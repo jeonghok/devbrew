@@ -105,7 +105,7 @@
 
 **후보:** C10, C11, C12, C14, C22, C27, C28, C41, C50, C57, C59, C64, C66, C67.
 
-**레트로핏 항목** ([`_retrofit-status.md`](_retrofit-status.md)에서 유래): 양쪽 플러그인의 CHANGELOG.md, "Principles Instantiated" README 섹션, quality-pipeline skill과 runtime-verifier agent의 `cost_class` 선언, SKILL.md frontmatter 스키마 스펙.
+**레트로핏 항목:** 양쪽 플러그인의 CHANGELOG.md, "Principles Instantiated" README 섹션, quality-pipeline skill과 runtime-verifier agent의 `cost_class` 선언, SKILL.md frontmatter 스키마 스펙.
 
 **핵심 산출물 — C57 (review mode detection):** Phase 1a의 필수 선행 조건. 네 가지 모드: `headless` / `autofix` / `report-only` / `interactive`. 감지 로직은 Phase 1 시작 전에 문서화 완료 필수.
 
@@ -113,7 +113,6 @@
 
 **종료 기준:**
 - 양쪽 플러그인이 CLAUDE.md Plugin Shape 체크리스트 전항목 통과.
-- `_retrofit-status.md` docs-debt 격차 해소.
 - C57 mode detection 스펙 문서화 완료.
 - quality-gates v1.4.1, project-init v1.1.1.
 
@@ -255,6 +254,8 @@
 - C4: Wiki/index triad (기록 → SessionStart가 읽음 → PreCompact가 영속).
 - C25: Dual-lifetime 태그 (7일 / 영구). 크로스-프로젝트에는 `trusted: false`.
 
+> **참고 (2026-05-06):** Phase 4a 후보 C3+C4+C25+C69는 이제 철학 §4.6 Compounding Skill primitive의 first-class 운영 내용 (philosophy.md §4.6 + Law 3 corollary 참조).
+
 **4b — 읽기 측:** C69. Grep-first 7-step 검색. 수락 기준: recall >85%, precision >80%.
 
 **4c — 쓰기 측:** C61. 5차원 중복 검출 (problem, root cause, solution, files, prevention). High (4-5) → 업데이트. Moderate (2-3) → 생성 + flag. Low (0-1) → 생성.
@@ -364,4 +365,3 @@ Phase 0 ─── C57 required ──→ Phase 1
 - **Branch:** `feature/harness-philosophy`
 - **Harvest source:** [`docs/research/plugin-harvest-rounds.md`](../research/plugin-harvest-rounds.md) (4 rounds, 69 candidates)
 - **Philosophy anchor:** [`docs/philosophy/devbrew-harness-philosophy.md`](devbrew-harness-philosophy.md) (3 Laws, 23 principles, 17 anti-patterns)
-- **Retrofit baseline:** [`docs/philosophy/_retrofit-status.md`](_retrofit-status.md)

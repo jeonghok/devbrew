@@ -104,7 +104,7 @@ Docs, READMEs, and prompt changes only. No new plugin code. Single PR.
 
 **Candidates:** C10, C11, C12, C14, C22, C27, C28, C41, C50, C57, C59, C64, C66, C67.
 
-**Retrofit items** (from [`_retrofit-status.md`](_retrofit-status.md)): CHANGELOG.md for both plugins, "Principles Instantiated" README sections, `cost_class` declarations on quality-pipeline skill and runtime-verifier agent, SKILL.md frontmatter schema spec.
+**Retrofit items:** CHANGELOG.md for both plugins, "Principles Instantiated" README sections, `cost_class` declarations on quality-pipeline skill and runtime-verifier agent, SKILL.md frontmatter schema spec.
 
 **Key deliverable — C57 (review mode detection):** Required prerequisite for Phase 1a. Four modes: `headless` / `autofix` / `report-only` / `interactive`. Detection logic must be documented before Phase 1 begins.
 
@@ -112,7 +112,6 @@ Docs, READMEs, and prompt changes only. No new plugin code. Single PR.
 
 **Exit criteria:**
 - Both plugins pass full CLAUDE.md Plugin Shape checklist.
-- `_retrofit-status.md` docs-debt gaps resolved.
 - C57 mode detection spec documented.
 - quality-gates v1.4.1, project-init v1.1.1.
 
@@ -254,6 +253,8 @@ Docs, READMEs, and prompt changes only. No new plugin code. Single PR.
 - C4: Wiki/index triad (write → SessionStart reads → PreCompact persists).
 - C25: Dual-lifetime tags (7-day / permanent). `trusted: false` for cross-project.
 
+> **Note (2026-05-06):** Phase 4a candidates C3+C4+C25+C69 are now first-class operational content of philosophy §4.6 Compounding Skill primitive (see philosophy.md §4.6 + Law 3 corollary).
+
 **4b — Read side:** C69. Grep-first 7-step search. Acceptance: recall >85%, precision >80%.
 
 **4c — Write side:** C61. 5-dimension overlap (problem, root cause, solution, files, prevention). High (4-5) → update. Moderate (2-3) → create + flag. Low (0-1) → create.
@@ -363,4 +364,3 @@ Phase 0 ─── C57 required ──→ Phase 1
 - **Branch:** `feature/harness-philosophy`
 - **Harvest source:** [`docs/research/plugin-harvest-rounds.md`](../research/plugin-harvest-rounds.md) (4 rounds, 69 candidates)
 - **Philosophy anchor:** [`docs/philosophy/devbrew-harness-philosophy.md`](devbrew-harness-philosophy.md) (3 Laws, 23 principles, 17 anti-patterns)
-- **Retrofit baseline:** [`docs/philosophy/_retrofit-status.md`](_retrofit-status.md)

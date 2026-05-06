@@ -74,7 +74,7 @@ Full 플러그인 primitive 레퍼런스: [`docs/philosophy/devbrew-harness-phil
 
 ## 금지 패턴 (Forbidden Patterns)
 
-Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md) §3. 리뷰에서 이름으로 cite. 이 리포에서 가장 자주 fire하는 다섯 개:
+Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md) §2 (각 원칙의 anti-corollary) + §11.1 (ID 마이그레이션). 리뷰에서 이름으로 cite. 이 리포에서 가장 자주 fire하는 다섯 개:
 
 - **Self-approval** — 같은 턴의 writer/reviewer (Law 2 위반).
 - **Polite stop** — 긍정적 리뷰 후 다음 액션으로 가지 않고 요약을 narrate. Approval gate와 구분: gate는 사용자가 redirect 가능, polite stop은 acknowledge만 가능.

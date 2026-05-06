@@ -73,7 +73,7 @@ Full plugin primitives reference: [`docs/philosophy/devbrew-harness-philosophy.m
 
 ## Forbidden Patterns
 
-Full catalog with case studies: [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md) §3. Cite by name in reviews. The five that fire most often in this repo:
+Full catalog with case studies: [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md) §2 (each principle's anti-corollary) + §11.1 (ID migration). Cite by name in reviews. The five that fire most often in this repo:
 
 - **Self-approval** — writer and reviewer in the same turn (Law 2 violation).
 - **Polite stop** — narrating a summary after a positive review instead of proceeding to the next action. Distinct from an approval gate: a gate lets the user redirect; a polite stop only lets them acknowledge.
