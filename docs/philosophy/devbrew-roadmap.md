@@ -1,23 +1,24 @@
-# devbrew Post-Harvest Roadmap
+# devbrew 수확 후 로드맵 (Post-Harvest Roadmap)
 
 > **Research is done. This is the build sequence.**
+> *리서치는 끝났다. 이제 빌드 순서다.*
 >
-> *69 candidate patterns from 4 source harnesses, distilled into 6 phases. Each phase has acceptance criteria, ordering constraints, and a version number. Per-plugin specs are written when each phase starts — not before.*
+> *4개 소스 하니스에서 69개 후보 패턴, 6개 페이즈로 증류. 각 페이즈에 수락 기준, 순서 제약, 버전 번호. 플러그인별 스펙은 해당 페이즈 시작 시점에 작성 — 그 전이 아님.*
 
-This document is the bridge between research ([`plugin-harvest-rounds.md`](../research/plugin-harvest-rounds.md)) and execution. It turns the Candidate Registry (C1–C69) into Go/Park/Kill decisions with a phased build order. The harvest file has the analysis; this file has the decisions.
+이 문서는 리서치 ([`plugin-harvest-rounds.md`](../research/plugin-harvest-rounds.md))와 실행 사이의 다리입니다. Candidate Registry (C1–C69)를 Go/Park/Kill 결정과 단계적 빌드 순서로 변환합니다. 수확 파일에 분석이 있고, 이 파일에 결정이 있습니다.
 
-**Sources harvested:** oh-my-claudecode v4.9.1 (R1), gstack (R2), ouroboros v0.28.7 (R3), compound-engineering v2.66.1 (R4).
+**수확된 소스:** oh-my-claudecode v4.9.1 (R1), gstack (R2), ouroboros v0.28.7 (R3), compound-engineering v2.66.1 (R4).
 
-**Validated by:** 4 cross-reference analyses (one per harness), each checking for misassignments, missing acceptance criteria, anti-recommendation violations, and unresolved open questions.
+**검증:** 4개 교차 참조 분석 (하니스당 하나), 각각 잘못된 할당, 누락된 수락 기준, 안티-권장 위반, 미해결 미결 질문을 검사.
 
 ## How to Read This Document
 
-- **Go** — committed to build, assigned to a phase.
-- **Park** — deferred with a testable un-parking condition. Not abandoned.
-- **Kill** — permanently rejected with rationale.
-- Each **Phase** section contains: scope, candidates, within-phase build order, ordering constraints, and exit criteria.
-- Candidates are referenced by **ID only** (e.g., "C2 — physical tool scoping"). Full analysis is in the [harvest file](../research/plugin-harvest-rounds.md).
-- **Priority rubric** (from harvest): `(laws_covered × gap_severity × round_reinforcement) / build_cost`.
+- **Go** — 빌드 확정, 페이즈에 배정됨.
+- **Park** — 테스트 가능한 un-parking 조건과 함께 보류. 포기가 아님.
+- **Kill** — 근거와 함께 영구 거절.
+- 각 **페이즈** 섹션에는: 범위, 후보, 페이즈 내 빌드 순서, 순서 제약, 종료 기준이 포함.
+- 후보는 **ID로만** 참조 (예: "C2 — physical tool scoping"). 전체 분석은 [수확 파일](../research/plugin-harvest-rounds.md)에 있음.
+- **우선순위 rubric** (수확에서 유래): `(laws_covered × gap_severity × round_reinforcement) / build_cost`.
 
 ## Decision Summary
 
@@ -94,219 +95,219 @@ This document is the bridge between research ([`plugin-harvest-rounds.md`](../re
 | C68 | Adversarial 4-technique framework | Go | 1f |
 | C69 | Grep-first learnings search | Go | 4b |
 
-**Total: 53 Go + 14 Park + 2 Kill = 69.**
+**합계: 53 Go + 14 Park + 2 Kill = 69.**
 
 ---
 
 ## Phase 0 — Convention Sweep
 
-Docs, READMEs, and prompt changes only. No new plugin code. Single PR.
+문서, README, 프롬프트 변경만. 새 플러그인 코드 없음. 단일 PR.
 
-**Candidates:** C10, C11, C12, C14, C22, C27, C28, C41, C50, C57, C59, C64, C66, C67.
+**후보:** C10, C11, C12, C14, C22, C27, C28, C41, C50, C57, C59, C64, C66, C67.
 
-**Retrofit items:** CHANGELOG.md for both plugins, "Principles Instantiated" README sections, `cost_class` declarations on quality-pipeline skill and runtime-verifier agent, SKILL.md frontmatter schema spec.
+**레트로핏 항목:** 양쪽 플러그인의 CHANGELOG.md, "Principles Instantiated" README 섹션, quality-pipeline skill과 runtime-verifier agent의 `cost_class` 선언, SKILL.md frontmatter 스키마 스펙.
 
-**Key deliverable — C57 (review mode detection):** Required prerequisite for Phase 1a. Four modes: `headless` / `autofix` / `report-only` / `interactive`. Detection logic must be documented before Phase 1 begins.
+**핵심 산출물 — C57 (review mode detection):** Phase 1a의 필수 선행 조건. 네 가지 모드: `headless` / `autofix` / `report-only` / `interactive`. 감지 로직은 Phase 1 시작 전에 문서화 완료 필수.
 
-**Reconciliation principle** (R2 "Boil the Lake" vs P8): *"Tests boil the lake; production code deletes ruthlessly."*
+**조정 원칙** (R2 "Boil the Lake" vs P8): *"Tests boil the lake; production code deletes ruthlessly."*
 
-**Exit criteria:**
-- Both plugins pass full CLAUDE.md Plugin Shape checklist.
-- C57 mode detection spec documented.
+**종료 기준:**
+- 양쪽 플러그인이 CLAUDE.md Plugin Shape 체크리스트 전항목 통과.
+- C57 mode detection 스펙 문서화 완료.
 - quality-gates v1.4.1, project-init v1.1.1.
 
 ---
 
 ## Phase 1 — quality-gates Reviewer Hardening
 
-**Score:** 8.0 (highest). **Laws:** 1+2. **Cost:** S. **Ships:** quality-gates v1.5.0.
+**점수:** 8.0 (최고). **법칙:** 1+2. **비용:** S. **출시:** quality-gates v1.5.0.
 
-**Candidates (16):** C2, C6, C19, C20, C24, C30, C31, C32, C33, C35, C36, C42, C52a, C56, C63, C68.
+**후보 (16개):** C2, C6, C19, C20, C24, C30, C31, C32, C33, C35, C36, C42, C52a, C56, C63, C68.
 
 ### Build order
 
-**1a — Unified review output schema** (foundation; depends on Phase 0 C57):
+**1a — 통합 리뷰 출력 스키마** (기반; Phase 0 C57에 의존):
 - C20: Verdict envelope (APPROVE / REQUEST CHANGES / COMMENT × CRITICAL / HIGH / MEDIUM / LOW).
-- C30: Per-finding payload (`severity`, `confidence` 1–10, `path`, `line`, `category`, `summary`, `fix`, `fingerprint`, `specialist`). Sentinel: `NO FINDINGS`. Confidence rubric: 9–10 show, 7–8 show, 5–6 caveat, 3–4 suppress, 1–2 P0-only.
-- C56: Autofix disposition (4 levels): `safe_auto` → review-fixer, `gated_auto` → downstream-resolver (`AskUserQuestion` per P22), `manual` → human, `advisory` → release.
+- C30: Per-finding payload (`severity`, `confidence` 1–10, `path`, `line`, `category`, `summary`, `fix`, `fingerprint`, `specialist`). Sentinel: `NO FINDINGS`. Confidence rubric: 9–10 표시, 7–8 표시, 5–6 주의 표기, 3–4 억제, 1–2 P0-only.
+- C56: Autofix disposition (4 레벨): `safe_auto` → review-fixer, `gated_auto` → downstream-resolver (P22에 따라 `AskUserQuestion`), `manual` → human, `advisory` → release.
 
-**1b — Verification tightening** (builds on 1a):
-- C6: Tighten 3-tier mapping (Mechanical $0 → Semantic $$ → Consensus $$$).
-- C19: Two-stage protocol (spec compliance → code quality).
-- C52a: Structural consensus triggers (4 of 7): SEED_MODIFICATION, ONTOLOGY_EVOLUTION, GOAL_INTERPRETATION, MANUAL_REQUEST. Drift-aware triggers (C52b) deferred to Phase 2d.
-- C35: Two-tier test classification (gate / periodic) + diff-based selection. Cost tiers: <5s free, E2E ~$3.85/run behind gate, LLM-judge ~$4/run strong gate.
+**1b — 검증 강화** (1a 위에 구축):
+- C6: 3-tier 매핑 강화 (Mechanical $0 → Semantic $$ → Consensus $$$).
+- C19: Two-stage 프로토콜 (스펙 준수 → 코드 품질).
+- C52a: 구조적 consensus trigger (7개 중 4개): SEED_MODIFICATION, ONTOLOGY_EVOLUTION, GOAL_INTERPRETATION, MANUAL_REQUEST. Drift-aware trigger (C52b)는 Phase 2d로 이연.
+- C35: Two-tier 테스트 분류 (gate / periodic) + diff 기반 선택. 비용 계층: <5s 무료, E2E ~$3.85/run 게이트 뒤, LLM-judge ~$4/run 강한 게이트.
 
-**1c — Fan-out trinity** (depends on 1a for dispatch targets):
-- C31: Scope-gated dispatch. Always-on: Testing + Maintainability (≥50 LOC). Conditional by `SCOPE_*` env vars. `[NEVER_GATE]` floor for Security + Testing.
-- C33: Always-on adversarial. Never conditional on LOC or risk signals. Never gates shipping — advisory only.
-- C42: Tiered gating. Eng-review = single hard gate. All specialist reviews = advisory.
+**1c — Fan-out 삼위일체** (1a에 의존, dispatch 대상 필요):
+- C31: Scope-gated dispatch. 상시 활성: Testing + Maintainability (≥50 LOC). `SCOPE_*` env var로 조건부. `[NEVER_GATE]` floor: Security + Testing.
+- C33: 상시 활성 adversarial. LOC나 risk signal에 조건부로 만들지 않음. shipping을 gate하지 않음 — advisory only.
+- C42: Tiered gating. Eng-review = single hard gate. 모든 specialist review = advisory.
 
-**1d — Specialist expansion** (gated on 1c):
+**1d — 전문가 확장** (1c에 게이트됨):
 - C24: api-reviewer + performance-reviewer.
-- C32: data-migration, maintainability, red-team. Each outputs JSON per C30 schema.
+- C32: data-migration, maintainability, red-team. 각각 C30 스키마에 따라 JSON 출력.
 
-**1e — Physical enforcement** (parallel with 1c–1d):
-- C2: PreToolUse hook enforcing blanket `disallowedTools: Write, Edit` on ALL review-role agents. Ecosystem-wide, not per-agent.
+**1e — 물리적 집행** (1c–1d와 병렬):
+- C2: PreToolUse 훅으로 모든 review-role agent에 blanket `disallowedTools: Write, Edit` 적용. 에코시스템 전체, agent별이 아님.
 
-**1f — Polish** (final):
-- C36: Review readiness dashboard (stale = >7 days OR HEAD changed).
-- C63: Per-reviewer "What NOT to flag" lists.
-- C68: Adversarial 4-technique framework (assumption violation, composition failures, cascade construction, abuse cases). Depth-calibrated: Quick / Standard / Deep.
+**1f — 마무리** (최종):
+- C36: Review readiness dashboard (stale = >7일 또는 HEAD 변경).
+- C63: 리뷰어별 "Flag하지 말아야 할 것" 목록.
+- C68: Adversarial 4-technique 프레임워크 (가정 위반, 합성 실패, 연쇄 구성, 악용 케이스). 깊이 조절: Quick / Standard / Deep.
 
 ### Constraints
 
-- All enforcement at agent layer (C2 PreToolUse), NOT skill-level `allowed-tools`.
-- Zero Tier 1 self-review. All fixes require Tier 2 or Tier 3 review.
+- 모든 집행은 agent 레이어 (C2 PreToolUse)에서, skill 레벨 `allowed-tools`가 아님.
+- Tier 1 self-review 제로. 모든 수정은 Tier 2 또는 Tier 3 리뷰 필요.
 
 ### Exit criteria
 
 - quality-gates v1.5.0.
-- Unified 3-layer schema: verdict + per-finding + autofix.
-- PreToolUse hook blocks Write/Edit for all review agents (C2).
+- 통합 3-layer 스키마: verdict + per-finding + autofix.
+- PreToolUse 훅이 모든 review agent에서 Write/Edit 차단 (C2).
 - Scope-gated dispatch with `[NEVER_GATE]` on Security + Testing (C31).
-- Adversarial: always-on, 4 techniques (C33 + C68).
-- New specialists: api, performance, data-migration, maintainability, red-team (C24 + C32).
-- Two-tier test classification (C35).
-- CHANGELOG.md entry.
+- Adversarial: 상시 활성, 4 technique (C33 + C68).
+- 신규 전문가: api, performance, data-migration, maintainability, red-team (C24 + C32).
+- Two-tier 테스트 분류 (C35).
+- CHANGELOG.md 엔트리.
 
 ---
 
-## Phase 2 — spec-authoring Plugin + Stagnation Library
+## 페이즈 2 — spec-authoring 플러그인 + 정체 라이브러리 (Stagnation Library)
 
-**Score:** 6.0 + 3.0 (stagnation absorbed). **Laws:** 1+3. **Cost:** M. **Ships:** `plugins/spec-authoring/` v0.1.0.
+**점수:** 6.0 + 3.0 (정체 흡수). **법칙:** 1+3. **비용:** M. **출시:** `plugins/spec-authoring/` v0.1.0.
 
-**Candidates (15):** C1, C7, C9, C34, C43, C44, C45, C46, C49, C51, C52b, C53, C55, C58, C60.
+**후보 (15개):** C1, C7, C9, C34, C43, C44, C45, C46, C49, C51, C52b, C53, C55, C58, C60.
 
 ### Build order (strictly serialized)
 
-**2a — Stagnation library** (prerequisite for interview loops):
-- C7: Circuit breaker. 4 patterns: SPINNING (sha256 repeat, threshold=3), OSCILLATION (A↔B, threshold=2), NO_DRIFT (delta<0.01, threshold=3), DIMINISHING_RETURNS (improvement<0.01, threshold=3).
-- C46: Persona recovery. Affinity: HACKER→SPINNING, RESEARCHER→{NO_DRIFT, DIMINISHING_RETURNS}, SIMPLIFIER→{DIMINISHING_RETURNS, OSCILLATION}, ARCHITECT→{OSCILLATION, NO_DRIFT}, CONTRARIAN→all. Deterministic first-match.
-- Location: shared `scripts/` for cross-plugin reuse.
+**2a — 정체 라이브러리** (인터뷰 루프의 선행 조건):
+- C7: Circuit breaker. 4개 패턴: SPINNING (sha256 반복, threshold=3), OSCILLATION (A↔B, threshold=2), NO_DRIFT (delta<0.01, threshold=3), DIMINISHING_RETURNS (improvement<0.01, threshold=3).
+- C46: Persona 복구. Affinity: HACKER→SPINNING, RESEARCHER→{NO_DRIFT, DIMINISHING_RETURNS}, SIMPLIFIER→{DIMINISHING_RETURNS, OSCILLATION}, ARCHITECT→{OSCILLATION, NO_DRIFT}, CONTRARIAN→all. 결정론적 first-match.
+- 위치: 크로스-플러그인 재사용을 위한 공유 `scripts/`.
 
-**2b — Core gate** (depends on 2a):
-- C1: Structural ambiguity gate. Mandatory sections: Context/Why, Goals, Non-goals, Constraints, Acceptance Criteria, Files to Modify, Verification Plan, Rejected Alternatives, Metadata. Structural first; numerical optional.
-- C55: Seed schema as markdown + YAML frontmatter (NOT .yaml files). 7 core fields: `goal`, `task_type`, `constraints`, `acceptance_criteria`, `exit_conditions`, `metadata`, `brownfield_context`. Optional: `ontology_schema`, `evaluation_principles`, `ambiguity_score`.
-- C49: Seed immutability via git versioning (NOT event sourcing). Modifications trigger C52a SEED_MODIFICATION.
+**2b — 핵심 게이트** (2a에 의존):
+- C1: 구조적 모호성 게이트. 필수 섹션: Context/Why, Goals, Non-goals, Constraints, Acceptance Criteria, Files to Modify, Verification Plan, Rejected Alternatives, Metadata. 구조적 먼저; 수치적은 선택.
+- C55: Seed 스키마를 markdown + YAML frontmatter로 (.yaml 파일이 아님). 7개 core field: `goal`, `task_type`, `constraints`, `acceptance_criteria`, `exit_conditions`, `metadata`, `brownfield_context`. 선택적: `ontology_schema`, `evaluation_principles`, `ambiguity_score`.
+- C49: git 버저닝으로 Seed 불변성 (event sourcing이 아님). 수정 시 C52a SEED_MODIFICATION 트리거.
 
-**2c — Interview system** (depends on 2a + 2b):
-- C43: 4-path routing. PATH 1a auto-confirm factual (marked `[from-code][auto-confirmed]`). PATH 2 human judgment = default.
-- C44: Dialectic rhythm guard. 3 consecutive non-user answers → force PATH 2.
+**2c — 인터뷰 시스템** (2a + 2b에 의존):
+- C43: 4-path 라우팅. PATH 1a는 사실 확인을 자동 승인 (`[from-code][auto-confirmed]` 표시). PATH 2 인간 판단 = 기본값.
+- C44: Dialectic rhythm guard. 3회 연속 비사용자 답변 → PATH 2 강제.
 - C45: Breadth-keeper agent (`disallowedTools: Write, Edit`).
-- C51: Ontological questioning (5 types: ESSENCE, ROOT_CAUSE, PREREQUISITES, HIDDEN_ASSUMPTIONS, EXISTING_CONTEXT). Available in Standard/Deep scope; skip Lightweight.
+- C51: 존재론적 질문 (5가지 유형: ESSENCE, ROOT_CAUSE, PREREQUISITES, HIDDEN_ASSUMPTIONS, EXISTING_CONTEXT). Standard/Deep scope에서 사용 가능; Lightweight에서는 skip.
 
-**2d — Document review** (depends on Phase 1 reviewers):
-- C58: 2 always-on (coherence + feasibility) + 5 conditional. Dispatches to Phase 1 reviewer pool.
-- C34: Plan/audit boomerang (symmetric pre-work + post-work review).
-- C60: Scope-adaptive depth. Lightweight / Standard / Deep. LLM auto-assess + `AskUserQuestion` override.
-- C52b: Drift-aware triggers (SEED_DRIFT_ALERT >0.3, STAGE2_UNCERTAINTY >0.3, LATERAL_THINKING_ADOPTION). Partial until Phase 3 ships drift measurement.
+**2d — 문서 리뷰** (Phase 1 리뷰어에 의존):
+- C58: 2개 상시 활성 (coherence + feasibility) + 5개 조건부. Phase 1 리뷰어 풀에 dispatch.
+- C34: Plan/audit boomerang (대칭적 사전 작업 + 사후 작업 리뷰).
+- C60: Scope-adaptive 깊이. Lightweight / Standard / Deep. LLM 자동 평가 + `AskUserQuestion` override.
+- C52b: Drift-aware trigger (SEED_DRIFT_ALERT >0.3, STAGE2_UNCERTAINTY >0.3, LATERAL_THINKING_ADOPTION). Phase 3이 drift 측정을 shipping할 때까지 부분적.
 
-**2e — Provenance** (additive):
-- C53: Answer prefixes: `[from-code][auto-confirmed]`, `[from-code]`, `[from-user]`, `[from-research]`.
-- C9: Dimensional scoring (optional — adopt only if structural gate proves insufficient).
+**2e — 출처 (Provenance)** (부가적):
+- C53: 답변 접두사: `[from-code][auto-confirmed]`, `[from-code]`, `[from-user]`, `[from-research]`.
+- C9: 차원별 스코어링 (선택적 — 구조적 게이트가 불충분할 때만 채택).
 
 ### Constraints
 
-- User confirmation gate between all pipeline stages (no auto-decide).
-- Structural gate first; numerical scoring never primary.
-- Seed schema = markdown + frontmatter, never raw YAML.
+- 모든 파이프라인 단계 간 사용자 확인 게이트 (자동 결정 없음).
+- 구조적 게이트 먼저; 수치 스코어링은 절대 primary가 되지 않음.
+- Seed 스키마 = markdown + frontmatter, raw YAML 절대 금지.
 
 ### Exit criteria
 
 - `plugins/spec-authoring/` v0.1.0 (Principles Instantiated: Law 1 / P1 / P2).
-- Stagnation library: 4 patterns, sha256, persona recovery (C7 + C46).
-- Structural gate with mandatory sections (C1).
-- Seed schema: 7 core fields, markdown + frontmatter (C55).
-- Interview: 4-path routing, rhythm guard, breadth-keeper (C43 + C44 + C45).
-- Document-review dispatching to Phase 1 reviewers (C58).
+- 정체 라이브러리: 4개 패턴, sha256, persona 복구 (C7 + C46).
+- 필수 섹션이 포함된 구조적 게이트 (C1).
+- Seed 스키마: 7개 core field, markdown + frontmatter (C55).
+- 인터뷰: 4-path 라우팅, rhythm guard, breadth-keeper (C43 + C44 + C45).
+- Phase 1 리뷰어에 dispatch하는 문서 리뷰 (C58).
 - CHANGELOG.md.
 
 ---
 
-## Phase 3 — State Persistence + Drift Libraries
+## 페이즈 3 — 상태 영속성 + Drift 라이브러리 (State Persistence + Drift Libraries)
 
-**Score:** 3.0. **Cost:** M. **Ships:** shared library modules.
+**점수:** 3.0. **비용:** M. **출시:** 공유 라이브러리 모듈.
 
-**Candidates (3):** C5, C54, C65.
+**후보 (3개):** C5, C54, C65.
 
-- C5: PreCompact state snapshot. Markdown: `.claude/<plugin>.local.md`. Fallback to Stop-hook if PreCompact unreliable.
-- C54: Drift measurement. 3-axis weighted Jaccard (Goal 0.5, Constraint 0.3, Ontology 0.2). Threshold ≤ 0.3. Start point-in-time; add continuous in v0.2.0.
-- C65: Per-run artifacts as `.claude/<plugin>-<run-id>.local.md`. Markdown, not directories.
+- C5: PreCompact 상태 스냅샷. 마크다운: `.claude/<plugin>.local.md`. PreCompact가 불안정할 경우 Stop-hook으로 fallback.
+- C54: Drift 측정. 3축 가중 Jaccard (Goal 0.5, Constraint 0.3, Ontology 0.2). Threshold ≤ 0.3. point-in-time으로 시작; v0.2.0에서 continuous 추가.
+- C65: Per-run artifact를 `.claude/<plugin>-<run-id>.local.md`로. 마크다운, 디렉토리가 아님.
 
-**Exit criteria:**
-- PreCompact hook with Stop-hook fallback (C5).
-- Drift library: 3-axis Jaccard, configurable thresholds (C54).
-- Per-run markdown artifacts (C65).
-- `trusted: false` default on cross-project state.
+**종료 기준:**
+- PreCompact 훅 with Stop-hook fallback (C5).
+- Drift 라이브러리: 3축 Jaccard, 설정 가능한 threshold (C54).
+- Per-run 마크다운 artifact (C65).
+- 크로스-프로젝트 state에 `trusted: false` 기본값.
 - Kill switch: `DEVBREW_SKIP_HOOKS=state-persistence:pre-compact`.
 
 ---
 
 ## Phase 4 — compounding-learnings Plugin
 
-**Score:** 2.25. **Laws:** 3. **Cost:** M. **Ships:** `plugins/compounding-learnings/` v0.1.0.
+**점수:** 2.25. **법칙:** 3. **비용:** M. **출시:** `plugins/compounding-learnings/` v0.1.0.
 
-**Candidates (5):** C3, C4, C25, C61, C69. Depends on Phase 3.
+**후보 (5개):** C3, C4, C25, C61, C69. Phase 3에 의존.
 
-**4a — Core** (first compound cycle):
-- C3: Learner skill with 3-point gate (non-Googleable / context-specific / hard-won).
-- C4: Wiki/index triad (write → SessionStart reads → PreCompact persists).
-- C25: Dual-lifetime tags (7-day / permanent). `trusted: false` for cross-project.
+**4a — 코어** (첫 compound 사이클):
+- C3: 3-point gate가 있는 Learner skill (non-Googleable / context-specific / hard-won).
+- C4: Wiki/index triad (기록 → SessionStart가 읽음 → PreCompact가 영속).
+- C25: Dual-lifetime 태그 (7일 / 영구). 크로스-프로젝트에는 `trusted: false`.
 
-> **Note (2026-05-06):** Phase 4a candidates C3+C4+C25+C69 are now first-class operational content of philosophy §4.6 Compounding Skill primitive (see philosophy.md §4.6 + Law 3 corollary).
+> **참고 (2026-05-06):** Phase 4a 후보 C3+C4+C25+C69는 이제 철학 §4.6 Compounding Skill primitive의 first-class 운영 내용 (philosophy.md §4.6 + Law 3 corollary 참조).
 
-**4b — Read side:** C69. Grep-first 7-step search. Acceptance: recall >85%, precision >80%.
+**4b — 읽기 측:** C69. Grep-first 7-step 검색. 수락 기준: recall >85%, precision >80%.
 
-**4c — Write side:** C61. 5-dimension overlap (problem, root cause, solution, files, prevention). High (4-5) → update. Moderate (2-3) → create + flag. Low (0-1) → create.
+**4c — 쓰기 측:** C61. 5차원 중복 검출 (problem, root cause, solution, files, prevention). High (4-5) → 업데이트. Moderate (2-3) → 생성 + flag. Low (0-1) → 생성.
 
-**Exit criteria:**
+**종료 기준:**
 - `plugins/compounding-learnings/` v0.1.0 (Principles Instantiated: Law 3 / P5 / P14).
-- 3-point extraction gate (C3). Discoverability check (Law 3 corollary).
-- Overlap detection: 5-dimension, zero false-negatives >70% (C61).
-- Grep search: recall >85%, precision >80% (C69).
+- 3-point extraction gate (C3). Discoverability check (Law 3 따름정리).
+- 중복 검출: 5차원, zero false-negative >70% (C61).
+- Grep 검색: recall >85%, precision >80% (C69).
 - Kill switch: `DEVBREW_DISABLE_COMPOUNDING_LEARNINGS=1`.
 
 ---
 
-## Phase 5 — project-init Enhancements
+## 페이즈 5 — project-init 강화 (Enhancements)
 
-**Cost:** S. **Ships:** project-init v1.2.0. Independent — parallel with Phases 2–4.
+**비용:** S. **출시:** project-init v1.2.0. 독립적 — Phase 0 이후 Phase 2–4와 병렬 가능.
 
-**Candidate (1):** C15. Commit-trailer schema: `Constraint:`, `Rejected:`, `Directive:`, `Confidence:`, `Scope-risk:`, `Not-tested:`. Trivia escape: skip for one-sentence diffs.
+**후보 (1개):** C15. Commit-trailer 스키마: `Constraint:`, `Rejected:`, `Directive:`, `Confidence:`, `Scope-risk:`, `Not-tested:`. Trivia escape: 한 문장 diff에는 skip.
 
-**Exit criteria:** project-init v1.2.0. Trailer template + optional PostToolUse validation hook. CHANGELOG.md entry.
+**종료 기준:** project-init v1.2.0. Trailer 템플릿 + optional PostToolUse validation 훅. CHANGELOG.md 엔트리.
 
 ---
 
-## Parked Items
+## 보류 항목 (Parked Items)
 
-| id | pattern | reason | un-parking condition |
+| id | pattern | 사유 | un-parking 조건 |
 |---|---|---|---|
-| C8 | Keyword pre-routing | S cost, not in top-6 | >3 plugins with keyword-triggered skills |
-| C16 | Cross-model adversarial | L cost, multi-model required | Multi-model API verified + C7 shipped |
-| C17 | Per-agent benchmark | L cost | User budgets 1 week |
-| C18 | Agent `level: N` | Philosophy-only | Philosophy revision cycle |
-| C21 | Dual-harness | Claude-Code-only | devbrew targets other runtimes |
-| C23 | Lane-grouped catalog | Low agent count | Agent count > 10 |
-| C26 | Skill codegen | Build step overhead | >10 plugins + authoring bottleneck |
-| C29 | Skill-level hooks | Q9 unresolved | Claude Code docs confirm SKILL.md hooks |
-| C37 | Retrospective | Not core to Three Laws | Phase 4 shipped |
-| C38 | Host adapters | Out of scope | Same as C21 |
-| C39 | Runtime daemon | L cost | User budgets + runtime-verifier insufficient |
-| C40 | AI-slop blacklist | Unverified (reported) | Main-thread cite obtained |
-| C47 | PAL Router | Multi-model required | Same as C16 |
-| C62 | Session historian | Cross-platform | Phase 4 shipped + Claude-Code-only scoped |
+| C8 | Keyword pre-routing | S 비용, top-6에 미포함 | keyword-triggered skill을 가진 플러그인 >3개 |
+| C16 | Cross-model adversarial | L 비용, 다중 모델 필요 | Multi-model API 검증 완료 + C7 shipped |
+| C17 | Per-agent benchmark | L 비용 | 사용자가 1주일 예산 할당 |
+| C18 | Agent `level: N` | 철학 문서 전용 | 철학 개정 사이클 |
+| C21 | Dual-harness | Claude-Code 전용 | devbrew가 다른 런타임을 타겟 |
+| C23 | Lane-grouped catalog | 낮은 agent 수 | Agent 수 > 10 |
+| C26 | Skill codegen | 빌드 단계 오버헤드 | >10개 플러그인 + authoring 병목 |
+| C29 | Skill-level hooks | Q9 미해결 | Claude Code 문서에서 SKILL.md hook 확인 |
+| C37 | Retrospective | Three Laws의 core가 아님 | Phase 4 shipped |
+| C38 | Host adapters | 범위 밖 | C21과 동일 |
+| C39 | Runtime daemon | L 비용 | 사용자 예산 + runtime-verifier 불충분 |
+| C40 | AI-slop blacklist | 미검증 (보고됨) | Main-thread cite 확보 |
+| C47 | PAL Router | 다중 모델 필요 | C16과 동일 |
+| C62 | Session historian | 크로스-플랫폼 | Phase 4 shipped + Claude-Code-only scoped |
 
-## Killed Items
+## 거절 항목 (Killed Items)
 
-| id | pattern | reason |
+| id | pattern | 사유 |
 |---|---|---|
-| C13 | *(original benchmark)* | Retired R1, superseded by C17 |
-| C48 | Event-sourced state | Permanent conflict with markdown-state mandate |
+| C13 | *(original benchmark)* | R1에서 retired, C17로 대체됨 |
+| C48 | Event-sourced state | markdown-state mandate와 영구적 충돌 |
 
 ---
 
-## Phase Dependency Graph
+## 페이즈 의존성 그래프 (Phase Dependency Graph)
 
 ```
 Phase 0 ─── C57 required ──→ Phase 1
@@ -322,39 +323,39 @@ Phase 0 ─── C57 required ──→ Phase 1
                 Phase 4         │
 ```
 
-**Parallelization:** Phase 5 with anything after Phase 0. Phase 2a can start parallel with Phase 1d–1f. Phases 3→4 strictly sequential. C52 split: C52a in Phase 1b, C52b in Phase 2d.
+**병렬화:** Phase 5는 Phase 0 이후 어떤 것과도 병렬 가능. Phase 2a는 Phase 1d–1f와 병렬 시작 가능. Phase 3→4는 엄격 직렬. C52 분할: C52a는 Phase 1b, C52b는 Phase 2d.
 
 ---
 
-## Open Questions
+## 미결 질문 (Open Questions)
 
-### Resolved
+### 해결됨 (Resolved)
 
-| Q | Decision | Rationale |
+| Q | 결정 | 근거 |
 |---|---|---|
-| Q1 | C2 = ecosystem-wide blanket | OMC's agent-by-agent is inconsistent |
-| Q2 | Learnings index = per-plugin `docs/learnings/` | Plugin-local, grep-discoverable |
-| Q8 | Fan-out via C31 + C33 + C42 trinity | Scope gating + advisory tiers |
-| Q13 | `[NEVER_GATE]` for Security + Testing | Others gate after 0-finding runs |
-| Q15 | PATH 1a allowed, marked `[from-code]` | 3 sources converge; provenance preserves trust |
-| Q18 | Frozen specs via git versioning | C48 killed |
-| Q19 | C51 in Standard/Deep, not Lightweight | Available when scope warrants |
-| Q22 | 7 core seed fields; 3 optional | Start minimal, expand when proven |
-| Q23 | 4-level autofix | CE shipped 60+ versions |
-| Q24 | `mode:headless` adopted | Required for composition |
-| Q25 | C58 bundled in Phase 2d | Related workflow |
-| Q30 | `.claude/<plugin>-<run-id>.local.md` | Markdown convention |
+| Q1 | C2 = 에코시스템 전체 blanket | OMC의 agent별 방식은 일관성 부족 |
+| Q2 | Learnings index = 플러그인별 `docs/learnings/` | 플러그인-로컬, grep-discoverable |
+| Q8 | Fan-out via C31 + C33 + C42 삼위일체 | Scope gating + advisory tier |
+| Q13 | `[NEVER_GATE]` for Security + Testing | 다른 것들은 0-finding run 후 gate |
+| Q15 | PATH 1a 허용, `[from-code]` 표시 | 3개 소스 수렴; provenance가 trust 보존 |
+| Q18 | git 버저닝으로 frozen spec | C48 killed |
+| Q19 | C51은 Standard/Deep에서, Lightweight에서는 아님 | scope가 정당화할 때 사용 가능 |
+| Q22 | 7개 core seed field; 3개 optional | 최소로 시작, 검증 후 확장 |
+| Q23 | 4-level autofix | CE가 60+ 버전 shipping |
+| Q24 | `mode:headless` 채택 | composition에 필수 |
+| Q25 | C58은 Phase 2d에 번들 | 관련 workflow |
+| Q30 | `.claude/<plugin>-<run-id>.local.md` | 마크다운 관례 |
 
-### Carried Forward
+### 이월됨 (Carried Forward)
 
-| Q | Blocks | Decision deferred to |
+| Q | 차단 대상 | 결정 이연 시점 |
 |---|---|---|
-| Q3 | Phase 3 | PreCompact reliability; Stop-hook fallback |
-| Q9 | C29 un-parking | Claude Code docs |
-| Q17 | Phase 2a | Start deterministic, measure |
-| Q21 | Phase 3 | Point-in-time first, continuous v0.2.0 |
-| Q26 | Phase 2d | LLM auto-assess + override |
-| Q27 | Phase 4c | Adapt dimensions to devbrew |
+| Q3 | Phase 3 | PreCompact 안정성; Stop-hook fallback |
+| Q9 | C29 un-parking | Claude Code 문서 |
+| Q17 | Phase 2a | 결정론적으로 시작, 측정 |
+| Q21 | Phase 3 | point-in-time 먼저, continuous v0.2.0 |
+| Q26 | Phase 2d | LLM 자동 평가 + override |
+| Q27 | Phase 4c | devbrew에 맞게 차원 조정 |
 
 ---
 
