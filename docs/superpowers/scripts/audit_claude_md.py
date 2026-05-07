@@ -15,6 +15,7 @@ REPORT_PATH = REPO_ROOT / "docs/superpowers/reports/2026-05-07-claude-md-audit.m
 
 LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)#]+)(?:#([^)]+))?\)")
 HEADING_RE = re.compile(r"^(#+)\s+(.+?)\s*$", re.MULTILINE)
+# §-prefixed tokens can't use \b (§ is non-word); group 1 handles \b tokens, group 2 handles §.
 TOKEN_RE = re.compile(r"(?:\b(Law [1-3]|P[0-9]+|AP[0-9]+)|(§[0-9]+(?:\.[0-9]+)?))")
 
 COUNT_PATTERNS = {

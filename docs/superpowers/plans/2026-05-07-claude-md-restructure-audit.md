@@ -1014,13 +1014,13 @@ EOF
 - Report at specified path → Task 6+7 ✓
 - 단일 auto-fix commit, no empty commits → Task 8 step 4 (`if fixed != claude:`) ✓
 - 재실행 zero findings → Task 9 ✓
-- Spec deviation 두 가지(Bash→Python, ephemeral report) → Plan header에 명시 ✓
+- Spec deviation 한 가지(Bash→Python); ephemeral-report 가정은 mid-flight gitignore 변경으로 무효화 (header note 참조) ✓
 
 **Placeholder scan:** TBD/TODO/"implement later" 없음. Task 2 step 8의 fallback("expected가 GitHub 실제 출력과 다르면 조정")은 fragile point에 대한 명시적 안내 — placeholder 아님.
 
 **Type consistency:**
 - `Finding(kind, file, line, detail, auto_fix=None)` — Task 1 정의, 모든 task에서 일관 사용
-- `auto_fix`는 *전체 fixed line* 문자열 (Task 4·Task 6 step 5에서 line-level apply가 가능하도록 통일)
+- `auto_fix`는 `tuple[int, int, str] | None` — `(start, end, replacement)` (Task 6에서 multi-finding-per-line composition을 위해 spec의 단순 string format에서 refactor; line-level apply는 sort right-to-left로 composition)
 - `extract_links` → `(text, path, anchor, line_no)` / `extract_tokens` → `(token, line_no)` — 형태가 다르지만 각각 고유 호출자만 가짐, 충돌 없음
 
 **Self-review에서 잡힌 issue:** Task 6에서 `auto_fix` payload semantics를 변경(anchor 문자열 → 전체 line)하면서 Task 2의 초기 구현과 일관되지 않음을 발견 → Task 6 step 5에서 `run_anchor_pass`를 backfill하는 단계를 명시.

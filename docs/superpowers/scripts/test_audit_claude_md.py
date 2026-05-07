@@ -88,14 +88,25 @@ class TestExtractTokens(unittest.TestCase):
 
 class TestCountPass(unittest.TestCase):
     def test_finds_known_drift(self):
-        findings = audit.run_count_pass(
-            audit.CLAUDE_MD.read_text(),
-            audit.PHILOSOPHY.read_text(),
+        # Synthetic fixtures so this test is independent of whether the live tree is pre- or post-fix.
+        stale_claude = "출처·23개 원칙·17개 anti-pattern·10 primitive·6 tension\n"
+        synthetic_phil = (
+            "\n".join(f"### P{i}. Title" for i in range(1, 25))     # 24 principles
+            + "\n"
+            + "\n".join(f"### AP{i}. Title" for i in range(1, 15))  # 14 anti-patterns
+            + "\n"
+            + "\n".join(f"### 4.{i} Title" for i in range(0, 11))   # 11 primitives (4.0..4.10)
+            + "\n"
+            + "\n".join(f"### 5.{i} Title" for i in range(1, 7))    # 6 tensions
+            + "\n"
         )
+        findings = audit.run_count_pass(stale_claude, synthetic_phil)
         kinds = [f.detail.split(":")[0] for f in findings if f.kind == "COUNT_DRIFT"]
         self.assertIn("principles", kinds)
         self.assertIn("anti_patterns", kinds)
         self.assertIn("primitives", kinds)
+        # tensions is NOT expected — claimed=6 matches actual=6
+        self.assertNotIn("tensions", kinds)
 
 
 class TestCountActual(unittest.TestCase):
