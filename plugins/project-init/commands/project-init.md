@@ -1,5 +1,5 @@
 ---
-description: "Initialize git workflow rules for the project (branch strategy, commit conventions, PR process)"
+description: "Initialize git workflow rules + LLM coding baseline for the project (branch strategy, commit conventions, PR process, Karpathy-derived LLM guidelines)"
 allowed-tools: [Bash, Read, Write, Edit, Glob, Grep]
 ---
 
@@ -122,5 +122,5 @@ Report what was created:
 > - `docs/git-workflow/pr-process.md` — PR process
 >
 > The `project-init` plugin hook will auto-validate branch names and commit messages.
-> The 4-line LLM Coding Guidelines baseline is derived from Andrej Karpathy's LLM coding observations.
+> The 4-bullet LLM Coding Guidelines baseline is derived from Andrej Karpathy's LLM coding observations.
 > Use `/commit` or `/commit-push-pr` (commit-commands plugin) for streamlined git operations.

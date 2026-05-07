@@ -6,7 +6,7 @@ Git workflow initialization plugin for Claude Code. Generates branching strategy
 
 ```
 plugins/project-init/
-├── .claude-plugin/plugin.json       # Plugin metadata (v1.1.0)
+├── .claude-plugin/plugin.json       # Plugin metadata (v1.2.0)
 ├── README.md                        # This file
 ├── commands/
 │   └── project-init.md              # /project-init — interactive setup
@@ -16,6 +16,7 @@ plugins/project-init/
 └── templates/
     ├── shared/
     │   ├── commit-conventions.md    # Conventional Commits rules (all strategies)
+    │   ├── llm-guidelines.md    # Karpathy LLM coding baseline (all strategies)
     │   └── pr-process.md            # PR template and merge strategy (all strategies)
     ├── github-flow/
     │   ├── claude-md-section.md     # CLAUDE.md injection template
