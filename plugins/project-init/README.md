@@ -6,7 +6,7 @@ Git workflow initialization plugin for Claude Code. Generates branching strategy
 
 ```
 plugins/project-init/
-├── .claude-plugin/plugin.json       # Plugin metadata (v1.1.0)
+├── .claude-plugin/plugin.json       # Plugin metadata (v1.2.0)
 ├── README.md                        # This file
 ├── commands/
 │   └── project-init.md              # /project-init — interactive setup
@@ -16,6 +16,7 @@ plugins/project-init/
 └── templates/
     ├── shared/
     │   ├── commit-conventions.md    # Conventional Commits rules (all strategies)
+    │   ├── llm-guidelines.md    # Karpathy LLM coding baseline (all strategies)
     │   └── pr-process.md            # PR template and merge strategy (all strategies)
     ├── github-flow/
     │   ├── claude-md-section.md     # CLAUDE.md injection template
@@ -34,7 +35,7 @@ plugins/project-init/
 2. Select a branching strategy (GitHub Flow / Git Flow / Trunk-based)
 3. Answer 2-3 customization questions (commit scope, merge strategy)
 4. Plugin generates:
-   - `CLAUDE.md` — minimal Git Workflow section (reference to docs/)
+   - `CLAUDE.md` — `## LLM Coding Guidelines` (4-bullet Karpathy baseline) + `## Git Workflow` (terse anchor, reference to `docs/git-workflow/`)
    - `docs/git-workflow/branch-strategy.md` — branch rules for the team
    - `docs/git-workflow/commit-conventions.md` — Conventional Commits rules
    - `docs/git-workflow/pr-process.md` — PR template and review checklist
@@ -45,6 +46,7 @@ plugins/project-init/
 |-----------|------|
 | **`/project-init` command** | Interactive setup — select strategy, generate rules |
 | **PostToolUse hook** | Auto-validates branch naming and commit message format |
+| **LLM Coding Guidelines** | 4-bullet Karpathy-derived behavioral baseline injected into CLAUDE.md |
 | **Templates** | Pre-built rules for 3 branching strategies |
 
 ## Branching Strategies
@@ -61,6 +63,12 @@ Works alongside other plugins:
 - **commit-commands**: `/commit` and `/commit-push-pr` read CLAUDE.md rules to format messages
 - **superpowers**: `using-git-worktrees` follows branch naming conventions from docs/
 - **quality-gates**: Auto-triggers quality pipeline on PR creation
+
+## Principles Instantiated
+
+- **Law 1 (Clarity Before Code)** — 4-bullet LLM Coding Guidelines (Karpathy-derived: assumptions explicit, no overengineering, surgical scope, verifiable success criteria) injected at the project boundary so Claude reads it on every session start.
+- **Law 3 (Compounding)** — PostToolUse hook continuously enforces branch naming and Conventional Commits format; convention drift caught at the action layer.
+- **Plugin shape — minimal pointer pattern** — CLAUDE.md keeps terse anchors (8-line LLM block + Git Workflow summary); details live in `docs/git-workflow/`. CLAUDE.md bloat 방지 + 룰 discoverability 양립.
 
 ## Usage
 

@@ -1,5 +1,5 @@
 ---
-description: "Initialize git workflow rules for the project (branch strategy, commit conventions, PR process)"
+description: "Initialize git workflow rules + LLM coding baseline for the project (branch strategy, commit conventions, PR process, Karpathy-derived LLM guidelines)"
 allowed-tools: [Bash, Read, Write, Edit, Glob, Grep]
 ---
 
@@ -65,6 +65,7 @@ Based on the selected strategy and answers, generate the following files.
 #### 4a: Read templates
 
 Read these files from the plugin:
+- `${CLAUDE_PLUGIN_ROOT}/templates/shared/llm-guidelines.md`
 - `${CLAUDE_PLUGIN_ROOT}/templates/<strategy>/claude-md-section.md`
 - `${CLAUDE_PLUGIN_ROOT}/templates/<strategy>/branch-strategy.md`
 - `${CLAUDE_PLUGIN_ROOT}/templates/shared/commit-conventions.md`
@@ -81,13 +82,24 @@ Replace these placeholders in the template content:
 | `{{SCOPE_CONVENTION}}` | The scope rule from Step 3 question 1 (e.g., "Scope by module/directory name: `auth`, `api`, `ui`") |
 | `{{MERGE_STRATEGY}}` | The merge strategy from Step 3 question 2 (e.g., "squash merge") |
 
-#### 4c: Write CLAUDE.md section
+#### 4c: Write CLAUDE.md sections
 
-- If `CLAUDE.md` exists and has a `## Git Workflow` section: **replace** that section only (preserve all other content)
-- If `CLAUDE.md` exists but has no `## Git Workflow` section: **append** the section at the end
-- If `CLAUDE.md` does not exist: **create** the file with the section
+The CLAUDE.md gets two project-init-managed sections, in this exact order:
 
-Use the content from `claude-md-section.md` (with placeholders replaced).
+1. `## LLM Coding Guidelines` (from `shared/llm-guidelines.md`, no placeholders)
+2. `## Git Workflow` (from `<strategy>/claude-md-section.md` with placeholders replaced)
+
+Apply this matrix based on the current CLAUDE.md state:
+
+| State | Action |
+|---|---|
+| CLAUDE.md does not exist | Create the file with both sections, LLM Guidelines first, Git Workflow second |
+| Exists, neither section present | Append both sections at the end (LLM Guidelines first, Git Workflow second) |
+| Exists, only `## Git Workflow` present | Insert `## LLM Coding Guidelines` directly above `## Git Workflow`; replace Git Workflow content with the new template |
+| Exists, only `## LLM Coding Guidelines` present | Replace LLM Guidelines content with the new template; append `## Git Workflow` directly after |
+| Exists, both sections present | Replace each section's content independently in place |
+
+In every state, preserve all non-managed content (other headings, paragraphs, code blocks) exactly as-is. The two managed sections must remain contiguous (no other content inserted between them).
 
 #### 4d: Write docs/git-workflow/ files
 
@@ -101,13 +113,14 @@ Create the directory `docs/git-workflow/` if it doesn't exist. Write these 3 fil
 
 Report what was created:
 
-> Git workflow initialized with **{strategy name}** strategy.
+> Git workflow + LLM coding guidelines initialized with **{strategy name}** strategy.
 >
 > Files created/updated:
-> - `CLAUDE.md` — Git Workflow section added
+> - `CLAUDE.md` — `## LLM Coding Guidelines` and `## Git Workflow` sections added
 > - `docs/git-workflow/branch-strategy.md` — Branch rules
 > - `docs/git-workflow/commit-conventions.md` — Commit conventions
 > - `docs/git-workflow/pr-process.md` — PR process
 >
 > The `project-init` plugin hook will auto-validate branch names and commit messages.
+> The 4-bullet LLM Coding Guidelines baseline is derived from Andrej Karpathy's LLM coding observations.
 > Use `/commit` or `/commit-push-pr` (commit-commands plugin) for streamlined git operations.
