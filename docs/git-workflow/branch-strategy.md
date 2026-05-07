@@ -37,7 +37,7 @@ git checkout -b feature/<name>
 
 ### Continuing work on an existing branch
 
-Sync with main before continuing. This project prefers **merge** over rebase when syncing an existing feature branch (rebase is disallowed for already-shared branches):
+Sync with main before continuing:
 
 ```bash
 git checkout feature/<name>
@@ -47,8 +47,8 @@ git merge origin/main
 
 ### After PR merge
 
-- Delete the branch (usually handled by `gh pr merge --delete-branch`)
-- Or keep and sync from main for follow-up work
+- Delete the branch: `git branch -d feature/<name>`
+- Or keep and merge main in for follow-up work
 
 ## Rules for Claude
 
@@ -57,4 +57,5 @@ git merge origin/main
 - **ALWAYS** use `feature/*` or `fix/*` branch naming
 - When asked to "start working on X" — create a properly named branch first
 - If on `main` and about to make changes — STOP and create a branch first
-- When syncing an existing feature branch with `main` — use `git merge`, not `git rebase`
+- When switching to an existing feature branch — check if it needs sync from main
+- **ALWAYS** sync an existing feature branch with `git merge origin/main`, never `git rebase`. Rebase rewrites commit SHAs — unsafe on any pushed branch.

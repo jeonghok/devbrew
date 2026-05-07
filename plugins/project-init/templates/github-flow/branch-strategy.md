@@ -42,13 +42,13 @@ Sync with main before continuing:
 ```bash
 git checkout feature/<name>
 git fetch origin
-git rebase origin/main
+git merge origin/main
 ```
 
 ### After PR merge
 
 - Delete the branch: `git branch -d feature/<name>`
-- Or keep and rebase from main for follow-up work
+- Or keep and merge main in for follow-up work
 
 ## Rules for Claude
 
@@ -57,4 +57,5 @@ git rebase origin/main
 - **ALWAYS** use `feature/*` or `fix/*` branch naming
 - When asked to "start working on X" — create a properly named branch first
 - If on `main` and about to make changes — STOP and create a branch first
-- When switching to an existing feature branch — check if it needs rebase from main
+- When switching to an existing feature branch — check if it needs sync from main
+- **ALWAYS** sync an existing feature branch with `git merge origin/main`, never `git rebase`. Rebase rewrites commit SHAs — unsafe on any pushed branch.

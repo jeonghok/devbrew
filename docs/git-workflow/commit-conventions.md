@@ -35,7 +35,7 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/).
 
 ## Scope
 
-Scope by plugin name (e.g., `project-init`, `quality-gates`) or component type (e.g., `hook`, `command`, `skill`)
+Scope by module/directory name: `auth`, `api`, `ui`
 
 ## Breaking Changes
 
