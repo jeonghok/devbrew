@@ -118,7 +118,7 @@ Plan mode가 이 이유로 존재합니다. devbrew의 복잡한 작업을 하�
 
 ### 2.2 Under Law 2 — Writer/Reviewer Independence
 
-Law 2를 직접 봉사하는 원칙들. AP3, AP13, AP14가 anti-corollary로 nested. AP11은 P3 body에 흡수 (standalone 헤더 없음).
+Law 2를 직접 봉사하는 원칙들. AP3, AP13, AP14가 anti-corollary로 nested. AP11은 P3 body에 흡수 (standalone 헤더 없음). P24는 R5 (2026-05-06)에서 Anthropic *Claude Code Best Practices*의 Writer/Reviewer pattern을 직접 출처로 추가됨.
 
 ### P3. Writer/Reviewer Isolation via Tool Scoping
 
@@ -127,6 +127,24 @@ gstack 방식: `allowed-tools` frontmatter로 역할 경계를 **프롬프트가
 > *"Role boundaries are enforced by disallowedTools in frontmatter. Every agent prompt starts with 'You are X. You are responsible for Y. You are NOT responsible for Z' — the negative clause prevents helpful-agent creep."* — OMC architecture
 
 **흡수된 안티패턴 (구 AP11):** `Write` 권한을 가진 리뷰어는 리뷰어가 아니며, mutating `Bash`를 가진 플래너는 플래너가 아닙니다. default(전체 tool 접근)은 어떤 role-scoped agent에도 금지됩니다. 모든 agent 정의는 명시적 `allowedTools`와 `disallowedTools` 리스트를 가져야 합니다.
+
+### P24. Writer/Reviewer Pattern (Fresh-Context Critique Loop)
+
+P3가 *enforcement* (frontmatter tool-scoping)이라면, P24는 *workflow shape*입니다 — Anthropic *Claude Code Best Practices*가 명시적으로 명명한 default 패턴: Writer 세션이 draft를 만들고, **fresh context의 Reviewer 세션**이 critique하고, Writer가 피드백을 반영해서 다시 draft하는 dual-session loop. 핵심 근거는 self-bias의 비대칭 — 같은 context는 자신이 방금 쓴 코드 쪽으로 systematically 편향됨. fresh context는 그 anchor를 끊습니다.
+
+> *"[…] multiple sessions enable quality-focused workflows. **A fresh context improves code review since Claude won't be biased toward code it just wrote.** For example, use a Writer/Reviewer pattern."* — *Claude Code Best Practices*
+
+> *"In the evaluator-optimizer workflow, one LLM call generates a response while another provides evaluation and feedback in a loop."* — *Building Effective Agents*
+
+운영적 함의:
+
+- **Production code를 shipping하는 플러그인의 default workflow shape는 Writer/Reviewer 2-session loop.** 단일 agent의 draft + self-review로 종결하는 패턴은 AP3 (Self-Approval)의 일반화된 형태로 treat.
+- Reviewer는 *반드시* fresh context — 같은 turn 내 reviewer skill 재invoke가 minimum baseline, 별도 agent dispatch가 정석, 별도 session이 high-stakes default. 같은 context의 self-review는 self-bias를 그대로 안고 감.
+- Loop은 single iteration이 아닐 수 있음 — Writer가 Reviewer feedback을 받고 revise하고 다시 review에 보내는 반복. *Building Effective Agents*의 "evaluator-optimizer"가 정확히 그것.
+- P3와 동시 적용: P3는 *무엇이* 가능하냐 (Reviewer는 `Write`/`Edit` disallow), P24는 *언제, 어떤 모양으로* 도느냐 (Writer draft → Reviewer fresh context critique → revise loop).
+- P11과 구분: P11은 *cross-MODEL* (다른 vendor) 게이트 — 되돌리기 어려운 결정의 opt-in. P24는 *same-model fresh-context* 게이트 — production-ship default. 한 플러그인이 P24만, 또는 P24+P11 (high-stakes에 추가) 둘 다 instantiate 가능.
+
+**Reference implementation:** `plugins/quality-gates/`의 3-gate 파이프라인 (writer → reviewer → runtime verifier)이 P24의 canonical instantiation. 플러그인이 P24를 instantiate함을 README *"Principles Instantiated"*에서 cite하면 future search가 모든 instantiation을 발견 (Law 3 compounding substrate).
 
 ### P4. Verification Is Infrastructure
 
@@ -147,6 +165,8 @@ gstack 방식: `allowed-tools` frontmatter로 역할 경계를 **프롬프트가
 *P4의 anti-corollary. 원래 위치: 구 §3.*
 
 같은 턴이 쓰고 승인하는 것. Law 2로 엄격히 금지. 하니스는 승인을 구조적으로 독립된 pass로 route해야 함 — 다른 agent, 다른 skill, 또는 최소한 fresh context로 reviewer skill을 다시 invoke.
+
+Anthropic *Claude Code Best Practices*가 self-bias의 비대칭을 명시적으로 articulate함: *"A fresh context improves code review since Claude won't be biased toward code it just wrote."* AP3는 그 bias가 무엇인지의 이름 — 같은 context의 reviewer는 자신이 방금 쓴 코드를 *defend*하는 default로 들어가고, fresh context는 그 anchor를 끊습니다. P24가 그 분리를 default workflow shape로 만들고, AP3는 그 분리 없는 self-pass를 거부 — 둘은 같은 axis의 positive/negative.
 
 ### P10. Taste Pluralism
 
@@ -623,7 +643,7 @@ CE는 compound-engineering 플러그인을 **훅 0개**로 shipping — bet은 �
 | Principle / Primitive | Primary source | Supporting source(s) |
 |---|---|---|
 | Clarity Before Code (Law 1) | Ouroboros | OMC deep-interview, gstack office-hours, CE ce-brainstorm, Anthropic plan mode |
-| Writer/Reviewer Isolation (Law 2) | OMC execution_protocols | gstack allowed-tools, CE parallel review, Ouroboros 3-stage gate, Anthropic subagent pattern |
+| Writer/Reviewer Isolation (Law 2) | OMC execution_protocols | gstack allowed-tools, CE parallel review, Ouroboros 3-stage gate, Anthropic subagent pattern, Anthropic *Claude Code Best Practices* (Writer/Reviewer pattern) |
 | Compounding Cycle (Law 3) | CE / Klaassen essays | OMC learner+wiki, gstack learnings.jsonl, Anthropic filesystem-as-memory |
 | Ambiguity Gate (P2) | Ouroboros | OMC deep-interview dimensional scoring + C43+C44+C45+C51 (roadmap, 2026-05-06 absorption) |
 | Tool Scoping (P3; AP11 absorbed) | gstack | OMC Delegation Enforcer hook |
@@ -647,6 +667,7 @@ CE는 compound-engineering 플러그인을 **훅 0개**로 shipping — bet은 �
 | Security & Supply Chain (P21) | devbrew own (AP12, P10, §5.6에서 synthesize) | Anthropic *Writing Effective Tools* (간접) |
 | Cost Awareness (P22) | OMC tier variants + gstack confidence gating + `ccg` decomposition | Anthropic *Multi-Agent Research System* (4× token cost 경고) |
 | Versioning & Deprecation (P23) | devbrew own; plugin.json cache-key 요구사항에서 상속 | SemVer |
+| Writer/Reviewer Pattern (P24) | Anthropic *Claude Code Best Practices* | Anthropic *Building Effective Agents* (evaluator-optimizer workflow) |
 | Tool Scoping Enforcement (AP11) | gstack `allowed-tools` | OMC Delegation Enforcer |
 | Undeclared Plugin Dependency (AP12) | devbrew quality-gates existing | — |
 | PRD Theater (AP1) | OMC | — |
@@ -750,7 +771,7 @@ CE는 compound-engineering 플러그인을 **훅 0개**로 shipping — bet은 �
 
 ### 11.2 Principle Changes (B.2)
 
-Modification types: **R** = relocated only, **E** = C# content로 expanded, **A** = body가 AP를 absorb, **N** = anti-corollary로 AP를 nest.
+Modification types: **R** = relocated only, **E** = C# content로 expanded, **A** = body가 AP를 absorb, **N** = anti-corollary로 AP를 nest, **NEW** = R5에서 신규 추가.
 
 | ID | Modification | New Location | Source / Notes |
 |---|---|---|---|
@@ -777,8 +798,9 @@ Modification types: **R** = relocated only, **E** = C# content로 expanded, **A*
 | P21 | R                  | §2.4 Cross-cutting  | — |
 | P22 | N(AP9)             | §2.4 Cross-cutting  | — |
 | P23 | R                  | §2.4 Cross-cutting  | — |
+| P24 | NEW (R5)           | §2.2 Law 2          | Anthropic *Claude Code Best Practices* — Writer/Reviewer pattern; fresh-context critique loop |
 
-**No P24.** Roadmap 클러스터 C3+C4+C25+C69는 §4.6 + Law 3 corollary 확장으로 흡수 (lightness meta-principle).
+**P24 added 2026-05-06 R5** — Anthropic *Claude Code Best Practices*의 Writer/Reviewer pattern을 직접 출처로 신규 추가. 참고: 이전 R4 restructure에서는 roadmap 클러스터 C3+C4+C25+C69에 대해 새 P# 만들지 않고 §4.6 + Law 3 corollary로 흡수했음 (lightness meta-principle). P24는 그 클러스터와 무관하게 별개의 일급 출처에서 도착한 패턴이라 슬롯을 채움.
 
 ### 11.3 §4 Primitive Expansions
 
@@ -858,3 +880,7 @@ Load-bearing 인용, verbatim 유지해서 이후 라운드가 re-fetch 없이 c
 > *"Prioritize transparency by explicitly showing the agent's planning steps."* — *Building Effective Agents*
 >
 > *"Initializer agent: The very first agent session uses a specialized prompt that asks the model to set up the initial environment […] Coding agent: Every subsequent session asks the model to make incremental progress, then leave structured updates."* — *Effective Harnesses for Long-Running Agents*
+>
+> *"[…] multiple sessions enable quality-focused workflows. A fresh context improves code review since Claude won't be biased toward code it just wrote. For example, use a Writer/Reviewer pattern."* — *Claude Code Best Practices*
+>
+> *"In the evaluator-optimizer workflow, one LLM call generates a response while another provides evaluation and feedback in a loop."* — *Building Effective Agents*
