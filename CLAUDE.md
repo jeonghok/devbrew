@@ -81,16 +81,21 @@ Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md
 - **Subagent spray** — 선언 없는 fan-out ≥ 5; single-agent를 default로.
 - **Unbounded autonomy** — max-iter count, wall-clock budget, repeat 감지, 사용자-override kill switch 없는 루프.
 
+## LLM Coding Guidelines
+
+- Think Before Coding — 가정·혼란·tradeoff 명시, 의심나면 묻기
+- Simplicity First — 요청 이상 만들지 않기, 추측 금지
+- Surgical Changes — 요청과 직결된 줄만, 인접 코드 청소 금지
+- Goal-Driven Execution — 검증 가능한 성공 기준 정의 후 loop
+
 ## Git Workflow
 
-GitHub Flow. `main`에서 분기, PR로 다시 merge. 상세는 [`docs/git-workflow/`](docs/git-workflow/).
+GitHub Flow. Branch from `main`, merge back via PR. Details in `docs/git-workflow/`.
 
-- Branch: `main`에서 `feature/*` 또는 `fix/*`. Kebab-case, 2-4 단어.
-- Commit: Conventional Commits (`<type>(<scope>): <description>`).
-- PR: squash merge. [`docs/git-workflow/pr-process.md`](docs/git-workflow/pr-process.md) 참조.
-- `project-init` 플러그인이 branch 이름과 commit format을 자동 검증.
-- `main`에서 feature branch를 업데이트할 때 `git rebase`보다 `git merge` 선호.
-- Default `gh pr merge --squash --delete-branch`; squash merge 후 로컬 branch도 force-delete.
+- Branch: `feature/*` or `fix/*` from `main`. Kebab-case, 2-4 words.
+- Commit: Conventional Commits (`<type>(<scope>): <description>`)
+- PR: squash merge, see `docs/git-workflow/pr-process.md`
+- project-init plugin auto-validates branch naming and commit format
 
 ## When Editing This Repo
 
