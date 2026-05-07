@@ -5,7 +5,7 @@
 >
 > *병목은 모델이 아니다. 스펙, 리뷰, 메모리다. devbrew의 역할은 사용자가 의식적으로 기억하지 않아도 이 세 가지가 자동으로 지켜지도록 만드는 것이다.*
 
-devbrew는 Claude Code를 위한 플러그인 마켓플레이스입니다. `plugins/*` 하위의 모든 플러그인은 아래 원칙을 상속합니다. 출처·23개 원칙·17개 anti-pattern·네 소스 하니스(oh-my-claudecode, gstack, ouroboros, compound-engineering)와 Anthropic 엔지니어링 문서의 원문 인용까지 담긴 전체 철학은 [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md)에 있습니다. 이 파일은 사전 로드 컨텍스트 앵커 — 불변값, 체크리스트, 포인터만 담습니다. 철학 문서에 속해야 할 내용은 이 파일에 오지 않습니다.
+devbrew는 Claude Code를 위한 플러그인 마켓플레이스입니다. `plugins/*` 하위의 모든 플러그인은 아래 원칙을 상속합니다. 출처·24개 원칙·14개 anti-pattern·네 소스 하니스(oh-my-claudecode, gstack, ouroboros, compound-engineering)와 Anthropic 엔지니어링 문서의 원문 인용까지 담긴 전체 철학은 [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md)에 있습니다. 이 파일은 사전 로드 컨텍스트 앵커 — 불변값, 체크리스트, 포인터만 담습니다. 철학 문서에 속해야 할 내용은 이 파일에 오지 않습니다.
 
 > **처음 오셨나요?** 플러그인을 만들고 있다면 → [§새 플러그인 만들기](#새-플러그인-만들기). 코드를 리뷰하고 있다면 → [§세 법칙](#세-법칙-three-laws)과 [§금지 패턴](#금지-패턴-forbidden-patterns). 그 이유가 궁금하다면 → [철학 문서](docs/philosophy/devbrew-harness-philosophy.md).
 
@@ -101,7 +101,7 @@ GitHub Flow. `main`에서 분기, PR로 다시 merge. 상세는 [`docs/git-workf
 
 ## References
 
-- [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md) — 전체 철학: 23 원칙, 17 anti-pattern, 10 primitive, 6 tension with pick, attribution map, 원문 인용 (Appendix A).
+- [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md) — 전체 철학: 24 원칙, 14 anti-pattern, 11 primitive, 6 tension with pick, attribution map, 원문 인용 (Appendix A).
 - [`docs/git-workflow/`](docs/git-workflow/) — branching, commit, PR process.
 - [`plugins/quality-gates/README.md`](plugins/quality-gates/README.md) — 3-gate pipeline으로 Laws 1–2를 구현하는 레퍼런스 — pr-review-toolkit, feature-dev, superpowers agent에 dispatch.
 - [`plugins/project-init/README.md`](plugins/project-init/README.md) — git-workflow enforcement과 branch/commit validation.
