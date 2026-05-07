@@ -603,6 +603,8 @@ Expected: 0 finding.
 
 - [ ] **Step 1: `apply_auto_fixes` 실패 테스트**
 
+**Note:** Task 6 refactored `Finding.auto_fix` from `str | None` to `tuple[int, int, str] | None` to support multi-finding-per-line composition. See Task 6 step 1 in this plan.
+
 ```python
 class TestApplyFixes(unittest.TestCase):
     def test_count_drift_fix(self):
@@ -610,7 +612,7 @@ class TestApplyFixes(unittest.TestCase):
         f = audit.Finding(
             "COUNT_DRIFT", "CLAUDE.md", 1,
             "principles: claimed=23 actual=24",
-            auto_fix="this doc has 24 원칙 cataloged",
+            auto_fix=(13, 15, "24"),
         )
         self.assertEqual(
             audit.apply_auto_fixes(original, [f]),
@@ -724,7 +726,7 @@ class TestRenderReport(unittest.TestCase):
         f = audit.Finding(
             "COUNT_DRIFT", "CLAUDE.md", 5,
             "principles: claimed=23 actual=24",
-            auto_fix="...",
+            auto_fix=(0, 2, "24"),
         )
         report = audit.render_report([f])
         self.assertIn("**Auto-fixed**", report)
@@ -889,13 +891,15 @@ Expected: 1 commit created on `feature/harness-philosophy`. Verify with `git log
 cd /Users/jeonghokim/Downloads/devbrew && python3 docs/superpowers/scripts/audit_claude_md.py
 ```
 
-Expected output (대략):
+Expected output:
 ```
 Auto-fixes applied to /Users/jeonghokim/Downloads/devbrew/CLAUDE.md
 Report written to /Users/jeonghokim/Downloads/devbrew/docs/superpowers/reports/2026-05-07-claude-md-audit.md
-Total findings: 2
-Auto-fixed: 2
+Total findings: 5
+Auto-fixed: 5
 ```
+
+The 5 findings are: principles 23→24 (×2 occurrences on lines 8 and 104), anti_patterns 17→14 (×2), primitives 10→11 (×1, on line 104). The original spot-check anticipated only the first two; primitives drift was discovered by the audit itself.
 
 - [ ] **Step 2: 보고서 inspection**
 

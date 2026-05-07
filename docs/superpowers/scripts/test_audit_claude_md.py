@@ -95,6 +95,7 @@ class TestCountPass(unittest.TestCase):
         kinds = [f.detail.split(":")[0] for f in findings if f.kind == "COUNT_DRIFT"]
         self.assertIn("principles", kinds)
         self.assertIn("anti_patterns", kinds)
+        self.assertIn("primitives", kinds)
 
 
 class TestCountActual(unittest.TestCase):
@@ -179,6 +180,26 @@ class TestRenderReport(unittest.TestCase):
         report = audit.render_report([f])
         self.assertIn("**Auto-fixed**", report)
         self.assertIn("CLAUDE.md:5", report)
+
+
+class TestRenderReportNewSections(unittest.TestCase):
+    def test_auto_fix_diff_present_when_changes(self):
+        original = "old line\n"
+        fixed = "new line\n"
+        report = audit.render_report([], original, fixed)
+        self.assertIn("```diff", report)
+        self.assertIn("-old line", report)
+        self.assertIn("+new line", report)
+
+    def test_no_diff_when_unchanged(self):
+        report = audit.render_report([], "same\n", "same\n")
+        self.assertIn("(no auto-fixes applied)", report)
+
+    def test_manual_actions_for_unresolved_citation(self):
+        f = audit.Finding("UNRESOLVED_CITATION", "CLAUDE.md", 10, "P99", auto_fix=None)
+        report = audit.render_report([f])
+        self.assertIn("Recommended manual actions", report)
+        self.assertIn("`P99` does not resolve", report)
 
 
 if __name__ == "__main__":

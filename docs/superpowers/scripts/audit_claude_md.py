@@ -5,7 +5,7 @@ from __future__ import annotations
 import re, sys
 from pathlib import Path
 from dataclasses import dataclass
-from difflib import get_close_matches
+from difflib import get_close_matches, unified_diff
 from collections import defaultdict
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -255,6 +255,14 @@ REPORT_TEMPLATE = """# CLAUDE.md Audit — 2026-05-07
 
 ### MISSING_SOURCE_SENTINEL
 {sentinel}
+
+## Auto-fix diff
+
+{auto_fix_diff}
+
+## Recommended manual actions
+
+{manual_actions}
 """
 
 
@@ -269,9 +277,36 @@ def _section(findings: list[Finding], kind: str) -> str:
     return "\n".join(out)
 
 
-def render_report(findings: list[Finding]) -> str:
+def render_report(findings: list[Finding], original: str = "", fixed: str = "") -> str:
     auto_fixed = lambda kind: sum(1 for f in findings if f.kind == kind and f.auto_fix)
     of_kind = lambda kind: sum(1 for f in findings if f.kind == kind)
+
+    # Auto-fix diff section
+    if original and fixed and original != fixed:
+        diff_lines = list(unified_diff(
+            original.splitlines(keepends=True),
+            fixed.splitlines(keepends=True),
+            fromfile="CLAUDE.md (before)",
+            tofile="CLAUDE.md (after)",
+            n=3,
+        ))
+        auto_fix_diff = "```diff\n" + "".join(diff_lines) + "```" if diff_lines else "(no auto-fixes applied)"
+    else:
+        auto_fix_diff = "(no auto-fixes applied)"
+
+    # Recommended manual actions: report-only findings that need human judgment
+    manual = []
+    for f in findings:
+        if f.kind == "UNRESOLVED_CITATION":
+            manual.append(f"- `{f.file}:{f.line}` — citation `{f.detail}` does not resolve. Investigate: typo, missing principle, or future-reference.")
+        elif f.kind == "BROKEN_LINK":
+            manual.append(f"- `{f.file}:{f.line}` — link target missing: {f.detail}. Update path or remove reference.")
+        elif f.kind == "BROKEN_ANCHOR" and f.auto_fix is None:
+            manual.append(f"- `{f.file}:{f.line}` — anchor not auto-fixable: {f.detail}. Manually update fragment.")
+        elif f.kind == "MISSING_SOURCE_SENTINEL":
+            manual.append(f"- `{f.file}:{f.line}` — {f.detail}. Restore named source in §6 of philosophy.md.")
+    manual_actions = "\n".join(manual) if manual else "(no manual actions required)"
+
     return REPORT_TEMPLATE.format(
         n_link=of_kind("BROKEN_LINK"),
         n_anchor=of_kind("BROKEN_ANCHOR"),
@@ -285,6 +320,8 @@ def render_report(findings: list[Finding]) -> str:
         unresolved=_section(findings, "UNRESOLVED_CITATION"),
         count_drift=_section(findings, "COUNT_DRIFT"),
         sentinel=_section(findings, "MISSING_SOURCE_SENTINEL"),
+        auto_fix_diff=auto_fix_diff,
+        manual_actions=manual_actions,
     )
 
 
@@ -300,7 +337,7 @@ def main() -> int:
 
     fixed = apply_auto_fixes(claude, findings)
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REPORT_PATH.write_text(render_report(findings))
+    REPORT_PATH.write_text(render_report(findings, claude, fixed))
 
     if fixed != claude:
         CLAUDE_MD.write_text(fixed)
