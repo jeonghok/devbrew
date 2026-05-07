@@ -77,4 +77,5 @@ git checkout -b hotfix/<name>
 - When asked to "start working on X" — create a feature branch from `develop`
 - If on `main` or `develop` and about to make changes — STOP and create a branch first
 - When merging a release or hotfix — merge to BOTH `main` and `develop`
-- When switching to an existing feature branch — check if it needs rebase from `develop`
+- When switching to an existing feature branch — check if it needs sync from `develop`
+- **ALWAYS** sync an existing feature branch with `git merge origin/develop`, never `git rebase`. Rebase rewrites commit SHAs — unsafe on any pushed branch.
