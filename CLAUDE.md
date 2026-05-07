@@ -96,6 +96,7 @@ GitHub Flow. `main`에서 분기, PR로 다시 merge. 상세는 [`docs/git-workf
 
 - `plugins/<name>/`를 건드리는 모든 PR에 **플러그인 version bump**.
 - **Korean-primary, English-terms-only.** `CLAUDE.md`와 `docs/philosophy/*.md` 등 user-facing 문서는 한국어를 primary로 작성. 영어는 **식별자**(P#, AP#, Law N, §X.Y, plugin 이름), **고유명사**(OMC, gstack, Ouroboros, CE, Anthropic 등), **원문 인용**(verbatim, 어느 방향으로도 gloss 추가 안 함), **기술 용어 중 자연스러운 한국어 대응이 없는 것**(`frontmatter`, `PreCompact`, `subagent`, `hook`, `skill` 등)에 한정. `*.ko.md` 동반 파일 모델은 폐기 (drift 비용 > 이중 노출 가치).
+- **`docs/**.md` 파일이 ~300줄 이상이면 상단(제목 + 에피그래프 + 한 줄 정체성 다음, 본문 진입 직전)에 `## 목차` 섹션 필수.** §X.Y depth로 anchor 링크. 섹션 추가/이름 변경/삭제 시 같은 commit에서 TOC도 동기화 (drift 시 cite-by-anchor 깨짐). 짧은 doc(<300줄, git-workflow 가이드 등)은 면제.
 - 새 플러그인은 README에 **어떤 철학 원칙을 instantiate하는지 cite** (예: *"Laws 1 and 2를 gate-based pipeline dispatch로 구현"*).
 - **버그가 리뷰를 탈출하면**, 해결책은 잡았어야 할 reviewer persona 파일을 편집하는 것. 코드만 패치하는 게 아님. 그 commit이 compounding 이벤트 (Law 3).
 
