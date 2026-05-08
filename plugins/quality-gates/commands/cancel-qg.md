@@ -1,7 +1,7 @@
 ---
 description: "Cancel active quality gates pipeline"
 argument-hint: "[--gc | --all]"
-allowed-tools: ["Bash(test:*)", "Bash(rm:*)", "Bash(rm -rf:*)", "Read", "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/qg-gc.py:*)"]
+allowed-tools: ["Bash(test:*)", "Bash(rm:*)", "Bash(rm -rf:*)", "Bash(find:*)", "Bash(wc:*)", "Read", "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/qg-gc.py:*)", "AskUserQuestion"]
 hide-from-slash-command-tool: "true"
 ---
 
