@@ -17,9 +17,15 @@
 
 set -euo pipefail
 
-STATE_FILE=".claude/quality-gates.local.md"
-SESSION_FILE=".claude/quality-gates-session.local.md"
-BRANCH_FILE=".claude/quality-gates-branch.local.md"
+SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
+if [[ -z "$SESSION_ID" ]]; then
+  echo "result: no_session_id"
+  exit 0
+fi
+STATE_DIR=".claude/quality-gates/$SESSION_ID"
+STATE_FILE="$STATE_DIR/pipeline.md"
+SESSION_FILE="$STATE_DIR/files.md"
+BRANCH_FILE="$STATE_DIR/branch.md"
 STALE_HOURS="${QG_STALE_HOURS:-24}"
 
 current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
@@ -66,7 +72,7 @@ else
 fi
 
 # 4. Update branch marker (atomic) — for every path that did NOT early-exit.
-mkdir -p .claude
+mkdir -p "$STATE_DIR"
 tmp_branch="${BRANCH_FILE}.tmp.$$"
 {
   printf '%s\n' '---'
