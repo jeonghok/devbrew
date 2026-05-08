@@ -25,10 +25,12 @@ own line, this is a Stop-hook-injected continuation → go to step 2a. Otherwise
 it is a first invocation (via `/qg` or direct skill call) →
 go to step 2b.
 
-**2a. Continuation path.** The state file MUST exist. Verify:
+**2a. Continuation path.** The state file MUST exist. Verify (the session ID
+is read from `$CLAUDE_CODE_SESSION_ID`; if empty, treat as an invariant
+violation and stop with the same error as below):
 
 ```bash
-test -f .claude/quality-gates.local.md
+test -f ".claude/quality-gates/${CLAUDE_CODE_SESSION_ID}/pipeline.md"
 ```
 
 - Exit 0 → proceed to the Arguments section below.
@@ -37,7 +39,8 @@ test -f .claude/quality-gates.local.md
   pipeline immediately — do NOT call `setup-qg.sh`, as fresh state would mask
   the real bug:
 
-  > ❌ Pipeline state file disappeared mid-run (`.claude/quality-gates.local.md`).
+  > ❌ Pipeline state file disappeared mid-run
+  > (`.claude/quality-gates/<session-id>/pipeline.md`).
   > This indicates state corruption or an accidental deletion.
   > Run `/cancel-qg` to clear residual state, then `/qg` to restart.
 
@@ -105,8 +108,9 @@ Parse the output (one `key: value` line per output line):
 - `result: fresh_start` | `result: preserved` | `result: no_session_data` → silent.
 
 After the check, if `result == cleared_*`, do NOT use any prior
-`quality-gates-session.local.md` data — proceed as if `--branch` mode is
-implied (full diff against `main`).
+`.claude/quality-gates/<session-id>/files.md` data — proceed as if `--branch`
+mode is implied (full diff against `main`). The check itself operates within
+the per-session folder; cross-session siblings are never inspected.
 
 ### Trivia escape (§E)
 
@@ -118,8 +122,8 @@ Run the trivia detector before Gate 1 dispatch:
 
 If exit code is `0`:
 - Read the stdout line `trivia: <kind>` (kind ∈ `whitespace | rename`).
-- Update `.claude/quality-gates.local.md` with `status: completed`,
-  `outcome: trivia-skipped`, `trivia_kind: <kind>`.
+- Update `.claude/quality-gates/<session-id>/pipeline.md` with
+  `status: completed`, `outcome: trivia-skipped`, `trivia_kind: <kind>`.
 - Emit `<qg-signal verdict="trivia-skipped" reason="<kind>" />` and stop.
 - Tell the user: "Trivia change (`<kind>`); review skipped."
 
@@ -255,23 +259,26 @@ Then run this **single consolidated bash block**. It captures the diff once, wri
 ```bash
 set -e
 
+# Per-session cache directory (must already exist — setup-qg.sh creates it).
+QG_DIR=".claude/quality-gates/${CLAUDE_CODE_SESSION_ID}"
+mkdir -p "$QG_DIR"
+
 # Docs filter (§D): exclude *.md, *.txt, *.rst, docs/**, CHANGELOG*, README*
 # from the scope passed to code-reviewer-style agents. Gate 1 plan-verifier
 # already saw the unfiltered diff above; from here on, agents see code paths only.
-mkdir -p .claude
 git diff --name-only \
   | "${CLAUDE_PLUGIN_ROOT}/scripts/filter-docs.sh" \
-  > .claude/qg-code-paths.tmp
+  > "$QG_DIR/code-paths.tmp"
 
-if [ -s .claude/qg-code-paths.tmp ]; then
+if [ -s "$QG_DIR/code-paths.tmp" ]; then
   # shellcheck disable=SC2046
-  DIFF_CONTENT=$(git diff -- $(cat .claude/qg-code-paths.tmp))
+  DIFF_CONTENT=$(git diff -- $(cat "$QG_DIR/code-paths.tmp"))
 else
   # Docs-only change (rare after trivia escape and Gate 1 PASS): empty diff for code reviewers
   DIFF_CONTENT=""
 fi
 
-printf '%s' "$DIFF_CONTENT" > .claude/qg-diff-cache.txt
+printf '%s' "$DIFF_CONTENT" > "$QG_DIR/diff-cache.txt"
 
 DIFF_CHARS=${#DIFF_CONTENT}
 DIFF_LINES=$(printf '%s\n' "$DIFF_CONTENT" | grep -cE '^[+-][^+-]' || echo 0)
@@ -323,7 +330,7 @@ printf '{"diff_chars":%d,"diff_lines":%d,"inline_diff_mode":"%s","type_design":%
 
 Parse the JSON from the bash stdout and hold the flags in your context. **Fail-open**: if the bash block errors or emits unparseable output, set all Phase 2 flags to `1` so no agent is silently skipped.
 
-If `inline_diff_mode` is `true`, use the `Read` tool on `.claude/qg-diff-cache.txt` to load the diff content into context for reuse in Agent prompts. If `inline_diff_mode` is `false`, skip the Read — subagents will run their own `git diff`.
+If `inline_diff_mode` is `true`, use the `Read` tool on `.claude/quality-gates/<session-id>/diff-cache.txt` (substitute `<session-id>` with `$CLAUDE_CODE_SESSION_ID`) to load the diff content into context for reuse in Agent prompts. If `inline_diff_mode` is `false`, skip the Read — subagents will run their own `git diff`.
 
 #### Dispatch Prompt Template
 
@@ -592,7 +599,7 @@ If CRITICAL or IMPORTANT issues are found:
    ```bash
    git diff --name-only
    ```
-3. **Re-run the Step 0 consolidated bash block** so the cache file and flags reflect the post-fix state. Re-read `.claude/qg-diff-cache.txt` into context.
+3. **Re-run the Step 0 consolidated bash block** so the cache file and flags reflect the post-fix state. Re-read `.claude/quality-gates/<session-id>/diff-cache.txt` into context.
 4. If `iteration < max_iterations`: selectively re-dispatch per the dedup rule below.
 5. If `iteration >= max_iterations`: stop and report remaining issues.
 
@@ -664,13 +671,13 @@ Record the list of changed files. This determines the signal verdict (`PASS` if 
 
 #### Cache Cleanup
 
-Before emitting the Gate 2 signal (on **any** verdict — PASS, FAIL, NEEDS_RESTART, or error), delete the cache file:
+Before emitting the Gate 2 signal (on **any** verdict — PASS, FAIL, NEEDS_RESTART, or error), delete the per-session cache file:
 
 ```bash
-rm -f .claude/qg-diff-cache.txt
+rm -f ".claude/quality-gates/${CLAUDE_CODE_SESSION_ID}/diff-cache.txt"
 ```
 
-This must run on every exit path. If the skill turn crashes before cleanup, the next Gate 2 invocation's Step 0 will overwrite the cache — stale content cannot bleed in, but an orphaned cache file is a signal that an earlier run failed abnormally.
+This must run on every exit path. If the skill turn crashes before cleanup, the next Gate 2 invocation's Step 0 will overwrite the cache — stale content cannot bleed in, but an orphaned cache file is a signal that an earlier run failed abnormally. The folder itself stays; it is removed by `stop-hook.py` on terminal verdict, `/cancel-qg`, or the SessionEnd hook.
 
 #### Output Report
 
@@ -743,7 +750,7 @@ Output a structured report in this exact format. **All skipped agents must be li
 - Always track which files you modify — the orchestrator needs this for the signal's `files_changed` attribute
 - If you changed code, your verdict MUST be `NEEDS_RESTART` (not `PASS`), so Gate 1 can re-verify
 - Path A (`plan_path_source == "explicit"`) preserves the original `superpowers:code-reviewer` dispatch behavior — do not gate it on diff size
-- Delete `.claude/qg-diff-cache.txt` on every Gate 2 exit path (including errors)
+- Delete `.claude/quality-gates/<session-id>/diff-cache.txt` on every Gate 2 exit path (including errors)
 
 ### Gate 3: Runtime Verification
 
@@ -877,7 +884,7 @@ For Gate 2, include the `iteration` attribute:
 
 ## Rules
 
-- NEVER directly read or write the contents of `.claude/quality-gates.local.md`. All state creation, validation, and stale-state cleanup is delegated to `setup-qg.sh`; mutation is the Stop hook's job. The skill may probe existence with `test -f` (Preflight only) and invoke `setup-qg.sh --ensure` via Bash. No other interaction is permitted.
+- NEVER directly read or write the contents of `.claude/quality-gates/<session-id>/pipeline.md`. All state creation, validation, and stale-state cleanup is delegated to `setup-qg.sh`; mutation is the Stop hook's job. The skill may probe existence with `test -f` (Preflight only) and invoke `setup-qg.sh --ensure` via Bash. No other interaction is permitted. Sibling session folders under `.claude/quality-gates/` belong to other Claude Code sessions and must not be inspected or modified.
 - ALWAYS emit exactly one `<qg-signal>` tag at the end of your response
 - Output each gate's result to the user immediately
 - If an agent dispatch fails (error), report the error and emit signal with verdict="FAIL"
