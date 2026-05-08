@@ -17,6 +17,7 @@ gate3_fail). The within-Gate-2 fix-loop (max_gate2_iterations) is preserved.
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -24,7 +25,12 @@ from datetime import datetime, timezone
 
 # --- Constants ---
 
-STATE_FILE = ".claude/quality-gates.local.md"
+ROOT = ".claude/quality-gates"
+
+
+def state_file_for(session_id: str) -> str:
+    return f"{ROOT}/{session_id}/pipeline.md"
+
 
 GATE_NAMES = {
     "1": "Plan Verification",
@@ -567,24 +573,28 @@ def main():
     except (json.JSONDecodeError, EOFError):
         sys.exit(0)
 
+    session_id = hook_input.get("session_id", "")
+    if not session_id:
+        sys.exit(0)
+    state_file = state_file_for(session_id)
+
     # 1. Check state file exists
-    if not os.path.exists(STATE_FILE):
+    if not os.path.exists(state_file):
         sys.exit(0)
 
     # 2. Parse state file
-    state, body = parse_state_file(STATE_FILE)
+    state, body = parse_state_file(state_file)
     if state is None:
-        # Corrupted state file ��� delete and allow exit
+        # Corrupted state file — delete and allow exit
         try:
-            os.unlink(STATE_FILE)
+            os.unlink(state_file)
         except OSError:
             pass
         sys.exit(0)
 
-    # 3. Session isolation
+    # 3. Session isolation defense-in-depth (path already encodes session)
     state_session = state.get("session_id", "")
-    hook_session = hook_input.get("session_id", "")
-    if state_session and hook_session and state_session != hook_session:
+    if state_session and state_session != session_id:
         sys.exit(0)
 
     # 4. Extract signal from hook input or transcript
@@ -613,17 +623,15 @@ def main():
 
     # 8. Update state file with signal results
     try:
-        update_state_file(STATE_FILE, state, signal, transition)
+        update_state_file(state_file, state, signal, transition)
     except Exception as e:
         print(f"⚠️  Quality Gates: Failed to update state file: {e}",
               file=sys.stderr)
 
-    # 9. Handle completion/abort — delete state file and allow exit
+    # 9. Handle completion/abort — remove session folder entirely and allow exit
     if transition["type"] in ("complete", "abort"):
-        try:
-            os.unlink(STATE_FILE)
-        except OSError:
-            pass
+        folder = os.path.dirname(state_file)
+        shutil.rmtree(folder, ignore_errors=True)
         sys.exit(0)
 
     # 10. Handle user-choice prompts (gate2_user_choice, max_gate2_exceeded,
@@ -645,7 +653,7 @@ def main():
     if transition["type"] == "extend":
         current_gate = state["current_gate"]
         # State file already updated with new max
-        updated_state, updated_body = parse_state_file(STATE_FILE)
+        updated_state, updated_body = parse_state_file(state_file)
         if updated_state:
             updated_results = extract_gate_results(updated_body)
             prompt = build_gate_prompt(current_gate, updated_state, updated_results)
@@ -673,7 +681,7 @@ def main():
     if transition["type"] == "next_gate":
         next_gate = transition["next_gate"]
         # Re-read state file to get updated gate results
-        updated_state, updated_body = parse_state_file(STATE_FILE)
+        updated_state, updated_body = parse_state_file(state_file)
         if updated_state:
             updated_results = extract_gate_results(updated_body)
             prompt = build_gate_prompt(next_gate, updated_state, updated_results)
@@ -681,7 +689,7 @@ def main():
             prompt = build_gate_prompt(next_gate, state, gate_results)
     elif transition["type"] == "retry_gate":
         retry_gate = transition.get("gate", state["current_gate"])
-        updated_state, updated_body = parse_state_file(STATE_FILE)
+        updated_state, updated_body = parse_state_file(state_file)
         if updated_state:
             updated_results = extract_gate_results(updated_body)
             prompt = build_gate_prompt(retry_gate, updated_state, updated_results)
