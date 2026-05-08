@@ -1,5 +1,6 @@
 """Tests for scripts/qg-gc.py — TTL-based session-folder GC."""
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,7 @@ def make_session_dir(root, sid, mtime_offset_seconds=0, ctime_offset_seconds=0):
 class TestQgGc(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
 
     def test_old_folder_removed(self):
         old = make_session_dir(self.tmp, "abcd1234efgh", mtime_offset_seconds=-25 * 3600)

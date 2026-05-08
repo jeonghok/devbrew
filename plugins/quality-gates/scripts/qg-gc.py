@@ -99,7 +99,10 @@ def gc(self_session_id: str | None = None) -> int:
     if _disabled() or not ROOT.exists():
         return 0
     lock_path = ROOT / LOCK_NAME
-    lock_path.touch(exist_ok=True)
+    try:
+        lock_path.touch(exist_ok=True)
+    except OSError:
+        return 0
     ttl_ns = _ttl_ns()
     removed = 0
     with open(lock_path, "w") as lockfile:
