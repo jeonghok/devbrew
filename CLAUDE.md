@@ -29,7 +29,7 @@ devbrew는 Claude Code를 위한 플러그인 마켓플레이스입니다. `plug
 - **Scoped agents — default-everything 금지.** 모든 agent는 명시적 `allowedTools`/`disallowedTools`. 역할 프롬프트는 *"You are X. You are responsible for Y. You are NOT responsible for Z."*로 시작. 쓰기 권한이 있는 리뷰어는 Law 2 위반.
 - **최소 버전이 선언된 의존성.** `other-plugin:agent-name`을 dispatch하는 플러그인은 README prerequisites에 `other-plugin`을 리스트. Silent coupling은 버그.
 - **모든 skill에 `cost_class` 선언** (`low`|`medium`|`high`|`variable`). `high`는 지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함. Fan-out factor N ≥ 5는 hard review 게이트.
-- **JSON이 아니라 마크다운 state.** State는 `.claude/<plugin>.local.md`에 살음 (git-ignored, 성공 시 auto-delete, 실패 시 디버깅을 위해 보존). **Secret 기록 금지** — placeholder 참조 사용 (철학 P21).
+- **JSON이 아니라 마크다운 state.** State는 `.claude/<plugin>.local.md`에 살음 (git-ignored, 성공 시 auto-delete, 실패 시 디버깅을 위해 보존). per-session 격리가 필요하면 `.claude/<plugin>/<session-id>/...` 하위 디렉토리도 허용 — plugin namespace(`.claude/<plugin>/`) 하위에 머물 것 (철학 §4.8 참조). **Secret 기록 금지** — placeholder 참조 사용 (철학 P21).
 - **모든 훅에 kill switch.** `DEVBREW_DISABLE_<PLUGIN>=1` 또는 `DEVBREW_SKIP_HOOKS=<plugin>:<hook>`. 어떤 훅도 자신의 kill switch 존중을 거부할 수 없음 — kill switch는 보안 컨트롤.
 - **훅 공존.** 같은 event 내 훅은 교환 가능해야 함. Signal tag는 `<{plugin}-signal>` 네임스페이스. `SessionStart` 훅은 read-only 조언자, 절대 mutate 안 함. 각 훅은 README의 "Hooks Installed"에 "왜 skill이 아닌가"의 한 줄 justification과 함께 문서화.
 - **Progressive disclosure.** Skill 이름은 동명사 (`running-quality-gates`, `authoring-specs`). Command 이름은 짧은 명령형 (`qg`, `review`). 모호한 이름 (`helper`, `utils`, `"I can help you..."`) 없음.

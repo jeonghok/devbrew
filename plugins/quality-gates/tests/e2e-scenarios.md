@@ -146,6 +146,70 @@ Ran 23 tests in 0.NNNs
 OK
 ```
 
+## v1.6.0 Scenarios (per-session state)
+
+### V1 — Concurrent sessions stay isolated
+
+**Setup**: Two terminal sessions A and B in the same project. Both have valid `CLAUDE_CODE_SESSION_ID` env vars (`$SID_A`, `$SID_B`).
+1. In A: `Edit` `/abs/a.py`. Verify `.claude/quality-gates/$SID_A/files.md` contains `/abs/a.py` only.
+2. In B: `Edit` `/abs/b.py`. Verify `.claude/quality-gates/$SID_B/files.md` contains `/abs/b.py` only.
+3. In A: Run `/qg`. Verify scope = files from A's tracker only.
+
+**Pass**: `$SID_A`'s `files.md` has no `/abs/b.py` references and vice versa.
+
+### V2 — Dormant session GC
+
+**Setup**: Backdate a sibling session's files mtime by 25 hours.
+```bash
+old=$(($(date +%s) - 25 * 3600))
+touch -t "$(date -r $old +%Y%m%d%H%M)" .claude/quality-gates/oldsess0001/pipeline.md
+touch -t "$(date -r $old +%Y%m%d%H%M)" .claude/quality-gates/oldsess0001
+```
+1. Run `/qg` (any flavor). Verify `.claude/quality-gates/oldsess0001/` no longer exists.
+2. Set `DEVBREW_QG_GC_VERBOSE=1` and observe stdout: `[quality-gates] GC: removed 1 stale session folder(s)`.
+
+### V3 — Graceful SessionEnd cleanup
+
+1. Start `/qg` in a session.
+2. Close Claude Code gracefully (not `kill -9`).
+3. Verify `.claude/quality-gates/$SID/` is gone.
+
+**Pass**: own folder removed; sibling folders untouched.
+
+### V4 — Legacy migration on upgrade
+
+**Setup**: Pre-existing v1.5.0 flat files (5 files) in `.claude/`.
+```bash
+touch .claude/quality-gates.local.md \
+      .claude/quality-gates-session.local.md \
+      .claude/quality-gates-branch.local.md \
+      .claude/qg-diff-cache.txt \
+      .claude/qg-code-paths.tmp
+```
+1. Open Claude Code. Observe `session-start-advisor` stdout: `[quality-gates] Legacy v1.5.0 state files detected.`
+2. Run `/qg`. Observe `setup-qg.sh` stderr: `Removed 5 legacy flat state file(s) from v1.5.0.`
+3. Verify the 5 files are gone, new `.claude/quality-gates/$SID/pipeline.md` exists.
+
+### V5 — GC lock contention silent
+
+1. Hold the lock from a shell:
+```bash
+exec 9>".claude/quality-gates/.gc.lock"
+flock -n 9 || echo "fail"
+# (keep shell open with lock held)
+```
+2. In another terminal, run `/qg --gc`. Should silently exit (GC skipped, no error).
+3. Stale folders preserved.
+
+### V6 — Kill switch globally disables
+
+```bash
+DEVBREW_DISABLE_QUALITY_GATES=1 /qg
+```
+1. Verify no `.claude/quality-gates/` folder created.
+2. Verify SessionEnd hook noop.
+3. Verify `qg-gc.py` exits 0 without action.
+
 ## Out-of-Scope for This Verification
 
 - Live cost telemetry (recording actual $ per run for each depth tier) —

@@ -1,8 +1,20 @@
 # State File Format
 
-The state file `.claude/quality-gates.local.md` is managed entirely by the setup
-script (`scripts/setup-qg.sh`) and the Stop hook (`hooks/stop-hook.py`).
-**The SKILL.md must NOT read or write this file.**
+The state file `.claude/quality-gates/<session-id>/pipeline.md` (per-session,
+v1.6.0+) is managed entirely by the setup script (`scripts/setup-qg.sh`) and
+the Stop hook (`hooks/stop-hook.py`). **The SKILL.md must NOT read or write
+this file.**
+
+`<session-id>` resolves from `$CLAUDE_CODE_SESSION_ID`; siblings under
+`.claude/quality-gates/` belong to other concurrent Claude Code sessions and
+must not be touched. Companion files in the same folder (`files.md` for
+session-scope tracking, `branch.md` for branch-mismatch detection,
+`diff-cache.txt` / `code-paths.tmp` for transient Gate 2 caches) follow the
+same per-session lifecycle.
+
+The legacy v1.5.0 layout (flat `.claude/quality-gates.local.md`,
+`quality-gates-session.local.md`, `quality-gates-branch.local.md`) is
+unlinked on first `/qg` post-upgrade and never re-created.
 
 ## Schema
 
@@ -51,9 +63,15 @@ started_at: "<ISO timestamp>"  # Pipeline start time
 
 ## Lifecycle
 
-1. **Created by**: `scripts/setup-qg.sh` (on `/qg`)
-2. **Updated by**: `hooks/stop-hook.py` (after each gate completes)
-3. **Deleted by**: `hooks/stop-hook.py` (on pipeline complete/abort) or `/cancel-qg`
+1. **Created by**: `scripts/setup-qg.sh` (on `/qg`) — also `mkdir -p`s the
+   per-session folder.
+2. **Updated by**: `hooks/stop-hook.py` (after each gate completes).
+3. **Deleted by**: `hooks/stop-hook.py` (on pipeline complete/abort),
+   `/cancel-qg`, or `hooks/session-end-cleanup.py` on graceful session end.
+   Deletion always rmtrees the entire `.claude/quality-gates/<session-id>/`
+   folder, not just `pipeline.md`. Stale sibling folders (older than
+   `DEVBREW_QG_TTL_HOURS`, default 24h) are GC'd by `scripts/qg-gc.py` on the
+   next `/qg`.
 
 ## Purpose
 

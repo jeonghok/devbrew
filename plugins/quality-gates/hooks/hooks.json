@@ -1,5 +1,5 @@
 {
-  "description": "Quality Gates - Stop hook for pipeline progression + PostToolUse session-tracker for /qg scope",
+  "description": "Quality Gates - Stop hook for pipeline progression + PostToolUse session-tracker for /qg scope + SessionStart advisor + SessionEnd cleanup",
   "hooks": {
     "Stop": [
       {
@@ -21,6 +21,15 @@
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use-session-tracker.py"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use.py"
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -29,6 +38,16 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session-start-advisor.py"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.py"
           }
         ]
       }

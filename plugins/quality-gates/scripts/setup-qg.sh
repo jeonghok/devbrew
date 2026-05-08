@@ -14,6 +14,7 @@ SKIP_RUNTIME="false"
 PLAN_FILE="auto"
 PR_URL=""
 ENSURE_MODE="false"
+SESSION_ID=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -45,6 +46,14 @@ while [[ $# -gt 0 ]]; do
       PR_URL="$2"
       shift 2
       ;;
+    --session-id)
+      if [[ -z "${2:-}" ]]; then
+        echo "❌ Error: --session-id requires an argument" >&2
+        exit 1
+      fi
+      SESSION_ID="$2"
+      shift 2
+      ;;
     -h|--help)
       cat << 'HELP_EOF'
 Quality Gates Pipeline Setup
@@ -62,6 +71,7 @@ OPTIONS:
   --skip-runtime       Skip Gate 3 (runtime verification)
   --plan <path>        Specify plan file path (default: auto-detect)
   --pr-url <url>       Specify PR URL
+  --session-id <id>    Override session ID (defaults to CLAUDE_CODE_SESSION_ID)
   --ensure             Idempotent mode: no-op if state from this session
                        already exists (used by skill preflight, not /qg).
   -h, --help           Show this help message
@@ -84,28 +94,71 @@ HELP_EOF
   esac
 done
 
-# --- Active Pipeline Check ---
-
-STATE_FILE=".claude/quality-gates.local.md"
-
-if [[ -f "$STATE_FILE" ]]; then
-  existing_session=$(awk -F'"' '/^session_id:/ {print $2; exit}' "$STATE_FILE" 2>/dev/null || echo "")
-  current_session="${CLAUDE_CODE_SESSION_ID:-}"
-
-  if [[ -n "$existing_session" && -n "$current_session" && "$existing_session" != "$current_session" ]]; then
-    echo "⚠️  Stale quality-gates state from session $existing_session detected; overwriting." >&2
-    rm -f "$STATE_FILE"
-  elif [[ "$ENSURE_MODE" == "true" ]]; then
-    exit 0
-  else
-    echo "❌ Error: A quality gates pipeline is already active" >&2
-    echo "   State file: $STATE_FILE" >&2
-    echo "" >&2
-    echo "   To cancel the active pipeline: /cancel-qg" >&2
-    echo "   Then re-run: /qg" >&2
-    exit 1
-  fi
+# --- Resolve session ID ---
+# --session-id arg takes precedence, then env var.
+if [[ -z "$SESSION_ID" ]]; then
+  SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
 fi
+if [[ -z "$SESSION_ID" ]]; then
+  cat >&2 <<EOF
+❌ Quality Gates: cannot create pipeline state — session ID is empty.
+   Neither --session-id <id> argument nor CLAUDE_CODE_SESSION_ID env var was provided.
+   This usually means /qg was invoked outside of Claude Code or in a sub-shell
+   that did not inherit the env. Re-run /qg from Claude Code, or pass
+   --session-id explicitly.
+EOF
+  exit 1
+fi
+
+# Validate pattern (defense in depth; matches qg-gc.py SESSION_PATTERN).
+if [[ ! "$SESSION_ID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
+  echo "❌ Quality Gates: session ID '$SESSION_ID' fails pattern guard ([A-Za-z0-9_-]{8,})." >&2
+  exit 1
+fi
+
+# --- Per-session paths ---
+STATE_DIR=".claude/quality-gates/$SESSION_ID"
+STATE_FILE="$STATE_DIR/pipeline.md"
+
+# --- Active pipeline check (self-session only) ---
+if [[ -f "$STATE_FILE" ]]; then
+  if [[ "$ENSURE_MODE" == "true" ]]; then
+    exit 0
+  fi
+  echo "❌ Error: A quality gates pipeline is already active in this session" >&2
+  echo "   State file: $STATE_FILE" >&2
+  echo "" >&2
+  echo "   To cancel: /cancel-qg" >&2
+  exit 1
+fi
+
+# --- Legacy v1.5.0 cleanup (one-time, advisory) ---
+LEGACY_FILES=(
+  ".claude/quality-gates.local.md"
+  ".claude/quality-gates-session.local.md"
+  ".claude/quality-gates-branch.local.md"
+  ".claude/qg-diff-cache.txt"
+  ".claude/qg-code-paths.tmp"
+)
+LEGACY_REMOVED=0
+for f in "${LEGACY_FILES[@]}"; do
+  if [[ -f "$f" ]]; then
+    rm -f "$f"
+    LEGACY_REMOVED=$((LEGACY_REMOVED + 1))
+  fi
+done
+if [[ "$LEGACY_REMOVED" -gt 0 ]]; then
+  cat >&2 <<EOF
+[quality-gates] Removed $LEGACY_REMOVED legacy flat state file(s) from v1.5.0.
+v1.6.0 uses per-session storage at .claude/quality-gates/<session>/.
+EOF
+fi
+
+# --- TTL GC (best-effort; never aborts setup) ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+python3 "$SCRIPT_DIR/qg-gc.py" --session-id "$SESSION_ID" 2>/dev/null || true
+
+mkdir -p "$STATE_DIR"
 
 # --- Dependency Check ---
 
@@ -179,8 +232,6 @@ fi
 
 # --- Create State File ---
 
-mkdir -p .claude
-
 TEMP_FILE="${STATE_FILE}.tmp.$$"
 TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -195,7 +246,7 @@ single_gate: ${SINGLE_GATE:-null}
 plan_file: "$PLAN_FILE"
 pr_url: "$PR_URL"
 available_plugins: "$AVAILABLE_PLUGINS"
-session_id: "${CLAUDE_CODE_SESSION_ID:-}"
+session_id: "$SESSION_ID"
 started_at: "$TIMESTAMP"
 ---
 

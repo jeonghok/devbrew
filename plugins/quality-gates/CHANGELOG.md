@@ -4,6 +4,37 @@ All notable changes to the `quality-gates` plugin are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] — 2026-05-08
+
+### Added
+- SessionEnd hook (`session-end-cleanup.py`) for graceful per-session state cleanup.
+- `scripts/qg-gc.py`: TTL-based GC helper with `fcntl` lock, double-stat ns race guard, and rename-then-rmtree.
+- Env: `DEVBREW_QG_TTL_HOURS` (default 24), `DEVBREW_QG_GC_VERBOSE` (default off).
+- `/cancel-qg --gc` (TTL sweep) and `/cancel-qg --all` (full wipe with confirm + active-sibling listing).
+- `/qg --gc` flag for explicit GC invocation.
+- `setup-qg.sh --session-id <id>` argument as fallback when `CLAUDE_CODE_SESSION_ID` env var is unset.
+- `post-tool-use.py` registered as PostToolUse(Bash) hook in `hooks.json` (was previously orphaned).
+
+### Changed
+- State moved from flat `.claude/quality-gates*.local.md` (5 files) to per-session `.claude/quality-gates/<session-id>/{pipeline,files,branch}.md` + `{diff-cache,code-paths}` files.
+- `session-start-advisor.py` now scopes advice to current session only and is read-only (per CLAUDE.md "SessionStart never mutates" rule).
+- `setup-qg.sh` hard-fails if neither `CLAUDE_CODE_SESSION_ID` nor `--session-id` is provided.
+- `setup-qg.sh` now invokes `qg-gc.py` at start (best-effort; never aborts setup).
+- `/qg --reset` now wipes the current session folder + legacy v1.5.0 files (was: only flat files).
+- README "Principles Instantiated": fixed mis-citation of P21 → corrected to P5 (Filesystem as Memory) + P14 (State Survives Compaction) + §4.8 (State File). The state-file rule never lived in P21 (Security & Supply Chain).
+
+### Fixed
+- Concurrent sessions in the same project no longer corrupt each other's state (was: 5 shared `.claude/` files).
+- Stale state from a crashed/closed session no longer triggers misleading "in-flight pipeline" advice in unrelated new sessions.
+- `post-tool-use.py` now scopes its "active pipeline" check to the calling session only (was: any session blocked auto-trigger).
+
+### Removed
+- Flat per-project state file model. The 5 legacy files (`quality-gates.local.md`, `quality-gates-session.local.md`, `quality-gates-branch.local.md`, `qg-diff-cache.txt`, `qg-code-paths.tmp`) are unlinked on first `/qg` post-upgrade with a stderr warning.
+
+### Migration
+- `session-start-advisor` surfaces a one-time stdout message when legacy files are found (read-only — never deletes).
+- In-flight v1.5.0 pipelines are not automatically migrated; the previous session_id is meaningful only to that prior session. Re-run `/qg`.
+
 ## [1.5.0] — 2026-04-30
 
 ### Added

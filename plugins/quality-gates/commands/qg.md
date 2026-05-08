@@ -12,10 +12,13 @@ Run the 3-gate quality verification pipeline to ensure code quality before PR me
 
 ## Special argument: `--reset`
 
-If `$ARGUMENTS` contains `--reset` (alone or anywhere), do NOT run the setup
-script. Instead, delete all quality-gates state files and exit:
+`$ARGUMENTS` 가 `--reset` 포함 시 setup 안 돌리고 자기 세션 폴더 + legacy 파일 정리:
 
 ```!
+SID="${CLAUDE_CODE_SESSION_ID:-}"
+if [ -n "$SID" ]; then
+  rm -rf ".claude/quality-gates/$SID"
+fi
 rm -f .claude/quality-gates.local.md \
       .claude/quality-gates-session.local.md \
       .claude/quality-gates-branch.local.md \
@@ -23,7 +26,17 @@ rm -f .claude/quality-gates.local.md \
       .claude/qg-code-paths.tmp
 ```
 
-Then tell the user "Quality-gates state cleared." and stop.
+종료 후 "Quality-gates state cleared." 보고.
+
+## Special argument: `--gc`
+
+`$ARGUMENTS` 가 `--gc` 포함 시 (단독 또는 다른 인자와 함께) TTL GC를 명시 실행:
+
+```!
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg-gc.py"
+```
+
+`--gc` 단독: 종료. 다른 인자와 함께: GC 후 setup 진행.
 
 ## Instructions
 
@@ -44,7 +57,8 @@ When you finish the gate, emit a `<qg-signal>` tag. The Stop hook handles pipeli
 | `/qg` | Full pipeline (Gate 1 → 2 → 3), session-scoped diff |
 | `/qg branch` | Full pipeline, full-branch diff (vs `main`) |
 | `/qg --paths <glob>...` | Full pipeline, scope to matched paths |
-| `/qg --reset` | Clear all session state files and exit |
+| `/qg --reset` | Clear current session folder + legacy v1.5.0 flat files and exit |
+| `/qg --gc` | Run TTL GC on stale session folders |
 | `/qg gate1` | Plan verification only |
 | `/qg gate2` | PR review only |
 | `/qg gate3` | Runtime verification only |
@@ -57,7 +71,7 @@ When you finish the gate, emit a `<qg-signal>` tag. The Stop hook handles pipeli
 
 `/qg` reviews files **edited in the current Claude Code session** by default.
 A PostToolUse hook (`post-tool-use-session-tracker.py`) accumulates touched
-files into `.claude/quality-gates-session.local.md`. The pre-pipeline check
+files into `.claude/quality-gates/<session-id>/files.md`. The pre-pipeline check
 (`pre-pipeline-check.sh`) clears this file when the branch changes mid-session
 or when 24+ hours pass without activity.
 
@@ -92,4 +106,4 @@ session-tracker hook (keeps Stop hook + advisor active).
   choice ("apply changes and re-run /qg"); does NOT auto-restart from Gate 1
 - Gate 2 iterates up to 5 times internally (`max_gate2_iterations`)
 - Repeat-detection: identical iterations trigger early user choice
-- State tracked in `.claude/quality-gates*.local.md` (managed by hook scripts)
+- State tracked in `.claude/quality-gates/<session-id>/{pipeline,files,branch}.md` (managed by hook scripts; see plugin README)

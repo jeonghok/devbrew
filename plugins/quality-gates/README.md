@@ -14,7 +14,7 @@ once that file lands on `main`):
 - **AP3 (Trivia ceremony) avoidance** — `check-trivia.sh` skips pipeline entirely on whitespace/rename ≤3 lines single-file changes.
 - **AP9 (Subagent spray) hard gate** — AskUserQuestion fires when Phase 1+2 dispatch count ≥ 4.
 - **AP15 (Unbounded autonomy) avoidance** — within-Gate-2 loop bounded by `max_gate2_iterations=5` + repeat-detection (no-progress check) + kill switches.
-- **P21 (Markdown state, not JSON)** — `.claude/quality-gates*.local.md` files (auto-ignored by `*.local.md` gitignore pattern).
+- **P5 (Filesystem as Memory) + P14 (State Survives Compaction) + §4.8 (State File)** — per-session markdown state under `.claude/quality-gates/<session-id>/` (auto-ignored by `*.local.md` gitignore pattern; folder GC'd by TTL sweep + SessionEnd hook).
 
 ## Architecture
 
@@ -35,13 +35,15 @@ quality-gates/
 │   ├── hooks.json                            # Hook configuration
 │   ├── stop-hook.py                          # Pipeline progression (state machine)
 │   ├── post-tool-use-session-tracker.py      # Tracks files edited this session
+│   ├── post-tool-use.py                      # PostToolUse(Bash) — auto-trigger detector
 │   ├── session-start-advisor.py              # Read-only advisor for in-flight pipelines
-│   └── post-tool-use.py                      # (disabled; retained for rollback)
+│   └── session-end-cleanup.py                # Removes current session folder on graceful close
 ├── scripts/
 │   ├── setup-qg.sh                           # Pipeline initialization
 │   ├── pre-pipeline-check.sh                 # In-skill session-lifecycle check
 │   ├── check-trivia.sh                       # Trivia escape detector
-│   └── filter-docs.sh                        # Docs-path filter for code reviewers
+│   ├── filter-docs.sh                        # Docs-path filter for code reviewers
+│   └── qg-gc.py                              # TTL-based stale-session GC (fcntl-locked)
 └── skills/
     └── quality-pipeline/
         ├── SKILL.md         # Single-gate executor
@@ -56,7 +58,9 @@ quality-gates/
 |---|---|---|---|
 | `stop-hook.py` | Stop | yes (state file) | Pipeline progression must run *after* every assistant turn. |
 | `post-tool-use-session-tracker.py` | PostToolUse(Edit/Write/MultiEdit) | yes (session file) | Must observe every file mutation deterministically; only a hook can. |
-| `session-start-advisor.py` | SessionStart | **no — read-only advisor** | Surface in-flight pipelines without mutation (CLAUDE.md hook coexistence rule). |
+| `post-tool-use.py` | PostToolUse(Bash) | no — read-only check | Detect commit/PR Bash activity to suggest `/qg`; scoped to current session only. |
+| `session-start-advisor.py` | SessionStart | **no — read-only advisor** | Surface in-flight pipelines (current session) without mutation (CLAUDE.md hook coexistence rule). |
+| `session-end-cleanup.py` | SessionEnd | yes (removes own session folder) | Graceful per-session cleanup on close; crashes fall back to TTL sweep. |
 
 All hooks honor `DEVBREW_DISABLE_QUALITY_GATES=1` (global) and the per-hook
 override `DEVBREW_SKIP_HOOKS=quality-gates:<hook-name>`.
@@ -125,14 +129,17 @@ is preserved.
 /qg                            # Full pipeline; session-scoped diff
 /qg branch                     # Full pipeline; full-branch diff vs main
 /qg --paths <glob>...          # Full pipeline; explicit path scope
-/qg --reset                    # Clear all session state files and exit
+/qg --reset                    # Clear current session folder + legacy v1.5.0 files; exit
+/qg --gc                       # Sweep stale sibling sessions (TTL) and exit
 /qg gate1                      # Plan verification only
 /qg gate2                      # PR review only
 /qg gate3                      # Runtime verification only
 /qg --skip-runtime             # Gates 1 & 2 only
 /qg --plan <path>              # Use specific plan file
 /qg --pr-url <url>             # Specify PR URL
-/cancel-qg                     # Cancel active pipeline
+/cancel-qg                     # Cancel active pipeline (current session)
+/cancel-qg --gc                # TTL sweep of stale sessions
+/cancel-qg --all               # Wipe all sessions (confirms; lists active siblings first)
 ```
 
 ## Prerequisites
@@ -148,17 +155,23 @@ is preserved.
 
 - `MAX_GATE2_ITERATIONS`: 5 (review-fix cycles within Gate 2)
 - `QG_STALE_HOURS`: 24 (session file staleness threshold for pre-pipeline-check.sh)
+- `DEVBREW_QG_TTL_HOURS`: 24 (TTL for sibling session folders; older folders GC'd on `/qg` or `/cancel-qg --gc`)
+- `DEVBREW_QG_GC_VERBOSE`: unset (set to `1` for GC sweep diagnostics on stderr)
 
 (`MAX_TOTAL_ITERATIONS` and the cross-gate restart loop were removed in v1.5.0.)
 
-## State Files
+## Pipeline state
 
-Pipeline state is tracked in `.claude/`:
+State is tracked per Claude Code session in `.claude/quality-gates/<session-id>/`:
+- `pipeline.md` — pipeline frontmatter (status, current_gate, iteration counters) + body (Gate Results, History).
+- `files.md` — files edited in this session (used for `/qg` scope narrowing).
+- `branch.md` — last seen git branch (for branch-mismatch detection).
+- `diff-cache.txt`, `code-paths.tmp` — transient caches.
 
-| File | Owner | Created by | Deleted by |
-|---|---|---|---|
-| `quality-gates.local.md` | stop-hook.py + setup-qg.sh | setup-qg.sh | stop-hook.py on completion |
-| `quality-gates-session.local.md` | post-tool-use-session-tracker.py | first Edit/Write of the session | pre-pipeline-check.sh on branch mismatch / stale; `/qg --reset` |
-| `quality-gates-branch.local.md` | pre-pipeline-check.sh | first `/qg` invocation per branch | `/qg --reset` |
+Stale sibling folders (mtime older than `DEVBREW_QG_TTL_HOURS`, default 24h) are
+garbage-collected when `/qg` or `/cancel-qg --gc` runs. The `SessionStart` hook
+is strictly read-only (per CLAUDE.md rule); the `SessionEnd` hook removes the
+current session's folder on graceful close. Crashes fall back to the TTL sweep.
 
-All match the `*.local.md` gitignore pattern; no `.gitignore` changes are needed.
+All files match the `*.local.md` gitignore pattern; no `.gitignore` changes are
+needed.
