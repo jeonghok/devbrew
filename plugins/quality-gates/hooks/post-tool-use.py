@@ -2,8 +2,9 @@
 """PostToolUse hook for quality-gates plugin.
 
 Detects when `gh pr create` succeeds and injects a system message
-to trigger the quality pipeline. Prevents double-triggering by checking
-for an active state file.
+to trigger the quality pipeline. Self-session scope: checks only
+`.claude/quality-gates/<session-id>/pipeline.md` for the active flag.
+Passes --session-id explicitly to setup-qg.sh in case env var is unset.
 """
 
 import json
@@ -21,28 +22,26 @@ def main():
 
     tool_name = input_data.get("tool_name", "")
     tool_input = input_data.get("tool_input", {})
-    # Actual field name from Claude Code is "tool_response", not "tool_output"
     tool_response = input_data.get("tool_response", {})
+    session_id = input_data.get("session_id", "")
 
-    if tool_name != "Bash":
+    if tool_name != "Bash" or not session_id:
         print(json.dumps({}))
         sys.exit(0)
 
     command = tool_input.get("command", "")
-
-    # Check if this is a gh pr create command
     if not re.search(r"gh\s+pr\s+create", command):
         print(json.dumps({}))
         sys.exit(0)
 
-    # Check for active pipeline state file to prevent double-trigger
     project_dir = input_data.get("cwd", os.getcwd())
-    state_file = os.path.join(project_dir, ".claude", "quality-gates.local.md")
+    state_file = os.path.join(
+        project_dir, ".claude", "quality-gates", session_id, "pipeline.md"
+    )
     if os.path.exists(state_file):
         print(json.dumps({}))
         sys.exit(0)
 
-    # Extract PR URL from tool_response.stdout
     if isinstance(tool_response, dict):
         stdout = tool_response.get("stdout", "")
     else:
@@ -54,7 +53,6 @@ def main():
         print(json.dumps({}))
         sys.exit(0)
 
-    # Compute plugin root from this script's location
     plugin_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     setup_script = os.path.join(plugin_root, "scripts", "setup-qg.sh")
 
@@ -62,7 +60,7 @@ def main():
         "systemMessage": (
             f"Quality Gates: PR created at {pr_url}. "
             "You MUST now initialize the quality-gates pipeline. "
-            f'Run: Bash("{setup_script} --pr-url {pr_url}") '
+            f'Run: Bash("{setup_script} --session-id {session_id} --pr-url {pr_url}") '
             "Then invoke Skill(\"quality-gates:quality-pipeline\") with gate=1 "
             "to begin Gate 1."
         )
