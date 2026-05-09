@@ -17,6 +17,12 @@
       "description": "Git workflow initialization: select branching strategy (GitHub Flow, Git Flow, Trunk-based), generate rules and auto-validate.",
       "source": "./plugins/project-init",
       "category": "development"
+    },
+    {
+      "name": "spec-distill",
+      "description": "집요한 인터뷰로 모호함을 명확함으로 변환해 superpowers 호환 spec.md를 생성하는 devbrew-native 플러그인. Drop-in 대체 of superpowers/brainstorming.",
+      "source": "./plugins/spec-distill",
+      "category": "development"
     }
   ]
 }

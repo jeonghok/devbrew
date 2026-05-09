@@ -1,0 +1,27 @@
+{
+  "description": "spec-distill — UserPromptSubmit interview suggestion + SessionStart anchor for resumed sessions.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/interview-trigger.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-anchor.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
