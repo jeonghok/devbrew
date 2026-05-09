@@ -12,7 +12,7 @@ if [[ "${DEVBREW_SKIP_HOOKS:-}" == *"spec-distill:SessionStart"* ]]; then
   exit 0
 fi
 
-state_dir=".claude/spec-distill"
+state_dir="${CLAUDE_PROJECT_DIR:-$PWD}/.claude/spec-distill"
 
 # Check if state directory exists with active sessions
 if [[ -d "$state_dir" ]]; then

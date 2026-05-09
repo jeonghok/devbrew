@@ -61,6 +61,7 @@ draft 중 인터뷰에서 답을 못 얻은 항목은 **유추하지 말고** "O
 ## kill switch
 
 - `DEVBREW_DISABLE_SPEC_DISTILL=1`: 즉시 abort, draft 미완성이면 그대로 보존.
+- `DEVBREW_SKIP_HOOKS=spec-distill:<event>`: hook-specific skip — skill 자체에는 직접 영향 없으나, 관련 hook(UserPromptSubmit/SessionStart)이 비활성화될 수 있어 명시 (doc consistency).
 
 ## 다음 phase
 

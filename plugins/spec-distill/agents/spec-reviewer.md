@@ -67,8 +67,10 @@ issue_id = sha256_short(category + ":" + target_section)
 **Status:** approved | needs_revise | needs_interview
 
 **Issues:**
-- [<#section>]: <category> — "<message>" — raised <N>x ⚠ unresolved (if applicable)
+- [<issue_id>] [<#section>]: <category> — "<message>" — raised <N>x ⚠ unresolved (if applicable)
 - ...
+
+(`issue_id`는 위 "Issue ID 정의"의 `sha256_short(category + ":" + target_section)`. *반드시 emit* — `reviewing-spec`이 다음 round에서 same-id 매칭으로 `raised_count` 증가시키기 위함. v0.2.0 plan-reviewer 재사용 호환.)
 
 **Recommendations (advisory):**
 - ...
