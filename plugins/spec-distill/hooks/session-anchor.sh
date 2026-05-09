@@ -1,33 +1,47 @@
 #!/usr/bin/env bash
 # spec-distill SessionStart hook — read-only advisor (P14 mutate X).
-# Emits anchor message if previous session state exists.
+# Emits structured JSON {"systemMessage": "..."} if previous session state exists
+# (matches quality-gates Python hook output protocol).
 
 set -u
+set -o pipefail
 
-# Kill switches
+# Kill switches (colon-anchored)
 if [[ "${DEVBREW_DISABLE_SPEC_DISTILL:-}" == "1" ]]; then
   exit 0
 fi
-if [[ "${DEVBREW_SKIP_HOOKS:-}" == *"spec-distill:SessionStart"* ]]; then
-  exit 0
-fi
+case ":${DEVBREW_SKIP_HOOKS:-}:" in
+  *":spec-distill:SessionStart:"*) exit 0 ;;
+esac
 
 state_dir="${CLAUDE_PROJECT_DIR:-$PWD}/.claude/spec-distill"
 
-# Check if state directory exists with active sessions
-if [[ -d "$state_dir" ]]; then
-  active_sessions=$(find "$state_dir" -mindepth 2 -maxdepth 2 -name "state.local.md" 2>/dev/null | head -3)
-  if [[ -n "$active_sessions" ]]; then
-    cat <<EOF
-<spec-distill-anchor>
-이전 인터뷰 세션이 있습니다. 다음 위치에 state 파일이 보존돼 있습니다:
-$active_sessions
+if [[ ! -d "$state_dir" ]]; then
+  exit 0
+fi
 
-\`/interview resume\`로 재진입하거나, 새 세션은 \`/interview\` 그대로 시작.
-(이 anchor는 read-only advisory — state는 자동 mutate되지 않습니다.)
-</spec-distill-anchor>
-EOF
-  fi
+# Distinguish "no sessions" from "permission denied" (loud-logging requirement)
+if [[ ! -r "$state_dir" ]]; then
+  echo "[spec-distill:session-anchor] warn: state directory exists but is not readable: $state_dir" >&2
+  exit 0
+fi
+
+# Find session state files (depth 2 = .claude/spec-distill/<session-id>/state.local.md)
+active_sessions=$(find "$state_dir" -mindepth 2 -maxdepth 2 -name "state.local.md" 2>/dev/null | head -3 || true)
+
+if [[ -z "$active_sessions" ]]; then
+  exit 0
+fi
+
+# Build advisory message (collapse newlines to spaces — JSON-string safety)
+sessions_inline=$(printf '%s' "$active_sessions" | tr '\n' ' ' | sed 's/ $//')
+msg="이전 인터뷰 세션이 있습니다. \`/interview resume\`로 재진입하거나, 새 세션은 \`/interview\` 그대로 시작. State 파일: $sessions_inline"
+
+if command -v jq >/dev/null 2>&1; then
+  jq -n --arg m "$msg" '{systemMessage: $m}'
+else
+  escaped=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ')
+  printf '{"systemMessage":"%s"}\n' "$escaped"
 fi
 
 exit 0

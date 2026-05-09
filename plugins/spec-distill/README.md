@@ -82,8 +82,8 @@
 
 ## Hooks Installed
 
-- **`UserPromptSubmit` (`interview-trigger.sh`)** — build/make/create 키워드 + 짧은 prompt 감지 시 `<spec-distill-signal>` 출력. 강제 X (advisory). **왜 skill이 아닌가**: 사용자가 명시적으로 `/interview` 안 쳐도 인터뷰 진입을 권장하려면 모든 prompt event를 가로채야 함 — skill로는 사용자 명시 호출 후에만 작동.
-- **`SessionStart` (`session-anchor.sh`)** — 이전 세션 state 존재 시 anchor message 출력 (read-only, P14 mutate X). **왜 skill이 아닌가**: 세션 시작 직후 자동 표시 필요 — skill은 사용자 명시 호출 후만.
+- **`UserPromptSubmit` (`interview-trigger.sh`)** — build/make/create 키워드 + 짧은 prompt 감지 시 `{"systemMessage": "..."}` JSON 출력 (Claude Code hook protocol — quality-gates Python hook과 동일). 강제 X (advisory). **왜 skill이 아닌가**: 사용자가 명시적으로 `/interview` 안 쳐도 인터뷰 진입을 권장하려면 모든 prompt event를 가로채야 함 — skill로는 사용자 명시 호출 후에만 작동.
+- **`SessionStart` (`session-anchor.sh`)** — 이전 세션 state 존재 시 `{"systemMessage": "..."}` JSON 출력 (read-only, P14 mutate X). **왜 skill이 아닌가**: 세션 시작 직후 자동 표시 필요 — skill은 사용자 명시 호출 후만.
 
 ## Kill switches
 
@@ -104,6 +104,8 @@
 
 ## Prerequisites
 
+- **Claude Code built-in `general-purpose` agent** — 항상 사용 가능 (별도 설치 불필요). `conducting-interview` skill의 C43 ambiguity path가 dispatch.
+- **`jq`** (CLI, recommended) — hook 스크립트가 stdin JSON payload 파싱과 `{"systemMessage": "..."}` JSON 출력에 사용. 없으면 regex fallback + loud warning (devbrew "loud-logging graceful degradation").
 - **superpowers** (외부, optional) — `writing-plans` skill을 다음 단계로 호출. 없으면 spec.md만 commit하고 종료.
 
 ## License
