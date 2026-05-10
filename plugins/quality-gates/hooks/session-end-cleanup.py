@@ -4,7 +4,9 @@
 Removes `.claude/quality-gates/<self-session>/` if it exists.
 Best-effort: idempotent (no-op if missing), tolerant of permission errors.
 
-Kill switch: DEVBREW_DISABLE_QUALITY_GATES=1.
+Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
+  DEVBREW_DISABLE_QUALITY_GATES=1                       - disables this hook entirely
+  DEVBREW_SKIP_HOOKS=quality-gates:session-end-cleanup  - skip just this one
 """
 from __future__ import annotations
 
@@ -18,7 +20,11 @@ ROOT = Path(".claude/quality-gates")
 
 
 def _disabled() -> bool:
-    return os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1"
+    if os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1":
+        return True
+    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
+    tokens = {t.strip() for t in skip.split(",") if t.strip()}
+    return "quality-gates:session-end-cleanup" in tokens
 
 
 def main() -> int:
