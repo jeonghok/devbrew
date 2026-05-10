@@ -146,7 +146,19 @@ def validate_commit(command):
 # --- Main ---
 
 
+def kill_switch_active():
+    """Return True if devbrew kill switch env vars opt this hook out."""
+    if os.environ.get("DEVBREW_DISABLE_PROJECT_INIT") == "1":
+        return True
+    skip_list = [s.strip() for s in os.environ.get("DEVBREW_SKIP_HOOKS", "").split(",")]
+    return "project-init:post-tool-use" in skip_list
+
+
 def main():
+    if kill_switch_active():
+        print(json.dumps({}))
+        sys.exit(0)
+
     try:
         input_data = json.load(sys.stdin)
     except (json.JSONDecodeError, EOFError):

@@ -6,7 +6,7 @@ Git workflow initialization plugin for Claude Code. Generates branching strategy
 
 ```
 plugins/project-init/
-├── .claude-plugin/plugin.json       # Plugin metadata (v1.2.0)
+├── .claude-plugin/plugin.json       # Plugin metadata
 ├── README.md                        # This file
 ├── commands/
 │   └── project-init.md              # /project-init — interactive setup
@@ -63,6 +63,11 @@ Works alongside other plugins:
 - **commit-commands**: `/commit` and `/commit-push-pr` read CLAUDE.md rules to format messages
 - **superpowers**: `using-git-worktrees` follows branch naming conventions from docs/
 - **quality-gates**: Auto-triggers quality pipeline on PR creation
+
+## Hooks Installed
+
+- **`PostToolUse` (Bash matcher)** — branch-name and commit-message validation. **Why hook, not skill:** validation must fire on every Bash invocation regardless of model attention. A skill is model-invoked and cannot guarantee deterministic execution at the action layer; the hook runs unconditionally after every Bash tool use.
+- **Kill switch:** set `DEVBREW_DISABLE_PROJECT_INIT=1` to disable, or `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` for finer-grained opt-out (devbrew CLAUDE.md §Plugin Shape).
 
 ## Principles Instantiated
 
