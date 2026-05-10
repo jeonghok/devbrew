@@ -31,16 +31,41 @@ You will receive a prompt containing:
 
 ## Step 1: Find the Plan File
 
-If `plan_path` is provided and not "auto", use that file directly.
+Discovery is delegated to a deterministic script (`scripts/discover-plan.sh`)
+so the priority list, glob, and checkbox-eligibility filter are unit-tested.
+Do not implement these rules yourself — call the script and parse its JSON.
 
-Otherwise, auto-detect:
-1. List files in `~/.claude/plans/` sorted by modification time (most recent first)
-2. For each file, check if it contains `- [ ]` (unchecked checkbox)
-3. Use the first file that has unchecked checkboxes
-4. If no file has unchecked checkboxes, use the most recently modified plan file
-5. If `~/.claude/plans/` is empty, return verdict SKIP with reason "No plan file found"
+Run via Bash:
 
-Use Glob and Bash tools for this.
+```bash
+if [[ "$plan_path" == "auto" || -z "$plan_path" ]]; then
+  "${CLAUDE_PLUGIN_ROOT}/scripts/discover-plan.sh"
+else
+  "${CLAUDE_PLUGIN_ROOT}/scripts/discover-plan.sh" --plan "$plan_path"
+fi
+```
+
+The script emits a single-line JSON object on stdout:
+
+```json
+{"plan_path":"<absolute-or-empty>","source":"explicit|project-local|legacy-global|none","reason":"<human-readable>"}
+```
+
+Exit-code branching:
+
+| Exit | Meaning | Action |
+|---|---|---|
+| `0` | Plan found | Capture `plan_path` and `source` from JSON. Continue to Step 2. |
+| `1` | No plan in any source | Verdict `SKIP` with `reason` from JSON (e.g., `"No plan file found. Searched: docs/superpowers/plans/, ~/.claude/plans"`). Skip Steps 2–5. |
+| `2` | `--plan` path is invalid | Verdict `SKIP` with reason `"Explicit --plan path does not exist: <path>"` (use the `reason` field verbatim). Skip Steps 2–5. |
+
+If `source == "legacy-global"`, immediately before the report header in Step 5 emit one warning line:
+
+```
+⚠️ Legacy plan source: ~/.claude/plans/. Consider migrating to docs/superpowers/plans/ (where superpowers:writing-plans saves by default).
+```
+
+Project-local hits stay silent; explicit hits stay silent.
 
 ## Step 2: Parse Checkboxes
 
@@ -106,6 +131,7 @@ Output a structured report in this exact format:
 ## Plan Verification Report (Gate 1)
 
 **Plan:** [filename]
+**Source:** [project-local | legacy-global | explicit]
 **Total Items:** [N]
 **Completed:** [N] ([%]%)
 **Uncompleted Blocking:** [N]
