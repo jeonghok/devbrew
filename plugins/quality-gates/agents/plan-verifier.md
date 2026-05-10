@@ -39,20 +39,21 @@ The orchestrator passes you `plan_path` as a prompt parameter (a literal value l
 `"auto"`, `""`, or an absolute/repo-relative path). Decide which command to run by
 inspecting that value:
 
+**The script resolves project-local plans against the current working directory.** Always invoke it with an explicit `cd "<literal project_dir value>"` prefix so it scans the correct repository — substitute the `project_dir` value you received in your input prompt.
+
 - If `plan_path` is `"auto"` or empty → run
 
   ```bash
-  "${CLAUDE_PLUGIN_ROOT}/scripts/discover-plan.sh"
+  cd "<literal project_dir value>" && "${CLAUDE_PLUGIN_ROOT}/scripts/discover-plan.sh"
   ```
 
-- Otherwise → substitute the literal value of `plan_path` into the path argument and run
+- Otherwise → substitute the literal values of BOTH `project_dir` and `plan_path` and run
 
   ```bash
-  "${CLAUDE_PLUGIN_ROOT}/scripts/discover-plan.sh" --plan "<literal plan_path value>"
+  cd "<literal project_dir value>" && "${CLAUDE_PLUGIN_ROOT}/scripts/discover-plan.sh" --plan "<literal plan_path value>"
   ```
 
-  (Replace `<literal plan_path value>` with the actual string you received — do not
-  treat it as a shell variable.)
+  (Replace `<literal project_dir value>` and `<literal plan_path value>` with the actual strings you received — do not treat them as shell variables.)
 
 The script emits a single-line JSON object on stdout:
 
