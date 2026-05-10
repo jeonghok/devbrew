@@ -90,12 +90,12 @@ Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md
 
 ## Git Workflow
 
-GitHub Flow. Branch from `main`, merge back via PR. Details in `docs/git-workflow/`.
+GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow/`.
 
-- Branch: `feature/*` or `fix/*` from `main`. Kebab-case, 2-4 words.
+- Branch: `main`에서 `feature/*` 또는 `fix/*`. kebab-case, 2–4 단어.
 - Commit: Conventional Commits (`<type>(<scope>): <description>`)
-- PR: squash merge, see `docs/git-workflow/pr-process.md`
-- project-init plugin auto-validates branch naming and commit format
+- PR: merge commit, `docs/git-workflow/pr-process.md` 참고
+- project-init 플러그인이 브랜치 명명·commit 포맷 자동 검증
 
 ## When Editing This Repo
 

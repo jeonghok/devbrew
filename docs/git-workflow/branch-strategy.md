@@ -2,32 +2,34 @@
 
 ## Model
 
-- `main` is the production branch — always deployable
-- All work happens on short-lived `feature/*` or `fix/*` branches
-- No `develop`, `release`, or `staging` branches
+- `main`은 production 브랜치 — 항상 deployable
+- 모든 작업은 단명 `feature/*` 또는 `fix/*` 브랜치에서
+- `develop`, `release`, `staging` 브랜치 없음
 
 ## Branch Naming Pattern
 
 ```regex
-^(feature|fix)/[\w.-]+$
+^(feature|fix)/[a-z0-9][a-z0-9.-]*$
 ```
+
+소문자 + 숫자 + 하이픈 + dot만 허용 (예: `feature/v1.2-fix`). URL-friendly + case-insensitive 파일시스템 충돌 방지 (예: macOS는 `feature/Foo`와 `feature/foo`를 같은 브랜치로 본다).
 
 ## Branch Prefixes
 
 | Prefix | Use | Example |
 |--------|-----|---------|
-| `feature/<name>` | New feature or enhancement | `feature/user-auth` |
-| `fix/<name>` | Bug fix | `fix/login-redirect` |
+| `feature/<name>` | 새 기능 또는 enhancement | `feature/user-auth` |
+| `fix/<name>` | 버그 수정 | `fix/login-redirect` |
 
-- Use **kebab-case** for the description
-- Keep it concise: 2-4 words
-- Max 50 characters total
+- 설명에는 **kebab-case** 사용
+- 간결하게: 2–4 단어
+- 전체 50자 이하
 
 ## Branch Lifecycle
 
 ### Creating a branch
 
-Always start from latest `main`:
+항상 최신 `main`에서 시작:
 
 ```bash
 git checkout main
@@ -37,7 +39,7 @@ git checkout -b feature/<name>
 
 ### Continuing work on an existing branch
 
-Sync with main before continuing:
+작업 재개 전 main과 동기화:
 
 ```bash
 git checkout feature/<name>
@@ -47,15 +49,15 @@ git merge origin/main
 
 ### After PR merge
 
-- Delete the branch: `git branch -d feature/<name>`
-- Or keep and merge main in for follow-up work
+- 브랜치 삭제: `git branch -d feature/<name>`
+- 또는 유지하고 main을 merge해 후속 작업
 
 ## Rules for Claude
 
-- **ALWAYS** check current branch before starting work: `git branch --show-current`
-- **NEVER** commit directly to `main`
-- **ALWAYS** use `feature/*` or `fix/*` branch naming
-- When asked to "start working on X" — create a properly named branch first
-- If on `main` and about to make changes — STOP and create a branch first
-- When switching to an existing feature branch — check if it needs sync from main
-- **ALWAYS** sync an existing feature branch with `git merge origin/main`, never `git rebase`. Rebase rewrites commit SHAs — unsafe on any pushed branch.
+- **ALWAYS** 작업 시작 전 현재 브랜치 확인: `git branch --show-current`
+- **NEVER** `main`에 직접 commit
+- **ALWAYS** `feature/*` 또는 `fix/*` 브랜치 명명 사용
+- "X 작업 시작해" 요청 시 — 먼저 적절히 명명된 브랜치 생성
+- `main`에 있고 변경하려 할 때 — STOP, 브랜치 먼저 생성
+- 기존 feature 브랜치로 전환 시 — main에서 sync 필요한지 확인
+- **ALWAYS** 기존 feature 브랜치는 `git merge origin/main`으로 sync, `git rebase`는 절대 안 됨. rebase는 commit SHA를 rewrite — push된 브랜치에 unsafe.
