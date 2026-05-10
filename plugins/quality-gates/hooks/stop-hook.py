@@ -12,6 +12,10 @@ State machine (forward-only):
 NEEDS_RESTART from Gate 2 or Gate 3 no longer auto-restarts to Gate 1.
 Instead it terminates with a user-choice prompt (gate2_user_choice /
 gate3_fail). The within-Gate-2 fix-loop (max_gate2_iterations) is preserved.
+
+Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
+  DEVBREW_DISABLE_QUALITY_GATES=1                  - disables this hook entirely
+  DEVBREW_SKIP_HOOKS=quality-gates:stop-hook       - skip just this one
 """
 
 import json
@@ -567,7 +571,17 @@ def build_system_message(state, transition):
 
 # --- Main ---
 
+def _disabled() -> bool:
+    """Honor devbrew kill switches before any side effect."""
+    if os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1":
+        return True
+    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
+    return "quality-gates:stop-hook" in skip
+
+
 def main():
+    if _disabled():
+        sys.exit(0)
     try:
         hook_input = json.load(sys.stdin)
     except (json.JSONDecodeError, EOFError):
