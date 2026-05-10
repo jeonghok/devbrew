@@ -1,7 +1,7 @@
 {
   "name": "project-init",
   "description": "Initialize git workflow rules + LLM coding baseline for any project. Select a branching strategy (GitHub Flow, Git Flow, Trunk-based), generate CLAUDE.md and docs/ with branch naming, Conventional Commits, PR process, and Karpathy-derived LLM coding guidelines. Auto-validates via hooks.",
-  "version": "1.2.3",
+  "version": "1.3.0",
   "author": {
     "name": "jeonghokim"
   }

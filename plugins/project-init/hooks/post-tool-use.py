@@ -16,9 +16,9 @@ import sys
 
 # --- Constants ---
 
-DEFAULT_BRANCH_PATTERN = re.compile(r"^(feature|fix)/[\w.-]+$")
+DEFAULT_BRANCH_PATTERN = re.compile(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
 CONVENTIONAL_COMMIT_PATTERN = re.compile(
-    r"^(feat|fix|docs|style|refactor|perf|test|build|ci|chore)(\(.+\))?!?:\s.+"
+    r"^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?:\s.+"
 )
 
 BRANCH_CREATE_RE = re.compile(r"git\s+(?:checkout\s+-b|switch\s+-c)\s+(\S+)")
@@ -138,7 +138,7 @@ def validate_commit(command):
     return (
         f"project-init: Commit message does not follow Conventional Commits format.\n"
         f"Expected: <type>(<scope>): <description>\n"
-        f"Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore\n"
+        f"Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert\n"
         f"Suggested: {suggested_type}: {first_line}"
     )
 

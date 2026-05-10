@@ -9,8 +9,10 @@
 ## Branch Naming Pattern
 
 ```regex
-^(feature|fix)/[\w.-]+$
+^(feature|fix)/[a-z0-9][a-z0-9.-]*$
 ```
+
+소문자 + 숫자 + 하이픈 + dot만 허용 (예: `feature/v1.2-fix`). URL-friendly + case-insensitive 파일시스템 충돌 방지 (예: macOS는 `feature/Foo`와 `feature/foo`를 같은 브랜치로 본다).
 
 ## Branch Prefixes
 

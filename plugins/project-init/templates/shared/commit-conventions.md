@@ -14,8 +14,8 @@
 
 ## Rules
 
-- **Subject line**: 명령형 동사 ("add" — "added" 아님), 최대 72자, 마침표 없음
-- **Body**: 선택, *what*이 아니라 *why*를 설명, 72자에서 wrap
+- **Subject line**: 명령형 동사 ("add" — "added" 아님), **최대 50자**, 마침표 없음. `git log --oneline`, GitHub PR list, 80-col terminal이 50자에서 truncate (Tim Pope 50/72 rule)
+- **Body**: 선택, *what*이 아니라 *why*를 설명, **72자에서 wrap**
 - **Footer**: breaking change에는 `BREAKING CHANGE:`, AI 보조 commit에는 `Co-Authored-By:`
 
 ## Types
@@ -32,6 +32,7 @@
 | `build` | 빌드 시스템·의존성 | `build: upgrade webpack to v6` |
 | `ci` | CI 설정 | `ci: add deploy stage` |
 | `chore` | 유지보수, 프로덕션 코드 변경 없음 | `chore: update .gitignore` |
+| `revert` | 이전 commit 되돌림 | `revert: feat(auth): add OAuth2 login` |
 
 ## Scope
 
@@ -47,6 +48,18 @@ feat(api)!: change response format for /users
 BREAKING CHANGE: response now returns array instead of object
 ```
 
+## SemVer Mapping
+
+[Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) §1은 commit type을 [SemVer](https://semver.org/)에 직접 매핑:
+
+| Commit | SemVer bump | 예시 |
+|--------|-------------|------|
+| `fix:` | PATCH | `1.2.3` → `1.2.4` |
+| `feat:` | MINOR | `1.2.3` → `1.3.0` |
+| `BREAKING CHANGE:` (any type) | MAJOR | `1.2.3` → `2.0.0` |
+
+자동 릴리스 도구 (`release-please`, `semantic-release`)가 이 매핑으로 version bump + CHANGELOG 생성.
+
 ## AI-Assisted Commits
 
 Claude가 commit 작성을 보조하거나 직접 작성하면 footer 추가:
@@ -54,6 +67,20 @@ Claude가 commit 작성을 보조하거나 직접 작성하면 footer 추가:
 ```
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
+
+## Issue References
+
+Conventional Commits v1.0.0 footer pattern으로 issue를 link:
+
+```
+fix(api): handle null response on /users endpoint
+
+Closes: #123
+Refs: #98
+```
+
+- `Closes: #N` — GitHub이 PR merge 시 issue #N 자동 close
+- `Refs: #N` — 관련 issue 참조, close하지 않음 (CC footer 규약 — GitHub 자동 처리 없음, 단순 hyperlink만)
 
 ## Good Examples
 

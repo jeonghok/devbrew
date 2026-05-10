@@ -5,6 +5,23 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [1.3.0] — 2026-05-10
+
+### Added
+- `templates/shared/commit-conventions.md`에 `revert` commit type row 추가 (Conventional Commits v1.0.0 / Angular convention 표준 type, AC2). `hooks/post-tool-use.py:21` `CONVENTIONAL_COMMIT_PATTERN`과 line 141 error message도 동기화 (AC17, AC18).
+- `templates/shared/commit-conventions.md`에 `## SemVer Mapping` 섹션 신설. `fix→PATCH`, `feat→MINOR`, `BREAKING CHANGE→MAJOR` 매핑 명시 — [Conventional Commits v1.0.0 §1](https://www.conventionalcommits.org/en/v1.0.0/) 정의에 따라 `release-please`/`semantic-release` 자동화 enabler (AC3).
+- `templates/shared/commit-conventions.md`에 `## Issue References` 섹션 신설. `Closes: #N` (issue auto-close), `Refs: #N` (참조) footer pattern 예제 (AC4).
+- `templates/shared/pr-process.md`에 `## Server-Side Enforcement` 섹션 신설. 6개 GitHub branch protection 항목 (PR reviews, status checks, linear history, no force push, signed commits, dismiss stale approvals) 명시. "client-side hook이 server-side를 대체하지 않음" 강조. [GitHub docs — About protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches) 참조 (AC6).
+- `templates/git-flow/branch-strategy.md`에 `## When NOT to use Git Flow` 섹션 신설. [Vincent Driessen 2020 reflection](https://nvie.com/posts/a-successful-git-branching-model/) paraphrase 인용 — continuous delivery 팀이라면 GitHub Flow 권장, Git Flow는 versioned releases 한정. [Atlassian "legacy" 분류](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow) cite (AC8).
+- `templates/trunk-based/branch-strategy.md`에 `## Releasing` 섹션 신설. Pattern A (tag from trunk, default) + Pattern B (release branches for legacy version support, cherry-pick from trunk + kill switch 안내). [trunkbaseddevelopment.com](https://trunkbaseddevelopment.com/) canonical 권장 패턴 (AC14).
+
+### Changed
+- 3개 strategy의 branch naming regex가 `[\w.-]+` → `[a-z0-9][a-z0-9.-]*`로 tighten. `\w`가 대문자/언더스코어 허용해 산문의 "kebab-case" 권장과 정합성 결여였던 사실 오류 수정 (AC9, AC11, AC13). `hooks/post-tool-use.py:19` `DEFAULT_BRANCH_PATTERN` fallback도 동기화 (AC16). 기존 컨벤션 따르던 사용자 (`feature/foo-bar`)는 영향 없음 — 잘못된 이름 (`feature/Foo_Bar`, `feature/foo_bar`) 쓰던 사용자만 거부됨 (의도된 fix).
+- `templates/shared/commit-conventions.md` `## Rules` 섹션의 subject line 한계가 72자 → **50자**로 변경. body wrap 72자 별도 명시. [Tim Pope 2008 *"A Note About Git Commit Messages"*](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html) canonical "50/72 rule" 정렬 — `git log --oneline`, GitHub PR list, 80-col terminal이 50자에서 truncate. [cbea.ms *"How to Write a Git Commit Message"*](https://cbea.ms/git-commit/) 동일 권장 (AC1).
+
+### Fixed
+- v1.2.3 이전 templates는 subject line 한계를 72자로 표기해 Tim Pope 50/72 rule의 두 한계 (subject 50 / body 72)를 혼동하고 있었음. AC1으로 시정.
+
 ## [1.2.3] — 2026-05-10
 
 ### Changed

@@ -56,6 +56,22 @@ Default: **{{MERGE_STRATEGY}}**
 - [ ] commit 메시지가 컨벤션 따름 (`docs/git-workflow/commit-conventions.md`)
 - [ ] PR 설명이 변경사항을 정확히 반영
 
+## Server-Side Enforcement
+
+> **이 플러그인의 hook은 client-side 검증만** — server-side enforcement는 GitHub Settings → Branches → Branch protection rules (또는 organization 단위 Repository rulesets)에서 별도 설정 필요. Hook이 우회되거나 (`DEVBREW_DISABLE_PROJECT_INIT=1`) 다른 도구에서 push될 때 server-side만이 진정한 enforcement.
+
+`main` (또는 보호 대상 브랜치) protection 권장 설정:
+
+- **Require pull request reviews before merging** — 최소 1명 approval 필수
+- **Require status checks to pass before merging** — CI 통과 강제 (예: `lint`, `test`, `build`)
+- **Require linear history** (선택) — merge commit 금지 → squash 또는 rebase merge만 허용
+- **Do not allow force pushes** — protected 브랜치 history 무결성 보장
+- **Require signed commits** (선택) — GPG/SSH 서명 강제 (보안 critical 프로젝트)
+- **Dismiss stale pull request approvals when new commits are pushed** — 새 commit이 들어오면 이전 approval 자동 무효화
+
+설정 위치: GitHub repo → Settings → Branches → Add branch protection rule.
+참조: [GitHub docs — About protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches).
+
 ## Plugin Integration
 
 - **commit-commands**: 간소화된 PR 생성을 위해 `/commit-push-pr` 사용

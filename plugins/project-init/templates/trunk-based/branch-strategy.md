@@ -10,8 +10,10 @@
 ## Branch Naming Pattern
 
 ```regex
-^(feature|fix)/[\w.-]+$
+^(feature|fix)/[a-z0-9][a-z0-9.-]*$
 ```
+
+소문자 + 숫자 + 하이픈 + dot만 허용 (예: `feature/v1.2-fix`). URL-friendly + case-insensitive 파일시스템 충돌 방지.
 
 ## Branch Prefixes
 
@@ -61,6 +63,50 @@ git branch -d feature/<name>
 - 새 코드를 feature flag 뒤로 wrap
 - flag 비활성화 상태로 `main`에 merge
 - 기능이 완성되고 테스트 끝나면 flag 활성화
+
+## Releasing
+
+[trunkbaseddevelopment.com](https://trunkbaseddevelopment.com/) canonical은 두 가지 release 패턴을 권장:
+
+### Pattern A — Tag from trunk (default)
+
+`main`에서 직접 version 태그를 찍고 그 시점에서 build/deploy:
+
+```bash
+git checkout main
+git pull origin main
+git tag -a v1.2.0 -m "Release v1.2.0"
+git push origin v1.2.0
+```
+
+CI/CD가 tag push를 트리거로 deploy. 별도 release 브랜치 없음 — `main`이 곧 release source.
+
+### Pattern B — Release branches for legacy support
+
+이미 출시된 옛 version (예: v1.x)에 hotfix를 backport해야 할 때만:
+
+> **Note:** `release/*` 브랜치는 본 strategy의 regex (`^(feature|fix)/...`) 스코프 밖이라 project-init hook이 거부한다. 예외적 1회 작업이므로 kill switch로 우회: `DEVBREW_DISABLE_PROJECT_INIT=1 git checkout -b release/v1.x`.
+
+```bash
+# 1. trunk에서 release 브랜치 cut (1회만, kill switch 사용)
+git checkout main
+git pull origin main
+DEVBREW_DISABLE_PROJECT_INIT=1 git checkout -b release/v1.x
+git push -u origin release/v1.x
+
+# 2. fix는 항상 trunk에 먼저 commit
+git checkout main
+# ... fix 작업, commit, PR merge ...
+
+# 3. trunk에서 release 브랜치로 cherry-pick
+git checkout release/v1.x
+git cherry-pick <fix-commit-sha>
+git tag -a v1.2.5 -m "Patch v1.2.5"
+git push origin release/v1.x v1.2.5
+```
+
+- 새 개발은 항상 `main` (trunk)에서. release 브랜치는 receive-only.
+- release 브랜치를 새 기능 개발에 쓰지 말 것 — 그 순간 long-lived feature branch가 되어 TBD 위반.
 
 ## Rules for Claude
 
