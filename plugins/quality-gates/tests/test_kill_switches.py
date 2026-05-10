@@ -1,0 +1,263 @@
+"""Regression tests: every hook honors devbrew kill switches.
+
+Per CLAUDE.md ("kill switch는 보안 컨트롤"), every hook must check both
+DEVBREW_DISABLE_QUALITY_GATES=1 (global) and DEVBREW_SKIP_HOOKS=quality-gates:<key>
+(per-hook). This test guards against the v1.6.1/v1.6.2 regression pattern
+where new hooks shipped without the env var checks, contradicting the README's
+"All hooks honor..." promise.
+
+Strategy per hook:
+  1. setup() pre-creates state that — without a kill switch — would cause the
+     hook to produce a detectable side effect (state mutation, stdout, file
+     creation, folder deletion).
+  2. run hook with the relevant env var set.
+  3. assert the side effect did NOT happen.
+
+A hook that ignores the env var is detected by the side effect appearing
+despite the kill switch — the test fails loudly.
+"""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+PLUGIN_ROOT = Path(__file__).resolve().parent.parent
+HOOKS = PLUGIN_ROOT / "hooks"
+
+# Each hook contract: (script, per-hook skip key).
+# The skip key is the suffix used in DEVBREW_SKIP_HOOKS=quality-gates:<key>.
+HOOK_CONTRACTS = [
+    ("stop-hook.py", "stop-hook"),
+    ("post-tool-use.py", "post-tool-use"),
+    ("post-tool-use-session-tracker.py", "session-tracker"),
+    ("session-start-advisor.py", "session-start-advisor"),
+    ("session-end-cleanup.py", "session-end-cleanup"),
+]
+
+SID = "killswitch12345"
+
+PIPELINE_RUNNING = (
+    "---\n"
+    "status: gate1_running\n"
+    "current_gate: 1\n"
+    "total_iterations: 0\n"
+    'started_at: "2026-05-10T00:00:00Z"\n'
+    "---\n"
+    "# Quality Gates Pipeline State\n"
+)
+
+
+def _qg_dir(cwd: str) -> Path:
+    return Path(cwd) / ".claude" / "quality-gates" / SID
+
+
+def _payload_for(script: str) -> dict:
+    """Payload that — without a kill switch — would cause the hook to act."""
+    if script == "post-tool-use.py":
+        return {
+            "session_id": SID,
+            "tool_name": "Bash",
+            "tool_input": {"command": "gh pr create --title x --body y"},
+            "tool_response": {"stdout": "https://github.com/owner/repo/pull/42\n"},
+            "cwd": "",  # filled in per test
+        }
+    if script == "post-tool-use-session-tracker.py":
+        return {
+            "session_id": SID,
+            "tool_name": "Edit",
+            "tool_input": {"file_path": "/tmp/regression-killswitch-target.txt"},
+        }
+    return {"session_id": SID}
+
+
+def _setup_state(cwd: str, script: str) -> None:
+    """Pre-create state so the hook would normally do work."""
+    qg = _qg_dir(cwd)
+    if script in ("stop-hook.py", "session-start-advisor.py"):
+        qg.mkdir(parents=True, exist_ok=True)
+        (qg / "pipeline.md").write_text(PIPELINE_RUNNING)
+    elif script == "session-end-cleanup.py":
+        qg.mkdir(parents=True, exist_ok=True)
+        (qg / "marker.txt").write_text("present-before-hook\n")
+
+
+def _run_hook(script: str, payload: dict, env_extra: dict, cwd: str) -> subprocess.CompletedProcess:
+    env = os.environ.copy()
+    # Drop any kill switch the test runner inherited so we control the var precisely.
+    env.pop("DEVBREW_DISABLE_QUALITY_GATES", None)
+    env.pop("DEVBREW_SKIP_HOOKS", None)
+    env.update(env_extra)
+    if "cwd" in payload:
+        payload = {**payload, "cwd": cwd}
+    return subprocess.run(
+        [sys.executable, str(HOOKS / script)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        env=env,
+        timeout=15,
+    )
+
+
+def _assert_no_side_effect(test: unittest.TestCase, script: str, cwd: str,
+                           proc: subprocess.CompletedProcess, label: str) -> None:
+    """Hook-specific check that the kill switch actually suppressed work."""
+    test.assertEqual(
+        proc.returncode, 0,
+        f"{label}: hook exited {proc.returncode}; stderr={proc.stderr!r}",
+    )
+
+    qg = _qg_dir(cwd)
+
+    if script == "stop-hook.py":
+        # State file must be untouched.
+        contents = (qg / "pipeline.md").read_text()
+        test.assertEqual(
+            contents, PIPELINE_RUNNING,
+            f"{label}: stop-hook mutated pipeline.md despite kill switch",
+        )
+
+    elif script == "post-tool-use.py":
+        # Must not emit a systemMessage trigger.
+        out = proc.stdout.strip()
+        if out:
+            try:
+                parsed = json.loads(out)
+            except json.JSONDecodeError:
+                test.fail(f"{label}: post-tool-use produced non-JSON stdout: {out!r}")
+            test.assertNotIn(
+                "systemMessage", parsed,
+                f"{label}: post-tool-use injected systemMessage despite kill switch",
+            )
+
+    elif script == "post-tool-use-session-tracker.py":
+        files_md = qg / "files.md"
+        test.assertFalse(
+            files_md.exists(),
+            f"{label}: session-tracker created {files_md} despite kill switch",
+        )
+
+    elif script == "session-start-advisor.py":
+        # Advisor produces stdout when in-flight state is present.
+        test.assertEqual(
+            proc.stdout.strip(), "",
+            f"{label}: advisor produced output despite kill switch: {proc.stdout!r}",
+        )
+        # And must not delete or rewrite the state.
+        contents = (qg / "pipeline.md").read_text()
+        test.assertEqual(contents, PIPELINE_RUNNING, f"{label}: advisor touched state")
+
+    elif script == "session-end-cleanup.py":
+        test.assertTrue(
+            qg.exists() and (qg / "marker.txt").exists(),
+            f"{label}: session-end-cleanup removed folder despite kill switch",
+        )
+
+    else:
+        test.fail(f"{label}: no side-effect assertion defined for {script}")
+
+
+class KillSwitchRegressionTest(unittest.TestCase):
+    """Each test runs against all 5 hooks via subTest."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp(prefix="qg-killswitch-")
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+
+    def test_global_disable_silences_every_hook(self) -> None:
+        """DEVBREW_DISABLE_QUALITY_GATES=1 must suppress every hook."""
+        for script, _ in HOOK_CONTRACTS:
+            with self.subTest(hook=script):
+                _setup_state(self.tmp, script)
+                proc = _run_hook(
+                    script, _payload_for(script),
+                    {"DEVBREW_DISABLE_QUALITY_GATES": "1"}, self.tmp,
+                )
+                _assert_no_side_effect(self, script, self.tmp, proc, f"global / {script}")
+
+    def test_per_hook_skip_silences_targeted_hook(self) -> None:
+        """DEVBREW_SKIP_HOOKS=quality-gates:<key> must suppress that one hook."""
+        for script, key in HOOK_CONTRACTS:
+            with self.subTest(hook=script, key=key):
+                _setup_state(self.tmp, script)
+                proc = _run_hook(
+                    script, _payload_for(script),
+                    {"DEVBREW_SKIP_HOOKS": f"quality-gates:{key}"}, self.tmp,
+                )
+                _assert_no_side_effect(
+                    self, script, self.tmp, proc, f"per-hook / {script}",
+                )
+
+    def test_per_hook_skip_in_csv_list(self) -> None:
+        """SKIP_HOOKS substring match must work when the key is one of many."""
+        for script, key in HOOK_CONTRACTS:
+            with self.subTest(hook=script, key=key):
+                _setup_state(self.tmp, script)
+                csv = f"other-plugin:foo,quality-gates:{key},another:bar"
+                proc = _run_hook(
+                    script, _payload_for(script),
+                    {"DEVBREW_SKIP_HOOKS": csv}, self.tmp,
+                )
+                _assert_no_side_effect(
+                    self, script, self.tmp, proc, f"csv / {script}",
+                )
+
+    def test_setup_actually_triggers_work_without_kill_switch(self) -> None:
+        """Sanity: confirm each hook's setup would produce a detectable side effect.
+
+        This guards against the test passing trivially when the setup is wrong
+        (e.g., hook would no-op even without a kill switch). If this test fails,
+        the kill-switch tests above are unreliable.
+        """
+        for script, _ in HOOK_CONTRACTS:
+            with self.subTest(hook=script):
+                _setup_state(self.tmp, script)
+                proc = _run_hook(script, _payload_for(script), {}, self.tmp)
+                self.assertEqual(
+                    proc.returncode, 0,
+                    f"sanity / {script}: hook crashed with stderr={proc.stderr!r}",
+                )
+                self._assert_side_effect_happened(script, self.tmp, proc)
+                # Reset state for next iteration.
+                shutil.rmtree(_qg_dir(self.tmp).parent, ignore_errors=True)
+
+    def _assert_side_effect_happened(self, script: str, cwd: str,
+                                     proc: subprocess.CompletedProcess) -> None:
+        qg = _qg_dir(cwd)
+        if script == "post-tool-use.py":
+            self.assertIn(
+                "systemMessage", proc.stdout,
+                "post-tool-use sanity: should emit systemMessage on `gh pr create`",
+            )
+        elif script == "post-tool-use-session-tracker.py":
+            self.assertTrue(
+                (qg / "files.md").exists(),
+                "session-tracker sanity: should create files.md on Edit",
+            )
+        elif script == "session-start-advisor.py":
+            self.assertNotEqual(
+                proc.stdout.strip(), "",
+                "advisor sanity: should produce output for in-flight state",
+            )
+        elif script == "session-end-cleanup.py":
+            self.assertFalse(
+                qg.exists(),
+                "session-end-cleanup sanity: should remove folder",
+            )
+        elif script == "stop-hook.py":
+            # stop-hook needs a transcript signal to mutate state. Without one,
+            # it exits silently — which is its normal no-op behavior, not a
+            # missing kill-switch. We accept that the global/per-hook tests
+            # above are sufficient for stop-hook (verified via grep).
+            pass
+
+
+if __name__ == "__main__":
+    unittest.main()

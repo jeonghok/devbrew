@@ -14,7 +14,9 @@ Behaviors:
 
 Working-directory contract: invoked with cwd = workspace root.
 
-Kill switch: DEVBREW_DISABLE_QUALITY_GATES=1.
+Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
+  DEVBREW_DISABLE_QUALITY_GATES=1                          - disables this hook entirely
+  DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor   - skip just this one
 Verbose: DEVBREW_QG_GC_VERBOSE=1 prints sibling-folder count.
 """
 from __future__ import annotations
@@ -45,7 +47,10 @@ def _strip_quotes(value: str) -> str:
 
 
 def _disabled() -> bool:
-    return os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1"
+    if os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1":
+        return True
+    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
+    return "quality-gates:session-start-advisor" in skip
 
 
 def _verbose() -> bool:
