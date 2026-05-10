@@ -224,6 +224,34 @@ class TestGate3ResolutionState(unittest.TestCase):
         # P21 guard: prompt mentions decision-only contract
         self.assertIn("decision", prompt.lower())
 
+    def test_gate3_repeat_detected_when_same_needed_twice(self):
+        # When two consecutive NEEDS_RESOLUTION emit the SAME `needed_hash`,
+        # transition must escalate to gate3_repeat_detected, not just increment.
+        state = self._gate3_state(resolution_iter=1, max_resolutions=3)
+        state["last_gate3_needed_hash"] = "abc123"
+        signal = {"gate": "3", "verdict": "NEEDS_RESOLUTION",
+                  "summary": "still down", "needed_hash": "abc123"}
+        transition = stop_hook.compute_transition(state, signal)
+        self.assertEqual(transition["type"], "gate3_repeat_detected")
+
+    def test_gate3_different_needed_hash_continues_resolution(self):
+        # Different needed_hash → progress is being made, continue.
+        state = self._gate3_state(resolution_iter=1, max_resolutions=3)
+        state["last_gate3_needed_hash"] = "abc123"
+        signal = {"gate": "3", "verdict": "NEEDS_RESOLUTION",
+                  "summary": "different problem", "needed_hash": "xyz789"}
+        transition = stop_hook.compute_transition(state, signal)
+        self.assertEqual(transition["type"], "gate3_needs_resolution")
+
+    def test_gate3_repeat_detected_prompt(self):
+        state = self._gate3_state(resolution_iter=2, max_resolutions=3)
+        prompt = stop_hook.build_special_prompt(
+            "gate3_repeat_detected", state, "context"
+        )
+        self.assertIn("GATE3_REPEAT_DETECTED", prompt)
+        self.assertIn("PASS_WITH_WARNINGS", prompt)
+        self.assertIn("abort", prompt.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

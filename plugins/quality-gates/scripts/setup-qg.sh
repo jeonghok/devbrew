@@ -253,6 +253,7 @@ current_gate: $CURRENT_GATE
 gate2_iteration: 0
 max_gate2_iterations: 5
 gate3_resolution_iter: 0
+last_gate3_needed_hash: ""
 max_gate3_resolutions: $MAX_GATE3_RESOLUTIONS
 skip_runtime: $SKIP_RUNTIME
 single_gate: ${SINGLE_GATE:-null}

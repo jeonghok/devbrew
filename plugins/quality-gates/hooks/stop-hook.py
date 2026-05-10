@@ -278,11 +278,16 @@ def compute_transition(state, signal):
 
     # --- Gate 3 transitions ---
     if gate == "3":
-        if verdict in ("PASS", "SKIP", "SKIP_WITH_EVIDENCE"):
+        if verdict in ("PASS", "SKIP", "SKIP_WITH_EVIDENCE", "PASS_WITH_WARNINGS"):
             return {"type": "complete"}
         if verdict == "NEEDS_RESOLUTION":
             iter_now = state.get("gate3_resolution_iter", 0)
             max_now = state.get("max_gate3_resolutions", 3)
+            # Repeat detection: same needed_hash from prior iteration → not converging
+            current_hash = signal.get("needed_hash", "")
+            prior_hash = state.get("last_gate3_needed_hash", "")
+            if iter_now > 0 and current_hash and current_hash == prior_hash:
+                return {"type": "gate3_repeat_detected"}
             if iter_now < max_now:
                 return {"type": "gate3_needs_resolution"}
             # max reached → escalate to gate3_fail (existing prompt)
@@ -342,6 +347,9 @@ def update_state_file(path, state, signal, transition):
     if transition.get("type") == "gate3_needs_resolution":
         new_gate3_resolution_iter = state.get("gate3_resolution_iter", 0) + 1
         state["gate3_resolution_iter"] = new_gate3_resolution_iter
+        # Remember this iteration's needed_hash so the next iteration can
+        # detect a repeat (same needed set twice in a row → not converging).
+        state["last_gate3_needed_hash"] = signal.get("needed_hash", "")
 
     # Apply frontmatter updates via string replacement.
     # Forward-only: total_iterations / max_total_iterations are no longer
@@ -352,6 +360,7 @@ def update_state_file(path, state, signal, transition):
         "current_gate": str(new_gate),
         "gate2_iteration": str(new_gate2_iter),
         "gate3_resolution_iter": str(new_gate3_resolution_iter),
+        "last_gate3_needed_hash": state.get("last_gate3_needed_hash", ""),
     }
     for key, val in replacements.items():
         content = re.sub(
@@ -520,6 +529,21 @@ def build_special_prompt(transition_type, state, gate_results, prompt_key=None):
             f"\nPipeline context:\n{gate_results}"
         )
 
+    if transition_type == "gate3_repeat_detected":
+        return (
+            "GATE3_REPEAT_DETECTED\n\n"
+            "Gate 3 (Runtime Verification) is not converging — "
+            "the same `needed` resources appeared 2 iterations in a row.\n\n"
+            "Present options to the user via AskUserQuestion:\n"
+            "1. Proceed — accept the current state with warnings and continue\n"
+            "2. Abort — stop the pipeline\n\n"
+            "Based on user choice:\n"
+            '- Proceed: emit <qg-signal gate="3" verdict="PASS_WITH_WARNINGS" '
+            'summary="Repeat detected; user accepted" files_changed="" />\n'
+            '- Abort: emit <qg-signal action="abort" reason="User chose to abort" />\n'
+            f"\nPipeline context:\n{gate_results}"
+        )
+
     if transition_type == "gate3_fail":
         return (
             "GATE3_FAIL\n\n"
@@ -599,7 +623,8 @@ def build_system_message(state, transition):
 
     gate_name = GATE_NAMES.get(str(gate), f"Gate {gate}")
 
-    if t_type in ("max_gate2_exceeded", "gate3_fail", "gate2_user_choice"):
+    if t_type in ("max_gate2_exceeded", "gate3_fail", "gate2_user_choice",
+                  "gate3_needs_resolution", "gate3_repeat_detected"):
         return "⚠️ Quality Gates: Action required | /cancel-qg to stop"
 
     # Forward-only: show within-Gate-2 iteration progress when applicable;
@@ -699,9 +724,12 @@ def main():
         sys.exit(0)
 
     # 10. Handle user-choice prompts (gate2_user_choice, max_gate2_exceeded,
-    #     gate3_fail).  These block and present options; the pipeline resumes
-    #     only after the user emits a new signal.
-    if transition["type"] in ("gate2_user_choice", "max_gate2_exceeded", "gate3_fail"):
+    #     gate3_fail, gate3_needs_resolution, gate3_repeat_detected).
+    #     These block and present options; the pipeline resumes only after
+    #     the user emits a new signal.
+    if transition["type"] in ("gate2_user_choice", "max_gate2_exceeded",
+                              "gate3_fail", "gate3_needs_resolution",
+                              "gate3_repeat_detected"):
         prompt_key = transition.get("prompt_key")
         prompt = build_special_prompt(transition["type"], state, gate_results,
                                       prompt_key=prompt_key)
