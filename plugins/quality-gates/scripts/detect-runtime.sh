@@ -126,6 +126,69 @@ if [[ -f Makefile ]]; then
   done
 fi
 
+# --- env_status ---
+ENV_STATUS=()
+for envfile in .env .env.local .env.development; do
+  if [[ -f "$envfile" ]]; then
+    ENV_STATUS+=("$(printf '  - file: %s\n    exists: true\n    has_example: false' "$envfile")")
+  elif [[ -f "${envfile}.example" ]]; then
+    ENV_STATUS+=("$(printf '  - file: %s\n    exists: false\n    has_example: true' "$envfile")")
+  fi
+done
+
+# --- mcp_browser detection ---
+# Strategy: read ~/.claude/settings.json or .claude/settings.json for known
+# MCP server entries. chrome-devtools wins over playwright.
+MCP_BROWSER="none"
+SETTINGS_FILES=("$HOME/.claude/settings.json" ".claude/settings.json" ".mcp.json")
+for sf in "${SETTINGS_FILES[@]}"; do
+  if [[ -f "$sf" ]]; then
+    if grep -qi 'chrome-devtools' "$sf" 2>/dev/null; then
+      MCP_BROWSER="chrome-devtools"
+      break
+    fi
+    if grep -qi 'playwright' "$sf" 2>/dev/null; then
+      MCP_BROWSER="playwright"
+      # Don't break — chrome-devtools in another settings file wins
+    fi
+  fi
+done
+
+# --- app_url_candidates ---
+URL_CANDIDATES=()
+# Default ports
+if [[ "$PROJECT_TYPE" == "web" ]]; then
+  URL_CANDIDATES+=("http://localhost:3000")
+  URL_CANDIDATES+=("http://localhost:8000")
+fi
+# Parse port mappings from docker-compose
+if [[ -f docker-compose.yml ]] || [[ -f docker-compose.yaml ]]; then
+  COMPOSE_FILE="docker-compose.yml"
+  [[ -f docker-compose.yaml ]] && COMPOSE_FILE="docker-compose.yaml"
+  # Extract "<host>:<container>" port mappings, take host port
+  while IFS= read -r port; do
+    [[ -n "$port" ]] && URL_CANDIDATES+=("http://localhost:$port")
+  done < <(grep -oE '"[0-9]+:[0-9]+"|- [0-9]+:[0-9]+' "$COMPOSE_FILE" 2>/dev/null \
+            | sed -E 's/[^0-9]*([0-9]+):[0-9]+.*/\1/' | sort -u)
+fi
+# Dedupe
+if [[ ${#URL_CANDIDATES[@]} -gt 0 ]]; then
+  IFS=$'\n' URL_CANDIDATES=($(printf '%s\n' "${URL_CANDIDATES[@]}" | awk '!seen[$0]++'))
+  unset IFS
+fi
+
+# --- plan_features extraction ---
+PLAN_FEATURES=()
+if [[ -n "${PLAN_PATH:-}" ]] && [[ -f "$PLAN_PATH" ]]; then
+  # Extract /<word> route patterns and "X form/page" phrases
+  while IFS= read -r match; do
+    [[ -n "$match" ]] && PLAN_FEATURES+=("$match")
+  done < <(grep -oE '/[a-zA-Z][a-zA-Z0-9_/-]*' "$PLAN_PATH" 2>/dev/null | sort -u | head -10)
+  while IFS= read -r match; do
+    [[ -n "$match" ]] && PLAN_FEATURES+=("\"$match\"")
+  done < <(grep -oE '[a-zA-Z]+ (form|page|dashboard|panel)' "$PLAN_PATH" 2>/dev/null | sort -u | head -5)
+fi
+
 # --- Emit manifest ---
 emit "project_type: $PROJECT_TYPE"
 
@@ -143,10 +206,29 @@ else
   for r in "${TEST_RUNNERS[@]}"; do emit "  - $r"; done
 fi
 
-emit "mcp_browser: none"
-emit "app_url_candidates: []"
-emit "env_status: []"
-emit "plan_features: []"
+emit "mcp_browser: $MCP_BROWSER"
+
+if [[ ${#URL_CANDIDATES[@]} -eq 0 ]]; then
+  emit "app_url_candidates: []"
+else
+  emit "app_url_candidates:"
+  for u in "${URL_CANDIDATES[@]}"; do emit "  - $u"; done
+fi
+
+if [[ ${#ENV_STATUS[@]} -eq 0 ]]; then
+  emit "env_status: []"
+else
+  emit "env_status:"
+  for e in "${ENV_STATUS[@]}"; do emit "$e"; done
+fi
+
+if [[ ${#PLAN_FEATURES[@]} -eq 0 ]]; then
+  emit "plan_features: []"
+else
+  emit "plan_features:"
+  for f in "${PLAN_FEATURES[@]}"; do emit "  - $f"; done
+fi
+
 emit "attempted_log_path: .claude/quality-gates/${CLAUDE_CODE_SESSION_ID:-unknown}/gate3-evidence.md"
 
 exit 0

@@ -77,6 +77,59 @@ assert_contains "$OUT" "kind: pytest" "T3: pytest surface"
 assert_contains "$OUT" "- pytest" "T3: pytest in test_runners"
 assert_not_contains "$OUT" "kind: npm-script" "T3: no npm in non-node project"
 
+# --- Test 4: web-example-only fixture → env_status flags missing .env ---
+echo "== Test 4: web-example-only =="
+OUT=$(run_detector "web-example-only")
+RC=$?
+assert_eq "$RC" "0" "T4: exit 0"
+assert_contains "$OUT" "project_type: web" "T4: web project"
+assert_contains "$OUT" "env_status:" "T4: emits env_status"
+assert_contains "$OUT" "file: .env" "T4: tracks .env file"
+assert_contains "$OUT" "exists: false" "T4: .env does not exist"
+assert_contains "$OUT" "has_example: true" "T4: .env.example present"
+
+# --- Test 5: app_url_candidates from docker-compose ports ---
+echo "== Test 5: app_url_candidates =="
+OUT=$(run_detector "web-compose")
+assert_contains "$OUT" "app_url_candidates:" "T5: emits app_url_candidates"
+assert_contains "$OUT" "http://localhost:3000" "T5: port 3000 from compose"
+
+# --- Test 6: mcp_browser defaults to "none" when no settings reference it ---
+echo "== Test 6: mcp_browser default =="
+TMPHOME=$(mktemp -d)
+OUT=$(cd "$FIXTURES/markdown-only" && HOME="$TMPHOME" bash "$SCRIPT" 2>/dev/null)
+assert_contains "$OUT" "mcp_browser: none" "T6: defaults to none with no settings"
+rm -rf "$TMPHOME"
+
+# --- Test 6b: mcp_browser detects chrome-devtools when settings.json contains it ---
+echo "== Test 6b: mcp_browser chrome-devtools detection =="
+TMPHOME=$(mktemp -d)
+mkdir -p "$TMPHOME/.claude"
+cat > "$TMPHOME/.claude/settings.json" <<'EOF'
+{
+  "mcpServers": {
+    "chrome-devtools": {"command": "fake"}
+  }
+}
+EOF
+OUT=$(cd "$FIXTURES/markdown-only" && HOME="$TMPHOME" bash "$SCRIPT" 2>/dev/null)
+assert_contains "$OUT" "mcp_browser: chrome-devtools" "T6b: detects chrome-devtools"
+rm -rf "$TMPHOME"
+
+# --- Test 7: plan_features extracted from plan_path ---
+echo "== Test 7: plan_features extraction =="
+PLAN_TMP=$(mktemp)
+cat > "$PLAN_TMP" <<'EOF'
+# Plan
+- visit /auth login form
+- check /dashboard
+EOF
+OUT=$(cd "$FIXTURES/web-compose" && PLAN_PATH="$PLAN_TMP" bash "$SCRIPT" 2>/dev/null)
+assert_contains "$OUT" "plan_features:" "T7: emits plan_features"
+assert_contains "$OUT" "/auth" "T7: extracts /auth"
+assert_contains "$OUT" "/dashboard" "T7: extracts /dashboard"
+rm -f "$PLAN_TMP"
+
 echo ""
 echo "Tests passed: $PASS, failed: $FAIL"
 [[ $FAIL -eq 0 ]] || exit 1
