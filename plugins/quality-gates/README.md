@@ -10,6 +10,7 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 1 (Clarity Before Code)** — Gate 1 plan-verifier가 FAIL 시 `gate1_summary` YAML 핸드오프로 Gate 2 진입을 차단.
 - **Law 2 (Writer ≠ Reviewer)** — 모든 reviewer agent가 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언 (frontmatter scoping으로 물리적 격리).
 - **Law 3 (Compounding)** — scout `rationale` 필드가 매 iteration마다 state 파일에 로깅; reviewer-persona 편집이 학습된 교훈을 인코딩하는 substrate.
+- **Law 3 (Compounding) — cross-plugin reader contract** — Gate 1 plan-verifier가 sister-plugin (`superpowers:writing-plans`)의 출력 경로 `docs/superpowers/plans/`를 1순위 source로 명시 consume; convention drift가 silent breakage가 되지 않도록 README "Plan Discovery Sources" 섹션이 reader/writer 약속을 문서화.
 - **AP3 (Trivia ceremony) 회피** — `check-trivia.sh`가 단일 파일·≤3줄 whitespace/rename을 파이프라인 전체 skip.
 - **AP9 (Subagent spray) hard gate** — Phase 1+2 dispatch 수가 ≥4일 때 AskUserQuestion 발동.
 - **AP15 (Unbounded autonomy) 회피** — Gate 2 내부 fix-loop이 `max_gate2_iterations=5` + repeat-detection (no-progress check) + kill switch로 묶임.
@@ -137,6 +138,22 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 /cancel-qg --gc                # stale 세션 TTL sweep
 /cancel-qg --all               # 전 세션 wipe (확인 + 활성 sibling 리스트 먼저)
 ```
+
+## Plan Discovery Sources (Gate 1)
+
+`/qg gate1`이 `--plan <path>`를 받지 않으면 다음 우선순위로 plan 파일을 탐색합니다 (위→아래로 첫 자격 candidate에서 멈춤):
+
+| 우선순위 | 위치 | 자격 조건 |
+|---|---|---|
+| 1 | `--plan <path>` (CLI 명시) | 존재하면 사용. 없으면 SKIP (fallback 안 함) |
+| 2 | `./docs/superpowers/plans/*.md` (project-local) | checkbox `- [ ]` / `- [x]` 1개 이상 |
+| 3 | `~/.claude/plans/*.md` (legacy global) | project-local 비었을 때만 consult. hit 시 deprecation 경고 출력 |
+
+선택된 source 내부에서: unchecked checkbox 있는 파일 우선, 동률이면 mtime 가장 최근. 모두 all-checked면 mtime 가장 최근 ("방금 끝낸 plan, PASS 처리 정상").
+
+**Soft dependency:** project-local source는 `superpowers:writing-plans` skill이 plan을 저장하는 경로 (`docs/superpowers/plans/`) 와 동일합니다. superpowers 플러그인을 설치하지 않았더라도 동일 경로에 `.md` 파일을 직접 두면 동작합니다.
+
+알고리즘 자체는 `scripts/discover-plan.sh`에 분리되어 `tests/test_discover_plan.sh` 10개 fixture로 검증됩니다.
 
 ## 사전 요건
 
