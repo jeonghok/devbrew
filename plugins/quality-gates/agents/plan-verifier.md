@@ -3,6 +3,7 @@ name: plan-verifier
 model: sonnet
 cost_class: low
 color: cyan
+disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]
 description: >
   Use this agent to verify implementation completeness against a plan file.
   Reads the markdown plan with checkbox items, cross-references with git diff,

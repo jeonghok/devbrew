@@ -25,7 +25,7 @@
 # contain double-quote or backslash characters. This holds for every plan
 # produced by superpowers:writing-plans and any sane filesystem layout.
 
-set -u
+set -euo pipefail
 
 EXPLICIT=""
 
