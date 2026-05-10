@@ -1,0 +1,7 @@
+{
+  "name": "fixture-web-compose",
+  "scripts": {
+    "dev": "echo 'fake dev server'",
+    "test": "echo 'fake tests'"
+  }
+}

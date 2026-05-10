@@ -54,6 +54,29 @@ assert_contains "$OUT" "project_type:" "T1: emits project_type"
 assert_contains "$OUT" "runnable_surfaces: []" "T1: empty runnable_surfaces"
 assert_contains "$OUT" "test_runners: []" "T1: empty test_runners"
 
+# --- Test 2: web-compose fixture → docker-compose + npm-script surfaces ---
+echo "== Test 2: web-compose =="
+OUT=$(run_detector "web-compose")
+RC=$?
+assert_eq "$RC" "0" "T2: exit 0"
+assert_contains "$OUT" "project_type: web" "T2: project_type=web"
+assert_contains "$OUT" "kind: docker-compose" "T2: docker-compose surface"
+assert_contains "$OUT" "kind: npm-script" "T2: npm-script surface"
+assert_contains "$OUT" "name: dev" "T2: npm:dev script detected"
+assert_contains "$OUT" "name: test" "T2: npm:test script detected"
+assert_contains "$OUT" "test_runners:" "T2: emits test_runners"
+assert_contains "$OUT" "- npm" "T2: npm in test_runners"
+
+# --- Test 3: library-tests fixture → pytest only ---
+echo "== Test 3: library-tests =="
+OUT=$(run_detector "library-tests")
+RC=$?
+assert_eq "$RC" "0" "T3: exit 0"
+assert_contains "$OUT" "project_type: library" "T3: project_type=library"
+assert_contains "$OUT" "kind: pytest" "T3: pytest surface"
+assert_contains "$OUT" "- pytest" "T3: pytest in test_runners"
+assert_not_contains "$OUT" "kind: npm-script" "T3: no npm in non-node project"
+
 echo ""
 echo "Tests passed: $PASS, failed: $FAIL"
 [[ $FAIL -eq 0 ]] || exit 1
