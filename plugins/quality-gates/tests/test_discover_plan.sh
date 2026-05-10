@@ -128,9 +128,8 @@ assert_contains "$OUT" "newer.md" "T8: picks most recently modified"
 cd / && rm -rf "$TMPDIR"
 
 # --- Test 9: project-local has 2 zero-checkbox files → falls through to legacy ---
-TMPDIR=$(mktemp -d); mkdir -p "$TMPDIR/home/.claude/plans"
+TMPDIR=$(mktemp -d); mkdir -p "$TMPDIR/home/.claude/plans" "$TMPDIR/docs/superpowers/plans"
 echo "no checkboxes" > "$TMPDIR/docs/superpowers/plans/a.md"
-mkdir -p "$TMPDIR/docs/superpowers/plans"
 echo "also none" > "$TMPDIR/docs/superpowers/plans/b.md"
 write_plan "$TMPDIR/home/.claude/plans/legacy.md" 2 0
 OUT=$(run_in_env "$TMPDIR")
