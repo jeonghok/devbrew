@@ -121,8 +121,9 @@ cd / && rm -rf "$TMPDIR"
 # --- Test 8: project-local has 2 unchecked plans → most recent mtime wins ---
 TMPDIR=$(mktemp -d); mkdir -p "$TMPDIR/home/.claude/plans"
 write_plan "$TMPDIR/docs/superpowers/plans/older.md" 1 0
-sleep 1.1
 write_plan "$TMPDIR/docs/superpowers/plans/newer.md" 1 0
+touch -t 202601010000 "$TMPDIR/docs/superpowers/plans/older.md"
+touch -t 202601010001 "$TMPDIR/docs/superpowers/plans/newer.md"
 OUT=$(run_in_env "$TMPDIR")
 RC=$?
 assert_eq "$RC" "0" "T8: exit 0"

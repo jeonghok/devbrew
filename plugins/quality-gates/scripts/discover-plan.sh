@@ -11,6 +11,10 @@
 #   2. ./docs/superpowers/plans/*.md    (project-local)
 #   3. $HOME/.claude/plans/*.md         (legacy global)
 #
+# IMPORTANT: invoke from the repository root. The project-local source path is
+# resolved against $PWD; calling from elsewhere will silently miss project-local
+# plans and fall through to the legacy source or "not found".
+#
 # Within a chosen source: prefer files with at least one '- [ ]' (unchecked
 # checkbox), tiebroken by most-recent mtime; else fall back to most-recent
 # file that has at least one checkbox of any kind. Files with zero
@@ -104,9 +108,11 @@ pick_best() {
 }
 
 # Source 2: project-local
-PROJECT_LOCAL="docs/superpowers/plans"
+# Project-local source resolved against $PWD so emitted paths are absolute.
+# Caller must cd to repo root before invoking; see header notes above.
+PROJECT_LOCAL="$PWD/docs/superpowers/plans"
 if PLAN=$(pick_best "$PROJECT_LOCAL"); then
-  emit_json "$PLAN" "project-local" "Found in $PROJECT_LOCAL"
+  emit_json "$PLAN" "project-local" "Found in docs/superpowers/plans/"
   exit 0
 fi
 
@@ -117,5 +123,5 @@ if PLAN=$(pick_best "$LEGACY"); then
   exit 0
 fi
 
-emit_json "" "none" "No plan file found. Searched: $PROJECT_LOCAL, ~/.claude/plans"
+emit_json "" "none" "No plan file found. Searched: docs/superpowers/plans/, ~/.claude/plans/"
 exit 1
