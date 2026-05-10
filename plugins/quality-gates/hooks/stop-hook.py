@@ -76,7 +76,8 @@ def parse_state_file(path):
 
     # Convert numeric fields (forward-only: total_iterations / max_total_iterations
     # are no longer written by setup-qg.sh; tolerate their absence on read).
-    required_numeric = ("current_gate", "gate2_iteration", "max_gate2_iterations")
+    required_numeric = ("current_gate", "gate2_iteration", "max_gate2_iterations",
+                        "gate3_resolution_iter", "max_gate3_resolutions")
     optional_numeric = ("total_iterations", "max_total_iterations")
     for field in required_numeric:
         val = state.get(field, "0")

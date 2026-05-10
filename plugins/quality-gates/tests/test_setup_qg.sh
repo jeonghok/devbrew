@@ -36,6 +36,15 @@ assert_file_not_exists() {
   fi
 }
 
+assert_contains() {
+  local haystack="$1" needle="$2" msg="$3"
+  if [[ "$haystack" == *"$needle"* ]]; then
+    PASS=$((PASS + 1)); note "PASS: $msg"
+  else
+    FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $msg (string '$needle' not in '$haystack')"
+  fi
+}
+
 # --- Test 1: --session-id arg creates per-session folder ---
 TMPDIR=$(mktemp -d); cd "$TMPDIR"
 SID="testsession01"
@@ -43,7 +52,10 @@ unset CLAUDE_CODE_SESSION_ID
 "$SCRIPT" --session-id "$SID" >/dev/null 2>&1
 RC=$?
 assert_eq "$RC" "0" "exits 0 with --session-id"
-assert_file_exists ".claude/quality-gates/$SID/pipeline.md" "creates pipeline.md in per-session folder"
+STATE_FILE=".claude/quality-gates/$SID/pipeline.md"
+assert_file_exists "$STATE_FILE" "creates pipeline.md in per-session folder"
+assert_contains "$(cat $STATE_FILE)" "gate3_resolution_iter: 0" "state file has gate3_resolution_iter"
+assert_contains "$(cat $STATE_FILE)" "max_gate3_resolutions: 3" "state file has max_gate3_resolutions default"
 cd / && rm -rf "$TMPDIR"
 
 # --- Test 2: env var works without --session-id ---

@@ -158,6 +158,17 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 "$SCRIPT_DIR/qg-gc.py" --session-id "$SESSION_ID" 2>/dev/null || true
 
+# DEVBREW_GATE3_MAX_RESOLUTIONS env override (default 3, integer 0..10 clamp)
+RAW_MAX="${DEVBREW_GATE3_MAX_RESOLUTIONS:-3}"
+if [[ ! "$RAW_MAX" =~ ^[0-9]+$ ]]; then
+  echo "⚠️  Quality Gates: DEVBREW_GATE3_MAX_RESOLUTIONS='$RAW_MAX' is not numeric; using default 3" >&2
+  MAX_GATE3_RESOLUTIONS=3
+elif [[ "$RAW_MAX" -gt 10 ]]; then
+  MAX_GATE3_RESOLUTIONS=10
+else
+  MAX_GATE3_RESOLUTIONS="$RAW_MAX"
+fi
+
 mkdir -p "$STATE_DIR"
 
 # --- Dependency Check ---
@@ -241,6 +252,8 @@ status: $STATUS
 current_gate: $CURRENT_GATE
 gate2_iteration: 0
 max_gate2_iterations: 5
+gate3_resolution_iter: 0
+max_gate3_resolutions: $MAX_GATE3_RESOLUTIONS
 skip_runtime: $SKIP_RUNTIME
 single_gate: ${SINGLE_GATE:-null}
 plan_file: "$PLAN_FILE"

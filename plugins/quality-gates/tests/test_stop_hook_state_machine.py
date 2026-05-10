@@ -94,5 +94,35 @@ class TestForwardOnlyStateMachine(unittest.TestCase):
         self.assertEqual(transition["type"], "gate2_user_choice")
 
 
+class TestGate3ResolutionState(unittest.TestCase):
+    def test_gate3_resolution_iter_parsed_as_int(self):
+        # parse_state_file이 새 필드를 int로 변환하는지 확인.
+        import tempfile, textwrap
+        content = textwrap.dedent("""\
+            ---
+            status: gate3_running
+            current_gate: 3
+            gate2_iteration: 0
+            max_gate2_iterations: 5
+            gate3_resolution_iter: 1
+            max_gate3_resolutions: 3
+            skip_runtime: false
+            single_gate: null
+            session_id: "abc12345"
+            started_at: "2026-05-10T00:00:00Z"
+            ---
+
+            # Pipeline State
+            """)
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
+            f.write(content)
+            path = f.name
+        state, _ = stop_hook.parse_state_file(path)
+        self.assertEqual(state["gate3_resolution_iter"], 1)
+        self.assertEqual(state["max_gate3_resolutions"], 3)
+        self.assertIsInstance(state["gate3_resolution_iter"], int)
+        self.assertIsInstance(state["max_gate3_resolutions"], int)
+
+
 if __name__ == "__main__":
     unittest.main()
