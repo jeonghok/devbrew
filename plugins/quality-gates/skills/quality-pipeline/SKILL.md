@@ -781,34 +781,204 @@ Output a structured report in this exact format. **All skipped agents must be li
 
 ### Gate 3: Runtime Verification
 
-Dispatch the runtime-verifier agent:
+Gate 3 enforces an **evidence-required** verification model: the agent must
+attempt every runnable surface declared in the pre-flight manifest, and any
+SKIP must be backed by attempted-but-failed log entries. The skill mediates a
+**3-way ping-pong** between itself (mother), the human, and the runtime-verifier
+(reviewer): the skill detects infrastructure, asks the user up-front for
+required *decisions* (never secret values), dispatches the agent with a
+deterministic manifest, validates the resulting evidence-log, and re-dispatches
+the agent up to `max_gate3_resolutions` times if the agent emits
+`NEEDS_RESOLUTION`.
+
+#### Step 0: Pre-flight detection
+
+Run the deterministic detector once per Gate 3 invocation:
+
+```bash
+PLAN_PATH="<plan_file>" "${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh"
+```
+
+Parse the YAML output into a `manifest` dict in your context. **Fail-open**:
+if the detector errors or output is unparseable, proceed with an empty
+manifest (`runnable_surfaces: []`, `plan_features: []`) — the agent will
+then return `SKIP_WITH_EVIDENCE` defensively, which is correct for the
+"no detectable runtime infrastructure" case.
+
+#### Step 1: Fast-path SKIP (no agent dispatch)
+
+If ALL of the following hold:
+
+- `manifest.runnable_surfaces == []`
+- `manifest.test_runners == []`
+- `manifest.plan_features == []`
+
+then there is genuinely nothing to verify. Emit immediately, without
+dispatching the runtime-verifier agent (token-cost = 0):
+
+1. Use Bash to write `<attempted_log_path>` with content:
+   ```markdown
+   # Gate 3 Evidence Log — fast-path skip
+   No runnable surfaces, test runners, or plan features detected.
+   Detector output saved at <session_dir>/manifest.yaml.
+   ```
+2. Output to user:
+   ```
+   ## Gate 3: Runtime Verification — SKIP_WITH_EVIDENCE
+   No runnable surfaces detected (markdown-only / library without tests / etc.).
+   Evidence log: <path>
+   ```
+3. Emit signal:
+   ```xml
+   <qg-signal gate="3" verdict="SKIP_WITH_EVIDENCE" summary="no runnable surfaces detected" files_changed="" />
+   ```
+
+Do NOT proceed to Step 2 in this case.
+
+#### Step 2: Upfront resolution (AskUserQuestion, decisions only)
+
+Build a list of `requires_decision` items from the manifest:
+
+- Every `runnable_surface` with `requires_decision: true` (currently only
+  `docker-compose`).
+- Every `env_status` entry with `exists: false, has_example: true` — propose
+  to copy `.env.example` to `.env`.
+
+If the list is non-empty, invoke `AskUserQuestion` ONCE with up to 4 questions
+(per the tool's hard cap). For each:
+
+| Manifest item | Question label | Options |
+|---|---|---|
+| `docker-compose: requires_decision` | "Bring up `docker compose`?" | `yes` / `skip-this-surface` |
+| `env_status: has_example, !exists` | "Copy `.env.example` → `.env`?" | `yes` / `manual-set-then-retry` / `skip` |
+
+**Hard rules:**
+- The option labels MUST be decisions (yes/no, retry/skip/abort) or paths.
+  NEVER ask for a secret value (API_KEY, DB_URL, password) as free text.
+- If more than 4 decisions exist, batch the most blocking 3 and let the agent's
+  NEEDS_RESOLUTION loop handle the rest mid-run.
+
+Apply the user's answers via the skill's Bash tool (the agent has
+`Write/Edit` disallowed):
+
+- "Copy `.env.example` → `.env`: yes" → `cp .env.example .env`
+- "Bring up docker compose: yes" → `docker compose up -d` (capture exit code)
+
+Update the manifest in your context with `applied_decisions` so the agent
+knows what was already done. If `docker compose up -d` itself fails (daemon
+down), record this as a pre-emptive resolvable failure: build a synthetic
+`needed` block, jump to Step 5 (NEEDS_RESOLUTION handling) without
+dispatching the agent yet.
+
+#### Step 3: Dispatch the runtime-verifier agent
+
+Build the dispatch prompt:
 
 ```
 Agent(
   subagent_type="quality-gates:runtime-verifier",
-  prompt="Verify application runtime behavior.
-    project_dir: <current working directory>
-    plan_path: <plan_path>
-    project_type: auto
-    app_start_command: auto
-    app_url: auto"
+  prompt="""Verify application runtime behavior using the manifest below.
+
+  project_dir: <cwd>
+  plan_path: <plan_path>
+  iteration: <gate3_resolution_iter>
+  previous_evidence_log_path: <path or 'none'>
+
+  ## Manifest (verbatim from detect-runtime.sh)
+  <YAML manifest>
+
+  ## Applied decisions (from upfront AskUserQuestion)
+  <YAML list of {decision, action, outcome}>
+  """
 )
 ```
 
-Read the agent's report. Check the Verdict line.
+Wait for the agent's structured response. Parse:
 
-**Output Gate 3 result to user:**
-```
-## Gate 3: Runtime Verification — [PASS/FAIL/SKIP/NEEDS_RESTART]
-[verdict explanation]
-[checks performed and results]
+- `Verdict:` line (`PASS` / `FAIL` / `SKIP_WITH_EVIDENCE` / `NEEDS_RESOLUTION`)
+- `Evidence Log:` path
+- For `NEEDS_RESOLUTION`: the `needed:` YAML block + `needed_hash:` line
+
+#### Step 4: Validate evidence-log (PASS / FAIL / SKIP_WITH_EVIDENCE)
+
+For PASS or SKIP_WITH_EVIDENCE verdicts, validate the evidence-log:
+
+1. Read the file at `manifest.attempted_log_path`.
+2. Build the expected set: every `runnable_surface.kind+name` plus every
+   `plan_feature` plus a synthetic `chrome-devtools-mcp` entry if
+   `manifest.mcp_browser != none`.
+3. For each expected item, grep for a matching `- kind: ...` block in the
+   evidence-log.
+4. If any expected item is missing, **reject the verdict**:
+   - Output to user: "Evidence-log incomplete: M out of N items unattempted: [list]"
+   - Emit `<qg-signal gate="3" verdict="FAIL" summary="incomplete evidence: <count> unattempted" files_changed="" />`
+5. If all items present, accept the verdict and emit accordingly:
+   - PASS → `<qg-signal gate="3" verdict="PASS" summary="all surfaces verified" files_changed="" />`
+   - SKIP_WITH_EVIDENCE → `<qg-signal gate="3" verdict="SKIP_WITH_EVIDENCE" summary="<short>" files_changed="" />`
+
+#### Step 5: NEEDS_RESOLUTION handling (mid-run escalation)
+
+If verdict is `NEEDS_RESOLUTION`:
+
+1. Parse the `needed:` block.
+2. Use the agent's emitted `needed_hash` verbatim. If the agent failed to
+   emit one, treat that as a contract violation and emit
+   `<qg-signal gate="3" verdict="FAIL" summary="agent contract violation: no needed_hash in NEEDS_RESOLUTION report" files_changed="" />`
+   instead — do not synthesize a hash, since algorithm divergence between
+   skill and agent would silently break convergence detection.
+3. Emit signal:
+   ```xml
+   <qg-signal gate="3" verdict="NEEDS_RESOLUTION" needed_hash="<hash>"
+              summary="<one-line>" files_changed="" />
+   ```
+4. The Stop hook converts this into a `gate3_needs_resolution` continuation
+   prompt — that prompt directs you (next turn) to invoke `AskUserQuestion`
+   with the agent's `needed` items rendered as **retry / skip-surface / abort**
+   options (NEVER as free-text inputs).
+5. On retry continuation: re-dispatch the agent using the now-incremented
+   `gate3_resolution_iter` value from state (the Stop hook auto-increments
+   before the skill is re-invoked) and the previous evidence-log path so
+   the agent can resume from where it left off.
+
+#### Step 6: FAIL handling
+
+If verdict is `FAIL` (or `NEEDS_RESTART`), emit:
+
+```xml
+<qg-signal gate="3" verdict="FAIL" summary="<one-line>" files_changed="<list or empty>" />
 ```
 
-**Handle verdict:**
-- PASS → emit signal with verdict="PASS"
-- SKIP → emit signal with verdict="SKIP"
-- NEEDS_RESTART → emit signal with verdict="NEEDS_RESTART"
-- FAIL → emit signal with verdict="FAIL"
+The Stop hook routes to `gate3_fail` (existing behavior).
+
+#### Output to user (always)
+
+After every Gate 3 turn, output to the user:
+
+```
+## Gate 3: Runtime Verification — [VERDICT]
+**Manifest:** [N runnable surfaces, M plan features, mcp=<browser>]
+**Evidence:** [path]
+**Verdict explanation:** [from agent's report or fast-path text]
+```
+
+#### Gate 3 rules
+
+- The detector is read-only — never invoke it with arguments that could
+  cause file creation. The detector script already enforces this.
+- The agent has `Write`/`Edit` disallowed. If the verdict report from the
+  agent claims to have edited a file, treat that as a contract violation
+  and emit FAIL with a note.
+- Skill-side file ops (`cp`, `docker compose up`) MUST happen via Bash with
+  the user's prior consent recorded as an applied_decision.
+- NEVER ask the user for a secret value. The only valid resolutions for a
+  missing secret are: (a) user sets it on disk and retries, (b) skip the
+  affected surface, (c) abort.
+- If `DEVBREW_GATE3_MAX_RESOLUTIONS=0`, the Stop hook will escalate the
+  first NEEDS_RESOLUTION directly to `gate3_fail` — proceed with FAIL
+  handling (Step 6) when the continuation prompt arrives.
+- `iteration` parameter increments only on explicit gate3_needs_resolution
+  continuations; the Stop hook manages this via update_state_file. Do not
+  manually maintain the counter.
 
 ## Special Prompts from Stop Hook
 
@@ -857,6 +1027,32 @@ Based on choice:
 - Fix: fix the issues, then `<qg-signal gate="3" verdict="NEEDS_RESTART" summary="Fixed runtime issues" files_changed="list,of,changed,files" />`
 - Skip: `<qg-signal gate="3" verdict="SKIP" summary="User chose to skip" files_changed="" />`
 - Abort: `<qg-signal action="abort" reason="User chose to abort" />`
+
+### GATE3_NEEDS_RESOLUTION
+
+Gate 3 reviewer reported a resolvable missing resource. Read the previous
+turn's `needed:` YAML block and present user options via AskUserQuestion.
+
+For each `needed[i]`:
+- Question: `needed[i].description`
+- Options: `retry` / `skip-this-surface` / `abort` — decisions only; never ask for secret values from the user.
+
+Based on user choice:
+- All retries → re-dispatch runtime-verifier per Step 5 above. Then emit a
+  fresh `<qg-signal gate="3" verdict="..." />` based on the new agent verdict.
+- Any skip-this-surface → record in evidence-log, mark surface as
+  user-skipped, emit
+  `<qg-signal gate="3" verdict="SKIP_WITH_EVIDENCE" summary="user opted to skip <surface>" files_changed="" />`
+- Any abort →
+  `<qg-signal action="abort" reason="User aborted during gate3_needs_resolution" />`
+
+### GATE3_REPEAT_DETECTED
+
+Same `needed_hash` appeared twice — the resolution loop is not converging.
+Present the user with proceed-with-warnings vs abort:
+
+- Proceed → `<qg-signal gate="3" verdict="PASS_WITH_WARNINGS" summary="repeat detected; user accepted" files_changed="" />`
+- Abort → `<qg-signal action="abort" reason="User aborted on repeat detection" />`
 
 ## Final Summary
 
