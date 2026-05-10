@@ -3,6 +3,16 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.6.3] — 2026-05-10
+
+### Fixed
+- **Step 0 review-range fallback** (skill `quality-pipeline`): 작업 트리가 깨끗할 때(모두 commit됨) 기존 bash block은 빈 `git diff`로 fall-through해 review 대상이 0줄이 되던 문제. 이제 working tree가 dirty면 unstaged diff(기존), clean이면서 `main..HEAD`에 commit이 있으면 자동으로 `main...HEAD` 누적 branch diff로 전환. 6개의 `git diff` 호출 모두 통일된 `$REVIEW_RANGE`를 사용. (qg self-review §5.1 — v1.6.2 dogfood에서 발견)
+- **Test detection regex**: `^tests?/`가 top-level `tests/`만 매칭해 nested `<sub>/tests/` (monorepo / plugin marketplace 구조)에서 `test_change=0` false negative 발생. `(^|/)tests?/`로 변경 — top-level + nested 모두 매칭.
+- **`set -e` 제거 (Step 0 bash block)**: 모든 명령이 이미 `|| true` / `|| echo 0`으로 실패 처리하고 있어 `set -e`는 redundant했고, subshell command substitution과 상호작용하면서 fix-loop iteration에서 silent abort 유발. 제거 후 각 명령의 failure mode가 local + 예측 가능.
+
+### Changed
+- Step 0 JSON output에 `review_range` 필드 추가 — 어떤 모드(unstaged / `main...HEAD`)로 review됐는지 사용자가 보이도록.
+
 ## [1.6.2] — 2026-05-10
 
 ### Fixed
