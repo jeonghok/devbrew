@@ -320,6 +320,7 @@ def update_state_file(path, state, signal, transition):
     new_total = state.get("total_iterations", 1)
     new_gate2_iter = state.get("gate2_iteration", 0)
     new_max_total = state.get("max_total_iterations", 5)
+    new_gate3_resolution_iter = state.get("gate3_resolution_iter", 0)
 
     t_type = transition["type"]
     if t_type == "next_gate":
@@ -337,6 +338,11 @@ def update_state_file(path, state, signal, transition):
     elif t_type in ("complete", "abort"):
         new_status = "completed" if t_type == "complete" else "aborted"
 
+    # Track gate3 resolution iteration (forward-only count).
+    if transition.get("type") == "gate3_needs_resolution":
+        new_gate3_resolution_iter = state.get("gate3_resolution_iter", 0) + 1
+        state["gate3_resolution_iter"] = new_gate3_resolution_iter
+
     # Apply frontmatter updates via string replacement.
     # Forward-only: total_iterations / max_total_iterations are no longer
     # persisted (setup-qg.sh stopped writing them in v1.5.0). Stale fields
@@ -345,6 +351,7 @@ def update_state_file(path, state, signal, transition):
         "status": new_status,
         "current_gate": str(new_gate),
         "gate2_iteration": str(new_gate2_iter),
+        "gate3_resolution_iter": str(new_gate3_resolution_iter),
     }
     for key, val in replacements.items():
         content = re.sub(
@@ -480,6 +487,36 @@ def build_special_prompt(transition_type, state, gate_results, prompt_key=None):
             '- Proceed: emit <qg-signal gate="2" verdict="PASS_WITH_WARNINGS" '
             'summary="Proceeding with remaining issues" files_changed="" />\n'
             '- Abort: emit <qg-signal action="abort" reason="User chose to abort" />\n'
+            f"\nPipeline context:\n{gate_results}"
+        )
+
+    if transition_type == "gate3_needs_resolution":
+        iter_now = state.get("gate3_resolution_iter", 0)
+        max_now = state.get("max_gate3_resolutions", 3)
+        return (
+            "GATE3_NEEDS_RESOLUTION\n\n"
+            "Gate 3 (Runtime Verification) found resolvable missing resources "
+            f"(resolution iteration {iter_now}/{max_now}).\n\n"
+            "The skill (mother) must present the agent's `needed` items to the user "
+            "as **decision-only** options (retry / skip this surface / abort). "
+            "DO NOT ask the user for secret values (API keys, DB URLs, tokens, "
+            "passwords). If a secret is required, the only valid options are: "
+            "user sets the secret in .env on disk and chooses retry, OR skip the "
+            "affected surface, OR abort.\n\n"
+            "Present options to the user via AskUserQuestion:\n"
+            "1. Retry — user has resolved the missing resource (e.g., started "
+            "Docker daemon, added env var to .env). Re-dispatch runtime-verifier.\n"
+            "2. Skip this surface — record the surface as unresolved in evidence-log "
+            "and continue with remaining surfaces.\n"
+            "3. Abort — stop the pipeline.\n\n"
+            "Based on user choice:\n"
+            "- Retry: re-dispatch runtime-verifier with updated manifest "
+            '(skill increments gate3_resolution_iter). Then emit '
+            '<qg-signal gate="3" verdict="..." iteration="N" /> with the new verdict.\n'
+            '- Skip surface: emit <qg-signal gate="3" verdict="SKIP_WITH_EVIDENCE" '
+            'summary="user opted to skip <surface>" files_changed="" />\n'
+            '- Abort: emit <qg-signal action="abort" reason="User chose to abort '
+            'during gate3_needs_resolution" />\n'
             f"\nPipeline context:\n{gate_results}"
         )
 

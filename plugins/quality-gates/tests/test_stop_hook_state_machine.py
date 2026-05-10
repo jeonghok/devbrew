@@ -169,6 +169,61 @@ class TestGate3ResolutionState(unittest.TestCase):
         transition = stop_hook.compute_transition(state, signal)
         self.assertEqual(transition["type"], "complete")
 
+    def test_gate3_resolution_iter_increments_on_transition(self):
+        # Round-trip through the real update_state_file: write a state file with
+        # gate3_resolution_iter=0, invoke update_state_file with a
+        # gate3_needs_resolution transition, re-parse, and assert the persisted
+        # counter advanced to 1. Regression-catches removal of the increment
+        # block in update_state_file (a tautological inline test would not).
+        import tempfile, textwrap
+        content = textwrap.dedent("""\
+            ---
+            status: gate3_running
+            current_gate: 3
+            gate2_iteration: 0
+            max_gate2_iterations: 5
+            gate3_resolution_iter: 0
+            max_gate3_resolutions: 3
+            skip_runtime: false
+            single_gate: null
+            session_id: "abc12345"
+            started_at: "2026-05-10T00:00:00Z"
+            ---
+
+            # Pipeline State
+
+            ## Pipeline History
+            """)
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
+            f.write(content)
+            path = f.name
+        state, _ = stop_hook.parse_state_file(path)
+        self.assertEqual(state["gate3_resolution_iter"], 0)
+        signal = {"gate": "3", "verdict": "NEEDS_RESOLUTION",
+                  "summary": "docker daemon down"}
+        transition = {"type": "gate3_needs_resolution"}
+        stop_hook.update_state_file(path, state, signal, transition)
+        new_state, _ = stop_hook.parse_state_file(path)
+        self.assertEqual(new_state["gate3_resolution_iter"], 1)
+
+    def test_gate3_needs_resolution_prompt_contains_user_choices(self):
+        # State here represents post-increment state (update_state_file runs
+        # before build_special_prompt in main()). resolution_iter=2 means
+        # "this is the user's 2nd resolution attempt out of max 3".
+        state = self._gate3_state(resolution_iter=2, max_resolutions=3)
+        gate_results = "### Gate 3 (iter 2)\n**Summary:** docker daemon down\n"
+        prompt = stop_hook.build_special_prompt(
+            "gate3_needs_resolution", state, gate_results
+        )
+        self.assertIn("GATE3_NEEDS_RESOLUTION", prompt)
+        self.assertIn("retry", prompt.lower())
+        self.assertIn("skip", prompt.lower())
+        self.assertIn("abort", prompt.lower())
+        # iteration counter visible (post-increment): "2/3"
+        self.assertIn("2/3", prompt)
+        # P21 guard: prompt mentions decision-only contract
+        self.assertIn("decision", prompt.lower())
+
 
 if __name__ == "__main__":
     unittest.main()
