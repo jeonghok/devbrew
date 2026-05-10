@@ -15,6 +15,23 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **AP9 (Subagent spray) hard gate** — Phase 1+2 dispatch 수가 ≥4일 때 AskUserQuestion 발동.
 - **AP15 (Unbounded autonomy) 회피** — Gate 2 내부 fix-loop이 `max_gate2_iterations=5` + repeat-detection (no-progress check) + kill switch로 묶임.
 - **P5 (Filesystem as Memory) + P14 (State Survives Compaction) + §4.8 (State File)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (`*.local.md` gitignore 패턴으로 자동 제외; TTL sweep + SessionEnd hook으로 폴더 GC).
+- **Law 1 (Verification Plan section).** Gate 3 enforces an evidence-required
+  SKIP — the runtime-verifier must attempt every manifest surface and produce
+  an evidence-log; SKIP without evidence is rejected by the skill and
+  escalated to FAIL. (v1.8.0)
+- **Law 2 (writer/reviewer separation, physical via tool scoping).**
+  `runtime-verifier` agent declares `disallowedTools: [Write, Edit, MultiEdit,
+  NotebookEdit]`. Fixable file operations (e.g., `cp .env.example .env`,
+  `docker compose up`) are performed by the skill's Bash tool only after
+  the user has explicitly chosen them via AskUserQuestion. (v1.8.0)
+- **AP16 (unbounded autonomy).** Gate 3's NEEDS_RESOLUTION mid-run loop is
+  bounded by `max_gate3_resolutions` (default 3, env override
+  `DEVBREW_GATE3_MAX_RESOLUTIONS=0..10`). Repeat detection on `needed_hash`
+  catches non-converging loops earlier than the iteration cap. (v1.8.0)
+- **P21 (no secret in prompt context).** AskUserQuestion in Gate 3 asks
+  decisions and pointers (yes/no/path) — never secret values. Missing
+  secrets are resolved by the user setting them in `.env` on disk and
+  choosing retry. Regression test: `tests/test_no_secret_prompts.py`. (v1.8.0)
 
 ## 구조
 

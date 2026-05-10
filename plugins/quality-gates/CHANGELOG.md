@@ -3,6 +3,60 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.8.0] — 2026-05-11
+
+### Added
+- **Pre-flight runtime detector** (`scripts/detect-runtime.sh`): deterministic
+  bash script that produces a YAML manifest of project_type, runnable_surfaces
+  (docker-compose / npm-script / pytest / cargo / go / makefile), test_runners,
+  mcp_browser (chrome-devtools / playwright / none), app_url_candidates,
+  env_status, and plan_features (extracted from PLAN_PATH). Read-only.
+- **Fast-path SKIP_WITH_EVIDENCE**: when detector reports zero runnable
+  surfaces, zero test_runners, and zero plan_features, Gate 3 emits
+  SKIP_WITH_EVIDENCE without dispatching the agent (token cost = 0).
+- **Mid-run NEEDS_RESOLUTION escalation**: agent can request human resolution
+  for fixable missing resources. Skill mediates 3-way ping-pong (skill ↔ user ↔
+  agent) via AskUserQuestion. Bounded by `max_gate3_resolutions` (default 3).
+- **`DEVBREW_GATE3_MAX_RESOLUTIONS` env override** (clamped 0..10). Setting
+  to `0` disables mid-run escalation (Approach 2 mode — first NEEDS_RESOLUTION
+  directly fails Gate 3).
+- **Repeat detection** on `needed_hash`: same missing resources twice in a row
+  trigger `gate3_repeat_detected` → user choice (proceed_with_warnings / abort).
+- **Evidence-log validation** by skill: every manifest item must have an
+  attempted entry; missing entries auto-escalate SKIP_WITH_EVIDENCE → FAIL.
+- **Fixture-based tests**: 4 fixtures (web-compose / web-example-only /
+  library-tests / markdown-only), 7 detector tests in
+  `tests/test_detect_runtime.sh`, 6 new state-machine tests, 1 frontmatter
+  lint test, 1 secret-leakage regression test (AC12 / P21).
+
+### Changed
+- **`runtime-verifier.md` rewrite (v2)**:
+  - Frontmatter declares `allowedTools: [Read, Bash, Grep, Glob, mcp__plugin_chrome-devtools-mcp_*]`
+    and `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` — fixes
+    CLAUDE.md Plugin Shape "default-everything 금지" violation.
+  - `cost_class: variable` (was `low` — iteration loop possible).
+  - Body: manifest-driven attempts, evidence-log obligation, 4-verdict
+    taxonomy (PASS / FAIL / SKIP_WITH_EVIDENCE / NEEDS_RESOLUTION), explicit
+    P21 guard against requesting secret values.
+- **SKILL.md Gate 3 section** rewritten to 6 steps (detect → fast-path →
+  upfront resolution → dispatch → evidence validation → NEEDS_RESOLUTION).
+- **stop-hook.py**: new transitions `gate3_needs_resolution` and
+  `gate3_repeat_detected`, new state fields `gate3_resolution_iter` and
+  `max_gate3_resolutions`, `last_gate3_needed_hash`. Existing `SKIP` verdict
+  still routes to `complete` (back-compat); `SKIP_WITH_EVIDENCE` and
+  `PASS_WITH_WARNINGS` join the same complete-bucket.
+
+### Fixed
+- **Silent SKIP regressions in Gate 3**: previously, project type detection
+  fall-through (no `package.json scripts.dev`, no `manage.py`) would silently
+  return `unknown` → SKIP without user notification. Now, evidence-required
+  SKIP rejects this path; the skill either fast-path SKIPs (with an evidence
+  log), or escalates incomplete attempts to FAIL.
+- **chrome-devtools MCP under-utilization**: agent previously had to discover
+  available browser MCP tools via runtime keyword search. Detector now
+  injects `mcp_browser: chrome-devtools | playwright | none` into the manifest
+  deterministically.
+
 ## [1.7.0] — 2026-05-10
 
 ### Added
