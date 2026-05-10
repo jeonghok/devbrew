@@ -35,15 +35,24 @@ Discovery is delegated to a deterministic script (`scripts/discover-plan.sh`)
 so the priority list, glob, and checkbox-eligibility filter are unit-tested.
 Do not implement these rules yourself — call the script and parse its JSON.
 
-Run via Bash:
+The orchestrator passes you `plan_path` as a prompt parameter (a literal value like
+`"auto"`, `""`, or an absolute/repo-relative path). Decide which command to run by
+inspecting that value:
 
-```bash
-if [[ "$plan_path" == "auto" || -z "$plan_path" ]]; then
+- If `plan_path` is `"auto"` or empty → run
+
+  ```bash
   "${CLAUDE_PLUGIN_ROOT}/scripts/discover-plan.sh"
-else
-  "${CLAUDE_PLUGIN_ROOT}/scripts/discover-plan.sh" --plan "$plan_path"
-fi
-```
+  ```
+
+- Otherwise → substitute the literal value of `plan_path` into the path argument and run
+
+  ```bash
+  "${CLAUDE_PLUGIN_ROOT}/scripts/discover-plan.sh" --plan "<literal plan_path value>"
+  ```
+
+  (Replace `<literal plan_path value>` with the actual string you received — do not
+  treat it as a shell variable.)
 
 The script emits a single-line JSON object on stdout:
 
@@ -51,12 +60,18 @@ The script emits a single-line JSON object on stdout:
 {"plan_path":"<absolute-or-empty>","source":"explicit|project-local|legacy-global|none","reason":"<human-readable>"}
 ```
 
+After the script runs, read **both** the stdout JSON and the exit code from the
+Bash tool's structured output. Use the exit code for verdict branching; use the
+JSON `reason` field verbatim for any SKIP message. Do not collapse exit 1 and
+exit 2 into a generic "non-zero" check — the spec distinguishes them and the
+report's reason text differs.
+
 Exit-code branching:
 
 | Exit | Meaning | Action |
 |---|---|---|
 | `0` | Plan found | Capture `plan_path` and `source` from JSON. Continue to Step 2. |
-| `1` | No plan in any source | Verdict `SKIP` with `reason` from JSON (e.g., `"No plan file found. Searched: docs/superpowers/plans/, ~/.claude/plans"`). Skip Steps 2–5. |
+| `1` | No plan in any source | Verdict `SKIP` with `reason` from JSON (e.g., `"No plan file found. Searched: docs/superpowers/plans/, ~/.claude/plans/"`). Skip Steps 2–5. |
 | `2` | `--plan` path is invalid | Verdict `SKIP` with reason `"Explicit --plan path does not exist: <path>"` (use the `reason` field verbatim). Skip Steps 2–5. |
 
 If `source == "legacy-global"`, immediately before the report header in Step 5 emit one warning line:
