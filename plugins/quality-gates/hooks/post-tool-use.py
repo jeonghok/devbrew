@@ -5,6 +5,10 @@ Detects when `gh pr create` succeeds and injects a system message
 to trigger the quality pipeline. Self-session scope: checks only
 `.claude/quality-gates/<session-id>/pipeline.md` for the active flag.
 Passes --session-id explicitly to setup-qg.sh in case env var is unset.
+
+Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
+  DEVBREW_DISABLE_QUALITY_GATES=1                     - disables this hook entirely
+  DEVBREW_SKIP_HOOKS=quality-gates:post-tool-use      - skip just this one
 """
 
 import json
@@ -13,7 +17,18 @@ import re
 import sys
 
 
+def _disabled() -> bool:
+    """Honor devbrew kill switches before any side effect."""
+    if os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1":
+        return True
+    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
+    return "quality-gates:post-tool-use" in skip
+
+
 def main():
+    if _disabled():
+        print(json.dumps({}))
+        sys.exit(0)
     try:
         input_data = json.load(sys.stdin)
     except (json.JSONDecodeError, EOFError):
