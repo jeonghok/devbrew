@@ -5,6 +5,12 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [1.2.3] — 2026-05-10
+
+### Changed
+- devbrew CLAUDE.md *"Korean-primary, English-terms-only"* 정책을 `plugins/project-init/`에 적용 (qg `28c6ffb` precedent 정렬). `README.md`, `CHANGELOG.md`, `commands/project-init.md` 본문이 Korean-primary로 재작성됨; 식별자, code, branch 이름, regex, frontmatter `description`은 영어 유지.
+- `templates/shared/llm-guidelines.md`가 v1.2.0에서 확립한 *"English headers/code + Korean explainers"* 하이브리드 패턴을 다른 templates 전체로 확장 — `templates/shared/commit-conventions.md`, `templates/shared/pr-process.md`, `templates/<strategy>/branch-strategy.md` (3개), `templates/<strategy>/claude-md-section.md` (3개). Conventional Commits 식별자, regex, `gh` 명령, branch prefix, `**ALWAYS**`/`**NEVER**` 강조 토큰, `{{SCOPE_CONVENTION}}`/`{{MERGE_STRATEGY}}` placeholder, `## Git Workflow` anchor 영어 유지.
+
 ## [1.2.2] — 2026-05-10
 
 ### Security
