@@ -5,6 +5,17 @@ All notable changes to the `project-init` plugin will be documented in this file
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] — 2026-05-10
+
+### Security
+- `hooks/post-tool-use.py` now honors the devbrew kill-switch contract. Sets `DEVBREW_DISABLE_PROJECT_INIT=1` or `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` to opt out. Prior versions had no escape hatch — the hook ran unconditionally on every `Bash` PostToolUse, violating `CLAUDE.md` §Plugin Shape ("어떤 훅도 자신의 kill switch 존중을 거부할 수 없음 — kill switch는 보안 컨트롤").
+
+### Added
+- `README.md` "Hooks Installed" section per devbrew CLAUDE.md requirement (one-line "왜 skill이 아닌가" justification + kill-switch documentation).
+
+### Changed
+- `README.md` Architecture tree no longer pins a hard-coded version comment (was stale at `v1.2.0` when the plugin was on `1.2.1`).
+
 ## [1.2.1] — 2026-05-07
 
 Same-day patch correcting v1.2.0 template defaults — intentional duplicate date.
