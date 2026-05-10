@@ -123,6 +123,52 @@ class TestGate3ResolutionState(unittest.TestCase):
         self.assertIsInstance(state["gate3_resolution_iter"], int)
         self.assertIsInstance(state["max_gate3_resolutions"], int)
 
+    def _gate3_state(self, resolution_iter=0, max_resolutions=3):
+        return {
+            "current_gate": 3,
+            "gate2_iteration": 5,
+            "max_gate2_iterations": 5,
+            "gate3_resolution_iter": resolution_iter,
+            "max_gate3_resolutions": max_resolutions,
+            "total_iterations": 1,
+            "max_total_iterations": 5,
+            "skip_runtime": False,
+            "single_gate": None,
+        }
+
+    def test_gate3_needs_resolution_under_cap_returns_resolution_transition(self):
+        state = self._gate3_state(resolution_iter=0)
+        signal = {"gate": "3", "verdict": "NEEDS_RESOLUTION", "summary": "docker daemon down"}
+        transition = stop_hook.compute_transition(state, signal)
+        self.assertEqual(transition["type"], "gate3_needs_resolution")
+
+    def test_gate3_needs_resolution_at_cap_escalates_to_fail(self):
+        state = self._gate3_state(resolution_iter=3, max_resolutions=3)
+        signal = {"gate": "3", "verdict": "NEEDS_RESOLUTION", "summary": "still missing"}
+        transition = stop_hook.compute_transition(state, signal)
+        self.assertEqual(transition["type"], "gate3_fail")
+
+    def test_gate3_needs_resolution_with_max_zero_escalates_immediately(self):
+        # DEVBREW_GATE3_MAX_RESOLUTIONS=0 (Approach 2 mode)
+        state = self._gate3_state(resolution_iter=0, max_resolutions=0)
+        signal = {"gate": "3", "verdict": "NEEDS_RESOLUTION", "summary": "no resolution allowed"}
+        transition = stop_hook.compute_transition(state, signal)
+        self.assertEqual(transition["type"], "gate3_fail")
+
+    def test_gate3_skip_with_evidence_completes(self):
+        state = self._gate3_state()
+        signal = {"gate": "3", "verdict": "SKIP_WITH_EVIDENCE",
+                  "summary": "no runnable surfaces detected"}
+        transition = stop_hook.compute_transition(state, signal)
+        self.assertEqual(transition["type"], "complete")
+
+    def test_gate3_legacy_skip_still_completes(self):
+        # Backward compat: bare SKIP verdict from older agents still completes.
+        state = self._gate3_state()
+        signal = {"gate": "3", "verdict": "SKIP", "summary": "user opted out"}
+        transition = stop_hook.compute_transition(state, signal)
+        self.assertEqual(transition["type"], "complete")
+
 
 if __name__ == "__main__":
     unittest.main()

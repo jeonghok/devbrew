@@ -278,8 +278,15 @@ def compute_transition(state, signal):
 
     # --- Gate 3 transitions ---
     if gate == "3":
-        if verdict in ("PASS", "SKIP"):
+        if verdict in ("PASS", "SKIP", "SKIP_WITH_EVIDENCE"):
             return {"type": "complete"}
+        if verdict == "NEEDS_RESOLUTION":
+            iter_now = state.get("gate3_resolution_iter", 0)
+            max_now = state.get("max_gate3_resolutions", 3)
+            if iter_now < max_now:
+                return {"type": "gate3_needs_resolution"}
+            # max reached → escalate to gate3_fail (existing prompt)
+            return {"type": "gate3_fail"}
         if verdict in ("NEEDS_RESTART", "FAIL"):
             # Forward-only: Gate 3 issues require user attention; no auto-restart.
             # build_special_prompt("gate3_fail") covers both paths uniformly.
