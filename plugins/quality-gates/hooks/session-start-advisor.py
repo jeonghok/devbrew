@@ -50,7 +50,8 @@ def _disabled() -> bool:
     if os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1":
         return True
     skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
-    return "quality-gates:session-start-advisor" in skip
+    tokens = {t.strip() for t in skip.split(",") if t.strip()}
+    return "quality-gates:session-start-advisor" in tokens
 
 
 def _verbose() -> bool:

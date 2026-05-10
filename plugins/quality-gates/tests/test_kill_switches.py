@@ -117,11 +117,18 @@ def _assert_no_side_effect(test: unittest.TestCase, script: str, cwd: str,
     qg = _qg_dir(cwd)
 
     if script == "stop-hook.py":
-        # State file must be untouched.
+        # State file must be untouched AND no decision/systemMessage emitted.
+        # Without the stdout check, this assertion is satisfied even if
+        # _disabled() were silently broken (a no-signal stop-hook run would
+        # also leave pipeline.md unchanged but WOULD emit decision JSON).
         contents = (qg / "pipeline.md").read_text()
         test.assertEqual(
             contents, PIPELINE_RUNNING,
             f"{label}: stop-hook mutated pipeline.md despite kill switch",
+        )
+        test.assertEqual(
+            proc.stdout.strip(), "",
+            f"{label}: stop-hook produced stdout despite kill switch: {proc.stdout!r}",
         )
 
     elif script == "post-tool-use.py":
@@ -196,7 +203,7 @@ class KillSwitchRegressionTest(unittest.TestCase):
                 )
 
     def test_per_hook_skip_in_csv_list(self) -> None:
-        """SKIP_HOOKS substring match must work when the key is one of many."""
+        """SKIP_HOOKS whole-token match must work when the key is one of many."""
         for script, key in HOOK_CONTRACTS:
             with self.subTest(hook=script, key=key):
                 _setup_state(self.tmp, script)
@@ -207,6 +214,48 @@ class KillSwitchRegressionTest(unittest.TestCase):
                 )
                 _assert_no_side_effect(
                     self, script, self.tmp, proc, f"csv / {script}",
+                )
+
+    def test_per_hook_skip_does_not_cross_contaminate(self) -> None:
+        """A longer key must NOT silence a hook whose key is its prefix.
+
+        Previously: `'quality-gates:post-tool-use' in 'quality-gates:post-tool-use-session-tracker'`
+        was True (substring match), so a user setting the longer key by mistake
+        (e.g. typing the script filename) would silently disable post-tool-use.py.
+        Whole-token match closes this hole.
+        """
+        # Setup post-tool-use state. Apply SKIP_HOOKS naming the LONGER key.
+        # post-tool-use.py must still emit systemMessage (NOT silenced).
+        _setup_state(self.tmp, "post-tool-use.py")
+        proc = _run_hook(
+            "post-tool-use.py",
+            _payload_for("post-tool-use.py"),
+            {"DEVBREW_SKIP_HOOKS": "quality-gates:post-tool-use-session-tracker"},
+            self.tmp,
+        )
+        self.assertIn(
+            "systemMessage", proc.stdout,
+            "post-tool-use was accidentally silenced by a key whose prefix matches it",
+        )
+
+    def test_all_hooks_declare_kill_switch_strings(self) -> None:
+        """Every *.py file in hooks/ must mention both kill-switch env var names.
+
+        Source-text static check that catches the v1.6.1/v1.6.2 regression
+        pattern at merge time: a developer adding a new hook script without
+        the env var checks fails this test even if they forget to update
+        HOOK_CONTRACTS. This is the regression net the docstring promises.
+        """
+        for hook_file in sorted(HOOKS.glob("*.py")):
+            with self.subTest(hook=hook_file.name):
+                src = hook_file.read_text()
+                self.assertIn(
+                    "DEVBREW_DISABLE_QUALITY_GATES", src,
+                    f"{hook_file.name} missing global kill switch env var",
+                )
+                self.assertIn(
+                    "DEVBREW_SKIP_HOOKS", src,
+                    f"{hook_file.name} missing per-hook kill switch env var",
                 )
 
     def test_setup_actually_triggers_work_without_kill_switch(self) -> None:
@@ -252,11 +301,15 @@ class KillSwitchRegressionTest(unittest.TestCase):
                 "session-end-cleanup sanity: should remove folder",
             )
         elif script == "stop-hook.py":
-            # stop-hook needs a transcript signal to mutate state. Without one,
-            # it exits silently — which is its normal no-op behavior, not a
-            # missing kill-switch. We accept that the global/per-hook tests
-            # above are sufficient for stop-hook (verified via grep).
-            pass
+            # With pipeline.md present and no transcript signal, stop-hook
+            # flows to its decision-block path and emits JSON to stdout. The
+            # kill-switch path skips this entirely. So stdout content is the
+            # discriminator: present = kill switch off; empty = kill switch on.
+            self.assertIn(
+                "decision", proc.stdout,
+                "stop-hook sanity: should emit decision block when state file present "
+                "and no kill switch is set",
+            )
 
 
 if __name__ == "__main__":

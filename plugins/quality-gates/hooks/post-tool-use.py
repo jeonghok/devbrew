@@ -18,11 +18,17 @@ import sys
 
 
 def _disabled() -> bool:
-    """Honor devbrew kill switches before any side effect."""
+    """Honor devbrew kill switches before any side effect.
+
+    Uses whole-token match against comma-separated DEVBREW_SKIP_HOOKS so a
+    longer key like 'quality-gates:post-tool-use-session-tracker' does not
+    accidentally silence this hook (substring `in` would prefix-match).
+    """
     if os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1":
         return True
     skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
-    return "quality-gates:post-tool-use" in skip
+    tokens = {t.strip() for t in skip.split(",") if t.strip()}
+    return "quality-gates:post-tool-use" in tokens
 
 
 def main():

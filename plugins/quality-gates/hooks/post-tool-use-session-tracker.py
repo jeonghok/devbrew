@@ -23,7 +23,8 @@ def _disabled() -> bool:
     if os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1":
         return True
     skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
-    return "quality-gates:session-tracker" in skip
+    tokens = {t.strip() for t in skip.split(",") if t.strip()}
+    return "quality-gates:session-tracker" in tokens
 
 
 def _read_existing(path: Path) -> set[str]:
