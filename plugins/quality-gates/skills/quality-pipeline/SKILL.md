@@ -257,22 +257,42 @@ This flag decides whether to unconditionally dispatch `superpowers:code-reviewer
 Then run this **single consolidated bash block**. It captures the diff once, writes it to a cache file for later reuse, computes all Phase 2 trigger flags in the same shell where `$DIFF_CONTENT` is still alive, and emits a JSON line to stdout that this skill will parse:
 
 ```bash
-set -e
+# NOTE: `set -e` removed — every command below has explicit failure handling
+# (`|| true` / `|| echo 0`). `set -e` interacts poorly with subshell
+# command substitution and was causing silent aborts in fix-loop iterations
+# (qg self-review §5.1). Each command's failure mode is now local and
+# predictable.
 
 # Per-session cache directory (must already exist — setup-qg.sh creates it).
 QG_DIR=".claude/quality-gates/${CLAUDE_CODE_SESSION_ID}"
 mkdir -p "$QG_DIR"
 
+# Review range selection (qg self-review §5.1 fix):
+#   - Working tree dirty → review unstaged changes (default `git diff` form)
+#   - Working tree clean + commits ahead of main → review cumulative branch diff
+#     so /qg works after a `git commit` without forcing the user to add `branch`
+#   - Otherwise (clean tree, no commits ahead) → empty diff scope (no-op review)
+# REVIEW_RANGE is empty for the dirty-tree path; "main...HEAD" for the
+# committed-ahead-of-main path. Unquoted expansion below is intentional so
+# that empty REVIEW_RANGE adds no extra arg to git diff.
+REVIEW_RANGE=""
+if [ -z "$(git diff --name-only 2>/dev/null)" ] \
+   && git rev-parse --verify --quiet main >/dev/null \
+   && [ -n "$(git log --oneline main..HEAD 2>/dev/null)" ]; then
+  REVIEW_RANGE="main...HEAD"
+fi
+
 # Docs filter (§D): exclude *.md, *.txt, *.rst, docs/**, CHANGELOG*, README*
 # from the scope passed to code-reviewer-style agents. Gate 1 plan-verifier
 # already saw the unfiltered diff above; from here on, agents see code paths only.
-git diff --name-only \
+# shellcheck disable=SC2086  # REVIEW_RANGE intentionally word-splits (empty | "main...HEAD")
+git diff $REVIEW_RANGE --name-only \
   | "${CLAUDE_PLUGIN_ROOT}/scripts/filter-docs.sh" \
   > "$QG_DIR/code-paths.tmp"
 
 if [ -s "$QG_DIR/code-paths.tmp" ]; then
-  # shellcheck disable=SC2046
-  DIFF_CONTENT=$(git diff -- $(cat "$QG_DIR/code-paths.tmp"))
+  # shellcheck disable=SC2046,SC2086
+  DIFF_CONTENT=$(git diff $REVIEW_RANGE -- $(cat "$QG_DIR/code-paths.tmp"))
 else
   # Docs-only change (rare after trivia escape and Gate 1 PASS): empty diff for code reviewers
   DIFF_CONTENT=""
@@ -299,7 +319,11 @@ else
   TYPE_DESIGN=0
 fi
 
-if git diff --name-only | grep -qE '(test|spec)\.[jt]sx?$|_test\.py$|\.test\.|\.spec\.|^tests?/'; then
+# Test detection — `(^|/)tests?/` matches both top-level `tests/` and nested
+# `<sub>/tests/` (qg self-review §5.1 fix; previously only matched top-level
+# which silently set test_change=0 for monorepo / plugin marketplace layouts).
+# shellcheck disable=SC2086
+if git diff $REVIEW_RANGE --name-only | grep -qE '(test|spec)\.[jt]sx?$|_test\.py$|\.test\.|\.spec\.|(^|/)tests?/'; then
   TEST_CHANGE=1
 else
   TEST_CHANGE=0
@@ -314,18 +338,21 @@ if printf '%s\n' "$CHANGED_LINES" | awk '
   COMMENT_CHANGE=1
 fi
 
-NEW_FILES=$(git diff --diff-filter=A --name-only | paste -sd, - 2>/dev/null || true)
-CONFIG_TOUCHED=$(git diff --name-only | grep -E '(^|/)(package\.json|tsconfig\.json|pyproject\.toml|Cargo\.toml|go\.mod)$|\.schema\.|/migrations/|\.proto$|openapi\.' | paste -sd, - 2>/dev/null || true)
+# shellcheck disable=SC2086
+NEW_FILES=$(git diff $REVIEW_RANGE --diff-filter=A --name-only | paste -sd, - 2>/dev/null || true)
+# shellcheck disable=SC2086
+CONFIG_TOUCHED=$(git diff $REVIEW_RANGE --name-only | grep -E '(^|/)(package\.json|tsconfig\.json|pyproject\.toml|Cargo\.toml|go\.mod)$|\.schema\.|/migrations/|\.proto$|openapi\.' | paste -sd, - 2>/dev/null || true)
 if [ -n "$NEW_FILES" ] || [ -n "$CONFIG_TOUCHED" ]; then
   ARCH_CHANGE=1
 else
   ARCH_CHANGE=0
 fi
 
-CHANGED_LINE_COUNT=$(git diff --numstat | awk '{sum += $1 + $2} END {print sum+0}')
+# shellcheck disable=SC2086
+CHANGED_LINE_COUNT=$(git diff $REVIEW_RANGE --numstat | awk '{sum += $1 + $2} END {print sum+0}')
 
-printf '{"diff_chars":%d,"diff_lines":%d,"inline_diff_mode":"%s","type_design":%d,"test_change":%d,"comment_change":%d,"new_files":"%s","config_touched":"%s","arch_change":%d,"changed_line_count":%d}\n' \
-  "$DIFF_CHARS" "$DIFF_LINES" "$INLINE_DIFF_MODE" "$TYPE_DESIGN" "$TEST_CHANGE" "$COMMENT_CHANGE" "$NEW_FILES" "$CONFIG_TOUCHED" "$ARCH_CHANGE" "$CHANGED_LINE_COUNT"
+printf '{"diff_chars":%d,"diff_lines":%d,"inline_diff_mode":"%s","type_design":%d,"test_change":%d,"comment_change":%d,"new_files":"%s","config_touched":"%s","arch_change":%d,"changed_line_count":%d,"review_range":"%s"}\n' \
+  "$DIFF_CHARS" "$DIFF_LINES" "$INLINE_DIFF_MODE" "$TYPE_DESIGN" "$TEST_CHANGE" "$COMMENT_CHANGE" "$NEW_FILES" "$CONFIG_TOUCHED" "$ARCH_CHANGE" "$CHANGED_LINE_COUNT" "$REVIEW_RANGE"
 ```
 
 Parse the JSON from the bash stdout and hold the flags in your context. **Fail-open**: if the bash block errors or emits unparseable output, set all Phase 2 flags to `1` so no agent is silently skipped.
