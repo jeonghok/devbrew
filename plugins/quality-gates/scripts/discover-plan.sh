@@ -28,7 +28,11 @@ EXPLICIT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --plan)
-      EXPLICIT="${2:-}"
+      if [[ $# -lt 2 ]]; then
+        printf '{"plan_path":"","source":"none","reason":"--plan requires a path argument"}\n'
+        exit 2
+      fi
+      EXPLICIT="$2"
       shift 2
       ;;
     *)

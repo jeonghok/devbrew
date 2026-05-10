@@ -141,6 +141,16 @@ assert_contains "$OUT" '"source":"legacy-global"' "T9: source=legacy-global afte
 assert_contains "$OUT" "legacy.md" "T9: legacy plan picked"
 cd / && rm -rf "$TMPDIR"
 
+# --- Test 10: --plan with no following path → exit 2 (regression) ---
+TMPDIR=$(mktemp -d); mkdir -p "$TMPDIR/home/.claude/plans"
+cd "$TMPDIR"
+OUT=$(HOME="$TMPDIR/home" bash "$SCRIPT" --plan 2>/dev/null)
+RC=$?
+assert_eq "$RC" "2" "T10: exit 2 when --plan has no path"
+assert_contains "$OUT" '"source":"none"' "T10: source=none"
+assert_contains "$OUT" "requires a path argument" "T10: reason mentions path argument requirement"
+cd / && rm -rf "$TMPDIR"
+
 # --- Summary ---
 echo
 echo "Results: $PASS passed, $FAIL failed"
