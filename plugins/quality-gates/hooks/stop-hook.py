@@ -76,9 +76,9 @@ def parse_state_file(path):
 
     # Convert numeric fields (forward-only: total_iterations / max_total_iterations
     # are no longer written by setup-qg.sh; tolerate their absence on read).
-    required_numeric = ("current_gate", "gate2_iteration", "max_gate2_iterations",
+    required_numeric = ("current_gate", "gate2_iteration", "max_gate2_iterations")
+    optional_numeric = ("total_iterations", "max_total_iterations",
                         "gate3_resolution_iter", "max_gate3_resolutions")
-    optional_numeric = ("total_iterations", "max_total_iterations")
     for field in required_numeric:
         val = state.get(field, "0")
         if not val.isdigit():
@@ -93,6 +93,22 @@ def parse_state_file(path):
         if val.isdigit():
             state[field] = int(val)
         # else: leave as-is; nothing reads it after forward-only refactor
+
+    # Backward compatibility for v1.7.0 → v1.8.0:
+    # - gate3_resolution_iter / max_gate3_resolutions added in v1.8.0.
+    # - last_gate3_needed_hash added in v1.8.0 (string field, no conversion).
+    # If absent from the state file (legacy session), default to safe values
+    # so the pipeline continues rather than silently corrupting state.
+    if "gate3_resolution_iter" not in state or not isinstance(state.get("gate3_resolution_iter"), int):
+        state["gate3_resolution_iter"] = 0
+        print("⚠️  Quality Gates: state file lacks gate3_resolution_iter (v1.7.0 schema?); defaulting to 0",
+              file=sys.stderr)
+    if "max_gate3_resolutions" not in state or not isinstance(state.get("max_gate3_resolutions"), int):
+        state["max_gate3_resolutions"] = 3
+        print("⚠️  Quality Gates: state file lacks max_gate3_resolutions; defaulting to 3",
+              file=sys.stderr)
+    if "last_gate3_needed_hash" not in state:
+        state["last_gate3_needed_hash"] = ""
 
     # Convert boolean fields
     for field in ("skip_runtime",):

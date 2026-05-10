@@ -870,6 +870,8 @@ down), record this as a pre-emptive resolvable failure: build a synthetic
 `needed` block, jump to Step 5 (NEEDS_RESOLUTION handling) without
 dispatching the agent yet.
 
+When the skill emits a synthetic `<qg-signal verdict="NEEDS_RESOLUTION" needed_hash="..." />` for a skill-pre-emptive failure (rather than from the agent), it MUST compute `needed_hash` using the same algorithm as the agent — `printf '%s\n' "${kinds[@]}" | sort | { command -v sha256sum >/dev/null && sha256sum || shasum -a 256; } | cut -d' ' -f1`. An empty `needed_hash` would silently bypass repeat detection at `stop-hook.py:289` (`current_hash and current_hash == prior_hash` is false when current is empty), allowing infinite identical pre-emptive failures up to `max_gate3_resolutions`.
+
 #### Step 3: Dispatch the runtime-verifier agent
 
 Build the dispatch prompt:
@@ -904,9 +906,20 @@ Wait for the agent's structured response. Parse:
 For PASS or SKIP_WITH_EVIDENCE verdicts, validate the evidence-log:
 
 1. Read the file at `manifest.attempted_log_path`.
-2. Build the expected set: every `runnable_surface.kind+name` plus every
-   `plan_feature` plus a synthetic `chrome-devtools-mcp` entry if
-   `manifest.mcp_browser != none`.
+2. Build the expected set. For each `runnable_surface` in the manifest, compute its **identifier** by kind:
+
+   | kind | identifier (used for matching evidence-log entries) |
+   |---|---|
+   | `docker-compose` | `kind: docker-compose` (single entry per manifest) |
+   | `npm-script` | `kind: npm-script | name: <name>` (one identifier per script: dev/start/serve/test) |
+   | `pytest` | `kind: pytest` |
+   | `cargo-test` / `cargo-run` | `kind: cargo-test` / `kind: cargo-run` |
+   | `go-test` / `go-run` | `kind: go-test` / `kind: go-run` |
+   | `makefile` | `kind: makefile | target: <target>` |
+
+   Add one identifier per `plan_feature` (`kind: plan-feature | feature: <route_or_label>`).
+
+   If `manifest.mcp_browser != none`, add a synthetic identifier `kind: chrome-devtools-mcp` (or `kind: playwright-mcp`).
 3. For each expected item, grep for a matching `- kind: ...` block in the
    evidence-log.
 4. If any expected item is missing, **reject the verdict**:

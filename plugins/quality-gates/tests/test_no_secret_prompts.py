@@ -23,7 +23,7 @@ TARGETS = [
 # the smell we're guarding against. We accept these in option DESCRIPTIONS
 # (e.g., "user has set DB_URL in .env") but flag any imperative
 # "ask the user for <SECRET>" or "input the API_KEY" pattern.
-SECRET_KEYWORDS = r"(API[_-]?KEY|TOKEN|PASSWORD|SECRET|CREDENTIAL|PRIVATE[_-]?KEY)"
+SECRET_KEYWORDS = r"(API[_-]?KEY|TOKEN|PASSWORD|SECRET|CREDENTIAL|PRIVATE[_-]?KEY|DB[_-]?URL|DATABASE[_-]?URL|CONNECTION[_-]?STRING)"
 LEAK_PATTERN = re.compile(
     rf"(ask|prompt|input|enter|provide|paste|type)\b[^\.\n]{{0,80}}\b{SECRET_KEYWORDS}\b",
     re.IGNORECASE,

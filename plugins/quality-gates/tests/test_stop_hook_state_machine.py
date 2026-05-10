@@ -123,6 +123,34 @@ class TestGate3ResolutionState(unittest.TestCase):
         self.assertIsInstance(state["gate3_resolution_iter"], int)
         self.assertIsInstance(state["max_gate3_resolutions"], int)
 
+    def test_legacy_v17_state_file_parses_with_defaults(self):
+        # Simulates a v1.7.0 state file that doesn't have the new gate3 fields.
+        # parse_state_file must NOT return None,None — it must default the new
+        # fields and emit a warning, allowing the pipeline to continue.
+        import tempfile, textwrap
+        content = textwrap.dedent("""\
+            ---
+            status: gate3_running
+            current_gate: 3
+            gate2_iteration: 0
+            max_gate2_iterations: 5
+            skip_runtime: false
+            single_gate: null
+            session_id: "abc12345"
+            started_at: "2026-05-10T00:00:00Z"
+            ---
+
+            # Pipeline State
+            """)
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
+            f.write(content)
+            path = f.name
+        state, body = stop_hook.parse_state_file(path)
+        self.assertIsNotNone(state, "Legacy v1.7.0 state file must parse, not return None")
+        self.assertEqual(state["gate3_resolution_iter"], 0)
+        self.assertEqual(state["max_gate3_resolutions"], 3)
+        self.assertEqual(state["last_gate3_needed_hash"], "")
+
     def _gate3_state(self, resolution_iter=0, max_resolutions=3):
         return {
             "current_gate": 3,

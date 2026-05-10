@@ -19,7 +19,8 @@
   agent) via AskUserQuestion. Bounded by `max_gate3_resolutions` (default 3).
 - **`DEVBREW_GATE3_MAX_RESOLUTIONS` env override** (clamped 0..10). Setting
   to `0` disables mid-run escalation (Approach 2 mode — first NEEDS_RESOLUTION
-  directly fails Gate 3).
+  transitions directly to `gate3_fail`, which presents the user with
+  fix/skip/abort).
 - **Repeat detection** on `needed_hash`: same missing resources twice in a row
   trigger `gate3_repeat_detected` → user choice (proceed_with_warnings / abort).
 - **Evidence-log validation** by skill: every manifest item must have an
