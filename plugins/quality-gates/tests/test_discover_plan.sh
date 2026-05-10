@@ -34,7 +34,7 @@ run_in_env() {
   # Args: project_dir, [extra script args...]
   local proj="$1"; shift
   cd "$proj"
-  HOME="$proj/home" bash "$SCRIPT" "$@" 2>/tmp/discover-plan-err
+  HOME="$proj/home" bash "$SCRIPT" "$@" 2>"$proj/_stderr"
   return $?
 }
 
@@ -53,6 +53,8 @@ OUT=$(run_in_env "$TMPDIR")
 RC=$?
 assert_eq "$RC" "1" "T1: exit 1 when both empty"
 assert_contains "$OUT" '"source":"none"' "T1: source=none"
+assert_contains "$OUT" "docs/superpowers/plans" "T1: reason mentions project-local path"
+assert_contains "$OUT" ".claude/plans" "T1: reason mentions legacy path"
 cd / && rm -rf "$TMPDIR"
 
 # --- Test 2: project-local has 1 unchecked plan → source=project-local ---
