@@ -43,13 +43,15 @@ quality-gates/
 │   ├── pre-pipeline-check.sh                 # in-skill 세션 라이프사이클 체크
 │   ├── check-trivia.sh                       # Trivia escape 감지기
 │   ├── filter-docs.sh                        # 코드 reviewer용 docs path 필터
+│   ├── discover-plan.sh                      # Plan 파일 우선순위 탐색 (Gate 1)
 │   └── qg-gc.py                              # TTL 기반 stale 세션 GC (fcntl-locked)
-└── skills/
-    └── quality-pipeline/
-        ├── SKILL.md         # 단일 게이트 실행기
-        └── references/
-            ├── dependency-check.md   # 사전 의존성 체크
-            └── state-file-format.md  # 파이프라인 state 파일 포맷
+├── skills/
+│   └── quality-pipeline/
+│       ├── SKILL.md         # 단일 게이트 실행기
+│       └── references/
+│           ├── dependency-check.md   # 사전 의존성 체크
+│           └── state-file-format.md  # 파이프라인 state 파일 포맷
+└── tests/                            # Bash 단위 테스트 (test_discover_plan.sh 등)
 ```
 
 ## 설치된 Hook

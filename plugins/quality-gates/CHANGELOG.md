@@ -12,13 +12,13 @@
 
 ### Changed
 - Discovery 알고리즘이 `agents/plan-verifier.md` prose 안의 자유서술에서 결정적 bash script로 이동. 미래 source 추가도 회귀 없이 가능. (Law 2 정신 — agent 자유서술 vs script contract.)
-- Legacy source (`~/.claude/plans/`) 사용 시 `⚠️ Legacy plan source ... Consider migrating ...` 1줄 deprecation 경고 출력. project-local hit이면 silent.
+- Legacy source (`~/.claude/plans/`) 사용 시 `agents/plan-verifier.md`가 `⚠️ Legacy plan source ... Consider migrating ...` 1줄 deprecation 경고를 report 헤더 직전에 emit. project-local hit이면 silent.
 - README "Principles Instantiated" 섹션에 Law 3 cross-plugin compounding 항목 추가 — `superpowers:writing-plans`의 출력 위치를 sister-plugin contract로 명시.
 - `discover-plan.sh`가 `plan_path` 필드를 절대 경로로 emit (Task 2 fix). agent의 `Read` 호출이 cwd와 무관하게 작동.
 
 ### Fixed
 - **Path mismatch (Gate 1 SKIP/false-match bug)**: `superpowers:writing-plans` 가 `docs/superpowers/plans/` 에 plan을 저장하는데 plan-verifier 는 `~/.claude/plans/`만 스캔해서 (a) 사용자의 최신 plan을 찾지 못하거나 (b) `~/.claude/plans/` 의 옛날 무관한 plan을 잘못 verify 하던 문제. 1.7.0 부터 priority 기반 discovery 로 정확히 매칭.
-- **`--plan <missing>` 무한 루프**: `discover-plan.sh --plan` (path 인자 누락) 시 `shift 2` 실패가 silent하게 묵살되어 무한 루프에 빠지던 corner case. 가드 추가 + T10 regression test.
+- **`--plan <missing>` 무한 루프**: `discover-plan.sh --plan` (path 인자 누락) 시 `shift 2` 실패가 silent하게 묵살되어 무한 루프에 빠지던 corner case. `[[ $# -lt 2 ]]` 가드 + exit 2 처리 + T10 regression test.
 
 ## [1.6.3] — 2026-05-10
 
