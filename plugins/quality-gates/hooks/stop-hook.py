@@ -42,6 +42,18 @@ GATE_NAMES = {
     "3": "Runtime Verification",
 }
 
+# Authoritative Gate 3 verdict set (TD-1). Keep in sync with runtime-verifier.md
+# and SKILL.md. compute_transition warns when it sees a verdict outside this set
+# instead of silently aborting.
+GATE3_VERDICTS = frozenset({
+    "PASS", "SKIP", "SKIP_WITH_EVIDENCE", "PASS_WITH_WARNINGS",
+    "NEEDS_RESOLUTION", "NEEDS_RESTART", "FAIL",
+})
+
+# Bounds for max_gate3_resolutions. Mirrors the clamp in setup-qg.sh so an
+# externally-edited state file cannot produce an unbounded resolution loop.
+MAX_GATE3_RESOLUTIONS_CAP = 10
+
 
 # --- State File Parsing ---
 
@@ -77,7 +89,8 @@ def parse_state_file(path):
     # Convert numeric fields (forward-only: total_iterations / max_total_iterations
     # are no longer written by setup-qg.sh; tolerate their absence on read).
     required_numeric = ("current_gate", "gate2_iteration", "max_gate2_iterations")
-    optional_numeric = ("total_iterations", "max_total_iterations")
+    optional_numeric = ("total_iterations", "max_total_iterations",
+                        "gate3_resolution_iter", "max_gate3_resolutions")
     for field in required_numeric:
         val = state.get(field, "0")
         if not val.isdigit():
@@ -92,6 +105,39 @@ def parse_state_file(path):
         if val.isdigit():
             state[field] = int(val)
         # else: leave as-is; nothing reads it after forward-only refactor
+
+    # Backward compatibility for v1.7.0 → v1.8.0:
+    # - gate3_resolution_iter / max_gate3_resolutions added in v1.8.0.
+    # - last_gate3_needed_hash added in v1.8.0 (string field, no conversion).
+    # If absent from the state file (legacy session), default to safe values
+    # so the pipeline continues rather than silently corrupting state.
+    if "gate3_resolution_iter" not in state or not isinstance(state.get("gate3_resolution_iter"), int):
+        state["gate3_resolution_iter"] = 0
+        print("⚠️  Quality Gates: state file lacks gate3_resolution_iter (v1.7.0 schema?); defaulting to 0",
+              file=sys.stderr)
+    if "max_gate3_resolutions" not in state or not isinstance(state.get("max_gate3_resolutions"), int):
+        state["max_gate3_resolutions"] = 3
+        print("⚠️  Quality Gates: state file lacks max_gate3_resolutions; defaulting to 3",
+              file=sys.stderr)
+    # Read-time clamp (TD-4): mirror setup-qg.sh's 0..MAX_GATE3_RESOLUTIONS_CAP
+    # bound so a manually-edited state file with e.g. max_gate3_resolutions: 9999
+    # cannot produce an effectively unbounded resolution loop.
+    if state["max_gate3_resolutions"] > MAX_GATE3_RESOLUTIONS_CAP:
+        print(
+            f"⚠️  Quality Gates: max_gate3_resolutions={state['max_gate3_resolutions']} "
+            f"exceeds cap {MAX_GATE3_RESOLUTIONS_CAP}; clamping",
+            file=sys.stderr,
+        )
+        state["max_gate3_resolutions"] = MAX_GATE3_RESOLUTIONS_CAP
+    elif state["max_gate3_resolutions"] < 0:
+        print(
+            f"⚠️  Quality Gates: max_gate3_resolutions={state['max_gate3_resolutions']} "
+            "is negative; clamping to 0",
+            file=sys.stderr,
+        )
+        state["max_gate3_resolutions"] = 0
+    if "last_gate3_needed_hash" not in state:
+        state["last_gate3_needed_hash"] = ""
 
     # Convert boolean fields
     for field in ("skip_runtime",):
@@ -277,8 +323,44 @@ def compute_transition(state, signal):
 
     # --- Gate 3 transitions ---
     if gate == "3":
-        if verdict in ("PASS", "SKIP"):
+        # TD-1: warn (don't silently abort) when verdict is outside the
+        # documented Gate 3 vocabulary. Common cause: agent emits a typo'd
+        # or renamed verdict that drifts from runtime-verifier.md.
+        # Route through gate3_fail so the user gets an in-pipeline message
+        # (Finding 3: silent rmtree on bare abort gave no user-visible
+        # explanation of why the pipeline vanished).
+        if verdict not in GATE3_VERDICTS:
+            print(
+                f"⚠️  Quality Gates: Gate 3 emitted unknown verdict '{verdict}'; "
+                f"expected one of {sorted(GATE3_VERDICTS)}. Routing to gate3_fail.",
+                file=sys.stderr,
+            )
+            return {"type": "gate3_fail"}
+        if verdict in ("PASS", "SKIP", "SKIP_WITH_EVIDENCE", "PASS_WITH_WARNINGS"):
             return {"type": "complete"}
+        if verdict == "NEEDS_RESOLUTION":
+            iter_now = state.get("gate3_resolution_iter", 0)
+            max_now = state.get("max_gate3_resolutions", 3)
+            # Repeat detection: same needed_hash from prior iteration → not converging
+            current_hash = signal.get("needed_hash", "")
+            prior_hash = state.get("last_gate3_needed_hash", "")
+            # TA-5/SF-7: missing needed_hash silently disables repeat detection.
+            # SKILL.md contract: agent MUST emit needed_hash on NEEDS_RESOLUTION.
+            # Warn here so a contract violation is visible rather than silent.
+            if iter_now > 0 and not current_hash:
+                print(
+                    "⚠️  Quality Gates: NEEDS_RESOLUTION on iteration "
+                    f"{iter_now} omitted needed_hash; repeat detection "
+                    "disabled for this iteration. Agent contract violation — "
+                    "see runtime-verifier.md.",
+                    file=sys.stderr,
+                )
+            if iter_now > 0 and current_hash and current_hash == prior_hash:
+                return {"type": "gate3_repeat_detected"}
+            if iter_now < max_now:
+                return {"type": "gate3_needs_resolution"}
+            # max reached → escalate to gate3_fail (existing prompt)
+            return {"type": "gate3_fail"}
         if verdict in ("NEEDS_RESTART", "FAIL"):
             # Forward-only: Gate 3 issues require user attention; no auto-restart.
             # build_special_prompt("gate3_fail") covers both paths uniformly.
@@ -295,8 +377,17 @@ def update_state_file(path, state, signal, transition):
     try:
         with open(path, "r") as f:
             content = f.read()
-    except (IOError, OSError):
-        return
+    except (IOError, OSError) as e:
+        # SF-1: do NOT swallow silently. A read failure here means the
+        # gate3 resolution counter won't be incremented, which would
+        # silently bypass max_gate3_resolutions and produce an unbounded
+        # NEEDS_RESOLUTION loop. Surface the error so main()'s top-level
+        # except catches and reports it.
+        print(
+            f"⚠️  Quality Gates: update_state_file: cannot read state file {path}: {e}",
+            file=sys.stderr,
+        )
+        raise
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     gate = signal.get("gate", "?")
@@ -312,6 +403,7 @@ def update_state_file(path, state, signal, transition):
     new_total = state.get("total_iterations", 1)
     new_gate2_iter = state.get("gate2_iteration", 0)
     new_max_total = state.get("max_total_iterations", 5)
+    new_gate3_resolution_iter = state.get("gate3_resolution_iter", 0)
 
     t_type = transition["type"]
     if t_type == "next_gate":
@@ -329,6 +421,14 @@ def update_state_file(path, state, signal, transition):
     elif t_type in ("complete", "abort"):
         new_status = "completed" if t_type == "complete" else "aborted"
 
+    # Track gate3 resolution iteration (forward-only count).
+    if transition.get("type") == "gate3_needs_resolution":
+        new_gate3_resolution_iter = state.get("gate3_resolution_iter", 0) + 1
+        state["gate3_resolution_iter"] = new_gate3_resolution_iter
+        # Remember this iteration's needed_hash so the next iteration can
+        # detect a repeat (same needed set twice in a row → not converging).
+        state["last_gate3_needed_hash"] = signal.get("needed_hash", "")
+
     # Apply frontmatter updates via string replacement.
     # Forward-only: total_iterations / max_total_iterations are no longer
     # persisted (setup-qg.sh stopped writing them in v1.5.0). Stale fields
@@ -337,11 +437,46 @@ def update_state_file(path, state, signal, transition):
         "status": new_status,
         "current_gate": str(new_gate),
         "gate2_iteration": str(new_gate2_iter),
+        "gate3_resolution_iter": str(new_gate3_resolution_iter),
+        "last_gate3_needed_hash": state.get("last_gate3_needed_hash", ""),
     }
     for key, val in replacements.items():
-        content = re.sub(
+        new_content, n_subs = re.subn(
             rf"^{key}:.*$", f"{key}: {val}", content, count=1, flags=re.MULTILINE
         )
+        if n_subs == 0:
+            # SF-5: legacy v1.7.0 state file lacks this key — re.sub would
+            # silently no-op, losing the counter increment and breaking the
+            # NEEDS_RESOLUTION cap. Inject the field before the closing "---".
+            #
+            # CRITICAL: The frontmatter boundary is `\n---\n`. We must inject
+            # at that boundary, NOT at the document-starting `---\n` (which
+            # would corrupt the file and make parse_state_file return None,
+            # silently killing the pipeline). The leading `\n` in the regex
+            # anchors to the closing marker rather than the opening one.
+            print(
+                f"⚠️  Quality Gates: state file missing field '{key}'; "
+                "injecting (legacy v1.7.0 schema → v1.8.0 migration).",
+                file=sys.stderr,
+            )
+            injected = re.sub(
+                r"(\n---\s*\n)",
+                rf"\n{key}: {val}\1",
+                new_content,
+                count=1,
+            )
+            if injected == new_content:
+                # No `\n---\n` found — file lacks a closing frontmatter
+                # marker. Refuse to silently corrupt; surface and continue
+                # without the inject so the rest of the pipeline can decide.
+                print(
+                    f"⚠️  Quality Gates: cannot inject '{key}': "
+                    "no frontmatter closing marker found.",
+                    file=sys.stderr,
+                )
+            content = injected
+        else:
+            content = new_content
 
     # --- Append gate result ---
 
@@ -475,6 +610,51 @@ def build_special_prompt(transition_type, state, gate_results, prompt_key=None):
             f"\nPipeline context:\n{gate_results}"
         )
 
+    if transition_type == "gate3_needs_resolution":
+        iter_now = state.get("gate3_resolution_iter", 0)
+        max_now = state.get("max_gate3_resolutions", 3)
+        return (
+            "GATE3_NEEDS_RESOLUTION\n\n"
+            "Gate 3 (Runtime Verification) found resolvable missing resources "
+            f"(resolution iteration {iter_now}/{max_now}).\n\n"
+            "The skill (mother) must present the agent's `needed` items to the user "
+            "as **decision-only** options (retry / skip this surface / abort). "
+            "DO NOT ask the user for secret values (API keys, DB URLs, tokens, "
+            "passwords). If a secret is required, the only valid options are: "
+            "user sets the secret in .env on disk and chooses retry, OR skip the "
+            "affected surface, OR abort.\n\n"
+            "Present options to the user via AskUserQuestion:\n"
+            "1. Retry — user has resolved the missing resource (e.g., started "
+            "Docker daemon, added env var to .env). Re-dispatch runtime-verifier.\n"
+            "2. Skip this surface — record the surface as unresolved in evidence-log "
+            "and continue with remaining surfaces.\n"
+            "3. Abort — stop the pipeline.\n\n"
+            "Based on user choice:\n"
+            "- Retry: re-dispatch runtime-verifier with updated manifest "
+            '(skill increments gate3_resolution_iter). Then emit '
+            '<qg-signal gate="3" verdict="..." iteration="N" /> with the new verdict.\n'
+            '- Skip surface: emit <qg-signal gate="3" verdict="SKIP_WITH_EVIDENCE" '
+            'summary="user opted to skip <surface>" files_changed="" />\n'
+            '- Abort: emit <qg-signal action="abort" reason="User chose to abort '
+            'during gate3_needs_resolution" />\n'
+            f"\nPipeline context:\n{gate_results}"
+        )
+
+    if transition_type == "gate3_repeat_detected":
+        return (
+            "GATE3_REPEAT_DETECTED\n\n"
+            "Gate 3 (Runtime Verification) is not converging — "
+            "the same `needed` resources appeared 2 iterations in a row.\n\n"
+            "Present options to the user via AskUserQuestion:\n"
+            "1. Proceed — accept the current state with warnings and continue\n"
+            "2. Abort — stop the pipeline\n\n"
+            "Based on user choice:\n"
+            '- Proceed: emit <qg-signal gate="3" verdict="PASS_WITH_WARNINGS" '
+            'summary="Repeat detected; user accepted" files_changed="" />\n'
+            '- Abort: emit <qg-signal action="abort" reason="User chose to abort" />\n'
+            f"\nPipeline context:\n{gate_results}"
+        )
+
     if transition_type == "gate3_fail":
         return (
             "GATE3_FAIL\n\n"
@@ -539,7 +719,21 @@ def build_special_prompt(transition_type, state, gate_results, prompt_key=None):
             f"\nPipeline context:\n{gate_results}"
         )
 
-    return ""
+    # SF-3: unknown transition_type. Should be unreachable — every type in
+    # the dispatch set must have a branch above. Fail loudly rather than
+    # producing a blank prompt that would confuse the user.
+    print(
+        f"⚠️  Quality Gates: build_special_prompt: unhandled transition_type "
+        f"'{transition_type}' (prompt_key={prompt_key!r})",
+        file=sys.stderr,
+    )
+    return (
+        f"PIPELINE_ERROR\n\nQuality Gates reached an unhandled transition state: "
+        f"'{transition_type}'. This is a programming error.\n\n"
+        "Please run `/cancel-qg` and re-run `/qg` from scratch.\n\n"
+        '- Recovery: emit <qg-signal action="abort" reason="unhandled transition: '
+        f"{transition_type}\" />"
+    )
 
 
 def build_system_message(state, transition):
@@ -554,7 +748,8 @@ def build_system_message(state, transition):
 
     gate_name = GATE_NAMES.get(str(gate), f"Gate {gate}")
 
-    if t_type in ("max_gate2_exceeded", "gate3_fail", "gate2_user_choice"):
+    if t_type in ("max_gate2_exceeded", "gate3_fail", "gate2_user_choice",
+                  "gate3_needs_resolution", "gate3_repeat_detected"):
         return "⚠️ Quality Gates: Action required | /cancel-qg to stop"
 
     # Forward-only: show within-Gate-2 iteration progress when applicable;
@@ -644,8 +839,33 @@ def main():
     try:
         update_state_file(state_file, state, signal, transition)
     except Exception as e:
-        print(f"⚠️  Quality Gates: Failed to update state file: {e}",
-              file=sys.stderr)
+        # SF-1/Finding 2: a failed state-file update on the resolution-loop
+        # path would let the loop run with stale in-memory state — exactly
+        # the unbounded-loop hazard SF-1 was supposed to fix. For
+        # gate3_needs_resolution specifically (and other transitions whose
+        # safety depends on persisted state), abort the pipeline rather than
+        # continuing silently.
+        print(
+            f"⚠️  Quality Gates: Failed to update state file: {e}; "
+            "aborting pipeline to prevent inconsistent state.",
+            file=sys.stderr,
+        )
+        if transition["type"] in ("gate3_needs_resolution",
+                                  "gate3_repeat_detected"):
+            print(json.dumps({
+                "decision": "block",
+                "reason": (
+                    "PIPELINE_ERROR\n\nQuality Gates could not persist "
+                    "pipeline state during a Gate 3 resolution cycle. "
+                    "Continuing would risk an unbounded loop with stale "
+                    "state. Please run `/cancel-qg` and re-run `/qg` "
+                    f"from scratch.\n\nError: {e}"
+                ),
+                "systemMessage": (
+                    "⚠️ Quality Gates: state-write failed | /cancel-qg to stop"
+                ),
+            }))
+            sys.exit(0)
 
     # 9. Handle completion/abort — remove session folder entirely and allow exit
     if transition["type"] in ("complete", "abort"):
@@ -654,9 +874,12 @@ def main():
         sys.exit(0)
 
     # 10. Handle user-choice prompts (gate2_user_choice, max_gate2_exceeded,
-    #     gate3_fail).  These block and present options; the pipeline resumes
-    #     only after the user emits a new signal.
-    if transition["type"] in ("gate2_user_choice", "max_gate2_exceeded", "gate3_fail"):
+    #     gate3_fail, gate3_needs_resolution, gate3_repeat_detected).
+    #     These block and present options; the pipeline resumes only after
+    #     the user emits a new signal.
+    if transition["type"] in ("gate2_user_choice", "max_gate2_exceeded",
+                              "gate3_fail", "gate3_needs_resolution",
+                              "gate3_repeat_detected"):
         prompt_key = transition.get("prompt_key")
         prompt = build_special_prompt(transition["type"], state, gate_results,
                                       prompt_key=prompt_key)

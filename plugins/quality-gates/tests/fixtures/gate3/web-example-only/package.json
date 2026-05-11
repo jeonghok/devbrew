@@ -1,0 +1,6 @@
+{
+  "name": "fixture-web-example-only",
+  "scripts": {
+    "dev": "echo 'fake dev server'"
+  }
+}

@@ -219,3 +219,84 @@ DEVBREW_DISABLE_QUALITY_GATES=1 /qg
 - Automated E2E test harness — would require a Claude Code subprocess invocation
   pattern that the current toolchain does not standardize. Manual verification
   via the scenarios above is the contract.
+
+## Gate 3 Active Verification Scenarios (v1.8.0)
+
+### Scenario G3-A: Web app, docker-compose, .env all present
+
+**Setup:** project root has `docker-compose.yml`, `package.json` with `dev`
+script, `.env`, and a plan referencing `/auth`. chrome-devtools MCP is
+configured.
+
+**Run:** `/qg --gate3`
+
+**Expected:**
+- Detector emits manifest with: docker-compose, npm:dev, npm:test,
+  pytest (if applicable), `mcp_browser: chrome-devtools`,
+  `plan_features: [/auth]`, `env_status: [{file: .env, exists: true}]`.
+- Skill asks: "Bring up docker compose? (yes/skip-this-surface)" → user yes.
+- Skill: `docker compose up -d` succeeds.
+- Agent dispatched with manifest. Attempts each surface, captures screenshots
+  + a11y snapshots, writes evidence-log.
+- Verdict: PASS.
+- `<qg-signal gate="3" verdict="PASS" .../>` → pipeline complete.
+
+### Scenario G3-B: Web app, .env missing but .env.example present
+
+**Setup:** same as G3-A but `.env` does not exist; `.env.example` does.
+
+**Run:** `/qg --gate3`
+
+**Expected:**
+- Detector flags `env_status: [{file: .env, exists: false, has_example: true}]`.
+- Skill asks: "Copy .env.example → .env? (yes/manual-set/skip)" → user yes.
+- Skill: `cp .env.example .env`.
+- Agent proceeds; verdict depends on whether the example values are valid for
+  startup. If app boots: PASS. If app fails on bad credentials: NEEDS_RESOLUTION
+  with `needed: [{kind: missing-env-var, description: "DB_URL invalid; set
+  real value in .env and retry"}]`.
+- On NEEDS_RESOLUTION: skill asks retry/skip/abort. User edits .env, picks
+  retry → agent re-dispatched (iter=1) → PASS.
+
+### Scenario G3-C: Docker daemon down (mid-run escalation)
+
+**Setup:** `docker-compose.yml` exists, but Docker is not running.
+
+**Run:** `/qg --gate3`
+
+**Expected:**
+- Skill: `docker compose up -d` fails ("Cannot connect to Docker daemon").
+- Skill jumps to Step 5 (NEEDS_RESOLUTION handling) WITHOUT agent dispatch.
+- Skill asks: "Docker daemon down. Start it and retry? (retry/skip-surface/abort)"
+- If retry: skill re-attempts `docker compose up -d`. If now succeeds → continue
+  to Step 3 agent dispatch.
+- If skip-surface: agent dispatched with manifest, but compose surface marked
+  `pre-skipped` in applied_decisions. Agent attempts npm:dev only.
+- After 3 retries with same `needed_hash`: `gate3_repeat_detected` →
+  proceed/abort.
+
+### Scenario G3-D: Markdown-only repo (fast-path SKIP)
+
+**Setup:** repo has only `.md` files. No package.json, no docker-compose,
+no test infra.
+
+**Run:** `/qg --gate3`
+
+**Expected:**
+- Detector emits manifest with empty runnable_surfaces / test_runners /
+  plan_features.
+- Skill: fast-path SKIP_WITH_EVIDENCE. **Sub-agent NOT dispatched.**
+- Evidence log written: "no runnable surfaces detected".
+- `<qg-signal gate="3" verdict="SKIP_WITH_EVIDENCE" .../>`.
+- Token cost for Gate 3: detector + minimal skill overhead. No agent tokens.
+
+### Verification
+
+To run these scenarios manually:
+1. `cd plugins/quality-gates/tests/fixtures/gate3/<scenario-dir>`
+2. `CLAUDE_CODE_SESSION_ID=test_$(date +%s) /qg --gate3`
+3. Observe expected behavior; check evidence-log under `.claude/quality-gates/<sid>/`.
+
+The fixtures cover G3-A (web-compose), G3-B (web-example-only), and G3-D
+(markdown-only) directly. G3-C requires Docker on the host machine and is
+a manual test only.
