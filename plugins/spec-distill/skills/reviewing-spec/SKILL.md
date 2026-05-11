@@ -15,7 +15,7 @@ cost_class: medium
 
 ## Steps
 
-1. **Load state.local.md** — `rereview_count`, `wall_clock_started_at`, `issue_history` 읽기.
+1. **Load state.local.md** — `session_id`, `rereview_count`, `wall_clock_started_at`, `issue_history` 읽기. `session_id`가 unbound이거나 placeholder `<session-id>` 인 채로면 Step 3 cleanup이 charset 검증으로 자동 skip되지만, 사용자에게 명시적 통보 필요 (P14 + AP2).
 2. **Wall-clock check (AC14)**: `now - wall_clock_started_at > DEVBREW_SPEC_DISTILL_TIMEOUT_MIN` (default 30) 이면 advisory metric 표기 + Phase 5 forced escalate.
 3. **Dispatch spec-reviewer agent**:
    ```
@@ -73,8 +73,15 @@ echo "  superpowers writing-plans skill 호출"
 echo "  Spec 경로: docs/superpowers/specs/<file>-spec.md"
 echo "  명령: Skill superpowers:writing-plans <위 경로>"
 
-# Step 3: State cleanup
-rm -rf .claude/spec-distill/<session-id>/
+# Step 3: State cleanup (guarded — charset allowlist; '.', '..', whitespace, traversal 모두 거부)
+case "$session_id" in
+  ''|*[!A-Za-z0-9_-]*)
+    echo "[spec-distill] cleanup skipped: session_id invalid or unresolved ('${session_id:-<unset>}'). State preserved at .claude/spec-distill/ — 수동 cleanup 필요." >&2
+    ;;
+  *)
+    rm -rf -- ".claude/spec-distill/$session_id/"
+    ;;
+esac
 
 # Step 4: Plugin termination
 echo "spec-distill v0.1.0 종료."
