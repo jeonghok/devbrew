@@ -245,13 +245,62 @@ class TestGate3ResolutionState(unittest.TestCase):
         repeat_transition = stop_hook.compute_transition(new_state, repeat_signal)
         self.assertEqual(repeat_transition["type"], "gate3_repeat_detected")
 
-    def test_gate3_unknown_verdict_warns_and_aborts(self):
-        # TD-1: verdict outside GATE3_VERDICTS frozenset must surface a warning
-        # and abort safely rather than silently falling through.
+    def test_gate3_unknown_verdict_routes_to_gate3_fail(self):
+        # TD-1 + Finding 3 (iter 2): verdict outside GATE3_VERDICTS frozenset
+        # must surface a warning AND route through gate3_fail so the user gets
+        # an in-pipeline message rather than a silent rmtree of the session.
         state = self._gate3_state()
         signal = {"gate": "3", "verdict": "MAYBE_PASS", "summary": "typo"}
         transition = stop_hook.compute_transition(state, signal)
-        self.assertEqual(transition["type"], "abort")
+        self.assertEqual(transition["type"], "gate3_fail")
+
+    def test_legacy_state_file_missing_field_inject_inside_frontmatter(self):
+        # Finding 1 + Finding 4 (iter 2 regression): when update_state_file
+        # encounters a state file without one of the v1.8.0 keys, the
+        # re.subn(n_subs == 0) path injects the field. The injection MUST
+        # land inside the frontmatter (between opening and closing ---),
+        # not before the opening ---. A wrong injection would corrupt the
+        # file so that parse_state_file returns (None, None) on the next
+        # invocation — silently killing the pipeline.
+        import tempfile, textwrap
+        # Legacy v1.7.0 schema: no last_gate3_needed_hash field.
+        content = textwrap.dedent("""\
+            ---
+            status: gate3_running
+            current_gate: 3
+            gate2_iteration: 0
+            max_gate2_iterations: 5
+            gate3_resolution_iter: 0
+            max_gate3_resolutions: 3
+            skip_runtime: false
+            single_gate: null
+            session_id: "abc12345"
+            started_at: "2026-05-10T00:00:00Z"
+            ---
+
+            # Pipeline State
+
+            ## Pipeline History
+            """)
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
+            f.write(content)
+            path = f.name
+        state, _ = stop_hook.parse_state_file(path)
+        self.assertIsNotNone(state)
+        hash_value = "cafebabe" * 8
+        signal = {"gate": "3", "verdict": "NEEDS_RESOLUTION",
+                  "summary": "x", "needed_hash": hash_value}
+        transition = {"type": "gate3_needs_resolution"}
+        stop_hook.update_state_file(path, state, signal, transition)
+        # File must remain parseable after the injection.
+        new_state, _ = stop_hook.parse_state_file(path)
+        self.assertIsNotNone(new_state,
+            "state file must remain parseable after injection — "
+            "if injection landed before the opening ---, parse returns None")
+        # The missing field must have been injected with the new value.
+        self.assertEqual(new_state["last_gate3_needed_hash"], hash_value)
+        # Counter still increments.
+        self.assertEqual(new_state["gate3_resolution_iter"], 1)
 
     def test_parse_state_file_clamps_max_gate3_resolutions(self):
         # TD-4: a manually-edited state file with max_gate3_resolutions out of

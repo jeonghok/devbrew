@@ -326,13 +326,16 @@ def compute_transition(state, signal):
         # TD-1: warn (don't silently abort) when verdict is outside the
         # documented Gate 3 vocabulary. Common cause: agent emits a typo'd
         # or renamed verdict that drifts from runtime-verifier.md.
+        # Route through gate3_fail so the user gets an in-pipeline message
+        # (Finding 3: silent rmtree on bare abort gave no user-visible
+        # explanation of why the pipeline vanished).
         if verdict not in GATE3_VERDICTS:
             print(
                 f"⚠️  Quality Gates: Gate 3 emitted unknown verdict '{verdict}'; "
-                f"expected one of {sorted(GATE3_VERDICTS)}. Aborting safely.",
+                f"expected one of {sorted(GATE3_VERDICTS)}. Routing to gate3_fail.",
                 file=sys.stderr,
             )
-            return {"type": "abort"}
+            return {"type": "gate3_fail"}
         if verdict in ("PASS", "SKIP", "SKIP_WITH_EVIDENCE", "PASS_WITH_WARNINGS"):
             return {"type": "complete"}
         if verdict == "NEEDS_RESOLUTION":
@@ -445,26 +448,31 @@ def update_state_file(path, state, signal, transition):
             # SF-5: legacy v1.7.0 state file lacks this key — re.sub would
             # silently no-op, losing the counter increment and breaking the
             # NEEDS_RESOLUTION cap. Inject the field before the closing "---".
+            #
+            # CRITICAL: The frontmatter boundary is `\n---\n`. We must inject
+            # at that boundary, NOT at the document-starting `---\n` (which
+            # would corrupt the file and make parse_state_file return None,
+            # silently killing the pipeline). The leading `\n` in the regex
+            # anchors to the closing marker rather than the opening one.
             print(
                 f"⚠️  Quality Gates: state file missing field '{key}'; "
                 "injecting (legacy v1.7.0 schema → v1.8.0 migration).",
                 file=sys.stderr,
             )
-            injected, inj_n = re.subn(
-                r"^---\s*$", f"{key}: {val}\n---", new_content,
-                count=1, flags=re.MULTILINE,
+            injected = re.sub(
+                r"(\n---\s*\n)",
+                rf"\n{key}: {val}\1",
+                new_content,
+                count=1,
             )
-            # The second --- closes the frontmatter; the first was already
-            # consumed by the parser. Inject before the closing marker by
-            # matching only the second standalone --- line. subn count=1 on
-            # an unanchored pattern hits the first; we need the second, so
-            # split-and-reinsert is safer.
-            if inj_n == 0:
-                # Frontmatter terminator not found — fall back to prepending
-                # field after the opening "---" so the field exists.
-                injected = re.sub(
-                    r"^(---\s*\n)", rf"\1{key}: {val}\n", new_content,
-                    count=1, flags=re.MULTILINE,
+            if injected == new_content:
+                # No `\n---\n` found — file lacks a closing frontmatter
+                # marker. Refuse to silently corrupt; surface and continue
+                # without the inject so the rest of the pipeline can decide.
+                print(
+                    f"⚠️  Quality Gates: cannot inject '{key}': "
+                    "no frontmatter closing marker found.",
+                    file=sys.stderr,
                 )
             content = injected
         else:
@@ -831,8 +839,33 @@ def main():
     try:
         update_state_file(state_file, state, signal, transition)
     except Exception as e:
-        print(f"⚠️  Quality Gates: Failed to update state file: {e}",
-              file=sys.stderr)
+        # SF-1/Finding 2: a failed state-file update on the resolution-loop
+        # path would let the loop run with stale in-memory state — exactly
+        # the unbounded-loop hazard SF-1 was supposed to fix. For
+        # gate3_needs_resolution specifically (and other transitions whose
+        # safety depends on persisted state), abort the pipeline rather than
+        # continuing silently.
+        print(
+            f"⚠️  Quality Gates: Failed to update state file: {e}; "
+            "aborting pipeline to prevent inconsistent state.",
+            file=sys.stderr,
+        )
+        if transition["type"] in ("gate3_needs_resolution",
+                                  "gate3_repeat_detected"):
+            print(json.dumps({
+                "decision": "block",
+                "reason": (
+                    "PIPELINE_ERROR\n\nQuality Gates could not persist "
+                    "pipeline state during a Gate 3 resolution cycle. "
+                    "Continuing would risk an unbounded loop with stale "
+                    "state. Please run `/cancel-qg` and re-run `/qg` "
+                    f"from scratch.\n\nError: {e}"
+                ),
+                "systemMessage": (
+                    "⚠️ Quality Gates: state-write failed | /cancel-qg to stop"
+                ),
+            }))
+            sys.exit(0)
 
     # 9. Handle completion/abort — remove session folder entirely and allow exit
     if transition["type"] in ("complete", "abort"):
