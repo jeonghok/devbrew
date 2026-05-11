@@ -22,8 +22,8 @@ argument-hint: "[rough request]"
 1. **Typo 1줄 수정** — 예: "fix typo on line 3", "오타 고쳐줘"
 2. **주석-only diff** — 예: "add a comment explaining X"
 3. **단일 파일 formatting** — 예: "reformat foo.py", "indentation 맞춰줘"
-4. **단일 변수/함수 rename** — 예: "rename `foo` to `bar`"
-5. **<10 토큰 + 명확한 단일 action 동사** — 예: "fix typo", "add semicolon", "remove blank line"
+4. **단일 파일 내 단일 식별자 rename** — 예: "in `foo.py` rename `bar` to `baz`". *Repo-wide / multi-file rename은 trivia 아님 — 의미 변경 risk로 인터뷰 진입.*
+5. **<10 토큰 + 명백히 안전한 syntactic action 동사** — 예: "fix typo", "add semicolon", "remove blank line". *다음 경우는 trivia 아님: (a) destructive 동사 `drop`/`truncate`/`reset`/`force-push` 등이 system noun (`table`/`branch`/`production`/`deployment`) 과 결합, (b) `delete`/`remove` + system noun (e.g., "remove auth middleware", "delete user table"). 의미론적 삭제는 syntactic 삭제와 구분.*
 
 해당하면 다음 메시지를 출력하고 인터뷰를 시작하지 마십시오:
 
