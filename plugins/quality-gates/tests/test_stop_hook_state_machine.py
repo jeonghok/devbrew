@@ -200,9 +200,10 @@ class TestGate3ResolutionState(unittest.TestCase):
     def test_gate3_resolution_iter_increments_on_transition(self):
         # Round-trip through the real update_state_file: write a state file with
         # gate3_resolution_iter=0, invoke update_state_file with a
-        # gate3_needs_resolution transition, re-parse, and assert the persisted
-        # counter advanced to 1. Regression-catches removal of the increment
-        # block in update_state_file (a tautological inline test would not).
+        # gate3_needs_resolution transition (signal carries a needed_hash),
+        # re-parse, and assert BOTH the counter advanced AND the hash persisted.
+        # Regression-catches removal of the increment block in update_state_file
+        # AND removal of the last_gate3_needed_hash assignment (TA-1).
         import tempfile, textwrap
         content = textwrap.dedent("""\
             ---
@@ -211,6 +212,7 @@ class TestGate3ResolutionState(unittest.TestCase):
             gate2_iteration: 0
             max_gate2_iterations: 5
             gate3_resolution_iter: 0
+            last_gate3_needed_hash: ""
             max_gate3_resolutions: 3
             skip_runtime: false
             single_gate: null
@@ -227,12 +229,58 @@ class TestGate3ResolutionState(unittest.TestCase):
             path = f.name
         state, _ = stop_hook.parse_state_file(path)
         self.assertEqual(state["gate3_resolution_iter"], 0)
+        self.assertEqual(state["last_gate3_needed_hash"], "")
+        hash_value = "deadbeef" * 8  # 64 hex chars, valid sha256 shape
         signal = {"gate": "3", "verdict": "NEEDS_RESOLUTION",
-                  "summary": "docker daemon down"}
+                  "summary": "docker daemon down", "needed_hash": hash_value}
         transition = {"type": "gate3_needs_resolution"}
         stop_hook.update_state_file(path, state, signal, transition)
         new_state, _ = stop_hook.parse_state_file(path)
         self.assertEqual(new_state["gate3_resolution_iter"], 1)
+        # TA-1: hash must round-trip so subsequent iteration can detect repeat.
+        self.assertEqual(new_state["last_gate3_needed_hash"], hash_value)
+        # Verify the persisted hash actually drives repeat detection.
+        repeat_signal = {"gate": "3", "verdict": "NEEDS_RESOLUTION",
+                         "summary": "same problem", "needed_hash": hash_value}
+        repeat_transition = stop_hook.compute_transition(new_state, repeat_signal)
+        self.assertEqual(repeat_transition["type"], "gate3_repeat_detected")
+
+    def test_gate3_unknown_verdict_warns_and_aborts(self):
+        # TD-1: verdict outside GATE3_VERDICTS frozenset must surface a warning
+        # and abort safely rather than silently falling through.
+        state = self._gate3_state()
+        signal = {"gate": "3", "verdict": "MAYBE_PASS", "summary": "typo"}
+        transition = stop_hook.compute_transition(state, signal)
+        self.assertEqual(transition["type"], "abort")
+
+    def test_parse_state_file_clamps_max_gate3_resolutions(self):
+        # TD-4: a manually-edited state file with max_gate3_resolutions out of
+        # range must be clamped to MAX_GATE3_RESOLUTIONS_CAP at read time, not
+        # only at write time in setup-qg.sh.
+        import tempfile, textwrap
+        content = textwrap.dedent("""\
+            ---
+            status: gate3_running
+            current_gate: 3
+            gate2_iteration: 0
+            max_gate2_iterations: 5
+            gate3_resolution_iter: 0
+            max_gate3_resolutions: 9999
+            last_gate3_needed_hash: ""
+            skip_runtime: false
+            single_gate: null
+            session_id: "abc12345"
+            started_at: "2026-05-10T00:00:00Z"
+            ---
+
+            # Pipeline State
+            """)
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as f:
+            f.write(content)
+            path = f.name
+        state, _ = stop_hook.parse_state_file(path)
+        self.assertEqual(state["max_gate3_resolutions"],
+                         stop_hook.MAX_GATE3_RESOLUTIONS_CAP)
 
     def test_gate3_needs_resolution_prompt_contains_user_choices(self):
         # State here represents post-increment state (update_state_file runs

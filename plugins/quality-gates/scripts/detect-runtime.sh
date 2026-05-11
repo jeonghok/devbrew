@@ -2,6 +2,17 @@
 # detect-runtime.sh — emit a YAML manifest describing runtime-verification
 # surfaces in the current working directory.
 #
+# Inputs (env vars; all optional except $PWD):
+#   $PWD                        — project root (script reads files relative to it)
+#   $PLAN_PATH                  — path to plan markdown file. When set and the
+#                                 file exists, the script extracts /<route>
+#                                 patterns and "X form/page/dashboard/panel"
+#                                 phrases into manifest.plan_features.
+#   $HOME                       — for ~/.claude/settings.json MCP detection;
+#                                 .claude/settings.json and .mcp.json also probed.
+#   $CLAUDE_CODE_SESSION_ID     — used to construct attempted_log_path; falls
+#                                 back to "unknown" when unset.
+#
 # Output (single multi-line YAML to stdout, expected by SKILL.md Gate 3):
 #   project_type: web|cli|library|unknown
 #   runnable_surfaces: [...]
@@ -11,6 +22,16 @@
 #   env_status: [...]
 #   plan_features: [...]
 #   attempted_log_path: .claude/quality-gates/<sid>/gate3-evidence.md
+#
+# Per-kind schema for runnable_surfaces (kind-tagged sum type):
+#   docker-compose   — {kind, path, requires_decision}
+#   npm-script       — {kind, name ∈ {dev,start,serve,test}, command}
+#   pytest           — {kind, command}
+#   cargo-test       — {kind, command}
+#   cargo-run        — {kind, command}             (only when Cargo.toml has [[bin]])
+#   go-test          — {kind, command}
+#   go-run           — {kind, command}             (only when main.go found)
+#   makefile         — {kind, target ∈ {run,serve,test}, command}
 #
 # Exit codes: 0 = ok (parse manifest), non-zero = invariant violation
 # (skill should fail-open: treat as empty manifest).

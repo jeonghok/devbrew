@@ -164,6 +164,7 @@ if [[ ! "$RAW_MAX" =~ ^[0-9]+$ ]]; then
   echo "⚠️  Quality Gates: DEVBREW_GATE3_MAX_RESOLUTIONS='$RAW_MAX' is not numeric; using default 3" >&2
   MAX_GATE3_RESOLUTIONS=3
 elif [[ "$RAW_MAX" -gt 10 ]]; then
+  echo "⚠️  Quality Gates: DEVBREW_GATE3_MAX_RESOLUTIONS='$RAW_MAX' exceeds maximum 10; clamping to 10" >&2
   MAX_GATE3_RESOLUTIONS=10
 else
   MAX_GATE3_RESOLUTIONS="$RAW_MAX"

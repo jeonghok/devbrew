@@ -116,6 +116,37 @@ OUT=$(cd "$FIXTURES/markdown-only" && HOME="$TMPHOME" bash "$SCRIPT" 2>/dev/null
 assert_contains "$OUT" "mcp_browser: chrome-devtools" "T6b: detects chrome-devtools"
 rm -rf "$TMPHOME"
 
+# --- Test 6c: mcp_browser falls back to playwright when only playwright is configured ---
+echo "== Test 6c: mcp_browser playwright detection =="
+TMPHOME=$(mktemp -d)
+mkdir -p "$TMPHOME/.claude"
+cat > "$TMPHOME/.claude/settings.json" <<'EOF'
+{
+  "mcpServers": {
+    "playwright": {"command": "fake"}
+  }
+}
+EOF
+OUT=$(cd "$FIXTURES/markdown-only" && HOME="$TMPHOME" bash "$SCRIPT" 2>/dev/null)
+assert_contains "$OUT" "mcp_browser: playwright" "T6c: detects playwright as fallback"
+rm -rf "$TMPHOME"
+
+# --- Test 6d: chrome-devtools wins over playwright when both are configured ---
+echo "== Test 6d: mcp_browser chrome-devtools priority over playwright =="
+TMPHOME=$(mktemp -d)
+mkdir -p "$TMPHOME/.claude"
+cat > "$TMPHOME/.claude/settings.json" <<'EOF'
+{
+  "mcpServers": {
+    "playwright": {"command": "fake"},
+    "chrome-devtools": {"command": "fake"}
+  }
+}
+EOF
+OUT=$(cd "$FIXTURES/markdown-only" && HOME="$TMPHOME" bash "$SCRIPT" 2>/dev/null)
+assert_contains "$OUT" "mcp_browser: chrome-devtools" "T6d: chrome-devtools wins"
+rm -rf "$TMPHOME"
+
 # --- Test 7: plan_features extracted from plan_path ---
 echo "== Test 7: plan_features extraction =="
 PLAN_TMP=$(mktemp)

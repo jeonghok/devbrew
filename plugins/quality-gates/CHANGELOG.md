@@ -6,57 +6,25 @@
 ## [1.8.0] — 2026-05-11
 
 ### Added
-- **Pre-flight runtime detector** (`scripts/detect-runtime.sh`): deterministic
-  bash script that produces a YAML manifest of project_type, runnable_surfaces
-  (docker-compose / npm-script / pytest / cargo / go / makefile), test_runners,
-  mcp_browser (chrome-devtools / playwright / none), app_url_candidates,
-  env_status, and plan_features (extracted from PLAN_PATH). Read-only.
-- **Fast-path SKIP_WITH_EVIDENCE**: when detector reports zero runnable
-  surfaces, zero test_runners, and zero plan_features, Gate 3 emits
-  SKIP_WITH_EVIDENCE without dispatching the agent (token cost = 0).
-- **Mid-run NEEDS_RESOLUTION escalation**: agent can request human resolution
-  for fixable missing resources. Skill mediates 3-way ping-pong (skill ↔ user ↔
-  agent) via AskUserQuestion. Bounded by `max_gate3_resolutions` (default 3).
-- **`DEVBREW_GATE3_MAX_RESOLUTIONS` env override** (clamped 0..10). Setting
-  to `0` disables mid-run escalation (Approach 2 mode — first NEEDS_RESOLUTION
-  transitions directly to `gate3_fail`, which presents the user with
-  fix/skip/abort).
-- **Repeat detection** on `needed_hash`: same missing resources twice in a row
-  trigger `gate3_repeat_detected` → user choice (proceed_with_warnings / abort).
-- **Evidence-log validation** by skill: every manifest item must have an
-  attempted entry; missing entries auto-escalate SKIP_WITH_EVIDENCE → FAIL.
-- **Fixture-based tests**: 4 fixtures (web-compose / web-example-only /
-  library-tests / markdown-only), 7 detector tests in
-  `tests/test_detect_runtime.sh`, 6 new state-machine tests, 1 frontmatter
-  lint test, 1 secret-leakage regression test (AC12 / P21).
+- **Pre-flight runtime detector** (`scripts/detect-runtime.sh`): `project_type`, `runnable_surfaces` (docker-compose / npm-script / pytest / cargo / go / makefile), `test_runners`, `mcp_browser` (chrome-devtools / playwright / none), `app_url_candidates`, `env_status`, `plan_features` (`PLAN_PATH` env에서 추출) 를 YAML manifest로 산출하는 결정적 bash script. read-only.
+- **Fast-path SKIP_WITH_EVIDENCE**: detector가 runnable_surfaces / test_runners / plan_features 모두 비어있다고 보고하면 Gate 3가 agent dispatch 없이 즉시 SKIP_WITH_EVIDENCE emit (token cost = 0).
+- **Mid-run NEEDS_RESOLUTION escalation**: agent가 fixable한 missing resource에 대해 사용자 해결을 요청 가능. Skill이 3자 ping-pong (skill ↔ user ↔ agent)을 AskUserQuestion 으로 중재. `max_gate3_resolutions` (기본 3) 으로 묶임.
+- **`DEVBREW_GATE3_MAX_RESOLUTIONS` env override** (0..10 clamp). `0` 으로 설정 시 mid-run escalation 비활성화 (Approach 2 mode — 첫 NEEDS_RESOLUTION 이 바로 `gate3_fail` transition 으로 가서 user에게 fix/skip/abort 선택 제시).
+- **Repeat detection** (`needed_hash` 기반): 같은 missing resource가 2회 연속이면 `gate3_repeat_detected` → user choice (proceed_with_warnings / abort).
+- **Evidence-log validation** (skill 측): manifest의 모든 항목이 attempted entry를 가져야 함; 누락된 항목이 있으면 SKIP_WITH_EVIDENCE 를 자동 FAIL 로 격상.
+- **Fixture 기반 테스트**: 4개 fixture (web-compose / web-example-only / library-tests / markdown-only), `tests/test_detect_runtime.sh` 의 30+ assertion, `TestGate3ResolutionState` 의 10+ 신규 state-machine 테스트, frontmatter lint 테스트, secret-leakage regression 테스트 (AC12 / P21).
 
 ### Changed
-- **`runtime-verifier.md` rewrite (v2)**:
-  - Frontmatter declares `allowedTools: [Read, Bash, Grep, Glob, mcp__plugin_chrome-devtools-mcp_*]`
-    and `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` — fixes
-    CLAUDE.md Plugin Shape "default-everything 금지" violation.
-  - `cost_class: variable` (was `low` — iteration loop possible).
-  - Body: manifest-driven attempts, evidence-log obligation, 4-verdict
-    taxonomy (PASS / FAIL / SKIP_WITH_EVIDENCE / NEEDS_RESOLUTION), explicit
-    P21 guard against requesting secret values.
-- **SKILL.md Gate 3 section** rewritten to 6 steps (detect → fast-path →
-  upfront resolution → dispatch → evidence validation → NEEDS_RESOLUTION).
-- **stop-hook.py**: new transitions `gate3_needs_resolution` and
-  `gate3_repeat_detected`, new state fields `gate3_resolution_iter` and
-  `max_gate3_resolutions`, `last_gate3_needed_hash`. Existing `SKIP` verdict
-  still routes to `complete` (back-compat); `SKIP_WITH_EVIDENCE` and
-  `PASS_WITH_WARNINGS` join the same complete-bucket.
+- **`runtime-verifier.md` 재작성 (v2)**:
+  - Frontmatter 가 `allowedTools: [Read, Bash, Grep, Glob, mcp__plugin_chrome-devtools-mcp_*]` 와 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 명시 — CLAUDE.md Plugin Shape "default-everything 금지" 위반 fix.
+  - `cost_class: variable` (기존 `low` 에서 변경 — iteration loop 가능).
+  - Body: manifest-driven attempt 흐름, evidence-log 작성 의무, 4-verdict 체계 (PASS / FAIL / SKIP_WITH_EVIDENCE / NEEDS_RESOLUTION), secret 값 요청 금지 P21 guard 명시.
+- **SKILL.md Gate 3 섹션** 6 단계 재작성 (detect → fast-path → upfront resolution → dispatch → evidence validation → NEEDS_RESOLUTION).
+- **stop-hook.py**: 신규 transition `gate3_needs_resolution`, `gate3_repeat_detected`; 신규 state field `gate3_resolution_iter`, `max_gate3_resolutions`, `last_gate3_needed_hash`. 기존 `SKIP` verdict 는 그대로 `complete` 로 라우팅 (back-compat); `SKIP_WITH_EVIDENCE` 와 `PASS_WITH_WARNINGS` 가 같은 complete-bucket 에 합류.
 
 ### Fixed
-- **Silent SKIP regressions in Gate 3**: previously, project type detection
-  fall-through (no `package.json scripts.dev`, no `manage.py`) would silently
-  return `unknown` → SKIP without user notification. Now, evidence-required
-  SKIP rejects this path; the skill either fast-path SKIPs (with an evidence
-  log), or escalates incomplete attempts to FAIL.
-- **chrome-devtools MCP under-utilization**: agent previously had to discover
-  available browser MCP tools via runtime keyword search. Detector now
-  injects `mcp_browser: chrome-devtools | playwright | none` into the manifest
-  deterministically.
+- **Gate 3 의 silent SKIP regression**: 이전엔 project type detection fall-through (`package.json scripts.dev` 없음, `manage.py` 없음) 시 silently `unknown` → SKIP 으로 빠지면서 user 에게 알림이 없었음. 이제 evidence-required SKIP 이 이 경로를 거부; skill 이 fast-path SKIP (evidence log 동반) 으로 처리하거나 incomplete attempt 를 FAIL 로 격상.
+- **chrome-devtools MCP under-utilization**: 이전엔 agent 가 사용 가능한 browser MCP tool 을 runtime keyword search 로 발견해야 했음. 이제 detector 가 `mcp_browser: chrome-devtools | playwright | none` 을 manifest 에 결정적으로 inject.
 
 ## [1.7.0] — 2026-05-10
 

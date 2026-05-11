@@ -22,10 +22,11 @@ unlinked on first `/qg` post-upgrade and never re-created.
 ---
 status: gate1_running          # gate1_running | gate2_running | gate3_running | completed | aborted
 current_gate: 1                # 1 | 2 | 3
-total_iterations: 1            # Full pipeline restart count
 gate2_iteration: 0             # Review-fix cycle count within Gate 2
-max_total_iterations: 5        # Limit for full pipeline restarts
 max_gate2_iterations: 5        # Limit for Gate 2 review-fix cycles
+gate3_resolution_iter: 0       # NEEDS_RESOLUTION mid-run iteration count within Gate 3 (v1.8.0)
+max_gate3_resolutions: 3       # Limit for Gate 3 NEEDS_RESOLUTION cycles (v1.8.0; 0..10 clamp; env override DEVBREW_GATE3_MAX_RESOLUTIONS)
+last_gate3_needed_hash: ""     # sha256(sorted needed.kind) from prior NEEDS_RESOLUTION; powers repeat detection (v1.8.0)
 skip_runtime: false            # Whether to skip Gate 3
 single_gate: null              # null | gate1 | gate2 | gate3
 plan_file: "auto"              # Plan file path or "auto"
@@ -33,6 +34,8 @@ pr_url: ""                     # PR URL or empty
 available_plugins: "pr-review-toolkit,feature-dev,superpowers"
 session_id: "<session_id>"     # For session isolation
 started_at: "<ISO timestamp>"  # Pipeline start time
+# total_iterations / max_total_iterations: deprecated in v1.5.0 (cross-gate
+# restart removed). Tolerated on read for back-compat; never written.
 ---
 
 # Quality Gates Pipeline State
