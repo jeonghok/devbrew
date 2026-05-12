@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.8.1] — 2026-05-12
+
+### Added
+- **Worktree regression guards** (`tests/test_worktree.sh`, `tests/test_isolation.sh`): hermetic mktemp-based tests that lock in qg's PWD-relative state-path contract — the structural property that makes git-worktree isolation work without any worktree-specific code in the plugin. `test_worktree.sh` (10 assertions) verifies setup/discover/trivia/pre-check all read worktree-local context and never leak into the origin repo's `.claude/`. `test_isolation.sh` (11 assertions) verifies bidirectional isolation under a shared session ID (worktree ↔ origin), distinct-inode property of the two pipeline.md files, and that two concurrent sessions in the same directory remain independent. These tests will fail if anyone introduces `git rev-parse --git-common-dir` / `--show-toplevel`-rooted state paths, which would silently break worktree isolation.
+
 ## [1.8.0] — 2026-05-11
 
 ### Added
