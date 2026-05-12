@@ -872,6 +872,105 @@ dispatching the agent yet.
 
 When the skill emits a synthetic `<qg-signal verdict="NEEDS_RESOLUTION" needed_hash="..." />` for a skill-pre-emptive failure (rather than from the agent), it MUST compute `needed_hash` using the same algorithm as the agent — `printf '%s\n' "${kinds[@]}" | sort | { command -v sha256sum >/dev/null && sha256sum || shasum -a 256; } | cut -d' ' -f1`. An empty `needed_hash` would silently bypass repeat detection at `stop-hook.py:289` (`current_hash and current_hash == prior_hash` is false when current is empty), allowing infinite identical pre-emptive failures up to `max_gate3_resolutions`.
 
+#### Step 2.5: Test scope validation (informational, non-blocking)
+
+This step is informational. It never blocks Gate 3. The kill switch
+`DEVBREW_DISABLE_GATE3_TEST_VALIDATION=1` (or
+`DEVBREW_SKIP_HOOKS=quality-gates:gate3-test-scope`) skips the step
+entirely.
+
+**2.5a — Kill-switch check:**
+
+```bash
+if [ "${DEVBREW_DISABLE_GATE3_TEST_VALIDATION:-0}" = "1" ] \
+   || [[ ",${DEVBREW_SKIP_HOOKS:-}," == *,quality-gates:gate3-test-scope,* ]]; then
+  echo "validation skipped: kill switch"
+  KILL_SWITCH=1
+else
+  KILL_SWITCH=0
+fi
+```
+
+If `KILL_SWITCH=1`: append `## Test Scope Verdicts\n\nvalidation skipped: kill switch\n\n` to the evidence-log preamble and proceed to Step 3.
+
+**2.5b — Compute candidate test files:**
+
+```bash
+CANDIDATES=$("${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh" 2>/dev/null || true)
+```
+
+If `$CANDIDATES` is empty (whitespace-only or true empty): append `## Test Scope Verdicts\n\nvalidation skipped: no candidate tests\n\n` to the evidence-log preamble and proceed to Step 3.
+
+**2.5c — Dispatch test-scope-validator agent:**
+
+```
+Agent(
+  subagent_type="quality-gates:test-scope-validator",
+  model="sonnet",
+  prompt="""Validate the scope alignment of candidate test files for Gate 3.
+
+  plan_path: <plan_path>
+
+  gate1_summary:
+  <verbatim YAML from Gate 1, including matched_items>
+
+  ## Current Diff
+  ```diff
+  <filtered diff verbatim, ≤50KB>
+  ```
+
+  candidate_test_files:
+  <newline-separated paths from $CANDIDATES>
+  """
+)
+```
+
+**2.5d — Parse + validate output:**
+
+Read the last YAML fenced block from the agent's reply. Validate:
+- Has `test_scope_verdicts:` key with a list
+- Has `summary:` key with a string
+- Each verdict's `classification` is one of: `aligned`, `outdated-suspicion`, `cherry-pick-suspicion`, `unclear`
+- No evidence/summary value contains `%`, `/<digit>+/<digit>+`, or standalone scoring tokens (use regex `[0-9]+%|[0-9]+/[0-9]+` — reject)
+
+**Fail-open**: if parsing fails, schema violates, or agent dispatches errors (timeout, plugin missing, etc.): append `## Test Scope Verdicts\n\nvalidation skipped: <reason>\n\n` to the evidence-log preamble. Proceed to Step 3 without aborting Gate 3.
+
+**2.5e — Render + carry forward:**
+
+Print to user:
+
+```
+## Gate 3 — Test Scope Check
+- <file>: <classification>[ — <evidence>]   (one line per verdict)
+
+Summary: <agent.summary>. Proceeding to runtime execution; review flagged tests after Gate 3.
+```
+
+Use ⚠️ prefix for `outdated-suspicion` and ⚠️⚠️ for `cherry-pick-suspicion`. No prefix for `aligned` (omit evidence to keep output tight). `unclear` uses ⚠️.
+
+Prepend to the evidence-log file at `manifest.attempted_log_path` via Bash heredoc (before runtime-verifier writes its part):
+
+```bash
+TMP_LOG=$(mktemp)
+cat > "$TMP_LOG" <<EOF
+## Test Scope Verdicts
+
+<rendered verdict lines, same as user-facing output minus the ⚠️ marks>
+
+Summary: <agent.summary>
+
+EOF
+# If the evidence-log already has content (re-entry), prepend; otherwise just write.
+if [ -s "$ATTEMPTED_LOG_PATH" ]; then
+  cat "$ATTEMPTED_LOG_PATH" >> "$TMP_LOG"
+fi
+mv "$TMP_LOG" "$ATTEMPTED_LOG_PATH"
+```
+
+Then proceed to Step 3 (dispatch runtime-verifier) regardless of verdicts.
+
+**Gate 3 verdict impact:** none. The runtime-verifier's verdict (PASS/FAIL/SKIP_WITH_EVIDENCE/NEEDS_RESOLUTION) is the sole driver of Gate 3 outcome. Step 2.5 only enriches the evidence-log and surfaces information to the user.
+
 #### Step 3: Dispatch the runtime-verifier agent
 
 Build the dispatch prompt:
