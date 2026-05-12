@@ -3,6 +3,34 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.9.0] — 2026-05-12
+
+### Added
+- **Gate 3 Step 2.5 — Test scope validator** (informational, non-blocking).
+  New `test-scope-validator` agent classifies scope-relevant test files as
+  `aligned` / `outdated-suspicion` / `cherry-pick-suspicion` / `unclear`
+  before `runtime-verifier` executes them. Surfaces silent failure modes
+  (outdated tests against post-refactor behavior; tautological assertions
+  added for coverage padding) without blocking Gate 3.
+- `scripts/compute-test-scope-candidates.sh` — deterministic candidate
+  resolver (Python/JS/TS heuristic src→test mapping + changed-test fallback).
+- `agents/test-scope-validator.md` — read-only agent with `Write`/`Edit`
+  disallowed (Law 2 3-way separation: writer / test-scope-validator /
+  runtime-verifier).
+- `tests/test_compute_test_scope_candidates.sh`, `tests/test_test_scope_validator_frontmatter.sh`
+- `tests/fixtures/test-scope/{aligned,outdated,cherry-pick}/` — reference
+  fixtures for manual verification.
+
+### Changed
+- `skills/quality-pipeline/SKILL.md` — Gate 3 gained Step 2.5 between
+  Step 2 (Upfront resolution) and Step 3 (Dispatch runtime-verifier).
+  Existing verdict model and stop-hook continuation prompts unchanged.
+
+### Environment
+- New: `DEVBREW_DISABLE_GATE3_TEST_VALIDATION=1` — skip Step 2.5 entirely.
+- New: `DEVBREW_SKIP_HOOKS=quality-gates:gate3-test-scope` — alternate kill
+  switch (consistent with existing skip-hook pattern).
+
 ## [1.8.1] — 2026-05-12
 
 ### Added
