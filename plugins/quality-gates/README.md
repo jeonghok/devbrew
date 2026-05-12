@@ -19,6 +19,8 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 2 (Writer ≠ Reviewer, frontmatter tool scoping으로 물리적 분리)** (v1.8.0) — `runtime-verifier` agent가 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언. `cp .env.example .env`, `docker compose up` 같은 fixable한 파일 작업은 사용자가 AskUserQuestion에서 명시 선택한 후 skill의 Bash tool로만 수행.
 - **AP16 (Unbounded autonomy) 회피 — Gate 3** (v1.8.0) — Gate 3의 NEEDS_RESOLUTION mid-run 루프가 `max_gate3_resolutions` (기본 3, env override `DEVBREW_GATE3_MAX_RESOLUTIONS=0..10`)로 묶임. `needed_hash` 기반 repeat detection이 iteration cap 도달 전에 non-converging loop을 잡음.
 - **P21 (Secret이 prompt context에 들어가지 않음)** (v1.8.0) — Gate 3의 AskUserQuestion은 결정과 포인터(yes/no/path)만 묻고 secret 값은 절대 받지 않음. 누락된 secret은 사용자가 disk의 `.env`에 직접 추가 후 retry 선택으로 해결. regression test: `tests/test_no_secret_prompts.py`.
+- **Law 2 (Writer ≠ Reviewer, 3-way 분리)** (v1.9.0) — Gate 3가 3-way agent 분리를 강제. writer (originating turn) ≠ `test-scope-validator` (Step 2.5 pre-execution 리뷰어) ≠ `runtime-verifier` (Step 3 executor). 두 reviewer 모두 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언 — prompt 기반 분리가 아닌 frontmatter scoping으로 물리적 분리.
+- **§5.3 (Categorical signal, no numeric scoring)** (v1.9.0) — `test-scope-validator`는 정확히 4-way enum 분류 (`aligned` / `outdated-suspicion` / `cherry-pick-suspicion` / `unclear`)만 emit. percentage, confidence, X/Y rating 모두 금지. summary의 counter 정수 (`1 aligned, 0 outdated…`) 는 허용. devbrew §5.3 "수치 스코어링 ban" instantiation.
 
 ## 구조
 
@@ -27,11 +29,12 @@ quality-gates/
 ├── .claude-plugin/         # 플러그인 메타데이터
 │   └── plugin.json
 ├── agents/                 # Gate agent (leaf agent; 파이프라인이 dispatch)
-│   ├── plan-verifier.md    # Gate 1
-│   ├── runtime-verifier.md # Gate 3 (Gate 2는 SKILL.md가 직접 orchestrate)
-│   ├── scout.md            # Gate 2 Phase 0 — 모델 기반 dispatch planner
-│   ├── adversarial.md      # Gate 2 Phase 1.5 — false-positive hunter
-│   └── synthesizer.md      # Gate 2 Phase 1.6 — finding dedupe/rank
+│   ├── plan-verifier.md         # Gate 1
+│   ├── runtime-verifier.md      # Gate 3 Step 3 (runner)
+│   ├── test-scope-validator.md  # Gate 3 Step 2.5 (pre-exec test scope check)
+│   ├── scout.md                 # Gate 2 Phase 0 — 모델 기반 dispatch planner
+│   ├── adversarial.md           # Gate 2 Phase 1.5 — false-positive hunter
+│   └── synthesizer.md           # Gate 2 Phase 1.6 — finding dedupe/rank
 ├── commands/
 │   ├── qg.md               # /qg slash command (--reset, --paths, branch flag 포함)
 │   └── cancel-qg.md        # /cancel-qg command
@@ -49,6 +52,7 @@ quality-gates/
 │   ├── filter-docs.sh                        # 코드 reviewer용 docs path 필터
 │   ├── discover-plan.sh                      # Plan 파일 우선순위 탐색 (Gate 1)
 │   ├── detect-runtime.sh                     # Gate 3 런타임 surface 탐지 (manifest 산출)
+│   ├── compute-test-scope-candidates.sh      # Gate 3 Step 2.5 — 후보 test 파일 산출 (Python/JS/TS heuristic)
 │   └── qg-gc.py                              # TTL 기반 stale 세션 GC (fcntl-locked)
 ├── skills/
 │   └── quality-pipeline/
@@ -177,6 +181,8 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 - `QG_STALE_HOURS`: 24 (`pre-pipeline-check.sh`의 세션 파일 staleness 기준)
 - `DEVBREW_QG_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/qg` 또는 `/cancel-qg --gc`에서 GC)
 - `DEVBREW_QG_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
+- `DEVBREW_DISABLE_GATE3_TEST_VALIDATION`: unset (`1` 설정 시 Gate 3 Step 2.5 (test scope validation) 완전 skip; default unset = validation enabled)
+- `DEVBREW_SKIP_HOOKS=quality-gates:gate3-test-scope`: 위와 동일한 kill switch — 기존 hook-skip 패턴과 일관성 유지를 위한 alternate form
 
 (`MAX_TOTAL_ITERATIONS`와 cross-gate restart 루프는 v1.5.0에서 제거됨.)
 
