@@ -1,13 +1,14 @@
 # QG Codex Reviewer — Design Spec
 
-> **Status:** Draft v2 — revised after spec-reviewer adversarial review (16 issues addressed)
+> **Status:** Draft v3 — revised after spec-reviewer rounds 1 + 2 (26 total issues addressed)
 > **Author:** Jeongho-K (with Claude Opus 4.7)
 > **Date:** 2026-05-13
 > **Plugin:** `plugins/quality-gates`
 > **Plugin bump:** `1.10.0 → 1.11.0` (minor — 새 reviewer surface 추가)
 > **Branch:** `feature/qg-codex-reviewer`
 > **Revision log:**
-> - v1 → v2: switched core invocation from `codex exec --output-schema` to `codex exec --json` (JSONL streaming) per gstack reviewer precedent; added auth + version probes; tightened security model; replaced grep-based AC4 with multi-line aware verification; added cost ceiling, fan-out audit, concrete next action.
+> - v1 → v2: switched core invocation from `codex exec --output-schema` to `codex exec --json` (JSONL streaming) per gstack reviewer precedent; added auth + version probes; tightened security model; replaced grep-based AC4 with multi-line aware verification; added cost ceiling, fan-out audit, concrete next action. (Round 1: 16 issues addressed.)
+> - v2 → v3: added prompt-engineering spike as Step 0 (NEW-1); added stderr capture `2>"$TMPERR"` + auth-error AC5 mock (NEW-2); added Non-goal "no web_search_cached" (NEW-3); added `-C "$_REPO_ROOT"` to all invocations (NEW-4); added AC5 mock `valid-json-no-fence` + parser fallback chain (NEW-5); canonicalized `-s read-only` (NEW-6); timeout 330s → 600s with correct `codex exec --json` precedent (NEW-7); added §10 Open Questions section (NEW-8); added `tests/test-cost-consent.sh` + concrete AC10 verification (NEW-9); removed `Bash(cat *)` from allowlist — parser reads stdin from pipe (NEW-10).
 
 ## 1. Context / Why
 
@@ -52,6 +53,8 @@ Codex CLI(OpenAI 계열 모델)가 시스템에 설치되어 있으면 OS 프로
 - **Gate 1 / Gate 3 변경 안 함** — Gate 1은 plan↔diff 단순 매칭, Gate 3는 MCP 기반.
 - **`codex review` subcommand 사용 안 함** — 출력이 freeform 텍스트라 finding YAML 정규화 어려움. `codex exec --json`이 stream에서 structured extraction 가능.
 - **`codex exec --output-schema` 사용 안 함** — CE 위임 패턴, reviewer per-finding 출력에 검증된 precedent 없음. gstack의 `--json` JSONL이 검증된 reviewer 패턴.
+- **`--enable web_search_cached` 사용 안 함** — QG는 working-tree-scoped review. 외부 web search는 review 품질에 추가 가치 미미하며 latency + cost 증가. 명시적 제외 (§4.3 canonical invocation에 포함 안 함).
+- **Prompt-engineering 가정을 validated pattern으로 표기하지 않음** — Codex가 `agent_message`에서 fenced JSON code block을 emit하는 행동은 gstack에서 검증된 적 없는 prompt-engineering 영역. §9 Step 0 spike로 *empirically* 검증 후 구현 진행 — 검증 실패 시 spec revision 필요.
 
 ## 4. Constraints
 
@@ -75,9 +78,25 @@ Codex CLI(OpenAI 계열 모델)가 시스템에 설치되어 있으면 OS 프로
 
 ### 4.3 보안
 
-- Codex 호출은 **항상** `-s read-only`. Agent 본문에 인라인 명시 + AC4로 정적 검증.
+- Codex 호출은 **항상** 다음 정규 형태 (canonical invocation, 한 곳에서 정의 후 spec 전체 참조):
+  ```bash
+  gtimeout 600 codex exec "<prompt>" \
+    -C "$_REPO_ROOT" \
+    -s read-only \
+    -c 'model_reasoning_effort="medium"' \
+    --json \
+    < /dev/null 2>"$TMPERR" \
+    | python3 scripts/codex-findings-to-yaml.py
+  ```
+  핵심 플래그:
+  - `-s read-only` (short form, **canonical**) — sandbox 모드. spec 전체에서 `--sandbox` 대신 `-s` 사용.
+  - `-C "$_REPO_ROOT"` — working directory pin. QG pipeline의 CWD가 repo root가 아닐 수 있어 필수.
+  - `--json` — JSONL stream 출력 (gstack `codex exec` precedent, lines 1153/1302/1350).
+  - `< /dev/null` — stdin 닫음 (gstack pattern; codex가 stdin을 읽지 않게 함, deadlock 회피).
+  - `2>"$TMPERR"` — stderr 캡처. Auth 오류는 stderr로 나오므로 exit 0이어도 `$TMPERR` 파싱 필요.
+  - `gtimeout 600` — 600s wall-clock 한도. **gstack `codex exec --json` precedent**: challenge/consult 모드 line 1153/1302/1350 모두 600s 사용. (v2 원안 330s는 `codex review` precedent였으나 `codex review`는 §3에서 거부된 패턴 — 잘못된 precedent 인용이었음.)
+  - **명시적 비채택:** `--enable web_search_cached` — gstack codex exec 인보케이션에 있지만 QG는 read-only 코드 review이므로 외부 web search 불필요. Latency/cost 절감 위해 제외 (§3 Non-goal 7).
 - Recursion guard: `CODEX_SANDBOX` 또는 `CODEX_SESSION_ID` env set → probe `false` emit.
-- Wall-clock 한도: `gtimeout 330` (gstack `codex review` precedent). 더 긴 thinking이 필요한 deep mode는 가능하지만 default 330s.
 - Persona 파일 (`codex-reviewer.md`)은 security-critical: sandbox/allowlist/timeout 약화 PR은 보안 리뷰 대상.
 
 ### 4.4 비용
@@ -140,7 +159,11 @@ meta:
 JSONL parser (`codex-findings-to-yaml.py`)는 다음 입력 형식을 받음:
 
 - **Input (stdin):** Codex JSONL stream — 각 line이 `{"type": "...", "delta": "...", ...}` 형태 event. 종결은 `agent_message` 또는 `task_complete` event.
-- **추출:** 마지막 `agent_message` event의 `text` 필드에서 JSON code block (```` ```json ... ``` ````) 추출. JSON 안의 `findings` array를 YAML로 변환.
+- **추출 (3-stage fallback chain):** 마지막 `agent_message` event의 `text` 필드에 대해 순차 시도:
+  1. **Stage 1 — Fenced JSON.** ```` ```json ... ``` ```` 블록 추출 후 `findings` array 파싱.
+  2. **Stage 2 — Raw JSON.** Stage 1 실패 시 text 전체를 JSON으로 파싱 시도 (모델이 fence 없이 raw object 반환한 경우).
+  3. **Stage 3 — Fallback.** Stage 1/2 모두 실패 → `findings: []` + `meta.reason: malformed_json` + `meta.raw_text_preview: <first 200 chars>`.
+- **stderr capture:** `$TMPERR` 파일을 같이 받아서, exit 0이어도 stderr에 `Error: ` / `auth` / `authentication` 패턴이 있으면 `meta.reason: auth_error_in_stderr` (Codex CLI는 auth 실패를 stderr + exit 0로 내는 경우 존재).
 - **Output (stdout):** 위 YAML 형식.
 
 ### AC4 — Sandbox 강제 (정적 검증)
@@ -162,14 +185,16 @@ Helper script가 backslash-continuation을 한 줄로 normalize 후 grep. 단순
 
 ### AC5 — Graceful failure (concrete tests)
 
-다음 4가지 실패 case 각각에 대해 mock codex binary + verification:
+다음 6가지 실패 case 각각에 대해 mock codex binary + verification:
 
 | Failure | Mock | Expected |
 |---|---|---|
 | exit ≠ 0 | `mock-codex-exit1.sh` (즉시 exit 1) | Agent emits `findings: []`, `meta.codex_failed: true`, `meta.reason: exit_nonzero`, `meta.exit_code: 1` |
-| Timeout | `mock-codex-hang.sh` (sleep 400) | gtimeout fires after 330s, agent emits `findings: []`, `meta.reason: timeout`, `meta.exit_code: 124` |
-| Malformed JSON | `mock-codex-bad-json.sh` (random bytes) | Agent emits `findings: []`, `meta.reason: malformed_json`, `meta.exit_code: 0` |
+| Timeout | `mock-codex-hang.sh` (sleep 700) | gtimeout fires after 600s, agent emits `findings: []`, `meta.reason: timeout`, `meta.exit_code: 124` |
+| Malformed JSON | `mock-codex-bad-json.sh` (random bytes) | Agent emits `findings: []`, `meta.reason: malformed_json`, `meta.exit_code: 0`, `meta.raw_text_preview: <preview>` |
 | Missing final message | `mock-codex-no-agent-message.sh` (이벤트 없이 exit 0) | Agent emits `findings: []`, `meta.reason: missing_result`, `meta.exit_code: 0` |
+| Valid JSON without fence | `mock-codex-valid-json-no-fence.sh` (raw JSON object in agent_message, no ```` ```json ``` ```` wrap) | Parser Stage 2 fallback 성공 — Agent emits parsed `findings: [...]`, `meta.reason` 없음 (정상 처리) |
+| Auth error in stderr (exit 0) | `mock-codex-auth-stderr.sh` (stderr: `Error: authentication failed`, stdout: empty, exit 0) | Agent emits `findings: []`, `meta.reason: auth_error_in_stderr`, `meta.exit_code: 0`, `meta.stderr_preview: <preview>` |
 
 **Downstream impact 검증:** 각 case에서 captured synthesizer 입력에 codex의 `findings: []`가 다른 reviewer findings를 영향 주지 않음을 assert:
 ```bash
@@ -210,19 +235,26 @@ baseline 부재 시 AC7는 "aspirational — baseline must be captured first"로
 
 첫 사용 시 `AskUserQuestion`이 발화되고 사용자가 "approve / decline / always-approve" 중 선택. Consent marker (`~/.claude/quality-gates/codex-cost-consent.md`) 있으면 silent. Decline 시 그 세션 동안 codex-reviewer skip + meta note.
 
-검증: `rm ~/.claude/quality-gates/codex-cost-consent.md && /qg` → consent 프롬프트 발화 확인 (수동 또는 mocked AskUserQuestion).
+**검증 (`tests/test-cost-consent.sh`):** Test harness가 `QG_MOCK_ASKUSER_PATH=$TMPDIR/captured-question.json` env var 설정. SKILL.md 안의 cost consent 호출이 이 env var 감지 시 실제 AskUserQuestion 대신 prompt text를 파일에 기록 후 `approve` 반환 (mocked). 테스트 절차:
+1. `rm -f ~/.claude/quality-gates/codex-cost-consent.md` (marker 제거)
+2. `QG_MOCK_ASKUSER_PATH=/tmp/q.json bash tests/run-qg-once.sh`
+3. Assert `/tmp/q.json` 존재 + grep `codex` `/tmp/q.json` 매치
+4. Assert marker 파일 생성됨
+5. 두 번째 run: `QG_MOCK_ASKUSER_PATH=/tmp/q2.json bash tests/run-qg-once.sh`
+6. Assert `/tmp/q2.json` 미생성 (silent, marker 존재하므로)
 
 ### AC11 — Outer Bash allowlist 정적 검증
 
 `codex-reviewer.md` 의 `allowed-tools` 라인 파싱 → 다음 패턴만 포함:
 - `Bash(codex exec*)` 또는 `Bash(codex *)` (codex 실행)
 - `Bash(timeout *)` / `Bash(gtimeout *)` (timeout wrapper)
-- `Bash(mktemp -d*)` (스크래치)
-- `Bash(cat *)` (read-only)
-- `Bash(python3 *)` (parser)
+- `Bash(mktemp -d*)` (스크래치 디렉토리 생성)
+- `Bash(python3 *)` (parser 실행)
 - `Read`
 
-위 외 패턴 (특히 generic `Bash`, `Write`, `Edit` 류) 존재 시 AC11 실패.
+위 외 패턴 (특히 generic `Bash`, `Bash(cat *)`, `Bash(echo *)`, `Write`, `Edit` 류) 존재 시 AC11 실패.
+
+**`Bash(cat *)` 명시적 제외 (NEW-10):** `cat` allowlist는 redirection (`cat foo > bar`) 차단 못함 — Claude Code의 `allowed-tools` 패턴 매칭은 command prefix 기반이지 shell line full parse가 아님. 파일 읽기는 `Read` 도구로만 (Bash 우회 불가). Parser는 stdin pipe로 codex stdout 받음 — `cat` 불필요.
 
 ## 6. Files to Modify
 
@@ -236,7 +268,10 @@ baseline 부재 시 AC7는 "aspirational — baseline must be captured first"로
 | `plugins/quality-gates/tests/test-detect-codex.sh` | AC1 6-case 자동 검증. | ~80 lines |
 | `plugins/quality-gates/tests/test-sandbox-enforced.sh` | AC4 정적 검증. | ~30 lines |
 | `plugins/quality-gates/tests/lib/extract-codex-invocations.py` | Multi-line shell block normalize 헬퍼 (AC4). | ~40 lines |
-| `plugins/quality-gates/tests/mocks/mock-codex-{exit1,hang,bad-json,no-agent-message}.sh` | AC5 4 mock binaries. | ~10 lines each |
+| `plugins/quality-gates/tests/mocks/mock-codex-{exit1,hang,bad-json,no-agent-message,valid-json-no-fence,auth-stderr}.sh` | AC5 6 mock binaries (v3: +valid-json-no-fence, +auth-stderr). | ~10 lines each |
+| `plugins/quality-gates/tests/test-cost-consent.sh` | AC10 mocked AskUserQuestion via `QG_MOCK_ASKUSER_PATH` env var. | ~50 lines |
+| `plugins/quality-gates/tests/test-findings-parser.sh` | AC3 — synthetic JSONL streams (fenced JSON, raw JSON, malformed, missing, auth-stderr) into parser, diff against expected YAML. | ~60 lines |
+| `plugins/quality-gates/tests/spike/test-codex-json-extraction.sh` | §9 Step 0 prompt-engineering spike — runs real `codex exec --json` with sample prompt 3 times, asserts fenced JSON in `agent_message` ≥ 2/3 runs. | ~40 lines |
 | `plugins/quality-gates/tests/fixtures/baseline-synthesizer-{small,medium,large}.yaml` | AC7 baseline (precursor task에서 captured). | captured |
 | `docs/superpowers/specs/2026-05-13-qg-codex-reviewer-design.md` | 본 spec (이 파일). | (existing) |
 
@@ -356,7 +391,7 @@ echo "All 6 cases passed."
 
 ### 7.5 Failure injection — AC5
 
-`tests/test-failure-injection.sh`: 4 mock codex binary 각각으로 codex-reviewer agent simulation 실행 → 출력 + synthesizer 입력 diff 검증.
+`tests/test-failure-injection.sh`: 6 mock codex binary 각각으로 codex-reviewer agent simulation 실행 → 출력 + synthesizer 입력 diff 검증. (v3에서 `valid-json-no-fence`, `auth-stderr` 추가)
 
 ### 7.6 Backward compatibility — AC7
 
@@ -405,28 +440,49 @@ Gate 1/3 포함. **Rejected** — Gate 1 plan↔diff 단순 매칭에 추가 가
 
 ### 8.8 명시적 토큰 cap
 
-Codex CLI는 토큰 cap 플래그 미지원 (확인 필요 — `codex exec --help`). **Rejected** — `gtimeout 330`을 비용 ceiling proxy로 사용. 단일 호출 wall-clock 제한 = 비용 상한 근사. 토큰 cap이 codex CLI에 추가되면 spec 갱신.
+Codex CLI 토큰 cap 플래그 가용성은 §10 Open Question (OQ-1)로 분리. v3 시점 미확인. **Rejected (current)** — `gtimeout 600`을 wall-clock 기반 비용 ceiling proxy로 사용. Step 0 spike 단계에서 `codex exec --help` 확인 후 토큰 cap 발견 시 spec amendment.
 
 ## 9. Concrete Next Action
 
 구현 시작 순서 (writing-plans 단계에서 task로 풀어낼 baseline):
 
+0. **Prompt-engineering spike (BLOCKING gate)** — 실제 codex가 설치된 환경에서 `tests/spike/test-codex-json-extraction.sh` 실행:
+   ```bash
+   # spike: prompt에 "Output your findings as JSON in a code block. Use exactly this format: ```json\n{\"findings\": [...]}\n```"
+   # 3회 실행, 각 회마다 agent_message에 fenced JSON 추출 가능한지 검증.
+   for i in 1 2 3; do
+     gtimeout 600 codex exec "$SPIKE_PROMPT" -C "$_REPO_ROOT" -s read-only \
+       -c 'model_reasoning_effort="medium"' --json < /dev/null 2>/dev/null \
+       | python3 scripts/codex-findings-to-yaml.py
+   done
+   ```
+   **Pass 기준:** 3회 중 ≥2회 fenced JSON 또는 raw JSON 파싱 성공. **Fail 시:** spec amendment — prompt template 조정, 또는 `codex exec --output-schema`로 architecture 재검토 (현 §3 거부 근거였던 "검증된 precedent 없음"이 spike로 뒤집힐 수 있음). Spike 실패면 step 3 진행 금지.
 1. **Worktree 확인** — 이미 `worktree-qg-codex-spec`에 있음. Spec merge 후 `feature/qg-codex-reviewer` 새 브랜치 또는 worktree.
 2. **Baseline capture (AC7 precursor)** — codex 없는 상태에서 합성 3 PR로 `/qg` 돌려 fixture 저장. 이걸 *먼저* 해야 AC7가 active.
 3. **`scripts/detect-codex.sh` 작성** + **`tests/test-detect-codex.sh` 6 case mock + assert** — AC1.
-4. **`scripts/codex-findings-to-yaml.py` 작성** + JSONL parser test — AC3.
-5. **`agents/codex-reviewer.md` 작성** — frontmatter (allowed-tools narrow, disallowedTools 5종) + 본문 (probe → mktemp → codex exec --json --sandbox read-only with gtimeout 330 → pipe to parser → emit YAML). AC4/AC9/AC11.
-6. **`tests/test-sandbox-enforced.sh` + mock-codex binaries** — AC5.
+4. **`scripts/codex-findings-to-yaml.py` 작성** + JSONL parser test (3-stage fallback chain + stderr capture) — AC3.
+5. **`agents/codex-reviewer.md` 작성** — frontmatter (allowed-tools narrow per AC11, disallowedTools 5종) + 본문에 §4.3 canonical invocation 정확히 포함 (`gtimeout 600 codex exec ... -C "$_REPO_ROOT" -s read-only ... --json < /dev/null 2>"$TMPERR" | python3 ...`). AC4/AC9/AC11 정적 검증 통과.
+6. **`tests/test-sandbox-enforced.sh` + 6 mock-codex binaries** — AC5.
 7. **`agents/scout.md` 패치** (3 patch hunks) — AC2.
 8. **`skills/quality-pipeline/SKILL.md` 패치** — Phase 0 probe 호출 + Scout 입력 합성.
-9. **Cost consent gate** — `AskUserQuestion` 호출 + marker 파일 로직 — AC10.
+9. **Cost consent gate** — `AskUserQuestion` 호출 + marker 파일 로직 + `QG_MOCK_ASKUSER_PATH` mock hook — AC10.
 10. **Metadata** — `plugin.json` bump, `CHANGELOG.md` `[1.11.0]` 섹션, `README.md` 3 곳 갱신 — AC8.
 11. **AC7 regression run** — baseline과 diff.
 12. **Self-review + commit + PR**.
 
-각 step은 `writing-plans` skill에서 task로 분해됨. 5번이 가장 무겁고 11번이 가장 위험 (baseline drift 발견 시 회귀 디버깅).
+각 step은 `writing-plans` skill에서 task로 분해됨. **Step 0이 BLOCKING gate** — spike 실패 시 5번 진행 불가. 5번이 다음으로 무겁고 11번이 가장 위험 (baseline drift 발견 시 회귀 디버깅).
 
-## 10. Metadata
+## 10. Open Questions
+
+Spec 시점에 미확정이며 구현 중(특히 §9 Step 0 spike) 해소 필요한 항목. 해소 결과는 spec amendment로 반영.
+
+- **OQ-1 — Codex CLI 토큰 cap 플래그 존재 여부.** `codex exec --help` 확인 필요. 존재한다면 `gtimeout 600` wall-clock proxy를 토큰 기반 ceiling으로 보강. 부재하면 v3 spec 그대로 진행. (이전 §8.8 "(확인 필요)" hedge가 여기로 이동.)
+- **OQ-2 — `agent_message` text에서 모델이 fenced JSON을 emit하는 행동의 안정성.** §9 Step 0 spike에서 실증 검증. 3/3 fenced 성공이면 confidence 높음, 2/3이면 Stage 2 raw fallback이 자주 호출됨, ≤1/3이면 prompt template 재설계 또는 `--output-schema` 재검토.
+- **OQ-3 — Codex JSONL stream event schema 안정성.** `agent_message` event의 정확한 필드 이름과 nesting이 codex 버전 간 변동될 수 있음. `_gstack_codex_version_check`가 known-bad만 차단 — known-good 범위 미정의. Spike에서 event schema 캡처 후 `tests/fixtures/codex-jsonl-sample.json`로 frozen. 향후 codex upgrade 시 sample과 diff로 schema drift 감지.
+- **OQ-4 — `model_reasoning_effort="medium"` vs `"high"` 선택.** §4.3 canonical에서 `"medium"`으로 고정했으나 deep depth review에서 `"high"`가 더 적절할 수 있음. v3.1에서 depth별 reasoning effort 매핑 검토 가능 (현재 v3는 단일 값으로 단순화).
+- **OQ-5 — `auth_error_in_stderr` 정규식.** `Error: authentication failed` 외에 codex가 어떤 phrasing을 쓰는지 미확정. Spike에서 의도적으로 invalid API key로 호출해 stderr 캡처 후 정규식 fine-tune.
+
+## 11. Metadata
 
 - **Plugin:** `plugins/quality-gates`
 - **Version bump:** `1.10.0 → 1.11.0` (minor, backward compatible)
@@ -446,4 +502,5 @@ Codex CLI는 토큰 cap 플래그 미지원 (확인 필요 — `codex exec --hel
   - `feedback_devbrew_design_lightness` — 새 P# 추가 없이 Law 2 instantiation 확장
   - `feedback_plugin_version_bump` — 1.10.0 → 1.11.0 명시
 - **Spec review log:**
-  - v1 → v2: spec-distill:spec-reviewer가 16 이슈 (4 BLOCK / 7 HIGH / 5 MEDIUM) 지적. 전부 v2에서 addressed. 주요 변경: 아키텍처 `--output-schema` → `--json` JSONL, version/auth probe 추가, timeout 180→330, 3 layer 격리 명시, AC5 concrete failure tests, AC7 precursor task, AC10 cost consent, AC11 Bash allowlist, Concrete Next Action 섹션 추가.
+  - v1 → v2: spec-distill:spec-reviewer round 1이 16 이슈 (4 BLOCK / 7 HIGH / 5 MEDIUM) 지적. 전부 v2에서 addressed. 주요 변경: 아키텍처 `--output-schema` → `--json` JSONL, version/auth probe 추가, timeout 180→330, 3 layer 격리 명시, AC5 concrete failure tests, AC7 precursor task, AC10 cost consent, AC11 Bash allowlist, Concrete Next Action 섹션 추가.
+  - v2 → v3: spec-distill:spec-reviewer round 2가 10 NEW 이슈 (6 HIGH / 4 MEDIUM, 그중 4개 implementation-blocking) 지적. 전부 v3에서 addressed. 주요 변경: §4.3 canonical invocation 단일 정의 (`-C "$_REPO_ROOT"`, `-s read-only`, `--json`, `< /dev/null`, `2>"$TMPERR"`), timeout 330→600 (`codex exec --json` precedent로 정정), `--enable web_search_cached` 명시적 비채택, AC3 parser 3-stage fallback chain, AC5에 2 추가 case (valid-json-no-fence, auth-error-stderr), AC10 `QG_MOCK_ASKUSER_PATH` mocked verification, AC11에서 `Bash(cat *)` 제거 (redirection 우회 차단 위해), §9 Step 0 prompt-engineering spike (BLOCKING gate), §10 Open Questions 5 항목 분리.
