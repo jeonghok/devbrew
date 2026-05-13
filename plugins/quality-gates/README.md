@@ -21,6 +21,7 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **P21 (Secret이 prompt context에 들어가지 않음)** (v1.8.0) — Gate 3의 AskUserQuestion은 결정과 포인터(yes/no/path)만 묻고 secret 값은 절대 받지 않음. 누락된 secret은 사용자가 disk의 `.env`에 직접 추가 후 retry 선택으로 해결. regression test: `tests/test_no_secret_prompts.py`.
 - **Law 2 (Writer ≠ Reviewer, 3-way 분리)** (v1.9.0) — Gate 3가 3-way agent 분리를 강제. writer (originating turn) ≠ `test-scope-validator` (Step 2.5 pre-execution 리뷰어) ≠ `runtime-verifier` (Step 3 executor). 두 reviewer 모두 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언 — prompt 기반 분리가 아닌 frontmatter scoping으로 물리적 분리.
 - **§5.3 (Categorical signal, no numeric scoring)** (v1.9.0) — `test-scope-validator`는 정확히 4-way enum 분류 (`aligned` / `outdated-suspicion` / `cherry-pick-suspicion` / `unclear`)만 emit. percentage, confidence, X/Y rating 모두 금지. summary의 counter 정수 (`1 aligned, 0 outdated…`) 는 허용. devbrew §5.3 "수치 스코어링 ban" instantiation.
+- **Law 2 strengthening — model-family separation.** Optional `codex-reviewer` agent (when Codex CLI is detected) runs review in a separate process with a different model family (OpenAI vs Anthropic) and an OS-level read-only sandbox, giving 3-layer reviewer-writer isolation: `disallowedTools` + narrow `Bash` allowlist + `codex -s read-only`.
 
 ## 구조
 
@@ -88,6 +89,10 @@ quality-gates/
 | Deep | ~55–75% (AskUserQuestion 게이트 발동) |
 
 트리거 조건과 override flag는 [`commands/qg.md`](commands/qg.md) 참고.
+
+### Codex reviewer cost
+
+The optional `codex-reviewer` agent has `cost_class: variable` — it invokes the user's Codex CLI subscription/API on each `standard`/`deep` Gate 2 dispatch. First-use cost consent gate prompts via `AskUserQuestion`. Per-call wall-clock ceiling: 600s (proxy for cost ceiling — Codex CLI does not currently expose a token cap flag). Disable globally with `DEVBREW_DISABLE_QG_CODEX=1`.
 
 ## 게이트
 
