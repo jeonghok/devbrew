@@ -58,7 +58,18 @@ Drift 정리(D4) 와 dead-weight 제거(D1–D3) 를 두 PR 로 분리할 수 �
 
 ### 그룹 B — Stop-hook trim (dead-weight removal)
 
-- **G5.** `total_iterations` / `max_total_iterations` 필드를 schema 와 코드에서 완전 제거. `parse_state_file` (현 line 89,92,101–107) 의 tolerate 코드 삭제, `update_state_file` (현 line 403, 405, 433) 의 잔존 reference 삭제, schema doc (`references/state-file-format.md:37-38`) 의 deprecated note 도 함께 정리. 기존 fixture 파일들 (`tests/test_stop_hook_state_machine.py`, `tests/test_kill_switches.py:49`, `tests/test_session_start_advisor.py:26`) 의 `total_iterations: ...` 라인 정리.
+- **G5.** `total_iterations` / `max_total_iterations` 필드를 schema, 코드, **그리고 `extend` transition의 dead write** 까지 완전 제거. 정확한 잔존 위치:
+  - `parse_state_file` (현 line 89, 92, 101–107) — tolerate 코드 삭제
+  - `update_state_file`:
+    - line 403 `new_total = state.get("total_iterations", 1)` — 변수 자체 제거
+    - line 405 `new_max_total = state.get("max_total_iterations", 5)` — 변수 자체 제거
+    - line 419–420 `extend` 분기의 `new_max_total += transition.get("additional", 3)` — **이미 dead write** (line 436–442 의 `replacements` dict 에 `max_total_iterations` 키가 없어 never persisted). G5 의 일부로 line 419–420 삭제 + `extend` transition 의 effective behavior 가 `build_gate_prompt` 재주입뿐임을 코멘트로 명시 (또는 `extend` transition 자체를 `compute_transition` 에서 emit 되지 않는다면 dead branch 로 제거 — 구현 단계 사전 검증 필수)
+    - line 433–435 의 forward-only comment 자체도 함께 정리 (필드가 사라지면 comment 도 obsolete)
+  - schema doc (`references/state-file-format.md:37-38`) — deprecated note 제거
+  - Fixture 파일 정확한 라인:
+    - `tests/test_stop_hook_state_machine.py:25-26, 40-41, 56-57, 72-73, 87-88, 161-162` — 6 case 각각의 fixture dict 에서 `"total_iterations": 1,` / `"max_total_iterations": 5,` 2 라인쌍 삭제. `tests/test_stop_hook_state_machine.py:15` 의 `test_no_max_total_iterations_constant` 는 회귀 가드로 *유지*
+    - `tests/test_kill_switches.py:49` — `"total_iterations: 0\n"` 라인 삭제
+    - `tests/test_session_start_advisor.py:26` — `"total_iterations: 1\n"` 라인 삭제
 - **G6.** `build_special_prompt` 의 6 case 를 (a) 공통 template 함수 + (b) per-case `dict[case → {header, body, options, signal_mapping}]` 구조로 통합. 외부 호출 면 (`main()` 의 prompt_key 전달) 변경 없음.
 - **G7.** `main()` 의 transition-handler 5 종 (`next_gate`, `retry_gate`, `extend`, `continue`, user-choice 5종) 을 `emit_continuation(prompt, transition)` helper 로 통합. `print(json.dumps(...))` boilerplate 1 곳에 모음.
 
@@ -75,7 +86,13 @@ Drift 정리(D4) 와 dead-weight 제거(D1–D3) 를 두 PR 로 분리할 수 �
 - **NG4.** Stop-hook 의 6 책임(§Context 표) 중 어느 하나라도 제거 / skill in-turn 이전. 본 PR 은 *trim* 이지 *remove* 가 아님.
 - **NG5.** New user-facing surface. 새 환경변수 / 새 verdict / 새 transition 추가 없음.
 - **NG6.** Korean translation pass. 기존 영어 prose 를 한국어로 옮기는 작업은 별도 cycle (CLAUDE.md *"Korean-primary"* 정책의 점진적 적용).
-- **NG7.** `setup-qg.sh` 의 `total_iterations` writing 정리 — *이미 v1.5.0 에서 정리됨* (pre-check 로 확인). No-op file.
+- **NG7.** `setup-qg.sh` 의 `total_iterations` writing 정리 — *이미 v1.5.0 에서 정리됨*. 재현 가능한 사전 검증:
+  ```bash
+  grep -n 'total_iterations\|max_total_iterations' \
+    plugins/quality-gates/scripts/setup-qg.sh
+  # → exit 1 (no matches). 2026-05-13 spec author 가 confirmation.
+  ```
+  No-op file — `Files to Modify` 표에 포함되지 않음.
 
 ## Constraints
 
@@ -113,7 +130,15 @@ Drift 정리(D4) 와 dead-weight 제거(D1–D3) 를 두 PR 로 분리할 수 �
   awk '/^def build_special_prompt/{flag=1} flag{print; if(/^def [a-z_]+\(/ && !/^def build_special_prompt/)exit}' \
     plugins/quality-gates/hooks/stop-hook.py | wc -l
   ```
-- **AC10.** `main()` 의 transition-handler section (현 line 870–942, 73 LoC) LoC ≤ 35. `emit_continuation` 또는 동등 helper 1 개로 통합. 측정: PR diff 의 main() body 비교.
+- **AC10.** `main()` 의 transition-handler section (현 line 870–942, 73 LoC) LoC ≤ 35. `emit_continuation` 또는 동등 helper 1 개로 통합. 자동 측정 명령:
+  ```bash
+  awk '/^def main\(\)/{f=1; n=0} f{n++; if(/^def [a-z_]+\(/ && !/^def main\(\)/){print n-1; exit}}' \
+    plugins/quality-gates/hooks/stop-hook.py
+  # → main() 전체 LoC. transition-handler 만의 라인 수는 PR diff 의
+  # `# 9. Handle completion/abort` ~ `# 13. Build next gate prompt` 블록
+  # 의 before/after LoC 를 비교 — diff 에서 - 블록 행수 - + 블록 행수 ≤ -38
+  # (현 73 → 목표 ≤ 35).
+  ```
 - **AC11.** 전체 `hooks/stop-hook.py` LoC ≤ 800 (현 960). PR description 에 정확한 before/after 수치 기록.
 
 ### 그룹 C — Regression guard
@@ -129,9 +154,13 @@ Drift 정리(D4) 와 dead-weight 제거(D1–D3) 를 두 PR 로 분리할 수 �
   - `tests/test_stop_hook_state_machine.py` (fixture state 의 옛 필드 제거 후 모든 case 동작)
   - `tests/test_session_start_advisor.py`
 - **AC14.** 새 회귀 가드 추가: `tests/test_stop_hook_unit.py` (또는 동등) — 다음 invariant 를 unit 으로 검증:
-  - `build_special_prompt` 가 6 transition_type 모두에 대해 빈 문자열이 아닌 prompt 를 반환
-  - 각 prompt 에 user-visible option 3 종 (proceed / fix-and-rerun-or-skip / abort) 의 *의미적* 항목이 모두 포함
-  - 알려지지 않은 transition_type 에 대해 `PIPELINE_ERROR` fallback 작동
+  - `build_special_prompt` 가 6 transition_type (`max_gate2_exceeded`, `gate3_needs_resolution`, `gate3_repeat_detected`, `gate3_fail`, `gate2_user_choice` with `prompt_key="gate2_needs_restart"`, `gate2_user_choice` with `prompt_key="gate2_repeat_detected"`) 각각에 대해 다음을 동시 만족:
+    - 반환값 길이 > 200 자
+    - case-specific header (`"GATE2_NEEDS_RESTART\n\n"` / `"GATE2_REPEAT_DETECTED\n\n"` / `"GATE2_MAX_EXCEEDED\n\n"` / `"GATE3_FAIL\n\n"` / `"GATE3_NEEDS_RESOLUTION\n\n"` / `"GATE3_REPEAT_DETECTED\n\n"`) prefix 포함
+    - 본문에 `<qg-signal` 문자열 ≥ 2 회 (옵션-결과 매핑 의도 검증)
+    - `"abort"` 문자열 포함 (3 옵션 중 abort 항목 보장)
+  - 알려지지 않은 transition_type 에 대해 반환 문자열이 정확히 `"PIPELINE_ERROR\n\n"` prefix 로 시작 (단순 non-empty 가 아님 — reviewer 가 빈 문자열로 swap 시 우회 가능 우려 차단)
+  - `gate2_user_choice` with `prompt_key=None` (generic fallback) 도 동일 invariant 검증 (현 line 708–720)
 
 ### 그룹 D — Versioning
 
@@ -157,7 +186,7 @@ Drift 정리(D4) 와 dead-weight 제거(D1–D3) 를 두 PR 로 분리할 수 �
 
 ## Verification Plan
 
-### 1. Static — forbidden phrase grep (AC1–AC3, AC8)
+### 1. Static — forbidden phrase grep (AC1–AC3, AC8, NG7)
 
 ```bash
 cd plugins/quality-gates
@@ -173,6 +202,11 @@ COUNT=$(grep -rn 'total_iterations\|max_total_iterations' . \
   | grep -v 'test_stop_hook_state_machine.py.*test_no_max_total_iterations_constant' \
   | wc -l)
 test "$COUNT" -eq 0 || { echo "FAIL: $COUNT residual hits"; exit 1; }
+
+# NG7 — setup-qg.sh 가 deprecated 필드를 writing 하지 않음을 명시 검증
+grep -n 'total_iterations\|max_total_iterations' scripts/setup-qg.sh \
+  && { echo "FAIL: setup-qg.sh has unexpected deprecated field reference"; exit 1; } \
+  || true
 
 echo "PASS"
 ```
@@ -232,6 +266,7 @@ python3 tests/test_stop_hook_unit.py
 - **(C) Verdict rename (`NEEDS_RESTART` → `NEEDS_USER_FIX`)** — `qg-signal` XML schema 호환성 깨짐. Semantics 만 prose 에서 재정의로 충분.
 - **(D) State schema breaking change (`pipeline.md` v2 migration)** — `total_iterations` 필드 제거는 *removal* 이지 *migration* 이 아님. 1년간 never-written 이고 `setup-qg.sh --ensure` 가 overwrite 하므로 breaking 아님. v2.0.0 major bump 불필요.
 - **(E) 6 case → 1 generic prompt 로 추가 단순화** — 각 case 의 contextual prose (e.g. GATE3_NEEDS_RESOLUTION 의 secret-value 금지 안내) 가 case-specific 가치를 가짐. Template + data dict 까지가 단순화의 정당한 한계.
+- **(F) D1 (deprecated field 제거) 와 D2/D3 (template / helper 리팩토링) 을 별도 commit 으로 분리** — bisect 비용 측면에서 매력적이지만 거절. 근거: (1) D1 의 fixture 라인 정리가 D2 의 template unit test 작성과 같은 파일 (`test_stop_hook_state_machine.py`) 을 건드림 — 두 commit 사이 충돌 가능성. (2) D1 의 `extend` dead-write 발견 자체가 D3 (`main()` helper 추출) 와 같은 함수 영역 — 분리 시 두 PR 모두 `update_state_file` 을 건드림. (3) v1.5.0 forward-only invariant 의 단일 instantiation 이므로 commit 단위 분리는 *세분화의 코스트* 가 *bisect 의 이득* 을 초과. 다만 implementation 단계의 plan 에서는 step 으로 분리 (D1 → D2 → D3 → D4 순서, 각 step 후 `tests/` 통과 확인) — 같은 PR 안의 점진 commit 로 bisect 가능성 보존.
 
 ## Metadata
 
