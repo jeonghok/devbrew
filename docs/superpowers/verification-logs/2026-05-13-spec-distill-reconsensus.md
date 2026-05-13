@@ -8,7 +8,7 @@ Worktree: .claude/worktrees/spec-distill-reconsensus-design
 |---|---|---|
 | V0 | fixture 존재 사전 검증 (8 .md + 1 .sh) | PASS |
 | V1 | plugin.json version 0.2.0 | PASS |
-| V2 | spec-template locked_decisions frontmatter | FAIL |
+| V2 | spec-template locked_decisions frontmatter | PASS (after worktree cherry-pick fix) |
 | V3 | reviewer agent affects_locked_decisions contract | PASS |
 | V4 | routing table affects_locked column + [3.5] row | PASS |
 | V5 | Mode B allowed_issue_ids + mode_b_violation | PASS |
@@ -26,20 +26,10 @@ Worktree: .claude/worktrees/spec-distill-reconsensus-design
 - V12 is manual checklist deferred to PR review.
 - All other commands run via grep/test directly on committed file state.
 
-## V2 FAIL — Detail
+## V2 FAIL → Recovery — Detail
 
-Command:
-```python
-python3 -c "import yaml, re; \
-content = open('plugins/spec-distill/templates/spec-template.md').read(); \
-fm = re.split(r'^---\s*$', content, maxsplit=2, flags=re.MULTILINE)[1]; \
-d = yaml.safe_load(fm); \
-assert 'locked_decisions' in d; \
-print('V2 PASS')"
-```
+Initial run: V2 failed with `AssertionError`. Root cause: T2 implementer subagent committed `a9ed571` to **main branch** (not the worktree branch `worktree-spec-distill-reconsensus-design`) — likely due to absolute path resolution leaking outside the worktree during git operations. Worktree branch lacked the Task 2 commit.
 
-Output: `AssertionError` (exit code 1)
+Recovery: `git cherry-pick a9ed571` brought the template change into the worktree branch as commit `94282ac`. V2 re-run: PASS (`locked_decisions: []` present in frontmatter).
 
-Root cause: `plugins/spec-distill/templates/spec-template.md` frontmatter does not contain a `locked_decisions` key. Current frontmatter keys are: `name`, `version`, `created_at`, `session_id`, `status`, `next_phase`, `source`. The `locked_decisions` field — required by the v0.2.0 re-consensus gate design — was not added to the template during implementation.
-
-Required fix: add `locked_decisions: []` to the YAML frontmatter of `plugins/spec-distill/templates/spec-template.md`, and update `source` to reflect `spec-distill v0.2.0`.
+Side effect: `main` branch on the underlying repository (`/Users/jeonghokim/Downloads/devbrew`) now contains the orphan T2 commit (`a9ed571`) outside the worktree's PR. To clean up on the user's side (after PR merge): `git checkout main && git reset --hard origin/main` (or whatever is the appropriate upstream). This is a Subagent-Driven Development gotcha to be noted for the plugin retrospective — implementer subagents should be sandboxed strictly to worktree paths.
