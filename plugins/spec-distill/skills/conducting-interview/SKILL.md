@@ -28,7 +28,9 @@ non_user_streak: <int>
 rereview_count: 0
 wall_clock_started_at: <ISO8601>
 trivia_escape_armed: false
-issue_history: []
+issue_history: []                    # 각 항목: {id, raised_count, dismissed_by_user, accepted_by_user, reconsensus_count, resolved, escalated}
+pending_locked_decisions: []         # 매 round 끝 append (b/d path 명시 응답만). drafting-spec Mode A가 spec.md frontmatter로 변환.
+reconsensus_accepted_ids: []         # reviewing-spec [3.5] sub-step이 기록. Mode B에 allowed_issue_ids로 전달.
 ---
 ```
 
@@ -67,6 +69,29 @@ State body: 각 round의 4-block 출력 + 사용자 답변 + (있다면) breadth
 
 매 round의 4-block에서 어떤 path로 routing했는지 transcript에 명시하십시오.
 
+## Locked 판정 트리거 (G1, AC1)
+
+매 round 끝에 사용자 응답을 `pending_locked_decisions`에 append할지 다음 decision table로 판정:
+
+| 사용자 응답 유형 | path | locked? |
+|---|---|---|
+| 명시적 수락 (예/동의/선택지 1개 선택/자유 텍스트로 결정 명시) | b, d | ✅ true |
+| 명시적 거절 (아니오/거절/대안 제시) | b, d | ✅ true (반대 명제로 locked) |
+| 보류 ("잘 모르겠음", "둘 다 괜찮음", "나중에 결정") | b, d | ❌ false — Open Questions로 박제 |
+| "추가 정보 필요" / "더 설명해주세요" | b, d | ❌ false — re-ask 또는 OQ |
+| factual auto-confirm | a | ❌ false (사용자 미답변) |
+| sub-agent ambiguity 답안 | c | ✅ true ONLY IF 사용자 confirm 받음 |
+
+`locked? == true` 항목은 매 round 끝에 다음 형식으로 `pending_locked_decisions`에 append:
+
+```yaml
+- id: LD<N>                          # N = pending_locked_decisions.length + 1
+  section: "#<spec-section-anchor>"  # 답변이 spec의 어느 섹션에 박힐지 (예: "#goals", "#acceptance-criteria")
+  summary: "<160자 이내 한 줄 요약>"   # P21 secret placeholder 치환 적용
+  source: interview-round-<N>        # 운영 경로 표시
+  source_path: b | c | d             # 어느 routing path에서 왔는지
+```
+
 ## C44 Dialectic Rhythm Guard
 
 `non_user_streak` 카운터 — 직전 N round 동안 *사용자 답변이 없었던* 횟수.
@@ -103,6 +128,23 @@ dispatch 결과 (`narrow_tunneling: true`) 면 다음 round 시작 시 `suggeste
 종료 시 다음 메시지 출력:
 
 > 인터뷰 phase 종료 조건 충족. `drafting-spec` skill로 전환합니다.
+
+## In-flight state migration (C10)
+
+state.local.md 로드 시 v0.1.x schema (신규 필드 부재)를 감지하면 *non-mutating read*로 자동 promote:
+
+- `pending_locked_decisions` 부재 → `[]`로 in-memory default.
+- `issue_history[].dismissed_by_user` / `accepted_by_user` / `reconsensus_count` 부재 → `0`으로 in-memory default.
+- `reconsensus_accepted_ids` 부재 → `[]`로 in-memory default.
+
+다음 state write 시점에 frontmatter에 자연스럽게 추가 (backward-rewriting 금지 — 명시적 write 시점에만 frontmatter 갱신).
+
+사용자에게 advisory 한 줄 출력:
+```
+[spec-distill v0.2.0] state.local.md schema migration: <fields> added with defaults.
+```
+
+자동 promote 실패 시 (파일 corruption 등) → 사용자에게 "v0.1.x in-flight state 호환 실패 — 세션 재시작 권장" 알림 + state.local.md 보존 (P14).
 
 ## kill switch
 
