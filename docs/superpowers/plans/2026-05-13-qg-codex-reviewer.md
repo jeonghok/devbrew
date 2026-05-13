@@ -224,14 +224,84 @@ git commit -m "feat(qg-codex): add prompt-engineering spike for fenced JSON extr
 
 ---
 
-## Task 1: AC7 backward-compatibility baseline capture (precursor)
+## Task 1: AC7 backward-compatibility — REVISED (deferred to aspirational per spec)
 
-**Why first (before any codex changes):** §AC7 requires regression diff against baseline captured pre-feature. Must run /qg on representative diffs in pristine state.
+**Scope change recorded 2026-05-13 (execution-time discovery):** The plan's original Task 1 required capturing a byte-identical synthesizer baseline by running `/qg` non-interactively against 3 synthetic diffs. Investigation found:
+
+1. **No unattended `/qg` harness exists.** `plugins/quality-gates/tests/e2e-scenarios.md` line 4 explicitly states: *"Live `/qg` runs require an interactive Claude Code session against a real PR; this file specifies what to test and what passing looks like so a reviewer or a future re-verification can reproduce the results."* All current e2e verification is manual.
+
+2. **Synthesizer output is inherently non-deterministic** (LLM-generated YAML). Byte-identity assertion would either fail constantly or require ignoring so many fields that the test becomes vacuous.
+
+3. **The feature is purely additive + opt-in.** Existing test suite running clean after the feature lands is sufficient regression evidence, especially given:
+   - AC2 (scout integration test) covers "scout excludes codex-reviewer when `codex_available: false`"
+   - AC1 case 3 (kill switch) covers `DEVBREW_DISABLE_QG_CODEX=1`
+   - All existing qg tests must continue to pass (Task 11.2)
+
+**Decision per spec §AC7 escape clause** (*"baseline 부재 시 AC7는 'aspirational — baseline must be captured first'로 표기"*): mark AC7 as aspirational, document the manual capture procedure for a future user who wants stronger regression evidence, and rely on Task 11's existing-test-suite regression check for backward-compat verification.
 
 **Files:**
-- Create: `plugins/quality-gates/tests/fixtures/baseline_synthesizer_{small,medium,large}.yaml`
-- Create: `plugins/quality-gates/tests/fixtures/baseline_capture_README.md`
-- Create: `plugins/quality-gates/tests/capture_baseline.sh`
+- Create: `plugins/quality-gates/tests/fixtures/baseline_capture_README.md` (documents the deferral + manual procedure for future capture)
+
+**Replaces:** all `baseline_synthesizer_*.yaml` fixtures and `capture_baseline.sh` (no longer needed).
+
+### Steps (revised)
+
+- [x] **1.1: Decision documented.** AC7 deferred to aspirational. See Task 10 (also revised) for what now replaces the byte-identical regression check.
+
+- [ ] **1.2: Create baseline_capture_README.md**
+
+Create `plugins/quality-gates/tests/fixtures/baseline_capture_README.md`:
+
+```markdown
+# AC7 Baseline — Aspirational (Deferred)
+
+## Status
+
+AC7 (byte-identical synthesizer output between codex-disabled and pre-feature
+state) is **aspirational** for the qg-codex-reviewer feature. No baseline
+fixtures captured. Verification relies instead on:
+
+- AC1 case 3 (`DEVBREW_DISABLE_QG_CODEX=1` returns `skip_reason: kill_switch`)
+- AC2 (scout omits `codex-reviewer` from `phase1_agents` when `codex_available: false`)
+- Existing qg test suite passing unchanged (Task 11)
+
+## Rationale
+
+QG's existing e2e verification is manual interactive (see `e2e-scenarios.md`).
+Capturing synthesizer output for byte-identity regression would require either:
+1. A new unattended `/qg` harness (significant scope), OR
+2. Manual capture (one-time human time investment with LLM nondeterminism risk)
+
+The qg-codex-reviewer feature is additive and opt-in. The above three checks
+provide sufficient regression evidence without the harness investment.
+
+## Future: Manual Baseline Procedure
+
+If a user wants stronger regression evidence:
+
+1. On a commit *before* `feature/qg-codex-reviewer` lands (e.g., `main`):
+   ```bash
+   DEVBREW_DISABLE_QG_CODEX=1 /qg
+   ```
+   on 3 representative PRs (small/medium/large diff). Save synthesizer YAML
+   output from each session.
+
+2. Strip non-deterministic fields (timestamps, session_ids, paths) — write a
+   small `normalize_qg_output.py` that drops these via regex.
+
+3. Save fixtures as `baseline_synthesizer_{small,medium,large}.yaml` next to
+   this README.
+
+4. After feature lands, re-run `/qg` with `DEVBREW_DISABLE_QG_CODEX=1` on the
+   same 3 PRs and diff against fixtures. Expect identity (modulo normalize).
+```
+
+- [ ] **1.3: Commit the deferral**
+
+```bash
+git add plugins/quality-gates/tests/fixtures/baseline_capture_README.md
+git commit -m "docs(qg-codex): defer AC7 baseline to aspirational (spec escape clause)"
+```
 
 ### Steps
 
@@ -1598,49 +1668,79 @@ git commit -m "chore(qg-codex): bump to 1.11.0 + CHANGELOG + README"
 
 ---
 
-## Task 10: AC7 regression run
+## Task 10: AC7 backward-compat — REVISED (structural verification)
 
-**Files:** none new; consumes Task 1 baselines.
+**Scope change recorded 2026-05-13:** With Task 1's baseline capture deferred (see Task 1 revision), this task's byte-identical regression diff is no longer feasible. Replaced with three structural checks that together cover the same intent — *"behavior is unchanged when codex is disabled/absent."*
 
-### Steps
+**Files:**
+- Create: `plugins/quality-gates/tests/test_codex_backward_compat.sh`
 
-- [ ] **10.1: Write regression test**
+### Steps (revised)
+
+- [ ] **10.1: Write structural regression test**
 
 Create `plugins/quality-gates/tests/test_codex_backward_compat.sh`:
 
 ```bash
 #!/usr/bin/env bash
-# AC7 — codex-disabled run produces output identical to baseline fixtures.
+# AC7 (revised) — structural verification that codex-disabled paths
+# behave identically to pre-feature state.
+#
+# Three checks:
+#   1. Probe with kill switch returns false (uses AC1 test's logic)
+#   2. Scout's static rules omit codex-reviewer when codex_available=false
+#      (already covered by AC2 test, repeated here for completeness)
+#   3. All existing qg test files pass (no regressions in unrelated tests)
 
 set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-FIXTURES="$SCRIPT_DIR/fixtures"
 
 pass=0; fail=0
-for size in small medium large; do
-  BASELINE="$FIXTURES/baseline_synthesizer_$size.yaml"
-  CURRENT="$(mktemp -t qg-current-$size-XXXXXX.yaml)"
-  trap "rm -f \"$CURRENT\"" EXIT
 
-  if [[ ! -f "$BASELINE" ]]; then
-    echo "  SKIP: $size (baseline missing — run Task 1 first)"
-    continue
-  fi
+# Check 1: kill switch produces skip
+out="$(DEVBREW_DISABLE_QG_CODEX=1 bash "$PLUGIN_ROOT/scripts/detect_codex.sh")"
+if echo "$out" | grep -q 'skip_reason: kill_switch'; then
+  echo "  PASS: kill switch → codex_available: false"
+  pass=$((pass + 1))
+else
+  echo "  FAIL: kill switch did not produce skip"
+  echo "$out" | sed 's/^/    /'
+  fail=$((fail + 1))
+fi
 
-  DEVBREW_DISABLE_QG_CODEX=1 bash "$SCRIPT_DIR/run_qg_on_fixture.sh" "$size" \
-    | python3 "$SCRIPT_DIR/lib/normalize_qg_output.py" \
-    > "$CURRENT"
+# Check 2: scout selection rule mentions skip on quick
+if grep -q 'codex_available.*standard.*deep\|codex_available.*depth' "$PLUGIN_ROOT/agents/scout.md"; then
+  echo "  PASS: scout selection rule excludes codex on quick"
+  pass=$((pass + 1))
+else
+  echo "  FAIL: scout selection rule for codex-reviewer not found"
+  fail=$((fail + 1))
+fi
 
-  if diff -u "$BASELINE" "$CURRENT" > /dev/null; then
-    echo "  PASS: $size identical to baseline"
-    pass=$((pass + 1))
-  else
-    echo "  FAIL: $size differs from baseline"
-    diff -u "$BASELINE" "$CURRENT" | sed 's/^/    /'
-    fail=$((fail + 1))
-  fi
+# Check 3: all pre-existing qg test files (those NOT touching codex) pass.
+# This is the real regression check — if the codex feature broke anything
+# in scout/SKILL/probe-call wiring, one of these tests will catch it.
+echo "Running existing qg test suite..."
+existing_failures=0
+for t in "$PLUGIN_ROOT"/tests/test_*.sh "$PLUGIN_ROOT"/tests/test_*.py; do
+  case "$(basename "$t")" in
+    # Skip the new codex-* tests; they're tested separately.
+    test_detect_codex.sh|test_findings_parser.sh|test_sandbox_enforced.sh|test_failure_injection.sh|test_scout_codex_integration.sh|test_cost_consent.sh|test_codex_backward_compat.sh) continue ;;
+  esac
+  case "$t" in
+    *.py) python3 "$t" > /dev/null 2>&1 || existing_failures=$((existing_failures + 1)) ;;
+    *.sh) bash "$t" > /dev/null 2>&1 || existing_failures=$((existing_failures + 1)) ;;
+  esac
 done
+
+if [[ $existing_failures -eq 0 ]]; then
+  echo "  PASS: all existing qg tests pass (no regressions)"
+  pass=$((pass + 1))
+else
+  echo "  FAIL: $existing_failures pre-existing test(s) regressed"
+  fail=$((fail + 1))
+fi
 
 echo ""
 echo "Total: $((pass + fail)), pass: $pass, fail: $fail"
@@ -1657,13 +1757,13 @@ bash plugins/quality-gates/tests/test_codex_backward_compat.sh
 
 Expected: `Total: 3, pass: 3, fail: 0`
 
-If FAIL: check normalizer strips all non-deterministic fields; check QG output structure hasn't drifted between baseline capture and now.
+If FAIL on Check 3: identify which existing test broke. Likely culprits are scout.md (Task 6) or SKILL.md (Task 7) edits that drifted from the existing pattern. Re-read the patches and fix.
 
 - [ ] **10.3: Commit regression test**
 
 ```bash
 git add plugins/quality-gates/tests/test_codex_backward_compat.sh
-git commit -m "test(qg-codex): AC7 regression — codex-disabled output matches baseline"
+git commit -m "test(qg-codex): AC7 structural regression — kill switch + scout rule + existing suite"
 ```
 
 ---
