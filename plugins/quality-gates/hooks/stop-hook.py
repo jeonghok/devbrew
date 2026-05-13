@@ -400,9 +400,7 @@ def update_state_file(path, state, signal, transition):
 
     new_status = state.get("status", "gate1_running")
     new_gate = state.get("current_gate", 1)
-    new_total = state.get("total_iterations", 1)
     new_gate2_iter = state.get("gate2_iteration", 0)
-    new_max_total = state.get("max_total_iterations", 5)
     new_gate3_resolution_iter = state.get("gate3_resolution_iter", 0)
 
     t_type = transition["type"]
@@ -416,10 +414,12 @@ def update_state_file(path, state, signal, transition):
         new_status = f"gate{retry_gate}_running"
         if retry_gate == 2:
             new_gate2_iter = transition.get("gate2_iteration", new_gate2_iter)
-    elif t_type == "extend":
-        new_max_total += transition.get("additional", 3)
     elif t_type in ("complete", "abort"):
         new_status = "completed" if t_type == "complete" else "aborted"
+    # extend: transition is routed by main() (re-injects current gate prompt);
+    # update_state_file leaves status/gate/iter fields untouched, which has
+    # always been the effective behavior (the prior new_max_total += ... was
+    # never in the replacements dict and so was a silent no-op write).
 
     # Track gate3 resolution iteration (forward-only count).
     if transition.get("type") == "gate3_needs_resolution":
@@ -429,10 +429,9 @@ def update_state_file(path, state, signal, transition):
         # detect a repeat (same needed set twice in a row → not converging).
         state["last_gate3_needed_hash"] = signal.get("needed_hash", "")
 
-    # Apply frontmatter updates via string replacement.
-    # Forward-only: total_iterations / max_total_iterations are no longer
-    # persisted (setup-qg.sh stopped writing them in v1.5.0). Stale fields
-    # in old state files are tolerated on read but not refreshed.
+    # Apply frontmatter updates via string replacement. Only fields in the
+    # replacements dict below are touched; legacy fields stay verbatim and
+    # never re-enter the state machine.
     replacements = {
         "status": new_status,
         "current_gate": str(new_gate),
