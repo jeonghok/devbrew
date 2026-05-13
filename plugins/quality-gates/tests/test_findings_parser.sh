@@ -41,6 +41,14 @@ check "fenced JSON (legacy top-level) Stage 1" "$TMP/fenced-legacy.jsonl" "" 'fi
 # Fixture 1c: real on-the-wire fixture from Task 0 spike (regression anchor for codex schema drift)
 check "real codex sample (Task 0 fixture)" "$PLUGIN_ROOT/tests/spike/fixtures/codex_jsonl_sample.json" "" 'agent: codex-reviewer'
 
+# Fixture 1d: fenced JSON WITHOUT trailing newline before closing backticks.
+# Real LLM outputs frequently omit the trailing newline. Regression anchor
+# for FENCED_JSON_RE's optional \n? before ```.
+cat > "$TMP/fenced-no-trailing-nl.jsonl" <<'EOF'
+{"type":"item.completed","item":{"type":"agent_message","text":"```json\n{\"findings\":[{\"file\":\"d.py\",\"line\":2,\"severity\":\"SUGGESTION\",\"confidence\":6,\"summary\":\"no trailing newline before fence close\",\"proposed_fix\":\"none\"}]}```"}}
+EOF
+check "fenced JSON (no trailing newline)" "$TMP/fenced-no-trailing-nl.jsonl" "" 'file: d.py'
+
 # Fixture 2: raw JSON inside nested item.completed (Stage 2 success — no fence)
 cat > "$TMP/raw.jsonl" <<'EOF'
 {"type":"item.completed","item":{"type":"agent_message","text":"{\"findings\":[{\"file\":\"b.py\",\"line\":5,\"severity\":\"IMPORTANT\",\"confidence\":7,\"summary\":\"null check missing\",\"proposed_fix\":\"add if b is None guard\"}]}"}}

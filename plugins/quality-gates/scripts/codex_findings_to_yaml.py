@@ -28,7 +28,7 @@ AUTH_ERROR_RE = re.compile(
     r"\b(authentication|auth\s+(failed|error)|invalid\s+(api[\s_]?key|token))\b",
     re.IGNORECASE,
 )
-FENCED_JSON_RE = re.compile(r"```json\s*\n(.*?)\n```", re.DOTALL)
+FENCED_JSON_RE = re.compile(r"```json\s*\n(.*?)\n?```", re.DOTALL)
 
 
 def extract_last_agent_message(stdin_text: str) -> tuple[str | None, bool]:
