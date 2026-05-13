@@ -50,19 +50,58 @@ v0.2.0에서 superseded LD는 frontmatter에 *무제한 보존* — count cutoff
 
 `reviewing-spec` skill에서 사용자가 "revise per review" 선택 시 호출됨.
 
+### Input contract (G6, AC5)
+
+Mode B는 다음 입력을 reviewing-spec skill로부터 받음:
+
+- `spec_path`: 수정할 spec.md 경로
+- `issues`: reviewer가 raise한 전체 issue 리스트
+- **`allowed_issue_ids`** (필수, 빈 리스트도 명시): 적용 허가받은 issue ID 리스트. 이 리스트에 *없는* issue ID의 변경은 *절대 적용 금지*.
+- (선택) `superseded_LD_ids`: re-consensus [3.5]에서 사용자가 (1) 수용한 LD ID 리스트. 해당 LD를 `superseded_by` 마커와 함께 유지하고 새 LD 추가.
+
+`allowed_issue_ids`가 빈 리스트인 경우: 어떤 issue도 적용하지 않음 (no-op return, state.local.md 변경 X).
+
 ### Steps
 
-1. **Read current spec.md** + reviewer's `Issues` list.
-2. **For each issue**, identify the target section (`#goals`, `#acceptance-criteria` 등) and apply targeted fix:
+1. **Read current spec.md** + `issues` 리스트 + `allowed_issue_ids` 입력 + (있다면) `superseded_LD_ids`.
+2. **Filter issues**: `issues` 중 `id in allowed_issue_ids` 만 추출. 나머지는 무시.
+3. **For each filtered issue**, identify the target section (`#goals`, `#acceptance-criteria` 등) and apply targeted fix:
    - `missing_section` → 섹션 추가.
    - `concrete_action_missing` → "Concrete Next Action" 섹션 채움.
    - `ambiguous_requirement` → 측정 가능 표현으로 재작성.
    - `unstated_assumption` → "Constraints" 또는 "Context" 섹션에 명시 추가.
    - `untestable_AC` → AC를 verification 명령 + 예상 결과 형태로 재작성.
    - `scope_creep` → Non-goals 섹션 강화 또는 Goals 분리.
-3. **Write file** with `Edit` tool (전체 rewrite 대신 targeted edit).
-4. **Update state.local.md**: `issue_history`에 resolved 마커 표시 (해당 `issue_id`의 `resolved: true`).
-5. **Re-dispatch reviewing-spec** for re-review.
+4. **Apply supersession markers** (만약 `superseded_LD_ids` 제공됨): spec.md frontmatter `locked_decisions:` 안에서 각 superseded LD에 `superseded_by: LD<new_id>` 추가, 새 LD entry에 `supersedes: LD<old_id>` 추가. NG6 — 무제한 보존, 둘 다 frontmatter에 남김.
+5. **Pre-write guard check**: 적용하려는 모든 변경이 `allowed_issue_ids` 안에 있는지 한 번 더 검증. 외부 issue 변경 시도가 감지되면 → 즉시 abort (다음 sub-section 참조).
+6. **Write file** with `Edit` tool (전체 rewrite 대신 targeted edit).
+7. **Update state.local.md**: `issue_history`에 resolved 마커 표시 (해당 `issue_id`의 `resolved: true`).
+8. **Re-dispatch reviewing-spec** for re-review.
+
+### Abort flow (issue `e5f208a0`, AC5)
+
+`allowed_issue_ids`에 없는 issue 적용이 감지되면 (Step 5 또는 Step 3 도중):
+
+1. spec.md edit 즉시 중단. 이미 적용된 partial edit이 있으면 `git restore <spec-path>` 실행 — Edit tool은 working tree를 직접 수정하므로 `git reset HEAD --`는 효과 없음, `git restore`로 working tree를 HEAD 상태로 복원.
+2. state.local.md에 다음 marker 기록:
+   ````yaml
+   mode_b_violation:
+     attempted_issue_id: <id>
+     allowed: [<allowed_issue_ids>]
+     timestamp: <ISO8601>
+   ````
+3. reviewing-spec [3.5] sub-step으로 제어 반환 (reviewing-spec이 `mode_b_violation` marker 감지).
+4. 사용자에게 advisory 표시:
+   > Mode B contract 위반 — `<id>`가 `allowed_issue_ids`에 없음. 재합의 round 누락 가능성. 옵션: (i) 해당 issue를 re-consensus에 추가 / (ii) Mode B 재dispatch (수동 issue 선택) / (iii) [5] Human Gate로 escalate.
+
+### In-flight state migration (C10)
+
+state.local.md 로드 시 v0.1.x schema (신규 필드 부재)면 *non-mutating read*로 자동 promote:
+- `issue_history[].dismissed_by_user` / `accepted_by_user` / `reconsensus_count` 부재 → `0`으로 in-memory default.
+- 다음 state write 시점에 frontmatter에 자연스럽게 추가.
+- backward-rewriting 금지 — 명시적 write 시점에만 frontmatter 갱신.
+- 사용자에게 advisory: `[spec-distill v0.2.0] state.local.md schema migration: <fields> added with defaults.`
+- corruption 시 → "v0.1.x in-flight state 호환 실패 — 세션 재시작 권장" + state.local.md 보존.
 
 ## "유추 금지" 원칙 (사용자 #3 반영)
 
