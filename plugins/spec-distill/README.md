@@ -25,7 +25,11 @@
                     ↓                        │
                 [3] Spec Reviewer ── verdict │
                     ├─ needs_interview → user confirm → [1]
-                    ├─ needs_revise ────→ [4]
+                    ├─ needs_revise (all unlocked) → [4]
+                    ├─ needs_revise (any locked) → [3.5] Re-consensus  ← v0.2.0
+                    │       ├─ (1) 수용 → [4] with allowed_issue_ids
+                    │       ├─ (2) 유지 → [3] re-dispatch (dismissed)
+                    │       └─ (3) 추가 인터뷰 → [1]
                     └─ approved ────────→ [5]
                 [4] Revise → [3] (auto re-review, max 3)
                 [5] Human Gate
@@ -51,6 +55,7 @@
 - **P12 (Trivia escape)** — `/interview` first-step rule (typo / 주석-only / formatting / 단일 rename / <10 토큰 + 단일 action).
 - **P14 (State preservation)** — `.claude/spec-distill/<session-id>/state.local.md` (실패/abort 시 보존).
 - **P17 (User sovereignty)** — `needs_interview` user confirm gate, [5] Human Review, all kill switches.
+- **P17 (User sovereignty) — locked_decisions 추적 + [3.5] Re-consensus gate** — 인터뷰 합의가 writer/reviewer 페어에 의해 사용자 동의 없이 뒤집히는 것을 frontmatter-level로 차단. (v0.2.0)
 - **P18 (Stagnation detection)** — issue `raised_count ≥ 3 unresolved` 시 P18 stagnation 명시 + forced [5] escalate.
 - **P21 (Secret 기록 금지)** — state.local.md token/key/credential placeholder 치환.
 - **P22 (Cost class)** — 모든 skill cost_class 선언 (medium/low/medium).
@@ -92,6 +97,7 @@
 - `DEVBREW_SKIP_HOOKS=spec-distill:SessionStart` — SessionStart hook만 skip.
 - `DEVBREW_RHYTHM_GUARD_THRESHOLD=N` — Dialectic Rhythm Guard threshold (default 3).
 - `DEVBREW_SPEC_DISTILL_TIMEOUT_MIN=N` — wall-clock budget (default 30 min).
+- `DEVBREW_SPEC_DISTILL_SKIP_RECONSENSUS=1` (v0.2.0) — [3.5] Re-consensus gate 우회. **loud warning**: locked decisions 보호 비활성화 — 사용자 sovereignty 약화 위험.
 
 ## Future Roadmap
 
