@@ -777,7 +777,7 @@ Output a structured report in this exact format. **All skipped agents must be li
 - If an agent returns no findings, that domain is clean — don't re-run it
 - `code-simplifier` suggestions NEVER block the pipeline
 - Always track which files you modify — the orchestrator needs this for the signal's `files_changed` attribute
-- If you changed code, your verdict MUST be `NEEDS_RESTART` (not `PASS`) — the Stop hook halts the pipeline with a user-choice prompt so the user can re-run `/qg` after applying fixes. The pipeline does NOT auto-restart from Gate 1
+- If you changed code, your verdict MUST be `NEEDS_RESTART` (not `PASS`) — the Stop hook halts the pipeline with a user-choice prompt so the user can re-run `/qg` after applying fixes. The pipeline does NOT auto-restart; Gate 1 does not re-run automatically
 - Path A (`plan_path_source == "explicit"`) preserves the original `superpowers:code-reviewer` dispatch behavior — do not gate it on diff size
 - Delete `.claude/quality-gates/<session-id>/diff-cache.txt` on every Gate 2 exit path (including errors)
 
@@ -1132,7 +1132,7 @@ Based on choice:
 
 ### GATE3_FAIL
 
-Gate 3 failed. The pipeline is forward-only and does not auto-restart from Gate 1; the user applies fixes and re-runs `/qg`. Present:
+Gate 3 failed. The pipeline is forward-only and does not auto-restart; Gate 1 does not re-run automatically. The user applies fixes and re-runs `/qg`. Present:
 1. **Fix and re-run /qg** — apply fixes; pipeline terminates so the user can re-run /qg manually
 2. **Skip** runtime verification
 3. **Abort** pipeline
@@ -1203,7 +1203,7 @@ Verdict values:
 - `PASS` — Gate succeeded, no issues
 - `FAIL` — Gate failed, issues remain
 - `SKIP` — Gate skipped (no plan file, non-web project, etc.)
-- `NEEDS_RESTART` — Code was changed during fixes. Pipeline halts with a Stop-hook user-choice prompt; the user applies fixes and re-runs `/qg`. The pipeline does **not** auto-restart from Gate 1 (forward-only state machine, v1.5.0+).
+- `NEEDS_RESTART` — Code was changed during fixes. Pipeline halts with a Stop-hook user-choice prompt; the user applies fixes and re-runs `/qg`. The pipeline does **not** auto-restart (forward-only state machine, v1.5.0+; Gate 1 does not re-run automatically).
 - `PASS_WITH_WARNINGS` — Gate passed with non-blocking warnings
 - `RETRY` — Gate needs to re-run (Gate 1 implemented missing items)
 
