@@ -34,8 +34,6 @@ pr_url: ""                     # PR URL or empty
 available_plugins: "pr-review-toolkit,feature-dev,superpowers"
 session_id: "<session_id>"     # For session isolation
 started_at: "<ISO timestamp>"  # Pipeline start time
-# total_iterations / max_total_iterations: deprecated in v1.5.0 (cross-gate
-# restart removed). Tolerated on read for back-compat; never written.
 ---
 
 # Quality Gates Pipeline State
