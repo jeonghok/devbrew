@@ -89,6 +89,7 @@ spec-distill 플러그인의 spec-reviewer agent가 인터뷰 단계에서 사�
 - **NG3**: 새로운 agent 추가 없음 — spec-reviewer agent의 *출력 형식 확장*만 (frontmatter scoping은 유지).
 - **NG4**: numerical scoring 도입 없음 — locked_decisions는 boolean (locked or not) 차원, 점수 X (philosophy §5.3 준수).
 - **NG5**: 자동 reviewer persona 학습 없음 — `dismissed_by_user >= 3` 시 *사용자에게* "reviewer persona 점검 필요" 알림만 (Law 3 trigger), 자동 persona 편집 X.
+- **NG6** *(OQ6 격상 — issue `d3f1b70c` 해결)*: v0.2.0에서 superseded LD frontmatter archive cutoff 정책 *없음*. drafting-spec Mode B는 superseded LD를 *무제한 frontmatter에 보존* (`superseded_by` + `supersedes` 마커 모두 유지, count 제한 X). frontmatter 비대화에 대한 archive 정책은 v0.3.0+로 deferred — 이 spec의 범위 밖.
 
 ## Constraints
 
@@ -100,7 +101,13 @@ spec-distill 플러그인의 spec-reviewer agent가 인터뷰 단계에서 사�
 - **C6**: P21 (secret 기록 금지) — locked_decisions의 `summary` 필드는 token/key/credential 패턴 placeholder 치환.
 - **C7**: README "Principles Instantiated"에 P17 instantiation 한 줄 추가 (Law 3 compounding substrate).
 - **C8** *(frontmatter source 허용값)*: spec.md frontmatter `locked_decisions[].source` 필드 허용값은 `interview-round-<N>` (정상 운영 경로) 또는 `brainstorming-round-<N>` (본 design spec과 같은 meta-spec dogfooding 경로) 중 하나. drafting-spec Mode A는 *interview-round-N* 형식만 생성하고 brainstorming-round 형식은 수동 작성에 한정.
-- **C9** *(fixture 순서 의존성)*: Verification Plan의 fixture-기반 검증 (V3, V5, V8)은 fixture 파일이 *Files to Modify* 항목으로 신규 생성된 이후에만 실행 가능. 실행 순서: (1) state schema migration → (2) fixture 파일 생성 → (3) reviewer/Mode B 코드 변경 → (4) Verification Plan 실행.
+- **C9** *(fixture 순서 의존성 — implementation-blocking, issue `c9f1a3b2` 해결)*: Verification Plan의 fixture-기반 검증은 fixture 파일 *존재 검증을 사전 게이트로 실행*해야 한다. 실행 순서: (1) state schema migration → (2) fixture 파일 생성 → (3) reviewer/Mode B 코드 변경 → (4) Verification Plan 실행. **위반 시 enforcement**: V0 pre-gate (V1 직전 실행)이 `test -d plugins/spec-distill/tests/fixtures && ls plugins/spec-distill/tests/fixtures/*.md | wc -l` ≥ 8 검증 + 9개 명시 fixture 파일명 각각 `test -f` 검증. 미충족 시 Verification Plan 전체 abort (exit 1). 또한 모든 V command의 grep은 `set -e -o pipefail` 환경에서 실행하여 `grep -q` 부재 파일에 대해 silent pass 차단.
+- **C10** *(in-flight state migration — issue `a8e2d194` 해결)*: v0.1.x에서 진행 중인 세션의 state.local.md (신규 필드 부재) 처리 명세. reviewing-spec / drafting-spec / conducting-interview SKILL.md가 state.local.md 로드 시 *missing field*를 발견하면 다음 규칙 적용:
+  - `pending_locked_decisions` 부재 → `[]`로 자동 promote (다음 state write 시 frontmatter에 명시).
+  - `issue_history[].dismissed_by_user` / `accepted_by_user` / `reconsensus_count` 부재 → 각각 `0`으로 자동 promote.
+  - `reconsensus_accepted_ids` 부재 → `[]`로 자동 promote.
+  - 자동 promote는 *non-mutating read* (in-memory default) — 다음 state write 시점에 frontmatter에 자연스럽게 추가. 사용자에게 한 줄 advisory 출력 ("state.local.md schema migration: <fields> added with defaults"). state.local.md를 *backward-rewriting*하지 않음.
+  - 자동 promote 실패 시 (예: 파일 corruption) → 사용자에게 "v0.1.x in-flight state 호환 실패 — 세션 재시작 권장" 알림 + state.local.md 보존 (P14).
 
 ## Acceptance Criteria
 
@@ -111,11 +118,12 @@ spec-distill 플러그인의 spec-reviewer agent가 인터뷰 단계에서 사�
   - 검증 명령: `bash plugins/spec-distill/tests/run-fixture-ac1.sh` — 이 스크립트는 `drafting-spec` Mode A를 fixture transcript에 dispatch하고, 결과 spec.md frontmatter를 `yq` 또는 `python3 -c "import yaml..."`로 파싱하여 `len(locked_decisions) == 3 AND all(LD.source.startswith('interview-round'))` assert.
   - SKILL.md 자체 검증: `grep -q "Locked 판정 트리거" plugins/spec-distill/skills/conducting-interview/SKILL.md`.
   - (issue `c3ad4bdf` 해결.)
-- **AC2** (reviewer 출력 형식): `spec-reviewer.md` agent definition의 "Output 형식" 섹션에 `affects_locked_decisions:` 필드가 명시되고, agent가 fixture spec.md에 dispatch될 때 모든 issue 라인 다음에 indented 필드로 emit. **Verification (definition-grep + fixture-based)**:
+- **AC2** (reviewer 출력 형식): `spec-reviewer.md` agent definition의 "Output 형식" 섹션에 `affects_locked_decisions:` 필드가 명시되고, agent definition + contract fixture가 일관된 schema를 정의. **Verification (definition-grep only — issue `f4a7c021` 해결, manual replay 의존성 제거)**:
   - Agent definition grep: `grep -q "affects_locked_decisions" plugins/spec-distill/agents/spec-reviewer.md`.
-  - 신규 fixture `plugins/spec-distill/tests/fixtures/reviewer-output-mixed.md` — reviewer가 fixture spec에 대해 produce할 *예상* 출력 (LD1, LD2 포함 spec에 대해 mixed issues). 이 fixture는 실제 reviewer dispatch 없이 *contract 명세*로 사용 (LLM 출력은 deterministic하지 않으므로). reviewer 변경 후 fixture를 manual replay 1회 수행하여 형식 일치 확인 — 실패 시 agent definition을 수정하지 fixture를 수정하지 않음.
-  - Contract 명세 grep: `grep -cE '^[[:space:]]*affects_locked_decisions:' plugins/spec-distill/tests/fixtures/reviewer-output-mixed.md` ≥ issue 라인 수.
-  - (issue `8078f608` 해결.)
+  - Output 형식 코드 블록 검증: `awk '/^## Output 형식/,/^## /' plugins/spec-distill/agents/spec-reviewer.md | grep -qE '^[[:space:]]*affects_locked_decisions:.*\[.*\]'` (필드가 markdown code block 안에 list-bracket 형태로 명시).
+  - Contract fixture `plugins/spec-distill/tests/fixtures/reviewer-output-mixed.md`는 *expected schema 예시*로만 사용 (실제 LLM replay 검증 X — LLM 출력 비결정성 수용). fixture grep: `grep -cE '^[[:space:]]*affects_locked_decisions:' plugins/spec-distill/tests/fixtures/reviewer-output-mixed.md` ≥ 2 (mixed locked + unlocked 두 sample issue 모두 필드 포함).
+  - **Pass 기준**: 위 3개 grep 모두 exit 0. LLM replay는 *runtime 검증*이지 AC2 검증 항목 아님 (AC2는 contract definition 검증).
+  - (issue `8078f608`, `f4a7c021` 해결.)
 - **AC3** (routing): `reviewing-spec` SKILL.md의 Deterministic Routing Table에 `affects_locked` column이 추가되고, "all-empty → [4]" 및 "any non-empty → [3.5]" 분기 행이 명시. **Verification (SKILL.md-grep + manual trace)**:
   - SKILL.md grep: `grep -cE '^\| .* affects_locked' plugins/spec-distill/skills/reviewing-spec/SKILL.md` ≥ 4 (헤더 + 분기 row 3개 이상).
   - Fixture trace: `plugins/spec-distill/tests/fixtures/routing-trace-cases.md`에 5개 case (all-empty / mixed-locked / stagnation / count>=3 / dismissed) 각각의 routing 결과를 expected하게 기재. SKILL.md routing table을 case별로 매핑하여 manual review.
@@ -124,10 +132,20 @@ spec-distill 플러그인의 spec-reviewer agent가 인터뷰 단계에서 사�
   - `grep -A 20 "## \[3.5\] Re-consensus" plugins/spec-distill/skills/reviewing-spec/SKILL.md | grep -cE "^[[:space:]]*[-*][[:space:]].+→"` == 3 (옵션 3개 + arrow notation).
   - 직접 호출 검증: SKILL.md에 `AskUserQuestion` 호출 코드 블록이 포함되고 그 안의 `options:` 리스트가 3개 항목임을 확인 (`yq` 또는 정규식 grep).
   - (issue `8078f608` 해결.)
-- **AC5** (Mode B guard + 전달 메커니즘): `reviewing-spec` SKILL.md의 [3.5] sub-step이 사용자 "수용" 응답을 state.local.md `reconsensus_accepted_ids:` 리스트에 기록하고, Mode B dispatch 시 이 리스트를 `allowed_issue_ids` 파라미터로 전달함을 명시. `drafting-spec` Mode B SKILL.md는 입력에 `allowed_issue_ids`가 있으면 이 리스트에 *없는* issue_id의 변경을 *적용하지 않음*을 명시 + 위반 시 abort. **Verification (SKILL.md-grep + fixture)**:
+- **AC5** (Mode B guard + 전달 메커니즘 + abort flow): `reviewing-spec` SKILL.md의 [3.5] sub-step이 사용자 "수용" 응답을 state.local.md `reconsensus_accepted_ids:` 리스트에 기록하고, Mode B dispatch 시 이 리스트를 `allowed_issue_ids` 파라미터로 전달함을 명시. `drafting-spec` Mode B SKILL.md는 입력에 `allowed_issue_ids`가 있으면 이 리스트에 *없는* issue_id의 변경을 *적용하지 않음*을 명시. **Abort flow (issue `e5f208a0` 해결)**: Mode B가 reviewer issues 중 `allowed_issue_ids`에 없는 issue_id 적용을 *시도*할 경우:
+  1. spec.md edit 즉시 중단 (이미 적용된 partial edit 있으면 git reset HEAD --),
+  2. state.local.md에 `mode_b_violation: { attempted_issue_id: <id>, allowed: [...] }` 마커 기록,
+  3. reviewing-spec [3.5] sub-step으로 제어 반환 (reviewing-spec이 violation marker 감지),
+  4. 사용자에게 advisory 표시 ("Mode B contract 위반 — `<id>` 가 `allowed_issue_ids`에 없음. 재합의 round 누락 가능성. 옵션: (i) 해당 issue를 re-consensus에 추가 / (ii) Mode B 재dispatch (수동 issue 선택) / (iii) [5] Human Gate로 escalate").
+  
+  **Verification (SKILL.md-grep + fixture)**:
   - 전달 메커니즘 grep: `grep -q "reconsensus_accepted_ids" plugins/spec-distill/skills/reviewing-spec/SKILL.md` && `grep -q "allowed_issue_ids" plugins/spec-distill/skills/drafting-spec/SKILL.md`.
-  - Fixture `plugins/spec-distill/tests/fixtures/mode-b-guard-case.md`: 입력 spec.md + `allowed_issue_ids: [I1]` + reviewer issues `[I1, I2]` → expected diff (I1만 적용). Manual replay 1회로 contract 동작 확인.
-  - (issue `40f517cf`, `8078f608` 해결.)
+  - Abort flow grep: `grep -q "mode_b_violation" plugins/spec-distill/skills/drafting-spec/SKILL.md` && `grep -q "mode_b_violation" plugins/spec-distill/skills/reviewing-spec/SKILL.md`.
+  - Fixture `plugins/spec-distill/tests/fixtures/mode-b-guard-case.md`: **두 시나리오** 포함:
+    - *정상 케이스*: 입력 spec.md + `allowed_issue_ids: [I1]` + reviewer issues `[I1, I2]` → expected diff (I1만 적용, I2 unchanged).
+    - *abort 케이스*: 입력 spec.md + `allowed_issue_ids: [I1]` + Mode B가 I2 적용 시도 → expected outcome (spec.md unchanged, state.local.md에 `mode_b_violation` 마커, reviewing-spec [3.5] re-entry).
+  - fixture를 contract 명세로 사용 (manual replay 의존성 없음, 형식 grep만 요구): `grep -q "mode_b_violation" plugins/spec-distill/tests/fixtures/mode-b-guard-case.md`.
+  - (issue `40f517cf`, `8078f608`, `f4a7c021`, `e5f208a0` 해결.)
 - **AC6** (stagnation 분리 + state schema): state.local.md issue_history 각 항목에 `dismissed_by_user: 0`, `accepted_by_user: 0` 카운터 신규 필드 추가. stagnation 판정 로직이 `raised_count >= 3 AND dismissed_by_user == 0` 조건으로 변경. **Verification (SKILL.md-grep + fixture trace)**:
   - State schema grep: `grep -q "dismissed_by_user" plugins/spec-distill/skills/conducting-interview/SKILL.md` && `grep -q "dismissed_by_user" plugins/spec-distill/skills/reviewing-spec/SKILL.md`.
   - Fixture `plugins/spec-distill/tests/fixtures/stagnation-cases.md`: 3 case (raised=3 dismissed=0 / raised=3 dismissed=1 / raised=3 dismissed=3) → expected outcome (stagnation / no-stagnation / reviewer-persona-warn). reviewing-spec SKILL.md routing 조건과 manual 매핑.
@@ -140,19 +158,31 @@ spec-distill 플러그인의 spec-reviewer agent가 인터뷰 단계에서 사�
   - SKILL.md grep: `grep -q "DEVBREW_SPEC_DISTILL_SKIP_RECONSENSUS" plugins/spec-distill/skills/reviewing-spec/SKILL.md`.
   - README grep: `grep -q "DEVBREW_SPEC_DISTILL_SKIP_RECONSENSUS" plugins/spec-distill/README.md` (Kill switches 섹션).
   - Warning 메시지 명시: SKILL.md에 "locked decisions 보호 비활성화됨 — 사용자 sovereignty 약화 위험" 문구 포함.
-- **AC9** (re-consensus 무한 루프 방지): state.local.md issue_history 각 항목에 `reconsensus_count: 0` 카운터. `reconsensus_count[issue_id] >= 2` 시 [5] forced escalate. **Verification (SKILL.md-grep + fixture)**:
+- **AC9** (re-consensus 무한 루프 방지 + escalate priority — issue `7b6c9a1d` 해결): state.local.md issue_history 각 항목에 `reconsensus_count: 0` 카운터. **Escalate priority table** (reviewing-spec SKILL.md에 명시 + 다음 순서로 평가):
+  
+  | 우선순위 | 조건 | scope | 동작 |
+  |---|---|---|---|
+  | P1 (highest) | C3: 한 round에 locked-affecting issue ≥ 4 | spec 전체 | [5] forced escalate, *전체 spec* 인간 검토. issue_history 변경 X. |
+  | P2 | AC9: 특정 issue_id의 `reconsensus_count >= 2` | per-issue | 해당 issue 만 [5] forced escalate, *나머지 issue는 [4] Revise로 계속*. issue_history에 `escalated: true` 마커. |
+  | P3 | AC6: P18 stagnation (`raised_count >= 3 AND dismissed_by_user == 0`) | per-issue | 해당 issue 만 [5] forced escalate. |
+  | P4 (lowest) | AC6 보강: `dismissed_by_user >= 3` | per-issue + persona warn | 해당 issue [5] escalate + reviewer persona 점검 advisory. |
+  
+  두 조건이 동시 충족 시 P1 우선 (global이 per-issue 우선). 같은 우선순위 내 동시 충족 시 모든 해당 issue를 묶어서 한 번에 [5] escalate.
+  
+  **Verification (SKILL.md-grep)**:
   - State schema grep: `grep -q "reconsensus_count" plugins/spec-distill/skills/reviewing-spec/SKILL.md`.
-  - Routing 조건 grep: `grep -qE "reconsensus_count.*>=.*2" plugins/spec-distill/skills/reviewing-spec/SKILL.md`.
-  - Fixture `plugins/spec-distill/tests/fixtures/reconsensus-loop-case.md`: issue_history에 `reconsensus_count: 2` 시뮬레이션 → expected [5] 직행.
+  - Priority table grep: `grep -cE '^\| P[1-4]' plugins/spec-distill/skills/reviewing-spec/SKILL.md` ≥ 4.
+  - 우선순위 명시 grep: `grep -q "P1.*우선\|global.*우선\|per-issue.*가 아닌" plugins/spec-distill/skills/reviewing-spec/SKILL.md`.
+  - Fixture `plugins/spec-distill/tests/fixtures/reconsensus-loop-case.md`: 두 시나리오 — (a) issue_history에 `reconsensus_count: 2` 시뮬레이션 → expected per-issue [5] 직행 (P2 path), (b) locked-affecting issue 5개 시뮬레이션 → expected spec 전체 [5] (P1 path).
 - **AC10** (plugin.json bump): v0.1.2 → v0.2.0. CHANGELOG.md 생성 (`## [0.2.0] — YYYY-MM-DD` with Added/Changed). **Verification (exec)**: `jq -e '.version == "0.2.0"' plugins/spec-distill/.claude-plugin/plugin.json` && `test -f plugins/spec-distill/CHANGELOG.md` && `grep -q "## \[0.2.0\]" plugins/spec-distill/CHANGELOG.md`.
 
 ## Files to Modify
 
 ### 핵심 변경
 
-- `plugins/spec-distill/skills/reviewing-spec/SKILL.md` — routing table에 `affects_locked` column 추가, [3.5] Re-consensus sub-step 섹션 추가 (`AskUserQuestion` 호출 명세 + 3-옵션 + state.local.md `reconsensus_accepted_ids:` 기록 + Mode B로 `allowed_issue_ids` 전달), kill switch 항목 추가, stagnation 조건 변경 (`raised_count >= 3 AND dismissed_by_user == 0`), `reconsensus_count` 카운터 + AC9 routing 추가.
-- `plugins/spec-distill/skills/drafting-spec/SKILL.md` — Mode A에 locked_decisions frontmatter 생성 로직 추가 (state.local.md `pending_locked_decisions` 읽어 변환); Mode B에 `allowed_issue_ids` 입력 contract 추가 (입력 리스트에 없는 issue_id는 적용 금지, 위반 시 abort + reviewing-spec에 escalate).
-- `plugins/spec-distill/skills/conducting-interview/SKILL.md` — state.local.md 신규 필드 (`pending_locked_decisions: []`, `issue_history[].dismissed_by_user`, `issue_history[].accepted_by_user`, `issue_history[].reconsensus_count`); G1 decision table을 "Locked 판정 트리거" 섹션으로 복제; (b)/(d) path에서 사용자 명시 응답을 `pending_locked_decisions`에 append 명시 (보류/추가 정보 요청은 Open Questions로).
+- `plugins/spec-distill/skills/reviewing-spec/SKILL.md` — routing table에 `affects_locked` column 추가, [3.5] Re-consensus sub-step 섹션 추가 (`AskUserQuestion` 호출 명세 + 3-옵션 + state.local.md `reconsensus_accepted_ids:` 기록 + Mode B로 `allowed_issue_ids` 전달), kill switch 항목 추가, stagnation 조건 변경 (`raised_count >= 3 AND dismissed_by_user == 0`), `reconsensus_count` 카운터 + **AC9 escalate priority table (P1–P4)** 추가, **`mode_b_violation` marker 감지 → [3.5] re-entry 로직** 추가, **in-flight state migration**: load 시 missing field 자동 promote + advisory 출력.
+- `plugins/spec-distill/skills/drafting-spec/SKILL.md` — Mode A에 locked_decisions frontmatter 생성 로직 추가 (state.local.md `pending_locked_decisions` 읽어 변환); Mode A에 **superseded LD 무제한 보존** 정책 명시 (NG6 — count cutoff 없음, archive는 v0.3.0+); Mode B에 `allowed_issue_ids` 입력 contract 추가 + **abort flow** (위반 시: edit 중단 → git reset → state.local.md에 `mode_b_violation` 기록 → reviewing-spec [3.5] 복귀); Mode B에 **in-flight state migration** 동일 적용.
+- `plugins/spec-distill/skills/conducting-interview/SKILL.md` — state.local.md 신규 필드 (`pending_locked_decisions: []`, `issue_history[].dismissed_by_user`, `issue_history[].accepted_by_user`, `issue_history[].reconsensus_count`); G1 decision table을 "Locked 판정 트리거" 섹션으로 복제; (b)/(d) path에서 사용자 명시 응답을 `pending_locked_decisions`에 append 명시 (보류/추가 정보 요청은 Open Questions로); **in-flight state migration** 동일 적용 (load 시 missing field 자동 promote).
 - `plugins/spec-distill/agents/spec-reviewer.md` — Input 섹션에 "spec.md frontmatter의 `locked_decisions:` 리스트 (Read tool로 추출)" 추가; "Output 형식"에 `affects_locked_decisions: [LD ids]` 필드 명시 (모든 issue 라인 다음 indented 줄); "What to check"에 LD 매핑 가이드 (issue의 `target_section`과 LD `section` deterministic 매칭, message 내용과 `summary` 의미 매칭) 추가.
 - `plugins/spec-distill/templates/spec-template.md` — frontmatter에 `locked_decisions:` 필드 (빈 리스트 기본값) + `source` 필드 허용값 주석 추가.
 
@@ -168,20 +198,34 @@ spec-distill 플러그인의 spec-reviewer agent가 인터뷰 단계에서 사�
 - `plugins/spec-distill/tests/fixtures/locked-decisions-spec.md` — LD1/LD2 포함 spec.md 샘플 (AC2, AC5에서 input으로 사용).
 - `plugins/spec-distill/tests/fixtures/reviewer-output-mixed.md` — AC2 contract 명세. reviewer expected output 형식 (mixed locked + unlocked).
 - `plugins/spec-distill/tests/fixtures/routing-trace-cases.md` — AC3, AC7 검증. 5개 routing case 매핑.
-- `plugins/spec-distill/tests/fixtures/mode-b-guard-case.md` — AC5 검증. `allowed_issue_ids` 입력 + 위반 시나리오 expected diff.
+- `plugins/spec-distill/tests/fixtures/mode-b-guard-case.md` — AC5 검증. 두 시나리오: (a) 정상 (`allowed_issue_ids: [I1]` + issues `[I1, I2]` → I1만 적용), (b) abort (Mode B가 I2 시도 → mode_b_violation marker + [3.5] re-entry).
 - `plugins/spec-distill/tests/fixtures/stagnation-cases.md` — AC6 검증. 3개 stagnation case.
 - `plugins/spec-distill/tests/fixtures/v0.1.x-spec-no-locked.md` — AC7 검증. 하위 호환.
-- `plugins/spec-distill/tests/fixtures/reconsensus-loop-case.md` — AC9 검증. 무한 루프 cap.
+- `plugins/spec-distill/tests/fixtures/reconsensus-loop-case.md` — AC9 검증. 두 시나리오: (a) per-issue (issue_history에 `reconsensus_count: 2` → 해당 issue [5] escalate, 나머지 continue), (b) global (locked-affecting issue 5개 → spec 전체 [5]).
 - `plugins/spec-distill/tests/run-fixture-ac1.sh` — AC1 검증 실행 스크립트 (Mode A dispatch + yaml parse + assert).
 
 ## Verification Plan
 
-**실행 순서 의존성 (C9)**: Verification 실행 전 사전 조건:
-1. State schema migration 적용 (conducting-interview SKILL.md + reviewing-spec SKILL.md 변경).
-2. Fixture 파일 생성 (Files to Modify의 9개 fixture).
-3. Skill/agent definition 파일 변경 (reviewer/Mode A/Mode B/routing).
-4. 위 3 단계 완료 후 V1–V12 실행.
+**실행 순서 의존성 (C9 — implementation-blocking)**: Verification 실행 전 사전 조건:
+1. State schema migration 적용 (conducting-interview SKILL.md + reviewing-spec SKILL.md + drafting-spec SKILL.md 변경).
+2. Fixture 파일 생성 (Files to Modify의 9개 fixture + run-fixture-ac1.sh).
+3. Skill/agent definition 파일 변경 (reviewer/Mode A/Mode B/routing/abort flow).
+4. **V0 pre-gate 실행** (아래) — 실패 시 V1–V12 abort.
 
+**모든 V command는 `set -e -o pipefail` 환경에서 실행** — `grep -q` 없는 파일에 대한 silent pass 차단 (C9 enforcement).
+
+- **V0** (pre-gate, fixture 존재 검증): 
+  ```bash
+  set -e -o pipefail
+  test -d plugins/spec-distill/tests/fixtures
+  for f in interview-transcript-bbda.md locked-decisions-spec.md reviewer-output-mixed.md \
+           routing-trace-cases.md mode-b-guard-case.md stagnation-cases.md \
+           v0.1.x-spec-no-locked.md reconsensus-loop-case.md; do
+    test -f "plugins/spec-distill/tests/fixtures/$f"
+  done
+  test -x plugins/spec-distill/tests/run-fixture-ac1.sh
+  ```
+  V0 실패 시 *전체 Verification Plan abort* — fixture 부재 상태에서 V1–V12를 실행하면 false-pass 위험 (issue `c9f1a3b2` 해결).
 - **V1** (lint): `jq empty plugins/spec-distill/.claude-plugin/plugin.json && jq -e '.version == "0.2.0"' plugins/spec-distill/.claude-plugin/plugin.json`.
 - **V2** (template schema): `python3 -c "import yaml; d=yaml.safe_load(open('plugins/spec-distill/templates/spec-template.md').read().split('---')[1]); assert 'locked_decisions' in d"`.
 - **V3** (reviewer agent contract): `grep -q "affects_locked_decisions" plugins/spec-distill/agents/spec-reviewer.md` && `grep -cE '^[[:space:]]*affects_locked_decisions:' plugins/spec-distill/tests/fixtures/reviewer-output-mixed.md` ≥ 2.
@@ -212,7 +256,7 @@ spec-distill 플러그인의 spec-reviewer agent가 인터뷰 단계에서 사�
 - **OQ3** *(확정됨 → C3로 격상)*: AskUserQuestion 최대 3개 LD 묶음, 4개 이상이면 [5] forced escalate.
 - **OQ4**: `dismissed_by_user` / `accepted_by_user` / `reconsensus_count` 카운터가 *세션 간*에 persistent한가? **잠정**: 세션 한정 (현재 spec-distill state 모델 유지, state.local.md는 세션 한정). cross-session learning은 별도 spec (v0.3.0+).
 - **OQ5** *(확정됨)*: kill switch는 README "Kill switches" 섹션에 loud warning과 함께 명시 (AC8 verification 참조).
-- **OQ6** *(신규)*: superseded LD가 spec.md frontmatter에 남는가, 제거되는가? **잠정**: 남김 (Law 3 compounding — 변경 이력 박제). 필드: `old LD`에 `superseded_by: LD_new`, `new LD`에 `supersedes: LD_old`. drafting-spec Mode B가 두 마커를 모두 기록. plan 단계에서 frontmatter 비대화 방지 위해 cutoff 정책 (예: 3 supersession 이후 archive) 검토 필요.
+- **OQ6** *(NG6로 격상 — issue `d3f1b70c` 해결, 더 이상 OQ 아님)*: superseded LD 보존 정책은 NG6 참조 (v0.2.0에서 무제한 보존, archive cutoff는 v0.3.0+).
 
 ## Concrete Next Action
 
