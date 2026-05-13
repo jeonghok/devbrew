@@ -798,6 +798,20 @@ def _disabled() -> bool:
     return "quality-gates:stop-hook" in tokens
 
 
+def emit_continuation(prompt, sys_msg):
+    """Emit a Stop-hook 'block' decision and exit(0).
+
+    Centralizes the print(json.dumps({...})) + sys.exit(0) boilerplate
+    that the main() transition handlers all share.
+    """
+    print(json.dumps({
+        "decision": "block",
+        "reason": prompt,
+        "systemMessage": sys_msg,
+    }))
+    sys.exit(0)
+
+
 def main():
     if _disabled():
         sys.exit(0)
@@ -886,91 +900,59 @@ def main():
             }))
             sys.exit(0)
 
-    # 9. Handle completion/abort — remove session folder entirely and allow exit
+    # 9. Handle completion/abort — remove session folder entirely and allow exit.
     if transition["type"] in ("complete", "abort"):
         folder = os.path.dirname(state_file)
         shutil.rmtree(folder, ignore_errors=True)
         sys.exit(0)
 
-    # 10. Handle user-choice prompts (gate2_user_choice, max_gate2_exceeded,
-    #     gate3_fail, gate3_needs_resolution, gate3_repeat_detected).
-    #     These block and present options; the pipeline resumes only after
-    #     the user emits a new signal.
-    if transition["type"] in ("gate2_user_choice", "max_gate2_exceeded",
-                              "gate3_fail", "gate3_needs_resolution",
-                              "gate3_repeat_detected"):
-        prompt_key = transition.get("prompt_key")
-        prompt = build_special_prompt(transition["type"], state, gate_results,
-                                      prompt_key=prompt_key)
-        sys_msg = build_system_message(state, transition)
-        print(json.dumps({
-            "decision": "block",
-            "reason": prompt,
-            "systemMessage": sys_msg,
-        }))
-        sys.exit(0)
+    # 10. Resolve prompt + sys_msg for every remaining transition shape, then
+    #     hand off to emit_continuation. Cases share the same trailer
+    #     (block decision + system message), differing only in how the next
+    #     prompt is constructed.
+    USER_CHOICE_TYPES = {
+        "gate2_user_choice", "max_gate2_exceeded", "gate3_fail",
+        "gate3_needs_resolution", "gate3_repeat_detected",
+    }
 
-    # 11. Handle extend — re-inject current gate prompt.
-    # update_state_file makes no state change on extend (the prior
-    # capacity-extension increment was a silent no-op since v1.5.0 — the
-    # corresponding field was never in the replacements dict). The
-    # re-read of state below picks up any unrelated changes on disk.
-    if transition["type"] == "extend":
-        current_gate = state["current_gate"]
-        updated_state, updated_body = parse_state_file(state_file)
-        if updated_state:
-            updated_results = extract_gate_results(updated_body)
-            prompt = build_gate_prompt(current_gate, updated_state, updated_results)
-            sys_msg = build_system_message(updated_state, {"type": "retry_gate"})
-            print(json.dumps({
-                "decision": "block",
-                "reason": prompt,
-                "systemMessage": sys_msg,
-            }))
-        sys.exit(0)
-
-    # 12. Handle scout-fallback (continue) — informational; re-inject current gate
-    if transition["type"] == "continue":
-        current_gate = state["current_gate"]
-        prompt = build_gate_prompt(current_gate, state, gate_results)
-        sys_msg = build_system_message(state, {"type": "retry_gate"})
-        print(json.dumps({
-            "decision": "block",
-            "reason": prompt,
-            "systemMessage": sys_msg,
-        }))
-        sys.exit(0)
-
-    # 13. Build next gate prompt
-    if transition["type"] == "next_gate":
-        next_gate = transition["next_gate"]
-        # Re-read state file to get updated gate results
-        updated_state, updated_body = parse_state_file(state_file)
-        if updated_state:
-            updated_results = extract_gate_results(updated_body)
-            prompt = build_gate_prompt(next_gate, updated_state, updated_results)
+    if transition["type"] in USER_CHOICE_TYPES:
+        prompt = build_special_prompt(
+            transition["type"], state, gate_results,
+            prompt_key=transition.get("prompt_key"),
+        )
+    elif transition["type"] == "next_gate":
+        next_state, next_body = parse_state_file(state_file)
+        if next_state:
+            prompt = build_gate_prompt(transition["next_gate"], next_state,
+                                       extract_gate_results(next_body))
         else:
-            prompt = build_gate_prompt(next_gate, state, gate_results)
+            prompt = build_gate_prompt(transition["next_gate"], state, gate_results)
     elif transition["type"] == "retry_gate":
         retry_gate = transition.get("gate", state["current_gate"])
-        updated_state, updated_body = parse_state_file(state_file)
-        if updated_state:
-            updated_results = extract_gate_results(updated_body)
-            prompt = build_gate_prompt(retry_gate, updated_state, updated_results)
+        next_state, next_body = parse_state_file(state_file)
+        if next_state:
+            prompt = build_gate_prompt(retry_gate, next_state,
+                                       extract_gate_results(next_body))
         else:
             prompt = build_gate_prompt(retry_gate, state, gate_results)
+    elif transition["type"] in ("continue", "extend"):
+        # Scout fallback or capacity extension — re-inject the current gate
+        # prompt. (extend is kept reachable for forward-compat even though
+        # update_state_file makes no state change for it; see the trailing
+        # comment in update_state_file for context.)
+        next_state, next_body = (parse_state_file(state_file)
+                                 if transition["type"] == "extend"
+                                 else (None, None))
+        the_state = next_state or state
+        the_results = (extract_gate_results(next_body) if next_body
+                       else gate_results)
+        prompt = build_gate_prompt(the_state["current_gate"], the_state, the_results)
     else:
-        # Fallback: re-inject current gate
+        # Defensive fallback: unknown transition — re-inject current gate.
         prompt = build_gate_prompt(state["current_gate"], state, gate_results)
 
     sys_msg = build_system_message(state, transition)
-
-    print(json.dumps({
-        "decision": "block",
-        "reason": prompt,
-        "systemMessage": sys_msg,
-    }))
-    sys.exit(0)
+    emit_continuation(prompt, sys_msg)
 
 
 if __name__ == "__main__":
