@@ -587,18 +587,17 @@ def build_gate_prompt(gate_num, state, gate_results):
     return "".join(prompt_parts)
 
 
-def build_special_prompt(transition_type, state, gate_results, prompt_key=None):
-    """Build prompts for special situations (user choices, gate failures).
-
-    transition_type: the transition["type"] value.
-    prompt_key: optional sub-key for gate2_user_choice (gate2_needs_restart,
-                gate2_repeat_detected).
-    """
-    if transition_type == "max_gate2_exceeded":
-        return (
-            "GATE2_MAX_EXCEEDED\n\n"
-            f"Gate 2 (PR Review) exceeded maximum iterations "
-            f"({state['max_gate2_iterations']}).\n\n"
+# Per-case data for build_special_prompt. Each entry is keyed by either the
+# transition_type (for single-prompt-key cases) or the tuple
+# (transition_type, prompt_key). The 'header' is the exact case-tag prefix the
+# unit tests assert. 'body' is rendered with .format(**fmt) where fmt is a
+# state-derived mapping built inline below.
+_SPECIAL_PROMPTS = {
+    "max_gate2_exceeded": {
+        "header": "GATE2_MAX_EXCEEDED",
+        "body": (
+            "Gate 2 (PR Review) exceeded maximum iterations "
+            "({max_gate2_iterations}).\n\n"
             "Report remaining issues to the user and present options:\n"
             "1. Proceed to Gate 3 anyway\n"
             "2. Abort pipeline\n\n"
@@ -606,16 +605,13 @@ def build_special_prompt(transition_type, state, gate_results, prompt_key=None):
             '- Proceed: emit <qg-signal gate="2" verdict="PASS_WITH_WARNINGS" '
             'summary="Proceeding with remaining issues" files_changed="" />\n'
             '- Abort: emit <qg-signal action="abort" reason="User chose to abort" />\n'
-            f"\nPipeline context:\n{gate_results}"
-        )
-
-    if transition_type == "gate3_needs_resolution":
-        iter_now = state.get("gate3_resolution_iter", 0)
-        max_now = state.get("max_gate3_resolutions", 3)
-        return (
-            "GATE3_NEEDS_RESOLUTION\n\n"
+        ),
+    },
+    "gate3_needs_resolution": {
+        "header": "GATE3_NEEDS_RESOLUTION",
+        "body": (
             "Gate 3 (Runtime Verification) found resolvable missing resources "
-            f"(resolution iteration {iter_now}/{max_now}).\n\n"
+            "(resolution iteration {gate3_resolution_iter}/{max_gate3_resolutions}).\n\n"
             "The skill (mother) must present the agent's `needed` items to the user "
             "as **decision-only** options (retry / skip this surface / abort). "
             "DO NOT ask the user for secret values (API keys, DB URLs, tokens, "
@@ -636,12 +632,11 @@ def build_special_prompt(transition_type, state, gate_results, prompt_key=None):
             'summary="user opted to skip <surface>" files_changed="" />\n'
             '- Abort: emit <qg-signal action="abort" reason="User chose to abort '
             'during gate3_needs_resolution" />\n'
-            f"\nPipeline context:\n{gate_results}"
-        )
-
-    if transition_type == "gate3_repeat_detected":
-        return (
-            "GATE3_REPEAT_DETECTED\n\n"
+        ),
+    },
+    "gate3_repeat_detected": {
+        "header": "GATE3_REPEAT_DETECTED",
+        "body": (
             "Gate 3 (Runtime Verification) is not converging — "
             "the same `needed` resources appeared 2 iterations in a row.\n\n"
             "Present options to the user via AskUserQuestion:\n"
@@ -651,12 +646,11 @@ def build_special_prompt(transition_type, state, gate_results, prompt_key=None):
             '- Proceed: emit <qg-signal gate="3" verdict="PASS_WITH_WARNINGS" '
             'summary="Repeat detected; user accepted" files_changed="" />\n'
             '- Abort: emit <qg-signal action="abort" reason="User chose to abort" />\n'
-            f"\nPipeline context:\n{gate_results}"
-        )
-
-    if transition_type == "gate3_fail":
-        return (
-            "GATE3_FAIL\n\n"
+        ),
+    },
+    "gate3_fail": {
+        "header": "GATE3_FAIL",
+        "body": (
             "Gate 3 (Runtime Verification) failed.\n\n"
             "Present options to the user:\n"
             "1. Fix the issues and re-run `/qg` (pipeline does not auto-restart)\n"
@@ -668,45 +662,43 @@ def build_special_prompt(transition_type, state, gate_results, prompt_key=None):
             '- Skip: emit <qg-signal gate="3" verdict="SKIP" '
             'summary="User chose to skip runtime verification" files_changed="" />\n'
             '- Abort: emit <qg-signal action="abort" reason="User chose to abort" />\n'
-            f"\nPipeline context:\n{gate_results}"
-        )
-
-    if transition_type == "gate2_user_choice":
-        if prompt_key == "gate2_needs_restart":
-            return (
-                "GATE2_NEEDS_RESTART\n\n"
-                "Gate 2 (PR Review) found that code-level changes are needed.\n\n"
-                "The pipeline is forward-only and cannot automatically re-enter Gate 1.\n\n"
-                "Present options to the user:\n"
-                "1. Proceed — accept the Gate 2 findings as-is and continue\n"
-                "2. Apply changes and re-run — apply the suggested changes, "
-                "then re-run `/qg` manually\n"
-                "3. Abort — stop the pipeline\n\n"
-                "Based on user choice:\n"
-                '- Proceed: emit <qg-signal gate="2" verdict="PASS_WITH_WARNINGS" '
-                'summary="Accepted Gate 2 findings as-is" files_changed="" />\n'
-                '- Apply + re-run: emit <qg-signal action="abort" '
-                'reason="User will apply changes and re-run /qg" />\n'
-                '- Abort: emit <qg-signal action="abort" reason="User chose to abort" />\n'
-                f"\nPipeline context:\n{gate_results}"
-            )
-        if prompt_key == "gate2_repeat_detected":
-            return (
-                "GATE2_REPEAT_DETECTED\n\n"
-                "Gate 2 (PR Review) is not converging — "
-                "the same findings appeared 2 iterations in a row.\n\n"
-                "Present options to the user:\n"
-                "1. Proceed — accept the current Gate 2 findings and continue\n"
-                "2. Abort — stop the pipeline\n\n"
-                "Based on user choice:\n"
-                '- Proceed: emit <qg-signal gate="2" verdict="PASS_WITH_WARNINGS" '
-                'summary="Proceeding despite repeated findings" files_changed="" />\n'
-                '- Abort: emit <qg-signal action="abort" reason="User chose to abort" />\n'
-                f"\nPipeline context:\n{gate_results}"
-            )
-        # Generic gate2_user_choice fallback
-        return (
-            "GATE2_USER_CHOICE\n\n"
+        ),
+    },
+    ("gate2_user_choice", "gate2_needs_restart"): {
+        "header": "GATE2_NEEDS_RESTART",
+        "body": (
+            "Gate 2 (PR Review) found that code-level changes are needed.\n\n"
+            "The pipeline is forward-only and cannot automatically re-enter Gate 1.\n\n"
+            "Present options to the user:\n"
+            "1. Proceed — accept the Gate 2 findings as-is and continue\n"
+            "2. Apply changes and re-run — apply the suggested changes, "
+            "then re-run `/qg` manually\n"
+            "3. Abort — stop the pipeline\n\n"
+            "Based on user choice:\n"
+            '- Proceed: emit <qg-signal gate="2" verdict="PASS_WITH_WARNINGS" '
+            'summary="Accepted Gate 2 findings as-is" files_changed="" />\n'
+            '- Apply + re-run: emit <qg-signal action="abort" '
+            'reason="User will apply changes and re-run /qg" />\n'
+            '- Abort: emit <qg-signal action="abort" reason="User chose to abort" />\n'
+        ),
+    },
+    ("gate2_user_choice", "gate2_repeat_detected"): {
+        "header": "GATE2_REPEAT_DETECTED",
+        "body": (
+            "Gate 2 (PR Review) is not converging — "
+            "the same findings appeared 2 iterations in a row.\n\n"
+            "Present options to the user:\n"
+            "1. Proceed — accept the current Gate 2 findings and continue\n"
+            "2. Abort — stop the pipeline\n\n"
+            "Based on user choice:\n"
+            '- Proceed: emit <qg-signal gate="2" verdict="PASS_WITH_WARNINGS" '
+            'summary="Proceeding despite repeated findings" files_changed="" />\n'
+            '- Abort: emit <qg-signal action="abort" reason="User chose to abort" />\n'
+        ),
+    },
+    ("gate2_user_choice", None): {
+        "header": "GATE2_USER_CHOICE",
+        "body": (
             "Gate 2 (PR Review) requires user input.\n\n"
             "Present options to the user:\n"
             "1. Proceed — accept findings as-is\n"
@@ -715,23 +707,51 @@ def build_special_prompt(transition_type, state, gate_results, prompt_key=None):
             '- Proceed: emit <qg-signal gate="2" verdict="PASS_WITH_WARNINGS" '
             'summary="User accepted findings" files_changed="" />\n'
             '- Abort: emit <qg-signal action="abort" reason="User chose to abort" />\n'
-            f"\nPipeline context:\n{gate_results}"
+        ),
+    },
+}
+
+
+def build_special_prompt(transition_type, state, gate_results, prompt_key=None):
+    """Build prompts for special situations (user choices, gate failures).
+
+    transition_type: the transition["type"] value.
+    prompt_key: optional sub-key (currently used to disambiguate
+                gate2_user_choice into gate2_needs_restart /
+                gate2_repeat_detected; absent → generic gate2_user_choice).
+    """
+    if transition_type == "gate2_user_choice":
+        key = ("gate2_user_choice", prompt_key)
+        entry = _SPECIAL_PROMPTS.get(key) or _SPECIAL_PROMPTS[("gate2_user_choice", None)]
+    else:
+        entry = _SPECIAL_PROMPTS.get(transition_type)
+
+    if entry is None:
+        # SF-3: unknown transition_type. Should be unreachable — every type
+        # in the dispatch set must have a branch above. Fail loudly rather
+        # than producing a blank prompt that would confuse the user.
+        print(
+            f"⚠️  Quality Gates: build_special_prompt: unhandled transition_type "
+            f"'{transition_type}' (prompt_key={prompt_key!r})",
+            file=sys.stderr,
+        )
+        return (
+            f"PIPELINE_ERROR\n\nQuality Gates reached an unhandled transition state: "
+            f"'{transition_type}'. This is a programming error.\n\n"
+            "Please run `/cancel-qg` and re-run `/qg` from scratch.\n\n"
+            '- Recovery: emit <qg-signal action="abort" reason="unhandled transition: '
+            f"{transition_type}\" />"
         )
 
-    # SF-3: unknown transition_type. Should be unreachable — every type in
-    # the dispatch set must have a branch above. Fail loudly rather than
-    # producing a blank prompt that would confuse the user.
-    print(
-        f"⚠️  Quality Gates: build_special_prompt: unhandled transition_type "
-        f"'{transition_type}' (prompt_key={prompt_key!r})",
-        file=sys.stderr,
-    )
+    fmt = {
+        "max_gate2_iterations": state.get("max_gate2_iterations", 5),
+        "gate3_resolution_iter": state.get("gate3_resolution_iter", 0),
+        "max_gate3_resolutions": state.get("max_gate3_resolutions", 3),
+    }
     return (
-        f"PIPELINE_ERROR\n\nQuality Gates reached an unhandled transition state: "
-        f"'{transition_type}'. This is a programming error.\n\n"
-        "Please run `/cancel-qg` and re-run `/qg` from scratch.\n\n"
-        '- Recovery: emit <qg-signal action="abort" reason="unhandled transition: '
-        f"{transition_type}\" />"
+        f"{entry['header']}\n\n"
+        f"{entry['body'].format(**fmt)}"
+        f"\nPipeline context:\n{gate_results}"
     )
 
 
