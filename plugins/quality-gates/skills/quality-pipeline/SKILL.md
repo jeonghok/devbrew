@@ -389,6 +389,19 @@ changed_files_since_last_dispatch: <list or 'none'>
 
 **Purpose**: Replace rule-based diff-feature gating with model judgment. Scout reads the filtered diff + Gate 1 summary and returns a structured dispatch plan that overrides the rule-based flags computed in Step 0.
 
+**Codex availability probe (Gate 2, Phase 0 prerequisite):**
+
+Run before dispatching scout:
+
+```bash
+MANIFEST_PATH="${TMPDIR:-/tmp}/qg-codex-manifest-${CLAUDE_CODE_SESSION_ID:-unknown}.yaml"
+bash plugins/quality-gates/scripts/detect_codex.sh > "$MANIFEST_PATH"
+```
+
+The script emits a YAML manifest (6 cases — install, kill-switch, sandbox-recursion, auth, version, ok). Read the manifest and include it as the `codex_manifest:` field in the Scout dispatch prompt's inputs section, alongside `filtered_diff`, `gate1_summary`, and `session_scope`.
+
+Idempotency: rerunning is safe (read-only, no side effects). If the manifest file exists from a prior probe in this session, regenerate it — environment state may have changed.
+
 Dispatch:
 
 ```
