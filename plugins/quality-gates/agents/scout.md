@@ -31,7 +31,7 @@ You will receive:
   codex_available: true | false
   codex_path: <string, only if available>
   codex_version: <string, only if available>
-  skip_reason: <not_installed | kill_switch | inside_codex_sandbox | auth_missing | known_bad_version>
+  skip_reason: <not_installed | kill_switch | inside_codex_sandbox | auth_missing | known_bad_version | user_declined_cost_consent>
   ```
 
 ## Depth decision rules
