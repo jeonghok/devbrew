@@ -87,13 +87,28 @@ state.local.md에 `mode_b_violation` marker 존재 시 (Mode B abort 후 복귀)
 1. 사용자에게 AskUserQuestion으로 3-옵션 advisory ((i) re-consensus에 추가 / (ii) Mode B 재dispatch / (iii) [5] escalate).
 2. 응답에 따라 분기. (i) → Step 1로 돌아가 묶음 재구성. (ii) → Mode B 재dispatch (사용자 선택 issue). (iii) → [5] Human Gate.
 
-### Re-review cap (AC6)
+### Escalate priority table (AC9, P1–P4)
 
-`rereview_count >= 3` 도달 시 (즉 4번째 reviewer dispatch 시도 시): 자동으로 [5] Human Gate로 forced escalate, 전체 `issue_history` 첨부.
+routing이 [5] forced escalate를 trigger할 수 있는 조건들. 다음 우선순위로 평가 (P1 최우선):
 
-### Stagnation detection (AC7)
+| 우선순위 | 조건 | scope | 동작 |
+|---|---|---|---|
+| **P1 (highest)** | C3: 한 round에 locked-affecting issue ≥ 4 | spec 전체 | [5] forced escalate, *전체 spec* 인간 검토. issue_history 변경 X. |
+| **P2** | AC9: 특정 `issue_id`의 `reconsensus_count >= 2` | per-issue | 해당 issue 만 [5] forced escalate, *나머지 issue는 [4] Revise로 계속*. `issue_history[<id>].escalated = true`. |
+| **P3** | P18 stagnation: `raised_count >= 3 AND dismissed_by_user == 0` | per-issue | 해당 issue 만 [5] forced escalate. |
+| **P4 (lowest)** | `dismissed_by_user >= 3` | per-issue + persona warn | 해당 issue [5] escalate + advisory: "reviewer가 같은 issue를 3회 raise + 사용자가 3회 거절. reviewer persona 점검 필요 (NG5 — 자동 편집 X)." |
 
-spec-reviewer agent가 `Stagnation_signal: true` 반환 시 (이전 review 동일 issue_id `raised_count >= 3 unresolved`): 자동 [5] forced escalate, P18 stagnation 명시.
+**두 조건 동시 충족 시**: P1이 P2/P3/P4보다 우선 (global이 per-issue 우선). 같은 우선순위 내 동시 충족 시 모든 해당 issue를 묶어서 한 번에 [5] escalate.
+
+### Re-review cap (rereview_count)
+
+`rereview_count >= 3` 도달 시 (즉 4번째 reviewer dispatch 시도 시): 자동으로 [5] Human Gate로 forced escalate, 전체 `issue_history` 첨부. (위 P1–P4와 별개 cap — 무한 review loop 방지.)
+
+### Stagnation detection (P3 row 참조)
+
+spec-reviewer agent가 `Stagnation_signal: true` 반환 시: 해당 issue에 대해 `raised_count >= 3 AND dismissed_by_user == 0` 검증. 두 조건 모두 충족 시 P3 trigger.
+
+`dismissed_by_user >= 1`인 issue는 stagnation count에서 제외 — 사용자 명시 거절은 P17 sovereignty 행사이지 stagnation이 아님.
 
 ## Phase 5 Human Gate
 
@@ -138,6 +153,19 @@ echo "spec-distill v0.1.0 종료."
 ### 실패 시 state 보존 (P14)
 
 git commit 실패 / handoff 실패 / cleanup 실패 시: state.local.md 보존, 사용자에게 실패 원인 명시.
+
+## In-flight state migration (C10)
+
+reviewing-spec dispatch 시작 시 state.local.md 로드. v0.1.x schema (신규 필드 부재)면 *non-mutating read*로 자동 promote:
+
+- `issue_history[].dismissed_by_user` / `accepted_by_user` / `reconsensus_count` 부재 → `0`으로 in-memory default.
+- `reconsensus_accepted_ids` 부재 → `[]`로 in-memory default.
+
+다음 state write 시점에 frontmatter에 자연스럽게 추가 (backward-rewriting 금지).
+
+사용자에게 advisory: `[spec-distill v0.2.0] state.local.md schema migration: <fields> added with defaults.`
+
+corruption 시 → "v0.1.x in-flight state 호환 실패 — 세션 재시작 권장" 알림 + state.local.md 보존 (P14).
 
 ## kill switch
 
