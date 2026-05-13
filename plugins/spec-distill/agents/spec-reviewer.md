@@ -3,6 +3,11 @@ name: spec-reviewer
 model: sonnet
 cost_class: medium
 color: orange
+allowedTools:
+  - Read
+  - Grep
+  - Glob
+  - Bash
 disallowedTools:
   - Write
   - Edit

@@ -126,7 +126,7 @@ spec-reviewer agent가 `Stagnation_signal: true` 반환 시: 해당 issue에 대
 ```bash
 # Step 1: Commit spec.md
 git add docs/superpowers/specs/<file>-spec.md
-git commit -m "spec: <topic> (v1.0.0, spec-distill v0.1.0)"
+git commit -m "spec: <topic> (v1.0.0, spec-distill v0.2.0)"
 
 # Step 2: Output handoff pointer
 echo "Spec lock 완료. 다음 단계:"
@@ -145,7 +145,7 @@ case "$session_id" in
 esac
 
 # Step 4: Plugin termination
-echo "spec-distill v0.1.0 종료."
+echo "spec-distill v0.2.0 종료."
 ```
 
 **polite stop 금지** (AP2): "spec is approved!"만 narrate하고 위 4 step을 skip하면 안 됨. 4 step 모두 *실제로* 실행.
