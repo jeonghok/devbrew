@@ -23,7 +23,6 @@ def make_state(status: str, gate: int = 2, started_at: str = "2026-04-29T08:14:0
         "---\n"
         f"status: {status}\n"
         f"current_gate: {gate}\n"
-        "total_iterations: 1\n"
         f'started_at: "{started_at}"\n'
         "---\n"
         "# Quality Gates Pipeline State\n"

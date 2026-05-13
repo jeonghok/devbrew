@@ -46,7 +46,6 @@ PIPELINE_RUNNING = (
     "---\n"
     "status: gate1_running\n"
     "current_gate: 1\n"
-    "total_iterations: 0\n"
     'started_at: "2026-05-10T00:00:00Z"\n'
     "---\n"
     "# Quality Gates Pipeline State\n"

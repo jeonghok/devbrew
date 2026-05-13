@@ -22,8 +22,6 @@ class TestForwardOnlyStateMachine(unittest.TestCase):
             "current_gate": 2,
             "gate2_iteration": 1,
             "max_gate2_iterations": 5,
-            "total_iterations": 1,
-            "max_total_iterations": 5,
             "skip_runtime": False,
             "single_gate": None,
         }
@@ -37,8 +35,6 @@ class TestForwardOnlyStateMachine(unittest.TestCase):
     def test_gate3_needs_restart_terminates_with_user_choice(self):
         state = {
             "current_gate": 3,
-            "total_iterations": 1,
-            "max_total_iterations": 5,
             "gate2_iteration": 0,
             "max_gate2_iterations": 5,
             "skip_runtime": False,
@@ -53,8 +49,6 @@ class TestForwardOnlyStateMachine(unittest.TestCase):
     def test_trivia_skipped_verdict_completes_pipeline(self):
         state = {
             "current_gate": 1,
-            "total_iterations": 1,
-            "max_total_iterations": 5,
             "gate2_iteration": 0,
             "max_gate2_iterations": 5,
             "skip_runtime": False,
@@ -69,8 +63,6 @@ class TestForwardOnlyStateMachine(unittest.TestCase):
             "current_gate": 2,
             "gate2_iteration": 1,
             "max_gate2_iterations": 5,
-            "total_iterations": 1,
-            "max_total_iterations": 5,
             "skip_runtime": False,
             "single_gate": None,
         }
@@ -84,8 +76,6 @@ class TestForwardOnlyStateMachine(unittest.TestCase):
             "current_gate": 2,
             "gate2_iteration": 3,
             "max_gate2_iterations": 5,
-            "total_iterations": 1,
-            "max_total_iterations": 5,
             "skip_runtime": False,
             "single_gate": None,
         }
@@ -158,8 +148,6 @@ class TestGate3ResolutionState(unittest.TestCase):
             "max_gate2_iterations": 5,
             "gate3_resolution_iter": resolution_iter,
             "max_gate3_resolutions": max_resolutions,
-            "total_iterations": 1,
-            "max_total_iterations": 5,
             "skip_runtime": False,
             "single_gate": None,
         }
