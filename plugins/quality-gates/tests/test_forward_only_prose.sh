@@ -5,15 +5,25 @@
 # deprecated total_iterations / max_total_iterations fields have re-entered
 # the codebase.
 #
+# Style mirrors the plugin's other tests/test_*.sh (PASS/FAIL counter + summary).
+#
+# AC8 expectation timing: this script is created as a failing-test anchor for
+# Task 1 of the v1.10.0 cleanup. AC8 LEAK includes the fixture lines in
+# tests/test_stop_hook_state_machine.py (lines 25-162) and tests/test_kill_switches.py:49,
+# tests/test_session_start_advisor.py:26 until Task 4 (D1.c) removes them; the
+# allowlist below only excludes the named gate test (line 15) because the
+# rest of the file legitimately fails AC8 today by carrying the deprecated keys.
+#
 # Locked by spec docs/superpowers/specs/2026-05-13-qg-forward-only-cleanup-and-stop-hook-trim-design.md AC1-3, AC4-6, AC8, NG7.
 set -u
 
 REPO_PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_PLUGIN_ROOT"
 
-FAILED=0
-fail()  { echo "FAIL: $*"; FAILED=1; }
-ok()    { echo "ok:   $*"; }
+PASS=0
+FAIL=0
+fail()  { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $*"; }
+ok()    { PASS=$((PASS+1)); echo "  ✓ ok:   $*"; }
 
 # --- AC1-3: forbidden phrases in skill prose -----------------------------------
 
@@ -58,8 +68,15 @@ else
 fi
 
 # --- AC8: deprecated state field residues --------------------------------------
-# Allowed: CHANGELOG history; test_no_max_total_iterations_constant gate test;
-# this script itself (which has to reference the forbidden tokens to grep for them).
+# Allowed (always): CHANGELOG history; the named gate test
+# (test_stop_hook_state_machine.py line 15 — test_no_max_total_iterations_constant);
+# this script itself (it must reference the forbidden tokens to grep for them).
+# Transient (FAIL today, will go green when their owning task lands):
+#   - hooks/stop-hook.py:89,92,403,405,433       — Tasks 2-3 (D1.a/b)
+#   - tests/test_stop_hook_state_machine.py:25-162 fixture lines  — Task 4 (D1.c)
+#   - tests/test_kill_switches.py:49             — Task 4 (D1.c)
+#   - tests/test_session_start_advisor.py:26     — Task 4 (D1.c)
+#   - skills/quality-pipeline/references/state-file-format.md:37  — Task 5 (D1.d)
 
 LEAK=$(grep -rn 'total_iterations\|max_total_iterations' . 2>/dev/null \
   | grep -v 'CHANGELOG.md' \
@@ -82,10 +99,8 @@ else
     ok "NG7: setup-qg.sh free of deprecated field references"
 fi
 
-# -------------------------------------------------------------------------------
+# --- Summary -------------------------------------------------------------------
 
-if [ "$FAILED" -ne 0 ]; then
-    echo "test_forward_only_prose.sh: FAIL"
-    exit 1
-fi
-echo "test_forward_only_prose.sh: PASS"
+echo
+echo "Results: $PASS passed, $FAIL failed"
+[[ "$FAIL" -eq 0 ]]
