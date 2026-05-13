@@ -63,7 +63,7 @@ Codex CLI(OpenAI 계열 모델)가 시스템에 설치되어 있으면 OS 프로
 - **Law 1.** 본 spec이 9개 필수 섹션 (Context, Goals, Non-goals, Constraints, AC, Files, Verification, Rejected, Metadata) + Concrete Next Action 보강.
 - **Law 2 — 3중 격리:**
   1. `codex-reviewer.md` frontmatter: `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit, Glob]` (Write 류 도구 차단)
-  2. `codex-reviewer.md` frontmatter: `allowed-tools` 명시 (예: `Bash(codex exec*), Bash(timeout *), Bash(gtimeout *), Bash(mktemp -d*), Bash(cat *), Bash(python3 *), Read`) — outer Bash가 shell redirection으로 파일에 못 쓰도록 패턴 화이트리스트
+  2. `codex-reviewer.md` frontmatter: `allowed-tools` 명시 — AC11이 binding 정의. outer Bash가 shell redirection으로 파일에 못 쓰도록 패턴 화이트리스트. (`Bash(cat *)`는 redirection 우회 가능해서 제외 — AC11 NEW-10 note 참조.)
   3. Codex subprocess 자체: `-s read-only` OS sandbox
   > **명시:** sandbox `-s read-only`는 Codex의 *agent loop*가 쓰는 걸 막는다. Outer Claude Code agent의 Bash는 그 sandbox 안에 있지 않다. 두 layer 모두 필요하며 어느 한 쪽도 다른 쪽을 substitute하지 않는다.
 - **Law 3.** Spec → plan → 구현 사이클 후 `plugin.json` bump + CHANGELOG entry + README "Principles Instantiated" — 자동 compounding.
@@ -103,7 +103,7 @@ Codex CLI(OpenAI 계열 모델)가 시스템에 설치되어 있으면 OS 프로
 
 - `cost_class: variable` — 사용자의 Codex 구독/API 종량제에 따라 다름.
 - **First-use cost gate:** `~/.claude/quality-gates/codex-cost-consent.md`에 consent record 없으면 첫 호출 전 `AskUserQuestion`으로 사용자 동의 요구. 동의 시 marker 파일 작성, 이후 silent.
-- Per-run hard ceiling (spec v2 한도): `gtimeout 330` 자체가 비용 ceiling proxy (단일 호출 시간 한도 = 비용 한도 근사). 명시적 토큰 cap은 codex CLI가 지원하지 않으므로 wall-clock으로 대체.
+- Per-run hard ceiling: §4.3 canonical의 `gtimeout 600` 자체가 비용 ceiling proxy (단일 호출 시간 한도 = 비용 한도 근사). 명시적 토큰 cap은 §10 OQ-1 (codex CLI 지원 여부 미확정) — Step 0 spike에서 확인 후 발견 시 amendment.
 - `quick` depth는 skip — 작은 diff에 codex 호출은 trivia ceremony (forbidden pattern).
 
 ### 4.5 Fan-out audit
@@ -405,7 +405,7 @@ PR 리뷰 시 `codex-reviewer.md` 변경에 대해 다음 체크리스트:
 - [ ] `disallowedTools`에 `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Glob` 모두 존재
 - [ ] `allowed-tools`가 narrow Bash 화이트리스트 (generic `Bash` 아님)
 - [ ] 모든 `codex exec` 라인에 `-s read-only`
-- [ ] 모든 `codex exec` 라인에 timeout wrapper (`gtimeout 330` / `timeout 330`)
+- [ ] 모든 `codex exec` 라인에 timeout wrapper (`gtimeout 600` / `timeout 600` — §4.3 canonical에 매칭)
 - [ ] Recursion guard probe 통과 후 dispatch
 
 ## 8. Rejected Alternatives
