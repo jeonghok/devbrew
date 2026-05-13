@@ -75,9 +75,6 @@ issue_id = sha256_short(category + ":" + target_section)
 
 ## Output 형식 (이 형식을 정확히 준수, AC5)
 
-각 issue 뒤에 반드시 아래 형식의 줄을 2-space indent로 emit:
-  affects_locked_decisions: [LD<n>, LD<m>] | []
-
 ```markdown
 ## Spec Review (round N)
 
