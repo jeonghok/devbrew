@@ -118,6 +118,8 @@ def _yaml_scalar(v: Any) -> str:
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--stderr-file", default=None)
+    p.add_argument("--meta-override-exit-code", type=int, default=None)
+    p.add_argument("--meta-override-reason", default=None)
     args = p.parse_args()
 
     stdin_text = sys.stdin.read()
@@ -131,6 +133,16 @@ def main() -> int:
 
     def has_auth_error() -> bool:
         return bool(stderr_text and AUTH_ERROR_RE.search(stderr_text))
+
+    def apply_overrides(meta: dict) -> dict:
+        # Apply exit-code override unconditionally if supplied (caller knows the real exit code).
+        if args.meta_override_exit_code is not None:
+            meta["exit_code"] = args.meta_override_exit_code
+        # Apply reason override only if non-empty (empty string from shell = no override).
+        if args.meta_override_reason:
+            meta["reason"] = args.meta_override_reason
+            meta["codex_failed"] = True
+        return meta
 
     last_msg, any_jsonl_parsed = extract_last_agent_message(stdin_text)
 
@@ -152,7 +164,7 @@ def main() -> int:
             }
         else:
             meta = {"codex_failed": True, "reason": "missing_result", "exit_code": 0}
-        sys.stdout.write(yaml_emit([], meta))
+        sys.stdout.write(yaml_emit([], apply_overrides(meta)))
         return 0
 
     parsed = parse_fenced_json(last_msg)
@@ -174,7 +186,7 @@ def main() -> int:
                 "exit_code": 0,
                 "raw_text_preview": last_msg[:200],
             }
-        sys.stdout.write(yaml_emit([], meta))
+        sys.stdout.write(yaml_emit([], apply_overrides(meta)))
         return 0
 
     findings = parsed.get("findings", []) or []
@@ -182,7 +194,7 @@ def main() -> int:
         findings = []
 
     meta = {"codex_failed": False}
-    sys.stdout.write(yaml_emit(findings, meta))
+    sys.stdout.write(yaml_emit(findings, apply_overrides(meta)))
     return 0
 
 

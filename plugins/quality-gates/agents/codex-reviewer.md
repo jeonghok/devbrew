@@ -37,25 +37,32 @@ Execute exactly this sequence:
 
 ```bash
 SCRATCH="$(mktemp -d -t qg-codex-rev-XXXXXX)"
+DIFF_FILE="$SCRATCH/diff.patch"
+PLAN_FILE="$SCRATCH/plan.yaml"
 PROMPT_FILE="$SCRATCH/prompt.md"
 STDOUT_FILE="$SCRATCH/codex.jsonl"
 STDERR_FILE="$SCRATCH/codex.stderr"
 TIMEOUT_CMD="$(command -v gtimeout || command -v timeout)"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
-# Write prompt from template — substitute {{FILTERED_DIFF}} and
-# {{PLAN_SUMMARY}} with the agent's inputs. See "Prompt template" below.
-# Use python3 heredoc for safe substitution (shell quoting safe even if
-# inputs contain quotes or backticks):
-python3 - <<PYEOF > "$PROMPT_FILE"
-template = """[PASTE PROMPT TEMPLATE HERE — see below]"""
-diff_content = """[FILTERED_DIFF content as Python triple-quoted string]"""
-plan_content = """[PLAN_SUMMARY content as Python triple-quoted string]"""
-out = template.replace("{{FILTERED_DIFF}}", diff_content)
-out = out.replace("{{PLAN_SUMMARY}}", plan_content)
-print(out)
-PYEOF
+# Write inputs to scratch files via single-quoted-delimiter heredoc —
+# content is treated as opaque bytes; no shell expansion of `$`, backtick,
+# or `\`, and no Python literal injection vector (the diff never touches
+# a Python or shell string literal).
+cat > "$DIFF_FILE" <<'INPUT_EOF'
+{{FILTERED_DIFF}}
+INPUT_EOF
 
+cat > "$PLAN_FILE" <<'INPUT_EOF'
+{{PLAN_SUMMARY}}
+INPUT_EOF
+
+# Build the prompt safely (substitution happens inside Python via
+# str.replace on opaque bytes — no eval, no template engine).
+python3 "$REPO_ROOT/plugins/quality-gates/scripts/build_codex_prompt.py" \
+    "$DIFF_FILE" "$PLAN_FILE" > "$PROMPT_FILE"
+
+# Canonical codex invocation (spec §4.3 — all 5 load-bearing flags).
 "$TIMEOUT_CMD" 600 codex exec "$(cat "$PROMPT_FILE")" \
     -C "$REPO_ROOT" \
     -s read-only \
@@ -66,56 +73,28 @@ PYEOF
     2>"$STDERR_FILE"
 EXIT_CODE=$?
 
-python3 plugins/quality-gates/scripts/codex_findings_to_yaml.py \
-    --stderr-file "$STDERR_FILE" \
-    < "$STDOUT_FILE"
-
+# Parser receives exit code + override reason; emits a SINGLE coherent
+# YAML document (no later printf-append fragility).
 if [[ $EXIT_CODE -eq 124 ]]; then
-  printf '  exit_code: 124\n  reason: timeout\n  codex_failed: true\n'
+  OVERRIDE_REASON=timeout
 elif [[ $EXIT_CODE -ne 0 ]]; then
-  printf '  exit_code: %d\n  reason: exit_nonzero\n  codex_failed: true\n' "$EXIT_CODE"
+  OVERRIDE_REASON=exit_nonzero
+else
+  OVERRIDE_REASON=""
 fi
+
+python3 "$REPO_ROOT/plugins/quality-gates/scripts/codex_findings_to_yaml.py" \
+    --stderr-file "$STDERR_FILE" \
+    --meta-override-exit-code "$EXIT_CODE" \
+    --meta-override-reason "$OVERRIDE_REASON" \
+    < "$STDOUT_FILE"
 ```
+
+`{{FILTERED_DIFF}}` and `{{PLAN_SUMMARY}}` are placeholder markers that the agent runtime (Claude Code) substitutes with the actual agent inputs *before* the agent body executes. The `<<'INPUT_EOF'` (single-quoted heredoc delimiter) disables shell expansion, so any `$`, backtick, or `\` in the diff/plan content is preserved literally. After substitution, the heredoc body is the raw bytes — written verbatim to the scratch file with no shell escaping risk and never seen by a Python string literal.
 
 ## Prompt template
 
-The template uses Python str.replace for substitution to avoid shell-quoting issues with embedded quotes/backticks in diffs.
-
-```text
-You are a code reviewer. Review the diff for bugs, silent failures,
-security issues, missing error handling, and design problems. Do not
-modify any files; you are in a read-only sandbox.
-
-<diff>
-{{FILTERED_DIFF}}
-</diff>
-
-<plan_context>
-{{PLAN_SUMMARY}}
-</plan_context>
-
-Output your findings in a fenced JSON code block:
-
-[BACKTICKS_JSON]
-{
-  "findings": [
-    {
-      "file": "<path>",
-      "line": <integer>,
-      "severity": "CRITICAL | IMPORTANT | SUGGESTION",
-      "confidence": <integer 1-10>,
-      "summary": "<one sentence>",
-      "proposed_fix": "<description>"
-    }
-  ]
-}
-[BACKTICKS_END]
-
-If you find no issues, emit `{"findings": []}` inside the same code fence.
-Do not output any text after the closing fence.
-```
-
-(When writing the prompt to disk at runtime, replace `[BACKTICKS_JSON]` with three backticks + `json`, and `[BACKTICKS_END]` with three backticks.)
+The canonical prompt template lives in `scripts/build_codex_prompt.py` as `PROMPT_TEMPLATE`. Do NOT inline a copy here — single source of truth keeps drift from happening. The template uses `{{FILTERED_DIFF}}` and `{{PLAN_SUMMARY}}` markers; the script substitutes them via `str.replace` (opaque-bytes replacement, no eval/parse).
 
 ## Forbidden
 
@@ -123,3 +102,5 @@ Do not output any text after the closing fence.
 - Do not pipe to `cat` or any other intermediate command — parser reads stdin directly.
 - Do not retry on failure within this agent.
 - Do not produce findings of your own; you are the parser's output emitter.
+- Do not inline `filtered_diff` content into any Python string literal, shell argument, or expandable heredoc — always pass via file path written through a `<<'EOF'` (single-quoted-delimiter) heredoc. Inlining the diff into a Python triple-quoted string allows a `"""` sequence in a malicious PR to escape the literal and execute arbitrary Python inside this agent's Bash sandbox (Law 2 bypass — writer gaining authority over reviewer's harness).
+- Do not append meta lines via shell `printf` after the parser emits its YAML — use `--meta-override-exit-code` / `--meta-override-reason` flags on the parser so a single coherent YAML document is produced on all paths.

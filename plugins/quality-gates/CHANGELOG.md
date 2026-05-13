@@ -3,6 +3,40 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.10.1] — 2026-05-14
+
+### Security
+- **codex-reviewer prompt-injection vector closed (C1).** The Task 4 agent
+  body previously inlined `filtered_diff` content into a Python triple-
+  quoted string literal inside a `python3 - <<PYEOF` heredoc. A reviewed
+  PR containing `"""` could terminate the literal and execute arbitrary
+  Python inside the agent's `Bash(python3 *)` sandbox — *before*
+  `codex exec` ever runs, bypassing the read-only sandbox and all
+  three Law 2 isolation layers. Replaced with a file-path-only pattern:
+  diff/plan content is written to scratch files via a single-quoted
+  heredoc (`<<'INPUT_EOF'`, no shell expansion), then a new helper
+  `scripts/build_codex_prompt.py` reads the files via
+  `pathlib.Path.read_text()` and substitutes the markers via opaque-bytes
+  `str.replace`. Reviewed-PR content never reaches a Python or shell
+  string literal in any agent-generated code.
+
+### Fixed
+- **Single coherent YAML on codex failure paths (I3).** The agent body
+  previously appended `printf '  exit_code: …\n  reason: timeout\n  ...'`
+  lines AFTER `codex_findings_to_yaml.py` had already emitted a full
+  `meta:` block — producing orphaned indented lines (invalid YAML)
+  whenever the parser fell into the `missing_result` branch. Replaced
+  with two new parser flags `--meta-override-exit-code` and
+  `--meta-override-reason`; the parser now emits one coherent YAML
+  document on success, timeout, exit-nonzero, malformed, and auth-error
+  paths.
+
+### Tests
+- Added three fixtures to `tests/test_findings_parser.sh`: timeout
+  override (exit 124 + reason), success-path override (no reason set),
+  and parser injection-safety (an `agent_message.text` containing `"""`
+  is parsed without side effects). Suite is now 11/11.
+
 ## [1.10.0] — 2026-05-13
 
 ### Changed

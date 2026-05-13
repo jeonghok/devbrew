@@ -73,6 +73,49 @@ Error: authentication failed: invalid API key
 EOF
 check "auth error in stderr" "$TMP/empty.jsonl" "$TMP/auth-err.txt" 'reason: auth_error_in_stderr'
 
+# Fixture 6: exit-code override (timeout scenario — empty stdin, exit 124, reason override)
+: > "$TMP/empty-for-timeout.jsonl"
+output="$(python3 "$PARSER" \
+  --meta-override-exit-code 124 \
+  --meta-override-reason timeout \
+  < "$TMP/empty-for-timeout.jsonl" 2>&1)"
+if echo "$output" | grep -q 'reason: timeout' && echo "$output" | grep -q 'exit_code: 124' && echo "$output" | grep -q 'codex_failed: true'; then
+  echo "  PASS: meta override timeout"; pass=$((pass + 1))
+else
+  echo "  FAIL: meta override timeout"
+  echo "$output" | sed 's/^/      /'
+  fail=$((fail + 1))
+fi
+
+# Fixture 7: exit-code override on success (findings present, exit 0)
+cat > "$TMP/success.jsonl" <<'EOF'
+{"type":"item.completed","item":{"type":"agent_message","text":"```json\n{\"findings\":[{\"file\":\"s.py\",\"line\":1,\"severity\":\"SUGGESTION\",\"confidence\":3,\"summary\":\"ok\",\"proposed_fix\":\"none\"}]}\n```"}}
+EOF
+output="$(python3 "$PARSER" \
+  --meta-override-exit-code 0 \
+  --meta-override-reason "" \
+  < "$TMP/success.jsonl" 2>&1)"
+if echo "$output" | grep -q 'codex_failed: false' && echo "$output" | grep -q 'file: s.py'; then
+  echo "  PASS: meta override on success (no reason set)"; pass=$((pass + 1))
+else
+  echo "  FAIL: meta override on success"
+  echo "$output" | sed 's/^/      /'
+  fail=$((fail + 1))
+fi
+
+# Fixture 8: parser handles agent_message text containing """ safely (injection safety)
+cat > "$TMP/injection-attempt.jsonl" <<'EOF'
+{"type":"item.completed","item":{"type":"agent_message","text":"Here are findings: \"\"\" + __import__('os').system('echo PWNED') + \"\"\"\n```json\n{\"findings\":[{\"file\":\"i.py\",\"line\":1,\"severity\":\"SUGGESTION\",\"confidence\":1,\"summary\":\"injection attempt in text\",\"proposed_fix\":\"none\"}]}\n```"}}
+EOF
+output="$(python3 "$PARSER" < "$TMP/injection-attempt.jsonl" 2>&1)"
+if echo "$output" | grep -q 'file: i.py' && ! echo "$output" | grep -q 'PWNED'; then
+  echo "  PASS: parser ignores triple-quote injection in agent_message text"; pass=$((pass + 1))
+else
+  echo "  FAIL: parser reacted to injection attempt"
+  echo "$output" | sed 's/^/      /'
+  fail=$((fail + 1))
+fi
+
 echo ""
 echo "Total: $((pass + fail)), pass: $pass, fail: $fail"
 [[ $fail -eq 0 ]] || exit 1
