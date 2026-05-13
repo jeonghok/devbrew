@@ -890,10 +890,13 @@ def main():
         }))
         sys.exit(0)
 
-    # 11. Handle extend — update max and re-inject current gate prompt
+    # 11. Handle extend — re-inject current gate prompt.
+    # update_state_file makes no state change on extend (the prior
+    # new_max_total += additional was a silent no-op since v1.5.0 —
+    # max_total_iterations was never in the replacements dict). The
+    # re-read of state below picks up any unrelated changes on disk.
     if transition["type"] == "extend":
         current_gate = state["current_gate"]
-        # State file already updated with new max
         updated_state, updated_body = parse_state_file(state_file)
         if updated_state:
             updated_results = extract_gate_results(updated_body)
