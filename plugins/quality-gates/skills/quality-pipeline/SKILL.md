@@ -11,9 +11,11 @@ cost_class: variable
 
 # Quality Gates — Gate Executor
 
-You are executing a **single gate** of the quality pipeline. The Stop hook manages
-pipeline progression (gate-to-gate transitions, iteration counting, loop-back on
-code changes). You do NOT manage state files or pipeline flow.
+You are executing a **single gate** of the quality pipeline. The Stop hook
+manages pipeline progression (gate-to-gate transitions and within-Gate-2
+iteration counting). The pipeline is **forward-only**: code-change verdicts
+(`NEEDS_RESTART`) terminate with a user-choice prompt rather than auto-restarting
+from Gate 1. You do NOT manage state files or pipeline flow.
 
 ## Preflight
 
@@ -749,7 +751,7 @@ Output a structured report in this exact format. **All skipped agents must be li
 ### Verdict: [PASS / FAIL / NEEDS_RESTART]
 [If PASS: "All critical and important issues resolved."]
 [If FAIL: "N issues remain after max iterations."]
-[If NEEDS_RESTART: "Code was changed during fixes. Pipeline should restart from Gate 1."]
+[If NEEDS_RESTART: "Code was changed during fixes. The pipeline is forward-only — it halts with a user-choice prompt rather than auto-restarting from Gate 1. The user applies the fixes and re-runs /qg."]
 ```
 
 **Output Gate 2 result to user:**
@@ -775,7 +777,7 @@ Output a structured report in this exact format. **All skipped agents must be li
 - If an agent returns no findings, that domain is clean — don't re-run it
 - `code-simplifier` suggestions NEVER block the pipeline
 - Always track which files you modify — the orchestrator needs this for the signal's `files_changed` attribute
-- If you changed code, your verdict MUST be `NEEDS_RESTART` (not `PASS`), so Gate 1 can re-verify
+- If you changed code, your verdict MUST be `NEEDS_RESTART` (not `PASS`) — the Stop hook halts the pipeline with a user-choice prompt so the user can re-run `/qg` after applying fixes. The pipeline does NOT auto-restart from Gate 1
 - Path A (`plan_path_source == "explicit"`) preserves the original `superpowers:code-reviewer` dispatch behavior — do not gate it on diff size
 - Delete `.claude/quality-gates/<session-id>/diff-cache.txt` on every Gate 2 exit path (including errors)
 
@@ -1130,13 +1132,13 @@ Based on choice:
 
 ### GATE3_FAIL
 
-Gate 3 failed. Present:
-1. **Fix issues** (will restart from Gate 1)
+Gate 3 failed. The pipeline is forward-only and does not auto-restart from Gate 1; the user applies fixes and re-runs `/qg`. Present:
+1. **Fix and re-run /qg** — apply fixes; pipeline terminates so the user can re-run /qg manually
 2. **Skip** runtime verification
 3. **Abort** pipeline
 
 Based on choice:
-- Fix: fix the issues, then `<qg-signal gate="3" verdict="NEEDS_RESTART" summary="Fixed runtime issues" files_changed="list,of,changed,files" />`
+- Fix: inform the user to apply fixes and re-run /qg, then `<qg-signal action="abort" reason="User will re-run /qg after fixes" />`
 - Skip: `<qg-signal gate="3" verdict="SKIP" summary="User chose to skip" files_changed="" />`
 - Abort: `<qg-signal action="abort" reason="User chose to abort" />`
 
@@ -1201,7 +1203,7 @@ Verdict values:
 - `PASS` — Gate succeeded, no issues
 - `FAIL` — Gate failed, issues remain
 - `SKIP` — Gate skipped (no plan file, non-web project, etc.)
-- `NEEDS_RESTART` — Code was changed, pipeline should restart from Gate 1
+- `NEEDS_RESTART` — Code was changed during fixes. Pipeline halts with a Stop-hook user-choice prompt; the user applies fixes and re-runs `/qg`. The pipeline does **not** auto-restart from Gate 1 (forward-only state machine, v1.5.0+).
 - `PASS_WITH_WARNINGS` — Gate passed with non-blocking warnings
 - `RETRY` — Gate needs to re-run (Gate 1 implemented missing items)
 
