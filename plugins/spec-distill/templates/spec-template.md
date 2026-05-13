@@ -6,6 +6,10 @@ session_id: <uuid>
 status: locked
 next_phase: writing-plans
 source: spec-distill v0.1.0
+# Locked decisions — interview (b)/(d) path 사용자 명시 응답에서 도출.
+# drafting-spec Mode A가 채움. Mode B는 superseded_by/supersedes 마커로 변경 이력 박제.
+# source 허용값: interview-round-<N> (정상 운영) 또는 brainstorming-round-<N> (meta-spec dogfooding).
+locked_decisions: []
 ---
 
 # <Topic title>
