@@ -3,6 +3,70 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.10.0] — 2026-05-13
+
+### Changed
+- **SKILL.md prose** aligned with the v1.5.0 forward-only state machine. Five
+  sites in `skills/quality-pipeline/SKILL.md` had carried the pre-1.5.0
+  "auto-restart from Gate 1" vocabulary; they now describe the actual
+  Stop-hook behavior (user-choice prompt; user re-runs `/qg`).
+- **`GATE3_FAIL` prompt option 1 label** is now `"Fix and re-run /qg"`
+  (was `"Fix issues (will restart from Gate 1)"`). User-visible string
+  change; semantics already matched the new label since v1.5.0.
+- **Example history log** in `references/state-file-format.md` no longer
+  shows `Restarting from Gate 1 (iteration 2)` — replaced with the
+  forward-only termination line.
+
+### Removed
+- **`total_iterations` / `max_total_iterations`** state-file fields. Deprecated
+  in v1.5.0, never written since, and (discovered during this cleanup) the
+  `extend` branch in `update_state_file` that incremented `new_max_total`
+  was already a dead write because `max_total_iterations` had been absent
+  from the `replacements` dict for a year. Removed from `parse_state_file`,
+  `update_state_file`, schema doc, and three fixture files. The
+  `test_no_max_total_iterations_constant` gate test is preserved.
+
+### Fixed
+- **Doc-vs-code drift**: SKILL.md verdict definitions, GATE3_FAIL prompt,
+  and Gate 2 output format no longer mis-instruct reviewers that the
+  pipeline auto-restarts from Gate 1. Locked by the new
+  `tests/test_forward_only_prose.sh` grep guard (AC1–AC8 + NG7,
+  8 assertions, exit 0 on PASS).
+- **Stale comment in `main()` extend branch** (`# State file already
+  updated with new max`) replaced with an accurate description: the prior
+  `new_max_total += additional` was a silent no-op since v1.5.0 because
+  `max_total_iterations` was never in the replacements dict. Caught during
+  Task 3 code review; CLAUDE.md Law 3 compounding.
+
+### Internal
+- **`build_special_prompt`** refactored from a 6-case if/elif ladder
+  (~146 LoC) to a module-level `_SPECIAL_PROMPTS` per-case dict + a 43-line
+  dispatcher. Semantics preserved; locked by `tests/test_stop_hook_unit.py`
+  (5 invariants: exact case-tag header prefix, length > 200, `<qg-signal`
+  ≥ 2 directives, abort option present, exact `PIPELINE_ERROR\n\n`
+  prefix on unknown transitions).
+- **`main()` transition-handler** collapses 4 duplicated
+  `print(json.dumps({...})); sys.exit(0)` blocks into a single
+  `emit_continuation` helper called after a small prompt-selector
+  dispatch. Handler block shrank ~73 → ~51 LoC (-22).
+- **`hooks/stop-hook.py` LoC**: before 960, after 964. The spec's
+  ≤ 800 target turned out to be over-optimistic — the `_SPECIAL_PROMPTS`
+  dict for 7 cases is roughly as long as the original if/elif ladder
+  (data encoding doesn't compress over branches). The realistic floor
+  for D1+D2+D3 was ~950–960. The substantive win is structural (one
+  source of truth per case, unified trailer) and the unit-test net
+  protects against future drift, not raw LoC.
+
+### Notes
+- Stop-hook itself remains. The spec's "Stop-hook review" section enumerates
+  6 responsibilities (turn-boundary auto-progression, multi-turn Gate 2
+  fix-loop, user-choice prompt injection, state-file management, repeat-
+  detection invariant, mid-session cleanup); none can be moved into the
+  skill without losing automatic continuation or the code-enforced
+  AP15 *"loop without repeat detection"* guard. The user-prompted
+  re-evaluation ("이제와서는 stop hook이 반드시 필요할지도 검토해봐")
+  is preserved in the spec's §Context for future readers.
+
 ## [1.9.0] — 2026-05-12
 
 ### Added
