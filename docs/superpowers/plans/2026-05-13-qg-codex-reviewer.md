@@ -511,6 +511,18 @@ git commit -m "feat(qg-codex): add detect_codex.sh 6-case probe"
 - Test: `plugins/quality-gates/tests/test_findings_parser.sh`
 - Create: `plugins/quality-gates/scripts/codex_findings_to_yaml.py`
 
+**IMPORTANT — Task 0 spike discovery (load-bearing for this task):** Codex 0.130.0 wraps `agent_message` inside an `item.completed` envelope. The actual on-the-wire JSONL event shape is:
+
+```json
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"```json\n{...}\n```"}}
+```
+
+The parser MUST drill into `item.text` (nested), with legacy top-level `{"type":"agent_message","text":"..."}` and `{"type":"agent_message","message":"..."}` as fallbacks. A naive top-level `evt["type"] == "agent_message"` check (the shape gstack references used) silently produces zero findings against codex 0.130.0.
+
+Use the frozen fixture at `plugins/quality-gates/tests/spike/fixtures/codex_jsonl_sample.json` as ground-truth input in the test fixtures below — at least one test case should feed the literal fixture bytes through the parser and assert non-empty findings, so future codex schema drift is caught immediately.
+
+The parser pseudocode below (in step 3.3) has been updated to handle both shapes. Do NOT revert to top-level-only checking.
+
 ### Steps
 
 - [ ] **3.1: Write parser test (failing first)**
@@ -546,15 +558,25 @@ check() {
   fi
 }
 
-# Fixture 1: fenced JSON in agent_message (Stage 1 success)
+# Fixture 1: fenced JSON in nested item.completed → agent_message (Codex 0.130+ shape, Stage 1 success)
 cat > "$TMP/fenced.jsonl" <<'EOF'
-{"type":"agent_message","text":"Here are findings:\n```json\n{\"findings\":[{\"file\":\"a.py\",\"line\":3,\"severity\":\"IMPORTANT\",\"confidence\":9,\"summary\":\"index access without bounds check\",\"proposed_fix\":\"catch IndexError\"}]}\n```"}
+{"type":"item.completed","item":{"type":"agent_message","text":"Here are findings:\n```json\n{\"findings\":[{\"file\":\"a.py\",\"line\":3,\"severity\":\"IMPORTANT\",\"confidence\":9,\"summary\":\"index access without bounds check\",\"proposed_fix\":\"catch IndexError\"}]}\n```"}}
 EOF
-check "fenced JSON Stage 1" "$TMP/fenced.jsonl" "" 'file: a.py'
+check "fenced JSON (nested) Stage 1" "$TMP/fenced.jsonl" "" 'file: a.py'
 
-# Fixture 2: raw JSON (Stage 2 success)
+# Fixture 1b: legacy top-level agent_message shape (still must be supported)
+cat > "$TMP/fenced-legacy.jsonl" <<'EOF'
+{"type":"agent_message","text":"```json\n{\"findings\":[{\"file\":\"a-legacy.py\",\"line\":1,\"severity\":\"SUGGESTION\",\"confidence\":5,\"summary\":\"legacy shape\",\"proposed_fix\":\"none\"}]}\n```"}
+EOF
+check "fenced JSON (legacy top-level) Stage 1" "$TMP/fenced-legacy.jsonl" "" 'file: a-legacy.py'
+
+# Fixture 1c: real on-the-wire fixture from Task 0 spike (regression anchor for codex schema drift).
+# This is the load-bearing test — if codex changes its event schema in a future version, this test fails first.
+check "real codex sample (Task 0 fixture)" "$PLUGIN_ROOT/tests/spike/fixtures/codex_jsonl_sample.json" "" 'agent: codex-reviewer'
+
+# Fixture 2: raw JSON inside nested item.completed (Stage 2 success — no fence)
 cat > "$TMP/raw.jsonl" <<'EOF'
-{"type":"agent_message","text":"{\"findings\":[{\"file\":\"b.py\",\"line\":5,\"severity\":\"IMPORTANT\",\"confidence\":7,\"summary\":\"null check missing\",\"proposed_fix\":\"add if b is None guard\"}]}"}
+{"type":"item.completed","item":{"type":"agent_message","text":"{\"findings\":[{\"file\":\"b.py\",\"line\":5,\"severity\":\"IMPORTANT\",\"confidence\":7,\"summary\":\"null check missing\",\"proposed_fix\":\"add if b is None guard\"}]}"}}
 EOF
 check "raw JSON Stage 2" "$TMP/raw.jsonl" "" 'file: b.py'
 
@@ -623,6 +645,15 @@ FENCED_JSON_RE = re.compile(r"```json\s*\n(.*?)\n```", re.DOTALL)
 
 
 def extract_last_agent_message(stdin_text: str) -> str | None:
+    """Extract text of the last agent_message event from a Codex JSONL stream.
+
+    Handles two event shapes:
+      1. Codex 0.130+: {"type":"item.completed","item":{"type":"agent_message","text":"..."}}
+      2. Legacy:       {"type":"agent_message","text":"..."} or {"type":"agent_message","message":"..."}
+
+    Discovery: Task 0 spike (commit 01db82f) — see fixture
+    plugins/quality-gates/tests/spike/fixtures/codex_jsonl_sample.json.
+    """
     last_text: str | None = None
     for line in stdin_text.splitlines():
         line = line.strip()
@@ -632,8 +663,11 @@ def extract_last_agent_message(stdin_text: str) -> str | None:
             ev = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if ev.get("type") == "agent_message":
-            txt = ev.get("text") or ev.get("message", "")
+
+        # Drill into nested item if present (Codex 0.130+), else use event directly (legacy).
+        item = ev.get("item") if isinstance(ev.get("item"), dict) else ev
+        if item.get("type") == "agent_message":
+            txt = item.get("text") or item.get("message", "")
             if txt:
                 last_text = txt
     return last_text

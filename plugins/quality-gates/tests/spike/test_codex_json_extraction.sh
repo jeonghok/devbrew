@@ -2,6 +2,10 @@
 # Spike: verify codex emits fenced JSON >=2/3 times.
 
 set -u
+# Intentionally NOT `set -e` / `set -o pipefail`: the loop must continue through
+# all 3 runs even if one codex invocation errors out. Failed runs are observed
+# via exit-code logging + "no fenced JSON" outcome, not via shell aborting.
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 PROMPT_FILE="$SCRIPT_DIR/spike_prompt.md"
@@ -13,9 +17,11 @@ trap 'rm -rf "$OUT_DIR"' EXIT
 PROMPT="$(cat "$PROMPT_FILE")"
 TIMEOUT_CMD="$(command -v gtimeout || command -v timeout)"
 [[ -n "$TIMEOUT_CMD" ]] || { echo "Need gtimeout or timeout" >&2; exit 1; }
+command -v python3 >/dev/null || { echo "Need python3 for JSONL parsing" >&2; exit 1; }
 
 pass=0
 total=3
+first_pass_run=""  # track first passing run so we freeze the correct fixture
 for i in 1 2 3; do
   echo "--- Run $i/$total ---"
   STDOUT_FILE="$OUT_DIR/run-$i.jsonl"
@@ -46,9 +52,11 @@ item = d.get("item") if isinstance(d.get("item"), dict) else d
 print(item.get("text", item.get("message", "")))
 ' 2>/dev/null || echo "")"
 
-  if echo "$last_msg" | grep -q '```json' && echo "$last_msg" | grep -q '```\s*$'; then
+  # Use POSIX bracket class instead of \s — defensive against non-GNU grep.
+  if echo "$last_msg" | grep -q '```json' && echo "$last_msg" | grep -qE '```[[:space:]]*$'; then
     echo "  fenced JSON detected"
     pass=$((pass + 1))
+    [[ -z "$first_pass_run" ]] && first_pass_run="$i"
   else
     echo "  no fenced JSON"
     echo "  preview: $(echo "$last_msg" | head -c 200)"
@@ -59,8 +67,10 @@ echo ""
 echo "Spike result: $pass/$total passed"
 if [[ $pass -ge 2 ]]; then
   mkdir -p "$SCRIPT_DIR/fixtures"
-  cp "$OUT_DIR/run-1.jsonl" "$SCRIPT_DIR/fixtures/codex_jsonl_sample.json"
-  echo "Frozen sample to $SCRIPT_DIR/fixtures/codex_jsonl_sample.json"
+  # Freeze the FIRST passing run (not blindly run-1), so a partial-pass scenario
+  # (e.g., run-1 fails, runs 2-3 pass) still produces a valid ground-truth fixture.
+  cp "$OUT_DIR/run-$first_pass_run.jsonl" "$SCRIPT_DIR/fixtures/codex_jsonl_sample.json"
+  echo "Frozen run-$first_pass_run sample to $SCRIPT_DIR/fixtures/codex_jsonl_sample.json"
   exit 0
 else
   echo "FAIL: spike threshold not met. Halt before Task 4." >&2
