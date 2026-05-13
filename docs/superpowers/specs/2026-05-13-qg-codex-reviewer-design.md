@@ -1,218 +1,449 @@
 # QG Codex Reviewer — Design Spec
 
-> **Status:** Draft — pending implementation plan
+> **Status:** Draft v2 — revised after spec-reviewer adversarial review (16 issues addressed)
 > **Author:** Jeongho-K (with Claude Opus 4.7)
 > **Date:** 2026-05-13
 > **Plugin:** `plugins/quality-gates`
 > **Plugin bump:** `1.10.0 → 1.11.0` (minor — 새 reviewer surface 추가)
 > **Branch:** `feature/qg-codex-reviewer`
+> **Revision log:**
+> - v1 → v2: switched core invocation from `codex exec --output-schema` to `codex exec --json` (JSONL streaming) per gstack reviewer precedent; added auth + version probes; tightened security model; replaced grep-based AC4 with multi-line aware verification; added cost ceiling, fan-out audit, concrete next action.
 
 ## 1. Context / Why
 
-QG (quality-gates)의 3개 게이트는 모두 reviewer agent를 dispatch한다 — Gate 1의 plan-verifier, Gate 2의 scout / code-reviewer / silent-failure-hunter / feature-dev:code-reviewer / adversarial / synthesizer, Gate 3의 runtime-verifier / test-scope-validator. 모두 같은 Anthropic 모델 family에서 도는 subagent다.
+QG의 3개 게이트는 모두 reviewer agent를 dispatch한다 — Gate 1의 plan-verifier, Gate 2의 scout / code-reviewer / silent-failure-hunter / feature-dev:code-reviewer / adversarial / synthesizer, Gate 3의 runtime-verifier / test-scope-validator. 전부 같은 Anthropic 모델 family에서 도는 subagent다.
 
-Law 2 — "writer와 reviewer는 같은 pass를 공유 못 한다" — 는 `disallowedTools` frontmatter로 물리적으로 강제된다. 그러나 **모델 family 단일성**은 남아 있는 약점이다. 동일 family의 reviewer들은 pattern-matching 누락(blind spot)이 상관(correlated)될 수 있다 — 한 reviewer가 놓치면 다른 reviewer도 놓칠 확률이 높아지는 구조.
+Law 2 — "writer와 reviewer는 같은 pass를 공유 못 한다" — 는 `disallowedTools` frontmatter로 물리적으로 강제된다. 그러나 **모델 family 단일성**은 남아 있는 약점이다. 동일 family의 reviewer들은 pattern-matching 누락이 상관(correlated)될 수 있다.
 
-Codex CLI(OpenAI 계열 모델 백엔드)가 시스템에 설치되어 있으면 진짜 독립적인 두 번째 의견 — 다른 프로세스, 다른 모델 family — 을 얻을 수 있다. devbrew Law 2의 정신을 "프롬프트가 아니라 물리적 분리"에서 한 단계 더 밀어 "OS 프로세스 분리 + 모델 family 분리"로 확장한다.
+Codex CLI(OpenAI 계열 모델)가 시스템에 설치되어 있으면 OS 프로세스 분리 + 모델 family 분리라는 진짜 독립 의견을 얻을 수 있다. devbrew Law 2 정신을 한 단계 더 밀어 "프롬프트가 아니라 물리"에서 "프롬프트 ≠ 도구 ≠ OS 프로세스 ≠ 모델 family"로 확장한다.
 
-Reference 패턴 (Codex 통합 선례):
-- `reference/compound-engineering-plugin/plugins/compound-engineering/skills/ce-work-beta/references/codex-delegation-workflow.md` — `codex exec`을 writer로 위임. 환경 probe (`command -v codex`, `CODEX_SANDBOX`/`CODEX_SESSION_ID` recursion guard), output schema 강제, sandbox mode 선택 (`yolo` / `full-auto`), circuit breaker (3연속 실패 후 비활성화).
-- `reference/gstack/codex/SKILL.md` — `codex review` / `codex challenge` / `codex consult` 3-mode "200 IQ second opinion" reviewer 패턴.
+**Reference 패턴 — 검증된 invocation:**
 
-QG는 reviewer pipeline이므로 두 reference의 합성: CE의 환경 probe + 격리 패턴 + gstack의 reviewer 의도, 단 `codex exec -s read-only` (read-only sandbox)로 격리.
+- `reference/gstack/codex/SKILL.md:1153, 1302, 1350` — gstack의 codex challenge / consult / resume reviewer 모드. 패턴:
+  ```bash
+  _gstack_codex_timeout_wrapper 600 codex exec "<prompt>" -C "$_REPO_ROOT" \
+    -s read-only -c 'model_reasoning_effort="high"' \
+    --enable web_search_cached --json < /dev/null \
+    | PYTHONUNBUFFERED=1 python3 -u -c "..."
+  ```
+  핵심: `codex exec` + `-s read-only` sandbox + `--json` JSONL streaming + Python으로 reasoning trace와 final agent message 추출.
+
+- `reference/gstack/bin/gstack-codex-*`:
+  - `_gstack_codex_version_check` — known-bad version 가드. 정규식: `(^|[^0-9.])0\.120\.(0|1|2)([^0-9.]|$)` (stdin deadlock bug).
+  - `_gstack_codex_timeout_wrapper` — gtimeout / timeout fallback 체인.
+  - `_gstack_codex_auth_probe` — `$CODEX_API_KEY`, `$OPENAI_API_KEY`, `~/.codex/auth.json` 중 하나 필요.
+
+- `reference/compound-engineering-plugin/.../codex-delegation-workflow.md` — CE는 `codex exec --output-schema` 패턴을 *writer 위임*에 사용 (status/files_modified 같은 *완료 contract*). **이 패턴은 reviewer per-finding 출력에는 검증된 적 없음.** 따라서 본 spec은 CE 위임 패턴이 아니라 gstack reviewer 패턴을 따른다.
 
 ## 2. Goals
 
-1. Codex CLI가 시스템에 설치되어 있고 `DEVBREW_DISABLE_QG_CODEX=1`이 아니면, QG가 자동 감지한다.
-2. 감지 시 Gate 2 Phase 1에 `codex-reviewer` agent를 추가 dispatch한다.
-3. Codex의 findings는 기존 reviewer와 동일한 finding YAML schema로 정규화되어 Phase 1.5 (adversarial) / Phase 1.6 (synthesizer)에서 출처 구분 없이 dedupe/rank된다.
-4. Codex 호출은 OS-level read-only sandbox(`-s read-only`)로 격리되어 working tree mutation이 물리적으로 불가능하다.
-5. 실패 모드(timeout, exit ≠ 0, malformed JSON, 누락된 result) 모두 graceful skip — 다른 reviewer 실행에 영향 없음.
+1. Codex CLI 가용성 + 인증 + 버전 안전성을 한 probe로 확인한다.
+2. Probe 통과 시 Gate 2 Phase 1에 `codex-reviewer` agent를 추가 dispatch한다.
+3. Codex 출력 (JSONL stream의 final agent message)에서 finding을 추출, 기존 reviewer와 동일 YAML schema로 정규화한다.
+4. Codex 호출은 `-s read-only` sandbox + outer agent의 `Bash` allowlist로 격리된다 (2중 격리).
+5. 실패 모드는 모두 graceful — 다른 reviewer 영향 없음, synthesizer 입력 형식 보존.
+6. Codex 비용은 사용자가 명시적으로 인지/제한할 수 있다 (cost ceiling 또는 first-use 경고).
 
 ## 3. Non-goals
 
-- **Codex로 코드를 *작성*하지 않는다.** QG는 review pipeline이며 ce-work-beta의 writer delegation 영역과 명확히 분리된다.
-- **Codex가 git/PR/working tree를 mutate하지 않는다.** `-s read-only` sandbox로 강제.
-- **기존 Claude reviewer를 대체하지 않는다.** 추가 reviewer로만 동작 — 비용 최적화 목적 아님.
-- **Gate 1 / Gate 3은 변경하지 않는다.** Gate 1은 단순 plan ↔ diff 매칭이라 codex의 추가 가치가 미미하고, Gate 3는 MCP 도구 (chrome-devtools) 기반이라 codex CLI와 결합 의미가 약하다. 범위를 Gate 2 Phase 1로 한정해 영향 범위를 좁힌다.
-- **`codex review` subcommand는 쓰지 않는다.** 출력 형식이 고정되어 finding YAML 정규화가 어렵다. `codex exec --output-schema`가 더 유연하다.
+- **Codex로 코드 *작성* 안 함** — QG는 review pipeline, writer delegation은 ce-work-beta 영역.
+- **Codex가 working tree mutate 안 함** — `-s read-only` sandbox.
+- **기존 Claude reviewer 대체 안 함** — 추가 reviewer로만, 비용 최적화 아님.
+- **Gate 1 / Gate 3 변경 안 함** — Gate 1은 plan↔diff 단순 매칭, Gate 3는 MCP 기반.
+- **`codex review` subcommand 사용 안 함** — 출력이 freeform 텍스트라 finding YAML 정규화 어려움. `codex exec --json`이 stream에서 structured extraction 가능.
+- **`codex exec --output-schema` 사용 안 함** — CE 위임 패턴, reviewer per-finding 출력에 검증된 precedent 없음. gstack의 `--json` JSONL이 검증된 reviewer 패턴.
 
 ## 4. Constraints
 
-### 4.1 devbrew 철학 제약
+### 4.1 devbrew 철학
 
-- **Law 1 (Clarity Before Code).** 본 spec 자체가 Law 1의 instantiation — 구조적 게이트 (Context, Goals, Non-goals, Constraints, AC, Files, Verification, Rejected Alternatives, Metadata) 충족.
-- **Law 2 (Writer/Reviewer Separation).** `codex-reviewer.md` frontmatter에 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit, Glob]` 명시. 추가로 codex 프로세스 자체에 `-s read-only` sandbox — 2중 격리.
-- **Law 3 (Compounding).** Spec 자체가 `docs/superpowers/specs/` 하위에 영구 저장 (Law 3 substrate). README의 "Principles Instantiated"에 "Law 2 strengthening via process + model-family separation" 한 줄 추가.
+- **Law 1.** 본 spec이 9개 필수 섹션 (Context, Goals, Non-goals, Constraints, AC, Files, Verification, Rejected, Metadata) + Concrete Next Action 보강.
+- **Law 2 — 3중 격리:**
+  1. `codex-reviewer.md` frontmatter: `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit, Glob]` (Write 류 도구 차단)
+  2. `codex-reviewer.md` frontmatter: `allowed-tools` 명시 (예: `Bash(codex exec*), Bash(timeout *), Bash(gtimeout *), Bash(mktemp -d*), Bash(cat *), Bash(python3 *), Read`) — outer Bash가 shell redirection으로 파일에 못 쓰도록 패턴 화이트리스트
+  3. Codex subprocess 자체: `-s read-only` OS sandbox
+  > **명시:** sandbox `-s read-only`는 Codex의 *agent loop*가 쓰는 걸 막는다. Outer Claude Code agent의 Bash는 그 sandbox 안에 있지 않다. 두 layer 모두 필요하며 어느 한 쪽도 다른 쪽을 substitute하지 않는다.
+- **Law 3.** Spec → plan → 구현 사이클 후 `plugin.json` bump + CHANGELOG entry + README "Principles Instantiated" — 자동 compounding.
 
-### 4.2 Plugin shape 제약
+### 4.2 Plugin shape
 
-- **Scoped tools:** `codex-reviewer.md`는 `allowedTools: [Bash, Read]`, `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit, Glob]`. Scout 패치는 frontmatter 건드리지 않음 (입력만 추가).
-- **cost_class:** `codex-reviewer.md`에 `cost_class: variable` (사용자의 codex 계정/구독에 따라 다름). README cost 섹션에 명시.
-- **Kill switch:** `DEVBREW_DISABLE_QG_CODEX=1` 환경변수. probe script가 가장 먼저 확인.
-- **Markdown state, secret 금지:** 결과는 OS-temp (`mktemp -d`)에 — 영구 보존 불필요. Secret 기록 없음 (probe는 codex 경로/버전만).
-- **Graceful degradation with loud logging:** Codex 없을 때 fallback이 돌았음을 사용자가 출력에서 인지할 수 있게 SKILL.md에 명시 ("Codex CLI not detected — skipping codex-reviewer").
-- **Progressive disclosure:** Agent 이름 `codex-reviewer` (짧고 명령형 아님 — agent는 명사). Probe script 이름 `detect-codex.sh` (기존 `detect-runtime.sh`와 동형).
+- `codex-reviewer.md` frontmatter: `cost_class: variable`, `allowed-tools` 화이트리스트 명시.
+- Kill switch: `DEVBREW_DISABLE_QG_CODEX=1`.
+- Markdown state (스크래치는 OS temp).
+- Graceful degradation with loud logging.
+- 새 P# 추가 없음 — Law 2의 instantiation 강화일 뿐 직교 원칙 아님.
 
-### 4.3 보안 제약
+### 4.3 보안
 
-- Codex 프로세스가 `-s read-only` sandbox 외 모드로 호출되지 않도록 agent 본문에 인라인 ("Always invoke codex with `-s read-only`. Never substitute a different sandbox mode.").
-- Recursion guard: `CODEX_SANDBOX` 또는 `CODEX_SESSION_ID` env가 set이면 probe는 `codex_available: false`를 emit (이미 codex 안에서 도는 경우 재귀 회피).
-- Timeout: `timeout 180 codex exec ...` — 하드 wall-clock 한도.
-- Persona 파일 보호: `codex-reviewer.md`는 reviewer persona — 약화하는 PR(security 제약 제거, sandbox 모드 변경)은 보안 리뷰 대상 (CLAUDE.md "Persona 파일은 보안-민감 코드" 조항).
+- Codex 호출은 **항상** `-s read-only`. Agent 본문에 인라인 명시 + AC4로 정적 검증.
+- Recursion guard: `CODEX_SANDBOX` 또는 `CODEX_SESSION_ID` env set → probe `false` emit.
+- Wall-clock 한도: `gtimeout 330` (gstack `codex review` precedent). 더 긴 thinking이 필요한 deep mode는 가능하지만 default 330s.
+- Persona 파일 (`codex-reviewer.md`)은 security-critical: sandbox/allowlist/timeout 약화 PR은 보안 리뷰 대상.
+
+### 4.4 비용
+
+- `cost_class: variable` — 사용자의 Codex 구독/API 종량제에 따라 다름.
+- **First-use cost gate:** `~/.claude/quality-gates/codex-cost-consent.md`에 consent record 없으면 첫 호출 전 `AskUserQuestion`으로 사용자 동의 요구. 동의 시 marker 파일 작성, 이후 silent.
+- Per-run hard ceiling (spec v2 한도): `gtimeout 330` 자체가 비용 ceiling proxy (단일 호출 시간 한도 = 비용 한도 근사). 명시적 토큰 cap은 codex CLI가 지원하지 않으므로 wall-clock으로 대체.
+- `quick` depth는 skip — 작은 diff에 codex 호출은 trivia ceremony (forbidden pattern).
+
+### 4.5 Fan-out audit
+
+QG는 이미 fan-out ≥ 5 regime (Phase 2 deep 단독으로 5 agent 가능). `codex-reviewer` 추가로 Phase 1 deep은 3 → 4 (still <5). Gate 2 전체 max dispatch 11 → 12 (선언된 hard review gate 안에 있음, CLAUDE.md plugin shape 조항). 추가 escalation 없음, 단 README "Fan-out" 섹션에 12로 갱신.
 
 ## 5. Acceptance Criteria
 
-각 AC는 검증 가능한 binary 조건.
+### AC1 — Probe correctness (6 cases)
 
-- **AC1 — Probe correctness (4 cases).**
-  `bash scripts/detect-codex.sh`가 다음 4가지 case에서 정확한 YAML emit:
-  1. Codex 미설치 (`command -v codex` 빈 출력) → `codex_available: false`, `skip_reason: not_installed`
-  2. Codex 설치됨 → `codex_available: true`, `codex_path: <absolute>`, `codex_version: <string>`
-  3. Kill switch (`DEVBREW_DISABLE_QG_CODEX=1`) → `codex_available: false`, `skip_reason: kill_switch`
-  4. 이미 codex 안 (`CODEX_SANDBOX=1`) → `codex_available: false`, `skip_reason: inside_codex_sandbox`
+`bash scripts/detect-codex.sh`가 다음 6가지 case에서 정확한 YAML emit. 각 case는 verification script `tests/test-detect-codex.sh`로 자동 검증:
 
-- **AC2 — Scout 통합.** Scout이 `codex_manifest` YAML을 입력으로 받고, `codex_available: true` AND depth ∈ {standard, deep}일 때 `phase1_agents`에 `codex-reviewer` 포함. depth=`quick`일 때 또는 `codex_available: false`일 때 미포함.
+| # | 환경 | Emit |
+|---|---|---|
+| 1 | Codex 미설치 (`command -v codex` 빈 출력) | `codex_available: false`<br>`skip_reason: not_installed` |
+| 2 | Codex 설치 + 인증 + 안전 버전 | `codex_available: true`<br>`codex_path: <absolute>`<br>`codex_version: <string>` |
+| 3 | Kill switch (`DEVBREW_DISABLE_QG_CODEX=1`) | `codex_available: false`<br>`skip_reason: kill_switch` |
+| 4 | 이미 codex 안 (`CODEX_SANDBOX=1` 또는 `CODEX_SESSION_ID=...`) | `codex_available: false`<br>`skip_reason: inside_codex_sandbox` |
+| 5 | 인증 없음 (`$CODEX_API_KEY` / `$OPENAI_API_KEY` / `~/.codex/auth.json` 모두 부재) | `codex_available: false`<br>`skip_reason: auth_missing` |
+| 6 | 알려진 bad version (regex `(^\|[^0-9.])0\.120\.(0\|1\|2)([^0-9.]\|$)` 매칭) | `codex_available: false`<br>`skip_reason: known_bad_version`<br>`detected_version: <string>` |
 
-- **AC3 — Codex-reviewer agent 출력 schema.** Agent가 다른 Phase 1 reviewer와 동일한 finding YAML 구조 emit:
-  ```yaml
-  - agent: codex-reviewer
-    file: <path>
-    line: <number>
-    severity: CRITICAL | IMPORTANT | SUGGESTION
-    confidence: <1-10>
-    summary: <one sentence>
-    proposed_fix: <string>
-  ```
+### AC2 — Scout 통합
 
-- **AC4 — Sandbox 강제.** `codex-reviewer.md` 본문 grep으로 `codex exec` 호출이 항상 `-s read-only` 플래그를 동반함을 확인. (테스트 케이스: grep으로 `codex exec`가 등장하는 모든 라인이 `read-only`도 포함)
+Scout이 `codex_manifest` block을 dispatch prompt 입력으로 받고:
+- `codex_available: true` AND depth ∈ {standard, deep} → `phase1_agents`에 `codex-reviewer` 포함
+- `codex_available: false` OR depth = quick → 미포함
 
-- **AC5 — Graceful failure.** Codex 호출이 실패(exit ≠ 0, timeout, malformed JSON, 누락된 result)할 때:
-  1. Agent는 다음 형태의 YAML emit:
-     ```yaml
-     findings: []
-     meta:
-       codex_failed: true
-       reason: <one of: exit_nonzero | timeout | malformed_json | missing_result>
-       exit_code: <int or null>
-     ```
-  2. Phase 1.5 (adversarial) / Phase 1.6 (synthesizer)는 영향 없이 진행 — 빈 리스트는 자연스럽게 dedupe/rank pass-through
-  3. 다른 reviewer의 findings는 그대로 처리
+`tests/test-scout-integration.sh`로 합성된 codex_manifest 4 case (true/standard, true/quick, false/standard, true/deep) 검증.
 
-- **AC6 — Kill switch 우회.** `DEVBREW_DISABLE_QG_CODEX=1 /qg` 실행 시 codex-reviewer가 dispatch되지 않음 (스카웃 출력에 미포함).
+### AC3 — Codex-reviewer 출력 schema
 
-- **AC7 — Backward compatibility.** Codex 미설치 환경에서 기존 QG 출력과 100% 동일 (findings 개수, ordering, synthesizer 출력 모두). 회귀 테스트로 검증.
+Agent 출력은 Phase 1 reviewer와 동일 YAML 구조:
 
-- **AC8 — Plugin shape compliance.** `plugin.json` 버전 `1.10.0 → 1.11.0` bump, `CHANGELOG.md`에 `[1.11.0] — 2026-05-13` 섹션 (Added/Changed), README "Principles Instantiated"에 1줄 추가, README cost 섹션에 codex_class: variable 명시.
+```yaml
+- agent: codex-reviewer
+  file: <path>
+  line: <number>
+  severity: CRITICAL | IMPORTANT | SUGGESTION
+  confidence: <1-10>
+  summary: <one sentence>
+  proposed_fix: <string>
+```
 
-- **AC9 — Persona 격리 (Law 2 이중).** `codex-reviewer.md` frontmatter에 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit, Glob]` 명시 AND agent 본문에 `-s read-only` 인라인. 두 layer 중 하나라도 빠지면 AC 실패.
+추가로 마지막에 meta block:
+
+```yaml
+meta:
+  codex_version: <string>
+  codex_runtime_ms: <int>
+  codex_failed: false
+```
+
+JSONL parser (`codex-findings-to-yaml.py`)는 다음 입력 형식을 받음:
+
+- **Input (stdin):** Codex JSONL stream — 각 line이 `{"type": "...", "delta": "...", ...}` 형태 event. 종결은 `agent_message` 또는 `task_complete` event.
+- **추출:** 마지막 `agent_message` event의 `text` 필드에서 JSON code block (```` ```json ... ``` ````) 추출. JSON 안의 `findings` array를 YAML로 변환.
+- **Output (stdout):** 위 YAML 형식.
+
+### AC4 — Sandbox 강제 (정적 검증)
+
+`codex-reviewer.md` 본문의 모든 `codex exec` invocation이 `-s read-only`를 동반함을 정적으로 검증.
+
+검증 명령 (`tests/test-sandbox-enforced.sh`):
+
+```bash
+# Extract every shell block, find codex exec lines, verify each has -s read-only
+# in same block. Multi-line invocations with backslash continuation are
+# normalized to one logical line first.
+python3 tests/lib/extract-codex-invocations.py agents/codex-reviewer.md \
+  | grep -v -E '(-s|--sandbox)[[:space:]]+read-only' \
+  | (! grep -q .)  # exit 0 only if no offending lines
+```
+
+Helper script가 backslash-continuation을 한 줄로 normalize 후 grep. 단순 line grep 대신.
+
+### AC5 — Graceful failure (concrete tests)
+
+다음 4가지 실패 case 각각에 대해 mock codex binary + verification:
+
+| Failure | Mock | Expected |
+|---|---|---|
+| exit ≠ 0 | `mock-codex-exit1.sh` (즉시 exit 1) | Agent emits `findings: []`, `meta.codex_failed: true`, `meta.reason: exit_nonzero`, `meta.exit_code: 1` |
+| Timeout | `mock-codex-hang.sh` (sleep 400) | gtimeout fires after 330s, agent emits `findings: []`, `meta.reason: timeout`, `meta.exit_code: 124` |
+| Malformed JSON | `mock-codex-bad-json.sh` (random bytes) | Agent emits `findings: []`, `meta.reason: malformed_json`, `meta.exit_code: 0` |
+| Missing final message | `mock-codex-no-agent-message.sh` (이벤트 없이 exit 0) | Agent emits `findings: []`, `meta.reason: missing_result`, `meta.exit_code: 0` |
+
+**Downstream impact 검증:** 각 case에서 captured synthesizer 입력에 codex의 `findings: []`가 다른 reviewer findings를 영향 주지 않음을 assert:
+```bash
+# Run failure case + non-codex reviewer mock, capture synthesizer input
+diff <(./run-qg-with-codex-failure.sh | extract-synthesizer-input) \
+     <(./run-qg-without-codex.sh | extract-synthesizer-input)
+# Expected: identical except for added codex meta block
+```
+
+### AC6 — Kill switch
+
+`DEVBREW_DISABLE_QG_CODEX=1 /qg` 실행 시 scout 출력 YAML의 `phase1_agents`에 `codex-reviewer` 부재.
+
+### AC7 — Backward compatibility (with precursor)
+
+**Precursor task (AC7 활성화 전 1회 실행):** Codex 미설치 환경에서 `/qg`를 3개 합성 PR (small/medium/large diff)에 실행 → synthesizer 출력 YAML을 baseline fixture로 `tests/fixtures/baseline-synthesizer-{small,medium,large}.yaml`에 저장.
+
+**AC7 자체:** Codex 미설치 환경에서 같은 3개 PR에 `/qg` 재실행 → 출력이 baseline과 byte-identical (단, timestamp/session_id 등 비결정적 필드는 normalize). `git diff` 기반 검증.
+
+baseline 부재 시 AC7는 "aspirational — baseline must be captured first"로 표기.
+
+### AC8 — Plugin shape compliance
+
+- `plugin.json`: `version: "1.10.0" → "1.11.0"` 변경 검증 (`jq -r .version < plugin.json`)
+- `CHANGELOG.md`: `## [1.11.0] — 2026-05-13` 섹션 존재 + Added/Changed 하위 항목 grep 확인
+- `README.md`: "Principles Instantiated" 섹션에 Law 2 강화 한 줄 추가 + "Fan-out" 섹션 12로 갱신 + cost 섹션에 `variable` 명시 — 각각 grep 확인
+
+### AC9 — Persona 격리 (3 layer)
+
+`codex-reviewer.md` frontmatter + 본문에 3 layer 격리 모두 존재:
+1. `disallowedTools` 라인에 `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Glob` 모두 포함
+2. `allowed-tools` 라인이 `Bash(...)` 패턴 화이트리스트로 narrow (단순 `Bash` 아님)
+3. 본문의 모든 `codex exec` invocation에 `-s read-only` 포함 (AC4와 중복 검증)
+
+한 layer라도 빠지면 AC9 실패.
+
+### AC10 — Cost consent
+
+첫 사용 시 `AskUserQuestion`이 발화되고 사용자가 "approve / decline / always-approve" 중 선택. Consent marker (`~/.claude/quality-gates/codex-cost-consent.md`) 있으면 silent. Decline 시 그 세션 동안 codex-reviewer skip + meta note.
+
+검증: `rm ~/.claude/quality-gates/codex-cost-consent.md && /qg` → consent 프롬프트 발화 확인 (수동 또는 mocked AskUserQuestion).
+
+### AC11 — Outer Bash allowlist 정적 검증
+
+`codex-reviewer.md` 의 `allowed-tools` 라인 파싱 → 다음 패턴만 포함:
+- `Bash(codex exec*)` 또는 `Bash(codex *)` (codex 실행)
+- `Bash(timeout *)` / `Bash(gtimeout *)` (timeout wrapper)
+- `Bash(mktemp -d*)` (스크래치)
+- `Bash(cat *)` (read-only)
+- `Bash(python3 *)` (parser)
+- `Read`
+
+위 외 패턴 (특히 generic `Bash`, `Write`, `Edit` 류) 존재 시 AC11 실패.
 
 ## 6. Files to Modify
 
 ### 6.1 새 파일
 
-| Path | Purpose |
-|---|---|
-| `plugins/quality-gates/scripts/detect-codex.sh` | Codex 가용성 probe. YAML manifest emit. read-only, ~50줄. |
-| `plugins/quality-gates/scripts/codex-findings-to-yaml.py` | Codex JSON 출력 → 표준 finding YAML 정규화. ~30줄. |
-| `plugins/quality-gates/agents/codex-reviewer.md` | 독립 reviewer agent. Bash로 `codex exec -s read-only` 호출. |
-| `plugins/quality-gates/tests/test-detect-codex.bats` 또는 `.sh` | AC1의 4가지 case unit test. |
-| `docs/superpowers/specs/2026-05-13-qg-codex-reviewer-design.md` | 본 spec (이 파일). |
+| Path | Purpose | 크기 추정 |
+|---|---|---|
+| `plugins/quality-gates/scripts/detect-codex.sh` | 6-case probe — version, auth, sandbox-guard, kill-switch, install-check 모두 통합. `gstack-codex-*` 헬퍼를 재구현 (외부 dep 없음). | ~80 lines |
+| `plugins/quality-gates/scripts/codex-findings-to-yaml.py` | Codex JSONL stream → 표준 finding YAML. JSONL event parser + JSON extractor + YAML emitter + failure mode classifier. | ~120 lines |
+| `plugins/quality-gates/agents/codex-reviewer.md` | Reviewer agent (frontmatter + 본문 invocation 패턴). | ~150 lines |
+| `plugins/quality-gates/tests/test-detect-codex.sh` | AC1 6-case 자동 검증. | ~80 lines |
+| `plugins/quality-gates/tests/test-sandbox-enforced.sh` | AC4 정적 검증. | ~30 lines |
+| `plugins/quality-gates/tests/lib/extract-codex-invocations.py` | Multi-line shell block normalize 헬퍼 (AC4). | ~40 lines |
+| `plugins/quality-gates/tests/mocks/mock-codex-{exit1,hang,bad-json,no-agent-message}.sh` | AC5 4 mock binaries. | ~10 lines each |
+| `plugins/quality-gates/tests/fixtures/baseline-synthesizer-{small,medium,large}.yaml` | AC7 baseline (precursor task에서 captured). | captured |
+| `docs/superpowers/specs/2026-05-13-qg-codex-reviewer-design.md` | 본 spec (이 파일). | (existing) |
 
-### 6.2 패치
+### 6.2 패치 — 정확한 줄 granularity
+
+#### `plugins/quality-gates/agents/scout.md`
+
+**Patch 1 (Inputs 섹션, line ~17 근방):** 입력 목록에 `codex_manifest` 추가.
+
+```diff
+ You will receive:
+
+ - `filtered_diff`: unified diff with documentation paths excluded (*.md, docs/**, etc.).
+ - `gate1_summary`: a YAML block from Gate 1 plan-verifier:
+   ...
+ - `session_scope`: one of `branch | session | paths` plus the applied path list.
++- `codex_manifest`: YAML block from `scripts/detect-codex.sh`:
++  ```yaml
++  codex_available: true | false
++  codex_path: <string, only if available>
++  codex_version: <string, only if available>
++  skip_reason: <not_installed | kill_switch | inside_codex_sandbox | auth_missing | known_bad_version>
++  ```
+```
+
+**Patch 2 (Phase 1 selection table, line ~55):** codex-reviewer row 추가.
+
+```diff
+ | depth | phase1_agents |
+ |---|---|
+ | quick | [code-reviewer] |
+-| standard | [code-reviewer, silent-failure-hunter] |
+-| deep | [code-reviewer, silent-failure-hunter, feature-dev:code-reviewer] |
++| standard | [code-reviewer, silent-failure-hunter] + codex-reviewer if codex_available |
++| deep | [code-reviewer, silent-failure-hunter, feature-dev:code-reviewer] + codex-reviewer if codex_available |
+```
+
+**Patch 3 (Phase 1 selection 본문, line ~62):** 추가 rule:
+
+```
+- `codex-reviewer`: include when `codex_manifest.codex_available == true` AND depth ∈ {standard, deep}. Skip on `quick` (cost/latency overhead unjustified for small diffs).
+```
+
+#### `plugins/quality-gates/skills/quality-pipeline/SKILL.md`
+
+**Patch 1 (Gate 2 Phase 0 직전):** Codex probe 호출 + Scout 입력 합성.
+
+정확한 위치: 현재 SKILL.md의 "Gate 2 — Phase 0 (Scout)" 섹션 진입부, Scout dispatch 직전.
+
+```markdown
+**Codex availability probe (Gate 2, Phase 0 prerequisite):**
+
+\`\`\`bash
+bash scripts/detect-codex.sh > /tmp/qg-codex-manifest.yaml
+\`\`\`
+
+The script emits a YAML manifest (6-case probe — install, kill-switch, sandbox-recursion, auth, version, ok). Output is captured to `/tmp/qg-codex-manifest.yaml` (or `${TMPDIR}/qg-codex-manifest-${SESSION_ID}.yaml` if `$TMPDIR` set) and passed as the `codex_manifest` input field to Scout. **Idempotency:** rerunning the probe is safe (read-only, no side effects); the SKILL.md does not check for prior probe output.
+```
+
+**Inject 방법:** Scout dispatch가 markdown으로 표현된 입력 블록을 만들 때, `codex_manifest:` 키 하위에 YAML 매니페스트의 *escaped 본문*을 inline. 파일을 그대로 cat하는 게 아니라 YAML safe-load 후 재emit — injection 방어 (현재 detect-codex.sh 출력은 hardcoded set이라 injection 표면 사실상 0이지만 명시적 normalize 단계 명시).
+
+### 6.3 메타데이터 패치
 
 | Path | 변경 |
 |---|---|
-| `plugins/quality-gates/agents/scout.md` | 입력 schema에 `codex_manifest` 추가, Phase 1 후보 목록에 `codex-reviewer` 추가, 선택 규칙 한 줄 추가. |
-| `plugins/quality-gates/skills/quality-pipeline/SKILL.md` | Gate 2 Phase 0 직전에 `detect-codex.sh` 실행 → 그 stdout YAML을 Scout dispatch 프롬프트의 inputs 섹션에 `codex_manifest:` 키로 inline (`filtered_diff` / `gate1_summary`와 동일 메커니즘 — Scout agent의 단일 프롬프트 입력 일부). |
 | `plugins/quality-gates/.claude-plugin/plugin.json` | `version: "1.10.0" → "1.11.0"` |
-| `plugins/quality-gates/CHANGELOG.md` | `## [1.11.0] — 2026-05-13` 섹션 (Added: codex-reviewer agent, detect-codex probe; Changed: scout dispatch input shape — backwards-compatible). |
-| `plugins/quality-gates/README.md` | "Principles Instantiated"에 Law 2 강화 한 줄 추가, "Hooks Installed" 또는 "Agents" 섹션에 codex-reviewer 추가, cost 섹션에 codex variable cost 명시. |
+| `plugins/quality-gates/CHANGELOG.md` | `## [1.11.0] — 2026-05-13` 섹션 신규: Added (codex-reviewer agent, detect-codex probe, codex-findings-to-yaml parser), Changed (scout dispatch input now includes codex_manifest — backwards-compatible). |
+| `plugins/quality-gates/README.md` | (a) "Principles Instantiated"에 "Law 2 strengthening: writer-reviewer 분리에 모델 family 분리 + OS sandbox 추가 격리"; (b) Fan-out 카운트 11 → 12 갱신; (c) cost 섹션에 "codex-reviewer: variable (depends on user's Codex subscription / API plan; first-use consent gate)" |
 
 ## 7. Verification Plan
 
-### 7.1 Probe unit test (`tests/test-detect-codex.sh`)
+### 7.1 Probe unit test — AC1 6 cases
 
-`detect-codex.sh`를 4가지 환경에서 실행하고 stdout grep으로 검증:
+`tests/test-detect-codex.sh`:
 
 ```bash
-# Case 1: not installed (PATH에서 codex 제거)
-PATH=/usr/bin /bin bash scripts/detect-codex.sh | grep -q 'skip_reason: not_installed'
+# Case 1: not installed
+PATH=/usr/bin:/bin bash scripts/detect-codex.sh \
+  | grep -q 'skip_reason: not_installed' || fail 1
 
-# Case 2: installed (mock codex binary)
-PATH="$MOCK_DIR:$PATH" bash scripts/detect-codex.sh | grep -q 'codex_available: true'
+# Case 2: installed + auth + safe version (mock codex binary that returns 1.0.0)
+PATH="$MOCK_OK_DIR:$PATH" CODEX_API_KEY=test bash scripts/detect-codex.sh \
+  | grep -q 'codex_available: true' || fail 2
 
 # Case 3: kill switch
-DEVBREW_DISABLE_QG_CODEX=1 bash scripts/detect-codex.sh | grep -q 'skip_reason: kill_switch'
+DEVBREW_DISABLE_QG_CODEX=1 bash scripts/detect-codex.sh \
+  | grep -q 'skip_reason: kill_switch' || fail 3
 
 # Case 4: inside codex sandbox
-CODEX_SANDBOX=1 bash scripts/detect-codex.sh | grep -q 'skip_reason: inside_codex_sandbox'
+CODEX_SANDBOX=1 bash scripts/detect-codex.sh \
+  | grep -q 'skip_reason: inside_codex_sandbox' || fail 4
+
+# Case 5: no auth
+PATH="$MOCK_OK_DIR:$PATH" \
+  CODEX_API_KEY= OPENAI_API_KEY= HOME=/tmp/no-codex-home \
+  bash scripts/detect-codex.sh \
+  | grep -q 'skip_reason: auth_missing' || fail 5
+
+# Case 6: known bad version (mock that returns 0.120.1)
+PATH="$MOCK_BAD_DIR:$PATH" CODEX_API_KEY=test bash scripts/detect-codex.sh \
+  | grep -q 'skip_reason: known_bad_version' || fail 6
+
+echo "All 6 cases passed."
 ```
 
-### 7.2 Schema conformance
+### 7.2 Scout integration test — AC2
 
-`codex-findings-to-yaml.py`에 합성 codex 출력 JSON 입력 → 표준 finding YAML emit 확인. Malformed JSON 입력 → 빈 리스트 + meta note.
+`tests/test-scout-integration.sh`: 4 case 합성된 `codex_manifest` + filtered_diff/gate1_summary로 scout 호출 (test harness `tests/harness/dispatch-scout.sh` 사용) → 출력 YAML의 `phase1_agents` 검증.
 
-### 7.3 Integration (수동)
+### 7.3 JSONL parser test — AC3
 
-- Codex 설치된 환경에서 `/qg` 실행 → Scout 출력 YAML에 `codex-reviewer` 포함 확인 → Phase 1에서 실제 호출 → 결과 synthesizer 출력 포함 확인.
-- Codex 미설치 환경에서 `/qg` 실행 → 기존 동작과 동일.
-- `DEVBREW_DISABLE_QG_CODEX=1 /qg` → codex-reviewer skip.
+`tests/test-findings-parser.sh`: 4가지 synthetic JSONL stream을 stdin으로 파서에 입력 → 기대 YAML과 diff.
 
-### 7.4 Failure injection
+### 7.4 Sandbox static check — AC4
 
-- `codex` 자리에 `exit 1`만 하는 mock binary → agent가 빈 findings + meta note emit, Phase 1.5/1.6 정상 진행.
-- Timeout 시뮬레이션 (`sleep 300`) → 180초 후 timeout, graceful skip.
-- Malformed JSON 출력 → 빈 리스트 + meta note.
+`tests/test-sandbox-enforced.sh` (위 AC4 참조). CI에서 실행.
 
-### 7.5 Backward compatibility regression
+### 7.5 Failure injection — AC5
 
-기존 `tests/` 하위 테스트 전부 통과 확인.
+`tests/test-failure-injection.sh`: 4 mock codex binary 각각으로 codex-reviewer agent simulation 실행 → 출력 + synthesizer 입력 diff 검증.
 
-### 7.6 Persona file 보안 검토
+### 7.6 Backward compatibility — AC7
 
-리뷰어 persona 파일 (`codex-reviewer.md`) 작성 시 다음 보안 컨트롤이 인라인으로 박혀 있는지 확인:
-- `disallowedTools` frontmatter
-- `-s read-only` sandbox 모드
-- `timeout 180` wall-clock 한도
-- Recursion guard 호출 (probe 통과 후 dispatch)
+**Precursor (one-time):** `tests/capture-baseline.sh` 실행. Codex 미설치 환경에서 3개 합성 PR에 `/qg` 돌려 synthesizer 출력 fixture 저장. Commit으로 baseline 고정.
+
+**AC7 regression:** `tests/test-backward-compat.sh` — 같은 3 PR + 미설치 환경 → fixture와 diff (normalize 후).
+
+### 7.7 Persona security review
+
+PR 리뷰 시 `codex-reviewer.md` 변경에 대해 다음 체크리스트:
+- [ ] `disallowedTools`에 `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Glob` 모두 존재
+- [ ] `allowed-tools`가 narrow Bash 화이트리스트 (generic `Bash` 아님)
+- [ ] 모든 `codex exec` 라인에 `-s read-only`
+- [ ] 모든 `codex exec` 라인에 timeout wrapper (`gtimeout 330` / `timeout 330`)
+- [ ] Recursion guard probe 통과 후 dispatch
 
 ## 8. Rejected Alternatives
 
 ### 8.1 Codex로 writer 위임 (CE 패턴 그대로)
 
-CE의 `ce-work-beta` 패턴은 `codex exec`로 implementation 위임. **거부 이유:** QG는 review pipeline이지 writer가 아님. Writer delegation은 별도 플러그인(ce-work-beta) 영역이며 QG가 침범할 책임이 아니다.
+QG는 review pipeline. Writer delegation은 ce-work-beta 영역. **Rejected — out of scope.**
 
-### 8.2 Settings.json toggle로 모든 reviewer를 codex로 교체
+### 8.2 Settings.json toggle로 모든 reviewer를 codex로
 
-비용 절감 목적. **거부 이유:** Law 2의 가치(독립 의견)를 잃고 비용 최적화로 의미 좁아짐. 단일 모델 family로 회귀하면서 reviewer correlation 문제 재발. 또한 사용자가 toggle 상태를 추적해야 하는 mental model 비용 발생.
+비용 절감 목적. **Rejected** — Law 2의 독립 의견 가치 손실 (단일 family 회귀); 사용자 mental model 비용.
 
 ### 8.3 Adversarial agent를 codex로 교체
 
-기존 `adversarial.md`가 codex 가용 시 backend 전환. **거부 이유:** 한 agent에 두 backend는 디버깅/테스트 부담 큼; codex 없을 때와 동작 차이가 크면 회귀 표면 넓어짐; "reviewer-reviewer 격리" 효과보다 "writer-reviewer 격리" 강화가 Law 2 정신에 더 가깝다. 새 agent로 분리하는 것이 깨끗.
+`adversarial.md`가 codex 가용 시 backend 전환. **Rejected** — 한 agent 두 backend는 디버깅/테스트 부담; 새 agent로 분리가 깨끗; Law 2 효과는 "writer vs reviewer 격리"가 "reviewer vs reviewer 격리"보다 큼.
 
 ### 8.4 `codex review` subcommand 사용
 
-빌트인 diff review 모드. **거부 이유:** 출력 형식이 고정되어 표준 finding YAML로 정규화 어려움. `codex exec --output-schema`가 schema 강제 + 유연성 모두 제공.
+빌트인 diff review 모드 (gstack의 `/codex review`). **Rejected** — 출력이 freeform 텍스트로 fixed format, 표준 finding YAML로 정규화 어려움; `codex exec --json`이 stream에서 structured JSON 추출 가능.
 
-### 8.5 모든 Gate에 codex 추가 (Gate 1/3 포함)
+### 8.5 `codex exec --output-schema` 사용 (v1 원안)
 
-**거부 이유:** Gate 1은 plan ↔ diff 단순 매칭이라 codex의 추가 가치가 미미. Gate 3는 MCP 도구 (chrome-devtools 등) 기반의 runtime verification이라 codex CLI와 결합 의미가 약함. 범위를 Gate 2 Phase 1로 한정해 영향 범위를 좁히고 검증 부담 최소화.
+CE의 writer delegation 패턴. **Rejected after v1 review** — `--output-schema`는 writer 완료 contract용으로 검증된 패턴이며, reviewer per-finding 출력에는 precedent 없음. Codex agent loop가 schema-enforced 출력을 emit하기 전에 reasoning trace를 같이 출력하는지 미확인. gstack의 `--json` JSONL streaming + Python parser가 검증된 reviewer 패턴.
 
-### 8.6 새 P# 원칙으로 escalation
+### 8.6 모든 Gate에 codex 추가
 
-"Multi-model reviewer diversity"를 새 devbrew 원칙으로 추가. **거부 이유:** `feedback_devbrew_design_lightness` 메모리 — devbrew design은 기본이 lightness, 기존 원칙 흡수가 default. 이 디자인은 Law 2의 *물리적 분리* 원칙을 한 단계 더 인스턴스화하는 것이지 직교 원칙이 아니다. Law 2 텍스트에 "다른 모델 family로 분리하면 강화" 한 줄 코멘트 추가 정도면 충분 (별도 PR 가능).
+Gate 1/3 포함. **Rejected** — Gate 1 plan↔diff 단순 매칭에 추가 가치 미미; Gate 3는 MCP 도구 기반. Gate 2 Phase 1로 범위 한정.
 
-## 9. Metadata
+### 8.7 새 P# 원칙으로 escalation
+
+"Multi-model reviewer diversity"를 신규 devbrew 원칙. **Rejected** — `feedback_devbrew_design_lightness` 부합. 본 디자인은 Law 2의 *물리 분리* 원칙을 한 단계 더 인스턴스화하지 직교 원칙 아님. Law 2 본문에 "다른 모델 family로 분리하면 강화" 한 줄 추가는 별도 PR 가능.
+
+### 8.8 명시적 토큰 cap
+
+Codex CLI는 토큰 cap 플래그 미지원 (확인 필요 — `codex exec --help`). **Rejected** — `gtimeout 330`을 비용 ceiling proxy로 사용. 단일 호출 wall-clock 제한 = 비용 상한 근사. 토큰 cap이 codex CLI에 추가되면 spec 갱신.
+
+## 9. Concrete Next Action
+
+구현 시작 순서 (writing-plans 단계에서 task로 풀어낼 baseline):
+
+1. **Worktree 확인** — 이미 `worktree-qg-codex-spec`에 있음. Spec merge 후 `feature/qg-codex-reviewer` 새 브랜치 또는 worktree.
+2. **Baseline capture (AC7 precursor)** — codex 없는 상태에서 합성 3 PR로 `/qg` 돌려 fixture 저장. 이걸 *먼저* 해야 AC7가 active.
+3. **`scripts/detect-codex.sh` 작성** + **`tests/test-detect-codex.sh` 6 case mock + assert** — AC1.
+4. **`scripts/codex-findings-to-yaml.py` 작성** + JSONL parser test — AC3.
+5. **`agents/codex-reviewer.md` 작성** — frontmatter (allowed-tools narrow, disallowedTools 5종) + 본문 (probe → mktemp → codex exec --json --sandbox read-only with gtimeout 330 → pipe to parser → emit YAML). AC4/AC9/AC11.
+6. **`tests/test-sandbox-enforced.sh` + mock-codex binaries** — AC5.
+7. **`agents/scout.md` 패치** (3 patch hunks) — AC2.
+8. **`skills/quality-pipeline/SKILL.md` 패치** — Phase 0 probe 호출 + Scout 입력 합성.
+9. **Cost consent gate** — `AskUserQuestion` 호출 + marker 파일 로직 — AC10.
+10. **Metadata** — `plugin.json` bump, `CHANGELOG.md` `[1.11.0]` 섹션, `README.md` 3 곳 갱신 — AC8.
+11. **AC7 regression run** — baseline과 diff.
+12. **Self-review + commit + PR**.
+
+각 step은 `writing-plans` skill에서 task로 분해됨. 5번이 가장 무겁고 11번이 가장 위험 (baseline drift 발견 시 회귀 디버깅).
+
+## 10. Metadata
 
 - **Plugin:** `plugins/quality-gates`
-- **Version bump:** `1.10.0 → 1.11.0` (minor — 새 surface 추가, backward compatible)
-- **Branch suggestion:** `feature/qg-codex-reviewer`
-- **Commit prefix:** `feat(qg-codex):` for new files, `feat(qg):` for scout/skill patches
-- **Estimated effort:** 1 implementation session — probe + agent + scout patch + skill patch + version/CHANGELOG/README + tests
-- **Risk:** Low — additive change, 2중 격리, graceful degradation, kill switch
-- **Dependencies:** None (codex CLI는 런타임 optional, 미설치 시 graceful skip)
+- **Version bump:** `1.10.0 → 1.11.0` (minor, backward compatible)
+- **Branch:** `feature/qg-codex-reviewer` (현재 worktree: `worktree-qg-codex-spec` — spec merge 후 새 브랜치)
+- **Commit prefix:** `feat(qg-codex):` 새 파일, `feat(qg):` scout/skill 패치, `chore(qg):` version/CHANGELOG, `docs(qg):` README
+- **Estimated effort:** 1–2 implementation sessions
+  - Session 1: probe + parser + agent skeleton (steps 3–5)
+  - Session 2: tests + scout/skill patches + metadata + AC7 regression (steps 2, 6–11)
+- **Risk:** Low–Medium
+  - Low: additive, kill switch, 3 layer 격리, graceful degradation
+  - Medium: `codex exec --json` reviewer 출력에서 finding JSON 추출이 모델 obedience에 의존 (prompt engineering risk) — first-pass JSONL stream으로 실증 검증 필요한 spike 포함
+- **Dependencies:**
+  - 런타임: codex CLI (optional, graceful degradation)
+  - 빌드: Python 3 (parser) — 이미 다른 qg 스크립트가 사용 중
 - **Related memory:**
-  - `feedback_respect_upstream_model_hardcoding` — 본 디자인은 model frontmatter 우회 아님 (codex는 별도 프로세스), 충돌 없음
-  - `feedback_devbrew_design_lightness` — 새 P# 추가 없이 기존 패턴(probe script, scout dispatch, finding YAML) 한 번 더 인스턴스화
-  - `feedback_plugin_version_bump` — 본 spec이 1.10.0 → 1.11.0 bump 명시
+  - `feedback_respect_upstream_model_hardcoding` — 충돌 없음 (codex는 별도 프로세스)
+  - `feedback_devbrew_design_lightness` — 새 P# 추가 없이 Law 2 instantiation 확장
+  - `feedback_plugin_version_bump` — 1.10.0 → 1.11.0 명시
+- **Spec review log:**
+  - v1 → v2: spec-distill:spec-reviewer가 16 이슈 (4 BLOCK / 7 HIGH / 5 MEDIUM) 지적. 전부 v2에서 addressed. 주요 변경: 아키텍처 `--output-schema` → `--json` JSONL, version/auth probe 추가, timeout 180→330, 3 layer 격리 명시, AC5 concrete failure tests, AC7 precursor task, AC10 cost consent, AC11 Bash allowlist, Concrete Next Action 섹션 추가.
