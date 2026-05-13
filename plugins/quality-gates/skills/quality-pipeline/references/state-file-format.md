@@ -55,11 +55,10 @@ started_at: "<ISO timestamp>"  # Pipeline start time
 **Files Changed:** src/auth.ts
 
 ## Pipeline History
-- [2026-04-12T10:00:00Z] Pipeline started (iteration 1)
+- [2026-04-12T10:00:00Z] Pipeline started
 - [2026-04-12T10:02:00Z] Gate 1: PASS
 - [2026-04-12T10:05:00Z] Gate 2 iter 1: FAIL
-- [2026-04-12T10:08:00Z] Gate 2 iter 2: NEEDS_RESTART
-- [2026-04-12T10:08:00Z] Restarting from Gate 1 (iteration 2)
+- [2026-04-12T10:08:00Z] Gate 2 iter 2: NEEDS_RESTART → user-choice (terminate; user re-runs /qg)
 ```
 
 ## Lifecycle
