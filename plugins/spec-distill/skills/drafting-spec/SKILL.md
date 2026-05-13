@@ -32,9 +32,19 @@ cost_class: low
    - **Rejected Alternatives** — 인터뷰 중 거절된 옵션을 R1, R2, ... 형태로.
    - **Open Questions** — 인터뷰 종료 시 미해결 항목 (없으면 "None").
    - **Concrete Next Action** — 다음 단계 명시 (default: superpowers writing-plans 호출 + spec 경로 + plan 산출 경로 + 명령).
-4. **Fill frontmatter** (7 fields): `name`, `version: 1.0.0`, `created_at`, `session_id`, `status: locked`, `next_phase: writing-plans`, `source: spec-distill v0.1.0`.
+4. **Fill frontmatter** (8 fields):
+   - `name`, `version: 1.0.0`, `created_at`, `session_id`, `status: locked`, `next_phase: writing-plans`, `source: spec-distill v0.2.0`.
+   - **`locked_decisions:`** — state.local.md의 `pending_locked_decisions:` 리스트를 그대로 frontmatter로 변환. (G2, AC1)
+     - 각 LD entry: `id`, `section`, `summary` (160자 이내 단일 라인, P21 secret placeholder 치환), `source` (`interview-round-<N>` 형식), `source_path` (b/c/d).
+     - `pending_locked_decisions`가 빈 리스트면 `locked_decisions: []`로 emit (frontmatter에 키는 존재, 값만 빈 리스트).
 5. **Write file** with `Write` tool to resolved path.
 6. **Update state.local.md**: `phase: 3` (다음은 reviewer phase).
+
+### Superseded LD 보존 정책 (NG6)
+
+v0.2.0에서 superseded LD는 frontmatter에 *무제한 보존* — count cutoff 없음. archive 정책은 v0.3.0+로 deferred.
+- 새 LD가 기존 LD를 superseded할 때 (Mode B가 호출): 기존 LD에 `superseded_by: LD<new>` 추가, 새 LD에 `supersedes: LD<old>` 추가.
+- Mode A는 *initial draft*이므로 supersession 마커를 직접 생성하지 않음 (Mode B 전용).
 
 ## Mode B: Revise per review (Phase 4)
 
