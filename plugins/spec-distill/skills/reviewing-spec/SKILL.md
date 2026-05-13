@@ -171,3 +171,7 @@ corruption 시 → "v0.1.x in-flight state 호환 실패 — 세션 재시작 �
 
 - `DEVBREW_DISABLE_SPEC_DISTILL=1`: 즉시 abort, state.local.md 보존.
 - `DEVBREW_SPEC_DISTILL_TIMEOUT_MIN=N`: wall-clock budget override (default 30).
+- **`DEVBREW_SPEC_DISTILL_SKIP_RECONSENSUS=1`** (v0.2.0): [3.5] Re-consensus gate 우회 + loud warning 출력.
+  - 비상시 사용. v0.1.x 원래 자동 [4] path로 fallback.
+  - 출력: `[spec-distill v0.2.0] WARNING: locked decisions 보호 비활성화됨 — 사용자 sovereignty 약화 위험. DEVBREW_SPEC_DISTILL_SKIP_RECONSENSUS=1로 [3.5] 우회됨.`
+  - reviewer가 locked-affecting issue를 raise해도 자동 Mode B (모든 issue 적용).
