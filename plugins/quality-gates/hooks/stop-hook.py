@@ -86,11 +86,12 @@ def parse_state_file(path):
             value = value.strip().strip('"')
             state[key.strip()] = value
 
-    # Convert numeric fields (forward-only: total_iterations / max_total_iterations
-    # are no longer written by setup-qg.sh; tolerate their absence on read).
+    # Convert numeric fields. total_iterations / max_total_iterations were
+    # removed in v1.10.0 (already never-written since v1.5.0); legacy state
+    # files carrying them are simply parsed without those keys — nothing
+    # downstream reads them.
     required_numeric = ("current_gate", "gate2_iteration", "max_gate2_iterations")
-    optional_numeric = ("total_iterations", "max_total_iterations",
-                        "gate3_resolution_iter", "max_gate3_resolutions")
+    optional_numeric = ("gate3_resolution_iter", "max_gate3_resolutions")
     for field in required_numeric:
         val = state.get(field, "0")
         if not val.isdigit():
@@ -104,7 +105,6 @@ def parse_state_file(path):
             continue
         if val.isdigit():
             state[field] = int(val)
-        # else: leave as-is; nothing reads it after forward-only refactor
 
     # Backward compatibility for v1.7.0 → v1.8.0:
     # - gate3_resolution_iter / max_gate3_resolutions added in v1.8.0.
