@@ -27,10 +27,10 @@ ok()    { PASS=$((PASS+1)); echo "  ✓ ok:   $*"; }
 
 # --- AC1-3: forbidden phrases in skill prose -----------------------------------
 
-if grep -rn 'restart from Gate 1' skills 2>/dev/null; then
-    fail "AC1: 'restart from Gate 1' phrase still present"
+if grep -rnE 'restart(ing)? from Gate 1' skills 2>/dev/null; then
+    fail "AC1: 'restart(ing)? from Gate 1' phrase still present"
 else
-    ok "AC1: no 'restart from Gate 1' in skill prose"
+    ok "AC1: no 'restart(ing)? from Gate 1' in skill prose"
 fi
 
 if grep -rn 'loop-back' skills 2>/dev/null; then
@@ -39,10 +39,10 @@ else
     ok "AC2: no 'loop-back' in skill prose"
 fi
 
-if grep -rn 'Restarting from Gate 1' skills 2>/dev/null; then
-    fail "AC3: example log line 'Restarting from Gate 1' still present"
+if grep -rnE 'Restart(ing)? from Gate 1' skills 2>/dev/null; then
+    fail "AC3: example log line 'Restart(ing)? from Gate 1' still present"
 else
-    ok "AC3: no 'Restarting from Gate 1' in skill or references"
+    ok "AC3: no 'Restart(ing)? from Gate 1' in skill or references"
 fi
 
 # --- AC4-6: required phrases ---------------------------------------------------

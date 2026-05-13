@@ -751,7 +751,7 @@ Output a structured report in this exact format. **All skipped agents must be li
 ### Verdict: [PASS / FAIL / NEEDS_RESTART]
 [If PASS: "All critical and important issues resolved."]
 [If FAIL: "N issues remain after max iterations."]
-[If NEEDS_RESTART: "Code was changed during fixes. The pipeline is forward-only — it halts with a user-choice prompt rather than auto-restarting from Gate 1. The user applies the fixes and re-runs /qg."]
+[If NEEDS_RESTART: "Code was changed during fixes. The pipeline is forward-only — it halts with a user-choice prompt; Gate 1 does not re-run automatically. The user applies the fixes and re-runs /qg."]
 ```
 
 **Output Gate 2 result to user:**
