@@ -86,9 +86,9 @@ def parse_state_file(path):
             value = value.strip().strip('"')
             state[key.strip()] = value
 
-    # Convert numeric fields. total_iterations / max_total_iterations were
+    # Convert numeric fields. The legacy v1.5.0 cross-gate counter pair was
     # removed in v1.10.0 (already never-written since v1.5.0); legacy state
-    # files carrying them are simply parsed without those keys — nothing
+    # files carrying them parse without populating those keys — nothing
     # downstream reads them.
     required_numeric = ("current_gate", "gate2_iteration", "max_gate2_iterations")
     optional_numeric = ("gate3_resolution_iter", "max_gate3_resolutions")
@@ -892,8 +892,8 @@ def main():
 
     # 11. Handle extend — re-inject current gate prompt.
     # update_state_file makes no state change on extend (the prior
-    # new_max_total += additional was a silent no-op since v1.5.0 —
-    # max_total_iterations was never in the replacements dict). The
+    # capacity-extension increment was a silent no-op since v1.5.0 — the
+    # corresponding field was never in the replacements dict). The
     # re-read of state below picks up any unrelated changes on disk.
     if transition["type"] == "extend":
         current_gate = state["current_gate"]
