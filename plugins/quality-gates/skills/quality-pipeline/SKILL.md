@@ -444,6 +444,32 @@ If validation fails OR scout times out (>60s) OR scout sets `fallback: true`:
 - Tell user: `[quality-gates] scout fallback engaged: <reason>. Using rule-based gating.`
 - Fall through to **Fallback gating** (existing rule-based path below); skip Phase 1 / Phase 2 *depth-aware dispatch* and use the rule-based flags from Step 0 instead.
 
+#### Phase 1: External Reviewer Inclusion (codex-reviewer)
+
+SKILL.md가 codex-reviewer dispatch를 단독 결정한다 (scout 영역 밖, LD4 정합). Standard/deep depth에서만 평가.
+
+**가용 경로 (`codex_manifest.codex_available == true`):**
+
+가용성 조건: `codex_manifest.codex_available == true` AND consent marker `${HOME}/.claude/quality-gates/codex-cost-consent.md` 존재 (or env `QG_MOCK_CONSENT_OK=1`). 두 조건 모두 충족 시 → **무조건** codex-reviewer를 Phase 1 parallel dispatch에 포함. scout이 빼지 못함.
+
+---
+
+**비가용 경로 (`codex_manifest.codex_available == false`):**
+
+manifest의 `skip_reason` 어떤 값이든 이 분기를 따른다. 기존 3-agent dispatch만 실행:
+`phase1_agents: [code-reviewer, silent-failure-hunter, feature-dev:code-reviewer]` — v1.10.x 시점과 byte-equivalent 동작.
+
+내부 변수: `external_reviewers` (local). 가용 시 append; 비가용 시 `[]`. Phase 1 dispatch 전체 = `phase1_agents ∪ external_reviewers`.
+
+이 분기에서 외부 확장 없음. scout의 phase1_agents를 그대로 사용.
+
+**테스트 Mock 환경변수 (LD8 정합):**
+
+`QG_MOCK_CODEX_MANIFEST` (= `available` | `unavailable` | `<path-to-yaml>`) — test harness에서 manifest 주입. `available` 시 codex-reviewer가 dispatch에 포함된다.
+`QG_MOCK_CONSENT_OK` (= `1` boolean) — consent 파일 존재 simulate.
+`QG_MOCK_SCOUT_FALLBACK` (= `1` boolean — 본 task 후속).
+`available` 값은 가용 경로를 트리거하고 external reviewer를 포함시킨다. `unavailable`은 비가용 경로를 트리거한다.
+
 #### AskUserQuestion hard gate
 
 Compute `len(scout.phase1_agents) + len(scout.phase2_agents)`. If **≥ 4**:
