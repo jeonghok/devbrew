@@ -26,8 +26,17 @@ locked_decisions:
     decision: "codex-reviewer dispatch는 scout 판단 영역 밖. codex_manifest.codex_available && consent_ok 시 무조건 Phase 1 parallel dispatch에 포함."
     rationale: "사용자 명시 요구 — '선택적으로 호출되는게 아니라 codex가 깔려있다면 들어가게'."
   - id: LD6
-    decision: "PR shape: Stacked 2-PR — v1.11.1 hotfix (C1+C2) → v1.12.0 minor (나머지)."
-    rationale: "production blocking 결함은 작은 PR로 빠르게, 보강은 별도. Review burden 분산."
+    decision: "PR shape: Stacked 2-PR — v1.11.1 hotfix (C1+C2 → 7 파일) → v1.12.0 minor (나머지 → 16 파일). PR ②가 PR ① 대비 ~2.3배 규모는 의도된 분포 (hotfix 작게 + 견고화 크게의 자연 비대칭)."
+    rationale: "production blocking 결함은 작은 PR로 빠르게, 보강은 별도. Review burden 분산. PR ② SKILL.md가 4개 변경 그룹(AC4 dispatch + AC11 consent + AC12 schema + AC13 fallback) 축적되나 stacked rebase로 conflict 자동 해소."
+  - id: LD7
+    decision: "AC4/AC5/AC13의 정식 acceptance는 수동 verification V7–V9 (`required, not supplemental`). Mock test V13는 proxy only."
+    rationale: "SKILL.md는 LLM-instruction prose document — mock test(grep+sed dry-run)가 real LLM dispatch 동작을 직접 검증 불가. mock-vs-real gap을 수동으로 메움. Round 2 reviewer 결정."
+  - id: LD8
+    decision: "신규 mock harness env var는 모두 `QG_MOCK_` namespace 사용. value semantics: enum string OR path OR boolean(=1)."
+    rationale: "기존 `QG_MOCK_ASKUSER_PATH`(v1.11.0) 패턴과 일치. 미래 테스트 작성자의 일관성 보장. Round 2 reviewer 결정."
+  - id: LD9
+    decision: "Audit findings raw data를 `docs/research/2026-05-14-pr33-pr32-retroactive-audit.md`에 박제 — conversation-only가 아닌 git-committed 파일로."
+    rationale: "Law 3 (`어떤 미래 agent도 읽지 않는 파일에 기록하는 것은 theater`) instantiation. 본 spec의 Context/Why가 인용하는 9 critical + 17 important findings를 retrievable하게 만듦. Round 3 reviewer 결정."
 ---
 
 # QG Codex-Reviewer 복구 + 견고화 설계
@@ -39,6 +48,8 @@ PR #33 (v1.11.0)에서 도입했으나 두 가지 결함(C1 frontmatter 키 오�
 ## Context / Why
 
 2026-05-14 retroactive QG audit (6 reviewers × 2 worktrees)에서 PR #33 (worktree-qg-codex-spec, MERGED bc06953)에 대해 9 critical + 17 important findings를 발견. 그 중 PR #33 영역의 4 critical과 11 important가 본 spec의 대상이다.
+
+**Audit findings 박제 (Law 3, LD9 정합)**: 전체 finding list + AC 매핑은 `docs/research/2026-05-14-pr33-pr32-retroactive-audit.md` 참조. 본 spec의 모든 AC는 그 audit의 specific finding에 대응 — 임의로 추가된 scope 없음.
 
 핵심 결함 두 가지가 결합되어 **현재 main에서 v1.11.0 codex-reviewer가 절대 dispatch되지 않는다**:
 
@@ -104,7 +115,7 @@ devbrew CLAUDE.md Law 3 ("Every Cycle Must Leave the System Smarter"): C1은 단
 ### PR ② (v1.12.0 minor) — 견고화 + Law 3 linter
 
 - **AC7**: `plugins/quality-gates/scripts/detect_codex.sh`의 `codex --version` 호출이 `timeout 5` 또는 `gtimeout 5`로 래핑된다. timeout 바이너리 부재 시 새 7번째 case `skip_reason: timeout_binary_missing` (exit 0 유지). `tests/test_detect_codex.sh`에 두 시나리오 추가 통과.
-- **AC8**: `plugins/quality-gates/agents/codex-reviewer.md` agent body가 `TIMEOUT_CMD` 빈 문자열 검사 후 즉시 abort — `OVERRIDE_REASON=no_timeout_binary` 전달 후 codex 호출 회피. 결과 manifest에 `codex_failed: true`, `reason: no_timeout_binary`.
+- **AC8**: `plugins/quality-gates/agents/codex-reviewer.md` agent body가 `TIMEOUT_CMD` 빈 문자열 검사 후 즉시 abort — `OVERRIDE_REASON=no_timeout_binary` 전달 후 codex 호출 회피. 결과 manifest에 `codex_failed: true`, `reason: no_timeout_binary`. **Scope clarification**: AC7의 `detect_codex.sh`가 `timeout_binary_missing` manifest를 emit하면 SKILL.md(AC4)가 codex-reviewer dispatch 자체를 안 함 → 정상 경로에서 AC8 코드는 도달 불가. AC8은 **defense-in-depth 레이어** — `detect_codex.sh` 실행 시점에는 timeout 바이너리가 있었으나 agent body 실행 시점에 사라진 race condition(예: 다른 프로세스가 PATH 변경, 바이너리 삭제) 전용. plan 작성 시 AC8을 "주 경로 방어"로 오해 금지.
 - **AC9**: `plugins/quality-gates/scripts/codex_findings_to_yaml.py`:
   - **(a) Schema mismatch**: findings가 list 아닐 때 빈 배열 coerce + `meta.reason: schema_mismatch` + `meta.raw_findings_type` (e.g., `"dict"`, `"str"`, `"NoneType"`) 기록. 검증 fixture: `tests/fixtures/codex_findings_dict_input.json` (findings를 dict로 emit), `tests/fixtures/codex_findings_string_input.json` (findings를 string으로 emit) 신규.
   - **(b) Last-fence selection**: `parse_fenced_json`을 `FENCED_JSON_RE.search(text)` 에서 `re.findall(FENCED_JSON_RE, text)[-1]` 로 변경 (multiple match 시 마지막 선택). 검증 fixture: `tests/fixtures/codex_two_fenced_blocks.json` 신규 — 첫 block에 `{"findings": []}` (가짜), 두 번째 block에 실제 findings. parser가 두 번째 block을 선택하는지 assert.
@@ -139,7 +150,19 @@ devbrew CLAUDE.md Law 3 ("Every Cycle Must Leave the System Smarter"): C1은 단
   - "Principles Instantiated" 섹션에 Law 2 (3-layer reviewer-writer isolation: frontmatter deny-list + bash allow-list + codex sandbox) 명시.
 - **AC17**: `docs/superpowers/specs/2026-05-13-qg-codex-reviewer-design.md` 내 모든 `codex-findings-to-yaml.py` / `detect-codex.sh` (dashes) 참조를 실제 underscore 파일명(`codex_findings_to_yaml.py` / `detect_codex.sh`)으로 정리. 검증: `grep -E "codex-findings-to-yaml|detect-codex" docs/superpowers/specs/2026-05-13-qg-codex-reviewer-design.md` 결과가 0줄.
   - **버전 헤더**: OQ1 해소 시 정확한 값(v3 또는 v3.1) 명시. **OQ1 미해소 fallback (default behavior)**: 버전 헤더를 `Draft v3.x — adversarial rounds resolved via PR review history (see git log)` 형태의 placeholder로 기재하고, PR ② body에서 "OQ1 resolved as v3.x — exact round count deferred to git history reconstruction" 명시. 본 AC는 placeholder 형태도 PASS로 간주.
-- **AC18**: CHANGELOG에 `## [1.12.0] — 2026-05-14` 항목 추가 — Fixed/Changed/Security 카테고리. PR ① v1.11.1 entry는 superseded 표기 없이 그대로 보존.
+- **AC18**: CHANGELOG에 `## [1.12.0] — 2026-05-14` 항목 추가. PR ① v1.11.1 entry는 superseded 표기 없이 그대로 보존.
+  - **AC별 카테고리 매핑 (ground truth)**:
+    | Category | AC |
+    |---|---|
+    | Added | AC14 (advisor frontmatter scan), AC15 (test_agent_frontmatter_keys.sh), 신규 test/fixture 파일 |
+    | Changed | AC7 (detect_codex.sh timeout 래핑), AC10 (agent body 검사 강화), AC16 (README sync), AC17 (spec 파일명) |
+    | Fixed | AC8 (TIMEOUT_CMD defense-in-depth), AC9(a–d) (silent failure 닫기), AC11 (consent marker write 실패 surface), AC12 (manifest schema validation), AC13 (fallback codex inclusion + visibility) |
+    | Security | (없음 — 본 PR ②는 PR ①의 Layer 2 fix 이후 추가 security surface 변경 없음) |
+  - **AC6 (v1.11.1) 카테고리 매핑**:
+    | Category | AC |
+    |---|---|
+    | Fixed | AC1 (frontmatter key), AC2 (validation 회귀 확인), AC3 (scout codex dispatch 제거), AC4 (SKILL.md dispatch logic), AC5 (codex 미가용 회귀) |
+    | Security | AC1 (Layer 2 isolation 복구) |
 - **AC19**: plugin.json 버전 v1.11.1 → v1.12.0.
 
 ## Files to Modify
@@ -173,6 +196,27 @@ PR ② (v1.12.0 minor, base=PR ①):
   plugins/quality-gates/CHANGELOG.md                      # [1.12.0] 항목 추가
   docs/superpowers/specs/2026-05-13-qg-codex-reviewer-design.md  # codex-findings-to-yaml/detect-codex (dashes) → underscore 정리; 버전 헤더 OQ1 해소 결과 또는 placeholder
 ```
+
+## Implementation Order Constraints
+
+Plan 작성자가 reverse-engineer해야 하는 위험 회피용 — 본 spec이 직접 명시.
+
+**PR ① 내부 순서**:
+- AC1 (frontmatter fix) — 독립.
+- AC2 (validation 유지 확인) — AC3 적용 *후* 검증 가능 (AC3 fix 전 SKILL.md validation은 실제로 작동 안 함).
+- AC3 (scout.md codex dispatch 제거) — AC2 검증의 전제.
+- AC4 + AC5 (dispatch logic + 미가용 회귀) — 같은 SKILL.md 파일 다른 코드 경로. AC4 먼저 implement → AC5 회귀 검증.
+- AC6 (CHANGELOG + plugin.json) — 마지막 (다른 AC 결정 사항 모두 반영 후).
+
+**PR ② 내부 순서** (G2-a → G2-b → G2-c → G2-d 권장):
+- G2-a (codex stability): AC7 → AC8 → AC9. AC7이 manifest schema 결정 → AC8/AC9가 의존.
+- G2-b (SKILL.md robustness): AC10 → AC12 → AC13 → AC11. SKILL.md 같은 파일이지만 코드 경로가 다름. *편집 순서*: AC12(schema validation 추가) → AC13(fallback inclusion) → AC11(consent marker write block) → AC10 (agent body 변경은 별 파일).
+- G2-c (Law 3 linter): AC14 → AC15. advisor가 frontmatter scan 동작 정의 → bash test가 그 결과를 grep 검증.
+- G2-d (docs sync): AC16/AC17/AC18/AC19. AC18(CHANGELOG)이 마지막.
+
+**Cross-PR 의존성**:
+- **AC15 (PR ②)는 AC1 (PR ①) merge 이후에만 PASS 가능** — AC1 fix 전엔 codex-reviewer.md 자체가 grep deny-list에 hit. PR ② plan에 "PR ① merge 후 AC15 실행" 명기 필요.
+- **PR ② SKILL.md rebase**: PR ① 머지 후 PR ② branch가 main으로 rebase 시 SKILL.md 변경의 변경 위에 추가 변경 누적 — conflict 가능. AC4/AC5(PR ①) 머지 후 AC11/AC12/AC13(PR ②)는 다른 코드 영역이라 conflict 가능성 낮으나 수동 확인.
 
 ## Verification Plan
 
