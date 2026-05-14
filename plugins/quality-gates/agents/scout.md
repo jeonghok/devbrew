@@ -62,12 +62,10 @@ fallback: false
 | depth | phase1_agents |
 |---|---|
 | quick | [code-reviewer] |
-| standard | [code-reviewer, silent-failure-hunter] + codex-reviewer if codex_available |
-| deep | [code-reviewer, silent-failure-hunter, feature-dev:code-reviewer] + codex-reviewer if codex_available |
+| standard | [code-reviewer, silent-failure-hunter] |
+| deep | [code-reviewer, silent-failure-hunter, feature-dev:code-reviewer] |
 
 You MAY deviate (e.g., add silent-failure-hunter to a quick run that has try/except changes), but justify in `rationale`.
-
-- `codex-reviewer`: include when `codex_manifest.codex_available == true` AND depth ∈ {standard, deep}. Skip on `quick` — cost/latency overhead is unjustified for small diffs.
 
 ## Phase 2 selection — only what the diff actually warrants
 
