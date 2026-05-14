@@ -42,8 +42,21 @@ PLAN_FILE="$SCRATCH/plan.yaml"
 PROMPT_FILE="$SCRATCH/prompt.md"
 STDOUT_FILE="$SCRATCH/codex.jsonl"
 STDERR_FILE="$SCRATCH/codex.stderr"
+
+# AC10: REPO_ROOT must be non-empty (defense against non-git invocation).
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$REPO_ROOT" ]; then
+  echo '{"codex_failed": true, "reason": "not_in_git_repo"}'
+  exit 0
+fi
+
+# AC8: TIMEOUT_CMD must be non-empty (defense-in-depth; AC7's detect_codex.sh
+# typically catches this earlier, but race conditions can leave us here).
 TIMEOUT_CMD="$(command -v gtimeout || command -v timeout)"
-REPO_ROOT="$(git rev-parse --show-toplevel)"
+if [ -z "$TIMEOUT_CMD" ]; then
+  echo '{"codex_failed": true, "reason": "no_timeout_binary"}'
+  exit 0
+fi
 
 # Write inputs to scratch files via single-quoted-delimiter heredoc —
 # content is treated as opaque bytes; no shell expansion of `$`, backtick,
@@ -59,8 +72,13 @@ INPUT_EOF
 
 # Build the prompt safely (substitution happens inside Python via
 # str.replace on opaque bytes — no eval, no template engine).
-python3 "$REPO_ROOT/plugins/quality-gates/scripts/build_codex_prompt.py" \
-    "$DIFF_FILE" "$PLAN_FILE" > "$PROMPT_FILE"
+# AC10: prompt builder exit code check — abort on failure (silent empty
+# prompt would cause codex to run with no context).
+if ! python3 "$REPO_ROOT/plugins/quality-gates/scripts/build_codex_prompt.py" \
+       "$DIFF_FILE" "$PLAN_FILE" > "$PROMPT_FILE"; then
+  echo '{"codex_failed": true, "reason": "prompt_build_failed"}'
+  exit 0
+fi
 
 # Canonical codex invocation (spec §4.3 — all 5 load-bearing flags).
 "$TIMEOUT_CMD" 600 codex exec "$(cat "$PROMPT_FILE")" \
