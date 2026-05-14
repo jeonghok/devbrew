@@ -18,6 +18,9 @@ Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
   DEVBREW_DISABLE_QUALITY_GATES=1                          - disables this hook entirely
   DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor   - skip just this one
 Verbose: DEVBREW_QG_GC_VERBOSE=1 prints sibling-folder count.
+
+Sub-features (kill switch via DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor:<feature>):
+  - frontmatter-scan: scan plugins/*/agents/*.md for kebab-case allowed-tools/disallowed-tools keys
 """
 from __future__ import annotations
 
@@ -52,6 +55,41 @@ def _disabled() -> bool:
     skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
     tokens = {t.strip() for t in skip.split(",") if t.strip()}
     return "quality-gates:session-start-advisor" in tokens
+
+
+# AC14: sub-feature kill switch
+def _subfeature_disabled(feature: str) -> bool:
+    if _disabled():
+        return True
+    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
+    tokens = {t.strip() for t in skip.split(",") if t.strip()}
+    return f"quality-gates:session-start-advisor:{feature}" in tokens
+
+
+# AC14: frontmatter scan sub-feature
+def _scan_agent_frontmatter_keys() -> None:
+    """plugins/*/agents/*.md 스캔, kebab-case allowed-tools/disallowed-tools 발견 시 advice."""
+    if _subfeature_disabled("frontmatter-scan"):
+        return
+    repo_root = Path.cwd()
+    for agent_file in repo_root.glob("plugins/*/agents/*.md"):
+        try:
+            parts = agent_file.read_text().split("---", 2)
+            if len(parts) < 3:
+                continue
+            frontmatter = parts[1]
+            for bad_key in ("allowed-tools", "disallowed-tools"):
+                if re.search(rf"^{re.escape(bad_key)}:", frontmatter, re.MULTILINE):
+                    correct = "".join(
+                        p.capitalize() if i else p
+                        for i, p in enumerate(bad_key.split("-"))
+                    )
+                    sys.stderr.write(
+                        f"⚠️ {agent_file.relative_to(repo_root)}: agent frontmatter에 "
+                        f"kebab-case '{bad_key}' 발견. '{correct}' (camelCase)가 올바른 컨벤션.\n"
+                    )
+        except (OSError, UnicodeDecodeError):
+            continue
 
 
 def _verbose() -> bool:
@@ -133,6 +171,7 @@ def main() -> int:
                 text = ""
             if text:
                 _emit_self_advisory(text)
+    _scan_agent_frontmatter_keys()
     if _verbose():
         n = _sibling_active_count(self_sid)
         if n > 0:
