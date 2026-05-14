@@ -126,12 +126,14 @@ def main() -> int:
 
     stdin_text = sys.stdin.read()
     stderr_text = ""
+    _stderr_read_error: str | None = None
     if args.stderr_file:
         try:
             with open(args.stderr_file, "r", encoding="utf-8", errors="replace") as fh:
                 stderr_text = fh.read()
-        except OSError:
+        except OSError as e:
             stderr_text = ""
+            _stderr_read_error = str(e.errno) if e.errno else type(e).__name__
 
     def has_auth_error() -> bool:
         return bool(stderr_text and AUTH_ERROR_RE.search(stderr_text))
@@ -144,6 +146,9 @@ def main() -> int:
         if args.meta_override_reason:
             meta["reason"] = args.meta_override_reason
             meta["codex_failed"] = True
+        # AC9(d): surface stderr file read errors for caller visibility.
+        if _stderr_read_error is not None:
+            meta["stderr_read_error"] = _stderr_read_error
         return meta
 
     last_msg, any_jsonl_parsed = extract_last_agent_message(stdin_text)

@@ -179,6 +179,25 @@ if [ "$ac9c_pass" = "true" ]; then
   pass=$((pass + 1))
 fi
 
+# AC9(d) — stderr read error surfaced via meta.stderr_read_error
+if [ "$(id -u)" -eq 0 ]; then
+  echo "  SKIP: AC9(d) test requires non-root user (NG7: capability env out-of-scope)"
+else
+  UNREADABLE="$TMP/unreadable.txt"
+  touch "$UNREADABLE"
+  chmod 000 "$UNREADABLE"
+  OUT=$(echo '{}' | python3 "$PARSER" --stderr-file "$UNREADABLE" 2>&1 || true)
+  if echo "$OUT" | grep -qE "stderr_read_error:"; then
+    echo "  PASS: AC9(d): chmod 000 stderr → meta.stderr_read_error surfaced"
+    pass=$((pass + 1))
+  else
+    echo "  FAIL: AC9(d): stderr read failure not surfaced via meta.stderr_read_error"
+    echo "$OUT" | sed 's/^/      /'
+    fail=$((fail + 1))
+  fi
+  chmod 600 "$UNREADABLE" 2>/dev/null || true
+fi
+
 echo ""
 echo "Total: $((pass + fail)), pass: $pass, fail: $fail"
 [[ $fail -eq 0 ]] || exit 1
