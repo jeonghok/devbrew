@@ -33,6 +33,7 @@ You will receive:
   codex_version: <string, only if available>
   skip_reason: <not_installed | kill_switch | inside_codex_sandbox | auth_missing | known_bad_version | user_declined_cost_consent>
   ```
+  > **scout은 이 필드를 사용하지 않는다.** `codex_manifest`는 SKILL.md의 dispatch 결정을 위해 pass-through되는 값이다. scout은 rationale에 codex를 언급하거나 `fallback`을 설정하는 데 이 값을 사용해서는 안 된다. (LD4 참조)
 
 ## Depth decision rules
 
