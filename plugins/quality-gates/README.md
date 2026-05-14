@@ -22,6 +22,8 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 2 (Writer ≠ Reviewer, 3-way 분리)** (v1.9.0) — Gate 3가 3-way agent 분리를 강제. writer (originating turn) ≠ `test-scope-validator` (Step 2.5 pre-execution 리뷰어) ≠ `runtime-verifier` (Step 3 executor). 두 reviewer 모두 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언 — prompt 기반 분리가 아닌 frontmatter scoping으로 물리적 분리.
 - **§5.3 (Categorical signal, no numeric scoring)** (v1.9.0) — `test-scope-validator`는 정확히 4-way enum 분류 (`aligned` / `outdated-suspicion` / `cherry-pick-suspicion` / `unclear`)만 emit. percentage, confidence, X/Y rating 모두 금지. summary의 counter 정수 (`1 aligned, 0 outdated…`) 는 허용. devbrew §5.3 "수치 스코어링 ban" instantiation.
 - **Law 2 strengthening — model-family separation.** Optional `codex-reviewer` agent (when Codex CLI is detected) runs review in a separate process with a different model family (OpenAI vs Anthropic) and an OS-level read-only sandbox, giving 3-layer reviewer-writer isolation: `disallowedTools` + narrow `Bash` allowlist + `codex -s read-only`.
+- **Law 2 (3-layer isolation, v1.11.0/v1.12.0)** — `codex-reviewer`의 3-layer isolation: (1) frontmatter `allowedTools`/`disallowedTools` camelCase deny/allow whitelist (AC1 fix, v1.11.1에서 복구), (2) narrow `Bash` allowlist (실제 키 `allowedTools`), (3) `codex exec -s read-only` OS-level sandbox. Layer 1 없이 Layer 2/3는 불완전 — 세 layer가 함께 물리적 격리를 구성.
+- **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `hooks/session-start-advisor.py` frontmatter scanner (AC14): SessionStart마다 모든 agent 파일의 frontmatter key를 kebab-case drift 검사. `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — CI에서 C1 종류 (kebab-case 잘못된 키) drift를 자동 차단. 이 두 mechanism이 함께 "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation.
 
 ## 구조
 
@@ -35,7 +37,8 @@ quality-gates/
 │   ├── test-scope-validator.md  # Gate 3 Step 2.5 (pre-exec test scope check)
 │   ├── scout.md                 # Gate 2 Phase 0 — 모델 기반 dispatch planner
 │   ├── adversarial.md           # Gate 2 Phase 1.5 — false-positive hunter
-│   └── synthesizer.md           # Gate 2 Phase 1.6 — finding dedupe/rank
+│   ├── synthesizer.md           # Gate 2 Phase 1.6 — finding dedupe/rank
+│   └── codex-reviewer.md        # Gate 2 Phase 1 — external OpenAI reviewer (Layer 2/3 isolation)
 ├── commands/
 │   ├── qg.md               # /qg slash command (--reset, --paths, branch flag 포함)
 │   └── cancel-qg.md        # /cancel-qg command
@@ -54,6 +57,9 @@ quality-gates/
 │   ├── discover-plan.sh                      # Plan 파일 우선순위 탐색 (Gate 1)
 │   ├── detect-runtime.sh                     # Gate 3 런타임 surface 탐지 (manifest 산출)
 │   ├── compute-test-scope-candidates.sh      # Gate 3 Step 2.5 — 후보 test 파일 산출 (Python/JS/TS heuristic)
+│   ├── detect_codex.sh                       # Codex CLI 7-case probe (version/auth/sandbox/kill-switch/timeout)
+│   ├── build_codex_prompt.py                 # Gate 2 Phase 1 codex-reviewer용 prompt builder
+│   ├── codex_findings_to_yaml.py             # Codex JSONL stream → 표준 finding YAML (auth/schema/stderr 처리)
 │   └── qg-gc.py                              # TTL 기반 stale 세션 GC (fcntl-locked)
 ├── skills/
 │   └── quality-pipeline/
@@ -111,7 +117,8 @@ Phase 0  Scout (항상, sonnet) — dispatch plan 산출: depth + agent subset
 Phase 1  Critical analysis (depth-aware, 병렬)
   ├── pr-review-toolkit:code-reviewer        (항상; upstream Opus)
   ├── pr-review-toolkit:silent-failure-hunter (Standard/Deep; sonnet override)
-  └── feature-dev:code-reviewer              (Deep 전용)
+  ├── feature-dev:code-reviewer              (Deep 전용)
+  └── codex-reviewer                         (external; Codex CLI 가용 + consent 시 자동 포함, LD5)
 Phase 2  Conditional (scout 추천만)
   ├── pr-review-toolkit:type-design-analyzer  → 신규 타입
   ├── pr-review-toolkit:pr-test-analyzer      → 테스트 변경
@@ -123,7 +130,7 @@ Phase 1.6  Synthesizer (Phase 1 실행 시 항상, sonnet) — dedupe/rank
 Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 ```
 
-`len(phase1) + len(phase2) >= 4`일 때 AskUserQuestion 발동 (philosophy AP9).
+`len(phase1) + len(phase2) >= 4`일 때 AskUserQuestion 발동 (philosophy AP9). 최대 fan-out: Phase 1 (4) + Phase 2 (5) + Phase 1.5 (1) + Phase 1.6 (1) + Phase 3 (1) = 12.
 
 ## 파이프라인 흐름 (forward-only state machine, v1.5.0)
 
