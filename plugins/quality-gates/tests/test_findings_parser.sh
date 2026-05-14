@@ -139,6 +139,17 @@ else
   fail=$((fail + 1))
 fi
 
+# AC9(b) — last fenced block selection
+output="$(python3 "$PARSER" < "$FIXTURES/codex_two_fenced_blocks.json" 2>&1)"
+if echo "$output" | grep -q "real.py" && ! (echo "$output" | grep -qE "findings:[[:space:]]*\[\]"); then
+  echo "  PASS: AC9(b): last fenced block selected (prompt injection 차단)"
+  pass=$((pass + 1))
+else
+  echo "  FAIL: AC9(b): parser did not pick LAST fenced block (real finding lost or first fake block selected)"
+  echo "$output" | sed 's/^/      /'
+  fail=$((fail + 1))
+fi
+
 echo ""
 echo "Total: $((pass + fail)), pass: $pass, fail: $fail"
 [[ $fail -eq 0 ]] || exit 1

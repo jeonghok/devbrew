@@ -69,11 +69,12 @@ def extract_last_agent_message(stdin_text: str) -> tuple[str | None, bool]:
 
 
 def parse_fenced_json(text: str) -> dict | None:
-    m = FENCED_JSON_RE.search(text)
-    if not m:
+    matches = re.findall(FENCED_JSON_RE, text)
+    if not matches:
         return None
+    # AC9(b): pick LAST block to defeat adversarial diff-injected earlier blocks.
     try:
-        return json.loads(m.group(1))
+        return json.loads(matches[-1])
     except json.JSONDecodeError:
         return None
 
