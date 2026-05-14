@@ -414,7 +414,17 @@ If `codex_manifest.codex_available == true` AND marker file `${HOME}/.claude/qua
      - `Approve always (recommended)` — writes marker; silent on future runs
      - `Decline` — sets `codex_available: false` for this session
 
-3. On `Approve always`: write marker with `consented: <ISO timestamp>`.
+3. On `Approve always`: write marker file with `consented: <ISO timestamp>` via the following bash snippet (test V14가 본 block을 추출 실행):
+
+<!-- QG-CONSENT-MARKER-WRITE -->
+# QG-CONSENT-MARKER-WRITE
+```bash
+mkdir -p "${HOME}/.claude/quality-gates" \
+  && printf 'consented: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+       > "${HOME}/.claude/quality-gates/codex-cost-consent.md" \
+  || { errno=$?; echo "[quality-gates] could not persist consent (errno $errno); will re-prompt next run" >&2; }
+```
+
 4. On `Decline`: replace loaded `codex_manifest` with `codex_available: false\nskip_reason: user_declined_cost_consent` for remainder of session.
 
 Dispatch:
