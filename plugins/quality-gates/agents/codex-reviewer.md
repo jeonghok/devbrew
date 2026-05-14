@@ -3,7 +3,7 @@ name: codex-reviewer
 description: Independent code reviewer that delegates to the Codex CLI as a separate process with read-only sandbox. Runs only when codex is detected and not opted out. Emits standard Phase 1 finding YAML.
 model: inherit
 cost_class: variable
-allowed-tools:
+allowedTools:
   - Bash(codex exec*)
   - Bash(timeout *)
   - Bash(gtimeout *)
