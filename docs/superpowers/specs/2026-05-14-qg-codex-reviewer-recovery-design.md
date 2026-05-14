@@ -65,12 +65,19 @@ devbrew CLAUDE.md Law 3 ("Every Cycle Must Leave the System Smarter"): C1은 단
 - **NG3**: codex CLI 자체 동작 변경/패치 없음. 본 plugin이 호출 측만 다룸.
 - **NG4**: plugin-dev:plugin-validator 확장 없음 — quality-gates 내부 self-contained linter만.
 - **NG5**: 비영어 codex 출력 (일본어/한국어 등) 매칭은 default 범위 밖. AUTH_ERROR_RE 확장은 영어 패턴만 (`401|403|forbidden|unauthor|credential|quota|billing|subscription|expired`).
-- **NG6**: codex-reviewer를 quick depth에 dispatch하지 않음 — quick은 in-process subagent도 안 돌리므로 외부 reviewer도 일관성 위해 제외.
+- **NG6**: codex-reviewer를 quick depth에 dispatch하지 않음 — quick은 in-process subagent도 안 돌리므로 외부 reviewer도 일관성 위해 제외. **근거**: 사용자 명시 발언 "codex가 깔려있다면 들어가게"는 cost consent의 default 의도와 결합되어야 — quick depth diff(typo/trivial)에 600s codex 호출은 cost ceiling 위반. 사용자가 quick에도 명시적으로 codex를 원했다고 표명한 적 없으므로 reasonable default로 quick 제외. R10에서 alternative 명시.
+- **NG7**: stderr 읽기 실패 검증(AC9(d))은 `id -u == 0` 기준 root skip만 지원. Linux capability(`CAP_DAC_OVERRIDE` 등) 기반 권한 상승 환경의 verification은 범위 밖.
 
 ## Constraints
 
 - **CN1**: devbrew CLAUDE.md Plugin Shape 준수 — plugin.json SemVer bump (v1.11.0 → v1.11.1 → v1.12.0), CHANGELOG 항목, README "Principles Instantiated" 업데이트.
-- **CN2**: PR shape Stacked 2-PR. PR ①(v1.11.1)이 base로 머지된 후 PR ②(v1.12.0)이 base=main으로 rebase 가능해야 함. 사용자 메모리에 따라 stacked PR base를 `--delete-branch`로 삭제하면 dependent PR CLOSED — 본 spec에서는 PR ② 머지 전까지 PR ① 브랜치 보존.
+- **CN2**: PR shape Stacked 2-PR.
+  - **브랜치 이름**: PR ① branch=`feature/qg-codex-recovery-hotfix` (base=main). PR ② branch=`feature/qg-codex-recovery-hardening` (base=PR ① branch).
+  - **머지 순서**: PR ① 먼저 main으로 squash 또는 merge → PR ② branch를 main으로 rebase → PR ②를 main으로 머지.
+  - **브랜치 보존 enforcement (사용자 메모리 risk 회피)**: stacked PR base를 `--delete-branch`로 삭제하면 dependent PR CLOSED. 다음 가드 모두 적용:
+    - **(a) PR ① description note**: `⚠️ DO NOT delete this branch until PR ②(feature/qg-codex-recovery-hardening) is merged. Stacked PR base deletion will CLOSE PR ② irreversibly.` 명시.
+    - **(b) PR ② description note**: `🔗 BASE: feature/qg-codex-recovery-hotfix (PR #N). 머지 순서: PR #N → 본 PR rebase → 본 PR 머지.` 명시.
+    - **(c) V11/V12 사전 체크**: V11 통과 후 PR ② 작업 시작 직전 `git branch -a | grep qg-codex-recovery-hotfix` 결과 비어있지 않음을 수동 확인 (Verification Plan에 명시).
 - **CN3**: backward compatibility — codex 미가용한 사용자 환경에서 기존 Phase 1 동작(3-agent parallel)이 동일하게 동작해야 한다. external_reviewers 필드가 빈 배열이면 결과적으로 `phase1_agents ∪ [] == phase1_agents`.
 - **CN4**: cost consent gate는 보존. consent marker 파일 (`${HOME}/.claude/quality-gates/codex-cost-consent.md`)이 없으면 첫 사용 시 AskUserQuestion으로 승인 요청 (기존 동작 그대로).
 - **CN5**: quality-gates 플러그인은 self-contained — plugin-dev/spec-distill 등 cross-plugin 의존성 추가 금지.
@@ -89,10 +96,10 @@ devbrew CLAUDE.md Law 3 ("Every Cycle Must Leave the System Smarter"): C1은 단
   - **보존 (CN7 정합)**: `codex_manifest` *input* 필드는 그대로 유지 (scout이 dispatch 결정에 사용하지 않더라도 input으로 받음을 명시하는 것은 OK — SKILL.md가 dispatch 결정에 사용).
   - 검증: `grep -i "codex" plugins/quality-gates/agents/scout.md`의 결과에서 dispatch/output 관련 mention이 0이고 input/context 관련만 남음.
 - **AC4**: `SKILL.md` Phase 1 dispatch logic 변경: standard/deep depth에서 `codex_manifest.codex_available == true` AND consent marker 존재 시, in-process subagent 3개(scout이 결정한 `phase1_agents`)와 함께 codex-reviewer를 **무조건** parallel dispatch에 포함한다. dispatch 결정 권한은 SKILL.md만 가진다. SKILL.md 내부에서 이 가용 codex 리스트를 가리키는 변수명을 `external_reviewers`로 둔다(local 변수, scout output 필드 아님).
-  - **자동 검증**: `tests/test_codex_dispatch_invariant.sh` 신규 — `QG_MOCK_CODEX_MANIFEST=available`, `QG_MOCK_CONSENT_OK=1` 환경에서 SKILL.md의 Phase 1 dispatch logic을 inline shell로 시뮬레이션하는 grep+sed 기반 dry-run. codex-reviewer가 dispatch 리스트에 포함되는지 stdout 검증.
+  - **자동 검증 (proxy only)**: `tests/test_codex_dispatch_invariant.sh` 신규 — `QG_MOCK_CODEX_MANIFEST=available`, `QG_MOCK_CONSENT_OK=1` 환경에서 SKILL.md의 Phase 1 dispatch logic을 inline shell로 시뮬레이션하는 grep+sed 기반 dry-run. codex-reviewer가 dispatch 리스트에 포함되는지 stdout 검증. **단, 이 mock test는 LLM이 SKILL.md prose를 실행할 때의 동작을 직접 검증하지 못함 (mock-vs-real gap)** — 실제 dispatch 동작의 정식 acceptance는 V7 수동 verification (`required, not supplemental`)이 담당.
 - **AC5**: codex 미가용 시(`codex_manifest.codex_available == false` 또는 manifest skip_reason 어떤 값이든) Phase 1은 기존 3-agent dispatch만 수행 — v1.10.x 시점과 byte-equivalent 동작.
-  - **자동 검증**: `tests/test_codex_dispatch_invariant.sh` 동일 파일의 두 번째 시나리오 — `QG_MOCK_CODEX_MANIFEST=unavailable`에서 dispatch 리스트가 정확히 3-agent (codex-reviewer 부재)임을 검증.
-- **AC6**: plugin.json 버전 v1.11.0 → v1.11.1. CHANGELOG에 `## [1.11.1] — 2026-05-14` 항목 추가 (Fixed/Security 카테고리).
+  - **자동 검증 (proxy only)**: `tests/test_codex_dispatch_invariant.sh` 동일 파일의 두 번째 시나리오 — `QG_MOCK_CODEX_MANIFEST=unavailable`에서 dispatch 리스트가 정확히 3-agent (codex-reviewer 부재)임을 검증. 정식 acceptance는 V8 수동 verification (`required`).
+- **AC6**: plugin.json 버전 v1.11.0 → v1.11.1. CHANGELOG에 `## [1.11.1] — 2026-05-14` 항목 추가 (Fixed/Security 카테고리). **SemVer 분류 근거 명시**: CHANGELOG Fixed 항목에 `scout.md의 codex-reviewer dispatch instruction은 v1.11.0에서 C1+C2로 인해 production에서 작동하지 않았으므로, 본 PR의 제거 변경은 SemVer 의미상 "deprecation of never-working behavior" — backward-incompatibility 없음 (실제 동작이 0인 코드 path 제거).` 한 줄 명기. devbrew CLAUDE.md "one-minor deprecation window" 요건은 본 케이스에 적용되지 않는 사유를 동일 항목에서 한 줄 정리.
 
 ### PR ② (v1.12.0 minor) — 견고화 + Law 3 linter
 
@@ -102,17 +109,28 @@ devbrew CLAUDE.md Law 3 ("Every Cycle Must Leave the System Smarter"): C1은 단
   - **(a) Schema mismatch**: findings가 list 아닐 때 빈 배열 coerce + `meta.reason: schema_mismatch` + `meta.raw_findings_type` (e.g., `"dict"`, `"str"`, `"NoneType"`) 기록. 검증 fixture: `tests/fixtures/codex_findings_dict_input.json` (findings를 dict로 emit), `tests/fixtures/codex_findings_string_input.json` (findings를 string으로 emit) 신규.
   - **(b) Last-fence selection**: `parse_fenced_json`을 `FENCED_JSON_RE.search(text)` 에서 `re.findall(FENCED_JSON_RE, text)[-1]` 로 변경 (multiple match 시 마지막 선택). 검증 fixture: `tests/fixtures/codex_two_fenced_blocks.json` 신규 — 첫 block에 `{"findings": []}` (가짜), 두 번째 block에 실제 findings. parser가 두 번째 block을 선택하는지 assert.
   - **(c) AUTH_ERROR_RE 확장**: 기존 `(authentication|auth\s+(failed|error)|invalid\s+(api[\s_]?key|token))` 에 `|401|403|forbidden|unauthor|credential|quota|billing|subscription|expired` 추가 (case-insensitive). 검증 fixture: stderr 샘플 5개 (`401 Unauthorized`, `403 Forbidden`, `quota exceeded`, `subscription required`, `credential expired`) 각각 매칭됨을 `tests/test_findings_parser.sh`가 검증.
-  - **(d) stderr 읽기 실패**: `OSError` catch 후 `stderr_text=""`를 emit하기 전에 `meta.stderr_read_error: <errno>` (또는 errno 없을 시 `"<exception type>"`) 기록. 검증: `chmod 000`된 임시 stderr 파일을 input으로 parser 호출 시 `meta.stderr_read_error` 키 존재 검증 (단, CI 환경 root 권한이면 skip).
+  - **(d) stderr 읽기 실패**: `OSError` catch 후 `stderr_text=""`를 emit하기 전에 `meta.stderr_read_error: <errno>` (또는 errno 없을 시 `"<exception type>"`) 기록. 검증: `chmod 000`된 임시 stderr 파일을 input으로 parser 호출 시 `meta.stderr_read_error` 키 존재 검증. **Root skip 판정 기준**: `[ "$(id -u)" -eq 0 ]` 일 때만 skip. Linux capability (`CAP_DAC_OVERRIDE` 등) 기반 권한 상승 환경은 본 AC의 범위 밖 (NG7로 명시). flaky test 회피를 위해 다른 권한 detection 메커니즘(`whoami`, `$EUID`) 사용 금지.
 - **AC10**: `plugins/quality-gates/agents/codex-reviewer.md` agent body:
   - `python3 ... build_codex_prompt.py > "$PROMPT_FILE"` 직후 exit-code 검사 추가, 실패 시 `OVERRIDE_REASON=prompt_build_failed` + codex 호출 회피.
   - `REPO_ROOT="$(git rev-parse --show-toplevel)"` 직후 빈 문자열 검사, 빈 경우 abort.
-- **AC11**: `plugins/quality-gates/skills/quality-pipeline/SKILL.md`의 cost consent marker 쓰기에 실패 처리 추가 — SKILL.md prose가 모델에게 `if marker_write_failed: print(...)`를 명령하는 형태가 아니라, **shell command 자체에 `|| { echo "[quality-gates] could not persist consent (errno $?); will re-prompt next run" >&2; }`** 형태로 inline 처리하도록 prose 변경. 검증: 새 `tests/test_consent_marker_write_failure.sh` — `chmod 000 ~/.claude/quality-gates/` 후 SKILL.md의 marker-write snippet을 추출 실행, stderr에 위 메시지 패턴 grep. (CI root 환경 fallback: 가상 `HOME=/dev/null`로 marker-write 실패 강제, 동일 패턴 검증.)
+- **AC11**: `plugins/quality-gates/skills/quality-pipeline/SKILL.md`의 cost consent marker 쓰기에 실패 처리 추가.
+  - **Prose 변경 형식 (V14 추출 가능 조건)**: SKILL.md에서 marker-write를 fenced bash block으로 **embed**한다. block 직전 prose는 `# QG-CONSENT-MARKER-WRITE` 같은 unique 식별 주석으로 시작 → V14 grep으로 block 경계 추출 가능. block 내용:
+    ```bash
+    # QG-CONSENT-MARKER-WRITE
+    mkdir -p "${HOME}/.claude/quality-gates" \
+      && printf 'consented: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        > "${HOME}/.claude/quality-gates/codex-cost-consent.md" \
+      || { errno=$?; echo "[quality-gates] could not persist consent (errno $errno); will re-prompt next run" >&2; }
+    ```
+  - **V14 (`tests/test_consent_marker_write_failure.sh`)**: SKILL.md에서 `# QG-CONSENT-MARKER-WRITE` 주석부터 닫는 ``` ``` ``` 까지 grep으로 추출 → 임시 디렉토리에서 실행 시 `HOME=/dev/null` 또는 `chmod 000 ~/.claude/quality-gates` 로 쓰기 실패 강제 → stderr에 `could not persist consent (errno ` 패턴 매칭됨을 assert.
 - **AC12**: `plugins/quality-gates/skills/quality-pipeline/SKILL.md`이 `detect_codex.sh` manifest를 schema validation — 필수 키 (`codex_available`, `codex_path`, `codex_version` 또는 `skip_reason`) 부재 시 안전한 default(`codex_available: false`) + stderr warning.
 - **AC13**: `plugins/quality-gates/skills/quality-pipeline/SKILL.md`의 scout-fallback 분기에서, codex 가용 + consent OK 시에도 codex-reviewer를 dispatch에 포함 (legacy fallback 경로도 동일 invariant 유지) — fallback이 codex를 silently 떨어뜨리지 않는다.
-  - **자동 검증**: `tests/test_codex_dispatch_invariant.sh`에 세 번째 시나리오 추가 — `QG_MOCK_SCOUT_FALLBACK=1`, `QG_MOCK_CODEX_MANIFEST=available`, `QG_MOCK_CONSENT_OK=1` 환경에서 SKILL.md의 fallback 분기 dispatch 리스트에 codex-reviewer가 포함됨을 grep으로 검증. fallback 진입은 mock env var로 강제.
+  - **자동 검증 (proxy only)**: `tests/test_codex_dispatch_invariant.sh`에 세 번째 시나리오 추가 — `QG_MOCK_SCOUT_FALLBACK=1`, `QG_MOCK_CODEX_MANIFEST=available`, `QG_MOCK_CONSENT_OK=1` 환경에서 SKILL.md의 fallback 분기 dispatch 리스트에 codex-reviewer가 포함됨을 grep으로 검증. 정식 acceptance는 V9 수동 verification (`required`).
+  - **Mock env var contract**: 본 spec이 도입하는 3개 mock hook 모두 prefix `QG_MOCK_` 통일. value semantics: `QG_MOCK_CODEX_MANIFEST=<available|unavailable|<path-to-yaml>>` (enum string OR 파일 경로 — empty면 real `detect_codex.sh` 호출), `QG_MOCK_CONSENT_OK=1` (boolean), `QG_MOCK_SCOUT_FALLBACK=1` (boolean). 기존 `QG_MOCK_ASKUSER_PATH=<path>` 패턴(v1.11.0)과 namespace 일치.
   - **사용자 visibility**: fallback engage 시 SKILL.md prose가 `[quality-gates] scout fallback engaged; codex-reviewer still dispatched (codex_available=true)` 형태의 명시적 stderr 메시지를 inline shell로 emit하도록 변경. silent skip 금지.
 - **AC14**: 잘못된 frontmatter 키 검출 — 기존 `plugins/quality-gates/hooks/session-start-advisor.py`에 frontmatter scan 로직을 **확장 추가** (별도 hook 파일 신설 아님). 세션 시작 시 `plugins/*/agents/*.md` 스캔. `^allowed-tools:` 또는 `^disallowed-tools:` (kebab-case) 발견 시 한국어 advice 출력 (`⚠️ <파일경로>: agent frontmatter에 kebab-case 'allowed-tools' 발견. 'allowedTools' (camelCase)가 올바른 컨벤션.`).
-  - **Kill switch**: 기존 `DEVBREW_DISABLE_QG=1`이 전체 advisor 비활성. **새 fine-grained switch**: `DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor:frontmatter-scan` — 콜론 두 번 형식으로 advisor 내부 sub-feature 단위 비활성 (다른 advisor sub-feature는 계속 동작). CN6 정합. advisor 파일 상단 docstring에 sub-feature list와 각 sub-feature 비활성 토큰 명시.
+  - **Kill switch**: 기존 `DEVBREW_DISABLE_QUALITY_GATES=1`이 전체 advisor 비활성 (유지). **새 fine-grained switch**: `DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor:frontmatter-scan` — 콜론 두 번 형식으로 advisor 내부 sub-feature 단위 비활성. CN6 정합. advisor 파일 상단 docstring에 sub-feature list와 각 sub-feature 비활성 토큰 명시.
+  - **Parser 로직 추가 (현재 `_disabled()` exact-match만 지원)**: `session-start-advisor.py`에 새 helper `_subfeature_disabled(feature: str) -> bool` 추가 — `DEVBREW_SKIP_HOOKS` 토큰 중 `f"quality-gates:session-start-advisor:{feature}"` 또는 `_disabled()` (전체)가 true면 true. frontmatter scan 호출 직전 `if _subfeature_disabled("frontmatter-scan"): return` 가드. 검증: V6 (`test_session_start_advisor.py`)에 sub-feature 토큰만 set한 경우 frontmatter scan은 skip되고 다른 advisor 동작은 유지됨을 assert.
 - **AC15**: `plugins/quality-gates/tests/test_agent_frontmatter_keys.sh` 신규 — repo 전체에서 `plugins/*/agents/*.md` 파일을 grep, `^allowed-tools:` 또는 `^disallowed-tools:` 발견되면 fail. 통과 시 `agent frontmatter keys: OK` 출력.
 - **AC16**: `plugins/quality-gates/README.md`:
   - 디렉토리 트리(또는 동등 섹션)에 신규 4개 파일(`agents/codex-reviewer.md`, `scripts/detect_codex.sh`, `scripts/build_codex_prompt.py`, `scripts/codex_findings_to_yaml.py`) 추가.
@@ -169,17 +187,20 @@ PR ② (v1.12.0 minor, base=PR ①):
 - **V13**: `bash plugins/quality-gates/tests/test_codex_dispatch_invariant.sh` — PR ① 신규 테스트 통과. 3 시나리오 (codex_available, codex_unavailable, scout_fallback+codex_available) 각각의 dispatch 리스트가 spec 예상과 일치 (AC4 + AC5 + AC13).
 - **V14**: `bash plugins/quality-gates/tests/test_consent_marker_write_failure.sh` — marker write 실패 시 stderr 패턴 검증 통과 (AC11).
 
-### 수동 (live codex)
+### 수동 (live codex) — **required, not supplemental**
 
-- **V7**: codex CLI 설치된 환경에서 `/qg`. Gate 2 Phase 1 dispatch 메시지에 codex-reviewer가 등장하는지 stdout 확인. consent marker가 없으면 첫 사용 시 AskUserQuestion 등장하고, "Approve always" 후 marker 파일 생성 확인.
-- **V8**: codex CLI를 PATH에서 일시 제거(`PATH=$(echo "$PATH" | tr ':' '\n' | grep -v codex | paste -sd:)`) 한 상태에서 `/qg`. Phase 1 dispatch가 기존 3-agent (code-reviewer/silent-failure-hunter/feature-dev:code-reviewer)만 포함하는지 확인 → AC5 회귀 검증.
-- **V9**: codex 가용 환경에서 codex CLI 버전을 known-bad (예: 0.120.1 docker 이미지)로 교체 후 `/qg`. detect_codex.sh가 `skip_reason: known_bad_version` emit, codex-reviewer 제외, 사용자에게 명시적 메시지 출력 확인.
-- **V10**: `allowed-tools` 키를 잘못 추가한 dummy agent 파일을 `plugins/quality-gates/agents/_test_bad.md`에 일시 작성 → 새 세션 시작 → SessionStart advisor가 한국어 advice 출력 확인. 파일 제거 후 advice 사라짐 확인.
+본 섹션의 V7–V10은 AC4/AC5/AC13의 정식 acceptance 조건 (자동 mock test는 proxy). 본 V들이 PASS하지 않으면 PR 머지 차단.
+
+- **V7**: codex CLI 설치된 환경에서 `/qg`. Gate 2 Phase 1 dispatch 메시지에 codex-reviewer가 등장하는지 stdout 확인. consent marker가 없으면 첫 사용 시 AskUserQuestion 등장하고, "Approve always" 후 marker 파일 생성 확인. **AC4의 정식 acceptance**.
+- **V8**: codex CLI를 PATH에서 일시 제거(`PATH=$(echo "$PATH" | tr ':' '\n' | grep -v codex | paste -sd:)`) 한 상태에서 `/qg`. Phase 1 dispatch가 기존 3-agent (code-reviewer/silent-failure-hunter/feature-dev:code-reviewer)만 포함하는지 확인. **AC5의 정식 acceptance — 회귀 검증**.
+- **V9**: codex 가용 환경에서 codex CLI 버전을 known-bad (예: 0.120.1 docker 이미지)로 교체 후 `/qg`. detect_codex.sh가 `skip_reason: known_bad_version` emit, codex-reviewer 제외, 사용자에게 명시적 메시지 출력 확인. **AC13의 정식 acceptance**.
+- **V10**: `allowed-tools` 키를 잘못 추가한 dummy agent 파일을 `plugins/quality-gates/agents/_test_bad.md`에 일시 작성 → 새 세션 시작 → SessionStart advisor가 한국어 advice 출력 확인. 파일 제거 후 advice 사라짐 확인. **AC14의 보조 검증** (자동 V2/V6와 병행).
 
 ### 코드 리뷰 게이트 (self-verification)
 
-- **V11**: PR ①에 `/qg` 실행. Gate 2 verdict가 **PASS** 또는 **PASS_WITH_WARNINGS** 둘 중 하나여야 PASS로 간주. **FAIL이면 verification 실패** — PR 머지 차단. SKILL.md 변경 자체가 변경된 SKILL.md를 실행하므로 chicken-and-egg 우려가 있으나, 변경의 본질은 dispatch 결정 *로직* 추가이므로 변경된 SKILL.md도 정상 동작. 만약 변경된 SKILL.md가 자기 자신의 변경에 대해 NEEDS_RESTART를 emit하면 본 verification 실패로 간주 (forward-only state machine fix-loop 무한 회피).
-- **V12**: PR ②에 `/qg`. 동일 기준 (PASS / PASS_WITH_WARNINGS만 통과). PR ①과 달리 PR ②는 SKILL.md 변경이 더 크므로 self-test 신호 더 강함. 기준: AC4/AC5/AC13 자동 검증 통과 + Gate 2 PASS.
+- **V11**: PR ①에 `/qg` 실행. **사전 조건**: `rm -rf .claude/quality-gates/` (이전 pipeline state clean — self-reference 안정성 위해). Gate 2 verdict가 **PASS** 또는 **PASS_WITH_WARNINGS** 둘 중 하나여야 PASS로 간주. **FAIL이면 verification 실패** — PR 머지 차단. SKILL.md 변경 자체가 변경된 SKILL.md를 실행하므로 chicken-and-egg 우려가 있으나, 변경의 본질은 dispatch 결정 *로직* 추가이므로 변경된 SKILL.md도 정상 동작. 만약 변경된 SKILL.md가 자기 자신의 변경에 대해 NEEDS_RESTART를 emit하면 본 verification 실패로 간주 (forward-only state machine fix-loop 무한 회피).
+- **V12**: PR ②에 `/qg`. 동일 사전 조건(state clean) + 동일 기준 (PASS / PASS_WITH_WARNINGS만 통과). PR ①과 달리 PR ②는 SKILL.md 변경이 더 크므로 self-test 신호 더 강함. 기준: AC4/AC5/AC13 자동 검증 + V7–V9 수동 검증 + Gate 2 PASS.
+- **V15**: PR ② 작업 시작 직전 `git branch -a | grep qg-codex-recovery-hotfix` 결과 비어있지 않음 확인 (CN2 (c) brunch 보존 가드).
 
 ## Rejected Alternatives
 
@@ -193,6 +214,7 @@ PR ② (v1.12.0 minor, base=PR ①):
 - **R7 — Sentinel marker 기반 prompt injection 방어**: `parse_fenced_json` 대신 `<FINDINGS_START>...<FINDINGS_END>` 같은 unique marker 사용. 거부 — codex 모델 출력에 marker가 정확히 emit된다는 보장 없음 (모델 신뢰 의존). last-fence selection이 더 단순하고 prompt 변경 불필요.
 - **R8 — Integration test (real codex 호출)**: cost + flaky risk + CI 환경 codex 인증 복잡. 거부 — failure-injection mock 확장으로 충분. 수동 V7–V9가 integration 커버.
 - **R9 — Vertical slice 3-PR**: hotfix → 견고화 → linter. 거부 — Stacked 3-PR은 base 의존성 관리 복잡, 머지 도중 base 삭제 시 dependent CLOSED 위험(사용자 메모리). 2-PR이 위험/이득 균형.
+- **R10 — Quick depth에도 codex-reviewer 자동 dispatch**: scout이 quick depth로 판정한 PR(typo/trivial)에도 codex 가용 시 dispatch. 거부 — (1) cost consent의 600s ceiling 대비 trivial diff에는 over-engineering, (2) Anthropic Best Practices "trivia ceremony" anti-pattern (한 줄 diff에 full pipeline) 직접 위반. NG6 정합. 사용자가 추후 명시적으로 quick에도 원한다고 표명하면 NG6 + R10 재고.
 
 ## Open Questions
 
@@ -217,3 +239,10 @@ writing-plans skill은 `args`로 받은 spec 파일 경로를 읽고, 본 spec�
 - writing-plans skill이 plan 안에 "branch: feature/qg-codex-recovery-hotfix" (PR ①) + "branch: feature/qg-codex-recovery-hardening" (PR ②, base=PR ① branch) stacked 명시 권장.
 
 **PR ② OQ1 dependency**: writing-plans skill 호출 직전 OQ1(spec v3 vs v3.1)을 git log로 reconstruct 시도. plan 안에 OQ1 해소 결과 또는 "placeholder v3.x 사용" 명시 (AC17 정합).
+
+**PR ② sub-task grouping 힌트**: writing-plans skill이 PR ②를 단일 task 그룹으로 다루면 ~13 AC + 신규 파일 8개로 plan이 매우 김. 다음 그룹으로 sub-task 분리 권장:
+- **G2-a (codex stability)**: AC7, AC8, AC9 (timeout + schema + parser)
+- **G2-b (SKILL.md robustness)**: AC10, AC11, AC12, AC13 (agent body + consent marker + manifest validation + fallback)
+- **G2-c (Law 3 linter)**: AC14, AC15 (advisor + bash test)
+- **G2-d (docs sync)**: AC16, AC17, AC18, AC19 (README + spec rename + CHANGELOG + version bump)
+각 sub-task는 독립적으로 implement 가능하며, 머지 시 단일 PR ②로 통합.
