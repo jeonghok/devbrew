@@ -4,6 +4,7 @@
 > *코드보다 명세 먼저. 배포보다 리뷰 먼저. 잊기 전에 축적.*
 >
 > *병목은 모델이 아니다. 스펙, 리뷰, 메모리다. devbrew의 역할은 사용자가 의식적으로 기억하지 않아도 이 세 가지가 자동으로 지켜지도록 만드는 것이다.*
+> *reference/는 필요시에만 탐색*
 
 devbrew는 Claude Code를 위한 플러그인 마켓플레이스입니다. `plugins/*` 하위의 모든 플러그인은 아래 원칙을 상속합니다. 출처·24개 원칙·14개 anti-pattern·네 소스 하니스(oh-my-claudecode, gstack, ouroboros, compound-engineering)와 Anthropic 엔지니어링 문서의 원문 인용까지 담긴 전체 철학은 [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md)에 있습니다. 이 파일은 사전 로드 컨텍스트 앵커 — 불변값, 체크리스트, 포인터만 담습니다. 철학 문서에 속해야 할 내용은 이 파일에 오지 않습니다.
 
