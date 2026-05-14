@@ -30,7 +30,7 @@ out="$(PATH=/usr/bin:/bin bash "$PROBE")"
 assert_grep "not installed" "$out" 'skip_reason: not_installed'
 
 echo "=== Case 2: installed + auth + safe version ==="
-out="$(PATH="$MOCKS/safe-v1:/usr/bin:/bin" CODEX_API_KEY=test bash "$PROBE")"
+out="$(PATH="$MOCKS/safe-v1:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=test bash "$PROBE")"
 assert_grep "ok" "$out" 'codex_available: true'
 
 echo "=== Case 3: kill switch ==="
@@ -47,12 +47,37 @@ assert_grep "inside codex via CODEX_SESSION_ID" "$out" 'skip_reason: inside_code
 
 echo "=== Case 5: auth missing ==="
 mkdir -p "$TMP/no-codex-home"
-out="$(PATH="$MOCKS/safe-v1:/usr/bin:/bin" CODEX_API_KEY= OPENAI_API_KEY= HOME="$TMP/no-codex-home" bash "$PROBE")"
+out="$(PATH="$MOCKS/safe-v1:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY= OPENAI_API_KEY= HOME="$TMP/no-codex-home" bash "$PROBE")"
 assert_grep "auth missing" "$out" 'skip_reason: auth_missing'
 
 echo "=== Case 6: known bad version ==="
-out="$(PATH="$MOCKS/bad-version:/usr/bin:/bin" CODEX_API_KEY=test bash "$PROBE")"
+out="$(PATH="$MOCKS/bad-version:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=test bash "$PROBE")"
 assert_grep "known bad version" "$out" 'skip_reason: known_bad_version'
+
+# AC7 — codex --version timeout 5s wrap
+# Accept either literal timeout/gtimeout or via TIMEOUT_BIN variable with arg 5
+echo "=== AC7: codex --version uses timeout 5 ==="
+if grep -qE '(timeout|gtimeout)[[:space:]]+5[[:space:]]+codex[[:space:]]+--version' \
+    "$PLUGIN_ROOT/scripts/detect_codex.sh" || \
+   grep -qE '\$TIMEOUT_BIN"?[[:space:]]+5[[:space:]]+codex[[:space:]]+--version' \
+    "$PLUGIN_ROOT/scripts/detect_codex.sh"; then
+  echo "  PASS: AC7: codex --version wrapped with timeout 5"
+  pass=$((pass + 1))
+else
+  echo "  FAIL: AC7: codex --version not wrapped with 'timeout 5'"
+  fail=$((fail + 1))
+fi
+
+# AC7 — timeout_binary_missing 7th case
+echo "=== AC7: timeout_binary_missing 7th case ==="
+if grep -q "timeout_binary_missing" \
+    "$PLUGIN_ROOT/scripts/detect_codex.sh"; then
+  echo "  PASS: AC7: timeout_binary_missing skip_reason present"
+  pass=$((pass + 1))
+else
+  echo "  FAIL: AC7: timeout_binary_missing skip_reason not emitted"
+  fail=$((fail + 1))
+fi
 
 echo ""
 echo "Total: $((pass + fail)), pass: $pass, fail: $fail"

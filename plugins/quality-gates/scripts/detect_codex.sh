@@ -34,8 +34,20 @@ if [[ -z "${CODEX_API_KEY:-}" && -z "${OPENAI_API_KEY:-}" && ! -f "${HOME:-/none
   exit 0
 fi
 
-# 5. Version check (known-bad regex from gstack: 0.120.0/1/2 stdin deadlock)
-CODEX_VERSION="$(codex --version 2>/dev/null | head -1 || echo unknown)"
+# 5. Timeout binary check (required to prevent pipeline freeze on hung version probe)
+TIMEOUT_BIN=$(command -v gtimeout 2>/dev/null || command -v timeout 2>/dev/null)
+if [ -z "$TIMEOUT_BIN" ]; then
+  cat <<YAML
+codex_available: false
+codex_path: ""
+codex_version: ""
+skip_reason: timeout_binary_missing
+YAML
+  exit 0
+fi
+
+# 6. Version check (known-bad regex from gstack: 0.120.0/1/2 stdin deadlock)
+CODEX_VERSION="$("$TIMEOUT_BIN" 5 codex --version 2>/dev/null | head -1 || echo unknown)"
 if echo "$CODEX_VERSION" | grep -Eq '(^|[^0-9.])0\.120\.(0|1|2)([^0-9.]|$)'; then
   printf 'codex_available: false\n'
   printf 'skip_reason: known_bad_version\n'
@@ -43,7 +55,7 @@ if echo "$CODEX_VERSION" | grep -Eq '(^|[^0-9.])0\.120\.(0|1|2)([^0-9.]|$)'; the
   exit 0
 fi
 
-# 6. All checks pass
+# 7. All checks pass
 printf 'codex_available: true\n'
 printf 'codex_path: %s\n' "$CODEX_PATH"
 printf 'codex_version: %s\n' "$CODEX_VERSION"
