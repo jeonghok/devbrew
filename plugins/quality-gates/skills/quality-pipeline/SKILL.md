@@ -389,6 +389,34 @@ changed_files_since_last_dispatch: <list or 'none'>
 
 **Purpose**: Replace rule-based diff-feature gating with model judgment. Scout reads the filtered diff + Gate 1 summary and returns a structured dispatch plan that overrides the rule-based flags computed in Step 0.
 
+**Codex availability probe (Gate 2, Phase 0 prerequisite):**
+
+Run before dispatching scout:
+
+```bash
+MANIFEST_PATH="${TMPDIR:-/tmp}/qg-codex-manifest-${CLAUDE_CODE_SESSION_ID:-unknown}.yaml"
+bash plugins/quality-gates/scripts/detect_codex.sh > "$MANIFEST_PATH"
+```
+
+The script emits a YAML manifest (6 cases — install, kill-switch, sandbox-recursion, auth, version, ok). Read the manifest and include it as the `codex_manifest:` field in the Scout dispatch prompt's inputs section, alongside `filtered_diff`, `gate1_summary`, and `session_scope`.
+
+Idempotency: rerunning is safe (read-only, no side effects). If the manifest file exists from a prior probe in this session, regenerate it — environment state may have changed.
+
+**Codex cost consent (first-use gate):**
+
+If `codex_manifest.codex_available == true` AND marker file `${HOME}/.claude/quality-gates/codex-cost-consent.md` does not exist:
+
+1. If `QG_MOCK_ASKUSER_PATH` env var is set: write the question text to that path and read response as `approve` (test harness hook).
+2. Else: invoke `AskUserQuestion` (load via `ToolSearch select:AskUserQuestion` if schema not present):
+   - Question: "Codex CLI detected (`{codex_version}`). The codex-reviewer agent will call `codex exec` for each Gate 2 review on `standard`/`deep` diffs. This uses your Codex subscription/API and may incur cost (proxy ceiling: 600s wall-clock per call). Approve enabling codex-reviewer for this project?"
+   - Options:
+     - `Approve once` — enables for this session only, no marker
+     - `Approve always (recommended)` — writes marker; silent on future runs
+     - `Decline` — sets `codex_available: false` for this session
+
+3. On `Approve always`: write marker with `consented: <ISO timestamp>`.
+4. On `Decline`: replace loaded `codex_manifest` with `codex_available: false\nskip_reason: user_declined_cost_consent` for remainder of session.
+
 Dispatch:
 
 ```

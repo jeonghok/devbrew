@@ -3,6 +3,37 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.11.0] — 2026-05-14
+
+### Added
+
+- `codex-reviewer` agent: independent code reviewer dispatched as a separate process via `codex exec --json -s read-only` when Codex CLI is detected. Adds OS-process + model-family separation to QG Gate 2 Phase 1, strengthening Law 2 (writer-reviewer physical separation).
+- `scripts/detect_codex.sh`: 6-case probe (not_installed, kill_switch, inside_codex_sandbox, auth_missing, known_bad_version, ok). Read-only, exit 0 always. Known-bad version regex covers Codex CLI 0.120.0-0.120.2 (stdin deadlock bug).
+- `scripts/codex_findings_to_yaml.py`: JSONL stream parser with 3-stage fallback chain (fenced JSON → raw JSON → malformed_json). Handles both Codex 0.130+ nested `item.completed` event shape and legacy top-level `agent_message` shape. Includes stderr capture for `auth_error_in_stderr` (Codex exit 0 + auth failure pattern). Supports `--meta-override-exit-code` and `--meta-override-reason` flags for agent-side timeout/exit-nonzero classification.
+- `scripts/build_codex_prompt.py`: safe prompt construction — reads inputs from file paths, substitutes via `str.replace` with no shell/Python literal injection vector.
+- First-use cost consent gate: `AskUserQuestion`-based prompt with marker file at `~/.claude/quality-gates/codex-cost-consent.md`. Silent after first approval. Test harness uses `QG_MOCK_ASKUSER_PATH` env var for deterministic verification.
+- Kill switch: `DEVBREW_DISABLE_QG_CODEX=1` disables codex-reviewer globally.
+- Task 0 prompt-engineering spike (`tests/spike/`) — empirically validated codex emits fenced JSON in `agent_message` ≥2/3 runs. Frozen sample (`fixtures/codex_jsonl_sample.json`) serves as regression anchor against future codex event-schema drift.
+
+### Changed
+
+- `agents/scout.md`: dispatch input now includes `codex_manifest` (backwards-compatible — when `codex_available: false`, Phase 1 dispatch list is unchanged from prior behavior).
+- `skills/quality-pipeline/SKILL.md`: Gate 2 Phase 0 prerequisite now runs `detect_codex.sh` and synthesizes the manifest into Scout's input. Cost consent gate fires between probe and Scout dispatch.
+
+### Security
+
+- 3-layer reviewer-writer isolation for codex-reviewer agent:
+  1. Frontmatter `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit, Glob]`
+  2. Frontmatter `allowed-tools` narrow Bash whitelist (no `Bash(cat *)` — prevents redirection bypass)
+  3. `codex exec -s read-only` OS-level sandbox
+- Closed prompt-injection vector during Task 4 review: agent body now writes inputs to scratch files via single-quoted heredocs (`<<'EOF'`) and substitutes via Python `str.replace` on file paths — adversarial PR content (e.g., `"""` in diff text) cannot escape into outer agent execution.
+
+### Notes
+
+- Bumps QG Gate 2 max parallel fan-out from 11 → 12 (deep depth with codex-reviewer in Phase 1 + all Phase 2 specialists). Still within declared fan-out regime.
+- AC7 (backward-compat regression) is verified structurally (probe + scout-rule + existing test suite) rather than via synthesizer baseline diff. See `tests/fixtures/baseline_capture_README.md` for the deferral rationale.
+- Spec: `docs/superpowers/specs/2026-05-13-qg-codex-reviewer-design.md` v3.1 (3 rounds adversarial review, 29 issues addressed).
+
 ## [1.10.0] — 2026-05-13
 
 ### Changed
