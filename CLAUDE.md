@@ -6,9 +6,7 @@
 > *병목은 모델이 아니다. 스펙, 리뷰, 메모리다. devbrew의 역할은 사용자가 의식적으로 기억하지 않아도 이 세 가지가 자동으로 지켜지도록 만드는 것이다.*
 > *reference/는 필요시에만 탐색*
 
-devbrew는 Claude Code를 위한 플러그인 마켓플레이스입니다. `plugins/*` 하위의 모든 플러그인은 아래 원칙을 상속합니다. 출처·24개 원칙·14개 anti-pattern·네 소스 하니스(oh-my-claudecode, gstack, ouroboros, compound-engineering)와 Anthropic 엔지니어링 문서의 원문 인용까지 담긴 전체 철학은 [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md)에 있습니다. 이 파일은 사전 로드 컨텍스트 앵커 — 불변값, 체크리스트, 포인터만 담습니다. 철학 문서에 속해야 할 내용은 이 파일에 오지 않습니다.
-
-> **처음 오셨나요?** 플러그인을 만들고 있다면 → [§새 플러그인 만들기](#새-플러그인-만들기). 코드를 리뷰하고 있다면 → [§세 법칙](#세-법칙-three-laws)과 [§금지 패턴](#금지-패턴-forbidden-patterns). 그 이유가 궁금하다면 → [철학 문서](docs/philosophy/devbrew-harness-philosophy.md).
+devbrew는 Claude Code를 위한 플러그인 마켓플레이스입니다. `plugins/*` 하위의 모든 플러그인은 아래 원칙을 상속합니다. 전체 철학(24개 원칙·14개 anti-pattern·소스 하니스 원문 인용)은 [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md).
 
 ## The Three Laws
 
@@ -22,7 +20,7 @@ devbrew는 Claude Code를 위한 플러그인 마켓플레이스입니다. `plug
 
 ## Plugin Shape
 
-`plugins/*`의 모든 플러그인은 [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md) §4.0의 canonical 디렉토리 구조를 따르고 다음을 모두 만족해야 합니다. Deep corollary와 "왜"는 철학 §4 / §P1–P23에 있음.
+`plugins/*`의 모든 플러그인은 [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md) §4.0의 canonical 디렉토리 구조를 따르고 다음을 모두 만족해야 합니다.
 
 - **모든 PR마다 SemVer bump가 붙는 `plugin.json`.** 필수: `name`, `description`, `version`. 플러그인을 건드리는 모든 PR마다 bump (major = breaking, minor = 새 surface, patch = fix) — 안 그러면 cache key가 silent stale. 보안-critical 의존성은 optional `integrity` field로 pin.
 - **v1.0.0 이상이면 `CHANGELOG.md`.** `## [version] — YYYY-MM-DD` with Added/Changed/Deprecated/Removed/Fixed/Security. 제거 전 one-minor deprecation window.
@@ -61,16 +59,7 @@ plugins/<your-plugin>/
 - [`plugins/quality-gates/`](plugins/quality-gates/) — **writer + reviewer + hook 파이프라인**. 3-gate `allowedTools`/`disallowedTools` 격리로 Laws 1–2를 embody. `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`를 shipping.
 - [`plugins/project-init/`](plugins/project-init/) — **git-workflow enforcement**. Compounding hook과 branching-strategy 템플릿으로 Law 3를 embody. `commands/`, `hooks/`, `templates/`를 shipping. `agents/`나 `skills/` 없음 — hooks-and-templates 플러그인도 유효한 형태.
 
-**첫 플러그인 체크리스트** (merge 전 모든 체크):
-
-- [ ] `plugin.json`에 `name`, `version`, `description` 존재 (시작은 `0.1.0`)
-- [ ] `README.md`에 법칙/원칙을 번호로 cite하는 "Principles Instantiated" 섹션 존재
-- [ ] 모든 agent가 `allowedTools`/`disallowedTools` 선언 — default-everything 금지
-- [ ] 모든 skill이 `cost_class` 선언
-- [ ] 모든 hook에 `DEVBREW_DISABLE_<PLUGIN>=1` kill switch 존재
-- [ ] version ≥ v1.0.0이면 `CHANGELOG.md` 존재
-
-Full 플러그인 primitive 레퍼런스: [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md) §4.
+**Merge 전:** 위 [Plugin Shape](#plugin-shape) 모든 bullet 만족 + 시작 버전 `0.1.0`.
 
 ## Forbidden Patterns
 
@@ -100,15 +89,7 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 ## When Editing This Repo
 
-- `plugins/<name>/`를 건드리는 모든 PR에 **플러그인 version bump**.
 - **Korean-primary, English-terms-only.** `CLAUDE.md`와 `docs/philosophy/*.md` 등 user-facing 문서는 한국어를 primary로 작성. 영어는 **식별자**(P#, AP#, Law N, §X.Y, plugin 이름), **고유명사**(OMC, gstack, Ouroboros, CE, Anthropic 등), **원문 인용**(verbatim, 어느 방향으로도 gloss 추가 안 함), **기술 용어 중 자연스러운 한국어 대응이 없는 것**(`frontmatter`, `PreCompact`, `subagent`, `hook`, `skill` 등)에 한정. `*.ko.md` 동반 파일 모델은 폐기 (drift 비용 > 이중 노출 가치).
 - **`docs/**.md` 파일이 ~300줄 이상이면 상단(제목 + 에피그래프 + 한 줄 정체성 다음, 본문 진입 직전)에 `## 목차` 섹션 필수.** §X.Y depth로 anchor 링크. 섹션 추가/이름 변경/삭제 시 같은 commit에서 TOC도 동기화 (drift 시 cite-by-anchor 깨짐). 짧은 doc(<300줄, git-workflow 가이드 등)은 면제.
-- 새 플러그인은 README에 **어떤 철학 원칙을 instantiate하는지 cite** (예: *"Laws 1 and 2를 gate-based pipeline dispatch로 구현"*).
 - **버그가 리뷰를 탈출하면**, 해결책은 잡았어야 할 reviewer persona 파일을 편집하는 것. 코드만 패치하는 게 아님. 그 commit이 compounding 이벤트 (Law 3).
 
-## References
-
-- [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md) — 전체 철학: 24 원칙, 14 anti-pattern, 11 primitive, 6 tension with pick, attribution map, 원문 인용 (Appendix A).
-- [`docs/git-workflow/`](docs/git-workflow/) — branching, commit, PR process.
-- [`plugins/quality-gates/README.md`](plugins/quality-gates/README.md) — 3-gate pipeline으로 Laws 1–2를 구현하는 레퍼런스 — pr-review-toolkit, feature-dev, superpowers agent에 dispatch.
-- [`plugins/project-init/README.md`](plugins/project-init/README.md) — git-workflow enforcement과 branch/commit validation.
