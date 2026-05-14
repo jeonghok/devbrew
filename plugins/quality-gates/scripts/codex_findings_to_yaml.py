@@ -25,7 +25,8 @@ from typing import Any
 
 
 AUTH_ERROR_RE = re.compile(
-    r"\b(authentication|auth\s+(failed|error)|invalid\s+(api[\s_]?key|token))\b",
+    r"(authentication|auth\s+(failed|error)|invalid\s+(api[\s_]?key|token)"
+    r"|401|403|forbidden|unauthor|credential|quota|billing|subscription|expired)",
     re.IGNORECASE,
 )
 FENCED_JSON_RE = re.compile(r"```json\s*\n(.*?)\n?```", re.DOTALL)

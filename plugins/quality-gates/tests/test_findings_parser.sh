@@ -150,6 +150,35 @@ else
   fail=$((fail + 1))
 fi
 
+# AC9(c) — AUTH_ERROR_RE extended patterns (import from actual parser module)
+AC9C_PY="$TMP/check_auth_re.py"
+cat > "$AC9C_PY" << PYEOF
+import sys, importlib.util
+scripts_dir = sys.argv[1]
+pattern = sys.argv[2]
+spec = importlib.util.spec_from_file_location(
+    "codex_findings_to_yaml",
+    scripts_dir + "/codex_findings_to_yaml.py"
+)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+print('MATCH' if mod.AUTH_ERROR_RE.search(pattern) else 'NO_MATCH')
+PYEOF
+ac9c_pass=true
+for pattern in "401 Unauthorized" "403 Forbidden" "quota exceeded" \
+               "subscription required" "credential expired"; do
+  result=$(python3 "$AC9C_PY" "$PLUGIN_ROOT/scripts" "$pattern")
+  if [ "$result" != "MATCH" ]; then
+    echo "  FAIL: AC9(c): AUTH_ERROR_RE missed pattern: $pattern"
+    fail=$((fail + 1))
+    ac9c_pass=false
+  fi
+done
+if [ "$ac9c_pass" = "true" ]; then
+  echo "  PASS: AC9(c): AUTH_ERROR_RE matches 5 extended patterns"
+  pass=$((pass + 1))
+fi
+
 echo ""
 echo "Total: $((pass + fail)), pass: $pass, fail: $fail"
 [[ $fail -eq 0 ]] || exit 1
