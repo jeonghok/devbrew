@@ -527,6 +527,14 @@ For hardcoded-frontmatter agents, do NOT pass `model` (respect upstream choice �
 **Fallback** (when scout-fallback engages): use the legacy "always 3 parallel"
 behavior below.
 
+**Scout fallback codex inclusion (AC13)**: 만약 scout이 timeout/JSON-error/self-fallback으로 engage하면, legacy "always 3-agent" Phase 1 dispatch를 사용한다. 단, `codex_manifest.codex_available == true` AND consent marker 존재 (or `QG_MOCK_CONSENT_OK=1`) 시 codex-reviewer를 fallback dispatch에도 **무조건** 포함하고, 다음 stderr 메시지를 출력:
+
+```bash
+echo "[quality-gates] scout fallback engaged; codex-reviewer still dispatched (codex_available=true)" >&2
+```
+
+이로써 fallback 경로가 사용자에게 visible. codex 비가용 시는 기존 3-agent만 dispatch.
+
 #### Phase 1 (legacy/fallback): Critical Analysis
 
 Dispatch these agents **in parallel** (single tool-call block with multiple `Agent()` calls).
