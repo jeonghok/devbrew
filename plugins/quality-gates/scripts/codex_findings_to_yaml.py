@@ -189,11 +189,12 @@ def main() -> int:
         sys.stdout.write(yaml_emit([], apply_overrides(meta)))
         return 0
 
-    findings = parsed.get("findings", []) or []
-    if not isinstance(findings, list):
-        findings = []
-
+    raw_findings = parsed.get("findings", [])
+    findings = raw_findings if isinstance(raw_findings, list) else []
     meta = {"codex_failed": False}
+    if raw_findings is not None and not isinstance(raw_findings, list):
+        meta["reason"] = "schema_mismatch"
+        meta["raw_findings_type"] = type(raw_findings).__name__
     sys.stdout.write(yaml_emit(findings, apply_overrides(meta)))
     return 0
 

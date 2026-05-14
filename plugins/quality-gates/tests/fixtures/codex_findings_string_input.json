@@ -1,0 +1,1 @@
+{"type": "agent_message", "text": "```json\n{\"findings\": \"a string instead of list\"}\n```\n"}

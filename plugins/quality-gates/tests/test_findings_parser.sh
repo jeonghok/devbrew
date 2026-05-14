@@ -116,6 +116,29 @@ else
   fail=$((fail + 1))
 fi
 
+# AC9(a) — non-list findings coerce + meta.reason
+FIXTURES="$PLUGIN_ROOT/tests/fixtures"
+output="$(python3 "$PARSER" < "$FIXTURES/codex_findings_dict_input.json" 2>&1)"
+if echo "$output" | grep -qE "reason:[[:space:]]*schema_mismatch" && \
+   echo "$output" | grep -qE "raw_findings_type:[[:space:]]*dict"; then
+  echo "  PASS: AC9(a): dict findings → meta.reason: schema_mismatch + raw_findings_type: dict"
+  pass=$((pass + 1))
+else
+  echo "  FAIL: AC9(a): dict findings did not produce meta.reason: schema_mismatch or raw_findings_type: dict"
+  echo "$output" | sed 's/^/      /'
+  fail=$((fail + 1))
+fi
+
+output="$(python3 "$PARSER" < "$FIXTURES/codex_findings_string_input.json" 2>&1)"
+if echo "$output" | grep -qE "raw_findings_type:[[:space:]]*str"; then
+  echo "  PASS: AC9(a): string findings → meta.raw_findings_type: str"
+  pass=$((pass + 1))
+else
+  echo "  FAIL: AC9(a): string findings missing meta.raw_findings_type: str"
+  echo "$output" | sed 's/^/      /'
+  fail=$((fail + 1))
+fi
+
 echo ""
 echo "Total: $((pass + fail)), pass: $pass, fail: $fail"
 [[ $fail -eq 0 ]] || exit 1
