@@ -472,7 +472,8 @@ manifest의 `skip_reason` 어떤 값이든 이 분기를 따른다. 기존 3-age
 
 #### AskUserQuestion hard gate
 
-Compute `len(scout.phase1_agents) + len(scout.phase2_agents)`. If **≥ 4**:
+Compute `len(scout.phase1_agents) + len(external_reviewers) + len(scout.phase2_agents)`. If **≥ 4**:
+(`external_reviewers` = codex-reviewer 등 Phase 1에 무조건 포함되는 외부 reviewer; 가용 시 1, 비가용 시 0. fan-out 임계 평가에 반드시 포함.)
 
 Before dispatching anything, invoke AskUserQuestion:
 

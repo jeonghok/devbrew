@@ -8,12 +8,13 @@ ok()   { echo "OK: $1"; }
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 SKILL="$REPO_ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
 
-# Scenario 1: codex_available=true, consent_ok=1 → codex-reviewer must be in dispatch list
-DISPATCH_LINE=$(QG_MOCK_CODEX_MANIFEST=available QG_MOCK_CONSENT_OK=1 \
-  grep -E "QG_MOCK_CODEX_MANIFEST" "$SKILL" | head -5)
+# Scenario 1: SKILL.md prose가 codex_available 가용 경로에서 codex-reviewer dispatch 명시?
+# (proxy verification — actual LLM dispatch는 V7 수동, LD7)
+# env vars (QG_MOCK_*)는 real LLM 실행에만 영향; 본 test는 SKILL.md prose만 검사.
+DISPATCH_LINE=$(grep -B 2 -A 10 "codex_manifest\.codex_available == true" "$SKILL")
 echo "$DISPATCH_LINE" | grep -qE "codex-reviewer" \
-  || fail "Scenario 1: SKILL.md prose missing codex-reviewer dispatch when codex_available && consent_ok"
-ok "Scenario 1: codex_available + consent_ok → codex-reviewer dispatched"
+  || fail "Scenario 1: SKILL.md prose missing codex-reviewer dispatch when codex_available"
+ok "Scenario 1: codex_available → codex-reviewer dispatched (prose check)"
 
 # Scenario 2: codex_available=false → exactly 3-agent dispatch, NO codex-reviewer
 DISPATCH_BLOCK=$(grep -B 2 -A 8 "codex_manifest.codex_available == false" "$SKILL")
