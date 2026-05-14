@@ -402,6 +402,18 @@ The script emits a YAML manifest (6 cases — install, kill-switch, sandbox-recu
 
 Idempotency: rerunning is safe (read-only, no side effects). If the manifest file exists from a prior probe in this session, regenerate it — environment state may have changed.
 
+**Manifest schema validation (AC12)**: detect_codex.sh 결과 YAML을 읽은 후 다음 필수 키 존재 검증 — 없으면 safe default + stderr warning:
+
+- `codex_available` (boolean) — 필수
+- 만약 `codex_available == true`: `codex_path` (string, non-empty) + `codex_version` (string) 필수
+- 만약 `codex_available == false`: `skip_reason` (string) 필수
+
+위 키가 누락되거나 type이 안 맞으면:
+```bash
+echo "[quality-gates] codex manifest schema invalid; treating as unavailable" >&2
+```
+출력 후 `codex_available: false` + `skip_reason: manifest_invalid` 로 처리.
+
 **Codex cost consent (first-use gate):**
 
 If `codex_manifest.codex_available == true` AND marker file `${HOME}/.claude/quality-gates/codex-cost-consent.md` does not exist:
