@@ -175,6 +175,35 @@ def cmd_ambiguity(path: Path, blacklist_path: Path) -> int:
     return 0
 
 
+PLACEHOLDER_TOKENS = ("TBD", "TODO", "FIXME", "<placeholder>")
+
+
+def scan_placeholders(text: str) -> list[dict]:
+    """Find lines containing placeholder tokens. Frontmatter and `~`-escaped
+    occurrences are excluded."""
+    hits: list[dict] = []
+    # Skip frontmatter
+    m = FRONTMATTER_RE.match(text)
+    body_start = m.end() if m else 0
+    offset_line = text[:body_start].count("\n")
+    body = text[body_start:]
+    for idx, line in enumerate(body.split("\n"), start=offset_line + 1):
+        for token in PLACEHOLDER_TOKENS:
+            for m2 in re.finditer(re.escape(token), line):
+                start = m2.start()
+                if start > 0 and line[start - 1] == "~":
+                    continue
+                hits.append({"line": idx, "token": token, "text": line})
+                break
+    return hits
+
+
+def cmd_placeholders(path: Path) -> int:
+    text = path.read_text(encoding="utf-8")
+    print(json.dumps({"hits": scan_placeholders(text)}))
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print("usage: parse_spec_structure.py <subcommand> <args>", file=sys.stderr)
@@ -188,6 +217,8 @@ def main(argv: list[str]) -> int:
         return cmd_locked_decisions(Path(argv[2]))
     if sub == "ambiguity":
         return cmd_ambiguity(Path(argv[2]), Path(argv[3]))
+    if sub == "placeholders":
+        return cmd_placeholders(Path(argv[2]))
     print(f"unknown subcommand: {sub}", file=sys.stderr)
     return 64
 

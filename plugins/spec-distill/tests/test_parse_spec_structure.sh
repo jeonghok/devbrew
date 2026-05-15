@@ -91,5 +91,22 @@ rc=$?
   || note FAIL "escape syntax failed (rc=$rc out=$out)"
 
 echo ""
+echo "=== placeholders subcommand ==="
+
+# T7-1: design-no-frontmatter → no hits
+out=$(python3 "$SCRIPT" placeholders "$FIX/design-no-frontmatter.md" 2>&1)
+rc=$?
+[[ $rc -eq 0 ]] && echo "$out" | grep -q '"hits": \[\]' \
+  && note PASS "clean design has no placeholder hits" \
+  || note FAIL "clean design placeholder scan failed (rc=$rc out=$out)"
+
+# T7-2: design-tbd → TBD hit
+out=$(python3 "$SCRIPT" placeholders "$FIX/design-tbd.md" 2>&1)
+rc=$?
+[[ $rc -eq 0 ]] && echo "$out" | grep -q '"token": "TBD"' \
+  && note PASS "TBD placeholder detected" \
+  || note FAIL "TBD placeholder detection failed (rc=$rc out=$out)"
+
+echo ""
 echo "summary: $pass passed, $fail failed"
 [[ $fail -eq 0 ]]
