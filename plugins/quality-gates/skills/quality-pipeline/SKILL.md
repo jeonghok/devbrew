@@ -512,8 +512,17 @@ scout/adversarial/synthesizer are infrastructure and excluded from the count.
 
 #### Phase 1: Critical Analysis (depth-aware, parallel)
 
-Dispatch the agents in `scout.phase1_agents` **in parallel** (single tool-call
-block). Model assignment per dispatch:
+**Kill switch filter (applies to BOTH scout-primary and legacy/fallback paths).** Before dispatching any Phase 1 agents, apply per-agent kill switches by filtering the dispatch list. Currently honored:
+
+```bash
+if [ "${DEVBREW_DISABLE_QG_SECURITY_REVIEWER:-0}" = "1" ]; then
+  echo "[quality-gates] security-reviewer disabled via DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1" >&2
+  # Remove security-reviewer from BOTH scout.phase1_agents (if present) AND the
+  # legacy fallback Agent A/B/C/D list (the Agent D block becomes a no-op).
+fi
+```
+
+Same filter pattern applies for future per-agent kill switches. After filtering, dispatch the remaining agents in `scout.phase1_agents` **in parallel** (single tool-call block). Model assignment per dispatch:
 
 | agent | quick | standard | deep | model override on Task call |
 |---|---|---|---|---|

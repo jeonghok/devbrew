@@ -2,26 +2,29 @@
 # AC2 / AC10a — security-reviewer persona structural conformance.
 # Verifies the persona file declares the canonical finding YAML schema
 # from adversarial.md:22-30 and the forced-findings prohibition rule.
-set -u
+set -eu
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 PERSONA="$REPO_ROOT/plugins/quality-gates/agents/security-reviewer.md"
 
+# Existence guard — runs while set -e is active so a missing persona
+# fails fast with a clean diagnostic rather than yielding empty REPO_ROOT
+# silently and confusing downstream grep results.
+if [ ! -f "$PERSONA" ]; then
+  echo "  FAIL: persona file missing at $PERSONA" >&2; exit 1
+fi
+
+set +e
 pass=0; fail=0
 check() {
   local name="$1" cmd="$2" expected="$3"
   local actual
-  actual="$(eval "$cmd" 2>/dev/null || echo "0")"
+  actual="$(eval "$cmd" 2>/dev/null || true)"
   if [ "$actual" -ge "$expected" ]; then
     echo "  PASS: $name (got $actual, expected >= $expected)"; pass=$((pass + 1))
   else
     echo "  FAIL: $name (got $actual, expected >= $expected)"; fail=$((fail + 1))
   fi
 }
-
-# Existence
-if [ ! -f "$PERSONA" ]; then
-  echo "  FAIL: persona file missing at $PERSONA"; exit 1
-fi
 
 # Frontmatter required keys
 check "frontmatter name" \

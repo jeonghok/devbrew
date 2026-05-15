@@ -4,15 +4,20 @@
 # LLM, not executable, so we verify the kill switch is documented in the
 # dispatch sequence. Behavioral assertion of LLM compliance requires
 # integration smoke (AC10b, opt-in).
-set -u
+set -eu
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 SKILL="$REPO_ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
 
+if [ ! -f "$SKILL" ]; then
+  echo "  FAIL: SKILL.md missing at $SKILL" >&2; exit 1
+fi
+
+set +e
 pass=0; fail=0
 check() {
   local name="$1" cmd="$2" expected="$3"
   local actual
-  actual="$(eval "$cmd" 2>/dev/null || echo "0")"
+  actual="$(eval "$cmd" 2>/dev/null || true)"
   if [ "$actual" -ge "$expected" ]; then
     echo "  PASS: $name (got $actual, expected >= $expected)"; pass=$((pass + 1))
   else
