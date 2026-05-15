@@ -1,5 +1,5 @@
 {
-  "description": "spec-distill — UserPromptSubmit interview suggestion + SessionStart anchor for resumed sessions.",
+  "description": "spec-distill — UserPromptSubmit interview suggestion + SessionStart anchor + PostToolUse spec/design validator + Stop reviewer dispatch.",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -19,6 +19,29 @@
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-anchor.sh",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/spec-write-validator.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/review-dispatch.py",
+            "timeout": 10
           }
         ]
       }
