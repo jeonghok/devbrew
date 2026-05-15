@@ -46,6 +46,7 @@
 
 - **Law 1 (Clarity Before Code)** — Plugin의 raison d'être. 인터뷰 → spec lock → reviewer → human gate. "spec 이전엔 코딩 안 한다" 강제.
 - **Law 2 (Writer/Reviewer 분리)** — `disallowedTools: Write, Edit, MultiEdit, NotebookEdit` frontmatter로 spec-reviewer + breadth-keeper agent의 *물리적* 분리. 프롬프트가 아닌 frontmatter scoping.
+- **Law 2 강화 (v0.3.0)** — Writer/Reviewer 분리를 turn-boundary 결정론으로 끌어올림. PostToolUse가 spec/design write를 감지해 *해당 turn 안* structural gate를 차단(exit 2)하고, Stop hook이 *다음 turn 첫 액션*으로 reviewer dispatch를 systemMessage 주입으로 강제. file-based ledger (`state.local.md` `pending_review:` block)가 trans-hook coordination을 LLM 의지에서 분리.
 - **Law 3 (Compounding)** — spec.md 파일 자체가 named, versioned, diff-able artifact (P5). state.local.md 보존 (실패 시) → 디버깅 + future session 추적.
 
 ### Principles 흡수
@@ -87,8 +88,12 @@
 
 ## Hooks Installed
 
-- **`UserPromptSubmit` (`interview-trigger.sh`)** — build/make/create 키워드 + 짧은 prompt 감지 시 `{"systemMessage": "..."}` JSON 출력 (Claude Code hook protocol — quality-gates Python hook과 동일). 강제 X (advisory). **왜 skill이 아닌가**: 사용자가 명시적으로 `/interview` 안 쳐도 인터뷰 진입을 권장하려면 모든 prompt event를 가로채야 함 — skill로는 사용자 명시 호출 후에만 작동.
-- **`SessionStart` (`session-anchor.sh`)** — 이전 세션 state 존재 시 `{"systemMessage": "..."}` JSON 출력 (read-only, P14 mutate X). **왜 skill이 아닌가**: 세션 시작 직후 자동 표시 필요 — skill은 사용자 명시 호출 후만.
+| Event | Script | 책임 | 왜 skill이 아닌가 |
+|---|---|---|---|
+| UserPromptSubmit | `hooks/interview-trigger.sh` | vague build/make 요청 감지 → advisory | 사용자 자동 prompt에 반응해야 함 (skill은 사용자가 invoke해야 동작). |
+| SessionStart | `hooks/session-anchor.sh` | resumed session에 spec-distill anchor 표시 | session-level lifecycle event는 hook 전용. |
+| PostToolUse | `hooks/spec-write-validator.py` | spec/design 파일 write 시 mechanical Layer 1 검증 + `pending_review:` ledger 기록 (v0.3.0) | spec writer가 *자기 작업을 자기가 검증*하는 회색지대를 file-system level에서 가로채는 것이 Law 2의 가장 강력한 구현. skill은 LLM이 invoke해야 동작하므로 trigger 결정론이 부족함. |
+| Stop | `hooks/review-dispatch.py` | `pending_review:` block 있으면 systemMessage 주입으로 reviewer dispatch 강제 (v0.3.0) | turn boundary는 LLM의 메시지 형식과 무관한 결정론적 지점 — skill로는 hit 불가. |
 
 ## Kill switches
 
