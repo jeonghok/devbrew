@@ -52,7 +52,7 @@ depth: quick | standard | deep
 risky_files:
   - path: <path>
     reason: <one-sentence reason>
-phase1_agents: [<subset of: code-reviewer, silent-failure-hunter, feature-dev:code-reviewer>]
+phase1_agents: [<subset of: code-reviewer, silent-failure-hunter, feature-dev:code-reviewer, security-reviewer>]
 phase2_agents: [<subset of: type-design-analyzer, pr-test-analyzer, comment-analyzer, superpowers:code-reviewer, feature-dev:code-architect>]
 rationale: <2-3 sentences explaining depth + agent selection>
 fallback: false
@@ -62,9 +62,9 @@ fallback: false
 
 | depth | phase1_agents |
 |---|---|
-| quick | [code-reviewer] |
-| standard | [code-reviewer, silent-failure-hunter] |
-| deep | [code-reviewer, silent-failure-hunter, feature-dev:code-reviewer] |
+| quick | [code-reviewer, security-reviewer] |
+| standard | [code-reviewer, silent-failure-hunter, security-reviewer] |
+| deep | [code-reviewer, silent-failure-hunter, feature-dev:code-reviewer, security-reviewer] |
 
 You MAY deviate (e.g., add silent-failure-hunter to a quick run that has try/except changes), but justify in `rationale`.
 
