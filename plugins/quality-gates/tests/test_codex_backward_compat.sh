@@ -26,12 +26,40 @@ else
   fail=$((fail + 1))
 fi
 
-# Check 2: scout selection rule references codex_available + depth gating
-if grep -qE 'codex_available.*standard.*deep|codex_available.*depth' "$PLUGIN_ROOT/agents/scout.md"; then
-  echo "  PASS: scout selection rule includes codex_available depth gate"
+# Check 2 (updated for Task 2/3 architecture): SKILL.md owns codex dispatch and
+# enforces standard/deep-only gate + v1.10.x byte-equivalent fallback.
+# Three sub-checks; all must pass.
+SKILL_MD="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
+c2_fail=0
+
+# 2a: SKILL.md is the sole decision-maker for codex-reviewer dispatch (not scout)
+if grep -qE 'SKILL\.md.*codex-reviewer.*dispatch.*단독|codex-reviewer dispatch.*단독' "$SKILL_MD"; then
+  : # sub-check pass
+else
+  echo "  FAIL: SKILL.md does not declare sole ownership of codex-reviewer dispatch"
+  c2_fail=$((c2_fail + 1))
+fi
+
+# 2b: codex-reviewer is evaluated on standard/deep only (excluded from quick)
+if grep -qE 'Standard/deep depth.*평가|standard.*deep.*only|depth.*quick.*phase2_agents.*\[\]|depth == quick.*phase2_agents' "$SKILL_MD"; then
+  : # sub-check pass
+else
+  echo "  FAIL: SKILL.md does not gate codex-reviewer to standard/deep depth"
+  c2_fail=$((c2_fail + 1))
+fi
+
+# 2c: codex unavailable path preserves v1.10.x byte-equivalent 3-agent dispatch
+if grep -qE 'byte-equivalent' "$SKILL_MD"; then
+  : # sub-check pass
+else
+  echo "  FAIL: SKILL.md does not document v1.10.x byte-equivalent fallback"
+  c2_fail=$((c2_fail + 1))
+fi
+
+if [[ $c2_fail -eq 0 ]]; then
+  echo "  PASS: SKILL.md owns codex dispatch, depth-gates standard/deep, preserves v1.10.x fallback"
   pass=$((pass + 1))
 else
-  echo "  FAIL: scout selection rule for codex-reviewer not found"
   fail=$((fail + 1))
 fi
 

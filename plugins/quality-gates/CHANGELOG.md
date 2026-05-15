@@ -3,6 +3,25 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.11.1] — 2026-05-14
+
+### Fixed
+
+- `agents/codex-reviewer.md` frontmatter key를 `allowed-tools` (kebab-case) → `allowedTools` (camelCase) 로 수정. v1.11.0에서 Layer 2 isolation (narrow Bash whitelist)이 잘못된 키 때문에 실질적으로 비활성이었음. `tests/test_codex_reviewer_frontmatter.sh` 도 같은 잘못된 키를 검사하던 4 occurrences를 함께 수정.
+- `agents/scout.md`에서 codex-reviewer dispatch instruction 제거. v1.11.0에서 scout이 `phase1_agents`에 codex-reviewer를 추가하면 SKILL.md validation FAIL → scout-fallback → codex-reviewer silently dropped 상태였음. dispatch 단일 진실은 SKILL.md로 이동 (manifest 가용성 + consent 기반).
+- `skills/quality-pipeline/SKILL.md` Phase 1 dispatch logic: codex 가용 + consent OK 시 codex-reviewer를 in-process subagent 3개와 parallel dispatch에 무조건 포함. codex 미가용 시 v1.10.x byte-equivalent 3-agent dispatch 유지.
+
+### Security
+
+- 3-layer reviewer-writer isolation의 Layer 2 (`allowedTools` deny-list/allow-list narrow whitelist) 복구. v1.11.0의 광고된 보안 보장이 실제로 작동 시작.
+
+### Notes
+
+**SemVer 분류 근거**: v1.11.0의 codex-reviewer dispatch는 C1+C2 결함으로 인해 production에서 실제로 작동하지 않았음 — 본 PR의 "scout codex emit 제거"는 SemVer 의미상 "deprecation of never-working behavior" 이므로 backward-incompatible 변경 아님. devbrew CLAUDE.md "one-minor deprecation window" 요건은 본 케이스에 적용되지 않음.
+
+Audit findings: `docs/research/2026-05-14-pr33-pr32-retroactive-audit.md` (C1, C2, I-부분).
+Spec: `docs/superpowers/specs/2026-05-14-qg-codex-reviewer-recovery-design.md` (AC1–AC6).
+
 ## [1.11.0] — 2026-05-14
 
 ### Added
