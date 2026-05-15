@@ -65,5 +65,31 @@ rc=$?
   || note FAIL "design no-frontmatter case failed (rc=$rc out=$out)"
 
 echo ""
+echo "=== ambiguity subcommand ==="
+BL="$REPO_ROOT/plugins/spec-distill/scripts/ambiguity-blacklist.txt"
+
+# T6-1: spec-valid → no hits
+out=$(python3 "$SCRIPT" ambiguity "$FIX/spec-valid.md" "$BL" 2>&1)
+rc=$?
+[[ $rc -eq 0 ]] && echo "$out" | grep -q '"hits": \[\]' \
+  && note PASS "valid spec has no ambiguity hits" \
+  || note FAIL "valid ambiguity scan failed (rc=$rc out=$out)"
+
+# T6-2: spec-ambiguity-line12 → hit "works correctly" on line 12
+out=$(python3 "$SCRIPT" ambiguity "$FIX/spec-ambiguity-line12.md" "$BL" 2>&1)
+rc=$?
+[[ $rc -eq 0 ]] && echo "$out" | grep -q 'works correctly' \
+  && echo "$out" | grep -q '"line": 12' \
+  && note PASS "ambiguity hit detected on line 12" \
+  || note FAIL "ambiguity-line12 detection failed (rc=$rc out=$out)"
+
+# T6-3: spec-ambiguity-escaped → no hits (~ prefix excludes)
+out=$(python3 "$SCRIPT" ambiguity "$FIX/spec-ambiguity-escaped.md" "$BL" 2>&1)
+rc=$?
+[[ $rc -eq 0 ]] && echo "$out" | grep -q '"hits": \[\]' \
+  && note PASS "~escape prefix excludes from scan" \
+  || note FAIL "escape syntax failed (rc=$rc out=$out)"
+
+echo ""
 echo "summary: $pass passed, $fail failed"
 [[ $fail -eq 0 ]]

@@ -141,6 +141,40 @@ def cmd_locked_decisions(path: Path) -> int:
     return 0
 
 
+def load_blacklist(blacklist_path: Path) -> list[str]:
+    patterns: list[str] = []
+    for raw in blacklist_path.read_text(encoding="utf-8").split("\n"):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        patterns.append(line)
+    return patterns
+
+
+def scan_ambiguity(text: str, patterns: list[str]) -> list[dict]:
+    """Find lines containing any blacklisted phrase. `~phrase` opt-out applies
+    to that specific occurrence (match must NOT be preceded by `~`).
+    """
+    hits: list[dict] = []
+    for lineno, line in enumerate(text.split("\n"), start=1):
+        for phrase in patterns:
+            # Search for phrase, ensure the character immediately before is not `~`
+            for m in re.finditer(re.escape(phrase), line, flags=re.IGNORECASE):
+                start = m.start()
+                if start > 0 and line[start - 1] == "~":
+                    continue
+                hits.append({"line": lineno, "phrase": phrase, "text": line})
+                break  # one hit per phrase per line is enough
+    return hits
+
+
+def cmd_ambiguity(path: Path, blacklist_path: Path) -> int:
+    text = path.read_text(encoding="utf-8")
+    patterns = load_blacklist(blacklist_path)
+    print(json.dumps({"hits": scan_ambiguity(text, patterns)}))
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print("usage: parse_spec_structure.py <subcommand> <args>", file=sys.stderr)
@@ -152,6 +186,8 @@ def main(argv: list[str]) -> int:
         return cmd_sections(Path(argv[2]))
     if sub == "locked-decisions":
         return cmd_locked_decisions(Path(argv[2]))
+    if sub == "ambiguity":
+        return cmd_ambiguity(Path(argv[2]), Path(argv[3]))
     print(f"unknown subcommand: {sub}", file=sys.stderr)
     return 64
 
