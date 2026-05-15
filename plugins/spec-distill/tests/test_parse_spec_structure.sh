@@ -48,5 +48,22 @@ rc=$?
   || note FAIL "missing-goals detection failed (rc=$rc out=$out)"
 
 echo ""
+echo "=== locked-decisions subcommand ==="
+
+# T5-1: spec-valid → no errors (LD1만 있고 모든 sub-field 존재)
+out=$(python3 "$SCRIPT" locked-decisions "$FIX/spec-valid.md" 2>&1)
+rc=$?
+[[ $rc -eq 0 ]] && echo "$out" | grep -q '"errors": \[\]' \
+  && note PASS "valid spec locked_decisions has no errors" \
+  || note FAIL "valid locked_decisions check failed (rc=$rc out=$out)"
+
+# T5-2: design-no-frontmatter → no errors (locked_decisions 부재 = 미적용, design mode에서 정상)
+out=$(python3 "$SCRIPT" locked-decisions "$FIX/design-no-frontmatter.md" 2>&1)
+rc=$?
+[[ $rc -eq 0 ]] && echo "$out" | grep -q '"errors": \[\]' \
+  && note PASS "design-mode no-frontmatter has no errors" \
+  || note FAIL "design no-frontmatter case failed (rc=$rc out=$out)"
+
+echo ""
 echo "summary: $pass passed, $fail failed"
 [[ $fail -eq 0 ]]

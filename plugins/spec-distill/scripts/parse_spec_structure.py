@@ -91,6 +91,56 @@ def cmd_frontmatter(path: Path) -> int:
     return 0
 
 
+LD_FIELDS = ("id", "section", "summary", "source")
+
+
+def validate_locked_decisions(text: str) -> list[str]:
+    """Each LD entry must have id/section/summary/source. Returns error list."""
+    errors: list[str] = []
+    m = FRONTMATTER_RE.match(text)
+    if not m:
+        return errors  # no frontmatter → design mode → no LD constraint
+    body = m.group(1)
+    # Locate `locked_decisions:` block and its entries (lines starting with "  - id:")
+    in_block = False
+    entries: list[dict] = []
+    current: dict = {}
+    for line in body.split("\n"):
+        if re.match(r"^locked_decisions\s*:\s*\[\s*\]\s*$", line):
+            return errors  # explicitly empty
+        if re.match(r"^locked_decisions\s*:\s*$", line):
+            in_block = True
+            continue
+        if in_block:
+            if re.match(r"^[a-zA-Z_]", line):  # next top-level key → block end
+                if current:
+                    entries.append(current)
+                break
+            m_id = re.match(r"^\s*-\s*id\s*:\s*(.+)$", line)
+            m_field = re.match(r"^\s+([a-z_]+)\s*:\s*(.+)$", line)
+            if m_id:
+                if current:
+                    entries.append(current)
+                current = {"id": m_id.group(1).strip()}
+            elif m_field:
+                key = m_field.group(1).strip()
+                val = m_field.group(2).strip()
+                current[key] = val
+    if current:
+        entries.append(current)
+    for idx, entry in enumerate(entries):
+        for f in LD_FIELDS:
+            if f not in entry or not entry[f]:
+                errors.append(f"LD[{idx}] missing required field '{f}'")
+    return errors
+
+
+def cmd_locked_decisions(path: Path) -> int:
+    text = path.read_text(encoding="utf-8")
+    print(json.dumps({"errors": validate_locked_decisions(text)}))
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
         print("usage: parse_spec_structure.py <subcommand> <args>", file=sys.stderr)
@@ -100,6 +150,8 @@ def main(argv: list[str]) -> int:
         return cmd_frontmatter(Path(argv[2]))
     if sub == "sections":
         return cmd_sections(Path(argv[2]))
+    if sub == "locked-decisions":
+        return cmd_locked_decisions(Path(argv[2]))
     print(f"unknown subcommand: {sub}", file=sys.stderr)
     return 64
 
