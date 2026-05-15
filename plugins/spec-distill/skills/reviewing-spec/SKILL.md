@@ -15,7 +15,7 @@ cost_class: medium
 
 ## Steps
 
-1. **Load state.local.md** — `session_id`, `rereview_count`, `wall_clock_started_at`, `issue_history` 읽기. `session_id`가 unbound이거나 placeholder `<session-id>` 인 채로면 Step 3 cleanup이 charset 검증으로 자동 skip되지만, 사용자에게 명시적 통보 필요 (P14 + AP2).
+1. **Load state.local.md** — `session_id`, `rereview_count`, `wall_clock_started_at`, `issue_history` 읽기. 또한 `pending_review:` block 존재 여부 확인. *이 skill은 PostToolUse hook이 spec/design 파일 write를 감지해 file ledger에 `pending_review:` block을 기록한 직후, Stop hook이 다음 turn에 systemMessage로 dispatch를 강제했기 때문에* 호출됨 — `pending_review:` block이 *없는 채로* invoke되면 manual override로 간주 (loud advisory). `session_id`가 unbound이거나 placeholder `<session-id>` 인 채로면 Step 3 cleanup이 charset 검증으로 자동 skip되지만, 사용자에게 명시적 통보 필요 (P14 + AP2).
 2. **Wall-clock check (AC14)**: `now - wall_clock_started_at > DEVBREW_SPEC_DISTILL_TIMEOUT_MIN` (default 30) 이면 advisory metric 표기 + Phase 5 forced escalate.
 3. **Dispatch spec-reviewer agent**:
    ```
@@ -100,9 +100,14 @@ routing이 [5] forced escalate를 trigger할 수 있는 조건들. 다음 우선
 
 **두 조건 동시 충족 시**: P1이 P2/P3/P4보다 우선 (global이 per-issue 우선). 같은 우선순위 내 동시 충족 시 모든 해당 issue를 묶어서 한 번에 [5] escalate.
 
-### Re-review cap (rereview_count)
+### Re-review cap (rereview_count, hybrid policy — v0.3.0 hook 통합)
 
-`rereview_count >= 3` 도달 시 (즉 4번째 reviewer dispatch 시도 시): 자동으로 [5] Human Gate로 forced escalate, 전체 `issue_history` 첨부. (위 P1–P4와 별개 cap — 무한 review loop 방지.)
+두 조건 중 *하나라도* 충족 시 자동으로 [5] Human Gate로 forced escalate, 전체 `issue_history` 첨부:
+
+1. **Hard cap**: `rereview_count >= 5` 도달 시 (즉 6번째 reviewer dispatch 시도 시). 기존 v0.2.0의 cap=3을 v0.3.0에서 cap=5로 상향 — multi-round drift detection을 위한 budget 확장.
+2. **Round-level stagnation early-exit**: spec-reviewer가 `verdict: needs_revise` + `Stagnation_signal: true` 를 반환한 경우, `rereview_count`와 무관하게 즉시 [5] Human Gate로 escalate. 이는 *수렴 실패 조기 감지* — issue가 새로 발견되지 않고 같은 항목이 반복 raise되는 상황을 한 라운드 안에 끝낸다.
+
+기존 P3 row (`raised_count >= 3 AND dismissed_by_user == 0`)는 *per-issue* stagnation, 위 (2)는 *round-level* stagnation으로 trigger가 다르다.
 
 ### Stagnation detection (P3 row 참조)
 
