@@ -540,6 +540,8 @@ echo "[quality-gates] scout fallback engaged; codex-reviewer still dispatched (c
 
 Dispatch these agents **in parallel** (single tool-call block with multiple `Agent()` calls).
 
+**Fan-out note (fallback mode):** when scout fails and the legacy fallback dispatches Agent A + Agent B + Agent C + Agent D = 4 reviewers, this crosses the `≥ 4` fan-out threshold but does NOT route through the AskUserQuestion gate (the gate is scout-primary only, L497). This is intentional: fallback is already a degraded state, and prompting the user for fan-out consent on top of an already-degraded pipeline reduces usability with marginal safety gain. If a user wants to suppress security-reviewer dispatch entirely in fallback mode, set `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1` — the kill switch is honored on both paths.
+
 **Agent A — pr-review-toolkit:code-reviewer**
 
 Immutable head:
