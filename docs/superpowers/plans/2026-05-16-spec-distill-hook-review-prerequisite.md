@@ -79,12 +79,12 @@ whole-token match (쉼표 분리), substring prefix-match 방지.
 {
   "session_id":             str,
   "last_assistant_message": str | {"content": [{"type":"text","text":str},...]} ,
-  "transcript_path":        str   # last_assistant_message fallback용
+  "transcript_path":        str   # signal 부재 시 fallback용
 }
 ```
 
 - L172: `hook_input.get("last_assistant_message", "")` — 우선 소스
-- L850–851: `last_assistant_message` 없으면 `transcript_path` fallback
+- L850–851: `extract_signal_from_hook_input()` 가 signal을 찾지 못하면 (즉, `<qg-signal>` 태그가 부재하면 — `last_assistant_message` 자체의 존재 여부와 무관) `transcript_path` JSONL을 parse하는 fallback
 
 ### `<qg-signal>` 태그 파싱 (L188–193)
 
@@ -173,7 +173,7 @@ DEVBREW_SKIP_HOOKS=quality-gates:stop-hook  # 이 hook만 skip
 | stdout 정상 경로 | `{"systemMessage": "..."}` | `{"decision":"block","reason":"...","systemMessage":"..."}` |
 | exit(2) 사용 | 없음 | 없음 |
 | stderr 사용 | 없음 (오류 시 Python traceback) | 경고 메시지 (`⚠️ Quality Gates: ...`) |
-| 신호 소스 | N/A | `last_assistant_message` → `transcript_path` fallback |
+| 신호 소스 | N/A | `extract_signal_from_hook_input()` signal 부재 시 → `transcript_path` JSONL fallback |
 
 **T8 구현자:** PostToolUse로 차단하려면 harness 문서 기준 `exit(2)` 사용. quality-gates는 차단 없이 알림만 하므로 exit(2) 레퍼런스가 없음 — harness 원문 참조 필수.
 
