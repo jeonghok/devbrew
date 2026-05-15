@@ -402,6 +402,18 @@ The script emits a YAML manifest (6 cases — install, kill-switch, sandbox-recu
 
 Idempotency: rerunning is safe (read-only, no side effects). If the manifest file exists from a prior probe in this session, regenerate it — environment state may have changed.
 
+**Manifest schema validation (AC12)**: detect_codex.sh 결과 YAML을 읽은 후 다음 필수 키 존재 검증 — 없으면 safe default + stderr warning:
+
+- `codex_available` (boolean) — 필수
+- 만약 `codex_available == true`: `codex_path` (string, non-empty) + `codex_version` (string) 필수
+- 만약 `codex_available == false`: `skip_reason` (string) 필수
+
+위 키가 누락되거나 type이 안 맞으면:
+```bash
+echo "[quality-gates] codex manifest schema invalid; treating as unavailable" >&2
+```
+출력 후 `codex_available: false` + `skip_reason: manifest_invalid` 로 처리.
+
 **Codex cost consent (first-use gate):**
 
 If `codex_manifest.codex_available == true` AND marker file `${HOME}/.claude/quality-gates/codex-cost-consent.md` does not exist:
@@ -414,7 +426,17 @@ If `codex_manifest.codex_available == true` AND marker file `${HOME}/.claude/qua
      - `Approve always (recommended)` — writes marker; silent on future runs
      - `Decline` — sets `codex_available: false` for this session
 
-3. On `Approve always`: write marker with `consented: <ISO timestamp>`.
+3. On `Approve always`: write marker file with `consented: <ISO timestamp>` via the following bash snippet (test V14가 본 block을 추출 실행):
+
+<!-- QG-CONSENT-MARKER-WRITE -->
+# QG-CONSENT-MARKER-WRITE
+```bash
+mkdir -p "${HOME}/.claude/quality-gates" \
+  && printf 'consented: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+       > "${HOME}/.claude/quality-gates/codex-cost-consent.md" \
+  || { errno=$?; echo "[quality-gates] could not persist consent (errno $errno); will re-prompt next run" >&2; }
+```
+
 4. On `Decline`: replace loaded `codex_manifest` with `codex_available: false\nskip_reason: user_declined_cost_consent` for remainder of session.
 
 Dispatch:
@@ -504,6 +526,14 @@ For hardcoded-frontmatter agents, do NOT pass `model` (respect upstream choice �
 
 **Fallback** (when scout-fallback engages): use the legacy "always 3 parallel"
 behavior below.
+
+**Scout fallback codex inclusion (AC13)**: 만약 scout이 timeout/JSON-error/self-fallback으로 engage하면, legacy "always 3-agent" Phase 1 dispatch를 사용한다. 단, `codex_manifest.codex_available == true` AND consent marker 존재 (or `QG_MOCK_CONSENT_OK=1`) 시 codex-reviewer를 fallback dispatch에도 **무조건** 포함하고, 다음 stderr 메시지를 출력:
+
+```bash
+echo "[quality-gates] scout fallback engaged; codex-reviewer still dispatched (codex_available=true)" >&2
+```
+
+이로써 fallback 경로가 사용자에게 visible. codex 비가용 시는 기존 3-agent만 dispatch.
 
 #### Phase 1 (legacy/fallback): Critical Analysis
 

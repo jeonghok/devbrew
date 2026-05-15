@@ -25,7 +25,8 @@ from typing import Any
 
 
 AUTH_ERROR_RE = re.compile(
-    r"\b(authentication|auth\s+(failed|error)|invalid\s+(api[\s_]?key|token))\b",
+    r"(authentication|auth\s+(failed|error)|invalid\s+(api[\s_]?key|token)"
+    r"|401|403|forbidden|unauthor|credential|quota|billing|subscription|expired)",
     re.IGNORECASE,
 )
 FENCED_JSON_RE = re.compile(r"```json\s*\n(.*?)\n?```", re.DOTALL)
@@ -69,11 +70,12 @@ def extract_last_agent_message(stdin_text: str) -> tuple[str | None, bool]:
 
 
 def parse_fenced_json(text: str) -> dict | None:
-    m = FENCED_JSON_RE.search(text)
-    if not m:
+    matches = re.findall(FENCED_JSON_RE, text)
+    if not matches:
         return None
+    # AC9(b): pick LAST block to defeat adversarial diff-injected earlier blocks.
     try:
-        return json.loads(m.group(1))
+        return json.loads(matches[-1])
     except json.JSONDecodeError:
         return None
 
@@ -124,12 +126,14 @@ def main() -> int:
 
     stdin_text = sys.stdin.read()
     stderr_text = ""
+    _stderr_read_error: str | None = None
     if args.stderr_file:
         try:
             with open(args.stderr_file, "r", encoding="utf-8", errors="replace") as fh:
                 stderr_text = fh.read()
-        except OSError:
+        except OSError as e:
             stderr_text = ""
+            _stderr_read_error = str(e.errno) if e.errno else type(e).__name__
 
     def has_auth_error() -> bool:
         return bool(stderr_text and AUTH_ERROR_RE.search(stderr_text))
@@ -142,6 +146,9 @@ def main() -> int:
         if args.meta_override_reason:
             meta["reason"] = args.meta_override_reason
             meta["codex_failed"] = True
+        # AC9(d): surface stderr file read errors for caller visibility.
+        if _stderr_read_error is not None:
+            meta["stderr_read_error"] = _stderr_read_error
         return meta
 
     last_msg, any_jsonl_parsed = extract_last_agent_message(stdin_text)
@@ -189,11 +196,12 @@ def main() -> int:
         sys.stdout.write(yaml_emit([], apply_overrides(meta)))
         return 0
 
-    findings = parsed.get("findings", []) or []
-    if not isinstance(findings, list):
-        findings = []
-
+    raw_findings = parsed.get("findings", [])
+    findings = raw_findings if isinstance(raw_findings, list) else []
     meta = {"codex_failed": False}
+    if raw_findings is not None and not isinstance(raw_findings, list):
+        meta["reason"] = "schema_mismatch"
+        meta["raw_findings_type"] = type(raw_findings).__name__
     sys.stdout.write(yaml_emit(findings, apply_overrides(meta)))
     return 0
 

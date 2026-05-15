@@ -132,6 +132,39 @@ class TestAdvisor(unittest.TestCase):
         proc = run_advisor(self.tmp)
         self.assertIn("--reset", proc.stdout)
 
+    # AC14 tests -----------------------------------------------------------
+
+    def test_frontmatter_scan_detects_bad_key(self):
+        """AC14: advisor가 kebab-case allowed-tools 발견 시 stderr advice 출력."""
+        agents_dir = Path(self.tmp) / "plugins" / "quality-gates" / "agents"
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "_test_bad.md").write_text(
+            "---\nname: test\nallowed-tools: [Bash]\n---\nbody\n"
+        )
+        proc = run_advisor(self.tmp)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("allowed-tools", proc.stderr,
+                      "AC14: advisor did not detect bad frontmatter key")
+        self.assertIn("allowedTools", proc.stderr,
+                      "AC14: advisor did not suggest correct camelCase convention")
+
+    def test_subfeature_kill_switch(self):
+        """AC14: DEVBREW_SKIP_HOOKS sub-feature token으로 frontmatter scan 비활성."""
+        agents_dir = Path(self.tmp) / "plugins" / "quality-gates" / "agents"
+        agents_dir.mkdir(parents=True)
+        (agents_dir / "_test_bad.md").write_text(
+            "---\nallowed-tools: [Bash]\n---\n"
+        )
+        proc = run_advisor(
+            self.tmp,
+            env_extra={
+                "DEVBREW_SKIP_HOOKS": "quality-gates:session-start-advisor:frontmatter-scan"
+            },
+        )
+        self.assertEqual(proc.returncode, 0)
+        self.assertNotIn("allowed-tools", proc.stderr,
+                         "AC14: sub-feature kill switch did not suppress advice")
+
 
 if __name__ == "__main__":
     unittest.main()

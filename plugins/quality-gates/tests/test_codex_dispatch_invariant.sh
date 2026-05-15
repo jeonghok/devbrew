@@ -24,4 +24,12 @@ echo "$DISPATCH_BLOCK" | grep -q "codex-reviewer" \
   && fail "Scenario 2: codex-reviewer must NOT appear in unavailable branch"
 ok "Scenario 2: codex_unavailable → 3-agent only (regression guard)"
 
-echo "PASS: test_codex_dispatch_invariant.sh (2 scenarios)"
+# Scenario 3: scout-fallback + codex_available=true → codex-reviewer STILL dispatched
+DISPATCH_FALLBACK=$(grep -A 8 "scout-fallback\|scout fallback" "$SKILL" | head -15)
+echo "$DISPATCH_FALLBACK" | grep -qE "codex-reviewer" \
+  || fail "Scenario 3: fallback branch drops codex-reviewer silently"
+echo "$DISPATCH_FALLBACK" | grep -qE "scout fallback engaged" \
+  || fail "Scenario 3: fallback engage stderr message missing"
+ok "Scenario 3: scout-fallback + codex_available → codex-reviewer dispatched + visibility message"
+
+echo "PASS: test_codex_dispatch_invariant.sh (3 scenarios)"

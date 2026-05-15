@@ -1,6 +1,6 @@
 # QG Codex Reviewer — Design Spec
 
-> **Status:** Draft v3 — revised after spec-reviewer rounds 1 + 2 (26 total issues addressed)
+> **Status:** Draft v3.1 — revised after spec-reviewer rounds 1 + 2 (26 issues) + stale-reference cleanup; see git log for full revision history
 > **Author:** Jeongho-K (with Claude Opus 4.7)
 > **Date:** 2026-05-13
 > **Plugin:** `plugins/quality-gates`
@@ -86,7 +86,7 @@ Codex CLI(OpenAI 계열 모델)가 시스템에 설치되어 있으면 OS 프로
     -c 'model_reasoning_effort="medium"' \
     --json \
     < /dev/null 2>"$TMPERR" \
-    | python3 scripts/codex-findings-to-yaml.py
+    | python3 scripts/codex_findings_to_yaml.py
   ```
   핵심 플래그:
   - `-s read-only` (short form, **canonical**) — sandbox 모드. spec 전체에서 `--sandbox` 대신 `-s` 사용.
@@ -114,7 +114,7 @@ QG는 이미 fan-out ≥ 5 regime (Phase 2 deep 단독으로 5 agent 가능). `c
 
 ### AC1 — Probe correctness (6 cases)
 
-`bash scripts/detect-codex.sh`가 다음 6가지 case에서 정확한 YAML emit. 각 case는 verification script `tests/test-detect-codex.sh`로 자동 검증:
+`bash scripts/detect_codex.sh`가 다음 6가지 case에서 정확한 YAML emit. 각 case는 verification script `tests/test-detect_codex.sh`로 자동 검증:
 
 | # | 환경 | Emit |
 |---|---|---|
@@ -156,7 +156,7 @@ meta:
   codex_failed: false
 ```
 
-JSONL parser (`codex-findings-to-yaml.py`)는 다음 입력 형식을 받음:
+JSONL parser (`codex_findings_to_yaml.py`)는 다음 입력 형식을 받음:
 
 - **Input (stdin):** Codex JSONL stream — 각 line이 `{"type": "...", "delta": "...", ...}` 형태 event. 종결은 `agent_message` 또는 `task_complete` event.
 - **추출 (3-stage fallback chain):** 마지막 `agent_message` event의 `text` 필드에 대해 순차 시도:
@@ -262,10 +262,10 @@ baseline 부재 시 AC7는 "aspirational — baseline must be captured first"로
 
 | Path | Purpose | 크기 추정 |
 |---|---|---|
-| `plugins/quality-gates/scripts/detect-codex.sh` | 6-case probe — version, auth, sandbox-guard, kill-switch, install-check 모두 통합. `gstack-codex-*` 헬퍼를 재구현 (외부 dep 없음). | ~80 lines |
-| `plugins/quality-gates/scripts/codex-findings-to-yaml.py` | Codex JSONL stream → 표준 finding YAML. JSONL event parser + JSON extractor + YAML emitter + failure mode classifier. | ~120 lines |
+| `plugins/quality-gates/scripts/detect_codex.sh` | 6-case probe — version, auth, sandbox-guard, kill-switch, install-check 모두 통합. `gstack-codex-*` 헬퍼를 재구현 (외부 dep 없음). | ~80 lines |
+| `plugins/quality-gates/scripts/codex_findings_to_yaml.py` | Codex JSONL stream → 표준 finding YAML. JSONL event parser + JSON extractor + YAML emitter + failure mode classifier. | ~120 lines |
 | `plugins/quality-gates/agents/codex-reviewer.md` | Reviewer agent (frontmatter + 본문 invocation 패턴). | ~150 lines |
-| `plugins/quality-gates/tests/test-detect-codex.sh` | AC1 6-case 자동 검증. | ~80 lines |
+| `plugins/quality-gates/tests/test-detect_codex.sh` | AC1 6-case 자동 검증. | ~80 lines |
 | `plugins/quality-gates/tests/test-sandbox-enforced.sh` | AC4 정적 검증. | ~30 lines |
 | `plugins/quality-gates/tests/lib/extract-codex-invocations.py` | Multi-line shell block normalize 헬퍼 (AC4). | ~40 lines |
 | `plugins/quality-gates/tests/mocks/mock-codex-{exit1,hang,bad-json,no-agent-message,valid-json-no-fence,auth-stderr}.sh` | AC5 6 mock binaries (v3: +valid-json-no-fence, +auth-stderr). | ~10 lines each |
@@ -288,7 +288,7 @@ baseline 부재 시 AC7는 "aspirational — baseline must be captured first"로
  - `gate1_summary`: a YAML block from Gate 1 plan-verifier:
    ...
  - `session_scope`: one of `branch | session | paths` plus the applied path list.
-+- `codex_manifest`: YAML block from `scripts/detect-codex.sh`:
++- `codex_manifest`: YAML block from `scripts/detect_codex.sh`:
 +  ```yaml
 +  codex_available: true | false
 +  codex_path: <string, only if available>
@@ -325,13 +325,13 @@ baseline 부재 시 AC7는 "aspirational — baseline must be captured first"로
 **Codex availability probe (Gate 2, Phase 0 prerequisite):**
 
 \`\`\`bash
-bash scripts/detect-codex.sh > /tmp/qg-codex-manifest.yaml
+bash scripts/detect_codex.sh > /tmp/qg-codex-manifest.yaml
 \`\`\`
 
 The script emits a YAML manifest (6-case probe — install, kill-switch, sandbox-recursion, auth, version, ok). Output is captured to `/tmp/qg-codex-manifest.yaml` (or `${TMPDIR}/qg-codex-manifest-${SESSION_ID}.yaml` if `$TMPDIR` set) and passed as the `codex_manifest` input field to Scout. **Idempotency:** rerunning the probe is safe (read-only, no side effects); the SKILL.md does not check for prior probe output.
 ```
 
-**Inject 방법:** Scout dispatch가 markdown으로 표현된 입력 블록을 만들 때, `codex_manifest:` 키 하위에 YAML 매니페스트의 *escaped 본문*을 inline. 파일을 그대로 cat하는 게 아니라 YAML safe-load 후 재emit — injection 방어 (현재 detect-codex.sh 출력은 hardcoded set이라 injection 표면 사실상 0이지만 명시적 normalize 단계 명시).
+**Inject 방법:** Scout dispatch가 markdown으로 표현된 입력 블록을 만들 때, `codex_manifest:` 키 하위에 YAML 매니페스트의 *escaped 본문*을 inline. 파일을 그대로 cat하는 게 아니라 YAML safe-load 후 재emit — injection 방어 (현재 detect_codex.sh 출력은 hardcoded set이라 injection 표면 사실상 0이지만 명시적 normalize 단계 명시).
 
 ### 6.3 메타데이터 패치
 
@@ -345,33 +345,33 @@ The script emits a YAML manifest (6-case probe — install, kill-switch, sandbox
 
 ### 7.1 Probe unit test — AC1 6 cases
 
-`tests/test-detect-codex.sh`:
+`tests/test-detect_codex.sh`:
 
 ```bash
 # Case 1: not installed
-PATH=/usr/bin:/bin bash scripts/detect-codex.sh \
+PATH=/usr/bin:/bin bash scripts/detect_codex.sh \
   | grep -q 'skip_reason: not_installed' || fail 1
 
 # Case 2: installed + auth + safe version (mock codex binary that returns 1.0.0)
-PATH="$MOCK_OK_DIR:$PATH" CODEX_API_KEY=test bash scripts/detect-codex.sh \
+PATH="$MOCK_OK_DIR:$PATH" CODEX_API_KEY=test bash scripts/detect_codex.sh \
   | grep -q 'codex_available: true' || fail 2
 
 # Case 3: kill switch
-DEVBREW_DISABLE_QG_CODEX=1 bash scripts/detect-codex.sh \
+DEVBREW_DISABLE_QG_CODEX=1 bash scripts/detect_codex.sh \
   | grep -q 'skip_reason: kill_switch' || fail 3
 
 # Case 4: inside codex sandbox
-CODEX_SANDBOX=1 bash scripts/detect-codex.sh \
+CODEX_SANDBOX=1 bash scripts/detect_codex.sh \
   | grep -q 'skip_reason: inside_codex_sandbox' || fail 4
 
 # Case 5: no auth
 PATH="$MOCK_OK_DIR:$PATH" \
   CODEX_API_KEY= OPENAI_API_KEY= HOME=/tmp/no-codex-home \
-  bash scripts/detect-codex.sh \
+  bash scripts/detect_codex.sh \
   | grep -q 'skip_reason: auth_missing' || fail 5
 
 # Case 6: known bad version (mock that returns 0.120.1)
-PATH="$MOCK_BAD_DIR:$PATH" CODEX_API_KEY=test bash scripts/detect-codex.sh \
+PATH="$MOCK_BAD_DIR:$PATH" CODEX_API_KEY=test bash scripts/detect_codex.sh \
   | grep -q 'skip_reason: known_bad_version' || fail 6
 
 echo "All 6 cases passed."
@@ -453,14 +453,14 @@ Codex CLI 토큰 cap 플래그 가용성은 §10 Open Question (OQ-1)로 분리.
    for i in 1 2 3; do
      gtimeout 600 codex exec "$SPIKE_PROMPT" -C "$_REPO_ROOT" -s read-only \
        -c 'model_reasoning_effort="medium"' --json < /dev/null 2>/dev/null \
-       | python3 scripts/codex-findings-to-yaml.py
+       | python3 scripts/codex_findings_to_yaml.py
    done
    ```
    **Pass 기준:** 3회 중 ≥2회 fenced JSON 또는 raw JSON 파싱 성공. **Fail 시:** spec amendment — prompt template 조정, 또는 `codex exec --output-schema`로 architecture 재검토 (현 §3 거부 근거였던 "검증된 precedent 없음"이 spike로 뒤집힐 수 있음). Spike 실패면 step 3 진행 금지.
 1. **Worktree 확인** — 이미 `worktree-qg-codex-spec`에 있음. Spec merge 후 `feature/qg-codex-reviewer` 새 브랜치 또는 worktree.
 2. **Baseline capture (AC7 precursor)** — codex 없는 상태에서 합성 3 PR로 `/qg` 돌려 fixture 저장. 이걸 *먼저* 해야 AC7가 active.
-3. **`scripts/detect-codex.sh` 작성** + **`tests/test-detect-codex.sh` 6 case mock + assert** — AC1.
-4. **`scripts/codex-findings-to-yaml.py` 작성** + JSONL parser test (3-stage fallback chain + stderr capture) — AC3.
+3. **`scripts/detect_codex.sh` 작성** + **`tests/test-detect_codex.sh` 6 case mock + assert** — AC1.
+4. **`scripts/codex_findings_to_yaml.py` 작성** + JSONL parser test (3-stage fallback chain + stderr capture) — AC3.
 5. **`agents/codex-reviewer.md` 작성** — frontmatter (allowed-tools narrow per AC11, disallowedTools 5종) + 본문에 §4.3 canonical invocation 정확히 포함 (`gtimeout 600 codex exec ... -C "$_REPO_ROOT" -s read-only ... --json < /dev/null 2>"$TMPERR" | python3 ...`). AC4/AC9/AC11 정적 검증 통과.
 6. **`tests/test-sandbox-enforced.sh` + 6 mock-codex binaries** — AC5.
 7. **`agents/scout.md` 패치** (3 patch hunks) — AC2.

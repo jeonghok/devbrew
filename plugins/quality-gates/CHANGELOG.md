@@ -3,6 +3,42 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.12.0] — 2026-05-14
+
+### Added
+
+- `tests/test_agent_frontmatter_keys.sh` — repo-wide agent frontmatter convention deny-list (AC15).
+- `hooks/session-start-advisor.py` 에 frontmatter scan sub-feature 확장 + `_subfeature_disabled()` helper (AC14).
+- `tests/test_consent_marker_write_failure.sh` (AC11 검증).
+- `tests/test_codex_dispatch_invariant.sh` scenario 3 (AC13 fallback).
+- `tests/fixtures/codex_findings_dict_input.json`, `codex_findings_string_input.json`, `codex_two_fenced_blocks.json` (AC9 fixtures).
+
+### Changed
+
+- `scripts/detect_codex.sh` — `codex --version` 호출을 `timeout 5` 로 래핑. 7번째 case `skip_reason: timeout_binary_missing` 추가 (AC7).
+- `agents/codex-reviewer.md` agent body — TIMEOUT_CMD/REPO_ROOT empty 검사 + prompt builder exit-code 검사 (AC8/AC10).
+- `README.md` — 디렉토리 트리에 codex 관련 4파일 추가, Gate 2 stage diagram에 codex-reviewer 노드, Fan-out 11→12, Principles Instantiated에 Law 2/Law 3 instantiation (AC16).
+- `docs/superpowers/specs/2026-05-13-qg-codex-reviewer-design.md` — 스크립트 파일명 dashes → underscores (AC17).
+
+### Fixed
+
+- `scripts/codex_findings_to_yaml.py`:
+  - non-list findings → `meta.reason: schema_mismatch` + `meta.raw_findings_type` surface (silent coerce 종료) (AC9a).
+  - `parse_fenced_json` last block 선택 (prompt injection 차단) (AC9b).
+  - `AUTH_ERROR_RE` 확장: 401/403/forbidden/quota/expired 등 (AC9c).
+  - stderr 읽기 실패 시 `meta.stderr_read_error: <errno>` (AC9d).
+- `skills/quality-pipeline/SKILL.md`:
+  - cost consent marker write 실패 시 stderr 메시지 — fenced bash block + `# QG-CONSENT-MARKER-WRITE` 식별 주석으로 V14가 추출 검증 가능 (AC11).
+  - detect_codex.sh manifest schema validation (AC12).
+  - scout-fallback 분기에서도 codex 가용 + consent 시 codex-reviewer dispatch + 명시적 stderr 메시지 (AC13).
+
+### Notes
+
+- Spec: `docs/superpowers/specs/2026-05-14-qg-codex-reviewer-recovery-design.md` (AC7–AC19).
+- Audit: `docs/research/2026-05-14-pr33-pr32-retroactive-audit.md`.
+- Law 2 instantiation: 3-layer reviewer-writer isolation (codex-reviewer)가 v1.11.1에서 복구된 후 v1.12.0에서 schema/auth/timeout 안전성 추가.
+- Law 3 instantiation: agent frontmatter convention drift 재발을 차단하는 compounding mechanism (advisor + bash test) 신설.
+
 ## [1.11.1] — 2026-05-14
 
 ### Fixed

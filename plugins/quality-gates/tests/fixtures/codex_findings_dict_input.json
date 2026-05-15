@@ -1,0 +1,1 @@
+{"type": "agent_message", "text": "```json\n{\"findings\": {\"file\": \"x.py\", \"line\": 10, \"issue\": \"test\"}}\n```\n"}

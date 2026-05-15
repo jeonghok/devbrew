@@ -116,6 +116,88 @@ else
   fail=$((fail + 1))
 fi
 
+# AC9(a) — non-list findings coerce + meta.reason
+FIXTURES="$PLUGIN_ROOT/tests/fixtures"
+output="$(python3 "$PARSER" < "$FIXTURES/codex_findings_dict_input.json" 2>&1)"
+if echo "$output" | grep -qE "reason:[[:space:]]*schema_mismatch" && \
+   echo "$output" | grep -qE "raw_findings_type:[[:space:]]*dict"; then
+  echo "  PASS: AC9(a): dict findings → meta.reason: schema_mismatch + raw_findings_type: dict"
+  pass=$((pass + 1))
+else
+  echo "  FAIL: AC9(a): dict findings did not produce meta.reason: schema_mismatch or raw_findings_type: dict"
+  echo "$output" | sed 's/^/      /'
+  fail=$((fail + 1))
+fi
+
+output="$(python3 "$PARSER" < "$FIXTURES/codex_findings_string_input.json" 2>&1)"
+if echo "$output" | grep -qE "raw_findings_type:[[:space:]]*str"; then
+  echo "  PASS: AC9(a): string findings → meta.raw_findings_type: str"
+  pass=$((pass + 1))
+else
+  echo "  FAIL: AC9(a): string findings missing meta.raw_findings_type: str"
+  echo "$output" | sed 's/^/      /'
+  fail=$((fail + 1))
+fi
+
+# AC9(b) — last fenced block selection
+output="$(python3 "$PARSER" < "$FIXTURES/codex_two_fenced_blocks.json" 2>&1)"
+if echo "$output" | grep -q "real.py" && ! (echo "$output" | grep -qE "findings:[[:space:]]*\[\]"); then
+  echo "  PASS: AC9(b): last fenced block selected (prompt injection 차단)"
+  pass=$((pass + 1))
+else
+  echo "  FAIL: AC9(b): parser did not pick LAST fenced block (real finding lost or first fake block selected)"
+  echo "$output" | sed 's/^/      /'
+  fail=$((fail + 1))
+fi
+
+# AC9(c) — AUTH_ERROR_RE extended patterns (import from actual parser module)
+AC9C_PY="$TMP/check_auth_re.py"
+cat > "$AC9C_PY" << PYEOF
+import sys, importlib.util
+scripts_dir = sys.argv[1]
+pattern = sys.argv[2]
+spec = importlib.util.spec_from_file_location(
+    "codex_findings_to_yaml",
+    scripts_dir + "/codex_findings_to_yaml.py"
+)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+print('MATCH' if mod.AUTH_ERROR_RE.search(pattern) else 'NO_MATCH')
+PYEOF
+ac9c_pass=true
+for pattern in "401 Unauthorized" "403 Forbidden" "quota exceeded" \
+               "subscription required" "credential expired"; do
+  result=$(python3 "$AC9C_PY" "$PLUGIN_ROOT/scripts" "$pattern")
+  if [ "$result" != "MATCH" ]; then
+    echo "  FAIL: AC9(c): AUTH_ERROR_RE missed pattern: $pattern"
+    fail=$((fail + 1))
+    ac9c_pass=false
+  fi
+done
+if [ "$ac9c_pass" = "true" ]; then
+  echo "  PASS: AC9(c): AUTH_ERROR_RE matches 5 extended patterns"
+  pass=$((pass + 1))
+fi
+
+# AC9(d) — stderr read error surfaced via meta.stderr_read_error
+if [ "$(id -u)" -eq 0 ]; then
+  echo "  SKIP: AC9(d) test requires non-root user (NG7: capability env out-of-scope)"
+else
+  UNREADABLE="$TMP/unreadable.txt"
+  touch "$UNREADABLE"
+  chmod 000 "$UNREADABLE"
+  OUT=$(echo '{}' | python3 "$PARSER" --stderr-file "$UNREADABLE" 2>&1 || true)
+  if echo "$OUT" | grep -qE "stderr_read_error:"; then
+    echo "  PASS: AC9(d): chmod 000 stderr → meta.stderr_read_error surfaced"
+    pass=$((pass + 1))
+  else
+    echo "  FAIL: AC9(d): stderr read failure not surfaced via meta.stderr_read_error"
+    echo "$OUT" | sed 's/^/      /'
+    fail=$((fail + 1))
+  fi
+  chmod 600 "$UNREADABLE" 2>/dev/null || true
+fi
+
 echo ""
 echo "Total: $((pass + fail)), pass: $pass, fail: $fail"
 [[ $fail -eq 0 ]] || exit 1
