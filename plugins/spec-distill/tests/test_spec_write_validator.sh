@@ -31,16 +31,17 @@ state_pending() {
 }
 
 # Case 1: AC1 — valid spec → exit 0 + state write
-cp "$FIX/spec-valid.md" "$WORK/spec.md"
-out=$(run_hook "$WORK/spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-1")
+mkdir -p "$WORK/docs/superpowers/specs"
+cp "$FIX/spec-valid.md" "$WORK/docs/superpowers/specs/2026-05-16-test1-spec.md"
+out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test1-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-1")
 rc=$?
 [[ $rc -eq 0 ]] && state_pending "test-1" >/dev/null \
   && note PASS "AC1: valid spec exits 0 + pending_review recorded" \
   || note FAIL "AC1 failed (rc=$rc out=$out)"
 
 # Case 2: AC2 — missing Goals → exit 2 + stderr matches
-cp "$FIX/spec-missing-goals.md" "$WORK/spec2.md"
-out=$(run_hook "$WORK/spec2.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-2")
+cp "$FIX/spec-missing-goals.md" "$WORK/docs/superpowers/specs/2026-05-16-test2-spec.md"
+out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test2-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-2")
 rc=$?
 [[ $rc -eq 2 ]] && echo "$out" | grep -qE "missing sections:.*#goals" \
   && [[ ! -f "$WORK/.claude/spec-distill/test-2/state.local.md" ]] \
@@ -48,8 +49,8 @@ rc=$?
   || note FAIL "AC2 failed (rc=$rc out=$out)"
 
 # Case 3: AC3 — ambiguity hit on line 12
-cp "$FIX/spec-ambiguity-line12.md" "$WORK/spec3.md"
-out=$(run_hook "$WORK/spec3.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-3")
+cp "$FIX/spec-ambiguity-line12.md" "$WORK/docs/superpowers/specs/2026-05-16-test3-spec.md"
+out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test3-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-3")
 rc=$?
 [[ $rc -eq 2 ]] && echo "$out" | grep -q "ambiguity hit:" \
   && echo "$out" | grep -q "line 12" \
@@ -58,8 +59,8 @@ rc=$?
   || note FAIL "AC3 failed (rc=$rc out=$out)"
 
 # Case 4: AC4 — ~escape allowed → exit 0
-cp "$FIX/spec-ambiguity-escaped.md" "$WORK/spec4.md"
-out=$(run_hook "$WORK/spec4.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-4")
+cp "$FIX/spec-ambiguity-escaped.md" "$WORK/docs/superpowers/specs/2026-05-16-test4-spec.md"
+out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test4-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-4")
 rc=$?
 [[ $rc -eq 0 ]] && note PASS "AC4: ~escape prefix passes" \
   || note FAIL "AC4 failed (rc=$rc out=$out)"
@@ -91,16 +92,16 @@ rc=$?
   || note FAIL "AC7 failed (rc=$rc out=$out)"
 
 # Case 8: AC8 — DEVBREW_DISABLE_SPEC_DISTILL=1 silent
-cp "$FIX/spec-valid.md" "$WORK/spec8.md"
-out=$(run_hook "$WORK/spec8.md" "DEVBREW_DISABLE_SPEC_DISTILL=1 DEVBREW_SPEC_DISTILL_SESSION_ID=test-8")
+cp "$FIX/spec-valid.md" "$WORK/docs/superpowers/specs/2026-05-16-test8-spec.md"
+out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test8-spec.md" "DEVBREW_DISABLE_SPEC_DISTILL=1 DEVBREW_SPEC_DISTILL_SESSION_ID=test-8")
 rc=$?
 [[ $rc -eq 0 ]] && [[ ! -f "$WORK/.claude/spec-distill/test-8/state.local.md" ]] \
   && note PASS "AC8: DEVBREW_DISABLE_SPEC_DISTILL=1 silent" \
   || note FAIL "AC8 failed (rc=$rc out=$out)"
 
 # Case 9: AC9 — DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1: Layer 1 runs, no state write
-cp "$FIX/spec-valid.md" "$WORK/spec9.md"
-out=$(run_hook "$WORK/spec9.md" "DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1 DEVBREW_SPEC_DISTILL_SESSION_ID=test-9")
+cp "$FIX/spec-valid.md" "$WORK/docs/superpowers/specs/2026-05-16-test9-spec.md"
+out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test9-spec.md" "DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1 DEVBREW_SPEC_DISTILL_SESSION_ID=test-9")
 rc=$?
 [[ $rc -eq 0 ]] && [[ ! -f "$WORK/.claude/spec-distill/test-9/state.local.md" ]] \
   && note PASS "AC9: SKIP_AUTOREVIEW skips Layer 2" \

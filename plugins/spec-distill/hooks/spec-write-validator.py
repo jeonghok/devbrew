@@ -31,10 +31,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PARSE_LIB = SCRIPT_DIR.parent / "scripts" / "parse_spec_structure.py"
 BLACKLIST = SCRIPT_DIR.parent / "scripts" / "ambiguity-blacklist.txt"
 
-# Path-suffix patterns. spec\d* allows numbered variants used in tests
-# (spec.md, spec2.md, ...). design suffix matches *design.md.
-SPEC_SUFFIX_RE = re.compile(r"spec\d*\.md$", re.IGNORECASE)
-DESIGN_SUFFIX_RE = re.compile(r"design\.md$", re.IGNORECASE)
+PATH_PREFIX = "docs/superpowers/specs/"
 
 
 def kill_switch_active() -> bool:
@@ -49,17 +46,15 @@ def kill_switch_active() -> bool:
 
 
 def resolve_mode(file_path: str) -> Optional[str]:
-    """Return 'spec', 'design', or None (not in scope).
-
-    Design takes precedence over spec when both match (e.g. `spec-design.md`
-    is design mode).
-    """
-    if DESIGN_SUFFIX_RE.search(file_path):
+    """Return 'spec', 'design', or None (not in scope)."""
+    if PATH_PREFIX not in file_path:
+        return None
+    if file_path.endswith("-spec.md"):
+        return "spec"
+    if file_path.endswith("-design.md"):
         if os.environ.get("DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE") == "1":
             return None
         return "design"
-    if SPEC_SUFFIX_RE.search(file_path):
-        return "spec"
     return None
 
 
