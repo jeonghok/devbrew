@@ -8,6 +8,22 @@
 
 devbrew는 Claude Code를 위한 플러그인 마켓플레이스입니다. `plugins/*` 하위의 모든 플러그인은 아래 원칙을 상속합니다. 전체 철학(24개 원칙·14개 anti-pattern·소스 하니스 원문 인용)은 [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md).
 
+## LLM Coding Guidelines
+
+- Think Before Coding — 가정·혼란·tradeoff 명시, 의심나면 묻기
+- Simplicity First — 요청 이상 만들지 않기, 추측 금지
+- Surgical Changes — 요청과 직결된 줄만, 인접 코드 청소 금지
+- Goal-Driven Execution — 검증 가능한 성공 기준 정의 후 loop
+
+## Git Workflow
+
+GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow/`.
+
+- Branch: `main`에서 `feature/*` 또는 `fix/*`. kebab-case, 2–4 단어.
+- Commit: Conventional Commits (`<type>(<scope>): <description>`)
+- PR: merge commit, `docs/git-workflow/pr-process.md` 참고
+- project-init 플러그인이 브랜치 명명·commit 포맷 자동 검증
+
 ## The Three Laws
 
 **Law 1 — Clarity Before Code.** 명세가 모호한 상태에서는 구현이 진행되지 않습니다. 코드를 shipping하는 모든 플러그인은 실제 거절 메커니즘을 가져야 합니다 — 최소한 **구조적 게이트** (필수 섹션: Context/Why, Goals, Non-goals, Constraints, Acceptance Criteria, Files to Modify, Verification Plan, Rejected Alternatives, Metadata)를 silent하게 skip할 수 없어야 합니다. Adversarial self-review는 구조적 baseline 위에 강력 권장, 수치 스코어링은 허용되지만 권장하지 않음 (철학 §5.3). *Trivia escape:* 한 문장으로 설명 가능한 trivia diff (typo, rename, 주석-only, single-file formatting)는 게이트 우회. 정의 및 자격 규정은 philosophy §2.1 / P12 참조.
@@ -71,25 +87,8 @@ Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md
 - **Subagent spray** — 선언 없는 fan-out ≥ 5; single-agent를 default로.
 - **Unbounded autonomy** — max-iter count, wall-clock budget, repeat 감지, 사용자-override kill switch 없는 루프.
 
-## LLM Coding Guidelines
-
-- Think Before Coding — 가정·혼란·tradeoff 명시, 의심나면 묻기
-- Simplicity First — 요청 이상 만들지 않기, 추측 금지
-- Surgical Changes — 요청과 직결된 줄만, 인접 코드 청소 금지
-- Goal-Driven Execution — 검증 가능한 성공 기준 정의 후 loop
-
-## Git Workflow
-
-GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow/`.
-
-- Branch: `main`에서 `feature/*` 또는 `fix/*`. kebab-case, 2–4 단어.
-- Commit: Conventional Commits (`<type>(<scope>): <description>`)
-- PR: merge commit, `docs/git-workflow/pr-process.md` 참고
-- project-init 플러그인이 브랜치 명명·commit 포맷 자동 검증
-
 ## When Editing This Repo
 
 - **Korean-primary, English-terms-only.** `CLAUDE.md`와 `docs/philosophy/*.md` 등 user-facing 문서는 한국어를 primary로 작성. 영어는 **식별자**(P#, AP#, Law N, §X.Y, plugin 이름), **고유명사**(OMC, gstack, Ouroboros, CE, Anthropic 등), **원문 인용**(verbatim, 어느 방향으로도 gloss 추가 안 함), **기술 용어 중 자연스러운 한국어 대응이 없는 것**(`frontmatter`, `PreCompact`, `subagent`, `hook`, `skill` 등)에 한정. `*.ko.md` 동반 파일 모델은 폐기 (drift 비용 > 이중 노출 가치).
 - **`docs/**.md` 파일이 ~300줄 이상이면 상단(제목 + 에피그래프 + 한 줄 정체성 다음, 본문 진입 직전)에 `## 목차` 섹션 필수.** §X.Y depth로 anchor 링크. 섹션 추가/이름 변경/삭제 시 같은 commit에서 TOC도 동기화 (drift 시 cite-by-anchor 깨짐). 짧은 doc(<300줄, git-workflow 가이드 등)은 면제.
 - **버그가 리뷰를 탈출하면**, 해결책은 잡았어야 할 reviewer persona 파일을 편집하는 것. 코드만 패치하는 게 아님. 그 commit이 compounding 이벤트 (Law 3).
-
