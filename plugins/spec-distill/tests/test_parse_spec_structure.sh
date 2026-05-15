@@ -31,5 +31,22 @@ rc=$?
   || note FAIL "no-frontmatter case failed (rc=$rc out=$out)"
 
 echo ""
+echo "=== sections subcommand ==="
+
+# T4-1: spec-valid → no missing sections
+out=$(python3 "$SCRIPT" sections "$FIX/spec-valid.md" 2>&1)
+rc=$?
+[[ $rc -eq 0 ]] && echo "$out" | grep -q '"missing": \[\]' \
+  && note PASS "valid spec has no missing sections" \
+  || note FAIL "valid spec sections check failed (rc=$rc out=$out)"
+
+# T4-2: spec-missing-goals → missing includes "#goals"
+out=$(python3 "$SCRIPT" sections "$FIX/spec-missing-goals.md" 2>&1)
+rc=$?
+[[ $rc -eq 0 ]] && echo "$out" | grep -q '#goals' \
+  && note PASS "spec-missing-goals reports #goals as missing" \
+  || note FAIL "missing-goals detection failed (rc=$rc out=$out)"
+
+echo ""
 echo "summary: $pass passed, $fail failed"
 [[ $fail -eq 0 ]]

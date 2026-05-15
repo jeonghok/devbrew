@@ -18,6 +18,42 @@ from pathlib import Path
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 
+# 11 required sections (anchor form for output mapping)
+REQUIRED_SECTIONS = [
+    ("Goal", "#goal"),
+    ("Context", "#context"),
+    ("Goals", "#goals"),
+    ("Non-goals", "#non-goals"),
+    ("Constraints", "#constraints"),
+    ("Acceptance Criteria", "#acceptance-criteria"),
+    ("Files to Modify", "#files-to-modify"),
+    ("Verification Plan", "#verification-plan"),
+    ("Rejected Alternatives", "#rejected-alternatives"),
+    ("Open Questions", "#open-questions"),
+    ("Concrete Next Action", "#concrete-next-action"),
+]
+
+
+def find_missing_sections(text: str) -> list[str]:
+    """Return anchor list for sections whose `## <title>` header is absent.
+
+    'Context' matches both `## Context` and `## Context / Why`. Match is
+    case-insensitive on the section title.
+    """
+    missing = []
+    for title, anchor in REQUIRED_SECTIONS:
+        pattern = re.compile(rf"^##\s+{re.escape(title)}\b", re.MULTILINE | re.IGNORECASE)
+        if not pattern.search(text):
+            missing.append(anchor)
+    return missing
+
+
+def cmd_sections(path: Path) -> int:
+    text = path.read_text(encoding="utf-8")
+    missing = find_missing_sections(text)
+    print(json.dumps({"missing": missing}))
+    return 0
+
 
 def parse_frontmatter(text: str) -> dict:
     """Parse YAML-ish frontmatter into a flat dict. Returns {} if absent."""
@@ -62,6 +98,8 @@ def main(argv: list[str]) -> int:
     sub = argv[1]
     if sub == "frontmatter":
         return cmd_frontmatter(Path(argv[2]))
+    if sub == "sections":
+        return cmd_sections(Path(argv[2]))
     print(f"unknown subcommand: {sub}", file=sys.stderr)
     return 64
 
