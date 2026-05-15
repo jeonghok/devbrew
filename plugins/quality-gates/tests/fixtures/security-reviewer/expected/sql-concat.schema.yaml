@@ -1,0 +1,12 @@
+# Minimum expected output shape for the sql-concat fixture.
+# Tests do NOT compare exact finding text (LLM non-determinism) — only
+# that the emitted YAML has the right keys + severity enum value range
+# + finding count >= 1 + the affected file is app/users.py.
+
+- agent: security-reviewer
+  file: app/users.py
+  line: <integer in 13..15>
+  severity: CRITICAL  # or IMPORTANT — both acceptable for SQL string-concat
+  confidence: 8  # or 9 or 10 — anchor 75 or 100 expected for literal concat
+  summary: <one sentence mentioning SQL injection or string concatenation>
+  proposed_fix: <description mentioning parameterized query or placeholder>

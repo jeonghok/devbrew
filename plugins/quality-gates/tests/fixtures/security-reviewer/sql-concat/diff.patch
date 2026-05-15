@@ -1,0 +1,13 @@
+diff --git a/app/users.py b/app/users.py
+index 0000001..0000002 100644
+--- a/app/users.py
++++ b/app/users.py
+@@ -10,4 +10,9 @@ class UserRepo:
+     def __init__(self, conn):
+         self.conn = conn
+
++    def get_by_name(self, name):
++        cur = self.conn.cursor()
++        cur.execute("SELECT * FROM users WHERE name = '" + name + "'")
++        return cur.fetchone()
++
