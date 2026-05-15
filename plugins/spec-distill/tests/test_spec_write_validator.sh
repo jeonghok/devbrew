@@ -115,6 +115,17 @@ rc=$?
   && note PASS "AC10: DESIGN_MODE_DISABLE skips design.md silently" \
   || note FAIL "AC10 failed (rc=$rc out=$out)"
 
+# Case 11: I1 regression — write twice, verify exactly one pending_review block
+mkdir -p "$WORK/docs/superpowers/specs"
+cp "$FIX/spec-valid.md" "$WORK/docs/superpowers/specs/2026-05-16-idem-spec.md"
+run_hook "$WORK/docs/superpowers/specs/2026-05-16-idem-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-idem" > /dev/null
+run_hook "$WORK/docs/superpowers/specs/2026-05-16-idem-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-idem" > /dev/null
+pending_count=$(grep -c '^pending_review:' "$WORK/.claude/spec-distill/test-idem/state.local.md")
+triggered_count=$(grep -c '^  triggered_at:' "$WORK/.claude/spec-distill/test-idem/state.local.md")
+[[ "$pending_count" == "1" ]] && [[ "$triggered_count" == "1" ]] \
+  && note PASS "I1: state file remains idempotent on re-write" \
+  || note FAIL "I1: state file has $pending_count pending_review and $triggered_count triggered_at (expected 1 each)"
+
 echo ""
 echo "summary: $pass passed, $fail failed"
 [[ $fail -eq 0 ]]

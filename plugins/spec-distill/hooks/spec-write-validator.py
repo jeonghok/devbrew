@@ -59,10 +59,14 @@ def resolve_mode(file_path: str) -> Optional[str]:
 
 
 def call_parser(sub: str, *args: str) -> dict:
-    cp = subprocess.run(
-        ["python3", str(PARSE_LIB), sub, *args],
-        capture_output=True, text=True, check=False,
-    )
+    try:
+        cp = subprocess.run(
+            ["python3", str(PARSE_LIB), sub, *args],
+            capture_output=True, text=True, check=False,
+            timeout=10,
+        )
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired) as exc:
+        return {"_error": f"parser failure: {exc}"}
     if cp.returncode != 0:
         return {"_error": cp.stderr.strip() or f"parser rc={cp.returncode}"}
     try:
@@ -83,9 +87,12 @@ def write_state(session_id: str, path: str, mode: str) -> None:
     )
     if state_file.exists():
         body = state_file.read_text(encoding="utf-8")
-        # Remove existing pending_review: block (deterministic re-write)
-        body = re.sub(r"^pending_review:\n(?:  .*\n)*", "", body, flags=re.MULTILINE)
-        state_file.write_text(body.rstrip() + "\n" + block, encoding="utf-8")
+        # Strip existing pending_review block BEFORE rstrip — regex requires
+        # each indented line to end with \n
+        body = re.sub(
+            r"^pending_review:\n(?:  [^\n]*\n)*", "", body, flags=re.MULTILINE
+        )
+        state_file.write_text(body.rstrip() + "\n\n" + block, encoding="utf-8")
     else:
         state_file.write_text(
             f"---\nsession_id: {session_id}\n---\n\n{block}", encoding="utf-8"
@@ -150,7 +157,10 @@ def main() -> int:
     # Pass → write state (unless Layer 2 disabled)
     if os.environ.get("DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW") != "1":
         session_id = os.environ.get("DEVBREW_SPEC_DISTILL_SESSION_ID", "default")
-        write_state(session_id, file_path, mode)
+        try:
+            write_state(session_id, file_path, mode)
+        except (PermissionError, OSError) as exc:
+            print(f"[spec-distill] state write failed (non-fatal): {exc}", file=sys.stderr)
 
     # Advisory systemMessage
     print(
