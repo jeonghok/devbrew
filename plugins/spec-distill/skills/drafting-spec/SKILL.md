@@ -116,4 +116,4 @@ draft 중 인터뷰에서 답을 못 얻은 항목은 **유추하지 말고** "O
 
 ## 다음 phase
 
-`reviewing-spec` skill 호출. spec.md 경로를 input으로.
+`reviewing-spec` phase는 PostToolUse + Stop hook이 자동 dispatch (v0.3.0+). drafting-spec이 명시 호출할 필요 없음. 단 hook이 비활성화된 환경(`DEVBREW_DISABLE_SPEC_DISTILL=1` 또는 kill switch)에서는 수동으로 `reviewing-spec` skill 호출.

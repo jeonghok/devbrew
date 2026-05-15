@@ -75,7 +75,7 @@
 - **AP4 (Trivia ceremony)** — `/interview` first-step trivia escape (5 패턴).
 - **AP9 (Subagent spray)** — agent 2개, breadth-keeper round당 max 1 invoke.
 - **AP14 (Unchallenged consensus)** — sub-agent reviewer adversarial review. (Steelman은 plan-reviewer PR로 defer.)
-- **AP16 (Unbounded autonomy)** — re-review max 3, rhythm guard 3, wall-clock 30min, kill switch.
+- **AP16 (Unbounded autonomy)** — re-review max 5 (hybrid policy, v0.3.0: hard cap + stagnation early-exit), rhythm guard 3, wall-clock 30min, kill switch.
 - **AP17 (Compaction-killed facts)** — state.local.md frontmatter 보존.
 
 ## External source absorption
