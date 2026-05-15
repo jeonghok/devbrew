@@ -25,7 +25,7 @@ You are NOT responsible for: making new findings, judging correctness (Adversari
    - `confirm` → keep as-is.
 2. Group findings by (file, line, severity-after-verdict).
 3. Within each group: merge into a single entry, list all originating agents.
-4. Suppress entries where confidence < 7.
+4. Suppress entries where confidence < 7 AND severity != CRITICAL. (Severity CRITICAL findings always surface — a critical-impact issue is worth showing even at low confidence; the user can dismiss noise but cannot recover from a missed CRITICAL.)
 5. Sort by severity (CRITICAL > IMPORTANT > SUGGESTION), then confidence descending.
 
 ## Output
@@ -50,7 +50,7 @@ Emit Markdown for the user. Use this exact structure:
 
 - ...
 
-### Suppressed (confidence < 7)
+### Suppressed (confidence < 7, severity != CRITICAL)
 
 <count> finding(s) hidden. Re-run with `/qg --show-low-confidence` to see all.
 ```
