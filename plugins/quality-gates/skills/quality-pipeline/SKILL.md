@@ -457,7 +457,7 @@ Agent(
 
 Parse Scout's YAML output. Validate:
 - `depth ∈ {quick, standard, deep}`
-- `phase1_agents ⊆ {code-reviewer, silent-failure-hunter, feature-dev:code-reviewer}`
+- `phase1_agents ⊆ {code-reviewer, silent-failure-hunter, feature-dev:code-reviewer, security-reviewer}`
 - If `depth == quick` then `phase2_agents` MUST be `[]`
 - All listed agent names are recognized
 
@@ -520,6 +520,7 @@ block). Model assignment per dispatch:
 | `pr-review-toolkit:code-reviewer` | (upstream Opus) | (upstream Opus) | (upstream Opus) | none — respect upstream `model: opus` |
 | `pr-review-toolkit:silent-failure-hunter` | — | included | included | `model: "sonnet"` |
 | `feature-dev:code-reviewer` | — | — | included | none — upstream is `model: sonnet` |
+| `quality-gates:security-reviewer` | included | included | included | `model: "sonnet"` (frontmatter `inherit`) |
 
 For agents whose frontmatter is `inherit`, pass `model: "sonnet"` via Task tool.
 For hardcoded-frontmatter agents, do NOT pass `model` (respect upstream choice — Task 1 design decision).
@@ -562,7 +563,23 @@ Immutable head:
 
 If `feature-dev` is NOT in `available_plugins`, skip Agent C silently and record this in the report's "Phase 2 Skipped Agents" section with reason "feature-dev plugin not available".
 
-Wait for all three agents to complete. Collect their findings.
+**Agent D — security-reviewer** (always dispatched unless `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`)
+
+Before dispatching, check the kill switch:
+
+```bash
+if [ "${DEVBREW_DISABLE_QG_SECURITY_REVIEWER:-0}" = "1" ]; then
+  echo "[quality-gates] security-reviewer disabled via DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1" >&2
+  # skip Agent D; other Phase 1 agents still dispatch
+fi
+```
+
+Immutable head:
+> Review the unstaged changes for code-level security vulnerabilities. Trace untrusted-input entry points to dangerous sinks. Categories: injection (SQL/NoSQL/command/template/directory), authn/authz bypass (missing middleware, IDOR, privilege escalation, CSRF on state-change), secrets in code or logs, SSRF + path traversal, insecure deserialization, cryptographic misuse, raw-HTML escape hatches, dependency manifest changes. Suppress defense-in-depth on already-protected code, theoretical/physical-access attacks, dev/test insecure transport, and generic hardening advice. If diff has no security surface, emit empty YAML list (`[]`) — do not pad with forced findings. Output: canonical YAML schema only (agent / file / line / severity / confidence / summary / proposed_fix), no prose.
+>
+> If the prompt contains a `## Current Diff` section, operate on that diff verbatim. **Do NOT run `git diff` yourself** — the full unified diff is already provided.
+
+Wait for all dispatched agents to complete. Collect their findings.
 
 **Individual dispatch failures**: if any single `Agent()` call fails (plugin missing, agent errors, etc.), record `"<agent-name>: dispatch failed: <error>"` in the output report's "Dispatch Failures" section and continue with the remaining agents. Do not abort Gate 2 on a single failure.
 
