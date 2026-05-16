@@ -28,7 +28,7 @@ echo "[AC1] /qg branch (no name) — backward compat"
 REPO=$(make_repo feat-a)
 (cd "$REPO" && CLAUDE_CODE_SESSION_ID=ac1session12 "$SETUP" branch >/dev/null)
 state="$REPO/.claude/quality-gates/ac1session12/pipeline.md"
-[ -f "$state" ] && pass "state file created"
+[ -f "$state" ] && pass "state file created" || fail "state file not created"
 grep -q '^worktree_path:' "$state" \
   && fail "worktree_path set in legacy mode" \
   || pass "no worktree_path in legacy mode"
@@ -42,7 +42,7 @@ echo "[AC2] /qg branch <name> happy path"
 REPO=$(make_repo feat-b)
 (cd "$REPO" && CLAUDE_CODE_SESSION_ID=ac2session12 "$SETUP" branch feat-b >/dev/null)
 state="$REPO/.claude/quality-gates/ac2session12/pipeline.md"
-[ -f "$state" ] && pass "state file in main repo"
+[ -f "$state" ] && pass "state file in main repo" || fail "state file not created"
 wpath=$(awk -F'"' '/^worktree_path:/{print $2}' "$state")
 [ -n "$wpath" ] && [ -d "$wpath" ] && pass "worktree_path exists" \
   || fail "worktree_path missing or invalid: $wpath"

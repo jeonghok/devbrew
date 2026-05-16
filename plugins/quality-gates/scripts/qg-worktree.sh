@@ -11,7 +11,7 @@
 # anything outside [A-Za-z0-9._-], or contains '..' substring, or has
 # leading '.', or exceeds 64 chars.
 #
-# Kill switch: DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1 — `create` exits 1
+# Kill switch: DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1 — `create` exits 2
 # with a loud message.
 
 set -u
