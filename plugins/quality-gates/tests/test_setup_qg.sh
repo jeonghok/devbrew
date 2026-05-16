@@ -140,6 +140,26 @@ RC=$?
 [[ "$RC" -ne 0 ]] && PASS=$((PASS + 1)) || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: 2nd invocation same session should error"; }
 cd / && rm -rf "$TMPDIR"
 
+# --- Test 6: project_dir in state frontmatter (v1.13.0 AC6) ---
+TMPDIR=$(mktemp -d); cd "$TMPDIR"
+# Resolve the canonical path to handle macOS /var -> /private/var symlink
+EXPECTED_DIR=$(cd "$TMPDIR" && pwd)
+SID="proj-dir-test-01"
+unset CLAUDE_CODE_SESSION_ID
+CLAUDE_CODE_SESSION_ID="$SID" "$SCRIPT" >/dev/null 2>&1
+STATE_FILE="$TMPDIR/.claude/quality-gates/$SID/pipeline.md"
+assert_file_exists "$STATE_FILE" "project_dir test: state file created"
+# Verify project_dir key is present
+PROJ_LINE=$(grep '^project_dir:' "$STATE_FILE" 2>/dev/null || true)
+if [[ -n "$PROJ_LINE" ]]; then
+  PASS=$((PASS + 1)); note "PASS: project_dir present in state frontmatter"
+else
+  FAIL=$((FAIL + 1)); echo "  ✗ FAIL: project_dir missing from state frontmatter at $STATE_FILE"
+fi
+# Verify value contains expected dir (loose match, cross-platform)
+assert_contains "$PROJ_LINE" "$EXPECTED_DIR" "project_dir value equals invocation cwd"
+cd / && rm -rf "$TMPDIR"
+
 echo
 echo "Pass: $PASS, Fail: $FAIL"
 [[ "$FAIL" -eq 0 ]] && exit 0 || exit 1

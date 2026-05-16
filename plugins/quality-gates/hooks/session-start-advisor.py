@@ -12,7 +12,7 @@ Behaviors:
 - legacy flat state file (v1.5.0) detected     → systemMessage about migration
                                                   (read-only check; setup-qg removes)
 
-Working-directory contract: invoked with cwd = workspace root.
+Working-directory contract: state root derived from payload['cwd']; falls back loudly.
 
 Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
   DEVBREW_DISABLE_QUALITY_GATES=1                          - disables this hook entirely
@@ -30,13 +30,12 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(".claude/quality-gates")
-LEGACY_FILES = (
-    Path(".claude/quality-gates.local.md"),
-    Path(".claude/quality-gates-session.local.md"),
-    Path(".claude/quality-gates-branch.local.md"),
-    Path(".claude/qg-diff-cache.txt"),
-    Path(".claude/qg-code-paths.tmp"),
+LEGACY_RELATIVE = (
+    ".claude/quality-gates.local.md",
+    ".claude/quality-gates-session.local.md",
+    ".claude/quality-gates-branch.local.md",
+    ".claude/qg-diff-cache.txt",
+    ".claude/qg-code-paths.tmp",
 )
 ACTIVE_STATUSES = {"gate1_running", "gate2_running", "gate3_running"}
 GATE_RX = re.compile(r"^current_gate:\s*(\S+)", re.MULTILINE)
@@ -57,6 +56,17 @@ def _disabled() -> bool:
     return "quality-gates:session-start-advisor" in tokens
 
 
+def _state_root(hook_input: dict) -> Path:
+    """Resolve state root from hook stdin payload cwd; fall back loudly."""
+    cwd = hook_input.get("cwd") if hook_input else None
+    if not cwd:
+        print("[quality-gates] session-start-advisor payload missing 'cwd'; "
+              "falling back to process cwd",
+              file=sys.stderr)
+        cwd = os.getcwd()
+    return Path(cwd) / ".claude" / "quality-gates"
+
+
 # AC14: sub-feature kill switch
 def _subfeature_disabled(feature: str) -> bool:
     if _disabled():
@@ -67,11 +77,11 @@ def _subfeature_disabled(feature: str) -> bool:
 
 
 # AC14: frontmatter scan sub-feature
-def _scan_agent_frontmatter_keys() -> None:
+def _scan_agent_frontmatter_keys(payload: dict) -> None:
     """plugins/*/agents/*.md 스캔, kebab-case allowed-tools/disallowed-tools 발견 시 advice."""
     if _subfeature_disabled("frontmatter-scan"):
         return
-    repo_root = Path.cwd()
+    repo_root = Path(payload.get("cwd") or os.getcwd())
     for agent_file in repo_root.glob("plugins/*/agents/*.md"):
         try:
             parts = agent_file.read_text().split("---", 2)
@@ -96,23 +106,30 @@ def _verbose() -> bool:
     return os.environ.get("DEVBREW_QG_GC_VERBOSE") == "1"
 
 
-def _self_session_id() -> str:
-    try:
-        payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, OSError):
-        return ""
+def _self_session_id(payload: dict) -> str:
     return payload.get("session_id", "") or ""
 
 
-def _legacy_present() -> bool:
-    return any(p.exists() for p in LEGACY_FILES)
+def _load_payload() -> dict:
+    try:
+        return json.load(sys.stdin)
+    except (json.JSONDecodeError, OSError):
+        return {}
 
 
-def _sibling_active_count(self_sid: str) -> int:
-    if not ROOT.exists():
+def _legacy_present(payload: dict) -> bool:
+    """Resolve legacy v1.5.0 marker paths against payload cwd (Gate-2 review C1)."""
+    cwd = payload.get("cwd") if payload else None
+    base = Path(cwd) if cwd else Path.cwd()
+    return any((base / rel).exists() for rel in LEGACY_RELATIVE)
+
+
+def _sibling_active_count(self_sid: str, payload: dict) -> int:
+    root = _state_root(payload)
+    if not root.exists():
         return 0
     count = 0
-    for child in ROOT.iterdir():
+    for child in root.iterdir():
         if not child.is_dir():
             continue
         if not SESSION_PATTERN.match(child.name):
@@ -155,15 +172,16 @@ def _emit_self_advisory(state_text: str) -> None:
 def main() -> int:
     if _disabled():
         return 0
-    self_sid = _self_session_id()
-    if _legacy_present():
+    payload = _load_payload()
+    self_sid = _self_session_id(payload)
+    if _legacy_present(payload):
         sys.stdout.write(
             "[quality-gates] Legacy v1.5.0 state files detected. "
             "They will be removed on your next /qg invocation. "
             "If you had an in-flight pipeline, re-run it.\n"
         )
     if self_sid:
-        self_pipeline = ROOT / self_sid / "pipeline.md"
+        self_pipeline = _state_root(payload) / self_sid / "pipeline.md"
         if self_pipeline.exists():
             try:
                 text = self_pipeline.read_text()
@@ -171,9 +189,9 @@ def main() -> int:
                 text = ""
             if text:
                 _emit_self_advisory(text)
-    _scan_agent_frontmatter_keys()
+    _scan_agent_frontmatter_keys(payload)
     if _verbose():
-        n = _sibling_active_count(self_sid)
+        n = _sibling_active_count(self_sid, payload)
         if n > 0:
             sys.stdout.write(
                 f"[quality-gates] verbose: {n} sibling session(s) appear active.\n"

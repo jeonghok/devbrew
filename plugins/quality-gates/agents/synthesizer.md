@@ -14,6 +14,7 @@ You are NOT responsible for: making new findings, judging correctness (Adversari
 
 ## Inputs
 
+- `project_dir`: project working directory (absolute path) — pipeline 의 단일 좌표. SKILL preflight 에서 frozen. 절대 재계산 금지 (`git rev-parse`, `Path.cwd()`, `pwd` 모두 금지).
 - All Phase 1 + Phase 2 raw findings.
 - All Adversarial verdicts.
 
@@ -65,6 +66,7 @@ No high-confidence findings. <count> low-confidence findings suppressed.
 
 ## Forbidden
 
+- Do not re-resolve cwd via `git rev-parse`, `Path.cwd()`, `os.getcwd()`, or any shell `pwd` invocation — use `project_dir` from your input verbatim. Re-resolution at agent runtime defeats the pipeline-wide coordinate contract.
 - No new findings.
 - No prose narration outside the structured Markdown above.
 - No emoji.

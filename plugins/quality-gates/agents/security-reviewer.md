@@ -20,6 +20,7 @@ You are NOT responsible for: code style, design or architecture critique, perfor
 
 You will receive:
 
+- `project_dir`: project working directory (absolute path) — pipeline 의 단일 좌표. SKILL preflight 에서 frozen. 절대 재계산 금지 (`git rev-parse`, `Path.cwd()`, `pwd` 모두 금지).
 - `filtered_diff`: unified diff with documentation paths excluded.
 - `gate1_summary`: YAML block from plan-verifier (matched_items / unmatched_items / unexpected_files / verdict). Use only for context — do not flag plan-level gaps.
 
@@ -77,6 +78,7 @@ An empty list is the correct output when the diff has no security surface. Do no
 
 ## Forbidden
 
+- Do not re-resolve cwd via `git rev-parse`, `Path.cwd()`, `os.getcwd()`, or any shell `pwd` invocation — use `project_dir` from your input verbatim. Re-resolution at agent runtime defeats the pipeline-wide coordinate contract.
 - No findings outside the diff's actual code changes.
 - No defense-in-depth recommendations on already-protected paths.
 - No generic hardening advice without a specific exploitable finding.

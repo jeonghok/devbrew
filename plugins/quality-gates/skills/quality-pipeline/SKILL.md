@@ -75,6 +75,7 @@ Parse the following from the prompt parameters:
 - `gate`: Which gate to execute (1, 2, or 3)
 - `plan_path`: Plan file path (or "auto")
 - `pr_url`: PR URL (optional)
+- `project_dir`: Absolute path to repo root (worktree-aware). Injected by stop-hook on gate continuation; on first invocation derive from `pwd`. Single pipeline coordinate frozen at preflight — do NOT re-derive via `pwd`/`git rev-parse` on continuation.
 - `available_plugins`: Comma-separated list of available plugins
 - `iteration`: Current Gate 2 iteration number (Gate 2 only)
 - `max_iterations`: Maximum Gate 2 iterations (Gate 2 only)
@@ -451,7 +452,8 @@ Agent(
   <verbatim YAML from Gate 1>
 
   session_scope: <branch | session | paths> + <applied path list>
-  iteration: <N>"
+  iteration: <N>
+  project_dir: <current working directory>"
 )
 ```
 
@@ -590,6 +592,8 @@ Immutable head:
 >
 > If the prompt contains a `## Current Diff` section, operate on that diff verbatim. **Do NOT run `git diff` yourself** — the full unified diff is already provided.
 
+> Your input prompt will also include a `project_dir: <absolute path>` line representing the pipeline's single coordinate. Use this verbatim for any Read tool call — do not re-resolve via `pwd` or `Path.cwd()`.
+
 Wait for all dispatched agents to complete. Collect their findings.
 
 **Individual dispatch failures**: if any single `Agent()` call fails (plugin missing, agent errors, etc.), record `"<agent-name>: dispatch failed: <error>"` in the output report's "Dispatch Failures" section and continue with the remaining agents. Do not abort Gate 2 on a single failure.
@@ -670,7 +674,8 @@ Agent(
   subagent_type="quality-gates:adversarial",
   model="opus",
   prompt="<all Phase 1 + Phase 2 findings as structured YAML>
-  filtered_diff: <verbatim from cache>"
+  filtered_diff: <verbatim from cache>
+  project_dir: <current working directory>"
 )
 ```
 
@@ -692,7 +697,8 @@ Dispatch:
 Agent(
   subagent_type="quality-gates:synthesizer",
   model="sonnet",
-  prompt="<all Phase 1 findings + Phase 2 findings + Adversarial verdicts>"
+  prompt="<all Phase 1 findings + Phase 2 findings + Adversarial verdicts>
+  project_dir: <current working directory>"
 )
 ```
 
@@ -1025,6 +1031,7 @@ Agent(
   prompt="""Validate the scope alignment of candidate test files for Gate 3.
 
   plan_path: <plan_path>
+  project_dir: <current working directory>
 
   gate1_summary:
   <verbatim YAML from Gate 1, including matched_items>

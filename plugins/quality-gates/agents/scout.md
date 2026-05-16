@@ -16,6 +16,7 @@ You are NOT responsible for: reviewing code yourself, fixing issues, or running 
 
 You will receive:
 
+- `project_dir`: project working directory (absolute path) — pipeline 의 단일 좌표. SKILL preflight 에서 frozen. 절대 재계산 금지 (`git rev-parse`, `Path.cwd()`, `pwd` 모두 금지).
 - `filtered_diff`: unified diff with documentation paths excluded (*.md, docs/**, etc.).
 - `gate1_summary`: a YAML block from Gate 1 plan-verifier:
   ```yaml
@@ -86,5 +87,6 @@ Empty list is correct when no Phase 2 specialist applies. Do not pad.
 
 ## Forbidden
 
+- Do not re-resolve cwd via `git rev-parse`, `Path.cwd()`, `os.getcwd()`, or any shell `pwd` invocation — use `project_dir` from your input verbatim. Re-resolution at agent runtime defeats the pipeline-wide coordinate contract.
 - No code review findings in your output. You only plan — others review.
 - No prose around the YAML. The harness parses your output as YAML directly.

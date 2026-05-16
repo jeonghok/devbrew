@@ -25,15 +25,25 @@ import shutil
 import sys
 import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 
 
 # --- Constants ---
 
-ROOT = ".claude/quality-gates"
+
+def _state_root(hook_input: dict) -> Path:
+    """Resolve state root from hook stdin payload cwd; fall back loudly."""
+    cwd = hook_input.get("cwd") if hook_input else None
+    if not cwd:
+        print("[quality-gates] stop-hook payload missing 'cwd'; "
+              "falling back to process cwd",
+              file=sys.stderr)
+        cwd = os.getcwd()
+    return Path(cwd) / ".claude" / "quality-gates"
 
 
-def state_file_for(session_id: str) -> str:
-    return f"{ROOT}/{session_id}/pipeline.md"
+def state_file_for(session_id: str, hook_input: dict) -> str:
+    return str(_state_root(hook_input) / session_id / "pipeline.md")
 
 
 GATE_NAMES = {
@@ -57,8 +67,18 @@ MAX_GATE3_RESOLUTIONS_CAP = 10
 
 # --- State File Parsing ---
 
-def parse_state_file(path):
-    """Parse YAML frontmatter and body from state file."""
+_PROJECT_DIR_WARNED = False  # Gate-2 review fix: emit v1.13.x fallback warning at most once per session
+
+
+def parse_state_file(path, fallback_cwd=None):
+    """Parse YAML frontmatter and body from state file.
+
+    fallback_cwd: project_dir to use when state file lacks the field (v1.12.x
+    backward-compat). Pass the already-validated hook_input['cwd'] from main()
+    so legacy state files in a worktree do not silently inject process cwd
+    as project_dir into agent dispatch prompts. Falls back to os.getcwd()
+    when None for callers that don't have hook_input access.
+    """
     try:
         with open(path, "r") as f:
             content = f.read()
@@ -138,6 +158,20 @@ def parse_state_file(path):
         state["max_gate3_resolutions"] = 0
     if "last_gate3_needed_hash" not in state:
         state["last_gate3_needed_hash"] = ""
+
+    # Backward compatibility for v1.12.x → v1.13.0:
+    # - project_dir added in v1.13.0 to freeze pipeline coordinate at preflight.
+    # If absent (legacy state file), default to current process cwd so the
+    # pipeline continues rather than silently corrupting state. This mirrors
+    # the gate3_resolution_iter pattern above (per spec-reviewer R3 advisory).
+    if "project_dir" not in state or not state.get("project_dir"):
+        global _PROJECT_DIR_WARNED
+        state["project_dir"] = fallback_cwd or os.getcwd()
+        if not _PROJECT_DIR_WARNED:
+            print("⚠️  Quality Gates: state file lacks project_dir (v1.12.x schema?); "
+                  f"defaulting to {state['project_dir']}",
+                  file=sys.stderr)
+            _PROJECT_DIR_WARNED = True
 
     # Convert boolean fields
     for field in ("skip_runtime",):
@@ -538,6 +572,7 @@ def build_gate_prompt(gate_num, state, gate_results):
             "Parameters:\n"
             f"  gate: 1\n"
             f"  plan_path: {plan_file}\n"
+            f"  project_dir: {state['project_dir']}\n"
             f"  available_plugins: {available_plugins}\n"
         )
     elif gate_num == 2:
@@ -561,6 +596,7 @@ def build_gate_prompt(gate_num, state, gate_results):
             f"  previous_findings: {prev_findings}\n"
             f"  available_plugins: {available_plugins}\n"
             f"  plan_path: {plan_file}\n"
+            f"  project_dir: {state['project_dir']}\n"
         )
     elif gate_num == 3:
         prompt_parts.append(
@@ -568,6 +604,7 @@ def build_gate_prompt(gate_num, state, gate_results):
             "Parameters:\n"
             f"  gate: 3\n"
             f"  plan_path: {plan_file}\n"
+            f"  project_dir: {state['project_dir']}\n"
             f"  project_type: auto\n"
             f"  app_start_command: auto\n"
             f"  app_url: auto\n"
@@ -823,14 +860,14 @@ def main():
     session_id = hook_input.get("session_id", "")
     if not session_id:
         sys.exit(0)
-    state_file = state_file_for(session_id)
+    state_file = state_file_for(session_id, hook_input)
 
     # 1. Check state file exists
     if not os.path.exists(state_file):
         sys.exit(0)
 
     # 2. Parse state file
-    state, body = parse_state_file(state_file)
+    state, body = parse_state_file(state_file, fallback_cwd=hook_input.get("cwd"))
     if state is None:
         # Corrupted state file — delete and allow exit
         try:
@@ -921,7 +958,7 @@ def main():
             prompt_key=transition.get("prompt_key"),
         )
     elif transition["type"] == "next_gate":
-        next_state, next_body = parse_state_file(state_file)
+        next_state, next_body = parse_state_file(state_file, fallback_cwd=hook_input.get("cwd"))
         if next_state:
             prompt = build_gate_prompt(transition["next_gate"], next_state,
                                        extract_gate_results(next_body))
@@ -929,7 +966,7 @@ def main():
             prompt = build_gate_prompt(transition["next_gate"], state, gate_results)
     elif transition["type"] == "retry_gate":
         retry_gate = transition.get("gate", state["current_gate"])
-        next_state, next_body = parse_state_file(state_file)
+        next_state, next_body = parse_state_file(state_file, fallback_cwd=hook_input.get("cwd"))
         if next_state:
             prompt = build_gate_prompt(retry_gate, next_state,
                                        extract_gate_results(next_body))
@@ -940,7 +977,7 @@ def main():
         # prompt. (extend is kept reachable for forward-compat even though
         # update_state_file makes no state change for it; see the trailing
         # comment in update_state_file for context.)
-        next_state, next_body = (parse_state_file(state_file)
+        next_state, next_body = (parse_state_file(state_file, fallback_cwd=hook_input.get("cwd"))
                                  if transition["type"] == "extend"
                                  else (None, None))
         the_state = next_state or state

@@ -3,6 +3,38 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.14.0] — 2026-05-16
+
+### Added
+- State file schema field `project_dir` (frontmatter) — single pipeline coordinate frozen at preflight (AC6, B6 fix).
+- `project_dir` input contract on 6 Gate-2 agents: scout, codex-reviewer, adversarial, synthesizer, test-scope-validator, security-reviewer (AC2).
+- `tests/test_hook_cwd_contract.py` — payload cwd contract for post-tool-use-session-tracker and session-start-advisor.
+- `tests/test_worktree.sh` T5/T6/T7/T8/T9 — regression guards for SKILL dispatch, hook AST, codex-reviewer plugin paths, agent.md drift, state schema.
+- `tests/test_codex_dispatch_invariant.sh` Scenario 4 — anchor-then-window awk for Pattern-P and Pattern-L dispatch blocks.
+
+### Changed
+- `hooks/stop-hook.py`: removed module-level `ROOT` constant; introduced `_state_root(hook_input)` helper deriving state path from payload cwd. `state_file_for(session_id, hook_input)` signature updated.
+- `hooks/stop-hook.py:build_gate_prompt()`: all 3 gate branches now inject `project_dir: {state["project_dir"]}` into continuation prompts, ensuring gate-boundary cwd persistence.
+- `hooks/stop-hook.py:parse_state_file()`: surfaces `project_dir` with v1.13.x backward-compat fallback (`os.getcwd()` + stderr warning, mirroring `gate3_resolution_iter` pattern at L114-120).
+- `hooks/post-tool-use-session-tracker.py`: state path and `abs_path` resolution base both derived from payload cwd.
+- `hooks/session-start-advisor.py`: `_scan_agent_frontmatter_keys` now takes payload arg and derives `repo_root` from payload cwd instead of `Path.cwd()`.
+- `agents/codex-reviewer.md`: bash block guards empty `project_dir`, `cd "$project_dir"`, `REPO_ROOT="$project_dir"` (no more `git rev-parse`); plugin scripts called via `${CLAUDE_PLUGIN_ROOT}/scripts/` instead of `$REPO_ROOT/plugins/quality-gates/scripts/` (which only existed in devbrew's self-test).
+- `skills/quality-pipeline/SKILL.md`: 4 Pattern-P dispatch blocks (scout/adversarial/synthesizer/test-scope-validator) and 1 Pattern-L block (Agent D security-reviewer) now declare `project_dir: <current working directory>` in their prompts.
+
+### Fixed
+- **B1**: stop-hook.py `ROOT` constant relative-path bug — state file path now derived from payload cwd (worktree-safe).
+- **B2**: post-tool-use-session-tracker.py `Path(".claude/quality-gates")` relative bug + `abs_path` resolution against wrong base.
+- **B3**: session-start-advisor.py `Path.cwd()` worktree blindness.
+- **B4**: SKILL.md missing `project_dir` in dispatches to scout/codex-reviewer/adversarial/synthesizer/test-scope-validator/security-reviewer.
+- **B5**: codex-reviewer.md (a) `$REPO_ROOT/plugins/quality-gates/scripts/...` path broken outside devbrew, (b) missing `cd "$project_dir"` causing subprocess cwd nondeterminism.
+- **B6**: state file schema lacked `project_dir`; stop-hook `build_gate_prompt()` never propagated it across gate boundaries — caused gate2/3 continuations to re-evaluate cwd in main repo when pipeline was launched from worktree.
+- **B3 completion**: session-start-advisor primary advisory path (sibling-count + self-pipeline check) now derives state root from payload cwd, matching the frontmatter-scan sub-feature fix.
+- **B7 (new)**: session-end-cleanup.py removed module-level relative ROOT; per-session folder cleanup now anchored to payload cwd, eliminating silent state-leak when session ends with process-cwd different from worktree.
+
+### Upgrade notes
+- In-flight v1.13.x pipelines: state file lacks `project_dir`; `parse_state_file()` falls back to `os.getcwd()` + stderr warning. If your continuation is running from a worktree, expect one warning per gate transition. For clean state, run `/cancel-qg && /qg` after upgrade.
+- No state-file format break: v1.13.x state files remain readable; v1.14.0 state files have one additional `project_dir:` line that older code would simply ignore.
+
 ## [1.13.0] — 2026-05-16
 
 ### Added

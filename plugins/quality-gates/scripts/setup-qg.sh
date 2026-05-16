@@ -261,6 +261,7 @@ single_gate: ${SINGLE_GATE:-null}
 plan_file: "$PLAN_FILE"
 pr_url: "$PR_URL"
 available_plugins: "$AVAILABLE_PLUGINS"
+project_dir: "$(pwd)"
 session_id: "$SESSION_ID"
 started_at: "$TIMESTAMP"
 ---

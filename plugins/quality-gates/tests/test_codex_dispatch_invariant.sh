@@ -32,4 +32,32 @@ echo "$DISPATCH_FALLBACK" | grep -qE "scout fallback engaged" \
   || fail "Scenario 3: fallback engage stderr message missing"
 ok "Scenario 3: scout-fallback + codex_available → codex-reviewer dispatched + visibility message"
 
-echo "PASS: test_codex_dispatch_invariant.sh (3 scenarios)"
+# Scenario 4: project_dir contract in 5 SKILL.md dispatch blocks (AC1)
+# Pattern P — 4 agents with explicit Agent() block (window=15)
+for name in scout adversarial synthesizer test-scope-validator; do
+  if ! awk -v name="quality-gates:$name" '
+    $0 ~ name { found=NR }
+    found && NR <= found+15 && /project_dir:/ { ok=1; exit }
+    END { exit !ok }
+  ' "$SKILL"; then
+    fail "Scenario 4: Pattern-P dispatch block for $name lacks project_dir"
+  fi
+done
+
+# Pattern L — security-reviewer prose header (window=30)
+if ! awk '
+  /\*\*Agent D — security-reviewer\*\*/ { found=NR }
+  found && NR <= found+30 && /project_dir/ { ok=1; exit }
+  END { exit !ok }
+' "$SKILL"; then
+  fail "Scenario 4: Pattern-L Agent D (security-reviewer) section lacks project_dir reference"
+fi
+
+# Reference-only — codex-reviewer.md is the source of truth
+if ! grep -q 'project_dir' "$REPO_ROOT/plugins/quality-gates/agents/codex-reviewer.md"; then
+  fail "Scenario 4: codex-reviewer.md lacks project_dir input contract"
+fi
+
+ok "Scenario 4: all 6 agents have project_dir contract (P×4 + L×1 + ref×1)"
+
+echo "PASS: test_codex_dispatch_invariant.sh (4 scenarios)"

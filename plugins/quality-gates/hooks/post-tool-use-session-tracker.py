@@ -60,8 +60,26 @@ def main() -> int:
     file_path = payload.get("tool_input", {}).get("file_path")
     if not file_path:
         return 0
-    abs_path = str(Path(file_path).resolve())
-    state_file = Path(".claude/quality-gates") / session_id / "files.md"
+    # AC4: derive worktree-relative base from payload cwd (B2 fix).
+    # Loud fallback per CLAUDE.md "Loud logging을 동반한 graceful degradation"
+    # — Gate 2 review found this hook's earlier silent fallback was the only
+    # surface that violated G3; harmonize with stop-hook/session-end-cleanup/
+    # session-start-advisor which all warn on missing 'cwd'.
+    cwd_val = payload.get("cwd")
+    if not cwd_val:
+        print("[quality-gates] post-tool-use-session-tracker payload missing 'cwd'; "
+              "falling back to process cwd",
+              file=sys.stderr)
+        cwd_val = os.getcwd()
+    cwd_base = Path(cwd_val)
+    # If file_path is absolute, resolve() ignores cwd_base; if relative,
+    # join against payload cwd so worktree paths resolve correctly.
+    file_path_obj = Path(file_path)
+    if file_path_obj.is_absolute():
+        abs_path = str(file_path_obj.resolve())
+    else:
+        abs_path = str((cwd_base / file_path_obj).resolve())
+    state_file = cwd_base / ".claude" / "quality-gates" / session_id / "files.md"
     existing = _read_existing(state_file)
     if abs_path in existing:
         return 0

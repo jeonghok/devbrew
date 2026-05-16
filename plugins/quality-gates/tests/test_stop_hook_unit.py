@@ -106,3 +106,142 @@ class TestBuildSpecialPrompt(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# pytest-style tests for parse_state_file (AC6 — project_dir parsing)
+# ---------------------------------------------------------------------------
+
+def test_parse_state_file_reads_project_dir(tmp_path, capsys):
+    """parse_state_file surfaces project_dir from frontmatter (AC6)."""
+    state_file = tmp_path / "pipeline.md"
+    state_file.write_text("""---
+status: gate1_running
+current_gate: 1
+gate2_iteration: 0
+max_gate2_iterations: 5
+gate3_resolution_iter: 0
+last_gate3_needed_hash: ""
+max_gate3_resolutions: 3
+skip_runtime: false
+single_gate: null
+plan_file: "auto"
+pr_url: ""
+available_plugins: ""
+project_dir: "/Users/test/myproject/wt-feat"
+session_id: "abc123def456"
+started_at: "2026-05-16T10:00:00Z"
+---
+
+# state body
+""")
+    state, body = stop_hook.parse_state_file(str(state_file))
+    assert state is not None
+    assert state["project_dir"] == "/Users/test/myproject/wt-feat"
+
+
+def test_parse_state_file_missing_project_dir_falls_back_to_cwd(tmp_path, capsys, monkeypatch):
+    """v1.12.x state file lacks project_dir — fallback to os.getcwd() + stderr warning."""
+    monkeypatch.chdir(tmp_path)
+    state_file = tmp_path / "pipeline.md"
+    state_file.write_text("""---
+status: gate1_running
+current_gate: 1
+gate2_iteration: 0
+max_gate2_iterations: 5
+gate3_resolution_iter: 0
+last_gate3_needed_hash: ""
+max_gate3_resolutions: 3
+skip_runtime: false
+single_gate: null
+plan_file: "auto"
+pr_url: ""
+available_plugins: ""
+session_id: "abc123def456"
+started_at: "2026-05-16T10:00:00Z"
+---
+
+# state body
+""")
+    state, body = stop_hook.parse_state_file(str(state_file))
+    assert state is not None
+    # On macOS, monkeypatch.chdir + getcwd may return /private/var/... while tmp_path returns /var/...
+    # Compare resolved paths for cross-platform safety.
+    from pathlib import Path
+    assert Path(state["project_dir"]).resolve() == Path(tmp_path).resolve()
+    captured = capsys.readouterr()
+    assert "state file lacks project_dir" in captured.err
+
+
+# ---------------------------------------------------------------------------
+# pytest-style tests for build_gate_prompt (AC6 — project_dir injection)
+# ---------------------------------------------------------------------------
+
+def test_build_gate_prompt_injects_project_dir_gate1():
+    state = {
+        "plan_file": "auto",
+        "pr_url": "",
+        "available_plugins": "pr-review-toolkit",
+        "gate2_iteration": 1,
+        "max_gate2_iterations": 5,
+        "project_dir": "/Users/test/wt-feat",
+        "skip_runtime": False,
+        "max_gate3_resolutions": 3,
+    }
+    prompt = stop_hook.build_gate_prompt(1, state, "")
+    assert "project_dir: /Users/test/wt-feat" in prompt
+
+
+def test_build_gate_prompt_injects_project_dir_gate2():
+    state = {
+        "plan_file": "auto",
+        "pr_url": "https://example.com/pr/1",
+        "available_plugins": "pr-review-toolkit",
+        "gate2_iteration": 2,
+        "max_gate2_iterations": 5,
+        "project_dir": "/Users/test/wt-feat",
+        "skip_runtime": False,
+        "max_gate3_resolutions": 3,
+    }
+    prompt = stop_hook.build_gate_prompt(2, state, "")
+    assert "project_dir: /Users/test/wt-feat" in prompt
+
+
+def test_build_gate_prompt_injects_project_dir_gate3():
+    state = {
+        "plan_file": "auto",
+        "pr_url": "",
+        "available_plugins": "pr-review-toolkit",
+        "gate2_iteration": 1,
+        "max_gate2_iterations": 5,
+        "project_dir": "/Users/test/wt-feat",
+        "skip_runtime": False,
+        "max_gate3_resolutions": 3,
+        "gate3_resolution_iter": 0,
+    }
+    prompt = stop_hook.build_gate_prompt(3, state, "")
+    assert "project_dir: /Users/test/wt-feat" in prompt
+
+
+# ---------------------------------------------------------------------------
+# pytest-style tests for _state_root (AC-B1 — payload cwd path resolution)
+# ---------------------------------------------------------------------------
+
+def test_state_root_uses_payload_cwd(tmp_path):
+    """_state_root reads payload cwd, ignoring process cwd."""
+    hook_input = {"cwd": str(tmp_path)}
+    root = stop_hook._state_root(hook_input)
+    # macOS symlink-safe comparison
+    from pathlib import Path
+    assert Path(root).resolve() == (Path(tmp_path) / ".claude" / "quality-gates").resolve()
+
+
+def test_state_root_falls_back_to_getcwd_with_warning(capsys, monkeypatch, tmp_path):
+    """Missing cwd in payload triggers stderr warning + os.getcwd() fallback."""
+    monkeypatch.chdir(tmp_path)
+    hook_input = {}  # missing cwd
+    root = stop_hook._state_root(hook_input)
+    from pathlib import Path
+    assert Path(root).resolve() == (Path(tmp_path) / ".claude" / "quality-gates").resolve()
+    captured = capsys.readouterr()
+    assert "stop-hook payload missing 'cwd'" in captured.err

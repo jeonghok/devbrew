@@ -16,8 +16,6 @@ import shutil
 import sys
 from pathlib import Path
 
-ROOT = Path(".claude/quality-gates")
-
 
 def _disabled() -> bool:
     if os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1":
@@ -25,6 +23,17 @@ def _disabled() -> bool:
     skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
     tokens = {t.strip() for t in skip.split(",") if t.strip()}
     return "quality-gates:session-end-cleanup" in tokens
+
+
+def _state_root(hook_input: dict) -> Path:
+    """Resolve state root from hook stdin payload cwd; fall back loudly."""
+    cwd = hook_input.get("cwd") if hook_input else None
+    if not cwd:
+        print("[quality-gates] session-end-cleanup payload missing 'cwd'; "
+              "falling back to process cwd",
+              file=sys.stderr)
+        cwd = os.getcwd()
+    return Path(cwd) / ".claude" / "quality-gates"
 
 
 def main() -> int:
@@ -37,7 +46,7 @@ def main() -> int:
     session_id = payload.get("session_id", "")
     if not session_id:
         return 0
-    folder = ROOT / session_id
+    folder = _state_root(payload) / session_id
     shutil.rmtree(folder, ignore_errors=True)
     return 0
 
