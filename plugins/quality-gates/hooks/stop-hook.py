@@ -549,6 +549,7 @@ def build_gate_prompt(gate_num, state, gate_results):
             "Parameters:\n"
             f"  gate: 1\n"
             f"  plan_path: {plan_file}\n"
+            f"  project_dir: {state.get('project_dir', os.getcwd())}\n"
             f"  available_plugins: {available_plugins}\n"
         )
     elif gate_num == 2:
@@ -572,6 +573,7 @@ def build_gate_prompt(gate_num, state, gate_results):
             f"  previous_findings: {prev_findings}\n"
             f"  available_plugins: {available_plugins}\n"
             f"  plan_path: {plan_file}\n"
+            f"  project_dir: {state.get('project_dir', os.getcwd())}\n"
         )
     elif gate_num == 3:
         prompt_parts.append(
@@ -579,6 +581,7 @@ def build_gate_prompt(gate_num, state, gate_results):
             "Parameters:\n"
             f"  gate: 3\n"
             f"  plan_path: {plan_file}\n"
+            f"  project_dir: {state.get('project_dir', os.getcwd())}\n"
             f"  project_type: auto\n"
             f"  app_start_command: auto\n"
             f"  app_url: auto\n"

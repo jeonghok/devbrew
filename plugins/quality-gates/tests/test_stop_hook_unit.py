@@ -171,3 +171,53 @@ started_at: "2026-05-16T10:00:00Z"
     assert Path(state["project_dir"]).resolve() == Path(tmp_path).resolve()
     captured = capsys.readouterr()
     assert "state file lacks project_dir" in captured.err
+
+
+# ---------------------------------------------------------------------------
+# pytest-style tests for build_gate_prompt (AC6 — project_dir injection)
+# ---------------------------------------------------------------------------
+
+def test_build_gate_prompt_injects_project_dir_gate1():
+    state = {
+        "plan_file": "auto",
+        "pr_url": "",
+        "available_plugins": "pr-review-toolkit",
+        "gate2_iteration": 1,
+        "max_gate2_iterations": 5,
+        "project_dir": "/Users/test/wt-feat",
+        "skip_runtime": False,
+        "max_gate3_resolutions": 3,
+    }
+    prompt = stop_hook.build_gate_prompt(1, state, "")
+    assert "project_dir: /Users/test/wt-feat" in prompt
+
+
+def test_build_gate_prompt_injects_project_dir_gate2():
+    state = {
+        "plan_file": "auto",
+        "pr_url": "https://example.com/pr/1",
+        "available_plugins": "pr-review-toolkit",
+        "gate2_iteration": 2,
+        "max_gate2_iterations": 5,
+        "project_dir": "/Users/test/wt-feat",
+        "skip_runtime": False,
+        "max_gate3_resolutions": 3,
+    }
+    prompt = stop_hook.build_gate_prompt(2, state, "")
+    assert "project_dir: /Users/test/wt-feat" in prompt
+
+
+def test_build_gate_prompt_injects_project_dir_gate3():
+    state = {
+        "plan_file": "auto",
+        "pr_url": "",
+        "available_plugins": "pr-review-toolkit",
+        "gate2_iteration": 1,
+        "max_gate2_iterations": 5,
+        "project_dir": "/Users/test/wt-feat",
+        "skip_runtime": False,
+        "max_gate3_resolutions": 3,
+        "gate3_resolution_iter": 0,
+    }
+    prompt = stop_hook.build_gate_prompt(3, state, "")
+    assert "project_dir: /Users/test/wt-feat" in prompt
