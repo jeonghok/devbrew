@@ -303,7 +303,7 @@ AC8 의 shell block 그대로 실행. 3개 OK 라인 (transcript / state-in-work
 
 ## 10. Metadata
 
-- **Status**: draft round 3 — spec-reviewer round 1 (12 issues) + round 2 (7 new issues from fix authoring) 모두 반영 완료
+- **Status**: **approved** — spec-reviewer round 3 final pass (status: approved, stagnation: false). Ready for writing-plans skill handoff.
 - **Estimated implementation time**: 5~6 hours (18 파일, 6 단정 신규 unit test, e2e 검증)
 - **Risk level**: low–medium (대다수 사용자 no-op; state file schema 추가는 backward-compat 처리됨; gate boundary propagation 은 신규 영역이므로 단위 테스트 필수)
 - **Plugin version target**: `quality-gates 1.13.0`
@@ -312,6 +312,8 @@ AC8 의 shell block 그대로 실행. 3개 OK 라인 (transcript / state-in-work
   - Round 0: brainstorming session 2026-05-16, claude-opus-4-7
   - Round 1: spec-distill:spec-reviewer adversarial review — 12 issues (2 critical, 5 major, 4 minor, 1 block); all addressed in round 2
   - Round 2: spec-distill:spec-reviewer second-pass — 7 new issues introduced by round-1 fix-authoring (0 block, 3 high, 4 medium); all addressed in round 3
+  - Round 3: spec-distill:spec-reviewer final-pass — **approved** (stagnation: false). 2 advisory (non-blocking): codex-reviewer를 Phase D dispatch list에서 제외 (§11 step 14 inline-polished); AC8 transcript-path slug encoding은 best-effort manual step (이미 명시됨).
+- **Implementer must-read before Phase A**: `hooks/stop-hook.py:114-120` 의 `gate3_resolution_iter` backward-compat 패턴 — `project_dir` field 의 missing-from-state fallback 은 이 패턴 (graceful degradation + stderr warning) 을 그대로 복제. 위의 `required_numeric` block 패턴 (`return None, None` on failure) 을 따르면 gate2/gate3 continuation 이 hard-fail 함.
 - **Forbidden patterns invoked**: trivia-ceremony 회피 (18개 파일 → 정상 minor); polite-stop 방지 (concrete next-action §11 명시)
 
 ## 11. Concrete Next Action
@@ -338,7 +340,10 @@ writing-plans skill 호출 시 다음 ordered sequence 로 implementation plan �
 13. (이 시점에서 `bash tests/test_worktree.sh` T7+T8 PASS 단계적 검증.)
 
 ### Phase D — SKILL dispatch propagation (B4 fix continued)
-14. `skills/quality-pipeline/SKILL.md` 의 6개 Agent() dispatch 블록 (scout, codex-reviewer Phase 1 inclusion, adversarial, synthesizer, test-scope-validator, security-reviewer) prompt 에 `project_dir: <current working directory>` 라인 추가.
+14. `skills/quality-gates/quality-pipeline/SKILL.md` 의 dispatch 블록 5개에 `project_dir: <current working directory>` 라인 추가:
+    - Pattern P (4개): scout, adversarial, synthesizer, test-scope-validator 의 Agent() block prompt.
+    - Pattern L (1개): "Agent D — security-reviewer" 섹션의 Immutable head 직후 prose.
+    - **codex-reviewer 는 제외** (round 3 advisory): SKILL.md 내 별도 Agent() dispatch 블록 없음; codex-reviewer.md 자체의 Inputs (AC2) 가 single source of truth. SKILL.md L469-544 의 fan-out 평가 prose 는 단순 inclusion logic 이므로 prompt 주입 대상 아님.
 15. `tests/test_codex_dispatch_invariant.sh` Scenario 4 추가 (anchor-then-window awk).
 16. `tests/test_worktree.sh` T5/T6/T9 추가.
 
