@@ -53,7 +53,38 @@ REPO=$(mktemp -d)
 
 rm -rf "$REPO"
 
-# (further subcommand tests appended in later tasks)
+# --- create ---
+echo "[create]"
+
+REPO=$(mktemp -d)
+(cd "$REPO" && git init -q -b main && git config user.email t@t && \
+  git config user.name t && git commit -q --allow-empty -m init && \
+  git branch feat-x)
+
+SID="abcdef12345678"
+WTPATH=$(cd "$REPO" && "$WT" create feat-x "$SID" 2>/dev/null)
+[ -d "$WTPATH" ] && pass "create returns valid path" \
+  || fail "create path missing: $WTPATH"
+
+[ "$(cd "$WTPATH" && git rev-parse HEAD)" = \
+  "$(cd "$REPO" && git rev-parse feat-x)" ] \
+  && pass "worktree HEAD matches branch" || fail "HEAD mismatch"
+
+# Detached HEAD check
+sym=$(cd "$WTPATH" && git symbolic-ref -q HEAD 2>/dev/null || echo "")
+[ -z "$sym" ] && pass "detached HEAD" || fail "not detached: $sym"
+
+# Idempotent reuse
+WTPATH2=$(cd "$REPO" && "$WT" create feat-x "$SID" 2>/dev/null)
+[ "$WTPATH" = "$WTPATH2" ] && pass "idempotent reuse" \
+  || fail "second create differs"
+
+# Kill switch
+( cd "$REPO" && DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1 \
+    "$WT" create feat-x "killtest-$SID" 2>/dev/null ) \
+  && fail "kill switch ignored" || pass "kill switch honored"
+
+rm -rf "$REPO"
 
 echo
 echo "Result: $PASS passed, $FAIL failed"
