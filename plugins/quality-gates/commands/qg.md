@@ -66,6 +66,7 @@ When you finish the gate, emit a `<qg-signal>` tag. The Stop hook handles pipeli
 | `/qg --plan <path>` | Use specific plan file |
 | `/qg --pr-url <url>` | Specify PR URL |
 | `/cancel-qg` | Cancel active pipeline |
+| `DEVBREW_QG_KEEP_WORKTREE=1` | Preserve branch worktree after pipeline completes or is cancelled (default: removed) |
 
 ### Scope (default: session)
 
