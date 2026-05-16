@@ -84,6 +84,13 @@ WTPATH2=$(cd "$REPO" && "$WT" create feat-x "$SID" 2>/dev/null)
     "$WT" create feat-x "killtest-$SID" 2>/dev/null ) \
   && fail "kill switch ignored" || pass "kill switch honored"
 
+# Regression: branch with dot in name doesn't cause grep false positive
+(cd "$REPO" && git branch release-1.0) >/dev/null
+WTPATH3=$(cd "$REPO" && "$WT" create release-1.0 "dotsid12345678" 2>/dev/null)
+[ -d "$WTPATH3" ] && [ "$WTPATH3" != "$WTPATH" ] \
+  && pass "dot in branch name doesn't collide" \
+  || fail "dot regression: $WTPATH3 vs $WTPATH"
+
 rm -rf "$REPO"
 
 echo

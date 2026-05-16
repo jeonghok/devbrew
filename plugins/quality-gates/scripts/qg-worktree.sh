@@ -55,7 +55,7 @@ case "${1:-}" in
     abs="$(cd "$parent" && pwd -P)/${sanitized}-${sid_short}"
     if [[ -d "$abs" ]]; then
       # Idempotent: verify it's a registered worktree and reuse
-      if git worktree list --porcelain | grep -q "^worktree $abs$"; then
+      if git worktree list --porcelain | grep -qxF "worktree $abs"; then
         echo "qg-worktree: reusing existing worktree at $abs" >&2
         printf '%s' "$abs"; echo
         exit 0
