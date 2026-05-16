@@ -25,6 +25,7 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 2 (3-layer isolation, v1.11.0/v1.12.0)** — `codex-reviewer`의 3-layer isolation: (1) frontmatter `allowedTools`/`disallowedTools` camelCase deny/allow whitelist (AC1 fix, v1.11.1에서 복구), (2) narrow `Bash` allowlist (실제 키 `allowedTools`), (3) `codex exec -s read-only` OS-level sandbox. Layer 1 없이 Layer 2/3는 불완전 — 세 layer가 함께 물리적 격리를 구성.
 - **Law 2 (Writer ≠ Reviewer, frontmatter scoping)** (v1.13.0) — `security-reviewer` agent가 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언. Phase 1 always-run reviewer 중 4번째로 추가되며, kill switch `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`로 사용자가 disable 가능 (Plugin Shape — 모든 reviewer는 opt-out 가능).
 - **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `hooks/session-start-advisor.py` frontmatter scanner (AC14): SessionStart마다 모든 agent 파일의 frontmatter key를 kebab-case drift 검사. `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — CI에서 C1 종류 (kebab-case 잘못된 키) drift를 자동 차단. 이 두 mechanism이 함께 "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation.
+- **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / hook / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
 
 ## 구조
 
