@@ -30,12 +30,12 @@ import re
 import sys
 from pathlib import Path
 
-LEGACY_FILES = (
-    Path(".claude/quality-gates.local.md"),
-    Path(".claude/quality-gates-session.local.md"),
-    Path(".claude/quality-gates-branch.local.md"),
-    Path(".claude/qg-diff-cache.txt"),
-    Path(".claude/qg-code-paths.tmp"),
+LEGACY_RELATIVE = (
+    ".claude/quality-gates.local.md",
+    ".claude/quality-gates-session.local.md",
+    ".claude/quality-gates-branch.local.md",
+    ".claude/qg-diff-cache.txt",
+    ".claude/qg-code-paths.tmp",
 )
 ACTIVE_STATUSES = {"gate1_running", "gate2_running", "gate3_running"}
 GATE_RX = re.compile(r"^current_gate:\s*(\S+)", re.MULTILINE)
@@ -117,8 +117,11 @@ def _load_payload() -> dict:
         return {}
 
 
-def _legacy_present() -> bool:
-    return any(p.exists() for p in LEGACY_FILES)
+def _legacy_present(payload: dict) -> bool:
+    """Resolve legacy v1.5.0 marker paths against payload cwd (Gate-2 review C1)."""
+    cwd = payload.get("cwd") if payload else None
+    base = Path(cwd) if cwd else Path.cwd()
+    return any((base / rel).exists() for rel in LEGACY_RELATIVE)
 
 
 def _sibling_active_count(self_sid: str, payload: dict) -> int:
@@ -171,7 +174,7 @@ def main() -> int:
         return 0
     payload = _load_payload()
     self_sid = _self_session_id(payload)
-    if _legacy_present():
+    if _legacy_present(payload):
         sys.stdout.write(
             "[quality-gates] Legacy v1.5.0 state files detected. "
             "They will be removed on your next /qg invocation. "

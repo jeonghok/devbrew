@@ -61,8 +61,17 @@ def main() -> int:
     if not file_path:
         return 0
     # AC4: derive worktree-relative base from payload cwd (B2 fix).
-    # Falls back to process cwd silently — session-tracker is not the warning surface.
-    cwd_base = Path(payload.get("cwd") or os.getcwd())
+    # Loud fallback per CLAUDE.md "Loud logging을 동반한 graceful degradation"
+    # — Gate 2 review found this hook's earlier silent fallback was the only
+    # surface that violated G3; harmonize with stop-hook/session-end-cleanup/
+    # session-start-advisor which all warn on missing 'cwd'.
+    cwd_val = payload.get("cwd")
+    if not cwd_val:
+        print("[quality-gates] post-tool-use-session-tracker payload missing 'cwd'; "
+              "falling back to process cwd",
+              file=sys.stderr)
+        cwd_val = os.getcwd()
+    cwd_base = Path(cwd_val)
     # If file_path is absolute, resolve() ignores cwd_base; if relative,
     # join against payload cwd so worktree paths resolve correctly.
     file_path_obj = Path(file_path)

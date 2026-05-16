@@ -75,6 +75,7 @@ Parse the following from the prompt parameters:
 - `gate`: Which gate to execute (1, 2, or 3)
 - `plan_path`: Plan file path (or "auto")
 - `pr_url`: PR URL (optional)
+- `project_dir`: Absolute path to repo root (worktree-aware). Injected by stop-hook on gate continuation; on first invocation derive from `pwd`. Single pipeline coordinate frozen at preflight — do NOT re-derive via `pwd`/`git rev-parse` on continuation.
 - `available_plugins`: Comma-separated list of available plugins
 - `iteration`: Current Gate 2 iteration number (Gate 2 only)
 - `max_iterations`: Maximum Gate 2 iterations (Gate 2 only)
