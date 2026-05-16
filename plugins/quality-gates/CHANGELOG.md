@@ -3,6 +3,31 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.15.0] — 2026-05-17
+
+### Added
+- `/qg branch <name>` — 다른 브랜치를 격리된 detached worktree에서 검사하는 새 surface. 현재 작업트리 무손상.
+- `scripts/qg-worktree.sh` — worktree 라이프사이클 헬퍼 (`sanitize` / `validate-branch` / `create` / `remove` subcommands).
+- State file schema fields: `worktree_path`, `target_branch` (worktree 모드일 때만 frontmatter에 emit).
+- `tests/test_qg_worktree_helper.sh` — 19 unit cases (sanitize 6 + validate-branch 3 + create 6 + remove 4).
+- `tests/test_branch_worktree.sh` — 20 integration cases (AC1–AC11 from spec).
+- `tests/test_stop_hook_worktree_cleanup.py` — 6 unit cases (complete/abort/KEEP/legacy + AC8 preservation).
+- `tests/test_session_end_cleanup.py` — 2 new cases for dangling worktree safety net.
+- Kill switches: `DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1` (기능 차단), `DEVBREW_QG_KEEP_WORKTREE=1` (cleanup 차단).
+- README "Recipes" 섹션 — PR 브랜치 검사 워크플로우 + worktree 보존/비활성화 가이드.
+- Principles Instantiated 2 entries — Law 1 (7 rejection scenarios → AC1–AC11) + Law 3 (worktree path convention §4.8).
+
+### Changed
+- `scripts/setup-qg.sh`: `branch` 키워드 뒤 non-flag non-gate 토큰을 `<target-branch>`로 해석. 해당 모드에서 `qg-worktree.sh create`를 호출하고 state frontmatter의 `project_dir`을 worktree absolute path로 freeze. 새 토큰이 없으면 기존 `/qg branch` 동작 보존.
+- `hooks/stop-hook.py`: terminal status (`complete`/`abort`) 분기에서 state의 `worktree_path` 존재 시 자동 cleanup (`DEVBREW_QG_KEEP_WORKTREE` 존중). non-terminal status에서는 보존 + stderr 안내 메시지로 사용자에게 worktree 경로 표시.
+- `hooks/session-end-cleanup.py`: dangling worktree safety net — 세션 종료 시 state에 `worktree_path`가 있고 KEEP env가 미설정이면 `qg-worktree.sh remove` 호출.
+- `commands/qg.md`: argument-hint 갱신 (`branch [<name>]`), Quick Reference에 `/qg branch <name>` 행 + 두 kill switch 환경변수 행 추가.
+
+### Upgrade notes
+- v1.14.x state file은 새 필드 `worktree_path` / `target_branch` 부재 → 기존 로직으로 fall through (stop-hook이 `state.get("worktree_path", "")` 빈 문자열 → cleanup 분기 미진입). Migration 없음.
+- 기존 `/qg branch` (인자 없음) 동작 100% 보존 — argument-hint도 backward-compatible (`[branch [<name>]|...]`).
+- v1.14.0의 worktree cwd contract (`project_dir` state frontmatter) 위에 올려짐. v1.14.0 미만에서 in-flight pipeline은 새 surface 사용 불가 (state schema 호환성 누락).
+
 ## [1.14.0] — 2026-05-16
 
 ### Added
