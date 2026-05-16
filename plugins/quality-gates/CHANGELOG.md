@@ -28,6 +28,8 @@
 - **B4**: SKILL.md missing `project_dir` in dispatches to scout/codex-reviewer/adversarial/synthesizer/test-scope-validator/security-reviewer.
 - **B5**: codex-reviewer.md (a) `$REPO_ROOT/plugins/quality-gates/scripts/...` path broken outside devbrew, (b) missing `cd "$project_dir"` causing subprocess cwd nondeterminism.
 - **B6**: state file schema lacked `project_dir`; stop-hook `build_gate_prompt()` never propagated it across gate boundaries — caused gate2/3 continuations to re-evaluate cwd in main repo when pipeline was launched from worktree.
+- **B3 completion**: session-start-advisor primary advisory path (sibling-count + self-pipeline check) now derives state root from payload cwd, matching the frontmatter-scan sub-feature fix.
+- **B7 (new)**: session-end-cleanup.py removed module-level relative ROOT; per-session folder cleanup now anchored to payload cwd, eliminating silent state-leak when session ends with process-cwd different from worktree.
 
 ### Upgrade notes
 - In-flight v1.13.x pipelines: state file lacks `project_dir`; `parse_state_file()` falls back to `os.getcwd()` + stderr warning. If your continuation is running from a worktree, expect one warning per gate transition. For clean state, run `/cancel-qg && /qg` after upgrade.

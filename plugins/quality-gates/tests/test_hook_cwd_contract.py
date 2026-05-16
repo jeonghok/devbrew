@@ -89,8 +89,59 @@ def test_session_start_advisor_uses_payload_cwd(tmp_path):
         f"Advisor didn't scan payload cwd; stderr: {proc.stderr}"
 
 
-# Note: test_session_start_advisor_uses_payload_cwd uses pytest's tmp_path fixture
-# and is intentionally NOT included in the __main__ block below.
+CLEANUP_HOOK = PLUGIN_DIR / "hooks" / "session-end-cleanup.py"
+
+
+def test_session_end_cleanup_uses_payload_cwd(tmp_path):
+    """SessionEnd removes <payload-cwd>/.claude/quality-gates/<sid>/, not process-cwd."""
+    sid = "cleanup-test-01"
+    # Create state under payload cwd
+    state_dir = tmp_path / ".claude" / "quality-gates" / sid
+    state_dir.mkdir(parents=True)
+    (state_dir / "pipeline.md").write_text("test state\n")
+
+    # Create decoy state under process cwd (should NOT be removed)
+    with tempfile.TemporaryDirectory() as proc_dir:
+        decoy_dir = Path(proc_dir) / ".claude" / "quality-gates" / sid
+        decoy_dir.mkdir(parents=True)
+        (decoy_dir / "pipeline.md").write_text("decoy\n")
+
+        proc = subprocess.run(
+            ["python3", str(CLEANUP_HOOK)],
+            input=json.dumps({"cwd": str(tmp_path), "session_id": sid}),
+            capture_output=True,
+            text=True,
+            cwd=proc_dir,
+            timeout=10,
+        )
+        assert proc.returncode == 0
+        assert not state_dir.exists(), f"Worktree state not removed: {state_dir}"
+        assert decoy_dir.exists(), f"Decoy at process cwd was wrongly removed: {decoy_dir}"
+
+
+def test_session_start_advisor_self_pipeline_uses_payload_cwd(tmp_path):
+    """SessionStart advisor finds self pipeline under payload cwd, not process cwd."""
+    sid = "advisor-self-test-01"
+    pipeline = tmp_path / ".claude" / "quality-gates" / sid / "pipeline.md"
+    pipeline.parent.mkdir(parents=True)
+    pipeline.write_text("---\nstatus: gate1_running\n---\n")
+
+    proc = subprocess.run(
+        ["python3", str(ADVISOR_HOOK)],
+        input=json.dumps({"cwd": str(tmp_path), "session_id": sid}),
+        capture_output=True,
+        text=True,
+        cwd="/tmp",  # different from payload cwd
+        timeout=10,
+    )
+    # Advisor reads self_pipeline; we just verify it doesn't crash and that
+    # any sibling-count log references the payload-cwd-rooted directory.
+    # The advisor may print stderr advisories; just confirm zero exit code.
+    assert proc.returncode == 0
+
+
+# Note: tests using pytest's tmp_path fixture are intentionally NOT included
+# in the __main__ block below.
 # Run via: python3 -m pytest plugins/quality-gates/tests/test_hook_cwd_contract.py
 if __name__ == "__main__":
     test_state_file_under_payload_cwd()

@@ -12,7 +12,7 @@ Behaviors:
 - legacy flat state file (v1.5.0) detected     → systemMessage about migration
                                                   (read-only check; setup-qg removes)
 
-Working-directory contract: invoked with cwd = workspace root.
+Working-directory contract: state root derived from payload['cwd']; falls back loudly.
 
 Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
   DEVBREW_DISABLE_QUALITY_GATES=1                          - disables this hook entirely
@@ -30,7 +30,6 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(".claude/quality-gates")
 LEGACY_FILES = (
     Path(".claude/quality-gates.local.md"),
     Path(".claude/quality-gates-session.local.md"),
@@ -55,6 +54,17 @@ def _disabled() -> bool:
     skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
     tokens = {t.strip() for t in skip.split(",") if t.strip()}
     return "quality-gates:session-start-advisor" in tokens
+
+
+def _state_root(hook_input: dict) -> Path:
+    """Resolve state root from hook stdin payload cwd; fall back loudly."""
+    cwd = hook_input.get("cwd") if hook_input else None
+    if not cwd:
+        print("[quality-gates] session-start-advisor payload missing 'cwd'; "
+              "falling back to process cwd",
+              file=sys.stderr)
+        cwd = os.getcwd()
+    return Path(cwd) / ".claude" / "quality-gates"
 
 
 # AC14: sub-feature kill switch
@@ -111,11 +121,12 @@ def _legacy_present() -> bool:
     return any(p.exists() for p in LEGACY_FILES)
 
 
-def _sibling_active_count(self_sid: str) -> int:
-    if not ROOT.exists():
+def _sibling_active_count(self_sid: str, payload: dict) -> int:
+    root = _state_root(payload)
+    if not root.exists():
         return 0
     count = 0
-    for child in ROOT.iterdir():
+    for child in root.iterdir():
         if not child.is_dir():
             continue
         if not SESSION_PATTERN.match(child.name):
@@ -167,7 +178,7 @@ def main() -> int:
             "If you had an in-flight pipeline, re-run it.\n"
         )
     if self_sid:
-        self_pipeline = ROOT / self_sid / "pipeline.md"
+        self_pipeline = _state_root(payload) / self_sid / "pipeline.md"
         if self_pipeline.exists():
             try:
                 text = self_pipeline.read_text()
@@ -177,7 +188,7 @@ def main() -> int:
                 _emit_self_advisory(text)
     _scan_agent_frontmatter_keys(payload)
     if _verbose():
-        n = _sibling_active_count(self_sid)
+        n = _sibling_active_count(self_sid, payload)
         if n > 0:
             sys.stdout.write(
                 f"[quality-gates] verbose: {n} sibling session(s) appear active.\n"
