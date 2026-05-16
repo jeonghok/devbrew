@@ -160,6 +160,13 @@ for agent in scout adversarial synthesizer test-scope-validator security-reviewe
   fi
 done
 
+# --- Test 7: codex-reviewer.md must not reference $REPO_ROOT/plugins/quality-gates (AC3) ---
+if grep -q '\$REPO_ROOT/plugins/quality-gates' "$PLUGIN_DIR/agents/codex-reviewer.md"; then
+  fail "T7: codex-reviewer.md still references \$REPO_ROOT/plugins/quality-gates (breaks outside devbrew)"
+else
+  pass "T7: codex-reviewer.md uses \${CLAUDE_PLUGIN_ROOT} (devbrew-portable)"
+fi
+
 # --- Summary ---
 echo
 echo "Results: $PASS passed, $FAIL failed"

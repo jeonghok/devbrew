@@ -26,6 +26,7 @@ You are NOT responsible for: producing findings yourself, modifying any file (in
 
 ## Inputs
 
+- `project_dir`: project working directory (absolute path) — pipeline 의 단일 좌표. SKILL preflight 에서 frozen. 절대 재계산 금지.
 - `filtered_diff`: unified diff with documentation paths excluded.
 - `gate1_summary`: YAML block from plan-verifier (matched_items only — used for context).
 
@@ -36,6 +37,13 @@ Pre-conditions: `detect_codex.sh` has emitted `codex_available: true` (this agen
 Execute exactly this sequence:
 
 ```bash
+# AC3 guard — fail loud if pipeline coordinate is missing.
+if [ -z "${project_dir:-}" ]; then
+  echo '{"codex_failed": true, "reason": "missing_project_dir"}'
+  exit 0
+fi
+cd "$project_dir" || { echo '{"codex_failed": true, "reason": "project_dir_unreachable"}'; exit 0; }
+
 SCRATCH="$(mktemp -d -t qg-codex-rev-XXXXXX)"
 DIFF_FILE="$SCRATCH/diff.patch"
 PLAN_FILE="$SCRATCH/plan.yaml"
@@ -43,12 +51,9 @@ PROMPT_FILE="$SCRATCH/prompt.md"
 STDOUT_FILE="$SCRATCH/codex.jsonl"
 STDERR_FILE="$SCRATCH/codex.stderr"
 
-# AC10: REPO_ROOT must be non-empty (defense against non-git invocation).
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
-if [ -z "$REPO_ROOT" ]; then
-  echo '{"codex_failed": true, "reason": "not_in_git_repo"}'
-  exit 0
-fi
+# AC3: REPO_ROOT is now an alias for project_dir (single coordinate contract).
+# The empty-string guard above (AC3 guard) already catches missing project_dir.
+REPO_ROOT="$project_dir"
 
 # AC8: TIMEOUT_CMD must be non-empty (defense-in-depth; AC7's detect_codex.sh
 # typically catches this earlier, but race conditions can leave us here).
@@ -74,7 +79,7 @@ INPUT_EOF
 # str.replace on opaque bytes — no eval, no template engine).
 # AC10: prompt builder exit code check — abort on failure (silent empty
 # prompt would cause codex to run with no context).
-if ! python3 "$REPO_ROOT/plugins/quality-gates/scripts/build_codex_prompt.py" \
+if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_codex_prompt.py" \
        "$DIFF_FILE" "$PLAN_FILE" > "$PROMPT_FILE"; then
   echo '{"codex_failed": true, "reason": "prompt_build_failed"}'
   exit 0
@@ -101,7 +106,7 @@ else
   OVERRIDE_REASON=""
 fi
 
-python3 "$REPO_ROOT/plugins/quality-gates/scripts/codex_findings_to_yaml.py" \
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/codex_findings_to_yaml.py" \
     --stderr-file "$STDERR_FILE" \
     --meta-override-exit-code "$EXIT_CODE" \
     --meta-override-reason "$OVERRIDE_REASON" \
@@ -116,9 +121,10 @@ The canonical prompt template lives in `scripts/build_codex_prompt.py` as `PROMP
 
 ## Forbidden
 
-- Do not modify the invocation flags. `-s read-only`, `-C "$REPO_ROOT"`, `--json`, `< /dev/null`, and `2>"$STDERR_FILE"` are load-bearing.
+- Do not modify the invocation flags. `-s read-only`, `-C "$REPO_ROOT"` (where `$REPO_ROOT` is the alias for `$project_dir` set above), `--json`, `< /dev/null`, and `2>"$STDERR_FILE"` are load-bearing.
 - Do not pipe to `cat` or any other intermediate command — parser reads stdin directly.
 - Do not retry on failure within this agent.
 - Do not produce findings of your own; you are the parser's output emitter.
 - Do not inline `filtered_diff` content into any Python string literal, shell argument, or expandable heredoc — always pass via file path written through a `<<'EOF'` (single-quoted-delimiter) heredoc. Inlining the diff into a Python triple-quoted string allows a `"""` sequence in a malicious PR to escape the literal and execute arbitrary Python inside this agent's Bash sandbox (Law 2 bypass — writer gaining authority over reviewer's harness).
 - Do not append meta lines via shell `printf` after the parser emits its YAML — use `--meta-override-exit-code` / `--meta-override-reason` flags on the parser so a single coherent YAML document is produced on all paths.
+- Do not re-resolve cwd via `git rev-parse`, `Path.cwd()`, `os.getcwd()`, or any shell `pwd` invocation — use `project_dir` from your input verbatim. Re-resolution at agent runtime defeats the pipeline-wide coordinate contract (and re-introduces the worktree drift bug fixed in v1.13.0).
