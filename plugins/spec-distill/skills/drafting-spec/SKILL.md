@@ -38,6 +38,7 @@ cost_class: low
      - 각 LD entry: `id`, `section`, `summary` (160자 이내 단일 라인, P21 secret placeholder 치환), `source` (`interview-round-<N>` 형식), `source_path` (b/c/d).
      - `pending_locked_decisions`가 빈 리스트면 `locked_decisions: []`로 emit (frontmatter에 키는 존재, 값만 빈 리스트).
 5. **Write file** with `Write` tool to resolved path.
+> **v0.3.0+ 변경**: Step 5의 `Write` 직후 PostToolUse hook이 spec.md를 감지해 `pending_review:` block을 state.local.md에 기록하고, Stop hook이 다음 turn에 reviewer dispatch를 systemMessage로 강제한다. drafting-spec skill 본체가 `reviewing-spec` skill을 명시 호출하지 않아도 trigger 결정론적으로 발동.
 6. **Update state.local.md**: `phase: 3` (다음은 reviewer phase).
 
 ### Superseded LD 보존 정책 (NG6)
@@ -76,6 +77,7 @@ Mode B는 다음 입력을 reviewing-spec skill로부터 받음:
 5. **Pre-write guard check**: 적용하려는 모든 변경이 `allowed_issue_ids` 안에 있는지 한 번 더 검증. 외부 issue 변경 시도가 감지되면 → 즉시 abort (다음 sub-section 참조).
 6. **Write file** with `Edit` tool (전체 rewrite 대신 targeted edit).
 7. **Update state.local.md**: `issue_history`에 resolved 마커 표시 (해당 `issue_id`의 `resolved: true`).
+> **v0.3.0+ 변경**: Step 6의 `Edit` 직후 hook이 동일 메커니즘으로 reviewing-spec dispatch를 강제. 단 `last_dispatched_at` TTL 가드로 self-ref cycle 방지 — Mode B의 정상 edit cycle은 TTL 만료 후 통과.
 8. **Re-dispatch reviewing-spec** for re-review.
 
 ### Abort flow (issue `e5f208a0`, AC5)
@@ -114,4 +116,4 @@ draft 중 인터뷰에서 답을 못 얻은 항목은 **유추하지 말고** "O
 
 ## 다음 phase
 
-`reviewing-spec` skill 호출. spec.md 경로를 input으로.
+`reviewing-spec` phase는 PostToolUse + Stop hook이 자동 dispatch (v0.3.0+). drafting-spec이 명시 호출할 필요 없음. 단 hook이 비활성화된 환경(`DEVBREW_DISABLE_SPEC_DISTILL=1` 또는 kill switch)에서는 수동으로 `reviewing-spec` skill 호출.

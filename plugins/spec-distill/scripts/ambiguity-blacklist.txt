@@ -1,0 +1,13 @@
+# spec-distill ambiguity blacklist
+# One pattern per line. Lines starting with # are comments.
+# Escape: prepend `~` to a word in spec.md to opt out of scan for that occurrence.
+works correctly
+fast
+good UX
+as needed
+properly
+efficient
+seamless
+robust
+easy to use
+intuitive
