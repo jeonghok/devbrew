@@ -26,6 +26,8 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 2 (Writer ≠ Reviewer, frontmatter scoping)** (v1.13.0) — `security-reviewer` agent가 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언. Phase 1 always-run reviewer 중 4번째로 추가되며, kill switch `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`로 사용자가 disable 가능 (Plugin Shape — 모든 reviewer는 opt-out 가능).
 - **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `hooks/session-start-advisor.py` frontmatter scanner (AC14): SessionStart마다 모든 agent 파일의 frontmatter key를 kebab-case drift 검사. `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — CI에서 C1 종류 (kebab-case 잘못된 키) drift를 자동 차단. 이 두 mechanism이 함께 "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation.
 - **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / hook / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
+- **Law 1 (Clarity Before Code) — `/qg branch <name>` surface** (v1.15.0) — 7개 거절 시나리오(존재하지 않는 브랜치, path traversal, kill switch, idempotent reuse 등)가 `tests/test_branch_worktree.sh` AC1–AC11에 acceptance criteria로 명시. 실패 경로마다 명확한 진단 메시지를 stderr로 출력.
+- **Law 3 (Compounding) — worktree path 컨벤션** (v1.15.0) — `.claude/<plugin>/worktrees/<name>-<sid-short>/` 경로 패턴을 `docs/philosophy/devbrew-harness-philosophy.md` §4.8에 footnote로 박아 두어, 차후 다른 플러그인이 임시 worktree를 만들 때 같은 컨벤션을 재사용할 수 있게 함.
 
 ## 구조
 
@@ -165,6 +167,39 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 /cancel-qg --all               # 전 세션 wipe (확인 + 활성 sibling 리스트 먼저)
 ```
 
+## Recipes
+
+### 다른 브랜치를 격리된 worktree에서 검사
+
+다른 브랜치를 검사하면서 본인 작업트리는 무손상 유지:
+
+```bash
+git fetch origin pull/123/head:pr-123  # PR을 로컬 브랜치로 가져오기
+/qg branch pr-123                       # 임시 worktree에서 파이프라인 실행
+```
+
+내부 동작:
+
+1. `<repo>/.claude/quality-gates/worktrees/pr-123-<sid>/` 에 detached worktree 생성
+2. 그 안에서 Gate 1 → 2 → 3 실행, agent들이 worktree에서 diff를 읽음 (state는 main repo에 머묾, v1.14.0 worktree cwd contract 그대로 적용)
+3. 정상 종료 (complete / cancel) 시 자동 cleanup. 비정상 종료 (NEEDS_RESTART 등) 시 보존 + stderr 안내 경로
+
+### 디버깅용 worktree 보존
+
+```bash
+DEVBREW_QG_KEEP_WORKTREE=1 /qg branch feat-x
+# 종료 후 .claude/quality-gates/worktrees/feat-x-<sid>/ 보존
+# 수동 정리: git worktree remove <path>
+```
+
+### `/qg branch <name>` 자체를 비활성화
+
+```bash
+export DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1
+```
+
+`/qg branch` (인자 없음) 은 영향 없음.
+
 ## Plan Discovery Sources (Gate 1)
 
 `/qg gate1`이 `--plan <path>`를 받지 않으면 다음 우선순위로 plan 파일을 탐색합니다 (위→아래로 첫 자격 candidate에서 멈춤):
@@ -198,6 +233,8 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 - `DEVBREW_QG_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
 - `DEVBREW_DISABLE_GATE3_TEST_VALIDATION`: unset (`1` 설정 시 Gate 3 Step 2.5 (test scope validation) 완전 skip; default unset = validation enabled)
 - `DEVBREW_SKIP_HOOKS=quality-gates:gate3-test-scope`: 위와 동일한 kill switch — 기존 hook-skip 패턴과 일관성 유지를 위한 alternate form
+- `DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1`: `/qg branch <name>` auto-worktree 비활성화 (기능을 disable; `/qg branch` no-arg는 영향 없음)
+- `DEVBREW_QG_KEEP_WORKTREE=1`: worktree cleanup 비활성화 (디버깅용 보존)
 
 (`MAX_TOTAL_ITERATIONS`와 cross-gate restart 루프는 v1.5.0에서 제거됨.)
 
