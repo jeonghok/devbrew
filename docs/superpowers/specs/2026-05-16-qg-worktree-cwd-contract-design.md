@@ -72,6 +72,7 @@ plus: python3 "$REPO_ROOT/plugins/quality-gates/scripts/..." 가 사용자 repo�
   - 사용자가 worktree 안 쓰는 경우 (대다수 use case), 모든 변경은 no-op (project_dir이 cwd와 일치).
   - 기존 worktree 안 쓰는 회귀 테스트들 (`test_worktree.sh` T1~T4) 그대로 통과.
   - **State file schema 변경 backward-compat**: 신규 `project_dir` 필드는 v1.12.x state file 에 없을 수 있음. `parse_state_file()` 에 누락 시 기본값 `os.getcwd()` + stderr 경고 (v1.7→1.8 의 `gate3_resolution_iter` 추가 패턴 따름, stop-hook.py:114-120 참조).
+  - **Mid-pipeline partial-deploy window (round 2 Issue [d9c7f5e2])**: v1.12.x → v1.13.0 업그레이드 시점에 진행 중인 (gate1 완료, gate2 미시작 등) pipeline 은 stop-hook 가 새 코드로 동작하지만 SKILL.md 가 인스톨러에서 이미 새 버전 — 두 컴포넌트는 install 이 atomic 이므로 partial-deploy window 자체가 없음. 단, 사용자가 v1.12.x state file 을 들고 v1.13.0 으로 업데이트한 직후 첫 continuation 에서는 `parse_state_file()` 의 fallback 으로 `os.getcwd()` 가 쓰이고 stderr 경고가 한 번 발생 — 이 동작은 의도된 graceful degradation. CHANGELOG 의 Upgrade 노트에 "in-flight pipeline 은 `/cancel-qg && /qg` 권장" 한 줄 추가.
 - C5: **Trivia escape 우회 금지**: 본 diff는 10개 파일 + 신규 테스트 1개 + CHANGELOG entry → trivia 아님, 풀 pipeline 검증 필요.
 - **C6**: **Persona hardening only, no weakening**: codex-reviewer.md (및 6개 agent.md) 의 `Forbidden` 섹션 변경은 **새 규칙 추가** (hardening) 이며, 기존 규칙 제거/완화 (weakening) 아님. CLAUDE.md "Persona 파일은 보안-민감 코드" 의 보안 리뷰 트리거 (규칙 제거, 임계치 완화) 에 해당하지 않음. (Issue #9)
 - **C7**: **Codex CLI `-C` flag trust boundary**: `codex exec -C "$project_dir"` 가 codex 자체의 cwd 를 강제한다고 신뢰. detect_codex.sh 의 version 가드 (이미 `known_bad_version` skip_reason 처리 있음) 가 이 보장의 단일 fail-safe. 본 spec 은 codex CLI 자체 동작을 변경하지 않음. (Issue #10)
@@ -79,21 +80,43 @@ plus: python3 "$REPO_ROOT/plugins/quality-gates/scripts/..." 가 사용자 repo�
 ## 5. Acceptance Criteria
 
 ### AC1: SKILL.md dispatch 6개 블록에 `project_dir` 명시 (Gate 2)
-- scout (L446-455), codex-reviewer (Phase 1 inclusion, fan-out 블록), adversarial (L670-675), synthesizer (L693-697), test-scope-validator (L1023-1040), security-reviewer (Phase 1 immutable head 블록 — Agent A/D 패턴) 의 dispatch prompt 문자열에 `project_dir: <current working directory>` 라인 포함. 패턴은 이미 정착된 plan-verifier (L143) 와 runtime-verifier (L1070) 와 동일.
-- **검증 (deterministic)**: `test_codex_dispatch_invariant.sh` 신규 Scenario 4:
-  ```bash
-  for name in scout codex-reviewer adversarial synthesizer test-scope-validator security-reviewer; do
-    # 각 subagent_type="quality-gates:<name>" 라인을 anchor 로 잡고
-    # 다음 10 라인 (Agent() prompt 본문 영역) 안에 project_dir 존재 단정
-    awk -v name="quality-gates:$name" '
-      $0 ~ name { found=NR }
-      found && NR <= found+10 && /project_dir:/ { ok=1; exit }
-      END { exit !ok }
-    ' "$SKILL" || fail "$name dispatch block lacks project_dir"
-  done
-  ```
-  (10 라인 윈도우는 기존 plan-verifier/runtime-verifier 블록 길이 평균치 — 마진 충분.)
-- 단순 grep 대신 anchor-then-window 방식 채택: 같은 파일에 `project_dir` 이 별도 prose 로 등장해도 false-positive 없음 (Issue #3).
+**Scope clarification (round 2 Issue [7a3f2c1d])**: 6개 list 는 dispatch contract 일관성 차원에서 **모두 포함**. scout / adversarial / synthesizer / test-scope-validator 가 직접 cwd-sensitive bash 를 실행하지 않더라도, agent body 에서 Read 호출 시 worktree-relative path 를 base 로 쓰기 위해 `project_dir` input 이 필요 (G2 의 "Read tool 호출 시 `project_dir` 을 절대경로 base 로 사용" 정합). cwd-insensitive 라는 이유로 일부 agent 만 빼는 partial coverage 는 같은 버그 재발 위험 — 그래서 6개 전체.
+
+**Dispatch 패턴 두 가지 (round 2 Issue [b4e91a2f])**: SKILL.md 는 두 dispatch 패턴 동시 사용:
+- **Pattern P (primary)**: ` ```Agent( subagent_type="quality-gates:<name>", ...) ``` ` fenced code block 형태. plan-verifier (L139), runtime-verifier (L1066), scout (L445), adversarial (L669), synthesizer (L692), test-scope-validator (L994) 가 이 패턴.
+- **Pattern L (legacy/fallback)**: `**Agent X — <plugin>:<name>**` prose 헤더 + `Immutable head:` 텍스트 형태. SKILL.md L548-591 의 Agent A/B/C/D 가 이 패턴. security-reviewer 는 **L 패턴만** 가짐 (current SKILL.md 에 P-pattern dispatch 블록 없음). codex-reviewer 는 L497-499 의 fan-out 평가 + L540-544 의 fallback inclusion prose 로 dispatch — P 패턴도 L 패턴도 아닌 reference-only 형태.
+
+**6개 모두에 대한 project_dir 보장**:
+- Pattern P (4개: scout / adversarial / synthesizer / test-scope-validator): Agent() prompt 문자열 안에 `project_dir: <current working directory>` 라인 추가.
+- Pattern L (1개: security-reviewer): "Agent D — security-reviewer" 섹션의 "Immutable head" 다음에 `If the prompt contains a `## Current Diff` section, ...` 문장이 이미 있음. 그 직전/직후에 추가:
+  > Your input prompt will include a `project_dir: <absolute path>` line. Use this verbatim for any Read tool call — do not re-resolve via `pwd` or `Path.cwd()`.
+- Reference-only (1개: codex-reviewer): SKILL.md 가 직접 dispatch 하지 않으므로 SKILL.md 변경 불필요. 대신 codex-reviewer.md 의 Inputs 섹션 (AC2) 가 single source of truth — orchestrator 가 codex-reviewer 를 dispatch 할 때 prompt 에 `project_dir:` 라인 포함하라는 안내가 agent.md 자체에 있음.
+
+**검증 (deterministic) — two-pattern aware**: `test_codex_dispatch_invariant.sh` 신규 Scenario 4:
+```bash
+SKILL="$REPO_ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
+
+# Pattern P — 4 agents with explicit Agent() block
+for name in scout adversarial synthesizer test-scope-validator; do
+  awk -v name="quality-gates:$name" '
+    $0 ~ name { found=NR }
+    found && NR <= found+15 && /project_dir:/ { ok=1; exit }
+    END { exit !ok }
+  ' "$SKILL" || fail "Scenario 4: Pattern-P dispatch for $name lacks project_dir"
+done
+
+# Pattern L — security-reviewer prose header
+awk '
+  /\*\*Agent D — security-reviewer\*\*/ { found=NR }
+  found && NR <= found+30 && /project_dir/ { ok=1; exit }
+  END { exit !ok }
+' "$SKILL" || fail "Scenario 4: Pattern-L Agent D (security-reviewer) section lacks project_dir reference"
+
+# Reference-only — codex-reviewer.md is the source of truth
+grep -q 'project_dir' "$REPO_ROOT/plugins/quality-gates/agents/codex-reviewer.md" \
+  || fail "Scenario 4: codex-reviewer.md lacks project_dir input contract"
+```
+- Window 가 P 패턴은 15 라인 (Agent() block 평균 길이 + 여유), L 패턴은 30 라인 (헤더 + Immutable head 본문 + 후속 prose 평균).
 
 ### AC2: 6개 agent.md에 `project_dir` input contract 추가 + drift guard
 - 각 agent.md 의 "Inputs" 섹션 첫 항목 (또는 기존 첫 항목 바로 위) 에:
@@ -163,6 +186,7 @@ REPO_ROOT="$project_dir"     # ← git rev-parse 제거; project_dir 이 단일 
   ```bash
   project_dir: "$(pwd)"   # AC6: pipeline coordinate frozen at preflight
   ```
+- **`$(pwd)` 시점 보장 (round 2 Issue [c6d84e3b])**: SKILL.md L52 의 호출 `"${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh" --ensure` 는 Claude Code Bash tool 로 실행되며, Bash tool 의 cwd 는 skill invocation cwd 를 inherit. 따라서 setup-qg.sh subshell 안에서의 `$(pwd)` 는 skill cwd 와 동일 — pipeline 의 결정적 단일 좌표. 별도의 `cd ... && bash setup-qg.sh` wrapping 불필요. (이 invariant 자체는 SKILL.md 의 instruction prose 가 보장; setup-qg.sh 안에 `cd "$1"` 같은 우회 코드를 추가하면 안 됨 — Forbidden.)
 - `hooks/stop-hook.py:parse_state_file()` 에 `project_dir` 키 처리:
   - 존재 시 state["project_dir"] = 값.
   - 누락 시 (v1.12.x state file): `state["project_dir"] = os.getcwd()` + stderr 경고 `"⚠️ Quality Gates: state file lacks project_dir (v1.12.x schema?); defaulting to current process cwd"`. 패턴은 stop-hook.py L114-120 의 `gate3_resolution_iter` 처리와 동일.
@@ -193,8 +217,11 @@ echo "y = 1" > foo.py && git add . && git commit -q -m "add foo"
 /qg gate2
 
 # Step 1 — codex-reviewer 가 foo.py 인식 (transcript inspection)
-# Transcript 경로: ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl
-TRANSCRIPT="$(ls -t ~/.claude/projects/-tmp-qg-wt-test-wt-feat/*.jsonl | head -1)"
+# Transcript 경로 탐색 (round 2 Issue [e2b8c4a1] — macOS /tmp ↔ /private/tmp symlink 회피)
+TRANSCRIPT="$(find ~/.claude/projects -name '*.jsonl' -path '*wt-feat*' -newer /tmp/qg-wt-test -print 2>/dev/null | sort | tail -1)"
+if [ -z "$TRANSCRIPT" ]; then
+  echo "FAIL: no transcript found for wt-feat session"; exit 1
+fi
 python3 -c "
 import sys, json
 with open('$TRANSCRIPT') as f:
@@ -223,7 +250,7 @@ grep -q "missing 'cwd'" ~/.claude/logs/*.log && echo "FAIL: fallback warning emi
 |---|---|---|
 | `plugins/quality-gates/skills/quality-pipeline/SKILL.md` | 6개 dispatch 블록 prompt 에 `project_dir:` 라인 추가 | +6 |
 | `plugins/quality-gates/agents/scout.md` | Inputs `project_dir` + Forbidden | +4 |
-| `plugins/quality-gates/agents/codex-reviewer.md` | Inputs `project_dir` + Forbidden + bash 5개 fix (guard, cd, REPO_ROOT 단순화, 2개 plugin script path) | +10, -4 |
+| `plugins/quality-gates/agents/codex-reviewer.md` | Inputs `project_dir` + Forbidden + bash 5개 fix (guard, cd, REPO_ROOT 단순화, 2개 plugin script path) + 기존 Forbidden 섹션의 `-C "$REPO_ROOT"` 멘션이 "project_dir 의 alias" 임을 명시하는 한 줄 추가 (round 2 Issue [f1d3a9c7] — 의미 변화 명시) | +12, -4 |
 | `plugins/quality-gates/agents/adversarial.md` | Inputs `project_dir` + Forbidden | +4 |
 | `plugins/quality-gates/agents/synthesizer.md` | Inputs `project_dir` + Forbidden | +4 |
 | `plugins/quality-gates/agents/test-scope-validator.md` | Inputs `project_dir` + Forbidden | +4 |
@@ -276,14 +303,15 @@ AC8 의 shell block 그대로 실행. 3개 OK 라인 (transcript / state-in-work
 
 ## 10. Metadata
 
-- **Status**: draft round 2 — spec-reviewer round 1 12 issues 반영 완료
+- **Status**: draft round 3 — spec-reviewer round 1 (12 issues) + round 2 (7 new issues from fix authoring) 모두 반영 완료
 - **Estimated implementation time**: 5~6 hours (18 파일, 6 단정 신규 unit test, e2e 검증)
 - **Risk level**: low–medium (대다수 사용자 no-op; state file schema 추가는 backward-compat 처리됨; gate boundary propagation 은 신규 영역이므로 단위 테스트 필수)
 - **Plugin version target**: `quality-gates 1.13.0`
 - **Dependencies**: 없음 (다른 플러그인 영향 없음)
 - **Spec review history**:
   - Round 0: brainstorming session 2026-05-16, claude-opus-4-7
-  - Round 1: spec-distill:spec-reviewer adversarial review — 12 issues raised (2 critical, 5 major, 4 minor, 1 block); all addressed in round 2
+  - Round 1: spec-distill:spec-reviewer adversarial review — 12 issues (2 critical, 5 major, 4 minor, 1 block); all addressed in round 2
+  - Round 2: spec-distill:spec-reviewer second-pass — 7 new issues introduced by round-1 fix-authoring (0 block, 3 high, 4 medium); all addressed in round 3
 - **Forbidden patterns invoked**: trivia-ceremony 회피 (18개 파일 → 정상 minor); polite-stop 방지 (concrete next-action §11 명시)
 
 ## 11. Concrete Next Action
@@ -295,7 +323,7 @@ writing-plans skill 호출 시 다음 ordered sequence 로 implementation plan �
 2. `hooks/stop-hook.py:parse_state_file()` 에 `project_dir` 필드 처리 (existing → use; missing → fallback + warning).
 3. `hooks/stop-hook.py:build_gate_prompt()` 의 3개 gate 분기 (gate 1/2/3) 모두에 `f"  project_dir: {state.get('project_dir', os.getcwd())}\n"` 라인 추가.
 4. `tests/test_stop_hook_unit.py` 에 project_dir 전파 case 추가.
-5. (이 시점에서 `bash tests/test_stop_hook_unit.py` PASS — Phase A 완료 검증.)
+5. (이 시점에서 `python3 plugins/quality-gates/tests/test_stop_hook_unit.py` PASS — Phase A 완료 검증.) **(round 2 Issue [a5c2d6f8] — Python 파일, `bash` 아닌 `python3`)**
 
 ### Phase B — Hook cwd 정규화 (B1/B2/B3 fix)
 6. `hooks/stop-hook.py`: `ROOT` 상수 제거, `_state_root(hook_input)` helper 추가, `state_file_for` signature 갱신, 모든 호출처 갱신.
