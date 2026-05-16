@@ -91,7 +91,8 @@ case "${1:-}" in
     esac
     [[ -d "$target" ]] || exit 0  # idempotent
     git worktree remove --force "$target" 2>/dev/null \
-      || rm -rf "$target"  # fallback when git lost track
+      || rm -rf "$target" \
+      || die "rm -rf fallback also failed: $target"  # fallback when git lost track
     ;;
   *)
     die "unknown subcommand: ${1:-}"
