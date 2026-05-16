@@ -166,7 +166,8 @@ REPO=$(make_repo feat-i)
   || fail "branch changed"
 rm -rf "$REPO"
 
-# (AC6–AC8, AC10–AC11 appended in later tasks)
+# (AC8 lives in test_stop_hook_worktree_cleanup.py; AC12 is exercised by
+#  test_branch_worktree.sh AC2 via the project_dir frontmatter assertion.)
 
 echo
 echo "Result: $PASS passed, $FAIL failed"
