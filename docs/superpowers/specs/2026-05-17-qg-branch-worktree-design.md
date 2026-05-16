@@ -88,9 +88,9 @@ git worktree add --detach "$WORKTREE_PATH" "$TARGET_BRANCH"
 - 이미 존재하면 `git worktree list`로 확인 후 reuse (idempotent)
 
 **setup-qg.sh invocation**:
-- worktree 생성 후 `cd "$WORKTREE_PATH"` 한 다음 setup-qg.sh를 invoke
-- setup-qg.sh는 `pwd`를 `project_dir`로 frozen → state file이 worktree 안에 살게 됨
-- 이후 모든 hook과 agent dispatch는 v1.14.0 contract에 따라 그 `project_dir`을 따라감
+- setup-qg.sh는 **main repo cwd에서 실행** (Stop hook의 payload cwd가 main repo이므로 state path를 찾을 수 있어야 함).
+- `branch <name>` 모드일 때 setup-qg.sh가 내부적으로 `qg-worktree.sh create`를 호출해 worktree를 만들고, 그 path를 받아 state frontmatter의 `project_dir`로 **worktree-abs-path**를 freeze. (기본 경로에서는 `pwd`였음.)
+- 결과: state file은 `<main-repo>/.claude/quality-gates/<session-id>/pipeline.md`에 존재하고, 그 안의 `project_dir: <worktree>`가 Gate 2/3 agent dispatch prompt에 주입되어 agent들이 worktree에서 diff/리뷰 수행. v1.14.0 contract의 자연스러운 확장.
 
 **Cleanup 정책**:
 
@@ -144,7 +144,7 @@ v1.14.x state file은 두 필드 없음 → stop-hook의 `parse_state_file()`은
 **테스트 가능한 시나리오**:
 
 - **AC1**: 기존 `/qg branch` (인자 없음) 호출이 v1.14.0과 동일하게 동작 (회귀 가드).
-- **AC2**: `/qg branch <존재하는-브랜치>` 호출 시 `.claude/quality-gates/worktrees/<name>-<sid>/` 디렉토리 생성, 그 안에서 setup-qg.sh가 실행되어 `pipeline.md`의 `project_dir`이 worktree path와 일치.
+- **AC2**: `/qg branch <존재하는-브랜치>` 호출 시 `<main-repo>/.claude/quality-gates/worktrees/<name>-<sid>/` 디렉토리에 detached worktree 생성. State file은 `<main-repo>/.claude/quality-gates/<session-id>/pipeline.md`에 작성되며, 그 frontmatter의 `project_dir`은 worktree absolute path와 일치. `worktree_path`와 `target_branch` 필드도 채워짐.
 - **AC3**: `/qg branch <존재하지-않는-브랜치>` → exit code 2, stderr에 "not found" 메시지.
 - **AC4**: `/qg branch ../evil` → exit code 2, stderr에 "Invalid branch name" 메시지.
 - **AC5**: 같은 세션에서 `/qg branch <name>` 두 번 호출 → 두 번째는 기존 worktree reuse, stderr에 "Reusing existing worktree" 메시지.
