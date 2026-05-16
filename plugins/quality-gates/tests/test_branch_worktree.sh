@@ -54,7 +54,67 @@ tb=$(awk -F'"' '/^target_branch:/{print $2}' "$state")
   || fail "target_branch wrong: $tb"
 rm -rf "$REPO"
 
-# (AC3–AC11 appended in later tasks)
+# --- AC3: nonexistent branch ---
+echo "[AC3] nonexistent branch"
+REPO=$(make_repo feat-c)
+out=$(cd "$REPO" && CLAUDE_CODE_SESSION_ID=ac3session12 \
+        "$SETUP" branch noexist 2>&1 >/dev/null) || true
+[ ! -f "$REPO/.claude/quality-gates/ac3session12/pipeline.md" ] \
+  && pass "no state file on failure" \
+  || fail "state file leaked"
+echo "$out" | grep -qi "not found\|failed" \
+  && pass "error message present" \
+  || fail "no error message: $out"
+rm -rf "$REPO"
+
+# --- AC4: path traversal in name ---
+echo "[AC4] path traversal name"
+REPO=$(make_repo feat-d)
+out=$(cd "$REPO" && CLAUDE_CODE_SESSION_ID=ac4session12 \
+        "$SETUP" branch ../evil 2>&1 >/dev/null) || true
+echo "$out" | grep -qi "invalid\|dotdot\|sanitize\|not found\|failed" \
+  && pass "rejected with message" \
+  || fail "no error message: $out"
+rm -rf "$REPO"
+
+# --- AC5: idempotent reuse ---
+echo "[AC5] idempotent reuse"
+REPO=$(make_repo feat-e)
+(cd "$REPO" && CLAUDE_CODE_SESSION_ID=ac5session12 "$SETUP" branch feat-e >/dev/null)
+state="$REPO/.claude/quality-gates/ac5session12/pipeline.md"
+wpath1=$(awk -F'"' '/^worktree_path:/{print $2}' "$state")
+rm -f "$state"  # simulate re-run within same session
+(cd "$REPO" && CLAUDE_CODE_SESSION_ID=ac5session12 "$SETUP" branch feat-e \
+   2> "$REPO/stderr.txt" >/dev/null)
+wpath2=$(awk -F'"' '/^worktree_path:/{print $2}' "$state")
+[ "$wpath1" = "$wpath2" ] && [ -n "$wpath1" ] && pass "same worktree path" \
+  || fail "paths differ: $wpath1 vs $wpath2"
+grep -q "reusing existing" "$REPO/stderr.txt" \
+  && pass "reuse message logged" \
+  || fail "no reuse message in stderr"
+rm -rf "$REPO"
+
+# --- AC9: kill switch ---
+echo "[AC9] DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1"
+REPO=$(make_repo feat-f)
+out=$(cd "$REPO" && CLAUDE_CODE_SESSION_ID=ac9session12 \
+        DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1 \
+        "$SETUP" branch feat-f 2>&1 >/dev/null) || true
+echo "$out" | grep -qi "disabled" \
+  && pass "kill switch message" \
+  || fail "no kill switch message: $out"
+[ ! -f "$REPO/.claude/quality-gates/ac9session12/pipeline.md" ] \
+  && pass "kill switch prevented state" \
+  || fail "state created despite kill switch"
+# Legacy /qg branch (no name) still works under the kill switch
+(cd "$REPO" && CLAUDE_CODE_SESSION_ID=ac9bsession \
+   DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1 \
+   "$SETUP" branch >/dev/null) \
+  && pass "kill switch does not affect legacy /qg branch" \
+  || fail "kill switch killed legacy mode"
+rm -rf "$REPO"
+
+# (AC6–AC8, AC10–AC11 appended in later tasks)
 
 echo
 echo "Result: $PASS passed, $FAIL failed"

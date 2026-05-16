@@ -131,14 +131,17 @@ fi
 WORKTREE_PATH=""
 if [[ "$BRANCH_MODE" == "true" ]] && [[ -n "$TARGET_BRANCH" ]]; then
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  if ! WORKTREE_PATH="$("$SCRIPT_DIR/qg-worktree.sh" create "$TARGET_BRANCH" "$SESSION_ID" 2>&1)"; then
-    # qg-worktree.sh wrote diagnostics to its stderr; we captured them above.
+  _wt_stderr_tmp=$(mktemp)
+  if ! WORKTREE_PATH="$("$SCRIPT_DIR/qg-worktree.sh" create "$TARGET_BRANCH" "$SESSION_ID" 2>"$_wt_stderr_tmp")"; then
     echo "❌ Quality Gates: worktree creation failed" >&2
-    echo "$WORKTREE_PATH" >&2  # contains the diagnostic from qg-worktree
+    cat "$_wt_stderr_tmp" >&2
+    rm -f "$_wt_stderr_tmp"
     exit 1
   fi
-  # qg-worktree may have written "reusing existing worktree" to stderr that got captured.
-  # The last line of stdout is the absolute path. Extract it cleanly:
+  # Forward any advisory stderr (e.g. "reusing existing worktree") to our own stderr.
+  [[ -s "$_wt_stderr_tmp" ]] && cat "$_wt_stderr_tmp" >&2
+  rm -f "$_wt_stderr_tmp"
+  # stdout is the absolute worktree path (single line).
   WORKTREE_PATH="$(printf '%s\n' "$WORKTREE_PATH" | tail -n1)"
 fi
 
