@@ -978,6 +978,19 @@ def main():
         "gate3_needs_resolution", "gate3_repeat_detected",
     }
 
+    # Surface worktree path to user on non-terminal user-choice transitions so they
+    # know where the preserved worktree is.
+    USER_CHOICE_TYPES_FOR_HINT = {
+        "gate2_user_choice", "max_gate2_exceeded", "gate3_fail",
+        "gate3_needs_resolution", "gate3_repeat_detected",
+    }
+    if state.get("worktree_path") and transition["type"] in USER_CHOICE_TYPES_FOR_HINT:
+        print(
+            f"[quality-gates] worktree preserved at {state['worktree_path']} — "
+            "remove manually with `git worktree remove` after handling.",
+            file=sys.stderr,
+        )
+
     if transition["type"] in USER_CHOICE_TYPES:
         prompt = build_special_prompt(
             transition["type"], state, gate_results,

@@ -133,6 +133,33 @@ def test_no_worktree_path_no_op():
         assert result.returncode == 0, f"legacy state errored: stdout={result.stdout!r} stderr={result.stderr!r}"
 
 
+def test_gate3_fail_preserves_worktree():
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, wt, _ = make_repo_with_worktree(Path(tmp))
+        sid = "gate3failsess12"
+        # status must be gate3_running so hook routes through Gate 3 logic
+        write_state(repo, sid, str(wt), status="gate3_running")
+        signal = '<qg-signal gate="3" verdict="FAIL" summary="" />'
+        result = run_hook(repo, sid, signal)
+        assert wt.exists(), (
+            f"worktree must persist on gate3_fail. "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
+
+
+def test_gate2_user_choice_preserves_worktree():
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, wt, _ = make_repo_with_worktree(Path(tmp))
+        sid = "gate2userses12X"
+        write_state(repo, sid, str(wt), status="gate2_running")
+        signal = '<qg-signal gate="2" verdict="NEEDS_RESTART" summary="" />'
+        result = run_hook(repo, sid, signal)
+        assert wt.exists(), (
+            f"worktree must persist on gate2_user_choice. "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        )
+
+
 if __name__ == "__main__":
     test_complete_removes_worktree()
     print("test_complete_removes_worktree passed")
@@ -142,4 +169,8 @@ if __name__ == "__main__":
     print("test_keep_env_preserves_worktree passed")
     test_no_worktree_path_no_op()
     print("test_no_worktree_path_no_op passed")
+    test_gate3_fail_preserves_worktree()
+    print("test_gate3_fail_preserves_worktree passed")
+    test_gate2_user_choice_preserves_worktree()
+    print("test_gate2_user_choice_preserves_worktree passed")
     print("All stop-hook worktree cleanup tests passed.")
