@@ -23,6 +23,7 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **§5.3 (Categorical signal, no numeric scoring)** (v1.9.0) — `test-scope-validator`는 정확히 4-way enum 분류 (`aligned` / `outdated-suspicion` / `cherry-pick-suspicion` / `unclear`)만 emit. percentage, confidence, X/Y rating 모두 금지. summary의 counter 정수 (`1 aligned, 0 outdated…`) 는 허용. devbrew §5.3 "수치 스코어링 ban" instantiation.
 - **Law 2 strengthening — model-family separation.** Optional `codex-reviewer` agent (when Codex CLI is detected) runs review in a separate process with a different model family (OpenAI vs Anthropic) and an OS-level read-only sandbox, giving 3-layer reviewer-writer isolation: `disallowedTools` + narrow `Bash` allowlist + `codex -s read-only`.
 - **Law 2 (3-layer isolation, v1.11.0/v1.12.0)** — `codex-reviewer`의 3-layer isolation: (1) frontmatter `allowedTools`/`disallowedTools` camelCase deny/allow whitelist (AC1 fix, v1.11.1에서 복구), (2) narrow `Bash` allowlist (실제 키 `allowedTools`), (3) `codex exec -s read-only` OS-level sandbox. Layer 1 없이 Layer 2/3는 불완전 — 세 layer가 함께 물리적 격리를 구성.
+- **Law 2 (Writer ≠ Reviewer, frontmatter scoping)** (v1.13.0) — `security-reviewer` agent가 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언. Phase 1 always-run reviewer 중 4번째로 추가되며, kill switch `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`로 사용자가 disable 가능 (Plugin Shape — 모든 reviewer는 opt-out 가능).
 - **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `hooks/session-start-advisor.py` frontmatter scanner (AC14): SessionStart마다 모든 agent 파일의 frontmatter key를 kebab-case drift 검사. `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — CI에서 C1 종류 (kebab-case 잘못된 키) drift를 자동 차단. 이 두 mechanism이 함께 "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation.
 
 ## 구조
@@ -38,7 +39,8 @@ quality-gates/
 │   ├── scout.md                 # Gate 2 Phase 0 — 모델 기반 dispatch planner
 │   ├── adversarial.md           # Gate 2 Phase 1.5 — false-positive hunter
 │   ├── synthesizer.md           # Gate 2 Phase 1.6 — finding dedupe/rank
-│   └── codex-reviewer.md        # Gate 2 Phase 1 — external OpenAI reviewer (Layer 2/3 isolation)
+│   ├── codex-reviewer.md        # Gate 2 Phase 1 — external OpenAI reviewer (Layer 2/3 isolation)
+│   └── security-reviewer.md     # Gate 2 Phase 1 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`
 ├── commands/
 │   ├── qg.md               # /qg slash command (--reset, --paths, branch flag 포함)
 │   └── cancel-qg.md        # /cancel-qg command

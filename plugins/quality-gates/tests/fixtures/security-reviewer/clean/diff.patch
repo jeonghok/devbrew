@@ -1,0 +1,10 @@
+diff --git a/app/format.py b/app/format.py
+index 0000003..0000004 100644
+--- a/app/format.py
++++ b/app/format.py
+@@ -3,6 +3,7 @@
+ def format_currency(amount: int) -> str:
+     """Format an integer cent value as USD with comma separators."""
+-    return f"${amount/100:,.2f}"
++    dollars = amount / 100
++    return f"${dollars:,.2f}"

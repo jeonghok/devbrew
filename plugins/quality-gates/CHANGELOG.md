@@ -3,6 +3,24 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.13.0] — 2026-05-16
+
+### Added
+
+- **Phase 1 always-run `security-reviewer` agent.** Code-level security review now runs on every Gate 2 invocation (all 3 depth tiers: quick / standard / deep). Hunts injection, authn/authz bypass, secrets, SSRF + path traversal, insecure deserialization, cryptographic misuse, raw-HTML escape hatches, and dependency manifest changes. Emits canonical finding YAML schema (`adversarial.md:22-30`). Persona declares `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` for Law 2 physical isolation; `cost_class: medium`; `model: inherit`.
+- **Kill switch `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`.** Mirrors codex-reviewer's `DEVBREW_DISABLE_QG_CODEX` pattern. Loud-logging graceful degradation: stderr emits `security-reviewer disabled via DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1` on activation; other Phase 1 reviewers continue to run.
+- **Structural tests.** `tests/test_security_reviewer_persona.sh` (frontmatter + schema keyword + role declaration grep) and `tests/test_security_reviewer_kill_switch.sh` (SKILL.md kill switch reference grep).
+- **Integration smoke fixtures.** `tests/fixtures/security-reviewer/{sql-concat,clean,expected}/` — opt-in, CI-non-blocking (LLM non-determinism).
+
+### Changed
+
+- **Phase 1 dispatch fan-out.** Phase 1 catalog grows by 1 (now: code-reviewer, silent-failure-hunter, feature-dev:code-reviewer, security-reviewer + conditional codex-reviewer). On `deep` depth with codex-reviewer available, `phase1_agents = 4` + `external_reviewers = 1` = 5, exceeding the AskUserQuestion fan-out gate (≥ 4) — users see an explicit confirm before parallel dispatch.
+- **Synthesizer suppression rule (`synthesizer.md` step 4).** Was: "Suppress entries where confidence < 7." Now: "Suppress entries where confidence < 7 AND severity != CRITICAL." Honors spec §4.4 "P0 + anchor 50 always reports" — a critical-impact finding surfaces even at low confidence. Applies to all Phase 1 reviewers (not just security-reviewer). Output section label updated to `### Suppressed (confidence < 7, severity != CRITICAL)`.
+
+### Security
+
+- New `security-reviewer` persona file is security-sensitive code per CLAUDE.md ("Persona 파일은 보안-민감 코드"). PRs weakening hunt categories, lowering anchored confidence rubric, or removing the forced-findings prohibition rule require security review.
+
 ## [1.12.0] — 2026-05-14
 
 ### Added
