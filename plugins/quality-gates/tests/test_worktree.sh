@@ -151,6 +151,15 @@ else
 fi
 rm -rf "$(dirname "$REPO")"
 
+# --- Test 8: agent.md Inputs contract drift guard (AC2, T8) ---
+for agent in scout adversarial synthesizer test-scope-validator security-reviewer codex-reviewer; do
+  if grep -q 'project_dir' "$PLUGIN_DIR/agents/$agent.md"; then
+    pass "T8: agents/$agent.md declares project_dir input"
+  else
+    fail "T8: agents/$agent.md missing project_dir input contract"
+  fi
+done
+
 # --- Summary ---
 echo
 echo "Results: $PASS passed, $FAIL failed"
