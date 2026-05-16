@@ -167,6 +167,57 @@ else
   pass "T7: codex-reviewer.md uses \${CLAUDE_PLUGIN_ROOT} (devbrew-portable)"
 fi
 
+# --- Test 5: SKILL.md prose contains project_dir in 5 dispatch blocks ---
+SKILL_MD="$PLUGIN_DIR/skills/quality-pipeline/SKILL.md"
+T5_FAIL=0
+for name in scout adversarial synthesizer test-scope-validator; do
+  if ! awk -v name="quality-gates:$name" '
+    $0 ~ name { found=NR }
+    found && NR <= found+15 && /project_dir:/ { ok=1; exit }
+    END { exit !ok }
+  ' "$SKILL_MD"; then
+    T5_FAIL=1
+    fail "T5: SKILL.md dispatch for $name lacks project_dir"
+  fi
+done
+if ! awk '/\*\*Agent D — security-reviewer\*\*/ { found=NR }
+        found && NR <= found+30 && /project_dir/ { ok=1; exit }
+        END { exit !ok }' "$SKILL_MD"; then
+  T5_FAIL=1
+  fail "T5: SKILL.md Agent D section lacks project_dir"
+fi
+[[ "$T5_FAIL" -eq 0 ]] && pass "T5: SKILL.md propagates project_dir to all 5 dispatch points"
+
+# --- Test 6: hooks read payload cwd (AST-based, not grep) ---
+T6_FAIL=0
+for hook in stop-hook.py post-tool-use-session-tracker.py session-start-advisor.py; do
+  if ! python3 -c "
+import ast, sys
+tree = ast.parse(open('$PLUGIN_DIR/hooks/$hook').read())
+found = False
+for node in ast.walk(tree):
+    if isinstance(node, ast.Call):
+        # Look for *.get('cwd') or *.get('cwd', ...)
+        if isinstance(node.func, ast.Attribute) and node.func.attr == 'get':
+            args = node.args
+            if args and isinstance(args[0], ast.Constant) and args[0].value == 'cwd':
+                found = True
+                break
+sys.exit(0 if found else 1)
+"; then
+    T6_FAIL=1
+    fail "T6: hooks/$hook does not call .get('cwd') anywhere"
+  fi
+done
+[[ "$T6_FAIL" -eq 0 ]] && pass "T6: all 3 hooks read payload cwd (AST verified)"
+
+# --- Test 9: setup-qg.sh writes project_dir to state frontmatter ---
+if grep -q '^project_dir:' "$PLUGIN_DIR/scripts/setup-qg.sh"; then
+  pass "T9: setup-qg.sh emits project_dir in state frontmatter"
+else
+  fail "T9: setup-qg.sh missing project_dir frontmatter write"
+fi
+
 # --- Summary ---
 echo
 echo "Results: $PASS passed, $FAIL failed"
