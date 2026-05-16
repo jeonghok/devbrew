@@ -106,3 +106,68 @@ class TestBuildSpecialPrompt(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# pytest-style tests for parse_state_file (AC6 — project_dir parsing)
+# ---------------------------------------------------------------------------
+
+def test_parse_state_file_reads_project_dir(tmp_path, capsys):
+    """parse_state_file surfaces project_dir from frontmatter (AC6)."""
+    state_file = tmp_path / "pipeline.md"
+    state_file.write_text("""---
+status: gate1_running
+current_gate: 1
+gate2_iteration: 0
+max_gate2_iterations: 5
+gate3_resolution_iter: 0
+last_gate3_needed_hash: ""
+max_gate3_resolutions: 3
+skip_runtime: false
+single_gate: null
+plan_file: "auto"
+pr_url: ""
+available_plugins: ""
+project_dir: "/Users/test/myproject/wt-feat"
+session_id: "abc123def456"
+started_at: "2026-05-16T10:00:00Z"
+---
+
+# state body
+""")
+    state, body = stop_hook.parse_state_file(str(state_file))
+    assert state is not None
+    assert state["project_dir"] == "/Users/test/myproject/wt-feat"
+
+
+def test_parse_state_file_missing_project_dir_falls_back_to_cwd(tmp_path, capsys, monkeypatch):
+    """v1.12.x state file lacks project_dir — fallback to os.getcwd() + stderr warning."""
+    monkeypatch.chdir(tmp_path)
+    state_file = tmp_path / "pipeline.md"
+    state_file.write_text("""---
+status: gate1_running
+current_gate: 1
+gate2_iteration: 0
+max_gate2_iterations: 5
+gate3_resolution_iter: 0
+last_gate3_needed_hash: ""
+max_gate3_resolutions: 3
+skip_runtime: false
+single_gate: null
+plan_file: "auto"
+pr_url: ""
+available_plugins: ""
+session_id: "abc123def456"
+started_at: "2026-05-16T10:00:00Z"
+---
+
+# state body
+""")
+    state, body = stop_hook.parse_state_file(str(state_file))
+    assert state is not None
+    # On macOS, monkeypatch.chdir + getcwd may return /private/var/... while tmp_path returns /var/...
+    # Compare resolved paths for cross-platform safety.
+    from pathlib import Path
+    assert Path(state["project_dir"]).resolve() == Path(tmp_path).resolve()
+    captured = capsys.readouterr()
+    assert "state file lacks project_dir" in captured.err

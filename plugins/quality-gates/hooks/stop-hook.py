@@ -139,6 +139,17 @@ def parse_state_file(path):
     if "last_gate3_needed_hash" not in state:
         state["last_gate3_needed_hash"] = ""
 
+    # Backward compatibility for v1.12.x → v1.13.0:
+    # - project_dir added in v1.13.0 to freeze pipeline coordinate at preflight.
+    # If absent (legacy state file), default to current process cwd so the
+    # pipeline continues rather than silently corrupting state. This mirrors
+    # the gate3_resolution_iter pattern above (per spec-reviewer R3 advisory).
+    if "project_dir" not in state or not state.get("project_dir"):
+        state["project_dir"] = os.getcwd()
+        print("⚠️  Quality Gates: state file lacks project_dir (v1.12.x schema?); "
+              "defaulting to current process cwd",
+              file=sys.stderr)
+
     # Convert boolean fields
     for field in ("skip_runtime",):
         state[field] = state.get(field, "false").lower() == "true"
