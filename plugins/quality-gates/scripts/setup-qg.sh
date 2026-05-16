@@ -15,12 +15,23 @@ PLAN_FILE="auto"
 PR_URL=""
 ENSURE_MODE="false"
 SESSION_ID=""
+BRANCH_MODE="false"
+TARGET_BRANCH=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     gate1|gate2|gate3)
       SINGLE_GATE="$1"
       shift
+      ;;
+    branch)
+      shift
+      # peek next token
+      if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]] && [[ ! "$1" =~ ^gate[123]$ ]]; then
+        TARGET_BRANCH="$1"
+        shift
+      fi
+      BRANCH_MODE="true"
       ;;
     --skip-runtime)
       SKIP_RUNTIME="true"
@@ -114,6 +125,21 @@ fi
 if [[ ! "$SESSION_ID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
   echo "❌ Quality Gates: session ID '$SESSION_ID' fails pattern guard ([A-Za-z0-9_-]{8,})." >&2
   exit 1
+fi
+
+# --- Branch worktree mode ---
+WORKTREE_PATH=""
+if [[ "$BRANCH_MODE" == "true" ]] && [[ -n "$TARGET_BRANCH" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if ! WORKTREE_PATH="$("$SCRIPT_DIR/qg-worktree.sh" create "$TARGET_BRANCH" "$SESSION_ID" 2>&1)"; then
+    # qg-worktree.sh wrote diagnostics to its stderr; we captured them above.
+    echo "❌ Quality Gates: worktree creation failed" >&2
+    echo "$WORKTREE_PATH" >&2  # contains the diagnostic from qg-worktree
+    exit 1
+  fi
+  # qg-worktree may have written "reusing existing worktree" to stderr that got captured.
+  # The last line of stdout is the absolute path. Extract it cleanly:
+  WORKTREE_PATH="$(printf '%s\n' "$WORKTREE_PATH" | tail -n1)"
 fi
 
 # --- Per-session paths ---
@@ -261,7 +287,18 @@ single_gate: ${SINGLE_GATE:-null}
 plan_file: "$PLAN_FILE"
 pr_url: "$PR_URL"
 available_plugins: "$AVAILABLE_PLUGINS"
-project_dir: "$(pwd)"
+project_dir: "${WORKTREE_PATH:-$(pwd)}"
+EOF
+
+# Conditionally include worktree fields only when a named branch was given.
+if [[ -n "$WORKTREE_PATH" ]]; then
+  cat >> "$TEMP_FILE" << EOF
+worktree_path: "${WORKTREE_PATH}"
+target_branch: "${TARGET_BRANCH}"
+EOF
+fi
+
+cat >> "$TEMP_FILE" << EOF
 session_id: "$SESSION_ID"
 started_at: "$TIMESTAMP"
 ---
