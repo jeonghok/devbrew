@@ -221,3 +221,27 @@ def test_build_gate_prompt_injects_project_dir_gate3():
     }
     prompt = stop_hook.build_gate_prompt(3, state, "")
     assert "project_dir: /Users/test/wt-feat" in prompt
+
+
+# ---------------------------------------------------------------------------
+# pytest-style tests for _state_root (AC-B1 — payload cwd path resolution)
+# ---------------------------------------------------------------------------
+
+def test_state_root_uses_payload_cwd(tmp_path):
+    """_state_root reads payload cwd, ignoring process cwd."""
+    hook_input = {"cwd": str(tmp_path)}
+    root = stop_hook._state_root(hook_input)
+    # macOS symlink-safe comparison
+    from pathlib import Path
+    assert Path(root).resolve() == (Path(tmp_path) / ".claude" / "quality-gates").resolve()
+
+
+def test_state_root_falls_back_to_getcwd_with_warning(capsys, monkeypatch, tmp_path):
+    """Missing cwd in payload triggers stderr warning + os.getcwd() fallback."""
+    monkeypatch.chdir(tmp_path)
+    hook_input = {}  # missing cwd
+    root = stop_hook._state_root(hook_input)
+    from pathlib import Path
+    assert Path(root).resolve() == (Path(tmp_path) / ".claude" / "quality-gates").resolve()
+    captured = capsys.readouterr()
+    assert "stop-hook payload missing 'cwd'" in captured.err

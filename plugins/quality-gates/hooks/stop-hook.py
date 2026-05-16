@@ -25,15 +25,25 @@ import shutil
 import sys
 import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 
 
 # --- Constants ---
 
-ROOT = ".claude/quality-gates"
+
+def _state_root(hook_input: dict) -> Path:
+    """Resolve state root from hook stdin payload cwd; fall back loudly."""
+    cwd = hook_input.get("cwd") if hook_input else None
+    if not cwd:
+        print("[quality-gates] stop-hook payload missing 'cwd'; "
+              "falling back to process cwd",
+              file=sys.stderr)
+        cwd = os.getcwd()
+    return Path(cwd) / ".claude" / "quality-gates"
 
 
-def state_file_for(session_id: str) -> str:
-    return f"{ROOT}/{session_id}/pipeline.md"
+def state_file_for(session_id: str, hook_input: dict) -> str:
+    return str(_state_root(hook_input) / session_id / "pipeline.md")
 
 
 GATE_NAMES = {
@@ -837,7 +847,7 @@ def main():
     session_id = hook_input.get("session_id", "")
     if not session_id:
         sys.exit(0)
-    state_file = state_file_for(session_id)
+    state_file = state_file_for(session_id, hook_input)
 
     # 1. Check state file exists
     if not os.path.exists(state_file):
