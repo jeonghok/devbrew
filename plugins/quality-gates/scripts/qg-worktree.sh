@@ -66,6 +66,33 @@ case "${1:-}" in
       || die "git worktree add failed for $branch"
     printf '%s' "$abs"; echo
     ;;
+  remove)
+    [[ $# -eq 2 ]] || die "usage: remove <abs-path>"
+    target="$2"
+    # Safety: only allow paths under <repo>/.claude/quality-gates/worktrees/
+    repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+    # Canonicalize repo_root to resolve symlinks (macOS /var → /private/var)
+    repo_root=$(cd "$repo_root" && pwd -P)
+    parent="$repo_root/.claude/quality-gates/worktrees"
+    # Canonicalize target by resolving its deepest existing ancestor.
+    # Walk up until we find an existing dir, resolve it, then reattach the rest.
+    t_path="$target" t_suffix=""
+    while [[ -n "$t_path" && ! -d "$t_path" ]]; do
+      t_suffix="/$(basename "$t_path")$t_suffix"
+      t_path=$(dirname "$t_path")
+    done
+    if [[ -d "$t_path" ]]; then
+      t_path=$(cd "$t_path" && pwd -P)
+    fi
+    target_real="$t_path$t_suffix"
+    case "$target_real" in
+      "$parent"/*) ;;
+      *) die "refuse to remove outside namespace: $target" ;;
+    esac
+    [[ -d "$target" ]] || exit 0  # idempotent
+    git worktree remove --force "$target" 2>/dev/null \
+      || rm -rf "$target"  # fallback when git lost track
+    ;;
   *)
     die "unknown subcommand: ${1:-}"
     ;;

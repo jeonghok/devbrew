@@ -93,6 +93,30 @@ WTPATH3=$(cd "$REPO" && "$WT" create release-1.0 "dotsid12345678" 2>/dev/null)
 
 rm -rf "$REPO"
 
+# --- remove ---
+echo "[remove]"
+
+REPO=$(mktemp -d)
+(cd "$REPO" && git init -q -b main && git config user.email t@t && \
+  git config user.name t && git commit -q --allow-empty -m init && \
+  git branch feat-y)
+WTPATH=$(cd "$REPO" && "$WT" create feat-y "remove-test12345" 2>/dev/null)
+[ -d "$WTPATH" ] || { fail "create precondition"; }
+
+(cd "$REPO" && "$WT" remove "$WTPATH") \
+  && [ ! -d "$WTPATH" ] && pass "remove deletes dir" \
+  || fail "remove failed or dir remains"
+
+# Remove a nonexistent path → exit 0 (best-effort)
+(cd "$REPO" && "$WT" remove "$REPO/.claude/quality-gates/worktrees/missing-12345678") \
+  && pass "remove missing is noop" || fail "remove missing errored"
+
+# Refuse outside-namespace paths (safety)
+(cd "$REPO" && "$WT" remove "/tmp" 2>/dev/null) \
+  && fail "removed outside namespace" || pass "outside namespace refused"
+
+rm -rf "$REPO"
+
 echo
 echo "Result: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
