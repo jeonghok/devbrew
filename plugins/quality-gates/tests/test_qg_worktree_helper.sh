@@ -32,6 +32,22 @@ long=$(printf 'a%.0s' {1..65})
 "$WT" sanitize "$long" >/dev/null 2>&1 && fail "65 chars accepted" \
   || pass "length cap enforced"
 
+# --- validate-branch ---
+echo "[validate-branch]"
+
+REPO=$(mktemp -d)
+(cd "$REPO" && git init -q -b main && git config user.email t@t && \
+  git config user.name t && git commit -q --allow-empty -m init && \
+  git branch real-branch)
+
+(cd "$REPO" && "$WT" validate-branch real-branch) \
+  && pass "existing branch ok" || fail "existing branch rejected"
+
+(cd "$REPO" && "$WT" validate-branch nonexistent 2>/dev/null) \
+  && fail "nonexistent accepted" || pass "nonexistent rejected"
+
+rm -rf "$REPO"
+
 # (further subcommand tests appended in later tasks)
 
 echo

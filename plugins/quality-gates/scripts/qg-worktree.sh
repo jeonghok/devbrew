@@ -34,6 +34,12 @@ case "${1:-}" in
     [[ $# -eq 2 ]] || die "usage: sanitize <name>"
     cmd_sanitize "$2"; echo  # trailing newline for shell convenience
     ;;
+  validate-branch)
+    [[ $# -eq 2 ]] || die "usage: validate-branch <name>"
+    git rev-parse --verify --quiet "refs/heads/$2" >/dev/null \
+      || git rev-parse --verify --quiet "$2" >/dev/null \
+      || die "branch not found: $2 (try \`git branch --all\`)"
+    ;;
   *)
     die "unknown subcommand: ${1:-}"
     ;;
