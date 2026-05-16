@@ -150,7 +150,7 @@ v1.14.x state file은 두 필드 없음 → stop-hook의 `parse_state_file()`은
 - **AC5**: 같은 세션에서 `/qg branch <name>` 두 번 호출 → 두 번째는 기존 worktree reuse, stderr에 "Reusing existing worktree" 메시지.
 - **AC6**: `/qg branch <name>` 후 정상 통과 → Stop hook이 `git worktree remove`로 정리, 다음 `git worktree list`에 해당 path 없음.
 - **AC7**: `/qg branch <name>` 후 `/cancel-qg` → worktree cleanup 동일.
-- **AC8**: `/qg branch <name>` 중 Gate 2 NEEDS_RESTART → worktree 보존, stdout에 "Worktree preserved at <path> — remove manually with `git worktree remove`" 문구.
+- **AC8**: `/qg branch <name>` 중 Gate 2 NEEDS_RESTART → worktree 보존. Stop hook이 stderr에 "[quality-gates] worktree preserved at <path> — remove manually with `git worktree remove` after handling." 안내를 emit (Claude Code UI에서 user-visible).
 - **AC9**: `DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1 /qg branch <name>` → exit 1, kill switch 메시지. 기존 `/qg branch` (인자 없음)는 영향 없음.
 - **AC10**: `DEVBREW_QG_KEEP_WORKTREE=1 /qg branch <name>` 통과 → worktree 보존.
 - **AC11**: 본 작업트리의 `git status`는 `/qg branch <name>` 전후로 동일 (작업트리 무손상).

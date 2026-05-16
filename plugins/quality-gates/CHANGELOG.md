@@ -9,7 +9,7 @@
 - `/qg branch <name>` — 다른 브랜치를 격리된 detached worktree에서 검사하는 새 surface. 현재 작업트리 무손상.
 - `scripts/qg-worktree.sh` — worktree 라이프사이클 헬퍼 (`sanitize` / `validate-branch` / `create` / `remove` subcommands).
 - State file schema fields: `worktree_path`, `target_branch` (worktree 모드일 때만 frontmatter에 emit).
-- `tests/test_qg_worktree_helper.sh` — 19 unit cases (sanitize 6 + validate-branch 3 + create 6 + remove 4).
+- `tests/test_qg_worktree_helper.sh` — 18 unit cases (sanitize 6 + validate-branch 3 + create 6 + remove 3).
 - `tests/test_branch_worktree.sh` — 20 integration cases (AC1–AC11 from spec).
 - `tests/test_stop_hook_worktree_cleanup.py` — 6 unit cases (complete/abort/KEEP/legacy + AC8 preservation).
 - `tests/test_session_end_cleanup.py` — 2 new cases for dangling worktree safety net.
