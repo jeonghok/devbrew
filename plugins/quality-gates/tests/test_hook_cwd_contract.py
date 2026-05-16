@@ -64,6 +64,34 @@ def test_relative_file_path_resolves_against_payload_cwd():
             f"Expected resolved {expected_abs} in state; got:\n{content}"
 
 
+ADVISOR_HOOK = PLUGIN_DIR / "hooks" / "session-start-advisor.py"
+
+
+def test_session_start_advisor_uses_payload_cwd(tmp_path):
+    """advisor scans plugins/*/agents/*.md relative to payload cwd."""
+    # Create a fake plugin layout under tmp_path with a bad-key agent file
+    agent_path = tmp_path / "plugins" / "fake-plugin" / "agents" / "test.md"
+    agent_path.parent.mkdir(parents=True)
+    agent_path.write_text(
+        "---\nname: test\nallowed-tools: [Read]\n---\nbody\n"
+    )
+
+    proc = subprocess.run(
+        ["python3", str(ADVISOR_HOOK)],
+        input=json.dumps({"cwd": str(tmp_path), "session_id": "advisor-test-01"}),
+        capture_output=True,
+        text=True,
+        cwd="/tmp",  # different from payload cwd to prove payload wins
+        timeout=10,
+    )
+    # The kebab-case warning should mention the agent under payload cwd
+    assert "fake-plugin/agents/test.md" in proc.stderr, \
+        f"Advisor didn't scan payload cwd; stderr: {proc.stderr}"
+
+
+# Note: test_session_start_advisor_uses_payload_cwd uses pytest's tmp_path fixture
+# and is intentionally NOT included in the __main__ block below.
+# Run via: python3 -m pytest plugins/quality-gates/tests/test_hook_cwd_contract.py
 if __name__ == "__main__":
     test_state_file_under_payload_cwd()
     test_relative_file_path_resolves_against_payload_cwd()

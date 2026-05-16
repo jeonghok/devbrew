@@ -67,11 +67,11 @@ def _subfeature_disabled(feature: str) -> bool:
 
 
 # AC14: frontmatter scan sub-feature
-def _scan_agent_frontmatter_keys() -> None:
+def _scan_agent_frontmatter_keys(payload: dict) -> None:
     """plugins/*/agents/*.md 스캔, kebab-case allowed-tools/disallowed-tools 발견 시 advice."""
     if _subfeature_disabled("frontmatter-scan"):
         return
-    repo_root = Path.cwd()
+    repo_root = Path(payload.get("cwd") or os.getcwd())
     for agent_file in repo_root.glob("plugins/*/agents/*.md"):
         try:
             parts = agent_file.read_text().split("---", 2)
@@ -96,12 +96,15 @@ def _verbose() -> bool:
     return os.environ.get("DEVBREW_QG_GC_VERBOSE") == "1"
 
 
-def _self_session_id() -> str:
-    try:
-        payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, OSError):
-        return ""
+def _self_session_id(payload: dict) -> str:
     return payload.get("session_id", "") or ""
+
+
+def _load_payload() -> dict:
+    try:
+        return json.load(sys.stdin)
+    except (json.JSONDecodeError, OSError):
+        return {}
 
 
 def _legacy_present() -> bool:
@@ -155,7 +158,8 @@ def _emit_self_advisory(state_text: str) -> None:
 def main() -> int:
     if _disabled():
         return 0
-    self_sid = _self_session_id()
+    payload = _load_payload()
+    self_sid = _self_session_id(payload)
     if _legacy_present():
         sys.stdout.write(
             "[quality-gates] Legacy v1.5.0 state files detected. "
@@ -171,7 +175,7 @@ def main() -> int:
                 text = ""
             if text:
                 _emit_self_advisory(text)
-    _scan_agent_frontmatter_keys()
+    _scan_agent_frontmatter_keys(payload)
     if _verbose():
         n = _sibling_active_count(self_sid)
         if n > 0:
