@@ -46,6 +46,11 @@ REPO=$(mktemp -d)
 (cd "$REPO" && "$WT" validate-branch nonexistent 2>/dev/null) \
   && fail "nonexistent accepted" || pass "nonexistent rejected"
 
+# Regression: tag is not a branch
+(cd "$REPO" && git tag v1) >/dev/null
+(cd "$REPO" && "$WT" validate-branch v1 2>/dev/null) \
+  && fail "tag accepted as branch" || pass "tag rejected"
+
 rm -rf "$REPO"
 
 # (further subcommand tests appended in later tasks)

@@ -37,7 +37,6 @@ case "${1:-}" in
   validate-branch)
     [[ $# -eq 2 ]] || die "usage: validate-branch <name>"
     git rev-parse --verify --quiet "refs/heads/$2" >/dev/null \
-      || git rev-parse --verify --quiet "$2" >/dev/null \
       || die "branch not found: $2 (try \`git branch --all\`)"
     ;;
   *)
