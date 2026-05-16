@@ -22,6 +22,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -937,8 +938,33 @@ def main():
             }))
             sys.exit(0)
 
-    # 9. Handle completion/abort — remove session folder entirely and allow exit.
+    # 9. Handle completion/abort — cleanup worktree (if any), then remove state folder.
     if transition["type"] in ("complete", "abort"):
+        worktree_path = state.get("worktree_path", "")
+        keep_env = os.environ.get("DEVBREW_QG_KEEP_WORKTREE", "0") == "1"
+        if worktree_path and not keep_env:
+            # Use qg-worktree.sh remove for namespace-safe deletion.
+            plugin_root = Path(__file__).resolve().parent.parent
+            wt_script = plugin_root / "scripts" / "qg-worktree.sh"
+            try:
+                subprocess.run(
+                    [str(wt_script), "remove", worktree_path],
+                    cwd=hook_input.get("cwd") or os.getcwd(),
+                    timeout=30,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired) as e:
+                print(
+                    f"⚠️  Quality Gates: worktree cleanup failed for "
+                    f"{worktree_path}: {e}",
+                    file=sys.stderr,
+                )
+        elif worktree_path and keep_env:
+            print(
+                f"[quality-gates] DEVBREW_QG_KEEP_WORKTREE=1; preserved worktree at "
+                f"{worktree_path}",
+                file=sys.stderr,
+            )
         folder = os.path.dirname(state_file)
         shutil.rmtree(folder, ignore_errors=True)
         sys.exit(0)
