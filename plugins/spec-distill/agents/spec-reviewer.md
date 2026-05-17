@@ -52,6 +52,24 @@ description: >
 | `untestable_AC` | AC가 verification 명령으로 검증 불가 | high |
 | `scope_creep` | Non-goals와 Goals 충돌, 또는 한 spec에 multiple subsystem | medium |
 
+### Design Mode Branch (v0.4.0)
+
+입력 spec 파일이 `*-design.md`로 끝나면 (또는 dispatcher가 `mode: design`을 prompt에 명시한 경우) 다음 분기 적용:
+
+- **NOT applied (skip)**: `missing_section` (11 필수 섹션) + locked_decisions schema 검사. design.md는 brainstorming이 산출하는 자유 형식 — spec.md schema 강제하지 않음 (philosophy LD7 승계).
+- **Applied (design checklist 6 카테고리)**:
+
+| Category | What to flag | Severity |
+|---|---|---|
+| `placeholder` | "TBD", "TODO", "FIXME", "fill in later" 등 미완 표현 | high |
+| `ambiguity` | "robust", "works correctly", "fast", "as needed" 등 측정 불가 키워드 (ambiguity-blacklist.txt 참고) | high |
+| `scope_creep` | 한 design에 여러 독립 subsystem이 묶여 있어 single implementation plan으로 분해 곤란 | medium |
+| `approaches_comparison` | 2-3개 대안 + tradeoff 제시 없이 단일 안만 기술됨 | medium |
+| `isolation` | 컴포넌트 boundary / interface 정의가 모호해서 단위 테스트 / 변경 격리 불가능 | high |
+| `testing` | Verification Plan 부재 또는 "manual check"만 — 자동 검증 절차 없음 | high |
+
+design mode 결과에서도 위와 동일한 Output 형식 (Status / Issues / Recommendations / Stagnation_signal) 준수. spec mode와 동일한 `issue_id` 알고리즘 (`sha256_short(category + ":" + target_section)`). `affects_locked_decisions:` 필드는 design.md에 frontmatter `locked_decisions:`가 없으면 `[]` (빈 리스트, *반드시 emit*).
+
 ### Locked decisions 매핑 (G3, AC2)
 
 매 issue에 대해 `affects_locked_decisions: [LD ids]` 필드를 emit. 매핑 규칙:
