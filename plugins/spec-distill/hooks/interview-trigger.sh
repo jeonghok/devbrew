@@ -8,13 +8,19 @@
 set -u
 set -o pipefail
 
-# Kill switches (devbrew convention; colon-anchored to prevent prefix-injection)
+# Kill switches (CSV — canonical per quality-gates v1.6.x)
 if [[ "${DEVBREW_DISABLE_SPEC_DISTILL:-}" == "1" ]]; then
   exit 0
 fi
-case ":${DEVBREW_SKIP_HOOKS:-}:" in
-  *":spec-distill:UserPromptSubmit:"*) exit 0 ;;
-esac
+if [[ -n "${DEVBREW_SKIP_HOOKS:-}" ]]; then
+  IFS=',' read -ra _skip_tokens <<< "$DEVBREW_SKIP_HOOKS"
+  for _tok in "${_skip_tokens[@]}"; do
+    case "${_tok// /}" in
+      spec-distill:UserPromptSubmit) exit 0 ;;
+    esac
+  done
+  unset _skip_tokens _tok
+fi
 
 # Read JSON payload from stdin
 payload=$(cat 2>/dev/null || true)
