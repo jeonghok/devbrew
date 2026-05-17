@@ -331,9 +331,11 @@ def compute_no_signal_transition(state, max_no_signal):
     if max_no_signal <= 0:
         return {"type": "continue"}
     cur = int(state.get("consecutive_no_signal", 0))
-    new_count = cur + 1
     if cur >= max_no_signal:
-        return {"type": "no_signal_max", "new_count": new_count}
+        # Ceiling — don't overcount. State already past threshold; persist
+        # cur (not cur+1) so user-facing prompt and on-disk value agree.
+        return {"type": "no_signal_max", "new_count": cur}
+    new_count = cur + 1
     return {"type": "no_signal_inc", "new_count": new_count}
 
 
@@ -617,8 +619,13 @@ def update_state_file(path, state, signal, transition):
 
 def _persist_no_signal_counter(path, new_value):
     """Update consecutive_no_signal in state frontmatter atomically."""
-    with open(path, "r") as f:
-        content = f.read()
+    try:
+        with open(path, "r") as f:
+            content = f.read()
+    except (IOError, OSError) as e:
+        print(f"⚠️  Quality Gates: _persist_no_signal_counter: cannot read {path}: {e}",
+              file=sys.stderr)
+        raise
     new_content, n = re.subn(
         r"^consecutive_no_signal:.*$",
         f"consecutive_no_signal: {int(new_value)}",
@@ -1033,6 +1040,10 @@ def main():
 
     if not signal:
         ns_transition = compute_no_signal_transition(state, max_no_signal)
+        # Mirror the to-be-persisted value into in-memory state so that
+        # build_special_prompt's fmt dict sees the post-increment count.
+        if "new_count" in ns_transition:
+            state["consecutive_no_signal"] = ns_transition["new_count"]
         if ns_transition["type"] == "no_signal_max":
             prompt = build_special_prompt("no_signal_max", state, gate_results)
             sys_msg = build_system_message(state, {"type": "no_signal_max"})

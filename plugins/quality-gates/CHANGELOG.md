@@ -3,6 +3,13 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.17.1] — 2026-05-18
+
+### Fixed
+- `_persist_no_signal_counter`: wrap initial `open()` in `(IOError, OSError)` handler to match `update_state_file`'s established pattern.
+- `compute_no_signal_transition`: ceiling-value semantics — `no_signal_max` branch now returns `new_count = cur` (not `cur+1`) so persisted and user-facing counter values agree.
+- `main()` no-signal branch: mirror `new_count` into in-memory `state["consecutive_no_signal"]` before `build_special_prompt` so fmt rendering uses the post-increment count.
+
 ## [1.17.0] — 2026-05-17
 
 ### Added
