@@ -581,7 +581,7 @@ AskUserQuestion({
 
 Based on the answer:
 - **Proceed:** continue to parallel dispatch.
-- **phase1-only:** narrow `final_dispatch_list` to Phase 1 agents only; record "Phase 2 skipped: user requested phase1-only" in the report.
+- **phase1-only:** narrow `final_dispatch_list` to Phase 1 agents + security-reviewer (drop Phase 2 agents and codex-reviewer); record "Phase 2 skipped: user requested phase1-only" in the report.
 - **Abort:** emit `<qg-signal action="abort" reason="user declined fan-out" />` and stop.
 
 For lists with `len < 4`, skip the gate and dispatch directly.

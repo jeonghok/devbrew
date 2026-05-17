@@ -6,7 +6,7 @@
 ## [1.16.0] — 2026-05-18
 
 ### Changed
-- SKILL.md Phase 1 dispatch: unified `#### Phase 1 (unified dispatch)` section replaces dual headings (primary `#### Phase 1: Critical Analysis` + `#### Phase 1 (legacy/fallback)`). ~135 LOC dedup. Single dispatch builder = single source of truth for persona edits going forward (T2-2 / T3-5).
+- SKILL.md Phase 1 dispatch: unified `#### Phase 1 (unified dispatch)` section replaces dual headings (primary `#### Phase 1: Critical Analysis` + `#### Phase 1 (legacy/fallback)`). Two parallel gate-path sections collapse into one 4-step linear flow — single dispatch builder = single source of truth for future persona edits (T2-2 / T3-5). Raw line count change is small (+76/-47); the structural gain is removing the dual-path dispatch logic split.
 - AskUserQuestion fan-out gate now applies to BOTH primary and fallback paths (was: fallback skipped the gate — degraded paths got less friction, not more, contradicting graceful-degradation principle).
 
 ### Fixed
