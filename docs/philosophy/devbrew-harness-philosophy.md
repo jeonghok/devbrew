@@ -621,6 +621,7 @@ plugins/<name>/
 
 - State는 `.claude/<plugin>.local.md` (YAML frontmatter가 있는 마크다운)에 살음, JSON 아님. 마크다운인 이유: 사람이 편집 가능, diff 쉬움, committed되더라도 대화 기록으로 survive.
 - per-session 격리가 필요하면 `.claude/<plugin>/<session-id>/...` 하위 디렉토리도 P5/P14 정합 유지하며 허용. 단 plugin namespace(`.claude/<plugin>/`) 하위에 머물러야 함. 사례: `quality-gates` (v1.6.0+) — 동시 세션 격리 + TTL GC + SessionEnd cleanup.
+- **임시 worktree 컨벤션**: 플러그인이 일시적 git worktree를 만들 필요가 있을 때 (예: `quality-gates` v1.15.0의 `/qg branch <name>` auto-worktree) 경로는 `<repo>/.claude/<plugin>/worktrees/<sanitized-name>-<session-id-prefix>/` 형태로 plugin namespace 하위에 둔다. cleanup 책임은 생성한 플러그인의 Stop hook (정상 종료 시 자동 제거) + SessionEnd hook (safety net — dangling worktree 회수) 둘 다 가져야 한다. State 자체는 main repo의 `.claude/<plugin>/<session-id>/`에 머무르며, worktree absolute path는 state frontmatter의 별도 필드(예: `worktree_path`, `project_dir` freeze)로 전파.
 - **Gitignore 규칙 (리포 루트 `.gitignore`에서 enforce):** `.claude/*.local.md`는 devbrew 리포 전체에 걸쳐 **반드시** git-ignore되어야 함. State 파일은 경로, secret-인접 문자열, branch 이름, PR URL을 포함할 수 있음 — 공유 의도 없음. State 파일을 생성하는 플러그인의 setup 스크립트는 gitignore 라인이 존재하는지 확인하고 없으면 추가하는 책임이 있음.
 - Frontmatter는 구조화된 field (step, iteration, last-verdict 등); body는 내러티브 (무슨 일이 있었는지, 다음은 뭔지).
 - State 파일은 성공적 완료 시 auto-delete, 실패 시 디버깅을 위해 보존.

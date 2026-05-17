@@ -1,6 +1,6 @@
 ---
 description: "Run the quality gates pipeline (plan verification → PR review → runtime verification)"
-argument-hint: "[gate1|gate2|gate3] [branch|--paths <glob>...|--reset] [--skip-runtime] [--plan <path>] [--pr-url <url>]"
+argument-hint: "[gate1|gate2|gate3] [branch [<name>]|--paths <glob>...|--reset] [--skip-runtime] [--plan <path>] [--pr-url <url>]"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)", "Bash(rm:*)", "Bash(test:*)", "Agent", "Skill", "Bash", "Read", "Edit", "Write", "Glob", "Grep"]
 ---
 
@@ -56,6 +56,7 @@ When you finish the gate, emit a `<qg-signal>` tag. The Stop hook handles pipeli
 |---------|--------|
 | `/qg` | Full pipeline (Gate 1 → 2 → 3), session-scoped diff |
 | `/qg branch` | Full pipeline, full-branch diff (vs `main`) |
+| `/qg branch <name>` | Full pipeline against branch `<name>` in isolated worktree |
 | `/qg --paths <glob>...` | Full pipeline, scope to matched paths |
 | `/qg --reset` | Clear current session folder + legacy v1.5.0 flat files and exit |
 | `/qg --gc` | Run TTL GC on stale session folders |
@@ -66,6 +67,8 @@ When you finish the gate, emit a `<qg-signal>` tag. The Stop hook handles pipeli
 | `/qg --plan <path>` | Use specific plan file |
 | `/qg --pr-url <url>` | Specify PR URL |
 | `/cancel-qg` | Cancel active pipeline |
+| `DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1` | Disable `/qg branch <name>` auto-worktree mode |
+| `DEVBREW_QG_KEEP_WORKTREE=1` | Preserve branch worktree after pipeline completes or is cancelled (default: removed) |
 
 ### Scope (default: session)
 
