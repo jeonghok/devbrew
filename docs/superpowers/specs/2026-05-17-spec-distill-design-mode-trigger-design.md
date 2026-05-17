@@ -115,7 +115,7 @@ devbrew Law 2(*Writer and Reviewer Must Never Share a Pass*)의 instantiation �
 - **C5**: PostToolUse hook(`spec-write-validator.py`) 본문 변경 최소화. 이미 design mode 처리 중 — 추가 회귀 테스트 fixture만 보강.
 - **C6**: state path 해석은 `hooks/state_path.py` 단일 helper로 중앙화. 모든 hook(spec-write-validator, review-dispatch, pending-review-reminder)이 이 helper만 호출. git 부재/실패 시 cwd fallback + `[spec-distill] state root fallback: cwd ({path}) — main repo 미해석` stderr 한 줄 emit. (cf. LD11)
 - **C7**: **Mandate obedience는 hard mechanism이 아닌 best-effort + redundancy** — Claude가 systemMessage를 obey한다는 강제 수단은 없다. L4a Stop mandate가 무시되면 L4b UserPromptSubmit reminder가 매 next turn 재emit. 둘 다 무시되는 케이스(예: 사용자가 kill switch 활성화)는 cleanup 정책(C8)으로 누적 방지. (review issue c4d18a52 대응)
-- **C8**: **state cleanup 정책** — pending_review block의 `triggered_at` > 24h 경과 시 다음 hook fire 때 stale로 간주하고 자동 purge + stderr 통보. last_dispatched_at만 있고 pending_review 없는 state는 7일 후 파일 단위 auto-delete (P14 graceful state hygiene). 신규 env var `DEVBREW_SPEC_DISTILL_STALE_HOURS`로 override 가능 — 단 C3에 따라 신규 env var 도입 금지 원칙과 충돌하므로 기본값만 유지하고 별도 변수 없이 ship. (review issue a1f3c2d0 Q2 대응)
+- **C8**: **state cleanup 정책** — pending_review block의 `triggered_at` > 24h 경과 시 다음 hook fire 때 stale로 간주하고 자동 purge + stderr 통보. last_dispatched_at만 있고 pending_review 없는 state는 7일 후 파일 단위 auto-delete (P14 graceful state hygiene). 임계치는 신규 env var 없이 하드코딩 (C3 일관성). (review issue a1f3c2d0 Q2 대응)
 - **C9**: **session_id 해석 순서** — `DEVBREW_SPEC_DISTILL_SESSION_ID` env var → conducting-interview가 frontmatter에 박은 session_id → `"default"` fallback. hook runtime 기준이며 spec/design.md frontmatter는 참조하지 않는다. 같은 design.md를 두 session에서 열어도 각 session의 env(또는 default)로 분리. (review issue a1f3c2d0 Q3 대응)
 
 ## Acceptance Criteria
@@ -126,7 +126,7 @@ devbrew Law 2(*Writer and Reviewer Must Never Share a Pass*)의 instantiation �
 - **AC4**: pending_review block이 next turn 시작에도 살아있고 `last_dispatched_at` > TTL이면 UserPromptSubmit reminder가 systemMessage 재emit.
 - **AC5**: `test_reviewing_spec_design_routing.py`가 design mode 입력에 대해 spec-reviewer dispatch prompt에 `mode: design` 토큰이 포함되고 reviewer 출력에 11-section 또는 locked_decisions 누락을 issue로 raise하지 *않음*을 검증 (behavior assertion, SKILL.md 텍스트 검증이 아님). (review issue b7e20f91 대응)
 - **AC6**: reviewing-spec routing table에 design rows 3개 추가 — (approved → Human Gate → writing-plans), (needs_revise & count<3 → **brainstorming author 회귀** = 사용자가 design.md 직접 수정 후 다음 turn에서 reviewing-spec 재dispatch; drafting-spec Mode B 호출하지 *않음*), (needs_revise & count≥3 → forced Human Gate). 표 본문에 "drafting-spec 미호출" 명시. (review issue f1b30d74 대응)
-- **AC7**: `test_spec_reviewer_design_checklist.py`가 spec-reviewer를 `mode=design` 프롬프트로 실제 호출(또는 fixture 기반 dry-run)하여, 출력 issue 카테고리에 placeholder / ambiguity / scope-creep / approaches-comparison / isolation / testing 중 최소 3개 카테고리가 등장 가능함을 검증한다 (behavior assertion, persona 텍스트 grep이 아님). 동일 fixture로 spec mode 호출 시 기존 verdict format이 무손상함도 검증. (review issue b7e20f91 대응)
+- **AC7**: `test_spec_reviewer_design_checklist.py`가 spec-reviewer를 `mode=design` 프롬프트로 실제 호출(또는 fixture 기반 dry-run)하여, 출력 issue 카테고리에 placeholder / ambiguity / scope-creep / approaches-comparison / isolation / testing 중 최소 3개 카테고리가 등장 가능함을 검증한다 (behavior assertion, persona 텍스트 grep이 아님). *이 6개 카테고리는 본 design Files-to-Modify의 `agents/spec-reviewer.md` design checklist 섹션에서 정의된다.* 동일 fixture로 spec mode 호출 시 기존 verdict format이 무손상함도 검증. (review issue b7e20f91 대응)
 - **AC8**: `DEVBREW_DISABLE_SPEC_DISTILL=1` 또는 `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` 환경변수 설정 시 reminder hook은 exit 0 (no emit).
 - **AC9**: plugin.json `version: 0.4.0`, CHANGELOG.md `## [0.4.0] — 2026-MM-DD` 섹션에 Added/Changed 분류로 변경사항 기재. README.md "Hooks Installed" 섹션에 UserPromptSubmit reminder 항목 추가, 한 줄 justification ("Stop hook single-shot mandate가 silent drop될 경우 매 turn 재확인하는 redundancy layer — skill로 처리 불가, turn boundary 이벤트가 필요").
 - **AC10**: 신규 테스트 4개 파일 전체 통과. 커버 시나리오: (a) design mode 인식 + state 기록, (b) Stop mandate 본문 검증("reviewing-spec" + "terminal handoff 보류" 둘 다), (c) reminder TTL 가드 — skip / 초과 시 재emit 두 분기, (d) reviewing-spec design routing rows 3개.
@@ -183,9 +183,9 @@ plugins/spec-distill/
 - **R4 — PostToolUse가 즉시 dispatch mandate emit (Stop 무관)**: turn 중간이라 Claude가 이미 다음 액션 결정 중일 수 있음. PostToolUse의 systemMessage는 advisory에 적합, mandate는 turn boundary(Stop)에 두는 게 안전.
 - **R5 — Pattern matcher만 수정**: v0.3.0에서 design mode 추가로 매칭은 이미 통과. L4(dispatch obedience) / L5(reviewing-spec design 분기)가 미해결이라 부분 fix.
 
-## Open Questions
+## Open Questions (resolved ledger)
 
-round-1 review(spec-reviewer agent)에서 4개 미해결 질문이 잠복해 있음을 발견. 모두 round-2에서 LD/Constraint/Non-goal로 승격하여 박제 완료. 본 섹션은 *질문이 어디로 흡수되었는지의 ledger*로 보존.
+round-1 review(spec-reviewer agent)에서 4개 미해결 질문이 잠복해 있음을 발견. 모두 round-2에서 LD/Constraint/Non-goal로 승격하여 박제 완료. 본 섹션은 *질문이 어디로 흡수되었는지의 ledger*로 보존 — 미래 reviewing-spec에서 stagnation 오인 방지를 위해 헤더에 "resolved ledger" 명시.
 
 - **OQ1 (mandate obedience 강제 메커니즘)**: "Stop hook mandate를 Claude가 obey하지 않으면?" → **C7로 흡수**. hard mechanism 없음 — best-effort + L4b redundancy. 둘 다 무시되는 경우는 사용자 의도(kill switch)로 간주하고 C8의 cleanup 정책으로 누적 방지.
 - **OQ2 (state TTL spam/stale)**: "UserPromptSubmit reminder TTL 30s 만료 후 stale state 처리?" → **C8로 흡수**. pending_review `triggered_at` > 24h → auto-purge. last_dispatched_at만 있는 state → 7일 후 파일 단위 auto-delete.
