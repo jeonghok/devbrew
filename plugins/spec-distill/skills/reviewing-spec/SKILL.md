@@ -3,7 +3,7 @@ name: reviewing-spec
 description: >
   Use this skill to dispatch the spec-reviewer agent against a spec.md draft
   and apply deterministic routing per the verdict × signal table. Manages re-
-  review cap (max 3, AC6), stagnation detection (AC7), wall-clock budget (AC14),
+  review cap (max 5, AC6 — v0.3.0+), stagnation detection (AC7), wall-clock budget (AC14),
   and approve handoff sequence (AC11). Routing table is defined below in this
   SKILL.md (AC15) — agent verdict × stagnation signal × rereview count → next phase.
 cost_class: medium
@@ -34,14 +34,14 @@ cost_class: medium
 | Mode | Verdict | Stagnation_signal | rereview_count | affects_locked | → Next Phase |
 |---|---|---|---|---|---|
 | spec | `approved` | - | - | - | **[5] Human Gate** (auto) |
-| spec | `needs_revise` | false | < 3 | **empty** | **[4] Revise** (auto, dispatch drafting-spec Mode B with `allowed_issue_ids = [all]`) |
-| spec | `needs_revise` | false | < 3 | **non-empty** | **[3.5] Re-consensus gate** |
-| spec | `needs_revise` | false | >= 3 | - | **[5] Human Gate** (forced escalate, full issue_history 첨부) |
+| spec | `needs_revise` | false | < 5 | **empty** | **[4] Revise** (auto, dispatch drafting-spec Mode B with `allowed_issue_ids = [all]`) |
+| spec | `needs_revise` | false | < 5 | **non-empty** | **[3.5] Re-consensus gate** |
+| spec | `needs_revise` | false | >= 5 | - | **[5] Human Gate** (forced escalate, full issue_history 첨부) |
 | spec | `needs_revise` | true | - | - | **[5] Human Gate** (P18 stagnation, forced escalate — dismissed_by_user >= 1 issue는 stagnation count 제외) |
 | spec | `needs_interview` | - | - | - | **user confirm gate** → [1] Interview 또는 [5] (취소) |
 | **design** | `approved` | - | - | - | **[5] Human Gate** → `superpowers:writing-plans` |
-| **design** | `needs_revise` | - | < 3 | - | **brainstorming author 회귀**: 메인 agent가 design.md 직접 수정 후 reviewing-spec 재dispatch. **drafting-spec Mode B 호출하지 않음** (spec mode 전용). |
-| **design** | `needs_revise` | - | >= 3 | - | **[5] Human Gate** (forced escalate, full issue_history 첨부) |
+| **design** | `needs_revise` | - | < 5 | - | **brainstorming author 회귀**: 메인 agent가 design.md 직접 수정 후 reviewing-spec 재dispatch. **drafting-spec Mode B 호출하지 않음** (spec mode 전용). |
+| **design** | `needs_revise` | - | >= 5 | - | **[5] Human Gate** (forced escalate, full issue_history 첨부) |
 
 매 dispatch 후 위 표를 *그대로* 적용. prose-based 결정 금지.
 

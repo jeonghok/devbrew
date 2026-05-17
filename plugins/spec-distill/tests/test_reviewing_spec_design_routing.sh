@@ -30,9 +30,9 @@ grep -qE 'drafting-spec.*미호출|drafting-spec.*호출하지 (않|않음)' "$S
   && note PASS "AC6: 'drafting-spec 미호출' explicit text present" \
   || note FAIL "AC6 drafting-spec exclusion missing"
 
-# (forced Human Gate at count >= 3)
-grep -qE 'design\b.*count >?= ?3|design\b.*>=.*3.*Human Gate' "$SKILL" \
-  && note PASS "AC6: design count>=3 forced Human Gate row present" \
+# (forced Human Gate at count >= 5; v0.3.0 bump 3→5, see CHANGELOG)
+grep -qE 'design\b.*count >?= ?5|design\b.*>=.*5.*Human Gate' "$SKILL" \
+  && note PASS "AC6: design count>=5 forced Human Gate row present" \
   || note FAIL "AC6 design forced escalate row missing"
 
 echo
