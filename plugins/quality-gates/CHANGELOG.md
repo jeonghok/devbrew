@@ -3,6 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.15.1] — 2026-05-18
+
+### Added
+- tests/harness/agent_stub.py — Python module with run_agent_stub() + assert_yaml_schema() helpers for upcoming behavioral tests (T3-4 prerequisite). Prevents test/production drift by giving behavioral fixtures a deterministic short-circuit for Agent dispatch.
+- tests/test_agent_stub_harness.py — 7 self-tests on the harness itself.
+
 ## [1.15.0] — 2026-05-17
 
 ### Added
