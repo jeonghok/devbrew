@@ -364,15 +364,55 @@ class TestR5Fences(unittest.TestCase):
             self.assertIn("L3", out)
             self.assertEqual(rc, 0)
 
-    def test_4_backtick_fence_ignored(self):
-        """AC11 scope-out: 4+ backtick fences not checked."""
+    def test_4_backtick_fence_without_lang_warns(self):
+        """AC11 (v1.4.0 fix): 4+ backtick fence without language tag → warn (no more accidental skip)."""
         with tempfile.TemporaryDirectory() as td:
             target = Path(td) / "AGENTS.md"
             target.write_text(
                 "# Title\n\n"
-                "````\n"  # 4 backticks, no language
+                "````\n"  # 4 backticks, no language → should warn
                 "code\n"
                 "````\n"
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertIn("fenced code block", out)
+            self.assertEqual(rc, 0)
+
+    def test_4_backtick_fence_with_lang_passes(self):
+        """AC11 (v1.4.0 fix): 4+ backtick fence WITH language → pass."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(
+                "# Title\n\n"
+                "````python\n"
+                "x = 1\n"
+                "````\n"
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("fenced code block", out)
+            self.assertEqual(rc, 0)
+
+    def test_space_separated_info_string_passes(self):
+        """F5 regression: ``` bash (CommonMark §4.5 space-separated info string) → pass.
+
+        Previously the regex ``^ {0,3}` ``` `(\S*)\s*$`` missed this entirely, causing
+        the closing fence to be reinterpreted as a bare opener (false-positive +
+        state corruption). The relaxed regex handles whitespace between the fence
+        and the info string.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(
+                "# Title\n\n"
+                "``` bash\n"  # space-separated info string
+                "echo hi\n"
+                "```\n"
             )
             out, rc = run_hook(
                 {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
@@ -491,6 +531,46 @@ class TestR6Links(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             target = Path(td) / "AGENTS.md"
             target.write_text("[X](HTTPS://example.com)\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("unresolved internal link", out)
+            self.assertEqual(rc, 0)
+
+    def test_link_with_title_attribute_passes(self):
+        """F6 regression: [text](docs.md "title") — title stripped before path resolution."""
+        with tempfile.TemporaryDirectory() as td:
+            sibling = Path(td) / "docs.md"
+            sibling.write_text("ok")
+            target = Path(td) / "AGENTS.md"
+            target.write_text('[see](docs.md "Hover title here")\n')
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("unresolved internal link", out)
+            self.assertEqual(rc, 0)
+
+    def test_image_syntax_skipped(self):
+        """F6 regression: ![alt](src) image syntax → skipped (images are not link rule scope)."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text("![logo](nonexistent-logo.png)\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("unresolved internal link", out)
+            self.assertEqual(rc, 0)
+
+    def test_angle_bracket_destination(self):
+        """F6 regression: [x](<path with spaces.md>) — angle brackets stripped."""
+        with tempfile.TemporaryDirectory() as td:
+            sibling = Path(td) / "path with spaces.md"
+            sibling.write_text("ok")
+            target = Path(td) / "AGENTS.md"
+            target.write_text("[see](<path with spaces.md>)\n")
             out, rc = run_hook(
                 {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
                 cwd=td,
@@ -638,6 +718,44 @@ class TestRPointer(unittest.TestCase):
             # Root pair is fine, not flagged
             self.assertNotIn("Make CLAUDE.md contain", out.split("drift risk")[0])
             self.assertEqual(rc, 0)
+
+
+class TestRobustness(unittest.TestCase):
+    """F1 + F3 regression tests — graceful degradation against pathological inputs."""
+
+    def test_circular_symlink_does_not_crash(self):
+        """F1 regression: Path.resolve() on a circular symlink raises RuntimeError.
+
+        The hook must not propagate the exception — it must catch (OSError, RuntimeError)
+        in safe_resolve() and exit 0 with {} per the advisory contract.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            # Create CLAUDE.md as a symlink to itself (circular)
+            loop = Path(td) / "CLAUDE.md"
+            os.symlink("CLAUDE.md", loop)
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(loop)}},
+                cwd=td,
+            )
+            self.assertEqual(rc, 0)
+            # stdout is JSON `{}` (no traceback, no systemMessage)
+            self.assertEqual(out.strip(), "{}")
+
+    def test_r6_broken_symlink_target_does_not_crash(self):
+        """F1 regression: R6 link pointing at a symlink loop must skip, not crash."""
+        with tempfile.TemporaryDirectory() as td:
+            # Symlink loop inside the project dir
+            loop = Path(td) / "loop.md"
+            os.symlink("loop.md", loop)
+            target = Path(td) / "AGENTS.md"
+            target.write_text("[broken](loop.md)\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertEqual(rc, 0)
+            # Hook must produce valid JSON — either {} or a systemMessage, not a crash
+            self.assertTrue(out.strip().startswith("{"))
 
 
 if __name__ == "__main__":

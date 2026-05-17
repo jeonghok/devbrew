@@ -19,7 +19,6 @@ from typing import Optional
 
 # --- Filter constants ---
 
-TARGET_BASENAMES = {"CLAUDE.md", "AGENTS.md"}
 TARGET_RELPATHS = {"CLAUDE.md", "AGENTS.md", ".claude/CLAUDE.md", ".claude/AGENTS.md"}
 TARGET_TOOLS = {"Write", "Edit", "MultiEdit"}
 WORKTREE_MARKER = os.sep + ".git" + os.sep + "worktrees" + os.sep
@@ -40,16 +39,38 @@ def kill_switch_active() -> bool:
     return "project-init:docs-lint" in skip_list
 
 
+def safe_resolve(p: Path, why: str = "path") -> Optional[Path]:
+    """Wrap ``Path.resolve()`` against circular-symlink ``RuntimeError`` and ``OSError``.
+
+    Returns the resolved Path on success, ``None`` on failure (with a stderr
+    breadcrumb). Used at every site that resolves user-controlled paths so a
+    broken symlink loop never crashes the hook (which must always exit 0).
+    """
+    try:
+        return p.resolve()
+    except (OSError, RuntimeError) as e:
+        print(
+            f"[project-init:docs-lint] could not resolve {why} {p!r} — skipping ({e})",
+            file=sys.stderr,
+        )
+        return None
+
+
 def resolve_target_path(file_path: str, project_dir: str) -> Optional[Path]:
     """Return absolute Path if file_path is one of the 4 target root context files
     relative to project_dir, else None. Skips worktree internal metadata paths."""
     if not file_path:
         return None
-    abs_path = Path(file_path).resolve()
+    abs_path = safe_resolve(Path(file_path), why="file_path")
+    if abs_path is None:
+        return None
     if WORKTREE_MARKER in str(abs_path):
         return None
+    pd = safe_resolve(Path(project_dir), why="project_dir")
+    if pd is None:
+        return None
     try:
-        rel = abs_path.relative_to(Path(project_dir).resolve())
+        rel = abs_path.relative_to(pd)
     except ValueError:
         # File is outside CLAUDE_PROJECT_DIR
         return None
@@ -113,14 +134,21 @@ def check_r2_toc(target: Path, rel_display: str) -> Optional[str]:
     )
 
 
-FENCE_RE = re.compile(r"^ {0,3}`{3}(\S*)\s*$")
+# CommonMark §4.5 fence: 3+ backticks, optional whitespace, optional info string.
+# The earlier `^ {0,3}` ``` `(\S*)\s*$` form (v1.4.0 initial release) missed
+# both 4+-backtick fences AND space-separated info strings (` ```bash`),
+# which caused the closing fence to be reinterpreted as a new bare opener
+# (state-corruption false-positive). The relaxed form below matches both.
+FENCE_RE = re.compile(r"^ {0,3}(`{3,})\s*(\S*)\s*$")
 
 
 def check_r5_fences(target: Path, rel_display: str) -> Optional[str]:
-    """AC11/AC12: bare 3-backtick opening fence without language tag.
+    """AC11/AC12: bare opening code fence without a language tag.
 
-    Scope-outs (v1.4.0 false-negative허용): 4+ backtick fences, tilde fences,
-    space-separated info string (`​```​ bash` with leading space).
+    Matches any 3+ backtick fence. Allows leading whitespace before the info
+    string per CommonMark §4.5 (` ``` bash` is equivalent to ` ```bash`).
+
+    Scope-outs (v1.4.0 false-negative허용): tilde fences (`~~~`).
     """
     try:
         content = target.read_text(encoding="utf-8")
@@ -134,8 +162,8 @@ def check_r5_fences(target: Path, rel_display: str) -> Optional[str]:
         if not m:
             continue
         if not in_fence:
-            # Opening fence
-            lang = m.group(1)
+            # Opening fence — info string (lang tag) is group 2
+            lang = m.group(2)
             if not lang:
                 violations.append(lineno)
         # Toggle either way (closing fence is always bare and intentional)
@@ -159,12 +187,44 @@ def check_r5_fences(target: Path, rel_display: str) -> Optional[str]:
     )
 
 
-LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+# Negative lookbehind `(?<!!)` skips image syntax `![alt](src)` — images are
+# a different rule surface and frequently point at binary assets, so resolving
+# them with R6 produces noise. Use a non-greedy destination group so a link
+# title like `[x](docs.md "Docs")` doesn't capture the title into group 2;
+# whitespace inside parens is then handled by ``_parse_link_destination``
+# (CommonMark §6.3 — bare destinations stop at first whitespace).
+LINK_RE = re.compile(r"(?<!!)\[([^\]]+)\]\(([^)]+)\)")
 URL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
+
+
+def _parse_link_destination(raw: str) -> Optional[str]:
+    """Extract just the destination path from a markdown link target.
+
+    Per CommonMark §6.3: ``[text](<path with spaces> "title")`` and the bare
+    form ``[text](path.md "title")``. Returns the path with angle brackets
+    stripped and any title attribute discarded, or None if empty.
+    """
+    s = raw.strip()
+    if not s:
+        return None
+    if s.startswith("<"):
+        # Angle-bracket form: <path with spaces possibly>
+        end = s.find(">")
+        if end == -1:
+            return None
+        return s[1:end]
+    # Bare form: stop at first whitespace (which begins an optional title)
+    ws = re.search(r"\s", s)
+    if ws:
+        return s[: ws.start()]
+    return s
 
 
 def check_r6_links(target: Path, rel_display: str, project_dir: Path) -> Optional[str]:
     """AC13/AC14/AC15: internal markdown links must resolve.
+
+    Skips: image syntax (`![alt](src)`), URL-scheme links, anchor-only links.
+    Parses CommonMark §6.3 destinations (angle brackets, optional title).
 
     Scope-outs (v1.4.0 false-positive허용): links inside fenced code blocks /
     inline backtick spans are not excluded — known false-positive surface,
@@ -178,25 +238,29 @@ def check_r6_links(target: Path, rel_display: str, project_dir: Path) -> Optiona
     unresolved: list[str] = []
     base_dir = target.parent
     for m in LINK_RE.finditer(content):
-        raw_target = m.group(2).strip()
-        if not raw_target:
+        raw_target = m.group(2)
+        dest = _parse_link_destination(raw_target)
+        if dest is None or not dest:
             continue
-        if URL_SCHEME_RE.match(raw_target):
+        if URL_SCHEME_RE.match(dest):
             continue
-        if raw_target.startswith("#"):
+        if dest.startswith("#"):
             continue
         # Strip fragment
-        path_part = raw_target.split("#", 1)[0]
+        path_part = dest.split("#", 1)[0]
         if not path_part:
             continue
-        resolved = (base_dir / path_part).resolve()
+        resolved = safe_resolve(base_dir / path_part, why="link target")
+        if resolved is None:
+            # Couldn't resolve at all (broken symlink loop, perm error, etc.)
+            continue
         # AC15: escape outside project_dir → treat as external
         try:
             resolved.relative_to(project_dir)
         except ValueError:
             continue
         if not resolved.exists():
-            unresolved.append(raw_target)
+            unresolved.append(dest)
     if not unresolved:
         return None
     shown = unresolved[:5]
@@ -229,17 +293,33 @@ def _normalize_pointer_content(content: str) -> str:
     return no_comments.strip()
 
 
-def _is_proper_pointer(claude_path: Path, agents_basename: str = "AGENTS.md") -> bool:
-    """Return True if claude_path satisfies AC16 pass conditions."""
+def _is_proper_pointer(claude_path: Path, agents_basename: str = "AGENTS.md") -> Optional[bool]:
+    """Return True/False per AC16 pass conditions, or None if CLAUDE.md is unreadable.
+
+    Returning None (with stderr breadcrumb) lets ``check_r_pointer`` skip the
+    drift check entirely rather than emitting a misleading "drift risk"
+    warning when the real problem is a permission or encoding error.
+    """
     # Cond 1: symlink to AGENTS.md
     if claude_path.is_symlink():
-        link = os.readlink(claude_path)
+        try:
+            link = os.readlink(claude_path)
+        except OSError as e:
+            print(
+                f"[project-init:docs-lint] could not readlink {claude_path} — skipping R-pointer ({e})",
+                file=sys.stderr,
+            )
+            return None
         return link in (agents_basename, f"./{agents_basename}")
     # Cond 2: normalized content == "@AGENTS.md"
     try:
         content = claude_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return False
+    except (OSError, UnicodeDecodeError) as e:
+        print(
+            f"[project-init:docs-lint] could not read {claude_path} — skipping R-pointer ({e})",
+            file=sys.stderr,
+        )
+        return None
     return _normalize_pointer_content(content) == f"@{agents_basename}"
 
 
@@ -253,17 +333,23 @@ def check_r_pointer(target: Path, project_dir: Path) -> Optional[str]:
     agents_path = target_dir / "AGENTS.md"
     # AC18.5: pair file worktree check + CLAUDE_PROJECT_DIR escape guard
     for p in (claude_path, agents_path):
-        resolved = p.resolve() if p.exists() else p
+        if not p.exists():
+            continue
+        resolved = safe_resolve(p, why="pair path")
+        if resolved is None:
+            return None  # unresolvable pair path → can't determine drift safely
         if WORKTREE_MARKER in str(resolved):
             return None
         try:
-            if p.exists():
-                p.resolve().relative_to(project_dir)
+            resolved.relative_to(project_dir)
         except ValueError:
             return None
     if not (claude_path.exists() and agents_path.exists()):
         return None  # drift only meaningful when both exist
-    if _is_proper_pointer(claude_path):
+    pointer_ok = _is_proper_pointer(claude_path)
+    if pointer_ok is None:
+        return None  # CLAUDE.md unreadable — stderr breadcrumb already emitted
+    if pointer_ok:
         return None
     try:
         rel_claude = claude_path.relative_to(project_dir).as_posix()
@@ -298,7 +384,10 @@ def main() -> int:
     if target is None:
         emit()
         return 0
-    project_dir_path = Path(project_dir).resolve()
+    project_dir_path = safe_resolve(Path(project_dir), why="project_dir")
+    if project_dir_path is None:
+        emit()
+        return 0
     try:
         rel_display = target.relative_to(project_dir_path).as_posix()
     except ValueError:
