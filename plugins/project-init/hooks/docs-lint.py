@@ -78,8 +78,9 @@ def check_r1_size(target: Path, rel_display: str) -> Optional[str]:
     try:
         content = target.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
+        print(f"[project-init:docs-lint] could not read {rel_display} — skipping R1", file=sys.stderr)
         return None
-    lines = content.count("\n") + (0 if content.endswith("\n") or not content else 1)
+    lines = len(content.splitlines())
     if lines <= 200:
         return None
     base = (
@@ -89,6 +90,27 @@ def check_r1_size(target: Path, rel_display: str) -> Optional[str]:
     if lines > 300:
         return base + " (STRONG: >300 lines means agent will likely truncate)"
     return base
+
+
+TOC_RE = re.compile(r"^##\s+(목차|Table of Contents|Contents)\s*$", re.MULTILINE)
+
+
+def check_r2_toc(target: Path, rel_display: str) -> Optional[str]:
+    """AC9: TOC required if >300 lines."""
+    try:
+        content = target.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        print(f"[project-init:docs-lint] could not read {rel_display} — skipping R2", file=sys.stderr)
+        return None
+    lines = len(content.splitlines())
+    if lines <= 300:
+        return None
+    if TOC_RE.search(content):
+        return None
+    return (
+        f"project-init: {rel_display} exceeds 300 lines without a TOC section. "
+        f'Add "## 목차" or "## Table of Contents" near the top.'
+    )
 
 
 def main() -> int:
@@ -120,6 +142,9 @@ def main() -> int:
     msg_r1 = check_r1_size(target, rel_display)
     if msg_r1:
         messages.append(msg_r1)
+    msg_r2 = check_r2_toc(target, rel_display)
+    if msg_r2:
+        messages.append(msg_r2)
     # More rules will be added in subsequent tasks.
     if messages:
         emit("\n\n".join(messages))

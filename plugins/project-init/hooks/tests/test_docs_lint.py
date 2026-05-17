@@ -173,6 +173,7 @@ class TestR1Size(unittest.TestCase):
             )
             self.assertIn("Anthropic recommends ≤200", out)
             self.assertNotIn("STRONG", out)
+            self.assertEqual(rc, 0)
 
     def test_301_lines_strong_warns(self):
         """AC8: 301 lines → R1 base + STRONG suffix in single message."""
@@ -187,6 +188,78 @@ class TestR1Size(unittest.TestCase):
             self.assertIn("301 lines", out)
             # AC8: single combined string, not duplicate emit
             self.assertEqual(out.count("Anthropic recommends ≤200"), 1)
+
+
+class TestR2Toc(unittest.TestCase):
+    """R2 — TOC required if >300 lines."""
+
+    def test_350_lines_no_toc_warns(self):
+        """AC9: 350 lines + no TOC → R2 warning (and R1 STRONG)."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text("# Title\n\n" + "\n".join(f"line {i}" for i in range(350)) + "\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertIn("exceeds 300 lines without a TOC", out)
+            # AC19: both R1 STRONG and R2 fire, joined with \n\n
+            self.assertIn("STRONG", out)
+
+    def test_350_lines_with_korean_toc_passes(self):
+        """AC9: 350 lines + ## 목차 → R2 passes (R1 STRONG still fires)."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(
+                "# Title\n\n## 목차\n\n- intro\n\n"
+                + "\n".join(f"line {i}" for i in range(350)) + "\n"
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("without a TOC", out)
+            self.assertIn("STRONG", out)  # R1 still fires
+
+    def test_350_lines_with_english_toc_passes(self):
+        """AC9: 350 lines + ## Table of Contents → R2 passes."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(
+                "# Title\n\n## Table of Contents\n\n- intro\n\n"
+                + "\n".join(f"line {i}" for i in range(350)) + "\n"
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("without a TOC", out)
+
+    def test_300_lines_or_less_no_r2(self):
+        """AC9: ≤300 lines → R2 never fires regardless of TOC presence."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text("\n".join(f"line {i}" for i in range(250)) + "\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("without a TOC", out)
+
+    def test_toc_at_end_of_file_still_passes(self):
+        """AC10: TOC location is free — bottom of file also OK."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(
+                "# Title\n\n"
+                + "\n".join(f"line {i}" for i in range(340)) + "\n"
+                + "\n## 목차\n\n- intro\n"
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("without a TOC", out)
 
 
 if __name__ == "__main__":
