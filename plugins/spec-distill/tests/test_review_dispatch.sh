@@ -22,7 +22,7 @@ setup_state() {
 run_hook() {
   local sid="$1"
   cd "$WORK" && DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
-    bash -c "echo '{}' | python3 '$HOOK'" 2>&1
+    bash -c "echo '{}' | python3 '$HOOK'" 2>/dev/null
 }
 
 # Case 11: AC11 — pending_review present → systemMessage emit

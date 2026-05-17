@@ -24,9 +24,15 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+from state_path import state_root as _state_root, cleanup_stale_states  # noqa: E402
+
 
 PENDING_RE = re.compile(
-    r"^pending_review:\n  path:\s*(?P<path>[^\n]+)\n  mode:\s*(?P<mode>[^\n]+)\n  triggered_at:\s*(?P<triggered>[^\n]+)\n",
+    r"^pending_review:\n  path:\s*(?P<path>[^\n]+)\n  mode:\s*(?P<mode>[^\n]+)\n"
+    r"(?:  worktree_path:\s*(?P<wt>[^\n]+)\n)?"
+    r"  triggered_at:\s*(?P<triggered>[^\n]+)\n",
     re.MULTILINE,
 )
 LAST_DISPATCHED_RE = re.compile(r"^last_dispatched_at:\s*(.+)$", re.MULTILINE)
@@ -44,7 +50,7 @@ def kill_switch_active() -> bool:
 
 
 def state_file_for(session_id: str) -> Path:
-    return Path(".claude/spec-distill") / session_id / "state.local.md"
+    return _state_root() / session_id / "state.local.md"
 
 
 def parse_iso(s: str) -> Optional[datetime]:
@@ -72,6 +78,10 @@ def rewrite_state(path: Path, body: str, now: datetime) -> None:
 def main() -> int:
     if kill_switch_active():
         return 0
+    try:
+        cleanup_stale_states(_state_root())
+    except (OSError, PermissionError):
+        pass
     session_id = os.environ.get("DEVBREW_SPEC_DISTILL_SESSION_ID", "default")
     state_path = state_file_for(session_id)
     if not state_path.exists():
@@ -97,11 +107,18 @@ def main() -> int:
             return 0  # within guard window
     spec_path = m.group("path").strip()
     mode = m.group("mode").strip()
-    msg = (
-        "MANDATORY: 다음 turn 첫 액션으로 reviewing-spec skill 호출. "
-        f"spec path: {spec_path}. mode: {mode}. "
-        "다른 작업을 시작하기 전 reviewer agent dispatch."
+    wt = (m.group("wt") or "").strip()
+    msg_lines = [
+        "MANDATORY: 다음 turn 첫 액션으로 reviewing-spec skill 호출.",
+        f"spec path: {spec_path}.",
+        f"mode: {mode}.",
+    ]
+    if wt:
+        msg_lines.append(f"worktree_path: {wt}.")
+    msg_lines.append(
+        "호출 skill의 terminal handoff(writing-plans 등)는 review pass 이후로 보류."
     )
+    msg = " ".join(msg_lines)
     print(json.dumps({"systemMessage": msg}), flush=True)
     try:
         rewrite_state(state_path, body, now)
