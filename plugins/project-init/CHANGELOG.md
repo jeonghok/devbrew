@@ -5,6 +5,26 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [1.4.0] — 2026-05-17
+
+### Added
+- `hooks/docs-lint.py` — root context 파일 (`CLAUDE.md`/`AGENTS.md`/`.claude/CLAUDE.md`/`.claude/AGENTS.md`) 의 5 agent-readable convention rule을 PostToolUse advisory로 검증. R1 size (>200 warn, >300 STRONG), R2 TOC (>300 lines required), R5 fenced code language tag, R6 internal links resolve, R-pointer CLAUDE/AGENTS drift (bidirectional trigger). Non-blocking, kill switch `DEVBREW_SKIP_HOOKS=project-init:docs-lint`. 디자인 근거: Anthropic 공식 ([code.claude.com/docs/en/memory.md] *"target under 200 lines"*) + AGENTS.md 오픈 스펙 ([agents.md] 16+ 벤더 채택) + Chroma 2025 *Context Rot* (input length에 monotonic degradation) + Lost-in-the-Middle (Liu 2023) 3-source 합의.
+- `templates/shared/claude-md-pointer.md` — `@AGENTS.md\n` 한 줄, `/project-init`이 CLAUDE.md로 발행하는 thin pointer template.
+- `hooks/tests/` — Python stdlib `unittest` 기반 40+ test case (모든 룰 happy/violation + kill switch + symlink + worktree + bidirectional trigger). fixture 9개 서브디렉토리 layout (`fixtures/<case>/AGENTS.md` 또는 `CLAUDE.md`).
+- `hooks/tests/smoke.sh` — V2 자동화 smoke script (CI-runnable, no human eyeballing, macOS bash 3.2 호환).
+
+### Changed
+- `commands/project-init.md` Step 4 전반 — **AGENTS.md를 canonical**, **CLAUDE.md를 `@AGENTS.md` thin pointer**로 발행. 기존 단일-CLAUDE.md 5-state matrix를 *AGENTS.md × CLAUDE.md 2축 4-state matrix* (S1 clean / S2a CLAUDE-only full / S2b dangling pointer / S3 AGENTS canonical / S4 divergent) 로 재작성. 4-state matrix는 mutually exclusive AND exhaustive — raw 6 조합 중 S2가 (2→1), S4가 (2→1) 압축.
+- `commands/project-init.md` Step 1 — 기존 CLAUDE.md가 있고 AGENTS.md가 없으면 migration 프롬프트 추가. 거절 시 전체 abort.
+- `commands/project-init.md` Step 5 confirmation — AGENTS.md (canonical) + CLAUDE.md (`@AGENTS.md` thin pointer) 생성 명시.
+- `templates/<strategy>/claude-md-section.md` → `agents-md-section.md` 3건 rename (`git mv`로 history 보존).
+- `hooks/hooks.json` — PostToolUse에 두 번째 entry 추가 (matcher `Write|Edit|MultiEdit`).
+- `plugin.json` description — AGENTS.md primary + thin pointer 패턴 반영.
+
+### Migration notes
+- 기존 v1.3.0 사용자가 `/project-init` 재실행 시 S2 path로 진입 → migration 프롬프트 → AGENTS.md 생성 + CLAUDE.md thin pointer 교체.
+- 두 hook은 kill switch 토큰이 다름 (`project-init:post-tool-use` vs `project-init:docs-lint`). 둘 모두 끄려면 `DEVBREW_SKIP_HOOKS=project-init:post-tool-use,project-init:docs-lint`.
+
 ## [1.3.0] — 2026-05-10
 
 ### Added
