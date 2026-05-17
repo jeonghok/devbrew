@@ -111,15 +111,6 @@
 - `DEVBREW_SKIP_HOOKS=spec-distill:PostToolUse` (alias: `spec-distill:validator`) — PostToolUse hook만 skip.
 - `DEVBREW_SKIP_HOOKS=spec-distill:Stop` (alias: `spec-distill:review-dispatch`) — Stop hook만 skip.
 
-## Future Roadmap
-
-| Version | 추가 |
-|---|---|
-| **v0.2.0** | `drafting-plan` skill, `reviewing-plan` 별도 skill (phase별 분리), `steelman-critic` agent (spec/plan 양쪽 도입). |
-| **v0.3.0** | (사용자 패턴 확인 후) `PreCompact` hook + cross-session resume. |
-| **v0.4.0+** | (마찰 측정 후) reviewer high-confidence trivial revise auto-apply 토글. |
-| **v1.0.0** | API 안정화 + `CHANGELOG.md` 시작. |
-
 ## Prerequisites
 
 - **Claude Code built-in `general-purpose` agent** — 항상 사용 가능 (별도 설치 불필요). `conducting-interview` skill의 C43 ambiguity path가 dispatch.

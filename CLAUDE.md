@@ -5,7 +5,7 @@
 >
 > *병목은 모델이 아니다. 스펙, 리뷰, 메모리다. devbrew의 역할은 사용자가 의식적으로 기억하지 않아도 이 세 가지가 자동으로 지켜지도록 만드는 것이다.*
 
-devbrew는 Claude Code를 위한 플러그인 마켓플레이스입니다. `plugins/*` 하위의 모든 플러그인은 아래 원칙을 상속합니다. 전체 철학(24개 원칙·14개 anti-pattern·소스 하니스 원문 인용)은 [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md). 외부 참조 corpus는 `../reference/`에 있으며 필요 시에만 탐색.
+devbrew는 Claude Code를 위한 플러그인 마켓플레이스입니다. `plugins/*` 하위의 모든 플러그인은 아래 원칙을 상속합니다. 전체 철학(24개 원칙·14개 anti-pattern·소스 하니스 원문 인용)은 [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md). 외부 참조 corpus는 `../reference/`에 있으며 필요 시에만 탐색 [reference 탐색 가이드](../reference/REFERENCE_HARVEST.md).
 
 ## LLM Coding Guidelines
 
