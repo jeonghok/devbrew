@@ -38,21 +38,25 @@ out=$(DEVBREW_SKIP_HOOKS="spec-distill:UserPromptSubmit" bash "$TRIGGER" <<< '{"
 
 # 3. Kill switch isolation: a different hook in DEVBREW_SKIP_HOOKS does NOT suppress
 out=$(DEVBREW_SKIP_HOOKS="spec-distill:SessionStart" bash "$TRIGGER" <<< '{"user_prompt":"build me a thing"}' 2>/dev/null || true)
-echo "$out" | grep -q "systemMessage" \
+echo "$out" | jq -e '.hookSpecificOutput.hookEventName == "UserPromptSubmit"' >/dev/null \
+  && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
   && note PASS "DEVBREW_SKIP_HOOKS for different hook does not affect this hook" \
   || note FAIL "DEVBREW_SKIP_HOOKS isolation broken (got: $out)"
 
 # 4. Kill switch: prefix-injection guard (notspec-distill:... must NOT match)
 out=$(DEVBREW_SKIP_HOOKS="notspec-distill:UserPromptSubmit" bash "$TRIGGER" <<< '{"user_prompt":"build me a thing"}' 2>/dev/null || true)
-echo "$out" | grep -q "systemMessage" \
+echo "$out" | jq -e '.hookSpecificOutput.hookEventName == "UserPromptSubmit"' >/dev/null \
+  && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
   && note PASS "Prefix-injection in DEVBREW_SKIP_HOOKS is rejected" \
   || note FAIL "Prefix-injection bypass succeeded (got: $out)"
 
-# 5. Happy path: keyword + short prompt → systemMessage emitted
+# 5. Happy path: keyword + short prompt → UserPromptSubmit dual-target emit
 out=$(bash "$TRIGGER" <<< '{"user_prompt":"build me a todo app"}' 2>/dev/null)
-echo "$out" | grep -q '"systemMessage"' \
-  && note PASS "Keyword+short prompt emits systemMessage JSON" \
-  || note FAIL "Keyword+short prompt did not emit systemMessage (got: $out)"
+echo "$out" | jq -e '.hookSpecificOutput.hookEventName == "UserPromptSubmit"' >/dev/null \
+  && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("interview")' >/dev/null \
+  && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
+  && note PASS "Keyword+short prompt emits dual-target (additionalContext + systemMessage)" \
+  || note FAIL "Keyword+short prompt did not emit expected schema (got: $out)"
 
 # 6. No keyword → silence
 out=$(bash "$TRIGGER" <<< '{"user_prompt":"explain how this works"}' 2>/dev/null || true)
@@ -81,13 +85,15 @@ out=$(CLAUDE_PROJECT_DIR="$TMPSTATE" bash "$ANCHOR" < /dev/null 2>/dev/null || t
 [[ -z "$out" ]] && note PASS "No state dir → silent" \
                 || note FAIL "No state dir should be silent (got: $out)"
 
-# 10. State file present → systemMessage emitted
+# 10. State file present → SessionStart dual-target emit
 mkdir -p "$TMPSTATE/.claude/spec-distill/test-session-id"
 echo "---" > "$TMPSTATE/.claude/spec-distill/test-session-id/state.local.md"
 out=$(CLAUDE_PROJECT_DIR="$TMPSTATE" bash "$ANCHOR" < /dev/null 2>/dev/null)
-echo "$out" | grep -q '"systemMessage"' \
-  && note PASS "State file present → emits systemMessage JSON" \
-  || note FAIL "State file should emit systemMessage (got: $out)"
+echo "$out" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null \
+  && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | length > 0' >/dev/null \
+  && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
+  && note PASS "State file present → emits dual-target (additionalContext + systemMessage)" \
+  || note FAIL "State file should emit dual-target schema (got: $out)"
 
 # 11. Mutation regression: session-anchor.sh does NOT modify any file
 before=$(find "$TMPSTATE/.claude" -type f 2>/dev/null | sort | xargs md5sum 2>/dev/null | md5sum | awk '{print $1}')
