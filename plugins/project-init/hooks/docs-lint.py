@@ -160,11 +160,16 @@ def check_r5_fences(target: Path, rel_display: str) -> Optional[str]:
 
 
 LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
-URL_SCHEME_RE = re.compile(r"^[a-z][a-z0-9+.-]*:")
+URL_SCHEME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
 
 
 def check_r6_links(target: Path, rel_display: str, project_dir: Path) -> Optional[str]:
-    """AC13/AC14/AC15: internal markdown links must resolve."""
+    """AC13/AC14/AC15: internal markdown links must resolve.
+
+    Scope-outs (v1.4.0 false-positive허용): links inside fenced code blocks /
+    inline backtick spans are not excluded — known false-positive surface,
+    parallel to R5's fence scope-outs.
+    """
     try:
         content = target.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
@@ -202,6 +207,74 @@ def check_r6_links(target: Path, rel_display: str, project_dir: Path) -> Optiona
     return (
         f"project-init: {rel_display} has {len(unresolved)} unresolved internal link(s): "
         f"[{list_str}]"
+    )
+
+
+FRONTMATTER_RE = re.compile(r"^---\n.*?\n---(?:\n|$)", re.DOTALL)
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+def _normalize_pointer_content(content: str) -> str:
+    """AC16 normalization: (1) strip frontmatter (2) strip HTML comments (3) str.strip().
+
+    Order matters — frontmatter regex must run before HTML comment strip;
+    do not reorder (frontmatter could contain `<!-- -->` boundaries that the
+    comment strip would corrupt).
+    """
+    # 1. Strip frontmatter
+    no_fm = FRONTMATTER_RE.sub("", content, count=1)
+    # 2. Strip HTML comments
+    no_comments = HTML_COMMENT_RE.sub("", no_fm)
+    # 3. Whitespace
+    return no_comments.strip()
+
+
+def _is_proper_pointer(claude_path: Path, agents_basename: str = "AGENTS.md") -> bool:
+    """Return True if claude_path satisfies AC16 pass conditions."""
+    # Cond 1: symlink to AGENTS.md
+    if claude_path.is_symlink():
+        link = os.readlink(claude_path)
+        return link in (agents_basename, f"./{agents_basename}")
+    # Cond 2: normalized content == "@AGENTS.md"
+    try:
+        content = claude_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    return _normalize_pointer_content(content) == f"@{agents_basename}"
+
+
+def check_r_pointer(target: Path, project_dir: Path) -> Optional[str]:
+    """AC16-AC18.5: bidirectional CLAUDE/AGENTS drift detection.
+
+    Triggered when editing any of the 4 target files; checks the directory's pair.
+    """
+    target_dir = target.parent
+    claude_path = target_dir / "CLAUDE.md"
+    agents_path = target_dir / "AGENTS.md"
+    # AC18.5: pair file worktree check + CLAUDE_PROJECT_DIR escape guard
+    for p in (claude_path, agents_path):
+        resolved = p.resolve() if p.exists() else p
+        if WORKTREE_MARKER in str(resolved):
+            return None
+        try:
+            if p.exists():
+                p.resolve().relative_to(project_dir)
+        except ValueError:
+            return None
+    if not (claude_path.exists() and agents_path.exists()):
+        return None  # drift only meaningful when both exist
+    if _is_proper_pointer(claude_path):
+        return None
+    try:
+        rel_claude = claude_path.relative_to(project_dir).as_posix()
+        rel_agents = agents_path.relative_to(project_dir).as_posix()
+    except ValueError:
+        rel_claude = str(claude_path)
+        rel_agents = str(agents_path)
+    return (
+        f"project-init: Both {rel_claude} and {rel_agents} exist with divergent content "
+        f"(drift risk). Make CLAUDE.md contain just \"@AGENTS.md\" or symlink it: "
+        f"`ln -sf AGENTS.md CLAUDE.md`"
     )
 
 
@@ -243,6 +316,9 @@ def main() -> int:
     msg_r6 = check_r6_links(target, rel_display, project_dir_path)
     if msg_r6:
         messages.append(msg_r6)
+    msg_rp = check_r_pointer(target, project_dir_path)
+    if msg_rp:
+        messages.append(msg_rp)
     if messages:
         emit("\n\n".join(messages))
     else:

@@ -486,6 +486,159 @@ class TestR6Links(unittest.TestCase):
             self.assertIn("and 3 more", out)
             self.assertEqual(rc, 0)
 
+    def test_uppercase_url_scheme_skipped(self):
+        """AC13: case-insensitive URL scheme detection (RFC 3986)."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text("[X](HTTPS://example.com)\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("unresolved internal link", out)
+            self.assertEqual(rc, 0)
+
+
+class TestRPointer(unittest.TestCase):
+    """R-pointer — CLAUDE.md ↔ AGENTS.md drift detection (bidirectional trigger)."""
+
+    def _write_pair(self, td: str, agents_content: str, claude_content: str, sub: str = "") -> Tuple[Path, Path]:
+        base = Path(td) / sub if sub else Path(td)
+        base.mkdir(parents=True, exist_ok=True)
+        a = base / "AGENTS.md"
+        c = base / "CLAUDE.md"
+        a.write_text(agents_content)
+        c.write_text(claude_content)
+        return a, c
+
+    def test_only_one_file_no_check(self):
+        """AC16: drift requires BOTH files; only AGENTS.md present → no R-pointer."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text("# title\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("drift risk", out)
+            self.assertEqual(rc, 0)
+
+    def test_thin_pointer_passes(self):
+        """AC16 cond 2: CLAUDE.md is '@AGENTS.md' → pass."""
+        with tempfile.TemporaryDirectory() as td:
+            a, c = self._write_pair(td, "# canonical\n", "@AGENTS.md\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(c)}},
+                cwd=td,
+            )
+            self.assertNotIn("drift risk", out)
+            self.assertEqual(rc, 0)
+
+    def test_thin_pointer_with_frontmatter_passes(self):
+        """AC16 normalization: frontmatter stripped before @AGENTS.md check."""
+        with tempfile.TemporaryDirectory() as td:
+            a, c = self._write_pair(
+                td,
+                "# canonical\n",
+                "---\ntitle: foo\n---\n@AGENTS.md\n",
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(c)}},
+                cwd=td,
+            )
+            self.assertNotIn("drift risk", out)
+            self.assertEqual(rc, 0)
+
+    def test_frontmatter_no_trailing_newline_passes(self):
+        """AC16 trailing newline regex: closing --- without \\n still strips."""
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            (base / "AGENTS.md").write_text("# canonical\n")
+            (base / "CLAUDE.md").write_text("---\nfoo: bar\n---\n@AGENTS.md")  # no trailing \n
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(base / "CLAUDE.md")}},
+                cwd=td,
+            )
+            self.assertNotIn("drift risk", out)
+            self.assertEqual(rc, 0)
+
+    def test_html_comments_stripped(self):
+        """AC16: HTML comments removed before comparison."""
+        with tempfile.TemporaryDirectory() as td:
+            a, c = self._write_pair(
+                td,
+                "# canonical\n",
+                "<!-- maintainer note -->\n@AGENTS.md\n",
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(c)}},
+                cwd=td,
+            )
+            self.assertNotIn("drift risk", out)
+            self.assertEqual(rc, 0)
+
+    def test_divergent_content_warns(self):
+        """AC17: both exist + CLAUDE.md has divergent content → drift warning."""
+        with tempfile.TemporaryDirectory() as td:
+            a, c = self._write_pair(
+                td,
+                "# canonical AGENTS\n",
+                "# completely different CLAUDE\n\nLots of content here.\n",
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(c)}},
+                cwd=td,
+            )
+            self.assertIn("drift risk", out)
+            self.assertIn("ln -sf AGENTS.md CLAUDE.md", out)
+            self.assertEqual(rc, 0)
+
+    def test_symlink_passes(self):
+        """AC16 cond 1: CLAUDE.md is symlink to AGENTS.md → pass."""
+        with tempfile.TemporaryDirectory() as td:
+            a = Path(td) / "AGENTS.md"
+            a.write_text("# canonical\n")
+            c = Path(td) / "CLAUDE.md"
+            os.symlink("AGENTS.md", c)
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(c)}},
+                cwd=td,
+            )
+            self.assertNotIn("drift risk", out)
+            self.assertEqual(rc, 0)
+
+    def test_bidirectional_trigger_from_agents_edit(self):
+        """AC18.5: editing AGENTS.md also triggers R-pointer if pair CLAUDE.md is divergent."""
+        with tempfile.TemporaryDirectory() as td:
+            a, c = self._write_pair(
+                td,
+                "# canonical AGENTS\n",
+                "# divergent CLAUDE\n\nstuff\n",
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(a)}},  # AGENTS edited
+                cwd=td,
+            )
+            self.assertIn("drift risk", out)
+            self.assertEqual(rc, 0)
+
+    def test_dot_claude_dir_independent(self):
+        """AC18: .claude/CLAUDE.md ↔ .claude/AGENTS.md checked independently."""
+        with tempfile.TemporaryDirectory() as td:
+            dot = Path(td) / ".claude"
+            a, c = self._write_pair(td, "# root agents\n", "@AGENTS.md\n")  # root pair OK
+            dot.mkdir()
+            (dot / "AGENTS.md").write_text("# inner\n")
+            (dot / "CLAUDE.md").write_text("# divergent inner\n\ndifferent content\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(dot / "CLAUDE.md")}},
+                cwd=td,
+            )
+            self.assertIn("drift risk", out)
+            # Root pair is fine, not flagged
+            self.assertNotIn("Make CLAUDE.md contain", out.split("drift risk")[0])
+            self.assertEqual(rc, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
