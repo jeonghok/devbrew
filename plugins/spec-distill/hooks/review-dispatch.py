@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""spec-distill Stop hook — review dispatch enforcer.
+"""spec-distill Stop hook — review dispatch enforcer (v0.5.0).
 
 Reads state.local.md for the current session. If `pending_review:` block
 is present AND last_dispatched_at is empty or older than the redispatch TTL,
-emits stdout `{"systemMessage": "..."}` to mandate next-turn dispatch of
-reviewing-spec skill against the recorded spec path.
+emits stdout `{"decision":"block","reason":"...","systemMessage":"..."}` —
+the `decision:"block"` forces Claude Code to continue immediately (no user
+input wait), and `reason` is shown to Claude as a system message so the next
+turn first action becomes the reviewing-spec skill call.
 
-After emit, rewrites state.local.md: pending_review block removed, `last_dispatched_at`
-set to now.
+Ordering guarantee (AC7.1): `rewrite_state()` must complete (with fsync) BEFORE
+the JSON is printed. Reverse ordering races with a second Stop fire and
+produces a block storm. On rewrite OSError, the hook exits `{}` 0 (no block)
+to preserve the race-free TTL guard (AC7.2) — the L4b UserPromptSubmit
+reminder picks up the missed dispatch on the next user prompt.
 
 Kill switches:
 - DEVBREW_DISABLE_SPEC_DISTILL=1
@@ -72,7 +77,11 @@ def rewrite_state(path: Path, body: str, now: datetime) -> None:
         body = LAST_DISPATCHED_RE.sub(f"last_dispatched_at: {new_ts}", body)
     else:
         body = body.rstrip() + f"\nlast_dispatched_at: {new_ts}\n"
-    path.write_text(body, encoding="utf-8")
+    # AC7.1: explicit flush + fsync for OS-level durability before any emit.
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(body)
+        f.flush()
+        os.fsync(f.fileno())
 
 
 def main() -> int:
@@ -119,11 +128,20 @@ def main() -> int:
         "호출 skill의 terminal handoff(writing-plans 등)는 review pass 이후로 보류."
     )
     msg = " ".join(msg_lines)
-    print(json.dumps({"systemMessage": msg}), flush=True)
+    # AC7.1: rewrite BEFORE emit. AC7.2: rewrite-fail → no emit (block storm guard).
     try:
         rewrite_state(state_path, body, now)
     except OSError as e:
-        print(f"[spec-distill] state rewrite failed (non-fatal): {e}", file=sys.stderr)
+        print(
+            f"[spec-distill] state rewrite failed (non-fatal, dispatch suppressed): {e}",
+            file=sys.stderr,
+        )
+        return 0  # {} stdout, no decision:block — L4b reminder picks up on next prompt
+    print(json.dumps({
+        "decision": "block",
+        "reason": msg,
+        "systemMessage": "[spec-distill] reviewing-spec dispatch enforced for next turn",
+    }), flush=True)
     return 0
 
 

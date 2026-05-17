@@ -95,3 +95,33 @@ class HookOutputSchemaTestBase(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.repo, ignore_errors=True)
+
+
+class TestReviewDispatchSchema(HookOutputSchemaTestBase):
+    """AC1 — review-dispatch.py (Stop hook) output schema."""
+
+    def test_pending_review_emits_decision_block_with_reason(self):
+        session_id = "test-stop-happy"
+        _write_pending_review_state(
+            self.repo, session_id,
+            spec_path="/tmp/some-spec.md", mode="spec",
+            worktree_path="/Users/foo/wt",
+        )
+        result = _run_hook(
+            "review-dispatch.py",
+            cwd=self.repo,
+            env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": session_id},
+        )
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertTrue(result.stdout.strip(), msg="stdout empty")
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload.get("decision"), "block")
+        reason = payload.get("reason", "")
+        self.assertIn("MANDATORY", reason)
+        self.assertIn("spec path:", reason)
+        self.assertIn("mode:", reason)
+        self.assertIn("worktree_path:", reason)
+        sysmsg = payload.get("systemMessage", "")
+        self.assertTrue(sysmsg, msg="systemMessage missing")
+        self.assertLessEqual(len(sysmsg), 120, msg=f"systemMessage too long: {len(sysmsg)}")
+        self.assertTrue(sysmsg.startswith("[spec-distill]"))
