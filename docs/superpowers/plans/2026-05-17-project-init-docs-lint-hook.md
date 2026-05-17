@@ -1900,12 +1900,10 @@ PR 생성 후 URL을 사용자에게 출력.
 
 ## V12 Probe Result
 
-*(Task 0 Step 4 — 구현자가 채움)*
-
-- Date: TBD
-- Harness: TBD
-- Verdict: TBD
-- Evidence: TBD
+- Date: 2026-05-17
+- Harness: Claude Code (`claude-opus-4-7[1m]`)
+- Verdict: **SUPPORTED** — `matcher: "Write|Edit|MultiEdit"` regex alternation 지원 확인. 별도 probe 우회됨.
+- Evidence: `plugins/spec-distill/hooks/hooks.json:33`이 이미 동일 패턴 (`"matcher": "Write|Edit|MultiEdit"`) 선언. 본 세션에서 `docs/superpowers/specs/2026-05-17-project-init-docs-lint-hook-design.md` Write 시 spec-distill의 `spec-write-validator.py`가 정상 발화 → `.claude/spec-distill/default/state.local.md`에 `pending_review:` 블록 기록. 같은 세션의 실측으로 harness가 regex alternation을 그대로 처리함을 확인. → Task 8의 `hooks.json` entry를 spec AC3 그대로 작성. Plan unchanged.
 
 ---
 
