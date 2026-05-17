@@ -44,10 +44,18 @@ sessions_inline=$(printf '%s' "$active_sessions" | tr '\n' ' ' | sed 's/ $//')
 msg="이전 인터뷰 세션이 있습니다. \`/interview resume\`로 재진입하거나, 새 세션은 \`/interview\` 그대로 시작. State 파일: $sessions_inline"
 
 if command -v jq >/dev/null 2>&1; then
-  jq -n --arg m "$msg" '{systemMessage: $m}'
+  jq -n --arg m "$msg" '{
+      hookSpecificOutput: {
+          hookEventName: "SessionStart",
+          additionalContext: $m
+      },
+      systemMessage: "[spec-distill] previous interview session(s) detected"
+  }'
 else
-  escaped=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ')
-  printf '{"systemMessage":"%s"}\n' "$escaped"
+  # Manual JSON-escape fallback (sed-based: backslash + double-quote + LF + CR only;
+  # null byte / other control chars / non-BMP unicode out of scope — jq path handles those).
+  escaped=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ' | tr -d '\r')
+  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"},"systemMessage":"[spec-distill] previous interview session(s) detected"}\n' "$escaped"
 fi
 
 exit 0

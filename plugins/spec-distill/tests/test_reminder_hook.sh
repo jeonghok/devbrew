@@ -55,9 +55,11 @@ out=$(run_hook)
 OLD=$(python3 -c 'from datetime import datetime,timezone,timedelta; print((datetime.now(timezone.utc)-timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ"))')
 write_state "$OLD"
 out=$(run_hook)
-echo "$out" | grep -q "reviewing-spec" \
-  && echo "$out" | grep -q "terminal handoff" \
-  && note PASS "AC4: reminder re-emits past TTL with full mandate body" \
+echo "$out" | jq -e '.hookSpecificOutput.hookEventName == "UserPromptSubmit"' >/dev/null \
+  && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("reviewing-spec")' >/dev/null \
+  && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("terminal handoff")' >/dev/null \
+  && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
+  && note PASS "AC4: reminder re-emits past TTL with full mandate body (dual-target)" \
   || note FAIL "AC4 failed. out='$out'"
 
 # AC4b (T-4): after re-emit, last_dispatched_at must be updated to a recent

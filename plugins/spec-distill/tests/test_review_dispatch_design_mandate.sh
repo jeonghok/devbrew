@@ -31,31 +31,26 @@ pending_review:
   triggered_at: 2026-05-17T00:00:00Z
 EOF
 
-out=$(cd "$WORK/main-repo" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$SID" python3 "$HOOK" </dev/null 2>&1)
+out=$(cd "$WORK/main-repo" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$SID" python3 "$HOOK" </dev/null 2>/dev/null)
 rc=$?
 
-# Extract systemMessage from JSON stdout (stderr filtered out via line filter)
-msg=$(printf '%s' "$out" | python3 -c 'import sys,json
-for line in sys.stdin:
-    line=line.strip()
-    if not line: continue
-    try:
-        o=json.loads(line)
-    except Exception: continue
-    if "systemMessage" in o:
-        print(o["systemMessage"]); break
-')
+# AC2 — Stop hook dual-target schema: long mandate in .reason, short trace in .systemMessage.
+echo "$out" | jq -e '.decision == "block"' >/dev/null \
+  && echo "$out" | jq -e '.reason | contains("reviewing-spec")' >/dev/null \
+  && echo "$out" | jq -e '.reason | contains("terminal handoff")' >/dev/null \
+  && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
+  && note PASS "AC2: mandate (.reason) contains 'reviewing-spec' + 'terminal handoff' phrases" \
+  || note FAIL "AC2 failed. out='$out'"
 
-# AC2 — both phrases present
-echo "$msg" | grep -q "reviewing-spec" \
-  && echo "$msg" | grep -q "terminal handoff" \
-  && note PASS "AC2: mandate contains 'reviewing-spec' + 'terminal handoff' phrases" \
-  || note FAIL "AC2 failed. msg='$msg'"
+# AC12 — worktree_path carried forward in .reason body
+echo "$out" | jq -e '.reason | contains("worktree_path: /Users/foo/.claude/worktrees/test-wt")' >/dev/null \
+  && note PASS "AC12: mandate (.reason) carries worktree_path forward" \
+  || note FAIL "AC12 failed. out='$out'"
 
-# AC12 — worktree_path included
-echo "$msg" | grep -q "worktree_path: /Users/foo/.claude/worktrees/test-wt" \
-  && note PASS "AC12: mandate carries worktree_path forward" \
-  || note FAIL "AC12 failed. msg='$msg'"
+# Mode signal — design mode mandate should carry mode marker in .reason
+echo "$out" | jq -e '.reason | contains("mode: design")' >/dev/null \
+  && note PASS "design mode marker present in mandate body" \
+  || note FAIL "design mode marker missing. out='$out'"
 
 # pending_review cleared after fire
 [[ -f "$SDIR/state.local.md" ]] \

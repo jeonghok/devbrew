@@ -102,7 +102,13 @@ def main() -> int:
     if wt:
         parts.append(f"worktree_path: {wt}.")
     parts.append("호출 skill의 terminal handoff(writing-plans 등)는 review pass 이후로 보류.")
-    print(json.dumps({"systemMessage": " ".join(parts)}), flush=True)
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": " ".join(parts),
+        },
+        "systemMessage": "[spec-distill] pending review reminder re-dispatched",
+    }), flush=True)
     # Update last_dispatched_at so we don't spam
     new_body = LAST_DISPATCHED_RE.sub(
         f"last_dispatched_at: {now.strftime('%Y-%m-%dT%H:%M:%SZ')}", body,

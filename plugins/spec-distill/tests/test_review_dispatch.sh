@@ -45,12 +45,14 @@ pending_review:
 "
 out=$(run_hook "test-11")
 rc=$?
-[[ $rc -eq 0 ]] && echo "$out" | grep -q '"systemMessage"' \
-  && echo "$out" | grep -q 'MANDATORY' \
-  && echo "$out" | grep -q '/tmp/some-spec.md' \
-  && echo "$out" | grep -q 'reviewing-spec' \
-  && echo "$out" | grep -q 'terminal handoff' \
-  && note PASS "AC11: pending_review triggers systemMessage with required tokens (incl. terminal handoff)" \
+[[ $rc -eq 0 ]] \
+  && echo "$out" | jq -e '.decision == "block"' >/dev/null \
+  && echo "$out" | jq -e '.reason | contains("MANDATORY")' >/dev/null \
+  && echo "$out" | jq -e '.reason | contains("/tmp/some-spec.md")' >/dev/null \
+  && echo "$out" | jq -e '.reason | contains("reviewing-spec")' >/dev/null \
+  && echo "$out" | jq -e '.reason | contains("terminal handoff")' >/dev/null \
+  && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
+  && note PASS "AC11: pending_review triggers decision:block reason+systemMessage with required tokens (incl. terminal handoff)" \
   || note FAIL "AC11 failed (rc=$rc out=$out)"
 
 # Case 12: AC12 — no pending_review → silent exit 0
