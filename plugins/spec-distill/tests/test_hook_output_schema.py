@@ -125,3 +125,22 @@ class TestReviewDispatchSchema(HookOutputSchemaTestBase):
         self.assertTrue(sysmsg, msg="systemMessage missing")
         self.assertLessEqual(len(sysmsg), 120, msg=f"systemMessage too long: {len(sysmsg)}")
         self.assertTrue(sysmsg.startswith("[spec-distill]"))
+
+    def test_reason_encoding_safe_with_special_chars(self):
+        """AC1a — special chars in spec path must round-trip via json.loads."""
+        session_id = "test-stop-encoding"
+        special_path = "/tmp/spec dir/with $special `chars`.md"
+        _write_pending_review_state(
+            self.repo, session_id,
+            spec_path=special_path, mode="design",
+            worktree_path="/tmp/wt with space",
+        )
+        result = _run_hook(
+            "review-dispatch.py",
+            cwd=self.repo,
+            env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": session_id},
+        )
+        self.assertEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)  # ← round-trip via stdlib json
+        self.assertIn(special_path, payload["reason"])
+        self.assertIn("/tmp/wt with space", payload["reason"])
