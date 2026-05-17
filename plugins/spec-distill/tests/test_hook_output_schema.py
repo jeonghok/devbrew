@@ -363,3 +363,47 @@ class TestPendingReviewReminderSchema(HookOutputSchemaTestBase):
         sysmsg = payload.get("systemMessage", "")
         self.assertTrue(sysmsg)
         self.assertLessEqual(len(sysmsg), 120)
+
+
+class TestInterviewTriggerSchema(HookOutputSchemaTestBase):
+    """AC4 — interview-trigger.sh output schema (bash, jq + no-jq paths)."""
+
+    def _run(self, env_extra=None):
+        stdin_payload = {"user_prompt": "make a chat app"}
+        return _run_hook(
+            "interview-trigger.sh",
+            cwd=self.repo, stdin_payload=stdin_payload,
+            env_extra=env_extra, binary="bash",
+        )
+
+    @unittest.skipUnless(shutil.which("jq"), "jq required for AC4-a")
+    def test_jq_path_emits_additional_context(self):
+        result = self._run()
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertTrue(result.stdout.strip())
+        payload = json.loads(result.stdout)
+        hso = payload.get("hookSpecificOutput", {})
+        self.assertEqual(hso.get("hookEventName"), "UserPromptSubmit")
+        ac = hso.get("additionalContext", "")
+        self.assertIn("interview", ac)
+        self.assertIn("advisory", ac)
+        sysmsg = payload.get("systemMessage", "")
+        self.assertTrue(sysmsg)
+        self.assertLessEqual(len(sysmsg), 120)
+
+    def test_no_jq_fallback_emits_additional_context(self):
+        # Force no-jq by stripping PATH to a dir without jq.
+        no_jq_bin = self.repo / "no-jq-bin"
+        no_jq_bin.mkdir()
+        # Symlink only bash + python3 + sed + tr + grep + printf + cat + wc.
+        for tool in ("bash", "python3", "sed", "tr", "grep", "printf", "cat", "wc"):
+            src = shutil.which(tool)
+            if src:
+                (no_jq_bin / tool).symlink_to(src)
+        result = self._run(env_extra={"PATH": str(no_jq_bin)})
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertTrue(result.stdout.strip())
+        payload = json.loads(result.stdout)
+        hso = payload.get("hookSpecificOutput", {})
+        self.assertEqual(hso.get("hookEventName"), "UserPromptSubmit")
+        self.assertIn("interview", hso.get("additionalContext", ""))

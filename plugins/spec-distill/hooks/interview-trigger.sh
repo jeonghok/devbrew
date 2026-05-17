@@ -59,11 +59,17 @@ if printf '%s' "$prompt" | grep -qiE "$keywords_pattern" && [[ "$word_count" -lt
   msg="이 요청은 spec 작성 인터뷰가 필요해 보입니다 (build/make/create 키워드 + 짧은 prompt). 명시적으로 \`/interview\`를 호출하면 4-block Korean Socratic 인터뷰로 모호함을 줄일 수 있습니다. (이 신호는 advisory — 강제하지 않습니다.)"
 
   if command -v jq >/dev/null 2>&1; then
-    jq -n --arg m "$msg" '{systemMessage: $m}'
+    jq -n --arg m "$msg" '{
+        hookSpecificOutput: {
+            hookEventName: "UserPromptSubmit",
+            additionalContext: $m
+        },
+        systemMessage: "[spec-distill] interview suggestion (see context)"
+    }'
   else
-    # Manual JSON-escape fallback for environments without jq
-    escaped=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ')
-    printf '{"systemMessage":"%s"}\n' "$escaped"
+    # Manual JSON-escape fallback (sync with session-anchor.sh — same escape strategy)
+    escaped=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ' | tr -d '\r')
+    printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"%s"},"systemMessage":"[spec-distill] interview suggestion (see context)"}\n' "$escaped"
   fi
 fi
 
