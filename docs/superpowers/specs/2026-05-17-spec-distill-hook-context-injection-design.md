@@ -1,11 +1,12 @@
 ---
 name: spec-distill-hook-context-injection
-version: 1.0.0
+version: 1.1.0
 created_at: 2026-05-17
 session_id: brainstorm-2026-05-17
 status: locked
 next_phase: writing-plans
-source: superpowers/brainstorming + empirical hook firing 증거 (state.local.md 흔적 + 수동 재현 stdout) + Claude Code 공식 hook 사양 (code.claude.com/docs/en/hooks) + quality-gates reference 패턴 (plugins/quality-gates/hooks/stop-hook.py:845-849)
+review_rounds: 1
+source: superpowers/brainstorming + empirical hook firing 증거 (state.local.md 흔적 + 수동 재현 stdout) + Claude Code 공식 hook 사양 (code.claude.com/docs/en/hooks, 본 doc §C4에 verbatim quote) + quality-gates reference 패턴 (plugins/quality-gates/hooks/stop-hook.py:845-849)
 ---
 
 # spec-distill — Hook Output Context Injection Fix 디자인 스펙 (v0.5.0)
@@ -27,7 +28,11 @@ source: superpowers/brainstorming + empirical hook firing 증거 (state.local.md
 
 ## Goal
 
-`plugins/spec-distill/hooks/`의 5개 hook이 stdout으로 emit하는 메시지가 Claude의 다음 model request context에 *실제로* 포함되도록 JSON output schema를 정정한다. 동일 메시지를 `systemMessage` 필드로 user transcript에도 짧게 노출시켜 hook 발화 흔적을 디버깅 가능하게 유지한다. 동시에 모든 hook의 output JSON schema 회귀를 잡는 통합 테스트(`tests/test_hook_output_schema.py`)를 신설한다. 한 PR로 묶어 minor version bump (`0.4.0` → `0.5.0`).
+본 PR은 **3개 독립 deliverable**을 한 묶음으로 ship한다. 각 deliverable은 독립적으로 implementation 가능하지만 한 PR로 머지하는 이유는 §Coupling 근거에 명시. writing-plans 단계에서 task 순서는 (a) → (b) → (c) — (b)는 (a)에 의존, (c)는 (a)+(b) 검증 통과 후 마지막에.
+
+- **(a) Hook 코드 정정 (load-bearing 변경)**: `plugins/spec-distill/hooks/`의 5개 hook (`review-dispatch.py`, `spec-write-validator.py` advisory 분기, `pending-review-reminder.py`, `interview-trigger.sh`, `session-anchor.sh`) stdout JSON을 dual-target 패턴으로 변경. Claude-target field (`hookSpecificOutput.additionalContext` 또는 `decision:"block"+reason`) + `systemMessage` (짧은 user-visible 흔적, ≤120자). 기존 `systemMessage`-only 출력은 모두 제거. Stop hook의 경우 추가로 `rewrite_state()` 호출 순서를 `print()` *이전*으로 변경 (TTL guard race condition fix, §AC7 참조).
+- **(b) 회귀 방지 test 신설 (compounding 산출물)**: `plugins/spec-distill/tests/test_hook_output_schema.py` 신설. 5개 hook 모두에 대해 (env_setup, stdin_payload | state_fixture, expected_fields) 테이블로 parametrize된 unittest 케이스. Stop hook은 stdin 대신 temp state file fixture로 dispatch trigger (§AC12 fixture strategy 참조). 기존 4개 bash test 파일의 assertion도 systemMessage substring grep → jq JSON path assertion으로 갱신.
+- **(c) 메타데이터 + 문서 동기화**: `plugin.json` v0.4.0 → v0.5.0 minor bump (cache key 갱신). `CHANGELOG.md`에 `[0.5.0] — 2026-05-17` Fixed/Changed/Security entry. `README.md` Hooks 섹션에 dual-target output 패턴 문서화 + "Principles Instantiated"에 Law 2/3 instantiation 라인 추가.
 
 **Coupling 근거 (왜 5개 hook을 한 PR에)**: 본 plugin의 reviewer dispatch는 *3단 안전망* (L1 PostToolUse advisory + L3 Stop mandate + L4b UserPromptSubmit reminder)으로 설계됐다. 셋 중 어느 하나만 systemMessage-only로 남기면 그 단의 fallback이 그대로 silent fail — 다른 두 단이 (인프라 race condition 등으로) 실패할 때 안전망이 작동하지 않는다. 사용자가 보고한 incident 자체가 "Stop hook은 발화했으나 Claude context에 도달 안 함"이었고, 같은 시점에 후속 UserPromptSubmit reminder도 *같은 버그로* silent fail이 보장된 상태였다. 5개 hook을 한 묶음으로 고쳐야 안전망이 의도대로 작동하는 *살아있는 baseline*이 만들어진다. (interview-trigger / session-anchor는 의도가 user advisory 우선이나 `additionalContext`로 보내도 user는 동일 메시지를 `systemMessage` 짧은 라인으로 보고 Claude도 컨텍스트를 가져 더 잘 보조 — 손실 없음). 롤백 단위(`git revert <pr-merge-sha>`)도 단일 commit이 되어 단순.
 
@@ -74,7 +79,7 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
 
 - **G1 — 5개 hook의 Claude-target 메시지가 실제로 inject됨**: `review-dispatch.py` (Stop), `spec-write-validator.py` advisory branch (PostToolUse), `pending-review-reminder.py` (UserPromptSubmit), `interview-trigger.sh` (UserPromptSubmit), `session-anchor.sh` (SessionStart) 모두 적절한 Claude-target 필드 사용.
 - **G2 — Dual-target output 패턴 채택**: 모든 hook이 Claude-target field와 `systemMessage`를 함께 emit. Claude는 context로 받고, user는 transcript에서 hook 발화 흔적 확인 가능. 디버깅 가능성 보존.
-- **G3 — Stop hook의 dispatch 보장이 즉시 continue로 실현**: `review-dispatch.py`의 `decision:"block"`이 Stop을 막고 Claude를 다음 model request로 즉시 진입시킴 → "다음 turn 첫 액션은 reviewing-spec" 강제가 user 입력 대기 없이 작동. 기존 TTL guard (`DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=30`)가 무한 block 루프 방지.
+- **G3 — Stop hook의 dispatch 보장이 즉시 continue로 실현 (조건부)**: `review-dispatch.py`의 `decision:"block"`이 Stop을 막고 Claude를 다음 model request로 즉시 진입시킴 → "다음 turn 첫 액션은 reviewing-spec" 강제가 user 입력 대기 없이 작동. TTL guard (`DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=30`)가 무한 block 루프 방지하나, **이는 `rewrite_state()`가 `print()`보다 먼저 실행되어 OS에 flush된다는 ordering 전제 위에서만 성립** (§AC7). 현재 코드는 print→rewrite 순서로 race condition 가능 (Reviewer round-1 issue 83dc5425) — 본 PR이 ordering 정정 포함.
 - **G4 — Output schema 회귀 방지 test**: 신규 `tests/test_hook_output_schema.py`가 5개 hook의 happy-path stdout을 jq schema assertion으로 검증. 누군가 다시 `systemMessage`-only로 떨어뜨리면 CI에서 즉시 잡힘.
 - **G5 — 기존 동작 모두 보존**: state machine (`pending_review:` 블록 + `last_dispatched_at` TTL guard), kill switches (`DEVBREW_DISABLE_SPEC_DISTILL=1` + `DEVBREW_SKIP_HOOKS=spec-distill:<event>`), worktree path resolution (`state_path.state_root()`), cleanup 정책 (24h pending purge / 7일 state file purge), block 분기의 `decision:"block"+reason` 패턴 — 전부 무손상.
 - **G6 — devbrew Plugin Shape 준수**: `plugin.json` minor bump (`0.4.0` → `0.5.0`, Claude 가시성 동작 변경 = new behavior surface), `CHANGELOG.md`에 `[0.5.0] — 2026-05-17` entry (Fixed + Changed), `README.md` Hook 섹션에 dual-target output 패턴 문서화.
@@ -90,36 +95,95 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
 - **NG6 — reviewing-spec skill / spec-reviewer agent / drafting-spec skill 변경 안 함**: hook 정정으로 dispatch가 reach하기 시작하면 기존 skill/agent가 그대로 작동해야 함. 추가 변경 시 PR 분리.
 - **NG7 — `decision:"block"` 사용을 PostToolUse advisory 분기로 확장 안 함**: PostToolUse advisory는 *정보 전달* 의도이지 차단이 아님 → `additionalContext`가 올바른 선택. block 분기 (현재 line 103–108)는 이미 `decision:"block"+reason` 사용 중이며 무손상.
 - **NG8 — 한 turn 안에서 reviewing-spec skill 자동 invoke 안 함**: Stop hook의 `decision:"block"`이 Claude를 continue 시키지만, 실제 skill 호출은 Claude의 다음 model request에서 reason을 보고 *결정*함. hook이 skill을 직접 호출하지 않음 (Claude Code는 그런 메커니즘 없음).
+- **NG9 — Cross-hook path resolver unification 안 함**: `state_path.state_root()` (Python) 와 `${CLAUDE_PROJECT_DIR:-$PWD}/.claude/spec-distill` (bash session-anchor.sh) 의 다른 resolution 전략. 본 PR은 output schema fix 범위로 한정, path resolver 통합은 후속 PR에서 진행. 본 PR에서는 `test_hook_output_schema.py`에 advisory 비교 test만 추가 (skipUnless).
 
 ## Constraints
 
 - **C1 — Python 3 stdlib + jq only**: 기존 hook들이 `json`/`os`/`re`/`sys` + bash `jq`만 사용. 외부 의존성 추가 없음. `test_hook_output_schema.py`는 Python stdlib `unittest` + `subprocess` + `json`.
 - **C2 — Hook timeout 5–10s 유지**: `hooks.json`의 기존 timeout 값 (5초 reminder, 10초 그 외) 변경 없음. output field 교체는 ms 수준 성능 차이.
 - **C3 — JSON I/O 계약 준수**: stdin = Claude Code의 hook input payload, stdout = 단일 JSON object. parse 실패 / 출력 실패 시 `{}` exit 0 (graceful degradation, 기존 동작 보존).
-- **C4 — Output JSON 구조 (Claude Code 공식 사양)**:
-  - PostToolUse / UserPromptSubmit / SessionStart 등 *additionalContext 지원 event*:
-    ```json
-    {
-      "hookSpecificOutput": {
-        "hookEventName": "PostToolUse",  // event 이름 정확히 일치 필수
-        "additionalContext": "..."
-      },
-      "systemMessage": "<짧은 흔적 라인>"
-    }
-    ```
-  - Stop event:
+- **C4 — Output JSON 구조 (Claude Code 공식 사양 verbatim)**:
+
+  본 문서 작성 시점(2026-05-17) `code.claude.com/docs/en/hooks`에서 직접 fetch한 인용:
+
+  - **PostToolUse 예시 (decision + additionalContext 결합 가능)**:
     ```json
     {
       "decision": "block",
-      "reason": "<Claude가 볼 본문>",
-      "systemMessage": "<짧은 흔적 라인>"
+      "reason": "Tool output validation failed",
+      "hookSpecificOutput": {
+        "hookEventName": "PostToolUse",
+        "additionalContext": "File created but contains syntax errors"
+      }
     }
     ```
-- **C5 — `hookSpecificOutput.hookEventName`은 호출 event와 정확히 일치**: `"PostToolUse"`, `"UserPromptSubmit"`, `"SessionStart"`. typo / 다른 event 이름이면 Claude Code가 silent drop 가능 — `test_hook_output_schema.py`가 assertion으로 검증.
-- **C6 — `decision:"block"`의 TTL guard 필수 (Stop hook)**: 무한 block 루프 방지. `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC` (default 30s) 이미 구현됨, 무손상. block한 직후 `last_dispatched_at`을 now로 rewrite → 30초 안에 다시 Stop이 fire되면 guard에 의해 통과 (block 안 함).
+    → 본 PR의 spec-write-validator advisory 분기는 `decision` 없이 hookSpecificOutput만 사용:
+    ```json
+    {
+      "hookSpecificOutput": {
+        "hookEventName": "PostToolUse",
+        "additionalContext": "[spec-distill] <mode> structural OK. Reviewer will be dispatched at turn end (Stop hook will mandate reviewing-spec skill invocation)."
+      },
+      "systemMessage": "[spec-distill] <mode> OK · reviewer dispatch pending"
+    }
+    ```
+
+  - **UserPromptSubmit 사양 (verbatim 인용)**:
+    > `additionalContext` | String added to Claude's context alongside the submitted prompt.
+
+    예시:
+    ```json
+    {
+      "hookSpecificOutput": {
+        "hookEventName": "UserPromptSubmit",
+        "additionalContext": "My additional context here"
+      }
+    }
+    ```
+
+  - **SessionStart 사양 (verbatim 인용)**:
+    > `additionalContext` | String added to Claude's context at the start of the conversation, before the first prompt.
+
+    예시:
+    ```json
+    {
+      "hookSpecificOutput": {
+        "hookEventName": "SessionStart",
+        "additionalContext": "Current branch: feat/auth-refactor\n..."
+      }
+    }
+    ```
+
+  - **Stop 사양 (verbatim 인용 — hookSpecificOutput 미사용, top-level decision 패턴)**:
+    > Events | Decision pattern | Key fields
+    > `Stop`, `SubagentStop` | Top-level `decision` | `decision: "block"`, `reason`
+
+    예시:
+    ```json
+    {
+      "decision": "block",
+      "reason": "Tests must pass before stopping"
+    }
+    ```
+    → 본 PR의 review-dispatch.py는 `systemMessage`를 추가하여 dual-target:
+    ```json
+    {
+      "decision": "block",
+      "reason": "MANDATORY: 다음 turn 첫 액션으로 reviewing-spec skill 호출. spec path: <path>. mode: <mode>. worktree_path: <wt>. 호출 skill의 terminal handoff(writing-plans 등)는 review pass 이후로 보류.",
+      "systemMessage": "[spec-distill] reviewing-spec dispatch enforced"
+    }
+    ```
+
+  - **글로벌 character cap (verbatim 인용)**:
+    > Hook output strings, including `additionalContext`, `systemMessage`, and plain stdout, are capped at 10,000 characters. Output that exceeds this limit is saved to a file and replaced with a preview and file path.
+
+- **C5 — `hookSpecificOutput.hookEventName`은 OPTIONAL hint (verbatim 사양)**: 공식 문서에 명시적으로 "hookEventName"이 required로 표기되지 않음. SessionStart 문서는 *"a hook that only loads context can print to stdout directly without building JSON"* 라고 plain stdout도 허용. 그럼에도 본 PR은 dual-target 출력에 `systemMessage` 등을 결합하므로 JSON form 필수이며, hookEventName을 명시 포함하여 (a) 미래 docs 변경에 대비한 defensive, (b) IDE/grep 친화 (어느 hook의 output인지 즉시 인지). `test_hook_output_schema.py`가 schema assertion으로 검증 (AC12).
+- **C6 — `decision:"block"`의 TTL guard 필수 + ordering 전제 (Stop hook)**: 무한 block 루프 방지. `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC` (default 30s) 이미 구현됨. **핵심: `rewrite_state()` 호출이 `print()` 이전에 완료**되어야 race-free. 현재 코드(review-dispatch.py line 122 print → lines 123–127 rewrite)는 inverted ordering으로 race 위험 — 본 PR이 ordering 정정 (§AC7).
 - **C7 — Kill switch는 보안 컨트롤 (devbrew CLAUDE.md §Plugin Shape)**: 어떤 dispatch 메시지든 kill switch active면 모두 `{}` exit. 우회 로직 금지. 기존 5개 hook의 kill switch 로직 무손상.
-- **C8 — `systemMessage` 짧게 유지**: dual-target output에서 systemMessage는 *user transcript에 hook 발화 흔적*이 목적 → 짧게 (한 줄, ≤80자). 본문은 additionalContext / reason에 들어감. 중복 노출 회피.
+- **C8 — `systemMessage` 길이 가이드 (단일 기준)**: dual-target output에서 systemMessage는 *user transcript에 hook 발화 흔적*이 목적 → 한 줄, **≤120자** (글로벌 10,000자 cap의 1.2% 사용). 본문은 additionalContext / reason에 들어가므로 중복 회피. AC1과 동일 기준 (C8/AC1 contradiction 해소).
 - **C9 — bash hook의 fallback (no-jq) JSON 출력 보존**: `interview-trigger.sh` / `session-anchor.sh`의 manual JSON escape fallback 경로도 함께 정정. jq 없는 환경에서 동일 schema 출력.
+- **C10 — Reason / additionalContext 안의 경로/문자열은 JSON 안전 round-trip 보장**: `json.dumps()` (Python) / `jq -n --arg` (bash)는 quote/backslash/newline 정확히 escape. 그러나 *bash test assertion*에서 `jq -er '.reason'` → pipe → grep으로 검증할 때 path가 shell-special 문자 (공백, `$`, backtick) 포함 시 grep 패턴이 잘못 해석될 수 있음. `test_hook_output_schema.py`는 Python `json.loads` 직접 사용으로 round-trip 안전. bash test는 `jq -e '.reason | contains("...")'` 형태로 jq 내부에서 substring 검증하여 shell 노출 회피.
+- **C11 — Cross-hook path resolution 일관성**: Python hook 3개는 `state_path.state_root()` 사용, bash hook 2개 중 `session-anchor.sh`는 `${CLAUDE_PROJECT_DIR:-$PWD}/.claude/spec-distill` 직접 사용 — 두 path resolver가 동일 결과를 내야 함. `state_path.py`의 `git rev-parse --git-common-dir` 기반 resolution과 bash의 직접 path가 worktree 시나리오에서 *다른* 결과를 낼 수 있음 (worktree 내부에서 호출 시 bash는 worktree root, Python은 main repo root). 본 PR은 output schema 변경만이므로 path resolution 로직 자체는 무변화 — 하지만 `test_hook_output_schema.py`에 cross-resolver 일관성 advisory test 추가 (skipUnless로 worktree env 감지 시만 실행). 본격 fix는 후속 PR (NG 추가).
 
 ## Acceptance Criteria
 
@@ -129,6 +193,7 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
   - `.decision == "block"`
   - `.reason` (non-empty, "MANDATORY" 단어와 `spec path:` substring 포함, `mode:` substring 포함, 있으면 `worktree_path:`)
   - `.systemMessage` (non-empty, ≤120자, "[spec-distill]" prefix)
+- **AC1a — `.reason` 인코딩 안전성**: spec path가 공백 / `$` / backtick / 따옴표 / 백슬래시 / 개행 포함하더라도 `json.loads(stdout).get("reason")`로 round-trip 후 원본 path 문자열 그대로 복원되어야 함. test_hook_output_schema.py가 fixture path `"/tmp/spec dir/with $special `chars`.md"` 같은 케이스로 검증.
 - **AC2 — `spec-write-validator.py` (PostToolUse) advisory 분기 stdout JSON**:
   - `.hookSpecificOutput.hookEventName == "PostToolUse"`
   - `.hookSpecificOutput.additionalContext` (non-empty, mode 단어 + "structural OK" + "Reviewer will be dispatched" 포함)
@@ -152,8 +217,8 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
 ### State machine 보존
 
 - **AC6 — `pending_review:` 블록 schema 무변화**: `spec-write-validator.py`가 state에 쓰는 4-field 블록(path/mode/worktree_path/triggered_at) 정확히 동일.
-- **AC7 — `last_dispatched_at` rewrite 무변화**: `review-dispatch.py` block 발사 후 (decision:"block" 출력 후) state의 `pending_review:` 블록 제거 + `last_dispatched_at` now로 rewrite — 기존 동작 그대로.
-- **AC8 — TTL guard 작동**: Stop hook 발화 시점에 `last_dispatched_at`이 30초 이내면 `{}` exit (no block, no continue). `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC` 환경변수 override 작동.
+- **AC7 — `rewrite_state()` ordering 정정 (write-before-emit)**: `review-dispatch.py`는 `rewrite_state(state_path, body, now)` 호출이 **`print(json.dumps(...))` 보다 먼저** 완료되어야 함 + Python `f.write()` 후 명시적 `f.flush()` + `os.fsync(f.fileno())` 로 OS-level durability 보장. 이는 기존 v0.4.0 코드(line 122 print → lines 123–127 rewrite) 와 다른 ordering — Reviewer round-1 issue 83dc5425 fix. ordering 반대 시 Claude Code가 `decision:"block"`을 처리하여 즉시 다시 Stop을 fire할 때 두 번째 hook이 stale state (last_dispatched_at 미갱신)를 읽어 두 번째 block 출력 → block storm 위험. `test_hook_output_schema.py`가 rewrite-before-emit 순서를 검증하기 위해 hook 실행 후 state file mtime이 stdout capture 시각 이전임을 assertion.
+- **AC8 — TTL guard 작동**: Stop hook 발화 시점에 `last_dispatched_at`이 30초 이내면 `{}` exit (no block, no continue). `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC` 환경변수 override 작동. AC7의 ordering 정정 전제 위에서만 신뢰 가능.
 - **AC9 — Cleanup 정책 무변화**: 24h pending_review 자동 purge + 7일 state file 자동 delete 기존 동작 그대로.
 
 ### Kill switches
@@ -163,7 +228,22 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
 
 ### 회귀 방지
 
-- **AC12 — `tests/test_hook_output_schema.py` 신설**: 5개 hook 모두에 대해 stdin payload 주입 → stdout JSON 캡처 → schema assertion (AC1–AC5의 각 field 존재 + 값 형태). Python `unittest`, `subprocess.run`으로 hook 실행. `unittest.skipUnless`로 jq 의존 케이스(AC4-b/AC5-b 의 jq-없음 fallback)는 환경 감지 후 skip.
+- **AC12 — `tests/test_hook_output_schema.py` 신설 (parametrized fixture 기반)**:
+  - **Structure**: Python `unittest.TestCase` 1개 + `subTest()` 또는 `parameterized` 스타일로 5개 hook을 row로 처리 — 각 row = `(hook_name, exec_args, env_setup, stdin_payload_or_state_fixture, expected_schema_dict)`.
+  - **Stop hook 케이스 (review-dispatch.py)**: stdin payload 없음 (Stop hook은 stdin 무시, state file 읽음). Setup:
+    1. `tempfile.TemporaryDirectory()` 로 임시 state root 생성.
+    2. `<temp_root>/<session_id>/state.local.md` 에 frontmatter + pending_review block 작성 (path/mode/worktree_path/triggered_at).
+    3. `DEVBREW_SPEC_DISTILL_SESSION_ID=<session_id>` env로 hook이 그 state 읽도록 유도.
+    4. `state_path.state_root()`를 monkey-patch 또는 `CLAUDE_PROJECT_DIR=<temp_root>` 로 redirect (방법은 implementation plan에서 결정).
+    5. `subprocess.run(["python3", "review-dispatch.py"], env=..., capture_output=True)` 실행.
+    6. `json.loads(result.stdout)` → schema assertion + state mtime < stdout receipt time (AC7 ordering).
+    7. tearDown: tempdir 자동 cleanup.
+  - **PostToolUse / UserPromptSubmit / SessionStart 케이스**: stdin payload 주입 (`{"session_id": "...", "hook_event_name": "...", "tool_name": "Write", "tool_input": {"file_path": "<temp_spec_path>"}, ...}`). spec-write-validator는 `<temp_spec_path>` 가 `docs/superpowers/specs/*-design.md` 형태여야 trigger되므로 fixture spec 파일도 생성.
+  - **bash hook 케이스 (interview-trigger.sh, session-anchor.sh)**: `subprocess.run(["bash", "interview-trigger.sh"], ...)` 또는 `["bash", "session-anchor.sh"]`. jq 의존 케이스(AC4-b/AC5-b)는 `unittest.skipUnless(not shutil.which("jq"), "jq not available — testing no-jq fallback")` 로 jq-없는 환경 감지 후 fallback path 검증. jq 있는 환경에서는 정상 path 검증.
+  - **Encoding 안전성 (AC1a)**: Stop hook 케이스 중 1개는 fixture path에 공백/특수 문자 포함 → round-trip 검증.
+  - **subTest 실패 격리**: 한 hook의 schema 위반이 다른 hook test를 막지 않음. CI 출력에서 5개 row 모두의 PASS/FAIL이 보임.
+  - **devbrew kill switch 케이스도 같은 파일에**: `DEVBREW_DISABLE_SPEC_DISTILL=1` 설정 후 5개 hook 모두 stdout이 `{}` 또는 empty임을 검증 (AC10/AC11과 통합).
+  - **Cross-resolver advisory (NG9)**: worktree env (`git rev-parse --is-inside-work-tree` 확인) 감지 시 Python `state_path.state_root()` 결과와 bash `${CLAUDE_PROJECT_DIR:-$PWD}/.claude/spec-distill` 결과가 다른 path 가리키는지 advisory 비교. 다르면 `unittest.expectedFailure` 로 마킹하여 후속 PR scope 명시.
 - **AC13 — 기존 `tests/test_review_dispatch.sh`, `tests/test_review_dispatch_design_mandate.sh` assertion 갱신**: 기존 systemMessage substring grep → `jq '.reason'` 기반 assertion + `jq '.decision'` == "block" assertion. 기존 PASS 시나리오 모두 PASS.
 - **AC14 — 기존 `tests/test_hooks.sh`, `tests/test_spec_write_validator.sh`, `tests/test_reminder_hook.sh` assertion 갱신**: 동일 — JSON path assertion으로 변경.
 - **AC15 — 5개 hook 모두에서 `systemMessage`-only output 발생 시 새 test가 즉시 FAIL**: 회귀 시 CI 블록.
@@ -179,18 +259,109 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
 
 ### 수정 (hook 코드 — 5 files)
 
-- `plugins/spec-distill/hooks/review-dispatch.py` (line 122): `print(json.dumps({"systemMessage": msg}), flush=True)` → `print(json.dumps({"decision":"block","reason":msg,"systemMessage":"<짧은 흔적>"}), flush=True)`. block 분기 의미 변경 docstring 갱신 (lines 1–16).
-- `plugins/spec-distill/hooks/spec-write-validator.py` (lines 167–175 advisory 분기): `{"systemMessage": "..."}` → `{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"..."},"systemMessage":"<짧은 흔적>"}`. block 분기 (line 103–108)는 *무변경*.
-- `plugins/spec-distill/hooks/pending-review-reminder.py` (line 105): `{"systemMessage": "..."}` → `{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"..."},"systemMessage":"<짧은 흔적>"}`.
-- `plugins/spec-distill/hooks/interview-trigger.sh` (lines 60–67): jq invocation + no-jq fallback 둘 다 갱신 — `{systemMessage: $m}` → `{hookSpecificOutput:{hookEventName:"UserPromptSubmit",additionalContext:$m},systemMessage:"<짧은 흔적>"}`. shell-escape 안전.
-- `plugins/spec-distill/hooks/session-anchor.sh` (lines 44–51): 동일 — jq + no-jq fallback 둘 다 `hookEventName:"SessionStart"` 형태로.
+각 hook의 literal systemMessage text는 ≤120자 (C8/AC1) + "[spec-distill]" prefix + hook 식별 키워드.
 
-### 수정 (test — 4 files)
+- `plugins/spec-distill/hooks/review-dispatch.py` (lines 122–127, **ordering 정정 + output schema 정정**):
+  - 현재 code:
+    ```python
+    print(json.dumps({"systemMessage": msg}), flush=True)
+    try:
+        rewrite_state(state_path, body, now)
+    except OSError as e:
+        print(f"[spec-distill] state rewrite failed (non-fatal): {e}", file=sys.stderr)
+    ```
+  - 신규 code (**rewrite-BEFORE-emit 순서**, fsync 추가):
+    ```python
+    try:
+        rewrite_state(state_path, body, now)  # fsync 포함, AC7
+    except OSError as e:
+        print(f"[spec-distill] state rewrite failed (non-fatal): {e}", file=sys.stderr)
+        # rewrite 실패 시에도 decision:block은 emit (사용자 알람 우선) — 다만 stale TTL guard로 storm 가능성 stderr로 loud log
+    print(json.dumps({
+        "decision": "block",
+        "reason": msg,
+        "systemMessage": "[spec-distill] reviewing-spec dispatch enforced for next turn"
+    }), flush=True)
+    ```
+  - `rewrite_state()` 본문에 `f.flush(); os.fsync(f.fileno())` 추가 (현재 `path.write_text()`는 내부적으로 close하나 OS-level fsync는 보장 안 함).
+  - docstring lines 1–16 갱신: "Stop hook이 `decision:'block'`을 emit하여 Claude를 즉시 continue시킴" 추가, "rewrite-before-emit ordering guarantee" 명시.
 
-- `plugins/spec-distill/tests/test_review_dispatch.sh`: 기존 systemMessage substring grep을 `jq -e '.decision == "block"'` + `jq -er '.reason' | grep MANDATORY` + `jq -er '.systemMessage' | grep '\[spec-distill\]'`로 교체. 기존 시나리오 (pending_review 있음 / 없음 / TTL within / kill switch) 모두 그대로 PASS.
+- `plugins/spec-distill/hooks/spec-write-validator.py` (lines 167–175 advisory 분기, **output schema 정정만**):
+  - 현재 code:
+    ```python
+    print(json.dumps({"systemMessage": (
+        f"[spec-distill] {mode} structural OK. "
+        "Reviewer will be dispatched at turn end."
+    )}), flush=True)
+    ```
+  - 신규 code:
+    ```python
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": (
+                f"[spec-distill] {mode} structural OK. "
+                "Reviewer will be dispatched at turn end "
+                "(Stop hook will mandate reviewing-spec skill invocation)."
+            )
+        },
+        "systemMessage": f"[spec-distill] {mode} OK · reviewer dispatch pending"
+    }), flush=True)
+    ```
+  - block 분기 (line 103–108 `emit_block()`)는 *무변경* — 이미 `{"decision":"block","reason":"..."}` 올바른 패턴.
+
+- `plugins/spec-distill/hooks/pending-review-reminder.py` (line 105, **output schema 정정만**):
+  - 현재 code:
+    ```python
+    print(json.dumps({"systemMessage": " ".join(parts)}), flush=True)
+    ```
+  - 신규 code:
+    ```python
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": " ".join(parts)
+        },
+        "systemMessage": "[spec-distill] pending review reminder re-dispatched"
+    }), flush=True)
+    ```
+
+- `plugins/spec-distill/hooks/interview-trigger.sh` (lines 60–67, **jq + no-jq fallback 둘 다 정정**):
+  - 신규 jq path:
+    ```bash
+    jq -n --arg m "$msg" '{
+        hookSpecificOutput: {
+            hookEventName: "UserPromptSubmit",
+            additionalContext: $m
+        },
+        systemMessage: "[spec-distill] interview suggestion (see context)"
+    }'
+    ```
+  - 신규 no-jq fallback:
+    ```bash
+    escaped=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ')
+    printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"%s"},"systemMessage":"[spec-distill] interview suggestion (see context)"}\n' "$escaped"
+    ```
+
+- `plugins/spec-distill/hooks/session-anchor.sh` (lines 44–51, **jq + no-jq fallback 둘 다 정정**):
+  - 신규 jq path:
+    ```bash
+    jq -n --arg m "$msg" '{
+        hookSpecificOutput: {
+            hookEventName: "SessionStart",
+            additionalContext: $m
+        },
+        systemMessage: "[spec-distill] previous interview session(s) detected"
+    }'
+    ```
+  - 신규 no-jq fallback: 동일 패턴.
+
+### 수정 (test — 5 files)
+
+- `plugins/spec-distill/tests/test_review_dispatch.sh`: 기존 systemMessage substring grep을 `jq -e '.decision == "block"'` + `jq -e '.reason | contains("MANDATORY")'` + `jq -e '.systemMessage | startswith("[spec-distill]")'`로 교체 (C10에 따라 grep 대신 jq 내부 substring). 기존 시나리오 (pending_review 있음 / 없음 / TTL within / kill switch) 모두 그대로 PASS.
 - `plugins/spec-distill/tests/test_review_dispatch_design_mandate.sh`: 동일 패턴으로 갱신.
-- `plugins/spec-distill/tests/test_hooks.sh` (있는 spec-write-validator advisory 케이스): `jq -e '.hookSpecificOutput.hookEventName == "PostToolUse"'` + `jq -er '.hookSpecificOutput.additionalContext' | grep "structural OK"`로 갱신.
-- `plugins/spec-distill/tests/test_reminder_hook.sh`: `jq -e '.hookSpecificOutput.hookEventName == "UserPromptSubmit"'` + additionalContext substring grep.
+- `plugins/spec-distill/tests/test_hooks.sh` (spec-write-validator advisory 케이스 포함 시): `jq -e '.hookSpecificOutput.hookEventName == "PostToolUse"'` + `jq -e '.hookSpecificOutput.additionalContext | contains("structural OK")'`로 갱신.
+- `plugins/spec-distill/tests/test_reminder_hook.sh`: `jq -e '.hookSpecificOutput.hookEventName == "UserPromptSubmit"'` + additionalContext substring (`contains("REMINDER")`).
 - `plugins/spec-distill/tests/test_spec_write_validator.sh`: advisory 케이스 같은 패턴. block 케이스 (이미 `decision`+`reason` 사용 중)는 무변경.
 
 ### 신규 (test — 1 file)
@@ -224,7 +395,8 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
 - **V2 — 기존 테스트 회귀 없음**: `bash plugins/spec-distill/tests/test_review_dispatch.sh`, `bash plugins/spec-distill/tests/test_review_dispatch_design_mandate.sh`, `bash plugins/spec-distill/tests/test_hooks.sh`, `bash plugins/spec-distill/tests/test_reminder_hook.sh`, `bash plugins/spec-distill/tests/test_spec_write_validator.sh` 모두 PASS. assertion 변경에도 시나리오 outcome 동일.
 - **V3 — Kill switch 회귀 없음**: `DEVBREW_DISABLE_SPEC_DISTILL=1`, `DEVBREW_SKIP_HOOKS=spec-distill:Stop`, `DEVBREW_SKIP_HOOKS=spec-distill:PostToolUse`, `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit`, `DEVBREW_SKIP_HOOKS=spec-distill:SessionStart` 각각 active일 때 해당 hook stdout `{}` (또는 empty) — `test_hook_output_schema.py`에 케이스 추가.
 - **V4 — TTL guard 회귀 없음**: Stop hook을 30초 내 연속 2회 발화 시 두 번째 호출은 stdout `{}` exit 0 (no block). `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=1` 환경에서 1초 sleep 후 fire하면 두 번째도 block 출력.
-- **V5 — `decision:"block"` 의미 검증 (수동 E2E)**: 새 spec 파일 commit → spec-write-validator의 additionalContext가 Claude tool result 직후 system reminder로 보임 → Claude가 Stop 시도 → review-dispatch의 `decision:"block"` 발화 → Claude가 즉시 continue, 다음 model request에서 reason을 보고 reviewing-spec skill 호출. 수동 한 사이클 (≤5분).
+- **V5a — Hook output schema 자동 검증 (CI 가능)**: `test_hook_output_schema.py`의 5개 hook 케이스가 stdout JSON을 `json.loads()` 후 전체 schema dict 비교 (top-level key set, `hookSpecificOutput.hookEventName` 정확 일치, `additionalContext`/`reason` 비어있지 않음, `systemMessage` prefix + ≤120자, ordering: state file mtime < stdout receipt 시각). 수동 단계 없음, CI 통과 가능.
+- **V5b — Claude Code E2E 동작 검증 (수동, inherent)**: 새 design.md commit → spec-write-validator의 additionalContext가 Claude tool result 직후 system reminder로 보임 → Claude가 Stop 시도 → review-dispatch의 `decision:"block"` 발화 → Claude가 즉시 continue, 다음 model request에서 reason을 보고 reviewing-spec skill 호출. **이 시나리오는 Claude Code 인프라 행동을 stub 불가능** — 수동 E2E (≤5분) 외에 자동화 수단 없음. 실패 시 본 PR의 핵심 가설(공식 doc verbatim quote, C4)이 invalidate되므로 PR 차단 사유.
 - **V6 — Worktree path 회귀 없음**: worktree 내부에서 spec 생성 → state file이 main repo `.claude/spec-distill/<session>/state.local.md`에 기록 → 다음 Stop hook에서 worktree_path 필드가 reason에 포함됨. 기존 V2/V3에서 cover.
 - **V7 — `plugin.json` version bump 확인**: `git diff plugins/spec-distill/.claude-plugin/plugin.json` → `"version": "0.4.0"` → `"version": "0.5.0"` 단일 변경.
 - **V8 — CHANGELOG entry 확인**: `head -20 plugins/spec-distill/CHANGELOG.md` → `## [0.5.0] — 2026-05-17` 신규 entry. v0.4.0 entry 위치 무변.
@@ -251,6 +423,10 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
 - **Approach A — 보고된 2 hook (`review-dispatch` + `spec-write-validator` advisory) 만 fix.** 거절 이유: `pending-review-reminder.py`가 *완전히 같은 버그* (line 105 `{"systemMessage": "..."}`)이며, L3 Stop이 어떤 이유로 missed되면 L4b reminder fallback이 dispatch를 살리도록 v0.4.0에서 도입됐는데, 그 안전망이 같은 버그로 silent fail 보장 상태. Approach A는 사용자가 보고한 incident만 해결하고 안전망 갈증을 그대로 둠 → 다음 incident가 인프라 race condition (가설 3) 으로 발생하면 L4b도 동일 silent fail. 가성비 낮음.
 
 - **Approach C — devbrew-wide systemMessage audit (quality-gates `post-tool-use.py:81`, project-init hook 포함).** 거절 이유: (a) 사용자 보고 범위 초과, (b) quality-gates의 PR-creation systemMessage 같은 건 *의도된 user-only display* 가능성 (user가 다음 prompt로 `/qg`를 직접 invoke하는 흐름이 design), 일률적 변경 시 의도하지 않은 동작 변경 위험, (c) PR 크기 폭발로 review/롤백 단위 비대화. *향후 별도 PR*로 plugin별 의도 확인 후 진행 가능.
+
+- **Two-phase migration (Stop hook patch PR 먼저, 4개 advisory hook 후속 PR).** 거절 이유: (a) Stop hook만 먼저 ship하면 advisory L1 (`spec-write-validator`) 이 여전히 systemMessage-only로 남아 Claude가 "structural OK, reviewer dispatched" advisory를 받지 못함 → 사용자가 디스크 흔적으로만 dispatch 상태 추적 가능, 사용자 경험 enrichment 누락. (b) 두 단계 사이의 인터림 baseline에 v0.5.0a 같은 중간 버전이 필요 — devbrew SemVer 정책상 모호 (cache key 한 번 더 갱신). (c) 롤백 단위가 2개 commit으로 분산 → `git revert <single-sha>` 단순성 손실. (d) `test_hook_output_schema.py`도 2번에 걸쳐 추가하거나 후속 PR로 미루는 어색함. 한 PR로 cutover하는 atomic 변경이 SemVer/test/롤백 모두에서 더 단순. 다만 Reviewer round-1 issue adcd1c89가 지적했듯 이 옵션이 명시되지 않으면 reader가 "고려됐는가?"를 알 수 없음 → 본 round-2 spec revision에서 명시 추가.
+
+- **Feature flag (`DEVBREW_SPEC_DISTILL_NEW_SCHEMA=1`) dual-output mode.** 거절 이유: (a) systemMessage + additionalContext + decision+reason을 동시에 출력하는 코드는 이미 본 PR이 채택 (dual-target의 "dual"이 feature flag dual이 아니라 *user-vs-Claude target dual*). flag로 새 schema를 gating해도 Claude는 항상 새 schema field를 보거나 못 봄 — production에서 *부분 enable*이 의미 없음 (Claude Code 한 인스턴스가 한 hook output을 한 번에 처리). (b) Hook 출력 schema는 binary contract — 옳거나 silent fail이거나. 점진적 ramp가 hook output에 적용 불가능 (network rollout 아님). (c) flag 추가는 신규 env var → NG5 위반 (devbrew LD10 일관성). 적절한 안전 장치는 *기존* kill switch (`DEVBREW_DISABLE_SPEC_DISTILL=1`) + 회귀 test + plugin.json minor bump로 충분.
 
 - **Stop hook에 `decision:"block"` 대신 `additionalContext`-like 메커니즘만 사용 (event 변경).** 거절 이유: Stop event는 `hookSpecificOutput.additionalContext` 미지원 (공식 사양상 SessionStart/Setup/SubagentStart/UserPromptSubmit/UserPromptExpansion/PreToolUse/PostToolUse/PostToolUseFailure/PostToolBatch에 한정). Stop hook의 유일한 Claude-target 메커니즘이 `decision:"block"+reason`. 우회 불가.
 
@@ -284,3 +460,6 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
 - **Affected plugin**: `plugins/spec-distill/` (v0.4.0 → v0.5.0).
 - **Out-of-scope plugins**: `plugins/quality-gates/`, `plugins/project-init/` (별도 PR로 audit 가능).
 - **다음 단계**: superpowers `writing-plans` skill로 implementation plan 생성.
+- **Revision history**:
+  - v1.0.0 (2026-05-17, commit c0bc790): initial draft.
+  - v1.1.0 (2026-05-17, round-1 spec-reviewer adversarial review 반영): 10개 issue 모두 fix — rewrite-before-emit ordering 의무화 (AC7), reason 인코딩 round-trip 안전성 (AC1a + C10), `test_hook_output_schema.py` Stop-hook state fixture 명세 (AC12), V5 split (V5a 자동/V5b 수동), test 파일 count 정정 (4→5), §9.1에 two-phase migration + feature flag 거절 alternative 추가, C4 hook 사양 verbatim 인용, C5 hedging 제거, Goal 3개 deliverable로 enumerate, G3 조건부 표현 명시, hook 별 literal systemMessage 텍스트 명시 (`<짧은 흔적>` placeholder 제거), C11 + NG9에 cross-resolver consistency 명시 (본 PR scope 한정).
