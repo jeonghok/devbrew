@@ -20,7 +20,7 @@ grep -qE 'design\b.*approved.*Human Gate' "$SKILL" \
   && note PASS "AC6: design approved → Human Gate row present" \
   || note FAIL "AC6 design approved row missing"
 
-# (needs_revise & count<3 → brainstorming author 회귀)
+# (needs_revise & count<5 → brainstorming author 회귀; v0.3.0 bump 3→5)
 grep -qE 'design\b.*needs_revise.*brainstorming author' "$SKILL" \
   && note PASS "AC6: design needs_revise → brainstorming author 회귀 row present" \
   || note FAIL "AC6 design needs_revise row missing"
@@ -30,9 +30,9 @@ grep -qE 'drafting-spec.*미호출|drafting-spec.*호출하지 (않|않음)' "$S
   && note PASS "AC6: 'drafting-spec 미호출' explicit text present" \
   || note FAIL "AC6 drafting-spec exclusion missing"
 
-# (forced Human Gate at count >= 3)
-grep -qE 'design\b.*count >?= ?3|design\b.*>=.*3.*Human Gate' "$SKILL" \
-  && note PASS "AC6: design count>=3 forced Human Gate row present" \
+# (forced Human Gate at count >= 5; v0.3.0 bump 3→5, see CHANGELOG)
+grep -qE 'design\b.*count >?= ?5|design\b.*>=.*5.*Human Gate' "$SKILL" \
+  && note PASS "AC6: design count>=5 forced Human Gate row present" \
   || note FAIL "AC6 design forced escalate row missing"
 
 echo

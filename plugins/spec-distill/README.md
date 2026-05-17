@@ -31,7 +31,7 @@
                     │       ├─ (2) 유지 → [3] re-dispatch (dismissed)
                     │       └─ (3) 추가 인터뷰 → [1]
                     └─ approved ────────→ [5]
-                [4] Revise → [3] (auto re-review, max 3)
+                [4] Revise → [3] (auto re-review, max 5)
                 [5] Human Gate
                     ├─ "more interview" → [1]
                     ├─ "edit spec"      → [4]
