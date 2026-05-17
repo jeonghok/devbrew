@@ -28,6 +28,8 @@ from typing import Optional
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
+from state_path import state_root as _state_root  # noqa: E402
 PARSE_LIB = SCRIPT_DIR.parent / "scripts" / "parse_spec_structure.py"
 BLACKLIST = SCRIPT_DIR.parent / "scripts" / "ambiguity-blacklist.txt"
 
@@ -75,20 +77,19 @@ def call_parser(sub: str, *args: str) -> dict:
         return {"_error": f"parser bad json: {e}"}
 
 
-def write_state(session_id: str, path: str, mode: str) -> None:
-    state_dir = Path(".claude/spec-distill") / session_id
+def write_state(session_id: str, path: str, mode: str, worktree_path: str) -> None:
+    state_dir = _state_root() / session_id
     state_dir.mkdir(parents=True, exist_ok=True)
     state_file = state_dir / "state.local.md"
     block = (
         "pending_review:\n"
         f"  path: {path}\n"
         f"  mode: {mode}\n"
+        f"  worktree_path: {worktree_path}\n"
         f"  triggered_at: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
     )
     if state_file.exists():
         body = state_file.read_text(encoding="utf-8")
-        # Strip existing pending_review block BEFORE rstrip — regex requires
-        # each indented line to end with \n
         body = re.sub(
             r"^pending_review:\n(?:  [^\n]*\n)*", "", body, flags=re.MULTILINE
         )
@@ -158,7 +159,7 @@ def main() -> int:
     if os.environ.get("DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW") != "1":
         session_id = os.environ.get("DEVBREW_SPEC_DISTILL_SESSION_ID", "default")
         try:
-            write_state(session_id, file_path, mode)
+            write_state(session_id, file_path, mode, os.getcwd())
         except (PermissionError, OSError) as exc:
             print(f"[spec-distill] state write failed (non-fatal): {exc}", file=sys.stderr)
 
