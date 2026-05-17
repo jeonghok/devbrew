@@ -330,3 +330,36 @@ class TestSpecWriteValidatorSchema(HookOutputSchemaTestBase):
         self.assertTrue(sysmsg)
         self.assertLessEqual(len(sysmsg), 120)
         self.assertTrue(sysmsg.startswith("[spec-distill]"))
+
+
+class TestPendingReviewReminderSchema(HookOutputSchemaTestBase):
+    """AC3 — pending-review-reminder.py output schema."""
+
+    def test_pending_review_past_ttl_emits_reminder_in_additional_context(self):
+        session_id = "test-reminder"
+        # last_dispatched_at older than 30s default TTL.
+        old_ts = "2026-05-16T00:00:00Z"
+        _write_pending_review_state(
+            self.repo, session_id,
+            spec_path="/tmp/x-design.md", mode="design",
+            worktree_path="/tmp/wt",
+            last_dispatched_at=old_ts,
+        )
+        stdin_payload = {"user_prompt": "hi", "session_id": session_id}
+        result = _run_hook(
+            "pending-review-reminder.py",
+            cwd=self.repo, stdin_payload=stdin_payload,
+            env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": session_id},
+        )
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertTrue(result.stdout.strip())
+        payload = json.loads(result.stdout)
+        hso = payload.get("hookSpecificOutput", {})
+        self.assertEqual(hso.get("hookEventName"), "UserPromptSubmit")
+        ac = hso.get("additionalContext", "")
+        self.assertIn("REMINDER", ac)
+        self.assertIn("pending_review", ac)
+        self.assertIn("reviewing-spec", ac)
+        sysmsg = payload.get("systemMessage", "")
+        self.assertTrue(sysmsg)
+        self.assertLessEqual(len(sysmsg), 120)
