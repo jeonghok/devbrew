@@ -136,7 +136,7 @@ def main() -> int:
             f"[spec-distill] state rewrite failed (non-fatal, dispatch suppressed): {e}",
             file=sys.stderr,
         )
-        return 0  # {} stdout, no decision:block — L4b reminder picks up on next prompt
+        return 0  # empty stdout, no decision:block — L4b reminder picks up on next prompt
     print(json.dumps({
         "decision": "block",
         "reason": msg,

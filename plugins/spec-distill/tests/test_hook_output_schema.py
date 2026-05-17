@@ -181,3 +181,110 @@ class TestReviewDispatchSchema(HookOutputSchemaTestBase):
         # stderr should contain the loud log
         self.assertIn("state rewrite failed", result.stderr)
         self.assertIn("dispatch suppressed", result.stderr)
+
+
+class TestReviewDispatchOrdering(unittest.TestCase):
+    """AC7.3 — verify rewrite_state runs BEFORE print(json.dumps(...))."""
+
+    def _walk_calls_in_order(self, body_nodes, target_names):
+        """Yield (lineno, name) for Call nodes whose func.id is in target_names.
+
+        Recurses into FunctionDef body if encountered (handles helper refactor
+        per AC7.3.1 commentary)."""
+        for node in body_nodes:
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+                call = node.value
+                name = None
+                if isinstance(call.func, ast.Name):
+                    name = call.func.id
+                elif isinstance(call.func, ast.Attribute):
+                    name = call.func.attr
+                if name in target_names:
+                    yield (node.lineno, name)
+            if isinstance(node, ast.With):
+                yield from self._walk_calls_in_order(node.body, target_names)
+            if isinstance(node, ast.Try):
+                yield from self._walk_calls_in_order(node.body, target_names)
+                for handler in node.handlers:
+                    yield from self._walk_calls_in_order(handler.body, target_names)
+            if isinstance(node, ast.If):
+                yield from self._walk_calls_in_order(node.body, target_names)
+                yield from self._walk_calls_in_order(node.orelse, target_names)
+            if isinstance(node, ast.FunctionDef):
+                yield from self._walk_calls_in_order(node.body, target_names)
+
+    def test_ast_rewrite_before_print(self):
+        """AC7.3.1 — static AST scan: rewrite_state appears before print."""
+        source = (HOOKS_DIR / "review-dispatch.py").read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        main_fn = next(
+            n for n in tree.body
+            if isinstance(n, ast.FunctionDef) and n.name == "main"
+        )
+        calls = list(self._walk_calls_in_order(main_fn.body, {"rewrite_state", "print"}))
+        rewrite_lines = [ln for ln, n in calls if n == "rewrite_state"]
+        print_lines = [ln for ln, n in calls if n == "print"]
+        self.assertTrue(rewrite_lines, "no rewrite_state call found in main()")
+        self.assertTrue(print_lines, "no print call found in main()")
+        # The final emit print must be after the rewrite_state call.
+        self.assertLess(
+            min(rewrite_lines), max(print_lines),
+            msg=f"AC7.3.1 violated: rewrite={rewrite_lines}, print={print_lines}",
+        )
+
+    def test_mock_trace_rewrite_before_print(self):
+        """AC7.3.3 — execute-time mock trace verifies rewrite runs first."""
+        import importlib.util
+        spec_module = importlib.util.spec_from_file_location(
+            "review_dispatch_under_test", HOOKS_DIR / "review-dispatch.py",
+        )
+        mod = importlib.util.module_from_spec(spec_module)
+        spec_module.loader.exec_module(mod)
+
+        import builtins
+        call_log: list[str] = []
+        original_rewrite = mod.rewrite_state
+        original_print = builtins.print
+
+        def traced_rewrite(*args, **kwargs):
+            call_log.append("rewrite_state")
+            return original_rewrite(*args, **kwargs)
+
+        def traced_print(*args, **kwargs):
+            # Only count stdout prints (json emit), not stderr loud logs.
+            if kwargs.get("file") is None:
+                call_log.append("print_stdout")
+            return original_print(*args, **kwargs)
+
+        repo = _make_temp_repo()
+        try:
+            session_id = "test-mock-trace"
+            _write_pending_review_state(
+                repo, session_id, spec_path="/tmp/x-spec.md", mode="spec",
+            )
+            with mock.patch.object(mod, "rewrite_state", traced_rewrite), \
+                 mock.patch.object(builtins, "print", traced_print), \
+                 mock.patch.dict(os.environ, {
+                     "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
+                 }), \
+                 mock.patch("sys.stdin", new=__import__("io").StringIO("{}")):
+                cwd_before = os.getcwd()
+                try:
+                    os.chdir(repo)
+                    mod.main()
+                finally:
+                    os.chdir(cwd_before)
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+        try:
+            r_idx = call_log.index("rewrite_state")
+        except ValueError:
+            self.fail(f"rewrite_state not called; trace: {call_log}")
+        try:
+            p_idx = call_log.index("print_stdout")
+        except ValueError:
+            self.fail(f"print_stdout not called; trace: {call_log}")
+        self.assertLess(
+            r_idx, p_idx,
+            msg=f"AC7.3.3 violated: rewrite at {r_idx}, print at {p_idx}; trace: {call_log}",
+        )
