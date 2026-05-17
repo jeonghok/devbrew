@@ -47,6 +47,14 @@ locked_decisions:
     section: "#constraints"
     summary: 'Kill switch는 기존 namespace 재사용. DEVBREW_DISABLE_SPEC_DISTILL=1, DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit (또는 :reminder). 신규 env var 도입 금지. (C3)'
     source: brainstorming-round-1
+  - id: LD11
+    section: "#goals"
+    summary: 'State 파일 위치는 항상 main repo root 기준으로 해석한다. 워크트리에서 호출되더라도 `<main_repo>/.claude/spec-distill/<session-id>/state.local.md`에 기록 — git rev-parse --git-common-dir로 main repo .git 위치를 얻고 dirname으로 root 도출. 비-git/git 실패 시 cwd fallback + stderr loud log. (G6, philosophy §4.8 instantiation)'
+    source: brainstorming-round-2 (worktree investigation)
+  - id: LD12
+    section: "#goals"
+    summary: 'pending_review block에 worktree_path 필드 추가 — Write 시점의 절대경로(cwd 기반)를 기록. Stop hook의 mandate systemMessage에도 worktree_path를 포함시켜 reviewing-spec이 main repo cwd로 돌아왔을 때도 spec 파일의 절대경로를 잃지 않도록 한다. (G7)'
+    source: brainstorming-round-2 (worktree investigation)
 ---
 
 # spec-distill Design-Mode Trigger Reliability (v0.4.0)
@@ -63,6 +71,8 @@ PostToolUse hook이 `*-design.md` write를 감지한 후, 동일 session 또는 
 
 추가로 reviewing-spec skill 자체는 spec mode(11 sections, locked_decisions, interview re-entry) 전제로 짜여 있어, 가령 dispatch 되더라도 design.md를 spec.md로 오인 판정할 위험이 있음.
 
+**워크트리 환경 추가 발견 (round-2 investigation)**: 본 design 작성 자체를 worktree 안(`<repo>/.claude/worktrees/spec-distill-design-trigger/`)에서 수행하면서 dogfood로 검증 중, PostToolUse hook이 state를 **worktree's `.claude/spec-distill/`** 에 기록하는 것을 관측. main repo의 `.claude/spec-distill/`은 빈 상태. 이는 philosophy §4.8 ("State 자체는 main repo의 `.claude/<plugin>/<session-id>/`에 머무르며...") 컨벤션 위반이며, `ExitWorktree action: remove` 시 pending_review state silent loss → reviewer dispatch 실패의 두 번째 root cause. 4-layer redundancy가 무력화되는 시나리오.
+
 devbrew Law 2(*Writer and Reviewer Must Never Share a Pass*)의 instantiation 신뢰성 문제다. brainstorming은 superpowers 플러그인 소속이라 우리가 수정할 수 없으므로, spec-distill 내부의 hook + skill layer에서만 결정론을 끌어올린다.
 
 ## Goals
@@ -72,6 +82,8 @@ devbrew Law 2(*Writer and Reviewer Must Never Share a Pass*)의 instantiation �
 - **G3**: UserPromptSubmit reminder hook 추가 — Stop hook의 single-shot mandate가 다음 turn에서 무시될 경우 매 user prompt에 재emit. TTL guard. (cf. LD3)
 - **G4**: Hook은 agent를 직접 invoke하지 않는다. systemMessage signaling 한정. Law 2 물리 분리 유지. (cf. LD4)
 - **G5**: reviewing-spec skill의 routing table에 design row 추가 + Step 1 mode 분기. 기존 spec mode 경로 무손상. (cf. LD5)
+- **G6**: State 파일 위치를 worktree-aware로 통일 — 모든 hook이 `git rev-parse --git-common-dir`로 main repo root를 해석하고 거기에 state를 기록/읽기. worktree에서 호출돼도 main repo `.claude/spec-distill/`에만 state가 살아 `ExitWorktree action: remove` silent-loss 차단. (cf. LD11, philosophy §4.8)
+- **G7**: pending_review block에 `worktree_path:` 필드 추가. Stop mandate systemMessage에도 포함 → reviewing-spec이 main repo cwd로 돌아와도 spec 절대경로 보존. (cf. LD12)
 
 ## Non-goals
 
@@ -87,6 +99,7 @@ devbrew Law 2(*Writer and Reviewer Must Never Share a Pass*)의 instantiation �
 - **C3**: Kill switch는 기존 namespace 재사용. `DEVBREW_DISABLE_SPEC_DISTILL=1`, `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` (또는 `:reminder`). (cf. LD10)
 - **C4**: 모든 신규/변경 hook은 graceful degradation — state I/O 실패 시 exit 0 + stderr loud log. crash 금지.
 - **C5**: PostToolUse hook(`spec-write-validator.py`) 본문 변경 최소화. 이미 design mode 처리 중 — 추가 회귀 테스트 fixture만 보강.
+- **C6**: state path 해석은 `hooks/state_path.py` 단일 helper로 중앙화. 모든 hook(spec-write-validator, review-dispatch, pending-review-reminder)이 이 helper만 호출. git 부재/실패 시 cwd fallback + `[spec-distill] state root fallback: cwd ({path}) — main repo 미해석` stderr 한 줄 emit. (cf. LD11)
 
 ## Acceptance Criteria
 
@@ -100,6 +113,9 @@ devbrew Law 2(*Writer and Reviewer Must Never Share a Pass*)의 instantiation �
 - **AC8**: `DEVBREW_DISABLE_SPEC_DISTILL=1` 또는 `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` 환경변수 설정 시 reminder hook은 exit 0 (no emit).
 - **AC9**: plugin.json `version: 0.4.0`, CHANGELOG.md `## [0.4.0] — 2026-MM-DD` 섹션에 Added/Changed 분류로 변경사항 기재. README.md "Hooks Installed" 섹션에 UserPromptSubmit reminder 항목 추가, 한 줄 justification ("Stop hook single-shot mandate가 silent drop될 경우 매 turn 재확인하는 redundancy layer — skill로 처리 불가, turn boundary 이벤트가 필요").
 - **AC10**: 신규 테스트 4개 파일 전체 통과. 커버 시나리오: (a) design mode 인식 + state 기록, (b) Stop mandate 본문 검증("reviewing-spec" + "terminal handoff 보류" 둘 다), (c) reminder TTL 가드 — skip / 초과 시 재emit 두 분기, (d) reviewing-spec design routing rows 3개.
+- **AC11**: worktree cwd(`<repo>/.claude/worktrees/<wt>/`)에서 PostToolUse가 fire해도 state 파일은 `<main_repo>/.claude/spec-distill/<session-id>/state.local.md`에 기록된다. worktree 안 `.claude/spec-distill/`에는 state 파일이 *생기지 않는다*.
+- **AC12**: pending_review block에 `worktree_path: <write 시점 cwd>` 필드 포함. Stop hook이 emit하는 mandate systemMessage 본문에 spec 파일 절대경로 + worktree_path 둘 다 포함되어, reviewing-spec이 main repo로 돌아온 turn에서도 spec을 찾을 수 있다.
+- **AC13**: git 부재 환경(예: tarball checkout)에서 hook이 호출되면 state는 cwd-relative로 fallback 기록되고, stderr에 `[spec-distill] state root fallback: cwd (...) — main repo 미해석` 한 줄이 emit된다 (loud log). 사용자가 fallback 동작을 인지 가능.
 
 ## Files to Modify
 
@@ -110,8 +126,10 @@ plugins/spec-distill/
 ├── README.md                                                 # Hooks Installed에 UserPromptSubmit reminder + Principles Instantiated 갱신
 ├── hooks/
 │   ├── hooks.json                                            # UserPromptSubmit에 reminder 등록 (기존 interview-trigger.sh 옆)
-│   ├── pending-review-reminder.py                            # NEW: TTL-guarded redundancy hook
-│   └── review-dispatch.py                                    # systemMessage 본문 강화 (terminal handoff 보류 문구)
+│   ├── pending-review-reminder.py                            # NEW: TTL-guarded redundancy hook (state_path helper 사용)
+│   ├── review-dispatch.py                                    # systemMessage 본문 강화 + state_path helper + mandate에 worktree_path 포함
+│   ├── spec-write-validator.py                               # state write에 state_path helper + pending_review에 worktree_path 필드 추가
+│   └── state_path.py                                         # NEW: main repo root 해석 helper (git rev-parse --git-common-dir, cwd fallback loud log)
 ├── skills/reviewing-spec/SKILL.md                            # Step 1 mode 분기 + Routing Table design rows 3개
 ├── agents/spec-reviewer.md                                   # design mode checklist 분기 섹션
 └── tests/
@@ -120,7 +138,9 @@ plugins/spec-distill/
     ├── test_design_mode_validator.py                         # NEW: L1 mode=design 인식 검증
     ├── test_review_dispatch_design_mandate.py                # NEW: L4a mandate 본문 검증
     ├── test_reminder_hook.py                                 # NEW: L4b TTL skip / 초과 시 재emit
-    └── test_reviewing_spec_design_routing.py                 # NEW: L5 routing rows 검증
+    ├── test_reviewing_spec_design_routing.py                 # NEW: L5 routing rows 검증
+    ├── test_state_path_worktree.py                           # NEW: state_path helper가 worktree에서 main repo root 반환
+    └── test_state_path_fallback.py                           # NEW: git 부재 시 cwd fallback + loud log
 ```
 
 ## Verification Plan
@@ -130,6 +150,7 @@ plugins/spec-distill/
 - **V3**: `python3 -m pytest plugins/spec-distill/tests/test_reminder_hook.py -v` — TTL 가드 동작 (skip + 재emit 두 분기).
 - **V4**: `python3 -m pytest plugins/spec-distill/tests/test_reviewing_spec_design_routing.py -v` — routing table design rows 3개가 모두 정의되어 있고 의도된 next phase로 매핑.
 - **V5**: 수동 E2E — temp 디렉토리에서 `docs/superpowers/specs/2026-05-17-e2e-design.md`를 Write tool로 작성 → state.local.md에 pending_review 확인 → Claude session 종료 후 재시작 → 첫 user prompt에 reminder systemMessage 관측.
+- **V5a**: 수동 E2E — worktree (`<repo>/.claude/worktrees/<name>/`)에서 같은 파일을 Write → state.local.md가 `<main_repo>/.claude/spec-distill/<session-id>/`에만 기록되었는지 확인 (worktree 안에는 없어야 함). `ExitWorktree action: remove` 후에도 state 보존 확인.
 - **V6**: kill switch 검증 — `DEVBREW_SKIP_HOOKS=spec-distill:reminder python3 hooks/pending-review-reminder.py < payload.json`가 exit 0 + no stdout emit.
 - **V7**: 회귀 검증 — 기존 `tests/test_*.py` 전체 통과 (spec mode 경로 무손상).
 
