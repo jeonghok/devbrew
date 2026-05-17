@@ -94,26 +94,46 @@ def cleanup_stale_states(root: Path) -> None:
                         f"[spec-distill] state cleanup: purged stale pending_review in {state_file}",
                         file=sys.stderr,
                     )
-                except OSError:
-                    pass
-        # File-level delete if only last_dispatched_at remains and is old
-        if "pending_review:" not in body:
+                except OSError as e:
+                    print(
+                        f"[spec-distill] state cleanup: FAILED to write purged state to {state_file}: {e}",
+                        file=sys.stderr,
+                    )
+        # File-level delete if only last_dispatched_at remains and is old.
+        # Guard against deleting state files that still carry in-flight session
+        # data (phase/issue_history/wall_clock_started_at/reconsensus markers).
+        SIGNIFICANT_MARKERS = (
+            "phase:",
+            "issue_history:",
+            "wall_clock_started_at:",
+            "rereview_count:",
+            "reconsensus_accepted_ids:",
+            "mode_b_violation:",
+            "pending_locked_decisions:",
+            "under_revision:",
+        )
+        has_other_data = any(m in body for m in SIGNIFICANT_MARKERS)
+        if "pending_review:" not in body and not has_other_data:
             ld = re.search(r"^last_dispatched_at:\s*(.+)$", body, flags=re.MULTILINE)
             if ld:
                 ts = _parse_iso(ld.group(1))
                 if ts and ts < file_cutoff:
                     try:
                         state_file.unlink()
-                        try:
-                            session_dir.rmdir()
-                        except OSError:
-                            pass
+                    except OSError as e:
                         print(
-                            f"[spec-distill] state cleanup: deleted stale state file {state_file}",
+                            f"[spec-distill] state cleanup: FAILED to delete {state_file}: {e}",
                             file=sys.stderr,
                         )
+                        continue
+                    try:
+                        session_dir.rmdir()
                     except OSError:
                         pass
+                    print(
+                        f"[spec-distill] state cleanup: deleted stale state file {state_file}",
+                        file=sys.stderr,
+                    )
 
 
 def main(argv: list[str]) -> int:

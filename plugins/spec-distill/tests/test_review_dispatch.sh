@@ -4,7 +4,15 @@ set -u -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 HOOK="$REPO_ROOT/plugins/spec-distill/hooks/review-dispatch.py"
 WORK=$(mktemp -d -t specdistill-dispatch-XXXXXX)
+# Resolve symlinks (macOS /var → /private/var) so Path.resolve() output matches.
+WORK=$(cd "$WORK" && pwd -P)
 trap 'rm -rf "$WORK"' EXIT
+
+# T-5: exercise the git-aware state_root path (whole point of state_path.py).
+# Without git init, state_root() falls back to cwd-relative — which masks the
+# primary code path.
+( cd "$WORK" && git init -q && git config user.email t@t.t \
+  && git config user.name t && git commit -q --allow-empty -m seed )
 
 pass=0; fail=0
 note() {
@@ -41,7 +49,8 @@ rc=$?
   && echo "$out" | grep -q 'MANDATORY' \
   && echo "$out" | grep -q '/tmp/some-spec.md' \
   && echo "$out" | grep -q 'reviewing-spec' \
-  && note PASS "AC11: pending_review triggers systemMessage with required tokens" \
+  && echo "$out" | grep -q 'terminal handoff' \
+  && note PASS "AC11: pending_review triggers systemMessage with required tokens (incl. terminal handoff)" \
   || note FAIL "AC11 failed (rc=$rc out=$out)"
 
 # Case 12: AC12 — no pending_review → silent exit 0
@@ -74,6 +83,44 @@ rc2=$?
   && grep -q '^last_dispatched_at:' "$WORK/.claude/spec-distill/test-13/state.local.md" \
   && note PASS "AC13: dispatch consumes block; re-fire within TTL silent" \
   || note FAIL "AC13 failed (rc1=$rc1 rc2=$rc2 out2=$out2)"
+
+# Case 14 (T-1): Stop hook kill switch via DEVBREW_SKIP_HOOKS=spec-distill:Stop
+setup_state "test-14" "---
+session_id: test-14
+---
+
+pending_review:
+  path: /tmp/k.md
+  mode: spec
+  triggered_at: 2026-05-16T10:00:00Z
+"
+out=$(cd "$WORK" && DEVBREW_SPEC_DISTILL_SESSION_ID=test-14 \
+  DEVBREW_SKIP_HOOKS="spec-distill:Stop" \
+  bash -c "echo '{}' | python3 '$HOOK'" 2>/dev/null)
+rc=$?
+[[ $rc -eq 0 ]] && [[ -z "$out" ]] \
+  && grep -q '^pending_review:' "$WORK/.claude/spec-distill/test-14/state.local.md" \
+  && note PASS "AC14 (T-1): kill switch spec-distill:Stop suppresses emit + preserves state" \
+  || note FAIL "AC14 failed (rc=$rc out=$out)"
+
+# Case 15 (T-1): kill switch via DEVBREW_SKIP_HOOKS=spec-distill:review-dispatch (alias)
+setup_state "test-15" "---
+session_id: test-15
+---
+
+pending_review:
+  path: /tmp/k2.md
+  mode: spec
+  triggered_at: 2026-05-16T10:00:00Z
+"
+out=$(cd "$WORK" && DEVBREW_SPEC_DISTILL_SESSION_ID=test-15 \
+  DEVBREW_SKIP_HOOKS="spec-distill:review-dispatch" \
+  bash -c "echo '{}' | python3 '$HOOK'" 2>/dev/null)
+rc=$?
+[[ $rc -eq 0 ]] && [[ -z "$out" ]] \
+  && grep -q '^pending_review:' "$WORK/.claude/spec-distill/test-15/state.local.md" \
+  && note PASS "AC15 (T-1): kill switch :review-dispatch alias suppresses emit" \
+  || note FAIL "AC15 failed (rc=$rc out=$out)"
 
 echo ""
 echo "summary: $pass passed, $fail failed"

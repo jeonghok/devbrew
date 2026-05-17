@@ -60,6 +60,13 @@ echo "$out" | grep -q "reviewing-spec" \
   && note PASS "AC4: reminder re-emits past TTL with full mandate body" \
   || note FAIL "AC4 failed. out='$out'"
 
+# AC4b (T-4): after re-emit, last_dispatched_at must be updated to a recent
+# timestamp (anti-spam guard — without this update, AC3 would silently regress).
+new_ts=$(grep -E '^last_dispatched_at:' "$SDIR/state.local.md" | awk '{print $2}')
+[[ -n "$new_ts" ]] && [[ "$new_ts" != "$OLD" ]] \
+  && note PASS "AC4b (T-4): last_dispatched_at updated after emit (anti-spam guard live)" \
+  || note FAIL "AC4b failed — last_dispatched_at unchanged after emit: '$new_ts' vs OLD='$OLD'"
+
 # AC8: kill switch via DEVBREW_SKIP_HOOKS
 out=$(run_hook "DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit")
 [[ -z "$out" ]] \
