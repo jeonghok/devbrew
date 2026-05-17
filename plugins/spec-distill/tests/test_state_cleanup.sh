@@ -40,6 +40,7 @@ session_id: stale-pending
 pending_review:
   path: /tmp/y.md
   mode: design
+  worktree_path: /tmp/wt-stale
   triggered_at: $T_25H
 EOF
 

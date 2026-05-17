@@ -79,7 +79,7 @@ def cleanup_stale_states(root: Path) -> None:
         # Purge stale pending_review
         import re
         m = re.search(
-            r"^pending_review:\n  path:[^\n]+\n  mode:[^\n]+\n  triggered_at:\s*([^\n]+)\n(?:  [^\n]*\n)*",
+            r"^pending_review:\n  path:[^\n]+\n  mode:[^\n]+\n(?:  worktree_path:[^\n]+\n)?  triggered_at:\s*([^\n]+)\n(?:  [^\n]*\n)*",
             body, flags=re.MULTILINE,
         )
         if m:
