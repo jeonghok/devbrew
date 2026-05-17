@@ -3,6 +3,15 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.16.0] — 2026-05-18
+
+### Changed
+- SKILL.md Phase 1 dispatch: unified `#### Phase 1 (unified dispatch)` section replaces dual headings (primary `#### Phase 1: Critical Analysis` + `#### Phase 1 (legacy/fallback)`). ~135 LOC dedup. Single dispatch builder = single source of truth for persona edits going forward (T2-2 / T3-5).
+- AskUserQuestion fan-out gate now applies to BOTH primary and fallback paths (was: fallback skipped the gate — degraded paths got less friction, not more, contradicting graceful-degradation principle).
+
+### Fixed
+- Fallback dispatch path no longer silently skips the user-cost-consent prompt at fan-out ≥4.
+
 ## [1.15.0] — 2026-05-17
 
 ### Added

@@ -7,6 +7,7 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 이 플러그인은 다음 devbrew 법칙·원칙을 인스턴스화합니다
 ([`docs/philosophy/devbrew-harness-philosophy.md`](../../docs/philosophy/devbrew-harness-philosophy.md) 참고):
 
+- **Law 3 (Compounding)** — Phase 1 single dispatch builder (v1.16.0). Future persona edits land in one place, never drift across two dispatch sections.
 - **Law 1 (Clarity Before Code)** — Gate 1 plan-verifier가 FAIL 시 `gate1_summary` YAML 핸드오프로 Gate 2 진입을 차단.
 - **Law 2 (Writer ≠ Reviewer)** — 모든 reviewer agent가 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언 (frontmatter scoping으로 물리적 격리).
 - **Law 3 (Compounding)** — scout `rationale` 필드가 매 iteration마다 state 파일에 로깅; reviewer-persona 편집이 학습된 교훈을 인코딩하는 substrate.
