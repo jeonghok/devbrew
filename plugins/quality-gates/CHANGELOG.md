@@ -3,6 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.16.0] — 2026-05-18
+
+### Fixed
+- `stop-hook.py` step 8 `except Exception` block: PIPELINE_ERROR routing broadened from `{gate3_needs_resolution, gate3_repeat_detected}` to ALL non-terminal transitions. Forward-progress writes (`next_gate`, `retry_gate`, `continue`, `gate2_user_choice`, `max_gate2_exceeded`, `gate3_fail`) now also abort on persist failure rather than falling through with stale in-memory state. Terminal (complete/abort) intentionally fall through to step 9 cleanup which is independently resilient (T2-6).
+- New `TestStateWriteFailureBroadening` contract tests covering AC22 (8 forward-progress transition types emit error) and AC23 (2 terminal transitions are silent).
+
 ## [1.15.0] — 2026-05-17
 
 ### Added
