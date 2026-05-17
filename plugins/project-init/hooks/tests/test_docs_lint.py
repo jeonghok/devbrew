@@ -1,0 +1,135 @@
+"""Unit tests for plugins/project-init/hooks/docs-lint.py."""
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from typing import Optional, Tuple
+
+HOOK = Path(__file__).resolve().parent.parent / "docs-lint.py"
+
+
+def run_hook(payload: dict, env_override: Optional[dict] = None, cwd: Optional[str] = None) -> Tuple[str, int]:
+    """Invoke the hook with given JSON payload; return (stdout, returncode)."""
+    env = os.environ.copy()
+    # Strip any inherited devbrew env vars first to make tests deterministic
+    for k in list(env):
+        if k.startswith("DEVBREW_"):
+            del env[k]
+    if env_override:
+        env.update(env_override)
+    if cwd:
+        env["CLAUDE_PROJECT_DIR"] = cwd
+    cp = subprocess.run(
+        [sys.executable, str(HOOK)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=10,
+    )
+    return cp.stdout, cp.returncode
+
+
+class TestSkeleton(unittest.TestCase):
+    """AC1, AC2, AC4, AC5, AC6 — skeleton behavior."""
+
+    def test_kill_switch_full_disable(self):
+        """AC4: DEVBREW_DISABLE_PROJECT_INIT=1 → {} exit 0."""
+        out, rc = run_hook(
+            {"tool_name": "Write", "tool_input": {"file_path": "/anything/CLAUDE.md"}},
+            env_override={"DEVBREW_DISABLE_PROJECT_INIT": "1"},
+        )
+        self.assertEqual(out.strip(), "{}")
+        self.assertEqual(rc, 0)
+
+    def test_kill_switch_hook_opt_out(self):
+        """AC4: DEVBREW_SKIP_HOOKS containing project-init:docs-lint → {}."""
+        out, rc = run_hook(
+            {"tool_name": "Write", "tool_input": {"file_path": "/anything/CLAUDE.md"}},
+            env_override={"DEVBREW_SKIP_HOOKS": "other:foo,project-init:docs-lint,bar:baz"},
+        )
+        self.assertEqual(out.strip(), "{}")
+        self.assertEqual(rc, 0)
+
+    def test_non_target_tool_no_op(self):
+        """AC2: Bash tool input → {} (only Write/Edit/MultiEdit checked)."""
+        with tempfile.TemporaryDirectory() as td:
+            out, rc = run_hook(
+                {"tool_name": "Bash", "tool_input": {"command": "ls"}},
+                cwd=td,
+            )
+            self.assertEqual(out.strip(), "{}")
+            self.assertEqual(rc, 0)
+
+    def test_non_target_file_no_op(self):
+        """AC2: file_path that isn't one of the 4 names → {}."""
+        with tempfile.TemporaryDirectory() as td:
+            other = Path(td) / "README.md"
+            other.write_text("# readme\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(other)}},
+                cwd=td,
+            )
+            self.assertEqual(out.strip(), "{}")
+            self.assertEqual(rc, 0)
+
+    def test_invalid_json_graceful(self):
+        """AC6: invalid stdin JSON → {} exit 0 (graceful)."""
+        # send raw garbage instead of structured payload
+        env = {k: v for k, v in os.environ.items() if not k.startswith("DEVBREW_")}
+        cp = subprocess.run(
+            [sys.executable, str(HOOK)],
+            input="this is not json",
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=10,
+        )
+        self.assertEqual(cp.stdout.strip(), "{}")
+        self.assertEqual(cp.returncode, 0)
+
+    def test_worktree_path_skip(self):
+        """AC5: file_path inside .git/worktrees/** → skip ({})."""
+        with tempfile.TemporaryDirectory() as td:
+            wt_dir = Path(td) / ".git" / "worktrees" / "wt1"
+            wt_dir.mkdir(parents=True)
+            wt_file = wt_dir / "CLAUDE.md"
+            wt_file.write_text("# stub\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(wt_file)}},
+                cwd=td,
+            )
+            self.assertEqual(out.strip(), "{}")
+            self.assertEqual(rc, 0)
+
+    def test_path_traversal_outside_project_dir(self):
+        """C4: file_path escaping CLAUDE_PROJECT_DIR → skip."""
+        with tempfile.TemporaryDirectory() as td_outer:
+            with tempfile.TemporaryDirectory() as td_project:
+                outside = Path(td_outer) / "CLAUDE.md"
+                outside.write_text("# stub\n")
+                out, rc = run_hook(
+                    {"tool_name": "Write", "tool_input": {"file_path": str(outside)}},
+                    cwd=td_project,
+                )
+                self.assertEqual(out.strip(), "{}")
+                self.assertEqual(rc, 0)
+
+    def test_target_file_passes_through_to_rules(self):
+        """AC1: legitimate CLAUDE.md in project dir → reaches rule layer (no rules triggered for valid empty file → {})."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "CLAUDE.md"
+            target.write_text("# Title\n\nShort content.\n")  # passes all 5 rules
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertEqual(out.strip(), "{}")
+            self.assertEqual(rc, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
