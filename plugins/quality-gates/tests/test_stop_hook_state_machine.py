@@ -404,6 +404,47 @@ class TestWallClockBudget(unittest.TestCase):
             transition = base
         self.assertEqual(transition["type"], "wall_clock_exceeded")
 
+    def test_AC14b_abort_after_deadline_is_not_overridden(self):
+        """Regression: once deadline is past, an abort signal must flow
+        through unmodified — otherwise wall_clock_exceeded loops forever."""
+        from datetime import datetime, timezone
+        state = {
+            "current_gate": 2, "gate2_iteration": 1, "max_gate2_iterations": 5,
+            "skip_runtime": False, "single_gate": None,
+            "wall_clock_deadline_at": "2026-05-17T11:00:00Z",
+        }
+        abort_signal = {"action": "abort", "reason": "User chose to abort"}
+        base = stop_hook.compute_transition(state, abort_signal)
+        self.assertEqual(base["type"], "abort")
+        # Simulate step 7.5 from main() with the BUDGET_SKIPPABLE guard:
+        BUDGET_SKIPPABLE = {"abort", "complete", "wall_clock_exceeded"}
+        now = datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc)
+        if stop_hook.deadline_exceeded(state, now=now) and base["type"] not in BUDGET_SKIPPABLE:
+            transition = {"type": "wall_clock_exceeded", "prior": base}
+        else:
+            transition = base
+        self.assertEqual(transition["type"], "abort",
+                         "deadline_exceeded must not override an abort signal")
+
+    def test_AC14c_complete_after_deadline_is_not_overridden(self):
+        """Companion: complete (pipeline finished) must also flow through."""
+        from datetime import datetime, timezone
+        state = {
+            "current_gate": 3, "gate2_iteration": 1, "max_gate2_iterations": 5,
+            "skip_runtime": False, "single_gate": None,
+            "wall_clock_deadline_at": "2026-05-17T11:00:00Z",
+        }
+        complete_signal = {"action": "complete"}
+        base = stop_hook.compute_transition(state, complete_signal)
+        self.assertEqual(base["type"], "complete")
+        BUDGET_SKIPPABLE = {"abort", "complete", "wall_clock_exceeded"}
+        now = datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc)
+        if stop_hook.deadline_exceeded(state, now=now) and base["type"] not in BUDGET_SKIPPABLE:
+            transition = {"type": "wall_clock_exceeded", "prior": base}
+        else:
+            transition = base
+        self.assertEqual(transition["type"], "complete")
+
 
 if __name__ == "__main__":
     unittest.main()

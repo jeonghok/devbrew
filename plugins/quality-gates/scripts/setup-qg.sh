@@ -215,7 +215,10 @@ else
   if WALL_CLOCK_DEADLINE="$(date -u -v+"${DEADLINE_MIN}"M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; then
     :
   else
-    WALL_CLOCK_DEADLINE="$(date -u -d "+${DEADLINE_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ)"
+    WALL_CLOCK_DEADLINE="$(date -u -d "+${DEADLINE_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" || {
+      echo "⚠️  Quality Gates: cannot compute wall-clock deadline on this platform; deadline disabled" >&2
+      WALL_CLOCK_DEADLINE=""
+    }
   fi
 fi
 

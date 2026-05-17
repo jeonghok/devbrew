@@ -954,7 +954,13 @@ def main():
 
     # 7.5. Wall-clock budget override (T2-3). Pure compute_transition above
     # stays untouched; this is main()-only I/O against current clock.
-    if deadline_exceeded(state):
+    # Terminal and self-acknowledging transitions are NOT overridden — the
+    # user has already responded to the budget prompt (or is taking a
+    # terminal action), so re-injecting the prompt would loop forever.
+    BUDGET_SKIPPABLE = {"abort", "complete", "wall_clock_exceeded"}
+    if deadline_exceeded(state) and transition["type"] not in BUDGET_SKIPPABLE:
+        # `prior` preserves the original transition for audit/log — read by
+        # future logging hooks, intentionally unused by current main flow.
         transition = {"type": "wall_clock_exceeded", "prior": transition}
 
     # 8. Update state file with signal results
@@ -1029,11 +1035,9 @@ def main():
         "gate3_needs_resolution", "gate3_repeat_detected",
         "wall_clock_exceeded",
     }
-    USER_CHOICE_TYPES_FOR_HINT = USER_CHOICE_TYPES
-
     # Surface worktree path to user on non-terminal user-choice transitions so they
     # know where the preserved worktree is.
-    if state.get("worktree_path") and transition["type"] in USER_CHOICE_TYPES_FOR_HINT:
+    if state.get("worktree_path") and transition["type"] in USER_CHOICE_TYPES:
         print(
             f"[quality-gates] worktree preserved at {state['worktree_path']} — "
             "remove manually with `git worktree remove` after handling.",
