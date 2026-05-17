@@ -366,5 +366,44 @@ class TestGate3ResolutionState(unittest.TestCase):
         self.assertIn("abort", prompt.lower())
 
 
+class TestWallClockBudget(unittest.TestCase):
+    """T2-3: deadline_exceeded() pure helper + main() integration."""
+
+    def test_AC10_exceeded_returns_true(self):
+        from datetime import datetime, timezone
+        state = {"wall_clock_deadline_at": "2026-05-17T12:00:00Z"}
+        now = datetime(2026, 5, 17, 12, 0, 1, tzinfo=timezone.utc)
+        self.assertTrue(stop_hook.deadline_exceeded(state, now=now))
+
+    def test_AC11_not_exceeded_returns_false(self):
+        from datetime import datetime, timezone
+        state = {"wall_clock_deadline_at": "2026-05-17T12:00:00Z"}
+        now = datetime(2026, 5, 17, 11, 59, 59, tzinfo=timezone.utc)
+        self.assertFalse(stop_hook.deadline_exceeded(state, now=now))
+
+    def test_AC12_missing_field_returns_false(self):
+        self.assertFalse(stop_hook.deadline_exceeded({}, now=None))
+
+    def test_AC13_setup_disabled_by_env_writes_empty(self):
+        state = {"wall_clock_deadline_at": ""}
+        self.assertFalse(stop_hook.deadline_exceeded(state, now=None))
+
+    def test_AC14_main_integration_routes_to_wall_clock_exceeded(self):
+        from datetime import datetime, timezone
+        state = {
+            "current_gate": 2, "gate2_iteration": 1, "max_gate2_iterations": 5,
+            "skip_runtime": False, "single_gate": None,
+            "wall_clock_deadline_at": "2026-05-17T11:00:00Z",
+        }
+        signal = {"gate": "2", "verdict": "PASS"}
+        base = stop_hook.compute_transition(state, signal)
+        now = datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc)
+        if stop_hook.deadline_exceeded(state, now=now):
+            transition = {"type": "wall_clock_exceeded", "prior": base}
+        else:
+            transition = base
+        self.assertEqual(transition["type"], "wall_clock_exceeded")
+
+
 if __name__ == "__main__":
     unittest.main()

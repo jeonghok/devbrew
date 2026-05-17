@@ -282,6 +282,31 @@ def extract_last_signal(transcript_path):
     return attrs
 
 
+# --- Wall-clock budget (T2-3) ---
+
+def deadline_exceeded(state, now=None) -> bool:
+    """Pure helper: True iff state has a populated wall_clock_deadline_at
+    that is strictly in the past relative to `now` (default: utc now).
+
+    Returns False when:
+    - the field is absent (legacy state, feature off),
+    - the field is the empty string (DEVBREW_QG_DEADLINE_MIN=0 opt-out),
+    - the field is malformed (defensive — feature off rather than abort).
+    """
+    deadline_str = state.get("wall_clock_deadline_at", "")
+    if not deadline_str:
+        return False
+    try:
+        deadline = datetime.fromisoformat(deadline_str.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return False
+    if now is None:
+        now = datetime.now(timezone.utc)
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
+    return now > deadline
+
+
 # --- State Transitions ---
 
 def compute_transition(state, signal):
@@ -734,6 +759,25 @@ _SPECIAL_PROMPTS = {
             '- Abort: emit <qg-signal action="abort" reason="User chose to abort" />\n'
         ),
     },
+    "wall_clock_exceeded": {
+        "header": "WALL_CLOCK_EXCEEDED",
+        "body": (
+            "Quality Gates exceeded the configured wall-clock budget.\n\n"
+            "Present options to the user via AskUserQuestion:\n"
+            "1. Extend budget — opt-in to continue (re-run /qg with "
+            "DEVBREW_QG_DEADLINE_MIN larger or 0).\n"
+            "2. Accept partial — emit verdict for the gate as-is.\n"
+            "3. Abort — stop the pipeline.\n\n"
+            "Based on user choice:\n"
+            "- Extend: emit <qg-signal action=\"abort\" "
+            "reason=\"User will re-run /qg with extended budget\" />\n"
+            "- Accept partial: emit <qg-signal gate=\"{current_gate}\" "
+            "verdict=\"PASS_WITH_WARNINGS\" summary=\"wall-clock exceeded; "
+            "user accepted partial\" files_changed=\"\" />\n"
+            "- Abort: emit <qg-signal action=\"abort\" "
+            "reason=\"User chose to abort after wall-clock exceeded\" />\n"
+        ),
+    },
     ("gate2_user_choice", None): {
         "header": "GATE2_USER_CHOICE",
         "body": (
@@ -785,6 +829,7 @@ def build_special_prompt(transition_type, state, gate_results, prompt_key=None):
         "max_gate2_iterations": state.get("max_gate2_iterations", 5),
         "gate3_resolution_iter": state.get("gate3_resolution_iter", 0),
         "max_gate3_resolutions": state.get("max_gate3_resolutions", 3),
+        "current_gate": state.get("current_gate", 1),
     }
     return (
         f"{entry['header']}\n\n"
@@ -806,7 +851,8 @@ def build_system_message(state, transition):
     gate_name = GATE_NAMES.get(str(gate), f"Gate {gate}")
 
     if t_type in ("max_gate2_exceeded", "gate3_fail", "gate2_user_choice",
-                  "gate3_needs_resolution", "gate3_repeat_detected"):
+                  "gate3_needs_resolution", "gate3_repeat_detected",
+                  "wall_clock_exceeded"):
         return "⚠️ Quality Gates: Action required | /cancel-qg to stop"
 
     # Forward-only: show within-Gate-2 iteration progress when applicable;
@@ -906,6 +952,11 @@ def main():
     # 7. Compute state transition
     transition = compute_transition(state, signal)
 
+    # 7.5. Wall-clock budget override (T2-3). Pure compute_transition above
+    # stays untouched; this is main()-only I/O against current clock.
+    if deadline_exceeded(state):
+        transition = {"type": "wall_clock_exceeded", "prior": transition}
+
     # 8. Update state file with signal results
     try:
         update_state_file(state_file, state, signal, transition)
@@ -976,14 +1027,12 @@ def main():
     USER_CHOICE_TYPES = {
         "gate2_user_choice", "max_gate2_exceeded", "gate3_fail",
         "gate3_needs_resolution", "gate3_repeat_detected",
+        "wall_clock_exceeded",
     }
+    USER_CHOICE_TYPES_FOR_HINT = USER_CHOICE_TYPES
 
     # Surface worktree path to user on non-terminal user-choice transitions so they
     # know where the preserved worktree is.
-    USER_CHOICE_TYPES_FOR_HINT = {
-        "gate2_user_choice", "max_gate2_exceeded", "gate3_fail",
-        "gate3_needs_resolution", "gate3_repeat_detected",
-    }
     if state.get("worktree_path") and transition["type"] in USER_CHOICE_TYPES_FOR_HINT:
         print(
             f"[quality-gates] worktree preserved at {state['worktree_path']} — "
