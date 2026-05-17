@@ -460,3 +460,96 @@ class TestSessionAnchorSchema(HookOutputSchemaTestBase):
         hso = payload.get("hookSpecificOutput", {})
         self.assertEqual(hso.get("hookEventName"), "SessionStart")
         self.assertIn("이전 인터뷰 세션", hso.get("additionalContext", ""))
+
+
+class TestKillSwitches(HookOutputSchemaTestBase):
+    """AC10/AC11 — DEVBREW_DISABLE_SPEC_DISTILL=1 and DEVBREW_SKIP_HOOKS=spec-distill:<event>."""
+
+    def _empty_or_braces(self, stdout: str) -> bool:
+        s = stdout.strip()
+        return s == "" or s == "{}"
+
+    def test_global_disable_silences_review_dispatch(self):
+        session_id = "ks-review"
+        _write_pending_review_state(self.repo, session_id, spec_path="/x", mode="spec")
+        result = _run_hook(
+            "review-dispatch.py", cwd=self.repo,
+            env_extra={
+                "DEVBREW_DISABLE_SPEC_DISTILL": "1",
+                "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
+            },
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(self._empty_or_braces(result.stdout),
+                        msg=f"unexpected output: {result.stdout!r}")
+
+    def test_hook_specific_disable_silences_review_dispatch(self):
+        session_id = "ks-review-2"
+        _write_pending_review_state(self.repo, session_id, spec_path="/x", mode="spec")
+        result = _run_hook(
+            "review-dispatch.py", cwd=self.repo,
+            env_extra={
+                "DEVBREW_SKIP_HOOKS": "spec-distill:Stop",
+                "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
+            },
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(self._empty_or_braces(result.stdout))
+
+    def test_global_disable_silences_spec_write_validator(self):
+        spec_abs = self.repo / "docs" / "superpowers" / "specs" / "x-design.md"
+        spec_abs.parent.mkdir(parents=True, exist_ok=True)
+        spec_abs.write_text("# x\n", encoding="utf-8")
+        stdin_payload = {
+            "tool_name": "Write",
+            "tool_input": {"file_path": str(spec_abs)},
+            "hook_event_name": "PostToolUse",
+        }
+        result = _run_hook(
+            "spec-write-validator.py", cwd=self.repo, stdin_payload=stdin_payload,
+            env_extra={"DEVBREW_DISABLE_SPEC_DISTILL": "1"},
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(self._empty_or_braces(result.stdout))
+
+    def test_global_disable_silences_pending_review_reminder(self):
+        session_id = "ks-reminder"
+        _write_pending_review_state(
+            self.repo, session_id, spec_path="/x", mode="spec",
+            last_dispatched_at="2026-05-16T00:00:00Z",  # past TTL
+        )
+        result = _run_hook(
+            "pending-review-reminder.py", cwd=self.repo,
+            stdin_payload={"user_prompt": "hi"},
+            env_extra={
+                "DEVBREW_DISABLE_SPEC_DISTILL": "1",
+                "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
+            },
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(self._empty_or_braces(result.stdout))
+
+    def test_global_disable_silences_interview_trigger(self):
+        result = _run_hook(
+            "interview-trigger.sh", cwd=self.repo,
+            stdin_payload={"user_prompt": "make a chat app"},
+            env_extra={"DEVBREW_DISABLE_SPEC_DISTILL": "1"},
+            binary="bash",
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(self._empty_or_braces(result.stdout))
+
+    def test_global_disable_silences_session_anchor(self):
+        prev = self.repo / ".claude" / "spec-distill" / "x"
+        prev.mkdir(parents=True)
+        (prev / "state.local.md").write_text("---\n---\n", encoding="utf-8")
+        result = _run_hook(
+            "session-anchor.sh", cwd=self.repo,
+            env_extra={
+                "DEVBREW_DISABLE_SPEC_DISTILL": "1",
+                "CLAUDE_PROJECT_DIR": str(self.repo),
+            },
+            binary="bash",
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(self._empty_or_braces(result.stdout))
