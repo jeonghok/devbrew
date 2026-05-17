@@ -3,6 +3,25 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.16.0] — 2026-05-17
+
+### Security
+- `commands/cancel-qg.md`: `$CLAUDE_CODE_SESSION_ID`가 비어있거나 패턴이 깨졌을 때 `rm -rf ".claude/quality-gates/$SID"`가 plugin 루트(`. claude/quality-gates/`)로 expand되어 동시에 실행 중인 모든 세션 폴더를 wipe하는 catastrophic 경로를 차단. 모든 destructive Bash 블록에 `[[ -n "$SID" && "$SID" =~ ^[A-Za-z0-9_-]{8,}$ ]]` SID-pattern 가드를 강제 (LLM prose 가드 → 셸-level 가드 격상). `--all` 경로에도 `[[ -d ".claude/quality-gates" ]]` 존재 가드 추가. Origin: Tier 1 audit U-7. *Persona-as-security-code 트리거: 향후 cancel-qg 가드 약화는 security review 대상.*
+
+### Changed
+- `README.md` "인스턴스화한 원칙" 섹션의 AP-ID cite drift 수정. `AP3 (Trivia ceremony)` → `P12 anti-corollary (former AP5)` (AP3는 §11.1 migration table 상 *Self-Approval*, AP5가 *Trivia Pipeline Overhead*였음). `AP9` → `P22 anti-corollary (former AP9)`, `AP16` → `P18 anti-corollary (former AP16)`로 post-restructure cite style로 정렬. Trivia 항목엔 현재 coverage(whitespace+rename only)와 deferred 확장 추적을 명시. Origin: Tier 1 audit F-3.
+- `README.md` `## 설정` 섹션을 `### Tuning knobs` + `### Kill switches (보안 컨트롤)` 두 subsection으로 재구성. 모든 component disable env var (`DEVBREW_DISABLE_QUALITY_GATES`, `DEVBREW_DISABLE_QG_CODEX`, `DEVBREW_DISABLE_QG_SECURITY_REVIEWER`, `DEVBREW_DISABLE_GATE3_TEST_VALIDATION`, `DEVBREW_QG_DISABLE_BRANCH_WORKTREE`) + 모든 hook 키 (`stop-hook`, `session-tracker`, `post-tool-use`, `session-start-advisor`, `session-start-advisor:frontmatter-scan`, `session-end-cleanup`, `gate3-test-scope`)을 표 형식으로 통합. CLAUDE.md *"kill switch는 보안 컨트롤"* 원칙 instantiation: 보이지 않는 보안 컨트롤은 컨트롤이 아님. Origin: Tier 1 audit U-3 + U-4.
+- `agents/plan-verifier.md`, `agents/runtime-verifier.md`, `agents/test-scope-validator.md`: opening identity prompt에 *"You are NOT responsible for ..."* clause 추가. CLAUDE.md Plugin Shape > Component Isolation의 *"You are X. You are responsible for Y. You are NOT responsible for Z."* triad 완성. Z 절은 persona-as-security-code의 scope-creep 방지 lock — 향후 PR에서 이 문장이 weakened되면 security-review trigger. Origin: Tier 1 audit F-8.
+- `skills/quality-pipeline/SKILL.md`: 1349줄 SKILL 상단에 `## Contents` TOC 추가 (Workflow / Per-gate dispatch logic / Output templates 세 그룹). CLAUDE.md `docs/**.md ~300줄 이상이면 TOC 필수` 규정 instantiation. Origin: Tier 1 audit A-12.
+
+### Removed
+- `hooks/stop-hook.py` + `skills/quality-pipeline/SKILL.md`: dead `extend` transition 제거. v1.5.0이 cross-gate restart 메커니즘을 삭제하면서 `extend` action은 effective no-op이 되었으나 (update_state_file에서 no replacements, main에서 `("continue", "extend")` 공동 분기) 코드와 docstring·signal example에 잔존. `compute_transition`의 `action == "extend"` 분기, `update_state_file`의 trailing comment, `main()`의 합쳐진 elif 분기, signal example (`<qg-signal action="extend" />`) 모두 제거. 테스트 영향 없음 (extend signal 참조하는 테스트 0개). Origin: Tier 1 audit A-9.
+
+### Deferred (Tier 2/3 spec)
+- 다음 항목은 별도 spec 파일 `docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md`로 분리되어 다음 release cycle에서 처리:
+  - **Tier 2 (correctness)**: trivia escape coverage 확장 (comment-only, `--paths` 전파, untracked single-file), scout fallback의 AskUserQuestion 게이트 우회 차단 + Phase 1 dual-dispatch 통합, pipeline wall-clock budget, stop-hook no-signal infinite re-injection counter, codex 미설치 시 loud logging, state-write 실패 시 forward-progress 경로 routing, README state-machine diagram, adversarial 비용 prompt 포함.
+  - **Tier 3 (refactor)**: scout/synthesizer/codex-reviewer를 deterministic script로 (LLM 판단 없는 layer), 8개 에이전트 중 7개의 behavioral test backfill.
+
 ## [1.15.0] — 2026-05-17
 
 ### Added

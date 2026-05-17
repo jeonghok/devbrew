@@ -291,7 +291,7 @@ def compute_transition(state, signal):
     "type" key.  All verdict-to-transition mappings are centralised here.
 
     Transition types:
-      next_gate | retry_gate | complete | abort | extend |
+      next_gate | retry_gate | complete | abort |
       gate2_user_choice | max_gate2_exceeded | gate3_fail | continue
     """
     action = signal.get("action")
@@ -303,9 +303,6 @@ def compute_transition(state, signal):
         return {"type": "complete"}
     if action == "abort":
         return {"type": "abort"}
-    if action == "extend":
-        additional = int(signal.get("additional", "3"))
-        return {"type": "extend", "additional": additional}
 
     # --- Cross-cutting new verdicts (handled before gate-specific logic) ---
 
@@ -451,10 +448,6 @@ def update_state_file(path, state, signal, transition):
             new_gate2_iter = transition.get("gate2_iteration", new_gate2_iter)
     elif t_type in ("complete", "abort"):
         new_status = "completed" if t_type == "complete" else "aborted"
-    # extend: transition is routed by main() (re-injects current gate prompt);
-    # update_state_file leaves status/gate/iter fields untouched, which has
-    # always been the effective behavior (the prior new_max_total += ... was
-    # never in the replacements dict and so was a silent no-op write).
 
     # Track gate3 resolution iteration (forward-only count).
     if transition.get("type") == "gate3_needs_resolution":
@@ -1011,18 +1004,9 @@ def main():
                                        extract_gate_results(next_body))
         else:
             prompt = build_gate_prompt(retry_gate, state, gate_results)
-    elif transition["type"] in ("continue", "extend"):
-        # Scout fallback or capacity extension — re-inject the current gate
-        # prompt. (extend is kept reachable for forward-compat even though
-        # update_state_file makes no state change for it; see the trailing
-        # comment in update_state_file for context.)
-        next_state, next_body = (parse_state_file(state_file, fallback_cwd=hook_input.get("cwd"))
-                                 if transition["type"] == "extend"
-                                 else (None, None))
-        the_state = next_state or state
-        the_results = (extract_gate_results(next_body) if next_body
-                       else gate_results)
-        prompt = build_gate_prompt(the_state["current_gate"], the_state, the_results)
+    elif transition["type"] == "continue":
+        # Scout fallback — re-inject the current gate prompt with current state.
+        prompt = build_gate_prompt(state["current_gate"], state, gate_results)
     else:
         # Defensive fallback: unknown transition — re-inject current gate.
         prompt = build_gate_prompt(state["current_gate"], state, gate_results)
