@@ -59,7 +59,7 @@ if [[ "$tracked_count" -ne 1 ]]; then
   exit 1
 fi
 
-line_count="$(gd --shortstat 2>/dev/null \
+diff_line_count="$(gd --shortstat 2>/dev/null \
   | grep -oE '[0-9]+ (insertion|deletion)' \
   | awk '{s+=$1} END {print s+0}')"
 
@@ -78,7 +78,7 @@ if [[ "$renames" -ge 1 && "$content_changes" -eq 0 ]]; then
 fi
 
 # Comment-only (T2-1 new)
-if [[ "$line_count" -le 3 ]]; then
+if [[ "$diff_line_count" -le 3 ]]; then
   changed="$(gd --unified=0 | grep -E '^[+-]' | grep -vE '^(---|\+\+\+)')"
   if [[ -n "$changed" ]]; then
     non_comment="$(echo "$changed" | grep -vE '^[+-][[:space:]]*($|#|//|--|/\*|\*)' || true)"
@@ -90,7 +90,7 @@ if [[ "$line_count" -le 3 ]]; then
 fi
 
 # Typo (T2-1 new): exactly 1 changed line, 1 differing token, length-diff ≤ 2
-if [[ "$line_count" -eq 2 ]]; then
+if [[ "$diff_line_count" -eq 2 ]]; then
   added="$(gd --unified=0 | grep -E '^\+' | grep -v '^+++' | sed 's/^+//')"
   removed="$(gd --unified=0 | grep -E '^-' | grep -v '^---' | sed 's/^-//')"
   added_lines=$(echo "$added" | wc -l | tr -d ' ')

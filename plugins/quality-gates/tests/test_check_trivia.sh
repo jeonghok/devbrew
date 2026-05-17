@@ -12,12 +12,17 @@ FAIL=0
 run_case() {
   local name="$1" setup_fn="$2" expected_exit="$3" expected_stdout="$4"
   local tmp; tmp="$(mktemp -d)"
+  # Trap ensures tmpdir cleanup even if setup_fn or assertions exit non-zero
+  # under set -euo pipefail before reaching the explicit cleanup at end of fn.
+  trap 'popd >/dev/null 2>&1; rm -rf "$tmp"' RETURN
   pushd "$tmp" >/dev/null
   git init -q
   git config user.email t@t.com
   git config user.name t
   "$setup_fn"
   set +e
+  # NOTE: $TRIVIA_ARGS is intentionally unquoted — word-splitting required
+  # for multi-token args like "--paths a.py". Do not "fix" to "$TRIVIA_ARGS".
   local stdout; stdout="$("$SCRIPT" $TRIVIA_ARGS 2>/dev/null)"; local exit_code=$?
   set -e
   if [[ "$exit_code" == "$expected_exit" && "$stdout" == "$expected_stdout" ]]; then
@@ -28,8 +33,6 @@ run_case() {
     echo "  got:      exit=$exit_code stdout='$stdout'"
     FAIL=$((FAIL+1))
   fi
-  popd >/dev/null
-  rm -rf "$tmp"
 }
 
 # AC1 — comment-only single file

@@ -3,6 +3,15 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.16.1] — 2026-05-18
+
+### Fixed
+- `test_check_trivia.sh` `run_case`: added `trap RETURN` for tmpdir cleanup so a failing setup-fn under `set -euo pipefail` does not leak tmpdirs.
+
+### Changed
+- `check-trivia.sh`: renamed diff-context `line_count` variable to `diff_line_count` so it does not shadow the untracked-newfile detector's physical-line-count variable. Behavior unchanged.
+- `test_check_trivia.sh`: added comment documenting `$TRIVIA_ARGS` unquoted-by-design (word-split intended for multi-token args).
+
 ## [1.16.0] — 2026-05-18
 
 ### Added
