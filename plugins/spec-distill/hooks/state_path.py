@@ -47,9 +47,73 @@ def state_root(cwd: str | None = None) -> Path:
     return fallback
 
 
+def _parse_iso(s: str):
+    s = s.strip()
+    try:
+        return datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
 def cleanup_stale_states(root: Path) -> None:
-    """Stub for Task 3."""
-    return None
+    """Purge stale pending_review blocks (>24h) and old state files (>7d).
+
+    - pending_review with triggered_at > 24h ago → strip block, keep file.
+    - state file with no pending_review and last_dispatched_at > 7d → delete file.
+    """
+    if not root.exists():
+        return
+    now = datetime.now(timezone.utc)
+    pending_cutoff = now - timedelta(hours=PENDING_TTL_HOURS)
+    file_cutoff = now - timedelta(days=FILE_TTL_DAYS)
+    for session_dir in root.iterdir():
+        if not session_dir.is_dir():
+            continue
+        state_file = session_dir / "state.local.md"
+        if not state_file.exists():
+            continue
+        try:
+            body = state_file.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        # Purge stale pending_review
+        import re
+        m = re.search(
+            r"^pending_review:\n  path:[^\n]+\n  mode:[^\n]+\n  triggered_at:\s*([^\n]+)\n(?:  [^\n]*\n)*",
+            body, flags=re.MULTILINE,
+        )
+        if m:
+            ts = _parse_iso(m.group(1))
+            if ts and ts < pending_cutoff:
+                body = re.sub(
+                    r"^pending_review:\n(?:  [^\n]*\n)*", "", body, flags=re.MULTILINE,
+                )
+                try:
+                    state_file.write_text(body, encoding="utf-8")
+                    print(
+                        f"[spec-distill] state cleanup: purged stale pending_review in {state_file}",
+                        file=sys.stderr,
+                    )
+                except OSError:
+                    pass
+        # File-level delete if only last_dispatched_at remains and is old
+        if "pending_review:" not in body:
+            ld = re.search(r"^last_dispatched_at:\s*(.+)$", body, flags=re.MULTILINE)
+            if ld:
+                ts = _parse_iso(ld.group(1))
+                if ts and ts < file_cutoff:
+                    try:
+                        state_file.unlink()
+                        try:
+                            session_dir.rmdir()
+                        except OSError:
+                            pass
+                        print(
+                            f"[spec-distill] state cleanup: deleted stale state file {state_file}",
+                            file=sys.stderr,
+                        )
+                    except OSError:
+                        pass
 
 
 def main(argv: list[str]) -> int:
