@@ -288,3 +288,45 @@ class TestReviewDispatchOrdering(unittest.TestCase):
             r_idx, p_idx,
             msg=f"AC7.3.3 violated: rewrite at {r_idx}, print at {p_idx}; trace: {call_log}",
         )
+
+
+class TestSpecWriteValidatorSchema(HookOutputSchemaTestBase):
+    """AC2 — spec-write-validator.py advisory branch output schema."""
+
+    def test_design_mode_advisory_emits_additional_context(self):
+        # Create a valid design.md fixture so the validator passes structural
+        # checks and reaches the advisory branch.
+        spec_rel = Path("docs") / "superpowers" / "specs" / "2026-05-17-test-design.md"
+        spec_abs = self.repo / spec_rel
+        spec_abs.parent.mkdir(parents=True, exist_ok=True)
+        spec_abs.write_text(
+            "# Test Design\n\nContext / Why\n\nGoals\n\nNon-goals\n\n"
+            "Constraints\n\nAcceptance Criteria\n\nFiles\n\nVerification Plan\n\n"
+            "Rejected Alternatives\n\nMetadata\n",
+            encoding="utf-8",
+        )
+        stdin_payload = {
+            "session_id": "test-pttu",
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Write",
+            "tool_input": {"file_path": str(spec_abs)},
+            "tool_output": "ok",
+            "cwd": str(self.repo),
+        }
+        result = _run_hook(
+            "spec-write-validator.py",
+            cwd=self.repo, stdin_payload=stdin_payload,
+            env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": "test-pttu"},
+        )
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertTrue(result.stdout.strip(), msg="advisory stdout empty")
+        payload = json.loads(result.stdout)
+        hso = payload.get("hookSpecificOutput", {})
+        self.assertEqual(hso.get("hookEventName"), "PostToolUse")
+        ac = hso.get("additionalContext", "")
+        self.assertIn("structural OK", ac)
+        self.assertIn("Reviewer will be dispatched", ac)
+        sysmsg = payload.get("systemMessage", "")
+        self.assertTrue(sysmsg)
+        self.assertLessEqual(len(sysmsg), 120)
+        self.assertTrue(sysmsg.startswith("[spec-distill]"))

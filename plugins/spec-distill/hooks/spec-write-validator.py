@@ -163,13 +163,18 @@ def main() -> int:
         except (PermissionError, OSError) as exc:
             print(f"[spec-distill] state write failed (non-fatal): {exc}", file=sys.stderr)
 
-    # Advisory systemMessage
+    # Advisory output (v0.5.0 dual-target: additionalContext for Claude + systemMessage trace).
     print(
         json.dumps({
-            "systemMessage": (
-                f"[spec-distill] {mode} structural OK. "
-                "Reviewer will be dispatched at turn end."
-            )
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": (
+                    f"[spec-distill] {mode} structural OK. "
+                    "Reviewer will be dispatched at turn end "
+                    "(Stop hook will mandate reviewing-spec skill invocation)."
+                ),
+            },
+            "systemMessage": f"[spec-distill] {mode} OK · reviewer dispatch pending",
         }),
         flush=True,
     )
