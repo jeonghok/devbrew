@@ -3,6 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.17.0] — 2026-05-18
+
+### Added
+- color: <enum> frontmatter on 5 agents that previously lacked it: adversarial=orange, codex-reviewer=pink, scout=purple, security-reviewer=red, synthesizer=blue. Total 8 agents now color-coded from Claude Code 8-color palette (cyan/green/yellow/blue/red/purple/orange/pink). UX: parallel dispatch threads are visually distinguishable when 5+ reviewers fire concurrently in Gate 2 deep mode (T2-9).
+- tests/test_agent_color.sh — dynamic AC53/AC55 verification: every extant agent file has color from the 8-color enum. Survives T3-1/2/3 refactor (which deletes scout/synthesizer/codex-reviewer.md).
+
 ## [1.16.0] — 2026-05-18
 
 ### Changed
