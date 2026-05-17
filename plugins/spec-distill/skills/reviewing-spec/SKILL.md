@@ -15,7 +15,7 @@ cost_class: medium
 
 ## Steps
 
-1. **Load state.local.md** — `session_id`, `rereview_count`, `wall_clock_started_at`, `issue_history` 읽기. 또한 `pending_review:` block 존재 여부 확인. *이 skill은 PostToolUse hook이 spec/design 파일 write를 감지해 file ledger에 `pending_review:` block을 기록한 직후, Stop hook이 다음 turn에 systemMessage로 dispatch를 강제했기 때문에* 호출됨 — `pending_review:` block이 *없는 채로* invoke되면 manual override로 간주 (loud advisory). `session_id`가 unbound이거나 placeholder `<session-id>` 인 채로면 Step 3 cleanup이 charset 검증으로 자동 skip되지만, 사용자에게 명시적 통보 필요 (P14 + AP2).
+1. **Load state.local.md** — `session_id`, `rereview_count`, `wall_clock_started_at`, `issue_history` 읽기. 또한 `pending_review:` block 존재 여부 확인. *이 skill은 PostToolUse hook이 spec/design 파일 write를 감지해 file ledger에 `pending_review:` block을 기록한 직후, Stop hook이 다음 turn에 systemMessage로 dispatch를 강제했기 때문에* 호출됨 — `pending_review:` block이 *없는 채로* invoke되면 manual override로 간주 (loud advisory). **`pending_review.mode` 분기**: `mode: design`일 때 11-section 누락 / locked_decisions schema 검사는 *skip* (brainstorming의 design.md는 spec.md와 다른 양식). 본문의 placeholder / ambiguity / scope-creep / approaches-comparison / isolation / testing 검사만 spec-reviewer에게 요청. `session_id`가 unbound이거나 placeholder `<session-id>` 인 채로면 Step 3 cleanup이 charset 검증으로 자동 skip되지만, 사용자에게 명시적 통보 필요 (P14 + AP2).
 2. **Wall-clock check (AC14)**: `now - wall_clock_started_at > DEVBREW_SPEC_DISTILL_TIMEOUT_MIN` (default 30) 이면 advisory metric 표기 + Phase 5 forced escalate.
 3. **Dispatch spec-reviewer agent**:
    ```
@@ -31,14 +31,17 @@ cost_class: medium
 
 ## Deterministic Routing Table (AC15)
 
-| Verdict | Stagnation_signal | rereview_count | affects_locked | → Next Phase |
-|---|---|---|---|---|
-| `approved` | - | - | - | **[5] Human Gate** (auto) |
-| `needs_revise` | false | < 3 | **empty (모든 issue)** | **[4] Revise** (auto, dispatch drafting-spec Mode B with `allowed_issue_ids = [all]`) |
-| `needs_revise` | false | < 3 | **non-empty (하나 이상)** | **[3.5] Re-consensus gate** (다음 sub-section 참조) |
-| `needs_revise` | false | >= 3 | - | **[5] Human Gate** (forced escalate, full issue_history 첨부) |
-| `needs_revise` | true | - | - | **[5] Human Gate** (P18 stagnation, forced escalate — 단 dismissed_by_user >= 1 issue는 stagnation count 제외) |
-| `needs_interview` | - | - | - | **user confirm gate** → [1] Interview (확인) 또는 [5] (취소) |
+| Mode | Verdict | Stagnation_signal | rereview_count | affects_locked | → Next Phase |
+|---|---|---|---|---|---|
+| spec | `approved` | - | - | - | **[5] Human Gate** (auto) |
+| spec | `needs_revise` | false | < 3 | **empty** | **[4] Revise** (auto, dispatch drafting-spec Mode B with `allowed_issue_ids = [all]`) |
+| spec | `needs_revise` | false | < 3 | **non-empty** | **[3.5] Re-consensus gate** |
+| spec | `needs_revise` | false | >= 3 | - | **[5] Human Gate** (forced escalate, full issue_history 첨부) |
+| spec | `needs_revise` | true | - | - | **[5] Human Gate** (P18 stagnation, forced escalate — dismissed_by_user >= 1 issue는 stagnation count 제외) |
+| spec | `needs_interview` | - | - | - | **user confirm gate** → [1] Interview 또는 [5] (취소) |
+| **design** | `approved` | - | - | - | **[5] Human Gate** → `superpowers:writing-plans` |
+| **design** | `needs_revise` | - | < 3 | - | **brainstorming author 회귀**: 메인 agent가 design.md 직접 수정 후 reviewing-spec 재dispatch. **drafting-spec Mode B 호출하지 않음** (spec mode 전용). |
+| **design** | `needs_revise` | - | >= 3 | - | **[5] Human Gate** (forced escalate, full issue_history 첨부) |
 
 매 dispatch 후 위 표를 *그대로* 적용. prose-based 결정 금지.
 
