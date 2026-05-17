@@ -119,7 +119,7 @@ class TestSkeleton(unittest.TestCase):
                 self.assertEqual(rc, 0)
 
     def test_target_file_passes_through_to_rules(self):
-        """AC1: legitimate CLAUDE.md in project dir → reaches rule layer (no rules triggered for valid empty file → {})."""
+        """AC1: target file passes filter and reaches rule layer; valid 3-line content stays below all rule thresholds so output is {}."""
         with tempfile.TemporaryDirectory() as td:
             target = Path(td) / "CLAUDE.md"
             target.write_text("# Title\n\nShort content.\n")  # passes all 5 rules
@@ -129,6 +129,64 @@ class TestSkeleton(unittest.TestCase):
             )
             self.assertEqual(out.strip(), "{}")
             self.assertEqual(rc, 0)
+
+
+class TestR1Size(unittest.TestCase):
+    """R1 — file size threshold (warn at >200, strong warn at >300)."""
+
+    def _write_lines(self, td: str, basename: str, n: int) -> Path:
+        p = Path(td) / basename
+        p.write_text("\n".join(f"line {i}" for i in range(n)) + "\n")
+        return p
+
+    def test_exactly_200_lines_passes(self):
+        """AC7: 200 lines exact → no R1 warning."""
+        with tempfile.TemporaryDirectory() as td:
+            target = self._write_lines(td, "CLAUDE.md", 200)
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("Anthropic recommends", out)
+            self.assertEqual(rc, 0)
+
+    def test_201_lines_warns(self):
+        """AC7: 201 lines → R1 base warning (no STRONG suffix yet)."""
+        with tempfile.TemporaryDirectory() as td:
+            target = self._write_lines(td, "AGENTS.md", 201)
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertIn("Anthropic recommends ≤200", out)
+            self.assertIn("201 lines", out)
+            self.assertNotIn("STRONG", out)
+            self.assertEqual(rc, 0)
+
+    def test_300_lines_passes_strong_threshold(self):
+        """AC8: 300 lines exact → only base warning (not STRONG yet, threshold is >300)."""
+        with tempfile.TemporaryDirectory() as td:
+            target = self._write_lines(td, "AGENTS.md", 300)
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertIn("Anthropic recommends ≤200", out)
+            self.assertNotIn("STRONG", out)
+
+    def test_301_lines_strong_warns(self):
+        """AC8: 301 lines → R1 base + STRONG suffix in single message."""
+        with tempfile.TemporaryDirectory() as td:
+            target = self._write_lines(td, "AGENTS.md", 301)
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertIn("Anthropic recommends ≤200", out)
+            self.assertIn("STRONG", out)
+            self.assertIn("301 lines", out)
+            # AC8: single combined string, not duplicate emit
+            self.assertEqual(out.count("Anthropic recommends ≤200"), 1)
 
 
 if __name__ == "__main__":

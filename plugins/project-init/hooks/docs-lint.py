@@ -59,11 +59,36 @@ def resolve_target_path(file_path: str, project_dir: str) -> Optional[Path]:
 
 
 def emit(systemMessage: Optional[str] = None) -> None:
-    """Print hook JSON output and exit 0."""
+    """Print hook JSON output and exit 0.
+
+    ``ensure_ascii=False`` so Unicode glyphs (≤, →, etc.) reach the user
+    verbatim instead of as escape sequences — JSON spec permits raw UTF-8.
+    """
     if systemMessage:
-        print(json.dumps({"systemMessage": systemMessage}), flush=True)
+        print(json.dumps({"systemMessage": systemMessage}, ensure_ascii=False), flush=True)
     else:
         print(json.dumps({}), flush=True)
+
+
+# --- Rules ---
+
+
+def check_r1_size(target: Path, rel_display: str) -> Optional[str]:
+    """AC7/AC8: size warning if >200 lines, STRONG suffix if >300."""
+    try:
+        content = target.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    lines = content.count("\n") + (0 if content.endswith("\n") or not content else 1)
+    if lines <= 200:
+        return None
+    base = (
+        f"project-init: {rel_display} is {lines} lines. "
+        f"Anthropic recommends ≤200. Move detailed content to docs/** and link from here."
+    )
+    if lines > 300:
+        return base + " (STRONG: >300 lines means agent will likely truncate)"
+    return base
 
 
 def main() -> int:
@@ -86,8 +111,20 @@ def main() -> int:
     if target is None:
         emit()
         return 0
-    # Rules will be wired in subsequent tasks. For skeleton, no rules → pass.
-    emit()
+    # Compute display path (relative to project_dir for readability)
+    try:
+        rel_display = target.relative_to(Path(project_dir).resolve()).as_posix()
+    except ValueError:
+        rel_display = str(target)
+    messages: list[str] = []
+    msg_r1 = check_r1_size(target, rel_display)
+    if msg_r1:
+        messages.append(msg_r1)
+    # More rules will be added in subsequent tasks.
+    if messages:
+        emit("\n\n".join(messages))
+    else:
+        emit()
     return 0
 
 
