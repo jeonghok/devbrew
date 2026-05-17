@@ -20,7 +20,7 @@ grep -qE 'design\b.*approved.*Human Gate' "$SKILL" \
   && note PASS "AC6: design approved → Human Gate row present" \
   || note FAIL "AC6 design approved row missing"
 
-# (needs_revise & count<3 → brainstorming author 회귀)
+# (needs_revise & count<5 → brainstorming author 회귀; v0.3.0 bump 3→5)
 grep -qE 'design\b.*needs_revise.*brainstorming author' "$SKILL" \
   && note PASS "AC6: design needs_revise → brainstorming author 회귀 row present" \
   || note FAIL "AC6 design needs_revise row missing"
