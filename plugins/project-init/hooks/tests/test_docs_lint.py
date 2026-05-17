@@ -204,7 +204,15 @@ class TestR2Toc(unittest.TestCase):
             )
             self.assertIn("exceeds 300 lines without a TOC", out)
             # AC19: both R1 STRONG and R2 fire, joined with \n\n
+            # (which is JSON-encoded as \\n\\n in the systemMessage payload)
             self.assertIn("STRONG", out)
+            self.assertIn("\\n\\n", out)
+            # R1 message must come before R2 message (insertion order)
+            self.assertLess(
+                out.index("Anthropic recommends"),
+                out.index("exceeds 300 lines without a TOC"),
+            )
+            self.assertEqual(rc, 0)
 
     def test_350_lines_with_korean_toc_passes(self):
         """AC9: 350 lines + ## 목차 → R2 passes (R1 STRONG still fires)."""
@@ -220,6 +228,7 @@ class TestR2Toc(unittest.TestCase):
             )
             self.assertNotIn("without a TOC", out)
             self.assertIn("STRONG", out)  # R1 still fires
+            self.assertEqual(rc, 0)
 
     def test_350_lines_with_english_toc_passes(self):
         """AC9: 350 lines + ## Table of Contents → R2 passes."""
@@ -234,6 +243,7 @@ class TestR2Toc(unittest.TestCase):
                 cwd=td,
             )
             self.assertNotIn("without a TOC", out)
+            self.assertEqual(rc, 0)
 
     def test_300_lines_or_less_no_r2(self):
         """AC9: ≤300 lines → R2 never fires regardless of TOC presence."""
@@ -245,6 +255,7 @@ class TestR2Toc(unittest.TestCase):
                 cwd=td,
             )
             self.assertNotIn("without a TOC", out)
+            self.assertEqual(rc, 0)
 
     def test_toc_at_end_of_file_still_passes(self):
         """AC10: TOC location is free — bottom of file also OK."""
@@ -260,6 +271,109 @@ class TestR2Toc(unittest.TestCase):
                 cwd=td,
             )
             self.assertNotIn("without a TOC", out)
+            self.assertEqual(rc, 0)
+
+
+class TestR5Fences(unittest.TestCase):
+    """R5 — fenced code blocks must declare a language (3-backtick only)."""
+
+    def test_bare_fence_warns(self):
+        """AC11: opening fence without language → warn with line number."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(
+                "# Title\n\n"
+                "```\n"
+                "some code\n"
+                "```\n"
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertIn("fenced code block", out)
+            self.assertIn("line L3", out)
+            self.assertEqual(rc, 0)
+
+    def test_languaged_fence_passes(self):
+        """AC11: opening fence with bash → pass."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(
+                "# Title\n\n"
+                "```bash\n"
+                "ls\n"
+                "```\n"
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("fenced code block", out)
+
+    def test_indented_code_block_ignored(self):
+        """AC12: 4+ space indent → markdown indented code, R5 skips."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(
+                "# Title\n\n"
+                "    ```\n"  # 4 spaces — indented code, not fence
+                "    code\n"
+                "    ```\n"
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("fenced code block", out)
+
+    def test_close_fence_not_flagged(self):
+        """AC11 stateful: bare closing fence after opening fence is OK."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(
+                "# Title\n\n"
+                "```python\n"  # open with lang
+                "x = 1\n"
+                "```\n"        # bare close — must NOT trigger
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("fenced code block", out)
+
+    def test_multi_violation_count_and_list(self):
+        """AC11 message format: count + list pattern."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            # 3 bare opens (with proper closes)
+            content = ""
+            for _ in range(3):
+                content += "```\nstuff\n```\n\n"
+            target.write_text("# Title\n\n" + content)
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertIn("3 fenced code blocks", out)
+            self.assertIn("at lines [", out)
+
+    def test_4_backtick_fence_ignored(self):
+        """AC11 scope-out: 4+ backtick fences not checked."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(
+                "# Title\n\n"
+                "````\n"  # 4 backticks, no language
+                "code\n"
+                "````\n"
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("fenced code block", out)
 
 
 if __name__ == "__main__":

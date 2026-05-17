@@ -113,6 +113,52 @@ def check_r2_toc(target: Path, rel_display: str) -> Optional[str]:
     )
 
 
+FENCE_RE = re.compile(r"^ {0,3}`{3}(\S*)\s*$")
+
+
+def check_r5_fences(target: Path, rel_display: str) -> Optional[str]:
+    """AC11/AC12: bare 3-backtick opening fence without language tag.
+
+    Scope-outs (v1.4.0 false-negative허용): 4+ backtick fences, tilde fences,
+    space-separated info string (`​```​ bash` with leading space).
+    """
+    try:
+        content = target.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        print(f"[project-init:docs-lint] could not read {rel_display} — skipping R5", file=sys.stderr)
+        return None
+    violations: list[int] = []
+    in_fence = False
+    for lineno, line in enumerate(content.splitlines(), start=1):
+        m = FENCE_RE.match(line)
+        if not m:
+            continue
+        if not in_fence:
+            # Opening fence
+            lang = m.group(1)
+            if not lang:
+                violations.append(lineno)
+        # Toggle either way (closing fence is always bare and intentional)
+        in_fence = not in_fence
+    if not violations:
+        return None
+    if len(violations) == 1:
+        return (
+            f"project-init: {rel_display} has 1 fenced code block without a language tag "
+            f"at line L{violations[0]}. Add the language (e.g. \"```bash\")."
+        )
+    shown = violations[:5]
+    suffix = ""
+    if len(violations) > 5:
+        suffix = f" ... and {len(violations) - 5} more"
+    line_list = ", ".join(f"L{n}" for n in shown) + suffix
+    return (
+        f"project-init: {rel_display} has {len(violations)} fenced code blocks "
+        f"without language tags at lines [{line_list}]. "
+        f"Add the language (e.g. \"```bash\")."
+    )
+
+
 def main() -> int:
     if kill_switch_active():
         emit()
@@ -145,6 +191,9 @@ def main() -> int:
     msg_r2 = check_r2_toc(target, rel_display)
     if msg_r2:
         messages.append(msg_r2)
+    msg_r5 = check_r5_fences(target, rel_display)
+    if msg_r5:
+        messages.append(msg_r5)
     # More rules will be added in subsequent tasks.
     if messages:
         emit("\n\n".join(messages))
