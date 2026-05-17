@@ -14,7 +14,7 @@ note() {
   else fail=$((fail+1)); echo "  ✗ $2"; fi
 }
 
-# Helper: simulate PostToolUse stdin payload, optional env vars
+# Helper: simulate PostToolUse stdin payload, optional env vars (stderr merged for legacy callers)
 run_hook() {
   local fpath="$1"
   local extra_env="${2:-}"
@@ -24,19 +24,32 @@ run_hook() {
     "echo '$payload' | python3 '$HOOK'" 2>&1
 }
 
+# Helper: same but captures stdout only (for jq advisory-branch assertions)
+run_hook_stdout() {
+  local fpath="$1"
+  local extra_env="${2:-}"
+  local payload
+  payload=$(printf '{"tool_name":"Write","tool_input":{"file_path":"%s"}}' "$fpath")
+  cd "$WORK" && env -i HOME="$HOME" PATH="$PATH" $extra_env bash -c \
+    "echo '$payload' | python3 '$HOOK'" 2>/dev/null
+}
+
 # Helper: read pending_review block from state.local.md (if any)
 state_pending() {
   local f="$WORK/.claude/spec-distill/$1/state.local.md"
   [[ -f "$f" ]] && grep -E '^pending_review:' "$f"
 }
 
-# Case 1: AC1 — valid spec → exit 0 + state write
+# Case 1: AC1 — valid spec → exit 0 + state write + dual-target advisory emit
 mkdir -p "$WORK/docs/superpowers/specs"
 cp "$FIX/spec-valid.md" "$WORK/docs/superpowers/specs/2026-05-16-test1-spec.md"
-out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test1-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-1")
+out=$(run_hook_stdout "$WORK/docs/superpowers/specs/2026-05-16-test1-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-1")
 rc=$?
 [[ $rc -eq 0 ]] && state_pending "test-1" >/dev/null \
-  && note PASS "AC1: valid spec exits 0 + pending_review recorded" \
+  && echo "$out" | jq -e '.hookSpecificOutput.hookEventName == "PostToolUse"' >/dev/null \
+  && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("structural OK")' >/dev/null \
+  && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
+  && note PASS "AC1: valid spec exits 0 + pending_review recorded + dual-target advisory emit" \
   || note FAIL "AC1 failed (rc=$rc out=$out)"
 
 # Case 2: AC2 — missing Goals → exit 2 + stderr matches
@@ -73,13 +86,15 @@ rc=$?
 [[ $rc -eq 0 ]] && [[ -z "$out" ]] && note PASS "AC5: out-of-scope path silent exit 0" \
   || note FAIL "AC5 failed (rc=$rc out=$out)"
 
-# Case 6: AC6 — design.md no-frontmatter → exit 0 + mode: design
+# Case 6: AC6 — design.md no-frontmatter → exit 0 + mode: design + design advisory in additionalContext
 mkdir -p "$WORK/docs/superpowers/specs"
 cp "$FIX/design-no-frontmatter.md" "$WORK/docs/superpowers/specs/2026-05-16-test-design.md"
-out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test-design.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-6")
+out=$(run_hook_stdout "$WORK/docs/superpowers/specs/2026-05-16-test-design.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-6")
 rc=$?
 [[ $rc -eq 0 ]] && grep -q 'mode: design' "$WORK/.claude/spec-distill/test-6/state.local.md" \
-  && note PASS "AC6: design.md no-frontmatter exits 0 + mode: design" \
+  && echo "$out" | jq -e '.hookSpecificOutput.hookEventName == "PostToolUse"' >/dev/null \
+  && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("design structural OK")' >/dev/null \
+  && note PASS "AC6: design.md no-frontmatter exits 0 + mode: design + design advisory" \
   || note FAIL "AC6 failed (rc=$rc out=$out)"
 
 # Case 7: AC7 — design.md with TBD → exit 2 + placeholder hit
