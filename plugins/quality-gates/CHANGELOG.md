@@ -3,6 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.16.0] — 2026-05-18
+
+### Added
+- README §파이프라인 흐름: Mermaid `stateDiagram-v2` block enumerating all 13 stop-hook transition types (`next_gate`, `retry_gate`, `complete`, `abort`, `continue`, `gate2_user_choice`, `max_gate2_exceeded`, `gate3_fail`, `gate3_needs_resolution`, `gate3_repeat_detected`, `wall_clock_exceeded`, `no_signal_inc`, `no_signal_max`). New contributors can see forward-only invariants at a glance — NEEDS_RESTART → user gate (not auto-retry), terminal cleanup paths, both stuck-state guards (T2-7).
+- `tests/test_readme_state_diagram_complete.sh` — grep-based drift detection: diagram set must equal authoritative 13-row set (no missing, no superset).
+
 ## [1.15.0] — 2026-05-17
 
 ### Added
