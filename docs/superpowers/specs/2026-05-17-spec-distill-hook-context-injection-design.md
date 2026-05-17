@@ -1,11 +1,11 @@
 ---
 name: spec-distill-hook-context-injection
-version: 1.1.0
+version: 1.2.0
 created_at: 2026-05-17
 session_id: brainstorm-2026-05-17
 status: locked
 next_phase: writing-plans
-review_rounds: 1
+review_rounds: 2
 source: superpowers/brainstorming + empirical hook firing 증거 (state.local.md 흔적 + 수동 재현 stdout) + Claude Code 공식 hook 사양 (code.claude.com/docs/en/hooks, 본 doc §C4에 verbatim quote) + quality-gates reference 패턴 (plugins/quality-gates/hooks/stop-hook.py:845-849)
 ---
 
@@ -83,7 +83,7 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
 - **G4 — Output schema 회귀 방지 test**: 신규 `tests/test_hook_output_schema.py`가 5개 hook의 happy-path stdout을 jq schema assertion으로 검증. 누군가 다시 `systemMessage`-only로 떨어뜨리면 CI에서 즉시 잡힘.
 - **G5 — 기존 동작 모두 보존**: state machine (`pending_review:` 블록 + `last_dispatched_at` TTL guard), kill switches (`DEVBREW_DISABLE_SPEC_DISTILL=1` + `DEVBREW_SKIP_HOOKS=spec-distill:<event>`), worktree path resolution (`state_path.state_root()`), cleanup 정책 (24h pending purge / 7일 state file purge), block 분기의 `decision:"block"+reason` 패턴 — 전부 무손상.
 - **G6 — devbrew Plugin Shape 준수**: `plugin.json` minor bump (`0.4.0` → `0.5.0`, Claude 가시성 동작 변경 = new behavior surface), `CHANGELOG.md`에 `[0.5.0] — 2026-05-17` entry (Fixed + Changed), `README.md` Hook 섹션에 dual-target output 패턴 문서화.
-- **G7 — devbrew Plugin Shape "Loud logging" 준수**: 만약 미래에 hookSpecificOutput schema가 plugin output에서 누락되면 stderr loud log (시작 시 self-check 또는 test에서). 현재 PR 범위에서는 `test_hook_output_schema.py`가 동등 기능.
+- **G7 — devbrew Plugin Shape "Loud logging" 준수 (test-only 범위)**: hookSpecificOutput schema 회귀를 잡는 메커니즘은 **`test_hook_output_schema.py`만**으로 한정 (runtime self-check 추가 안 함 — hook 코드 추가 변경 회피). 현재 PR 범위에서는 CI 통과 시 schema가 보장됨. 향후 runtime self-check 필요성 발견 시 별도 PR. Round-2 advisory NEW (G7 명확화) fix.
 
 ## Non-goals
 
@@ -217,7 +217,14 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
 ### State machine 보존
 
 - **AC6 — `pending_review:` 블록 schema 무변화**: `spec-write-validator.py`가 state에 쓰는 4-field 블록(path/mode/worktree_path/triggered_at) 정확히 동일.
-- **AC7 — `rewrite_state()` ordering 정정 (write-before-emit)**: `review-dispatch.py`는 `rewrite_state(state_path, body, now)` 호출이 **`print(json.dumps(...))` 보다 먼저** 완료되어야 함 + Python `f.write()` 후 명시적 `f.flush()` + `os.fsync(f.fileno())` 로 OS-level durability 보장. 이는 기존 v0.4.0 코드(line 122 print → lines 123–127 rewrite) 와 다른 ordering — Reviewer round-1 issue 83dc5425 fix. ordering 반대 시 Claude Code가 `decision:"block"`을 처리하여 즉시 다시 Stop을 fire할 때 두 번째 hook이 stale state (last_dispatched_at 미갱신)를 읽어 두 번째 block 출력 → block storm 위험. `test_hook_output_schema.py`가 rewrite-before-emit 순서를 검증하기 위해 hook 실행 후 state file mtime이 stdout capture 시각 이전임을 assertion.
+- **AC7 — `rewrite_state()` ordering 정정 (write-before-emit) + rewrite 실패 시 emit 금지**:
+  - **AC7.1 — Ordering 요구**: `review-dispatch.py`는 `rewrite_state(state_path, body, now)` 호출이 **`print(json.dumps(...))` 보다 먼저** 완료되어야 함 + `rewrite_state()` 내부에 `f.write()` 후 `f.flush()` + `os.fsync(f.fileno())` 로 OS-level durability 보장. 이는 기존 v0.4.0 코드(line 122 print → lines 123–127 rewrite) 와 다른 ordering — Reviewer round-1 issue 83dc5425 fix.
+  - **AC7.2 — Rewrite 실패 시 동작 (race-free 보장)**: rewrite_state가 OSError로 실패하면 hook은 stderr loud log + `{}` exit 0 (block 안 함). 이는 G3/C6의 race-free TTL guard 전제를 절대적으로 유지 — rewrite 실패 후 block emit 시 다음 Stop이 stale state를 읽고 또 block → block storm. Tradeoff: 이번 Stop의 dispatch 1회는 누락되나, L4b UserPromptSubmit reminder가 다음 user prompt에 dispatch를 살림 (안전망 design intent). Round-2 issue NEW-f8e20d44 (contradiction) fix.
+  - **AC7.3 — Ordering 검증 전략 (NEW-a7f3c291 fix)**: `test_hook_output_schema.py`는 mtime/시각 비교 대신 다음 3가지 중 *최소 1개*를 구현하여 ordering을 *실제로* 검증:
+    1. **AST inspection**: `ast.parse(open("review-dispatch.py").read())` → main() 함수 body 노드를 순회하여 `rewrite_state` Call node가 `print` Call node 보다 *먼저* 등장하는지 line number 비교. ordering 위반 시 fail.
+    2. **Fault injection**: 임시 read-only state file로 fixture 구성 → rewrite_state가 OSError raise → stdout이 `{}` (또는 empty) 임을 검증 (AC7.2 동시 검증). emit이 발생하면 fail.
+    3. **Mock-based ordering trace**: `unittest.mock.patch` 로 `rewrite_state`를 wrap하여 호출 순서를 list에 기록 + `print`도 wrap. 순서 list가 `["rewrite_state", "print"]` 인지 검증.
+  - 권장: 위 3가지 모두 구현 (AST + fault injection + mock trace) 하여 isolation 보장. mtime 비교는 dead assertion이므로 제거.
 - **AC8 — TTL guard 작동**: Stop hook 발화 시점에 `last_dispatched_at`이 30초 이내면 `{}` exit (no block, no continue). `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC` 환경변수 override 작동. AC7의 ordering 정정 전제 위에서만 신뢰 가능.
 - **AC9 — Cleanup 정책 무변화**: 24h pending_review 자동 purge + 7일 state file 자동 delete 기존 동작 그대로.
 
@@ -234,7 +241,7 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
     1. `tempfile.TemporaryDirectory()` 로 임시 state root 생성.
     2. `<temp_root>/<session_id>/state.local.md` 에 frontmatter + pending_review block 작성 (path/mode/worktree_path/triggered_at).
     3. `DEVBREW_SPEC_DISTILL_SESSION_ID=<session_id>` env로 hook이 그 state 읽도록 유도.
-    4. `state_path.state_root()`를 monkey-patch 또는 `CLAUDE_PROJECT_DIR=<temp_root>` 로 redirect (방법은 implementation plan에서 결정).
+    4. `state_path.state_root()`의 resolution을 redirect — **`CLAUDE_PROJECT_DIR=<temp_root>` env 사용 (env-redirect 채택)**. monkey-patch는 `state_path.py` 내부 구현에 결합하여 향후 internal refactor를 깨뜨릴 위험이 있고, env-redirect는 hook이 운영 환경에서 사용하는 동일한 외부 인터페이스를 그대로 사용 → test가 implementation detail이 아닌 contract를 검증. Round-2 advisory에 따라 writing-plans 단계가 아닌 design 단계에서 결정.
     5. `subprocess.run(["python3", "review-dispatch.py"], env=..., capture_output=True)` 실행.
     6. `json.loads(result.stdout)` → schema assertion + state mtime < stdout receipt time (AC7 ordering).
     7. tearDown: tempdir 자동 cleanup.
@@ -243,7 +250,7 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
   - **Encoding 안전성 (AC1a)**: Stop hook 케이스 중 1개는 fixture path에 공백/특수 문자 포함 → round-trip 검증.
   - **subTest 실패 격리**: 한 hook의 schema 위반이 다른 hook test를 막지 않음. CI 출력에서 5개 row 모두의 PASS/FAIL이 보임.
   - **devbrew kill switch 케이스도 같은 파일에**: `DEVBREW_DISABLE_SPEC_DISTILL=1` 설정 후 5개 hook 모두 stdout이 `{}` 또는 empty임을 검증 (AC10/AC11과 통합).
-  - **Cross-resolver advisory (NG9)**: worktree env (`git rev-parse --is-inside-work-tree` 확인) 감지 시 Python `state_path.state_root()` 결과와 bash `${CLAUDE_PROJECT_DIR:-$PWD}/.claude/spec-distill` 결과가 다른 path 가리키는지 advisory 비교. 다르면 `unittest.expectedFailure` 로 마킹하여 후속 PR scope 명시.
+  - **Cross-resolver advisory (NG9, skipUnless 패턴)**: worktree env (`git rev-parse --is-inside-work-tree` 확인) 감지 시에만 실행되는 advisory test. `@unittest.skipUnless(_in_worktree(), "cross-resolver test runs only inside a git worktree")` 로 환경 감지. 실행되면 Python `state_path.state_root()` 결과와 bash `${CLAUDE_PROJECT_DIR:-$PWD}/.claude/spec-distill` 결과를 비교하여 동일하면 PASS, 다르면 FAIL (실제 mismatch 발견 시 PR reviewer가 NG9의 후속 PR을 즉시 작성하도록 신호). `expectedFailure`는 의도된 실패 마킹이므로 본 advisory 의도와 부합하지 않아 사용 안 함 — Round-2 issue NEW-d4c91b38 fix. 후속 PR이 path resolver 통합을 ship하면 본 test의 fail 가능성이 0이 되며 그 시점에 test는 그대로 유지 (no-op cost).
 - **AC13 — 기존 `tests/test_review_dispatch.sh`, `tests/test_review_dispatch_design_mandate.sh` assertion 갱신**: 기존 systemMessage substring grep → `jq '.reason'` 기반 assertion + `jq '.decision'` == "block" assertion. 기존 PASS 시나리오 모두 PASS.
 - **AC14 — 기존 `tests/test_hooks.sh`, `tests/test_spec_write_validator.sh`, `tests/test_reminder_hook.sh` assertion 갱신**: 동일 — JSON path assertion으로 변경.
 - **AC15 — 5개 hook 모두에서 `systemMessage`-only output 발생 시 새 test가 즉시 FAIL**: 회귀 시 CI 블록.
@@ -354,7 +361,12 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
         systemMessage: "[spec-distill] previous interview session(s) detected"
     }'
     ```
-  - 신규 no-jq fallback: 동일 패턴.
+  - 신규 no-jq fallback (literal — interview-trigger.sh와 동일 escape 전략):
+    ```bash
+    escaped=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ' | tr -d '\r')
+    printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"},"systemMessage":"[spec-distill] previous interview session(s) detected"}\n' "$escaped"
+    ```
+  - **No-jq fallback scope 제한**: bash sed 기반 escape는 backslash + double-quote + LF + CR 만 처리. null byte / 기타 control char / unicode 고위 codepoint는 처리 대상 아님 — devbrew state 파일 / 사용자 prompt에 그런 문자가 들어오는 시나리오는 본 PR scope 밖 (AC1a의 path 예시는 공백/`$`/backtick/일반 quote만 보장). jq 있는 환경에서는 jq가 full JSON escape 처리. CI에서 jq 있는 환경을 default로 가정 (AC4-b/AC5-b의 no-jq path는 fallback 안전망이지 임의 입력 처리 메커니즘 아님).
 
 ### 수정 (test — 5 files)
 
@@ -424,7 +436,7 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
 
 - **Approach C — devbrew-wide systemMessage audit (quality-gates `post-tool-use.py:81`, project-init hook 포함).** 거절 이유: (a) 사용자 보고 범위 초과, (b) quality-gates의 PR-creation systemMessage 같은 건 *의도된 user-only display* 가능성 (user가 다음 prompt로 `/qg`를 직접 invoke하는 흐름이 design), 일률적 변경 시 의도하지 않은 동작 변경 위험, (c) PR 크기 폭발로 review/롤백 단위 비대화. *향후 별도 PR*로 plugin별 의도 확인 후 진행 가능.
 
-- **Two-phase migration (Stop hook patch PR 먼저, 4개 advisory hook 후속 PR).** 거절 이유: (a) Stop hook만 먼저 ship하면 advisory L1 (`spec-write-validator`) 이 여전히 systemMessage-only로 남아 Claude가 "structural OK, reviewer dispatched" advisory를 받지 못함 → 사용자가 디스크 흔적으로만 dispatch 상태 추적 가능, 사용자 경험 enrichment 누락. (b) 두 단계 사이의 인터림 baseline에 v0.5.0a 같은 중간 버전이 필요 — devbrew SemVer 정책상 모호 (cache key 한 번 더 갱신). (c) 롤백 단위가 2개 commit으로 분산 → `git revert <single-sha>` 단순성 손실. (d) `test_hook_output_schema.py`도 2번에 걸쳐 추가하거나 후속 PR로 미루는 어색함. 한 PR로 cutover하는 atomic 변경이 SemVer/test/롤백 모두에서 더 단순. 다만 Reviewer round-1 issue adcd1c89가 지적했듯 이 옵션이 명시되지 않으면 reader가 "고려됐는가?"를 알 수 없음 → 본 round-2 spec revision에서 명시 추가.
+- **Two-phase migration (Stop hook patch PR 먼저, 4개 advisory hook 후속 PR).** 거절 이유: (a) Stop hook만 먼저 ship하면 advisory L1 (`spec-write-validator`) 이 여전히 systemMessage-only로 남아 Claude가 "structural OK, reviewer dispatched" advisory를 받지 못함 → 사용자가 디스크 흔적으로만 dispatch 상태 추적 가능, 사용자 경험 enrichment 누락. (b) **중간 상태 silent fail 위험**: phase 1 후 phase 2 전 시기에 사용자가 spec을 작성하면 (b1) L3 Stop hook은 fix되어 dispatch가 reach하지만 (b2) L1 PostToolUse advisory + L4b UserPromptSubmit reminder는 여전히 systemMessage-only로 silent — 이 인터림 baseline은 안전망 일관성 측면에서 v0.4.0보다 더 혼란스러움 (작동 안 함이 아니라 *부분 작동*, 디버깅이 어려움). (c) 롤백 단위가 2개 commit으로 분산 → `git revert <single-sha>` 단순성 손실. (d) `test_hook_output_schema.py`도 2번에 걸쳐 추가하거나 후속 PR로 미루는 어색함. 한 PR로 cutover하는 atomic 변경이 *부분 작동 인터림 baseline 회피*/test/롤백 모두에서 더 단순. 다만 Reviewer round-1 issue adcd1c89가 지적했듯 이 옵션이 명시되지 않으면 reader가 "고려됐는가?"를 알 수 없음 → 본 round-2 spec revision에서 명시 추가. Round-2 issue NEW-e9a3bb52 (circular SemVer argument) fix: 기존 (b) "SemVer 정책상 모호"는 부정확한 논거여서 "부분 작동 인터림 baseline 위험"으로 교체.
 
 - **Feature flag (`DEVBREW_SPEC_DISTILL_NEW_SCHEMA=1`) dual-output mode.** 거절 이유: (a) systemMessage + additionalContext + decision+reason을 동시에 출력하는 코드는 이미 본 PR이 채택 (dual-target의 "dual"이 feature flag dual이 아니라 *user-vs-Claude target dual*). flag로 새 schema를 gating해도 Claude는 항상 새 schema field를 보거나 못 봄 — production에서 *부분 enable*이 의미 없음 (Claude Code 한 인스턴스가 한 hook output을 한 번에 처리). (b) Hook 출력 schema는 binary contract — 옳거나 silent fail이거나. 점진적 ramp가 hook output에 적용 불가능 (network rollout 아님). (c) flag 추가는 신규 env var → NG5 위반 (devbrew LD10 일관성). 적절한 안전 장치는 *기존* kill switch (`DEVBREW_DISABLE_SPEC_DISTILL=1`) + 회귀 test + plugin.json minor bump로 충분.
 
@@ -463,3 +475,4 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
 - **Revision history**:
   - v1.0.0 (2026-05-17, commit c0bc790): initial draft.
   - v1.1.0 (2026-05-17, round-1 spec-reviewer adversarial review 반영): 10개 issue 모두 fix — rewrite-before-emit ordering 의무화 (AC7), reason 인코딩 round-trip 안전성 (AC1a + C10), `test_hook_output_schema.py` Stop-hook state fixture 명세 (AC12), V5 split (V5a 자동/V5b 수동), test 파일 count 정정 (4→5), §9.1에 two-phase migration + feature flag 거절 alternative 추가, C4 hook 사양 verbatim 인용, C5 hedging 제거, Goal 3개 deliverable로 enumerate, G3 조건부 표현 명시, hook 별 literal systemMessage 텍스트 명시 (`<짧은 흔적>` placeholder 제거), C11 + NG9에 cross-resolver consistency 명시 (본 PR scope 한정).
+  - v1.2.0 (2026-05-17, round-2 spec-reviewer adversarial review 반영): 5개 신규 issue + 3개 advisory 모두 fix — AC7 ordering assertion 강화 (mtime dead-assertion 제거, AST inspection + fault injection + mock trace 3-prong 검증, NEW-a7f3c291), AC7.2 rewrite 실패 시 emit 금지 (block storm 회피, NEW-f8e20d44), session-anchor.sh no-jq fallback literal snippet 명시 + scope 제한 명시 (NEW-b2c1e6f7), AC12 cross-resolver test가 `skipUnless` 사용 (`expectedFailure` 폐기, NEW-d4c91b38), §9.1 two-phase 거절 (b) "SemVer 정책상 모호" 순환 논거를 "부분 작동 인터림 baseline 위험"으로 교체 (NEW-e9a3bb52), AC12 monkey-patch vs env-redirect 결정 (env-redirect 채택, design 단계 결정), G7 test-only 범위 명확화.
