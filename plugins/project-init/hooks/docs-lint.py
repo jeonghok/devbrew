@@ -159,6 +159,52 @@ def check_r5_fences(target: Path, rel_display: str) -> Optional[str]:
     )
 
 
+LINK_RE = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+URL_SCHEME_RE = re.compile(r"^[a-z][a-z0-9+.-]*:")
+
+
+def check_r6_links(target: Path, rel_display: str, project_dir: Path) -> Optional[str]:
+    """AC13/AC14/AC15: internal markdown links must resolve."""
+    try:
+        content = target.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        print(f"[project-init:docs-lint] could not read {rel_display} — skipping R6", file=sys.stderr)
+        return None
+    unresolved: list[str] = []
+    base_dir = target.parent
+    for m in LINK_RE.finditer(content):
+        raw_target = m.group(2).strip()
+        if not raw_target:
+            continue
+        if URL_SCHEME_RE.match(raw_target):
+            continue
+        if raw_target.startswith("#"):
+            continue
+        # Strip fragment
+        path_part = raw_target.split("#", 1)[0]
+        if not path_part:
+            continue
+        resolved = (base_dir / path_part).resolve()
+        # AC15: escape outside project_dir → treat as external
+        try:
+            resolved.relative_to(project_dir)
+        except ValueError:
+            continue
+        if not resolved.exists():
+            unresolved.append(raw_target)
+    if not unresolved:
+        return None
+    shown = unresolved[:5]
+    suffix = ""
+    if len(unresolved) > 5:
+        suffix = f" ... and {len(unresolved) - 5} more"
+    list_str = ", ".join(shown) + suffix
+    return (
+        f"project-init: {rel_display} has {len(unresolved)} unresolved internal link(s): "
+        f"[{list_str}]"
+    )
+
+
 def main() -> int:
     if kill_switch_active():
         emit()
@@ -179,9 +225,9 @@ def main() -> int:
     if target is None:
         emit()
         return 0
-    # Compute display path (relative to project_dir for readability)
+    project_dir_path = Path(project_dir).resolve()
     try:
-        rel_display = target.relative_to(Path(project_dir).resolve()).as_posix()
+        rel_display = target.relative_to(project_dir_path).as_posix()
     except ValueError:
         rel_display = str(target)
     messages: list[str] = []
@@ -194,7 +240,9 @@ def main() -> int:
     msg_r5 = check_r5_fences(target, rel_display)
     if msg_r5:
         messages.append(msg_r5)
-    # More rules will be added in subsequent tasks.
+    msg_r6 = check_r6_links(target, rel_display, project_dir_path)
+    if msg_r6:
+        messages.append(msg_r6)
     if messages:
         emit("\n\n".join(messages))
     else:

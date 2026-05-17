@@ -310,6 +310,7 @@ class TestR5Fences(unittest.TestCase):
                 cwd=td,
             )
             self.assertNotIn("fenced code block", out)
+            self.assertEqual(rc, 0)
 
     def test_indented_code_block_ignored(self):
         """AC12: 4+ space indent → markdown indented code, R5 skips."""
@@ -326,6 +327,7 @@ class TestR5Fences(unittest.TestCase):
                 cwd=td,
             )
             self.assertNotIn("fenced code block", out)
+            self.assertEqual(rc, 0)
 
     def test_close_fence_not_flagged(self):
         """AC11 stateful: bare closing fence after opening fence is OK."""
@@ -342,6 +344,7 @@ class TestR5Fences(unittest.TestCase):
                 cwd=td,
             )
             self.assertNotIn("fenced code block", out)
+            self.assertEqual(rc, 0)
 
     def test_multi_violation_count_and_list(self):
         """AC11 message format: count + list pattern."""
@@ -358,6 +361,8 @@ class TestR5Fences(unittest.TestCase):
             )
             self.assertIn("3 fenced code blocks", out)
             self.assertIn("at lines [", out)
+            self.assertIn("L3", out)
+            self.assertEqual(rc, 0)
 
     def test_4_backtick_fence_ignored(self):
         """AC11 scope-out: 4+ backtick fences not checked."""
@@ -374,6 +379,112 @@ class TestR5Fences(unittest.TestCase):
                 cwd=td,
             )
             self.assertNotIn("fenced code block", out)
+            self.assertEqual(rc, 0)
+
+
+class TestR6Links(unittest.TestCase):
+    """R6 — internal markdown links must resolve."""
+
+    def test_resolved_link_passes(self):
+        """AC13: link to existing sibling file → pass."""
+        with tempfile.TemporaryDirectory() as td:
+            sibling = Path(td) / "docs.md"
+            sibling.write_text("ok")
+            target = Path(td) / "AGENTS.md"
+            target.write_text("# Title\n\nSee [docs](docs.md).\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("unresolved internal link", out)
+            self.assertEqual(rc, 0)
+
+    def test_unresolved_link_warns(self):
+        """AC13/AC14: link to non-existent file → warn with path listed."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text("# Title\n\nSee [missing](nope.md).\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertIn("1 unresolved internal link", out)
+            self.assertIn("nope.md", out)
+            self.assertEqual(rc, 0)
+
+    def test_url_scheme_skipped(self):
+        """AC13: URL schemes (http, https, mailto, custom) → skip."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(
+                "# Title\n\n"
+                "- [external](https://example.com)\n"
+                "- [contact](mailto:x@y.z)\n"
+                "- [phone](tel:1234)\n"
+                "- [custom](weird+scheme:foo)\n"
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("unresolved internal link", out)
+            self.assertEqual(rc, 0)
+
+    def test_anchor_only_link_skipped(self):
+        """AC13: #anchor-only link → skip (same-file anchor not checked)."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text("# Title\n\n[jump](#section)\n## section\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("unresolved internal link", out)
+            self.assertEqual(rc, 0)
+
+    def test_fragment_stripped_before_check(self):
+        """AC13: link with #fragment — path checked, fragment stripped."""
+        with tempfile.TemporaryDirectory() as td:
+            sibling = Path(td) / "docs.md"
+            sibling.write_text("ok")
+            target = Path(td) / "AGENTS.md"
+            target.write_text("[see](docs.md#header)\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("unresolved internal link", out)
+            self.assertEqual(rc, 0)
+
+    def test_escape_outside_project_dir_skipped(self):
+        """AC15: link target escaping project_dir → treated as external, skipped."""
+        with tempfile.TemporaryDirectory() as td_outer:
+            with tempfile.TemporaryDirectory() as td_project:
+                outside = Path(td_outer) / "other.md"
+                outside.write_text("ok")
+                target = Path(td_project) / "AGENTS.md"
+                # relative path going up and out
+                rel = os.path.relpath(outside, td_project)
+                target.write_text(f"[outside]({rel})\n")
+                out, rc = run_hook(
+                    {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                    cwd=td_project,
+                )
+                self.assertNotIn("unresolved internal link", out)
+                self.assertEqual(rc, 0)
+
+    def test_multi_unresolved_truncates_at_5(self):
+        """AC14: max 5 listed, '... and M more' suffix beyond."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text("\n".join(f"[bad{i}](no{i}.md)" for i in range(8)) + "\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertIn("8 unresolved internal link", out)
+            self.assertIn("and 3 more", out)
+            self.assertEqual(rc, 0)
 
 
 if __name__ == "__main__":
