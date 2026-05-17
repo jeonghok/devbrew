@@ -1,7 +1,7 @@
 ---
 name: adversarial
 description: Phase 1.5 of Gate 2 — adversarially reviews findings from Phase 1+2 reviewers to find false positives, weak fixes, or better alternatives. Strengthens review by hunting noise.
-model: opus
+model: sonnet
 cost_class: low
 disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]
 ---

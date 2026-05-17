@@ -105,6 +105,10 @@ quality-gates/
 
 The optional `codex-reviewer` agent has `cost_class: variable` — it invokes the user's Codex CLI subscription/API on each `standard`/`deep` Gate 2 dispatch. First-use cost consent gate prompts via `AskUserQuestion`. Per-call wall-clock ceiling: 600s (proxy for cost ceiling — Codex CLI does not currently expose a token cap flag). Disable globally with `DEVBREW_DISABLE_QG_CODEX=1`.
 
+### Adversarial reviewer model
+
+`adversarial` agent uses `model: sonnet` (T2-8 downgrade from opus). The task is *calibration* (mapping each finding to confirm/downgrade/reject verdict + brief reason), not new finding generation — sonnet is sufficient. Ran ~5× per pipeline (once per Gate 2 fix-loop iteration), so the downgrade compounds across the typical 3-5 iter loop. AskUserQuestion fan-out count excludes `adversarial`/`scout`/`synthesizer` (infrastructure dispatches; not user-visible cost).
+
 ## 게이트
 
 | Gate | 주체 | 목적 | 위임 대상 |
