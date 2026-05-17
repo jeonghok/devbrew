@@ -307,6 +307,12 @@ def deadline_exceeded(state, now=None) -> bool:
     return now > deadline
 
 
+# Set of transition types that must NOT be overridden by step-7.5 deadline
+# branch — these are terminal or already-acknowledging the budget, so
+# re-injecting wall_clock_exceeded would loop forever.
+BUDGET_SKIPPABLE = frozenset({"abort", "complete", "wall_clock_exceeded"})
+
+
 # --- State Transitions ---
 
 def compute_transition(state, signal):
@@ -762,18 +768,19 @@ _SPECIAL_PROMPTS = {
     "wall_clock_exceeded": {
         "header": "WALL_CLOCK_EXCEEDED",
         "body": (
-            "Quality Gates exceeded the configured wall-clock budget.\n\n"
+            "Quality Gates exceeded the configured wall-clock budget "
+            "(current gate: {current_gate}).\n\n"
             "Present options to the user via AskUserQuestion:\n"
-            "1. Extend budget — opt-in to continue (re-run /qg with "
-            "DEVBREW_QG_DEADLINE_MIN larger or 0).\n"
-            "2. Accept partial — emit verdict for the gate as-is.\n"
-            "3. Abort — stop the pipeline.\n\n"
+            "1. Extend budget — opt-in to continue (abort this pipeline; "
+            "re-run /qg with DEVBREW_QG_DEADLINE_MIN larger or 0).\n"
+            "2. Accept partial — finalize the pipeline as-is with warnings; "
+            "skip remaining gates.\n"
+            "3. Abort — stop the pipeline outright.\n\n"
             "Based on user choice:\n"
             "- Extend: emit <qg-signal action=\"abort\" "
             "reason=\"User will re-run /qg with extended budget\" />\n"
-            "- Accept partial: emit <qg-signal gate=\"{current_gate}\" "
-            "verdict=\"PASS_WITH_WARNINGS\" summary=\"wall-clock exceeded; "
-            "user accepted partial\" files_changed=\"\" />\n"
+            "- Accept partial: emit <qg-signal action=\"complete\" "
+            "reason=\"wall-clock exceeded; user accepted partial\" />\n"
             "- Abort: emit <qg-signal action=\"abort\" "
             "reason=\"User chose to abort after wall-clock exceeded\" />\n"
         ),
@@ -957,7 +964,6 @@ def main():
     # Terminal and self-acknowledging transitions are NOT overridden — the
     # user has already responded to the budget prompt (or is taking a
     # terminal action), so re-injecting the prompt would loop forever.
-    BUDGET_SKIPPABLE = {"abort", "complete", "wall_clock_exceeded"}
     if deadline_exceeded(state) and transition["type"] not in BUDGET_SKIPPABLE:
         # `prior` preserves the original transition for audit/log — read by
         # future logging hooks, intentionally unused by current main flow.

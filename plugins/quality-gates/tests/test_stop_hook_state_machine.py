@@ -406,7 +406,9 @@ class TestWallClockBudget(unittest.TestCase):
 
     def test_AC14b_abort_after_deadline_is_not_overridden(self):
         """Regression: once deadline is past, an abort signal must flow
-        through unmodified — otherwise wall_clock_exceeded loops forever."""
+        through unmodified — otherwise wall_clock_exceeded loops forever.
+        Imports BUDGET_SKIPPABLE from the production module so test
+        cannot drift from main()."""
         from datetime import datetime, timezone
         state = {
             "current_gate": 2, "gate2_iteration": 1, "max_gate2_iterations": 5,
@@ -416,10 +418,8 @@ class TestWallClockBudget(unittest.TestCase):
         abort_signal = {"action": "abort", "reason": "User chose to abort"}
         base = stop_hook.compute_transition(state, abort_signal)
         self.assertEqual(base["type"], "abort")
-        # Simulate step 7.5 from main() with the BUDGET_SKIPPABLE guard:
-        BUDGET_SKIPPABLE = {"abort", "complete", "wall_clock_exceeded"}
         now = datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc)
-        if stop_hook.deadline_exceeded(state, now=now) and base["type"] not in BUDGET_SKIPPABLE:
+        if stop_hook.deadline_exceeded(state, now=now) and base["type"] not in stop_hook.BUDGET_SKIPPABLE:
             transition = {"type": "wall_clock_exceeded", "prior": base}
         else:
             transition = base
@@ -427,7 +427,8 @@ class TestWallClockBudget(unittest.TestCase):
                          "deadline_exceeded must not override an abort signal")
 
     def test_AC14c_complete_after_deadline_is_not_overridden(self):
-        """Companion: complete (pipeline finished) must also flow through."""
+        """Companion: complete must also flow through. Uses production
+        BUDGET_SKIPPABLE constant."""
         from datetime import datetime, timezone
         state = {
             "current_gate": 3, "gate2_iteration": 1, "max_gate2_iterations": 5,
@@ -437,13 +438,19 @@ class TestWallClockBudget(unittest.TestCase):
         complete_signal = {"action": "complete"}
         base = stop_hook.compute_transition(state, complete_signal)
         self.assertEqual(base["type"], "complete")
-        BUDGET_SKIPPABLE = {"abort", "complete", "wall_clock_exceeded"}
         now = datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc)
-        if stop_hook.deadline_exceeded(state, now=now) and base["type"] not in BUDGET_SKIPPABLE:
+        if stop_hook.deadline_exceeded(state, now=now) and base["type"] not in stop_hook.BUDGET_SKIPPABLE:
             transition = {"type": "wall_clock_exceeded", "prior": base}
         else:
             transition = base
         self.assertEqual(transition["type"], "complete")
+
+    def test_AC14d_budget_skippable_contains_terminal_set(self):
+        """Lock: BUDGET_SKIPPABLE must include all terminal transitions
+        plus wall_clock_exceeded itself, otherwise specific loops re-open."""
+        self.assertIn("abort", stop_hook.BUDGET_SKIPPABLE)
+        self.assertIn("complete", stop_hook.BUDGET_SKIPPABLE)
+        self.assertIn("wall_clock_exceeded", stop_hook.BUDGET_SKIPPABLE)
 
 
 if __name__ == "__main__":
