@@ -55,6 +55,18 @@ locked_decisions:
     section: "#goals"
     summary: 'pending_review block에 worktree_path 필드 추가 — Write 시점의 절대경로(cwd 기반)를 기록. Stop hook의 mandate systemMessage에도 worktree_path를 포함시켜 reviewing-spec이 main repo cwd로 돌아왔을 때도 spec 파일의 절대경로를 잃지 않도록 한다. (G7)'
     source: brainstorming-round-2 (worktree investigation)
+  - id: LD13
+    section: "#constraints"
+    summary: 'Mandate obedience는 hard mechanism이 아니라 best-effort + redundancy. L4a/L4b 둘 다 무시되는 케이스는 사용자 의도(kill switch)로 간주하고 cleanup 정책(LD14)으로 state 누적만 방지. Claude를 강제로 obey시키는 메커니즘은 의도적으로 도입하지 않음 — devbrew Law 2 물리 분리 원칙과 상충 위험. (C7)'
+    source: brainstorming-round-3 (spec-reviewer issue c4d18a52)
+  - id: LD14
+    section: "#constraints"
+    summary: 'State cleanup 정책 = pending_review triggered_at > 24h → auto-purge, last_dispatched_at만 있는 state → 7일 후 파일 auto-delete. 신규 env var 없이 하드코딩 (LD10 일관성). (C8, P14 graceful state hygiene)'
+    source: brainstorming-round-3 (spec-reviewer issue a1f3c2d0 Q2)
+  - id: LD15
+    section: "#non-goals"
+    summary: 'drafting-spec skill은 본 design v0.4.0 범위 밖. design mode needs_revise → drafting-spec Mode B를 호출하지 *않고* brainstorming author(메인 agent)에게 control 반환. drafting-spec은 spec mode 전용 유지. (NG5)'
+    source: brainstorming-round-3 (spec-reviewer issue f1b30d74)
 ---
 
 # spec-distill Design-Mode Trigger Reliability (v0.4.0)
@@ -67,7 +79,7 @@ PostToolUse hook이 `*-design.md` write를 감지한 후, 동일 session 또는 
 
 ## Context / Why
 
-직전 브랜치(spec-distill-hook-review v0.3.0)에서 PostToolUse matcher와 design mode 인식은 도입되었으나, **brainstorming flow의 terminal step("invoke writing-plans")이 Stop hook의 mandate systemMessage("invoke reviewing-spec")와 충돌**할 때 어느 쪽이 이기는지 명세 부재. 결과: design.md 작성 직후 spec-reviewer가 fire하지 않고 writing-plans로 직진하는 silent-miss가 관측됨.
+직전 브랜치(spec-distill-hook-review v0.3.0)에서 L1(PostToolUse matcher + design mode 인식)은 정상 도입되었고 본 design 작성 dogfood 중에도 fire 확인됨. silent-miss는 **L4(dispatch obedience)와 L5(reviewing-spec design 분기 부재)** 두 layer에서 발생: Stop hook이 mandate를 emit해도 brainstorming flow의 terminal step("invoke writing-plans")과 충돌할 때 우선순위가 정해져 있지 않아 다음 turn에서 mandate가 무시될 수 있고, 가령 reviewing-spec이 호출되어도 design.md를 spec.md 양식으로 오인 판정할 수 있다.
 
 추가로 reviewing-spec skill 자체는 spec mode(11 sections, locked_decisions, interview re-entry) 전제로 짜여 있어, 가령 dispatch 되더라도 design.md를 spec.md로 오인 판정할 위험이 있음.
 
@@ -91,6 +103,8 @@ devbrew Law 2(*Writer and Reviewer Must Never Share a Pass*)의 instantiation �
 - **NG2**: design mode에 locked_decisions/11-sections schema 강제하지 않음. brainstorming 산출물 자유도 보존. (cf. LD7)
 - **NG3**: brainstorming SKILL.md 수정 안 함 (superpowers 플러그인 소속, cross-plugin coupling 회피).
 - **NG4**: 신규 env var 도입 없음 — 기존 `DEVBREW_DISABLE_SPEC_DISTILL`/`DEVBREW_SKIP_HOOKS` namespace 재사용.
+- **NG5**: drafting-spec skill 수정 안 함 (spec mode 전용 유지). design.md `needs_revise` 시 re-draft는 brainstorming author(외부 skill) 책임으로 routing — drafting-spec Mode B는 호출하지 않는다. (review issue f1b30d74 대응)
+- **NG6**: bare repo / submodule / nested worktree / `.git` symlink 환경은 v0.4.0 supported scope 밖. state_path.py에서 fallback 경로로 cwd-relative 처리 + stderr loud log만 보장. (review issue d9f47b03 대응)
 
 ## Constraints
 
@@ -100,6 +114,9 @@ devbrew Law 2(*Writer and Reviewer Must Never Share a Pass*)의 instantiation �
 - **C4**: 모든 신규/변경 hook은 graceful degradation — state I/O 실패 시 exit 0 + stderr loud log. crash 금지.
 - **C5**: PostToolUse hook(`spec-write-validator.py`) 본문 변경 최소화. 이미 design mode 처리 중 — 추가 회귀 테스트 fixture만 보강.
 - **C6**: state path 해석은 `hooks/state_path.py` 단일 helper로 중앙화. 모든 hook(spec-write-validator, review-dispatch, pending-review-reminder)이 이 helper만 호출. git 부재/실패 시 cwd fallback + `[spec-distill] state root fallback: cwd ({path}) — main repo 미해석` stderr 한 줄 emit. (cf. LD11)
+- **C7**: **Mandate obedience는 hard mechanism이 아닌 best-effort + redundancy** — Claude가 systemMessage를 obey한다는 강제 수단은 없다. L4a Stop mandate가 무시되면 L4b UserPromptSubmit reminder가 매 next turn 재emit. 둘 다 무시되는 케이스(예: 사용자가 kill switch 활성화)는 cleanup 정책(C8)으로 누적 방지. (review issue c4d18a52 대응)
+- **C8**: **state cleanup 정책** — pending_review block의 `triggered_at` > 24h 경과 시 다음 hook fire 때 stale로 간주하고 자동 purge + stderr 통보. last_dispatched_at만 있고 pending_review 없는 state는 7일 후 파일 단위 auto-delete (P14 graceful state hygiene). 신규 env var `DEVBREW_SPEC_DISTILL_STALE_HOURS`로 override 가능 — 단 C3에 따라 신규 env var 도입 금지 원칙과 충돌하므로 기본값만 유지하고 별도 변수 없이 ship. (review issue a1f3c2d0 Q2 대응)
+- **C9**: **session_id 해석 순서** — `DEVBREW_SPEC_DISTILL_SESSION_ID` env var → conducting-interview가 frontmatter에 박은 session_id → `"default"` fallback. hook runtime 기준이며 spec/design.md frontmatter는 참조하지 않는다. 같은 design.md를 두 session에서 열어도 각 session의 env(또는 default)로 분리. (review issue a1f3c2d0 Q3 대응)
 
 ## Acceptance Criteria
 
@@ -107,9 +124,9 @@ devbrew Law 2(*Writer and Reviewer Must Never Share a Pass*)의 instantiation �
 - **AC2**: pending_review block이 기록된 직후 turn 종료 시 Stop hook이 systemMessage emit. 메시지 본문에 "reviewing-spec 호출" + "타 terminal handoff(writing-plans 등) 보류" 두 문구 모두 포함.
 - **AC3**: Stop hook fire 후 next turn UserPromptSubmit에서 reminder hook은 silent skip (TTL=30s 가드).
 - **AC4**: pending_review block이 next turn 시작에도 살아있고 `last_dispatched_at` > TTL이면 UserPromptSubmit reminder가 systemMessage 재emit.
-- **AC5**: reviewing-spec skill 본문 Step 1에서 `pending_review.mode` 분기 명시 — design일 때 locked_decisions / 11-sections 점검 skip.
-- **AC6**: reviewing-spec routing table에 design rows 3개 추가 — (approved → Human Gate → writing-plans), (needs_revise & count<3 → re-draft path), (needs_revise & count≥3 → forced Human Gate).
-- **AC7**: spec-reviewer agent persona에 design mode checklist 분기 섹션 추가 — placeholder, ambiguity, scope creep, 2-3 approaches 비교 유무, isolation/boundaries, testing 언급. 기존 spec-mode 본문 무손상.
+- **AC5**: `test_reviewing_spec_design_routing.py`가 design mode 입력에 대해 spec-reviewer dispatch prompt에 `mode: design` 토큰이 포함되고 reviewer 출력에 11-section 또는 locked_decisions 누락을 issue로 raise하지 *않음*을 검증 (behavior assertion, SKILL.md 텍스트 검증이 아님). (review issue b7e20f91 대응)
+- **AC6**: reviewing-spec routing table에 design rows 3개 추가 — (approved → Human Gate → writing-plans), (needs_revise & count<3 → **brainstorming author 회귀** = 사용자가 design.md 직접 수정 후 다음 turn에서 reviewing-spec 재dispatch; drafting-spec Mode B 호출하지 *않음*), (needs_revise & count≥3 → forced Human Gate). 표 본문에 "drafting-spec 미호출" 명시. (review issue f1b30d74 대응)
+- **AC7**: `test_spec_reviewer_design_checklist.py`가 spec-reviewer를 `mode=design` 프롬프트로 실제 호출(또는 fixture 기반 dry-run)하여, 출력 issue 카테고리에 placeholder / ambiguity / scope-creep / approaches-comparison / isolation / testing 중 최소 3개 카테고리가 등장 가능함을 검증한다 (behavior assertion, persona 텍스트 grep이 아님). 동일 fixture로 spec mode 호출 시 기존 verdict format이 무손상함도 검증. (review issue b7e20f91 대응)
 - **AC8**: `DEVBREW_DISABLE_SPEC_DISTILL=1` 또는 `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` 환경변수 설정 시 reminder hook은 exit 0 (no emit).
 - **AC9**: plugin.json `version: 0.4.0`, CHANGELOG.md `## [0.4.0] — 2026-MM-DD` 섹션에 Added/Changed 분류로 변경사항 기재. README.md "Hooks Installed" 섹션에 UserPromptSubmit reminder 항목 추가, 한 줄 justification ("Stop hook single-shot mandate가 silent drop될 경우 매 turn 재확인하는 redundancy layer — skill로 처리 불가, turn boundary 이벤트가 필요").
 - **AC10**: 신규 테스트 4개 파일 전체 통과. 커버 시나리오: (a) design mode 인식 + state 기록, (b) Stop mandate 본문 검증("reviewing-spec" + "terminal handoff 보류" 둘 다), (c) reminder TTL 가드 — skip / 초과 시 재emit 두 분기, (d) reviewing-spec design routing rows 3개.
@@ -138,9 +155,11 @@ plugins/spec-distill/
     ├── test_design_mode_validator.py                         # NEW: L1 mode=design 인식 검증
     ├── test_review_dispatch_design_mandate.py                # NEW: L4a mandate 본문 검증
     ├── test_reminder_hook.py                                 # NEW: L4b TTL skip / 초과 시 재emit
-    ├── test_reviewing_spec_design_routing.py                 # NEW: L5 routing rows 검증
+    ├── test_reviewing_spec_design_routing.py                 # NEW: L5 routing rows 검증 + behavior (design mode dispatch prompt에 mode 토큰)
+    ├── test_spec_reviewer_design_checklist.py                # NEW: AC7 behavior assertion (design mode 호출 시 issue 카테고리 출현)
     ├── test_state_path_worktree.py                           # NEW: state_path helper가 worktree에서 main repo root 반환
-    └── test_state_path_fallback.py                           # NEW: git 부재 시 cwd fallback + loud log
+    ├── test_state_path_fallback.py                           # NEW: git 부재 시 cwd fallback + loud log
+    └── test_state_cleanup.py                                 # NEW: 24h/7일 TTL auto-purge 동작
 ```
 
 ## Verification Plan
@@ -153,6 +172,8 @@ plugins/spec-distill/
 - **V5a**: 수동 E2E — worktree (`<repo>/.claude/worktrees/<name>/`)에서 같은 파일을 Write → state.local.md가 `<main_repo>/.claude/spec-distill/<session-id>/`에만 기록되었는지 확인 (worktree 안에는 없어야 함). `ExitWorktree action: remove` 후에도 state 보존 확인.
 - **V6**: kill switch 검증 — `DEVBREW_SKIP_HOOKS=spec-distill:reminder python3 hooks/pending-review-reminder.py < payload.json`가 exit 0 + no stdout emit.
 - **V7**: 회귀 검증 — 기존 `tests/test_*.py` 전체 통과 (spec mode 경로 무손상).
+- **V8**: `python3 -m pytest plugins/spec-distill/tests/test_spec_reviewer_design_checklist.py -v` — AC7 behavior (design mode prompt 호출 시 reviewer 출력에 design-relevant 카테고리 출현 + spec mode regression 안전).
+- **V9**: `python3 -m pytest plugins/spec-distill/tests/test_state_cleanup.py -v` — 24h pending_review purge + 7일 file auto-delete 검증.
 
 ## Rejected Alternatives
 
@@ -164,11 +185,20 @@ plugins/spec-distill/
 
 ## Open Questions
 
-- 없음 (모든 결정 LD1–LD10에 박제).
+round-1 review(spec-reviewer agent)에서 4개 미해결 질문이 잠복해 있음을 발견. 모두 round-2에서 LD/Constraint/Non-goal로 승격하여 박제 완료. 본 섹션은 *질문이 어디로 흡수되었는지의 ledger*로 보존.
+
+- **OQ1 (mandate obedience 강제 메커니즘)**: "Stop hook mandate를 Claude가 obey하지 않으면?" → **C7로 흡수**. hard mechanism 없음 — best-effort + L4b redundancy. 둘 다 무시되는 경우는 사용자 의도(kill switch)로 간주하고 C8의 cleanup 정책으로 누적 방지.
+- **OQ2 (state TTL spam/stale)**: "UserPromptSubmit reminder TTL 30s 만료 후 stale state 처리?" → **C8로 흡수**. pending_review `triggered_at` > 24h → auto-purge. last_dispatched_at만 있는 state → 7일 후 파일 단위 auto-delete.
+- **OQ3 (session_id 해석 우선순위)**: "frontmatter session_id vs hook runtime session_id 충돌?" → **C9로 흡수**. env → conducting-interview 박은 ID → "default" 순서. frontmatter는 참조하지 않음.
+- **OQ4 (reviewer가 worktree_path를 어떻게 활용?)**: "reviewing-spec이 main repo cwd로 돌아왔을 때 spec 절대경로 보존?" → **G7/LD12로 흡수**. pending_review.path가 이미 절대경로이므로 worktree_path는 advisory(사용자 통보용). reviewer는 path만으로 동작.
 
 ## Concrete Next Action
 
-다음 단계: `superpowers:writing-plans` skill 호출 (이 design을 기반으로 step-by-step 구현 plan 작성).
-- Spec 경로: `docs/superpowers/specs/2026-05-17-spec-distill-design-mode-trigger-design.md`
-- Plan 산출물: `docs/superpowers/plans/2026-05-17-spec-distill-design-mode-trigger.md`
-- 명령: `/superpowers:writing-plans` (현 session 내 chained invocation)
+**현재 review status가 approved 인지 needs_revise 인지에 따라 분기.**
+
+- **approved**: 다음 단계 `superpowers:writing-plans` skill 호출 (이 design을 기반으로 step-by-step 구현 plan 작성).
+  - Spec 경로: `docs/superpowers/specs/2026-05-17-spec-distill-design-mode-trigger-design.md`
+  - Plan 산출물: `docs/superpowers/plans/2026-05-17-spec-distill-design-mode-trigger.md`
+  - 명령: `/superpowers:writing-plans` (현 session 내 chained invocation)
+- **needs_revise**: 다음 단계 brainstorming author(현 session의 메인 agent)가 reviewer의 issue 목록을 design.md에 반영. 수정 후 같은 turn 또는 다음 turn에서 reviewing-spec 재dispatch — `Agent({subagent_type: "spec-distill:spec-reviewer", prompt: "previous_issues=[<id list>]; review design.md 재검토"})`. routing table의 rereview_count guard(<3)에 따라 3회 초과 시 Human Gate로 forced escalate.
+- **needs_interview**: spec-distill의 `/interview` 명령으로 회귀하여 ambiguous dimension 추가 인터뷰. design mode에서는 거의 발생하지 않음(brainstorming이 이미 인터뷰 기능 일부 수행).
