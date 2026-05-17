@@ -1,11 +1,11 @@
 ---
 name: spec-distill-hook-context-injection
-version: 1.2.0
+version: 1.3.0
 created_at: 2026-05-17
 session_id: brainstorm-2026-05-17
 status: locked
 next_phase: writing-plans
-review_rounds: 2
+review_rounds: 3
 source: superpowers/brainstorming + empirical hook firing 증거 (state.local.md 흔적 + 수동 재현 stdout) + Claude Code 공식 hook 사양 (code.claude.com/docs/en/hooks, 본 doc §C4에 verbatim quote) + quality-gates reference 패턴 (plugins/quality-gates/hooks/stop-hook.py:845-849)
 ---
 
@@ -219,9 +219,9 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
 - **AC6 — `pending_review:` 블록 schema 무변화**: `spec-write-validator.py`가 state에 쓰는 4-field 블록(path/mode/worktree_path/triggered_at) 정확히 동일.
 - **AC7 — `rewrite_state()` ordering 정정 (write-before-emit) + rewrite 실패 시 emit 금지**:
   - **AC7.1 — Ordering 요구**: `review-dispatch.py`는 `rewrite_state(state_path, body, now)` 호출이 **`print(json.dumps(...))` 보다 먼저** 완료되어야 함 + `rewrite_state()` 내부에 `f.write()` 후 `f.flush()` + `os.fsync(f.fileno())` 로 OS-level durability 보장. 이는 기존 v0.4.0 코드(line 122 print → lines 123–127 rewrite) 와 다른 ordering — Reviewer round-1 issue 83dc5425 fix.
-  - **AC7.2 — Rewrite 실패 시 동작 (race-free 보장)**: rewrite_state가 OSError로 실패하면 hook은 stderr loud log + `{}` exit 0 (block 안 함). 이는 G3/C6의 race-free TTL guard 전제를 절대적으로 유지 — rewrite 실패 후 block emit 시 다음 Stop이 stale state를 읽고 또 block → block storm. Tradeoff: 이번 Stop의 dispatch 1회는 누락되나, L4b UserPromptSubmit reminder가 다음 user prompt에 dispatch를 살림 (안전망 design intent). Round-2 issue NEW-f8e20d44 (contradiction) fix.
+  - **AC7.2 — Rewrite 실패 시 동작 (race-free 보장)**: rewrite_state가 OSError로 실패하면 hook은 stderr loud log + `{}` exit 0 (block 안 함). 이는 G3/C6의 race-free TTL guard 전제를 절대적으로 유지 — rewrite 실패 후 block emit 시 다음 Stop이 stale state를 읽고 또 block → block storm. Tradeoff: 이번 Stop의 dispatch 1회는 누락되나, L4b UserPromptSubmit reminder가 다음 user prompt에 dispatch를 살림 (안전망 design intent). **단, 직전 *성공* dispatch의 `last_dispatched_at`이 TTL(30초) 이내인 경우 L4b도 TTL guard에 의해 suppress될 수 있음** — 이 시나리오는 사용자가 30초 안에 후속 prompt를 보낸 경우로, 다음 *Stop hook* 발화 시 정상 dispatch (state 리셋된 후)되므로 안전망 손실 없음. Round-2 issue NEW-f8e20d44 (contradiction) fix + Round-3 advisory (L4b TTL 조건 명시).
   - **AC7.3 — Ordering 검증 전략 (NEW-a7f3c291 fix)**: `test_hook_output_schema.py`는 mtime/시각 비교 대신 다음 3가지 중 *최소 1개*를 구현하여 ordering을 *실제로* 검증:
-    1. **AST inspection**: `ast.parse(open("review-dispatch.py").read())` → main() 함수 body 노드를 순회하여 `rewrite_state` Call node가 `print` Call node 보다 *먼저* 등장하는지 line number 비교. ordering 위반 시 fail.
+    1. **AST inspection**: `ast.parse(open("review-dispatch.py").read())` → main() 함수 body 노드를 순회하여 `rewrite_state` Call node가 `print` Call node 보다 *먼저* 등장하는지 line number 비교. ordering 위반 시 fail. **리팩터 대응**: 미래에 dispatch 로직이 helper 함수로 분리되면(예: `_emit_block()`) AST scan 범위를 해당 helper body로 확장 (helper name이 main()의 Call node로 등장하는 경우 helper로 recurse). 이는 mock-based ordering trace (prong 3)가 실행 경로 자체를 잡으므로 AST 우회 위험을 보완.
     2. **Fault injection**: 임시 read-only state file로 fixture 구성 → rewrite_state가 OSError raise → stdout이 `{}` (또는 empty) 임을 검증 (AC7.2 동시 검증). emit이 발생하면 fail.
     3. **Mock-based ordering trace**: `unittest.mock.patch` 로 `rewrite_state`를 wrap하여 호출 순서를 list에 기록 + `print`도 wrap. 순서 list가 `["rewrite_state", "print"]` 인지 검증.
   - 권장: 위 3가지 모두 구현 (AST + fault injection + mock trace) 하여 isolation 보장. mtime 비교는 dead assertion이므로 제거.
@@ -243,7 +243,7 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
     3. `DEVBREW_SPEC_DISTILL_SESSION_ID=<session_id>` env로 hook이 그 state 읽도록 유도.
     4. `state_path.state_root()`의 resolution을 redirect — **`CLAUDE_PROJECT_DIR=<temp_root>` env 사용 (env-redirect 채택)**. monkey-patch는 `state_path.py` 내부 구현에 결합하여 향후 internal refactor를 깨뜨릴 위험이 있고, env-redirect는 hook이 운영 환경에서 사용하는 동일한 외부 인터페이스를 그대로 사용 → test가 implementation detail이 아닌 contract를 검증. Round-2 advisory에 따라 writing-plans 단계가 아닌 design 단계에서 결정.
     5. `subprocess.run(["python3", "review-dispatch.py"], env=..., capture_output=True)` 실행.
-    6. `json.loads(result.stdout)` → schema assertion + state mtime < stdout receipt time (AC7 ordering).
+    6. `json.loads(result.stdout)` → schema assertion. ordering 검증은 AC7.3의 3-prong (AST + fault injection + mock trace)으로 수행 (mtime 비교는 dead assertion이므로 사용 안 함 — Round-2 issue NEW-a7f3c291 fix 일관성).
     7. tearDown: tempdir 자동 cleanup.
   - **PostToolUse / UserPromptSubmit / SessionStart 케이스**: stdin payload 주입 (`{"session_id": "...", "hook_event_name": "...", "tool_name": "Write", "tool_input": {"file_path": "<temp_spec_path>"}, ...}`). spec-write-validator는 `<temp_spec_path>` 가 `docs/superpowers/specs/*-design.md` 형태여야 trigger되므로 fixture spec 파일도 생성.
   - **bash hook 케이스 (interview-trigger.sh, session-anchor.sh)**: `subprocess.run(["bash", "interview-trigger.sh"], ...)` 또는 `["bash", "session-anchor.sh"]`. jq 의존 케이스(AC4-b/AC5-b)는 `unittest.skipUnless(not shutil.which("jq"), "jq not available — testing no-jq fallback")` 로 jq-없는 환경 감지 후 fallback path 검증. jq 있는 환경에서는 정상 path 검증.
@@ -277,13 +277,15 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
     except OSError as e:
         print(f"[spec-distill] state rewrite failed (non-fatal): {e}", file=sys.stderr)
     ```
-  - 신규 code (**rewrite-BEFORE-emit 순서**, fsync 추가):
+  - 신규 code (**rewrite-BEFORE-emit 순서**, fsync 포함, rewrite 실패 시 emit 없이 early return — AC7.2 준수):
     ```python
     try:
-        rewrite_state(state_path, body, now)  # fsync 포함, AC7
+        rewrite_state(state_path, body, now)  # fsync 포함, AC7.1
     except OSError as e:
+        # AC7.2: rewrite 실패 시 block emit하면 block storm 위험 (다음 Stop이 stale state 읽고 또 block).
+        # 안전망 L4b (UserPromptSubmit reminder) 가 다음 prompt에 dispatch 살림.
         print(f"[spec-distill] state rewrite failed (non-fatal): {e}", file=sys.stderr)
-        # rewrite 실패 시에도 decision:block은 emit (사용자 알람 우선) — 다만 stale TTL guard로 storm 가능성 stderr로 loud log
+        return 0  # {} stdout, decision:block 안 함
     print(json.dumps({
         "decision": "block",
         "reason": msg,
@@ -344,9 +346,9 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
         systemMessage: "[spec-distill] interview suggestion (see context)"
     }'
     ```
-  - 신규 no-jq fallback:
+  - 신규 no-jq fallback (session-anchor.sh와 동일 CR 처리 — Round-3 issue d4c1b9e3 fix):
     ```bash
-    escaped=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ')
+    escaped=$(printf '%s' "$msg" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ' | tr -d '\r')
     printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"%s"},"systemMessage":"[spec-distill] interview suggestion (see context)"}\n' "$escaped"
     ```
 
@@ -476,3 +478,4 @@ devbrew CLAUDE.md *§Forbidden Patterns*: "**버그가 리뷰를 탈출하면**,
   - v1.0.0 (2026-05-17, commit c0bc790): initial draft.
   - v1.1.0 (2026-05-17, round-1 spec-reviewer adversarial review 반영): 10개 issue 모두 fix — rewrite-before-emit ordering 의무화 (AC7), reason 인코딩 round-trip 안전성 (AC1a + C10), `test_hook_output_schema.py` Stop-hook state fixture 명세 (AC12), V5 split (V5a 자동/V5b 수동), test 파일 count 정정 (4→5), §9.1에 two-phase migration + feature flag 거절 alternative 추가, C4 hook 사양 verbatim 인용, C5 hedging 제거, Goal 3개 deliverable로 enumerate, G3 조건부 표현 명시, hook 별 literal systemMessage 텍스트 명시 (`<짧은 흔적>` placeholder 제거), C11 + NG9에 cross-resolver consistency 명시 (본 PR scope 한정).
   - v1.2.0 (2026-05-17, round-2 spec-reviewer adversarial review 반영): 5개 신규 issue + 3개 advisory 모두 fix — AC7 ordering assertion 강화 (mtime dead-assertion 제거, AST inspection + fault injection + mock trace 3-prong 검증, NEW-a7f3c291), AC7.2 rewrite 실패 시 emit 금지 (block storm 회피, NEW-f8e20d44), session-anchor.sh no-jq fallback literal snippet 명시 + scope 제한 명시 (NEW-b2c1e6f7), AC12 cross-resolver test가 `skipUnless` 사용 (`expectedFailure` 폐기, NEW-d4c91b38), §9.1 two-phase 거절 (b) "SemVer 정책상 모호" 순환 논거를 "부분 작동 인터림 baseline 위험"으로 교체 (NEW-e9a3bb52), AC12 monkey-patch vs env-redirect 결정 (env-redirect 채택, design 단계 결정), G7 test-only 범위 명확화.
+  - v1.3.0 (2026-05-17, round-3 spec-reviewer adversarial review 반영 + Phase 5 Human Gate 사용자 선택 "revise per review"): 2 load-bearing issue + 3 advisory 모두 fix — review-dispatch.py 코드 스니펫 except 블록을 `return 0` early return으로 정정하여 AC7.2 정책과 일치 (f8e20d44 stagnation marker), interview-trigger.sh no-jq fallback에 `tr -d '\r'` 추가하여 session-anchor.sh와 대칭 (d4c1b9e3), AC12 step 6 mtime 잔재 제거하고 AC7.3 3-prong 참조로 교체, AC7.2에 L4b TTL guard 조건 (직전 성공 dispatch 30초 이내 시 다음 Stop hook이 정상 처리) 명시, AC7.3 AST inspection에 helper 함수 리팩터 대응 (Call node recurse 전략) 명시.
