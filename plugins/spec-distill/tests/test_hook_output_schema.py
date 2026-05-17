@@ -144,3 +144,40 @@ class TestReviewDispatchSchema(HookOutputSchemaTestBase):
         payload = json.loads(result.stdout)  # ← round-trip via stdlib json
         self.assertIn(special_path, payload["reason"])
         self.assertIn("/tmp/wt with space", payload["reason"])
+
+    def test_rewrite_failure_suppresses_emit(self):
+        """AC7.2 — if rewrite_state raises OSError, hook must NOT emit decision:block."""
+        session_id = "test-stop-rewrite-fail"
+        state_file = _write_pending_review_state(
+            self.repo, session_id, spec_path="/tmp/x-spec.md", mode="spec",
+        )
+        # Make state file read-only to force rewrite_state OSError on open(w).
+        # File-level chmod is required: parent-dir chmod doesn't block writes
+        # to existing owned files. Also chmod the parent so any fallback
+        # create/rename also fails.
+        parent = state_file.parent
+        original_file_mode = state_file.stat().st_mode
+        original_parent_mode = parent.stat().st_mode
+        try:
+            os.chmod(state_file, 0o444)  # r--r--r--
+            os.chmod(parent, 0o555)  # r-xr-xr-x
+            result = _run_hook(
+                "review-dispatch.py",
+                cwd=self.repo,
+                env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": session_id},
+            )
+        finally:
+            os.chmod(parent, original_parent_mode)
+            os.chmod(state_file, original_file_mode)
+        self.assertEqual(result.returncode, 0)
+        # stdout must be empty or {} — NOT decision:block
+        stripped = result.stdout.strip()
+        if stripped:
+            payload = json.loads(stripped)
+            self.assertNotEqual(
+                payload.get("decision"), "block",
+                msg=f"AC7.2 violated: emitted decision:block despite rewrite failure: {stripped}",
+            )
+        # stderr should contain the loud log
+        self.assertIn("state rewrite failed", result.stderr)
+        self.assertIn("dispatch suppressed", result.stderr)
