@@ -3,6 +3,19 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.16.0] — 2026-05-18
+
+### Added
+- `check-trivia.sh` new detector kinds: `comment` (comment-only diffs ≤3 lines), `typo` (single-token substitution with length-diff ≤2), `untracked-newfile` (single new file ≤3 lines, all blank/comment/shebang). Fulfills CLAUDE.md P12 anti-corollary 4-axis coverage promise (T2-1).
+- New `tests/test_check_trivia.sh` with 6 fixture-based AC tests (AC1..AC6).
+- README §Trivia detector coverage subsection documenting all 5 kinds.
+
+### Fixed
+- Untracked single-file additions no longer fall through to full pipeline when they qualify as trivia (regression: previous `gd --name-only` did not see untracked files).
+
+### Changed
+- SKILL.md propagates `--paths` argument to `check-trivia.sh` so user-supplied scope is honored.
+
 ## [1.15.0] — 2026-05-17
 
 ### Added

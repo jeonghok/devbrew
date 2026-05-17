@@ -117,14 +117,18 @@ the per-session folder; cross-session siblings are never inspected.
 
 ### Trivia escape (§E)
 
-Run the trivia detector before Gate 1 dispatch:
+Run the trivia detector before Gate 1 dispatch. If `--paths` was supplied by
+the user (i.e. `session_scope == paths`), propagate those paths so the detector
+scopes its diff to the same file set:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh"
+# PATH_ARGS is empty when no --paths were given; set to "--paths <glob>..."
+# by parsing them from the /qg invocation arguments (e.g. "/qg --paths src/ lib/").
+"${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh" $PATH_ARGS
 ```
 
 If exit code is `0`:
-- Read the stdout line `trivia: <kind>` (kind ∈ `whitespace | rename`).
+- Read the stdout line `trivia: <kind>` (kind ∈ `whitespace | rename | comment | typo | untracked-newfile`).
 - Update `.claude/quality-gates/<session-id>/pipeline.md` with
   `status: completed`, `outcome: trivia-skipped`, `trivia_kind: <kind>`.
 - Emit `<qg-signal verdict="trivia-skipped" reason="<kind>" />` and stop.
