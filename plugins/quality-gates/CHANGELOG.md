@@ -3,6 +3,20 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.29.0] — 2026-05-19
+
+### Removed
+- `agents/scout.md` — replaced by `scripts/scout.py`. Depth-decision table was already deterministic in v1.x; LLM was only applying the rules. Saves ~5-15K input + 500 output tokens per Gate 2 iteration. Eliminates scout-fallback path (script can't JSON-parse-fail) — `fallback: false` always (T3-1, AC29-AC33).
+
+### Added
+- `scripts/scout.py` — ~70-line rule-based depth + agent selection. Stdin JSON → stdout YAML with `depth`, `phase1_agents`, `phase2_agents`, `rationale`, `fallback`.
+- `tests/test_scout_script.sh` — 5 fixture tests covering AC29-AC33 (small whitespace / medium new-files / large config / large+type / large+test).
+
+### Changed
+- SKILL.md Phase 0 prose: scout invocation now `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/scout.py` (was: `Agent(subagent_type="quality-gates:scout", ...)`). Frontmatter `allowed-tools` extended.
+- `tests/test_scout_codex_integration.sh`: anchor patterns updated to reference scout.py.
+- `tests/test_worktree.sh` T5/T8 loops drop `scout` (no longer applies).
+
 ## [1.28.0] — 2026-05-19
 
 ### Removed

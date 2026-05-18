@@ -10,6 +10,7 @@ cost_class: variable
 allowed-tools:
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py:*)
 ---
 
 # Quality Gates — Gate Executor
@@ -474,33 +475,30 @@ mkdir -p "${HOME}/.claude/quality-gates" \
 
 4. On `Decline`: replace loaded `codex_manifest` with `codex_available: false\nskip_reason: user_declined_cost_consent` for remainder of session.
 
-Dispatch:
+**Scout dispatch (script-based, T3-1):**
 
-```
-Agent(
-  subagent_type="quality-gates:scout",
-  model="sonnet",
-  prompt="<filtered diff (≤50KB) or '<diff too large; use git diff>'>
+Scout was an LLM agent in v1.x; in v1.29.0 it is a deterministic Python script
+(no LLM judgment was being used — the depth-decision table from v1.x scout.md
+L42-44 is what scout.py implements directly).
 
-  gate1_summary:
-  <verbatim YAML from Gate 1>
+Build the step-0 JSON input (already computed by the Step 0 bash block above):
 
-  session_scope: <branch | session | paths> + <applied path list>
-  iteration: <N>
-  project_dir: <current working directory>"
+```bash
+STEP0_JSON=$(cat <<EOF
+{
+  "changed_lines": $CHANGED_LINE_COUNT,
+  "new_files": $([ -n "$NEW_FILES" ] && echo 1 || echo 0),
+  "config_touched": $([ -n "$CONFIG_TOUCHED" ] && echo true || echo false),
+  "type_design": $([ "$TYPE_DESIGN" = "1" ] && echo true || echo false),
+  "test_change": $([ "$TEST_CHANGE" = "1" ] && echo true || echo false),
+  "gate1_verdict": "$GATE1_VERDICT"
+}
+EOF
 )
+SCOUT_YAML=$(echo "$STEP0_JSON" | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scout.py")
 ```
 
-Parse Scout's YAML output. Validate:
-- `depth ∈ {quick, standard, deep}`
-- `phase1_agents ⊆ {code-reviewer, silent-failure-hunter, feature-dev:code-reviewer, security-reviewer}`
-- If `depth == quick` then `phase2_agents` MUST be `[]`
-- All listed agent names are recognized
-
-If validation fails OR scout times out (>60s) OR scout sets `fallback: true`:
-- Emit `<qg-signal verdict="scout-fallback" reason="<json-error|timeout|self-fallback>" />`
-- Tell user: `[quality-gates] scout fallback engaged: <reason>. Using rule-based gating.`
-- Fall through to **Fallback gating** (existing rule-based path below); skip Phase 1 / Phase 2 *depth-aware dispatch* and use the rule-based flags from Step 0 instead.
+Parse the YAML for `depth`, `phase1_agents`, `phase2_agents`, `rationale`, `fallback` fields. `fallback` is always `false` (rule-based primary; no fallback path needed since script is deterministic).
 
 #### Phase 1: External Reviewer Inclusion (codex-reviewer)
 

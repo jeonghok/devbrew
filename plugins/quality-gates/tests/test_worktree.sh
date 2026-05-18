@@ -154,7 +154,8 @@ rm -rf "$(dirname "$REPO")"
 # --- Test 8: agent.md Inputs contract drift guard (AC2, T8) ---
 # T3-3: codex-reviewer.md deleted — removed from this loop (no longer applicable post-T3-3).
 # T3-2: synthesizer.md deleted — removed from this loop (no longer applicable post-T3-2).
-for agent in scout adversarial test-scope-validator security-reviewer; do
+# T3-1: scout.md deleted — removed from this loop (no longer applicable post-T3-1).
+for agent in adversarial test-scope-validator security-reviewer; do
   if grep -q 'project_dir' "$PLUGIN_DIR/agents/$agent.md"; then
     pass "T8: agents/$agent.md declares project_dir input"
   else
@@ -173,9 +174,10 @@ fi
 
 # --- Test 5: SKILL.md prose contains project_dir in agent dispatch blocks ---
 # T3-2: synthesizer removed from Agent() dispatch (now a script); removed from this loop.
+# T3-1: scout removed from Agent() dispatch (now a script); removed from this loop.
 SKILL_MD="$PLUGIN_DIR/skills/quality-pipeline/SKILL.md"
 T5_FAIL=0
-for name in scout adversarial test-scope-validator; do
+for name in adversarial test-scope-validator; do
   if ! awk -v name="quality-gates:$name" '
     $0 ~ name { found=NR }
     found && NR <= found+15 && /project_dir:/ { ok=1; exit }
@@ -194,7 +196,7 @@ if ! awk '/\*security-reviewer \(`quality-gates:security-reviewer`\)/ { found=NR
   T5_FAIL=1
   fail "T5: SKILL.md security-reviewer section lacks project_dir"
 fi
-[[ "$T5_FAIL" -eq 0 ]] && pass "T5: SKILL.md propagates project_dir to all 5 dispatch points"
+[[ "$T5_FAIL" -eq 0 ]] && pass "T5: SKILL.md propagates project_dir to all 4 dispatch points"
 
 # --- Test 6: hooks read payload cwd (AST-based, not grep) ---
 T6_FAIL=0
