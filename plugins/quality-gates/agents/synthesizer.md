@@ -2,6 +2,7 @@
 name: synthesizer
 description: Phase 1.6 of Gate 2 — dedupes Phase 1+2+adversarial findings, ranks by severity×confidence, suppresses confidence<7 except CRITICAL severity, produces user-facing prioritized list.
 model: sonnet
+color: blue
 cost_class: low
 disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]
 ---
