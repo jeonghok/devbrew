@@ -149,6 +149,33 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
               → Stop hook → SKILL.md (Gate 3) → done
 ```
 
+**State machine 전체 transition 그래프** (stop-hook `compute_transition()` + main() override 기준):
+
+```mermaid
+stateDiagram-v2
+    [*] --> gate1_running
+    gate1_running --> gate2_running: next_gate (PASS/SKIP)
+    gate1_running --> gate1_running: retry_gate (RETRY)
+    gate1_running --> aborted: abort (FAIL)
+    gate2_running --> gate3_running: next_gate (PASS)
+    gate2_running --> gate2_running: retry_gate (FAIL, iter<max)
+    gate2_running --> gate2_running: continue (scout-fallback)
+    gate2_running --> gate2_user_choice: gate2_user_choice (NEEDS_RESTART)
+    gate2_running --> max_gate2_exceeded: max_gate2_exceeded
+    gate2_running --> completed: complete (skip_runtime)
+    gate3_running --> completed: complete (PASS/SKIP)
+    gate3_running --> gate3_running: gate3_needs_resolution (iter<cap)
+    gate3_running --> gate3_repeat_detected: gate3_repeat_detected (same hash 2x)
+    gate3_running --> gate3_fail: gate3_fail (FAIL/NEEDS_RESTART/cap exceeded)
+    any_gate --> wall_clock_exceeded: wall_clock_exceeded (T2-3)
+    any_gate --> any_gate: no_signal_inc (T2-4)
+    any_gate --> no_signal_max: no_signal_max (T2-4)
+    completed --> [*]
+    aborted --> [*]
+```
+
+**13 transition types**: `next_gate`, `retry_gate`, `complete`, `abort`, `continue`, `gate2_user_choice`, `max_gate2_exceeded`, `gate3_fail`, `gate3_needs_resolution`, `gate3_repeat_detected`, `wall_clock_exceeded` (v1.x T2-3), `no_signal_inc` (v1.x T2-4), `no_signal_max` (v1.x T2-4).
+
 **v1.5.0에서 cross-gate restart 제거**: Gate 2 / Gate 3 NEEDS_RESTART는 더 이상 Gate 1으로 자동 재진입하지 않습니다. user-choice prompt ("변경을 적용하고 /qg 재실행")로 종료. Gate 2 내부 fix-loop (최대 5회)는 보존.
 
 ### Trivia detector coverage
