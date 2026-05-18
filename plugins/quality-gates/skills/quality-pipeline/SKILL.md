@@ -17,6 +17,33 @@ iteration counting). The pipeline is **forward-only**: code-change verdicts
 (`NEEDS_RESTART`) terminate with a user-choice prompt rather than auto-restarting
 from Gate 1. You do NOT manage state files or pipeline flow.
 
+## Contents
+
+이 SKILL은 단일 턴에서 한 게이트만 실행. 섹션은 **세 그룹**으로 묶임:
+
+1. **Workflow** (process — top-to-bottom on first invocation):
+   - [Preflight](#preflight) — continuation vs. first invocation 감지, sentinel check
+   - [Arguments](#arguments) — `/qg` flags (`--reset`, `--paths`, `branch <name>`)
+   - [Dependency Check](#dependency-check) — required scripts/agents 존재 검사
+   - [Gate Execution](#gate-execution) — entry point; current gate로 routing
+2. **Per-gate dispatch logic** (Gate Execution이 호출):
+   - [Pre-pipeline check](#pre-pipeline-check-f-1) — staleness / scope / branch-mismatch
+   - [Trivia escape](#trivia-escape-e) — one-sentence diff → skip all gates
+   - [Gate 1: Plan Verification](#gate-1-plan-verification) — dispatch `plan-verifier`
+   - [Gate 2: PR Review](#gate-2-pr-review) — scout + Phase 1 + adversarial + synthesizer
+   - [Gate 3: Runtime Verification](#gate-3-runtime-verification) — test-scope-validator + runtime-verifier
+3. **Output templates & special prompts** (skill이 사용자에게 emit하는 verbatim 포맷, field substitution 포함):
+   - Gate 1 result template (`## Gate 1: Plan Verification — [PASS/FAIL/SKIP]`)
+   - Gate 2 dispatch payload section (`## Current Diff`)
+   - Gate 2 result templates (`## PR Review Report (Gate 2)`, `## Gate 2: PR Review (iter [iteration]) — [verdict]`)
+   - Gate 3 templates (`## Gate 3 — Test Scope Check`, `## Test Scope Verdicts`, `## Gate 3: Runtime Verification — [VERDICT]`)
+   - [Special Prompts from Stop Hook](#special-prompts-from-stop-hook) — `GATE2_NEEDS_RESTART`, `GATE2_REPEAT_DETECTED`, `GATE2_MAX_EXCEEDED`, `GATE3_FAIL`, `GATE3_NEEDS_RESOLUTION`, `GATE3_REPEAT_DETECTED`
+   - Final summary templates (`## Final Summary`, `## Quality Gates Pipeline — Complete`)
+   - [Signal Tag Rules](#signal-tag-rules) — `<qg-signal>` emission schema
+   - [Rules](#rules) — never-write-state-file, exactly-one-signal-tag invariants
+
+(섹션 추가/이름 변경 시 본 TOC도 같은 commit에서 sync — CLAUDE.md TOC drift 규정.)
+
 ## Preflight
 
 Before parsing arguments or dispatching agents, do this in order:
@@ -117,14 +144,18 @@ the per-session folder; cross-session siblings are never inspected.
 
 ### Trivia escape (§E)
 
-Run the trivia detector before Gate 1 dispatch:
+Run the trivia detector before Gate 1 dispatch. If `--paths` was supplied by
+the user (i.e. `session_scope == paths`), propagate those paths so the detector
+scopes its diff to the same file set:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh"
+# PATH_ARGS is empty when no --paths were given; set to "--paths <glob>..."
+# by parsing them from the /qg invocation arguments (e.g. "/qg --paths src/ lib/").
+"${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh" $PATH_ARGS
 ```
 
 If exit code is `0`:
-- Read the stdout line `trivia: <kind>` (kind ∈ `whitespace | rename`).
+- Read the stdout line `trivia: <kind>` (kind ∈ `whitespace | rename | comment | typo | untracked-newfile`).
 - Update `.claude/quality-gates/<session-id>/pipeline.md` with
   `status: completed`, `outcome: trivia-skipped`, `trivia_kind: <kind>`.
 - Emit `<qg-signal verdict="trivia-skipped" reason="<kind>" />` and stop.
@@ -1365,7 +1396,6 @@ For Gate 2, include the `iteration` attribute:
 ```xml
 <qg-signal action="complete" />
 <qg-signal action="abort" reason="description" />
-<qg-signal action="extend" additional="3" />
 ```
 
 ## Rules
