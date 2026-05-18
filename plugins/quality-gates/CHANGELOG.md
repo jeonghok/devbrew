@@ -3,6 +3,19 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.28.0] — 2026-05-19
+
+### Removed
+- `agents/synthesizer.md` — replaced by `scripts/synthesize_findings.py`. Algorithm is fully deterministic (5 steps: apply verdict / dedup / suppress<7 except CRITICAL / sort / render Markdown). No LLM judgment was being used; dispatch cost (~3K tokens × every Gate 2 iteration) eliminated (T3-2, AC34-AC39).
+
+### Added
+- `scripts/synthesize_findings.py` — ~120-line deterministic post-processor. Accepts `--adversarial <yaml> --findings <yaml>`, emits Markdown to stdout matching the v1.x synthesizer schema.
+- `tests/test_synthesize_findings.sh` — 6 fixture-based tests covering AC34-AC39.
+
+### Changed
+- SKILL.md Phase 1.6 prose: synthesizer is now invoked via `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py ...` (was: `Agent(subagent_type="quality-gates:synthesizer", ...)`). Frontmatter `allowed-tools` extended with the new script entry.
+- `tests/test_worktree.sh` T8 loop drops `synthesizer` (no longer applies). T5 loop also drops `synthesizer` (no longer an Agent() dispatch).
+
 ## [1.27.0] — 2026-05-19
 
 ### Removed

@@ -9,6 +9,7 @@ description: >
 cost_class: variable
 allowed-tools:
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py:*)
 ---
 
 # Quality Gates — Gate Executor
@@ -785,19 +786,18 @@ iteration's hash:
 
 #### Phase 1.6: Synthesizer (always when Phase 1 ran)
 
-Dispatch:
+Synthesizer is now a deterministic script (T3-2, v1.28.0). The 5-step algorithm
+(apply verdicts → dedup → suppress<7 → sort → render Markdown) has no LLM
+judgment, so direct Bash invocation replaces the v1.x Agent() dispatch.
 
-```
-Agent(
-  subagent_type="quality-gates:synthesizer",
-  model="sonnet",
-  prompt="<all Phase 1 findings + Phase 2 findings + Adversarial verdicts>
-  project_dir: <current working directory>"
-)
+```bash
+python3 ${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py \
+  --adversarial ${QG_DIR}/adversarial.yaml \
+  --findings ${QG_DIR}/findings.yaml \
+  > ${QG_DIR}/synthesized.md
 ```
 
-The synthesizer's Markdown output is what the user sees as "Gate 2 Findings"
-(it replaces the raw aggregator dump in the legacy Output Report section).
+The Markdown output is what the user sees as "Gate 2 Findings".
 
 #### Within-Gate-2 loop — efficient form
 
