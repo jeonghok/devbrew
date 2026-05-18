@@ -28,6 +28,7 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / hook / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
 - **Law 1 (Clarity Before Code) — `/qg branch <name>` surface** (v1.15.0) — 7개 거절 시나리오(존재하지 않는 브랜치, path traversal, kill switch, idempotent reuse 등)가 `tests/test_branch_worktree.sh` AC1–AC11에 acceptance criteria로 명시. 실패 경로마다 명확한 진단 메시지를 stderr로 출력.
 - **Law 3 (Compounding) — worktree path 컨벤션** (v1.15.0) — `.claude/<plugin>/worktrees/<name>-<sid-short>/` 경로 패턴을 `docs/philosophy/devbrew-harness-philosophy.md` §4.8에 footnote로 박아 두어, 차후 다른 플러그인이 임시 worktree를 만들 때 같은 컨벤션을 재사용할 수 있게 함.
+- **Law 1 (Clarity Before Code)** — `compute_transition()`이 pure로 유지되도록 `deadline_exceeded()`를 module-level helper로 분리. main()이 I/O를 격리.
 
 ## 구조
 
@@ -234,6 +235,7 @@ export DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1
 - `DEVBREW_QG_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/qg` 또는 `/cancel-qg --gc`에서 GC)
 - `DEVBREW_QG_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
 - `DEVBREW_GATE3_MAX_RESOLUTIONS`: 3 (`0..10`, Gate 3 NEEDS_RESOLUTION mid-run 루프 cap)
+- `DEVBREW_QG_DEADLINE_MIN`: 30 (Pipeline wall-clock budget, 분 단위. `0`이면 무한 (no-deadline 모드). 도달 시 user-choice prompt 발동.)
 - `DEVBREW_QG_KEEP_WORKTREE=1`: `/qg branch` worktree cleanup 비활성화 (디버깅용 보존)
 
 ### Kill switches (보안 컨트롤)

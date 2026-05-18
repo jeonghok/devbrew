@@ -201,6 +201,27 @@ fi
 
 mkdir -p "$STATE_DIR"
 
+# --- Wall-clock budget (T2-3) ---
+RAW_DEADLINE_MIN="${DEVBREW_QG_DEADLINE_MIN:-30}"
+if [[ ! "$RAW_DEADLINE_MIN" =~ ^[0-9]+$ ]]; then
+  echo "⚠️  Quality Gates: DEVBREW_QG_DEADLINE_MIN='$RAW_DEADLINE_MIN' is not numeric; using default 30" >&2
+  DEADLINE_MIN=30
+else
+  DEADLINE_MIN="$RAW_DEADLINE_MIN"
+fi
+if [[ "$DEADLINE_MIN" -eq 0 ]]; then
+  WALL_CLOCK_DEADLINE=""
+else
+  if WALL_CLOCK_DEADLINE="$(date -u -v+"${DEADLINE_MIN}"M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; then
+    :
+  else
+    WALL_CLOCK_DEADLINE="$(date -u -d "+${DEADLINE_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" || {
+      echo "⚠️  Quality Gates: cannot compute wall-clock deadline on this platform; deadline disabled" >&2
+      WALL_CLOCK_DEADLINE=""
+    }
+  fi
+fi
+
 # --- Dependency Check ---
 
 AVAILABLE_PLUGINS=""
@@ -302,6 +323,7 @@ EOF
 fi
 
 cat >> "$TEMP_FILE" << EOF
+wall_clock_deadline_at: "$WALL_CLOCK_DEADLINE"
 session_id: "$SESSION_ID"
 started_at: "$TIMESTAMP"
 ---
