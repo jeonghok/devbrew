@@ -7,6 +7,8 @@ description: >
   or "is my PR ready to merge". Executes a single gate per turn; the Stop hook
   manages pipeline progression automatically.
 cost_class: variable
+allowed-tools:
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)
 ---
 
 # Quality Gates — Gate Executor
@@ -502,6 +504,23 @@ If validation fails OR scout times out (>60s) OR scout sets `fallback: true`:
 #### Phase 1: External Reviewer Inclusion (codex-reviewer)
 
 SKILL.md가 codex-reviewer dispatch를 단독 결정한다 (scout 영역 밖, LD4 정합). Standard/deep depth에서만 평가.
+
+**Codex 외부 reviewer 호출 (T3-3, script-based):**
+
+`codex_manifest.codex_available == true` AND consent marker exists. Skill invokes:
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh \
+  "${QG_DIR}/filtered_diff.patch" \
+  "${project_dir}" \
+  "${QG_DIR}/codex_findings.yaml"
+```
+
+(Replaces v1.x agent dispatch — `agents/codex-reviewer.md` deleted in v1.27.0. Layer 1 isolation preserved via this SKILL.md narrow Bash allowlist entry; Layer 3 sandbox `codex exec -s read-only` preserved inside the script.)
+
+Output YAML at `${QG_DIR}/codex_findings.yaml` is consumed by synthesizer alongside Phase 1 agent findings.
+
+`codex_available: false` 경로 — T2-5 visibility policy로 `skip_reason`별 stderr emit. Same as v1.x agent path: no script invocation, no findings appended.
 
 **가용 경로 (`codex_manifest.codex_available == true`):**
 

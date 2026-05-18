@@ -56,11 +56,11 @@ if ! awk '
   fail "Scenario 4: Pattern-L security-reviewer section lacks project_dir reference"
 fi
 
-# Reference-only — codex-reviewer.md is the source of truth
-if ! grep -q 'project_dir' "$REPO_ROOT/plugins/quality-gates/agents/codex-reviewer.md"; then
-  fail "Scenario 4: codex-reviewer.md lacks project_dir input contract"
+# T3-3: codex-reviewer.md deleted — verify script invocation exists in SKILL.md instead.
+if ! grep -q 'run_codex_reviewer.sh' "$SKILL"; then
+  fail "Scenario 4: SKILL.md missing run_codex_reviewer.sh script invocation (T3-3)"
 fi
 
-ok "Scenario 4: all 6 agents have project_dir contract (P×4 + L×1 + ref×1)"
+ok "Scenario 4: all 5 agents + script invocation have project_dir/path contract (P×4 + L×1 + script×1)"
 
 echo "PASS: test_codex_dispatch_invariant.sh (4 scenarios)"
