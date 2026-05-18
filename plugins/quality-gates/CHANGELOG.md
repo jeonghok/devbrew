@@ -12,38 +12,36 @@
 ### Added
 - `tests/test_agent_stub_harness.py`: 2 regression tests covering both fixes (`test_run_agent_stub_raises_on_empty_yaml` over 5 empty-form variants, `test_assert_yaml_schema_empty_enum_dict_is_not_skipped` over no-violation + missing-key compositions). 9/9 tests PASS.
 
-## [1.15.1] — 2026-05-18
-
-### Added
-- tests/harness/agent_stub.py — Python module with run_agent_stub() + assert_yaml_schema() helpers for upcoming behavioral tests (T3-4 prerequisite). Prevents test/production drift by giving behavioral fixtures a deterministic short-circuit for Agent dispatch.
-- tests/test_agent_stub_harness.py — 7 self-tests on the harness itself.
 ## [1.25.0] — 2026-05-19
 
 ### Added
 - color: <enum> frontmatter on 5 agents that previously lacked it: adversarial=orange, codex-reviewer=pink, scout=purple, security-reviewer=red, synthesizer=blue. Total 8 agents now color-coded from Claude Code 8-color palette (cyan/green/yellow/blue/red/purple/orange/pink). UX: parallel dispatch threads are visually distinguishable when 5+ reviewers fire concurrently in Gate 2 deep mode (T2-9).
 - tests/test_agent_color.sh — dynamic AC53/AC55 verification: every extant agent file has color from the 8-color enum. Survives T3-1/2/3 refactor (which deletes scout/synthesizer/codex-reviewer.md).
 
-## [1.16.0] — 2026-05-18
 ## [1.24.0] — 2026-05-19
 
 ### Changed
 - agents/adversarial.md: model downgrade opus → sonnet. Adversarial task is calibration (confirm/downgrade/reject verdict mapping per finding) — not new generation. Sonnet sufficient at ~5x lower cost per dispatch; savings compound across 3-5 iter Gate 2 fix-loop (T2-8).
 - README Cost Class section adds Adversarial reviewer model subsection documenting downgrade rationale + infrastructure-dispatch exclusion policy (scout/adversarial/synthesizer not counted in AskUserQuestion fan-out prompt).
+
 ## [1.23.0] — 2026-05-19
 
 ### Added
 - README §파이프라인 흐름: Mermaid `stateDiagram-v2` block enumerating all 13 stop-hook transition types (`next_gate`, `retry_gate`, `complete`, `abort`, `continue`, `gate2_user_choice`, `max_gate2_exceeded`, `gate3_fail`, `gate3_needs_resolution`, `gate3_repeat_detected`, `wall_clock_exceeded`, `no_signal_inc`, `no_signal_max`). New contributors can see forward-only invariants at a glance — NEEDS_RESTART → user gate (not auto-retry), terminal cleanup paths, both stuck-state guards (T2-7).
 - `tests/test_readme_state_diagram_complete.sh` — grep-based drift detection: diagram set must equal authoritative 13-row set (no missing, no superset).
+
 ## [1.22.0] — 2026-05-19
 
 ### Fixed
 - `stop-hook.py` step 8 `except Exception` block: PIPELINE_ERROR routing broadened from `{gate3_needs_resolution, gate3_repeat_detected}` to ALL non-terminal transitions. Forward-progress writes (`next_gate`, `retry_gate`, `continue`, `gate2_user_choice`, `max_gate2_exceeded`, `gate3_fail`) now also abort on persist failure rather than falling through with stale in-memory state. Terminal (complete/abort) intentionally fall through to step 9 cleanup which is independently resilient (T2-6).
 - New `TestStateWriteFailureBroadening` contract tests covering AC22 (8 forward-progress transition types emit error) and AC23 (2 terminal transitions are silent).
+
 ## [1.21.0] — 2026-05-19
 
 ### Added
 - SKILL.md `Codex skip 안내` visibility-policy section — for `codex_available: false` responses, 4 of 6 `skip_reason` enum values now emit a one-line stderr message explaining the cause (`not_installed`, `auth_missing`, `timeout_binary_missing`, `known_bad_version`). The other 2 (`kill_switch`, `inside_codex_sandbox`) remain silent by policy (user-intended disable / recursion guard). Fulfills CLAUDE.md "loud logging + graceful degradation" promise — users paying for Codex now know why dispatch was skipped (T2-5).
 - `tests/test_skill_codex_skip_prose.sh` — grep-based AC19/AC20/AC21 verification.
+
 ## [1.20.0] — 2026-05-19
 
 ### Changed
