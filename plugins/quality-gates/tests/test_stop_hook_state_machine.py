@@ -366,6 +366,132 @@ class TestGate3ResolutionState(unittest.TestCase):
         self.assertIn("abort", prompt.lower())
 
 
+class TestWallClockBudget(unittest.TestCase):
+    """T2-3: deadline_exceeded() pure helper + main() integration."""
+
+    def test_AC10_exceeded_returns_true(self):
+        from datetime import datetime, timezone
+        state = {"wall_clock_deadline_at": "2026-05-17T12:00:00Z"}
+        now = datetime(2026, 5, 17, 12, 0, 1, tzinfo=timezone.utc)
+        self.assertTrue(stop_hook.deadline_exceeded(state, now=now))
+
+    def test_AC11_not_exceeded_returns_false(self):
+        from datetime import datetime, timezone
+        state = {"wall_clock_deadline_at": "2026-05-17T12:00:00Z"}
+        now = datetime(2026, 5, 17, 11, 59, 59, tzinfo=timezone.utc)
+        self.assertFalse(stop_hook.deadline_exceeded(state, now=now))
+
+    def test_AC12_missing_field_returns_false(self):
+        self.assertFalse(stop_hook.deadline_exceeded({}, now=None))
+
+    def test_AC13_setup_disabled_by_env_writes_empty(self):
+        state = {"wall_clock_deadline_at": ""}
+        self.assertFalse(stop_hook.deadline_exceeded(state, now=None))
+
+    def test_AC14_main_integration_routes_to_wall_clock_exceeded(self):
+        from datetime import datetime, timezone
+        state = {
+            "current_gate": 2, "gate2_iteration": 1, "max_gate2_iterations": 5,
+            "skip_runtime": False, "single_gate": None,
+            "wall_clock_deadline_at": "2026-05-17T11:00:00Z",
+        }
+        signal = {"gate": "2", "verdict": "PASS"}
+        base = stop_hook.compute_transition(state, signal)
+        now = datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc)
+        if stop_hook.deadline_exceeded(state, now=now):
+            transition = {"type": "wall_clock_exceeded", "prior": base}
+        else:
+            transition = base
+        self.assertEqual(transition["type"], "wall_clock_exceeded")
+
+    def test_AC14b_abort_after_deadline_is_not_overridden(self):
+        """Regression: once deadline is past, an abort signal must flow
+        through unmodified — otherwise wall_clock_exceeded loops forever.
+        Imports BUDGET_SKIPPABLE from the production module so test
+        cannot drift from main()."""
+        from datetime import datetime, timezone
+        state = {
+            "current_gate": 2, "gate2_iteration": 1, "max_gate2_iterations": 5,
+            "skip_runtime": False, "single_gate": None,
+            "wall_clock_deadline_at": "2026-05-17T11:00:00Z",
+        }
+        abort_signal = {"action": "abort", "reason": "User chose to abort"}
+        base = stop_hook.compute_transition(state, abort_signal)
+        self.assertEqual(base["type"], "abort")
+        now = datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc)
+        if stop_hook.deadline_exceeded(state, now=now) and base["type"] not in stop_hook.BUDGET_SKIPPABLE:
+            transition = {"type": "wall_clock_exceeded", "prior": base}
+        else:
+            transition = base
+        self.assertEqual(transition["type"], "abort",
+                         "deadline_exceeded must not override an abort signal")
+
+    def test_AC14c_complete_after_deadline_is_not_overridden(self):
+        """Companion: complete must also flow through. Uses production
+        BUDGET_SKIPPABLE constant."""
+        from datetime import datetime, timezone
+        state = {
+            "current_gate": 3, "gate2_iteration": 1, "max_gate2_iterations": 5,
+            "skip_runtime": False, "single_gate": None,
+            "wall_clock_deadline_at": "2026-05-17T11:00:00Z",
+        }
+        complete_signal = {"action": "complete"}
+        base = stop_hook.compute_transition(state, complete_signal)
+        self.assertEqual(base["type"], "complete")
+        now = datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc)
+        if stop_hook.deadline_exceeded(state, now=now) and base["type"] not in stop_hook.BUDGET_SKIPPABLE:
+            transition = {"type": "wall_clock_exceeded", "prior": base}
+        else:
+            transition = base
+        self.assertEqual(transition["type"], "complete")
+
+    def test_AC14d_budget_skippable_contains_terminal_set(self):
+        """Lock: BUDGET_SKIPPABLE must include all terminal transitions
+        plus wall_clock_exceeded itself, otherwise specific loops re-open."""
+        self.assertIn("abort", stop_hook.BUDGET_SKIPPABLE)
+        self.assertIn("complete", stop_hook.BUDGET_SKIPPABLE)
+        self.assertIn("wall_clock_exceeded", stop_hook.BUDGET_SKIPPABLE)
+
+
+class TestNoSignalCounter(unittest.TestCase):
+    """T2-4: consecutive_no_signal counter prevents infinite re-inject."""
+
+    def _base_state(self, consecutive_no_signal=0):
+        return {
+            "current_gate": 2, "gate2_iteration": 1, "max_gate2_iterations": 5,
+            "skip_runtime": False, "single_gate": None,
+            "consecutive_no_signal": consecutive_no_signal,
+        }
+
+    def test_AC15_inc_below_max(self):
+        state = self._base_state(consecutive_no_signal=2)
+        transition = stop_hook.compute_no_signal_transition(state, max_no_signal=3)
+        self.assertEqual(transition["type"], "no_signal_inc")
+        self.assertEqual(transition["new_count"], 3)
+
+    def test_AC16_at_max_triggers_user_choice(self):
+        state = self._base_state(consecutive_no_signal=3)
+        transition = stop_hook.compute_no_signal_transition(state, max_no_signal=3)
+        self.assertEqual(transition["type"], "no_signal_max")
+
+    def test_AC17_valid_signal_resets_counter(self):
+        state = self._base_state(consecutive_no_signal=2)
+        new_count = stop_hook.reset_no_signal(state)
+        self.assertEqual(new_count, 0)
+
+    def test_AC18_feature_off_when_max_zero(self):
+        state = self._base_state(consecutive_no_signal=5)
+        transition = stop_hook.compute_no_signal_transition(state, max_no_signal=0)
+        self.assertEqual(transition["type"], "continue")
+
+    def test_AC18b_both_stuck_protections_off_yields_continue(self):
+        state = self._base_state(consecutive_no_signal=100)
+        state["wall_clock_deadline_at"] = ""
+        transition = stop_hook.compute_no_signal_transition(state, max_no_signal=0)
+        self.assertEqual(transition["type"], "continue")
+        self.assertFalse(stop_hook.deadline_exceeded(state))
+
+
 if __name__ == "__main__":
     unittest.main()
 

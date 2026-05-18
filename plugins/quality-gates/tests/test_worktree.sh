@@ -180,11 +180,14 @@ for name in scout adversarial synthesizer test-scope-validator; do
     fail "T5: SKILL.md dispatch for $name lacks project_dir"
   fi
 done
-if ! awk '/\*\*Agent D — security-reviewer\*\*/ { found=NR }
+# Updated in v1.16.0: heading restructured from `**Agent D — security-reviewer**`
+# to italic `*security-reviewer (...)*`. New anchor captures the qualified plugin
+# name so future drift in either dispatch convention is caught.
+if ! awk '/\*security-reviewer \(`quality-gates:security-reviewer`\)/ { found=NR }
         found && NR <= found+30 && /project_dir/ { ok=1; exit }
         END { exit !ok }' "$SKILL_MD"; then
   T5_FAIL=1
-  fail "T5: SKILL.md Agent D section lacks project_dir"
+  fail "T5: SKILL.md security-reviewer section lacks project_dir"
 fi
 [[ "$T5_FAIL" -eq 0 ]] && pass "T5: SKILL.md propagates project_dir to all 5 dispatch points"
 
