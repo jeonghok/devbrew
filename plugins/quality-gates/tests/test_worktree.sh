@@ -153,7 +153,8 @@ rm -rf "$(dirname "$REPO")"
 
 # --- Test 8: agent.md Inputs contract drift guard (AC2, T8) ---
 # T3-3: codex-reviewer.md deleted — removed from this loop (no longer applicable post-T3-3).
-for agent in scout adversarial synthesizer test-scope-validator security-reviewer; do
+# T3-2: synthesizer.md deleted — removed from this loop (no longer applicable post-T3-2).
+for agent in scout adversarial test-scope-validator security-reviewer; do
   if grep -q 'project_dir' "$PLUGIN_DIR/agents/$agent.md"; then
     pass "T8: agents/$agent.md declares project_dir input"
   else
@@ -170,10 +171,11 @@ else
   pass "T7: codex-reviewer migrated to script; script uses \${CLAUDE_PLUGIN_ROOT} (devbrew-portable)"
 fi
 
-# --- Test 5: SKILL.md prose contains project_dir in 5 dispatch blocks ---
+# --- Test 5: SKILL.md prose contains project_dir in agent dispatch blocks ---
+# T3-2: synthesizer removed from Agent() dispatch (now a script); removed from this loop.
 SKILL_MD="$PLUGIN_DIR/skills/quality-pipeline/SKILL.md"
 T5_FAIL=0
-for name in scout adversarial synthesizer test-scope-validator; do
+for name in scout adversarial test-scope-validator; do
   if ! awk -v name="quality-gates:$name" '
     $0 ~ name { found=NR }
     found && NR <= found+15 && /project_dir:/ { ok=1; exit }
