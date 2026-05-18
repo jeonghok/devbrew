@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.24.0] — 2026-05-19
+
+### Changed
+- agents/adversarial.md: model downgrade opus → sonnet. Adversarial task is calibration (confirm/downgrade/reject verdict mapping per finding) — not new generation. Sonnet sufficient at ~5x lower cost per dispatch; savings compound across 3-5 iter Gate 2 fix-loop (T2-8).
+- README Cost Class section adds Adversarial reviewer model subsection documenting downgrade rationale + infrastructure-dispatch exclusion policy (scout/adversarial/synthesizer not counted in AskUserQuestion fan-out prompt).
 ## [1.23.0] — 2026-05-19
 
 ### Added
