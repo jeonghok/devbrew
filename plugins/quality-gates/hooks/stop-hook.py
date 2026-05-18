@@ -1087,27 +1087,28 @@ def main():
     try:
         update_state_file(state_file, state, signal, transition)
     except Exception as e:
-        # SF-1/Finding 2: a failed state-file update on the resolution-loop
-        # path would let the loop run with stale in-memory state — exactly
-        # the unbounded-loop hazard SF-1 was supposed to fix. For
-        # gate3_needs_resolution specifically (and other transitions whose
-        # safety depends on persisted state), abort the pipeline rather than
-        # continuing silently.
+        # T2-6: SF-1 broadening. Any forward-progress transition whose
+        # safety depends on persisted state must route to PIPELINE_ERROR
+        # rather than continue with stale in-memory state. Previously only
+        # gate3_needs_resolution + gate3_repeat_detected routed; now ALL
+        # non-terminal transitions do (next_gate / retry_gate / continue /
+        # gate2_user_choice / max_gate2_exceeded / gate3_fail / etc.).
+        # Terminal (complete, abort) intentionally fall through to step 9's
+        # cleanup, which is itself resilient to write failures.
         print(
             f"⚠️  Quality Gates: Failed to update state file: {e}; "
             "aborting pipeline to prevent inconsistent state.",
             file=sys.stderr,
         )
-        if transition["type"] in ("gate3_needs_resolution",
-                                  "gate3_repeat_detected"):
+        if transition["type"] not in ("complete", "abort"):
             print(json.dumps({
                 "decision": "block",
                 "reason": (
                     "PIPELINE_ERROR\n\nQuality Gates could not persist "
-                    "pipeline state during a Gate 3 resolution cycle. "
-                    "Continuing would risk an unbounded loop with stale "
-                    "state. Please run `/cancel-qg` and re-run `/qg` "
-                    f"from scratch.\n\nError: {e}"
+                    "pipeline state during a forward-progress transition. "
+                    "Continuing would risk inconsistent state and unbounded "
+                    "replay. Please run `/cancel-qg` and re-run `/qg` from "
+                    f"scratch.\n\nTransition: {transition['type']}\nError: {e}"
                 ),
                 "systemMessage": (
                     "⚠️ Quality Gates: state-write failed | /cancel-qg to stop"

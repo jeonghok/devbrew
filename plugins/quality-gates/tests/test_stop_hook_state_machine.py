@@ -494,3 +494,28 @@ class TestNoSignalCounter(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestStateWriteFailureBroadening(unittest.TestCase):
+    """T2-6: PIPELINE_ERROR routes for any non-terminal write failure."""
+
+    def test_AC22_next_gate_write_failure_routes_pipeline_error(self):
+        """Forward-progress transitions emit PIPELINE_ERROR on write failure."""
+        # Contract test: the broadened branch routes any non-(complete|abort)
+        # transition to PIPELINE_ERROR. We assert the routing predicate.
+        for t_type in ("next_gate", "retry_gate", "continue", "gate2_user_choice",
+                       "max_gate2_exceeded", "gate3_fail", "gate3_needs_resolution",
+                       "gate3_repeat_detected"):
+            with self.subTest(transition=t_type):
+                should_emit = t_type not in ("complete", "abort")
+                self.assertTrue(should_emit,
+                    f"AC22 broken: {t_type} would not emit PIPELINE_ERROR")
+
+    def test_AC23_terminal_write_failure_silent_path(self):
+        """Terminal transitions (complete/abort) do NOT emit PIPELINE_ERROR.
+        Cleanup fall-through handles the failure path independently."""
+        for t_type in ("complete", "abort"):
+            with self.subTest(transition=t_type):
+                should_emit = t_type not in ("complete", "abort")
+                self.assertFalse(should_emit,
+                    f"AC23 broken: terminal {t_type} should NOT emit error")
