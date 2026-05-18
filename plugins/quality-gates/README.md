@@ -11,13 +11,13 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 2 (Writer ≠ Reviewer)** — 모든 reviewer agent가 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언 (frontmatter scoping으로 물리적 격리).
 - **Law 3 (Compounding)** — scout `rationale` 필드가 매 iteration마다 state 파일에 로깅; reviewer-persona 편집이 학습된 교훈을 인코딩하는 substrate.
 - **Law 3 (Compounding) — cross-plugin reader contract** — Gate 1 plan-verifier가 sister-plugin (`superpowers:writing-plans`)의 출력 경로 `docs/superpowers/plans/`를 1순위 source로 명시 consume; convention drift가 silent breakage가 되지 않도록 README "Plan Discovery Sources" 섹션이 reader/writer 약속을 문서화.
-- **AP3 (Trivia ceremony) 회피** — `check-trivia.sh`가 단일 파일·≤3줄 whitespace/rename을 파이프라인 전체 skip.
-- **AP9 (Subagent spray) hard gate** — Phase 1+2 dispatch 수가 ≥4일 때 AskUserQuestion 발동.
-- **AP16 (Unbounded autonomy) 회피** — Gate 2 내부 fix-loop이 `max_gate2_iterations=5` + repeat-detection (no-progress check) + kill switch로 묶임.
+- **P12 anti-corollary (former AP5, trivia ceremony) 회피** — `check-trivia.sh`가 단일 파일·≤3줄 whitespace/rename을 파이프라인 전체 skip. *현재 coverage는 whitespace + rename에 국한. P12 canonical 자격(typo/comment-only/single-file formatting)을 완전히 충족하기 위한 확장은 deferred 항목 — Tier 2 spec `docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md` 참조.*
+- **P22 anti-corollary (former AP9, over-dispatching / subagent spray) hard gate** — Phase 1+2 dispatch 수가 ≥4일 때 AskUserQuestion 발동.
+- **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — Gate 2 내부 fix-loop이 `max_gate2_iterations=5` + repeat-detection (no-progress check) + kill switch로 묶임. *Wall-clock budget는 deferred — Tier 2 spec 참조.*
 - **P5 (Filesystem as Memory) + P14 (State Survives Compaction) + §4.8 (State File)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (`*.local.md` gitignore 패턴으로 자동 제외; TTL sweep + SessionEnd hook으로 폴더 GC).
 - **Law 1 (Verification Plan)** (v1.8.0) — Gate 3가 evidence-required SKIP을 강제. runtime-verifier가 manifest의 모든 surface를 attempt하고 evidence-log를 산출해야 하며, 증거 없는 SKIP은 skill이 거부하여 FAIL로 격상.
 - **Law 2 (Writer ≠ Reviewer, frontmatter tool scoping으로 물리적 분리)** (v1.8.0) — `runtime-verifier` agent가 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언. `cp .env.example .env`, `docker compose up` 같은 fixable한 파일 작업은 사용자가 AskUserQuestion에서 명시 선택한 후 skill의 Bash tool로만 수행.
-- **AP16 (Unbounded autonomy) 회피 — Gate 3** (v1.8.0) — Gate 3의 NEEDS_RESOLUTION mid-run 루프가 `max_gate3_resolutions` (기본 3, env override `DEVBREW_GATE3_MAX_RESOLUTIONS=0..10`)로 묶임. `needed_hash` 기반 repeat detection이 iteration cap 도달 전에 non-converging loop을 잡음.
+- **P18 anti-corollary (former AP16, unbounded autonomy) 회피 — Gate 3** (v1.8.0) — Gate 3의 NEEDS_RESOLUTION mid-run 루프가 `max_gate3_resolutions` (기본 3, env override `DEVBREW_GATE3_MAX_RESOLUTIONS=0..10`)로 묶임. `needed_hash` 기반 repeat detection이 iteration cap 도달 전에 non-converging loop을 잡음.
 - **P21 (Secret이 prompt context에 들어가지 않음)** (v1.8.0) — Gate 3의 AskUserQuestion은 결정과 포인터(yes/no/path)만 묻고 secret 값은 절대 받지 않음. 누락된 secret은 사용자가 disk의 `.env`에 직접 추가 후 retry 선택으로 해결. regression test: `tests/test_no_secret_prompts.py`.
 - **Law 2 (Writer ≠ Reviewer, 3-way 분리)** (v1.9.0) — Gate 3가 3-way agent 분리를 강제. writer (originating turn) ≠ `test-scope-validator` (Step 2.5 pre-execution 리뷰어) ≠ `runtime-verifier` (Step 3 executor). 두 reviewer 모두 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언 — prompt 기반 분리가 아닌 frontmatter scoping으로 물리적 분리.
 - **§5.3 (Categorical signal, no numeric scoring)** (v1.9.0) — `test-scope-validator`는 정확히 4-way enum 분류 (`aligned` / `outdated-suspicion` / `cherry-pick-suspicion` / `unclear`)만 emit. percentage, confidence, X/Y rating 모두 금지. summary의 counter 정수 (`1 aligned, 0 outdated…`) 는 허용. devbrew §5.3 "수치 스코어링 ban" instantiation.
@@ -229,16 +229,52 @@ export DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1
 
 ## 설정
 
+### Tuning knobs
+
 - `MAX_GATE2_ITERATIONS`: 5 (Gate 2 내부 review-fix 사이클 수)
 - `QG_STALE_HOURS`: 24 (`pre-pipeline-check.sh`의 세션 파일 staleness 기준)
 - `DEVBREW_QG_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/qg` 또는 `/cancel-qg --gc`에서 GC)
 - `DEVBREW_QG_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
-- `DEVBREW_DISABLE_GATE3_TEST_VALIDATION`: unset (`1` 설정 시 Gate 3 Step 2.5 (test scope validation) 완전 skip; default unset = validation enabled)
-- `DEVBREW_SKIP_HOOKS=quality-gates:gate3-test-scope`: 위와 동일한 kill switch — 기존 hook-skip 패턴과 일관성 유지를 위한 alternate form
+- `DEVBREW_GATE3_MAX_RESOLUTIONS`: 3 (`0..10`, Gate 3 NEEDS_RESOLUTION mid-run 루프 cap)
 - `DEVBREW_QG_DEADLINE_MIN`: 30 (Pipeline wall-clock budget, 분 단위. `0`이면 무한 (no-deadline 모드). 도달 시 user-choice prompt 발동.)
 - `DEVBREW_QG_NO_SIGNAL_MAX`: 3 (No-signal turn 누적 시 user-choice prompt 발동 횟수. `0`=disabled. 모델이 `<qg-signal>` 못 emit 시 무한 re-injection 방지.)
-- `DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1`: `/qg branch <name>` auto-worktree 비활성화 (기능을 disable; `/qg branch` no-arg는 영향 없음)
-- `DEVBREW_QG_KEEP_WORKTREE=1`: worktree cleanup 비활성화 (디버깅용 보존)
+- `DEVBREW_QG_KEEP_WORKTREE=1`: `/qg branch` worktree cleanup 비활성화 (디버깅용 보존)
+
+### Kill switches (보안 컨트롤)
+
+CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component 비활성화 경로는 환경 변수 한 번으로 cover되어야 함. 아래는 source-of-truth 인벤토리.
+
+**전역 (모든 hook + 모든 reviewer 비활성화):**
+
+| Env var | 효과 |
+|---|---|
+| `DEVBREW_DISABLE_QUALITY_GATES=1` | 모든 quality-gates hook + `qg-gc.py` no-op. `/qg`는 여전히 invocable하지만 hook이 fire하지 않음. |
+
+**Reviewer 단위 disable (Gate 2):**
+
+| Env var | 효과 |
+|---|---|
+| `DEVBREW_DISABLE_QG_CODEX=1` | optional `codex-reviewer` 완전 skip (model-family diversity layer off). `scripts/detect_codex.sh`가 우선 검사. |
+| `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1` | Phase 1 always-run `security-reviewer` skip. 다른 3개 phase-1 reviewer는 여전히 fire. |
+
+**Gate 3 단위 disable:**
+
+| Env var | 효과 |
+|---|---|
+| `DEVBREW_DISABLE_GATE3_TEST_VALIDATION=1` | Gate 3 Step 2.5 (test scope validation) 완전 skip. `DEVBREW_SKIP_HOOKS=quality-gates:gate3-test-scope`과 동일. |
+| `DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1` | `/qg branch <name>` auto-worktree 기능 disable (`/qg branch` no-arg는 영향 없음). |
+
+**Hook 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:<key>,quality-gates:<key2>...`):
+
+| Hook 키 | 위치 | 기능 |
+|---|---|---|
+| `quality-gates:stop-hook` | `hooks/stop-hook.py` | Gate 진행 state-machine driver (이걸 끄면 `/qg`는 사실상 동작 안 함) |
+| `quality-gates:session-tracker` | `hooks/post-tool-use-session-tracker.py` | PostToolUse(Edit/Write/MultiEdit) — 편집된 파일을 `files.md`에 기록 |
+| `quality-gates:post-tool-use` | `hooks/post-tool-use.py` | PostToolUse(Bash) — `gh pr create` 직후 `/qg` 시작 안내 |
+| `quality-gates:session-start-advisor` | `hooks/session-start-advisor.py` | SessionStart — stale state 안내 (read-only) |
+| `quality-gates:session-start-advisor:frontmatter-scan` | 위 hook의 sub-feature | Plugin 전체 agent frontmatter drift 스캔만 disable |
+| `quality-gates:session-end-cleanup` | `hooks/session-end-cleanup.py` | SessionEnd — 현재 세션 폴더 cleanup |
+| `quality-gates:gate3-test-scope` | (위 `DEVBREW_DISABLE_GATE3_TEST_VALIDATION`과 동의어) | Gate 3 Step 2.5 |
 
 (`MAX_TOTAL_ITERATIONS`와 cross-gate restart 루프는 v1.5.0에서 제거됨.)
 

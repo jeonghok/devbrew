@@ -3,25 +3,26 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [1.17.1] — 2026-05-18
+## [1.18.0] — 2026-05-19
+
+### Added
+- `DEVBREW_QG_NO_SIGNAL_MAX` (default 3, `0`=disabled) — stop-hook counter that prevents infinite re-injection when the model fails to emit `<qg-signal>` for N consecutive turns. New transition types `no_signal_inc` (silent increment) and `no_signal_max` (user-choice intercept) (T2-4).
+- `compute_no_signal_transition(state, max_no_signal)` pure helper and `reset_no_signal(state)` helper for testability.
 
 ### Fixed
 - `_persist_no_signal_counter`: wrap initial `open()` in `(IOError, OSError)` handler to match `update_state_file`'s established pattern.
 - `compute_no_signal_transition`: ceiling-value semantics — `no_signal_max` branch now returns `new_count = cur` (not `cur+1`) so persisted and user-facing counter values agree.
 - `main()` no-signal branch: mirror `new_count` into in-memory `state["consecutive_no_signal"]` before `build_special_prompt` so fmt rendering uses the post-increment count.
 
-## [1.17.0] — 2026-05-17
-
-### Added
-- `DEVBREW_QG_NO_SIGNAL_MAX` (default 3, `0`=disabled) — stop-hook counter that prevents infinite re-injection when the model fails to emit `<qg-signal>` for N consecutive turns. New transition types `no_signal_inc` (silent increment) and `no_signal_max` (user-choice intercept) (T2-4).
-- `compute_no_signal_transition(state, max_no_signal)` pure helper and `reset_no_signal(state)` helper for testability.
-
 ### Changed
 - `setup-qg.sh`: state frontmatter adds `consecutive_no_signal: 0` initial field.
 - `parse_state_file`: defaults `consecutive_no_signal` to 0 for backward-compat with v1.16.x state files.
 - `USER_CHOICE_TYPES` set extended with `"no_signal_max"`; `build_system_message` user-choice branch updated.
 
-## [1.16.1] — 2026-05-17
+## [1.17.0] — 2026-05-19
+
+### Added
+- `DEVBREW_QG_DEADLINE_MIN` (default 30 min, `0`=disabled) — pipeline wall-clock budget. main() 흐름에서 `deadline_exceeded(state, now=None)` pure helper로 검사 후 `wall_clock_exceeded` user-choice transition emit. CLAUDE.md `P18 anti-corollary` 4-가드 중 누락되었던 wall-clock 추가 (T2-3).
 
 ### Fixed
 - Wall-clock budget no longer overrides terminal/self-acknowledging transitions: added `BUDGET_SKIPPABLE = frozenset({"abort", "complete", "wall_clock_exceeded"})` module constant; step 7.5 in `main()` consults it before re-injecting `wall_clock_exceeded`. Previous behavior caused unescapable loop once the deadline was past (T2-3 round 1 fix in `14dab3a`).
@@ -29,17 +30,29 @@
 - `setup-qg.sh` GNU `date -d` fallback now suppresses stderr and degrades gracefully to no-deadline mode if neither BSD nor GNU `date` variant works (loud-logging via stderr warning, no abort under `set -euo pipefail`).
 
 ### Changed
+- `setup-qg.sh`: state frontmatter에 `wall_clock_deadline_at: "<ISO8601>"` 신설.
+- `stop-hook.py`: `_SPECIAL_PROMPTS`에 `wall_clock_exceeded` entry, `USER_CHOICE_TYPES`에 동일 추가.
 - `BUDGET_SKIPPABLE` promoted to module-level `frozenset` (was local set in `main()`); test fixtures import `stop_hook.BUDGET_SKIPPABLE` so any future divergence between production and test fails immediately.
 - `USER_CHOICE_TYPES_FOR_HINT` aliasing removed — `USER_CHOICE_TYPES` is the single source.
 
 ## [1.16.0] — 2026-05-17
 
-### Added
-- `DEVBREW_QG_DEADLINE_MIN` (default 30 min, `0`=disabled) — pipeline wall-clock budget. main() 흐름에서 `deadline_exceeded(state, now=None)` pure helper로 검사 후 `wall_clock_exceeded` user-choice transition emit. CLAUDE.md `P18 anti-corollary` 4-가드 중 누락되었던 wall-clock 추가 (T2-3).
+### Security
+- `commands/cancel-qg.md`: `$CLAUDE_CODE_SESSION_ID`가 비어있거나 패턴이 깨졌을 때 `rm -rf ".claude/quality-gates/$SID"`가 plugin 루트(`. claude/quality-gates/`)로 expand되어 동시에 실행 중인 모든 세션 폴더를 wipe하는 catastrophic 경로를 차단. 모든 destructive Bash 블록에 `[[ -n "$SID" && "$SID" =~ ^[A-Za-z0-9_-]{8,}$ ]]` SID-pattern 가드를 강제 (LLM prose 가드 → 셸-level 가드 격상). `--all` 경로에도 `[[ -d ".claude/quality-gates" ]]` 존재 가드 추가. Origin: Tier 1 audit U-7. *Persona-as-security-code 트리거: 향후 cancel-qg 가드 약화는 security review 대상.*
 
 ### Changed
-- `setup-qg.sh`: state frontmatter에 `wall_clock_deadline_at: "<ISO8601>"` 신설.
-- `stop-hook.py`: `_SPECIAL_PROMPTS`에 `wall_clock_exceeded` entry, `USER_CHOICE_TYPES`에 동일 추가.
+- `README.md` "인스턴스화한 원칙" 섹션의 AP-ID cite drift 수정. `AP3 (Trivia ceremony)` → `P12 anti-corollary (former AP5)` (AP3는 §11.1 migration table 상 *Self-Approval*, AP5가 *Trivia Pipeline Overhead*였음). `AP9` → `P22 anti-corollary (former AP9)`, `AP16` → `P18 anti-corollary (former AP16)`로 post-restructure cite style로 정렬. Trivia 항목엔 현재 coverage(whitespace+rename only)와 deferred 확장 추적을 명시. Origin: Tier 1 audit F-3.
+- `README.md` `## 설정` 섹션을 `### Tuning knobs` + `### Kill switches (보안 컨트롤)` 두 subsection으로 재구성. 모든 component disable env var (`DEVBREW_DISABLE_QUALITY_GATES`, `DEVBREW_DISABLE_QG_CODEX`, `DEVBREW_DISABLE_QG_SECURITY_REVIEWER`, `DEVBREW_DISABLE_GATE3_TEST_VALIDATION`, `DEVBREW_QG_DISABLE_BRANCH_WORKTREE`) + 모든 hook 키 (`stop-hook`, `session-tracker`, `post-tool-use`, `session-start-advisor`, `session-start-advisor:frontmatter-scan`, `session-end-cleanup`, `gate3-test-scope`)을 표 형식으로 통합. CLAUDE.md *"kill switch는 보안 컨트롤"* 원칙 instantiation: 보이지 않는 보안 컨트롤은 컨트롤이 아님. Origin: Tier 1 audit U-3 + U-4.
+- `agents/plan-verifier.md`, `agents/runtime-verifier.md`, `agents/test-scope-validator.md`: opening identity prompt에 *"You are NOT responsible for ..."* clause 추가. CLAUDE.md Plugin Shape > Component Isolation의 *"You are X. You are responsible for Y. You are NOT responsible for Z."* triad 완성. Z 절은 persona-as-security-code의 scope-creep 방지 lock — 향후 PR에서 이 문장이 weakened되면 security-review trigger. Origin: Tier 1 audit F-8.
+- `skills/quality-pipeline/SKILL.md`: 1349줄 SKILL 상단에 `## Contents` TOC 추가 (Workflow / Per-gate dispatch logic / Output templates 세 그룹). CLAUDE.md `docs/**.md ~300줄 이상이면 TOC 필수` 규정 instantiation. Origin: Tier 1 audit A-12.
+
+### Removed
+- `hooks/stop-hook.py` + `skills/quality-pipeline/SKILL.md`: dead `extend` transition 제거. v1.5.0이 cross-gate restart 메커니즘을 삭제하면서 `extend` action은 effective no-op이 되었으나 (update_state_file에서 no replacements, main에서 `("continue", "extend")` 공동 분기) 코드와 docstring·signal example에 잔존. `compute_transition`의 `action == "extend"` 분기, `update_state_file`의 trailing comment, `main()`의 합쳐진 elif 분기, signal example (`<qg-signal action="extend" />`) 모두 제거. 테스트 영향 없음 (extend signal 참조하는 테스트 0개). Origin: Tier 1 audit A-9.
+
+### Deferred (Tier 2/3 spec)
+- 다음 항목은 별도 spec 파일 `docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md`로 분리되어 다음 release cycle에서 처리:
+  - **Tier 2 (correctness)**: trivia escape coverage 확장 (comment-only, `--paths` 전파, untracked single-file), scout fallback의 AskUserQuestion 게이트 우회 차단 + Phase 1 dual-dispatch 통합, pipeline wall-clock budget, stop-hook no-signal infinite re-injection counter, codex 미설치 시 loud logging, state-write 실패 시 forward-progress 경로 routing, README state-machine diagram, adversarial 비용 prompt 포함.
+  - **Tier 3 (refactor)**: scout/synthesizer/codex-reviewer를 deterministic script로 (LLM 판단 없는 layer), 8개 에이전트 중 7개의 behavioral test backfill.
 
 ## [1.15.0] — 2026-05-17
 
