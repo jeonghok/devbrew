@@ -160,6 +160,14 @@ def parse_state_file(path, fallback_cwd=None):
     if "last_gate3_needed_hash" not in state:
         state["last_gate3_needed_hash"] = ""
 
+    if "consecutive_no_signal" not in state:
+        state["consecutive_no_signal"] = 0
+    else:
+        try:
+            state["consecutive_no_signal"] = int(state["consecutive_no_signal"])
+        except (ValueError, TypeError):
+            state["consecutive_no_signal"] = 0
+
     # Backward compatibility for v1.12.x → v1.13.0:
     # - project_dir added in v1.13.0 to freeze pipeline coordinate at preflight.
     # If absent (legacy state file), default to current process cwd so the
@@ -282,6 +290,60 @@ def extract_last_signal(transcript_path):
     return attrs
 
 
+# --- Wall-clock budget (T2-3) ---
+
+def deadline_exceeded(state, now=None) -> bool:
+    """Pure helper: True iff state has a populated wall_clock_deadline_at
+    that is strictly in the past relative to `now` (default: utc now).
+
+    Returns False when:
+    - the field is absent (legacy state, feature off),
+    - the field is the empty string (DEVBREW_QG_DEADLINE_MIN=0 opt-out),
+    - the field is malformed (defensive — feature off rather than abort).
+    """
+    deadline_str = state.get("wall_clock_deadline_at", "")
+    if not deadline_str:
+        return False
+    try:
+        deadline = datetime.fromisoformat(deadline_str.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return False
+    if now is None:
+        now = datetime.now(timezone.utc)
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
+    return now > deadline
+
+
+# Set of transition types that must NOT be overridden by step-7.5 deadline
+# branch — these are terminal or already-acknowledging the budget, so
+# re-injecting wall_clock_exceeded would loop forever.
+BUDGET_SKIPPABLE = frozenset({"abort", "complete", "wall_clock_exceeded"})
+
+
+# --- No-signal counter (T2-4) ---
+
+def compute_no_signal_transition(state, max_no_signal):
+    """Pure helper: decide what to do when no <qg-signal> emitted this turn.
+
+    max_no_signal: env-derived bound (DEVBREW_QG_NO_SIGNAL_MAX). 0 disables.
+    """
+    if max_no_signal <= 0:
+        return {"type": "continue"}
+    cur = int(state.get("consecutive_no_signal", 0))
+    if cur >= max_no_signal:
+        # Ceiling — don't overcount. State already past threshold; persist
+        # cur (not cur+1) so user-facing prompt and on-disk value agree.
+        return {"type": "no_signal_max", "new_count": cur}
+    new_count = cur + 1
+    return {"type": "no_signal_inc", "new_count": new_count}
+
+
+def reset_no_signal(state) -> int:
+    """Return the new consecutive_no_signal value after a valid signal (0)."""
+    return 0
+
+
 # --- State Transitions ---
 
 def compute_transition(state, signal):
@@ -291,7 +353,7 @@ def compute_transition(state, signal):
     "type" key.  All verdict-to-transition mappings are centralised here.
 
     Transition types:
-      next_gate | retry_gate | complete | abort | extend |
+      next_gate | retry_gate | complete | abort |
       gate2_user_choice | max_gate2_exceeded | gate3_fail | continue
     """
     action = signal.get("action")
@@ -303,9 +365,6 @@ def compute_transition(state, signal):
         return {"type": "complete"}
     if action == "abort":
         return {"type": "abort"}
-    if action == "extend":
-        additional = int(signal.get("additional", "3"))
-        return {"type": "extend", "additional": additional}
 
     # --- Cross-cutting new verdicts (handled before gate-specific logic) ---
 
@@ -451,10 +510,6 @@ def update_state_file(path, state, signal, transition):
             new_gate2_iter = transition.get("gate2_iteration", new_gate2_iter)
     elif t_type in ("complete", "abort"):
         new_status = "completed" if t_type == "complete" else "aborted"
-    # extend: transition is routed by main() (re-injects current gate prompt);
-    # update_state_file leaves status/gate/iter fields untouched, which has
-    # always been the effective behavior (the prior new_max_total += ... was
-    # never in the replacements dict and so was a silent no-op write).
 
     # Track gate3 resolution iteration (forward-only count).
     if transition.get("type") == "gate3_needs_resolution":
@@ -546,6 +601,40 @@ def update_state_file(path, state, signal, transition):
     try:
         with os.fdopen(fd, "w") as f:
             f.write(content)
+        os.replace(temp_path, path)
+    except Exception:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _persist_no_signal_counter(path, new_value):
+    """Update consecutive_no_signal in state frontmatter atomically."""
+    try:
+        with open(path, "r") as f:
+            content = f.read()
+    except (IOError, OSError) as e:
+        print(f"⚠️  Quality Gates: _persist_no_signal_counter: cannot read {path}: {e}",
+              file=sys.stderr)
+        raise
+    new_content, n = re.subn(
+        r"^consecutive_no_signal:.*$",
+        f"consecutive_no_signal: {int(new_value)}",
+        content, count=1, flags=re.MULTILINE,
+    )
+    if n == 0:
+        new_content = re.sub(
+            r"(\n---\s*\n)",
+            f"\nconsecutive_no_signal: {int(new_value)}\\1",
+            content, count=1,
+        )
+    dir_name = os.path.dirname(path)
+    fd, temp_path = tempfile.mkstemp(dir=dir_name, prefix=".qg-state-")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(new_content)
         os.replace(temp_path, path)
     except Exception:
         try:
@@ -734,6 +823,44 @@ _SPECIAL_PROMPTS = {
             '- Abort: emit <qg-signal action="abort" reason="User chose to abort" />\n'
         ),
     },
+    "wall_clock_exceeded": {
+        "header": "WALL_CLOCK_EXCEEDED",
+        "body": (
+            "Quality Gates exceeded the configured wall-clock budget "
+            "(current gate: {current_gate}).\n\n"
+            "Present options to the user via AskUserQuestion:\n"
+            "1. Extend budget — opt-in to continue (abort this pipeline; "
+            "re-run /qg with DEVBREW_QG_DEADLINE_MIN larger or 0).\n"
+            "2. Accept partial — finalize the pipeline as-is with warnings; "
+            "skip remaining gates.\n"
+            "3. Abort — stop the pipeline outright.\n\n"
+            "Based on user choice:\n"
+            "- Extend: emit <qg-signal action=\"abort\" "
+            "reason=\"User will re-run /qg with extended budget\" />\n"
+            "- Accept partial: emit <qg-signal action=\"complete\" "
+            "reason=\"wall-clock exceeded; user accepted partial\" />\n"
+            "- Abort: emit <qg-signal action=\"abort\" "
+            "reason=\"User chose to abort after wall-clock exceeded\" />\n"
+        ),
+    },
+    "no_signal_max": {
+        "header": "NO_SIGNAL_MAX",
+        "body": (
+            "Quality Gates received no <qg-signal> tag for "
+            "{consecutive_no_signal} consecutive turns "
+            "(DEVBREW_QG_NO_SIGNAL_MAX={max_no_signal}).\n\n"
+            "Present options to the user via AskUserQuestion:\n"
+            "1. Retry — model may have missed the signal; re-inject the "
+            "current gate prompt one more time.\n"
+            "2. Abort — stop the pipeline; investigate why the model is "
+            "not emitting the signal.\n\n"
+            "Based on user choice:\n"
+            "- Retry: emit <qg-signal action=\"abort\" "
+            "reason=\"User chose to retry; will re-run /qg\" />\n"
+            "- Abort: emit <qg-signal action=\"abort\" "
+            "reason=\"User chose to abort after no-signal max\" />\n"
+        ),
+    },
     ("gate2_user_choice", None): {
         "header": "GATE2_USER_CHOICE",
         "body": (
@@ -785,6 +912,9 @@ def build_special_prompt(transition_type, state, gate_results, prompt_key=None):
         "max_gate2_iterations": state.get("max_gate2_iterations", 5),
         "gate3_resolution_iter": state.get("gate3_resolution_iter", 0),
         "max_gate3_resolutions": state.get("max_gate3_resolutions", 3),
+        "current_gate": state.get("current_gate", 1),
+        "consecutive_no_signal": state.get("consecutive_no_signal", 0),
+        "max_no_signal": int(os.environ.get("DEVBREW_QG_NO_SIGNAL_MAX", "3") or 3),
     }
     return (
         f"{entry['header']}\n\n"
@@ -806,7 +936,8 @@ def build_system_message(state, transition):
     gate_name = GATE_NAMES.get(str(gate), f"Gate {gate}")
 
     if t_type in ("max_gate2_exceeded", "gate3_fail", "gate2_user_choice",
-                  "gate3_needs_resolution", "gate3_repeat_detected"):
+                  "gate3_needs_resolution", "gate3_repeat_detected",
+                  "wall_clock_exceeded", "no_signal_max"):
         return "⚠️ Quality Gates: Action required | /cancel-qg to stop"
 
     # Forward-only: show within-Gate-2 iteration progress when applicable;
@@ -891,8 +1022,38 @@ def main():
     # 5. Get gate results from state file body
     gate_results = extract_gate_results(body)
 
-    # 6. If no signal found, re-inject current gate prompt (ralph-loop pattern)
+    # 6. If no signal found, increment consecutive_no_signal and decide.
+    raw_max = os.environ.get("DEVBREW_QG_NO_SIGNAL_MAX", "3")
+    try:
+        max_no_signal = int(raw_max)
+    except (ValueError, TypeError):
+        print(f"⚠️  Quality Gates: DEVBREW_QG_NO_SIGNAL_MAX='{raw_max}' "
+              "is not numeric; defaulting to 3.", file=sys.stderr)
+        max_no_signal = 3
+
     if not signal:
+        ns_transition = compute_no_signal_transition(state, max_no_signal)
+        # Mirror the to-be-persisted value into in-memory state so that
+        # build_special_prompt's fmt dict sees the post-increment count.
+        if "new_count" in ns_transition:
+            state["consecutive_no_signal"] = ns_transition["new_count"]
+        if ns_transition["type"] == "no_signal_max":
+            prompt = build_special_prompt("no_signal_max", state, gate_results)
+            sys_msg = build_system_message(state, {"type": "no_signal_max"})
+            try:
+                _persist_no_signal_counter(state_file, ns_transition.get("new_count", 0))
+            except Exception as e:
+                print(f"⚠️  Quality Gates: could not persist counter: {e}",
+                      file=sys.stderr)
+            emit_continuation(prompt, sys_msg)
+            return  # unreachable; emit_continuation exits
+        elif ns_transition["type"] == "no_signal_inc":
+            try:
+                _persist_no_signal_counter(state_file, ns_transition.get("new_count", 0))
+            except Exception as e:
+                print(f"⚠️  Quality Gates: could not persist counter: {e}",
+                      file=sys.stderr)
+        # type == "continue" → fall through to existing re-inject behavior
         current_gate = state["current_gate"]
         prompt = build_gate_prompt(current_gate, state, gate_results)
         sys_msg = build_system_message(state, {"type": "retry_gate"})
@@ -903,34 +1064,51 @@ def main():
         }))
         sys.exit(0)
 
+    # 6.5. Valid signal arrived — reset the no-signal counter.
+    try:
+        _persist_no_signal_counter(state_file, reset_no_signal(state))
+    except Exception as e:
+        print(f"⚠️  Quality Gates: could not reset counter: {e}", file=sys.stderr)
+
     # 7. Compute state transition
     transition = compute_transition(state, signal)
+
+    # 7.5. Wall-clock budget override (T2-3). Pure compute_transition above
+    # stays untouched; this is main()-only I/O against current clock.
+    # Terminal and self-acknowledging transitions are NOT overridden — the
+    # user has already responded to the budget prompt (or is taking a
+    # terminal action), so re-injecting the prompt would loop forever.
+    if deadline_exceeded(state) and transition["type"] not in BUDGET_SKIPPABLE:
+        # `prior` preserves the original transition for audit/log — read by
+        # future logging hooks, intentionally unused by current main flow.
+        transition = {"type": "wall_clock_exceeded", "prior": transition}
 
     # 8. Update state file with signal results
     try:
         update_state_file(state_file, state, signal, transition)
     except Exception as e:
-        # SF-1/Finding 2: a failed state-file update on the resolution-loop
-        # path would let the loop run with stale in-memory state — exactly
-        # the unbounded-loop hazard SF-1 was supposed to fix. For
-        # gate3_needs_resolution specifically (and other transitions whose
-        # safety depends on persisted state), abort the pipeline rather than
-        # continuing silently.
+        # T2-6: SF-1 broadening. Any forward-progress transition whose
+        # safety depends on persisted state must route to PIPELINE_ERROR
+        # rather than continue with stale in-memory state. Previously only
+        # gate3_needs_resolution + gate3_repeat_detected routed; now ALL
+        # non-terminal transitions do (next_gate / retry_gate / continue /
+        # gate2_user_choice / max_gate2_exceeded / gate3_fail / etc.).
+        # Terminal (complete, abort) intentionally fall through to step 9's
+        # cleanup, which is itself resilient to write failures.
         print(
             f"⚠️  Quality Gates: Failed to update state file: {e}; "
             "aborting pipeline to prevent inconsistent state.",
             file=sys.stderr,
         )
-        if transition["type"] in ("gate3_needs_resolution",
-                                  "gate3_repeat_detected"):
+        if transition["type"] not in ("complete", "abort"):
             print(json.dumps({
                 "decision": "block",
                 "reason": (
                     "PIPELINE_ERROR\n\nQuality Gates could not persist "
-                    "pipeline state during a Gate 3 resolution cycle. "
-                    "Continuing would risk an unbounded loop with stale "
-                    "state. Please run `/cancel-qg` and re-run `/qg` "
-                    f"from scratch.\n\nError: {e}"
+                    "pipeline state during a forward-progress transition. "
+                    "Continuing would risk inconsistent state and unbounded "
+                    "replay. Please run `/cancel-qg` and re-run `/qg` from "
+                    f"scratch.\n\nTransition: {transition['type']}\nError: {e}"
                 ),
                 "systemMessage": (
                     "⚠️ Quality Gates: state-write failed | /cancel-qg to stop"
@@ -976,15 +1154,11 @@ def main():
     USER_CHOICE_TYPES = {
         "gate2_user_choice", "max_gate2_exceeded", "gate3_fail",
         "gate3_needs_resolution", "gate3_repeat_detected",
+        "wall_clock_exceeded", "no_signal_max",
     }
-
     # Surface worktree path to user on non-terminal user-choice transitions so they
     # know where the preserved worktree is.
-    USER_CHOICE_TYPES_FOR_HINT = {
-        "gate2_user_choice", "max_gate2_exceeded", "gate3_fail",
-        "gate3_needs_resolution", "gate3_repeat_detected",
-    }
-    if state.get("worktree_path") and transition["type"] in USER_CHOICE_TYPES_FOR_HINT:
+    if state.get("worktree_path") and transition["type"] in USER_CHOICE_TYPES:
         print(
             f"[quality-gates] worktree preserved at {state['worktree_path']} — "
             "remove manually with `git worktree remove` after handling.",
@@ -1011,18 +1185,9 @@ def main():
                                        extract_gate_results(next_body))
         else:
             prompt = build_gate_prompt(retry_gate, state, gate_results)
-    elif transition["type"] in ("continue", "extend"):
-        # Scout fallback or capacity extension — re-inject the current gate
-        # prompt. (extend is kept reachable for forward-compat even though
-        # update_state_file makes no state change for it; see the trailing
-        # comment in update_state_file for context.)
-        next_state, next_body = (parse_state_file(state_file, fallback_cwd=hook_input.get("cwd"))
-                                 if transition["type"] == "extend"
-                                 else (None, None))
-        the_state = next_state or state
-        the_results = (extract_gate_results(next_body) if next_body
-                       else gate_results)
-        prompt = build_gate_prompt(the_state["current_gate"], the_state, the_results)
+    elif transition["type"] == "continue":
+        # Scout fallback — re-inject the current gate prompt with current state.
+        prompt = build_gate_prompt(state["current_gate"], state, gate_results)
     else:
         # Defensive fallback: unknown transition — re-inject current gate.
         prompt = build_gate_prompt(state["current_gate"], state, gate_results)

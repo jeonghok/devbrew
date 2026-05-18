@@ -11,21 +11,42 @@ hide-from-slash-command-tool: "true"
 
 ## Default (no flags) — cancel current session's pipeline
 
-1. session ID 결정:
-   - 환경변수 `CLAUDE_CODE_SESSION_ID` 사용. 비어있으면 "Cannot determine session ID — no active pipeline."로 종료.
-2. 자기 세션 폴더 검사:
+**왜 Bash 블록 안에서 SID 가드를 다시 검사하는가:** `$CLAUDE_CODE_SESSION_ID`가
+비어 있거나 패턴이 깨진 채 `rm -rf ".claude/quality-gates/$SID"`로 expand되면
+`rm -rf ".claude/quality-gates/"`가 되어 **동시에 실행 중인 모든 세션 폴더가
+지워짐**. LLM prose ("비어있으면 종료")는 가드가 아니다. 셸이 보장한다.
+
+1. **세션 ID 가드 + 폴더 검사** (한 Bash 블록에서):
    ```!
-   test -d ".claude/quality-gates/$CLAUDE_CODE_SESSION_ID" && echo EXISTS || echo NOT_FOUND
+   SID="${CLAUDE_CODE_SESSION_ID:-}"
+   if [[ -z "$SID" || ! "$SID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
+     echo "NO_VALID_SID"
+     exit 0
+   fi
+   if test -d ".claude/quality-gates/$SID"; then
+     echo "EXISTS:$SID"
+   else
+     echo "NOT_FOUND:$SID"
+   fi
    ```
+2. **NO_VALID_SID**: "Cannot determine session ID — no active pipeline." 종료.
 3. **NOT_FOUND**: "No active quality gates pipeline found for this session." 종료.
 4. **EXISTS**:
-   - `Read(.claude/quality-gates/$CLAUDE_CODE_SESSION_ID/pipeline.md)`로 frontmatter (`status`, `current_gate`, `gate2_iteration`) 읽기.
-   - 폴더 통째 삭제: `Bash("rm -rf .claude/quality-gates/$CLAUDE_CODE_SESSION_ID")`.
+   - `Read(.claude/quality-gates/<SID>/pipeline.md)`로 frontmatter (`status`, `current_gate`, `gate2_iteration`) 읽기.
+   - 폴더 삭제 (반드시 SID 가드를 재선언한 단일 Bash 블록 안에서):
+     ```!
+     SID="${CLAUDE_CODE_SESSION_ID:-}"
+     if [[ -z "$SID" || ! "$SID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
+       echo "ABORT: invalid SID at delete time"
+       exit 1
+     fi
+     rm -rf -- ".claude/quality-gates/$SID" && echo "CANCELLED:$SID" || echo "FAILED:$SID"
+     ```
    - 보고: "Cancelled quality gates pipeline (was at Gate N, iteration M)".
 
 ## `--gc` — cancel + immediate TTL sweep
 
-1. Default 액션 수행 (자기 세션 폴더 삭제).
+1. Default 액션 수행 (자기 세션 폴더 삭제 — 위 SID 가드 적용).
 2. `Bash("python3 ${CLAUDE_PLUGIN_ROOT}/scripts/qg-gc.py")` 실행 → stale sibling 폴더 정리.
 
 ## `--all` — wipe all session folders (REQUIRES CONFIRM)
@@ -37,5 +58,10 @@ hide-from-slash-command-tool: "true"
 2. `AskUserQuestion`을 사용해 사용자에게 확인:
    - 질문: "Delete ALL quality-gates session folders? N appear active (mtime < 1h)."
    - 옵션: "Yes, delete all" / "No, abort"
-3. **Yes**: `Bash("rm -rf .claude/quality-gates")` + 보고 "Removed all session folders."
+3. **Yes**: 정확한 경로만 지우도록 가드된 Bash 블록 사용:
+   ```!
+   [[ -d ".claude/quality-gates" ]] || { echo "NOTHING_TO_DELETE"; exit 0; }
+   rm -rf -- ".claude/quality-gates" && echo "REMOVED_ALL" || echo "FAILED_ALL"
+   ```
+   보고: "Removed all session folders."
 4. **No**: 보고 "Aborted." 종료.
