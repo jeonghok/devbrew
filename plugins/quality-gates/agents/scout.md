@@ -2,6 +2,7 @@
 name: scout
 description: Phase 0 of Gate 2 — reads filtered diff and Gate 1 summary, decides depth (quick/standard/deep) and which Phase 1/2 reviewers to dispatch. Returns YAML dispatch plan.
 model: sonnet
+color: purple
 cost_class: low
 disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]
 ---
