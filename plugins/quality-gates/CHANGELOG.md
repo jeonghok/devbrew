@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.21.0] — 2026-05-19
+
+### Added
+- SKILL.md `Codex skip 안내` visibility-policy section — for `codex_available: false` responses, 4 of 6 `skip_reason` enum values now emit a one-line stderr message explaining the cause (`not_installed`, `auth_missing`, `timeout_binary_missing`, `known_bad_version`). The other 2 (`kill_switch`, `inside_codex_sandbox`) remain silent by policy (user-intended disable / recursion guard). Fulfills CLAUDE.md "loud logging + graceful degradation" promise — users paying for Codex now know why dispatch was skipped (T2-5).
+- `tests/test_skill_codex_skip_prose.sh` — grep-based AC19/AC20/AC21 verification.
 ## [1.20.0] — 2026-05-19
 
 ### Changed

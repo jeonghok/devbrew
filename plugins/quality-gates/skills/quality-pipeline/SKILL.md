@@ -518,6 +518,21 @@ manifest의 `skip_reason` 어떤 값이든 이 분기를 따른다. 기존 3-age
 
 이 분기에서 외부 확장 없음. scout의 phase1_agents를 그대로 사용.
 
+**Codex skip 안내 (T2-5 visibility policy):**
+
+`detect_codex.sh`가 `codex_available: false` 응답 시 `skip_reason`에 따라 사용자에게 stderr로 한 줄 안내를 emit. CLAUDE.md `loud logging을 동반한 graceful degradation` 약속 — 사용자가 Codex 구독 비용을 지불하고도 dispatch 안 되는 이유를 알 수 있어야 함.
+
+| skip_reason | 사용자 안내 (stderr) | 이유 |
+|---|---|---|
+| `kill_switch` | (silent) | 사용자가 명시 disable — noise 회피 |
+| `inside_codex_sandbox` | (silent) | 재귀 guard, 정상 동작 |
+| `not_installed` | `[quality-gates] Codex CLI not installed; model-family diversity layer skipped.` | dispatch path가 단일 모델 family로 축소됨을 알림 |
+| `auth_missing` | `` [quality-gates] Codex CLI detected but auth missing; set CODEX_API_KEY/OPENAI_API_KEY or run `codex login`. `` | 비용 지불 + dispatch 안 됨의 원인 |
+| `timeout_binary_missing` | `` [quality-gates] Codex skipped: no `timeout`/`gtimeout` binary (install coreutils). `` | hung version probe 방지 |
+| `known_bad_version` | `[quality-gates] Codex version known-bad ({version}); upgrade.` | gstack 0.120.x stdin deadlock 등 |
+
+`kill_switch`와 `inside_codex_sandbox`는 silent — 정상 사용자 의도 / 재귀 가드 동작이므로 stderr noise 부담만 줌. 다른 4개는 `>&2` 출력 후 dispatch 진행 (graceful degradation).
+
 **테스트 Mock 환경변수 (LD8 정합):**
 
 `QG_MOCK_CODEX_MANIFEST` (= `available` | `unavailable` | `<path-to-yaml>`) — test harness에서 manifest 주입. `available` 시 codex-reviewer가 dispatch에 포함된다.
