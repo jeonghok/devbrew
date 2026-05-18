@@ -17,6 +17,33 @@ iteration counting). The pipeline is **forward-only**: code-change verdicts
 (`NEEDS_RESTART`) terminate with a user-choice prompt rather than auto-restarting
 from Gate 1. You do NOT manage state files or pipeline flow.
 
+## Contents
+
+이 SKILL은 단일 턴에서 한 게이트만 실행. 섹션은 **세 그룹**으로 묶임:
+
+1. **Workflow** (process — top-to-bottom on first invocation):
+   - [Preflight](#preflight) — continuation vs. first invocation 감지, sentinel check
+   - [Arguments](#arguments) — `/qg` flags (`--reset`, `--paths`, `branch <name>`)
+   - [Dependency Check](#dependency-check) — required scripts/agents 존재 검사
+   - [Gate Execution](#gate-execution) — entry point; current gate로 routing
+2. **Per-gate dispatch logic** (Gate Execution이 호출):
+   - [Pre-pipeline check](#pre-pipeline-check-f-1) — staleness / scope / branch-mismatch
+   - [Trivia escape](#trivia-escape-e) — one-sentence diff → skip all gates
+   - [Gate 1: Plan Verification](#gate-1-plan-verification) — dispatch `plan-verifier`
+   - [Gate 2: PR Review](#gate-2-pr-review) — scout + Phase 1 + adversarial + synthesizer
+   - [Gate 3: Runtime Verification](#gate-3-runtime-verification) — test-scope-validator + runtime-verifier
+3. **Output templates & special prompts** (skill이 사용자에게 emit하는 verbatim 포맷, field substitution 포함):
+   - Gate 1 result template (`## Gate 1: Plan Verification — [PASS/FAIL/SKIP]`)
+   - Gate 2 dispatch payload section (`## Current Diff`)
+   - Gate 2 result templates (`## PR Review Report (Gate 2)`, `## Gate 2: PR Review (iter [iteration]) — [verdict]`)
+   - Gate 3 templates (`## Gate 3 — Test Scope Check`, `## Test Scope Verdicts`, `## Gate 3: Runtime Verification — [VERDICT]`)
+   - [Special Prompts from Stop Hook](#special-prompts-from-stop-hook) — `GATE2_NEEDS_RESTART`, `GATE2_REPEAT_DETECTED`, `GATE2_MAX_EXCEEDED`, `GATE3_FAIL`, `GATE3_NEEDS_RESOLUTION`, `GATE3_REPEAT_DETECTED`
+   - Final summary templates (`## Final Summary`, `## Quality Gates Pipeline — Complete`)
+   - [Signal Tag Rules](#signal-tag-rules) — `<qg-signal>` emission schema
+   - [Rules](#rules) — never-write-state-file, exactly-one-signal-tag invariants
+
+(섹션 추가/이름 변경 시 본 TOC도 같은 commit에서 sync — CLAUDE.md TOC drift 규정.)
+
 ## Preflight
 
 Before parsing arguments or dispatching agents, do this in order:
@@ -117,14 +144,18 @@ the per-session folder; cross-session siblings are never inspected.
 
 ### Trivia escape (§E)
 
-Run the trivia detector before Gate 1 dispatch:
+Run the trivia detector before Gate 1 dispatch. If `--paths` was supplied by
+the user (i.e. `session_scope == paths`), propagate those paths so the detector
+scopes its diff to the same file set:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh"
+# PATH_ARGS is empty when no --paths were given; set to "--paths <glob>..."
+# by parsing them from the /qg invocation arguments (e.g. "/qg --paths src/ lib/").
+"${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh" $PATH_ARGS
 ```
 
 If exit code is `0`:
-- Read the stdout line `trivia: <kind>` (kind ∈ `whitespace | rename`).
+- Read the stdout line `trivia: <kind>` (kind ∈ `whitespace | rename | comment | typo | untracked-newfile`).
 - Update `.claude/quality-gates/<session-id>/pipeline.md` with
   `status: completed`, `outcome: trivia-skipped`, `trivia_kind: <kind>`.
 - Emit `<qg-signal verdict="trivia-skipped" reason="<kind>" />` and stop.
@@ -487,6 +518,21 @@ manifest의 `skip_reason` 어떤 값이든 이 분기를 따른다. 기존 3-age
 
 이 분기에서 외부 확장 없음. scout의 phase1_agents를 그대로 사용.
 
+**Codex skip 안내 (T2-5 visibility policy):**
+
+`detect_codex.sh`가 `codex_available: false` 응답 시 `skip_reason`에 따라 사용자에게 stderr로 한 줄 안내를 emit. CLAUDE.md `loud logging을 동반한 graceful degradation` 약속 — 사용자가 Codex 구독 비용을 지불하고도 dispatch 안 되는 이유를 알 수 있어야 함.
+
+| skip_reason | 사용자 안내 (stderr) | 이유 |
+|---|---|---|
+| `kill_switch` | (silent) | 사용자가 명시 disable — noise 회피 |
+| `inside_codex_sandbox` | (silent) | 재귀 guard, 정상 동작 |
+| `not_installed` | `[quality-gates] Codex CLI not installed; model-family diversity layer skipped.` | dispatch path가 단일 모델 family로 축소됨을 알림 |
+| `auth_missing` | `` [quality-gates] Codex CLI detected but auth missing; set CODEX_API_KEY/OPENAI_API_KEY or run `codex login`. `` | 비용 지불 + dispatch 안 됨의 원인 |
+| `timeout_binary_missing` | `` [quality-gates] Codex skipped: no `timeout`/`gtimeout` binary (install coreutils). `` | hung version probe 방지 |
+| `known_bad_version` | `[quality-gates] Codex version known-bad ({version}); upgrade.` | gstack 0.120.x stdin deadlock 등 |
+
+`kill_switch`와 `inside_codex_sandbox`는 silent — 정상 사용자 의도 / 재귀 가드 동작이므로 stderr noise 부담만 줌. 다른 4개는 `>&2` 출력 후 dispatch 진행 (graceful degradation).
+
 **테스트 Mock 환경변수 (LD8 정합):**
 
 `QG_MOCK_CODEX_MANIFEST` (= `available` | `unavailable` | `<path-to-yaml>`) — test harness에서 manifest 주입. `available` 시 codex-reviewer가 dispatch에 포함된다.
@@ -494,41 +540,43 @@ manifest의 `skip_reason` 어떤 값이든 이 분기를 따른다. 기존 3-age
 `QG_MOCK_SCOUT_FALLBACK` (= `1` boolean — 본 task 후속).
 `available` 값은 가용 경로를 트리거하고 external reviewer를 포함시킨다. `unavailable`은 비가용 경로를 트리거한다.
 
-#### AskUserQuestion hard gate
+#### Phase 1 (unified dispatch)
 
-Compute `len(scout.phase1_agents) + len(external_reviewers) + len(scout.phase2_agents)`. If **≥ 4**:
-(`external_reviewers` = codex-reviewer 등 Phase 1에 무조건 포함되는 외부 reviewer; 가용 시 1, 비가용 시 0. fan-out 임계 평가에 반드시 포함.)
+Phase 1 reviewer dispatch is a single section with four steps. The same
+AskUserQuestion fan-out gate applies regardless of which path produced
+the dispatch list — primary (scout YAML) or fallback (rule-based gating
+when scout fails or `fallback: true`).
 
-Before dispatching anything, invoke AskUserQuestion:
+**Step 1 — Resolve dispatch list:**
 
-> Phase 1 (M) + Phase 2 (K) = N reviewer agents.
-> Adversarial + Synthesizer always run on top.
-> Approximate cost: <pull from §Cost classes>.
->
-> Options:
-> - `proceed` — dispatch as planned.
-> - `phase1-only` — dispatch only Phase 1 agents; skip Phase 2.
-> - `abort` — emit `<qg-signal action="abort" reason="user declined fan-out" />` and stop.
+- **Primary path (scout `fallback: false`):** read scout YAML — `phase1_agents`
+  and `phase2_agents` are the authoritative selection.
+- **Fallback path (scout `fallback: true`, scout JSON parse error, or
+  scout-rerun limit exceeded):** apply rule-based gating from the depth
+  table below. Emit `<qg-signal verdict="scout-fallback" reason="..." />`
+  so the user knows the rule-based path was taken.
 
-scout/adversarial/synthesizer are infrastructure and excluded from the count.
+| depth | phase1_agents | phase2_agents (conditional) |
+|---|---|---|
+| quick | code-reviewer, security-reviewer | (empty) |
+| standard | code-reviewer, silent-failure-hunter, security-reviewer | type-design-analyzer / pr-test-analyzer / comment-analyzer per diff signals |
+| deep | code-reviewer, silent-failure-hunter, feature-dev:code-reviewer, security-reviewer | + superpowers:code-reviewer / feature-dev:code-architect per major-step boundary / new modules |
 
-#### Phase 1: Critical Analysis (depth-aware, parallel)
-
-**Kill switch filter (applies to BOTH scout-primary and legacy/fallback paths).** Before dispatching any Phase 1 agents, apply per-agent kill switches by filtering the dispatch list. Currently honored:
+**Kill switch filter (applies to BOTH scout-primary and fallback paths).** After resolving the dispatch list, filter per-agent kill switches:
 
 ```bash
 if [ "${DEVBREW_DISABLE_QG_SECURITY_REVIEWER:-0}" = "1" ]; then
   echo "[quality-gates] security-reviewer disabled via DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1" >&2
   # Remove security-reviewer from BOTH scout.phase1_agents (if present) AND the
-  # legacy fallback Agent A/B/C/D list (the Agent D block becomes a no-op).
+  # rule-based fallback list (the Agent D slot becomes a no-op).
 fi
 ```
 
-Same filter pattern applies for future per-agent kill switches. After filtering, dispatch the remaining agents in `scout.phase1_agents` **in parallel** (single tool-call block). Model assignment per dispatch:
+Same filter pattern applies for future per-agent kill switches. Model assignment per dispatch:
 
 | agent | quick | standard | deep | model override on Task call |
 |---|---|---|---|---|
-| `pr-review-toolkit:code-reviewer` | (upstream Opus) | (upstream Opus) | (upstream Opus) | none — respect upstream `model: opus` |
+| `pr-review-toolkit:code-reviewer` | included | included | included | none — respect upstream `model: opus` |
 | `pr-review-toolkit:silent-failure-hunter` | — | included | included | `model: "sonnet"` |
 | `feature-dev:code-reviewer` | — | — | included | none — upstream is `model: sonnet` |
 | `quality-gates:security-reviewer` | included | included | included | `model: "sonnet"` (frontmatter `inherit`) |
@@ -536,10 +584,13 @@ Same filter pattern applies for future per-agent kill switches. After filtering,
 For agents whose frontmatter is `inherit`, pass `model: "sonnet"` via Task tool.
 For hardcoded-frontmatter agents, do NOT pass `model` (respect upstream choice — Task 1 design decision).
 
-**Fallback** (when scout-fallback engages): use the legacy "always 3 parallel"
-behavior below.
+**Step 2 — Combine with external reviewers:**
 
-**Scout fallback codex inclusion (AC13)**: 만약 scout이 timeout/JSON-error/self-fallback으로 engage하면, legacy "always 3-agent" Phase 1 dispatch를 사용한다. 단, `codex_manifest.codex_available == true` AND consent marker 존재 (or `QG_MOCK_CONSENT_OK=1`) 시 codex-reviewer를 fallback dispatch에도 **무조건** 포함하고, 다음 stderr 메시지를 출력:
+If `codex_manifest.codex_available == true`, append `codex-reviewer` to the
+dispatch list. If `false`, emit the loud-skip stderr message from the
+visibility-policy table (see §Codex skip 안내) and continue without it.
+
+**Scout fallback codex inclusion (AC13)**: 만약 scout이 timeout/JSON-error/self-fallback으로 engage하면, rule-based fallback dispatch를 사용한다. 단, `codex_manifest.codex_available == true` AND consent marker 존재 (or `QG_MOCK_CONSENT_OK=1`) 시 codex-reviewer를 fallback dispatch에도 **무조건** 포함하고, 다음 stderr 메시지를 출력:
 
 ```bash
 echo "[quality-gates] scout fallback engaged; codex-reviewer still dispatched (codex_available=true)" >&2
@@ -547,51 +598,75 @@ echo "[quality-gates] scout fallback engaged; codex-reviewer still dispatched (c
 
 이로써 fallback 경로가 사용자에게 visible. codex 비가용 시는 기존 3-agent만 dispatch.
 
-#### Phase 1 (legacy/fallback): Critical Analysis
+`final_dispatch_list = phase1_agents ∪ external_reviewers ∪ phase2_agents`.
 
-Dispatch these agents **in parallel** (single tool-call block with multiple `Agent()` calls).
+scout/adversarial/synthesizer are infrastructure and excluded from the fan-out count.
 
-**Fan-out note (fallback mode):** when scout fails and the legacy fallback dispatches Agent A + Agent B + Agent C + Agent D = 4 reviewers, this crosses the `≥ 4` fan-out threshold but does NOT route through the AskUserQuestion gate (the gate is scout-primary only, L497). This is intentional: fallback is already a degraded state, and prompting the user for fan-out consent on top of an already-degraded pipeline reduces usability with marginal safety gain. If a user wants to suppress security-reviewer dispatch entirely in fallback mode, set `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1` — the kill switch is honored on both paths.
+**Step 3 — Fan-out gate + parallel dispatch:**
 
-**Agent A — pr-review-toolkit:code-reviewer**
+Compute `len(final_dispatch_list)`. If **≥ 4**, invoke AskUserQuestion BEFORE
+the dispatch. The gate applies regardless of whether the list came from
+primary or fallback path. (Fallback paths should add MORE friction, not less,
+because the rule-based heuristic is less accurate than scout's analysis —
+CLAUDE.md loud logging + graceful degradation principle.)
 
-Immutable head:
+```python
+AskUserQuestion({
+  questions: [{
+    question: f"Gate 2 deep review will dispatch {len(final_dispatch_list)} reviewer(s) in parallel. Estimated cost: {cost_summary}. Proceed?",
+    header: "Gate 2 fan-out",
+    options: [
+      {label: "Proceed", description: f"Dispatch all {len(final_dispatch_list)} reviewers"},
+      {label: "phase1-only", description: "Smaller dispatch — phase1 + security-reviewer only; skip Phase 2"},
+      {label: "Abort", description: "Skip Gate 2 — emit abort signal"},
+    ],
+    multiSelect: false,
+  }]
+})
+```
+
+Based on the answer:
+- **Proceed:** continue to parallel dispatch.
+- **phase1-only:** narrow `final_dispatch_list` to Phase 1 agents + security-reviewer (drop Phase 2 agents and codex-reviewer); record "Phase 2 skipped: user requested phase1-only" in the report.
+- **Abort:** emit `<qg-signal action="abort" reason="user declined fan-out" />` and stop.
+
+For lists with `len < 4`, skip the gate and dispatch directly.
+
+**Step 4 — Parallel dispatch:**
+
+```
+Task(parallel=true, agents=final_dispatch_list, dispatch_prompt=...)
+```
+
+The dispatch prompt template (see §Dispatch Prompt Template above) is
+identical for primary and fallback paths. Each agent receives:
+- The diff (from `## Current Diff` section).
+- `project_dir: <absolute path>` — use verbatim for any Read tool call; do not re-resolve via `pwd` or `Path.cwd()`.
+
+**Agent prompt heads (immutable, apply to both paths):**
+
+*code-reviewer (`pr-review-toolkit:code-reviewer`)*:
 > Review the unstaged changes for bugs, logic errors, security vulnerabilities, and code quality issues. Focus on high-confidence issues only.
 >
 > If the prompt contains a `## Current Diff` section, operate on that diff verbatim. **Do NOT run `git diff` yourself** — the full unified diff is already provided. You may still use `Read` on specific files for extra context outside the diff's scope.
 
-**Agent B — pr-review-toolkit:silent-failure-hunter**
-
-Immutable head:
+*silent-failure-hunter (`pr-review-toolkit:silent-failure-hunter`)*:
 > Review the unstaged changes to identify silent failures, inadequate error handling, and inappropriate fallback behavior. Focus on high-confidence issues only.
 >
 > If the prompt contains a `## Current Diff` section, operate on that diff verbatim. **Do NOT run `git diff` yourself** — the full unified diff is already provided.
 
-**Agent C — feature-dev:code-reviewer** (only if `available_plugins` includes `feature-dev`)
-
-Immutable head:
+*feature-dev:code-reviewer* (only if `available_plugins` includes `feature-dev`):
 > Review the unstaged changes for project convention and guideline compliance. Focus on CLAUDE.md adherence, import patterns, naming conventions, and framework-specific patterns. Do NOT focus on bugs or security — another reviewer handles those. Report only issues with confidence >= 80.
 >
 > If the prompt contains a `## Current Diff` section, operate on that diff verbatim. **Do NOT run `git diff` yourself** — the full unified diff is already provided.
 
-If `feature-dev` is NOT in `available_plugins`, skip Agent C silently and record this in the report's "Phase 2 Skipped Agents" section with reason "feature-dev plugin not available".
+If `feature-dev` is NOT in `available_plugins`, skip this agent silently and record in the report's "Phase 2 Skipped Agents" section with reason "feature-dev plugin not available".
 
-**Agent D — security-reviewer** (always dispatched unless `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`)
-
-Before dispatching, check the kill switch:
-
-```bash
-if [ "${DEVBREW_DISABLE_QG_SECURITY_REVIEWER:-0}" = "1" ]; then
-  echo "[quality-gates] security-reviewer disabled via DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1" >&2
-  # skip Agent D; other Phase 1 agents still dispatch
-fi
-```
-
-Immutable head:
+*security-reviewer (`quality-gates:security-reviewer`)* (always dispatched unless `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`):
 > Review the unstaged changes for code-level security vulnerabilities. Trace untrusted-input entry points to dangerous sinks. Categories: injection (SQL/NoSQL/command/template/directory), authn/authz bypass (missing middleware, IDOR, privilege escalation, CSRF on state-change), secrets in code or logs, SSRF + path traversal, insecure deserialization, cryptographic misuse, raw-HTML escape hatches, dependency manifest changes. Suppress defense-in-depth on already-protected code, theoretical/physical-access attacks, dev/test insecure transport, and generic hardening advice. If diff has no security surface, emit empty YAML list (`[]`) — do not pad with forced findings. Output: canonical YAML schema only (agent / file / line / severity / confidence / summary / proposed_fix), no prose.
 >
 > If the prompt contains a `## Current Diff` section, operate on that diff verbatim. **Do NOT run `git diff` yourself** — the full unified diff is already provided.
-
+>
 > Your input prompt will also include a `project_dir: <absolute path>` line representing the pipeline's single coordinate. Use this verbatim for any Read tool call — do not re-resolve via `pwd` or `Path.cwd()`.
 
 Wait for all dispatched agents to complete. Collect their findings.
@@ -1336,7 +1411,6 @@ For Gate 2, include the `iteration` attribute:
 ```xml
 <qg-signal action="complete" />
 <qg-signal action="abort" reason="description" />
-<qg-signal action="extend" additional="3" />
 ```
 
 ## Rules

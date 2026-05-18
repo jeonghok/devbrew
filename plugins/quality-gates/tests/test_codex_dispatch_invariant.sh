@@ -45,12 +45,15 @@ for name in scout adversarial synthesizer test-scope-validator; do
 done
 
 # Pattern L — security-reviewer prose header (window=30)
+# Updated in v1.16.0: heading changed from **Agent D — security-reviewer**
+# to *security-reviewer (`quality-gates:security-reviewer`)* inside the
+# unified dispatch section.
 if ! awk '
-  /\*\*Agent D — security-reviewer\*\*/ { found=NR }
+  /\*security-reviewer \(`quality-gates:security-reviewer`\)/ { found=NR }
   found && NR <= found+30 && /project_dir/ { ok=1; exit }
   END { exit !ok }
 ' "$SKILL"; then
-  fail "Scenario 4: Pattern-L Agent D (security-reviewer) section lacks project_dir reference"
+  fail "Scenario 4: Pattern-L security-reviewer section lacks project_dir reference"
 fi
 
 # Reference-only — codex-reviewer.md is the source of truth
