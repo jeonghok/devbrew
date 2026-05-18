@@ -3,6 +3,15 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.15.2] — 2026-05-19
+
+### Fixed
+- `tests/harness/agent_stub.py` `run_agent_stub`: guard against `yaml.safe_load` returning `None` for empty/whitespace/`null`/`~` input. Previously the None propagated silently to callers; now raises `AssertionError` naming the agent and fixture. Caught by qg self-review Gate 2 silent-failure-hunter (confirmed by adversarial).
+- `tests/harness/agent_stub.py` `assert_yaml_schema`: changed `if enum:` to `if enum is not None:` so an empty `enum={}` dict is treated as "validate against zero constraints" (no-op loop) rather than "skip validation entirely" (silent green). Empty-dict was a real risk for programmatic enum builders that produce zero entries.
+
+### Added
+- `tests/test_agent_stub_harness.py`: 2 regression tests covering both fixes (`test_run_agent_stub_raises_on_empty_yaml` over 5 empty-form variants, `test_assert_yaml_schema_empty_enum_dict_is_not_skipped` over no-violation + missing-key compositions). 9/9 tests PASS.
+
 ## [1.15.1] — 2026-05-18
 
 ### Added

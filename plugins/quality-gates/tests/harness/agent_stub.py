@@ -26,14 +26,26 @@ def run_agent_stub(agent_name: str, prompt: str, frozen_output: str) -> Any:
 
     agent_name and prompt are accepted for signature parity with future
     dispatch wrappers; they are not used by the stub itself.
+
+    Raises AssertionError when YAML is malformed OR when YAML is valid but
+    parses to None (empty / whitespace / literal 'null'). A None result
+    indicates fixture authoring error — never a valid frozen agent output.
     """
     try:
-        return yaml.safe_load(frozen_output)
+        parsed = yaml.safe_load(frozen_output)
     except yaml.YAMLError as e:
         raise AssertionError(
             f"agent_stub[{agent_name}]: frozen_output not valid YAML: {e}\n"
             f"---\n{frozen_output[:500]}\n---"
         )
+    if parsed is None:
+        raise AssertionError(
+            f"agent_stub[{agent_name}]: frozen_output parsed to None "
+            f"(empty, whitespace-only, or literal 'null'). "
+            f"Provide a non-empty YAML mapping as the frozen fixture.\n"
+            f"---\n{frozen_output[:500]}\n---"
+        )
+    return parsed
 
 
 def assert_yaml_schema(parsed: Any,
@@ -53,7 +65,11 @@ def assert_yaml_schema(parsed: Any,
                 f"required key missing: {k!r}. "
                 f"Keys present: {list(parsed.keys())}"
             )
-    if enum:
+    # Use `is not None` (not truthy check) so that an empty dict — possible
+    # from a programmatic enum builder that produced zero entries — is treated
+    # as "validate against zero constraints" (no-op loop) rather than as
+    # "skip validation entirely" (silent green). Only an explicit None skips.
+    if enum is not None:
         for key, allowed in enum.items():
             if key not in parsed:
                 continue
