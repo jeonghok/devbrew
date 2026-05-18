@@ -1,56 +1,66 @@
 #!/usr/bin/env bash
-# Static check: scout.md declares codex_manifest as a pass-through Input
-# and explicitly disclaims making codex-reviewer dispatch decisions.
-# Architecture: codex-reviewer dispatch was moved from scout to SKILL.md in
-# commit 4c9e7d2 (LD4). These checks guard against drift back.
+# Static check: scout.py is the deterministic replacement for agents/scout.md.
+# Architecture: scout was migrated to scripts/scout.py in v1.29.0 (T3-1).
+# These checks guard:
+#   1. agents/scout.md is absent (deleted in T3-1).
+#   2. scripts/scout.py exists and is executable.
+#   3. SKILL.md Phase 0 references scout.py invocation (not Agent() dispatch).
+#   4. SKILL.md codex dispatch remains owned by SKILL.md (LD4 guard — unchanged by T3-1).
 
 set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SCOUT_MD="$PLUGIN_ROOT/agents/scout.md"
+SCOUT_PY="$PLUGIN_ROOT/scripts/scout.py"
+SKILL_MD="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 
 pass=0; fail=0
-check() {
-  local name="$1" pattern="$2"
-  if grep -q "$pattern" "$SCOUT_MD"; then
+check_true() {
+  local name="$1" result="$2"
+  if [[ "$result" == "0" ]]; then
     echo "  PASS: $name"; pass=$((pass + 1))
   else
-    echo "  FAIL: $name (pattern not found: $pattern)"
-    fail=$((fail + 1))
+    echo "  FAIL: $name"; fail=$((fail + 1))
+  fi
+}
+check_false() {
+  local name="$1" result="$2"
+  if [[ "$result" != "0" ]]; then
+    echo "  PASS: $name"; pass=$((pass + 1))
+  else
+    echo "  FAIL: $name (should be absent/false)"; fail=$((fail + 1))
   fi
 }
 
-# 1. codex_manifest must still appear in Inputs (pass-through field)
-check "Inputs lists codex_manifest" 'codex_manifest'
+# 1. agents/scout.md must be absent (deleted in T3-1)
+check_false "agents/scout.md absent post-T3-1" "$(test -f "$SCOUT_MD"; echo $?)"
 
-# 2. scout.md must explicitly disclaim codex dispatch decisions (LD4 guard)
-check "scout explicitly disclaims codex dispatch decisions" '사용하지 않는다\|does not use\|LD4'
+# 2. scripts/scout.py must exist
+check_true "scripts/scout.py exists" "$(test -f "$SCOUT_PY"; echo $?)"
 
-# 3. scout.md must NOT contain codex depth-selection rule prose
-#    (SKILL.md owns this; if it reappears here, that is a regression)
-if grep -q 'codex_available.*\(standard\|deep\)\|codex_available.*depth' "$SCOUT_MD"; then
-  echo "  FAIL: scout.md still has codex dispatch selection rule (SKILL.md owns this — LD4)"
-  fail=$((fail + 1))
+# 3. scripts/scout.py must be executable
+check_true "scripts/scout.py is executable" "$(test -x "$SCOUT_PY"; echo $?)"
+
+# 4. SKILL.md Phase 0 references scout.py invocation (script-based dispatch)
+if grep -q 'scripts/scout.py' "$SKILL_MD"; then
+  echo "  PASS: SKILL.md references scripts/scout.py"; pass=$((pass + 1))
 else
-  echo "  PASS: scout.md does not select codex-reviewer depth (SKILL.md owns this now)"
-  pass=$((pass + 1))
+  echo "  FAIL: SKILL.md does not reference scripts/scout.py"; fail=$((fail + 1))
 fi
 
-# 4. scout.md must NOT reference codex-reviewer in any Phase 1 selection table
-#    (the agent list in the table must only contain non-codex reviewers)
-if grep -q 'codex-reviewer' "$SCOUT_MD"; then
-  echo "  FAIL: scout.md references codex-reviewer (should be removed — SKILL.md owns dispatch)"
+# 5. SKILL.md must NOT contain old Agent(subagent_type="quality-gates:scout") dispatch
+if grep -q 'subagent_type="quality-gates:scout"' "$SKILL_MD"; then
+  echo "  FAIL: SKILL.md still has old Agent(subagent_type=\"quality-gates:scout\") dispatch (T3-1 regression)"
   fail=$((fail + 1))
 else
-  echo "  PASS: scout.md does not reference codex-reviewer in Phase 1 table"
-  pass=$((pass + 1))
+  echo "  PASS: old Agent() scout dispatch absent from SKILL.md"; pass=$((pass + 1))
 fi
 
 # Scenario 5 (T2-2 / AC7-AC8) — unified dispatch heading + fan-out gate
 # applies to both primary and fallback paths.
 test_scenario_5_unified_dispatch() {
   echo "=== Scenario 5: Phase 1 unified dispatch + fan-out gate ==="
-  local skill="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
+  local skill="$SKILL_MD"
 
   # AC7-a: exactly one unified heading (4 hashes — preserves Gate 2 nesting).
   local count_unified
