@@ -3,6 +3,21 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.27.0] — 2026-05-19
+
+### Removed
+- `agents/codex-reviewer.md` — replaced by `scripts/run_codex_reviewer.sh`. Layer 1 isolation now provided by SKILL.md narrow Bash allowlist instead of agent frontmatter `disallowedTools`. Layer 3 sandbox (`codex exec -s read-only`) preserved inside the script (T3-3, AC40-AC44).
+
+### Added
+- `scripts/run_codex_reviewer.sh` — independent codex review subprocess (88 lines). Takes `<diff_path> <project_dir> <output_yaml_path>`; emits canonical Phase 1 finding YAML.
+- `tests/test_skill_bash_allowlist_narrow.sh` — AC44 regression: SKILL.md `allowed-tools` frontmatter must enumerate specific script paths, never `Bash(*)` wildcard.
+
+### Changed
+- `tests/test_codex_reviewer_frontmatter.sh` — rewritten: was a frontmatter grep on the deleted agent; now asserts agent absence + script existence + Layer 3 sandbox preservation.
+- `tests/test_codex_dispatch_invariant.sh` — anchor patterns updated to reference the new script invocation prose instead of agent dispatch.
+- `tests/test_worktree.sh` T8 — codex-reviewer removed from agent-file project_dir loop (no longer applicable post-T3-3).
+- SKILL.md Phase 1 dispatch prose: codex-reviewer invocation is now a Bash script call, not an Agent() dispatch. Frontmatter gains narrow `allowed-tools` entry for the new script.
+
 ## [1.26.0] — 2026-05-19
 
 ### Fixed
