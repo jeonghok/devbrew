@@ -3,6 +3,14 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.30.0] — 2026-05-19
+
+### Added
+- 5 behavioral test files for surviving leaf agents (plan-verifier, security-reviewer, adversarial, test-scope-validator, runtime-verifier). Each test uses `tests/harness/agent_stub.py` to short-circuit dispatch with frozen YAML fixtures — deterministic, hermetic, no LLM call. 3 tests per agent (AC45 schema/enum, AC46 missing-key-raises, AC47 invalid-yaml-raises) = 15 total. Completes CLAUDE.md Law 3 (Compounding) for the qg agent surface: any future drift in output contract fails CI immediately (T3-4, AC45-AC48).
+
+### Reached
+- v1.30.0 — spec upper bound. All 56 acceptance criteria from `docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md` implemented. Tier 2 + Tier 3 cycle complete.
+
 ## [1.29.0] — 2026-05-19
 
 ### Removed
