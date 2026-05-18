@@ -306,6 +306,7 @@ max_gate2_iterations: 5
 gate3_resolution_iter: 0
 last_gate3_needed_hash: ""
 max_gate3_resolutions: $MAX_GATE3_RESOLUTIONS
+consecutive_no_signal: 0
 skip_runtime: $SKIP_RUNTIME
 single_gate: ${SINGLE_GATE:-null}
 plan_file: "$PLAN_FILE"

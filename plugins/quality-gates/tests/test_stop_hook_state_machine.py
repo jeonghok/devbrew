@@ -453,5 +453,44 @@ class TestWallClockBudget(unittest.TestCase):
         self.assertIn("wall_clock_exceeded", stop_hook.BUDGET_SKIPPABLE)
 
 
+class TestNoSignalCounter(unittest.TestCase):
+    """T2-4: consecutive_no_signal counter prevents infinite re-inject."""
+
+    def _base_state(self, consecutive_no_signal=0):
+        return {
+            "current_gate": 2, "gate2_iteration": 1, "max_gate2_iterations": 5,
+            "skip_runtime": False, "single_gate": None,
+            "consecutive_no_signal": consecutive_no_signal,
+        }
+
+    def test_AC15_inc_below_max(self):
+        state = self._base_state(consecutive_no_signal=2)
+        transition = stop_hook.compute_no_signal_transition(state, max_no_signal=3)
+        self.assertEqual(transition["type"], "no_signal_inc")
+        self.assertEqual(transition["new_count"], 3)
+
+    def test_AC16_at_max_triggers_user_choice(self):
+        state = self._base_state(consecutive_no_signal=3)
+        transition = stop_hook.compute_no_signal_transition(state, max_no_signal=3)
+        self.assertEqual(transition["type"], "no_signal_max")
+
+    def test_AC17_valid_signal_resets_counter(self):
+        state = self._base_state(consecutive_no_signal=2)
+        new_count = stop_hook.reset_no_signal(state)
+        self.assertEqual(new_count, 0)
+
+    def test_AC18_feature_off_when_max_zero(self):
+        state = self._base_state(consecutive_no_signal=5)
+        transition = stop_hook.compute_no_signal_transition(state, max_no_signal=0)
+        self.assertEqual(transition["type"], "continue")
+
+    def test_AC18b_both_stuck_protections_off_yields_continue(self):
+        state = self._base_state(consecutive_no_signal=100)
+        state["wall_clock_deadline_at"] = ""
+        transition = stop_hook.compute_no_signal_transition(state, max_no_signal=0)
+        self.assertEqual(transition["type"], "continue")
+        self.assertFalse(stop_hook.deadline_exceeded(state))
+
+
 if __name__ == "__main__":
     unittest.main()

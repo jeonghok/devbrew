@@ -3,6 +3,22 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.18.0] — 2026-05-19
+
+### Added
+- `DEVBREW_QG_NO_SIGNAL_MAX` (default 3, `0`=disabled) — stop-hook counter that prevents infinite re-injection when the model fails to emit `<qg-signal>` for N consecutive turns. New transition types `no_signal_inc` (silent increment) and `no_signal_max` (user-choice intercept) (T2-4).
+- `compute_no_signal_transition(state, max_no_signal)` pure helper and `reset_no_signal(state)` helper for testability.
+
+### Fixed
+- `_persist_no_signal_counter`: wrap initial `open()` in `(IOError, OSError)` handler to match `update_state_file`'s established pattern.
+- `compute_no_signal_transition`: ceiling-value semantics — `no_signal_max` branch now returns `new_count = cur` (not `cur+1`) so persisted and user-facing counter values agree.
+- `main()` no-signal branch: mirror `new_count` into in-memory `state["consecutive_no_signal"]` before `build_special_prompt` so fmt rendering uses the post-increment count.
+
+### Changed
+- `setup-qg.sh`: state frontmatter adds `consecutive_no_signal: 0` initial field.
+- `parse_state_file`: defaults `consecutive_no_signal` to 0 for backward-compat with v1.16.x state files.
+- `USER_CHOICE_TYPES` set extended with `"no_signal_max"`; `build_system_message` user-choice branch updated.
+
 ## [1.17.0] — 2026-05-19
 
 ### Added
