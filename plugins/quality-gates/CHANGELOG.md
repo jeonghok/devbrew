@@ -69,7 +69,6 @@
 - 다음 항목은 별도 spec 파일 `docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md`로 분리되어 다음 release cycle에서 처리:
   - **Tier 2 (correctness)**: trivia escape coverage 확장 (comment-only, `--paths` 전파, untracked single-file), scout fallback의 AskUserQuestion 게이트 우회 차단 + Phase 1 dual-dispatch 통합, pipeline wall-clock budget, stop-hook no-signal infinite re-injection counter, codex 미설치 시 loud logging, state-write 실패 시 forward-progress 경로 routing, README state-machine diagram, adversarial 비용 prompt 포함.
   - **Tier 3 (refactor)**: scout/synthesizer/codex-reviewer를 deterministic script로 (LLM 판단 없는 layer), 8개 에이전트 중 7개의 behavioral test backfill.
->>>>>>> origin/main
 
 ## [1.15.0] — 2026-05-17
 
