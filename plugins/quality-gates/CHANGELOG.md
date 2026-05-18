@@ -3,6 +3,22 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.19.0] — 2026-05-19
+
+### Added
+- `check-trivia.sh` new detector kinds: `comment` (comment-only diffs ≤3 lines), `typo` (single-token substitution with length-diff ≤2), `untracked-newfile` (single new file ≤3 lines, all blank/comment/shebang). Fulfills CLAUDE.md P12 anti-corollary 4-axis coverage promise (T2-1).
+- New `tests/test_check_trivia.sh` with 6 fixture-based AC tests (AC1..AC6).
+- README §Trivia detector coverage subsection documenting all 5 kinds.
+
+### Fixed
+- Untracked single-file additions no longer fall through to full pipeline when they qualify as trivia (regression: previous `gd --name-only` did not see untracked files).
+- `test_check_trivia.sh` `run_case`: added `trap RETURN` for tmpdir cleanup so a failing setup-fn under `set -euo pipefail` does not leak tmpdirs.
+
+### Changed
+- SKILL.md propagates `--paths` argument to `check-trivia.sh` so user-supplied scope is honored.
+- `check-trivia.sh`: renamed diff-context `line_count` variable to `diff_line_count` so it does not shadow the untracked-newfile detector's physical-line-count variable. Behavior unchanged.
+- `test_check_trivia.sh`: added comment documenting `$TRIVIA_ARGS` unquoted-by-design (word-split intended for multi-token args).
+
 ## [1.18.0] — 2026-05-19
 
 ### Added
@@ -53,6 +69,7 @@
 - 다음 항목은 별도 spec 파일 `docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md`로 분리되어 다음 release cycle에서 처리:
   - **Tier 2 (correctness)**: trivia escape coverage 확장 (comment-only, `--paths` 전파, untracked single-file), scout fallback의 AskUserQuestion 게이트 우회 차단 + Phase 1 dual-dispatch 통합, pipeline wall-clock budget, stop-hook no-signal infinite re-injection counter, codex 미설치 시 loud logging, state-write 실패 시 forward-progress 경로 routing, README state-machine diagram, adversarial 비용 prompt 포함.
   - **Tier 3 (refactor)**: scout/synthesizer/codex-reviewer를 deterministic script로 (LLM 판단 없는 layer), 8개 에이전트 중 7개의 behavioral test backfill.
+>>>>>>> origin/main
 
 ## [1.15.0] — 2026-05-17
 

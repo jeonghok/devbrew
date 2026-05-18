@@ -7,6 +7,7 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 이 플러그인은 다음 devbrew 법칙·원칙을 인스턴스화합니다
 ([`docs/philosophy/devbrew-harness-philosophy.md`](../../docs/philosophy/devbrew-harness-philosophy.md) 참고):
 
+- **P12 anti-corollary 완전 cover** — trivia escape 4-axis (typo + rename + comment-only + single-file formatting/whitespace) + untracked-newfile escape hatch.
 - **Law 1 (Clarity Before Code)** — Gate 1 plan-verifier가 FAIL 시 `gate1_summary` YAML 핸드오프로 Gate 2 진입을 차단.
 - **Law 2 (Writer ≠ Reviewer)** — 모든 reviewer agent가 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언 (frontmatter scoping으로 물리적 격리).
 - **Law 3 (Compounding)** — scout `rationale` 필드가 매 iteration마다 state 파일에 로깅; reviewer-persona 편집이 학습된 교훈을 인코딩하는 substrate.
@@ -149,6 +150,20 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 ```
 
 **v1.5.0에서 cross-gate restart 제거**: Gate 2 / Gate 3 NEEDS_RESTART는 더 이상 Gate 1으로 자동 재진입하지 않습니다. user-choice prompt ("변경을 적용하고 /qg 재실행")로 종료. Gate 2 내부 fix-loop (최대 5회)는 보존.
+
+### Trivia detector coverage
+
+`scripts/check-trivia.sh`가 인식하는 trivia kind. 매칭 시 `/qg`는 dispatch를 건너뜀.
+
+| kind | regex/조건 | 예 (positive) | 예 (negative) |
+|---|---|---|---|
+| `whitespace` | `git diff -w`가 비어 있음 | 들여쓰기 normalize | 한 토큰이라도 추가/삭제 |
+| `rename` | `--diff-filter=R` ≥1 + content 변경 0 | `git mv a.py b.py` | `mv` + 한 줄 수정 |
+| `comment` | 변경 line ≤3, 모두 `^[+-]\s*(#\|//\|--\|/*\|*)` 매칭 | docstring 한 줄 수정 | 코드 + 주석 혼합 |
+| `typo` | 한 line 수정, 1 token만 다름, 길이 차 ≤2 | `colour → color`, `userId → userPid` | `userID → userIdentifier` (rename) |
+| `untracked-newfile` | 새 파일 1개, ≤3줄, 모두 빈/주석/shebang | 빈 placeholder 추가 | 새 함수 정의 추가 |
+
+`comment`, `typo`, `untracked-newfile`은 v1.16.0 (T2-1)에서 추가.
 
 ## 사용
 
