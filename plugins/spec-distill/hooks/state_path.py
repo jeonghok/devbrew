@@ -49,6 +49,8 @@ def resolve_session_id(payload: dict | None = None) -> str | None:
         )
         return None
     return sid
+
+
 FILE_TTL_DAYS = 7
 
 
