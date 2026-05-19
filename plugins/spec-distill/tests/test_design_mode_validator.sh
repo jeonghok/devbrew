@@ -32,10 +32,10 @@ run_hook() {
 # Case 1: AC1 + AC11 — valid design.md write from worktree → state in MAIN repo only
 DEST="$WORK/main-repo/docs/superpowers/specs/2026-05-17-test-design.md"
 cp "$FIX/2026-05-17-test-design.md" "$DEST"
-out=$(run_hook "$WORK/wt-foo" "$DEST" "DEVBREW_SPEC_DISTILL_SESSION_ID=case1")
+out=$(run_hook "$WORK/wt-foo" "$DEST" "DEVBREW_SPEC_DISTILL_SESSION_ID=case-001")
 rc=$?
-MAIN_STATE="$WORK/main-repo/.claude/spec-distill/case1/state.local.md"
-WT_STATE="$WORK/wt-foo/.claude/spec-distill/case1/state.local.md"
+MAIN_STATE="$WORK/main-repo/.claude/spec-distill/case-001/state.local.md"
+WT_STATE="$WORK/wt-foo/.claude/spec-distill/case-001/state.local.md"
 [[ $rc -eq 0 ]] && [[ -f "$MAIN_STATE" ]] && [[ ! -f "$WT_STATE" ]] \
   && grep -q '^pending_review:' "$MAIN_STATE" \
   && grep -q 'mode: design' "$MAIN_STATE" \
@@ -51,9 +51,9 @@ grep -q "^  worktree_path:.*wt-foo" "$MAIN_STATE" \
 DEST2="$WORK/main-repo/docs/superpowers/specs/2026-05-17-test-spec.md"
 if [[ -f "$FIX/spec-valid.md" ]]; then
   cp "$FIX/spec-valid.md" "$DEST2"
-  out=$(run_hook "$WORK/wt-foo" "$DEST2" "DEVBREW_SPEC_DISTILL_SESSION_ID=case3")
+  out=$(run_hook "$WORK/wt-foo" "$DEST2" "DEVBREW_SPEC_DISTILL_SESSION_ID=case-003")
   rc=$?
-  MAIN_STATE2="$WORK/main-repo/.claude/spec-distill/case3/state.local.md"
+  MAIN_STATE2="$WORK/main-repo/.claude/spec-distill/case-003/state.local.md"
   [[ $rc -eq 0 ]] && [[ -f "$MAIN_STATE2" ]] \
     && grep -q 'mode: spec' "$MAIN_STATE2" \
     && note PASS "regression: spec-mode write also routes to main repo .claude" \
