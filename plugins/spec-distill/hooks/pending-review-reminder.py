@@ -57,6 +57,17 @@ def parse_iso(s: str):
 def main() -> int:
     if kill_switch_active():
         return 0
+    # Best-effort GC FIRST (matches review-dispatch.py ordering) — fire-and-forget
+    try:
+        subprocess.run(
+            ["python3", str(GC_SCRIPT)],
+            timeout=5, check=False, capture_output=True,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        print(
+            f"[spec-distill] gc fire-and-forget failed (non-fatal): {exc}",
+            file=sys.stderr,
+        )
     # Read stdin (UserPromptSubmit payload) for session_id resolution
     try:
         payload = json.load(sys.stdin)
@@ -72,22 +83,6 @@ def main() -> int:
         body = state_file.read_text(encoding="utf-8")
     except OSError as e:
         print(f"[spec-distill] reminder state read failed (non-fatal): {e}", file=sys.stderr)
-        return 0
-    # Best-effort GC (fire-and-forget)
-    try:
-        subprocess.run(
-            ["python3", str(GC_SCRIPT)],
-            timeout=5, check=False, capture_output=True,
-        )
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        print(
-            f"[spec-distill] gc fire-and-forget failed (non-fatal): {exc}",
-            file=sys.stderr,
-        )
-    # Re-read after GC (block may have been purged)
-    try:
-        body = state_file.read_text(encoding="utf-8")
-    except OSError:
         return 0
     m = PENDING_RE.search(body)
     if not m:
