@@ -12,6 +12,7 @@ CLI:
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone, timedelta
@@ -19,6 +20,35 @@ from pathlib import Path
 
 
 PENDING_TTL_HOURS = 24
+SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
+
+
+def resolve_session_id(payload: dict | None = None) -> str | None:
+    """Resolve session_id with precedence: test override → CLAUDE_CODE_SESSION_ID → payload.
+
+    Returns None + loud stderr on unresolved or charset/length validation failure.
+    Caller must skip state write but may still emit advisory output.
+    """
+    sid = (
+        os.environ.get("DEVBREW_SPEC_DISTILL_SESSION_ID")
+        or os.environ.get("CLAUDE_CODE_SESSION_ID")
+        or (payload or {}).get("session_id")
+    )
+    if not sid:
+        print(
+            "[spec-distill] session_id unresolved (env+payload empty) — "
+            "state write skipped, hook output retained",
+            file=sys.stderr,
+        )
+        return None
+    if not SESSION_PATTERN.match(sid):
+        truncated = sid[:32] + ("..." if len(sid) > 32 else "")
+        print(
+            f"[spec-distill] session_id rejected by charset/length: '{truncated}'",
+            file=sys.stderr,
+        )
+        return None
+    return sid
 FILE_TTL_DAYS = 7
 
 
@@ -77,7 +107,6 @@ def cleanup_stale_states(root: Path) -> None:
         except OSError:
             continue
         # Purge stale pending_review
-        import re
         m = re.search(
             r"^pending_review:\n  path:[^\n]+\n  mode:[^\n]+\n(?:  worktree_path:[^\n]+\n)?  triggered_at:\s*([^\n]+)\n(?:  [^\n]*\n)*",
             body, flags=re.MULTILINE,
