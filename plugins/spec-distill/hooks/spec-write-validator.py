@@ -77,9 +77,35 @@ def call_parser(sub: str, *args: str) -> dict:
         return {"_error": f"parser bad json: {e}"}
 
 
+LEGACY_ADVISORY_MARKER = ".legacy-advisory-emitted-v060"
+
+
+def _legacy_advisory_check(state_root_path: Path) -> None:
+    """AC14 — emit one-shot advisory if `.claude/spec-distill/default/` exists."""
+    legacy = state_root_path / "default"
+    marker = state_root_path / LEGACY_ADVISORY_MARKER
+    if not legacy.exists() or marker.exists():
+        return
+    try:
+        state_root_path.mkdir(parents=True, exist_ok=True)
+        marker.write_text("")
+        print(
+            "[spec-distill] v0.6.0 detected: .claude/spec-distill/default/ "
+            "legacy folder, manual cleanup recommended (no auto-delete to "
+            "preserve in-flight work — see CHANGELOG [0.6.0]).",
+            file=sys.stderr,
+        )
+    except OSError as exc:
+        print(
+            f"[spec-distill] legacy advisory marker write failed: {exc}",
+            file=sys.stderr,
+        )
+
+
 def write_state(session_id: str, path: str, mode: str, worktree_path: str) -> None:
     state_dir = _state_root() / session_id
     state_dir.mkdir(parents=True, exist_ok=True)
+    _legacy_advisory_check(_state_root())
     state_file = state_dir / "state.local.md"
     block = (
         "pending_review:\n"
@@ -88,16 +114,37 @@ def write_state(session_id: str, path: str, mode: str, worktree_path: str) -> No
         f"  worktree_path: {worktree_path}\n"
         f"  triggered_at: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
     )
-    if state_file.exists():
-        body = state_file.read_text(encoding="utf-8")
-        body = re.sub(
-            r"^pending_review:\n(?:  [^\n]*\n)*", "", body, flags=re.MULTILINE
-        )
-        state_file.write_text(body.rstrip() + "\n\n" + block, encoding="utf-8")
-    else:
+    if not state_file.exists():
         state_file.write_text(
             f"---\nsession_id: {session_id}\n---\n\n{block}", encoding="utf-8"
         )
+        return
+    # File exists — detect stale session_id (AC8 defensive truncate)
+    try:
+        body = state_file.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError) as exc:
+        print(
+            f"[spec-distill] state.local.md unreadable — preserving for debug: {exc}",
+            file=sys.stderr,
+        )
+        return
+    fm_match = re.search(r"^session_id:\s*([^\n]+)$", body, flags=re.MULTILINE)
+    if fm_match and fm_match.group(1).strip() != session_id:
+        old = fm_match.group(1).strip()
+        print(
+            f"[spec-distill] stale state detected (old sid={old[:32]}, "
+            f"current={session_id[:32]}) — truncating",
+            file=sys.stderr,
+        )
+        state_file.write_text(
+            f"---\nsession_id: {session_id}\n---\n\n{block}", encoding="utf-8"
+        )
+        return
+    # Matching session_id (or no frontmatter) — strip pending_review block and append fresh
+    body = re.sub(
+        r"^pending_review:\n(?:  [^\n]*\n)*", "", body, flags=re.MULTILINE
+    )
+    state_file.write_text(body.rstrip() + "\n\n" + block, encoding="utf-8")
 
 
 def emit_block(reasons: list[str]) -> None:
@@ -157,11 +204,13 @@ def main() -> int:
 
     # Pass → write state (unless Layer 2 disabled)
     if os.environ.get("DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW") != "1":
-        session_id = os.environ.get("DEVBREW_SPEC_DISTILL_SESSION_ID", "default")
-        try:
-            write_state(session_id, file_path, mode, os.getcwd())
-        except (PermissionError, OSError) as exc:
-            print(f"[spec-distill] state write failed (non-fatal): {exc}", file=sys.stderr)
+        from state_path import resolve_session_id
+        session_id = resolve_session_id(payload)
+        if session_id is not None:
+            try:
+                write_state(session_id, file_path, mode, os.getcwd())
+            except (PermissionError, OSError) as exc:
+                print(f"[spec-distill] state write failed (non-fatal): {exc}", file=sys.stderr)
 
     # Advisory output (v0.5.0 dual-target: additionalContext for Claude + systemMessage trace).
     print(
