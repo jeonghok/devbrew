@@ -34,8 +34,8 @@ run_hook() {
 }
 
 # Case 11: AC11 — pending_review present → systemMessage emit
-setup_state "test-11" "---
-session_id: test-11
+setup_state "test-011" "---
+session_id: test-011
 ---
 
 pending_review:
@@ -43,7 +43,7 @@ pending_review:
   mode: spec
   triggered_at: 2026-05-16T10:00:00Z
 "
-out=$(run_hook "test-11")
+out=$(run_hook "test-011")
 rc=$?
 [[ $rc -eq 0 ]] \
   && echo "$out" | jq -e '.decision == "block"' >/dev/null \
@@ -56,19 +56,19 @@ rc=$?
   || note FAIL "AC11 failed (rc=$rc out=$out)"
 
 # Case 12: AC12 — no pending_review → silent exit 0
-setup_state "test-12" "---
-session_id: test-12
+setup_state "test-012" "---
+session_id: test-012
 ---
 "
-out=$(run_hook "test-12")
+out=$(run_hook "test-012")
 rc=$?
 [[ $rc -eq 0 ]] && [[ -z "$out" ]] && note PASS "AC12: no pending_review silent" \
   || note FAIL "AC12 failed (rc=$rc out=$out)"
 
 # Case 13: AC13 — dispatch removes pending_review + sets last_dispatched_at;
 # second call within TTL is silent.
-setup_state "test-13" "---
-session_id: test-13
+setup_state "test-013" "---
+session_id: test-013
 ---
 
 pending_review:
@@ -76,19 +76,19 @@ pending_review:
   mode: spec
   triggered_at: 2026-05-16T10:00:00Z
 "
-out1=$(run_hook "test-13")
+out1=$(run_hook "test-013")
 rc1=$?
-out2=$(run_hook "test-13")
+out2=$(run_hook "test-013")
 rc2=$?
 [[ $rc1 -eq 0 ]] && [[ $rc2 -eq 0 ]] && [[ -z "$out2" ]] \
-  && ! grep -q '^pending_review:' "$WORK/.claude/spec-distill/test-13/state.local.md" \
-  && grep -q '^last_dispatched_at:' "$WORK/.claude/spec-distill/test-13/state.local.md" \
+  && ! grep -q '^pending_review:' "$WORK/.claude/spec-distill/test-013/state.local.md" \
+  && grep -q '^last_dispatched_at:' "$WORK/.claude/spec-distill/test-013/state.local.md" \
   && note PASS "AC13: dispatch consumes block; re-fire within TTL silent" \
   || note FAIL "AC13 failed (rc1=$rc1 rc2=$rc2 out2=$out2)"
 
 # Case 14 (T-1): Stop hook kill switch via DEVBREW_SKIP_HOOKS=spec-distill:Stop
-setup_state "test-14" "---
-session_id: test-14
+setup_state "test-014" "---
+session_id: test-014
 ---
 
 pending_review:
@@ -96,18 +96,18 @@ pending_review:
   mode: spec
   triggered_at: 2026-05-16T10:00:00Z
 "
-out=$(cd "$WORK" && DEVBREW_SPEC_DISTILL_SESSION_ID=test-14 \
+out=$(cd "$WORK" && DEVBREW_SPEC_DISTILL_SESSION_ID=test-014 \
   DEVBREW_SKIP_HOOKS="spec-distill:Stop" \
   bash -c "echo '{}' | python3 '$HOOK'" 2>/dev/null)
 rc=$?
 [[ $rc -eq 0 ]] && [[ -z "$out" ]] \
-  && grep -q '^pending_review:' "$WORK/.claude/spec-distill/test-14/state.local.md" \
+  && grep -q '^pending_review:' "$WORK/.claude/spec-distill/test-014/state.local.md" \
   && note PASS "AC14 (T-1): kill switch spec-distill:Stop suppresses emit + preserves state" \
   || note FAIL "AC14 failed (rc=$rc out=$out)"
 
 # Case 15 (T-1): kill switch via DEVBREW_SKIP_HOOKS=spec-distill:review-dispatch (alias)
-setup_state "test-15" "---
-session_id: test-15
+setup_state "test-015" "---
+session_id: test-015
 ---
 
 pending_review:
@@ -115,12 +115,12 @@ pending_review:
   mode: spec
   triggered_at: 2026-05-16T10:00:00Z
 "
-out=$(cd "$WORK" && DEVBREW_SPEC_DISTILL_SESSION_ID=test-15 \
+out=$(cd "$WORK" && DEVBREW_SPEC_DISTILL_SESSION_ID=test-015 \
   DEVBREW_SKIP_HOOKS="spec-distill:review-dispatch" \
   bash -c "echo '{}' | python3 '$HOOK'" 2>/dev/null)
 rc=$?
 [[ $rc -eq 0 ]] && [[ -z "$out" ]] \
-  && grep -q '^pending_review:' "$WORK/.claude/spec-distill/test-15/state.local.md" \
+  && grep -q '^pending_review:' "$WORK/.claude/spec-distill/test-015/state.local.md" \
   && note PASS "AC15 (T-1): kill switch :review-dispatch alias suppresses emit" \
   || note FAIL "AC15 failed (rc=$rc out=$out)"
 

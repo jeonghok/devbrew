@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -31,7 +32,9 @@ from typing import Optional
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
-from state_path import state_root as _state_root, cleanup_stale_states  # noqa: E402
+from state_path import state_root as _state_root, resolve_session_id  # noqa: E402
+
+GC_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "spec-distill-gc.py"
 
 
 PENDING_RE = re.compile(
@@ -88,10 +91,22 @@ def main() -> int:
     if kill_switch_active():
         return 0
     try:
-        cleanup_stale_states(_state_root())
-    except (OSError, PermissionError):
-        pass
-    session_id = os.environ.get("DEVBREW_SPEC_DISTILL_SESSION_ID", "default")
+        subprocess.run(
+            ["python3", str(GC_SCRIPT)],
+            timeout=5, check=False, capture_output=True,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        print(
+            f"[spec-distill] gc fire-and-forget failed (non-fatal): {exc}",
+            file=sys.stderr,
+        )
+    try:
+        payload = json.load(sys.stdin)
+    except (json.JSONDecodeError, Exception):
+        payload = {}
+    session_id = resolve_session_id(payload)
+    if session_id is None:
+        return 0
     state_path = state_file_for(session_id)
     if not state_path.exists():
         return 0
