@@ -99,7 +99,7 @@ Law 3 (Compounding) instantiation: (a) hook 코드 수정 + (b) SessionEnd hook 
 
 - **N1 — `/cancel-spec-distill --gc` 같은 user-triggered GC command**: qg는 `/qg --gc` / `/cancel-qg --gc/--all`을 가지지만 spec-distill은 v0.6.0에서 도입 안 함. follow-up.
 
-- **N2 — v0.5.x `.claude/spec-distill/default/` 자동 마이그레이션**: 기존 사용자 환경의 `default/` 폴더를 자동 삭제하지 않음. 첫 hook fire 시 stderr advisory만 emit ("v0.6.0 detected: `.claude/spec-distill/default/` legacy folder, manual cleanup recommended"). qg는 `setup-qg.sh:164-184`에서 legacy cleanup 자동화하지만 spec-distill은 사용자 in-flight 작업 risk 회피 — P14 우선.
+- **N2 — v0.5.x `.claude/spec-distill/default/` 자동 마이그레이션**: 기존 사용자 환경의 `default/` 폴더를 자동 삭제하지 않음. **State-root lifetime 동안 한 번만** stderr advisory emit ("v0.6.0 detected: `.claude/spec-distill/default/` legacy folder, manual cleanup recommended"). Marker 파일 `.claude/spec-distill/.legacy-advisory-emitted-v060` 으로 idempotent — 존재 시 skip, 부재 시 emit + touch (`echo > marker` 1 atomic write). 사용자가 marker 삭제 시 재emit. Hook이 per-call new process라 module-level flag 부적합. qg는 `setup-qg.sh:164-184`에서 legacy cleanup 자동화하지만 spec-distill은 사용자 in-flight 작업 risk 회피 — P14 우선.
 
 - **N3 — AC11 polite-stop 자체 detection**: "approved!"만 narrate하고 script 호출 skip하는 행동을 자동 detect하지 않음. 3-layer defense로 *사용자 노출 증상*은 차단되므로 OK. polite-stop 자체 행동 교정은 `agents/spec-reviewer.md` persona file 영역, 별도 PR.
 
@@ -127,7 +127,11 @@ Law 3 (Compounding) instantiation: (a) hook 코드 수정 + (b) SessionEnd hook 
 
 - **C7 — TTL-GC 호출 cost**: PostToolUse 또는 UserPromptSubmit 마다 fire-and-forget이지만 subprocess 비용 (~50ms python 기동). hook timeout 5s 내. fcntl lock contention 시 즉시 return.
 
-- **C8 — 동시성 (approve_handoff/SessionEnd overlap)**: 사용자 "approve" 클릭 → reviewing-spec이 `approve_handoff.sh` 호출 → Claude Code가 같은 turn 종료 직후 SessionEnd 발화. 이 경우 두 cleanup path가 인접 또는 부분 overlap할 수 있다. 처리: (i) approve_handoff.sh의 Step 3 `rm -rf -- <path>` 이후에 SessionEnd가 도달하면 folder 이미 부재 → `shutil.rmtree(ignore_errors=True)` no-op. (ii) 반대 순서로 SessionEnd가 먼저 도달하면 approve_handoff.sh Step 3가 부재 folder에 `rm -rf` 시도 → BSD/GNU `rm -rf`는 부재 path에 대해 exit 0 (둘 다 `--` 사용 시). `set -euo pipefail` 환경에서도 exit 0이라 abort 안 됨. (iii) 동시 진행 (literal parallel)은 OS가 inode-level race를 serialize. 결론: race 보강 추가 없음. AC6의 "rm fail" 케이스는 *permission 실패* 한정이므로 본 overlap은 별도 케이스로 명시 — `tests/test_approve_handoff.sh`에 "folder pre-deleted (SessionEnd preceded)" 케이스 추가 (§AC6 update).
+- **C8 — 동시성 (approve_handoff/SessionEnd overlap)**: 사용자 "approve" 클릭 → reviewing-spec이 `approve_handoff.sh` 호출 → Claude Code가 같은 turn 종료 직후 SessionEnd 발화. 두 cleanup path가 인접 또는 부분 overlap 가능. 처리:
+  - **(i) approve_handoff.sh 완료 후 SessionEnd 도달**: folder 이미 부재 → SessionEnd의 `shutil.rmtree(folder, ignore_errors=True)` no-op. `ignore_errors=True`가 FileNotFoundError 흡수.
+  - **(ii) SessionEnd 먼저 도달, 이후 approve_handoff.sh Step 3**: 부재 folder에 `rm -rf -- "$folder"` 시도. POSIX `rm` 명세 + `-f` flag는 *"do not prompt for confirmation, ignore nonexistent operands, do not show error messages for nonexistent files or arguments"*. 부재 path에서 exit 0. `set -euo pipefail` 의 `-e`는 non-zero exit에만 abort하므로 영향 없음.
+  - **(iii) 동시 진행 — 한쪽이 traversal 중에 다른쪽이 unlink**: `rm -rf` 가 directory traversal 도중 mid-tree entry가 사라지면 (예: SessionEnd의 rmtree가 동시에 그것을 unlink) ENOENT 발생. `rm -f` 의 명세상 ENOENT *for the operand* 만 silent — *mid-traversal* ENOENT는 일부 구현 (GNU coreutils ≥ 8.x) 에서 stderr "cannot remove ... No such file" + non-zero exit. 방어: `approve_handoff.sh` Step 3 를 다음 형태로 작성 — `rm -rf -- "$folder" 2>/dev/null || true`. `|| true` 가 race-induced non-zero exit을 흡수, `2>/dev/null` 이 spurious "no such file" stderr 흡수. 동일 처리를 `tests/test_approve_handoff.sh` 8번째 케이스 ("folder pre-deleted")에서 검증.
+  - **결론**: literal parallel race는 `|| true` + `ignore_errors=True` 둘 다 ENOENT 흡수로 graceful. 추가 lock 메커니즘 (예: flock) 도입 안 함 — cleanup race는 idempotent semantic이라 lock 불필요.
 
 - **C9 — Worktree 호환 (spec-distill divergence from qg)**: `state_path.state_root()` 함수는 `git rev-parse --git-common-dir` 기반으로 worktree에서도 main repo의 `.claude/spec-distill/` 로 resolve. 신규 `session-end-cleanup.py` + `spec-distill-gc.py`는 qg의 단순 `Path(cwd) / .claude / quality-gates` 패턴을 *그대로 흡수하지 않고* spec-distill의 git-aware `state_root(cwd)`를 호출해야 함. 이유: spec-write-validator가 main repo에 state를 쓰는데 SessionEnd가 worktree-local `.claude/`를 보면 cleanup miss. 4-layer defense가 layer 사이 path divergence로 깨지는 걸 방지.
 
@@ -137,7 +141,18 @@ Law 3 (Compounding) instantiation: (a) hook 코드 수정 + (b) SessionEnd hook 
 
 각 AC는 measurable + verifiable.
 
-- **AC1 — session_id 해석 단일화**: `state_path.py`에 `resolve_session_id(payload: dict | None = None) -> str | None` 함수 export. precedence: `DEVBREW_SPEC_DISTILL_SESSION_ID` → `CLAUDE_CODE_SESSION_ID` → `payload["session_id"]`. 검증 실패 시 `None` + stderr. Verify: `tests/test_session_id_resolution.sh` 11 케이스 전부 통과.
+- **AC1 — session_id 해석 단일화**: `state_path.py`에 `resolve_session_id(payload: dict | None = None) -> str | None` 함수 export. precedence: `DEVBREW_SPEC_DISTILL_SESSION_ID` → `CLAUDE_CODE_SESSION_ID` → `payload["session_id"]`. 검증 실패 시 `None` + stderr. Verify: `tests/test_session_id_resolution.sh` 11 케이스 전부 통과. 케이스 목록:
+  1. test override env + CLAUDE_CODE_SESSION_ID 동시 set → test override 우선 반환
+  2. test override unset + CLAUDE_CODE_SESSION_ID set → CLAUDE_CODE_SESSION_ID 반환
+  3. 두 env 모두 unset + payload `{"session_id": "payload-12345678"}` → payload 반환
+  4. 두 env unset + payload 부재/null → None + stderr "unresolved (env+payload empty)"
+  5. test override env = empty string "" + CLAUDE_CODE_SESSION_ID set → 다음 source로 fallback (Python `or` chain의 empty=falsy)
+  6. session_id 값 "with spaces" → None + stderr "rejected by charset"
+  7. session_id 값 "../traversal" / "with/slash" / "with.dot" → None
+  8. session_id 길이 3 chars "abc" → None (8자 미만 reject)
+  9. session_id 정확히 8 chars "a1b2c3d4" → 통과
+  10. UUID 형식 "a3f8b1c2-4d5e-6f7a-8b9c-0d1e2f3a4b5c" → 통과
+  11. session_id 길이 256 chars (charset valid) → 통과
 
 - **AC2 — 3개 hook이 `resolve_session_id` 사용**: 다음 grep 모두 통과해야 함. (i) `grep -lE 'resolve_session_id\(' plugins/spec-distill/hooks/spec-write-validator.py plugins/spec-distill/hooks/review-dispatch.py plugins/spec-distill/hooks/pending-review-reminder.py` 결과 3개 파일 모두 match. (ii) `grep -E 'os\.environ\.get\("DEVBREW_SPEC_DISTILL_SESSION_ID", "default"\)' plugins/spec-distill/hooks/*.py` 결과 0건 (line-number drift에 의존하지 않는 회귀 검증).
 
@@ -149,21 +164,24 @@ Law 3 (Compounding) instantiation: (a) hook 코드 수정 + (b) SessionEnd hook 
 
 - **AC6 — `approve_handoff.sh` 작동**: `scripts/approve_handoff.sh` 신규. `tests/test_approve_handoff.sh` 8 케이스 전부 통과 (happy path / charset reject / empty session_id arg / empty spec_path arg / git commit fail / rm permission fail / idempotent re-run / **folder pre-deleted (SessionEnd preceded approve_handoff Step 3) — `rm -rf -- <absent path>`가 exit 0이라 abort 안 함**, §C8 overlap 시나리오).
 
-- **AC7 — `reviewing-spec/SKILL.md` AC11 섹션 simplification**: 다음 두 grep 모두 통과해야 함. (i) `grep -c 'rm -rf -- ".claude/spec-distill' plugins/spec-distill/skills/reviewing-spec/SKILL.md` 결과 = 0 (4-step shell의 cleanup 라인이 SKILL.md에 더 이상 존재 안 함). (ii) `grep -c 'approve_handoff.sh' plugins/spec-distill/skills/reviewing-spec/SKILL.md` 결과 ≥ 1 (1-line script call로 교체됨).
+- **AC7 — `reviewing-spec/SKILL.md` AC11 섹션 simplification**: 다음 세 grep 모두 통과해야 함. (i) `grep -c 'rm -rf -- ".claude/spec-distill' plugins/spec-distill/skills/reviewing-spec/SKILL.md` 결과 = 0 (4-step shell의 cleanup 라인이 SKILL.md에 더 이상 존재 안 함). (ii) `grep -c 'approve_handoff.sh' plugins/spec-distill/skills/reviewing-spec/SKILL.md` 결과 ≥ 1 (script reference 존재). (iii) `grep -E 'approve_handoff\.sh[^\n]+\$\{?session_id\}?[^\n]+\$\{?spec_path\}?' plugins/spec-distill/skills/reviewing-spec/SKILL.md` match ≥ 1 (script 호출 시 두 인자 `$session_id` + `$spec_path` 모두 전달 검증 — 인자 누락 silent-fail 방지).
 
 - **AC8 — `write_state` 방어적 truncate**: `spec-write-validator.py`의 `write_state` 함수가 stale session_id 검출 시 wipe-and-rewrite. `tests/test_stale_state_truncate.sh` 4 케이스 전부 통과 (stale detected → truncate / matching session_id → append / no frontmatter → backward compat / unreadable → preserve).
 
-- **AC9 — brainstorming entry 회귀 방지**: `tests/test_brainstorming_entry.sh` 3 케이스. Harness mock 없음 — 모든 hook을 직접 python 호출 + stdin JSON payload feeding (qg `tests/test_session_end_cleanup.py` 패턴). 케이스: (i) `/interview` 진입 없이 design.md write — `printf '{"tool_name":"Write","tool_input":{"file_path":"<path>"},"session_id":"brainstorm-12345678"}' | python3 hooks/spec-write-validator.py` → `.claude/spec-distill/brainstorm-12345678/state.local.md` 생성, frontmatter `session_id: brainstorm-12345678`. (ii) state.local.md 어디에도 `default` literal 부재 (grep). (iii) `printf '{"session_id":"brainstorm-12345678","cwd":"<repo>"}' | python3 hooks/session-end-cleanup.py` → 해당 folder 부재.
+- **AC9 — brainstorming entry 회귀 방지**: `tests/test_brainstorming_entry.sh` 3 케이스, **strict sequential ordering** ((i) → (ii) → (iii)) — 단일 bash script가 step 단위로 순차 실행, 병렬 runner 금지. 각 step 실패 시 즉시 abort (`set -euo pipefail`). Harness mock 없음 — 모든 hook을 직접 python 호출 + stdin JSON payload feeding (qg `tests/test_session_end_cleanup.py` 패턴). 케이스:
+  - **(i) Setup**: `/interview` 진입 없이 design.md write — `printf '{"tool_name":"Write","tool_input":{"file_path":"<path>"},"session_id":"brainstorm-12345678"}' | python3 hooks/spec-write-validator.py` → `.claude/spec-distill/brainstorm-12345678/state.local.md` 생성, frontmatter `session_id: brainstorm-12345678`.
+  - **(ii) Assertion**: (i) 후 state.local.md 어디에도 `default` literal 부재 (`! grep 'default' .claude/spec-distill/brainstorm-12345678/state.local.md`).
+  - **(iii) Cleanup verification**: (ii) 후 `printf '{"session_id":"brainstorm-12345678","cwd":"<repo>"}' | python3 hooks/session-end-cleanup.py` → 해당 folder 부재 (`test ! -d .claude/spec-distill/brainstorm-12345678`).
 
 - **AC10 — kill switch 매트릭스**: `tests/test_kill_switches_v060.sh` 6+ 케이스 — 모든 신규 hook/script가 `DEVBREW_DISABLE_SPEC_DISTILL=1` + `DEVBREW_SKIP_HOOKS=spec-distill:<event>` 존중.
 
 - **AC11 — 메타데이터 bump**: `plugin.json` `version: "0.6.0"`. `CHANGELOG.md`에 `## [0.6.0] — 2026-05-19` entry with Added/Changed/Deprecated/Fixed 섹션. README.md "Hooks Installed" 섹션에 SessionEnd 한 줄 추가, "Principles Instantiated"에 Law 2 / P3 / P14 instantiation 추가.
 
-- **AC12 — `cleanup_stale_states` deprecation**: 함수 body가 no-op + 첫 호출 시 한 번만 stderr deprecation warning. v0.7.0 제거 예정 명시 주석.
+- **AC12 — `cleanup_stale_states` deprecation**: 함수 body가 no-op + state-root lifetime 동안 한 번만 stderr deprecation warning (marker 파일 `.claude/spec-distill/.deprecation-cleanup-stale-states-v060` — 존재 시 skip). v0.7.0 제거 예정 명시 주석. Hook이 per-call new process라 module-level flag 대신 marker 파일 사용.
 
-- **AC13 — 기존 테스트 무변경 통과**: `cd plugins/spec-distill && bash tests/test_state_path.sh && bash tests/test_spec_write_validator.sh && bash tests/test_review_dispatch.sh && bash tests/test_reminder_hook.sh && bash tests/test_design_mode_validator.sh && python3 -m unittest tests.test_hook_output_schema` 모두 통과.
+- **AC13 — 기존 테스트 무변경 통과**: `cd plugins/spec-distill && bash tests/test_state_path.sh && bash tests/test_spec_write_validator.sh && bash tests/test_review_dispatch.sh && bash tests/test_reminder_hook.sh && bash tests/test_design_mode_validator.sh && bash tests/test_review_dispatch_design_mandate.sh && python3 -m unittest tests.test_hook_output_schema` 모두 통과. **§Verification Plan의 "기존 테스트" 블록과 본 AC13의 목록은 동일해야 함** — drift 발견 시 본 AC13이 ground truth (merge gate). v0.6.0 머지 시점 기준 shell 6 + python unittest 1 = 7개 기존 테스트.
 
-- **AC14 — v0.5.x legacy advisory**: 첫 hook fire 시 `.claude/spec-distill/default/` 존재 검출하면 stderr advisory 한 번 emit. 자동 삭제 안 함.
+- **AC14 — v0.5.x legacy advisory**: `.claude/spec-distill/default/` 존재 검출 시 stderr advisory emit + marker 파일 `.claude/spec-distill/.legacy-advisory-emitted-v060` touch. marker 존재 시 skip (idempotent across hook invocations). 자동 삭제 안 함. §N2 참조.
 
 ## Files to Modify
 
@@ -251,19 +269,24 @@ python3 -m unittest tests.test_hook_output_schema
 ! grep -rn '"default"' hooks/  # 0건이어야 함
 grep -rn 'resolve_session_id' hooks/  # 3개 hook + state_path.py 정의
 
-# Cross-plugin reference (qg 패턴 alignment — side-effect 없는 grep)
-grep -E '^SESSION_PATTERN = ' scripts/spec-distill-gc.py
-grep -E '^SESSION_PATTERN = ' ../quality-gates/scripts/qg-gc.py
-# 두 줄이 동일한 regex literal이어야 함 (수동 비교 또는 diff 처리)
+# Cross-plugin reference (qg 패턴 alignment — 자동화 diff)
+diff <(grep -E '^SESSION_PATTERN = ' scripts/spec-distill-gc.py) \
+     <(grep -E '^SESSION_PATTERN = ' ../quality-gates/scripts/qg-gc.py)
+# exit 0 이어야 함 (두 줄 동일). diff non-zero = SESSION_PATTERN drift.
 
 # Production env 가용성 검증 (G1 핵심)
 # CLAUDE_CODE_SESSION_ID가 실제 hook payload에 supply되는지 grep으로 확인
 grep -rn "CLAUDE_CODE_SESSION_ID" ../quality-gates/scripts/  # qg가 같은 env에 의존, 그것이 작동 중이라는 자체가 evidence
-# 추가: Claude Code 실제 hook 호출 시 payload 캡처 (test override env unset 상태)
-DEVBREW_SPEC_DISTILL_SESSION_ID="" \
-  echo '{"tool_name":"Write","tool_input":{"file_path":"docs/superpowers/specs/test-design.md"},"session_id":"payload-12345678"}' \
-  | python3 hooks/spec-write-validator.py 2>&1 | grep -v 'session_id unresolved'
-# 위 명령이 grep 통과(즉 unresolved 메시지 없음)하면 payload session_id가 read됨 = G1 production path 검증
+# 추가: payload session_id read 경로 검증 — test override env를 *unset* (env -u, NOT empty string)
+env -u DEVBREW_SPEC_DISTILL_SESSION_ID -u CLAUDE_CODE_SESSION_ID \
+  python3 hooks/spec-write-validator.py \
+  <<< '{"tool_name":"Write","tool_input":{"file_path":"docs/superpowers/specs/test-design.md"},"session_id":"payload-12345678"}' \
+  2>state.err >/dev/null
+# 통과 기준 (explicit): state.err 에 "session_id unresolved" 문자열 부재 + .claude/spec-distill/payload-12345678/state.local.md 생성
+test ! -s state.err || ! grep -q 'session_id unresolved' state.err
+test -f .claude/spec-distill/payload-12345678/state.local.md
+rm -f state.err
+rm -rf .claude/spec-distill/payload-12345678/  # smoke cleanup
 
 # Manual smoke (PR reviewer 권장)
 DEVBREW_SPEC_DISTILL_SESSION_ID="smoke-12345678" \
@@ -318,13 +341,20 @@ ls .claude/spec-distill/  # smoke-12345678 폴더 부재
 
 - **Spec author**: Jeongho-K (kimjhq97@gmail.com) — superpowers `/brainstorming` skill을 통한 Korean Socratic 5-section design 후 spec-distill `/reviewing-spec` round 1 adversarial review 거쳐 revise. 본 plugin이 자기 fix를 검토하는 ouroboros 구조라 reviewer agent의 issue 10건은 메인 author가 직접 design.md 수정으로 처리 (design mode routing: drafting-spec Mode B 호출 안 함).
 - **Source chain**: 사용자 보고 (state.local.md 2026-05-17 잔여 frontmatter) → /brainstorming 5-section (architecture / components / data flow / error handling / testing) → 본 design doc.
-- **Implementation plan target**: 다음 단계는 superpowers `writing-plans` skill로 task breakdown 생성. Task 순서 권장: (1) C1 `state_path.py` extension → (2) C4/C5/C6 신규 file 작성 (병렬 가능) → (3) C2/C3 기존 hook 변경 (C1 의존) → (4) SKILL.md / hooks.json / plugin.json / CHANGELOG / README 동기화 → (5) 7개 신규 test 추가 + 기존 test 통과 확인.
+- **Implementation plan target**: 다음 단계는 superpowers `writing-plans` skill로 task breakdown 생성. Task 순서 권장 (deliverable 알파벳 일관 사용 — §Goal의 (a)/(b)/(c)/(d)와 동일 식별자):
+  1. **(a) Phase 1 — `state_path.py` extension**: `resolve_session_id(payload)` 함수 export + `SESSION_PATTERN` 상수 + `cleanup_stale_states` deprecate. Marker-based "once" deprecation advisory.
+  2. **(b)(c) Phase 2 — 신규 file 작성 (병렬)**: `hooks/session-end-cleanup.py`, `scripts/spec-distill-gc.py`, `scripts/approve_handoff.sh`. (a)의 helper 호출.
+  3. **(a)(d) Phase 3 — 기존 hook 변경**: `hooks/spec-write-validator.py` (session_id 소스 + defensive truncate), `hooks/review-dispatch.py`, `hooks/pending-review-reminder.py`. (a) 의존.
+  4. **Phase 4 — 메타데이터 + 문서 sync**: `hooks/hooks.json` SessionEnd 등록, `skills/reviewing-spec/SKILL.md` AC11 1-line call로 교체, `plugin.json` v0.6.0 bump, `CHANGELOG.md` entry, `README.md` 갱신.
+  5. **Phase 5 — 7개 신규 test 추가 + 기존 test 통과 확인**: §Files to Modify의 7 신규 test 파일 + §Verification Plan의 기존 13개 (shell 12 + python unittest 1) 모두 통과.
+
+  C# (Constraint number)는 §Constraints의 C1~C10을 가리킴 — deliverable 알파벳과 *별개의 식별 체계*. 본 design doc에서 두 체계는 의미가 다르므로 cross-reference 시 항상 prefix 명시 ("§Goal (a)", "§Constraint C9").
 - **PR scope**: 1 PR (feature/spec-distill-state-cleanup-fix). 4 deliverable 묶음 (§Goal coupling 근거).
 - **Branch**: `feature/spec-distill-state-cleanup-fix` from `main`. Conventional Commits: `feat(spec-distill): session-id resolution + 4-layer cleanup defense (v0.6.0)`.
 - **Risk profile**: 
   - High-confidence: qg 패턴 그대로 흡수 (검증된 production 코드 100+ commits).
   - Medium: write_state defensive truncate는 신규 path, 신규 test로 cover.
   - Low: AC11 script extraction은 기존 prose의 1:1 변환.
-- **Rollback**: `git revert <pr-merge-sha>`. v0.5.1 코드는 변경 없이 보존되므로 single-commit revert가 working state.
+- **Rollback**: `git revert <pr-merge-sha>` (PR 머지 후 실제 SHA로 치환되는 *의도적 template placeholder*. spec 작성 시점에 미지정, PR 머지 시점에 commit hash 확정. 이 doc은 머지 후 retroactive update 안 함 — git log로 SHA 조회 가능). v0.5.1 코드는 변경 없이 보존되므로 single-commit revert가 working state. **Merge 전략**: PR이 merge commit 방식 (squash 아님) — `docs/git-workflow/pr-process.md` 의 GitHub Flow 규약 준수. revert 대상은 merge commit SHA.
 - **Cost class**: low (코드 수정 + 신규 hook/script). 사용자 인터랙션 발생 surface 없음.
 - **Compounding artifact**: 본 design doc + 7개 신규 test + CHANGELOG entry. 미래 spec-distill 작업이 grep "잔여 frontmatter" / "default literal" / "session_id collision"으로 찾을 수 있음.
