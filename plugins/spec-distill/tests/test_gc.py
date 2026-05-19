@@ -109,9 +109,7 @@ class GcTest(unittest.TestCase):
         orphan.mkdir()
         (orphan / "state.local.md").write_text("x")
         past = time.time() - 120  # 2 min old (> 60s sweep threshold)
-        os.utime(orphan, (past, past))
-        # Also set the directory ctime to past (orphan check uses ctime)
-        os.utime(orphan, (past, past))
+        os.utime(orphan, (past, past))  # _sweep_gc_pending uses st_mtime (see docstring)
         run_gc(cwd=self.tmp)
         self.assertFalse(orphan.exists())  # swept
 
