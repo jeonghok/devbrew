@@ -181,7 +181,7 @@ Law 3 (Compounding) instantiation: (a) hook 코드 수정 + (b) SessionEnd hook 
 
 - **AC13 — 기존 테스트 무변경 통과**: `cd plugins/spec-distill && bash tests/test_state_path.sh && bash tests/test_spec_write_validator.sh && bash tests/test_review_dispatch.sh && bash tests/test_reminder_hook.sh && bash tests/test_design_mode_validator.sh && bash tests/test_review_dispatch_design_mandate.sh && python3 -m unittest tests.test_hook_output_schema` 모두 통과. **§Verification Plan의 "기존 테스트" 블록과 본 AC13의 목록은 동일해야 함** — drift 발견 시 본 AC13이 ground truth (merge gate). v0.6.0 머지 시점 기준 shell 6 + python unittest 1 = 7개 기존 테스트.
 
-- **AC14 — v0.5.x legacy advisory**: `.claude/spec-distill/default/` 존재 검출 시 stderr advisory emit + marker 파일 `.claude/spec-distill/.legacy-advisory-emitted-v060` touch. marker 존재 시 skip (idempotent across hook invocations). 자동 삭제 안 함. §N2 참조.
+- **AC14 — v0.5.x legacy advisory**: `spec-write-validator.py` (PostToolUse hook — production에서 가장 자주 fire) 가 검출 담당. `.claude/spec-distill/default/` 존재 검출 시 stderr advisory emit + marker 파일 `.claude/spec-distill/.legacy-advisory-emitted-v060` touch. marker 존재 시 skip (idempotent across hook invocations). 자동 삭제 안 함. §N2 참조.
 
 ## Files to Modify
 
@@ -189,7 +189,7 @@ Law 3 (Compounding) instantiation: (a) hook 코드 수정 + (b) SessionEnd hook 
 
 - `plugins/spec-distill/hooks/state_path.py`
   - 신규 export: `SESSION_PATTERN` 상수, `resolve_session_id(payload)` 함수.
-  - `cleanup_stale_states` 함수 body → no-op + deprecation stderr (한 번만, module-level flag).
+  - `cleanup_stale_states` 함수 body → no-op + deprecation stderr (marker 파일 `.claude/spec-distill/.deprecation-cleanup-stale-states-v060` 기반 one-time advisory, §AC12 참조).
 
 - `plugins/spec-distill/hooks/spec-write-validator.py`
   - line 160: `session_id = resolve_session_id(payload)` 호출. None 처리 (advisory only, state skip).
