@@ -15,11 +15,9 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 
-PENDING_TTL_HOURS = 24
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
 
 
@@ -51,9 +49,6 @@ def resolve_session_id(payload: dict | None = None) -> str | None:
     return sid
 
 
-FILE_TTL_DAYS = 7
-
-
 def state_root(cwd: str | None = None) -> Path:
     """Return <main_repo>/.claude/spec-distill. cwd fallback on git failure."""
     if cwd is None:
@@ -79,92 +74,35 @@ def state_root(cwd: str | None = None) -> Path:
     return fallback
 
 
-def _parse_iso(s: str):
-    s = s.strip()
-    try:
-        return datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    except ValueError:
-        return None
+DEPRECATION_MARKER = ".deprecation-cleanup-stale-states-v060"
 
 
 def cleanup_stale_states(root: Path) -> None:
-    """Purge stale pending_review blocks (>24h) and old state files (>7d).
+    """DEPRECATED v0.6.0 — kept for backward import compatibility.
 
-    - pending_review with triggered_at > 24h ago → strip block, keep file.
-    - state file with no pending_review and last_dispatched_at > 7d → delete file.
+    Real cleanup now handled by scripts/spec-distill-gc.py (TTL-GC) +
+    hooks/session-end-cleanup.py (per-session). This function is no-op.
+    Removed in v0.7.0.
     """
     if not root.exists():
         return
-    now = datetime.now(timezone.utc)
-    pending_cutoff = now - timedelta(hours=PENDING_TTL_HOURS)
-    file_cutoff = now - timedelta(days=FILE_TTL_DAYS)
-    for session_dir in root.iterdir():
-        if not session_dir.is_dir():
-            continue
-        state_file = session_dir / "state.local.md"
-        if not state_file.exists():
-            continue
-        try:
-            body = state_file.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        # Purge stale pending_review
-        m = re.search(
-            r"^pending_review:\n  path:[^\n]+\n  mode:[^\n]+\n(?:  worktree_path:[^\n]+\n)?  triggered_at:\s*([^\n]+)\n(?:  [^\n]*\n)*",
-            body, flags=re.MULTILINE,
+    marker = root / DEPRECATION_MARKER
+    if marker.exists():
+        return  # advisory already emitted in this state-root lifetime
+    try:
+        marker.write_text("")  # atomic touch; empty content
+        print(
+            "[spec-distill] cleanup_stale_states() is deprecated since v0.6.0 "
+            "(no-op). Cleanup now handled by spec-distill-gc.py + "
+            "session-end-cleanup.py. Function removed in v0.7.0.",
+            file=sys.stderr,
         )
-        if m:
-            ts = _parse_iso(m.group(1))
-            if ts and ts < pending_cutoff:
-                body = re.sub(
-                    r"^pending_review:\n(?:  [^\n]*\n)*", "", body, flags=re.MULTILINE,
-                )
-                try:
-                    state_file.write_text(body, encoding="utf-8")
-                    print(
-                        f"[spec-distill] state cleanup: purged stale pending_review in {state_file}",
-                        file=sys.stderr,
-                    )
-                except OSError as e:
-                    print(
-                        f"[spec-distill] state cleanup: FAILED to write purged state to {state_file}: {e}",
-                        file=sys.stderr,
-                    )
-        # File-level delete if only last_dispatched_at remains and is old.
-        # Guard against deleting state files that still carry in-flight session
-        # data (phase/issue_history/wall_clock_started_at/reconsensus markers).
-        SIGNIFICANT_MARKERS = (
-            "phase:",
-            "issue_history:",
-            "wall_clock_started_at:",
-            "rereview_count:",
-            "reconsensus_accepted_ids:",
-            "mode_b_violation:",
-            "pending_locked_decisions:",
-            "under_revision:",
+    except OSError as exc:
+        # marker write failed — emit advisory anyway, accept duplicate noise
+        print(
+            f"[spec-distill] cleanup_stale_states deprecated (marker write failed: {exc})",
+            file=sys.stderr,
         )
-        has_other_data = any(m in body for m in SIGNIFICANT_MARKERS)
-        if "pending_review:" not in body and not has_other_data:
-            ld = re.search(r"^last_dispatched_at:\s*(.+)$", body, flags=re.MULTILINE)
-            if ld:
-                ts = _parse_iso(ld.group(1))
-                if ts and ts < file_cutoff:
-                    try:
-                        state_file.unlink()
-                    except OSError as e:
-                        print(
-                            f"[spec-distill] state cleanup: FAILED to delete {state_file}: {e}",
-                            file=sys.stderr,
-                        )
-                        continue
-                    try:
-                        session_dir.rmdir()
-                    except OSError:
-                        pass
-                    print(
-                        f"[spec-distill] state cleanup: deleted stale state file {state_file}",
-                        file=sys.stderr,
-                    )
 
 
 def main(argv: list[str]) -> int:
