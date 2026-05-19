@@ -24,7 +24,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent / "hooks"
 sys.path.insert(0, str(HERE))
-from state_path import state_root, SESSION_PATTERN  # noqa: E402
+from state_path import state_root, SESSION_PATTERN  # noqa: E402 # pyright: ignore[reportMissingImports]
 
 LOCK_NAME = ".gc.lock"
 GRACE_NS = 60 * 1_000_000_000
