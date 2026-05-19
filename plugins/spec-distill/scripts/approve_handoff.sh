@@ -3,6 +3,12 @@
 # Usage: approve_handoff.sh <session_id> <spec_path>
 set -euo pipefail
 
+# Kill switch — CLAUDE.md "kill switch는 보안 컨트롤"
+if [[ "${DEVBREW_DISABLE_SPEC_DISTILL:-}" == "1" ]]; then
+    echo "[spec-distill] approve_handoff: DEVBREW_DISABLE_SPEC_DISTILL=1 — skip (state preserved)" >&2
+    exit 0
+fi
+
 session_id="${1:?usage: approve_handoff.sh <session_id> <spec_path>}"
 spec_path="${2:?usage: approve_handoff.sh <session_id> <spec_path>}"
 

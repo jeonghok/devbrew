@@ -91,10 +91,15 @@ def main() -> int:
     if kill_switch_active():
         return 0
     try:
-        subprocess.run(
+        result = subprocess.run(
             ["python3", str(GC_SCRIPT)],
-            timeout=5, check=False, capture_output=True,
+            timeout=5, check=False, capture_output=True, text=True,
         )
+        if result.returncode != 0:
+            print(
+                f"[spec-distill] GC exited rc={result.returncode}: {result.stderr.strip()}",
+                file=sys.stderr,
+            )
     except (subprocess.TimeoutExpired, OSError) as exc:
         print(
             f"[spec-distill] gc fire-and-forget failed (non-fatal): {exc}",
@@ -102,7 +107,10 @@ def main() -> int:
         )
     try:
         payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, Exception):
+    except json.JSONDecodeError:
+        payload = {}
+    except OSError as exc:
+        print(f"[spec-distill] stdin read error: {exc}", file=sys.stderr)
         payload = {}
     session_id = resolve_session_id(payload)
     if session_id is None:

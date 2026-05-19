@@ -36,8 +36,14 @@ def main() -> int:
         return 0
     try:
         payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError:
         return 0
+    except OSError as exc:
+        print(f"[spec-distill] session-end-cleanup: stdin read error: {exc}", file=sys.stderr)
+        return 0
+    # SessionEnd targets the ending session (from payload), NOT the current
+    # session (from CLAUDE_CODE_SESSION_ID env). Use payload directly — do not
+    # use resolve_session_id which has env precedence.
     session_id = payload.get("session_id", "")
     if not session_id or not SESSION_PATTERN.match(session_id):
         return 0

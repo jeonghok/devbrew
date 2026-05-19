@@ -140,7 +140,8 @@ def write_state(session_id: str, path: str, mode: str, worktree_path: str) -> No
             f"---\nsession_id: {session_id}\n---\n\n{block}", encoding="utf-8"
         )
         return
-    # Matching session_id (or no frontmatter) — strip pending_review block and append fresh
+    # Matching session_id (or no frontmatter — backward compat per AC8 case iii)
+    # — strip pending_review block and append fresh
     body = re.sub(
         r"^pending_review:\n(?:  [^\n]*\n)*", "", body, flags=re.MULTILINE
     )

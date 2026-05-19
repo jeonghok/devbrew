@@ -62,12 +62,13 @@ def _folder_mtime_ns(folder: Path) -> int:
 def _within_grace(folder: Path) -> bool:
     try:
         has_files = any(p.is_file() for p in folder.iterdir())
+        if has_files:
+            return False
+        age_ns = time.time_ns() - folder.stat().st_ctime_ns
+        return age_ns < GRACE_NS
     except OSError:
+        # Folder vanished between iterdir() and stat() — race with concurrent cleanup.
         return False
-    if has_files:
-        return False
-    age_ns = time.time_ns() - folder.stat().st_ctime_ns
-    return age_ns < GRACE_NS
 
 
 def _sweep_gc_pending(root: Path) -> int:
@@ -133,11 +134,23 @@ def gc(self_session_id: str | None = None) -> int:
     lock_path = root / LOCK_NAME
     try:
         lock_path.touch(exist_ok=True)
-    except OSError:
+    except OSError as exc:
+        print(
+            f"[spec-distill] GC skipped — cannot create lock file {lock_path}: {exc}",
+            file=sys.stderr,
+        )
         return 0
     ttl_ns = _ttl_ns()
     removed = 0
-    with open(lock_path, "w") as lockfile:
+    try:
+        lockfile = open(lock_path, "w")
+    except OSError as exc:
+        print(
+            f"[spec-distill] GC lock open failed: {exc}",
+            file=sys.stderr,
+        )
+        return 0
+    with lockfile:
         try:
             fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except (BlockingIOError, OSError):
