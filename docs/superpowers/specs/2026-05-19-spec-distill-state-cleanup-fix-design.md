@@ -126,7 +126,7 @@ Law 3 (Compounding) instantiation: (a) hook 코드 수정 + (b) SessionEnd hook 
 
 - **C8 — 동시성**: SessionEnd hook과 approve_handoff.sh가 동시 실행될 수 있는 (이론적) edge case에서 `shutil.rmtree(ignore_errors=True)` + `rm -rf -- <path>` 둘 다 idempotent. race 보강 추가 없음.
 
-- **C9 — Worktree 호환**: `state_path.state_root()` 함수는 `git rev-parse --git-common-dir` 기반으로 worktree에서도 main repo의 `.claude/spec-distill/` 로 resolve. 기존 동작 유지.
+- **C9 — Worktree 호환 (spec-distill divergence from qg)**: `state_path.state_root()` 함수는 `git rev-parse --git-common-dir` 기반으로 worktree에서도 main repo의 `.claude/spec-distill/` 로 resolve. 신규 `session-end-cleanup.py` + `spec-distill-gc.py`는 qg의 단순 `Path(cwd) / .claude / quality-gates` 패턴을 *그대로 흡수하지 않고* spec-distill의 git-aware `state_root(cwd)`를 호출해야 함. 이유: spec-write-validator가 main repo에 state를 쓰는데 SessionEnd가 worktree-local `.claude/`를 보면 cleanup miss. 4-layer defense가 layer 사이 path divergence로 깨지는 걸 방지.
 
 - **C10 — Secret 기록 금지 (P21)**: session_id가 보안-민감 데이터로 간주되지 않지만, stderr log는 `[:32]` truncate로 fingerprint 노출 최소화.
 
@@ -273,6 +273,10 @@ ls .claude/spec-distill/  # smoke-12345678 폴더 부재
 - 본 fix는 CLI scripts + hooks (모두 STDIN/STDOUT JSON). chrome-devtools-mcp / docker-compose / npm:dev 같은 surface 없음 → Gate 3은 hook smoke test로 충족.
 
 ## Rejected Alternatives
+
+**채택된 접근 (옵션 D)**: §Goal에 명시된 4-deliverable 패턴 — `CLAUDE_CODE_SESSION_ID` 단일 소스 + 4-layer cleanup defense (SessionEnd hook + TTL-GC + approve_handoff script + write_state defensive truncate). qg의 검증된 패턴을 흡수, P12 (lightness) 준수.
+
+아래는 brainstorming 과정에서 explore했으나 거절된 대안들.
 
 ### 옵션 A — `/interview` Step 0에 init 게이트
 - conducting-interview Step 0에서 기존 state.local.md 발견 시 `AskUserQuestion`으로 `resume | start fresh | abort` 선택.
