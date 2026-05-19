@@ -7,7 +7,7 @@ with loud stderr log.
 
 CLI:
   python3 state_path.py state-root [<cwd>]    → prints absolute path to stdout
-  python3 state_path.py cleanup <state-root>  → purges stale state files
+  python3 state_path.py cleanup <state-root>  → emits deprecation advisory (no-op since v0.6.0; removed in v0.7.0)
 """
 from __future__ import annotations
 
