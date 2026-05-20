@@ -1,5 +1,5 @@
 {
-  "description": "spec-distill — UserPromptSubmit interview suggestion + SessionStart anchor + PostToolUse spec/design validator + Stop reviewer dispatch.",
+  "description": "spec-distill — UserPromptSubmit interview + reminder, SessionStart anchor, PostToolUse spec/design validator, Stop reviewer dispatch, SessionEnd cleanup.",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -46,6 +46,17 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/review-dispatch.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/session-end-cleanup.py",
             "timeout": 10
           }
         ]

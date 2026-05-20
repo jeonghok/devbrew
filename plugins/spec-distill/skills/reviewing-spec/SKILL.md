@@ -129,38 +129,19 @@ spec-reviewer agent가 `Stagnation_signal: true` 반환 시: 해당 issue에 대
 
 ## Approve handoff sequence (AC11)
 
-사용자 "approve" 선택 시 다음 4 step을 *그대로* 실행:
+사용자 "approve" 선택 시:
 
 ```bash
-# Step 1: Commit spec.md
-git add docs/superpowers/specs/<file>-spec.md
-git commit -m "spec: <topic> (v1.0.0, spec-distill v0.2.0)"
-
-# Step 2: Output handoff pointer
-echo "Spec lock 완료. 다음 단계:"
-echo "  superpowers writing-plans skill 호출"
-echo "  Spec 경로: docs/superpowers/specs/<file>-spec.md"
-echo "  명령: Skill superpowers:writing-plans <위 경로>"
-
-# Step 3: State cleanup (guarded — charset allowlist; '.', '..', whitespace, traversal 모두 거부)
-case "$session_id" in
-  ''|*[!A-Za-z0-9_-]*)
-    echo "[spec-distill] cleanup skipped: session_id invalid or unresolved ('${session_id:-<unset>}'). State preserved at .claude/spec-distill/ — 수동 cleanup 필요." >&2
-    ;;
-  *)
-    rm -rf -- ".claude/spec-distill/$session_id/"
-    ;;
-esac
-
-# Step 4: Plugin termination
-echo "spec-distill v0.2.0 종료."
+bash "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/approve_handoff.sh" "$session_id" "$spec_path"
 ```
 
-**polite stop 금지** (AP2): "spec is approved!"만 narrate하고 위 4 step을 skip하면 안 됨. 4 step 모두 *실제로* 실행.
+스크립트가 4-step (commit / handoff pointer / cleanup / termination) atomic 실행. session_id charset guard 내장 — invalid 시 cleanup skip + advisory. commit 실패 시 state.local.md 보존, exit 1.
+
+**polite stop 금지** (AP2): "approved!"만 narrate하고 스크립트 호출 skip 금지. SessionEnd hook이 backup cleanup이지만 user-explicit "approve" 의도는 즉시 반영.
 
 ### 실패 시 state 보존 (P14)
 
-git commit 실패 / handoff 실패 / cleanup 실패 시: state.local.md 보존, 사용자에게 실패 원인 명시.
+approve_handoff.sh가 commit 실패 시 exit 1 + state.local.md 보존. cleanup rm 실패는 advisory only — SessionEnd hook이 재시도.
 
 ## In-flight state migration (C10)
 
