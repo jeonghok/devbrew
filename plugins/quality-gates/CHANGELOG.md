@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.30.1] — 2026-05-20
+
+### Changed
+- `agents/security-reviewer.md` — `color: red` → `color: purple`. Cosmetic only; 채도 높은 red가 눈에 쨍해 차분한 purple로 교체. 격리(`disallowedTools`)·로직 영향 없음.
+
 ## [1.30.0] — 2026-05-19
 
 ### Added

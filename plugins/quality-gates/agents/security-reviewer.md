@@ -2,7 +2,7 @@
 name: security-reviewer
 description: Phase 1 of Gate 2 — always-run code-level security review. Hunts exploitable paths (injection, authn/authz bypass, secrets, SSRF/path-traversal, crypto misuse, deserialization, raw-HTML escape hatches) and emits the canonical finding YAML schema defined in adversarial.md:22-30.
 model: inherit
-color: red
+color: purple
 cost_class: medium
 disallowedTools:
   - Write
