@@ -110,7 +110,7 @@ The optional `codex-reviewer` agent has `cost_class: variable` — it invokes th
 
 ### Adversarial reviewer model
 
-`adversarial` agent uses `model: sonnet` (T2-8 downgrade from opus). The task is *calibration* (mapping each finding to confirm/downgrade/reject verdict + brief reason), not new finding generation — sonnet is sufficient. Ran ~5× per pipeline (once per Gate 2 fix-loop iteration), so the downgrade compounds across the typical 3-5 iter loop. AskUserQuestion fan-out count excludes `adversarial`/`scout`/`synthesizer` (infrastructure dispatches; not user-visible cost).
+`adversarial` agent uses `model: opus`. It is the **Opus-critic over the Sonnet Phase 1 workers** (cf. Anthropic multi-agent patterns: spend capability at the judgment bottleneck): the Phase 1/2 reviewers run on cheaper models and the synthesizer after it is a deterministic script, so adversarial is the *single model-based judgment gate* in Gate 2 — every finding the user sees passed through its verdict. Its persona runs a per-finding 3-gate verification (real? / introduced-by-this-diff? / handled-elsewhere?) plus a severity realist check, which is reasoning-heavy enough to warrant opus. A prior cost pass (T2-8) drifted the frontmatter/README toward sonnet while the SKILL dispatch still pinned opus; the three sites are now reconciled to opus and locked by `tests/test_adversarial_model_consistency.sh`. Runs ~once per Gate 2 fix-loop iteration (≤5×). AskUserQuestion fan-out count excludes `adversarial`/`scout`/`synthesizer` (infrastructure dispatches; not user-visible cost). To reduce its cost, lower the *number* of Gate 2 iterations or the diff scope — not this model.
 
 ## 게이트
 

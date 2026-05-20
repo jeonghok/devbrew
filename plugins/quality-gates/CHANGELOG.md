@@ -3,6 +3,18 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.31.0] — 2026-05-20
+
+### Changed
+- `agents/adversarial.md` — persona 강화. sonnet 시절의 미니멀 "calibration only" 프롬프트를 opus-critic에 맞는 다단계 검증으로 확장: per-finding **3-gate** (real in code? / introduced by THIS diff? / handled elsewhere?), CRITICAL/IMPORTANT용 **severity realist check** (이론적 최악 아닌 현실적 최악 + mitigation, 단 data-loss/security/auth-bypass/financial은 절대 다운그레이드 금지), **cross-reviewer corroboration** 신호, **evidence bar** (증거 없는 CRITICAL/IMPORTANT은 opinion → reject/downgrade), manufactured-outrage 금지. 강화만 — 임계치 완화·규칙 제거 없음 (persona는 보안-민감 코드). 역할(verdict-only, no new findings)·cwd 금지 규칙 보존.
+- `agents/adversarial.md` — 출력 스키마를 top-level `verdicts:` wrapper로 정렬 (synthesizer는 이미 wrapper와 bare list 둘 다 수용 — `synthesize_findings.py:32`; behavioral 테스트 fixture와도 일치). `finding_id: <agent>-<file>-<line>` 매칭 키 보존.
+
+### Fixed
+- adversarial reviewer model 선언 drift 정합. `agents/adversarial.md` frontmatter와 README 모델 노트는 `sonnet`이라 적혀 있었으나 `SKILL.md` Phase 1.5 dispatch가 `model="opus"`로 frontmatter를 덮어, 실제로는 **opus로 실행**되고 있었음 (세 사이트 불일치). adversarial은 Sonnet Phase 1 워커 위의 **Opus-critic** — Gate 2의 유일한 모델-기반 판단 게이트 — 이므로 의도된 모델은 opus. 세 사이트를 모두 opus로 정합: frontmatter `model: opus`, SKILL은 dispatch override를 제거하고 frontmatter에 위임(다른 qg-owned agent 관례와 일치), README 모델 노트를 opus 근거로 재작성. effective 모델은 변화 없음(원래도 opus 실행); 선언 정합 + persona 강화가 본 릴리스의 변경.
+
+### Added
+- `tests/test_adversarial_model_consistency.sh` — drift 가드. 세 선언 사이트(frontmatter / SKILL dispatch / README 모델 노트 + phase 다이어그램)가 opus로 일관됨을 검증. 미래 단일 사이트 편집(예: cost-cut으로 한 곳만 sonnet 변경)이 CI에서 즉시 fail. CLAUDE.md Law 3 — "리뷰를 탈출한 drift는 코드만 패치하지 말고 재발을 잡는 가드를 신설".
+
 ## [1.30.1] — 2026-05-20
 
 ### Changed
