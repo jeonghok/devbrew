@@ -765,12 +765,19 @@ Dispatch:
 ```
 Agent(
   subagent_type="quality-gates:adversarial",
-  model="opus",
   prompt="<all Phase 1 + Phase 2 findings as structured YAML>
   filtered_diff: <verbatim from cache>
   project_dir: <current working directory>"
 )
 ```
+
+Do **not** add a `model=` override to this dispatch: adversarial declares
+`model: opus` in its frontmatter (the single source of truth). It is the
+Opus-critic over the Sonnet Phase 1 workers — the only model-based judgment gate
+in Gate 2 — so capability is spent here deliberately. A `model="sonnet"` cost-cut
+here would silently contradict the frontmatter and README; the
+`tests/test_adversarial_model_consistency.sh` guard fails CI if it reappears.
+See README "Adversarial reviewer model".
 
 Apply Adversarial verdicts (`confirm` / `downgrade` / `reject`) to the
 finding set BEFORE passing to Synthesizer.
