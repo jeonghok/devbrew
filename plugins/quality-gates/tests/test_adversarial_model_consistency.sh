@@ -37,6 +37,12 @@ assert_grep() {
 
 assert_not_grep() {
   local file="$1" pattern="$2" msg="$3"
+  # A missing file must FAIL, not vacuously PASS (Gate 2 adversarial confirmed this gap):
+  # grep on a nonexistent file exits non-zero, which would otherwise route to the PASS branch.
+  if [ ! -f "$file" ]; then
+    FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $msg (file not found: ${file##*/})"
+    return
+  fi
   if grep -qE "$pattern" "$file" 2>/dev/null; then
     FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $msg (unexpected '$pattern' in ${file##*/})"
   else
@@ -50,7 +56,12 @@ assert_not_grep "$AGENT" '^model: sonnet$' "adversarial.md frontmatter is not so
 
 # 2. SKILL dispatch must rely on frontmatter (no model= override in the block).
 adv_block="$(grep -A3 'subagent_type="quality-gates:adversarial"' "$SKILL" 2>/dev/null || true)"
-if printf '%s' "$adv_block" | grep -q 'model='; then
+if [ -z "$adv_block" ]; then
+  # Empty block = dispatch removed/renamed = the check cannot verify its invariant.
+  # Treat as FAIL, not PASS — a vacuous pass here would defeat the guard's purpose
+  # (Gate 2 adversarial caught this false-PASS blind spot).
+  FAIL=$((FAIL + 1)); echo "  ✗ FAIL: SKILL has no adversarial dispatch block (pattern not found in ${SKILL##*/})"
+elif printf '%s' "$adv_block" | grep -q 'model='; then
   FAIL=$((FAIL + 1)); echo "  ✗ FAIL: SKILL adversarial dispatch pins a model override (must rely on frontmatter)"
 else
   PASS=$((PASS + 1)); echo "  PASS: SKILL adversarial dispatch has no model override (relies on frontmatter)"
