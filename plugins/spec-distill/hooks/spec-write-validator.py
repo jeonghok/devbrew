@@ -2,8 +2,10 @@
 """spec-distill PostToolUse hook — Layer 1 structural validator.
 
 - Reads PostToolUse JSON payload from stdin.
-- Filters: tool must be Write/Edit/MultiEdit on `*spec*.md` (spec mode) or
-  `*design.md` (design mode). Out-of-scope paths exit 0 silently.
+- Filters: tool must be Write/Edit/MultiEdit on a `.md` under docs/superpowers/specs/.
+  Mode: `-spec.md` → spec; `-design.md` → design; other `.md` → spec if its
+  frontmatter block has a `locked_decisions` key, else design.
+  Out-of-scope paths exit 0 silently.
 - spec mode: 11 sections + frontmatter + locked_decisions + ambiguity scan.
 - design mode: ambiguity + placeholder scan only.
 - On pass: writes `pending_review:` block to .claude/spec-distill/<session>/state.local.md.
