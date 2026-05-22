@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """AC12 — Hook output schema 통합 회귀 방지 test (v0.5.0).
 
-Covers AC1–AC5 (5 hook output schemas), AC1a (encoding round-trip),
+Covers AC1–AC3 + AC5 (4 hook output schemas; AC4 removed in v0.7.0), AC1a (encoding round-trip),
 AC7.1/7.2/7.3 (Stop hook ordering + rewrite-fail behavior + ordering
 verification 3-prong), AC10/AC11 (kill switches), NG9 (cross-resolver
 advisory).
@@ -365,50 +365,6 @@ class TestPendingReviewReminderSchema(HookOutputSchemaTestBase):
         self.assertLessEqual(len(sysmsg), 120)
 
 
-class TestInterviewTriggerSchema(HookOutputSchemaTestBase):
-    """AC4 — interview-trigger.sh output schema (bash, jq + no-jq paths)."""
-
-    def _run(self, env_extra=None):
-        stdin_payload = {"user_prompt": "make a chat app"}
-        return _run_hook(
-            "interview-trigger.sh",
-            cwd=self.repo, stdin_payload=stdin_payload,
-            env_extra=env_extra, binary="bash",
-        )
-
-    @unittest.skipUnless(shutil.which("jq"), "jq required for AC4-a")
-    def test_jq_path_emits_additional_context(self):
-        result = self._run()
-        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
-        self.assertTrue(result.stdout.strip())
-        payload = json.loads(result.stdout)
-        hso = payload.get("hookSpecificOutput", {})
-        self.assertEqual(hso.get("hookEventName"), "UserPromptSubmit")
-        ac = hso.get("additionalContext", "")
-        self.assertIn("interview", ac)
-        self.assertIn("advisory", ac)
-        sysmsg = payload.get("systemMessage", "")
-        self.assertTrue(sysmsg)
-        self.assertLessEqual(len(sysmsg), 120)
-
-    def test_no_jq_fallback_emits_additional_context(self):
-        # Force no-jq by stripping PATH to a dir without jq.
-        no_jq_bin = self.repo / "no-jq-bin"
-        no_jq_bin.mkdir()
-        # Symlink only bash + python3 + sed + tr + grep + printf + cat + wc.
-        for tool in ("bash", "python3", "sed", "tr", "grep", "printf", "cat", "wc"):
-            src = shutil.which(tool)
-            if src:
-                (no_jq_bin / tool).symlink_to(src)
-        result = self._run(env_extra={"PATH": str(no_jq_bin)})
-        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
-        self.assertTrue(result.stdout.strip())
-        payload = json.loads(result.stdout)
-        hso = payload.get("hookSpecificOutput", {})
-        self.assertEqual(hso.get("hookEventName"), "UserPromptSubmit")
-        self.assertIn("interview", hso.get("additionalContext", ""))
-
-
 class TestSessionAnchorSchema(HookOutputSchemaTestBase):
     """AC5 — session-anchor.sh output schema (bash, jq + no-jq paths)."""
 
@@ -525,16 +481,6 @@ class TestKillSwitches(HookOutputSchemaTestBase):
                 "DEVBREW_DISABLE_SPEC_DISTILL": "1",
                 "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
             },
-        )
-        self.assertEqual(result.returncode, 0)
-        self.assertTrue(self._empty_or_braces(result.stdout))
-
-    def test_global_disable_silences_interview_trigger(self):
-        result = _run_hook(
-            "interview-trigger.sh", cwd=self.repo,
-            stdin_payload={"user_prompt": "make a chat app"},
-            env_extra={"DEVBREW_DISABLE_SPEC_DISTILL": "1"},
-            binary="bash",
         )
         self.assertEqual(result.returncode, 0)
         self.assertTrue(self._empty_or_braces(result.stdout))
