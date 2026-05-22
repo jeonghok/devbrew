@@ -38,6 +38,7 @@ with contextlib.redirect_stderr(err):
 assert "[spec-distill]" in err.getvalue() and "bin.md" in err.getvalue()
 # AC7 + AC2 회귀 — DESIGN_MODE_DISABLE
 os.environ["DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE"] = "1"
+assert v.resolve_mode(mk("w-spec.md")) == "spec"   # -spec.md는 DESIGN_MODE_DISABLE에 면역 (회귀 가드)
 assert v.resolve_mode(mk("z-design.md")) is None
 assert v.resolve_mode(mk("nolocked.md", "---\nname: t\n---\n")) is None
 assert v.resolve_mode(mk("locked.md", "---\nlocked_decisions: []\n---\n")) == "spec"
