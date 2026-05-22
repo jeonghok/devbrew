@@ -7,7 +7,6 @@ with loud stderr log.
 
 CLI:
   python3 state_path.py state-root [<cwd>]    → prints absolute path to stdout
-  python3 state_path.py cleanup <state-root>  → emits deprecation advisory (no-op since v0.6.0; removed in v0.7.0)
 """
 from __future__ import annotations
 
@@ -74,51 +73,14 @@ def state_root(cwd: str | None = None) -> Path:
     return fallback
 
 
-DEPRECATION_MARKER = ".deprecation-cleanup-stale-states-v060"
-
-
-def cleanup_stale_states(root: Path) -> None:
-    """DEPRECATED v0.6.0 — kept for backward import compatibility.
-
-    Real cleanup now handled by scripts/spec-distill-gc.py (TTL-GC) +
-    hooks/session-end-cleanup.py (per-session). This function is no-op.
-    Removed in v0.7.0.
-    """
-    if not root.exists():
-        return
-    marker = root / DEPRECATION_MARKER
-    if marker.exists():
-        return  # advisory already emitted in this state-root lifetime
-    try:
-        marker.write_text("")  # atomic touch; empty content
-        print(
-            "[spec-distill] cleanup_stale_states() is deprecated since v0.6.0 "
-            "(no-op). Cleanup now handled by spec-distill-gc.py + "
-            "session-end-cleanup.py. Function removed in v0.7.0.",
-            file=sys.stderr,
-        )
-    except OSError as exc:
-        # marker write failed — emit advisory anyway, accept duplicate noise
-        print(
-            f"[spec-distill] cleanup_stale_states deprecated (marker write failed: {exc})",
-            file=sys.stderr,
-        )
-
-
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
-        print("usage: state_path.py {state-root|cleanup} [<arg>]", file=sys.stderr)
+        print("usage: state_path.py state-root [<cwd>]", file=sys.stderr)
         return 2
     sub = argv[1]
     if sub == "state-root":
         cwd = argv[2] if len(argv) >= 3 else None
         print(str(state_root(cwd)))
-        return 0
-    if sub == "cleanup":
-        if len(argv) < 3:
-            print("usage: state_path.py cleanup <state-root>", file=sys.stderr)
-            return 2
-        cleanup_stale_states(Path(argv[2]))
         return 0
     print(f"unknown subcommand: {sub}", file=sys.stderr)
     return 2

@@ -8,7 +8,6 @@ set -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 PLUGIN_ROOT="$REPO_ROOT/plugins/spec-distill"
-TRIGGER="$PLUGIN_ROOT/hooks/interview-trigger.sh"
 ANCHOR="$PLUGIN_ROOT/hooks/session-anchor.sh"
 
 pass=0
@@ -24,57 +23,6 @@ note() {
   fi
 }
 
-echo "=== interview-trigger.sh ==="
-
-# 1. Kill switch: DEVBREW_DISABLE_SPEC_DISTILL=1 → silent
-out=$(DEVBREW_DISABLE_SPEC_DISTILL=1 bash "$TRIGGER" <<< '{"user_prompt":"build me a thing"}' 2>/dev/null || true)
-[[ -z "$out" ]] && note PASS "DEVBREW_DISABLE_SPEC_DISTILL=1 suppresses output" \
-                || note FAIL "DEVBREW_DISABLE_SPEC_DISTILL=1 suppresses output (got: $out)"
-
-# 2. Kill switch: DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit → silent
-out=$(DEVBREW_SKIP_HOOKS="spec-distill:UserPromptSubmit" bash "$TRIGGER" <<< '{"user_prompt":"build me a thing"}' 2>/dev/null || true)
-[[ -z "$out" ]] && note PASS "DEVBREW_SKIP_HOOKS exact match suppresses output" \
-                || note FAIL "DEVBREW_SKIP_HOOKS exact match suppresses output (got: $out)"
-
-# 3. Kill switch isolation: a different hook in DEVBREW_SKIP_HOOKS does NOT suppress
-out=$(DEVBREW_SKIP_HOOKS="spec-distill:SessionStart" bash "$TRIGGER" <<< '{"user_prompt":"build me a thing"}' 2>/dev/null || true)
-echo "$out" | jq -e '.hookSpecificOutput.hookEventName == "UserPromptSubmit"' >/dev/null \
-  && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
-  && note PASS "DEVBREW_SKIP_HOOKS for different hook does not affect this hook" \
-  || note FAIL "DEVBREW_SKIP_HOOKS isolation broken (got: $out)"
-
-# 4. Kill switch: prefix-injection guard (notspec-distill:... must NOT match)
-out=$(DEVBREW_SKIP_HOOKS="notspec-distill:UserPromptSubmit" bash "$TRIGGER" <<< '{"user_prompt":"build me a thing"}' 2>/dev/null || true)
-echo "$out" | jq -e '.hookSpecificOutput.hookEventName == "UserPromptSubmit"' >/dev/null \
-  && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
-  && note PASS "Prefix-injection in DEVBREW_SKIP_HOOKS is rejected" \
-  || note FAIL "Prefix-injection bypass succeeded (got: $out)"
-
-# 5. Happy path: keyword + short prompt → UserPromptSubmit dual-target emit
-out=$(bash "$TRIGGER" <<< '{"user_prompt":"build me a todo app"}' 2>/dev/null)
-echo "$out" | jq -e '.hookSpecificOutput.hookEventName == "UserPromptSubmit"' >/dev/null \
-  && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("interview")' >/dev/null \
-  && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
-  && note PASS "Keyword+short prompt emits dual-target (additionalContext + systemMessage)" \
-  || note FAIL "Keyword+short prompt did not emit expected schema (got: $out)"
-
-# 6. No keyword → silence
-out=$(bash "$TRIGGER" <<< '{"user_prompt":"explain how this works"}' 2>/dev/null || true)
-[[ -z "$out" ]] && note PASS "No keyword → silent" \
-                || note FAIL "No keyword should be silent (got: $out)"
-
-# 7. Long prompt (≥20 words) → silence (verify on natural-English long prompt)
-LONG='{"user_prompt":"build a comprehensive authentication system with OAuth support and audit logging and rate limiting and session timeout and forgotten password recovery flows"}'
-out=$(bash "$TRIGGER" <<< "$LONG" 2>/dev/null || true)
-[[ -z "$out" ]] && note PASS "Long prompt (≥20 words) → silent" \
-                || note FAIL "Long prompt should be silent (got: $out)"
-
-# 8. Re-entrancy guard: /interview prefix → silence
-out=$(bash "$TRIGGER" <<< '{"user_prompt":"/interview build me a thing"}' 2>/dev/null || true)
-[[ -z "$out" ]] && note PASS "/interview prefix → silent (re-entrancy guard)" \
-                || note FAIL "/interview prefix should be silent (got: $out)"
-
-echo ""
 echo "=== session-anchor.sh ==="
 
 TMPSTATE=$(mktemp -d)
