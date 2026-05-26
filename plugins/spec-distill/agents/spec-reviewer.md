@@ -32,7 +32,7 @@ description: >
 
 ## Input
 
-- spec.md 파일 경로 (`docs/superpowers/specs/<file>-spec.md`)
+- spec/design 파일 경로 — `docs/superpowers/specs/` hierarchy 안의 임의 `.md` (sub-folder 포함). 입력 파일 mode는 dispatcher의 `pending_review.mode` (또는 prompt의 `mode:`) 필드로 전달됨; suffix(`-spec.md`/`-design.md`) 없이 frontmatter `locked_decisions:` 유무로 분류된 파일도 정상 입력.
 - (선택) 이전 review history — 같은 issue ID 추적용
 - **spec.md frontmatter의 `locked_decisions:` 리스트** (Read tool로 추출, C1 + G3) — 각 issue의 `affects_locked_decisions` 매핑에 사용.
 
@@ -54,7 +54,13 @@ description: >
 
 ### Design Mode Branch (v0.4.0)
 
-입력 spec 파일이 `*-design.md`로 끝나면 (또는 dispatcher가 `mode: design`을 prompt에 명시한 경우) 다음 분기 적용:
+다음 중 어느 하나라도 충족하면 design mode 분기 적용 (v0.8.1: scope 일반화):
+
+- 입력 파일이 `*-design.md` suffix
+- 입력 파일이 suffix 없는 `.md`이고 frontmatter `locked_decisions` 키 부재로 content-aware 판별이 design (`hooks/spec-write-validator.py:resolve_mode` 규칙)
+- dispatcher가 `pending_review.mode: design` (또는 prompt에 `mode: design`)을 명시
+
+위 어느 하나라도 충족 시:
 
 - **NOT applied (skip)**: `missing_section` (11 필수 섹션) + locked_decisions schema 검사. design.md는 brainstorming이 산출하는 자유 형식 — spec.md schema 강제하지 않음 (philosophy LD7 승계).
 - **Applied (design checklist 6 카테고리)**:
