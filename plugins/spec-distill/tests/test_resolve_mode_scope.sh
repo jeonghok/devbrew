@@ -30,6 +30,16 @@ assert v.resolve_mode(mk("unclosed.md", "---\nname: t\nlocked_decisions: []\n"))
 assert v.resolve_mode(mk("baz.txt")) is None
 assert v.resolve_mode(mk("q.markdown")) is None
 assert v.resolve_mode("/elsewhere/foo.md") is None
+# AC8 (v0.8.1) — sub-folder hierarchy 회귀 가드: specs/<sub>/... 도 in-scope
+def mksub(rel, body=""):
+    p = base / rel; p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(body, encoding="utf-8"); return str(p)
+assert v.resolve_mode(mksub("sub/x-spec.md")) == "spec"
+assert v.resolve_mode(mksub("sub/x-design.md")) == "design"
+assert v.resolve_mode(mksub("sub/sub2/foo.md", "---\nname: t\nlocked_decisions: []\n---\n")) == "spec"
+assert v.resolve_mode(mksub("sub/bar.md", "---\nname: t\n---\n")) == "design"
+# AC8 negative — `specs`로 시작하지만 hierarchy 경계가 다른 경로는 prefix 밖
+assert v.resolve_mode("/tmp/docs/superpowers/specs_archive/foo.md") is None
 # AC6 — 디코드 실패(바이너리) → design + stderr loud
 binp = base / "bin.md"; binp.write_bytes(b"\xff\xfe\x00\x01 not utf8")
 err = io.StringIO()

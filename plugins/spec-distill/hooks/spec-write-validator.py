@@ -2,7 +2,8 @@
 """spec-distill PostToolUse hook — Layer 1 structural validator.
 
 - Reads PostToolUse JSON payload from stdin.
-- Filters: tool must be Write/Edit/MultiEdit on a `.md` under docs/superpowers/specs/.
+- Filters: tool must be Write/Edit/MultiEdit on a `.md` under docs/superpowers/specs/
+  (sub-folder hierarchy 포함).
   Mode: `-spec.md` → spec; `-design.md` → design; other `.md` → spec if its
   frontmatter block has a `locked_decisions` key, else design.
   Out-of-scope paths exit 0 silently.

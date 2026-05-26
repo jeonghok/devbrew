@@ -1,7 +1,7 @@
 {
   "name": "spec-distill",
   "description": "집요한 인터뷰로 모호함을 명확함으로 변환해 superpowers 호환 spec.md를 생성. devbrew Laws 1+2 instantiation (Writer/Reviewer 물리적 분리, 4-block Korean Socratic interview).",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "author": {
     "name": "jeonghokim"
   }
