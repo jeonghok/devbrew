@@ -7,13 +7,6 @@
 
 devbrew는 Claude Code를 위한 플러그인 마켓플레이스입니다. `plugins/*` 하위의 모든 플러그인은 아래 원칙을 상속합니다. 전체 철학(24개 원칙·14개 anti-pattern·소스 하니스 원문 인용)은 [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md). 외부 참조 corpus는 `../reference/`에 있으며 필요 시에만 탐색 [reference 탐색 가이드](../reference/REFERENCE_HARVEST.md).
 
-## LLM Coding Guidelines
-
-- Think Before Coding — 가정·혼란·tradeoff 명시, 의심나면 묻기
-- Simplicity First — 요청 이상 만들지 않기, 추측 금지
-- Surgical Changes — 요청과 직결된 줄만, 인접 코드 청소 금지
-- Goal-Driven Execution — 검증 가능한 성공 기준 정의 후 loop
-
 ## Git Workflow
 
 GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow/`.
