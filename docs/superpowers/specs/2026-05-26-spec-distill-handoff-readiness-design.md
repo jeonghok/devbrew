@@ -22,11 +22,12 @@ source: superpowers/brainstorming (2026-05-26 세션) + spec-distill v0.8.1 현�
 - 플러그인은 `/compact`를 직접 호출할 수 없음 (Claude Code 내장 슬래시 커맨드, 플러그인 dispatch surface 밖).
 - 본 design 자체가 dogfooding — `## Handoff Context` 섹션 형식을 본 문서가 시범 사용.
 - spec-distill의 design mode reviewer는 brainstorming 단계 산출물 (`*-design.md`)을 검사하지만 brainstorming skill은 외부(superpowers)이므로 spec-distill이 design.md를 *생성*하는 방식을 제어하지 못함 — `## Handoff Context` 부재 시 reviewer가 needs_revise + recommendation으로 사용자/메인 agent에게 수동 추가 요구하는 방식만 가능.
+- `/compact` 명령에 박은 next-step instruction이 compact 결과에 보존된다는 보장은 *없음* (Claude Code `/compact` 동작은 공식 사양 외 구현 detail에 의존). 따라서 [1] /compact 권장은 *best-effort* — 사용자의 [2] 다음 세션 첫 프롬프트가 진짜 안전망.
 
 **Deferred to plan**:
-- 신규 7개 테스트 파일의 정확한 fixture 구성 (스크립트 입출력 mock 방식).
-- `_frontmatter_source_version()` 헬퍼 위치 (`hooks/state_path.py` vs spec-reviewer agent 내부 검사) — plan 단계에서 결정.
+- 신규 6개 테스트 파일의 정확한 fixture 구성 (스크립트 입출력 mock 방식).
 - README "Principles Instantiated" 라인 추가 문구 — plan/구현 단계 wording.
+- `hooks/state_path.py` 헬퍼 위치 여부 — 본 PR은 helper 신설 없이 reviewer agent 안 inline grep만 사용 (default to lightness).
 
 ## 목차
 
@@ -69,11 +70,12 @@ devbrew 철학 정렬:
 
 - **G1**: spec-reviewer agent가 `handoff_incomplete` 카테고리를 spec mode + design mode 양쪽에서 block-severity로 검사. 위반 패턴 4종 정의됨 (섹션 부재 / 하위 항목 비어있음 / conversation reference 검출 / TL;DR이 Goal 복붙).
 - **G2**: `## Handoff Context` 섹션이 `templates/spec-template.md`에 의무 섹션으로 추가됨. TL;DR / Implicit context / Deferred to plan 3개 하위 항목 명시.
-- **G3**: `approve_handoff.sh` Step 2가 "Handoff packet" 3-block 출력 (compact 명령 / 다음 세션 첫 프롬프트 / divider) 형식으로 emit. /compact 명령 텍스트는 next-step instruction을 preserve 지시어에 embed.
+- **G3**: `approve_handoff.sh` Step 2가 "Handoff packet" 3-block 출력 (compact 명령 / 다음 세션 첫 프롬프트 / divider) 형식으로 emit. /compact 명령 텍스트는 next-step instruction을 preserve 지시어에 embed하되 *best-effort* — 진짜 안전망은 [2] 다음 세션 첫 프롬프트 라인이며 사용자가 /compact 후 그것을 복사하면 항상 동작.
 - **G4**: `DEVBREW_SPEC_DISTILL_SKIP_HANDOFF_CHECK=1` kill switch가 `handoff_incomplete` 카테고리만 우회. 다른 검사는 정상 동작. loud warning 출력.
-- **G5**: Pre-v0.9.0 spec.md (frontmatter `source: spec-distill v0.8.x` 이하)는 grandfather — `handoff_incomplete` 검사 skip + one-shot advisory.
-- **G6**: `plugin.json` 0.8.1 → 0.9.0 bump, CHANGELOG/README 동기화.
-- **G7**: 7개 신규 회귀 방지 테스트 (tests/) 추가.
+- **G5**: `plugin.json` 0.8.1 → 0.9.0 bump, CHANGELOG/README 동기화.
+- **G6**: 6개 신규 회귀 방지 테스트 (tests/) 추가.
+
+(이전 G5 "grandfather pre-v0.9.0 spec.md" 항목은 R6에서 거절 — `source:` 필드 비정형 파싱 hole과 schema 복잡도 대비 이득 부족.)
 
 ## Non-goals
 
@@ -83,6 +85,8 @@ devbrew 철학 정렬:
 - **NG4**: writing-plans skill 변경. /compact 후 writing-plans 진입은 superpowers 측이 처리.
 - **NG5**: in-flight 진행 중인 v0.8.x 세션의 state.local.md schema migration. v0.9.0은 *신규* 작성되는 spec/design에만 enforce.
 - **NG6**: spec-reviewer가 대화 history에 접근하여 "대화엔 있는데 spec엔 없는 것"을 검사 — agent는 파일만 본다 (Law 2 disallowedTools). 검사는 *파일 안의 signal* (placeholder/conversation reference/empty section)에 한정.
+- **NG7**: TL;DR이 Goal과 동일/유사한지 검출 — v0.9.0에선 surface 축소를 위해 보류. LLM 판단 deterministic 검증 어려움 (R5 참조), v0.10.0+ defer.
+- **NG8**: pre-v0.9.0 spec.md grandfather 처리 — `source:` 필드 비정형 파싱 hole 때문에 v0.9.0에서 제외 (R6). 기존 spec 재review 시 30초 분량 수동 Handoff Context 추가 필요 (CHANGELOG/README 안내).
 
 ## Constraints
 
@@ -93,21 +97,27 @@ devbrew 철학 정렬:
 - **C5**: kill switch `DEVBREW_SPEC_DISTILL_SKIP_HANDOFF_CHECK=1` 사용 시 reviewer는 stderr에 loud warning "handoff readiness 검증 비활성화 — /compact 이후 정보 손실 risk" 출력.
 - **C6**: design mode에서 `handoff_incomplete` 위반 시 routing은 기존 `design + needs_revise + count < 5` 행 그대로 — "brainstorming author 회귀" (메인 agent가 design.md 직접 수정). 신규 routing 행 추가 없음.
 - **C7**: 모든 검사 패턴(대화 reference regex 등)은 reviewer prompt 안에서 정의 — 별도 shared config 파일 안 만든다 (default to lightness).
+- **C8 (conversation reference 패턴, v0.9.0 확정 집합)**: 검사 대상은 다음 10개 substring (case-insensitive, normalize whitespace 후 매칭) — `"as discussed"`, `"as we agreed"`, `"we talked about"`, `"the user mentioned"`, `"earlier in this session"`, `"위에서 논의한"`, `"방금 결정한"`, `"아까 결정한"`, `"이전에 말했듯이"`, `"언급하셨던"`. 확장은 v0.10.0+ 별도 PR로 처리 (extensibility는 reviewer prompt 안 list 추가). 본 v0.9.0 집합은 reviewer prompt + AC4 fixture + test에서 동일 사용.
+- **C9 (4-surface dependency graph)**: 단일 v0.9.0 PR 내 task 순서 — (a) template 수정 → (b) reviewer agent에 카테고리 추가 (a의 섹션 anchor 참조) → (c) approve_handoff.sh 출력 교체 (a/b와 독립, 병렬 가능) → (d) plugin.json/CHANGELOG/README (마지막). (a)와 (b)는 fixture-reviewer 정합성 때문에 같은 PR이어야 함 (AC2–4 테스트가 둘 다 필요); (c)는 독립 deploy 가능하나 사용자 경험 일관성을 위해 같은 minor에 포함; (d)는 항상 마지막.
 
 ## Acceptance Criteria
 
-- **AC1**: `templates/spec-template.md`를 읽어 `## Handoff Context`, `**TL;DR**`, `**Implicit context**`, `**Deferred to plan**` 4개 문자열이 모두 존재함을 grep으로 확인 가능.
+- **AC1**: `templates/spec-template.md`를 읽어 `## Handoff Context`, `**TL;DR**`, `**Implicit context**`, `**Deferred to plan**` 4개 문자열이 모두 존재함을 grep으로 확인 가능. 섹션 위치는 `## Goal` 직후, `## Context / Why` 직전 (OQ2 resolve).
 - **AC2**: `tests/test_handoff_context_section_required.sh` — `## Handoff Context` 섹션이 없는 spec.md fixture를 reviewer에 dispatch 시 `handoff_incomplete` issue가 Issues 블록에 포함됨.
 - **AC3**: `tests/test_handoff_context_empty_subsections.sh` — TL;DR/Implicit/Deferred 중 하나라도 빈 fixture에서 `handoff_incomplete` issue emit.
-- **AC4**: `tests/test_conversation_reference_detection.sh` — spec 본문에 "as discussed", "we talked about", "위에서 논의한", "방금 결정한", "the user mentioned" 중 하나라도 포함된 fixture에서 `handoff_incomplete` issue emit.
-- **AC5**: `tests/test_handoff_context_tldr_dup.sh` — TL;DR이 Goal 섹션 본문과 동일한 (normalize whitespace 후 exact match) fixture에서 `handoff_incomplete` issue emit.
-- **AC6**: `tests/test_approve_handoff_packet_emit.sh` — `approve_handoff.sh <session_id> <spec_path>` stdout이 (a) `===== spec-distill handoff packet =====` divider, (b) `/compact spec at` 으로 시작하는 라인, (c) `Skill superpowers:writing-plans` 라인을 모두 포함.
-- **AC7**: `tests/test_handoff_kill_switch.sh` — `DEVBREW_SPEC_DISTILL_SKIP_HANDOFF_CHECK=1` 환경에서 reviewer dispatch 시 `handoff_incomplete` issue 없음 + stderr에 "handoff readiness 검증 비활성화" 문자열 포함.
-- **AC8**: `tests/test_grandfather_pre_v090_specs.sh` — frontmatter `source: spec-distill v0.8.x` (또는 v0.7.x, v0.6.x 등) 인 fixture에서 `handoff_incomplete` issue 없음 + stderr/advisory 출력.
-- **AC9**: `tests/test_handoff_design_mode.sh` — design.md 형식 fixture (frontmatter `locked_decisions` 부재, `## Handoff Context` 없음)에서 `handoff_incomplete` issue emit (design mode 7번째 카테고리로 작동 확인).
-- **AC10**: `plugin.json` `version` 필드가 `"0.9.0"`.
-- **AC11**: `CHANGELOG.md`에 `## [0.9.0] — 2026-05-26` 섹션 존재, Added/Changed 하위 항목 포함.
-- **AC12**: `README.md` Kill switches 섹션에 `DEVBREW_SPEC_DISTILL_SKIP_HANDOFF_CHECK=1` 행 추가.
+- **AC4**: `tests/test_conversation_reference_detection.sh` — spec 본문에 C8의 10개 패턴 (`"as discussed"`, `"as we agreed"`, `"we talked about"`, `"the user mentioned"`, `"earlier in this session"`, `"위에서 논의한"`, `"방금 결정한"`, `"아까 결정한"`, `"이전에 말했듯이"`, `"언급하셨던"`) 각각에 대해 1개 fixture씩 (총 10개 fixture or table-driven) 검증 — 각 fixture에서 `handoff_incomplete` issue emit.
+- **AC5**: `tests/test_approve_handoff_packet_emit.sh` — `approve_handoff.sh <session_id> <spec_path>` stdout이 다음 *모두* 포함:
+  - (a) divider 라인 `===== spec-distill handoff packet =====` 정확 매치.
+  - (b) `/compact ` 으로 시작하는 라인 (leading whitespace 무관), 해당 라인 본문에 `<spec_path>` substring + `Handoff Context` + `AC` + `Files to Modify` 모두 포함 (preserve directive 본문 검증).
+  - (c) 동일 `/compact` 라인 안에 `drop` 또는 `버리` substring (drop directive 검증).
+  - (d) 동일 `/compact` 라인 또는 같은 block 안에 `Skill superpowers:writing-plans <spec_path>` substring (next-step embed 검증).
+  - (e) [2] block에 별도로 `Skill superpowers:writing-plans <spec_path>` 라인 (안전망 검증).
+  - (f) divider 종료 라인 (`====...===` 8+ 문자).
+- **AC6**: `tests/test_handoff_kill_switch.sh` — `DEVBREW_SPEC_DISTILL_SKIP_HANDOFF_CHECK=1` 환경에서 reviewer dispatch 시 `handoff_incomplete` issue 없음 + stderr에 "handoff readiness 검증 비활성화" 문자열 포함.
+- **AC7**: `tests/test_handoff_design_mode.sh` — design.md 형식 fixture (frontmatter `locked_decisions` 부재, `## Handoff Context` 없음)에서 `handoff_incomplete` issue emit (design mode 7번째 카테고리로 작동 확인).
+- **AC8**: `plugin.json` `version` 필드가 `"0.9.0"`.
+- **AC9**: `CHANGELOG.md`에 `## [0.9.0] — 2026-05-26` 섹션 존재, Added/Changed 하위 항목 포함, `Removed: grandfather logic from initial draft` advisory 또는 NG8 참조 포함.
+- **AC10**: `README.md` Kill switches 섹션에 `DEVBREW_SPEC_DISTILL_SKIP_HANDOFF_CHECK=1` 행 추가.
 
 ## Files to Modify
 
@@ -121,21 +131,19 @@ plugins/spec-distill/CHANGELOG.md                     # [0.9.0] — 2026-05-26 e
 
 plugins/spec-distill/tests/test_handoff_context_section_required.sh    # AC2
 plugins/spec-distill/tests/test_handoff_context_empty_subsections.sh   # AC3
-plugins/spec-distill/tests/test_conversation_reference_detection.sh    # AC4
-plugins/spec-distill/tests/test_handoff_context_tldr_dup.sh            # AC5
-plugins/spec-distill/tests/test_approve_handoff_packet_emit.sh         # AC6
-plugins/spec-distill/tests/test_handoff_kill_switch.sh                 # AC7
-plugins/spec-distill/tests/test_grandfather_pre_v090_specs.sh          # AC8
-plugins/spec-distill/tests/test_handoff_design_mode.sh                 # AC9
+plugins/spec-distill/tests/test_conversation_reference_detection.sh    # AC4 (10 fixtures / table-driven)
+plugins/spec-distill/tests/test_approve_handoff_packet_emit.sh         # AC5
+plugins/spec-distill/tests/test_handoff_kill_switch.sh                 # AC6
+plugins/spec-distill/tests/test_handoff_design_mode.sh                 # AC7
 ```
 
 ## Verification Plan
 
-- **V1**: `bash plugins/spec-distill/tests/test_handoff_*.sh` — 7개 신규 테스트 모두 통과.
-- **V2**: `bash plugins/spec-distill/tests/test_approve_handoff_packet_emit.sh` — handoff packet 3-block 출력 확인.
-- **V3**: `bash plugins/spec-distill/tests/test_grandfather_pre_v090_specs.sh` — 이전 버전 spec backward compat.
-- **V4**: 기존 테스트 회귀 — `bash plugins/spec-distill/tests/test_*.sh` 전체 실행, 모두 통과.
-- **V5**: 수동 dogfood — 본 design.md 자체를 spec-distill reviewing-spec skill에 dispatch (v0.9.0 빌드 후), `handoff_incomplete` 검사가 `## Handoff Context` 존재로 통과함을 확인. self-validation.
+- **V1**: `bash plugins/spec-distill/tests/test_handoff_*.sh` — 6개 신규 테스트 모두 통과.
+- **V2**: `bash plugins/spec-distill/tests/test_approve_handoff_packet_emit.sh` — handoff packet 6개 sub-assertion (AC5 a–f) 모두 통과.
+- **V3**: 기존 테스트 회귀 — `bash plugins/spec-distill/tests/test_*.sh` 전체 실행, 모두 통과.
+- **V4 (positive dogfood)**: 본 design.md 자체를 spec-distill reviewing-spec skill에 dispatch (v0.9.0 빌드 후). `## Handoff Context` 존재 + 비어있지 않음 + conversation reference 패턴 부재 → `handoff_incomplete` issue 없음 확인.
+- **V5 (negative dogfood)**: 본 design.md의 `## Handoff Context` 섹션을 임시 제거한 사본을 reviewing-spec skill에 dispatch (v0.9.0 빌드 후). `handoff_incomplete` issue가 emit되어야 함 — reviewer가 카테고리를 항상 skip하는 silent-fail 회귀 차단. (test_handoff_design_mode.sh와 fixture는 다르지만 같은 카테고리 검증.)
 - **V6**: `jq -r '.version' plugins/spec-distill/.claude-plugin/plugin.json` → `0.9.0`.
 - **V7**: `grep -q "0.9.0" plugins/spec-distill/CHANGELOG.md` → exit 0.
 
@@ -143,15 +151,17 @@ plugins/spec-distill/tests/test_handoff_design_mode.sh                 # AC9
 
 - **R1 — 신규 `handoff-verifier` agent**: 별도 agent 파일로 검사 책임 분리. **거절**: AP9 (subagent spray) risk, devbrew "default to lightness" 위배. handoff readiness는 spec quality와 orthogonal하지 않음 — 신규 agent 정당화 부족.
 - **R2 — reviewing-spec skill 안에서 spec-reviewer 두 번 dispatch (general review + handoff-only)**: approved 직후 별도 handoff dispatch. **거절**: dispatch cost 2배, re-review cap 계산 복잡, AP14 ceremony 패턴.
-- **R3 — sidecar `<spec>.next.md` 파일 생성**: handoff packet을 git-tracked 파일로 보존. **거절**: 추가 파일 surface 증가, /compact 명령에 next-step instruction을 embed하는 트릭으로 compact-survival 이미 보장됨. v0.10.0에서 사용자 피드백 보고 재검토.
+- **R3 — sidecar `<spec>.next.md` 파일 생성**: handoff packet을 git-tracked 파일로 보존. **거절**: 추가 파일 surface 증가. compact-survival은 *best-effort*이지 보장 아님 — 진짜 안전망은 [2] 다음 세션 첫 프롬프트 라인(사용자 복사 가능). v0.10.0에서 사용자 피드백 보고 재검토.
 - **R4 — `## Handoff Context` 대신 frontmatter 필드로 (`handoff_context: ...`)**: YAML 안에 텍스트 박기. **거절**: multi-paragraph 텍스트는 markdown 본문이 자연스러움, frontmatter는 키-값 메타데이터에 한정 (P5).
-- **R5 — Conversation reference 검출 패턴을 별도 config 파일로**: `templates/ambiguity-blacklist.txt` 처럼 외부화. **거절**: 패턴 5–7개 수준, reviewer prompt 안 정의가 가장 명확 (C7).
+- **R5 — Conversation reference 검출 패턴을 별도 config 파일로**: `templates/ambiguity-blacklist.txt` 처럼 외부화. **거절**: 패턴 10개 수준, reviewer prompt 안 정의가 가장 명확 (C7+C8).
+- **R6 — pre-v0.9.0 spec.md grandfather 처리**: frontmatter `source:` 또는 `version:` 필드 기반으로 옛 spec은 `handoff_incomplete` 검사 skip. **거절**: 실제 spec/design 파일의 `source:` 값이 비정형(`source: superpowers/brainstorming + ...` 등 자유 문자열) — semver 추출 hole 발생. `version:` 필드는 spec 내용 version이지 schema version 아니라 의미 충돌. 신규 schema 필드 도입은 complexity 증가. 대안: 옛 spec 재review 시 사용자가 30초 분량 `## Handoff Context` 수동 추가 (reviewer recommendation에 템플릿 snippet 포함). CHANGELOG/README v0.9.0 release notes에 명시.
+- **R7 — TL;DR이 Goal과 동일/유사 검출 (이전 AC5)**: LLM 판단 deterministic 테스트 불가, fixture 신뢰성 약화. **거절**: v0.9.0 surface 축소. v0.10.0+에서 spec-reviewer agent prompt에 advisory(non-block) 카테고리로 재시도 검토.
 
 ## Open Questions
 
-- **OQ1**: `_frontmatter_source_version()` 헬퍼 (grandfather 판정용) 위치 — `hooks/state_path.py` 추가 vs spec-reviewer agent 안 inline shell? plan 단계에서 결정. (현재 agent는 Bash 권한이 있으므로 inline grep으로 frontmatter `source:` 라인 파싱 가능 — agent inline이 더 간단할 수 있음.)
-- **OQ2**: `## Handoff Context` 섹션 위치 — 11개 기존 섹션 어디 사이에 넣을지? 제안: `## Goal` 바로 다음 (가장 가시적이고 reader가 먼저 본다). 또는 `## Concrete Next Action` 직전 (handoff 의미 그룹). plan에서 확정.
-- **OQ3**: `tests/test_handoff_design_mode.sh` fixture 생성 방식 — design.md를 임시 파일로 생성 후 reviewer 직접 dispatch vs 기존 design-mode 테스트 패턴 답습? 후자가 일관성↑. plan에서 패턴 비교.
+- **OQ1**: `tests/test_handoff_design_mode.sh` fixture 생성 방식 — design.md를 임시 파일로 생성 후 reviewer 직접 dispatch vs 기존 design-mode 테스트 패턴 답습? 후자가 일관성↑. plan에서 패턴 비교.
+
+(이전 OQ1 "frontmatter source 헬퍼 위치"는 R6 grandfather 폐기로 무효. 이전 OQ2 "섹션 위치"는 AC1에서 resolve — `## Goal` 직후, `## Context / Why` 직전.)
 
 ## Concrete Next Action
 
