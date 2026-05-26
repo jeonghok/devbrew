@@ -38,6 +38,8 @@
                     └─ "approve"        → handoff (commit + pointer + cleanup)
 ```
 
+**v0.9.0**: `[5] approve → handoff` 시 stdout에 *Handoff packet* (3-block) emit — `/compact` 명령 양식 + 다음 세션 첫 프롬프트 (자세히는 `scripts/approve_handoff.sh`).
+
 ## Principles Instantiated
 
 이 플러그인이 instantiate하는 devbrew 철학.
@@ -120,6 +122,7 @@
 - `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` (v0.6.0) — SessionEnd cleanup hook만 skip. AC11 approve handoff + TTL-GC가 backup으로 작동.
 - `DEVBREW_SPEC_DISTILL_TTL_HOURS=<int>` (v0.6.0) — TTL-GC orphan 정리 임계값 (default 24h). 짧게 설정 시 자주 정리, in-flight 작업 risk 증가.
 - `DEVBREW_SPEC_DISTILL_GC_VERBOSE=1` (v0.6.0) — TTL-GC가 cleanup 발생 시 stdout summary 출력. CI/디버깅용.
+- `DEVBREW_SPEC_DISTILL_SKIP_HANDOFF_CHECK=1` (v0.9.0) — `handoff_incomplete` 카테고리만 우회. 다른 검사 (`missing_section` 등)는 정상 동작. loud warning stderr 출력. /compact 이후 정보 손실 risk 명시.
 
 ## Prerequisites
 
