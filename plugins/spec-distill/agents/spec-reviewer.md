@@ -51,6 +51,7 @@ description: >
 | `unstated_assumption` | spec이 가정하는 인프라/외부/팀 컨텍스트 명시 안 됨 | high |
 | `untestable_AC` | AC가 verification 명령으로 검증 불가 | high |
 | `scope_creep` | Non-goals와 Goals 충돌, 또는 한 spec에 multiple subsystem | medium |
+| `handoff_incomplete` | (a) `## Handoff Context` 섹션 부재, (b) TL;DR / Implicit context / Deferred to plan 중 하나라도 비어있음, (c) 본문에 C8 conversation reference 패턴 검출 (아래 list 참조) | block |
 
 ### Design Mode Branch (v0.4.0)
 
@@ -73,6 +74,31 @@ description: >
 | `approaches_comparison` | 2-3개 대안 + tradeoff 제시 없이 단일 안만 기술됨 | medium |
 | `isolation` | 컴포넌트 boundary / interface 정의가 모호해서 단위 테스트 / 변경 격리 불가능 | high |
 | `testing` | Verification Plan 부재 또는 "manual check"만 — 자동 검증 절차 없음 | high |
+| `handoff_incomplete` | (a) `## Handoff Context` 섹션 부재, (b) TL;DR / Implicit context / Deferred to plan 중 하나라도 비어있음, (c) 본문에 C8 conversation reference 패턴 검출 (아래 list 참조) | block |
+
+### Handoff readiness 검사 상세 (v0.9.0)
+
+`handoff_incomplete` 카테고리는 *spec mode + design mode 양쪽에서* 동일하게 적용. 검사 3개 sub-pattern:
+
+1. **섹션 부재**: 파일 본문에 `^## Handoff Context` 라인 부재 → `handoff_incomplete: section absent`.
+2. **하위 항목 미작성**: 섹션은 있으나 `TL;DR`, `Implicit context`, `Deferred to plan` 3개 sub-block 중 하나라도 비어있음(label 이후 다음 빈 줄까지 의미 있는 텍스트 < 10자) → `handoff_incomplete: subsection empty`.
+3. **Conversation reference 검출**: 다음 15개 substring (case-insensitive, normalize whitespace) 중 하나라도 본문에 포함되면 `handoff_incomplete: conversation reference detected`.
+
+   **영어 8개**: `as discussed`, `as we agreed`, `we talked about`, `the user mentioned`, `you mentioned`, `as mentioned before`, `per our discussion`, `earlier in this session`.
+
+   **한국어 7개**: `위에서 논의한`, `위에서 언급한`, `방금 결정한`, `아까 결정한`, `이전에 말했듯이`, `언급하셨던`, `말씀하신`.
+
+   확장은 v0.10.0+ 별도 PR로 본 list에 라인 추가 (인프라 변경 없음).
+
+#### Kill switch (v0.9.0)
+
+`DEVBREW_SPEC_DISTILL_SKIP_HANDOFF_CHECK=1` 환경 변수가 설정되어 있으면 `handoff_incomplete` 카테고리만 우회. 다른 검사는 정상. agent는 stderr에 loud warning 출력:
+
+```
+[spec-distill v0.9.0] WARNING: handoff readiness 검증 비활성화 — /compact 이후 정보 손실 risk
+```
+
+다른 카테고리(`missing_section`, `ambiguous_requirement` 등)는 영향 없음.
 
 design mode 결과에서도 위와 동일한 Output 형식 (Status / Issues / Recommendations / Stagnation_signal) 준수. spec mode와 동일한 `issue_id` 알고리즘 (`sha256_short(category + ":" + target_section)`). `affects_locked_decisions:` 필드는 design.md에 frontmatter `locked_decisions:`가 없으면 `[]` (빈 리스트, *반드시 emit*).
 
@@ -124,7 +150,7 @@ issue_id = sha256_short(category + ":" + target_section)
 
 ## verdict 규칙
 
-- **approved**: 11 섹션 모두 + concrete next action 명시 + AC 모두 측정 가능 + unstated assumption 없음.
+- **approved**: 11 섹션 모두 + concrete next action 명시 + AC 모두 측정 가능 + unstated assumption 없음 + **severity=block 카테고리 모두 clean** (`missing_section`, `concrete_action_missing`, `handoff_incomplete` 포함 — v0.9.0+).
 - **needs_revise**: 위 중 일부 누락이지만 인터뷰 round 추가는 불필요 (drafting-spec에서 해결 가능).
 - **needs_interview**: 사용자 의도가 spec에 약하게 표현돼 있어 추가 인터뷰 round가 필요.
 

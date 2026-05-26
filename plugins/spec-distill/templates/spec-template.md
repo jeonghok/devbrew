@@ -18,6 +18,20 @@ locked_decisions: []
 
 (One sentence — testable outcome.)
 
+## Handoff Context
+
+> 이 spec을 처음 보는 사람(또는 /compact 후 자기 자신)이 30초에 핵심 파악할 수 있게.
+> 대화 컨텍스트를 가정하지 말 것 — 모든 사실은 spec 본문에 self-contained.
+
+**TL;DR** (1–2 sentences — 무엇을, 왜):
+- ...
+
+**Implicit context** (Constraints에 안 박힌, 작업 진행에 필요한 외부 사실):
+- ...
+
+**Deferred to plan** (이 spec이 의도적으로 lock하지 않은 결정):
+- ...
+
 ## Context / Why
 
 (Why now, what problem, who asked, what's at stake.)

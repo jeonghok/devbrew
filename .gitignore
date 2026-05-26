@@ -214,3 +214,6 @@ __marimo__/
 .claude/
 reference/
 .omx
+
+# Git worktrees (per-feature isolated workspaces)
+.worktrees/
