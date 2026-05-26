@@ -1,6 +1,6 @@
 # project-init 플러그인
 
-Claude Code용 git workflow + LLM coding baseline 초기화 플러그인. 어떤 프로젝트에든 branching strategy, commit conventions, PR process 룰을 생성한다.
+Claude Code용 git workflow 초기화 플러그인. 어떤 프로젝트에든 branching strategy, commit conventions, PR process 룰을 생성한다.
 
 ## 아키텍처
 
@@ -22,7 +22,6 @@ plugins/project-init/
 └── templates/
     ├── shared/
     │   ├── commit-conventions.md
-    │   ├── llm-guidelines.md
     │   ├── pr-process.md
     │   └── claude-md-pointer.md     # v1.4.0 — @AGENTS.md 한 줄 thin pointer
     ├── github-flow/
@@ -42,7 +41,7 @@ plugins/project-init/
 2. branching strategy 선택 (GitHub Flow / Git Flow / Trunk-based)
 3. 커스터마이징 질문 2–3개 답변 (commit scope, merge strategy)
 4. 플러그인이 다음을 생성:
-   - `AGENTS.md` — `## LLM Coding Guidelines` + `## Git Workflow` (canonical content source, OpenAI Codex/Cursor/Aider 등 16+ 벤더 자동 인식)
+   - `AGENTS.md` — `## Git Workflow` (canonical content source, OpenAI Codex/Cursor/Aider 등 16+ 벤더 자동 인식)
    - `CLAUDE.md` — `@AGENTS.md` 한 줄 thin pointer (Claude Code가 AGENTS.md content를 자동 import)
    - `docs/git-workflow/branch-strategy.md` — 팀의 브랜치 룰
    - `docs/git-workflow/commit-conventions.md` — Conventional Commits 룰
@@ -54,7 +53,6 @@ plugins/project-init/
 |---------|------|
 | **`/project-init` command** | 인터랙티브 셋업 — strategy 선택, 룰 생성 |
 | **PostToolUse hook** | 브랜치 이름·커밋 메시지 포맷 자동 검증 |
-| **LLM Coding Guidelines** | Karpathy 유래 4-bullet 행동 baseline을 CLAUDE.md에 주입 |
 | **Templates** | 3개 branching strategy의 사전 작성된 룰 |
 
 ## 브랜치 전략
@@ -86,9 +84,8 @@ plugins/project-init/
 이 플러그인은 다음 devbrew 법칙·원칙을 인스턴스화합니다
 ([`docs/philosophy/devbrew-harness-philosophy.md`](../../docs/philosophy/devbrew-harness-philosophy.md) 참고):
 
-- **Law 1 (Clarity Before Code)** — 4-bullet LLM Coding Guidelines (Karpathy 유래: 가정 명시, overengineering 금지, surgical scope, verifiable 성공 기준)을 프로젝트 boundary에 주입해 Claude가 매 session start마다 읽도록.
 - **Law 3 (Compounding)** — PostToolUse hook이 브랜치 명명과 Conventional Commits 포맷을 지속적으로 강제; 컨벤션 drift를 action 레이어에서 잡음.
-- **Plugin shape — minimal pointer pattern** — CLAUDE.md는 짧은 anchor만 (8줄 LLM 블록 + Git Workflow 요약), 상세는 `docs/git-workflow/`에 거주. CLAUDE.md bloat 방지 + 룰 discoverability 양립.
+- **Plugin shape — minimal pointer pattern** — CLAUDE.md는 짧은 anchor만 (Git Workflow 요약), 상세는 `docs/git-workflow/`에 거주. CLAUDE.md bloat 방지 + 룰 discoverability 양립.
 - **Law 1 (Clarity Before Code) — v1.4.0** — agent-readable docs convention enforcement (size ≤200, TOC ≥300줄, fenced code language tag, internal links resolve, CLAUDE/AGENTS drift). Anthropic 공식 가이드 + AGENTS.md 오픈 스펙 + Chroma 2025 *Context Rot* / Lost-in-the-Middle / MDEval / MAST 3-source 합의로 도출된 deterministic baseline.
 
 ## 사용

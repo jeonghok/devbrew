@@ -5,6 +5,28 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [1.5.0] — 2026-05-26
+
+### Removed
+
+- `templates/shared/llm-guidelines.md` 파일 및 `## LLM Coding Guidelines` 섹션 emission 전면 제거. `/project-init`은 더 이상 타깃 프로젝트의 AGENTS.md에 4-bullet behavior baseline을 주입하지 않는다.
+- Plugin layer(`plugin.json` description, `commands/project-init.md` frontmatter & Step 5 확인 메시지, README) 전체에서 Karpathy attribution 및 LLM Coding Guidelines 참조 제거.
+
+### Changed
+
+- `commands/project-init.md` Step 4a 읽기 목록 6 → 5 파일 (`llm-guidelines.md` 제외).
+- `commands/project-init.md` Step 4c 4-state matrix의 S1·S2a·S3 행에서 `## LLM Coding Guidelines` 섹션 관리 로직 제거 — `## Git Workflow`만 관리. S2a 셀은 기존 CLAUDE.md의 `## LLM Coding Guidelines` 컨텐츠가 비-관리 컨텐츠로 자동 분류되어 AGENTS.md migration 시 보존됨을 명시.
+- devbrew root `CLAUDE.md`에서도 동일 섹션 제거 (dogfooding 일관성).
+
+### Migration / Note
+
+- 이미 이전 버전으로 `/project-init`을 실행한 사용자의 `AGENTS.md` 또는 `CLAUDE.md`에 주입된 `## LLM Coding Guidelines` 섹션은 **자동 제거되지 않는다**. 원하면 manual 삭제 권장.
+- 재실행 시(Step 4c S3 path)도 기존 `## LLM Coding Guidelines` 섹션은 비-관리 컨텐츠로 분류되어 보존됨 — `## Git Workflow` 섹션만 in-place 갱신.
+
+### Rationale
+
+- 4-bullet wording (`요청 이상 만들지 않기, 추측 금지` / `인접 코드 청소 금지`)이 action 제약과 suggestion 제약을 구분하지 못해 proactive observation·제안 표면을 의도치 않게 줄이는 chilling effect 발생. wording fix 비용 대비 net benefit이 낮다고 판단하여 전면 제거. Claude Code 기본 시스템 프롬프트가 이미 동등한 행동 baseline (Think Before, Simplicity, Surgical, Goal-driven)을 제공.
+
 ## [1.4.0] — 2026-05-17
 
 ### Added

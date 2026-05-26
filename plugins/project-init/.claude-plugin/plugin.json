@@ -1,7 +1,7 @@
 {
   "name": "project-init",
-  "description": "Initialize git workflow rules + LLM coding baseline for any project. Select a branching strategy (GitHub Flow, Git Flow, Trunk-based), generate AGENTS.md (canonical) + CLAUDE.md (@AGENTS.md thin pointer) and docs/ with branch naming, Conventional Commits, PR process, and Karpathy-derived LLM coding guidelines. Auto-validates branch/commit + agent-readable docs conventions via hooks.",
-  "version": "1.4.0",
+  "description": "Initialize git workflow rules for any project. Select a branching strategy (GitHub Flow, Git Flow, Trunk-based), generate AGENTS.md (canonical) + CLAUDE.md (@AGENTS.md thin pointer) and docs/ with branch naming, Conventional Commits, and PR process. Auto-validates branch/commit + agent-readable docs conventions via hooks.",
+  "version": "1.5.0",
   "author": {
     "name": "jeonghokim"
   }
