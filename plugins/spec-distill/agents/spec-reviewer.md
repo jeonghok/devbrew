@@ -150,7 +150,7 @@ issue_id = sha256_short(category + ":" + target_section)
 
 ## verdict 규칙
 
-- **approved**: 11 섹션 모두 + concrete next action 명시 + AC 모두 측정 가능 + unstated assumption 없음.
+- **approved**: 11 섹션 모두 + concrete next action 명시 + AC 모두 측정 가능 + unstated assumption 없음 + **severity=block 카테고리 모두 clean** (`missing_section`, `concrete_action_missing`, `handoff_incomplete` 포함 — v0.9.0+).
 - **needs_revise**: 위 중 일부 누락이지만 인터뷰 round 추가는 불필요 (drafting-spec에서 해결 가능).
 - **needs_interview**: 사용자 의도가 spec에 약하게 표현돼 있어 추가 인터뷰 round가 필요.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spec-distill v0.6.0 — AC11 atomic approve handoff (script-ified from prose).
+# spec-distill v0.9.0 — AC11 atomic approve handoff (script-ified from prose).
 # Usage: approve_handoff.sh <session_id> <spec_path>
 set -euo pipefail
 
@@ -30,7 +30,7 @@ esac
 
 # Step 1: commit
 git add -- "$spec_path"
-if ! git commit -m "spec: $(basename "${spec_path%-spec.md}" | sed 's/^[0-9-]*//') (v1.0.0, spec-distill v0.6.0)"; then
+if ! git commit -m "spec: $(basename "${spec_path%-spec.md}" | sed 's/^[0-9-]*//') (v1.0.0, spec-distill v0.9.0)"; then
     echo "[spec-distill] commit failed — state preserved, 사용자 수동 개입 필요" >&2
     exit 1
 fi
@@ -59,4 +59,4 @@ if [[ "$cleanup_skipped" == "0" ]]; then
 fi
 
 # Step 4: termination notice
-echo "spec-distill v0.6.0 종료."
+echo "spec-distill v0.9.0 종료."

@@ -14,7 +14,22 @@ design_start=$(grep -n "^### Design Mode Branch" "$AGENT" | head -1 | cut -d: -f
   || { note FAIL "design mode section header missing"; exit 1; }
 
 # Within the design mode block, all 6 existing categories + handoff_incomplete must appear.
-design_block=$(sed -n "${design_start},/^## /p" "$AGENT")
+# Bounded extraction: from `### Design Mode Branch` line to (but not including) the next H3
+# sub-section or the next H2 section. Prevents range bleed into later sub-sections
+# (adversarial F3 — previously `sed -n "${design_start},/^## /p"` bled across H3 boundaries).
+design_block=$(awk -v start="$design_start" '
+  NR < start { next }
+  NR == start { in_block = 1; print; next }
+  in_block && /^### / { exit }
+  in_block && /^## / { exit }
+  in_block { print }
+' "$AGENT")
+
+if [[ -z "$design_block" ]]; then
+  note FAIL "AC7: design mode block extracted empty — check agent file structure"
+  echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
+  exit 1
+fi
 
 for cat in "placeholder" "ambiguity" "scope_creep" "approaches_comparison" "isolation" "testing" "handoff_incomplete"; do
   echo "$design_block" | grep -q "$cat" \
