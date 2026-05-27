@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AC6 — approve_handoff.sh contract.
+# AC1/AC2/AC3/AC7 — approve_handoff.sh idempotent contract (v0.10.0).
 set -uo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -20,89 +20,96 @@ setup_repo() {
     echo "state" > "$wd/.claude/spec-distill/test-sid12/state.local.md"
 }
 
-# Case 1: happy path
+marker_path() {
+    local wd=$1 sid=$2
+    echo "$wd/.claude/spec-distill/.markers/${sid}.emitted"
+}
+
+# ───────── Case 1 (AC1): happy path — clean HEAD spec → marker created, packet emitted ─────────
 WORK=$(mktemp -d)
 setup_repo "$WORK"
-echo "modified" > "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md"
-bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>&1
+bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/tmp/out 2>/tmp/err
 rc=$?
-[[ $rc -eq 0 && ! -d "$WORK/.claude/spec-distill/test-sid12" ]] \
-    && note PASS "case 1: happy path (commit + cleanup)" \
-    || note FAIL "case 1: rc=$rc folder_exists=$([[ -d $WORK/.claude/spec-distill/test-sid12 ]] && echo y || echo n)"
-rm -rf "$WORK"
-
-# Case 2: charset reject (cleanup_skipped)
-WORK=$(mktemp -d)
-setup_repo "$WORK"
-mkdir -p "$WORK/.claude/spec-distill/..bad"
-echo "modified" > "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md"
-bash "$SCRIPT" "../bad" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>err
-grep -q "cleanup skipped" err \
-    && note PASS "case 2: charset reject emits advisory" \
-    || note FAIL "case 2: missing cleanup-skipped advisory"
-rm -rf "$WORK"
-
-# Case 3: empty session_id arg
-bash "$SCRIPT" "" "anything" >/dev/null 2>&1
-[[ $? -ne 0 ]] \
-    && note PASS "case 3: empty session_id rejected" \
-    || note FAIL "case 3: empty session_id accepted"
-
-# Case 4: empty spec_path arg
-bash "$SCRIPT" "test-sid12" "" >/dev/null 2>&1
-[[ $? -ne 0 ]] \
-    && note PASS "case 4: empty spec_path rejected" \
-    || note FAIL "case 4: empty spec_path accepted"
-
-# Case 5: git commit fail (no spec edit → 'nothing to commit')
-WORK=$(mktemp -d)
-setup_repo "$WORK"
-# don't modify spec → git commit will fail "nothing to commit"
-bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>&1
-rc=$?
-[[ $rc -ne 0 && -d "$WORK/.claude/spec-distill/test-sid12" ]] \
-    && note PASS "case 5: commit fail preserves state" \
-    || note FAIL "case 5: rc=$rc, state lost"
-rm -rf "$WORK"
-
-# Case 6: rm permission fail (skip if root or limited platform)
-if [[ $(id -u) -ne 0 ]]; then
-    WORK=$(mktemp -d)
-    setup_repo "$WORK"
-    chmod 555 "$WORK/.claude/spec-distill"  # parent read-only
-    echo "modified" > "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md"
-    bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>err
-    grep -q "cleanup rm failed" err \
-        && note PASS "case 6: rm fail emits advisory but exits 0" \
-        || note FAIL "case 6: missing rm-fail advisory"
-    chmod 755 "$WORK/.claude/spec-distill"
-    rm -rf "$WORK"
+m=$(marker_path "$WORK" "test-sid12")
+if [[ $rc -eq 0 && -f "$m" ]] && grep -q "STATUS=already_handed_off" "$m" && grep -q "===== spec-distill handoff packet =====" /tmp/out; then
+    note PASS "case 1 (AC1): clean HEAD → marker created + packet emitted"
 else
-    note PASS "case 6: skipped (running as root)"
+    note FAIL "case 1: rc=$rc, marker_exists=$([[ -f $m ]] && echo y || echo n), stdout_ok=$(grep -q handoff /tmp/out && echo y || echo n)"
 fi
-
-# Case 7: idempotent re-run (second call → already committed)
-WORK=$(mktemp -d)
-setup_repo "$WORK"
-echo "modified" > "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md"
-bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>&1
-# folder already gone; second call should still fail because git has nothing to commit
-bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>&1
-[[ $? -ne 0 ]] \
-    && note PASS "case 7: idempotent re-run fails (already committed)" \
-    || note FAIL "case 7: re-run silently succeeded"
 rm -rf "$WORK"
 
-# Case 8: folder pre-deleted (SessionEnd preceded)
+# ───────── Case 2 (AC2): dirty spec → exit 1 + 4-token stderr advisory ─────────
+WORK=$(mktemp -d)
+setup_repo "$WORK"
+echo "uncommitted modification" >> "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md"
+bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/tmp/out 2>/tmp/err
+rc=$?
+m=$(marker_path "$WORK" "test-sid12")
+required_tokens_ok=1
+grep -q "\[spec-distill\]" /tmp/err || required_tokens_ok=0
+grep -q "dirty_blocked" /tmp/err || required_tokens_ok=0
+grep -q "git status --short" /tmp/err || required_tokens_ok=0
+grep -q "git add -- " /tmp/err || required_tokens_ok=0
+grep -q "git commit -m " /tmp/err || required_tokens_ok=0
+if [[ $rc -ne 0 && ! -f "$m" && "$required_tokens_ok" -eq 1 ]]; then
+    note PASS "case 2 (AC2): dirty → exit 1 + 4-token advisory + no marker"
+else
+    note FAIL "case 2: rc=$rc, marker_absent=$([[ ! -f $m ]] && echo y || echo n), tokens_ok=$required_tokens_ok"
+fi
+rm -rf "$WORK"
+
+# ───────── Case 3 (AC3): idempotent re-run → marker preserved, TIMESTAMP unchanged ─────────
+WORK=$(mktemp -d)
+setup_repo "$WORK"
+bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>&1
+m=$(marker_path "$WORK" "test-sid12")
+ts1=$(grep "^TIMESTAMP=" "$m" | cut -d= -f2-)
+sleep 1
+bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/tmp/out 2>&1
+rc=$?
+ts2=$(grep "^TIMESTAMP=" "$m" | cut -d= -f2-)
+if [[ $rc -eq 0 && -f "$m" && "$ts1" == "$ts2" ]] && grep -q "STATUS=already_handed_off" "$m" && grep -q "handoff packet" /tmp/out; then
+    note PASS "case 3 (AC3): re-run preserves TIMESTAMP + re-emits packet"
+else
+    note FAIL "case 3: rc=$rc, ts_unchanged=$([[ $ts1 == $ts2 ]] && echo y || echo n)"
+fi
+rm -rf "$WORK"
+
+# ───────── Case 4: charset reject (cleanup_skipped) ─────────
+WORK=$(mktemp -d)
+setup_repo "$WORK"
+bash "$SCRIPT" "../bad" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>/tmp/err
+grep -q "cleanup skipped" /tmp/err \
+    && note PASS "case 4: charset reject emits advisory" \
+    || note FAIL "case 4: missing cleanup-skipped advisory"
+rm -rf "$WORK"
+
+# ───────── Case 5: empty session_id arg → exit 1 ─────────
+bash "$SCRIPT" "" "anything" >/dev/null 2>&1
+[[ $? -ne 0 ]] && note PASS "case 5: empty session_id rejected" || note FAIL "case 5: empty session_id accepted"
+
+# ───────── Case 6: empty spec_path arg → exit 1 ─────────
+bash "$SCRIPT" "test-sid12" "" >/dev/null 2>&1
+[[ $? -ne 0 ]] && note PASS "case 6: empty spec_path rejected" || note FAIL "case 6: empty spec_path accepted"
+
+# ───────── Case 7 (AC7): kill switch DEVBREW_DISABLE_SPEC_DISTILL=1 → exit 0, no marker ─────────
+WORK=$(mktemp -d)
+setup_repo "$WORK"
+DEVBREW_DISABLE_SPEC_DISTILL=1 bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>&1
+rc=$?
+m=$(marker_path "$WORK" "test-sid12")
+[[ $rc -eq 0 && ! -f "$m" ]] \
+    && note PASS "case 7 (AC7): kill switch → exit 0, no marker" \
+    || note FAIL "case 7: rc=$rc, marker_absent=$([[ ! -f $m ]] && echo y || echo n)"
+rm -rf "$WORK"
+
+# ───────── Case 8: session folder pre-deleted (SessionEnd preceded) → graceful ─────────
 WORK=$(mktemp -d)
 setup_repo "$WORK"
 rm -rf "$WORK/.claude/spec-distill/test-sid12"
-echo "modified" > "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md"
 bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>&1
 rc=$?
-[[ $rc -eq 0 ]] \
-    && note PASS "case 8: folder pre-deleted graceful" \
-    || note FAIL "case 8: rc=$rc on absent folder"
+[[ $rc -eq 0 ]] && note PASS "case 8: folder pre-deleted graceful" || note FAIL "case 8: rc=$rc"
 rm -rf "$WORK"
 
 if [[ "$fail" -gt 0 ]]; then
