@@ -21,11 +21,14 @@ MARKER
 }
 
 invoke() {
-    local wd=$1 payload=$2
+    local wd=$1 payload=$2 sid=$3
     cd "$wd"
     git init -q 2>/dev/null || true
     git config user.email t@x.invalid 2>/dev/null
     git config user.name t 2>/dev/null
+    # DEVBREW_SPEC_DISTILL_SESSION_ID pins the session so resolve_session_id uses
+    # our test SID rather than CLAUDE_CODE_SESSION_ID from the outer shell.
+    export DEVBREW_SPEC_DISTILL_SESSION_ID="$sid"
     echo "$payload" | python3 "$HOOK" 2>&1
 }
 
@@ -42,7 +45,7 @@ pld() {
 WORK=$(mktemp -d)
 SID="sess1234abc"
 make_marker "$WORK" "$SID"
-invoke "$WORK" "$(pld "$SID" "/compact preserve spec")" >/dev/null
+invoke "$WORK" "$(pld "$SID" "/compact preserve spec")" "$SID" >/dev/null
 if [[ ! -f "$WORK/.claude/spec-distill/.markers/${SID}.emitted" ]]; then
     note PASS "case 1: /compact prefix → marker deleted"
 else
@@ -53,7 +56,7 @@ rm -rf "$WORK"
 # ───────── Case 2 (AC5.ii): Skill superpowers:writing-plans → marker deleted ─────────
 WORK=$(mktemp -d)
 make_marker "$WORK" "$SID"
-invoke "$WORK" "$(pld "$SID" "Skill superpowers:writing-plans foo.md")" >/dev/null
+invoke "$WORK" "$(pld "$SID" "Skill superpowers:writing-plans foo.md")" "$SID" >/dev/null
 if [[ ! -f "$WORK/.claude/spec-distill/.markers/${SID}.emitted" ]]; then
     note PASS "case 2: Skill writing-plans → marker deleted"
 else
@@ -64,7 +67,7 @@ rm -rf "$WORK"
 # ───────── Case 3: leading whitespace handled (lstrip semantics) ─────────
 WORK=$(mktemp -d)
 make_marker "$WORK" "$SID"
-invoke "$WORK" "$(pld "$SID" "   /compact")" >/dev/null
+invoke "$WORK" "$(pld "$SID" "   /compact")" "$SID" >/dev/null
 if [[ ! -f "$WORK/.claude/spec-distill/.markers/${SID}.emitted" ]]; then
     note PASS "case 3: leading whitespace then /compact → marker deleted"
 else
@@ -75,7 +78,7 @@ rm -rf "$WORK"
 # ───────── Case 4: substring (mid-message) → marker preserved ─────────
 WORK=$(mktemp -d)
 make_marker "$WORK" "$SID"
-invoke "$WORK" "$(pld "$SID" "please run /compact later")" >/dev/null
+invoke "$WORK" "$(pld "$SID" "please run /compact later")" "$SID" >/dev/null
 if [[ -f "$WORK/.claude/spec-distill/.markers/${SID}.emitted" ]]; then
     note PASS "case 4: substring /compact → marker preserved"
 else
@@ -86,7 +89,7 @@ rm -rf "$WORK"
 # ───────── Case 5: case-sensitive (/Compact rejected) ─────────
 WORK=$(mktemp -d)
 make_marker "$WORK" "$SID"
-invoke "$WORK" "$(pld "$SID" "/Compact preserve")" >/dev/null
+invoke "$WORK" "$(pld "$SID" "/Compact preserve")" "$SID" >/dev/null
 if [[ -f "$WORK/.claude/spec-distill/.markers/${SID}.emitted" ]]; then
     note PASS "case 5: /Compact (uppercase C) → marker preserved (case-sensitive)"
 else
@@ -97,7 +100,7 @@ rm -rf "$WORK"
 # ───────── Case 6: unrelated prompt → marker preserved ─────────
 WORK=$(mktemp -d)
 make_marker "$WORK" "$SID"
-invoke "$WORK" "$(pld "$SID" "do something else")" >/dev/null
+invoke "$WORK" "$(pld "$SID" "do something else")" "$SID" >/dev/null
 if [[ -f "$WORK/.claude/spec-distill/.markers/${SID}.emitted" ]]; then
     note PASS "case 6: unrelated prompt → marker preserved"
 else
