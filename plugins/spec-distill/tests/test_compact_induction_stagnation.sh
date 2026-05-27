@@ -22,9 +22,13 @@ git init -q
 git config user.email t@x.invalid
 git config user.name t
 
+# Per-run tmpdir to avoid /tmp/induct_err_* collisions between parallel CI jobs.
+TMPDIR_TESTRUN=$(mktemp -d)
+trap 'rm -rf "$TMPDIR_TESTRUN"' EXIT
+
 # Fire 5 times with session id pinning
 for i in 1 2 3 4 5; do
-    DEVBREW_SPEC_DISTILL_SESSION_ID="$SID" bash -c "echo '{\"session_id\":\"$SID\"}' | python3 \"$HOOK\"" >/dev/null 2>/tmp/induct_err_$i || true
+    DEVBREW_SPEC_DISTILL_SESSION_ID="$SID" bash -c "echo '{\"session_id\":\"$SID\"}' | python3 \"$HOOK\"" >/dev/null 2>"$TMPDIR_TESTRUN/induct_err_$i" || true
 done
 
 # Check FIRE_COUNT progression and final self-cleanup behavior.
@@ -37,10 +41,10 @@ else
 fi
 
 # Advisory check on the 5th fire's stderr
-if grep -q "stagnation" /tmp/induct_err_5 2>/dev/null; then
+if grep -q "stagnation" "$TMPDIR_TESTRUN/induct_err_5" 2>/dev/null; then
     note PASS "case 2: stagnation advisory emitted on 5th fire"
 else
-    note FAIL "case 2: stagnation keyword missing in stderr: $(cat /tmp/induct_err_5 2>/dev/null)"
+    note FAIL "case 2: stagnation keyword missing in stderr: $(cat "$TMPDIR_TESTRUN/induct_err_5" 2>/dev/null)"
 fi
 
 # 6th fire should be a no-op (marker absent) — emit {}
@@ -51,7 +55,7 @@ else
     note FAIL "case 3: 6th fire stdout '$out6' (expected '{}')"
 fi
 
-rm -rf "$WORK" /tmp/induct_err_*
+rm -rf "$WORK"  # TMPDIR_TESTRUN cleaned by EXIT trap
 
 if [[ "$fail" -gt 0 ]]; then
     echo "FAILED: $fail case(s)"
