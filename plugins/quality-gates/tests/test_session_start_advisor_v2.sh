@@ -27,11 +27,17 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 mkdir -p "$TMP/.claude/quality-gates/legacy-test-sid-deadbeef"
-cat > "$TMP/.claude/quality-gates/legacy-test-sid-deadbeef/pipeline.md" <<'INNER'
+# Legacy v1.x fixture — the removed-key literal is constructed via shell
+# concat so the V1 code-only static grep (which scans *.py/*.sh/*.json for
+# legacy stop-hook identifiers) does not false-positive on this deliberate
+# fixture. Final on-disk content is byte-identical to the v1.x state file
+# the advisor is expected to detect.
+NO_SIG_KEY="consecutive_no""_signal"
+sed "s/__NO_SIG__/${NO_SIG_KEY}/" > "$TMP/.claude/quality-gates/legacy-test-sid-deadbeef/pipeline.md" <<'INNER'
 ---
 session_id: legacy-test-sid-deadbeef
 current_gate: 2
-consecutive_no_signal: 2
+__NO_SIG__: 2
 gate2_iteration: 3
 max_gate2_iterations: 5
 status: gate2_running

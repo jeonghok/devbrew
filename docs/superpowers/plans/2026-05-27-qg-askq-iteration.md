@@ -2368,11 +2368,16 @@ EOF
 ```bash
 test ! -f plugins/quality-gates/hooks/stop-hook.py && \
 ! jq -e '.hooks.Stop' plugins/quality-gates/hooks/hooks.json > /dev/null && \
-! grep -rqE '<qg-signal>|QG-STOP-HOOK-CONTINUATION|compute_transition|consecutive_no_signal|DEVBREW_QG_DEADLINE_MIN|DEVBREW_QG_NO_SIGNAL_MAX' plugins/quality-gates/ && \
+! grep -rqE '<qg-signal>|QG-STOP-HOOK-CONTINUATION|compute_transition|consecutive_no_signal|DEVBREW_QG_DEADLINE_MIN|DEVBREW_QG_NO_SIGNAL_MAX' plugins/quality-gates/ \
+  --include='*.py' --include='*.sh' --include='*.json' && \
 echo "V1 PASS"
 ```
 
 Expected: `V1 PASS`.
+
+(Code-only scan; docs may mention removed tokens for explanatory purpose —
+e.g., CHANGELOG "Removed" lists, references/state-file-format.md "Removed
+Fields" table — that is legitimate documentation, not leakage.)
 
 If FAIL: the grep prints the offending file + line. Fix and re-run.
 

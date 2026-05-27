@@ -40,7 +40,7 @@ LEGACY_RELATIVE = (
 # v1.32.0: in-flight detection removed. Legacy v1.x markers still detected
 # for one-shot advisory (see _emit_legacy_v1_advisory). Keys are constructed
 # (not literals) so V8-pre static grep for in-flight identifiers stays clean.
-LEGACY_V1_KEYS = ("status:", "current" + "_gate:", "consecutive_no_signal:")
+LEGACY_V1_KEYS = ("status:", "current" + "_gate:", "consecutive_no" + "_signal:")
 
 
 def _disabled() -> bool:

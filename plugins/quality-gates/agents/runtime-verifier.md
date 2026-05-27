@@ -192,10 +192,6 @@ HASH=$(printf '%s\n' "${kinds[@]}" | sort | { command -v sha256sum >/dev/null &&
 
 The skill compares this against the previous iteration's hash; identical hashes for two consecutive NEEDS_RESOLUTION emit signals trigger `gate3_repeat_detected`.
 
-Then emit the signal tag (the skill ALSO emits a final `<qg-signal>` after parsing your report; you do NOT emit `<qg-signal>` directly — that is the skill's responsibility):
-
-(no `<qg-signal>` from agent — leave that to the skill)
-
 ## Notes
 
 - If `mcp_browser: none`, do not attempt any chrome-devtools / playwright actions; record those as `attempted: no, reason: "MCP unavailable"` in evidence-log. PASS is still possible if all other surfaces succeeded.
