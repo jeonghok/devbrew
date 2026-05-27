@@ -187,40 +187,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 python3 "$SCRIPT_DIR/qg-gc.py" --session-id "$SESSION_ID" 2>/dev/null || true
 
-# DEVBREW_GATE3_MAX_RESOLUTIONS env override (default 3, integer 0..10 clamp)
-RAW_MAX="${DEVBREW_GATE3_MAX_RESOLUTIONS:-3}"
-if [[ ! "$RAW_MAX" =~ ^[0-9]+$ ]]; then
-  echo "⚠️  Quality Gates: DEVBREW_GATE3_MAX_RESOLUTIONS='$RAW_MAX' is not numeric; using default 3" >&2
-  MAX_GATE3_RESOLUTIONS=3
-elif [[ "$RAW_MAX" -gt 10 ]]; then
-  echo "⚠️  Quality Gates: DEVBREW_GATE3_MAX_RESOLUTIONS='$RAW_MAX' exceeds maximum 10; clamping to 10" >&2
-  MAX_GATE3_RESOLUTIONS=10
-else
-  MAX_GATE3_RESOLUTIONS="$RAW_MAX"
-fi
-
 mkdir -p "$STATE_DIR"
-
-# --- Wall-clock budget (T2-3) ---
-RAW_DEADLINE_MIN="${DEVBREW_QG_DEADLINE_MIN:-30}"
-if [[ ! "$RAW_DEADLINE_MIN" =~ ^[0-9]+$ ]]; then
-  echo "⚠️  Quality Gates: DEVBREW_QG_DEADLINE_MIN='$RAW_DEADLINE_MIN' is not numeric; using default 30" >&2
-  DEADLINE_MIN=30
-else
-  DEADLINE_MIN="$RAW_DEADLINE_MIN"
-fi
-if [[ "$DEADLINE_MIN" -eq 0 ]]; then
-  WALL_CLOCK_DEADLINE=""
-else
-  if WALL_CLOCK_DEADLINE="$(date -u -v+"${DEADLINE_MIN}"M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)"; then
-    :
-  else
-    WALL_CLOCK_DEADLINE="$(date -u -d "+${DEADLINE_MIN} minutes" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null)" || {
-      echo "⚠️  Quality Gates: cannot compute wall-clock deadline on this platform; deadline disabled" >&2
-      WALL_CLOCK_DEADLINE=""
-    }
-  fi
-fi
 
 # --- Dependency Check ---
 
@@ -279,19 +246,6 @@ if plugin_installed "superpowers"; then
   fi
 fi
 
-# --- Determine Initial State ---
-
-CURRENT_GATE=1
-STATUS="gate1_running"
-
-if [[ -n "$SINGLE_GATE" ]]; then
-  case $SINGLE_GATE in
-    gate1) CURRENT_GATE=1; STATUS="gate1_running" ;;
-    gate2) CURRENT_GATE=2; STATUS="gate2_running" ;;
-    gate3) CURRENT_GATE=3; STATUS="gate3_running" ;;
-  esac
-fi
-
 # --- Create State File ---
 
 TEMP_FILE="${STATE_FILE}.tmp.$$"
@@ -299,42 +253,26 @@ TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 cat > "$TEMP_FILE" << EOF
 ---
-status: $STATUS
-current_gate: $CURRENT_GATE
+session_id: "$SESSION_ID"
+started_at: "$TIMESTAMP"
 gate2_iteration: 0
-max_gate2_iterations: 5
-gate3_resolution_iter: 0
-last_gate3_needed_hash: ""
-max_gate3_resolutions: $MAX_GATE3_RESOLUTIONS
-consecutive_no_signal: 0
-skip_runtime: $SKIP_RUNTIME
-single_gate: ${SINGLE_GATE:-null}
-plan_file: "$PLAN_FILE"
-pr_url: "$PR_URL"
-available_plugins: "$AVAILABLE_PLUGINS"
-project_dir: "${WORKTREE_PATH:-$(pwd)}"
 EOF
 
-# Conditionally include worktree fields only when a named branch was given.
+# worktree_path is optional — only set when /qg branch <name> created one.
 if [[ -n "$WORKTREE_PATH" ]]; then
   cat >> "$TEMP_FILE" << EOF
-worktree_path: "${WORKTREE_PATH}"
-target_branch: "${TARGET_BRANCH}"
+worktree_path: "$WORKTREE_PATH"
+target_branch: "$TARGET_BRANCH"
 EOF
 fi
 
 cat >> "$TEMP_FILE" << EOF
-wall_clock_deadline_at: "$WALL_CLOCK_DEADLINE"
-session_id: "$SESSION_ID"
-started_at: "$TIMESTAMP"
 ---
 
-# Quality Gates Pipeline State
+# Quality Gates Pipeline State (v2.0.0)
 
-## Gate Results
-
-## Pipeline History
-- [$TIMESTAMP] Pipeline started (iteration 1)
+## History
+- [$TIMESTAMP] Pipeline started
 EOF
 
 mv "$TEMP_FILE" "$STATE_FILE"
@@ -366,5 +304,4 @@ if [[ "$PLAN_FILE" != "auto" ]]; then
   echo "Plan file: $PLAN_FILE"
 fi
 echo ""
-echo "Stop hook is active. Pipeline progression is automatic."
-echo "To cancel: /cancel-qg"
+echo "Pipeline runs in this turn. To cancel before run: /cancel-qg"
