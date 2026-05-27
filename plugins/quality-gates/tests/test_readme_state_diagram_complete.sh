@@ -1,36 +1,55 @@
 #!/usr/bin/env bash
-# AC49-AC52 — README state-machine diagram drift detection.
+# README state-diagram drift detection (I12, v1.32.1).
 #
-# Asserts the README contains exactly one Mermaid stateDiagram-v2 block
-# whose transition names match the 13-row authoritative set from the spec.
+# v1.32.0 redesign replaced the Mermaid stateDiagram-v2 (turn-by-turn
+# Stop-hook state machine, 13 transitions) with a single ASCII diagram
+# representing the in-turn AskUserQuestion-driven pipeline. This test
+# now asserts that ONE canonical pipeline diagram exists in the README
+# and contains the v1.32.0 protocol-shape markers expected by the design.
 
 set -euo pipefail
 README="plugins/quality-gates/README.md"
 
-# AC50: exactly one stateDiagram-v2 block.
-count_diag=$(grep -c 'stateDiagram-v2' "$README")
-[[ "$count_diag" -eq 1 ]] || { echo "FAIL AC50: stateDiagram-v2 count=$count_diag (expected 1)"; exit 1; }
+[[ -f "$README" ]] || { echo "FAIL: README missing at $README"; exit 1; }
 
-# AC51: at least 2 terminal/state markers ([*] or completed/aborted text).
-count_term=$(grep -cE '\[\*\]|completed|aborted' "$README")
-[[ "$count_term" -ge 2 ]] || { echo "FAIL AC51: terminal markers=$count_term (expected ≥2)"; exit 1; }
-
-# AC49 + AC52: 13 transition names exactly equal expected set (no missing, no superset).
-PATTERN='\b(next_gate|retry_gate|complete|abort|continue|gate2_user_choice|max_gate2_exceeded|gate3_fail|gate3_needs_resolution|gate3_repeat_detected|wall_clock_exceeded|no_signal_inc|no_signal_max)\b'
-README_SET=$(awk '/^```mermaid$/,/^```$/' "$README" \
-  | grep -oE "$PATTERN" | sort -u)
-EXPECTED_SET=$(printf '%s\n' \
-  next_gate retry_gate complete abort continue gate2_user_choice \
-  max_gate2_exceeded gate3_fail gate3_needs_resolution gate3_repeat_detected \
-  wall_clock_exceeded no_signal_inc no_signal_max | sort -u)
-
-if ! diff <(echo "$README_SET") <(echo "$EXPECTED_SET") >/dev/null; then
-  echo "FAIL AC49/AC52: README mermaid diagram transition set differs from expected."
-  echo "--- README has ---"
-  echo "$README_SET"
-  echo "--- expected ---"
-  echo "$EXPECTED_SET"
+# 1. No Mermaid stateDiagram-v2 block (was removed in v1.32.0).
+if grep -q 'stateDiagram-v2' "$README"; then
+  echo "FAIL: stateDiagram-v2 still present (v1.32.0 removed it)"
   exit 1
 fi
 
-echo "PASS AC49/AC50/AC51/AC52: README state-machine diagram complete (13 transitions)"
+# 2. Exactly one v1.32.0 ASCII pipeline diagram (delimited by
+#    "single assistant turn" header line inside a fenced block).
+turn_diagrams=$(grep -c 'single assistant turn' "$README" || true)
+[[ "$turn_diagrams" -eq 1 ]] || {
+  echo "FAIL: expected exactly 1 'single assistant turn' diagram header, got $turn_diagrams"
+  exit 1
+}
+
+# 3. Protocol-shape markers inside the diagram (each must appear at least once).
+EXPECTED_MARKERS=(
+  "setup-qg.sh"
+  "SKILL preflight"
+  "trivia escape"
+  "Gate 1 dispatch"
+  "Gate 2 iter loop"
+  "Gate 3 dispatch"
+  "AskUserQuestion"
+  "findings remain"
+  "Runtime"
+  "Final summary"
+)
+missing=()
+for marker in "${EXPECTED_MARKERS[@]}"; do
+  if ! grep -qF "$marker" "$README"; then
+    missing+=("$marker")
+  fi
+done
+
+if [[ "${#missing[@]}" -gt 0 ]]; then
+  echo "FAIL: README v1.32.0 pipeline diagram missing markers:"
+  printf '  - %s\n' "${missing[@]}"
+  exit 1
+fi
+
+echo "PASS: README v1.32.0 pipeline diagram complete (${#EXPECTED_MARKERS[@]} markers + no stateDiagram-v2)"
