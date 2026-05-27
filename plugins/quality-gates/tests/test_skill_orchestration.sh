@@ -48,6 +48,15 @@ check "Continue anyway"          "Gate 1 FAIL option"
 check "View detail"              "Gate 1 FAIL option"
 # Gate 2 iter context
 check "findings remain"          "Gate 2 iter anchor"
+# AC6 anchor uniqueness (Medium): `findings remain` must appear in EXACTLY
+# ONE AskUserQuestion question template, so the routing is unambiguous.
+# Prose mentions and meta-comments outside `question:` lines are allowed.
+question_findings=$(awk '/^[[:space:]]*question:/ && /findings remain/ { c++ } END { print c+0 }' "$S")
+if [[ "$question_findings" -ne 1 ]]; then
+  echo "FAIL V2b uniqueness: 'findings remain' appears in $question_findings question: lines (expected 1)"
+  exit 1
+fi
+echo "PASS V2b (anchor uniqueness: 1 question line)"
 check "Retry"                    "Gate 2 iter option"
 check "Proceed to Gate 3"        "Gate 2 iter option"
 # Gate 3 NEEDS_RESOLUTION context

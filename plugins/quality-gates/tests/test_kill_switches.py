@@ -221,6 +221,42 @@ class KillSwitchRegressionTest(unittest.TestCase):
             "post-tool-use was accidentally silenced by a key whose prefix matches it",
         )
 
+    def test_skill_setup_qg_honors_disable_kill_switch(self) -> None:
+        """setup-qg.sh must short-circuit when DEVBREW_DISABLE_QUALITY_GATES=1.
+
+        SKILL preflight P1 already checks this upstream, but defense in depth:
+        the script itself must reject invocation so direct callers (tests,
+        scripts, ad-hoc shell) cannot accidentally bypass the kill switch.
+        """
+        script = PLUGIN_ROOT / "scripts" / "setup-qg.sh"
+        env = os.environ.copy()
+        env["DEVBREW_DISABLE_QUALITY_GATES"] = "1"
+        env["CLAUDE_CODE_SESSION_ID"] = "killswitch-skill-test1"
+        result = subprocess.run(
+            ["bash", str(script), "--ensure"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd=self.tmp,
+        )
+        self.assertNotEqual(
+            result.returncode, 0,
+            "DEVBREW_DISABLE_QUALITY_GATES=1 must cause setup-qg to exit non-zero "
+            f"(stdout={result.stdout!r}, stderr={result.stderr!r})",
+        )
+        self.assertRegex(
+            result.stderr,
+            r"DEVBREW_DISABLE_QUALITY_GATES|disabled",
+            "kill-switch error message must reference DEVBREW_DISABLE_QUALITY_GATES or 'disabled'",
+        )
+        # And no state file should have been created.
+        state = Path(self.tmp) / ".claude" / "quality-gates" / "killswitch-skill-test1" / "pipeline.md"
+        self.assertFalse(
+            state.exists(),
+            f"setup-qg should not create state under kill switch; found {state}",
+        )
+
     def test_all_hooks_declare_kill_switch_strings(self) -> None:
         """Every *.py file in hooks/ must mention both kill-switch env var names.
 

@@ -14,23 +14,31 @@ trap 'rm -rf "$TMP"' EXIT
 cd "$TMP"
 
 # ============== /cancel-qg ==============
-echo "--- /cancel-qg behavior fixture ---"
+# v1.32.1 (TQ-2): test invokes the SAME helper that the command invokes,
+# so command-test drift is impossible. cancel-qg-core.sh enforces the SID
+# guard internally; we exercise it via the real helper.
+echo "--- /cancel-qg behavior fixture (via shared helper) ---"
 SID="test-sid-deadbeef"
 mkdir -p ".claude/quality-gates/$SID"
 echo '---' > ".claude/quality-gates/$SID/pipeline.md"
 
-# Mimic command behavior (SID guard + rm -rf).
-if [[ -z "$SID" || ! "$SID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
-  echo "FAIL: SID guard rejected valid SID"; exit 1
-fi
-rm -rf -- ".claude/quality-gates/$SID"
-test ! -d ".claude/quality-gates/$SID" || { echo "FAIL: folder still exists"; exit 1; }
-echo "PASS /cancel-qg (behavior)"
+bash "$ROOT/quality-gates/scripts/cancel-qg-core.sh" --session-id "$SID" >/dev/null
+test ! -d ".claude/quality-gates/$SID" || { echo "FAIL: folder still exists after cancel-qg-core"; exit 1; }
+echo "PASS /cancel-qg (behavior via cancel-qg-core.sh)"
 
 echo "--- /cancel-qg command-file static check ---"
-grep -q 'rm -rf' "$ROOT/quality-gates/commands/cancel-qg.md" || { echo "FAIL: cancel-qg.md missing rm -rf"; exit 1; }
-grep -qiE 'cancel|cleared|removed' "$ROOT/quality-gates/commands/cancel-qg.md" || { echo "FAIL: cancel-qg.md missing cancel/cleared/removed token"; exit 1; }
-echo "PASS /cancel-qg (command-file documents behavior)"
+grep -q 'cancel-qg-core.sh' "$ROOT/quality-gates/commands/cancel-qg.md" \
+  || { echo "FAIL: cancel-qg.md no longer references cancel-qg-core.sh helper"; exit 1; }
+grep -qiE 'cancel|cleared|removed' "$ROOT/quality-gates/commands/cancel-qg.md" \
+  || { echo "FAIL: cancel-qg.md missing cancel/cleared/removed token"; exit 1; }
+echo "PASS /cancel-qg (command-file references shared helper)"
+
+# SID guard regression: cancel-qg-core.sh must refuse short / empty SID.
+echo "--- /cancel-qg SID guard regression ---"
+if bash "$ROOT/quality-gates/scripts/cancel-qg-core.sh" --session-id "short" 2>/dev/null; then
+  echo "FAIL: SID guard accepted 7-char SID"; exit 1
+fi
+echo "PASS /cancel-qg (SID guard rejects short SID)"
 
 # ============== /qg --reset (legacy v1.5.0 flat file sweep) ==============
 echo "--- /qg --reset behavior fixture ---"

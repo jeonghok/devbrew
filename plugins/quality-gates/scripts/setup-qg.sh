@@ -8,6 +8,15 @@
 
 set -euo pipefail
 
+# --- Defense-in-depth kill switch ---
+# SKILL preflight P1 also checks this and short-circuits before calling
+# setup-qg.sh. Honoring it here too means direct callers (tests, scripts)
+# can't accidentally bypass the kill switch via a fresh invocation.
+if [[ "${DEVBREW_DISABLE_QUALITY_GATES:-}" == "1" ]]; then
+  echo "[quality-gates] setup-qg disabled via DEVBREW_DISABLE_QUALITY_GATES=1" >&2
+  exit 1
+fi
+
 # --- Argument Parsing ---
 
 SINGLE_GATE=""

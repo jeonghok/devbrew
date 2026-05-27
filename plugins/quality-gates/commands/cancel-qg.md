@@ -1,7 +1,7 @@
 ---
 description: "Cancel a quality-gates pipeline session (single-turn execution in v1.32.0; this clears orphan state)"
 argument-hint: "[--gc | --all]"
-allowed-tools: ["Bash(test:*)", "Bash(rm:*)", "Bash(rm -rf:*)", "Bash(find:*)", "Bash(wc:*)", "Read", "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/qg-gc.py:*)", "AskUserQuestion"]
+allowed-tools: ["Bash(test:*)", "Bash(rm:*)", "Bash(rm -rf:*)", "Bash(find:*)", "Bash(wc:*)", "Read", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/cancel-qg-core.sh:*)", "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/qg-gc.py:*)", "AskUserQuestion"]
 hide-from-slash-command-tool: "true"
 ---
 
@@ -37,15 +37,11 @@ before completion.
 3. **NOT_FOUND**: "No active quality gates pipeline found for this session." 종료.
 4. **EXISTS**:
    - `Read(.claude/quality-gates/<SID>/pipeline.md)`로 frontmatter (`status`, `current_gate`, `gate2_iteration`) 읽기.
-   - 폴더 삭제 (반드시 SID 가드를 재선언한 단일 Bash 블록 안에서):
+   - 폴더 삭제: `cancel-qg-core.sh` 헬퍼 호출 (SID 가드 내장, command와 test가 동일 코드 경로 사용 — spec §5.8 TQ-2):
      ```!
-     SID="${CLAUDE_CODE_SESSION_ID:-}"
-     if [[ -z "$SID" || ! "$SID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
-       echo "ABORT: invalid SID at delete time"
-       exit 1
-     fi
-     rm -rf -- ".claude/quality-gates/$SID" && echo "CANCELLED:$SID" || echo "FAILED:$SID"
+     bash "${CLAUDE_PLUGIN_ROOT}/scripts/cancel-qg-core.sh"
      ```
+   - 헬퍼는 성공 시 `cancel-qg-core: removed ...`을 stdout으로 출력, 실패 시 stderr + non-zero exit.
    - 보고: "Cancelled quality gates pipeline (was at Gate N, iteration M)".
 
 ## `--gc` — cancel + immediate TTL sweep
