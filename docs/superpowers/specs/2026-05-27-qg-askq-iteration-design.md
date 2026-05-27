@@ -92,15 +92,15 @@ CC API에서 `AskUserQuestion`이 tool call로 동작한다는 사실(같은 턴
 - **AC3**: `skills/quality-pipeline/SKILL.md`에 `<qg-signal>` 태그 emission 지시문이 없음 (`! grep -q '<qg-signal>' plugins/quality-gates/skills/quality-pipeline/SKILL.md`).
 - **AC4**: `# QG-STOP-HOOK-CONTINUATION` sentinel 문자열이 plugins 트리 어디에도 없음 (`! grep -r 'QG-STOP-HOOK-CONTINUATION' plugins/quality-gates/`).
 - **AC5**: SKILL의 Gate Execution 섹션이 Gate 1 → Gate 2 → Gate 3을 명시적으로 시리얼 호출하는 의사코드/실제 instruction을 포함하며, **호출 순서가 텍스트상 단조 증가**. 자동 검증: `awk '/Gate 1/{if(!g1)g1=NR} /Gate 2/{if(!g2)g2=NR} /Gate 3/{if(!g3)g3=NR} END{exit !(g1 && g2 && g3 && g1<g2 && g2<g3)}' plugins/quality-gates/skills/quality-pipeline/SKILL.md` exit 0 (각 라벨의 *첫* 등장 줄 번호가 1 < 2 < 3 순).
-- **AC6**: Gate 2 fix-loop가 매 iter 끝에서 `AskUserQuestion` 호출을 지시하며, 3-옵션(`Retry` / `Proceed to Gate 3` / `Stop`)을 명시. 자동 grep smoke: 세 라벨 문자열 모두 SKILL.md에 등장 (V2b 참조).
-- **AC7**: Gate 1 FAIL 시 AskUserQuestion 호출 + 3-옵션(`Continue anyway` / `Stop` / `View detail`) 명시. 자동 grep smoke: 세 라벨 문자열 모두 SKILL.md에 등장.
-- **AC8**: Gate 3 NEEDS_RESOLUTION 시 AskUserQuestion 호출 + 3-옵션(`Yes, retry` / `Skip with evidence` / `Stop`) 명시 + P21 secret-not-in-prompt 정책 재확인 문구 포함. 자동 grep smoke: 세 라벨 + `P21` 토큰 모두 SKILL.md에 등장.
+- **AC6**: Gate 2 fix-loop가 매 iter 끝에서 `AskUserQuestion` 호출을 지시하며, 3-옵션(`Retry` / `Proceed to Gate 3` / `Stop`)을 명시. **Context anchor**: Gate 2 iter 프롬프트는 반드시 literal phrase `findings remain`을 포함 — 이 phrase는 Gate 2 iter 맥락 *전용* (다른 AskUserQuestion 분기에는 등장 금지). 자동 grep smoke: `Retry` + `Proceed to Gate 3` + `findings remain` 세 phrase 모두 SKILL.md에 등장 (V2b 참조). `Stop`는 다른 맥락과 공유되므로 grep으로는 검증 안 함.
+- **AC7**: Gate 1 FAIL 시 AskUserQuestion 호출 + 3-옵션(`Continue anyway` / `Stop` / `View detail`) 명시. **Context anchor**: Gate 1 FAIL 프롬프트는 literal phrase `Plan verification failed` 포함 (Gate 1 FAIL 맥락 전용). 자동 grep smoke: `Continue anyway` + `View detail` + `Plan verification failed` 세 phrase 모두 SKILL.md에 등장.
+- **AC8**: Gate 3 NEEDS_RESOLUTION 시 AskUserQuestion 호출 + 3-옵션(`Yes, retry` / `Skip with evidence` / `Stop`) 명시 + P21 secret-not-in-prompt 정책 재확인 문구 포함. **Context anchor**: Gate 3 NEEDS_RESOLUTION 프롬프트는 literal phrase `Runtime verifier needs` 포함 (Gate 3 맥락 전용). 자동 grep smoke: `Yes, retry` + `Skip with evidence` + `Runtime verifier needs` + `P21` 네 phrase 모두 SKILL.md에 등장.
 - **AC9**: `DEVBREW_QG_DEADLINE_MIN`, `DEVBREW_QG_NO_SIGNAL_MAX` 환경변수 처리 코드가 SKILL/scripts/hooks에서 제거됨 (`! grep -r 'DEVBREW_QG_DEADLINE_MIN\|DEVBREW_QG_NO_SIGNAL_MAX' plugins/quality-gates/`).
 - **AC10**: `compute_transition`, `extract_last_signal`, `extract_signal_from_hook_input`, `consecutive_no_signal`, `compute_no_signal_transition` 등 stop-hook 관련 식별자가 plugins 트리에 없음 (`! grep -rn 'compute_transition\|consecutive_no_signal' plugins/quality-gates/`).
 - **AC11**: `plugin.json`의 `version`이 `2.0.0`이고, `CHANGELOG.md`에 `## [2.0.0] — 2026-MM-DD` 섹션이 Added/Changed/Removed/Breaking을 포함하며 `hooks/stop-hook.py` 제거와 `<qg-signal>`/sentinel 제거를 명시.
 - **AC12**: README의 "설치된 Hook" 표에서 `stop-hook.py` 행이 제거(`! grep 'stop-hook.py' plugins/quality-gates/README.md`), v1.x mermaid `stateDiagram-v2` 블록이 제거(`! grep -q 'stateDiagram-v2' plugins/quality-gates/README.md`), 신규 ASCII 시퀀스 다이어그램에 "single assistant turn" 라벨 등장(`grep -q 'single assistant turn' plugins/quality-gates/README.md`), "Principles Instantiated"에 P22 일반화 문구 추가(`grep -qE 'progression primitive|progression gate' plugins/quality-gates/README.md`).
 - **AC13**: 기존 reviewer agent(`plan-verifier`, `scout`, `adversarial`, `synthesizer`, `codex-reviewer`, `security-reviewer`, `runtime-verifier`, `test-scope-validator`)의 frontmatter `disallowedTools` 선언이 그대로 유지됨 (Law 2 무결).
-- **AC14 (C9 잠금 검증)**: `hooks/session-start-advisor.py`의 in-flight pipeline 감지 코드 경로가 제거됨 (`! grep -qE 'pipeline_status|current_gate|in_flight_pipeline' plugins/quality-gates/hooks/session-start-advisor.py`). 동 hook의 frontmatter scan 함수는 그대로 유지(`grep -qE 'frontmatter|scan_agent' plugins/quality-gates/hooks/session-start-advisor.py`). `hooks/post-tool-use-session-tracker.py`, `hooks/post-tool-use.py`, `hooks/session-end-cleanup.py`는 코드 diff 없음 (`git diff --quiet HEAD~ -- plugins/quality-gates/hooks/post-tool-use*.py plugins/quality-gates/hooks/session-end-cleanup.py` exit 0).
+- **AC14 (C9 잠금 검증)**: `hooks/session-start-advisor.py`의 in-flight pipeline 감지 코드 경로가 제거됨 (`! grep -qE 'pipeline_status|current_gate|in_flight_pipeline' plugins/quality-gates/hooks/session-start-advisor.py`). 동 hook의 frontmatter scan 함수는 그대로 유지(`grep -qE 'frontmatter|scan_agent' plugins/quality-gates/hooks/session-start-advisor.py`). `hooks/post-tool-use-session-tracker.py`, `hooks/post-tool-use.py`, `hooks/session-end-cleanup.py`는 **feature 브랜치 시작점 대비** 코드 diff 없음 — 다중 커밋/squash 시나리오 안전하게 검증: `git diff $(git merge-base HEAD main) HEAD -- plugins/quality-gates/hooks/post-tool-use*.py plugins/quality-gates/hooks/session-end-cleanup.py` 출력이 비어 있어야 함 (exit 0 + no output).
 - **AC15**: `tests/` 디렉토리에서 stop-hook/state-machine 전용 테스트(`test_*stop_hook*`, `test_*transition*`, `test_no_signal*`)가 제거되거나 신규 SKILL 오케스트레이션 테스트로 대체됨.
 - **AC16**: SessionStart advisor가 legacy v1.x state file(`current_gate`/`consecutive_no_signal` 등 신규 schema에 없는 키 보유) 감지 시 사용자에게 `/cancel-qg`로 정리 안내를 1회 emit (read-only, mutation 없음).
 - **AC17**: 다음 3개 명령의 동작을 v2.0.0 minimal state schema 상에서 확정 (각각 fixture 폴더로 검증, 검증 명령은 V10):
@@ -162,7 +162,15 @@ plugins/quality-gates/
 
 ## Verification Plan
 
-- **V0 (premise verification — plan 단계 첫 task, implementation 착수 전 1회 필수)**: AskUserQuestion이 같은 어시스턴트 턴 내 tool result로 응답을 반환하는 전제를 smoke test. 절차: (a) 임시 SKILL stub 작성 (`/tmp/qg-v0-smoke.md`) — `AskUserQuestion` 호출 직후 같은 응답 안에서 `Bash(echo same-turn)` 호출, (b) Claude Code에서 stub 호출, (c) trace 확인: `AskUserQuestion` tool result가 도착한 *같은* assistant message 안에 `Bash` tool call이 있어야 함. 실패 시 (즉 AskUserQuestion 응답이 별도 턴으로 떨어짐) 본 spec 전체가 무효이며 plan/implementation 중단 — R1(continuation 명시화) 또는 R2(user-driven)로 재설계 회귀 필요.
+- **V0 (premise verification — plan 단계 첫 task, implementation 착수 전 필수)**: AskUserQuestion이 같은 어시스턴트 턴 내 tool result로 응답을 반환하는 전제 + OQ1의 frontmatter 선언 필요 여부를 동시 확정. **두 stub 작성**:
+  - **V0-a (no declaration)**: 임시 SKILL stub `/tmp/qg-v0-a.md` — frontmatter `allowed-tools:`에 `AskUserQuestion` 미포함. 본문: `AskUserQuestion` 호출 후 같은 응답 안에서 `Bash(echo same-turn-a)` 호출.
+  - **V0-b (explicit declaration)**: 임시 SKILL stub `/tmp/qg-v0-b.md` — frontmatter `allowed-tools:`에 `AskUserQuestion` 명시 포함. 본문: V0-a와 동일.
+  - 각 stub에 대해 Claude Code에서 호출 → trace 확인: `AskUserQuestion` tool result가 도착한 *같은* assistant message 안에 `Bash` tool call이 있어야 함.
+  - **결과 분기**:
+    - V0-a, V0-b 둘 다 PASS → OQ1: (a) 채택 (선언 생략, lightness default). 본 spec 전제 confirmed.
+    - V0-a FAIL, V0-b PASS → OQ1: (b) 채택 (명시 선언). 본 spec 전제 confirmed.
+    - V0-a PASS, V0-b FAIL → 비정상 (선언 추가가 호출을 깨뜨림). 사용자에게 escalate — CC harness 버전 호환성 점검 필요.
+    - V0-a FAIL, V0-b FAIL → **본 spec 전체가 무효**. plan/implementation 중단. R1(continuation 명시화) 또는 R2(user-driven)로 재설계 회귀 필요.
 - **V1**: AC1–AC4, AC9, AC10 일괄 검증 — `bash` 스크립트로 grep/test 명령 실행:
   ```bash
   test ! -f plugins/quality-gates/hooks/stop-hook.py && \
@@ -175,16 +183,26 @@ plugins/quality-gates/
     plugins/quality-gates/skills/quality-pipeline/SKILL.md
   ```
   exit 0이면 PASS.
-- **V2b (AC6/AC7/AC8 grep smoke)**: SKILL.md에 옵션 라벨 + P21 토큰 일괄 존재 검증:
+- **V2b (AC6/AC7/AC8 grep smoke — context-anchored)**: SKILL.md에 옵션 라벨 + context anchor + P21 토큰 일괄 존재 검증. context anchor가 각 AskUserQuestion 호출 맥락을 *유일하게* 식별하므로 단순 라벨 grep의 맥락 모호성(예: `Stop`이 여러 분기에 등장) 문제를 해결:
   ```bash
   S=plugins/quality-gates/skills/quality-pipeline/SKILL.md
-  for label in "Continue anyway" "View detail" "Retry" "Proceed to Gate 3" "Yes, retry" "Skip with evidence"; do
-    grep -q -- "$label" "$S" || { echo "missing label: $label"; exit 1; }
-  done
-  grep -q "P21" "$S"
+  # Gate 1 FAIL context
+  grep -q -- "Plan verification failed" "$S" || { echo "missing Gate 1 FAIL anchor"; exit 1; }
+  grep -q -- "Continue anyway" "$S" || { echo "missing Gate 1 FAIL option"; exit 1; }
+  grep -q -- "View detail" "$S" || { echo "missing Gate 1 FAIL option"; exit 1; }
+  # Gate 2 iter context
+  grep -q -- "findings remain" "$S" || { echo "missing Gate 2 iter anchor"; exit 1; }
+  grep -q -- "Retry" "$S" || { echo "missing Gate 2 iter option"; exit 1; }
+  grep -q -- "Proceed to Gate 3" "$S" || { echo "missing Gate 2 iter option"; exit 1; }
+  # Gate 3 NEEDS_RESOLUTION context
+  grep -q -- "Runtime verifier needs" "$S" || { echo "missing Gate 3 anchor"; exit 1; }
+  grep -q -- "Yes, retry" "$S" || { echo "missing Gate 3 option"; exit 1; }
+  grep -q -- "Skip with evidence" "$S" || { echo "missing Gate 3 option"; exit 1; }
+  # P21 secret policy reaffirmation
+  grep -q -- "P21" "$S" || { echo "missing P21 token"; exit 1; }
   ```
-  exit 0이면 PASS.
-- **V2c (AC6–AC8 보조 수동 검수)**: 자동 grep PASS 후 사람이 SKILL.md를 읽고 *호출 컨텍스트*(어느 verdict 직후 어느 옵션이 fire하는지) 적합성을 검수. 자동 grep은 문자열 존재만 보장하므로 호출 시점 맥락은 수동 보조 필요.
+  exit 0이면 PASS. (`Stop` 라벨은 모든 분기 공통이므로 grep 검증 대상에서 제외 — 각 context anchor가 그 맥락 내 `Stop` 존재를 implicit하게 보장.)
+- **V2c (AC6–AC8 보조 수동 검수, advisory)**: V2b의 anchor가 호출 맥락 귀속을 충분히 보장하므로 V2c는 advisory로 격하 — 자동 grep PASS 후 사람이 SKILL.md를 읽고 anchor 주변 instruction이 의도된 verdict 분기에 묶여 있는지 sanity check. *AC 충족의 필수 단계 아님* — V2b가 PASS하면 AC6/AC7/AC8 충족.
 - **V3 (AC11)**: `jq -r .version plugins/quality-gates/.claude-plugin/plugin.json`이 `"2.0.0"` 출력. `grep -c '^## \[2.0.0\]' plugins/quality-gates/CHANGELOG.md`가 ≥1.
 - **V4 (AC12)**:
   ```bash
@@ -201,15 +219,29 @@ plugins/quality-gates/
   done
   ```
 - **V6 (AC15 — mock 접근 방식 lock)**: `ls plugins/quality-gates/tests/`에 deleted 패턴(`*stop_hook*`, `*transition*`, `*no_signal*`)이 없고 `test_skill_orchestration.sh` 존재. 본 spec은 mock 접근으로 **(a) 정적 SKILL.md instruction grep 방식**을 채택 — V2a/V2b/V2c가 이미 정적 grep을 수행하므로, `test_skill_orchestration.sh`는 V2a+V2b+V2c를 1개 스크립트로 묶고 종합 exit code를 반환하는 wrapper로 구현. **(b) 실제 CC harness subprocess 호출 통합 테스트**(`claude-code --prompt /qg ...` → trace parse)는 v2.0.0 first-pass 범위 외 (장점: end-to-end; 단점: CC binary 의존 + 비결정적 + 비용). 검증 명령: `bash plugins/quality-gates/tests/test_skill_orchestration.sh` exit 0.
-- **V7 (AC18, reproducible checklist)**: fixture는 본 worktree의 `main` 대비 작은 합성 변경. 절차:
-  1. `git checkout -b qg-happy-path-fixture`
-  2. `printf '\n<!-- happy-path fixture: harmless content line -->\n' >> plugins/quality-gates/README.md` (단일 파일 단일 commit, ~1 LOC, comment 형식이라 typo trivia 미트리거)
-  3. `git commit -am "test: happy-path fixture"`
-  4. trivia escape 사전 확인: `bash plugins/quality-gates/scripts/check-trivia.sh`. 출력에 `trivia=` 또는 trivia kind 라벨이 나오면 fixture를 2-line으로 확장 (예: `## happy-path` 헤더 추가 — `comment` trivia kind 우회).
-  5. `/qg` 실행.
-  6. 검증: 어시스턴트 trace에 `AskUserQuestion` tool call 0회 (`grep -c AskUserQuestion <trace-file>` = 0). 최종 텍스트에 `Gate 1: PASSED`, `Gate 2: PASSED`, `Gate 3:` (verdict) 각 1개씩. 단일 turn 안에서 final summary 도달.
-  7. 정리: `git checkout main && git branch -D qg-happy-path-fixture`.
-- **V8 (AC16, reproducible legacy-state fixture)**:
+- **V7 (AC18, static-grep — primary)**: AC18의 *primary* 검증은 V6의 정적 분석에 통합. SKILL.md의 happy-path instruction 경로에 `AskUserQuestion` 호출 마커가 없음을 grep으로 확인 — 즉 SKILL이 PASS 경로에서 AskUserQuestion 호출 *지시문을 갖지 않음*을 정적으로 보장. 검증 명령:
+  ```bash
+  S=plugins/quality-gates/skills/quality-pipeline/SKILL.md
+  # SKILL.md 안에서 "PASS" 마커 행과 같은 코드 블록/섹션 내에 AskUserQuestion이 등장하지 않아야 함.
+  # 단순화: PASS 단어가 등장하는 줄의 ±10줄 내에 AskUserQuestion이 없는지 확인.
+  awk '
+    /PASS/ {pass_lines[NR]=1}
+    /AskUserQuestion/ {ask_lines[NR]=1}
+    END {
+      for (p in pass_lines) {
+        for (a in ask_lines) {
+          if (a >= p-10 && a <= p+10) {
+            print "FAIL: AskUserQuestion at line " a " too close to PASS at line " p
+            exit 1
+          }
+        }
+      }
+    }
+  ' "$S"
+  ```
+  exit 0이면 PASS. (V0 통과 + V2b 통과 + V7 정적 grep 통과가 함께 AC18을 보장.)
+- **V7-manual (선택, 작성자 PR-time 수동 확인)**: 실제 happy path 동작은 본 worktree에서 작성자가 PR 직전 수동 검증 — 합성 fixture 만들기 어렵고 (`check-trivia.sh` 출력 포맷이 본 spec 검증 시점 미확정 + CC trace 파일 export 메커니즘이 표준화되어 있지 않음) automation 비용이 효익보다 큼. 절차는 plan 단계에서 수동 acceptance checklist 형태로 산출 — V0/V2b/V7 정적 검증을 통과한 코드에 대한 보조 sanity check 목적.
+- **V8 (AC16, reproducible legacy-state — direct script invocation)**: SessionStart hook을 *직접* subprocess로 호출하여 hook 환경의 stdin payload를 시뮬레이션. CC CLI 옵션 의존 제거:
   1. `mkdir -p .claude/quality-gates/legacy-test-sid-deadbeef`
   2. fixture state 작성:
      ```bash
@@ -223,15 +255,23 @@ plugins/quality-gates/
      ---
      EOF
      ```
-  3. SessionStart 트리거: 새 Claude Code 세션 시작 (`claude --new-session` 또는 separate terminal).
-  4. 검증: stderr에 `[quality-gates] legacy state file detected` 또는 동등한 패턴 + `/cancel-qg` 안내 1회 emit. 정확한 문구는 plan에서 확정, 본 spec은 (a) `legacy` 토큰 + (b) `/cancel-qg` 문자열 두 가지가 stderr 안에 등장하는 것을 요구.
-  5. 정리: `rm -rf .claude/quality-gates/legacy-test-sid-deadbeef`.
+  3. SessionStart hook 직접 호출 (CC harness 비의존):
+     ```bash
+     SESSION_ID="$(uuidgen 2>/dev/null || echo test-session-newsid)"
+     echo "{\"session_id\":\"$SESSION_ID\",\"cwd\":\"$(pwd)\"}" \
+       | python3 plugins/quality-gates/hooks/session-start-advisor.py 2> /tmp/qg-v8-stderr.log
+     ```
+  4. 검증: `/tmp/qg-v8-stderr.log`에 (a) `legacy` 토큰 + (b) `/cancel-qg` 문자열 두 가지 등장:
+     ```bash
+     grep -q legacy /tmp/qg-v8-stderr.log && grep -q '/cancel-qg' /tmp/qg-v8-stderr.log
+     ```
+  5. 정리: `rm -rf .claude/quality-gates/legacy-test-sid-deadbeef /tmp/qg-v8-stderr.log`.
 - **V9 (regression)**: `tests/test_branch_worktree.sh`, `tests/test_discover_plan.sh`, `tests/test_no_secret_prompts.py`, `tests/test_agent_frontmatter_keys.sh`, `tests/test_adversarial_model_consistency.sh` 모두 PASS.
-- **V10 (AC17, /cancel-qg + /qg --reset + /qg --gc fixture 검증)**: 신규 `plugins/quality-gates/tests/test_cancel_qg.sh` 작성. 절차:
-  1. fixture: `mkdir -p .claude/quality-gates/test-sid-deadbeef && echo '---' > .claude/quality-gates/test-sid-deadbeef/pipeline.md`.
-  2. `/cancel-qg` 시뮬레이션: `bash plugins/quality-gates/commands/cancel-qg.md` 내 명령 추출 실행 (또는 동등 `rm -rf` 호출), 폴더 부재 + stdout에 "session state cleared" 등장 확인.
-  3. legacy file fixture: `touch .claude/quality-gates.local.md .claude/quality-gates-session.local.md`. `/qg --reset` 시뮬레이션 실행 후 이들 파일 부재 확인.
-  4. TTL fixture: `mkdir -p .claude/quality-gates/old-sid && touch -t 200001010000 .claude/quality-gates/old-sid/pipeline.md`. `python3 plugins/quality-gates/scripts/qg-gc.py` 실행 후 `old-sid` 폴더 부재 확인.
+- **V10 (AC17, fixture 검증 — 단일 접근 lock)**: 신규 `plugins/quality-gates/tests/test_cancel_qg.sh` 작성. 본 spec은 **command-file 직접 파싱 금지**를 lock — test script 내부에서 직접 동일 동작(`rm -rf` 호출 + stdout 확인)을 fixture로 작성하고, *별도로* command-file이 동일 동작을 포함하는지를 정적 grep으로 확인. 두 단계가 분리되어 command-file 변경 시 grep 단계가 fail해 alert. 절차:
+  1. **/cancel-qg behavior fixture**: `mkdir -p .claude/quality-gates/test-sid-deadbeef && echo '---' > .claude/quality-gates/test-sid-deadbeef/pipeline.md`. test script 내에서 `CLAUDE_CODE_SESSION_ID=test-sid-deadbeef` 환경에서 `rm -rf .claude/quality-gates/test-sid-deadbeef` 실행 + `echo "Quality-gates session state cleared."` 직접 호출. 폴더 부재 + stdout 메시지 확인.
+  2. **/cancel-qg command-file static check**: `grep -q 'rm -rf' plugins/quality-gates/commands/cancel-qg.md && grep -q 'session state cleared' plugins/quality-gates/commands/cancel-qg.md`. command-file이 fixture와 동일 동작을 *문서화*하는지 확인.
+  3. **/qg --reset legacy fixture**: `touch .claude/quality-gates.local.md .claude/quality-gates-session.local.md`. test script 내에서 `rm -f` 직접 호출 후 파일 부재 확인. 별도 `grep -q 'rm -f' plugins/quality-gates/commands/qg.md`로 command-file이 동일 동작 문서화 확인.
+  4. **/qg --gc TTL fixture**: `mkdir -p .claude/quality-gates/old-sid && touch -t 200001010000 .claude/quality-gates/old-sid/pipeline.md && python3 plugins/quality-gates/scripts/qg-gc.py`. 종료 후 `old-sid` 폴더 부재 확인 (qg-gc.py는 실제 production script이므로 직접 호출).
 
 ## Rejected Alternatives
 
@@ -245,7 +285,7 @@ plugins/quality-gates/
 
 ## Open Questions
 
-- **OQ1 (tool 선언 best practice)**: `skills/quality-pipeline/SKILL.md`의 신규 `allowed-tools` frontmatter에 `AskUserQuestion`을 명시 선언해야 하는지 (현재 deferred tool로 ToolSearch 통해 로드됨). 본 spec의 *전제 검증* V0이 통과한 *후*에 결정 — V0이 명시 선언 없이 호출 성공을 확인하면 선언 생략 가능, 호출 실패 시 명시 선언 추가. plan 단계에서 V0 결과에 따라 분기.
+- **OQ1 (tool 선언 best practice — V0 gate로 구조화)**: `skills/quality-pipeline/SKILL.md`의 신규 `allowed-tools` frontmatter에 `AskUserQuestion`을 명시 선언해야 하는지 (현재 deferred tool로 ToolSearch 통해 로드됨). **Plan 단계 구조화 요구사항** (본 spec이 plan에 강제): plan의 *첫* task는 V0 smoke test 실행이며, V0이 (a)/(b) 두 경로 모두 시도해야 함 — (a) `allowed-tools`에 AskUserQuestion 미포함 상태로 호출 시도, (b) 포함 상태로 호출 시도. 둘 중 하나만 성공하면 그 경로를 lock하여 SKILL.md 재작성 task의 frontmatter에 반영, 둘 다 성공하면 (a) 채택 (lightness default). 본 spec은 SKILL.md frontmatter의 정확한 내용을 lock하지 않으나, 결정 *알고리즘*은 lock — plan 작성자가 임의 분기 만들지 못함.
 - **OQ2 (CLOSED — C1으로 격상)**: ~~Gate 2 fix-loop의 fix 적용 권한~~ → C1에서 orchestrator-as-writer로 lock됨. plan/구현 단계에서 재고 대상 아님.
 - **OQ3 (state schema 세부)**: `pipeline.md` minimal schema의 정확한 필드 — `started_at`, `worktree_path`, `gate2_iteration` 외 GC를 위한 mtime anchor가 별도로 필요한가(파일 자체의 mtime으로 충분한가). plan에서 확정. *주의*: AC17 검증 명령은 schema에 직접 의존하지 않고 폴더 부재/존재 + stdout 패턴만 확인하므로 OQ3 미해결이 AC17 검증을 막지 않음.
 
