@@ -3,6 +3,65 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.0.0] — 2026-05-27
+
+### Breaking
+- **Stop hook removed.** `hooks/stop-hook.py` (1205 LOC, 13-transition
+  state machine, wall-clock guard, no-signal counter) deleted along with
+  the `Stop` event registration in `hooks.json`. Pipeline progression now
+  lives entirely in the `quality-pipeline` SKILL as in-turn serial
+  dispatch.
+- **`<qg-signal>` emission contract removed.** SKILL no longer emits the
+  signal tag. The `# QG-STOP-HOOK-CONTINUATION` sentinel is no longer
+  recognized by any code path.
+- **State file shape changed.** v2.0.0 state file is minimal: `session_id`,
+  `started_at`, `worktree_path` (optional), `gate2_iteration`. Removed
+  fields: `status`, `current_gate`, `consecutive_no_signal`,
+  `max_gate2_iterations`, `gate3_resolution_iter`, `last_gate3_needed_hash`,
+  `max_gate3_resolutions`, `skip_runtime`, `single_gate`, `plan_file`,
+  `pr_url`, `available_plugins`, `wall_clock_deadline_at`, `project_dir`.
+- **Env vars removed.** `DEVBREW_QG_DEADLINE_MIN` and
+  `DEVBREW_QG_NO_SIGNAL_MAX` no longer exist (wall-clock guard and
+  no-signal counter went away with stop-hook). Other env vars unchanged.
+
+### Added
+- **AskUserQuestion progression primitive.** SKILL calls AskUserQuestion
+  at Gate 1 FAIL, Gate 2 iter boundary (every iteration), Gate 2 max-iter
+  (replacing silent halt), and Gate 3 NEEDS_RESOLUTION. Same-turn tool
+  result drives the next dispatch.
+- **Static SKILL orchestration test:** `tests/test_skill_orchestration.sh`
+  (V2a gate-order + V2b context-anchor + V7 PASS-proximity heuristic).
+- **Fixture test for /cancel-qg, /qg --reset, /qg --gc:**
+  `tests/test_cancel_qg.sh`.
+- **Session-start advisor v2 test:** `tests/test_session_start_advisor_v2.sh`
+  (V8 legacy advisory + V8-pre code-structure guard).
+
+### Changed
+- **SKILL.md rewritten** from single-gate-per-turn to single-turn-serial
+  dispatch with AskUserQuestion gating.
+- **setup-qg.sh** emits minimal state schema; wall-clock and gate3-max
+  computation removed.
+- **session-start-advisor.py** drops in-flight pipeline detection;
+  detects legacy v1.x state files and emits one-shot `/cancel-qg` stderr
+  advisory. Frontmatter scan sub-feature unchanged.
+- **commands/qg.md** Pipeline Rules section rewritten; removed "Stop hook
+  handles progression" claim.
+- **README.md** Hook table no longer lists stop-hook.py; state diagram
+  replaced with ASCII single-turn sequence; Principles section adds
+  P22 generalization note.
+
+### Removed
+- `hooks/stop-hook.py`
+- `hooks/hooks.json` Stop event block
+- All `<qg-signal>` references in SKILL/scripts/hooks
+- Obsolete tests coupled to stop-hook semantics (`test_forward_only_prose.sh`
+  and any stop-hook-coupled tests detected during Task 7)
+
+### Migration
+v1.x in-flight pipelines cannot resume under v2.0.0. After upgrade, run
+`/cancel-qg` (per-session) or `/qg --reset` (legacy flat files) to clear
+old state. SessionStart advisor will guide you on next session start.
+
 ## [1.31.0] — 2026-05-20
 
 ### Changed
