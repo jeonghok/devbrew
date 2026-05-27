@@ -200,7 +200,7 @@ fi
 
 # --- Test 6: hooks read payload cwd (AST-based, not grep) ---
 T6_FAIL=0
-for hook in stop-hook.py post-tool-use-session-tracker.py session-start-advisor.py; do
+for hook in post-tool-use-session-tracker.py session-start-advisor.py; do
   if ! python3 -c "
 import ast, sys
 tree = ast.parse(open('$PLUGIN_DIR/hooks/$hook').read())
@@ -219,7 +219,7 @@ sys.exit(0 if found else 1)
     fail "T6: hooks/$hook does not call .get('cwd') anywhere"
   fi
 done
-[[ "$T6_FAIL" -eq 0 ]] && pass "T6: all 3 hooks read payload cwd (AST verified)"
+[[ "$T6_FAIL" -eq 0 ]] && pass "T6: all 2 hooks read payload cwd (AST verified)"
 
 # --- Test 9: setup-qg.sh writes project_dir to state frontmatter ---
 if grep -q '^project_dir:' "$PLUGIN_DIR/scripts/setup-qg.sh"; then

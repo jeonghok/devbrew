@@ -33,7 +33,6 @@ HOOKS = PLUGIN_ROOT / "hooks"
 # Each hook contract: (script, per-hook skip key).
 # The skip key is the suffix used in DEVBREW_SKIP_HOOKS=quality-gates:<key>.
 HOOK_CONTRACTS = [
-    ("stop-hook.py", "stop-hook"),
     ("post-tool-use.py", "post-tool-use"),
     ("post-tool-use-session-tracker.py", "session-tracker"),
     ("session-start-advisor.py", "session-start-advisor"),
@@ -78,7 +77,7 @@ def _payload_for(script: str) -> dict:
 def _setup_state(cwd: str, script: str) -> None:
     """Pre-create state so the hook would normally do work."""
     qg = _qg_dir(cwd)
-    if script in ("stop-hook.py", "session-start-advisor.py"):
+    if script == "session-start-advisor.py":
         qg.mkdir(parents=True, exist_ok=True)
         (qg / "pipeline.md").write_text(PIPELINE_RUNNING)
     elif script == "session-end-cleanup.py":
@@ -115,22 +114,7 @@ def _assert_no_side_effect(test: unittest.TestCase, script: str, cwd: str,
 
     qg = _qg_dir(cwd)
 
-    if script == "stop-hook.py":
-        # State file must be untouched AND no decision/systemMessage emitted.
-        # Without the stdout check, this assertion is satisfied even if
-        # _disabled() were silently broken (a no-signal stop-hook run would
-        # also leave pipeline.md unchanged but WOULD emit decision JSON).
-        contents = (qg / "pipeline.md").read_text()
-        test.assertEqual(
-            contents, PIPELINE_RUNNING,
-            f"{label}: stop-hook mutated pipeline.md despite kill switch",
-        )
-        test.assertEqual(
-            proc.stdout.strip(), "",
-            f"{label}: stop-hook produced stdout despite kill switch: {proc.stdout!r}",
-        )
-
-    elif script == "post-tool-use.py":
+    if script == "post-tool-use.py":
         # Must not emit a systemMessage trigger.
         out = proc.stdout.strip()
         if out:
@@ -298,16 +282,6 @@ class KillSwitchRegressionTest(unittest.TestCase):
             self.assertFalse(
                 qg.exists(),
                 "session-end-cleanup sanity: should remove folder",
-            )
-        elif script == "stop-hook.py":
-            # With pipeline.md present and no transcript signal, stop-hook
-            # flows to its decision-block path and emits JSON to stdout. The
-            # kill-switch path skips this entirely. So stdout content is the
-            # discriminator: present = kill switch off; empty = kill switch on.
-            self.assertIn(
-                "decision", proc.stdout,
-                "stop-hook sanity: should emit decision block when state file present "
-                "and no kill switch is set",
             )
 
 
