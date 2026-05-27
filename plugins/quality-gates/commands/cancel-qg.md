@@ -1,5 +1,5 @@
 ---
-description: "Cancel a quality-gates pipeline session (single-turn execution in v2.0.0; this clears orphan state)"
+description: "Cancel a quality-gates pipeline session (single-turn execution in v1.32.0; this clears orphan state)"
 argument-hint: "[--gc | --all]"
 allowed-tools: ["Bash(test:*)", "Bash(rm:*)", "Bash(rm -rf:*)", "Bash(find:*)", "Bash(wc:*)", "Read", "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/qg-gc.py:*)", "AskUserQuestion"]
 hide-from-slash-command-tool: "true"
@@ -7,7 +7,7 @@ hide-from-slash-command-tool: "true"
 
 # Cancel Quality Gates
 
-v2.0.0 pipelines run in a single assistant turn — `/cancel-qg` mainly
+v1.32.0 pipelines run in a single assistant turn — `/cancel-qg` mainly
 cleans orphan state from aborted turns or `/qg` invocations that crashed
 before completion.
 

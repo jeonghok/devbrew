@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# v2.0.0 /cancel-qg, /qg --reset, /qg --gc fixture verification (AC17, V10).
+# v1.32.0 /cancel-qg, /qg --reset, /qg --gc fixture verification (AC17, V10).
 #
 # Approach (spec V10 lock):
 #   (1) Run the documented behavior directly via fixture shell — verify effect.

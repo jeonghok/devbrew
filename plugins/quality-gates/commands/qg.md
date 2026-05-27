@@ -96,7 +96,7 @@ loop, the pre-redesign behavior):
 
 Set `DEVBREW_DISABLE_QUALITY_GATES=1` to globally disable. Set
 `DEVBREW_SKIP_HOOKS=quality-gates:session-tracker` to disable just the
-session-tracker hook (keeps SessionStart advisor active). v2.0.0 has no
+session-tracker hook (keeps SessionStart advisor active). v1.32.0 has no
 Stop hook.
 
 ### Gates
@@ -105,7 +105,7 @@ Stop hook.
 2. **PR Review** — Iterative code review (scout → Phase 1+2 → adversarial → synthesizer); within-gate fix-loop up to 5 iterations
 3. **Runtime Verification** — Launches app and verifies behavior with browser automation
 
-### Pipeline Rules (v2.0.0)
+### Pipeline Rules (v1.32.0)
 
 - Pipeline runs in a single assistant turn (no Stop hook, no continuation
   sentinel, no cross-turn state machine).

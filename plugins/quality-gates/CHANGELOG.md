@@ -3,7 +3,7 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [2.0.0] — 2026-05-27
+## [1.32.0] — 2026-05-27
 
 ### Breaking
 - **Stop hook removed.** `hooks/stop-hook.py` (1205 LOC, 13-transition
@@ -14,7 +14,7 @@
 - **`<qg-signal>` emission contract removed.** SKILL no longer emits the
   signal tag. The `# QG-STOP-HOOK-CONTINUATION` sentinel is no longer
   recognized by any code path.
-- **State file shape changed.** v2.0.0 state file is minimal: `session_id`,
+- **State file shape changed.** v1.32.0 state file is minimal: `session_id`,
   `started_at`, `worktree_path` (optional), `gate2_iteration`. Removed
   fields: `status`, `current_gate`, `consecutive_no_signal`,
   `max_gate2_iterations`, `gate3_resolution_iter`, `last_gate3_needed_hash`,
@@ -58,7 +58,7 @@
   and any stop-hook-coupled tests detected during Task 7)
 
 ### Migration
-v1.x in-flight pipelines cannot resume under v2.0.0. After upgrade, run
+v1.x in-flight pipelines cannot resume under v1.32.0. After upgrade, run
 `/cancel-qg` (per-session) or `/qg --reset` (legacy flat files) to clear
 old state. SessionStart advisor will guide you on next session start.
 

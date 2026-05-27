@@ -155,7 +155,7 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
               → Stop hook → SKILL.md (Gate 3) → done
 ```
 
-**Single-turn serial dispatch** (v2.0.0 — SKILL drives the entire pipeline within one assistant turn; AskUserQuestion gates inter-gate progression and Gate 2 iterations):
+**Single-turn serial dispatch** (v1.32.0 — SKILL drives the entire pipeline within one assistant turn; AskUserQuestion gates inter-gate progression and Gate 2 iterations):
 
 ```
 ┌─ single assistant turn ──────────────────────────────────────────────┐
@@ -212,7 +212,7 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-**v2.0.0에서 Stop hook 제거**: 파이프라인 진행은 더 이상 Stop hook 기반 state machine으로 turn-by-turn 진행되지 않고, `quality-pipeline` SKILL이 단일 assistant turn 내에서 serial dispatch로 끝까지 실행합니다. Inter-gate progression과 Gate 2 fix-loop iteration은 모두 AskUserQuestion으로 사용자 동의를 받아 진행 — 동일한 도구가 subagent fan-out gate와 inter-gate progression gate를 함께 담당합니다.
+**v1.32.0에서 Stop hook 제거**: 파이프라인 진행은 더 이상 Stop hook 기반 state machine으로 turn-by-turn 진행되지 않고, `quality-pipeline` SKILL이 단일 assistant turn 내에서 serial dispatch로 끝까지 실행합니다. Inter-gate progression과 Gate 2 fix-loop iteration은 모두 AskUserQuestion으로 사용자 동의를 받아 진행 — 동일한 도구가 subagent fan-out gate와 inter-gate progression gate를 함께 담당합니다.
 
 ### Trivia detector coverage
 

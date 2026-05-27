@@ -24,7 +24,7 @@ allowed-tools:
   - Grep
 ---
 
-# Quality Gates — In-Turn Orchestrator (v2.0.0)
+# Quality Gates — In-Turn Orchestrator (v1.32.0)
 
 You are running the **full quality-gates pipeline** in a single assistant
 turn. You dispatch the three gates serially in order. At decision points
@@ -82,7 +82,7 @@ return immediately. Do NOT call setup-qg.sh or any agent.
 ```
 
 `setup-qg.sh --ensure` creates the per-session state file
-(`.claude/quality-gates/<sid>/pipeline.md`) with minimal v2.0.0 schema.
+(`.claude/quality-gates/<sid>/pipeline.md`) with minimal v1.32.0 schema.
 Exit non-zero → surface stderr verbatim and abort.
 
 **Step P3 — Pre-pipeline check (scope detection).** Run:
@@ -375,7 +375,7 @@ Branch:
 Print:
 
 ```markdown
-## Quality Gates Pipeline — Complete (v2.0.0)
+## Quality Gates Pipeline — Complete (v1.32.0)
 
 - **Gate 1**: <clean|failed-continued|SKIP>
 - **Gate 2**: <clean iter N | proceeded-with-findings iter N | aborted iter N | skipped>
@@ -397,7 +397,7 @@ edit working-tree files for user-consented Gate 2 fixes only.
 You MAY append a single line to the `## History` section per gate verdict;
 do not modify any other content. Frontmatter is owned by setup-qg.sh.
 
-**R3 (no fake user messages):** v2.0.0 has no Stop hook continuation, no
+**R3 (no fake user messages):** v1.32.0 has no Stop hook continuation, no
 emission tag, and no continuation sentinel. Do NOT emit any such marker.
 
 **R4 (P21 secret policy):** the decision-tool prompts never request a

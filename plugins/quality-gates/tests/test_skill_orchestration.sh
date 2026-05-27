@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# v2.0.0 SKILL.md orchestration verification (static grep approach).
+# v1.32.0 SKILL.md orchestration verification (static grep approach).
 #
 # Wraps spec verification steps:
 #   V2a — AC5: Gate 1 → Gate 2 → Gate 3 first-mention line order monotonic

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# v2.0.0 session-start-advisor verification.
+# v1.32.0 session-start-advisor verification.
 #   V8 (AC16): legacy v1.x state file triggers `/cancel-qg` advisory on stderr.
 #   V8-pre (AC14 advisory): in-flight code paths gone, frontmatter scan kept.
 

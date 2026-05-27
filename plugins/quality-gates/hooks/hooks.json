@@ -1,5 +1,5 @@
 {
-  "description": "Quality Gates v2.0.0 — PostToolUse session-tracker for /qg scope + SessionStart legacy-state advisor + SessionEnd cleanup. Pipeline progression managed in-turn by the quality-pipeline SKILL.",
+  "description": "Quality Gates v1.32.0 — PostToolUse session-tracker for /qg scope + SessionStart legacy-state advisor + SessionEnd cleanup. Pipeline progression managed in-turn by the quality-pipeline SKILL.",
   "hooks": {
     "PostToolUse": [
       {

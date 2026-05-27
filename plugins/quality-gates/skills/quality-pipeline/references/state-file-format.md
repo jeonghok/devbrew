@@ -1,6 +1,6 @@
-# State File Format (v2.0.0)
+# State File Format (v1.32.0)
 
-> v2.0.0 breaking change: cross-turn pipeline state는 SKILL의 단일 턴
+> v1.32.0 breaking change: cross-turn pipeline state는 SKILL의 단일 턴
 > 시리얼 디스패치로 흡수됨. 본 state file은 **GC mtime anchor + worktree
 > tracking + Gate 2 iter 카운터 reporting**만 보존한다.
 
@@ -30,7 +30,7 @@ gate2_iteration: 0                   # Updated by SKILL.md ONLY via the
                                      # display is in History only.
 ---
 
-# Quality Gates Pipeline State (v2.0.0)
+# Quality Gates Pipeline State (v1.32.0)
 
 ## History
 

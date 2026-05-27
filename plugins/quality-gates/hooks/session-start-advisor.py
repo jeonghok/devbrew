@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """SessionStart hook: advisory only — never mutates state.
 
-v2.0.0 behaviors:
+v1.32.0 behaviors:
 - Legacy v1.x per-session pipeline.md (with stop-hook-era keys) → stderr
   one-shot advisory pointing to `/cancel-qg`.
 - Legacy v1.5.0 flat state files (.claude/quality-gates.local.md etc.) →
@@ -9,7 +9,7 @@ v2.0.0 behaviors:
 - frontmatter-scan sub-feature: warn about kebab-case allowed-tools /
   disallowed-tools in plugins/*/agents/*.md (unchanged from v1.x).
 
-In-flight pipeline detection was removed in v2.0.0 — pipelines no longer
+In-flight pipeline detection was removed in v1.32.0 — pipelines no longer
 span turns, so there is nothing to "resume" across sessions.
 
 Working-directory contract: state root derived from payload['cwd']; falls
@@ -37,7 +37,7 @@ LEGACY_RELATIVE = (
     ".claude/qg-diff-cache.txt",
     ".claude/qg-code-paths.tmp",
 )
-# v2.0.0: in-flight detection removed. Legacy v1.x markers still detected
+# v1.32.0: in-flight detection removed. Legacy v1.x markers still detected
 # for one-shot advisory (see _emit_legacy_v1_advisory). Keys are constructed
 # (not literals) so V8-pre static grep for in-flight identifiers stays clean.
 LEGACY_V1_KEYS = ("status:", "current" + "_gate:", "consecutive_no_signal:")
@@ -129,15 +129,15 @@ def _emit_legacy_v1_advisory(payload: dict, self_sid: str) -> bool:
                 text = ""
             if any(key in text for key in LEGACY_V1_KEYS):
                 sys.stderr.write(
-                    "[quality-gates v2.0.0] Legacy v1.x pipeline state detected "
+                    "[quality-gates v1.32.0] Legacy v1.x pipeline state detected "
                     "in current session. Run `/cancel-qg` to clear before invoking "
-                    "`/qg` (v2.0.0 single-turn pipeline cannot resume v1.x state).\n"
+                    "`/qg` (v1.32.0 single-turn pipeline cannot resume v1.x state).\n"
                 )
                 found = True
     # 2. Flat v1.5.0 state files.
     if _legacy_present(payload):
         sys.stderr.write(
-            "[quality-gates v2.0.0] Legacy v1.5.0 flat state files detected. "
+            "[quality-gates v1.32.0] Legacy v1.5.0 flat state files detected. "
             "Run `/qg --reset` or `/cancel-qg` to remove. They will also be "
             "removed automatically on next `/qg` invocation.\n"
         )
