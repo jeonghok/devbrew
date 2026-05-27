@@ -43,11 +43,22 @@ locked_decisions:
 - `brainstorming` skill은 upstream superpowers cache에 위치 (`~/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/`). devbrew는 직접 편집 불가, CLAUDE.md guidance와 hook으로만 영향 가능.
 - spec-distill v0.8.0부터 review hook은 `docs/superpowers/specs/` 아래 모든 `.md`에 발화 — brainstorming의 `*-design.md` 산출물도 hook 대상.
 - 현행 v0.9.0 `approve_handoff.sh`는 Step 1에서 `git add` + `git commit` → "이미 committed" 또는 "변경 없음" 상황에서 `nothing to commit` 에러로 exit 1, 사용자 작업 차단.
+- **Claude Code hook 출력 JSON schema** (기존 `pending-review-reminder.py`, `review-dispatch.py`에서 확인된 형식):
+  ```json
+  {
+    "hookSpecificOutput": {
+      "hookEventName": "Stop" | "UserPromptSubmit",
+      "additionalContext": "<systemMessage로 inject되는 마크다운/plaintext 문자열>"
+    },
+    "systemMessage": "<짧은 reason, 모델에게 표시>"
+  }
+  ```
+- **Claude Code hook payload schema**: hook은 stdin으로 JSON payload 수신 — `session_id` 필드 포함 (`state_path.resolve_session_id(payload)` 헬퍼가 기존 spec-distill hook 모두에서 사용 중). 신규 hook 둘도 같은 헬퍼로 session_id 획득.
+- **`.handoff-status` 및 marker 파일 형식**: plaintext key=value (한 줄 1쌍). `STATUS=already_handed_off\nTIMESTAMP=2026-05-27T...\nFIRE_COUNT=<n>` 형식. grep/sed로 직접 다룰 수 있고 yq 등 추가 의존성 불필요. 신규 fire count도 같은 marker 파일 안 `FIRE_COUNT=` 라인에 append/rewrite.
 
 **Deferred to plan**:
-- Stop hook fire 카운트 임계치(5회 후 stagnation cleanup)의 구체 implementation — plan에서 결정.
-- `compact-detect.py`의 `/compact` prefix 매칭 정확한 regex — plan에서 edge case 수집 후 결정.
-- 기존 `.handoff-status` 파일 schema 정확한 YAML 또는 plaintext 형식 — plan에서 결정.
+- `compact-detect.py`의 `/compact` prefix 매칭 정확한 정규식 (leading whitespace, fullwidth slash 등 edge case 처리) — AC5에서 high-level semantics만 명시, regex 자체는 plan.
+- Stop hook의 `additionalContext` 문자열 *최종 wording* (verbatim 명령 내용) — design은 schema 확정, 문구는 plan UX iteration.
 
 ## Context / Why
 
@@ -88,7 +99,7 @@ devbrew 철학상 의미:
 - **C1**: 변경되는 모든 파일은 `plugins/spec-distill/`와 devbrew root `CLAUDE.md` 한 줄 외부로 spillover하지 않는다.
 - **C2**: 두 신규 hook은 `DEVBREW_DISABLE_SPEC_DISTILL=1` 및 `DEVBREW_SKIP_HOOKS=spec-distill:<hook>` 형식 kill switch를 모두 존중한다 (CLAUDE.md "kill switch는 보안 컨트롤").
 - **C3**: spec-distill `plugin.json` version은 `0.9.0` → `0.10.0` (minor bump: 신규 surface 2개 hook + idempotent contract). CHANGELOG.md에 0.10.0 entry 추가.
-- **C4**: 신규 marker 디렉토리 `.claude/spec-distill/.markers/`는 SessionEnd hook 또는 TTL-GC에서 24h 이상 stale marker 자동 정리한다 (v0.6.0 GC 패턴 재사용).
+- **C4**: 신규 marker 디렉토리 `.claude/spec-distill/.markers/`의 24h 이상 stale marker는 기존 `scripts/spec-distill-gc.py`를 확장해 sweep 한다 (별도 GC 신설 없음). 신규 marker 디렉토리 한 줄 추가 + 같은 fcntl lock / double-stat ns / rename-then-rmtree race guard 패턴 재사용 — Files to Modify에 명시.
 - **C5**: `.handoff-status` 파일은 일반 텍스트 또는 단순 key=value 형식 — secret 기록 금지 (CLAUDE.md P21).
 - **C6**: README.md "Principles Instantiated" 섹션에 "Ouroboros handoff_contract.py replay-safety/named-status/dedupe instantiation" 추가 (Law 3: 미래 검색 discoverability).
 
@@ -97,9 +108,12 @@ devbrew 철학상 의미:
 - **AC1**: spec 파일이 working tree clean이고 HEAD에 존재할 때 `approve_handoff.sh <sid> <path>` 호출 → exit 0, stdout에 v0.9.0 동일 형식 3-block handoff packet, `.claude/spec-distill/.markers/<sid>.emitted` marker 파일 생성, `.handoff-status` 파일에 `STATUS=already_handed_off` 기록.
 - **AC2**: spec 파일이 uncommitted 또는 dirty인 상태에서 호출 → exit 1, stderr에 advisory (현재 `git status` 결과 spec 관련 + 정확한 `git add` + `git commit` 명령 string), marker 미생성, state.local.md 보존.
 - **AC3**: 같은 `session_id`로 두 번 호출 → 두 번째도 exit 0, marker 보존 (touch 갱신만), packet 재emit, `STATUS=already_handed_off` 유지 (Ouroboros invariant #1 dedupe).
-- **AC4**: marker 존재 상태에서 Stop hook fire → stdout(Claude Code hook protocol)에 additionalContext JSON으로 `/compact` 명령 verbatim + writing-plans 안내 emit. marker 부재 시 no-op + exit 0.
-- **AC5**: UserPromptSubmit event payload `user_message`가 `/compact` prefix로 시작 또는 `Skill superpowers:writing-plans` 포함 → marker 파일 삭제, stderr 1줄 loud advisory.
-- **AC6**: 같은 marker에 대해 Stop hook이 5회 fire되어도 marker 살아있으면 marker 자동 삭제 + stderr advisory `[spec-distill] compact-induction stagnation: 5 fires without /compact — manual confirmation required`.
+- **AC4**: marker 존재 상태에서 Stop hook fire → stdout에 Implicit context의 schema 형식 JSON 출력. `hookSpecificOutput.additionalContext`는 (a) verbatim `/compact` 명령 string과 (b) writing-plans 호출 안내 두 부분을 포함. marker 부재 시 stdout `{}` + exit 0 (no-op).
+- **AC5**: UserPromptSubmit event payload의 `user_message` (or 동등 필드)에 대해 다음 두 조건 *어느 하나라도* 충족 시 marker 삭제 + stderr 1줄 loud advisory:
+  - (i) `user_message.lstrip()`이 `/compact`로 시작 (즉 leading-whitespace strip 후 prefix match).
+  - (ii) `user_message.lstrip()`이 `Skill superpowers:writing-plans`로 시작 (start-of-message exact-token match, 중간 substring은 trigger 안 됨 — false-positive 차단).
+  두 조건 모두 case-sensitive. 다른 위치에 같은 문자열이 등장해도 marker 보존.
+- **AC6**: 같은 marker에 대해 Stop hook fire마다 marker 파일 안 `FIRE_COUNT=` 라인 +1 갱신. `FIRE_COUNT >= 5` 도달 시 marker 자동 삭제 + stderr advisory `[spec-distill] compact-induction stagnation: 5 fires without /compact — manual confirmation required`. 동일 marker가 재생성되기 전까지 더 이상 fire 안 함.
 - **AC7**: `DEVBREW_DISABLE_SPEC_DISTILL=1` 환경에서 모든 신규 hook + approve_handoff.sh가 즉시 exit 0, marker 생성/삭제 모두 skip.
 - **AC8**: `DEVBREW_SKIP_HOOKS=spec-distill:compact-induction` 환경에서 compact-induction hook은 즉시 exit 0, compact-detect와 approve_handoff.sh는 정상 동작.
 - **AC9**: `plugin.json` version이 `0.10.0`이고 CHANGELOG.md에 `## [0.10.0] — 2026-05-27` entry 존재 (Added/Changed/Notes 섹션 포함).
@@ -130,6 +144,9 @@ plugins/spec-distill/README.md
 plugins/spec-distill/skills/reviewing-spec/SKILL.md
   — "Approve handoff sequence (AC11)" 절의 "4-step" 표현을 신규 step 수에 맞춰 갱신. 실패 시 state 보존 절은 "dirty_blocked 상태" 명시.
 
+plugins/spec-distill/scripts/spec-distill-gc.py
+  — 기존 TTL-GC sweep 대상에 .claude/spec-distill/.markers/ 디렉토리 한 줄 추가. 24h+ stale marker 파일 정리. 기존 fcntl lock / double-stat ns / rename-then-rmtree race guard 패턴 재사용.
+
 CLAUDE.md (devbrew root)
   — "Plugin Shape" 또는 "Forbidden Patterns" 인접 위치에 brainstorming → spec-distill handoff 1줄 가이드 추가.
 
@@ -151,6 +168,9 @@ plugins/spec-distill/tests/test_compact_detect_hook.sh
 
 plugins/spec-distill/tests/test_compact_induction_stagnation.sh
   — 5회 fire 후 self-cleanup + advisory 검증.
+
+plugins/spec-distill/tests/test_handoff_compact_chain.sh
+  — V9 자동 hook chain integration test. approve_handoff → marker → compact-induction stdout JSON 단언 → compact-detect → marker 삭제 단언.
 ```
 
 ## Verification Plan
@@ -163,7 +183,8 @@ plugins/spec-distill/tests/test_compact_induction_stagnation.sh
 - **V6 — kill switch**: 환경변수 `DEVBREW_DISABLE_SPEC_DISTILL=1` 설정 후 V1-V5 모두 즉시 exit 0 (no-op).
 - **V7 — version bump**: `jq -r .version plugins/spec-distill/.claude-plugin/plugin.json` 출력이 `0.10.0`이고, CHANGELOG.md 최상단 entry가 `## [0.10.0] — 2026-05-27`.
 - **V8 — full plugin test suite**: `bash plugins/spec-distill/tests/run_all.sh` (또는 individual test 모두) PASS.
-- **V9 — manual end-to-end**: brainstorming으로 임의 design.md 작성 + commit → spec-distill review-dispatch → reviewing-spec approve → approve_handoff.sh emit packet → Stop hook이 한 번 더 SystemMessage emit → `/compact` 입력 → marker 삭제 → fresh context로 writing-plans 진입. 전체 흐름이 인간 개입 없이 packet emit ~ /compact prompting까지 자동.
+- **V9 — automated hook protocol integration**: 신규 test `tests/test_handoff_compact_chain.sh` — approve_handoff.sh를 mock spec으로 호출 → marker 생성 단언 → compact-induction.py에 mock Stop payload (JSON via stdin) 주입 → stdout JSON 파싱해서 `hookSpecificOutput.additionalContext` 안에 `/compact` 문자열 존재 + `Skill superpowers:writing-plans` 문자열 존재 단언 → compact-detect.py에 mock UserPromptSubmit payload (`{"user_message":"/compact ..."}`) 주입 → marker 부재 단언. 전체 hook chain의 *JSON contract*를 spec session 외부에서 자동 검증.
+- **V10 — manual smoke (advisory only)**: V9가 contract를 자동 검증하나, 실제 Claude Code session 안에서 SystemMessage가 모델에 visible한지는 인간 관찰 필요. brainstorming 임의 design.md → spec-distill review-dispatch → approve → Stop hook fire → `/compact` 입력 → writing-plans 진입 흐름을 1회 실측. PR pre-merge checklist 항목 (자동 CI 게이트 아님).
 
 ## Rejected Alternatives
 
@@ -175,8 +196,8 @@ plugins/spec-distill/tests/test_compact_induction_stagnation.sh
 
 ## Open Questions
 
-- **OQ1**: Stop hook이 SystemMessage를 emit할 때 `additionalContext` 필드의 정확한 JSON schema — Claude Code의 hook protocol 문서 또는 superpowers/oh-my-codex의 기존 hook 구현 참조 필요. (Plan 단계에서 reference 확인 후 결정.)
-- **OQ2**: `compact-detect.py`의 `/compact` prefix 매칭이 leading whitespace, fullwidth slash 등 edge case를 어떻게 다룰지 — plan에서 spec.
+- (OQ1 resolved — JSON schema가 Implicit context에 명시됨, AC4에서 직접 참조.)
+- **OQ2 (narrowed)**: AC5의 high-level 매칭 semantics (lstrip + startswith)는 확정. 다만 fullwidth slash (`／compact`), 한글 자모 prefix 등 edge case를 정규식으로 어디까지 cover할지는 plan에서 결정. 첫 cut: ASCII `/compact` 만 trigger, 나머지는 false-negative 허용 (사용자가 다시 입력).
 
 ## Concrete Next Action
 
