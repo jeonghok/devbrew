@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# v1.32.0 SKILL.md orchestration verification (static grep approach).
+# v1.32.1 SKILL.md orchestration verification (static grep approach).
 #
 # Wraps spec verification steps:
 #   V2a — AC5: Gate 1 → Gate 2 → Gate 3 first-mention line order monotonic
 #   V2b — AC6/AC7/AC8: context anchors + 3-option labels + P21 token
-#   V7  — AC18: AskUserQuestion not within ±10 lines of any "PASS" marker
-#                (supporting heuristic; primary anchor-check lives in V2b)
+#
+# V7 was REMOVED in v1.32.1 (C6 atomicity, spec §5.1/§5.6.9): the
+# `grep -c '\bPASS\b'` token never appeared in SKILL.md, so V7's
+# negative-assertion path was unreachable (tautological PASS). Replaced
+# by tests/harness/test_skill_orchestration_behavior.sh, which asserts
+# the orchestration protocol-shape (dispatch ordering, proximity, and
+# fan-out membership) without any unreachable code paths.
 #
 # Exit 0 if all pass; non-zero with diagnostic on first failure.
 
@@ -52,21 +57,7 @@ check "Skip with evidence"       "Gate 3 option"
 check "P21"                      "P21 secret-policy token"
 echo "PASS V2b (context anchors + options + P21)"
 
-# ============== V7: PASS proximity (AC18 supporting) ==============
-awk '
-  /PASS/        {pass_lines[NR]=1}
-  /AskUserQuestion/ {ask_lines[NR]=1}
-  END {
-    for (p in pass_lines) {
-      for (a in ask_lines) {
-        if (a >= p-10 && a <= p+10) {
-          print "FAIL V7: AskUserQuestion at line " a " too close to PASS at line " p
-          exit 1
-        }
-      }
-    }
-  }
-' "$S" || exit 1
-echo "PASS V7 (PASS-AskUserQuestion proximity)"
+# V7 removed in v1.32.1 (see header). Protocol-shape coverage moved to
+# tests/harness/test_skill_orchestration_behavior.sh.
 
 echo "All SKILL orchestration checks pass."
