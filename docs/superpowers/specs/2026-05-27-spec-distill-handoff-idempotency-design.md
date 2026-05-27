@@ -57,8 +57,8 @@ locked_decisions:
 - **`.handoff-status` 및 marker 파일 형식**: plaintext key=value (한 줄 1쌍). `STATUS=already_handed_off\nTIMESTAMP=2026-05-27T...\nFIRE_COUNT=<n>` 형식. grep/sed로 직접 다룰 수 있고 yq 등 추가 의존성 불필요. 신규 fire count도 같은 marker 파일 안 `FIRE_COUNT=` 라인에 append/rewrite.
 
 **Deferred to plan**:
-- `compact-detect.py`의 `/compact` prefix 매칭 정확한 정규식 (leading whitespace, fullwidth slash 등 edge case 처리) — AC5에서 high-level semantics만 명시, regex 자체는 plan.
 - Stop hook의 `additionalContext` 문자열 *최종 wording* (verbatim 명령 내용) — design은 schema 확정, 문구는 plan UX iteration.
+- (compact-detect.py의 prefix 매칭 edge case는 OQ2가 canonical owner — 여기서 중복 서술 안 함.)
 
 ## Context / Why
 
@@ -106,8 +106,12 @@ devbrew 철학상 의미:
 ## Acceptance Criteria
 
 - **AC1**: spec 파일이 working tree clean이고 HEAD에 존재할 때 `approve_handoff.sh <sid> <path>` 호출 → exit 0, stdout에 v0.9.0 동일 형식 3-block handoff packet, `.claude/spec-distill/.markers/<sid>.emitted` marker 파일 생성, `.handoff-status` 파일에 `STATUS=already_handed_off` 기록.
-- **AC2**: spec 파일이 uncommitted 또는 dirty인 상태에서 호출 → exit 1, stderr에 advisory (현재 `git status` 결과 spec 관련 + 정확한 `git add` + `git commit` 명령 string), marker 미생성, state.local.md 보존.
-- **AC3**: 같은 `session_id`로 두 번 호출 → 두 번째도 exit 0, marker 보존 (touch 갱신만), packet 재emit, `STATUS=already_handed_off` 유지 (Ouroboros invariant #1 dedupe).
+- **AC2**: spec 파일이 uncommitted 또는 dirty인 상태에서 호출 → exit 1, marker 미생성, state.local.md 보존. stderr advisory는 다음 *필수 토큰 4개*를 모두 포함 (test가 grep으로 단언):
+  - 1) `[spec-distill]` prefix
+  - 2) `dirty_blocked` (named status)
+  - 3) `git status --short -- "<spec_path>"` 출력 (file-scoped, 전체 status dump 아님)
+  - 4) copy-pasteable 명령 두 줄: `git add -- "<spec_path>"` 와 `git commit -m ...` (정확한 문자열 prefix; 메시지 본문은 자유)
+- **AC3**: 같은 `session_id`로 두 번 호출 → 두 번째도 exit 0, marker 보존, packet 재emit, `STATUS=already_handed_off` 유지. **TIMESTAMP 라인은 최초 emit 시각을 보존, idempotent re-run 시 갱신하지 않음** (Ouroboros invariant #1 dedupe — 동일 logical handoff은 동일 timestamp). `FIRE_COUNT`는 Stop hook fire가 일어날 때만 갱신, approve_handoff.sh 재호출로는 변경 없음.
 - **AC4**: marker 존재 상태에서 Stop hook fire → stdout에 Implicit context의 schema 형식 JSON 출력. `hookSpecificOutput.additionalContext`는 (a) verbatim `/compact` 명령 string과 (b) writing-plans 호출 안내 두 부분을 포함. marker 부재 시 stdout `{}` + exit 0 (no-op).
 - **AC5**: UserPromptSubmit event payload의 `user_message` (or 동등 필드)에 대해 다음 두 조건 *어느 하나라도* 충족 시 marker 삭제 + stderr 1줄 loud advisory:
   - (i) `user_message.lstrip()`이 `/compact`로 시작 (즉 leading-whitespace strip 후 prefix match).
@@ -177,10 +181,10 @@ plugins/spec-distill/tests/test_handoff_compact_chain.sh
 
 - **V1 — approve_handoff happy path**: `bash plugins/spec-distill/tests/test_approve_handoff.sh` (재작성된 Case 1-8 모두 PASS). 실행 결과의 stdout이 `===== spec-distill handoff packet =====`로 시작해야 한다.
 - **V2 — named-status invariant**: `bash plugins/spec-distill/tests/test_handoff_status_named.sh` 통과. grep으로 `approve_handoff.sh` 안에 `readonly HANDOFF_STATUS_*` 3개 상수 존재 검증.
-- **V3 — compact-induction Stop hook**: `bash plugins/spec-distill/tests/test_compact_induction_hook.sh` 통과. marker 존재 시 hook stdout JSON에 `additionalContext` 필드 존재, marker 부재 시 빈 stdout.
+- **V3 — compact-induction Stop hook**: `bash plugins/spec-distill/tests/test_compact_induction_hook.sh` 통과. marker 존재 시 hook stdout JSON에 `hookSpecificOutput.additionalContext` 필드 존재, marker 부재 시 stdout이 정확히 `{}` (AC4와 일치 — JSON consistency 유지, raw 빈 stdout 아님).
 - **V4 — compact-detect UserPromptSubmit hook**: `bash plugins/spec-distill/tests/test_compact_detect_hook.sh` 통과. `/compact` prefix 입력 시 marker 삭제 확인, 일반 prompt 시 marker 보존.
 - **V5 — stagnation escape**: `bash plugins/spec-distill/tests/test_compact_induction_stagnation.sh` 통과. 5회 fire 후 marker 부재 + stderr에 `stagnation` 키워드 advisory.
-- **V6 — kill switch**: 환경변수 `DEVBREW_DISABLE_SPEC_DISTILL=1` 설정 후 V1-V5 모두 즉시 exit 0 (no-op).
+- **V6 — kill switch**: 환경변수 `DEVBREW_DISABLE_SPEC_DISTILL=1` 설정 후 V1-V5 *및 V9* 모두 즉시 exit 0 (no-op) — V9의 hook chain test도 kill switch 경로에서 marker 미생성 단언 추가. `DEVBREW_SKIP_HOOKS=spec-distill:compact-induction`은 compact-induction.py만 no-op, compact-detect.py와 approve_handoff.sh는 정상 동작.
 - **V7 — version bump**: `jq -r .version plugins/spec-distill/.claude-plugin/plugin.json` 출력이 `0.10.0`이고, CHANGELOG.md 최상단 entry가 `## [0.10.0] — 2026-05-27`.
 - **V8 — full plugin test suite**: `bash plugins/spec-distill/tests/run_all.sh` (또는 individual test 모두) PASS.
 - **V9 — automated hook protocol integration**: 신규 test `tests/test_handoff_compact_chain.sh` — approve_handoff.sh를 mock spec으로 호출 → marker 생성 단언 → compact-induction.py에 mock Stop payload (JSON via stdin) 주입 → stdout JSON 파싱해서 `hookSpecificOutput.additionalContext` 안에 `/compact` 문자열 존재 + `Skill superpowers:writing-plans` 문자열 존재 단언 → compact-detect.py에 mock UserPromptSubmit payload (`{"user_message":"/compact ..."}`) 주입 → marker 부재 단언. 전체 hook chain의 *JSON contract*를 spec session 외부에서 자동 검증.
