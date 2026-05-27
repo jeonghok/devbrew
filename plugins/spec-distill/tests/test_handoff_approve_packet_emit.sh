@@ -5,8 +5,8 @@ set -u -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SCRIPT="$REPO_ROOT/plugins/spec-distill/scripts/approve_handoff.sh"
 
-# Fake spec path (file does not need to exist — script git commit failure is OK, stdout
-# still emitted before exit). Use a 12-char hex session_id to pass charset guard.
+# Spec file must exist and be committed for v0.10.0 approve_handoff.sh to emit packet
+# (LD4: commit responsibility removed from script). Use 12-char hex session_id for charset guard.
 TEST_SID="aaaa11112222"
 TEST_SPEC="docs/superpowers/specs/2026-05-26-FAKE-design.md"
 
@@ -23,9 +23,11 @@ git config user.name test
 echo "# init" > README.md
 git add README.md && git commit -q -m init
 echo "# fake spec" > "$TEST_SPEC"
-git add "$TEST_SPEC"
+# v0.10.0: spec must be committed (clean HEAD) for approve_handoff.sh to emit packet.
+# Previously v0.9.0 expected the script itself to commit.
+git add "$TEST_SPEC" && git commit -q -m "spec: lock"
 
-# Capture stdout (script may exit non-zero from commit failure; we only care stdout).
+# Capture stdout (script exits 0 with idempotent emit; stdout is what we test).
 out=$(bash "$SCRIPT" "$TEST_SID" "$TEST_SPEC" 2>/dev/null || true)
 
 pass=0; fail=0

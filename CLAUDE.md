@@ -89,6 +89,7 @@ Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md
 - **Trivia ceremony** — 한 문장 diff에 full pipeline 실행 (Anthropic *Best Practices*).
 - **Subagent spray** — 선언 없는 fan-out ≥ 5; single-agent를 default로.
 - **Unbounded autonomy** — max-iter count, wall-clock budget, repeat 감지, 사용자-override kill switch 없는 루프.
+- **Polite handoff** — brainstorming/spec-distill review-approved 후 `/compact` 안내만 narrate하고 spec-distill 의 `approve_handoff.sh`를 호출하지 않음. 호출하면 marker가 생성되고 Stop hook이 unmissable하게 `/compact`를 induce하므로 narrate-only는 polite-stop의 한 종류 (AP2 variant).
 
 **버그가 리뷰를 탈출하면**, 해결책은 잡았어야 할 reviewer persona 파일을 편집하는 것 — 코드만 패치하는 게 아님. 그 commit이 compounding 이벤트 (Law 3).
 

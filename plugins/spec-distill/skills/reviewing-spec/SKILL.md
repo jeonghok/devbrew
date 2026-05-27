@@ -135,13 +135,13 @@ spec-reviewer agent가 `Stagnation_signal: true` 반환 시: 해당 issue에 대
 bash "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/approve_handoff.sh" "$session_id" "$spec_path"
 ```
 
-스크립트가 4-step (commit / handoff pointer / cleanup / termination) atomic 실행. session_id charset guard 내장 — invalid 시 cleanup skip + advisory. commit 실패 시 state.local.md 보존, exit 1.
+스크립트(v0.10.0+)가 idempotent state machine 실행: (1) kill switch + charset guard, (2) marker/HEAD/working-tree 검사로 named status 판정 (`already_handed_off` / `dirty_blocked` / `emitted`), (3) emitted 경로에서 `.claude/spec-distill/.markers/<sid>.emitted` marker write, (4) 모든 정상 경로에서 packet stdout re-emit (재호출 시 TIMESTAMP 보존, dedupe), (5) emitted 경로에서 session 디렉토리 cleanup. `dirty_blocked` 상태에서는 exit 1 + copy-pasteable `git add`/`git commit` advisory를 stderr에 출력 — *commit은 사용자 책임*이며 스크립트가 직접 시도하지 않음 (v0.9.0과 다름).
 
 **polite stop 금지** (AP2): "approved!"만 narrate하고 스크립트 호출 skip 금지. SessionEnd hook이 backup cleanup이지만 user-explicit "approve" 의도는 즉시 반영.
 
 ### 실패 시 state 보존 (P14)
 
-approve_handoff.sh가 commit 실패 시 exit 1 + state.local.md 보존. cleanup rm 실패는 advisory only — SessionEnd hook이 재시도.
+approve_handoff.sh가 `dirty_blocked` 판정 시 exit 1 + state.local.md 보존 + marker 미생성. cleanup rm 실패는 advisory only — SessionEnd hook이 재시도. v0.10.0부터 git commit 실패는 발생 가능 경로가 아님 (스크립트가 commit 시도 안 함).
 
 ## In-flight state migration (C10)
 

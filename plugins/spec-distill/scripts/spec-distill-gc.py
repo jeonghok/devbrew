@@ -100,6 +100,41 @@ def _sweep_gc_pending(root: Path) -> int:
     return removed
 
 
+def _sweep_markers(root: Path, ttl_ns: int) -> int:
+    """Remove .markers/<sid>.emitted files older than TTL.
+
+    Markers live outside per-session folders (LD5) and outlive their owning
+    session by design. TTL-GC sweep prevents indefinite accumulation on
+    machines where Stop/UserPromptSubmit hooks never resolve the marker
+    (e.g., abandoned sessions).
+
+    Race-safe via individual file unlink (no rename-then-rmtree needed —
+    markers are single files, not directories).
+    """
+    markers_dir = root / ".markers"
+    if not markers_dir.exists():
+        return 0
+    removed = 0
+    now_ns = time.time_ns()
+    for child in markers_dir.iterdir():
+        if not child.is_file():
+            continue
+        if not child.name.endswith(".emitted"):
+            continue
+        try:
+            age_ns = now_ns - child.stat().st_mtime_ns
+        except OSError:
+            continue
+        if age_ns < ttl_ns:
+            continue
+        try:
+            child.unlink()
+            removed += 1
+        except OSError:
+            continue
+    return removed
+
+
 def _gc_one(folder: Path, ttl_ns: int) -> bool:
     if _within_grace(folder):
         return False
@@ -157,6 +192,7 @@ def gc(self_session_id: str | None = None) -> int:
             return 0
         try:
             removed += _sweep_gc_pending(root)
+            removed += _sweep_markers(root, ttl_ns)
             for child in root.iterdir():
                 if not child.is_dir():
                     continue
