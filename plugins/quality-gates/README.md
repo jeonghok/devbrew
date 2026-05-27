@@ -145,16 +145,10 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 
 `len(phase1) + len(phase2) >= 4`일 때 AskUserQuestion 발동 (philosophy AP9). 최대 fan-out: Phase 1 (4) + Phase 2 (5) + Phase 1.5 (1) + Phase 1.6 (1) + Phase 3 (1) = 12.
 
-## 파이프라인 흐름 (forward-only state machine, v1.5.0)
+## 파이프라인 흐름 (single-turn serial dispatch, v1.32.0)
 
-```
-/qg → setup-qg.sh → pre-pipeline-check → trivia escape?
-   ├── yes → 즉시 PASS, 0 dispatch
-   └── no  → SKILL.md (Gate 1) → Stop hook → SKILL.md (Gate 2)
-              → Stop hook → SKILL.md (Gate 3) → done
-```
+`v1.32.0`에서 SKILL이 전체 파이프라인을 단일 assistant turn 내에서 serial dispatch로 실행합니다. Inter-gate progression과 Gate 2 fix-loop iteration은 모두 AskUserQuestion으로 사용자 동의를 받아 진행 — 동일한 도구가 subagent fan-out gate와 inter-gate progression gate를 함께 담당합니다. (v1.5.0의 turn-by-turn state machine 다이어그램은 제거됨; 단일 다이어그램만 유지.)
 
-**Single-turn serial dispatch** (v1.32.0 — SKILL drives the entire pipeline within one assistant turn; AskUserQuestion gates inter-gate progression and Gate 2 iterations):
 
 ```
 ┌─ single assistant turn ──────────────────────────────────────────────┐
@@ -211,7 +205,7 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-**v1.32.0에서 Stop hook 제거**: 파이프라인 진행은 더 이상 Stop hook 기반 state machine으로 turn-by-turn 진행되지 않고, `quality-pipeline` SKILL이 단일 assistant turn 내에서 serial dispatch로 끝까지 실행합니다. Inter-gate progression과 Gate 2 fix-loop iteration은 모두 AskUserQuestion으로 사용자 동의를 받아 진행 — 동일한 도구가 subagent fan-out gate와 inter-gate progression gate를 함께 담당합니다.
+**v1.32.0 변경 요약**: 파이프라인 진행은 더 이상 turn-by-turn state machine으로 진행되지 않고, `quality-pipeline` SKILL이 단일 assistant turn 내에서 serial dispatch로 끝까지 실행합니다. AskUserQuestion이 subagent fan-out gate와 inter-gate progression gate를 함께 담당합니다.
 
 ### Trivia detector coverage
 
