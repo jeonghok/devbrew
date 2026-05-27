@@ -26,16 +26,21 @@ session_id="${1:?usage: approve_handoff.sh <session_id> <spec_path>}"
 spec_path="${2:?usage: approve_handoff.sh <session_id> <spec_path>}"
 
 # ─── session_id charset guard (defense in depth — state_path.SESSION_PATTERN equivalent) ───
+# v0.10.0 (post-Gate-2 review): warn-and-continue replaced with fail-fast.
+# Earlier shape set cleanup_skipped=1 but allowed unvalidated session_id to be
+# interpolated into marker_file path (line 50). The marker write path didn't
+# exist before v0.10.0 — adding it expanded the blast radius of the bypass.
+# cleanup_skipped variable retained for backward symmetry but is now always 0.
 cleanup_skipped=0
 case "$session_id" in
     ''|*[!A-Za-z0-9_-]*)
-        echo "[spec-distill] approve_handoff: cleanup skipped — invalid session_id '${session_id:-<empty>}'" >&2
-        cleanup_skipped=1
+        echo "[spec-distill] approve_handoff: invalid session_id '${session_id:-<empty>}' — aborting" >&2
+        exit 1
         ;;
     *)
         if [[ ${#session_id} -lt 8 ]]; then
-            echo "[spec-distill] approve_handoff: cleanup skipped — session_id length < 8" >&2
-            cleanup_skipped=1
+            echo "[spec-distill] approve_handoff: session_id length < 8 — aborting" >&2
+            exit 1
         fi
         ;;
 esac
@@ -62,10 +67,18 @@ else
         current_status="$HANDOFF_STATUS_DIRTY_BLOCKED"
     elif ! git diff --quiet --cached -- "$spec_path" 2>/dev/null; then
         current_status="$HANDOFF_STATUS_DIRTY_BLOCKED"
-    elif [[ -n "$(git ls-files --others --exclude-standard -- "$spec_path" 2>/dev/null)" ]]; then
-        current_status="$HANDOFF_STATUS_DIRTY_BLOCKED"
     else
-        current_status="$HANDOFF_STATUS_EMITTED"
+        # ls-files check: explicit exit-code handling — corrupt repo / smudge-filter
+        # crash exits non-zero with empty stdout, which silently passed as "clean"
+        # in the prior `[[ -n "$(...)" ]]` form. Fail-closed: any non-zero exit OR
+        # non-empty output → dirty_blocked.
+        ls_out=$(git ls-files --others --exclude-standard -- "$spec_path" 2>/dev/null)
+        ls_rc=$?
+        if [[ $ls_rc -ne 0 || -n "$ls_out" ]]; then
+            current_status="$HANDOFF_STATUS_DIRTY_BLOCKED"
+        else
+            current_status="$HANDOFF_STATUS_EMITTED"
+        fi
     fi
 fi
 

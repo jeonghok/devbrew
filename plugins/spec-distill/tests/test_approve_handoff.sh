@@ -81,13 +81,20 @@ else
 fi
 rm -rf "$WORK"
 
-# ───────── Case 4: charset reject (cleanup_skipped) ─────────
+# ───────── Case 4: charset reject (fail-fast, no marker write) ─────────
 WORK=$(mktemp -d)
 setup_repo "$WORK"
 bash "$SCRIPT" "../bad" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>"$ERR"
-grep -q "cleanup skipped" "$ERR" \
-    && note PASS "case 4: charset reject emits advisory" \
-    || note FAIL "case 4: missing cleanup-skipped advisory"
+rc=$?
+# v0.10.0 post-Gate-2: invalid session_id is fail-fast (exit 1, no marker write).
+# Marker dir traversal attempt path: $WORK/.claude/spec-distill/bad.emitted (the
+# traversal escape from .markers/).
+traversal_target="$WORK/.claude/spec-distill/bad.emitted"
+if [[ $rc -ne 0 ]] && grep -q "aborting" "$ERR" && [[ ! -f "$traversal_target" ]]; then
+    note PASS "case 4: charset reject — exit 1 + no traversal marker"
+else
+    note FAIL "case 4: rc=$rc, advisory=$(grep -q aborting "$ERR" && echo y || echo n), traversal_absent=$([[ ! -f $traversal_target ]] && echo y || echo n)"
+fi
 rm -rf "$WORK"
 
 # ───────── Case 5: empty session_id arg → exit 1 ─────────
