@@ -1,17 +1,6 @@
 {
-  "description": "Quality Gates - Stop hook for pipeline progression + PostToolUse session-tracker for /qg scope + SessionStart advisor + SessionEnd cleanup",
+  "description": "Quality Gates v2.0.0 — PostToolUse session-tracker for /qg scope + SessionStart legacy-state advisor + SessionEnd cleanup. Pipeline progression managed in-turn by the quality-pipeline SKILL.",
   "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/stop-hook.py",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write|MultiEdit",
