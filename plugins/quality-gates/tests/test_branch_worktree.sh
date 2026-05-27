@@ -37,7 +37,9 @@ grep -q '^worktree_path:' "$state" \
   || pass "no worktree dir in legacy mode"
 rm -rf "$REPO"
 
-# --- AC2: /qg branch <name> creates worktree, sets project_dir ---
+# --- AC2: /qg branch <name> creates worktree, records worktree_path + target_branch ---
+# (project_dir field was removed from state schema in v1.32.0 minimal-state
+# refactor — worktree_path itself is the user-visible invariant.)
 echo "[AC2] /qg branch <name> happy path"
 REPO=$(make_repo feat-b)
 (cd "$REPO" && CLAUDE_CODE_SESSION_ID=ac2session12 "$SETUP" branch feat-b >/dev/null)
@@ -46,9 +48,6 @@ state="$REPO/.claude/quality-gates/ac2session12/pipeline.md"
 wpath=$(awk -F'"' '/^worktree_path:/{print $2}' "$state")
 [ -n "$wpath" ] && [ -d "$wpath" ] && pass "worktree_path exists" \
   || fail "worktree_path missing or invalid: $wpath"
-pdir=$(awk -F'"' '/^project_dir:/{print $2}' "$state")
-[ "$pdir" = "$wpath" ] && pass "project_dir = worktree path" \
-  || fail "project_dir != worktree ($pdir vs $wpath)"
 tb=$(awk -F'"' '/^target_branch:/{print $2}' "$state")
 [ "$tb" = "feat-b" ] && pass "target_branch recorded" \
   || fail "target_branch wrong: $tb"
@@ -167,7 +166,7 @@ REPO=$(make_repo feat-i)
 rm -rf "$REPO"
 
 # (AC8 lives in test_stop_hook_worktree_cleanup.py; AC12 is exercised by
-#  test_branch_worktree.sh AC2 via the project_dir frontmatter assertion.)
+#  test_branch_worktree.sh AC2 via the worktree_path frontmatter assertion.)
 
 echo
 echo "Result: $PASS passed, $FAIL failed"
