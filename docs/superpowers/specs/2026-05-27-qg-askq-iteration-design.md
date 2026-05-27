@@ -39,6 +39,7 @@ locked_decisions:
 - 사용자가 AskUserQuestion 응답으로 "Stop" 선택 시 partial pipeline의 final summary 포맷 (텍스트 템플릿).
 - `tests/test_skill_orchestration.sh`의 정확한 fixture 행렬 (4 시나리오 각각의 mock SKILL.md instruction line 패턴 — 본 spec V6에서 정적 grep 접근 *방식*만 lock, fixture 행렬은 plan).
 - README 신규 ASCII 시퀀스 다이어그램의 정확한 줄 구성 (본 spec G5에서 *형태*만 lock).
+- `scripts/qg-gc.py`에 `--dry-run` 또는 `--root <path>` 옵션 추가 여부 (round-3 reviewer advisory) — V10 step 4에서 production script 직접 호출로 활성 세션 폴더를 의도치 않게 삭제할 위험. test fixture isolation을 폴더 네이밍(`old-sid`)에 의존하지 않도록 옵션 추가 검토.
 
 ## Context / Why
 
@@ -219,7 +220,7 @@ plugins/quality-gates/
   done
   ```
 - **V6 (AC15 — mock 접근 방식 lock)**: `ls plugins/quality-gates/tests/`에 deleted 패턴(`*stop_hook*`, `*transition*`, `*no_signal*`)이 없고 `test_skill_orchestration.sh` 존재. 본 spec은 mock 접근으로 **(a) 정적 SKILL.md instruction grep 방식**을 채택 — V2a/V2b/V2c가 이미 정적 grep을 수행하므로, `test_skill_orchestration.sh`는 V2a+V2b+V2c를 1개 스크립트로 묶고 종합 exit code를 반환하는 wrapper로 구현. **(b) 실제 CC harness subprocess 호출 통합 테스트**(`claude-code --prompt /qg ...` → trace parse)는 v2.0.0 first-pass 범위 외 (장점: end-to-end; 단점: CC binary 의존 + 비결정적 + 비용). 검증 명령: `bash plugins/quality-gates/tests/test_skill_orchestration.sh` exit 0.
-- **V7 (AC18, static-grep — primary)**: AC18의 *primary* 검증은 V6의 정적 분석에 통합. SKILL.md의 happy-path instruction 경로에 `AskUserQuestion` 호출 마커가 없음을 grep으로 확인 — 즉 SKILL이 PASS 경로에서 AskUserQuestion 호출 *지시문을 갖지 않음*을 정적으로 보장. 검증 명령:
+- **V7 (AC18, supporting static signal)**: AC18의 *primary* 검증은 **V2b의 anchor-grep** (PASS 분기에 anchor 부재 = AskUserQuestion 호출 없음을 implicit하게 보장). V7은 추가 정적 신호로 PASS 마커 ±10줄 awk proximity 분석 — heuristic 성격(실제 instruction block이 10줄 초과면 false PASS 가능, PASS 언급이 무관 섹션에 있으면 false FAIL 가능). 따라서 V0(전제) + V2b(primary anchor-grep) + V7(supporting proximity signal) + V7-manual(작성자 PR-time 수동 sanity) 4 단계가 함께 AC18을 보장. 검증 명령:
   ```bash
   S=plugins/quality-gates/skills/quality-pipeline/SKILL.md
   # SKILL.md 안에서 "PASS" 마커 행과 같은 코드 블록/섹션 내에 AskUserQuestion이 등장하지 않아야 함.
