@@ -7,6 +7,12 @@ SCRIPT="$PLUGIN_DIR/scripts/approve_handoff.sh"
 fail=0
 note() { echo "[$1] $2"; [[ "$1" == "FAIL" ]] && fail=$((fail+1)) || true; }
 
+# Per-run tmpdir to avoid "$OUT" collisions between parallel CI jobs.
+TMPDIR_TESTRUN=$(mktemp -d)
+trap 'rm -rf "$TMPDIR_TESTRUN"' EXIT
+OUT="$TMPDIR_TESTRUN/out"
+ERR="$TMPDIR_TESTRUN/err"
+
 setup_repo() {
     local wd=$1
     mkdir -p "$wd/docs/superpowers/specs"
@@ -28,13 +34,13 @@ marker_path() {
 # ───────── Case 1 (AC1): happy path — clean HEAD spec → marker created, packet emitted ─────────
 WORK=$(mktemp -d)
 setup_repo "$WORK"
-bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/tmp/out 2>/tmp/err
+bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >"$OUT" 2>"$ERR"
 rc=$?
 m=$(marker_path "$WORK" "test-sid12")
-if [[ $rc -eq 0 && -f "$m" ]] && grep -q "STATUS=already_handed_off" "$m" && grep -q "===== spec-distill handoff packet =====" /tmp/out; then
+if [[ $rc -eq 0 && -f "$m" ]] && grep -q "STATUS=already_handed_off" "$m" && grep -q "===== spec-distill handoff packet =====" "$OUT"; then
     note PASS "case 1 (AC1): clean HEAD → marker created + packet emitted"
 else
-    note FAIL "case 1: rc=$rc, marker_exists=$([[ -f $m ]] && echo y || echo n), stdout_ok=$(grep -q handoff /tmp/out && echo y || echo n)"
+    note FAIL "case 1: rc=$rc, marker_exists=$([[ -f $m ]] && echo y || echo n), stdout_ok=$(grep -q handoff "$OUT" && echo y || echo n)"
 fi
 rm -rf "$WORK"
 
@@ -42,15 +48,15 @@ rm -rf "$WORK"
 WORK=$(mktemp -d)
 setup_repo "$WORK"
 echo "uncommitted modification" >> "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md"
-bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/tmp/out 2>/tmp/err
+bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >"$OUT" 2>"$ERR"
 rc=$?
 m=$(marker_path "$WORK" "test-sid12")
 required_tokens_ok=1
-grep -q "\[spec-distill\]" /tmp/err || required_tokens_ok=0
-grep -q "dirty_blocked" /tmp/err || required_tokens_ok=0
-grep -q "git status --short" /tmp/err || required_tokens_ok=0
-grep -q "git add -- " /tmp/err || required_tokens_ok=0
-grep -q "git commit -m " /tmp/err || required_tokens_ok=0
+grep -q "\[spec-distill\]" "$ERR" || required_tokens_ok=0
+grep -q "dirty_blocked" "$ERR" || required_tokens_ok=0
+grep -q "git status --short" "$ERR" || required_tokens_ok=0
+grep -q "git add -- " "$ERR" || required_tokens_ok=0
+grep -q "git commit -m " "$ERR" || required_tokens_ok=0
 if [[ $rc -ne 0 && ! -f "$m" && "$required_tokens_ok" -eq 1 ]]; then
     note PASS "case 2 (AC2): dirty → exit 1 + 4-token advisory + no marker"
 else
@@ -65,10 +71,10 @@ bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.m
 m=$(marker_path "$WORK" "test-sid12")
 ts1=$(grep "^TIMESTAMP=" "$m" | cut -d= -f2-)
 sleep 1
-bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/tmp/out 2>&1
+bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >"$OUT" 2>&1
 rc=$?
 ts2=$(grep "^TIMESTAMP=" "$m" | cut -d= -f2-)
-if [[ $rc -eq 0 && -f "$m" && "$ts1" == "$ts2" ]] && grep -q "STATUS=already_handed_off" "$m" && grep -q "handoff packet" /tmp/out; then
+if [[ $rc -eq 0 && -f "$m" && "$ts1" == "$ts2" ]] && grep -q "STATUS=already_handed_off" "$m" && grep -q "handoff packet" "$OUT"; then
     note PASS "case 3 (AC3): re-run preserves TIMESTAMP + re-emits packet"
 else
     note FAIL "case 3: rc=$rc, ts_unchanged=$([[ $ts1 == $ts2 ]] && echo y || echo n)"
@@ -78,8 +84,8 @@ rm -rf "$WORK"
 # ───────── Case 4: charset reject (cleanup_skipped) ─────────
 WORK=$(mktemp -d)
 setup_repo "$WORK"
-bash "$SCRIPT" "../bad" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>/tmp/err
-grep -q "cleanup skipped" /tmp/err \
+bash "$SCRIPT" "../bad" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>"$ERR"
+grep -q "cleanup skipped" "$ERR" \
     && note PASS "case 4: charset reject emits advisory" \
     || note FAIL "case 4: missing cleanup-skipped advisory"
 rm -rf "$WORK"
