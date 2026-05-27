@@ -56,7 +56,7 @@ if [[ -f "$marker_file" ]]; then
 else
     # No marker yet — check spec is in HEAD and working tree is clean.
     if ! git rev-parse HEAD -- "$spec_path" >/dev/null 2>&1; then
-        # spec_path not tracked yet
+        # HEAD missing (empty repo) — untracked spec is caught by the ls-files check below
         current_status="$HANDOFF_STATUS_DIRTY_BLOCKED"
     elif ! git diff --quiet -- "$spec_path" 2>/dev/null; then
         current_status="$HANDOFF_STATUS_DIRTY_BLOCKED"
@@ -87,7 +87,10 @@ if [[ "$current_status" == "$HANDOFF_STATUS_DIRTY_BLOCKED" ]]; then
 fi
 
 # ─── Marker write (emitted path only — already_done preserves existing) ───
-mkdir -p "$markers_dir"
+mkdir -p "$markers_dir" || {
+    echo "[spec-distill] approve_handoff: failed to create markers dir '$markers_dir'" >&2
+    exit 1
+}
 if [[ "$current_status" == "$HANDOFF_STATUS_EMITTED" ]]; then
     # First emit — write fresh marker.
     timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
