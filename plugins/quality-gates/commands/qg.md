@@ -46,9 +46,11 @@ Execute the setup script to initialize the pipeline:
 "${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh" $ARGUMENTS
 ```
 
-Now invoke `Skill("quality-gates:quality-pipeline")` with gate=1 (or the gate specified in $ARGUMENTS) to begin the first gate.
-
-When you finish the gate, emit a `<qg-signal>` tag. The Stop hook handles pipeline progression automatically.
+Now invoke `Skill("quality-gates:quality-pipeline")` with the parsed
+arguments. The skill runs the complete pipeline in this turn — Gate 1 →
+Gate 2 (with internal fix-loop) → Gate 3 — and surfaces decision points
+via AskUserQuestion. No further commands are needed unless the pipeline
+is aborted at a decision point.
 
 ### Quick Reference
 
@@ -94,7 +96,8 @@ loop, the pre-redesign behavior):
 
 Set `DEVBREW_DISABLE_QUALITY_GATES=1` to globally disable. Set
 `DEVBREW_SKIP_HOOKS=quality-gates:session-tracker` to disable just the
-session-tracker hook (keeps Stop hook + advisor active).
+session-tracker hook (keeps SessionStart advisor active). v2.0.0 has no
+Stop hook.
 
 ### Gates
 
@@ -102,11 +105,16 @@ session-tracker hook (keeps Stop hook + advisor active).
 2. **PR Review** — Iterative code review (scout → Phase 1+2 → adversarial → synthesizer); within-gate fix-loop up to 5 iterations
 3. **Runtime Verification** — Launches app and verifies behavior with browser automation
 
-### Pipeline Rules
+### Pipeline Rules (v2.0.0)
 
-- Pipeline progression managed by Stop hook (no manual gate transitions needed)
-- **Forward-only state machine**: Gate 2/3 NEEDS_RESTART terminates with user
-  choice ("apply changes and re-run /qg"); does NOT auto-restart from Gate 1
-- Gate 2 iterates up to 5 times internally (`max_gate2_iterations`)
-- Repeat-detection: identical iterations trigger early user choice
-- State tracked in `.claude/quality-gates/<session-id>/{pipeline,files,branch}.md` (managed by hook scripts; see plugin README)
+- Pipeline runs in a single assistant turn (no Stop hook, no continuation
+  sentinel, no cross-turn state machine).
+- **Forward-only**: code-change verdicts terminate. Gate 2 fix-loop applies
+  user-consented fixes inline (orchestrator-as-writer); does NOT auto-restart
+  from Gate 1.
+- Gate 2 iterates up to 5 times internally; AskUserQuestion fires at every
+  iteration boundary with `Retry` / `Proceed to Gate 3` / `Stop`.
+- AskUserQuestion also fires on Gate 1 FAIL, Gate 2 max-iter, and Gate 3
+  NEEDS_RESOLUTION.
+- State tracked minimally in `.claude/quality-gates/<session-id>/pipeline.md`
+  (managed by `scripts/setup-qg.sh`; SKILL reads worktree_path only).
