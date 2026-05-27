@@ -37,9 +37,12 @@ LEGACY_RELATIVE = (
     ".claude/qg-diff-cache.txt",
     ".claude/qg-code-paths.tmp",
 )
-# v1.32.0: in-flight detection removed. Legacy v1.x markers still detected
-# for one-shot advisory (see _emit_legacy_v1_advisory). Keys are constructed
-# (not literals) so V8-pre static grep for in-flight identifiers stays clean.
+# Invariant: keys MUST use string concatenation to evade static grep
+# against self-referential tokens. AC17 asserts both split forms (each
+# split on the underscore) are present here AND that the unsplit literal
+# forms do NOT appear anywhere in this file. v1.32.0: in-flight detection
+# removed — legacy v1.x markers are detected for one-shot advisory only
+# (see _emit_legacy_v1_advisory).
 LEGACY_V1_KEYS = ("status:", "current" + "_gate:", "consecutive_no" + "_signal:")
 
 
@@ -104,7 +107,11 @@ def _self_session_id(payload: dict) -> str:
 def _load_payload() -> dict:
     try:
         return json.load(sys.stdin)
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError as e:
+        print(f"[qg-advisor] payload parse failed: {e}", file=sys.stderr)
+        return {}
+    except OSError as e:
+        print(f"[qg-advisor] payload read failed: {e}", file=sys.stderr)
         return {}
 
 
@@ -125,7 +132,8 @@ def _emit_legacy_v1_advisory(payload: dict, self_sid: str) -> bool:
         if per_session.exists():
             try:
                 text = per_session.read_text()
-            except OSError:
+            except OSError as e:
+                print(f"[qg-advisor] legacy-v1 scan skipped: {e}", file=sys.stderr)
                 text = ""
             if any(key in text for key in LEGACY_V1_KEYS):
                 sys.stderr.write(
