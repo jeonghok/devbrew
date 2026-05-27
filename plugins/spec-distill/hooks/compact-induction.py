@@ -126,7 +126,22 @@ def main() -> int:
     fields = read_marker(marker)
     spec_path = fields.get("SPEC_PATH", "<spec path missing in marker>")
 
-    bump_fire_count(marker, body)
+    new_count = bump_fire_count(marker, body)
+    if new_count >= 5:
+        try:
+            marker.unlink()
+        except OSError as exc:
+            print(
+                f"[spec-distill] compact-induction stagnation cleanup failed: {exc}",
+                file=sys.stderr,
+            )
+        print(
+            "[spec-distill] compact-induction stagnation: 5 fires without /compact "
+            "— manual confirmation required",
+            file=sys.stderr,
+        )
+        emit_no_op()
+        return 0
     emit_induction(spec_path)
     return 0
 
