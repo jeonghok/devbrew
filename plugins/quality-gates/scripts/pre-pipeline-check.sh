@@ -34,9 +34,20 @@ if [[ -f "$BRANCH_FILE" ]]; then
   last_branch="$(awk -F'"' '/^branch:/ {print $2; exit}' "$BRANCH_FILE" 2>/dev/null || echo "")"
 fi
 
-# 2. Branch mismatch? Wipe both state files.
+# 2. Branch mismatch? Wipe stale state, but NEVER delete a pipeline.md
+# owned by the live (same-session) pipeline (C2 race fix). setup-qg.sh
+# may have just created STATE_FILE; this script must not race-delete it.
 if [[ -n "$last_branch" && "$last_branch" != "$current_branch" ]]; then
-  rm -f "$SESSION_FILE" "$STATE_FILE"
+  pipeline_session=""
+  if [[ -f "$STATE_FILE" ]]; then
+    pipeline_session=$(awk -F'"' '/^session_id:/ { print $2; exit }' "$STATE_FILE" 2>/dev/null | tr -d '[:space:]')
+  fi
+  if [[ -n "$pipeline_session" && "$pipeline_session" == "$SESSION_ID" ]]; then
+    echo "pre-pipeline-check: preserving session-owned state file ($STATE_FILE)" >&2
+    rm -f "$SESSION_FILE"
+  else
+    rm -f "$SESSION_FILE" "$STATE_FILE"
+  fi
   echo "result: cleared_branch_mismatch"
   echo "previous_branch: $last_branch"
   echo "branch: $current_branch"
