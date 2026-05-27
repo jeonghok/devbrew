@@ -71,6 +71,20 @@ handles deletion.
 
 이 섹션은 첫 번째 (그리고 유일한) SKILL 호출에서 한 번만 실행된다.
 
+**Step P0 — Derive project_dir (dispatch coordinate).** Compute the project
+directory ONCE at preflight; freeze the value for the rest of the turn:
+
+```bash
+project_dir=$(pwd)
+```
+
+This value is threaded into every reviewer dispatch via the `project_dir:`
+field (see [Reviewer dispatch contract](#reviewer-dispatch-contract)).
+Worktree-aware: `pwd` resolves to the active worktree root. Do NOT re-derive
+in any per-dispatch block — the reviewer agents declare `project_dir` as a
+required dispatch parameter and forbid `pwd`/`git rev-parse` recomputation
+in their personas.
+
 **Step P1 — Global kill switch.** If `DEVBREW_DISABLE_QUALITY_GATES=1`,
 emit `[quality-gates] disabled via DEVBREW_DISABLE_QUALITY_GATES=1` and
 return immediately. Do NOT call setup-qg.sh or any agent.
@@ -137,7 +151,8 @@ Run `${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh`. Exit code:
 - 0 = trivia detected → skip all gates. Print:
   > `Trivia diff — all gates skipped (one-sentence diff per CLAUDE.md trivia escape).`
 - 1 = non-trivia → proceed to Gate 1.
-- 2 = error → print stderr verbatim and abort.
+- any other non-zero (script crash / environment failure) → print stderr
+  verbatim and abort the pipeline. Do NOT silently treat as non-trivia.
 
 ## Gate 1: Plan Verification
 
@@ -218,11 +233,37 @@ For each iteration N (1..5):
 
 1. Compute diff scope (paths / branch / session — from preflight result).
 2. Dispatch the scout: `Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py ...)`.
-3. Dispatch reviewer subagents in parallel:
-   - `quality-gates:security-reviewer`
-   - `quality-gates:adversarial`
-   - `pr-review-toolkit:code-reviewer` (if pr-review-toolkit available)
-   - codex reviewer if `detect_codex.sh` returns true
+3. Dispatch reviewer subagents in parallel (per [Reviewer dispatch contract](#reviewer-dispatch-contract)).
+   `quality-gates:security-reviewer` and `quality-gates:adversarial` are
+   the in-house dispatches that MUST include `project_dir: "$project_dir"`:
+
+```
+Agent({
+  subagent_type: "quality-gates:security-reviewer",
+  description: "Security review (Gate 2 iter N)",
+  prompt: "Run code-level security review on the current diff.
+    project_dir: \"$project_dir\"
+    diff_scope: <paths|branch|session as resolved at preflight>
+    plan_path: <path or 'auto'>
+    iteration: N
+    <…scout-supplied context…>"
+})
+
+Agent({
+  subagent_type: "quality-gates:adversarial",
+  description: "Adversarial review of Phase-1 findings (Gate 2 iter N)",
+  prompt: "Re-review findings from Phase-1 reviewers for false positives
+    and missed exploit paths.
+    project_dir: \"$project_dir\"
+    phase1_findings: <yaml from security-reviewer + code-reviewer + codex>
+    iteration: N"
+})
+```
+
+   `pr-review-toolkit:code-reviewer` (if pr-review-toolkit available) and
+   the codex reviewer (if `detect_codex.sh` returns true) are dispatched
+   with their own contracts; they do not require `project_dir` because
+   they re-derive scope from the inlined diff blob.
 4. Dispatch `quality-gates:synthesizer` (or local synthesize_findings.py)
    to consolidate findings.
 5. Compute boundary outcome:
@@ -274,10 +315,75 @@ AskUserQuestion({
 Branch on answer:
 - **Retry** → apply user-consented fixes by calling Edit/Write directly
   with the synthesizer's suggested patches; increment iteration counter;
-  loop back to step 1 of the Gate 2 section.
+  loop back to step 1 of the Gate 2 section. See
+  [Retry: file-write safety](#retry-file-write-safety) for the
+  canonicalization requirement on reviewer-supplied paths, and
+  [Retry: error handling](#retry-error-handling) for the AskUserQuestion
+  surface that fires on Edit failures.
 - **Proceed to Gate 3** → exit the loop, continue to Gate 3 with current
   findings recorded in History.
 - **Stop** → emit final summary marked aborted at Gate 2.
+
+### Retry: file-write safety
+
+Before applying any reviewer-supplied `file:` field, canonicalize BOTH the
+project root and the candidate path (symlink-traversal mitigation, I10):
+
+```python
+import os
+root = os.path.realpath(project_dir)
+candidate = os.path.realpath(supplied_file)
+if os.path.commonpath([root, candidate]) != root:
+    raise SecurityError(f"Path escapes project_dir: {candidate}")
+```
+
+Display the **full canonicalized file list** in the AskUserQuestion
+`description` field (not just a `<summary>` field) so the user sees every
+path that will be written. Reject and warn on any path resolving outside
+`project_dir`.
+
+### Retry: error handling
+
+If `Edit` returns one of `old_string not unique`, `EACCES`, `ENOSPC`, or
+any other failure during Retry application, do NOT silently skip.
+Surface "Retry failed" via AskUserQuestion (skip retry or abort, never silent):
+
+```
+AskUserQuestion({
+  questions: [
+    {
+      question: "Retry failed at <file>: <reason>. Skip retry or abort?",
+      header: "Retry",
+      options: [
+        {label: "Skip retry / abort",      description: "Abort this Retry iteration; surface to Gate 2 verdict."},
+        {label: "Continue with next file", description: "Skip this file's fix; continue applying remaining Retry patches."}
+      ],
+      multiSelect: false
+    }
+  ]
+})
+```
+
+No silent retry-skip — every Edit failure surfaces a user choice.
+
+## Reviewer dispatch contract
+
+The following four reviewer subagents declare `project_dir` as a REQUIRED
+dispatch parameter and forbid `pwd`/`git rev-parse` recomputation inside
+the persona. Any dispatch of these agents MUST thread the preflight-frozen
+`$project_dir` value via the `project_dir:` field of the prompt:
+
+- `quality-gates:adversarial`
+- `quality-gates:test-scope-validator`
+- `quality-gates:security-reviewer`
+- `quality-gates:runtime-verifier`
+
+The contract is verified by:
+- runtime: agent personas reject prompts missing `project_dir:` (see
+  `plugins/quality-gates/agents/*.md` frontmatter)
+- static: `tests/harness/test_skill_orchestration_behavior.sh` asserts
+  every `subagent_type: "<agent>"` block in this SKILL has a
+  `project_dir:` line within 10 lines (AC1, AC6 protocol-shape)
 
 ## Gate 2 max-iter decision
 
@@ -308,9 +414,36 @@ If `skip_runtime` was set in arguments, skip this entire section.
 
 1. Dispatch `quality-gates:test-scope-validator` to classify scope-relevant
    test files (aligned / outdated-suspicion / cherry-pick-suspicion / unclear).
+   Per [Reviewer dispatch contract](#reviewer-dispatch-contract), `project_dir`
+   is required:
+
+```
+Agent({
+  subagent_type: "quality-gates:test-scope-validator",
+  description: "Classify scope-relevant test files (Gate 3)",
+  prompt: "Validate test scope against current diff and plan items.
+    project_dir: \"$project_dir\"
+    plan_path: <path or 'auto'>
+    candidate_test_files: <list from scope-detection step>"
+})
+```
+
 2. Run `${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh` to discover
    runnable surfaces (docker-compose, npm:dev, MCP servers, etc.).
 3. Dispatch `quality-gates:runtime-verifier` with the runtime manifest.
+   `project_dir` is required:
+
+```
+Agent({
+  subagent_type: "quality-gates:runtime-verifier",
+  description: "Runtime verification (Gate 3)",
+  prompt: "Attempt each declared runnable surface and write an evidence-log.
+    project_dir: \"$project_dir\"
+    manifest: <output of detect-runtime.sh>
+    resolution_iter: <N (1..DEVBREW_GATE3_MAX_RESOLUTIONS)>"
+})
+```
+
 4. Subagent verdict: clean, failure, `SKIP_WITH_EVIDENCE`, or
    `NEEDS_RESOLUTION`.
 
