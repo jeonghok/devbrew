@@ -275,8 +275,9 @@ class KillSwitchRegressionTest(unittest.TestCase):
             )
         elif script == "session-start-advisor.py":
             self.assertNotEqual(
-                proc.stdout.strip(), "",
-                "advisor sanity: should produce output for in-flight state",
+                proc.stderr.strip(), "",
+                "advisor sanity: should produce stderr advisory for legacy state "
+                "(v1.32.0 advisor writes to stderr, not stdout)",
             )
         elif script == "session-end-cleanup.py":
             self.assertFalse(
