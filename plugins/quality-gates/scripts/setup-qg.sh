@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Quality Gates Pipeline Setup Script
-# Creates state file for Stop hook-based pipeline progression.
+# Creates per-session state file for in-turn pipeline orchestration
+# (AskUserQuestion-iteration model; no Stop hook continuation).
 # All file I/O happens here (bash), not through Claude's Write tool,
 # so no permission prompts are triggered.
 
@@ -246,6 +247,18 @@ if plugin_installed "superpowers"; then
   fi
 fi
 
+# --- Validate DEVBREW_GATE3_MAX_RESOLUTIONS (P18 unbounded-autonomy guard) ---
+# Default 3. Clamped to 0..10. Non-numeric → warning + default.
+
+gate3_max="${DEVBREW_GATE3_MAX_RESOLUTIONS:-3}"
+if ! [[ "$gate3_max" =~ ^[0-9]+$ ]]; then
+  echo "setup-qg: DEVBREW_GATE3_MAX_RESOLUTIONS='$gate3_max' is not numeric; defaulting to 3" >&2
+  gate3_max=3
+elif (( gate3_max > 10 )); then
+  echo "setup-qg: DEVBREW_GATE3_MAX_RESOLUTIONS='$gate3_max' exceeds maximum 10; clamping to 10" >&2
+  gate3_max=10
+fi
+
 # --- Create State File ---
 
 TEMP_FILE="${STATE_FILE}.tmp.$$"
@@ -255,7 +268,7 @@ cat > "$TEMP_FILE" << EOF
 ---
 session_id: "$SESSION_ID"
 started_at: "$TIMESTAMP"
-gate2_iteration: 0
+gate3_max_resolutions: $gate3_max
 EOF
 
 # worktree_path is optional — only set when /qg branch <name> created one.
