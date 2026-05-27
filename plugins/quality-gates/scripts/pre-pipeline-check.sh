@@ -5,7 +5,6 @@
 # - Stdout: structured `key: value` lines consumed by SKILL.md.
 #
 # Result keys emitted on stdout (always one of):
-#   active_resume      - mid-pipeline state detected; preserve session data, resume
 #   cleared_branch_mismatch - HEAD branch changed since last run; both state files deleted
 #   cleared_stale      - session file older than $STALE_HOURS; deleted
 #   fresh_start        - no prior branch marker; first run on this branch
@@ -33,18 +32,6 @@ current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
 last_branch=""
 if [[ -f "$BRANCH_FILE" ]]; then
   last_branch="$(awk -F'"' '/^branch:/ {print $2; exit}' "$BRANCH_FILE" 2>/dev/null || echo "")"
-fi
-
-# 1. Active state? Preserve everything and return early (no branch update).
-if [[ -f "$STATE_FILE" ]]; then
-  status="$(awk '/^status:/ {sub(/^status:[[:space:]]*/, ""); gsub(/"/, ""); print; exit}' "$STATE_FILE" 2>/dev/null || echo "")"
-  case "$status" in
-    gate1_running|gate2_running|gate3_running)
-      echo "result: active_resume"
-      echo "branch: $current_branch"
-      exit 0
-      ;;
-  esac
 fi
 
 # 2. Branch mismatch? Wipe both state files.
