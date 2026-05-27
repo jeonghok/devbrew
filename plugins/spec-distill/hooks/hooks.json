@@ -1,5 +1,5 @@
 {
-  "description": "spec-distill — UserPromptSubmit reminder, SessionStart anchor, PostToolUse spec/design validator, Stop reviewer dispatch, SessionEnd cleanup.",
+  "description": "spec-distill — UserPromptSubmit reminder/compact-detect, SessionStart anchor, PostToolUse spec/design validator, Stop reviewer-dispatch + compact-induction, SessionEnd cleanup.",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -7,6 +7,11 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pending-review-reminder.py",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/compact-detect.py",
             "timeout": 5
           }
         ]
@@ -42,6 +47,11 @@
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/review-dispatch.py",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/compact-induction.py",
+            "timeout": 5
           }
         ]
       }
