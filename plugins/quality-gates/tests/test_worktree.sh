@@ -173,11 +173,12 @@ else
 fi
 
 # --- Test 5: SKILL.md prose contains project_dir in agent dispatch blocks ---
-# T3-2: synthesizer removed from Agent() dispatch (now a script); removed from this loop.
-# T3-1: scout removed from Agent() dispatch (now a script); removed from this loop.
+# v1.32.0 reverts to subagent_type-anchored search for ALL 4 reviewers
+# (uniform pattern; no italic-bold heading required). Previous heading-
+# anchored fallback for security-reviewer is removed (drift-prone).
 SKILL_MD="$PLUGIN_DIR/skills/quality-pipeline/SKILL.md"
 T5_FAIL=0
-for name in adversarial test-scope-validator; do
+for name in adversarial test-scope-validator security-reviewer runtime-verifier; do
   if ! awk -v name="quality-gates:$name" '
     $0 ~ name { found=NR }
     found && NR <= found+15 && /project_dir:/ { ok=1; exit }
@@ -187,20 +188,11 @@ for name in adversarial test-scope-validator; do
     fail "T5: SKILL.md dispatch for $name lacks project_dir"
   fi
 done
-# Updated in v1.16.0: heading restructured from `**Agent D — security-reviewer**`
-# to italic `*security-reviewer (...)*`. New anchor captures the qualified plugin
-# name so future drift in either dispatch convention is caught.
-if ! awk '/\*security-reviewer \(`quality-gates:security-reviewer`\)/ { found=NR }
-        found && NR <= found+30 && /project_dir/ { ok=1; exit }
-        END { exit !ok }' "$SKILL_MD"; then
-  T5_FAIL=1
-  fail "T5: SKILL.md security-reviewer section lacks project_dir"
-fi
 [[ "$T5_FAIL" -eq 0 ]] && pass "T5: SKILL.md propagates project_dir to all 4 dispatch points"
 
 # --- Test 6: hooks read payload cwd (AST-based, not grep) ---
 T6_FAIL=0
-for hook in stop-hook.py post-tool-use-session-tracker.py session-start-advisor.py; do
+for hook in post-tool-use-session-tracker.py session-start-advisor.py; do
   if ! python3 -c "
 import ast, sys
 tree = ast.parse(open('$PLUGIN_DIR/hooks/$hook').read())
@@ -219,14 +211,12 @@ sys.exit(0 if found else 1)
     fail "T6: hooks/$hook does not call .get('cwd') anywhere"
   fi
 done
-[[ "$T6_FAIL" -eq 0 ]] && pass "T6: all 3 hooks read payload cwd (AST verified)"
+[[ "$T6_FAIL" -eq 0 ]] && pass "T6: all 2 hooks read payload cwd (AST verified)"
 
-# --- Test 9: setup-qg.sh writes project_dir to state frontmatter ---
-if grep -q '^project_dir:' "$PLUGIN_DIR/scripts/setup-qg.sh"; then
-  pass "T9: setup-qg.sh emits project_dir in state frontmatter"
-else
-  fail "T9: setup-qg.sh missing project_dir frontmatter write"
-fi
+# --- Test 9: REMOVED — v1.32.0 schema intentionally has no project_dir field ---
+# project_dir is now a per-dispatch runtime parameter threaded by the SKILL
+# (see T5), not a state-frontmatter field. The schema field was removed to
+# avoid coordinate drift between worktree-mode and main-repo-mode pipelines.
 
 # --- Summary ---
 echo

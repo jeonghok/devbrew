@@ -3,6 +3,219 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.32.2] — 2026-05-28
+
+### Fixed (Gate 2 iter-2 review-driven follow-up, same PR #71)
+
+- **CRIT-1-iter2**: `pre-pipeline-check.sh` `no_session_id` 와
+  `invalid_session_id` 분기에서 `exit 1`로 변경 (이전 `exit 0`).
+  setup-qg.sh와 대칭 의미론. SKILL.md preflight P3에 result-code
+  enumeration 추가 — 모든 알려진 코드별 downstream action 명시 +
+  unknown code는 contract violation으로 abort. silent fall-through
+  방지.
+- **CRIT-2-iter2**: `cancel-qg-core.sh`에서 `DEVBREW_QG_KEEP_WORKTREE=1`
+  시 worktree AND state folder를 unit으로 보존. 이전: state folder만
+  무조건 삭제되어 worktree path 가 영구 leak. 이제: 둘 다 보존하고
+  loud advisory 출력하여 사용자가 미래 `/cancel-qg`로 회수 가능.
+  qg-worktree.sh missing case도 loud diagnostic.
+- **I-A-iter2**: plugin.json 1.32.1 → 1.32.2 bump.
+  `feedback_plugin_version_bump.md` 메모리 + CLAUDE.md "every PR
+  touching plugins/<name>/ must bump that plugin's version field in
+  the same commit" 준수. iter-1 commit 이후 cache key 무효화 보장.
+- **I-B-iter2**: `commands/cancel-qg.md`의 "v1.32.0 minimal schema"
+  표기를 "v1.32.1 minimal schema"로 정정. `gate3_max_resolutions:`는
+  v1.32.1에서 추가된 필드 (C3 복구).
+- **HIGH-1-iter2**: `LEGACY_V1_KEYS` invariant 주석을 실제 enforcement
+  형태와 일치시키고 새로운 V8d source-text 테스트 추가. 이전 주석은
+  "AC17 unsplit literal forms do NOT appear" 라는 존재하지 않는 test를
+  주장. 이제: behavioral (V8c) + source-text (V8d) 이중 enforcement.
+  V8d는 split form 양쪽 존재 + unsplit literal 절대 부재를 grep으로
+  검증 — ruff/black auto-fix merging 방어.
+
+## [1.32.1] — 2026-05-28
+
+### Fixed (Gate 2 iter-1 review-driven follow-up, same PR #71)
+
+- **C1-iter1**: `SKILL.md` frontmatter `allowed-tools`에 `AskUserQuestion`
+  + `detect-runtime.sh` + `compute-test-scope-candidates.sh` + `detect_codex.sh`
+  추가. v1.32.0 단일-턴 설계가 의존하는 도구들이 누락되어 있었음.
+- **I-iter1-2**: `commands/cancel-qg.md` v1.32.0 minimal schema에 정렬.
+  제거된 v1.5.x 필드(`status`/`current_gate`/`gate2_iteration`) 참조 제거.
+- **I-iter1-3**: `scripts/cancel-qg-core.sh` worktree-aware cleanup —
+  `pipeline.md`에 `worktree_path:`가 있으면 `qg-worktree.sh remove`
+  먼저 호출 (DEVBREW_QG_KEEP_WORKTREE=1 가드). session-end-cleanup.py와
+  대칭 의미론.
+- **I-iter1-4**: `LEGACY_V1_KEYS` invariant 주석 정확도 개선. `status:`는
+  split 안 하는 이유(자기-참조 substring 부재 + 일반성) 명시.
+- **I-iter1-5**: `scripts/pre-pipeline-check.sh` SESSION_ID pattern guard
+  추가 (`^[A-Za-z0-9_-]{8,}$`). `setup-qg.sh`/`cancel-qg-core.sh`와 일관.
+- **I-iter1-6**: SKILL.md Retry error handling option labels 재조정 —
+  "Abort retry" / "Skip this file" (이전: "Skip retry / abort" / "Continue
+  with next file" — 의미 역전).
+- **I-iter1-7**: `references/state-file-format.md` v1.32.1 schema에 정렬.
+  `gate2_iteration: 0` 제거 → Removed Fields에 이동. `gate3_max_resolutions:`
+  활성 필드로 추가.
+- **I-iter1-8**: `agents/runtime-verifier.md`의 `project_dir` input에
+  "절대 재계산 금지" 강제 문구 + Forbidden 섹션 항목 추가. 나머지 3개
+  reviewer agent와 동일 contract.
+- **I-iter1-9**: CHANGELOG C1 entry English-prose → Korean-primary로 재작성.
+- **I-iter1-10**: state file watermark `(v1.32.0)` → `(v1.32.1)`
+  (setup-qg.sh + state-file-format.md).
+
+### Fixed (Gate 2 review-driven, PR #71)
+
+- **C1**: `SKILL.md` — `project_dir:` threading을 4개 reviewer dispatch
+  (`adversarial`, `test-scope-validator`, `security-reviewer`,
+  `runtime-verifier`) 전체에 복구. 신규 preflight P0 step에서
+  `project_dir=$(pwd)`로 도출 후 매 dispatch에 전달. 워크트리 모드에서
+  agent가 `pwd`/`git rev-parse`로 재도출 시 발생하는 coordinate drift 차단.
+- **C2**: `pre-pipeline-check.sh` 세션 ID 가드 추가. 같은 세션이
+  소유한 `pipeline.md`는 절대 삭제 안 함 (setup-qg P2 → pre-pipeline-check
+  P3 race 차단). stderr 권고: `pre-pipeline-check: preserving
+  session-owned state file`.
+- **C3**: `DEVBREW_GATE3_MAX_RESOLUTIONS` 검증 블록 `setup-qg.sh`에
+  복구. 정수 파싱 + clamp 0..10 + default 3. state 파일에
+  `gate3_max_resolutions:` 필드로 기록. P18 unbounded-autonomy
+  guard 회귀 해소.
+- **C4**: `tests/test_setup_qg.sh` v1.32.1 schema 기준으로 재작성.
+  제거된 9개 stale assertion (removed schema keys, removed stderr
+  warnings) 정리. 새 assertion: --ensure 멱등성, clamp 값, per-session
+  folder isolation, schema invariants.
+- **C5**: v1 `tests/test_session_start_advisor.py` 삭제. v2 shell
+  wrapper (V8a/V8b/V8c)가 대체.
+- **C6**: 새로운 `tests/harness/test_skill_orchestration_behavior.sh` —
+  SKILL.md orchestration의 protocol-shape 검증 (순서/근접성/섹션
+  멤버십). 12개 assertion. V7 tautological substring grep은 같은
+  commit에서 삭제 (`grep -c 'PASS'`가 항상 0을 반환해 negative-assertion
+  path가 unreachable이었음).
+- **I1**: `test_kill_switches.py` advisor sanity 검사를 stderr로 전환
+  (v1.32.0 advisor는 stdout이 아닌 stderr에 출력).
+- **I2**: `test_worktree.sh` T5 4개 reviewer 모두에 대해 uniform
+  `quality-gates:<name>` subagent_type anchor 사용. T9 (state
+  frontmatter `project_dir:`) 제거 — v1.32.0 schema에서 의도적으로
+  제거된 필드.
+- **I3**: `setup-qg.sh` 헤더 주석에서 "Stop hook-based" 표현 제거,
+  "in-turn pipeline orchestration (AskUserQuestion-iteration model;
+  no Stop hook continuation)"로 교체.
+- **I4/I5**: `session-start-advisor.py` silent-failure (OSError /
+  JSONDecodeError) diagnostic stderr로 전환. 빈 fallback은 유지
+  (advisor가 SessionStart를 crash시키면 안 됨).
+- **I6**: SKILL.md Retry path error handling — `Edit` 실패 시
+  AskUserQuestion으로 사용자에게 surface ("Retry failed at <file>:
+  <reason>. Skip retry / abort? / Continue with next file."). silent
+  skip 금지.
+- **I7**: `check-trivia.sh` exit code 2 분기 SKILL.md에서 제거
+  (script가 절대 2로 종료하지 않음 — unreachable). 0/1 이외의
+  non-zero는 script crash로 propagate되어 파이프라인 abort.
+- **I8**: README v1.5.0 Stop-hook ASCII 다이어그램 제거. v1.32.0
+  AskUserQuestion 다이어그램만 남음. 주변 prose의 "Stop hook" 참조
+  제거.
+- **I9**: `tests/e2e-scenarios.md` v1.5.0 잔재 (stop-hook.py,
+  `<qg-signal>`, gate2_repeat_detected) 4곳 정리.
+- **I10**: SKILL.md Retry path file-write safety — reviewer 공급
+  `file:` 필드를 `os.path.realpath` + `os.path.commonpath`로 양쪽
+  canonicalize. `project_dir` 외부로 escape하는 경로는 `SecurityError`
+  raise. AskUserQuestion description에 full canonicalized path
+  list 노출. symlink-traversal 회피.
+- **I11**: `setup-qg.sh` state 템플릿에서 `gate2_iteration: 0`
+  phantom 필드 제거. 실제 iteration counter는 History 섹션에 기록됨
+  (spec/plan은 SKILL.md frontmatter에 있다고 잘못 명시했지만, 실제
+  위치는 state 템플릿).
+- **I12**: `tests/test_readme_state_diagram_complete.sh` v1.32.1 README
+  기준으로 전면 재작성. v1.5.0 Mermaid stateDiagram-v2 13-transition
+  assertion 삭제, v1.32.0 ASCII pipeline 다이어그램의 10개
+  protocol-shape marker 검증으로 전환.
+
+### Fixed (Medium tier)
+
+- LEGACY_V1_KEYS 두 번째 split 완성 (`consecutive_no_signal:` →
+  string-concat 형식). v1.32.0이 `current_gate:`만 split한 half-applied
+  fix 완성. Invariant 주석 추가 (AC17 acceptance criterion 명시).
+- `cancel-qg-core.sh` 추출 (TQ-2): commands/cancel-qg.md와
+  tests/test_cancel_qg.sh가 동일 helper 호출. SID pattern guard
+  (`[A-Za-z0-9_-]{8,}`) 헬퍼 내장. command-test drift 차단.
+- 새 `tests/test_pre_pipeline_check.sh` (C2 회귀 방지). 4 cases:
+  fresh_start / same_session_preserved / cross_session_deleted /
+  advisory_emitted.
+- `test_kill_switches.py`에 `test_skill_setup_qg_honors_disable_kill_switch`
+  케이스 추가. `setup-qg.sh`가 SKILL preflight P1 외에 자체적으로도
+  `DEVBREW_DISABLE_QUALITY_GATES=1`을 honor (defense in depth).
+- `test_skill_orchestration.sh` V2b anchor uniqueness 강화: `findings
+  remain`이 `question:` 라인 정확히 1회만 등장해야 함 (다른 AskUserQuestion
+  섹션으로의 복사-붙여넣기 차단).
+- `test_session_start_advisor_v2.sh` V8 → V8a/V8b/V8c 분리.
+  V8a (per-session fixture only), V8b (flat-legacy fixture only),
+  V8c (LEGACY_V1_KEYS 3-token fixture-based regression).
+- `test_branch_worktree.sh` comment drift 4곳 정리 (stop-hook 참조 →
+  AskUserQuestion-cleanup 표현; 삭제된 test_stop_hook_worktree_cleanup.py
+  참조 acknowledge).
+
+### Security
+
+- I10: reviewer 공급 path가 `project_dir` 외부로 escape하는 것을 차단
+  (`realpath` + `commonpath` 양쪽 normalisation). symlink-traversal
+  회피. AskUserQuestion description에 full canonicalized file list
+  노출하여 사용자가 매 write surface 가시화.
+
+## [1.32.0] — 2026-05-27
+
+### Breaking
+- **Stop hook removed.** `hooks/stop-hook.py` (1205 LOC, 13-transition
+  state machine, wall-clock guard, no-signal counter) deleted along with
+  the `Stop` event registration in `hooks.json`. Pipeline progression now
+  lives entirely in the `quality-pipeline` SKILL as in-turn serial
+  dispatch.
+- **`<qg-signal>` emission contract removed.** SKILL no longer emits the
+  signal tag. The `# QG-STOP-HOOK-CONTINUATION` sentinel is no longer
+  recognized by any code path.
+- **State file shape changed.** v1.32.0 state file is minimal: `session_id`,
+  `started_at`, `worktree_path` (optional), `gate2_iteration`. Removed
+  fields: `status`, `current_gate`, `consecutive_no_signal`,
+  `max_gate2_iterations`, `gate3_resolution_iter`, `last_gate3_needed_hash`,
+  `max_gate3_resolutions`, `skip_runtime`, `single_gate`, `plan_file`,
+  `pr_url`, `available_plugins`, `wall_clock_deadline_at`, `project_dir`.
+- **Env vars removed.** `DEVBREW_QG_DEADLINE_MIN` and
+  `DEVBREW_QG_NO_SIGNAL_MAX` no longer exist (wall-clock guard and
+  no-signal counter went away with stop-hook). Other env vars unchanged.
+
+### Added
+- **AskUserQuestion progression primitive.** SKILL calls AskUserQuestion
+  at Gate 1 FAIL, Gate 2 iter boundary (every iteration), Gate 2 max-iter
+  (replacing silent halt), and Gate 3 NEEDS_RESOLUTION. Same-turn tool
+  result drives the next dispatch.
+- **Static SKILL orchestration test:** `tests/test_skill_orchestration.sh`
+  (V2a gate-order + V2b context-anchor + V7 PASS-proximity heuristic).
+- **Fixture test for /cancel-qg, /qg --reset, /qg --gc:**
+  `tests/test_cancel_qg.sh`.
+- **Session-start advisor v2 test:** `tests/test_session_start_advisor_v2.sh`
+  (V8 legacy advisory + V8-pre code-structure guard).
+
+### Changed
+- **SKILL.md rewritten** from single-gate-per-turn to single-turn-serial
+  dispatch with AskUserQuestion gating.
+- **setup-qg.sh** emits minimal state schema; wall-clock and gate3-max
+  computation removed.
+- **session-start-advisor.py** drops in-flight pipeline detection;
+  detects legacy v1.x state files and emits one-shot `/cancel-qg` stderr
+  advisory. Frontmatter scan sub-feature unchanged.
+- **commands/qg.md** Pipeline Rules section rewritten; removed "Stop hook
+  handles progression" claim.
+- **README.md** Hook table no longer lists stop-hook.py; state diagram
+  replaced with ASCII single-turn sequence; Principles section adds
+  P22 generalization note.
+
+### Removed
+- `hooks/stop-hook.py`
+- `hooks/hooks.json` Stop event block
+- All `<qg-signal>` references in SKILL/scripts/hooks
+- Obsolete tests coupled to stop-hook semantics (`test_forward_only_prose.sh`
+  and any stop-hook-coupled tests detected during Task 7)
+
+### Migration
+v1.x in-flight pipelines cannot resume under v1.32.0. After upgrade, run
+`/cancel-qg` (per-session) or `/qg --reset` (legacy flat files) to clear
+old state. SessionStart advisor will guide you on next session start.
+
 ## [1.31.0] — 2026-05-20
 
 ### Changed

@@ -1,11 +1,15 @@
 ---
-description: "Cancel active quality gates pipeline"
+description: "Cancel a quality-gates pipeline session (single-turn execution in v1.32.0; this clears orphan state)"
 argument-hint: "[--gc | --all]"
-allowed-tools: ["Bash(test:*)", "Bash(rm:*)", "Bash(rm -rf:*)", "Bash(find:*)", "Bash(wc:*)", "Read", "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/qg-gc.py:*)", "AskUserQuestion"]
+allowed-tools: ["Bash(test:*)", "Bash(rm:*)", "Bash(rm -rf:*)", "Bash(find:*)", "Bash(wc:*)", "Read", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/cancel-qg-core.sh:*)", "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/qg-gc.py:*)", "AskUserQuestion"]
 hide-from-slash-command-tool: "true"
 ---
 
 # Cancel Quality Gates
+
+v1.32.0 pipelines run in a single assistant turn — `/cancel-qg` mainly
+cleans orphan state from aborted turns or `/qg` invocations that crashed
+before completion.
 
 `$ARGUMENTS` 처리:
 
@@ -32,17 +36,13 @@ hide-from-slash-command-tool: "true"
 2. **NO_VALID_SID**: "Cannot determine session ID — no active pipeline." 종료.
 3. **NOT_FOUND**: "No active quality gates pipeline found for this session." 종료.
 4. **EXISTS**:
-   - `Read(.claude/quality-gates/<SID>/pipeline.md)`로 frontmatter (`status`, `current_gate`, `gate2_iteration`) 읽기.
-   - 폴더 삭제 (반드시 SID 가드를 재선언한 단일 Bash 블록 안에서):
+   - `Read(.claude/quality-gates/<SID>/pipeline.md)`로 frontmatter 읽기. v1.32.1 minimal schema의 실제 필드: `session_id`, `started_at`, `gate3_max_resolutions` (v1.32.1 C3 복구), optional `worktree_path` / `target_branch`. (v1.5.x의 `status` / `current_gate` / `gate2_iteration`은 v1.32.0/v1.32.1에서 제거됨 — 실제 iteration counter는 `## History` 섹션의 append-only 라인으로 추적.)
+   - 폴더 삭제: `cancel-qg-core.sh` 헬퍼 호출 (SID 가드 + worktree-aware cleanup 내장; command와 test가 동일 코드 경로 사용 — spec §5.8 TQ-2):
      ```!
-     SID="${CLAUDE_CODE_SESSION_ID:-}"
-     if [[ -z "$SID" || ! "$SID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
-       echo "ABORT: invalid SID at delete time"
-       exit 1
-     fi
-     rm -rf -- ".claude/quality-gates/$SID" && echo "CANCELLED:$SID" || echo "FAILED:$SID"
+     bash "${CLAUDE_PLUGIN_ROOT}/scripts/cancel-qg-core.sh"
      ```
-   - 보고: "Cancelled quality gates pipeline (was at Gate N, iteration M)".
+   - 헬퍼는 성공 시 `cancel-qg-core: removed ...`을 stdout으로 출력, 실패 시 stderr + non-zero exit. `worktree_path:` 필드가 있고 `DEVBREW_QG_KEEP_WORKTREE=1`이 아니면 헬퍼가 `qg-worktree.sh remove`도 호출.
+   - 보고: "Cancelled quality gates pipeline (session_id: <SID>, started_at: <ISO>, worktree: <path or 'none'>)".
 
 ## `--gc` — cancel + immediate TTL sweep
 

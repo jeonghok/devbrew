@@ -1,1447 +1,563 @@
 ---
 name: quality-pipeline
 description: >
-  This skill should be used when the user wants to run quality gates, verify code
-  quality, check PR readiness, or run the QG pipeline. Triggered by commands like
-  "/qg", "run quality gates", "verify my implementation", "check code quality",
-  or "is my PR ready to merge". Executes a single gate per turn; the Stop hook
-  manages pipeline progression automatically.
+  This skill runs the full quality-gates pipeline in a single assistant
+  turn. Triggered by `/qg`, "run quality gates", "verify my implementation",
+  "check code quality", or "is my PR ready to merge". Dispatches the
+  three gates (plan verification, PR review, runtime verification)
+  serially in a single turn. Progression decisions and fix-loop
+  iteration boundaries surface to the user via AskUserQuestion tool calls.
+  Happy path (all gates pass) requires zero user clicks.
 cost_class: variable
 allowed-tools:
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/pre-pipeline-check.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)
+  - Agent
+  - AskUserQuestion
+  - Edit
+  - Write
+  - Read
+  - Glob
+  - Grep
 ---
 
-# Quality Gates — Gate Executor
+# Quality Gates — In-Turn Orchestrator (v1.32.0)
 
-You are executing a **single gate** of the quality pipeline. The Stop hook
-manages pipeline progression (gate-to-gate transitions and within-Gate-2
-iteration counting). The pipeline is **forward-only**: code-change verdicts
-(`NEEDS_RESTART`) terminate with a user-choice prompt rather than auto-restarting
-from Gate 1. You do NOT manage state files or pipeline flow.
+You are running the **full quality-gates pipeline** in a single assistant
+turn. You dispatch the three gates serially in order. At decision points
+(plan-verification failure, review-iter boundary, runtime needs-resolve) you call
+`AskUserQuestion` and branch on the user's response — the response arrives
+as a tool result in the same turn, so no Stop hook and no continuation
+sentinel are needed.
+
+**Law 2 (Writer ≠ Reviewer):** you are the orchestrator (writer). All
+verdict-producing agents are dispatched as separate subagents with
+`disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` so they cannot
+mutate the working tree. You ARE allowed to apply user-approved fixes
+("Retry" path on the review gate) using Edit/Write — those changes are
+user-consented, not self-approval.
+
+**State file:** read `worktree_path` from `.claude/quality-gates/<sid>/pipeline.md`
+only during preflight; never write. Setup script handles creation, /cancel-qg
+handles deletion.
 
 ## Contents
 
-이 SKILL은 단일 턴에서 한 게이트만 실행. 섹션은 **세 그룹**으로 묶임:
+이 SKILL은 단일 어시스턴트 턴 안에서 전체 파이프라인을 실행. 섹션 그룹:
 
-1. **Workflow** (process — top-to-bottom on first invocation):
-   - [Preflight](#preflight) — continuation vs. first invocation 감지, sentinel check
-   - [Arguments](#arguments) — `/qg` flags (`--reset`, `--paths`, `branch <name>`)
-   - [Dependency Check](#dependency-check) — required scripts/agents 존재 검사
-   - [Gate Execution](#gate-execution) — entry point; current gate로 routing
-2. **Per-gate dispatch logic** (Gate Execution이 호출):
-   - [Pre-pipeline check](#pre-pipeline-check-f-1) — staleness / scope / branch-mismatch
-   - [Trivia escape](#trivia-escape-e) — one-sentence diff → skip all gates
+1. **Workflow (top-to-bottom on invocation):**
+   - [Preflight](#preflight) — kill switch / setup-qg / pre-pipeline-check
+   - [Arguments](#arguments) — `/qg` flags 파싱
+   - [Dispatch Loop](#dispatch-loop) — three gates serialized in order with per-gate iteration
+2. **Per-gate dispatch logic:**
+   - [Trivia escape](#trivia-escape) — one-sentence diff → all gates skipped
    - [Gate 1: Plan Verification](#gate-1-plan-verification) — dispatch `plan-verifier`
-   - [Gate 2: PR Review](#gate-2-pr-review) — scout + Phase 1 + adversarial + synthesizer
+   - [Gate 2: PR Review](#gate-2-pr-review) — scout + Phase 1 + adversarial + synthesizer; iter loop with decision tool at every boundary
    - [Gate 3: Runtime Verification](#gate-3-runtime-verification) — test-scope-validator + runtime-verifier
-3. **Output templates & special prompts** (skill이 사용자에게 emit하는 verbatim 포맷, field substitution 포함):
-   - Gate 1 result template (`## Gate 1: Plan Verification — [PASS/FAIL/SKIP]`)
-   - Gate 2 dispatch payload section (`## Current Diff`)
-   - Gate 2 result templates (`## PR Review Report (Gate 2)`, `## Gate 2: PR Review (iter [iteration]) — [verdict]`)
-   - Gate 3 templates (`## Gate 3 — Test Scope Check`, `## Test Scope Verdicts`, `## Gate 3: Runtime Verification — [VERDICT]`)
-   - [Special Prompts from Stop Hook](#special-prompts-from-stop-hook) — `GATE2_NEEDS_RESTART`, `GATE2_REPEAT_DETECTED`, `GATE2_MAX_EXCEEDED`, `GATE3_FAIL`, `GATE3_NEEDS_RESOLUTION`, `GATE3_REPEAT_DETECTED`
-   - Final summary templates (`## Final Summary`, `## Quality Gates Pipeline — Complete`)
-   - [Signal Tag Rules](#signal-tag-rules) — `<qg-signal>` emission schema
-   - [Rules](#rules) — never-write-state-file, exactly-one-signal-tag invariants
-
-(섹션 추가/이름 변경 시 본 TOC도 같은 commit에서 sync — CLAUDE.md TOC drift 규정.)
+3. **Decision points (AskUserQuestion templates):**
+   - [Gate 1 FAIL decision](#gate-1-fail-decision)
+   - [Gate 2 iter boundary decision](#gate-2-iter-boundary-decision)
+   - [Gate 2 max-iter decision](#gate-2-max-iter-decision)
+   - [Gate 3 NEEDS_RESOLUTION decision](#gate-3-needs_resolution-decision)
+4. **Output templates** (verbatim, field substitution):
+   - Gate 1/2/3 result templates
+   - Final summary template
+   - [Rules](#rules) — Law 2 invariants, state file invariants
 
 ## Preflight
 
-Before parsing arguments or dispatching agents, do this in order:
+이 섹션은 첫 번째 (그리고 유일한) SKILL 호출에서 한 번만 실행된다.
 
-**1. Detect continuation vs. first invocation.** Look at the current turn's user
-prompt. If it contains the literal string `# QG-STOP-HOOK-CONTINUATION` on its
-own line, this is a Stop-hook-injected continuation → go to step 2a. Otherwise
-it is a first invocation (via `/qg` or direct skill call) →
-go to step 2b.
-
-**2a. Continuation path.** The state file MUST exist. Verify (the session ID
-is read from `$CLAUDE_CODE_SESSION_ID`; if empty, treat as an invariant
-violation and stop with the same error as below):
+**Step P0 — Derive project_dir (dispatch coordinate).** Compute the project
+directory ONCE at preflight; freeze the value for the rest of the turn:
 
 ```bash
-test -f ".claude/quality-gates/${CLAUDE_CODE_SESSION_ID}/pipeline.md"
+project_dir=$(pwd)
 ```
 
-- Exit 0 → proceed to the Arguments section below.
-- Non-zero → this is an invariant violation (Stop hook continued a pipeline
-  whose state file vanished). Output the following to the user and stop the
-  pipeline immediately — do NOT call `setup-qg.sh`, as fresh state would mask
-  the real bug:
+This value is threaded into every reviewer dispatch via the `project_dir:`
+field (see [Reviewer dispatch contract](#reviewer-dispatch-contract)).
+Worktree-aware: `pwd` resolves to the active worktree root. Do NOT re-derive
+in any per-dispatch block — the reviewer agents declare `project_dir` as a
+required dispatch parameter and forbid `pwd`/`git rev-parse` recomputation
+in their personas.
 
-  > ❌ Pipeline state file disappeared mid-run
-  > (`.claude/quality-gates/<session-id>/pipeline.md`).
-  > This indicates state corruption or an accidental deletion.
-  > Run `/cancel-qg` to clear residual state, then `/qg` to restart.
+**Step P1 — Global kill switch.** If `DEVBREW_DISABLE_QUALITY_GATES=1`,
+emit `[quality-gates] disabled via DEVBREW_DISABLE_QUALITY_GATES=1` and
+return immediately. Do NOT call setup-qg.sh or any agent.
 
-**2b. First-invocation path.** Bootstrap or validate state by running:
+**Step P2 — Setup state.** Run:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh" --ensure
+"${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh" --ensure $ARGUMENTS
 ```
 
-`setup-qg.sh --ensure` handles all cases: creates state if missing, no-ops if
-fresh state for this session already exists, overwrites stale state from a
-prior (crashed) session, and errors if a concurrent pipeline is genuinely
-active.
+`setup-qg.sh --ensure` creates the per-session state file
+(`.claude/quality-gates/<sid>/pipeline.md`) with minimal v1.32.0 schema.
+Exit non-zero → surface stderr verbatim and abort.
 
-- Exit 0 → state is valid and session-matched. Proceed to the Arguments section.
-- Exit non-zero → surface the script's stderr output to the user verbatim and
-  abort. The error is already actionable (e.g. "already active — run
-  `/cancel-qg`"); do not attempt recovery.
-
-**Note on the continuation marker.** `# QG-STOP-HOOK-CONTINUATION` is a
-deliberate machine-readable sentinel emitted only by
-`stop-hook.py:build_gate_prompt()`. If a user types it literally, preflight
-will incorrectly take the continuation path — this is an acceptable limitation
-for the threat model.
-
-## Arguments
-
-Parse the following from the prompt parameters:
-
-- `gate`: Which gate to execute (1, 2, or 3)
-- `plan_path`: Plan file path (or "auto")
-- `pr_url`: PR URL (optional)
-- `project_dir`: Absolute path to repo root (worktree-aware). Injected by stop-hook on gate continuation; on first invocation derive from `pwd`. Single pipeline coordinate frozen at preflight — do NOT re-derive via `pwd`/`git rev-parse` on continuation.
-- `available_plugins`: Comma-separated list of available plugins
-- `iteration`: Current Gate 2 iteration number (Gate 2 only)
-- `max_iterations`: Maximum Gate 2 iterations (Gate 2 only)
-- `previous_findings`: Summary from last Gate 2 iteration (Gate 2 only)
-
-If this is the first gate invocation (no parameters in the prompt), determine the gate
-from any `/qg` arguments (gate1, gate2, gate3) or default to gate=1.
-
-## Dependency Check
-
-If `available_plugins` is provided in the prompt parameters, use it directly.
-
-Otherwise (first invocation only), run the pre-flight dependency checks per
-[references/dependency-check.md](references/dependency-check.md) to build the
-`available_plugins` list.
-
-## Gate Execution
-
-### Pre-pipeline check (§F-1)
-
-Before any agent dispatch in the first gate of a fresh pipeline (skip on
-mid-pipeline continuations — Stop hook injection), run:
+**Step P3 — Pre-pipeline check (scope detection).** Run:
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/pre-pipeline-check.sh"
 ```
 
-Parse the output (one `key: value` line per output line):
-
-- `result: active_resume` → continue with existing state file (mid-pipeline resume).
-- `result: cleared_branch_mismatch` → tell user "branch changed; session scope reset."
-- `result: cleared_stale` → tell user "stale session data cleared."
-- `result: fresh_start` | `result: preserved` | `result: no_session_data` → silent.
-
-After the check, if `result == cleared_*`, do NOT use any prior
-`.claude/quality-gates/<session-id>/files.md` data — proceed as if `--branch`
-mode is implied (full diff against `main`). The check itself operates within
-the per-session folder; cross-session siblings are never inspected.
-
-### Trivia escape (§E)
-
-Run the trivia detector before Gate 1 dispatch. If `--paths` was supplied by
-the user (i.e. `session_scope == paths`), propagate those paths so the detector
-scopes its diff to the same file set:
-
-```bash
-# PATH_ARGS is empty when no --paths were given; set to "--paths <glob>..."
-# by parsing them from the /qg invocation arguments (e.g. "/qg --paths src/ lib/").
-"${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh" $PATH_ARGS
-```
-
-If exit code is `0`:
-- Read the stdout line `trivia: <kind>` (kind ∈ `whitespace | rename | comment | typo | untracked-newfile`).
-- Update `.claude/quality-gates/<session-id>/pipeline.md` with
-  `status: completed`, `outcome: trivia-skipped`, `trivia_kind: <kind>`.
-- Emit `<qg-signal verdict="trivia-skipped" reason="<kind>" />` and stop.
-- Tell the user: "Trivia change (`<kind>`); review skipped."
-
-If exit code is non-zero, proceed to Gate 1.
-
-### Gate 1: Plan Verification
-
-Dispatch the plan-verifier agent:
-
-```
-Agent(
-  subagent_type="quality-gates:plan-verifier",
-  prompt="Verify plan implementation completeness.
-    plan_path: <plan_path or 'auto'>
-    project_dir: <current working directory>
-    available_plugins: <available_plugins list>"
-)
-```
-
-Read the agent's report. Check the Verdict line.
-
-**Implementation Trace (conditional — skill-orchestrated):**
-
-The plan-verifier agent is a leaf agent and does NOT dispatch `feature-dev:code-explorer` itself. Instead, it emits a `### Possibly Implemented (needs trace)` section in its report listing items whose files exist in the git diff but whose checkboxes are unchecked. This skill performs the trace:
-
-1. **Parse the trace section.** Scan the plan-verifier report for a `### Possibly Implemented (needs trace)` header. If the section is absent or empty → no trace is needed. Record "Implementation Trace: Skipped (no possibly-implemented items)" in the Gate 1 output and proceed.
-2. **Check plugin availability.** If the section is present but `available_plugins` does NOT include `feature-dev` → skip silently and record "Implementation Trace: Skipped (feature-dev plugin not available)".
-3. **Conditional code-explorer dispatch.** If the section is present AND `feature-dev` is available, parse the bulleted items. Each bullet follows the format `- <item text> | files: <comma-separated paths> | line: <N>`. Dispatch `feature-dev:code-explorer` once with the parsed list verbatim:
-
-```
-Agent(
-  subagent_type="feature-dev:code-explorer",
-  prompt="The implementation plan is at <plan_path>. Read it first to understand
-    the full scope of planned features.
-    Then trace the implementation of the following items that appear to have
-    been partially implemented (files exist in git diff but checkboxes unchecked):
-    <parsed bullet list verbatim>
-    For each, verify it is properly wired up and functional.
-    Report which features are fully connected and which have gaps."
-)
-```
-
-4. **Integrate trace results.** For each item reported as "fully connected", downgrade its status from blocking to "Likely implemented" (non-blocking) in the Gate 1 verdict computation. For each item reported with gaps, keep it as blocking. Append a "Implementation Trace" section to the Gate 1 output summarizing per-item results.
-5. **Recompute Gate 1 verdict** using the updated blocking count: if zero blocking items remain → PASS; otherwise FAIL with the remaining count.
-
-**Evidence-Based Verification (conditional):**
-
-If `available_plugins` includes `superpowers` AND the plan-verifier report
-contains items in "Likely implemented" or "Possibly implemented" status:
-
-```
-Skill("superpowers:verification-before-completion")
-```
-
-Follow the skill's gate function:
-1. IDENTIFY: Determine which command proves the implementation works
-2. RUN: Execute the full command
-3. READ: Check full output and exit code
-4. VERIFY: Does the output confirm the implementation?
-
-Integrate evidence into Gate 1's verdict.
-Note: This step executes commands but does NOT modify any code.
-
-**Output Gate 1 result to user:**
-```
-## Gate 1: Plan Verification — [PASS/FAIL/SKIP]
-[verdict explanation]
-[key findings summary]
-[evidence-based verification results, if executed]
-```
-
-**Handle verdict:**
-- PASS → emit signal with verdict="PASS"
-- SKIP → emit signal with verdict="SKIP"
-- FAIL →
-  Report blocking gaps to the user.
-  Ask: "N blocking items remain. Should I implement them, or proceed anyway?"
-  - If implement: implement the items, then emit signal with verdict="RETRY"
-  - If proceed: emit signal with verdict="PASS_WITH_WARNINGS"
-
-### Gate 1 → Gate 2 handoff format
-
-On PASS (or PASS_WITH_WARNINGS), Gate 1 MUST emit, as the last block of its
-assistant message, a YAML fenced block named `gate1_summary`:
-
-```yaml
-plan_path: <absolute or repo-relative path>
-matched_items: [<plan checkbox text>]
-unmatched_items: [<plan checkbox text>]
-unexpected_files: [<path>]
-verdict: PASS | FAIL | NEEDS_CLARIFICATION
-```
-
-If `verdict` is FAIL, the pipeline halts here (Gate 2 does not run — Law 1).
-If `verdict` is NEEDS_CLARIFICATION, Stop hook injects a user choice
-(clarify / proceed / abort).
-On PASS, the harness passes this block verbatim to Scout (Phase 0) as part
-of its prompt context.
-
-### Gate 2: PR Review
-
-Gate 2 is orchestrated inline by this skill — the skill dispatches review
-agents directly because Claude Code does not allow agents to dispatch other
-agents (only skills can use `Agent()` with `subagent_type`). There is no
-intermediate orchestrator agent for Gate 2.
-
-**Tunable constants** (edit this block to tune):
-
-- `AUTO_PLAN_LINE_THRESHOLD = 30` — minimum changed-line count to dispatch `superpowers:code-reviewer` when plan was auto-detected
-- `LARGE_DIFF_CHARS = 50000` — if `git diff` stdout exceeds this, fall back to per-agent `git diff` (no inline)
-- `LARGE_DIFF_LINES = 800` — same, counted in `+`/`-` lines
-
-**Optimization principles** (preserve QA quality while reducing token cost):
-
-- Capture `git diff` ONCE per iteration and inline it into dispatch prompts so subagents do not re-fetch
-- Use deterministic bash checks (not free-form interpretation) to decide Phase 2 dispatches — **fail-open** when checks are ambiguous
-- Skip re-running an agent inside the fix-loop only when the fixed files do not intersect its domain
-- Structure dispatch prompts as `[immutable head] → [diff] → [variable tail]` for prompt-cache friendliness
-- Record every skip decision in the output report — **no silent skips**
-- **Never truncate or summarize the diff** — the complete unified diff is passed verbatim
-
-#### Step 0: Resolve plan_path_source and capture diff
-
-First, derive `plan_path_source`:
-
-- If `plan_path` is literally `"auto"` or empty → `plan_path_source = "auto"`
-- Otherwise (user passed an explicit path via `/qg --plan=<path>`, or SKILL.md received a concrete resolved path) → `plan_path_source = "explicit"`
-
-This flag decides whether to unconditionally dispatch `superpowers:code-reviewer` (explicit intent, Path A) or gate it on diff characteristics (auto, Path B).
-
-Then run this **single consolidated bash block**. It captures the diff once, writes it to a cache file for later reuse, computes all Phase 2 trigger flags in the same shell where `$DIFF_CONTENT` is still alive, and emits a JSON line to stdout that this skill will parse:
-
-```bash
-# NOTE: `set -e` removed — every command below has explicit failure handling
-# (`|| true` / `|| echo 0`). `set -e` interacts poorly with subshell
-# command substitution and was causing silent aborts in fix-loop iterations
-# (qg self-review §5.1). Each command's failure mode is now local and
-# predictable.
-
-# Per-session cache directory (must already exist — setup-qg.sh creates it).
-QG_DIR=".claude/quality-gates/${CLAUDE_CODE_SESSION_ID}"
-mkdir -p "$QG_DIR"
-
-# Review range selection (qg self-review §5.1 fix):
-#   - Working tree dirty → review unstaged changes (default `git diff` form)
-#   - Working tree clean + commits ahead of main → review cumulative branch diff
-#     so /qg works after a `git commit` without forcing the user to add `branch`
-#   - Otherwise (clean tree, no commits ahead) → empty diff scope (no-op review)
-# REVIEW_RANGE is empty for the dirty-tree path; "main...HEAD" for the
-# committed-ahead-of-main path. Unquoted expansion below is intentional so
-# that empty REVIEW_RANGE adds no extra arg to git diff.
-REVIEW_RANGE=""
-if [ -z "$(git diff --name-only 2>/dev/null)" ] \
-   && git rev-parse --verify --quiet main >/dev/null \
-   && [ -n "$(git log --oneline main..HEAD 2>/dev/null)" ]; then
-  REVIEW_RANGE="main...HEAD"
-fi
-
-# Docs filter (§D): exclude *.md, *.txt, *.rst, docs/**, CHANGELOG*, README*
-# from the scope passed to code-reviewer-style agents. Gate 1 plan-verifier
-# already saw the unfiltered diff above; from here on, agents see code paths only.
-# shellcheck disable=SC2086  # REVIEW_RANGE intentionally word-splits (empty | "main...HEAD")
-git diff $REVIEW_RANGE --name-only \
-  | "${CLAUDE_PLUGIN_ROOT}/scripts/filter-docs.sh" \
-  > "$QG_DIR/code-paths.tmp"
-
-if [ -s "$QG_DIR/code-paths.tmp" ]; then
-  # shellcheck disable=SC2046,SC2086
-  DIFF_CONTENT=$(git diff $REVIEW_RANGE -- $(cat "$QG_DIR/code-paths.tmp"))
-else
-  # Docs-only change (rare after trivia escape and Gate 1 PASS): empty diff for code reviewers
-  DIFF_CONTENT=""
-fi
-
-printf '%s' "$DIFF_CONTENT" > "$QG_DIR/diff-cache.txt"
-
-DIFF_CHARS=${#DIFF_CONTENT}
-DIFF_LINES=$(printf '%s\n' "$DIFF_CONTENT" | grep -cE '^[+-][^+-]' || echo 0)
-
-LARGE_DIFF_CHARS=50000
-LARGE_DIFF_LINES=800
-if [ "$DIFF_CHARS" -le "$LARGE_DIFF_CHARS" ] && [ "$DIFF_LINES" -le "$LARGE_DIFF_LINES" ]; then
-  INLINE_DIFF_MODE=true
-else
-  INLINE_DIFF_MODE=false
-fi
-
-CHANGED_LINES=$(printf '%s\n' "$DIFF_CONTENT" | grep -E '^[+-][^+-]' || true)
-
-if printf '%s\n' "$CHANGED_LINES" | grep -qE '\b(interface|class|type|struct|enum)\b'; then
-  TYPE_DESIGN=1
-else
-  TYPE_DESIGN=0
-fi
-
-# Test detection — `(^|/)tests?/` matches both top-level `tests/` and nested
-# `<sub>/tests/` (qg self-review §5.1 fix; previously only matched top-level
-# which silently set test_change=0 for monorepo / plugin marketplace layouts).
-# shellcheck disable=SC2086
-if git diff $REVIEW_RANGE --name-only | grep -qE '(test|spec)\.[jt]sx?$|_test\.py$|\.test\.|\.spec\.|(^|/)tests?/'; then
-  TEST_CHANGE=1
-else
-  TEST_CHANGE=0
-fi
-
-COMMENT_CHANGE=0
-if printf '%s\n' "$CHANGED_LINES" | awk '
-  /^\+[[:space:]]*(\/\/|#|\*|\/\*)/ { n++; if (n >= 3) { found=1; exit } }
-  !/^\+[[:space:]]*(\/\/|#|\*|\/\*)/ { n=0 }
-  END { exit !found }
-'; then
-  COMMENT_CHANGE=1
-fi
-
-# shellcheck disable=SC2086
-NEW_FILES=$(git diff $REVIEW_RANGE --diff-filter=A --name-only | paste -sd, - 2>/dev/null || true)
-# shellcheck disable=SC2086
-CONFIG_TOUCHED=$(git diff $REVIEW_RANGE --name-only | grep -E '(^|/)(package\.json|tsconfig\.json|pyproject\.toml|Cargo\.toml|go\.mod)$|\.schema\.|/migrations/|\.proto$|openapi\.' | paste -sd, - 2>/dev/null || true)
-if [ -n "$NEW_FILES" ] || [ -n "$CONFIG_TOUCHED" ]; then
-  ARCH_CHANGE=1
-else
-  ARCH_CHANGE=0
-fi
-
-# shellcheck disable=SC2086
-CHANGED_LINE_COUNT=$(git diff $REVIEW_RANGE --numstat | awk '{sum += $1 + $2} END {print sum+0}')
-
-printf '{"diff_chars":%d,"diff_lines":%d,"inline_diff_mode":"%s","type_design":%d,"test_change":%d,"comment_change":%d,"new_files":"%s","config_touched":"%s","arch_change":%d,"changed_line_count":%d,"review_range":"%s"}\n' \
-  "$DIFF_CHARS" "$DIFF_LINES" "$INLINE_DIFF_MODE" "$TYPE_DESIGN" "$TEST_CHANGE" "$COMMENT_CHANGE" "$NEW_FILES" "$CONFIG_TOUCHED" "$ARCH_CHANGE" "$CHANGED_LINE_COUNT" "$REVIEW_RANGE"
-```
-
-Parse the JSON from the bash stdout and hold the flags in your context. **Fail-open**: if the bash block errors or emits unparseable output, set all Phase 2 flags to `1` so no agent is silently skipped.
-
-If `inline_diff_mode` is `true`, use the `Read` tool on `.claude/quality-gates/<session-id>/diff-cache.txt` (substitute `<session-id>` with `$CLAUDE_CODE_SESSION_ID`) to load the diff content into context for reuse in Agent prompts. If `inline_diff_mode` is `false`, skip the Read — subagents will run their own `git diff`.
-
-#### Dispatch Prompt Template
-
-Assemble every Agent prompt in this fixed order so the prefix is cache-friendly:
-
-```
-[Section 1 — IMMUTABLE HEAD]
-<role-and-rules text; identical across iterations>
-<instruction NOT to re-run git diff if INLINE_DIFF_MODE is true>
-
-[Section 2 — DIFF BLOCK]
-(only if inline_diff_mode == true)
-## Current Diff
-```diff
-<cached diff content verbatim, unabridged>
-```
-
-[Section 3 — VARIABLE TAIL]
-iteration: <N>
-previous_findings: <previous_findings or 'none'>
-changed_files_since_last_dispatch: <list or 'none'>
-```
-
-**Never truncate or summarize the diff content when inlining.** The complete unified diff is passed verbatim.
-
-#### Phase 0: Scout (always run, single dispatch)
-
-**Purpose**: Replace rule-based diff-feature gating with model judgment. Scout reads the filtered diff + Gate 1 summary and returns a structured dispatch plan that overrides the rule-based flags computed in Step 0.
-
-**Codex availability probe (Gate 2, Phase 0 prerequisite):**
-
-Run before dispatching scout:
-
-```bash
-MANIFEST_PATH="${TMPDIR:-/tmp}/qg-codex-manifest-${CLAUDE_CODE_SESSION_ID:-unknown}.yaml"
-bash plugins/quality-gates/scripts/detect_codex.sh > "$MANIFEST_PATH"
-```
-
-The script emits a YAML manifest (6 cases — install, kill-switch, sandbox-recursion, auth, version, ok). Read the manifest and include it as the `codex_manifest:` field in the Scout dispatch prompt's inputs section, alongside `filtered_diff`, `gate1_summary`, and `session_scope`.
-
-Idempotency: rerunning is safe (read-only, no side effects). If the manifest file exists from a prior probe in this session, regenerate it — environment state may have changed.
-
-**Manifest schema validation (AC12)**: detect_codex.sh 결과 YAML을 읽은 후 다음 필수 키 존재 검증 — 없으면 safe default + stderr warning:
-
-- `codex_available` (boolean) — 필수
-- 만약 `codex_available == true`: `codex_path` (string, non-empty) + `codex_version` (string) 필수
-- 만약 `codex_available == false`: `skip_reason` (string) 필수
-
-위 키가 누락되거나 type이 안 맞으면:
-```bash
-echo "[quality-gates] codex manifest schema invalid; treating as unavailable" >&2
-```
-출력 후 `codex_available: false` + `skip_reason: manifest_invalid` 로 처리.
-
-**Codex cost consent (first-use gate):**
-
-If `codex_manifest.codex_available == true` AND marker file `${HOME}/.claude/quality-gates/codex-cost-consent.md` does not exist:
-
-1. If `QG_MOCK_ASKUSER_PATH` env var is set: write the question text to that path and read response as `approve` (test harness hook).
-2. Else: invoke `AskUserQuestion` (load via `ToolSearch select:AskUserQuestion` if schema not present):
-   - Question: "Codex CLI detected (`{codex_version}`). The codex-reviewer agent will call `codex exec` for each Gate 2 review on `standard`/`deep` diffs. This uses your Codex subscription/API and may incur cost (proxy ceiling: 600s wall-clock per call). Approve enabling codex-reviewer for this project?"
-   - Options:
-     - `Approve once` — enables for this session only, no marker
-     - `Approve always (recommended)` — writes marker; silent on future runs
-     - `Decline` — sets `codex_available: false` for this session
-
-3. On `Approve always`: write marker file with `consented: <ISO timestamp>` via the following bash snippet (test V14가 본 block을 추출 실행):
-
-<!-- QG-CONSENT-MARKER-WRITE -->
-# QG-CONSENT-MARKER-WRITE
-```bash
-mkdir -p "${HOME}/.claude/quality-gates" \
-  && printf 'consented: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-       > "${HOME}/.claude/quality-gates/codex-cost-consent.md" \
-  || { errno=$?; echo "[quality-gates] could not persist consent (errno $errno); will re-prompt next run" >&2; }
-```
-
-4. On `Decline`: replace loaded `codex_manifest` with `codex_available: false\nskip_reason: user_declined_cost_consent` for remainder of session.
-
-**Scout dispatch (script-based, T3-1):**
-
-Scout was an LLM agent in v1.x; in v1.29.0 it is a deterministic Python script
-(no LLM judgment was being used — the depth-decision table from v1.x scout.md
-L42-44 is what scout.py implements directly).
-
-Build the step-0 JSON input (already computed by the Step 0 bash block above):
-
-```bash
-STEP0_JSON=$(cat <<EOF
-{
-  "changed_lines": $CHANGED_LINE_COUNT,
-  "new_files": $([ -n "$NEW_FILES" ] && echo 1 || echo 0),
-  "config_touched": $([ -n "$CONFIG_TOUCHED" ] && echo true || echo false),
-  "type_design": $([ "$TYPE_DESIGN" = "1" ] && echo true || echo false),
-  "test_change": $([ "$TEST_CHANGE" = "1" ] && echo true || echo false),
-  "gate1_verdict": "$GATE1_VERDICT"
-}
-EOF
-)
-SCOUT_YAML=$(echo "$STEP0_JSON" | python3 "${CLAUDE_PLUGIN_ROOT}/scripts/scout.py")
-```
-
-Parse the YAML for `depth`, `phase1_agents`, `phase2_agents`, `rationale`, `fallback` fields. `fallback` is always `false` (rule-based primary; no fallback path needed since script is deterministic).
-
-#### Phase 1: External Reviewer Inclusion (codex-reviewer)
-
-SKILL.md가 codex-reviewer dispatch를 단독 결정한다 (scout 영역 밖, LD4 정합). Standard/deep depth에서만 평가.
-
-**Codex 외부 reviewer 호출 (T3-3, script-based):**
-
-`codex_manifest.codex_available == true` AND consent marker exists. Skill invokes:
-
-```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh \
-  "${QG_DIR}/filtered_diff.patch" \
-  "${project_dir}" \
-  "${QG_DIR}/codex_findings.yaml"
-```
-
-(Replaces v1.x agent dispatch — `agents/codex-reviewer.md` deleted in v1.27.0. Layer 1 isolation preserved via this SKILL.md narrow Bash allowlist entry; Layer 3 sandbox `codex exec -s read-only` preserved inside the script.)
-
-Output YAML at `${QG_DIR}/codex_findings.yaml` is consumed by synthesizer alongside Phase 1 agent findings.
-
-`codex_available: false` 경로 — T2-5 visibility policy로 `skip_reason`별 stderr emit. Same as v1.x agent path: no script invocation, no findings appended.
-
-**가용 경로 (`codex_manifest.codex_available == true`):**
-
-가용성 조건: `codex_manifest.codex_available == true` AND consent marker `${HOME}/.claude/quality-gates/codex-cost-consent.md` 존재 (or env `QG_MOCK_CONSENT_OK=1`). 두 조건 모두 충족 시 → **무조건** codex-reviewer를 Phase 1 parallel dispatch에 포함. scout이 빼지 못함.
-
----
-
-**비가용 경로 (`codex_manifest.codex_available == false`):**
-
-manifest의 `skip_reason` 어떤 값이든 이 분기를 따른다. 기존 3-agent dispatch만 실행:
-`phase1_agents: [code-reviewer, silent-failure-hunter, feature-dev:code-reviewer]` — v1.10.x 시점과 byte-equivalent 동작.
-
-내부 변수: `external_reviewers` (local). 가용 시 append; 비가용 시 `[]`. Phase 1 dispatch 전체 = `phase1_agents ∪ external_reviewers`.
-
-이 분기에서 외부 확장 없음. scout의 phase1_agents를 그대로 사용.
-
-**Codex skip 안내 (T2-5 visibility policy):**
-
-`detect_codex.sh`가 `codex_available: false` 응답 시 `skip_reason`에 따라 사용자에게 stderr로 한 줄 안내를 emit. CLAUDE.md `loud logging을 동반한 graceful degradation` 약속 — 사용자가 Codex 구독 비용을 지불하고도 dispatch 안 되는 이유를 알 수 있어야 함.
-
-| skip_reason | 사용자 안내 (stderr) | 이유 |
+The script exits non-zero on hard precondition violations (`no_session_id`,
+`invalid_session_id`) and zero on normal codes. **Non-zero exit must abort
+the pipeline immediately** — surface the script's stderr verbatim and stop.
+Do NOT proceed to Gate 1 with degraded state.
+
+On zero exit, parse the `result:` line. Handle every emitted code; unknown
+values are a contract violation, not "treat as fresh":
+
+| `result:` | Meaning | Downstream action |
 |---|---|---|
-| `kill_switch` | (silent) | 사용자가 명시 disable — noise 회피 |
-| `inside_codex_sandbox` | (silent) | 재귀 guard, 정상 동작 |
-| `not_installed` | `[quality-gates] Codex CLI not installed; model-family diversity layer skipped.` | dispatch path가 단일 모델 family로 축소됨을 알림 |
-| `auth_missing` | `` [quality-gates] Codex CLI detected but auth missing; set CODEX_API_KEY/OPENAI_API_KEY or run `codex login`. `` | 비용 지불 + dispatch 안 됨의 원인 |
-| `timeout_binary_missing` | `` [quality-gates] Codex skipped: no `timeout`/`gtimeout` binary (install coreutils). `` | hung version probe 방지 |
-| `known_bad_version` | `[quality-gates] Codex version known-bad ({version}); upgrade.` | gstack 0.120.x stdin deadlock 등 |
+| `fresh_start` | First run on this branch | normal — silent |
+| `preserved` | Session file fresh; reuse | normal — silent |
+| `no_session_data` | No prior state | normal — silent |
+| `cleared_branch_mismatch` | HEAD branch changed; state wiped | tell user "branch changed; session scope reset"; do not use prior files.md |
+| `cleared_stale` | Session file aged out; deleted | tell user "stale session data cleared"; do not use prior files.md |
+| `active_resume` | Mid-pipeline resume on same session | continue with existing state |
+| (other) | Unknown — contract violation | abort with stderr verbatim |
 
-`kill_switch`와 `inside_codex_sandbox`는 silent — 정상 사용자 의도 / 재귀 가드 동작이므로 stderr noise 부담만 줌. 다른 4개는 `>&2` 출력 후 dispatch 진행 (graceful degradation).
+## Arguments
 
-**테스트 Mock 환경변수 (LD8 정합):**
+Parse from `/qg` invocation:
+- `gate` (optional): `gate1`, `gate2`, `gate3`, or absent (full pipeline).
+- `plan_path` (optional): defaults to "auto" (`scripts/discover-plan.sh`).
+- `pr_url` (optional).
+- `skip_runtime` (flag): if set, skip Gate 3.
+- `paths` (optional, repeatable): scope override for Gate 2 diff.
 
-`QG_MOCK_CODEX_MANIFEST` (= `available` | `unavailable` | `<path-to-yaml>`) — test harness에서 manifest 주입. `available` 시 codex-reviewer가 dispatch에 포함된다.
-`QG_MOCK_CONSENT_OK` (= `1` boolean) — consent 파일 존재 simulate.
-`QG_MOCK_SCOUT_FALLBACK` (= `1` boolean — 본 task 후속).
-`available` 값은 가용 경로를 트리거하고 external reviewer를 포함시킨다. `unavailable`은 비가용 경로를 트리거한다.
+Single-gate mode (`gate1`/`gate2`/`gate3`) runs ONLY the named gate and
+emits its verdict directly — no decision-tool call, no inter-gate
+transition.
 
-#### Phase 1 (unified dispatch)
+## Dispatch Loop
 
-Phase 1 reviewer dispatch is a single section with four steps. The same
-AskUserQuestion fan-out gate applies regardless of which path produced
-the dispatch list — primary (scout YAML) or fallback (rule-based gating
-when scout fails or `fallback: true`).
+Full pipeline mode:
 
-**Step 1 — Resolve dispatch list:**
+1. Run [Trivia escape](#trivia-escape). If trivia detected, print "Trivia
+   diff — all gates skipped" and return.
+2. Run [Gate 1: Plan Verification](#gate-1-plan-verification).
+   - On clean verdict → continue to Gate 2 (silently; print one-line "Gate 1: clean").
+   - On failure → invoke [Gate 1 FAIL decision](#gate-1-fail-decision); branch
+     per user choice (Continue anyway / Stop / View detail).
+3. Run [Gate 2: PR Review](#gate-2-pr-review). Iterate (review → fix?) up
+   to 5 times. At the end of EACH iteration:
+   - findings empty → print "Gate 2 iter N: clean" and continue to Gate 3.
+   - findings non-empty → invoke [Gate 2 iter boundary decision](#gate-2-iter-boundary-decision).
+4. If `skip_runtime`, skip Gate 3 and emit final summary.
+5. Otherwise run [Gate 3: Runtime Verification](#gate-3-runtime-verification).
+   - On clean verdict → continue to final summary.
+   - On failure → final summary with Gate 3 failure marker; do not auto-restart.
+   - On needs-resolution → invoke [Gate 3 NEEDS_RESOLUTION decision](#gate-3-needs_resolution-decision)
+     up to `DEVBREW_GATE3_MAX_RESOLUTIONS` times (default 3, env override,
+     clamp 0..10).
+6. Emit final summary.
 
-- **Primary path (scout `fallback: false`):** read scout YAML — `phase1_agents`
-  and `phase2_agents` are the authoritative selection.
-- **Fallback path (scout `fallback: true`, scout JSON parse error, or
-  scout-rerun limit exceeded):** apply rule-based gating from the depth
-  table below. Emit `<qg-signal verdict="scout-fallback" reason="..." />`
-  so the user knows the rule-based path was taken.
+## Trivia escape
 
-| depth | phase1_agents | phase2_agents (conditional) |
-|---|---|---|
-| quick | code-reviewer, security-reviewer | (empty) |
-| standard | code-reviewer, silent-failure-hunter, security-reviewer | type-design-analyzer / pr-test-analyzer / comment-analyzer per diff signals |
-| deep | code-reviewer, silent-failure-hunter, feature-dev:code-reviewer, security-reviewer | + superpowers:code-reviewer / feature-dev:code-architect per major-step boundary / new modules |
+Run `${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh`. Exit code:
+- 0 = trivia detected → skip all gates. Print:
+  > `Trivia diff — all gates skipped (one-sentence diff per CLAUDE.md trivia escape).`
+- 1 = non-trivia → proceed to Gate 1.
+- any other non-zero (script crash / environment failure) → print stderr
+  verbatim and abort the pipeline. Do NOT silently treat as non-trivia.
 
-**Kill switch filter (applies to BOTH scout-primary and fallback paths).** After resolving the dispatch list, filter per-agent kill switches:
+## Gate 1: Plan Verification
 
-```bash
-if [ "${DEVBREW_DISABLE_QG_SECURITY_REVIEWER:-0}" = "1" ]; then
-  echo "[quality-gates] security-reviewer disabled via DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1" >&2
-  # Remove security-reviewer from BOTH scout.phase1_agents (if present) AND the
-  # rule-based fallback list (the Agent D slot becomes a no-op).
-fi
+Dispatch the `quality-gates:plan-verifier` subagent:
+
 ```
-
-Same filter pattern applies for future per-agent kill switches. Model assignment per dispatch:
-
-| agent | quick | standard | deep | model override on Task call |
-|---|---|---|---|---|
-| `pr-review-toolkit:code-reviewer` | included | included | included | none — respect upstream `model: opus` |
-| `pr-review-toolkit:silent-failure-hunter` | — | included | included | `model: "sonnet"` |
-| `feature-dev:code-reviewer` | — | — | included | none — upstream is `model: sonnet` |
-| `quality-gates:security-reviewer` | included | included | included | `model: "sonnet"` (frontmatter `inherit`) |
-
-For agents whose frontmatter is `inherit`, pass `model: "sonnet"` via Task tool.
-For hardcoded-frontmatter agents, do NOT pass `model` (respect upstream choice — Task 1 design decision).
-
-**Step 2 — Combine with external reviewers:**
-
-If `codex_manifest.codex_available == true`, append `codex-reviewer` to the
-dispatch list. If `false`, emit the loud-skip stderr message from the
-visibility-policy table (see §Codex skip 안내) and continue without it.
-
-**Scout fallback codex inclusion (AC13)**: 만약 scout이 timeout/JSON-error/self-fallback으로 engage하면, rule-based fallback dispatch를 사용한다. 단, `codex_manifest.codex_available == true` AND consent marker 존재 (or `QG_MOCK_CONSENT_OK=1`) 시 codex-reviewer를 fallback dispatch에도 **무조건** 포함하고, 다음 stderr 메시지를 출력:
-
-```bash
-echo "[quality-gates] scout fallback engaged; codex-reviewer still dispatched (codex_available=true)" >&2
-```
-
-이로써 fallback 경로가 사용자에게 visible. codex 비가용 시는 기존 3-agent만 dispatch.
-
-`final_dispatch_list = phase1_agents ∪ external_reviewers ∪ phase2_agents`.
-
-scout/adversarial/synthesizer are infrastructure and excluded from the fan-out count.
-
-**Step 3 — Fan-out gate + parallel dispatch:**
-
-Compute `len(final_dispatch_list)`. If **≥ 4**, invoke AskUserQuestion BEFORE
-the dispatch. The gate applies regardless of whether the list came from
-primary or fallback path. (Fallback paths should add MORE friction, not less,
-because the rule-based heuristic is less accurate than scout's analysis —
-CLAUDE.md loud logging + graceful degradation principle.)
-
-```python
-AskUserQuestion({
-  questions: [{
-    question: f"Gate 2 deep review will dispatch {len(final_dispatch_list)} reviewer(s) in parallel. Estimated cost: {cost_summary}. Proceed?",
-    header: "Gate 2 fan-out",
-    options: [
-      {label: "Proceed", description: f"Dispatch all {len(final_dispatch_list)} reviewers"},
-      {label: "phase1-only", description: "Smaller dispatch — phase1 + security-reviewer only; skip Phase 2"},
-      {label: "Abort", description: "Skip Gate 2 — emit abort signal"},
-    ],
-    multiSelect: false,
-  }]
+Agent({
+  subagent_type: "quality-gates:plan-verifier",
+  description: "Plan verification (Gate 1)",
+  prompt: "Verify that all checkbox items in the plan are implemented. ..."
 })
 ```
 
-Based on the answer:
-- **Proceed:** continue to parallel dispatch.
-- **phase1-only:** narrow `final_dispatch_list` to Phase 1 agents + security-reviewer (drop Phase 2 agents and codex-reviewer); record "Phase 2 skipped: user requested phase1-only" in the report.
-- **Abort:** emit `<qg-signal action="abort" reason="user declined fan-out" />` and stop.
+(Construct the actual prompt from `plan_path`, the discovered plan via
+`scripts/discover-plan.sh`, and the current diff.)
 
-For lists with `len < 4`, skip the gate and dispatch directly.
+Subagent returns a verdict YAML block with one of the three outcomes:
 
-**Step 4 — Parallel dispatch:**
+- **Clean verdict**: print `## Gate 1: Plan Verification — clean\n**Verdict:** clean\n**Summary:** <one line>` and continue to Gate 2.
+- **SKIP**: print `## Gate 1 — SKIP\n**Reason:** <reason>` and continue to Gate 2.
+- **Failure verdict**: print the full Gate 1 result block (including
+  unimplemented item list) and proceed to
+  [Gate 1 FAIL decision](#gate-1-fail-decision).
 
-```
-Task(parallel=true, agents=final_dispatch_list, dispatch_prompt=...)
-```
+---
 
-The dispatch prompt template (see §Dispatch Prompt Template above) is
-identical for primary and fallback paths. Each agent receives:
-- The diff (from `## Current Diff` section).
-- `project_dir: <absolute path>` — use verbatim for any Read tool call; do not re-resolve via `pwd` or `Path.cwd()`.
+The Gate 1 verdict block is rendered before invoking the FAIL decision so
+that the user has the full context in scrollback when they answer the
+question below. The orchestrator does not auto-continue past Gate 1 on
+failure; user consent is required regardless of how many planned items
+remain unimplemented.
 
-**Agent prompt heads (immutable, apply to both paths):**
+The following section is the decision-tool template fired only on the
+failure branch. Single-gate mode (`/qg gate1`) emits the verdict block and
+exits without calling the decision tool at all — the FAIL decision is a
+full-pipeline-only mechanism for inter-gate progression consent.
 
-*code-reviewer (`pr-review-toolkit:code-reviewer`)*:
-> Review the unstaged changes for bugs, logic errors, security vulnerabilities, and code quality issues. Focus on high-confidence issues only.
->
-> If the prompt contains a `## Current Diff` section, operate on that diff verbatim. **Do NOT run `git diff` yourself** — the full unified diff is already provided. You may still use `Read` on specific files for extra context outside the diff's scope.
+Verdict output blocks above are addressed to the user (rendered to the
+conversation transcript). The decision template below is addressed to the
+assistant runtime: it is a literal tool call the orchestrator emits, and
+the user response arrives as a tool result in the same turn.
 
-*silent-failure-hunter (`pr-review-toolkit:silent-failure-hunter`)*:
-> Review the unstaged changes to identify silent failures, inadequate error handling, and inappropriate fallback behavior. Focus on high-confidence issues only.
->
-> If the prompt contains a `## Current Diff` section, operate on that diff verbatim. **Do NOT run `git diff` yourself** — the full unified diff is already provided.
+## Gate 1 FAIL decision
 
-*feature-dev:code-reviewer* (only if `available_plugins` includes `feature-dev`):
-> Review the unstaged changes for project convention and guideline compliance. Focus on CLAUDE.md adherence, import patterns, naming conventions, and framework-specific patterns. Do NOT focus on bugs or security — another reviewer handles those. Report only issues with confidence >= 80.
->
-> If the prompt contains a `## Current Diff` section, operate on that diff verbatim. **Do NOT run `git diff` yourself** — the full unified diff is already provided.
+> **Spec anchor (AC7):** the literal phrase `Plan verification failed`
+> MUST appear in the prompt — V2b grep checks this.
 
-If `feature-dev` is NOT in `available_plugins`, skip this agent silently and record in the report's "Phase 2 Skipped Agents" section with reason "feature-dev plugin not available".
-
-*security-reviewer (`quality-gates:security-reviewer`)* (always dispatched unless `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`):
-> Review the unstaged changes for code-level security vulnerabilities. Trace untrusted-input entry points to dangerous sinks. Categories: injection (SQL/NoSQL/command/template/directory), authn/authz bypass (missing middleware, IDOR, privilege escalation, CSRF on state-change), secrets in code or logs, SSRF + path traversal, insecure deserialization, cryptographic misuse, raw-HTML escape hatches, dependency manifest changes. Suppress defense-in-depth on already-protected code, theoretical/physical-access attacks, dev/test insecure transport, and generic hardening advice. If diff has no security surface, emit empty YAML list (`[]`) — do not pad with forced findings. Output: canonical YAML schema only (agent / file / line / severity / confidence / summary / proposed_fix), no prose.
->
-> If the prompt contains a `## Current Diff` section, operate on that diff verbatim. **Do NOT run `git diff` yourself** — the full unified diff is already provided.
->
-> Your input prompt will also include a `project_dir: <absolute path>` line representing the pipeline's single coordinate. Use this verbatim for any Read tool call — do not re-resolve via `pwd` or `Path.cwd()`.
-
-Wait for all dispatched agents to complete. Collect their findings.
-
-**Individual dispatch failures**: if any single `Agent()` call fails (plugin missing, agent errors, etc.), record `"<agent-name>: dispatch failed: <error>"` in the output report's "Dispatch Failures" section and continue with the remaining agents. Do not abort Gate 2 on a single failure.
-
-#### Phase 2: Scout-recommended dispatch (primary path)
-
-Dispatch ONLY the agents listed in `scout.phase2_agents` (subset of:
-`type-design-analyzer`, `pr-test-analyzer`, `comment-analyzer`,
-`superpowers:code-reviewer`, `feature-dev:code-architect`).
-
-Model overrides per dispatch:
-
-| agent | model override |
-|---|---|
-| `pr-review-toolkit:type-design-analyzer` (inherit) | `model: "sonnet"` |
-| `pr-review-toolkit:pr-test-analyzer` (inherit) | `model: "sonnet"` |
-| `pr-review-toolkit:comment-analyzer` (inherit) | `model: "sonnet"` |
-| `superpowers:code-reviewer` (inherit) | `model: "sonnet"` |
-| `feature-dev:code-architect` (hardcoded sonnet) | none — respect upstream |
-
-If the AskUserQuestion gate above selected `phase1-only`, skip this section
-entirely (and record "Phase 2 skipped: user requested phase1-only").
-
-If scout-fallback engaged, use the rule-based fallback below.
-
-#### Phase 2 (legacy/fallback): Conditional Analysis
-
-Use the flag values parsed from the Step 0 JSON. Every skip must be recorded in the output report — **no silent skips**.
-
-All Phase 2 dispatches are assembled via the template above. Append the following sentence to the end of each Phase 2 agent's immutable head:
-
-> If the prompt contains a `## Current Diff` section, operate on that diff verbatim. **Do NOT run `git diff` yourself** — the full unified diff is already provided.
-
-**If `type_design == 1`** → dispatch `pr-review-toolkit:type-design-analyzer`:
-> Analyze all type/interface/class/struct/enum changes in the current diff for encapsulation, invariant expression, and design quality.
-
-**If `test_change == 1`** → dispatch `pr-review-toolkit:pr-test-analyzer`:
-> Review the test coverage in the current changes. Identify critical gaps in test coverage for new functionality.
-
-**If `comment_change == 1`** → dispatch `pr-review-toolkit:comment-analyzer`:
-> Analyze code comments in the current changes for accuracy, completeness, and long-term maintainability.
-
-**If `arch_change == 1` AND `available_plugins` includes `feature-dev`** → dispatch `feature-dev:code-architect`:
-> Analyze the architectural impact of the current diff. Validate that new files follow existing codebase patterns, module boundaries are respected, and architecture remains consistent. Focus on pattern validation, not bugs or style.
-
-##### superpowers:code-reviewer dispatch (Path A / Path B)
-
-**Prerequisites (both must hold):**
-
-- `plan_path` is not empty
-- `available_plugins` includes `superpowers`
-
-If prerequisites fail → skip (record reason).
-
-**Path A — Explicit user intent**: if `plan_path_source == "explicit"` → **dispatch unconditionally**.
-
-**Path B — Auto-detected plan**: if `plan_path_source == "auto"` (or absent — treat missing as auto), dispatch only if **any one** of:
-
-1. `new_files` (from Step 0 JSON) is non-empty
-2. `changed_line_count >= 30` (`AUTO_PLAN_LINE_THRESHOLD`)
-3. `config_touched` (from Step 0 JSON) is non-empty
-
-Otherwise skip and record the reason (e.g., `"skipped: auto mode, 8 changed lines, no new files, no config touch"`).
-
-Dispatch prompt (immutable head):
-> Review the unstaged changes against the implementation plan at `{plan_path}`. Check for plan alignment, architectural deviations from planned approach, SOLID principles, and separation of concerns. Categorize issues as Critical, Important, or Suggestions.
->
-> If the prompt contains a `## Current Diff` section, operate on that diff verbatim. **Do NOT run `git diff` yourself** — the full unified diff is already provided.
-
-#### Phase 1.5: Adversarial (Standard/Deep only)
-
-If `scout.depth ∈ {standard, deep}` AND Phase 1 produced any findings:
-
-Dispatch:
+Call AskUserQuestion:
 
 ```
-Agent(
-  subagent_type="quality-gates:adversarial",
-  prompt="<all Phase 1 + Phase 2 findings as structured YAML>
-  filtered_diff: <verbatim from cache>
-  project_dir: <current working directory>"
-)
+AskUserQuestion({
+  questions: [
+    {
+      question: "Plan verification failed: <N> planned items not yet implemented (<summary>). How do you want to proceed?",
+      header: "Gate 1 FAIL",
+      options: [
+        {label: "Continue anyway", description: "Proceed to Gate 2 review despite incomplete plan. Use when items are intentionally deferred."},
+        {label: "Stop",            description: "Abort the pipeline. Address the gaps and re-run /qg."},
+        {label: "View detail",     description: "Print full per-item verdict from plan-verifier, then ask again."}
+      ],
+      multiSelect: false
+    }
+  ]
+})
 ```
 
-Do **not** add a `model=` override to this dispatch: adversarial declares
-`model: opus` in its frontmatter (the single source of truth). It is the
-Opus-critic over the Sonnet Phase 1 workers — the only model-based judgment gate
-in Gate 2 — so capability is spent here deliberately. A `model="sonnet"` cost-cut
-here would silently contradict the frontmatter and README; the
-`tests/test_adversarial_model_consistency.sh` guard fails CI if it reappears.
-See README "Adversarial reviewer model".
+Branch on the user's answer:
+- **Continue anyway** → proceed to Gate 2 (record "Gate 1 failure — user continued" in History).
+- **Stop** → emit final summary marked aborted at Gate 1.
+- **View detail** → print the verbose Gate 1 verdict, then re-invoke this
+  same decision tool (without `View detail` this time, to avoid loops).
 
-Apply Adversarial verdicts (`confirm` / `downgrade` / `reject`) to the
-finding set BEFORE passing to Synthesizer.
+## Gate 2: PR Review
 
-**Conditional re-run on iteration**: when Gate 2 enters a new iteration of
-the within-loop fix-loop, compute the hash of the current Phase 1 finding
-set as `(file, line, severity, summary)` tuples. Compare to previous
-iteration's hash:
-- Same hash → SKIP adversarial (already verified).
-- Different hash → run adversarial.
+Iterative fix-loop, `max_gate2_iterations = 5` (hard-coded constant).
 
-#### Phase 1.6: Synthesizer (always when Phase 1 ran)
+For each iteration N (1..5):
 
-Synthesizer is now a deterministic script (T3-2, v1.28.0). The 5-step algorithm
-(apply verdicts → dedup → suppress<7 → sort → render Markdown) has no LLM
-judgment, so direct Bash invocation replaces the v1.x Agent() dispatch.
-
-```bash
-python3 ${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py \
-  --adversarial ${QG_DIR}/adversarial.yaml \
-  --findings ${QG_DIR}/findings.yaml \
-  > ${QG_DIR}/synthesized.md
-```
-
-The Markdown output is what the user sees as "Gate 2 Findings".
-
-#### Within-Gate-2 loop — efficient form
-
-The fix-loop (max 5 iterations, preserved) runs scout once per iteration on
-**delta diff** rather than the full diff:
-
-1. Identify changed file set since last iteration: `git diff <last-iter-sha> HEAD --name-only`.
-2. Re-run Scout with only those files in scope.
-3. Dispatch only what scout newly recommends; reuse prior findings for
-   unchanged files.
-4. Apply Phase 1.5 conditional adversarial re-run rule above.
-5. Always run synthesizer.
-
-#### Repeat-detection (no-progress check)
-
-After each iteration, compute:
-- `dispatch_hash = sha256(json(scout_output_minimal))` (depth + phase1_agents + phase2_agents only)
-- `synth_hash = sha256(synthesizer_markdown)`
-
-If both `dispatch_hash` and `synth_hash` are equal to the previous iteration's:
-- Emit `<qg-signal verdict="repeat-detected" />`.
-- Stop hook injects user choice (`gate2_repeat_detected` prompt): proceed (accept findings) / abort.
-
-This guards philosophy AP15 ("loop without repeat detection") even though
-`max_gate2_iterations=5` provides the hard upper bound.
-
-#### Classifying Findings
-
-From each agent's output, classify findings:
-
-- **CRITICAL** (confidence ≥ 90%): Bugs, security vulnerabilities, data loss risks
-- **IMPORTANT** (confidence ≥ 80%): Logic errors, poor error handling, missing validation
-- **SUGGESTION** (confidence < 80%): Style, naming, simplification opportunities
-
-#### Fix-and-Review Loop
-
-If CRITICAL or IMPORTANT issues are found:
-
-1. **Fix the issues** using `Edit`/`Write` tools (the skill has these directly — no delegation needed).
-2. Capture the set of changed files:
-   ```bash
-   git diff --name-only
-   ```
-3. **Re-run the Step 0 consolidated bash block** so the cache file and flags reflect the post-fix state. Re-read `.claude/quality-gates/<session-id>/diff-cache.txt` into context.
-4. If `iteration < max_iterations`: selectively re-dispatch per the dedup rule below.
-5. If `iteration >= max_iterations`: stop and report remaining issues.
-
-##### Agent Domain Mapping (for dedup)
-
-When deciding whether to re-dispatch an agent, compute the intersection of `fix_files` with the agent's domain paths:
-
-| Agent | Domain paths (glob) |
-|---|---|
-| `pr-review-toolkit:code-reviewer` | `**/*.{ts,tsx,js,jsx,py,go,rs,java,rb,kt,swift,cs,cpp,c,h}` |
-| `pr-review-toolkit:silent-failure-hunter` | same as above |
-| `feature-dev:code-reviewer` | same as above |
-| `pr-review-toolkit:type-design-analyzer` | files containing type/interface/class/struct/enum definitions |
-| `pr-review-toolkit:pr-test-analyzer` | test files only (see `test_change` regex) |
-| `pr-review-toolkit:comment-analyzer` | files where comment lines were added/changed |
-| `superpowers:code-reviewer` | same as code-reviewer (broad) |
-| `feature-dev:code-architect` | source files + config/schema files |
-| `pr-review-toolkit:code-simplifier` | never re-run (Phase 3 one-shot) |
-
-##### Dedup Decision
-
-For each agent `A` whose last run returned findings:
+1. Compute diff scope (paths / branch / session — from preflight result).
+2. Dispatch the scout: `Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py ...)`.
+3. Dispatch reviewer subagents in parallel (per [Reviewer dispatch contract](#reviewer-dispatch-contract)).
+   `quality-gates:security-reviewer` and `quality-gates:adversarial` are
+   the in-house dispatches that MUST include `project_dir: "$project_dir"`:
 
 ```
-domain_paths_A = expand(A.domain paths)
-if fix_files ∩ domain_paths_A == ∅:
-  → SKIP re-dispatch. Record "dedup: A's domain untouched by fix"
-else:
-  → Re-dispatch A with the updated diff content
+Agent({
+  subagent_type: "quality-gates:security-reviewer",
+  description: "Security review (Gate 2 iter N)",
+  prompt: "Run code-level security review on the current diff.
+    project_dir: \"$project_dir\"
+    diff_scope: <paths|branch|session as resolved at preflight>
+    plan_path: <path or 'auto'>
+    iteration: N
+    <…scout-supplied context…>"
+})
+
+Agent({
+  subagent_type: "quality-gates:adversarial",
+  description: "Adversarial review of Phase-1 findings (Gate 2 iter N)",
+  prompt: "Re-review findings from Phase-1 reviewers for false positives
+    and missed exploit paths.
+    project_dir: \"$project_dir\"
+    phase1_findings: <yaml from security-reviewer + code-reviewer + codex>
+    iteration: N"
+})
 ```
 
-**Fail-open**: if the intersection check is ambiguous (e.g., domain paths hard to enumerate), **re-dispatch anyway**. Broad-domain agents (code-reviewer, silent-failure-hunter, feature-dev:code-reviewer) almost always re-dispatch because their domain covers all source files.
+   `pr-review-toolkit:code-reviewer` (if pr-review-toolkit available) and
+   the codex reviewer (if `detect_codex.sh` returns true) are dispatched
+   with their own contracts; they do not require `project_dir` because
+   they re-derive scope from the inlined diff blob.
+4. Dispatch `quality-gates:synthesizer` (or local synthesize_findings.py)
+   to consolidate findings.
+5. Compute boundary outcome:
+   - findings empty → print `## Gate 2 iter N: clean` and exit the loop (continue to Gate 3).
+   - findings non-empty → invoke [Gate 2 iter boundary decision](#gate-2-iter-boundary-decision).
 
-##### Targeted re-dispatch on specific fix types
+If iteration N=5 ends with findings still non-empty: invoke
+[Gate 2 max-iter decision](#gate-2-max-iter-decision) instead of the
+normal iter-boundary decision.
 
-These rules layer on top of the dedup rule (they can **expand** the re-dispatch set, never shrink it):
+---
 
-- If the fix changes function signatures or module structure → also re-dispatch `feature-dev:code-architect` (if run before)
-- If the fix changes error handling → also re-dispatch `silent-failure-hunter`
-- If the fix changes types/interfaces → also re-dispatch `type-design-analyzer` (if `type_design` still 1)
-- If the fix deviates from plan → also re-dispatch `superpowers:code-reviewer` (if run before)
+The two decision templates below are tool-call literals; they fire only
+on the non-empty-findings branch (iter-boundary) and on the iteration-5
+exhaustion branch (max-iter). Each emits a single decision-tool invocation
+with a unique header so the user can disambiguate iterations in the
+transcript.
 
-#### Phase 3: Polish — one-shot rule
+The iter-boundary anchor phrase `findings remain` is specific to this
+template and must not appear in any other decision-tool call in this
+SKILL, per spec AC6.
 
-Run `pr-review-toolkit:code-simplifier` **only when ALL THREE** conditions hold in the current iteration:
+## Gate 2 iter boundary decision
 
-1. Phase 1 produced **zero** CRITICAL or IMPORTANT findings
-2. Phase 2 produced **zero** CRITICAL or IMPORTANT findings
-3. The fix-loop made **zero** file changes in this iteration
+> **Spec anchor (AC6):** the literal phrase `findings remain` MUST appear
+> in the prompt — V2b grep checks this. This phrase is Gate 2-iter-specific
+> (not used in any other decision-tool call in this SKILL).
 
-These conditions naturally limit Phase 3 to at most one execution per pipeline run: it runs only in the final clean iteration, after which the pipeline concludes with PASS.
-
-Dispatch prompt (immutable head):
-> Review recently modified code for opportunities to simplify for clarity, consistency, and maintainability while preserving all functionality.
->
-> If the prompt contains a `## Current Diff` section, operate on that diff verbatim. **Do NOT run `git diff` yourself** — the full unified diff is already provided.
-
-Code-simplifier findings are **always non-blocking** (suggestions only).
-
-#### Detecting Code Changes
-
-After the final fix (or after each iteration), run:
-
-```bash
-git diff --name-only
-```
-
-Record the list of changed files. This determines the signal verdict (`PASS` if no fixes, `NEEDS_RESTART` if files were modified).
-
-#### Cache Cleanup
-
-Before emitting the Gate 2 signal (on **any** verdict — PASS, FAIL, NEEDS_RESTART, or error), delete the per-session cache file:
-
-```bash
-rm -f ".claude/quality-gates/${CLAUDE_CODE_SESSION_ID}/diff-cache.txt"
-```
-
-This must run on every exit path. If the skill turn crashes before cleanup, the next Gate 2 invocation's Step 0 will overwrite the cache — stale content cannot bleed in, but an orphaned cache file is a signal that an earlier run failed abnormally. The folder itself stays; it is removed by `stop-hook.py` on terminal verdict, `/cancel-qg`, or the SessionEnd hook.
-
-#### Output Report
-
-Output a structured report in this exact format. **All skipped agents must be listed with a reason — no silent skips.**
+Call AskUserQuestion (replace `N` with the iteration number, `<summary>`
+with the synthesizer's one-line summary):
 
 ```
-## PR Review Report (Gate 2)
-
-**Iteration:** [N]/[max]
-**Inline Diff Mode:** [true/false] (diff_chars=[N], diff_lines=[N])
-**Agents Dispatched:** [list]
-**Files Changed During Fixes:** [list or "none"]
-
-### Phase 2 Skipped Agents
-- type-design-analyzer: [reason, e.g. "no type/interface/class/struct/enum in changed lines"]
-- pr-test-analyzer: [reason, e.g. "no test files touched"]
-- comment-analyzer: [reason, e.g. "no new comment block >= 3 lines added"]
-- feature-dev:code-architect: [reason, e.g. "no new files, no config files touched"]
-- superpowers:code-reviewer: [reason, e.g. "auto mode, 8 changed lines, no new files, no config touch"]
-(omit entries that were dispatched)
-
-### Dedup Skipped (fix-loop re-dispatch)
-- [agent-name]: dedup — [agent]'s domain untouched by fix
-(or "none")
-
-### Dispatch Failures
-- [agent-name]: dispatch failed: [error]
-(omit section if none)
-
-### Critical Issues
-[list or "none"]
-
-### Important Issues
-[list or "none"]
-
-### Suggestions (non-blocking)
-[list or "none"]
-
-### Code Changes Made
-[list of fixes applied, or "none"]
-
-### Verdict: [PASS / FAIL / NEEDS_RESTART]
-[If PASS: "All critical and important issues resolved."]
-[If FAIL: "N issues remain after max iterations."]
-[If NEEDS_RESTART: "Code was changed during fixes. The pipeline is forward-only — it halts with a user-choice prompt; Gate 1 does not re-run automatically. The user applies the fixes and re-runs /qg."]
+AskUserQuestion({
+  questions: [
+    {
+      question: "Gate 2 iter N: findings remain (<summary>). What next?",
+      header: "Gate 2 iter N",
+      options: [
+        {label: "Retry",              description: "Apply the suggested fixes (I will Edit the files in this turn), then re-run Gate 2 reviewers."},
+        {label: "Proceed to Gate 3",  description: "Accept current findings as-is and continue to runtime verification."},
+        {label: "Stop",               description: "Abort the pipeline at this iteration. Address findings and re-run /qg."}
+      ],
+      multiSelect: false
+    }
+  ]
+})
 ```
 
-**Output Gate 2 result to user:**
-```
-## Gate 2: PR Review (iter [iteration]) — [PASS/FAIL/NEEDS_RESTART]
-[verdict explanation]
-[agents run and key findings]
-```
+Branch on answer:
+- **Retry** → apply user-consented fixes by calling Edit/Write directly
+  with the synthesizer's suggested patches; increment iteration counter;
+  loop back to step 1 of the Gate 2 section. See
+  [Retry: file-write safety](#retry-file-write-safety) for the
+  canonicalization requirement on reviewer-supplied paths, and
+  [Retry: error handling](#retry-error-handling) for the AskUserQuestion
+  surface that fires on Edit failures.
+- **Proceed to Gate 3** → exit the loop, continue to Gate 3 with current
+  findings recorded in History.
+- **Stop** → emit final summary marked aborted at Gate 2.
 
-**Handle verdict:**
-- PASS → emit signal with verdict="PASS"
-- NEEDS_RESTART → emit signal with verdict="NEEDS_RESTART"
-- FAIL → emit signal with verdict="FAIL"
+### Retry: file-write safety
 
-#### Gate 2 Rules
+Before applying any reviewer-supplied `file:` field, canonicalize BOTH the
+project root and the candidate path (symlink-traversal mitigation, I10):
 
-- NEVER reimplement review logic — always delegate to specialized agents (pr-review-toolkit, feature-dev, superpowers)
-- If a plugin is not in `available_plugins`, skip its agents and note the skip in the report
-- NEVER truncate, summarize, or filter the cached diff content when inlining — pass the full unified diff verbatim
-- NEVER silently skip an agent — every skip must appear in the "Phase 2 Skipped Agents" or "Dedup Skipped" section with a reason
-- Fail-open: when any bash check, JSON parse, or intersection test is ambiguous, **dispatch** the agent
-- When fixing issues, make minimal changes — don't refactor or improve beyond what's needed
-- If an agent returns no findings, that domain is clean — don't re-run it
-- `code-simplifier` suggestions NEVER block the pipeline
-- Always track which files you modify — the orchestrator needs this for the signal's `files_changed` attribute
-- If you changed code, your verdict MUST be `NEEDS_RESTART` (not `PASS`) — the Stop hook halts the pipeline with a user-choice prompt so the user can re-run `/qg` after applying fixes. The pipeline does NOT auto-restart; Gate 1 does not re-run automatically
-- Path A (`plan_path_source == "explicit"`) preserves the original `superpowers:code-reviewer` dispatch behavior — do not gate it on diff size
-- Delete `.claude/quality-gates/<session-id>/diff-cache.txt` on every Gate 2 exit path (including errors)
-
-### Gate 3: Runtime Verification
-
-Gate 3 enforces an **evidence-required** verification model: the agent must
-attempt every runnable surface declared in the pre-flight manifest, and any
-SKIP must be backed by attempted-but-failed log entries. The skill mediates a
-**3-way ping-pong** between itself (mother), the human, and the runtime-verifier
-(reviewer): the skill detects infrastructure, asks the user up-front for
-required *decisions* (never secret values), dispatches the agent with a
-deterministic manifest, validates the resulting evidence-log, and re-dispatches
-the agent up to `max_gate3_resolutions` times if the agent emits
-`NEEDS_RESOLUTION`.
-
-#### Step 0: Pre-flight detection
-
-Run the deterministic detector once per Gate 3 invocation:
-
-```bash
-PLAN_PATH="<plan_file>" "${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh"
+```python
+import os
+root = os.path.realpath(project_dir)
+candidate = os.path.realpath(supplied_file)
+if os.path.commonpath([root, candidate]) != root:
+    raise SecurityError(f"Path escapes project_dir: {candidate}")
 ```
 
-Parse the YAML output into a `manifest` dict in your context. **Fail-open**:
-if the detector errors or output is unparseable, proceed with an empty
-manifest (`runnable_surfaces: []`, `plan_features: []`) — the agent will
-then return `SKIP_WITH_EVIDENCE` defensively, which is correct for the
-"no detectable runtime infrastructure" case.
+Display the **full canonicalized file list** in the AskUserQuestion
+`description` field (not just a `<summary>` field) so the user sees every
+path that will be written. Reject and warn on any path resolving outside
+`project_dir`.
 
-#### Step 1: Fast-path SKIP (no agent dispatch)
+### Retry: error handling
 
-If ALL of the following hold:
-
-- `manifest.runnable_surfaces == []`
-- `manifest.test_runners == []`
-- `manifest.plan_features == []`
-
-then there is genuinely nothing to verify. Emit immediately, without
-dispatching the runtime-verifier agent (token-cost = 0):
-
-1. Use Bash to write `<attempted_log_path>` with content:
-   ```markdown
-   # Gate 3 Evidence Log — fast-path skip
-   No runnable surfaces, test runners, or plan features detected.
-   Detector output saved at <session_dir>/manifest.yaml.
-   ```
-2. Output to user:
-   ```
-   ## Gate 3: Runtime Verification — SKIP_WITH_EVIDENCE
-   No runnable surfaces detected (markdown-only / library without tests / etc.).
-   Evidence log: <path>
-   ```
-3. Emit signal:
-   ```xml
-   <qg-signal gate="3" verdict="SKIP_WITH_EVIDENCE" summary="no runnable surfaces detected" files_changed="" />
-   ```
-
-Do NOT proceed to Step 2 in this case.
-
-#### Step 2: Upfront resolution (AskUserQuestion, decisions only)
-
-Build a list of `requires_decision` items from the manifest:
-
-- Every `runnable_surface` with `requires_decision: true` (currently only
-  `docker-compose`).
-- Every `env_status` entry with `exists: false, has_example: true` — propose
-  to copy `.env.example` to `.env`.
-
-If the list is non-empty, invoke `AskUserQuestion` ONCE with up to 4 questions
-(per the tool's hard cap). For each:
-
-| Manifest item | Question label | Options |
-|---|---|---|
-| `docker-compose: requires_decision` | "Bring up `docker compose`?" | `yes` / `skip-this-surface` |
-| `env_status: has_example, !exists` | "Copy `.env.example` → `.env`?" | `yes` / `manual-set-then-retry` / `skip` |
-
-**Hard rules:**
-- The option labels MUST be decisions (yes/no, retry/skip/abort) or paths.
-  NEVER ask for a secret value (API_KEY, DB_URL, password) as free text.
-- If more than 4 decisions exist, batch the most blocking 3 and let the agent's
-  NEEDS_RESOLUTION loop handle the rest mid-run.
-
-Apply the user's answers via the skill's Bash tool (the agent has
-`Write/Edit` disallowed):
-
-- "Copy `.env.example` → `.env`: yes" → `cp .env.example .env`
-- "Bring up docker compose: yes" → `docker compose up -d` (capture exit code)
-
-Update the manifest in your context with `applied_decisions` so the agent
-knows what was already done. If `docker compose up -d` itself fails (daemon
-down), record this as a pre-emptive resolvable failure: build a synthetic
-`needed` block, jump to Step 5 (NEEDS_RESOLUTION handling) without
-dispatching the agent yet.
-
-When the skill emits a synthetic `<qg-signal verdict="NEEDS_RESOLUTION" needed_hash="..." />` for a skill-pre-emptive failure (rather than from the agent), it MUST compute `needed_hash` using the same algorithm as the agent — `printf '%s\n' "${kinds[@]}" | sort | { command -v sha256sum >/dev/null && sha256sum || shasum -a 256; } | cut -d' ' -f1`. An empty `needed_hash` would silently bypass repeat detection at `stop-hook.py:289` (`current_hash and current_hash == prior_hash` is false when current is empty), allowing infinite identical pre-emptive failures up to `max_gate3_resolutions`.
-
-#### Step 2.5: Test scope validation (informational, non-blocking)
-
-This step is informational. It never blocks Gate 3. The kill switch
-`DEVBREW_DISABLE_GATE3_TEST_VALIDATION=1` (or
-`DEVBREW_SKIP_HOOKS=quality-gates:gate3-test-scope`) skips the step
-entirely.
-
-**2.5a — Kill-switch check:**
-
-```bash
-if [ "${DEVBREW_DISABLE_GATE3_TEST_VALIDATION:-0}" = "1" ] \
-   || [[ ",${DEVBREW_SKIP_HOOKS:-}," == *,quality-gates:gate3-test-scope,* ]]; then
-  echo "validation skipped: kill switch"
-  KILL_SWITCH=1
-else
-  KILL_SWITCH=0
-fi
-```
-
-If `KILL_SWITCH=1`: append `## Test Scope Verdicts\n\nvalidation skipped: kill switch\n\n` to the evidence-log preamble and proceed to Step 3.
-
-**2.5b — Compute candidate test files:**
-
-```bash
-CANDIDATES=$("${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh" 2>/dev/null || true)
-```
-
-If `$CANDIDATES` is empty (whitespace-only or true empty): append `## Test Scope Verdicts\n\nvalidation skipped: no candidate tests\n\n` to the evidence-log preamble and proceed to Step 3.
-
-**2.5c — Dispatch test-scope-validator agent:**
+If `Edit` returns one of `old_string not unique`, `EACCES`, `ENOSPC`, or
+any other failure during Retry application, do NOT silently skip.
+Surface "Retry failed" via AskUserQuestion (abort retry or skip this file, never silent):
 
 ```
-Agent(
-  subagent_type="quality-gates:test-scope-validator",
-  model="sonnet",
-  prompt="""Validate the scope alignment of candidate test files for Gate 3.
-
-  plan_path: <plan_path>
-  project_dir: <current working directory>
-
-  gate1_summary:
-  <verbatim YAML from Gate 1, including matched_items>
-
-  ## Current Diff
-  ```diff
-  <filtered diff verbatim, ≤50KB>
-  ```
-
-  candidate_test_files:
-  <newline-separated paths from $CANDIDATES>
-  """
-)
+AskUserQuestion({
+  questions: [
+    {
+      question: "Retry failed at <file>: <reason>. Abort the retry iteration, or skip this file and continue with the remaining patches?",
+      header: "Retry",
+      options: [
+        {label: "Abort retry",     description: "Abort this Retry iteration entirely; surface as failure to the Gate 2 verdict."},
+        {label: "Skip this file",  description: "Skip THIS file's fix only; continue applying remaining Retry patches in this iteration."}
+      ],
+      multiSelect: false
+    }
+  ]
+})
 ```
 
-**2.5d — Parse + validate output:**
+No silent retry-skip — every Edit failure surfaces a user choice. Labels
+are explicit: "Abort retry" terminates the iteration; "Skip this file"
+continues with remaining patches.
 
-Read the last YAML fenced block from the agent's reply. Validate:
-- Has `test_scope_verdicts:` key with a list
-- Has `summary:` key with a string
-- Each verdict's `classification` is one of: `aligned`, `outdated-suspicion`, `cherry-pick-suspicion`, `unclear`
-- No evidence/summary value contains `%`, `/<digit>+/<digit>+`, or standalone scoring tokens (use regex `[0-9]+%|[0-9]+/[0-9]+` — reject)
+## Reviewer dispatch contract
 
-**Fail-open**: if parsing fails, schema violates, or agent dispatches errors (timeout, plugin missing, etc.): append `## Test Scope Verdicts\n\nvalidation skipped: <reason>\n\n` to the evidence-log preamble. Proceed to Step 3 without aborting Gate 3.
+The following four reviewer subagents declare `project_dir` as a REQUIRED
+dispatch parameter and forbid `pwd`/`git rev-parse` recomputation inside
+the persona. Any dispatch of these agents MUST thread the preflight-frozen
+`$project_dir` value via the `project_dir:` field of the prompt:
 
-**2.5e — Render + carry forward:**
+- `quality-gates:adversarial`
+- `quality-gates:test-scope-validator`
+- `quality-gates:security-reviewer`
+- `quality-gates:runtime-verifier`
 
-Print to user:
+The contract is verified by:
+- runtime: agent personas reject prompts missing `project_dir:` (see
+  `plugins/quality-gates/agents/*.md` frontmatter)
+- static: `tests/harness/test_skill_orchestration_behavior.sh` asserts
+  every `subagent_type: "<agent>"` block in this SKILL has a
+  `project_dir:` line within 10 lines (AC1, AC6 protocol-shape)
 
-```
-## Gate 3 — Test Scope Check
-- <file>: <classification>[ — <evidence>]   (one line per verdict)
+## Gate 2 max-iter decision
 
-Summary: <agent.summary>. Proceeding to runtime execution; review flagged tests after Gate 3.
-```
-
-Use ⚠️ prefix for `outdated-suspicion` and ⚠️⚠️ for `cherry-pick-suspicion`. No prefix for `aligned` (omit evidence to keep output tight). `unclear` uses ⚠️.
-
-Prepend to the evidence-log file at `manifest.attempted_log_path` via Bash heredoc (before runtime-verifier writes its part):
-
-```bash
-TMP_LOG=$(mktemp)
-cat > "$TMP_LOG" <<EOF
-## Test Scope Verdicts
-
-<rendered verdict lines, same as user-facing output minus the ⚠️ marks>
-
-Summary: <agent.summary>
-
-EOF
-# If the evidence-log already has content (re-entry), prepend; otherwise just write.
-if [ -s "$ATTEMPTED_LOG_PATH" ]; then
-  cat "$ATTEMPTED_LOG_PATH" >> "$TMP_LOG"
-fi
-mv "$TMP_LOG" "$ATTEMPTED_LOG_PATH"
-```
-
-Then proceed to Step 3 (dispatch runtime-verifier) regardless of verdicts.
-
-**Gate 3 verdict impact:** none. The runtime-verifier's verdict (PASS/FAIL/SKIP_WITH_EVIDENCE/NEEDS_RESOLUTION) is the sole driver of Gate 3 outcome. Step 2.5 only enriches the evidence-log and surfaces information to the user.
-
-#### Step 3: Dispatch the runtime-verifier agent
-
-Build the dispatch prompt:
+After iteration 5 still has findings, do NOT silently halt. Call:
 
 ```
-Agent(
-  subagent_type="quality-gates:runtime-verifier",
-  prompt="""Verify application runtime behavior using the manifest below.
-
-  project_dir: <cwd>
-  plan_path: <plan_path>
-  iteration: <gate3_resolution_iter>
-  previous_evidence_log_path: <path or 'none'>
-
-  ## Manifest (verbatim from detect-runtime.sh)
-  <YAML manifest>
-
-  ## Applied decisions (from upfront AskUserQuestion)
-  <YAML list of {decision, action, outcome}>
-  """
-)
+AskUserQuestion({
+  questions: [
+    {
+      question: "Gate 2 reached max 5 iterations. Last findings: <summary>. Proceed to Gate 3 or stop?",
+      header: "Gate 2 max-iter",
+      options: [
+        {label: "Proceed to Gate 3", description: "Accept residual findings and continue."},
+        {label: "Stop",              description: "Abort the pipeline. Address findings and re-run /qg."}
+      ],
+      multiSelect: false
+    }
+  ]
+})
 ```
 
-Wait for the agent's structured response. Parse:
+Branch on answer accordingly. (P18 unbounded-autonomy is satisfied by
+this user-consent termination.)
 
-- `Verdict:` line (`PASS` / `FAIL` / `SKIP_WITH_EVIDENCE` / `NEEDS_RESOLUTION`)
-- `Evidence Log:` path
-- For `NEEDS_RESOLUTION`: the `needed:` YAML block + `needed_hash:` line
+## Gate 3: Runtime Verification
 
-#### Step 4: Validate evidence-log (PASS / FAIL / SKIP_WITH_EVIDENCE)
+If `skip_runtime` was set in arguments, skip this entire section.
 
-For PASS or SKIP_WITH_EVIDENCE verdicts, validate the evidence-log:
-
-1. Read the file at `manifest.attempted_log_path`.
-2. Build the expected set. For each `runnable_surface` in the manifest, compute its **identifier** by kind:
-
-   | kind | identifier (used for matching evidence-log entries) |
-   |---|---|
-   | `docker-compose` | `kind: docker-compose` (single entry per manifest) |
-   | `npm-script` | `kind: npm-script | name: <name>` (one identifier per script: dev/start/serve/test) |
-   | `pytest` | `kind: pytest` |
-   | `cargo-test` / `cargo-run` | `kind: cargo-test` / `kind: cargo-run` |
-   | `go-test` / `go-run` | `kind: go-test` / `kind: go-run` |
-   | `makefile` | `kind: makefile | target: <target>` |
-
-   Add one identifier per `plan_feature` (`kind: plan-feature | feature: <route_or_label>`).
-
-   If `manifest.mcp_browser != none`, add a synthetic identifier `kind: chrome-devtools-mcp` (or `kind: playwright-mcp`).
-3. For each expected item, grep for a matching `- kind: ...` block in the
-   evidence-log.
-4. If any expected item is missing, **reject the verdict**:
-   - Output to user: "Evidence-log incomplete: M out of N items unattempted: [list]"
-   - Emit `<qg-signal gate="3" verdict="FAIL" summary="incomplete evidence: <count> unattempted" files_changed="" />`
-5. If all items present, accept the verdict and emit accordingly:
-   - PASS → `<qg-signal gate="3" verdict="PASS" summary="all surfaces verified" files_changed="" />`
-   - SKIP_WITH_EVIDENCE → `<qg-signal gate="3" verdict="SKIP_WITH_EVIDENCE" summary="<short>" files_changed="" />`
-
-#### Step 5: NEEDS_RESOLUTION handling (mid-run escalation)
-
-If verdict is `NEEDS_RESOLUTION`:
-
-1. Parse the `needed:` block.
-2. Use the agent's emitted `needed_hash` verbatim. If the agent failed to
-   emit one, treat that as a contract violation and emit
-   `<qg-signal gate="3" verdict="FAIL" summary="agent contract violation: no needed_hash in NEEDS_RESOLUTION report" files_changed="" />`
-   instead — do not synthesize a hash, since algorithm divergence between
-   skill and agent would silently break convergence detection.
-3. Emit signal:
-   ```xml
-   <qg-signal gate="3" verdict="NEEDS_RESOLUTION" needed_hash="<hash>"
-              summary="<one-line>" files_changed="" />
-   ```
-4. The Stop hook converts this into a `gate3_needs_resolution` continuation
-   prompt — that prompt directs you (next turn) to invoke `AskUserQuestion`
-   with the agent's `needed` items rendered as **retry / skip-surface / abort**
-   options (NEVER as free-text inputs).
-5. On retry continuation: re-dispatch the agent using the now-incremented
-   `gate3_resolution_iter` value from state (the Stop hook auto-increments
-   before the skill is re-invoked) and the previous evidence-log path so
-   the agent can resume from where it left off.
-
-#### Step 6: FAIL handling
-
-If verdict is `FAIL` (or `NEEDS_RESTART`), emit:
-
-```xml
-<qg-signal gate="3" verdict="FAIL" summary="<one-line>" files_changed="<list or empty>" />
-```
-
-The Stop hook routes to `gate3_fail` (existing behavior).
-
-#### Output to user (always)
-
-After every Gate 3 turn, output to the user:
+1. Dispatch `quality-gates:test-scope-validator` to classify scope-relevant
+   test files (aligned / outdated-suspicion / cherry-pick-suspicion / unclear).
+   Per [Reviewer dispatch contract](#reviewer-dispatch-contract), `project_dir`
+   is required:
 
 ```
-## Gate 3: Runtime Verification — [VERDICT]
-**Manifest:** [N runnable surfaces, M plan features, mcp=<browser>]
-**Evidence:** [path]
-**Verdict explanation:** [from agent's report or fast-path text]
+Agent({
+  subagent_type: "quality-gates:test-scope-validator",
+  description: "Classify scope-relevant test files (Gate 3)",
+  prompt: "Validate test scope against current diff and plan items.
+    project_dir: \"$project_dir\"
+    plan_path: <path or 'auto'>
+    candidate_test_files: <list from scope-detection step>"
+})
 ```
 
-#### Gate 3 rules
+2. Run `${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh` to discover
+   runnable surfaces (docker-compose, npm:dev, MCP servers, etc.).
+3. Dispatch `quality-gates:runtime-verifier` with the runtime manifest.
+   `project_dir` is required:
 
-- The detector is read-only — never invoke it with arguments that could
-  cause file creation. The detector script already enforces this.
-- The agent has `Write`/`Edit` disallowed. If the verdict report from the
-  agent claims to have edited a file, treat that as a contract violation
-  and emit FAIL with a note.
-- Skill-side file ops (`cp`, `docker compose up`) MUST happen via Bash with
-  the user's prior consent recorded as an applied_decision.
-- NEVER ask the user for a secret value. The only valid resolutions for a
-  missing secret are: (a) user sets it on disk and retries, (b) skip the
-  affected surface, (c) abort.
-- If `DEVBREW_GATE3_MAX_RESOLUTIONS=0`, the Stop hook will escalate the
-  first NEEDS_RESOLUTION directly to `gate3_fail` — proceed with FAIL
-  handling (Step 6) when the continuation prompt arrives.
-- `iteration` parameter increments only on explicit gate3_needs_resolution
-  continuations; the Stop hook manages this via update_state_file. Do not
-  manually maintain the counter.
+```
+Agent({
+  subagent_type: "quality-gates:runtime-verifier",
+  description: "Runtime verification (Gate 3)",
+  prompt: "Attempt each declared runnable surface and write an evidence-log.
+    project_dir: \"$project_dir\"
+    manifest: <output of detect-runtime.sh>
+    resolution_iter: <N (1..DEVBREW_GATE3_MAX_RESOLUTIONS)>"
+})
+```
 
-## Special Prompts from Stop Hook
+4. Subagent verdict: clean, failure, `SKIP_WITH_EVIDENCE`, or
+   `NEEDS_RESOLUTION`.
 
-The Stop hook may inject special prompts that start with keywords.
-Handle them as follows:
+Outcome routing:
 
-### GATE2_NEEDS_RESTART (forward-only, replaces former MAX_TOTAL_ITERATIONS path)
+- **Clean verdict** → print `## Gate 3: Runtime Verification — clean` and continue
+  to final summary.
+- **Failure verdict** → print full Gate 3 verdict block, then emit final
+  summary marked Gate 3 failure. Do NOT auto-restart.
+- **SKIP_WITH_EVIDENCE** → print verdict block with evidence; continue to
+  final summary.
+- **NEEDS_RESOLUTION** → invoke
+  [Gate 3 NEEDS_RESOLUTION decision](#gate-3-needs_resolution-decision).
 
-Gate 2 emitted `NEEDS_RESTART` (code-level changes required). Present:
-1. **Proceed** — accept current findings as-is and continue to Gate 3
-2. **Abort** — stop pipeline; user will apply changes and re-run `/qg`
+---
 
-Based on choice:
-- Proceed: `<qg-signal gate="2" verdict="PASS_WITH_WARNINGS" summary="User accepted findings" files_changed="" />`
-- Abort: `<qg-signal action="abort" reason="User chose to abort" />`
+The NEEDS_RESOLUTION branch is the only Gate 3 outcome that surfaces a
+user question. Clean and failure outcomes route directly to the final
+summary; SKIP_WITH_EVIDENCE prints evidence and continues. The decision
+template below is bounded by `DEVBREW_GATE3_MAX_RESOLUTIONS` so a
+mis-configured environment cannot loop indefinitely.
 
-### GATE2_REPEAT_DETECTED
+Per spec AC8 and the secret-policy rule (P21 reaffirmation), the prompt
+body asks the user to place secrets on disk first and then respond yes/no.
+Never request a secret value as a literal string in the prompt.
 
-Gate 2 within-loop is not converging (same dispatch plan + synthesizer
-output for two iterations in a row). Present:
-1. **Proceed** — accept findings as-is
-2. **Abort** — stop pipeline
+## Gate 3 NEEDS_RESOLUTION decision
 
-Based on choice:
-- Proceed: `<qg-signal gate="2" verdict="PASS_WITH_WARNINGS" summary="Repeat detected; user accepted" files_changed="" />`
-- Abort: `<qg-signal action="abort" reason="User chose to abort" />`
+> **Spec anchor (AC8):** the literal phrase `Runtime verifier needs` MUST
+> appear in the prompt — V2b grep checks this. **P21 reaffirmation MUST
+> also appear in the prompt body** (literal token `P21`) — the prompt
+> never asks for secret values, only paths or yes/no.
 
-### GATE2_MAX_EXCEEDED
+Loop up to `DEVBREW_GATE3_MAX_RESOLUTIONS` times (default 3, env override
+clamped 0..10):
 
-Gate 2 exceeded maximum review iterations. Report remaining issues and present:
-1. **Proceed to Gate 3** anyway
-2. **Abort** pipeline
+```
+AskUserQuestion({
+  questions: [
+    {
+      question: "Runtime verifier needs: <missing resource description>. (P21: never paste secrets into this prompt — add them to .env / config on disk first, then choose Yes, retry.)",
+      header: "Gate 3 resolve",
+      options: [
+        {label: "Yes, retry",         description: "I've added the missing resource on disk. Re-run Gate 3."},
+        {label: "Skip with evidence", description: "Mark Gate 3 SKIP_WITH_EVIDENCE with reason."},
+        {label: "Stop",               description: "Abort the pipeline at Gate 3."}
+      ],
+      multiSelect: false
+    }
+  ]
+})
+```
 
-Based on choice:
-- Proceed: `<qg-signal gate="2" verdict="PASS_WITH_WARNINGS" summary="Proceeding with remaining issues" files_changed="" />`
-- Abort: `<qg-signal action="abort" reason="User chose to abort" />`
-
-### GATE3_FAIL
-
-Gate 3 failed. The pipeline is forward-only and does not auto-restart; Gate 1 does not re-run automatically. The user applies fixes and re-runs `/qg`. Present:
-1. **Fix and re-run /qg** — apply fixes; pipeline terminates so the user can re-run /qg manually
-2. **Skip** runtime verification
-3. **Abort** pipeline
-
-Based on choice:
-- Fix: inform the user to apply fixes and re-run /qg, then `<qg-signal action="abort" reason="User will re-run /qg after fixes" />`
-- Skip: `<qg-signal gate="3" verdict="SKIP" summary="User chose to skip" files_changed="" />`
-- Abort: `<qg-signal action="abort" reason="User chose to abort" />`
-
-### GATE3_NEEDS_RESOLUTION
-
-Gate 3 reviewer reported a resolvable missing resource. Read the previous
-turn's `needed:` YAML block and present user options via AskUserQuestion.
-
-For each `needed[i]`:
-- Question: `needed[i].description`
-- Options: `retry` / `skip-this-surface` / `abort` — decisions only; never ask for secret values from the user.
-
-Based on user choice:
-- All retries → re-dispatch runtime-verifier per Step 5 above. Then emit a
-  fresh `<qg-signal gate="3" verdict="..." />` based on the new agent verdict.
-- Any skip-this-surface → record in evidence-log, mark surface as
-  user-skipped, emit
-  `<qg-signal gate="3" verdict="SKIP_WITH_EVIDENCE" summary="user opted to skip <surface>" files_changed="" />`
-- Any abort →
-  `<qg-signal action="abort" reason="User aborted during gate3_needs_resolution" />`
-
-### GATE3_REPEAT_DETECTED
-
-Same `needed_hash` appeared twice — the resolution loop is not converging.
-Present the user with proceed-with-warnings vs abort:
-
-- Proceed → `<qg-signal gate="3" verdict="PASS_WITH_WARNINGS" summary="repeat detected; user accepted" files_changed="" />`
-- Abort → `<qg-signal action="abort" reason="User aborted on repeat detection" />`
+Branch:
+- **Yes, retry** → increment resolution counter; if exceeds env limit,
+  fall through to Skip with evidence. Otherwise re-dispatch runtime-verifier.
+- **Skip with evidence** → record SKIP_WITH_EVIDENCE and continue to summary.
+- **Stop** → final summary aborted at Gate 3.
 
 ## Final Summary
 
-When the Stop hook signals this is the last gate (no more gates after this),
-output the final pipeline summary:
+Print:
 
-```
-## Quality Gates Pipeline — Complete
+```markdown
+## Quality Gates Pipeline — Complete (v1.32.0)
 
-### Gate Results
-| Gate | Status | Details |
-|------|--------|---------|
-| 1. Plan Verification | [status] | [details] |
-| 2. PR Review | [status] | [details] |
-| 3. Runtime Verification | [status] | [details] |
+- **Gate 1**: <clean|failed-continued|SKIP>
+- **Gate 2**: <clean iter N | proceeded-with-findings iter N | aborted iter N | skipped>
+- **Gate 3**: <clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>
 
-### Summary of Changes Made
-- [file]: [what was changed] (Gate N)
-
-PR is ready for merge.
+**History:**
+<copy the appended ## History lines from the state file>
 ```
 
-## Signal Tag Rules
-
-After each gate completes, you **MUST** output a signal tag. This is how the Stop
-hook knows what happened and what to do next.
-
-**Gate completion signals:**
-```xml
-<qg-signal gate="N" verdict="VERDICT" summary="one-line summary" files_changed="comma,separated,list" />
-```
-
-Verdict values:
-- `PASS` — Gate succeeded, no issues
-- `FAIL` — Gate failed, issues remain
-- `SKIP` — Gate skipped (no plan file, non-web project, etc.)
-- `NEEDS_RESTART` — Code was changed during fixes. Pipeline halts with a Stop-hook user-choice prompt; the user applies fixes and re-runs `/qg`. The pipeline does **not** auto-restart (forward-only state machine, v1.5.0+; Gate 1 does not re-run automatically).
-- `PASS_WITH_WARNINGS` — Gate passed with non-blocking warnings
-- `RETRY` — Gate needs to re-run (Gate 1 implemented missing items)
-
-For Gate 2, include the `iteration` attribute:
-```xml
-<qg-signal gate="2" verdict="PASS" iteration="3" summary="All issues resolved" files_changed="" />
-```
-
-**Pipeline control signals:**
-```xml
-<qg-signal action="complete" />
-<qg-signal action="abort" reason="description" />
-```
+State file cleanup is deferred to /cancel-qg or SessionEnd cleanup hook.
 
 ## Rules
 
-- NEVER directly read or write the contents of `.claude/quality-gates/<session-id>/pipeline.md`. All state creation, validation, and stale-state cleanup is delegated to `setup-qg.sh`; mutation is the Stop hook's job. The skill may probe existence with `test -f` (Preflight only) and invoke `setup-qg.sh --ensure` via Bash. No other interaction is permitted. Sibling session folders under `.claude/quality-gates/` belong to other Claude Code sessions and must not be inspected or modified.
-- ALWAYS emit exactly one `<qg-signal>` tag at the end of your response
-- Output each gate's result to the user immediately
-- If an agent dispatch fails (error), report the error and emit signal with verdict="FAIL"
-- The `files_changed` attribute must list every file modified during this gate (comma-separated), or empty string if none
-- The `summary` attribute should be a concise one-line description of the gate result
+**R1 (Law 2 — physical):** never call Edit/Write on agent persona files
+(`plugins/quality-gates/agents/*.md`) in this turn. The orchestrator may
+edit working-tree files for user-consented Gate 2 fixes only.
+
+**R2 (state file write invariant):** never write `pipeline.md` frontmatter.
+You MAY append a single line to the `## History` section per gate verdict;
+do not modify any other content. Frontmatter is owned by setup-qg.sh.
+
+**R3 (no fake user messages):** v1.32.0 has no Stop hook continuation, no
+emission tag, and no continuation sentinel. Do NOT emit any such marker.
+
+**R4 (P21 secret policy):** the decision-tool prompts never request a
+secret value as a string. For Gate 3 missing-credential resolution, ask
+the user to place secrets on disk (`.env`, config file) and respond yes/no.
+
+**R5 (single dispatch per turn):** the entire pipeline runs in one turn.
+Do not call setup-qg.sh more than once. Do not call check-trivia.sh more
+than once. Do not re-dispatch the same Gate 2 reviewer for the same
+iteration.

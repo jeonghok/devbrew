@@ -5,7 +5,6 @@
 # - Stdout: structured `key: value` lines consumed by SKILL.md.
 #
 # Result keys emitted on stdout (always one of):
-#   active_resume      - mid-pipeline state detected; preserve session data, resume
 #   cleared_branch_mismatch - HEAD branch changed since last run; both state files deleted
 #   cleared_stale      - session file older than $STALE_HOURS; deleted
 #   fresh_start        - no prior branch marker; first run on this branch
@@ -20,7 +19,20 @@ set -euo pipefail
 SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
 if [[ -z "$SESSION_ID" ]]; then
   echo "result: no_session_id"
-  exit 0
+  # exit 1 (was 0 pre-v1.32.2): empty SID is a hard precondition violation,
+  # not a graceful-degrade case. setup-qg.sh exits 1 for the same condition;
+  # this brings symmetry. SKILL preflight P3 must treat any non-zero exit
+  # as abort.
+  exit 1
+fi
+# SID pattern guard (matches setup-qg.sh / cancel-qg-core.sh). A malformed
+# SID would expand `.claude/quality-gates/$SESSION_ID` to a path-escape
+# (e.g. `..`), and subsequent rm/mkdir calls would silently operate on
+# unrelated paths.
+if ! [[ "$SESSION_ID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
+  echo "pre-pipeline-check: session ID '$SESSION_ID' fails pattern guard ([A-Za-z0-9_-]{8,})" >&2
+  echo "result: invalid_session_id"
+  exit 1
 fi
 STATE_DIR=".claude/quality-gates/$SESSION_ID"
 STATE_FILE="$STATE_DIR/pipeline.md"
@@ -35,21 +47,20 @@ if [[ -f "$BRANCH_FILE" ]]; then
   last_branch="$(awk -F'"' '/^branch:/ {print $2; exit}' "$BRANCH_FILE" 2>/dev/null || echo "")"
 fi
 
-# 1. Active state? Preserve everything and return early (no branch update).
-if [[ -f "$STATE_FILE" ]]; then
-  status="$(awk '/^status:/ {sub(/^status:[[:space:]]*/, ""); gsub(/"/, ""); print; exit}' "$STATE_FILE" 2>/dev/null || echo "")"
-  case "$status" in
-    gate1_running|gate2_running|gate3_running)
-      echo "result: active_resume"
-      echo "branch: $current_branch"
-      exit 0
-      ;;
-  esac
-fi
-
-# 2. Branch mismatch? Wipe both state files.
+# 2. Branch mismatch? Wipe stale state, but NEVER delete a pipeline.md
+# owned by the live (same-session) pipeline (C2 race fix). setup-qg.sh
+# may have just created STATE_FILE; this script must not race-delete it.
 if [[ -n "$last_branch" && "$last_branch" != "$current_branch" ]]; then
-  rm -f "$SESSION_FILE" "$STATE_FILE"
+  pipeline_session=""
+  if [[ -f "$STATE_FILE" ]]; then
+    pipeline_session=$(awk -F'"' '/^session_id:/ { print $2; exit }' "$STATE_FILE" 2>/dev/null | tr -d '[:space:]')
+  fi
+  if [[ -n "$pipeline_session" && "$pipeline_session" == "$SESSION_ID" ]]; then
+    echo "pre-pipeline-check: preserving session-owned state file ($STATE_FILE)" >&2
+    rm -f "$SESSION_FILE"
+  else
+    rm -f "$SESSION_FILE" "$STATE_FILE"
+  fi
   echo "result: cleared_branch_mismatch"
   echo "previous_branch: $last_branch"
   echo "branch: $current_branch"

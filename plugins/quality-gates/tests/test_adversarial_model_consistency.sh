@@ -54,17 +54,26 @@ assert_not_grep() {
 assert_grep "$AGENT" '^model: opus$' "adversarial.md frontmatter is model: opus"
 assert_not_grep "$AGENT" '^model: sonnet$' "adversarial.md frontmatter is not sonnet"
 
-# 2. SKILL dispatch must rely on frontmatter (no model= override in the block).
-adv_block="$(grep -A3 'subagent_type="quality-gates:adversarial"' "$SKILL" 2>/dev/null || true)"
-if [ -z "$adv_block" ]; then
-  # Empty block = dispatch removed/renamed = the check cannot verify its invariant.
-  # Treat as FAIL, not PASS — a vacuous pass here would defeat the guard's purpose
-  # (Gate 2 adversarial caught this false-PASS blind spot).
-  FAIL=$((FAIL + 1)); echo "  ✗ FAIL: SKILL has no adversarial dispatch block (pattern not found in ${SKILL##*/})"
-elif printf '%s' "$adv_block" | grep -q 'model='; then
-  FAIL=$((FAIL + 1)); echo "  ✗ FAIL: SKILL adversarial dispatch pins a model override (must rely on frontmatter)"
+# 2. SKILL dispatch must rely on frontmatter (no model= override pinned anywhere
+#    near the adversarial reference). v1.32.0 SKILL groups Gate 2 reviewers as
+#    a bullet list of subagent_type identifiers (`- quality-gates:adversarial`)
+#    rather than per-reviewer Agent() dispatch blocks, so the drift guard
+#    asserts on the line + a windowed model= scan around it.
+adv_line_no="$(grep -nE '^[[:space:]]*-?[[:space:]]*[`\"]?quality-gates:adversarial[`\"]?' "$SKILL" 2>/dev/null | head -1 | cut -d: -f1)"
+if [ -z "$adv_line_no" ]; then
+  # Missing reference = dispatch removed/renamed = the check cannot verify its
+  # invariant. Treat as FAIL, not PASS — a vacuous pass here would defeat the
+  # guard's purpose (Gate 2 adversarial caught this false-PASS blind spot).
+  FAIL=$((FAIL + 1)); echo "  ✗ FAIL: SKILL has no adversarial reviewer reference (pattern not found in ${SKILL##*/})"
 else
-  PASS=$((PASS + 1)); echo "  PASS: SKILL adversarial dispatch has no model override (relies on frontmatter)"
+  win_start=$((adv_line_no > 5 ? adv_line_no - 5 : 1))
+  win_end=$((adv_line_no + 5))
+  adv_window="$(sed -n "${win_start},${win_end}p" "$SKILL" 2>/dev/null || true)"
+  if printf '%s' "$adv_window" | grep -qE 'model[[:space:]]*=[[:space:]]*["'\'']?(opus|sonnet|haiku)'; then
+    FAIL=$((FAIL + 1)); echo "  ✗ FAIL: SKILL adversarial reference has a model override nearby (must rely on frontmatter)"
+  else
+    PASS=$((PASS + 1)); echo "  PASS: SKILL adversarial reference has no nearby model override (relies on frontmatter)"
+  fi
 fi
 
 # 3. README must describe adversarial as opus, consistently in both the model

@@ -1,80 +1,80 @@
-# State File Format
+# State File Format (v1.32.1)
 
-The state file `.claude/quality-gates/<session-id>/pipeline.md` (per-session,
-v1.6.0+) is managed entirely by the setup script (`scripts/setup-qg.sh`) and
-the Stop hook (`hooks/stop-hook.py`). **The SKILL.md must NOT read or write
-this file.**
+> v1.32.0 breaking change: cross-turn pipeline state는 SKILL의 단일 턴
+> 시리얼 디스패치로 흡수됨. 본 state file은 **GC mtime anchor + worktree
+> tracking + Gate 3 resolution-cap reporting**만 보존한다.
+>
+> v1.32.1 (review-driven): `gate2_iteration: 0` phantom 필드 제거(I11),
+> `gate3_max_resolutions:` 필드 추가(C3).
+
+The state file `.claude/quality-gates/<session-id>/pipeline.md` (per-session)
+is created by the setup script (`scripts/setup-qg.sh`) on `/qg` invocation
+and deleted by `/cancel-qg`, `/qg --reset`, or the TTL GC
+(`scripts/qg-gc.py`, default 24h).
 
 `<session-id>` resolves from `$CLAUDE_CODE_SESSION_ID`; siblings under
-`.claude/quality-gates/` belong to other concurrent Claude Code sessions and
-must not be touched. Companion files in the same folder (`files.md` for
-session-scope tracking, `branch.md` for branch-mismatch detection,
-`diff-cache.txt` / `code-paths.tmp` for transient Gate 2 caches) follow the
-same per-session lifecycle.
+`.claude/quality-gates/` belong to other concurrent Claude Code sessions
+and must not be touched.
 
-The legacy v1.5.0 layout (flat `.claude/quality-gates.local.md`,
-`quality-gates-session.local.md`, `quality-gates-branch.local.md`) is
-unlinked on first `/qg` post-upgrade and never re-created.
+**SKILL.md must NOT write this file.** SKILL.md MAY read `worktree_path`
+during preflight to confirm working directory; nothing else.
 
 ## Schema
 
 ```yaml
 ---
-status: gate1_running          # gate1_running | gate2_running | gate3_running | completed | aborted
-current_gate: 1                # 1 | 2 | 3
-gate2_iteration: 0             # Review-fix cycle count within Gate 2
-max_gate2_iterations: 5        # Limit for Gate 2 review-fix cycles
-gate3_resolution_iter: 0       # NEEDS_RESOLUTION mid-run iteration count within Gate 3 (v1.8.0)
-max_gate3_resolutions: 3       # Limit for Gate 3 NEEDS_RESOLUTION cycles (v1.8.0; 0..10 clamp; env override DEVBREW_GATE3_MAX_RESOLUTIONS)
-last_gate3_needed_hash: ""     # sha256(sorted needed.kind) from prior NEEDS_RESOLUTION; powers repeat detection (v1.8.0)
-skip_runtime: false            # Whether to skip Gate 3
-single_gate: null              # null | gate1 | gate2 | gate3
-plan_file: "auto"              # Plan file path or "auto"
-pr_url: ""                     # PR URL or empty
-available_plugins: "pr-review-toolkit,feature-dev,superpowers"
-session_id: "<session_id>"     # For session isolation
-started_at: "<ISO timestamp>"  # Pipeline start time
+session_id: "<session_id>"           # CLAUDE_CODE_SESSION_ID
+started_at: "<ISO-8601 UTC>"         # setup-qg.sh timestamp
+gate3_max_resolutions: 3             # DEVBREW_GATE3_MAX_RESOLUTIONS clamped 0..10
+worktree_path: "<absolute path>"     # OPTIONAL — set only when /qg branch <name> used
+target_branch: "<branch name>"       # OPTIONAL — paired with worktree_path
 ---
 
-# Quality Gates Pipeline State
+# Quality Gates Pipeline State (v1.32.1)
 
-## Gate Results
+## History
 
-### Gate 1
-**Verdict:** PASS
-**Summary:** 24/24 items implemented (100%)
+(SKILL appends one line per gate verdict for in-turn observability.)
 
-### Gate 2 Iteration 1
-**Verdict:** FAIL
-**Summary:** 3 critical issues found, 2 fixed
-**Files Changed:** src/auth.ts, src/utils.ts
-
-### Gate 2 Iteration 2
-**Verdict:** NEEDS_RESTART
-**Summary:** All issues resolved, code changed
-**Files Changed:** src/auth.ts
-
-## Pipeline History
-- [2026-04-12T10:00:00Z] Pipeline started
-- [2026-04-12T10:02:00Z] Gate 1: PASS
-- [2026-04-12T10:05:00Z] Gate 2 iter 1: FAIL
-- [2026-04-12T10:08:00Z] Gate 2 iter 2: NEEDS_RESTART → user-choice (terminate; user re-runs /qg)
+- [2026-05-27T10:00:00Z] Pipeline started
+- [2026-05-27T10:02:00Z] Gate 1: PASS
+- [2026-05-27T10:05:00Z] Gate 2 iter 1: FAIL → user chose Retry
+- [2026-05-27T10:08:00Z] Gate 2 iter 2: PASS
+- [2026-05-27T10:12:00Z] Gate 3: PASS
+- [2026-05-27T10:12:01Z] Pipeline complete
 ```
+
+## Removed Fields (vs v1.x)
+
+The following v1.x fields are **no longer written or read**:
+
+| Removed | Reason |
+|---|---|
+| `status` | No cross-turn state machine. Pipeline is single-turn. |
+| `current_gate` | SKILL dispatches Gate 1 → 2 → 3 inline. |
+| `consecutive_no_signal` | `<qg-signal>` tag removed. |
+| `max_gate2_iterations` | Hard-coded constant in SKILL (5). |
+| `gate3_resolution_iter` | Hard-coded constant in SKILL (default 3, env override). |
+| `last_gate3_needed_hash` | Repeat detection moves to inline AskUserQuestion. |
+| `max_gate3_resolutions` | Renamed to `gate3_max_resolutions:` (C3 restored in v1.32.1). |
+| `gate2_iteration` | Phantom field — counter lives in `## History` section only (I11 v1.32.1). |
+| `skip_runtime` | Passed as SKILL invocation arg. |
+| `single_gate` | Passed as SKILL invocation arg. |
+| `plan_file` | Passed as SKILL invocation arg. |
+| `pr_url` | Passed as SKILL invocation arg. |
+| `available_plugins` | SKILL re-derives inline (cheap). |
+| `wall_clock_deadline_at` | Wall-clock guard removed (AskUserQuestion = in-loop user consent). |
+| `project_dir` | Derived from `pwd` at SKILL preflight (single-turn invariant). |
+
+Companion files in the same folder (`files.md` for session-scope tracking,
+`branch.md` for branch-mismatch detection) follow the same per-session
+lifecycle and are unchanged from v1.x.
 
 ## Lifecycle
 
 1. **Created by**: `scripts/setup-qg.sh` (on `/qg`) — also `mkdir -p`s the
    per-session folder.
-2. **Updated by**: `hooks/stop-hook.py` (after each gate completes).
-3. **Deleted by**: `hooks/stop-hook.py` (on pipeline complete/abort),
-   `/cancel-qg`, or `hooks/session-end-cleanup.py` on graceful session end.
-   Deletion always rmtrees the entire `.claude/quality-gates/<session-id>/`
-   folder, not just `pipeline.md`. Stale sibling folders (older than
-   `DEVBREW_QG_TTL_HOURS`, default 24h) are GC'd by `scripts/qg-gc.py` on the
-   next `/qg`.
-
-## Purpose
-
-- Track pipeline progress across Stop hook iterations
-- Store gate results for inter-gate context passing
-- Session isolation (prevent cross-session interference)
+2. **Updated by**: SKILL.md may *append* to the `## History` section for
+   observability. Frontmatter is write-once at setup.
+3. **Deleted by**: `/cancel-qg`, `/qg --reset`, `hooks/session-end-cleanup.py`
+   on graceful session end, or `scripts/qg-gc.py` (TTL GC).

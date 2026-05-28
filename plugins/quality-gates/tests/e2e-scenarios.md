@@ -85,7 +85,7 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 ### I — Repeat detection
 **Setup**: contrive a PR where Phase 1 finds the same finding twice (e.g., the auto-fix doesn't actually fix the root cause).
 **Run**: `/qg`
-**Expected**: after iteration 2 with identical scout dispatch hash + synthesizer hash, `<qg-signal verdict="repeat-detected" />` is emitted. Stop hook injects `gate2_repeat_detected` user-choice prompt before reaching `max_gate2_iterations=5`.
+**Expected**: after iteration 2 with identical scout dispatch hash + synthesizer hash, the SKILL surfaces the Gate 2 iter-boundary decision via AskUserQuestion (Retry / Proceed to Gate 3 / Stop) with a repeat-detected note in the prompt, before reaching the hard cap `max_gate2_iterations=5`.
 
 ### J — Branch-mismatch mid-session
 **Run**: edit a file on `feature/qg-cost-reduction`, then `git checkout main`, then `/qg`.
@@ -136,11 +136,12 @@ Agents (model + cost_class):
   runtime-verifier: model=sonnet, cost_class=low
 
 SKILL cost_class: variable
-plugin.json version: 1.5.0
+plugin.json version: 1.32.x
 Hooks registered:
-  Stop: stop-hook.py
   PostToolUse: post-tool-use-session-tracker.py
   SessionStart: session-start-advisor.py
+  (v1.32.0 removes the Stop hook — pipeline progression is now in-turn
+  AskUserQuestion-driven, not turn-by-turn signal-driven.)
 
 Ran 23 tests in 0.NNNs
 OK
@@ -239,7 +240,7 @@ configured.
 - Agent dispatched with manifest. Attempts each surface, captures screenshots
   + a11y snapshots, writes evidence-log.
 - Verdict: PASS.
-- `<qg-signal gate="3" verdict="PASS" .../>` → pipeline complete.
+- SKILL prints `## Gate 3: Runtime Verification — clean` → pipeline complete.
 
 ### Scenario G3-B: Web app, .env missing but .env.example present
 
@@ -287,7 +288,7 @@ no test infra.
   plan_features.
 - Skill: fast-path SKIP_WITH_EVIDENCE. **Sub-agent NOT dispatched.**
 - Evidence log written: "no runnable surfaces detected".
-- `<qg-signal gate="3" verdict="SKIP_WITH_EVIDENCE" .../>`.
+- SKILL prints `## Gate 3 — SKIP_WITH_EVIDENCE` with the evidence-log path.
 - Token cost for Gate 3: detector + minimal skill overhead. No agent tokens.
 
 ### Verification

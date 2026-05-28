@@ -33,7 +33,6 @@ HOOKS = PLUGIN_ROOT / "hooks"
 # Each hook contract: (script, per-hook skip key).
 # The skip key is the suffix used in DEVBREW_SKIP_HOOKS=quality-gates:<key>.
 HOOK_CONTRACTS = [
-    ("stop-hook.py", "stop-hook"),
     ("post-tool-use.py", "post-tool-use"),
     ("post-tool-use-session-tracker.py", "session-tracker"),
     ("session-start-advisor.py", "session-start-advisor"),
@@ -78,7 +77,7 @@ def _payload_for(script: str) -> dict:
 def _setup_state(cwd: str, script: str) -> None:
     """Pre-create state so the hook would normally do work."""
     qg = _qg_dir(cwd)
-    if script in ("stop-hook.py", "session-start-advisor.py"):
+    if script == "session-start-advisor.py":
         qg.mkdir(parents=True, exist_ok=True)
         (qg / "pipeline.md").write_text(PIPELINE_RUNNING)
     elif script == "session-end-cleanup.py":
@@ -115,22 +114,7 @@ def _assert_no_side_effect(test: unittest.TestCase, script: str, cwd: str,
 
     qg = _qg_dir(cwd)
 
-    if script == "stop-hook.py":
-        # State file must be untouched AND no decision/systemMessage emitted.
-        # Without the stdout check, this assertion is satisfied even if
-        # _disabled() were silently broken (a no-signal stop-hook run would
-        # also leave pipeline.md unchanged but WOULD emit decision JSON).
-        contents = (qg / "pipeline.md").read_text()
-        test.assertEqual(
-            contents, PIPELINE_RUNNING,
-            f"{label}: stop-hook mutated pipeline.md despite kill switch",
-        )
-        test.assertEqual(
-            proc.stdout.strip(), "",
-            f"{label}: stop-hook produced stdout despite kill switch: {proc.stdout!r}",
-        )
-
-    elif script == "post-tool-use.py":
+    if script == "post-tool-use.py":
         # Must not emit a systemMessage trigger.
         out = proc.stdout.strip()
         if out:
@@ -237,6 +221,42 @@ class KillSwitchRegressionTest(unittest.TestCase):
             "post-tool-use was accidentally silenced by a key whose prefix matches it",
         )
 
+    def test_skill_setup_qg_honors_disable_kill_switch(self) -> None:
+        """setup-qg.sh must short-circuit when DEVBREW_DISABLE_QUALITY_GATES=1.
+
+        SKILL preflight P1 already checks this upstream, but defense in depth:
+        the script itself must reject invocation so direct callers (tests,
+        scripts, ad-hoc shell) cannot accidentally bypass the kill switch.
+        """
+        script = PLUGIN_ROOT / "scripts" / "setup-qg.sh"
+        env = os.environ.copy()
+        env["DEVBREW_DISABLE_QUALITY_GATES"] = "1"
+        env["CLAUDE_CODE_SESSION_ID"] = "killswitch-skill-test1"
+        result = subprocess.run(
+            ["bash", str(script), "--ensure"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd=self.tmp,
+        )
+        self.assertNotEqual(
+            result.returncode, 0,
+            "DEVBREW_DISABLE_QUALITY_GATES=1 must cause setup-qg to exit non-zero "
+            f"(stdout={result.stdout!r}, stderr={result.stderr!r})",
+        )
+        self.assertRegex(
+            result.stderr,
+            r"DEVBREW_DISABLE_QUALITY_GATES|disabled",
+            "kill-switch error message must reference DEVBREW_DISABLE_QUALITY_GATES or 'disabled'",
+        )
+        # And no state file should have been created.
+        state = Path(self.tmp) / ".claude" / "quality-gates" / "killswitch-skill-test1" / "pipeline.md"
+        self.assertFalse(
+            state.exists(),
+            f"setup-qg should not create state under kill switch; found {state}",
+        )
+
     def test_all_hooks_declare_kill_switch_strings(self) -> None:
         """Every *.py file in hooks/ must mention both kill-switch env var names.
 
@@ -291,23 +311,14 @@ class KillSwitchRegressionTest(unittest.TestCase):
             )
         elif script == "session-start-advisor.py":
             self.assertNotEqual(
-                proc.stdout.strip(), "",
-                "advisor sanity: should produce output for in-flight state",
+                proc.stderr.strip(), "",
+                "advisor sanity: should produce stderr advisory for legacy state "
+                "(v1.32.0 advisor writes to stderr, not stdout)",
             )
         elif script == "session-end-cleanup.py":
             self.assertFalse(
                 qg.exists(),
                 "session-end-cleanup sanity: should remove folder",
-            )
-        elif script == "stop-hook.py":
-            # With pipeline.md present and no transcript signal, stop-hook
-            # flows to its decision-block path and emits JSON to stdout. The
-            # kill-switch path skips this entirely. So stdout content is the
-            # discriminator: present = kill switch off; empty = kill switch on.
-            self.assertIn(
-                "decision", proc.stdout,
-                "stop-hook sanity: should emit decision block when state file present "
-                "and no kill switch is set",
             )
 
 

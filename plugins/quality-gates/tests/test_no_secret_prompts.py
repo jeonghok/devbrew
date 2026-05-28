@@ -1,9 +1,9 @@
 """Regression test for AC12 (P21 Secret 미노출).
 
-Scans SKILL.md and stop-hook.py for AskUserQuestion-like prompts that could
-solicit secret values. The contract: every user-facing option label must be
-a *decision* (yes/no, retry/skip/abort) or *path*, never a free-form input
-for a secret.
+Scans SKILL.md and other persona/agent files for AskUserQuestion-like prompts
+that could solicit secret values. The contract: every user-facing option label
+must be a *decision* (yes/no, retry/skip/abort) or *path*, never a free-form
+input for a secret.
 """
 import re
 import unittest
@@ -14,7 +14,6 @@ ROOT = Path(__file__).resolve().parent.parent
 # Files where AskUserQuestion options are defined or instructed.
 TARGETS = [
     ROOT / "skills/quality-pipeline/SKILL.md",
-    ROOT / "hooks/stop-hook.py",
     ROOT / "agents/runtime-verifier.md",
 ]
 
@@ -64,38 +63,6 @@ class TestNoSecretPrompts(unittest.TestCase):
             r"never ask.*secret|do not ask.*secret)",
             "runtime-verifier.md must explicitly forbid secret-value requests",
         )
-
-    def test_stop_hook_gate3_resolution_prompt_only_offers_decisions(self):
-        """The gate3_needs_resolution prompt must offer retry/skip/abort,
-        not free-form value entry."""
-        # This is a behavioral check via direct call.
-        import importlib.util, sys
-        hook_path = ROOT / "hooks/stop-hook.py"
-        spec = importlib.util.spec_from_file_location("stop_hook", hook_path)
-        stop_hook = importlib.util.module_from_spec(spec)
-        sys.modules["stop_hook"] = stop_hook
-        spec.loader.exec_module(stop_hook)
-
-        state = {
-            "current_gate": 3,
-            "gate2_iteration": 5,
-            "max_gate2_iterations": 5,
-            "gate3_resolution_iter": 1,
-            "max_gate3_resolutions": 3,
-            "skip_runtime": False,
-            "single_gate": None,
-        }
-        prompt = stop_hook.build_special_prompt(
-            "gate3_needs_resolution", state, "context"
-        )
-        # Must offer the 3 standard decisions
-        self.assertIn("retry", prompt.lower())
-        self.assertIn("skip", prompt.lower())
-        self.assertIn("abort", prompt.lower())
-        # Must NOT instruct a free-form secret entry
-        self.assertNotRegex(prompt, r"(?i)\benter (your|the) (api[_-]?key|token|password|secret)")
-        self.assertNotRegex(prompt, r"(?i)\binput (your|the) (api[_-]?key|token|password|secret)")
-
 
 if __name__ == "__main__":
     unittest.main()

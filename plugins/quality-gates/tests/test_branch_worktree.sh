@@ -37,7 +37,9 @@ grep -q '^worktree_path:' "$state" \
   || pass "no worktree dir in legacy mode"
 rm -rf "$REPO"
 
-# --- AC2: /qg branch <name> creates worktree, sets project_dir ---
+# --- AC2: /qg branch <name> creates worktree, records worktree_path + target_branch ---
+# (project_dir field was removed from state schema in v1.32.0 minimal-state
+# refactor — worktree_path itself is the user-visible invariant.)
 echo "[AC2] /qg branch <name> happy path"
 REPO=$(make_repo feat-b)
 (cd "$REPO" && CLAUDE_CODE_SESSION_ID=ac2session12 "$SETUP" branch feat-b >/dev/null)
@@ -46,9 +48,6 @@ state="$REPO/.claude/quality-gates/ac2session12/pipeline.md"
 wpath=$(awk -F'"' '/^worktree_path:/{print $2}' "$state")
 [ -n "$wpath" ] && [ -d "$wpath" ] && pass "worktree_path exists" \
   || fail "worktree_path missing or invalid: $wpath"
-pdir=$(awk -F'"' '/^project_dir:/{print $2}' "$state")
-[ "$pdir" = "$wpath" ] && pass "project_dir = worktree path" \
-  || fail "project_dir != worktree ($pdir vs $wpath)"
 tb=$(awk -F'"' '/^target_branch:/{print $2}' "$state")
 [ "$tb" = "feat-b" ] && pass "target_branch recorded" \
   || fail "target_branch wrong: $tb"
@@ -114,13 +113,14 @@ echo "$out" | grep -qi "disabled" \
   || fail "kill switch killed legacy mode"
 rm -rf "$REPO"
 
-# --- AC6: terminal status removes worktree (via stop-hook simulation) ---
+# --- AC6: terminal status removes worktree (AskUserQuestion-cleanup simulation) ---
 echo "[AC6] cleanup on complete"
 REPO=$(make_repo feat-g)
 (cd "$REPO" && CLAUDE_CODE_SESSION_ID=ac6sess1234567 "$SETUP" branch feat-g >/dev/null)
 state="$REPO/.claude/quality-gates/ac6sess1234567/pipeline.md"
 wpath=$(awk -F'"' '/^worktree_path:/{print $2}' "$state")
-# Simulate stop-hook terminal cleanup by calling qg-worktree.sh remove directly
+# v1.32.0: SKILL's terminal status path triggers qg-worktree.sh remove via
+# /cancel-qg or SessionEnd cleanup; simulate that by calling remove directly.
 (cd "$REPO" && "$PLUGIN_DIR/scripts/qg-worktree.sh" remove "$wpath")
 [ ! -d "$wpath" ] && pass "worktree removed on cleanup" \
   || fail "worktree remains: $wpath"
@@ -140,8 +140,10 @@ rm -rf "$REPO"
 
 # --- AC10: DEVBREW_QG_KEEP_WORKTREE documented somewhere ---
 echo "[AC10] KEEP_WORKTREE documentation"
-# AC10 (KEEP env actually preserves worktree at terminal status) is
-# already verified end-to-end in test_stop_hook_worktree_cleanup.py.
+# AC10 end-to-end behavior (KEEP env actually preserves worktree at
+# terminal status) was previously verified in test_stop_hook_worktree_cleanup.py,
+# which was removed alongside the Stop hook in v1.32.0. Behavioral coverage
+# moves to /cancel-qg + SessionEnd cleanup paths.
 # Here we just assert documentation exists somewhere users can find:
 # either in setup-qg.sh --help, or in README, or in commands/qg.md.
 found=0
@@ -166,8 +168,9 @@ REPO=$(make_repo feat-i)
   || fail "branch changed"
 rm -rf "$REPO"
 
-# (AC8 lives in test_stop_hook_worktree_cleanup.py; AC12 is exercised by
-#  test_branch_worktree.sh AC2 via the project_dir frontmatter assertion.)
+# (AC8 was covered by test_stop_hook_worktree_cleanup.py, removed in
+#  v1.32.0 along with the Stop hook itself. AC12 remains exercised here
+#  via the AC2 worktree_path frontmatter assertion.)
 
 echo
 echo "Result: $PASS passed, $FAIL failed"

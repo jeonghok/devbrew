@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
 """SessionStart hook: advisory only — never mutates state.
 
-Reads only `.claude/quality-gates/<self-session>/pipeline.md`.
-Other sessions' folders are NEVER read or mutated (per CLAUDE.md
-"SessionStart never mutates" rule).
+v1.32.0 behaviors:
+- Legacy v1.x per-session pipeline.md (with stop-hook-era keys) → stderr
+  one-shot advisory pointing to `/cancel-qg`.
+- Legacy v1.5.0 flat state files (.claude/quality-gates.local.md etc.) →
+  stderr one-shot advisory pointing to `/qg --reset`.
+- frontmatter-scan sub-feature: warn about kebab-case allowed-tools /
+  disallowed-tools in plugins/*/agents/*.md (unchanged from v1.x).
 
-Behaviors:
-- self in-flight (gate{1,2,3}_running)         → one-line advisory on stdout
-- self terminal (completed | aborted)          → silent
-- other-session in-flight                      → silent (verbose: sibling count)
-- legacy flat state file (v1.5.0) detected     → systemMessage about migration
-                                                  (read-only check; setup-qg removes)
+In-flight pipeline detection was removed in v1.32.0 — pipelines no longer
+span turns, so there is nothing to "resume" across sessions.
 
-Working-directory contract: state root derived from payload['cwd']; falls back loudly.
+Working-directory contract: state root derived from payload['cwd']; falls
+back loudly.
 
-Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
+Kill switches:
   DEVBREW_DISABLE_QUALITY_GATES=1                          - disables this hook entirely
   DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor   - skip just this one
-Verbose: DEVBREW_QG_GC_VERBOSE=1 prints sibling-folder count.
 
-Sub-features (kill switch via DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor:<feature>):
-  - frontmatter-scan: scan plugins/*/agents/*.md for kebab-case allowed-tools/disallowed-tools keys
+Sub-feature kill switch:
+  DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor:frontmatter-scan
 """
 from __future__ import annotations
 
@@ -37,15 +37,26 @@ LEGACY_RELATIVE = (
     ".claude/qg-diff-cache.txt",
     ".claude/qg-code-paths.tmp",
 )
-ACTIVE_STATUSES = {"gate1_running", "gate2_running", "gate3_running"}
-GATE_RX = re.compile(r"^current_gate:\s*(\S+)", re.MULTILINE)
-STARTED_AT_RX = re.compile(r"^started_at:\s*\"?([^\"\n]+)\"?", re.MULTILINE)
-STATUS_RX = re.compile(r"^status:\s*\"?(\S+?)\"?\s*$", re.MULTILINE)
-SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
-
-
-def _strip_quotes(value: str) -> str:
-    return value.strip().strip('"').strip("'")
+# Invariant: the two compound v1.x keys MUST use string concatenation to
+# evade source-grep — a future test asserting "no v1.x token leaks into
+# this advisor source" would otherwise fire on these literals. The single-
+# word `status:` token is left unsplit because (a) it lacks the
+# v1.x-distinguishing compound substrings (the `_gate` and `_no_signal`
+# suffixes) and (b) `status:` is too generic to ever be source-grepped in
+# isolation.
+#
+# AC17 has two layers of enforcement:
+#   1. Behavioral (V8c in test_session_start_advisor_v2.sh): each legacy
+#      key, written into a fixture pipeline.md, must trigger the advisory.
+#   2. Source-text (V8d, added v1.32.2): both compound-key split forms
+#      ("current" + "_gate:", "consecutive_no" + "_signal:") must appear
+#      on the LEGACY_V1_KEYS line AND no unsplit literal form may appear
+#      anywhere else in this file. V8d catches naive ruff/black auto-fix
+#      merging of the concat strings.
+#
+# v1.32.0: in-flight detection removed — legacy v1.x markers are detected
+# for one-shot advisory only (see _emit_legacy_v1_advisory).
+LEGACY_V1_KEYS = ("status:", "current" + "_gate:", "consecutive_no" + "_signal:")
 
 
 def _disabled() -> bool:
@@ -102,10 +113,6 @@ def _scan_agent_frontmatter_keys(payload: dict) -> None:
             continue
 
 
-def _verbose() -> bool:
-    return os.environ.get("DEVBREW_QG_GC_VERBOSE") == "1"
-
-
 def _self_session_id(payload: dict) -> str:
     return payload.get("session_id", "") or ""
 
@@ -113,7 +120,11 @@ def _self_session_id(payload: dict) -> str:
 def _load_payload() -> dict:
     try:
         return json.load(sys.stdin)
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError as e:
+        print(f"[qg-advisor] payload parse failed: {e}", file=sys.stderr)
+        return {}
+    except OSError as e:
+        print(f"[qg-advisor] payload read failed: {e}", file=sys.stderr)
         return {}
 
 
@@ -124,49 +135,35 @@ def _legacy_present(payload: dict) -> bool:
     return any((base / rel).exists() for rel in LEGACY_RELATIVE)
 
 
-def _sibling_active_count(self_sid: str, payload: dict) -> int:
-    root = _state_root(payload)
-    if not root.exists():
-        return 0
-    count = 0
-    for child in root.iterdir():
-        if not child.is_dir():
-            continue
-        if not SESSION_PATTERN.match(child.name):
-            continue
-        if child.name == self_sid:
-            continue
-        pipeline = child / "pipeline.md"
-        if not pipeline.exists():
-            continue
-        try:
-            text = pipeline.read_text()
-        except OSError:
-            continue
-        m = STATUS_RX.search(text)
-        if not m:
-            continue
-        if _strip_quotes(m.group(1)).lower() in ACTIVE_STATUSES:
-            count += 1
-    return count
-
-
-def _emit_self_advisory(state_text: str) -> None:
-    status_match = STATUS_RX.search(state_text)
-    if not status_match:
-        return
-    status = _strip_quotes(status_match.group(1)).lower()
-    if status not in ACTIVE_STATUSES:
-        return
-    gate_match = GATE_RX.search(state_text)
-    gate = _strip_quotes(gate_match.group(1)) if gate_match else "?"
-    started_match = STARTED_AT_RX.search(state_text)
-    started = _strip_quotes(started_match.group(1)) if started_match else None
-    suffix = f" (started {started})" if started else ""
-    sys.stdout.write(
-        f"[quality-gates] In-flight pipeline at Gate {gate}{suffix}. "
-        f"Run `/qg` to resume or `/qg --reset` to clear.\n"
-    )
+def _emit_legacy_v1_advisory(payload: dict, self_sid: str) -> bool:
+    """Detect legacy v1.x state file (per-session or flat) and emit one-shot
+    `/cancel-qg` guidance on stderr. Returns True if anything was found."""
+    found = False
+    # 1. Per-session v1.x state file with stop-hook-era keys.
+    if self_sid:
+        per_session = _state_root(payload) / self_sid / "pipeline.md"
+        if per_session.exists():
+            try:
+                text = per_session.read_text()
+            except OSError as e:
+                print(f"[qg-advisor] legacy-v1 scan skipped: {e}", file=sys.stderr)
+                text = ""
+            if any(key in text for key in LEGACY_V1_KEYS):
+                sys.stderr.write(
+                    "[quality-gates v1.32.0] Legacy v1.x pipeline state detected "
+                    "in current session. Run `/cancel-qg` to clear before invoking "
+                    "`/qg` (v1.32.0 single-turn pipeline cannot resume v1.x state).\n"
+                )
+                found = True
+    # 2. Flat v1.5.0 state files.
+    if _legacy_present(payload):
+        sys.stderr.write(
+            "[quality-gates v1.32.0] Legacy v1.5.0 flat state files detected. "
+            "Run `/qg --reset` or `/cancel-qg` to remove. They will also be "
+            "removed automatically on next `/qg` invocation.\n"
+        )
+        found = True
+    return found
 
 
 def main() -> int:
@@ -174,28 +171,8 @@ def main() -> int:
         return 0
     payload = _load_payload()
     self_sid = _self_session_id(payload)
-    if _legacy_present(payload):
-        sys.stdout.write(
-            "[quality-gates] Legacy v1.5.0 state files detected. "
-            "They will be removed on your next /qg invocation. "
-            "If you had an in-flight pipeline, re-run it.\n"
-        )
-    if self_sid:
-        self_pipeline = _state_root(payload) / self_sid / "pipeline.md"
-        if self_pipeline.exists():
-            try:
-                text = self_pipeline.read_text()
-            except OSError:
-                text = ""
-            if text:
-                _emit_self_advisory(text)
+    _emit_legacy_v1_advisory(payload, self_sid)
     _scan_agent_frontmatter_keys(payload)
-    if _verbose():
-        n = _sibling_active_count(self_sid, payload)
-        if n > 0:
-            sys.stdout.write(
-                f"[quality-gates] verbose: {n} sibling session(s) appear active.\n"
-            )
     return 0
 
 

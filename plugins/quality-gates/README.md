@@ -29,8 +29,11 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / hook / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
 - **Law 1 (Clarity Before Code) — `/qg branch <name>` surface** (v1.15.0) — 7개 거절 시나리오(존재하지 않는 브랜치, path traversal, kill switch, idempotent reuse 등)가 `tests/test_branch_worktree.sh` AC1–AC11에 acceptance criteria로 명시. 실패 경로마다 명확한 진단 메시지를 stderr로 출력.
 - **Law 3 (Compounding) — worktree path 컨벤션** (v1.15.0) — `.claude/<plugin>/worktrees/<name>-<sid-short>/` 경로 패턴을 `docs/philosophy/devbrew-harness-philosophy.md` §4.8에 footnote로 박아 두어, 차후 다른 플러그인이 임시 worktree를 만들 때 같은 컨벤션을 재사용할 수 있게 함.
-- **Law 1 (Clarity Before Code)** — `compute_transition()`이 pure로 유지되도록 `deadline_exceeded()`를 module-level helper로 분리. main()이 I/O를 격리.
-- **Law 1 (Clarity)** — `compute_no_signal_transition()` pure helper; main()의 단일 분기에서 호출. **stuck-state 보호 4-axis 중 모델 침묵 가드** 완성.
+- **Law 1 (Clarity Before Code) — single-turn dispatch contract** (v1.32.0) — pipeline progression이 `quality-pipeline` SKILL의 단일 assistant turn 내 serial dispatch로 일원화. cross-turn state machine (transition compute helpers, no-signal counter, wall-clock guard) 전부 삭제 — 진행 결정은 SKILL의 명시적 boundary + AskUserQuestion으로만 발생. State file은 GC mtime anchor + worktree tracking + Gate 2 iter counter reporting만 보존.
+- **P22 generalization (consent gate → progression gate):** AskUserQuestion
+  is reused as a **progression primitive** at every gate boundary and Gate
+  2 fix-loop iteration. The same tool that gates subagent fan-out now
+  gates inter-gate progression — no new principle ID needed.
 
 ## 구조
 
@@ -52,7 +55,6 @@ quality-gates/
 │   └── cancel-qg.md        # /cancel-qg command
 ├── hooks/
 │   ├── hooks.json                            # Hook 설정
-│   ├── stop-hook.py                          # 파이프라인 진행 (state machine)
 │   ├── post-tool-use-session-tracker.py      # 세션 동안 편집한 파일 추적
 │   ├── post-tool-use.py                      # PostToolUse(Bash) — auto-trigger 감지기
 │   ├── session-start-advisor.py              # in-flight 파이프라인 read-only advisor
@@ -82,7 +84,6 @@ quality-gates/
 
 | Hook | 이벤트 | 변경? | 왜 hook인가 (skill이 아닌)? |
 |---|---|---|---|
-| `stop-hook.py` | Stop | 예 (state 파일) | 매 어시스턴트 turn 이후 파이프라인 진행이 결정적으로 필요. |
 | `post-tool-use-session-tracker.py` | PostToolUse(Edit/Write/MultiEdit) | 예 (세션 파일) | 모든 파일 mutation을 결정적으로 관찰해야 함; hook만 가능. |
 | `post-tool-use.py` | PostToolUse(Bash) | 아니오 — read-only | commit/PR Bash 활동을 감지해 `/qg` 제안; 현재 세션 scope. |
 | `session-start-advisor.py` | SessionStart | **아니오 — read-only advisor** | mutation 없이 in-flight 파이프라인 알림 (CLAUDE.md hook coexistence 룰). |
@@ -144,43 +145,67 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 
 `len(phase1) + len(phase2) >= 4`일 때 AskUserQuestion 발동 (philosophy AP9). 최대 fan-out: Phase 1 (4) + Phase 2 (5) + Phase 1.5 (1) + Phase 1.6 (1) + Phase 3 (1) = 12.
 
-## 파이프라인 흐름 (forward-only state machine, v1.5.0)
+## 파이프라인 흐름 (single-turn serial dispatch, v1.32.0)
+
+`v1.32.0`에서 SKILL이 전체 파이프라인을 단일 assistant turn 내에서 serial dispatch로 실행합니다. Inter-gate progression과 Gate 2 fix-loop iteration은 모두 AskUserQuestion으로 사용자 동의를 받아 진행 — 동일한 도구가 subagent fan-out gate와 inter-gate progression gate를 함께 담당합니다. (v1.5.0의 turn-by-turn state machine 다이어그램은 제거됨; 단일 다이어그램만 유지.)
+
 
 ```
-/qg → setup-qg.sh → pre-pipeline-check → trivia escape?
-   ├── yes → 즉시 PASS, 0 dispatch
-   └── no  → SKILL.md (Gate 1) → Stop hook → SKILL.md (Gate 2)
-              → Stop hook → SKILL.md (Gate 3) → done
+┌─ single assistant turn ──────────────────────────────────────────────┐
+│                                                                       │
+│   user: /qg                                                           │
+│       │                                                               │
+│       ▼                                                               │
+│   setup-qg.sh --ensure  (creates .claude/quality-gates/<sid>/...)     │
+│       │                                                               │
+│       ▼                                                               │
+│   SKILL preflight  (kill switch, pre-pipeline-check)                  │
+│       │                                                               │
+│       ▼                                                               │
+│   trivia escape? ─── yes ──▶ "Trivia diff — all gates skipped"        │
+│       │ no                                                            │
+│       ▼                                                               │
+│   Gate 1 dispatch (plan-verifier)                                     │
+│       │                                                               │
+│       ├── PASS ───────────────────────────────────────────┐           │
+│       │                                                   │           │
+│       └── FAIL ──▶ AskUserQuestion                        │           │
+│                   ("Plan verification failed ..."          │           │
+│                    Continue anyway / Stop / View detail)  │           │
+│                       │                                   │           │
+│                       └── Continue ─────────────────────▶ ┤           │
+│                                                            ▼          │
+│                                              Gate 2 iter loop (≤5)    │
+│                                                  │                    │
+│                                                  ├── findings empty ─┐│
+│                                                  │     ▶ Gate 3       ││
+│                                                  │                    ││
+│                                                  └── findings remain  ││
+│                                                       AskUserQuestion ││
+│                                                       ("findings      ││
+│                                                        remain..."     ││
+│                                                       Retry / Proceed ││
+│                                                        to Gate 3 /    ││
+│                                                        Stop)          ││
+│                                                                       ││
+│                                                  Gate 3 dispatch ◀────┘│
+│                                                  (runtime-verifier)    │
+│                                                       │                │
+│                                                       ├── PASS         │
+│                                                       ├── FAIL         │
+│                                                       ├── SKIP_WITH_EVIDENCE
+│                                                       └── NEEDS_RESOLUTION
+│                                                              ▶ AskUserQuestion
+│                                                              ("Runtime
+│                                                               verifier needs..."
+│                                                               P21 reaffirmed)
+│                                                                       │
+│   Final summary                                                       │
+│                                                                       │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
-**State machine 전체 transition 그래프** (stop-hook `compute_transition()` + main() override 기준):
-
-```mermaid
-stateDiagram-v2
-    [*] --> gate1_running
-    gate1_running --> gate2_running: next_gate (PASS/SKIP)
-    gate1_running --> gate1_running: retry_gate (RETRY)
-    gate1_running --> aborted: abort (FAIL)
-    gate2_running --> gate3_running: next_gate (PASS)
-    gate2_running --> gate2_running: retry_gate (FAIL, iter<max)
-    gate2_running --> gate2_running: continue (scout-fallback)
-    gate2_running --> gate2_user_choice: gate2_user_choice (NEEDS_RESTART)
-    gate2_running --> max_gate2_exceeded: max_gate2_exceeded
-    gate2_running --> completed: complete (skip_runtime)
-    gate3_running --> completed: complete (PASS/SKIP)
-    gate3_running --> gate3_running: gate3_needs_resolution (iter<cap)
-    gate3_running --> gate3_repeat_detected: gate3_repeat_detected (same hash 2x)
-    gate3_running --> gate3_fail: gate3_fail (FAIL/NEEDS_RESTART/cap exceeded)
-    any_gate --> wall_clock_exceeded: wall_clock_exceeded (T2-3)
-    any_gate --> any_gate: no_signal_inc (T2-4)
-    any_gate --> no_signal_max: no_signal_max (T2-4)
-    completed --> [*]
-    aborted --> [*]
-```
-
-**13 transition types**: `next_gate`, `retry_gate`, `complete`, `abort`, `continue`, `gate2_user_choice`, `max_gate2_exceeded`, `gate3_fail`, `gate3_needs_resolution`, `gate3_repeat_detected`, `wall_clock_exceeded` (v1.x T2-3), `no_signal_inc` (v1.x T2-4), `no_signal_max` (v1.x T2-4).
-
-**v1.5.0에서 cross-gate restart 제거**: Gate 2 / Gate 3 NEEDS_RESTART는 더 이상 Gate 1으로 자동 재진입하지 않습니다. user-choice prompt ("변경을 적용하고 /qg 재실행")로 종료. Gate 2 내부 fix-loop (최대 5회)는 보존.
+**v1.32.0 변경 요약**: 파이프라인 진행은 더 이상 turn-by-turn state machine으로 진행되지 않고, `quality-pipeline` SKILL이 단일 assistant turn 내에서 serial dispatch로 끝까지 실행합니다. AskUserQuestion이 subagent fan-out gate와 inter-gate progression gate를 함께 담당합니다.
 
 ### Trivia detector coverage
 
@@ -282,8 +307,6 @@ export DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1
 - `DEVBREW_QG_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/qg` 또는 `/cancel-qg --gc`에서 GC)
 - `DEVBREW_QG_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
 - `DEVBREW_GATE3_MAX_RESOLUTIONS`: 3 (`0..10`, Gate 3 NEEDS_RESOLUTION mid-run 루프 cap)
-- `DEVBREW_QG_DEADLINE_MIN`: 30 (Pipeline wall-clock budget, 분 단위. `0`이면 무한 (no-deadline 모드). 도달 시 user-choice prompt 발동.)
-- `DEVBREW_QG_NO_SIGNAL_MAX`: 3 (No-signal turn 누적 시 user-choice prompt 발동 횟수. `0`=disabled. 모델이 `<qg-signal>` 못 emit 시 무한 re-injection 방지.)
 - `DEVBREW_QG_KEEP_WORKTREE=1`: `/qg branch` worktree cleanup 비활성화 (디버깅용 보존)
 
 ### Kill switches (보안 컨트롤)
@@ -314,7 +337,6 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | Hook 키 | 위치 | 기능 |
 |---|---|---|
-| `quality-gates:stop-hook` | `hooks/stop-hook.py` | Gate 진행 state-machine driver (이걸 끄면 `/qg`는 사실상 동작 안 함) |
 | `quality-gates:session-tracker` | `hooks/post-tool-use-session-tracker.py` | PostToolUse(Edit/Write/MultiEdit) — 편집된 파일을 `files.md`에 기록 |
 | `quality-gates:post-tool-use` | `hooks/post-tool-use.py` | PostToolUse(Bash) — `gh pr create` 직후 `/qg` 시작 안내 |
 | `quality-gates:session-start-advisor` | `hooks/session-start-advisor.py` | SessionStart — stale state 안내 (read-only) |
