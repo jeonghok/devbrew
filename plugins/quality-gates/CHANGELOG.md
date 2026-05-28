@@ -3,6 +3,71 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.32.3] — 2026-05-28
+
+PR #71 (v1.32.0 → v1.32.2) merge 후 deferred된 6건의 follow-up.
+모든 변경은 비기능적 polish/defense-in-depth (breaking change 없음).
+3-round spec review 통과 (8 + 4 + 0 issues 모두 흡수).
+
+### Added
+- **`scripts/read-frontmatter.py`**: frontmatter `key: "value"` 파싱
+  helper. escape-aware regex로 embedded `\"` / `\\` 처리. 3 call site
+  (`pre-pipeline-check.sh` × 2, `cancel-qg-core.sh` × 1)의 `awk -F'"'`
+  패턴 대체 (MED-3).
+- **`scripts/check-allowed-tools-order.sh`**: SKILL.md `allowed-tools`
+  pipeline-order 검증 linter. Canonical source = 내부 `EXPECTED_ORDER`
+  배열 (single source of truth). 16 tools 5 groups (I-D).
+- **`scripts/check-changelog-korean-primary.py`**: CHANGELOG `[1.32.0]`
+  Korean-primary 컨벤션 단락 단위 검증 (I-C). 영구 보존 (향후 항목
+  추가 시 재검증 가능).
+- **`tests/test_read_frontmatter.sh`**: 5 케이스 — quoted / unquoted /
+  missing / embedded-quote (val"ue) / embedded-backslash (a\b).
+- **`tests/test_cancel_qg_med4.sh`**: MED-4 검증. mv backup + cp stub +
+  `trap '...' EXIT` 패턴으로 fixture stub 통한 실패 경로 검증 (3 assertion:
+  stub 메시지 prefix / exit code 1 라인 / sed invocation 0건).
+- **`tests/test_check_allowed_tools_order.sh`**: linter 4 시나리오 —
+  canonical PASS / within-group swap FAIL / cross-group move FAIL /
+  unknown tool FAIL.
+- **`tests/fixtures/qg-worktree-fail-stub.sh`**: MED-4 영구 fixture.
+  qg-worktree.sh 실패 simulator (exit 1 + stderr 메시지).
+
+### Changed
+- **`cancel-qg-core.sh`**:
+  - MED-1: qg-worktree.sh 부재/비실행 메시지 self-actionable화. MISSING
+    vs EXISTS-but-not-executable 구별, 사용자 직접 실행 명령
+    (`git worktree remove --force "<path>"`) 명시.
+  - MED-4: pipe-to-stream-editor 제거. `cmd | sed` 대신 stdout/stderr
+    병합 capture + 수동 prefix. `if/else` 형태로 `set -e` 안전하게 exit
+    code 캡처. qg-worktree.sh 출력 계약(병합 스트림 prefix-emit) 보존.
+  - MED-3 transition: `awk -F'"'` 호출부를 `read-frontmatter.py` 호출로
+    교체. `SCRIPT_DIR` 변수를 file top으로 끌어올려 lowercase `script_dir`
+    정의와 통일.
+- **`pre-pipeline-check.sh`**: MED-3 transition 2 site
+  (`branch` / `session_id` 파싱). `tr -d '[:space:]'` 제거 (helper가
+  `.strip()` 내부 처리). `SCRIPT_DIR` 변수 file top에 추가.
+- **`skills/quality-pipeline/SKILL.md`**: `allowed-tools` frontmatter
+  pipeline-order 재정렬 (I-D). 5 group 경계를 YAML comment로 inline 문서화.
+- **`CHANGELOG.md` `[1.32.0]` body**: English prose → Korean-primary 변환
+  (I-C). Technical 사실 변경 없음.
+
+### Fixed
+- **`tests/test_pre_pipeline_check.sh`**: MED-2 SID guard 4 boundary
+  케이스 추가 — empty / too-short (7 char) / invalid-char (`abc/def123`) /
+  valid (15 char + sandbox `git init` + fresh state로 isolation).
+
+### Acceptance Criteria
+- AC1 (MED-1): cancel-qg-core.sh stderr 메시지 검증
+- AC2 (MED-2): 4 SID boundary 케이스 PASS
+- AC3 (MED-3 transition): `awk -F'"'` 0 hits, `SCRIPT_DIR` 정의 확인
+- AC4 (MED-3 unit): 5 helper 케이스 PASS
+- AC5 (MED-4): sed 0건, exit code 라인 검증
+- AC6 (I-C): `check-changelog-korean-primary.py` PASS
+- AC7 (I-D ordering): linter exit 0
+- AC8 (I-D linter unit): 4 scenarios PASS
+- AC9 (regression): 기존 testsuite + 신규 7 test 전체 PASS
+- AC10: `plugin.json.version` == `"1.32.3"`
+- AC11: 이 CHANGELOG entry 존재
+
 ## [1.32.2] — 2026-05-28
 
 ### Fixed (Gate 2 iter-2 review-driven follow-up, same PR #71)
