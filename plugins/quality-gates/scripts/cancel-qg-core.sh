@@ -69,14 +69,32 @@ fi
 # session-end-cleanup.py). Only fires when KEEP_WORKTREE is not 1.
 if [[ -n "$worktree_path" && -d "$worktree_path" ]]; then
   if [[ -x "$SCRIPT_DIR/qg-worktree.sh" ]]; then
-    if "$SCRIPT_DIR/qg-worktree.sh" remove "$worktree_path" 2>&1 \
-        | sed 's/^/cancel-qg-core: worktree: /' >&2; then
-      :
+    # MED-4: sed pipe 제거. set -euo pipefail 활성 상태이므로
+    # `var=$(failing_cmd)` 시 즉시 exit 위험. if/else로 exit code 명시 캡처.
+    # qg-worktree.sh 출력 계약 보존: stdout+stderr 병합 스트림을 prefix-emit.
+    if worktree_output="$("$SCRIPT_DIR/qg-worktree.sh" remove "$worktree_path" 2>&1)"; then
+      worktree_rc=0
     else
-      echo "cancel-qg-core: worktree removal failed (continuing with state-folder cleanup)" >&2
+      worktree_rc=$?
+    fi
+    if [[ -n "$worktree_output" ]]; then
+      while IFS= read -r line; do
+        printf 'cancel-qg-core: worktree: %s\n' "$line" >&2
+      done <<< "$worktree_output"
+    fi
+    if [[ "$worktree_rc" -ne 0 ]]; then
+      echo "cancel-qg-core: qg-worktree.sh remove exit code $worktree_rc (continuing with state-folder cleanup)" >&2
     fi
   else
-    echo "cancel-qg-core: qg-worktree.sh missing or not executable at $SCRIPT_DIR — worktree at $worktree_path not removed; clean it manually" >&2
+    # MED-1: missing vs not-executable 구별 + 사용자 직접 실행 명령 명시.
+    if [[ ! -e "$SCRIPT_DIR/qg-worktree.sh" ]]; then
+      echo "cancel-qg-core: qg-worktree.sh MISSING at $SCRIPT_DIR/" >&2
+    else
+      mode="$(stat -f %Lp "$SCRIPT_DIR/qg-worktree.sh" 2>/dev/null || stat -c %a "$SCRIPT_DIR/qg-worktree.sh" 2>/dev/null)"
+      echo "cancel-qg-core: qg-worktree.sh EXISTS but not executable at $SCRIPT_DIR/qg-worktree.sh (mode: $mode)" >&2
+    fi
+    echo "cancel-qg-core: orphan worktree at $worktree_path — clean manually with:" >&2
+    echo "  git worktree remove --force \"$worktree_path\"" >&2
   fi
 fi
 
