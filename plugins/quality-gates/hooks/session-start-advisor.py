@@ -43,8 +43,17 @@ LEGACY_RELATIVE = (
 # word `status:` token is left unsplit because (a) it lacks the
 # v1.x-distinguishing compound substrings (the `_gate` and `_no_signal`
 # suffixes) and (b) `status:` is too generic to ever be source-grepped in
-# isolation. AC17 asserts both compound-key split forms are present here
-# AND that their unsplit literal forms do NOT appear anywhere in this file.
+# isolation.
+#
+# AC17 has two layers of enforcement:
+#   1. Behavioral (V8c in test_session_start_advisor_v2.sh): each legacy
+#      key, written into a fixture pipeline.md, must trigger the advisory.
+#   2. Source-text (V8d, added v1.32.2): both compound-key split forms
+#      ("current" + "_gate:", "consecutive_no" + "_signal:") must appear
+#      on the LEGACY_V1_KEYS line AND no unsplit literal form may appear
+#      anywhere else in this file. V8d catches naive ruff/black auto-fix
+#      merging of the concat strings.
+#
 # v1.32.0: in-flight detection removed — legacy v1.x markers are detected
 # for one-shot advisory only (see _emit_legacy_v1_advisory).
 LEGACY_V1_KEYS = ("status:", "current" + "_gate:", "consecutive_no" + "_signal:")

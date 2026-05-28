@@ -19,7 +19,11 @@ set -euo pipefail
 SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
 if [[ -z "$SESSION_ID" ]]; then
   echo "result: no_session_id"
-  exit 0
+  # exit 1 (was 0 pre-v1.32.2): empty SID is a hard precondition violation,
+  # not a graceful-degrade case. setup-qg.sh exits 1 for the same condition;
+  # this brings symmetry. SKILL preflight P3 must treat any non-zero exit
+  # as abort.
+  exit 1
 fi
 # SID pattern guard (matches setup-qg.sh / cancel-qg-core.sh). A malformed
 # SID would expand `.claude/quality-gates/$SESSION_ID` to a path-escape
@@ -28,7 +32,7 @@ fi
 if ! [[ "$SESSION_ID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
   echo "pre-pipeline-check: session ID '$SESSION_ID' fails pattern guard ([A-Za-z0-9_-]{8,})" >&2
   echo "result: invalid_session_id"
-  exit 0
+  exit 1
 fi
 STATE_DIR=".claude/quality-gates/$SESSION_ID"
 STATE_FILE="$STATE_DIR/pipeline.md"

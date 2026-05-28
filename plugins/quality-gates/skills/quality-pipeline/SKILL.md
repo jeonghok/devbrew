@@ -109,9 +109,23 @@ Exit non-zero → surface stderr verbatim and abort.
 "${CLAUDE_PLUGIN_ROOT}/scripts/pre-pipeline-check.sh"
 ```
 
-Parse the `result:` line. `cleared_branch_mismatch` / `cleared_stale` /
-`fresh_start` are normal. Use the result downstream when computing Gate 2
-diff scope.
+The script exits non-zero on hard precondition violations (`no_session_id`,
+`invalid_session_id`) and zero on normal codes. **Non-zero exit must abort
+the pipeline immediately** — surface the script's stderr verbatim and stop.
+Do NOT proceed to Gate 1 with degraded state.
+
+On zero exit, parse the `result:` line. Handle every emitted code; unknown
+values are a contract violation, not "treat as fresh":
+
+| `result:` | Meaning | Downstream action |
+|---|---|---|
+| `fresh_start` | First run on this branch | normal — silent |
+| `preserved` | Session file fresh; reuse | normal — silent |
+| `no_session_data` | No prior state | normal — silent |
+| `cleared_branch_mismatch` | HEAD branch changed; state wiped | tell user "branch changed; session scope reset"; do not use prior files.md |
+| `cleared_stale` | Session file aged out; deleted | tell user "stale session data cleared"; do not use prior files.md |
+| `active_resume` | Mid-pipeline resume on same session | continue with existing state |
+| (other) | Unknown — contract violation | abort with stderr verbatim |
 
 ## Arguments
 

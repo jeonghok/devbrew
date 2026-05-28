@@ -47,19 +47,35 @@ fi
 
 target_dir=".claude/quality-gates/$session_id"
 
-# If pipeline.md records a worktree_path (from `/qg branch <name>`), remove
-# the worktree first to avoid leaking it. Honors DEVBREW_QG_KEEP_WORKTREE
-# the same way session-end-cleanup.py does. This mirrors session-end-
-# cleanup.py logic so /cancel-qg has symmetric semantics.
+# Read worktree_path once before any cleanup so we know whether to honor
+# DEVBREW_QG_KEEP_WORKTREE. If the env var is set, BOTH the worktree AND
+# the state folder are preserved as a unit — removing pipeline.md would
+# orphan worktree_path (session-end-cleanup.py discovers worktrees by
+# reading the same file).
+worktree_path=""
 if [[ -f "$target_dir/pipeline.md" ]]; then
   worktree_path=$(awk -F'"' '/^worktree_path:/ { print $2; exit }' "$target_dir/pipeline.md" 2>/dev/null)
-  if [[ -n "$worktree_path" && -d "$worktree_path" && "${DEVBREW_QG_KEEP_WORKTREE:-}" != "1" ]]; then
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if [[ -x "$script_dir/qg-worktree.sh" ]]; then
-      "$script_dir/qg-worktree.sh" remove "$worktree_path" 2>&1 \
-        | sed 's/^/cancel-qg-core: worktree: /' >&2 || \
-        echo "cancel-qg-core: worktree removal failed (continuing with state-folder cleanup)" >&2
+fi
+
+if [[ -n "$worktree_path" && "${DEVBREW_QG_KEEP_WORKTREE:-}" == "1" ]]; then
+  echo "cancel-qg-core: DEVBREW_QG_KEEP_WORKTREE=1 — preserving worktree at $worktree_path AND state folder $target_dir." >&2
+  echo "cancel-qg-core: NOTE: pipeline.md retained so session-end-cleanup.py / future /cancel-qg can still rediscover the worktree." >&2
+  exit 0
+fi
+
+# Honor worktree-aware cleanup: remove the worktree first (symmetric with
+# session-end-cleanup.py). Only fires when KEEP_WORKTREE is not 1.
+if [[ -n "$worktree_path" && -d "$worktree_path" ]]; then
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -x "$script_dir/qg-worktree.sh" ]]; then
+    if "$script_dir/qg-worktree.sh" remove "$worktree_path" 2>&1 \
+        | sed 's/^/cancel-qg-core: worktree: /' >&2; then
+      :
+    else
+      echo "cancel-qg-core: worktree removal failed (continuing with state-folder cleanup)" >&2
     fi
+  else
+    echo "cancel-qg-core: qg-worktree.sh missing or not executable at $script_dir — worktree at $worktree_path not removed; clean it manually" >&2
   fi
 fi
 

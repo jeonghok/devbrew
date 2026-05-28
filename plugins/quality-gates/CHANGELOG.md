@@ -3,6 +3,35 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [1.32.2] — 2026-05-28
+
+### Fixed (Gate 2 iter-2 review-driven follow-up, same PR #71)
+
+- **CRIT-1-iter2**: `pre-pipeline-check.sh` `no_session_id` 와
+  `invalid_session_id` 분기에서 `exit 1`로 변경 (이전 `exit 0`).
+  setup-qg.sh와 대칭 의미론. SKILL.md preflight P3에 result-code
+  enumeration 추가 — 모든 알려진 코드별 downstream action 명시 +
+  unknown code는 contract violation으로 abort. silent fall-through
+  방지.
+- **CRIT-2-iter2**: `cancel-qg-core.sh`에서 `DEVBREW_QG_KEEP_WORKTREE=1`
+  시 worktree AND state folder를 unit으로 보존. 이전: state folder만
+  무조건 삭제되어 worktree path 가 영구 leak. 이제: 둘 다 보존하고
+  loud advisory 출력하여 사용자가 미래 `/cancel-qg`로 회수 가능.
+  qg-worktree.sh missing case도 loud diagnostic.
+- **I-A-iter2**: plugin.json 1.32.1 → 1.32.2 bump.
+  `feedback_plugin_version_bump.md` 메모리 + CLAUDE.md "every PR
+  touching plugins/<name>/ must bump that plugin's version field in
+  the same commit" 준수. iter-1 commit 이후 cache key 무효화 보장.
+- **I-B-iter2**: `commands/cancel-qg.md`의 "v1.32.0 minimal schema"
+  표기를 "v1.32.1 minimal schema"로 정정. `gate3_max_resolutions:`는
+  v1.32.1에서 추가된 필드 (C3 복구).
+- **HIGH-1-iter2**: `LEGACY_V1_KEYS` invariant 주석을 실제 enforcement
+  형태와 일치시키고 새로운 V8d source-text 테스트 추가. 이전 주석은
+  "AC17 unsplit literal forms do NOT appear" 라는 존재하지 않는 test를
+  주장. 이제: behavioral (V8c) + source-text (V8d) 이중 enforcement.
+  V8d는 split form 양쪽 존재 + unsplit literal 절대 부재를 grep으로
+  검증 — ruff/black auto-fix merging 방어.
+
 ## [1.32.1] — 2026-05-28
 
 ### Fixed (Gate 2 iter-1 review-driven follow-up, same PR #71)
