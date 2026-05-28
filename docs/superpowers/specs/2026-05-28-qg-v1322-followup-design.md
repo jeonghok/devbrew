@@ -376,7 +376,7 @@ YAML comment(`#`)로 그룹 경계를 inline 문서화. (YAML 표준 comment, CC
 2. **MED-2** (AC2): `bash plugins/quality-gates/tests/test_pre_pipeline_check.sh` 실행, 4 boundary 케이스 PASS. T-SID-valid는 test 내부에서 sandbox `git init` 후 실행하므로 deterministic.
 3. **MED-3 transition** (AC3): `bash plugins/quality-gates/tests/test_read_frontmatter.sh` PASS (5 cases). `grep -rn "awk -F'\"'" plugins/quality-gates/scripts/` 0 hits. `grep -c "SCRIPT_DIR=" plugins/quality-gates/scripts/pre-pipeline-check.sh plugins/quality-gates/scripts/cancel-qg-core.sh` 각각 ≥ 1.
 4. **MED-3 escape** (AC4): T-RF-embedded-quote의 stdout이 정확히 `val"ue` (5 chars); T-RF-embedded-backslash의 stdout이 정확히 `a\b` (3 chars).
-5. **MED-4** (AC5): `bash plugins/quality-gates/tests/test_cancel_qg_med4.sh` PASS — fixture `qg-worktree-fail-stub.sh`을 호출 디렉토리에 symlink로 임시 교체 → `cancel-qg-core.sh` 호출 → stderr에 `exit code 1` 라인 grep → 원본 복원. `grep -c "sed" cancel-qg-core.sh` == 0.
+5. **MED-4** (AC5): `bash plugins/quality-gates/tests/test_cancel_qg_med4.sh` PASS — mv backup + cp stub + `trap '...' EXIT` 자동 복원 패턴(§4.4 참조)으로 `cancel-qg-core.sh` 호출 → stderr에 `exit code 1` 라인 grep. `grep -c "sed" cancel-qg-core.sh` == 0.
 6. **I-C** (AC6): `python3 plugins/quality-gates/scripts/check-changelog-korean-primary.py CHANGELOG.md` exit 0 — 단락 단위로 Hangul 또는 verbatim quote 또는 100% identifier 검증.
 7. **I-D** (AC7+AC8): `bash plugins/quality-gates/scripts/check-allowed-tools-order.sh` exit 0. `bash plugins/quality-gates/tests/test_check_allowed_tools_order.sh` 4개 시나리오 모두 expected 결과.
 
