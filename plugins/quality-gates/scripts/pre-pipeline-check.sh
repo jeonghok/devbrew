@@ -16,6 +16,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
 if [[ -z "$SESSION_ID" ]]; then
   echo "result: no_session_id"
@@ -44,7 +46,7 @@ current_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")"
 
 last_branch=""
 if [[ -f "$BRANCH_FILE" ]]; then
-  last_branch="$(awk -F'"' '/^branch:/ {print $2; exit}' "$BRANCH_FILE" 2>/dev/null || echo "")"
+  last_branch="$(python3 "$SCRIPT_DIR/read-frontmatter.py" "$BRANCH_FILE" branch 2>/dev/null || echo "")"
 fi
 
 # 2. Branch mismatch? Wipe stale state, but NEVER delete a pipeline.md
@@ -53,7 +55,7 @@ fi
 if [[ -n "$last_branch" && "$last_branch" != "$current_branch" ]]; then
   pipeline_session=""
   if [[ -f "$STATE_FILE" ]]; then
-    pipeline_session=$(awk -F'"' '/^session_id:/ { print $2; exit }' "$STATE_FILE" 2>/dev/null | tr -d '[:space:]')
+    pipeline_session=$(python3 "$SCRIPT_DIR/read-frontmatter.py" "$STATE_FILE" session_id 2>/dev/null)
   fi
   if [[ -n "$pipeline_session" && "$pipeline_session" == "$SESSION_ID" ]]; then
     echo "pre-pipeline-check: preserving session-owned state file ($STATE_FILE)" >&2

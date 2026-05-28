@@ -9,6 +9,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 session_id=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -54,7 +56,7 @@ target_dir=".claude/quality-gates/$session_id"
 # reading the same file).
 worktree_path=""
 if [[ -f "$target_dir/pipeline.md" ]]; then
-  worktree_path=$(awk -F'"' '/^worktree_path:/ { print $2; exit }' "$target_dir/pipeline.md" 2>/dev/null)
+  worktree_path=$(python3 "$SCRIPT_DIR/read-frontmatter.py" "$target_dir/pipeline.md" worktree_path 2>/dev/null)
 fi
 
 if [[ -n "$worktree_path" && "${DEVBREW_QG_KEEP_WORKTREE:-}" == "1" ]]; then
@@ -66,16 +68,15 @@ fi
 # Honor worktree-aware cleanup: remove the worktree first (symmetric with
 # session-end-cleanup.py). Only fires when KEEP_WORKTREE is not 1.
 if [[ -n "$worktree_path" && -d "$worktree_path" ]]; then
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  if [[ -x "$script_dir/qg-worktree.sh" ]]; then
-    if "$script_dir/qg-worktree.sh" remove "$worktree_path" 2>&1 \
+  if [[ -x "$SCRIPT_DIR/qg-worktree.sh" ]]; then
+    if "$SCRIPT_DIR/qg-worktree.sh" remove "$worktree_path" 2>&1 \
         | sed 's/^/cancel-qg-core: worktree: /' >&2; then
       :
     else
       echo "cancel-qg-core: worktree removal failed (continuing with state-folder cleanup)" >&2
     fi
   else
-    echo "cancel-qg-core: qg-worktree.sh missing or not executable at $script_dir — worktree at $worktree_path not removed; clean it manually" >&2
+    echo "cancel-qg-core: qg-worktree.sh missing or not executable at $SCRIPT_DIR — worktree at $worktree_path not removed; clean it manually" >&2
   fi
 fi
 
