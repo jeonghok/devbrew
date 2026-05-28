@@ -33,6 +33,22 @@
 
 PR #71 ("AskUserQuestion-driven in-turn iteration", v1.32.0 → v1.32.2) merge 후, 3 round의 `/qg` 리뷰에서 surface된 27+ → 10 → 5 finding curve가 수렴했고, 32+건이 해결됐다. 마지막 라운드에서 5개 blocking(2 Critical + 3 Important)을 fix한 후 "Accept partial" 옵션으로 wall-clock budget을 마무리하고 merge함. 이때 deferred로 분류된 6건이 본 spec의 대상이다.
 
+### 0.1 Handoff Context (for writing-plans / executor)
+
+**TL;DR**: PR #71의 deferred 6건을 단일 PR(v1.32.3, patch)로 ship. 4건 mechanical + 2건 design-decided. 기존 v1.32.2 testsuite regression 0. 신규 helper 2(`read-frontmatter.py`, `check-allowed-tools-order.sh`) + 검증용 helper 1(`check-changelog-korean-primary.py`) + 신규 test 3 + 신규 fixture 1.
+
+**Implicit context (reader assumed to know)**:
+- quality-gates plugin의 v1.32.0 minimal state schema (`session_id`, `started_at`, `worktree_path?`, `gate3_max_resolutions`, `target_branch?`). 본문에서 frontmatter 파싱 helper가 다루는 *값 schema*가 이 좁은 set.
+- `set -euo pipefail`이 모든 shell script에 적용됨 (기존 코드 컨벤션). 새 코드도 동일 prelude 가정.
+- `CLAUDE_PLUGIN_ROOT` env가 SKILL/command에서 `${CLAUDE_PLUGIN_ROOT}/scripts/...` 형태로 사용됨 — 새 helper 호출도 동일 패턴.
+- 모든 cancel-qg-core.sh의 SID 가드(`^[A-Za-z0-9_-]{8,}$`)는 보안 제어 — 임의 강도 완화 금지.
+
+**Deferred to plan (this spec이 결정 *안 하는* 사항, plan이 채울 것)**:
+- 각 fix의 commit message 본문 정확한 문구 (commit granularity는 §3 명시; per-file-group).
+- `tests/fixtures/qg-worktree-fail-stub.sh` 실행 권한 부여 절차 (`chmod +x` step을 commit 단위로 배치할지).
+- CHANGELOG `[1.32.3]` Added/Changed/Fixed 분류 안의 항목별 한 줄 카피.
+- spec_version `1.1.0` → `1.2.0`이 round 2 흡수로 bump되어야 하는가 (메타 trace 용도).
+
 Deferred 6건은 모두 *작은* 비기능적 개선(defense-in-depth diagnostic 강화, 테스트 커버리지 보강, 코드/문서 컨벤션):
 
 | ID | 카테고리 | 영향 |
@@ -196,20 +212,28 @@ fi
 
 `set -o pipefail` (line 10)로 첫 non-zero가 propagate되지만, 만약 sed 자체가 실패하면 잘못된 메시지 출력. 그리고 `2>&1 | sed`는 stderr를 stdout으로 합쳐서 다시 stderr로 보내는 구조라 가독성 ↓.
 
-**fix**: stdout/stderr 분리 capture, prefix 수동:
+**qg-worktree.sh 출력 계약 (preserved)**: 기존 코드(`2>&1 | sed`)와 동일하게 stdout + stderr 병합 스트림을 prefix-emit하여 stderr로 출력. qg-worktree.sh의 정상 경로 stdout이 비어있든 진단을 출력하든 *동작 변경 없음* (backward-compat 보장).
+
+**fix**: stdout/stderr 병합 capture + `set -e` 안전 if/else 패턴 + prefix 수동:
 ```bash
-worktree_output="$("$script_dir/qg-worktree.sh" remove "$worktree_path" 2>&1)"; worktree_rc=$?
+# set -euo pipefail 활성 상태이므로 `var=$(failing_cmd)` 시 즉시 exit 위험.
+# if/else 형태로 exit code를 명시 캡처해 회피 (advisory 3 흡수).
+if worktree_output="$("$script_dir/qg-worktree.sh" remove "$worktree_path" 2>&1)"; then
+  worktree_rc=0
+else
+  worktree_rc=$?
+fi
 if [[ -n "$worktree_output" ]]; then
-  printf '%s\n' "$worktree_output" | while IFS= read -r line; do
+  while IFS= read -r line; do
     printf 'cancel-qg-core: worktree: %s\n' "$line" >&2
-  done
+  done <<< "$worktree_output"
 fi
 if [[ "$worktree_rc" -ne 0 ]]; then
   echo "cancel-qg-core: qg-worktree.sh remove exit code $worktree_rc (continuing with state-folder cleanup)" >&2
 fi
 ```
 
-이제 sed 의존 0건, exit code가 메시지에 명시됨.
+이제 sed 의존 0건, exit code가 메시지에 명시됨, `set -e` 상호작용 안전.
 
 **MED-4 검증용 fixture**: `tests/fixtures/qg-worktree-fail-stub.sh` 신규 (영구 파일, executable):
 ```bash
@@ -218,7 +242,16 @@ fi
 echo "stub: simulated worktree removal failure" >&2
 exit 1
 ```
-테스트(`tests/test_cancel_qg_med4.sh` 신규)는 `cancel-qg-core.sh` 호출 직전 `qg-worktree.sh`를 stub으로 symlink 교체 → 호출 → stderr 검사 → 원본 복원. PATH 오염 없이 같은 디렉토리 교체 방식.
+
+테스트(`tests/test_cancel_qg_med4.sh` 신규):
+1. **Backup**: `mv plugins/quality-gates/scripts/qg-worktree.sh "$BACKUP"` (rename — symlink 아님, atomic on same filesystem).
+2. **Install stub**: `cp tests/fixtures/qg-worktree-fail-stub.sh plugins/quality-gates/scripts/qg-worktree.sh` (copy로 영구 fixture 보존).
+3. **trap EXIT 안전망**: `trap 'mv -f "$BACKUP" plugins/quality-gates/scripts/qg-worktree.sh' EXIT` — 비정상 종료 시에도 원본 자동 복원 (advisory 2 + issue 4c70bd68 흡수).
+4. **호출**: `bash plugins/quality-gates/scripts/cancel-qg-core.sh --session-id test-sid-... 2>&1`.
+5. **검증**: stderr에 `cancel-qg-core: worktree: stub: simulated worktree removal failure` + `cancel-qg-core: qg-worktree.sh remove exit code 1` 라인 grep.
+6. **Cleanup**: trap이 처리하므로 명시 복원 step 불필요. trap 해제 후 정상 종료.
+
+PATH 오염 없음. symlink 아닌 copy/rename 방식이라 비정상 종료 시 stale symlink 위험 0.
 
 ### 4.5 I-C: CHANGELOG [1.32.0] body Korean-primary 변환
 
@@ -298,7 +331,7 @@ YAML comment(`#`)로 그룹 경계를 inline 문서화. (YAML 표준 comment, CC
 
 | AC | 검증 |
 |---|---|
-| AC1 (MED-1) | `cancel-qg-core.sh` 직접 실행 시 (`qg-worktree.sh` chmod -x로 simulate), stderr에 `MISSING` 또는 `EXISTS but not executable` + `git worktree remove --force "<path>"` 명령 포함 |
+| AC1 (MED-1) | **Reproducer**: tempdir에 `mkdir -p .claude/quality-gates/test-sid-12345678` + `printf '%s\n' '---' 'session_id: "test-sid-12345678"' 'started_at: "2026-05-28T00:00:00Z"' 'worktree_path: "/tmp/qg-test-wt"' '---' > .claude/quality-gates/test-sid-12345678/pipeline.md` + `mkdir -p /tmp/qg-test-wt` + `chmod -x plugins/quality-gates/scripts/qg-worktree.sh` 후 `bash plugins/quality-gates/scripts/cancel-qg-core.sh --session-id test-sid-12345678` 실행. **검증**: stderr에 `EXISTS but not executable` + `git worktree remove --force "/tmp/qg-test-wt"` 라인 포함. cleanup: `chmod +x` 복원. 별도 케이스(파일 자체 이동)로 `MISSING` 라인 grep 검증. cancel-qg-core.sh 호출 시그니처: `--session-id <id>` 또는 `CLAUDE_CODE_SESSION_ID` env fallback (기존 v1.32.2 미변경) |
 | AC2 (MED-2) | `bash tests/test_pre_pipeline_check.sh` 출력에 `T-SID-empty PASS`, `T-SID-short PASS`, `T-SID-invalid-char PASS`, `T-SID-valid PASS` 모두 포함 |
 | AC3 (MED-3 transition) | `scripts/read-frontmatter.py` 존재 + executable. `grep -rn "awk -F'\"'" plugins/quality-gates/scripts/` == 0 hits. 두 호출 파일(`pre-pipeline-check.sh`, `cancel-qg-core.sh`) 각각에 `SCRIPT_DIR="$(cd "$(dirname` 패턴 존재 (helper 호출 경로 확보) |
 | AC4 (MED-3 unit) | `bash tests/test_read_frontmatter.sh` 모든 5 케이스 PASS — 특히 **T-RF-embedded-quote가 `val"ue` 출력**, T-RF-embedded-backslash가 `a\b` 출력 (escape 처리 정상 작동) |
@@ -315,7 +348,7 @@ YAML comment(`#`)로 그룹 경계를 inline 문서화. (YAML 표준 comment, CC
 ### Created
 - `plugins/quality-gates/scripts/read-frontmatter.py` (~45 lines, escape-aware)
 - `plugins/quality-gates/scripts/check-allowed-tools-order.sh` (~80 lines)
-- `plugins/quality-gates/scripts/check-changelog-korean-primary.py` (~30 lines, AC6 verification helper — PR 후 폐기 가능)
+- `plugins/quality-gates/scripts/check-changelog-korean-primary.py` (~30 lines, AC6 verification helper — **영구 보존**: 향후 CHANGELOG 항목 추가 시에도 동일 컨벤션 재검증 가능. 폐기 시 AC6 재현 불가하므로 (advisory 1 흡수))
 - `plugins/quality-gates/tests/test_read_frontmatter.sh` (~60 lines, 5 cases)
 - `plugins/quality-gates/tests/test_check_allowed_tools_order.sh` (~70 lines, 4 scenarios)
 - `plugins/quality-gates/tests/test_cancel_qg_med4.sh` (~50 lines)
