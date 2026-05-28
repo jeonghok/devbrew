@@ -402,7 +402,7 @@ YAML comment(`#`)로 그룹 경계를 inline 문서화. (YAML 표준 comment, CC
 
 | Field | Value |
 |---|---|
-| spec_version | 1.1.0 (round-1 review fixes 적용) |
+| spec_version | 1.2.0 (round-1 + round-2 review fixes 적용) |
 | spec_path | `docs/superpowers/specs/2026-05-28-qg-v1322-followup-design.md` |
 | author | Jeongho-K + Claude (Opus 4.7) |
 | created | 2026-05-28 |
@@ -414,4 +414,4 @@ YAML comment(`#`)로 그룹 경계를 inline 문서화. (YAML 표준 comment, CC
 | commit_granularity | per-file-group (~6-8 commits 예상) |
 | acceptance_count | 11 (AC1–AC11) |
 | total_LOC_estimate | ~340 (신규 ~280 + 수정 ~60) |
-| review_rounds | 1 (round-1 round-1 8 issues + 3 advisories 모두 흡수) |
+| review_rounds | 2 (round-1: 8 issues + 3 adv 흡수; round-2: 1 block + 3 high + 3 adv 흡수) |
