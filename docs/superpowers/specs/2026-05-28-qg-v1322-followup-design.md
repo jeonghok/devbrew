@@ -107,9 +107,9 @@ Exit code는 **0 유지** — state folder 정리는 계속 진행됨. WARN 라�
 | T-SID-empty | `CLAUDE_CODE_SESSION_ID=""` | `result: no_session_id` | 1 |
 | T-SID-short | `CLAUDE_CODE_SESSION_ID="abcd123"` (7 chars) | `result: invalid_session_id` | 1 |
 | T-SID-invalid-char | `CLAUDE_CODE_SESSION_ID="abc/def123"` | `result: invalid_session_id` | 1 |
-| T-SID-valid | `CLAUDE_CODE_SESSION_ID="abc-def_123ABC"` (15 chars) | NOT `invalid_session_id` (proceeds to branch check) | 0 (or non-zero if other guards fire) |
+| T-SID-valid | `CLAUDE_CODE_SESSION_ID="abc-def_123ABC"` (15 chars) + cwd가 git repo + state 폴더 부재 (fresh state) | `result: fresh_start` + `branch: <current>` | 0 |
 
-각 케이스에서 stderr 메시지가 SID pattern guard 토큰을 포함하는지도 확인.
+T-SID-valid는 *isolation* 위해 sandbox temp dir에서 `git init` + `git commit --allow-empty -m init` 으로 minimal git repo 만든 후 실행 — 다른 guard(state file presence, branch mismatch)가 발화하지 않는 deterministic 환경. 각 invalid 케이스에서 stderr 메시지가 SID pattern guard 토큰(`fails pattern guard`)을 포함하는지 grep 확인.
 
 ### 4.3 MED-3: frontmatter 파싱 helper로 통일
 
@@ -120,15 +120,16 @@ Exit code는 **0 유지** — state folder 정리는 계속 진행됨. WARN 라�
 
 embedded-quote에 fragile. 실 발생 가능성은 우리가 쓰는 값 schema(`worktree_path`/`session_id`/`branch`) 한정 ≈ 0이지만, helper 추출로 single-source-of-truth 확보 + 향후 schema 확장 시 안전.
 
-**fix**: `scripts/read-frontmatter.py` 신규 (stdlib only, regex 기반):
+**fix**: `scripts/read-frontmatter.py` 신규 (stdlib only, YAML escape sequence 처리 포함):
 
 ```python
 #!/usr/bin/env python3
 """Read a single frontmatter value from a YAML-frontmatter markdown file.
 
 Usage: read-frontmatter.py <file> <key>
-Stdout: value (without surrounding quotes), or empty if missing.
-Exit: 0 on success (even if key missing — value just empty), 1 on file/parse error.
+Stdout: value (without surrounding quotes; \\" / \\\\ escape 해제), 또는
+        key 부재 시 빈 줄.
+Exit: 0 on success (key 부재도 success), 1 on file/parse error.
 """
 import re, sys
 from pathlib import Path
@@ -144,21 +145,32 @@ except OSError as e:
     print(f"read-frontmatter: {e}", file=sys.stderr)
     sys.exit(1)
 
-# Match `<key>: "value"` or `<key>: value` in the first frontmatter block.
-# Frontmatter is delimited by `---` markers.
-m = re.search(rf'^---\s*\n(.*?)\n---\s*\n', text, re.DOTALL)
-fm = m.group(1) if m else text  # tolerate no delimiters
-m2 = re.search(rf'^{re.escape(key)}:\s*(?:"([^"]*)"|(.*))$', fm, re.MULTILINE)
+# Frontmatter는 `---` 마커로 감싸짐. 없으면 전체 텍스트 대상.
+m = re.search(r'^---\s*\n(.*?)\n---\s*\n', text, re.DOTALL)
+fm = m.group(1) if m else text
+
+# Match key: "...escaped..." (escape-aware) OR key: bare-value
+# Escape-aware quoted: `[^"\\]` (일반 char) 또는 `\\.` (escape sequence) 반복.
+m2 = re.search(
+    rf'^{re.escape(key)}:\s*(?:"((?:[^"\\]|\\.)*)"|(.*))$',
+    fm, re.MULTILINE
+)
 if m2:
-    print(m2.group(1) if m2.group(1) is not None else m2.group(2).strip())
+    if m2.group(1) is not None:  # quoted form
+        # Unescape minimal YAML double-quoted escape sequences (현재 schema 범위:
+        # \" 와 \\ 만; \n/\t/\xXX는 지원 안 함 — 우리 frontmatter는 한 줄 값만).
+        val = m2.group(1).replace('\\\\', '\x00').replace('\\"', '"').replace('\x00', '\\')
+        print(val)
+    else:  # bare form
+        print(m2.group(2).strip())
+else:
+    print("")  # key 부재 — 명시적 빈 줄 (advisory 1 흡수)
 ```
 
-3 call site 전환:
+3 call site 전환 (각 파일 상단에 `SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"` 미정의 시 추가):
 - `pre-pipeline-check.sh:47`: `last_branch="$(python3 "$SCRIPT_DIR/read-frontmatter.py" "$BRANCH_FILE" branch 2>/dev/null || echo "")"`
-- `pre-pipeline-check.sh:56`: `pipeline_session="$(python3 "$SCRIPT_DIR/read-frontmatter.py" "$STATE_FILE" session_id 2>/dev/null | tr -d '[:space:]')"`
+- `pre-pipeline-check.sh:56`: `pipeline_session="$(python3 "$SCRIPT_DIR/read-frontmatter.py" "$STATE_FILE" session_id 2>/dev/null)"` — helper가 `.strip()` 적용하므로 기존 `tr -d '[:space:]'` 제거 (advisory 3 흡수)
 - `cancel-qg-core.sh:57`: `worktree_path="$(python3 "$SCRIPT_DIR/read-frontmatter.py" "$target_dir/pipeline.md" worktree_path 2>/dev/null)"`
-
-(각 호출부에서 `SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"` 변수가 정의되어 있다고 가정 — 없으면 추가.)
 
 **Helper unit test** (`tests/test_read_frontmatter.sh` 신규):
 
@@ -166,8 +178,9 @@ if m2:
 |---|---|---|---|
 | T-RF-quoted | `key: "value"` | `key` | `value` |
 | T-RF-unquoted | `key: value` | `key` | `value` |
-| T-RF-missing | `other: foo` | `key` | (empty) |
-| T-RF-embedded-quote | `key: "val\"ue"` | `key` | `val` (current limitation 문서화 — `"` 임베디드 시 첫 `"`까지만; 실 사용 값 schema에는 없음) |
+| T-RF-missing | `other: foo` | `key` | (empty line) |
+| T-RF-embedded-quote | `key: "val\"ue"` | `key` | `val"ue` (escape 처리됨 — MED-3 fragility 진짜 해소) |
+| T-RF-embedded-backslash | `key: "a\\b"` | `key` | `a\b` (literal `\\` → `\`) |
 
 ### 4.4 MED-4: sed pipe 제거 (error attribution 명확화)
 
@@ -197,6 +210,15 @@ fi
 ```
 
 이제 sed 의존 0건, exit code가 메시지에 명시됨.
+
+**MED-4 검증용 fixture**: `tests/fixtures/qg-worktree-fail-stub.sh` 신규 (영구 파일, executable):
+```bash
+#!/usr/bin/env bash
+# Stub: simulates qg-worktree.sh failure for MED-4 testing.
+echo "stub: simulated worktree removal failure" >&2
+exit 1
+```
+테스트(`tests/test_cancel_qg_med4.sh` 신규)는 `cancel-qg-core.sh` 호출 직전 `qg-worktree.sh`를 stub으로 symlink 교체 → 호출 → stderr 검사 → 원본 복원. PATH 오염 없이 같은 디렉토리 교체 방식.
 
 ### 4.5 I-C: CHANGELOG [1.32.0] body Korean-primary 변환
 
@@ -253,12 +275,24 @@ allowed-tools:
 
 YAML comment(`#`)로 그룹 경계를 inline 문서화. (YAML 표준 comment, CC가 무시함.)
 
-**Linter** (`scripts/check-allowed-tools-order.sh` 신규, ~60 lines):
+**Linter** (`scripts/check-allowed-tools-order.sh` 신규, ~80 lines):
 - 입력: `skills/quality-pipeline/SKILL.md`
-- 동작: frontmatter `allowed-tools` 블록 추출 → 그룹 경계(`# Group N — ...`) 검출 → 각 그룹 내부 항목이 정의된 순서와 일치하는지 확인 → 새 도구가 그룹 정의 외에 추가되면 fail.
-- Exit 0: PASS / Exit 1: FAIL with diagnostic.
+- **Canonical source of truth**: linter 내부에 하드코딩된 EXPECTED_ORDER 배열 (그룹별 도구 순서). SKILL.md의 `# Group N — ...` 주석은 *문서화*이지 canonical 아님 — drift 검출 시 SKILL.md를 linter에 맞춰 수정.
+- 동작: frontmatter `allowed-tools` 블록 추출 → 각 항목을 linter EXPECTED_ORDER와 라인 단위 비교 → 불일치 시 diff 출력 + FAIL.
+- Exit 0: PASS / Exit 1: FAIL with diagnostic ("expected at position N: X, found Y").
 - 실행: manual (`bash plugins/quality-gates/scripts/check-allowed-tools-order.sh`) — CI/hook 미도입.
-- 새 도구 추가 시 linter 자체와 SKILL.md 동시 수정 필요 (강제 coupling으로 컨벤션 drift 방지).
+- 새 도구 추가 시 linter EXPECTED_ORDER 와 SKILL.md frontmatter를 같은 commit에서 함께 수정 — coupling으로 컨벤션 drift 방지.
+
+**Linter 단위 테스트** (`tests/test_check_allowed_tools_order.sh` 신규):
+
+| Test | SKILL.md 변경 | Expected exit |
+|---|---|---|
+| T-LA-canonical | 변경 없음 (현재 정렬) | 0 (PASS) |
+| T-LA-within-group-swap | Group 5 안에서 `Read`와 `Glob` 위치 교환 | 1 (FAIL) — diagnostic에 `position 12: expected Read, found Glob` |
+| T-LA-cross-group-move | `AskUserQuestion`을 Group 5로 이동 | 1 (FAIL) |
+| T-LA-unknown-tool | 새 도구 `Notify` 추가 (linter EXPECTED_ORDER 미반영) | 1 (FAIL) — diagnostic에 `unexpected tool: Notify` |
+
+각 test는 tempdir에 SKILL.md copy → mutation → linter 실행 → 원본 복원. 부수효과 없음.
 
 ## 5. Acceptance Criteria
 
@@ -266,21 +300,26 @@ YAML comment(`#`)로 그룹 경계를 inline 문서화. (YAML 표준 comment, CC
 |---|---|
 | AC1 (MED-1) | `cancel-qg-core.sh` 직접 실행 시 (`qg-worktree.sh` chmod -x로 simulate), stderr에 `MISSING` 또는 `EXISTS but not executable` + `git worktree remove --force "<path>"` 명령 포함 |
 | AC2 (MED-2) | `bash tests/test_pre_pipeline_check.sh` 출력에 `T-SID-empty PASS`, `T-SID-short PASS`, `T-SID-invalid-char PASS`, `T-SID-valid PASS` 모두 포함 |
-| AC3 (MED-3) | `scripts/read-frontmatter.py` 존재 + executable. `grep -c "awk -F'\"'" plugins/quality-gates/scripts/*.sh` == 0 |
-| AC4 (MED-3 unit) | `bash tests/test_read_frontmatter.sh` 모든 4 케이스 PASS |
-| AC5 (MED-4) | `grep -c "sed" plugins/quality-gates/scripts/cancel-qg-core.sh` == 0 (변경 후 sed 호출 0건). `qg-worktree.sh` 실패 시 stderr에 정확한 exit code 명시 |
-| AC6 (I-C) | `awk '/^## \[1\.32\.0\]/,/^## \[/' CHANGELOG.md`의 본문에서 영어 sentence가 *원문 인용 / 식별자 / env var / 파일경로* 외에 0건. (수동 확인: 한국어 문장 비율 > 80%) |
-| AC7 (I-D) | SKILL.md frontmatter에 `# Group 1 — Preflight scripts` ... `# Group 5 — File operations` 5개 comment 존재. `bash scripts/check-allowed-tools-order.sh` exit 0 |
-| AC8 (regression) | `bash tests/test_session_start_advisor_v2.sh && bash tests/test_cancel_qg.sh && bash tests/harness/test_skill_orchestration_behavior.sh && bash tests/test_pre_pipeline_check.sh && bash tests/test_read_frontmatter.sh` 전체 PASS |
-| AC9 (version) | `plugin.json` `version` field == `"1.32.3"` |
-| AC10 (changelog) | `CHANGELOG.md` 최상단 entry가 `## [1.32.3] — 2026-05-28` + Korean-primary 본문 + Added/Changed/Fixed 분류 |
+| AC3 (MED-3 transition) | `scripts/read-frontmatter.py` 존재 + executable. `grep -rn "awk -F'\"'" plugins/quality-gates/scripts/` == 0 hits. 두 호출 파일(`pre-pipeline-check.sh`, `cancel-qg-core.sh`) 각각에 `SCRIPT_DIR="$(cd "$(dirname` 패턴 존재 (helper 호출 경로 확보) |
+| AC4 (MED-3 unit) | `bash tests/test_read_frontmatter.sh` 모든 5 케이스 PASS — 특히 **T-RF-embedded-quote가 `val"ue` 출력**, T-RF-embedded-backslash가 `a\b` 출력 (escape 처리 정상 작동) |
+| AC5 (MED-4) | `grep -c "sed" plugins/quality-gates/scripts/cancel-qg-core.sh` == 0 (변경 후 sed 호출 0건). `bash tests/test_cancel_qg_med4.sh` PASS — stub fixture 통해 `exit code 1` 라인이 stderr에 정확히 출력됨 검증 |
+| AC6 (I-C) | `awk '/^## \[1\.32\.0\]/,/^## \[/' CHANGELOG.md` 본문의 모든 단락이 (a) Korean 문자 (Hangul `가-힯`) 1개 이상 포함, 또는 (b) verbatim 인용(따옴표 둘러싸인 영어), 또는 (c) 100% identifier (backtick + 백슬래시/슬래시/under/문자만)로 구성. `python3 scripts/check-changelog-korean-primary.py` (테스트용 임시 스크립트, PR 후 폐기 가능) 통해 자동 검증 — 단락 단위 deterministic 판정 |
+| AC7 (I-D ordering) | SKILL.md frontmatter에 `# Group 1 — Preflight scripts` ... `# Group 5 — File operations` 5개 comment 존재. `bash scripts/check-allowed-tools-order.sh` exit 0 |
+| AC8 (I-D linter unit) | `bash tests/test_check_allowed_tools_order.sh` 4개 시나리오(T-LA-canonical PASS, T-LA-within-group-swap FAIL, T-LA-cross-group-move FAIL, T-LA-unknown-tool FAIL) 모두 통과 |
+| AC9 (regression) | `bash tests/test_session_start_advisor_v2.sh && bash tests/test_cancel_qg.sh && bash tests/harness/test_skill_orchestration_behavior.sh && bash tests/test_pre_pipeline_check.sh && bash tests/test_read_frontmatter.sh && bash tests/test_cancel_qg_med4.sh && bash tests/test_check_allowed_tools_order.sh` 전체 PASS |
+| AC10 (version) | `plugin.json` `version` field == `"1.32.3"` |
+| AC11 (changelog) | `CHANGELOG.md` 최상단 entry가 `## [1.32.3] — 2026-05-28` + Korean-primary 본문 + Added/Changed/Fixed 분류 |
 
 ## 6. Files to Modify
 
 ### Created
-- `plugins/quality-gates/scripts/read-frontmatter.py` (~35 lines)
-- `plugins/quality-gates/scripts/check-allowed-tools-order.sh` (~60 lines)
-- `plugins/quality-gates/tests/test_read_frontmatter.sh` (~50 lines)
+- `plugins/quality-gates/scripts/read-frontmatter.py` (~45 lines, escape-aware)
+- `plugins/quality-gates/scripts/check-allowed-tools-order.sh` (~80 lines)
+- `plugins/quality-gates/scripts/check-changelog-korean-primary.py` (~30 lines, AC6 verification helper — PR 후 폐기 가능)
+- `plugins/quality-gates/tests/test_read_frontmatter.sh` (~60 lines, 5 cases)
+- `plugins/quality-gates/tests/test_check_allowed_tools_order.sh` (~70 lines, 4 scenarios)
+- `plugins/quality-gates/tests/test_cancel_qg_med4.sh` (~50 lines)
+- `plugins/quality-gates/tests/fixtures/qg-worktree-fail-stub.sh` (~5 lines, executable)
 
 ### Modified
 - `plugins/quality-gates/scripts/cancel-qg-core.sh` (MED-1 + MED-3 + MED-4)
@@ -298,35 +337,39 @@ YAML comment(`#`)로 그룹 경계를 inline 문서화. (YAML 표준 comment, CC
 
 ## 7. Verification Plan
 
-**Per-fix verification**:
-1. MED-1: `chmod -x plugins/quality-gates/scripts/qg-worktree.sh` 후 `cancel-qg-core.sh` 직접 호출, stderr 검사. 복원 후 정상 동작 검증.
-2. MED-2: `bash plugins/quality-gates/tests/test_pre_pipeline_check.sh` 실행, 4 boundary 케이스 PASS 확인.
-3. MED-3: `bash plugins/quality-gates/tests/test_read_frontmatter.sh` PASS. `grep -rn "awk -F'\"'" plugins/quality-gates/scripts/` 0 hits.
-4. MED-4: `cancel-qg-core.sh`에서 `qg-worktree.sh` 강제 실패 fixture(스크립트가 exit 1 echo only) 만들어 호출 → stderr에 `exit code 1` 라인 포함 검증.
-5. I-C: `CHANGELOG.md` [1.32.0] section diff review.
-6. I-D: `bash plugins/quality-gates/scripts/check-allowed-tools-order.sh` PASS. 무작위로 한 줄 swap 후 FAIL 확인.
+**Per-fix verification** (각 step은 *재현 가능* + AC와 1:1 매핑):
 
-**Regression**:
-- `bash plugins/quality-gates/tests/test_session_start_advisor_v2.sh` PASS
-- `bash plugins/quality-gates/tests/test_cancel_qg.sh` PASS
-- `bash plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh` PASS
+1. **MED-1** (AC1): `chmod -x plugins/quality-gates/scripts/qg-worktree.sh` 후 `bash plugins/quality-gates/scripts/cancel-qg-core.sh` 직접 호출 → stderr에 `EXISTS but not executable` + `git worktree remove --force` 라인 포함 grep. 복원 (`chmod +x`) 후 정상 path 재확인. (대안: 임시 디렉토리로 `qg-worktree.sh` 이동 후 호출 → `MISSING` 라인 grep.)
+2. **MED-2** (AC2): `bash plugins/quality-gates/tests/test_pre_pipeline_check.sh` 실행, 4 boundary 케이스 PASS. T-SID-valid는 test 내부에서 sandbox `git init` 후 실행하므로 deterministic.
+3. **MED-3 transition** (AC3): `bash plugins/quality-gates/tests/test_read_frontmatter.sh` PASS (5 cases). `grep -rn "awk -F'\"'" plugins/quality-gates/scripts/` 0 hits. `grep -c "SCRIPT_DIR=" plugins/quality-gates/scripts/pre-pipeline-check.sh plugins/quality-gates/scripts/cancel-qg-core.sh` 각각 ≥ 1.
+4. **MED-3 escape** (AC4): T-RF-embedded-quote의 stdout이 정확히 `val"ue` (5 chars); T-RF-embedded-backslash의 stdout이 정확히 `a\b` (3 chars).
+5. **MED-4** (AC5): `bash plugins/quality-gates/tests/test_cancel_qg_med4.sh` PASS — fixture `qg-worktree-fail-stub.sh`을 호출 디렉토리에 symlink로 임시 교체 → `cancel-qg-core.sh` 호출 → stderr에 `exit code 1` 라인 grep → 원본 복원. `grep -c "sed" cancel-qg-core.sh` == 0.
+6. **I-C** (AC6): `python3 plugins/quality-gates/scripts/check-changelog-korean-primary.py CHANGELOG.md` exit 0 — 단락 단위로 Hangul 또는 verbatim quote 또는 100% identifier 검증.
+7. **I-D** (AC7+AC8): `bash plugins/quality-gates/scripts/check-allowed-tools-order.sh` exit 0. `bash plugins/quality-gates/tests/test_check_allowed_tools_order.sh` 4개 시나리오 모두 expected 결과.
 
-**Final integration**: `/qg --paths plugins/quality-gates/` 실행 (선택적; trivia escape 가능성 있음, 변경량 ~150 LOC이라 trivia 아닐 가능성 큼). PR 전 manual review.
+**Regression** (AC9):
+- `bash plugins/quality-gates/tests/test_session_start_advisor_v2.sh` PASS (v1.32.2 V8a-d 무결성)
+- `bash plugins/quality-gates/tests/test_cancel_qg.sh` PASS (기존 cancel 경로)
+- `bash plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh` PASS (V2/V7 protocol-shape)
+
+**Final integration** (필수, *not* 선택): `/qg --paths plugins/quality-gates/` 실행. 변경량 ~210 LOC + 신규 7 파일이므로 trivia escape 자격 미달. Gate 1 (plan-verifier), Gate 2 (PR review), Gate 3 (runtime verify) 모두 통과 후에야 PR 생성. trivia escape 발화 시 (예상 외) `--no-trivia` flag로 강제 실행.
 
 ## 8. Rejected Alternatives
 
 - **yq 의존성 도입 (MED-3)**: 좁은 frontmatter schema(`key: "value"` 한 줄)에 yq 풀세트는 overkill. 설치 보장도 불확실 (homebrew/apt 환경 차이).
 - **bash regex helper (MED-3)**: `[[ $line =~ ^key:\ \"([^\"]*)\" ]]`로 가능하나 embedded `"` 동일 fragility — python3 도입의 정당성 약화. 사용자 결정: Python3.
+- **awk 유지 + limitation 문서화 (MED-3)**: round-1 review에서 reviewer가 "helper 도입 목적이 fragility 해소인데 limitation으로 문서화하면 자기모순"이라 지적. *Rejected* — 진짜 escape-aware 정규식으로 처리하여 MED-3 본래 목적 달성 (T-RF-embedded-quote가 `val"ue`를 정상 반환). 추후 escape sequence(`\n`, `\xXX`)가 필요해지면 PyYAML safe_load로 추가 escalation 가능.
 - **MED-1 exit code 3 (orphan warning)**: 기존 caller(`commands/cancel-qg.md`) 변경 필요. scope creep. exit 0 + loud stderr advisory로 충분.
 - **CHANGELOG 다른 버전(`[1.32.1]`, `[1.32.2]`) Korean 변환**: 이미 Korean-primary로 작성됨 (이번 PR #71 작업에서 일관성 확보). 본 spec scope는 [1.32.0]만.
 - **I-D linter를 hooks/PostToolUse에 등록**: 매 SKILL.md edit마다 자동 실행되면 좋겠으나, 다른 plugin SKILL.md에 false positive 발생 가능 (다른 plugin의 컨벤션과 충돌). 본 PR scope는 manual linter만.
 - **SKILL.md allowed-tools 단일 alphabetical**: enforcement는 쉽지만 pipeline-order 가독성 손실. 사용자 결정: pipeline-order grouping.
+- **linter canonical을 SKILL.md 주석에서 파싱 (I-D)**: round-1 review에서 reviewer가 "linter 하드코딩과 SKILL.md 주석이 독립 표현되면 SSoT 위반" 지적. linter 하드코딩 EXPECTED_ORDER를 canonical로 채택, SKILL.md 주석은 문서화 — drift 시 SKILL.md를 linter에 맞춤. SKILL.md 주석을 canonical로 했을 때 linter가 자기 자신을 검증해야 하는 부트스트랩 문제 회피.
 
 ## 9. Metadata
 
 | Field | Value |
 |---|---|
-| spec_version | 1.0.0 |
+| spec_version | 1.1.0 (round-1 review fixes 적용) |
 | spec_path | `docs/superpowers/specs/2026-05-28-qg-v1322-followup-design.md` |
 | author | Jeongho-K + Claude (Opus 4.7) |
 | created | 2026-05-28 |
@@ -335,6 +378,7 @@ YAML comment(`#`)로 그룹 경계를 inline 문서화. (YAML 표준 comment, CC
 | branch | `feature/qg-v1322-followup` |
 | worktree | `/Users/jeonghokim/Downloads/devbrew/.claude/worktrees/feature-qg-v1322-followup` |
 | execution_mode | INLINE (Subagent-driven은 fix 단위가 작아 overhead 우세) |
-| commit_granularity | per-file-group (~5-6 commits 예상) |
-| acceptance_count | 10 (AC1–AC10) |
-| total_LOC_estimate | ~180 (신규 ~145 + 수정 ~35) |
+| commit_granularity | per-file-group (~6-8 commits 예상) |
+| acceptance_count | 11 (AC1–AC11) |
+| total_LOC_estimate | ~340 (신규 ~280 + 수정 ~60) |
+| review_rounds | 1 (round-1 round-1 8 issues + 3 advisories 모두 흡수) |
