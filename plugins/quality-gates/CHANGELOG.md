@@ -160,61 +160,61 @@
 ## [1.32.0] — 2026-05-27
 
 ### Breaking
-- **Stop hook removed.** `hooks/stop-hook.py` (1205 LOC, 13-transition
-  state machine, wall-clock guard, no-signal counter) deleted along with
-  the `Stop` event registration in `hooks.json`. Pipeline progression now
-  lives entirely in the `quality-pipeline` SKILL as in-turn serial
-  dispatch.
-- **`<qg-signal>` emission contract removed.** SKILL no longer emits the
-  signal tag. The `# QG-STOP-HOOK-CONTINUATION` sentinel is no longer
-  recognized by any code path.
-- **State file shape changed.** v1.32.0 state file is minimal: `session_id`,
-  `started_at`, `worktree_path` (optional), `gate2_iteration`. Removed
-  fields: `status`, `current_gate`, `consecutive_no_signal`,
+- **Stop hook 제거.** `hooks/stop-hook.py` (1205 LOC, 13-transition state
+  machine, wall-clock guard, no-signal counter)가 `hooks.json`의 `Stop`
+  event 등록과 함께 삭제됨. Pipeline progression은 이제 `quality-pipeline`
+  SKILL 안에서 in-turn serial dispatch로 전적으로 처리됨.
+- **`<qg-signal>` emission contract 제거.** SKILL이 더 이상 signal tag를
+  emit하지 않음. `# QG-STOP-HOOK-CONTINUATION` sentinel은 어떤 코드 경로에서도
+  인식되지 않음.
+- **State file shape 변경.** v1.32.0 state file은 minimal: `session_id`,
+  `started_at`, `worktree_path` (optional), `gate2_iteration`. 제거된 필드:
+  `status`, `current_gate`, `consecutive_no_signal`,
   `max_gate2_iterations`, `gate3_resolution_iter`, `last_gate3_needed_hash`,
   `max_gate3_resolutions`, `skip_runtime`, `single_gate`, `plan_file`,
   `pr_url`, `available_plugins`, `wall_clock_deadline_at`, `project_dir`.
-- **Env vars removed.** `DEVBREW_QG_DEADLINE_MIN` and
-  `DEVBREW_QG_NO_SIGNAL_MAX` no longer exist (wall-clock guard and
-  no-signal counter went away with stop-hook). Other env vars unchanged.
+- **Env vars 제거.** `DEVBREW_QG_DEADLINE_MIN`과
+  `DEVBREW_QG_NO_SIGNAL_MAX`가 더 이상 존재하지 않음 (wall-clock guard와
+  no-signal counter는 stop-hook과 함께 사라짐). 다른 env vars는 미변경.
 
 ### Added
-- **AskUserQuestion progression primitive.** SKILL calls AskUserQuestion
-  at Gate 1 FAIL, Gate 2 iter boundary (every iteration), Gate 2 max-iter
-  (replacing silent halt), and Gate 3 NEEDS_RESOLUTION. Same-turn tool
-  result drives the next dispatch.
+- **AskUserQuestion progression primitive.** SKILL이 Gate 1 FAIL, Gate 2
+  iter boundary (매 iteration), Gate 2 max-iter (silent halt 대체), Gate 3
+  NEEDS_RESOLUTION에서 AskUserQuestion 호출. Same-turn tool 결과가 다음
+  dispatch를 구동.
 - **Static SKILL orchestration test:** `tests/test_skill_orchestration.sh`
   (V2a gate-order + V2b context-anchor + V7 PASS-proximity heuristic).
-- **Fixture test for /cancel-qg, /qg --reset, /qg --gc:**
+- **`/cancel-qg`, `/qg --reset`, `/qg --gc` fixture test:**
   `tests/test_cancel_qg.sh`.
 - **Session-start advisor v2 test:** `tests/test_session_start_advisor_v2.sh`
   (V8 legacy advisory + V8-pre code-structure guard).
 
 ### Changed
-- **SKILL.md rewritten** from single-gate-per-turn to single-turn-serial
-  dispatch with AskUserQuestion gating.
-- **setup-qg.sh** emits minimal state schema; wall-clock and gate3-max
-  computation removed.
-- **session-start-advisor.py** drops in-flight pipeline detection;
-  detects legacy v1.x state files and emits one-shot `/cancel-qg` stderr
-  advisory. Frontmatter scan sub-feature unchanged.
-- **commands/qg.md** Pipeline Rules section rewritten; removed "Stop hook
-  handles progression" claim.
-- **README.md** Hook table no longer lists stop-hook.py; state diagram
-  replaced with ASCII single-turn sequence; Principles section adds
-  P22 generalization note.
+- **SKILL.md** single-gate-per-turn에서 AskUserQuestion gating의
+  single-turn-serial dispatch로 재작성.
+- **setup-qg.sh**가 minimal state schema를 emit; wall-clock과 gate3-max
+  계산 제거.
+- **session-start-advisor.py**는 in-flight pipeline detection을 drop;
+  legacy v1.x state file을 감지해 one-shot `/cancel-qg` stderr advisory
+  emit. Frontmatter scan sub-feature는 미변경.
+- **commands/qg.md** Pipeline Rules 섹션 재작성; "Stop hook handles
+  progression" 주장 제거.
+- **README.md** Hook 테이블이 더 이상 stop-hook.py를 나열하지 않음;
+  state diagram은 ASCII single-turn sequence로 교체; Principles 섹션에
+  P22 일반화 노트 추가.
 
 ### Removed
 - `hooks/stop-hook.py`
-- `hooks/hooks.json` Stop event block
-- All `<qg-signal>` references in SKILL/scripts/hooks
-- Obsolete tests coupled to stop-hook semantics (`test_forward_only_prose.sh`
-  and any stop-hook-coupled tests detected during Task 7)
+- `hooks/hooks.json`의 `Stop` event block
+- SKILL / scripts / hooks 의 모든 `<qg-signal>` 참조
+- stop-hook semantics에 coupled된 obsolete test
+  (`test_forward_only_prose.sh` + Task 7에서 감지된 stop-hook-coupled test)
 
 ### Migration
-v1.x in-flight pipelines cannot resume under v1.32.0. After upgrade, run
-`/cancel-qg` (per-session) or `/qg --reset` (legacy flat files) to clear
-old state. SessionStart advisor will guide you on next session start.
+v1.x in-flight pipeline은 v1.32.0에서 resume 불가. 업그레이드 후
+`/cancel-qg` (per-session) 또는 `/qg --reset` (legacy flat files)을
+실행해 옛 state를 clear. SessionStart advisor가 다음 session 시작 시
+guide를 emit함.
 
 ## [1.31.0] — 2026-05-20
 
