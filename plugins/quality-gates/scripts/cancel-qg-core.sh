@@ -46,6 +46,23 @@ if ! [[ "$session_id" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
 fi
 
 target_dir=".claude/quality-gates/$session_id"
+
+# If pipeline.md records a worktree_path (from `/qg branch <name>`), remove
+# the worktree first to avoid leaking it. Honors DEVBREW_QG_KEEP_WORKTREE
+# the same way session-end-cleanup.py does. This mirrors session-end-
+# cleanup.py logic so /cancel-qg has symmetric semantics.
+if [[ -f "$target_dir/pipeline.md" ]]; then
+  worktree_path=$(awk -F'"' '/^worktree_path:/ { print $2; exit }' "$target_dir/pipeline.md" 2>/dev/null)
+  if [[ -n "$worktree_path" && -d "$worktree_path" && "${DEVBREW_QG_KEEP_WORKTREE:-}" != "1" ]]; then
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ -x "$script_dir/qg-worktree.sh" ]]; then
+      "$script_dir/qg-worktree.sh" remove "$worktree_path" 2>&1 \
+        | sed 's/^/cancel-qg-core: worktree: /' >&2 || \
+        echo "cancel-qg-core: worktree removal failed (continuing with state-folder cleanup)" >&2
+    fi
+  fi
+fi
+
 if [[ -d "$target_dir" ]]; then
   rm -rf -- "$target_dir"
   echo "cancel-qg-core: removed $target_dir"

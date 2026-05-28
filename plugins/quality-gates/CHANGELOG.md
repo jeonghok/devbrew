@@ -5,13 +5,41 @@
 
 ## [1.32.1] — 2026-05-28
 
+### Fixed (Gate 2 iter-1 review-driven follow-up, same PR #71)
+
+- **C1-iter1**: `SKILL.md` frontmatter `allowed-tools`에 `AskUserQuestion`
+  + `detect-runtime.sh` + `compute-test-scope-candidates.sh` + `detect_codex.sh`
+  추가. v1.32.0 단일-턴 설계가 의존하는 도구들이 누락되어 있었음.
+- **I-iter1-2**: `commands/cancel-qg.md` v1.32.0 minimal schema에 정렬.
+  제거된 v1.5.x 필드(`status`/`current_gate`/`gate2_iteration`) 참조 제거.
+- **I-iter1-3**: `scripts/cancel-qg-core.sh` worktree-aware cleanup —
+  `pipeline.md`에 `worktree_path:`가 있으면 `qg-worktree.sh remove`
+  먼저 호출 (DEVBREW_QG_KEEP_WORKTREE=1 가드). session-end-cleanup.py와
+  대칭 의미론.
+- **I-iter1-4**: `LEGACY_V1_KEYS` invariant 주석 정확도 개선. `status:`는
+  split 안 하는 이유(자기-참조 substring 부재 + 일반성) 명시.
+- **I-iter1-5**: `scripts/pre-pipeline-check.sh` SESSION_ID pattern guard
+  추가 (`^[A-Za-z0-9_-]{8,}$`). `setup-qg.sh`/`cancel-qg-core.sh`와 일관.
+- **I-iter1-6**: SKILL.md Retry error handling option labels 재조정 —
+  "Abort retry" / "Skip this file" (이전: "Skip retry / abort" / "Continue
+  with next file" — 의미 역전).
+- **I-iter1-7**: `references/state-file-format.md` v1.32.1 schema에 정렬.
+  `gate2_iteration: 0` 제거 → Removed Fields에 이동. `gate3_max_resolutions:`
+  활성 필드로 추가.
+- **I-iter1-8**: `agents/runtime-verifier.md`의 `project_dir` input에
+  "절대 재계산 금지" 강제 문구 + Forbidden 섹션 항목 추가. 나머지 3개
+  reviewer agent와 동일 contract.
+- **I-iter1-9**: CHANGELOG C1 entry English-prose → Korean-primary로 재작성.
+- **I-iter1-10**: state file watermark `(v1.32.0)` → `(v1.32.1)`
+  (setup-qg.sh + state-file-format.md).
+
 ### Fixed (Gate 2 review-driven, PR #71)
 
-- **C1**: SKILL.md restores `project_dir:` threading into all 4 reviewer
-  dispatches (`adversarial`, `test-scope-validator`, `security-reviewer`,
-  `runtime-verifier`). 신규 preflight P0 step에서 `project_dir=$(pwd)`로
-  도출 후 매 dispatch에 전달. 워크트리 모드에서 agent가 `pwd`/`git rev-parse`로
-  재도출 시 발생하는 coordinate drift 차단.
+- **C1**: `SKILL.md` — `project_dir:` threading을 4개 reviewer dispatch
+  (`adversarial`, `test-scope-validator`, `security-reviewer`,
+  `runtime-verifier`) 전체에 복구. 신규 preflight P0 step에서
+  `project_dir=$(pwd)`로 도출 후 매 dispatch에 전달. 워크트리 모드에서
+  agent가 `pwd`/`git rev-parse`로 재도출 시 발생하는 coordinate drift 차단.
 - **C2**: `pre-pipeline-check.sh` 세션 ID 가드 추가. 같은 세션이
   소유한 `pipeline.md`는 절대 삭제 안 함 (setup-qg P2 → pre-pipeline-check
   P3 race 차단). stderr 권고: `pre-pipeline-check: preserving

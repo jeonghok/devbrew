@@ -37,12 +37,16 @@ LEGACY_RELATIVE = (
     ".claude/qg-diff-cache.txt",
     ".claude/qg-code-paths.tmp",
 )
-# Invariant: keys MUST use string concatenation to evade static grep
-# against self-referential tokens. AC17 asserts both split forms (each
-# split on the underscore) are present here AND that the unsplit literal
-# forms do NOT appear anywhere in this file. v1.32.0: in-flight detection
-# removed — legacy v1.x markers are detected for one-shot advisory only
-# (see _emit_legacy_v1_advisory).
+# Invariant: the two compound v1.x keys MUST use string concatenation to
+# evade source-grep — a future test asserting "no v1.x token leaks into
+# this advisor source" would otherwise fire on these literals. The single-
+# word `status:` token is left unsplit because (a) it lacks the
+# v1.x-distinguishing compound substrings (the `_gate` and `_no_signal`
+# suffixes) and (b) `status:` is too generic to ever be source-grepped in
+# isolation. AC17 asserts both compound-key split forms are present here
+# AND that their unsplit literal forms do NOT appear anywhere in this file.
+# v1.32.0: in-flight detection removed — legacy v1.x markers are detected
+# for one-shot advisory only (see _emit_legacy_v1_advisory).
 LEGACY_V1_KEYS = ("status:", "current" + "_gate:", "consecutive_no" + "_signal:")
 
 

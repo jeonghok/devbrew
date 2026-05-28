@@ -1,8 +1,11 @@
-# State File Format (v1.32.0)
+# State File Format (v1.32.1)
 
 > v1.32.0 breaking change: cross-turn pipeline state는 SKILL의 단일 턴
 > 시리얼 디스패치로 흡수됨. 본 state file은 **GC mtime anchor + worktree
-> tracking + Gate 2 iter 카운터 reporting**만 보존한다.
+> tracking + Gate 3 resolution-cap reporting**만 보존한다.
+>
+> v1.32.1 (review-driven): `gate2_iteration: 0` phantom 필드 제거(I11),
+> `gate3_max_resolutions:` 필드 추가(C3).
 
 The state file `.claude/quality-gates/<session-id>/pipeline.md` (per-session)
 is created by the setup script (`scripts/setup-qg.sh`) on `/qg` invocation
@@ -22,15 +25,12 @@ during preflight to confirm working directory; nothing else.
 ---
 session_id: "<session_id>"           # CLAUDE_CODE_SESSION_ID
 started_at: "<ISO-8601 UTC>"         # setup-qg.sh timestamp
+gate3_max_resolutions: 3             # DEVBREW_GATE3_MAX_RESOLUTIONS clamped 0..10
 worktree_path: "<absolute path>"     # OPTIONAL — set only when /qg branch <name> used
-gate2_iteration: 0                   # Updated by SKILL.md ONLY via the
-                                     # template `## Gate 2 Iteration N` line
-                                     # in the History section (not frontmatter).
-                                     # Kept at 0 in frontmatter — counter
-                                     # display is in History only.
+target_branch: "<branch name>"       # OPTIONAL — paired with worktree_path
 ---
 
-# Quality Gates Pipeline State (v1.32.0)
+# Quality Gates Pipeline State (v1.32.1)
 
 ## History
 
@@ -56,7 +56,8 @@ The following v1.x fields are **no longer written or read**:
 | `max_gate2_iterations` | Hard-coded constant in SKILL (5). |
 | `gate3_resolution_iter` | Hard-coded constant in SKILL (default 3, env override). |
 | `last_gate3_needed_hash` | Repeat detection moves to inline AskUserQuestion. |
-| `max_gate3_resolutions` | Read inline from `DEVBREW_GATE3_MAX_RESOLUTIONS`. |
+| `max_gate3_resolutions` | Renamed to `gate3_max_resolutions:` (C3 restored in v1.32.1). |
+| `gate2_iteration` | Phantom field — counter lives in `## History` section only (I11 v1.32.1). |
 | `skip_runtime` | Passed as SKILL invocation arg. |
 | `single_gate` | Passed as SKILL invocation arg. |
 | `plan_file` | Passed as SKILL invocation arg. |

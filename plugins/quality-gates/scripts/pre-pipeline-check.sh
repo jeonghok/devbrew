@@ -21,6 +21,15 @@ if [[ -z "$SESSION_ID" ]]; then
   echo "result: no_session_id"
   exit 0
 fi
+# SID pattern guard (matches setup-qg.sh / cancel-qg-core.sh). A malformed
+# SID would expand `.claude/quality-gates/$SESSION_ID` to a path-escape
+# (e.g. `..`), and subsequent rm/mkdir calls would silently operate on
+# unrelated paths.
+if ! [[ "$SESSION_ID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
+  echo "pre-pipeline-check: session ID '$SESSION_ID' fails pattern guard ([A-Za-z0-9_-]{8,})" >&2
+  echo "result: invalid_session_id"
+  exit 0
+fi
 STATE_DIR=".claude/quality-gates/$SESSION_ID"
 STATE_FILE="$STATE_DIR/pipeline.md"
 SESSION_FILE="$STATE_DIR/files.md"

@@ -16,7 +16,11 @@ allowed-tools:
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/pre-pipeline-check.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)
   - Agent
+  - AskUserQuestion
   - Edit
   - Write
   - Read
@@ -346,17 +350,17 @@ path that will be written. Reject and warn on any path resolving outside
 
 If `Edit` returns one of `old_string not unique`, `EACCES`, `ENOSPC`, or
 any other failure during Retry application, do NOT silently skip.
-Surface "Retry failed" via AskUserQuestion (skip retry or abort, never silent):
+Surface "Retry failed" via AskUserQuestion (abort retry or skip this file, never silent):
 
 ```
 AskUserQuestion({
   questions: [
     {
-      question: "Retry failed at <file>: <reason>. Skip retry or abort?",
+      question: "Retry failed at <file>: <reason>. Abort the retry iteration, or skip this file and continue with the remaining patches?",
       header: "Retry",
       options: [
-        {label: "Skip retry / abort",      description: "Abort this Retry iteration; surface to Gate 2 verdict."},
-        {label: "Continue with next file", description: "Skip this file's fix; continue applying remaining Retry patches."}
+        {label: "Abort retry",     description: "Abort this Retry iteration entirely; surface as failure to the Gate 2 verdict."},
+        {label: "Skip this file",  description: "Skip THIS file's fix only; continue applying remaining Retry patches in this iteration."}
       ],
       multiSelect: false
     }
@@ -364,7 +368,9 @@ AskUserQuestion({
 })
 ```
 
-No silent retry-skip — every Edit failure surfaces a user choice.
+No silent retry-skip — every Edit failure surfaces a user choice. Labels
+are explicit: "Abort retry" terminates the iteration; "Skip this file"
+continues with remaining patches.
 
 ## Reviewer dispatch contract
 

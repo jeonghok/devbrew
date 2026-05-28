@@ -291,7 +291,7 @@ fi
 cat >> "$TEMP_FILE" << EOF
 ---
 
-# Quality Gates Pipeline State (v1.32.0)
+# Quality Gates Pipeline State (v1.32.1)
 
 ## History
 - [$TIMESTAMP] Pipeline started
