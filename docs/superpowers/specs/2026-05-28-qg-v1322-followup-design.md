@@ -8,6 +8,27 @@
 
 ---
 
+## 목차
+
+- [§0. Context](#0-context)
+- [§1. Goals](#1-goals)
+- [§2. Non-goals](#2-non-goals)
+- [§3. Constraints](#3-constraints)
+- [§4. Per-fix specifications](#4-per-fix-specifications)
+  - [§4.1 MED-1: `qg-worktree.sh` 부재 메시지 self-actionable화](#41-med-1-qg-worktreesh-부재-메시지-self-actionable화)
+  - [§4.2 MED-2: pre-pipeline-check SID guard boundary tests](#42-med-2-pre-pipeline-check-sid-guard-boundary-tests)
+  - [§4.3 MED-3: frontmatter 파싱 helper로 통일](#43-med-3-frontmatter-파싱-helper로-통일)
+  - [§4.4 MED-4: sed pipe 제거 (error attribution 명확화)](#44-med-4-sed-pipe-제거-error-attribution-명확화)
+  - [§4.5 I-C: CHANGELOG [1.32.0] body Korean-primary 변환](#45-i-c-changelog-1320-body-korean-primary-변환)
+  - [§4.6 I-D: SKILL.md `allowed-tools` pipeline-order](#46-i-d-skillmd-allowed-tools-pipeline-order)
+- [§5. Acceptance Criteria](#5-acceptance-criteria)
+- [§6. Files to Modify](#6-files-to-modify)
+- [§7. Verification Plan](#7-verification-plan)
+- [§8. Rejected Alternatives](#8-rejected-alternatives)
+- [§9. Metadata](#9-metadata)
+
+---
+
 ## 0. Context
 
 PR #71 ("AskUserQuestion-driven in-turn iteration", v1.32.0 → v1.32.2) merge 후, 3 round의 `/qg` 리뷰에서 surface된 27+ → 10 → 5 finding curve가 수렴했고, 32+건이 해결됐다. 마지막 라운드에서 5개 blocking(2 Critical + 3 Important)을 fix한 후 "Accept partial" 옵션으로 wall-clock budget을 마무리하고 merge함. 이때 deferred로 분류된 6건이 본 spec의 대상이다.
