@@ -11,8 +11,8 @@
 #
 # Optional env:
 #   PLAN_SUMMARY_FILE — path to YAML file with an optional plan summary
-#                       (omit for empty plan context; Gate 1 verifier removed
-#                       in v2.0.0, so callers normally leave this unset).
+#                       (omit for empty plan context; the upstream plan-verification
+#                       step was removed in v2.0.0, so callers normally leave this unset).
 #
 # Emits: YAML to <output_yaml_path>. Schema:
 #   agent: codex-reviewer

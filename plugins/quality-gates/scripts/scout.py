@@ -4,7 +4,7 @@
 Replaces agents/scout.md Agent dispatch. The decision rules in v1.x
 scout.md L42-44 are already deterministic; the LLM was only applying the
 table. Direct rule-based decision saves ~5-15K input + 500 output tokens
-per Gate 2 iteration.
+per Review gate iteration.
 
 Input (stdin JSON):
   {
