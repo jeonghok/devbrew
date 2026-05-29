@@ -3,6 +3,58 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.0.0] — 2026-05-30
+
+**BREAKING.** Gate 1(plan verification) 제거 + wall-clock budget 제거 + 두 게이트
+비수치 rename. plan 검증은 상류 `superpowers:writing-plans` / `spec-distill`가 담당하는
+중복 단계였고, v1.32.0 single-turn 재설계 후 남은 wall-clock 잔재를 정리.
+
+### Removed
+- **`agents/plan-verifier.md`** + **`tests/test_plan_verifier_behavior.py`**: Gate 1
+  plan-verifier agent 완전 제거. plan 검증은 writing-plans/spec-distill 소관.
+- **`/qg gate1` 서브커맨드**: 제거 (alias 없음).
+- **scout `gate1_verdict` 입력 필드** + reviewer dispatch의 `gate1_summary` 핸드오프: 제거.
+- **codex per-call 600s wall-clock timeout** (`run_codex_reviewer.sh`의 `timeout 600`
+  래퍼·`no_timeout_binary` 분기·`OVERRIDE_REASON=timeout`): 제거. hang 위험은 수용 —
+  backstop은 Bash tool timeout + `DEVBREW_DISABLE_QG_CODEX=1` + `/cancel-qg`.
+- **README wall-clock budget deferred 노트** + codex "Per-call wall-clock ceiling: 600s"
+  표현: 제거.
+- **철학 문서 AP16 `(b) wall-clock budget` guard**: 제거 (autonomous-loop guard 4→3개:
+  max-iter / repeat 감지 / kill switch).
+- **state-file-format `wall_clock_deadline_at`** 행: 제거.
+
+### Changed
+- **게이트 비수치 rename**: `Gate 2: PR Review` → **Review gate**, `Gate 3: Runtime
+  Verification` → **Runtime gate**. "gate" 명사는 플러그인 이름·`/qg`와 정합 위해 유지.
+- **서브커맨드**: `/qg gate2` → `/qg review`, `/qg gate3` → `/qg runtime`.
+- **env var**: `DEVBREW_GATE3_MAX_RESOLUTIONS` → `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS`;
+  `DEVBREW_DISABLE_GATE3_TEST_VALIDATION` → `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION`.
+- **hook 키**: `quality-gates:gate3-test-scope` → `quality-gates:runtime-test-scope`.
+- **state 필드**: `gate3_max_resolutions` → `runtime_max_resolutions`.
+- **내부 식별자**: `max_gate2_iterations` → `max_review_iterations`; `gate3-evidence.md`
+  → `runtime-evidence.md`; `gate3_fail` → `runtime_fail`; `gate3_repeat_detected` →
+  `runtime_repeat_detected`; synthesize heading `## Gate 2 Findings` → `## Review Findings`.
+- **유지**: `scripts/discover-plan.sh` + "Plan Discovery Sources" 문서 (Runtime gate의
+  test-scope-validator가 `plan_path:auto`로 소비 — plan *verify*만 제거, plan *discovery*는 존속).
+  P22 Cost Awareness·`cost_class`·Cost Class % 표·`detect_codex.sh` 5s probe도 유지.
+
+### Migration (1.32.3 → 2.0.0)
+
+**Deprecated alias 없음** — clean break (P17 사용자 주권 우선, P23 deprecation-window
+하우스 룰의 의도적 예외; major bump가 breaking을 신호). 구→신 매핑:
+
+| old | new |
+|---|---|
+| `/qg gate1` | *(제거 — plan 검증은 writing-plans/spec-distill)* |
+| `/qg gate2` | `/qg review` |
+| `/qg gate3` | `/qg runtime` |
+| `DEVBREW_GATE3_MAX_RESOLUTIONS` | `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS` |
+| `DEVBREW_DISABLE_GATE3_TEST_VALIDATION` | `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION` |
+| `DEVBREW_SKIP_HOOKS=quality-gates:gate3-test-scope` | `...=quality-gates:runtime-test-scope` |
+
+구 `gate1`/`gate2`/`gate3` 서브커맨드와 `DEVBREW_GATE3_*` env는 **즉시 무효** — 스크립트·CI에서
+참조 중이면 위 표대로 갱신 필요.
+
 ## [1.32.3] — 2026-05-28
 
 PR #71 (v1.32.0 → v1.32.2) merge 후 deferred된 6건의 follow-up.
