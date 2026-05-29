@@ -4,13 +4,15 @@
 
 **Goal:** spec-distill의 marker 기반 Stop-hook `/compact` induction을 제거하고, /compact 추천을 reviewing-spec Phase 5의 `AskUserQuestion` proceed 게이트로 옮기며, dangling `spec_path` 핸드오프 예외를 `-f` working-tree 가드로 봉쇄한다.
 
-**Architecture:** `approve_handoff.sh`를 thin finalizer(spec_path 존재 검증 + 세션 cleanup)로 축소하고, `compact-induction.py`/`compact-detect.py` hook + `.markers/` 메커니즘 + named-status 상수를 삭제한다. 다음-단계 추천은 hook(텍스트 주입만 가능)이 아니라 skill이 띄우는 interactive 게이트가 담당한다 (AP2 approval-gate 구분 §철학 line 413).
+**Architecture:** `approve_handoff.sh`를 thin finalizer(spec_path 존재 검증 + 세션 cleanup)로 축소하고, `compact-induction.py`/`compact-detect.py` hook + `.markers/` 메커니즘 + named-status 상수를 삭제한다. 다음-단계 추천은 hook(텍스트 주입만 가능)이 아니라 skill이 띄우는 interactive 게이트가 담당한다 (AP2 approval-gate 구분, 철학 §AP2 line 413).
 
 **Tech Stack:** bash (POSIX + git), Python 3 (hooks/GC, stdlib only), markdown skill/docs. 테스트는 bash assertion 스크립트 + Python `unittest`.
 
-**Spec:** `docs/superpowers/specs/2026-05-29-spec-distill-handoff-proceed-gate-design.md` (4-round adversarial review, approved).
+**Spec:** `docs/superpowers/specs/2026-05-29-spec-distill-handoff-proceed-gate-design.md` (4-round adversarial review + AC19 delta mini-cycle round-2, approved/locked).
 
-**Branch:** `feature/spec-distill-proceed-gate` (이미 생성됨, design doc 2 commits).
+**Branch:** `feature/spec-distill-proceed-gate` (이미 생성됨; design doc commits `958d4f2`→`b39758f`).
+
+> **Baseline note (필독):** 아래 모든 소스 파일은 현재 **v0.10.0 상태 그대로**다 (이 plan은 구현 *이전* 작성). 따라서 "rewrite"는 *incremental 편집*이 아니라 **구버전 mechanism(marker·induction·packet·`HANDOFF_STATUS_`·`dirty_blocked`) 단언/서술의 전면 교체**다. 검증 step의 "토큰 부재" 단언(V1/V7/V8 류)은 구현 *후* 평가되는 목표 상태이지 현재 repo 상태가 아니다 (현재 repo엔 구버전 서술이 그대로 있는 게 정상).
 
 ---
 
@@ -21,19 +23,21 @@
 | `plugins/spec-distill/scripts/approve_handoff.sh` | 핸드오프 finalizer: spec_path 존재 검증 + cleanup | **rewrite** (marker/packet/named-status 제거, `-f` 가드 추가) |
 | `plugins/spec-distill/hooks/compact-induction.py` | (구) Stop hook /compact induction | **delete** |
 | `plugins/spec-distill/hooks/compact-detect.py` | (구) UserPromptSubmit marker 삭제 | **delete** |
-| `plugins/spec-distill/hooks/hooks.json` | hook 등록 | **edit** (compact-* 2개 항목 제거) |
-| `plugins/spec-distill/scripts/spec-distill-gc.py` | 세션 dir TTL-GC | **edit** (`_sweep_markers` 제거) |
-| `plugins/spec-distill/skills/reviewing-spec/SKILL.md` | review phase + handoff | **edit** (Phase 5 proceed 게이트) |
+| `plugins/spec-distill/hooks/hooks.json` | hook 등록 | **edit** (compact-* 2개 항목 + description 갱신) |
+| `plugins/spec-distill/scripts/spec-distill-gc.py` | 세션 dir TTL-GC | **edit** (`_sweep_markers` 정의+호출 제거) |
+| `plugins/spec-distill/skills/reviewing-spec/SKILL.md` | review phase + handoff | **edit** (Phase 5 proceed 게이트, 줄 121–144 교체) |
 | `plugins/spec-distill/tests/test_handoff_spec_path_validation.sh` | AC4a/AC4b 회귀 | **create** |
 | `plugins/spec-distill/tests/test_approve_handoff.sh` | approve_handoff 계약 | **rewrite** |
 | `plugins/spec-distill/tests/test_handoff_compact_chain.sh` | 핸드오프 end-to-end | **rewrite** |
-| `plugins/spec-distill/tests/test_gc.py` | GC | **edit** (marker 케이스 13~16 + `_make_marker` 삭제) |
+| `plugins/spec-distill/tests/test_gc.py` | GC | **edit** (marker block 줄 123–163 삭제) |
 | `plugins/spec-distill/tests/test_compact_induction_hook.sh` 외 4개 | 구 mechanism 테스트 | **delete** |
-| `plugins/spec-distill/.claude-plugin/plugin.json` | 메타 | **edit** (0.11.0) |
-| `plugins/spec-distill/CHANGELOG.md` | 변경 이력 | **edit** ([0.11.0]) |
-| `plugins/spec-distill/README.md` | 문서 | **edit** (Hooks 표 −2, kill switch −2, Principles) |
-| `CLAUDE.md` | devbrew root | **edit** (Polite handoff 항목) |
-| `MEMORY 파일` | compounding | **edit** (전환 기록) |
+| `plugins/spec-distill/.claude-plugin/plugin.json` | 메타 | **edit** (0.10.0→0.11.0) |
+| `plugins/spec-distill/CHANGELOG.md` | 변경 이력 | **edit** ([0.11.0] prepend) |
+| `plugins/spec-distill/README.md` | 문서 | **edit** (Hooks 표 −2, kill switch −2, Principle/AP2/Flow) |
+| `CLAUDE.md` | devbrew root | **edit** (Polite handoff Forbidden Pattern) |
+| auto-memory `project_spec_distill_review_hardening.md` | compounding | **edit** (전환 기록) |
+
+**범위 제외 (spec round-2 검증 — 변경 불필요, V9 unchanged-green):** `test_handoff_kill_switch.sh`, `test_handoff_context_section_required.sh`, `test_handoff_context_empty_subsections.sh`, `test_handoff_design_mode.sh`, `test_handoff_conversation_reference.sh`, `test_session_end_cleanup.py` — grep 결과 marker/STATUS/packet/FIRE_COUNT 참조 0건 (spec-reviewer persona / session cleanup 검증만, approve_handoff/marker 무관).
 
 ---
 
@@ -62,9 +66,6 @@ SCRIPT="$PLUGIN_DIR/scripts/approve_handoff.sh"
 fail=0
 note() { echo "[$1] $2"; [[ "$1" == "FAIL" ]] && fail=$((fail+1)) || true; }
 
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-ERR="$TMP/err"
-
 setup_repo() {
     local wd=$1
     mkdir -p "$wd/docs/superpowers/specs"
@@ -77,18 +78,18 @@ setup_repo() {
 }
 
 # ── AC4a: spec_path never existed (absent in working tree AND git) ──
-WORK=$(mktemp -d); setup_repo "$WORK"
+WORK=$(mktemp -d); setup_repo "$WORK"; ERR="$WORK/err"
 bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/NONEXISTENT.md" >/dev/null 2>"$ERR"; rc=$?
 sess_dir="$WORK/.claude/spec-distill/test-sid12"
-if [[ $rc -eq 1 ]] && grep -q "\[spec-distill\]" "$ERR" && grep -qi "not found\|부재" "$ERR" && [[ -d "$sess_dir" ]]; then
+if [[ $rc -eq 1 ]] && grep -q "\[spec-distill\]" "$ERR" && grep -qi "not found\|부재\|no handoff" "$ERR" && [[ -d "$sess_dir" ]]; then
     note PASS "AC4a: absent spec_path → exit 1 + advisory + session dir preserved"
 else
-    note FAIL "AC4a: rc=$rc, advisory=$(grep -qi 'not found\|부재' "$ERR" && echo y || echo n), sess_preserved=$([[ -d $sess_dir ]] && echo y || echo n)"
+    note FAIL "AC4a: rc=$rc, advisory=$(grep -qi 'not found\|부재\|no handoff' "$ERR" && echo y || echo n), sess_preserved=$([[ -d $sess_dir ]] && echo y || echo n)"
 fi
 rm -rf "$WORK"
 
 # ── AC4b: dangling worktree — tracked in git HEAD, removed from working tree ──
-WORK=$(mktemp -d); setup_repo "$WORK"
+WORK=$(mktemp -d); setup_repo "$WORK"; ERR="$WORK/err"
 # spec is committed (in HEAD); now delete the working-tree copy → dangling.
 rm -f "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md"
 bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>"$ERR"; rc=$?
@@ -106,7 +107,7 @@ echo "PASSED: 2 cases"
 
 - [ ] **Step 2: Rewrite test_approve_handoff.sh to the v0.11.0 contract**
 
-Replace the entire contents of `plugins/spec-distill/tests/test_approve_handoff.sh`:
+Replace the **entire** contents of `plugins/spec-distill/tests/test_approve_handoff.sh` (구버전은 marker/STATUS/packet 단언 + dirty→exit1 — 전면 교체):
 
 ```bash
 #!/usr/bin/env bash
@@ -135,7 +136,7 @@ setup_repo() {
 }
 markers_dir() { echo "$1/.claude/spec-distill/.markers"; }
 
-# ── Case 1 (AC3): clean HEAD spec → exit 0, NO marker dir, NO packet text ──
+# ── Case 1 (AC3): clean HEAD spec → exit 0, NO marker dir, NO packet/STATUS text ──
 WORK=$(mktemp -d); setup_repo "$WORK"
 bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >"$OUT" 2>"$ERR"; rc=$?
 md=$(markers_dir "$WORK")
@@ -215,7 +216,7 @@ if [[ "$fail" -gt 0 ]]; then echo "FAILED: $fail case(s)"; exit 1; fi
 echo "PASSED: 7 cases"
 ```
 
-- [ ] **Step 3: Delete the obsolete approve_handoff tests**
+- [ ] **Step 3: Delete the two obsolete approve_handoff tests**
 
 ```bash
 git rm plugins/spec-distill/tests/test_handoff_approve_packet_emit.sh \
@@ -223,17 +224,17 @@ git rm plugins/spec-distill/tests/test_handoff_approve_packet_emit.sh \
 ```
 (packet emit + named-status 기능이 제거되므로 검증 대상 부재 — AC16/AC18.)
 
-- [ ] **Step 4: Run the new tests to verify they FAIL against the current script**
+- [ ] **Step 4: Run the new tests to verify they FAIL against the current v0.10.0 script**
 
 Run: `bash plugins/spec-distill/tests/test_handoff_spec_path_validation.sh`
-Expected: FAIL on AC4b (current script has no `-f` guard; `git rev-parse HEAD` succeeds → proceeds).
+Expected: `FAILED: 1 case(s)` — AC4b fails (current script has no `-f` guard; `git rev-parse HEAD -- <path>` succeeds → proceeds to packet emit, exit 0 not 1).
 
 Run: `bash plugins/spec-distill/tests/test_approve_handoff.sh`
-Expected: FAIL on case 1/2/3 (current script writes marker, dirty→exit 1, emits packet).
+Expected: FAIL — current script writes marker dir (case 1/3), dirty→exit 1 (case 2 expects exit 0), emits packet (case 1).
 
 - [ ] **Step 5: Rewrite approve_handoff.sh as the v0.11.0 thin finalizer**
 
-Replace the entire contents of `plugins/spec-distill/scripts/approve_handoff.sh`:
+Replace the **entire** contents of `plugins/spec-distill/scripts/approve_handoff.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -354,7 +355,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: Rewrite test_handoff_compact_chain.sh to the v0.11.0 contract (no marker/induction)**
 
-Replace the entire contents of `plugins/spec-distill/tests/test_handoff_compact_chain.sh`:
+Replace the **entire** contents of `plugins/spec-distill/tests/test_handoff_compact_chain.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -416,11 +417,11 @@ if [[ "$fail" -gt 0 ]]; then echo "FAILED: $fail step(s)"; exit 1; fi
 echo "PASSED: chain"
 ```
 
-- [ ] **Step 2: Edit hooks.json — remove the two compact-* entries**
+- [ ] **Step 2: Edit hooks.json — remove the two compact-* entries + update description**
 
-In `plugins/spec-distill/hooks/hooks.json`, update the top-level `description` and remove the compact-induction (Stop) + compact-detect (UserPromptSubmit) hook objects.
+In `plugins/spec-distill/hooks/hooks.json`:
 
-Change `description` from:
+(a) Change the top-level `description` (line 2) from:
 ```json
   "description": "spec-distill — UserPromptSubmit reminder/compact-detect, SessionStart anchor, PostToolUse spec/design validator, Stop reviewer-dispatch + compact-induction, SessionEnd cleanup.",
 ```
@@ -429,7 +430,7 @@ to:
   "description": "spec-distill — UserPromptSubmit reminder, SessionStart anchor, PostToolUse spec/design validator, Stop reviewer-dispatch, SessionEnd cleanup.",
 ```
 
-In the `UserPromptSubmit` array, remove the second hook object (compact-detect.py), leaving only pending-review-reminder.py:
+(b) In the `UserPromptSubmit` array, remove the compact-detect.py hook object (lines 12–16), leaving only pending-review-reminder.py. Result:
 ```json
     "UserPromptSubmit": [
       {
@@ -444,7 +445,7 @@ In the `UserPromptSubmit` array, remove the second hook object (compact-detect.p
     ],
 ```
 
-In the `Stop` array, remove the second hook object (compact-induction.py), leaving only review-dispatch.py:
+(c) In the `Stop` array, remove the compact-induction.py hook object (lines 51–55), leaving only review-dispatch.py. Result:
 ```json
     "Stop": [
       {
@@ -469,13 +470,13 @@ git rm plugins/spec-distill/hooks/compact-induction.py \
        plugins/spec-distill/tests/test_compact_detect_hook.sh
 ```
 
-- [ ] **Step 4: Verify hooks.json is valid JSON and chain test passes**
+- [ ] **Step 4: Verify hooks.json is valid JSON and the removals took (AC1/AC2)**
 
-Run: `python3 -c "import json,sys; json.load(open('plugins/spec-distill/hooks/hooks.json'))" && echo "JSON OK"`
+Run: `python3 -c "import json; json.load(open('plugins/spec-distill/hooks/hooks.json')); print('JSON OK')"`
 Expected: `JSON OK`
 
-Run: `python3 -c "import json; d=json.load(open('plugins/spec-distill/hooks/hooks.json')); print('compact-induction' in json.dumps(d), 'compact-detect' in json.dumps(d))"`
-Expected: `False False`
+Run: `python3 -c "import json; d=json.dumps(json.load(open('plugins/spec-distill/hooks/hooks.json'))); print('compact-induction' in d, 'compact-detect' in d, 'review-dispatch' in d, 'pending-review-reminder' in d)"`
+Expected: `False False True True` (AC1: compact-* gone; AC2: review-dispatch + reminder remain)
 
 Run: `bash plugins/spec-distill/tests/test_handoff_compact_chain.sh`
 Expected: `PASSED: chain`
@@ -487,8 +488,8 @@ git add plugins/spec-distill/hooks/hooks.json plugins/spec-distill/tests/test_ha
 git commit -m "feat(spec-distill)!: remove compact-induction + compact-detect hooks
 
 marker 기반 Stop-hook /compact induction + UserPromptSubmit detect 폐기.
-hooks.json에서 두 항목 제거(Stop=review-dispatch만, UserPromptSubmit=reminder만).
-chain 테스트를 marker/induction 없는 v0.11.0 계약으로 재작성.
+hooks.json에서 두 항목 + description 갱신(Stop=review-dispatch만,
+UserPromptSubmit=reminder만). chain 테스트를 marker/induction 없는 v0.11.0 계약으로 재작성.
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -498,25 +499,35 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Task 3: GC `_sweep_markers` dead code 제거
 
 **Files:**
-- Edit: `plugins/spec-distill/scripts/spec-distill-gc.py`
-- Edit: `plugins/spec-distill/tests/test_gc.py`
+- Edit: `plugins/spec-distill/scripts/spec-distill-gc.py` (remove def 줄 103–135 + call 줄 195)
+- Edit: `plugins/spec-distill/tests/test_gc.py` (remove marker block 줄 123–163)
 
 - [ ] **Step 1: Delete the marker GC test cases from test_gc.py**
 
-In `plugins/spec-distill/tests/test_gc.py`, delete the entire `# ─── v0.10.0 _sweep_markers tests ───` block: the `_make_marker` helper (around line 125) and `test_13_marker_ttl_reached`, `test_14_marker_ttl_not_reached`, `test_15_marker_dir_missing`, `test_16_non_emitted_file_preserved` (lines ~123–160). The non-marker cases test_1–test_12 remain unchanged.
+In `plugins/spec-distill/tests/test_gc.py`, delete the entire marker test block — the `# ─── v0.10.0 _sweep_markers tests ───` comment (줄 123), the `_make_marker` helper (줄 125–137), and `test_13_marker_ttl_reached` / `test_14_marker_ttl_not_reached` / `test_15_marker_dir_missing` / `test_16_non_emitted_file_preserved` (줄 139–163). 
 
-- [ ] **Step 2: Run test_gc.py to confirm it still imports (will fail at import if `_sweep_markers` referenced)**
+Concretely, remove everything from (and including) line 123:
+```python
+    # ─── v0.10.0 _sweep_markers tests ───
+```
+through (and including) line 163:
+```python
+        self.assertTrue(other.exists())
+```
+The block ends right before the closing `if __name__ == "__main__":` (which stays). The non-marker cases `test_1`–`test_12` remain unchanged.
 
-Run: `python3 -m pytest plugins/spec-distill/tests/test_gc.py -q` (or `python3 plugins/spec-distill/tests/test_gc.py` if unittest-runnable)
-Expected: tests 1–12 PASS (marker tests gone).
+- [ ] **Step 2: Run test_gc.py to confirm the marker cases are gone and 1–12 still pass**
+
+Run: `python3 -m unittest plugins.spec-distill.tests.test_gc -q 2>/dev/null || python3 plugins/spec-distill/tests/test_gc.py`
+Expected: 12 tests run, all PASS. (Note: `_sweep_markers` still exists in the GC script at this point — test_gc no longer exercises it, but the function is removed in Step 3.)
 
 - [ ] **Step 3: Remove `_sweep_markers` function + its call site from spec-distill-gc.py**
 
 In `plugins/spec-distill/scripts/spec-distill-gc.py`:
 
-Delete the entire `_sweep_markers` function (lines 103–135, from `def _sweep_markers(root: Path, ttl_ns: int) -> int:` through its closing `return removed`).
+(a) Delete the entire `_sweep_markers` function — 줄 103–135, from `def _sweep_markers(root: Path, ttl_ns: int) -> int:` through its closing `    return removed`. Also remove the single blank line separating it from `_gc_one` so two blank lines remain between `_sweep_gc_pending` and `_gc_one` (PEP 8).
 
-Remove its call in `gc()` — change:
+(b) Remove its call in `gc()` — change (줄 194–196):
 ```python
             removed += _sweep_gc_pending(root)
             removed += _sweep_markers(root, ttl_ns)
@@ -528,13 +539,13 @@ to:
             for child in root.iterdir():
 ```
 
-- [ ] **Step 4: Verify no `_sweep_markers` / `.markers` references remain in GC**
+- [ ] **Step 4: Verify no `_sweep_markers` / `.markers` references remain in GC + tests green**
 
 Run: `grep -c "_sweep_markers\|\.markers" plugins/spec-distill/scripts/spec-distill-gc.py`
 Expected: `0`
 
-Run: `python3 -m pytest plugins/spec-distill/tests/test_gc.py -q`
-Expected: all remaining cases PASS.
+Run: `python3 -m unittest plugins.spec-distill.tests.test_gc -q 2>/dev/null || python3 plugins/spec-distill/tests/test_gc.py`
+Expected: all 12 remaining cases PASS (import succeeds — no dangling `_sweep_markers` reference).
 
 - [ ] **Step 5: Commit**
 
@@ -543,7 +554,7 @@ git add plugins/spec-distill/scripts/spec-distill-gc.py plugins/spec-distill/tes
 git commit -m "refactor(spec-distill): drop _sweep_markers from GC (markers removed)
 
 marker가 더는 생성되지 않으므로 .markers/ TTL sweep dead code 제거 + test_13~16 삭제.
-marker GC coverage 포기는 의도적(AC18).
+marker GC coverage 포기는 의도적(AC18 — markers 미생성).
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -553,11 +564,13 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Task 4: reviewing-spec Phase 5 proceed 게이트
 
 **Files:**
-- Edit: `plugins/spec-distill/skills/reviewing-spec/SKILL.md` (replace "Phase 5 Human Gate" + "Approve handoff sequence" + "실패 시 state 보존" sections, ~lines 121–144)
+- Edit: `plugins/spec-distill/skills/reviewing-spec/SKILL.md` — replace 줄 121–144 (`## Phase 5 Human Gate` 부터 `### 실패 시 state 보존 (P14)` 절 끝까지). 그 다음 절(`## In-flight state migration (C10)`, 줄 146~)은 변경 없이 유지.
 
-- [ ] **Step 1: Replace the Phase 5 + Approve handoff sections in SKILL.md**
+> **중요 (V7/AC10 자기지시 함정):** AC10/V7은 SKILL.md에 `marker`·`packet`·`compact-induction`·`compact-detect`·`.markers/` 토큰이 **0건**이길 요구한다. 따라서 "marker 없음"처럼 *부재를 설명하려고 그 단어를 쓰는 것*도 위반이다. 아래 교체 본문은 그 토큰들을 일절 쓰지 않는다 (구버전 메커니즘은 "상태 추적 artifact" 등 중립어로 지칭). `/compact`·`writing-plans`는 V7 grep 대상이 아니므로 사용 OK.
 
-In `plugins/spec-distill/skills/reviewing-spec/SKILL.md`, replace from `## Phase 5 Human Gate` through the end of the `### 실패 시 state 보존 (P14)` subsection with:
+- [ ] **Step 1: Replace the Phase 5 + Approve handoff + 실패 시 보존 sections in SKILL.md**
+
+In `plugins/spec-distill/skills/reviewing-spec/SKILL.md`, replace 줄 121–144 with:
 
 ````markdown
 ## Phase 5 Human Gate — proceed 게이트
@@ -590,7 +603,7 @@ AskUserQuestion({
 
 ### Step C — 응답 처리
 
-- **① /compact 후 writing-plans**: Approve handoff sequence 실행 → 사용자에게 verbatim `/compact` 명령을 *그대로 보이게* 노출 + "compact 후 writing-plans 진입 준비됨" 안내 → **여기서 턴을 종료(STOP). 같은 턴에서 `writing-plans`를 호출하지 말 것** (compact 전 writing-plans 진입 = 옵션 ① 무력화). `Skill superpowers:writing-plans <path>` 진입은 사용자가 `/compact`를 *실제 실행한 다음 턴*에 **사용자 트리거**(예: `/compact write plan`처럼 compact 뒤에 붙인 진행 인자, 또는 명시적 진행 요청)로만 일어난다 — 모델은 다음 턴에 자동 진입하지 *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17). compact된 fresh context에서 plan 작성 (AC19).
+- **① /compact 후 writing-plans**: Approve handoff sequence 실행 → 사용자에게 verbatim `/compact` 명령을 *그대로 보이게* 노출 + "compact 후 writing-plans 진입 준비됨" 안내 → **여기서 턴 종료(STOP). 같은 턴에서 `writing-plans`를 호출하지 말 것** (compact 전 writing-plans 진입 = 옵션 ① 무력화). `Skill superpowers:writing-plans <path>` 진입은 사용자가 `/compact`를 *실제 실행한 다음 턴*에 **사용자 트리거**(예: `/compact write plan`처럼 compact 뒤에 붙인 진행 인자, 또는 명시적 진행 요청)로만 일어난다 — 모델은 다음 턴에 자동 진입하지 *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17). compact된 fresh context에서 plan 작성 (AC19).
 - **② 바로 writing-plans**: Approve handoff sequence 실행 → 즉시 `Skill superpowers:writing-plans <path>` 호출.
 - **③ 수정 필요**: 후속 `AskUserQuestion`으로 분기 — "revise per review" → drafting-spec Mode B (spec mode) / 메인 agent design.md 직접 수정 (design mode); "more interview" → conducting-interview (state phase=1 reset, interview_round 유지); "edit spec myself" → 사용자 편집 후 reviewing-spec 재진입.
 - **④ 멈춤**: state 보존, 종료.
@@ -601,7 +614,7 @@ approve(①/②) 선택 후 "approved!"만 narrate하고 Approve handoff sequenc
 
 ### cross-compact 조기 진행 금지 (AC19 — polite stop의 *반대* 실패 모드, verifiable)
 
-옵션 ① 선택 시 `/compact`를 노출한 *직후* 같은 턴에서 `writing-plans`로 직진하는 것은 금지. compact가 무거운 plan-write *뒤에* 오면 context 위생 이점이 사라져 옵션 ①이 무의미해진다 (2026-05-29 본 design 세션에서 실측된 실패: "handoff"라 말하고 compact 전에 plan을 그대로 써버림). 다음 턴 진입은 *사용자 트리거*(예: `/compact write plan` 인자)로만 일어나며 모델 자동 진입이 아니다(NG4·P17). polite stop이 "진행해야 할 때 멈춤"이라면 이것은 "멈춰야 할 때 진행" — 두 방향 모두 게이트의 사용자-주권(P17)을 우회한다. **verifiable (두-레이어, AC11 선례)**: (i) `grep -cE "턴 종료|다음 턴"` ≥ 1, **AND** (ii) 옵션 ① 서술 *블록 안에서* 'turn-ending(STOP)' + 'writing-plans 같은 턴 호출 금지' + '다음 턴 = 사용자 트리거'가 *함께* 명시됐음을 리뷰에서 확인 (grep 단독 false-positive — '턴 종료' 문구와 '같은 턴 호출' 문구 공존 — 차단은 리뷰 레이어 담당; mechanical 한계는 AC11과 동일 수준 인정). 옵션 ②는 이 정지 요건의 *명시적 예외*(compact 없이 즉시 writing-plans). **AC8 경계** (round-2 advisory 반영): AC8 '추가 AskUserQuestion 없음'은 *approve 옵션이 최종 확정된 그 어시스턴트 응답 턴*에 한정한다 (Phase 5 내 revise/interview 루프의 다른 턴이 아님 — 그 턴들은 본래 질문을 띄움). 다음 턴에 진입한 writing-plans가 자체 실행-방식 선택 게이트를 띄우는 것은 별개 skill scope이므로 AC8 해당 없음.
+옵션 ① 선택 시 `/compact`를 노출한 *직후* 같은 턴에서 `writing-plans`로 직진하는 것은 금지. compact가 무거운 plan-write *뒤에* 오면 context 위생 이점이 사라져 옵션 ①이 무의미해진다 (2026-05-29 본 design 세션에서 실측된 실패: "handoff"라 말하고 compact 전에 plan을 그대로 써버림). 다음 턴 진입은 *사용자 트리거*(예: `/compact write plan` 인자)로만 일어나며 모델 자동 진입이 아니다(NG4·P17). polite stop이 "진행해야 할 때 멈춤"이라면 이것은 "멈춰야 할 때 진행" — 두 방향 모두 게이트의 사용자-주권(P17)을 우회한다. **verifiable (두-레이어, AC11 선례)**: (i) `grep -cE "턴 종료|다음 턴"` ≥ 1, **AND** (ii) 옵션 ① 서술 *블록 안에서* 'turn-ending(STOP)' + 'writing-plans 같은 턴 호출 금지' + '다음 턴 = 사용자 트리거'가 *함께* 명시됐음을 리뷰에서 확인 (grep 단독은 두 문구의 같은-블록 공존을 보장 못 하므로 — false-positive: '턴 종료' 문구와 '같은 턴 호출' 문구가 떨어져 공존해도 통과 — 공존·정합 판정은 리뷰 레이어 담당; mechanical 한계는 AC11과 동일 수준 인정). 옵션 ②는 이 정지 요건의 *명시적 예외*(compact 없이 즉시 writing-plans). **AC8 경계** (round-2 advisory 반영): AC8 '추가 AskUserQuestion 없음'은 *approve 옵션이 최종 확정된 그 어시스턴트 응답 턴*에 한정한다 (Phase 5 내 revise/interview 루프의 다른 턴이 아님 — 그 턴들은 본래 질문을 띄움). 다음 턴에 진입한 writing-plans가 자체 실행-방식 선택 게이트를 띄우는 것은 별개 skill scope이므로 AC8 해당 없음.
 
 ## Approve handoff sequence (①/② 공통)
 
@@ -611,7 +624,7 @@ approve(①/②) 시:
 bash "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/approve_handoff.sh" "$session_id" "$spec_path"
 ```
 
-스크립트(v0.11.0+)가 thin finalizer로 동작: (1) kill switch + charset guard, (2) **spec_path working-tree 존재 검증** (`[[ -f ]]`, 모든 git 조회 이전 — 부재 시 exit 1 + advisory + cleanup 미수행, state 보존), (3) 미커밋 spec advisory (non-blocking, exit 0), (4) 세션 디렉토리 cleanup. **marker/packet/named-status 없음** — 다음-단계 추천은 proceed 게이트가 담당. idempotent by statelessness(재호출은 clean tree에서 no-op).
+스크립트(v0.11.0+)가 thin finalizer로 동작: (1) kill switch + charset guard, (2) **spec_path working-tree 존재 검증** (`[[ -f ]]`, 모든 git 조회 이전 — 부재 시 exit 1 + advisory + cleanup 미수행, state 보존), (3) 미커밋 spec advisory (non-blocking, exit 0), (4) 세션 디렉토리 cleanup. **상태 추적 artifact를 남기지 않는다** — 다음-단계 추천은 proceed 게이트가 담당. idempotent by statelessness(재호출은 clean tree에서 no-op).
 
 **polite stop 금지** (AP2): approve인데 스크립트 호출/게이트를 skip하고 narrate만 하지 말 것. SessionEnd hook이 backup cleanup이나 user-explicit approve 의도는 즉시 반영.
 
@@ -620,15 +633,21 @@ bash "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/approve_handoff.sh" 
 approve_handoff.sh가 spec_path 부재로 exit 1 시 + state.local.md 보존 + 세션 cleanup 미수행 (사용자 재선택 대기). cleanup rm 실패는 advisory only — SessionEnd hook이 재시도. git commit 실패 경로는 존재하지 않음 (스크립트가 commit 시도 안 함; 미커밋은 advisory).
 ````
 
-- [ ] **Step 2: Verify no stale marker/induction references + verifiable AC11 tokens**
+- [ ] **Step 2: Verify no stale legacy references (AC10) + verifiable AC11/AC19 tokens (V7)**
 
 Run: `grep -c "compact-induction\|compact-detect\|\.markers\|marker\|packet\|HANDOFF_STATUS\|already_handed_off\|dirty_blocked" plugins/spec-distill/skills/reviewing-spec/SKILL.md`
-Expected: `0`
+Expected: `0` (AC10 — 새 본문은 위 토큰을 일절 쓰지 않음; "상태 추적 artifact" 중립어로 지칭)
 
-Run: `grep -c "AskUserQuestion" plugins/spec-distill/skills/reviewing-spec/SKILL.md` → ≥ 1 (Phase 5 gate; the [3.5] re-consensus gate already uses it).
-Run: `grep -ci "polite" plugins/spec-distill/skills/reviewing-spec/SKILL.md` → ≥ 1.
-Run: `grep -cE "턴 종료|다음 턴" plugins/spec-distill/skills/reviewing-spec/SKILL.md` → ≥ 1 (AC19 (i) — mechanical layer).
-**리뷰 레이어 (AC19 (ii), round-2 advisory)**: 옵션 ① 서술 *블록 안에서* 'turn-ending(STOP)' + 'writing-plans 같은 턴 호출 금지' + '다음 턴 = 사용자 트리거' 3요소가 *함께* 있는지 육안 확인 (grep 단독은 공존 보장 불가 — false-positive 차단은 이 레이어가 담당).
+Run: `grep -c "AskUserQuestion" plugins/spec-distill/skills/reviewing-spec/SKILL.md`
+Expected: `≥ 2` (Phase 5 gate + 기존 [3.5] re-consensus gate)
+
+Run: `grep -ci "polite" plugins/spec-distill/skills/reviewing-spec/SKILL.md`
+Expected: `≥ 1` (AC11)
+
+Run: `grep -cE "턴 종료|다음 턴" plugins/spec-distill/skills/reviewing-spec/SKILL.md`
+Expected: `≥ 1` (AC19 mechanical layer (i))
+
+**리뷰 레이어 (AC19 (ii) + AC11 semantic, round-2 advisory):** 옵션 ① 서술 *블록 안에서* 'turn-ending(STOP)' + 'writing-plans 같은 턴 호출 금지' + '다음 턴 = 사용자 트리거' 3요소가 *함께* 있는지, 그리고 게이트-less 종료 경로가 advisory 없이 존재하지 않는지 육안 확인 (grep 단독은 같은-블록 공존 보장 불가 — false-positive 차단은 이 레이어가 담당).
 
 - [ ] **Step 3: Commit**
 
@@ -638,7 +657,7 @@ git commit -m "feat(spec-distill): Phase 5 AskUserQuestion proceed gate
 
 marker/packet induction 의존 제거. 단일 게이트(① /compact 후 writing-plans 권장 /
 ② 바로 writing-plans / ③ 수정 / ④ 멈춤)로 다음 단계 제안. spec_path 선검증 추가.
-polite-stop(AP2) 금지 verifiable 기준 명문화.
+polite-stop(AP2) + cross-compact 조기 진행 금지(AC19, 옵션 ① 턴 경계 STOP) verifiable 기준 명문화.
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -655,25 +674,27 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: Bump plugin.json version**
 
-In `plugins/spec-distill/.claude-plugin/plugin.json`, change `"version": "0.10.0"` to `"version": "0.11.0"`.
+In `plugins/spec-distill/.claude-plugin/plugin.json`, change line 4 `"version": "0.10.0"` to `"version": "0.11.0"`.
 
 - [ ] **Step 2: Prepend the [0.11.0] CHANGELOG entry**
 
-In `plugins/spec-distill/CHANGELOG.md`, insert after the `# Changelog` header (before `## [0.10.0]`):
+In `plugins/spec-distill/CHANGELOG.md`, insert after the `# Changelog` header (line 1, before `## [0.10.0] — 2026-05-27` on line 3):
 
 ```markdown
+
 ## [0.11.0] — 2026-05-29
 
 ### Removed
 - `hooks/compact-induction.py` — marker 기반 Stop-hook `/compact` 재주입 폐기. /compact 추천은 reviewing-spec Phase 5의 `AskUserQuestion` proceed 게이트로 이동 (hook은 AskUserQuestion을 띄울 수 없음).
 - `hooks/compact-detect.py` — marker 삭제용 UserPromptSubmit hook. marker 부재로 무의미.
 - `.claude/spec-distill/.markers/` marker 메커니즘 전체 + `approve_handoff.sh`의 named-status 상수(`HANDOFF_STATUS_*`)·packet emit·`dirty_blocked` exit-1.
-- `scripts/spec-distill-gc.py`의 `_sweep_markers` — marker 미생성으로 sweep 대상 부재. **marker GC coverage 포기는 의도적.**
+- `scripts/spec-distill-gc.py`의 `_sweep_markers` — marker 미생성으로 sweep 대상 부재. **marker GC coverage 포기는 의도적** (markers는 v0.11.0부터 생성되지 않음).
 - 테스트: `test_compact_induction_hook.sh`, `test_compact_induction_stagnation.sh`, `test_compact_detect_hook.sh`, `test_handoff_approve_packet_emit.sh`, `test_handoff_status_named.sh`, `test_gc.py`의 marker 케이스(test_13~16).
 
 ### Changed
-- `skills/reviewing-spec/SKILL.md` Phase 5 — 단일 `AskUserQuestion` proceed 게이트(① /compact 후 writing-plans 권장 / ② 바로 writing-plans / ③ 수정 / ④ 멈춤)로 재구성. approve 후 2차 질문 없음. polite-stop(AP2) 금지 verifiable 기준 명문화.
-- `scripts/approve_handoff.sh` — thin finalizer로 축소: spec_path working-tree 존재 검증 + 세션 cleanup. 미커밋 검사는 advisory(non-blocking).
+- `skills/reviewing-spec/SKILL.md` Phase 5 — 단일 `AskUserQuestion` proceed 게이트(① /compact 후 writing-plans 권장 / ② 바로 writing-plans / ③ 수정 / ④ 멈춤)로 재구성. approve 후 2차 질문 없음. polite-stop(AP2) + cross-compact 조기 진행 금지(AC19) verifiable 기준 명문화.
+- `scripts/approve_handoff.sh` — thin finalizer로 축소: spec_path working-tree 존재 검증 + 세션 cleanup. 미커밋 검사는 advisory(non-blocking, exit 0).
+- `hooks/hooks.json` — Stop=review-dispatch만, UserPromptSubmit=pending-review-reminder만. description 갱신.
 
 ### Fixed
 - dangling `spec_path` 핸드오프 예외 — `[[ -f "$spec_path" ]]` working-tree 가드를 모든 git 조회 *이전*에 수행. 삭제된 worktree 경로(git HEAD tracked but working-tree absent)가 `git rev-parse HEAD` 성공으로 통과하던 결함 봉쇄.
@@ -682,54 +703,83 @@ In `plugins/spec-distill/CHANGELOG.md`, insert after the `# Changelog` header (b
 - `tests/test_handoff_spec_path_validation.sh` — AC4a(부재) + AC4b(dangling worktree) 회귀.
 
 ### Security
-- 없음 (persona/reviewer 약화 없음 — review-dispatch / pending-review-reminder hook은 그대로).
-
+- 없음. review-dispatch / pending-review-reminder / spec-reviewer persona 무변경 — review 강제(Law 1/2) 유지.
 ```
 
-- [ ] **Step 3: Edit README.md — remove the two hook rows + two kill-switch lines + update Principle**
+- [ ] **Step 3: Edit README.md — Hooks 표 −2, kill switch −2, Principle/AP2/Flow 갱신**
 
 In `plugins/spec-distill/README.md`:
 
-(a) Delete the `Stop (2)` row (compact-induction.py, line ~106) and the `UserPromptSubmit (2)` row (compact-detect.py, line ~107) from the "Hooks Installed" table.
+(a) **Hooks Installed 표** — delete the `Stop (2)` row (compact-induction.py, 줄 106) and the `UserPromptSubmit (2)` row (compact-detect.py, 줄 107). The remaining rows (SessionStart / PostToolUse / Stop / UserPromptSubmit / SessionEnd) stay.
 
-(b) Delete the two kill-switch bullets (lines ~129–130):
-```
+(b) **Kill switches** — delete the two compact-* bullets (줄 129–130, AC17):
+```markdown
 - `DEVBREW_SKIP_HOOKS=spec-distill:compact-induction` (v0.10.0) — Stop hook compact-induction.py만 skip. review-dispatch.py는 정상.
 - `DEVBREW_SKIP_HOOKS=spec-distill:compact-detect` (v0.10.0) — UserPromptSubmit hook compact-detect.py만 skip. pending-review-reminder.py는 정상.
 ```
 
-(c) Replace the Principle bullet (line ~55) — change the Ouroboros named-status/marker text:
+(c) **Principle (Ouroboros marker, 줄 55)** — replace:
 ```markdown
 - **Law 3 (Compounding) + Ouroboros instantiation (v0.10.0)** — `scripts/approve_handoff.sh`가 Ouroboros `handoff_contract.py` 패턴을 차용: named-status 3개 상수 (`HANDOFF_STATUS_*`), replay-safety (재호출 시 TIMESTAMP 보존), dedupe invariant (marker 존재 = 이미 처리됨). 미래 search가 "handoff invariant"로 두 instantiation을 같이 찾도록 README + CHANGELOG에 명시.
 ```
-to:
+with:
 ```markdown
 - **AP2 approval-gate 구분 (v0.11.0)** — handoff 다음-단계 추천을 hook(텍스트 주입만 가능)이 아니라 reviewing-spec Phase 5의 `AskUserQuestion` proceed 게이트로 전달. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 polite-stop 봉쇄 장치 (철학 §AP2 line 413). `approve_handoff.sh`는 spec_path 존재 검증 + 세션 cleanup만 수행하는 stateless finalizer.
 ```
 
-- [ ] **Step 4: Edit CLAUDE.md — Polite handoff Forbidden Pattern**
+(d) **AP2 bullet (줄 80)** — replace (현재 "commit + pointer + cleanup"은 v0.9.0 잔존 drift이자 v0.11.0 후엔 더 부정확):
+```markdown
+- **AP2 (Polite stop)** — Phase 5 approve tail = handoff sequence (commit + pointer + cleanup), narrate-only 금지.
+```
+with:
+```markdown
+- **AP2 (Polite stop)** — Phase 5 approve tail = proceed 게이트(AskUserQuestion) → handoff sequence (spec_path 검증 + 세션 cleanup). 게이트를 skip한 narrate-only 종료 금지. cross-compact 조기 진행(옵션 ① 노출 후 같은 턴 writing-plans 직진)도 게이트 P17 우회의 대칭 실패로 금지 (v0.11.0 AC19).
+```
 
-In `CLAUDE.md`, replace line ~92:
+(e) **Flow 다이어그램 doc-consistency (줄 38 + 41)** — 위 (a)–(d)가 spec AC14/AC17의 직접 대상이라면, 이 둘은 *같은 변경 도메인의 stale 서술*이다 (literal AC enumeration 밖이나 self-contradiction 방지를 위한 doc 정합 수정). **strict spec adherence를 선호하면 이 sub-step만 drop 가능** — 단, drop 시 두 줄이 v0.11.0 후 부정확하게 남음을 PR 설명에 명시(silent-cap 금지).
+
+줄 38:
+```
+                    └─ "approve"        → handoff (commit + pointer + cleanup)
+```
+→
+```
+                    └─ "approve"        → proceed 게이트(AskUserQuestion) → handoff (검증 + cleanup)
+```
+
+줄 41:
+```markdown
+**v0.9.0**: `[5] approve → handoff` 시 stdout에 *Handoff packet* (3-block) emit — `/compact` 명령 양식 + 다음 세션 첫 프롬프트 (자세히는 `scripts/approve_handoff.sh`).
+```
+→
+```markdown
+**v0.11.0**: `[5] approve → proceed 게이트(AskUserQuestion)`가 다음 단계 제안 (① /compact 후 writing-plans 권장 / ② 바로 writing-plans / ③ 수정 / ④ 멈춤). `approve_handoff.sh`는 spec_path 검증 + 세션 cleanup만 (상태 추적 artifact 없음).
+```
+
+- [ ] **Step 4: Edit CLAUDE.md — Polite handoff Forbidden Pattern (AC15)**
+
+In `CLAUDE.md`, replace the "Polite handoff" Forbidden Patterns bullet:
 ```markdown
 - **Polite handoff** — brainstorming/spec-distill review-approved 후 `/compact` 안내만 narrate하고 spec-distill 의 `approve_handoff.sh`를 호출하지 않음. 호출하면 marker가 생성되고 Stop hook이 unmissable하게 `/compact`를 induce하므로 narrate-only는 polite-stop의 한 종류 (AP2 variant).
 ```
 with:
 ```markdown
-- **Polite handoff** — brainstorming/spec-distill review-approved 후 다음 단계를 narrate만 하고 spec-distill reviewing-spec Phase 5의 `AskUserQuestion` proceed 게이트를 띄우지 않음. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 봉쇄 장치 — 게이트를 skip한 narrate-only 종료가 polite-stop의 한 종류 (AP2 variant). (v0.11.0 이전엔 marker + Stop-hook induction이 이 역할을 했으나, hook은 AskUserQuestion을 띄울 수 없어 게이트로 전환.)
+- **Polite handoff** — brainstorming/spec-distill review-approved 후 다음 단계를 narrate만 하고 spec-distill reviewing-spec Phase 5의 `AskUserQuestion` proceed 게이트를 띄우지 않음. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 봉쇄 장치 — 게이트를 skip한 narrate-only 종료가 polite-stop의 한 종류 (AP2 variant). 대칭으로, 옵션 ①(/compact 후 writing-plans) 선택 시 /compact 노출 후 같은 턴에 writing-plans로 직진하는 cross-compact 조기 진행도 게이트 우회 (AP2 variant, spec-distill v0.11.0 AC19). (v0.11.0 이전엔 marker + Stop-hook induction이 이 역할을 했으나, hook은 AskUserQuestion을 띄울 수 없어 게이트로 전환.)
 ```
 
-- [ ] **Step 5: Verify version, JSON, and token absence**
+- [ ] **Step 5: Verify version, JSON, CHANGELOG, and token absence (V8/AC13/AC14/AC17)**
 
 Run: `python3 -c "import json; print(json.load(open('plugins/spec-distill/.claude-plugin/plugin.json'))['version'])"`
 Expected: `0.11.0`
 
-Run: `head -3 plugins/spec-distill/CHANGELOG.md` → shows `## [0.11.0] — 2026-05-29`.
+Run: `head -4 plugins/spec-distill/CHANGELOG.md | grep -c "## \[0.11.0\] — 2026-05-29"`
+Expected: `1`
 
 Run: `grep -c "compact-induction\|compact-detect" plugins/spec-distill/README.md`
-Expected: `0`
+Expected: `0` (AC14/AC17)
 
-Run: `grep -c "marker가 생성\|unmissable하게" CLAUDE.md`
-Expected: `0`
+Run: `grep -c "marker가 생성\|unmissable하게 .compact." CLAUDE.md`
+Expected: `0` (AC15 — 구 서술 제거)
 
 - [ ] **Step 6: Commit**
 
@@ -737,8 +787,8 @@ Expected: `0`
 git add plugins/spec-distill/.claude-plugin/plugin.json plugins/spec-distill/CHANGELOG.md plugins/spec-distill/README.md CLAUDE.md
 git commit -m "docs(spec-distill): v0.11.0 — CHANGELOG, README, CLAUDE.md, version bump
 
-plugin.json 0.10.0→0.11.0. Hooks 표 −2 + kill switch −2. Principle을
-AP2 approval-gate 구분으로 갱신. CLAUDE.md Polite handoff 항목을 게이트 기준으로.
+plugin.json 0.10.0→0.11.0. README Hooks 표 −2 + kill switch −2 + Principle/AP2/Flow를
+proceed-gate 기준으로 갱신. CLAUDE.md Polite handoff 항목을 게이트 + cross-compact 기준으로.
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -748,29 +798,35 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Task 6: full suite 회귀 + memory compounding
 
 **Files:**
-- Memory: `project_spec_distill_review_hardening.md` (auto-memory) + `MEMORY.md` 인덱스 한 줄
+- Memory: auto-memory `project_spec_distill_review_hardening.md` + `MEMORY.md` 인덱스 한 줄
 
-- [ ] **Step 1: Run the full spec-distill test suite**
+- [ ] **Step 1: Run the full spec-distill test suite (V9)**
 
-Run every test in `plugins/spec-distill/tests/`:
 ```bash
+cd /Users/jeonghokim/Downloads/devbrew
 for t in plugins/spec-distill/tests/test_*.sh; do echo "=== $t ==="; bash "$t" || echo "!!! FAIL: $t"; done
-python3 -m pytest plugins/spec-distill/tests/test_gc.py plugins/spec-distill/tests/test_session_end_cleanup.py -q
+python3 plugins/spec-distill/tests/test_gc.py
+python3 plugins/spec-distill/tests/test_session_end_cleanup.py
+python3 -m pytest plugins/spec-distill/tests/test_hook_output_schema.py -q 2>/dev/null || python3 plugins/spec-distill/tests/test_hook_output_schema.py
 ```
-Expected: 모든 테스트 PASS. 특히 범위에서 제외된 5개(`test_handoff_kill_switch.sh`, `test_handoff_context_section_required.sh`, `test_handoff_context_empty_subsections.sh`, `test_handoff_design_mode.sh`, `test_handoff_conversation_reference.sh`)는 **unchanged green** (spec-reviewer persona 검증, marker 무관 — V9).
+Expected: 모든 테스트 PASS. 특히 범위 제외 5개(`test_handoff_kill_switch.sh`, `test_handoff_context_section_required.sh`, `test_handoff_context_empty_subsections.sh`, `test_handoff_design_mode.sh`, `test_handoff_conversation_reference.sh`)는 **unchanged green** (spec-reviewer persona 검증, marker 무관). 삭제된 5개 테스트(`test_compact_*`, `test_handoff_approve_packet_emit`, `test_handoff_status_named`)는 glob에 더는 안 잡힘.
 
 - [ ] **Step 2: Confirm no orphan references repo-wide**
 
-Run: `grep -rn "compact-induction\|compact-detect\|_sweep_markers" plugins/spec-distill/ --include='*.py' --include='*.sh' --include='*.json' --include='*.md' | grep -v CHANGELOG`
-Expected: 빈 출력 (CHANGELOG의 Removed 항목만 historical 참조로 허용).
+Run:
+```bash
+grep -rn "compact-induction\|compact-detect\|_sweep_markers\|HANDOFF_STATUS\|\.markers/" plugins/spec-distill/ \
+  --include='*.py' --include='*.sh' --include='*.json' --include='*.md' | grep -v CHANGELOG.md
+```
+Expected: 빈 출력 (CHANGELOG.md의 Removed 항목만 historical 참조로 허용 — grep -v로 제외).
 
 - [ ] **Step 3: Update the project memory (Law 3 compounding)**
 
-Update `project_spec_distill_review_hardening.md` in the auto-memory dir — append the v0.11.0 transition:
+Update `/Users/jeonghokim/.claude/projects/-Users-jeonghokim-Downloads-devbrew/memory/project_spec_distill_review_hardening.md` — append the v0.11.0 transition to the body:
 
-> v0.11.0(#TBD-PR): marker-induction(compact-induction/compact-detect/.markers/) 제거 → reviewing-spec Phase 5 `AskUserQuestion` proceed 게이트로 전환. 근거: hook은 AskUserQuestion을 띄울 수 없음 + dangling spec_path 예외. 핵심: AP2 방어가 hook 인프라 → skill의 approval gate로 이동(철학 §AP2 line 413 approval-gate ≠ polite-stop). approve_handoff.sh는 spec_path `-f` 존재 가드(git 조회 이전) + 세션 cleanup만 하는 stateless finalizer. **원칙 갱신**: "훅 가치=marker-induction(unmissable)"은 더 이상 아님 — unmissable은 이제 사용자 응답을 강제하는 AskUserQuestion 게이트.
+> v0.11.0(#TBD-PR): marker-induction(compact-induction/compact-detect/.markers/) 제거 → reviewing-spec Phase 5 `AskUserQuestion` proceed 게이트로 전환. 근거: hook은 AskUserQuestion을 띄울 수 없음 + dangling spec_path 실측 예외(PR #72 worktree 삭제 후 stale state). 핵심: AP2 방어가 hook 인프라 → skill의 approval gate로 이동(철학 §AP2 line 413: approval-gate ≠ polite-stop). approve_handoff.sh는 spec_path `-f` 존재 가드(git 조회 *이전*) + 세션 cleanup만 하는 stateless finalizer. **원칙 갱신**: "훅 가치 = marker-induction(unmissable)"은 더 이상 아님 — unmissable은 이제 사용자 응답을 강제하는 AskUserQuestion 게이트. **AC19**: polite-stop("진행해야 할 때 멈춤")의 대칭 실패 = cross-compact 조기 진행("멈춰야 할 때 진행", /compact 노출 후 같은 턴 writing-plans 직진) — 둘 다 게이트 P17 우회.
 
-(파일이 없으면 메모리 frontmatter 규칙대로 생성하고 `MEMORY.md` 인덱스에 한 줄 추가. PR 번호는 PR 생성 후 채움.)
+(`MEMORY.md` 인덱스의 해당 줄도 v0.11.0 포함하도록 갱신. PR 번호는 PR 생성 후 `#TBD-PR`를 실제 번호로 치환.)
 
 - [ ] **Step 4: Final commit**
 
@@ -779,7 +835,7 @@ git add -A
 git commit -m "chore(spec-distill): v0.11.0 memory compounding + suite green
 
 전체 테스트 suite PASS 확인. project_spec_distill_review_hardening 메모리에
-marker-induction → proceed-gate 전환 기록 (Law 3).
+marker-induction → proceed-gate 전환 + AC19 대칭 실패 모드 기록 (Law 3).
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -789,17 +845,24 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ## Self-Review
 
 **1. Spec coverage (AC1–AC19 → task):**
-- AC1 (hook 파일/등록 부재) → Task 2; AC2 (review-dispatch/reminder 잔존) → Task 2 Step 4.
-- AC3 (clean→exit0 no marker, idempotency) → Task 1 Case 1/3; AC4a/AC4b (spec_path 부재/dangling) → Task 1 spec_path_validation; AC5 (dirty→exit0 advisory) → Task 1 Case 2; AC6 (cleanup) → Task 1 Case 4; AC7 (kill switch) → Task 1 Case 7.
-- AC8 (proceed 게이트 4옵션) / AC9 (spec_path 선검증) / AC10 (marker 참조 제거) / AC11 (polite-stop verifiable) / **AC19 (cross-compact 조기 진행 금지 — 옵션 ① 턴 경계 정지)** → Task 4 (Step C 옵션 ① + cross-compact 금지 subsection + Step 2 grep 검증).
-- AC12 (`_sweep_markers` 제거) → Task 3.
-- AC13 (0.11.0 + CHANGELOG) / AC14 (README hooks/kill switch) / AC15 (CLAUDE.md) / AC17 (README kill switch 토큰 부재) → Task 5.
-- AC16 (테스트 삭제/재작성) → Task 1 Step 3 + Task 2 Step 3 + Task 4; AC18 (test_gc marker 케이스 삭제) → Task 3.
-- 모든 AC에 대응 task 존재. gap 없음.
+- AC1 (hook 파일/등록 부재) → Task 2 Step 2/3/4; AC2 (review-dispatch/reminder 잔존) → Task 2 Step 4.
+- AC3 (clean→exit0 no marker + clean 재호출 idempotency) → Task 1 Case 1/3; AC4a/AC4b (spec_path 부재/dangling) → Task 1 spec_path_validation; AC5 (dirty→exit0 advisory FLIP) → Task 1 Case 2; AC6 (cleanup 발생) → Task 1 Case 4; AC7 (kill switch) → Task 1 Case 7.
+- AC8 (proceed 게이트 4옵션 + approve 후 2차 질문 없음 + AC8 경계) / AC9 (spec_path 선검증) / AC10 (legacy 참조 0건) / AC11 (polite-stop verifiable) / **AC19 (cross-compact 조기 진행 금지 — 옵션 ① 턴 경계 STOP)** → Task 4 (Step A/B/C + polite-stop + cross-compact subsection + Step 2 grep 검증).
+- AC12 (`_sweep_markers` 정의+호출 제거) → Task 3.
+- AC13 (0.11.0 + CHANGELOG) → Task 5 Step 1/2; AC14 (README hooks 표 −2 + Principle) → Task 5 Step 3(a)(c)(d); AC15 (CLAUDE.md Polite handoff) → Task 5 Step 4; AC17 (README kill switch 토큰 −2) → Task 5 Step 3(b).
+- AC16 (테스트 삭제/재작성) → Task 1 Step 2/3 + Task 2 Step 1/3 + Task 4 Step 1; AC18 (test_gc marker 케이스 삭제 + 의도적 포기 CHANGELOG 명시) → Task 3 Step 1 + Task 5 Step 2.
+- **모든 AC1–AC19에 대응 task 존재. gap 없음.** Verification Plan V1–V10 매핑: V1→T2.4, V2→T1.6, V3→T1.6, V4→T1.6(case4), V5→T1.6(case7), V6→T3.4, V7→T4.2, V8→T5.5, V9→T6.1, V10→수동 smoke(advisory, PR pre-merge).
 
-**2. Placeholder scan:** Task 6 Step 3의 "#TBD-PR"는 PR 번호 — PR 생성 후 채우는 의도적 deferral(코드 placeholder 아님). 그 외 TBD/TODO 없음. 모든 코드 step에 full 코드 블록 존재.
+**2. Placeholder scan:** Task 6 Step 3의 `#TBD-PR`는 PR 번호 — PR 생성 후 치환하는 의도적 deferral(코드 placeholder 아님, 본문에 치환 지시 명시). 그 외 TBD/TODO/"implement later" 없음. 모든 code step에 full 코드 블록(approve_handoff.sh 전문, 3개 테스트 전문, SKILL.md 교체 전문, 모든 edit의 before/after 블록) 존재 — "similar to" 참조 없음.
 
-**3. Type/name consistency:** `approve_handoff.sh` 인자 순서 `<session_id> <spec_path>` 전 task 일관. 마커 경로 `.claude/spec-distill/.markers/<sid>.emitted` — Task 1/2 테스트에서 *부재* 단언으로만 등장(일관). `DEVBREW_DISABLE_SPEC_DISTILL` kill switch 이름 일관. Phase 5 옵션 ①~④ 라벨 Task 4 ↔ CHANGELOG(Task 5) 일치.
+**3. Type/name consistency:**
+- `approve_handoff.sh` 인자 순서 `<session_id> <spec_path>` 전 task·전 테스트 일관.
+- session_id 테스트 픽스처 `test-sid12`(len 9 ≥ 8, charset OK) / chain은 `chainsid12abc` — 둘 다 charset guard 통과.
+- `.claude/spec-distill/.markers/` 경로 — Task 1/2 테스트에서 *부재* 단언으로만 등장(실제 생성 코드 없음, 일관).
+- `DEVBREW_DISABLE_SPEC_DISTILL` kill switch 이름 — 스크립트·3개 테스트 일관.
+- Phase 5 옵션 라벨 ①~④ — SKILL.md(Task 4) ↔ CHANGELOG/README/CLAUDE.md(Task 5) 문구 일치.
+- **V7 자기지시 함정 회피 확인**: Task 4 교체 본문은 `marker`/`packet`/`compact-induction`/`compact-detect`/`.markers` 토큰을 0회 사용("상태 추적 artifact" 중립어) → Task 4 Step 2 grep `0` 단언과 정합. (이전 plan의 "marker/packet 없음" 표현은 자기 grep을 깨뜨렸음 — 이번 rewrite에서 수정.)
+- **`grep -cE "턴 종료|다음 턴"` ≥ 1 확인**: 교체 본문 Step C 옵션 ①에 "여기서 턴 종료(STOP)" + "다음 턴" 실문구 존재 + cross-compact 절에 grep 예시로도 등장 → 단언 충족.
 
 ---
 
