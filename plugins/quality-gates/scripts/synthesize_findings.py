@@ -100,11 +100,11 @@ def sort_findings(findings):
 def render(findings, suppressed_count):
     if not findings:
         return (
-            "## Gate 2 Findings (Synthesized)\n\n"
+            "## Review Findings (Synthesized)\n\n"
             f"No high-confidence findings. {suppressed_count} low-confidence "
             "findings suppressed.\n"
         )
-    out = ["## Gate 2 Findings (Synthesized)", ""]
+    out = ["## Review Findings (Synthesized)", ""]
     for sev_name in ("CRITICAL", "IMPORTANT", "SUGGESTION"):
         bucket = [f for f in findings if f.get("severity") == sev_name]
         if not bucket:
