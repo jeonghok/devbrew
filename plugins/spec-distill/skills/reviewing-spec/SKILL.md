@@ -39,7 +39,7 @@ cost_class: medium
 | spec | `needs_revise` | false | >= 5 | - | **[5] Human Gate** (forced escalate, full issue_history 첨부) |
 | spec | `needs_revise` | true | - | - | **[5] Human Gate** (P18 stagnation, forced escalate — dismissed_by_user >= 1 issue는 stagnation count 제외) |
 | spec | `needs_interview` | - | - | - | **user confirm gate** → [1] Interview 또는 [5] (취소) |
-| **design** | `approved` | - | - | - | **[5] Human Gate** → `superpowers:writing-plans` |
+| **design** | `approved` | - | - | - | **[5] Human Gate** (proceed 게이트 — ①/② → `superpowers:writing-plans`) |
 | **design** | `needs_revise` | - | < 5 | - | **brainstorming author 회귀**: 메인 agent가 design.md 직접 수정 후 reviewing-spec 재dispatch. **drafting-spec Mode B 호출하지 않음** (spec mode 전용). |
 | **design** | `needs_revise` | - | >= 5 | - | **[5] Human Gate** (forced escalate, full issue_history 첨부) |
 
@@ -86,7 +86,7 @@ cost_class: medium
 
 ### mode_b_violation 감지 (AC5)
 
-state.local.md에 `mode_b_violation` marker 존재 시 (Mode B abort 후 복귀):
+state.local.md에 `mode_b_violation` flag가 설정된 경우 (Mode B abort 후 복귀):
 1. 사용자에게 AskUserQuestion으로 3-옵션 advisory ((i) re-consensus에 추가 / (ii) Mode B 재dispatch / (iii) [5] escalate).
 2. 응답에 따라 분기. (i) → Step 1로 돌아가 묶음 재구성. (ii) → Mode B 재dispatch (사용자 선택 issue). (iii) → [5] Human Gate.
 
@@ -118,30 +118,68 @@ spec-reviewer agent가 `Stagnation_signal: true` 반환 시: 해당 issue에 대
 
 `dismissed_by_user >= 1`인 issue는 stagnation count에서 제외 — 사용자 명시 거절은 P17 sovereignty 행사이지 stagnation이 아님.
 
-## Phase 5 Human Gate
+## Phase 5 Human Gate — proceed 게이트
 
-사용자에게 reviewer 결과를 표시하고, 다음 옵션 중 선택받습니다 (`AskUserQuestion` 활용):
+### Step A — spec_path 선검증 (게이트 *이전* 필수)
 
-- **"revise per review"** → drafting-spec Mode B 호출.
-- **"more interview"** → conducting-interview skill 호출 (state phase = 1로 reset, interview_round 유지).
-- **"edit spec myself"** → 사용자가 직접 spec.md 편집 후 반환 → reviewing-spec 재진입.
-- **"approve"** → Approve handoff sequence (다음 섹션).
+`current_spec`(= spec_path)이 working-tree에 존재하는지 먼저 확인. 부재 시(예: 삭제된 worktree 경로) **proceed 게이트를 띄우지 말고** loud advisory + 사용자에게 재선택/리셋 요청, handoff 진행 금지:
 
-## Approve handoff sequence (AC11)
+> `[spec-distill] current_spec '<path>' 부재 (working-tree에 없음) — stale state. current_spec 재선택 또는 세션 리셋 필요. handoff 진행 안 함.`
 
-사용자 "approve" 선택 시:
+### Step B — 단일 `AskUserQuestion` proceed 게이트 (AC8)
+
+spec_path 유효 시, reviewer 결과를 표시하고 **한 번의** `AskUserQuestion`으로 다음 단계를 제안 (approve 후 별도 2차 질문 없음):
+
+```javascript
+AskUserQuestion({
+  questions: [{
+    question: "spec '<path>' review: <verdict 요약>. 다음 단계?",
+    header: "Proceed",
+    options: [
+      {label: "/compact 후 writing-plans (권장)", description: "approve_handoff(검증+cleanup) 후 verbatim /compact 명령 노출 → 사용자 /compact 실행 시 writing-plans. 긴 인터뷰 context 정리 이점."},
+      {label: "바로 writing-plans", description: "approve_handoff 후 즉시 Skill superpowers:writing-plans <path> 호출 (compact 없이)."},
+      {label: "수정 필요", description: "approve 아님 — 후속 질문으로 revise per review / more interview / edit myself 분기."},
+      {label: "멈춤 (나중에)", description: "state 보존하고 종료."}
+    ],
+    multiSelect: false
+  }]
+})
+```
+
+### Step C — 응답 처리
+
+- **① /compact 후 writing-plans**: Approve handoff sequence 실행 → 사용자에게 아래 verbatim `/compact` 명령을 *그대로 보이게* 노출 (`<path>`는 실제 spec_path로 치환) + "compact 후 writing-plans 진입 준비됨" 안내:
+
+  > `/compact spec at <path> 보존 — 본문(특히 Handoff Context, Acceptance Criteria, Files to Modify) 유지하고 인터뷰 대화·기각된 대안·중간 추론은 drop. 다음 단계: Skill superpowers:writing-plans <path>.`
+
+  → **여기서 턴 종료(STOP). 같은 턴에서 `writing-plans`를 호출하지 말 것** (compact 전 writing-plans 진입 = 옵션 ① 무력화). `Skill superpowers:writing-plans <path>` 진입은 사용자가 `/compact`를 *실제 실행한 다음 턴*에 **사용자 트리거**(예: `/compact write plan`처럼 compact 뒤에 붙인 진행 인자, 또는 명시적 진행 요청)로만 일어난다 — 모델은 다음 턴에 자동 진입하지 *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17). compact된 fresh context에서 plan 작성 (AC19).
+- **② 바로 writing-plans**: Approve handoff sequence 실행 → 즉시 `Skill superpowers:writing-plans <path>` 호출.
+- **③ 수정 필요**: 후속 `AskUserQuestion`으로 분기 — "revise per review" → drafting-spec Mode B (spec mode) / 메인 agent design.md 직접 수정 (design mode); "more interview" → conducting-interview (state phase=1 reset, interview_round 유지); "edit spec myself" → 사용자 편집 후 reviewing-spec 재진입.
+- **④ 멈춤**: state 보존, 종료.
+
+### polite stop 금지 (AP2 — verifiable, AC11)
+
+approve(①/②) 선택 후 "approved!"만 narrate하고 Approve handoff sequence 호출/다음 phase 진입을 skip하는 것은 **polite stop**. Phase 5를 *종료*하는 모든 경로는 (a) 위 proceed 게이트 제시를 거치거나(①/②/③/④), (b) 게이트를 거치지 않는 예외 경로(Step A spec_path 부재, kill switch)는 명시적 advisory 단락을 동반해야 한다 — 게이트-less silent 종료 금지. (게이트는 사용자가 redirect 가능한 approval gate이므로 P17 주권에 기여하며 polite-stop이 아니다 — 철학 §AP2.)
+
+### cross-compact 조기 진행 금지 (AC19 — polite stop의 *반대* 실패 모드, verifiable)
+
+옵션 ① 선택 시 `/compact`를 노출한 *직후* 같은 턴에서 `writing-plans`로 직진하는 것은 금지. compact가 무거운 plan-write *뒤에* 오면 context 위생 이점이 사라져 옵션 ①이 무의미해진다 (2026-05-29 본 design 세션에서 실측된 실패: "handoff"라 말하고 compact 전에 plan을 그대로 써버림). 다음 턴 진입은 *사용자 트리거*(예: `/compact write plan` 인자)로만 일어나며 모델 자동 진입이 아니다(NG4·P17). polite stop이 "진행해야 할 때 멈춤"이라면 이것은 "멈춰야 할 때 진행" — 두 방향 모두 게이트의 사용자-주권(P17)을 우회한다. **verifiable (두-레이어, AC11 선례)**: (i) `grep -cE "턴 종료|다음 턴"` ≥ 1, **AND** (ii) 옵션 ① 서술 *블록 안에서* 'turn-ending(STOP)' + 'writing-plans 같은 턴 호출 금지' + '다음 턴 = 사용자 트리거'가 *함께* 명시됐음을 리뷰에서 확인 (grep 단독은 두 문구의 같은-블록 공존을 보장 못 하므로 — false-positive: '턴 종료' 문구와 '같은 턴 호출' 문구가 떨어져 공존해도 통과 — 공존·정합 판정은 리뷰 레이어 담당; mechanical 한계는 AC11과 동일 수준 인정). 옵션 ②는 이 정지 요건의 *명시적 예외*(compact 없이 즉시 writing-plans). **AC8 경계** (round-2 advisory 반영): AC8 '추가 AskUserQuestion 없음'은 *approve 옵션이 최종 확정된 그 어시스턴트 응답 턴*에 한정한다 (Phase 5 내 revise/interview 루프의 다른 턴이 아님 — 그 턴들은 본래 질문을 띄움). 다음 턴에 진입한 writing-plans가 자체 실행-방식 선택 게이트를 띄우는 것은 별개 skill scope이므로 AC8 해당 없음.
+
+## Approve handoff sequence (①/② 공통)
+
+approve(①/②) 시:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/approve_handoff.sh" "$session_id" "$spec_path"
 ```
 
-스크립트(v0.10.0+)가 idempotent state machine 실행: (1) kill switch + charset guard, (2) marker/HEAD/working-tree 검사로 named status 판정 (`already_handed_off` / `dirty_blocked` / `emitted`), (3) emitted 경로에서 `.claude/spec-distill/.markers/<sid>.emitted` marker write, (4) 모든 정상 경로에서 packet stdout re-emit (재호출 시 TIMESTAMP 보존, dedupe), (5) emitted 경로에서 session 디렉토리 cleanup. `dirty_blocked` 상태에서는 exit 1 + copy-pasteable `git add`/`git commit` advisory를 stderr에 출력 — *commit은 사용자 책임*이며 스크립트가 직접 시도하지 않음 (v0.9.0과 다름).
+스크립트(v0.11.0+)가 thin finalizer로 동작: (1) kill switch + charset guard, (2) **spec_path working-tree 존재 검증** (`[[ -f ]]`, 모든 git 조회 이전 — 부재 시 exit 1 + advisory + cleanup 미수행, state 보존), (3) 미커밋 spec advisory (non-blocking, exit 0), (4) 세션 디렉토리 cleanup. **상태 추적 artifact를 남기지 않는다** — 다음-단계 추천은 proceed 게이트가 담당. idempotent by statelessness(재호출은 clean tree에서 no-op).
 
-**polite stop 금지** (AP2): "approved!"만 narrate하고 스크립트 호출 skip 금지. SessionEnd hook이 backup cleanup이지만 user-explicit "approve" 의도는 즉시 반영.
+**polite stop 금지** (AP2): approve인데 스크립트 호출/게이트를 skip하고 narrate만 하지 말 것. SessionEnd hook이 backup cleanup이나 user-explicit approve 의도는 즉시 반영.
 
 ### 실패 시 state 보존 (P14)
 
-approve_handoff.sh가 `dirty_blocked` 판정 시 exit 1 + state.local.md 보존 + marker 미생성. cleanup rm 실패는 advisory only — SessionEnd hook이 재시도. v0.10.0부터 git commit 실패는 발생 가능 경로가 아님 (스크립트가 commit 시도 안 함).
+approve_handoff.sh가 exit 1 시(spec_path 부재 — Step A 통과 후 race로 사라진 경우 포함 — 또는 session_id charset/arg 검증 실패) state.local.md 보존 + 세션 cleanup 미수행 (사용자 재선택 대기). 에이전트는 스크립트 stderr advisory를 그대로 노출하고 사용자 입력을 기다린다 (게이트 재표시는 사용자 요청 시). cleanup rm 실패는 advisory only — SessionEnd hook이 재시도. git commit 실패 경로는 존재하지 않음 (스크립트가 commit 시도 안 함; 미커밋은 advisory).
 
 ## In-flight state migration (C10)
 
