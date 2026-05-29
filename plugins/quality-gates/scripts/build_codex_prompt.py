@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """build_codex_prompt.py — Construct codex review prompt from input files.
 
-Reads filtered_diff and gate1_summary from argv file paths. NEVER takes
+Reads filtered_diff and an optional plan summary from argv file paths. NEVER takes
 inline content via argv or stdin — always file paths. Substitutes into a
 template using str.replace (no shell, no python eval, no triple-quote).
 Writes the assembled prompt to stdout.

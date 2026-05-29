@@ -10,8 +10,9 @@
 #   run_codex_reviewer.sh <diff_path> <project_dir> <output_yaml_path>
 #
 # Optional env:
-#   PLAN_SUMMARY_FILE — path to YAML file with plan-verifier matched_items
-#                       (omit for empty plan context).
+#   PLAN_SUMMARY_FILE — path to YAML file with an optional plan summary
+#                       (omit for empty plan context; Gate 1 verifier removed
+#                       in v2.0.0, so callers normally leave this unset).
 #
 # Emits: YAML to <output_yaml_path>. Schema:
 #   agent: codex-reviewer
@@ -44,12 +45,6 @@ PROMPT_FILE="$SCRATCH/prompt.md"
 STDOUT_FILE="$SCRATCH/codex.jsonl"
 STDERR_FILE="$SCRATCH/codex.stderr"
 
-TIMEOUT_CMD="$(command -v gtimeout || command -v timeout)"
-if [[ -z "$TIMEOUT_CMD" ]]; then
-  echo '{"codex_failed": true, "reason": "no_timeout_binary"}' > "$OUTPUT_PATH"
-  exit 0
-fi
-
 # Build prompt (plan summary from caller-passed file, or empty).
 PLAN_SUMMARY="${PLAN_SUMMARY_FILE:-/dev/null}"
 if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_codex_prompt.py" \
@@ -63,19 +58,20 @@ fi
 #   -C "$PROJECT_DIR": working directory pin (single pipeline coordinate)
 #   --json           : JSONL stream output
 #   < /dev/null      : detach stdin (prevents stdin deadlock on some codex versions)
-"$TIMEOUT_CMD" 600 codex exec "$(cat "$PROMPT_FILE")" \
+# Direct codex invocation — no per-call timeout (hang risk accepted; backstops:
+# Bash tool timeout, DEVBREW_DISABLE_QG_CODEX=1, /cancel-qg). Layer 3 sandbox
+# (-s read-only) preserved. `|| EXIT_CODE=$?` keeps capture safe under set -e.
+EXIT_CODE=0
+codex exec "$(cat "$PROMPT_FILE")" \
     -C "$PROJECT_DIR" \
     -s read-only \
     -c 'model_reasoning_effort="medium"' \
     --json \
     < /dev/null \
     > "$STDOUT_FILE" \
-    2>"$STDERR_FILE"
-EXIT_CODE=$?
+    2>"$STDERR_FILE" || EXIT_CODE=$?
 
-if [[ $EXIT_CODE -eq 124 ]]; then
-  OVERRIDE_REASON=timeout
-elif [[ $EXIT_CODE -ne 0 ]]; then
+if [[ $EXIT_CODE -ne 0 ]]; then
   OVERRIDE_REASON=exit_nonzero
 else
   OVERRIDE_REASON=""
