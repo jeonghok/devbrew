@@ -48,7 +48,7 @@ reviewing-spec Phase 5 handoff를 재설계해 (a) `compact-induction`/`compact-
 
 **Implicit context** (Constraints에 없지만 진행에 필요):
 - **hook은 `AskUserQuestion`을 띄울 수 없다.** hook은 stdout/JSON으로 `additionalContext`·`systemMessage` 텍스트만 주입 가능. interactive 결정 게이트는 skill(메인 turn)만 띄운다 — 이것이 LD1/LD2의 근본 근거.
-- **모델은 `/compact` slash command를 직접 실행할 수 없다** (Claude Code 본질적 제약, 2026-05-27 design LD2/NG2에서 확인). 따라서 옵션 ①(/compact 후 writing-plans)은 모델이 명령을 노출하고 *사용자가* 실행한다.
+- **모델은 `/compact` slash command를 직접 실행할 수 없다** (Claude Code 본질적 제약, 2026-05-27 design LD2/NG2에서 확인). 따라서 옵션 ①(/compact 후 writing-plans)은 모델이 명령을 노출하고 *사용자가* 실행한다. 노출 후 모델은 그 턴을 *종료*해야 하며(같은 턴에서 writing-plans 호출 금지), writing-plans는 사용자가 /compact를 실행한 *다음 턴*에서만 진입한다 — 안 그러면 compact가 무거운 plan-write 뒤에 와서 무의미해진다. 본 2026-05-29 design 세션에서 정확히 이 실패가 실측됐다("handoff"라 말하고 compact 전에 plan을 그대로 작성). → **AC19**.
 - spec-distill review hook(`review-dispatch`, `pending-review-reminder`)은 `docs/superpowers/specs/` 아래 `.md` write에 발화 — 이 design.md도 hook 대상. 본 변경은 그 review-강제 hook을 건드리지 않는다(Non-goal).
 - reviewing-spec Phase 5는 이미 `AskUserQuestion`을 사용한다(현행 옵션: revise / more interview / edit / approve). 본 변경은 그 옵션 집합을 proceed 중심으로 재구성하는 것이지 새 게이트 신설이 아니다.
 - 현재 main repo에 stale 세션 state(`.claude/spec-distill/d915fa62-.../state.local.md`)가 남아 dangling worktree 경로를 가리킨다 — 이 design의 LD4 검증이 막으려는 정확한 상황.
@@ -123,6 +123,7 @@ devbrew 철학상 의미:
 - **AC16**: marker/induction/packet/named-status가 *제거*되는(재작성 불가능 — 검증 대상 기능 자체가 사라짐) 테스트는 **삭제**된다: `test_compact_induction_hook.sh`, `test_compact_induction_stagnation.sh`, `test_compact_detect_hook.sh`, `test_handoff_approve_packet_emit.sh`(packet 부재가 AC3), `test_handoff_status_named.sh`(named-status 상수 제거, AC18). 새 계약으로 **재작성**되는 테스트: `test_handoff_compact_chain.sh`(V9 — approve→검증→cleanup, marker/induction 없음), `test_approve_handoff.sh`(Case 2 flip + AC3 clean 재호출 idempotency + AC6 cleanup-발생 단언). **재작성 = 전면 교체**: 기존 marker/induction/packet/STATUS 단언을 *모두 제거*하고 새 계약 단언으로 갈아끼움(incremental 편집 아님). 신규 회귀 테스트 `test_handoff_spec_path_validation.sh`가 **AC4a + AC4b** 두 시나리오를 모두 커버하며 통과한다.
 - **AC17**: `README.md` "Kill switches" 섹션에서 `DEVBREW_SKIP_HOOKS=spec-distill:compact-induction`·`DEVBREW_SKIP_HOOKS=spec-distill:compact-detect` 두 항목이 제거됐다. (grep: 두 토큰이 README에 부재.)
 - **AC18**: `test_gc.py`의 marker TTL GC 케이스(marker 파일 생성 → sweep 후 부재 검증 케이스)가 **삭제**됐고, marker GC coverage 포기가 *의도적*(markers는 v0.11.0부터 생성되지 않아 sweep 대상 부재)임이 CHANGELOG의 Removed 항목에 명시됐다. `test_handoff_status_named.sh` 삭제도 동일 근거(named-status 상수 vestigial).
+- **AC19** (cross-compact 조기 진행 금지 — polite-stop의 *반대* 실패 모드): `reviewing-spec/SKILL.md`가 옵션 ① 선택 시 (a) `approve_handoff.sh` 실행 + verbatim `/compact` 노출 *후 그 턴을 종료*하고, (b) `writing-plans`를 같은 턴에서 호출하지 *않으며*, (c) `writing-plans`는 사용자가 `/compact`를 실제 실행한 *다음 턴*에서만 진입한다 — 고 명시한다. compact 전 writing-plans 진입(cross-compact 조기 진행)이 옵션 ①을 무력화하는 금지 동작으로 문구화돼 있다. polite stop("진행해야 할 때 멈춤")과 이것("멈춰야 할 때 진행")은 모두 게이트의 P17 사용자-주권을 우회하는 대칭 실패다. **verifiable**: 옵션 ① 서술에 '턴 종료'/'다음 턴'(또는 동등) + 'writing-plans 같은 턴 호출 금지' 취지 문구가 grep으로 확인된다(`grep -cE "턴 종료|다음 턴"` ≥ 1). 옵션 ②는 이 정지 요건의 *명시적 예외*(compact 없이 즉시 writing-plans)임이 대비로 명시된다. (근거: 본 2026-05-29 design 세션에서 실측된 실패 — Implicit context 및 Context/Why 참조.)
 
 ## Files to Modify
 
@@ -158,7 +159,7 @@ plugins/spec-distill/scripts/spec-distill-gc.py
 plugins/spec-distill/skills/reviewing-spec/SKILL.md
   — Phase 5 Human Gate를 단일 AskUserQuestion proceed 게이트(4 옵션)로 재구성.
     spec_path 선검증 지시 추가. "Approve handoff sequence" 절을 marker·packet 없는 계약으로 갱신.
-    polite-stop(AP2) 금지 문구 추가.
+    polite-stop(AP2) 금지 문구 + cross-compact 조기 진행 금지(AC19, 옵션 ① 턴 경계 정지) 문구 추가.
 
 plugins/spec-distill/tests/test_handoff_compact_chain.sh
   — V9 end-to-end를 "approve → spec_path 검증 → cleanup → (marker/induction/packet 없음)"로 재작성.
@@ -211,7 +212,7 @@ memory: project_spec_distill_review_hardening.md
 - **V4 — 세션 cleanup**: `test_approve_handoff.sh`의 신규 case가 정상 경로 후 `.claude/spec-distill/<sid>/` 부재 단언, cleanup 실패 시 non-fatal advisory 확인 (AC6).
 - **V5 — kill switch**: `DEVBREW_DISABLE_SPEC_DISTILL=1` → approve_handoff.sh 즉시 exit 0, cleanup 포함 부작용 skip (AC7).
 - **V6 — GC dead code 제거**: `grep -c '_sweep_markers' plugins/spec-distill/scripts/spec-distill-gc.py` → 0. `bash`/`python3` GC 테스트 PASS (AC12).
-- **V7 — skill 계약 정적 검증**: `reviewing-spec/SKILL.md`에 marker/compact-induction/compact-detect/`.markers/` 참조 0건. proceed 게이트 4 옵션 + spec_path 선검증 + polite-stop 금지 문구 존재 (AC8/AC9/AC10/AC11).
+- **V7 — skill 계약 정적 검증**: `reviewing-spec/SKILL.md`에 marker/compact-induction/compact-detect/`.markers/` 참조 0건. proceed 게이트 4 옵션 + spec_path 선검증 + polite-stop 금지 문구 + cross-compact 조기 진행 금지 문구 존재 (AC8/AC9/AC10/AC11/AC19). AC19: `grep -cE "턴 종료|다음 턴" reviewing-spec/SKILL.md` ≥ 1.
 - **V8 — meta/docs**: `jq -r .version plugins/spec-distill/.claude-plugin/plugin.json` → `0.11.0`. CHANGELOG 최상단 `## [0.11.0] — 2026-05-29` (Removed에 marker GC coverage 의도적 포기 명시). README Hooks 표에 compact-* 부재 + "Kill switches"에 `compact-induction`/`compact-detect` 토큰 부재(AC17). CLAUDE.md "Polite handoff" 항목 게이트 기준 (AC13/AC14/AC15/AC17).
 - **V9 — full plugin test suite**: `plugins/spec-distill/tests/`의 모든 test PASS (재작성·삭제 반영). marker/induction 전제 테스트가 남아 실패하지 않음 (AC16).
 - **V10 — manual smoke (advisory only)**: 실제 session에서 임의 design.md → review-dispatch → approve → proceed 게이트(AskUserQuestion) 노출 → 옵션 ② 선택 → writing-plans 진입을 1회 실측. 옵션 ① 선택 시 /compact 명령이 복사 가능하게 노출되는지 확인. PR pre-merge checklist (자동 CI 게이트 아님).
