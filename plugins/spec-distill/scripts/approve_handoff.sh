@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# spec-distill v0.10.0 — idempotent handoff state machine.
-# Removes git commit responsibility (LD4): spec is user-owned.
-# Writes named-status marker (LD3 Ouroboros instantiation) for compact-induction
-# Stop hook to detect handoff-pending state.
+# spec-distill v0.11.0 — proceed-gate handoff finalizer.
+# No marker, no packet, no named-status: the next-step recommendation now lives
+# in reviewing-spec Phase 5's AskUserQuestion proceed gate (a hook cannot raise
+# an AskUserQuestion; the skill can). This script only:
+#   (1) validates spec_path exists in the working tree (LD4 — fixes dangling-path bug),
+#   (2) emits a NON-BLOCKING advisory if the spec is uncommitted/dirty (LD6/AC5),
+#   (3) cleans up the per-session state directory (AC6).
+# Idempotent by statelessness: re-running on a clean tree / already-removed
+# session dir is a no-op.
 #
 # Usage: approve_handoff.sh <session_id> <spec_path>
 # Exit codes:
-#   0 — handoff packet emitted (status: emitted | already_done)
-#   1 — dirty_blocked (uncommitted/dirty spec) or arg error
+#   0 — spec exists (committed or dirty-with-advisory); session dir cleaned
+#   1 — spec_path missing from working tree, or arg/charset error (no cleanup)
 set -uo pipefail
-
-# ─── Named-status constants (Ouroboros handoff_contract.py pattern) ───
-readonly HANDOFF_STATUS_ALREADY_DONE="already_handed_off"
-readonly HANDOFF_STATUS_DIRTY_BLOCKED="dirty_blocked"
-readonly HANDOFF_STATUS_EMITTED="emitted"
 
 # ─── Kill switch (CLAUDE.md "kill switch는 보안 컨트롤") ───
 if [[ "${DEVBREW_DISABLE_SPEC_DISTILL:-}" == "1" ]]; then
@@ -26,12 +26,6 @@ session_id="${1:?usage: approve_handoff.sh <session_id> <spec_path>}"
 spec_path="${2:?usage: approve_handoff.sh <session_id> <spec_path>}"
 
 # ─── session_id charset guard (defense in depth — state_path.SESSION_PATTERN equivalent) ───
-# v0.10.0 (post-Gate-2 review): warn-and-continue replaced with fail-fast.
-# Earlier shape set cleanup_skipped=1 but allowed unvalidated session_id to be
-# interpolated into marker_file path (line 50). The marker write path didn't
-# exist before v0.10.0 — adding it expanded the blast radius of the bypass.
-# cleanup_skipped variable retained for backward symmetry but is now always 0.
-cleanup_skipped=0
 case "$session_id" in
     ''|*[!A-Za-z0-9_-]*)
         echo "[spec-distill] approve_handoff: invalid session_id '${session_id:-<empty>}' — aborting" >&2
@@ -45,98 +39,46 @@ case "$session_id" in
         ;;
 esac
 
-# ─── Resolve marker directory (uses git-common-dir like state_path.py) ───
+# ─── spec_path working-tree existence guard (LD4 — MUST precede ALL git queries) ───
+# `git rev-parse HEAD -- "$spec_path"` succeeds whenever HEAD exists, regardless
+# of whether spec_path is present on disk. A dangling worktree path (tracked in
+# git HEAD but removed from the working tree) would otherwise slip through and
+# the handoff would run against a non-existent file. The -f guard closes that
+# exact bug (spec-reviewer g7b4d2a9). No cleanup on this path — stale judgement
+# is deferred to reviewing-spec (state preserved).
+if [[ ! -f "$spec_path" ]]; then
+    echo "[spec-distill] approve_handoff: spec_path '$spec_path' not found in working tree — no handoff, session state preserved." >&2
+    echo "[spec-distill] stale/dangling 경로일 수 있음 (예: 삭제된 worktree). reviewing-spec에서 current_spec 재선택 또는 세션 리셋 필요." >&2
+    exit 1
+fi
+
+# ─── Resolve main repo (uses git-common-dir like state_path.py) ───
 git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null || echo ".git")
 if [[ ! "$git_common_dir" = /* ]]; then
     git_common_dir="$(pwd)/$git_common_dir"
 fi
 main_repo="$(dirname "$git_common_dir")"
-markers_dir="$main_repo/.claude/spec-distill/.markers"
-marker_file="$markers_dir/${session_id}.emitted"
 
-# ─── State machine: determine current handoff status ───
-# Priority: existing marker → already_done. Else: check working tree.
-if [[ -f "$marker_file" ]]; then
-    current_status="$HANDOFF_STATUS_ALREADY_DONE"
-else
-    # No marker yet — check spec is in HEAD and working tree is clean.
-    if ! git rev-parse HEAD -- "$spec_path" >/dev/null 2>&1; then
-        # HEAD missing (empty repo) — untracked spec is caught by the ls-files check below
-        current_status="$HANDOFF_STATUS_DIRTY_BLOCKED"
-    elif ! git diff --quiet -- "$spec_path" 2>/dev/null; then
-        current_status="$HANDOFF_STATUS_DIRTY_BLOCKED"
-    elif ! git diff --quiet --cached -- "$spec_path" 2>/dev/null; then
-        current_status="$HANDOFF_STATUS_DIRTY_BLOCKED"
-    else
-        # ls-files check: explicit exit-code handling — corrupt repo / smudge-filter
-        # crash exits non-zero with empty stdout, which silently passed as "clean"
-        # in the prior `[[ -n "$(...)" ]]` form. Fail-closed: any non-zero exit OR
-        # non-empty output → dirty_blocked.
-        ls_out=$(git ls-files --others --exclude-standard -- "$spec_path" 2>/dev/null)
-        ls_rc=$?
-        if [[ $ls_rc -ne 0 || -n "$ls_out" ]]; then
-            current_status="$HANDOFF_STATUS_DIRTY_BLOCKED"
-        else
-            current_status="$HANDOFF_STATUS_EMITTED"
-        fi
-    fi
-fi
-
-# ─── Branch: dirty_blocked → loud advisory + exit 1 (AC2) ───
-if [[ "$current_status" == "$HANDOFF_STATUS_DIRTY_BLOCKED" ]]; then
-    short_status=$(git status --short -- "$spec_path" 2>/dev/null || echo "??  $spec_path")
+# ─── Committed check — ADVISORY only (non-blocking, LD6/AC5) ───
+# spec은 사용자 소유 (2026-05-27 LD4 계승). 미커밋이어도 차단하지 않음 —
+# writing-plans는 working-tree content를 읽으므로 미커밋 spec도 안전.
+# ls-files: explicit exit-code handling (fail-closed) — corrupt repo / smudge-filter
+# crash exits non-zero with empty stdout, which silently passed as "clean" in the
+# prior `[[ -n "$(...)" ]]` form. Any non-zero exit OR non-empty output → advisory.
+ls_out=$(git ls-files --others --exclude-standard -- "$spec_path" 2>/dev/null); ls_rc=$?
+if ! git diff --quiet -- "$spec_path" 2>/dev/null \
+   || ! git diff --quiet --cached -- "$spec_path" 2>/dev/null \
+   || [[ $ls_rc -ne 0 || -n "$ls_out" ]]; then
     {
-        echo "[spec-distill] approve_handoff: $HANDOFF_STATUS_DIRTY_BLOCKED — spec working tree not clean."
-        echo "git status --short -- \"$spec_path\":"
-        echo "$short_status"
-        echo
-        echo "사용자 수동 commit 필요. 다음 명령 copy-paste:"
+        echo "[spec-distill] approve_handoff: spec '$spec_path' 미커밋/dirty (advisory — 진행은 계속)."
+        echo "기록을 위해 commit 권장:"
         echo "  git add -- \"$spec_path\""
         echo "  git commit -m \"spec: \$(basename \"$spec_path\" .md) (locked)\""
-        echo
-        echo "commit 후 approve_handoff.sh 재호출."
     } >&2
-    exit 1
 fi
 
-# ─── Marker write (emitted path only — already_done preserves existing) ───
-mkdir -p "$markers_dir" || {
-    echo "[spec-distill] approve_handoff: failed to create markers dir '$markers_dir'" >&2
-    exit 1
-}
-if [[ "$current_status" == "$HANDOFF_STATUS_EMITTED" ]]; then
-    # First emit — write fresh marker.
-    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    cat > "$marker_file" <<MARKER
-STATUS=$HANDOFF_STATUS_ALREADY_DONE
-TIMESTAMP=$timestamp
-FIRE_COUNT=0
-SPEC_PATH=$spec_path
-MARKER
-fi
-# else: HANDOFF_STATUS_ALREADY_DONE — preserve TIMESTAMP and FIRE_COUNT (AC3).
+# ─── Session directory cleanup (AC6) ───
+rm -rf -- "$main_repo/.claude/spec-distill/$session_id/" 2>/dev/null || \
+    echo "[spec-distill] cleanup rm failed (non-fatal) — SessionEnd hook will retry" >&2
 
-# ─── Handoff packet emit (re-emit on every call — idempotent) ───
-cat <<EOF
-
-===== spec-distill handoff packet =====
-Spec lock 완료: $spec_path
-
-[1] /compact 명령 (지금 복사-실행):
-
-  /compact spec at $spec_path 보존. 그 spec 본문(특히 Handoff Context, Acceptance Criteria, Files to Modify) 유지하고 인터뷰 대화/기각된 대안/중간 추론 drop. 다음 단계는 "Skill superpowers:writing-plans $spec_path" 호출.
-
-[2] /compact 후 첫 메시지 (자동 진행되면 생략):
-
-  Skill superpowers:writing-plans $spec_path
-
-========================================
-EOF
-
-# ─── Session directory cleanup (only on first emit; already_done preserves nothing extra) ───
-if [[ "$current_status" == "$HANDOFF_STATUS_EMITTED" && "$cleanup_skipped" == "0" ]]; then
-    rm -rf -- "$main_repo/.claude/spec-distill/$session_id/" 2>/dev/null || \
-        echo "[spec-distill] cleanup rm failed (non-fatal) — SessionEnd hook will retry" >&2
-fi
-
-echo "spec-distill v0.10.0 종료 (status: $current_status)."
+echo "spec-distill v0.11.0 handoff finalized (session: $session_id). 다음 단계는 reviewing-spec proceed 게이트 선택대로 진행."
