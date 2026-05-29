@@ -82,8 +82,8 @@ def main():
             f"Quality Gates: PR created at {pr_url}. "
             "You MUST now initialize the quality-gates pipeline. "
             f'Run: Bash("{setup_script} --session-id {session_id} --pr-url {pr_url}") '
-            "Then invoke Skill(\"quality-gates:quality-pipeline\") with gate=1 "
-            "to begin Gate 1."
+            "Then invoke Skill(\"quality-gates:quality-pipeline\") "
+            "to begin the pipeline (Review gate → Runtime gate)."
         )
     }
 

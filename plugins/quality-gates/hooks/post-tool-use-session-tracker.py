@@ -62,7 +62,7 @@ def main() -> int:
         return 0
     # AC4: derive worktree-relative base from payload cwd (B2 fix).
     # Loud fallback per CLAUDE.md "Loud logging을 동반한 graceful degradation"
-    # — Gate 2 review found this hook's earlier silent fallback was the only
+    # — a Review gate review found this hook's earlier silent fallback was the only
     # surface that violated G3; harmonize with stop-hook/session-end-cleanup/
     # session-start-advisor which all warn on missing 'cwd'.
     cwd_val = payload.get("cwd")
