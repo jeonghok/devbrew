@@ -8,11 +8,11 @@
 # appeared, so its negative-assertion path was unreachable).
 #
 # Coverage (spec §5.6.9):
-#   - Gate 1 → Gate 2 → Gate 3 dispatch line order monotonic
-#   - All 4 reviewer agents present in Gate 2/3 fan-out (consistency w/ C1)
-#   - Gate 2 iter cap within 50 lines of AskUserQuestion section
-#   - DEVBREW_GATE3_MAX_RESOLUTIONS within 100 lines of Gate 3 dispatch
-#   - Retry-path AskUserQuestion block lies between Gate 2 and Gate 3
+#   - Review gate → Runtime gate dispatch line order monotonic
+#   - All 4 reviewer agents present in Review/Runtime gate fan-out (consistency w/ C1)
+#   - Review gate iter cap within proximity of AskUserQuestion section
+#   - DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS within 100 lines of Runtime gate dispatch
+#   - Retry-path AskUserQuestion block lies between Review gate and Runtime gate
 
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -75,19 +75,16 @@ assert_proximity() {
 }
 
 # Gate dispatch lines.
-gate1_line=$(first_line 'subagent_type.*plan-verifier')
-gate2_line=$(first_line 'subagent_type.*quality-gates:adversarial')
-gate3_line=$(first_line 'subagent_type.*runtime-verifier')
+review_line=$(first_line 'subagent_type.*quality-gates:adversarial')
+runtime_line=$(first_line 'subagent_type.*runtime-verifier')
 
-assert_line "Gate 1 plan-verifier dispatch" "$gate1_line"
-assert_line "Gate 2 adversarial dispatch"   "$gate2_line"
-assert_line "Gate 3 runtime-verifier dispatch" "$gate3_line"
+assert_line "Review gate adversarial dispatch"   "$review_line"
+assert_line "Runtime gate runtime-verifier dispatch" "$runtime_line"
 
-# Ordering: Gate 1 < Gate 2 < Gate 3.
-assert_order "Gate 1 precedes Gate 2" "$gate1_line" "$gate2_line"
-assert_order "Gate 2 precedes Gate 3" "$gate2_line" "$gate3_line"
+# Ordering: Review gate < Runtime gate.
+assert_order "Review precedes Runtime" "$review_line" "$runtime_line"
 
-# Four reviewer agents in Gate 2 / Gate 3 fan-out (consistency with C1 / AC1).
+# Four reviewer agents in Review / Runtime gate fan-out (consistency with C1 / AC1).
 for agent in adversarial test-scope-validator security-reviewer runtime-verifier; do
   if grep -qE "subagent_type[^\"]*\"quality-gates:$agent" "$SKILL_MD"; then
     echo "PASS: $agent dispatch present"
@@ -97,26 +94,26 @@ for agent in adversarial test-scope-validator security-reviewer runtime-verifier
   fi
 done
 
-# Gate 2 iter cap proximity to Gate 2 section / AskUserQuestion.
-# Use FIRST AskUserQuestion at or after the Gate 2 dispatch (the description's
-# top-of-file AskUserQuestion mention is irrelevant; we want the Gate-2
-# decision-tool call).
-askuser_g2_line=$(first_line_after 'AskUserQuestion' "$gate2_line")
-itercap_line=$(first_line 'max_gate2_iterations')
-assert_proximity "iter cap near Gate 2 AskUserQuestion" "$askuser_g2_line" "$itercap_line" 80
+# Review gate iter cap proximity to Review gate section / AskUserQuestion.
+# Use FIRST AskUserQuestion at or after the adversarial dispatch (the
+# description's top-of-file AskUserQuestion mention is irrelevant; we want the
+# Review-gate decision-tool call).
+askuser_review_line=$(first_line_after 'AskUserQuestion' "$review_line")
+itercap_line=$(first_line 'max_review_iterations')
+assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 80
 
-# DEVBREW_GATE3_MAX_RESOLUTIONS near Gate 3 dispatch — use first mention
-# AT OR AFTER the Gate 3 dispatch line (the top-of-file "up to ..." preview
-# mention is irrelevant; we want the Gate 3 NEEDS_RESOLUTION section reference).
-gate3_max_line=$(first_line_after 'DEVBREW_GATE3_MAX_RESOLUTIONS' "$gate3_line")
-assert_proximity "GATE3_MAX_RESOLUTIONS near Gate 3 dispatch" "$gate3_line" "$gate3_max_line" 100
+# DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS near Runtime gate dispatch — use first mention
+# AT OR AFTER the Runtime gate dispatch line (the top-of-file "up to ..." preview
+# mention is irrelevant; we want the Runtime NEEDS_RESOLUTION section reference).
+runtime_max_line=$(first_line_after 'DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS' "$runtime_line")
+assert_proximity "RUNTIME_MAX_RESOLUTIONS near Runtime dispatch" "$runtime_line" "$runtime_max_line" 100
 
-# Retry-path AskUserQuestion (I6) between Gate 2 dispatch and Gate 3 dispatch.
+# Retry-path AskUserQuestion (I6) between Review gate dispatch and Runtime gate dispatch.
 retry_line=$(first_line 'Retry: error handling|Retry failed')
-if [[ "$retry_line" -gt 0 && "$retry_line" -gt "$gate2_line" && "$retry_line" -lt "$gate3_line" ]]; then
-  echo "PASS: Retry block between Gate 2 ($gate2_line) and Gate 3 ($gate3_line) at $retry_line"
+if [[ "$retry_line" -gt 0 && "$retry_line" -gt "$review_line" && "$retry_line" -lt "$runtime_line" ]]; then
+  echo "PASS: Retry block between Review gate ($review_line) and Runtime gate ($runtime_line) at $retry_line"
 else
-  echo "FAIL: Retry block not between Gate 2 ($gate2_line) and Gate 3 ($gate3_line); found at $retry_line"
+  echo "FAIL: Retry block not between Review gate ($review_line) and Runtime gate ($runtime_line); found at $retry_line"
   fail=$((fail + 1))
 fi
 

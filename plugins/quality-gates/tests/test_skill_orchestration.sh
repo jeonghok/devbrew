@@ -2,8 +2,8 @@
 # v1.32.1 SKILL.md orchestration verification (static grep approach).
 #
 # Wraps spec verification steps:
-#   V2a — AC5: Gate 1 → Gate 2 → Gate 3 first-mention line order monotonic
-#   V2b — AC6/AC7/AC8: context anchors + 3-option labels + P21 token
+#   V2a: Review gate → Runtime gate first-mention line order monotonic
+#   V2b: context anchors + 3-option labels + P21 token
 #
 # V7 was REMOVED in v1.32.1 (C6 atomicity, spec §5.1/§5.6.9): the
 # `grep -c '\bPASS\b'` token never appeared in SKILL.md, so V7's
@@ -24,14 +24,14 @@ if [[ ! -f "$S" ]]; then
   exit 1
 fi
 
-# ============== V2a: Gate label order (AC5) ==============
-awk '/Gate 1/{if(!g1)g1=NR} /Gate 2/{if(!g2)g2=NR} /Gate 3/{if(!g3)g3=NR} END{
-  if (!(g1 && g2 && g3 && g1<g2 && g2<g3)) {
-    print "FAIL V2a: Gate label order broken. g1=" g1 " g2=" g2 " g3=" g3
+# ============== V2a: gate label order ==============
+awk '/Review gate/{if(!r)r=NR} /Runtime gate/{if(!rt)rt=NR} END{
+  if (!(r && rt && r<rt)) {
+    print "FAIL V2a: gate label order broken. review=" r " runtime=" rt
     exit 1
   }
 }' "$S" || exit 1
-echo "PASS V2a (gate-label order)"
+echo "PASS V2a (gate-label order: review < runtime)"
 
 # ============== V2b: Context anchors + options + P21 (AC6/7/8) ==============
 check() {
@@ -42,12 +42,8 @@ check() {
     exit 1
   fi
 }
-# Gate 1 FAIL context
-check "Plan verification failed" "Gate 1 FAIL anchor"
-check "Continue anyway"          "Gate 1 FAIL option"
-check "View detail"              "Gate 1 FAIL option"
-# Gate 2 iter context
-check "findings remain"          "Gate 2 iter anchor"
+# Review iter context
+check "findings remain"          "Review iter anchor"
 # AC6 anchor uniqueness (Medium): `findings remain` must appear in EXACTLY
 # ONE AskUserQuestion question template, so the routing is unambiguous.
 # Prose mentions and meta-comments outside `question:` lines are allowed.
@@ -57,12 +53,12 @@ if [[ "$question_findings" -ne 1 ]]; then
   exit 1
 fi
 echo "PASS V2b (anchor uniqueness: 1 question line)"
-check "Retry"                    "Gate 2 iter option"
-check "Proceed to Gate 3"        "Gate 2 iter option"
-# Gate 3 NEEDS_RESOLUTION context
-check "Runtime verifier needs"   "Gate 3 anchor"
-check "Yes, retry"               "Gate 3 option"
-check "Skip with evidence"       "Gate 3 option"
+check "Retry"                    "Review iter option"
+check "Proceed to Runtime gate"  "Review iter option"
+# Runtime NEEDS_RESOLUTION context
+check "Runtime verifier needs"   "Runtime anchor"
+check "Yes, retry"               "Runtime option"
+check "Skip with evidence"       "Runtime option"
 check "P21"                      "P21 secret-policy token"
 echo "PASS V2b (context anchors + options + P21)"
 
