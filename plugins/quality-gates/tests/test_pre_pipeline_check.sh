@@ -107,10 +107,80 @@ case_advisory_emitted() {
   unset CLAUDE_CODE_SESSION_ID
 }
 
+# --- v1.32.3 MED-2: SID guard boundary cases ---
+
+# T-SID-empty: 빈 SID → result: no_session_id + exit 1
+case_sid_empty() {
+  local tmp; tmp=$(mktemp -d)
+  ( cd "$tmp" && git init -q && git commit --allow-empty -q -m "init" 2>/dev/null )
+  cd "$tmp"
+  export CLAUDE_CODE_SESSION_ID=""
+  local out; out=$(bash "$SCRIPT" 2>&1) || true
+  if echo "$out" | grep -q '^result: no_session_id'; then
+    pass "T-SID-empty"
+  else
+    fail "T-SID-empty (no result: no_session_id, got: $out)"
+  fi
+  cd / && rm -rf "$tmp"
+  unset CLAUDE_CODE_SESSION_ID
+}
+
+# T-SID-short: 7 char (min 8) → result: invalid_session_id + pattern guard stderr + exit 1
+case_sid_short() {
+  local tmp; tmp=$(mktemp -d)
+  ( cd "$tmp" && git init -q && git commit --allow-empty -q -m "init" 2>/dev/null )
+  cd "$tmp"
+  export CLAUDE_CODE_SESSION_ID="abcd123"
+  local out; out=$(bash "$SCRIPT" 2>&1) || true
+  if echo "$out" | grep -q '^result: invalid_session_id' && echo "$out" | grep -q 'fails pattern guard'; then
+    pass "T-SID-short"
+  else
+    fail "T-SID-short (got: $out)"
+  fi
+  cd / && rm -rf "$tmp"
+  unset CLAUDE_CODE_SESSION_ID
+}
+
+# T-SID-invalid-char: contains '/' → invalid_session_id + pattern guard
+case_sid_invalid_char() {
+  local tmp; tmp=$(mktemp -d)
+  ( cd "$tmp" && git init -q && git commit --allow-empty -q -m "init" 2>/dev/null )
+  cd "$tmp"
+  export CLAUDE_CODE_SESSION_ID="abc/def123"
+  local out; out=$(bash "$SCRIPT" 2>&1) || true
+  if echo "$out" | grep -q '^result: invalid_session_id' && echo "$out" | grep -q 'fails pattern guard'; then
+    pass "T-SID-invalid-char"
+  else
+    fail "T-SID-invalid-char (got: $out)"
+  fi
+  cd / && rm -rf "$tmp"
+  unset CLAUDE_CODE_SESSION_ID
+}
+
+# T-SID-valid: 유효 SID + sandbox git init + fresh state → result: fresh_start, exit 0
+case_sid_valid() {
+  local tmp; tmp=$(mktemp -d)
+  ( cd "$tmp" && git init -q && git commit --allow-empty -q -m "init" 2>/dev/null )
+  cd "$tmp"
+  export CLAUDE_CODE_SESSION_ID="abc-def_123ABC"
+  local out; out=$(bash "$SCRIPT" 2>&1) || true
+  if echo "$out" | grep -q '^result: fresh_start'; then
+    pass "T-SID-valid"
+  else
+    fail "T-SID-valid (got: $out)"
+  fi
+  cd / && rm -rf "$tmp"
+  unset CLAUDE_CODE_SESSION_ID
+}
+
 case_fresh_start
 case_same_session_preserved
 case_cross_session_deleted
 case_advisory_emitted
+case_sid_empty
+case_sid_short
+case_sid_invalid_char
+case_sid_valid
 
 echo
 echo "test_pre_pipeline_check: $PASS passed, $FAIL failed"

@@ -10,22 +10,27 @@ description: >
   Happy path (all gates pass) requires zero user clicks.
 cost_class: variable
 allowed-tools:
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py:*)
+  # Group 1 — Preflight scripts (실행 순서: setup → pre-check → trivia)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/pre-pipeline-check.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh:*)
+  # Group 2 — Gate 2 PR review scripts
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py:*)
+  # Group 3 — Gate 3 runtime verification scripts
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)
+  # Group 4 — Meta (orchestration primitives)
   - Agent
   - AskUserQuestion
-  - Edit
-  - Write
+  # Group 5 — File operations
   - Read
   - Glob
   - Grep
+  - Edit
+  - Write
 ---
 
 # Quality Gates — In-Turn Orchestrator (v1.32.0)
