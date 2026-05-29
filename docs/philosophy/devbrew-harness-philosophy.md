@@ -198,7 +198,7 @@ P3가 *enforcement* (frontmatter tool-scoping)이라면, P24는 *workflow shape*
 
 1. **Mechanical** — compile, lint, type-check, test. 저렴, 이진, non-negotiable.
 2. **Semantic** — P1 스펙 대비 AC 준수를 agent가 판단. 더 비쌈. 독립 리뷰어 필요 (P3).
-3. **Runtime** — 실제로 돌림 (headless browser, CLI invocation, smoke test). 앞 두 개가 놓치는 버그 class를 잡음. 이것이 오늘의 `quality-gates/` Gate 3이며, 모든 플러그인의 모델이 되어야 함.
+3. **Runtime** — 실제로 돌림 (headless browser, CLI invocation, smoke test). 앞 두 개가 놓치는 버그 class를 잡음. 이것이 오늘의 `quality-gates/` Runtime gate이며, 모든 플러그인의 모델이 되어야 함.
 
 최소 하나, 이상적으로 셋 다 없이는 "완료" 주장 불가.
 
@@ -326,7 +326,7 @@ Agent가 `name`, `caption`, `file_type`이 필요할 때 `uuid`, `mime_type`, `2
 
 *L1, L2, L3 봉사:* loop의 첫 단계는 spec 작성 (L1); review 단계는 구조적으로 분리 (L2); compound tail은 명명된 learning 캡처 단계 (L3).
 
-작업은 사이클을 통해 흐릅니다. 단일 pass가 아닙니다. 단위는 "spec → plan → implement → review → verify → compound"이고, 전체 루프가 작업당 돌아갑니다. 세션당이 아닙니다. CE의 4-step `Plan → Work → Review → Compound`가 정전 이름 붙은 사이클입니다. OMC의 `autopilot` 5-phase 파이프라인(Expansion → Planning → Execution → QA → Validation → Cleanup)이 더 정교한 인스턴스이고, Ouroboros의 inner/outer 중첩 루프 with Wonder/Reflect가 가장 야심 찬 버전입니다. devbrew의 `quality-gates`는 이미 spine이 있습니다 (Gate 1 plan → Gate 2 review → Gate 3 runtime, 코드 변경 시 Gate 1로 loop back).
+작업은 사이클을 통해 흐릅니다. 단일 pass가 아닙니다. 단위는 "spec → plan → implement → review → verify → compound"이고, 전체 루프가 작업당 돌아갑니다. 세션당이 아닙니다. CE의 4-step `Plan → Work → Review → Compound`가 정전 이름 붙은 사이클입니다. OMC의 `autopilot` 5-phase 파이프라인(Expansion → Planning → Execution → QA → Validation → Cleanup)이 더 정교한 인스턴스이고, Ouroboros의 inner/outer 중첩 루프 with Wonder/Reflect가 가장 야심 찬 버전입니다. devbrew의 `quality-gates`는 이미 spine이 있습니다 (Review gate → Runtime gate; plan 단계는 상류 writing-plans / spec-distill 소관).
 
 **devbrew가 quality-gates에 추가할 것:** tail의 명시적 `compound` 단계 — 여섯 번째 게이트든, post-pipeline 스킬이든 — 파일에 learning을 기록하는 것이 유일한 역할.
 
@@ -360,7 +360,7 @@ Claude Code primitive를 감싸는 내부 프레임워크 없음. 플러그인�
 
 *L1, L2, L3 봉사:* 플러그인별 spec이 좁게 유지 (L1); 플러그인별 리뷰어 scope 누출 없음 (L2); 플러그인별 learning이 도메인에 한정 (L3).
 
-플러그인은 하나를 잘 하고 나머지는 다른 플러그인에 위임합니다. `quality-gates`가 이미 이 모델입니다 — Gate 2가 pr-review-toolkit, feature-dev, superpowers agent들에 dispatch. 철학은 이것을 일반화합니다: **devbrew의 모든 플러그인은 marketplace의 시민이지, 자족적인 왕국이 아닙니다.** 두 플러그인이 overlap하면 둘 다 사용할 수 있는 제3 플러그인으로 refactor, 다른 곳에 존재하는 capability가 필요하면 `README.md` prerequisites에서 명시적으로 의존.
+플러그인은 하나를 잘 하고 나머지는 다른 플러그인에 위임합니다. `quality-gates`가 이미 이 모델입니다 — Review gate가 pr-review-toolkit, feature-dev, superpowers agent들에 dispatch. 철학은 이것을 일반화합니다: **devbrew의 모든 플러그인은 marketplace의 시민이지, 자족적인 왕국이 아닙니다.** 두 플러그인이 overlap하면 둘 다 사용할 수 있는 제3 플러그인으로 refactor, 다른 곳에 존재하는 capability가 필요하면 `README.md` prerequisites에서 명시적으로 의존.
 
 이것이 anti-OMC-monolith 이동입니다. OMC는 20 hooks + 32 skills + 19 agents를 한 플러그인으로 shipping합니다. 편의성을 사지만 모든 결합 비용을 상속하고 per-capability 채택을 불가능하게 만듭니다. devbrew는 상호 운용하는 많은 작은 플러그인을 선호합니다.
 
@@ -431,7 +431,7 @@ devbrew의 규칙: 모든 loop-bearing 플러그인은 circuit breaker와 함께
 
 *P18의 anti-corollary. 원래 위치: 구 §3.*
 
-"멈추지 않는" 루프는 (Sisyphus framing) 토큰을 태우고 사용자가 시스템을 불신하게 만듭니다. 모든 autonomous 루프는 다음을 가져야 함: (a) max iteration 카운트, (b) wall-clock budget, (c) repeat 감지 (P18), (d) 사용자-overrideable kill switch (OMC의 `DISABLE_OMC=1`과 `cancel-qg`가 템플릿).
+"멈추지 않는" 루프는 (Sisyphus framing) 토큰을 태우고 사용자가 시스템을 불신하게 만듭니다. 모든 autonomous 루프는 다음을 가져야 함: (a) max iteration 카운트, (b) repeat 감지 (P18), (c) 사용자-overrideable kill switch (OMC의 `DISABLE_OMC=1`과 `cancel-qg`가 템플릿).
 
 ### P19. Graceful Degradation of External Dependencies
 
@@ -453,7 +453,7 @@ Optional 의존성이 없을 때 (`--critic=codex` with Codex CLI 미설치) 더
 
 - **State file secret hygiene.** State 파일 (`.claude/<plugin>.local.md`)은 git-ignore되지만 (P5, §4.8) 의도치 않게 공유될 수 있음 (백업, 복사, 버그 리포트 첨부). 플러그인은 state 파일에 secret (토큰, API key, 풀 PII)을 기록해선 안 됨. placeholder 참조 (`$GITHUB_TOKEN`, 경로 참조) 사용.
 - **Persona 파일은 코드다.** Reviewer persona 파일은 (P10, §4.4) 버그를 잡는 load-bearing default. persona checklist를 약화(규칙 제거, 임계치 완화)하는 PR은 **보안-민감 변경**이고 test suite 수정과 같은 수준의 scrutiny 필요. `git diff`가 `plugins/*/reviewers/` 아래 파일을 건드리면 PR 템플릿이 이를 "security-relevant"로 flag.
-- **Plugin-to-plugin trust.** 플러그인 A가 `plugin-b:agent-name`을 dispatch하면 A는 B의 agent 동작을 상속합니다. B가 악의적 prompt injection으로 업데이트되면 A의 사용자가 영향받음. 완화책: (a) 최소 버전이 선언된 의존성 (P9, AP12) — A가 B를 알려진 good 버전에 pin 가능. (b) `plugin.json`은 critical 의존성에 대해 optional `integrity` field (git SHA 또는 tag)를 포함해야 함. (c) 여러 플러그인이 관여할 때 supply-chain 리뷰는 `quality-gates` Gate 2의 일부.
+- **Plugin-to-plugin trust.** 플러그인 A가 `plugin-b:agent-name`을 dispatch하면 A는 B의 agent 동작을 상속합니다. B가 악의적 prompt injection으로 업데이트되면 A의 사용자가 영향받음. 완화책: (a) 최소 버전이 선언된 의존성 (P9, AP12) — A가 B를 알려진 good 버전에 pin 가능. (b) `plugin.json`은 critical 의존성에 대해 optional `integrity` field (git SHA 또는 tag)를 포함해야 함. (c) 여러 플러그인이 관여할 때 supply-chain 리뷰는 `quality-gates` Review gate의 일부.
 - **Description의 prompt injection.** Skill description은 매 세션의 system prompt에 preload됩니다. 악의적 skill description은 prompt-injection payload를 담을 수 있음. plugin-to-plugin merge에서 skill description의 anomaly (이상한 instruction, role-override 시도, Unicode 트릭) 리뷰.
 - **Kill switch는 보안 컨트롤이기도 함.** Per-plugin kill switch (`DEVBREW_DISABLE_<PLUGIN>=1`, P13 참조)는 사용자가 플러그인을 즉시 비활성화하게 해줌. 모든 플러그인은 autonomous 실행 중에도 kill switch를 존중해야 함. 어떤 훅도 kill switch를 inspect하고 거부해선 안 됨.
 
