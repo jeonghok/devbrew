@@ -590,7 +590,7 @@ AskUserQuestion({
 
 ### Step C — 응답 처리
 
-- **① /compact 후 writing-plans**: Approve handoff sequence 실행 → 사용자에게 verbatim `/compact` 명령을 *그대로 보이게* 노출 → **여기서 턴을 종료(STOP). 같은 턴에서 `writing-plans`를 호출하지 말 것** (compact 전 writing-plans 진입 = 옵션 ① 무력화). `Skill superpowers:writing-plans <path>`는 사용자가 `/compact`를 *실제 실행한 다음 턴*에서만 진입한다 — compact된 fresh context에서 plan을 작성 (AC19).
+- **① /compact 후 writing-plans**: Approve handoff sequence 실행 → 사용자에게 verbatim `/compact` 명령을 *그대로 보이게* 노출 + "compact 후 writing-plans 진입 준비됨" 안내 → **여기서 턴을 종료(STOP). 같은 턴에서 `writing-plans`를 호출하지 말 것** (compact 전 writing-plans 진입 = 옵션 ① 무력화). `Skill superpowers:writing-plans <path>` 진입은 사용자가 `/compact`를 *실제 실행한 다음 턴*에 **사용자 트리거**(예: `/compact write plan`처럼 compact 뒤에 붙인 진행 인자, 또는 명시적 진행 요청)로만 일어난다 — 모델은 다음 턴에 자동 진입하지 *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17). compact된 fresh context에서 plan 작성 (AC19).
 - **② 바로 writing-plans**: Approve handoff sequence 실행 → 즉시 `Skill superpowers:writing-plans <path>` 호출.
 - **③ 수정 필요**: 후속 `AskUserQuestion`으로 분기 — "revise per review" → drafting-spec Mode B (spec mode) / 메인 agent design.md 직접 수정 (design mode); "more interview" → conducting-interview (state phase=1 reset, interview_round 유지); "edit spec myself" → 사용자 편집 후 reviewing-spec 재진입.
 - **④ 멈춤**: state 보존, 종료.
@@ -601,7 +601,7 @@ approve(①/②) 선택 후 "approved!"만 narrate하고 Approve handoff sequenc
 
 ### cross-compact 조기 진행 금지 (AC19 — polite stop의 *반대* 실패 모드, verifiable)
 
-옵션 ① 선택 시 `/compact`를 노출한 *직후* 같은 턴에서 `writing-plans`로 직진하는 것은 금지. compact가 무거운 plan-write *뒤에* 오면 context 위생 이점이 사라져 옵션 ①이 무의미해진다 (2026-05-29 본 design 세션에서 실측된 실패: "handoff"라 말하고 compact 전에 plan을 그대로 써버림). polite stop이 "진행해야 할 때 멈춤"이라면 이것은 "멈춰야 할 때 진행" — 두 방향 모두 게이트의 사용자-주권(P17)을 우회한다. **verifiable**: 옵션 ① 서술에 '턴 종료'(STOP) + '다음 턴'(또는 동등) + 'writing-plans 같은 턴 호출 금지' 취지 문구가 grep으로 확인된다. 옵션 ②는 이 정지 요건의 *명시적 예외*(compact 없이 즉시 writing-plans).
+옵션 ① 선택 시 `/compact`를 노출한 *직후* 같은 턴에서 `writing-plans`로 직진하는 것은 금지. compact가 무거운 plan-write *뒤에* 오면 context 위생 이점이 사라져 옵션 ①이 무의미해진다 (2026-05-29 본 design 세션에서 실측된 실패: "handoff"라 말하고 compact 전에 plan을 그대로 써버림). 다음 턴 진입은 *사용자 트리거*(예: `/compact write plan` 인자)로만 일어나며 모델 자동 진입이 아니다(NG4·P17). polite stop이 "진행해야 할 때 멈춤"이라면 이것은 "멈춰야 할 때 진행" — 두 방향 모두 게이트의 사용자-주권(P17)을 우회한다. **verifiable (두-레이어, AC11 선례)**: (i) `grep -cE "턴 종료|다음 턴"` ≥ 1, **AND** (ii) 옵션 ① 서술 *블록 안에서* 'turn-ending(STOP)' + 'writing-plans 같은 턴 호출 금지' + '다음 턴 = 사용자 트리거'가 *함께* 명시됐음을 리뷰에서 확인 (grep 단독 false-positive — '턴 종료' 문구와 '같은 턴 호출' 문구 공존 — 차단은 리뷰 레이어 담당; mechanical 한계는 AC11과 동일 수준 인정). 옵션 ②는 이 정지 요건의 *명시적 예외*(compact 없이 즉시 writing-plans). **AC8 경계** (round-2 advisory 반영): AC8 '추가 AskUserQuestion 없음'은 *approve 옵션이 최종 확정된 그 어시스턴트 응답 턴*에 한정한다 (Phase 5 내 revise/interview 루프의 다른 턴이 아님 — 그 턴들은 본래 질문을 띄움). 다음 턴에 진입한 writing-plans가 자체 실행-방식 선택 게이트를 띄우는 것은 별개 skill scope이므로 AC8 해당 없음.
 
 ## Approve handoff sequence (①/② 공통)
 
@@ -627,7 +627,8 @@ Expected: `0`
 
 Run: `grep -c "AskUserQuestion" plugins/spec-distill/skills/reviewing-spec/SKILL.md` → ≥ 1 (Phase 5 gate; the [3.5] re-consensus gate already uses it).
 Run: `grep -ci "polite" plugins/spec-distill/skills/reviewing-spec/SKILL.md` → ≥ 1.
-Run: `grep -cE "턴 종료|다음 턴" plugins/spec-distill/skills/reviewing-spec/SKILL.md` → ≥ 1 (AC19 cross-compact 정지 문구 — 옵션 ① 턴 경계).
+Run: `grep -cE "턴 종료|다음 턴" plugins/spec-distill/skills/reviewing-spec/SKILL.md` → ≥ 1 (AC19 (i) — mechanical layer).
+**리뷰 레이어 (AC19 (ii), round-2 advisory)**: 옵션 ① 서술 *블록 안에서* 'turn-ending(STOP)' + 'writing-plans 같은 턴 호출 금지' + '다음 턴 = 사용자 트리거' 3요소가 *함께* 있는지 육안 확인 (grep 단독은 공존 보장 불가 — false-positive 차단은 이 레이어가 담당).
 
 - [ ] **Step 3: Commit**
 
