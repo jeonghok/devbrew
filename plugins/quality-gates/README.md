@@ -1,6 +1,6 @@
 # Quality Gates 플러그인
 
-Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 리뷰 위임 구조.
+Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 리뷰 위임 구조.
 
 ## 인스턴스화한 원칙
 
@@ -8,19 +8,18 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 ([`docs/philosophy/devbrew-harness-philosophy.md`](../../docs/philosophy/devbrew-harness-philosophy.md) 참고):
 
 - **Law 3 (Compounding)** — Phase 1 single dispatch builder (T2-2/T3-5). Future persona edits land in one place, never drift across two dispatch sections.
-- **Law 1 (Clarity Before Code)** — Gate 1 plan-verifier가 FAIL 시 `gate1_summary` YAML 핸드오프로 Gate 2 진입을 차단.
 - **Law 2 (Writer ≠ Reviewer)** — 모든 reviewer agent가 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언 (frontmatter scoping으로 물리적 격리).
 - **Law 3 (Compounding)** — scout `rationale` 필드가 매 iteration마다 state 파일에 로깅; reviewer-persona 편집이 학습된 교훈을 인코딩하는 substrate.
-- **Law 3 (Compounding) — cross-plugin reader contract** — Gate 1 plan-verifier가 sister-plugin (`superpowers:writing-plans`)의 출력 경로 `docs/superpowers/plans/`를 1순위 source로 명시 consume; convention drift가 silent breakage가 되지 않도록 README "Plan Discovery Sources" 섹션이 reader/writer 약속을 문서화.
+- **Law 3 (Compounding) — cross-plugin reader contract** — Runtime gate의 test-scope-validator(`scripts/discover-plan.sh`)가 sister-plugin (`superpowers:writing-plans`)의 출력 경로 `docs/superpowers/plans/`를 1순위 source로 명시 consume; convention drift가 silent breakage가 되지 않도록 README "Plan Discovery Sources" 섹션이 reader/writer 약속을 문서화.
 - **P12 anti-corollary (former AP5, trivia ceremony) 회피** — `check-trivia.sh`가 단일 파일·≤3줄 whitespace/rename을 파이프라인 전체 skip. *현재 coverage는 whitespace + rename에 국한. P12 canonical 자격(typo/comment-only/single-file formatting)을 완전히 충족하기 위한 확장은 deferred 항목 — Tier 2 spec `docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md` 참조.*
 - **P22 anti-corollary (former AP9, over-dispatching / subagent spray) hard gate** — Phase 1+2 dispatch 수가 ≥4일 때 AskUserQuestion 발동.
-- **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — Gate 2 내부 fix-loop이 `max_gate2_iterations=5` + repeat-detection (no-progress check) + kill switch로 묶임. *Wall-clock budget는 deferred — Tier 2 spec 참조.*
+- **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — Review gate 내부 fix-loop이 `max_review_iterations=5` + repeat-detection (no-progress check) + kill switch로 묶임.
 - **P5 (Filesystem as Memory) + P14 (State Survives Compaction) + §4.8 (State File)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (`*.local.md` gitignore 패턴으로 자동 제외; TTL sweep + SessionEnd hook으로 폴더 GC).
-- **Law 1 (Verification Plan)** (v1.8.0) — Gate 3가 evidence-required SKIP을 강제. runtime-verifier가 manifest의 모든 surface를 attempt하고 evidence-log를 산출해야 하며, 증거 없는 SKIP은 skill이 거부하여 FAIL로 격상.
+- **Law 1 (Verification Plan)** (v1.8.0) — Runtime gate가 evidence-required SKIP을 강제. runtime-verifier가 manifest의 모든 surface를 attempt하고 evidence-log를 산출해야 하며, 증거 없는 SKIP은 skill이 거부하여 FAIL로 격상.
 - **Law 2 (Writer ≠ Reviewer, frontmatter tool scoping으로 물리적 분리)** (v1.8.0) — `runtime-verifier` agent가 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언. `cp .env.example .env`, `docker compose up` 같은 fixable한 파일 작업은 사용자가 AskUserQuestion에서 명시 선택한 후 skill의 Bash tool로만 수행.
-- **P18 anti-corollary (former AP16, unbounded autonomy) 회피 — Gate 3** (v1.8.0) — Gate 3의 NEEDS_RESOLUTION mid-run 루프가 `max_gate3_resolutions` (기본 3, env override `DEVBREW_GATE3_MAX_RESOLUTIONS=0..10`)로 묶임. `needed_hash` 기반 repeat detection이 iteration cap 도달 전에 non-converging loop을 잡음.
-- **P21 (Secret이 prompt context에 들어가지 않음)** (v1.8.0) — Gate 3의 AskUserQuestion은 결정과 포인터(yes/no/path)만 묻고 secret 값은 절대 받지 않음. 누락된 secret은 사용자가 disk의 `.env`에 직접 추가 후 retry 선택으로 해결. regression test: `tests/test_no_secret_prompts.py`.
-- **Law 2 (Writer ≠ Reviewer, 3-way 분리)** (v1.9.0) — Gate 3가 3-way agent 분리를 강제. writer (originating turn) ≠ `test-scope-validator` (Step 2.5 pre-execution 리뷰어) ≠ `runtime-verifier` (Step 3 executor). 두 reviewer 모두 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언 — prompt 기반 분리가 아닌 frontmatter scoping으로 물리적 분리.
+- **P18 anti-corollary (former AP16, unbounded autonomy) 회피 — Runtime gate** (v1.8.0) — Runtime gate의 NEEDS_RESOLUTION mid-run 루프가 `runtime_max_resolutions` (기본 3, env override `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS=0..10`)로 묶임. `needed_hash` 기반 repeat detection이 iteration cap 도달 전에 non-converging loop을 잡음.
+- **P21 (Secret이 prompt context에 들어가지 않음)** (v1.8.0) — Runtime gate의 AskUserQuestion은 결정과 포인터(yes/no/path)만 묻고 secret 값은 절대 받지 않음. 누락된 secret은 사용자가 disk의 `.env`에 직접 추가 후 retry 선택으로 해결. regression test: `tests/test_no_secret_prompts.py`.
+- **Law 2 (Writer ≠ Reviewer, 3-way 분리)** (v1.9.0) — Runtime gate가 3-way agent 분리를 강제. writer (originating turn) ≠ `test-scope-validator` (Step 2.5 pre-execution 리뷰어) ≠ `runtime-verifier` (Step 3 executor). 두 reviewer 모두 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언 — prompt 기반 분리가 아닌 frontmatter scoping으로 물리적 분리.
 - **§5.3 (Categorical signal, no numeric scoring)** (v1.9.0) — `test-scope-validator`는 정확히 4-way enum 분류 (`aligned` / `outdated-suspicion` / `cherry-pick-suspicion` / `unclear`)만 emit. percentage, confidence, X/Y rating 모두 금지. summary의 counter 정수 (`1 aligned, 0 outdated…`) 는 허용. devbrew §5.3 "수치 스코어링 ban" instantiation.
 - **Law 2 strengthening — model-family separation.** Optional `codex-reviewer` agent (when Codex CLI is detected) runs review in a separate process with a different model family (OpenAI vs Anthropic) and an OS-level read-only sandbox, giving 3-layer reviewer-writer isolation: `disallowedTools` + narrow `Bash` allowlist + `codex -s read-only`.
 - **Law 2 (3-layer isolation, v1.11.0/v1.12.0)** — `codex-reviewer`의 3-layer isolation: (1) frontmatter `allowedTools`/`disallowedTools` camelCase deny/allow whitelist (AC1 fix, v1.11.1에서 복구), (2) narrow `Bash` allowlist (실제 키 `allowedTools`), (3) `codex exec -s read-only` OS-level sandbox. Layer 1 없이 Layer 2/3는 불완전 — 세 layer가 함께 물리적 격리를 구성.
@@ -29,7 +28,7 @@ Claude Code용 3-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / hook / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
 - **Law 1 (Clarity Before Code) — `/qg branch <name>` surface** (v1.15.0) — 7개 거절 시나리오(존재하지 않는 브랜치, path traversal, kill switch, idempotent reuse 등)가 `tests/test_branch_worktree.sh` AC1–AC11에 acceptance criteria로 명시. 실패 경로마다 명확한 진단 메시지를 stderr로 출력.
 - **Law 3 (Compounding) — worktree path 컨벤션** (v1.15.0) — `.claude/<plugin>/worktrees/<name>-<sid-short>/` 경로 패턴을 `docs/philosophy/devbrew-harness-philosophy.md` §4.8에 footnote로 박아 두어, 차후 다른 플러그인이 임시 worktree를 만들 때 같은 컨벤션을 재사용할 수 있게 함.
-- **Law 1 (Clarity Before Code) — single-turn dispatch contract** (v1.32.0) — pipeline progression이 `quality-pipeline` SKILL의 단일 assistant turn 내 serial dispatch로 일원화. cross-turn state machine (transition compute helpers, no-signal counter, wall-clock guard) 전부 삭제 — 진행 결정은 SKILL의 명시적 boundary + AskUserQuestion으로만 발생. State file은 GC mtime anchor + worktree tracking + Gate 2 iter counter reporting만 보존.
+- **Law 1 (Clarity Before Code) — single-turn dispatch contract** (v1.32.0) — pipeline progression이 `quality-pipeline` SKILL의 단일 assistant turn 내 serial dispatch로 일원화. cross-turn state machine (transition compute helpers, no-signal counter, 시간 기반 guard) 전부 삭제 — 진행 결정은 SKILL의 명시적 boundary + AskUserQuestion으로만 발생. State file은 GC mtime anchor + worktree tracking + Review gate iter counter reporting만 보존.
 - **P22 generalization (consent gate → progression gate):** AskUserQuestion
   is reused as a **progression primitive** at every gate boundary and Gate
   2 fix-loop iteration. The same tool that gates subagent fan-out now
@@ -42,14 +41,13 @@ quality-gates/
 ├── .claude-plugin/         # 플러그인 메타데이터
 │   └── plugin.json
 ├── agents/                 # Gate agent (leaf agent; 파이프라인이 dispatch)
-│   ├── plan-verifier.md         # Gate 1
-│   ├── runtime-verifier.md      # Gate 3 Step 3 (runner)
-│   ├── test-scope-validator.md  # Gate 3 Step 2.5 (pre-exec test scope check)
-│   ├── scout.md                 # Gate 2 Phase 0 — 모델 기반 dispatch planner
-│   ├── adversarial.md           # Gate 2 Phase 1.5 — false-positive hunter
-│   ├── synthesizer.md           # Gate 2 Phase 1.6 — finding dedupe/rank
-│   ├── codex-reviewer.md        # Gate 2 Phase 1 — external OpenAI reviewer (Layer 2/3 isolation)
-│   └── security-reviewer.md     # Gate 2 Phase 1 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`
+│   ├── runtime-verifier.md      # Runtime gate Step 3 (runner)
+│   ├── test-scope-validator.md  # Runtime gate Step 2.5 (pre-exec test scope check)
+│   ├── scout.md                 # Review gate Phase 0 — 모델 기반 dispatch planner
+│   ├── adversarial.md           # Review gate Phase 1.5 — false-positive hunter
+│   ├── synthesizer.md           # Review gate Phase 1.6 — finding dedupe/rank
+│   ├── codex-reviewer.md        # Review gate Phase 1 — external OpenAI reviewer (Layer 2/3 isolation)
+│   └── security-reviewer.md     # Review gate Phase 1 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`
 ├── commands/
 │   ├── qg.md               # /qg slash command (--reset, --paths, branch flag 포함)
 │   └── cancel-qg.md        # /cancel-qg command
@@ -64,11 +62,11 @@ quality-gates/
 │   ├── pre-pipeline-check.sh                 # in-skill 세션 라이프사이클 체크
 │   ├── check-trivia.sh                       # Trivia escape 감지기
 │   ├── filter-docs.sh                        # 코드 reviewer용 docs path 필터
-│   ├── discover-plan.sh                      # Plan 파일 우선순위 탐색 (Gate 1)
-│   ├── detect-runtime.sh                     # Gate 3 런타임 surface 탐지 (manifest 산출)
-│   ├── compute-test-scope-candidates.sh      # Gate 3 Step 2.5 — 후보 test 파일 산출 (Python/JS/TS heuristic)
+│   ├── discover-plan.sh                      # Plan 파일 우선순위 탐색 (Runtime gate test-scope-validator)
+│   ├── detect-runtime.sh                     # Runtime gate 런타임 surface 탐지 (manifest 산출)
+│   ├── compute-test-scope-candidates.sh      # Runtime gate Step 2.5 — 후보 test 파일 산출 (Python/JS/TS heuristic)
 │   ├── detect_codex.sh                       # Codex CLI 7-case probe (version/auth/sandbox/kill-switch/timeout)
-│   ├── build_codex_prompt.py                 # Gate 2 Phase 1 codex-reviewer용 prompt builder
+│   ├── build_codex_prompt.py                 # Review gate Phase 1 codex-reviewer용 prompt builder
 │   ├── codex_findings_to_yaml.py             # Codex JSONL stream → 표준 finding YAML (auth/schema/stderr 처리)
 │   └── qg-gc.py                              # TTL 기반 stale 세션 GC (fcntl-locked)
 ├── skills/
@@ -107,23 +105,22 @@ quality-gates/
 
 ### Codex reviewer cost
 
-The optional `codex-reviewer` agent has `cost_class: variable` — it invokes the user's Codex CLI subscription/API on each `standard`/`deep` Gate 2 dispatch. First-use cost consent gate prompts via `AskUserQuestion`. Per-call wall-clock ceiling: 600s (proxy for cost ceiling — Codex CLI does not currently expose a token cap flag). Disable globally with `DEVBREW_DISABLE_QG_CODEX=1`.
+The optional `codex-reviewer` agent has `cost_class: variable` — it invokes the user's Codex CLI subscription/API on each `standard`/`deep` Review gate dispatch. First-use cost consent gate prompts via `AskUserQuestion`. Disable globally with `DEVBREW_DISABLE_QG_CODEX=1`.
 
 ### Adversarial reviewer model
 
-`adversarial` agent uses `model: opus`. It is the **Opus-critic over the Sonnet Phase 1 workers** (cf. Anthropic multi-agent patterns: spend capability at the judgment bottleneck): the Phase 1/2 reviewers run on cheaper models and the synthesizer after it is a deterministic script, so adversarial is the *single model-based judgment gate* in Gate 2 — every finding the user sees passed through its verdict. Its persona runs a per-finding 3-gate verification (real? / introduced-by-this-diff? / handled-elsewhere?) plus a severity realist check, which is reasoning-heavy enough to warrant opus. A prior cost pass (T2-8) drifted the frontmatter/README toward sonnet while the SKILL dispatch still pinned opus; the three sites are now reconciled to opus and locked by `tests/test_adversarial_model_consistency.sh`. Runs ~once per Gate 2 fix-loop iteration (≤5×). AskUserQuestion fan-out count excludes `adversarial`/`scout`/`synthesizer` (infrastructure dispatches; not user-visible cost). To reduce its cost, lower the *number* of Gate 2 iterations or the diff scope — not this model.
+`adversarial` agent uses `model: opus`. It is the **Opus-critic over the Sonnet Phase 1 workers** (cf. Anthropic multi-agent patterns: spend capability at the judgment bottleneck): the Phase 1/2 reviewers run on cheaper models and the synthesizer after it is a deterministic script, so adversarial is the *single model-based judgment gate* in the Review gate — every finding the user sees passed through its verdict. Its persona runs a per-finding 3-gate verification (real? / introduced-by-this-diff? / handled-elsewhere?) plus a severity realist check, which is reasoning-heavy enough to warrant opus. A prior cost pass (T2-8) drifted the frontmatter/README toward sonnet while the SKILL dispatch still pinned opus; the three sites are now reconciled to opus and locked by `tests/test_adversarial_model_consistency.sh`. Runs ~once per Review gate fix-loop iteration (≤5×). AskUserQuestion fan-out count excludes `adversarial`/`scout`/`synthesizer` (infrastructure dispatches; not user-visible cost). To reduce its cost, lower the *number* of Review gate iterations or the diff scope — not this model.
 
 ## 게이트
 
-| Gate | 주체 | 목적 | 위임 대상 |
+| 게이트 | 주체 | 목적 | 위임 대상 |
 |------|-----|------|---------|
-| 1 | plan-verifier agent | plan checkbox와 git diff 교차 확인; `gate1_summary` YAML을 Gate 2로 핸드오프 | feature-dev:code-explorer (구현 추적), superpowers:verification-before-completion (증거) |
-| 2 | quality-pipeline skill (inline) | scout 주도 orchestration: depth-aware dispatch + Phase 1.5 adversarial + Phase 1.6 synthesizer | pr-review-toolkit, feature-dev, superpowers (review agent들) |
-| 3 | runtime-verifier agent | 앱 시작, 콘솔 에러 확인, 스크린샷 | chrome-devtools-mcp 또는 playwright |
+| Review gate | quality-pipeline skill (inline) | scout 주도 orchestration: depth-aware dispatch + Phase 1.5 adversarial + Phase 1.6 synthesizer | pr-review-toolkit, feature-dev, superpowers (review agent들) |
+| Runtime gate | runtime-verifier agent | 앱 시작, 콘솔 에러 확인, 스크린샷 | chrome-devtools-mcp 또는 playwright |
 
-**아키텍처 메모 — 왜 Gate 2는 agent가 없는가**: Claude Code는 skill만 (agent가 아닌) `Agent()`의 `subagent_type`을 사용 가능. Gate 2는 여러 Phase로 review agent를 dispatch해야 하므로 orchestration 로직이 `skills/quality-pipeline/SKILL.md`에 직접 있습니다. Gate 1과 3은 leaf agent (sub-agent dispatch 안 함).
+**아키텍처 메모 — 왜 Review gate는 agent가 없는가**: Claude Code는 skill만 (agent가 아닌) `Agent()`의 `subagent_type`을 사용 가능. Review gate는 여러 Phase로 review agent를 dispatch해야 하므로 orchestration 로직이 `skills/quality-pipeline/SKILL.md`에 직접 있습니다. Runtime gate는 leaf agent (sub-agent dispatch 안 함).
 
-## Gate 2 리뷰 단계 (v1.5.0 재설계)
+## Review gate 리뷰 단계 (v1.5.0 재설계)
 
 ```
 Phase 0  Scout (항상, sonnet) — dispatch plan 산출: depth + agent subset
@@ -147,7 +144,7 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 
 ## 파이프라인 흐름 (single-turn serial dispatch, v1.32.0)
 
-`v1.32.0`에서 SKILL이 전체 파이프라인을 단일 assistant turn 내에서 serial dispatch로 실행합니다. Inter-gate progression과 Gate 2 fix-loop iteration은 모두 AskUserQuestion으로 사용자 동의를 받아 진행 — 동일한 도구가 subagent fan-out gate와 inter-gate progression gate를 함께 담당합니다. (v1.5.0의 turn-by-turn state machine 다이어그램은 제거됨; 단일 다이어그램만 유지.)
+`v1.32.0`에서 SKILL이 전체 파이프라인을 단일 assistant turn 내에서 serial dispatch로 실행합니다. Inter-gate progression과 Review gate fix-loop iteration은 모두 AskUserQuestion으로 사용자 동의를 받아 진행 — 동일한 도구가 subagent fan-out gate와 inter-gate progression gate를 함께 담당합니다. (v1.5.0의 turn-by-turn state machine 다이어그램은 제거됨; 단일 다이어그램만 유지.)
 
 
 ```
@@ -165,41 +162,28 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 │   trivia escape? ─── yes ──▶ "Trivia diff — all gates skipped"        │
 │       │ no                                                            │
 │       ▼                                                               │
-│   Gate 1 dispatch (plan-verifier)                                     │
+│   Review gate iter loop (≤5)                                          │
 │       │                                                               │
-│       ├── PASS ───────────────────────────────────────────┐           │
-│       │                                                   │           │
-│       └── FAIL ──▶ AskUserQuestion                        │           │
-│                   ("Plan verification failed ..."          │           │
-│                    Continue anyway / Stop / View detail)  │           │
-│                       │                                   │           │
-│                       └── Continue ─────────────────────▶ ┤           │
-│                                                            ▼          │
-│                                              Gate 2 iter loop (≤5)    │
-│                                                  │                    │
-│                                                  ├── findings empty ─┐│
-│                                                  │     ▶ Gate 3       ││
-│                                                  │                    ││
-│                                                  └── findings remain  ││
-│                                                       AskUserQuestion ││
-│                                                       ("findings      ││
-│                                                        remain..."     ││
-│                                                       Retry / Proceed ││
-│                                                        to Gate 3 /    ││
-│                                                        Stop)          ││
-│                                                                       ││
-│                                                  Gate 3 dispatch ◀────┘│
-│                                                  (runtime-verifier)    │
-│                                                       │                │
-│                                                       ├── PASS         │
-│                                                       ├── FAIL         │
-│                                                       ├── SKIP_WITH_EVIDENCE
-│                                                       └── NEEDS_RESOLUTION
-│                                                              ▶ AskUserQuestion
-│                                                              ("Runtime
-│                                                               verifier needs..."
-│                                                               P21 reaffirmed)
-│                                                                       │
+│       ├── findings empty ──────────────────────────┐                  │
+│       │                                            │                  │
+│       └── findings remain ──▶ AskUserQuestion      │                  │
+│                              ("findings remain..."  │                  │
+│                               Retry / Proceed to    │                  │
+│                               Runtime gate / Stop)  │                  │
+│                                  │                  ▼                  │
+│                                  └────────▶ Runtime gate dispatch      │
+│                                             (runtime-verifier)         │
+│                                                  │                     │
+│                                                  ├── PASS              │
+│                                                  ├── FAIL              │
+│                                                  ├── SKIP_WITH_EVIDENCE │
+│                                                  └── NEEDS_RESOLUTION   │
+│                                                         ▶ AskUserQuestion
+│                                                         ("Runtime
+│                                                          verifier needs..."
+│                                                          P21 reaffirmed)
+│                                                  │                     │
+│       ▼                                          ▼                     │
 │   Final summary                                                       │
 │                                                                       │
 └───────────────────────────────────────────────────────────────────────┘
@@ -229,10 +213,9 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 /qg --paths <glob>...          # 풀 파이프라인; 명시 path scope
 /qg --reset                    # 현재 세션 폴더 + legacy v1.5.0 파일 정리 후 종료
 /qg --gc                       # stale sibling 세션 (TTL) sweep 후 종료
-/qg gate1                      # plan 검증만
-/qg gate2                      # PR 리뷰만
-/qg gate3                      # 런타임 검증만
-/qg --skip-runtime             # Gate 1 & 2만
+/qg review                     # Review gate만
+/qg runtime                    # Runtime gate만
+/qg --skip-runtime             # Review gate만 (런타임 skip)
 /qg --plan <path>              # 특정 plan 파일 사용
 /qg --pr-url <url>             # PR URL 명시
 /cancel-qg                     # 현재 세션 활성 파이프라인 취소
@@ -254,7 +237,7 @@ git fetch origin pull/123/head:pr-123  # PR을 로컬 브랜치로 가져오기
 내부 동작:
 
 1. `<repo>/.claude/quality-gates/worktrees/pr-123-<sid>/` 에 detached worktree 생성
-2. 그 안에서 Gate 1 → 2 → 3 실행, agent들이 worktree에서 diff를 읽음 (state는 main repo에 머묾, v1.14.0 worktree cwd contract 그대로 적용)
+2. 그 안에서 Review gate → Runtime gate 실행, agent들이 worktree에서 diff를 읽음 (state는 main repo에 머묾, v1.14.0 worktree cwd contract 그대로 적용)
 3. 정상 종료 (complete / cancel) 시 자동 cleanup. 비정상 종료 (NEEDS_RESTART 등) 시 보존 + stderr 안내 경로
 
 ### 디버깅용 worktree 보존
@@ -273,9 +256,9 @@ export DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1
 
 `/qg branch` (인자 없음) 은 영향 없음.
 
-## Plan Discovery Sources (Gate 1)
+## Plan Discovery Sources (Runtime gate test-scope-validator)
 
-`/qg gate1`이 `--plan <path>`를 받지 않으면 다음 우선순위로 plan 파일을 탐색합니다 (위→아래로 첫 자격 candidate에서 멈춤):
+Runtime gate의 test-scope-validator가 `--plan <path>`를 받지 않으면 다음 우선순위로 plan 파일을 탐색합니다 (`scripts/discover-plan.sh`; 위→아래로 첫 자격 candidate에서 멈춤):
 
 | 우선순위 | 위치 | 자격 조건 |
 |---|---|---|
@@ -293,20 +276,20 @@ export DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1
 
 | 플러그인 | 필수 | 사용처 | 목적 |
 |---------|------|-------|------|
-| pr-review-toolkit | 예 | Gate 2 | 핵심 review agent |
-| feature-dev | 아니오 | Gate 1, 2 | 컨벤션 리뷰, 아키텍처, 구현 추적 |
-| superpowers | 아니오 | Gate 1, 2 | plan 정합성, 증거 검증 |
-| chrome-devtools-mcp / playwright | 아니오 | Gate 3 | 브라우저 자동화 |
+| pr-review-toolkit | 예 | Review gate | 핵심 review agent |
+| feature-dev | 아니오 | Review gate | 컨벤션 리뷰, 아키텍처, 구현 추적 |
+| superpowers | 아니오 | Review gate | plan 정합성, 증거 검증 |
+| chrome-devtools-mcp / playwright | 아니오 | Runtime gate | 브라우저 자동화 |
 
 ## 설정
 
 ### Tuning knobs
 
-- `MAX_GATE2_ITERATIONS`: 5 (Gate 2 내부 review-fix 사이클 수)
+- `MAX_REVIEW_ITERATIONS`: 5 (Review gate 내부 review-fix 사이클 수)
 - `QG_STALE_HOURS`: 24 (`pre-pipeline-check.sh`의 세션 파일 staleness 기준)
 - `DEVBREW_QG_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/qg` 또는 `/cancel-qg --gc`에서 GC)
 - `DEVBREW_QG_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
-- `DEVBREW_GATE3_MAX_RESOLUTIONS`: 3 (`0..10`, Gate 3 NEEDS_RESOLUTION mid-run 루프 cap)
+- `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS`: 3 (`0..10`, Runtime gate NEEDS_RESOLUTION mid-run 루프 cap)
 - `DEVBREW_QG_KEEP_WORKTREE=1`: `/qg branch` worktree cleanup 비활성화 (디버깅용 보존)
 
 ### Kill switches (보안 컨트롤)
@@ -319,18 +302,18 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 |---|---|
 | `DEVBREW_DISABLE_QUALITY_GATES=1` | 모든 quality-gates hook + `qg-gc.py` no-op. `/qg`는 여전히 invocable하지만 hook이 fire하지 않음. |
 
-**Reviewer 단위 disable (Gate 2):**
+**Reviewer 단위 disable (Review gate):**
 
 | Env var | 효과 |
 |---|---|
 | `DEVBREW_DISABLE_QG_CODEX=1` | optional `codex-reviewer` 완전 skip (model-family diversity layer off). `scripts/detect_codex.sh`가 우선 검사. |
 | `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1` | Phase 1 always-run `security-reviewer` skip. 다른 3개 phase-1 reviewer는 여전히 fire. |
 
-**Gate 3 단위 disable:**
+**Runtime gate 단위 disable:**
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_DISABLE_GATE3_TEST_VALIDATION=1` | Gate 3 Step 2.5 (test scope validation) 완전 skip. `DEVBREW_SKIP_HOOKS=quality-gates:gate3-test-scope`과 동일. |
+| `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION=1` | Runtime gate Step 2.5 (test scope validation) 완전 skip. `DEVBREW_SKIP_HOOKS=quality-gates:runtime-test-scope`과 동일. |
 | `DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1` | `/qg branch <name>` auto-worktree 기능 disable (`/qg branch` no-arg는 영향 없음). |
 
 **Hook 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:<key>,quality-gates:<key2>...`):
@@ -342,7 +325,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 | `quality-gates:session-start-advisor` | `hooks/session-start-advisor.py` | SessionStart — stale state 안내 (read-only) |
 | `quality-gates:session-start-advisor:frontmatter-scan` | 위 hook의 sub-feature | Plugin 전체 agent frontmatter drift 스캔만 disable |
 | `quality-gates:session-end-cleanup` | `hooks/session-end-cleanup.py` | SessionEnd — 현재 세션 폴더 cleanup |
-| `quality-gates:gate3-test-scope` | (위 `DEVBREW_DISABLE_GATE3_TEST_VALIDATION`과 동의어) | Gate 3 Step 2.5 |
+| `quality-gates:runtime-test-scope` | (위 `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION`과 동의어) | Runtime gate Step 2.5 |
 
 (`MAX_TOTAL_ITERATIONS`와 cross-gate restart 루프는 v1.5.0에서 제거됨.)
 
