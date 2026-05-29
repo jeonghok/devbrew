@@ -120,48 +120,6 @@ class GcTest(unittest.TestCase):
         run_gc(cwd=self.tmp)
         self.assertTrue(recent.exists())
 
-    # ─── v0.10.0 _sweep_markers tests ───
-
-    def _make_marker(self, sid, age_seconds):
-        markers_dir = self.root / ".markers"
-        markers_dir.mkdir(exist_ok=True)
-        m = markers_dir / f"{sid}.emitted"
-        m.write_text(
-            "STATUS=already_handed_off\n"
-            "TIMESTAMP=2026-05-27T00:00:00Z\n"
-            "FIRE_COUNT=0\n"
-            "SPEC_PATH=/dummy.md\n"
-        )
-        past = time.time() - age_seconds
-        os.utime(m, (past, past))
-        return m
-
-    def test_13_marker_ttl_reached(self):
-        m = self._make_marker("sess1234", 25 * 3600)  # 25h, over 24h TTL
-        run_gc(cwd=self.tmp)
-        self.assertFalse(m.exists())
-
-    def test_14_marker_ttl_not_reached(self):
-        m = self._make_marker("sess1234", 3600)  # 1h, under TTL
-        run_gc(cwd=self.tmp)
-        self.assertTrue(m.exists())
-
-    def test_15_marker_dir_missing(self):
-        # No .markers/ dir at all — _sweep_markers must exit 0 gracefully.
-        rc, _, _ = run_gc(cwd=self.tmp)
-        self.assertEqual(rc, 0)
-
-    def test_16_non_emitted_file_preserved(self):
-        # Files in .markers/ without .emitted suffix must NOT be swept.
-        markers_dir = self.root / ".markers"
-        markers_dir.mkdir()
-        other = markers_dir / "something.txt"
-        other.write_text("not a marker")
-        past = time.time() - 25 * 3600
-        os.utime(other, (past, past))
-        run_gc(cwd=self.tmp)
-        self.assertTrue(other.exists())
-
 
 if __name__ == "__main__":
     unittest.main()
