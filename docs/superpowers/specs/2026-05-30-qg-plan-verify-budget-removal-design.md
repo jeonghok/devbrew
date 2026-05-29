@@ -47,11 +47,18 @@
   budget"(은유)은 유지한다.** autonomous-loop guard와 별개 개념.
 - **`docs/superpowers/specs/`·`plans/` 과거 문서, CHANGELOG 과거 항목은 재작성하지
   않는다** (기록물 — CHANGELOG·git 히스토리와 동급).
-- Gate 2(Review) 내부 fix-loop, scout/adversarial/synthesizer, Gate 3(Runtime)
-  verifier·test-scope-validator의 **로직**은 변경하지 않는다 — 이름·번호만.
+- Review gate(구 Gate 2) 내부 fix-loop, scout/adversarial/synthesizer,
+  Runtime gate(구 Gate 3) verifier·test-scope-validator의 **로직**은 변경하지
+  않는다 — 이름·번호만 (신규 이름 선행, 구 수치 이름은 괄호 병기; §5 명명 맵과 일관).
 - **`discover-plan.sh`(plan-discovery 유틸)는 제거하지 않는다.** "plan verify
   제거"는 *verifier*(Gate 1 agent + 검증 verdict)에 한정하며, plan-discovery
   인프라는 test-scope-validator가 독립 소비하므로 존속한다 (verifier ≠ discovery).
+  **재정의(reframe)의 범위 보장 (h3d9c7f0):** discover-plan.sh 변경은 *주석·문서
+  라벨 ONLY* — 실행 로직·stdout 출력 계약(emit하는 `plan_path:` 절대경로 형식)·
+  CLI 인터페이스(`--plan` 등)는 **byte-identical**로 불변. 따라서 이 파일을
+  소비하는 test-scope-validator와의 계약이 바뀌지 않으며, "이름·번호만 변경" Non-goal과
+  충돌하지 않는다 (주석 변경 ≠ 로직 변경). 회귀 가드: AC2가 `test_discover_plan.sh`
+  존속을 요구하므로 출력 계약 변경 시 기존 fixture 테스트가 실패한다.
 - 새 P#/AP# 신설 없음 (devbrew designs default to lightness).
 - 마켓플레이스 canonical cycle("spec→plan→implement→review→verify→compound")은
   유지한다 — plan 단계는 writing-plans/spec-distill 소관이지 qg Gate 1이 아니므로
@@ -92,21 +99,51 @@
 ## 6. Acceptance Criteria
 
 각 AC는 grep/파일 부재로 기계적으로 검증 가능하다. "plugin source"는
-`plugins/quality-gates/` 하위에서 `tests/`·`CHANGELOG.md` 제외를 의미한다.
+`plugins/quality-gates/` 하위에서 `tests/`·`CHANGELOG.md` 제외를 의미하며,
+아래 ACs는 다음 **canonical grep**(이하 `SRC_GREP "<pattern>"`)을 그대로 실행한
+결과로 판정한다 — copy-pasteable, exit/카운트 규칙 명시:
+
+```bash
+SRC_GREP() {  # 매칭 줄 출력; 0줄이면 "부재" 통과
+  grep -rniE "$1" plugins/quality-gates \
+    --include='*.md' --include='*.py' --include='*.sh' --include='*.json' \
+  | grep -vE '/tests/|/CHANGELOG\.md' || true
+}
+```
+
+대소문자는 `-i`로 일괄 처리(GATE/Gate/gate 동일 취급). "0건"은 `SRC_GREP`이
+**0줄을 출력**함을 뜻한다.
+
+**AC3 vs AC8 authority (a3f2c1e8):** AC3은 *Gate-1 프레이밍 문자열*
+(`plan-verifier`, `gate 1`)을, AC8은 *모든 수치 gate 식별자*
+(`gate [123]`, env var `GATE_[123]`)를 대상으로 한다. 두 sweep은 belt-and-suspenders로
+중첩되며 **둘 다 0줄**이어야 한다 (충돌 아님 — 같은 방향의 단언). `discover-plan`이라는
+**문자열 자체는 어느 패턴에도 포함되지 않으므로** 어떤 sweep의 매칭 대상도 아니다
+(존속하는 discover-plan.sh는 두 AC와 무관).
 
 **Gate 1 제거**
 
 1. `agents/plan-verifier.md` 파일이 존재하지 않는다. `scripts/discover-plan.sh`는
    **유지**된다 (공용 plan-discovery 유틸; test-scope-validator가 소비).
 2. `tests/test_plan_verifier_behavior.py`가 존재하지 않는다.
-   `tests/test_discover_plan.sh`·`tests/test_worktree.sh`는 **유지**된다
-   (discover-plan 존속). test-scope plan.md fixture는 test-scope-validator용이므로
-   **유지**된다.
-3. plugin source에서 `grep -rni "gate1\|gate 1\|plan-verifier"` → 0건.
-   `discover-plan` 참조는 "Gate 1" 프레이밍 없이 test-scope-validator 컨텍스트로만
-   존속한다 (`grep -rni "discover-plan.*Gate 1\|Gate 1.*discover-plan"` → 0건).
+   `tests/test_discover_plan.sh`·`tests/test_worktree.sh`는 **유지**되며
+   `tests/test_discover_plan.sh`가 **수정 없이(파일 byte-identical) green**이다 (b2d1e8a3:
+   "byte-identical"로 §3과 표현 통일 — test 파일을 건드리지 않음. Phase C가 *다른*
+   테스트(`test_detect_codex.sh` 등)의 600s 케이스를 수정하는 것과는 무관). 이
+   무수정 green이 곧 discover-plan.sh의 **stdout 출력 계약**(emit하는 `plan_path:`
+   절대경로 형식) 불변에 대한 기계적 보장이다 (h3d9c7f0).
+   test-scope plan.md fixture는 test-scope-validator용이므로 **유지**된다.
+3. `SRC_GREP "plan-verifier|gate ?1"` → 0줄 (`gate ?1`은 `?`로 공백이 optional이라
+   "gate1"·"gate 1"을 모두 매칭 — 별도 `gate1` 토큰 불필요). `discover-plan` 참조는
+   "Gate 1" 프레이밍 없이 test-scope-validator 컨텍스트로만 존속한다
+   (`SRC_GREP "discover-plan.{0,40}gate ?1|gate ?1.{0,40}discover-plan"` → 0줄).
 4. `SKILL.md`에 "Gate 1: Plan Verification" 섹션과 "Gate 1 FAIL decision" 섹션이
    없고, Dispatch Loop가 Review → Runtime 2단계이며 Contents TOC가 이를 반영한다.
+   구체 검증 (full path, copy-pasteable):
+   `grep -ciE "Gate 1: Plan Verification|Gate 1 FAIL decision" plugins/quality-gates/skills/quality-pipeline/SKILL.md`
+   → `0`; `grep -cE "Dispatch Loop" plugins/quality-gates/skills/quality-pipeline/SKILL.md`
+   ≥ `1` (섹션 존속). 그 섹션 본문의 "Gate 1"/"plan-verifier" 디스패치 단계 부재는
+   AC3 sweep로 보장.
 5. `commands/qg.md`에 `gate1` 모드가 없고 Gates 표/Quick Reference가 2-게이트를
    반영한다.
 6. `scout.py`에 `gate1_verdict` 필드가 없다.
@@ -115,19 +152,31 @@
 
 7. `setup-qg.sh` arg 파싱이 `review|runtime`을 수용하고 `gate1|gate2|gate3`을
    거부한다. usage 텍스트가 비수치 이름을 쓴다.
-8. plugin source에서 `grep -rno "GATE3\|gate3\|gate2\|gate 2\|gate 3"` → 0건.
-   `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS`, `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION`,
-   `quality-gates:runtime-test-scope`가 존재한다.
+8. `SRC_GREP "gate ?[123]|GATE_?[123]"` → 0줄 (`gate1/2/3`·`GATE1/2/3`·공백 변형
+   `gate 1/2/3`을 대소문자 무관·env var underscore 변형 포함 전부 커버; AC3의
+   gate1과 합쳐 **모든** 수치 gate 참조가 plugin source에서 전무함을 보장).
+   신규 식별자 존재 확인(positive): `SRC_GREP "DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS"`,
+   `SRC_GREP "DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION"`,
+   `SRC_GREP "quality-gates:runtime-test-scope"`가 각각 ≥1줄.
 9. `/qg review`, `/qg runtime` 서브커맨드가 `commands/qg.md`·`setup-qg.sh`에
    문서화·구현되어 있다. deprecated alias(`gate2`/`gate3`)는 존재하지 않는다.
+   구체 검증 (full path):
+   `grep -ciE "gate ?[23]" plugins/quality-gates/commands/qg.md plugins/quality-gates/scripts/setup-qg.sh`
+   → `0` (alias 부재; AC8 전역 sweep의 파일-국소 재확인);
+   `grep -cE "\\breview\\b" plugins/quality-gates/commands/qg.md` ≥ `1` AND
+   `grep -cE "\\bruntime\\b" plugins/quality-gates/commands/qg.md` ≥ `1` (신규 서브커맨드 존재).
 10. README 게이트 표가 정확히 2행(Review gate / Runtime gate)이다.
 
 **wall-clock budget 제거**
 
 11. `run_codex_reviewer.sh`에 `timeout 600`·`no_timeout_binary` 분기·
-    `OVERRIDE_REASON=timeout`이 없고 `codex exec`를 직접 호출한다.
-12. plugin source에서 `grep -rni "wall-clock\|wall_clock\|600"` → codex per-call
-    ceiling 관련 0건 (detect_codex의 5s probe·무관한 숫자 제외).
+    `OVERRIDE_REASON=timeout`이 없고 `codex exec`를 직접 호출한다
+    (`SRC_GREP "no_timeout_binary|OVERRIDE_REASON=timeout"` → 0줄).
+12. `SRC_GREP "wall-clock|wall_clock|timeout[[:space:]]+600"` → 0줄.
+    **bare `600` 숫자는 검색하지 않는다** — codex per-call ceiling은 오직
+    `timeout 600` 구문으로만 존재했으므로 이 구문 부재가 충분조건이며, "무관한
+    숫자" 판정 모호성이 제거된다. detect_codex의 5s probe는 `timeout 5`라 이
+    패턴에 매칭되지 않아 자연히 보존된다 (AC18에서 별도 positive 확인).
 13. README "인스턴스화한 원칙"에서 구 line 17 deferred 노트와 line 110
     "Per-call wall-clock ceiling: 600s (proxy for cost ceiling)" 표현이 제거된다.
 14. 철학 AP16에서 `(b) wall-clock budget` guard가 제거되고 guard가 3개(max-iter /
@@ -135,25 +184,44 @@
 
 **철학 문서 정합**
 
-15. 철학 gate 참조가 비수치화된다: line 201 "Gate 3"→"Runtime gate",
-    line 363·456 "Gate 2"→"Review gate", line 329의 qg 절이 "review → runtime"으로
-    갱신되고 obsolete한 "Gate 1로 loop back" 서술이 제거된다.
+15. 철학 문서가 quality-gates를 수치 gate로 지칭하지 않는다 (**content-based,
+    라인 번호 비의존** — 선행 편집으로 라인이 밀려도 flaky하지 않음):
+    `grep -nE "Gate [0-9]" docs/philosophy/devbrew-harness-philosophy.md` → 0줄
+    (모든 qg gate 참조가 "Runtime gate"/"Review gate"로 대체). obsolete한
+    "Gate 1로 loop back" 서술 부재 — 기계적 규칙(d1a3f609): `grep -in "loop back"
+    docs/philosophy/devbrew-harness-philosophy.md`가 **0줄**이거나, 매칭 행에
+    `quality-gates`·`qg`·`Gate`가 **하나도 없을 때만** 통과 ("qg 무관" 자의 판단 제거).
+    §7 Phase D의 라인 번호는 편집 *위치 힌트*일 뿐 AC 판정 기준이 아니다.
 16. canonical cycle "spec→plan→implement→review→verify→compound"는 철학 문서에
     그대로 유지된다 (grep 확인).
 
 **Regression guard (유지 항목)**
 
-17. P22 Cost Awareness 전체, 모든 `cost_class` 선언, Cost Class % 표, 철학 §4.1
-    "시간 budget", AP2 "attention budget"이 유지된다 (grep 확인).
-18. `detect_codex.sh`의 `timeout 5 codex --version` probe가 유지된다.
-19. 모든 reviewer agent의 `disallowedTools` 격리가 유지된다.
+17. P22 Cost Awareness·`cost_class`·Cost Class % 표·철학 §4.1 "시간 budget"·
+    AP2 "attention budget"이 유지된다 — 구체 grep (각 ≥1줄):
+    `grep -ciE "cost_class" plugins/quality-gates/skills/quality-pipeline/SKILL.md`,
+    `grep -cE "Cost Class" plugins/quality-gates/README.md`,
+    `grep -cE "P22|Cost Awareness" docs/philosophy/devbrew-harness-philosophy.md`,
+    `grep -cE "시간 budget" docs/philosophy/devbrew-harness-philosophy.md`,
+    `grep -cE "attention budget" docs/philosophy/devbrew-harness-philosophy.md`.
+18. `detect_codex.sh`의 5s probe가 유지된다:
+    `grep -cE "timeout.{0,4}5 codex --version" plugins/quality-gates/scripts/detect_codex.sh`
+    ≥ `1`.
+19. 모든 reviewer agent가 `disallowedTools` 격리를 유지한다:
+    `grep -lE "disallowedTools" plugins/quality-gates/agents/adversarial.md \`
+    `plugins/quality-gates/agents/runtime-verifier.md \`
+    `plugins/quality-gates/agents/security-reviewer.md \`
+    `plugins/quality-gates/agents/test-scope-validator.md` → 4개 파일 전부 매칭
+    (plan-verifier 제거 후 남는 4개 reviewer agent).
 
 **메타데이터·버전**
 
 20. `plugin.json` version = `2.0.0`.
 21. `CHANGELOG.md`에 `## [2.0.0] — 2026-05-30` 항목이 Removed/Changed +
     Migration 노트(old→new 매핑, alias 없음 경고)와 함께 추가된다.
-22. 전체 테스트 스위트가 green이다 (삭제/rename된 테스트 반영 후).
+22. **(Semantic AC — §8 "Semantic" 양식이 검증)** 전체 테스트 스위트가 green이다
+    (삭제/수정/rename된 테스트 반영 후). AC1~AC21은 Mechanical, AC22가 유일한
+    Semantic AC — §6↔§8 추적 일대일.
 
 ## 7. Files to Modify
 
@@ -185,18 +253,29 @@
   `test_test_scope_validator_*`, `check-allowed-tools-order.sh` 등 GATE3/gate2
   참조 전부.
 
-**Phase C — wall-clock budget 제거**
-- `scripts/run_codex_reviewer.sh` — `timeout 600` 래퍼·`no_timeout_binary`·
-  `OVERRIDE_REASON=timeout`.
-- `README.md` — 구 line 17·110.
-- 테스트: `test_codex_dispatch_invariant.sh`, `test_detect_codex.sh`,
-  `test_scout_codex_integration.sh`, `test_skill_codex_skip_prose.sh`,
-  `tests/mocks/bin-stubs/{gtimeout,timeout}` — timeout 케이스/mock 의존 정리.
-- 유지: `detect_codex.sh` 5s probe.
+**Phase C — wall-clock budget 제거** (파일별 delete/modify/keep 명시)
+- **수정** `scripts/run_codex_reviewer.sh` — `timeout 600` 래퍼·`no_timeout_binary`
+  분기·`OVERRIDE_REASON=timeout` 제거 → `codex exec` 직접 호출.
+- **수정** `README.md` — wall-clock budget deferred 노트(구 line 17) + codex
+  "Per-call wall-clock ceiling: 600s (proxy for cost ceiling)" 표현(구 line 110) 제거.
+- **수정** (삭제 아님) `test_codex_dispatch_invariant.sh`,
+  `test_scout_codex_integration.sh`, `test_skill_codex_skip_prose.sh` — 600s
+  ceiling·`no_timeout_binary` 경로 단언만 제거; codex dispatch 커버리지는 존속.
+- **유지(불변)** `test_detect_codex.sh` — 5s probe·`timeout_binary_missing` skip은
+  detect 경로라 유효; 600s 단언이 있을 경우에만 그 케이스 제거.
+- **유지(불변)** `tests/mocks/bin-stubs/{gtimeout,timeout}` — **삭제 금지**:
+  `detect_codex.sh`의 5s version probe가 여전히 timeout 바이너리를 요구하므로 mock이
+  계속 사용된다 (Phase C의 핵심 함정 — self-review가 잡음).
+- **유지(불변)** `detect_codex.sh` 5s probe + `timeout_binary_missing` skip 로직
+  (per-call ceiling이 아니라 detect hang 방지; AC18).
 
-**Phase D — 철학 문서**
-- `docs/philosophy/devbrew-harness-philosophy.md` — AP16 line 434, gate 참조
-  line 201·329·363·456. (§4.1 line 561·P22·AP2는 손대지 않음.)
+**Phase D — 철학 문서** (라인 번호는 *현재 기준 위치 힌트*, 편집 시점에 패턴으로
+재확인 — AC15는 content-based)
+- `docs/philosophy/devbrew-harness-philosophy.md` — AP16의 `(b) wall-clock budget`
+  guard 제거(현 ~line 434) + gate 참조 비수치화(현 ~line 201 "Gate 3"→"Runtime
+  gate", ~363·456 "Gate 2"→"Review gate", ~329 qg 절 "review → runtime" + "Gate 1로
+  loop back" 제거). **§4.1 "시간 budget"(현 ~561)·P22 전체·AP2 "attention budget"은
+  손대지 않는다.**
 - TOC(`## 목차`) 영향 없음 (섹션 추가/삭제/rename 없음).
 
 **Phase E — 메타데이터**
@@ -207,19 +286,31 @@
 
 AC와 1:1 매핑. devbrew §4.5 세 양식(mechanical / semantic / runtime).
 
-- **Mechanical (AC1–AC18):**
-  `grep -rni "gate1\|gate 1\|plan-verifier\|GATE3\|gate2\|gate 2\|gate 3\|wall-clock\|wall_clock\|timeout 600"`
-  를 plugin source(tests/CHANGELOG 제외)에 실행 → 0건. (`discover-plan`은 존속하므로
-  0-count grep에서 제외; 대신 "Gate 1" 프레이밍 부재만 확인.) 삭제 파일 부재 확인
-  (`test ! -f plan-verifier.md`), 존속 파일 존재 확인 (`test -f discover-plan.sh`).
-  신규 env/서브커맨드 존재 확인 (grep positive). 유지 항목 regression grep
-  (cost_class·P22·5s probe·disallowedTools positive). 기존 린터
-  (`check-allowed-tools-order.sh`) 통과.
+- **Mechanical — AC1~AC21 전부 (AC22 제외).** AC4·AC5·AC6·AC7·AC9도 grep/파일
+  검사로 Mechanical에 속한다 (런타임 아님). §6의 `SRC_GREP` 0-count ACs
+  (AC3·AC8·AC11·AC12) + 파일 존재/부재(`test ! -f plan-verifier.md`,
+  `test -f discover-plan.sh`) + 신규 식별자 positive grep(AC8) + 철학 content
+  grep(AC15·AC16) + regression positive grep(AC17·AC18·AC19: cost_class·P22·
+  `timeout 5`·disallowedTools) + 버전(AC20) + CHANGELOG 항목(AC21) + 기존 린터
+  (`check-allowed-tools-order.sh`) 통과. (`discover-plan`은 존속하므로 0-count
+  대상에서 제외 — AC3가 "Gate 1" 프레이밍 부재만 확인.)
 - **Semantic (AC22):** `plugins/quality-gates/tests/` 전체 스위트 실행 → green.
-  삭제/rename 반영된 테스트가 의도대로 통과/제거됨.
-- **Runtime (AC4–AC10):** `/qg`(full = review→runtime), `/qg review`,
-  `/qg runtime` smoke 실행. codex 설치 환경에서 detect→dispatch 정상,
-  미설치 환경에서 graceful skip(loud log) 정상.
+  삭제/수정/rename 반영된 테스트가 의도대로 통과/제거됨.
+- **Runtime (행위 검증 — Mechanical을 대체하지 않음).** `/qg`(full =
+  review→runtime), `/qg review`, `/qg runtime` smoke가 2-게이트 파이프라인을 실제
+  dispatch하는지, codex 설치 시 detect→dispatch 정상·미설치 시 graceful
+  skip(loud log) 정상인지 확인. **관찰 가능 pass 기준 (9e3c5d72):** `/qg` full 실행
+  시 stdout에 "Review gate"·"Runtime gate" 헤더가 각각 ≥1회 출력되고 exit 0; "Gate
+  1"/"Plan Verification" 헤더는 출력되지 않음. (이 smoke는 non-binding sanity —
+  grep ACs 판정을 대체하지 않음.) **주의(false-pass 방지, e9b2d054): grep 기반
+  ACs(AC3~AC12 등)는 반드시 Mechanical 결과로 판정한다 — "smoke green"이 grep
+  부재 단언을 대체하지 못한다.** Runtime smoke 통과만으로 AC 충족을 주장하지 않는다.
+- **R1 backstop (의도적 non-AC, g2e1a851):** codex 600s 제거의 hang 위험은
+  설계상 "수용"이며 별도 AC로 강제하지 않는다. 단 backstop 존재를 다음 **구체
+  2-명령 수동 확인**으로 기록한다 (검증 *면제*가 아니라 non-blocking 확인):
+  (i) `DEVBREW_DISABLE_QG_CODEX=1 /qg runtime` 실행 → 출력에 codex skip loud log가
+  보이고 codex 미dispatch; (ii) `/cancel-qg` 실행 → 프롬프트 정상 복귀(활성 세션
+  취소 가능). 둘 중 어느 것도 hang하지 않음을 1행으로 기록.
 
 ## 9. Rejected Alternatives
 
@@ -266,3 +357,29 @@ AC와 1:1 매핑. devbrew §4.5 세 양식(mechanical / semantic / runtime).
 - **관련 원칙:** Law 1 (구조적 게이트), Law 2 (격리 불변), P17 (사용자 주권),
   P18/AP16 (unbounded autonomy — wall-clock guard 제거 후 3-guard), P22 (Cost
   Awareness — 유지), P23 (SemVer·deprecation — 의도적 예외).
+
+## Handoff Context
+
+*(compact 후 fresh-context writing-plans가 대화 없이 복원할 핵심. /compact 시
+이 섹션·Acceptance Criteria·Files to Modify는 보존, 인터뷰 대화·중간 추론은 drop.)*
+
+- **TL;DR:** quality-gates v1.32.3 → **v2.0.0**. Gate 1(plan-verifier agent) 제거 +
+  wall-clock budget 제거(AP16 (b) guard, README deferred 노트, codex per-call 600s
+  timeout) + 게이트 **비수치 rename**("Review gate" / "Runtime gate", 서브커맨드
+  `/qg review`·`/qg runtime`, env `DEVBREW_QG_RUNTIME_*`). **즉시 전면 rename, alias
+  없음 = v2.0.0 clean break.**
+- **Implicit context (사용자-locked 결정, 재논의 불필요):**
+  - budget 제거는 **wall-clock(시간)에 한정** — P22 Cost Awareness·`cost_class`·
+    Cost Class % 표·§4.1 "시간 budget"·AP2 "attention budget"은 **유지** (CLAUDE.md
+    Plugin Shape가 cost_class 강제).
+  - **alias 없는 즉시 rename은 P23 deprecation-window 하우스 룰의 의도적 예외** —
+    P17 사용자 주권이 하우스 룰에 우선. major bump가 breaking 신호, CHANGELOG
+    Migration 노트가 이행 경로.
+  - **`discover-plan.sh`는 제거하지 않는다** — plan *verify*(Gate 1 agent)만 제거.
+    Runtime gate의 test-scope-validator가 `plan_path:auto`로 이 유틸에 독립 의존하므로
+    존속(주석/라벨 reframe ONLY, stdout 계약 byte-identical).
+  - codex 600s 제거의 hang 위험은 수용(§10 R1) — backstop은 Bash timeout +
+    `DEVBREW_DISABLE_QG_CODEX=1` + `/cancel-qg`. detect_codex.sh의 **5s probe는 유지**.
+- **Deferred to plan (writing-plans에서 확정):** Phase A–E 실행 순서, 각 테스트
+  파일의 수정 범위(특히 Phase C의 600s 단언 제거 vs 케이스 보존), 철학 문서 편집의
+  정확한 라인(AC15 content-grep으로 재확인), CHANGELOG Migration 노트 문구.
