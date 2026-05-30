@@ -53,8 +53,11 @@ qg의 truth로 instantiate.
 - **plan을 구현-방식 hint로 강등(제거 아님).** `discover-plan.sh`는 byte-identical로
   유지(v2.0.0이 유지한 것과 일관). plan은 spec 없을 때의 fallback scope hint이자
   spec 있을 때의 보조 hint.
-- **best-effort 안전 속성:** spec 부재 시 qg는 v2.0.0과 **byte-identical** 동작
-  (회귀 위험 구조적 0). 신능력은 spec 존재 시에만 활성.
+- **best-effort 안전 속성:** spec 부재 시 qg는 v2.0.0과 **기능 동작이 동일**
+  (per-file verdict·exit code·YAML 출력 구조 불변). 단 새 fallback **loud log 한 줄**은
+  추가된다(AC11) — "byte-identical"이 아니라 "기능 회귀 0 + 진단 가능한 신호 추가"가
+  정확한 표현. 신능력은 spec 존재 시에만 활성. (cf. `discover-plan.sh` 파일 자체의
+  byte-identical 불변(AC3)은 *파일* 불변이며 이 *동작* 정의와 구분된다.)
 - **kill switch** `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1` — AC-coverage facet만 끄고
   validator는 plan-기반으로 계속.
 - SemVer `v2.0.0 → v2.1.0` (새 surface = spec discovery + ac_coverage, 하위호환).
@@ -97,6 +100,14 @@ qg의 truth로 instantiate.
   verdict를 block하지 않는다.
 - **discover-spec.sh는 repo root에서 호출.** project-local 소스를 `$PWD` 기준 해석
   (discover-plan.sh와 동일 계약·헤더 노트).
+- **invocation parity (allowed-tools 변경 불요).** `discover-spec.sh`의 호출 메커니즘은
+  `discover-plan.sh`와 **동일**해야 한다: (a) test-scope-validator agent가 자신의 일반
+  `Bash`로 `spec_path:auto`를 직접 resolve, (b) codex 경로는 `run_codex_reviewer.sh`가
+  **script-internal**로 spec AC를 처리. 둘 다 Claude 도구 호출이 아니므로 SKILL.md
+  `allowed-tools`(narrow `Bash(...:*)` 열거)에 `discover-spec.sh`를 추가할 필요가 없다
+  — `discover-plan.sh`가 현재 어떤 allowed-tools에도 없이 동작하는 것과 동일. (만약
+  미래 audit이 discover-plan에 allowed-tools 엔트리가 필요하다고 판정하면 둘을 함께
+  추가; 본 작업은 parity만 보장.)
 
 ## 5. Acceptance Criteria
 
@@ -122,16 +133,22 @@ qg의 truth로 instantiate.
 
 4. `agents/test-scope-validator.md`의 입력 선언에서 융합 문자열
    `spec/plan markdown`이 사라지고 `spec_path`·`plan_path`가 **별도 줄**로 분리된다.
+   **단일-입력 모델을 서술하는 다른 두 위치도 함께 갱신:** `:23` example block
+   (`skill provides plan_path`)과 `:64` Step 1 cross-ref (`plan_path (auto = discover-plan.sh)`)가
+   `spec_path`를 함께 언급하도록 수정 (분리 후 잔존 시 agent 실행 혼란 — f8b6d205).
    검증: `grep -c 'spec/plan markdown' agents/test-scope-validator.md` → `0`;
-   `grep -c 'spec_path' agents/test-scope-validator.md` ≥ `1` AND
+   `grep -c 'spec_path' agents/test-scope-validator.md` ≥ `3` (입력 선언 + example + Step 1) AND
    `grep -c 'plan_path' agents/test-scope-validator.md` ≥ `1`.
 5. spec_path가 주어지면 validator가 `ac_coverage:` 블록을 emit하고, 부재 시 생략하고
    plan-기반 per-file verdict로 fallback한다 (Semantic — behavior 테스트).
    `ac_coverage`의 각 항목은 `id`(AC#)·`status`(covered|uncovered)·`covered_by`(테스트
-   ref 리스트)를 갖는다. note 줄에 "advisory only — does not block" 포함.
-6. per-file verdict의 cherry-pick-suspicion 정의가 "spec AC scope에 orthogonal"을
-   참조한다 (plan scope 단독 아님). 검증: persona에 spec AC 기준 문구 존재
-   (`grep -ciE 'acceptance criteria|spec AC' agents/test-scope-validator.md` ≥ `1`).
+   ref 리스트)를 갖는다 — **필드명은 본 AC에서 확정**(Handoff Deferred ②는 indent/anchor
+   규약만, 필드명 아님). note 줄에 "advisory only — does not block" 포함.
+6. per-file verdict의 cherry-pick-suspicion 정의가 plan scope 단독이 아니라 **spec AC
+   scope에 orthogonal**을 참조하도록 *재정의된다*. 검증(기준 재정의 자체를 단언 —
+   키워드 단순 존재가 아니라): `grep -cE 'orthogonal to.{0,40}(spec|acceptance criteria)'
+   agents/test-scope-validator.md` ≥ `1` (9a2f1b34 — 구 `'acceptance criteria|spec AC'`
+   존재-grep은 무관 맥락 매칭으로 false-pass 가능했음).
 
 **codex 슬롯 부활**
 
@@ -141,7 +158,14 @@ qg의 truth로 instantiate.
    `grep -c 'plan_context\|PLAN_SUMMARY' scripts/build_codex_prompt.py` → `0`.
    `:74-77`의 "/dev/null canonical(plan)" 주석이 "spec AC가 canonical context"로 갱신.
 8. `scripts/run_codex_reviewer.sh`가 추출된 spec AC(또는 spec 부재 시 `/dev/null`)를
-   build_codex_prompt.py에 전달한다. 검증: test_build_codex_prompt.sh 확장 케이스 green.
+   build_codex_prompt.py에 전달한다. **변수·callsite 리네임도 enforce** (c9f3b241 —
+   AC7 grep은 build_codex_prompt.py만 봤음): `PLAN_SUMMARY_FILE`·`PLAN_SUMMARY`가
+   `SPEC_AC_FILE`·`SPEC_AC`로 리네임되고 callsite가 spec AC 인자를 전달
+   (현재 위치 ~`:13`/`:52`/`:53-54` — **편집 중 이동하므로 위치 힌트일 뿐;
+   판정은 아래 grep이 authoritative**, line_number_anchor_drift). 검증:
+   `grep -c 'PLAN_SUMMARY' scripts/run_codex_reviewer.sh` → `0` AND
+   `grep -c 'SPEC_AC' scripts/run_codex_reviewer.sh` ≥ `1`; test_build_codex_prompt.sh
+   확장 케이스 green.
 
 **SKILL 배선**
 
@@ -149,6 +173,12 @@ qg의 truth로 instantiate.
    Runtime gate의 test-scope-validator dispatch 블록 내 10줄 안에 `spec_path:` 줄이
    있다 (test-scope-validator dispatch 계약). Review gate codex 경로가 spec AC를 주입한다.
    검증: `grep -cE 'spec_path' skills/quality-pipeline/SKILL.md` ≥ `2`.
+   **invocation parity 단언 (e1d40a7c):** `discover-spec.sh`는 SKILL `allowed-tools`
+   frontmatter에 추가되지 *않는다* — `discover-plan.sh`와 동일 메커니즘(agent Bash /
+   script-internal). 검증(실행 가능 — frontmatter 블록만 추출해 grep, ac9_grep_untestable):
+   `sed -n '1,/^---$/{/^---$/!p}' skills/quality-pipeline/SKILL.md | grep -c 'discover-spec'`
+   → `0` AND 동 명령의 `discover-plan` → `0` (둘 다 frontmatter 부재 = parity).
+   (`sed`는 첫 `---` 다음부터 두 번째 `---`까지의 frontmatter 본문만 출력.)
 
 **degradation & kill switch**
 
@@ -189,20 +219,29 @@ qg의 truth로 instantiate.
 
 **수정**
 - `agents/test-scope-validator.md` — 입력 `spec_path`/`plan_path` 분리(`:54` 융합 해소),
-  기준 축 spec AC 1차·plan 2차, `ac_coverage` 출력 블록 신설, no-spec fallback + loud log,
-  kill switch 분기. `disallowedTools` 불변.
+  **+ `:23` example block·`:64` Step 1 cross-ref도 spec_path 반영**(f8b6d205),
+  기준 축 spec AC 1차·plan 2차, cherry-pick-suspicion "spec AC scope에 orthogonal" 재정의,
+  `ac_coverage` 출력 블록 신설, no-spec fallback + loud log, kill switch 분기.
+  `disallowedTools` 불변.
 - `scripts/build_codex_prompt.py` — `<plan_context>`→`<spec_context>`,
   `{{PLAN_SUMMARY}}`→`{{SPEC_AC}}`, arg `<plan_summary_file>`→`<spec_ac_file>`,
   `:74-77` 주석 갱신.
-- `scripts/run_codex_reviewer.sh` — 추출된 spec AC(또는 spec 부재 시 /dev/null)를 전달.
+- `scripts/run_codex_reviewer.sh` — `PLAN_SUMMARY_FILE`·`PLAN_SUMMARY` →
+  `SPEC_AC_FILE`·`SPEC_AC` 리네임, callsite가 추출된 spec AC(또는 spec 부재 시
+  /dev/null)를 전달(c9f3b241). **spec 부재 분기에서 codex-path loud log emit**
+  (AC11이 "validator·codex 양쪽 loud log"를 요구 — run_codex_loud_log_owner).
   **deferred to plan:** AC 섹션 추출 위치(run_codex_reviewer.sh awk vs build_codex_prompt.py
   내부) — AC 섹션만 추출(spec 전체는 prompt bloat).
 - `skills/quality-pipeline/SKILL.md` — Arguments에 `spec_path`(default auto), Runtime
   gate dispatch에 `spec_path:` 줄, Review gate codex 경로에 spec AC 주입.
+  **`allowed-tools` frontmatter는 변경 없음**(invocation parity — discover-spec은 agent
+  Bash/script-internal로 호출; e1d40a7c).
 - `README.md` — "Spec Discovery Sources" 절, "Principles Instantiated"에 C66, gate 표.
 - `tests/test_test_scope_validator_behavior.py` — ac_coverage 존재(spec)/fallback(no-spec)/
   cherry-pick 기준=spec AC/kill-switch.
-- `tests/test_build_codex_prompt.sh` — `<spec_context>` 슬롯 + no-spec /dev/null 경로.
+- `tests/test_build_codex_prompt.sh` — `<plan_context>`(`:27`) 단언을 `<spec_context>`로
+  **교체**(케이스 1의 `/dev/null` 경로는 "spec AC 부재 → 빈 `<spec_context>`" 의미로
+  *재명명*, 케이스 폐기 아님; `:3-6` v2.0.0 주석도 spec 어휘로 갱신; b3c7a918).
 - `.claude-plugin/plugin.json` — version 2.1.0.
 - `CHANGELOG.md` — v2.1.0 항목.
 
@@ -283,7 +322,8 @@ AC와 1:1 매핑. devbrew §4.5 세 양식.
   `discover-spec.sh` 신설(discover-plan 거울, best-effort) + test-scope-validator
   기준선 plan→spec AC 교체 + `ac_coverage` advisory 블록 + codex 죽은 `<plan_context>`
   슬롯을 `<spec_context>`로 부활. plan은 구현-방식 hint로 강등(제거 아님,
-  discover-plan.sh byte-identical). **spec 없으면 v2.0.0과 byte-identical fallback.**
+  discover-plan.sh 파일 byte-identical). **spec 없으면 v2.0.0과 기능 동작 동일
+  fallback (+ fallback loud log 한 줄 추가 — 기능 회귀 0, byte-identical 아님).**
 - **Implicit context (사용자-locked 결정, 재논의 불필요):**
   - **비대칭이 정당화의 핵심:** plan-verify(상류 중복, 제거 옳음) vs spec-conformance
     (코드 존재해야 가능 → qg만 닫을 수 있는 비중복 루프). 본 작업 ≠ v2.0.0 되돌리기.
@@ -294,7 +334,10 @@ AC와 1:1 매핑. devbrew §4.5 세 양식.
   - **Approach 선택:** A(구조적 owner) + C보완(codex 슬롯 부활). B(전용 reviewer)·
     C단독(owner 없음) 기각.
 - **Deferred to plan (writing-plans에서 확정):** ① AC 섹션 추출 위치(run_codex_reviewer.sh
-  awk vs build_codex_prompt.py 내부); ② ac_coverage YAML 정확한 스키마/필드명; ③
+  awk vs build_codex_prompt.py 내부); ② ac_coverage YAML의 **indent/anchor 규약만**
+  (필드명 `id`/`status`/`covered_by`는 AC5에서 확정 — 모순 해소 a7b2e019); ③
   discover-spec.sh AC-적격성 정규식 + multi-spec mtime tiebreak 구현; ④ kill-switch
   분기를 SKILL vs agent persona 어디서 평가할지; ⑤ baseline reds 캡처 절차(repo root);
-  ⑥ Phase 실행 순서.
+  ⑥ Phase 실행 순서; ⑦ 본 spec의 모든 line-number anchor(`run_codex_reviewer.sh`·
+  `build_codex_prompt.py`·`test-scope-validator.md`)는 *현재 위치 힌트*이므로 구현
+  착수 전 재확인 — 판정은 grep/식별자 기반이 authoritative (line_number_anchor_drift).
