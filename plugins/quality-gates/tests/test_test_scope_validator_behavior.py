@@ -61,6 +61,7 @@ test_scope_verdicts:
   - file: tests/test_foo.py
     classification: aligned
     evidence: matches AC3 behavior
+summary: 1 aligned, 0 outdated-suspicion, 0 cherry-pick-suspicion, 0 unclear
 ac_coverage:
   note: "advisory only — does not block the Runtime gate"
   items:
@@ -70,7 +71,6 @@ ac_coverage:
     - id: AC2
       status: uncovered
       covered_by: []
-summary: 1 aligned, 0 outdated-suspicion, 0 cherry-pick-suspicion, 0 unclear
 """
 
 TEST_SCOPE_NO_SPEC = """
@@ -91,7 +91,7 @@ def test_ac_coverage_schema_when_spec_present():
     )
     ac = parsed["ac_coverage"]
     assert_yaml_schema(ac, required_keys=["note", "items"])
-    # AC5: note declares advisory posture (two stable tokens — robust to dash glyph).
+    # note must carry two stable substrings — robust to em-dash glyph variants.
     assert "advisory only" in ac["note"]
     assert "does not block" in ac["note"]
     for item in ac["items"]:

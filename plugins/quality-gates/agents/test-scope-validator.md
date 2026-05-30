@@ -52,7 +52,7 @@ You are the **Test Scope Validator** — a light-weight pre-execution check that
 Your dispatch prompt contains:
 
 - `project_dir`: project working directory (absolute path) — pipeline 의 단일 좌표. SKILL preflight 에서 frozen. 절대 재계산 금지 (`git rev-parse`, `Path.cwd()`, `pwd` 모두 금지).
-- `spec_path`: path to the project **spec** markdown — the Acceptance Criteria truth, your PRIMARY reference axis (auto = `scripts/discover-spec.sh`; may be absent, or the literal `none` when the SKILL disabled spec conformance). When present, you also emit an `ac_coverage` block (Step 3).
+- `spec_path`: path to the project **spec** markdown — the Acceptance Criteria truth, your PRIMARY reference axis (auto = `scripts/discover-spec.sh`; may be absent, or the literal `none` when the SKILL disabled spec conformance). When present, you also emit an `ac_coverage` block (Step 3.5).
 - `plan_path`: path to the **plan** markdown — a SECONDARY implementation-method hint, not the truth (auto = `scripts/discover-plan.sh`; may be absent)
 - `## Current Diff` section: filtered unified diff (≤50KB)
 - `candidate_test_files`: newline-separated list of test file paths to evaluate
@@ -73,7 +73,7 @@ Pick exactly one classification per file:
 
 | Classification | Trigger |
 |---|---|
-| `aligned` | Assertions clearly match plan items or post-diff behavior |
+| `aligned` | Assertions clearly match spec acceptance criteria (or plan items when no spec is present) or post-diff behavior |
 | `outdated-suspicion` | Assertions reference symbols / behaviors that were renamed, removed, or semantically changed in the diff, yet the test file itself was not updated |
 | `cherry-pick-suspicion` | Assertions are tautological (`assert True`, `assert obj is not None` as the only assertion in a test function) OR coverage exists but the behavior tested is **orthogonal to spec acceptance criteria** scope (plan scope is only a secondary hint when no spec is present) |
 | `unclear` | Heavy mocking, indirect coupling, or insufficient context to classify confidently |
@@ -109,6 +109,7 @@ verdicts above are scope hygiene; this block answers "does the shipped
 code/test set cover what the spec promised?"
 
 ```yaml
+# ... appended to the SAME YAML document, immediately after the summary: line ...
 ac_coverage:
   note: "advisory only — does not block the Runtime gate"
   items:
