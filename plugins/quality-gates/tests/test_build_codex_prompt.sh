@@ -32,6 +32,7 @@ echo "$out" | grep -q 'feature X works' && bad "no-spec: leaked spec text" || ok
 out2="$(python3 "$BUILD" "$DIFF" "$SPEC" 2>/dev/null)"; rc2=$?
 [ "$rc2" -eq 0 ] && ok "real spec AC → exit 0" || bad "real spec AC → exit $rc2 (expected 0)"
 echo "$out2" | grep -q 'feature X works' && ok "real spec AC: content included" || bad "real spec AC: content missing"
+echo "$out2" | grep -q '<spec_context>' && ok "real spec AC: spec_context block present" || bad "real spec AC: spec_context block missing"
 
 # Case 3: missing diff file → exit 2 (diff is still required).
 python3 "$BUILD" /nonexistent-qg-diff-xyz "$SPEC" >/dev/null 2>&1

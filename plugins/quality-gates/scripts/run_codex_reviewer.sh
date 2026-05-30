@@ -65,13 +65,21 @@ elif [[ -n "${SPEC_AC_FILE:-}" && -f "${SPEC_AC_FILE}" ]]; then
   echo "[quality-gates] codex spec context: using explicit SPEC_AC_FILE=$SPEC_AC_FILE" >&2
 else
   SPEC_JSON="$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/discover-spec.sh" 2>/dev/null || true)"
-  SPEC_PATH="$(printf '%s' "$SPEC_JSON" | sed -n 's/.*"spec_path":"\([^"]*\)".*/\1/p')"
-  if [[ -n "$SPEC_PATH" && -f "$SPEC_PATH" ]]; then
-    SPEC_AC="$SCRATCH/spec_ac.md"
-    awk '/^#/{is_ac=($0~/[Aa]cceptance [Cc]riteria/);is_b=($0~/^## /||$0~/^# /);if(is_ac){inac=1;print;next}if(inac&&is_b)exit} inac' "$SPEC_PATH" > "$SPEC_AC"
-    echo "[quality-gates] codex spec context: injected Acceptance Criteria from $SPEC_PATH" >&2
+  if [[ -z "$SPEC_JSON" ]]; then
+    echo "[quality-gates] codex spec context: discover-spec.sh produced no output (script missing or crashed? check CLAUDE_PLUGIN_ROOT) — empty <spec_context>." >&2
   else
-    echo "[quality-gates] codex spec context: no project spec found (searched docs/superpowers/specs/) — empty <spec_context>, v2.0.0 behavior." >&2
+    SPEC_PATH="$(printf '%s' "$SPEC_JSON" | sed -n 's/.*"spec_path":"\([^"]*\)".*/\1/p')"
+    if [[ -n "$SPEC_PATH" && -f "$SPEC_PATH" ]]; then
+      awk '/^#/{is_ac=($0~/[Aa]cceptance [Cc]riteria/);is_b=($0~/^## /||$0~/^# /);if(is_ac){inac=1;print;next}if(inac&&is_b)exit} inac' "$SPEC_PATH" > "$SCRATCH/spec_ac.md"
+      if [[ -s "$SCRATCH/spec_ac.md" ]]; then
+        SPEC_AC="$SCRATCH/spec_ac.md"
+        echo "[quality-gates] codex spec context: injected Acceptance Criteria from $SPEC_PATH" >&2
+      else
+        echo "[quality-gates] codex spec context: AC section empty after extraction from $SPEC_PATH — empty <spec_context>." >&2
+      fi
+    else
+      echo "[quality-gates] codex spec context: no project spec found (searched docs/superpowers/specs/) — empty <spec_context>, v2.0.0 behavior." >&2
+    fi
   fi
 fi
 
