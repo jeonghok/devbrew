@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# test_build_codex_prompt.sh — regression guard for the optional plan-summary
-# contract (v2.0.0). run_codex_reviewer.sh defaults PLAN_SUMMARY_FILE to
-# /dev/null ("omit for empty plan context"); since the Gate 1 verifier was
-# removed, empty-plan-context is the canonical codex path. build_codex_prompt.py
-# MUST treat a non-regular-file plan summary (/dev/null, missing) as empty
-# context, not error — otherwise codex review fails with prompt_build_failed.
+# test_build_codex_prompt.sh — regression guard for the optional spec-AC
+# contract (v2.1.0). run_codex_reviewer.sh resolves the spec script-internally
+# and passes its extracted Acceptance Criteria section; when no spec exists it
+# passes /dev/null. build_codex_prompt.py MUST treat a non-regular-file spec-AC
+# argument (/dev/null, missing) as empty <spec_context>, not error — otherwise
+# codex review fails with prompt_build_failed (the v2.0.0 silent-break this
+# guard was created for, now re-aimed from plan summary to spec AC).
 
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,24 +17,24 @@ ok()   { PASS=$((PASS + 1)); echo "  PASS: $1"; }
 bad()  { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $1"; }
 
 DIFF="$(mktemp)"; printf 'diff --git a b\n+added line\n' > "$DIFF"
-PLAN="$(mktemp)"; printf 'matched_items:\n  - feature X\n' > "$PLAN"
-trap 'rm -f "$DIFF" "$PLAN"' EXIT
+SPEC="$(mktemp)"; printf '## Acceptance Criteria\n1. feature X works\n' > "$SPEC"
+trap 'rm -f "$DIFF" "$SPEC"' EXIT
 
-# Case 1: /dev/null plan summary → exit 0, empty <plan_context>.
+# Case 1: /dev/null spec AC (no spec found) → exit 0, empty <spec_context>.
 out="$(python3 "$BUILD" "$DIFF" /dev/null 2>/dev/null)"; rc=$?
-[ "$rc" -eq 0 ] && ok "/dev/null plan → exit 0" || bad "/dev/null plan → exit $rc (expected 0)"
-echo "$out" | grep -q '+added line' && ok "/dev/null: diff content present" || bad "/dev/null: diff content missing"
-# <plan_context> must exist but contain no plan text.
-echo "$out" | grep -q '<plan_context>' && ok "/dev/null: plan_context block present" || bad "/dev/null: plan_context block missing"
-echo "$out" | grep -q 'matched_items' && bad "/dev/null: leaked plan text" || ok "/dev/null: empty plan context"
+[ "$rc" -eq 0 ] && ok "no-spec (/dev/null) → exit 0" || bad "no-spec (/dev/null) → exit $rc (expected 0)"
+echo "$out" | grep -q '+added line' && ok "no-spec: diff content present" || bad "no-spec: diff content missing"
+# <spec_context> must exist but contain no spec text.
+echo "$out" | grep -q '<spec_context>' && ok "no-spec: spec_context block present" || bad "no-spec: spec_context block missing"
+echo "$out" | grep -q 'feature X works' && bad "no-spec: leaked spec text" || ok "no-spec: empty spec context"
 
-# Case 2: real plan file → content included, exit 0.
-out2="$(python3 "$BUILD" "$DIFF" "$PLAN" 2>/dev/null)"; rc2=$?
-[ "$rc2" -eq 0 ] && ok "real plan → exit 0" || bad "real plan → exit $rc2 (expected 0)"
-echo "$out2" | grep -q 'matched_items' && ok "real plan: content included" || bad "real plan: content missing"
+# Case 2: real spec AC file → content included, exit 0.
+out2="$(python3 "$BUILD" "$DIFF" "$SPEC" 2>/dev/null)"; rc2=$?
+[ "$rc2" -eq 0 ] && ok "real spec AC → exit 0" || bad "real spec AC → exit $rc2 (expected 0)"
+echo "$out2" | grep -q 'feature X works' && ok "real spec AC: content included" || bad "real spec AC: content missing"
 
 # Case 3: missing diff file → exit 2 (diff is still required).
-python3 "$BUILD" /nonexistent-qg-diff-xyz "$PLAN" >/dev/null 2>&1
+python3 "$BUILD" /nonexistent-qg-diff-xyz "$SPEC" >/dev/null 2>&1
 [ "$?" -eq 2 ] && ok "missing diff → exit 2" || bad "missing diff → wrong exit"
 
 echo ""
