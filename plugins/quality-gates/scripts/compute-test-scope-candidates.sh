@@ -4,7 +4,7 @@
 #
 # Inputs:
 #   $PWD            — must be a git working tree
-#   (no env vars)   — review range is computed identically to SKILL.md Gate 2 Step 0
+#   (no env vars)   — review range is computed identically to SKILL.md Review gate Step 0
 #
 # Output (stdout):
 #   Zero or more lines, one path per line. Paths are repo-relative.
@@ -23,7 +23,7 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
   exit 1
 fi
 
-# Review range — identical formula to Gate 2 Step 0 (SKILL.md §"Step 0").
+# Review range — identical formula to the Review gate Step 0 (SKILL.md §"Step 0").
 REVIEW_RANGE=""
 if [ -z "$(git diff --name-only 2>/dev/null)" ] \
    && git rev-parse --verify --quiet main >/dev/null \

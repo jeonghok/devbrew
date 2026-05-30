@@ -1,6 +1,6 @@
 ---
-description: "Run the quality gates pipeline (plan verification → PR review → runtime verification)"
-argument-hint: "[gate1|gate2|gate3] [branch [<name>]|--paths <glob>...|--reset] [--skip-runtime] [--plan <path>] [--pr-url <url>]"
+description: "Run the quality gates pipeline (review → runtime verification)"
+argument-hint: "[review|runtime] [branch [<name>]|--paths <glob>...|--reset] [--skip-runtime] [--plan <path>] [--pr-url <url>]"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)", "Bash(rm:*)", "Bash(test:*)", "Agent", "Skill", "Bash", "Read", "Edit", "Write", "Glob", "Grep"]
 ---
 
@@ -47,8 +47,8 @@ Execute the setup script to initialize the pipeline:
 ```
 
 Now invoke `Skill("quality-gates:quality-pipeline")` with the parsed
-arguments. The skill runs the complete pipeline in this turn — Gate 1 →
-Gate 2 (with internal fix-loop) → Gate 3 — and surfaces decision points
+arguments. The skill runs the complete pipeline in this turn — the
+Review gate (with internal fix-loop) → the Runtime gate — and surfaces decision points
 via AskUserQuestion. No further commands are needed unless the pipeline
 is aborted at a decision point.
 
@@ -56,16 +56,15 @@ is aborted at a decision point.
 
 | Command | Effect |
 |---------|--------|
-| `/qg` | Full pipeline (Gate 1 → 2 → 3), session-scoped diff |
+| `/qg` | Full pipeline (Review gate → Runtime gate), session-scoped diff |
 | `/qg branch` | Full pipeline, full-branch diff (vs `main`) |
 | `/qg branch <name>` | Full pipeline against branch `<name>` in isolated worktree |
 | `/qg --paths <glob>...` | Full pipeline, scope to matched paths |
 | `/qg --reset` | Clear current session folder + legacy v1.5.0 flat files and exit |
 | `/qg --gc` | Run TTL GC on stale session folders |
-| `/qg gate1` | Plan verification only |
-| `/qg gate2` | PR review only |
-| `/qg gate3` | Runtime verification only |
-| `/qg --skip-runtime` | Gates 1 & 2 only (skip runtime) |
+| `/qg review` | Review gate only |
+| `/qg runtime` | Runtime gate only |
+| `/qg --skip-runtime` | Review gate only (skip runtime) |
 | `/qg --plan <path>` | Use specific plan file |
 | `/qg --pr-url <url>` | Specify PR URL |
 | `/cancel-qg` | Cancel active pipeline |
@@ -101,20 +100,19 @@ Stop hook.
 
 ### Gates
 
-1. **Plan Verification** — Checks all planned items are implemented
-2. **PR Review** — Iterative code review (scout → Phase 1+2 → adversarial → synthesizer); within-gate fix-loop up to 5 iterations
-3. **Runtime Verification** — Launches app and verifies behavior with browser automation
+- **Review gate** — Iterative code review (scout → Phase 1+2 → adversarial → synthesizer); within-gate fix-loop up to 5 iterations
+- **Runtime gate** — Launches app and verifies behavior with browser automation
 
-### Pipeline Rules (v1.32.0)
+### Pipeline Rules (v2.0.0)
 
 - Pipeline runs in a single assistant turn (no Stop hook, no continuation
   sentinel, no cross-turn state machine).
-- **Forward-only**: code-change verdicts terminate. Gate 2 fix-loop applies
+- **Forward-only**: code-change verdicts terminate. The Review gate fix-loop applies
   user-consented fixes inline (orchestrator-as-writer); does NOT auto-restart
-  from Gate 1.
-- Gate 2 iterates up to 5 times internally; AskUserQuestion fires at every
-  iteration boundary with `Retry` / `Proceed to Gate 3` / `Stop`.
-- AskUserQuestion also fires on Gate 1 FAIL, Gate 2 max-iter, and Gate 3
+  from an earlier gate.
+- The Review gate iterates up to 5 times internally; AskUserQuestion fires at every
+  iteration boundary with `Retry` / `Proceed to Runtime gate` / `Stop`.
+- AskUserQuestion also fires on Review gate max-iter and Runtime gate
   NEEDS_RESOLUTION.
 - State tracked minimally in `.claude/quality-gates/<session-id>/pipeline.md`
   (managed by `scripts/setup-qg.sh`; SKILL reads worktree_path only).

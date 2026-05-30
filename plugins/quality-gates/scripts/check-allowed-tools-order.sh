@@ -14,11 +14,11 @@ EXPECTED_ORDER=(
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/pre-pipeline-check.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh:*)'
-  # Group 2 — Gate 2 PR review scripts
+  # Group 2 — Review gate scripts
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py:*)'
-  # Group 3 — Gate 3 runtime verification scripts
+  # Group 3 — Runtime gate scripts
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)'

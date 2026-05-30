@@ -4,7 +4,7 @@
 Replaces agents/scout.md Agent dispatch. The decision rules in v1.x
 scout.md L42-44 are already deterministic; the LLM was only applying the
 table. Direct rule-based decision saves ~5-15K input + 500 output tokens
-per Gate 2 iteration.
+per Review gate iteration.
 
 Input (stdin JSON):
   {
@@ -12,8 +12,7 @@ Input (stdin JSON):
     "new_files": int,
     "config_touched": bool,
     "type_design": bool,
-    "test_change": bool,
-    "gate1_verdict": "PASS"|"FAIL"|"NEEDS_CLARIFICATION"|""
+    "test_change": bool
   }
 
 Output (stdout YAML):
@@ -33,13 +32,9 @@ def decide(s):
     config = bool(s.get("config_touched", False))
     type_design = bool(s.get("type_design", False))
     test_change = bool(s.get("test_change", False))
-    g1 = s.get("gate1_verdict", "")
 
     # Depth decision (v1.x scout.md L42-44)
-    if g1 == "NEEDS_CLARIFICATION":
-        depth = "deep"
-        rationale = "Gate 1 NEEDS_CLARIFICATION — scope itself uncertain."
-    elif changed >= 200 or new_files >= 1 or config or type_design:
+    if changed >= 200 or new_files >= 1 or config or type_design:
         depth = "deep"
         rationale = "Large or structural change — deep review warranted."
     elif changed >= 50:

@@ -30,14 +30,14 @@ TARGET_BRANCH=""
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    gate1|gate2|gate3)
+    review|runtime)
       SINGLE_GATE="$1"
       shift
       ;;
     branch)
       shift
       # peek next token
-      if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]] && [[ ! "$1" =~ ^gate[123]$ ]]; then
+      if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]] && [[ ! "$1" =~ ^(review|runtime)$ ]]; then
         TARGET_BRANCH="$1"
         shift
       fi
@@ -80,16 +80,15 @@ while [[ $# -gt 0 ]]; do
 Quality Gates Pipeline Setup
 
 USAGE:
-  /qg [gate1|gate2|gate3] [OPTIONS]
+  /qg [review|runtime] [OPTIONS]
 
 ARGUMENTS:
-  gate1          Run Plan Verification only
-  gate2          Run PR Review only
-  gate3          Run Runtime Verification only
-  (none)         Run full pipeline (Gate 1 → 2 → 3)
+  review         Run the Review gate only
+  runtime        Run the Runtime gate only
+  (none)         Run full pipeline (Review gate → Runtime gate)
 
 OPTIONS:
-  --skip-runtime       Skip Gate 3 (runtime verification)
+  --skip-runtime       Skip the Runtime gate (runtime verification)
   --plan <path>        Specify plan file path (default: auto-detect)
   --pr-url <url>       Specify PR URL
   --session-id <id>    Override session ID (defaults to CLAUDE_CODE_SESSION_ID)
@@ -98,9 +97,8 @@ OPTIONS:
   -h, --help           Show this help message
 
 PIPELINE:
-  Gate 1: Plan Verification — checks all planned items are implemented
-  Gate 2: PR Review — iterative code review (review → fix → re-review)
-  Gate 3: Runtime Verification — launches app and verifies behavior
+  Review gate — iterative code review (review → fix → re-review)
+  Runtime gate — launches app and verifies behavior
 
 STOPPING:
   Use /cancel-qg to cancel an active pipeline
@@ -224,7 +222,7 @@ plugin_installed() {
   return 1
 }
 
-# Check pr-review-toolkit (required for Gate 2)
+# Check pr-review-toolkit (required for the Review gate)
 PR_REVIEW_FOUND=false
 if plugin_installed "pr-review-toolkit"; then
   PR_REVIEW_FOUND=true
@@ -233,8 +231,8 @@ fi
 
 if [[ "$PR_REVIEW_FOUND" == "false" ]]; then
   echo "⚠️  Warning: pr-review-toolkit plugin not found" >&2
-  echo "   Gate 2 (PR Review) requires this plugin for code review agents" >&2
-  echo "   Pipeline will continue but Gate 2 may have limited functionality" >&2
+  echo "   The Review gate (PR Review) requires this plugin for code review agents" >&2
+  echo "   Pipeline will continue but the Review gate may have limited functionality" >&2
   echo "" >&2
 fi
 
@@ -256,16 +254,16 @@ if plugin_installed "superpowers"; then
   fi
 fi
 
-# --- Validate DEVBREW_GATE3_MAX_RESOLUTIONS (P18 unbounded-autonomy guard) ---
+# --- Validate DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS (P18 unbounded-autonomy guard) ---
 # Default 3. Clamped to 0..10. Non-numeric → warning + default.
 
-gate3_max="${DEVBREW_GATE3_MAX_RESOLUTIONS:-3}"
-if ! [[ "$gate3_max" =~ ^[0-9]+$ ]]; then
-  echo "setup-qg: DEVBREW_GATE3_MAX_RESOLUTIONS='$gate3_max' is not numeric; defaulting to 3" >&2
-  gate3_max=3
-elif (( gate3_max > 10 )); then
-  echo "setup-qg: DEVBREW_GATE3_MAX_RESOLUTIONS='$gate3_max' exceeds maximum 10; clamping to 10" >&2
-  gate3_max=10
+runtime_max="${DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS:-3}"
+if ! [[ "$runtime_max" =~ ^[0-9]+$ ]]; then
+  echo "setup-qg: DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS='$runtime_max' is not numeric; defaulting to 3" >&2
+  runtime_max=3
+elif (( runtime_max > 10 )); then
+  echo "setup-qg: DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS='$runtime_max' exceeds maximum 10; clamping to 10" >&2
+  runtime_max=10
 fi
 
 # --- Create State File ---
@@ -277,7 +275,7 @@ cat > "$TEMP_FILE" << EOF
 ---
 session_id: "$SESSION_ID"
 started_at: "$TIMESTAMP"
-gate3_max_resolutions: $gate3_max
+runtime_max_resolutions: $runtime_max
 EOF
 
 # worktree_path is optional — only set when /qg branch <name> created one.
@@ -301,19 +299,20 @@ mv "$TEMP_FILE" "$STATE_FILE"
 
 # --- Output Setup Message ---
 
-GATE_NAMES=("" "Plan Verification" "PR Review" "Runtime Verification")
-
 if [[ -n "$SINGLE_GATE" ]]; then
-  GATE_NUM=${SINGLE_GATE//gate/}
+  case "$SINGLE_GATE" in
+    review)  GATE_LABEL="Review gate" ;;
+    runtime) GATE_LABEL="Runtime gate" ;;
+  esac
   echo "🔄 Quality Gates Pipeline — Single Gate Mode"
   echo ""
-  echo "Gate: ${GATE_NUM} (${GATE_NAMES[$GATE_NUM]})"
+  echo "Gate: ${GATE_LABEL}"
 else
   echo "🔄 Quality Gates Pipeline — Full Pipeline"
   echo ""
-  echo "Gates: 1 (Plan Verification) → 2 (PR Review) → 3 (Runtime Verification)"
+  echo "Gates: Review gate → Runtime gate"
   if [[ "$SKIP_RUNTIME" == "true" ]]; then
-    echo "       Gate 3 skipped (--skip-runtime)"
+    echo "       Runtime gate skipped (--skip-runtime)"
   fi
 fi
 

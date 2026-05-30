@@ -13,7 +13,7 @@
 #   $CLAUDE_CODE_SESSION_ID     — used to construct attempted_log_path; falls
 #                                 back to "unknown" when unset.
 #
-# Output (single multi-line YAML to stdout, expected by SKILL.md Gate 3):
+# Output (single multi-line YAML to stdout, expected by SKILL.md Runtime gate):
 #   project_type: web|cli|library|unknown
 #   runnable_surfaces: [...]
 #   test_runners: [...]
@@ -21,7 +21,7 @@
 #   app_url_candidates: [...]
 #   env_status: [...]
 #   plan_features: [...]
-#   attempted_log_path: .claude/quality-gates/<sid>/gate3-evidence.md
+#   attempted_log_path: .claude/quality-gates/<sid>/runtime-evidence.md
 #
 # Per-kind schema for runnable_surfaces (kind-tagged sum type):
 #   docker-compose   — {kind, path, requires_decision}
@@ -250,6 +250,6 @@ else
   for f in "${PLAN_FEATURES[@]}"; do emit "  - $f"; done
 fi
 
-emit "attempted_log_path: .claude/quality-gates/${CLAUDE_CODE_SESSION_ID:-unknown}/gate3-evidence.md"
+emit "attempted_log_path: .claude/quality-gates/${CLAUDE_CODE_SESSION_ID:-unknown}/runtime-evidence.md"
 
 exit 0

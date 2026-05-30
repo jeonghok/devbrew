@@ -57,7 +57,7 @@ run_case "AC37 sort" \
 run_case "AC38 headers" \
   'verdicts: []' \
   '- {agent: r, file: a.py, line: 1, severity: CRITICAL, confidence: 9, summary: s, proposed_fix: f}' \
-  '## Gate 2 Findings.*### CRITICAL' ''
+  '## Review Findings.*### CRITICAL' ''
 
 # AC39 empty
 run_case "AC39 empty" \

@@ -4,7 +4,7 @@ description: >
   This skill runs the full quality-gates pipeline in a single assistant
   turn. Triggered by `/qg`, "run quality gates", "verify my implementation",
   "check code quality", or "is my PR ready to merge". Dispatches the
-  three gates (plan verification, PR review, runtime verification)
+  two gates (review, runtime verification)
   serially in a single turn. Progression decisions and fix-loop
   iteration boundaries surface to the user via AskUserQuestion tool calls.
   Happy path (all gates pass) requires zero user clicks.
@@ -14,11 +14,11 @@ allowed-tools:
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/pre-pipeline-check.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh:*)
-  # Group 2 — Gate 2 PR review scripts
+  # Group 2 — Review gate scripts
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/synthesize_findings.py:*)
-  # Group 3 — Gate 3 runtime verification scripts
+  # Group 3 — Runtime gate scripts
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)
@@ -33,11 +33,11 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v1.32.0)
+# Quality Gates — In-Turn Orchestrator (v2.0.0)
 
 You are running the **full quality-gates pipeline** in a single assistant
-turn. You dispatch the three gates serially in order. At decision points
-(plan-verification failure, review-iter boundary, runtime needs-resolve) you call
+turn. You dispatch the two gates serially in order. At decision points
+(review-iter boundary, runtime needs-resolve) you call
 `AskUserQuestion` and branch on the user's response — the response arrives
 as a tool result in the same turn, so no Stop hook and no continuation
 sentinel are needed.
@@ -60,19 +60,17 @@ handles deletion.
 1. **Workflow (top-to-bottom on invocation):**
    - [Preflight](#preflight) — kill switch / setup-qg / pre-pipeline-check
    - [Arguments](#arguments) — `/qg` flags 파싱
-   - [Dispatch Loop](#dispatch-loop) — three gates serialized in order with per-gate iteration
+   - [Dispatch Loop](#dispatch-loop) — two gates serialized in order with per-gate iteration
 2. **Per-gate dispatch logic:**
    - [Trivia escape](#trivia-escape) — one-sentence diff → all gates skipped
-   - [Gate 1: Plan Verification](#gate-1-plan-verification) — dispatch `plan-verifier`
-   - [Gate 2: PR Review](#gate-2-pr-review) — scout + Phase 1 + adversarial + synthesizer; iter loop with decision tool at every boundary
-   - [Gate 3: Runtime Verification](#gate-3-runtime-verification) — test-scope-validator + runtime-verifier
+   - [Review gate](#review-gate) — scout + Phase 1 + adversarial + synthesizer; iter loop with decision tool at every boundary
+   - [Runtime gate](#runtime-gate) — test-scope-validator + runtime-verifier
 3. **Decision points (AskUserQuestion templates):**
-   - [Gate 1 FAIL decision](#gate-1-fail-decision)
-   - [Gate 2 iter boundary decision](#gate-2-iter-boundary-decision)
-   - [Gate 2 max-iter decision](#gate-2-max-iter-decision)
-   - [Gate 3 NEEDS_RESOLUTION decision](#gate-3-needs_resolution-decision)
+   - [Review iter boundary decision](#review-iter-boundary-decision)
+   - [Review max-iter decision](#review-max-iter-decision)
+   - [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision)
 4. **Output templates** (verbatim, field substitution):
-   - Gate 1/2/3 result templates
+   - Review / Runtime result templates
    - Final summary template
    - [Rules](#rules) — Law 2 invariants, state file invariants
 
@@ -117,7 +115,7 @@ Exit non-zero → surface stderr verbatim and abort.
 The script exits non-zero on hard precondition violations (`no_session_id`,
 `invalid_session_id`) and zero on normal codes. **Non-zero exit must abort
 the pipeline immediately** — surface the script's stderr verbatim and stop.
-Do NOT proceed to Gate 1 with degraded state.
+Do NOT proceed to the Review gate with degraded state.
 
 On zero exit, parse the `result:` line. Handle every emitted code; unknown
 values are a contract violation, not "treat as fresh":
@@ -135,13 +133,14 @@ values are a contract violation, not "treat as fresh":
 ## Arguments
 
 Parse from `/qg` invocation:
-- `gate` (optional): `gate1`, `gate2`, `gate3`, or absent (full pipeline).
+- `gate` (optional): `review`, `runtime`, or absent (full pipeline).
 - `plan_path` (optional): defaults to "auto" (`scripts/discover-plan.sh`).
+  Consumed only by the Runtime gate's test-scope-validator (no Gate-1 verifier).
 - `pr_url` (optional).
-- `skip_runtime` (flag): if set, skip Gate 3.
-- `paths` (optional, repeatable): scope override for Gate 2 diff.
+- `skip_runtime` (flag): if set, skip the Runtime gate.
+- `paths` (optional, repeatable): scope override for the Review gate diff.
 
-Single-gate mode (`gate1`/`gate2`/`gate3`) runs ONLY the named gate and
+Single-gate mode (`review`/`runtime`) runs ONLY the named gate and
 emits its verdict directly — no decision-tool call, no inter-gate
 transition.
 
@@ -151,106 +150,31 @@ Full pipeline mode:
 
 1. Run [Trivia escape](#trivia-escape). If trivia detected, print "Trivia
    diff — all gates skipped" and return.
-2. Run [Gate 1: Plan Verification](#gate-1-plan-verification).
-   - On clean verdict → continue to Gate 2 (silently; print one-line "Gate 1: clean").
-   - On failure → invoke [Gate 1 FAIL decision](#gate-1-fail-decision); branch
-     per user choice (Continue anyway / Stop / View detail).
-3. Run [Gate 2: PR Review](#gate-2-pr-review). Iterate (review → fix?) up
+2. Run [Review gate](#review-gate). Iterate (review → fix?) up
    to 5 times. At the end of EACH iteration:
-   - findings empty → print "Gate 2 iter N: clean" and continue to Gate 3.
-   - findings non-empty → invoke [Gate 2 iter boundary decision](#gate-2-iter-boundary-decision).
-4. If `skip_runtime`, skip Gate 3 and emit final summary.
-5. Otherwise run [Gate 3: Runtime Verification](#gate-3-runtime-verification).
+   - findings empty → print "Review gate iter N: clean" and continue to the Runtime gate.
+   - findings non-empty → invoke [Review iter boundary decision](#review-iter-boundary-decision).
+3. If `skip_runtime`, skip the Runtime gate and emit final summary.
+4. Otherwise run [Runtime gate](#runtime-gate).
    - On clean verdict → continue to final summary.
-   - On failure → final summary with Gate 3 failure marker; do not auto-restart.
-   - On needs-resolution → invoke [Gate 3 NEEDS_RESOLUTION decision](#gate-3-needs_resolution-decision)
-     up to `DEVBREW_GATE3_MAX_RESOLUTIONS` times (default 3, env override,
+   - On failure → final summary with Runtime gate failure marker; do not auto-restart.
+   - On needs-resolution → invoke [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision)
+     up to `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS` times (default 3, env override,
      clamp 0..10).
-6. Emit final summary.
+5. Emit final summary.
 
 ## Trivia escape
 
 Run `${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh`. Exit code:
 - 0 = trivia detected → skip all gates. Print:
   > `Trivia diff — all gates skipped (one-sentence diff per CLAUDE.md trivia escape).`
-- 1 = non-trivia → proceed to Gate 1.
+- 1 = non-trivia → proceed to the Review gate.
 - any other non-zero (script crash / environment failure) → print stderr
   verbatim and abort the pipeline. Do NOT silently treat as non-trivia.
 
-## Gate 1: Plan Verification
+## Review gate
 
-Dispatch the `quality-gates:plan-verifier` subagent:
-
-```
-Agent({
-  subagent_type: "quality-gates:plan-verifier",
-  description: "Plan verification (Gate 1)",
-  prompt: "Verify that all checkbox items in the plan are implemented. ..."
-})
-```
-
-(Construct the actual prompt from `plan_path`, the discovered plan via
-`scripts/discover-plan.sh`, and the current diff.)
-
-Subagent returns a verdict YAML block with one of the three outcomes:
-
-- **Clean verdict**: print `## Gate 1: Plan Verification — clean\n**Verdict:** clean\n**Summary:** <one line>` and continue to Gate 2.
-- **SKIP**: print `## Gate 1 — SKIP\n**Reason:** <reason>` and continue to Gate 2.
-- **Failure verdict**: print the full Gate 1 result block (including
-  unimplemented item list) and proceed to
-  [Gate 1 FAIL decision](#gate-1-fail-decision).
-
----
-
-The Gate 1 verdict block is rendered before invoking the FAIL decision so
-that the user has the full context in scrollback when they answer the
-question below. The orchestrator does not auto-continue past Gate 1 on
-failure; user consent is required regardless of how many planned items
-remain unimplemented.
-
-The following section is the decision-tool template fired only on the
-failure branch. Single-gate mode (`/qg gate1`) emits the verdict block and
-exits without calling the decision tool at all — the FAIL decision is a
-full-pipeline-only mechanism for inter-gate progression consent.
-
-Verdict output blocks above are addressed to the user (rendered to the
-conversation transcript). The decision template below is addressed to the
-assistant runtime: it is a literal tool call the orchestrator emits, and
-the user response arrives as a tool result in the same turn.
-
-## Gate 1 FAIL decision
-
-> **Spec anchor (AC7):** the literal phrase `Plan verification failed`
-> MUST appear in the prompt — V2b grep checks this.
-
-Call AskUserQuestion:
-
-```
-AskUserQuestion({
-  questions: [
-    {
-      question: "Plan verification failed: <N> planned items not yet implemented (<summary>). How do you want to proceed?",
-      header: "Gate 1 FAIL",
-      options: [
-        {label: "Continue anyway", description: "Proceed to Gate 2 review despite incomplete plan. Use when items are intentionally deferred."},
-        {label: "Stop",            description: "Abort the pipeline. Address the gaps and re-run /qg."},
-        {label: "View detail",     description: "Print full per-item verdict from plan-verifier, then ask again."}
-      ],
-      multiSelect: false
-    }
-  ]
-})
-```
-
-Branch on the user's answer:
-- **Continue anyway** → proceed to Gate 2 (record "Gate 1 failure — user continued" in History).
-- **Stop** → emit final summary marked aborted at Gate 1.
-- **View detail** → print the verbose Gate 1 verdict, then re-invoke this
-  same decision tool (without `View detail` this time, to avoid loops).
-
-## Gate 2: PR Review
-
-Iterative fix-loop, `max_gate2_iterations = 5` (hard-coded constant).
+Iterative fix-loop, `max_review_iterations = 5` (hard-coded constant).
 
 For each iteration N (1..5):
 
@@ -263,7 +187,7 @@ For each iteration N (1..5):
 ```
 Agent({
   subagent_type: "quality-gates:security-reviewer",
-  description: "Security review (Gate 2 iter N)",
+  description: "Security review (Review gate iter N)",
   prompt: "Run code-level security review on the current diff.
     project_dir: \"$project_dir\"
     diff_scope: <paths|branch|session as resolved at preflight>
@@ -274,7 +198,7 @@ Agent({
 
 Agent({
   subagent_type: "quality-gates:adversarial",
-  description: "Adversarial review of Phase-1 findings (Gate 2 iter N)",
+  description: "Adversarial review of Phase-1 findings (Review gate iter N)",
   prompt: "Re-review findings from Phase-1 reviewers for false positives
     and missed exploit paths.
     project_dir: \"$project_dir\"
@@ -290,11 +214,11 @@ Agent({
 4. Dispatch `quality-gates:synthesizer` (or local synthesize_findings.py)
    to consolidate findings.
 5. Compute boundary outcome:
-   - findings empty → print `## Gate 2 iter N: clean` and exit the loop (continue to Gate 3).
-   - findings non-empty → invoke [Gate 2 iter boundary decision](#gate-2-iter-boundary-decision).
+   - findings empty → print `## Review gate iter N: clean` and exit the loop (continue to the Runtime gate).
+   - findings non-empty → invoke [Review iter boundary decision](#review-iter-boundary-decision).
 
 If iteration N=5 ends with findings still non-empty: invoke
-[Gate 2 max-iter decision](#gate-2-max-iter-decision) instead of the
+[Review max-iter decision](#review-max-iter-decision) instead of the
 normal iter-boundary decision.
 
 ---
@@ -309,10 +233,10 @@ The iter-boundary anchor phrase `findings remain` is specific to this
 template and must not appear in any other decision-tool call in this
 SKILL, per spec AC6.
 
-## Gate 2 iter boundary decision
+## Review iter boundary decision
 
 > **Spec anchor (AC6):** the literal phrase `findings remain` MUST appear
-> in the prompt — V2b grep checks this. This phrase is Gate 2-iter-specific
+> in the prompt — V2b grep checks this. This phrase is Review-iter-specific
 > (not used in any other decision-tool call in this SKILL).
 
 Call AskUserQuestion (replace `N` with the iteration number, `<summary>`
@@ -322,11 +246,11 @@ with the synthesizer's one-line summary):
 AskUserQuestion({
   questions: [
     {
-      question: "Gate 2 iter N: findings remain (<summary>). What next?",
-      header: "Gate 2 iter N",
+      question: "Review gate iter N: findings remain (<summary>). What next?",
+      header: "Review iter N",
       options: [
-        {label: "Retry",              description: "Apply the suggested fixes (I will Edit the files in this turn), then re-run Gate 2 reviewers."},
-        {label: "Proceed to Gate 3",  description: "Accept current findings as-is and continue to runtime verification."},
+        {label: "Retry",              description: "Apply the suggested fixes (I will Edit the files in this turn), then re-run Review gate reviewers."},
+        {label: "Proceed to Runtime gate",  description: "Accept current findings as-is and continue to runtime verification."},
         {label: "Stop",               description: "Abort the pipeline at this iteration. Address findings and re-run /qg."}
       ],
       multiSelect: false
@@ -338,14 +262,14 @@ AskUserQuestion({
 Branch on answer:
 - **Retry** → apply user-consented fixes by calling Edit/Write directly
   with the synthesizer's suggested patches; increment iteration counter;
-  loop back to step 1 of the Gate 2 section. See
+  loop back to step 1 of the Review gate section. See
   [Retry: file-write safety](#retry-file-write-safety) for the
   canonicalization requirement on reviewer-supplied paths, and
   [Retry: error handling](#retry-error-handling) for the AskUserQuestion
   surface that fires on Edit failures.
-- **Proceed to Gate 3** → exit the loop, continue to Gate 3 with current
+- **Proceed to Runtime gate** → exit the loop, continue to the Runtime gate with current
   findings recorded in History.
-- **Stop** → emit final summary marked aborted at Gate 2.
+- **Stop** → emit final summary marked aborted at the Review gate.
 
 ### Retry: file-write safety
 
@@ -378,7 +302,7 @@ AskUserQuestion({
       question: "Retry failed at <file>: <reason>. Abort the retry iteration, or skip this file and continue with the remaining patches?",
       header: "Retry",
       options: [
-        {label: "Abort retry",     description: "Abort this Retry iteration entirely; surface as failure to the Gate 2 verdict."},
+        {label: "Abort retry",     description: "Abort this Retry iteration entirely; surface as failure to the Review gate verdict."},
         {label: "Skip this file",  description: "Skip THIS file's fix only; continue applying remaining Retry patches in this iteration."}
       ],
       multiSelect: false
@@ -410,7 +334,7 @@ The contract is verified by:
   every `subagent_type: "<agent>"` block in this SKILL has a
   `project_dir:` line within 10 lines (AC1, AC6 protocol-shape)
 
-## Gate 2 max-iter decision
+## Review max-iter decision
 
 After iteration 5 still has findings, do NOT silently halt. Call:
 
@@ -418,10 +342,10 @@ After iteration 5 still has findings, do NOT silently halt. Call:
 AskUserQuestion({
   questions: [
     {
-      question: "Gate 2 reached max 5 iterations. Last findings: <summary>. Proceed to Gate 3 or stop?",
-      header: "Gate 2 max-iter",
+      question: "Review gate reached max 5 iterations. Last findings: <summary>. Proceed to the Runtime gate or stop?",
+      header: "Review max-iter",
       options: [
-        {label: "Proceed to Gate 3", description: "Accept residual findings and continue."},
+        {label: "Proceed to Runtime gate", description: "Accept residual findings and continue."},
         {label: "Stop",              description: "Abort the pipeline. Address findings and re-run /qg."}
       ],
       multiSelect: false
@@ -433,7 +357,7 @@ AskUserQuestion({
 Branch on answer accordingly. (P18 unbounded-autonomy is satisfied by
 this user-consent termination.)
 
-## Gate 3: Runtime Verification
+## Runtime gate
 
 If `skip_runtime` was set in arguments, skip this entire section.
 
@@ -445,7 +369,7 @@ If `skip_runtime` was set in arguments, skip this entire section.
 ```
 Agent({
   subagent_type: "quality-gates:test-scope-validator",
-  description: "Classify scope-relevant test files (Gate 3)",
+  description: "Classify scope-relevant test files (Runtime gate)",
   prompt: "Validate test scope against current diff and plan items.
     project_dir: \"$project_dir\"
     plan_path: <path or 'auto'>
@@ -461,11 +385,11 @@ Agent({
 ```
 Agent({
   subagent_type: "quality-gates:runtime-verifier",
-  description: "Runtime verification (Gate 3)",
+  description: "Runtime verification (Runtime gate)",
   prompt: "Attempt each declared runnable surface and write an evidence-log.
     project_dir: \"$project_dir\"
     manifest: <output of detect-runtime.sh>
-    resolution_iter: <N (1..DEVBREW_GATE3_MAX_RESOLUTIONS)>"
+    resolution_iter: <N (1..DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS)>"
 })
 ```
 
@@ -474,35 +398,35 @@ Agent({
 
 Outcome routing:
 
-- **Clean verdict** → print `## Gate 3: Runtime Verification — clean` and continue
+- **Clean verdict** → print `## Runtime gate — clean` and continue
   to final summary.
-- **Failure verdict** → print full Gate 3 verdict block, then emit final
-  summary marked Gate 3 failure. Do NOT auto-restart.
+- **Failure verdict** → print full Runtime gate verdict block, then emit final
+  summary marked Runtime gate failure. Do NOT auto-restart.
 - **SKIP_WITH_EVIDENCE** → print verdict block with evidence; continue to
   final summary.
 - **NEEDS_RESOLUTION** → invoke
-  [Gate 3 NEEDS_RESOLUTION decision](#gate-3-needs_resolution-decision).
+  [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision).
 
 ---
 
-The NEEDS_RESOLUTION branch is the only Gate 3 outcome that surfaces a
+The NEEDS_RESOLUTION branch is the only Runtime gate outcome that surfaces a
 user question. Clean and failure outcomes route directly to the final
 summary; SKIP_WITH_EVIDENCE prints evidence and continues. The decision
-template below is bounded by `DEVBREW_GATE3_MAX_RESOLUTIONS` so a
+template below is bounded by `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS` so a
 mis-configured environment cannot loop indefinitely.
 
 Per spec AC8 and the secret-policy rule (P21 reaffirmation), the prompt
 body asks the user to place secrets on disk first and then respond yes/no.
 Never request a secret value as a literal string in the prompt.
 
-## Gate 3 NEEDS_RESOLUTION decision
+## Runtime NEEDS_RESOLUTION decision
 
 > **Spec anchor (AC8):** the literal phrase `Runtime verifier needs` MUST
 > appear in the prompt — V2b grep checks this. **P21 reaffirmation MUST
 > also appear in the prompt body** (literal token `P21`) — the prompt
 > never asks for secret values, only paths or yes/no.
 
-Loop up to `DEVBREW_GATE3_MAX_RESOLUTIONS` times (default 3, env override
+Loop up to `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS` times (default 3, env override
 clamped 0..10):
 
 ```
@@ -510,11 +434,11 @@ AskUserQuestion({
   questions: [
     {
       question: "Runtime verifier needs: <missing resource description>. (P21: never paste secrets into this prompt — add them to .env / config on disk first, then choose Yes, retry.)",
-      header: "Gate 3 resolve",
+      header: "Runtime resolve",
       options: [
-        {label: "Yes, retry",         description: "I've added the missing resource on disk. Re-run Gate 3."},
-        {label: "Skip with evidence", description: "Mark Gate 3 SKIP_WITH_EVIDENCE with reason."},
-        {label: "Stop",               description: "Abort the pipeline at Gate 3."}
+        {label: "Yes, retry",         description: "I've added the missing resource on disk. Re-run the Runtime gate."},
+        {label: "Skip with evidence", description: "Mark the Runtime gate SKIP_WITH_EVIDENCE with reason."},
+        {label: "Stop",               description: "Abort the pipeline at the Runtime gate."}
       ],
       multiSelect: false
     }
@@ -526,18 +450,17 @@ Branch:
 - **Yes, retry** → increment resolution counter; if exceeds env limit,
   fall through to Skip with evidence. Otherwise re-dispatch runtime-verifier.
 - **Skip with evidence** → record SKIP_WITH_EVIDENCE and continue to summary.
-- **Stop** → final summary aborted at Gate 3.
+- **Stop** → final summary aborted at the Runtime gate.
 
 ## Final Summary
 
 Print:
 
 ```markdown
-## Quality Gates Pipeline — Complete (v1.32.0)
+## Quality Gates Pipeline — Complete (v2.0.0)
 
-- **Gate 1**: <clean|failed-continued|SKIP>
-- **Gate 2**: <clean iter N | proceeded-with-findings iter N | aborted iter N | skipped>
-- **Gate 3**: <clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>
+- **Review gate**: <clean iter N | proceeded-with-findings iter N | aborted iter N | skipped>
+- **Runtime gate**: <clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>
 
 **History:**
 <copy the appended ## History lines from the state file>
@@ -549,7 +472,7 @@ State file cleanup is deferred to /cancel-qg or SessionEnd cleanup hook.
 
 **R1 (Law 2 — physical):** never call Edit/Write on agent persona files
 (`plugins/quality-gates/agents/*.md`) in this turn. The orchestrator may
-edit working-tree files for user-consented Gate 2 fixes only.
+edit working-tree files for user-consented Review gate fixes only.
 
 **R2 (state file write invariant):** never write `pipeline.md` frontmatter.
 You MAY append a single line to the `## History` section per gate verdict;
@@ -559,10 +482,10 @@ do not modify any other content. Frontmatter is owned by setup-qg.sh.
 emission tag, and no continuation sentinel. Do NOT emit any such marker.
 
 **R4 (P21 secret policy):** the decision-tool prompts never request a
-secret value as a string. For Gate 3 missing-credential resolution, ask
+secret value as a string. For Runtime gate missing-credential resolution, ask
 the user to place secrets on disk (`.env`, config file) and respond yes/no.
 
 **R5 (single dispatch per turn):** the entire pipeline runs in one turn.
 Do not call setup-qg.sh more than once. Do not call check-trivia.sh more
-than once. Do not re-dispatch the same Gate 2 reviewer for the same
+than once. Do not re-dispatch the same Review gate reviewer for the same
 iteration.
