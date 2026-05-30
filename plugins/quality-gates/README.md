@@ -276,7 +276,7 @@ Runtime gate의 test-scope-validator가 `--plan <path>`를 받지 않으면 다�
 
 ## Spec Discovery Sources (Runtime gate test-scope-validator + Review gate codex)
 
-qg는 사용자 프로젝트의 **spec**(Acceptance Criteria의 truth)을 다음 우선순위로 탐색합니다 (`scripts/discover-spec.sh`; 위→아래 첫 자격 candidate에서 멈춤):
+Runtime gate의 test-scope-validator와 Review gate codex가 명시적 spec 경로를 받지 않으면 다음 우선순위로 사용자 프로젝트의 **spec**(Acceptance Criteria의 truth)을 탐색합니다 (`scripts/discover-spec.sh`; 위→아래 첫 자격 candidate에서 멈춤):
 
 | 우선순위 | 위치 | 자격 조건 |
 |---|---|---|
@@ -285,13 +285,13 @@ qg는 사용자 프로젝트의 **spec**(Acceptance Criteria의 truth)을 다음
 
 plan과 달리 **legacy-global 소스는 없습니다** — spec은 프로젝트 artifact (글로벌 위치 관행 부재). 자격 파일 중 mtime 가장 최근이 선택됩니다.
 
-**advisory only.** spec이 발견되면 test-scope-validator가 `ac_coverage` 블록(AC별 covered/uncovered + covered_by 테스트 ref)을 emit하고, codex 경로(`run_codex_reviewer.sh`)가 spec의 AC 섹션을 `<spec_context>`에 script-internal로 주입합니다. 어느 경우에도 Runtime gate verdict를 **block하지 않습니다.** spec이 없으면 loud log를 출력하고 v2.0.0 동작(plan-기반 scope)으로 fallback합니다.
+**advisory only.** spec이 발견되면 test-scope-validator가 `ac_coverage` 블록(`note: "advisory only — does not block"` + AC별 covered/uncovered + covered_by 테스트 ref)을 emit하고, codex 경로(`run_codex_reviewer.sh`)가 spec의 AC 섹션을 `<spec_context>`에 script-internal로 주입합니다. 어느 경우에도 Runtime gate verdict를 **block하지 않습니다.** spec이 없으면 loud log를 출력하고 v2.0.0 동작(plan-기반 scope)으로 fallback합니다.
 
 **kill switch:** `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1` — spec이 있어도 no-spec 경로를 강제 (ac_coverage 생략, codex `<spec_context>` 비움; validator는 plan-기반 계속).
 
-**Soft dependency:** project-local source는 `superpowers:brainstorming` / `spec-distill`이 spec을 저장하는 경로 (`docs/superpowers/specs/`)와 동일합니다.
+**Soft dependency:** project-local source는 `superpowers:brainstorming` / `spec-distill`이 spec을 저장하는 경로 (`docs/superpowers/specs/`)와 동일합니다. spec-distill / `superpowers:brainstorming` 플러그인을 설치하지 않았더라도 동일 경로에 `.md` 파일을 직접 두면 동작합니다.
 
-알고리즘은 `scripts/discover-spec.sh`에 분리되어 `tests/test_discover_spec.sh` fixture로 검증됩니다.
+알고리즘 자체는 `scripts/discover-spec.sh`에 분리되어 `tests/test_discover_spec.sh` 8개 fixture로 검증됩니다.
 
 ## 사전 요건
 
@@ -336,6 +336,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 |---|---|
 | `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION=1` | Runtime gate Step 2.5 (test scope validation) 완전 skip. `DEVBREW_SKIP_HOOKS=quality-gates:runtime-test-scope`과 동일. |
 | `DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1` | `/qg branch <name>` auto-worktree 기능 disable (`/qg branch` no-arg는 영향 없음). |
+| `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1` | spec 발견 시에도 no-spec 경로 강제 (ac_coverage 생략, codex `<spec_context>` 비움; validator는 plan-기반 계속). |
 
 **Hook 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:<key>,quality-gates:<key2>...`):
 
