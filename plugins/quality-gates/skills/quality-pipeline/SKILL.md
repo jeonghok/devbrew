@@ -135,10 +135,12 @@ values are a contract violation, not "treat as fresh":
 Parse from `/qg` invocation:
 - `gate` (optional): `review`, `runtime`, or absent (full pipeline).
 - `plan_path` (optional): defaults to "auto" (`scripts/discover-plan.sh`).
-  Consumed only by the Runtime gate's test-scope-validator (no Gate-1 verifier).
+  Threaded as a secondary scope hint to the Runtime gate's test-scope-validator
+  and the Review gate's security-reviewer / adversarial dispatches. The Gate-1
+  plan-verifier was removed in v2.0.0 — plan is no longer verified, only hinted.
 - `spec_path` (optional): defaults to "auto" (`scripts/discover-spec.sh`).
   The project spec is the Acceptance Criteria truth. Consumed by the Runtime
-  gate's test-scope-validator (primary AC axis → advisory `ac_coverage`) and by
+  gate's test-scope-validator (used to assess per-AC coverage — emitted as the advisory `ac_coverage` output) and by
   the Review gate codex path (spec AC injected into `<spec_context>`,
   script-internal in `run_codex_reviewer.sh`). If
   `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1`, pass `spec_path: none` to the
@@ -225,7 +227,7 @@ Agent({
    `run_codex_reviewer.sh` (via `discover-spec.sh`), so no `spec_path` dispatch
    field and no `allowed-tools` change are needed here (invocation parity with
    the existing `discover-plan.sh` mechanism). `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1`
-   empties the slot.
+   empties the slot — `run_codex_reviewer.sh` reads the env variable directly, so the orchestrator passes no additional argument for the codex path.
 4. Dispatch `quality-gates:synthesizer` (or local synthesize_findings.py)
    to consolidate findings.
 5. Compute boundary outcome:
@@ -388,7 +390,7 @@ Agent({
   prompt: "Validate test scope against current diff, spec acceptance criteria, and plan items.
     project_dir: \"$project_dir\"
     spec_path: <path or 'auto'; pass 'none' if DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1>
-    plan_path: <path or 'auto'>
+    plan_path: <path or 'auto'; no kill switch — plan is always a secondary hint>
     candidate_test_files: <list from scope-detection step>"
 })
 ```
