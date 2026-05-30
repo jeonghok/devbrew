@@ -69,12 +69,16 @@ def main() -> int:
     if not diff_path.is_file():
         print(f"diff file not found: {diff_path}", file=sys.stderr)
         return 2
-    if not plan_path.is_file():
-        print(f"plan summary file not found: {plan_path}", file=sys.stderr)
-        return 2
 
     diff_content = diff_path.read_text(encoding="utf-8", errors="replace")
-    plan_content = plan_path.read_text(encoding="utf-8", errors="replace")
+    # Plan summary is optional. The Gate 1 verifier was removed in v2.0.0, so the
+    # canonical path is "no plan context": callers pass /dev/null (a char device,
+    # not a regular file) or omit the file entirely. Treat any non-regular-file as
+    # empty context rather than erroring — only a real plan file contributes text.
+    if plan_path.is_file():
+        plan_content = plan_path.read_text(encoding="utf-8", errors="replace")
+    else:
+        plan_content = ""
 
     out = PROMPT_TEMPLATE.replace("{{FILTERED_DIFF}}", diff_content)
     out = out.replace("{{PLAN_SUMMARY}}", plan_content)

@@ -40,7 +40,10 @@ cd "$PROJECT_DIR" || {
   exit 0
 }
 
-SCRATCH="$(mktemp -d -t qg-codex-rev-XXXXXX)"
+SCRATCH="$(mktemp -d -t qg-codex-rev-XXXXXX)" || {
+  echo '{"codex_failed": true, "reason": "scratch_dir_uncreatable"}' > "$OUTPUT_PATH"
+  exit 0
+}
 PROMPT_FILE="$SCRATCH/prompt.md"
 STDOUT_FILE="$SCRATCH/codex.jsonl"
 STDERR_FILE="$SCRATCH/codex.stderr"
