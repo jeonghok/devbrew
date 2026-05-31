@@ -22,6 +22,7 @@ EXPECTED_ORDER=(
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)'
+  'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh:*)'
   # Group 4 — Meta
   'Agent'
   'AskUserQuestion'

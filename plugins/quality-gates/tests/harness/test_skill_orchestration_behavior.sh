@@ -117,6 +117,39 @@ else
   fail=$((fail + 1))
 fi
 
+# --- v2.2.0 sandbox-executor protocol-shape ---
+
+# create-sandbox must be invoked, and BEFORE the runtime-verifier dispatch.
+sandbox_line=$(first_line 'create-sandbox')
+assert_line "create-sandbox invoked" "$sandbox_line"
+assert_order "create-sandbox precedes runtime-verifier dispatch" "$sandbox_line" "$runtime_line"
+
+# mutation-guard must be invoked AFTER the runtime-verifier dispatch.
+guard_line=$(first_line_after 'mutation-guard' "$runtime_line")
+assert_line "mutation-guard invoked after runtime dispatch" "$guard_line"
+
+# forced_downgrade must be referenced (verdict gating on the guard result).
+assert_line "forced_downgrade referenced" "$(first_line 'forced_downgrade')"
+
+# Upfront Execution Plan section present, and before the Review gate dispatch.
+upfront_line=$(first_line 'Upfront Execution Plan|Execution Plan')
+assert_line "Upfront Execution Plan section present" "$upfront_line"
+
+# requires_decision drives the upfront gate.
+assert_line "requires_decision referenced in plan gate" "$(first_line 'requires_decision')"
+
+# Blocked-path routing references the three policies.
+assert_line "block policy stop/skip/ask present" "$(first_line 'block_policy|stop / skip / ask|stop/skip/ask')"
+
+# Kill-switch fallback present.
+assert_line "runtime sandbox kill switch present" "$(first_line 'DEVBREW_QG_DISABLE_RUNTIME_SANDBOX')"
+
+# spec_acceptance_criteria threaded to the verifier.
+assert_line "spec_acceptance_criteria threaded" "$(first_line 'spec_acceptance_criteria')"
+
+# Version bumped to 2.2.0 (final summary).
+assert_line "v2.2.0 in SKILL" "$(first_line 'v2.2.0|2\.2\.0')"
+
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"
   exit 0
