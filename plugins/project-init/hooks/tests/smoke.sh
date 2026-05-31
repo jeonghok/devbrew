@@ -23,6 +23,10 @@ FIXTURES=(
   drifted
   proper_pointer
   dangling_pointer
+  charter_complete
+  charter_missing_subsection
+  charter_placeholder_residue
+  charter_doc_target
 )
 EXPECTS=(
   "{}"
@@ -34,14 +38,49 @@ EXPECTS=(
   "systemMessage"
   "{}"
   "{}"
+  "{}"
+  "systemMessage"
+  "systemMessage"
+  "systemMessage"
 )
+# TARGETS[i] — relative path within the fixture dir to lint. Empty string keeps
+# the legacy AGENTS.md→CLAUDE.md autodetect; non-empty overrides it (charter
+# detail docs live at docs/project/*.md).
+# All three arrays (FIXTURES/EXPECTS/TARGETS) must stay the same length.
+TARGETS=(
+  ""
+  ""
+  ""
+  ""
+  ""
+  ""
+  ""
+  ""
+  ""
+  ""
+  ""
+  ""
+  "docs/project/charter.md"
+)
+
+# Parallel-array contract: FIXTURES, EXPECTS, TARGETS must stay the same length.
+# Adding a fixture means appending to all three. Fail loudly if they drift.
+if [ "${#EXPECTS[@]}" -ne "${#FIXTURES[@]}" ] || [ "${#TARGETS[@]}" -ne "${#FIXTURES[@]}" ]; then
+  echo "V2 FAIL: parallel array length mismatch — FIXTURES=${#FIXTURES[@]} EXPECTS=${#EXPECTS[@]} TARGETS=${#TARGETS[@]}"
+  exit 1
+fi
 
 fails=0
 for i in "${!FIXTURES[@]}"; do
   d="${FIXTURES[$i]}"
   expected="${EXPECTS[$i]}"
-  target="$FIX/$d/AGENTS.md"
-  [ -f "$target" ] || target="$FIX/$d/CLAUDE.md"
+  trel="${TARGETS[$i]}"
+  if [ -n "$trel" ]; then
+    target="$FIX/$d/$trel"
+  else
+    target="$FIX/$d/AGENTS.md"
+    [ -f "$target" ] || target="$FIX/$d/CLAUDE.md"
+  fi
   payload="{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$target\"}}"
   out=$(CLAUDE_PROJECT_DIR="$FIX/$d" python3 "$HOOK" <<< "$payload")
   if [ "$expected" = "{}" ]; then

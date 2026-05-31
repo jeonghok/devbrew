@@ -1,7 +1,7 @@
 {
   "name": "project-init",
-  "description": "Initialize git workflow rules for any project. Select a branching strategy (GitHub Flow, Git Flow, Trunk-based), generate AGENTS.md (canonical) + CLAUDE.md (@AGENTS.md thin pointer) and docs/ with branch naming, Conventional Commits, and PR process. Auto-validates branch/commit + agent-readable docs conventions via hooks.",
-  "version": "1.5.0",
+  "description": "Initialize git workflow rules and a project charter for any project. Select a branching strategy (GitHub Flow, Git Flow, Trunk-based) and elicit a project charter (vision, non-goals, tech-stack, conventions) via a fact-routing interview, then generate AGENTS.md (canonical: Git Workflow + Project Charter) + CLAUDE.md (@AGENTS.md thin pointer) and docs/ details. Auto-validates branch/commit, agent-readable docs conventions, and charter integrity via hooks.",
+  "version": "1.6.0",
   "author": {
     "name": "jeonghokim"
   }
