@@ -38,7 +38,7 @@ charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
 
 이 판정으로 C-S1 / C-S2 / C-S3 중 하나를 결정한다 (Step 4e의 matrix에서 사용):
 
-- **C-S1 (clean)** = `## Project Charter` 섹션 부재 **AND** `docs/project/charter.md` 부재. (섹션이 없어도 `charter.md`가 있으면 C-S1이 아니라 C-S3 — 기존 docs를 덮어쓰지 않는다.)
+- **C-S1 (clean)** = `## Project Charter` 섹션 부재 **AND** `docs/project/charter.md`·`docs/project/conventions.md` **둘 다 부재**. (섹션이 없어도 관리 detail 파일 `charter.md`·`conventions.md` 중 **하나라도** 있으면 C-S1이 아니라 C-S3 — 기존 user-authored docs를 clean-slate로 덮어쓰지 않는다. lone `conventions.md`만 있는 drifted repo도 여기서 C-S3로 라우팅된다.)
 - **C-S2 (complete)** = `charter_section_complete` == true **AND** `docs_complete` == true.
 - **C-S3 (partial/drifted)** = 그 외 전부. 분기: `charter_section_complete` == false 이면 **(a) 섹션 항목 누락** → Phase 1 보충 질문(Law 1 게이트 적용); `charter_section_complete` == true 이지만 `docs_complete` == false 이면 **(b) docs 파일만 누락** → 질문 없이 기존 섹션 값으로 누락 파일 생성.
 
@@ -205,7 +205,7 @@ placeholder 치환 매핑:
 | **C-S1 (clean)** | `AGENTS.md`에 `## Project Charter` 섹션 신규 추가(`agents-md-section.md` 치환본) + `docs/project/charter.md`·`conventions.md` 생성 (+용어 있으면 `glossary.md`). |
 | **C-S2 (complete)** | 업데이트 승인 시: `## Project Charter` 섹션 in-place 교체 + `docs/project/` 파일 in-place 갱신. 거절 시: 전부 unchanged, 중복 `## Project Charter` 섹션 생성 안 함. |
 | **C-S3 (a) 섹션 항목 누락** | Phase 1 보충 질문으로 채운 뒤 C-S1과 동일하게 발행(in-place 교체). |
-| **C-S3 (b) docs 파일만 누락** | 질문 없이(C-S3(b) 계약) 누락된 `docs/project/charter.md`·`conventions.md`를 생성하되, **`## Project Charter` 요약이 실제 source로 가진 값(vision·non-goals·tech-stack)만** 채운다. 요약에 없는 필드 — charter.md의 `## Goals`·`## Success Criteria / Definition of Done`·`## Personas`, conventions.md의 모든 헤딩(`## Naming`·`## Directory Structure`·`## Error Handling`·`## Anti-patterns`·`## Build & Test`) — 는 `_명시되지 않음 — 추후 보강._`으로 둔다(요약은 이 값들의 source가 아니므로 재구성 불가). AGENTS.md 섹션은 unchanged. 헌장 전체를 다시 채우려면 C-S2 경로의 "업데이트" 승인으로 Phase 1을 재진행한다. |
+| **C-S3 (b) docs 파일만 누락** | 질문 없이(C-S3(b) 계약) 누락된 `docs/project/charter.md`·`conventions.md`를 생성하되, **`## Project Charter` 요약이 실제 source로 가진 값(vision·non-goals·tech-stack)만** 채운다. 요약에 없는 필드 — charter.md의 `## Goals`·`## Success Criteria / Definition of Done`·`## Personas`, conventions.md의 모든 헤딩(`## Naming`·`## Directory Structure`·`## Error Handling`·`## Anti-patterns`·`## Build & Test`) — 는 위 4e placeholder 치환 매핑 표의 해당 fallback 마커(`_명시되지 않음._` 또는 charter.md soft 필드의 `_명시되지 않음 — 추후 보강._`)로 둔다(요약은 이 값들의 source가 아니므로 재구성 불가). AGENTS.md 섹션은 unchanged. 헌장 전체를 다시 채우려면 C-S2 경로의 "업데이트" 승인으로 Phase 1을 재진행한다. |
 
 `docs/project/` 디렉토리가 없으면 생성한다. 비-관리 콘텐츠(다른 헤딩·단락·코드 블록)는 모든 state에서 보존한다(기존 4c matrix 정신). `## Project Charter` 요약은 ≤약 25줄로 유지하고 상세는 전부 `docs/project/`로 내린다(C5 — 기존 R1 size 룰 자기 준수).
 
