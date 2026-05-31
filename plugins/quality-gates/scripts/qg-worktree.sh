@@ -6,6 +6,11 @@
 #   validate-branch <name>       -> exit 0 if git ref exists; exit 2 otherwise
 #   create <name> <session-id>   -> echoes absolute worktree path; idempotent
 #   remove <abs-path>            -> best-effort `git worktree remove --force`
+#   create-sandbox <session-id> -> echoes 2 lines: sandbox abs path, baseline SHA
+#                                  (disposable worktree mirroring the working tree,
+#                                   git-ignored files excluded; sealed as commit B)
+#   mutation-guard <sandbox> <B> -> echoes YAML: tracked_diff / disallowed_new_files /
+#                                    forced_downgrade (pure git; added in a later task)
 #
 # Sanitize rules: replace '/' with '-', then reject if remainder contains
 # anything outside [A-Za-z0-9._-], or contains '..' substring, or has
@@ -13,6 +18,8 @@
 #
 # Kill switch: DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1 — `create` exits 2
 # with a loud message.
+# Kill switch: DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1 — `create-sandbox` exits 3
+# (distinct from die's exit 2) so the orchestrator can fall back to read-only.
 
 set -u
 
@@ -65,6 +72,75 @@ case "${1:-}" in
     git worktree add --detach "$abs" "$branch" >/dev/null \
       || die "git worktree add failed for $branch"
     printf '%s' "$abs"; echo
+    ;;
+  create-sandbox)
+    # Disposable git worktree reflecting the main working tree (code-under-
+    # review), sealed into an immutable baseline commit B. §6.3 of the spec.
+    [[ $# -eq 2 ]] || die "usage: create-sandbox <session-id>"
+    if [[ "${DEVBREW_QG_DISABLE_RUNTIME_SANDBOX:-0}" == "1" ]]; then
+      echo "qg-worktree: runtime sandbox disabled via DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1 — orchestrator must fall back to read-only smoke mode" >&2
+      exit 3   # distinct from die's exit 2 → SKILL branches on this
+    fi
+    sid="$2"
+    sid_short="${sid:0:8}"
+    [[ -n "$sid_short" ]] || die "empty session-id"
+    main_root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not a git repo"
+    main_root=$(cd "$main_root" && pwd -P)
+    parent="$main_root/.claude/quality-gates/worktrees"
+    mkdir -p "$parent" || die "cannot create $parent"
+    sandbox="$parent/rt-${sid_short}"
+
+    # Idempotent: clear any stale sandbox so a fresh baseline can't inherit
+    # prior-run state.
+    git worktree prune >/dev/null 2>&1 || true
+    if [[ -e "$sandbox" ]]; then
+      git worktree remove --force "$sandbox" >/dev/null 2>&1 || rm -rf "$sandbox"
+      git worktree prune >/dev/null 2>&1 || true
+    fi
+    git worktree add --detach "$sandbox" HEAD >/dev/null 2>&1 \
+      || die "git worktree add failed (sandbox: $sandbox)"
+
+    # Overlay the main working-tree state, byte-faithfully, EXCLUDING
+    # git-ignored files (prod .env / deps / build — §6.3c operational safety).
+    # Per-file `cp -a` loop is the portable choice: rsync --ignore-missing-args
+    # and tar --null are unreliable across macOS bsdtar / old rsync.
+    tmp_list=$(mktemp) || die "mktemp failed"
+    {
+      git -C "$main_root" ls-files -z                          # tracked (any state)
+      git -C "$main_root" ls-files --others --exclude-standard -z  # untracked, not ignored
+    } > "$tmp_list"
+    while IFS= read -r -d '' rel; do
+      [[ -z "$rel" ]] && continue
+      case "$rel" in
+        .claude/quality-gates/worktrees/*) continue ;;  # never copy a sandbox into itself
+      esac
+      src="$main_root/$rel"
+      if [[ -e "$src" || -L "$src" ]]; then
+        mkdir -p "$sandbox/$(dirname "$rel")"
+        rm -rf "$sandbox/$rel"          # make type-change (file->symlink) faithful
+        cp -a "$src" "$sandbox/$rel"    # -a preserves mode, symlink, binary
+      fi
+    done < "$tmp_list"
+    rm -f "$tmp_list"
+
+    # Honor deletions: a tracked file deleted in the working tree must not
+    # survive in the sealed baseline.
+    while IFS= read -r -d '' rel; do
+      rm -f "$sandbox/$rel"
+    done < <(git -C "$main_root" ls-files -d -z)
+
+    # Seal the immutable baseline commit B. --no-verify skips any repo hooks;
+    # -c identity makes the commit succeed even when git identity is unset.
+    git -C "$sandbox" add -A >/dev/null 2>&1
+    git -C "$sandbox" \
+      -c user.email=qg-sandbox@devbrew.local -c user.name='qg sandbox' \
+      -c commit.gpgsign=false \
+      commit -q --no-verify --allow-empty -m "qg runtime sandbox baseline" \
+      >/dev/null 2>&1 || die "baseline commit failed"
+    base=$(git -C "$sandbox" rev-parse HEAD) || die "cannot read baseline SHA"
+
+    # Output contract: line 1 = sandbox abs path, line 2 = baseline SHA.
+    printf '%s\n%s\n' "$sandbox" "$base"
     ;;
   remove)
     [[ $# -eq 2 ]] || die "usage: remove <abs-path>"
