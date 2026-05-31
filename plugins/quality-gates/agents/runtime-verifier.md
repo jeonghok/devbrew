@@ -99,6 +99,7 @@ For each surface in `runnable_surfaces`:
 - If it carries `requires_decision: true` and is NOT in `approved_surfaces` → record `needs-decision`, do not run.
 - If it requires prod config/endpoints → record `blocked-for-safety`, do not run.
 - Otherwise boot it (test runners run directly; process-start surfaces with `run_in_background`).
+  - **docker-compose:** boot with `docker compose up -d` (NOT backgrounded with `&`), then health-probe each `app_url_candidates` URL via `curl -s -o /dev/null -w "%{http_code}"` before driving flows.
 
 Then derive flows. **Assertion-basis fallback chain (log which mode, loudly):**
 - `spec_acceptance_criteria` present → for each *testable* AC, reason out a concrete flow and assert the expected result.
@@ -113,7 +114,7 @@ For **CLI** flows: run the command, capture stdout/stderr/exit-code, and assert 
 
 ## Step 3: Write the evidence-log
 
-Write to `manifest.attempted_log_path` using a Bash heredoc (the log lives under `.claude/quality-gates/<sid>/`, scratch — not project source). Include these sections:
+Write to `manifest.attempted_log_path` using a Bash heredoc or the Write tool (the log lives under `.claude/quality-gates/<sid>/`, scratch — not project source). Include these sections:
 
 ```markdown
 # Runtime gate Evidence Log — iteration N
@@ -151,7 +152,7 @@ Every `runnable_surface` MUST have an `## Attempts` entry. When `spec_acceptance
 
 | Verdict | Condition |
 |---|---|
-| `PASS` | Every attempted surface booted; every asserted AC observed == expected with evidence; `console_errors == 0`; only non-product (git-ignored) writes. |
+| `PASS` | Every attempted surface booted; every asserted AC observed == expected with evidence; `console_errors == 0` for every navigated web URL (CLI / no-browser surfaces are exempt — N/A counts as satisfied); only non-product (git-ignored) writes. |
 | `FAIL` | An AC failed (form rendered but behavior wrong), OR booting required a product-source change, OR an unrecoverable boot failure (`resolvable: no`). Attach expected-vs-observed evidence and, when product change was attempted, describe the offending diff. |
 | `SKIP_WITH_EVIDENCE` | Zero runnable_surfaces / zero test_runners / zero functional basis (degenerate), OR a surface was `blocked-for-safety` / `needs-decision` and `block_policy` resolved to skip. |
 | `NEEDS_RESOLUTION` | A setup-fixable block remains after ≤3 retries. |
@@ -197,3 +198,4 @@ The skill compares this against the previous iteration's hash; identical hashes 
 - If `mcp_browser: none`, record browser steps as `attempted: no, reason: "MCP unavailable"`; PASS is still possible if all other surfaces succeeded and any spec AC could be asserted without the browser (e.g. CLI).
 - For `requires_decision: true` surfaces NOT in `approved_surfaces`, do not run — the user did not opt in during the upfront Execution Plan.
 - Be specific. The orchestrator validates that every manifest surface has an entry; missing entries escalate SKIP→FAIL.
+- A *testable* AC is one assertable at runtime (a UI flow, an API/network call, or a CLI command). A policy / process / external-dependency AC that cannot be asserted at runtime is recorded as `skipped-non-testable` with a reason in the evidence-log — it is NOT a FAIL.

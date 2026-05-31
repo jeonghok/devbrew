@@ -39,8 +39,7 @@ def test_AC45_runtime_verifier_verdict_enum():
         parsed,
         required_keys=["verdict", "evidence_log"],
         enum={"verdict": [
-            "PASS", "FAIL", "SKIP", "SKIP_WITH_EVIDENCE",
-            "NEEDS_RESOLUTION", "NEEDS_RESTART", "PASS_WITH_WARNINGS",
+            "PASS", "FAIL", "SKIP_WITH_EVIDENCE", "NEEDS_RESOLUTION",
         ]},
     )
 

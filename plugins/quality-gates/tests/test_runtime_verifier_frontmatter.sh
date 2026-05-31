@@ -38,15 +38,21 @@ assert_grep "^[[:space:]]+- Write([[:space:]]|$)" "Write present"
 assert_grep "^[[:space:]]+- Edit([[:space:]]|$)" "Edit present"
 assert_grep "^[[:space:]]+- MultiEdit([[:space:]]|$)" "MultiEdit present"
 
-# NotebookEdit still DENIED (deny list non-empty, not default-everything)
-assert_grep "^[[:space:]]+- NotebookEdit([[:space:]]|$)" "NotebookEdit still in disallowedTools"
-
-# Write/Edit/MultiEdit must NOT appear in the disallowedTools section.
+# Extract the disallowedTools block once; used for both NotebookEdit and Write/Edit checks.
 DISALLOWED_BLOCK=$(awk '
   /^disallowedTools:/ {indis=1; next}
   /^[a-zA-Z]/ {indis=0}
   indis {print}
 ' "$FILE")
+
+# NotebookEdit still DENIED — check it is INSIDE the disallowedTools section.
+if printf '%s' "$DISALLOWED_BLOCK" | grep -qE -- '- NotebookEdit([[:space:]]|$)'; then
+  PASS=$((PASS + 1)); echo "  PASS: NotebookEdit in disallowedTools (section-scoped)"
+else
+  FAIL=$((FAIL + 1)); echo "  ✗ FAIL: NotebookEdit must be in disallowedTools"
+fi
+
+# Write/Edit/MultiEdit must NOT appear in the disallowedTools section.
 if printf '%s' "$DISALLOWED_BLOCK" | grep -qE -- '- (Write|Edit|MultiEdit)\b'; then
   FAIL=$((FAIL + 1)); echo "  ✗ FAIL: Write/Edit/MultiEdit must NOT be in disallowedTools"
 else
