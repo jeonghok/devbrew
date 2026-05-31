@@ -33,18 +33,7 @@ grep -qE "review cap \(max $CAP," "$SKILL" \
   && note PASS "SKILL.md frontmatter: 'review cap (max $CAP, ...)'" \
   || note FAIL "SKILL.md frontmatter drift (expected 'max $CAP')"
 
-# Spec table has TWO '< CAP' rows (affects_locked=empty + non-empty). grep -q would
-# pass even if only one row is correct — the exact partial-drift class v0.3.0 hit.
-# Assert count==2 explicitly. (Phase 2 / pta-gap1)
-SPEC_LT_COUNT="$(grep -cE "spec\b.*\| < $CAP \|" "$SKILL" || true)"
-[[ "$SPEC_LT_COUNT" -eq 2 ]] \
-  && note PASS "SKILL.md routing: spec '< $CAP' rows (expected 2, found $SPEC_LT_COUNT)" \
-  || note FAIL "SKILL.md routing: spec '< $CAP' rows (expected 2, found $SPEC_LT_COUNT — partial drift?)"
-
-grep -qE "spec\b.*\| >= $CAP \|" "$SKILL" \
-  && note PASS "SKILL.md routing: spec '>= $CAP' row" \
-  || note FAIL "SKILL.md routing: spec '>= $CAP' row missing"
-
+# v0.12.0: spec-mode rows removed — only design rows carry the cap now.
 grep -qE "\*\*design\*\*.*\| < $CAP \|" "$SKILL" \
   && note PASS "SKILL.md routing: design '< $CAP' row" \
   || note FAIL "SKILL.md routing: design '< $CAP' row missing"
