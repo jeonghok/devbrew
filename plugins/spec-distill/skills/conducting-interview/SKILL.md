@@ -187,7 +187,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" check "$ROOT/<session-id>/
    케이스로 제시 — conducting-interview는 이를 **약화·편집하지 않습니다**(AC5).
 3. **게이트**(P17): 사용자가 (방어 → 원안 lock + `defense` 기록, steelman: defended) /
    (전환 → 대안 lock, 원안은 R4로, steelman: switched-to-this) / (보류 → §6 OQ).
-4. builder 출력 그대로 brief §4 Skepticism Log에 기록(대안 statement + URL + verdict).
+4. builder 출력 그대로 brief §4 Skepticism Log에 기록 — 각 항목은 (대안 statement + 웹근거 URL + `verdict ∈ {defended | switched | deferred}`). 게이트 매핑: 방어→`defended`, 전환→`switched`, 보류→`deferred`(§6 OQ에도 박제). 프론트매터 `steelman:` 라벨(`switched-to-this`)과 §4 `verdict` 어휘(`switched`)는 별개 — §4에는 위 세 단어만 사용.
 5. 한 방향당 steelman 1회(새 근거 없으면 재steelman 금지 — AP16 harassment 방지).
 
 **Law 2 경계**: steelman 게이트는 Law 2 분리 메커니즘이 *아닙니다* — Law 2 분리 reviewer는
