@@ -8,7 +8,7 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 ([`docs/philosophy/devbrew-harness-philosophy.md`](../../docs/philosophy/devbrew-harness-philosophy.md) 참고):
 
 - **Law 3 (Compounding)** — Phase 1 single dispatch builder (T2-2/T3-5). Future persona edits land in one place, never drift across two dispatch sections.
-- **Law 2 (Writer ≠ Reviewer)** — 모든 reviewer agent가 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언 (frontmatter scoping으로 물리적 격리).
+- **Law 2 (Writer ≠ Reviewer)** — 순수 read-only reviewer agent(`security-reviewer`/`adversarial`/`test-scope-validator`)가 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 선언 (frontmatter scoping으로 물리적 격리). `runtime-verifier`(sandbox-executor)는 예외로 Write를 갖되 git-diff mutation 가드로 Law 2 self-approval을 구조적으로 차단 — 아래 v2.2.0 bullet 참조.
 - **Law 3 (Compounding)** — scout `rationale` 필드가 매 iteration마다 state 파일에 로깅; reviewer-persona 편집이 학습된 교훈을 인코딩하는 substrate.
 - **Law 3 (Compounding) — cross-plugin reader contract** — Runtime gate의 test-scope-validator(`scripts/discover-plan.sh`)가 sister-plugin (`superpowers:writing-plans`)의 출력 경로 `docs/superpowers/plans/`를 1순위 source로 명시 consume; convention drift가 silent breakage가 되지 않도록 README "Plan Discovery Sources" 섹션이 reader/writer 약속을 문서화.
 - **P12 anti-corollary (former AP5, trivia ceremony) 회피** — `check-trivia.sh`가 단일 파일·≤3줄 whitespace/rename을 파이프라인 전체 skip. *현재 coverage는 whitespace + rename에 국한. P12 canonical 자격(typo/comment-only/single-file formatting)을 완전히 충족하기 위한 확장은 deferred 항목 — Tier 2 spec `docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md` 참조.*
