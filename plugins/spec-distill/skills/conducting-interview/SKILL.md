@@ -7,6 +7,7 @@ description: >
   ontological→5-type), C44 Dialectic Rhythm Guard, C45 breadth-keeper dispatch
   (max 1 per round, AC13). Persists state to .claude/spec-distill/<session-id>/state.local.md.
 cost_class: medium
+user-invocable: false
 ---
 
 # Conducting Interview (Phase 1)
