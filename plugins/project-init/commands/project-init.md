@@ -28,7 +28,7 @@ branching strategy 템플릿을 선택해 git workflow 룰을 초기화하고, �
 
 사용자 거절 시: 전체 `/project-init` 실행 abort — Step 2 이후의 docs/git-workflow/ 생성도 skip. AC21에 따라 부분 진행 금지.
 
-#### Step 1 (charter 상태 감지 — 파일 레벨, Phase 0보다 선행)
+#### Charter 상태 감지 (파일 레벨 — Phase 0보다 선행)
 
 charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
 
@@ -36,7 +36,13 @@ charter state를 **파일 레벨**로 판정한다 (§6 matrix 입력):
 - (b) 그 섹션의 `**Vision:**`·`**Non-goals:**`·`**Tech Stack:**` 값이 모두 비어있지 않고 `{{...}}` placeholder가 아닌가 (= `charter_section_complete`).
 - (c) `docs/project/charter.md` **와** `docs/project/conventions.md`가 모두 존재하는가 (= `docs_complete`; `glossary.md`는 조건부라 completeness 판정에서 제외).
 
-이 판정으로 C-S1 / C-S2 / C-S3 중 하나를 결정한다 (Step 4e의 matrix에서 사용). 이 판정은 git-workflow 감지와 독립이며, 두 matrix는 같은 run에서 동시에 평가되어도 서로 간섭하지 않는다.
+이 판정으로 C-S1 / C-S2 / C-S3 중 하나를 결정한다 (Step 4e의 matrix에서 사용):
+
+- **C-S1 (clean)** = `## Project Charter` 섹션 부재 **AND** `docs/project/charter.md` 부재. (섹션이 없어도 `charter.md`가 있으면 C-S1이 아니라 C-S3 — 기존 docs를 덮어쓰지 않는다.)
+- **C-S2 (complete)** = `charter_section_complete` == true **AND** `docs_complete` == true.
+- **C-S3 (partial/drifted)** = 그 외 전부. 분기: `charter_section_complete` == false 이면 **(a) 섹션 항목 누락** → Phase 1 보충 질문(Law 1 게이트 적용); `charter_section_complete` == true 이지만 `docs_complete` == false 이면 **(b) docs 파일만 누락** → 질문 없이 기존 섹션 값으로 누락 파일 생성.
+
+이 판정은 git-workflow 감지와 독립이며, 두 matrix는 같은 run에서 동시에 평가되어도 서로 간섭하지 않는다.
 
 ### Step 2: branching strategy 선택
 
@@ -168,7 +174,7 @@ template 컨텐츠에서 다음 placeholder들을 치환:
 
 #### 4e: Project Charter 발행 (§6 state matrix)
 
-charter step이 abort되지 않았다면, Step 1에서 판정한 charter state에 따라 발행한다. template은 `${CLAUDE_PLUGIN_ROOT}/templates/project/`에서 읽어 placeholder를 elicit된 값으로 치환한다 (C7 — 의견 콘텐츠 주입 금지, AC14).
+charter step이 abort(Law 1 게이트 실패)되지 않았다면, Step 1에서 판정한 charter state에 따라 발행한다 (C-S2 갱신 거절은 abort가 아니라 아래 C-S2 행의 unchanged로 처리). template은 `${CLAUDE_PLUGIN_ROOT}/templates/project/`에서 읽어 placeholder를 elicit된 값으로 치환한다 (C7 — 의견 콘텐츠 주입 금지, AC14).
 
 읽을 template:
 - `${CLAUDE_PLUGIN_ROOT}/templates/project/agents-md-section.md` → `AGENTS.md`의 `## Project Charter` 섹션
@@ -197,7 +203,7 @@ placeholder 치환 매핑:
 | **C-S1 (clean)** | `AGENTS.md`에 `## Project Charter` 섹션 신규 추가(`agents-md-section.md` 치환본) + `docs/project/charter.md`·`conventions.md` 생성 (+용어 있으면 `glossary.md`). |
 | **C-S2 (complete)** | 업데이트 승인 시: `## Project Charter` 섹션 in-place 교체 + `docs/project/` 파일 in-place 갱신. 거절 시: 전부 unchanged, 중복 `## Project Charter` 섹션 생성 안 함. |
 | **C-S3 (a) 섹션 항목 누락** | Phase 1 보충 질문으로 채운 뒤 C-S1과 동일하게 발행(in-place 교체). |
-| **C-S3 (b) docs 파일만 누락** | 질문 없이, 기존 `## Project Charter` 섹션 값을 source로 누락된 `docs/project/*.md`만 생성. AGENTS.md 섹션은 unchanged. |
+| **C-S3 (b) docs 파일만 누락** | 질문 없이, 기존 `## Project Charter` 섹션 값을 source로 누락된 `docs/project/charter.md`·`conventions.md`만 생성. AGENTS.md 섹션은 unchanged. |
 
 `docs/project/` 디렉토리가 없으면 생성한다. 비-관리 콘텐츠(다른 헤딩·단락·코드 블록)는 모든 state에서 보존한다(기존 4c matrix 정신). `## Project Charter` 요약은 ≤약 25줄로 유지하고 상세는 전부 `docs/project/`로 내린다(C5 — 기존 R1 size 룰 자기 준수).
 
