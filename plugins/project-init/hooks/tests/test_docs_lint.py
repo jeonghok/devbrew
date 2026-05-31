@@ -758,5 +758,204 @@ class TestRobustness(unittest.TestCase):
             self.assertTrue(out.strip().startswith("{"))
 
 
+class TestCharterTarget(unittest.TestCase):
+    """C10/AC11: docs/project/*.md become additive lint targets; the existing
+    4-path exact-set membership is untouched (regression-free)."""
+
+    def test_charter_doc_is_linted(self):
+        """AC11: an oversized docs/project/charter.md now reaches the rule layer
+        (proves it is a recognized target) and R1 fires."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "docs" / "project" / "charter.md"
+            target.parent.mkdir(parents=True)
+            target.write_text("\n".join(f"line {i}" for i in range(250)) + "\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertIn("Anthropic recommends", out)
+            self.assertEqual(rc, 0)
+
+    def test_charter_doc_clean_passes(self):
+        """A clean docs/project/conventions.md → {}."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "docs" / "project" / "conventions.md"
+            target.parent.mkdir(parents=True)
+            target.write_text("# Conventions\n\n## Naming\n\nkebab-case.\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertEqual(out.strip(), "{}")
+            self.assertEqual(rc, 0)
+
+    def test_non_charter_docs_path_not_targeted(self):
+        """C10 boundary: docs/other.md (not under docs/project/) stays a non-target
+        even when oversized → {}."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "docs" / "other.md"
+            target.parent.mkdir(parents=True)
+            target.write_text("\n".join(f"line {i}" for i in range(250)) + "\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertEqual(out.strip(), "{}")
+            self.assertEqual(rc, 0)
+
+    def test_lookalike_prefix_not_targeted(self):
+        """C10 boundary: docs/projectile/x.md must NOT match the docs/project/ prefix."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "docs" / "projectile" / "x.md"
+            target.parent.mkdir(parents=True)
+            target.write_text("\n".join(f"line {i}" for i in range(250)) + "\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertEqual(out.strip(), "{}")
+            self.assertEqual(rc, 0)
+
+
+class TestRCharter(unittest.TestCase):
+    """AC11: AGENTS.md '## Project Charter' required-subsection integrity
+    (heading-bounded; Vision / Non-goals / Tech Stack)."""
+
+    def _agents_with_charter(self, vision: str, nongoals: str, tech: str) -> str:
+        return (
+            "# Project AGENTS\n\n"
+            "## Project Charter\n\n"
+            f"**Vision:** {vision}\n\n"
+            f"**Non-goals:** {nongoals}\n\n"
+            f"**Tech Stack:** {tech}\n\n"
+            "상세: [charter](docs/project/charter.md)\n\n"
+            "## Git Workflow\n\nGitHub Flow.\n"
+        )
+
+    def test_complete_charter_passes(self):
+        """All three labels filled → no charter advisory."""
+        with tempfile.TemporaryDirectory() as td:
+            # Make the docs/project pointer resolve so R6 stays quiet.
+            cdir = Path(td) / "docs" / "project"
+            cdir.mkdir(parents=True)
+            (cdir / "charter.md").write_text("# Charter\n")
+            target = Path(td) / "AGENTS.md"
+            target.write_text(self._agents_with_charter(
+                "Ship a fast static-site generator.",
+                "No CMS, no plugins runtime.",
+                "Go 1.22, Hugo.",
+            ))
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("Project Charter' section is incomplete", out)
+            self.assertEqual(rc, 0)
+
+    def test_missing_label_warns(self):
+        """A required label absent → charter advisory naming it."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(
+                "# A\n\n## Project Charter\n\n"
+                "**Vision:** Ship it.\n\n"
+                "**Tech Stack:** Go.\n\n"  # Non-goals label missing
+                "## Git Workflow\n\nx\n"
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertIn("section is incomplete", out)
+            self.assertIn("Non-goals (label missing)", out)
+            self.assertEqual(rc, 0)
+
+    def test_empty_value_warns(self):
+        """A label present but value empty → 'empty' advisory."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(self._agents_with_charter("Ship it.", "", "Go."))
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertIn("section is incomplete", out)
+            self.assertIn("Non-goals (empty)", out)
+            self.assertEqual(rc, 0)
+
+    def test_placeholder_residue_warns(self):
+        """An unfilled {{...}} placeholder → 'placeholder' advisory (AC11 iii)."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(self._agents_with_charter("{{VISION}}", "No CMS.", "Go."))
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertIn("section is incomplete", out)
+            self.assertIn("Vision", out)
+            self.assertIn("placeholder", out)
+            self.assertEqual(rc, 0)
+
+    def test_no_charter_section_no_op(self):
+        """AGENTS.md without a '## Project Charter' section → rule no-ops (a
+        git-workflow-only AGENTS.md must not be falsely flagged)."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text("# A\n\n## Git Workflow\n\nGitHub Flow.\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertEqual(out.strip(), "{}")
+            self.assertEqual(rc, 0)
+
+    def test_charter_rule_only_on_agents(self):
+        """The charter rule fires only for AGENTS.md basename — a CLAUDE.md that
+        happens to contain a '## Project Charter' heading is not charter-linted."""
+        with tempfile.TemporaryDirectory() as td:
+            # AGENTS.md present (pair) so R-pointer doesn't dominate the assertion.
+            (Path(td) / "AGENTS.md").write_text("# canonical\n")
+            target = Path(td) / "CLAUDE.md"
+            target.write_text(
+                "# C\n\n## Project Charter\n\n**Vision:**\n\n"  # empty, but not AGENTS.md
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("section is incomplete", out)
+            self.assertEqual(rc, 0)
+
+    def test_charter_doc_not_charter_linted(self):
+        """docs/project/charter.md uses ## Vision etc. — it must NOT be subjected
+        to the AGENTS.md '## Project Charter' subsection rule."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "docs" / "project" / "charter.md"
+            target.parent.mkdir(parents=True)
+            target.write_text("# Charter\n\n## Vision\n\nShip it.\n")
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertNotIn("section is incomplete", out)
+            self.assertEqual(out.strip(), "{}")
+            self.assertEqual(rc, 0)
+
+    def test_kill_switch_silences_charter(self):
+        """AC12: DEVBREW_SKIP_HOOKS=project-init:docs-lint silences the charter rule
+        with no new kill-switch token."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(self._agents_with_charter("{{VISION}}", "", "Go."))
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+                env_override={"DEVBREW_SKIP_HOOKS": "project-init:docs-lint"},
+            )
+            self.assertEqual(out.strip(), "{}")
+            self.assertEqual(rc, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

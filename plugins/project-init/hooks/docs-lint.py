@@ -2,8 +2,9 @@
 """PostToolUse hook for project-init plugin — agent-readable docs convention validator.
 
 Validates root context files (CLAUDE.md, AGENTS.md, .claude/CLAUDE.md, .claude/AGENTS.md)
-against 5 deterministic rules: R1 size, R2 TOC, R5 fenced code language,
-R6 internal links resolve, R-pointer CLAUDE/AGENTS drift.
+and project charter detail docs (docs/project/*.md) against deterministic rules:
+R1 size, R2 TOC, R5 fenced code language, R6 internal links resolve,
+R-pointer CLAUDE/AGENTS drift, R-charter AGENTS.md '## Project Charter' integrity.
 
 Non-blocking advisory pattern: outputs systemMessage on violation, {} on pass.
 """
@@ -56,6 +57,17 @@ def safe_resolve(p: Path, why: str = "path") -> Optional[Path]:
         return None
 
 
+def is_charter_doc(rel_posix: str) -> bool:
+    """C10/AC11: charter detail docs under docs/project/ are additive lint targets.
+
+    A pure string predicate (prefix + suffix), OR'd into resolve_target_path
+    alongside the unchanged TARGET_RELPATHS exact-set. Using string membership
+    rather than a Path relationship keeps the existing 4-path exact-match
+    guarantee byte-identical (regression-free, C10).
+    """
+    return rel_posix.startswith("docs/project/") and rel_posix.endswith(".md")
+
+
 def resolve_target_path(file_path: str, project_dir: str) -> Optional[Path]:
     """Return absolute Path if file_path is one of the 4 target root context files
     relative to project_dir, else None. Skips worktree internal metadata paths."""
@@ -74,7 +86,8 @@ def resolve_target_path(file_path: str, project_dir: str) -> Optional[Path]:
     except ValueError:
         # File is outside CLAUDE_PROJECT_DIR
         return None
-    if rel.as_posix() not in TARGET_RELPATHS:
+    rel_posix = rel.as_posix()
+    if rel_posix not in TARGET_RELPATHS and not is_charter_doc(rel_posix):
         return None
     return abs_path
 
@@ -364,6 +377,66 @@ def check_r_pointer(target: Path, project_dir: Path) -> Optional[str]:
     )
 
 
+# R-charter — AGENTS.md '## Project Charter' required-subsection integrity (AC11).
+# The section is heading-bounded: from the '## Project Charter' line up to (but
+# not including) the next level-2 heading or EOF. Within it, three labels are
+# required, each non-empty and free of unfilled {{...}} placeholders. The label
+# strings MUST stay in sync with templates/project/agents-md-section.md
+# (locked by TestTemplateConsistency).
+CHARTER_SECTION_RE = re.compile(
+    r"^##\s+Project Charter\s*$\n?(.*?)(?=^##\s|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+CHARTER_PLACEHOLDER_RE = re.compile(r"\{\{.*?\}\}")
+CHARTER_REQUIRED_LABELS = ("Vision", "Non-goals", "Tech Stack")
+
+
+def _charter_field(section_body: str, label: str) -> Optional[str]:
+    """Return the trimmed value after a ``**<label>:**`` line in the section body,
+    or None if the label line is absent."""
+    m = re.search(rf"^\*\*{re.escape(label)}:\*\*[ \t]*(.*)$", section_body, re.MULTILINE)
+    if m is None:
+        return None
+    return m.group(1).strip()
+
+
+def check_r_charter(target: Path, rel_display: str) -> Optional[str]:
+    """AC11: validate the AGENTS.md '## Project Charter' summary section.
+
+    Fires only for an AGENTS.md target that actually contains a
+    '## Project Charter' section (so git-workflow-only AGENTS.md files and
+    charter detail docs are unaffected). For each required label flags:
+    (i) label absent, (ii) empty value, (iii) {{...}} placeholder residue.
+    """
+    if target.name != "AGENTS.md":
+        return None
+    try:
+        content = target.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        print(f"[project-init:docs-lint] could not read {rel_display} — skipping R-charter", file=sys.stderr)
+        return None
+    sec = CHARTER_SECTION_RE.search(content)
+    if sec is None:
+        return None  # no charter section → nothing to validate
+    body = sec.group(1)
+    problems: list[str] = []
+    for label in CHARTER_REQUIRED_LABELS:
+        val = _charter_field(body, label)
+        if val is None:
+            problems.append(f"{label} (label missing)")
+        elif not val:
+            problems.append(f"{label} (empty)")
+        elif CHARTER_PLACEHOLDER_RE.search(val):
+            problems.append(f"{label} (unfilled {{{{...}}}} placeholder)")
+    if not problems:
+        return None
+    return (
+        f"project-init: {rel_display} '## Project Charter' section is incomplete — "
+        f"{', '.join(problems)}. Fill these via `/project-init` (charter step) so the "
+        f"project charter inherits cleanly each session."
+    )
+
+
 def main() -> int:
     if kill_switch_active():
         emit()
@@ -408,6 +481,9 @@ def main() -> int:
     msg_rp = check_r_pointer(target, project_dir_path)
     if msg_rp:
         messages.append(msg_rp)
+    msg_rc = check_r_charter(target, rel_display)
+    if msg_rc:
+        messages.append(msg_rc)
     if messages:
         emit("\n\n".join(messages))
     else:
