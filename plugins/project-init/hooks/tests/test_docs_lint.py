@@ -1,4 +1,5 @@
 """Unit tests for plugins/project-init/hooks/docs-lint.py."""
+import importlib.util
 import json
 import os
 import subprocess
@@ -9,6 +10,15 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 HOOK = Path(__file__).resolve().parent.parent / "docs-lint.py"
+
+# The hook filename has a hyphen, so it is not importable by name. Load it via
+# importlib (side-effect-free: docs-lint.py guards execution behind
+# `if __name__ == "__main__":`) so the consistency test below couples to the
+# REAL constant rather than a parallel literal copy.
+_spec = importlib.util.spec_from_file_location("docs_lint_hook", HOOK)
+_docs_lint = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_docs_lint)
+CHARTER_REQUIRED_LABELS = _docs_lint.CHARTER_REQUIRED_LABELS
 
 
 def run_hook(payload: dict, env_override: Optional[dict] = None, cwd: Optional[str] = None) -> Tuple[str, int]:
@@ -964,10 +974,11 @@ class TestTemplateConsistency(unittest.TestCase):
     TEMPLATES = HOOK.parent.parent / "templates" / "project"
 
     def test_agents_section_template_has_required_labels(self):
-        """Each CHARTER_REQUIRED_LABELS entry appears as a bold label in the
-        summary template (AC4 ↔ AC11 coupling)."""
+        """Each CHARTER_REQUIRED_LABELS entry (imported from the hook, not a
+        parallel literal) appears as a bold label in the summary template
+        (AC4 ↔ AC11 coupling — a rename on either side breaks this)."""
         text = (self.TEMPLATES / "agents-md-section.md").read_text(encoding="utf-8")
-        for label in ("Vision", "Non-goals", "Tech Stack"):
+        for label in CHARTER_REQUIRED_LABELS:
             self.assertIn(f"**{label}:**", text)
 
     def test_charter_template_has_fixed_headings(self):
