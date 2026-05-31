@@ -98,6 +98,8 @@ C-S2(완전 헌장 존재)면 먼저 "헌장을 업데이트할까요?"를 묻�
 | `Gemfile` | Ruby. |
 | `composer.json` | PHP. |
 
+또한 **디렉토리 구조**를 스캔한다 (AC2 — manifest와 함께): `src/`·`app/`·`pages/`·`components/`·`lib/`·`tests/`(또는 `test/`·`spec/`)·`cmd/`·`internal/` 등 표준 레이아웃과 monorepo 신호(`packages/*`·`apps/*`, workspace 매니페스트)를 감지해 tech-stack·빌드 layout 후보를 보강한다. 디렉토리 신호도 manifest 후보와 동일하게 `[감지됨]` 라벨로 표기한다.
+
 감지된 각 항목에 **`[감지됨]`** 라벨을 붙여 Phase 1 ④에서 확인만 받는다.
 
 **Fallback (C6 — graceful degradation, loud logging)**: 위 manifest를 하나도 못 찾으면 crash하지 않고 직접 질문 모드로 downgrade하되 fallback이 돌았음을 명시한다:
@@ -203,7 +205,7 @@ placeholder 치환 매핑:
 | **C-S1 (clean)** | `AGENTS.md`에 `## Project Charter` 섹션 신규 추가(`agents-md-section.md` 치환본) + `docs/project/charter.md`·`conventions.md` 생성 (+용어 있으면 `glossary.md`). |
 | **C-S2 (complete)** | 업데이트 승인 시: `## Project Charter` 섹션 in-place 교체 + `docs/project/` 파일 in-place 갱신. 거절 시: 전부 unchanged, 중복 `## Project Charter` 섹션 생성 안 함. |
 | **C-S3 (a) 섹션 항목 누락** | Phase 1 보충 질문으로 채운 뒤 C-S1과 동일하게 발행(in-place 교체). |
-| **C-S3 (b) docs 파일만 누락** | 질문 없이, 기존 `## Project Charter` 섹션 값을 source로 누락된 `docs/project/charter.md`·`conventions.md`만 생성. AGENTS.md 섹션은 unchanged. |
+| **C-S3 (b) docs 파일만 누락** | 질문 없이(C-S3(b) 계약) 누락된 `docs/project/charter.md`·`conventions.md`를 생성하되, **`## Project Charter` 요약이 실제 source로 가진 값(vision·non-goals·tech-stack)만** 채운다. 요약에 없는 필드 — charter.md의 `## Goals`·`## Success Criteria / Definition of Done`·`## Personas`, conventions.md의 모든 헤딩(`## Naming`·`## Directory Structure`·`## Error Handling`·`## Anti-patterns`·`## Build & Test`) — 는 `_명시되지 않음 — 추후 보강._`으로 둔다(요약은 이 값들의 source가 아니므로 재구성 불가). AGENTS.md 섹션은 unchanged. 헌장 전체를 다시 채우려면 C-S2 경로의 "업데이트" 승인으로 Phase 1을 재진행한다. |
 
 `docs/project/` 디렉토리가 없으면 생성한다. 비-관리 콘텐츠(다른 헤딩·단락·코드 블록)는 모든 state에서 보존한다(기존 4c matrix 정신). `## Project Charter` 요약은 ≤약 25줄로 유지하고 상세는 전부 `docs/project/`로 내린다(C5 — 기존 R1 size 룰 자기 준수).
 

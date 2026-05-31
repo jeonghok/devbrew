@@ -16,9 +16,9 @@ plugins/project-init/
 │   ├── post-tool-use.py             # 브랜치 명명 + 커밋 메시지 검증기 (Bash matcher)
 │   ├── docs-lint.py                 # v1.4.0 — agent-readable docs convention 검증 (Write/Edit/MultiEdit matcher)
 │   └── tests/
-│       ├── test_docs_lint.py        # 40+ Python stdlib unittest
+│       ├── test_docs_lint.py        # 60+ Python stdlib unittest (charter rule 포함)
 │       ├── smoke.sh                 # V2 자동화 smoke script
-│       └── fixtures/                # 9개 서브디렉토리 (valid, oversized, drifted, ...)
+│       └── fixtures/                # 13개 서브디렉토리 (valid, oversized, drifted, charter_*, ...)
 └── templates/
     ├── shared/
     │   ├── commit-conventions.md

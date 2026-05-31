@@ -387,7 +387,11 @@ CHARTER_SECTION_RE = re.compile(
     r"^##\s+Project Charter\s*$\n?(.*?)(?=^##\s|\Z)",
     re.MULTILINE | re.DOTALL,
 )
-CHARTER_PLACEHOLDER_RE = re.compile(r"\{\{.*?\}\}")
+# `[^{}]*` (not `.*?`) keeps this linear: a non-greedy `\{\{.*?\}\}` backtracks
+# O(n^2) on a long single-line run of `{` (a malformed field value), which would
+# stall this advisory hook and break its always-exit-0/fast contract. `[^{}]*`
+# fails each start position in O(1) while still matching real `{{LABEL}}` residue.
+CHARTER_PLACEHOLDER_RE = re.compile(r"\{\{[^{}]*\}\}")
 CHARTER_REQUIRED_LABELS = ("Vision", "Non-goals", "Tech Stack")
 
 

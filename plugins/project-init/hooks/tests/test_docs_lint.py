@@ -967,6 +967,56 @@ class TestRCharter(unittest.TestCase):
             self.assertEqual(out.strip(), "{}")
             self.assertEqual(rc, 0)
 
+    def test_charter_rule_fires_on_dot_claude_agents(self):
+        """The rule gates on basename == 'AGENTS.md', so the .claude/AGENTS.md
+        TARGET_RELPATHS member is ALSO charter-linted. Pins this dual-location
+        contract so a future basename→relpath refactor can't silently drop it."""
+        with tempfile.TemporaryDirectory() as td:
+            dot = Path(td) / ".claude"
+            dot.mkdir()
+            target = dot / "AGENTS.md"
+            target.write_text(
+                "# A\n\n## Project Charter\n\n"
+                "**Vision:** Ship it.\n\n"
+                "**Tech Stack:** Go.\n\n"  # Non-goals label missing
+                "## Git Workflow\n\nx\n"
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            self.assertIn("section is incomplete", out)
+            self.assertIn("Non-goals (label missing)", out)
+            self.assertIn(".claude/AGENTS.md", out)
+            self.assertEqual(rc, 0)
+
+    def test_first_charter_section_wins(self):
+        """CHARTER_SECTION_RE is non-greedy with a (?=^##\\s|\\Z) bound, so only the
+        FIRST '## Project Charter' section is validated. Documents/locks the
+        first-occurrence-authoritative contract against a regex change to greedy."""
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "AGENTS.md"
+            target.write_text(
+                "# A\n\n"
+                "## Project Charter\n\n"
+                "**Vision:** \n\n"          # first section: vision empty
+                "**Non-goals:** No CMS.\n\n"
+                "**Tech Stack:** Go.\n\n"
+                "## Other\n\n"
+                "## Project Charter\n\n"     # second section: fully filled
+                "**Vision:** Ship it.\n\n"
+                "**Non-goals:** No CMS.\n\n"
+                "**Tech Stack:** Go.\n\n"
+            )
+            out, rc = run_hook(
+                {"tool_name": "Write", "tool_input": {"file_path": str(target)}},
+                cwd=td,
+            )
+            # The first (empty-vision) section is the one validated → warns.
+            self.assertIn("section is incomplete", out)
+            self.assertIn("Vision (empty)", out)
+            self.assertEqual(rc, 0)
+
 
 class TestTemplateConsistency(unittest.TestCase):
     """Lock the agents-md-section.md template labels to the hook's
