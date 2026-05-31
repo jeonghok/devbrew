@@ -49,6 +49,7 @@ git-ignored 파일(prod `.env`) 미복사로 원천 미접근.
 - **운영 안전.** 샌드박스가 git-ignored 파일(prod `.env`/자격증명/deps)을 복사하지 않아
   운영 DB/네트워크 접근 경로를 원천 차단. process-start/네트워크/파괴 surface는 upfront
   승인 게이트(blast-radius) 뒤로. OS-수준 egress 격리는 명시적 non-goal(한계 인정).
+- **fallback Law 2 보존.** `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`로 샌드박스를 끈 경우에도 verifier는 frontmatter상 Write를 갖지만, orchestrator가 R3 dispatch 전후의 `git status --porcelain` 차이로 실제 working-tree mutation을 잡아 verdict를 ≤FAIL로 강제 + loud warn — 구조적 Law 2 보장이 fallback에서도 유지(behavioral-only로 격하되지 않음).
 
 ## [2.1.0] — 2026-05-31
 

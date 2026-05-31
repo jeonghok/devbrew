@@ -403,7 +403,7 @@ If `skip_runtime` was set, skip this entire section.
 ```
 
 - Exit 0 → capture **line 1 = `sandbox_dir`**, **line 2 = `baseline_sha`**. The verifier's `project_dir` for this gate is `sandbox_dir` (frozen — overrides the preflight `project_dir` for the Runtime gate only).
-- **Exit 3** (kill switch `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`) → graceful fallback: dispatch the verifier in **read-only smoke mode** against the real `project_dir`, and print the loud line: `> [quality-gates] runtime sandbox disabled — read-only smoke verification only (DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1).` Skip the mutation guard (Step R4) in this mode.
+- **Exit 3** (kill switch `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`) → graceful fallback (no sandbox): the verifier runs in read-only smoke mode against the real `project_dir`. Because the verifier still holds Write tools (frontmatter cannot be revoked per-dispatch), Law 2 here is preserved by a **working-tree mutation check** instead of the sandbox guard: BEFORE the R3 dispatch, capture `fallback_pre` = `git -C "$project_dir" status --porcelain --untracked-files=all`. Print the loud line: `> [quality-gates] runtime sandbox disabled — read-only smoke mode on the real tree; Law 2 enforced via working-tree mutation check (DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1).` In R4, use the fallback working-tree guard (below) rather than the sandbox `mutation-guard`.
 - Any other non-zero → surface stderr verbatim and mark the Runtime gate failed.
 
 **Step R1 — test-scope-validator** (read-only reviewer; `project_dir` is the *preflight* dir, not the sandbox — it reviews the real diff). Per [Reviewer dispatch contract](#reviewer-dispatch-contract):
@@ -445,6 +445,8 @@ Agent({
 ```
 
 Read the YAML. **If `forced_downgrade: yes`**, the verdict is capped at FAIL regardless of the verifier's emitted verdict (Law 2 — the verifier cannot self-approve a product change). Surface `tracked_diff` + `disallowed_new_files` as evidence ("the app only ran after this change — fix it in a normal writer→review cycle"). The verifier's own `writes:` self-report is advisory only; this git result is authoritative.
+
+**Fallback working-tree guard (read-only mode only).** When the sandbox was disabled (Exit 3), instead of the sandbox `mutation-guard`, capture `fallback_post` = `git -C "$project_dir" status --porcelain --untracked-files=all` after the R3 dispatch. Any porcelain entry present in `fallback_post` but NOT in `fallback_pre` (captured in R0) means the verifier mutated the real working tree → treat as `forced_downgrade: yes`: cap the verdict at FAIL and print a loud warning that the working tree was modified in fallback mode (show the new entries; advise the user to `git diff` and revert). git-ignored files do not appear in `--porcelain`, so a setup-only `.env` fix is correctly NOT flagged — matching the sandbox guard's git-ignored ⇒ non-product rule. This keeps the structural Law-2 guarantee (a product mutation can never yield PASS) even with the sandbox disabled.
 
 **Step R5 — Discard the sandbox** (verdict-independent), unless in read-only fallback:
 
