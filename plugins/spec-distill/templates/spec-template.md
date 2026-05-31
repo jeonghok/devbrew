@@ -7,7 +7,7 @@ status: locked
 next_phase: writing-plans
 source: spec-distill v0.2.0
 # Locked decisions — interview (b)/(d) path 사용자 명시 응답에서 도출.
-# (v0.12.0: drafting-spec 제거 — spec.md를 수동 작성/검토할 때 이 형식 사용. 이 템플릿은 hook의 spec-mode 검증 대상 형식.)
+# (v0.12.0+: spec.md를 수동 작성/검토할 때 이 형식 사용. hook의 spec-mode 검증 대상 형식.)
 # source 허용값: interview-round-<N> 또는 brainstorming-round-<N>.
 locked_decisions: []
 ---
