@@ -161,6 +161,54 @@ assert_contains "$OUT" "/auth" "T7: extracts /auth"
 assert_contains "$OUT" "/dashboard" "T7: extracts /dashboard"
 rm -f "$PLAN_TMP"
 
+# --- helper: extract the runnable_surfaces block that contains a marker ---
+get_surface_block() {
+  # $1 = full manifest text, $2 = marker substring identifying the surface
+  awk -v marker="$2" '
+    /^  - kind:/ {
+      if (block != "" && index(block, marker)) print block
+      block = $0 "\n"; next
+    }
+    /^[a-z_]+:/ {            # a top-level key ends the surfaces region
+      if (block != "" && index(block, marker)) print block
+      block = ""; next
+    }
+    { if (block != "") block = block $0 "\n" }
+    END { if (block != "" && index(block, marker)) print block }
+  ' <<< "$1"
+}
+
+# --- Test 8: blast-radius — process-start surfaces require_decision (AC2) ---
+echo "== Test 8: blast-radius process-start =="
+OUT=$(run_detector "web-compose")
+dev_block=$(get_surface_block "$OUT" "name: dev")
+test_block=$(get_surface_block "$OUT" "name: test")
+assert_contains "$dev_block" "requires_decision: true" "T8: npm:dev requires_decision"
+assert_not_contains "$test_block" "requires_decision" "T8: npm:test stays automatic"
+
+# docker-compose keeps its existing requires_decision
+dc_block=$(get_surface_block "$OUT" "kind: docker-compose")
+assert_contains "$dc_block" "requires_decision: true" "T8: docker-compose requires_decision (unchanged)"
+
+# --- Test 9: test runners stay automatic (AC2) ---
+echo "== Test 9: test runner automatic =="
+OUT=$(run_detector "library-tests")
+pytest_block=$(get_surface_block "$OUT" "kind: pytest")
+assert_not_contains "$pytest_block" "requires_decision" "T9: pytest automatic (no gate)"
+
+# --- Test 10: danger-signal escalates an otherwise-automatic surface (AC5) ---
+echo "== Test 10: danger-signal escalation =="
+OUT=$(run_detector "danger-signal")
+sig_test_block=$(get_surface_block "$OUT" "name: test")
+assert_contains "$sig_test_block" "requires_decision: true" "T10: network-signal test script escalated"
+
+# --- Test 11: CLI-tool fixture detected as cli project ---
+echo "== Test 11: cli-tool fixture =="
+OUT=$(run_detector "cli-tool")
+RC=$?
+assert_eq "$RC" "0" "T11: exit 0"
+assert_contains "$OUT" "project_type: cli" "T11: project_type=cli"
+
 echo ""
 echo "Tests passed: $PASS, failed: $FAIL"
 [[ $FAIL -eq 0 ]] || exit 1

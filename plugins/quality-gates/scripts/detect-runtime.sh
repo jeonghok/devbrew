@@ -25,13 +25,17 @@
 #
 # Per-kind schema for runnable_surfaces (kind-tagged sum type):
 #   docker-compose   — {kind, path, requires_decision}
-#   npm-script       — {kind, name ∈ {dev,start,serve,test}, command}
+#   npm-script       — {kind, name ∈ {dev,start,serve,test}, command, requires_decision?}
 #   pytest           — {kind, command}
 #   cargo-test       — {kind, command}
-#   cargo-run        — {kind, command}             (only when Cargo.toml has [[bin]])
+#   cargo-run        — {kind, command, requires_decision}  (only when Cargo.toml has [[bin]])
 #   go-test          — {kind, command}
-#   go-run           — {kind, command}             (only when main.go found)
-#   makefile         — {kind, target ∈ {run,serve,test}, command}
+#   go-run           — {kind, command, requires_decision}  (only when main.go found)
+#   makefile         — {kind, target ∈ {run,serve,test}, command, requires_decision?}
+#
+# Blast-radius rule: process-start kinds (dev/start/serve/run/serve) and any
+# surface whose command body matches a network/deploy/destructive signal carry
+# requires_decision: true. Test-runner kinds are automatic (no requires_decision).
 #
 # Exit codes: 0 = ok (parse manifest), non-zero = invariant violation
 # (skill should fail-open: treat as empty manifest).
@@ -45,6 +49,12 @@ set -u  # NOT -e: we want graceful degradation; failure of a sub-detection
 # --- Helpers ---
 
 emit() { printf '%s\n' "$*"; }
+
+# Returns 0 if the supplied string contains a network/deploy/destructive signal.
+# Used to escalate an otherwise-automatic surface to requires_decision.
+has_danger_signal() {
+  printf '%s' "$1" | grep -qiE 'curl|wget|(^|[^a-z])ssh([^a-z]|$)|scp|rsync|deploy|kubectl|terraform|rm[[:space:]]+-rf|git[[:space:]]+push|npm[[:space:]]+publish|docker[[:space:]]+push|--force'
+}
 
 # --- Project type detection ---
 PROJECT_TYPE="unknown"
@@ -95,11 +105,21 @@ if [[ -f docker-compose.yml ]] || [[ -f docker-compose.yaml ]]; then
   SURFACES+=("$(printf '  - kind: docker-compose\n    path: %s\n    requires_decision: true' "$COMPOSE_PATH")")
 fi
 
-# npm-scripts: dev / start / serve / test (each as its own surface)
+# npm-scripts: dev / start / serve / test (each as its own surface).
+# Process-start scripts (dev/start/serve) and any script whose command body
+# carries a danger signal require an upfront decision (blast-radius gate).
 if [[ -f package.json ]]; then
   for script in dev start serve test; do
     if grep -qE "\"$script\"[[:space:]]*:" package.json 2>/dev/null; then
-      SURFACES+=("$(printf '  - kind: npm-script\n    name: %s\n    command: npm run %s' "$script" "$script")")
+      rd="false"
+      case "$script" in
+        dev|start|serve) rd="true" ;;
+      esac
+      script_line=$(grep -E "\"$script\"[[:space:]]*:" package.json 2>/dev/null | head -1)
+      has_danger_signal "$script_line" && rd="true"
+      block="$(printf '  - kind: npm-script\n    name: %s\n    command: npm run %s' "$script" "$script")"
+      [[ "$rd" == "true" ]] && block="$block$(printf '\n    requires_decision: true')"
+      SURFACES+=("$block")
       if [[ "$script" == "test" ]]; then
         add_test_runner "npm"
       fi
@@ -116,30 +136,42 @@ if [[ -f pyproject.toml ]] || [[ -f pytest.ini ]] || [[ -f setup.cfg ]]; then
   fi
 fi
 
-# cargo (test + run)
+# cargo (test automatic + run gated)
 if [[ -f Cargo.toml ]]; then
   SURFACES+=("$(printf '  - kind: cargo-test\n    command: cargo test')")
   add_test_runner "cargo"
   if grep -q '\[\[bin\]\]' Cargo.toml 2>/dev/null; then
-    SURFACES+=("$(printf '  - kind: cargo-run\n    command: cargo run')")
+    SURFACES+=("$(printf '  - kind: cargo-run\n    command: cargo run\n    requires_decision: true')")
   fi
 fi
 
-# go
+# go (test automatic + run gated)
 if [[ -f go.mod ]]; then
   SURFACES+=("$(printf '  - kind: go-test\n    command: go test ./...')")
   add_test_runner "go"
-  # go run requires a main.go entry; check for it
   if find . -maxdepth 2 -name 'main.go' 2>/dev/null | head -1 | grep -q .; then
-    SURFACES+=("$(printf '  - kind: go-run\n    command: go run ./...')")
+    SURFACES+=("$(printf '  - kind: go-run\n    command: go run ./...\n    requires_decision: true')")
   fi
 fi
 
-# Makefile targets
+# Makefile targets (run/serve gated; test automatic unless danger recipe)
 if [[ -f Makefile ]]; then
   for target in run serve test; do
     if grep -qE "^${target}:" Makefile 2>/dev/null; then
-      SURFACES+=("$(printf '  - kind: makefile\n    target: %s\n    command: make %s' "$target" "$target")")
+      rd="false"
+      case "$target" in
+        run|serve) rd="true" ;;
+      esac
+      # Scan the target's recipe block for danger signals.
+      recipe=$(awk -v t="^${target}:" '
+        $0 ~ t { inblk=1; next }
+        inblk && /^[^[:space:]]/ { inblk=0 }
+        inblk { print }
+      ' Makefile 2>/dev/null)
+      has_danger_signal "$recipe" && rd="true"
+      block="$(printf '  - kind: makefile\n    target: %s\n    command: make %s' "$target" "$target")"
+      [[ "$rd" == "true" ]] && block="$block$(printf '\n    requires_decision: true')"
+      SURFACES+=("$block")
       if [[ "$target" == "test" ]]; then
         add_test_runner "make"
       fi
