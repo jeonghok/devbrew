@@ -142,6 +142,59 @@ case "${1:-}" in
     # Output contract: line 1 = sandbox abs path, line 2 = baseline SHA.
     printf '%s\n%s\n' "$sandbox" "$base"
     ;;
+  mutation-guard)
+    # Pure-git product-mutation oracle. Inputs are ONLY (sandbox, baseline B).
+    # There is no channel for a verifier self-claim — that is the structural
+    # Law 2 self-approval defense (§6.7). Authoritative over the verdict.
+    [[ $# -eq 3 ]] || die "usage: mutation-guard <sandbox-abs> <baseline-sha>"
+    sandbox="$2" base="$3"
+    [[ -d "$sandbox" ]] || die "sandbox not found: $sandbox"
+    git -C "$sandbox" cat-file -e "${base}^{commit}" 2>/dev/null \
+      || die "bad baseline sha: $base"
+
+    # (1) tracked net diff vs the immutable baseline B. Comparing B<->working-tree
+    # is commit-agnostic: any intermediate `git commit` the verifier ran inside
+    # the sandbox cannot hide a net change. Also fold in staged-vs-B (defensive).
+    tracked=$(git -C "$sandbox" diff --name-only "$base" -- 2>/dev/null)
+    tracked_cached=$(git -C "$sandbox" diff --name-only --cached "$base" -- 2>/dev/null)
+    tracked_all=$(printf '%s\n%s\n' "$tracked" "$tracked_cached" | sed '/^$/d' | sort -u)
+
+    # (2) new files (untracked relative to B's index). Classification:
+    #   symlink  -> always product-affecting (target-agnostic, conservative)
+    #   ignored  -> non-product (cannot normally enter product) -> skip
+    #   else     -> product-affecting
+    # NOTE: plain `--others` (NOT --exclude-standard) so ignored files appear
+    # and we can classify them explicitly via check-ignore.
+    disallowed=()
+    while IFS= read -r -d '' rel; do
+      [[ -z "$rel" ]] && continue
+      if [[ -L "$sandbox/$rel" ]]; then
+        disallowed+=("$rel"); continue
+      fi
+      if git -C "$sandbox" check-ignore -q -- "$rel" 2>/dev/null; then
+        continue   # git-ignored -> non-product
+      fi
+      disallowed+=("$rel")
+    done < <(git -C "$sandbox" ls-files --others -z 2>/dev/null)
+
+    forced="no"
+    [[ -n "$tracked_all" ]] && forced="yes"
+    [[ ${#disallowed[@]} -gt 0 ]] && forced="yes"
+
+    if [[ -n "$tracked_all" ]]; then
+      echo "tracked_diff:"
+      while IFS= read -r f; do echo "  - $f"; done <<< "$tracked_all"
+    else
+      echo "tracked_diff: []"
+    fi
+    if [[ ${#disallowed[@]} -gt 0 ]]; then
+      echo "disallowed_new_files:"
+      for f in "${disallowed[@]}"; do echo "  - $f"; done
+    else
+      echo "disallowed_new_files: []"
+    fi
+    echo "forced_downgrade: $forced"
+    ;;
   remove)
     [[ $# -eq 2 ]] || die "usage: remove <abs-path>"
     target="$2"
