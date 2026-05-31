@@ -11,7 +11,7 @@ target_version: 0.12.0
 
 # spec-distill interview를 brainstorming 앞단 "문제공간 stage"로 재배치
 
-> *받아적는 인터뷰가 아니라, 시행착오를 미리 겪어 해소하고 외부 근거로 구체화하며 약한 방향을 깨뜨리는 강한 문제공간 stage. 그 산출물(meta-prompt)을 superpowers brainstorming에 넘긴다.*
+> *받아적는 인터뷰가 아니라, 시행착오를 미리 겪어 해소하고 외부 근거로 구체화하며 약한 방향을 깨뜨리는 강한 문제공간 stage. 그 산출물(meta-prompt)은 그 자체로 완결되며, superpowers가 있으면 brainstorming 해답공간으로 넘어간다.*
 
 ## 목차
 
@@ -36,19 +36,18 @@ target_version: 0.12.0
 
 > 이 spec을 처음 보는 사람(또는 /compact 후 자기 자신)이 30초에 핵심 파악할 수 있게. 대화 컨텍스트 가정 금지.
 
-**TL;DR**: spec-distill의 `/interview`를 "spec 생성기"에서 **superpowers brainstorming 앞단의 강한 문제공간(problem-space) stage**로 재배치한다. 인터뷰가 ① 메타 프롬프팅(방향 재구성) ② 웹 외부조사로 리서치 구체화 ③ steelman으로 의심·검증 ④ 시행착오 선(先)해소를 *강하게* 수행하고, 그 결과를 **interview brief(=brainstorming용 meta-prompt)**로 산출한다. brainstorming은 그 위에서 해답공간(architecture/approaches/design doc)을 온전히 설계하고, 그 design doc을 spec-distill의 분리 reviewer가 Law 2로 검증한다.
+**TL;DR**: spec-distill의 `/interview`를 "spec 생성기"에서 **superpowers brainstorming 앞단의 강한 문제공간(problem-space) stage**로 재배치한다. 인터뷰가 ① 메타 프롬프팅(방향 재구성) ② 웹 외부조사로 리서치 구체화 ③ steelman으로 의심·검증 ④ 시행착오 선(先)해소를 *강하게* 수행하고, 그 결과를 **interview brief(=brainstorming용 meta-prompt)**로 산출한다. brainstorming은 그 위에서 해답공간(architecture/approaches/design doc)을 온전히 설계하고, 그 design doc을 spec-distill의 분리 reviewer가 Law 2로 검증한다. **인터뷰는 단독 완결 stage** — brief가 terminal 산출물이고 brainstorming 호출은 *optional 다음 단계*다(superpowers optional; 없으면 brief + advisory로 완료, fallback spec-mode 경로 없음).
 
 **Implicit context** (Constraints에 안 박힌 외부 사실):
-- superpowers는 외부·**수정 불가** 플러그인 (`~/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/`). 통합은 brainstorming 내부 수정이 아니라 brief 산출 + invoke로만.
+- superpowers는 외부·**수정 불가**·**optional** 플러그인 (`~/.claude/plugins/cache/claude-plugins-official/superpowers/5.1.0/`). 통합은 brainstorming 내부 수정이 아니라 brief 산출 + (있으면) invoke로만. 인터뷰는 brief까지로 단독 완결되므로 superpowers 부재가 인터뷰를 막지 않는다.
 - 이건 **Double Diamond**의 두 다이아몬드: interview = 문제공간(diverge→converge on the *right problem*), brainstorming = 해답공간. 둘은 상보적이며 brainstorming은 **단축·스킵되지 않는다**.
 - **brainstorming 정지점(OQ1 주 방어선 근거)**: superpowers `brainstorming` SKILL.md "User Review Gate"(step 8)는 design doc 작성·commit 후 *"Wait for the user's response"*로 **명시 정지**한다 — 이 정지가 턴 경계를 만들어 spec-distill Stop hook(`review-dispatch.py`)의 reviewer dispatch를 트리거한다. 즉 reviewer는 brainstorming이 writing-plans로 가기 *전에* 돈다. (가정이 아니라 brainstorming 소스 step 8의 명시 동작.)
 - **Hook 인터페이스 계약(소스 확인 + 본 세션 live 관측)**: `spec-write-validator.py`의 `PATH_PREFIX = "docs/superpowers/specs/"` 아래 `.md` write 시 발동, `-design.md`는 design mode로 분류, `.claude/spec-distill/<session>/state.local.md`에 `pending_review:` block을 `{path, mode, worktree_path, triggered_at}` 키로 기록 → Stop hook이 이를 읽어 `reviewing-spec` dispatch를 강제. brainstorming의 `-design.md`에 **이미 이 seam이 걸려 있다** — 이 design doc 자체가 그 hook에 걸려 분리 reviewer 검증을 받았다(live dogfooding 확인).
 - 현재 spec-distill 버전 main = 0.11.3.
 
 **Deferred to plan** (이 spec이 의도적으로 lock하지 않은 결정):
-- **OQ2** — `drafting-spec` 스킬 **rename 여부**(`revising-design` 등). 테스트 50+가 참조하므로 plan에서 비용/이득 판단.
-- **OQ1** — `writing-plans` 전이를 막는 **PreToolUse 보강 게이트** 구현 여부. ⚠ **Law 2 보존(G6)과 직결되는 보안-급 미결정** — 미구현 시 brainstorming이 design-doc write→writing-plans를 *한 턴에* 체이닝하면 reviewer가 우회될 수 있다(Law 2 regression). 주 방어선(위 brainstorming step 8 정지)이 정상 작동하면 belt-and-suspenders로 불필요하나, **위험 수위 = 높음**이라 plan에서 명시 결정.
-- **OQ3** — 기존 `drafting-spec` Mode A의 deprecation window(즉시 제거 vs one-minor 유지) 처리 방식.
+- **OQ1–OQ4 전부 해소됨** (Decision Log #9–#11 + 본문 반영). 요약: PreToolUse 게이트 **미구현**(주 방어선만 — brainstorming step 8 정지 + Stop hook, 소스 ground), drafting-spec **완전 제거**(Mode A+B), superpowers **optional**(fallback spec-mode 경로 없음), brief supersession 마커 **불필요**.
+- **남은 plan-구현 노트(설계 blocker 아님)**: 워크트리 세션이 main-repo `.claude/spec-distill/<sid>/` state를 Edit/Write-tool로 못 고침(Bash는 가능) — hook write-path(state_path 라우팅) vs tool edit-path 비대칭. 이 design 세션에서 실증. §4.8 worktree-path와 같은 클래스. plan에서 state 갱신 경로 구현 시 고려.
 
 ## Context / Why
 
@@ -73,7 +72,7 @@ target_version: 0.12.0
 - **G3** — **웹 외부조사 내장**: 토픽 확정 후 landscape sweep 1회(bounded) + steelman/factual on-demand. 모든 외부 주장은 **인용 필수**.
 - **G4** — **Adversarial steelman 의심 게이트**: 의심 방향에 대안 steelman을 웹근거와 함께 제시, 사용자 방어/전환/보류 없이는 lock 불가. P17 sovereignty 유지(최종 결정권 항상 유저).
 - **G5** — **시행착오 선해소 기록**: 시도→버린 방향을 이유와 함께 박제(brief Tried & Discarded)해 다운스트림 재탐색 차단.
-- **G6** — **Law 2 보존**: brainstorming의 `-design.md`를 spec-distill의 frontmatter-scoped reviewer가 검증. drafting-spec Mode A retire, reviewing-spec + hook은 유지·retarget.
+- **G6** — **Law 2 보존**: brainstorming의 `-design.md`를 spec-distill의 frontmatter-scoped reviewer가 검증. drafting-spec **완전 제거**(Mode A+B), reviewing-spec는 **design-mode 전용 단순화**(spec-mode 행 + re-consensus [3.5] 제거), hook 무수정.
 - **G7** — **devbrew 원칙 흡수**: 신규 기능 셋을 기존 4-path/rhythm/breadth 구조에 흡수(새 P# 없음). 모든 신규 surface에 cost_class·kill switch·README "Principles Instantiated" 동기화.
 
 ## Non-goals
@@ -84,10 +83,11 @@ target_version: 0.12.0
 - **NG4** — 새 devbrew P# 신설. 기존 원칙 흡수가 default ([[feedback_devbrew_design_lightness]]).
 - **NG5** — 웹조사 무제한 fan-out. bounded(AP9 N≥5 hard 게이트 미만).
 - **NG6** — `/interview`의 trivia escape 변경. 그대로 유지.
+- **NG7** — 인터뷰가 spec 작성으로의 handoff를 *강제*하는 것. 인터뷰는 brief까지로 **단독 완결** — brainstorming 호출은 optional. superpowers를 required prerequisite로 격상하지 않음(결정 #10).
 
 ## Constraints
 
-- **C1** — superpowers 5.1.0 외부 플러그인, 수정 불가. brainstorming은 호출되면 자체 clarifying-questions/approaches 흐름을 돈다.
+- **C1** — superpowers 5.1.0 외부 플러그인, 수정 불가, **optional**. brainstorming은 호출되면 자체 clarifying-questions/approaches 흐름을 돈다. superpowers 부재 시 인터뷰는 brief + loud advisory로 완료(fallback spec-mode 경로 없음, graceful degrade — C4 패턴).
 - **C2** — devbrew Three Laws + Plugin Shape 전부 준수. Law 2는 frontmatter scoping(프롬프트 아님)으로 물리 분리.
 - **C3** — `spec-reviewer.md`/`breadth-keeper.md`/`steelman-builder.md` persona는 **보안-민감 코드**(CLAUDE.md) — 약화 PR은 보안 리뷰 대상.
 - **C4** — 웹조사 cost_class **variable**, kill switch 필수, graceful degradation(웹 불가 시 loud log + landscape 생략 명시).
@@ -107,9 +107,10 @@ target_version: 0.12.0
 - **AC7** — 웹조사가 단일 sweep에서 5회 이상 검색을 fan-out하지 않는다(AP9). steelman/factual on-demand는 순차이며 **인터뷰 세션 총량 soft cap ≤8**(초과 시 advisory + 강제 (b) 사용자 질문 — AP16 unbounded 방지). (검증: 웹 도구를 stub한 fixture 1회 실행 시 sweep 내 검색 호출 카운트 ≤4 assert + 세션 on-demand ≤8 assert — `tests/test_web_sweep_bound.sh`. 수동 리뷰 폴백 없음.)
 - **AC8** — 웹 비활성(`DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 도구 부재) 시 인터뷰는 crash하지 않고 landscape 생략을 loud하게 알리며 계속 진행한다(graceful degradation). (kill switch 테스트)
 - **AC9** — brainstorming이 `docs/superpowers/specs/...-design.md`를 쓰면 기존 `spec-write-validator` hook이 design mode로 감지해 `pending_review`를 기록하고, reviewer dispatch가 강제된다(Law 2 design-doc 검증 살아있음). (hook 출력 스키마 테스트 — 기존 `test_hook_output_schema.py` 확장)
-- **AC10** — `drafting-spec` Mode A(initial spec draft) 경로는 제거되거나 deprecation 경고를 내고, 더 이상 `/interview` 종료 시 호출되지 않는다. (SKILL.md 검증 + 종료 경로 테스트)
+- **AC10** — `drafting-spec` 스킬이 **완전 제거**(Mode A+B)되고 skills/hooks/commands 경로에서 호출 참조가 사라진다. (`grep -rl 'drafting-spec' plugins/spec-distill/{skills,hooks,commands}` = 0 — tests/ fixture·CHANGELOG 이력 제외)
 - **AC11** — `plugin.json` version = `0.12.0`, `CHANGELOG.md`에 `## [0.12.0]` 엔트리 존재(유효 ISO8601 날짜 — merge 날짜와 일치, `XX` placeholder 금지) + Added/Changed/Removed 섹션. (파일 검증 — 날짜는 merge 시점 확정, Deferred 아님)
 - **AC12** — README "Principles Instantiated"/"Flow"/"Hooks"/"Kill switches"가 새 흐름과 동기화된다. (자동: `grep`으로 README에 `DEVBREW_SPEC_DISTILL_DISABLE_WEB`·`interview-brief`·`steelman-builder` 키워드 존재 확인 — `tests/test_readme_sync.sh`. + 수동: 산문 정합 리뷰. 완전 수동 의존 아님.)
+- **AC13** — superpowers(`brainstorming` skill) 부재 시 `/interview`는 brief를 생성·완료하고 **loud advisory**("brief 완결 — superpowers 설치 시 design 단계로, 아니면 brief 직접 사용")를 낸 뒤 정지한다. crash·spec-mode fallback 시도 없음(단독 완결, graceful degrade). (superpowers-absent fixture 테스트)
 
 ## Architecture & Flow
 
@@ -126,8 +127,8 @@ conducting-interview  ── 강한 문제공간 STAGE ────────�
   · R4 시행착오 기록 (steelman switch·방향 폐기의 부산물)            │
   · breadth-keeper / rhythm guard(3) / wall-clock(30min)  (유지)   │
   ▼ 5 의례 모두 통과 (Law 1 구조 게이트)                            │
-interview brief 작성 → docs/superpowers/interview/<date>-<topic>-interview.md   ← 신규 산출물(meta-prompt)
-  ▼ terminal invoke (Approach A)
+interview brief 작성 → docs/superpowers/interview/<date>-<topic>-interview.md   ← terminal 산출물(meta-prompt, 단독 완결)
+  ▼ (optional 다음 단계 — superpowers 있을 때만; 없으면 brief + loud advisory로 완료)
 superpowers:brainstorming  (외부, brief를 rich context로)
   · 정상 풀가동 — 해답공간 설계(architecture/approaches)
   · -design.md 작성 → docs/superpowers/specs/<date>-<topic>-design.md
@@ -136,25 +137,25 @@ superpowers:brainstorming  (외부, brief를 rich context로)
   ▼ [Stop: review-dispatch → reviewer 강제]  (기존 hook)
 reviewing-spec → spec-reviewer agent (Law 2 frontmatter-scoped)  ── design doc 검증
   · approved → writing-plans
-  · needs_revise → 리바이저(drafting-spec Mode B retarget)가 allowed_issue_ids만 수정 → 재검증
+  · needs_revise → 메인 agent(brainstorming author 회귀)가 design.md 직접 수정 → 재검증 (Mode B 없음 — design mode)
   ▼
 writing-plans
 ```
 
 핵심: 신규 기능 셋이 **기존 4-path·rhythm·breadth에 흡수**된다. 웹 = path(a) 확장(codebase→codebase|외부 prior-art, 자동조사, 마커 `[from-web]`, streak +1), steelman = (c) subagent build + (b) user adjudicate 하이브리드(마커 `[steelman]`, adjudicate 시 streak reset), 시행착오 = steelman switch **또는** 사용자 직접 폐기의 기록.
 
-**Hook 경계 (component isolation).** 위 PostToolUse/Stop hook은 *무수정*으로 충분하다 — `spec-write-validator.py`의 `PATH_PREFIX`가 이미 `docs/superpowers/specs/`라 brainstorming의 `-design.md`를 design mode로 잡는다(Implicit context의 인터페이스 계약 참조). **retarget이 필요한 건 hook이 아니라** 그 design doc을 *읽고 검증하는* `reviewing-spec` 라우팅 + `spec-reviewer` persona뿐. interview brief는 `docs/superpowers/interview/`(PATH_PREFIX 밖)라 hook이 건드리지 않는다(C8 자동 보장).
+**Hook 경계 (component isolation).** 위 PostToolUse/Stop hook은 *무수정*으로 충분하다 — `spec-write-validator.py`의 `PATH_PREFIX`가 이미 `docs/superpowers/specs/`라 brainstorming의 `-design.md`를 design mode로 잡는다(Implicit context의 인터페이스 계약 참조). **변경이 필요한 건 hook이 아니라** 그 design doc을 *읽고 검증하는* `reviewing-spec` 라우팅(design-mode 전용 단순화) + `spec-reviewer` persona뿐. interview brief는 `docs/superpowers/interview/`(PATH_PREFIX 밖)라 hook이 건드리지 않는다(C8 자동 보장).
 
 ## Component Map
 
 | 컴포넌트 | 처리 | 비고 |
 |---|---|---|
 | `commands/interview.md` | **수정** | description/역할: "spec 생성기" → "brainstorming 앞단 문제공간 stage". trivia escape 유지(NG6). |
-| `skills/conducting-interview/SKILL.md` | **대수정** | 5 의례 종료 게이트 + path(a) 웹 확장 + steelman 게이트 + brief 작성 + brainstorming terminal invoke. cost_class medium→**variable**. |
+| `skills/conducting-interview/SKILL.md` | **대수정** | 5 의례 종료 게이트 + path(a) 웹 확장 + steelman 게이트 + brief 작성(terminal) + (superpowers 있으면) brainstorming optional invoke. cost_class medium→**variable**. |
 | `agents/steelman-builder.md` | **신규(scoped)** | `allowedTools: Read, Grep, Glob, WebSearch, WebFetch, mcp__*tavily*` / `disallowedTools: Write, Edit, MultiEdit, NotebookEdit`. 독립 skeptic, 대안 steelman 구축. |
 | `templates/interview-brief-template.md` | **신규** | meta-prompt 포맷(7 섹션). |
-| `skills/drafting-spec/SKILL.md` | **Mode A retire, Mode B retarget** | Mode A(initial spec draft) 제거. Mode B(allowed_issue_ids 리바이저)는 `-design.md` 대상으로 retarget. rename은 plan 결정. |
-| `skills/reviewing-spec/SKILL.md` | **유지·retarget** | routing table(verdict×signal) 유지, 검증 대상이 brainstorming design doc. |
+| `skills/drafting-spec/` | **전면 삭제(Mode A+B)** | brief=conducting-interview, design doc=brainstorming, design revise=메인 agent(author 회귀) → drafting-spec 불필요. 디렉토리 제거. rename(OQ2) moot. (결정 #10) |
+| `skills/reviewing-spec/SKILL.md` | **design-mode 전용 단순화** | design-mode 라우팅 행만 유지(검증 대상 = brainstorming `-design.md`). **spec-mode 행 + [3.5] re-consensus + mode_b_violation 제거**(drafting-spec/spec-mode 소멸로 dead path). |
 | `agents/spec-reviewer.md` | **persona 갱신** | 11-섹션 spec → brainstorming design doc 포맷 검증 추가. 보안-민감(C3). |
 | `agents/breadth-keeper.md` | **유지** | tunnel 감지 여전히 유효. |
 | `hooks/spec-write-validator.py` 등 | **무수정** | `PATH_PREFIX=docs/superpowers/specs/`(소스 확인)라 design mode 감시 기존재 + interview/ 자동 제외(C8). 추가 조치 불필요. |
@@ -163,7 +164,7 @@ writing-plans
 
 ## Interview Stage Internals — 5 통과 의례
 
-문제공간 stage가 *강하게* 작동하려면 다음 5 의례를 **모두 통과해야** brief 작성 + brainstorming invoke가 허용된다(Law 1 구조 게이트). 하나라도 미충족이면 종료 차단:
+문제공간 stage가 *강하게* 작동하려면 다음 5 의례를 **모두 통과해야** brief 작성(+ superpowers 있으면 brainstorming invoke)이 허용된다(Law 1 구조 게이트). 하나라도 미충족이면 종료 차단:
 
 | # | 의례 | 통과 기준 | 기존 메커니즘 |
 |---|---|---|---|
@@ -205,7 +206,7 @@ locked_directions:              # (b)/(d) 명시 + steelman 통과. brainstormin
 ## 4. Skepticism Log        # 의심 방향별: 대안 steelman 요지 + 웹근거 + verdict.
 ## 5. Tried & Discarded     # 시행착오: 시도→버린 이유. 다운스트림 재탐색 차단.
 ## 6. Open Questions        # 해답공간으로 이월. "유추 금지".
-## 7. Concrete Next Action  # superpowers:brainstorming 호출(이 brief가 context) → -design.md → reviewer → writing-plans.
+## 7. Concrete Next Action  # (optional) superpowers 있으면 brainstorming 호출(이 brief가 context) → -design.md → reviewer → writing-plans. 없으면 이 brief가 완결 산출물.
 ```
 
 §1~2 = 재구성된 문제공간(meta-prompt 코어), §3~5 = 해소된 탐색(landscape+의심+시행착오), §6 = 미해결 이월, §7 = 다음 액션.
@@ -214,16 +215,19 @@ locked_directions:              # (b)/(d) 명시 + steelman 통과. brainstormin
 
 ## Decision Log
 
-brainstorming 인터뷰 라운드에서 확정된 8개 결정(이 design의 locked directions):
+brainstorming 인터뷰 라운드 + post-review OQ 해소에서 확정된 11개 결정(이 design의 locked directions):
 
 1. **레이어 위치** = superpowers brainstorming **앞단**(상보적, 비중복).
-2. **Law 2 위치** = brainstorming의 `-design.md`를 spec-distill reviewer가 검증(drafting-spec Mode A retire, reviewing-spec 유지).
+2. **Law 2 위치** = brainstorming의 `-design.md`를 spec-distill reviewer가 검증(drafting-spec **완전 제거**, reviewing-spec **design-mode 전용 단순화**).
 3. **반례 강도** = **Adversarial steelman** (defend/override 게이트, P17 유지).
 4. **웹조사** = **Landscape sweep**(round 1–2) + steelman/factual on-demand, bounded.
-5. **Handoff** = **Approach A** (interview brief 산출물 + terminal invoke brainstorming).
+5. **Handoff** = **Approach A** — interview brief가 **단독 완결 terminal 산출물**. superpowers 있으면 brief를 context로 brainstorming 호출(optional 다음 단계), 없으면 brief + advisory로 완료.
 6. **목적 framing** = 강한 문제공간 stage(Double Diamond 1st diamond) — brainstorming 단축 아님. 메타 프롬프팅 + 리서치 구체화 + 시행착오 선해소 + 의심.
 7. **네이밍** = "interview" (브리프/폴더/stage 명칭; `discovery` 폐기).
 8. **steelman 에이전트** = 전용 scoped `steelman-builder` 신설(general-purpose 재사용 아님).
+9. **OQ1 해소** = PreToolUse 보강 게이트 **미구현**. 주 방어선(brainstorming step 8 user-review 정지 → Stop hook, 소스 ground)만으로 Law 2 보존.
+10. **OQ2+3 해소** = drafting-spec **완전 제거**(Mode A+B), superpowers **optional**, no-superpowers fallback 없음. 인터뷰는 brief까지 단독 완결(brief=terminal). rename(OQ2)·deprecation window(OQ3) moot.
+11. **OQ4 해소** = brief에 superseded LD 마커 **불필요**(Tried & Discarded로 방향변경 이력 충분).
 
 ## Files to Modify
 
@@ -234,12 +238,12 @@ plugins/spec-distill/commands/interview.md             # 역할 reframe(문제�
 plugins/spec-distill/skills/conducting-interview/SKILL.md  # 5 의례 + 웹 path(a) + steelman 게이트 + brief 작성 + invoke; cost_class variable
 plugins/spec-distill/agents/steelman-builder.md        # 신규 scoped 에이전트
 plugins/spec-distill/templates/interview-brief-template.md  # 신규 meta-prompt 템플릿
-plugins/spec-distill/skills/drafting-spec/SKILL.md     # Mode A retire, Mode B retarget(-design.md)
-plugins/spec-distill/skills/reviewing-spec/SKILL.md    # design doc retarget
+plugins/spec-distill/skills/drafting-spec/             # 디렉토리 전면 삭제 (Mode A+B)
+plugins/spec-distill/skills/reviewing-spec/SKILL.md    # design-mode 전용 단순화 (spec-mode 행+re-consensus+mode_b_violation 제거)
 plugins/spec-distill/agents/spec-reviewer.md           # design doc 포맷 검증 persona(보안-민감)
 plugins/spec-distill/README.md                         # flow/principles/hooks/kill switches 동기화
-plugins/spec-distill/hooks/spec-write-validator.py     # (필요시) docs/superpowers/interview/ 명시 제외
-plugins/spec-distill/tests/                            # Mode A 참조 갱신 + 신규 테스트(steelman/웹/brief/5의례)
+plugins/spec-distill/hooks/spec-write-validator.py     # 무수정 검증 (PATH_PREFIX 자동 제외) — 변경 없음, 진입점 참고
+plugins/spec-distill/tests/                            # drafting-spec/spec-mode 참조 테스트 제거·갱신 + 신규(steelman/웹/brief/5의례/superpowers-absent)
 ```
 
 ## Verification Plan
@@ -251,7 +255,7 @@ plugins/spec-distill/tests/                            # Mode A 참조 갱신 + 
 - **V5** — 웹 bound + kill switch: sweep ≤4 호출 규약 검증 + `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 시 graceful degradation(loud log, no crash).
 - **V6** — 인용 강제: External Landscape 항목에 URL 없으면 종료 게이트 fail. (`tests/test_landscape_citation.sh`)
 - **V7** — Law 2 design-doc 검증 생존: brainstorming `-design.md` write 시 hook `pending_review` 기록 + reviewer dispatch. (`tests/test_hook_output_schema.py` 확장)
-- **V8** — drafting-spec Mode A 미호출: 종료 경로가 Mode A를 호출하지 않음 확인.
+- **V8** — drafting-spec 전면 삭제: `grep -rl 'drafting-spec' plugins/spec-distill/{skills,hooks,commands}` = 0 (AC10) + 디렉토리 부재. reviewing-spec에 spec-mode 행/re-consensus 잔존 없음 확인.
 - **V9** — 회귀: 기존 spec-distill 테스트 baseline 캡처 후 신규 변경이 통과 테스트를 깨지 않는지(레포 root에서 실행, [[project_qg_pre_existing_test_reds]] 따라 사전 baseline). `bash plugins/spec-distill/tests/*.sh`.
 - **V10** — 수동 e2e: 실제 `/interview` 1회 — 웹 sweep·steelman·brief 생성·brainstorming invoke·reviewer 검증까지 흐름 확인. **체크리스트 항목 명시**: steelman이 *실제 반례 논거*를 담는지(빈/형식적 아님) — V3 구조검증이 못 잡는 품질 공백(G4 직결) 보완.
 
@@ -265,17 +269,25 @@ plugins/spec-distill/tests/                            # Mode A 참조 갱신 + 
 - **R6 — Advisory counter-proposal(약한 제안)**: steelman 대신 추천답만. → 약한 방향이 그냥 통과할 위험. 사용자가 강한 steelman 선택(결정 #3).
 - **R7 — 매 round 웹 보강**: 매 라운드 웹조사. → AP9/P22/AP16 위험 + 인터뷰 속도 저하. 거절(결정 #4).
 - **R8 — steelman을 general-purpose 재사용**: 전용 에이전트 대신 범용. → "scoped agents, default-everything 금지"(Plugin Shape) 약화. 사용자가 전용 신설 선택(결정 #8).
+- **R9 — superpowers를 required prerequisite로 격상**: 인터뷰가 항상 brainstorming으로 넘어가도록 강제(brainstorm 위임). → 인터뷰는 brief까지로 **단독 완결**이라 handoff 강제 불필요(NG7). superpowers 없으면 brief + advisory로 graceful degrade. 거절(결정 #10).
 
 ## Open Questions
 
-- **OQ1** — `writing-plans` 전이를 막는 **PreToolUse 보강 게이트**를 구현할 것인가? 주 방어선(brainstorming user-review 정지 + 기존 Stop hook)으로 충분할 가능성이 크나, brainstorming이 design doc→writing-plans를 한 턴에 체이닝하는 edge case 대비. → plan 단계에서 결정.
-- **OQ2** — `drafting-spec` 스킬을 `revising-design`으로 **rename**할 것인가, 아니면 이름 유지하고 Mode만 retarget할 것인가? 테스트 50+가 `drafting-spec` 참조 → rename 비용 vs 명료성. → plan 단계.
-- **OQ3** — `drafting-spec` Mode A를 **즉시 제거** vs **one-minor deprecation window**(0.12.0에서 경고, 0.13.0 제거)? spec-distill은 0.x라 deprecation window 규칙(≥1.0) 면제 가능하나 안전성 고려. → plan 단계.
-- **OQ4** — interview brief에 superseded LD 추적(supersedes/superseded_by 마커)이 필요한가? brief는 단발 산출물이라 불필요할 수 있음. → plan 단계.
+**OQ1–OQ4 전부 해소됨** (Decision Log #9–#11):
+- **OQ1**(PreToolUse 게이트) → **미구현**, 주 방어선만(brainstorming step 8 정지 + Stop hook, 소스 ground).
+- **OQ2**(drafting-spec rename) → **moot**, drafting-spec 전면 삭제.
+- **OQ3**(Mode A deprecation window) → **moot**, 전면 삭제(pre-1.0, loud CHANGELOG Removed로 충분).
+- **OQ4**(brief supersession 마커) → **불필요**, Tried & Discarded로 방향변경 이력 충분.
+
+**남은 plan-구현 노트(설계 blocker 아님)**:
+- **PN1** — 워크트리 세션이 main-repo `.claude/spec-distill/<sid>/` state를 Edit/Write-tool로 못 고침(Bash는 가능). hook write-path(state_path 라우팅) vs tool edit-path 비대칭 — 이 design 세션에서 실증. §4.8 worktree-path와 같은 클래스. plan에서 state 갱신 경로 구현 시 고려.
+- **PN2** — V8의 "reviewing-spec spec-mode/re-consensus 잔존 없음 확인"에 검증 스크립트 경로(예: `tests/test_reviewing_spec_design_only.sh`)를 plan에서 명시(V1–V7 수준 자동화 통일). (round-4 reviewer advisory)
+- **PN3** — AC7 "세션 총량 soft cap ≤8"의 계측 단위(state 파일 카운터 vs 메모리 내 누적)를 conducting-interview 구현 시 plan에서 명시(모호성 방지). (round-4 reviewer advisory)
+- **PN4** — AC5 verbatim 보존 테스트의 diff 기준(exact string match vs 핵심 URL·statement 포함)을 plan에서 세분화(flakiness 방지). (round-4 reviewer advisory)
 
 ## Concrete Next Action
 
 다음 단계: superpowers `writing-plans` skill 호출(brainstorming 종료 상태).
 - Spec(이 design doc) 경로: `docs/superpowers/specs/2026-05-31-interview-direction-layer-design.md`
 - Plan 산출물: `docs/superpowers/plans/2026-05-31-interview-direction-layer-plan.md`
-- 명령: writing-plans skill invoke (이 design doc을 input으로). plan은 OQ1–OQ4를 먼저 해소하고, Component Map 순서(steelman-builder + template → conducting-interview → drafting/reviewing retarget → reviewer persona → README/version/tests)로 TDD 분해.
+- 명령: writing-plans skill invoke (이 design doc을 input으로). OQ1–OQ4 해소 완료 — plan은 Component Map 순서[steelman-builder + template → conducting-interview(5의례+웹 path(a)+steelman 게이트+brief 작성+optional invoke) → **drafting-spec 디렉토리 삭제** + reviewing-spec design-mode 단순화 → reviewer persona → README/version/tests]로 TDD 분해. PN1(워크트리 state 경로) 고려.
