@@ -33,7 +33,7 @@
 #   go-run           — {kind, command, requires_decision}  (only when main.go found)
 #   makefile         — {kind, target ∈ {run,serve,test}, command, requires_decision?}
 #
-# Blast-radius rule: process-start kinds (dev/start/serve/run/serve) and any
+# Blast-radius rule: process-start kinds (dev/start/serve/run) and any
 # surface whose command body matches a network/deploy/destructive signal carry
 # requires_decision: true. Test-runner kinds are automatic (no requires_decision).
 #
@@ -53,7 +53,7 @@ emit() { printf '%s\n' "$*"; }
 # Returns 0 if the supplied string contains a network/deploy/destructive signal.
 # Used to escalate an otherwise-automatic surface to requires_decision.
 has_danger_signal() {
-  printf '%s' "$1" | grep -qiE 'curl|wget|(^|[^a-z])ssh([^a-z]|$)|scp|rsync|deploy|kubectl|terraform|rm[[:space:]]+-rf|git[[:space:]]+push|npm[[:space:]]+publish|docker[[:space:]]+push|--force'
+  printf '%s' "$1" | grep -qiE 'curl|wget|(^|[^a-z-])ssh([^a-z-]|$)|scp|rsync|deploy|kubectl|terraform|rm[[:space:]]+-rf|git[[:space:]]+push|npm[[:space:]]+publish|docker[[:space:]]+push|--force([[:space:]]|$)'
 }
 
 # --- Project type detection ---

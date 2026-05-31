@@ -209,6 +209,12 @@ RC=$?
 assert_eq "$RC" "0" "T11: exit 0"
 assert_contains "$OUT" "project_type: cli" "T11: project_type=cli"
 
+# --- Test 12: --force-exit must NOT escalate (I1 false-positive fix) ---
+echo "== Test 12: --force-exit not escalated =="
+OUT=$(run_detector "force-flag")
+ff_test_block=$(get_surface_block "$OUT" "name: test")
+assert_not_contains "$ff_test_block" "requires_decision" "T12: jest --force-exit stays automatic"
+
 echo ""
 echo "Tests passed: $PASS, failed: $FAIL"
 [[ $FAIL -eq 0 ]] || exit 1
