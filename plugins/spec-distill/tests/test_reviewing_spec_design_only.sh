@@ -20,7 +20,7 @@ grep -qiE 'reconsensus|re-consensus|\[3\.5\]' "$SKILL" \
   || note PASS "re-consensus [3.5] removed"
 grep -qE 'mode_b_violation' "$SKILL" \
   && note FAIL "mode_b_violation still present" || note PASS "mode_b_violation removed"
-grep -qE '^\| spec \|' "$SKILL" \
+grep -qE '^\|[[:space:]]*\**[[:space:]]*spec\b' "$SKILL" \
   && note FAIL "spec-mode routing rows still present" || note PASS "spec-mode routing rows removed"
 grep -q 'drafting-spec' "$SKILL" \
   && note FAIL "drafting-spec still referenced in reviewing-spec" || note PASS "drafting-spec ref removed from reviewing-spec"

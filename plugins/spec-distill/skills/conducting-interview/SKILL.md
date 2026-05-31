@@ -43,8 +43,6 @@ wall_clock_started_at: <ISO8601>
 trivia_escape_armed: false
 issue_history: []                    # 각 항목: {id, raised_count, dismissed_by_user, accepted_by_user, reconsensus_count, resolved, escalated}
 pending_locked_decisions: []         # 매 round 끝 append (b/d path 명시 응답만). brief frontmatter locked_directions로 변환.
-reconsensus_accepted_ids: []         # reviewing-spec [3.5] sub-step이 기록. Mode B에 allowed_issue_ids로 전달.
-under_revision: []                   # [3.5] sub-step "(3) 추가 인터뷰" 선택 시 LD ID 리스트. conducting-interview re-entry 시 focused interview 진행.
 ---
 ```
 
@@ -238,8 +236,6 @@ state.local.md 로드 시 v0.1.x schema (신규 필드 부재)를 감지하면 *
 
 - `pending_locked_decisions` 부재 → `[]`로 in-memory default.
 - `issue_history[].dismissed_by_user` / `accepted_by_user` / `reconsensus_count` 부재 → `0`으로 in-memory default.
-- `reconsensus_accepted_ids` 부재 → `[]`로 in-memory default.
-- `under_revision` 부재 → `[]`로 in-memory default.
 
 다음 state write 시점에 frontmatter에 자연스럽게 추가 (backward-rewriting 금지 — 명시적 write 시점에만 frontmatter 갱신).
 

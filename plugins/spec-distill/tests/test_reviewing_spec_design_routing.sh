@@ -26,7 +26,7 @@ grep -qE 'design\b.*needs_revise.*brainstorming author' "$SKILL" \
   || note FAIL "AC6 design needs_revise row missing"
 
 # (spec-mode rows removed in v0.12.0)
-grep -qE '^\| spec \|' "$SKILL" \
+grep -qE '^\|[[:space:]]*\**[[:space:]]*spec\b' "$SKILL" \
   && note FAIL "spec-mode routing rows should be removed (v0.12.0)" \
   || note PASS "spec-mode routing rows removed"
 
