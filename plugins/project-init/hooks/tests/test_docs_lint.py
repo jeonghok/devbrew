@@ -399,7 +399,7 @@ class TestR5Fences(unittest.TestCase):
             self.assertEqual(rc, 0)
 
     def test_space_separated_info_string_passes(self):
-        """F5 regression: ``` bash (CommonMark §4.5 space-separated info string) → pass.
+        r"""F5 regression: ``` bash (CommonMark §4.5 space-separated info string) → pass.
 
         Previously the regex ``^ {0,3}` ``` `(\S*)\s*$`` missed this entirely, causing
         the closing fence to be reinterpreted as a bare opener (false-positive +

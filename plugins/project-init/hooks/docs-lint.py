@@ -393,7 +393,11 @@ CHARTER_REQUIRED_LABELS = ("Vision", "Non-goals", "Tech Stack")
 
 def _charter_field(section_body: str, label: str) -> Optional[str]:
     """Return the trimmed value after a ``**<label>:**`` line in the section body,
-    or None if the label line is absent."""
+    or None if the label line is absent.
+
+    The value must be on the same physical line as the label (matching the inline
+    ``**Label:** value`` template format); a value placed on the following line reads
+    as empty."""
     m = re.search(rf"^\*\*{re.escape(label)}:\*\*[ \t]*(.*)$", section_body, re.MULTILINE)
     if m is None:
         return None
@@ -407,6 +411,10 @@ def check_r_charter(target: Path, rel_display: str) -> Optional[str]:
     '## Project Charter' section (so git-workflow-only AGENTS.md files and
     charter detail docs are unaffected). For each required label flags:
     (i) label absent, (ii) empty value, (iii) {{...}} placeholder residue.
+
+    Scope-outs (parallel to R5/R6): a ``**Label:**`` line inside a fenced code block
+    within the section is matched as if it were a real field — known false-positive
+    surface, accepted for parity with R5/R6.
     """
     if target.name != "AGENTS.md":
         return None
