@@ -20,7 +20,7 @@
     },
     {
       "name": "spec-distill",
-      "description": "집요한 인터뷰로 모호함을 명확함으로 변환해 superpowers 호환 spec.md를 생성하는 devbrew-native 플러그인. Drop-in 대체 of superpowers/brainstorming.",
+      "description": "A devbrew-native plugin that turns ambiguity into clarity through relentless interviewing to produce a superpowers-compatible spec.md. Drop-in replacement for superpowers/brainstorming.",
       "source": "./plugins/spec-distill",
       "category": "development"
     }
