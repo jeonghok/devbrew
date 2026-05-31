@@ -22,7 +22,7 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 **Law 1 — Clarity Before Code.** 명세가 모호한 상태에서는 구현이 진행되지 않습니다. 코드를 shipping하는 모든 플러그인은 실제 거절 메커니즘을 가져야 합니다 — 최소한 **구조적 게이트** (필수 섹션: Context/Why, Goals, Non-goals, Constraints, Acceptance Criteria, Files to Modify, Verification Plan, Rejected Alternatives, Metadata)를 silent하게 skip할 수 없어야 합니다. Adversarial self-review는 구조적 baseline 위에 강력 권장, 수치 스코어링은 허용되지만 권장하지 않음 (철학 §5.3). *Trivia escape:* 한 문장으로 설명 가능한 trivia diff (typo, rename, 주석-only, single-file formatting)는 게이트 우회. 정의 및 자격 규정은 philosophy §2.1 / P12 참조.
 
-**Law 2 — Writer and Reviewer Must Never Share a Pass.** 코드를 쓴 턴은 그 코드를 승인할 수 없음. 분리는 프롬프트가 아니라 물리적: `allowed-tools` / `disallowed-tools` frontmatter로 리뷰어가 `Write`/`Edit`을 literally 할 수 없게 만들기. 쓰기 권한이 있는 리뷰어는 리뷰어가 아님. 검증은 load-bearing 인프라, 나중 생각이 아님.
+**Law 2 — Writer and Reviewer Must Never Share a Pass.** 코드를 쓴 턴은 그 코드를 승인할 수 없음. 분리는 프롬프트가 아니라 물리적: `allowed-tools` / `disallowed-tools` frontmatter로 리뷰어가 `Write`/`Edit`을 literally 할 수 없게 만들기. 쓰기 권한이 있는 리뷰어는 리뷰어가 아님. 검증은 load-bearing 인프라, 나중 생각이 아님. *Scoped exception (qg v2.2.0):* 실제 서비스를 실행해야 하는 executor(runtime-verifier)는 `Write`를 갖되, 분리는 도구 deny가 아니라 **orchestrator가 immutable baseline 대비 `git diff`로 product 변경을 잡아 verdict를 ≤FAIL로 강제 + 무커밋 + 샌드박스 폐기**하는 구조적 가드로 보장 — verifier 주장과 독립이라 self-approval이 구조적으로 불가능 (철학 §1 Law 2 R6 note).
 
 **Law 3 — Every Cycle Must Leave the System Smarter.** Compounding은 선택적 wrap-up이 아니라 discoverability check가 붙은 이름 붙은 단계. 사이클이 learning을 생산하면 하니스는 그것을 파일로 capture하고 다음 세션이 실제로 찾을 것임을 확인 — discoverability가 위험하면 인덱스 (`AGENTS.md`/`CLAUDE.md`)를 자동 편집. 어떤 미래 agent도 읽지 않는 파일에 기록하는 것은 theater.
 
