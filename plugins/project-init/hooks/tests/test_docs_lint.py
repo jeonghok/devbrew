@@ -16,6 +16,7 @@ HOOK = Path(__file__).resolve().parent.parent / "docs-lint.py"
 # `if __name__ == "__main__":`) so the consistency test below couples to the
 # REAL constant rather than a parallel literal copy.
 _spec = importlib.util.spec_from_file_location("docs_lint_hook", HOOK)
+assert _spec is not None and _spec.loader is not None, f"could not load hook module from {HOOK}"
 _docs_lint = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_docs_lint)
 CHARTER_REQUIRED_LABELS = _docs_lint.CHARTER_REQUIRED_LABELS
