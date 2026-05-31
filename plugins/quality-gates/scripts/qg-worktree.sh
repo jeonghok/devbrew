@@ -117,7 +117,7 @@ case "${1:-}" in
       src="$main_root/$rel"
       if [[ -e "$src" || -L "$src" ]]; then
         mkdir -p "$sandbox/$(dirname "$rel")"
-        rm -rf "$sandbox/$rel"          # make type-change (file->symlink) faithful
+        rm -rf "$sandbox/$rel" 2>/dev/null  # make type-change (file->symlink) faithful
         cp -a "$src" "$sandbox/$rel"    # -a preserves mode, symlink, binary
       fi
     done < "$tmp_list"
@@ -126,12 +126,12 @@ case "${1:-}" in
     # Honor deletions: a tracked file deleted in the working tree must not
     # survive in the sealed baseline.
     while IFS= read -r -d '' rel; do
-      rm -f "$sandbox/$rel"
+      rm -f "$sandbox/$rel" 2>/dev/null
     done < <(git -C "$main_root" ls-files -d -z)
 
     # Seal the immutable baseline commit B. --no-verify skips any repo hooks;
     # -c identity makes the commit succeed even when git identity is unset.
-    git -C "$sandbox" add -A >/dev/null 2>&1
+    git -C "$sandbox" add -A >/dev/null 2>&1 || die "git add -A failed in sandbox"
     git -C "$sandbox" \
       -c user.email=qg-sandbox@devbrew.local -c user.name='qg sandbox' \
       -c commit.gpgsign=false \

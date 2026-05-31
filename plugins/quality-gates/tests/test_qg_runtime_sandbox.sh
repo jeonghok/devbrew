@@ -88,6 +88,19 @@ SANDBOX=$(printf '%s\n' "$OUT" | sed -n '1p')
   || fail "deleted file survived in sandbox"
 rm -rf "$REPO"
 
+echo "[create-sandbox: staged-but-uncommitted reflected in baseline]"
+REPO=$(mk_repo)
+printf 'STAGED CONTENT\n' > "$REPO/staged.txt"
+( cd "$REPO" && git add staged.txt )   # staged in index, NOT committed
+OUT=$(cd "$REPO" && "$WT" create-sandbox "staged0123456789" 2>/dev/null)
+SANDBOX=$(printf '%s\n' "$OUT" | sed -n '1p')
+BASE=$(printf '%s\n' "$OUT" | sed -n '2p')
+[ -f "$SANDBOX/staged.txt" ] && pass "staged file copied into sandbox" || fail "staged file missing"
+# the sealed baseline B must contain the staged file (so guard diffs are faithful)
+( cd "$SANDBOX" && git cat-file -e "$BASE:staged.txt" 2>/dev/null ) \
+  && pass "staged file present in baseline B" || fail "staged file not in baseline B"
+rm -rf "$REPO"
+
 echo "[create-sandbox: kill switch]"
 REPO=$(mk_repo)
 ( cd "$REPO" && DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1 "$WT" create-sandbox "kill01234567" 2>/dev/null )
