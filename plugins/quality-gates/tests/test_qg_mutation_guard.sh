@@ -73,6 +73,33 @@ G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
   && pass "new symlink -> forced_downgrade: yes" || fail "new symlink not caught"
 rm -rf "$(dirname "$SANDBOX")/../../.." 2>/dev/null
 
+echo "[mutation-guard: tracked deletion -> forced downgrade]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+rm "$SANDBOX/tracked.txt"   # verifier deletes a tracked product file
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
+  && pass "tracked deletion -> forced_downgrade: yes" || fail "deletion not caught"
+printf '%s' "$G" | grep -q "tracked.txt" \
+  && pass "deleted file surfaced in tracked_diff" || fail "deleted file not surfaced"
+rm -rf "$(dirname "$SANDBOX")/../../.." 2>/dev/null
+
+echo "[mutation-guard: YAML-metachar filename stays parseable (I1)]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+printf 'x\n' > "$SANDBOX/[id].tsx"   # bracket = YAML flow-seq metachar
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
+  && pass "[id].tsx new file -> forced_downgrade: yes" || fail "bracket file not caught"
+if python3 -c "import yaml" 2>/dev/null; then
+  if printf '%s' "$G" | python3 -c "import yaml,sys; yaml.safe_load(sys.stdin.read())" 2>/dev/null; then
+    pass "guard output is valid YAML with metachar filename"
+  else
+    fail "guard output not parseable as YAML"
+  fi
+else
+  pass "yaml parse check skipped (pyyaml unavailable)"
+fi
+rm -rf "$(dirname "$SANDBOX")/../../.." 2>/dev/null
+
 echo
 echo "Result: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

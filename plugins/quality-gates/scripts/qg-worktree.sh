@@ -10,7 +10,7 @@
 #                                  (disposable worktree mirroring the working tree,
 #                                   git-ignored files excluded; sealed as commit B)
 #   mutation-guard <sandbox> <B> -> echoes YAML: tracked_diff / disallowed_new_files /
-#                                    forced_downgrade (pure git; added in a later task)
+#                                    forced_downgrade (pure git; §6.7)
 #
 # Sanitize rules: replace '/' with '-', then reject if remainder contains
 # anything outside [A-Za-z0-9._-], or contains '..' substring, or has
@@ -181,15 +181,18 @@ case "${1:-}" in
     [[ -n "$tracked_all" ]] && forced="yes"
     [[ ${#disallowed[@]} -gt 0 ]] && forced="yes"
 
+    # Emit list entries as YAML single-quoted scalars so filenames containing
+    # YAML metacharacters ([, :, #, leading -) stay parseable. Single-quote is
+    # escaped as '' per the YAML spec.
     if [[ -n "$tracked_all" ]]; then
       echo "tracked_diff:"
-      while IFS= read -r f; do echo "  - $f"; done <<< "$tracked_all"
+      while IFS= read -r f; do echo "  - '${f//\'/\'\'}'"; done <<< "$tracked_all"
     else
       echo "tracked_diff: []"
     fi
     if [[ ${#disallowed[@]} -gt 0 ]]; then
       echo "disallowed_new_files:"
-      for f in "${disallowed[@]}"; do echo "  - $f"; done
+      for f in "${disallowed[@]}"; do echo "  - '${f//\'/\'\'}'"; done
     else
       echo "disallowed_new_files: []"
     fi
