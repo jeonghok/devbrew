@@ -957,5 +957,33 @@ class TestRCharter(unittest.TestCase):
             self.assertEqual(rc, 0)
 
 
+class TestTemplateConsistency(unittest.TestCase):
+    """Lock the agents-md-section.md template labels to the hook's
+    CHARTER_REQUIRED_LABELS so a rename in one place can't silently drift."""
+
+    TEMPLATES = HOOK.parent.parent / "templates" / "project"
+
+    def test_agents_section_template_has_required_labels(self):
+        """Each CHARTER_REQUIRED_LABELS entry appears as a bold label in the
+        summary template (AC4 ↔ AC11 coupling)."""
+        text = (self.TEMPLATES / "agents-md-section.md").read_text(encoding="utf-8")
+        for label in ("Vision", "Non-goals", "Tech Stack"):
+            self.assertIn(f"**{label}:**", text)
+
+    def test_charter_template_has_fixed_headings(self):
+        """AC5: charter.md fixed ## headings."""
+        text = (self.TEMPLATES / "charter.md").read_text(encoding="utf-8")
+        for h in ("## Vision", "## Goals", "## Non-goals",
+                  "## Success Criteria / Definition of Done", "## Personas"):
+            self.assertIn(h, text)
+
+    def test_conventions_template_has_fixed_headings(self):
+        """AC6: conventions.md fixed ## headings."""
+        text = (self.TEMPLATES / "conventions.md").read_text(encoding="utf-8")
+        for h in ("## Naming", "## Directory Structure", "## Error Handling",
+                  "## Anti-patterns", "## Build & Test"):
+            self.assertIn(h, text)
+
+
 if __name__ == "__main__":
     unittest.main()
