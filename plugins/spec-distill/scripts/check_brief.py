@@ -148,7 +148,7 @@ def gate(path: Path) -> int:
     if mal:
         failures.append(f"malformed skepticism entries: {len(mal)}")
     # Only check content of §5 when the section exists; absence is already in miss.
-    sec5_absent = any("5." in m for m in miss)
+    sec5_absent = any(m.startswith("5.") for m in miss)
     if not sec5_absent and not tried_discarded_ok(text):
         failures.append("Tried & Discarded empty (no entries and no N/A sentinel)")
     ok = not failures
