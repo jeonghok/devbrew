@@ -70,7 +70,13 @@ else
   else
     SPEC_PATH="$(printf '%s' "$SPEC_JSON" | sed -n 's/.*"spec_path":"\([^"]*\)".*/\1/p')"
     if [[ -n "$SPEC_PATH" && -f "$SPEC_PATH" ]]; then
-      awk '/^#/{is_ac=($0~/[Aa]cceptance [Cc]riteria/);is_b=($0~/^## /||$0~/^# /);if(is_ac){inac=1;print;next}if(inac&&is_b)exit} inac' "$SPEC_PATH" > "$SCRATCH/spec_ac.md"
+      # Extract only the spec's Acceptance Criteria SECTION: start at the AC
+      # header (ANY depth — matches discover-spec.sh's ^#+ eligibility), record
+      # its depth, and stop at the next header of the SAME-OR-SHALLOWER depth.
+      # Deeper subsections (e.g. #### under a ### AC) stay in; sibling/parent
+      # sections do not bleed in. A real '# '-style header is required, so a
+      # prose line merely containing the phrase does not start extraction.
+      awk '/^#+ /{h=$0;sub(/[^#].*/,"",h);d=length(h);if(!inac&&$0~/[Aa]cceptance [Cc]riteria/){inac=1;acd=d;print;next}if(inac&&d<=acd)exit} inac' "$SPEC_PATH" > "$SCRATCH/spec_ac.md"
       if [[ -s "$SCRATCH/spec_ac.md" ]]; then
         SPEC_AC="$SCRATCH/spec_ac.md"
         echo "[quality-gates] codex spec context: injected Acceptance Criteria from $SPEC_PATH" >&2
