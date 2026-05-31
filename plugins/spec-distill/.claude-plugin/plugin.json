@@ -1,7 +1,7 @@
 {
   "name": "spec-distill",
   "description": "Relentless interviewing that turns ambiguity into clarity to produce a superpowers-compatible spec.md. A devbrew Laws 1+2 instantiation (physical Writer/Reviewer separation, 4-block Korean Socratic interview).",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "author": {
     "name": "jeonghokim"
   }

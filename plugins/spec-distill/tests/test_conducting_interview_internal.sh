@@ -12,10 +12,15 @@ REVIEW="$PLUGIN_DIR/skills/reviewing-spec/SKILL.md"
 fail=0
 note() { echo "[$1] $2"; [[ "$1" == "FAIL" ]] && fail=$((fail+1)) || true; }
 
-# AC1 — user-invocable: false 존재 (메뉴 은닉)
-grep -q '^user-invocable: false$' "$SKILL" \
-    && note PASS "AC1: user-invocable: false present" \
-    || note FAIL "AC1: user-invocable: false MISSING"
+# AC1 — user-invocable: false가 frontmatter 블록 안에 존재 (메뉴 은닉).
+# frontmatter 한정: 첫 '---'…두 번째 '---' 블록만 추출 후 검사. 본문(markdown)에
+# 우연히 같은 문자열이 있어도 통과하지 않도록 (menu-visibility를 실제 제어하는
+# 위치에 키가 있을 때만 PASS). 파이프 대신 command-sub+herestring으로
+# set -uo pipefail SIGPIPE 오탐 회피.
+frontmatter="$(awk '/^---$/{c++} c==1' "$SKILL")"
+grep -q '^user-invocable: false$' <<<"$frontmatter" \
+    && note PASS "AC1: user-invocable: false present (frontmatter-scoped)" \
+    || note FAIL "AC1: user-invocable: false MISSING from frontmatter"
 
 # AC2 — 기존 frontmatter 키 보존 (의미 변경 없음)
 grep -q '^name: conducting-interview$' "$SKILL" \
