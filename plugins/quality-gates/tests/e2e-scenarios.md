@@ -132,11 +132,10 @@ Agents (model + cost_class):
   scout: model=sonnet, cost_class=low
   adversarial: model=opus, cost_class=low
   synthesizer: model=sonnet, cost_class=low
-  plan-verifier: model=sonnet, cost_class=low
-  runtime-verifier: model=sonnet, cost_class=low
+  runtime-verifier: model=inherit, cost_class=variable
 
 SKILL cost_class: variable
-plugin.json version: 1.32.x
+plugin.json version: 2.2.x
 Hooks registered:
   PostToolUse: post-tool-use-session-tracker.py
   SessionStart: session-start-advisor.py

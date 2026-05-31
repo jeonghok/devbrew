@@ -3,6 +3,53 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.2.0] — 2026-05-31
+
+`runtime-verifier`를 read-only 관찰자에서 **git-worktree 샌드박스 기능-executor**로 전환.
+서비스를 띄우고 real user flow를 구동하며 spec Acceptance Criteria 대비 동작을
+**증거-접지** 방식으로 단언한다. Write를 허용하되, orchestrator가 immutable baseline
+commit 대비 `git diff`로 product 변경을 ground-truth로 잡아 **PASS를 구조적으로 차단**하고
+무커밋·샌드박스 폐기로 Law 2 self-approval을 물리적으로 봉쇄한다. 운영 DB/네트워크는
+git-ignored 파일(prod `.env`) 미복사로 원천 미접근.
+
+### Added
+- **`scripts/qg-worktree.sh create-sandbox`**: working-tree를 byte-faithful 반영한
+  일회용 detached worktree 생성(`cp -a`로 mode/symlink/binary 보존, git-ignored 미복사,
+  deletion 반영) + immutable baseline commit `B` 봉인. 출력=경로+SHA 2줄.
+- **`scripts/qg-worktree.sh mutation-guard`**: `(sandbox, B)`만 입력받는 순수-git product-
+  mutation oracle. `tracked_diff` / `disallowed_new_files`(신규 non-ignored 파일 + 모든 신규
+  symlink) / `forced_downgrade` emit. verifier 자기판단과 독립 → Law 2 구조적 가드.
+- **`detect-runtime.sh` blast-radius 분류**: process-start kind(dev/start/serve, cargo-run,
+  go-run, makefile run/serve) + 네트워크/배포/파괴 신호 매칭 surface에 `requires_decision: true`.
+  test runner kind은 자동.
+- **Upfront Execution Plan** (SKILL): `requires_decision` surface가 있을 때만 1회 발화해
+  gate 범위·runtime 범위(`approved_surfaces`)·block 정책(`stop`/`skip`/`ask`)을 확정.
+  그 외 zero-click.
+- **신규 테스트**: `test_qg_runtime_sandbox.sh`, `test_qg_mutation_guard.sh`,
+  `test_detect_runtime.sh` blast-radius 확장, fixtures `gate3/cli-tool`·`gate3/danger-signal`·`gate3/force-flag`.
+- **kill switch `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`**: 샌드박스 끄고 read-only smoke
+  fallback + loud log.
+
+### Changed
+- **`agents/runtime-verifier.md`**: `model: sonnet → inherit`; `allowedTools`에
+  `Write`/`Edit`/`MultiEdit` + chrome-devtools 상호작용 도구(click/fill/fill_form/type_text/
+  hover/press_key/evaluate_script) 추가; `disallowedTools`는 `NotebookEdit`만 유지.
+  body를 sandbox-executor 정체성 + spec AC 기능 단언 + evidence-log
+  `writes`/`functional_assertions` 섹션으로 재작성.
+- **`SKILL.md`**: Runtime gate를 R0(sandbox)~R6(routing)로 재배선, mutation-guard 결과로
+  verdict ≤FAIL 강제, spec AC thread, blocked-path 정책 라우팅, cost heads-up. v2.2.0.
+- **`check-allowed-tools-order.sh`**: 정전 allowlist에 `qg-worktree.sh` 추가.
+
+### Security
+- **Law 2 메커니즘 이전 (도구 deny → git-diff 가드).** `runtime-verifier`의 self-approval
+  방지가 `disallowedTools: [Write]`(behavioral tool deny)에서 **orchestrator의 immutable-
+  baseline git-diff 가드**(구조적, verifier 주장과 독립)로 이동. 외부 표면(`/qg`)은
+  하위호환(additive + gated)이라 minor bump. `test-scope-validator`/`security-reviewer`/
+  `adversarial`은 read-only reviewer로 불변. persona 편집은 보안-민감 변경.
+- **운영 안전.** 샌드박스가 git-ignored 파일(prod `.env`/자격증명/deps)을 복사하지 않아
+  운영 DB/네트워크 접근 경로를 원천 차단. process-start/네트워크/파괴 surface는 upfront
+  승인 게이트(blast-radius) 뒤로. OS-수준 egress 격리는 명시적 non-goal(한계 인정).
+
 ## [2.1.0] — 2026-05-31
 
 qg가 처음으로 **사용자 프로젝트 spec을 단일 truth로 read**. cycle 위계(spec=truth ⊃
