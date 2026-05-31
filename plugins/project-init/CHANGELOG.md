@@ -5,6 +5,24 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [1.6.0] — 2026-05-31
+
+### Added
+
+- **Project Charter surface** — `/project-init`에 charter step(Step 3.5) 추가. **Phase 0** (fact-routing): `package.json`/`pyproject.toml`/`go.mod`/`Cargo.toml`/`pom.xml`/`build.gradle`/`Gemfile`/`composer.json` 등 manifest와 디렉토리 구조를 스캔해 tech-stack을 `[감지됨]` 라벨로 자동 후보 생성. **Phase 1**: AskUserQuestion ≤4개(vision·non-goals·핵심 conventions·tech-stack 확인)만 사용자에게 묻는다. manifest 부재 시 loud fallback으로 직접 질문 downgrade (C6).
+- 헌장 발행: `AGENTS.md`에 `## Project Charter` 요약 섹션(≤약 25줄) + `docs/project/charter.md`·`docs/project/conventions.md`(+ 조건부 `docs/project/glossary.md`) 상세 파일. `CLAUDE.md`는 `@AGENTS.md` thin pointer 유지.
+- `templates/project/` — 4개 skeleton(`agents-md-section.md`, `charter.md`, `conventions.md`, `glossary.md`). placeholder만 있는 빈 골격이며 의견 콘텐츠를 주입하지 않는다 (charter 콘텐츠 100% 사용자 elicited).
+- `hooks/docs-lint.py` — additive 확장. `is_charter_doc()` predicate로 `docs/project/*.md`를 lint 대상에 추가(기존 4-path exact-set 불변, regression-free) + R-charter 룰: `AGENTS.md`의 `## Project Charter` 섹션(heading-bounded)에서 vision·non-goals·tech-stack 레이블의 존재·비어있지 않음·`{{...}}` placeholder 잔존 없음을 advisory로 검출. **새 hook 파일·새 `hooks.json` entry·새 kill-switch 토큰 0개** — 기존 `DEVBREW_DISABLE_PROJECT_INIT=1` / `DEVBREW_SKIP_HOOKS=project-init:docs-lint`가 헌장 검증까지 커버.
+- `hooks/tests/` — charter target / R-charter / template-consistency 테스트 + smoke fixtures(`charter_complete`, `charter_missing_subsection`, `charter_placeholder_residue`, `charter_doc_target`). `smoke.sh`에 `TARGETS` parallel array + length-parity guard 추가(docs/project/*.md 타겟 지원).
+
+### Changed
+
+- `commands/project-init.md` — Step 1 charter 상태 감지(파일 레벨 C-S1/C-S2/C-S3 + 도출 공식), Step 3.5 charter 흐름(Phase 0/1 + bounded Law 1 게이트), Step 4e 헌장 발행 + 멱등 state matrix, Step 5 확인 메시지에 헌장 파일 추가.
+
+### Rationale
+
+- spec-distill(per-feature `spec.md`)·quality-gates(review) 위에 비어 있던 **프로젝트 수준 durable 정의** 레이어를 채운다. 헌장이 AGENTS.md 계층에 거주하므로 매 세션·모든 spec-distill 인터뷰가 passive 상속(추가 런타임 비용 0). v1.5.0이 제거한 canned `## LLM Coding Guidelines`와 정반대 방향 — devbrew 의견이 아니라 사용자가 elicit한 정의만 캡처한다.
+
 ## [1.5.0] — 2026-05-26
 
 ### Removed
