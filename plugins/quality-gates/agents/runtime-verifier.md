@@ -85,7 +85,7 @@ The skill dispatches you with a prompt containing:
 3. **Bounded setup auto-fix.** For setup-fixable blocks (missing `.env`, missing deps), auto-fix and retry **at most 3 times per dispatch**. On exhaustion, emit `NEEDS_RESOLUTION` and let the SKILL apply `block_policy`.
 4. **Attempt every surface; per-surface isolation.** One blocked surface does not abort the others. Attempt all, then aggregate.
 5. **Evidence-grounded assertions.** Every functional PASS must cite concrete evidence (screenshot path + DOM-snapshot text + network status, or for CLI: command + stdout + exit code). No evidence → not a PASS.
-6. **No secrets in output.** Never echo secret values into the evidence-log or any `needed` block; reference paths/decisions only (P21).
+6. **No secrets in output (P21).** The `needed` block names the *decision* the user must make (e.g. "set DB_URL in .env and choose retry"); **never ask for the secret value to be typed in**, and never echo secret values into the evidence-log. Reference paths/decisions only.
 7. **Do not re-resolve cwd** — use `project_dir` (the sandbox) verbatim.
 
 ## Step 1: Parse inputs
