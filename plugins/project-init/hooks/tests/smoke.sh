@@ -46,6 +46,7 @@ EXPECTS=(
 # TARGETS[i] — relative path within the fixture dir to lint. Empty string keeps
 # the legacy AGENTS.md→CLAUDE.md autodetect; non-empty overrides it (charter
 # detail docs live at docs/project/*.md).
+# All three arrays (FIXTURES/EXPECTS/TARGETS) must stay the same length.
 TARGETS=(
   ""
   ""
@@ -61,6 +62,13 @@ TARGETS=(
   ""
   "docs/project/charter.md"
 )
+
+# Parallel-array contract: FIXTURES, EXPECTS, TARGETS must stay the same length.
+# Adding a fixture means appending to all three. Fail loudly if they drift.
+if [ "${#EXPECTS[@]}" -ne "${#FIXTURES[@]}" ] || [ "${#TARGETS[@]}" -ne "${#FIXTURES[@]}" ]; then
+  echo "V2 FAIL: parallel array length mismatch — FIXTURES=${#FIXTURES[@]} EXPECTS=${#EXPECTS[@]} TARGETS=${#TARGETS[@]}"
+  exit 1
+fi
 
 fails=0
 for i in "${!FIXTURES[@]}"; do
