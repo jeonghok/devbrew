@@ -52,3 +52,58 @@ def test_AC46_test_scope_validator_missing_key_raises():
 def test_AC47_test_scope_validator_invalid_yaml_raises():
     with pytest.raises(AssertionError):
         run_agent_stub("test-scope-validator", "p", ": : invalid")
+
+
+# --- v2.1.0: ac_coverage advisory block (spec present) + no-spec fallback ---
+
+TEST_SCOPE_WITH_AC = """
+test_scope_verdicts:
+  - file: tests/test_foo.py
+    classification: aligned
+    evidence: matches AC3 behavior
+summary: 1 aligned, 0 outdated-suspicion, 0 cherry-pick-suspicion, 0 unclear
+ac_coverage:
+  note: "advisory only — does not block the Runtime gate"
+  items:
+    - id: AC1
+      status: covered
+      covered_by: ["tests/test_foo.py::test_ac1"]
+    - id: AC2
+      status: uncovered
+      covered_by: []
+"""
+
+TEST_SCOPE_NO_SPEC = """
+test_scope_verdicts:
+  - file: tests/test_foo.py
+    classification: aligned
+    evidence: matches plan item P3
+summary: 1 aligned, 0 outdated-suspicion, 0 cherry-pick-suspicion, 0 unclear
+"""
+
+
+def test_ac_coverage_schema_when_spec_present():
+    """When a spec is found, ac_coverage carries per-AC verdicts + advisory note."""
+    parsed = run_agent_stub("test-scope-validator", "p", TEST_SCOPE_WITH_AC)
+    assert_yaml_schema(
+        parsed,
+        required_keys=["test_scope_verdicts", "ac_coverage", "summary"],
+    )
+    ac = parsed["ac_coverage"]
+    assert_yaml_schema(ac, required_keys=["note", "items"])
+    # note must carry two stable substrings — robust to em-dash glyph variants.
+    assert "advisory only" in ac["note"]
+    assert "does not block" in ac["note"]
+    for item in ac["items"]:
+        assert_yaml_schema(
+            item,
+            required_keys=["id", "status", "covered_by"],
+            enum={"status": ["covered", "uncovered"]},
+        )
+
+
+def test_fallback_omits_ac_coverage_when_no_spec():
+    """No spec -> ac_coverage omitted; plan-based per-file verdicts still emitted."""
+    parsed = run_agent_stub("test-scope-validator", "p", TEST_SCOPE_NO_SPEC)
+    assert_yaml_schema(parsed, required_keys=["test_scope_verdicts", "summary"])
+    assert "ac_coverage" not in parsed

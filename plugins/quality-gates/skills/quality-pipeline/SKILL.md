@@ -33,7 +33,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v2.0.0)
+# Quality Gates — In-Turn Orchestrator (v2.1.0)
 
 You are running the **full quality-gates pipeline** in a single assistant
 turn. You dispatch the two gates serially in order. At decision points
@@ -135,7 +135,18 @@ values are a contract violation, not "treat as fresh":
 Parse from `/qg` invocation:
 - `gate` (optional): `review`, `runtime`, or absent (full pipeline).
 - `plan_path` (optional): defaults to "auto" (`scripts/discover-plan.sh`).
-  Consumed only by the Runtime gate's test-scope-validator (no Gate-1 verifier).
+  Threaded as a secondary scope hint to the Runtime gate's test-scope-validator
+  and the Review gate's security-reviewer / adversarial dispatches. The Gate-1
+  plan-verifier was removed in v2.0.0 — plan is no longer verified, only hinted.
+- `spec_path` (optional): defaults to "auto" (`scripts/discover-spec.sh`).
+  The project spec is the Acceptance Criteria truth. Consumed by the Runtime
+  gate's test-scope-validator (used to assess per-AC coverage — emitted as the advisory `ac_coverage` output) and by
+  the Review gate codex path (spec AC injected into `<spec_context>`,
+  script-internal in `run_codex_reviewer.sh`). If
+  `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1`, pass `spec_path: none` to the
+  test-scope-validator dispatch — this forces the no-spec fallback (ac_coverage
+  omitted, plan-based scope only). All spec behavior is advisory; it never
+  blocks a gate.
 - `pr_url` (optional).
 - `skip_runtime` (flag): if set, skip the Runtime gate.
 - `paths` (optional, repeatable): scope override for the Review gate diff.
@@ -211,6 +222,12 @@ Agent({
    the codex reviewer (if `detect_codex.sh` returns true) are dispatched
    with their own contracts; they do not require `project_dir` because
    they re-derive scope from the inlined diff blob.
+   The codex reviewer additionally injects the project spec's Acceptance
+   Criteria into its `<spec_context>` slot — resolved **script-internally** by
+   `run_codex_reviewer.sh` (via `discover-spec.sh`), so no `spec_path` dispatch
+   field and no `allowed-tools` change are needed here (invocation parity with
+   the existing `discover-plan.sh` mechanism). `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1`
+   empties the slot — `run_codex_reviewer.sh` reads the env variable directly, so the orchestrator passes no additional argument for the codex path.
 4. Dispatch `quality-gates:synthesizer` (or local synthesize_findings.py)
    to consolidate findings.
 5. Compute boundary outcome:
@@ -370,9 +387,10 @@ If `skip_runtime` was set in arguments, skip this entire section.
 Agent({
   subagent_type: "quality-gates:test-scope-validator",
   description: "Classify scope-relevant test files (Runtime gate)",
-  prompt: "Validate test scope against current diff and plan items.
+  prompt: "Validate test scope against current diff, spec acceptance criteria, and plan items.
     project_dir: \"$project_dir\"
-    plan_path: <path or 'auto'>
+    spec_path: <path or 'auto'; pass 'none' if DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1>
+    plan_path: <path or 'auto'; no kill switch — plan is always a secondary hint>
     candidate_test_files: <list from scope-detection step>"
 })
 ```
@@ -457,7 +475,7 @@ Branch:
 Print:
 
 ```markdown
-## Quality Gates Pipeline — Complete (v2.0.0)
+## Quality Gates Pipeline — Complete (v2.1.0)
 
 - **Review gate**: <clean iter N | proceeded-with-findings iter N | aborted iter N | skipped>
 - **Runtime gate**: <clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>

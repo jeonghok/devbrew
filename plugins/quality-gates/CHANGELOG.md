@@ -3,6 +3,50 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.1.0] — 2026-05-31
+
+qg가 처음으로 **사용자 프로젝트 spec을 단일 truth로 read**. cycle 위계(spec=truth ⊃
+plan=구현 방식)를 instantiate — 그동안 qg는 plan만 읽고 spec은 한 번도 읽지 않아
+`test-scope-validator`가 입력을 "spec/plan"으로 융합하고 있었음. spec-conformance는
+코드가 *존재*해야만 가능하므로 review/verify 단계인 qg만 닫을 수 있는 비중복 루프
+(plan-verify를 v2.0.0이 제거한 것과 비대칭). **advisory only — gate를 block하지 않음.**
+
+### Added
+- **`scripts/discover-spec.sh`** + **`tests/test_discover_spec.sh`**: 프로젝트 spec
+  우선순위 탐색(`--spec` → `docs/superpowers/specs/*.md`). AC-섹션 적격성 + 최신 mtime
+  tiebreak. legacy-global 소스 없음(spec은 프로젝트 artifact). `discover-plan.sh` 거울.
+- **`test-scope-validator` `ac_coverage` advisory 블록**: spec 발견 시 AC별
+  covered/uncovered + `covered_by` 테스트 ref. note "advisory only — does not block".
+- **codex `<spec_context>` 슬롯**: v2.0.0에서 `/dev/null`로 죽어 있던 `<plan_context>`
+  슬롯을 부활 — `run_codex_reviewer.sh`가 spec AC 섹션을 script-internal로 추출·주입.
+- **kill switch `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1`**: spec이 있어도 no-spec 경로
+  강제(ac_coverage 생략, codex spec context 비움; validator는 plan-기반 계속).
+- **README "Spec Discovery Sources"** 절 + "Principles Instantiated"에 **C66**.
+
+### Changed
+- **`test-scope-validator` 기준 축 전환**: 입력 융합(`spec/plan markdown`)을
+  `spec_path`(AC truth, primary) + `plan_path`(구현-방식 보조 hint)로 분리.
+  cherry-pick-suspicion 기준이 "plan scope" → "spec acceptance criteria scope에
+  orthogonal"로 재정의. plan은 강등(제거 아님).
+- **`build_codex_prompt.py`**: `<plan_context>`/`{{PLAN_SUMMARY}}`/`<plan_summary_file>`
+  → `<spec_context>`/`{{SPEC_AC}}`/`<spec_ac_file>`.
+- **`run_codex_reviewer.sh`**: `PLAN_SUMMARY_FILE`/`PLAN_SUMMARY` → `SPEC_AC_FILE`/`SPEC_AC`;
+  spec discovery + AC 섹션 awk 추출 + spec 부재 시 loud log를 script-internal로 추가.
+- **`SKILL.md`**: `spec_path` 인자 문서화 + test-scope-validator dispatch에 `spec_path:` 줄.
+  `allowed-tools` frontmatter는 불변(invocation parity).
+
+### Fixed
+- **`agents/test-scope-validator.md:54` spec/plan 융합 해소**: 입력을 문자 그대로
+  "path to the spec/plan markdown"으로 적어 spec(truth)과 plan(파생 hint)을 교환 가능한
+  한 덩어리로 취급하던 버그 수정 — 위계 복원.
+
+### Unchanged (의도적 보존)
+- **`scripts/discover-plan.sh` + `tests/test_discover_plan.sh`**: byte-identical.
+  plan *discovery*는 존속(보조 hint), plan *verify*만 v2.0.0이 제거.
+- **철학 문서**: 새 P#/AP# 없음 — C66 + Law 1 instantiation(devbrew design-lightness).
+- **reviewer agent `disallowedTools` 격리**: 불변(Law 2). spec 읽기는 read-only.
+- **advisory invariant**: `ac_coverage`·spec-conformance는 Runtime gate를 block 안 함.
+
 ## [2.0.0] — 2026-05-30
 
 **BREAKING.** Gate 1(plan verification) 제거 + wall-clock budget 제거 + 두 게이트

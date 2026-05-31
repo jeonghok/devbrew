@@ -33,6 +33,7 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
   is reused as a **progression primitive** at every gate boundary and Gate
   2 fix-loop iteration. The same tool that gates subagent fan-out now
   gates inter-gate progression — no new principle ID needed.
+- **C66 (Linked Artifact Flow) — spec을 truth로 instantiate** (v2.1.0) — qg가 처음으로 사용자 프로젝트 spec을 읽어(`scripts/discover-spec.sh`) test-scope-validator의 기준 축을 plan items → **spec Acceptance Criteria**로 전환하고, AC별 커버리지를 advisory `ac_coverage` 블록으로 surface하며, codex 경로(`run_codex_reviewer.sh`)가 spec AC를 `<spec_context>`에 주입. cycle 위계(spec=truth ⊃ plan=구현 방식)를 instantiate — spec→test 커버리지를 역방향 walk. plan은 구현-방식 보조 hint로 강등(제거 아님; `discover-plan.sh` byte-identical). **advisory only — Runtime gate를 block하지 않음.** spec 부재 시 loud log + v2.0.0 기능 동작 fallback. kill switch `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1`.
 
 ## 구조
 
@@ -63,6 +64,7 @@ quality-gates/
 │   ├── check-trivia.sh                       # Trivia escape 감지기
 │   ├── filter-docs.sh                        # 코드 reviewer용 docs path 필터
 │   ├── discover-plan.sh                      # Plan 파일 우선순위 탐색 (Runtime gate test-scope-validator)
+│   ├── discover-spec.sh                      # Spec 파일 우선순위 탐색 (test-scope-validator + codex; AC-섹션 적격성)
 │   ├── detect-runtime.sh                     # Runtime gate 런타임 surface 탐지 (manifest 산출)
 │   ├── compute-test-scope-candidates.sh      # Runtime gate Step 2.5 — 후보 test 파일 산출 (Python/JS/TS heuristic)
 │   ├── detect_codex.sh                       # Codex CLI 7-case probe (version/auth/sandbox/kill-switch/timeout)
@@ -272,6 +274,25 @@ Runtime gate의 test-scope-validator가 `--plan <path>`를 받지 않으면 다�
 
 알고리즘 자체는 `scripts/discover-plan.sh`에 분리되어 `tests/test_discover_plan.sh` 10개 fixture로 검증됩니다.
 
+## Spec Discovery Sources (Runtime gate test-scope-validator + Review gate codex)
+
+Runtime gate의 test-scope-validator와 Review gate codex가 명시적 spec 경로를 받지 않으면 다음 우선순위로 사용자 프로젝트의 **spec**(Acceptance Criteria의 truth)을 탐색합니다 (`scripts/discover-spec.sh`; 위→아래 첫 자격 candidate에서 멈춤):
+
+| 우선순위 | 위치 | 자격 조건 |
+|---|---|---|
+| 1 | `--spec <path>` (CLI 명시) | 존재하면 사용. 없으면 SKIP (fallback 안 함) |
+| 2 | `./docs/superpowers/specs/*.md` (project-local) | `^#+ .*Acceptance Criteria` 섹션 헤더 1개 이상 |
+
+plan과 달리 **legacy-global 소스는 없습니다** — spec은 프로젝트 artifact (글로벌 위치 관행 부재). 자격 파일 중 mtime 가장 최근이 선택됩니다.
+
+**advisory only.** spec이 발견되면 test-scope-validator가 `ac_coverage` 블록(`note: "advisory only — does not block"` + AC별 covered/uncovered + covered_by 테스트 ref)을 emit하고, codex 경로(`run_codex_reviewer.sh`)가 spec의 AC 섹션을 `<spec_context>`에 script-internal로 주입합니다. 어느 경우에도 Runtime gate verdict를 **block하지 않습니다.** spec이 없으면 loud log를 출력하고 v2.0.0 동작(plan-기반 scope)으로 fallback합니다.
+
+**kill switch:** `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1` — spec이 있어도 no-spec 경로를 강제 (ac_coverage 생략, codex `<spec_context>` 비움; validator는 plan-기반 계속).
+
+**Soft dependency:** project-local source는 `superpowers:brainstorming` / `spec-distill`이 spec을 저장하는 경로 (`docs/superpowers/specs/`)와 동일합니다. spec-distill / `superpowers:brainstorming` 플러그인을 설치하지 않았더라도 동일 경로에 `.md` 파일을 직접 두면 동작합니다.
+
+알고리즘 자체는 `scripts/discover-spec.sh`에 분리되어 `tests/test_discover_spec.sh` 8개 fixture로 검증됩니다.
+
 ## 사전 요건
 
 | 플러그인 | 필수 | 사용처 | 목적 |
@@ -315,6 +336,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 |---|---|
 | `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION=1` | Runtime gate Step 2.5 (test scope validation) 완전 skip. `DEVBREW_SKIP_HOOKS=quality-gates:runtime-test-scope`과 동일. |
 | `DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1` | `/qg branch <name>` auto-worktree 기능 disable (`/qg branch` no-arg는 영향 없음). |
+| `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1` | spec 발견 시에도 no-spec 경로 강제 (ac_coverage 생략, codex `<spec_context>` 비움; validator는 plan-기반 계속). |
 
 **Hook 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:<key>,quality-gates:<key2>...`):
 
