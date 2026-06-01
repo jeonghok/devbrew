@@ -176,6 +176,7 @@ SNAP="$(git -C "$sandbox" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
 | `excl_common_sha` | common-dir `info/exclude` 내용 해시 (없으면 `absent`) | C-A |
 | `excl_wt_sha` | per-worktree gitdir `info/exclude` 내용 해시 (없으면 `absent`) | C-A |
 | `excludesfile` / `excludesfile_sha` | `git config --get core.excludesFile` 값 + 가리키는 파일 내용 해시 | C-A 변종 |
+| `logallrefupdates` | `git config --get core.logAllRefUpdates` 값 | C-D commit+reset의 reflog-억제 우회 차단 (NEW-05) |
 
 - snapshot은 사이드채널 → **출력 계약 2줄(sandbox, base) 그대로**. `git worktree remove`가
   gitdir째 삭제하므로 auto-clean.
@@ -186,6 +187,16 @@ SNAP="$(git -C "$sandbox" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
   commit+reset 후 reflog 해시가 변함을 재현 확인. → reflog 가용성은 *closed*(open-question
   아님). 만일의 빈-reflog 환경 대비: snapshot 캡처 시 reflog가 비면 `head_reflog_sha=empty`로
   기록하고 가드는 동일 비교 규칙(불일치=`forced=yes`) 적용 — 빈 값도 정합 비교됨.
+- **reflog 억제 우회 차단(NEW-05, review round 2):** verifier(Bash+Write)가
+  `core.logAllRefUpdates=false`로 reflog를 끈 뒤 commit+`reset --hard B`하면 reflog가 안 자라
+  layer 3가 무력화될 수 있다(reset이 tree를 복원해 layer 1도 무력). 이중 방어: (a)
+  create-sandbox가 baseline commit *이전에* `git -C "$sandbox" config core.logAllRefUpdates
+  true`로 로깅을 보장(default값이지만 host pre-set=false 대비) → baseline·이후 HEAD 이동이
+  모두 로깅됨; (b) snapshot이 `logallrefupdates` 값을 캡처하고 **layer 2가 이를 비교** —
+  verifier가 snapshot 이후 끄면 config tamper로 `forced=yes`. 두 경로(reflog 자람 / config
+  변조)가 모두 닫힘. 잔여 한계(host가 reflog를 *물리적으로* 비활성화한 비정상 환경)는 원본
+  §3 OS-sandbox non-goal 상속 — 단 `logAllRefUpdates=true`는 non-bare repo의 git default라
+  실무 corner case.
 - **common-dir ≠ per-worktree gitdir(중복 아님):** 샌드박스는 항상 *linked* worktree
   (`git worktree add`)라 common-dir(메인 `.git`)과 per-worktree gitdir
   (`.git/worktrees/rt-<sid>`)이 항상 구별됨 → `excl_common_sha`/`excl_wt_sha`는 서로 다른
@@ -205,9 +216,12 @@ SNAP="$(git -C "$sandbox" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
 `tracked_diff: []` / `disallowed_new_files: []` / `forced_downgrade: yes` /
 `guard_error: '<reason>'` emit 후 **non-zero exit `=4` (locked; die=2·kill-switch=3과
 구별)**. 회귀 테스트는 exit code가 정확히 4인지 assert(H-AC1).
-detection 명령의 `2>/dev/null` 폐기 → stderr 캡처해 reason에. snapshot 파일 부재도
-`guard_fail`(우리가 snapshot 안 뜬 sandbox는 indeterminate). baseline `B` 존재 확인
-(`cat-file -e`)은 유지하되 `guard_fail`로.
+detection 명령의 `2>/dev/null` 폐기 → stderr 캡처해 reason에. snapshot 파일 부재 **또는
+필수 key 누락/truncated**(예: create-sandbox 중 kill·디스크 포화)도 `guard_fail`(snapshot이
+안 떴거나 손상된 sandbox는 indeterminate, NEW-03). 구현: 각 필수 key
+(`head_reflog_sha`/`stash_sha`/`excl_common_sha`/`excl_wt_sha`/`excludesfile`/
+`logallrefupdates`)의 *존재*를 파싱 시 assert — 누락 key를 빈 문자열로 읽어 `""==""` 비교로
+`forced=no`가 되는 경로를 봉쇄. baseline `B` 존재 확인(`cat-file -e`)도 `guard_fail`로.
 
 **계층 1 — content tree-hash (C-E + honest mutation).** fresh 임시 index로 working tree
 재독:
@@ -232,8 +246,10 @@ rm -f "$idx"   # 사용 후 즉시 제거
   계층 2는 `info/exclude`/`core.excludesFile`(untracked 채널)을 보고, tracked `.gitignore`는
   계층 1이 커버 — 두 채널 분담으로 ignore 우회 전부 닫힘.
 
-**계층 2 — ignore-channel tamper (C-A).** §6.1의 exclude/excludesFile 해시를 *지금* 재계산해
-snapshot과 비교. 불일치 → `forced=yes` + `guard_flags`에 `ignore_channel_tampered`.
+**계층 2 — ignore-channel + config tamper (C-A, NEW-05).** §6.1의 exclude/excludesFile 해시
+**및 `core.logAllRefUpdates` 값**을 *지금* 재계산해 snapshot과 비교. 불일치 → `forced=yes` +
+`guard_flags`에 `ignore_channel_tampered`(exclude/excludesFile 변경) 또는
+`reflog_logging_tampered`(logAllRefUpdates 변경 — verifier가 reflog를 꺼 C-D를 숨기려는 시도).
 (info/exclude로 숨긴 파일은 `add -A`가 못 보지만 *tamper 자체*를 잡아 ≤FAIL.)
 
 **계층 3 — snapshot delta (C-D).** `head_reflog_sha`·`stash_sha`를 지금 재계산해 비교.
@@ -268,10 +284,15 @@ snapshot과 비교. 불일치 → `forced=yes` + `guard_flags`에 `ignore_channe
 | C-A `.gitignore` 수정 | **1** | tracked `.gitignore` 변경이 content-hash에 반영 |
 | C-D stash push | 3 | `stash_sha` 불일치 |
 | C-D commit + `reset --hard B` | 3 | `head_reflog_sha` 불일치 (working tree는 복원되어 계층 1엔 안 잡힘) |
+| C-D + reflog 억제(`logAllRefUpdates=false`) | 2 | config tamper 비교 → `reflog_logging_tampered` (NEW-05) |
 | C-B git 실패 | 0 | rc≠0 → `guard_fail` exit 4 |
-| snapshot 부재 | 0 | fail-closed |
+| snapshot 부재 / 필수 key 누락·손상 | 0 | fail-closed (NEW-03) |
 
-primary=계층, 빈 셀 없음 → coverage gap 없음(독립 검증 가능).
+**matrix scope:** 위 표는 **guard-script 계층(0–3)** 범위다. **C-C(SKILL R4 fail-closed
+에러경로)는 guard script가 아니라 SKILL orchestration 계층(§6.4)에서 처리** — H-AC6 + §9
+정적 테스트가 별도로 커버. 따라서 *5개 우회 전부 닫힘 = 이 matrix(C-A·C-B·C-D·C-E) + §6.4
+(C-C)의 합산*이며, matrix 자체에 빈 셀은 없다(guard-script 범위 내 gap 없음). C-C를 guard
+script 테스트에 넣지 말 것(SKILL 계층 테스트가 담당, NEW-01/02).
 
 ### 6.3 create-sandbox 스크립트 hardening (S-A, S-B)
 
@@ -350,7 +371,8 @@ R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
 ## 7. Acceptance Criteria
 
 1. **H-AC1 (fail-closed)**: 가드의 임의 git 명령 실패 시 `forced_downgrade: yes` +
-   non-zero exit; snapshot 부재도 fail-closed. (C-B)
+   non-zero exit **`=4`**; snapshot 부재 **또는 필수 key 누락/손상**도 fail-closed(exit 4).
+   (C-B, NEW-03)
 2. **H-AC2 (content-hash, C-E)** — 독립 2케이스: **H-AC2a** `git update-index
    --assume-unchanged <f>` 후 tracked mutation → `forced=yes`; **H-AC2b** `--skip-worktree
    <f>` 후 tracked mutation → `forced=yes`. (둘은 git 내부 처리가 달라 각각 assert.)
@@ -359,8 +381,10 @@ R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
    gitdir `info/exclude` → 동일; **(iii)** `core.excludesFile` 설정 → 동일; **(iv)** tracked
    `.gitignore` 수정으로 신규 파일 은닉 시도 → `tracked_diff`의 `.gitignore` 변경으로
    `forced=yes`(계층 1 커버).
-4. **H-AC4 (snapshot-delta)**: (a) product 변경 + `git stash push -u` 변종, (b) product
-   변경 + `commit` + `git reset --hard B` 변종 → 둘 다 `forced=yes`. (C-D)
+4. **H-AC4 (snapshot-delta, C-D)**: (a) product 변경 + `git stash push -u`, (b) product
+   변경 + `commit` + `git reset --hard B` → 둘 다 `forced=yes`; **(c)** `git config
+   core.logAllRefUpdates false` 후 (b) 반복(reflog 억제 시도) → `forced=yes` +
+   `reflog_logging_tampered` (NEW-05).
 5. **H-AC5 (YAML)**: single-quote 포함 파일명 → 가드 출력이 유효 YAML + `forced=yes`. (I-D)
 6. **H-AC6 (R4 라우팅)**: SKILL R4가 가드 non-zero exit·무효 출력을 ≤FAIL로 라우팅(정적
    grep으로 R4 에러경로 절 존재 + stderr surface 문구 assert). (C-C)
@@ -392,8 +416,8 @@ R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
 - **`plugins/quality-gates/CHANGELOG.md`** — `[2.2.0]` Security/Fixed에 snapshot 기반
   hardened oracle + fail-closed + fallback SKIP cap 반영.
 - **테스트:**
-  - `tests/test_qg_mutation_guard.sh` 확장 — C-A/C-B/C-D(2변종)/C-E/I-D + snapshot-missing
-    fail-closed. 기존 8 케이스 green 유지.
+  - `tests/test_qg_mutation_guard.sh` 확장 — C-A(4채널)/C-B/C-D(3변종: stash·reset·reflog-
+    억제)/C-E(2)/I-D + snapshot-missing·malformed fail-closed. 기존 8 케이스 green 유지.
   - `tests/harness/test_skill_orchestration_behavior.sh` 확장 — R4 에러경로(C-C),
     fallback SKIP-cap & `runtime_project_dir`(H-AC7), retry baseline 재캡처(I-G),
     evidence_dir 절대경로 thread(H-AC8) 정적 assert.
@@ -416,11 +440,15 @@ R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
     (iv)는 `forced=yes` + `tracked_diff`에 `.gitignore`. (H-AC3)
   - C-D-a: mutation + `git stash push -u` → `forced=yes` + `stash_added`.
   - C-D-b: mutation + `commit` + `reset --hard B` → `forced=yes` + `reflog_advanced`.
+  - C-D-c (NEW-05): `git config core.logAllRefUpdates false` 후 mutation + `commit` +
+    `reset --hard B` → `forced=yes` + `reflog_logging_tampered`(config tamper로 잡힘; reflog
+    자체는 안 자랐어도 logAllRefUpdates 값 변경이 layer 2에 잡힘).
   - C-B: 임시 index 파일을 garbage로 덮거나 baseline SHA를 손상 → `guard_fail` 경로(
-    `forced=yes` + non-zero exit + `guard_error`).
+    `forced=yes` + non-zero exit `=4` + `guard_error`).
   - I-D: `foo'bar.js` 신규 파일 → 출력이 `python3 -c "import yaml; yaml.safe_load(...)"`로
     파싱되고 `forced=yes`.
-  - snapshot-missing: gitdir의 snapshot 파일을 지운 뒤 가드 → fail-closed.
+  - snapshot-missing / malformed (NEW-03): (a) gitdir의 snapshot 파일을 지운 뒤 가드,
+    (b) snapshot에서 필수 key 한 줄 제거(truncate) 후 가드 → 둘 다 fail-closed(exit 4).
 - **happy-path 무손상** (H-AC10): 기존 8 케이스(clean / tracked change / 독립성 re-run /
   ignored `.env` PASS / non-ignored 신규 / 신규 symlink / tracked 삭제 / YAML-metachar)
   전부 green 재확인.
@@ -488,8 +516,9 @@ R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
 (샌드박스 생애주기·AC 단언·upfront plan·운영 안전·Law 2 docs)는 유효. 원본 §9의 가드
 테스트 항목은 이 spec §9가 확장.
 
-**Deferred to plan (§11).** 해싱 커맨드 / reflog 가용성 실증 / exit code 번호 / fixture 형태
-— 전부 구현 세부.
+**Deferred to plan (§11).** 포터블 해싱 커맨드 선택 / 회귀 fixture 작성 형태 — 구현 세부만.
+(reflog 가용성·`guard_fail` exit code·4계층 순서·`.gitignore` tamper 봉쇄는 review에서 spec
+내 확정됨 — §6.1/§6.2, §11 footer 참조. plan에 재논의 거리 아님.)
 
 ## 13. Metadata
 
@@ -523,3 +552,16 @@ R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
   - evidence_dir `<sid>` 미정의(c7b1f4d5) → §6.6 = `CLAUDE_CODE_SESSION_ID`.
   - retry snapshot 충돌(3b5f8c01) → §6.7 R0 idempotent(stale gitdir+snapshot force-remove).
   - 원본 §6.7 supersede 후 forward-ref(handoff-01) → 원본 §6.7 상단에 supersede 포인터 추가.
+- **round 2 (spec-reviewer, 2026-06-01):** round-1 13건 전부 RESOLVED 확인. 신규 5건 반영
+  (모두 revision이 추가한 내용을 더 파고든 것; `affects_locked` 없음).
+  - **NEW-05 (보안 — reflog 억제 우회):** verifier가 `core.logAllRefUpdates=false`로 reflog를
+    꺼 C-D commit+reset을 숨기면 layer 3 무력(layer 1도 reset로 무력) → **§6.1 logallrefupdates
+    snapshot 캡처 + create-sandbox 강제 true + §6.2 layer 2가 config 변경을 tamper로 탐지**
+    (`reflog_logging_tampered`). matrix·H-AC4(c)·§9 C-D-c 반영.
+  - **NEW-03 (보안 — malformed snapshot):** snapshot 존재하나 필수 key 누락/truncated 시 빈
+    문자열 비교로 `forced=no`가 되던 경로 → §6.2 layer 0에 key-존재 assert → `guard_fail`.
+    H-AC1·§9 반영.
+  - NEW-01/02 (matrix scope): coverage matrix가 C-C(SKILL 계층)를 포함하지 않은 채 "gap
+    없음" 주장 → §6.2 matrix footer를 "guard-script 0–3 범위 + C-C는 §6.4/H-AC6" 로 scope 명시.
+  - NEW-04 (문서 모순): §12 "Deferred to plan"이 §11과 달리 reflog/exit-code를 여전히 deferred로
+    열거 → §12에서 제거(spec 내 확정 명시).
