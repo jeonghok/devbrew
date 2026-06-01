@@ -183,6 +183,17 @@ else
 fi
 assert_line "evidence_dir uses CLAUDE_CODE_SESSION_ID" "$(first_line 'CLAUDE_CODE_SESSION_ID')"
 
+# I-G: retry must re-capture BOTH sandbox_dir AND baseline_sha (new snapshot auto-recorded).
+retry_recap_line=$(first_line 're-capture')
+assert_line "retry re-capture phrase present" "$retry_recap_line"
+if grep -E 're-capture' "$SKILL_MD" | grep -q 'baseline_sha' && \
+   grep -E 're-capture' "$SKILL_MD" | grep -q 'sandbox_dir'; then
+  echo "PASS: retry re-captures both sandbox_dir and baseline_sha"
+else
+  echo "FAIL: retry does not re-capture both sandbox_dir + baseline_sha"
+  fail=$((fail + 1))
+fi
+
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"
   exit 0

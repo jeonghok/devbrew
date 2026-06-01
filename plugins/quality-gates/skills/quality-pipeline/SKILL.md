@@ -524,7 +524,7 @@ AskUserQuestion({
 ```
 
 Branch:
-- **Yes, retry** → increment resolution counter; if exceeds env limit, fall through to Skip with evidence. Otherwise re-create the sandbox (Step R0) so retries start from a clean baseline, then re-dispatch runtime-verifier.
+- **Yes, retry** → increment resolution counter; if exceeds env limit, fall through to Skip with evidence. Otherwise re-create the sandbox (Step R0) and **re-capture BOTH `sandbox_dir` (line 1) AND `baseline_sha` (line 2)** from the new output, refreshing the orchestrator variables — create-sandbox emits a NEW commit `B` each call, so reusing the old `baseline_sha` makes the guard `guard_fail "bad baseline sha"` (a false FAIL). The new snapshot is auto-recorded in the new gitdir; the stale sandbox + its old snapshot are force-removed by R0's idempotent cleanup. Then re-dispatch runtime-verifier with the refreshed `sandbox_dir`.
 - **Skip with evidence** → record SKIP_WITH_EVIDENCE and continue.
 - **Stop** → final summary aborted at the Runtime gate.
 
