@@ -273,6 +273,15 @@ executor가 surface 실행 중 **block**(완료 불가)되면:
 
 ### 6.7 Verdict 분류 + 구조적 self-approval 가드
 
+> **⚠️ SUPERSEDED (2026-06-01):** 이 절이 기술하는 *diff 기반* mutation 가드
+> (`git diff --name-only B`)는 qg self-review에서 **5가지로 우회 가능**함이 드러나
+> (info/exclude 밀반입·git-failure fail-open·SKILL R4 무에러경로·stash/reset revert·
+> assume-unchanged index 비트), **snapshot + content-tree-hash + ignore-channel-tamper +
+> snapshot-delta(fail-closed) oracle**로 교체됨. 정정 설계:
+> [`2026-06-01-qg-mutation-guard-hardening-design.md`](2026-06-01-qg-mutation-guard-hardening-design.md).
+> 아래 6.7-1~4의 *행위 계약*(product 변경 → verdict ≤FAIL, git-ignored=non-product,
+> 신규 symlink=product)은 유지되며 메커니즘만 강화됨 — §6.8/§6.9의 §6.7-2 참조도 그대로 유효.
+
 **구조적 가드 (이 설계의 안전 핵심).** gate 종료 시 **orchestrator(SKILL)가
 샌드박스의 product-mutation 여부를 git ground-truth로 산출**한다 — verifier의 자기
 판단에 의존하지 않는다. 기준은 §6.3에서 봉인한 **immutable baseline commit `B`**:

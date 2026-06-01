@@ -41,6 +41,7 @@ feature-dev:code-reviewer / codex) + adversarial(Phase 1.5) 검증. 원본 findi
 - [11. Open Questions (plan 단계 세부)](#11-open-questions-plan-단계-세부)
 - [12. Handoff Context](#12-handoff-context)
 - [13. Metadata](#13-metadata)
+- [14. Review revisions](#14-review-revisions)
 
 ## 1. Context / Why
 
@@ -180,14 +181,30 @@ SNAP="$(git -C "$sandbox" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
   gitdir째 삭제하므로 auto-clean.
 - pre-existing exclude/stash가 있어도 snapshot이 그 상태를 캡처하므로 가드는 *변경*만 본다
   → false-positive 없음.
+- **reflog 가용성 확정(경험적, review round 1):** `git worktree add --detach` + baseline
+  commit 직후 `git reflog show HEAD`는 비어있지 않다(HEAD@{0}=baseline commit). C-D
+  commit+reset 후 reflog 해시가 변함을 재현 확인. → reflog 가용성은 *closed*(open-question
+  아님). 만일의 빈-reflog 환경 대비: snapshot 캡처 시 reflog가 비면 `head_reflog_sha=empty`로
+  기록하고 가드는 동일 비교 규칙(불일치=`forced=yes`) 적용 — 빈 값도 정합 비교됨.
+- **common-dir ≠ per-worktree gitdir(중복 아님):** 샌드박스는 항상 *linked* worktree
+  (`git worktree add`)라 common-dir(메인 `.git`)과 per-worktree gitdir
+  (`.git/worktrees/rt-<sid>`)이 항상 구별됨 → `excl_common_sha`/`excl_wt_sha`는 서로 다른
+  파일을 캡처. (main worktree=`.git` 단일 케이스는 발생하지 않음 — 샌드박스는 main worktree가
+  아님.) 둘 다 검사하므로 어느 채널의 tamper든 잡힘.
 
 ### 6.2 mutation-guard 재작성 (4계층, fail-closed)
 
 계약 동일: `mutation-guard <sandbox> <base>`. snapshot은 gitdir에서 자동 발견.
 
+**실행 순서 (locked):** 계층 0 토대 검증 → 계층 1 content-hash → 계층 2 ignore-tamper →
+계층 3 snapshot-delta → `forced_downgrade` 집계. `forced`는 계층 1–3의 **OR 누적**이라
+결과는 순서 무관이지만, 계층 0의 git 실패는 *즉시* fail-closed(이후 계층 미실행). 구현은 이
+순서를 고정한다(보고 일관성).
+
 **계층 0 — fail-closed 토대 (C-B).** `guard_fail(reason)` 헬퍼: 임의 git 명령 rc≠0이면
 `tracked_diff: []` / `disallowed_new_files: []` / `forced_downgrade: yes` /
-`guard_error: '<reason>'` emit 후 **non-zero exit**(die의 exit 2와 구별되는 코드, 예: 4).
+`guard_error: '<reason>'` emit 후 **non-zero exit `=4` (locked; die=2·kill-switch=3과
+구별)**. 회귀 테스트는 exit code가 정확히 4인지 assert(H-AC1).
 detection 명령의 `2>/dev/null` 폐기 → stderr 캡처해 reason에. snapshot 파일 부재도
 `guard_fail`(우리가 snapshot 안 뜬 sandbox는 indeterminate). baseline `B` 존재 확인
 (`cat-file -e`)은 유지하되 `guard_fail`로.
@@ -195,15 +212,25 @@ detection 명령의 `2>/dev/null` 폐기 → stderr 캡처해 reason에. snapsho
 **계층 1 — content tree-hash (C-E + honest mutation).** fresh 임시 index로 working tree
 재독:
 ```
-tmp=$(mktemp); rm -f "$tmp"
-GIT_INDEX_FILE="$tmp" git -C "$sandbox" add -A -- .   # rc 명시 검사 → 실패 시 guard_fail
-cur_tree=$(GIT_INDEX_FILE="$tmp" git -C "$sandbox" write-tree)   # rc 검사
+idx="$(git -C "$sandbox" rev-parse --absolute-git-dir)/qg-tmp-idx.$$"; rm -f "$idx"
+GIT_INDEX_FILE="$idx" git -C "$sandbox" add -A -- .   # rc 명시 검사 → 실패 시 guard_fail
+cur_tree=$(GIT_INDEX_FILE="$idx" git -C "$sandbox" write-tree)   # rc 검사
 base_tree=$(git -C "$sandbox" rev-parse "${base}^{tree}")        # rc 검사
+rm -f "$idx"   # 사용 후 즉시 제거
 ```
 `cur_tree != base_tree` → content 변경(`forced=yes`). fresh index가 index 비트를 무시
 (§1 검증). `-f` 없음 → tracked `.gitignore`(B의 일부) 존중 → 합법 `.env` PASS 경로 보존.
 `add` 실패를 tree mismatch로 추론하지 말고 **rc로 직접** 판정(빈 index의 empty-tree가 그냥
 "다름"으로 읽히는 함정 회피 — adversarial 지적).
+- **index 경로(locked):** `mktemp; rm`(TOCTOU 창) 대신 **per-worktree gitdir 하위의
+  pid-unique 경로**(`$gitdir/qg-tmp-idx.$$`, 존재하지 않는 파일)를 `GIT_INDEX_FILE`로 →
+  git이 fresh index를 생성. gitdir 내라 동시 다른 프로세스 침투 창이 없고, 사용 후 `rm -f`.
+- **`.gitignore` tamper 닫힘(경험적, review round 1):** verifier가 tracked `.gitignore`를
+  수정해 신규 product 파일을 ignore로 숨겨도, `.gitignore`는 *tracked*라 그 수정 자체가
+  `cur_tree`에 반영돼 `tracked_diff`의 `M .gitignore`로 잡힘 → `forced=yes`. 숨긴 파일이
+  `add -A`(no `-f`)에서 빠져도 `.gitignore` 변경이 이미 downgrade를 유발(재현 확인). 즉
+  계층 2는 `info/exclude`/`core.excludesFile`(untracked 채널)을 보고, tracked `.gitignore`는
+  계층 1이 커버 — 두 채널 분담으로 ignore 우회 전부 닫힘.
 
 **계층 2 — ignore-channel tamper (C-A).** §6.1의 exclude/excludesFile 해시를 *지금* 재계산해
 snapshot과 비교. 불일치 → `forced=yes` + `guard_flags`에 `ignore_channel_tampered`.
@@ -225,6 +252,26 @@ snapshot과 비교. 불일치 → `forced=yes` + `guard_flags`에 `ignore_channe
 
 `forced_downgrade` = (계층1 content 변경) ∨ (신규 product 파일/symlink) ∨ (계층2 tamper)
 ∨ (계층3 delta). 하나라도 → `yes`.
+
+**우회 × 계층 coverage matrix (검증용 — §9가 이 표의 각 셀을 테스트):**
+
+| 우회 | 잡는 계층 | 메커니즘 |
+|---|---|---|
+| honest mutation (tracked) | 1 | `cur_tree != base_tree` |
+| C-E assume-unchanged | 1 | fresh index가 비트 무시 → content 차이 (§1 검증) |
+| C-E skip-worktree | 1 | 동상 (독립 테스트) |
+| 신규 non-ignored 파일 | 1 (보고: `disallowed_new_files`의 `A`) | `add -A`가 staging |
+| 신규 symlink (ignored 포함) | 보조 — `ls-files --others` symlink 합집합 | "symlink=항상 product" |
+| C-A `info/exclude`(common) | 2 | `excl_common_sha` 불일치 |
+| C-A `info/exclude`(per-worktree) | 2 | `excl_wt_sha` 불일치 |
+| C-A `core.excludesFile` | 2 | `excludesfile`/`_sha` 불일치 |
+| C-A `.gitignore` 수정 | **1** | tracked `.gitignore` 변경이 content-hash에 반영 |
+| C-D stash push | 3 | `stash_sha` 불일치 |
+| C-D commit + `reset --hard B` | 3 | `head_reflog_sha` 불일치 (working tree는 복원되어 계층 1엔 안 잡힘) |
+| C-B git 실패 | 0 | rc≠0 → `guard_fail` exit 4 |
+| snapshot 부재 | 0 | fail-closed |
+
+primary=계층, 빈 셀 없음 → coverage gap 없음(독립 검증 가능).
 
 ### 6.3 create-sandbox 스크립트 hardening (S-A, S-B)
 
@@ -257,15 +304,22 @@ happy-path 무영향.
 - **I-A**: fallback verdict를 **≤SKIP_WITH_EVIDENCE로 cap — 절대 PASS 아님**. "sandbox
   없음 = 구조적 Law 2 보장 없음 = 인증 안 함." smoke evidence·FAIL 탐지는 제공.
 - 추가 안전: fallback에서 SKILL이 real tree를 pre/post(`git status --porcelain` +
-  tracked content) 비교해 *변경됐으면* loud 경고(verdict는 이미 ≤SKIP이라 gating 아닌 신호;
-  verifier가 사용자 실제 파일을 변조하면 알림).
+  tracked content tree-hash) 비교해 *변경됐으면* **loud 경고**. 경고 계약(locked): SKILL이
+  **사용자-visible stdout**에 `[quality-gates] WARNING: runtime fallback에서 working tree가
+  변경됨 — <변경 파일 목록>. sandbox 미사용으로 구조적 보호 없음; 검토 요망.` 한 줄을 출력
+  **AND** evidence_dir(§6.6)에 기록. verdict 영향 없음(이미 ≤SKIP cap) — 순수 안전 신호이며
+  무시해도 gate는 진행(P18: 추가 차단 루프 없음).
 
 ### 6.6 evidence durability (I-C)
 
 evidence-log + 스크린샷이 상대 `.claude/...`로 기록 → verifier project_dir=sandbox라 sandbox
 내부 → R5 `remove` 삭제 → Evidence Log dangling.
-- SKILL이 R3 dispatch에 **절대 `evidence_dir`**(preflight `project_dir` 기준 = 메인 repo
-  `.claude/quality-gates/<sid>/`, sandbox_dir 아님)를 명시 파라미터로 thread.
+- SKILL이 R3 dispatch에 **절대 `evidence_dir`**를 명시 파라미터로 thread. 정의:
+  `<project_dir>/.claude/quality-gates/<sid>/` (preflight `project_dir` = 메인 repo,
+  sandbox_dir 아님). `<sid>` = **`CLAUDE_CODE_SESSION_ID`** — pipeline state 파일
+  `.claude/quality-gates/<sid>/pipeline.md`와 동일 값(이미 SKILL이 보유). evidence_dir는
+  절대 경로로 R3 prompt에 주입; H-AC8 정적 assert가 `.claude/quality-gates/.*/`(절대) 패턴을
+  확인.
 - `runtime-verifier.md`: product/서비스 파일은 sandbox(project_dir)에, **evidence는 절대
   `evidence_dir`에** 기록하도록 분리 명시.
 - `detect-runtime.sh`의 `attempted_log_path`도 절대 경로 emit.
@@ -278,6 +332,11 @@ retry가 "re-create sandbox (R0)"만 말하고 `baseline_sha` 재캡처 미명�
 가드 `guard_fail "bad baseline sha"` → false FAIL. 수정 문구: **"R0 재실행 후 새 출력의
 `sandbox_dir`(line 1) + `baseline_sha`(line 2)를 *둘 다* 재캡처해 orchestrator 변수 갱신 후
 R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
+
+**snapshot 충돌 없음:** `create-sandbox`(R0)는 idempotent — stale sandbox가 남아 있으면
+`git worktree remove --force` + `git worktree prune`로 *그 gitdir의 옛 snapshot까지* 함께
+제거한 뒤 새로 생성(현 qg-worktree.sh L93–99 동작). 따라서 retry 시 동일 base에 두 snapshot이
+공존하지 않음. (이전 sandbox가 R5로 이미 폐기됐든, retry 직전까지 남아 있든 R0가 정리.)
 
 ### 6.8 작은 수정 (I-F, I-E, I-D)
 
@@ -292,10 +351,14 @@ R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
 
 1. **H-AC1 (fail-closed)**: 가드의 임의 git 명령 실패 시 `forced_downgrade: yes` +
    non-zero exit; snapshot 부재도 fail-closed. (C-B)
-2. **H-AC2 (content-hash)**: `assume-unchanged`·`skip-worktree`로 숨긴 tracked mutation →
-   `forced_downgrade: yes`. (C-E)
-3. **H-AC3 (ignore-tamper)**: 신규 product 파일 + `info/exclude` append → `forced=yes` +
-   `guard_flags`에 `ignore_channel_tampered`. (C-A)
+2. **H-AC2 (content-hash, C-E)** — 독립 2케이스: **H-AC2a** `git update-index
+   --assume-unchanged <f>` 후 tracked mutation → `forced=yes`; **H-AC2b** `--skip-worktree
+   <f>` 후 tracked mutation → `forced=yes`. (둘은 git 내부 처리가 달라 각각 assert.)
+3. **H-AC3 (ignore-tamper, C-A)** — 4채널 각각 신규 product 파일과 함께: **(i)** common-dir
+   `info/exclude` append → `forced=yes` + `ignore_channel_tampered`; **(ii)** per-worktree
+   gitdir `info/exclude` → 동일; **(iii)** `core.excludesFile` 설정 → 동일; **(iv)** tracked
+   `.gitignore` 수정으로 신규 파일 은닉 시도 → `tracked_diff`의 `.gitignore` 변경으로
+   `forced=yes`(계층 1 커버).
 4. **H-AC4 (snapshot-delta)**: (a) product 변경 + `git stash push -u` 변종, (b) product
    변경 + `commit` + `git reset --hard B` 변종 → 둘 다 `forced=yes`. (C-D)
 5. **H-AC5 (YAML)**: single-quote 포함 파일명 → 가드 출력이 유효 YAML + `forced=yes`. (I-D)
@@ -344,9 +407,13 @@ R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
   작업 전 baseline 캡처 후 **신규/수정 테스트의 green만** 회귀 판정.
 - **우회 봉쇄 positive 테스트** (H-AC1–5): 각 우회를 throwaway repo에서 *재현*하는 fixture로
   `forced_downgrade: yes`(+ 해당 `guard_flags`) assert. 특히:
-  - C-E: `git update-index --assume-unchanged` 후 mutation → `forced=yes`.
-  - C-A: 신규 파일 + `$(git rev-parse --git-common-dir)/info/exclude` append →
-    `forced=yes` + `ignore_channel_tampered`.
+  - C-E (2케이스): (a) `git update-index --assume-unchanged <f>` 후 mutation → `forced=yes`;
+    (b) `--skip-worktree <f>` 후 mutation → `forced=yes`. 각각 독립 assert(H-AC2a/2b).
+  - C-A (4채널): (i) 신규 파일 + `$(git rev-parse --git-common-dir)/info/exclude` append;
+    (ii) 신규 파일 + per-worktree gitdir(`rev-parse --absolute-git-dir`)/info/exclude append;
+    (iii) 신규 파일 + `git config core.excludesFile <tmp>` 설정; (iv) tracked `.gitignore`에
+    신규 파일명 추가 후 그 파일 생성 → (i)–(iii)는 `forced=yes` + `ignore_channel_tampered`,
+    (iv)는 `forced=yes` + `tracked_diff`에 `.gitignore`. (H-AC3)
   - C-D-a: mutation + `git stash push -u` → `forced=yes` + `stash_added`.
   - C-D-b: mutation + `commit` + `reset --hard B` → `forced=yes` + `reflog_advanced`.
   - C-B: 임시 index 파일을 garbage로 덮거나 baseline SHA를 손상 → `guard_fail` 경로(
@@ -392,12 +459,12 @@ R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
 - **포터블 해싱 커맨드 확정** — `git hash-object --stdin` vs `shasum -a 256`/`sha256sum`
   (macOS/Linux 차이). 메커니즘은 "내용 해시 비교"로 locked, 커맨드만 plan. (`git hash-object`
   권장 — git 컨텍스트 내라 항상 가용.)
-- **detached HEAD reflog 가용성 재확인** — `git reflog show HEAD`가 `--detach` worktree에서
-  baseline commit 엔트리를 반환하는지 plan에서 실증(설계는 per-worktree `logs/HEAD` 격리
-  가정). 만약 비어있으면 `git rev-parse HEAD` + reflog count fallback.
-- **`guard_fail` exit code 번호** — die(2)·kill-switch(3)와 구별되는 값(예: 4) 확정.
 - **회귀 fixture 작성 형태** — C-A~C-E 재현을 `test_qg_mutation_guard.sh`의 `mk_sandbox`
   헬퍼 확장으로 할지 별도 헬퍼로 할지.
+
+> **review round 1에서 closed (구현 세부에서 격상·확정):** detached HEAD reflog 가용성
+> (경험적 확인 — §6.1) / `guard_fail` exit code(=4 locked — §6.2) / 4계층 실행 순서(§6.2) /
+> `.gitignore` tamper 봉쇄(§6.2) — 모두 보안-관련이라 plan defer 대신 spec에서 확정.
 
 ## 12. Handoff Context
 
@@ -434,3 +501,25 @@ R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
 - **헌장 영향:** 없음(신규 P# 없음) — 기존 Law 2 가드 메커니즘의 무결성 복구.
 - **보안-민감:** mutation-guard(보안 컨트롤) + persona(`runtime-verifier.md`) 편집 — 신중
   리뷰 대상. 구현 PR은 qg self-review 재실행 권장(이번엔 green이어야 함).
+
+## 14. Review revisions
+
+- **round 1 (spec-reviewer, 2026-06-01):** needs_revise 14건(전부 `ambiguity`/`isolation`/
+  `testing`/`handoff`, `affects_locked` 없음 — design mode). 보안-관련 2건은 경험적으로
+  확정 후 반영, 나머지는 명확성 보강.
+  - C-D commit+reset reflog 가용성을 plan으로 defer(8a3e0c17, b2c47e8f) → **§6.1에서
+    경험적 확정**(detached worktree reflog 비어있지 않음, commit+reset 후 해시 변함) +
+    빈-reflog fallback 규칙. open-question에서 제거.
+  - `.gitignore` 수정으로 신규 파일 은닉 가능성(d5e83f7a, 총평#2) → **§6.2에서 경험적
+    확정**(tracked `.gitignore` 변경이 content-hash에 잡힘) + §6.2 coverage matrix에 명시.
+  - 4계층 실행 순서 미명시(e3f2a1c4) → §6.2 순서 locked(0→1→2→3→집계).
+  - `mktemp; rm` TOCTOU + GIT_INDEX_FILE 경로(7a4b9d21) → §6.2 pid-unique gitdir 경로.
+  - `guard_fail` exit code 미확정(9c6d7e2f) → §6.2 **=4 locked**, H-AC1이 assert.
+  - C-E skip-worktree AC 미분리(e1a4d8b9) → §7 H-AC2a/2b 분리 + §9.
+  - C-A 3채널 중 2채널 untested(f3c2a9e0) → §7 H-AC3 4채널(+`.gitignore`) + §9.
+  - 우회×계층 coverage matrix 부재(f7d109c3) → §6.2 matrix 추가(검증 가능성).
+  - common-dir/per-worktree gitdir 중복 우려(c9f01e5b) → §6.1 "linked worktree라 항상 구별".
+  - fallback "loud 경고" 형태 미정(a08e2b14) → §6.5 stdout+evidence_dir 계약.
+  - evidence_dir `<sid>` 미정의(c7b1f4d5) → §6.6 = `CLAUDE_CODE_SESSION_ID`.
+  - retry snapshot 충돌(3b5f8c01) → §6.7 R0 idempotent(stale gitdir+snapshot force-remove).
+  - 원본 §6.7 supersede 후 forward-ref(handoff-01) → 원본 §6.7 상단에 supersede 포인터 추가.
