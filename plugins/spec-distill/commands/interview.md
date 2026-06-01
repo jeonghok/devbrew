@@ -1,11 +1,14 @@
 ---
-description: 4-block Korean Socratic 인터뷰로 모호한 요청을 spec.md로 변환. devbrew Law 1 instantiation.
+description: 강한 문제공간 stage — 메타프롬프팅·웹리서치·steelman으로 방향을 끌어내 brainstorming용 interview brief를 생성. devbrew Law 1 instantiation.
 argument-hint: "[rough request]"
 ---
 
 # /interview
 
-당신은 spec-distill 플러그인의 entry point입니다. 사용자가 `/interview`를 호출하면 다음 순서로 진행하십시오.
+당신은 spec-distill 플러그인의 entry point입니다. `/interview`는 superpowers brainstorming
+**앞단의 강한 문제공간 stage**로, 사용자에게서 방향을 끌어내고(메타프롬프팅), 외부 사례를
+웹으로 조사하고, 약한 방향을 steelman으로 깨뜨려 **interview brief**(meta-prompt)를 산출합니다.
+사용자가 `/interview`를 호출하면 다음 순서로 진행하십시오.
 
 ## Step 1: kill switch 존중
 
@@ -48,4 +51,6 @@ Skill conducting-interview $ARGUMENTS
 
 ## 다음 단계
 
-`conducting-interview` skill로 흐름이 넘어갑니다. 이 command 자체는 trivia escape + skill dispatch 책임만 집니다.
+`conducting-interview` skill로 흐름이 넘어가 5 통과 의례(R1–R5)를 거쳐 interview brief를
+`docs/superpowers/interview/`에 생성합니다. 이 command 자체는 trivia escape + skill dispatch
+책임만 집니다(NG6 — trivia escape 불변).

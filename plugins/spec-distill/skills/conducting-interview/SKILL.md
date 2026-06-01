@@ -1,18 +1,28 @@
 ---
 name: conducting-interview
 description: >
-  Use this skill to run the spec-distill 4-block Korean Socratic interview.
-  Called by /interview command after trivia escape check passes. Implements
-  C43 4-path routing (factual auto-confirm / judgment→user / ambiguity→sub-agent /
-  ontological→5-type), C44 Dialectic Rhythm Guard, C45 breadth-keeper dispatch
-  (max 1 per round, AC13). Persists state to .claude/spec-distill/<session-id>/state.local.md.
-cost_class: medium
+  Use this skill to run the spec-distill interview — a strong problem-space stage
+  (Double Diamond 1st diamond) that reframes the request (meta-prompting), grounds
+  it with bounded web research, breaks weak directions with adversarial steelman,
+  and pre-resolves trial-and-error. Produces a terminal interview-brief meta-prompt
+  at docs/superpowers/interview/. Called by /interview after trivia escape. Runs the
+  5 통과 의례 (R1-R5) as a Law 1 structural gate (check_brief.py). Optionally hands the
+  brief to superpowers:brainstorming. Persists state to main-repo
+  .claude/spec-distill/<session-id>/state.local.md (written via Bash — PN1).
+cost_class: variable
 user-invocable: false
 ---
 
-# Conducting Interview (Phase 1)
+# Conducting Interview — 문제공간 Stage (Phase 1)
 
-당신은 spec-distill의 인터뷰 phase를 진행 중입니다. 사용자의 모호한 요청을 명확한 spec으로 변환하기 위해 4-block Korean Socratic format으로 round를 진행합니다.
+당신은 spec-distill의 인터뷰 stage를 진행 중입니다. 이 stage는 *받아적는* 인터뷰가
+아니라 **강한 문제공간 stage**입니다(Double Diamond 1st diamond — brainstorming 해답공간
+앞단, 상보적·비중복). 4-block Korean Socratic format으로 round를 진행하되, 종료 전 **5
+통과 의례**를 모두 통과해야 brief 작성이 허용됩니다(Law 1 구조 게이트).
+
+산출물은 `spec.md`가 아니라 **interview brief**(brainstorming용 meta-prompt)이며, 이
+brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으면 brainstorming으로
+넘기고(optional), 없으면 brief 자체로 완료합니다.
 
 ## State location (AC2)
 
@@ -26,19 +36,33 @@ session_id: <uuid>
 phase: 1
 interview_round: <int>
 non_user_streak: <int>
+web_sweep_count: 0                   # 현재 sweep 내 web 검색 호출 수 (AP9, ≤4). sweep 종료 시 0으로 reset.
+web_search_count: 0                  # 세션 누적 web 검색 호출 수 (AP16, ≤8 soft cap).
 rereview_count: 0
 wall_clock_started_at: <ISO8601>
 trivia_escape_armed: false
 issue_history: []                    # 각 항목: {id, raised_count, dismissed_by_user, accepted_by_user, reconsensus_count, resolved, escalated}
-pending_locked_decisions: []         # 매 round 끝 append (b/d path 명시 응답만). drafting-spec Mode A가 spec.md frontmatter로 변환.
-reconsensus_accepted_ids: []         # reviewing-spec [3.5] sub-step이 기록. Mode B에 allowed_issue_ids로 전달.
-under_revision: []                   # [3.5] sub-step "(3) 추가 인터뷰" 선택 시 LD ID 리스트. conducting-interview re-entry 시 focused interview 진행.
+pending_locked_decisions: []         # 매 round 끝 append (b/d path 명시 응답만). brief frontmatter locked_directions로 변환.
 ---
 ```
 
 State body: 각 round의 4-block 출력 + 사용자 답변 + (있다면) breadth-keeper 출력 transcript.
 
 **Secret 기록 금지** (P21): 사용자 답변에 token/key/credential 패턴 감지 시 placeholder로 치환 후 기록.
+
+### State write contract (PN1 — worktree-safe)
+
+`state.local.md`는 `state_path.py`가 **main repo** `.claude/spec-distill/<sid>/`로 라우팅합니다
+(`git rev-parse --git-common-dir`). 워크트리 세션에서 이 경로는 워크트리 *밖*이라 `Write`/`Edit`
+tool이 차단됩니다 — state 갱신은 **반드시 Bash**로 하십시오:
+
+```bash
+ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" state-root)"
+STATE="$ROOT/<session-id>/state.local.md"
+# read-modify-write via python3 -c / heredoc (Edit tool 사용 금지 — main-repo 경로)
+```
+
+**brief는 예외**: `docs/superpowers/interview/`는 워크트리 *안*이라 `Write` tool로 정상 작성.
 
 ## 4-block Korean format (devbrother2024 deep-interview 흡수, AC1)
 
@@ -64,7 +88,7 @@ State body: 각 round의 4-block 출력 + 사용자 답변 + (있다면) breadth
 
 | Path | When | Action |
 |---|---|---|
-| (a) **factual** | 답이 codebase/git history에 있는 경우 | grep/Read로 *auto-confirm*, 사용자에게 묻지 않음. transcript에 `[from-code][auto-confirmed]` 마커 표시. |
+| (a) **factual / landscape** | 답이 codebase/git history *또는 외부 prior-art*에 있는 경우 | codebase는 grep/Read *auto-confirm*; 외부는 web sweep(아래 R2). 마커 `[from-code][auto-confirmed]` 또는 `[from-web]`. streak +1. |
 | (b) **judgment** | 사용자 선호/우선순위/제약 | 사용자에게 묻기 (default path). 4-block 출력. |
 | (c) **ambiguity** | 여러 해석 가능한 핵심 가정 | sub-agent에 adversarial draft 요청 (`general-purpose` agent에 "이 가정이 잘못됐다면 어떤 시나리오가 가능한가?" 형태로 dispatch). 답을 그대로 사용자에게 보여주고 confirm. |
 | (d) **ontological** | "이게 무엇인가" 종류 (essence/root cause 등) | C51 5-type framework 사용 — ESSENCE / ROOT_CAUSE / PREREQUISITES / HIDDEN_ASSUMPTIONS / EXISTING_CONTEXT 중 하나로 라벨링 후 사용자에게 묻기. |
@@ -102,6 +126,7 @@ State body: 각 round의 4-block 출력 + 사용자 답변 + (있다면) breadth
 - (c) sub-agent adversarial: streak +1
 - (b) 사용자 답변 받음: streak = 0
 - (d) ontological 사용자 답변 받음: streak = 0
+- (a) web auto-research: streak +1 (과도하면 강제 (b)로 사용자를 loop에 유지 — AP16).
 
 `non_user_streak >= DEVBREW_RHYTHM_GUARD_THRESHOLD` (default 3) 도달 시:
 
@@ -117,19 +142,106 @@ State body: 각 round의 4-block 출력 + 사용자 답변 + (있다면) breadth
 
 dispatch 결과 (`narrow_tunneling: true`) 면 다음 round 시작 시 `suggested_lateral_questions` 중 하나를 추천 답안으로 제시.
 
-## 종료 조건
+## 5 통과 의례 (Law 1 구조 게이트, R1–R5)
 
-다음을 모두 만족하면 phase 1 종료, drafting-spec skill로 전환:
+brief 작성(+ optional brainstorming invoke)은 다음 5 의례를 **모두 통과**해야 허용됩니다.
+하나라도 미충족이면 종료 차단. 종료 직전 `check_brief.py gate`로 **기계적 검증**(AC3):
 
-- Goal 명확 (한 문장으로 표현 가능)
-- Goals/Non-goals 일관 (충돌 없음)
-- Constraints 명시
-- Acceptance Criteria 측정 가능 형태로 도출
-- Open Questions 사용자 인지 (불명확한 것은 OQ로 박제)
+| # | 의례 | 통과 기준 | 메커니즘 |
+|---|---|---|---|
+| R1 | **Reframe (메타 프롬프트)** | 받은 요청을 재구성한 한 문장 문제정의 + 진짜 goal. | (d) ontological 5-type (ESSENCE/ROOT_CAUSE/...) → brief §1 |
+| R2 | **Landscape 수집** | web sweep ≥1회, prior-art/대안이 **인용과 함께** 표면화. | path(a) 확장 → brief §3 |
+| R3 | **Skepticism 통과** | 의심 triggered 방향이 모두 steelman 후 *방어 또는 전환*. un-challenged 의심 방향 lock 불가. | steelman-builder dispatch → brief §4 |
+| R4 | **시행착오 기록** | steelman switch된 방향 **또는** 사용자가 명시적으로 폐기한 방향이 *이유와 함께* 기록. 0건이면 `N/A — 전부 first-time defend+lock` 명시(빈 섹션 금지). | brief §5 |
+| R5 | **Open Questions 박제** | 미해결 명시("유추 금지"). | brief §6 |
 
-종료 시 다음 메시지 출력:
+### R2 — 웹 Landscape (bounded, AC7/AC8)
 
-> 인터뷰 phase 종료 조건 충족. `drafting-spec` skill로 전환합니다.
+토픽이 잡히면(round 1–2) landscape sweep **1회**를 수행합니다. 각 web 검색 *전에* `increment`로
+state의 `web_sweep_count`/`web_search_count`를 +1 하고(PN1 Bash write — `increment`가 read-modify-write를
+직접 수행, 인라인 주석 보존) budget을 확인합니다. `check`가 아니라 `increment`여야 카운터가 실제로
+전진합니다(미전진 시 budget이 영원히 0 — AP9/AP16 무력화). exit ≠ 0 이면 그 호출이 cap을 넘는다는 뜻:
+
+```bash
+ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" state-root)"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" increment "$ROOT/<session-id>/state.local.md" || {
+  echo "[spec-distill] web budget 초과 — landscape 중단, 강제 (b) 사용자 질문" ; }
+```
+
+- budget 초과(sweep>4 또는 session>8) → advisory + **강제 (b) 사용자 질문**(AP16).
+- 모든 외부 주장은 **출처 URL 필수**(AC4) — brief §3에 `[취함|피함|중립]` + 이유와 함께.
+- **kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`** 또는 web 도구 부재 → landscape를 **loud하게
+  생략**하고 계속(crash 금지, graceful degradation — AC8): `[spec-distill] web 비활성 — landscape 생략, codebase 근거만 사용`.
+- sweep 종료 시 `reset-sweep`로 `web_sweep_count`를 0으로 reset(session 카운터는 유지):
+  ```bash
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" reset-sweep "$ROOT/<session-id>/state.local.md"
+  ```
+
+### R3 — Steelman 의심 게이트 (P17)
+
+의심 trigger = landscape 모순 / 알려진 anti-pattern / 기존 LD 불일치 / breadth-keeper tunneling.
+
+1. `steelman-builder` 에이전트를 **순차** dispatch(병렬·투기적 금지 — C5):
+   ```
+   Agent({ description: "Steelman alternative", subagent_type: "spec-distill:steelman-builder",
+           prompt: "의심 방향: <statement>. trigger: <이유>. 대안의 강한 케이스를 웹근거와 함께." })
+   ```
+2. builder 출력(`alternative_statement` + `evidence[].url`)을 **verbatim**으로 4-block에 반대
+   케이스로 제시 — conducting-interview는 이를 **약화·편집하지 않습니다**(AC5).
+3. **게이트**(P17): 사용자가 (방어 → 원안 lock + `defense` 기록, steelman: defended) /
+   (전환 → 대안 lock, 원안은 R4로, steelman: switched-to-this) / (보류 → §6 OQ).
+4. builder 출력 그대로 brief §4 Skepticism Log에 기록 — 각 항목은 (대안 statement + 웹근거 URL + `verdict ∈ {defended | switched | deferred}`). 게이트 매핑: 방어→`defended`, 전환→`switched`, 보류→`deferred`(§6 OQ에도 박제). 프론트매터 `steelman:` 라벨(`switched-to-this`)과 §4 `verdict` 어휘(`switched`)는 별개 — §4에는 위 세 단어만 사용.
+5. 한 방향당 steelman 1회(새 근거 없으면 재steelman 금지 — AP16 harassment 방지).
+
+**Web 부재 시 graceful degradation (AC8 대칭)**: `steelman-builder`는 WebSearch/WebFetch를 요구합니다.
+kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구 부재로 steelman을 돌릴 수 없으면 —
+R2 landscape와 대칭으로 — opaque한 "malformed skepticism (no-url)" 게이트 실패로 떨어뜨리지 말고
+**loud advisory**를 내고 **수동 의심 게이트**로 전환합니다:
+`[spec-distill] web 비활성 — steelman 자동 생략, 사용자에게 의심 방향 수동 확인 요청`. 이 경우 §4
+Skepticism Log은 사용자 판단(방어/전환/보류)을 근거로 기록하되 URL 부재 사유를 명시합니다(`check_brief.py`의
+skepticism 형식 검사는 web-disabled 시 V10 manual로 위임).
+
+**Law 2 경계**: steelman 게이트는 Law 2 분리 메커니즘이 *아닙니다* — Law 2 분리 reviewer는
+오직 design doc(brainstorming `-design.md`)에만 적용됩니다. steelman은 문제공간 품질을 끌어올리는
+Law 1급 skepticism 의례입니다(verbatim pass-through로 무력화 방지).
+
+## 종료 — brief 작성 + optional handoff
+
+다음을 모두 만족하고 **5 통과 의례가 모두 통과**하면 brief를 작성합니다:
+
+- Goal/진짜 problem이 한 문장으로 재구성됨(R1).
+- Landscape가 인용과 함께 수집됨(R2).
+- 의심 방향이 모두 steelman 통과(R3).
+- 시행착오가 기록됨(R4).
+- Open Questions 박제(R5).
+
+### Step A — brief 작성 (terminal 산출물)
+
+1. `${CLAUDE_PLUGIN_ROOT}/templates/interview-brief-template.md`로 7-section 구조 확보.
+2. 경로: `docs/superpowers/interview/<YYYY-MM-DD>-<kebab-topic>-interview.md` (워크트리 안 → `Write` tool 사용).
+   - frontmatter: `type: interview-brief`, `next_phase: superpowers:brainstorming`,
+     `session_id`(기존 spec-distill 세션 재사용 — 새 세션 생성 안 함), `locked_directions[]`
+     (state `pending_locked_decisions` + steelman verdict 반영).
+3. **기계적 게이트 검증**(AC3) — 작성 직후:
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check_brief.py" gate "docs/superpowers/interview/<file>"
+   ```
+   exit ≠ 0 이면 **brief를 finalize하지 말고** 보고된 미충족 의례를 보완(누락 섹션/무인용
+   landscape/형식 미달 steelman/빈 Tried&Discarded). 통과(exit 0)할 때까지 반복.
+
+### Step B — optional handoff (superpowers 있을 때만)
+
+brief는 **단독 완결**입니다. 다음은 *optional 다음 단계*입니다:
+
+- **superpowers `brainstorming` skill 사용 가능 시**: 이 brief를 rich context로 전달하며
+  `superpowers:brainstorming`을 호출(해답공간 설계 → `-design.md` → 기존 hook이 design mode로
+  검증 → reviewing-spec → writing-plans).
+- **superpowers 부재 시(AC13)**: brief를 완료하고 **loud advisory**를 낸 뒤 정지 — crash·spec-mode
+  fallback **금지**(단독 완결, graceful degrade):
+
+  > `[spec-distill] interview brief 완결: docs/superpowers/interview/<file>. superpowers 설치 시 brainstorming 해답공간 단계로 이어집니다. 미설치 시 이 brief를 직접 다음 작업의 입력으로 사용하세요.`
+
+이 stage는 brief까지로 종료됩니다. handoff를 *강제하지 않습니다*(NG7).
 
 ## In-flight state migration (C10)
 
@@ -137,8 +249,6 @@ state.local.md 로드 시 v0.1.x schema (신규 필드 부재)를 감지하면 *
 
 - `pending_locked_decisions` 부재 → `[]`로 in-memory default.
 - `issue_history[].dismissed_by_user` / `accepted_by_user` / `reconsensus_count` 부재 → `0`으로 in-memory default.
-- `reconsensus_accepted_ids` 부재 → `[]`로 in-memory default.
-- `under_revision` 부재 → `[]`로 in-memory default.
 
 다음 state write 시점에 frontmatter에 자연스럽게 추가 (backward-rewriting 금지 — 명시적 write 시점에만 frontmatter 갱신).
 
@@ -154,7 +264,4 @@ state.local.md 로드 시 v0.1.x schema (신규 필드 부재)를 감지하면 *
 - `DEVBREW_DISABLE_SPEC_DISTILL=1`: 즉시 abort, state.local.md 보존 (실패 분석용).
 - `DEVBREW_RHYTHM_GUARD_THRESHOLD=N`: rhythm guard threshold override.
 - `DEVBREW_SPEC_DISTILL_TIMEOUT_MIN=N`: wall-clock budget (default 30) — 초과 시 advisory metric에 기록.
-
-## 다음 phase
-
-`drafting-spec` skill 호출. 인터뷰 transcript와 결정된 정보를 input으로 넘김.
+- `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`: web landscape(R2) 비활성 — loud advisory 후 codebase 근거만 사용 (AC8).

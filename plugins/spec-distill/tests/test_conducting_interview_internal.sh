@@ -29,9 +29,9 @@ grep -q '^name: conducting-interview$' "$SKILL" \
 grep -q '^description:' "$SKILL" \
     && note PASS "AC2: description preserved" \
     || note FAIL "AC2: description field broken"
-grep -q '^cost_class: medium$' "$SKILL" \
-    && note PASS "AC2: cost_class preserved" \
-    || note FAIL "AC2: cost_class field broken"
+grep -q '^cost_class: variable$' "$SKILL" \
+    && note PASS "AC2: cost_class: variable (v0.12.0)" \
+    || note FAIL "AC2: cost_class not variable"
 
 # AC3 — 프로그램 호출 경로 보존 (메뉴만 숨고 dispatch는 살아있음)
 grep -q 'Skill conducting-interview' "$CMD" \

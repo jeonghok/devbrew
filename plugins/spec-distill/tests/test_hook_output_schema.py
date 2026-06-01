@@ -543,3 +543,65 @@ class TestCrossResolverAdvisory(unittest.TestCase):
                 "Follow-up PR per spec NG9 needed."
             ),
         )
+
+
+class TestInterviewDirectionLayerHook(unittest.TestCase):
+    """AC9/V7/C8 — design-doc detection survives; interview/ is out of scope."""
+
+    def setUp(self) -> None:
+        self.repo = _make_temp_repo()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self.repo, ignore_errors=True)
+
+    def _post_write(self, rel_path: str) -> subprocess.CompletedProcess:
+        """Simulate a PostToolUse Write of a .md file at rel_path under the temp repo."""
+        abs_path = self.repo / rel_path
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        abs_path.write_text(
+            "---\nname: x\n---\n\n# X\n\nsome design prose with clear components.\n",
+            encoding="utf-8",
+        )
+        return _run_hook(
+            "spec-write-validator.py",
+            cwd=self.repo,
+            env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": "hooktestsession"},
+            stdin_payload={
+                "tool_name": "Write",
+                "tool_input": {"file_path": str(abs_path)},
+                "session_id": "hooktestsession",
+            },
+        )
+
+    def test_design_doc_under_specs_triggers_design_mode(self) -> None:
+        """AC9: -design.md under specs/ → design mode + pending_review block."""
+        cp = self._post_write(
+            "docs/superpowers/specs/2026-05-31-interview-direction-layer-design.md"
+        )
+        self.assertEqual(cp.returncode, 0, cp.stderr)
+        out = json.loads(cp.stdout)
+        self.assertIn("design", out["hookSpecificOutput"]["additionalContext"])
+        state = (
+            self.repo / ".claude" / "spec-distill" / "hooktestsession" / "state.local.md"
+        )
+        self.assertTrue(state.exists(), "pending_review state not written")
+        body = state.read_text(encoding="utf-8")
+        self.assertIn("pending_review:", body)
+        self.assertIn("mode: design", body)
+
+    def test_interview_brief_path_is_out_of_scope(self) -> None:
+        """C8: docs/superpowers/interview/ is outside PATH_PREFIX → no review gate."""
+        cp = self._post_write(
+            "docs/superpowers/interview/2026-05-31-sample-topic-interview.md"
+        )
+        self.assertEqual(cp.returncode, 0, cp.stderr)
+        # Out of scope → hook exits 0 silently, no additionalContext, no state written.
+        self.assertEqual(cp.stdout.strip(), "", "interview/ path should produce no output")
+        state = (
+            self.repo / ".claude" / "spec-distill" / "hooktestsession" / "state.local.md"
+        )
+        self.assertFalse(state.exists(), "interview/ path must not write pending_review")
+
+
+if __name__ == "__main__":
+    unittest.main()
