@@ -25,9 +25,12 @@ grep -qE '^\|[[:space:]]*\**[[:space:]]*spec\b' "$SKILL" \
 grep -q 'drafting-spec' "$SKILL" \
   && note FAIL "drafting-spec still referenced in reviewing-spec" || note PASS "drafting-spec ref removed from reviewing-spec"
 
-COUNT=$(grep -rl 'drafting-spec' "$PLUGIN/skills" "$PLUGIN/hooks" "$PLUGIN/commands" 2>/dev/null | wc -l | tr -d ' ')
-[[ "$COUNT" == "0" ]] && note PASS "AC10: 0 drafting-spec refs in skills/hooks/commands" \
-  || note FAIL "AC10: $COUNT drafting-spec refs remain"
+# F9-D: scan agents/ + templates/ too — the exact dirs this PR cleaned of
+# drafting-spec/Mode-B refs (spec-reviewer persona, spec-template comment).
+COUNT=$(grep -rl 'drafting-spec' "$PLUGIN/skills" "$PLUGIN/hooks" "$PLUGIN/commands" \
+  "$PLUGIN/agents" "$PLUGIN/templates" 2>/dev/null | wc -l | tr -d ' ')
+[[ "$COUNT" == "0" ]] && note PASS "AC10/F9-D: 0 drafting-spec refs in skills/hooks/commands/agents/templates" \
+  || note FAIL "AC10/F9-D: $COUNT drafting-spec refs remain"
 [[ ! -d "$PLUGIN/skills/drafting-spec" ]] && note PASS "drafting-spec/ directory removed" \
   || note FAIL "drafting-spec/ directory still exists"
 

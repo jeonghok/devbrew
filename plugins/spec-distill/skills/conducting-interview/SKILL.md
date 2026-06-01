@@ -157,12 +157,14 @@ brief 작성(+ optional brainstorming invoke)은 다음 5 의례를 **모두 통
 
 ### R2 — 웹 Landscape (bounded, AC7/AC8)
 
-토픽이 잡히면(round 1–2) landscape sweep **1회**를 수행합니다. 각 web 검색 *전에* state의
-`web_sweep_count`/`web_search_count`를 +1 하고(PN1 Bash write) budget을 확인:
+토픽이 잡히면(round 1–2) landscape sweep **1회**를 수행합니다. 각 web 검색 *전에* `increment`로
+state의 `web_sweep_count`/`web_search_count`를 +1 하고(PN1 Bash write — `increment`가 read-modify-write를
+직접 수행, 인라인 주석 보존) budget을 확인합니다. `check`가 아니라 `increment`여야 카운터가 실제로
+전진합니다(미전진 시 budget이 영원히 0 — AP9/AP16 무력화). exit ≠ 0 이면 그 호출이 cap을 넘는다는 뜻:
 
 ```bash
 ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" state-root)"
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" check "$ROOT/<session-id>/state.local.md" || {
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" increment "$ROOT/<session-id>/state.local.md" || {
   echo "[spec-distill] web budget 초과 — landscape 중단, 강제 (b) 사용자 질문" ; }
 ```
 
@@ -170,7 +172,10 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" check "$ROOT/<session-id>/
 - 모든 외부 주장은 **출처 URL 필수**(AC4) — brief §3에 `[취함|피함|중립]` + 이유와 함께.
 - **kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`** 또는 web 도구 부재 → landscape를 **loud하게
   생략**하고 계속(crash 금지, graceful degradation — AC8): `[spec-distill] web 비활성 — landscape 생략, codebase 근거만 사용`.
-- sweep 종료 시 `web_sweep_count`를 0으로 reset(session 카운터는 유지).
+- sweep 종료 시 `reset-sweep`로 `web_sweep_count`를 0으로 reset(session 카운터는 유지):
+  ```bash
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" reset-sweep "$ROOT/<session-id>/state.local.md"
+  ```
 
 ### R3 — Steelman 의심 게이트 (P17)
 
@@ -187,6 +192,14 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" check "$ROOT/<session-id>/
    (전환 → 대안 lock, 원안은 R4로, steelman: switched-to-this) / (보류 → §6 OQ).
 4. builder 출력 그대로 brief §4 Skepticism Log에 기록 — 각 항목은 (대안 statement + 웹근거 URL + `verdict ∈ {defended | switched | deferred}`). 게이트 매핑: 방어→`defended`, 전환→`switched`, 보류→`deferred`(§6 OQ에도 박제). 프론트매터 `steelman:` 라벨(`switched-to-this`)과 §4 `verdict` 어휘(`switched`)는 별개 — §4에는 위 세 단어만 사용.
 5. 한 방향당 steelman 1회(새 근거 없으면 재steelman 금지 — AP16 harassment 방지).
+
+**Web 부재 시 graceful degradation (AC8 대칭)**: `steelman-builder`는 WebSearch/WebFetch를 요구합니다.
+kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구 부재로 steelman을 돌릴 수 없으면 —
+R2 landscape와 대칭으로 — opaque한 "malformed skepticism (no-url)" 게이트 실패로 떨어뜨리지 말고
+**loud advisory**를 내고 **수동 의심 게이트**로 전환합니다:
+`[spec-distill] web 비활성 — steelman 자동 생략, 사용자에게 의심 방향 수동 확인 요청`. 이 경우 §4
+Skepticism Log은 사용자 판단(방어/전환/보류)을 근거로 기록하되 URL 부재 사유를 명시합니다(`check_brief.py`의
+skepticism 형식 검사는 web-disabled 시 V10 manual로 위임).
 
 **Law 2 경계**: steelman 게이트는 Law 2 분리 메커니즘이 *아닙니다* — Law 2 분리 reviewer는
 오직 design doc(brainstorming `-design.md`)에만 적용됩니다. steelman은 문제공간 품질을 끌어올리는

@@ -26,13 +26,25 @@ CLI subcommands (all print JSON):
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
 
+
+def _web_disabled() -> bool:
+    """AC8 graceful degradation: when web research is killed, URLs cannot be
+    obtained, so the gate relaxes the citation requirement on §3/§4 (the SKILL's
+    R2/R3 web-absent clauses). The judgment of whether the (URL-less) skepticism
+    is genuine stays V10 manual."""
+    return os.environ.get("DEVBREW_SPEC_DISTILL_DISABLE_WEB") == "1"
+
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 URL_RE = re.compile(r"https?://\S+")
 VALID_VERDICTS = ("defended", "switched", "deferred")
+# Fenced code blocks are illustrative, not authored content — strip them before
+# section/entry detection so headers quoted inside ``` cannot satisfy the gate (F4).
+FENCE_RE = re.compile(r"^[ \t]*```.*?^[ \t]*```[^\n]*$", re.DOTALL | re.MULTILINE)
 
 SECTIONS = [
     ("1", "Reframed Problem"),
@@ -47,7 +59,8 @@ SECTIONS = [
 
 def _body(text: str) -> str:
     m = FRONTMATTER_RE.match(text)
-    return text[m.end():] if m else text
+    body = text[m.end():] if m else text
+    return FENCE_RE.sub("", body)
 
 
 def find_missing_sections(text: str) -> list[str]:
@@ -84,23 +97,52 @@ def _entry_lines(section: str) -> list[str]:
 
 
 def landscape_uncited(text: str) -> list[str]:
+    if _web_disabled():
+        return []  # web off → no URLs obtainable; citation requirement relaxed (AC8)
     sec = _section_text(text, "3", "External Landscape")
     return [ln for ln in _entry_lines(sec) if not URL_RE.search(ln)]
 
 
+def landscape_present(text: str) -> bool:
+    """§3 External Landscape must carry >=1 entry, OR an explicit web-disabled
+    sentinel (AC8 graceful degradation). An empty §3 means no landscape was
+    surfaced — R2 unmet. Header presence alone is not research (F3)."""
+    sec = _section_text(text, "3", "External Landscape").strip()
+    if not sec:
+        return False
+    if re.search(r"\bN/?A\b|비활성|생략|web[ -]?disabled", sec, re.IGNORECASE):
+        return True
+    return bool(_entry_lines(sec))
+
+
+def steelman_unlogged(text: str) -> int:
+    """Count locked directions whose frontmatter claims a steelman outcome
+    (`defended` / `switched-to-this`) but which have no corresponding §4
+    Skepticism Log entry. The brief template requires every suspicion-triggered
+    direction to log a §4 entry; this enforces the count. Whether the entry is a
+    genuine counter-argument stays V10 manual (F6)."""
+    m = FRONTMATTER_RE.match(text)
+    fm = m.group(1) if m else ""
+    claimed = len(re.findall(
+        r"^\s*steelman\s*:\s*(?:defended|switched-to-this)\s*$", fm, re.MULTILINE))
+    logged = len(_entry_lines(_section_text(text, "4", "Skepticism Log")))
+    return max(0, claimed - logged)
+
+
 def skepticism_malformed(text: str) -> list[str]:
     sec = _section_text(text, "4", "Skepticism Log")
+    require_url = not _web_disabled()  # AC8: web off → user-judgment skepticism may lack a URL
     bad: list[str] = []
     for ln in _entry_lines(sec):
         has_url = bool(URL_RE.search(ln))
         has_verdict = any(v in ln.lower() for v in VALID_VERDICTS)
         stripped = URL_RE.sub("", ln).lstrip("- ").strip()
         has_stmt = len(stripped) >= 10
-        if not (has_url and has_verdict and has_stmt):
+        if not (has_verdict and has_stmt and (has_url or not require_url)):
             miss = []
             if not has_stmt:
                 miss.append("statement<10c")
-            if not has_url:
+            if require_url and not has_url:
                 miss.append("no-url")
             if not has_verdict:
                 miss.append("no-verdict")
@@ -133,7 +175,12 @@ def frontmatter_errors(text: str) -> list[str]:
 
 
 def gate(path: Path) -> int:
-    text = path.read_text(encoding="utf-8")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        print(json.dumps({"pass": False, "failures": [f"brief unreadable: {exc}"]},
+                         ensure_ascii=False))
+        return 1
     failures: list[str] = []
     miss = find_missing_sections(text)
     if miss:
@@ -141,12 +188,20 @@ def gate(path: Path) -> int:
     fe = frontmatter_errors(text)
     if fe:
         failures.append(f"frontmatter: {fe}")
+    # Only check §3 content when the section exists; absence is already in miss.
+    sec3_absent = any(m.startswith("3.") for m in miss)
+    if not sec3_absent and not landscape_present(text):
+        failures.append("External Landscape empty (no entries and no web-disabled sentinel)")
     unc = landscape_uncited(text)
     if unc:
         failures.append(f"uncited landscape entries: {len(unc)}")
     mal = skepticism_malformed(text)
     if mal:
         failures.append(f"malformed skepticism entries: {len(mal)}")
+    shortfall = steelman_unlogged(text)
+    if shortfall:
+        failures.append(
+            f"{shortfall} steelman-claimed direction(s) without a §4 Skepticism Log entry")
     # Only check content of §5 when the section exists; absence is already in miss.
     sec5_absent = any(m.startswith("5.") for m in miss)
     if not sec5_absent and not tried_discarded_ok(text):
@@ -161,7 +216,13 @@ def main(argv: list[str]) -> int:
         print("usage: check_brief.py <subcommand> <brief.md>", file=sys.stderr)
         return 64
     sub, path = argv[1], Path(argv[2])
-    text = path.read_text(encoding="utf-8")
+    if sub == "gate":
+        return gate(path)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        print(f"brief unreadable: {exc}", file=sys.stderr)
+        return 1
     if sub == "sections":
         print(json.dumps({"missing": find_missing_sections(text)}, ensure_ascii=False))
         return 0
@@ -177,8 +238,6 @@ def main(argv: list[str]) -> int:
     if sub == "frontmatter":
         print(json.dumps({"errors": frontmatter_errors(text)}, ensure_ascii=False))
         return 0
-    if sub == "gate":
-        return gate(path)
     print(f"unknown subcommand: {sub}", file=sys.stderr)
     return 64
 

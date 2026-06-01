@@ -601,3 +601,7 @@ class TestInterviewDirectionLayerHook(unittest.TestCase):
             self.repo / ".claude" / "spec-distill" / "hooktestsession" / "state.local.md"
         )
         self.assertFalse(state.exists(), "interview/ path must not write pending_review")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -21,9 +21,12 @@ has 'check_brief\.py gate' "termination gate calls check_brief.py gate"
 has '차단|block|종료.*금지|finalize.*안' "gate is blocking on failure"
 
 has 'web_budget\.py' "web bound calls web_budget.py"
+has 'web_budget\.py"? increment' "F2: web call increments counters before checking"
+has 'web_budget\.py"? reset-sweep' "F2: sweep boundary calls reset-sweep"
 has 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' "web kill switch documented (AC8)"
 has 'web_sweep_count' "PN3: web_sweep_count counter in state"
 has 'web_search_count' "PN3: web_search_count counter in state"
+has 'steelman.*생략|web 비활성.*steelman' "F8: R3 web-absent loud degradation (AC8 symmetry)"
 
 has 'steelman-builder' "steelman-builder dispatch"
 has 'verbatim|약화.*금지|편집.*금지' "steelman verbatim pass-through (AC5)"
