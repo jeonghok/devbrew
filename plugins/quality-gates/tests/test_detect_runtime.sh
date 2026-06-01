@@ -215,6 +215,15 @@ OUT=$(run_detector "force-flag")
 ff_test_block=$(get_surface_block "$OUT" "name: test")
 assert_not_contains "$ff_test_block" "requires_decision" "T12: jest --force-exit stays automatic"
 
+# --- Test 13: $HOME unset must NOT abort the manifest (I-F) ---
+echo "== Test 13: env -u HOME non-empty manifest =="
+OUT=$(cd "$FIXTURES/web-compose" && env -u HOME bash "$SCRIPT" 2>/dev/null)
+RC=$?
+assert_eq "$RC" "0" "T13: exit 0 with HOME unset"
+assert_contains "$OUT" "project_type: web" "T13: emits project_type with HOME unset"
+assert_contains "$OUT" "runnable_surfaces:" "T13: emits runnable_surfaces (not aborted before emit)"
+assert_contains "$OUT" "mcp_browser:" "T13: emits mcp_browser line"
+
 echo ""
 echo "Tests passed: $PASS, failed: $FAIL"
 [[ $FAIL -eq 0 ]] || exit 1

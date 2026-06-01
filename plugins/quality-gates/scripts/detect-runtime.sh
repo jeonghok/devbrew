@@ -193,8 +193,9 @@ done
 # Strategy: read ~/.claude/settings.json or .claude/settings.json for known
 # MCP server entries. chrome-devtools wins over playwright.
 MCP_BROWSER="none"
-SETTINGS_FILES=("$HOME/.claude/settings.json" ".claude/settings.json" ".mcp.json")
+SETTINGS_FILES=("${HOME:-}/.claude/settings.json" ".claude/settings.json" ".mcp.json")
 for sf in "${SETTINGS_FILES[@]}"; do
+  [[ "$sf" == "/.claude/settings.json" ]] && continue   # HOME unset → skip the ~ entry
   if [[ -f "$sf" ]]; then
     if grep -qi 'chrome-devtools' "$sf" 2>/dev/null; then
       MCP_BROWSER="chrome-devtools"
