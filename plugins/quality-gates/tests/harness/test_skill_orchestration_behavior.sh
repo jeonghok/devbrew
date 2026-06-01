@@ -173,6 +173,16 @@ else
   fail=$((fail + 1))
 fi
 
+# I-C: evidence_dir threaded to R3 as a main-repo absolute path that survives R5 discard.
+assert_line "evidence_dir threaded to verifier"  "$(first_line 'evidence_dir')"
+if grep -qE 'evidence_dir.*\.claude/quality-gates/' "$SKILL_MD"; then
+  echo "PASS: evidence_dir uses .claude/quality-gates/ path"
+else
+  echo "FAIL: evidence_dir path not .claude/quality-gates/"
+  fail=$((fail + 1))
+fi
+assert_line "evidence_dir uses CLAUDE_CODE_SESSION_ID" "$(first_line 'CLAUDE_CODE_SESSION_ID')"
+
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"
   exit 0

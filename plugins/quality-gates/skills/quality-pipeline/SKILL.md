@@ -422,6 +422,9 @@ Agent({
 
 **Step R2 — gather spec Acceptance Criteria.** Resolve the spec (reuse `discover-spec.sh` semantics already used by test-scope-validator) and build `spec_acceptance_criteria` as a `{ac_id, text}` list. If no spec, pass an empty list (the verifier falls back to plan_features → smoke).
 
+Also derive `evidence_dir = "$project_dir/.claude/quality-gates/$CLAUDE_CODE_SESSION_ID/"` (the preflight main-repo `project_dir`, NOT the sandbox — so it survives the R5 sandbox discard; `$CLAUDE_CODE_SESSION_ID` is the same value used for the pipeline state file). This absolute path is threaded to the verifier so its evidence-log + screenshots land in the main repo, not inside the disposable sandbox.
+(detect-runtime.sh runs from this same main-repo `project_dir` during the Upfront Execution Plan, so its `attempted_log_path` resolves to the identical `evidence_dir`.)
+
 **Step R3 — dispatch runtime-verifier (executor)** with `project_dir = runtime_project_dir`, the spec AC, the approved surfaces, and the block policy:
 
 ```
@@ -430,6 +433,7 @@ Agent({
   description: "Runtime verification (Runtime gate, sandbox executor)",
   prompt: "Boot the declared surfaces in the sandbox, drive flows, assert against spec AC, write an evidence-log.
     project_dir: \"$runtime_project_dir\"
+    evidence_dir: \"$evidence_dir\"
     spec_acceptance_criteria: <{ac_id,text} list or []>
     manifest: <output of detect-runtime.sh>
     approved_surfaces: <surfaces opted in at the Upfront Execution Plan>

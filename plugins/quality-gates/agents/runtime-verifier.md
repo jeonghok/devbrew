@@ -70,6 +70,7 @@ You are the Runtime Verifier — the Runtime gate of the quality-gates pipeline.
 The skill dispatches you with a prompt containing:
 
 - `project_dir`: **the sandbox path** (absolute) — the single coordinate, frozen by the SKILL. NEVER re-derive (`git rev-parse`, `Path.cwd()`, `pwd` all forbidden).
+- `evidence_dir`: **absolute path in the MAIN repo** (`<main>/.claude/quality-gates/<sid>/`), OUTSIDE the sandbox. Write your evidence-log and screenshots HERE — the sandbox is discarded after the gate, so anything written under `project_dir` (the sandbox) is destroyed. Product/service files you touch during boot go in `project_dir` (sandbox); evidence goes in `evidence_dir`.
 - `plan_path`: path to plan file (or `auto`).
 - `spec_acceptance_criteria`: a structured list of `{ac_id, text}` extracted from the project spec (may be empty — then use the fallback chain below).
 - **Manifest** — YAML from `scripts/detect-runtime.sh`. Read it verbatim; do NOT re-detect. Surfaces carry `requires_decision` flags.
@@ -106,7 +107,7 @@ Then derive flows. **Assertion-basis fallback chain (log which mode, loudly):**
 - else `plan_features` present → exercise those routes/labels (the older crude path).
 - else → no functional assertion; smoke-test only (boot + console-error check). Log `functional-mode: smoke (no spec, no plan_features)`.
 
-For **web** flows (per `mcp_browser`): navigate → interact (`click`/`fill`/`fill_form`/`type_text`/`hover`/`press_key`) → assert the expected DOM/network result. Capture screenshot to `.claude/quality-gates/<sid>/screenshots/<surface>.png`, a DOM snapshot, and the network status.
+For **web** flows (per `mcp_browser`): navigate → interact (`click`/`fill`/`fill_form`/`type_text`/`hover`/`press_key`) → assert the expected DOM/network result. Capture a screenshot to `<evidence_dir>/screenshots/<surface>.png` (absolute, main repo), a DOM snapshot, and the network status.
 
 For **CLI** flows: run the command, capture stdout/stderr/exit-code, and assert against the AC text with `grep`.
 
@@ -114,7 +115,7 @@ For **CLI** flows: run the command, capture stdout/stderr/exit-code, and assert 
 
 ## Step 3: Write the evidence-log
 
-Write to `manifest.attempted_log_path` using a Bash heredoc or the Write tool (the log lives under `.claude/quality-gates/<sid>/`, scratch — not project source). Include these sections:
+Write the evidence-log to `<evidence_dir>/runtime-evidence.md` and screenshots to `<evidence_dir>/screenshots/<surface>.png` — **always the absolute `evidence_dir`, never a sandbox-relative `.claude/...` path** (the sandbox is git-ignored and discarded; a relative write would be destroyed by R5, dangling the Evidence Log reference — I-C). `manifest.attempted_log_path` is already this absolute path. Include these sections:
 
 ```markdown
 # Runtime gate Evidence Log — iteration N
@@ -141,7 +142,7 @@ Write to `manifest.attempted_log_path` using a Bash heredoc or the Write tool (t
   expected: "redirect to /dashboard, greeting shows user name"
   observed: "redirected to /dashboard; greeting 'Hello, Dana'"
   evidence_refs:
-    - .claude/quality-gates/<sid>/screenshots/login.png
+    - <evidence_dir>/screenshots/login.png
     - "network: POST /api/login → 200"
   verdict: PASS
 ```
