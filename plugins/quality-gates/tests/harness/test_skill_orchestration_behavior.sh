@@ -150,6 +150,18 @@ assert_line "spec_acceptance_criteria threaded" "$(first_line 'spec_acceptance_c
 # Version bumped to 2.2.0 (final summary).
 assert_line "v2.2.0 in SKILL" "$(first_line 'v2.2.0|2\.2\.0')"
 
+# --- v2.2.0 mutation-guard hardening protocol-shape ---
+
+# C-C: R4 must route an errored/garbled guard as ≤FAIL, never PASS.
+# Anchor on `exit 4` (unique to the R4 routing table), then require the
+# fail-closed phrases to appear AT/AFTER it — so deleting them from R4 fails
+# the test even though similar words appear earlier (R0 / TOC).
+r4_tbl=$(first_line 'exit 4')
+assert_line "R4 routes guard exit 4 as FAIL"          "$r4_tbl"
+assert_line "R4 surfaces guard_error"                 "$(first_line 'guard_error')"
+assert_line "R4 surfaces guard stderr verbatim"       "$(first_line_after 'stderr verbatim' "$((r4_tbl - 1))")"
+assert_line "R4 never-PASS for indeterminate guard"   "$(first_line_after 'indeterminate' "$((r4_tbl - 1))")"
+
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"
   exit 0

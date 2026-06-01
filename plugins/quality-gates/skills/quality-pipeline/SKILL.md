@@ -446,6 +446,16 @@ Agent({
 
 Read the YAML. **If `forced_downgrade: yes`**, the verdict is capped at FAIL regardless of the verifier's emitted verdict (Law 2 — the verifier cannot self-approve a product change). Surface `tracked_diff` + `disallowed_new_files` as evidence ("the app only ran after this change — fix it in a normal writer→review cycle"). The verifier's own `writes:` self-report is advisory only; this git result is authoritative.
 
+**R4 exit-code routing (C-C — mirror R0's discipline; an indeterminate guard is never a PASS).** Capture BOTH the guard's stdout YAML AND its exit code:
+
+| Guard result | R4 routing |
+|---|---|
+| exit 0 + `forced_downgrade: no` (all §6.1 snapshot keys valid) | no product mutation → proceed to R5/R6 normally |
+| exit 0 + `forced_downgrade: yes` | cap verdict at FAIL; surface `tracked_diff` / `disallowed_new_files` / `guard_flags` as evidence |
+| **exit 4** (`guard_fail`), OR any other non-zero exit, OR a missing/invalid `forced_downgrade` key, OR a `guard_error:` line present | treat as `forced_downgrade: yes` → cap verdict at FAIL; surface the guard's `guard_error` + **stderr verbatim**; mark the Runtime gate failed. **Never read an errored or garbled guard as PASS** (indeterminate ≠ clean). |
+
+An errored guard (corrupt index, lost gitdir, missing/truncated snapshot, bad baseline) must not present as "not a downgrade." This is the orchestration-layer half of the bypass closure — the guard script's layers 0–3 (§6.2) cover C-A/C-B/C-D/C-E; this table covers C-C.
+
 **Fallback working-tree guard (read-only mode only).** When the sandbox was disabled (Exit 3), instead of the sandbox `mutation-guard`, capture `fallback_post` = `git -C "$project_dir" status --porcelain --untracked-files=all` after the R3 dispatch. Any porcelain entry present in `fallback_post` but NOT in `fallback_pre` (captured in R0) means the verifier mutated the real working tree → treat as `forced_downgrade: yes`: cap the verdict at FAIL and print a loud warning that the working tree was modified in fallback mode (show the new entries; advise the user to `git diff` and revert). git-ignored files do not appear in `--porcelain`, so a setup-only `.env` fix is correctly NOT flagged — matching the sandbox guard's git-ignored ⇒ non-product rule. This keeps the structural Law-2 guarantee (a product mutation can never yield PASS) even with the sandbox disabled.
 
 **Step R5 — Discard the sandbox** (verdict-independent), unless in read-only fallback:
