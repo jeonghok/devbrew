@@ -162,6 +162,17 @@ assert_line "R4 surfaces guard_error"                 "$(first_line 'guard_error
 assert_line "R4 surfaces guard stderr verbatim"       "$(first_line_after 'stderr verbatim' "$((r4_tbl - 1))")"
 assert_line "R4 never-PASS for indeterminate guard"   "$(first_line_after 'indeterminate' "$((r4_tbl - 1))")"
 
+# I-A/I-B: fallback caps at SKIP_WITH_EVIDENCE (never PASS) + single runtime_project_dir.
+assert_line "runtime_project_dir variable used"      "$(first_line 'runtime_project_dir')"
+assert_line "fallback caps at SKIP_WITH_EVIDENCE"    "$(first_line 'SKIP_WITH_EVIDENCE.*never PASS|never PASS.*SKIP_WITH_EVIDENCE')"
+# I-B: the R3 dispatch project_dir must NOT hardcode sandbox_dir (use runtime_project_dir).
+if grep -qE 'project_dir:[[:space:]]*\\?"\$runtime_project_dir' "$SKILL_MD"; then
+  echo "PASS: R3 dispatch uses runtime_project_dir"
+else
+  echo "FAIL: R3 dispatch does not use runtime_project_dir"
+  fail=$((fail + 1))
+fi
+
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"
   exit 0

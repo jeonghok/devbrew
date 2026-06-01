@@ -402,8 +402,8 @@ If `skip_runtime` was set, skip this entire section.
 "${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-sandbox "<session-id>"
 ```
 
-- Exit 0 → capture **line 1 = `sandbox_dir`**, **line 2 = `baseline_sha`**. The verifier's `project_dir` for this gate is `sandbox_dir` (frozen — overrides the preflight `project_dir` for the Runtime gate only).
-- **Exit 3** (kill switch `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`) → graceful fallback (no sandbox): the verifier runs in read-only smoke mode against the real `project_dir`. Because the verifier still holds Write tools (frontmatter cannot be revoked per-dispatch), Law 2 here is preserved by a **working-tree mutation check** instead of the sandbox guard: BEFORE the R3 dispatch, capture `fallback_pre` = `git -C "$project_dir" status --porcelain --untracked-files=all`. Print the loud line: `> [quality-gates] runtime sandbox disabled — read-only smoke mode on the real tree; Law 2 enforced via working-tree mutation check (DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1).` In R4, use the fallback working-tree guard (below) rather than the sandbox `mutation-guard`.
+- Exit 0 → capture **line 1 = `sandbox_dir`**, **line 2 = `baseline_sha`**. Set `runtime_project_dir = sandbox_dir` (the verifier's `project_dir` for this gate, frozen — overrides the preflight `project_dir` for the Runtime gate only).
+- **Exit 3** (kill switch `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`) → graceful fallback (no sandbox): set `runtime_project_dir = project_dir` (the preflight main-repo dir; `sandbox_dir`/`baseline_sha` stay UNSET). The verifier runs in read-only smoke mode against the real tree. Because the verifier still holds Write tools (frontmatter cannot be revoked per-dispatch), the fallback verdict is **capped at SKIP_WITH_EVIDENCE — never PASS** (no sandbox = no structural Law-2 guarantee = no certification; I-A). BEFORE the R3 dispatch, capture `fallback_pre` = `git -C "$project_dir" status --porcelain --untracked-files=all` plus a tracked content tree-hash baseline (`GIT_INDEX_FILE=<tmp> git -C "$project_dir" add -A -- . && git write-tree`). Print: `> [quality-gates] runtime sandbox disabled — read-only smoke mode on the real tree; verdict capped at SKIP_WITH_EVIDENCE (DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1).`
 - Any other non-zero → surface stderr verbatim and mark the Runtime gate failed.
 
 **Step R1 — test-scope-validator** (read-only reviewer; `project_dir` is the *preflight* dir, not the sandbox — it reviews the real diff). Per [Reviewer dispatch contract](#reviewer-dispatch-contract):
@@ -422,14 +422,14 @@ Agent({
 
 **Step R2 — gather spec Acceptance Criteria.** Resolve the spec (reuse `discover-spec.sh` semantics already used by test-scope-validator) and build `spec_acceptance_criteria` as a `{ac_id, text}` list. If no spec, pass an empty list (the verifier falls back to plan_features → smoke).
 
-**Step R3 — dispatch runtime-verifier (executor)** with `project_dir = sandbox_dir`, the spec AC, the approved surfaces, and the block policy:
+**Step R3 — dispatch runtime-verifier (executor)** with `project_dir = runtime_project_dir`, the spec AC, the approved surfaces, and the block policy:
 
 ```
 Agent({
   subagent_type: "quality-gates:runtime-verifier",
   description: "Runtime verification (Runtime gate, sandbox executor)",
   prompt: "Boot the declared surfaces in the sandbox, drive flows, assert against spec AC, write an evidence-log.
-    project_dir: \"$sandbox_dir\"
+    project_dir: \"$runtime_project_dir\"
     spec_acceptance_criteria: <{ac_id,text} list or []>
     manifest: <output of detect-runtime.sh>
     approved_surfaces: <surfaces opted in at the Upfront Execution Plan>
@@ -456,7 +456,7 @@ Read the YAML. **If `forced_downgrade: yes`**, the verdict is capped at FAIL reg
 
 An errored guard (corrupt index, lost gitdir, missing/truncated snapshot, bad baseline) must not present as "not a downgrade." This is the orchestration-layer half of the bypass closure — the guard script's layers 0–3 (§6.2) cover C-A/C-B/C-D/C-E; this table covers C-C.
 
-**Fallback working-tree guard (read-only mode only).** When the sandbox was disabled (Exit 3), instead of the sandbox `mutation-guard`, capture `fallback_post` = `git -C "$project_dir" status --porcelain --untracked-files=all` after the R3 dispatch. Any porcelain entry present in `fallback_post` but NOT in `fallback_pre` (captured in R0) means the verifier mutated the real working tree → treat as `forced_downgrade: yes`: cap the verdict at FAIL and print a loud warning that the working tree was modified in fallback mode (show the new entries; advise the user to `git diff` and revert). git-ignored files do not appear in `--porcelain`, so a setup-only `.env` fix is correctly NOT flagged — matching the sandbox guard's git-ignored ⇒ non-product rule. This keeps the structural Law-2 guarantee (a product mutation can never yield PASS) even with the sandbox disabled.
+**Fallback working-tree guard (read-only mode only — I-A/I-B).** When the sandbox was disabled (Exit 3), do NOT run the sandbox `mutation-guard`. The verdict is already capped at SKIP_WITH_EVIDENCE (R0); this guard is a pure SAFETY SIGNAL, not a verdict input. After the R3 dispatch, recompute `fallback_post` (porcelain + tracked content tree-hash, same as `fallback_pre`). If anything changed (a porcelain entry in `fallback_post` not in `fallback_pre`, or a differing tree-hash), emit a loud warning **to user-visible stdout** AND record it in `evidence_dir` (§6.6): `> [quality-gates] WARNING: runtime fallback에서 working tree가 변경됨 — <changed files>. sandbox 미사용으로 구조적 보호 없음; 검토 요망 (git diff 후 revert 권장).` git-ignored files do not appear in `--porcelain`, so a setup-only `.env` fix is correctly NOT flagged. The warning does not change the verdict (already ≤SKIP cap) and does not block the gate (P18 — no extra loop).
 
 **Step R5 — Discard the sandbox** (verdict-independent), unless in read-only fallback:
 
@@ -464,8 +464,9 @@ An errored guard (corrupt index, lost gitdir, missing/truncated snapshot, bad ba
 "${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "<sandbox_dir>"
 ```
 
-**Step R6 — Outcome routing** (verdict = min(verifier verdict, guard cap)):
+**Step R6 — Outcome routing** (verdict = min(verifier verdict, guard cap, fallback cap)):
 
+- **Fallback mode (sandbox disabled)** → the verifier's verdict is capped: a `PASS` becomes **SKIP_WITH_EVIDENCE** (no structural guarantee), `FAIL`/`NEEDS_RESOLUTION` pass through unchanged. The R4 fallback warning (if any) is printed but does not alter the verdict.
 - **Clean (PASS) AND `forced_downgrade: no`** → print `## Runtime gate — clean` and continue to final summary.
 - **`forced_downgrade: yes`** → print the Runtime gate FAIL block including the surfaced diff; emit final summary marked Runtime gate failure. Do NOT auto-restart, do NOT apply the diff (in-gate accept is out of scope).
 - **FAIL** (product bug / unrecoverable) → print verdict block; final summary marked failure.
