@@ -169,7 +169,7 @@ case "${1:-}" in
     excl_wt_sha=$(snap_hash_file "$snap_gitdir/info/exclude")
     excludesfile=$(git -C "$sandbox" config --get core.excludesFile 2>/dev/null || printf 'absent')
     if [[ "$excludesfile" != "absent" ]]; then
-      ef_path="$excludesfile"; case "$ef_path" in "~/"*) ef_path="${HOME:-}/${ef_path#~/}" ;; esac
+      ef_path="$excludesfile"; case "$ef_path" in "~/"*) ef_path="${HOME:-}/${ef_path#'~/'}" ;; esac
       excludesfile_sha=$(snap_hash_file "$ef_path")
     else
       excludesfile_sha=absent
@@ -190,58 +190,154 @@ case "${1:-}" in
     printf '%s\n%s\n' "$sandbox" "$base"
     ;;
   mutation-guard)
-    # Pure-git product-mutation oracle. Inputs are ONLY (sandbox, baseline B).
-    # There is no channel for a verifier self-claim — that is the structural
-    # Law 2 self-approval defense (§6.7). Authoritative over the verdict.
+    # 4-layer fail-closed product-mutation oracle (spec §6.2). Inputs are ONLY
+    # (sandbox, baseline B) + a snapshot create-sandbox wrote in the per-worktree
+    # gitdir. No channel for a verifier self-claim → structural Law 2 defense.
+    # Execution order locked: layer 0 → 1 → 2 → 3 → aggregate.
     [[ $# -eq 3 ]] || die "usage: mutation-guard <sandbox-abs> <baseline-sha>"
     sandbox="$2" base="$3"
-    [[ -d "$sandbox" ]] || die "sandbox not found: $sandbox"
-    git -C "$sandbox" cat-file -e "${base}^{commit}" 2>/dev/null \
-      || die "bad baseline sha: $base"
 
-    # (1) tracked net diff vs the immutable baseline B. Comparing B<->working-tree
-    # is commit-agnostic: any intermediate `git commit` the verifier ran inside
-    # the sandbox cannot hide a net change. Also fold in staged-vs-B (defensive).
-    tracked=$(git -C "$sandbox" diff --name-only "$base" -- 2>/dev/null)
-    tracked_cached=$(git -C "$sandbox" diff --name-only --cached "$base" -- 2>/dev/null)
-    tracked_all=$(printf '%s\n%s\n' "$tracked" "$tracked_cached" | sed '/^$/d' | sort -u)
+    # YAML single-quoted scalar escaper (I-D): '' escapes an embedded quote.
+    yq() { local s; s=$(printf '%s' "$1" | sed "s/'/''/g"); printf "'%s'" "$s"; }
 
-    # (2) new files (untracked relative to B's index). Classification:
-    #   symlink  -> always product-affecting (target-agnostic, conservative)
-    #   ignored  -> non-product (cannot normally enter product) -> skip
-    #   else     -> product-affecting
-    # NOTE: plain `--others` (NOT --exclude-standard) so ignored files appear
-    # and we can classify them explicitly via check-ignore.
-    disallowed=()
-    while IFS= read -r -d '' rel; do
-      [[ -z "$rel" ]] && continue
-      if [[ -L "$sandbox/$rel" ]]; then
-        disallowed+=("$rel"); continue
-      fi
-      if git -C "$sandbox" check-ignore -q -- "$rel" 2>/dev/null; then
-        continue   # git-ignored -> non-product
-      fi
-      disallowed+=("$rel")
-    done < <(git -C "$sandbox" ls-files --others -z 2>/dev/null)
+    # ---- Layer 0: fail-closed foundation (C-B, NEW-03) ----
+    # Any indeterminate result emits forced_downgrade: yes and exits 4 (locked;
+    # distinct from die=2 and kill-switch=3). "indeterminate is never PASS."
+    guard_fail() {
+      echo "tracked_diff: []"
+      echo "disallowed_new_files: []"
+      echo "guard_flags: []"
+      printf 'guard_error: %s\n' "$(yq "$1")"
+      echo "forced_downgrade: yes"
+      exit 4
+    }
+
+    [[ -d "$sandbox" ]] || guard_fail "sandbox not found: $sandbox"
+    gitdir=$(git -C "$sandbox" rev-parse --absolute-git-dir 2>&1) \
+      || guard_fail "cannot resolve gitdir: $gitdir"
+    common=$(git -C "$sandbox" rev-parse --git-common-dir 2>&1) \
+      || guard_fail "cannot resolve common-dir: $common"
+    case "$common" in /*) ;; *) common="$sandbox/$common" ;; esac
+    base_tree=$(git -C "$sandbox" rev-parse "${base}^{tree}" 2>&1) \
+      || guard_fail "bad baseline sha: $base ($base_tree)"
+
+    snap="$gitdir/qg-mutation-snapshot"
+    [[ -f "$snap" ]] || guard_fail "snapshot missing: $snap"
+    # Assert ALL §6.1 keys present — a missing key read as '' would yield a
+    # false forced=no (NEW-03). §6.1 table is the key single-source-of-truth.
+    for k in head_reflog_sha stash_sha excl_common_sha excl_wt_sha \
+             excludesfile excludesfile_sha logallrefupdates; do
+      grep -q "^$k=" "$snap" || guard_fail "snapshot missing key: $k"
+    done
+    snap_get() { sed -n "s/^$1=//p" "$snap" | head -1; }
 
     forced="no"
-    [[ -n "$tracked_all" ]] && forced="yes"
+    guard_flags=()
+    tracked_diff=()
+    disallowed=()
+
+    # ---- Layer 1: content tree-hash (C-E + honest mutation) ----
+    # Fresh temp index → git re-stats every path, ignoring assume-unchanged /
+    # skip-worktree index bits (verified). No -f → tracked .gitignore (part of B)
+    # is honored, preserving the legit git-ignored .env setup-only PASS path.
+    idx="$gitdir/qg-tmp-idx.$$"; rm -f "$idx"
+    add_out=$(GIT_INDEX_FILE="$idx" git -C "$sandbox" add -A -- . 2>&1) \
+      || { rm -f "$idx"; guard_fail "add -A failed: $add_out"; }
+    cur_tree=$(GIT_INDEX_FILE="$idx" git -C "$sandbox" write-tree 2>&1) \
+      || { rm -f "$idx"; guard_fail "write-tree failed: $cur_tree"; }
+    rm -f "$idx"
+
+    if [[ "$cur_tree" != "$base_tree" ]]; then
+      forced="yes"
+      ns=$(git -C "$sandbox" diff --name-status "$base_tree" "$cur_tree" 2>&1) \
+        || guard_fail "diff name-status failed: $ns"
+      while IFS=$'\t' read -r st p1 p2; do
+        [[ -z "$st" ]] && continue
+        case "$st" in
+          A*)    disallowed+=("$p1") ;;          # new non-ignored file (staged by add -A)
+          R*|C*) tracked_diff+=("$p1" "$p2") ;;  # rename/copy: both paths
+          *)     tracked_diff+=("$p1") ;;         # M / D / T / U
+        esac
+      done <<< "$ns"
+    fi
+
+    # New symlinks are product-affecting regardless of ignore status (original
+    # §6.7-2 rule). add -A skips ignored symlinks, so union them via ls-files.
+    others=$(git -C "$sandbox" ls-files --others -z 2>&1) \
+      || guard_fail "ls-files --others failed: $others"
+    while IFS= read -r -d '' rel; do
+      [[ -z "$rel" ]] && continue
+      [[ -L "$sandbox/$rel" ]] || continue
+      disallowed+=("$rel")
+    done < <(printf '%s' "$others")
     [[ ${#disallowed[@]} -gt 0 ]] && forced="yes"
 
-    # Emit list entries as YAML single-quoted scalars so filenames containing
-    # YAML metacharacters ([, :, #, leading -) stay parseable. Single-quote is
-    # escaped as '' per the YAML spec.
-    if [[ -n "$tracked_all" ]]; then
+    # ---- Layer 2: ignore-channel + config tamper (C-A, NEW-05) ----
+    ho() { if [[ -f "$1" ]]; then git -C "$sandbox" hash-object "$1" 2>/dev/null || printf 'absent'; else printf 'absent'; fi; }
+    now_excl_c=$(ho "$common/info/exclude")
+    now_excl_w=$(ho "$gitdir/info/exclude")
+    now_ef=$(git -C "$sandbox" config --get core.excludesFile 2>/dev/null || printf 'absent')
+    if [[ "$now_ef" != "absent" ]]; then
+      ef_path="$now_ef"; case "$ef_path" in "~/"*) ef_path="${HOME:-}/${ef_path#'~/'}" ;; esac
+      now_ef_sha=$(ho "$ef_path")
+    else
+      now_ef_sha="absent"
+    fi
+    now_lar=$(git -C "$sandbox" config --get core.logAllRefUpdates 2>/dev/null || printf 'unset')
+
+    if [[ "$now_excl_c" != "$(snap_get excl_common_sha)" \
+       || "$now_excl_w" != "$(snap_get excl_wt_sha)" \
+       || "$now_ef"     != "$(snap_get excludesfile)" \
+       || "$now_ef_sha" != "$(snap_get excludesfile_sha)" ]]; then
+      forced="yes"; guard_flags+=("ignore_channel_tampered")
+    fi
+    if [[ "$now_lar" != "$(snap_get logallrefupdates)" ]]; then
+      forced="yes"; guard_flags+=("reflog_logging_tampered")
+    fi
+
+    # ---- Layer 3: snapshot delta (C-D) ----
+    # ⚠️ MUST hash with the IDENTICAL idiom create-sandbox used (var-capture +
+    # `printf '%s'`), else a clean sandbox false-positives. absolute
+    # rev-list --all --not is FORBIDDEN (sibling-branch false-positive, §10).
+    g_rl=$(git -C "$sandbox" reflog show HEAD 2>/dev/null || true)
+    if [[ -n "$g_rl" ]]; then
+      now_reflog=$(printf '%s' "$g_rl" | git -C "$sandbox" hash-object --stdin)
+    else
+      now_reflog=empty
+    fi
+    g_sl=$(git -C "$sandbox" stash list 2>/dev/null || true)
+    now_stash=$(printf '%s' "$g_sl" | git -C "$sandbox" hash-object --stdin)
+    if [[ "$now_reflog" != "$(snap_get head_reflog_sha)" ]]; then
+      forced="yes"; guard_flags+=("reflog_advanced")
+    fi
+    if [[ "$now_stash" != "$(snap_get stash_sha)" ]]; then
+      forced="yes"; guard_flags+=("stash_added")
+    fi
+
+    # ---- Emit (two original fields preserved → 8 happy-path compat) ----
+    if [[ ${#tracked_diff[@]} -gt 0 ]]; then
       echo "tracked_diff:"
-      while IFS= read -r f; do echo "  - '${f//\'/\'\'}'"; done <<< "$tracked_all"
+      printf '%s\n' "${tracked_diff[@]}" | sort -u | while IFS= read -r f; do
+        [[ -z "$f" ]] && continue; echo "  - $(yq "$f")"
+      done
     else
       echo "tracked_diff: []"
     fi
     if [[ ${#disallowed[@]} -gt 0 ]]; then
       echo "disallowed_new_files:"
-      for f in "${disallowed[@]}"; do echo "  - '${f//\'/\'\'}'"; done
+      printf '%s\n' "${disallowed[@]}" | sort -u | while IFS= read -r f; do
+        [[ -z "$f" ]] && continue; echo "  - $(yq "$f")"
+      done
     else
       echo "disallowed_new_files: []"
+    fi
+    if [[ ${#guard_flags[@]} -gt 0 ]]; then
+      echo "guard_flags:"
+      printf '%s\n' "${guard_flags[@]}" | sort -u | while IFS= read -r g; do
+        echo "  - $g"
+      done
+    else
+      echo "guard_flags: []"
     fi
     echo "forced_downgrade: $forced"
     ;;
