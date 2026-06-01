@@ -59,7 +59,8 @@ case "${1:-}" in
     [[ -n "$sid_short" ]] || die "empty session-id"
     parent=".claude/quality-gates/worktrees"
     mkdir -p "$parent" || die "cannot create $parent"
-    abs="$(cd "$parent" && pwd -P)/${sanitized}-${sid_short}"
+    base_abs=$(cd "$parent" && pwd -P) || die "cd failed: $parent"
+    abs="$base_abs/${sanitized}-${sid_short}"
     if [[ -d "$abs" ]]; then
       # Idempotent: verify it's a registered worktree and reuse
       if git worktree list --porcelain | grep -qxF "worktree $abs"; then
@@ -85,7 +86,7 @@ case "${1:-}" in
     sid_short="${sid:0:8}"
     [[ -n "$sid_short" ]] || die "empty session-id"
     main_root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not a git repo"
-    main_root=$(cd "$main_root" && pwd -P)
+    main_root=$(cd "$main_root" && pwd -P) || die "cd failed: $main_root"
     parent="$main_root/.claude/quality-gates/worktrees"
     mkdir -p "$parent" || die "cannot create $parent"
     sandbox="$parent/rt-${sid_short}"
@@ -116,9 +117,9 @@ case "${1:-}" in
       esac
       src="$main_root/$rel"
       if [[ -e "$src" || -L "$src" ]]; then
-        mkdir -p "$sandbox/$(dirname "$rel")"
+        mkdir -p "$sandbox/$(dirname "$rel")" || die "mkdir failed: $rel"
         rm -rf "$sandbox/$rel" 2>/dev/null  # make type-change (file->symlink) faithful
-        cp -a "$src" "$sandbox/$rel"    # -a preserves mode, symlink, binary
+        cp -a "$src" "$sandbox/$rel" || die "cp failed: $rel"    # -a preserves mode, symlink, binary
       fi
     done < "$tmp_list"
     rm -f "$tmp_list"
@@ -126,11 +127,17 @@ case "${1:-}" in
     # Honor deletions: a tracked file deleted in the working tree must not
     # survive in the sealed baseline.
     while IFS= read -r -d '' rel; do
-      rm -f "$sandbox/$rel" 2>/dev/null
+      rm -f "$sandbox/$rel" || die "rm (deletion-honor) failed: $rel"
     done < <(git -C "$main_root" ls-files -d -z)
 
     # Seal the immutable baseline commit B. --no-verify skips any repo hooks;
     # -c identity makes the commit succeed even when git identity is unset.
+    # §6.1/NEW-05 — guarantee reflog logging BEFORE the baseline commit so the
+    # baseline and any later HEAD move are logged (default is true, but a host
+    # may have pre-set false). Layer 2 later compares this value vs the snapshot.
+    # NOTE(side-effect): in a linked worktree this writes to the common .git/config
+    # (main repo). 'true' is git's default so no practical harm; documented in §6.1.
+    git -C "$sandbox" config core.logAllRefUpdates true || die "cannot set logAllRefUpdates"
     git -C "$sandbox" add -A >/dev/null 2>&1 || die "git add -A failed in sandbox"
     git -C "$sandbox" \
       -c user.email=qg-sandbox@devbrew.local -c user.name='qg sandbox' \
@@ -138,6 +145,46 @@ case "${1:-}" in
       commit -q --no-verify --allow-empty -m "qg runtime sandbox baseline" \
       >/dev/null 2>&1 || die "baseline commit failed"
     base=$(git -C "$sandbox" rev-parse HEAD) || die "cannot read baseline SHA"
+
+    # §6.1 — capture the pre-verifier baseline snapshot the mutation-guard
+    # compares against. Side-channel: lives in the per-worktree gitdir, so the
+    # 2-line output contract is unchanged and `git worktree remove` auto-cleans it.
+    snap_gitdir=$(git -C "$sandbox" rev-parse --absolute-git-dir) || die "cannot resolve gitdir"
+    snap_common=$(git -C "$sandbox" rev-parse --git-common-dir)   || die "cannot resolve common-dir"
+    case "$snap_common" in /*) ;; *) snap_common="$sandbox/$snap_common" ;; esac
+    snap="$snap_gitdir/qg-mutation-snapshot"
+
+    snap_hash_file() { if [[ -f "$1" ]]; then git -C "$sandbox" hash-object "$1" 2>/dev/null || printf 'absent'; else printf 'absent'; fi; }
+    # reflog/stash MUST be hashed with the IDENTICAL idiom the guard uses
+    # (var-capture + `printf '%s'`), else a clean sandbox false-positives.
+    snap_rl=$(git -C "$sandbox" reflog show HEAD 2>/dev/null || true)
+    if [[ -n "$snap_rl" ]]; then
+      head_reflog_sha=$(printf '%s' "$snap_rl" | git -C "$sandbox" hash-object --stdin)
+    else
+      head_reflog_sha=empty
+    fi
+    snap_sl=$(git -C "$sandbox" stash list 2>/dev/null || true)
+    stash_sha=$(printf '%s' "$snap_sl" | git -C "$sandbox" hash-object --stdin)
+    excl_common_sha=$(snap_hash_file "$snap_common/info/exclude")
+    excl_wt_sha=$(snap_hash_file "$snap_gitdir/info/exclude")
+    excludesfile=$(git -C "$sandbox" config --get core.excludesFile 2>/dev/null || printf 'absent')
+    if [[ "$excludesfile" != "absent" ]]; then
+      ef_path="$excludesfile"; case "$ef_path" in "~/"*) ef_path="${HOME:-}/${ef_path#~/}" ;; esac
+      excludesfile_sha=$(snap_hash_file "$ef_path")
+    else
+      excludesfile_sha=absent
+    fi
+    logallrefupdates=$(git -C "$sandbox" config --get core.logAllRefUpdates 2>/dev/null || printf 'unset')
+
+    {
+      printf 'head_reflog_sha=%s\n' "$head_reflog_sha"
+      printf 'stash_sha=%s\n'        "$stash_sha"
+      printf 'excl_common_sha=%s\n'  "$excl_common_sha"
+      printf 'excl_wt_sha=%s\n'      "$excl_wt_sha"
+      printf 'excludesfile=%s\n'     "$excludesfile"
+      printf 'excludesfile_sha=%s\n' "$excludesfile_sha"
+      printf 'logallrefupdates=%s\n' "$logallrefupdates"
+    } > "$snap" || die "cannot write snapshot: $snap"
 
     # Output contract: line 1 = sandbox abs path, line 2 = baseline SHA.
     printf '%s\n%s\n' "$sandbox" "$base"
@@ -204,7 +251,7 @@ case "${1:-}" in
     # Safety: only allow paths under <repo>/.claude/quality-gates/worktrees/
     repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
     # Canonicalize repo_root to resolve symlinks (macOS /var → /private/var)
-    repo_root=$(cd "$repo_root" && pwd -P)
+    repo_root=$(cd "$repo_root" && pwd -P) || die "cd failed: $repo_root"
     parent="$repo_root/.claude/quality-gates/worktrees"
     # Canonicalize target by resolving its deepest existing ancestor.
     # Walk up until we find an existing dir, resolve it, then reattach the rest.
@@ -214,7 +261,7 @@ case "${1:-}" in
       t_path=$(dirname "$t_path")
     done
     if [[ -d "$t_path" ]]; then
-      t_path=$(cd "$t_path" && pwd -P)
+      t_path=$(cd "$t_path" && pwd -P) || die "cd failed: $t_path"
     fi
     target_real="$t_path$t_suffix"
     case "$target_real" in

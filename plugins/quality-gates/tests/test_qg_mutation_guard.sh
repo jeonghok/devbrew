@@ -22,6 +22,23 @@ mk_sandbox() {
 
 field() { printf '%s\n' "$1" | awk -v k="$2" '$0 ~ "^" k ":" {print; exit}'; }
 
+echo "[create-sandbox: snapshot captured with all 7 keys]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+SNAP="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
+if [ -f "$SNAP" ]; then
+  pass "snapshot file exists at per-worktree gitdir"
+else
+  fail "snapshot file missing: $SNAP"
+fi
+miss=0
+for k in head_reflog_sha stash_sha excl_common_sha excl_wt_sha excludesfile excludesfile_sha logallrefupdates; do
+  grep -q "^$k=" "$SNAP" 2>/dev/null || { miss=$((miss+1)); echo "    missing key: $k"; }
+done
+[ "$miss" -eq 0 ] && pass "snapshot has all 7 keys" || fail "snapshot missing $miss key(s)"
+[ "$(sed -n 's/^logallrefupdates=//p' "$SNAP")" = "true" ] \
+  && pass "logAllRefUpdates forced true at baseline" || fail "logAllRefUpdates not true"
+rm -rf "$(dirname "$SANDBOX")/../../.." 2>/dev/null
+
 echo "[mutation-guard: clean sandbox -> no downgrade]"
 OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
 G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
