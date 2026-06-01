@@ -115,6 +115,13 @@ egress)는 원본 §3/§6.2가 명시적 non-goal로 인정 — 이 spec도 그 
 - **완전한 OS-수준 sandbox.** verifier가 Bash로 guard script 삭제·host egress·메인 repo
   working tree 직접 변조하는 것까지 막지 않음(원본 §3/§6.2 경계 유지). 이 spec은 git
   ground-truth 계산의 무결성만 복원.
+- **reflog logging flip-and-restore 변종(round 3 b7f3a219).** verifier가
+  `core.logAllRefUpdates=false`로 끄고 → commit + `reset --hard B` → `true`로 *복원*하는
+  경로는 git ground-truth에 흔적을 남기지 않아(logging off 동안의 commit은 reflog에 미기록,
+  reset로 tree 복원, config 복원) 구조적으로 닫을 수 없다 — 위 OS-sandbox non-goal의 한 사례로
+  명시적으로 수용. 단 이 변종도 working tree는 baseline으로 복원되어 *shipping product ==
+  baseline*이고 다단계 config 조작을 요구한다. (config를 *끈 채 남기는* 단순 변종은 §6.2
+  layer 2가 잡음 — non-goal은 복원 변종에 한정.)
 - **F12 force-push regex 확장.** REFUTED — `git push` 토큰이 이미 모든 force-push 변종을
   `requires_decision`로 escalate. 비-git `tool --force-push`만 미커버이나 in-scope
   destructive surface 없음. 수정 안 함(원하면 향후 defense-in-depth).
@@ -191,12 +198,21 @@ SNAP="$(git -C "$sandbox" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
   `core.logAllRefUpdates=false`로 reflog를 끈 뒤 commit+`reset --hard B`하면 reflog가 안 자라
   layer 3가 무력화될 수 있다(reset이 tree를 복원해 layer 1도 무력). 이중 방어: (a)
   create-sandbox가 baseline commit *이전에* `git -C "$sandbox" config core.logAllRefUpdates
-  true`로 로깅을 보장(default값이지만 host pre-set=false 대비) → baseline·이후 HEAD 이동이
-  모두 로깅됨; (b) snapshot이 `logallrefupdates` 값을 캡처하고 **layer 2가 이를 비교** —
-  verifier가 snapshot 이후 끄면 config tamper로 `forced=yes`. 두 경로(reflog 자람 / config
-  변조)가 모두 닫힘. 잔여 한계(host가 reflog를 *물리적으로* 비활성화한 비정상 환경)는 원본
-  §3 OS-sandbox non-goal 상속 — 단 `logAllRefUpdates=true`는 non-bare repo의 git default라
-  실무 corner case.
+  true`로 로깅을 보장(default값이지만 host pre-set=false 대비) → 정직한 baseline·이후 HEAD
+  이동이 모두 로깅됨; (b) snapshot이 `logallrefupdates` 값을 캡처하고 **layer 2가 이를 비교**
+  — verifier가 끈 채로 남기면(또는 `always` 등 다른 값으로 바꾸면) config tamper로 `forced=yes`.
+  - **side-effect(round 3 advisory):** linked worktree에서 `git -C "$sandbox" config`는
+    common-dir `.git/config`(메인 repo local config)에 기록 → `core.logAllRefUpdates=true`가
+    메인 repo에 영구 남음. `true`가 git default라 실무 harm은 없으나 명세상 명시. (오염
+    회피가 필요하면 plan에서 `extensions.worktreeConfig` + `config --worktree`로 sandbox에
+    scope하는 옵션 — 구현 세부.)
+  - **잔여 gap — 명시적 non-goal(round 3 b7f3a219):** verifier가 `false`로 끄고 → commit +
+    `reset --hard B` → **`true`로 복원**하는 변종은 어떤 계층도 못 잡는다(layer 2: now==snapshot
+    `true` → 통과; layer 3: off 구간 commit이 reflog에 흔적 없음 → 통과; layer 1: reset로 tree
+    복원 → 통과). logging이 off였던 commit은 **git ground-truth에 흔적이 없어** OS-level 통제
+    없이는 구조적으로 닫을 수 없다 → 원본 §3 OS-sandbox non-goal 상속(§3에 명시). 단 이 변종도
+    working tree는 baseline으로 복원되므로 *shipping product == baseline*이며, 다단계 git config
+    조작을 요구하는 sophisticated 경로다.
 - **common-dir ≠ per-worktree gitdir(중복 아님):** 샌드박스는 항상 *linked* worktree
   (`git worktree add`)라 common-dir(메인 `.git`)과 per-worktree gitdir
   (`.git/worktrees/rt-<sid>`)이 항상 구별됨 → `excl_common_sha`/`excl_wt_sha`는 서로 다른
@@ -218,10 +234,12 @@ SNAP="$(git -C "$sandbox" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
 구별)**. 회귀 테스트는 exit code가 정확히 4인지 assert(H-AC1).
 detection 명령의 `2>/dev/null` 폐기 → stderr 캡처해 reason에. snapshot 파일 부재 **또는
 필수 key 누락/truncated**(예: create-sandbox 중 kill·디스크 포화)도 `guard_fail`(snapshot이
-안 떴거나 손상된 sandbox는 indeterminate, NEW-03). 구현: 각 필수 key
-(`head_reflog_sha`/`stash_sha`/`excl_common_sha`/`excl_wt_sha`/`excludesfile`/
-`logallrefupdates`)의 *존재*를 파싱 시 assert — 누락 key를 빈 문자열로 읽어 `""==""` 비교로
-`forced=no`가 되는 경로를 봉쇄. baseline `B` 존재 확인(`cat-file -e`)도 `guard_fail`로.
+안 떴거나 손상된 sandbox는 indeterminate, NEW-03). 구현: §6.1 표의 **모든 캡처 key**
+(`head_reflog_sha`·`stash_sha`·`excl_common_sha`·`excl_wt_sha`·`excludesfile`·
+`excludesfile_sha`·`logallrefupdates` — §6.1 표와 1:1 일치)의 *존재*를 파싱 시 assert —
+누락 key를 빈 문자열로 읽어 `""==""` 비교로 `forced=no`가 되는 경로를 봉쇄. (key 목록은 §6.1
+표가 single source of truth; 구현·테스트는 그 표를 기준으로 — round 3 d4c8e031.) baseline
+`B` 존재 확인(`cat-file -e`)도 `guard_fail`로.
 
 **계층 1 — content tree-hash (C-E + honest mutation).** fresh 임시 index로 working tree
 재독:
@@ -284,7 +302,8 @@ rm -f "$idx"   # 사용 후 즉시 제거
 | C-A `.gitignore` 수정 | **1** | tracked `.gitignore` 변경이 content-hash에 반영 |
 | C-D stash push | 3 | `stash_sha` 불일치 |
 | C-D commit + `reset --hard B` | 3 | `head_reflog_sha` 불일치 (working tree는 복원되어 계층 1엔 안 잡힘) |
-| C-D + reflog 억제(`logAllRefUpdates=false`) | 2 | config tamper 비교 → `reflog_logging_tampered` (NEW-05) |
+| C-D + reflog 억제, config를 *끈 채 남김* | 2 | config tamper 비교 → `reflog_logging_tampered` (NEW-05) |
+| C-D + reflog 억제, config *flip-and-restore* | — (non-goal) | git 흔적 없음 → §3 OS-sandbox non-goal 명시 수용 (b7f3a219) |
 | C-B git 실패 | 0 | rc≠0 → `guard_fail` exit 4 |
 | snapshot 부재 / 필수 key 누락·손상 | 0 | fail-closed (NEW-03) |
 
@@ -383,8 +402,9 @@ R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
    `forced=yes`(계층 1 커버).
 4. **H-AC4 (snapshot-delta, C-D)**: (a) product 변경 + `git stash push -u`, (b) product
    변경 + `commit` + `git reset --hard B` → 둘 다 `forced=yes`; **(c)** `git config
-   core.logAllRefUpdates false` 후 (b) 반복(reflog 억제 시도) → `forced=yes` +
-   `reflog_logging_tampered` (NEW-05).
+   core.logAllRefUpdates false`로 *끈 채* (b) 반복(persistent 억제) → `forced=yes` +
+   `reflog_logging_tampered` (NEW-05). *flip-and-restore 변종(끄고→작업→복원)은 §3 명시적
+   non-goal이라 closure assert 대상이 아님(b7f3a219).*
 5. **H-AC5 (YAML)**: single-quote 포함 파일명 → 가드 출력이 유효 YAML + `forced=yes`. (I-D)
 6. **H-AC6 (R4 라우팅)**: SKILL R4가 가드 non-zero exit·무효 출력을 ≤FAIL로 라우팅(정적
    grep으로 R4 에러경로 절 존재 + stderr surface 문구 assert). (C-C)
@@ -440,9 +460,9 @@ R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
     (iv)는 `forced=yes` + `tracked_diff`에 `.gitignore`. (H-AC3)
   - C-D-a: mutation + `git stash push -u` → `forced=yes` + `stash_added`.
   - C-D-b: mutation + `commit` + `reset --hard B` → `forced=yes` + `reflog_advanced`.
-  - C-D-c (NEW-05): `git config core.logAllRefUpdates false` 후 mutation + `commit` +
-    `reset --hard B` → `forced=yes` + `reflog_logging_tampered`(config tamper로 잡힘; reflog
-    자체는 안 자랐어도 logAllRefUpdates 값 변경이 layer 2에 잡힘).
+  - C-D-c (NEW-05): `git config core.logAllRefUpdates false`로 *끈 채* mutation + `commit` +
+    `reset --hard B` → `forced=yes` + `reflog_logging_tampered`(config를 끈 채 남기면 layer 2
+    값 비교에 잡힘). flip-and-restore(복원) 변종은 §3 non-goal — closure 테스트 없음(b7f3a219).
   - C-B: 임시 index 파일을 garbage로 덮거나 baseline SHA를 손상 → `guard_fail` 경로(
     `forced=yes` + non-zero exit `=4` + `guard_error`).
   - I-D: `foo'bar.js` 신규 파일 → 출력이 `python3 -c "import yaml; yaml.safe_load(...)"`로
@@ -565,3 +585,13 @@ R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
     없음" 주장 → §6.2 matrix footer를 "guard-script 0–3 범위 + C-C는 §6.4/H-AC6" 로 scope 명시.
   - NEW-04 (문서 모순): §12 "Deferred to plan"이 §11과 달리 reflog/exit-code를 여전히 deferred로
     열거 → §12에서 제거(spec 내 확정 명시).
+- **round 3 (spec-reviewer, 2026-06-01):** round-2 5건 전부 RESOLVED 확인. 신규 2건 반영
+  (수렴: 14→5→2, 재-raise 0, signal=false).
+  - **b7f3a219 (보안 claim 정확성):** NEW-05의 logAllRefUpdates 비교는 config를 *끈 채 남기는*
+    경우만 잡고, *flip-and-restore*(끄고→commit+reset→복원) 변종은 git 흔적이 없어 어떤 계층도
+    못 잡음 → matrix가 "닫힘"으로 과장. **§3에 명시적 non-goal로 수용** + §6.1/§6.2 matrix/
+    H-AC4(c)/§9를 "persistent=closed, restore=non-goal"로 정정. (메커니즘 추가 대신 정직한
+    범위 선언 — OS-sandbox 없이는 구조적 불가.) 부수: §6.1에 shared-config side-effect note.
+  - **d4c8e031 (completeness):** `excludesfile_sha`가 §6.1 캡처엔 있으나 §6.2 layer-0 assert
+    목록에서 누락 → NEW-03의 `""==""` false-no 경로 잔류 → §6.2를 "§6.1 표가 key SSoT,
+    모든 캡처 key를 assert"로 정정.
