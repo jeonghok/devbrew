@@ -262,14 +262,18 @@ case "${1:-}" in
     fi
 
     # New symlinks are product-affecting regardless of ignore status (original
-    # §6.7-2 rule). add -A skips ignored symlinks, so union them via ls-files.
-    others=$(git -C "$sandbox" ls-files --others -z 2>&1) \
-      || guard_fail "ls-files --others failed: $others"
+    # §6.7-2 rule). add -A skips ignored symlinks, so enumerate via ls-files -z.
+    # Read NUL-delimited entries from a temp file — NOT a $(...) capture, because
+    # bash drops NUL bytes, which silently disabled this union (integration-review I-1).
+    others_file="$gitdir/qg-tmp-others.$$"; rm -f "$others_file"
+    git -C "$sandbox" ls-files --others -z > "$others_file" 2>/dev/null \
+      || { rm -f "$others_file"; guard_fail "ls-files --others failed"; }
     while IFS= read -r -d '' rel; do
       [[ -z "$rel" ]] && continue
       [[ -L "$sandbox/$rel" ]] || continue
       disallowed+=("$rel")
-    done < <(printf '%s' "$others")
+    done < "$others_file"
+    rm -f "$others_file"
     [[ ${#disallowed[@]} -gt 0 ]] && forced="yes"
 
     # ---- Layer 2: ignore-channel + config tamper (C-A, NEW-05) ----

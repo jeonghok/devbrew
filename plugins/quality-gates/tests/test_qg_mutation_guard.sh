@@ -100,12 +100,22 @@ printf '%s' "$G" | grep -q "newfix.js" \
   && pass "new file in disallowed_new_files" || fail "newfix.js not surfaced"
 cleanup_sandbox "$SANDBOX"
 
-echo "[mutation-guard: new symlink -> product regardless of ignore]"
+echo "[mutation-guard: non-ignored symlink -> product (Layer 1 add -A)]"
 OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
-( cd "$SANDBOX" && ln -s /etc/hosts .env_link )   # name unlikely-ignored; symlink always product
+( cd "$SANDBOX" && ln -s /etc/hosts .env_link )   # non-ignored name -> staged by Layer-1 add -A (the IGNORED-symlink union path is covered by the I-1 test below)
 G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "new symlink -> forced_downgrade: yes" || fail "new symlink not caught"
+cleanup_sandbox "$SANDBOX"
+
+echo "[I-1: IGNORED symlink -> product (ls-files union path, NUL-safe)]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+( cd "$SANDBOX" && ln -s /etc/passwd .env )   # .env IS gitignored -> relies on ls-files union, not Layer-1 add -A
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
+  && pass "ignored symlink -> forced_downgrade: yes (I-1, symlink regardless of ignore)" || fail "ignored symlink EVADED (I-1 bypass)"
+printf '%s' "$G" | grep -q "\.env" \
+  && pass "ignored symlink surfaced in disallowed_new_files" || fail ".env symlink not surfaced"
 cleanup_sandbox "$SANDBOX"
 
 echo "[mutation-guard: tracked deletion -> forced downgrade]"
