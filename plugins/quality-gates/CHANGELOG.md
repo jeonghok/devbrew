@@ -51,6 +51,33 @@ git-ignored 파일(prod `.env`) 미복사로 원천 미접근.
   승인 게이트(blast-radius) 뒤로. OS-수준 egress 격리는 명시적 non-goal(한계 인정).
 - **fallback Law 2 보존.** `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`로 샌드박스를 끈 경우에도 verifier는 frontmatter상 Write를 갖지만, orchestrator가 R3 dispatch 전후의 `git status --porcelain` 차이로 실제 working-tree mutation을 잡아 verdict를 ≤FAIL로 강제 + loud warn — 구조적 Law 2 보장이 fallback에서도 유지(behavioral-only로 격하되지 않음).
 
+### Fixed
+- **mutation-guard 5개 우회 봉쇄 (보안).** diff 기반 oracle을 **snapshot + content
+  tree-hash + ignore/config-tamper + snapshot-delta**(전부 fail-closed) 4계층으로 재작성.
+  닫힌 우회: C-A `info/exclude`/`core.excludesFile`/`.gitignore` 밀반입,
+  C-B git-failure fail-open(rc 캡처 → exit 4), C-D `stash`/`commit+reset --hard`
+  (reflog/stash snapshot-delta) + 영구 `logAllRefUpdates=false` 억제(config tamper),
+  C-E `assume-unchanged`/`skip-worktree` index 비트(fresh-index content-hash).
+  snapshot은 per-worktree gitdir 사이드채널(출력 계약 2줄 무변경). 우회별 회귀 테스트 동반.
+- **C-C SKILL R4 fail-closed 라우팅.** errored/garbled 가드(exit 4 / `guard_error` /
+  무효 key)를 PASS가 아니라 ≤FAIL로 라우팅 + stderr verbatim surface.
+- **I-A/I-B fallback SKIP cap.** `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1` fallback verdict를
+  SKIP_WITH_EVIDENCE로 cap(절대 PASS 아님) + 단일 `runtime_project_dir`(unset `sandbox_dir`
+  하드코딩 제거) + real-tree 변경 loud 경고.
+- **I-C evidence durability.** evidence-log/스크린샷을 메인 repo 절대 `evidence_dir`
+  (`.claude/quality-gates/<sid>/`)에 기록 → 샌드박스 폐기(R5) 생존.
+- **I-D YAML escape.** single-quote 파일명을 `yq()`로 escape → 유효 YAML.
+- **I-E kill-switch 문서화.** `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX`를 README source-of-truth
+  표 + qg.md env 표에 등재.
+- **I-F detect-runtime `${HOME:-}`.** unset `$HOME`이 manifest emit을 abort시키던 것 차단.
+- **I-G retry baseline 재캡처.** NEEDS_RESOLUTION retry가 새 `sandbox_dir` + `baseline_sha`를
+  둘 다 재캡처(옛 sha 재사용 false-FAIL 제거).
+- **S-A/S-B create-sandbox 견고화.** overlay `cp`/`mkdir`/deletion + `cd` command-sub에 `|| die`.
+
+> non-goal(한계 인정): `logAllRefUpdates` *flip-and-restore* 변종(끄고→commit+reset→복원)은
+> git ground-truth에 흔적이 없어 OS-수준 통제 없이는 구조적으로 닫을 수 없다(spec §3).
+> 단 이 변종도 shipping product == baseline.
+
 ## [2.1.0] — 2026-05-31
 
 qg가 처음으로 **사용자 프로젝트 spec을 단일 truth로 read**. cycle 위계(spec=truth ⊃

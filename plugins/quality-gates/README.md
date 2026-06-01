@@ -340,6 +340,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 | `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION=1` | Runtime gate Step 2.5 (test scope validation) 완전 skip. `DEVBREW_SKIP_HOOKS=quality-gates:runtime-test-scope`과 동일. |
 | `DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1` | `/qg branch <name>` auto-worktree 기능 disable (`/qg branch` no-arg는 영향 없음). |
 | `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1` | spec 발견 시에도 no-spec 경로 강제 (ac_coverage 생략, codex `<spec_context>` 비움; validator는 plan-기반 계속). |
+| `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1` | Runtime gate의 git-worktree 샌드박스 executor를 끄고 read-only smoke fallback. verdict는 SKIP_WITH_EVIDENCE로 cap(절대 PASS 아님), real-tree 변경 시 loud 경고. `qg-worktree.sh create-sandbox`가 exit 3. |
 
 **Hook 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:<key>,quality-gates:<key2>...`):
 
