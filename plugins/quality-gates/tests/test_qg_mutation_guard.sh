@@ -246,16 +246,34 @@ printf '%s' "$G" | grep -q "ignore_channel_tampered" \
   && pass "ignore_channel_tampered flagged" || fail "tamper flag missing"
 cleanup_sandbox "$SANDBOX"
 
-echo "[C-A(ii): per-worktree gitdir info/exclude smuggle -> ignore_channel_tampered]"
+echo "[R2-AC4: per-worktree info/exclude RULE-ONLY change (no new file) -> Layer 2 ignore_channel_tampered]"
 OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
-printf 'export const fix=1\n' > "$SANDBOX/onlyhack.js"
 WTDIR="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)"
-mkdir -p "$WTDIR/info"; echo 'onlyhack.js' >> "$WTDIR/info/exclude"
+mkdir -p "$WTDIR/info"; echo 'phantom-rule-no-such-file' >> "$WTDIR/info/exclude"   # rule only; NO file planted
 G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
-  && pass "per-worktree info/exclude smuggle -> forced (H-AC3ii)" || fail "C-A per-worktree EVADED"
+  && pass "per-worktree info/exclude rule-only -> forced (R2-AC4)" || fail "Layer 2 excl_wt_sha path EVADED"
 printf '%s' "$G" | grep -q "ignore_channel_tampered" \
-  && pass "per-worktree ignore_channel_tampered flagged" || fail "per-worktree tamper flag missing"
+  && pass "ignore_channel_tampered from Layer 2 (R2-AC4)" || fail "Layer 2 tamper flag missing"
+# Layer 1/1b must NOT be the catcher (no new/changed tracked file): disallowed must be empty.
+printf '%s' "$G" | grep -q "disallowed_new_files: \[\]" \
+  && pass "no file flagged — isolation to Layer 2 confirmed (R2-AC4)" || fail "a file was flagged — not isolated to Layer 2"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R2-AC4 mutation-test: disabling Layer 2 excl_wt_sha comparison -> rule-only change EVADEs]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+WTDIR="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)"
+mkdir -p "$WTDIR/info"; echo 'phantom-rule-no-such-file' >> "$WTDIR/info/exclude"
+# Build a mutant copy of the guard with the per-worktree exclude comparison neutralized
+# (force the excl_wt_sha branch to always compare equal). sed targets the now_excl_w line.
+MUT=$(mktemp)
+sed 's|"\$now_excl_w" != "\$(snap_get excl_wt_sha)"|"x" != "x"|' "$WT" > "$MUT"
+chmod +x "$MUT"
+GM=$(/bin/bash "$MUT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
+[ "$(field "$GM" forced_downgrade)" = "forced_downgrade: no" ] \
+  && pass "mutant (Layer 2 excl_wt disabled) -> EVADE: forced_downgrade: no (R2-AC4 mutation)" \
+  || fail "mutant did NOT evade — the green is not actually traversing Layer 2"
+rm -f "$MUT"
 cleanup_sandbox "$SANDBOX"
 
 echo "[C-A(iii): core.excludesFile smuggle -> ignore_channel_tampered]"
