@@ -66,16 +66,16 @@ EXPECT=$(git -C "$SANDBOX" hash-object "$SNAP")
 cleanup_sandbox "$SANDBOX"
 
 echo "[mutation-guard: clean sandbox -> no downgrade]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: no" ] \
   && pass "clean sandbox -> forced_downgrade: no" || fail "clean misreported: $(field "$G" forced_downgrade)"
 cleanup_sandbox "$SANDBOX"
 
 echo "[mutation-guard: tracked change -> forced downgrade]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'orig\nHACKED TO PASS\n' > "$SANDBOX/tracked.txt"   # product source mutation
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "tracked change -> forced_downgrade: yes" || fail "tracked change not caught"
 printf '%s' "$G" | grep -q "tracked.txt" \
@@ -85,23 +85,23 @@ echo "[mutation-guard: independence — verdict ignores any verifier claim]"
 # The guard takes only (sandbox, base); there is no input channel for a
 # verifier claim. Re-running on the SAME mutated sandbox must still say yes,
 # proving the result is git-derived, not passthrough.
-G2=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G2=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G2" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "independent re-run still forced_downgrade: yes" || fail "non-deterministic guard"
 cleanup_sandbox "$SANDBOX"
 
 echo "[mutation-guard: git-ignored new file -> non-product (no downgrade)]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'DB_URL=local\n' > "$SANDBOX/.env"   # ignored — setup-only fix, PASS-able
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: no" ] \
   && pass "ignored new file -> no downgrade (setup-only PASS path)" || fail "ignored file wrongly downgraded"
 cleanup_sandbox "$SANDBOX"
 
 echo "[mutation-guard: non-ignored new file -> product (downgrade)]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'export const fix = 1\n' > "$SANDBOX/newfix.js"   # NOT ignored -> product
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "non-ignored new file -> forced_downgrade: yes" || fail "new product file not caught"
 printf '%s' "$G" | grep -q "newfix.js" \
@@ -109,17 +109,17 @@ printf '%s' "$G" | grep -q "newfix.js" \
 cleanup_sandbox "$SANDBOX"
 
 echo "[mutation-guard: non-ignored symlink -> product (Layer 1 add -A)]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 ( cd "$SANDBOX" && ln -s /etc/hosts .env_link )   # non-ignored name -> staged by Layer-1 add -A (the IGNORED-symlink union path is covered by the I-1 test below)
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "new symlink -> forced_downgrade: yes" || fail "new symlink not caught"
 cleanup_sandbox "$SANDBOX"
 
 echo "[I-1: IGNORED symlink -> product (ls-files union path, NUL-safe)]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 ( cd "$SANDBOX" && ln -s /etc/passwd .env )   # .env IS gitignored -> relies on ls-files union, not Layer-1 add -A
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "ignored symlink -> forced_downgrade: yes (I-1, symlink regardless of ignore)" || fail "ignored symlink EVADED (I-1 bypass)"
 printf '%s' "$G" | grep -q "\.env" \
@@ -127,9 +127,9 @@ printf '%s' "$G" | grep -q "\.env" \
 cleanup_sandbox "$SANDBOX"
 
 echo "[mutation-guard: tracked deletion -> forced downgrade]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 rm "$SANDBOX/tracked.txt"   # verifier deletes a tracked product file
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "tracked deletion -> forced_downgrade: yes" || fail "deletion not caught"
 printf '%s' "$G" | grep -q "tracked.txt" \
@@ -137,9 +137,9 @@ printf '%s' "$G" | grep -q "tracked.txt" \
 cleanup_sandbox "$SANDBOX"
 
 echo "[mutation-guard: YAML-metachar filename stays parseable (I1)]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'x\n' > "$SANDBOX/[id].tsx"   # bracket = YAML flow-seq metachar
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "[id].tsx new file -> forced_downgrade: yes" || fail "bracket file not caught"
 if python3 -c "import yaml" 2>/dev/null; then
@@ -154,28 +154,28 @@ fi
 cleanup_sandbox "$SANDBOX"
 
 echo "[C-E(a): assume-unchanged hides tracked mutation -> caught by content-hash]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'orig\nHACKED\n' > "$SANDBOX/tracked.txt"
 git -C "$SANDBOX" update-index --assume-unchanged tracked.txt
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "assume-unchanged tracked mutation -> forced_downgrade: yes (H-AC2a)" || fail "C-E assume-unchanged EVADED"
 cleanup_sandbox "$SANDBOX"
 
 echo "[C-E(b): skip-worktree hides tracked mutation -> caught by content-hash]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'orig\nHACKED\n' > "$SANDBOX/tracked.txt"
 git -C "$SANDBOX" update-index --skip-worktree tracked.txt
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "skip-worktree tracked mutation -> forced_downgrade: yes (H-AC2b)" || fail "C-E skip-worktree EVADED"
 cleanup_sandbox "$SANDBOX"
 
 echo "[C-A(iv): .gitignore tamper to hide a new file -> caught by content-hash on tracked .gitignore]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'node_modules/\n.env\nsecretfix.js\n' > "$SANDBOX/.gitignore"
 printf 'export const x=1\n' > "$SANDBOX/secretfix.js"
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass ".gitignore tamper -> forced_downgrade: yes (H-AC3iv)" || fail "C-A .gitignore EVADED"
 printf '%s' "$G" | grep -q ".gitignore" \
@@ -183,8 +183,8 @@ printf '%s' "$G" | grep -q ".gitignore" \
 cleanup_sandbox "$SANDBOX"
 
 echo "[C-B: bad baseline sha -> guard_fail exit 4]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT")
-G=$("$WT" mutation-guard "$SANDBOX" "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" 2>/dev/null); RC=$?
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+G=$("$WT" mutation-guard "$SANDBOX" "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" "$DIGEST" 2>/dev/null); RC=$?
 [ "$RC" -eq 4 ] && pass "bad baseline -> exit 4 (H-AC1)" || fail "bad baseline exit was $RC (expected 4)"
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "bad baseline -> forced_downgrade: yes" || fail "bad baseline not forced"
@@ -193,24 +193,24 @@ printf '%s' "$G" | grep -q "guard_error:" \
 cleanup_sandbox "$SANDBOX"
 
 echo "[NEW-03(a): snapshot missing -> guard_fail exit 4]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 rm -f "$(git -C "$SANDBOX" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null); RC=$?
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null); RC=$?
 [ "$RC" -eq 4 ] && pass "snapshot missing -> exit 4 (H-AC1)" || fail "snapshot-missing exit was $RC"
 cleanup_sandbox "$SANDBOX"
 
 echo "[NEW-03(b): snapshot malformed (key removed) -> guard_fail exit 4]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 SNAP="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
 grep -v '^stash_sha=' "$SNAP" > "$SNAP.tmp" && mv "$SNAP.tmp" "$SNAP"
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null); RC=$?
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null); RC=$?
 [ "$RC" -eq 4 ] && pass "snapshot malformed -> exit 4 (H-AC1)" || fail "snapshot-malformed exit was $RC"
 cleanup_sandbox "$SANDBOX"
 
 echo "[I-D: single-quote filename stays valid YAML + forced]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'x\n' > "$SANDBOX/foo'bar.js"
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "single-quote new file -> forced_downgrade: yes (H-AC5)" || fail "single-quote file not caught"
 if python3 -c "import yaml" 2>/dev/null; then
@@ -222,10 +222,10 @@ fi
 cleanup_sandbox "$SANDBOX"
 
 echo "[C-A(i): common-dir info/exclude smuggle -> ignore_channel_tampered]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'export const fix=1\n' > "$SANDBOX/onlyhack.js"
 echo 'onlyhack.js' >> "$(git -C "$SANDBOX" rev-parse --git-common-dir)/info/exclude"
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "common info/exclude smuggle -> forced (H-AC3i)" || fail "C-A common EVADED"
 printf '%s' "$G" | grep -q "ignore_channel_tampered" \
@@ -233,11 +233,11 @@ printf '%s' "$G" | grep -q "ignore_channel_tampered" \
 cleanup_sandbox "$SANDBOX"
 
 echo "[C-A(ii): per-worktree gitdir info/exclude smuggle -> ignore_channel_tampered]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'export const fix=1\n' > "$SANDBOX/onlyhack.js"
 WTDIR="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)"
 mkdir -p "$WTDIR/info"; echo 'onlyhack.js' >> "$WTDIR/info/exclude"
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "per-worktree info/exclude smuggle -> forced (H-AC3ii)" || fail "C-A per-worktree EVADED"
 printf '%s' "$G" | grep -q "ignore_channel_tampered" \
@@ -245,11 +245,11 @@ printf '%s' "$G" | grep -q "ignore_channel_tampered" \
 cleanup_sandbox "$SANDBOX"
 
 echo "[C-A(iii): core.excludesFile smuggle -> ignore_channel_tampered]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'export const fix=1\n' > "$SANDBOX/onlyhack.js"
 EXC=$(mktemp); echo 'onlyhack.js' > "$EXC"
 git -C "$SANDBOX" config core.excludesFile "$EXC"
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "core.excludesFile smuggle -> forced (H-AC3iii)" || fail "C-A excludesFile EVADED"
 printf '%s' "$G" | grep -q "ignore_channel_tampered" \
@@ -264,10 +264,10 @@ printf 'node_modules/\n.env\n' > "$R/.gitignore"
 printf '# global ignore\n' > "$THOME/.gitignore_global"
 (cd "$R" && git add -A && git commit -q -m init && git config core.excludesFile '~/.gitignore_global')
 OUT=$(cd "$R" && HOME="$THOME" "$WT" create-sandbox "tildexcl0123456" 2>/dev/null)
-SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'export const backdoor=1\n' > "$SANDBOX/backdoor.js"   # product file
 echo 'backdoor.js' >> "$THOME/.gitignore_global"              # smuggle via global ignore
-G=$(HOME="$THOME" "$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$(HOME="$THOME" "$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "~/-relative excludesFile smuggle -> forced (H-AC3iii tilde)" || fail "C-A excludesFile(~/) EVADED"
 printf '%s' "$G" | grep -q "ignore_channel_tampered" \
@@ -275,13 +275,13 @@ printf '%s' "$G" | grep -q "ignore_channel_tampered" \
 cleanup_sandbox "$SANDBOX"; rm -rf "$THOME"
 
 echo "[C-D-c (NEW-05): persistent logAllRefUpdates=false left set -> reflog_logging_tampered]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 git -C "$SANDBOX" config core.logAllRefUpdates false
 printf 'orig\nHACK\n' > "$SANDBOX/tracked.txt"
 git -C "$SANDBOX" add -A >/dev/null 2>&1
 git -C "$SANDBOX" -c user.email=q@q -c user.name=q commit -q -m sneaky
 git -C "$SANDBOX" reset --hard "$BASE" >/dev/null 2>&1
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "persistent logAllRefUpdates tamper -> forced (H-AC4c)" || fail "C-D-c EVADED"
 printf '%s' "$G" | grep -q "reflog_logging_tampered" \
@@ -289,10 +289,10 @@ printf '%s' "$G" | grep -q "reflog_logging_tampered" \
 cleanup_sandbox "$SANDBOX"
 
 echo "[C-D-a: stash push reverts tree -> caught by stash snapshot-delta]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'orig\nHACK\n' > "$SANDBOX/tracked.txt"
 git -C "$SANDBOX" stash push -u -q
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "stash-revert -> forced (H-AC4a)" || fail "C-D stash EVADED"
 printf '%s' "$G" | grep -q "stash_added" \
@@ -300,16 +300,69 @@ printf '%s' "$G" | grep -q "stash_added" \
 cleanup_sandbox "$SANDBOX"
 
 echo "[C-D-b: commit + reset --hard B reverts tree -> caught by reflog snapshot-delta]"
-OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'orig\nHACK\n' > "$SANDBOX/tracked.txt"
 git -C "$SANDBOX" add -A >/dev/null 2>&1
 git -C "$SANDBOX" -c user.email=q@q -c user.name=q commit -q -m sneaky
 git -C "$SANDBOX" reset --hard "$BASE" >/dev/null 2>&1
-G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "commit+reset-revert -> forced (H-AC4b)" || fail "C-D reset EVADED"
 printf '%s' "$G" | grep -q "reflog_advanced" \
   && pass "reflog_advanced flagged" || fail "reflog flag missing"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R2-AC1(b): no-forge variant — info/exclude changed, snapshot intact -> Layer 2 ignore_channel_tampered]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+COMMON="$(git -C "$SANDBOX" rev-parse --git-common-dir)"
+printf 'export const fix=1\n' > "$SANDBOX/onlyhack.js"
+echo 'onlyhack.js' >> "$COMMON/info/exclude"     # change ignore, DO NOT touch the snapshot
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null); RC=$?
+[ "$RC" -ne 4 ] && pass "no-forge: digest valid, guard does not fail-closed (R2-AC1b)" || fail "no-forge wrongly exit 4"
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
+  && pass "no-forge -> forced_downgrade: yes (Layer 2) (R2-AC1b)" || fail "no-forge not caught"
+printf '%s' "$G" | grep -q "ignore_channel_tampered" \
+  && pass "ignore_channel_tampered flagged (R2-AC1b)" || fail "Layer 2 tamper flag missing"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R2-AC1(d): clean sandbox + correct digest + no tamper -> forced_downgrade: no]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: no" ] \
+  && pass "clean + correct digest -> no downgrade (R2-AC1d)" || fail "clean+digest misreported"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R2-AC1(e): honest tracked mutation + correct digest -> forced_downgrade: yes (digest does NOT short-circuit Layer 1)]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+printf 'orig\nHACKED TO PASS\n' > "$SANDBOX/tracked.txt"
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
+  && pass "honest mutation + correct digest -> forced (R2-AC1e)" || fail "Layer 1 short-circuited by digest pass"
+printf '%s' "$G" | grep -q "tracked.txt" \
+  && pass "tracked.txt surfaced (R2-AC1e)" || fail "tracked.txt not surfaced"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R2-AC1(a): master-key exploit — forged snapshot + original digest -> guard_fail exit 4]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+SNAP="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
+COMMON="$(git -C "$SANDBOX" rev-parse --git-common-dir)"
+printf 'BACKDOOR()\n' > "$SANDBOX/onlyhack.js"                 # new product file
+echo 'onlyhack.js' >> "$COMMON/info/exclude"                   # evade Layer 1 (add -A honors common exclude)
+NEWH=$(git -C "$SANDBOX" hash-object "$COMMON/info/exclude")
+sed "s|^excl_common_sha=.*|excl_common_sha=$NEWH|" "$SNAP" > "$SNAP.t" && mv "$SNAP.t" "$SNAP"   # forge Layer 2 ref
+# orchestrator still holds the ORIGINAL (pre-forge) digest captured at create time:
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null); RC=$?
+[ "$RC" -eq 4 ] && pass "forged snapshot + orig digest -> exit 4 (R2-AC1a)" || fail "master-key exit was $RC (expected 4)"
+printf '%s' "$G" | grep -qi "digest" \
+  && pass "guard_error cites digest mismatch (R2-AC1a)" || fail "no digest-mismatch reason surfaced"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R2-AC1(c): empty digest -> guard_fail exit 4; omitted (2-arg) -> die exit 2]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "" 2>/dev/null); RC=$?
+[ "$RC" -eq 4 ] && pass "empty digest -> exit 4 (R2-AC1c)" || fail "empty-digest exit was $RC (expected 4)"
+"$WT" mutation-guard "$SANDBOX" "$BASE" >/dev/null 2>&1; RC2=$?
+[ "$RC2" -ne 0 ] && pass "2-arg call rejected (exit $RC2, never PASS) (R2-AC1c)" || fail "2-arg call was not rejected"
 cleanup_sandbox "$SANDBOX"
 
 echo

@@ -199,12 +199,16 @@ case "${1:-}" in
     printf '%s\n%s\n%s\n' "$sandbox" "$base" "$snapshot_digest"
     ;;
   mutation-guard)
-    # 4-layer fail-closed product-mutation oracle (spec §6.2). Inputs are ONLY
-    # (sandbox, baseline B) + a snapshot create-sandbox wrote in the per-worktree
-    # gitdir. No channel for a verifier self-claim → structural Law 2 defense.
-    # Execution order locked: layer 0 → 1 → 2 → 3 → aggregate.
-    [[ $# -eq 3 ]] || die "usage: mutation-guard <sandbox-abs> <baseline-sha>"
-    sandbox="$2" base="$3"
+    # 4-layer fail-closed product-mutation oracle (spec §6.1-6.3). Inputs are
+    # (sandbox, baseline B, snapshot-digest) + a snapshot create-sandbox wrote in
+    # the per-worktree gitdir. The snapshot is verifier-writable scratch SEALED by
+    # the orchestrator-held digest ($4): layer 0 verifies it before layers 1-3
+    # trust it → structural Law 2 defense (round-2 §6.1 closes C-NEW-1).
+    # Execution order locked: layer 0 → 1 → 1b → 2 → 3 → aggregate.
+    # $1=subcommand "mutation-guard" is counted, so the 3-arg contract is $#==4
+    # (round-1.5's 2-arg contract was $#==3).
+    [[ $# -eq 4 ]] || die "usage: mutation-guard <sandbox-abs> <baseline-sha> <snapshot-digest>"
+    sandbox="$2" base="$3" expected_digest="$4"
 
     # YAML single-quoted scalar escaper (I-D): '' escapes an embedded quote.
     yq() { local s; s=$(printf '%s' "$1" | sed "s/'/''/g"); printf "'%s'" "$s"; }
@@ -220,6 +224,11 @@ case "${1:-}" in
       echo "forced_downgrade: yes"
       exit 4
     }
+
+    # ---- Layer 0 (round-2): snapshot digest seal ----
+    # A missing/empty digest means the orchestrator did not seal this snapshot →
+    # indeterminate → never PASS (§6.1; distinct from a 2-arg usage error = die 2).
+    [[ -n "$expected_digest" ]] || guard_fail "missing snapshot digest (seal absent → indeterminate)"
 
     [[ -d "$sandbox" ]] || guard_fail "sandbox not found: $sandbox"
     gitdir=$(git -C "$sandbox" rev-parse --absolute-git-dir 2>&1) \
@@ -238,6 +247,17 @@ case "${1:-}" in
              excludesfile excludesfile_sha logallrefupdates; do
       grep -q "^$k=" "$snap" || guard_fail "snapshot missing key: $k"
     done
+
+    # Seal check: recompute the digest of the (verifier-reachable) snapshot and
+    # compare to the orchestrator-held value. A forged snapshot → mismatch →
+    # guard_fail (closes C-NEW-1: the verifier cannot forge the trust reference
+    # because it cannot reach the orchestrator-held expected_digest). Runs AFTER
+    # the existence + 7-key asserts, so those fail-closed first if applicable.
+    recomputed=$(git -C "$sandbox" hash-object "$snap" 2>&1) \
+      || guard_fail "cannot recompute snapshot digest: $recomputed"
+    [[ "$recomputed" == "$expected_digest" ]] \
+      || guard_fail "snapshot integrity check failed (digest mismatch — possible verifier tamper)"
+
     snap_get() { sed -n "s/^$1=//p" "$snap" | head -1; }
 
     forced="no"
