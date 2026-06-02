@@ -57,6 +57,14 @@ done
   && pass "logAllRefUpdates forced true at baseline" || fail "logAllRefUpdates not true"
 cleanup_sandbox "$SANDBOX"
 
+echo "[R2-AC1 setup: create-sandbox emits snapshot digest as line 3]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+SNAP="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
+EXPECT=$(git -C "$SANDBOX" hash-object "$SNAP")
+[ -n "$DIGEST" ] && [ "$DIGEST" = "$EXPECT" ] \
+  && pass "create-sandbox line 3 == hash-object of snapshot" || fail "line-3 digest absent/mismatch (got '$DIGEST', want '$EXPECT')"
+cleanup_sandbox "$SANDBOX"
+
 echo "[mutation-guard: clean sandbox -> no downgrade]"
 OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
 G=$("$WT" mutation-guard "$SANDBOX" "$BASE" 2>/dev/null)

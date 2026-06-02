@@ -6,11 +6,14 @@
 #   validate-branch <name>       -> exit 0 if git ref exists; exit 2 otherwise
 #   create <name> <session-id>   -> echoes absolute worktree path; idempotent
 #   remove <abs-path>            -> best-effort `git worktree remove --force`
-#   create-sandbox <session-id> -> echoes 2 lines: sandbox abs path, baseline SHA
-#                                  (disposable worktree mirroring the working tree,
-#                                   git-ignored files excluded; sealed as commit B)
-#   mutation-guard <sandbox> <B> -> echoes YAML: tracked_diff / disallowed_new_files /
-#                                    forced_downgrade (pure git; §6.7)
+#   create-sandbox <session-id> -> echoes 3 lines: sandbox abs path, baseline SHA,
+#                                  snapshot digest (disposable worktree mirroring the
+#                                  working tree, git-ignored files excluded; sealed as
+#                                  commit B; snapshot sealed by an orchestrator-held digest)
+#   mutation-guard <sandbox> <B> <snapshot-digest>
+#                                -> echoes YAML: tracked_diff / disallowed_new_files /
+#                                   guard_flags / forced_downgrade (pure git; §6.1-6.3).
+#                                   Verifies the snapshot digest before trusting it.
 #
 # Sanitize rules: replace '/' with '-', then reject if remainder contains
 # anything outside [A-Za-z0-9._-], or contains '..' substring, or has
@@ -186,8 +189,14 @@ case "${1:-}" in
       printf 'logallrefupdates=%s\n' "$logallrefupdates"
     } > "$snap" || die "cannot write snapshot: $snap"
 
-    # Output contract: line 1 = sandbox abs path, line 2 = baseline SHA.
-    printf '%s\n%s\n' "$sandbox" "$base"
+    # §6.1 round-2 digest-seal — hash the just-written 7-field snapshot so the
+    # orchestrator can hold the digest out-of-band and the guard can verify the
+    # snapshot's integrity (verifier-writable file → must be sealed). hash-object
+    # is always available in a git context.
+    snapshot_digest=$(git -C "$sandbox" hash-object "$snap") || die "cannot digest snapshot: $snap"
+    # Output contract (round-1.5 2 lines → 3): line 1 = sandbox abs path,
+    # line 2 = baseline SHA, line 3 = snapshot digest.
+    printf '%s\n%s\n%s\n' "$sandbox" "$base" "$snapshot_digest"
     ;;
   mutation-guard)
     # 4-layer fail-closed product-mutation oracle (spec §6.2). Inputs are ONLY
