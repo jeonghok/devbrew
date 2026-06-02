@@ -43,7 +43,7 @@ turn. You dispatch the two gates serially in order. At decision points
 as a tool result in the same turn, so no Stop hook and no continuation
 sentinel are needed.
 
-**Law 2 (Writer ≠ Reviewer):** you are the orchestrator (writer). `security-reviewer`, `adversarial`, and `test-scope-validator` are read-only reviewers (`disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]`). The `runtime-verifier` is a **sandbox executor**: it CAN Write/Edit, but only inside a disposable git-worktree sandbox, and you enforce Law 2 *structurally* — after it runs you compute `qg-worktree.sh mutation-guard <sandbox> <baseline>` and, if `forced_downgrade: yes`, you cap the verdict at FAIL regardless of what the verifier claimed. Nothing is committed; the sandbox is discarded. You may also apply user-approved Review-gate fixes ("Retry" path) via Edit/Write — those are user-consented.
+**Law 2 (Writer ≠ Reviewer):** you are the orchestrator (writer). `security-reviewer`, `adversarial`, and `test-scope-validator` are read-only reviewers (`disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]`). The `runtime-verifier` is a **sandbox executor**: it CAN Write/Edit, but only inside a disposable git-worktree sandbox, and you enforce Law 2 *structurally* — after it runs you compute `qg-worktree.sh mutation-guard <sandbox> <baseline> <snapshot_digest>` and, if `forced_downgrade: yes`, you cap the verdict at FAIL regardless of what the verifier claimed. The `<snapshot_digest>` is the orchestrator-held seal (captured at create-sandbox) that the guard verifies before trusting its snapshot — the verifier cannot reach it (§6.1). Nothing is committed; the sandbox is discarded. You may also apply user-approved Review-gate fixes ("Retry" path) via Edit/Write — those are user-consented.
 
 **State file:** read `worktree_path` from `.claude/quality-gates/<sid>/pipeline.md`
 only during preflight; never write. Setup script handles creation, /cancel-qg
@@ -402,7 +402,7 @@ If `skip_runtime` was set, skip this entire section.
 "${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-sandbox "<session-id>"
 ```
 
-- Exit 0 → capture **line 1 = `sandbox_dir`**, **line 2 = `baseline_sha`**. Set `runtime_project_dir = sandbox_dir` (the verifier's `project_dir` for this gate, frozen — overrides the preflight `project_dir` for the Runtime gate only).
+- Exit 0 → capture **line 1 = `sandbox_dir`**, **line 2 = `baseline_sha`**, **line 3 = `snapshot_digest`**. Parse contract (fixed): read exactly three lines with three successive `IFS= read -r` (`sandbox_dir` → `baseline_sha` → `snapshot_digest`) and strip trailing whitespace/CR from `snapshot_digest` (`tr -d '[:space:]'` or equivalent) — a stray newline/space in the hex makes the guard fail-closed on every run. Hold all three as orchestrator variables (verifier-unreachable: they live in this SKILL turn's context, not in the sandbox). Set `runtime_project_dir = sandbox_dir` (the verifier's `project_dir` for this gate, frozen — overrides the preflight `project_dir` for the Runtime gate only).
 - **Exit 3** (kill switch `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`) → graceful fallback (no sandbox): set `runtime_project_dir = project_dir` (the preflight main-repo dir; `sandbox_dir`/`baseline_sha` stay UNSET). The verifier runs in read-only smoke mode against the real tree. Because the verifier still holds Write tools (frontmatter cannot be revoked per-dispatch), the fallback verdict is **capped at SKIP_WITH_EVIDENCE — never PASS** (no sandbox = no structural Law-2 guarantee = no certification; I-A). BEFORE the R3 dispatch, capture `fallback_pre` = `git -C "$project_dir" status --porcelain --untracked-files=all` plus a tracked content tree-hash baseline (`GIT_INDEX_FILE=<tmp> git -C "$project_dir" add -A -- . && git write-tree`). Print: `> [quality-gates] runtime sandbox disabled — read-only smoke mode on the real tree; verdict capped at SKIP_WITH_EVIDENCE (DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1).`
 - Any other non-zero → surface stderr verbatim and mark the Runtime gate failed.
 
@@ -445,7 +445,7 @@ Agent({
 **Step R4 — Mutation guard (authoritative verdict cap).** Unless in read-only fallback, compute the product-mutation oracle:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" mutation-guard "<sandbox_dir>" "<baseline_sha>"
+"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" mutation-guard "<sandbox_dir>" "<baseline_sha>" "<snapshot_digest>"
 ```
 
 Read the YAML. **If `forced_downgrade: yes`**, the verdict is capped at FAIL regardless of the verifier's emitted verdict (Law 2 — the verifier cannot self-approve a product change). Surface `tracked_diff` + `disallowed_new_files` as evidence ("the app only ran after this change — fix it in a normal writer→review cycle"). The verifier's own `writes:` self-report is advisory only; this git result is authoritative.
@@ -459,6 +459,8 @@ Read the YAML. **If `forced_downgrade: yes`**, the verdict is capped at FAIL reg
 | **exit 4** (`guard_fail`), OR any other non-zero exit, OR a missing/invalid `forced_downgrade` key, OR a `guard_error:` line present | treat as `forced_downgrade: yes` → cap verdict at FAIL; surface the guard's `guard_error` + **stderr verbatim**; mark the Runtime gate failed. **Never read an errored or garbled guard as PASS** (indeterminate ≠ clean). |
 
 An errored guard (corrupt index, lost gitdir, missing/truncated snapshot, bad baseline) must not present as "not a downgrade." This is the orchestration-layer half of the bypass closure — the guard script's layers 0–3 (§6.2) cover C-A/C-B/C-D/C-E; this table covers C-C.
+
+A digest mismatch (the verifier forged the snapshot) surfaces here as **exit 4** with `guard_error: snapshot integrity check failed` — the same fail-closed path as any other indeterminate guard. This is the round-2 closure of C-NEW-1: the seal the guard checks is held by the orchestrator, out of the verifier's reach.
 
 **Fallback working-tree guard (read-only mode only — I-A/I-B).** When the sandbox was disabled (Exit 3), do NOT run the sandbox `mutation-guard`. The verdict is already capped at SKIP_WITH_EVIDENCE (R0); this guard is a pure SAFETY SIGNAL, not a verdict input. After the R3 dispatch, recompute `fallback_post` (porcelain + tracked content tree-hash, same as `fallback_pre`). If anything changed (a porcelain entry in `fallback_post` not in `fallback_pre`, or a differing tree-hash), emit a loud warning **to user-visible stdout** AND record it in `evidence_dir` (§6.6): `> [quality-gates] WARNING: runtime fallback에서 working tree가 변경됨 — <changed files>. sandbox 미사용으로 구조적 보호 없음; 검토 요망 (git diff 후 revert 권장).` git-ignored files do not appear in `--porcelain`, so a setup-only `.env` fix is correctly NOT flagged. The warning does not change the verdict (already ≤SKIP cap) and does not block the gate (P18 — no extra loop).
 
@@ -524,7 +526,7 @@ AskUserQuestion({
 ```
 
 Branch:
-- **Yes, retry** → increment resolution counter; if exceeds env limit, fall through to Skip with evidence. Otherwise re-create the sandbox (Step R0) and **re-capture BOTH `sandbox_dir` (line 1) AND `baseline_sha` (line 2)** from the new output, refreshing the orchestrator variables — create-sandbox emits a NEW commit `B` each call, so reusing the old `baseline_sha` makes the guard `guard_fail "bad baseline sha"` (a false FAIL). The new snapshot is auto-recorded in the new gitdir; the stale sandbox + its old snapshot are force-removed by R0's idempotent cleanup. Then re-dispatch runtime-verifier with the refreshed `sandbox_dir`.
+- **Yes, retry** → increment resolution counter; if exceeds env limit, fall through to Skip with evidence. Otherwise re-create the sandbox (Step R0) and re-capture the new output's `sandbox_dir` (line 1), `baseline_sha` (line 2), and `snapshot_digest` (line 3) with the same three successive `IFS= read -r` + digest-strip idiom as R0 — refreshing **all three** orchestrator variables. create-sandbox emits a NEW commit `B` AND a NEW snapshot (hence a new digest) each call, so reusing the old `baseline_sha` makes the guard `guard_fail "bad baseline sha"` and reusing the old `snapshot_digest` makes it `guard_fail "snapshot integrity check failed"` — both false FAILs. The new snapshot is auto-recorded in the new gitdir; the stale sandbox + its old snapshot are force-removed by R0's idempotent cleanup. Then re-dispatch runtime-verifier with the refreshed `sandbox_dir`, and call R4 as 3-arg with the refreshed `snapshot_digest`. (Fix the parse order: capturing the digest as line 2 swaps `baseline_sha`/`snapshot_digest` and fails-closed every run.)
 - **Skip with evidence** → record SKIP_WITH_EVIDENCE and continue.
 - **Stop** → final summary aborted at the Runtime gate.
 

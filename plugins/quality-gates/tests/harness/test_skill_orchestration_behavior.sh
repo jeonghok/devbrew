@@ -194,6 +194,36 @@ else
   fail=$((fail + 1))
 fi
 
+# --- round-2 digest-seal wiring ---
+
+# R0 must capture snapshot_digest in the R0 section (after the "Step R0" heading,
+# before the runtime-verifier dispatch) — NOT the Law-2 header at the top.
+r0_section=$(first_line 'Step R0')
+r0_digest=$(first_line_after 'snapshot_digest' "$r0_section")
+if [[ "$r0_digest" -gt 0 && "$r0_digest" -lt "$runtime_line" ]]; then
+  echo "PASS: R0 captures snapshot_digest (line 3) at $r0_digest"
+else
+  echo "FAIL: R0 does not capture snapshot_digest in the R0 section (found=$r0_digest, runtime=$runtime_line)"
+  fail=$((fail + 1))
+fi
+
+# Guard call must thread the 3rd arg on the R4 call line itself ($guard_line,
+# the first `mutation-guard` AFTER the runtime dispatch) — not the header mention.
+if awk -v n="$guard_line" 'NR==n && /snapshot_digest/ {f=1} END{exit !f}' "$SKILL_MD"; then
+  echo "PASS: R4 guard call threads snapshot_digest (3-arg) at line $guard_line"
+else
+  echo "FAIL: R4 guard call (line $guard_line) does not thread snapshot_digest"
+  fail=$((fail + 1))
+fi
+
+# I-G retry must re-capture snapshot_digest (line 3) in addition to the two existing.
+if grep -E 're-capture' "$SKILL_MD" | grep -q 'snapshot_digest'; then
+  echo "PASS: retry re-captures snapshot_digest"
+else
+  echo "FAIL: retry does not re-capture snapshot_digest"
+  fail=$((fail + 1))
+fi
+
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"
   exit 0
