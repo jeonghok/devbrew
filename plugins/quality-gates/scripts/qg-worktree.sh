@@ -270,6 +270,15 @@ case "${1:-}" in
     # skip-worktree index bits (verified). No -f → tracked .gitignore (part of B)
     # is honored, preserving the legit git-ignored .env setup-only PASS path.
     idx="$gitdir/qg-tmp-idx.$$"; rm -f "$idx"
+    # I-NEW-2: seed from B^{tree}, NOT an empty index. A force-tracked ignored
+    # file (`git add -f debug.log`, committed dist/) is already in B, so it stays
+    # in the index and is only re-stat'd — not re-excluded — so a clean sandbox
+    # is not a false-positive. assume-unchanged/skip-worktree bits are index-only
+    # (absent from a tree), so read-tree drops them → add -A still re-stats every
+    # path → C-E catch preserved. No -f → tracked .gitignore (part of B) honored →
+    # the legit git-ignored .env setup-only PASS path preserved.
+    rt_out=$(GIT_INDEX_FILE="$idx" git -C "$sandbox" read-tree "$base_tree" 2>&1) \
+      || { rm -f "$idx"; guard_fail "read-tree (Layer 1 seed) failed: $rt_out"; }
     add_out=$(GIT_INDEX_FILE="$idx" git -C "$sandbox" add -A -- . 2>&1) \
       || { rm -f "$idx"; guard_fail "add -A failed: $add_out"; }
     cur_tree=$(GIT_INDEX_FILE="$idx" git -C "$sandbox" write-tree 2>&1) \

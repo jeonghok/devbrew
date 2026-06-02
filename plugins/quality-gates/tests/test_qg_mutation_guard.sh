@@ -171,6 +171,20 @@ G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
   && pass "skip-worktree tracked mutation -> forced_downgrade: yes (H-AC2b)" || fail "C-E skip-worktree EVADED"
 cleanup_sandbox "$SANDBOX"
 
+echo "[R2-AC3(a): force-tracked ignored file, no mutation -> forced_downgrade: no (I-NEW-2)]"
+R=$(mktemp -d)
+(cd "$R" && git init -q -b main && git config user.email t@t && git config user.name t)
+printf 'orig\n' > "$R/tracked.txt"
+printf '*.log\n.env\n' > "$R/.gitignore"
+printf 'debug\n' > "$R/debug.log"
+(cd "$R" && git add -A && git add -f debug.log && git commit -q -m init)   # debug.log is tracked despite *.log ignore
+OUT=$(cd "$R" && "$WT" create-sandbox "inew2guard0123456" 2>/dev/null)
+SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: no" ] \
+  && pass "force-tracked ignored, clean -> no downgrade (R2-AC3a)" || fail "I-NEW-2 false-positive: $(field "$G" tracked_diff)"
+cleanup_sandbox "$SANDBOX"
+
 echo "[C-A(iv): .gitignore tamper to hide a new file -> caught by content-hash on tracked .gitignore]"
 OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 printf 'node_modules/\n.env\nsecretfix.js\n' > "$SANDBOX/.gitignore"
