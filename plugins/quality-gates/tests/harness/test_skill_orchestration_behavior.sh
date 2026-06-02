@@ -224,6 +224,20 @@ else
   fail=$((fail + 1))
 fi
 
+# --- R2-AC5: Law-3 persona hardening (the bypass escaped because reviewers
+#     trusted a verifier-writable artifact; the persona now forces that check).
+#     Anchor on the stable literal `verifier-writable`, which BOTH persona edits
+#     in Task 6 Step 3 include verbatim. ---
+AGENTS_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)/agents"
+for p in security-reviewer adversarial; do
+  if grep -qi 'verifier-writable' "$AGENTS_DIR/$p.md"; then
+    echo "PASS: $p persona has the verifier-writable-artifact check"
+  else
+    echo "FAIL: $p persona missing the verifier-writable-artifact check"
+    fail=$((fail + 1))
+  fi
+done
+
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"
   exit 0

@@ -36,6 +36,7 @@ Trace untrusted input → dangerous sink for each category. Verify each finding 
 - **Cryptographic misuse** — weak hash for security purposes; weak PRNG for token or nonce generation; non-constant-time comparison on secrets, tokens, or digests; hardcoded encryption key or IV; missing salt in password hashing.
 - **Raw-HTML escape hatches** — framework-specific raw-render or mark-safe APIs invoked on user-controlled content (Rails raw-render API, Django mark-safe filter, React raw-HTML render prop, Vue raw-HTML directive, direct DOM raw-HTML assignment).
 - **Dependency manifest changes** — `package.json`, `requirements.txt`, `go.mod`, `Cargo.toml`, `Gemfile`, `pyproject.toml`. Flag each new or upgraded entry as a finding so downstream review can verify CVE status. Do not run audit commands yourself.
+- **Trusted-artifact custody (Law 2 self-approval surface)** — when reviewing a security control that compares "now" against a stored reference (snapshot, baseline, config, temp file, lockfile), ask: can the *subject being verified* — a subagent holding `Write`, or arbitrary `Bash` inside a sandbox — write that reference or compute its path? If yes, the comparison is meaningless (the subject controls both sides). The trust anchor MUST live out of the subject's reach (orchestrator turn context, or an immutable commit). Flag any verifier-writable comparison ground-truth as CRITICAL.
 
 ## What you do NOT flag (anti-flag list)
 
