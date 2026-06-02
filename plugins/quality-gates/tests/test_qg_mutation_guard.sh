@@ -379,6 +379,81 @@ G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "" 2>/dev/null); RC=$?
 [ "$RC2" -ne 0 ] && pass "2-arg call rejected (exit $RC2, never PASS) (R2-AC1c)" || fail "2-arg call was not rejected"
 cleanup_sandbox "$SANDBOX"
 
+echo "[R2-AC2(i): common info/exclude-hidden new file, Layer 2 forged-off -> Layer 1b sole catch]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+SNAP="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
+COMMON="$(git -C "$SANDBOX" rev-parse --git-common-dir)"
+printf 'export const fix=1\n' > "$SANDBOX/onlyhack.js"
+echo 'onlyhack.js' >> "$COMMON/info/exclude"
+NEWH=$(git -C "$SANDBOX" hash-object "$COMMON/info/exclude")
+sed "s|^excl_common_sha=.*|excl_common_sha=$NEWH|" "$SNAP" > "$SNAP.t" && mv "$SNAP.t" "$SNAP"
+DIGEST=$(git -C "$SANDBOX" hash-object "$SNAP")     # digest of the patched snapshot -> Layer 0 passes
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
+  && pass "common-hidden file -> forced (Layer 1b sole, R2-AC2i)" || fail "b-precise common EVADED"
+printf '%s' "$G" | grep -q "onlyhack.js" \
+  && pass "onlyhack.js in disallowed_new_files (R2-AC2i)" || fail "onlyhack.js not surfaced"
+printf '%s' "$G" | grep -q "ignore_channel_tampered" \
+  && fail "Layer 2 fired — de-vacuum NOT isolated (R2-AC2i)" || pass "Layer 2 silent — de-vacuum isolation holds (R2-AC2i)"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R2-AC2(iii): core.excludesFile-hidden new file, Layer 2 forged-off -> Layer 1b sole catch]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+SNAP="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
+REPO="${SANDBOX%/.claude/quality-gates/worktrees/*}"
+EXC="$REPO/.qg_excludes"; echo 'onlyhack.js' > "$EXC"          # throwaway-internal path (N-4: no host ~/.gitconfig)
+git -C "$SANDBOX" config --local core.excludesFile "$EXC"
+printf 'export const fix=1\n' > "$SANDBOX/onlyhack.js"
+EFH=$(git -C "$SANDBOX" hash-object "$EXC")
+sed "s|^excludesfile=.*|excludesfile=$EXC|; s|^excludesfile_sha=.*|excludesfile_sha=$EFH|" "$SNAP" > "$SNAP.t" && mv "$SNAP.t" "$SNAP"
+DIGEST=$(git -C "$SANDBOX" hash-object "$SNAP")
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
+  && pass "excludesFile-hidden file -> forced (Layer 1b sole, R2-AC2iii)" || fail "b-precise excludesFile EVADED"
+printf '%s' "$G" | grep -q "ignore_channel_tampered" \
+  && fail "Layer 2 fired — de-vacuum NOT isolated (R2-AC2iii)" || pass "Layer 2 silent (R2-AC2iii)"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R2-AC2(ii): per-worktree info/exclude-hidden new file, Layer 2 forged-off -> caught (Layer 1 structural)]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+SNAP="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
+WTDIR="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)"
+printf 'export const fix=1\n' > "$SANDBOX/onlyhack.js"
+mkdir -p "$WTDIR/info"; echo 'onlyhack.js' >> "$WTDIR/info/exclude"
+NEWW=$(git -C "$SANDBOX" hash-object "$WTDIR/info/exclude")
+sed "s|^excl_wt_sha=.*|excl_wt_sha=$NEWW|" "$SNAP" > "$SNAP.t" && mv "$SNAP.t" "$SNAP"
+DIGEST=$(git -C "$SANDBOX" hash-object "$SNAP")
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
+# add -A ignores per-worktree info/exclude in a linked worktree, so Layer 1 stages
+# the file; b-precise neutralizes it too. Either way it is caught WITHOUT Layer 2.
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
+  && pass "per-worktree-hidden file -> forced w/o Layer 2 (R2-AC2ii)" || fail "per-worktree file EVADED"
+printf '%s' "$G" | grep -q "onlyhack.js" \
+  && pass "onlyhack.js surfaced (R2-AC2ii)" || fail "onlyhack.js not surfaced"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R2-AC2(iv): baseline .gitignore-matched new file -> no downgrade (usability)]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+mkdir -p "$SANDBOX/node_modules"; printf 'x\n' > "$SANDBOX/node_modules/x.js"   # baseline .gitignore has node_modules/
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: no" ] \
+  && pass "baseline-ignored runtime artifact -> no downgrade (R2-AC2iv)" || fail "node_modules false-FAILed"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R2-AC2(v): info/exclude-hidden new symlink -> forced (symlink coverage union)]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT")
+SNAP="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)/qg-mutation-snapshot"
+COMMON="$(git -C "$SANDBOX" rev-parse --git-common-dir)"
+( cd "$SANDBOX" && ln -s /etc/hosts hacklink )
+echo 'hacklink' >> "$COMMON/info/exclude"
+NEWH=$(git -C "$SANDBOX" hash-object "$COMMON/info/exclude")
+sed "s|^excl_common_sha=.*|excl_common_sha=$NEWH|" "$SNAP" > "$SNAP.t" && mv "$SNAP.t" "$SNAP"
+DIGEST=$(git -C "$SANDBOX" hash-object "$SNAP")
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
+  && pass "info/exclude-hidden symlink -> forced (R2-AC2v)" || fail "b-precise symlink EVADED"
+cleanup_sandbox "$SANDBOX"
+
 echo
 echo "Result: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

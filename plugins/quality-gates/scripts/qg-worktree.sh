@@ -236,6 +236,18 @@ case "${1:-}" in
     common=$(git -C "$sandbox" rev-parse --git-common-dir 2>&1) \
       || guard_fail "cannot resolve common-dir: $common"
     case "$common" in /*) ;; *) common="$sandbox/$common" ;; esac
+
+    # ---- b-precise pre-restore (§6.2 step 1a; load-bearing for correctness) ----
+    # A prior guard killed mid-neutralization may have left info/exclude as an
+    # empty file with the original renamed to .qgbak. Restore BEFORE Layer 2 reads
+    # info/exclude (else now-vs-snapshot would compare an empty file → false
+    # ignore_channel_tampered). Per-file independent → safe on partial recovery.
+    qg_ce="$common/info/exclude"
+    qg_we="$gitdir/info/exclude"
+    for f in "$qg_ce" "$qg_we"; do
+      [[ -f "$f.qgbak" ]] && mv -f "$f.qgbak" "$f"
+    done
+
     base_tree=$(git -C "$sandbox" rev-parse "${base}^{tree}" 2>&1) \
       || guard_fail "bad baseline sha: $base ($base_tree)"
 
@@ -313,6 +325,62 @@ case "${1:-}" in
     done < "$others_file"
     rm -f "$others_file"
     [[ ${#disallowed[@]} -gt 0 ]] && forced="yes"
+
+    # ---- Layer 1b (b-precise): baseline-anchored detection of new files hidden
+    #      ONLY by non-baseline ignore sources (info/exclude, core.excludesFile).
+    #      Trusted ignore source = baseline .gitignore ONLY (tracked, in B^{tree};
+    #      its tamper is caught by Layer 1). info/exclude + core.excludesFile are
+    #      untrusted (verifier-writable, absent from B). snapshot-INDEPENDENT, so a
+    #      bug in the digest seal or Layer 2 still leaves this detector standing.
+    #      Restore inline BEFORE Layer 2; the trap is a crash-only backstop. ----
+    restore_excludes() {
+      # reverse of backup order: per-worktree first, then common (common is shared).
+      [[ -f "$qg_we.qgbak" ]] && mv -f "$qg_we.qgbak" "$qg_we"
+      [[ -f "$qg_ce.qgbak" ]] && mv -f "$qg_ce.qgbak" "$qg_ce"
+      return 0
+    }
+    trap restore_excludes EXIT INT TERM
+    # backup (common first, then per-worktree) via atomic rename + empty placeholder.
+    if [[ -f "$qg_ce" ]]; then
+      mv "$qg_ce" "$qg_ce.qgbak" || guard_fail "b-precise: common info/exclude backup failed"
+      : > "$qg_ce"
+    fi
+    if [[ -f "$qg_we" ]]; then
+      mv "$qg_we" "$qg_we.qgbak" || guard_fail "b-precise: per-worktree info/exclude backup failed"
+      : > "$qg_we"
+    fi
+
+    # Second baseline-anchored pass: read-tree B then add -A with excludesFile
+    # neutralized. info/exclude is physically emptied above; baseline .gitignore
+    # (in B, in the working tree) is still honored → runtime artifacts stay ignored.
+    idx2="$gitdir/qg-tmp-idx2.$$"; rm -f "$idx2"
+    bp_rt=$(GIT_INDEX_FILE="$idx2" git -C "$sandbox" -c core.excludesFile=/dev/null read-tree "$base_tree" 2>&1) \
+      || { rm -f "$idx2"; guard_fail "b-precise read-tree failed: $bp_rt"; }
+    bp_add=$(GIT_INDEX_FILE="$idx2" git -C "$sandbox" -c core.excludesFile=/dev/null add -A -- . 2>&1) \
+      || { rm -f "$idx2"; guard_fail "b-precise add -A failed: $bp_add"; }
+    cur_tree_neutralized=$(GIT_INDEX_FILE="$idx2" git -C "$sandbox" write-tree 2>&1) \
+      || { rm -f "$idx2"; guard_fail "b-precise write-tree failed: $cur_tree_neutralized"; }
+    rm -f "$idx2"
+
+    # Restore info/exclude NOW (before Layer 2) + drop the crash-backstop trap.
+    restore_excludes
+    trap - EXIT INT TERM
+
+    # Pure git-diff set-difference (does NOT read Layer 1's bash arrays, avoiding a
+    # coupling bug): paths ADDED only when non-baseline sources are neutralized =
+    # smuggled new files. git represents symlinks as mode-120000 tree entries, so a
+    # symlink hidden by info/exclude shows up here too (additive with the ls-files
+    # symlink loop above → union ⊇ prior coverage).
+    bp_neut="$gitdir/qg-bp-neut.$$"; bp_l1="$gitdir/qg-bp-l1.$$"; rm -f "$bp_neut" "$bp_l1"
+    git -C "$sandbox" diff --name-status --diff-filter=A "$base_tree" "$cur_tree_neutralized" 2>/dev/null \
+      | cut -f2- | LC_ALL=C sort -u > "$bp_neut"
+    git -C "$sandbox" diff --name-status --diff-filter=A "$base_tree" "$cur_tree" 2>/dev/null \
+      | cut -f2- | LC_ALL=C sort -u > "$bp_l1"
+    while IFS= read -r rel; do
+      [[ -z "$rel" ]] && continue
+      disallowed+=("$rel"); forced="yes"
+    done < <(LC_ALL=C comm -23 "$bp_neut" "$bp_l1")
+    rm -f "$bp_neut" "$bp_l1"
 
     # ---- Layer 2: ignore-channel + config tamper (C-A, NEW-05) ----
     ho() { if [[ -f "$1" ]]; then git -C "$sandbox" hash-object "$1" 2>/dev/null || printf 'absent'; else printf 'absent'; fi; }
