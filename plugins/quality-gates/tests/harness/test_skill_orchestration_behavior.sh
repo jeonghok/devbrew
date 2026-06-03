@@ -247,6 +247,7 @@ done
 surface_line=$(first_line 'Surface findings|Step 4\.5')
 question_line=$(first_line 'question:.*findings remain')
 assert_line "Surface-findings step present" "$surface_line"
+assert_line "iter-boundary decision question present" "$question_line"
 assert_order "Surface findings precedes iter-boundary decision" "$surface_line" "$question_line"
 
 if [[ "$fail" -eq 0 ]]; then

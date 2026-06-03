@@ -260,14 +260,15 @@ Agent({
      emit the captured stdout to the user as a deliberate assistant message,
      prepended with the single context line `## Review gate iter N — Findings`,
      **before** invoking the decision tool. Then go to step 5.
-   - **kept = 0 AND suppressed > 0** (counts all zero; stdout is the
-     `No high-confidence findings. N low-confidence findings suppressed.` line
-     with N > 0) → no high-confidence finding to act on → treat as **clean**:
-     do NOT call AskUserQuestion. Surface only that single
-     `No high-confidence findings…` line for transparency, then continue the
-     loop / proceed to the Runtime gate.
-   - **kept = 0 AND suppressed = 0** → print `## Review gate iter N: clean` and
-     exit the loop (continue to the Runtime gate).
+   - **kept = 0 AND suppressed > 0** (the synthesizer emitted the empty-state
+     line `No high-confidence findings. N low-confidence findings suppressed.`
+     with N > 0 — read N from that line) → no high-confidence finding to act
+     on → treat as **clean**: do NOT call AskUserQuestion. Surface only that
+     single `No high-confidence findings…` line for transparency, then **exit
+     the loop (continue to the Runtime gate)** — do not iterate again.
+   - **kept = 0 AND suppressed = 0** (the same empty-state line with N = 0) →
+     print `## Review gate iter N: clean` and exit the loop (continue to the
+     Runtime gate).
 
 5. **Decision tool (kept > 0 only).** Invoke [Review iter boundary
    decision](#review-iter-boundary-decision). Fill its `<summary>` slot by
