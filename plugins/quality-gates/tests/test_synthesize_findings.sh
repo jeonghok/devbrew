@@ -39,6 +39,7 @@ run_case "AC35 reject" \
   '- {agent: code-reviewer, file: a.py, line: 10, severity: CRITICAL, confidence: 9, summary: bug, proposed_fix: fix}' \
   'No high-confidence' 'a.py:10'
 
+# AC36a + AC36b intentionally share one 3-finding fixture, each asserting a different facet.
 # AC36a rubric: conf5 non-CRIT shown WITH caveat; conf4 non-CRIT suppressed
 run_case "AC36a conf5 shown+caveat / conf4 suppressed" \
   'verdicts: []' \
@@ -113,6 +114,18 @@ run_case "ACR4 counts suppressed tail" \
   '- {agent: r, file: x.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}
 - {agent: r, file: q.py, line: 1, severity: SUGGESTION, confidence: 3, summary: low, proposed_fix: f}' \
   '1 suppressed \(conf <= 4\)' ''
+
+# ACR4 all-suppressed: render([], N>0) — kept=0 but suppressed>0 (AC-R4-11 empty-state path)
+run_case "ACR4 all-suppressed empty-state" \
+  'verdicts: []' \
+  '- {agent: r, file: x.py, line: 1, severity: IMPORTANT, confidence: 3, summary: s, proposed_fix: f}' \
+  'No high-confidence findings\. 1 low-confidence findings suppressed' 'x\.py:1'
+
+# ACR4 no-suppression: suppressed notice + counts tail both absent (locks suppressed_count>0 guard)
+run_case "ACR4 no-suppression notice absent" \
+  'verdicts: []' \
+  '- {agent: r, file: x.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}' \
+  '' 'finding\(s\) suppressed|suppressed \(conf <= 4\)'
 
 # AC39 empty
 run_case "AC39 empty" \
