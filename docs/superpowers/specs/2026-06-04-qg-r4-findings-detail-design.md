@@ -3,6 +3,8 @@
 > Review gate가 각 iter 종료 시 finding 전체를 표로 사용자에게 출력한 뒤 결정을 묻는다.
 > devbrew 개선 백로그 `R4` (bucket B). asks 원문: `.claude/devbrew-improvement-asks.md`.
 
+> **상태(scope):** 본 문서는 **구현 이전(pre-implementation) 설계 spec**이다. 여기 기술된 코드 변경(`suppress()` 3-way 재작성, SKILL `Step 4.5` surface, v2.3.0 bump, 테스트 추가)은 **writing-plans → 구현 단계의 deliverable**이며 현재 codebase에는 아직 존재하지 않는다(미존재가 정상). 본 spec은 그 구현의 *지침*이고, 리뷰 대상은 지침의 명확성·일관성·테스트 가능성이지 코드 반영 여부가 아니다.
+
 ## Context / Why
 
 `quality-gates`의 Review gate는 iter마다 reviewer(security-reviewer / code-reviewer / codex / adversarial)를 dispatch하고, `scripts/synthesize_findings.py`가 결정적(deterministic)으로 findings를 dedup·정렬·suppress한다. 그런데 **synthesize 결과가 사용자에게 deliberate하게 surface되지 않는다**:
@@ -70,7 +72,7 @@ persona 파일(`agents/*.md`) 0 변경.
 | IMPORTANT  | cache.py:30      | 6 *  | Race on shared dict              | adversarial              |
 | SUGGESTION | util.py:5        | 7    | Unclear variable name x          | code-reviewer            |
 
-`*` = confidence <= 6 (treat with caution). 2 findings suppressed (conf <= 4); re-run with `/qg --show-low-confidence`.
+`*` = confidence <= 6 (treat with caution). 2 finding(s) suppressed (conf <= 4); re-run with `/qg --show-low-confidence` to see all.
 
 **Suggested fixes:**
 - `auth.py:42` — parameterize the query (bound params, not f-string)
@@ -113,7 +115,7 @@ severity(직교축)와 분리한 C30 4-tier:
 - **표 헤더:** `| Sev | Path:Line | Conf | Summary | Source |`.
 - **Conf 셀:** clean = `<n>`; caveat(conf<=6) = `<n> *` (숫자·공백·별표).
 - **caveat 범례:** `` `*` = confidence <= 6 (treat with caution). ``
-- **suppressed 안내:** 기존 문구 유지 — `<n> finding(s) hidden. Re-run with `/qg --show-low-confidence` to see all.`
+- **suppressed 안내(단일 lock):** `<n> finding(s) suppressed (conf <= 4); re-run with `/qg --show-low-confidence` to see all.` — 표 레이아웃 예시의 legend 줄과 **동일 문자열**. (기존 `### Suppressed` heading + `hidden` 문구를 이 compact 1줄로 대체.)
 - **fixes 블록:** `**Suggested fixes:**` 헤더 + 행 `` - `<path>:<line>` — <proposed_fix> ``.
 - **empty:** `No high-confidence findings. <n> low-confidence findings suppressed.` (AC39 호환).
 
