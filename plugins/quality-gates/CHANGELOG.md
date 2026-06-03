@@ -59,6 +59,20 @@ git-ignored 파일(prod `.env`) 미복사로 원천 미접근.
   (reflog/stash snapshot-delta) + 영구 `logAllRefUpdates=false` 억제(config tamper),
   C-E `assume-unchanged`/`skip-worktree` index 비트(fresh-index content-hash).
   snapshot은 per-worktree gitdir 사이드채널(출력 계약 2줄 무변경). 우회별 회귀 테스트 동반.
+- **mutation-guard round-2: 6번째 우회(C-NEW-1) + 오탐(I-NEW-2) 봉쇄 (보안).** round-1.5 hardening의
+  snapshot이 verifier-writable gitdir에 살아 피검증자가 신뢰 기준을 위조 가능했던 master-key 결함을
+  **orchestrator-held digest seal**로 닫음: `create-sandbox`가 snapshot digest를 출력 line 3로 emit →
+  orchestrator(SKILL)가 verifier-unreachable 채널로 보유 → `mutation-guard`가 3번째 인자로 받아 신뢰 전
+  recompute·비교(위조 시 `guard_fail` exit 4). 추가로 snapshot-독립 **b-precise** 계층 1b를 도입 —
+  baseline `.gitignore`만 신뢰 ignore 소스로 인정하고 `info/exclude`·`core.excludesFile`로만 숨겨진 신규
+  파일(일반 파일 + symlink)을 2차 baseline-anchored read-tree pass의 git-diff 집합차로 포착(I-NEW-1
+  symlink-only 갭 흡수, `node_modules` 등 baseline-ignored 산출물은 미플래그하여 usability 보존).
+  I-NEW-2(empty-index false-positive)는 계층 1 임시 index를 `read-tree B^{tree}`로 시드해 제거
+  (force-tracked ignored 파일 무변경 시 `forced=no`; C-E catch·`.env` PASS 보존).
+- **Law-3 review-mechanism 강화.** 이 우회를 놓친 `security-reviewer`/`adversarial` persona에 "가드가
+  신뢰하는 artifact(snapshot/baseline/config)를 피검증자(Write 보유 subagent·샌드박스 Bash)가 쓰거나
+  경로 계산할 수 있는가" 체크 추가 + vacuous H-AC3(ii) 테스트를 rule-only 격리 케이스 + Layer-2 비활성
+  mutation-test로 재작성. 출력 계약 2줄 → 3줄(snapshot digest)로 정직하게 변경.
 - **C-C SKILL R4 fail-closed 라우팅.** errored/garbled 가드(exit 4 / `guard_error` /
   무효 key)를 PASS가 아니라 ≤FAIL로 라우팅 + stderr verbatim surface.
 - **I-A/I-B fallback SKIP cap.** `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1` fallback verdict를

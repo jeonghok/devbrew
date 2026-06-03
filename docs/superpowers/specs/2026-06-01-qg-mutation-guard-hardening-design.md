@@ -156,7 +156,7 @@ egress)는 원본 §3/§6.2가 명시적 non-goal로 인정 — 이 spec도 그 
 | content 비교 | fresh `GIT_INDEX_FILE` + `add -A`(no `-f`) + `write-tree` vs `B^{tree}` | 경험적 검증: index 비트(assume-unchanged/skip-worktree) 우회 + `.gitignore` 존중 |
 | C-D 처리 | content-hash 불가 → **snapshot delta**(HEAD reflog + stash list) | stash/reset이 tree를 baseline으로 복원 |
 | ignore-tamper | "non-comment 라인 존재" 아닌 **create 시점 대비 변경** | 합법 pre-existing exclude false-positive 회피; config로 무력화 불가 |
-| snapshot 저장 | **per-worktree gitdir** (`rev-parse --absolute-git-dir`)/qg-mutation-snapshot | 출력 계약 무변경, worktree remove 시 auto-clean |
+| snapshot 저장 | ~~**per-worktree gitdir**, 출력 계약 무변경~~ → **SUPERSEDED by round-2** (`2026-06-02-qg-mutation-guard-round2-digest-seal-design.md` §6.1): snapshot은 여전히 gitdir에 살되 verifier-writable이므로 **orchestrator-held digest로 봉인**(출력 line 3 + guard 3-arg). 무봉인 gitdir 저장이 C-NEW-1 master-key의 근본 원인이었다. | (round-2 정정) |
 | 에러 정책 | **fail-closed** — git 실패·snapshot 부재·malformed → `forced=yes` + non-zero exit | C-B; 보안 컨트롤은 fail-closed |
 | R4 라우팅 | R0 미러링 — 가드 non-zero/무효 → ≤FAIL + stderr surface | C-C; "indeterminate ≠ PASS" |
 | fallback | sandbox disabled → verdict **≤SKIP_WITH_EVIDENCE** (never PASS) + real-tree 변경 loud 경고 | I-A/I-B; "보장 없음 = 인증 없음" |
@@ -492,8 +492,11 @@ R3 re-dispatch. 새 snapshot은 새 gitdir에 자동 기록됨."**
   override 못 함(검증). → tamper 직접 탐지.
 - **absolute `rev-list --all --not $base`로 새 commit 탐지** — 공유 object store의 sibling
   브랜치에 false-positive(adversarial 검증). → bounded pre/post snapshot delta.
-- **snapshot을 create-sandbox 출력 3번째 줄로** — 출력 계약 변경 → 기존 2-arg 호출/테스트
-  깨짐. → per-worktree gitdir 사이드채널(계약 무변경 + auto-clean).
+- **snapshot을 create-sandbox 출력 3번째 줄로** — (당시 기각: 출력 계약 변경 → 2-arg 호출/테스트
+  깨짐.) **REVERSED by round-2** (`2026-06-02-qg-mutation-guard-round2-digest-seal-design.md` §6.1):
+  snapshot *내용*은 gitdir에 두되 그 *digest*를 출력 line 3로 emit해 orchestrator가 보유 →
+  3-arg guard로 봉인. "계약 무변경"의 편의가 정확히 master-key(C-NEW-1)를 만들었으므로 계약 변경
+  비용을 수용한다.
 - **fallback content-hash 가드로 PASS 허용** — Write verifier가 real tree를 변조하는
   transient window + crash 시 dirty 잔존 + C-D blind. → SKIP_WITH_EVIDENCE cap(사용자 선택).
 - **fallback에서 verifier read-only로 dispatch** — frontmatter Write를 per-dispatch
