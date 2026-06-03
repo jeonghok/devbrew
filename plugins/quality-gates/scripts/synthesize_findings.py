@@ -3,8 +3,9 @@
 
 Replaces agents/synthesizer.md Agent dispatch. The algorithm is fully
 deterministic (no LLM judgment): apply Adversarial verdicts → group/dedup
-by (file,line,severity) → suppress confidence<7 unless severity==CRITICAL
-→ sort severity-desc / confidence-desc / file-asc → render Markdown.
+by (file,line,severity) → suppress non-CRITICAL confidence<=4 (CRITICAL always
+kept; confidence 5-6 shown with a `*` caveat) → sort severity-desc /
+confidence-desc / file-asc → render Markdown table.
 
 Inputs (CLI args):
   --adversarial PATH   YAML file with `verdicts: [...]` (or top-level list)
@@ -78,11 +79,19 @@ def dedup(findings):
 
 
 def suppress(findings):
+    """C30 rubric (R4): kept vs suppressed.
+
+    - CRITICAL: always kept (any confidence).
+    - non-CRITICAL: confidence <= 4 -> suppressed; else kept.
+
+    The caveat marker (`*`) is NOT decided here; it is a pure function of
+    `confidence <= 6` on any *shown* finding, computed in render().
+    """
     kept, suppressed = [], []
     for f in findings:
         sev = f.get("severity", "SUGGESTION")
         conf = int(f.get("confidence", 0))
-        if conf < 7 and sev != "CRITICAL":
+        if sev != "CRITICAL" and conf <= 4:
             suppressed.append(f)
         else:
             kept.append(f)
@@ -104,27 +113,48 @@ def render(findings, suppressed_count):
             f"No high-confidence findings. {suppressed_count} low-confidence "
             "findings suppressed.\n"
         )
-    out = ["## Review Findings (Synthesized)", ""]
-    for sev_name in ("CRITICAL", "IMPORTANT", "SUGGESTION"):
-        bucket = [f for f in findings if f.get("severity") == sev_name]
-        if not bucket:
-            continue
-        out.append(f"### {sev_name}")
-        out.append("")
-        for f in bucket:
-            out.append(
-                f"- **{f.get('file')}:{f.get('line')}** — {f.get('summary', '')}"
-            )
-            out.append(f"  - Sources: {', '.join(f.get('sources', [f.get('agent', '?')]))}")
-            out.append(f"  - Confidence: {f.get('confidence')}/10")
-            out.append(f"  - Fix: {f.get('proposed_fix', '(none)')}")
-        out.append("")
+
+    counts = {"CRITICAL": 0, "IMPORTANT": 0, "SUGGESTION": 0}
+    for f in findings:
+        sev = f.get("severity", "SUGGESTION")
+        if sev in counts:
+            counts[sev] += 1
+    counts_line = (
+        f"**Findings:** {counts['CRITICAL']} CRITICAL / "
+        f"{counts['IMPORTANT']} IMPORTANT / {counts['SUGGESTION']} SUGGESTION"
+    )
     if suppressed_count > 0:
-        out.append("### Suppressed (confidence < 7, severity != CRITICAL)")
-        out.append("")
+        counts_line += f" — {suppressed_count} suppressed (conf <= 4)"
+
+    out = ["## Review Findings (Synthesized)", "", counts_line, ""]
+    out.append("| Sev | Path:Line | Conf | Summary | Source |")
+    out.append("|---|---|---|---|---|")
+    any_caveat = False
+    for f in findings:
+        sev = f.get("severity", "SUGGESTION")
+        conf = int(f.get("confidence", 0))
+        if conf <= 6:
+            conf_cell = f"{conf} *"
+            any_caveat = True
+        else:
+            conf_cell = f"{conf}"
+        path_line = f"{f.get('file')}:{f.get('line')}"
+        summary = f.get("summary", "")
+        source = ", ".join(f.get("sources", [f.get("agent", "?")]))
+        out.append(f"| {sev} | {path_line} | {conf_cell} | {summary} | {source} |")
+    out.append("")
+    if any_caveat:
+        out.append("`*` = confidence <= 6 (treat with caution).")
+    if suppressed_count > 0:
         out.append(
-            f"{suppressed_count} finding(s) hidden. "
-            "Re-run with `/qg --show-low-confidence` to see all."
+            f"{suppressed_count} finding(s) suppressed (conf <= 4); "
+            "re-run with `/qg --show-low-confidence` to see all."
+        )
+    out.append("")
+    out.append("**Suggested fixes:**")
+    for f in findings:
+        out.append(
+            f"- `{f.get('file')}:{f.get('line')}` — {f.get('proposed_fix', '(none)')}"
         )
     return "\n".join(out) + "\n"
 
