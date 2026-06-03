@@ -1,0 +1,6 @@
+{
+  "name": "fixture-force-flag",
+  "scripts": {
+    "test": "jest --force-exit --runInBand"
+  }
+}

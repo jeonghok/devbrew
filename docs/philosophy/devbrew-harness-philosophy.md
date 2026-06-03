@@ -93,6 +93,8 @@
 
 **따름정리:** 검증(verification)은 load-bearing 인프라입니다. 나중 생각이 아닙니다. 하니스는 모든 코드 작성 사이클에 (a) 증거 수집 단계, (b) 독립적인 리뷰 단계, (c) 증거 없이는 "완료" 주장 불가 규칙을 빚지고 있습니다. 이것은 이미 `plugins/quality-gates/`의 척추이며, 철학은 이것을 모든 플러그인으로 일반화합니다.
 
+**Scoped exception — executor with structural guard (R6, 2026-05-31, quality-gates v2.2.0):** Law 2의 *물리적 분리*는 보통 reviewer에게서 `Write`를 deny하는 형태다. 그러나 "실제 서비스를 실행하며 테스트"하는 executor(qg `runtime-verifier`)는 쓰기가 필요하다. 이 경우 분리는 **orchestrator가 immutable baseline commit 대비 `git diff`로 product 변경을 산출하는 구조적 가드**로 보장된다 — executor가 자유롭게 써도 product 변경은 git ground-truth가 잡아 verdict를 ≤FAIL로 강제하고, 무커밋·샌드박스 폐기로 product에 닿지 못한다. 핵심 불변식은 유지된다: *코드를 쓴 pass는 그것을 product에 approve할 수 없다.* 보장의 *형태*가 "도구 deny"에서 "git-diff 가드"로 바뀌었을 뿐 사라지지 않았다. behavioral 규칙(프롬프트)이 아니라 verifier 주장과 독립적인 구조이므로 self-approval이 구조적으로 불가능하다.
+
 ### Law 3 — Every Cycle Must Leave the System Smarter
 
 하니스를 "compound"하게 만드는 것은 N+1번째 작업이 N번째 작업보다 엄밀히 더 쉽다는 점입니다. 메커니즘은 low-tech입니다: **리포에 있는 파일을 미래 세션이 읽는 것.** Klaassen의 정의는 명확합니다:

@@ -3,6 +3,107 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.2.0] — 2026-05-31
+
+`runtime-verifier`를 read-only 관찰자에서 **git-worktree 샌드박스 기능-executor**로 전환.
+서비스를 띄우고 real user flow를 구동하며 spec Acceptance Criteria 대비 동작을
+**증거-접지** 방식으로 단언한다. Write를 허용하되, orchestrator가 immutable baseline
+commit 대비 `git diff`로 product 변경을 ground-truth로 잡아 **PASS를 구조적으로 차단**하고
+무커밋·샌드박스 폐기로 Law 2 self-approval을 물리적으로 봉쇄한다. 운영 DB/네트워크는
+git-ignored 파일(prod `.env`) 미복사로 원천 미접근.
+
+### Added
+- **`scripts/qg-worktree.sh create-sandbox`**: working-tree를 byte-faithful 반영한
+  일회용 detached worktree 생성(`cp -a`로 mode/symlink/binary 보존, git-ignored 미복사,
+  deletion 반영) + immutable baseline commit `B` 봉인. 출력=경로+SHA 2줄.
+- **`scripts/qg-worktree.sh mutation-guard`**: `(sandbox, B)`만 입력받는 순수-git product-
+  mutation oracle. `tracked_diff` / `disallowed_new_files`(신규 non-ignored 파일 + 모든 신규
+  symlink) / `forced_downgrade` emit. verifier 자기판단과 독립 → Law 2 구조적 가드.
+- **`detect-runtime.sh` blast-radius 분류**: process-start kind(dev/start/serve, cargo-run,
+  go-run, makefile run/serve) + 네트워크/배포/파괴 신호 매칭 surface에 `requires_decision: true`.
+  test runner kind은 자동.
+- **Upfront Execution Plan** (SKILL): `requires_decision` surface가 있을 때만 1회 발화해
+  gate 범위·runtime 범위(`approved_surfaces`)·block 정책(`stop`/`skip`/`ask`)을 확정.
+  그 외 zero-click.
+- **신규 테스트**: `test_qg_runtime_sandbox.sh`, `test_qg_mutation_guard.sh`,
+  `test_detect_runtime.sh` blast-radius 확장, fixtures `gate3/cli-tool`·`gate3/danger-signal`·`gate3/force-flag`.
+- **kill switch `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`**: 샌드박스 끄고 read-only smoke
+  fallback + loud log.
+
+### Changed
+- **`agents/runtime-verifier.md`**: `model: sonnet → inherit`; `allowedTools`에
+  `Write`/`Edit`/`MultiEdit` + chrome-devtools 상호작용 도구(click/fill/fill_form/type_text/
+  hover/press_key/evaluate_script) 추가; `disallowedTools`는 `NotebookEdit`만 유지.
+  body를 sandbox-executor 정체성 + spec AC 기능 단언 + evidence-log
+  `writes`/`functional_assertions` 섹션으로 재작성.
+- **`SKILL.md`**: Runtime gate를 R0(sandbox)~R6(routing)로 재배선, mutation-guard 결과로
+  verdict ≤FAIL 강제, spec AC thread, blocked-path 정책 라우팅, cost heads-up. v2.2.0.
+- **`check-allowed-tools-order.sh`**: 정전 allowlist에 `qg-worktree.sh` 추가.
+
+### Security
+- **Law 2 메커니즘 이전 (도구 deny → git-diff 가드).** `runtime-verifier`의 self-approval
+  방지가 `disallowedTools: [Write]`(behavioral tool deny)에서 **orchestrator의 immutable-
+  baseline git-diff 가드**(구조적, verifier 주장과 독립)로 이동. 외부 표면(`/qg`)은
+  하위호환(additive + gated)이라 minor bump. `test-scope-validator`/`security-reviewer`/
+  `adversarial`은 read-only reviewer로 불변. persona 편집은 보안-민감 변경.
+- **운영 안전.** 샌드박스가 git-ignored 파일(prod `.env`/자격증명/deps)을 복사하지 않아
+  운영 DB/네트워크 접근 경로를 원천 차단. process-start/네트워크/파괴 surface는 upfront
+  승인 게이트(blast-radius) 뒤로. OS-수준 egress 격리는 명시적 non-goal(한계 인정).
+- **fallback Law 2 보존.** `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`로 샌드박스를 끈 경우에도 verifier는 frontmatter상 Write를 갖지만, orchestrator가 R3 dispatch 전후의 `git status --porcelain` 차이로 실제 working-tree mutation을 잡아 verdict를 ≤FAIL로 강제 + loud warn — 구조적 Law 2 보장이 fallback에서도 유지(behavioral-only로 격하되지 않음).
+
+### Fixed
+- **mutation-guard 5개 우회 봉쇄 (보안).** diff 기반 oracle을 **snapshot + content
+  tree-hash + ignore/config-tamper + snapshot-delta**(전부 fail-closed) 4계층으로 재작성.
+  닫힌 우회: C-A `info/exclude`/`core.excludesFile`/`.gitignore` 밀반입,
+  C-B git-failure fail-open(rc 캡처 → exit 4), C-D `stash`/`commit+reset --hard`
+  (reflog/stash snapshot-delta) + 영구 `logAllRefUpdates=false` 억제(config tamper),
+  C-E `assume-unchanged`/`skip-worktree` index 비트(fresh-index content-hash).
+  snapshot은 per-worktree gitdir 사이드채널(출력 계약 2줄 무변경). 우회별 회귀 테스트 동반.
+- **mutation-guard round-2: 6번째 우회(C-NEW-1) + 오탐(I-NEW-2) 봉쇄 (보안).** round-1.5 hardening의
+  snapshot이 verifier-writable gitdir에 살아 피검증자가 신뢰 기준을 위조 가능했던 master-key 결함을
+  **orchestrator-held digest seal**로 닫음: `create-sandbox`가 snapshot digest를 출력 line 3로 emit →
+  orchestrator(SKILL)가 verifier-unreachable 채널로 보유 → `mutation-guard`가 3번째 인자로 받아 신뢰 전
+  recompute·비교(위조 시 `guard_fail` exit 4). 추가로 snapshot-독립 **b-precise** 계층 1b를 도입 —
+  baseline `.gitignore`만 신뢰 ignore 소스로 인정하고 `info/exclude`·`core.excludesFile`로만 숨겨진 신규
+  파일(일반 파일 + symlink)을 2차 baseline-anchored read-tree pass의 git-diff 집합차로 포착(I-NEW-1
+  symlink-only 갭 흡수, `node_modules` 등 baseline-ignored 산출물은 미플래그하여 usability 보존).
+  I-NEW-2(empty-index false-positive)는 계층 1 임시 index를 `read-tree B^{tree}`로 시드해 제거
+  (force-tracked ignored 파일 무변경 시 `forced=no`; C-E catch·`.env` PASS 보존).
+- **Law-3 review-mechanism 강화.** 이 우회를 놓친 `security-reviewer`/`adversarial` persona에 "가드가
+  신뢰하는 artifact(snapshot/baseline/config)를 피검증자(Write 보유 subagent·샌드박스 Bash)가 쓰거나
+  경로 계산할 수 있는가" 체크 추가 + vacuous H-AC3(ii) 테스트를 rule-only 격리 케이스 + Layer-2 비활성
+  mutation-test로 재작성. 출력 계약 2줄 → 3줄(snapshot digest)로 정직하게 변경.
+- **mutation-guard F1: b-precise `.qgbak` 백업 경로 무결성 봉쇄 (보안-무결성; codex 모델-diversity 리뷰).**
+  round-2 b-precise(계층 1b) crash-recovery가 신뢰하던 *예측가능·verifier-writable* `.qgbak` 백업 경로에서
+  모델-diverse codex 리뷰가 6개 무결성 변종(codex-1..6)을 적발 — **전부 self-approval 우회가 아니라**, 가드가
+  orchestrator 자신의 `info/exclude`(로컬 ignore 파일)를 손상시키거나 탐지 증거를 지우는 결함. 봉쇄:
+  pre-restore를 digest seal **이후**로 이동 + 봉인 snapshot sha와 일치할 때만 복원 + live가
+  crash-placeholder(부재/빈 파일) 상태일 때만 복원(rule-only tamper 증거 보존, codex-6) + live/백업
+  비정규-파일타입(디렉토리) fail-closed(codex-2/3) + hash-object 실패 fail-closed(codex-4) +
+  `restore_excludes`는 *이번 실행이 생성한 백업만* 복원(codex-5) + 계층 1b의 두 `git diff` 파이프라인
+  exit-check(codex-1). 변종별 회귀 테스트 R3-AC1(a–e)/R3-AC2(a–b) 동반. **잔여 follow-up**(전부 무결성,
+  우회 아님): codex-7 symlink 파일타입, codex-8 restore-`mv` exit-check, codex-9 `cut`/`sort`/`comm`
+  exit-check. 근본 재설계(예측가능 경로 → guard-created `mktemp`)는 검토 후 보류(draft 스펙
+  `docs/superpowers/specs/2026-06-03-qg-bprecise-backup-mktemp-design.md`).
+- **C-C SKILL R4 fail-closed 라우팅.** errored/garbled 가드(exit 4 / `guard_error` /
+  무효 key)를 PASS가 아니라 ≤FAIL로 라우팅 + stderr verbatim surface.
+- **I-A/I-B fallback SKIP cap.** `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1` fallback verdict를
+  SKIP_WITH_EVIDENCE로 cap(절대 PASS 아님) + 단일 `runtime_project_dir`(unset `sandbox_dir`
+  하드코딩 제거) + real-tree 변경 loud 경고.
+- **I-C evidence durability.** evidence-log/스크린샷을 메인 repo 절대 `evidence_dir`
+  (`.claude/quality-gates/<sid>/`)에 기록 → 샌드박스 폐기(R5) 생존.
+- **I-D YAML escape.** single-quote 파일명을 `yq()`로 escape → 유효 YAML.
+- **I-E kill-switch 문서화.** `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX`를 README source-of-truth
+  표 + qg.md env 표에 등재.
+- **I-F detect-runtime `${HOME:-}`.** unset `$HOME`이 manifest emit을 abort시키던 것 차단.
+- **I-G retry baseline 재캡처.** NEEDS_RESOLUTION retry가 새 `sandbox_dir` + `baseline_sha`를
+  둘 다 재캡처(옛 sha 재사용 false-FAIL 제거).
+- **S-A/S-B create-sandbox 견고화.** overlay `cp`/`mkdir`/deletion + `cd` command-sub에 `|| die`.
+
+> non-goal(한계 인정): `logAllRefUpdates` *flip-and-restore* 변종(끄고→commit+reset→복원)은
+> git ground-truth에 흔적이 없어 OS-수준 통제 없이는 구조적으로 닫을 수 없다(spec §3).
+> 단 이 변종도 shipping product == baseline.
+
 ## [2.1.0] — 2026-05-31
 
 qg가 처음으로 **사용자 프로젝트 spec을 단일 truth로 read**. cycle 위계(spec=truth ⊃

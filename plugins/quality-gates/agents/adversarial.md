@@ -46,7 +46,10 @@ Look for guards in callers, middleware, framework defaults, type-system
 constraints, or parallel handlers that already address the concern. If it is
 already mitigated up- or down-stream, downgrade or reject.
 
-A finding must clear all three gates to be `confirm`.
+**Gate D — For security-control findings: is the trust anchor out of the subject's reach?**
+When the diff adds or modifies a control that verifies a subject by **reading, writing, or comparing against** a stored path (snapshot, baseline, config, temp file, **backup/restore/seed target**), check whether the subject being verified (a `Write`-holding subagent or arbitrary sandbox `Bash`) can write that path, **plant it as a file *or a directory***, or compute its name. If it can, the path is **verifier-writable** and the control is compromised: for a *comparison* the subject controls both sides (vacuous); for a path the control *restores from or backs up to*, a plant can corrupt host state or skip a restore (a planted **directory** makes a backup `mv` move the live file INTO it, silently). A "this control is sound" finding must be `reject`ed, while an *absence* of this check is itself a real issue to record in `meta_note:`. This is NOT limited to comparison anchors — ANY verifier-writable path whose content or **filetype** steers the control is in scope. The trust anchor must live in the orchestrator's turn context or an immutable commit (or be gated on a sealed reference), never in a verifier-writable location.
+
+A finding must clear Gates A–C to be `confirm` (Gate D is a control-soundness lens, not a per-finding pass/fail).
 
 ## Severity realist check (CRITICAL / IMPORTANT findings)
 
@@ -119,7 +122,7 @@ issue the reviewers missed, add it once as a top-level `meta_note:` at the end �
 never as a verdict block.
 
 Verdicts:
-- `confirm`: cleared all three gates — the finding is real, introduced by this diff, unhandled elsewhere, and the fix is sound.
+- `confirm`: cleared Gates A–C — the finding is real, introduced by this diff, unhandled elsewhere, and the fix is sound.
 - `downgrade`: has merit but is overstated (lower severity/confidence) — pre-existing, partly mitigated, or a nitpick.
 - `reject`: false positive — the reviewer misread, pattern-matched without verification, the concern is handled elsewhere, or the proposed fix is wrong.
 

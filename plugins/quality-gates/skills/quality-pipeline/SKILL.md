@@ -22,6 +22,7 @@ allowed-tools:
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh:*)
   # Group 4 — Meta (orchestration primitives)
   - Agent
   - AskUserQuestion
@@ -33,7 +34,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v2.1.0)
+# Quality Gates — In-Turn Orchestrator (v2.2.0)
 
 You are running the **full quality-gates pipeline** in a single assistant
 turn. You dispatch the two gates serially in order. At decision points
@@ -42,12 +43,7 @@ turn. You dispatch the two gates serially in order. At decision points
 as a tool result in the same turn, so no Stop hook and no continuation
 sentinel are needed.
 
-**Law 2 (Writer ≠ Reviewer):** you are the orchestrator (writer). All
-verdict-producing agents are dispatched as separate subagents with
-`disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` so they cannot
-mutate the working tree. You ARE allowed to apply user-approved fixes
-("Retry" path on the review gate) using Edit/Write — those changes are
-user-consented, not self-approval.
+**Law 2 (Writer ≠ Reviewer):** you are the orchestrator (writer). `security-reviewer`, `adversarial`, and `test-scope-validator` are read-only reviewers (`disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]`). The `runtime-verifier` is a **sandbox executor**: it CAN Write/Edit, but only inside a disposable git-worktree sandbox, and you enforce Law 2 *structurally* — after it runs you compute `qg-worktree.sh mutation-guard <sandbox> <baseline> <snapshot_digest>` and, if `forced_downgrade: yes`, you cap the verdict at FAIL regardless of what the verifier claimed. The `<snapshot_digest>` is the orchestrator-held seal (captured at create-sandbox) that the guard verifies before trusting its snapshot — the verifier cannot reach it (§6.1). Nothing is committed; the sandbox is discarded. You may also apply user-approved Review-gate fixes ("Retry" path) via Edit/Write — those are user-consented.
 
 **State file:** read `worktree_path` from `.claude/quality-gates/<sid>/pipeline.md`
 only during preflight; never write. Setup script handles creation, /cancel-qg
@@ -155,24 +151,46 @@ Single-gate mode (`review`/`runtime`) runs ONLY the named gate and
 emits its verdict directly — no decision-tool call, no inter-gate
 transition.
 
+## Upfront Execution Plan
+
+Decide runtime scope ONCE, before any gate runs, but only when there is something risky to decide. After [Preflight](#preflight) and [Arguments](#arguments), and before the [Dispatch Loop](#dispatch-loop):
+
+1. Run `${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh` to get the manifest with `requires_decision` flags.
+2. **Gate firing condition (mechanical):** fire an `AskUserQuestion` **only if** the manifest has ≥1 surface with `requires_decision: true` AND no argument already pre-answers it (`gate=`, `skip_runtime`, or an explicit surface selection). Otherwise (pure-local test runners only / review-only / arg-answered) print a one-line plan and proceed **zero-click**.
+3. When firing, confirm in ONE question: **gate scope** (review / runtime / both), **runtime scope** (which `requires_decision` surfaces to opt into — test runners are automatic), and **block policy** (`stop` / `skip` / `ask`). Record the opted-in surfaces as `approved_surfaces` and the chosen `block_policy`.
+
+```
+AskUserQuestion({
+  questions: [
+    {
+      question: "Runtime scope: these surfaces can start processes or reach outside (requires_decision): <list>. Which should I run, and what should I do if one stays blocked after setup retries?",
+      header: "Runtime scope",
+      options: [
+        {label: "Run all + skip blocked", description: "Opt into all listed surfaces; block_policy=skip (SKIP_WITH_EVIDENCE, continue)."},
+        {label: "Run all + ask on block", description: "Opt into all; block_policy=ask (mid-run question, bounded by DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS)."},
+        {label: "Test runners only",       description: "Skip every requires_decision surface; run only automatic test runners."},
+        {label: "Stop on block",            description: "Opt into all; block_policy=stop (abort the gate at the first unrecoverable block)."}
+      ],
+      multiSelect: false
+    }
+  ]
+})
+```
+
+**Upfront approval is authoritative.** A surface opted in here is NOT re-asked mid-run. A mid-run question fires only for a *newly discovered* block when `block_policy=ask`, and the total number of such mid-run questions is itself bounded by `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS`.
+
+**Cost heads-up (AC13):** if the plan includes a web process-start surface (a heavy interactive flow on the inherited model), print one line before dispatching: `> Runtime gate will boot a web app and drive browser flows (heavier; inherited model).`
+
 ## Dispatch Loop
 
 Full pipeline mode:
 
-1. Run [Trivia escape](#trivia-escape). If trivia detected, print "Trivia
-   diff — all gates skipped" and return.
-2. Run [Review gate](#review-gate). Iterate (review → fix?) up
-   to 5 times. At the end of EACH iteration:
-   - findings empty → print "Review gate iter N: clean" and continue to the Runtime gate.
-   - findings non-empty → invoke [Review iter boundary decision](#review-iter-boundary-decision).
-3. If `skip_runtime`, skip the Runtime gate and emit final summary.
-4. Otherwise run [Runtime gate](#runtime-gate).
-   - On clean verdict → continue to final summary.
-   - On failure → final summary with Runtime gate failure marker; do not auto-restart.
-   - On needs-resolution → invoke [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision)
-     up to `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS` times (default 3, env override,
-     clamp 0..10).
-5. Emit final summary.
+1. Run [Trivia escape](#trivia-escape). If trivia detected, print "Trivia diff — all gates skipped" and return.
+2. Run [Upfront Execution Plan](#upfront-execution-plan) to fix gate scope, runtime scope (`approved_surfaces`), and `block_policy`. Zero-click unless a `requires_decision` surface exists and is not arg-answered.
+3. Run [Review gate](#review-gate) (unless gate scope excludes it). Iterate up to 5 times; at each iteration end: findings empty → continue; non-empty → [Review iter boundary decision](#review-iter-boundary-decision).
+4. If `skip_runtime` or gate scope excludes runtime, skip the Runtime gate and emit final summary.
+5. Otherwise run [Runtime gate](#runtime-gate) (R0–R6).
+6. Emit final summary.
 
 ## Trivia escape
 
@@ -376,12 +394,19 @@ this user-consent termination.)
 
 ## Runtime gate
 
-If `skip_runtime` was set in arguments, skip this entire section.
+If `skip_runtime` was set, skip this entire section.
 
-1. Dispatch `quality-gates:test-scope-validator` to classify scope-relevant
-   test files (aligned / outdated-suspicion / cherry-pick-suspicion / unclear).
-   Per [Reviewer dispatch contract](#reviewer-dispatch-contract), `project_dir`
-   is required:
+**Step R0 — Create the sandbox (or fall back).** Seal the code-under-review into a disposable git-worktree:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-sandbox "<session-id>"
+```
+
+- Exit 0 → capture **line 1 = `sandbox_dir`**, **line 2 = `baseline_sha`**, **line 3 = `snapshot_digest`**. Parse contract (fixed): read exactly three lines with three successive `IFS= read -r` (`sandbox_dir` → `baseline_sha` → `snapshot_digest`) and strip trailing whitespace/CR from `snapshot_digest` (`tr -d '[:space:]'` or equivalent) — a stray newline/space in the hex makes the guard fail-closed on every run. Hold all three as orchestrator variables (verifier-unreachable: they live in this SKILL turn's context, not in the sandbox). Set `runtime_project_dir = sandbox_dir` (the verifier's `project_dir` for this gate, frozen — overrides the preflight `project_dir` for the Runtime gate only).
+- **Exit 3** (kill switch `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`) → graceful fallback (no sandbox): set `runtime_project_dir = project_dir` (the preflight main-repo dir; `sandbox_dir`/`baseline_sha` stay UNSET). The verifier runs in read-only smoke mode against the real tree. Because the verifier still holds Write tools (frontmatter cannot be revoked per-dispatch), the fallback verdict is **capped at SKIP_WITH_EVIDENCE — never PASS** (no sandbox = no structural Law-2 guarantee = no certification; I-A). BEFORE the R3 dispatch, capture `fallback_pre` = `git -C "$project_dir" status --porcelain --untracked-files=all` plus a tracked content tree-hash baseline (`GIT_INDEX_FILE=<tmp> git -C "$project_dir" add -A -- . && git write-tree`). Print: `> [quality-gates] runtime sandbox disabled — read-only smoke mode on the real tree; verdict capped at SKIP_WITH_EVIDENCE (DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1).`
+- Any other non-zero → surface stderr verbatim and mark the Runtime gate failed.
+
+**Step R1 — test-scope-validator** (read-only reviewer; `project_dir` is the *preflight* dir, not the sandbox — it reviews the real diff). Per [Reviewer dispatch contract](#reviewer-dispatch-contract):
 
 ```
 Agent({
@@ -390,62 +415,98 @@ Agent({
   prompt: "Validate test scope against current diff, spec acceptance criteria, and plan items.
     project_dir: \"$project_dir\"
     spec_path: <path or 'auto'; pass 'none' if DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1>
-    plan_path: <path or 'auto'; no kill switch — plan is always a secondary hint>
+    plan_path: <path or 'auto'>
     candidate_test_files: <list from scope-detection step>"
 })
 ```
 
-2. Run `${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh` to discover
-   runnable surfaces (docker-compose, npm:dev, MCP servers, etc.).
-3. Dispatch `quality-gates:runtime-verifier` with the runtime manifest.
-   `project_dir` is required:
+**Step R2 — gather spec Acceptance Criteria.** Resolve the spec (reuse `discover-spec.sh` semantics already used by test-scope-validator) and build `spec_acceptance_criteria` as a `{ac_id, text}` list. If no spec, pass an empty list (the verifier falls back to plan_features → smoke).
+
+Also derive `evidence_dir = "$project_dir/.claude/quality-gates/$CLAUDE_CODE_SESSION_ID/"` (the preflight main-repo `project_dir`, NOT the sandbox — so it survives the R5 sandbox discard; `$CLAUDE_CODE_SESSION_ID` is the same value used for the pipeline state file). This absolute path is threaded to the verifier so its evidence-log + screenshots land in the main repo, not inside the disposable sandbox.
+(detect-runtime.sh runs from this same main-repo `project_dir` during the Upfront Execution Plan, so its `attempted_log_path` resolves to the identical `evidence_dir`.)
+
+**Step R3 — dispatch runtime-verifier (executor)** with `project_dir = runtime_project_dir`, the spec AC, the approved surfaces, and the block policy:
 
 ```
 Agent({
   subagent_type: "quality-gates:runtime-verifier",
-  description: "Runtime verification (Runtime gate)",
-  prompt: "Attempt each declared runnable surface and write an evidence-log.
-    project_dir: \"$project_dir\"
+  description: "Runtime verification (Runtime gate, sandbox executor)",
+  prompt: "Boot the declared surfaces in the sandbox, drive flows, assert against spec AC, write an evidence-log.
+    project_dir: \"$runtime_project_dir\"
+    evidence_dir: \"$evidence_dir\"
+    spec_acceptance_criteria: <{ac_id,text} list or []>
     manifest: <output of detect-runtime.sh>
+    approved_surfaces: <surfaces opted in at the Upfront Execution Plan>
+    block_policy: <stop|skip|ask>
     resolution_iter: <N (1..DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS)>"
 })
 ```
 
-4. Subagent verdict: clean, failure, `SKIP_WITH_EVIDENCE`, or
-   `NEEDS_RESOLUTION`.
+**Step R4 — Mutation guard (authoritative verdict cap).** Unless in read-only fallback, compute the product-mutation oracle:
 
-Outcome routing:
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" mutation-guard "<sandbox_dir>" "<baseline_sha>" "<snapshot_digest>"
+```
 
-- **Clean verdict** → print `## Runtime gate — clean` and continue
-  to final summary.
-- **Failure verdict** → print full Runtime gate verdict block, then emit final
-  summary marked Runtime gate failure. Do NOT auto-restart.
-- **SKIP_WITH_EVIDENCE** → print verdict block with evidence; continue to
-  final summary.
-- **NEEDS_RESOLUTION** → invoke
-  [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision).
+Read the YAML. **If `forced_downgrade: yes`**, the verdict is capped at FAIL regardless of the verifier's emitted verdict (Law 2 — the verifier cannot self-approve a product change). Surface `tracked_diff` + `disallowed_new_files` as evidence ("the app only ran after this change — fix it in a normal writer→review cycle"). The verifier's own `writes:` self-report is advisory only; this git result is authoritative.
+
+**R4 exit-code routing (C-C — mirror R0's discipline; an indeterminate guard is never a PASS).** Capture BOTH the guard's stdout YAML AND its exit code:
+
+| Guard result | R4 routing |
+|---|---|
+| exit 0 + `forced_downgrade: no` (all §6.1 snapshot keys valid) | no product mutation → proceed to R5/R6 normally |
+| exit 0 + `forced_downgrade: yes` | cap verdict at FAIL; surface `tracked_diff` / `disallowed_new_files` / `guard_flags` as evidence |
+| **exit 4** (`guard_fail`), OR any other non-zero exit, OR a missing/invalid `forced_downgrade` key, OR a `guard_error:` line present | treat as `forced_downgrade: yes` → cap verdict at FAIL; surface the guard's `guard_error` + **stderr verbatim**; mark the Runtime gate failed. **Never read an errored or garbled guard as PASS** (indeterminate ≠ clean). |
+
+An errored guard (corrupt index, lost gitdir, missing/truncated snapshot, bad baseline) must not present as "not a downgrade." This is the orchestration-layer half of the bypass closure — the guard script's layers 0–3 (§6.2) cover C-A/C-B/C-D/C-E; this table covers C-C.
+
+A digest mismatch (the verifier forged the snapshot) surfaces here as **exit 4** with `guard_error: snapshot integrity check failed` — the same fail-closed path as any other indeterminate guard. This is the round-2 closure of C-NEW-1: the seal the guard checks is held by the orchestrator, out of the verifier's reach.
+
+**Fallback working-tree guard (read-only mode only — I-A/I-B).** When the sandbox was disabled (Exit 3), do NOT run the sandbox `mutation-guard`. The verdict is already capped at SKIP_WITH_EVIDENCE (R0); this guard is a pure SAFETY SIGNAL, not a verdict input. After the R3 dispatch, recompute `fallback_post` (porcelain + tracked content tree-hash, same as `fallback_pre`). If anything changed (a porcelain entry in `fallback_post` not in `fallback_pre`, or a differing tree-hash), emit a loud warning **to user-visible stdout** AND record it in `evidence_dir` (§6.6): `> [quality-gates] WARNING: runtime fallback에서 working tree가 변경됨 — <changed files>. sandbox 미사용으로 구조적 보호 없음; 검토 요망 (git diff 후 revert 권장).` git-ignored files do not appear in `--porcelain`, so a setup-only `.env` fix is correctly NOT flagged. The warning does not change the verdict (already ≤SKIP cap) and does not block the gate (P18 — no extra loop).
+
+**Step R5 — Discard the sandbox** (verdict-independent), unless in read-only fallback:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "<sandbox_dir>"
+```
+
+**Step R6 — Outcome routing** (verdict = min(verifier verdict, guard cap, fallback cap)):
+
+- **Fallback mode (sandbox disabled)** → the verifier's verdict is capped: a `PASS` becomes **SKIP_WITH_EVIDENCE** (no structural guarantee), `FAIL`/`NEEDS_RESOLUTION` pass through unchanged. The R4 fallback warning (if any) is printed but does not alter the verdict.
+- **Clean (PASS) AND `forced_downgrade: no`** → print `## Runtime gate — clean` and continue to final summary.
+- **`forced_downgrade: yes`** → print the Runtime gate FAIL block including the surfaced diff; emit final summary marked Runtime gate failure. Do NOT auto-restart, do NOT apply the diff (in-gate accept is out of scope).
+- **FAIL** (product bug / unrecoverable) → print verdict block; final summary marked failure.
+- **SKIP_WITH_EVIDENCE** → print evidence; continue.
+- **NEEDS_RESOLUTION** → invoke [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision).
+
+## Blocked-path routing
+
+A surface is *blocked* when the executor cannot complete it. Routing (per-surface — one block never aborts the others):
+
+| Block kind | Handling |
+|---|---|
+| setup-fixable (.env/deps) | executor auto-fixes in sandbox + retries (≤3/dispatch). Success → continue; exhausted → `NEEDS_RESOLUTION`. |
+| operational-safety (prod config/network needed) | NOT run. Recorded `blocked-for-safety` → SKIP_WITH_EVIDENCE or NEEDS_RESOLUTION("provide test config"). |
+| needs-decision (`requires_decision` not in `approved_surfaces`) | NOT run → SKIP_WITH_EVIDENCE. |
+| product bug (AC unmet / won't boot from product defect) | FAIL + evidence. Not a retry. |
+| hang/timeout | per-surface wall-clock kill; record blocked; continue with remaining surfaces. |
+
+On executor `NEEDS_RESOLUTION` (setup retries exhausted), apply the upfront `block_policy`:
+- `stop` → abort the gate at the block; terminal summary.
+- `skip` → record SKIP_WITH_EVIDENCE for that surface; finalize with partial results.
+- `ask` → invoke [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision) (retry / skip-with-evidence / stop). Total `ask` mid-run questions are bounded by `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS`; on exhaustion, fall through to skip-with-evidence.
 
 ---
 
-The NEEDS_RESOLUTION branch is the only Runtime gate outcome that surfaces a
-user question. Clean and failure outcomes route directly to the final
-summary; SKIP_WITH_EVIDENCE prints evidence and continues. The decision
-template below is bounded by `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS` so a
-mis-configured environment cannot loop indefinitely.
+The NEEDS_RESOLUTION branch is the only Runtime gate outcome that surfaces a user question when `block_policy=ask`. It is bounded by `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS` so a mis-configured environment cannot loop indefinitely.
 
-Per spec AC8 and the secret-policy rule (P21 reaffirmation), the prompt
-body asks the user to place secrets on disk first and then respond yes/no.
-Never request a secret value as a literal string in the prompt.
+Per spec AC8 and the secret-policy rule (P21), the prompt body asks the user to place secrets on disk first and respond yes/no. Never request a secret value as a literal string.
 
 ## Runtime NEEDS_RESOLUTION decision
 
-> **Spec anchor (AC8):** the literal phrase `Runtime verifier needs` MUST
-> appear in the prompt — V2b grep checks this. **P21 reaffirmation MUST
-> also appear in the prompt body** (literal token `P21`) — the prompt
-> never asks for secret values, only paths or yes/no.
+> **Spec anchor (AC8):** the literal phrase `Runtime verifier needs` MUST appear in the prompt — V2b grep checks this. **P21 reaffirmation MUST also appear in the prompt body** (literal token `P21`) — the prompt never asks for secret values, only paths or yes/no.
 
-Loop up to `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS` times (default 3, env override
-clamped 0..10):
+Loop up to `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS` times (default 3, env override clamped 0..10):
 
 ```
 AskUserQuestion({
@@ -465,9 +526,8 @@ AskUserQuestion({
 ```
 
 Branch:
-- **Yes, retry** → increment resolution counter; if exceeds env limit,
-  fall through to Skip with evidence. Otherwise re-dispatch runtime-verifier.
-- **Skip with evidence** → record SKIP_WITH_EVIDENCE and continue to summary.
+- **Yes, retry** → increment resolution counter; if exceeds env limit, fall through to Skip with evidence. Otherwise re-create the sandbox (Step R0) and re-capture the new output's `sandbox_dir` (line 1), `baseline_sha` (line 2), and `snapshot_digest` (line 3) with the same three successive `IFS= read -r` + digest-strip idiom as R0 — refreshing **all three** orchestrator variables. create-sandbox emits a NEW commit `B` AND a NEW snapshot (hence a new digest) each call, so reusing the old `baseline_sha` makes the guard `guard_fail "bad baseline sha"` and reusing the old `snapshot_digest` makes it `guard_fail "snapshot integrity check failed"` — both false FAILs. The new snapshot is auto-recorded in the new gitdir; the stale sandbox + its old snapshot are force-removed by R0's idempotent cleanup. Then re-dispatch runtime-verifier with the refreshed `sandbox_dir`, and call R4 as 3-arg with the refreshed `snapshot_digest`. (Fix the parse order: capturing the digest as line 2 swaps `baseline_sha`/`snapshot_digest` and fails-closed every run.)
+- **Skip with evidence** → record SKIP_WITH_EVIDENCE and continue.
 - **Stop** → final summary aborted at the Runtime gate.
 
 ## Final Summary
@@ -475,7 +535,7 @@ Branch:
 Print:
 
 ```markdown
-## Quality Gates Pipeline — Complete (v2.1.0)
+## Quality Gates Pipeline — Complete (v2.2.0)
 
 - **Review gate**: <clean iter N | proceeded-with-findings iter N | aborted iter N | skipped>
 - **Runtime gate**: <clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>

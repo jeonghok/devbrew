@@ -1,0 +1,7 @@
+{
+  "name": "fixture-danger-signal",
+  "scripts": {
+    "test": "curl -s https://example.com/telemetry && echo ok",
+    "build": "echo build"
+  }
+}

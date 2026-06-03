@@ -117,6 +117,127 @@ else
   fail=$((fail + 1))
 fi
 
+# --- v2.2.0 sandbox-executor protocol-shape ---
+
+# create-sandbox must be invoked, and BEFORE the runtime-verifier dispatch.
+sandbox_line=$(first_line 'create-sandbox')
+assert_line "create-sandbox invoked" "$sandbox_line"
+assert_order "create-sandbox precedes runtime-verifier dispatch" "$sandbox_line" "$runtime_line"
+
+# mutation-guard must be invoked AFTER the runtime-verifier dispatch.
+guard_line=$(first_line_after 'mutation-guard' "$runtime_line")
+assert_line "mutation-guard invoked after runtime dispatch" "$guard_line"
+
+# forced_downgrade must be referenced (verdict gating on the guard result).
+assert_line "forced_downgrade referenced" "$(first_line 'forced_downgrade')"
+
+# Upfront Execution Plan section present, and before the Review gate dispatch.
+upfront_line=$(first_line 'Upfront Execution Plan|Execution Plan')
+assert_line "Upfront Execution Plan section present" "$upfront_line"
+
+# requires_decision drives the upfront gate.
+assert_line "requires_decision referenced in plan gate" "$(first_line 'requires_decision')"
+
+# Blocked-path routing references the three policies.
+assert_line "block policy stop/skip/ask present" "$(first_line 'block_policy|stop / skip / ask|stop/skip/ask')"
+
+# Kill-switch fallback present.
+assert_line "runtime sandbox kill switch present" "$(first_line 'DEVBREW_QG_DISABLE_RUNTIME_SANDBOX')"
+
+# spec_acceptance_criteria threaded to the verifier.
+assert_line "spec_acceptance_criteria threaded" "$(first_line 'spec_acceptance_criteria')"
+
+# Version bumped to 2.2.0 (final summary).
+assert_line "v2.2.0 in SKILL" "$(first_line 'v2.2.0|2\.2\.0')"
+
+# --- v2.2.0 mutation-guard hardening protocol-shape ---
+
+# C-C: R4 must route an errored/garbled guard as ≤FAIL, never PASS.
+# Anchor on `exit 4` (unique to the R4 routing table), then require the
+# fail-closed phrases to appear AT/AFTER it — so deleting them from R4 fails
+# the test even though similar words appear earlier (R0 / TOC).
+r4_tbl=$(first_line 'exit 4')
+assert_line "R4 routes guard exit 4 as FAIL"          "$r4_tbl"
+assert_line "R4 surfaces guard_error"                 "$(first_line 'guard_error')"
+assert_line "R4 surfaces guard stderr verbatim"       "$(first_line_after 'stderr verbatim' "$((r4_tbl - 1))")"
+assert_line "R4 never-PASS for indeterminate guard"   "$(first_line_after 'indeterminate' "$((r4_tbl - 1))")"
+
+# I-A/I-B: fallback caps at SKIP_WITH_EVIDENCE (never PASS) + single runtime_project_dir.
+assert_line "runtime_project_dir variable used"      "$(first_line 'runtime_project_dir')"
+assert_line "fallback caps at SKIP_WITH_EVIDENCE"    "$(first_line 'SKIP_WITH_EVIDENCE.*never PASS|never PASS.*SKIP_WITH_EVIDENCE')"
+# I-B: the R3 dispatch project_dir must NOT hardcode sandbox_dir (use runtime_project_dir).
+if grep -qE 'project_dir:[[:space:]]*\\?"\$runtime_project_dir' "$SKILL_MD"; then
+  echo "PASS: R3 dispatch uses runtime_project_dir"
+else
+  echo "FAIL: R3 dispatch does not use runtime_project_dir"
+  fail=$((fail + 1))
+fi
+
+# I-C: evidence_dir threaded to R3 as a main-repo absolute path that survives R5 discard.
+assert_line "evidence_dir threaded to verifier"  "$(first_line 'evidence_dir')"
+if grep -qE 'evidence_dir.*\.claude/quality-gates/' "$SKILL_MD"; then
+  echo "PASS: evidence_dir uses .claude/quality-gates/ path"
+else
+  echo "FAIL: evidence_dir path not .claude/quality-gates/"
+  fail=$((fail + 1))
+fi
+assert_line "evidence_dir uses CLAUDE_CODE_SESSION_ID" "$(first_line 'CLAUDE_CODE_SESSION_ID')"
+
+# I-G: retry must re-capture BOTH sandbox_dir AND baseline_sha (new snapshot auto-recorded).
+retry_recap_line=$(first_line 're-capture')
+assert_line "retry re-capture phrase present" "$retry_recap_line"
+if grep -E 're-capture' "$SKILL_MD" | grep -q 'baseline_sha' && \
+   grep -E 're-capture' "$SKILL_MD" | grep -q 'sandbox_dir'; then
+  echo "PASS: retry re-captures both sandbox_dir and baseline_sha"
+else
+  echo "FAIL: retry does not re-capture both sandbox_dir + baseline_sha"
+  fail=$((fail + 1))
+fi
+
+# --- round-2 digest-seal wiring ---
+
+# R0 must capture snapshot_digest in the R0 section (after the "Step R0" heading,
+# before the runtime-verifier dispatch) — NOT the Law-2 header at the top.
+r0_section=$(first_line 'Step R0')
+r0_digest=$(first_line_after 'snapshot_digest' "$r0_section")
+if [[ "$r0_digest" -gt 0 && "$r0_digest" -lt "$runtime_line" ]]; then
+  echo "PASS: R0 captures snapshot_digest (line 3) at $r0_digest"
+else
+  echo "FAIL: R0 does not capture snapshot_digest in the R0 section (found=$r0_digest, runtime=$runtime_line)"
+  fail=$((fail + 1))
+fi
+
+# Guard call must thread the 3rd arg on the R4 call line itself ($guard_line,
+# the first `mutation-guard` AFTER the runtime dispatch) — not the header mention.
+if awk -v n="$guard_line" 'NR==n && /snapshot_digest/ {f=1} END{exit !f}' "$SKILL_MD"; then
+  echo "PASS: R4 guard call threads snapshot_digest (3-arg) at line $guard_line"
+else
+  echo "FAIL: R4 guard call (line $guard_line) does not thread snapshot_digest"
+  fail=$((fail + 1))
+fi
+
+# I-G retry must re-capture snapshot_digest (line 3) in addition to the two existing.
+if grep -E 're-capture' "$SKILL_MD" | grep -q 'snapshot_digest'; then
+  echo "PASS: retry re-captures snapshot_digest"
+else
+  echo "FAIL: retry does not re-capture snapshot_digest"
+  fail=$((fail + 1))
+fi
+
+# --- R2-AC5: Law-3 persona hardening (the bypass escaped because reviewers
+#     trusted a verifier-writable artifact; the persona now forces that check).
+#     Anchor on the stable literal `verifier-writable`, which BOTH persona edits
+#     in Task 6 Step 3 include verbatim. ---
+AGENTS_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)/agents"
+for p in security-reviewer adversarial; do
+  if grep -qi 'verifier-writable' "$AGENTS_DIR/$p.md"; then
+    echo "PASS: $p persona has the verifier-writable-artifact check"
+  else
+    echo "FAIL: $p persona missing the verifier-writable-artifact check"
+    fail=$((fail + 1))
+  fi
+done
+
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"
   exit 0
