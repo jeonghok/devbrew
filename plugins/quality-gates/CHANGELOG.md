@@ -3,6 +3,34 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.3.0] — 2026-06-04
+
+Review gate가 각 iteration 종료 시 `synthesize_findings.py`의 finding 상세(표 +
+counts + suggested fixes)를 결정 tool **이전에** 사용자에게 surface한다. 이전에는
+AskUserQuestion `<summary>` 한 줄만 노출됐고 상세는 접힌 tool 출력에 묻혔다.
+가시성=명확성(Law 1) 개선이며 reviewer persona(`agents/*.md`)는 무변경(보안 리뷰 불필요).
+
+### Added
+- **`synthesize_findings.py` 표 렌더**: `render()`가 불릿 목록 대신 Markdown 표
+  `| Sev | Path:Line | Conf | Summary | Source |` + `**Findings:**` counts 헤더
+  (severity별 count, 항상 3-severity) + 표 밖 `**Suggested fixes:**` 리스트를 emit.
+- **SKILL Review gate `Step 4.5 — Surface findings`**: kept(표시) finding 수 기준으로
+  boundary를 판정하고, kept>0이면 script stdout 전체를 결정 tool 직전 surface.
+  AskUserQuestion `<summary>`·`## History` 항목은 counts line을 verbatim 추출.
+- **신규 테스트**: `test_synthesize_findings.sh` counts/caveat/suppressed-notice/
+  fixes/conf-boundary/all-suppressed 케이스, `test_skill_orchestration_behavior.sh`
+  surface-순서 `assert_order`(section-heading anchor 금지).
+
+### Changed
+- **confidence rubric (C30 4-tier)**: `suppress()`가 binary(conf<7 억제)에서 3-way로 —
+  conf 5–6은 표시하되 `*` caveat, conf ≤4 비-CRITICAL만 억제, CRITICAL은 confidence
+  무관 항상 표시(conf ≤6이면 `*`). caveat 단일 규칙: 표시된 finding의 confidence ≤ 6 ⟺ `*`.
+- **`## History` 라인 포맷**: gate verdict 단어 대신 severity count
+  (`iter N: 1 CRITICAL / 2 IMPORTANT / 1 SUGGESTION → user chose Retry`).
+  `references/state-file-format.md` 예시 동기화.
+- **버전 2.2.0 → 2.3.0** (minor, 새 surface): `plugin.json`, SKILL 제목 + Final
+  Summary, `test_skill_orchestration_behavior.sh` 버전 assertion 동기화.
+
 ## [2.2.0] — 2026-05-31
 
 `runtime-verifier`를 read-only 관찰자에서 **git-worktree 샌드박스 기능-executor**로 전환.

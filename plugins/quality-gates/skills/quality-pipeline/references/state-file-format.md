@@ -37,7 +37,7 @@ target_branch: "<branch name>"       # OPTIONAL — paired with worktree_path
 (SKILL appends one line per gate verdict for in-turn observability.)
 
 - [2026-05-27T10:00:00Z] Pipeline started
-- [2026-05-27T10:05:00Z] Review gate iter 1: FAIL → user chose Retry
+- [2026-05-27T10:05:00Z] Review gate iter 1: 1 CRITICAL / 2 IMPORTANT / 1 SUGGESTION → user chose Retry
 - [2026-05-27T10:08:00Z] Review gate iter 2: PASS
 - [2026-05-27T10:12:00Z] Runtime gate: PASS
 - [2026-05-27T10:12:01Z] Pipeline complete
