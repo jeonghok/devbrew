@@ -8,7 +8,7 @@
 `quality-gates`의 Review gate는 iter마다 reviewer(security-reviewer / code-reviewer / codex / adversarial)를 dispatch하고, `scripts/synthesize_findings.py`가 결정적(deterministic)으로 findings를 dedup·정렬·suppress한다. 그런데 **synthesize 결과가 사용자에게 deliberate하게 surface되지 않는다**:
 
 - `synthesize_findings.py`는 이미 상세 Markdown(file:line / summary / sources / confidence / fix)을 stdout으로 렌더한다 (`render()`, 현 line 100-129). 불릿 형식.
-- 이 stdout은 orchestrator의 `Bash` tool result로 transcript에 **존재은 하나**, (i) 접힌 tool 출력이라 시각적으로 묻히고, (ii) `SKILL.md` Review gate step 5는 이 블록을 사용자에게 다시 제시하라는 지시 없이 곧장 `AskUserQuestion`으로 가며, 그 템플릿은 한 줄 `<summary>`만 실어 나른다 (SKILL.md 현 line 277-294).
+- 이 stdout은 orchestrator의 `Bash` tool result로 transcript에 **존재은 하나**, (i) 접힌 tool 출력이라 시각적으로 묻히고, (ii) `SKILL.md` Review gate step 5(Compute boundary outcome)는 findings empty면 loop를 clean 종료하고 non-empty면 `Review iter boundary decision` 섹션의 `AskUserQuestion`을 호출하는데 — 그 블록을 사용자에게 다시 제시하라는 지시가 없고, 템플릿은 한 줄 `<summary>`만 실어 나른다.
 
 즉 **진짜 gap은 "데이터 부재"가 아니라 "deliberate한 surface 부재"**. 사용자는 어떤 finding 때문에 Retry/Proceed/Stop을 골라야 하는지 한 줄 요약만 보고 결정하게 된다.
 
@@ -16,7 +16,7 @@
 
 1. Review gate가 **각 iter 종료 시(결정 tool 직전)** finding 전체를 사용자에게 표로 출력한다.
 2. 표는 한눈에 분류 가능해야 한다: severity / path:line / confidence / summary / source.
-3. confidence 표시는 roadmap **C30 rubric**을 따른다(9–10·7–8 표시, 5–6 주의 표기, 3–4 억제, CRITICAL은 confidence 무관 항상 표시).
+3. confidence 표시는 roadmap **C30 rubric**을 따른다(9–10·7–8 표시, 5–6 주의 표기[`*` caveat], **≤4 억제** — 단 severity=CRITICAL은 confidence 무관 항상 표시). confidence 범위는 **1–10**이며, 누락 시 0으로 취급(≤4 규칙에 포함되어 비-CRITICAL이면 suppress). C30 roadmap의 "3–4 억제 / 1–2 P0-only" 구분은 본 설계에서 "비-CRITICAL ≤4 suppress + CRITICAL 항상 표시"로 동치 흡수된다(1–2 비-CRITICAL도 suppress, 1–2 CRITICAL은 CRITICAL-always 규칙으로 표시).
 4. History가 severity별 finding count를 누적한다(현재 한 줄 → 의미 있는 한 줄).
 5. 가장 가벼운 변경으로 달성한다 — reviewer persona 파일 무변경.
 
@@ -109,24 +109,30 @@ severity(직교축)와 분리한 C30 4-tier:
 
 현재 step 4(synthesize) → 5(boundary) 사이에 삽입:
 
-> **Step 4.5 — Surface findings.** synthesize_findings.py 반환 후 findings 非empty면 그 stdout 전체를 사용자에게 deliberate 메시지로 출력(`## Review gate iter N — Findings` 컨텍스트 1줄 prepend) — 결정 tool **이전에**. `**Findings:**` 라인을 AskUserQuestion `<summary>`와 History append에 재사용.
+> **Step 4.5 — Surface findings.** boundary outcome은 **kept(표시) finding 수** 기준으로 판정한다(suppress 이후, raw findings 수 아님):
+> - **kept > 0** → synthesize_findings.py stdout 전체를 사용자에게 deliberate 메시지로 출력(`## Review gate iter N — Findings` 컨텍스트 1줄 prepend) — 결정 tool **이전에**. 이어서 `Review iter boundary decision`(iter 5면 max-iter) 호출.
+> - **kept = 0, suppressed > 0** → 표시할 high-confidence finding 없음 → **clean으로 처리**(loop 계속, AskUserQuestion 미호출). 단 transparency 위해 stdout의 `No high-confidence findings. N low-confidence findings suppressed.` 한 줄을 surface.
+> - **kept = 0, suppressed = 0** → 기존 `## Review gate iter N: clean` 메시지 후 loop exit.
 
-- AskUserQuestion 템플릿: `<summary>` = counts line. **`findings remain` 앵커 유지**(surface 블록엔 미사용 — V2b 유일성).
-- max-iter 결정에도 동일 surface 적용.
+counts line 추출은 **결정론적**: stdout에서 `**Findings:**` prefix 라인을 **verbatim 복사**해 AskUserQuestion `<summary>` 및 History append에 사용한다 (LLM이 별도 요약 문구를 생성하지 않음 — Law 1 결정론).
+
+- AskUserQuestion 템플릿: `<summary>` = verbatim counts line. **`findings remain` 앵커 유지**(surface 블록엔 미사용 — V2b 유일성).
+- **max-iter 결정**: iter 5에서 kept>0이면 동일하게 Step 4.5 surface 후 `Review max-iter decision` 호출. 그 템플릿의 `Last findings: <summary>`의 `<summary>`도 verbatim counts line으로 채운다 (템플릿 텍스트 자체는 무변경).
 - History(R2 rule): `Review gate iter 2: 1 CRITICAL / 2 IMPORTANT / 1 SUGGESTION → user chose Retry`.
 
 ## Acceptance Criteria
 
 - **AC-R4-1:** `synthesize_findings.py`가 非empty findings에 대해 Markdown **표**(`| Sev | Path:Line | Conf | Summary | Source |`)를 출력한다.
-- **AC-R4-2:** 출력 첫 블록에 `**Findings:** <n> CRITICAL / <n> IMPORTANT / <n> SUGGESTION` counts 라인이 있다.
+- **AC-R4-2:** 출력 첫 블록에 `**Findings:** <n> CRITICAL / <n> IMPORTANT / <n> SUGGESTION` counts 라인이 있다. **세 severity는 count가 0이어도 항상 포함**(`0 CRITICAL / 2 IMPORTANT / 0 SUGGESTION` — 결정론적 추출/파싱). count는 kept(표시) finding 기준.
 - **AC-R4-3:** 표시된 finding의 confidence ≤ 6이면 `*` caveat 마커가 붙고(severity 무관), confidence ≥ 7이면 마커가 없다. confidence ≤ 4 비-CRITICAL은 표에서 빠지고 suppressed count에 반영된다.
 - **AC-R4-4:** severity=CRITICAL은 confidence와 무관하게 항상 표에 표시된다(conf≤4 포함, `*` 마커 부착).
 - **AC-R4-5:** `proposed_fix`는 표 밖 `**Suggested fixes:**` 리스트에 path:line 키로 렌더된다.
 - **AC-R4-6:** 정렬은 severity-desc → confidence-desc → file-asc (CRITICAL 행이 SUGGESTION 행보다 먼저).
 - **AC-R4-7:** empty findings → `No high-confidence findings` 메시지(기존 동작 유지).
-- **AC-R4-8:** SKILL Review gate가 결정 tool 직전 findings 블록을 surface하는 step을 명시 포함한다.
+- **AC-R4-8:** SKILL Review gate에 surface step이 존재하고, **`Review iter boundary decision`의 AskUserQuestion 라인보다 먼저** 나타난다 (line-number 비교로 검증 — 존재 grep만으로는 mis-placement를 못 잡으므로 불충분).
 - **AC-R4-9:** `findings remain`는 SKILL 전체에서 정확히 1개 `question:` 라인에만 존재(V2b 불변).
 - **AC-R4-10:** `plugin.json` = 2.3.0, SKILL `v2.3.0` 문자열, CHANGELOG `[2.3.0]`, state-file-format.md History 예시가 새 포맷.
+- **AC-R4-11:** kept=0 & suppressed>0이면 gate는 clean으로 계속하고(AskUserQuestion 미호출) `No high-confidence findings` 한 줄만 surface한다. kept=0 & suppressed=0이면 기존 clean 메시지.
 
 ## Files to Modify
 
@@ -141,10 +147,15 @@ severity(직교축)와 분리한 C30 4-tier:
 ## Verification Plan
 
 1. **Baseline:** 작업 전 repo root에서 전체 qg 테스트 실행, 기존 8 stale red 캡처([[project_qg_pre_existing_test_reds]]).
-2. **TDD:** `test_synthesize_findings.sh` AC34–39 갱신 + 신규 케이스(counts/caveat/fixes/suppress=conf≤4)를 먼저 red로 작성 → `synthesize_findings.py` 구현 → green.
-3. `test_skill_orchestration.sh` (findings remain 유일성), `test_skill_orchestration_behavior.sh` (버전 2.3.0) green.
-4. 회귀: 작업 후 전체 qg 테스트 = baseline red set만 남고 신규 red 0.
-5. (수동) `/qg`를 findings 발생 diff에 실행해 표가 결정 직전 surface되는지 e2e 확인.
+2. **TDD:** `test_synthesize_findings.sh` AC34–39 갱신 + 신규 케이스를 먼저 red로 작성 → `synthesize_findings.py` 구현 → green. 신규/갱신 fixture가 cover해야 할 경계:
+   - **AC36 의미 반전:** conf=5 IMPORTANT → 이제 표시 + `*` (expected_grep: 해당 행 + `*`); conf=4 비-CRITICAL → suppress (expected_neg: 해당 file:line); conf=4 CRITICAL → 표시 + `*`.
+   - **counts 라인:** `0 CRITICAL`을 포함하는 케이스로 zero-count 항상-3-severity 포맷 검증.
+   - **fixes 리스트:** `**Suggested fixes:**` 아래 path:line 키 존재.
+   - **표 헤더:** `| Sev | Path:Line | Conf | Summary | Source |` 존재.
+3. `test_skill_orchestration.sh` (findings remain 유일성 = 1), `test_skill_orchestration_behavior.sh` (버전 2.3.0) green.
+4. **Ordering test(자동, AC-R4-8):** SKILL.md에서 surface step 라인 번호 < `Review iter boundary decision`의 AskUserQuestion `findings remain` 라인 번호임을 awk line-number 비교로 assert (test_skill_orchestration.sh V2a 패턴 재사용).
+5. 회귀: 작업 후 전체 qg 테스트 = baseline red set만 남고 신규 red 0.
+6. **(수동 smoke — AC 비포함; 근거: 전체 `/qg` e2e는 live agent dispatch가 필요해 unit-test 불가):** findings를 유발하는 작은 diff(예: `tests/fixtures/security-reviewer/expected/sql-concat`류 SQL-concat) 위에서 `/qg review` 실행. **성공 기준:** (a) 표 블록이 AskUserQuestion **이전** assistant 메시지로 출력되고, (b) `<summary>`가 stdout의 `**Findings:**` counts line과 글자 그대로 일치.
 
 ## Rejected Alternatives
 
@@ -152,6 +163,22 @@ severity(직교축)와 분리한 C30 4-tier:
 - **A3 — `--emit-summary` 플래그로 summary/표 분리 출력:** `**Findings:**` 헤더 한 줄이 이미 summary를 겸하므로 부수 복잡도만 추가. 기각.
 - **Full C30 schema (category + fingerprint + specialist):** persona 3곳 편집 + 보안 리뷰. R5가 영구 descope되어 fingerprint 수요 없음, category는 source로 대체 가능. design-lightness로 기각.
 - **엄격 표시 정책(CRITICAL/IMPORTANT만 본문, SUGGESTION appendix):** confidence rubric과 이중 필터가 되어 중신뢰 SUGGESTION이 사라질 위험. "전체 표(rubric 단일 필터)"로 기각.
+
+## Handoff Context
+
+**TL;DR:** R4는 Review gate가 *이미 생성하는* finding 상세를 사용자에게 deliberate하게 surface하는 가시성 개선이다. 핵심 결정 3개: (1) **A1 접근** — `synthesize_findings.py`가 표를 렌더하고 SKILL이 verbatim surface (LLM 비결정 렌더 금지); (2) **category/persona 무변경** — design-lightness로 `category` 필드 제외, 분류는 `Source`로; (3) **C30 confidence rubric 채택** — conf 5–6 caveat 노출, ≤4 비-CRITICAL suppress, CRITICAL 항상 표시.
+
+**Implicit context (구현자가 놓치기 쉬운 것):**
+- `suppress()`를 binary → 3-way(`kept` / `kept_caveat` / `suppressed`)로 바꾸면 **AC36 의미가 반전**된다(conf5 IMPORTANT: suppress → 표시+`*`). 테스트 갱신 필수.
+- boundary outcome은 raw findings가 아니라 **kept** 기준. `kept=0 & suppressed>0`은 clean(질문 안 함).
+- `findings remain` 앵커는 SKILL 전체 **정확히 1회**(V2b) — surface 블록은 `Findings:`만 사용.
+- 버전 문자열 **3곳 동기화**: `plugin.json` · `SKILL.md`(v2.x 문자열) · `test_skill_orchestration_behavior.sh`.
+- `*` caveat 단일 규칙: 표시된 finding의 confidence ≤ 6 ⟺ `*`.
+
+**Deferred to plan (writing-plans가 확정):**
+- counts 라인의 정확한 구분자/공백, `*` 마커의 정확한 렌더 위치(conf 셀 suffix 문자열).
+- AC36/신규 fixture의 정확한 `expected_grep` / `expected_neg` 리터럴.
+- ordering test(AC-R4-8)의 awk 구현 형태.
 
 ## Metadata
 
