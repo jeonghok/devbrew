@@ -150,8 +150,9 @@ case "${1:-}" in
     base=$(git -C "$sandbox" rev-parse HEAD) || die "cannot read baseline SHA"
 
     # §6.1 — capture the pre-verifier baseline snapshot the mutation-guard
-    # compares against. Side-channel: lives in the per-worktree gitdir, so the
-    # 2-line output contract is unchanged and `git worktree remove` auto-cleans it.
+    # compares against. Lives in the per-worktree gitdir (so `git worktree remove`
+    # auto-cleans it); round-2 seals it with a digest emitted as output line 3,
+    # which the guard verifies before trusting the snapshot (§6.1).
     snap_gitdir=$(git -C "$sandbox" rev-parse --absolute-git-dir) || die "cannot resolve gitdir"
     snap_common=$(git -C "$sandbox" rev-parse --git-common-dir)   || die "cannot resolve common-dir"
     case "$snap_common" in /*) ;; *) snap_common="$sandbox/$snap_common" ;; esac

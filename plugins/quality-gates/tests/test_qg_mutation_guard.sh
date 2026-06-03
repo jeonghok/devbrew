@@ -357,6 +357,24 @@ printf '%s' "$G" | grep -q "ignore_channel_tampered" \
   && pass "ignore_channel_tampered flagged (R2-AC1b)" || fail "Layer 2 tamper flag missing"
 cleanup_sandbox "$SANDBOX"
 
+echo "[b-precise crash-recovery (§6.2 step-1a): leftover .qgbak -> Layer-0 pre-restore, no false tamper]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+COMMON="$(git -C "$SANDBOX" rev-parse --git-common-dir)"
+cp "$COMMON/info/exclude" "$COMMON/info/exclude.orig"   # remember original for the byte-identical assert
+mv "$COMMON/info/exclude" "$COMMON/info/exclude.qgbak"  # simulate crash: original parked in .qgbak
+: > "$COMMON/info/exclude"                              # ...live file left emptied
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: no" ] \
+  && pass "crash .qgbak -> pre-restore recovers, forced=no" || fail "pre-restore failed: $(field "$G" guard_flags)"
+printf '%s' "$G" | grep -q "ignore_channel_tampered" \
+  && fail "false ignore_channel_tampered after pre-restore" || pass "no false tamper after pre-restore"
+[ ! -f "$COMMON/info/exclude.qgbak" ] \
+  && pass ".qgbak consumed by pre-restore" || fail ".qgbak not consumed"
+cmp -s "$COMMON/info/exclude" "$COMMON/info/exclude.orig" \
+  && pass "common info/exclude restored byte-identical" || fail "info/exclude not restored to original"
+rm -f "$COMMON/info/exclude.orig"
+cleanup_sandbox "$SANDBOX"
+
 echo "[R2-AC1(d): clean sandbox + correct digest + no tamper -> forced_downgrade: no]"
 OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
 G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
