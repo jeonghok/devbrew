@@ -200,7 +200,7 @@ case "${1:-}" in
     printf '%s\n%s\n%s\n' "$sandbox" "$base" "$snapshot_digest"
     ;;
   mutation-guard)
-    # 4-layer fail-closed product-mutation oracle (spec §6.1-6.3). Inputs are
+    # 5-layer fail-closed product-mutation oracle (spec §6.1-6.3). Inputs are
     # (sandbox, baseline B, snapshot-digest) + a snapshot create-sandbox wrote in
     # the per-worktree gitdir. The snapshot is verifier-writable scratch SEALED by
     # the orchestrator-held digest ($4): layer 0 verifies it before layers 1-3
@@ -238,16 +238,12 @@ case "${1:-}" in
       || guard_fail "cannot resolve common-dir: $common"
     case "$common" in /*) ;; *) common="$sandbox/$common" ;; esac
 
-    # ---- b-precise pre-restore (§6.2 step 1a; load-bearing for correctness) ----
-    # A prior guard killed mid-neutralization may have left info/exclude as an
-    # empty file with the original renamed to .qgbak. Restore BEFORE Layer 2 reads
-    # info/exclude (else now-vs-snapshot would compare an empty file → false
-    # ignore_channel_tampered). Per-file independent → safe on partial recovery.
     qg_ce="$common/info/exclude"
     qg_we="$gitdir/info/exclude"
-    for f in "$qg_ce" "$qg_we"; do
-      [[ -f "$f.qgbak" ]] && mv -f "$f.qgbak" "$f"
-    done
+    # NOTE: b-precise crash-recovery pre-restore was MOVED to after the digest seal
+    # (see the §6.2 step 1a block below) so it trusts only the sealed snapshot, never
+    # the verifier-writable .qgbak path (F1: closes codex-2 dir-plant + the regular-
+    # file pre-restore-trust gap).
 
     base_tree=$(git -C "$sandbox" rev-parse "${base}^{tree}" 2>&1) \
       || guard_fail "bad baseline sha: $base ($base_tree)"
@@ -272,6 +268,39 @@ case "${1:-}" in
       || guard_fail "snapshot integrity check failed (digest mismatch — possible verifier tamper)"
 
     snap_get() { sed -n "s/^$1=//p" "$snap" | head -1; }
+
+    # ---- b-precise crash-recovery pre-restore (§6.2 step 1a; AFTER the seal) ----
+    # A prior guard killed mid-neutralization may have left info/exclude empty with
+    # the original parked in .qgbak; restore it BEFORE Layer 1/2 read info/exclude.
+    # But .qgbak is a verifier-writable predictable path in the SHARED common gitdir,
+    # so trust the SEALED snapshot — not the path: restore .qgbak ONLY when it hashes
+    # to the snapshot's recorded original sha (an authentic crash orphan). A
+    # non-regular .qgbak (planted directory) is verifier tampering → fail closed
+    # (else the backup `mv` below moves the live file INTO it, silently corrupting
+    # the orchestrator's info/exclude). A regular .qgbak whose content does NOT match
+    # is an attacker plant → left untouched (the normal backup/restore cycle then
+    # preserves the real live exclude, never overwriting it with planted content).
+    # Closes F1 (codex-2 + the regular-file pre-restore-trust gap); seal = trust anchor.
+    for pair in "$qg_ce:excl_common_sha" "$qg_we:excl_wt_sha"; do
+      f="${pair%%:*}"; key="${pair#*:}"
+      [[ -e "$f.qgbak" ]] || continue
+      # The backup path must be a regular file (a planted directory/symlink = tamper).
+      [[ -f "$f.qgbak" ]] || guard_fail "verifier-planted non-regular .qgbak (backup-path tamper): $f.qgbak"
+      # The live target must be absent or a regular file: a verifier-planted directory
+      # would make the restore `mv` move the backup INTO it, corrupting host state (codex-3).
+      [[ ! -e "$f" || -f "$f" ]] || guard_fail "non-regular info/exclude target (backup-path tamper): $f"
+      # Crash recovery ONLY: a guard killed mid-neutralization leaves the live file in the
+      # placeholder state (absent or EMPTY via `: >`). If live is NON-EMPTY it is real or
+      # verifier-tampered content — never overwrite it from .qgbak (that would ERASE a
+      # verifier's ignore-channel tamper before Layer 2 can flag it). Skip → Layer 2 judges
+      # the live content as-is. (codex-6)
+      [[ -s "$f" ]] && continue
+      # hash-object of a known-existing regular file must not fail silently → fail closed
+      # (a swallowed 'absent' would hide verifier-controlled backup-path tampering) (codex-4).
+      bak_sha=$(git -C "$sandbox" hash-object "$f.qgbak" 2>/dev/null) \
+        || guard_fail "cannot hash .qgbak backup (fail-closed): $f.qgbak"
+      [[ "$bak_sha" == "$(snap_get "$key")" ]] && mv -f "$f.qgbak" "$f"
+    done
 
     forced="no"
     guard_flags=()
@@ -334,21 +363,27 @@ case "${1:-}" in
     #      untrusted (verifier-writable, absent from B). snapshot-INDEPENDENT, so a
     #      bug in the digest seal or Layer 2 still leaves this detector standing.
     #      Restore inline BEFORE Layer 2; the trap is a crash-only backstop. ----
+    # Restore ONLY backups THIS run created (flag-tracked). A pre-existing .qgbak the
+    # backup did NOT create — e.g. a verifier plant for an originally-ABSENT info/exclude
+    # — must never be installed as the live exclude (codex-5). Authentic prior-crash
+    # orphans are handled solely by the sha-gated pre-restore above; nothing else trusts
+    # a .qgbak by mere existence.
+    made_ce_bak=0; made_we_bak=0
     restore_excludes() {
       # reverse of backup order: per-worktree first, then common (common is shared).
-      [[ -f "$qg_we.qgbak" ]] && mv -f "$qg_we.qgbak" "$qg_we"
-      [[ -f "$qg_ce.qgbak" ]] && mv -f "$qg_ce.qgbak" "$qg_ce"
+      [[ "$made_we_bak" == 1 && -f "$qg_we.qgbak" ]] && mv -f "$qg_we.qgbak" "$qg_we"
+      [[ "$made_ce_bak" == 1 && -f "$qg_ce.qgbak" ]] && mv -f "$qg_ce.qgbak" "$qg_ce"
       return 0
     }
     trap restore_excludes EXIT INT TERM
     # backup (common first, then per-worktree) via atomic rename + empty placeholder.
     if [[ -f "$qg_ce" ]]; then
-      mv "$qg_ce" "$qg_ce.qgbak" || guard_fail "b-precise: common info/exclude backup failed"
-      : > "$qg_ce"
+      mv "$qg_ce" "$qg_ce.qgbak" && made_ce_bak=1 || guard_fail "b-precise: common info/exclude backup failed"
+      : > "$qg_ce" || guard_fail "b-precise: cannot reset common info/exclude placeholder"
     fi
     if [[ -f "$qg_we" ]]; then
-      mv "$qg_we" "$qg_we.qgbak" || guard_fail "b-precise: per-worktree info/exclude backup failed"
-      : > "$qg_we"
+      mv "$qg_we" "$qg_we.qgbak" && made_we_bak=1 || guard_fail "b-precise: per-worktree info/exclude backup failed"
+      : > "$qg_we" || guard_fail "b-precise: cannot reset per-worktree info/exclude placeholder"
     fi
 
     # Second baseline-anchored pass: read-tree B then add -A with excludesFile
@@ -372,11 +407,18 @@ case "${1:-}" in
     # smuggled new files. git represents symlinks as mode-120000 tree entries, so a
     # symlink hidden by info/exclude shows up here too (additive with the ls-files
     # symlink loop above → union ⊇ prior coverage).
-    bp_neut="$gitdir/qg-bp-neut.$$"; bp_l1="$gitdir/qg-bp-l1.$$"; rm -f "$bp_neut" "$bp_l1"
-    git -C "$sandbox" diff --name-status --diff-filter=A "$base_tree" "$cur_tree_neutralized" 2>/dev/null \
-      | cut -f2- | LC_ALL=C sort -u > "$bp_neut"
-    git -C "$sandbox" diff --name-status --diff-filter=A "$base_tree" "$cur_tree" 2>/dev/null \
-      | cut -f2- | LC_ALL=C sort -u > "$bp_l1"
+    bp_neut="$gitdir/qg-bp-neut.$$"; bp_l1="$gitdir/qg-bp-l1.$$"
+    bp_nraw="$gitdir/qg-bp-nraw.$$"; bp_lraw="$gitdir/qg-bp-lraw.$$"
+    rm -f "$bp_neut" "$bp_l1" "$bp_nraw" "$bp_lraw"
+    # Capture each diff to a temp file and check ITS exit (the | cut | sort would
+    # otherwise mask a git-diff failure → empty set → silent fail-open). codex-1.
+    git -C "$sandbox" diff --name-status --diff-filter=A "$base_tree" "$cur_tree_neutralized" > "$bp_nraw" 2>/dev/null \
+      || { rm -f "$bp_neut" "$bp_l1" "$bp_nraw" "$bp_lraw"; guard_fail "b-precise neutralized-diff failed (fail-closed)"; }
+    git -C "$sandbox" diff --name-status --diff-filter=A "$base_tree" "$cur_tree" > "$bp_lraw" 2>/dev/null \
+      || { rm -f "$bp_neut" "$bp_l1" "$bp_nraw" "$bp_lraw"; guard_fail "b-precise layer1-diff failed (fail-closed)"; }
+    cut -f2- "$bp_nraw" | LC_ALL=C sort -u > "$bp_neut"
+    cut -f2- "$bp_lraw" | LC_ALL=C sort -u > "$bp_l1"
+    rm -f "$bp_nraw" "$bp_lraw"
     while IFS= read -r rel; do
       [[ -z "$rel" ]] && continue
       disallowed+=("$rel"); forced="yes"

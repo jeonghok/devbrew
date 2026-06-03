@@ -73,6 +73,18 @@ git-ignored 파일(prod `.env`) 미복사로 원천 미접근.
   신뢰하는 artifact(snapshot/baseline/config)를 피검증자(Write 보유 subagent·샌드박스 Bash)가 쓰거나
   경로 계산할 수 있는가" 체크 추가 + vacuous H-AC3(ii) 테스트를 rule-only 격리 케이스 + Layer-2 비활성
   mutation-test로 재작성. 출력 계약 2줄 → 3줄(snapshot digest)로 정직하게 변경.
+- **mutation-guard F1: b-precise `.qgbak` 백업 경로 무결성 봉쇄 (보안-무결성; codex 모델-diversity 리뷰).**
+  round-2 b-precise(계층 1b) crash-recovery가 신뢰하던 *예측가능·verifier-writable* `.qgbak` 백업 경로에서
+  모델-diverse codex 리뷰가 6개 무결성 변종(codex-1..6)을 적발 — **전부 self-approval 우회가 아니라**, 가드가
+  orchestrator 자신의 `info/exclude`(로컬 ignore 파일)를 손상시키거나 탐지 증거를 지우는 결함. 봉쇄:
+  pre-restore를 digest seal **이후**로 이동 + 봉인 snapshot sha와 일치할 때만 복원 + live가
+  crash-placeholder(부재/빈 파일) 상태일 때만 복원(rule-only tamper 증거 보존, codex-6) + live/백업
+  비정규-파일타입(디렉토리) fail-closed(codex-2/3) + hash-object 실패 fail-closed(codex-4) +
+  `restore_excludes`는 *이번 실행이 생성한 백업만* 복원(codex-5) + 계층 1b의 두 `git diff` 파이프라인
+  exit-check(codex-1). 변종별 회귀 테스트 R3-AC1(a–e)/R3-AC2(a–b) 동반. **잔여 follow-up**(전부 무결성,
+  우회 아님): codex-7 symlink 파일타입, codex-8 restore-`mv` exit-check, codex-9 `cut`/`sort`/`comm`
+  exit-check. 근본 재설계(예측가능 경로 → guard-created `mktemp`)는 검토 후 보류(draft 스펙
+  `docs/superpowers/specs/2026-06-03-qg-bprecise-backup-mktemp-design.md`).
 - **C-C SKILL R4 fail-closed 라우팅.** errored/garbled 가드(exit 4 / `guard_error` /
   무효 key)를 PASS가 아니라 ≤FAIL로 라우팅 + stderr verbatim surface.
 - **I-A/I-B fallback SKIP cap.** `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1` fallback verdict를

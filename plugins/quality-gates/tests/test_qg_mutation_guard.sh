@@ -11,7 +11,7 @@ pass() { PASS=$((PASS+1)); echo "  ✓ $1"; }
 fail() { FAIL=$((FAIL+1)); echo "  ✗ $1"; }
 
 mk_sandbox() {
-  # Build a repo, seal a sandbox via create-sandbox, echo "<sandbox>\n<base>".
+  # Build a repo, seal a sandbox via create-sandbox, echo "<sandbox>\n<base>\n<digest>".
   local r; r=$(mktemp -d)
   (cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t)
   printf 'orig\n' > "$r/tracked.txt"
@@ -183,7 +183,7 @@ SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n
 G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: no" ] \
   && pass "force-tracked ignored, clean -> no downgrade (R2-AC3a)" || fail "I-NEW-2 false-positive: $(field "$G" tracked_diff)"
-cleanup_sandbox "$SANDBOX"
+cleanup_sandbox "$SANDBOX"; rm -rf "$R"   # F4: $R cleaned even if create-sandbox failed (cleanup_sandbox early-returns)
 
 echo "[C-A(iv): .gitignore tamper to hide a new file -> caught by content-hash on tracked .gitignore]"
 OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
@@ -488,6 +488,95 @@ DIGEST=$(git -C "$SANDBOX" hash-object "$SNAP")
 G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
 [ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
   && pass "info/exclude-hidden symlink -> forced (R2-AC2v)" || fail "b-precise symlink EVADED"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R3-AC1(a): verifier-planted .qgbak DIRECTORY -> fail-closed exit 4, main-repo info/exclude uncorrupted (F1/codex-2)]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+COMMON="$(git -C "$SANDBOX" rev-parse --git-common-dir)"
+cp "$COMMON/info/exclude" "$COMMON/info/exclude.orig"      # remember original for the corruption assert
+mkdir -p "$COMMON/info/exclude.qgbak"                      # verifier plants a DIRECTORY at the predictable backup path
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null); RC=$?
+[ "$RC" -eq 4 ] \
+  && pass "planted .qgbak directory -> fail-closed exit 4 (R3-AC1a)" || fail "planted .qgbak dir not fail-closed (exit $RC)"
+cmp -s "$COMMON/info/exclude" "$COMMON/info/exclude.orig" \
+  && pass "common info/exclude uncorrupted by .qgbak dir-plant (R3-AC1a)" || fail "main-repo info/exclude CORRUPTED by .qgbak dir-plant"
+rm -rf "$COMMON/info/exclude.qgbak" "$COMMON/info/exclude.orig"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R3-AC1(b): verifier-planted regular .qgbak (non-matching) -> NOT restored, original preserved, clean (F1 pre-restore-trust)]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+COMMON="$(git -C "$SANDBOX" rev-parse --git-common-dir)"
+cp "$COMMON/info/exclude" "$COMMON/info/exclude.orig"
+printf 'ATTACKER-CONTROLLED-EXCLUDE\n' > "$COMMON/info/exclude.qgbak"   # plant a regular .qgbak the guard did NOT create
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: no" ] \
+  && pass "non-matching .qgbak plant ignored -> clean (R3-AC1b)" || fail "regular .qgbak plant altered verdict ($(field "$G" forced_downgrade))"
+cmp -s "$COMMON/info/exclude" "$COMMON/info/exclude.orig" \
+  && pass "original info/exclude preserved (not overwritten by .qgbak content) (R3-AC1b)" || fail "main-repo info/exclude DESTROYED by .qgbak content plant"
+rm -f "$COMMON/info/exclude.qgbak" "$COMMON/info/exclude.orig"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R3-AC2 mutation: b-precise neutralized-diff failure -> fail-closed exit 4 (codex-1 exit-check)]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+MUT=$(mktemp)
+# Inject a failure into the Layer-1b neutralized diff; the exit-check must fail closed.
+sed 's|diff --name-status --diff-filter=A "\$base_tree" "\$cur_tree_neutralized"|diff --name-status --bogus-flag-zzz|' "$WT" > "$MUT"
+chmod +x "$MUT"
+GM=$(/bin/bash "$MUT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null); RC=$?
+[ "$RC" -eq 4 ] \
+  && pass "b-precise neutralized-diff failure -> fail-closed exit 4 (R3-AC2/codex-1)" || fail "b-precise diff failure NOT fail-closed (exit $RC)"
+rm -f "$MUT"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R3-AC1(c): verifier plants LIVE info/exclude as DIRECTORY (+matching .qgbak) -> fail-closed, no mv-into-dir (codex-3)]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+COMMON="$(git -C "$SANDBOX" rev-parse --git-common-dir)"
+cp "$COMMON/info/exclude" "$COMMON/info/exclude.qgbak"   # .qgbak = authentic original (matches sealed excl_common_sha)
+rm -f "$COMMON/info/exclude"; mkdir "$COMMON/info/exclude"   # verifier plants the LIVE target as a directory
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null); RC=$?
+[ "$RC" -eq 4 ] \
+  && pass "live info/exclude dir-plant -> fail-closed exit 4 (R3-AC1c)" || fail "live dir-plant not fail-closed (exit $RC)"
+{ [ -f "$COMMON/info/exclude.qgbak" ] && [ ! -e "$COMMON/info/exclude/exclude.qgbak" ]; } \
+  && pass ".qgbak NOT moved into the planted dir (R3-AC1c)" || fail ".qgbak moved into live dir (corruption)"
+rm -rf "$COMMON/info/exclude" "$COMMON/info/exclude.qgbak"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R3-AC2(b) mutation: hash-object failure on existing regular .qgbak -> fail-closed (codex-4)]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+COMMON="$(git -C "$SANDBOX" rev-parse --git-common-dir)"
+: > "$COMMON/info/exclude"                            # crash-placeholder (empty live) so pre-restore reaches the hash check
+printf 'whatever\n' > "$COMMON/info/exclude.qgbak"   # a regular .qgbak the hash-object line then evaluates
+MUT=$(mktemp)
+sed 's|git -C "\$sandbox" hash-object "\$f.qgbak"|git -C "$sandbox" hash-object --bogus-flag-zzz|' "$WT" > "$MUT"
+chmod +x "$MUT"
+GM=$(/bin/bash "$MUT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null); RC=$?
+[ "$RC" -eq 4 ] \
+  && pass "hash-object failure on regular .qgbak -> fail-closed exit 4 (R3-AC2b/codex-4)" || fail "hash-failure not fail-closed (exit $RC)"
+rm -f "$MUT" "$COMMON/info/exclude.qgbak"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R3-AC1(d): planted .qgbak for ABSENT per-worktree info/exclude -> NOT installed by restore_excludes (codex-5)]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+WTDIR="$(git -C "$SANDBOX" rev-parse --absolute-git-dir)"
+mkdir -p "$WTDIR/info"; rm -f "$WTDIR/info/exclude"                  # ensure live per-worktree exclude is ABSENT
+printf 'ATTACKER-IGNORE-RULES\n' > "$WTDIR/info/exclude.qgbak"       # plant a backup the guard did NOT create
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
+{ [ ! -f "$WTDIR/info/exclude" ] || ! grep -q 'ATTACKER-IGNORE-RULES' "$WTDIR/info/exclude"; } \
+  && pass "planted .qgbak NOT installed as live per-worktree info/exclude (R3-AC1d)" || fail "restore_excludes installed verifier-planted .qgbak (codex-5)"
+rm -f "$WTDIR/info/exclude.qgbak"
+cleanup_sandbox "$SANDBOX"
+
+echo "[R3-AC1(e): info/exclude tamper + matching-original .qgbak -> tamper NOT erased by pre-restore (codex-6)]"
+OUT=$(mk_sandbox); SANDBOX=$(sed -n '1p' <<<"$OUT"); BASE=$(sed -n '2p' <<<"$OUT"); DIGEST=$(sed -n '3p' <<<"$OUT")
+COMMON="$(git -C "$SANDBOX" rev-parse --git-common-dir)"
+cp "$COMMON/info/exclude" "$COMMON/info/exclude.qgbak"        # .qgbak = authentic original (matches sealed excl_common_sha)
+echo 'phantom-rule-no-such-file' >> "$COMMON/info/exclude"   # rule-only tamper: live now NON-EMPTY and != original
+G=$("$WT" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
+[ "$(field "$G" forced_downgrade)" = "forced_downgrade: yes" ] \
+  && pass "tamper + matching .qgbak -> still forced (pre-restore did NOT erase the tamper) (R3-AC1e)" || fail "matching .qgbak erased tamper signal -> false clean (codex-6 bypass)"
+printf '%s' "$G" | grep -q "ignore_channel_tampered" \
+  && pass "ignore_channel_tampered preserved despite matching .qgbak (R3-AC1e)" || fail "ignore_channel_tampered suppressed by pre-restore overwrite (codex-6)"
+rm -f "$COMMON/info/exclude.qgbak"
 cleanup_sandbox "$SANDBOX"
 
 echo
