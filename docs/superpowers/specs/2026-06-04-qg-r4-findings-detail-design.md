@@ -31,7 +31,7 @@
 
 - **Law 2:** persona 파일 무변경 → 보안 리뷰 불필요. `synthesize_findings.py`는 결정적 script(LLM synthesizer agent를 대체한 설계 의도)이므로 렌더는 결정적이어야 한다 — orchestrator(LLM)가 표를 포맷하지 않는다.
 - **AC6 / V2b 유일성:** 리터럴 문구 `findings remain`은 SKILL 전체에서 정확히 1개 `question:` 라인에만 등장해야 한다(`test_skill_orchestration.sh:50`). surface 블록은 이 문구를 쓰지 않는다(`Findings:` 사용).
-- **plugin.json bump:** `plugins/quality-gates/`를 건드리므로 같은 PR에서 `2.2.0 → 2.3.0` (minor, 새 surface). SKILL.md 내 `v2.2.0` 문자열과 `test_skill_orchestration_behavior.sh`의 버전 assertion도 동기화. ([[feedback_plugin_version_bump]])
+- **plugin.json bump + 버전 3-사이트 동기화:** `plugins/quality-gates/`를 건드리므로 같은 PR에서 `2.2.0 → 2.3.0` (minor, 새 surface). `v2.2.0 → v2.3.0`를 **세 곳 모두** 갱신: (i) `SKILL.md:37` 제목 `(v2.2.0)`, (ii) `SKILL.md:538` Final Summary 템플릿 `(v2.2.0)` — **둘 다** 바꿔야 함(하나만 바꾸면 잔존 `2.2.0`에 아래 테스트가 매칭돼 false-pass), (iii) `test_skill_orchestration_behavior.sh:151` assertion 패턴 `v2.2.0|2\.2\.0` → `v2.3.0|2\.3\.0`. ([[feedback_plugin_version_bump]])
 - **CHANGELOG:** qg는 v2.x → `## [2.3.0] — 2026-06-04` 필수.
 - **doc-code 정합:** `references/state-file-format.md`의 History 예시를 새 severity-count 포맷으로 동기화.
 - **pre-existing reds:** main에 8개 stale red 존재([[project_qg_pre_existing_test_reds]]) — 작업 전 baseline 캡처, 테스트는 repo root에서 실행.
@@ -61,7 +61,7 @@ persona 파일(`agents/*.md`) 0 변경.
 ```markdown
 ## Review Findings (Synthesized)
 
-**Findings:** 1 CRITICAL / 2 IMPORTANT / 1 SUGGESTION · 2 suppressed (conf ≤ 4)
+**Findings:** 1 CRITICAL / 2 IMPORTANT / 1 SUGGESTION — 2 suppressed (conf <= 4)
 
 | Sev        | Path:Line        | Conf | Summary                          | Source                   |
 |------------|------------------|------|----------------------------------|--------------------------|
@@ -70,7 +70,7 @@ persona 파일(`agents/*.md`) 0 변경.
 | IMPORTANT  | cache.py:30      | 6 *  | Race on shared dict              | adversarial              |
 | SUGGESTION | util.py:5        | 7    | Unclear variable name x          | code-reviewer            |
 
-`*` = confidence ≤ 6 (treat with caution). 2 findings suppressed (conf ≤ 4) — re-run with `/qg --show-low-confidence`.
+`*` = confidence <= 6 (treat with caution). 2 findings suppressed (conf <= 4); re-run with `/qg --show-low-confidence`.
 
 **Suggested fixes:**
 - `auth.py:42` — parameterize the query (bound params, not f-string)
@@ -82,7 +82,7 @@ persona 파일(`agents/*.md`) 0 변경.
 설계 결정:
 - **단일 표**, 정렬 = severity-desc → confidence-desc → file-asc (기존 `sort_findings` 유지). `Sev` 컬럼이 grouping 대신.
 - **`fix`는 표 밖** 리스트 (긴 fix가 표 레이아웃을 깨지 않게).
-- 플레인 ASCII (이모지 없음, 하우스 스타일).
+- 이모지 없음; 구분자는 기존 `render()`(현 line 116/123) em-dash 스타일과 일관. 정확한 emit 문자열은 아래 **Rendered output contract**에 lock.
 - `**Findings:**` 한 줄 = summary 겸 History 소스.
 - 헤더 `## Review Findings (Synthesized)` 유지 (AC38 grep 호환).
 - empty case: `No high-confidence findings. N low-confidence findings suppressed.` 유지 (AC39 호환).
@@ -104,6 +104,20 @@ severity(직교축)와 분리한 C30 4-tier:
 **counts 라인 의미:** `**Findings:** <n> CRITICAL / <n> IMPORTANT / <n> SUGGESTION`은 **표시된(post-rubric) finding** 기준. suppressed(비-CRITICAL conf≤4)는 severity별로 쪼개지 않고 `· <n> suppressed (conf ≤ 4)` aggregate로만 표기.
 
 구현 노트: 기존 binary `suppress()`를 3-way 분류(`kept` / `kept_caveat` / `suppressed`)로 확장. `kept_caveat`는 표에서 conf 셀에 `*` suffix. CRITICAL은 항상 `kept`(conf≥7) 또는 `kept_caveat`(conf≤6), 절대 `suppressed` 아님.
+
+### Rendered output contract (locked strings)
+
+`synthesize_findings.py`가 emit하는 문자열을 아래로 **고정**한다 — counts line은 verbatim 추출 대상이라 문자 단위로 load-bearing이고, 테스트 fixture는 이 contract에서 기계적으로 도출된다. 이모지 없음, 구분자는 기존 `render()`(현 line 116/123) em-dash 스타일과 일관:
+
+- **counts line:** `**Findings:** <c> CRITICAL / <i> IMPORTANT / <s> SUGGESTION`. suppressed>0이면 ` — <n> suppressed (conf <= 4)` tail 부착(=0이면 tail 생략). severity 셋은 count 0이어도 항상 포함.
+- **표 헤더:** `| Sev | Path:Line | Conf | Summary | Source |`.
+- **Conf 셀:** clean = `<n>`; caveat(conf<=6) = `<n> *` (숫자·공백·별표).
+- **caveat 범례:** `` `*` = confidence <= 6 (treat with caution). ``
+- **suppressed 안내:** 기존 문구 유지 — `<n> finding(s) hidden. Re-run with `/qg --show-low-confidence` to see all.`
+- **fixes 블록:** `**Suggested fixes:**` 헤더 + 행 `` - `<path>:<line>` — <proposed_fix> ``.
+- **empty:** `No high-confidence findings. <n> low-confidence findings suppressed.` (AC39 호환).
+
+비교 연산자는 emit 문자열에서 ASCII `<=`를 쓰고 `≤`(non-ASCII)는 emit하지 않는다(grep target에 non-ASCII 회피). 본 설계 doc **산문**은 가독성을 위해 `≤`/`—`를 자유롭게 쓰되 위 emit 문자열에는 해당 없음.
 
 ### SKILL.md Review gate 변경
 
@@ -129,9 +143,9 @@ counts line 추출은 **결정론적**: stdout에서 `**Findings:**` prefix 라�
 - **AC-R4-5:** `proposed_fix`는 표 밖 `**Suggested fixes:**` 리스트에 path:line 키로 렌더된다.
 - **AC-R4-6:** 정렬은 severity-desc → confidence-desc → file-asc (CRITICAL 행이 SUGGESTION 행보다 먼저).
 - **AC-R4-7:** empty findings → `No high-confidence findings` 메시지(기존 동작 유지).
-- **AC-R4-8:** SKILL Review gate에 surface step이 존재하고, **`Review iter boundary decision`의 AskUserQuestion 라인보다 먼저** 나타난다 (line-number 비교로 검증 — 존재 grep만으로는 mis-placement를 못 잡으므로 불충분).
+- **AC-R4-8:** SKILL Review gate에 surface step이 존재하고, `Review iter boundary decision`의 `findings remain` 라인보다 **먼저** 나타난다. 검증은 `test_skill_orchestration_behavior.sh`의 `assert_order` primitive 사용 — earlier anchor `first_line 'Surface findings|Step 4\.5'`, later anchor `first_line 'question:.*findings remain'`. **`## Review gate` 섹션 헤딩을 anchor로 쓰지 말 것**(헤딩은 항상 내부 라인보다 앞서므로 tautological PASS — V7-class 결함). 존재 grep만으로는 mis-placement를 못 잡아 불충분.
 - **AC-R4-9:** `findings remain`는 SKILL 전체에서 정확히 1개 `question:` 라인에만 존재(V2b 불변).
-- **AC-R4-10:** `plugin.json` = 2.3.0, SKILL `v2.3.0` 문자열, CHANGELOG `[2.3.0]`, state-file-format.md History 예시가 새 포맷.
+- **AC-R4-10:** `plugin.json` = 2.3.0; SKILL.md의 **두** `(v2.2.0)` 사이트(제목 line 37 + Final Summary line 538) 모두 `(v2.3.0)`로; `test_skill_orchestration_behavior.sh` 패턴 `v2.3.0|2\.3\.0`이며 SKILL에 잔존 `2.2.0` 없음; CHANGELOG `[2.3.0]`; state-file-format.md History 예시가 새 포맷.
 - **AC-R4-11:** kept=0 & suppressed>0이면 gate는 clean으로 계속하고(AskUserQuestion 미호출) `No high-confidence findings` 한 줄만 surface한다. kept=0 & suppressed=0이면 기존 clean 메시지.
 
 ## Files to Modify
@@ -153,7 +167,7 @@ counts line 추출은 **결정론적**: stdout에서 `**Findings:**` prefix 라�
    - **fixes 리스트:** `**Suggested fixes:**` 아래 path:line 키 존재.
    - **표 헤더:** `| Sev | Path:Line | Conf | Summary | Source |` 존재.
 3. `test_skill_orchestration.sh` (findings remain 유일성 = 1), `test_skill_orchestration_behavior.sh` (버전 2.3.0) green.
-4. **Ordering test(자동, AC-R4-8):** SKILL.md에서 surface step 라인 번호 < `Review iter boundary decision`의 AskUserQuestion `findings remain` 라인 번호임을 awk line-number 비교로 assert (test_skill_orchestration.sh V2a 패턴 재사용).
+4. **Ordering test(자동, AC-R4-8):** `test_skill_orchestration_behavior.sh`에 `assert_order "surface precedes decision" "$(first_line 'Surface findings|Step 4\.5')" "$(first_line 'question:.*findings remain')"` 추가. **section-heading anchor 금지**(`## Review gate`는 tautological PASS — V7-class). test_skill_orchestration.sh의 V2a(section-heading awk)는 이 용도에 부적합 — surface-step 텍스트 자체를 anchor로.
 5. 회귀: 작업 후 전체 qg 테스트 = baseline red set만 남고 신규 red 0.
 6. **(수동 smoke — AC 비포함; 근거: 전체 `/qg` e2e는 live agent dispatch가 필요해 unit-test 불가):** findings를 유발하는 작은 diff(예: `tests/fixtures/security-reviewer/expected/sql-concat`류 SQL-concat) 위에서 `/qg review` 실행. **성공 기준:** (a) 표 블록이 AskUserQuestion **이전** assistant 메시지로 출력되고, (b) `<summary>`가 stdout의 `**Findings:**` counts line과 글자 그대로 일치.
 
@@ -176,9 +190,8 @@ counts line 추출은 **결정론적**: stdout에서 `**Findings:**` prefix 라�
 - `*` caveat 단일 규칙: 표시된 finding의 confidence ≤ 6 ⟺ `*`.
 
 **Deferred to plan (writing-plans가 확정):**
-- counts 라인의 정확한 구분자/공백, `*` 마커의 정확한 렌더 위치(conf 셀 suffix 문자열).
-- AC36/신규 fixture의 정확한 `expected_grep` / `expected_neg` 리터럴.
-- ordering test(AC-R4-8)의 awk 구현 형태.
+- `expected_grep` / `expected_neg` 리터럴 — 위 **Rendered output contract**의 locked strings에서 기계적으로 도출(plan의 첫 step). contract가 문자열을 lock하므로 red-first TDD 가능(도출이 선행조건).
+- 표 컬럼 padding/정렬 등 순수 cosmetic whitespace (테스트는 셀 내용으로 grep, padding 비의존).
 
 ## Metadata
 
