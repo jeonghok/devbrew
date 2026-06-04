@@ -34,7 +34,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v2.2.0)
+# Quality Gates — In-Turn Orchestrator (v2.3.0)
 
 You are running the **full quality-gates pipeline** in a single assistant
 turn. You dispatch the two gates serially in order. At decision points
@@ -247,14 +247,43 @@ Agent({
    the existing `discover-plan.sh` mechanism). `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1`
    empties the slot — `run_codex_reviewer.sh` reads the env variable directly, so the orchestrator passes no additional argument for the codex path.
 4. Dispatch `quality-gates:synthesizer` (or local synthesize_findings.py)
-   to consolidate findings.
-5. Compute boundary outcome:
-   - findings empty → print `## Review gate iter N: clean` and exit the loop (continue to the Runtime gate).
-   - findings non-empty → invoke [Review iter boundary decision](#review-iter-boundary-decision).
+   to consolidate findings. **Capture the script's complete stdout** — the
+   synthesized Markdown block (counts line + findings table + suggested-fixes
+   list, or the empty-state line). You surface this verbatim in step 4.5; do
+   NOT reformat or re-summarize it yourself (Law 1 determinism — the script,
+   not the orchestrator, owns the rendering).
 
-If iteration N=5 ends with findings still non-empty: invoke
-[Review max-iter decision](#review-max-iter-decision) instead of the
-normal iter-boundary decision.
+   **Step 4.5 — Surface findings.** Judge the boundary on the **kept
+   (displayed) finding count**, read from the `**Findings:**` counts line in
+   that stdout — NOT the raw reviewer count. Three cases:
+   - **kept > 0** (the counts line totals ≥ 1 across the three severities) →
+     emit the captured stdout to the user as a deliberate assistant message,
+     prepended with the single context line `## Review gate iter N — Findings`,
+     **before** invoking the decision tool. Then go to step 5.
+   - **kept = 0 AND suppressed > 0** (the synthesizer emitted the empty-state
+     line `No high-confidence findings. N low-confidence findings suppressed.`
+     with N > 0 — read N from that line) → no high-confidence finding to act
+     on → treat as **clean**: do NOT call AskUserQuestion. Surface only that
+     single `No high-confidence findings…` line for transparency, then **exit
+     the loop (continue to the Runtime gate)** — do not iterate again.
+   - **kept = 0 AND suppressed = 0** (the same empty-state line with N = 0) →
+     print `## Review gate iter N: clean` and exit the loop (continue to the
+     Runtime gate).
+
+5. **Decision tool (kept > 0 only).** Invoke [Review iter boundary
+   decision](#review-iter-boundary-decision). Fill its `<summary>` slot by
+   **verbatim-copying the `**Findings:**` counts line** from step 4's stdout
+   (deterministic extraction — do NOT author a fresh sentence). Append one
+   `## History` line of the form
+   `Review gate iter N: <c> CRITICAL / <i> IMPORTANT / <s> SUGGESTION → user chose <choice>`
+   (severity triplet copied from the same counts line; see
+   [state-file-format](references/state-file-format.md#history)).
+
+If iteration N=5 ends with kept > 0: run step 4.5's surface first (same as
+above), then invoke [Review max-iter decision](#review-max-iter-decision)
+instead of the normal iter-boundary decision. Fill that template's
+`Last findings: <summary>` slot with the same verbatim counts line (the
+template text itself is unchanged).
 
 ---
 
@@ -535,7 +564,7 @@ Branch:
 Print:
 
 ```markdown
-## Quality Gates Pipeline — Complete (v2.2.0)
+## Quality Gates Pipeline — Complete (v2.3.0)
 
 - **Review gate**: <clean iter N | proceeded-with-findings iter N | aborted iter N | skipped>
 - **Runtime gate**: <clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>

@@ -147,8 +147,8 @@ assert_line "runtime sandbox kill switch present" "$(first_line 'DEVBREW_QG_DISA
 # spec_acceptance_criteria threaded to the verifier.
 assert_line "spec_acceptance_criteria threaded" "$(first_line 'spec_acceptance_criteria')"
 
-# Version bumped to 2.2.0 (final summary).
-assert_line "v2.2.0 in SKILL" "$(first_line 'v2.2.0|2\.2\.0')"
+# Version bumped to 2.3.0 (title + final summary).
+assert_line "v2.3.0 in SKILL" "$(first_line 'v2.3.0|2\.3\.0')"
 
 # --- v2.2.0 mutation-guard hardening protocol-shape ---
 
@@ -237,6 +237,18 @@ for p in security-reviewer adversarial; do
     fail=$((fail + 1))
   fi
 done
+
+# --- v2.3.0 R4: Review-gate findings surfaced before the decision tool ---
+# The Surface-findings step (Step 4.5) must precede the iter-boundary
+# decision's `findings remain` question. Anchor on the surface-step TEXT,
+# NOT the `## Review gate` section heading — a heading always precedes its
+# body, so a heading anchor is a tautological PASS (the V7-class defect this
+# file was created to avoid). Existence grep alone cannot catch mis-placement.
+surface_line=$(first_line 'Surface findings|Step 4\.5')
+question_line=$(first_line 'question:.*findings remain')
+assert_line "Surface-findings step present" "$surface_line"
+assert_line "iter-boundary decision question present" "$question_line"
+assert_order "Surface findings precedes iter-boundary decision" "$surface_line" "$question_line"
 
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"

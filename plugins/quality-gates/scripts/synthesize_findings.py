@@ -3,8 +3,9 @@
 
 Replaces agents/synthesizer.md Agent dispatch. The algorithm is fully
 deterministic (no LLM judgment): apply Adversarial verdicts → group/dedup
-by (file,line,severity) → suppress confidence<7 unless severity==CRITICAL
-→ sort severity-desc / confidence-desc / file-asc → render Markdown.
+by (file,line,severity) → suppress non-CRITICAL confidence<=4 (CRITICAL always
+kept; confidence 5-6 shown with a `*` caveat) → sort severity-desc /
+confidence-desc / file-asc → render Markdown table.
 
 Inputs (CLI args):
   --adversarial PATH   YAML file with `verdicts: [...]` (or top-level list)
@@ -78,11 +79,19 @@ def dedup(findings):
 
 
 def suppress(findings):
+    """C30 rubric (R4): kept vs suppressed.
+
+    - CRITICAL: always kept (any confidence).
+    - non-CRITICAL: confidence <= 4 -> suppressed; else kept.
+
+    The caveat marker (`*`) is NOT decided here; it is a pure function of
+    `confidence <= 6` on any *shown* finding, computed in render().
+    """
     kept, suppressed = [], []
     for f in findings:
         sev = f.get("severity", "SUGGESTION")
         conf = int(f.get("confidence", 0))
-        if conf < 7 and sev != "CRITICAL":
+        if sev != "CRITICAL" and conf <= 4:
             suppressed.append(f)
         else:
             kept.append(f)
@@ -97,6 +106,35 @@ def sort_findings(findings):
     ))
 
 
+def _cell(value):
+    """Escape Markdown-table-breaking characters in a single table cell.
+
+    Cell values (summary, source, file) originate from reviewer-agent (LLM)
+    output and can contain `|` or newlines, which would split or break a
+    pipe-delimited table row. Escape `|` and collapse CR/LF to a space.
+    """
+    return str(value).replace("\r", "").replace("\n", " ").replace("|", "\\|")
+
+
+def _norm_sev(f):
+    """Return a finding's severity normalized to a known bucket.
+
+    Reviewer personas constrain severity to {CRITICAL, IMPORTANT, SUGGESTION},
+    but nothing enforces it at runtime. An unrecognized severity would render
+    a table row yet be omitted from the counts line — and the SKILL boundary
+    keys on that counts line, so a visible finding could be read as clean
+    (kept=0). Normalize to SUGGESTION (warn to stderr) so counts == rows.
+    """
+    sev = f.get("severity", "SUGGESTION")
+    if sev not in SEV_ORDER:
+        print(
+            f"[synthesize_findings] unknown severity {sev!r}; treating as SUGGESTION",
+            file=sys.stderr,
+        )
+        return "SUGGESTION"
+    return sev
+
+
 def render(findings, suppressed_count):
     if not findings:
         return (
@@ -104,28 +142,48 @@ def render(findings, suppressed_count):
             f"No high-confidence findings. {suppressed_count} low-confidence "
             "findings suppressed.\n"
         )
-    out = ["## Review Findings (Synthesized)", ""]
-    for sev_name in ("CRITICAL", "IMPORTANT", "SUGGESTION"):
-        bucket = [f for f in findings if f.get("severity") == sev_name]
-        if not bucket:
-            continue
-        out.append(f"### {sev_name}")
-        out.append("")
-        for f in bucket:
-            out.append(
-                f"- **{f.get('file')}:{f.get('line')}** — {f.get('summary', '')}"
-            )
-            out.append(f"  - Sources: {', '.join(f.get('sources', [f.get('agent', '?')]))}")
-            out.append(f"  - Confidence: {f.get('confidence')}/10")
-            out.append(f"  - Fix: {f.get('proposed_fix', '(none)')}")
-        out.append("")
+
+    counts = {"CRITICAL": 0, "IMPORTANT": 0, "SUGGESTION": 0}
+    rows = []
+    any_caveat = False
+    for f in findings:
+        sev = _norm_sev(f)
+        counts[sev] += 1
+        conf = int(f.get("confidence", 0))
+        if conf <= 6:
+            conf_cell = f"{conf} *"
+            any_caveat = True
+        else:
+            conf_cell = f"{conf}"
+        path_line = _cell(f"{f.get('file')}:{f.get('line')}")
+        summary = _cell(f.get("summary", ""))
+        source = _cell(", ".join(f.get("sources", [f.get("agent", "?")])))
+        rows.append(f"| {sev} | {path_line} | {conf_cell} | {summary} | {source} |")
+
+    counts_line = (
+        f"**Findings:** {counts['CRITICAL']} CRITICAL / "
+        f"{counts['IMPORTANT']} IMPORTANT / {counts['SUGGESTION']} SUGGESTION"
+    )
     if suppressed_count > 0:
-        out.append("### Suppressed (confidence < 7, severity != CRITICAL)")
-        out.append("")
+        counts_line += f" — {suppressed_count} suppressed (conf <= 4)"
+
+    out = ["## Review Findings (Synthesized)", "", counts_line, ""]
+    out.append("| Sev | Path:Line | Conf | Summary | Source |")
+    out.append("|---|---|---|---|---|")
+    out.extend(rows)
+    out.append("")
+    if any_caveat:
+        out.append("`*` = confidence <= 6 (treat with caution).")
+    if suppressed_count > 0:
         out.append(
-            f"{suppressed_count} finding(s) hidden. "
-            "Re-run with `/qg --show-low-confidence` to see all."
+            f"{suppressed_count} finding(s) suppressed (conf <= 4); "
+            "re-run with `/qg --show-low-confidence` to see all."
         )
+    out.append("")
+    out.append("**Suggested fixes:**")
+    for f in findings:
+        fix = str(f.get("proposed_fix", "(none)")).replace("\r", " ").replace("\n", " ")
+        out.append(f"- `{f.get('file')}:{f.get('line')}` — {fix}")
     return "\n".join(out) + "\n"
 
 
