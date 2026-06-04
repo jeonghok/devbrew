@@ -7,7 +7,9 @@ description: >
   two gates (review, runtime verification)
   serially in a single turn. Progression decisions and fix-loop
   iteration boundaries surface to the user via AskUserQuestion tool calls.
-  Happy path (all gates pass) requires zero user clicks.
+  With a gate argument (`/qg both|review|runtime`) the happy path requires zero
+  user clicks; bare `/qg` asks one upfront gate-scope question (Review only /
+  both), then runs click-free on the happy path.
 cost_class: variable
 allowed-tools:
   # Group 1 — Preflight scripts (실행 순서: setup → pre-check → trivia)
@@ -161,7 +163,7 @@ Two upfront decisions are owned here, in order, before any gate runs — after [
 
 ### Decision 1 — Gate scope (always, unless an argument pre-answers it)
 
-Fire this **first**, before any gate dispatch — it is the first decision in the [Dispatch Loop](#dispatch-loop).
+Fire this **first**, before any gate dispatch — it runs as part of [Dispatch Loop](#dispatch-loop) step 2, ahead of the Review gate.
 
 - **Skip condition (an argument is the answer):** if `gate ∈ {review, runtime, both}` or `skip_runtime` is set, that argument IS the answer — do NOT fire the question. `--skip-runtime` is an alias for "Review gate only" (= `gate=review`).
 - **Precedence (no silent conflict):** an explicit `gate=` value always wins over `--skip-runtime`. If `--skip-runtime` is combined with a conflicting `gate=runtime`/`gate=both`, `gate=` wins, `--skip-runtime` is ignored, and you print a one-line advisory: `> [quality-gates] --skip-runtime ignored: explicit gate=<value> wins (precedence).` The [Arguments](#arguments) mapping is normative on conflict.

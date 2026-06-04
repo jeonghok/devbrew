@@ -1,6 +1,6 @@
 ---
 description: "Run the quality gates pipeline (review → runtime verification)"
-argument-hint: "[review|runtime] [branch [<name>]|--paths <glob>...|--reset] [--skip-runtime] [--plan <path>] [--pr-url <url>]"
+argument-hint: "[review|runtime|both] [branch [<name>]|--paths <glob>...|--reset] [--skip-runtime] [--plan <path>] [--pr-url <url>]"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)", "Bash(rm:*)", "Bash(test:*)", "Agent", "Skill", "Bash", "Read", "Edit", "Write", "Glob", "Grep"]
 ---
 
@@ -56,7 +56,8 @@ is aborted at a decision point.
 
 | Command | Effect |
 |---------|--------|
-| `/qg` | Full pipeline (Review gate → Runtime gate), session-scoped diff |
+| `/qg` | Ask gate scope (Review only / both), then run; session-scoped diff |
+| `/qg both` | Full pipeline (both gates), no gate-scope question; session-scoped diff |
 | `/qg branch` | Full pipeline, full-branch diff (vs `main`) |
 | `/qg branch <name>` | Full pipeline against branch `<name>` in isolated worktree |
 | `/qg --paths <glob>...` | Full pipeline, scope to matched paths |
