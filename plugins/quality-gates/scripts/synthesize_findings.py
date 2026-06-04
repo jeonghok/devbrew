@@ -106,6 +106,35 @@ def sort_findings(findings):
     ))
 
 
+def _cell(value):
+    """Escape Markdown-table-breaking characters in a single table cell.
+
+    Cell values (summary, source, file) originate from reviewer-agent (LLM)
+    output and can contain `|` or newlines, which would split or break a
+    pipe-delimited table row. Escape `|` and collapse CR/LF to a space.
+    """
+    return str(value).replace("\r", "").replace("\n", " ").replace("|", "\\|")
+
+
+def _norm_sev(f):
+    """Return a finding's severity normalized to a known bucket.
+
+    Reviewer personas constrain severity to {CRITICAL, IMPORTANT, SUGGESTION},
+    but nothing enforces it at runtime. An unrecognized severity would render
+    a table row yet be omitted from the counts line — and the SKILL boundary
+    keys on that counts line, so a visible finding could be read as clean
+    (kept=0). Normalize to SUGGESTION (warn to stderr) so counts == rows.
+    """
+    sev = f.get("severity", "SUGGESTION")
+    if sev not in SEV_ORDER:
+        print(
+            f"[synthesize_findings] unknown severity {sev!r}; treating as SUGGESTION",
+            file=sys.stderr,
+        )
+        return "SUGGESTION"
+    return sev
+
+
 def render(findings, suppressed_count):
     if not findings:
         return (
@@ -115,10 +144,22 @@ def render(findings, suppressed_count):
         )
 
     counts = {"CRITICAL": 0, "IMPORTANT": 0, "SUGGESTION": 0}
+    rows = []
+    any_caveat = False
     for f in findings:
-        sev = f.get("severity", "SUGGESTION")
-        if sev in counts:
-            counts[sev] += 1
+        sev = _norm_sev(f)
+        counts[sev] += 1
+        conf = int(f.get("confidence", 0))
+        if conf <= 6:
+            conf_cell = f"{conf} *"
+            any_caveat = True
+        else:
+            conf_cell = f"{conf}"
+        path_line = _cell(f"{f.get('file')}:{f.get('line')}")
+        summary = _cell(f.get("summary", ""))
+        source = _cell(", ".join(f.get("sources", [f.get("agent", "?")])))
+        rows.append(f"| {sev} | {path_line} | {conf_cell} | {summary} | {source} |")
+
     counts_line = (
         f"**Findings:** {counts['CRITICAL']} CRITICAL / "
         f"{counts['IMPORTANT']} IMPORTANT / {counts['SUGGESTION']} SUGGESTION"
@@ -129,19 +170,7 @@ def render(findings, suppressed_count):
     out = ["## Review Findings (Synthesized)", "", counts_line, ""]
     out.append("| Sev | Path:Line | Conf | Summary | Source |")
     out.append("|---|---|---|---|---|")
-    any_caveat = False
-    for f in findings:
-        sev = f.get("severity", "SUGGESTION")
-        conf = int(f.get("confidence", 0))
-        if conf <= 6:
-            conf_cell = f"{conf} *"
-            any_caveat = True
-        else:
-            conf_cell = f"{conf}"
-        path_line = f"{f.get('file')}:{f.get('line')}"
-        summary = f.get("summary", "")
-        source = ", ".join(f.get("sources", [f.get("agent", "?")]))
-        out.append(f"| {sev} | {path_line} | {conf_cell} | {summary} | {source} |")
+    out.extend(rows)
     out.append("")
     if any_caveat:
         out.append("`*` = confidence <= 6 (treat with caution).")
@@ -153,9 +182,8 @@ def render(findings, suppressed_count):
     out.append("")
     out.append("**Suggested fixes:**")
     for f in findings:
-        out.append(
-            f"- `{f.get('file')}:{f.get('line')}` — {f.get('proposed_fix', '(none)')}"
-        )
+        fix = str(f.get("proposed_fix", "(none)")).replace("\r", " ").replace("\n", " ")
+        out.append(f"- `{f.get('file')}:{f.get('line')}` — {fix}")
     return "\n".join(out) + "\n"
 
 

@@ -20,6 +20,12 @@ AskUserQuestion `<summary>` 한 줄만 노출됐고 상세는 접힌 tool 출력
 - **신규 테스트**: `test_synthesize_findings.sh` counts/caveat/suppressed-notice/
   fixes/conf-boundary/all-suppressed 케이스, `test_skill_orchestration_behavior.sh`
   surface-순서 `assert_order`(section-heading anchor 금지).
+- **표 셀 무결성 (self-`/qg` review hardening)**: `render()`가 셀 값(summary/source/
+  file)의 `|`를 `\|`로 이스케이프하고 CR/LF를 공백으로 접어 reviewer LLM 텍스트의
+  파이프/개행이 표 구조를 깨지 않게 한다. 미지의 severity는 SUGGESTION으로 정규화
+  (stderr 경고)해 counts==렌더 행을 보장 — SKILL boundary가 보이는 finding을 clean
+  (kept=0)으로 오판하는 경로 차단. (R4 dogfood `/qg`에서 codex 모델-diversity가 적발,
+  code-reviewer 독립 확증.)
 
 ### Changed
 - **confidence rubric (C30 4-tier)**: `suppress()`가 binary(conf<7 억제)에서 3-way로 —

@@ -127,6 +127,18 @@ run_case "ACR4 no-suppression notice absent" \
   '- {agent: r, file: x.py, line: 1, severity: IMPORTANT, confidence: 8, summary: s, proposed_fix: f}' \
   '' 'finding\(s\) suppressed|suppressed \(conf <= 4\)'
 
+# ACR4 review-found: pipe in a cell value is escaped (table integrity, codex/code-reviewer iter-1)
+run_case "ACR4 pipe in summary escaped" \
+  'verdicts: []' \
+  '- {agent: r, file: a.py, line: 1, severity: IMPORTANT, confidence: 8, summary: "foo | bar", proposed_fix: f}' \
+  'foo \\\| bar' ''
+
+# ACR4 review-found: unknown severity is counted (normalized) so counts == rendered rows (codex/code-reviewer iter-1)
+run_case "ACR4 unknown severity normalized+counted" \
+  'verdicts: []' \
+  '- {agent: r, file: u.py, line: 1, severity: HIGH, confidence: 8, summary: s, proposed_fix: f}' \
+  '\*\*Findings:\*\* 0 CRITICAL / 0 IMPORTANT / 1 SUGGESTION' '0 CRITICAL / 0 IMPORTANT / 0 SUGGESTION'
+
 # AC39 empty
 run_case "AC39 empty" \
   'verdicts: []' \
