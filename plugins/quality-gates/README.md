@@ -19,7 +19,7 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 2 (Writer ≠ Reviewer, git-diff 구조적 가드)** (v2.2.0; supersedes v1.8.0 tool-deny) — `runtime-verifier`는 이제 **sandbox-executor**다. Write/Edit가 허용되지만 *일회용 git-worktree 샌드박스 안에서만* 의미를 가지며, orchestrator(SKILL)가 샌드박스 생성 시 code-under-review를 immutable baseline commit `B`로 봉인하고 gate 종료 시 `qg-worktree.sh mutation-guard`(순수 git, verifier 주장과 독립)로 product 변경을 ground-truth로 산출 — 비어있지 않으면 verdict가 구조적으로 ≤FAIL로 강제되고 아무것도 commit되지 않으며 샌드박스는 폐기된다. 즉 self-approval 방지의 *물리적 보장 형태*가 "도구 deny" → "git ground-truth 가드"로 바뀐 것이지 보장이 사라진 것이 아니다. **대비: `test-scope-validator`/`security-reviewer`/`adversarial`은 순수 read-only reviewer로 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 불변.** 운영 DB/네트워크는 git-ignored 파일(prod `.env`) 미복사로 미접근. regression: `tests/test_qg_mutation_guard.sh`(가드 독립성), `tests/test_qg_runtime_sandbox.sh`(ignored 미복사).
 - **Law 1 (Clarity / evidence-required) — 기능 단언** (v2.2.0) — Runtime gate가 spec Acceptance Criteria를 verifier에 thread해, 단순 "떴나?"가 아니라 AC별 flow를 구동하고 expected-vs-observed를 evidence(screenshot + DOM snapshot + network status)와 함께 단언. evidence 없는 "동작함"은 거부. spec 부재 시 plan_feature → smoke fallback(loud log).
 - **운영-안전 게이트 (blast-radius)** (v2.2.0) — `detect-runtime.sh`가 process-start/네트워크/파괴 신호 surface를 `requires_decision: true`로 분류하고, SKILL의 Upfront Execution Plan이 그것들을 1회 사용자 승인 뒤로 둔다(deny-by-default). 운영 DB/네트워크는 샌드박스가 git-ignored prod config를 복사하지 않아 원천 차단(OS-수준 egress 격리는 명시적 non-goal — 한계 인정).
-- **P18 — Upfront 1-회 결정 + 폐기** (v2.2.0) — runtime 범위·block 정책을 `requires_decision` surface가 있을 때만 1회 확정(없으면 zero-click). executor-내부 setup retry ≤3/dispatch, SKILL re-dispatch ≤`runtime_max_resolutions`; 곱이 hard ceiling. kill switch `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`. fallback(샌드박스 비활성)에서도 working-tree `git status` mutation 체크로 Law 2 구조적 보장 유지(verifier가 실제 트리를 바꾸면 ≤FAIL + loud warn).
+- **P18 — Upfront 1-회 결정 + 폐기** (v2.2.0; gate-scope 확장 v2.4.0) — **gate scope**(Review gate only / Run both gates)는 full `/qg`(gate arg 없음)마다 trivia escape 후 1회 발화하고(`/qg both|review|runtime`이면 0클릭), runtime 범위·block 정책은 `requires_decision` surface가 있을 때만 1회 확정(없으면 zero-click). executor-내부 setup retry ≤3/dispatch, SKILL re-dispatch ≤`runtime_max_resolutions`; 곱이 hard ceiling. kill switch `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`. fallback(샌드박스 비활성)에서도 working-tree `git status` mutation 체크로 Law 2 구조적 보장 유지(verifier가 실제 트리를 바꾸면 ≤FAIL + loud warn).
 - **P18 anti-corollary (former AP16, unbounded autonomy) 회피 — Runtime gate** (v1.8.0) — Runtime gate의 NEEDS_RESOLUTION mid-run 루프가 `runtime_max_resolutions` (기본 3, env override `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS=0..10`)로 묶임. `needed_hash` 기반 repeat detection이 iteration cap 도달 전에 non-converging loop을 잡음.
 - **P21 (Secret이 prompt context에 들어가지 않음)** (v1.8.0) — Runtime gate의 AskUserQuestion은 결정과 포인터(yes/no/path)만 묻고 secret 값은 절대 받지 않음. 누락된 secret은 사용자가 disk의 `.env`에 직접 추가 후 retry 선택으로 해결. regression test: `tests/test_no_secret_prompts.py`.
 - **Law 2 (Writer ≠ Reviewer, 3-way 분리)** (v1.9.0) — Runtime gate가 3-way agent 분리를 강제. writer (originating turn) ≠ `test-scope-validator` (Step 2.5 pre-execution 리뷰어) ≠ `runtime-verifier` (Step 3 executor). `test-scope-validator`는 `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]`로 물리 분리(불변). `runtime-verifier`는 v2.2.0부터 sandbox-executor로, Write를 갖되 git-diff mutation 가드(구조적)로 Law 2 self-approval을 차단 — 분리의 형태만 다르고 writer≠approver 불변식은 유지.
@@ -167,6 +167,11 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 │   trivia escape? ─── yes ──▶ "Trivia diff — all gates skipped"        │
 │       │ no                                                            │
 │       ▼                                                               │
+│   gate scope?  AskUserQuestion ("...both gates?")                     │
+│   (skipped if review | runtime | both | --skip-runtime arg)           │
+│       ├── "Review gate only" ──▶ Review gate, then Final summary      │
+│       │ "Run both gates"                                              │
+│       ▼                                                               │
 │   Review gate iter loop (≤5)                                          │
 │       │                                                               │
 │       ├── findings empty ──────────────────────────┐                  │
@@ -213,11 +218,12 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 ## 사용
 
 ```
-/qg                            # 풀 파이프라인; 세션 단위 diff
-/qg branch                     # 풀 파이프라인; main 대비 풀 브랜치 diff
-/qg --paths <glob>...          # 풀 파이프라인; 명시 path scope
+/qg                            # gate scope 질문 후 실행; 세션 단위 diff
+/qg branch                     # gate scope 질문 후 실행; main 대비 풀 브랜치 diff
+/qg --paths <glob>...          # gate scope 질문 후 실행; 명시 path scope
 /qg --reset                    # 현재 세션 폴더 + legacy v1.5.0 파일 정리 후 종료
 /qg --gc                       # stale sibling 세션 (TTL) sweep 후 종료
+/qg both                       # 두 게이트 모두 실행 (gate scope 질문 없음)
 /qg review                     # Review gate만
 /qg runtime                    # Runtime gate만
 /qg --skip-runtime             # Review gate만 (런타임 skip)

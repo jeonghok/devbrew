@@ -3,11 +3,13 @@ name: quality-pipeline
 description: >
   This skill runs the full quality-gates pipeline in a single assistant
   turn. Triggered by `/qg`, "run quality gates", "verify my implementation",
-  "check code quality", or "is my PR ready to merge". Dispatches the
-  two gates (review, runtime verification)
+  "check code quality", or "is my PR ready to merge". Dispatches up to
+  two gates (review, then optionally runtime verification)
   serially in a single turn. Progression decisions and fix-loop
   iteration boundaries surface to the user via AskUserQuestion tool calls.
-  Happy path (all gates pass) requires zero user clicks.
+  With a gate argument (`/qg both|review|runtime`) the happy path requires zero
+  user clicks; bare `/qg` asks one upfront gate-scope question (Review only /
+  both), then runs click-free on the happy path.
 cost_class: variable
 allowed-tools:
   # Group 1 — Preflight scripts (실행 순서: setup → pre-check → trivia)
@@ -34,10 +36,10 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v2.3.0)
+# Quality Gates — In-Turn Orchestrator (v2.4.0)
 
 You are running the **full quality-gates pipeline** in a single assistant
-turn. You dispatch the two gates serially in order. At decision points
+turn. You dispatch up to two gates serially in order (Runtime gate only when selected). At decision points
 (review-iter boundary, runtime needs-resolve) you call
 `AskUserQuestion` and branch on the user's response — the response arrives
 as a tool result in the same turn, so no Stop hook and no continuation
@@ -129,7 +131,11 @@ values are a contract violation, not "treat as fresh":
 ## Arguments
 
 Parse from `/qg` invocation:
-- `gate` (optional): `review`, `runtime`, or absent (full pipeline).
+- `gate` (optional): `review`, `runtime`, `both`, or absent.
+  - `review` → Review gate only. `runtime` → Runtime gate only (single-gate).
+  - `both` → run **both** gates with no gate-scope question (the zero-click "both" escape; symmetric with `review`/`runtime`). `both` answers **gate scope only**, not runtime scope — so Decision 2 still fires for `/qg both` when a `requires_decision` surface exists (same as bare `/qg`).
+  - absent → fire the Decision 1 gate-scope question (Review gate only / Run both gates).
+  - **Precedence:** an explicit `gate=` value always wins over `--skip-runtime`; on conflict `gate=` wins and a one-line advisory is printed (see Decision 1). No silent conflict.
 - `plan_path` (optional): defaults to "auto" (`scripts/discover-plan.sh`).
   Threaded as a secondary scope hint to the Runtime gate's test-scope-validator
   and the Review gate's security-reviewer / adversarial dispatches. The Gate-1
@@ -144,20 +150,59 @@ Parse from `/qg` invocation:
   omitted, plan-based scope only). All spec behavior is advisory; it never
   blocks a gate.
 - `pr_url` (optional).
-- `skip_runtime` (flag): if set, skip the Runtime gate.
+- `skip_runtime` (flag): if set, skip the Runtime gate — **subject to gate-scope precedence** (normalized below).
 - `paths` (optional, repeatable): scope override for the Review gate diff.
 
+**Effective skip-runtime (precedence normalization).** After parsing, compute `effective_skip_runtime`: it is `true` only when `skip_runtime` is set AND no explicit `gate ∈ {runtime, both}` was given. If `--skip-runtime` is combined with an explicit `gate=runtime` / `gate=both`, `gate=` wins → `effective_skip_runtime = false` and you print `> [quality-gates] --skip-runtime ignored: explicit gate=<value> wins (precedence).` (`gate=review` + `--skip-runtime` agree — no conflict; `effective_skip_runtime = true`.) **Every runtime-skip test below uses `effective_skip_runtime`, never the raw `skip_runtime` flag** — this is what wires the Decision-1 precedence rule into actual execution.
+
 Single-gate mode (`review`/`runtime`) runs ONLY the named gate and
-emits its verdict directly — no decision-tool call, no inter-gate
-transition.
+emits its verdict directly — no inter-gate progression. `/qg runtime`
+bypasses the Dispatch Loop (and Decision 2), so it produces its
+runtime-scope inputs at the Runtime gate's [Step R-init](#runtime-gate)
+instead — `detect-runtime.sh` → `manifest` / `approved_surfaces` /
+`block_policy` (and the runtime-scope question if a `requires_decision`
+surface exists) — preserving main's single-gate behavior (spec §3
+Non-goal: single-gate 동작 무변경).
 
 ## Upfront Execution Plan
 
-Decide runtime scope ONCE, before any gate runs, but only when there is something risky to decide. After [Preflight](#preflight) and [Arguments](#arguments), and before the [Dispatch Loop](#dispatch-loop):
+Two upfront decisions are owned here, in order, before any gate runs — after [Preflight](#preflight) and [Arguments](#arguments), as [Dispatch Loop](#dispatch-loop) step 2 (after the trivia escape, before any gate dispatch). **Decision 1 (gate scope)** fires first and always (unless an argument pre-answers it); **Decision 2 (runtime scope)** is conditional and only reachable when gate scope = both.
 
-1. Run `${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh` to get the manifest with `requires_decision` flags.
-2. **Gate firing condition (mechanical):** fire an `AskUserQuestion` **only if** the manifest has ≥1 surface with `requires_decision: true` AND no argument already pre-answers it (`gate=`, `skip_runtime`, or an explicit surface selection). Otherwise (pure-local test runners only / review-only / arg-answered) print a one-line plan and proceed **zero-click**.
-3. When firing, confirm in ONE question: **gate scope** (review / runtime / both), **runtime scope** (which `requires_decision` surfaces to opt into — test runners are automatic), and **block policy** (`stop` / `skip` / `ask`). Record the opted-in surfaces as `approved_surfaces` and the chosen `block_policy`.
+### Decision 1 — Gate scope (always, unless an argument pre-answers it)
+
+Fire this **first**, before any gate dispatch — it runs as part of [Dispatch Loop](#dispatch-loop) step 2, ahead of the Review gate.
+
+- **Skip condition (an argument is the answer):** if `gate ∈ {review, runtime, both}` or `skip_runtime` is set, that argument IS the answer — do NOT fire the question. `--skip-runtime` is an alias for "Review gate only" (= `gate=review`).
+- **Precedence (no silent conflict):** an explicit `gate=` value always wins over `--skip-runtime`. If `--skip-runtime` is combined with a conflicting `gate=runtime`/`gate=both`, `gate=` wins, `--skip-runtime` is ignored, and you print a one-line advisory: `> [quality-gates] --skip-runtime ignored: explicit gate=<value> wins (precedence).` The [Arguments](#arguments) mapping is normative on conflict.
+- **Otherwise fire a binary AskUserQuestion.** The literal phrase `both gates` MUST appear in the `question:` field — it is this decision's protocol-shape anchor and is unique across all decision-tool calls in this SKILL:
+
+```
+AskUserQuestion({
+  questions: [
+    {
+      question: "Run both gates (Review gate → Runtime gate), or only the Review gate?",
+      header: "Gate scope",
+      options: [
+        {label: "Run both gates",   description: "Review gate then Runtime gate. Runtime scope is decided next only if a requires_decision surface exists."},
+        {label: "Review gate only", description: "Run the Review gate and stop; skip the Runtime gate entirely."}
+      ],
+      multiSelect: false
+    }
+  ]
+})
+```
+
+- **Branch on answer:**
+  - `Review gate only` (also `gate=review` / `--skip-runtime`) → run the Review gate, then **short-circuit** the Runtime stage: skip Decision 2 and the entire Runtime gate, and emit the final summary.
+  - `Run both gates` (also `gate=both`) → proceed to Decision 2.
+
+### Decision 2 — Runtime scope + block policy (conditional)
+
+Reached when gate scope = both via the full-pipeline Dispatch Loop (interactive `Run both gates`, or the `gate=both` argument). **Single-gate `/qg runtime` bypasses the Dispatch Loop and runs the equivalent runtime-scope init at the Runtime gate's [Step R-init](#runtime-gate) instead** — so every path that reaches the Runtime gate produces `manifest` / `approved_surfaces` / `block_policy` for R3. Decide runtime scope ONCE, but only when there is something risky to decide.
+
+1. Run `${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh` to get the manifest with `requires_decision` flags. This runs whenever gate scope = both — the manifest is also threaded to the Runtime gate's R3 dispatch.
+2. **Gate firing condition (mechanical):** fire an `AskUserQuestion` **only if** the manifest has ≥1 surface with `requires_decision: true` AND no argument already pre-answers the *surface selection*. `gate=both` answers **gate scope only** — it does NOT pre-answer runtime scope, so Decision 2 still fires for `/qg both` when a `requires_decision` surface exists (matching bare `/qg` runtime behavior). Otherwise (pure-local test runners only / no risky surface / surface-arg-answered) print a one-line plan and proceed **zero-click**.
+3. When firing, confirm in ONE question: **runtime scope** (which `requires_decision` surfaces to opt into — test runners are automatic) and **block policy** (`stop` / `skip` / `ask`). Record the opted-in surfaces as `approved_surfaces` and the chosen `block_policy`.
 
 ```
 AskUserQuestion({
@@ -186,9 +231,9 @@ AskUserQuestion({
 Full pipeline mode:
 
 1. Run [Trivia escape](#trivia-escape). If trivia detected, print "Trivia diff — all gates skipped" and return.
-2. Run [Upfront Execution Plan](#upfront-execution-plan) to fix gate scope, runtime scope (`approved_surfaces`), and `block_policy`. Zero-click unless a `requires_decision` surface exists and is not arg-answered.
+2. Run [Upfront Execution Plan](#upfront-execution-plan). **Decision 1 (gate scope)** fires first (always, unless an arg pre-answers it): if the user chooses **Review gate only** (or `gate=review` / `--skip-runtime`), run the Review gate then **short-circuit** — skip Decision 2 and the Runtime gate, and go straight to the final summary (step 6). If **Run both gates** (or `gate=both`), continue. **Decision 2 (runtime scope + `block_policy`)** then fires only when a `requires_decision` surface exists and its surface selection is not arg-answered (zero-click otherwise); it records `approved_surfaces` and `block_policy`.
 3. Run [Review gate](#review-gate) (unless gate scope excludes it). Iterate up to 5 times; at each iteration end: findings empty → continue; non-empty → [Review iter boundary decision](#review-iter-boundary-decision).
-4. If `skip_runtime` or gate scope excludes runtime, skip the Runtime gate and emit final summary.
+4. If `effective_skip_runtime` or gate scope excludes runtime, skip the Runtime gate and emit final summary.
 5. Otherwise run [Runtime gate](#runtime-gate) (R0–R6).
 6. Emit final summary.
 
@@ -265,10 +310,13 @@ Agent({
      with N > 0 — read N from that line) → no high-confidence finding to act
      on → treat as **clean**: do NOT call AskUserQuestion. Surface only that
      single `No high-confidence findings…` line for transparency, then **exit
-     the loop (continue to the Runtime gate)** — do not iterate again.
+     the loop → [Dispatch Loop](#dispatch-loop) step 4** (which skips the Runtime
+     gate when gate scope = Review gate only / `effective_skip_runtime`, else runs
+     it) — do not iterate again.
    - **kept = 0 AND suppressed = 0** (the same empty-state line with N = 0) →
-     print `## Review gate iter N: clean` and exit the loop (continue to the
-     Runtime gate).
+     print `## Review gate iter N: clean` and exit the loop → [Dispatch
+     Loop](#dispatch-loop) step 4 (which short-circuits the Runtime gate for the
+     review-only path, else runs it).
 
 5. **Decision tool (kept > 0 only).** Invoke [Review iter boundary
    decision](#review-iter-boundary-decision). Fill its `<summary>` slot by
@@ -323,6 +371,8 @@ AskUserQuestion({
 })
 ```
 
+**Gate-scope conditional (review-only):** when gate scope = `Review gate only` (the Decision 1 choice, or `gate=review` / `--skip-runtime`) there is no Runtime gate to proceed to — replace the `Proceed to Runtime gate` option above with `{label: "Proceed (accept findings, finalize)", description: "Accept current findings as-is and go straight to the final summary; the Runtime gate is short-circuited."}` and branch it to the final summary (NOT the Runtime gate). `Retry` and `Stop` are unchanged.
+
 Branch on answer:
 - **Retry** → apply user-consented fixes by calling Edit/Write directly
   with the synthesizer's suggested patches; increment iteration counter;
@@ -333,6 +383,7 @@ Branch on answer:
   surface that fires on Edit failures.
 - **Proceed to Runtime gate** → exit the loop, continue to the Runtime gate with current
   findings recorded in History.
+- **Proceed (accept findings, finalize)** (review-only variant) → exit the loop, skip the Runtime gate, and emit the final summary with findings recorded.
 - **Stop** → emit final summary marked aborted at the Review gate.
 
 ### Retry: file-write safety
@@ -418,12 +469,16 @@ AskUserQuestion({
 })
 ```
 
+**Gate-scope conditional (review-only):** when gate scope = `Review gate only`, replace the `Proceed to Runtime gate` option with `{label: "Proceed (accept findings, finalize)", description: "Accept residual findings and go straight to the final summary; the Runtime gate is short-circuited."}` branching to the final summary, not the Runtime gate.
+
 Branch on answer accordingly. (P18 unbounded-autonomy is satisfied by
 this user-consent termination.)
 
 ## Runtime gate
 
-If `skip_runtime` was set, skip this entire section.
+If `effective_skip_runtime` was set, skip this entire section.
+
+**Step R-init — Runtime-scope inputs (every path that reaches this gate).** The R3 dispatch requires `manifest`, `approved_surfaces`, and `block_policy`. The full-pipeline `Run both gates` / `gate=both` path produced them in [Decision 2](#decision-2--runtime-scope--block-policy-conditional). **Single-gate `/qg runtime` bypassed the Dispatch Loop, so if `approved_surfaces` / `block_policy` are still unset on entry here, produce them now**: run `${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh` to get the `manifest`, then apply Decision 2's firing logic on the result — fire the runtime-scope `AskUserQuestion` only if ≥1 `requires_decision` surface exists and no surface-selection arg pre-answers it; otherwise zero-click with the automatic test runners as `approved_surfaces` and a default `block_policy=skip`. (`gate=runtime` pre-answers gate scope, NOT surface selection — same as main; spec §3 Non-goal preserves single-gate behavior.) After this step `manifest` / `approved_surfaces` / `block_policy` are guaranteed defined for R3. If Decision 2 already ran (gate scope = both), this step is a no-op.
 
 **Step R0 — Create the sandbox (or fall back).** Seal the code-under-review into a disposable git-worktree:
 
@@ -564,7 +619,7 @@ Branch:
 Print:
 
 ```markdown
-## Quality Gates Pipeline — Complete (v2.3.0)
+## Quality Gates Pipeline — Complete (v2.4.0)
 
 - **Review gate**: <clean iter N | proceeded-with-findings iter N | aborted iter N | skipped>
 - **Runtime gate**: <clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>

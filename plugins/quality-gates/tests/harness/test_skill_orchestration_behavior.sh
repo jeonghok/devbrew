@@ -147,8 +147,8 @@ assert_line "runtime sandbox kill switch present" "$(first_line 'DEVBREW_QG_DISA
 # spec_acceptance_criteria threaded to the verifier.
 assert_line "spec_acceptance_criteria threaded" "$(first_line 'spec_acceptance_criteria')"
 
-# Version bumped to 2.3.0 (title + final summary).
-assert_line "v2.3.0 in SKILL" "$(first_line 'v2.3.0|2\.3\.0')"
+# Version bumped to 2.4.0 (title + final summary).
+assert_line "v2.4.0 in SKILL" "$(first_line 'v2.4.0|2\.4\.0')"
 
 # --- v2.2.0 mutation-guard hardening protocol-shape ---
 
@@ -249,6 +249,97 @@ question_line=$(first_line 'question:.*findings remain')
 assert_line "Surface-findings step present" "$surface_line"
 assert_line "iter-boundary decision question present" "$question_line"
 assert_order "Surface findings precedes iter-boundary decision" "$surface_line" "$question_line"
+
+# --- v2.4.0: Upfront gate-scope decision (Decision 1) ---
+
+# Decision 1 gate-scope question exists: literal `both gates` anchor in a
+# question: field, with header `Gate scope`.
+gatescope_q=$(first_line 'question:.*both gates')
+assert_line "gate-scope question present (anchor 'both gates')" "$gatescope_q"
+assert_line "Gate scope header present" "$(first_line 'header:.*Gate scope')"
+
+# Ordering: gate-scope question BEFORE the Review gate dispatch.
+assert_order "gate-scope question precedes Review gate dispatch" "$gatescope_q" "$review_line"
+
+# Ordering: gate-scope (Decision 1) question BEFORE the runtime-scope (Decision 2) question.
+runtimescope_q=$(first_line 'question:.*Runtime scope')
+assert_order "gate-scope question precedes runtime-scope question" "$gatescope_q" "$runtimescope_q"
+
+# Uniqueness: `both gates` appears in exactly one question: line (anchor convention).
+bg_count=$(grep -cE 'question:.*both gates' "$SKILL_MD" || true)
+if [[ "$bg_count" -eq 1 ]]; then
+  echo "PASS: 'both gates' anchor unique (1 question: line)"
+else
+  echo "FAIL: 'both gates' anchor not unique ($bg_count question: lines)"
+  fail=$((fail + 1))
+fi
+
+# `gate` domain documents `both`.
+assert_line "gate domain documents both" "$(first_line 'gate.*review.*runtime.*both')"
+
+# Precedence advisory: explicit gate= wins over --skip-runtime (no silent conflict).
+assert_line "gate= precedence advisory documented" "$(first_line 'gate=.*wins')"
+
+# Dispatch Loop <-> Upfront Execution Plan consistency (round-2 advisory b82e4d19):
+# Dispatch Loop step 2 must reference Decision 1 and the short-circuit so the two
+# sections cannot drift.
+dl_line=$(first_line '## Dispatch Loop')
+assert_line "Dispatch Loop section present" "$dl_line"
+assert_line "Dispatch Loop references Decision 1" "$(first_line_after 'Decision 1' "$dl_line")"
+assert_line "Dispatch Loop references short-circuit" "$(first_line_after 'short-circuit' "$dl_line")"
+
+# --- v2.4.0 review-fix F1: single-gate /qg runtime produces the manifest ---
+# /qg runtime bypasses the Dispatch Loop (and thus Decision 2), so the Runtime
+# gate itself must produce manifest/approved_surfaces/block_policy for R3.
+# Guard: a Step R-init must run detect-runtime.sh on the single-gate runtime
+# path, BEFORE the runtime-verifier (R3) dispatch.
+rg_header=$(first_line '^## Runtime gate')
+rinit_line=$(first_line 'Step R-init')
+assert_line "Runtime gate Step R-init present" "$rinit_line"
+assert_order "R-init precedes runtime-verifier dispatch" "$rinit_line" "$runtime_line"
+assert_line "R-init runs detect-runtime in the Runtime gate" "$(first_line_after 'detect-runtime' "$rg_header")"
+if awk -v a="$rg_header" -v b="$runtime_line" 'NR>a && NR<b && /single-gate/ {f=1} END{exit !f}' "$SKILL_MD"; then
+  echo "PASS: Runtime gate documents the single-gate runtime manifest path"
+else
+  echo "FAIL: Runtime gate does not document single-gate runtime manifest init"
+  fail=$((fail + 1))
+fi
+
+# --- v2.4.0 review-fix F2: review-only suppresses "Proceed to Runtime gate" ---
+# When gate scope = Review gate only, the iter-boundary AND max-iter decisions
+# must NOT offer "Proceed to Runtime gate"; both carry a gate-scope-conditional
+# note replacing it with a finalize option.
+gsc_count=$(grep -cE 'Gate-scope conditional' "$SKILL_MD" || true)
+if [[ "$gsc_count" -ge 2 ]]; then
+  echo "PASS: gate-scope-conditional note in iter-boundary + max-iter ($gsc_count)"
+else
+  echo "FAIL: gate-scope-conditional note missing (found $gsc_count, need >=2)"
+  fail=$((fail + 1))
+fi
+# Anchor on a paren-free substring: macOS awk -v mangles `\(` escapes, so a
+# literal-paren regex would fail to match the (present) finalize option text.
+assert_line "review-only finalize option present" "$(first_line 'accept findings, finalize')"
+
+# --- v2.4.0 review-fix C4: gate= precedence wired into the skip logic ---
+# effective_skip_runtime must be DEFINED (Arguments normalization) AND USED by
+# the runtime-skip tests (Dispatch Loop step 4 + Runtime gate "skip this
+# section") — otherwise the Decision-1 `gate=` > `--skip-runtime` precedence is
+# documented but never governs execution (e.g. `/qg runtime --skip-runtime`
+# would silently skip runtime). >=3 references = defined + both skip sites.
+esr_count=$(grep -cE 'effective_skip_runtime' "$SKILL_MD" || true)
+if [[ "$esr_count" -ge 3 ]]; then
+  echo "PASS: effective_skip_runtime wired into the skip logic ($esr_count refs)"
+else
+  echo "FAIL: effective_skip_runtime under-wired (found $esr_count, need >=3: Arguments + Dispatch step 4 + Runtime gate)"
+  fail=$((fail + 1))
+fi
+
+# --- v2.4.0 review-fix F7: Review gate clean-exit also honors review-only ---
+# The kept=0 clean branches must route via Dispatch Loop step 4 (gate-scope
+# check), NOT unconditionally "continue to the Runtime gate" — else a clean
+# Review gate under "Review gate only" would run Runtime anyway.
+# Anchor on a single-line substring (the full phrase wraps across lines).
+assert_line "Review gate clean-exit routes via gate-scope check" "$(first_line 'when gate scope = Review gate only')"
 
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"
