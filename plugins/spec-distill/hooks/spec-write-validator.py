@@ -32,6 +32,8 @@ from typing import Optional
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
+SCRIPTS_DIR = SCRIPT_DIR.parent / "scripts"
+sys.path.insert(0, str(SCRIPTS_DIR))
 from state_path import state_root as _state_root  # noqa: E402
 PARSE_LIB = SCRIPT_DIR.parent / "scripts" / "parse_spec_structure.py"
 BLACKLIST = SCRIPT_DIR.parent / "scripts" / "ambiguity-blacklist.txt"
@@ -180,9 +182,8 @@ def write_state(session_id: str, path: str, mode: str, worktree_path: str) -> No
         return
     # Matching session_id (or no frontmatter — backward compat per AC8 case iii)
     # — strip pending_review block and append fresh
-    body = re.sub(
-        r"^pending_review:\n(?:  [^\n]*\n)*", "", body, flags=re.MULTILINE
-    )
+    import suppress_state  # pyright: ignore[reportMissingImports]
+    body = suppress_state.strip_pending(body)
     state_file.write_text(body.rstrip() + "\n\n" + block, encoding="utf-8")
 
 
@@ -193,6 +194,30 @@ def emit_block(reasons: list[str]) -> None:
     )
     for r in reasons:
         print(f"[spec-distill] {r}", file=sys.stderr)
+
+
+def emit_suppress_advisory(mode: str, key: str) -> None:
+    """v0.14.0 — suppressed 문서 arm skip advisory. 기존 'Reviewer will be
+    dispatched' 출력을 *교체*(이중 방출 금지, AC18)."""
+    print(
+        json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": (
+                    f"[spec-distill] {key} review suppressed this session "
+                    "(cancel-review/approved) — arm skipped. "
+                    f"Re-enable: /spec-distill:cancel-review --reset {key}"
+                ),
+            },
+            "systemMessage": f"[spec-distill] {mode} arm suppressed for {key}",
+        }),
+        flush=True,
+    )
+    print(
+        f"[spec-distill] {key} review suppressed this session — arm skipped. "
+        f"Re-enable: /spec-distill:cancel-review --reset {key}",
+        file=sys.stderr,
+    )
 
 
 def main() -> int:
@@ -246,6 +271,22 @@ def main() -> int:
         from state_path import resolve_session_id
         session_id = resolve_session_id(payload)
         if session_id is not None:
+            # v0.14.0 suppression 게이트 — per-doc, session-scoped (Layer 2).
+            # Layer 1 구조 검증은 위에서 이미 실행됨(NG1·AC10): suppressed 문서도
+            # 구조 실패면 exit 2로 차단. 여기 도달 = Layer 1 통과.
+            try:
+                import suppress_state  # pyright: ignore[reportMissingImports]
+                sfile = suppress_state.state_file_for(session_id)
+                if suppress_state.is_suppressed(sfile, file_path):
+                    key = suppress_state.canonical_key(file_path) or file_path
+                    emit_suppress_advisory(mode, key)
+                    return 0  # arm skip — 기존 advisory 미방출(AC18)
+            except Exception as exc:  # noqa: BLE001 — graceful degradation
+                print(
+                    f"[spec-distill] suppress check failed "
+                    f"(non-fatal, arming normally): {exc}",
+                    file=sys.stderr,
+                )
             try:
                 write_state(session_id, file_path, mode, os.getcwd())
             except (PermissionError, OSError) as exc:
