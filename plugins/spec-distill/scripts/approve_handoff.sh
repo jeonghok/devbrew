@@ -5,13 +5,13 @@
 # an AskUserQuestion; the skill can). This script only:
 #   (1) validates spec_path exists in the working tree (LD4 — fixes dangling-path bug),
 #   (2) emits a NON-BLOCKING advisory if the spec is uncommitted/dirty (LD6/AC5),
-#   (3) cleans up the per-session state directory (AC6).
-# Idempotent by statelessness: re-running on a clean tree / already-removed
-# session dir is a no-op.
+#   (3) records the approved spec into suppressed_paths + strips its pending
+#       (v0.14.0 — replaces dir rm; dir cleanup deferred to SessionEnd/TTL-GC).
+# Idempotent by set-membership (AC4/AC12): re-running adds the key at most once.
 #
 # Usage: approve_handoff.sh <session_id> <spec_path>
 # Exit codes:
-#   0 — spec exists (committed or dirty-with-advisory); session dir cleaned
+#   0 — spec exists (committed or dirty-with-advisory); approved spec suppressed (dir preserved)
 #   1 — spec_path missing from working tree, or arg/charset error (no cleanup)
 set -uo pipefail
 
@@ -77,8 +77,18 @@ if ! git diff --quiet -- "$spec_path" 2>/dev/null \
     } >&2
 fi
 
-# ─── Session directory cleanup (AC6) ───
-rm -rf -- "$main_repo/.claude/spec-distill/$session_id/" 2>/dev/null || \
-    echo "[spec-distill] cleanup rm failed (non-fatal) — SessionEnd hook will retry" >&2
+# ─── Suppress approved doc + strip its pending (v0.14.0, AC12) — replaces rm -rf ───
+# approved 문서를 suppressed_paths에 기록 → 같은 문서 재편집 시 재arm 차단(증상 A).
+# 정규화 + same-key pending strip + add는 suppress_state.py가 단일 소스로 수행(C4).
+# 세션 dir는 더 이상 여기서 삭제하지 않는다 — "승인됨" 기억을 세션 동안 보존해야
+# 재발을 막는다. dir cleanup은 SessionEnd hook / TTL-GC가 담당(AC15).
+suppress_cli="$(dirname "$0")/suppress_state.py"
+if [[ -f "$suppress_cli" ]]; then
+    if ! python3 "$suppress_cli" add "$session_id" "$spec_path"; then
+        echo "[spec-distill] approve_handoff: suppress 기록 실패 (non-fatal) — 같은 문서 재편집 시 재arm 가능. /spec-distill:cancel-review로 수동 억제 가능." >&2
+    fi
+else
+    echo "[spec-distill] approve_handoff: suppress_state.py 없음 (non-fatal) — 세션 dir는 SessionEnd/GC가 정리." >&2
+fi
 
-echo "spec-distill v0.11.0 handoff finalized (session: $session_id). 다음 단계는 reviewing-spec proceed 게이트 선택대로 진행."
+echo "spec-distill v0.14.0 handoff finalized (session: $session_id). approved spec suppressed for this session. 다음 단계는 reviewing-spec proceed 게이트 선택대로 진행."

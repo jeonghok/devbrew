@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# V9 — handoff end-to-end (v0.11.0): approve → spec_path validated → session
-# cleaned, with NO marker, NO induction hook, NO detect hook. Confirms the
-# proceed-gate contract leaves no marker artifact behind.
+# V9 — handoff end-to-end (v0.14.0): approve → spec_path validated → suppressed_paths
+# recorded + dir preserved, with NO marker, NO induction hook, NO detect hook.
+# Confirms the proceed-gate contract leaves no marker artifact behind.
 set -uo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,12 +25,15 @@ echo "# spec" > "$SPEC_REL"
 mkdir -p "$WORK/.claude/spec-distill/$SID"; echo state > "$WORK/.claude/spec-distill/$SID/state.local.md"
 git add . && git commit -q -m "init spec"
 
-# ── Step 1: approve_handoff → exit 0, NO marker dir created, session dir gone ──
+# ── Step 1: approve_handoff → exit 0, NO marker dir, suppressed_paths recorded, dir preserved ──
 bash "$APPROVE" "$SID" "$WORK/$SPEC_REL" >/tmp/chain_out_$$ 2>&1; rc=$?
 md="$WORK/.claude/spec-distill/.markers"
 sess="$WORK/.claude/spec-distill/$SID"
-if [[ $rc -eq 0 && ! -d "$md" && ! -d "$sess" ]]; then
-    note PASS "chain: approve → exit 0, no marker dir, session cleaned"
+key="docs/superpowers/specs/2026-01-01-test-spec.md"
+if [[ $rc -eq 0 && ! -d "$md" && -d "$sess" ]] \
+   && grep -q "^suppressed_paths:" "$sess/state.local.md" \
+   && grep -q "  - $key" "$sess/state.local.md"; then
+    note PASS "chain: approve → exit 0, no marker dir, suppressed recorded, dir preserved"
 else
     note FAIL "chain: rc=$rc, no_marker=$([[ ! -d $md ]] && echo y || echo n), sess_gone=$([[ ! -d $sess ]] && echo y || echo n) (out: $(cat /tmp/chain_out_$$))"
 fi
