@@ -3,6 +3,31 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.4.0] — 2026-06-04
+
+full `/qg`(gate arg 없음)가 trivia escape 후 어떤 게이트도 돌기 전에 **gate-scope 질문**
+(Review gate only / Run both gates)을 1회 발화한다. devbrew Law 1(Clarity Before Code)
+instantiation — 실행 범위를 의식적 결정으로 승격. 무클릭 둘 다는 새 `/qg both` arg로.
+
+### Added
+- **Upfront gate-scope 결정 (SKILL `## Upfront Execution Plan` Decision 1)**: trivia escape 후
+  Review gate dispatch 전, binary AskUserQuestion(앵커 `both gates`, header `Gate scope`).
+  "Review gate only" → Runtime 단계 short-circuit; "Run both gates" → Decision 2(runtime scope)로.
+- **`/qg both` arg**: `gate` 도메인에 `both` 추가 — gate-scope 질문 없이 두 게이트 실행
+  (`review`/`runtime`과 대칭). gate scope만 pre-answer하므로 `requires_decision` surface가 있으면
+  Decision 2는 그대로 발화(오늘날 무인자 `/qg`와 동일).
+- **신규 protocol-shape assertion** (`test_skill_orchestration_behavior.sh`): gate-scope 질문 존재
+  (`question:.*both gates` + header `Gate scope`) · 순서(Review gate dispatch 앞 + runtime-scope 질문 앞) ·
+  앵커 고유성 · `gate both` 문서화 · `gate=` precedence advisory · Dispatch Loop↔Upfront 정합.
+
+### Changed
+- **기본 동작**: full `/qg`(gate arg 없음)가 더 이상 무클릭으로 둘 다 돌지 않고 gate scope를
+  1회 묻는다. 무클릭 둘 다는 `/qg both`. "zero-click happy path"는 *재정의* — gate-scope는 1회
+  upfront 클릭(또는 `/qg both|review|runtime`이면 0), 이후 happy path는 무클릭.
+- **버전 2.3.0 → 2.4.0** (minor, 새 surface): `plugin.json`, SKILL 제목 + Final Summary,
+  `test_skill_orchestration_behavior.sh` 버전 assertion(`v2.3.0`→`v2.4.0`) 동기화.
+- **SKILL frontmatter description / `commands/qg.md` / README P18**: gate-scope always-asks 정합.
+
 ## [2.3.0] — 2026-06-04
 
 Review gate가 각 iteration 종료 시 `synthesize_findings.py`의 finding 상세(표 +
