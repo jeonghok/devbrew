@@ -3,8 +3,8 @@ name: quality-pipeline
 description: >
   This skill runs the full quality-gates pipeline in a single assistant
   turn. Triggered by `/qg`, "run quality gates", "verify my implementation",
-  "check code quality", or "is my PR ready to merge". Dispatches the
-  two gates (review, runtime verification)
+  "check code quality", or "is my PR ready to merge". Dispatches up to
+  two gates (review, then optionally runtime verification)
   serially in a single turn. Progression decisions and fix-loop
   iteration boundaries surface to the user via AskUserQuestion tool calls.
   With a gate argument (`/qg both|review|runtime`) the happy path requires zero
@@ -159,7 +159,7 @@ transition.
 
 ## Upfront Execution Plan
 
-Two upfront decisions are owned here, in order, before any gate runs — after [Preflight](#preflight) and [Arguments](#arguments), and before the [Dispatch Loop](#dispatch-loop). **Decision 1 (gate scope)** fires first and always (unless an argument pre-answers it); **Decision 2 (runtime scope)** is conditional and only reachable when gate scope = both.
+Two upfront decisions are owned here, in order, before any gate runs — after [Preflight](#preflight) and [Arguments](#arguments), as [Dispatch Loop](#dispatch-loop) step 2 (after the trivia escape, before any gate dispatch). **Decision 1 (gate scope)** fires first and always (unless an argument pre-answers it); **Decision 2 (runtime scope)** is conditional and only reachable when gate scope = both.
 
 ### Decision 1 — Gate scope (always, unless an argument pre-answers it)
 

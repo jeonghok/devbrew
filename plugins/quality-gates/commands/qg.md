@@ -47,8 +47,9 @@ Execute the setup script to initialize the pipeline:
 ```
 
 Now invoke `Skill("quality-gates:quality-pipeline")` with the parsed
-arguments. The skill runs the complete pipeline in this turn — the
-Review gate (with internal fix-loop) → the Runtime gate — and surfaces decision points
+arguments. The skill runs the pipeline in this turn — after the
+gate-scope question it runs the Review gate (with internal fix-loop) and,
+when both gates are selected, the Runtime gate — surfacing decision points
 via AskUserQuestion. No further commands are needed unless the pipeline
 is aborted at a decision point.
 
@@ -58,9 +59,9 @@ is aborted at a decision point.
 |---------|--------|
 | `/qg` | Ask gate scope (Review only / both), then run; session-scoped diff |
 | `/qg both` | Full pipeline (both gates), no gate-scope question; session-scoped diff |
-| `/qg branch` | Full pipeline, full-branch diff (vs `main`) |
-| `/qg branch <name>` | Full pipeline against branch `<name>` in isolated worktree |
-| `/qg --paths <glob>...` | Full pipeline, scope to matched paths |
+| `/qg branch` | Ask gate scope, then run; full-branch diff (vs `main`) |
+| `/qg branch <name>` | Ask gate scope, then run against branch `<name>` in isolated worktree |
+| `/qg --paths <glob>...` | Ask gate scope, then run; scope to matched paths |
 | `/qg --reset` | Clear current session folder + legacy v1.5.0 flat files and exit |
 | `/qg --gc` | Run TTL GC on stale session folders |
 | `/qg review` | Review gate only |
