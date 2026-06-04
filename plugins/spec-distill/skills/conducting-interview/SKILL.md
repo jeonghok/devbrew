@@ -229,17 +229,86 @@ Law 1급 skepticism 의례입니다(verbatim pass-through로 무력화 방지).
    exit ≠ 0 이면 **brief를 finalize하지 말고** 보고된 미충족 의례를 보완(누락 섹션/무인용
    landscape/형식 미달 steelman/빈 Tried&Discarded). 통과(exit 0)할 때까지 반복.
 
-### Step B — optional handoff (superpowers 있을 때만)
+### Step B — proceed 게이트 (handoff 방식 제안)
 
-brief는 **단독 완결**입니다. 다음은 *optional 다음 단계*입니다:
+brief는 **단독 완결 terminal 산출물**입니다(NG7 — handoff는 강제가 아니라 사용자 선택).
+Step B는 단일 책임 단위입니다: *brief가 완결되면 다음 stage(brainstorming 해답공간) 진입
+방식을 사용자에게 제안한다.* 입력 = 완결·`check_brief.py` 검증된 brief 경로 + superpowers
+가용성. 이 핸드오프는 `reviewing-spec` Phase 5의 `/compact` proceed 게이트와 **대칭**입니다 —
+같은 두 가드(AP2 + cross-compact)를 interview 어휘로 독립 저술합니다(상세 모델:
+`skills/reviewing-spec/SKILL.md` Phase 5).
 
-- **superpowers `brainstorming` skill 사용 가능 시**: 이 brief를 rich context로 전달하며
-  `superpowers:brainstorming`을 호출(해답공간 설계 → `-design.md` → 기존 hook이 design mode로
-  검증 → reviewing-spec → writing-plans).
-- **superpowers 부재 시(AC13)**: brief를 완료하고 **loud advisory**를 낸 뒤 정지 — crash·spec-mode
-  fallback **금지**(단독 완결, graceful degrade):
+#### B-1 — superpowers 가용성 분기 (AC13 보존)
+
+- **superpowers 부재 시 (AC13)**: 현행 graceful degradation 그대로 — brief를 완료하고 **loud advisory**를 낸 뒤 **정지(STOP)**. 게이트 없음(compact 후 넘길 대상 자체가 없음). crash·spec-mode fallback **금지**(단독 완결, graceful degrade):
 
   > `[spec-distill] interview brief 완결: docs/superpowers/interview/<file>. superpowers 설치 시 brainstorming 해답공간 단계로 이어집니다. 미설치 시 이 brief를 직접 다음 작업의 입력으로 사용하세요.`
+
+- **superpowers 가용 시**: B-2 proceed 게이트 제시.
+
+#### B-2 — 단일 `AskUserQuestion` proceed 게이트 (3옵션, AC20)
+
+게이트 *이전*에 brief 경로 존재를 확인합니다(`[[ -f <brief-path> ]]` — race 방어 경량 가드,
+`AskUserQuestion` 게이트 자체는 아님). 부재 시 reviewing-spec Phase 5 Step A와 대칭으로
+`/compact`를 노출하지 *않고* loud advisory 후 STOP(`approve_handoff.sh` 미호출 — 설계 §5.3):
+
+> `[spec-distill] brief '<brief-path>' 부재 — 재작성/세션 리셋 필요`
+
+(Step A의 작성 + `check_brief.py` 검증 직후라 정상 경로에선 발생하지 않습니다.)
+
+brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안합니다:
+
+```javascript
+AskUserQuestion({
+  questions: [{
+    question: "interview brief 완결: <brief-path> (5 통과 의례 통과). 다음 단계?",
+    header: "Proceed",
+    options: [
+      {label: "/compact 후 brainstorming (권장)", description: "verbatim /compact 노출 → 사용자 실행 시 brainstorming. 긴 인터뷰 context(round 대화·web sweep·steelman 중간산출) 정리 이점. brief 보존."},
+      {label: "바로 brainstorming", description: "즉시 Skill superpowers:brainstorming <brief-path> 호출 (compact 없이, 전체 context 유지)."},
+      {label: "brief만 종료", description: "brief는 단독 완결 terminal (NG7). handoff 안 함, 종료."}
+    ],
+    multiSelect: false
+  }]
+})
+```
+
+#### B-3 — 응답 처리
+
+- **① /compact 후 brainstorming**: 아래 verbatim `/compact` 명령을 *그대로 보이게* 노출
+  (`<brief-path>`는 실제 brief 경로로 치환) + "compact 후 brainstorming 진입 준비됨" 안내:
+
+  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 Reframe, Landscape, Locked Directions, Open Questions)과 경로 참조 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. 다음 단계: Skill superpowers:brainstorming <brief-path>.`
+
+  → **여기서 턴 종료(STOP). 같은 턴에서 `brainstorming`을 호출하지 말 것**(compact 전
+  brainstorming 진입 = 옵션 ① 무력화). `Skill superpowers:brainstorming <brief-path>` 진입은
+  사용자가 `/compact`를 *실제 실행한 다음 턴*에 **사용자 트리거**(예: `/compact write design`처럼
+  compact 뒤에 붙인 진행 인자, 또는 명시적 진행 요청)로만 일어난다 — 모델은 다음 턴에 자동
+  진입하지 *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17). compact된 fresh
+  context에서 brainstorming이 brief를 다시 읽어 해답공간을 설계한다.
+
+- **② 바로 brainstorming**: 즉시 `Skill superpowers:brainstorming <brief-path>` 호출(rich
+  context 유지 — 현행 동작과 동일). 이것은 아래 cross-compact 정지 요건의 *명시적 예외*다.
+
+- **③ brief만 종료**: brief terminal advisory(B-1 부재 advisory와 동일 톤) 출력 후 종료.
+  handoff 안 함. state는 SessionEnd hook이 cleanup(별도 cleanup 호출 없음).
+
+#### B-4 — 두 가드 (load-bearing)
+
+- **AP2 polite-stop 금지**: ①/② 선택 후 "brief 완결!"만 narrate하고 게이트 제시/Skill 호출을
+  skip하는 것은 **polite stop** — 금지. Step B를 *종료*하는 모든 경로는 (a) 위 proceed 게이트를
+  거치거나(①/②/③), (b) 게이트를 거치지 않는 예외(superpowers 부재)는 명시적 advisory 단락을
+  동반해야 한다 — 게이트-less **silent 종료 금지**. (게이트는 사용자가 redirect 가능한 approval
+  gate이므로 P17 주권에 기여, polite-stop 아님 — 철학 §AP2.)
+
+- **cross-compact 조기진행 금지 (AC21, AC19 대칭)**: 옵션 ① 선택 시 `/compact`를 노출한 *직후*
+  같은 턴에서 `brainstorming`으로 직진하는 것은 금지. compact가 무거운 작업 *뒤에* 오면 context
+  위생 이점이 사라져 옵션 ①이 무의미해진다(reviewing-spec AC19에서 실측된 실패 패턴의 대칭).
+  **다음 턴** 진입은 *사용자 트리거*(B-3 ①의 정규 문구: compact 뒤에 붙인 진행 인자 예 `/compact
+  write design`, 또는 명시적 진행 요청)로만 일어나며 모델 자동 진입이 아니다(NG4·P17). polite
+  stop이 "진행해야 할 때 멈춤"이라면 이것은 "멈춰야 할 때 진행" — 두 방향 모두 게이트의
+  사용자-주권(P17)을 우회한다. 옵션 ②는 이 정지 요건의 *명시적 예외*(compact 없이 즉시
+  brainstorming).
 
 이 stage는 brief까지로 종료됩니다. handoff를 *강제하지 않습니다*(NG7).
 
