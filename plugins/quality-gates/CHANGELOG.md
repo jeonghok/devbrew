@@ -31,6 +31,28 @@ instantiation — 실행 범위를 의식적 결정으로 승격. 무클릭 둘 
 ### Fixed
 - **`commands/qg.md`**: stale "3-gate" → "2-gate" 파이프라인 레이블 정정 (v2.0.0에서 게이트 2개로
   축소된 뒤 잔존한 라벨; adversarial agent의 per-finding 3-gate 검증과는 무관).
+- **single-gate `/qg runtime` manifest 회귀 (self-`/qg` review 적발)**: `detect-runtime.sh`를
+  Decision 2(gate scope=both 전용)로 옮기면서 Dispatch Loop를 우회하는 `/qg runtime`이
+  `manifest`/`approved_surfaces`/`block_policy` 없이 R3에 도달 — spec §3 Non-goal("single-gate
+  동작 무변경") 위반이었다. Runtime gate에 **Step R-init** 추가: 해당 입력이 미설정이면
+  `detect-runtime.sh` + runtime-scope 기본값을 그 자리에서 생성(Decision 2 이미 실행 시 no-op).
+- **Review-only 모드의 "Proceed to Runtime gate" 모순 (self-`/qg` review 적발)**: Decision 1에서
+  "Review gate only" 선택 후에도 iter-boundary/max-iter 결정이 "Proceed to Runtime gate"를 제시해
+  방금 한 gate-scope 선택과 충돌했다. 두 결정에 **gate-scope conditional** 절 추가: review-only이면
+  "Proceed (accept findings, finalize)"(→ final summary)로 대체.
+- **`/qg both`가 preflight에서 깨짐 (self-`/qg` review codex conf 10 적발)**: SKILL/command/docs에 `both`를
+  추가했지만 `scripts/setup-qg.sh`는 `review|runtime`만 파싱 → `both`가 `Unknown argument: both`로 exit 1,
+  skill 진입 전 파이프라인 abort. setup-qg.sh가 `both`를 수용(case arm + `branch` lookahead + help +
+  Full-Pipeline 배너)하도록 수정. `test_setup_qg.sh` Case 6 회귀 가드 추가.
+- **`gate=` precedence가 skip 로직에 미배선 (self-`/qg` review codex 적발)**: Decision 1의 "명시 `gate=`가
+  `--skip-runtime`을 이긴다" 규칙이 문서에만 있고 실제 skip 검사는 raw `skip_runtime`을 봐서
+  `/qg runtime --skip-runtime`이 runtime을 조용히 skip할 수 있었다. `effective_skip_runtime` 정규화
+  도입(Arguments) + Dispatch Loop step 4 / Runtime gate 진입 검사를 그 값으로 전환. `setup-qg.sh` 배너도
+  동일 precedence 반영(`both`/`runtime` + `--skip-runtime` → 모순적 "skipped" 대신 advisory; codex 2차 적발).
+- 위 **네 회귀**는 다단계 subagent 리뷰(per-task spec+quality + 최종 Opus whole-branch)를 모두 통과했고
+  **codex 독립 리뷰(read-only 샌드박스) + pr-review-toolkit code-reviewer가 self-`/qg`에서 적발** —
+  Claude-only 리뷰가 full-pipeline 경로만 추적해 single-gate / preflight-script 경로를 놓쳤다. 보안·정합
+  컨트롤엔 codex 독립 리뷰 필수(메모리 재확인). 신규 protocol-shape + setup-qg assertion으로 전부 박제.
 
 ## [2.3.0] — 2026-06-04
 

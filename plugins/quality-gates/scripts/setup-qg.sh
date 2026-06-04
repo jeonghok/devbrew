@@ -21,6 +21,7 @@ fi
 
 SINGLE_GATE=""
 SKIP_RUNTIME="false"
+GATE_BOTH="false"
 PLAN_FILE="auto"
 PR_URL=""
 ENSURE_MODE="false"
@@ -34,10 +35,15 @@ while [[ $# -gt 0 ]]; do
       SINGLE_GATE="$1"
       shift
       ;;
+    both)
+      # full pipeline, both gates, no gate-scope question (NOT single-gate)
+      GATE_BOTH="true"
+      shift
+      ;;
     branch)
       shift
       # peek next token
-      if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]] && [[ ! "$1" =~ ^(review|runtime)$ ]]; then
+      if [[ $# -gt 0 ]] && [[ ! "$1" =~ ^-- ]] && [[ ! "$1" =~ ^(review|runtime|both)$ ]]; then
         TARGET_BRANCH="$1"
         shift
       fi
@@ -80,12 +86,13 @@ while [[ $# -gt 0 ]]; do
 Quality Gates Pipeline Setup
 
 USAGE:
-  /qg [review|runtime] [OPTIONS]
+  /qg [review|runtime|both] [OPTIONS]
 
 ARGUMENTS:
   review         Run the Review gate only
   runtime        Run the Runtime gate only
-  (none)         Run full pipeline (Review gate → Runtime gate)
+  both           Run both gates with no gate-scope question
+  (none)         Run full pipeline; ask gate scope (Review only / both) first
 
 OPTIONS:
   --skip-runtime       Skip the Runtime gate (runtime verification)
@@ -307,12 +314,24 @@ if [[ -n "$SINGLE_GATE" ]]; then
   echo "🔄 Quality Gates Pipeline — Single Gate Mode"
   echo ""
   echo "Gate: ${GATE_LABEL}"
+  if [[ "$SINGLE_GATE" == "runtime" && "$SKIP_RUNTIME" == "true" ]]; then
+    # precedence: explicit gate=runtime wins over --skip-runtime (matches SKILL effective_skip_runtime)
+    echo "      --skip-runtime ignored: gate=runtime wins (precedence)"
+  fi
 else
   echo "🔄 Quality Gates Pipeline — Full Pipeline"
   echo ""
   echo "Gates: Review gate → Runtime gate"
+  if [[ "$GATE_BOTH" == "true" ]]; then
+    echo "       (both gates — no gate-scope question)"
+  fi
   if [[ "$SKIP_RUNTIME" == "true" ]]; then
-    echo "       Runtime gate skipped (--skip-runtime)"
+    if [[ "$GATE_BOTH" == "true" ]]; then
+      # precedence: explicit gate=both wins over --skip-runtime; Runtime gate WILL run
+      echo "       --skip-runtime ignored: gate=both wins (precedence); Runtime gate runs"
+    else
+      echo "       Runtime gate skipped (--skip-runtime)"
+    fi
   fi
 fi
 

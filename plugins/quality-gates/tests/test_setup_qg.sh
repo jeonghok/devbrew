@@ -83,6 +83,27 @@ assert "missing session-id hard-fails" "test '$RC' -ne 0"
 assert "error message mentions session" "grep -qi 'session' err"
 cd / && rm -rf "$TMPDIR"
 
+# --- Case 6: `both` gate token accepted (v2.4.0 /qg both). Regression guard:
+#     before the fix setup-qg.sh only matched review|runtime, so `both` fell to
+#     "Unknown argument: both" → exit 1, breaking /qg both at preflight before
+#     the skill ran (caught by codex during self-/qg review). ---
+TMPDIR=$(mktemp -d); cd "$TMPDIR"
+unset CLAUDE_CODE_SESSION_ID
+"$SCRIPT" both --session-id "test-both-$$" >out 2>err
+RC=$?
+assert "'/qg both' setup exits 0 (token accepted)" "test '$RC' -eq 0"
+assert "'/qg both' not rejected as Unknown argument" "! grep -qi 'Unknown argument' err out"
+assert "'/qg both' banner = full pipeline (not single-gate)" "grep -q 'Full Pipeline' out && ! grep -q 'Single Gate Mode' out"
+"$SCRIPT" branch both --session-id "test-bb-$$" >/dev/null 2>&1
+assert "'/qg branch both' parses ok (both not swallowed as branch name)" "test '$?' -eq 0"
+# precedence: explicit gate=both/runtime wins over --skip-runtime — the banner
+# must not contradict the SKILL's effective_skip_runtime (codex self-/qg F6).
+"$SCRIPT" both --skip-runtime --session-id "test-bs-$$" >out2 2>&1
+assert "'/qg both --skip-runtime' banner honors precedence (no contradictory skip)" "grep -qi 'gate=both wins' out2 && ! grep -q 'Runtime gate skipped' out2"
+"$SCRIPT" runtime --skip-runtime --session-id "test-rs-$$" >out3 2>&1
+assert "'/qg runtime --skip-runtime' banner notes precedence" "grep -qi 'gate=runtime wins' out3"
+cd / && rm -rf "$TMPDIR"
+
 echo
 echo "test_setup_qg.sh: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]] && exit 0 || exit 1
