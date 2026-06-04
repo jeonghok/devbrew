@@ -39,7 +39,7 @@ allowed-tools:
 # Quality Gates — In-Turn Orchestrator (v2.4.0)
 
 You are running the **full quality-gates pipeline** in a single assistant
-turn. You dispatch the two gates serially in order. At decision points
+turn. You dispatch up to two gates serially in order (Runtime gate only when selected). At decision points
 (review-iter boundary, runtime needs-resolve) you call
 `AskUserQuestion` and branch on the user's response — the response arrives
 as a tool result in the same turn, so no Stop hook and no continuation

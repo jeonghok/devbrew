@@ -167,6 +167,11 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 │   trivia escape? ─── yes ──▶ "Trivia diff — all gates skipped"        │
 │       │ no                                                            │
 │       ▼                                                               │
+│   gate scope?  AskUserQuestion ("...both gates?")                     │
+│   (skipped if review | runtime | both | --skip-runtime arg)           │
+│       ├── "Review gate only" ──▶ Review gate, then Final summary      │
+│       │ "Run both gates"                                              │
+│       ▼                                                               │
 │   Review gate iter loop (≤5)                                          │
 │       │                                                               │
 │       ├── findings empty ──────────────────────────┐                  │
@@ -213,11 +218,12 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 ## 사용
 
 ```
-/qg                            # 풀 파이프라인; 세션 단위 diff
-/qg branch                     # 풀 파이프라인; main 대비 풀 브랜치 diff
-/qg --paths <glob>...          # 풀 파이프라인; 명시 path scope
+/qg                            # gate scope 질문 후 실행; 세션 단위 diff
+/qg branch                     # gate scope 질문 후 실행; main 대비 풀 브랜치 diff
+/qg --paths <glob>...          # gate scope 질문 후 실행; 명시 path scope
 /qg --reset                    # 현재 세션 폴더 + legacy v1.5.0 파일 정리 후 종료
 /qg --gc                       # stale sibling 세션 (TTL) sweep 후 종료
+/qg both                       # 두 게이트 모두 실행 (gate scope 질문 없음)
 /qg review                     # Review gate만
 /qg runtime                    # Runtime gate만
 /qg --skip-runtime             # Review gate만 (런타임 skip)
