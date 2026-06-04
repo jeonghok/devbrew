@@ -37,6 +37,20 @@ has 'interview-brief-template' "uses brief template"
 has 'optional|선택' "brainstorming invoke is optional"
 has 'superpowers.*(부재|없).*advisory|advisory.*superpowers' "AC13: superpowers-absent loud advisory"
 
+# --- v0.13.0: Step B /compact proceed 게이트 (AC20/AC21/AC22) ---
+has 'AskUserQuestion' "AC20: Step B proceed gate uses AskUserQuestion"
+has '/compact 후 brainstorming' "AC20: option ① label (/compact 후 brainstorming)"
+has '바로 brainstorming' "AC20: option ② label (바로 brainstorming)"
+has 'brief만 종료' "AC20: option ③ label (brief만 종료)"
+has '/compact interview brief at' "AC20: verbatim /compact command exposed"
+
+# AC21(i) mechanical only — review layer (ii) coexistence judgment = spec-reviewer persona
+cc=$(grep -cE "턴 종료|다음 턴" "$SKILL"); [[ "$cc" -ge 1 ]] \
+  && note PASS "AC21(i): cross-compact stop wording present (lines=$cc)" \
+  || note FAIL "AC21(i): cross-compact stop wording absent"
+
+has 'polite[- ]?stop|narrate.*금지|silent 종료 금지' "AC22: AP2 polite-stop ban codified"
+
 has 'state_path\.py state-root|Bash.*state|state.*Bash' "PN1: state-write-via-Bash contract"
 
 grep -q 'drafting-spec' "$SKILL" && note FAIL "AC10: drafting-spec still referenced" || note PASS "AC10: no drafting-spec reference"

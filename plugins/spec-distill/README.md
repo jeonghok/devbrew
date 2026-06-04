@@ -20,7 +20,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 `conducting-interview` skill이 4-block format ("현재 이해 / 막힌 결정 / 추천 답안 / 질문")으로 첫 round를 시작합니다.
 
-## Flow (v0.12.0)
+## Flow (v0.13.0)
 
 ```
 /interview ─→ [0] Trivia escape ─→ [1] Interview (문제공간 stage)
@@ -28,7 +28,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
                                        · R1 Reframe / R2 Landscape / R3 Steelman / R4 Tried&Discarded / R5 OQ
                                        ▼ 5 의례 통과 (check_brief.py gate, Law 1)
                                    interview brief → docs/superpowers/interview/   ← terminal 산출물
-                                       ▼ (optional — superpowers 있을 때만)
+                                       ▼ [Step B proceed 게이트] ①/compact 후 brainstorming · ②바로 · ③brief만 종료  (superpowers 있을 때만)
                                    superpowers:brainstorming → -design.md
                                        ▼ [PostToolUse: design mode → pending_review]  (기존 hook)
                                        ▼ brainstorming user-review 정지 → 턴 경계
@@ -39,6 +39,8 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 ```
 
 **v0.12.0**: drafting-spec 제거 + reviewing-spec design-mode 전용. interview는 brief까지 단독 완결.
+
+**v0.13.0**: interview→brainstorming Step B를 `/compact` proceed 게이트(reviewing-spec Phase 5 대칭)로 재작성.
 
 ## Principles Instantiated
 
@@ -77,7 +79,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 ### Anti-pattern 회피
 
 - **AP1 (Self-approval)** — writer/reviewer 물리적 분리 (frontmatter scoping).
-- **AP2 (Polite stop)** — Phase 5 approve tail = proceed 게이트(AskUserQuestion) → handoff sequence (spec_path 검증 + 세션 cleanup). 게이트를 skip한 narrate-only 종료 금지. cross-compact 조기 진행(옵션 ① 노출 후 같은 턴 writing-plans 직진)도 게이트 P17 우회의 대칭 실패로 금지 (v0.11.0 AC19).
+- **AP2 (Polite stop)** — Phase 5 approve tail = proceed 게이트(AskUserQuestion) → handoff sequence (spec_path 검증 + 세션 cleanup). 게이트를 skip한 narrate-only 종료 금지. cross-compact 조기 진행(옵션 ① 노출 후 같은 턴 writing-plans 직진)도 게이트 P17 우회의 대칭 실패로 금지 (v0.11.0 AC19). interview→brainstorming Step B도 대칭 proceed 게이트(①/compact 후 brainstorming / ②바로 / ③brief만 종료) — 같은 두 가드(AP2 + cross-compact AC19/AC21) 적용, `approve_handoff.sh` 미호출(brief는 막 검증됨, 하류/SessionEnd가 cleanup) (v0.13.0).
 - **AP4 (Trivia ceremony)** — `/interview` first-step trivia escape (5 패턴).
 - **AP9 (Subagent spray)** — agent 2개, breadth-keeper round당 max 1 invoke.
 - **AP14 (Unchallenged consensus)** — sub-agent reviewer adversarial review + **`steelman-builder` 의심 게이트(v0.12.0)**: 의심 방향은 웹근거 기반 대안 steelman을 통과해야 lock.
