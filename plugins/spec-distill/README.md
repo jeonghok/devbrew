@@ -20,7 +20,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 `conducting-interview` skill이 4-block format ("현재 이해 / 막힌 결정 / 추천 답안 / 질문")으로 첫 round를 시작합니다.
 
-## Flow (v0.13.0)
+## Flow (v0.14.0)
 
 ```
 /interview ─→ [0] Trivia escape ─→ [1] Interview (문제공간 stage)
@@ -41,6 +41,8 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 **v0.12.0**: drafting-spec 제거 + reviewing-spec design-mode 전용. interview는 brief까지 단독 완결.
 
 **v0.13.0**: interview→brainstorming Step B를 `/compact` proceed 게이트(reviewing-spec Phase 5 대칭)로 재작성.
+
+**v0.14.0**: per-doc·session-scoped `suppressed_paths` + `/spec-distill:cancel-review` — 리뷰 완료/중단 후 같은 design 문서 재편집 시 재arm 차단.
 
 ## Principles Instantiated
 
@@ -63,7 +65,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - **P5 (Spec as artifact)** — `docs/superpowers/specs/...spec.md` named, versioned (frontmatter `version: 1.0.0`).
 - **P12 (Trivia escape)** — `/interview` first-step rule (typo / 주석-only / formatting / 단일 rename / <10 토큰 + 단일 action).
 - **P14 (State preservation)** — `.claude/spec-distill/<session-id>/state.local.md` (실패/abort 시 보존).
-- **P17 (User sovereignty)** — `needs_interview` user confirm gate, [5] Human Review, all kill switches.
+- **P17 (User sovereignty)** — `needs_interview` user confirm gate, [5] Human Review, all kill switches, **`/spec-distill:cancel-review [path] | --reset <path>` per-doc 취소·재활성화 게이트 (v0.14.0)**.
 - **P18 (Stagnation detection)** — issue `raised_count ≥ 3 unresolved` 시 P18 stagnation 명시 + forced [5] escalate.
 - **P21 (Secret 기록 금지)** — state.local.md token/key/credential placeholder 치환.
 - **P22 (Cost class)** — 모든 skill cost_class 선언 (conducting-interview: variable / reviewing-spec: medium).
@@ -102,7 +104,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 | Event | Script | 책임 | 왜 skill이 아닌가 |
 |---|---|---|---|
 | SessionStart | `hooks/session-anchor.sh` | resumed session에 spec-distill anchor 표시 | session-level lifecycle event는 hook 전용. |
-| PostToolUse | `hooks/spec-write-validator.py` | `docs/superpowers/specs/` 아래 **모든 `.md`** (sub-folder hierarchy 포함) write 시 (content-aware: frontmatter `locked_decisions` 유무로 spec/design mode) mechanical Layer 1 검증 + `pending_review:` ledger 기록 (v0.3.0) | spec writer가 *자기 작업을 자기가 검증*하는 회색지대를 file-system level에서 가로채는 것이 Law 2의 가장 강력한 구현. skill은 LLM이 invoke해야 동작하므로 trigger 결정론이 부족함. |
+| PostToolUse | `hooks/spec-write-validator.py` | `docs/superpowers/specs/` 아래 **모든 `.md`** (sub-folder hierarchy 포함) write 시 (content-aware: frontmatter `locked_decisions` 유무로 spec/design mode) mechanical Layer 1 검증 + `pending_review:` ledger 기록 (v0.3.0). **v0.14.0: arm 직전 `suppressed_paths` 조회 — 취소/승인된 문서는 arm skip(Layer 1은 불변).** | spec writer가 *자기 작업을 자기가 검증*하는 회색지대를 file-system level에서 가로채는 것이 Law 2의 가장 강력한 구현. skill은 LLM이 invoke해야 동작하므로 trigger 결정론이 부족함. |
 | Stop | `hooks/review-dispatch.py` | `pending_review:` block 있으면 systemMessage 주입으로 reviewer dispatch 강제 (v0.3.0) | turn boundary는 LLM의 메시지 형식과 무관한 결정론적 지점 — skill로는 hit 불가. |
 | UserPromptSubmit | `hooks/pending-review-reminder.py` | pending_review가 살아있고 TTL 만료 시 mandate 재emit (L4b redundancy). TTL(30s) 가드로 spam 방지. Kill switch: `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` / `:reminder`. | Stop hook single-shot mandate가 next-turn에서 silent drop될 경우 매 user prompt에 mandate 재emit하는 redundancy layer 필요 — turn boundary 이벤트라 skill로 처리 불가. |
 | SessionEnd | `hooks/session-end-cleanup.py` | deterministic per-session `.claude/spec-distill/<sid>/` cleanup (v0.6.0). polite-stop이나 approve 누락 시에도 cleanup 보장 (4-layer defense의 layer 2). Kill switch: `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd`. | Claude lifecycle 이벤트는 hook이 catch해야 함 — skill은 사용자/LLM이 invoke해야 동작. |
@@ -126,6 +128,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - `DEVBREW_SPEC_DISTILL_GC_VERBOSE=1` (v0.6.0) — TTL-GC가 cleanup 발생 시 stdout summary 출력. CI/디버깅용.
 - `DEVBREW_SPEC_DISTILL_SKIP_HANDOFF_CHECK=1` (v0.9.0) — `handoff_incomplete` 카테고리만 우회. 다른 검사 (`missing_section` 등)는 정상 동작. loud warning stderr 출력. /compact 이후 정보 손실 risk 명시.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` (v0.12.0) — interview 웹 리서치 비활성화. landscape를 loud log와 함께 생략, crash 없음 (graceful degradation, AC8).
+- `/spec-distill:cancel-review [path]` (v0.14.0) — env가 아닌 **per-doc 사용자 주권 경로**. 현재/지정 design 문서 auto-review 취소 + 세션 억제. `--reset <path>`로 재활성화. (kill switch는 아니지만 "원치 않는 리뷰를 끄는" 사용자 컨트롤로 여기 명시.)
 
 ## Prerequisites
 
