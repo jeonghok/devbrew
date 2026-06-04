@@ -147,8 +147,8 @@ assert_line "runtime sandbox kill switch present" "$(first_line 'DEVBREW_QG_DISA
 # spec_acceptance_criteria threaded to the verifier.
 assert_line "spec_acceptance_criteria threaded" "$(first_line 'spec_acceptance_criteria')"
 
-# Version bumped to 2.3.0 (title + final summary).
-assert_line "v2.3.0 in SKILL" "$(first_line 'v2.3.0|2\.3\.0')"
+# Version bumped to 2.4.0 (title + final summary).
+assert_line "v2.4.0 in SKILL" "$(first_line 'v2.4.0|2\.4\.0')"
 
 # --- v2.2.0 mutation-guard hardening protocol-shape ---
 
@@ -249,6 +249,44 @@ question_line=$(first_line 'question:.*findings remain')
 assert_line "Surface-findings step present" "$surface_line"
 assert_line "iter-boundary decision question present" "$question_line"
 assert_order "Surface findings precedes iter-boundary decision" "$surface_line" "$question_line"
+
+# --- v2.4.0: Upfront gate-scope decision (Decision 1) ---
+
+# Decision 1 gate-scope question exists: literal `both gates` anchor in a
+# question: field, with header `Gate scope`.
+gatescope_q=$(first_line 'question:.*both gates')
+assert_line "gate-scope question present (anchor 'both gates')" "$gatescope_q"
+assert_line "Gate scope header present" "$(first_line 'header:.*Gate scope')"
+
+# Ordering: gate-scope question BEFORE the Review gate dispatch.
+assert_order "gate-scope question precedes Review gate dispatch" "$gatescope_q" "$review_line"
+
+# Ordering: gate-scope (Decision 1) question BEFORE the runtime-scope (Decision 2) question.
+runtimescope_q=$(first_line 'question:.*Runtime scope')
+assert_order "gate-scope question precedes runtime-scope question" "$gatescope_q" "$runtimescope_q"
+
+# Uniqueness: `both gates` appears in exactly one question: line (anchor convention).
+bg_count=$(grep -cE 'question:.*both gates' "$SKILL_MD" || true)
+if [[ "$bg_count" -eq 1 ]]; then
+  echo "PASS: 'both gates' anchor unique (1 question: line)"
+else
+  echo "FAIL: 'both gates' anchor not unique ($bg_count question: lines)"
+  fail=$((fail + 1))
+fi
+
+# `gate` domain documents `both`.
+assert_line "gate domain documents both" "$(first_line 'gate.*review.*runtime.*both')"
+
+# Precedence advisory: explicit gate= wins over --skip-runtime (no silent conflict).
+assert_line "gate= precedence advisory documented" "$(first_line 'gate=.*wins')"
+
+# Dispatch Loop <-> Upfront Execution Plan consistency (round-2 advisory b82e4d19):
+# Dispatch Loop step 2 must reference Decision 1 and the short-circuit so the two
+# sections cannot drift.
+dl_line=$(first_line '## Dispatch Loop')
+assert_line "Dispatch Loop section present" "$dl_line"
+assert_line "Dispatch Loop references Decision 1" "$(first_line_after 'Decision 1' "$dl_line")"
+assert_line "Dispatch Loop references short-circuit" "$(first_line_after 'short-circuit' "$dl_line")"
 
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"
