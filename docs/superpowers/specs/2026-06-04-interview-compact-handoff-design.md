@@ -124,7 +124,9 @@ multiSelect: false
   **사용자 트리거**(예: `/compact write design`처럼 compact 뒤에 붙인 진행 인자, 또는 명시적
   진행 요청)로만 일어난다 — 모델은 다음 턴에 자동 진입하지 *않고* 신호를 기다리며, 사용자가
   redirect하면 미진입(NG4·P17). compact된 fresh context에서 brainstorming이 brief를 다시 읽어
-  해답공간을 설계한다.
+  해답공간을 설계한다. 이 '사용자 트리거' **2-형태**(① compact 뒤에 붙인 진행 인자 예
+  `/compact write design` / ② 명시적 진행 요청)는 SKILL.md 재작성 시 *정규 문구*로 그대로 쓴다
+  — 구현자 임의 축약 금지(reviewing-spec Phase 5 Step C ①과 동일 어휘).
 
 - **② 바로 brainstorming**: 즉시 `Skill superpowers:brainstorming <brief-path>` 호출
   (rich context 유지 — 현행 동작과 동일).
@@ -143,8 +145,8 @@ multiSelect: false
 - **cross-compact 조기진행 금지 (AC21, AC19 대칭)**: 옵션 ① 선택 시 `/compact`를 노출한 *직후*
   같은 턴에서 `brainstorming`으로 직진하는 것은 금지. compact가 무거운 작업 *뒤에* 오면 context
   위생 이점이 사라져 옵션 ①이 무의미해진다(reviewing-spec AC19에서 실측된 실패 패턴의 대칭).
-  다음 턴 진입은 *사용자 트리거*로만 일어나며 모델 자동 진입이 아니다(NG4·P17). 옵션 ②는 이
-  정지 요건의 *명시적 예외*(compact 없이 즉시 brainstorming).
+  다음 턴 진입은 *사용자 트리거*(B-3 ①의 정규 2-형태)로만 일어나며 모델 자동 진입이 아니다
+  (NG4·P17). 옵션 ②는 이 정지 요건의 *명시적 예외*(compact 없이 즉시 brainstorming).
 
 ### 5.3 Phase 5와의 의도적 차이 (isolation)
 
@@ -154,7 +156,10 @@ multiSelect: false
   불필요: ①/② 핸드오프면 세션이 brainstorming→reviewing-spec으로 이어져 나중
   spec→writing-plans의 approve_handoff가 정리하고, ③종료면 SessionEnd hook이 정리. **새
   스크립트를 만들지 않는 게 정답**(lightness). 단, ① 노출 *전에* `[[ -f <brief-path> ]]`
-  한 줄 sanity check는 둔다(막 쓴 파일이라 거의 항상 통과 — race 방어용 경량 가드, 게이트 아님).
+  한 줄 존재 확인은 둔다(race 방어용 경량 가드 — `AskUserQuestion` 게이트 자체는 아님). 실패
+  (exit 1) 시 — Step A의 작성+`check_brief.py` 검증 직후라 정상 경로에선 발생하지 않지만 —
+  reviewing-spec Phase 5 Step A와 대칭으로 `/compact`를 노출하지 *않고* loud advisory
+  (`[spec-distill] brief '<brief-path>' 부재 — 재작성/세션 리셋 필요`) 후 STOP.
 - **다음 stage = `superpowers:brainstorming`** (writing-plans 아님). `/compact` preserve 대상도
   brief의 §1 Reframe / §3 Landscape / locked_directions / Open Questions이며, drop 대상은
   round 대화·web sweep 원문·steelman 중간추론.
@@ -169,17 +174,24 @@ multiSelect: false
   proceed 게이트를 제시한다. *Verify*: `test_conducting_interview_stage.sh`가 SKILL.md에서
   `AskUserQuestion`·세 옵션 라벨 문구·`/compact` verbatim 명령 존재를 grep assert.
 - **AC21** — 옵션 ① 경로는 cross-compact 조기진행 금지를 verifiable하게 명문화한다(AC19 대칭,
-  2-layer). *Verify*: (i) grep `턴 종료|다음 턴` ≥ 1 **AND** (ii) 옵션 ① 서술 블록 안에서
-  '턴 종료(STOP)' + 'brainstorming 같은 턴 호출 금지' + '다음 턴 = 사용자 트리거'가 *함께*
-  명시됐음을 리뷰 레이어가 확인(grep 단독은 같은-블록 공존 보장 못 함 — AC11/AC19 선례 수준의
-  mechanical 한계 인정).
+  2-layer). *Verify*:
+  - **(i) mechanical** — test 파일 `test_conducting_interview_stage.sh`에 `grep -cE
+    "턴 종료|다음 턴"` ≥ 1 assert 추가. 이 한 줄만으로 AC21 pass를 선언하지 *않는다*.
+  - **(ii) 리뷰 레이어** (test로 불가 — spec-reviewer persona 담당) — 옵션 ① 서술 *블록 안에서*
+    '턴 종료(STOP)' + 'brainstorming 같은 턴 호출 금지' + '다음 턴 = 사용자 트리거' 세 구문이
+    *함께* 명시됐음을 확인. grep 단독은 같은-블록 공존을 보장 못 하므로(AC11/AC19 선례 수준의
+    mechanical 한계 인정) 이 공존·정합 판정은 (ii)에 귀속.
 - **AC22** — AP2 polite-stop 금지가 Step B에 명문화된다(종료 모든 경로 = 게이트 또는 명시적
   advisory). *Verify*: grep `polite[- ]?stop|narrate.*금지|silent 종료 금지`.
 - **AC23** — superpowers 부재 시 graceful degradation(brief terminal + loud advisory + STOP,
-  게이트 없음)이 보존된다(AC13 불변). *Verify*: 기존 `has 'superpowers.*(부재|없).*advisory'`
-  assert 유지 + 게이트가 superpowers-가용 분기 *안에* 있음을 리뷰 확인.
-- **AC24** — NG7(handoff 비강제)이 보존된다 — 옵션 ③이 그 가시화. *Verify*: 기존
-  `has 'optional|선택'` assert 유지 + ③ 옵션 라벨 grep.
+  게이트 없음)이 보존된다(AC13 불변). *Verify*: **(i) mechanical** — 기존
+  `has 'superpowers.*(부재|없).*advisory'` assert 유지(test 파일). **(ii) 리뷰 레이어** —
+  proceed 게이트(`AskUserQuestion`)가 superpowers-*가용* 분기(B-2) 안에만 있고, 부재 분기(B-1)는
+  advisory+STOP뿐임을 reviewer가 확인(grep으로는 분기 소속 판정 불가).
+- **AC24** — NG7(handoff 비강제)이 보존된다 — 옵션 ③이 그 가시화. *Verify*: **(i) mechanical** —
+  기존 `has 'optional|선택'` assert 유지 + 옵션 ③ 라벨(`brief만 종료`) grep ≥ 1(test 파일).
+  **(ii) 리뷰 레이어** — ③이 superpowers-가용 게이트(B-2)의 옵션이며(부재 분기 오배치 아님)
+  handoff를 강제하지 않는 종료 경로임을 reviewer가 확인.
 
 ## 7. Rejected Alternatives
 
@@ -210,7 +222,11 @@ multiSelect: false
 1. **TDD**: 먼저 `test_conducting_interview_stage.sh`에 AC20/AC21/AC22 grep assert 추가 →
    red 확인(현재 SKILL.md엔 게이트 문구 없음) → SKILL.md Step B 재작성 → green.
 2. **회귀**: 기존 `test_conducting_interview_stage.sh` 전체 PASS 유지(AC23/AC24 포함).
-   `test_brainstorming_entry.sh`(hook+cleanup) PASS 유지 — 본 변경은 hook 미변경이라 무영향.
+   `test_brainstorming_entry.sh`(hook+cleanup) PASS 유지. *근거*: 이 테스트는 PostToolUse
+   hook(`spec-write-validator.py`)이 `-design.md` write를 감지해 state를 만들고 SessionEnd가
+   cleanup하는 경로만 검사한다. Step B는 conducting-interview SKILL.md의 *산문*이라 테스트가
+   실행하지 않으며, hook은 Write 이벤트(= Step B 분기 *이전* 시점)에 fire하므로 Step B 교체와
+   인과적으로 무관(hook 코드 무변경).
 3. **테스트 실행**: `python3 -m unittest` 대상 아님(이건 .sh). repo root에서 `bash
    plugins/spec-distill/tests/test_conducting_interview_stage.sh` 실행(reference: test runner
    메모 — .sh는 직접 실행).
@@ -221,14 +237,19 @@ multiSelect: false
 
 ## 10. Handoff Context
 
-- **구현 위치**: 본 워크트리 `feature/interview-compact-handoff`(main=`b5a20b5`에서 분기,
-  spec-distill 0.12.0 베이스). 사용자 지시 — 구현은 main에서 워크트리 생성해 진행.
-- **변경의 핵심 1줄**: conducting-interview Step B의 자동 brainstorming invoke를, reviewing-spec
-  Phase 5와 대칭인 3옵션 `/compact` proceed 게이트로 교체(가드 2개 포함, approve_handoff 미호출).
-- **load-bearing 부분**: 두 가드(AP2 + cross-compact AC21). 이게 없으면 `/compact` 옵션이
-  무의미(모델이 말만 하고 직진). 절대 약화 금지.
-- **건드리면 안 되는 것**: 5 통과 의례, web budget, steelman, hook(spec-write-validator/
-  session-end-cleanup), reviewing-spec Phase 5.
-- **다음 단계**: 이 design doc은 brainstorming 산출물이므로 spec-distill Stop hook이 design-mode
-  review(reviewing-spec)를 강제할 수 있음 — Law 2 분리 reviewer 검증 후 Phase 5 게이트 →
-  writing-plans → 구현(TDD).
+**TL;DR**: conducting-interview Step B의 자동 brainstorming invoke를, reviewing-spec Phase 5와
+대칭인 3옵션 `/compact` proceed 게이트로 교체한다 — 가드 2개(AP2 + cross-compact AC21) 포함,
+`approve_handoff.sh` 미호출. 구현 위치는 워크트리 `feature/interview-compact-handoff`
+(main=`b5a20b5`에서 분기, spec-distill 0.12.0 베이스).
+
+**Implicit context**: 두 가드가 load-bearing — 없으면 `/compact` 옵션이 무의미(모델이 말만
+하고 직진)하므로 절대 약화 금지. 다음은 무변경 영역이라 건드리지 말 것: 5 통과 의례, web
+budget, steelman, hook(`spec-write-validator` / `session-end-cleanup`), reviewing-spec
+Phase 5. 세션 cleanup을 interview 쪽에서 새로 도입하지 않는 근거는 §5.3(하류 approve_handoff
+또는 SessionEnd가 담당).
+
+**Deferred to plan**: 정확한 grep assert 문자열과 테스트 케이스 배치는 writing-plans의 TDD
+단계에서 확정한다(§9 Verification Plan 기준). README flow 다이어그램의 게이트 표기 위치와
+CHANGELOG 문구도 plan 단계에서 정한다. 이 design doc은 brainstorming 산출물이라 spec-distill
+Stop hook이 design-mode review(reviewing-spec)를 강제 — Law 2 분리 reviewer 통과 후 Phase 5
+게이트 → writing-plans → 구현(TDD)이 다음 단계.
