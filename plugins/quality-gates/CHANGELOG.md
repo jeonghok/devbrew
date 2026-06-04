@@ -28,6 +28,10 @@ instantiation — 실행 범위를 의식적 결정으로 승격. 무클릭 둘 
   `test_skill_orchestration_behavior.sh` 버전 assertion(`v2.3.0`→`v2.4.0`) 동기화.
 - **SKILL frontmatter description / `commands/qg.md` / README P18**: gate-scope always-asks 정합.
 
+### Fixed
+- **`commands/qg.md`**: stale "3-gate" → "2-gate" 파이프라인 레이블 정정 (v2.0.0에서 게이트 2개로
+  축소된 뒤 잔존한 라벨; adversarial agent의 per-finding 3-gate 검증과는 무관).
+
 ## [2.3.0] — 2026-06-04
 
 Review gate가 각 iteration 종료 시 `synthesize_findings.py`의 finding 상세(표 +

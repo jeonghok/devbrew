@@ -6,7 +6,7 @@ allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)", "Bash(rm:*)
 
 # Quality Gates Pipeline
 
-Run the 3-gate quality verification pipeline to ensure code quality before PR merge.
+Run the 2-gate quality verification pipeline to ensure code quality before PR merge.
 
 **Arguments:** $ARGUMENTS
 
