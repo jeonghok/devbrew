@@ -177,7 +177,14 @@ def suppress_path(state_file: Path, raw_path: str) -> bool:
     add(state_file, raw_path)
     try:
         body = state_file.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+    except (OSError, UnicodeDecodeError) as exc:
+        # 키는 add()로 이미 기록됨(억제 유효); same-key pending strip만 생략.
+        # loud-logging 규약 — 조용한 swallow 금지(stale pending 1턴 가능성 알림).
+        print(
+            f"[spec-distill] suppress_state: post-add re-read failed — key suppressed, "
+            f"same-key pending strip skipped (pending may linger one turn): {exc}",
+            file=sys.stderr,
+        )
         return True
     pend = pending_path(body)
     if pend is not None and canonical_key(pend) == key:

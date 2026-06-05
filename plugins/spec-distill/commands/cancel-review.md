@@ -23,10 +23,17 @@ argument-hint: "[path] | --reset <path>"
 python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/cancel_review.py" $ARGUMENTS
 ```
 
+> **인용 주의**: `$ARGUMENTS`는 unquoted로 두어 토큰 경계를 보존합니다 — 통째로
+> `"$ARGUMENTS"`로 묶으면 `--reset <path>` 2-토큰 형식이 단일 argv로 깨집니다. 공백이
+> 포함된 경로를 넘길 때는 각 토큰을 개별 인용해서 호출하십시오:
+> `--reset "<path with space>"` 또는 `"<path with space>"`.
+
 ## 사용법
 
-- **인자 없음** — 현재 `pending_review` 문서를 취소 + 세션 억제. 이번 턴 Stop dispatch와
-  다음 턴 reminder, 이후 같은 문서 edit이 모두 no-op이 됩니다.
+- **인자 없음** — 현재 `pending_review` 문서를 취소 + 세션 억제. **단, no-arg는 PostToolUse가
+  arm한 *직후·같은 턴*(Stop dispatch 전) 창에서만 동작**합니다 — Stop hook이 dispatch 시
+  `pending_review`를 strip하므로, 리뷰가 *이미 dispatch된 뒤*나 *재편집 억제*에는 pending이
+  없어 no-op이 됩니다. 그 경우엔 아래 `<path>` 형식을 쓰십시오(가장 흔한 사용 경로).
 - **`<path>`** — 그 문서를 억제. 현재 pending이 *같은* 문서면 함께 취소하고, *다른*
   문서의 pending은 보존합니다 (특정 문서 targeting / 사전 억제).
 - **`--reset <path>`** — 억제 해제 → 그 문서 재편집 시 auto-review 재개.
