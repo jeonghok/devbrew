@@ -83,12 +83,18 @@ fi
 # 세션 dir는 더 이상 여기서 삭제하지 않는다 — "승인됨" 기억을 세션 동안 보존해야
 # 재발을 막는다. dir cleanup은 SessionEnd hook / TTL-GC가 담당(AC15).
 suppress_cli="$(dirname "$0")/suppress_state.py"
+# 최종 메시지는 suppress 성공 여부에 따라 달라진다 — 실패 시 "suppressed" 주장 금지
+# (stderr advisory와 stdout 성공문이 모순되지 않도록; qg codex C1).
 if [[ -f "$suppress_cli" ]]; then
-    if ! python3 "$suppress_cli" add "$session_id" "$spec_path"; then
+    if python3 "$suppress_cli" add "$session_id" "$spec_path"; then
+        suppress_msg="approved spec suppressed for this session."
+    else
+        suppress_msg="approve recorded; suppression FAILED (advisory above) — 같은 문서 재편집 시 재arm 가능. /spec-distill:cancel-review로 수동 억제 가능."
         echo "[spec-distill] approve_handoff: suppress 기록 실패 (non-fatal) — 같은 문서 재편집 시 재arm 가능. /spec-distill:cancel-review로 수동 억제 가능." >&2
     fi
 else
+    suppress_msg="suppression skipped (suppress_state.py 없음) — 세션 dir는 SessionEnd/GC가 정리."
     echo "[spec-distill] approve_handoff: suppress_state.py 없음 (non-fatal) — 세션 dir는 SessionEnd/GC가 정리." >&2
 fi
 
-echo "spec-distill v0.14.0 handoff finalized (session: $session_id). approved spec suppressed for this session. 다음 단계는 reviewing-spec proceed 게이트 선택대로 진행."
+echo "spec-distill v0.14.0 handoff finalized (session: $session_id). $suppress_msg 다음 단계는 reviewing-spec proceed 게이트 선택대로 진행."
