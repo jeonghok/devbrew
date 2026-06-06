@@ -141,6 +141,66 @@ triggered_count=$(grep -c '^  triggered_at:' "$WORK/.claude/spec-distill/test-id
   && note PASS "I1: state file remains idempotent on re-write" \
   || note FAIL "I1: state file has $pending_count pending_review and $triggered_count triggered_at (expected 1 each)"
 
+# Case 12: AC9/AC18 — suppressed doc → arm skip + suppress advisory가 normal advisory 교체
+mkdir -p "$WORK/docs/superpowers/specs" "$WORK/.claude/spec-distill/test-supp"
+cp "$FIX/spec-valid.md" "$WORK/docs/superpowers/specs/2026-05-16-supp-spec.md"
+cat > "$WORK/.claude/spec-distill/test-supp/state.local.md" <<EOF
+---
+session_id: test-supp
+---
+
+suppressed_paths:
+  - docs/superpowers/specs/2026-05-16-supp-spec.md
+EOF
+out=$(run_hook_stdout "$WORK/docs/superpowers/specs/2026-05-16-supp-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-supp")
+rc=$?
+sf="$WORK/.claude/spec-distill/test-supp/state.local.md"
+if [[ $rc -eq 0 ]] \
+  && ! grep -qE '^pending_review:' "$sf" \
+  && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("suppressed")' >/dev/null \
+  && ! echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("Reviewer will be dispatched")' >/dev/null; then
+  note PASS "AC9/AC18: suppressed doc → arm skip + suppress advisory (no normal advisory)"
+else
+  note FAIL "AC9/AC18 failed (rc=$rc out=$out)"
+fi
+
+# Case 13: AC10 — suppressed doc도 Layer 1 실행 (구조 실패 → exit 2)
+cp "$FIX/spec-missing-goals.md" "$WORK/docs/superpowers/specs/2026-05-16-supp2-spec.md"
+mkdir -p "$WORK/.claude/spec-distill/test-supp2"
+cat > "$WORK/.claude/spec-distill/test-supp2/state.local.md" <<EOF
+---
+session_id: test-supp2
+---
+
+suppressed_paths:
+  - docs/superpowers/specs/2026-05-16-supp2-spec.md
+EOF
+out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-supp2-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-supp2")
+rc=$?
+[[ $rc -eq 2 ]] && echo "$out" | grep -qE "missing sections:" \
+  && note PASS "AC10: suppressed doc still subject to Layer 1 (exit 2)" \
+  || note FAIL "AC10 failed (rc=$rc out=$out)"
+
+# Case 14: AC11 — 다른 비-suppressed 문서 write_state가 suppressed_paths 보존
+mkdir -p "$WORK/.claude/spec-distill/test-pres"
+cat > "$WORK/.claude/spec-distill/test-pres/state.local.md" <<EOF
+---
+session_id: test-pres
+---
+
+suppressed_paths:
+  - docs/superpowers/specs/2026-05-16-docA-design.md
+EOF
+cp "$FIX/spec-valid.md" "$WORK/docs/superpowers/specs/2026-05-16-docB-spec.md"
+run_hook "$WORK/docs/superpowers/specs/2026-05-16-docB-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-pres" >/dev/null
+sf="$WORK/.claude/spec-distill/test-pres/state.local.md"
+if grep -q "  - docs/superpowers/specs/2026-05-16-docA-design.md" "$sf" \
+   && grep -qE '^pending_review:' "$sf"; then
+  note PASS "AC11: suppressed_paths preserved across other-doc write_state"
+else
+  note FAIL "AC11 failed ($(cat "$sf"))"
+fi
+
 echo ""
 echo "summary: $pass passed, $fail failed"
 [[ $fail -eq 0 ]]

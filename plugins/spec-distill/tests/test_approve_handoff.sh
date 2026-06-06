@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # approve_handoff.sh thin-finalizer contract (v0.11.0): no marker, no packet,
 # no named-status. AC3 (clean → exit 0, no marker), AC5 (dirty → exit 0 + advisory),
-# AC3 idempotency (clean re-call), AC6 (cleanup happened), AC7 (kill switch).
+# AC12 (suppress recorded + dir preserved), AC7 (kill switch).
 set -uo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -50,30 +50,44 @@ else
 fi
 rm -rf "$WORK"
 
-# ── Case 3 (AC3 idempotency): clean re-call → exit 0 again, still no marker ──
+# ── Case 3 (AC12 idempotency): clean re-call → exit 0, suppressed_paths 1 entry ──
 WORK=$(mktemp -d); setup_repo "$WORK"
 spec="$WORK/docs/superpowers/specs/2026-01-01-test-spec.md"
 bash "$SCRIPT" "test-sid12" "$spec" >/dev/null 2>&1
-# re-create session dir (first call cleaned it up) to confirm second call also exits 0
-mkdir -p "$WORK/.claude/spec-distill/test-sid12"; echo state > "$WORK/.claude/spec-distill/test-sid12/state.local.md"
 bash "$SCRIPT" "test-sid12" "$spec" >"$OUT" 2>&1; rc=$?
-md=$(markers_dir "$WORK")
-if [[ $rc -eq 0 && ! -d "$md" ]]; then
-    note PASS "case 3 (AC3): clean re-call → exit 0, stateless idempotent"
+sf="$WORK/.claude/spec-distill/test-sid12/state.local.md"
+cnt=$(grep -c "  - docs/superpowers/specs/2026-01-01-test-spec.md" "$sf" 2>/dev/null || echo 0)
+if [[ $rc -eq 0 && "$cnt" == "1" ]]; then
+    note PASS "case 3 (AC12): idempotent re-call → exactly 1 suppressed entry"
 else
-    note FAIL "case 3: rc=$rc, no_marker_dir=$([[ ! -d $md ]] && echo y || echo n)"
+    note FAIL "case 3: rc=$rc cnt=$cnt"
 fi
 rm -rf "$WORK"
 
-# ── Case 4 (AC6): session dir present before → removed after approve ──
+# ── Case 4 (AC12): approve → suppressed_paths 기록 + pending strip + dir 보존 ──
 WORK=$(mktemp -d); setup_repo "$WORK"
 sess="$WORK/.claude/spec-distill/test-sid12"
-[[ -d "$sess" ]] || note FAIL "case 4 setup: session dir missing pre-call"
-bash "$SCRIPT" "test-sid12" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>&1; rc=$?
-if [[ $rc -eq 0 && ! -d "$sess" ]]; then
-    note PASS "case 4 (AC6): session dir cleaned up after approve"
+spec="$WORK/docs/superpowers/specs/2026-01-01-test-spec.md"
+cat > "$sess/state.local.md" <<EOF
+---
+session_id: test-sid12
+---
+
+pending_review:
+  path: $spec
+  mode: spec
+  worktree_path: $WORK
+  triggered_at: 2026-01-01T00:00:00Z
+EOF
+bash "$SCRIPT" "test-sid12" "$spec" >/dev/null 2>&1; rc=$?
+key="docs/superpowers/specs/2026-01-01-test-spec.md"
+if [[ $rc -eq 0 && -d "$sess" ]] \
+   && grep -q "^suppressed_paths:" "$sess/state.local.md" \
+   && grep -q "  - $key" "$sess/state.local.md" \
+   && ! grep -qE '^pending_review:' "$sess/state.local.md"; then
+    note PASS "case 4 (AC12): suppress recorded + pending stripped + dir preserved"
 else
-    note FAIL "case 4: rc=$rc, sess_gone=$([[ ! -d $sess ]] && echo y || echo n)"
+    note FAIL "case 4 (AC12): rc=$rc dir=$([[ -d $sess ]] && echo y || echo n)"
 fi
 rm -rf "$WORK"
 

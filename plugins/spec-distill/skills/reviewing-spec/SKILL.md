@@ -75,7 +75,7 @@ AskUserQuestion({
     question: "spec '<path>' review: <verdict 요약>. 다음 단계?",
     header: "Proceed",
     options: [
-      {label: "/compact 후 writing-plans (권장)", description: "approve_handoff(검증+cleanup) 후 verbatim /compact 명령 노출 → 사용자 /compact 실행 시 writing-plans. 긴 인터뷰 context 정리 이점."},
+      {label: "/compact 후 writing-plans (권장)", description: "approve_handoff(검증+suppress) 후 verbatim /compact 명령 노출 → 사용자 /compact 실행 시 writing-plans. 긴 인터뷰 context 정리 이점."},
       {label: "바로 writing-plans", description: "approve_handoff 후 즉시 Skill superpowers:writing-plans <path> 호출 (compact 없이)."},
       {label: "수정 필요", description: "approve 아님 — 후속 질문으로 revise per review / more interview / edit myself 분기."},
       {label: "멈춤 (나중에)", description: "state 보존하고 종료."}
@@ -112,13 +112,13 @@ approve(①/②) 시:
 bash "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/approve_handoff.sh" "$session_id" "$spec_path"
 ```
 
-스크립트(v0.11.0+)가 thin finalizer로 동작: (1) kill switch + charset guard, (2) **spec_path working-tree 존재 검증** (`[[ -f ]]`, 모든 git 조회 이전 — 부재 시 exit 1 + advisory + cleanup 미수행, state 보존), (3) 미커밋 spec advisory (non-blocking, exit 0), (4) 세션 디렉토리 cleanup. **상태 추적 artifact를 남기지 않는다** — 다음-단계 추천은 proceed 게이트가 담당. idempotent by statelessness(재호출은 clean tree에서 no-op).
+스크립트(v0.14.0+)가 thin finalizer로 동작: (1) kill switch + charset guard, (2) **spec_path working-tree 존재 검증** (`[[ -f ]]`, 모든 git 조회 이전 — 부재 시 exit 1 + advisory + suppress 미기록, state 보존), (3) 미커밋 spec advisory (non-blocking, exit 0), (4) **approved spec를 `suppressed_paths`에 기록 + 그 문서의 pending strip** (`suppress_state.py add` — v0.14.0에서 dir `rm` 대체; 같은 문서 재편집 시 재arm 차단). 세션 dir는 더 이상 여기서 삭제하지 않음 — SessionEnd hook / TTL-GC가 정리(승인 기억을 세션 동안 보존). 다음-단계 추천은 proceed 게이트가 담당. idempotent by set-membership(재호출은 키를 최대 1회 추가).
 
 **polite stop 금지** (AP2): approve인데 스크립트 호출/게이트를 skip하고 narrate만 하지 말 것. SessionEnd hook이 backup cleanup이나 user-explicit approve 의도는 즉시 반영.
 
 ### 실패 시 state 보존 (P14)
 
-approve_handoff.sh가 exit 1 시(spec_path 부재 — Step A 통과 후 race로 사라진 경우 포함 — 또는 session_id charset/arg 검증 실패) state.local.md 보존 + 세션 cleanup 미수행 (사용자 재선택 대기). 에이전트는 스크립트 stderr advisory를 그대로 노출하고 사용자 입력을 기다린다 (게이트 재표시는 사용자 요청 시). cleanup rm 실패는 advisory only — SessionEnd hook이 재시도. git commit 실패 경로는 존재하지 않음 (스크립트가 commit 시도 안 함; 미커밋은 advisory).
+approve_handoff.sh가 exit 1 시(spec_path 부재 — Step A 통과 후 race로 사라진 경우 포함 — 또는 session_id charset/arg 검증 실패) state.local.md 보존 + suppress 미기록 (사용자 재선택 대기). 에이전트는 스크립트 stderr advisory를 그대로 노출하고 사용자 입력을 기다린다 (게이트 재표시는 사용자 요청 시). suppress 기록 실패는 advisory only (non-fatal) — 사용자가 `/spec-distill:cancel-review`로 수동 억제 가능, 세션 dir 정리는 SessionEnd/TTL-GC. git commit 실패 경로는 존재하지 않음 (스크립트가 commit 시도 안 함; 미커밋은 advisory).
 
 ## In-flight state migration (C10)
 
