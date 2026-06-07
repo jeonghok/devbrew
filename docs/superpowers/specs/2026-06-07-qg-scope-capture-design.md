@@ -13,6 +13,7 @@ related:
   - plugins/quality-gates/scripts/check-trivia.sh                  # 형제 패턴 참조(무변경)
   - plugins/quality-gates/scripts/pre-pipeline-check.sh            # scope 해석 선행(무변경)
   - plugins/quality-gates/scripts/detect-runtime.sh               # runtime manifest 데이터원(무변경)
+  - plugins/quality-gates/scripts/discover-spec.sh               # spec AC 수 데이터원(무변경)
   - plugins/quality-gates/hooks/post-tool-use-session-tracker.py  # files.md 생산자(무변경)
   - plugins/quality-gates/commands/qg.md                          # kill switch + scope 문서
   - plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh  # anchor grep
@@ -29,7 +30,7 @@ related:
 > "clean"이 나오는 false-clean. 이 설계는 (1) "변경 있는데 resolved scope=0"을 결정론으로
 > 탐지해 거짓 "clean"을 구조적으로 막는 **정직-verdict floor**와, (2) 그 위에 깨진
 > 케이스에서만 1클릭으로 branch 리뷰를 제안하는 **redirect 게이트**, (3) Runtime이
-> Review와 달리 항상 full-project로 돈다는 사실을 실행 전 드러내는 **transparency 한 줄**을
+> Review와 달리 항상 full-project로 돈다는 사실을 boot 직전 드러내는 **transparency 한 줄**을
 > 더한다. 정상 경로(scope>0, 또는 진짜 변경 없음)는 침묵·zero-click 유지.
 
 ## 목차
@@ -40,7 +41,7 @@ related:
 - [4. Constraints](#4-constraints)
 - [5. Architecture](#5-architecture)
   - [5.1 결정론 신호 — `check-review-scope.sh`](#51-결정론-신호--check-review-scopesh)
-  - [5.2 소비자 A — redirect 게이트](#52-소비자-a--redirect-게이트)
+  - [5.2 호출·캐시 + 소비자 A — redirect 게이트](#52-호출캐시--소비자-a--redirect-게이트)
   - [5.3 소비자 B — 정직-verdict floor](#53-소비자-b--정직-verdict-floor)
   - [5.4 Runtime transparency 라인](#54-runtime-transparency-라인)
 - [6. Acceptance Criteria](#6-acceptance-criteria)
@@ -49,6 +50,7 @@ related:
 - [9. Rejected Alternatives](#9-rejected-alternatives)
 - [10. Open Questions](#10-open-questions)
 - [11. Concrete Next Action](#11-concrete-next-action)
+- [Handoff Context](#handoff-context)
 - [12. Metadata](#12-metadata)
 
 ## 1. Context / Why
@@ -93,7 +95,7 @@ harness-lightness), 기본값을 강제 branch로 바꾸면 개발 중 빠른 �
 - **G2 (redirect 게이트):** false-clean을 탐지하면, 깨진 케이스에서만 1클릭으로 "branch
   diff를 리뷰할까?"를 제안한다. P17 redirect 가능(hard block 아님).
 - **G3 (Runtime transparency):** Runtime이 *무엇을·어떻게* 검증하는지 + *Review scope와 무관하게
-  full-project로 돈다*는 비대칭을 실행 전 한 줄로 드러낸다.
+  full-project로 돈다*는 비대칭을 boot 직전 한 줄로 드러낸다.
 - **G4 (lightness 보존):** 정상 경로(scope>0) / 진짜 no-op(변경 없음)은 추가 클릭·마찰 0.
   새 게이트는 verdict가 거짓이 될 케이스에서만 발화.
 - **G5 (격리·테스트성):** 탐지 로직은 read-only 스크립트 하나로 격리해 독립 단위 테스트.
@@ -113,6 +115,9 @@ harness-lightness), 기본값을 강제 branch로 바꾸면 개발 중 빠른 �
 - **NG5:** 새 P# 신설하지 않는다. floor는 P8 determinism-economy에 흡수(design-lightness).
 - **NG6:** 자연어 scope 의도("전체 PR", "지금 브랜치") 파싱용 결정론 토큰 parser를 만들지
   않는다. non-load-bearing routing은 모델 신뢰(P8) — 결정론적 보장은 `/qg branch`에만.
+- **NG7:** 기존 `/qg branch` 명시 경로의 base 해석 동작을 바꾸지 않는다. C6 parity는 *redirect
+  "Review branch diff" 경로*에만 적용된다(같은 스크립트 run의 `base:` 재사용으로 보장) — 기존
+  branch 경로와의 수렴은 권장이되 이 작업 범위 밖.
 
 ## 4. Constraints
 
@@ -127,11 +132,12 @@ harness-lightness), 기본값을 강제 branch로 바꾸면 개발 중 빠른 �
 - **C5 (fail-open):** git 부재/detached HEAD/merge-base 없음/shallow 등 불확실 상태는
   `degraded`로 fail-open → 게이트 미발화(happy-path 마찰 0). 확신할 때만 발화 → false-positive
   차단.
-- **C6 (단일 base 진실원):** `branch_ahead_count`가 세는 diff와 redirect "Review branch diff"가
-  실제 리뷰하는 diff는 **동일 base**(merge-base)를 써야 한다 — 표시된 "M files ahead"와
-  실제 검토 대상이 일치해야 정직.
-- **C7 (단일 턴·단일 dispatch):** v2.0.0 파이프라인 규칙 유지 — setup/check-trivia 1회,
-  Stop hook·continuation sentinel 없음. 신규 스크립트도 preflight/Review-iter-1에서 1회 호출.
+- **C6 (단일 base 진실원):** redirect "Review branch diff" 경로에서 `branch_ahead_count`가 세는
+  diff와 실제 리뷰하는 diff는 **동일 base**(같은 스크립트 run의 `base:` 출력으로 만든
+  `merge_base(base)..HEAD`)를 써야 한다 — 표시된 "M files ahead" == 실제 검토 대상.
+- **C7 (단일 턴·단일 호출):** v2.0.0 파이프라인 규칙 유지 — setup/check-trivia 1회, Stop
+  hook·continuation sentinel 없음. `check-review-scope.sh`도 Review iter-1에서 **1회만** 호출하고
+  결과를 SKILL-turn 변수로 캐시(§5.2).
 - **C8 (플러그인 shape):** plugin.json SemVer bump(2.5.0→2.6.0), CHANGELOG, README Principles
   Instantiated 갱신(모든 PR 필수).
 
@@ -139,24 +145,24 @@ harness-lightness), 기본값을 강제 branch로 바꾸면 개발 중 빠른 �
 
 설계의 핵심: **하나의 결정론 신호, 두 소비자.** 탐지 로직을 SKILL 프롬프트에 흩뿌리지 않고
 read-only 스크립트 하나로 격리하고, 그 신호를 (A) redirect 게이트와 (B) 정직-verdict floor가
-소비한다. 신호원이 하나라 둘이 절대 발산하지 않는다.
+소비한다. 스크립트를 iter-1에서 **1회** 호출해 결과를 캐시하므로 두 소비자가 동일 값을 본다 —
+발산 불가.
 
 ```
                          ┌─────────────────────────────┐
                          │  check-review-scope.sh       │  (신규, read-only)
   scope mode (session/   │                              │
    branch/paths) ──────▶ │  resolved_count              │
-  session files.md ────▶ │  branch_ahead_count          │── signal: ─────────┐
-  git (merge-base/diff)  │  worktree_dirty              │  empty_scope_with_  │
-                         └─────────────────────────────┘  changes|normal|    │
-                                                           genuine_noop|      │
-                                                           degraded            │
-                         ┌──────────────────────────────────────────────────┘
-                         ▼
+  session files.md ────▶ │  branch_ahead_count          │── stdout ──────────┐
+  git (merge-base/diff)  │  worktree_dirty / base       │  (1회 호출,        │
+                         └─────────────────────────────┘   SKILL이 캐시)     │
+                                                                              │
+        SKILL-turn 캐시: $scope_signal $branch_ahead_count $base ◀───────────┘
+                         │                                  │
+                         ▼ (Review iter-1, scout 이전)      ▼ (verdict 방출부, Step 4.5)
    ┌────────────────────────────────┐     ┌────────────────────────────────┐
    │ 소비자 A: redirect 게이트       │     │ 소비자 B: 정직-verdict floor    │
-   │ (Review iter 1, scout 이전)     │     │ (verdict 방출부, Step 4.5)      │
-   │ signal==empty_scope_with_changes│     │ resolved_count==0 & 변경 존재   │
+   │ signal==empty_scope_with_changes│     │ signal==empty_scope_with_changes│
    │  → AskUserQuestion 발화         │     │  → "no scope reviewed … NOT     │
    │    (kill switch로 끌 수 있음)   │     │     certified clean" (결정론)   │
    └────────────────────────────────┘     └────────────────────────────────┘
@@ -169,25 +175,37 @@ read-only 스크립트 하나로 격리하고, 그 신호를 (A) redirect 게이
 SKILL이 분기). **단일 책임:** "resolved review scope가 비었는데 검토할 변경이 존재하는가?"
 
 **입력(인자/env):**
-- scope mode: `session` | `branch` | `paths`(SKILL이 preflight 해석 결과로 전달).
+- scope mode: `session` | `branch` | `paths`(SKILL이 preflight 해석 결과로 인자 전달).
 - `CLAUDE_CODE_SESSION_ID`(→ `.claude/quality-gates/<sid>/files.md` 위치).
-- paths mode면 glob 목록.
+- paths mode면 glob 목록 인자.
 
-**base 해석(C6 단일 진실원):**
+**base 해석(C6 단일 진실원 — 존재 확인까지 고정):**
 ```
-base = 첫 번째로 가능한 것:
-  git symbolic-ref --short refs/remotes/origin/HEAD  → "origin/" strip
-  → "main"(존재 시) → "master"(존재 시)
-merge_base = git merge-base "$base" HEAD
+base = 첫 번째로 성공하는 것:
+  (1) git symbolic-ref --short refs/remotes/origin/HEAD  → "origin/" prefix strip
+  (2) git rev-parse --verify --quiet refs/remotes/origin/main  → "main"
+  (3) git rev-parse --verify --quiet refs/remotes/origin/master → "master"
+  (4) git rev-parse --verify --quiet refs/heads/main   → "main"   (remote 없는 local)
+  (5) git rev-parse --verify --quiet refs/heads/master → "master"
+  모두 실패 → signal: degraded (fail-open)
+merge_base = git merge-base "$base" HEAD   (실패 → degraded)
 branch_ahead_count = git diff --name-only "$merge_base"..HEAD | wc -l
 ```
-(redirect "Review branch diff" 경로의 리뷰 대상도 이 `merge_base..HEAD`와 동일해야 함 — C6.)
+존재 확인은 전부 `git rev-parse --verify --quiet`로 통일 — local-only/remote 브랜치를 일관되게
+구분하고 detached HEAD/shallow에서 `degraded`로 떨어진다. SKILL의 redirect "Review branch diff"
+경로는 이 `base:` 출력값을 그대로 받아 `merge_base(base)..HEAD`로 리뷰 대상을 만든다(C6 parity).
 
 **계산:**
-- `resolved_count`: session mode면 `files.md`의 `- ` 항목 수; paths mode면 glob 매칭 + 변경된
-  파일 수; branch mode면 `branch_ahead_count`.
-- `worktree_dirty`: `git diff HEAD --name-only` 비어있지 않음 OR untracked(exclude-standard)
-  존재면 `yes`.
+- `resolved_count`:
+  - session mode → `files.md`의 `- ` 항목 수(없으면 0).
+  - paths mode → `git diff HEAD --name-only -- <globs> | wc -l`(glob에 매칭되면서 *동시에*
+    `git diff HEAD`에 등장하는 파일 수 — 변경 없는 glob 매칭은 제외; 단순 glob 매칭 수가 아님).
+  - branch mode → `branch_ahead_count`.
+- `worktree_dirty`: `git diff HEAD --name-only` 비어있지 않음 OR untracked(`git ls-files
+  --others --exclude-standard`) 존재면 `yes`. **`--exclude-standard`는 의도적** — `.gitignore`
+  대상(빌드 아티팩트·`node_modules`·`*.log` 등)은 "변경"으로 치지 않아 진짜 no-op(NG4)을
+  false-positive로 `empty_scope_with_changes`로 오분류하지 않는다. tracked 변경 + non-ignored
+  untracked만 센다.
 - `changes_exist` = `branch_ahead_count > 0` OR `worktree_dirty == yes`.
 
 **출력(structured stdout):**
@@ -195,7 +213,7 @@ branch_ahead_count = git diff --name-only "$merge_base"..HEAD | wc -l
 resolved_count: <N>
 branch_ahead_count: <M>
 worktree_dirty: yes|no
-base: <branch-name>
+base: <branch-name|->
 signal: empty_scope_with_changes | normal | genuine_noop | degraded
 ```
 
@@ -210,15 +228,20 @@ signal: empty_scope_with_changes | normal | genuine_noop | degraded
 **exit code:** 0 = ok(신호 파싱); 비정상 환경은 `signal: degraded` + exit 0(fail-open, SKILL이
 no-gate 처리). `detect-runtime.sh`의 graceful-degradation 규율과 동일.
 
-### 5.2 소비자 A — redirect 게이트
+### 5.2 호출·캐시 + 소비자 A — redirect 게이트
 
-Review 게이트 iter 1에서 **scope 해석 + v2.5.0 transparency 한 줄 직후, scout dispatch 이전**에
-`check-review-scope.sh` 호출. `signal == empty_scope_with_changes`이고 kill switch
-미설정이면 `AskUserQuestion` 발화.
+**호출·캐시(C7, 격리 계약):** SKILL은 `check-review-scope.sh`를 **Review iter-1 step 1**에서
+(scope 해석 + v2.5.0 transparency 한 줄 직후, scout dispatch 이전) **1회만** 호출하고 출력을
+SKILL-turn 변수 `$scope_signal` / `$branch_ahead_count` / `$base`에 캐시한다. 소비자 A(redirect
+게이트)와 소비자 B(floor)는 **재호출 없이 이 캐시를 소비**한다. iter 2–5에서 재호출하지 않는
+이유: empty-scope 케이스는 iter-1의 redirect 게이트에서 branch/honest-empty/stop 중 하나로
+*해소*되므로, 이후 iteration은 항상 non-empty(branch) scope로만 돌아 floor의
+`resolved_count==0` 술어가 iter-1에 한정된다. allowed-tools에 스크립트 추가.
 
-**고유 anchor 구절:** 질문 본문에 리터럴 `review scope is empty` 포함(SKILL 내 타 decision-tool
-호출과 충돌 없음 — `findings remain`/`both gates`/`Runtime verifier needs`와 같은 격의 protocol
-anchor. orchestration grep 테스트로 존재·고유성 검증).
+**소비자 A 발화:** `$scope_signal == empty_scope_with_changes`이고 kill switch 미설정이면
+`AskUserQuestion` 발화. **고유 anchor 구절:** 질문 본문에 리터럴 `review scope is empty` 포함
+(SKILL 내 타 decision-tool과 충돌 없음 — `findings remain`/`both gates`/`Runtime verifier
+needs`와 같은 격의 protocol anchor. orchestration grep이 존재·고유성 검증).
 
 ```
 AskUserQuestion({
@@ -229,7 +252,7 @@ AskUserQuestion({
     header: "Review scope",
     options: [
       {label: "Review branch diff (recommended)",
-       description: "merge-base(<base>)..HEAD 변경분을 리뷰. scope=branch로 재해석 후 정상 진행."},
+       description: "merge_base(<base>)..HEAD 변경분을 리뷰. scope=branch로 재해석 후 정상 진행."},
       {label: "Proceed (honest-empty, not clean)",
        description: "리뷰어 dispatch 건너뛰고 정직 verdict 직행 — 'no scope reviewed, NOT clean'."},
       {label: "Stop",
@@ -240,12 +263,14 @@ AskUserQuestion({
 })
 ```
 
-**분기:**
-- **Review branch diff** → scope=branch로 재해석(`merge_base..HEAD`), scout부터 정상 진행. 이후
-  iteration은 기존과 동일.
-- **Proceed (honest-empty)** → scout/reviewer dispatch 건너뜀(0개 파일에 리뷰어 돌리는 낭비
-  회피) → 5.3 정직 verdict 직행 → 다음 게이트/요약.
-- **Stop** → 정직 요약으로 중단(aborted at Review gate).
+**분기 (각 분기는 transcript-observable output을 남긴다 — AC7 검증용):**
+- **Review branch diff** → scope=branch로 재해석(`$base`로 `merge_base..HEAD`), 가시 출력
+  `> Review scope: branch (<M> files vs <base>).` → scout부터 정상 진행. 이후 iteration 기존과 동일.
+- **Proceed (honest-empty)** → scout/reviewer dispatch **건너뜀**(0개 파일에 리뷰어 돌리는 낭비
+  회피). positive observable 라인 출력(부재가 아니라 명시적 출력으로 검증 가능):
+  `> Review gate: skipping reviewer dispatch — 0 files reviewed (honest-empty path).`
+  → 5.3 정직 verdict 직행 → 다음 게이트/요약.
+- **Stop** → final summary에 `aborted at Review gate (empty scope, branch <M> ahead)` 표기로 중단.
 
 **kill switch:** `DEVBREW_QG_DISABLE_SCOPE_REDIRECT=1` → 게이트 생략, advisory 한 줄만 출력
 (`> [quality-gates] review scope empty but branch <M> ahead — redirect gate disabled; floor still applies.`)
@@ -253,25 +278,30 @@ AskUserQuestion({
 
 ### 5.3 소비자 B — 정직-verdict floor
 
-결정론 backstop. verdict 방출부(현재 SKILL Review 게이트 **Step 4.5**의 `kept=0 & suppressed=0`
-분기)에서, `check-review-scope.sh` 신호가 `empty_scope_with_changes`이면(= `resolved_count==0
-& changes_exist`) 라벨을 honest로 교체:
+결정론 backstop. verdict 방출부(SKILL Review 게이트 **Step 4.5**)에서, 캐시된 `$scope_signal`이
+`empty_scope_with_changes`이면 clean-equivalent 라벨을 honest로 교체. **Step 4.5의 clean으로
+귀결되는 두 sub-case 모두**에 적용한다:
 
-- 기존: `## Review gate iter N: clean`
-- floor: `## Review gate iter N: no scope reviewed (0 files; branch <M> ahead of <base>) — NOT certified clean.`
+- `kept=0 & suppressed=0` (`## Review gate iter N: clean`) → honest 라벨로 교체.
+- `kept=0 & suppressed>0` (`No high-confidence findings. N low-confidence findings suppressed.` —
+  현재 clean으로 treat해 loop exit) → 이 케이스도 사용자가 "검토됨·문제없음"으로 읽을 위험이
+  있으므로 honest 라벨을 **함께** 출력(suppressed count 라인은 유지).
 
-이 분기는 redirect 게이트와 **동일 신호원**을 소비하므로 발산 불가. 게이트가 어떤 이유로든
+honest 라벨:
+`## Review gate iter N: no scope reviewed (0 files; branch <M> ahead of <base>) — NOT certified clean.`
+
+이 분기는 redirect 게이트와 **동일 캐시 신호**를 소비하므로 발산 불가. 게이트가 어떤 이유로든
 (kill switch / AskUserQuestion 부재 / "Proceed honest-empty" 선택) 우회돼도 거짓 "clean"은
 구조적으로 불가 = G1 load-bearing(P8). `normal`/`genuine_noop` 경로의 `clean`/transparency
 문구는 **무변경**(NG4).
 
 최종 요약(Final Summary)의 `Review gate:` 줄도 honest-empty 케이스를 그대로 반영
-(`no scope reviewed (branch <M> ahead)` 등).
+(`no scope reviewed (branch <M> ahead)`).
 
 ### 5.4 Runtime transparency 라인
 
 순수 additive 한 줄(LD3 — 새 게이트·diff-scope 강제·동작 변경 전무, NG3). Review의
-`> Review scope: session (N files)`와 대칭.
+`> Review scope: ...`와 대칭.
 
 ```
 > Runtime scope: full project (<project_type>) — boots <surface 요약>, asserts <K> spec AC.
@@ -280,44 +310,57 @@ AskUserQuestion({
 
 - **마지막 절 `regardless of Review scope` = OQ4 비대칭 명시**(리터럴, grep 검증).
 - **데이터원(새 계산 없음):** `detect-runtime.sh` manifest(`project_type` +
-  `runnable_surfaces`/`test_runners` 요약) + spec AC 개수(R2 `discover-spec`에서 이미 수집).
+  `runnable_surfaces`/`test_runners` 요약) + spec AC 개수(R2 `discover-spec`에서 수집).
   `<K>` = spec AC 수(spec 없으면 `0 spec AC (smoke fallback)`).
-- **발화 지점(기존 surface 확장, 새 surface 없음 — OQ3):** Runtime 게이트 도달 *모든* 경로에서
-  dispatch 직전 1회:
-  - Decision 2 발화 경로(`requires_decision` surface 존재) → 질문 직전.
-  - Decision 2 zero-click 경로(현재 "print a one-line plan and proceed zero-click"의 그 줄) →
-    이 줄로 구체화.
-  - 단일 게이트 `/qg runtime`의 Step R-init → 동일.
+- **발화 지점(단일 — 타이밍 정합):** Runtime 게이트 **Step R2 직후·R3(runtime-verifier
+  dispatch) 직전 1회**. 출력 라인 시작 anchor: `> Runtime scope: full project`. 근거: Decision
+  2(Upfront 단계)와 R-init은 R2의 spec AC 수집 *이전*에 실행되므로 그 시점엔 `<K>`가 미확정 —
+  라인을 R2 뒤로 두면 manifest·approved_surfaces·spec AC가 모두 확정된 상태로 정확히 출력된다.
+  **Runtime 게이트가 실행되는 모든 경로(both-gates, 단일 `/qg runtime`)가 R3를 통과**하므로 단일
+  지점이 그 경로들을 전부 커버한다. Review-gate-only 경로(`gate=review`/"Review gate only"/
+  `effective_skip_runtime`)는 Runtime 게이트 섹션을 통째 skip하므로 R3에 도달하지 않고 — 이는
+  정상이다(돌리지 않는 Runtime을 설명할 라인도 없어야 함). R3는 앱 boot 직전이라 "before
+  execution" 의도도 만족한다(라인은 SKILL.md에 1회 등장 — grep -c == 1, 위치는 §8 proximity 검증).
 
 ## 6. Acceptance Criteria
 
 - **AC1:** `check-review-scope.sh`는 `resolved_count==0` AND (`branch_ahead_count>0` OR
-  `worktree_dirty`)일 때 `signal: empty_scope_with_changes`를 emit한다.
+  `worktree_dirty`)일 때 `signal: empty_scope_with_changes`를 emit한다(session·branch·paths mode 각각).
 - **AC2:** `resolved_count==0` AND 변경 전무일 때 `signal: genuine_noop`을 emit한다.
-- **AC3:** `resolved_count>0`일 때 `signal: normal`을 emit한다.
+- **AC3:** `resolved_count>0`일 때 `signal: normal`을 emit한다(paths mode 포함 — glob∩diff>0).
 - **AC4:** git 부재/detached HEAD/merge-base 없음/shallow일 때 `signal: degraded` + exit 0
   (fail-open)을 emit하고, SKILL은 이를 no-gate(redirect·floor 미발화)로 처리한다.
 - **AC5:** `check-review-scope.sh`는 파일을 생성/수정/삭제하지 않는다(read-only — 실행 전후
   `git status --porcelain` + working tree 불변).
-- **AC6:** SKILL Review 게이트 iter 1은 `signal==empty_scope_with_changes` AND kill switch
+- **AC6:** SKILL Review 게이트 iter 1은 `$scope_signal==empty_scope_with_changes` AND kill switch
   미설정일 때만 redirect `AskUserQuestion`을 발화하며, 그 질문에 리터럴 `review scope is empty`가
-  있고, 이 구절은 SKILL 내 다른 어떤 decision-tool 호출에도 없다(고유).
-- **AC7:** redirect 게이트 3옵션이 명세대로 분기한다 — "Review branch diff"→scope=branch 재해석
-  후 진행; "Proceed (honest-empty)"→리뷰어 skip + 정직 verdict; "Stop"→정직 요약 중단.
-- **AC8 (floor, 결정론):** `resolved_count==0 & changes_exist`이면 Review verdict 라벨은
-  `no scope reviewed … NOT certified clean`이며 절대 `clean`이 아니다. 이는 redirect 게이트와
+  있고, 이 구절은 SKILL 내 다른 어떤 decision-tool 호출에도 없다(고유 — grep -c == 1).
+- **AC7:** redirect 게이트 3옵션이 명세대로 분기하며 각각 transcript-observable **positive**
+  anchor를 남긴다 — "Review branch diff"→`> Review scope: branch (<M> files vs <base>)` 출력 +
+  scope=branch 진행; "Proceed (honest-empty)"→`> Review gate: skipping reviewer dispatch — 0 files
+  reviewed (honest-empty path).` 출력 + 정직 verdict(부재가 아닌 명시 출력으로 검증); "Stop"→final
+  summary `aborted at Review gate (empty scope...)`.
+- **AC8 (floor, 결정론):** `$scope_signal==empty_scope_with_changes`이면 Step 4.5의 clean-귀결
+  **두 sub-case 모두**(`suppressed=0`·`suppressed>0`)에서 Review verdict 라벨이
+  `no scope reviewed … NOT certified clean`이며 절대 단독 `clean`이 아니다. redirect 게이트와
   독립적으로 verdict 방출부에서 보장된다(게이트 우회·kill switch에도 불변).
 - **AC9:** `DEVBREW_QG_DISABLE_SCOPE_REDIRECT=1`이면 redirect 게이트는 발화하지 않되(advisory
   한 줄), floor(AC8)는 여전히 적용된다.
 - **AC10 (무회귀):** `normal`/`genuine_noop` 경로는 추가 클릭 없이 기존 verdict("clean")·
   transparency 문구를 그대로 유지한다.
-- **AC11:** Runtime 게이트에 도달하는 모든 경로(Decision 2 발화/zero-click, 단일 `/qg runtime`
-  R-init)는 dispatch 직전 transparency 라인을 출력하며, 그 라인에 리터럴 `regardless of Review
-  scope` + `project_type` + spec AC 수가 포함된다.
+- **AC11:** Runtime transparency 라인은 Step R2 직후·R3 직전 **1회** 출력되며(SKILL.md에 리터럴
+  1회 등장, `grep -c 'regardless of Review scope' == 1` + §8 proximity 검증으로 R2·R3 step marker
+  (`**bold**`, `##` 헤더 아님) *사이* 위치 확인 — 단순 존재가 아니라 위치까지), transcript-observable
+  anchor `> Runtime scope: full
+  project`로 시작해 `project_type` + surface 요약 + spec AC 수(`<K>`)를 포함한다. Runtime 게이트가
+  실행되는 모든 경로(both-gates / 단일 `/qg runtime`)가 R3를 통과하므로 단일 지점이 그 경로들을
+  커버한다(Review-gate-only은 Runtime 미실행이라 라인 없음 = 정상, AC12).
 - **AC12 (Runtime 무변경):** Runtime은 여전히 full-project로 돌고 diff-scope 강제·새 게이트가
   없다(라인은 additive). 단일 게이트 `/qg runtime` 동작 불변(라인 추가 외).
-- **AC13:** `branch_ahead_count`가 세는 diff와 "Review branch diff" 리뷰 대상이 동일 base
-  (merge-base)를 쓴다(C6 — 표시 M == 실제 검토 대상).
+- **AC13 (SKILL-스크립트 계약, C6):** redirect "Review branch diff" 경로의 리뷰 대상 base는
+  스크립트가 emit한 `base:` 값과 동일하다 — 정적 검증: SKILL redirect-branch 블록이
+  `$base`(스크립트 출력)를 참조해 `merge_base..HEAD`를 구성하는 라인이 존재(orchestration grep).
+  단위 테스트는 스크립트의 `base:` 출력 정확성만 담당.
 - **AC14:** plugin.json `2.6.0`, CHANGELOG `## [2.6.0] — 2026-06-07`, README Scope +
   Principles Instantiated 갱신, philosophy P8에 floor 한 문장 흡수(새 P# 없음).
 
@@ -326,10 +369,10 @@ AskUserQuestion({
 | 파일 | 변경 |
 |---|---|
 | `plugins/quality-gates/scripts/check-review-scope.sh` | **신규** — 결정론 신호(§5.1) |
-| `plugins/quality-gates/tests/test_check_review_scope.sh` | **신규** — AC1–AC5,AC13 fixture 단위 테스트 |
-| `plugins/quality-gates/skills/quality-pipeline/SKILL.md` | allowed-tools에 `check-review-scope.sh` 추가; Review iter 1에 redirect 게이트(§5.2, AC6/AC7); Step 4.5에 floor 라벨(§5.3, AC8); Runtime 3지점 transparency 라인(§5.4, AC11); kill switch 분기(AC9) |
+| `plugins/quality-gates/tests/test_check_review_scope.sh` | **신규** — AC1–AC5 fixture 단위 테스트 |
+| `plugins/quality-gates/skills/quality-pipeline/SKILL.md` | allowed-tools에 `check-review-scope.sh` 추가; Review iter-1 step 1에 1회 호출+캐시(§5.2); redirect 게이트(§5.2, AC6/AC7); Step 4.5 floor 두 sub-case(§5.3, AC8); Runtime R2 직후 단일 transparency 라인(§5.4, AC11); kill switch 분기(AC9); redirect-branch가 `$base` 참조(AC13) |
 | `plugins/quality-gates/commands/qg.md` | Quick Reference에 `DEVBREW_QG_DISABLE_SCOPE_REDIRECT=1` 행 + Scope 섹션 한 줄(floor/redirect 설명) |
-| `plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh` | redirect anchor(`review scope is empty`) 존재·고유성 + Runtime 라인(`regardless of Review scope`) grep(AC6/AC11) |
+| `plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh` | redirect anchor(`review scope is empty`, grep -c==1) + Runtime 라인(`regardless of Review scope`, grep -c==1) + AC13 정적 계약(redirect-branch `$base` 참조) grep |
 | `plugins/quality-gates/.claude-plugin/plugin.json` | `2.5.0` → `2.6.0` (AC14) |
 | `plugins/quality-gates/CHANGELOG.md` | `## [2.6.0] — 2026-06-07` (Added: floor/redirect/runtime line; Changed: empty-scope verdict label) |
 | `plugins/quality-gates/README.md` | Scope 설명 + Principles Instantiated에 P8 floor 한 줄 |
@@ -337,21 +380,34 @@ AskUserQuestion({
 
 ## 8. Verification Plan
 
-- **단위(신규):** `tests/test_check_review_scope.sh` — git fixture 4종으로 AC1–AC5,AC13:
-  - 빈 세션(`files.md` 없음/0항목) + 브랜치 base보다 앞섬 → `empty_scope_with_changes`.
-  - session `files.md` ≥1항목 → `normal`.
+- **단위(신규) — `tests/test_check_review_scope.sh`:** git fixture로 AC1–AC5:
+  - session: 빈 세션(`files.md` 없음/0항목) + 브랜치 base보다 앞섬 → `empty_scope_with_changes`.
+  - session: `files.md` ≥1항목 → `normal`.
+  - paths: glob 매칭 ∩ `git diff HEAD` > 0 → `normal`; 변경 없는 glob 매칭만 → `empty_scope_with_changes`(변경이 타 파일에 있을 때) / `genuine_noop`(변경 전무).
   - 빈 세션 + 변경 전무(clean tree, 브랜치 base와 동일) → `genuine_noop`.
-  - merge-base 없음(무관 root) / shallow → `degraded` + exit 0 (fail-open).
+  - merge-base 없음(무관 root) / detached HEAD → `degraded` + exit 0 (fail-open).
   - read-only 확인: 실행 전후 `git status --porcelain` 동일(AC5).
-- **orchestration grep:** `test_skill_orchestration_behavior.sh` 확장 — redirect anchor
-  `review scope is empty` 1회 존재 + 타 decision-tool 미포함(고유); Runtime 라인
-  `regardless of Review scope` 존재(AC6/AC11/AC14 anchor).
-- **수동 e2e(스크립트화 곤란 — 메모리 V10 패턴):**
-  1. 파일 편집→커밋→**새 세션**→`/qg` → redirect 게이트 발화 확인(AC6), 3옵션 각각 분기
-     (AC7); "Proceed honest-empty" 선택 시 verdict가 `NOT certified clean`(AC8).
-  2. `DEVBREW_QG_DISABLE_SCOPE_REDIRECT=1`로 재실행 → 게이트 없이 advisory + floor 적용(AC9).
-  3. 진짜 no-op(clean tree, 브랜치 base와 동일) `/qg` → 침묵·기존 clean(AC10).
-  4. web 프로젝트에서 Runtime 도달 → transparency 라인 + `regardless of Review scope`(AC11).
+  - `base:` 출력값 정확성(fixture가 origin/HEAD·local main·master 케이스별 기대 base).
+- **orchestration grep — `test_skill_orchestration_behavior.sh` 확장:**
+  - redirect anchor `review scope is empty` `grep -c == 1`(존재+고유, AC6).
+  - Runtime 라인 `regardless of Review scope` `grep -c == 1`(단일 지점) + **위치 검증**: awk/sed로
+    SKILL.md에서 그 라인이 `Step R2` step marker와 `Step R3` step marker(둘 다 `**bold**` 인라인
+    라벨 — `##` 마크다운 헤더 아님; 각 SKILL.md 전체에서 1회 등장) *사이*에 위치함을 확인(단순
+    존재가 아니라 R2-직후·R3-직전 — AC11). observable anchor `> Runtime scope: full project`도 grep.
+  - honest-empty positive anchor `> Review gate: skipping reviewer dispatch` `grep -c == 1`(AC7
+    회귀 보호 — non-event 대신 positive 출력 확인).
+  - AC13 정적 계약: SKILL redirect-branch 블록이 `$base`(스크립트 출력) 참조 라인 존재.
+- **수동 e2e(스크립트화 곤란 — 메모리 V10 패턴, observable anchor 명시):**
+  1. 편집→커밋→**새 세션**→`/qg` → redirect 게이트 발화(AC6). 3옵션 각각:
+     "Review branch diff"→`> Review scope: branch (M files vs <base>)` 확인(AC7);
+     "Proceed honest-empty"→`> Review gate: skipping reviewer dispatch — 0 files reviewed
+     (honest-empty path).` + verdict `NOT certified clean`(AC7/AC8);
+     "Stop"→final `aborted at Review gate (empty scope...)`(AC7).
+  2. `DEVBREW_QG_DISABLE_SCOPE_REDIRECT=1` 재실행 → 게이트 없이 advisory + verdict
+     `NOT certified clean`(AC9).
+  3. 진짜 no-op(clean tree, 브랜치 base와 동일) `/qg` → 침묵·기존 `clean`(AC10).
+  4. web 프로젝트 Runtime 도달 → R3 직전 transparency 라인 + `regardless of Review scope` +
+     spec AC 수(AC11).
 - **baseline:** 작업 전 repo root에서 기존 테스트 baseline 캡처(메모리: main에 8개 stale red —
   codex/consent/security/sandbox 환경의존, 작업과 무관 확인). 테스트는 repo root에서 실행.
 - **Law 2:** persona(`agents/*.md`) diff 없음 확인(C1).
@@ -361,7 +417,7 @@ AskUserQuestion({
 - **강제 branch/PR-diff 기본값 전환** → 버림. 개발 중 빠른 피드백(좁은 '방금 한 작업' scope)
   파괴 + 무거운 기본값이 인지부하·friction↑·채택률↓(brief §5, steelman ①④⑤). session 유지(NG1).
 - **generic empty-scope hard block(전면 차단)** → 버림. 이 repo '옥죄기' 폐기 패턴 +
-  idempotent no-op은 올바름. "변경 있는데 scope=0"만 좁게 잡는 redirect 게이트+floor로 대체(NG2).
+  idempotent no-op은 정상. "변경 있는데 scope=0"만 좁게 잡는 redirect 게이트+floor로 대체(NG2).
 - **Runtime을 변경 diff-scope로 강제** → 버림. 앱 부팅엔 전체 앱 필요 — 비대칭은 본질. additive
   transparency만(NG3).
 - **Advisory-only(redirect 질문 없음)** → 버림. 사용자가 redirect 게이트 채택(이 세션 Q) —
@@ -369,6 +425,9 @@ AskUserQuestion({
 - **탐지 로직을 `pre-pipeline-check.sh` 확장/SKILL 인라인** → 버림. pre-pipeline은
   staleness/branch-mismatch state mutation 책임 — scope-vs-changes 탐지를 섞으면 책임 혼탁. 새
   read-only 스크립트가 단일 책임·독립 테스트(G5).
+- **Runtime 라인 3지점 발화(Decision 2 + R-init + R3)** → 버림. Decision 2·R-init은 R2의 spec AC
+  수집 *이전*이라 `<K>` 미확정(타이밍 충돌). 모든 경로가 통과하는 R2-직후·R3-직전 단일 지점으로
+  수렴 — 정확성 + grep 검증 단순화(§5.4).
 - **no-op "clean"을 "nothing to review"로 변경** → 버림. brief "전자는 두지만" 명시 —
   scope creep. 진짜 no-op verdict는 무변경(NG4).
 - **새 P# 신설** → 버림. floor는 P8 determinism-economy의 직접 사례 — 흡수(NG5,
@@ -376,19 +435,43 @@ AskUserQuestion({
 
 ## 10. Open Questions
 
-- **OQ-A(구현 세부, 차단 아님):** `branch_ahead_count` diff와 scope=branch 리뷰 대상의 base
-  parity(C6/AC13)는 `check-review-scope.sh`가 base를 정의하고 SKILL의 branch-scope 경로가 그
-  값을 재사용하는 형태로 writing-plans에서 확정. 현 SKILL은 단일 canonical base resolver가
-  없으므로(qg.md "vs main"), 신규 스크립트가 단일 진실원이 된다.
-- **OQ-B(범위 밖):** session tracker가 *이번 세션 밖*에서 편집된 파일(다른 세션·외부 에디터)을
-  못 잡는 더 넓은 문제는 이 작업 범위 밖 — floor가 `worktree_dirty`로 부분 포착하나 근본
-  해결(브랜치 기준 항상 비교)은 NG1과 충돌하므로 의도적으로 다루지 않음.
+- **OQ-A (범위 밖, 의도적):** session tracker가 *이번 세션 밖*에서 편집된 파일(다른 세션·외부
+  에디터)을 못 잡는 더 넓은 문제는 이 작업 범위 밖 — floor가 `worktree_dirty`로 부분 포착하나
+  근본 해결(브랜치 기준 항상 비교)은 NG1과 충돌하므로 의도적으로 다루지 않음.
+
+(round-1 리뷰가 제기한 base 해석 방법·paths count·C6 주입 메커니즘·floor suppressed 케이스·
+Runtime 라인 타이밍은 모두 §5.1–§5.4/§6에서 *해소*됨 — 더 이상 open 아님.)
 
 ## 11. Concrete Next Action
 
 이 design을 spec-distill:reviewing-spec(Law 2 분리 reviewer)이 검증 → 통과 시 writing-plans로
 구현 계획 작성. writing-plans는 §7 Files to Modify를 task로 분해하고 §6 AC를 검증 단위로 매핑.
 구현은 subagent-driven 엄격 순차(메모리: 병렬·투기적 dispatch 금지, evidence-before-approved).
+
+## Handoff Context
+
+**TL;DR:** qg의 false-clean(커밋 후 빈 세션 → resolved scope 0 → "clean") 봉쇄. 새 read-only
+스크립트 `check-review-scope.sh`가 단일 신호(`empty_scope_with_changes`)를 emit하면 SKILL이
+iter-1에서 1회 호출·캐시해 (A) redirect 게이트(P17, kill 가능)와 (B) 정직-verdict floor(P8, kill
+불가)로 소비. Runtime은 R2 직후 transparency 한 줄(비대칭 명시)만 additive. session 기본값·
+no-op clean·`/qg branch` 동작은 무변경.
+
+**Implicit context (구현자가 알아야 할 비명시 사실):**
+- 현재 SKILL.md에는 `branch` scope용 **canonical base resolver가 없다**(qg.md는 "vs main"으로만
+  서술). 이 설계가 `check-review-scope.sh`를 단일 base 진실원으로 도입한다 — 구현자는 redirect
+  "Review branch diff" 경로에서 SKILL이 스크립트 `base:` 출력을 *직접 받아* `merge_base..HEAD`를
+  구성하게 해야 한다(AC13). 기존 `/qg branch` 경로 base 동작은 건드리지 않는다(NG7).
+- floor는 Step 4.5의 **두** clean-귀결 분기에 모두 걸어야 한다(`suppressed=0` 단독으로 충분치
+  않음 — `suppressed>0`도 사용자에게 clean으로 읽힘).
+- 스크립트는 iter-1에서 1회만 호출하고 캐시 소비(C7) — empty-scope는 iter-1에서 해소되므로
+  iter 2–5 재호출 불필요.
+- bash 3.2(macOS) 호환 유의(메모리: NUL command-substitution 함정 — `git ... -z` 변수 캡처 회피,
+  `--name-only | wc -l` 라인 카운트로 충분).
+- 기존 main에 8개 stale red(codex/consent/security/sandbox, 환경의존) — baseline 캡처 후 무관 확인.
+
+**Deferred to plan(writing-plans에서 task 분해):**
+- §7 9개 파일 변경의 순서(스크립트+단위테스트 먼저 → SKILL 편집 → orchestration grep → 문서/버전).
+- fixture git 셋업 디테일(origin/HEAD 모사, shallow/detached 케이스 생성).
 
 ## 12. Metadata
 
@@ -400,3 +483,9 @@ AskUserQuestion({
   determinism-economy(floor=정확성 결정론, redirect/routing=모델 신뢰), P17(redirect 게이트=
   사용자 redirect 가능), harness-lightness(정상 경로 zero-click).
 - **no new P#:** floor는 P8에 흡수.
+- **review history:** round-1 spec-reviewer `needs_revise`(10 issues: paths count/base 해석/AC7·
+  AC11 testability/isolation 호출·캐시/C6 주입/floor suppressed/AC13 단위범위/Runtime 타이밍/
+  Handoff 부재) → 전부 해소. round-2 `needs_revise`(8/10 완전 해소 확인 + 4 신규: NEW-001
+  "모든 경로 R3" 과장 주장 / NEW-002 AC11 위치 미검증 / NEW-003 honest-empty non-event anchor /
+  NEW-004 worktree_dirty gitignore 의도) → 본 개정에서 전부 해소(문구 정확화 + positive anchor +
+  proximity 검증 + 의도 명시). Stagnation_signal: false(두 라운드).
