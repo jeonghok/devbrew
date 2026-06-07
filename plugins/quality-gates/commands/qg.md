@@ -84,6 +84,11 @@ or when 24+ hours pass without activity.
 
 Override with `/qg branch` (full branch) or `/qg --paths <glob>...` (manual).
 
+암묵 session scope로 돌 때 qg는 그 사실을 한 줄로 밝힌다 (`Review scope: session (N files)` — 전체
+PR/브랜치는 `/qg branch`). 자연어로 브랜치/전체 리뷰 의도를 말하면 모델이 `/qg branch`(branch
+scope)로 해석한다 — 별도 토큰 alias 없음 (P8 determinism-economy: non-load-bearing 라우팅은
+모델 신뢰, 결정론적 보장은 literal `/qg branch`에).
+
 ### Cost guidance
 
 Approximate cost per run vs default-Opus baseline (full-branch + cross-gate

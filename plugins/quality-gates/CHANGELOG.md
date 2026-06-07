@@ -3,6 +3,25 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.5.0] — 2026-06-07
+
+암묵 session scope로 Review gate가 돌 때 그 사실을 사용자-가시 한 줄로 밝히는 **scope 투명성**을
+추가. 버려진 결정론적 under-coverage 경고(B1 후보)를 결정론 가드가 아니라 *모델 행동*으로 대체 —
+git 비교·차단 로직 없음. devbrew P8 determinism-economy refinement instantiation
+(철학 §P8 / §5.6 "Zero hooks" 일반화; "harness lightness — trust the model").
+
+### Added
+- **Scope 투명성 (SKILL diff-scope step, iteration N=1)**: scope가 암묵 default(session)로 풀릴 때
+  1회 `> Review scope: session (N files this session). 전체 PR/브랜치는 /qg branch.` 출력.
+  명시적 `/qg branch`·`--paths`는 침묵. 결정론 가드 아님("scope==session?"만 봄, git 비교 없음).
+- **NL scope-의도 trust note (SKILL + `commands/qg.md`)**: 자연어 branch/전체 리뷰 의도를 모델이
+  별도 토큰 parser 없이 branch scope로 해석. `/qg branch`는 결정론적 escape hatch로 유지.
+
+### Changed
+- **버전 2.4.0 → 2.5.0** (minor, 새 surface): `plugin.json`, SKILL 제목(L39)+Final Summary,
+  `test_skill_orchestration_behavior.sh` 버전 assertion(`v2.4.0`→`v2.5.0`) 동기화.
+- **README `인스턴스화한 원칙`**: P8 determinism-economy bullet 추가.
+
 ## [2.4.0] — 2026-06-04
 
 full `/qg`(gate arg 없음)가 trivia escape 후 어떤 게이트도 돌기 전에 **gate-scope 질문**
