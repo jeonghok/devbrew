@@ -365,6 +365,19 @@ assert_line "scope-redirect kill switch present" "$(first_line 'DEVBREW_QG_DISAB
 # AC: degraded signal emits a loud advisory (CLAUDE.md loud-logging; design §5.1).
 assert_line "degraded scope advisory present" "$(first_line 'scope check degraded')"
 
+# --- v2.6.0 AC8: honest-verdict floor at Step 4.5 (both clean sub-cases) ---
+assert_line "honest floor label present" "$(first_line 'NOT certified clean')"
+assert_line "honest floor gated on the cached scope signal" "$(first_line 'scope_signal == empty_scope_with_changes')"
+# 'no scope reviewed' must appear in both clean sub-cases + the final-summary
+# variant → at least 3 occurrences.
+floor_count=$(grep -cE 'no scope reviewed' "$SKILL_MD" || true)
+if [[ "$floor_count" -ge 3 ]]; then
+  echo "PASS: honest floor label in both clean sub-cases + final summary ($floor_count)"
+else
+  echo "FAIL: honest floor under-applied (found $floor_count, need >=3)"
+  fail=$((fail + 1))
+fi
+
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"
   exit 0

@@ -341,15 +341,23 @@ Agent({
    - **kept = 0 AND suppressed > 0** (the synthesizer emitted the empty-state
      line `No high-confidence findings. N low-confidence findings suppressed.`
      with N > 0 — read N from that line) → no high-confidence finding to act
-     on → treat as **clean**: do NOT call AskUserQuestion. Surface only that
-     single `No high-confidence findings…` line for transparency, then **exit
-     the loop → [Dispatch Loop](#dispatch-loop) step 4** (which skips the Runtime
-     gate when gate scope = Review gate only / `effective_skip_runtime`, else runs
-     it) — do not iterate again.
+     on → treat as **clean**: do NOT call AskUserQuestion. Surface the single
+     `No high-confidence findings…` line for transparency. **Honest-verdict floor
+     (AC8):** if the cached `$scope_signal == empty_scope_with_changes`, ALSO
+     print `## Review gate iter N: no scope reviewed (0 files; branch <M> ahead of <base>) — NOT certified clean.`
+     beneath it (the suppressed-count line stays; a zero-scope run must not read
+     as "reviewed & clean"). Then **exit the loop → [Dispatch
+     Loop](#dispatch-loop) step 4** (which skips the Runtime gate when gate scope = Review gate only / `effective_skip_runtime`, else runs it) — do not iterate
+     again.
    - **kept = 0 AND suppressed = 0** (the same empty-state line with N = 0) →
-     print `## Review gate iter N: clean` and exit the loop → [Dispatch
-     Loop](#dispatch-loop) step 4 (which short-circuits the Runtime gate for the
-     review-only path, else runs it).
+     **Honest-verdict floor (AC8):** if the cached `$scope_signal ==
+     empty_scope_with_changes`, do NOT print `clean`; print
+     `## Review gate iter N: no scope reviewed (0 files; branch <M> ahead of <base>) — NOT certified clean.`
+     (substitute `<M>` = `$branch_ahead_count`, `<base>` = `$base`). Otherwise
+     (`normal` / `genuine_noop` / `degraded`) print `## Review gate iter N: clean`
+     exactly as before (NG4 — genuine no-op and degraded fail-open are unchanged).
+     Then exit the loop → [Dispatch Loop](#dispatch-loop) step 4 (which
+     short-circuits the Runtime gate for the review-only path, else runs it).
 
 5. **Decision tool (kept > 0 only).** Invoke [Review iter boundary
    decision](#review-iter-boundary-decision). Fill its `<summary>` slot by
@@ -696,7 +704,7 @@ Print:
 ```markdown
 ## Quality Gates Pipeline — Complete (v2.5.0)
 
-- **Review gate**: <clean iter N | proceeded-with-findings iter N | aborted iter N | skipped>
+- **Review gate**: <clean iter N | no scope reviewed (branch <M> ahead) | proceeded-with-findings iter N | aborted iter N | skipped>
 - **Runtime gate**: <clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>
 
 **History:**
