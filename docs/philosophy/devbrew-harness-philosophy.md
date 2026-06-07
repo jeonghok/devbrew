@@ -340,6 +340,8 @@ Anthropic의 *Building Effective Agents* 첫 원칙이 literal합니다: *"Maint
 
 devbrew의 입장: **아키텍처는 최소주의, 작업 실행은 극대주의.** 플러그인은 하나를 잘 하고, 다른 플러그인과 composition하고, 프레임워크 추상화를 피하고, 하지만 실행할 때는 철저하게 실행합니다.
 
+**Determinism economy (refinement, 2026-06-07).** 단순성은 *코드 양*뿐 아니라 *결정론적 메커니즘의 양*에도 적용됩니다. 훅·스크립트·rigid 파싱·강제 규칙 같은 결정론 장치는 **모델 신뢰가 불충분하고 오류 비용이 높을 때 — 즉 load-bearing일 때 — 그리고 오직 그때** 정당합니다 (§5.6 "Zero hooks" 규칙을 모든 결정론 메커니즘으로 일반화). Load-bearing의 구체: Law 1 명세 거절 게이트("모델 신뢰만으로는 부족"), Law 2 writer≠reviewer 물리 분리, kill switch, mutation guard, 보안/정확성 게이트 — 결정론이 보장의 본체이므로 약화 금지. 반대로 scope-routing·자연어 의도 해석·UX 편의처럼 **이미 구조적 escape hatch가 존재하는 non-load-bearing 영역**에 결정론 가드를 덧쌓는 것은 harness를 옥죄어 모델 재량·성능을 깎는 over-engineering — 그 영역은 모델을 믿습니다. (발단: `/qg` session-scope under-coverage에 경고·fallback·alias·prose 4층 결정론을 제안했으나, 이미 `/qg branch` escape hatch가 있어 전부 폐기하고 모델 라우팅 신뢰로 결정.)
+
 > *"For many applications, optimizing single LLM calls with retrieval and in-context examples is usually enough. […] Don't hesitate to reduce abstraction layers and build with basic components as you move to production."* — Anthropic, *Building Effective Agents*
 >
 > *"AI-assisted coding makes the marginal cost of completeness near-zero."* — gstack ETHOS
@@ -849,6 +851,8 @@ Modification types: **R** = relocated only, **E** = C# content로 expanded, **A*
 | P24 | NEW (R5)           | §2.2 Law 2          | Anthropic *Claude Code Best Practices* — Writer/Reviewer pattern; fresh-context critique loop |
 
 **P24 added 2026-05-06 R5** — Anthropic *Claude Code Best Practices*의 Writer/Reviewer pattern을 직접 출처로 신규 추가. 참고: 이전 R4 restructure에서는 roadmap 클러스터 C3+C4+C25+C69에 대해 새 P# 만들지 않고 §4.6 + Law 3 corollary로 흡수했음 (lightness meta-principle). P24는 그 클러스터와 무관하게 별개의 일급 출처에서 도착한 패턴이라 슬롯을 채움.
+
+**P8 determinism-economy refinement added 2026-06-07** — 결정론 메커니즘의 양에도 P8을 적용하는 단락 흡수 (§5.6 "Zero hooks"의 일반화). 새 P# 없이 흡수 — lightness meta-principle (cf. R4 §4.6 흡수 선례). non-load-bearing 영역의 모델 신뢰는 Law 1·Law 2의 load-bearing 결정론과 충돌하지 않음.
 
 ### 11.3 §4 Primitive Expansions
 
