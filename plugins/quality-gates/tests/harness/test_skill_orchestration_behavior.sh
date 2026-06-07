@@ -362,6 +362,9 @@ assert_line "redirect-branch reuses script-emitted base (AC13)" "$(first_line 's
 # AC9: scope-redirect kill switch documented in SKILL.
 assert_line "scope-redirect kill switch present" "$(first_line 'DEVBREW_QG_DISABLE_SCOPE_REDIRECT')"
 
+# AC: degraded signal emits a loud advisory (CLAUDE.md loud-logging; design §5.1).
+assert_line "degraded scope advisory present" "$(first_line 'scope check degraded')"
+
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"
   exit 0

@@ -260,7 +260,7 @@ the rest of this turn (C7 — single call; the cached values are consumed again 
 the honest-verdict floor at Step 4.5, so the gate and the floor can never diverge):
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh" <mode> [globs…]
+"${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh" <mode> [globs...]
 ```
 
 `<mode>` is the scope resolved at step 1 (`session` / `branch` / `paths`); in
@@ -275,8 +275,12 @@ and `$base`. Route on `$scope_signal`:
   fire the gate; print one advisory line and continue to the scout (the Step 4.5
   floor still relabels the verdict — AC9):
   `> [quality-gates] review scope empty but branch <M> ahead of <base> — redirect gate disabled; floor still applies.`
-- `normal` / `genuine_noop` / `degraded` → no gate, no advisory; continue silently
-  to the scout (happy-path zero-click; `degraded` is fail-open per C5).
+- `normal` / `genuine_noop` → no gate, no advisory; continue silently to the scout
+  (happy-path zero-click).
+- `degraded` → no gate, no floor (fail-open per C5), but print one loud advisory
+  line so the fallback is visible (CLAUDE.md loud-logging; design §5.1):
+  `> [quality-gates] scope check degraded (detached HEAD / no base / shallow) — empty-scope detection skipped (fail-open; verdict not floor-protected this run).`
+  then continue to the scout.
 
 Run this signal check ONLY in iteration N=1 — the empty-scope case is resolved
 here (branch / honest-empty / stop), so iterations 2–5 always run on a non-empty
