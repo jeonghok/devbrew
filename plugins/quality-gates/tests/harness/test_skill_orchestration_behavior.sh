@@ -100,7 +100,7 @@ done
 # Review-gate decision-tool call).
 askuser_review_line=$(first_line_after 'AskUserQuestion' "$review_line")
 itercap_line=$(first_line 'max_review_iterations')
-assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 80
+assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 100
 
 # DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS near Runtime gate dispatch — use first mention
 # AT OR AFTER the Runtime gate dispatch line (the top-of-file "up to ..." preview
@@ -340,6 +340,27 @@ fi
 # Review gate under "Review gate only" would run Runtime anyway.
 # Anchor on a single-line substring (the full phrase wraps across lines).
 assert_line "Review gate clean-exit routes via gate-scope check" "$(first_line 'when gate scope = Review gate only')"
+
+# --- v2.6.0 AC6/AC7/AC9/AC13: empty-scope redirect gate ---
+# check-review-scope.sh invoked in the Review gate (call+cache).
+assert_line "check-review-scope.sh invoked" "$(first_line 'check-review-scope.sh')"
+# AC6: redirect question carries the unique anchor 'review scope is empty'.
+redirect_q=$(first_line 'question:.*[Rr]eview scope is empty')
+assert_line "empty-scope redirect question present (anchor 'review scope is empty')" "$redirect_q"
+rse_count=$(grep -ciE 'question:.*review scope is empty' "$SKILL_MD" || true)
+if [[ "$rse_count" -eq 1 ]]; then
+  echo "PASS: 'review scope is empty' anchor unique (1 question: line)"
+else
+  echo "FAIL: 'review scope is empty' anchor not unique ($rse_count question: lines)"
+  fail=$((fail + 1))
+fi
+assert_line "Empty-scope redirect decision section present" "$(first_line '## Empty-scope redirect decision')"
+# AC7: honest-empty branch leaves a positive observable line (not a non-event).
+assert_line "honest-empty skip anchor present" "$(first_line 'skipping reviewer dispatch')"
+# AC13: redirect-branch reuses the script-emitted base (C6 single base).
+assert_line "redirect-branch reuses script-emitted base (AC13)" "$(first_line 'script-emitted base')"
+# AC9: scope-redirect kill switch documented in SKILL.
+assert_line "scope-redirect kill switch present" "$(first_line 'DEVBREW_QG_DISABLE_SCOPE_REDIRECT')"
 
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"

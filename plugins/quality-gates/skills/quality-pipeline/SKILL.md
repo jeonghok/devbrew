@@ -16,6 +16,7 @@ allowed-tools:
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/pre-pipeline-check.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh:*)
   # Group 2 — Review gate scripts
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)
@@ -253,6 +254,34 @@ Iterative fix-loop, `max_review_iterations = 5` (hard-coded constant).
 For each iteration N (1..5):
 
 1. Compute diff scope (paths / branch / session — from preflight result). **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> Review scope: session (<COUNT> files edited this session). 전체 PR/브랜치는 /qg branch.` (`<COUNT>` = preflight `files.md` 항목 수). 명시적 `/qg branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/qg branch`는 결정론적 escape hatch로 유지).
+**Step 1b — Scope signal & empty-scope redirect (iteration N=1 only).** Before
+dispatching the scout, run the read-only scope signal **once** and cache it for
+the rest of this turn (C7 — single call; the cached values are consumed again by
+the honest-verdict floor at Step 4.5, so the gate and the floor can never diverge):
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh" <mode> [globs…]
+```
+
+`<mode>` is the scope resolved at step 1 (`session` / `branch` / `paths`); in
+`paths` mode pass the `--paths` globs as trailing args. Parse the structured
+stdout and cache `$scope_signal` (the `signal:` value), `$branch_ahead_count`,
+and `$base`. Route on `$scope_signal`:
+
+- `empty_scope_with_changes` AND `DEVBREW_QG_DISABLE_SCOPE_REDIRECT` unset → fire
+  the [Empty-scope redirect decision](#empty-scope-redirect-decision) NOW (before
+  the scout), and branch per that section before continuing.
+- `empty_scope_with_changes` AND `DEVBREW_QG_DISABLE_SCOPE_REDIRECT=1` → do NOT
+  fire the gate; print one advisory line and continue to the scout (the Step 4.5
+  floor still relabels the verdict — AC9):
+  `> [quality-gates] review scope empty but branch <M> ahead of <base> — redirect gate disabled; floor still applies.`
+- `normal` / `genuine_noop` / `degraded` → no gate, no advisory; continue silently
+  to the scout (happy-path zero-click; `degraded` is fail-open per C5).
+
+Run this signal check ONLY in iteration N=1 — the empty-scope case is resolved
+here (branch / honest-empty / stop), so iterations 2–5 always run on a non-empty
+scope and never re-trigger it.
+
 2. Dispatch the scout: `Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py ...)`.
 3. Dispatch reviewer subagents in parallel (per [Reviewer dispatch contract](#reviewer-dispatch-contract)).
    `quality-gates:security-reviewer` and `quality-gates:adversarial` are
@@ -344,6 +373,48 @@ transcript.
 The iter-boundary anchor phrase `findings remain` is specific to this
 template and must not appear in any other decision-tool call in this
 SKILL, per spec AC6.
+
+## Empty-scope redirect decision
+
+> **Spec anchor (AC6):** the literal phrase `review scope is empty` MUST appear
+> in the `question:` field — the orchestration harness checks it exists and is
+> UNIQUE across all decision-tool calls in this SKILL (grep -c == 1). Fired only
+> from Review gate Step 1b when `$scope_signal == empty_scope_with_changes` and
+> `DEVBREW_QG_DISABLE_SCOPE_REDIRECT` is unset.
+
+```
+AskUserQuestion({
+  questions: [
+    {
+      question: "Review scope is empty (session: 0 files) but the branch is <M> files ahead of <base>. These changes were never reviewed this session. What should I review?",
+      header: "Review scope",
+      options: [
+        {label: "Review branch diff (recommended)", description: "Review the merge_base..HEAD diff; re-interpret scope as branch, then proceed normally."},
+        {label: "Proceed (honest-empty, not clean)", description: "Skip reviewer dispatch and emit an honest verdict — 'no scope reviewed, NOT clean'."},
+        {label: "Stop", description: "Abort the pipeline with an honest summary. Re-run with /qg branch."}
+      ],
+      multiSelect: false
+    }
+  ]
+})
+```
+
+Substitute `<M>` = cached `$branch_ahead_count`, `<base>` = cached `$base`.
+Branch on the answer — each branch leaves a transcript-observable line (AC7):
+
+- **Review branch diff** → re-interpret scope as `branch`: the review target is
+  `git merge-base $base HEAD`..HEAD, reusing the **script-emitted base** `$base`
+  (C6 single base — the displayed "<M> files" equals the reviewed diff). Print
+  `> Review scope: branch (<M> files vs <base>).` then continue to step 2 (the
+  scout) and proceed normally for the remaining iterations.
+- **Proceed (honest-empty, not clean)** → skip the scout / reviewer / synthesizer
+  dispatch entirely (no value in reviewing 0 files). Print the positive observable
+  line `> Review gate: skipping reviewer dispatch — 0 files reviewed (honest-empty path).`
+  then emit the honest verdict label (the Step 4.5 floor label
+  `## Review gate iter N: no scope reviewed (0 files; branch <M> ahead of <base>) — NOT certified clean.`)
+  and exit the loop → [Dispatch Loop](#dispatch-loop) step 4.
+- **Stop** → emit the final summary marked
+  `aborted at Review gate (empty scope, branch <M> ahead)`.
 
 ## Review iter boundary decision
 
