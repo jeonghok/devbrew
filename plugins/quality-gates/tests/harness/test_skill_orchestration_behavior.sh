@@ -378,6 +378,26 @@ else
   fail=$((fail + 1))
 fi
 
+# --- v2.6.0 AC11: Runtime scope transparency line, single + between R2 and R3 ---
+r2_marker=$(first_line 'Step R2')
+r3_marker=$(first_line 'Step R3')
+rtscope_line=$(first_line 'regardless of Review scope')
+assert_line "Runtime scope asymmetry marker present" "$rtscope_line"
+assert_line "Runtime scope observable anchor present" "$(first_line 'Runtime scope: full project')"
+if [[ "$rtscope_line" -gt "$r2_marker" && "$rtscope_line" -lt "$r3_marker" ]]; then
+  echo "PASS: Runtime scope line between Step R2 ($r2_marker) and Step R3 ($r3_marker) at $rtscope_line"
+else
+  echo "FAIL: Runtime scope line not between R2/R3 (r2=$r2_marker line=$rtscope_line r3=$r3_marker)"
+  fail=$((fail + 1))
+fi
+rtscope_count=$(grep -cE 'regardless of Review scope' "$SKILL_MD" || true)
+if [[ "$rtscope_count" -eq 1 ]]; then
+  echo "PASS: Runtime scope asymmetry marker unique (1)"
+else
+  echo "FAIL: Runtime scope asymmetry marker not unique ($rtscope_count)"
+  fail=$((fail + 1))
+fi
+
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"
   exit 0

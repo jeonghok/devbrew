@@ -592,6 +592,22 @@ Agent({
 Also derive `evidence_dir = "$project_dir/.claude/quality-gates/$CLAUDE_CODE_SESSION_ID/"` (the preflight main-repo `project_dir`, NOT the sandbox — so it survives the R5 sandbox discard; `$CLAUDE_CODE_SESSION_ID` is the same value used for the pipeline state file). This absolute path is threaded to the verifier so its evidence-log + screenshots land in the main repo, not inside the disposable sandbox.
 (detect-runtime.sh runs from this same main-repo `project_dir` during the Upfront Execution Plan, so its `attempted_log_path` resolves to the identical `evidence_dir`.)
 
+**Runtime scope transparency (additive — AC11).** Emit exactly one user-visible
+line here (Step R2 complete → before the R3 dispatch), now that the
+manifest, approved surfaces, and spec AC are all known:
+
+> `> Runtime scope: full project (<project_type>) — boots <surface summary>, asserts <K> spec AC. Runtime runs the whole app regardless of Review scope.`
+
+Substitute `<project_type>` and `<surface summary>` from the `detect-runtime.sh`
+manifest (`project_type` + a short `runnable_surfaces` / `test_runners` digest);
+`<K>` = the number of `spec_acceptance_criteria` gathered in Step R2 (`0 spec AC (smoke fallback)`
+when none). The final clause is the OQ4 asymmetry marker (literal — do not
+paraphrase; it is the unique `grep -cE` anchor for this emission point). This is the ONLY emission point — every path that reaches the Runtime
+gate (both-gates and single `/qg runtime`) flows through R3, so one line covers
+them all; the Review-gate-only path never reaches here (correct — there is no
+Runtime to describe). This is purely additive: no new gate, no diff-scope forcing,
+no behavior change (NG3 / AC12).
+
 **Step R3 — dispatch runtime-verifier (executor)** with `project_dir = runtime_project_dir`, the spec AC, the approved surfaces, and the block policy:
 
 ```
