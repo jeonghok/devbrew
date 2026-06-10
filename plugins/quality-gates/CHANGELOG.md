@@ -29,6 +29,10 @@ devbrew P8 determinism-economy instantiation(결정론은 정확성 floor 한 �
   발산 불가; 게이트 우회·kill switch에도 불변(load-bearing).
 - **Runtime scope transparency 라인 (SKILL Step R2→R3, additive)**: `> Runtime scope: full project …
   regardless of Review scope`. 새 게이트·diff-scope 강제·동작 변경 없음.
+- **Degraded scope 신호 loud advisory (SKILL Step 1b)**: git 부재/detached HEAD/no-base/shallow 등으로
+  scope 신호가 `degraded`면 fail-open(redirect 게이트·floor 미발화)하되 그 사실을 1줄 loud advisory로
+  노출(`> [quality-gates] scope check degraded … verdict not floor-protected this run.`) — CLAUDE.md
+  loud-logging graceful degradation 준수.
 
 ### Changed
 - **버전 2.5.0 → 2.6.0** (minor, 새 surface): `plugin.json`, SKILL 제목 + Final Summary,
