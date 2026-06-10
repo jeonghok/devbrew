@@ -3,6 +3,42 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.6.0] — 2026-06-07
+
+Review gate가 *검토받았다고 믿는 scope*와 *실제 resolve한 scope*가 silent하게 발산할 때
+("커밋 후 빈 세션 → resolved scope 0 → clean"의 false-clean)를 봉쇄. 새 read-only 신호
+`check-review-scope.sh`가 단일 `signal`을 emit하면 SKILL이 Review iter-1에서 1회 호출·캐시해
+(A) redirect 게이트(P17, kill 가능)와 (B) 정직-verdict floor(P8, kill 불가)로 소비. Runtime은
+R2 직후 비대칭 명시 한 줄만 additive. session 기본값·genuine no-op clean·`/qg branch`는 무변경.
+devbrew P8 determinism-economy instantiation(결정론은 정확성 floor 한 점에만; redirect/routing은
+모델 신뢰).
+
+### Added
+- **`scripts/check-review-scope.sh` (신규, read-only)**: scope mode(session/branch/paths)별
+  `resolved_count` / `branch_ahead_count` / `worktree_dirty` / `base` / `signal`을 emit.
+  signal ∈ {`empty_scope_with_changes`, `normal`, `genuine_noop`, `degraded`}. 단일 base
+  진실원(origin/HEAD → origin/main → origin/master → local main → master); 불확실 환경은
+  `degraded` + exit 0 fail-open. `tests/test_check_review_scope.sh` (AC1–AC5).
+- **Empty-scope redirect 게이트 (SKILL Step 1b + `## Empty-scope redirect decision`)**:
+  `signal == empty_scope_with_changes` AND kill switch 미설정일 때만 1회 발화(앵커
+  `review scope is empty`, 고유). 3옵션(branch diff / honest-empty / stop) 각각 관측 가능한
+  출력 라인. kill switch `DEVBREW_QG_DISABLE_SCOPE_REDIRECT=1`.
+- **정직-verdict floor (SKILL Step 4.5, 결정론)**: `signal == empty_scope_with_changes`이면
+  clean으로 귀결되는 두 sub-case(`suppressed=0`·`suppressed>0`) 모두에서 verdict 라벨을
+  `no scope reviewed … NOT certified clean`으로 교체. redirect 게이트와 같은 캐시 신호를 소비해
+  발산 불가; 게이트 우회·kill switch에도 불변(load-bearing).
+- **Runtime scope transparency 라인 (SKILL Step R2→R3, additive)**: `> Runtime scope: full project …
+  regardless of Review scope`. 새 게이트·diff-scope 강제·동작 변경 없음.
+
+### Changed
+- **버전 2.5.0 → 2.6.0** (minor, 새 surface): `plugin.json`, SKILL 제목 + Final Summary,
+  `test_skill_orchestration_behavior.sh` 버전 assertion(`v2.5.0`→`v2.6.0`) 동기화.
+- **Empty-scope verdict 라벨**: resolved scope=0 + 변경 존재 시 더 이상 단독 `clean`이 아님.
+  genuine no-op(변경 없음)·`normal`·`degraded` 경로의 `clean`/transparency 문구는 무변경.
+- **README `인스턴스화한 원칙`**: P8 self-honest verdict floor bullet 추가.
+- **`docs/philosophy/devbrew-harness-philosophy.md`**: P8 determinism-economy에 self-honest
+  verdict floor 흡수(새 P# 없음).
+
 ## [2.5.0] — 2026-06-07
 
 암묵 session scope로 Review gate가 돌 때 그 사실을 사용자-가시 한 줄로 밝히는 **scope 투명성**을

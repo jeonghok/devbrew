@@ -37,7 +37,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v2.5.0)
+# Quality Gates — In-Turn Orchestrator (v2.6.0)
 
 You are running the **full quality-gates pipeline** in a single assistant
 turn. You dispatch up to two gates serially in order (Runtime gate only when selected). At decision points
@@ -718,7 +718,7 @@ Branch:
 Print:
 
 ```markdown
-## Quality Gates Pipeline — Complete (v2.5.0)
+## Quality Gates Pipeline — Complete (v2.6.0)
 
 - **Review gate**: <clean iter N | no scope reviewed (branch <M> ahead) | proceeded-with-findings iter N | aborted iter N | skipped>
 - **Runtime gate**: <clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>

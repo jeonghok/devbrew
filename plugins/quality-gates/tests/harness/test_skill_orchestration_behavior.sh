@@ -147,8 +147,8 @@ assert_line "runtime sandbox kill switch present" "$(first_line 'DEVBREW_QG_DISA
 # spec_acceptance_criteria threaded to the verifier.
 assert_line "spec_acceptance_criteria threaded" "$(first_line 'spec_acceptance_criteria')"
 
-# Version bumped to 2.5.0 (title + final summary).
-assert_line "v2.5.0 in SKILL" "$(first_line 'v2.5.0|2\.5\.0')"
+# Version bumped to 2.6.0 (title + final summary).
+assert_line "v2.6.0 in SKILL" "$(first_line 'v2.6.0|2\.6\.0')"
 
 # --- v2.2.0 mutation-guard hardening protocol-shape ---
 
