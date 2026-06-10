@@ -379,8 +379,8 @@ else
 fi
 
 # --- v2.6.0 AC11: Runtime scope transparency line, single + between R2 and R3 ---
-r2_marker=$(first_line 'Step R2')
-r3_marker=$(first_line 'Step R3')
+r2_marker=$(first_line '^\*\*Step R2')
+r3_marker=$(first_line '^\*\*Step R3')
 rtscope_line=$(first_line 'regardless of Review scope')
 assert_line "Runtime scope asymmetry marker present" "$rtscope_line"
 assert_line "Runtime scope observable anchor present" "$(first_line 'Runtime scope: full project')"
