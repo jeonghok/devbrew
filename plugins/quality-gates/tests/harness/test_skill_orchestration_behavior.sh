@@ -100,7 +100,10 @@ done
 # Review-gate decision-tool call).
 askuser_review_line=$(first_line_after 'AskUserQuestion' "$review_line")
 itercap_line=$(first_line 'max_review_iterations')
-assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 100
+# Locality bound widened 100→120 in v2.6.0 review-iter3: the Step-1 $effective_diff_scope
+# single-source paragraph + scout/dispatch annotations legitimately grew the Review-gate
+# region between the iter cap and the decision tool. Still a tight locality sanity check.
+assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 120
 
 # DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS near Runtime gate dispatch — use first mention
 # AT OR AFTER the Runtime gate dispatch line (the top-of-file "up to ..." preview
@@ -357,10 +360,44 @@ fi
 assert_line "Empty-scope redirect decision section present" "$(first_line '## Empty-scope redirect decision')"
 # AC7: honest-empty branch leaves a positive observable line (not a non-event).
 assert_line "honest-empty skip anchor present" "$(first_line 'skipping reviewer dispatch')"
-# AC13: redirect-branch reuses the script-emitted base (C6 single base).
-assert_line "redirect-branch reuses script-emitted base (AC13)" "$(first_line 'script-emitted base')"
+# AC13: redirect-branch reuses the script-emitted resolved base (C6 single base).
+# v2.6.0 review-iter1 fix: it reuses the emitted merge_base COMMIT SHA (always
+# resolvable) rather than re-resolving a possibly remote-only base NAME — a
+# strengthening of the single-base principle, so the anchor is the SHA phrasing.
+assert_line "redirect-branch reuses script-emitted base (AC13)" "$(first_line 'script-emitted commit SHA')"
 # AC9: scope-redirect kill switch documented in SKILL.
 assert_line "scope-redirect kill switch present" "$(first_line 'DEVBREW_QG_DISABLE_SCOPE_REDIRECT')"
+
+# --- v2.6.0 review-iter3 (codex+adversarial): stale-after-redirect class closed ---
+# A single $effective_diff_scope source feeds scout/dispatch/inlined-blob so a
+# Step-1b redirect propagates everywhere (no consumer reads the stale preflight scope).
+assert_line "effective_diff_scope single scope source present" "$(first_line 'effective_diff_scope')"
+# The 'Review branch diff' redirect must update BOTH scope_signal AND effective_diff_scope.
+eds_redirect=$(grep -cE 'effective_diff_scope = branch' "$SKILL_MD" || true)
+if [[ "$eds_redirect" -ge 1 ]]; then
+  echo "PASS: redirect sets effective_diff_scope = branch (stale-after-redirect closed)"
+else
+  echo "FAIL: redirect does not set effective_diff_scope = branch"
+  fail=$((fail + 1))
+fi
+# NEGATIVE guard: the stale 'as resolved at preflight' dispatch wording must be GONE
+# (it contradicted "scope resolved at step 1" and would hand reviewers the empty scope).
+stale_count=$(grep -cE 'as resolved at preflight' "$SKILL_MD" || true)
+if [[ "$stale_count" -eq 0 ]]; then
+  echo "PASS: no stale 'as resolved at preflight' scope wording (effective_diff_scope replaces it)"
+else
+  echo "FAIL: stale 'as resolved at preflight' wording still present ($stale_count)"
+  fail=$((fail + 1))
+fi
+
+# --- v2.6.0 review-iter4 (codex closure): worktree-only false-clean + persistence ---
+# The redirect must review the working-tree-inclusive UNION (git diff $merge_base + untracked),
+# NOT the committed-only two-dot diff — else a worktree-only trigger reviews 0 files and
+# certifies clean (false-clean). Anchor on the union phrasing.
+assert_line "redirect reviews working-tree-inclusive union (review-iter4 false-clean fix)" "$(first_line 'UNION of every change that triggered')"
+# The redirect-resolved scope persists as canonical across retry iterations 2-5
+# (Step 1 must not re-resolve from the raw preflight value after a redirect).
+assert_line "redirect scope canonical across iterations (review-iter4 persistence)" "$(first_line 'CANONICAL for ALL remaining')"
 
 # AC: degraded signal emits a loud advisory (CLAUDE.md loud-logging; design §5.1).
 assert_line "degraded scope advisory present" "$(first_line 'scope check degraded')"

@@ -132,9 +132,12 @@ harness-lightness), 기본값을 강제 branch로 바꾸면 개발 중 빠른 �
 - **C5 (fail-open):** git 부재/detached HEAD/merge-base 없음/shallow 등 불확실 상태는
   `degraded`로 fail-open → 게이트 미발화(happy-path 마찰 0). 확신할 때만 발화 → false-positive
   차단.
-- **C6 (단일 base 진실원):** redirect "Review branch diff" 경로에서 `branch_ahead_count`가 세는
-  diff와 실제 리뷰하는 diff는 **동일 base**(같은 스크립트 run의 `base:` 출력으로 만든
-  `merge_base(base)..HEAD`)를 써야 한다 — 표시된 "M files ahead" == 실제 검토 대상.
+- **C6 (단일 base 진실원):** redirect "Review branch diff" 경로에서 표시하는 변경 수와 실제 리뷰하는
+  diff는 같은 스크립트 run이 emit한 `merge_base:` 커밋 SHA에서 출발해야 한다 — base **이름**을
+  orchestration 계층에서 재-resolve하지 않는다(SHA 재사용 → remote-only base fail-open 회피). redirect는
+  signal을 유발한 모든 변경의 **union**(`git diff $merge_base`[working-tree inclusive] + non-ignored
+  untracked)을 리뷰하므로 worktree-only trigger에서도 빈 diff를 clean으로 인증하지 않는다(review-iter4);
+  표시 "M files" == 그 union count.
 - **C7 (단일 턴·단일 호출):** v2.0.0 파이프라인 규칙 유지 — setup/check-trivia 1회, Stop
   hook·continuation sentinel 없음. `check-review-scope.sh`도 Review iter-1에서 **1회만** 호출하고
   결과를 SKILL-turn 변수로 캐시(§5.2).
@@ -181,19 +184,22 @@ SKILL이 분기). **단일 책임:** "resolved review scope가 비었는데 검�
 
 **base 해석(C6 단일 진실원 — 존재 확인까지 고정):**
 ```
-base = 첫 번째로 성공하는 것:
-  (1) git symbolic-ref --short refs/remotes/origin/HEAD  → "origin/" prefix strip
-  (2) git rev-parse --verify --quiet refs/remotes/origin/main  → "main"
-  (3) git rev-parse --verify --quiet refs/remotes/origin/master → "master"
-  (4) git rev-parse --verify --quiet refs/heads/main   → "main"   (remote 없는 local)
-  (5) git rev-parse --verify --quiet refs/heads/master → "master"
+base(표시용 short name) / base_ref(그 ref의 git-usable 형태) = 첫 번째로 성공하는 것:
+  (1) git symbolic-ref --short refs/remotes/origin/HEAD  → base="origin/" strip, base_ref=그대로(origin/main)
+  (2) git rev-parse --verify --quiet refs/remotes/origin/main   → base="main",   base_ref="origin/main"
+  (3) git rev-parse --verify --quiet refs/remotes/origin/master → base="master", base_ref="origin/master"
+  (4) git rev-parse --verify --quiet refs/heads/main   → base="main",   base_ref="main"   (remote 없는 local)
+  (5) git rev-parse --verify --quiet refs/heads/master → base="master", base_ref="master"
   모두 실패 → signal: degraded (fail-open)
-merge_base = git merge-base "$base" HEAD   (실패 → degraded)
+merge_base = git merge-base "$base_ref" HEAD   (실패 → degraded)   # base_ref는 실제 존재하는 ref
 branch_ahead_count = git diff --name-only "$merge_base"..HEAD | wc -l
+# emit: base(표시), merge_base(SHA — SKILL redirect가 재사용)
 ```
 존재 확인은 전부 `git rev-parse --verify --quiet`로 통일 — local-only/remote 브랜치를 일관되게
-구분하고 detached HEAD/shallow에서 `degraded`로 떨어진다. SKILL의 redirect "Review branch diff"
-경로는 이 `base:` 출력값을 그대로 받아 `merge_base(base)..HEAD`로 리뷰 대상을 만든다(C6 parity).
+구분하고 detached HEAD/shallow에서 `degraded`로 떨어진다. base **이름**과 git-usable `base_ref`를
+분리해 `origin/main`만 있고 local `main`이 없는 흔한 토폴로지(fresh clone/CI/worktree)에서도 merge-base가
+실패하지 않는다(review-iter1 fix). SKILL의 redirect "Review branch diff" 경로는 emit된 `merge_base:`
+커밋 SHA를 그대로 받아 `$merge_base..HEAD`로 리뷰 대상을 만든다(C6 parity; base 이름 재-resolve 없음).
 
 **계산:**
 - `resolved_count`:
@@ -357,10 +363,18 @@ honest 라벨:
   커버한다(Review-gate-only은 Runtime 미실행이라 라인 없음 = 정상, AC12).
 - **AC12 (Runtime 무변경):** Runtime은 여전히 full-project로 돌고 diff-scope 강제·새 게이트가
   없다(라인은 additive). 단일 게이트 `/qg runtime` 동작 불변(라인 추가 외).
-- **AC13 (SKILL-스크립트 계약, C6):** redirect "Review branch diff" 경로의 리뷰 대상 base는
-  스크립트가 emit한 `base:` 값과 동일하다 — 정적 검증: SKILL redirect-branch 블록이
-  `$base`(스크립트 출력)를 참조해 `merge_base..HEAD`를 구성하는 라인이 존재(orchestration grep).
-  단위 테스트는 스크립트의 `base:` 출력 정확성만 담당.
+- **AC13 (SKILL-스크립트 계약, C6):** redirect "Review branch diff" 경로의 리뷰 대상은 스크립트가
+  emit한 `merge_base:` 커밋 SHA에서 출발해, signal을 유발한 **모든 변경의 union**을 리뷰한다 —
+  `git diff $merge_base`(merge_base SHA→**워킹트리**: committed-ahead + tracked-uncommitted 포함) +
+  non-ignored untracked. two-dot `$merge_base..HEAD`(committed-only)는 **쓰지 않는다**: worktree-only
+  trigger(`branch_ahead_count=0`)에서 그 diff는 비어 0 files를 clean으로 인증하는 false-clean이 되기
+  때문(review-iter4). base **이름**을 재-resolve하지 않으므로 remote-only base(`origin/main` + no local
+  `main`)에서도 orchestration 계층에서 fail-open되지 않고(review-iter1 강화), SHA는 항상 resolve 가능.
+  union이 `changes_exist`(branch_ahead OR worktree_dirty)와 정확히 일치하므로 `scope_signal=normal` 설정이
+  항상 valid. 정적 검증: SKILL redirect-branch 블록이 script-emitted `merge_base` SHA를 참조(앵커
+  `script-emitted commit SHA`) + working-tree-inclusive union(앵커 `UNION of every change that triggered`)
+  + retry persistence(앵커 `CANONICAL for ALL remaining`) 라인 존재(orchestration grep). 단위 테스트는
+  스크립트의 `base:` / `merge_base:` 출력 정확성을 담당.
 - **AC14:** plugin.json `2.6.0`, CHANGELOG `## [2.6.0] — 2026-06-07`, README Scope +
   Principles Instantiated 갱신, philosophy P8에 floor 한 문장 흡수(새 P# 없음).
 

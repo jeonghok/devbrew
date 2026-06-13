@@ -43,6 +43,54 @@ devbrew P8 determinism-economy instantiation(결정론은 정확성 floor 한 �
 - **`docs/philosophy/devbrew-harness-philosophy.md`**: P8 determinism-economy에 self-honest
   verdict floor 흡수(새 P# 없음).
 
+### Fixed
+- **Remote-only base branch fail-open (`check-review-scope.sh`)**: `origin/main`은 있으나
+  local `main`이 없는 흔한 토폴로지(fresh clone / CI checkout / worktree)에서 base가 bare 이름
+  (`main`)으로 resolve돼 `git merge-base main HEAD`가 실패→`degraded` fail-open→false-clean 보호가
+  *모든 모드(`/qg branch` 포함)에서* 무력화되던 결함을 봉쇄. 표시용 `base`(short name)와 git-usable
+  `base_ref`(실제 존재하는 ref, 예 `origin/main`)를 분리해 merge-base/diff에 `base_ref` 사용.
+  회귀 테스트 `case_base_origin_head_no_local_main` 추가(기존 `case_base_origin_head`는 local main을
+  유지해 이 경로를 한 번도 검증하지 못한 커버리지 갭이었음). codex 모델-다양성 리뷰 + adversarial
+  repro로 발견·확정.
+- **정직-floor가 "Review branch diff" redirect에서 over-fire (SKILL Step 1b/4.5)**: redirect로 scope를
+  branch로 재해석한 뒤에도 iter-1에 캐시된 `$scope_signal`(=`empty_scope_with_changes`)을 갱신하지
+  않아, 실제로 검토된 깨끗한 branch(kept=0)를 floor가 `0 files reviewed … NOT certified clean`으로
+  잘못 라벨하던 결함(안전 방향이나 자기모순 메시지)을 수정. redirect 분기에서 `$scope_signal=normal`로
+  갱신하고, 검토 타깃을 재-resolve 가능한 이름 대신 script가 emit한 `$merge_base` 커밋 SHA로 사용해
+  orchestration 계층의 동일 fail-open도 함께 제거. `check-review-scope.sh`가 `merge_base` 필드를 추가
+  emit; harness AC13 앵커를 SHA-reuse로 갱신.
+- **Stale-after-redirect: reviewer dispatch가 redirect 후에도 preflight scope를 읽던 결함 (SKILL)**:
+  "Review branch diff" redirect가 scope를 branch로 재해석해도 reviewer dispatch(`diff_scope`)·scout·
+  inlined diff blob은 *preflight* scope("as resolved at preflight")를 읽어, redirect 후에도 비었던
+  session scope(0 files)를 리뷰해 redirect가 silent하게 무력화될 수 있었다(F1과 동일 결함 class —
+  redirect가 갱신한 값을 downstream consumer가 stale하게 읽음). 단일 `$effective_diff_scope` 변수를
+  Step 1에서 정의하고 redirect 분기에서 `$scope_signal=normal`과 **함께** 갱신, 모든 consumer
+  (scout C1 / dispatch C2 / inlined blob C4)가 이를 읽도록 배선. 모순되던 "as resolved at preflight"
+  문구 제거. harness에 negative guard(해당 문구 부재) + redirect가 두 값 모두 갱신하는지 정적 검증 추가.
+  adversarial completeness sweep로 consumer 전수(C1–C8) 확정(C5 floor는 F1에서 이미 봉쇄).
+- **paths-mode가 committed branch-ahead 파일을 empty로 오신호 (`check-review-scope.sh`)**: `/qg --paths
+  <committed-file>`가 clean tree에서 `git diff HEAD`만 세어 resolved_count=0→`empty_scope_with_changes`로
+  오신호(안전 방향 over-review지만 redirect 잡음). resolved_count를 `(git diff HEAD) ∪ (merge_base..HEAD)`
+  교집합 globs로 계산(중복 제거)해 committed 매치도 포함 — count를 올릴 뿐 false-clean은 불가능.
+  회귀 테스트 `case_paths_committed_branch_ahead` 추가.
+- **worktree-only trigger에서 redirect FALSE-CLEAN (SKILL Step 1b redirect)**: `empty_scope_with_changes`는
+  worktree-only(`worktree_dirty=yes`, `branch_ahead_count=0`)에서도 발화하는데, 추천 옵션 "Review branch
+  diff"가 `merge_base..HEAD`(committed-only, 이 경우 **빈** diff)를 리뷰하고도 `scope_signal=normal`을 설정해
+  **0 files를 clean으로 인증**하던 결함(unsafe direction — 이 기능이 막으려던 바로 그 harm). redirect 리뷰
+  대상을 signal을 유발한 **모든 변경의 UNION** = `git diff $merge_base`(merge_base SHA→워킹트리, committed-ahead
+  + tracked-uncommitted 포함) + non-ignored untracked로 변경. two-dot `$merge_base..HEAD` 대신 working-tree
+  inclusive `git diff $merge_base` 사용 — `branch_ahead_count=0`이면 `HEAD==merge_base`라 워킹트리 변경을 실제로
+  리뷰. union이 `changes_exist`(branch_ahead OR worktree_dirty)와 정확히 일치하므로 `normal` 설정이 항상 valid.
+  `<M>` 표시·question 문구를 union count로 정정(worktree-only에서 오해 소지 있는 "0 ahead" 제거). harness
+  union/false-clean 정적 가드 추가. codex closure pass로 발견.
+- **redirect scope가 retry iteration에서 preflight로 revert (SKILL Step 1)**: redirect는 iter-1 Step 1b에서만
+  `$effective_diff_scope`를 갱신하는데 retry(iter 2-5)는 Step 1로 돌아가 raw preflight scope를 재해석할 수
+  있었다(Step 1b는 N=1-only). redirect 해소 후 `$effective_diff_scope`/`$scope_signal`을 **모든 잔여
+  iteration에서 canonical**로 고정(iter 2-5는 preflight 재해석 금지). harness persistence 정적 가드 추가.
+- **F2 회귀 테스트 하드닝 (`test_check_review_scope.sh`)**: `case_base_origin_head_no_local_main`에 명시적
+  `git fetch -q origin` + `merge_base != '-'` assertion 추가(remote-tracking ref 생성을 git config 무관하게
+  보장 + 토폴로지가 조용히 degrade-fail-open하지 않았음을 입증).
+
 ## [2.5.0] — 2026-06-07
 
 암묵 session scope로 Review gate가 돌 때 그 사실을 사용자-가시 한 줄로 밝히는 **scope 투명성**을

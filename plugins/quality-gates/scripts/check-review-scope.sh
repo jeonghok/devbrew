@@ -29,6 +29,7 @@ emit_degraded() {
   echo "branch_ahead_count: 0"
   echo "worktree_dirty: no"
   echo "base: -"
+  echo "merge_base: -"
   echo "signal: degraded"
   exit 0
 }
@@ -40,23 +41,29 @@ git rev-parse --verify --quiet HEAD >/dev/null 2>&1 || emit_degraded
 git symbolic-ref --quiet HEAD >/dev/null 2>&1 || emit_degraded
 
 # --- base resolution (single source of truth — C6). All existence checks use
-#     `git rev-parse --verify --quiet` for consistent local/remote handling. ---
+#     `git rev-parse --verify --quiet` for consistent local/remote handling.
+#     `base` is the human-readable DISPLAY short-name; `base_ref` is the
+#     git-usable ref that is KNOWN to exist (may be a remote-tracking ref).
+#     They are kept separate so a remote-only default branch (origin/main with
+#     no local main — fresh clone / CI checkout / worktree) does NOT make
+#     `git merge-base` fail and fall open to degraded (review-iter1 fix). ---
 base=""
+base_ref=""
 if ref=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null); then
-  base="${ref#origin/}"
+  base="${ref#origin/}"; base_ref="$ref"
 elif git rev-parse --verify --quiet refs/remotes/origin/main >/dev/null 2>&1; then
-  base="main"
+  base="main"; base_ref="origin/main"
 elif git rev-parse --verify --quiet refs/remotes/origin/master >/dev/null 2>&1; then
-  base="master"
+  base="master"; base_ref="origin/master"
 elif git rev-parse --verify --quiet refs/heads/main >/dev/null 2>&1; then
-  base="main"
+  base="main"; base_ref="main"
 elif git rev-parse --verify --quiet refs/heads/master >/dev/null 2>&1; then
-  base="master"
+  base="master"; base_ref="master"
 else
   emit_degraded
 fi
 
-merge_base=$(git merge-base "$base" HEAD 2>/dev/null) || emit_degraded
+merge_base=$(git merge-base "$base_ref" HEAD 2>/dev/null) || emit_degraded
 [[ -n "$merge_base" ]] || emit_degraded
 
 branch_ahead_count=$(git diff --name-only "$merge_base"..HEAD 2>/dev/null | wc -l | tr -d ' ')
@@ -88,9 +95,17 @@ case "$mode" in
     ;;
   paths)
     if [[ ${#globs[@]} -gt 0 ]]; then
-      # glob matches that ALSO appear in `git diff HEAD` (changed-and-matched),
-      # not bare glob membership.
-      resolved_count=$(git diff HEAD --name-only -- "${globs[@]}" 2>/dev/null | wc -l | tr -d ' ')
+      # glob matches that appear in the effective review diff = the UNION of
+      # worktree changes (git diff HEAD) and committed branch-ahead changes
+      # (merge_base..HEAD), de-duplicated. Counting only `git diff HEAD` would
+      # miss a path already committed on the branch with a clean tree and falsely
+      # report empty_scope_with_changes (review-iter3 fix; matches the redirect's
+      # merge_base..HEAD review target). Can only RAISE the count → never a
+      # false-clean (a genuinely empty paths scope keeps resolved_count=0).
+      resolved_count=$( { git diff HEAD --name-only -- "${globs[@]}" 2>/dev/null; \
+                          git diff --name-only "$merge_base"..HEAD -- "${globs[@]}" 2>/dev/null; } \
+                        | sort -u | wc -l | tr -d ' ')
+      resolved_count=${resolved_count:-0}
     fi
     ;;
   *)
@@ -116,5 +131,9 @@ echo "resolved_count: $resolved_count"
 echo "branch_ahead_count: $branch_ahead_count"
 echo "worktree_dirty: $worktree_dirty"
 echo "base: $base"
+# merge_base is a commit SHA (always resolvable) — the SKILL's "Review branch
+# diff" redirect reviews $merge_base..HEAD using THIS value, so it never has to
+# re-resolve a possibly-remote-only base name (review-iter1 orchestration fix).
+echo "merge_base: $merge_base"
 echo "signal: $signal"
 exit 0
