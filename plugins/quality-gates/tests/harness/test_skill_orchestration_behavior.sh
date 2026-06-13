@@ -100,7 +100,10 @@ done
 # Review-gate decision-tool call).
 askuser_review_line=$(first_line_after 'AskUserQuestion' "$review_line")
 itercap_line=$(first_line 'max_review_iterations')
-assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 80
+# Locality bound widened 100→120 in v2.6.0 review-iter3: the Step-1 $effective_diff_scope
+# single-source paragraph + scout/dispatch annotations legitimately grew the Review-gate
+# region between the iter cap and the decision tool. Still a tight locality sanity check.
+assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 120
 
 # DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS near Runtime gate dispatch — use first mention
 # AT OR AFTER the Runtime gate dispatch line (the top-of-file "up to ..." preview
@@ -147,8 +150,8 @@ assert_line "runtime sandbox kill switch present" "$(first_line 'DEVBREW_QG_DISA
 # spec_acceptance_criteria threaded to the verifier.
 assert_line "spec_acceptance_criteria threaded" "$(first_line 'spec_acceptance_criteria')"
 
-# Version bumped to 2.5.0 (title + final summary).
-assert_line "v2.5.0 in SKILL" "$(first_line 'v2.5.0|2\.5\.0')"
+# Version bumped to 2.6.0 (title + final summary).
+assert_line "v2.6.0 in SKILL" "$(first_line 'v2.6.0|2\.6\.0')"
 
 # --- v2.2.0 mutation-guard hardening protocol-shape ---
 
@@ -340,6 +343,97 @@ fi
 # Review gate under "Review gate only" would run Runtime anyway.
 # Anchor on a single-line substring (the full phrase wraps across lines).
 assert_line "Review gate clean-exit routes via gate-scope check" "$(first_line 'when gate scope = Review gate only')"
+
+# --- v2.6.0 AC6/AC7/AC9/AC13: empty-scope redirect gate ---
+# check-review-scope.sh invoked in the Review gate (call+cache).
+assert_line "check-review-scope.sh invoked" "$(first_line 'check-review-scope.sh')"
+# AC6: redirect question carries the unique anchor 'review scope is empty'.
+redirect_q=$(first_line 'question:.*[Rr]eview scope is empty')
+assert_line "empty-scope redirect question present (anchor 'review scope is empty')" "$redirect_q"
+rse_count=$(grep -ciE 'question:.*review scope is empty' "$SKILL_MD" || true)
+if [[ "$rse_count" -eq 1 ]]; then
+  echo "PASS: 'review scope is empty' anchor unique (1 question: line)"
+else
+  echo "FAIL: 'review scope is empty' anchor not unique ($rse_count question: lines)"
+  fail=$((fail + 1))
+fi
+assert_line "Empty-scope redirect decision section present" "$(first_line '## Empty-scope redirect decision')"
+# AC7: honest-empty branch leaves a positive observable line (not a non-event).
+assert_line "honest-empty skip anchor present" "$(first_line 'skipping reviewer dispatch')"
+# AC13: redirect-branch reuses the script-emitted resolved base (C6 single base).
+# v2.6.0 review-iter1 fix: it reuses the emitted merge_base COMMIT SHA (always
+# resolvable) rather than re-resolving a possibly remote-only base NAME — a
+# strengthening of the single-base principle, so the anchor is the SHA phrasing.
+assert_line "redirect-branch reuses script-emitted base (AC13)" "$(first_line 'script-emitted commit SHA')"
+# AC9: scope-redirect kill switch documented in SKILL.
+assert_line "scope-redirect kill switch present" "$(first_line 'DEVBREW_QG_DISABLE_SCOPE_REDIRECT')"
+
+# --- v2.6.0 review-iter3 (codex+adversarial): stale-after-redirect class closed ---
+# A single $effective_diff_scope source feeds scout/dispatch/inlined-blob so a
+# Step-1b redirect propagates everywhere (no consumer reads the stale preflight scope).
+assert_line "effective_diff_scope single scope source present" "$(first_line 'effective_diff_scope')"
+# The 'Review branch diff' redirect must update BOTH scope_signal AND effective_diff_scope.
+eds_redirect=$(grep -cE 'effective_diff_scope = branch' "$SKILL_MD" || true)
+if [[ "$eds_redirect" -ge 1 ]]; then
+  echo "PASS: redirect sets effective_diff_scope = branch (stale-after-redirect closed)"
+else
+  echo "FAIL: redirect does not set effective_diff_scope = branch"
+  fail=$((fail + 1))
+fi
+# NEGATIVE guard: the stale 'as resolved at preflight' dispatch wording must be GONE
+# (it contradicted "scope resolved at step 1" and would hand reviewers the empty scope).
+stale_count=$(grep -cE 'as resolved at preflight' "$SKILL_MD" || true)
+if [[ "$stale_count" -eq 0 ]]; then
+  echo "PASS: no stale 'as resolved at preflight' scope wording (effective_diff_scope replaces it)"
+else
+  echo "FAIL: stale 'as resolved at preflight' wording still present ($stale_count)"
+  fail=$((fail + 1))
+fi
+
+# --- v2.6.0 review-iter4 (codex closure): worktree-only false-clean + persistence ---
+# The redirect must review the working-tree-inclusive UNION (git diff $merge_base + untracked),
+# NOT the committed-only two-dot diff — else a worktree-only trigger reviews 0 files and
+# certifies clean (false-clean). Anchor on the union phrasing.
+assert_line "redirect reviews working-tree-inclusive union (review-iter4 false-clean fix)" "$(first_line 'UNION of every change that triggered')"
+# The redirect-resolved scope persists as canonical across retry iterations 2-5
+# (Step 1 must not re-resolve from the raw preflight value after a redirect).
+assert_line "redirect scope canonical across iterations (review-iter4 persistence)" "$(first_line 'CANONICAL for ALL remaining')"
+
+# AC: degraded signal emits a loud advisory (CLAUDE.md loud-logging; design §5.1).
+assert_line "degraded scope advisory present" "$(first_line 'scope check degraded')"
+
+# --- v2.6.0 AC8: honest-verdict floor at Step 4.5 (both clean sub-cases) ---
+assert_line "honest floor label present" "$(first_line 'NOT certified clean')"
+assert_line "honest floor gated on the cached scope signal" "$(first_line 'scope_signal == empty_scope_with_changes')"
+# 'no scope reviewed' must appear in both clean sub-cases + the final-summary
+# variant → at least 3 occurrences.
+floor_count=$(grep -cE 'no scope reviewed' "$SKILL_MD" || true)
+if [[ "$floor_count" -ge 3 ]]; then
+  echo "PASS: honest floor label in both clean sub-cases + final summary ($floor_count)"
+else
+  echo "FAIL: honest floor under-applied (found $floor_count, need >=3)"
+  fail=$((fail + 1))
+fi
+
+# --- v2.6.0 AC11: Runtime scope transparency line, single + between R2 and R3 ---
+r2_marker=$(first_line '^\*\*Step R2')
+r3_marker=$(first_line '^\*\*Step R3')
+rtscope_line=$(first_line 'regardless of Review scope')
+assert_line "Runtime scope asymmetry marker present" "$rtscope_line"
+assert_line "Runtime scope observable anchor present" "$(first_line 'Runtime scope: full project')"
+if [[ "$rtscope_line" -gt "$r2_marker" && "$rtscope_line" -lt "$r3_marker" ]]; then
+  echo "PASS: Runtime scope line between Step R2 ($r2_marker) and Step R3 ($r3_marker) at $rtscope_line"
+else
+  echo "FAIL: Runtime scope line not between R2/R3 (r2=$r2_marker line=$rtscope_line r3=$r3_marker)"
+  fail=$((fail + 1))
+fi
+rtscope_count=$(grep -cE 'regardless of Review scope' "$SKILL_MD" || true)
+if [[ "$rtscope_count" -eq 1 ]]; then
+  echo "PASS: Runtime scope asymmetry marker unique (1)"
+else
+  echo "FAIL: Runtime scope asymmetry marker not unique ($rtscope_count)"
+  fail=$((fail + 1))
+fi
 
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"

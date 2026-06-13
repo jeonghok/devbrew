@@ -73,6 +73,7 @@ is aborted at a decision point.
 | `DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1` | Disable `/qg branch <name>` auto-worktree mode |
 | `DEVBREW_QG_KEEP_WORKTREE=1` | Preserve branch worktree after pipeline completes or is cancelled (default: removed) |
 | `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1` | Disable the Runtime gate sandbox executor (read-only smoke fallback; verdict capped at SKIP_WITH_EVIDENCE) |
+| `DEVBREW_QG_DISABLE_SCOPE_REDIRECT=1` | Disable the empty-scope redirect question (advisory only); the honest-verdict floor still applies |
 
 ### Scope (default: session)
 
@@ -83,6 +84,12 @@ files into `.claude/quality-gates/<session-id>/files.md`. The pre-pipeline check
 or when 24+ hours pass without activity.
 
 Override with `/qg branch` (full branch) or `/qg --paths <glob>...` (manual).
+
+빈 세션에서 커밋된 변경이 있어 resolved scope가 0인데 브랜치는 base보다 앞서 있으면 (false-clean),
+qg는 "clean"이라 하지 않는다 — `check-review-scope.sh`가 `empty_scope_with_changes`를 결정론으로
+탐지해 **정직-verdict floor**(verdict를 `no scope reviewed … NOT certified clean`으로 교체;
+kill 불가)와 1클릭 **redirect 게이트**(branch diff 리뷰 제안; `DEVBREW_QG_DISABLE_SCOPE_REDIRECT=1`로
+끌 수 있음)를 띄운다. 진짜 변경 없음(genuine no-op)은 그대로 `clean`.
 
 암묵 session scope로 돌 때 qg는 그 사실을 한 줄로 밝힌다 (`Review scope: session (N files)` — 전체
 PR/브랜치는 `/qg branch`). 자연어로 브랜치/전체 리뷰 의도를 말하면 모델이 `/qg branch`(branch

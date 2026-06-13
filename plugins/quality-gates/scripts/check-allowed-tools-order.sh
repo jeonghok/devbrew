@@ -14,6 +14,7 @@ EXPECTED_ORDER=(
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/pre-pipeline-check.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh:*)'
+  'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh:*)'
   # Group 2 — Review gate scripts
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run_codex_reviewer.sh:*)'
