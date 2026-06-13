@@ -43,6 +43,7 @@ related:
 - [7. Files to Modify](#7-files-to-modify)
 - [8. Verification Plan](#8-verification-plan)
 - [9. Rejected Alternatives](#9-rejected-alternatives)
+- [Handoff Context](#handoff-context)
 - [10. Metadata](#10-metadata)
 
 ## 1. Context / Why
@@ -97,9 +98,12 @@ floor 유지) 중 **B**를, redirect 운명(유지 vs 제거) 중 **구조적 re
 
 ## 4. Constraints
 
-- C1. **Law 2 (verdict 무결성 = load-bearing).** floor가 clean을 무를 수 없게 하는 신호는
-  *독립 script의 `changes_exist`*여야 한다 — 모델의 clean 주장과 무관한 출처. 모델이 0파일
-  리뷰를 정직히 알고(리뷰어 0 dispatch), 변경 존재는 script가 객관 제공 → self-approval 우회 불가.
+- C1. **Law 2 (verdict 무결성 = load-bearing).** floor가 "clean"을 구조적으로 무를 수 없게
+  하는 독립 신호는 *script의 `changes_exist`* (모델의 clean 주장과 무관한 출처)다. floor의 다른
+  입력 `resolved_scope_file_count`는 모델 자유 주장이 아니라 concrete artifact(files.md 줄 수 /
+  script `branch_ahead_count` / glob 매치)에 대한 결정론 연산이며, 연산이 불확실하면 degraded로
+  fail-open(silent 0 금지 — §5.3). 봉쇄 대상 systemic false-clean("빈 scope 성실 리뷰 후 clean")은
+  두 결정론 신호의 곱으로 차단 → self-approval 우회 불가. (도덕적 인센티브 논증에 기대지 않는다.)
 - C2. **fail-open + loud logging.** script가 changes_exist를 확정 못 하면(detached HEAD /
   no base / shallow / non-git) `degraded: yes` emit, exit 0, floor는 fail-open(clean 허용)하되
   반드시 loud advisory 동반 (CLAUDE.md loud-logging; silent false-clean 금지).
@@ -135,14 +139,16 @@ routing(무엇을 리뷰?)은 모델/escape-hatch가 소유 — 가볍게. verdi
 **"이 브랜치/워킹트리에 변경이 존재하나?"** (scope 해석은 모델 소유이므로 script에서 제거).
 
 - **유지(load-bearing, dogfood가 옳게 고침):** git sanity → fail-open, base 해석
-  (`base`/`base_ref` 분리 — F2 remote-only fix), branch-ahead 카운트(merge_base 경유),
-  worktree-dirty(tracked `git diff HEAD` + 비-ignore untracked `--exclude-standard` — NG4).
+  (`base`/`base_ref` 분리 — F2 remote-only fix), branch-ahead 변경 **파일** 수
+  (`git diff --name-only merge_base..HEAD | wc -l` — 커밋 수 아님), worktree-dirty(tracked
+  `git diff HEAD` + 비-ignore untracked `--exclude-standard` — NG4).
 - **제거:** `mode` 파라미터, `paths` glob + union, `resolved_count`(모델이 scope 소유),
   `signal` 4-way 라우팅, redirect-union용 `merge_base` emit.
 - **emit (structured stdout):**
   ```
   changes_exist: yes|no        # branch_ahead>0 OR worktree_dirty=yes
-  branch_ahead_count: <M>      # honest 메시지용
+  branch_ahead_count: <M>      # 변경 *파일* 수 (merge_base..HEAD `git diff --name-only | wc -l` —
+                               #   커밋 수 아님; v2.6.0 동작 유지). branch 모드 resolved_scope_file_count 대리값
   worktree_dirty: yes|no       # honest 메시지용
   base: <name|->               # honest 메시지 표시명
   degraded: yes|no             # fail-open 마커 (C2)
@@ -167,8 +173,13 @@ Step 1b (iter N=1 only) — changes-exist cross-check (floor용 캐시):
 Step 4.5 floor 로직 (clean으로 갈 때 = kept findings == 0):
 
 ```
-resolved_scope_file_count  := Step 1 모델-소유 scope의 파일 수
-                              (session→files.md 항목, branch→diff names, paths→glob 매치)
+resolved_scope_file_count  := Step 1에서 해석한 review scope의 파일 수 — 결정론 도출:
+   · session → grep -c '^- ' .claude/quality-gates/<sid>/files.md   (파일 부재 시 0)
+   · branch  → script의 $branch_ahead_count                          (이미 결정론: git diff name 수)
+   · paths   → --paths glob 매치 수
+   도출이 불확실하면(files.md unreadable 등) 0으로 silent fall-through 금지 →
+   degraded 경로로 합류(아래 ELSE IF + loud advisory). v2.5.0 transparency 라인이
+   이미 session count를 표면화하므로 신규 측정이 아니라 기존 값 재사용.
 
 IF resolved_scope_file_count == 0 AND $changes_exist == yes:
     print "## Review gate iter N: no scope reviewed (0 files; branch <M> ahead of <base>,
@@ -181,10 +192,15 @@ ELSE:
     print "## Review gate iter N: clean"                       # 정상 (scope>0 또는 genuine no-op)
 ```
 
-floor의 load-bearing 성질(C1): `$changes_exist`는 독립 script 출력 — 모델이 0파일을
-리뷰했어도 변경이 존재하면 "clean"을 구조적으로 금지. `resolved_scope_file_count`는 모델이
-Step 1에서 해석한 자기 scope의 파일 수(리뷰어 0 dispatch면 0)로, 모델이 거짓 보고할 이유가
-없는 정직한 입력. 두 신호의 곱이 floor.
+floor의 load-bearing 핵심(C1): 독립 backstop은 **`$changes_exist`** — script가 모델의 clean
+주장과 무관하게 emit하는 객관 신호다. resolved scope가 비었을 때(0파일) 변경이 존재하면
+"clean"이 구조적으로 금지된다. 다른 입력 `resolved_scope_file_count`는 모델 자유 주장이 아니라
+concrete artifact(files.md 줄 수 / script의 branch_ahead_count / glob 매치)에 대한 결정론
+연산 결과이고, 그 연산이 불확실하면 degraded로 fail-open(silent 0 금지). 따라서 봉쇄하려는
+systemic false-clean — "빈 scope를 성실히 리뷰하고 clean 보고" — 은 모델 정직성이 아니라
+`changes_exist × (결정론 scope count == 0)`의 곱으로 차단된다. 조건이 `== 0`인 점에 유의:
+partial coverage(scope>0인데 branch 일부만)는 floor 미발동 — 그건 routing/convenience라 모델·
+transparency 라인이 처리(N4 비대상, [[project_qg_empty_scope_guard]]).
 
 ### 5.4 routing = 모델 (honesty norm + escape hatch)
 
@@ -213,11 +229,15 @@ dispatch/inlined-blob는 `$effective_diff_scope` 대신 모델-소유 scope를 �
   exit 0. (단위 테스트)
 - AC5. SKILL Step 4.5 floor: `resolved_scope_file_count == 0 AND changes_exist == yes`이면
   honest "no scope reviewed … NOT certified clean" 라벨을 출력하고 bare "clean"을 절대 출력하지
-  않는다. (harness behavior assert)
+  않는다. **검증:** (i) `test_skill_orchestration_behavior.sh`의 prose-anchor assert로 SKILL에
+  이 조건+라벨 블록이 존재함을 확인(기존 line 348-349 `assert_line` 패턴 재사용), (ii) 실제
+  동작은 AC13 e2e fixture가 검증.
 - AC6. `degraded == yes`이고 scope==0이면 "clean"은 허용하되 `verdict not floor-protected
-  this run` loud advisory가 동반된다. (harness assert)
+  this run` loud advisory가 동반된다. **검증:** SKILL anchor assert(advisory 문구 존재) +
+  AC13 fixture의 degraded 변종(base branch 없는 repo).
 - AC7. **happy-path 무회귀:** resolved scope>0이면 floor 미발동, "Review gate iter N: clean"이
-  v2.6.0과 동일하게 출력된다. (harness assert)
+  v2.6.0과 동일하게 출력된다. **검증:** AC13 fixture의 scope>0 변종(files.md ≥1항목 + 변경)에서
+  bare clean 출력 확인.
 - AC8. 문자열 `review scope is empty`가 SKILL.md에서 사라진다 (grep == 0; CHANGELOG 제외).
   Empty-scope redirect decision 섹션 전체가 제거된다.
 - AC9. `$effective_diff_scope`(및 `effective_diff_scope`)가 SKILL.md에서 사라진다
@@ -227,8 +247,13 @@ dispatch/inlined-blob는 `$effective_diff_scope` 대신 모델-소유 scope를 �
 - AC11. allowed-tools 무변경: `Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh:*)`
   유지, raw `git` 미추가. `check-allowed-tools-order.sh` 및 그 테스트가 무변경 통과.
 - AC12. honesty norm 한 줄이 SKILL.md에 존재한다 (G3; grep으로 핵심 문구 확인).
-- AC13. **false-clean e2e (TDD):** 빈 세션(files.md 0항목) + branch ahead 시나리오에서
-  파이프라인이 honest verdict(NOT certified clean)를 내고 "clean"을 내지 않는다. red→green.
+- AC13. **false-clean e2e (TDD):** harness가 **격리된 임시 repo**(`mktemp -d` + `git init` +
+  base branch + ahead 커밋)를 만들고 files.md를 빈 채로 둔 뒤 floor 로직을 실행 — honest verdict
+  (NOT certified clean)를 내고 "clean"을 내지 않는다. **fixture는 fail-closed**: `cd`/`git init`
+  실패 시 즉시 abort — 절대 live repo에서 git 파괴 연산 금지(v2.6.0 dogfood가 `set -u`-only
+  fixture의 live-repo `git branch -D main` 위험을 적발, [[project_qg_scope_capture]]). 변종으로
+  scope>0(AC7)·degraded=base branch 없음(AC6)·genuine no-op(변경 없음→clean — C4 happy-path
+  보조: floor 오발동 없음 확인)도 같은 fixture 골격으로 커버. red→green.
 - AC14. plugin.json 2.6.0 → 2.7.0; CHANGELOG `## [2.7.0] — 2026-06-13` (Removed/Changed);
   README "Principles Instantiated" + Scope 문서 갱신.
 - AC15. **baseline 무회귀:** 작업 후 main의 기존 8 stale red(환경의존)만 남고 신규 red 0.
@@ -258,9 +283,12 @@ dispatch/inlined-blob는 `$effective_diff_scope` 대신 모델-소유 scope를 �
 5. **linter 무회귀:** `bash scripts/check-allowed-tools-order.sh` 통과 (AC11).
 6. **baseline (AC15):** 작업 전 전체 테스트 baseline 캡처(기존 8 red 확인) → 작업 후 동일
    8개만, 신규 red 0. ([[project_qg_pre_existing_test_reds]] — repo root 실행)
-7. **/qg self-dogfood (선택, 권장):** feature 브랜치에 `/qg branch`로 Review 게이트 한 번
-   — 특히 codex model-diversity가 floor의 보안 fail-open을 다시 적발하는지
-   ([[project_qg_scope_capture]] 교훈: 보안 컨트롤은 codex 독립리뷰 필수).
+7. **/qg self-dogfood (필수 — floor는 보안/무결성 컨트롤):** feature 브랜치에 `/qg branch`로
+   Review 게이트를 돌려 **codex model-diversity가 floor의 fail-open을 적발하는지** 확인. §1이
+   기록하듯 v2.6.0 dogfood가 prior 2단계 리뷰를 뚫은 fail-open(F2)을 codex 독립리뷰로만 잡았고
+   ([[project_qg_scope_capture]]: "보안 컨트롤=codex 독립리뷰 필수"), floor 자체가 C1/Law 2
+   컨트롤이므로 이 pass를 optional로 두면 설계가 §1의 자기 교훈을 위반한다. **plan에 별도 task로
+   포함**(권장이 아니라 verification의 일부).
 
 ## 9. Rejected Alternatives
 
@@ -284,6 +312,25 @@ dispatch/inlined-blob는 `$effective_diff_scope` 대신 모델-소유 scope를 �
   아끼나, floor의 독립 신호 포착이 모델의 scope 판단에 조건부가 되어 load-bearing 안전성이 약화.
   C3대로 **eager(iter1 1회 호출·캐시)로 확정** — single-call 패턴 일관 + 신호를 리뷰 전 포착.
 
+## Handoff Context
+
+- **TL;DR:** v2.6.0 detector의 routing 재구성(script modes/paths/union/signal, redirect 게이트,
+  `$effective_diff_scope`, `DEVBREW_QG_DISABLE_SCOPE_REDIRECT`)을 제거하고 verdict 무결성 floor만
+  결정론으로 유지. floor = `resolved_scope_file_count == 0 AND changes_exist == yes → "clean" 금지`.
+  3 결정 locked: B floor 유지 / 구조적 redirect 제거 / tiny script(raw git 미부여).
+- **Implicit context (plan이 알아야 할 비자명):**
+  - `check-review-scope.sh`는 *유지·축소*(삭제 아님) → allowed-tools `Bash(...check-review-scope.sh:*)`
+    + `check-allowed-tools-order.sh:17`의 EXPECTED_ORDER 항목 **무변경**. raw `git`을 allowed-tools에
+    추가하지 말 것(N3) — floor의 git은 축소된 script가 수행.
+  - CHANGELOG는 append-only — [2.6.0] 보존, [2.7.0]만 추가. 제거-grep ACs(AC8/9/10)는 CHANGELOG 제외.
+  - 테스트는 **repo root에서** 실행([[project_qg_pre_existing_test_reds]]); main에 기존 8 stale
+    red(환경의존, 무관) — 작업 후 정확히 그 8개여야(AC15).
+  - 모든 테스트 fixture는 **fail-closed** 필수(live-repo git 파괴 방지 — v2.6.0 교훈, AC13).
+  - `resolved_scope_file_count` 도출이 불확실하면 degraded fail-open(silent 0 금지) — floor의
+    load-bearing 핵심이자 C1 검증 가능성의 근거(§5.3).
+- **Deferred to plan (차단 아님):** TDD 순서(AC13 red 먼저 → SKILL floor → script 축소 → 단위);
+  codex dogfood를 별도 task로 배치(§8 step 7, 필수). script rename·eager 호출은 §9/§10에서 닫힘.
+
 ## 10. Metadata
 
 - **Plugin / Version:** quality-gates, 2.6.0 → **2.7.0** (minor — surface 제거 + 동작 단순화,
@@ -294,7 +341,8 @@ dispatch/inlined-blob는 `$effective_diff_scope` 대신 모델-소유 scope를 �
 - **Memory:** [[project_qg_scope_capture]], [[feedback_harness_lightness_trust_model]],
   [[project_qg_empty_scope_guard]], [[project_qg_pre_existing_test_reds]],
   [[feedback_devbrew_design_lightness]], [[feedback_evidence_before_approved]].
-- **Open (구현 중 결정 가능, 차단 아님):** script 파일명 유지 vs rename (§9) — 기본: 유지(churn
-  최소). (eager vs lazy floor 호출은 C3/§9에서 eager로 확정 — 더는 open 아님.)
+- **Decided (was open):** script 파일명 `check-review-scope.sh` **유지**(rename은 allowed-tools/
+  linter/테스트/SKILL 참조 churn 유발 — §9; 헤더 주석으로 좁아진 책임 갱신). eager floor 호출 확정
+  (C3/§9). **차단 open 이슈 없음.**
 - **Law 1 게이트:** 이 design doc은 활성 설계(AC·동작 변경)라 spec-distill auto-review hook을
   정상 honor (documentary skip 아님 — [[feedback_spec_distill_documentary_edit_skip]]).
