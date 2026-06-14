@@ -3,6 +3,61 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.7.0] — 2026-06-13
+
+v2.6.0 false-clean detector에서 *routing 재구성*(무엇이 바뀌었나를 git으로 재구성)을 제거하고
+*verdict 무결성 floor*(0파일인데 clean 금지)만 결정론으로 유지. dogfood 5개 버그가 전부 routing에서
+나왔고 floor의 load-bearing 입력(`changes_exist`)은 한 번도 틀린 적 없다는 관찰에 따라 버그원천과
+가치원천을 분리. `check-review-scope.sh`는 `changes_exist`만 emit하는 103줄(로직 52줄)로 축소되고, redirect
+게이트·`$effective_diff_scope`·`DEVBREW_QG_DISABLE_SCOPE_REDIRECT`는 제거. routing은 모델 +
+`/qg branch` escape hatch + 정직 norm 한 줄에 위임. 정상 경로(scope>0 / genuine no-op)는 무변경.
+devbrew P8 determinism-economy + harness lightness instantiation(결정론은 load-bearing 무결성
+floor 한 점에만; routing은 모델 신뢰).
+
+### Removed
+- **Empty-scope redirect 게이트** (SKILL Step 1b + `## Empty-scope redirect decision` 섹션 전체):
+  빈 scope 시 3옵션 AskUserQuestion(branch diff / honest-empty / stop) + union 재계산. routing은
+  모델 영역이므로 구조적 게이트 불필요(lightness; 사용자 "구조적 redirect 제거" 결정).
+- **`$effective_diff_scope` single-source 변수 배선** (SKILL Step 1 + scout/dispatch/inlined-blob):
+  redirect 전파용 캐시 변수. redirect 제거로 소비자 소멸 — scout/reviewer dispatch/codex blob은
+  이제 모델-소유 scope를 직접 참조.
+- **kill switch `DEVBREW_QG_DISABLE_SCOPE_REDIRECT`** (SKILL / qg.md / README): redirect 게이트와
+  함께 제거. floor는 kill switch 없는 load-bearing 컨트롤로 유지.
+- **`check-review-scope.sh`의 routing 출력**: `signal`(4-way) / `resolved_count` / `merge_base` emit,
+  `mode`(session/branch/paths) 인자, `paths` glob union. 단위 테스트의 mode/paths/signal 케이스 제거.
+
+### Changed
+- **`scripts/check-review-scope.sh` 139줄 → 103줄 (로직 52줄)**: 단일 책임을 *"resolved scope가 비었는데 변경이
+  있나?"*에서 *"브랜치/워킹트리에 변경이 존재하나?"*로 좁힘. emit = `changes_exist` / `branch_ahead_count`
+  (변경 파일 수) / `worktree_dirty` / `base` / `degraded`. load-bearing fix 보존(F2 remote-only base
+  `base`/`base_ref` 분리, NG4 `--exclude-standard` untracked, degraded fail-open + loud advisory).
+- **정직-verdict floor (SKILL Step 4.5)**: 캐시된 `$scope_signal == empty_scope_with_changes` 대신
+  `$resolved_scope_file_count == 0 AND $changes_exist == yes`(두 결정론 신호의 곱)로 발동. 차단력
+  무손실 — `changes_exist`는 모델 clean 주장과 무관한 객관 신호. degraded면 fail-open + loud advisory.
+- **honesty norm 한 줄 추가 (SKILL Step 1b)**: 모델이 review-scope를 소유하고, 빈 scope + 변경 시
+  `/qg branch` 제안 또는 honest verdict를 내도록 명시. routing(모델)/integrity(floor) 분리.
+- **버전 2.6.0 → 2.7.0** (minor — surface 제거 + 동작 단순화, false-clean 차단 contract 보존):
+  `plugin.json`, SKILL 제목 + Final Summary, harness 버전 assertion(`v2.6.0`→`v2.7.0`) 동기화.
+- **README `인스턴스화한 원칙` self-honest-floor bullet + `commands/qg.md` Scope/kill-switch 문서** 갱신.
+- **신규 테스트 `tests/test_qg_false_clean_floor.sh`** (fail-closed e2e): false-clean 차단 + happy-path
+  clean + genuine no-op clean + degraded fail-open.
+
+### Fixed
+- **degraded 신호가 shallow clone을 실제로 감지** (`check-review-scope.sh`: `git rev-parse
+  --is-shallow-repository` 가드 추가): SKILL degraded advisory와 AC4가 v2.6.0부터 "shallow → degraded"를
+  광고했으나 스크립트는 shallow를 체크하지 않아, merge-base가 grafted boundary commit으로 해석되는
+  shallow 클론에서 약속된 fail-open이 발동하지 않던 doc↔impl gap을 봉쇄. `tests/test_check_review_scope.sh`에
+  shallow 회귀 케이스 추가(fixture `--is-shallow-repository == true` 자체를 단언해 vacuous-pass 방지).
+- **harness floor anchor 강건화** (`tests/harness/test_skill_orchestration_behavior.sh`): `changes_exist == yes`가
+  honesty-norm 라인에도 등장해 단독 grep이 floor 회귀 시에도 vacuous PASS하던 문제를, floor 라인에만 유일한
+  결합 패턴(`resolved_scope_file_count == 0 AND …changes_exist == yes`)으로 교체.
+- **데이터 git-query를 C2 fail-open으로 통일** (`check-review-scope.sh`): `branch_ahead_count` 계산이
+  `git diff … | wc -l` 파이프(파이프라인 exit status가 `wc`의 것 → git 실패가 삼켜짐)였고 `worktree_dirty`가
+  `-n "$(git diff/ls-files …)"`였던 탓에, sanity/base 통과 후 git 쿼리가 실패하면 `changes_exist: no` +
+  `degraded: no`(false-clean 방향 fail-CLOSED)가 되어 스크립트 자신의 C2 "fail-open on uncertainty" 계약을
+  위반하던 문제를 봉쇄. 세 쿼리를 모두 `var=$(git …) || emit_degraded` 직접-할당 idiom(line 64 merge_base와
+  동일)으로 전환 → 실패 시 fail-open(degraded). `tests/test_check_review_scope.sh`에 git-shim 회귀 케이스 추가.
+
 ## [2.6.0] — 2026-06-07
 
 Review gate가 *검토받았다고 믿는 scope*와 *실제 resolve한 scope*가 silent하게 발산할 때
