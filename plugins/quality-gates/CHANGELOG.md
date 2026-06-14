@@ -8,7 +8,7 @@
 v2.6.0 false-clean detector에서 *routing 재구성*(무엇이 바뀌었나를 git으로 재구성)을 제거하고
 *verdict 무결성 floor*(0파일인데 clean 금지)만 결정론으로 유지. dogfood 5개 버그가 전부 routing에서
 나왔고 floor의 load-bearing 입력(`changes_exist`)은 한 번도 틀린 적 없다는 관찰에 따라 버그원천과
-가치원천을 분리. `check-review-scope.sh`는 `changes_exist`만 emit하는 ~40줄로 축소되고, redirect
+가치원천을 분리. `check-review-scope.sh`는 `changes_exist`만 emit하는 86줄(로직 46줄)로 축소되고, redirect
 게이트·`$effective_diff_scope`·`DEVBREW_QG_DISABLE_SCOPE_REDIRECT`는 제거. routing은 모델 +
 `/qg branch` escape hatch + 정직 norm 한 줄에 위임. 정상 경로(scope>0 / genuine no-op)는 무변경.
 devbrew P8 determinism-economy + harness lightness instantiation(결정론은 load-bearing 무결성
@@ -27,7 +27,7 @@ floor 한 점에만; routing은 모델 신뢰).
   `mode`(session/branch/paths) 인자, `paths` glob union. 단위 테스트의 mode/paths/signal 케이스 제거.
 
 ### Changed
-- **`scripts/check-review-scope.sh` 120줄 → ~40줄**: 단일 책임을 *"resolved scope가 비었는데 변경이
+- **`scripts/check-review-scope.sh` 139줄 → 86줄 (로직 46줄)**: 단일 책임을 *"resolved scope가 비었는데 변경이
   있나?"*에서 *"브랜치/워킹트리에 변경이 존재하나?"*로 좁힘. emit = `changes_exist` / `branch_ahead_count`
   (변경 파일 수) / `worktree_dirty` / `base` / `degraded`. load-bearing fix 보존(F2 remote-only base
   `base`/`base_ref` 분리, NG4 `--exclude-standard` untracked, degraded fail-open + loud advisory).

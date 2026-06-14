@@ -73,7 +73,6 @@ is aborted at a decision point.
 | `DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1` | Disable `/qg branch <name>` auto-worktree mode |
 | `DEVBREW_QG_KEEP_WORKTREE=1` | Preserve branch worktree after pipeline completes or is cancelled (default: removed) |
 | `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1` | Disable the Runtime gate sandbox executor (read-only smoke fallback; verdict capped at SKIP_WITH_EVIDENCE) |
-| `DEVBREW_QG_DISABLE_SCOPE_REDIRECT=1` | Disable the empty-scope redirect question (advisory only); the honest-verdict floor still applies |
 
 ### Scope (default: session)
 
@@ -86,10 +85,11 @@ or when 24+ hours pass without activity.
 Override with `/qg branch` (full branch) or `/qg --paths <glob>...` (manual).
 
 빈 세션에서 커밋된 변경이 있어 resolved scope가 0인데 브랜치는 base보다 앞서 있으면 (false-clean),
-qg는 "clean"이라 하지 않는다 — `check-review-scope.sh`가 `empty_scope_with_changes`를 결정론으로
-탐지해 **정직-verdict floor**(verdict를 `no scope reviewed … NOT certified clean`으로 교체;
-kill 불가)와 1클릭 **redirect 게이트**(branch diff 리뷰 제안; `DEVBREW_QG_DISABLE_SCOPE_REDIRECT=1`로
-끌 수 있음)를 띄운다. 진짜 변경 없음(genuine no-op)은 그대로 `clean`.
+qg는 "clean"이라 하지 않는다 — read-only `check-review-scope.sh`가 `changes_exist`를 결정론으로
+emit하고, Review gate의 **정직-verdict floor**가 `resolved scope 0 AND changes_exist == yes`이면
+verdict를 `no scope reviewed … NOT certified clean`으로 교체한다(load-bearing, kill 불가). 무엇을
+리뷰할지(routing)는 모델이 소유 — 빈 scope면 모델이 `/qg branch`(전체 브랜치 리뷰)를 제안한다.
+진짜 변경 없음(genuine no-op)은 그대로 `clean`; 신호가 degraded면 fail-open + loud advisory.
 
 암묵 session scope로 돌 때 qg는 그 사실을 한 줄로 밝힌다 (`Review scope: session (N files)` — 전체
 PR/브랜치는 `/qg branch`). 자연어로 브랜치/전체 리뷰 의도를 말하면 모델이 `/qg branch`(branch

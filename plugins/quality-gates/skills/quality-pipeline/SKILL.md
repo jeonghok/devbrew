@@ -376,7 +376,7 @@ Agent({
      bare `clean`. Print
      `## Review gate iter N: no scope reviewed (0 files; branch <M> ahead of <base>, worktree <dirty|clean>) — NOT certified clean.`
      (`<M>` = `$branch_ahead_count`, `<base>` = `$base`, worktree token from
-     `$worktree_dirty`). A zero-scope run with real changes must never read as
+     `$worktree_dirty`: `yes`→`dirty`, `no`→`clean`). A zero-scope run with real changes must never read as
      "reviewed & clean".
    - ELSE IF `$degraded == yes AND $resolved_scope_file_count == 0`: print
      `## Review gate iter N: clean` AND the loud advisory
