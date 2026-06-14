@@ -37,7 +37,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v2.6.0)
+# Quality Gates — In-Turn Orchestrator (v2.7.0)
 
 You are running the **full quality-gates pipeline** in a single assistant
 turn. You dispatch up to two gates serially in order (Runtime gate only when selected). At decision points
@@ -255,61 +255,40 @@ For each iteration N (1..5):
 
 1. Compute diff scope (paths / branch / session — from preflight result). **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> Review scope: session (<COUNT> files edited this session). 전체 PR/브랜치는 /qg branch.` (`<COUNT>` = preflight `files.md` 항목 수). 명시적 `/qg branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/qg branch`는 결정론적 escape hatch로 유지).
 
-   **Effective scope variable (single source — closes the stale-after-redirect class).**
-   Set the orchestrator variable `$effective_diff_scope` = the scope resolved here
-   (`session` / `branch` / `paths`), with its review target (`branch` →
-   `$merge_base..HEAD` once Step 1b resolves the base; `paths` → the `--paths`
-   globs; `session` → the session `files.md` set). EVERY downstream scope consumer
-   — the scout (step 2), every reviewer dispatch (step 3, the `diff_scope:` field),
-   and the code-reviewer/codex inlined diff blob — reads `$effective_diff_scope`,
-   NEVER the raw preflight value. The Step-1b "Review branch diff" redirect updates
-   `$effective_diff_scope` in ONE place (next to `$scope_signal = normal`), so the
-   new scope propagates to every consumer at once — the dispatch scope and the
-   floor's `$scope_signal` always move together (the same defect class as F1).
-
-**Step 1b — Scope signal & empty-scope redirect (iteration N=1 only).** Before
-dispatching the scout, run the read-only scope signal **once** and cache it for
-the rest of this turn (C7 — single call; the cached values are consumed again by
-the honest-verdict floor at Step 4.5, so the gate and the floor can never diverge):
+**Step 1b — Changes-exist signal (iteration N=1 only).** Before dispatching the
+scout, run the read-only changes-exist signal **once** and cache it for the rest
+of this turn (C3 — single call; the cached values are consumed by the
+honest-verdict floor at Step 4.5):
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh" <mode> [globs...]
+"${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh"
 ```
 
-`<mode>` is the scope resolved at step 1 (`session` / `branch` / `paths`); in
-`paths` mode pass the `--paths` globs as trailing args. Parse the structured
-stdout and cache `$scope_signal` (the `signal:` value), `$branch_ahead_count`,
-`$base` (display name), and `$merge_base` (the resolved commit SHA, used by the
-branch-diff redirect so it never re-resolves a remote-only base name). Route on
-`$scope_signal`:
+The script takes **no arguments** — scope resolution (what to review) is yours, not
+the script's. Parse the structured stdout and cache `$changes_exist`,
+`$branch_ahead_count` (the changed-file count on `merge_base..HEAD`),
+`$worktree_dirty`, `$base` (display name), and `$degraded`. There is **no routing**
+here: this signal exists only to feed the Step 4.5 verdict floor.
 
-- `empty_scope_with_changes` AND `DEVBREW_QG_DISABLE_SCOPE_REDIRECT` unset → fire
-  the [Empty-scope redirect decision](#empty-scope-redirect-decision) NOW (before
-  the scout), and branch per that section before continuing.
-- `empty_scope_with_changes` AND `DEVBREW_QG_DISABLE_SCOPE_REDIRECT=1` → do NOT
-  fire the gate; print one advisory line and continue to the scout (the Step 4.5
-  floor still relabels the verdict — AC9):
-  `> [quality-gates] review scope empty but branch <M> ahead of <base> — redirect gate disabled; floor still applies.`
-- `normal` / `genuine_noop` → no gate, no advisory; continue silently to the scout
-  (happy-path zero-click).
-- `degraded` → no gate, no floor (fail-open per C5), but print one loud advisory
-  line so the fallback is visible (CLAUDE.md loud-logging; design §5.1):
-  `> [quality-gates] scope check degraded (detached HEAD / no base branch / unrelated history / shallow) — empty-scope detection skipped (fail-open; verdict not floor-protected this run).`
-  then continue to the scout.
+- `$degraded == yes` → the changes-exist signal is unavailable (detached HEAD /
+  no base branch / unrelated history / shallow). This run is NOT floor-protected;
+  the Step 4.5 ELSE-IF branch prints one loud advisory at the verdict (CLAUDE.md
+  loud-logging). Continue to the scout.
 
-Run this signal check ONLY in iteration N=1 — the empty-scope case is resolved
-here (branch / honest-empty / stop). **Once Step 1b resolves it, the resulting
-`$effective_diff_scope` and `$scope_signal` are CANONICAL for ALL remaining
-iterations:** Step 1 in iterations 2–5 does NOT re-resolve scope from the raw
-preflight value (Step 1b is N=1-only, so a re-resolve would silently revert a
-redirect to the original empty session scope — review-iter4 persistence fix).
-Iterations 2–5 reuse the cached `$effective_diff_scope`, so they always run on the
-redirect-selected non-empty scope and never re-trigger the signal.
+Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached values
+(single-call — do not re-invoke).
+
+> **Review-scope ownership (honesty norm — G3).** You own review-scope resolution.
+> If the scope you resolved at step 1 is empty (0 files) but the branch/worktree has
+> changes (`$changes_exist == yes`), you MUST NOT certify clean — offer to review the
+> full branch (`/qg branch`) or emit the honest "no scope reviewed" verdict. The Step
+> 4.5 floor enforces this structurally: this norm is the routing half (model-owned),
+> the floor is the integrity half (deterministic).
 
 2. Dispatch the scout: `Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py ...)` — compute its
-   metrics from **`$effective_diff_scope`'s target** (e.g. `git diff $merge_base` + untracked
-   for the branch-union redirect), never the raw preflight scope, so a Step-1b redirect is
-   honored here (C1).
+   metrics from the review scope you resolved at step 1 (the session `files.md` set, the
+   `branch` diff, or the `--paths` globs). Scope is model-owned; there is no cached scope
+   variable to thread.
 3. Dispatch reviewer subagents in parallel (per [Reviewer dispatch contract](#reviewer-dispatch-contract)).
    `quality-gates:security-reviewer` and `quality-gates:adversarial` are
    the in-house dispatches that MUST include `project_dir: "$project_dir"`:
@@ -320,7 +299,7 @@ Agent({
   description: "Security review (Review gate iter N)",
   prompt: "Run code-level security review on the current diff.
     project_dir: \"$project_dir\"
-    diff_scope: <$effective_diff_scope — the CURRENT scope after Step 1b, NOT the raw preflight value; a 'Review branch diff' redirect makes this 'branch' with target = the redirect union (git diff $merge_base + untracked)>
+    diff_scope: <the review scope you resolved at step 1: session (files.md set) / branch (git diff vs base) / paths (--paths globs)>
     plan_path: <path or 'auto'>
     iteration: N
     <…scout-supplied context…>"
@@ -340,11 +319,10 @@ Agent({
    `pr-review-toolkit:code-reviewer` (if pr-review-toolkit available) and
    the codex reviewer (if `detect_codex.sh` returns true) are dispatched
    with their own contracts; they do not require `project_dir` because
-   they re-derive scope from the inlined diff blob — **build that blob from
-   `$effective_diff_scope`'s target** (the empty-scope redirect's branch-union
-   `git diff $merge_base` + untracked, or the explicit branch/paths/session target),
-   NOT the raw preflight scope (C4 — same single-source rule as the scout and the
-   `diff_scope:` field).
+   they re-derive scope from the inlined diff blob — **build that blob from the
+   review scope you resolved at step 1** (the explicit branch / paths / session
+   target). Scope is model-owned (the honesty norm above); the floor independently
+   guards the empty-scope-with-changes case.
    The codex reviewer additionally injects the project spec's Acceptance
    Criteria into its `<spec_context>` slot — resolved **script-internally** by
    `run_codex_reviewer.sh` (via `discover-spec.sh`), so no `spec_path` dispatch
@@ -360,7 +338,19 @@ Agent({
 
    **Step 4.5 — Surface findings.** Judge the boundary on the **kept
    (displayed) finding count**, read from the `**Findings:**` counts line in
-   that stdout — NOT the raw reviewer count. Three cases:
+   that stdout — NOT the raw reviewer count.
+
+   **Resolved-scope file count (floor input — reuse, not a new measurement).**
+   `$resolved_scope_file_count` = the file count of the scope you resolved at
+   step 1: for `session` it is the same count the v2.5.0 transparency line already
+   surfaced (the `files.md` items); for `branch` it is the cached
+   `$branch_ahead_count`; for `paths` it is the number of `--paths` glob matches you
+   resolved. If this count cannot be determined (e.g. the session `files.md` is
+   unreadable), do NOT silently treat it as 0 — treat the run as `$degraded == yes`
+   for the floor (the ELSE-IF branch below + loud advisory). This is an
+   already-known value; do not re-measure (the orchestrator has no raw-git/grep tool).
+
+   Three cases:
    - **kept > 0** (the counts line totals ≥ 1 across the three severities) →
      emit the captured stdout to the user as a deliberate assistant message,
      prepended with the single context line `## Review gate iter N — Findings`,
@@ -369,22 +359,30 @@ Agent({
      line `No high-confidence findings. N low-confidence findings suppressed.`
      with N > 0 — read N from that line) → no high-confidence finding to act
      on → treat as **clean**: do NOT call AskUserQuestion. Surface the single
-     `No high-confidence findings…` line for transparency. **Honest-verdict floor
-     (AC8):** if the cached `$scope_signal == empty_scope_with_changes`, ALSO
-     print `## Review gate iter N: no scope reviewed (0 files; branch <M> ahead of <base>) — NOT certified clean.`
-     beneath it (the suppressed-count line stays; a zero-scope run must not read
-     as "reviewed & clean"). Then **exit the loop → [Dispatch
-     Loop](#dispatch-loop) step 4** (which skips the Runtime gate when gate scope = Review gate only / `effective_skip_runtime`, else runs it) — do not iterate
-     again.
+     `No high-confidence findings…` line for transparency, then apply the
+     **Honest-verdict floor** below. Then **exit the loop → [Dispatch
+     Loop](#dispatch-loop) step 4** (which skips the Runtime gate
+     when gate scope = Review gate only / `effective_skip_runtime`, else runs it) — do not iterate again.
    - **kept = 0 AND suppressed = 0** (the same empty-state line with N = 0) →
-     **Honest-verdict floor (AC8):** if the cached `$scope_signal ==
-     empty_scope_with_changes`, do NOT print `clean`; print
-     `## Review gate iter N: no scope reviewed (0 files; branch <M> ahead of <base>) — NOT certified clean.`
-     (substitute `<M>` = `$branch_ahead_count`, `<base>` = `$base`). Otherwise
-     (`normal` / `genuine_noop` / `degraded`) print `## Review gate iter N: clean`
-     exactly as before (NG4 — genuine no-op and degraded fail-open are unchanged).
-     Then exit the loop → [Dispatch Loop](#dispatch-loop) step 4 (which
-     short-circuits the Runtime gate for the review-only path, else runs it).
+     apply the SAME **Honest-verdict floor** below, then exit the loop → [Dispatch
+     Loop](#dispatch-loop) step 4 (which short-circuits the Runtime gate for the
+     review-only path, else runs it).
+
+   **Honest-verdict floor (deterministic — both clean sub-cases).** The floor keys
+   on two deterministic inputs — `$resolved_scope_file_count` (the step-1 count above)
+   and the cached `$changes_exist` (emitted by `check-review-scope.sh`, independent of
+   any clean claim):
+   - IF `$resolved_scope_file_count == 0 AND $changes_exist == yes`: do NOT print
+     bare `clean`. Print
+     `## Review gate iter N: no scope reviewed (0 files; branch <M> ahead of <base>, worktree <dirty|clean>) — NOT certified clean.`
+     (`<M>` = `$branch_ahead_count`, `<base>` = `$base`, worktree token from
+     `$worktree_dirty`). A zero-scope run with real changes must never read as
+     "reviewed & clean".
+   - ELSE IF `$degraded == yes AND $resolved_scope_file_count == 0`: print
+     `## Review gate iter N: clean` AND the loud advisory
+     `> [quality-gates] scope check degraded (detached HEAD / no base branch / unrelated history / shallow) — empty-scope detection skipped (fail-open; verdict not floor-protected this run).`
+   - ELSE: print `## Review gate iter N: clean` exactly as before (scope > 0, or a
+     genuine no-op with `$changes_exist == no` — unchanged happy path).
 
 5. **Decision tool (kept > 0 only).** Invoke [Review iter boundary
    decision](#review-iter-boundary-decision). Fill its `<summary>` slot by
@@ -412,66 +410,6 @@ transcript.
 The iter-boundary anchor phrase `findings remain` is specific to this
 template and must not appear in any other decision-tool call in this
 SKILL, per spec AC6.
-
-## Empty-scope redirect decision
-
-> **Spec anchor (AC6):** the literal phrase `review scope is empty` MUST appear
-> in the `question:` field — the orchestration harness checks it exists and is
-> UNIQUE across all decision-tool calls in this SKILL (grep -c == 1). Fired only
-> from Review gate Step 1b when `$scope_signal == empty_scope_with_changes` and
-> `DEVBREW_QG_DISABLE_SCOPE_REDIRECT` is unset.
-
-```
-AskUserQuestion({
-  questions: [
-    {
-      question: "Review scope is empty (session: 0 files) but there are <M> changed files outside it (branch-ahead commits and/or uncommitted/untracked changes). They were never reviewed this session. What should I review?",
-      header: "Review scope",
-      options: [
-        {label: "Review branch diff (recommended)", description: "Review the UNION of out-of-scope changes — branch-ahead commits + uncommitted + non-ignored untracked (git diff <merge_base> + untracked); re-interpret scope as branch, then proceed."},
-        {label: "Proceed (honest-empty, not clean)", description: "Skip reviewer dispatch and emit an honest verdict — 'no scope reviewed, NOT clean'."},
-        {label: "Stop", description: "Abort the pipeline with an honest summary. Re-run with /qg branch."}
-      ],
-      multiSelect: false
-    }
-  ]
-})
-```
-
-Substitute `<M>` = the out-of-scope change count = files in `git diff $merge_base --name-only`
-PLUS non-ignored untracked files (`git ls-files --others --exclude-standard`), de-duplicated
-— **not** just `$branch_ahead_count`, so a worktree-only trigger shows its real count, not 0.
-`<base>` = cached `$base`.
-Branch on the answer — each branch leaves a transcript-observable line (AC7):
-
-- **Review branch diff** → re-interpret scope as `branch`: the review target is the
-  **UNION of every change that triggered `empty_scope_with_changes`** — `git diff $merge_base`
-  (the script-emitted commit SHA → the working tree, which captures BOTH branch-ahead commits
-  AND tracked uncommitted changes) PLUS non-ignored untracked files. Using the script-emitted
-  commit SHA `$merge_base` (always resolvable, never re-resolves a remote-only base name) two-dot
-  `$merge_base..HEAD` is **deliberately NOT used** here: when the signal was triggered by
-  worktree-only changes (`branch_ahead_count = 0`, `HEAD == $merge_base`), `$merge_base..HEAD`
-  is empty and reviewing it would certify clean over 0 files (review-iter4 false-clean) — whereas
-  `git diff $merge_base` then equals the worktree diff and reviews the real changes. Because this
-  union is exactly `changes_exist` (`branch_ahead OR worktree_dirty`), it always covers the signal.
-  **Update BOTH cached values now, in this one place:** set `$scope_signal = normal` (valid — the
-  union covers every signal-triggering change, so the Step 4.5 floor must not relabel this genuinely-
-  reviewed set as "0 files reviewed / NOT certified clean") AND set `$effective_diff_scope = branch`
-  (target = this union: `git diff $merge_base` + untracked). These two MUST move together — the floor
-  keys on `$scope_signal`, and the scout + every reviewer dispatch + the inlined diff blob read
-  `$effective_diff_scope` (without it they would review the stale preflight `session` scope = 0 files
-  and the redirect would be silently defeated — the stale-after-redirect class). Print
-  `> Review scope: branch (<M> files vs <base>).` (where `<M>` is the union count above, so it is
-  never a misleading 0) then continue to step 2 (the scout) and proceed normally for the remaining
-  iterations.
-- **Proceed (honest-empty, not clean)** → skip the scout / reviewer / synthesizer
-  dispatch entirely (no value in reviewing 0 files). Print the positive observable
-  line `> Review gate: skipping reviewer dispatch — 0 files reviewed (honest-empty path).`
-  then emit the honest verdict label (the Step 4.5 floor label
-  `## Review gate iter N: no scope reviewed (0 files; branch <M> ahead of <base>) — NOT certified clean.`)
-  and exit the loop → [Dispatch Loop](#dispatch-loop) step 4.
-- **Stop** → emit the final summary marked
-  `aborted at Review gate (empty scope, branch <M> ahead)`.
 
 ## Review iter boundary decision
 
@@ -763,7 +701,7 @@ Branch:
 Print:
 
 ```markdown
-## Quality Gates Pipeline — Complete (v2.6.0)
+## Quality Gates Pipeline — Complete (v2.7.0)
 
 - **Review gate**: <clean iter N | no scope reviewed (branch <M> ahead) | proceeded-with-findings iter N | aborted iter N | skipped>
 - **Runtime gate**: <clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>
