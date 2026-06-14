@@ -353,8 +353,14 @@ assert_line "review-scope ownership honesty norm present" "$(first_line 'You own
 
 # AC5: the Step 4.5 floor keys on the two deterministic inputs — the resolved scope
 # file count AND the script-emitted changes_exist (NOT the removed scope_signal).
-assert_line "floor keyed on resolved_scope_file_count == 0" "$(first_line 'resolved_scope_file_count == 0')"
-assert_line "floor keyed on changes_exist == yes"           "$(first_line 'changes_exist == yes')"
+# Anchor BOTH conditions on a SINGLE line: 'changes_exist == yes' also appears on the
+# honesty-norm line (L283), so a lone `first_line 'changes_exist == yes'` would match
+# there and pass even if the Step 4.5 floor IF-condition itself regressed. The combined
+# 'resolved_scope_file_count == 0 AND …changes_exist == yes' pattern is unique to the
+# floor line, so it can only pass when the real floor condition is intact (codex v2.7.0
+# review, finding 3).
+assert_line "floor keyed on resolved_scope_file_count == 0 AND changes_exist == yes" \
+  "$(first_line 'resolved_scope_file_count == 0 AND .*changes_exist == yes')"
 assert_line "honest floor label present"                    "$(first_line 'NOT certified clean')"
 
 # AC6: degraded signal still emits a loud fail-open advisory.

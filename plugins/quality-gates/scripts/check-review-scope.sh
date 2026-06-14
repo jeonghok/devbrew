@@ -33,6 +33,12 @@ git rev-parse --is-inside-work-tree >/dev/null 2>&1 || emit_degraded
 git rev-parse --verify --quiet HEAD >/dev/null 2>&1 || emit_degraded
 # detached HEAD → no branch context to compare → degraded.
 git symbolic-ref --quiet HEAD >/dev/null 2>&1 || emit_degraded
+# shallow clone → truncated history → merge-base may resolve to a grafted
+# boundary commit (wrong count) instead of failing → degraded regardless (AC4;
+# the SKILL degraded advisory lists shallow as a trigger, so the script must
+# actually emit it). `--is-shallow-repository` (git ≥ 2.15) prints true|false;
+# on older git it prints nothing → no false-degrade.
+[[ "$(git rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]] && emit_degraded
 
 # --- base resolution. `base` is the human-readable DISPLAY short-name; `base_ref`
 #     is the git-usable ref KNOWN to exist (may be a remote-tracking ref). Kept
@@ -60,16 +66,27 @@ merge_base=$(git merge-base "$base_ref" HEAD 2>/dev/null) || emit_degraded
 
 # branch_ahead_count is a CHANGED-FILE count (NOT a commit count): the number of
 # files differing between merge_base and HEAD. The SKILL's branch-mode
-# resolved_scope_file_count reuses this value.
-branch_ahead_count=$(git diff --name-only "$merge_base"..HEAD 2>/dev/null | wc -l | tr -d ' ')
+# resolved_scope_file_count reuses this value. Capture via a DIRECT assignment (not a
+# `git … | wc -l` pipe, whose exit status is wc's, swallowing git's) so a query failure
+# fails OPEN to degraded — consistent with the C2 contract above. A silently-swallowed
+# git error here would yield branch_ahead_count=0 + degraded=no = a FALSE-CLEAN, the
+# exact state the floor exists to prevent.
+branch_names=$(git diff --name-only "$merge_base"..HEAD 2>/dev/null) || emit_degraded
+if [[ -z "$branch_names" ]]; then
+  branch_ahead_count=0
+else
+  branch_ahead_count=$(printf '%s\n' "$branch_names" | wc -l | tr -d ' ')
+fi
 
 # --- worktree_dirty: tracked changes OR non-ignored untracked.
 #     --exclude-standard is intentional (NG4): .gitignore'd build artifacts must
-#     NOT count as "changes" and false-trip changes_exist. ---
+#     NOT count as "changes" and false-trip changes_exist. Both queries use a direct
+#     assignment + `|| emit_degraded` so a git failure fails OPEN (C2), not fail-closed
+#     to a false "no" via an empty `-n "$(…)"`. ---
+tracked_changes=$(git diff HEAD --name-only 2>/dev/null) || emit_degraded
+untracked_changes=$(git ls-files --others --exclude-standard 2>/dev/null) || emit_degraded
 worktree_dirty="no"
-if [[ -n "$(git diff HEAD --name-only 2>/dev/null)" ]]; then
-  worktree_dirty="yes"
-elif [[ -n "$(git ls-files --others --exclude-standard 2>/dev/null)" ]]; then
+if [[ -n "$tracked_changes" || -n "$untracked_changes" ]]; then
   worktree_dirty="yes"
 fi
 

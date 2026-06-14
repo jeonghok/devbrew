@@ -146,6 +146,55 @@ case_degraded_no_base() {
   cd / && rm -rf "$REPO"
 }
 
+# AC4: shallow clone → degraded + exit 0 (fail-open). A shallow checkout truncates
+# history, so merge-base may resolve to a grafted boundary commit (a wrong count)
+# instead of failing — the script must degrade on shallow REGARDLESS. The fixture's
+# own `--is-shallow-repository == true` is asserted so this case cannot pass vacuously
+# (e.g. if a future git silently full-clones the local path).
+case_degraded_shallow() {
+  local origin; origin=$(mktemp -d) || exit 1
+  ( cd "$origin" || exit 1
+    git init -q; git config user.email t@t.test; git config user.name tester
+    git checkout -q -b main
+    echo base > a.txt; git add a.txt; git commit -qm base
+    echo more >> a.txt; git commit -qam more ) || exit 1
+  REPO=$(mktemp -d) || exit 1
+  # file:// forces the transport that honors --depth (a plain local path may ignore it).
+  git clone -q --depth 1 "file://$origin" "$REPO/clone" 2>/dev/null
+  cd "$REPO/clone" || { cd / && rm -rf "$REPO" "$origin"; fail "shallow clone setup"; return; }
+  local out rc shallow; out=$(bash "$SCRIPT"); rc=$?
+  shallow=$(git rev-parse --is-shallow-repository 2>/dev/null)
+  if [[ "$(field degraded "$out")" == "yes" && "$rc" -eq 0 && "$shallow" == "true" ]]; then
+    pass "shallow clone → degraded + exit 0 (fail-open, AC4)"
+  else
+    fail "degraded shallow (rc=$rc shallow=$shallow got: $out)"
+  fi
+  cd / && rm -rf "$REPO" "$origin"
+}
+
+# C2 fail-open: a git DATA-query failure AFTER sanity/base resolution must degrade,
+# not silently report a false "no changes" (a false-clean). Simulated with a `git`
+# shim on PATH that passes the sanity/base/merge-base calls through to real git but
+# fails every `git diff` — so the count/worktree queries error and must emit_degraded.
+case_degraded_git_query_failure() {
+  mk_repo_feature_ahead   # normal (non-shallow) repo, on feature 1 commit ahead of main
+  local realgit; realgit=$(command -v git)
+  local shim="$REPO/shim"; mkdir -p "$shim"
+  cat > "$shim/git" <<EOF
+#!/bin/sh
+if [ "\$1" = "diff" ]; then exit 1; fi
+exec "$realgit" "\$@"
+EOF
+  chmod +x "$shim/git"
+  local out rc; out=$(PATH="$shim:$PATH" bash "$SCRIPT"); rc=$?
+  if [[ "$(field degraded "$out")" == "yes" && "$rc" -eq 0 ]]; then
+    pass "git diff failure after sanity → degraded (fail-open, C2)"
+  else
+    fail "git-query fail-open (rc=$rc got: $out)"
+  fi
+  cd / && rm -rf "$REPO"
+}
+
 # read-only: working tree + git status unchanged before/after
 case_read_only() {
   mk_repo_feature_ahead
@@ -168,6 +217,8 @@ case_ng4_untracked_counted
 case_f2_origin_head_no_local_main
 case_degraded_detached
 case_degraded_no_base
+case_degraded_shallow
+case_degraded_git_query_failure
 case_read_only
 
 echo
