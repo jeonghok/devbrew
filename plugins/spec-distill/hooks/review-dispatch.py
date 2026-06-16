@@ -32,6 +32,8 @@ from typing import Optional
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
+SCRIPTS_DIR = SCRIPT_DIR.parent / "scripts"
+sys.path.insert(0, str(SCRIPTS_DIR))
 from state_path import state_root as _state_root, resolve_session_id  # noqa: E402
 
 GC_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "spec-distill-gc.py"
@@ -126,6 +128,27 @@ def main() -> int:
     m = PENDING_RE.search(body)
     if not m:
         return 0  # no pending dispatch
+    # A2 (v0.15.0): honor suppressed_paths — approve/cancel된 문서는 절대 재dispatch
+    # 안 함(Law 2 트리거/억제 대칭 복원 — Stop이 이제 두 신호를 모두 읽음). suppressed면
+    # stale pending을 strip하되 last_dispatched_at은 건드리지 않는다 — suppress는
+    # dispatch가 아니므로 TTL 시계를 시작하면 안 됨(cancel-review --reset 직후 정당한
+    # pending이 TTL window 동안 막히는 재발 window 방지). fail-safe 방향은 "리뷰가
+    # 일어나는 쪽": 이 블록의 어떤 예외(suppress_state import 실패 포함)도 정상
+    # dispatch로 귀결(과리뷰가 under-review보다 안전 — Law 1).
+    try:
+        import suppress_state  # scripts/ deferred import, fails-open (AC4)  # pyright: ignore[reportMissingImports]
+        if suppress_state.is_suppressed(state_path, m.group("path").strip()):
+            stripped = suppress_state.strip_pending(body).rstrip() + "\n"
+            with open(state_path, "w", encoding="utf-8") as f:
+                f.write(stripped)
+                f.flush()
+                os.fsync(f.fileno())
+            return 0  # suppressed → no dispatch, no emit, last_dispatched_at 불변
+    except Exception as exc:  # noqa: BLE001 — fail-open to dispatch (Law 1, NEW-001)
+        print(
+            f"[spec-distill] suppress check failed (non-fatal, dispatching): {exc}",
+            file=sys.stderr,
+        )
     # TTL guard against self-ref cycle
     try:
         ttl_sec = int(os.environ.get("DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC", "30"))

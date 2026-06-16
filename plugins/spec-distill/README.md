@@ -20,7 +20,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 `conducting-interview` skill이 4-block format ("현재 이해 / 막힌 결정 / 추천 답안 / 질문")으로 첫 round를 시작합니다.
 
-## Flow (v0.14.0)
+## Flow (v0.15.0)
 
 ```
 /interview ─→ [0] Trivia escape ─→ [1] Interview (문제공간 stage)
@@ -44,6 +44,8 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 **v0.14.0**: per-doc·session-scoped `suppressed_paths` + `/spec-distill:cancel-review` — 리뷰 완료/중단 후 같은 design 문서 재편집 시 재arm 차단.
 
+**v0.15.0**: approve→suppress 대칭화 — `approve_handoff.sh`가 suppress를 working-tree 존재검사 *앞에* 기록(순서 버그 fix) + Stop hook(`review-dispatch.py`)이 `suppressed_paths`를 존중해 승인/취소된 문서를 재dispatch하지 않음(트리거/억제 대칭).
+
 ## Principles Instantiated
 
 이 플러그인이 instantiate하는 devbrew 철학.
@@ -57,7 +59,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - **Law 2 (Writer/Reviewer Never Share a Pass) — infrastructure operability**: spec-reviewer agent의 writer/reviewer 물리 분리가 의미를 가지려면 reviewer dispatch가 Claude context에 *실제로* 도달해야 한다. v0.5.0의 dual-target output fix가 이 baseline을 보장. dispatch가 silent하게 lost되면 reviewer persona 분리 자체가 무의미.
 - **Law 3 (Compounding)** — spec.md 파일 자체가 named, versioned, diff-able artifact (P5). state.local.md 보존 (실패 시) → 디버깅 + future session 추적.
 - **Law 3 (Every Cycle Must Leave the System Smarter)**: v0.5.0 PR이 hook 코드 fix + `tests/test_hook_output_schema.py` 회귀 방지 test + CHANGELOG 명시 + design.md (`docs/superpowers/specs/2026-05-17-spec-distill-hook-context-injection-design.md`) — 4-layer compounding 흔적. 같은 클래스의 silent-output mistake가 미래에 들어오면 CI에서 즉시 잡힘.
-- **AP2 approval-gate 구분 (v0.11.0)** — handoff 다음-단계 추천을 hook(텍스트 주입만 가능)이 아니라 reviewing-spec Phase 5의 `AskUserQuestion` proceed 게이트로 전달. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 polite-stop 봉쇄 장치 (철학 §AP2 line 413). `approve_handoff.sh`(v0.14.0)는 spec_path 존재 검증 + approved 문서를 `suppressed_paths`에 기록(same-key pending strip 포함)하는 finalizer — 세션 dir 삭제는 SessionEnd/TTL-GC로 이관(더 이상 rm 기반 stateless cleanup 아님).
+- **AP2 approval-gate 구분 (v0.11.0)** — handoff 다음-단계 추천을 hook(텍스트 주입만 가능)이 아니라 reviewing-spec Phase 5의 `AskUserQuestion` proceed 게이트로 전달. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 polite-stop 봉쇄 장치 (철학 §AP2 line 413). `approve_handoff.sh`(v0.15.0)는 approved 문서를 `suppressed_paths`에 기록(same-key pending strip 포함)하는 finalizer로, suppression을 working-tree 존재검사 *앞*에 수행해 dangling/상대경로 경우에도 누락되지 않게 한다. 대칭으로 Stop hook(`review-dispatch.py`)이 `suppressed_paths`를 존중 — 트리거(강제)와 억제(approve/cancel)가 모두 hook 권위 레이어에 존재(Law 2 대칭). 세션 dir 삭제는 SessionEnd/TTL-GC로 이관.
 
 ### Principles 흡수
 

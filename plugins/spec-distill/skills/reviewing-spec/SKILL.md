@@ -112,13 +112,13 @@ approve(①/②) 시:
 bash "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/approve_handoff.sh" "$session_id" "$spec_path"
 ```
 
-스크립트(v0.14.0+)가 thin finalizer로 동작: (1) kill switch + charset guard, (2) **spec_path working-tree 존재 검증** (`[[ -f ]]`, 모든 git 조회 이전 — 부재 시 exit 1 + advisory + suppress 미기록, state 보존), (3) 미커밋 spec advisory (non-blocking, exit 0), (4) **approved spec를 `suppressed_paths`에 기록 + 그 문서의 pending strip** (`suppress_state.py add` — v0.14.0에서 dir `rm` 대체; 같은 문서 재편집 시 재arm 차단). 세션 dir는 더 이상 여기서 삭제하지 않음 — SessionEnd hook / TTL-GC가 정리(승인 기억을 세션 동안 보존). 다음-단계 추천은 proceed 게이트가 담당. idempotent by set-membership(재호출은 키를 최대 1회 추가).
+스크립트(v0.15.0+)가 thin finalizer로 동작: (1) kill switch + charset guard, (2) **approved spec를 `suppressed_paths`에 기록 + 같은-키 pending strip** (`suppress_state.py add` — canonical_key 기반, 파일 존재 불필요; 가장 먼저 수행돼 상대경로·서브디렉토리 cwd·dangling 경로 어떤 경우에도 기록 보장), (3) spec_path working-tree 존재 검증을 **non-blocking advisory로** (부재 시 stale/dangling 안내; suppress는 이미 (2)에서 기록됨, exit 0), (4) 미커밋 spec advisory (non-blocking, exit 0). 세션 dir는 더 이상 여기서 삭제하지 않음 — SessionEnd hook / TTL-GC가 정리(승인 기억을 세션 동안 보존). 다음-단계 추천은 proceed 게이트가 담당. idempotent by set-membership(재호출은 키를 최대 1회 추가). (v0.15.0: (2)↔(3) 순서 역전이 같은-턴 재dispatch 순서 버그를 닫음.)
 
 **polite stop 금지** (AP2): approve인데 스크립트 호출/게이트를 skip하고 narrate만 하지 말 것. SessionEnd hook이 backup cleanup이나 user-explicit approve 의도는 즉시 반영.
 
 ### 실패 시 state 보존 (P14)
 
-approve_handoff.sh가 exit 1 시(spec_path 부재 — Step A 통과 후 race로 사라진 경우 포함 — 또는 session_id charset/arg 검증 실패) state.local.md 보존 + suppress 미기록 (사용자 재선택 대기). 에이전트는 스크립트 stderr advisory를 그대로 노출하고 사용자 입력을 기다린다 (게이트 재표시는 사용자 요청 시). suppress 기록 실패는 advisory only (non-fatal) — 사용자가 `/spec-distill:cancel-review`로 수동 억제 가능, 세션 dir 정리는 SessionEnd/TTL-GC. git commit 실패 경로는 존재하지 않음 (스크립트가 commit 시도 안 함; 미커밋은 advisory).
+approve_handoff.sh의 exit 1은 **session_id charset/arg 검증 실패에 한정**한다(v0.15.0). spec_path가 in-scope(`docs/superpowers/specs/` prefix)이면 working-tree 부재여도 suppress를 기록하고 exit 0 + stale advisory를 낸다 — 부재는 더 이상 abort가 아니다(Step A 통과 후 race로 사라진 경우 포함). 에이전트는 스크립트 stderr advisory를 그대로 노출한다. suppress 기록 실패(out-of-scope 경로 등)는 advisory only (non-fatal) — 사용자가 `/spec-distill:cancel-review`로 수동 억제 가능, 세션 dir 정리는 SessionEnd/TTL-GC. git commit 실패 경로는 존재하지 않음 (스크립트가 commit 시도 안 함; 미커밋은 advisory).
 
 ## In-flight state migration (C10)
 

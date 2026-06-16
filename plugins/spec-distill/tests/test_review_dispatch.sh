@@ -124,6 +124,55 @@ rc=$?
   && note PASS "AC15 (T-1): kill switch :review-dispatch alias suppresses emit" \
   || note FAIL "AC15 failed (rc=$rc out=$out)"
 
+# Case 16 (AC3/AC3b): pending이 suppressed면 dispatch 안 함 + strip +
+# last_dispatched_at 불변 (suppress는 dispatch가 아니므로 TTL 시계를 시작 안 함).
+setup_state "test-016" "---
+session_id: test-016
+---
+
+pending_review:
+  path: docs/superpowers/specs/2026-01-01-x-design.md
+  mode: design
+  triggered_at: 2026-05-16T10:00:00Z
+
+last_dispatched_at: 2020-01-01T00:00:00Z
+
+suppressed_paths:
+  - docs/superpowers/specs/2026-01-01-x-design.md
+"
+out=$(run_hook "test-016")
+rc=$?
+sf16="$WORK/.claude/spec-distill/test-016/state.local.md"
+[[ $rc -eq 0 ]] && [[ -z "$out" ]] \
+  && ! grep -q '^pending_review:' "$sf16" \
+  && grep -q '^suppressed_paths:' "$sf16" \
+  && grep -q '^last_dispatched_at: 2020-01-01T00:00:00Z$' "$sf16" \
+  && note PASS "AC3/AC3b: suppressed pending → no dispatch + strip + last_dispatched_at 불변" \
+  || note FAIL "AC3/AC3b failed (rc=$rc out='$out')"
+
+# Case 17 (AC5): suppressed_paths에 다른 키만 있으면 in-scope pending은 정상 dispatch.
+setup_state "test-017" "---
+session_id: test-017
+---
+
+pending_review:
+  path: docs/superpowers/specs/2026-01-01-y-design.md
+  mode: design
+  triggered_at: 2026-05-16T10:00:00Z
+
+suppressed_paths:
+  - docs/superpowers/specs/2026-01-01-other-design.md
+"
+out=$(run_hook "test-017")
+rc=$?
+sf17="$WORK/.claude/spec-distill/test-017/state.local.md"
+[[ $rc -eq 0 ]] \
+  && echo "$out" | jq -e '.decision == "block"' >/dev/null \
+  && ! grep -q '^pending_review:' "$sf17" \
+  && grep -q '^last_dispatched_at:' "$sf17" \
+  && note PASS "AC5: non-suppressed in-scope pending → 정상 dispatch (회귀)" \
+  || note FAIL "AC5 failed (rc=$rc out='$out')"
+
 echo ""
 echo "summary: $pass passed, $fail failed"
 [[ $fail -eq 0 ]]
