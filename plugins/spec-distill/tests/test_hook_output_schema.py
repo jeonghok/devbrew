@@ -181,6 +181,58 @@ class TestReviewDispatchSchema(HookOutputSchemaTestBase):
         self.assertIn("state rewrite failed", result.stderr)
         self.assertIn("dispatch suppressed", result.stderr)
 
+    def test_suppress_import_failure_falls_open_to_dispatch(self):
+        """AC4 — `import suppress_state`가 실패하면(예: 모킹) 억제된 문서라도
+        Stop hook은 정상 dispatch한다 (fail-safe = 리뷰가 일어나는 쪽)."""
+        import importlib.util
+        import io
+        import contextlib
+        spec_module = importlib.util.spec_from_file_location(
+            "review_dispatch_ac4", HOOKS_DIR / "review-dispatch.py",
+        )
+        mod = importlib.util.module_from_spec(spec_module)
+        spec_module.loader.exec_module(mod)
+
+        repo = _make_temp_repo()
+        try:
+            session_id = "test-ac4-failopen"
+            spec = "docs/superpowers/specs/2026-01-01-x-design.md"
+            # 진짜 억제된 state: pending + 매칭되는 suppressed_paths.
+            state_dir = repo / ".claude" / "spec-distill" / session_id
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "state.local.md").write_text(
+                f"---\nsession_id: {session_id}\n---\n\n"
+                f"pending_review:\n  path: {spec}\n  mode: design\n"
+                f"  triggered_at: 2026-01-01T00:00:00Z\n\n"
+                f"suppressed_paths:\n  - {spec}\n",
+                encoding="utf-8",
+            )
+            out, err = io.StringIO(), io.StringIO()
+            # sys.modules['suppress_state'] = None → `import suppress_state` ImportError.
+            with mock.patch.dict(sys.modules, {"suppress_state": None}), \
+                 mock.patch.dict(os.environ, {
+                     "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
+                 }), \
+                 mock.patch("sys.stdin", new=io.StringIO("{}")), \
+                 contextlib.redirect_stdout(out), \
+                 contextlib.redirect_stderr(err):
+                cwd_before = os.getcwd()
+                try:
+                    os.chdir(repo)
+                    rc = mod.main()
+                finally:
+                    os.chdir(cwd_before)
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+        self.assertEqual(rc, 0)
+        stdout = out.getvalue().strip()
+        self.assertTrue(
+            stdout, msg="fail-open 시에도 decision:block을 emit해야 함",
+        )
+        payload = json.loads(stdout)
+        self.assertEqual(payload.get("decision"), "block")
+        self.assertIn("suppress check failed", err.getvalue())
+
 
 class TestReviewDispatchOrdering(unittest.TestCase):
     """AC7.3 — verify rewrite_state runs BEFORE print(json.dumps(...))."""
