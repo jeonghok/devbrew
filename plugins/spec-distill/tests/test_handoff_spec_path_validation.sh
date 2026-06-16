@@ -75,5 +75,24 @@ else
 fi
 rm -rf "$WORK"
 
+# ── AC1c (C3 — 원래 버그의 정확한 트리거): repo-root-상대경로 spec_path를 ──
+# ── 서브디렉토리 cwd에서 호출. 서브디렉토리 기준 `[[ -f "docs/.../x" ]]`는 false라 ──
+# ── v0.14.0 스크립트는 suppress 기록 전에 exit 1로 빠졌다(=재발 원인). v0.15.0은 ──
+# ── canonical_key로 suppress를 먼저 기록 → exit 0 + same-key pending strip. ──
+WORK=$(mktemp -d); setup_repo "$WORK"; ERR="$WORK/err"
+mkdir -p "$WORK/sub/dir"
+seed_pending "$WORK" "$WORK/$KEY"   # pending은 절대경로로 arm(validator 동작 모사)
+( cd "$WORK/sub/dir" && bash "$SCRIPT" "test-sid12" "$KEY" ) >/dev/null 2>"$ERR"; rc=$?
+sf="$WORK/.claude/spec-distill/test-sid12/state.local.md"
+if [[ $rc -eq 0 ]] \
+   && grep -q "^suppressed_paths:" "$sf" \
+   && grep -q "  - $KEY" "$sf" \
+   && ! grep -qE '^pending_review:' "$sf"; then
+    note PASS "AC1c (C3): relative spec_path from subdir cwd → exit 0 + suppress + same-key strip"
+else
+    note FAIL "AC1c (C3): rc=$rc (expected 0), suppress=$(grep -q '^suppressed_paths:' "$sf" && echo y || echo n), pending_stripped=$(grep -qE '^pending_review:' "$sf" && echo n || echo y)"
+fi
+rm -rf "$WORK"
+
 if [[ "$fail" -gt 0 ]]; then echo "FAILED: $fail case(s)"; exit 1; fi
-echo "PASSED: 2 cases"
+echo "PASSED: 3 cases"
