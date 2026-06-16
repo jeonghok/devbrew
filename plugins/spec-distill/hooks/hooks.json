@@ -1,5 +1,5 @@
 {
-  "description": "spec-distill — UserPromptSubmit reminder, SessionStart anchor, PostToolUse spec/design validator, Stop reviewer-dispatch, SessionEnd cleanup.",
+  "description": "spec-distill — UserPromptSubmit reminder, PostToolUse spec/design validator, Stop reviewer-dispatch, SessionEnd cleanup.",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -7,17 +7,6 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pending-review-reminder.py",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-anchor.sh",
             "timeout": 5
           }
         ]

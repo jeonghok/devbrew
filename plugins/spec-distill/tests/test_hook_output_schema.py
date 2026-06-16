@@ -416,59 +416,6 @@ class TestPendingReviewReminderSchema(HookOutputSchemaTestBase):
         self.assertLessEqual(len(sysmsg), 120)
 
 
-class TestSessionAnchorSchema(HookOutputSchemaTestBase):
-    """AC5 — session-anchor.sh output schema (bash, jq + no-jq paths)."""
-
-    def setUp(self):
-        super().setUp()
-        # Pre-populate a state dir so session-anchor finds "previous sessions".
-        prev = self.repo / ".claude" / "spec-distill" / "previous-session"
-        prev.mkdir(parents=True)
-        (prev / "state.local.md").write_text(
-            "---\nsession_id: previous-session\n---\n", encoding="utf-8",
-        )
-
-    def _run(self, env_extra=None):
-        env = {"CLAUDE_PROJECT_DIR": str(self.repo)}
-        if env_extra:
-            env.update(env_extra)
-        return _run_hook(
-            "session-anchor.sh",
-            cwd=self.repo, env_extra=env, binary="bash",
-        )
-
-    @unittest.skipUnless(shutil.which("jq"), "jq required for AC5-a")
-    def test_jq_path_emits_additional_context(self):
-        result = self._run()
-        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
-        self.assertTrue(result.stdout.strip(), msg=f"empty stdout; stderr: {result.stderr}")
-        payload = json.loads(result.stdout)
-        hso = payload.get("hookSpecificOutput", {})
-        self.assertEqual(hso.get("hookEventName"), "SessionStart")
-        ac = hso.get("additionalContext", "")
-        self.assertIn("이전 인터뷰 세션", ac)
-        self.assertIn("/interview", ac)
-        sysmsg = payload.get("systemMessage", "")
-        self.assertTrue(sysmsg)
-        self.assertLessEqual(len(sysmsg), 120)
-
-    def test_no_jq_fallback_emits_additional_context(self):
-        no_jq_bin = self.repo / "no-jq-bin-2"
-        no_jq_bin.mkdir()
-        for tool in ("bash", "python3", "sed", "tr", "grep", "printf", "cat",
-                     "wc", "find", "head"):
-            src = shutil.which(tool)
-            if src:
-                (no_jq_bin / tool).symlink_to(src)
-        result = self._run(env_extra={"PATH": str(no_jq_bin)})
-        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
-        self.assertTrue(result.stdout.strip())
-        payload = json.loads(result.stdout)
-        hso = payload.get("hookSpecificOutput", {})
-        self.assertEqual(hso.get("hookEventName"), "SessionStart")
-        self.assertIn("이전 인터뷰 세션", hso.get("additionalContext", ""))
-
-
 class TestKillSwitches(HookOutputSchemaTestBase):
     """AC10/AC11 — DEVBREW_DISABLE_SPEC_DISTILL=1 and DEVBREW_SKIP_HOOKS=spec-distill:<event>."""
 
@@ -532,21 +479,6 @@ class TestKillSwitches(HookOutputSchemaTestBase):
                 "DEVBREW_DISABLE_SPEC_DISTILL": "1",
                 "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
             },
-        )
-        self.assertEqual(result.returncode, 0)
-        self.assertTrue(self._empty_or_braces(result.stdout))
-
-    def test_global_disable_silences_session_anchor(self):
-        prev = self.repo / ".claude" / "spec-distill" / "x"
-        prev.mkdir(parents=True)
-        (prev / "state.local.md").write_text("---\n---\n", encoding="utf-8")
-        result = _run_hook(
-            "session-anchor.sh", cwd=self.repo,
-            env_extra={
-                "DEVBREW_DISABLE_SPEC_DISTILL": "1",
-                "CLAUDE_PROJECT_DIR": str(self.repo),
-            },
-            binary="bash",
         )
         self.assertEqual(result.returncode, 0)
         self.assertTrue(self._empty_or_braces(result.stdout))
