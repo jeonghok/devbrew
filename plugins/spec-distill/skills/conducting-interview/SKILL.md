@@ -39,7 +39,6 @@ non_user_streak: <int>
 web_sweep_count: 0                   # 현재 sweep 내 web 검색 호출 수 (AP9, ≤4). sweep 종료 시 0으로 reset.
 web_search_count: 0                  # 세션 누적 web 검색 호출 수 (AP16, ≤8 soft cap).
 rereview_count: 0
-wall_clock_started_at: <ISO8601>
 trivia_escape_armed: false
 issue_history: []                    # 각 항목: {id, raised_count, dismissed_by_user, accepted_by_user, reconsensus_count, resolved, escalated}
 pending_locked_decisions: []         # 매 round 끝 append (b/d path 명시 응답만). brief frontmatter locked_directions로 변환.
@@ -332,5 +331,4 @@ state.local.md 로드 시 v0.1.x schema (신규 필드 부재)를 감지하면 *
 
 - `DEVBREW_DISABLE_SPEC_DISTILL=1`: 즉시 abort, state.local.md 보존 (실패 분석용).
 - `DEVBREW_RHYTHM_GUARD_THRESHOLD=N`: rhythm guard threshold override.
-- `DEVBREW_SPEC_DISTILL_TIMEOUT_MIN=N`: wall-clock budget (default 30) — 초과 시 advisory metric에 기록.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`: web landscape(R2) 비활성 — loud advisory 후 codebase 근거만 사용 (AC8).
