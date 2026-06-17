@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# spec-distill — minimal hook regression tests.
+# spec-distill — SessionStart anchor 제거 회귀 락 (v0.16.0).
 # Run: bash plugins/spec-distill/tests/test_hooks.sh
-# Exits 0 on all pass, 1 on any failure.
+# session-anchor.sh 훅이 실수로 되살아나지 않음을 보장. Exits 0 on pass, 1 on fail.
 
 set -u
 set -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 PLUGIN_ROOT="$REPO_ROOT/plugins/spec-distill"
+HOOKS_JSON="$PLUGIN_ROOT/hooks/hooks.json"
 ANCHOR="$PLUGIN_ROOT/hooks/session-anchor.sh"
 
 pass=0
@@ -23,39 +24,21 @@ note() {
   fi
 }
 
-echo "=== session-anchor.sh ==="
+echo "=== SessionStart anchor removal regression lock ==="
 
-TMPSTATE=$(mktemp -d)
-trap 'rm -rf "$TMPSTATE"' EXIT
+# 1. hooks.json must NOT register a SessionStart hook (and must stay valid JSON).
+if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(1 if "SessionStart" in d.get("hooks", {}) else 0)' "$HOOKS_JSON"; then
+  note PASS "hooks.json has no SessionStart key"
+else
+  note FAIL "hooks.json still registers a SessionStart hook (or is invalid JSON)"
+fi
 
-# 9. No state dir → silent
-out=$(CLAUDE_PROJECT_DIR="$TMPSTATE" bash "$ANCHOR" < /dev/null 2>/dev/null || true)
-[[ -z "$out" ]] && note PASS "No state dir → silent" \
-                || note FAIL "No state dir should be silent (got: $out)"
-
-# 10. State file present → SessionStart dual-target emit
-mkdir -p "$TMPSTATE/.claude/spec-distill/test-session-id"
-echo "---" > "$TMPSTATE/.claude/spec-distill/test-session-id/state.local.md"
-out=$(CLAUDE_PROJECT_DIR="$TMPSTATE" bash "$ANCHOR" < /dev/null 2>/dev/null)
-echo "$out" | jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' >/dev/null \
-  && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | length > 0' >/dev/null \
-  && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
-  && note PASS "State file present → emits dual-target (additionalContext + systemMessage)" \
-  || note FAIL "State file should emit dual-target schema (got: $out)"
-
-# 11. Mutation regression: session-anchor.sh does NOT modify any file
-before=$(find "$TMPSTATE/.claude" -type f 2>/dev/null | sort | xargs md5sum 2>/dev/null | md5sum | awk '{print $1}')
-CLAUDE_PROJECT_DIR="$TMPSTATE" bash "$ANCHOR" < /dev/null > /dev/null 2>&1 || true
-after=$(find "$TMPSTATE/.claude" -type f 2>/dev/null | sort | xargs md5sum 2>/dev/null | md5sum | awk '{print $1}')
-[[ "$before" == "$after" ]] && note PASS "session-anchor.sh does not mutate files (md5 unchanged)" \
-                            || note FAIL "session-anchor.sh mutated files (P14 violation)"
-
-# 12. Kill switch isolation for SessionStart: trigger hook unaffected
-out=$(DEVBREW_SKIP_HOOKS="spec-distill:SessionStart" \
-      CLAUDE_PROJECT_DIR="$TMPSTATE" \
-      bash "$ANCHOR" < /dev/null 2>/dev/null || true)
-[[ -z "$out" ]] && note PASS "DEVBREW_SKIP_HOOKS=spec-distill:SessionStart suppresses anchor" \
-                || note FAIL "SessionStart kill switch did not suppress (got: $out)"
+# 2. The session-anchor.sh hook file must NOT exist.
+if [[ ! -e "$ANCHOR" ]]; then
+  note PASS "hooks/session-anchor.sh does not exist"
+else
+  note FAIL "hooks/session-anchor.sh still exists"
+fi
 
 echo ""
 echo "Results: $pass passed, $fail failed"
