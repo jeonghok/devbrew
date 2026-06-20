@@ -4,7 +4,7 @@ description: >
   Use this skill to dispatch the spec-reviewer agent against a brainstorming
   design doc (docs/superpowers/specs/...-design.md) and apply deterministic
   design-mode routing per the verdict table. Manages re-review cap (max 5,
-  hard cap → forced escalate), stagnation detection, wall-clock budget, and the Phase 5 proceed gate +
+  hard cap → forced escalate), stagnation detection, and the Phase 5 proceed gate +
   approve handoff. v0.12.0: design-mode only (spec-mode + spec-draft skill removed).
 cost_class: medium
 ---
@@ -15,9 +15,8 @@ cost_class: medium
 
 ## Steps
 
-1. **Load state.local.md** — `session_id`, `rereview_count`, `wall_clock_started_at`, `issue_history` 읽기 + `pending_review:` block 확인. 이 skill은 PostToolUse hook이 design 파일 write를 감지해 `pending_review:` block을 기록하고 Stop hook이 다음 turn에 dispatch를 강제했기 때문에 호출됨 — block이 없으면 manual override(loud advisory). v0.12.0부터 **design mode 전용**: 11-section/locked_decisions schema 검사는 적용 안 함(brainstorming의 자유 형식 design doc). 본문의 placeholder/ambiguity/scope-creep/approaches-comparison/isolation/testing/handoff_incomplete만 spec-reviewer에게 요청.
-2. **Wall-clock check (AC14)**: `now - wall_clock_started_at > DEVBREW_SPEC_DISTILL_TIMEOUT_MIN` (default 30) 이면 advisory metric 표기 + Phase 5 forced escalate.
-3. **Dispatch spec-reviewer agent**:
+1. **Load state.local.md** — `session_id`, `rereview_count`, `issue_history` 읽기 + `pending_review:` block 확인. 이 skill은 PostToolUse hook이 design 파일 write를 감지해 `pending_review:` block을 기록하고 Stop hook이 다음 turn에 dispatch를 강제했기 때문에 호출됨 — block이 없으면 manual override(loud advisory). v0.12.0부터 **design mode 전용**: 11-section/locked_decisions schema 검사는 적용 안 함(brainstorming의 자유 형식 design doc). 본문의 placeholder/ambiguity/scope-creep/approaches-comparison/isolation/testing/handoff_incomplete만 spec-reviewer에게 요청.
+2. **Dispatch spec-reviewer agent**:
    ```
    Agent({
      description: "Spec adversarial review",
@@ -25,9 +24,9 @@ cost_class: medium
      prompt: "Review spec.md at <path>. Previous issue history: <list>"
    })
    ```
-4. **Parse output** — Status, Issues, Recommendations, Stagnation_signal.
-5. **Apply routing table** (다음 섹션).
-6. **Update state.local.md** — `rereview_count += 1`, `issue_history`에 새 issues 추가/raised_count 증가.
+3. **Parse output** — Status, Issues, Recommendations, Stagnation_signal.
+4. **Apply routing table** (다음 섹션).
+5. **Update state.local.md** — `rereview_count += 1`, `issue_history`에 새 issues 추가/raised_count 증가.
 
 ## Deterministic Routing Table (AC15 — design-mode only, v0.12.0)
 
@@ -135,4 +134,3 @@ corruption 시 → "v0.1.x in-flight state 호환 실패 — 세션 재시작 �
 ## kill switch
 
 - `DEVBREW_DISABLE_SPEC_DISTILL=1`: 즉시 abort, state.local.md 보존.
-- `DEVBREW_SPEC_DISTILL_TIMEOUT_MIN=N`: wall-clock budget override (default 30).
