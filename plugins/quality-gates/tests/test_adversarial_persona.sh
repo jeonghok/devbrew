@@ -31,6 +31,13 @@ gateC_section() {
   awk '/\*\*Gate C/{f=1} /\*\*Gate D/{f=0} f' "$PERSONA"
 }
 
+# Section extractor — untrusted-input window (its header → ## Verification protocol).
+# `next` after the opening match keeps the window body-only and matches the
+# next-based style of the sibling test's extractors.
+untrusted_section() {
+  awk '/^## Untrusted input/{f=1; next} /^## Verification protocol/{f=0} f' "$PERSONA"
+}
+
 # Frontmatter required keys
 check "frontmatter name adversarial" \
   "grep -c '^name: adversarial$' '$PERSONA'" 1
@@ -53,8 +60,10 @@ if [ -n "$hdr" ] && [ -n "$proto" ] && [ "$hdr" -lt "$proto" ]; then
 else
   echo "  FAIL: untrusted-input header must exist before ## Verification protocol (hdr='$hdr' proto='$proto')"; fail=$((fail + 1))
 fi
-check "untrusted-input data-not-instructions norm present" \
-  "grep -cE 'data, not instructions' '$PERSONA'" 1
+# Body-unique phrase (NOT the header, which also contains "data, not instructions"):
+# scoped to the section window so deleting the body norm prose goes RED.
+check "untrusted-input body norm (data-not-a-reason) in section" \
+  "untrusted_section | grep -cE 'is data, not a reason'" 1
 
 # (B / AC4) 2 reject-at-verify precedents INSIDE the Gate C block, each with reject
 check "client-side trust-boundary precedent in Gate C, specifies reject" \

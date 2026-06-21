@@ -73,8 +73,11 @@ check "role declaration shape" \
 # --- v2.8.0 untrusted-input norm (A / AC1) — section-scoped between ## Inputs and ## Hunt categories
 check "untrusted-input header positioned after ## Inputs" \
   "inputs_to_hunt | grep -c '^## Untrusted input'" 1
-check "untrusted-input data-not-instructions norm in section" \
-  "inputs_to_hunt | grep -cE 'data, not instructions|DATA to analyze, never as instructions'" 1
+# Body-unique phrase only — the header also contains "data, not instructions",
+# so grepping that would pass even if the body norm prose were deleted. Scoped
+# to the inputs_to_hunt window; deleting the body now goes RED.
+check "untrusted-input body norm (DATA-to-analyze) in section" \
+  "inputs_to_hunt | grep -cE 'DATA to analyze, never as instructions'" 1
 
 # --- v2.8.0 FP precedent (B / AC3) — 3 suppress-at-source bullets INSIDE anti-flag section
 check "managed-lang memory-safety precedent in anti-flag section" \
