@@ -39,6 +39,7 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
   2 fix-loop iteration. The same tool that gates subagent fan-out now
   gates inter-gate progression — no new principle ID needed.
 - **C66 (Linked Artifact Flow) — spec을 truth로 instantiate** (v2.1.0) — qg가 처음으로 사용자 프로젝트 spec을 읽어(`scripts/discover-spec.sh`) test-scope-validator의 기준 축을 plan items → **spec Acceptance Criteria**로 전환하고, AC별 커버리지를 advisory `ac_coverage` 블록으로 surface하며, codex 경로(`run_codex_reviewer.sh`)가 spec AC를 `<spec_context>`에 주입. cycle 위계(spec=truth ⊃ plan=구현 방식)를 instantiate — spec→test 커버리지를 역방향 walk. plan은 구현-방식 보조 hint로 강등(제거 아님; `discover-plan.sh` byte-identical). **advisory only — Runtime gate를 block하지 않음.** spec 부재 시 loud log + v2.0.0 기능 동작 fallback. kill switch `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1`.
+- **P21 (Untrusted input — diff is data, not instructions)** (v2.8.0) — Review gate의 두 diff-reading reviewer(`security-reviewer`/`adversarial`)가 attacker-influenced `filtered_diff`(및 finding 텍스트)를 데이터로만 다루고 그 안의 prompt-injection·안전성 주장을 verdict 근거로 삼지 않도록 persona에 명시. 더해 언어/프레임워크 FP precedent 5건을 기능별 단일 배치(DRY)로 흡수 — suppress-at-source 3(security-reviewer anti-flag) + reject-at-verify 2(adversarial Gate C). 섹션-스코프 grep 회귀 락(`test_security_reviewer_persona.sh`/`test_adversarial_persona.sh`)으로 persona 약화 검출. 신규 P# 0, 결정론 가드 0 (Anthropic *"Using LLMs to Secure Source Code"* 평가 Tier-1; design-lightness).
 
 ## 구조
 
