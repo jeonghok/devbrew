@@ -151,7 +151,7 @@ class TestReviewLockUnit(unittest.TestCase):
         self.assertFalse(self.sf.exists() and "review_in_progress" in self.sf.read_text())
 
 
-def run_cli(args, env_extra=None, sid_env="clitest12", cwd=None):
+def run_cli(args, env_extra: dict | None = None, sid_env: str | None = "clitest12", cwd: Path | None = None):
     env = {**os.environ}
     for k in ("DEVBREW_DISABLE_SPEC_DISTILL", "CLAUDE_CODE_SESSION_ID",
               "DEVBREW_SPEC_DISTILL_SESSION_ID", "DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC"):

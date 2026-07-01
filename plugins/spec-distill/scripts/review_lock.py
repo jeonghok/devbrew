@@ -206,12 +206,7 @@ def is_review_active(body: str, pending_key: str | None, now: datetime, ttl: int
         return False
     for path, since in _parse_entries(body):
         if path == pending_key:
-            dt = parse_iso(since)
-            if dt is None:
-                return False
-            if (now - dt).total_seconds() >= ttl:
-                return False
-            return True
+            return not _is_stale(since, now, ttl)
     return False
 
 
