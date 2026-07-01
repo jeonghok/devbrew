@@ -149,6 +149,27 @@ def main() -> int:
             f"[spec-distill] suppress check failed (non-fatal, dispatching): {exc}",
             file=sys.stderr,
         )
+    # Document-keyed review lock (v0.18.0): 이 문서의 리뷰가 in-flight(신선 엔트리)면
+    # 재-arm된 pending은 subagent 경계 Stop 오발 — no-op하고 pending을 보존한다.
+    # fail-safe = 강제: 엔트리 부재/stale/파싱·import 예외 중 하나라도면 정상 dispatch로
+    # 진행(Law 1, over-review > under-review). 다른 문서의 신선 엔트리는 pending_key로
+    # 조회하므로 이 문서를 억제하지 않는다(AC16).
+    try:
+        import review_lock  # scripts/ deferred import, fails-open (AC4)  # pyright: ignore[reportMissingImports]
+        try:
+            lock_ttl = int(os.environ.get("DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC", "1800"))
+        except ValueError:
+            lock_ttl = 1800
+        pending_key = review_lock.canonical_key(m.group("path").strip())
+        if pending_key is not None and review_lock.is_review_active(
+            body, pending_key, datetime.now(timezone.utc), lock_ttl
+        ):
+            return 0  # review in progress for this doc → no dispatch, pending preserved
+    except Exception as exc:  # noqa: BLE001 — fail-open to dispatch (Law 1)
+        print(
+            f"[spec-distill] review-lock check failed (non-fatal, dispatching): {exc}",
+            file=sys.stderr,
+        )
     # TTL guard against self-ref cycle
     try:
         ttl_sec = int(os.environ.get("DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC", "30"))
