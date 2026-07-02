@@ -22,6 +22,8 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
+SCRIPTS_DIR = SCRIPT_DIR.parent / "scripts"
+sys.path.insert(0, str(SCRIPTS_DIR))
 from state_path import state_root as _state_root, resolve_session_id  # noqa: E402
 
 GC_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "spec-distill-gc.py"
@@ -95,6 +97,25 @@ def main() -> int:
     m = PENDING_RE.search(body)
     if not m:
         return 0
+    # Document-keyed review lock (v0.18.0) — Stop 훅과 동일 게이트(AC5): 이 문서의
+    # 리뷰가 in-flight(신선 엔트리)면 재-nag하지 않는다. fail-safe = 강제(어떤 예외도
+    # 정상 재-emit으로 fall-through).
+    try:
+        import review_lock  # scripts/ deferred import, fails-open (AC4)  # pyright: ignore[reportMissingImports]
+        try:
+            lock_ttl = int(os.environ.get("DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC", "1800"))
+        except ValueError:
+            lock_ttl = 1800
+        pending_key = review_lock.canonical_key(m.group("path").strip())
+        if pending_key is not None and review_lock.is_review_active(
+            body, pending_key, datetime.now(timezone.utc), lock_ttl
+        ):
+            return 0
+    except Exception as exc:  # noqa: BLE001 — fail-open to re-emit (Law 1)
+        print(
+            f"[spec-distill] review-lock check failed (non-fatal, reminding): {exc}",
+            file=sys.stderr,
+        )
     try:
         ttl = int(os.environ.get("DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC", "30"))
     except ValueError:

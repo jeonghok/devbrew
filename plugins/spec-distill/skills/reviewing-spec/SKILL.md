@@ -16,6 +16,15 @@ cost_class: medium
 ## Steps
 
 1. **Load state.local.md** — `session_id`, `rereview_count`, `issue_history` 읽기 + `pending_review:` block 확인. 이 skill은 PostToolUse hook이 design 파일 write를 감지해 `pending_review:` block을 기록하고 Stop hook이 다음 turn에 dispatch를 강제했기 때문에 호출됨 — block이 없으면 manual override(loud advisory). v0.12.0부터 **design mode 전용**: 11-section/locked_decisions schema 검사는 적용 안 함(brainstorming의 자유 형식 design doc). 본문의 placeholder/ambiguity/scope-creep/approaches-comparison/isolation/testing/handoff_incomplete만 spec-reviewer에게 요청.
+
+**리뷰 락 refresh (v0.18.0)** — state 로드 직후, `spec-reviewer` dispatch *전에* 이 문서의 review-in-progress 락을 갱신한다 (매 진입 — 최초 + revise 재진입):
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/review_lock.py" set "$session_id" "$spec_path"
+```
+
+이 락은 subagent(async) 경계에서 발생하는 메인 `Stop`이 진행 중인 리뷰를 재강제(중복/절단)하지 않도록 `review-dispatch.py`(Stop)와 `pending-review-reminder.py`(UserPromptSubmit)가 참조한다. 락은 **문서별**이라 다른 문서의 최초 강제는 억제하지 않으며, stale(TTL 1800s 초과) 시 강제가 재개된다(fail-safe = 강제).
+
 2. **Dispatch spec-reviewer agent**:
    ```
    Agent({
@@ -93,7 +102,23 @@ AskUserQuestion({
   → **여기서 턴 종료(STOP). 같은 턴에서 `writing-plans`를 호출하지 말 것** (compact 전 writing-plans 진입 = 옵션 ① 무력화). `Skill superpowers:writing-plans <path>` 진입은 사용자가 `/compact`를 *실제 실행한 다음 턴*에 **사용자 트리거**(예: `/compact write plan`처럼 compact 뒤에 붙인 진행 인자, 또는 명시적 진행 요청)로만 일어난다 — 모델은 다음 턴에 자동 진입하지 *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17). compact된 fresh context에서 plan 작성 (AC19).
 - **② 바로 writing-plans**: Approve handoff sequence 실행 → 즉시 `Skill superpowers:writing-plans <path>` 호출.
 - **③ 수정 필요**: 후속 `AskUserQuestion`으로 분기 — "revise per review" → 메인 agent가 design.md 직접 수정 후 reviewing-spec 재진입; "more interview" → conducting-interview (state phase=1 reset); "edit myself" → 사용자 편집 후 reviewing-spec 재진입.
-- **④ 멈춤**: state 보존, 종료.
+- **④ 멈춤**: `review_lock.py pause`(그 문서 엔트리 제거 + 같은-문서 pending strip, suppress 없이 — resumable) 실행 후 state 보존, 종료. 아래 매핑표 참조.
+
+### Phase 5 옵션 ↔ 리뷰 락 매핑 (v0.18.0)
+
+| 옵션 | 리뷰 락 동작 |
+|---|---|
+| ① / ② (approve) | `approve_handoff.sh`가 suppress + `review_lock.py clear`로 **그 문서 엔트리만** 제거. |
+| ③ (수정 필요/revise) | clear 안 함 — 다음 `reviewing-spec` 진입 Step 1이 그 문서 엔트리를 refresh. |
+| ④ (멈춤/나중에) | `review_lock.py pause`로 **그 문서 엔트리 제거 + 같은-문서 pending strip**(suppress 없이 — resumable). pending strip은 `review_lock.py pause`가 수행. |
+
+④ 멈춤 선택 시 실행:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/review_lock.py" pause "$session_id" "$spec_path"
+```
+
+④에서 엔트리만 제거하고 pending을 남기면 즉시 재발동([83dc5425]), 엔트리를 남기면 bounded under-review 창([fa17d241]) — `pause`가 둘을 함께 닫는다. 모든 동작은 **그 문서 엔트리에만** 작용하고 다른 문서 엔트리는 불변(multi-key, [ad4e6c3f]).
 
 ### polite stop 금지 (AP2 — verifiable, AC11)
 

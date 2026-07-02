@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spec-distill v0.15.0 — proceed-gate handoff finalizer.
+# spec-distill v0.18.0 — proceed-gate handoff finalizer.
 # 다음-단계 추천은 reviewing-spec Phase 5의 AskUserQuestion proceed 게이트가 담당
 # (hook은 AskUserQuestion을 못 띄움; skill은 띄움). 이 스크립트는 순서대로:
 #   (1) kill switch + arg/charset guard,
@@ -60,14 +60,15 @@ else
     echo "[spec-distill] approve_handoff: suppress_state.py 없음 (non-fatal) — 세션 dir는 SessionEnd/GC가 정리." >&2
 fi
 
-# ─── Resolve main repo (uses git-common-dir like state_path.py) ───
-# NOTE(v0.15.0): v0.14.0에서 `rm -rf "$main_repo/..."`가 제거된 뒤 main_repo는 현재
-# 미사용(dead) — 최소 diff로 보존. 제거는 안전한 future trivia.
-git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null || echo ".git")
-if [[ ! "$git_common_dir" = /* ]]; then
-    git_common_dir="$(pwd)/$git_common_dir"
+# ─── Clear this doc's review-in-progress lock entry (v0.18.0, AC6) ───
+# approve는 리뷰 완료 신호 → 그 문서 락 엔트리 제거(approve/cancel 대칭). raw
+# $spec_path를 넘기고 canonical_key 정규화는 review_lock에 위임(specs prefix 리터럴
+# 미포함 — test_no_prefix_slice 계약 유지). 다른 문서 엔트리는 불변(multi-key).
+lock_cli="$(dirname "$0")/review_lock.py"
+if [[ -f "$lock_cli" ]]; then
+    python3 "$lock_cli" clear "$session_id" "$spec_path" \
+      || echo "[spec-distill] approve_handoff: review-lock clear 실패 (non-fatal)" >&2
 fi
-main_repo="$(dirname "$git_common_dir")"
 
 # ─── spec_path advisory checks (NON-BLOCKING — suppress는 이미 위에서 기록됨) ───
 # v0.15.0: `[[ -f ]]`는 early-exit이 아니라 advisory. dangling worktree 경로
@@ -94,4 +95,4 @@ else
     echo "[spec-distill] stale/dangling 경로일 수 있음 (예: 삭제된 worktree). reviewing-spec에서 current_spec 재선택 또는 세션 리셋 권장." >&2
 fi
 
-echo "spec-distill v0.15.0 handoff finalized (session: $session_id). $suppress_msg 다음 단계는 reviewing-spec proceed 게이트 선택대로 진행."
+echo "spec-distill v0.18.0 handoff finalized (session: $session_id). $suppress_msg 다음 단계는 reviewing-spec proceed 게이트 선택대로 진행."

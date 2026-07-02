@@ -173,6 +173,77 @@ sf17="$WORK/.claude/spec-distill/test-017/state.local.md"
   && note PASS "AC5: non-suppressed in-scope pending → 정상 dispatch (회귀)" \
   || note FAIL "AC5 failed (rc=$rc out='$out')"
 
+
+# Case 18 (AC3): 같은 문서 락 엔트리 신선 + pending → no-op + pending 보존.
+NOW18=$(python3 -c 'from datetime import datetime,timezone; print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))')
+setup_state "test-018" "---
+session_id: test-018
+---
+
+pending_review:
+  path: docs/superpowers/specs/2026-07-01-lk-design.md
+  mode: design
+  triggered_at: 2026-05-16T10:00:00Z
+
+review_in_progress:
+  - path: docs/superpowers/specs/2026-07-01-lk-design.md
+    since: $NOW18
+"
+out=$(run_hook "test-018")
+rc=$?
+sf18="$WORK/.claude/spec-distill/test-018/state.local.md"
+[[ $rc -eq 0 ]] && [[ -z "$out" ]] \
+  && grep -q '^pending_review:' "$sf18" \
+  && note PASS "AC3: fresh same-doc lock → no-op + pending 보존" \
+  || note FAIL "AC3 failed (rc=$rc out='$out')"
+
+# Case 19 (AC16): 다른 문서만 락 엔트리 신선, 이 문서 pending → 정상 dispatch(억제 안 됨).
+NOW19=$(python3 -c 'from datetime import datetime,timezone; print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))')
+setup_state "test-019" "---
+session_id: test-019
+---
+
+pending_review:
+  path: docs/superpowers/specs/2026-07-01-thisdoc-design.md
+  mode: design
+  triggered_at: 2026-05-16T10:00:00Z
+
+review_in_progress:
+  - path: docs/superpowers/specs/2026-07-01-otherdoc-design.md
+    since: $NOW19
+"
+out=$(run_hook "test-019")
+rc=$?
+sf19="$WORK/.claude/spec-distill/test-019/state.local.md"
+[[ $rc -eq 0 ]] \
+  && echo "$out" | jq -e '.decision == "block"' >/dev/null \
+  && ! grep -q '^pending_review:' "$sf19" \
+  && note PASS "AC16: 다른 문서 락 신선 → 이 문서 정상 dispatch(비억제)" \
+  || note FAIL "AC16 failed (rc=$rc out='$out')"
+
+# Case 20 (AC4): 같은 문서 락 엔트리 stale(과거) + pending → dispatch + strip(fail-safe).
+setup_state "test-020" "---
+session_id: test-020
+---
+
+pending_review:
+  path: docs/superpowers/specs/2026-07-01-stale-design.md
+  mode: design
+  triggered_at: 2026-05-16T10:00:00Z
+
+review_in_progress:
+  - path: docs/superpowers/specs/2026-07-01-stale-design.md
+    since: 2020-01-01T00:00:00Z
+"
+out=$(run_hook "test-020")
+rc=$?
+sf20="$WORK/.claude/spec-distill/test-020/state.local.md"
+[[ $rc -eq 0 ]] \
+  && echo "$out" | jq -e '.decision == "block"' >/dev/null \
+  && ! grep -q '^pending_review:' "$sf20" \
+  && note PASS "AC4: stale 락 → dispatch + strip(fail-safe = 강제)" \
+  || note FAIL "AC4 failed (rc=$rc out='$out')"
+
 echo ""
 echo "summary: $pass passed, $fail failed"
 [[ $fail -eq 0 ]]

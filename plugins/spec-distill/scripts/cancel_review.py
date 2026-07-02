@@ -23,6 +23,7 @@ HOOKS_DIR = SCRIPT_DIR.parent / "hooks"
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(HOOKS_DIR))
 import suppress_state  # noqa: E402 # pyright: ignore[reportMissingImports]
+import review_lock  # noqa: E402 # pyright: ignore[reportMissingImports]
 from state_path import resolve_session_id  # noqa: E402 # pyright: ignore[reportMissingImports]
 
 
@@ -68,6 +69,7 @@ def main(argv: list[str]) -> int:
             _advise(f"'{target}' 스코프 밖({suppress_state.PREFIX} 없음) — no-op (AC8)")
             return 1
         suppress_state.suppress_path(sf, target)  # 같은-키 pending만 strip(AC19)
+        review_lock.clear_lock(sf, target)        # approve 대칭 — 그 문서 락 제거(AC11)
         _advise(f"suppressed {key} this session. 재리뷰: --reset {key}")
         return 0
 
@@ -87,6 +89,7 @@ def main(argv: list[str]) -> int:
         )
         return 0
     suppress_state.suppress_path(sf, pend)
+    review_lock.clear_lock(sf, pend)              # approve 대칭 — 그 문서 락 제거(AC11)
     key = suppress_state.canonical_key(pend) or pend
     _advise(f"cancelled pending review + suppressed {key} this session. 재리뷰: --reset {key}")
     return 0
