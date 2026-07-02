@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""spec-distill Stop hook — review dispatch enforcer (v0.5.0).
+"""spec-distill Stop hook — review dispatch enforcer (v0.18.0).
 
 Reads state.local.md for the current session. If `pending_review:` block
 is present AND last_dispatched_at is empty or older than the redispatch TTL,
@@ -18,6 +18,7 @@ Kill switches:
 - DEVBREW_DISABLE_SPEC_DISTILL=1
 - DEVBREW_SKIP_HOOKS=spec-distill:Stop  (or :review-dispatch)
 - DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=<int>  (default 30; self-ref cycle guard)
+- DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC=<int>  (default 1800; document-keyed review-lock freshness)
 """
 from __future__ import annotations
 

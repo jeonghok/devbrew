@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spec-distill v0.15.0 — proceed-gate handoff finalizer.
+# spec-distill v0.18.0 — proceed-gate handoff finalizer.
 # 다음-단계 추천은 reviewing-spec Phase 5의 AskUserQuestion proceed 게이트가 담당
 # (hook은 AskUserQuestion을 못 띄움; skill은 띄움). 이 스크립트는 순서대로:
 #   (1) kill switch + arg/charset guard,
@@ -95,4 +95,4 @@ else
     echo "[spec-distill] stale/dangling 경로일 수 있음 (예: 삭제된 worktree). reviewing-spec에서 current_spec 재선택 또는 세션 리셋 권장." >&2
 fi
 
-echo "spec-distill v0.15.0 handoff finalized (session: $session_id). $suppress_msg 다음 단계는 reviewing-spec proceed 게이트 선택대로 진행."
+echo "spec-distill v0.18.0 handoff finalized (session: $session_id). $suppress_msg 다음 단계는 reviewing-spec proceed 게이트 선택대로 진행."

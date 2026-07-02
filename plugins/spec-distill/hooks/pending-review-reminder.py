@@ -101,7 +101,7 @@ def main() -> int:
     # 리뷰가 in-flight(신선 엔트리)면 재-nag하지 않는다. fail-safe = 강제(어떤 예외도
     # 정상 재-emit으로 fall-through).
     try:
-        import review_lock  # pyright: ignore[reportMissingImports]
+        import review_lock  # scripts/ deferred import, fails-open (AC4)  # pyright: ignore[reportMissingImports]
         try:
             lock_ttl = int(os.environ.get("DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC", "1800"))
         except ValueError:
