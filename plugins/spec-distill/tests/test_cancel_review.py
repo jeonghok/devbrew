@@ -233,8 +233,7 @@ class TestCancelReview(unittest.TestCase):
         self._seed_lock(DOC_A, DOC_B)
         cp = run_cancel([str(self.tmp / DOC_A)], cwd=self.tmp)
         self.assertEqual(cp.returncode, 0, cp.stderr)
-        sys.path.insert(0, str(SCRIPTS))
-        import review_lock  # noqa
+        import review_lock  # noqa: E402 # pyright: ignore[reportMissingImports]
         body = self.sf.read_text()
         entries = dict(review_lock._parse_entries(body))
         self.assertNotIn(DOC_A, entries)   # 취소 문서 락 제거
