@@ -91,6 +91,46 @@ else
 fi
 rm -rf "$WORK"
 
+# ── Case 4b (AC6): approve → review_in_progress 그 문서 엔트리 clear ──
+WORK=$(mktemp -d); setup_repo "$WORK"
+sess="$WORK/.claude/spec-distill/test-sid12"
+spec="$WORK/docs/superpowers/specs/2026-01-01-test-spec.md"
+key="docs/superpowers/specs/2026-01-01-test-spec.md"
+otherkey="docs/superpowers/specs/2026-01-01-other-design.md"
+NOWLK=$(python3 -c 'from datetime import datetime,timezone; print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))')
+cat > "$sess/state.local.md" <<EOF
+---
+session_id: test-sid12
+---
+
+pending_review:
+  path: $spec
+  mode: design
+  triggered_at: 2026-01-01T00:00:00Z
+
+review_in_progress:
+  - path: $key
+    since: $NOWLK
+  - path: $otherkey
+    since: $NOWLK
+EOF
+bash "$SCRIPT" "test-sid12" "$spec" >/dev/null 2>&1; rc=$?
+if [[ $rc -eq 0 ]] \
+   && ! grep -q "  - path: $key\$" "$sess/state.local.md" \
+   && grep -q "  - path: $otherkey\$" "$sess/state.local.md"; then
+    note PASS "case 4b (AC6): approve clears THIS doc lock entry, preserves other"
+else
+    note FAIL "case 4b (AC6): rc=$rc"
+fi
+rm -rf "$WORK"
+
+# ── Case 4c (AC12): dead main_repo 블록 부재 (스크립트 소스 grep) ──
+if ! grep -qE 'main_repo=|git_common_dir=' "$SCRIPT"; then
+    note PASS "case 4c (AC12): dead main_repo/git_common_dir 블록 제거됨"
+else
+    note FAIL "case 4c (AC12): dead 블록 잔존"
+fi
+
 # ── Case 5: charset reject → exit 1 ──
 WORK=$(mktemp -d); setup_repo "$WORK"
 bash "$SCRIPT" "../bad" "$WORK/docs/superpowers/specs/2026-01-01-test-spec.md" >/dev/null 2>"$ERR"; rc=$?
@@ -115,4 +155,4 @@ fi
 rm -rf "$WORK"
 
 if [[ "$fail" -gt 0 ]]; then echo "FAILED: $fail case(s)"; exit 1; fi
-echo "PASSED: 7 cases"
+echo "PASSED: 9 cases"
