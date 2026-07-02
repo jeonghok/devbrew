@@ -218,6 +218,28 @@ class TestCancelReview(unittest.TestCase):
         self.assertEqual(suppress_state.pending_path(body), doc_a)
         self.assertEqual(suppress_state.suppressed_keys(body), [DOC_B])
 
+    def _seed_lock(self, key_a, key_b):
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.sf.parent.mkdir(parents=True, exist_ok=True)
+        self.sf.write_text(
+            f"---\nsession_id: {self.SID}\n---\n\n"
+            f"review_in_progress:\n"
+            f"  - path: {key_a}\n    since: {now}\n"
+            f"  - path: {key_b}\n    since: {now}\n"
+        )
+
+    def test_ac11_cancel_clears_lock_entry_preserves_other(self):
+        self._seed_lock(DOC_A, DOC_B)
+        cp = run_cancel([str(self.tmp / DOC_A)], cwd=self.tmp)
+        self.assertEqual(cp.returncode, 0, cp.stderr)
+        sys.path.insert(0, str(SCRIPTS))
+        import review_lock  # noqa
+        body = self.sf.read_text()
+        entries = dict(review_lock._parse_entries(body))
+        self.assertNotIn(DOC_A, entries)   # 취소 문서 락 제거
+        self.assertIn(DOC_B, entries)      # 다른 문서 락 불변(AC11)
+
 
 if __name__ == "__main__":
     unittest.main()
