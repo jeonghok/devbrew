@@ -18,15 +18,30 @@ grep -q 'review_lock.py" pause' "$SKILL" \
   && note PASS "AC2: Phase 5 ④=pause 명령 존재" \
   || note FAIL "AC2: review_lock pause 명령 없음"
 
-# teeth 증명: pause 라인을 삭제한 mutation은 grep FAIL 이어야 함(락에 이빨 있음).
-MUT=$(mktemp)
-grep -v 'review_lock.py" pause' "$SKILL" > "$MUT"
-if grep -q 'review_lock.py" pause' "$MUT"; then
-  note FAIL "AC14 teeth: mutation 후에도 매칭 — 락 무의미"
+# AC14 teeth (genuine — NOT a `grep -v X | grep -q X` tautology, which passes for any
+# file). Two independent proofs the AC2 lock has real teeth:
+# (1) body-uniqueness: the pause command string appears exactly once, so it can't be
+#     silently satisfied by a stray header/duplicate line. Remove the command line and
+#     the count drops to 0 → AC2's grep -q reds. A count != 1 is itself a finding.
+cnt=$(grep -c 'review_lock.py" pause' "$SKILL")
+[[ "$cnt" -eq 1 ]] \
+  && note PASS "AC14a: pause command body-unique (exactly 1 occurrence)" \
+  || note FAIL "AC14a: expected exactly 1 pause-command occurrence, got $cnt"
+
+# (2) discrimination control: the assertion pattern MATCHES a fixture that has the command
+#     and does NOT match one where it was removed — proving the grep has real
+#     discriminating power (a vacuous lock would behave identically on both fixtures).
+POS=$(mktemp); NEG=$(mktemp)
+printf '%s\n' 'noise before' \
+  'python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/review_lock.py" pause "$session_id" "$spec_path"' \
+  'noise after' > "$POS"
+printf '%s\n' 'noise before' '# pause command removed' 'noise after' > "$NEG"
+if grep -q 'review_lock.py" pause' "$POS" && ! grep -q 'review_lock.py" pause' "$NEG"; then
+  note PASS "AC14b: assertion grep discriminates present vs absent (real teeth)"
 else
-  note PASS "AC14 teeth: pause 라인 삭제 시 grep red(이빨 증명)"
+  note FAIL "AC14b: assertion grep failed to discriminate present/absent fixtures"
 fi
-rm -f "$MUT"
+rm -f "$POS" "$NEG"
 
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
