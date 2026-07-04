@@ -171,5 +171,54 @@ class PreservedBehaviorTest(_ProjectDirTestCase):
         self.assertEqual(cp.returncode, 0)
 
 
+class DerivePrefixesTest(unittest.TestCase):
+    """F2 / AC4 / AC5 — extract prefixes from leading identifier-alternation only."""
+
+    def test_github_flow(self):
+        pat = re.compile(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
+        self.assertEqual(_hook.derive_prefixes(pat), ["feature", "fix"])
+
+    def test_git_flow(self):
+        pat = re.compile(r"^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$")
+        self.assertEqual(_hook.derive_prefixes(pat), ["feature", "fix", "release", "hotfix"])
+
+    def test_non_capturing_group(self):
+        pat = re.compile(r"^(?:feature|fix)/[a-z0-9].*$")
+        self.assertEqual(_hook.derive_prefixes(pat), ["feature", "fix"])
+
+    def test_inline_flag_group_not_misparsed(self):
+        # (?i) inline flag must NOT yield ["i"] — reviewer a909f052
+        pat = re.compile(r"(?i)^(feature|fix)/[a-z0-9].*$")
+        self.assertEqual(_hook.derive_prefixes(pat), [])
+
+    def test_nested_group(self):
+        pat = re.compile(r"^((?:a|b))/[a-z0-9].*$")
+        self.assertEqual(_hook.derive_prefixes(pat), [])
+
+    def test_literal_prefix(self):
+        pat = re.compile(r"^feature-.*$")
+        self.assertEqual(_hook.derive_prefixes(pat), [])
+
+
+class F2SuggestionTest(_ProjectDirTestCase):
+    """F2 / AC4 / AC5 — correction suggestion derived from active pattern."""
+
+    def test_gitflow_violation_lists_derived_prefixes_no_feature_hardcode(self):
+        write_strategy(self.tmp, r"^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$")
+        msg = _hook.validate_branch("git checkout -b hotfix-login")
+        self.assertIsNotNone(msg)
+        self.assertIn("release", msg)
+        self.assertIn("hotfix", msg)
+        self.assertNotIn("feature/hotfix-login", msg)   # no hardcoded feature/ suggestion
+        self.assertIn("<prefix>/hotfix-login", msg)      # placeholder, not a single prefix
+
+    def test_exotic_pattern_degrades_to_doc(self):
+        write_strategy(self.tmp, r"^feature-.*$")  # literal prefix -> exotic -> []
+        msg = _hook.validate_branch("git checkout -b bad")
+        self.assertIsNotNone(msg)
+        self.assertNotIn("git branch -m", msg)  # cmd is None for exotic
+        self.assertIn("docs/git-workflow/branch-strategy.md", msg)
+
+
 if __name__ == "__main__":
     unittest.main()

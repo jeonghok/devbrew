@@ -77,6 +77,21 @@ def get_branch_pattern():
     return None
 
 
+def derive_prefixes(pattern):
+    """Extract allowed branch prefixes from a compiled pattern's leading alternation group.
+
+    ^(feature|fix|release|hotfix)/…  ->  ["feature","fix","release","hotfix"]
+    ^(?:feature|fix)/…               ->  ["feature","fix"]   (non-capturing OK)
+    선두가 identifier-alternation이 아니면(inline flags (?i), nested group, 리터럴 등) → []
+    (교정 제안에서 prefix 하드코딩 금지). 그룹 내용을 [a-z][a-z0-9-]* 토큰의 |-결합으로
+    못박아 `(?i)` 같은 flag 그룹이 "i" 프리픽스로 오파싱되지 않게 한다(reviewer a909f052).
+    """
+    m = re.match(
+        r"\^?\((?:\?:)?([a-z][a-z0-9-]*(?:\|[a-z][a-z0-9-]*)*)\)", pattern.pattern
+    )
+    return m.group(1).split("|") if m else []
+
+
 def guess_commit_type(message):
     """Guess the conventional commit type from a plain message."""
     first_word = message.strip().split()[0].lower() if message.strip() else ""
@@ -104,17 +119,24 @@ def validate_branch(command):
     if pattern.match(branch_name):
         return None
 
-    # Suggest correction
-    suggestion = branch_name
-    if "/" in suggestion:
-        suggestion = suggestion.split("/", 1)[1]
-    suggestion = f"feature/{suggestion}"
+    # Suggest correction — prefixes derived from the active pattern (no feature/ hardcode)
+    name_part = branch_name.split("/", 1)[1] if "/" in branch_name else branch_name
+    prefixes = derive_prefixes(pattern)
+    if prefixes:
+        hint = f"Allowed prefixes: {', '.join(prefixes)}"
+        cmd = f"Rename with: git branch -m <prefix>/{name_part}   (choose a prefix above)"
+    else:  # exotic regex → NO feature/ hardcode
+        hint = "See docs/git-workflow/branch-strategy.md for allowed prefixes."
+        cmd = None
 
-    return (
-        f'project-init: Branch "{branch_name}" does not follow naming convention.\n'
-        f"Expected pattern: {pattern.pattern}\n"
-        f"Suggested: git branch -m {suggestion}"
-    )
+    lines = [
+        f'project-init: Branch "{branch_name}" does not follow naming convention.',
+        f"Expected pattern: {pattern.pattern}",
+        hint,
+    ]
+    if cmd:
+        lines.append(cmd)
+    return "\n".join(lines)
 
 
 def validate_commit(command):
