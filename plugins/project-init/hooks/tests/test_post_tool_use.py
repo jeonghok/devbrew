@@ -211,6 +211,7 @@ class F2SuggestionTest(_ProjectDirTestCase):
         self.assertIn("hotfix", msg)
         self.assertNotIn("feature/hotfix-login", msg)   # no hardcoded feature/ suggestion
         self.assertIn("<prefix>/hotfix-login", msg)      # placeholder, not a single prefix
+        self.assertIn("Allowed prefixes: feature, fix, release, hotfix", msg)  # body-unique teeth (not header-satisfiable)
 
     def test_exotic_pattern_degrades_to_doc(self):
         write_strategy(self.tmp, r"^feature-.*$")  # literal prefix -> exotic -> []
@@ -256,6 +257,7 @@ class MainDoubleValidationTest(unittest.TestCase):
             msg = data.get("systemMessage", "")
             self.assertNotIn("naming convention", msg)  # branch OK -> no branch warning
             self.assertIn("Conventional Commits", msg)   # commit flagged independently
+            self.assertEqual(rc, 0)  # non-blocking: hook always exits 0 for compound shape too
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
