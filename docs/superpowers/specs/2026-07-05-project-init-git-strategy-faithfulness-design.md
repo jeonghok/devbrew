@@ -58,7 +58,7 @@ load-bearing 항목으로 요구한다.
 
 - **advisory hook 유지**(LD3) — PostToolUse, 항상 `sys.exit(0)` + `systemMessage`. blocking 아님.
 - **kill switch 불변**(devbrew) — `DEVBREW_DISABLE_PROJECT_INIT=1` / `DEVBREW_SKIP_HOOKS=project-init:post-tool-use`.
-- **commit 검증 경로 회귀 없음** — `validate_commit`은 이 작업에서 손대지 않는다.
+- **commit 검증 경로 회귀 없음** — `validate_commit` **함수 내부 로직은 불변**(호출 빈도는 §5.5에서 개선 — compound 명령에서 branch 경고와 무관하게 실행됨).
 - **신규 워크트리에서 구현**(LD6) — `feature/git-strategy-faithfulness` (이미 생성됨).
 - **plugin.json bump 동반**(devbrew) — 같은 PR에서 `1.6.0 → 1.7.0`(minor).
 - **문서 Korean-primary**(devbrew) — CHANGELOG/README 동기화.
@@ -69,11 +69,12 @@ load-bearing 항목으로 요구한다.
 ### 5.1 F1 — loud-advisory fail-open 폴백 (`post-tool-use.py`)
 
 `get_branch_pattern()`의 반환 계약을 `re.Pattern` → **`Optional[re.Pattern]`**으로 바꾼다.
-아래 셋을 **하나의 fail-open 경로로 통일**해 `None`을 반환한다:
+아래 넷을 **하나의 fail-open 경로로 통일**해 `None`을 반환한다:
 
 1. `branch-strategy.md` 파일 부재,
 2. ```regex 블록 부재,
-3. **regex 자체가 malformed**(`re.error`) — 오늘은 silent하게 GitHub-Flow로 떨어졌으나 이제 loud.
+3. **regex 자체가 malformed**(`re.error`) — 오늘은 silent하게 GitHub-Flow로 떨어졌으나 이제 loud,
+4. **```regex 블록이 비었거나 공백-only**(`.strip()` 후 empty) — 퇴화 패턴이 *모든* 브랜치명을 silent pass-all 하지 않도록 fail-open(reviewer cccfc098).
 
 `DEFAULT_BRANCH_PATTERN`(line 19)은 **완전 삭제**(OQ2 해소). 폴백이 `None`을 반환하면 호출자가
 0이 되어 dead code이며, 남겨두면 GitHub-Flow 디폴트가 잔존한다. lightness → 삭제.
@@ -90,8 +91,8 @@ def get_branch_pattern():
         with open(strategy_path, "r") as f:
             content = f.read()
         match = re.search(r"```regex\n(.+?)\n```", content)
-        if match:
-            return re.compile(match.group(1))
+        if match and match.group(1).strip():   # 빈/공백-only 캡처 → 무효(fail-open, reviewer cccfc098)
+            return re.compile(match.group(1).strip())
     except (FileNotFoundError, IOError, re.error):
         pass
     return None
@@ -238,7 +239,7 @@ hyphen 파일명이라 `importlib.util.spec_from_file_location`로 모듈 로드
 
 | 그룹 | 케이스 |
 |---|---|
-| **F1 fail-open** | (a) 파일 부재 → `get_branch_pattern()==None` + fail-open advisory("skipping"/"fail-open") 거부 아님 (b) regex-less 파일 → 동일 (c) malformed regex → 동일 (d) 선언된 git-flow regex → `release/x` **통과**(None) |
+| **F1 fail-open** | (a) 파일 부재 → `get_branch_pattern()==None` + fail-open advisory("skipping"/"fail-open") 거부 아님 (b) regex-less 파일 → 동일 (c) malformed regex → 동일 (d) 선언된 git-flow regex → `release/x` **통과**(None) (e) **빈/공백-only ` ```regex ` 블록 → None(fail-open), 임의 브랜치 silent pass-all 아님**(reviewer cccfc098) |
 | **F1 회귀 락** | `DEFAULT_BRANCH_PATTERN` 심볼 부재 assert(`assertFalse(hasattr(mod, "DEFAULT_BRANCH_PATTERN"))`) — silent 재도입 방지 teeth |
 | **F2 파생** | `derive_prefixes`: github-flow→`[feature,fix]` / git-flow→`[feature,fix,release,hotfix]` / 비캡처 `^(?:feature\|fix)/…`→`[feature,fix]` / **inline-flag `(?i)^(feature\|fix)/…`→`[]`**(reviewer a909f052) / nested `^((?:a\|b))/…`→`[]` / 리터럴 `^feature-.*`→`[]`. git-flow 위반 브랜치 → advisory가 `release,hotfix` 나열 **AND `feature/<name>` 하드코딩 부재**. exotic → `feature/` 부재 + 문서 안내 |
 | **main() 이중 검증** | fail-open 상태 compound `git checkout -b feat && git commit -m "add x"` → branch fail-open advisory **AND** commit(Conventional 위반) advisory가 **둘 다** 출력(commit 검증 미-skip; reviewer e65cae85); 정상 전략 compound에서도 두 검증기 독립 실행 |
@@ -251,7 +252,7 @@ hyphen 파일명이라 `importlib.util.spec_from_file_location`로 모듈 로드
 
 ## 8. Acceptance Criteria
 
-- **AC1** — `branch-strategy.md` 부재/regex-less/malformed 시 `validate_branch`가 브랜치명을 거부하지 않고 fail-open 한 줄 advisory를 반환(F1/LD2).
+- **AC1** — `branch-strategy.md` 부재/regex-less/malformed/**빈-or-공백-only regex 블록** 시 `validate_branch`가 브랜치명을 거부하지 않고 fail-open 한 줄 advisory를 반환(F1/LD2; 빈-블록 silent pass-all 방지, reviewer cccfc098).
 - **AC2** — `DEFAULT_BRANCH_PATTERN` 심볼이 `post-tool-use.py`에서 완전 제거(OQ2).
 - **AC3** — 선언된 전략 regex는 그대로 존중(git-flow `release/*` 통과, github-flow `feature/*` 통과) — 회귀 없음.
 - **AC4** — 위반 브랜치 교정 제안이 활성 패턴 파생 prefix를 나열하고 `feature/` 단일 하드코딩이 없음(F2/LD4); Git Flow hotfix에 `feature/` 오제안 없음.
@@ -273,6 +274,7 @@ hyphen 파일명이라 `importlib.util.spec_from_file_location`로 모듈 로드
   human이 무시하는 noise가 아니라 LLM이 self-correct하는 신호. 헌장이 enforcement substrate로 확립.
 - **F4/F5 전면 하드닝** → 버림(§3 Non-goals, OQ1): 신규 결정론 가드 증식이 lightness와 충돌.
 - **F1 세 원인(부재/regex-less/malformed)을 구분된 메시지로 분기** → 버림(stated decision, reviewer 94d5d6b5): LD2가 *한 줄* discoverable 안내를 지정. 셋 다 "선언된 유효 패턴 없음"으로 귀결이 동일하고, 메시지가 파일 경로(`docs/git-workflow/branch-strategy.md`)를 명시하므로 malformed regex도 사용자가 찾아 고칠 수 있다. 별도 malformed 분기는 코드 branch만 늘릴 뿐 lightness 대비 이득이 낮다. "no *valid* pattern found" 문구로 세 경우를 모두 정확히 커버(§5.1).
+- **`main()` short-circuit 유지 + None-pattern 경로만 commit-check 예외** → 버림(reviewer 권고 반영): `or` short-circuit을 남기고 fail-open 경로만 특수 처리하는 대안은 분기 복잡도만 늘린다. 두 검증기를 무조건 실행+concatenate(§5.5)가 더 단순하고 커버리지도 균일하게 넓다.
 
 ## 10. Handoff Context
 
