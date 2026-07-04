@@ -16,7 +16,6 @@ import sys
 
 # --- Constants ---
 
-DEFAULT_BRANCH_PATTERN = re.compile(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
 CONVENTIONAL_COMMIT_PATTERN = re.compile(
     r"^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?:\s.+"
 )
@@ -57,10 +56,11 @@ PROTECTED_BRANCHES = {"main", "master", "develop", "dev"}
 
 
 def get_branch_pattern():
-    """Load branch naming pattern from docs/git-workflow/branch-strategy.md.
+    """Return the declared branch pattern, or None when none is validly declared.
 
-    Falls back to default (feature|fix) if the file doesn't exist
-    or doesn't contain a regex block.
+    None => fail-open: 전략 미선언 → 브랜치명 검증을 건너뛴다(loud advisory).
+    아래 넷을 하나의 fail-open 경로로 통일한다: (1) 파일 부재, (2) ```regex 블록
+    부재, (3) malformed regex(re.error), (4) 빈/공백-only 블록(.strip() 후 empty).
     """
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR", ".")
     strategy_path = os.path.join(
@@ -70,11 +70,11 @@ def get_branch_pattern():
         with open(strategy_path, "r") as f:
             content = f.read()
         match = re.search(r"```regex\n(.+?)\n```", content)
-        if match:
-            return re.compile(match.group(1))
+        if match and match.group(1).strip():  # 빈/공백-only 캡처 → 무효(fail-open, reviewer cccfc098)
+            return re.compile(match.group(1).strip())
     except (FileNotFoundError, IOError, re.error):
         pass
-    return DEFAULT_BRANCH_PATTERN
+    return None
 
 
 def guess_commit_type(message):
@@ -95,6 +95,12 @@ def validate_branch(command):
         return None
 
     pattern = get_branch_pattern()
+    if pattern is None:  # 유효 패턴 없음(부재/regex-less/malformed/빈-블록) → fail OPEN, loudly
+        return (
+            "project-init: no valid branch-naming pattern found in "
+            "docs/git-workflow/branch-strategy.md — skipping branch-name "
+            "validation (fail-open)."
+        )
     if pattern.match(branch_name):
         return None
 
