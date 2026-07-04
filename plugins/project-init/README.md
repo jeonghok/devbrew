@@ -13,10 +13,11 @@ plugins/project-init/
 │   └── project-init.md              # /project-init — 인터랙티브 셋업
 ├── hooks/
 │   ├── hooks.json                   # PostToolUse hook 설정 (2개 entry)
-│   ├── post-tool-use.py             # 브랜치 명명 + 커밋 메시지 검증기 (Bash matcher)
+│   ├── post-tool-use.py             # 브랜치(fail-open advisory) + 커밋 검증기 (Bash matcher)
 │   ├── docs-lint.py                 # v1.4.0 — agent-readable docs convention 검증 (Write/Edit/MultiEdit matcher)
 │   └── tests/
 │       ├── test_docs_lint.py        # 60+ Python stdlib unittest (charter rule 포함)
+│       ├── test_post_tool_use.py    # v1.7.0 — post-tool-use fail-open/F2/main 검증
 │       ├── smoke.sh                 # V2 자동화 smoke script
 │       └── fixtures/                # 13개 서브디렉토리 (valid, oversized, drifted, charter_*, ...)
 └── templates/
@@ -78,7 +79,7 @@ plugins/project-init/
 
 ## 설치된 Hook
 
-- **`PostToolUse` (Bash matcher) — `post-tool-use.py`**: 브랜치 명·커밋 메시지 검증. **왜 hook인가?**: 검증은 모델 attention 여부와 무관하게 모든 Bash invocation에 발화해야 한다. skill은 모델이 invoke하는 단위라 action 레이어에서의 결정적 실행을 보장하지 못함.
+- **`PostToolUse` (Bash matcher) — `post-tool-use.py`**: 브랜치 명·커밋 메시지 검증 (advisory, non-blocking). 브랜치 검증은 `docs/git-workflow/branch-strategy.md`의 선언된 전략 패턴을 런타임에 읽어 수행하며, 전략 미선언(파일/`` ```regex `` 블록 부재·malformed·빈 블록)이면 GitHub Flow를 단정하지 않고 **loud advisory로 검증을 건너뛴다**(fail-open, v1.7.0). 교정 제안은 활성 패턴에서 파생된 prefix를 제시한다. **왜 hook인가?**: 검증은 모델 attention 여부와 무관하게 모든 Bash invocation에 발화해야 한다. skill은 모델이 invoke하는 단위라 action 레이어에서의 결정적 실행을 보장하지 못함.
   - Kill switch: `DEVBREW_DISABLE_PROJECT_INIT=1` 또는 `DEVBREW_SKIP_HOOKS=project-init:post-tool-use`
 
 - **`PostToolUse` (Write|Edit|MultiEdit matcher) — `docs-lint.py`**: root context 파일 (CLAUDE.md, AGENTS.md, .claude/CLAUDE.md, .claude/AGENTS.md) **및 `docs/project/*.md` (v1.6.0)**의 agent-readable convention (size ≤200, TOC if >300, fenced code language, internal links resolve, CLAUDE/AGENTS drift) + `AGENTS.md`의 `## Project Charter` 필수 하위항목(vision·non-goals·tech-stack: 존재·비어있지 않음·placeholder 잔존 없음, v1.6.0) 검증. **왜 hook인가?**: Write/Edit이 일어날 때마다 deterministic하게 발화해야 함, advisory only (non-blocking).
