@@ -85,13 +85,13 @@ CI/CD가 tag push를 트리거로 deploy. 별도 release 브랜치 없음 — `m
 
 이미 출시된 옛 version (예: v1.x)에 hotfix를 backport해야 할 때만:
 
-> **Note:** `release/*` 브랜치는 본 strategy의 regex (`^(feature|fix)/...`) 스코프 밖이라 project-init hook이 거부한다. 예외적 1회 작업이므로 kill switch로 우회: `DEVBREW_DISABLE_PROJECT_INIT=1 git checkout -b release/v1.x`.
+> **Note:** `release/*` 브랜치는 본 strategy의 regex(`^(feature|fix)/…`) 스코프 밖이라 project-init hook이 **advisory 경고**(허용 prefix `feature`/`fix`를 제시하는 다중 줄 메시지 — 이 전략엔 관용 없는 예외)를 냅니다. 단, project-init hook은 **non-blocking**(PostToolUse advisory)이라 브랜치 생성을 **차단하지 않습니다** — 의도된 backport 예외이므로 경고를 무시하고 진행하세요. hook 전체를 끄지 마세요(commit 검증까지 함께 꺼집니다).
 
 ```bash
-# 1. trunk에서 release 브랜치 cut (1회만, kill switch 사용)
+# 1. trunk에서 release 브랜치 cut (1회만; hook advisory 경고는 무시하고 진행)
 git checkout main
 git pull origin main
-DEVBREW_DISABLE_PROJECT_INIT=1 git checkout -b release/v1.x
+git checkout -b release/v1.x
 git push -u origin release/v1.x
 
 # 2. fix는 항상 trunk에 먼저 commit
