@@ -220,5 +220,61 @@ class F2SuggestionTest(_ProjectDirTestCase):
         self.assertIn("docs/git-workflow/branch-strategy.md", msg)
 
 
+class MainDoubleValidationTest(unittest.TestCase):
+    """AC10 / §5.5 — main() runs BOTH validators (no `or` short-circuit)."""
+
+    def test_compound_failopen_runs_both_validators(self):
+        tmp = tempfile.mkdtemp()  # no strategy file -> branch fails open
+        try:
+            payload = {
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": 'git checkout -b feat && git commit -m "add thing"'
+                },
+            }
+            out, rc = run_hook(payload, cwd=tmp)
+            self.assertEqual(rc, 0)
+            data = json.loads(out)
+            msg = data.get("systemMessage", "")
+            self.assertIn("fail-open", msg)             # branch validator ran
+            self.assertIn("Conventional Commits", msg)  # commit validator ALSO ran (not short-circuited)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_valid_branch_bad_commit_still_flags_commit(self):
+        tmp = tempfile.mkdtemp()
+        write_strategy(tmp, r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
+        try:
+            payload = {
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": 'git checkout -b feature/ok && git commit -m "add thing"'
+                },
+            }
+            out, rc = run_hook(payload, cwd=tmp)
+            data = json.loads(out)
+            msg = data.get("systemMessage", "")
+            self.assertNotIn("naming convention", msg)  # branch OK -> no branch warning
+            self.assertIn("Conventional Commits", msg)   # commit flagged independently
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_both_clean_emits_empty(self):
+        tmp = tempfile.mkdtemp()
+        write_strategy(tmp, r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
+        try:
+            payload = {
+                "tool_name": "Bash",
+                "tool_input": {
+                    "command": 'git checkout -b feature/ok && git commit -m "feat: ok"'
+                },
+            }
+            out, rc = run_hook(payload, cwd=tmp)
+            self.assertEqual(out.strip(), "{}")
+            self.assertEqual(rc, 0)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

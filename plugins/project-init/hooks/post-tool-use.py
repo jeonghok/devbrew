@@ -202,11 +202,12 @@ def main():
 
     command = tool_input.get("command", "")
 
-    # Try branch validation first, then commit validation
-    warning = validate_branch(command) or validate_commit(command)
+    # Run BOTH validators (no short-circuit): a branch warning must not
+    # suppress commit validation on compound commands (§5.5).
+    warnings = [w for w in (validate_branch(command), validate_commit(command)) if w]
 
-    if warning:
-        print(json.dumps({"systemMessage": warning}))
+    if warnings:
+        print(json.dumps({"systemMessage": "\n\n".join(warnings)}))
     else:
         print(json.dumps({}))
 
