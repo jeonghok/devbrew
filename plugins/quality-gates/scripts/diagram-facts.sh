@@ -19,7 +19,11 @@ while [[ $# -gt 0 ]]; do
 done
 git rev-parse --verify -q "$base_ref" >/dev/null 2>&1 || base_ref="main"
 base="$(git merge-base "$base_ref" HEAD 2>/dev/null || echo "")"
-[[ -n "$base" ]] || { echo "degraded: yes"; exit 0; }
+if [[ -z "$base" ]]; then
+  # --nodes callers expect ONLY neighbor paths; emit nothing rather than leak the marker
+  [[ "$nodes_only" -eq 1 ]] || echo "degraded: yes"
+  exit 0
+fi
 
 changed="$(git diff --name-only --diff-filter=ACM "$base"..HEAD)"
 
