@@ -1885,6 +1885,7 @@ allowed-tools:
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/pr-detect.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/comment-upsert.py:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/gh-identity.sh:*)   # identity fetch (gh api user encapsulated)
   - Bash(gh auth status:*)
   - Bash(gh repo view:*)
   - Bash(gh pr create:*)

@@ -79,13 +79,13 @@ qg의 기존 Law-2 패턴(read-only reviewer 에이전트 ↔ gh 가진 orchestr
 publishing-pr-understanding          SKILL (gh를 가진 유일 orchestrator; cost_class: variable)
   allowed-tools: Read, Grep, Glob, Agent, AskUserQuestion,
                  Bash(build-pr-context.sh, diagram-facts.sh, secret-scan.py,
-                      pr-detect.sh, comment-upsert.py, render-terminal.py),
-                 Bash(gh auth status:*, gh pr create:*,
+                      pr-detect.sh, comment-upsert.py, render-terminal.py, gh-identity.sh),
+                 Bash(gh auth status:*, gh repo view:*, gh pr create:*,
                       git rev-parse:*, git symbolic-ref:*, git push:*)
   INVARIANTS:
     - artifact = opaque bytes → gh 게시는 --body-file / -F body=@file, 절대 문자열 보간 금지
     - raw diff 재수집 금지 (git은 metadata 전용: rev-parse/symbolic-ref/push)
-    - gh api list/PATCH/POST는 comment-upsert.py 내부에 캡슐화 (orchestrator는 스크립트만 호출)
+    - gh api는 스크립트 내부에만 캡슐화 (list/PATCH/POST = comment-upsert.py, 인증 user login+id 조회 = gh-identity.sh) — orchestrator 본문엔 raw gh api 없음
         │ context blob (inlined, read-only)            │ artifact file (opaque)
         ▼                                              ▼
 build-pr-context.sh + diagram-facts.sh          secret-scan.py / pr-detect.sh /
@@ -195,7 +195,7 @@ report     → render-terminal.py 최종 보고(무엇을 어디에·created/upd
 - 빌더 페르소나의 "리터럴 재현 금지"는 defense-in-depth지 게이트 아님(생성기가 자기 안전을 인증 못 함).
 
 **comment-upsert.py — marker 멱등, S2:**
-- **불변 `comment.user.id == 인증 user.id`** 스코프(`gh api user --jq .id`). `.login`은 표시용만(rename→confused-deputy). **`author_association`은 선택기준 제거**(중복+악성 MEMBER 만족).
+- **불변 `comment.user.id == 인증 user.id`** 스코프(인증 user id는 `gh-identity.sh`가 `gh api user`를 캡슐화해 조회 — SKILL 본문엔 raw gh api 없음; **numeric id 비면 fail-closed**로 기존-PR upsert 미실행, comment-upsert의 empty-my_id 가드와 짝). `.login`은 표시용만(rename→confused-deputy). **`author_association`은 선택기준 제거**(중복+악성 MEMBER 만족).
 - 마커 = 정확한 트림 첫줄 `^<!-- pr-understanding:v1( tier=\d+)? -->$`, substring 아님. `gh api --paginate`.
 - **0→POST(terminal, re-list-PATCH TOCTOU 금지) / 1→PATCH / ≥2→REFUSE**(양쪽 html_url 출력 + 사용자 확인 — hard-block).
 - fork/외부 PR: authed identity로 스코프(PR owner 무관). write 없음→403→artifact-only loud degrade, 재시도 루프 없음.
@@ -293,6 +293,7 @@ notes    (accuracy) 0 warnings
 - `plugins/quality-gates/scripts/pr-detect.sh`
 - `plugins/quality-gates/scripts/comment-upsert.py`
 - `plugins/quality-gates/scripts/render-terminal.py`
+- `plugins/quality-gates/scripts/gh-identity.sh` (인증 user login+numeric id 조회; `gh api user` 캡슐화 → SKILL 본문 raw gh api 없음; fail-closed empty id — 구현 리뷰 반영)
 - `plugins/quality-gates/tests/test_secret_scan.*`, `test_secret_scan_fp.*`, `test_comment_upsert.py`, `test_diagram_facts.sh`, `test_build_pr_context.sh`, `test_render_terminal.sh`, `test_accuracy_warnings.*`, `test_publish_dry_run_zero_network.sh`, `test_publish_kill_switch.py`, `test_publish_degrade.*`, `test_pr_detect.sh`, `test_qg_publish_skill_orchestration.sh`, `test_hook_publish_suppression.py`
 
 **수정:**
