@@ -2,7 +2,6 @@
 re-suggestion when the publish sentinel is present. Run: python3 -m unittest."""
 from __future__ import annotations
 import json
-import os
 import subprocess
 import sys
 import tempfile

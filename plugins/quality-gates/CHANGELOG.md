@@ -7,7 +7,7 @@
 
 코드를 읽지 않는 사람이 PR을 이해하도록 하는 PR-understanding 산출물 생성(read-only
 opus 빌더, blob-only) + consent·시크릿 가드 하의 멱등 게시(별도 skill, gh 격리)를 추가.
-결정론은 비가역 게이트 2개(secret-scan 값-차단 / marker 모호-REFUSE)에만; 나머지는
+결정론은 비가역 체크포인트 2곳(secret-scan 값-차단 / marker 모호-REFUSE)에만; 나머지는
 페르소나 + preview 경고(§8 lightness). Review gate 순수성(gh 부재) 보존.
 
 ### Added

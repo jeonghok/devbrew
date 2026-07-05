@@ -11,7 +11,8 @@ grep -qE '"version":[[:space:]]*"2\.9\.0"' "$PLUGIN_ROOT/.claude-plugin/plugin.j
   && pass "plugin.json version 2.9.0" || fail "version not bumped to 2.9.0"
 grep -qE '^## \[2\.9\.0\]' "$PLUGIN_ROOT/CHANGELOG.md" \
   && pass "CHANGELOG has [2.9.0]" || fail "CHANGELOG missing [2.9.0]"
-grep -qF 'DEVBREW_QG_DISABLE_PUBLISH' "$PLUGIN_ROOT/README.md" \
+README="$PLUGIN_ROOT/README.md"
+awk '/^### Kill switches/{f=1;next} f&&/^## /{f=0} f' "$README" | grep -qF 'DEVBREW_QG_DISABLE_PUBLISH' \
   && pass "README kill-switch inventory lists DEVBREW_QG_DISABLE_PUBLISH" || fail "kill switch not inventoried"
 grep -qiE 'deterministic envelope|model-authored|모델 저술' "$PLUGIN_ROOT/README.md" \
   && pass "README honesty framing present" || fail "honesty framing missing"

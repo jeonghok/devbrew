@@ -51,6 +51,11 @@ class AccuracyWarnings(unittest.TestCase):
         out = run(art, FACTS, CHANGED)
         self.assertNotIn("warning:", out, out)
 
+    def test_no_tests_sentinel_suppresses_warning(self):
+        art = "**Testing** — _No tests in this PR._"
+        out = run(art, FACTS, CHANGED)   # CHANGED has no changed test file
+        self.assertNotIn("unverified testing claim", out, out)
+
 
 if __name__ == "__main__":
     unittest.main()

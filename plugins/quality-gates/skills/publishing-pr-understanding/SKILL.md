@@ -197,6 +197,10 @@ body=@file`).
   1. **publish sentinel `.claude/quality-gates/<sid>/publish-active.md`를 `Write`로 먼저
      기록한다 — `pr-create.sh` 실행 BEFORE(defense-in-depth).** (Task 12 `post-tool-use.py`가
      이 sentinel을 읽어 `gh pr create` 뒤 `/qg` 재유도를 억제한다.)
+     — 이 억제(AC11)는 이 SKILL이 쓰는 `<sid>`와 `post-tool-use.py`가 읽는 harness
+     `session_id`가 같은 값이라는 전제에 의존한다; 둘이 갈리면(예: post-`/compact`
+     session-id-split) 억제는 fail OPEN — 무해한 `/qg` 재제안이 한 번 더 뜨는 정도이며
+     보안 이슈는 아니다.
   2. (consent 후) **`pr-create.sh --base <default-branch> --head <branch> --body-file
      <artifact>`** — 이 wrapper가 `git push`(HEAD→`origin/<branch>`) + `gh pr create`를
      **내부에서** 실행한다. create sink이 raw SKILL prose가 아니라 **결정론 가드**가 되도록

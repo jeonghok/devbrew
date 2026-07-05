@@ -94,7 +94,7 @@ def cmd_accuracy_warnings(args) -> int:
     m = re.search(r"(?is)\*\*Testing\*\*.*?(?=\n\*\*|\Z)", artifact)
     if m and not has_test_change:
         body = m.group(0)
-        if re.search(r"(?i)\btest", body) and "_No tests in this PR_" not in body:
+        if re.search(r"(?i)\btest", body) and not re.search(r"No tests in this PR", body):
             warnings.append("warning: unverified testing claim (no changed test file)")
 
     seen = set()
