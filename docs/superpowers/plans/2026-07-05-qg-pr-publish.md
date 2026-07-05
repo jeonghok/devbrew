@@ -1193,8 +1193,9 @@ else
   if grep -qiE '^#+.*findings' "$AGENT"; then fail "artifact has a findings heading (AC3)"; else pass "findings only mentioned as prohibition (AC3)"; fi
 fi
 
-# AC4: mechanism-centric schema anchors present.
-for anchor in 'In one breath' 'Before . After' '지금 어떻게 동작하나' '계약'; do
+# AC4: mechanism-centric schema anchors present. (Before.*After is locale-robust:
+# the → arrow is multibyte, so a single-char '.' would miss it under a C locale.)
+for anchor in 'In one breath' 'Before.*After' '지금 어떻게 동작하나' '계약'; do
   grep -qE "$anchor" "$AGENT" && pass "schema anchor: $anchor" || fail "schema anchor missing: $anchor"
 done
 
