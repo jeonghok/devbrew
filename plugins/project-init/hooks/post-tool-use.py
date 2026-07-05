@@ -59,8 +59,9 @@ def get_branch_pattern():
     """Return the declared branch pattern, or None when none is validly declared.
 
     None => fail-open: 전략 미선언 → 브랜치명 검증을 건너뛴다(loud advisory).
-    아래 넷을 하나의 fail-open 경로로 통일한다: (1) 파일 부재, (2) ```regex 블록
-    부재, (3) malformed regex(re.error), (4) 빈/공백-only 블록(.strip() 후 empty).
+    아래 다섯을 하나의 fail-open 경로로 통일한다: (1) 파일 부재, (2) ```regex 블록
+    부재, (3) malformed regex(re.error), (4) 빈/공백-only 블록(.strip() 후 empty),
+    (5) non-UTF-8/binary 파일(UnicodeDecodeError) — crash 대신 loud fail-open (qg-security).
     """
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR", ".")
     strategy_path = os.path.join(
@@ -72,7 +73,7 @@ def get_branch_pattern():
         match = re.search(r"```regex\n(.+?)\n```", content)
         if match and match.group(1).strip():  # 빈/공백-only 캡처 → 무효(fail-open, reviewer cccfc098)
             return re.compile(match.group(1).strip())
-    except (FileNotFoundError, IOError, re.error):
+    except (OSError, re.error, ValueError):  # OSError⊇FileNotFound/IOError/PermissionError; ValueError⊇UnicodeDecodeError → non-UTF-8 파일도 fail-open (qg-security)
         pass
     return None
 

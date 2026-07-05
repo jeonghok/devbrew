@@ -120,6 +120,29 @@ class F1FailOpenTest(_ProjectDirTestCase):
         self.assertIsNotNone(pat)
         self.assertIsNone(_hook.validate_branch("git checkout -b release/v1.2"))
 
+    def test_non_utf8_strategy_file_fails_open(self):
+        # 5th malformed case (qg-security + adversarial): a non-UTF-8/binary
+        # branch-strategy.md must fail OPEN (loud advisory), never crash — this
+        # preserves the always-exit-0 advisory contract AND must not let a
+        # get_branch_pattern crash silently defeat commit validation in main()'s
+        # left-to-right validator tuple.
+        dst = Path(self.tmp) / "docs" / "git-workflow"
+        dst.mkdir(parents=True, exist_ok=True)
+        (dst / "branch-strategy.md").write_bytes(b"\xff\xfe\x00\x81\x82 not-utf8 \x9c")
+        self.assertIsNone(_hook.get_branch_pattern())  # no UnicodeDecodeError crash
+        msg = _hook.validate_branch("git checkout -b release/x")
+        self.assertIsNotNone(msg)
+        self.assertIn("fail-open", msg)
+        # main() must still exit 0 AND still run commit validation (not aborted mid-tuple)
+        out, rc = run_hook(
+            {"tool_name": "Bash",
+             "tool_input": {"command": 'git checkout -b release/x && git commit -m "add x"'}},
+            cwd=self.tmp,
+        )
+        self.assertEqual(rc, 0)
+        self.assertIn("fail-open", out)
+        self.assertIn("Conventional Commits", out)  # commit validator still ran
+
 
 class F1RegressionLockTest(unittest.TestCase):
     """AC2 — DEFAULT_BRANCH_PATTERN must stay deleted (no silent GitHub-Flow default)."""

@@ -9,7 +9,7 @@
 
 ### Changed
 
-- **`hooks/post-tool-use.py` enforcement가 선택된 git 전략에 충실해짐** — 브랜치 검증 폴백이 전략 미선언 시 GitHub-Flow 패턴(`^(feature|fix)/…`)을 단정하던 것을 **loud-advisory fail-open**으로 교체. `get_branch_pattern()`의 반환 계약이 `re.Pattern` → `Optional[re.Pattern]`로 바뀌어, 전략 파일 부재·`` ```regex `` 블록 부재·malformed regex·빈/공백-only regex 블록의 넷을 모두 `None`(검증 생략 + discoverable advisory)으로 통일. Git Flow의 `release/*`·`hotfix/*`가 더는 silent 거부되지 않는다.
+- **`hooks/post-tool-use.py` enforcement가 선택된 git 전략에 충실해짐** — 브랜치 검증 폴백이 전략 미선언 시 GitHub-Flow 패턴(`^(feature|fix)/…`)을 단정하던 것을 **loud-advisory fail-open**으로 교체. `get_branch_pattern()`의 반환 계약이 `re.Pattern` → `Optional[re.Pattern]`로 바뀌어, 전략 파일 부재·`` ```regex `` 블록 부재·malformed regex·빈/공백-only regex 블록·non-UTF-8 파일(디코딩 불가)의 다섯을 모두 `None`(검증 생략 + discoverable advisory)으로 통일 — 마지막은 crash 대신 loud fail-open(qg-security). Git Flow의 `release/*`·`hotfix/*`가 더는 silent 거부되지 않는다.
 - 위반 브랜치 교정 제안이 **활성 패턴에서 파생**(`derive_prefixes()`) — 항상 `feature/<name>`을 제안하던 하드코딩 제거. Git Flow에서 `hotfix-login` 오타에 허용 prefix(`feature, fix, release, hotfix`) 목록과 `git branch -m <prefix>/…` 플레이스홀더를 제시. exotic regex(inline flags `(?i)`·nested group·리터럴 접두)는 `docs/git-workflow/branch-strategy.md` 참조로 강등.
 - `main()`이 branch·commit 검증기를 **둘 다 실행**하고 경고를 concatenate — 기존 `or` short-circuit이 compound 명령(`git checkout -b … && git commit -m …`)에서 commit 검증을 건너뛰던 회귀를 봉쇄. advisory·non-blocking 성격 불변.
 - `templates/trunk-based/branch-strategy.md` Pattern B 노트에서 `DEVBREW_DISABLE_PROJECT_INIT=1` kill-switch 우회 안내 제거 — hook이 non-blocking advisory임을 정직히 설명(`release/*` backport는 경고를 무시하고 진행; hook 전체를 끄면 commit 검증까지 함께 꺼짐).
