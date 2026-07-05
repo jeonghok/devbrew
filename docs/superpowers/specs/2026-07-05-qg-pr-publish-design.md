@@ -323,7 +323,7 @@ notes    (accuracy) 0 warnings
 
 ## 15. Acceptance Criteria
 
-- **AC1** — 빌더는 **파일시스템 tool 0개**(Read/Grep/Glob/Bash/git/gh/network 전부 부재; disallowedTools 명시) — 유일 입력은 inlined build-pr-context.sh blob(단일 통제 채널; .env·리포 밖 접근 물리 불가). `model: opus` 고정. 회귀: 빌더 frontmatter에 Read/Grep/Glob/Bash 부재 grep 락.
+- **AC1** — 빌더는 **파일시스템 tool 0개**(Read/Grep/Glob/Bash/git/gh/network 전부 부재; disallowedTools 명시) — 유일 입력은 inlined build-pr-context.sh blob(단일 통제 채널; .env·리포 밖 접근 물리 불가). `model: opus` 고정. **defense-in-depth(구현 리뷰 반영):** `allowedTools: []`가 런타임에서 inherit-all로 오독될 최악의 경우에도 봉쇄되도록 disallowedTools에 FS/exec 8종 + 네트워크(WebFetch/WebSearch) + 서브에이전트 spawn(Agent)까지 명시. 회귀: 빌더 frontmatter에 11종 deny + `allowedTools: []` + `model: opus` 부재 grep 락(18 assertions).
 - **AC2** — **`quality-pipeline/SKILL.md` allowed-tools에 gh/network 도구 부재**(grep 회귀 락 — 이 불변식만 정확히 좁혀 주장). gh는 publish skill에만. (주의: `commands/qg.md`의 기존 unscoped `"Bash"`는 이 설계 이전부터 존재 — `/qg` command 자체의 gh 부재는 주장하지 않음; qg.md Bash 협소화는 out-of-scope 후속.)
 - **AC3** — 게시 본문에 qg findings/"무엇을 고쳤나" 미포함(순수 이해).
 - **AC4** — 스키마 = 메커니즘-중심(In one breath / Before→After / 지금 어떻게 동작하나[펼침] / 구조·계약표 / 조건부 diagram / Testing / Risk&Rollout / Review focus). tier=floor.
