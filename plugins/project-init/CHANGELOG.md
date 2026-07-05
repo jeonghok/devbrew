@@ -5,6 +5,27 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [1.7.0] — 2026-07-05
+
+### Changed
+
+- **`hooks/post-tool-use.py` enforcement가 선택된 git 전략에 충실해짐** — 브랜치 검증 폴백이 전략 미선언 시 GitHub-Flow 패턴(`^(feature|fix)/…`)을 단정하던 것을 **loud-advisory fail-open**으로 교체. `get_branch_pattern()`의 반환 계약이 `re.Pattern` → `Optional[re.Pattern]`로 바뀌어, 전략 파일 부재·`` ```regex `` 블록 부재·malformed regex·빈/공백-only regex 블록·non-UTF-8 파일(디코딩 불가)의 다섯을 모두 `None`(검증 생략 + discoverable advisory)으로 통일 — 마지막은 crash 대신 loud fail-open(qg-security). Git Flow의 `release/*`·`hotfix/*`가 더는 silent 거부되지 않는다.
+- 위반 브랜치 교정 제안이 **활성 패턴에서 파생**(`derive_prefixes()`) — 항상 `feature/<name>`을 제안하던 하드코딩 제거. Git Flow에서 `hotfix-login` 오타에 허용 prefix(`feature, fix, release, hotfix`) 목록과 `git branch -m <prefix>/…` 플레이스홀더를 제시. exotic regex(inline flags `(?i)`·nested group·리터럴 접두)는 `docs/git-workflow/branch-strategy.md` 참조로 강등.
+- `main()`이 branch·commit 검증기를 **둘 다 실행**하고 경고를 concatenate — 기존 `or` short-circuit이 compound 명령(`git checkout -b … && git commit -m …`)에서 commit 검증을 건너뛰던 회귀를 봉쇄. advisory·non-blocking 성격 불변.
+- `templates/trunk-based/branch-strategy.md` Pattern B 노트에서 `DEVBREW_DISABLE_PROJECT_INIT=1` kill-switch 우회 안내 제거 — hook이 non-blocking advisory임을 정직히 설명(`release/*` backport는 경고를 무시하고 진행; hook 전체를 끄면 commit 검증까지 함께 꺼짐).
+
+### Removed
+
+- `DEFAULT_BRANCH_PATTERN` 상수 완전 제거 — fail-open이 `None`을 반환하므로 GitHub-Flow 디폴트 폴백이 dead code.
+
+### Added
+
+- `hooks/tests/test_post_tool_use.py` — `post-tool-use.py`의 첫 테스트 하니스(`unittest`, `importlib` 로드). F1 fail-open(부재/regex-less/malformed/빈-블록/비-UTF-8)·F1 회귀 락(`DEFAULT_BRANCH_PATTERN` 부재)·F2 파생(`(?i)` 오파싱 방지 포함)·`main()` 이중 검증·비-UTF-8 locale UTF-8 판독·보존 동작(kill switch·non-Bash·malformed JSON·Conventional Commits) 커버.
+
+### Rationale
+
+- 감사 결과 3전략 지원 설계 자체는 건전하나 enforcement 계층이 세 지점에서 미선택 GitHub Flow를 단정하는 전략-불충실 버그였다(brief §1 root cause). "조용히 GitHub Flow로 검증"보다 "시끄럽게 검증 생략"이 fail-open 원칙에 충실. merge/base-branch 런타임 강제(F4/F5)는 "harness lightness — trust the model"로 명시 defer.
+
 ## [1.6.0] — 2026-05-31
 
 ### Added

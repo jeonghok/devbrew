@@ -16,7 +16,6 @@ import sys
 
 # --- Constants ---
 
-DEFAULT_BRANCH_PATTERN = re.compile(r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
 CONVENTIONAL_COMMIT_PATTERN = re.compile(
     r"^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?:\s.+"
 )
@@ -57,24 +56,41 @@ PROTECTED_BRANCHES = {"main", "master", "develop", "dev"}
 
 
 def get_branch_pattern():
-    """Load branch naming pattern from docs/git-workflow/branch-strategy.md.
+    """Return the declared branch pattern, or None when none is validly declared.
 
-    Falls back to default (feature|fix) if the file doesn't exist
-    or doesn't contain a regex block.
+    None => fail-open: 전략 미선언 → 브랜치명 검증을 건너뛴다(loud advisory).
+    아래 다섯을 하나의 fail-open 경로로 통일한다: (1) 파일 부재, (2) ```regex 블록
+    부재, (3) malformed regex(re.error), (4) 빈/공백-only 블록(.strip() 후 empty),
+    (5) non-UTF-8/binary 파일(UnicodeDecodeError) — crash 대신 loud fail-open (qg-security).
     """
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR", ".")
     strategy_path = os.path.join(
         project_dir, "docs", "git-workflow", "branch-strategy.md"
     )
     try:
-        with open(strategy_path, "r") as f:
+        with open(strategy_path, "r", encoding="utf-8") as f:  # explicit UTF-8: 생성 파일이 Korean-primary라 locale 기본 인코딩 의존 시 valid 파일이 non-UTF-8 locale에서 오판됨 (qg-codex)
             content = f.read()
         match = re.search(r"```regex\n(.+?)\n```", content)
-        if match:
-            return re.compile(match.group(1))
-    except (FileNotFoundError, IOError, re.error):
+        if match and match.group(1).strip():  # 빈/공백-only 캡처 → 무효(fail-open, reviewer cccfc098)
+            return re.compile(match.group(1).strip())
+    except (OSError, re.error, ValueError):  # OSError⊇FileNotFound/IOError/PermissionError; ValueError⊇UnicodeDecodeError → non-UTF-8 파일도 fail-open (qg-security)
         pass
-    return DEFAULT_BRANCH_PATTERN
+    return None
+
+
+def derive_prefixes(pattern):
+    """Extract allowed branch prefixes from a compiled pattern's leading alternation group.
+
+    ^(feature|fix|release|hotfix)/…  ->  ["feature","fix","release","hotfix"]
+    ^(?:feature|fix)/…               ->  ["feature","fix"]   (non-capturing OK)
+    선두가 identifier-alternation이 아니면(inline flags (?i), nested group, 리터럴 등) → []
+    (교정 제안에서 prefix 하드코딩 금지). 그룹 내용을 [a-z][a-z0-9-]* 토큰의 |-결합으로
+    못박아 `(?i)` 같은 flag 그룹이 "i" 프리픽스로 오파싱되지 않게 한다(reviewer a909f052).
+    """
+    m = re.match(
+        r"\^?\((?:\?:)?([a-z][a-z0-9-]*(?:\|[a-z][a-z0-9-]*)*)\)", pattern.pattern
+    )
+    return m.group(1).split("|") if m else []
 
 
 def guess_commit_type(message):
@@ -95,20 +111,33 @@ def validate_branch(command):
         return None
 
     pattern = get_branch_pattern()
+    if pattern is None:  # 유효 패턴 없음(부재/regex-less/malformed/빈-블록/비-UTF-8) → fail OPEN, loudly
+        return (
+            "project-init: no valid branch-naming pattern found in "
+            "docs/git-workflow/branch-strategy.md — skipping branch-name "
+            "validation (fail-open)."
+        )
     if pattern.match(branch_name):
         return None
 
-    # Suggest correction
-    suggestion = branch_name
-    if "/" in suggestion:
-        suggestion = suggestion.split("/", 1)[1]
-    suggestion = f"feature/{suggestion}"
+    # Suggest correction — prefixes derived from the active pattern (no feature/ hardcode)
+    name_part = branch_name.split("/", 1)[1] if "/" in branch_name else branch_name
+    prefixes = derive_prefixes(pattern)
+    if prefixes:
+        hint = f"Allowed prefixes: {', '.join(prefixes)}"
+        cmd = f"Rename with: git branch -m <prefix>/{name_part}   (choose a prefix above)"
+    else:  # exotic regex → NO feature/ hardcode
+        hint = "See docs/git-workflow/branch-strategy.md for allowed prefixes."
+        cmd = None
 
-    return (
-        f'project-init: Branch "{branch_name}" does not follow naming convention.\n'
-        f"Expected pattern: {pattern.pattern}\n"
-        f"Suggested: git branch -m {suggestion}"
-    )
+    lines = [
+        f'project-init: Branch "{branch_name}" does not follow naming convention.',
+        f"Expected pattern: {pattern.pattern}",
+        hint,
+    ]
+    if cmd:
+        lines.append(cmd)
+    return "\n".join(lines)
 
 
 def validate_commit(command):
@@ -174,11 +203,12 @@ def main():
 
     command = tool_input.get("command", "")
 
-    # Try branch validation first, then commit validation
-    warning = validate_branch(command) or validate_commit(command)
+    # Run BOTH validators (no short-circuit): a branch warning must not
+    # suppress commit validation on compound commands (§5.5).
+    warnings = [w for w in (validate_branch(command), validate_commit(command)) if w]
 
-    if warning:
-        print(json.dumps({"systemMessage": warning}))
+    if warnings:
+        print(json.dumps({"systemMessage": "\n\n".join(warnings)}))
     else:
         print(json.dumps({}))
 
