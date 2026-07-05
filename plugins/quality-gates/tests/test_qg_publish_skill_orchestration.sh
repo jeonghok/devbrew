@@ -24,11 +24,11 @@ if (( scan>0 && prev>scan && cons>prev && pub>cons )); then
 else
   fail "boundary order wrong (scan=$scan preview=$prev consent=$cons publish=$pub)"
 fi
-# AC9: --dry-run stops at preview (before consent/publish)
-awk '/## Preview/{f=1} f&&/dry-run/{print}' "$SKILL" | grep -qiE 'stop|중단|정지|no network|미게시' \
+# AC9: --dry-run stops at preview — bounded to the Preview section (fails if moved out)
+awk '/^## Preview/{f=1;next} /^## /{f=0} f' "$SKILL" | grep -qiE 'stop|중단|정지|no network|미게시' \
   && pass "dry-run stops at preview (AC9)" || fail "dry-run stop not asserted in Preview"
-# AC8: consent every run + irreversibility
-awk '/## Consent/{f=1} f&&/AskUserQuestion|비가역|irrevers|permanent/{print}' "$SKILL" | grep -q . \
+# AC8: consent every run + irreversibility — bounded to the Consent section (fails if moved out)
+awk '/^## Consent/{f=1;next} /^## /{f=0} f' "$SKILL" | grep -qiE 'AskUserQuestion|비가역|irrevers|permanent' \
   && pass "consent gate + irreversibility (AC8)" || fail "consent/irreversibility missing"
 # invariant: gh writes via body-file, never raw gh api in the skill body
 grep -qF -- '--body-file' "$SKILL" && pass "opaque bytes via --body-file" || fail "no --body-file invariant"
