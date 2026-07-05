@@ -30,8 +30,13 @@ def scan_ok(out: str) -> bool:
     return any(line.strip() == "scan_ok: yes" for line in out.splitlines())
 
 
+def blocked(out: str) -> bool:
+    return "scan_ok: no" in [l.strip() for l in out.splitlines()]
+
+
 def _load_module():
     spec = importlib.util.spec_from_file_location("secret_scan", SCRIPT)
+    assert spec and spec.loader  # dynamic import of a hyphen-dir script path
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m
@@ -52,7 +57,7 @@ class SecretScanFalsePositives(unittest.TestCase):
 
     def test_real_value_still_blocks(self):
         secret = "ghp_" + "Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4J3h2"
-        self.assertFalse(scan_ok(run(f"token = {secret}", f"token = {secret}")))
+        self.assertTrue(blocked(run(f"token = {secret}", f"token = {secret}")))
 
     def test_mutation_teeth(self):
         """If the keyword rule stopped subordinating to value-shape, this input

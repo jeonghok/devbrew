@@ -27,16 +27,22 @@ def scan_ok(out: str) -> bool:
     return any(line.strip() == "scan_ok: yes" for line in out.splitlines())
 
 
+def blocked(out: str) -> bool:
+    return "scan_ok: no" in [l.strip() for l in out.splitlines()]
+
+
 class SecretScanTeeth(unittest.TestCase):
     def test_github_token_blocks(self):
         secret = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
         out = run(f'token = "{secret}"', f'token = "{secret}"')
-        self.assertFalse(scan_ok(out), out)
+        self.assertTrue(blocked(out), out)
+        self.assertIn("finding:", out)
 
     def test_aws_key_blocks(self):
         secret = "AKIAIOSFODNN7EXAMPLE"
         out = run(secret, secret)
-        self.assertFalse(scan_ok(out), out)
+        self.assertTrue(blocked(out), out)
+        self.assertIn("finding:", out)
 
     def test_high_entropy_in_corpus_blocks(self):
         # Mixed-charset opaque token, Shannon ≈ 5.09 ≥ 4.0. NOT hex: hex maxes at
@@ -44,7 +50,8 @@ class SecretScanTeeth(unittest.TestCase):
         # stops every git SHA in the corpus from false-positiving.
         secret = "Kj8xQvN2mZ4pR7wL9tB3cF6yD1sA5gH0uE"
         out = run(f"key={secret}", f"key={secret}")
-        self.assertFalse(scan_ok(out), out)
+        self.assertTrue(blocked(out), out)
+        self.assertIn("finding:", out)
 
     def test_identifier_and_path_pass(self):
         # Design §8: identifiers AND file paths must be nameable. Note
@@ -59,7 +66,7 @@ class SecretScanTeeth(unittest.TestCase):
         r = subprocess.run(
             [sys.executable, str(SCRIPT), "--payload", "/no/such", "--corpus", "/no/such"],
             capture_output=True, text=True)
-        self.assertFalse(scan_ok(r.stdout), r.stdout)
+        self.assertTrue(blocked(r.stdout), r.stdout)
 
 
 if __name__ == "__main__":
