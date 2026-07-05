@@ -48,9 +48,10 @@ Review gate의 몫), artifact **내용**의 저술(그건 read-nothing `pr-under
 - **artifact = opaque bytes.** 게시는 항상 `--body-file <artifact>` 또는 스크립트
   내부의 `-F body=@file`로만 전송한다. artifact 텍스트를 gh 인자에 **문자열 보간하지
   않는다** (injection·인용 파괴 차단).
-- **raw diff 재수집 금지.** git은 **metadata 전용**이다 — `git rev-parse` /
-  `git symbolic-ref` / `git push`만 쓴다. diff·파일 내용은 오직 `build-pr-context.sh`
-  blob을 통해서만 흐른다(단일 통제 채널).
+- **raw diff 재수집 금지.** git은 **metadata 전용**이다 — SKILL 본문은 `git rev-parse` /
+  `git symbolic-ref`만 직접 쓰고, **push/create sink은 `pr-create.sh`에 캡슐화**된다
+  (killswitch·dry-run 결정론 강제; `git push`·`gh pr create`는 allowed-tools 직접 grant
+  아님). diff·파일 내용은 오직 `build-pr-context.sh` blob을 통해서만 흐른다(단일 통제 채널).
 - **코멘트 REST 캡슐화.** 코멘트 list / PATCH / POST(GitHub REST)는 전부
   `comment-upsert.py` **내부**에 캡슐화되어 있다. 이 SKILL body는 raw REST 호출을 직접
   쓰지 않는다 — 오케스트레이터는 스크립트만 호출한다.

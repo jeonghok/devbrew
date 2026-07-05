@@ -107,7 +107,7 @@ quality-gates/
 | Hook | 이벤트 | 변경? | 왜 hook인가 (skill이 아닌)? |
 |---|---|---|---|
 | `post-tool-use-session-tracker.py` | PostToolUse(Edit/Write/MultiEdit) | 예 (세션 파일) | 모든 파일 mutation을 결정적으로 관찰해야 함; hook만 가능. |
-| `post-tool-use.py` | PostToolUse(Bash) | 아니오 — read-only | commit/PR Bash 활동을 감지해 `/qg` 제안; 현재 세션 scope. `/qg-publish`가 만든 PR(publish sentinel `publish-active.md` 존재)에는 재유도하지 않는다(AC11) — publish와 review 두 표면이 서로 훈수 두지 않게. |
+| `post-tool-use.py` | PostToolUse(Bash) | 아니오 — read-only | commit/PR Bash 활동을 감지해 `/qg` 제안; 현재 세션 scope. `/qg-publish`는 `pr-create.sh`로 PR을 만들어 hook의 `gh pr create` 커맨드 매칭에 애초에 안 걸린다; 추가로 publish sentinel `publish-active.md`가 있으면 (직접 `gh pr create` 경로에서도) 억제한다(AC11, defense-in-depth) — publish와 review 두 표면이 서로 훈수 두지 않게. |
 | `session-start-advisor.py` | SessionStart | **아니오 — read-only advisor** | mutation 없이 in-flight 파이프라인 알림 (CLAUDE.md hook coexistence 룰). |
 | `session-end-cleanup.py` | SessionEnd | 예 (자기 세션 폴더 제거) | 정상 종료 시 per-session 정리; crash 시 TTL sweep으로 fallback. |
 
@@ -384,7 +384,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_QG_DISABLE_PUBLISH=1` | `comment-upsert.py`의 최내부 gh sink에서 강제(skill 진입 자체는 막지 않음) — 로컬 artifact 생성 + `--dry-run` preview는 그대로 동작하되 GitHub에 대한 실제 네트워크 쓰기(POST/PATCH)만 fail-closed로 차단된다. |
+| `DEVBREW_QG_DISABLE_PUBLISH=1` | **두 최내부 sink에서 결정론 강제**(skill 진입 자체는 막지 않음): `comment-upsert.py`(코멘트 POST/PATCH)와 `pr-create.sh`(`git push` + `gh pr create`). 로컬 artifact 생성 + `--dry-run` preview는 그대로 동작하되 GitHub에 대한 실제 네트워크 쓰기만 fail-closed로 차단된다. |
 
 **Hook 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:<key>,quality-gates:<key2>...`):
 
