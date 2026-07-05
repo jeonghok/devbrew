@@ -20,7 +20,7 @@
 
 ### Added
 
-- `hooks/tests/test_post_tool_use.py` — `post-tool-use.py`의 첫 테스트 하니스(`unittest`, `importlib` 로드). F1 fail-open(부재/regex-less/malformed/빈-블록)·F1 회귀 락(`DEFAULT_BRANCH_PATTERN` 부재)·F2 파생(`(?i)` 오파싱 방지 포함)·`main()` 이중 검증·보존 동작(kill switch·non-Bash·malformed JSON·Conventional Commits) 커버.
+- `hooks/tests/test_post_tool_use.py` — `post-tool-use.py`의 첫 테스트 하니스(`unittest`, `importlib` 로드). F1 fail-open(부재/regex-less/malformed/빈-블록/비-UTF-8)·F1 회귀 락(`DEFAULT_BRANCH_PATTERN` 부재)·F2 파생(`(?i)` 오파싱 방지 포함)·`main()` 이중 검증·비-UTF-8 locale UTF-8 판독·보존 동작(kill switch·non-Bash·malformed JSON·Conventional Commits) 커버.
 
 ### Rationale
 

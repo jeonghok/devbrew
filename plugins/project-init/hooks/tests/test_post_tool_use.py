@@ -143,6 +143,33 @@ class F1FailOpenTest(_ProjectDirTestCase):
         self.assertIn("fail-open", out)
         self.assertIn("Conventional Commits", out)  # commit validator still ran
 
+    def test_utf8_strategy_read_under_non_utf8_locale(self):
+        # codex (qg iter2): open() used the platform default encoding, so a VALID
+        # UTF-8 strategy file with non-ASCII (Korean — devbrew is Korean-primary)
+        # text fails to decode on a non-UTF-8 locale (e.g. LANG=C in CI/Docker),
+        # quietly fail-opening a correctly-declared strategy. encoding="utf-8"
+        # must read it regardless of locale.
+        dst = Path(self.tmp) / "docs" / "git-workflow"
+        dst.mkdir(parents=True, exist_ok=True)
+        (dst / "branch-strategy.md").write_text(
+            "# 브랜치 전략\n\n소문자만 허용합니다.\n\n"
+            "```regex\n^(feature|fix)/[a-z0-9][a-z0-9.-]*$\n```\n",
+            encoding="utf-8",
+        )
+        # Force an ASCII default encoding in the subprocess (defeat PEP 538/540
+        # coercion so the locale default is genuinely non-UTF-8).
+        out, rc = run_hook(
+            {"tool_name": "Bash", "tool_input": {"command": "git checkout -b Bad_Name"}},
+            env_override={"LC_ALL": "C", "LANG": "C",
+                          "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"},
+            cwd=self.tmp,
+        )
+        self.assertEqual(rc, 0)
+        # The Korean file decoded → its pattern applied → Bad_Name violates it.
+        # Under the bug the file fails to decode → fail-open, so neither holds.
+        self.assertIn("does not follow naming convention", out)
+        self.assertNotIn("fail-open", out)
+
 
 class F1RegressionLockTest(unittest.TestCase):
     """AC2 — DEFAULT_BRANCH_PATTERN must stay deleted (no silent GitHub-Flow default)."""

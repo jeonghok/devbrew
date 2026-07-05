@@ -68,7 +68,7 @@ def get_branch_pattern():
         project_dir, "docs", "git-workflow", "branch-strategy.md"
     )
     try:
-        with open(strategy_path, "r") as f:
+        with open(strategy_path, "r", encoding="utf-8") as f:  # explicit UTF-8: 생성 파일이 Korean-primary라 locale 기본 인코딩 의존 시 valid 파일이 non-UTF-8 locale에서 오판됨 (qg-codex)
             content = f.read()
         match = re.search(r"```regex\n(.+?)\n```", content)
         if match and match.group(1).strip():  # 빈/공백-only 캡처 → 무효(fail-open, reviewer cccfc098)
@@ -111,7 +111,7 @@ def validate_branch(command):
         return None
 
     pattern = get_branch_pattern()
-    if pattern is None:  # 유효 패턴 없음(부재/regex-less/malformed/빈-블록) → fail OPEN, loudly
+    if pattern is None:  # 유효 패턴 없음(부재/regex-less/malformed/빈-블록/비-UTF-8) → fail OPEN, loudly
         return (
             "project-init: no valid branch-naming pattern found in "
             "docs/git-workflow/branch-strategy.md — skipping branch-name "
