@@ -471,11 +471,17 @@ class SecretScanTeeth(unittest.TestCase):
         self.assertFalse(scan_ok(out), out)
 
     def test_high_entropy_in_corpus_blocks(self):
-        secret = "b7f3d9a1c2e84f60a5d8b3c1e9f27a04d6b8c1e3"  # 40 hex, H≥4.0
+        # Mixed-charset opaque token, Shannon ≈ 5.09 ≥ 4.0. NOT hex: hex maxes at
+        # log2(16)=4.0 so it never crosses the threshold — that is deliberate, it
+        # stops every git SHA in the corpus from false-positiving.
+        secret = "Kj8xQvN2mZ4pR7wL9tB3cF6yD1sA5gH0uE"
         out = run(f"key={secret}", f"key={secret}")
         self.assertFalse(scan_ok(out), out)
 
     def test_identifier_and_path_pass(self):
+        # Design §8: identifiers AND file paths must be nameable. Note
+        # 'src/StripeWebhookHandler.ts' has Shannon ≈ 4.18 as a whole token — it
+        # must still PASS because it is a path, not an opaque secret.
         payload = ("The authenticateUserWithToken function lives in "
                    "src/StripeWebhookHandler.ts and returns a Response.")
         out = run(payload, payload)
@@ -535,7 +541,9 @@ KNOWN_PATTERNS = [
 KEYWORD = re.compile(r"(?i)\b(password|passwd|secret|token|api[_-]?key|apikey|access[_-]?key)\b")
 ASSIGN = re.compile(r"[:=]\s*(.+)$")
 QUOTED = re.compile(r"""(['"])([^'"]{8,})\1""")
-TOKEN16 = re.compile(r"[A-Za-z0-9_\-./+=]{16,}")
+# SECRET_TOKEN excludes '/' and '.' so file paths (src/x.ts) tokenize into their
+# short segments and are never treated as one high-entropy blob (design §8).
+SECRET_TOKEN = re.compile(r"[A-Za-z0-9_+=-]{16,}")
 
 
 def shannon(s: str) -> float:
@@ -557,9 +565,23 @@ def _known(s: str):
     return None
 
 
+def _looks_secret(tok: str) -> bool:
+    """Opaque, secret-shaped: a known vendor pattern, OR a ≥16-char run that mixes
+    letters AND digits with Shannon ≥ 4.0. Pure-alpha identifiers
+    (authenticateUserWithToken, StripeWebhookHandler), file paths (contain '/',
+    excluded by SECRET_TOKEN), and hex/SHA (entropy < 4.0) are NOT secret-shaped —
+    reconciles §7(b) with the §8 mandate that identifiers/paths stay nameable."""
+    if _known(tok):
+        return True
+    if not SECRET_TOKEN.fullmatch(tok):
+        return False
+    return bool(re.search(r"[A-Za-z]", tok) and re.search(r"[0-9]", tok)
+                and len(tok) >= MIN_ENTROPY_LEN and shannon(tok) >= ENTROPY_THRESHOLD)
+
+
 def _high_entropy_in_corpus(s: str, corpus: str):
-    for tok in TOKEN16.findall(s):
-        if len(tok) >= MIN_ENTROPY_LEN and shannon(tok) >= ENTROPY_THRESHOLD and tok in corpus:
+    for tok in SECRET_TOKEN.findall(s):
+        if _looks_secret(tok) and tok in corpus:
             return "high-entropy-in-corpus"
     return None
 
@@ -567,7 +589,7 @@ def _high_entropy_in_corpus(s: str, corpus: str):
 def _quoted_source_value(s: str, corpus: str):
     for q in QUOTED.finditer(s):
         v = q.group(2)
-        if v in corpus and (shannon(v) >= ENTROPY_THRESHOLD or _known(v)):
+        if v in corpus and _looks_secret(v):
             return "quoted-source-value"
     return None
 
