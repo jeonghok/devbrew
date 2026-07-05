@@ -15,13 +15,27 @@ cost_class: medium
 
 ## Steps
 
-1. **Load state.local.md** — `session_id`, `rereview_count`, `issue_history` 읽기 + `pending_review:` block 확인. 이 skill은 PostToolUse hook이 design 파일 write를 감지해 `pending_review:` block을 기록하고 Stop hook이 다음 turn에 dispatch를 강제했기 때문에 호출됨 — block이 없으면 manual override(loud advisory). v0.12.0부터 **design mode 전용**: 11-section/locked_decisions schema 검사는 적용 안 함(brainstorming의 자유 형식 design doc). 본문의 placeholder/ambiguity/scope-creep/approaches-comparison/isolation/testing/handoff_incomplete만 spec-reviewer에게 요청.
+1. **Load state.local.md (hook-facing 상태는 harness sid 로 명시 해석)** — 먼저 훅(Stop/UserPromptSubmit/PostToolUse)이 읽는 파일과 *정의상 동일한* harness session id + state root 로 상태 파일을 연다. 훅은 raw sid 가 아니라 `resolve_session_id`(env-first: `DEVBREW_SPEC_DISTILL_SESSION_ID` → `CLAUDE_CODE_SESSION_ID` → payload)를 쓰므로, 스킬도 같은 리졸버를 CLI 로 재사용한다(DRY, C4):
 
-**리뷰 락 refresh (v0.18.0)** — state 로드 직후, `spec-reviewer` dispatch *전에* 이 문서의 review-in-progress 락을 갱신한다 (매 진입 — 최초 + revise 재진입):
+   ```bash
+   harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/hooks/state_path.py" session-id)"
+   ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/hooks/state_path.py" state-root)"
+   STATE="$ROOT/$harness_sid/state.local.md"   # 훅이 읽는 바로 그 파일
+   ```
+
+   이 `$STATE` 에서 `pending_review:`(→ `spec_path`·`mode`)를 읽는다. PostToolUse `spec-write-validator.py` 가 `pending_review:` 를 **항상 harness-sid 디렉토리**에 기록하므로, **read==write 디렉토리 불변식**(스킬의 pending/spec READ 와 락·suppress·approve WRITE 가 같은 `$STATE` 를 가리킴)이 성립해야 락이 훅에 보인다. block 이 없으면 manual override(loud advisory). v0.12.0부터 **design mode 전용**: 11-section/locked_decisions schema 검사는 적용 안 함(brainstorming 자유 형식). 본문의 placeholder/ambiguity/scope-creep/approaches-comparison/isolation/testing/handoff_incomplete만 spec-reviewer 에게 요청.
+
+   **불변식 (hook-facing trio vs continuity):** hook-facing trio(`pending_review`·lock·suppress)의 read/write 는 harness sid(`$STATE`); `rereview_count`/`issue_history` continuity 는 이 fix 가 건드리지 않고 harness-sid 로 collapse 하지 않는다.
+
+   **continuity read collapse 금지** — `rereview_count`/`issue_history`(아래 Step 5 에서 갱신) continuity 카운터는 인터뷰 선행 시 interview-UUID 파일(`conducting-interview/SKILL.md:35` self-`session_id`, `:41` `rereview_count`, `:43` `issue_history`)에 누적된다. **이 카운터의 읽기(이 Step)·쓰기(Step 5)를 `$harness_sid` 로 옮기지 말 것** — 옮기면 인터뷰-선행 플로우에서 `rereview_count` 가 0 으로 리셋돼 re-review cap(5)/round-level stagnation 조기-exit 가 약화된다. continuity 는 기존 메커니즘대로 읽고 쓴다(N1). 훅은 이 신호를 읽지 않으므로 read==write 불변식 대상이 아니다.
+
+**리뷰 락 refresh (v0.18.0; v0.19.0: harness sid keying)** — state 로드 직후, `spec-reviewer` dispatch *전에* 이 문서의 review-in-progress 락을 harness sid 로 갱신한다 (매 진입 — 최초 + revise 재진입):
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/review_lock.py" set "$session_id" "$spec_path"
+python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/review_lock.py" set "$harness_sid" "$spec_path"
 ```
+
+   `$harness_sid` 가 빈 값(env unset → `state_path.py session-id` exit 1)이면 **리뷰 락 refresh skip (리뷰 강제 유지)** — 조용히 넘어가지 말고 advisory 를 남긴다. 락을 못 걸어도 Law 1 fail-safe 방향(락 부재 = 정상 dispatch = 리뷰 강제)이라 안전하다.
 
 이 락은 subagent(async) 경계에서 발생하는 메인 `Stop`이 진행 중인 리뷰를 재강제(중복/절단)하지 않도록 `review-dispatch.py`(Stop)와 `pending-review-reminder.py`(UserPromptSubmit)가 참조한다. 락은 **문서별**이라 다른 문서의 최초 강제는 억제하지 않으며, stale(TTL 1800s 초과) 시 강제가 재개된다(fail-safe = 강제).
 
@@ -115,8 +129,10 @@ AskUserQuestion({
 ④ 멈춤 선택 시 실행:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/review_lock.py" pause "$session_id" "$spec_path"
+python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/review_lock.py" pause "$harness_sid" "$spec_path"
 ```
+
+`$harness_sid` 가 빈 값이면 pause(④)·approve(①②) 모두 harness-sid 파일에 반영할 수 없다 — 조용히 swallow 하지 말고 **이 stop/approve는 기록되지 않음** 을 advisory 로 알리고 `/spec-distill:cancel-review <path>` 수동 억제 경로를 안내한다(다음 세션에서 재-arm 가능).
 
 ④에서 엔트리만 제거하고 pending을 남기면 즉시 재발동([83dc5425]), 엔트리를 남기면 bounded under-review 창([fa17d241]) — `pause`가 둘을 함께 닫는다. 모든 동작은 **그 문서 엔트리에만** 작용하고 다른 문서 엔트리는 불변(multi-key, [ad4e6c3f]).
 
@@ -133,7 +149,7 @@ approve(①/②) 선택 후 "approved!"만 narrate하고 Approve handoff sequenc
 approve(①/②) 시:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/approve_handoff.sh" "$session_id" "$spec_path"
+bash "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/approve_handoff.sh" "$harness_sid" "$spec_path"
 ```
 
 스크립트(v0.15.0+)가 thin finalizer로 동작: (1) kill switch + charset guard, (2) **approved spec를 `suppressed_paths`에 기록 + 같은-키 pending strip** (`suppress_state.py add` — canonical_key 기반, 파일 존재 불필요; 가장 먼저 수행돼 상대경로·서브디렉토리 cwd·dangling 경로 어떤 경우에도 기록 보장), (3) spec_path working-tree 존재 검증을 **non-blocking advisory로** (부재 시 stale/dangling 안내; suppress는 이미 (2)에서 기록됨, exit 0), (4) 미커밋 spec advisory (non-blocking, exit 0). 세션 dir는 더 이상 여기서 삭제하지 않음 — SessionEnd hook / TTL-GC가 정리(승인 기억을 세션 동안 보존). 다음-단계 추천은 proceed 게이트가 담당. idempotent by set-membership(재호출은 키를 최대 1회 추가). (v0.15.0: (2)↔(3) 순서 역전이 같은-턴 재dispatch 순서 버그를 닫음.)
