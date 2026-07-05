@@ -84,10 +84,40 @@ case_binary_skipped() {
   cd / && rm -rf "$REPO"
 }
 
+case_history_flag_includes_intermediate_secret() {
+  REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
+  git init -q; git config user.email t@t.test; git config user.name tester
+  git checkout -q -b main; echo base > f.txt; git add -A; git commit -qm base
+  git checkout -q -b feature
+  printf 'k=ghp_intermediateAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n' >> f.txt
+  git commit -qam "add secret (intermediate)"
+  echo base > f.txt; git commit -qam "remove secret"   # gone from final file
+  local plain hist
+  plain=$(bash "$SCRIPT" --base main); hist=$(bash "$SCRIPT" --base main --history)
+  if ! printf '%s' "$plain" | grep -q "ghp_intermediate" && printf '%s' "$hist" | grep -q "ghp_intermediate"; then
+    pass "--history surfaces intermediate-commit content the default blob omits"
+  else fail "history flag (plain-has=$(printf '%s' "$plain"|grep -c ghp_intermediate) hist-has=$(printf '%s' "$hist"|grep -c ghp_intermediate))"; fi
+  cd / && rm -rf "$REPO"
+}
+case_no_merge_base_degrades() {
+  REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
+  git init -q; git config user.email t@t.test; git config user.name tester
+  git checkout -q -b main; echo a > a.txt; git add -A; git commit -qm a
+  git checkout -q --orphan feature; git rm -rf . >/dev/null 2>&1 || true
+  echo b > b.txt; git add -A; git commit -qm b
+  local out rc; out=$(bash "$SCRIPT" --base main 2>&1); rc=$?
+  if [[ "$rc" -eq 0 ]] && printf '%s' "$out" | grep -qi 'degraded'; then
+    pass "no merge-base → graceful degrade (exit 0)"
+  else fail "no-merge-base (rc=$rc)"; fi
+  cd / && rm -rf "$REPO"
+}
+
 case_blob_has_content
 case_blob_has_neighbor_signature
 case_deterministic
 case_rename_modify_in_corpus
 case_binary_skipped
+case_history_flag_includes_intermediate_secret
+case_no_merge_base_degrades
 echo "build-pr-context: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]
