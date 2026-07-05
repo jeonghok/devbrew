@@ -208,11 +208,24 @@ base="$(git merge-base "$base_ref" HEAD 2>/dev/null || echo "")"
 
 changed="$(git diff --name-only --diff-filter=ACM "$base"..HEAD)"
 
+# Extract the imported MODULE token from one added import line. Priority order
+# (greedy `.*(from|import)` would grab the wrong keyword on `from M import N`):
+#   1) quoted path (JS/TS: import x from 'M' / require('M') / import 'M')
+#   2) python  from M import ...   → M
+#   3) python  import M            → M
+extract_import() {
+  local line="$1" tok=""
+  tok="$(printf '%s' "$line" | sed -nE "s/.*['\"]([A-Za-z0-9_./@-]+)['\"].*/\1/p" | head -1)"
+  [[ -n "$tok" ]] && { printf '%s\n' "$tok"; return; }
+  tok="$(printf '%s' "$line" | sed -nE "s/^\+?[[:space:]]*from[[:space:]]+([A-Za-z0-9_.]+).*/\1/p" | head -1)"
+  [[ -n "$tok" ]] && { printf '%s\n' "$tok"; return; }
+  printf '%s' "$line" | sed -nE "s/^\+?[[:space:]]*import[[:space:]]+([A-Za-z0-9_.]+).*/\1/p" | head -1
+}
+
 # Resolve an import token to a repo-relative file, or empty if not in-repo.
 resolve() {
   local from="$1" tok="$2" cand
-  # python dotted: a.b.c -> a/b/c.py ; js/ts relative: ./x -> dir/x(.js|.ts)
-  tok="${tok#./}"; tok="${tok%\'}"; tok="${tok%\"}"
+  tok="${tok#./}"   # python dotted → a/b/c.py via ${tok//.//}; js relative via dirname
   for cand in "${tok}.py" "${tok//.//}.py" "${tok}.ts" "${tok}.js" \
               "$(dirname "$from")/${tok}.ts" "$(dirname "$from")/${tok}.js" \
               "$(dirname "$from")/${tok}.py" "$tok"; do
@@ -230,9 +243,7 @@ while IFS= read -r f; do
   [[ -n "$f" ]] || continue
   # added import lines in this file's diff (leading '+', not '+++')
   while IFS= read -r imp; do
-    tok="$(printf '%s' "$imp" \
-      | sed -nE "s/.*(from|import|require)[[:space:](]+['\"]?([A-Za-z0-9_./-]+).*/\2/p" \
-      | head -1)"
+    tok="$(extract_import "$imp")"
     [[ -n "$tok" ]] || continue
     dst="$(resolve "$f" "$tok" || true)"
     [[ -n "$dst" ]] || continue
