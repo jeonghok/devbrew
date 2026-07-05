@@ -65,6 +65,13 @@ class CommentUpsert(unittest.TestCase):
         r = run([mkc(1, MY_ID, "prefix " + MARKER)])
         self.assertEqual(action(r.stdout), "post", r.stdout)
 
+    def test_empty_my_id_matches_nothing(self):
+        # A userless/empty-uid comment bearing our marker must NOT be selected
+        # when my_id is empty (defense against an empty authed id).
+        c = {"id": 1, "user": {"id": ""}, "body": MARKER + "\nrest", "html_url": "https://x/c"}
+        r = run([c], my_id="")
+        self.assertEqual(action(r.stdout), "post", r.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

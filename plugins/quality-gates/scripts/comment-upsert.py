@@ -41,7 +41,7 @@ def _matches(comments, marker: str, my_id: str):
     for c in comments:
         uid = str((c.get("user") or {}).get("id", ""))
         first = (c.get("body") or "").splitlines()[0].strip() if c.get("body") else ""
-        if uid == str(my_id) and first == marker:
+        if uid and uid == str(my_id) and first == marker:
             out.append(c)
     return out
 
