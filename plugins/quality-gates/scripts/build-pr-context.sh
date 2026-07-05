@@ -25,10 +25,14 @@ echo "=== CHANGED FILES (name-status) ==="
 git diff --name-status "$base"..HEAD
 echo
 echo "=== CHANGED FILE CONTENTS ==="
-git diff --name-only --diff-filter=ACM "$base"..HEAD | sort | while IFS= read -r f; do
+git diff --name-only --diff-filter=ACMR "$base"..HEAD | sort | while IFS= read -r f; do
   [[ -f "$f" ]] || continue
   echo "--- FILE: $f ---"
-  if grep -Iq . "$f" 2>/dev/null; then cat "$f"; else echo "(binary omitted)"; fi
+  if grep -Iq . "$f" 2>/dev/null; then
+    cat "$f"
+  elif [[ -s "$f" ]]; then
+    echo "(binary omitted)"
+  fi
   echo
 done
 echo "=== NEIGHBOR SIGNATURES (imported, repo-relative) ==="

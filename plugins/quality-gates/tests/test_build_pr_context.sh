@@ -49,8 +49,45 @@ case_deterministic() {
   cd / && rm -rf "$REPO"
 }
 
+case_rename_modify_in_corpus() {
+  REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
+  git init -q; git config user.email t@t.test; git config user.name tester
+  git checkout -q -b main
+  printf 'line1\nline2\nline3\nline4\nline5\nline6\n' > orig.py
+  git add -A; git commit -qm base
+  git checkout -q -b feature
+  git mv orig.py renamed.py
+  printf 'MARKER_RENAME_MOD\n' >> renamed.py
+  git add -A; git commit -qm "rename and modify"
+  local out; out=$(bash "$SCRIPT" --base main)
+  if printf '%s' "$out" | grep -qF "MARKER_RENAME_MOD"; then
+    pass "renamed+modified file content present in blob (corpus completeness)"
+  else
+    fail "rename+modify content dropped from blob (got: $(printf '%s' "$out" | head -30))"
+  fi
+  cd / && rm -rf "$REPO"
+}
+
+case_binary_skipped() {
+  REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
+  git init -q; git config user.email t@t.test; git config user.name tester
+  git checkout -q -b main; echo seed > seed.txt; git add -A; git commit -qm base
+  git checkout -q -b feature
+  printf '\x00\x01\x02\x03binary\x00stuff' > blob.bin
+  git add -A; git commit -qm "add binary"
+  local out; out=$(bash "$SCRIPT" --base main)
+  if printf '%s' "$out" | grep -qF "(binary omitted)"; then
+    pass "binary file labeled (binary omitted), no garbage in blob"
+  else
+    fail "binary handling (got head: $(printf '%s' "$out" | head -20))"
+  fi
+  cd / && rm -rf "$REPO"
+}
+
 case_blob_has_content
 case_blob_has_neighbor_signature
 case_deterministic
+case_rename_modify_in_corpus
+case_binary_skipped
 echo "build-pr-context: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]
