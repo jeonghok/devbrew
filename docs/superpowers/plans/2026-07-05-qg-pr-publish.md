@@ -348,9 +348,41 @@ case_deterministic() {
   cd / && rm -rf "$REPO"
 }
 
+case_rename_modify_in_corpus() {
+  # a rename+modify must keep the file's content in the blob (corpus completeness)
+  REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
+  git init -q; git config user.email t@t.test; git config user.name tester
+  git checkout -q -b main
+  printf 'line1\nline2\nline3\nline4\nline5\nline6\n' > orig.py
+  git add -A; git commit -qm base
+  git checkout -q -b feature
+  git mv orig.py renamed.py; printf 'MARKER_RENAME_MOD\n' >> renamed.py
+  git add -A; git commit -qm "rename and modify"
+  local out; out=$(bash "$SCRIPT" --base main)
+  if printf '%s' "$out" | grep -qF "MARKER_RENAME_MOD"; then
+    pass "renamed+modified file content present in blob"
+  else fail "rename+modify content dropped (got: $(printf '%s' "$out" | head -30))"; fi
+  cd / && rm -rf "$REPO"
+}
+
+case_binary_skipped() {
+  REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
+  git init -q; git config user.email t@t.test; git config user.name tester
+  git checkout -q -b main; echo seed > seed.txt; git add -A; git commit -qm base
+  git checkout -q -b feature
+  printf '\x00\x01\x02\x03binary\x00stuff' > blob.bin; git add -A; git commit -qm "add binary"
+  local out; out=$(bash "$SCRIPT" --base main)
+  if printf '%s' "$out" | grep -qF "(binary omitted)"; then
+    pass "binary file labeled (binary omitted), no garbage"
+  else fail "binary handling (got: $(printf '%s' "$out" | head -20))"; fi
+  cd / && rm -rf "$REPO"
+}
+
 case_blob_has_content
 case_blob_has_neighbor_signature
 case_deterministic
+case_rename_modify_in_corpus
+case_binary_skipped
 echo "build-pr-context: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]
 ```
@@ -392,10 +424,17 @@ echo "=== CHANGED FILES (name-status) ==="
 git diff --name-status "$base"..HEAD
 echo
 echo "=== CHANGED FILE CONTENTS ==="
-git diff --name-only --diff-filter=ACM "$base"..HEAD | sort | while IFS= read -r f; do
+# --diff-filter=ACMR: include Renamed files (their content is in-scope; the blob
+# is the secret-scan corpus, so dropping renames would let a rename+modify smuggle
+# a value past the scan). git emits the NEW path for a rename, handled by [[ -f ]].
+git diff --name-only --diff-filter=ACMR "$base"..HEAD | sort | while IFS= read -r f; do
   [[ -f "$f" ]] || continue
   echo "--- FILE: $f ---"
-  if grep -Iq . "$f" 2>/dev/null; then cat "$f"; else echo "(binary omitted)"; fi
+  if grep -Iq . "$f" 2>/dev/null; then
+    cat "$f"
+  elif [[ -s "$f" ]]; then
+    echo "(binary omitted)"   # empty text files show as empty content, not mislabeled
+  fi
   echo
 done
 echo "=== NEIGHBOR SIGNATURES (imported, repo-relative) ==="
