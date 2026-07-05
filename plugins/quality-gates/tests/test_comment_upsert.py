@@ -72,6 +72,22 @@ class CommentUpsert(unittest.TestCase):
         r = run([c], my_id="")
         self.assertEqual(action(r.stdout), "post", r.stdout)
 
+    def test_producer_tier_marker_is_matched(self):
+        # A stored comment whose first line is the builder's real tier=N marker
+        # must be found (PATCH) when the orchestrator passes the tier-less marker.
+        c = {"id": 1, "user": {"id": int(MY_ID)},
+             "body": "<!-- pr-understanding:v1 tier=2 -->\nbody", "html_url": "https://x/c"}
+        r = run([c])   # run() posts with MARKER = tier-less canonical
+        self.assertEqual(action(r.stdout), "patch", r.stdout)
+
+    def test_tier_drift_still_matches_no_duplicate(self):
+        # Stored at tier=2, re-run conceptually at tier=3 → the tier-less matcher
+        # still finds the tier=2 comment → PATCH, not a duplicate POST.
+        c = {"id": 1, "user": {"id": int(MY_ID)},
+             "body": "<!-- pr-understanding:v1 tier=2 -->\nold", "html_url": "https://x/c"}
+        r = run([c])
+        self.assertEqual(action(r.stdout), "patch", r.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -171,10 +171,14 @@ body=@file`).
 
 - **기존 PR (`has_pr: yes`)** → **`comment-upsert.py`** (Preflight의 `gh-identity.sh`
   `id`가 비어 있지 않을 때만; 비었으면 §Degrade artifact-only):
-  `comment-upsert.py --pr <number> --marker '<!-- pr-understanding:v1 tier=N -->'
-  --body-file <artifact> --my-id <id from gh-identity.sh> [--repo owner/name]`. id-scope +
-  `--paginate`(스크립트 내부) + 마커 첫줄 정확 매칭으로 **0→POST / 1→PATCH / ≥2→REFUSE**
-  (REFUSE는 양쪽 `html_url` 출력 + 사용자 disambiguate — hard-block).
+  `comment-upsert.py --pr <number> --marker '<!-- pr-understanding:v1 -->'
+  --body-file <artifact> --my-id <id from gh-identity.sh> [--repo owner/name]`. **마커는
+  tier-less canonical(`v1` family)을 넘긴다** — 빌더는 artifact 본문 첫 줄에 `tier=N`을
+  emit하지만 tier는 변경 파일 수에 따라 드리프트하므로 **정보성일 뿐 매칭은 tier를 무시**한다
+  (스크립트가 `^<!-- pr-understanding:v1( tier=\d+)? -->$`로 anchored 매칭 — tier 드리프트가
+  멱등을 깨지 않게; design §7). id-scope + `--paginate --slurp`(스크립트 내부) + tier-tolerant
+  마커 첫줄 매칭으로 **0→POST / 1→PATCH / ≥2→REFUSE** (REFUSE는 양쪽 `html_url` 출력 +
+  사용자 disambiguate — hard-block).
 - **PR 부재 (`has_pr: no`)** →
   1. **publish sentinel `.claude/quality-gates/<sid>/publish-active.md`를 먼저 기록한다
      — `gh pr create` 실행 BEFORE.** (Task 12 `post-tool-use.py`가 이 sentinel을 읽어
