@@ -14,6 +14,9 @@ disallowedTools:
   - Grep
   - Glob
   - Bash
+  - WebFetch
+  - WebSearch
+  - Agent
 ---
 
 # PR Understanding Builder (quality-gates publish 생성기)

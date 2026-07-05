@@ -22,7 +22,7 @@ grep -qE '^model:[[:space:]]*opus[[:space:]]*$' <<<"$FM" \
 grep -qE '^allowedTools:[[:space:]]*\[\][[:space:]]*$' <<<"$FM" \
   && pass "allowedTools: [] (zero FS tools)" || fail "allowedTools not empty"
 
-for t in Write Edit MultiEdit NotebookEdit Read Grep Glob Bash; do
+for t in Write Edit MultiEdit NotebookEdit Read Grep Glob Bash WebFetch WebSearch Agent; do
   if grep -qE "^[[:space:]]*-[[:space:]]*$t[[:space:]]*$" <<<"$FM"; then
     pass "disallowedTools denies $t"
   else
