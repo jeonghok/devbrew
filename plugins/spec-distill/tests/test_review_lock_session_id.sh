@@ -7,8 +7,8 @@ set -u -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 HOOK="$REPO_ROOT/plugins/spec-distill/hooks/review-dispatch.py"
 LOCK="$REPO_ROOT/plugins/spec-distill/scripts/review_lock.py"
-WORK=$(mktemp -d -t specdistill-locksid-XXXXXX)
-WORK=$(cd "$WORK" && pwd -P)   # macOS /var → /private/var 정규화 (Path.resolve 일치)
+WORK=$(mktemp -d -t specdistill-locksid-XXXXXX) || exit 1
+WORK=$(cd "$WORK" && pwd -P) || exit 1   # macOS /var → /private/var 정규화 (Path.resolve 일치)
 trap 'rm -rf "$WORK"' EXIT
 
 # git-aware state_root 경로를 실제로 태움 (fallback 마스킹 방지).

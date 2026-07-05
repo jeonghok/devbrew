@@ -3,9 +3,9 @@ set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 HOOK="$REPO_ROOT/plugins/spec-distill/hooks/review-dispatch.py"
-WORK=$(mktemp -d -t specdistill-dispatch-XXXXXX)
+WORK=$(mktemp -d -t specdistill-dispatch-XXXXXX) || exit 1
 # Resolve symlinks (macOS /var → /private/var) so Path.resolve() output matches.
-WORK=$(cd "$WORK" && pwd -P)
+WORK=$(cd "$WORK" && pwd -P) || exit 1
 trap 'rm -rf "$WORK"' EXIT
 
 # T-5: exercise the git-aware state_root path (whole point of state_path.py).
