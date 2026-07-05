@@ -11,6 +11,7 @@ Deterministic, no network, no gh. ≤~100 columns.
 """
 from __future__ import annotations
 import argparse
+import re
 import sys
 
 RULE = "─" * 56
@@ -49,7 +50,7 @@ def cmd_table(args) -> int:
     return 0
 
 
-def cmd_diagram(args) -> int:
+def cmd_diagram(_args) -> int:
     nodes, edges = _read_facts(sys.stdin.read())
     print("nodes:")
     for n in nodes:
@@ -60,11 +61,59 @@ def cmd_diagram(args) -> int:
     return 0
 
 
+def cmd_accuracy_warnings(args) -> int:
+    artifact = open(args.artifact, encoding="utf-8", errors="replace").read()
+    facts_nodes, _ = _read_facts(open(args.facts, encoding="utf-8", errors="replace").read())
+    changed = {l.strip() for l in open(args.changed, encoding="utf-8", errors="replace")
+               if l.strip()}
+    node_paths = set(facts_nodes)
+    warnings = []
+
+    # 1) mermaid node referencing a repo path not in diagram-facts
+    in_mermaid = False
+    for line in artifact.splitlines():
+        if line.strip().startswith("```mermaid"):
+            in_mermaid = True; continue
+        if in_mermaid and line.strip().startswith("```"):
+            in_mermaid = False; continue
+        if in_mermaid:
+            for m in re.findall(r"[\w./-]+\.\w+", line):
+                if ("/" in m or m.endswith((".py", ".ts", ".js", ".sh", ".go", ".rb"))) \
+                   and m not in node_paths:
+                    warnings.append(f"warning: possible hallucinated node: {m}")
+
+    # 2) structure-table row marked NEW/changed but file not in changed-set
+    for line in artifact.splitlines():
+        if "|" in line and re.search(r"(?i)\b(NEW|changed|added|추가|신규)\b", line):
+            for m in re.findall(r"[\w./-]+\.\w+", line):
+                if ("/" in m or "." in m) and m not in changed and m not in node_paths:
+                    warnings.append(f"warning: possible hallucinated file: {m}")
+
+    # 3) Testing section claims tests but no changed test file exists
+    has_test_change = any(re.search(r"(^|/)test_|_test\.|\.test\.|/tests?/", c) for c in changed)
+    m = re.search(r"(?is)\*\*Testing\*\*.*?(?=\n\*\*|\Z)", artifact)
+    if m and not has_test_change:
+        body = m.group(0)
+        if re.search(r"(?i)\btest", body) and "_No tests in this PR_" not in body:
+            warnings.append("warning: unverified testing claim (no changed test file)")
+
+    seen = set()
+    for w in warnings:
+        if w not in seen:
+            seen.add(w); print(w)
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     t = sub.add_parser("table"); t.add_argument("--title", required=True); t.set_defaults(fn=cmd_table)
     d = sub.add_parser("diagram"); d.set_defaults(fn=cmd_diagram)
+    w = sub.add_parser("accuracy-warnings")
+    w.add_argument("--artifact", required=True)
+    w.add_argument("--facts", required=True)
+    w.add_argument("--changed", required=True)
+    w.set_defaults(fn=cmd_accuracy_warnings)
     args = ap.parse_args()
     return args.fn(args)
 
