@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AC16 — README/plugin.json/CHANGELOG synced with v0.18.0 (review-in-progress lock).
+# AC16 — README/plugin.json/CHANGELOG synced with v0.19.0 (review-lock session-id bridge).
 set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -10,11 +10,11 @@ CHANGELOG="$REPO_ROOT/plugins/spec-distill/CHANGELOG.md"
 pass=0; fail=0
 note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
 
-grep -q '"version": "0.18.0"' "$PLUGIN_JSON" \
-  && note PASS "AC16: plugin.json version 0.18.0" || note FAIL "AC16: plugin.json not 0.18.0"
-grep -qE '^## \[0\.18\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
-  && note PASS "AC16: CHANGELOG [0.18.0] entry with ISO date" || note FAIL "AC16: CHANGELOG [0.18.0] missing/!ISO"
-grep -qE '^## \[0\.18\.0\].*XX' "$CHANGELOG" \
+grep -q '"version": "0.19.0"' "$PLUGIN_JSON" \
+  && note PASS "AC16: plugin.json version 0.19.0" || note FAIL "AC16: plugin.json not 0.19.0"
+grep -qE '^## \[0\.19\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
+  && note PASS "AC16: CHANGELOG [0.19.0] entry with ISO date" || note FAIL "AC16: CHANGELOG [0.19.0] missing/!ISO"
+grep -qE '^## \[0\.19\.0\].*XX' "$CHANGELOG" \
   && note FAIL "AC16: CHANGELOG date has XX placeholder" || note PASS "AC16: no XX placeholder in date"
 
 for kw in 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' 'DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC' 'review_in_progress' 'interview-brief' 'steelman-builder' 'cancel-review'; do
