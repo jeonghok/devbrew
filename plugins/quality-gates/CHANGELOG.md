@@ -3,6 +3,32 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.9.0] — 2026-07-05
+
+코드를 읽지 않는 사람이 PR을 이해하도록 하는 PR-understanding 산출물 생성(read-only
+opus 빌더, blob-only) + consent·시크릿 가드 하의 멱등 게시(별도 skill, gh 격리)를 추가.
+결정론은 비가역 게이트 2개(secret-scan 값-차단 / marker 모호-REFUSE)에만; 나머지는
+페르소나 + preview 경고(§8 lightness). Review gate 순수성(gh 부재) 보존.
+
+### Added
+- `pr-understanding-builder` 에이전트 (`model: opus`, `allowedTools: []` — 파일시스템
+  tool 0개; 유일 입력 = inlined build-pr-context.sh blob).
+- `publishing-pr-understanding` skill (`/qg-publish [--dry-run]`) — gh를 가진 유일
+  orchestrator. preflight→build→generate→scan→preview→consent→publish→report.
+- 스크립트: build-pr-context.sh, diagram-facts.sh, secret-scan.py(FAIL CLOSED),
+  pr-detect.sh, comment-upsert.py(comment.user.id 스코프 멱등), render-terminal.py(공용
+  STATUS 표 + ASCII diagram + accuracy-warnings), gh-identity.sh(인증 user login+numeric
+  id 조회; `gh api user` 캡슐화 — SKILL 본문엔 raw gh api 없음, empty id는 fail-closed).
+- kill switch `DEVBREW_QG_DISABLE_PUBLISH` (최내부 sink, fail-closed).
+
+### Changed
+- `quality-pipeline` Final Summary를 render-terminal.py 공용 STATUS 표+트리로 (always-on
+  `/qg` 출력; publish opt-in과 분리된 core 변경).
+- `post-tool-use.py` — publish sentinel 존재 시 `/qg` 재유도 억제 (AC11).
+- **버전 2.8.0 → 2.9.0** (minor — 새 surface: PR-understanding generate/publish):
+  `plugin.json`, README "인스턴스화한 원칙"/설치된 Hook/Kill switches/Cost/구조,
+  `commands/qg.md` Quick Reference 동기화.
+
 ## [2.8.0] — 2026-06-21
 
 Review gate 두 diff-reading reviewer에 경량 persona-prose 보안 흡수 2건
