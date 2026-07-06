@@ -7,6 +7,7 @@ with loud stderr log.
 
 CLI:
   python3 state_path.py state-root [<cwd>]    → prints absolute path to stdout
+  python3 state_path.py session-id            → prints env-resolved session id (exit 1 if unresolved)
 """
 from __future__ import annotations
 
@@ -75,12 +76,22 @@ def state_root(cwd: str | None = None) -> Path:
 
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
-        print("usage: state_path.py state-root [<cwd>]", file=sys.stderr)
+        print("usage: state_path.py {state-root|session-id} [<cwd>]", file=sys.stderr)
         return 2
     sub = argv[1]
     if sub == "state-root":
         cwd = argv[2] if len(argv) >= 3 else None
         print(str(state_root(cwd)))
+        return 0
+    if sub == "session-id":
+        # env-only resolve (no hook payload on the CLI path); mirrors what the
+        # Stop/UserPromptSubmit/PostToolUse hooks resolve so the skill keys the
+        # review lock to the SAME state file the hooks read. Unresolved → exit 1
+        # with NO stdout (caller treats empty as "skip lock, keep enforcement").
+        sid = resolve_session_id(None)
+        if sid is None:
+            return 1
+        print(sid)
         return 0
     print(f"unknown subcommand: {sub}", file=sys.stderr)
     return 2

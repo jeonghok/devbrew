@@ -4,10 +4,10 @@ set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 HELPER="$REPO_ROOT/plugins/spec-distill/hooks/state_path.py"
-WORK=$(mktemp -d -t specdistill-statepath-XXXXXX)
+WORK=$(mktemp -d -t specdistill-statepath-XXXXXX) || exit 1
 # Resolve symlinks (macOS /var/folders → /private/var/folders) so that
 # expected paths match Python's Path.resolve() output.
-WORK=$(cd "$WORK" && pwd -P)
+WORK=$(cd "$WORK" && pwd -P) || exit 1
 trap 'rm -rf "$WORK"' EXIT
 
 pass=0; fail=0

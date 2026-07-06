@@ -109,6 +109,19 @@ class TestSuppressState(unittest.TestCase):
                 f"{rel} must delegate normalization to suppress_state (AC17)",
             )
 
+    def test_ac10_cancel_uses_env_resolver(self):  # AC10 회귀 락
+        """cancel_review.py 는 env-first resolve_session_id() 를 계속 써야 한다.
+        interview-UUID arg 로 되돌리는 회귀(예: sid = argv[1]) 를 차단."""
+        src = (SCRIPTS / "cancel_review.py").read_text(encoding="utf-8")
+        self.assertIn("from state_path import resolve_session_id", src,
+                      "cancel_review must import the env-first resolver")
+        self.assertIn("resolve_session_id()", src,
+                      "cancel_review must call resolve_session_id() (no sid arg)")
+        # sid 를 위치 인자에서 취하는 회귀 패턴 부재.
+        for regression in ("sid = argv[1]", "sid = args[0]", "sid = sys.argv[1]"):
+            self.assertNotIn(regression, src,
+                             f"cancel_review must not key sid from CLI arg ({regression})")
+
 
 def run_cancel(args, env_extra=None, cwd=None, sid: str | None = "tsid1234"):
     env = {**os.environ}

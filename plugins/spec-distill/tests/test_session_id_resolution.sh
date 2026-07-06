@@ -93,8 +93,43 @@ result="$(call_resolve '' "CLAUDE_CODE_SESSION_ID=$long_sid")"
     && note PASS "case 11: 256-char accept" \
     || note FAIL "case 11: 256-char accept"
 
+# ── session-id 서브커맨드 (AC9 / T3) ──────────────────────────────────────
+STATE_PATH="$HOOKS_DIR/state_path.py"
+
+# call_session_id [KEY=VALUE ...] — runs `state_path.py session-id` in clean env,
+# echoes "<stdout>|<exit_code>".
+call_session_id() {
+    local out rc
+    out="$(env -i "PATH=$PATH" "$@" python3 "$STATE_PATH" session-id 2>/dev/null)"; rc=$?
+    printf '%s|%s' "$out" "$rc"
+}
+
+# Case 12: env set (CLAUDE_CODE_SESSION_ID) → prints value, exit 0
+res="$(call_session_id CLAUDE_CODE_SESSION_ID=ccsid-87654321)"
+[[ "$res" == "ccsid-87654321|0" ]] \
+    && note PASS "case 12: session-id prints resolved sid, exit 0" \
+    || note FAIL "case 12: session-id set (got '$res')"
+
+# Case 13: DEVBREW override precedence honored by CLI
+res="$(call_session_id DEVBREW_SPEC_DISTILL_SESSION_ID=override-12345678 CLAUDE_CODE_SESSION_ID=ccsid-87654321)"
+[[ "$res" == "override-12345678|0" ]] \
+    && note PASS "case 13: session-id honors DEVBREW override" \
+    || note FAIL "case 13: session-id override (got '$res')"
+
+# Case 14: env unset → NO stdout ("<none>" 미출력) + exit 1
+res="$(call_session_id)"
+[[ "$res" == "|1" ]] \
+    && note PASS "case 14: session-id unset → empty stdout + exit 1" \
+    || note FAIL "case 14: session-id unset (got '$res')"
+
+# Case 15: charset reject (spaces) → empty stdout + exit 1
+res="$(call_session_id 'CLAUDE_CODE_SESSION_ID=with spaces')"
+[[ "$res" == "|1" ]] \
+    && note PASS "case 15: session-id charset reject → empty + exit 1" \
+    || note FAIL "case 15: session-id charset reject (got '$res')"
+
 if [[ "$fail" -gt 0 ]]; then
     echo "FAILED: $fail case(s)"
     exit 1
 fi
-echo "PASSED: 11 cases"
+echo "PASSED: 15 cases"
