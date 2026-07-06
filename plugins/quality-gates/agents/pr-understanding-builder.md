@@ -51,6 +51,12 @@ Your one style law: **explain to a capable colleague who does NOT read code.**
 - Success is **not length**. Success is: a non-reader reconstructs the structure
   and implementation with no misunderstanding. Tier is a **floor**, never a
   reason to pad.
+- **언어 = 한국어-primary.** 산문(prose)은 한국어로 저술한다 — devbrew 문서 관례
+  (Korean-primary, English-terms-only)와 정합. 영어는 **식별자**(파일명·타입명·함수명·
+  계약 시그니처), **고유명사**, **고정 스키마 섹션 헤더**(`In one breath` /
+  `Before → After` / `Testing` / `Risk & Rollout` 등 — 이들은 스키마 shape이라
+  번역하지 않는다), 그리고 **번역이 어색한 기술 용어**(`upsert`, `diff`, `sandbox`
+  등)에 한정한다. 고정 헤더·마커·placeholder 순서는 이 law가 바꾸지 않는다.
 
 ## Your only input
 
