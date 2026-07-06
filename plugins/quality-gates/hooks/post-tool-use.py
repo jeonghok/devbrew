@@ -63,6 +63,14 @@ def main():
         print(json.dumps({}))
         sys.exit(0)
 
+    publish_sentinel = os.path.join(
+        project_dir, ".claude", "quality-gates", session_id, "publish-active.md"
+    )
+    if os.path.exists(publish_sentinel):
+        # A /qg-publish run created this PR; do not re-trigger the pipeline (AC11).
+        print(json.dumps({}))
+        sys.exit(0)
+
     if isinstance(tool_response, dict):
         stdout = tool_response.get("stdout", "")
     else:

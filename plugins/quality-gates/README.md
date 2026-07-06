@@ -40,6 +40,11 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
   gates inter-gate progression — no new principle ID needed.
 - **C66 (Linked Artifact Flow) — spec을 truth로 instantiate** (v2.1.0) — qg가 처음으로 사용자 프로젝트 spec을 읽어(`scripts/discover-spec.sh`) test-scope-validator의 기준 축을 plan items → **spec Acceptance Criteria**로 전환하고, AC별 커버리지를 advisory `ac_coverage` 블록으로 surface하며, codex 경로(`run_codex_reviewer.sh`)가 spec AC를 `<spec_context>`에 주입. cycle 위계(spec=truth ⊃ plan=구현 방식)를 instantiate — spec→test 커버리지를 역방향 walk. plan은 구현-방식 보조 hint로 강등(제거 아님; `discover-plan.sh` byte-identical). **advisory only — Runtime gate를 block하지 않음.** spec 부재 시 loud log + v2.0.0 기능 동작 fallback. kill switch `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1`.
 - **P21 (Untrusted input — diff is data, not instructions)** (v2.8.0) — Review gate의 두 diff-reading reviewer(`security-reviewer`/`adversarial`)가 attacker-influenced `filtered_diff`(및 finding 텍스트)를 데이터로만 다루고 그 안의 prompt-injection·안전성 주장을 verdict 근거로 삼지 않도록 persona에 명시. 더해 언어/프레임워크 FP precedent 5건을 기능별 단일 배치(DRY)로 흡수 — suppress-at-source 3(security-reviewer anti-flag) + reject-at-verify 2(adversarial Gate C). 섹션-스코프 grep 회귀 락(`test_security_reviewer_persona.sh`/`test_adversarial_persona.sh`)으로 persona 약화 검출. 신규 P# 0, 결정론 가드 0 (Anthropic *"Using LLMs to Secure Source Code"* 평가 Tier-1; design-lightness).
+- **P21 (Secret이 prompt context에 들어가지 않음) — 출력값 유출 차단으로 확장 (publish sink)** (v2.9.0) — `/qg-publish`가 게시 직전 `secret-scan.py`로 전체 payload(artifact + PR title + 브랜치명 + 커밋메시지; PR-create 시 히스토리까지)에서 시크릿 **값**(quoted string / vendor 패턴 / corpus-substring, keyword는 보조 신호)을 스캔해 hit 시 게시를 FAIL CLOSED로 거부한다 — 스캔 에러·타임아웃도 hit 취급. 기존 인스턴스(v1.8.0, secret 값이 prompt로 들어가지 않음)와 자매지만 방향이 반대다: 여기는 모델이 저술한 텍스트가 GitHub로 **나가기 전** 값 유출을 막는다. regression: `tests/test_secret_scan.py`, `tests/test_secret_scan_fp.py`.
+- **P21 (Untrusted input — diff is data, not instructions) 확장** (v2.9.0) — v2.8.0에서 Review gate 두 reviewer에 넣은 norm을 `pr-understanding-builder` 페르소나와 publish orchestrator에도 확장한다. PR 코멘트는 id+마커 매칭용 opaque bytes로만 다루고(스크립트가 선택 계산; 모델이 내용을 읽고 지시로 따르지 않음), artifact 내 이미지는 auto-fetch 유출 벡터라 중립화한다.
+- **P17 (Consent) — 게시는 게이트가 아니라 opt-in consent-gated 표면** (v2.9.0) — `/qg-publish`는 매 실행마다 사람이 읽는 preview 뒤 AskUserQuestion으로 명시 동의를 받아야만 GitHub에 쓴다(비가역·영구 노출 고지 포함; cross-repo "always" 없음). **`/qg`의 Review gate/Runtime gate 자체는 이 기능으로 변경되지 않는다 — publish는 그 위에 얹힌 별도 opt-in 표면이지 세 번째 게이트가 아니다.**
+- **P18 (Bounded idempotency)** (v2.9.0) — `comment-upsert.py`가 인증 `user.id` 스코프 내에서 버전-패밀리 마커(`<!-- pr-understanding:v1 -->`, 첫 줄 anchored 매칭이 optional `tier=N` 접미사를 허용 — 빌더는 `tier=N`을 emit하지만 tier는 변경 파일 수에 따라 드리프트하므로 매칭은 tier를 무시해 멱등이 깨지지 않게 함)로 기존 코멘트를 조회해 0개→POST, 1개→PATCH, ≥2개(비정상)→REFUSE — 모호성 앞에서 임의로 고르지 않고 결정론적으로 멈추고 사용자 확인을 요구한다.
+- **pwn-request Law-2형 물리 분리 — 생성 ≠ 게시** (v2.9.0) — `pr-understanding-builder` 에이전트는 `allowedTools: []`(파일시스템·네트워크 tool 0개, 유일 입력 = inlined `build-pr-context.sh` blob)로 저술만 하고, `gh`/네트워크는 오직 `publishing-pr-understanding` skill(오케스트레이터)만 보유한다. Review gate의 writer≠reviewer 물리적 격리와 같은 형태를 생성↔게시 축에 적용한 것 — 생성기가 스스로를 게시할 길이 구조적으로 없다.
 
 ## 구조
 
@@ -54,14 +59,16 @@ quality-gates/
 │   ├── adversarial.md           # Review gate Phase 1.5 — false-positive hunter
 │   ├── synthesizer.md           # Review gate Phase 1.6 — finding dedupe/rank
 │   ├── codex-reviewer.md        # Review gate Phase 1 — external OpenAI reviewer (Layer 2/3 isolation)
-│   └── security-reviewer.md     # Review gate Phase 1 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`
+│   ├── security-reviewer.md     # Review gate Phase 1 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`
+│   └── pr-understanding-builder.md  # publish 생성기 — model: opus, allowedTools: [] (파일시스템·네트워크 tool 0개; 유일 입력 = inlined blob)
 ├── commands/
 │   ├── qg.md               # /qg slash command (--reset, --paths, branch flag 포함)
+│   ├── qg-publish.md       # /qg-publish slash command ([--dry-run]; publish skill로 얇은 dispatch)
 │   └── cancel-qg.md        # /cancel-qg command
 ├── hooks/
 │   ├── hooks.json                            # Hook 설정
 │   ├── post-tool-use-session-tracker.py      # 세션 동안 편집한 파일 추적
-│   ├── post-tool-use.py                      # PostToolUse(Bash) — auto-trigger 감지기
+│   ├── post-tool-use.py                      # PostToolUse(Bash) — auto-trigger 감지기; publish sentinel 존재 시 재유도 억제(AC11)
 │   ├── session-start-advisor.py              # in-flight 파이프라인 read-only advisor
 │   └── session-end-cleanup.py                # 정상 종료 시 현재 세션 폴더 제거
 ├── scripts/
@@ -76,14 +83,23 @@ quality-gates/
 │   ├── detect_codex.sh                       # Codex CLI 7-case probe (version/auth/sandbox/kill-switch/timeout)
 │   ├── build_codex_prompt.py                 # Review gate Phase 1 codex-reviewer용 prompt builder
 │   ├── codex_findings_to_yaml.py             # Codex JSONL stream → 표준 finding YAML (auth/schema/stderr 처리)
-│   └── qg-gc.py                              # TTL 기반 stale 세션 GC (fcntl-locked)
+│   ├── qg-gc.py                              # TTL 기반 stale 세션 GC (fcntl-locked)
+│   ├── build-pr-context.sh                   # publish: base..HEAD 고정 context blob (diff+내용+이웃 시그니처+커밋메시지) — 빌더의 유일 입력
+│   ├── diagram-facts.sh                      # publish: nodes/edges 산출 (changed files + 이웃 import; repo-root 상대 import만)
+│   ├── secret-scan.py                        # publish: 게시 직전 값-차단 secret scan (FAIL CLOSED)
+│   ├── pr-detect.sh                          # publish: 현재 브랜치의 PR 상태 탐지 (has_pr/number/url/state/head_pushed)
+│   ├── comment-upsert.py                     # publish: marker 기반 멱등 upsert (user.id 스코프, 0/1/≥2 REFUSE) — DEVBREW_QG_DISABLE_PUBLISH 최내부 sink
+│   ├── render-terminal.py                    # publish + Final Summary 공용 STATUS 표 / ASCII diagram / accuracy-warnings 렌더러
+│   └── gh-identity.sh                        # publish: 인증 user login+numeric id 조회 (`gh api user` 캡슐화; empty id는 fail-closed)
 ├── skills/
-│   └── quality-pipeline/
-│       ├── SKILL.md         # 단일 게이트 실행기
-│       └── references/
-│           ├── dependency-check.md   # 사전 의존성 체크
-│           └── state-file-format.md  # 파이프라인 state 파일 포맷
-└── tests/                            # Bash 단위 테스트 (test_discover_plan.sh 등)
+│   ├── quality-pipeline/
+│   │   ├── SKILL.md         # 단일 게이트 실행기
+│   │   └── references/
+│   │       ├── dependency-check.md   # 사전 의존성 체크
+│   │       └── state-file-format.md  # 파이프라인 state 파일 포맷
+│   └── publishing-pr-understanding/
+│       └── SKILL.md         # /qg-publish orchestrator — gh를 가진 유일 컴포넌트 (cost_class: variable)
+└── tests/                            # Bash/Python 단위 테스트 (test_discover_plan.sh, test_qg_publish_docs.sh 등)
 ```
 
 ## 설치된 Hook
@@ -91,7 +107,7 @@ quality-gates/
 | Hook | 이벤트 | 변경? | 왜 hook인가 (skill이 아닌)? |
 |---|---|---|---|
 | `post-tool-use-session-tracker.py` | PostToolUse(Edit/Write/MultiEdit) | 예 (세션 파일) | 모든 파일 mutation을 결정적으로 관찰해야 함; hook만 가능. |
-| `post-tool-use.py` | PostToolUse(Bash) | 아니오 — read-only | commit/PR Bash 활동을 감지해 `/qg` 제안; 현재 세션 scope. |
+| `post-tool-use.py` | PostToolUse(Bash) | 아니오 — read-only | commit/PR Bash 활동을 감지해 `/qg` 제안; 현재 세션 scope. `/qg-publish`는 `pr-create.sh`로 PR을 만들어 hook의 `gh pr create` 커맨드 매칭에 애초에 안 걸린다; 추가로 publish sentinel `publish-active.md`가 있으면 (직접 `gh pr create` 경로에서도) 억제한다(AC11, defense-in-depth) — publish와 review 두 표면이 서로 훈수 두지 않게. |
 | `session-start-advisor.py` | SessionStart | **아니오 — read-only advisor** | mutation 없이 in-flight 파이프라인 알림 (CLAUDE.md hook coexistence 룰). |
 | `session-end-cleanup.py` | SessionEnd | 예 (자기 세션 폴더 제거) | 정상 종료 시 per-session 정리; crash 시 TTL sweep으로 fallback. |
 
@@ -115,6 +131,10 @@ quality-gates/
 
 The optional `codex-reviewer` agent has `cost_class: variable` — it invokes the user's Codex CLI subscription/API on each `standard`/`deep` Review gate dispatch. First-use cost consent gate prompts via `AskUserQuestion`. Disable globally with `DEVBREW_DISABLE_QG_CODEX=1`.
 
+### PR-understanding publish cost (`/qg-publish`, separate from the two gates)
+
+`publishing-pr-understanding` skill은 `cost_class: variable` (context 크기·tier에 따라 다름). 저술을 맡는 `pr-understanding-builder`는 매 tier `model: opus`로 고정 — Deep tier만 실행 전 upfront cost 고지(AskUserQuestion)를 하며, 작은 diff는 비용이 자연히 bounded되고 `/qg-publish`가 수동·non-auto-chained 호출(Review/Runtime gate 뒤에 자동 연결되지 않음)이라 명시적 실행 자체가 비용 수용으로 간주된다. Review/Runtime 두 게이트의 비용 표(위)와는 **완전히 별도** — publish는 게이트가 아니므로 depth 기반 자동 트리거가 없다.
+
 ### Adversarial reviewer model
 
 `adversarial` agent uses `model: opus`. It is the **Opus-critic over the Sonnet Phase 1 workers** (cf. Anthropic multi-agent patterns: spend capability at the judgment bottleneck): the Phase 1/2 reviewers run on cheaper models and the synthesizer after it is a deterministic script, so adversarial is the *single model-based judgment gate* in the Review gate — every finding the user sees passed through its verdict. Its persona runs a per-finding 3-gate verification (real? / introduced-by-this-diff? / handled-elsewhere?) plus a severity realist check, which is reasoning-heavy enough to warrant opus. A prior cost pass (T2-8) drifted the frontmatter/README toward sonnet while the SKILL dispatch still pinned opus; the three sites are now reconciled to opus and locked by `tests/test_adversarial_model_consistency.sh`. Runs ~once per Review gate fix-loop iteration (≤5×). AskUserQuestion fan-out count excludes `adversarial`/`scout`/`synthesizer` (infrastructure dispatches; not user-visible cost). To reduce its cost, lower the *number* of Review gate iterations or the diff scope — not this model.
@@ -127,6 +147,15 @@ The optional `codex-reviewer` agent has `cost_class: variable` — it invokes th
 | Runtime gate | runtime-verifier agent | 앱 시작, 콘솔 에러 확인, 스크린샷 | chrome-devtools-mcp 또는 playwright |
 
 **아키텍처 메모 — 왜 Review gate는 agent가 없는가**: Claude Code는 skill만 (agent가 아닌) `Agent()`의 `subagent_type`을 사용 가능. Review gate는 여러 Phase로 review agent를 dispatch해야 하므로 orchestration 로직이 `skills/quality-pipeline/SKILL.md`에 직접 있습니다. Runtime gate는 leaf agent (sub-agent dispatch 안 함).
+
+**`/qg-publish` (PR-understanding generate/publish)는 세 번째 게이트가 아니다.** (v2.9.0)
+`gh`는 위 두 게이트 어디에도 없다 — publish는 별도 skill(`publishing-pr-understanding`)에
+격리된 **consent-gated opt-in 표면**이지, `/qg`의 Review/Runtime gate에 자동으로 연결되지
+않는다. 정직 문구: 이 표면은 **deterministic envelope + model-authored content** —
+gh I/O·secret-scan·marker-scoped idempotent upsert는 결정론 스크립트가 통제하고, 사람이
+읽는 실제 산출물 텍스트는 opus 빌더가 저술한 model-authored content다. 게시는 매 실행
+사람이 preview를 읽고 AskUserQuestion으로 명시 동의한 뒤에만 일어난다 — 자동 실행도,
+`/qg` 뒤 auto-chain도 없다. 자세한 내용은 [`commands/qg-publish.md`](commands/qg-publish.md).
 
 ## Review gate 리뷰 단계 (v1.5.0 재설계)
 
@@ -351,12 +380,18 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 | `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1` | spec 발견 시에도 no-spec 경로 강제 (ac_coverage 생략, codex `<spec_context>` 비움; validator는 plan-기반 계속). |
 | `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1` | Runtime gate의 git-worktree 샌드박스 executor를 끄고 read-only smoke fallback. verdict는 SKIP_WITH_EVIDENCE로 cap(절대 PASS 아님), real-tree 변경 시 loud 경고. `qg-worktree.sh create-sandbox`가 exit 3. |
 
+**Publish 단위 disable (`/qg-publish`, 게이트 아님):**
+
+| Env var | 효과 |
+|---|---|
+| `DEVBREW_QG_DISABLE_PUBLISH=1` | **두 최내부 sink에서 결정론 강제**(skill 진입 자체는 막지 않음): `comment-upsert.py`(코멘트 POST/PATCH)와 `pr-create.sh`(`git push` + `gh pr create`). 로컬 artifact 생성 + `--dry-run` preview는 그대로 동작하되 GitHub에 대한 실제 네트워크 쓰기만 fail-closed로 차단된다. |
+
 **Hook 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:<key>,quality-gates:<key2>...`):
 
 | Hook 키 | 위치 | 기능 |
 |---|---|---|
 | `quality-gates:session-tracker` | `hooks/post-tool-use-session-tracker.py` | PostToolUse(Edit/Write/MultiEdit) — 편집된 파일을 `files.md`에 기록 |
-| `quality-gates:post-tool-use` | `hooks/post-tool-use.py` | PostToolUse(Bash) — `gh pr create` 직후 `/qg` 시작 안내 |
+| `quality-gates:post-tool-use` | `hooks/post-tool-use.py` | PostToolUse(Bash) — `gh pr create` 직후 `/qg` 시작 안내 (publish sentinel 존재 시 억제) |
 | `quality-gates:session-start-advisor` | `hooks/session-start-advisor.py` | SessionStart — stale state 안내 (read-only) |
 | `quality-gates:session-start-advisor:frontmatter-scan` | 위 hook의 sub-feature | Plugin 전체 agent frontmatter drift 스캔만 disable |
 | `quality-gates:session-end-cleanup` | `hooks/session-end-cleanup.py` | SessionEnd — 현재 세션 폴더 cleanup |

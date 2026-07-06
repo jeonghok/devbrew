@@ -26,6 +26,7 @@ allowed-tools:
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py:*)
   # Group 4 — Meta (orchestration primitives)
   - Agent
   - AskUserQuestion
@@ -698,17 +699,18 @@ Branch:
 
 ## Final Summary
 
-Print:
+Build the status rows and render them (deterministic, scannable) — one
+`key<TAB>value` line per gate, verdict vocabulary unchanged (`clean iter N`,
+`no scope reviewed (branch <M> ahead)`, `proceeded-with-findings iter N`,
+`aborted iter N`, `skipped`, `clean`, `failed`, `SKIP_WITH_EVIDENCE`):
 
-```markdown
-## Quality Gates Pipeline — Complete (v2.7.0)
-
-- **Review gate**: <clean iter N | no scope reviewed (branch <M> ahead) | proceeded-with-findings iter N | aborted iter N | skipped>
-- **Runtime gate**: <clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>
-
-**History:**
-<copy the appended ## History lines from the state file>
+```bash
+printf 'Review gate\t<clean iter N | no scope reviewed (branch <M> ahead) | proceeded-with-findings iter N | aborted iter N | skipped>\nRuntime gate\t<clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>\n' \
+  | ${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py table --title "Quality Gates — Complete"
 ```
+
+Then print the appended `## History` lines from the state file as an
+indented tree beneath the table.
 
 State file cleanup is deferred to /cancel-qg or SessionEnd cleanup hook.
 
