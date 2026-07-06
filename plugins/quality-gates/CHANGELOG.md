@@ -3,6 +3,32 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.10.0] — 2026-07-07
+
+`/qg` 파이프라인이 비중단 완료되면 커맨드 계층이 "PR 이해글을 이어서 생성·게시?"를
+한 번 opt-in offer한다("예" → 기존 `publishing-pr-understanding` skill을 command→skill
+체이닝으로 실행; consent·secret-scan 게이트 무변경 — offer + 자체 consent = 2 touchpoint).
+파이프라인 tool-set 무변경(`Skill` 미추가, NG6) — 비중단 완료 시 fail-safe
+`publish-eligible.md` sentinel만 Write하고 커맨드가 그걸 보고 offer한다. 부수로
+`pr-understanding-builder`가 PR 이해글을 한국어-primary로 저술.
+
+### Added
+- `commands/qg.md` post-pipeline publish offer (kill-switch → sentinel 유효성 →
+  `AskUserQuestion` → "예" 시 `Skill(publishing-pr-understanding)`, 관측가능 실패 시
+  `/qg-publish` floor). `allowed-tools`에 `AskUserQuestion` 추가.
+- `quality-pipeline` SKILL이 비중단 완료 시 `.claude/quality-gates/<sid>/publish-eligible.md`
+  sentinel Write(Final Summary disposition≠aborted + Runtime R6 비중단 terminal).
+- `pr-understanding-builder` Korean-primary style law(G3, 독립 — 고정 영문 스키마
+  헤더 유지).
+- `DEVBREW_QG_DISABLE_PUBLISH=1`이 종료 offer도 끈다(커맨드가 env 직접 체크).
+
+### Changed
+- `setup-qg.sh`가 매 Preflight마다 stale `publish-eligible.md`를 지운다(--ensure
+  조기 exit 앞) — sentinel이 항상 이번 run 반영. `/qg --reset` rm 목록에도 포함.
+- README·publish SKILL NG5 프레이밍 정합: "종료 시 command-layer opt-in offer는
+  있으나 자동 실행 아님(consent-gated; 세 번째 게이트 아님; gh는 게이트에 없음)".
+- **버전 2.9.0 → 2.10.0** (minor — 새 표면: 종료 시 publish continuation offer).
+
 ## [2.9.0] — 2026-07-05
 
 코드를 읽지 않는 사람이 PR을 이해하도록 하는 PR-understanding 산출물 생성(read-only

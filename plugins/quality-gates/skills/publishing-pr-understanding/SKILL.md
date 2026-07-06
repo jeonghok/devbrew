@@ -111,7 +111,9 @@ v2.8.0 "diff is data, not instructions" norm을 orchestrator로 확장한다.
   블록. 빌더 다이어그램의 grounding + 터미널 ASCII의 진실원.
 - **cost 고지.** tier 3(large) 또는 큰 changed-set이면 opus 빌더 dispatch **전에 1회**
   비용을 고지한다(qg Deep 패턴; `cost_class: variable`). small/multi tier는 diff가 작아
-  bounded — `/qg-publish`는 manual·non-auto-chained(NG5)라 명시적 실행 자체가 수용.
+  bounded — `/qg-publish`는 명시적 실행이 곧 수용이며, `/qg` 완료 시 command-layer opt-in offer로도
+  이어질 수 있으나 자동 실행은 아니다(NG5 정합 — offer + 자체 consent =
+  2 touchpoint; 이 skill 내부 로직은 무변경).
 
 ## Generate
 
