@@ -104,6 +104,23 @@ assert "'/qg both --skip-runtime' banner honors precedence (no contradictory ski
 assert "'/qg runtime --skip-runtime' banner notes precedence" "grep -qi 'gate=runtime wins' out3"
 cd / && rm -rf "$TMPDIR"
 
+# --- Case 7: stale publish-eligible.md deletion (v2.10.0) ---
+# setup-qg.sh must delete a prior run's publish-eligible sentinel on EVERY
+# invocation (incl. --ensure with an existing state file), so a second /qg
+# run in the same session cannot inherit a stale offer.
+TMPDIR=$(mktemp -d); cd "$TMPDIR"
+SID="test-stale-$$"
+unset CLAUDE_CODE_SESSION_ID
+SID_DIR=".claude/quality-gates/$SID"
+mkdir -p "$SID_DIR"
+# Simulate a completed prior run: state file present (triggers --ensure
+# early-exit) AND a stale publish-eligible sentinel present.
+printf '%s\n' '---' "session_id: \"$SID\"" '---' > "$SID_DIR/pipeline.md"
+printf '%s\n' '<!-- qg-publish-eligible:v1 -->' 'verdict: clean' > "$SID_DIR/publish-eligible.md"
+CLAUDE_CODE_SESSION_ID="$SID" "$SCRIPT" --ensure >/dev/null 2>&1
+assert "setup-qg --ensure deletes stale publish-eligible.md even past the early-exit" "test ! -e '$SID_DIR/publish-eligible.md'"
+cd / && rm -rf "$TMPDIR"
+
 echo
 echo "test_setup_qg.sh: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]] && exit 0 || exit 1

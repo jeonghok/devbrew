@@ -142,6 +142,16 @@ if [[ ! "$SESSION_ID" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
   exit 1
 fi
 
+# --- Stale publish-eligible sentinel cleanup (v2.10.0) ---
+# The Task-2 pipeline SKILL writes .claude/quality-gates/<sid>/publish-eligible.md
+# only on non-aborted completion; the qg.md command offers publish iff that file
+# is present. State files persist across runs in a session, so setup-qg.sh (called
+# at SKILL Preflight P2) must clear a prior run's sentinel on EVERY invocation —
+# BEFORE the --ensure early-exit below (line ~168), else a second /qg in the same
+# session inherits a stale offer (false-offer). SKILL.md itself cannot rm (Write-only
+# allowed-tools), so this deletion lives here (its Preflight mechanism).
+rm -f ".claude/quality-gates/$SESSION_ID/publish-eligible.md"
+
 # --- Branch worktree mode ---
 WORKTREE_PATH=""
 if [[ "$BRANCH_MODE" == "true" ]] && [[ -n "$TARGET_BRANCH" ]]; then
