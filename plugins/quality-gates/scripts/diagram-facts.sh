@@ -75,7 +75,10 @@ done <<< "$changed"
 nodes="$(printf '%s\n%s' "$changed" "$neighbors" | grep -v '^$' | sort -u)"
 
 if [[ "$nodes_only" -eq 1 ]]; then
-  printf '%s\n' "$neighbors" | grep -v '^$' | sort -u
+  # `|| true`: empty neighbors → grep -v '^$' matches nothing → exit 1, which under
+  # set -euo pipefail would abort before the `exit 0` below. Tolerate it so a
+  # changed-file-imports-nothing case exits 0 (robust for any set -e caller).
+  printf '%s\n' "$neighbors" | grep -v '^$' | sort -u || true
   exit 0
 fi
 

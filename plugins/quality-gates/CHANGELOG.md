@@ -29,6 +29,24 @@ opus 빌더, blob-only) + consent·시크릿 가드 하의 멱등 게시(별도 
   `plugin.json`, README "인스턴스화한 원칙"/설치된 Hook/Kill switches/Cost/구조,
   `commands/qg.md` Quick Reference 동기화.
 
+### Security
+- **Sink fail-closed 하드닝** (Review gate self-dogfood — codex/security-reviewer/
+  silent-failure-hunter가 잡은 fail-open 3건):
+  - `pr-create.sh` — `set -euo pipefail` + `git push`/`gh pr create` 명시적 exit-code
+    체크. 실패 시 `action: create-failed` + non-zero exit이며 `action: created`는 둘 다
+    성공해야만 출력 (`set -uo`(no `-e`) + 무조건 echo가 실패를 성공으로 오보고하던 것 차단).
+    추가로 push BEFORE에 `gh` 존재+인증 preflight (`command -v gh` + `gh auth status`) —
+    미설치/미인증이면 `action: create-skipped (artifact-only)`로 degrade하고 push하지 않아
+    orphan pushed branch를 막는다 (sink self-contained; SKILL Preflight와 defense-in-depth).
+  - `secret-scan.py` — `basic-auth-url`(https 전용)을 scheme-agnostic `credential-url`로
+    확장 (postgres://·redis://:pass@·mongodb://·amqp:// 등 저-entropy URL 비밀번호 포착;
+    empty-user userinfo 허용). 추가로 corpus가 degraded(no-merge-base 헤더 마커)면
+    corpus-gated detector가 silent no-op되므로 fail-closed (`scan_ok: no`).
+  - `diagram-facts.sh --nodes` — import 없는 변경파일에서 grep-empty exit 1이 `set -e`로
+    조기 abort하던 것 `|| true`로 완화.
+- 회귀 락: pr-create 실패/degrade 경로 3건(push-fail·create-fail·gh-unauth) +
+  secret-scan non-HTTP URL/degraded-corpus 2건 (전부 mutation-test로 teeth 검증).
+
 ## [2.8.0] — 2026-06-21
 
 Review gate 두 diff-reading reviewer에 경량 persona-prose 보안 흡수 2건

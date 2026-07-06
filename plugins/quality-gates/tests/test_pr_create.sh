@@ -55,5 +55,55 @@ if grep -q 'push' "$CALLLOG" && grep -q 'pr create' "$CALLLOG"; then
 else fail "live path (out=$out log=$(cat "$CALLLOG"))"; fi
 rm -rf "$STUB"
 
+# Build a stub dir where git and/or gh FAIL, to prove the sink fails CLOSED:
+# never print "action: created" on a failed push/create, and never push when gh
+# is unavailable/unauth (teeth against reverting the fail-closed fixes). The gh
+# stub is ARG-AWARE: `gh auth status` (the pre-push guard) returns $auth_rc,
+# everything else (`gh pr create`) returns $create_rc.
+mk_stubs_rc() {  # $1=git_rc  $2=gh_create_rc  $3=gh_auth_rc(default 0)
+  local auth_rc="${3:-0}"
+  STUB=$(mktemp -d) || exit 1
+  printf '#!/usr/bin/env bash\necho "git $*" >> "$CALLLOG"\nexit %s\n' "$1" > "$STUB/git"
+  { printf '#!/usr/bin/env bash\necho "gh $*" >> "$CALLLOG"\n'
+    printf 'case "$1" in\n  auth) exit %s ;;\n  *) exit %s ;;\nesac\n' "$auth_rc" "$2"
+  } > "$STUB/gh"
+  chmod +x "$STUB/git" "$STUB/gh"
+  export CALLLOG="$STUB/calls.log"; : > "$CALLLOG"
+}
+
+# (iv) gh auth OK, git push FAILS → create-failed, NO "action: created", gh pr
+# create NOT reached, non-zero exit.
+mk_stubs_rc 1 0
+out=$(PATH="$STUB:$PATH" bash "$SCRIPT" --base main --head feature --body-file /dev/null 2>&1); rc=$?
+if printf '%s' "$out" | grep -q 'create-failed' \
+   && ! printf '%s' "$out" | grep -q 'action: created' \
+   && [[ "$rc" -ne 0 ]] && ! grep -q 'pr create' "$CALLLOG"; then
+  pass "git push failure: create-failed, no 'action: created', gh unreached, non-zero exit"
+else fail "push-failure (out=$out rc=$rc log=$(cat "$CALLLOG"))"; fi
+rm -rf "$STUB"
+
+# (v) gh auth OK, git push OK, gh pr create FAILS → create-failed, push WAS
+# reached (distinguishes from the guard firing), no "action: created".
+mk_stubs_rc 0 1
+out=$(PATH="$STUB:$PATH" bash "$SCRIPT" --base main --head feature --body-file /dev/null 2>&1); rc=$?
+if printf '%s' "$out" | grep -q 'create-failed' \
+   && ! printf '%s' "$out" | grep -q 'action: created' \
+   && [[ "$rc" -ne 0 ]] && grep -q 'push' "$CALLLOG"; then
+  pass "gh pr create failure: create-failed, push reached, no 'action: created', non-zero exit"
+else fail "create-failure (out=$out rc=$rc log=$(cat "$CALLLOG"))"; fi
+rm -rf "$STUB"
+
+# (vi) gh present but UNAUTHENTICATED (gh auth status fails) → create-skipped,
+# NO push (never leaves an orphan pushed branch), non-zero exit.
+mk_stubs_rc 0 0 1
+out=$(PATH="$STUB:$PATH" bash "$SCRIPT" --base main --head feature --body-file /dev/null 2>&1); rc=$?
+if printf '%s' "$out" | grep -q 'create-skipped' \
+   && ! grep -q 'push' "$CALLLOG" \
+   && ! grep -q 'pr create' "$CALLLOG" \
+   && [[ "$rc" -ne 0 ]]; then
+  pass "gh unauth: create-skipped, no push, gh pr create unreached, non-zero exit"
+else fail "gh-unauth (out=$out rc=$rc log=$(cat "$CALLLOG"))"; fi
+rm -rf "$STUB"
+
 echo "pr-create: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]

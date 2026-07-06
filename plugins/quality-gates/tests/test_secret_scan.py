@@ -68,6 +68,27 @@ class SecretScanTeeth(unittest.TestCase):
             capture_output=True, text=True)
         self.assertTrue(blocked(r.stdout), r.stdout)
 
+    def test_nonhttp_url_credentials_block(self):
+        # DB/broker connection strings with embedded creds must block regardless of
+        # the password's entropy — a KNOWN (corpus-independent) pattern. Includes the
+        # password-only userinfo form (redis://:pass@) which needs the empty-user regex.
+        for url in ("postgres://user:s3cr3tpassword@db:5432/app",
+                    "redis://:hunter2hunter2hunter2@cache:6379"):
+            out = run(url, url)
+            self.assertTrue(blocked(out), f"{url}\n{out}")
+            self.assertIn("finding:", out)
+
+    def test_degraded_corpus_fails_closed(self):
+        # Teeth for the corpus-integrity precondition: a degraded (no-merge-base)
+        # corpus silently no-ops the corpus-gated detectors, so a high-entropy secret
+        # NOT present in the thin corpus would otherwise pass. The scanner must FAIL
+        # CLOSED on the degraded header marker rather than certify it clean.
+        secret = "Kj8xQvN2mZ4pR7wL9tB3cF6yD1sA5gH0uE"   # high-entropy, absent from corpus
+        corpus = "=== PR CONTEXT (degraded: no merge-base with main) ===\n"
+        out = run(f"key={secret}", corpus)
+        self.assertTrue(blocked(out), out)
+        self.assertIn("corpus degraded", out)
+
 
 if __name__ == "__main__":
     unittest.main()

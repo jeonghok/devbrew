@@ -26,7 +26,13 @@ KNOWN_PATTERNS = [
     ("stripe-key", re.compile(r"\b(sk|rk)_live_[0-9A-Za-z]{24,}\b")),
     ("pem-private-key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}")),
-    ("basic-auth-url", re.compile(r"https?://[^\s/:@]+:[^\s/:@]+@")),
+    # Scheme-AGNOSTIC credential-in-URL: any `scheme://[user]:pass@host`, not just
+    # http(s) — DB/broker connection strings (postgres://, mysql://, redis://:pass@,
+    # mongodb://, amqp://) leak low-entropy passwords the entropy heuristic misses.
+    # userinfo user part is OPTIONAL (`[^\s/:@]*`) so password-only `redis://:pass@`
+    # is caught. This is a KNOWN pattern (corpus-independent) precisely because a
+    # low-entropy URL password can never cross the entropy floor.
+    ("credential-url", re.compile(r"\b[a-zA-Z][a-zA-Z0-9+.\-]*://[^\s/:@]*:[^\s/:@]+@")),
 ]
 KEYWORD = re.compile(r"(?i)\b(password|passwd|secret|token|api[_-]?key|apikey|access[_-]?key)\b")
 ASSIGN = re.compile(r"[:=]\s*(.+)$")
@@ -116,6 +122,17 @@ def main() -> int:
     try:
         payload = open(args.payload, encoding="utf-8", errors="replace").read()
         corpus = open(args.corpus, encoding="utf-8", errors="replace").read()
+        # Corpus-integrity precondition (FAIL CLOSED): the two corpus-gated
+        # detectors (_high_entropy_in_corpus / _quoted_source_value) silently
+        # no-op on a degraded/thin corpus, leaving only the 9 vendor patterns.
+        # build-pr-context.sh signals a degraded (no-merge-base) corpus with a
+        # `=== PR CONTEXT (degraded: ...` header line; treat that as un-scannable,
+        # not clean. Anchored on the exact header (^, MULTILINE) so file contents
+        # that merely mention "degraded" never false-trigger the block.
+        if re.search(r"^=== PR CONTEXT \(degraded", corpus, re.MULTILINE):
+            print("scan_ok: no")
+            print("finding: corpus degraded (no merge-base) — fail-closed")
+            return 2
         findings = scan(payload, corpus)
     except Exception as e:                             # FAIL CLOSED
         print("scan_ok: no")
