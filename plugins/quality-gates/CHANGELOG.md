@@ -20,7 +20,9 @@
   sentinel Write(Final Summary disposition≠aborted + Runtime R6 비중단 terminal).
 - `pr-understanding-builder` Korean-primary style law(G3, 독립 — 고정 영문 스키마
   헤더 유지).
-- `DEVBREW_QG_DISABLE_PUBLISH=1`이 종료 offer도 끈다(커맨드가 env 직접 체크).
+- 종료 offer는 `DEVBREW_QG_DISABLE_PUBLISH=1`뿐 아니라 전역 `DEVBREW_DISABLE_QUALITY_GATES=1`
+  에서도 skip된다(offer step-1이 두 kill switch를 모두 존중 — 전역 kill이 setup-qg의 stale-sentinel
+  삭제보다 먼저 exit하므로 offer가 직접 체크; kill switch는 보안 컨트롤).
 
 ### Changed
 - `setup-qg.sh`가 매 Preflight마다 stale `publish-eligible.md`를 지운다(--ensure

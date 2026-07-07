@@ -365,7 +365,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_DISABLE_QUALITY_GATES=1` | 모든 quality-gates hook + `qg-gc.py` no-op. `/qg`는 여전히 invocable하지만 hook이 fire하지 않음. |
+| `DEVBREW_DISABLE_QUALITY_GATES=1` | 모든 quality-gates hook + `qg-gc.py` no-op. `/qg`는 여전히 invocable하지만 hook이 fire하지 않음. `/qg` 완료 시의 command-layer publish offer도 skip된다(offer step-1이 이 전역 kill switch도 존중 — kill switch는 보안 컨트롤). |
 
 **Reviewer 단위 disable (Review gate):**
 
