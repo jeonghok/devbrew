@@ -452,18 +452,24 @@ else
   echo "FAIL: Runtime R6 missing publish-eligible.md write"; fail=$((fail+1))
 fi
 
-# (d) The write is guarded by a non-aborted disposition. Anchor on '쓰지 않는다'
-# (Korean "does not write") — this phrase lives in the guard SENTENCE body
-# (both the sentinel-format subsection and the Final-Summary wiring paragraph),
-# never in a bold section header — so deleting the guard body (not just a
-# header/title that happens to say "non-aborted") flips this to FAIL. A
-# header-only anchor (e.g. matching the section title's "(non-aborted ...)"
-# parenthetical) would NOT have this property, since headers survive body
-# deletion.
-if grep -qF 'disposition' "$SKILL_MD" && grep -qF '쓰지 않는다' "$SKILL_MD"; then
-  echo "PASS: sentinel write guarded by non-aborted disposition"
+# (d) The write is guarded by a non-aborted disposition — SECTION-SCOPED to the
+# Final Summary window ($fs_start/$fs_end from (b) above), NOT a whole-file
+# grep. '쓰지 않는다' (Korean "does not write") appears at TWO sites: the
+# canonical "## Publish-eligible sentinel" subsection (an EARLIER section,
+# outside this window) AND the Final-Summary wiring paragraph (inside this
+# window). A whole-file grep stays GREEN even if the Final-Summary guard
+# sentence is deleted (leaving only the canonical copy + the write) —
+# under-locking this load-bearing fail-safe guard (the repo's
+# grep_lock_header_satisfiable trap: the guard phrase is header-adjacent-but-
+# body text, so a header-satisfiable whole-file grep doesn't prove the
+# per-site guard survives). Scoping to the Final Summary window means
+# deleting ITS guard sentence fails this assertion independently of the
+# canonical copy elsewhere.
+if awk -v s="$fs_start" -v e="$fs_end" 'NR>s && NR<e' "$SKILL_MD" | grep -qF 'disposition' && \
+   awk -v s="$fs_start" -v e="$fs_end" 'NR>s && NR<e' "$SKILL_MD" | grep -qF '쓰지 않는다'; then
+  echo "PASS: Final Summary sentinel write guarded by non-aborted disposition (in-window)"
 else
-  echo "FAIL: sentinel write missing non-aborted disposition guard"; fail=$((fail+1))
+  echo "FAIL: Final Summary sentinel write missing non-aborted disposition guard (in-window)"; fail=$((fail+1))
 fi
 
 if [[ "$fail" -eq 0 ]]; then

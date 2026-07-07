@@ -62,8 +62,15 @@ is aborted at a decision point.
 <!-- 이 "예" 분기의 Skill 호출은 commands/qg-publish.md의 dispatch와 동일 호출.
      두 call site가 drift하지 않도록 함께 수정할 것 (Law 3 위생). -->
 
-1. **Kill switch.** `DEVBREW_QG_DISABLE_PUBLISH=1`이면 offer를 건너뛰고 한 줄만
-   출력하고 종료: `> [quality-gates] publish offer disabled via DEVBREW_QG_DISABLE_PUBLISH=1`.
+1. **Kill switch.** `DEVBREW_DISABLE_QUALITY_GATES=1`(전역) 또는
+   `DEVBREW_QG_DISABLE_PUBLISH=1`(publish 전용) 중 **어느 하나라도** 설정돼
+   있으면 offer를 건너뛴다 — 전역 kill 시 `setup-qg.sh`는 자신의 global-kill
+   체크에서 즉시 exit해 stale-sentinel 삭제(더 뒤 단계)까지 도달하지 못하므로,
+   이전 같은-세션 실행의 sentinel이 남아있을 수 있다; offer도 publish-전용
+   switch만 보면 이를 놓친다(kill switch = security control, CLAUDE.md). 설정된
+   쪽에 맞춰 한 줄만 출력하고 종료:
+   - `DEVBREW_QG_DISABLE_PUBLISH=1` → `> [quality-gates] publish offer disabled via DEVBREW_QG_DISABLE_PUBLISH=1`
+   - `DEVBREW_DISABLE_QUALITY_GATES=1` → `> [quality-gates] publish offer skipped: quality-gates globally disabled (DEVBREW_DISABLE_QUALITY_GATES=1).`
 2. **Eligibility (fail-safe — default no-offer).** 아래 둘이 **모두** 참이 아니면
    offer 없이 조용히 종료(비완료/abort/trivia는 sentinel 부재 → 여기서 걸림):
    - `test -f ".claude/quality-gates/$CLAUDE_CODE_SESSION_ID/publish-eligible.md"` 성공, **그리고**

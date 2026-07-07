@@ -34,5 +34,12 @@ grep -qF 'DEVBREW_QG_DISABLE_PUBLISH' <<<"$OFFER" && pass "offer honors DEVBREW_
 # (6) sentinel 유효성(마커) 체크.
 grep -qF 'publish-eligible.md' <<<"$OFFER" && pass "offer checks publish-eligible sentinel" || fail "sentinel presence not checked in offer"
 
+# (7) GLOBAL kill switch 체크 (offer must ALSO honor DEVBREW_DISABLE_QUALITY_GATES —
+# setup-qg.sh exits at its own global-kill check before reaching its stale-sentinel
+# delete, so a stale sentinel from a prior same-session run can survive; the offer
+# must not fire on that stale sentinel when the global switch is set). Scoped to
+# the OFFER window + body-unique (this literal doesn't appear in a header).
+grep -qF 'DEVBREW_DISABLE_QUALITY_GATES' <<<"$OFFER" && pass "offer honors DEVBREW_DISABLE_QUALITY_GATES (global kill)" || fail "global kill switch not checked in offer"
+
 echo "qg-publish-offer: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]
