@@ -44,5 +44,14 @@ for anchor in 'In one breath' 'Before.*After' '지금 어떻게 동작하나' '�
   grep -qE "$anchor" "$AGENT" && pass "schema anchor: $anchor" || fail "schema anchor missing: $anchor"
 done
 
+# --- Korean-primary style law (G3, v2.10.0) ---
+grep -qF '한국어-primary' "$AGENT" \
+  && pass "builder persona declares Korean-primary style law" \
+  || fail "Korean-primary style law missing"
+# 고정 영문 스키마 헤더는 유지(회귀: 헤더 한국어화 금지).
+grep -qF 'In one breath' "$AGENT" \
+  && pass "fixed English schema header 'In one breath' retained" \
+  || fail "schema header drifted (NG3 violation)"
+
 echo "builder-frontmatter: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]

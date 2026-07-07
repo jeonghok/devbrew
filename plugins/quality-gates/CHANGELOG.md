@@ -3,6 +3,39 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.10.0] — 2026-07-07
+
+`/qg` 파이프라인이 비중단 완료되면 커맨드 계층이 "PR 이해글을 이어서 생성·게시?"를
+한 번 opt-in offer한다("예" → 기존 `publishing-pr-understanding` skill을 command→skill
+체이닝으로 실행; consent·secret-scan 게이트 무변경 — offer + 자체 consent = 2 touchpoint).
+파이프라인 tool-set 무변경(`Skill` 미추가, NG6) — 비중단 완료 시 fail-safe
+`publish-eligible.md` sentinel만 Write하고 커맨드가 그걸 보고 offer한다. 부수로
+`pr-understanding-builder`가 PR 이해글을 한국어-primary로 저술.
+
+### Added
+- `commands/qg.md` post-pipeline publish offer (kill-switch → sentinel 유효성 →
+  `AskUserQuestion` → "예" 시 `Skill(publishing-pr-understanding)`, 관측가능 실패 시
+  `/qg-publish` floor). `allowed-tools`에 `AskUserQuestion` 추가.
+- `quality-pipeline` SKILL이 비중단 완료 시 `.claude/quality-gates/<sid>/publish-eligible.md`
+  sentinel Write(Final Summary disposition≠aborted + Runtime R6 비중단 terminal).
+- `pr-understanding-builder` Korean-primary style law(G3, 독립 — 고정 영문 스키마
+  헤더 유지).
+- 종료 offer는 `DEVBREW_QG_DISABLE_PUBLISH=1`뿐 아니라 전역 `DEVBREW_DISABLE_QUALITY_GATES=1`
+  에서도 skip된다(offer step-1이 두 kill switch를 모두 존중 — 전역 kill이 setup-qg의 stale-sentinel
+  삭제보다 먼저 exit하므로 offer가 직접 체크; kill switch는 보안 컨트롤).
+
+### Changed
+- `setup-qg.sh`가 매 Preflight마다 stale `publish-eligible.md`를 지운다(--ensure
+  조기 exit 앞) — sentinel이 항상 이번 run 반영. `/qg --reset` rm 목록에도 포함.
+- `setup-qg.sh` 전역 kill(`DEVBREW_DISABLE_QUALITY_GATES=1`) 브랜치도 stale sentinel을
+  구조적으로 지운다(arg-parse보다 앞이므로 `CLAUDE_CODE_SESSION_ID`로 resolve + 패턴
+  guard) — offer 미발동을 qg.md step-1 prose뿐 아니라 sentinel 부재로도 보장. cleanup
+  실패(예: non-writable dir) 시 `set -e`가 kill-switch advisory를 마스킹하지 않도록
+  loud WARN(`>&2`)으로 degrade하고 advisory·exit는 그대로 도달.
+- README·publish SKILL NG5 프레이밍 정합: "종료 시 command-layer opt-in offer는
+  있으나 자동 실행 아님(consent-gated; 세 번째 게이트 아님; gh는 게이트에 없음)".
+- **버전 2.9.0 → 2.10.0** (minor — 새 표면: 종료 시 publish continuation offer).
+
 ## [2.9.0] — 2026-07-05
 
 코드를 읽지 않는 사람이 PR을 이해하도록 하는 PR-understanding 산출물 생성(read-only

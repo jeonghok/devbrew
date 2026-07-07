@@ -419,6 +419,59 @@ else
   fail=$((fail + 1))
 fi
 
+# --- v2.10.0 publish-eligible sentinel wiring ---
+
+# (a) allowed-tools must NOT contain a standalone `Skill` entry (NG6 — no
+# skill-nesting). The block-end guard explicitly stops at the frontmatter's
+# closing `---` line (a naive `/^[^ -]/` end-pattern would NOT match `---`
+# itself, since `-` is excluded from that class too — it happens to stop one
+# line later at the first `# ` heading in THIS file, but that's incidental,
+# not guaranteed; an explicit `^---$` exit makes the bound correct on its own
+# terms regardless of what follows the frontmatter).
+if awk '/^allowed-tools:/{f=1;next} f&&/^---$/{exit} f&&/^[^ -]/{f=0} f' "$SKILL_MD" | grep -qE '^[[:space:]]*-[[:space:]]*Skill[[:space:]]*$'; then
+  echo "FAIL: quality-pipeline allowed-tools contains Skill (NG6 violation)"; fail=$((fail+1))
+else
+  echo "PASS: quality-pipeline allowed-tools has no Skill (NG6)"
+fi
+
+# (b) Final Summary section writes the sentinel (body-unique literal in section window).
+fs_start="$(first_line '^## Final Summary')"
+fs_end="$(first_line_after '^## ' "$fs_start")"
+if awk -v s="$fs_start" -v e="$fs_end" 'NR>s && NR<e' "$SKILL_MD" | grep -qF 'publish-eligible.md'; then
+  echo "PASS: Final Summary wires publish-eligible.md write (line window $fs_start..$fs_end)"
+else
+  echo "FAIL: Final Summary missing publish-eligible.md write"; fail=$((fail+1))
+fi
+
+# (c) Runtime gate R6 wires the sentinel too (single-gate /qg runtime bypasses Final Summary).
+r6_start="$(first_line 'Step R6')"
+r6_end="$(first_line_after '^## ' "$r6_start")"
+if awk -v s="$r6_start" -v e="$r6_end" 'NR>s && NR<e' "$SKILL_MD" | grep -qF 'publish-eligible.md'; then
+  echo "PASS: Runtime R6 wires publish-eligible.md write (line window $r6_start..$r6_end)"
+else
+  echo "FAIL: Runtime R6 missing publish-eligible.md write"; fail=$((fail+1))
+fi
+
+# (d) The write is guarded by a non-aborted disposition — SECTION-SCOPED to the
+# Final Summary window ($fs_start/$fs_end from (b) above), NOT a whole-file
+# grep. '쓰지 않는다' (Korean "does not write") appears at TWO sites: the
+# canonical "## Publish-eligible sentinel" subsection (an EARLIER section,
+# outside this window) AND the Final-Summary wiring paragraph (inside this
+# window). A whole-file grep stays GREEN even if the Final-Summary guard
+# sentence is deleted (leaving only the canonical copy + the write) —
+# under-locking this load-bearing fail-safe guard (the repo's
+# grep_lock_header_satisfiable trap: the guard phrase is header-adjacent-but-
+# body text, so a header-satisfiable whole-file grep doesn't prove the
+# per-site guard survives). Scoping to the Final Summary window means
+# deleting ITS guard sentence fails this assertion independently of the
+# canonical copy elsewhere.
+if awk -v s="$fs_start" -v e="$fs_end" 'NR>s && NR<e' "$SKILL_MD" | grep -qF 'disposition' && \
+   awk -v s="$fs_start" -v e="$fs_end" 'NR>s && NR<e' "$SKILL_MD" | grep -qF '쓰지 않는다'; then
+  echo "PASS: Final Summary sentinel write guarded by non-aborted disposition (in-window)"
+else
+  echo "FAIL: Final Summary sentinel write missing non-aborted disposition guard (in-window)"; fail=$((fail+1))
+fi
+
 if [[ "$fail" -eq 0 ]]; then
   echo "test_skill_orchestration_behavior: all protocol-shape assertions PASS"
   exit 0

@@ -133,7 +133,7 @@ The optional `codex-reviewer` agent has `cost_class: variable` — it invokes th
 
 ### PR-understanding publish cost (`/qg-publish`, separate from the two gates)
 
-`publishing-pr-understanding` skill은 `cost_class: variable` (context 크기·tier에 따라 다름). 저술을 맡는 `pr-understanding-builder`는 매 tier `model: opus`로 고정 — Deep tier만 실행 전 upfront cost 고지(AskUserQuestion)를 하며, 작은 diff는 비용이 자연히 bounded되고 `/qg-publish`가 수동·non-auto-chained 호출(Review/Runtime gate 뒤에 자동 연결되지 않음)이라 명시적 실행 자체가 비용 수용으로 간주된다. Review/Runtime 두 게이트의 비용 표(위)와는 **완전히 별도** — publish는 게이트가 아니므로 depth 기반 자동 트리거가 없다.
+`publishing-pr-understanding` skill은 `cost_class: variable` (context 크기·tier에 따라 다름). 저술을 맡는 `pr-understanding-builder`는 매 tier `model: opus`로 고정 — Deep tier만 실행 전 upfront cost 고지(AskUserQuestion)를 하며, 작은 diff는 비용이 자연히 bounded되고 `/qg-publish`는 명시적 실행이 곧 비용 수용이며, `/qg` 완료 시의 command-layer opt-in offer로도 이어질 수 있으나 자동 실행이 아니다(offer + 자체 consent = 2 touchpoint). Review/Runtime 두 게이트의 비용 표(위)와는 **완전히 별도** — publish는 게이트가 아니므로 depth 기반 자동 트리거가 없다.
 
 ### Adversarial reviewer model
 
@@ -154,8 +154,11 @@ The optional `codex-reviewer` agent has `cost_class: variable` — it invokes th
 않는다. 정직 문구: 이 표면은 **deterministic envelope + model-authored content** —
 gh I/O·secret-scan·marker-scoped idempotent upsert는 결정론 스크립트가 통제하고, 사람이
 읽는 실제 산출물 텍스트는 opus 빌더가 저술한 model-authored content다. 게시는 매 실행
-사람이 preview를 읽고 AskUserQuestion으로 명시 동의한 뒤에만 일어난다 — 자동 실행도,
-`/qg` 뒤 auto-chain도 없다. 자세한 내용은 [`commands/qg-publish.md`](commands/qg-publish.md).
+사람이 preview를 읽고 AskUserQuestion으로 명시 동의한 뒤에만 일어난다. `/qg` 완료 시
+command-layer opt-in offer로 이어질 수 있으나 **자동 실행은 아니다** — offer(1차)와
+publish의 informed-consent(2차) 둘 다 사람의 명시 동의가 필요하다(2 touchpoint).
+세 번째 게이트도 아니고, gh는 여전히 게이트 어디에도 없다. 자세한 내용은
+[`commands/qg-publish.md`](commands/qg-publish.md).
 
 ## Review gate 리뷰 단계 (v1.5.0 재설계)
 
@@ -362,7 +365,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_DISABLE_QUALITY_GATES=1` | 모든 quality-gates hook + `qg-gc.py` no-op. `/qg`는 여전히 invocable하지만 hook이 fire하지 않음. |
+| `DEVBREW_DISABLE_QUALITY_GATES=1` | 모든 quality-gates hook + `qg-gc.py` no-op. `/qg`는 여전히 invocable하지만 hook이 fire하지 않음. `/qg` 완료 시의 command-layer publish offer도 skip된다(offer step-1이 이 전역 kill switch도 존중 — kill switch는 보안 컨트롤). |
 
 **Reviewer 단위 disable (Review gate):**
 
@@ -384,7 +387,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_QG_DISABLE_PUBLISH=1` | **두 최내부 sink에서 결정론 강제**(skill 진입 자체는 막지 않음): `comment-upsert.py`(코멘트 POST/PATCH)와 `pr-create.sh`(`git push` + `gh pr create`). 로컬 artifact 생성 + `--dry-run` preview는 그대로 동작하되 GitHub에 대한 실제 네트워크 쓰기만 fail-closed로 차단된다. |
+| `DEVBREW_QG_DISABLE_PUBLISH=1` | **두 최내부 sink에서 결정론 강제**(skill 진입 자체는 막지 않음): `comment-upsert.py`(코멘트 POST/PATCH)와 `pr-create.sh`(`git push` + `gh pr create`). 로컬 artifact 생성 + `--dry-run` preview는 그대로 동작하되 GitHub에 대한 실제 네트워크 쓰기만 fail-closed로 차단된다. 같은 env var가 `/qg` 완료 시의 command-layer publish offer도 skip시킨다(커맨드가 env를 직접 체크; defense-in-depth — 동일 의도를 두 레이어에서). |
 
 **Hook 단위 disable** (`DEVBREW_SKIP_HOOKS=quality-gates:<key>,quality-gates:<key2>...`):
 
