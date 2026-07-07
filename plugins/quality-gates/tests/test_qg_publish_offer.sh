@@ -34,6 +34,12 @@ grep -qF 'DEVBREW_QG_DISABLE_PUBLISH' <<<"$OFFER" && pass "offer honors DEVBREW_
 # (6) sentinel 유효성(마커) 체크.
 grep -qF 'publish-eligible.md' <<<"$OFFER" && pass "offer checks publish-eligible sentinel" || fail "sentinel presence not checked in offer"
 
+# (6b) marker-VALIDITY gate: the offer must require the sentinel's first line to
+# be the EXACT v1 marker, not merely that a file named publish-eligible.md
+# exists — else any file with that name would arm the fail-safe. Section-scoped
+# to the OFFER window + body-unique literal (this marker id is not in a header).
+grep -qF 'qg-publish-eligible:v1' <<<"$OFFER" && pass "offer requires the exact v1 sentinel marker (validity gate)" || fail "marker-validity gate missing from offer (filename presence alone is insufficient)"
+
 # (7) GLOBAL kill switch 체크 (offer must ALSO honor DEVBREW_DISABLE_QUALITY_GATES —
 # setup-qg.sh exits at its own global-kill check before reaching its stale-sentinel
 # delete, so a stale sentinel from a prior same-session run can survive; the offer

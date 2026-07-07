@@ -27,6 +27,11 @@
 ### Changed
 - `setup-qg.sh`가 매 Preflight마다 stale `publish-eligible.md`를 지운다(--ensure
   조기 exit 앞) — sentinel이 항상 이번 run 반영. `/qg --reset` rm 목록에도 포함.
+- `setup-qg.sh` 전역 kill(`DEVBREW_DISABLE_QUALITY_GATES=1`) 브랜치도 stale sentinel을
+  구조적으로 지운다(arg-parse보다 앞이므로 `CLAUDE_CODE_SESSION_ID`로 resolve + 패턴
+  guard) — offer 미발동을 qg.md step-1 prose뿐 아니라 sentinel 부재로도 보장. cleanup
+  실패(예: non-writable dir) 시 `set -e`가 kill-switch advisory를 마스킹하지 않도록
+  loud WARN(`>&2`)으로 degrade하고 advisory·exit는 그대로 도달.
 - README·publish SKILL NG5 프레이밍 정합: "종료 시 command-layer opt-in offer는
   있으나 자동 실행 아님(consent-gated; 세 번째 게이트 아님; gh는 게이트에 없음)".
 - **버전 2.9.0 → 2.10.0** (minor — 새 표면: 종료 시 publish continuation offer).

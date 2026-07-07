@@ -13,6 +13,30 @@ set -euo pipefail
 # setup-qg.sh. Honoring it here too means direct callers (tests, scripts)
 # can't accidentally bypass the kill switch via a fresh invocation.
 if [[ "${DEVBREW_DISABLE_QUALITY_GATES:-}" == "1" ]]; then
+  # Structural backstop (v2.10.0): even when globally disabled, clear any stale
+  # publish-eligible sentinel for this session BEFORE exiting. The global-kill
+  # exit is upstream of the arg-parsed cleanup in the "Stale publish-eligible
+  # sentinel cleanup" block below, so without this a prior same-session run's
+  # sentinel would survive a globally-disabled invocation — leaving the qg.md
+  # offer's global-kill guard as the ONLY thing stopping a spurious publish
+  # offer. Clearing it here makes the offer's inability to fire structural (no
+  # sentinel to read); qg.md step-1 stays as belt-and-suspenders. Keyed off
+  # CLAUDE_CODE_SESSION_ID (the same var the SKILL writes and the qg.md offer
+  # read); empty + pattern guard mirror the session-id pattern validation below
+  # so the rm path is traversal-safe. (The offer-read itself does not re-validate
+  # the pattern — it relies on this write-side guard, since a sentinel can only
+  # be created under an already-validated session.) --session-id args are
+  # unparsed this early, so only the env-var session (the real, sole offer
+  # coupling) is cleaned.
+  _kill_sid="${CLAUDE_CODE_SESSION_ID:-}"
+  if [[ -n "$_kill_sid" && "$_kill_sid" =~ ^[A-Za-z0-9_-]{8,}$ ]]; then
+    # Loud-log a cleanup failure (e.g. non-writable session dir) rather than let
+    # set -e abort here and MASK the kill-switch advisory + exit below — the `||`
+    # list also exempts rm from set -e so the exit path stays reachable
+    # (CLAUDE.md: loud logging을 동반한 graceful degradation).
+    rm -f ".claude/quality-gates/$_kill_sid/publish-eligible.md" \
+      || echo "[quality-gates] WARN: could not clear stale publish-eligible sentinel at .claude/quality-gates/$_kill_sid/ — publish offer falls back to the qg.md kill-switch guard." >&2
+  fi
   echo "[quality-gates] setup-qg disabled via DEVBREW_DISABLE_QUALITY_GATES=1" >&2
   exit 1
 fi
@@ -147,8 +171,10 @@ fi
 # only on non-aborted completion; the qg.md command offers publish iff that file
 # is present. State files persist across runs in a session, so setup-qg.sh (called
 # at SKILL Preflight P2) must clear a prior run's sentinel on EVERY invocation —
-# BEFORE the --ensure early-exit below (line ~168), else a second /qg in the same
-# session inherits a stale offer (false-offer). SKILL.md itself cannot rm (Write-only
+# BEFORE the --ensure early-exit in the "Active pipeline check" below, else a
+# second /qg in the same session inherits a stale offer (false-offer). (The
+# global-kill branch near the top has its own copy of this cleanup, since it
+# exits upstream of here.) SKILL.md itself cannot rm (Write-only
 # allowed-tools), so this deletion lives here (its Preflight mechanism).
 rm -f ".claude/quality-gates/$SESSION_ID/publish-eligible.md"
 
