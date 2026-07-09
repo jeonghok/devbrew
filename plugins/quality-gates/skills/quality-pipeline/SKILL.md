@@ -1,17 +1,13 @@
 ---
 name: quality-pipeline
 description: >
-  This skill runs the full quality-gates pipeline in a single assistant
-  turn. Triggered by `/qg`, "run quality gates", "verify my implementation",
-  "check code quality", or "is my PR ready to merge". Dispatches up to
-  two gates (review, then optionally runtime verification)
-  serially in a single turn. Progression decisions and fix-loop
-  iteration boundaries surface to the user via AskUserQuestion tool calls.
-  With a gate argument (`/qg both|review|runtime`) the happy path requires zero
-  user clicks for the gates; bare `/qg` asks one upfront gate-scope question
-  (Review only / both), then runs click-free on the happy path. On non-aborted
-  completion the command layer offers an opt-in PR-understanding publish
-  continuation (a separate consent-gated step, not a gate).
+  Runs the full quality-gates pipeline in a single assistant turn. Triggered by
+  `/qg`, "run quality gates", "verify my implementation", "check code quality",
+  or "is my PR ready to merge". Dispatches up to two gates (review, then
+  optionally runtime verification) serially; progression and fix-loop decisions
+  surface to the user via AskUserQuestion. A gate argument (`/qg both|review|runtime`)
+  sets the scope. On non-aborted completion the command layer offers an opt-in
+  PR-understanding publish continuation — a separate consent-gated step, not a gate.
 cost_class: variable
 allowed-tools:
   # Group 1 — Preflight scripts (실행 순서: setup → pre-check → trivia)
