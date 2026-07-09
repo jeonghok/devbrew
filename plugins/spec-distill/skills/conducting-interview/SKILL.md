@@ -1,14 +1,10 @@
 ---
 name: conducting-interview
 description: >
-  Use this skill to run the spec-distill interview — a strong problem-space stage
-  (Double Diamond 1st diamond) that reframes the request (meta-prompting), grounds
-  it with bounded web research, breaks weak directions with adversarial steelman,
-  and pre-resolves trial-and-error. Produces a terminal interview-brief meta-prompt
-  at docs/superpowers/interview/. Called by /interview after trivia escape. Runs the
-  5 통과 의례 (R1-R5) as a Law 1 structural gate (check_brief.py). Optionally hands the
-  brief to superpowers:brainstorming. Persists state to main-repo
-  .claude/spec-distill/<session-id>/state.local.md (written via Bash — PN1).
+  Runs the spec-distill problem-space interview stage and produces a terminal
+  interview-brief at docs/superpowers/interview/. Brief authoring is gated by the
+  5 통과 의례 (R1-R5) Law 1 structural check (check_brief.py). Optionally hands the
+  brief to superpowers:brainstorming.
 cost_class: variable
 user-invocable: false
 ---
