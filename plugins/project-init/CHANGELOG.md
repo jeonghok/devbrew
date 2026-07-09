@@ -5,6 +5,19 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [1.7.2] — 2026-07-09
+
+(v1.7.1은 marketplace description 압축에 따른 doc-only patch bump — 동작 변경 없음.)
+
+### Fixed
+
+- **S2a migration이 `AGENTS.md`를 `# CLAUDE.md`로 잘못 제목 짓던 문제** — `commands/project-init.md` 4c 행렬은 "비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존"을 지시하고 H1에 대한 예외가 없었다. 그래서 `# CLAUDE.md`로 시작하는 흔한 형태의 CLAUDE.md를 migrate하면 산출된 `AGENTS.md`가 자기 자신이 아닌 원본 파일명을 제목으로 달았다. 4c S2a에 `(d)` 규칙을 추가 — **이전된 H1이 원본 파일명을 지칭할 때만** `# AGENTS.md`로 재제목하고, `# My Project` 같은 실제 프로젝트 제목은 종전대로 보존한다. 좁은 규칙이라 non-breaking.
+- 발견 경위: devbrew context-slimming WS5의 sandbox 재실행 — 감량된 repo 사본에서 `/project-init`을 S2a 승인 경로로 실제 수행해 산출물을 검사했다. 손-큐레이션 컨텐츠는 파괴되지 않고 `AGENTS.md`로 정상 이전됐으며(AC15/AC16 green), 이 제목 결함만 남았다.
+
+### Added
+
+- `hooks/tests/test_command_contract.py` — `commands/project-init.md`의 산문 계약 회귀 락. 명령서는 모델이 따르는 지시서라 동작을 실행할 수 없으므로, 규칙의 *존재*를 잠근다: 4c S2a `(d)` H1 재제목, 그 규칙의 좁은 범위(프로젝트 제목 보존), 보존 규칙이 예외를 명시하는지, 그리고 Step 1의 migration 거절 → 전체 abort (AC21). 각 assert는 규칙을 소유한 텍스트로 스코프된다 — 섹션 마커는 유일성을 강제하고(`section()`), 4c S2a 표 셀이 보존 규칙의 첫 어절을 인용하고 있으므로 그 규칙만은 줄-시작 앵커로 특정한다(`standalone_line()`). 인용문만 남기고 규칙을 지우는 mutation은 RED.
+
 ## [1.7.0] — 2026-07-05
 
 ### Changed

@@ -18,6 +18,7 @@ plugins/project-init/
 │   └── tests/
 │       ├── test_docs_lint.py        # 60+ Python stdlib unittest (charter rule 포함)
 │       ├── test_post_tool_use.py    # v1.7.0 — post-tool-use fail-open/F2/main 검증
+│       ├── test_command_contract.py # v1.7.2 — commands/ 산문 계약 회귀 락 (4c S2a H1, AC21 abort)
 │       ├── smoke.sh                 # V2 자동화 smoke script
 │       └── fixtures/                # 13개 서브디렉토리 (valid, oversized, drifted, charter_*, ...)
 └── templates/
