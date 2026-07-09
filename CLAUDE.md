@@ -5,7 +5,7 @@
 >
 > *병목은 모델이 아니다. 스펙, 리뷰, 메모리다. devbrew의 역할은 사용자가 의식적으로 기억하지 않아도 이 세 가지가 자동으로 지켜지도록 만드는 것이다.*
 
-devbrew는 Claude Code를 위한 플러그인 마켓플레이스입니다. `plugins/*` 하위의 모든 플러그인은 아래 원칙을 상속합니다. 전체 철학(24개 원칙·14개 anti-pattern·소스 하니스 원문 인용)은 [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md). 외부 참조 corpus는 `../reference/`에 있으며 필요 시에만 탐색 [reference 탐색 가이드](../reference/REFERENCE_HARVEST.md).
+devbrew는 Claude Code를 위한 플러그인 마켓플레이스입니다. `plugins/*` 하위의 모든 플러그인은 아래 원칙을 상속합니다. 전체 철학(구조 메커니즘 KEEP-12 + 코드 지도)은 [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md).
 
 ## Git Workflow
 
@@ -20,15 +20,15 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 이 세 법칙이 모든 플러그인을 지배합니다. **충돌 시 Law N이 Law N+1을 override** — 명확성 먼저, 독립성 둘째, compounding 셋째.
 
-**Law 1 — Clarity Before Code.** 명세가 모호한 상태에서는 구현이 진행되지 않습니다. 코드를 shipping하는 모든 플러그인은 실제 거절 메커니즘을 가져야 합니다 — 최소한 **구조적 게이트** (필수 섹션: Context/Why, Goals, Non-goals, Constraints, Acceptance Criteria, Files to Modify, Verification Plan, Rejected Alternatives, Metadata)를 silent하게 skip할 수 없어야 합니다. Adversarial self-review는 구조적 baseline 위에 강력 권장, 수치 스코어링은 허용되지만 권장하지 않음 (철학 §5.3). *Trivia escape:* 한 문장으로 설명 가능한 trivia diff (typo, rename, 주석-only, single-file formatting)는 게이트 우회. 정의 및 자격 규정은 philosophy §2.1 / P12 참조.
+**Law 1 — Clarity Before Code.** 명세가 모호한 상태에서는 구현이 진행되지 않습니다. 코드를 shipping하는 모든 플러그인은 실제 거절 메커니즘을 가져야 합니다 — 최소한 **구조적 게이트** (필수 섹션: Context/Why, Goals, Non-goals, Constraints, Acceptance Criteria, Files to Modify, Verification Plan, Rejected Alternatives, Metadata)를 silent하게 skip할 수 없어야 합니다. Adversarial self-review는 구조적 baseline 위에 강력 권장, 수치 스코어링은 허용되지만 권장하지 않음 (철학 P2). *Trivia escape:* 한 문장으로 설명 가능한 trivia diff (typo, rename, 주석-only, single-file formatting)는 게이트 우회. 정의 및 자격 규정은 philosophy P12 참조.
 
-**Law 2 — Writer and Reviewer Must Never Share a Pass.** 코드를 쓴 턴은 그 코드를 승인할 수 없음. 분리는 프롬프트가 아니라 물리적: `allowed-tools` / `disallowed-tools` frontmatter로 리뷰어가 `Write`/`Edit`을 literally 할 수 없게 만들기. 쓰기 권한이 있는 리뷰어는 리뷰어가 아님. 검증은 load-bearing 인프라, 나중 생각이 아님. *Scoped exception (qg v2.2.0):* 실제 서비스를 실행해야 하는 executor(runtime-verifier)는 `Write`를 갖되, 분리는 도구 deny가 아니라 **orchestrator가 immutable baseline 대비 `git diff`로 product 변경을 잡아 verdict를 ≤FAIL로 강제 + 무커밋 + 샌드박스 폐기**하는 구조적 가드로 보장 — verifier 주장과 독립이라 self-approval이 구조적으로 불가능 (철학 §1 Law 2 R6 note).
+**Law 2 — Writer and Reviewer Must Never Share a Pass.** 코드를 쓴 턴은 그 코드를 승인할 수 없음. 분리는 프롬프트가 아니라 물리적: `allowed-tools` / `disallowed-tools` frontmatter로 리뷰어가 `Write`/`Edit`을 literally 할 수 없게 만들기. 쓰기 권한이 있는 리뷰어는 리뷰어가 아님. 검증은 load-bearing 인프라, 나중 생각이 아님. *Scoped exception (qg v2.2.0):* 실제 서비스를 실행해야 하는 executor(runtime-verifier)는 `Write`를 갖되, 분리는 도구 deny가 아니라 **orchestrator가 immutable baseline 대비 `git diff`로 product 변경을 잡아 verdict를 ≤FAIL로 강제 + 무커밋 + 샌드박스 폐기**하는 구조적 가드로 보장 — verifier 주장과 독립이라 self-approval이 구조적으로 불가능 (철학 Law 2).
 
 **Law 3 — Every Cycle Must Leave the System Smarter.** Compounding은 선택적 wrap-up이 아니라 discoverability check가 붙은 이름 붙은 단계. 사이클이 learning을 생산하면 하니스는 그것을 파일로 capture하고 다음 세션이 실제로 찾을 것임을 확인 — discoverability가 위험하면 인덱스 (`AGENTS.md`/`CLAUDE.md`)를 자동 편집. 어떤 미래 agent도 읽지 않는 파일에 기록하는 것은 theater.
 
 ## Plugin Shape
 
-`plugins/*`의 모든 플러그인은 [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md) §4.0의 canonical 디렉토리 구조를 따르고 다음을 모두 만족해야 합니다.
+`plugins/*`의 모든 플러그인은 아래 [Plugin Shape](#plugin-shape)의 canonical 디렉토리 구조를 따르고 다음을 모두 만족해야 합니다.
 
 ### 메타데이터 & 버전 관리
 
@@ -44,7 +44,7 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 ### 런타임 상태 & 훅
 
-- **JSON이 아니라 마크다운 state.** State는 `.claude/<plugin>.local.md`에 살음 (git-ignored, 성공 시 auto-delete, 실패 시 디버깅을 위해 보존). per-session 격리가 필요하면 `.claude/<plugin>/<session-id>/...` 하위 디렉토리도 허용 — plugin namespace(`.claude/<plugin>/`) 하위에 머물 것 (철학 §4.8 참조). **Secret 기록 금지** — placeholder 참조 사용 (철학 P21).
+- **JSON이 아니라 마크다운 state.** State는 `.claude/<plugin>.local.md`에 살음 (git-ignored, 성공 시 auto-delete, 실패 시 디버깅을 위해 보존). per-session 격리가 필요하면 `.claude/<plugin>/<session-id>/...` 하위 디렉토리도 허용 — plugin namespace(`.claude/<plugin>/`) 하위에 머물 것 (철학 P13 참조). **Secret 기록 금지** — placeholder 참조 사용 (철학 P21).
 - **모든 훅에 kill switch.** `DEVBREW_DISABLE_<PLUGIN>=1` 또는 `DEVBREW_SKIP_HOOKS=<plugin>:<hook>`. 어떤 훅도 자신의 kill switch 존중을 거부할 수 없음 — kill switch는 보안 컨트롤.
 - **훅 공존.** 같은 event 내 훅은 교환 가능해야 함. Signal tag는 `<{plugin}-signal>` 네임스페이스. `SessionStart` 훅은 read-only 조언자, 절대 mutate 안 함. 각 훅은 README의 "Hooks Installed"에 "왜 skill이 아닌가"의 한 줄 justification과 함께 문서화.
 - **Loud logging을 동반한 graceful degradation.** 누락된 optional 의존성은 capability를 downgrade, crash하지 않음 — 사용자가 출력에서 fallback이 돌았음을 알 수 있어야 함.
@@ -82,7 +82,7 @@ plugins/<your-plugin>/
 
 ## Forbidden Patterns
 
-Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md) §2 (각 원칙의 anti-corollary) + §11.1 (ID 마이그레이션). 리뷰에서 이름으로 cite. 이 리포에서 가장 자주 fire하는 다섯 개:
+Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md`](docs/philosophy/devbrew-harness-philosophy.md)의 Structural Mechanisms 섹션 (각 원칙의 anti-corollary). 리뷰에서 이름으로 cite. 이 리포에서 가장 자주 fire하는 다섯 개:
 
 - **Self-approval** — 같은 턴의 writer/reviewer (Law 2 위반).
 - **Polite stop** — 긍정적 리뷰 후 다음 액션으로 가지 않고 요약을 narrate. Approval gate와 구분: gate는 사용자가 redirect 가능, polite stop은 acknowledge만 가능.
