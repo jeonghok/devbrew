@@ -108,10 +108,19 @@ frontmatter `locked_directions`와 1:1. 재논쟁 금지.
 ## 3. External Landscape
 
 > ⚠️ **이 섹션의 주장들도 "확정 사실"이 아니다.** D1–D4 중 3건의 전제가 틀렸던 것과 같은 이유로
-> (§2 참조), 아래 주장들도 **감사자의 검증 대상**이다. 특히 **C10("AGENTS.md-canonical 불가침")의
-> 근거인 *"Claude Code는 AGENTS.md를 네이티브로 읽지 않는다"*는 2026년 7월 현재도 참인지 반드시
-> 재확인**하라 — 틀렸다면 감사자는 잘못된 금지 조항을 받고 있는 것이다. 이미 발견된 오류: hook 타입은
-> 4종이 아니라 5종이었다(아래).
+> (§2 참조), 아래 주장들도 **감사자의 검증 대상**이다. 특히 *"Claude Code는 AGENTS.md를 네이티브로
+> 읽지 않는다"*(→ **D5**)는 2026년 7월 현재도 참인지 **공식 문서로 반드시 재확인**하라 — 근거는
+> 블로그 1편 + gist 1개뿐이고, 같은 등급의 주장들이 이미 세 번 틀렸다. **`withdrawn`이면 갭을 올려라.**
+> 이미 발견된 오류: hook 타입은 4종이 아니라 5종이었다(아래).
+>
+> **이 항목에 대한 어떤 사전 제약도 없다** (2026-07-12 — 한때 "불가침"이라는 금지 조항으로 주어졌으나,
+> 그것이 축④를 구조적으로 눈멀게 하므로 철회됐다. 금지 조항은 **더 이상 존재하지 않는다**).
+
+> ⚠️ **레퍼런스는 웹에만 있지 않다 — 디스크에 있다** (2026-07-12 추가). 설치된 공식 플러그인이
+> 2026 레퍼런스의 **인용 가능하고 재현 가능한** 출처다: `plugin-dev`(공식 플러그인 규범 + 검증기),
+> `claude-md-management/references/quality-criteria.md`(**공식 CLAUDE.md 품질 기준**),
+> `claude-code-setup`(**project-init과 정면으로 겹치는 공식 플러그인**), `skill-creator`, `hookify`.
+> 상세와 **함정**(공식 검증기 6개 중 5개가 project-init에 거짓 증거를 낸다)은 설계 §5.4.
 
 - **command와 skill은 이미 통합됨** — `.claude/commands/x.md`와 `skills/x/SKILL.md`는 "work the same way"이며 **둘 다 description만 startup 로드 + 본문은 invoke 시 로드**. — https://code.claude.com/docs/en/slash-commands — **[피함]** — "231줄 command를 skill로 쪼개면 context가 가벼워진다"는 전제가 사실무근. shape 이관은 context 이득 0의 lateral move.
 - **SKILL.md 권장 상한 500줄 / 결정론은 스크립트로** — https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices, https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview — **[중립]** — 231줄은 상한의 절반 이하라 "분해 필요" 근거 안 됨. 다만 "결정론은 스크립트로" 조항은 **의미 판단이 아닌** 순수 파일-상태 판정에 한해 감사 대상.
