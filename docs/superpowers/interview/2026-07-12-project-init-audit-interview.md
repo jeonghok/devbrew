@@ -98,12 +98,18 @@ frontmatter `locked_directions`와 1:1. 재논쟁 금지.
 
 ## 3. External Landscape
 
+> ⚠️ **이 섹션의 주장들도 "확정 사실"이 아니다.** D1–D4 중 3건의 전제가 틀렸던 것과 같은 이유로
+> (§2 참조), 아래 주장들도 **감사자의 검증 대상**이다. 특히 **C10("AGENTS.md-canonical 불가침")의
+> 근거인 *"Claude Code는 AGENTS.md를 네이티브로 읽지 않는다"*는 2026년 7월 현재도 참인지 반드시
+> 재확인**하라 — 틀렸다면 감사자는 잘못된 금지 조항을 받고 있는 것이다. 이미 발견된 오류: hook 타입은
+> 4종이 아니라 5종이었다(아래).
+
 - **command와 skill은 이미 통합됨** — `.claude/commands/x.md`와 `skills/x/SKILL.md`는 "work the same way"이며 **둘 다 description만 startup 로드 + 본문은 invoke 시 로드**. — https://code.claude.com/docs/en/slash-commands — **[피함]** — "231줄 command를 skill로 쪼개면 context가 가벼워진다"는 전제가 사실무근. shape 이관은 context 이득 0의 lateral move.
 - **SKILL.md 권장 상한 500줄 / 결정론은 스크립트로** — https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices, https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview — **[중립]** — 231줄은 상한의 절반 이하라 "분해 필요" 근거 안 됨. 다만 "결정론은 스크립트로" 조항은 **의미 판단이 아닌** 순수 파일-상태 판정에 한해 감사 대상.
 - **PostToolUse는 사후·비차단 (되돌릴 수 없음)** — https://claudefa.st/blog/tools/hooks/hooks-guide — **[중립]** — project-init의 브랜치·커밋 검증이 구조적으로 "이미 저지른 뒤의 경고"임을 확정. 승격 여부는 OQ2.
 - **hook 계층 모델**: prose = advisory / permissions = static allow-deny / **PreToolUse = 보안급 "반드시 일어나면 안 되는 것"**. 스타일 컨벤션(브랜치 prefix, 커밋 포맷)은 PreToolUse 영역이 아님. — https://paddo.dev/blog/claude-code-hooks-guardrails/ — **[취함]** — devbrew의 "harness lightness — trust the model"과 독립적으로 수렴하는 외부 근거.
 - **git blocking hook의 실패 모드**: 판단 여지 있는 스타일 규칙에 hard block → false positive로 사용자가 막힘, escape hatch 요구, 반발. — https://ai.sulat.com/claude-code-hooks-a-bookmarkable-guide-to-git-automation-11b4516adc5d — **[취함]**
-- **hook 타입 4종** (command / HTTP / prompt / agent) — project-init은 `command`만 사용. — https://code.claude.com/docs/en/plugins-reference — **[중립]** — 도입 정당성은 LD6 입증책임 규칙 적용 대상.
+- **hook 타입 5종** (command / HTTP / prompt / agent / `mcp_tool`) — project-init은 `command`만 사용. ⚠ 최초 브리핑은 "4종"이라 적었으나 `mcp_tool` 누락이었다 (2026-07-12 정정). — https://code.claude.com/docs/en/plugins-reference — **[중립]** — 도입 정당성은 LD6 입증책임 규칙 적용 대상. **감사자는 이 숫자도 직접 확인하라** — 이 brief의 사실 주장은 검증 대상이지 전제가 아니다.
 - **Claude Code는 AGENTS.md를 네이티브로 읽지 않음** → `@AGENTS.md` import 또는 symlink가 유일한 정답. — https://agyn.io/blog/claude-md-agents-md-compatibility, https://gist.github.com/yurukusa/d36197848911f025add142abefcde685 — **[취함]** — **project-init의 현행 AGENTS.md-canonical + CLAUDE.md-thin-pointer 설계는 2026 기준 정답**. 이 축은 "낡음"이 아니라 오히려 앞서 있음. 감사자는 이를 훼손하는 권고를 하지 말 것.
 - **내장 `/init` 존재** — 코드베이스를 스캔해 CLAUDE.md를 생성하며, AGENTS.md·.cursorrules·.windsurfrules를 읽어 반영. — https://www.marktechpost.com/2026/06/14/claude-code-guide-2026-25-features-with-examples-demo/ — **[중립]** — project-init Phase 0(manifest 스캔 tech-stack 감지)과 **기능 중복 의심**. 위임/차별화 판단은 OQ3.
 - **생태계 플러그인 레퍼런스**: plugin-builder(컴포넌트별 빌더 스킬 + 대화형 생성), CI/CD·validation 포함 플러그인 템플릿이 표준화 중. devbrew는 CI 없음. — https://github.com/claude-market/marketplace/tree/HEAD/plugin-builder, https://github.com/ivan-magda/claude-code-plugin-template — **[중립]** — LD3의 3번째 정렬 키("최신 레퍼런스 대비 격차")의 기준선.

@@ -90,7 +90,7 @@ disclosure를 공유 → 이관의 context 이득 0). 구조 가설은 **판정 
 | C1 | 감사자는 **물리적으로** 쓰기 불가여야 한다. 프롬프트 약속 불가. **Bash는 쓰기 통로다** — Bash를 가진 에이전트는 write-denied가 아니다. | Law 2 |
 | C2 | fan-out ≥ 5 → hard review 게이트(설계 문서 선언). `cost_class: high` → **런타임 `AskUserQuestion` 지출 동의 게이트**. **둘은 별개 의무다.** | CLAUDE.md Plugin Shape |
 | C3 | 루프에는 max-iter / kill switch가 있어야 한다. 재시도도 루프다. | Forbidden: unbounded autonomy |
-| C4 | 감사 범위 = `plugins/project-init/**` + `docs/git-workflow/**` + `.claude-plugin/marketplace.json`의 project-init 항목. | LD5 |
+| C4 | **갭**의 범위 = `plugins/project-init/**` + `docs/git-workflow/**` + `.claude-plugin/marketplace.json`의 project-init 항목. **읽기**는 제한 없음 — 검증에 필요한 리포 밖 파일(`~/.claude/plugins/**`)과 형제 플러그인 구현을 반드시 읽는다 (§8-3). | LD5 (읽기/갭 분리는 r6) |
 | C5 | shape 축에서 "형제 플러그인과 다르다"는 논거 **무효**. | LD6 |
 | C6 | D1–D4는 **확정 사실이 아니라 후보 단서**다. 감사자는 각 단서의 전제를 **직접 검증**한 뒤 `confirmed`/`withdrawn`/`reclassified`로 판정하고, `confirmed`인 것만 갭으로 올린다 (§5.6). | brief §2 (2026-07-12 재분류) |
 | C12 | **인덱스가 아니라 구현을 읽어라.** 메커니즘의 존재/부재를 판정할 때 `hooks.json`·`marketplace.json`·`description` 필드·목차 같은 **인덱스**만 보고 결론짓지 말 것. 그 메커니즘을 *실제로 구현하는 코드*를 열어라. | §5.6 (D1·D2·D4가 전부 이 실패였다) |
@@ -262,18 +262,22 @@ phase '병합'  ──────── barrier ────────
    에이전트 : 의미 중복 병합 (Claude 생존 갭 ∪ codex 갭 — cross-model)
    codex 갭도 여기서 audit-refuter를 1회 통과한다 (codex FP 선례 4회 — 무검증 통과 금지).
 
-   **codex 갭의 운명은 남김없이 회계된다** (AC6). 갈래는 다섯이다:
+   **codex 갭의 운명은 남김없이 회계된다** (AC6). 갈래는 여섯이다:
       S = 생존 (리포트에 source: codex 로 등재)
       R = 병합단계 audit-refuter가 kill      → 사유 한 줄
       M = Claude 갭에 의미 중복으로 흡수      → 흡수처 갭 id
       D = exact-key dedup(코드)으로 드롭      → 동일 키를 가진 Claude 갭 id
       K = 심층검증(3표 중 2표 refute)에서 kill → 사유 한 줄
-   **S + R + M + D + K == N** (pre-1이 evidence-pack.json에 기록한 정규화 codex 갭 수).
+      X = 스키마 검증 실패(재시도 2회 소진)로 폐기 → degraded[]에도 기록
+   **S + R + M + D + K + X == N** (pre-1이 evidence-pack.json에 기록한 정규화 codex 갭 수).
 
-   회계는 **빠짐없어야(exhaustive)** 의미가 있다. 갈래를 셋만 세면 dedup 드롭이나 심층검증 kill이
-   일어나는 순간 항등식이 깨져 정상 동작이 커밋 금지가 된다 — r3의 AC6이 정확히 그 실패였고,
-   갈래를 덜 세는 것은 그 실패를 한 phase 뒤로 옮길 뿐이다. 다섯 갈래 중 하나로 분류되지 않은
-   codex 갭이 있으면 그것이 곧 **조용한 증발**이며 RED다.
+   회계는 **빠짐없어야(exhaustive)** 의미가 있다. 갈래를 덜 세면 그 경로가 발생하는 순간 항등식이
+   깨져 **정상 동작이 커밋 금지**가 된다 — r3의 AC6이 정확히 그 실패였고, r4는 갈래를 셋만 세서
+   같은 실패를 한 phase 뒤로 옮겼을 뿐이었다. 이 문서는 이 실수를 **세 번** 했다. 여섯 갈래 중
+   하나로 분류되지 않은 codex 갭이 있으면 그것이 곧 **조용한 증발**이며 RED다.
+
+   > **구현자에게**: 새 소멸 경로를 추가하면 **반드시 새 버킷을 만들어라.** 항등식은 파이프라인의
+   > 모든 갈래를 세는 것이지, 우리가 기억해낸 갈래만 세는 것이 아니다.
 
 phase '심층검증'
    CRITICAL / HIGH 생존 갭에 **추가 2개 렌즈** (축별 refute 1표 + 2표 = 3표):
@@ -287,7 +291,7 @@ phase '종합'
    에이전트 : OQ1–OQ6 답변 종합. 축⑥의 OQ4 결과를 축②의 steelman 조건 (c) 필드에 반영.
    코드     : LD3 정렬 (§11)
    return   : {gaps[], oq_answers[], degraded[], deep_verified[], deep_skipped[],
-               codex_accounting: {N, S, R[], M[], D[], K[]},
+               codex_accounting: {N, S, R[], M[], D[], K[], X[]},
                rebuttals[]}   ← D<n>-REBUTTAL 갭 (§5.6). 있으면 리포트 최상단 + 헤더 공시.
 
 post-1   ─ orchestrator (Bash, workflow 밖)
@@ -348,8 +352,14 @@ codex는 **에이전트가 아니라 외부 프로세스** 1회 (workflow 밖).
 1. **읽기전용.** 도구 표면에 Bash/Write/Edit이 **없다**. 수정 제안은 텍스트로만.
 2. **전체 읽기 — excerpt 샘플링 금지.** 범위 내 파일은 end-to-end로 `Read`한다. 샘플링으로 놓친
    갭은 사용자에게 "이 축엔 문제 없음"으로 배달된다.
-3. **범위 (LD5).** `plugins/project-init/**` · `docs/git-workflow/**` · `.claude-plugin/marketplace.json`의
-   project-init 항목. 그 밖은 *비교 참조*로만 읽을 수 있고 갭 대상이 아니다.
+3. **범위 (LD5) — 갭의 범위이지 *읽기*의 범위가 아니다.** 갭을 올릴 수 있는 대상은
+   `plugins/project-init/**` · `docs/git-workflow/**` · `.claude-plugin/marketplace.json`의
+   project-init 항목뿐이다. **그러나 읽기는 제한되지 않으며, 검증에 필요한 것은 반드시 읽어야
+   한다** — 형제 플러그인의 *구현*(`plugins/quality-gates/hooks/*.py` 등), 설치된 플러그인 레지스트리
+   (`~/.claude/plugins/installed_plugins.json`, `~/.claude/plugins/cache/**`), 공식 문서(web).
+   **이 구분은 load-bearing이다**: D1의 반증 증거는 리포 *밖*(`installed_plugins.json`)에, D2의 반증
+   증거는 LD5 *밖*(`quality-gates/hooks/post-tool-use.py`)에 있었다. 읽기를 LD5로 묶으면 감사자는
+   후보 단서가 틀렸다는 것을 **구조적으로 발견할 수 없다** — 검증하라 시켜놓고 증거를 못 보게 막는 셈이다.
 4. **입증책임 (LD6).** shape 축에서 "형제 플러그인과 다르다"는 논거는 **무효**. 구조 변경 권고는
    *재현 가능한 실패 모드* 또는 steelman 조건 (a)~(d) 충족을 제시해야 한다.
 5. **D1–D4는 후보 단서다 — 사실이 아니다 (C6, §5.6).** 각 단서의 전제를 **직접 검증**한 뒤
@@ -479,7 +489,7 @@ codex는 **에이전트가 아니라 외부 프로세스** 1회 (workflow 밖).
 | AC3 | OQ1–OQ6 각각에 **답 또는 명시적 "증거 불충분"**이 붙는다. |
 | AC4 | OQ1(축②) 보고가 **좌·우 증거를 대칭으로** 담고, 조건 (a)~(d) 중 무엇이 충족되는지 명시한다. |
 | AC5 | 감사 전후 **LD5 범위 전체의 SHA-256 매니페스트가 동일**하다 (git-ignored 파일 포함). |
-| AC6 | codex 미실행 시 리포트 첫 20줄에 loud 배너. 실행 시 **codex 갭 회계가 남김없이 완결**된다 — `S + R + M + D + K == N`, 각 갈래에 사유 또는 흡수처 id 병기, 생존분은 `source: codex`로 구분 표시. |
+| AC6 | codex 미실행 시 리포트 첫 20줄에 loud 배너. 실행 시 **codex 갭 회계가 남김없이 완결**된다 — `S + R + M + D + K + X == N`, 각 갈래에 사유 또는 흡수처 id 병기, 생존분은 `source: codex`로 구분 표시. |
 | AC7 | 갭 목록이 LD3 4단 키(§11)로 결정론 정렬돼 있다. |
 | AC8 | 심층검증에서 kill된 갭 수와 상한 초과로 미검증된 갭 수가 리포트에 공시되고, 각 갭의 `verification` 필드가 채워져 있다. |
 | AC9 | 모든 감사 에이전트의 `agentType`이 **allowlist**(`plugin-auditor`, `audit-refuter`) 안에 있고, `agentType`을 **누락한 `agent()` 호출이 0건**이며, 두 agent 파일의 `tools:`에 쓰기 도구가 없다. |
@@ -499,7 +509,7 @@ codex는 **에이전트가 아니라 외부 프로세스** 1회 (workflow 밖).
 | AC3 | `## OQ 답변` 섹션이 존재하고 그 섹션 **안에서만** `OQ1`–`OQ6` 헤더 6개를 세며, **각 헤더 아래 비공백 본문 ≥ 30자**가 있어야 통과. 그 본문은 실질 답이거나 정확히 `증거 불충분` 마커를 포함한다. **본문 공백 → RED.** 전역 grep은 `oq_ref` 필드 때문에 항상 만족되므로 **폐기**. | 섹션-스코프 + 본문 길이 (AC2와 대칭) |
 | AC4 | 좌·우 블록 **각각**에서 `file:line` 증거 개수를 센다 → (a) 양쪽 ≥ 1, (b) `max/min ≤ 3` (대칭 비율 하한). `steelman_condition`이 `none`이면 그 근거 문장 ≥ 30자 필수. | 구조 카운트 + 비율 |
 | AC5 | 사전/사후 SHA-256 매니페스트(git-ignored 포함) diff = 공집합. | 해시 비교 |
-| AC6 | codex **미실행** 시 `head -20`에 `⚠ codex` 배너 존재. codex **실행** 시 **회계 완결성**: pre-1이 `evidence-pack.json`에 기록한 정규화 codex 갭 수 `N`에 대해 리포트가 다섯 갈래(생존 `S` / 병합 refute `R` / 의미 흡수 `M` / dedup 드롭 `D` / 심층검증 kill `K`)를 공시하고 **`S + R + M + D + K == N`** 이어야 통과. `R`·`K`에 사유 한 줄, `M`·`D`에 흡수처 갭 id가 붙어야 한다. 생존 `S`건은 표에 `source: codex`로 구분 표시. | 회계 항등식 (exhaustive) |
+| AC6 | codex **미실행** 시 `head -20`에 `⚠ codex` 배너 존재. codex **실행** 시 **회계 완결성**: pre-1이 `evidence-pack.json`에 기록한 정규화 codex 갭 수 `N`에 대해 리포트가 여섯 갈래(생존 `S` / 병합 refute `R` / 의미 흡수 `M` / dedup 드롭 `D` / 심층검증 kill `K` / 스키마 폐기 `X`)를 공시하고 **`S + R + M + D + K + X == N`** 이어야 통과. `R`·`K`·`X`에 사유 한 줄, `M`·`D`에 흡수처 갭 id가 붙어야 한다. 생존 `S`건은 표에 `source: codex`로 구분 표시. | 회계 항등식 (exhaustive) |
 | AC7 | 리포트 표를 파싱해 4단 정렬 키가 **전부** 단조인지 스크립트 확인 (severity, fix_cost, reference_gap, id). | 전 키 검증 |
 | AC8 | `심층검증 kill: N건` · `미검증(상한초과): M건` 두 줄 존재 + 모든 갭 행의 `verification` 열이 비어있지 않음. | 열 완전성 |
 | AC9 | 3단 검사. **(a)** workflow 스크립트의 `agent(` 호출 수 == `agentType:` 지정 수 — **누락된 호출이 0건**이어야 한다 (누락 시 기본 에이전트로 폴백하는데 그 도구 표면은 우리가 통제하지 않는다). **(b)** 모든 `agentType:` 값이 allowlist(`plugin-auditor`, `audit-refuter`)에 속한다. **(c)** allowlist의 각 agent 파일 frontmatter `tools:`에 `Bash`·`Write`·`Edit`·`MultiEdit`·`NotebookEdit`이 **없다**. (a)를 빼면 allowlist 검사는 "적혀 있는 것만" 보므로 vacuous하다. | allowlist + 누락 0 + 파일 검증 |
