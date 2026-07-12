@@ -212,6 +212,12 @@ __marimo__/
 .DS_Store
 *.local.md
 .claude/
+# Negate: /.claude/agents/ holds *source* agent definitions (read-only auditors whose
+# tool allowlist is what makes Law 2 physical), not runtime state. The rule above targets
+# plugin state dirs (.claude/<plugin>/…) at any depth — including plugins/**/.claude/.
+!/.claude/
+/.claude/*
+!/.claude/agents/
 reference/
 .omx
 
