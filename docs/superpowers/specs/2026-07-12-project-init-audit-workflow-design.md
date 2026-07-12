@@ -5,7 +5,7 @@
 
 - **Source brief**: [`docs/superpowers/interview/2026-07-12-project-init-audit-interview.md`](../interview/2026-07-12-project-init-audit-interview.md)
 - **Date**: 2026-07-12
-- **Revision**: r3 — 분리 리뷰 2라운드(각 4 렌즈, 총 69 에이전트) 반영. r1의 세 토대(Explore 감사자 / Bash write-deny 주장 / codex 스크립트 재사용)가 전부 반증돼 r2에서 교체됐고, r2가 새로 만든 §16 결함 3건(AC3 술어 반전 / AC6 vacuous quantifier / AC10 유령 체크)이 r3에서 정정됨. §19에 변경 이력.
+- **Revision**: r4 — 분리 리뷰 3라운드(각 4 렌즈, 총 94 에이전트) 반영. 생존 finding 추이 **9 → 4 → 2**(수렴). r1의 세 토대(Explore 감사자 / Bash write-deny 주장 / codex 스크립트 재사용)가 전부 반증돼 r2에서 교체됐고, r2·r3가 *수정하면서 새로 만든* §16 회귀들이 r3·r4에서 정정됨. §19에 변경 이력.
 - **Cycle**: 1/2 — 읽기전용 감사 (2차 사이클 = 사용자가 고른 갭의 구현)
 - **cost_class**: `high` → **§6 phase 0의 `AskUserQuestion` 지출 동의 게이트가 필수** (CLAUDE.md: "`high`는 지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함")
 
@@ -122,6 +122,14 @@ orchestrator(메인 루프)가 대신하면 감사자의 도구 표면은 `Read 
 `model: inherit`이므로 상류 하드코딩(`feature-dev:*`의 `model: sonnet`)을 우회하지 않으면서도 감사자가
 sonnet으로 고정되지 않는다.
 
+**왜 `tools:` allowlist인가 (리포의 기존 agent들은 `disallowedTools:` blocklist를 쓴다).** blocklist는
+*내가 나열하기를 잊은 도구*를 놓친다 — r1이 정확히 그렇게 실패했다. `disallowedTools: [Write, Edit,
+MultiEdit, NotebookEdit]`는 완벽해 보이지만 **Bash를 빼먹었고**, Bash가 쓰기 통로였다. allowlist는
+그 실패 모드가 구조적으로 불가능하다: 적지 않은 것은 없다. CLAUDE.md의 문면("모든 agent는 명시적
+`allowedTools`/`disallowedTools`")이 요구하는 것은 *명시적 도구 스코핑*이고, allowlist는 그 요구의
+더 강한 형태다. (`tools:` 필드가 실제로 동작하는 필드임은 `feature-dev:*` 선례로 확인 — 그럼에도
+§16 pre-flight 스모크가 실행 전에 이를 **실증**한다.)
+
 **cross-plugin 의존 없음.** r1은 `quality-gates`의 agent 2개 + 스크립트 4개에 silent coupling을
 만들었다. r2는 `detect_codex.sh` 하나만 read-only 호출하고(orchestrator가), 나머지는 쓰지 않는다.
 
@@ -150,6 +158,12 @@ codex exec -s read-only -C <repo> --json "<§8 계약 + §9 스키마 + 6축 전
 - quality-gates에서 재사용하는 것은 `detect_codex.sh`(순수 가용성 탐지) **하나뿐**이다.
 - **blind가 구조적으로 보장된다**: codex는 workflow *시작 전*에 돌므로 Claude 발견이 아직
   **존재하지 않는다.** r1처럼 "await 하지 않기"라는 규율에 의존하지 않는다.
+- **blind의 범위를 정직하게 한정한다**: codex는 **Claude의 발견**에 대해 blind이지, 감사 전체에
+  대해 blind인 것이 아니다. codex도 같은 §8 계약과 D1–D4, LD5 범위, 6축 정의를 프롬프트로 받는다 —
+  그것들은 *Claude의 결론*이 아니라 인터뷰가 확정한 **사실과 경계**이기 때문이다. 모델 다양성이
+  방어하는 것은 "두 모델이 같은 결론에 수렴해 같은 곳에서 눈이 머는 것"이지 "두 모델이 같은 문제를
+  푸는 것"이 아니다. 만약 D1–D4 자체가 틀렸다면 codex도 함께 틀린다 — 그 위험은 남으며, brief가
+  D1–D4를 `file:line`으로 못 박은 이유가 그것이다.
 - codex 출력은 §9 스키마로 **코드가 정규화**한다. `file:line` 증거가 없는 codex 갭은 **버린다**
   (AC1을 codex에도 동일 적용). `counter_argument`가 비면 병합 단계 refuter가 채우거나 갭을 강등한다.
 
@@ -190,9 +204,10 @@ phase 0  ─ 지출 동의 게이트 (orchestrator, workflow 밖)
 
 pre-1    ─ orchestrator (Bash, workflow 밖)
    무결성 스냅샷 BEFORE (SHA-256 매니페스트, --ignored 포함)
-   evidence pack 계산 (git history · 인벤토리 · 오염 상태)
+   evidence pack 계산 (git history · 인벤토리 · 오염 상태) → evidence-pack.json
    detect_codex.sh → 가용? codex exec -s read-only --json  ← BLIND (Claude 발견이 아직 없음)
    codex 출력 → §9 스키마로 정규화. 증거 없는 갭 폐기.
+   정규화 후 codex 갭 수 N을 evidence-pack.json에 기록  ← AC6 회계의 좌변
 
 ── Workflow 시작 (args = {evidencePack, codexFindings}) ──
 
@@ -206,6 +221,13 @@ phase '병합'  ──────── barrier ────────
    에이전트 : 의미 중복 병합 (Claude 생존 갭 ∪ codex 갭 — cross-model)
    codex 갭도 여기서 audit-refuter를 1회 통과한다 (codex FP 선례 4회 — 무검증 통과 금지).
 
+   **codex 갭의 운명은 세 갈래이며 전부 회계된다** (AC6):
+      S = 생존 (리포트에 source: codex 로 등재)
+      R = 병합단계 refute로 kill  → 사유 한 줄과 함께 리포트에 공시
+      M = Claude 갭에 의미 중복으로 흡수 → 흡수처 갭 id와 함께 공시
+   S + R + M == N (pre-1이 기록한 정규화 codex 갭 수). 세 갈래를 전부 세지 않으면
+   codex 갭이 조용히 증발해도 아무도 모른다.
+
 phase '심층검증'
    CRITICAL / HIGH 생존 갭에 **추가 2개 렌즈** (축별 refute 1표 + 2표 = 3표):
       · 재현성   — 실패 시나리오가 구체적인가
@@ -216,13 +238,20 @@ phase '심층검증'
 
 phase '종합'
    에이전트 : OQ1–OQ6 답변 종합. 축⑥의 OQ4 결과를 축②의 steelman 조건 (c) 필드에 반영.
-   코드     : LD3 3-키 결정론 정렬 (§11)
-   return   : {gaps[], oq_answers[], degraded[], deep_verified[], deep_skipped[]}
+   코드     : LD3 정렬 (§11)
+   return   : {gaps[], oq_answers[], degraded[], deep_verified[], deep_skipped[],
+               codex_accounting: {N, S, R[], M[]}}
 
 post-1   ─ orchestrator (Bash, workflow 밖)
-   무결성 스냅샷 AFTER → BEFORE와 비교. 다르면 **감사 무효, 커밋 금지**.
-   AC 검증 스크립트 **11종** 실행 (AC1–AC11, §16). 하나라도 RED → 커밋 금지.
-   리포트 저술 → docs/audits/ → 인덱스 포인터 추가 → 커밋.
+   1. 무결성 스냅샷 AFTER → BEFORE와 비교. 다르면 **감사 무효, 즉시 중단, 커밋 금지.**
+   2. **리포트 저술** → docs/audits/2026-07-12-project-init-audit.md (아직 커밋 안 함)
+   3. AC 검증 스크립트 **11종** 실행 (AC1–AC11, §16) — 검증 대상은 방금 쓴 리포트다.
+   4. 하나라도 RED → **커밋 금지**, RED 목록을 사용자에게 보고.
+   5. 전부 GREEN → 인덱스 포인터 추가 → 커밋.
+
+   순서가 load-bearing이다: AC 검증은 리포트를 **읽는다.** 리포트가 없는데 검증부터
+   돌리면 11종 전부가 파일 부재로 실패하거나(정상 감사도 커밋 불가) 무조건 통과하도록
+   스텁된다(이빨 없음). 저술이 검증보다 **먼저**다.
 ```
 
 **축 사이 순서 의존은 없다** (그래서 배리어 없는 `pipeline`이 옳다). 축⑥→축② 의존은 *발견* 단계가
@@ -380,6 +409,7 @@ codex는 **에이전트가 아니라 외부 프로세스** 1회 (workflow 밖).
 | `CLAUDE.md` | `docs/audits/` 포인터 1줄 추가 (Law 3 — 미래 세션이 찾을 수 있어야) |
 | `.gitignore` | **수정됨 (load-bearing)** — `.claude/` 규칙이 런타임 상태를 겨냥하면서 *소스 설정*인 `.claude/agents/`까지 삼켰다. 루트 `/.claude/`만 열고 그 안에서 `agents/`만 재포함. 중첩 `plugins/**/.claude/` 배제는 유지 (D4 오염이 다시 추적되지 않음을 `git check-ignore`로 확증). |
 | 감사 workflow 스크립트 | AC9의 검증 대상 — Workflow 도구가 세션 디렉토리에 자동 보존하지만, **AC9가 이 파일을 읽으므로** 산출물로 명시한다. |
+| `evidence-pack.json` (세션 디렉토리) | pre-1이 저술 — git history · 인벤토리 · 오염 상태 + **codex 갭 정규화 건수 `N`**(AC6 회계의 좌변). workflow에 `args`로 주입되고 post-1이 AC6 검증에 읽는다. |
 | `scripts/audit-verify.sh` 또는 workflow 인접 스크립트 | **AC1–AC11 11종** 기계 검증 |
 
 `plugins/**`는 **한 줄도 바뀌지 않는다.** 따라서 이 PR에 어떤 `plugin.json` version bump도 **불필요**하다
@@ -394,10 +424,10 @@ codex는 **에이전트가 아니라 외부 프로세스** 1회 (workflow 밖).
 | AC3 | OQ1–OQ6 각각에 **답 또는 명시적 "증거 불충분"**이 붙는다. |
 | AC4 | OQ1(축②) 보고가 **좌·우 증거를 대칭으로** 담고, 조건 (a)~(d) 중 무엇이 충족되는지 명시한다. |
 | AC5 | 감사 전후 **LD5 범위 전체의 SHA-256 매니페스트가 동일**하다 (git-ignored 파일 포함). |
-| AC6 | codex 미실행 시 리포트 첫 20줄에 loud 배너. 실행 시 codex 갭이 `source: codex`로 구분 표시. |
+| AC6 | codex 미실행 시 리포트 첫 20줄에 loud 배너. 실행 시 **codex 갭 회계가 완결**된다 — `S + R + M == N` (생존/refute/흡수의 합이 정규화 건수와 같다), `R`·`M`에 사유 병기, 생존분은 `source: codex`로 구분 표시. |
 | AC7 | 갭 목록이 LD3 4단 키(§11)로 결정론 정렬돼 있다. |
 | AC8 | 심층검증에서 kill된 갭 수와 상한 초과로 미검증된 갭 수가 리포트에 공시되고, 각 갭의 `verification` 필드가 채워져 있다. |
-| AC9 | 모든 감사 에이전트의 `agentType`이 **allowlist**(`plugin-auditor`, `audit-refuter`) 안에 있다. |
+| AC9 | 모든 감사 에이전트의 `agentType`이 **allowlist**(`plugin-auditor`, `audit-refuter`) 안에 있고, `agentType`을 **누락한 `agent()` 호출이 0건**이며, 두 agent 파일의 `tools:`에 쓰기 도구가 없다. |
 | AC10 | **팬아웃 개시 전 `AskUserQuestion` 지출 동의 게이트가 발동했다** (`cost_class: high` 의무). 강제는 구조(phase 0 ≺ pre-1)이고, 리포트는 그 사실을 헤더에 **공시**한다 — §16 참조. |
 | AC11 | 감사 리포트가 **인덱스에서 discoverable**하다 (`docs/audits/README.md` + `CLAUDE.md` 포인터). |
 
@@ -414,10 +444,10 @@ codex는 **에이전트가 아니라 외부 프로세스** 1회 (workflow 밖).
 | AC3 | `## OQ 답변` 섹션이 존재하고 그 섹션 **안에서만** `OQ1`–`OQ6` 헤더 6개를 세며, **각 헤더 아래 비공백 본문 ≥ 30자**가 있어야 통과. 그 본문은 실질 답이거나 정확히 `증거 불충분` 마커를 포함한다. **본문 공백 → RED.** 전역 grep은 `oq_ref` 필드 때문에 항상 만족되므로 **폐기**. | 섹션-스코프 + 본문 길이 (AC2와 대칭) |
 | AC4 | 좌·우 블록 **각각**에서 `file:line` 증거 개수를 센다 → (a) 양쪽 ≥ 1, (b) `max/min ≤ 3` (대칭 비율 하한). `steelman_condition`이 `none`이면 그 근거 문장 ≥ 30자 필수. | 구조 카운트 + 비율 |
 | AC5 | 사전/사후 SHA-256 매니페스트(git-ignored 포함) diff = 공집합. | 해시 비교 |
-| AC6 | codex **미실행** 시 `head -20`에 `⚠ codex` 배너 존재. codex **실행** 시: orchestrator가 정규화한 codex 갭 수 `N`(pre-1이 기록)과 리포트의 `source: codex` 행 수가 **정확히 일치**해야 통과. `N > 0`인데 표에 0건이면 RED. (`≥ 0`은 항상 참인 vacuous quantifier라 폐기 — 정규화가 통째로 깨져도 GREEN이었다.) | 건수 대조 (non-vacuous) |
+| AC6 | codex **미실행** 시 `head -20`에 `⚠ codex` 배너 존재. codex **실행** 시 **회계 완결성**: pre-1이 `evidence-pack.json`에 기록한 정규화 codex 갭 수 `N`에 대해 리포트가 `codex 갭 N건 → 생존 S / 병합단계 refute R / Claude 갭에 흡수 M` 을 공시하고 **`S + R + M == N`** 이어야 통과. `R`·`M`의 각 항목에 **사유 한 줄**이 붙어야 한다. 생존한 `S`건은 표에 `source: codex`로 구분 표시. | 회계 항등식 |
 | AC7 | 리포트 표를 파싱해 4단 정렬 키가 **전부** 단조인지 스크립트 확인 (severity, fix_cost, reference_gap, id). | 전 키 검증 |
 | AC8 | `심층검증 kill: N건` · `미검증(상한초과): M건` 두 줄 존재 + 모든 갭 행의 `verification` 열이 비어있지 않음. | 열 완전성 |
-| AC9 | workflow 스크립트의 모든 `agentType:` 값이 **allowlist에 속하는지** 검사 (블랙리스트 grep이 아니라). | allowlist |
+| AC9 | 3단 검사. **(a)** workflow 스크립트의 `agent(` 호출 수 == `agentType:` 지정 수 — **누락된 호출이 0건**이어야 한다 (누락 시 기본 에이전트로 폴백하는데 그 도구 표면은 우리가 통제하지 않는다). **(b)** 모든 `agentType:` 값이 allowlist(`plugin-auditor`, `audit-refuter`)에 속한다. **(c)** allowlist의 각 agent 파일 frontmatter `tools:`에 `Bash`·`Write`·`Edit`·`MultiEdit`·`NotebookEdit`이 **없다**. (a)를 빼면 allowlist 검사는 "적혀 있는 것만" 보므로 vacuous하다. | allowlist + 누락 0 + 파일 검증 |
 | AC10 | **강제는 구조다, 체크가 아니다.** phase 0이 pre-1보다 앞서므로 게이트 거절 → workflow 미실행 → 리포트 자체가 존재하지 않는다. 사후에 "게이트가 돌았나"를 묻는 것은 공허하다(리포트가 있다는 사실이 이미 게이트 통과를 함의). 따라서 AC10은 **공시 요건**이다: 리포트 헤더에 `지출 동의: 승인 (YYYY-MM-DD, 선언 팬아웃 N 에이전트)` 한 줄이 있고 `N`이 §7의 선언값과 일치하는지 grep. | 구조적 선행 + 공시 grep |
 | AC11 | `docs/audits/README.md`가 리포트를 링크하고, `CLAUDE.md`에서 `docs/audits/`로 가는 경로가 존재하는지 grep. | 링크 해석 |
 
@@ -495,6 +525,7 @@ GREEN이 유지되면 그 체크는 이빨이 없으므로 폐기·재작성한�
 | r1 | 최초 설계 | brainstorming |
 | **r2** | **§5 전면 교체** — `Explore` → 로컬 `plugin-auditor`/`audit-refuter` (Bash 없음, Law 2가 사실이 됨). **codex를 workflow 밖으로** (blind 구조 보장 + qg 스크립트 재사용 폐기). **§6 phase 0 지출 동의 게이트 추가** (AC10). **§5.5 무결성 스냅샷** (AC5 재작성 — git-ignored 포함). **§16 전 체크 이빨 확보** (헤더/앵커-satisfiable 폐기). **§18 Handoff Context 신설**. §11 정렬 술어 정정. §8에 C10(AGENTS.md 불가침)·전체읽기 조항 추가. §7 재시도 상한. | Law 2 분리 리뷰 — 4 렌즈 38 에이전트, 생존 9건 (WF-1/2/3, F2×2, N2, F5, F6, F7) |
 | **r3** | **§16 AC3 술어 반전 정정** — r2는 "본문이 **비었거나** … 통과"라고 써서, 이빨 없음을 고치겠다며 이빨 없음을 *명시적 PASS 규칙으로 승격*시켰다. **§16 AC6의 `≥ 0건`** vacuous quantifier → 정규화 건수 대조로 교체. **§16 AC10 정직화** — 게이트 거절 시 workflow가 안 도므로 사후 확인은 공허하다; 강제는 구조(phase 0 ≺ pre-1), 리포트는 공시만. **§16 pre-flight 스모크 신설** — `agentType` 해석과 `tools:` allowlist 실효성을 실행 전 실증. §6 "9종"→"11종", §7 호출 증폭 공시, §14에 `.gitignore`·workflow 스크립트 추가. | r2 재리뷰 — 4 렌즈 31 에이전트, 27건 중 생존 4건 (R2-1, NEW-3, NEW-4/R2-2) + refuter가 확인한 기계적 사실 4건 |
+| **r4** | **§16 AC6 회계 항등식** — r3의 "정확히 일치" 술어가 §6 병합 단계와 정면 모순이었다: codex FP를 **하나라도 성공적으로 걸러내면** 리포트의 codex 행 수가 `N`보다 작아져 AC6이 RED가 되고, 즉 **FP 방어가 의도대로 작동하는 순간 감사가 커밋 금지**가 됐다. vacuity를 고치려다 술어를 과잉 강화한 회귀. → `S + R + M == N` (생존/refute/흡수) 회계로 교체하고 §6 병합이 세 갈래를 반환하게 함. **§6 post-1 순서 정정** — AC 검증이 리포트를 *읽는데* 저술보다 **먼저** 돌고 있었다. **§16 AC9 3단 강화** — `agentType` **누락** 호출은 기본 에이전트로 폴백해 allowlist 검사를 vacuously 통과했다. **§5.3 blind 범위 한정** (codex는 Claude의 *발견*에 blind이지 공유 사실 preamble에 blind가 아니다). **§5.2 `tools:` allowlist 근거** (blocklist는 잊은 도구를 놓친다 — r1이 정확히 Bash를 잊었다). | r3 재리뷰 — 4 렌즈 25 에이전트, 21건 중 생존 2건 (둘 다 동일 AC6 이슈; **사전지식 0의 fresh-eyes 렌즈가 단독 적발**) |
 
 ## 20. Metadata
 
