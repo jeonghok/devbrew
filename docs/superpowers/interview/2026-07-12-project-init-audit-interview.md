@@ -69,9 +69,16 @@ frontmatter `locked_directions`와 1:1. 재논쟁 금지.
 
 감사자는 이 4건을 *재발견*하는 데 예산을 쓰지 말고, **영향 범위와 수정안**만 확정하라.
 
+> **단, "재발견 금지"는 "반증 금지"가 아니다.** 재발견 금지는 *재탐색 예산을 아끼려는* 규칙이지
+> *비판을 봉인하려는* 규칙이 아니다. D1–D4의 **전제·분류가 틀렸다는 증거**를 만나면 감사자는
+> 그것을 갭으로 올릴 **의무**가 있다. — 이 예외는 실제 사고에서 나왔다: D1은 최초에 "존재하지
+> 않는 플러그인"으로 분류됐으나 `commit-commands`는 **실재했고**, 그 오류는 6명의 Claude 감사자와
+> codex 전원에게 사실로 주입될 예정이었다. D1–D4가 감사의 검증 사각지대로 남으면, 감사는 자기가
+> 틀린 곳을 구조적으로 볼 수 없다.
+
 | # | 결함 | 증거 |
 |---|---|---|
-| D1 | **유령 의존성 배포** — 존재하지 않는 `commit-commands` 플러그인의 `/commit-push-pr`을 사용자에게 권함. `templates/shared/pr-process.md:77` 경유라 **사용자 프로젝트 산출물로 복제됨**(devbrew 자신의 `docs/git-workflow/pr-process.md:77`이 증거). | `README.md:77`, `commands/project-init.md:231`, `templates/shared/pr-process.md:77`, `docs/git-workflow/pr-process.md:77` |
+| D1 | **미선언 외부 의존성 + 조건부 유령 안내** — ⚠ **2026-07-12 정정**: 최초 브리핑은 이를 *"존재하지 않는 `commit-commands` 플러그인"*으로 분류했으나 이는 **사실 오류**다. `commit-commands@claude-plugins-official`은 **실재하는 공식 Anthropic 플러그인**이며(`~/.claude/plugins/installed_plugins.json` + 캐시 디렉토리 확인), devbrew *자체* 마켓플레이스(3개)에 없을 뿐이다. 실제 결함은 두 겹: **(a) 미선언 의존성** — project-init README가 commit-commands 통합을 광고하면서 **prerequisites 섹션이 아예 없다**(README 섹션 전수: 아키텍처/동작 방식/기능/브랜치 전략/통합/설치된 Hook/인스턴스화한 원칙/사용). CLAUDE.md: *"Silent coupling은 버그."* **(b) 조건부 유령 안내** — `templates/shared/pr-process.md:77` 경유로 `/commit-push-pr` 권고가 **사용자 프로젝트로 복제**되는데, 그 사용자가 commit-commands를 설치하지 않았다면 존재하지 않는 명령을 안내받는다. → **수정 방향은 "삭제"가 아니라 "선언·설치 안내 추가 + 미설치 사용자를 위한 graceful 문구"다.** | 실재 증거: `~/.claude/plugins/installed_plugins.json` (`"commit-commands@claude-plugins-official"`), `~/.claude/plugins/cache/claude-plugins-official/commit-commands/`. 결함 증거: `README.md:77`(prerequisites 부재), `commands/project-init.md:231`, `templates/shared/pr-process.md:77`, `docs/git-workflow/pr-process.md:77` |
 | D2 | **거짓 통합 주장** — README "quality-gates: PR 생성 시 quality 파이프라인 자동 트리거". qg 훅은 PostToolUse(Bash/Edit)·SessionStart·SessionEnd뿐이며 PR 생성 트리거는 없음. | `README.md:79` vs `plugins/quality-gates/hooks/hooks.json` |
 | D3 | **marketplace description drift** — `.claude-plugin/marketplace.json`의 project-init 설명이 v1.6.0 Project Charter·docs-lint·AGENTS.md를 전혀 반영 안 함(plugin.json description은 최신). 마켓플레이스 카드가 플러그인의 절반을 숨김. | `.claude-plugin/marketplace.json` vs `plugins/project-init/.claude-plugin/plugin.json` |
 | D4 | **플러그인 폴더 오염** — untracked `.claude/quality-gates/<uuid>/files.md`가 플러그인 디렉토리와 **`templates/` 내부**에 잔존. templates 하위는 배포 경로라 잠재적 유출. | `plugins/project-init/.claude/…`, `plugins/project-init/templates/.claude/…` |
