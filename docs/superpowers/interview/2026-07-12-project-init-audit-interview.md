@@ -86,22 +86,24 @@ frontmatter `locked_directions`와 1:1. 재논쟁 금지.
 >
 > **왜 범주 자체를 폐기하는가**: "확정 사실 + 재발견 금지"는 그 항목들을 감사가 **구조적으로 검증할
 > 수 없는 유일한 영역**으로 만든다 — 그리고 그것들이 다른 모든 판단의 전제다. 감사 코퍼스는
-> ~1,600줄이라 재발견 비용은 **싸고**, 틀린 전제의 비용은 **한 사이클 전체**다. 균형이 맞지 않는다.
+> **실측 4,837줄**(`plugins/project-init/**` 4,596 + `docs/git-workflow/**` 241)이라 재발견 비용은 여전히 **싸고**(6축이 나눠 읽는다), 틀린 전제의 비용은 **한 사이클 전체**다. 균형이 맞지 않는다. ⚠️ 이전 rev는 이 수치를 "~1,600줄"이라 적었으나 **테스트·fixture(2,500줄 이상)를 뺀 숫자**였다 — 그 숫자가 "전체 읽기 강제"와 팬아웃 규모를 정당화하고 있었으므로 실측으로 교체한다.
 
 **감사자에 대한 지시**: D1–D5는 **후보 단서**이지 사실이 아니다. 각 단서에 대해:
 
 1. **전제를 직접 검증하라** — 인용된 `file:line`을 열고, **주장된 메커니즘이 실제 구현에 존재하는지**
    확인하라. 인덱스·레지스트리·목차·description 필드만 읽고 판정하지 말 것. **구현을 읽어라.**
-2. 검증 결과를 `confirmed` / `withdrawn` / `reclassified` 중 하나로 리포트에 명시하고 근거를 붙여라.
-3. `confirmed`인 것만 갭 목록에 올린다. 나머지는 **철회 사유**와 함께 별도 표에 기록한다.
+2. 검증 결과를 `confirmed` / `withdrawn` / `reclassified` / `unverified` 중 하나로 리포트에 명시하고
+   근거를 붙여라. **`unverified`(예: web 부재로 D5 확인 불가)는 정직한 답이며 실패가 아니다** — 단
+   *왜* 검증할 수 없었는지를 반드시 적어라.
+3. `confirmed`인 것만 갭 목록에 올린다. 나머지는 **사유**와 함께 별도 표에 기록한다.
 
 | # | 결함 | 증거 |
 |---|---|---|
 | D1 | **미선언 외부 의존성 + 조건부 유령 안내** — ⚠ **2026-07-12 정정**: 최초 브리핑은 이를 *"존재하지 않는 `commit-commands` 플러그인"*으로 분류했으나 이는 **사실 오류**다. `commit-commands@claude-plugins-official`은 **실재하는 공식 Anthropic 플러그인**이며(`~/.claude/plugins/installed_plugins.json` + 캐시 디렉토리 확인), devbrew *자체* 마켓플레이스(3개)에 없을 뿐이다. 실제 결함은 두 겹: **(a) 미선언 의존성** — project-init README가 commit-commands 통합을 광고하면서 **prerequisites 섹션이 아예 없다**(README 섹션 전수: 아키텍처/동작 방식/기능/브랜치 전략/통합/설치된 Hook/인스턴스화한 원칙/사용). CLAUDE.md: *"Silent coupling은 버그."* **(b) 조건부 유령 안내** — `templates/shared/pr-process.md:77` 경유로 `/commit-push-pr` 권고가 **사용자 프로젝트로 복제**되는데, 그 사용자가 commit-commands를 설치하지 않았다면 존재하지 않는 명령을 안내받는다. → **수정 방향은 "삭제"가 아니라 "선언·설치 안내 추가 + 미설치 사용자를 위한 graceful 문구"다.** | 실재 증거: `~/.claude/plugins/installed_plugins.json` (`"commit-commands@claude-plugins-official"`), `~/.claude/plugins/cache/claude-plugins-official/commit-commands/`. 결함 증거: `README.md:77`(prerequisites 부재), `commands/project-init.md:231`, `templates/shared/pr-process.md:77`, `docs/git-workflow/pr-process.md:77` |
 | ~~D2~~ | ❌ **철회 (WITHDRAWN — 최초 주장이 거짓이었다).** 최초 주장: *"거짓 통합 주장 — README의 'quality-gates: PR 생성 시 자동 트리거'는 거짓; qg 훅은 PostToolUse/SessionStart/SessionEnd뿐"*. **반증**: `plugins/quality-gates/hooks/post-tool-use.py`가 `PostToolUse(Bash)` 안에서 `gh\s+pr\s+create`를 정규식으로 잡고, stdout의 PR URL을 추출해 *"You MUST now initialize the quality-gates pipeline"* systemMessage를 주입한다. **README:79는 참이다.** `templates/shared/pr-process.md:78`은 `(설치 시)` 전제조건까지 이미 정확히 달아 놓았다. **기계적 원인**: `hooks.json`의 *이벤트 등록 목록*만 읽고 훅 **본문**을 안 읽음 — 그리고 `hooks.json` 자신의 description은 PR 트리거를 언급하지 않아 그 파일만 보면 오류가 *확증*된다. | 반증: `plugins/quality-gates/hooks/post-tool-use.py:2-7, 54, 78, 88-95`. 원 주장의 증거였던 `hooks.json`은 **불충분한 증거**였다. |
 | D3 | **marketplace description drift** — `.claude-plugin/marketplace.json`의 project-init 설명이 v1.6.0 Project Charter·docs-lint·AGENTS.md를 전혀 반영 안 함(plugin.json description은 최신). 마켓플레이스 카드가 플러그인의 절반을 숨김. | `.claude-plugin/marketplace.json` vs `plugins/project-init/.claude-plugin/plugin.json` |
-| D4 | **플러그인 폴더 오염** (사실은 참 — 단 **유출 메커니즘 주장은 철회**). git-ignored `.claude/quality-gates/<uuid>/files.md` 3개가 플러그인 디렉토리와 `templates/` 내부에 잔존하며, 내용은 이전 qg 세션의 **절대경로 목록**이다. ~~"templates 하위는 배포 경로라 잠재적 유출"~~ → **거짓**: `commands/project-init.md:139-143`은 템플릿을 **파일명으로 개별 지정해 읽지**(`templates/<strategy>/branch-strategy.md` 등) 디렉토리를 재귀 복사하지 않는다. 따라서 사용자 프로젝트로 새는 경로는 **없다.** 남는 것은 리포 위생 문제 + 플러그인 tarball 패키징 시 포함될 여지. **severity를 그에 맞게 낮춰 판정할 것.** | 존재: `plugins/project-init/.claude/quality-gates/*/files.md` (2), `templates/.claude/quality-gates/*/files.md` (1). 유출 부재 근거: `commands/project-init.md:136-143` |
-| **D5** | **AGENTS.md-canonical 설계가 2026 기준 정답인가?** (구 C10 — **2026-07-12 강등**). 이전 rev는 §3의 *"Claude Code는 AGENTS.md를 네이티브로 읽지 않는다"*를 근거로 **"이 설계를 훼손하는 권고 금지"**라는 **재갈**을 물렸다. 그 금지는 **삭제됐다** — 근거가 블로그 1편 + gist 1개뿐이고, 같은 등급의 주장들이 이미 세 번 틀렸으며, 그 재갈은 축④(외부대비·정체성)가 *"낡음"의 가장 큰 후보*에 대해 구조적으로 눈멀게 했다. **축④는 2026-07 현재 Claude Code의 AGENTS.md 네이티브 지원 여부를 web으로 직접 확인**하고 판정하라. `withdrawn`이면 **갭을 올릴 수 있다.** | §3의 해당 항목 (블로그 + gist). **감사자가 공식 문서로 재확인할 것** |
+| D4 | **플러그인 폴더 오염** (사실은 참 — 단 **유출 메커니즘 주장은 철회**). git-ignored `.claude/quality-gates/<uuid>/files.md` 3개가 플러그인 디렉토리와 `templates/` 내부에 잔존하며, 내용은 이전 qg 세션의 **절대경로 목록**이다. ~~"templates 하위는 배포 경로라 잠재적 유출"~~ → **거짓**: `commands/project-init.md:139-143`은 템플릿을 **파일명으로 개별 지정해 읽지**(`templates/<strategy>/branch-strategy.md` 등) 디렉토리를 재귀 복사하지 않는다. 따라서 사용자 프로젝트로 새는 경로는 **없다.** 남는 것은 리포 위생 문제 + 플러그인 tarball 패키징 시 포함될 여지. **severity는 감사자가 이 사실들 위에서 스스로 판정한다** (orchestrator가 처방하지 않는다 — 설계 §5.4: 주입은 사실만). | 존재: `plugins/project-init/.claude/quality-gates/*/files.md` (2), `templates/.claude/quality-gates/*/files.md` (1). 유출 부재 근거: `commands/project-init.md:136-143` |
+| **D5** | **AGENTS.md-canonical 설계가 2026 기준 정답인가?** — §3은 *"Claude Code는 AGENTS.md를 네이티브로 읽지 않는다"*를 근거로 현행 설계가 정답이라고 적었다. **그 주장을 검증하라.** 근거는 블로그 1편 + gist 1개뿐이며, 같은 등급의 주장들이 이미 세 번 틀렸다. **축④는 2026-07 현재 Claude Code의 AGENTS.md 네이티브 지원 여부를 공식 문서로 직접 확인**하고 `confirmed`/`withdrawn`/`reclassified`/`unverified`로 판정하라. **`withdrawn`이면 갭을 올려라** — 그것이 이 감사에서 가장 값진 발견일 수 있다. *(연혁: 한때 이 항목은 "반대 권고 금지"라는 제약으로 주어졌으나 축④를 구조적으로 눈멀게 하므로 철회됐다.)* | §3의 해당 항목 (블로그 + gist). **공식 문서로 재확인 필수** |
 
 ## 3. External Landscape
 
@@ -117,7 +119,7 @@ frontmatter `locked_directions`와 1:1. 재논쟁 금지.
 - **hook 계층 모델**: prose = advisory / permissions = static allow-deny / **PreToolUse = 보안급 "반드시 일어나면 안 되는 것"**. 스타일 컨벤션(브랜치 prefix, 커밋 포맷)은 PreToolUse 영역이 아님. — https://paddo.dev/blog/claude-code-hooks-guardrails/ — **[취함]** — devbrew의 "harness lightness — trust the model"과 독립적으로 수렴하는 외부 근거.
 - **git blocking hook의 실패 모드**: 판단 여지 있는 스타일 규칙에 hard block → false positive로 사용자가 막힘, escape hatch 요구, 반발. — https://ai.sulat.com/claude-code-hooks-a-bookmarkable-guide-to-git-automation-11b4516adc5d — **[취함]**
 - **hook 타입 5종** (command / HTTP / prompt / agent / `mcp_tool`) — project-init은 `command`만 사용. ⚠ 최초 브리핑은 "4종"이라 적었으나 `mcp_tool` 누락이었다 (2026-07-12 정정). — https://code.claude.com/docs/en/plugins-reference — **[중립]** — 도입 정당성은 LD6 입증책임 규칙 적용 대상. **감사자는 이 숫자도 직접 확인하라** — 이 brief의 사실 주장은 검증 대상이지 전제가 아니다.
-- **Claude Code는 AGENTS.md를 네이티브로 읽지 않음** → `@AGENTS.md` import 또는 symlink가 유일한 정답. — https://agyn.io/blog/claude-md-agents-md-compatibility, https://gist.github.com/yurukusa/d36197848911f025add142abefcde685 — **[취함]** — **project-init의 현행 AGENTS.md-canonical + CLAUDE.md-thin-pointer 설계는 2026 기준 정답**. 이 축은 "낡음"이 아니라 오히려 앞서 있음. 감사자는 이를 훼손하는 권고를 하지 말 것.
+- **Claude Code는 AGENTS.md를 네이티브로 읽지 않음** → `@AGENTS.md` import 또는 symlink가 유일한 정답. — https://agyn.io/blog/claude-md-agents-md-compatibility, https://gist.github.com/yurukusa/d36197848911f025add142abefcde685 — **[검증 대상 → D5]** — ⚠️ **2026-07-12 재분류.** 이 항목은 한때 감사자에게 **금지 조항**으로 주어졌다(근거는 블로그 1편 + gist 1개뿐). 그 금지는 축④가 "낡음"의 가장 큰 후보에 대해 구조적으로 눈멀게 했으므로 **철회됐다.** 지금 이 항목은 **검증 대상 D5**다: **축④는 2026-07 현재 Claude Code의 AGENTS.md 네이티브 지원 여부를 공식 문서로 직접 확인**하고 `confirmed`/`withdrawn`/`reclassified`/`unverified`로 판정하라 (§2 D5). **`withdrawn`이면 갭을 올려라** — 그것이 이 감사에서 가장 값진 발견일 수 있다.
 - **내장 `/init` 존재** — 코드베이스를 스캔해 CLAUDE.md를 생성하며, AGENTS.md·.cursorrules·.windsurfrules를 읽어 반영. — https://www.marktechpost.com/2026/06/14/claude-code-guide-2026-25-features-with-examples-demo/ — **[중립]** — project-init Phase 0(manifest 스캔 tech-stack 감지)과 **기능 중복 의심**. 위임/차별화 판단은 OQ3.
 - **생태계 플러그인 레퍼런스**: plugin-builder(컴포넌트별 빌더 스킬 + 대화형 생성), CI/CD·validation 포함 플러그인 템플릿이 표준화 중. devbrew는 CI 없음. — https://github.com/claude-market/marketplace/tree/HEAD/plugin-builder, https://github.com/ivan-magda/claude-code-plugin-template — **[중립]** — LD3의 3번째 정렬 키("최신 레퍼런스 대비 격차")의 기준선.
 
