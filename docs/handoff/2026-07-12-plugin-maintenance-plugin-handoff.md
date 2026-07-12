@@ -3,7 +3,7 @@ type: plugin-handoff
 target_plugin: plugin-audit (가칭)
 status: in-progress — 1차 dogfood 진행 중 (설계 r11, 리뷰 10라운드 완료, 미착수: r11 리뷰 · 실행)
 source_session: 2026-07-12 project-init 감사 설계 (branch `feature/project-init-audit`, HEAD `ca313a2`)
-blocker: 가정 (i) 미해결 — `agentType`이 프로젝트 레벨 `.claude/agents/*.md`를 해석하지 않는다 (§4.1)
+blocker: **해소됨** (2026-07-12, 미니 workflow 스모크 실측) — `agentType`은 프로젝트 레벨 `.claude/agents/*.md`를 해석하고 `tools:` allowlist를 강제한다 (§4.1)
 ---
 
 # `plugin-audit` 핸드오프 — 플러그인 보수 감사 하니스
@@ -155,7 +155,9 @@ Workflow의 `agent()`에는 **도구 스코핑 옵션이 없다.** 옵션은 `la
 tools: Glob, Grep, Read, WebSearch, WebFetch   # Bash 없음 → Law 2가 사실
 ```
 
-blocklist("Write/Edit/... 를 빼라")는 **새 쓰기 도구가 추가되면 조용히 뚫린다.** allowlist는 열거된 것만 존재한다. 이 구분은 devbrew Law 2의 "프롬프트가 아니라 물리적"의 실제 의미다.
+blocklist("Write/Edit/... 를 빼라")는 **새 쓰기 도구가 추가되면 조용히 뚫린다.** allowlist는 **우리가 부여하는 표면**을 열거된 것으로 닫는다. 이 구분은 devbrew Law 2의 "프롬프트가 아니라 물리적"의 실제 의미다.
+
+> ⚠️ **정밀화 (2026-07-12 스모크 실측).** *"allowlist는 열거된 것만 존재한다"*는 **문자 그대로는 거짓이다.** `schema` 옵션을 쓰면 하니스가 `StructuredOutput`을 **주입**한다 — frontmatter에 없는 도구다. 쓰기 벡터는 아니지만(§4.1), **allowlist는 하니스 주입에 대해 닫혀 있지 않다.** Law 2를 allowlist **단독**에 걸지 말 것 — 무결성 백스톱(§3.1 post-1)이 2선 방어다. 원장 20.
 
 ### 3.3 codex는 **workflow 밖에서, 먼저, blind로**
 
@@ -275,48 +277,63 @@ r9 리뷰가 연 A~G와 r10 리뷰가 연 3개 CRITICAL은 **전부 닫혔다.**
 
 ---
 
-### 4.1 ★ **최우선 blocker — 가정 (i)이 지금 거짓이다** (실측)
+### 4.1 ✅ **blocker 해소 — 가정 (i)은 참이다** (2026-07-12 실측)
 
 **설계 전체가 이 가정 위에 선다:**
 
 > *"Workflow의 `agentType`이 프로젝트 레벨 `.claude/agents/*.md`를 해석한다."*
 
-**실측 결과 — 거짓이다.** `agentType: 'plugin-auditor'`로 실제 dispatch를 시도한 결과:
+**미니 workflow 스모크 결과 — 참이다.** (run `wf_f73feda2-22a`, 1 에이전트, 5.6초)
 
-```
-Agent type 'plugin-auditor' not found. Available agents: … (30개 목록)
-```
+원인은 단순했다. **에이전트 레지스트리는 세션 시작 시점에 스냅샷된다** (추정이 실측으로 확증됐다). 이전 세션의 실패는 파일이 세션 *중*에 만들어졌기 때문이지, 프로젝트 레벨 해석이 불가능해서가 아니었다. **agent 파일 커밋 → 세션 재시작** 후 `agentType: 'smoke-probe'`가 정상 해석됐다.
 
-두 파일은 **디스크에 존재하고 git에 tracked인데도** 레지스트리가 거부한다 (`git check-ignore` exit=1 → 무시되지 않음).
+**세 채널이 독립적으로 수렴했다** — 자기보고 하나로 판정하지 않았다 (§4.3-b):
 
-**추정 원인**: 에이전트 레지스트리가 **세션 시작 시점에 스냅샷**된다. 파일은 세션 *중*에 만들어졌다.
+| # | 채널 | 관측 | 강도 |
+|---|---|---|---|
+| 1 | `self_identity` | `"You are **smoke-probe**, a capability probe."` — `smoke-probe.md:10`과 **바이트 일치** | **persona가 실제로 로드됐다** = agentType 해석 확증 |
+| 2 | `available_tools` | `Read, WebSearch, WebFetch, StructuredOutput, Glob, Grep` — **Bash·Write 부재** | 자기보고 (약함) |
+| 3 | **sentinel 파일** | orchestrator가 지정한 두 절대경로가 **실행 후에도 디스크에 부재** + 워킹트리 clean | **외부 ground truth** (강함) |
 
-**이것이 Law 2의 유일한 메커니즘이다** — `agent()`에는 도구 스코핑 옵션이 없으므로(§3.2), write-denied `agentType`을 고르는 것 말고는 방법이 없다. 이 가정이 끝내 거짓이면 **§3.2 전체를 다시 써야 한다.**
+`bash_result` / `write_result` 둘 다 `"… TOOL ABSENT FROM TOOLSET"`. `dispatch_error: null`, `agents_error: 0`. `journal.jsonl` 원본 return이 워크플로 return과 일치 — 삼켜진 것 없음.
 
-**해소 절차 (다음 세션 최우선)**:
-1. agent 파일 **3개** 커밋 — `plugin-auditor.md` · `audit-refuter.md` · **`smoke-probe.md`(아직 없음, 신규 필요)**
-2. **Claude Code 세션 재시작**
-3. **미니 workflow 스모크**로 `agentType` 해석을 실증 (§4.2 — Agent 도구로 물으면 안 된다)
-4. 그래도 실패하면 폴백: `feature-dev:code-reviewer`(Bash 없음, 단 `model: sonnet` 하드코딩을 감수)
+**채널 3이 load-bearing이다.** 1·2는 에이전트가 *하는 말*이고, 3은 orchestrator가 `ls`로 잡는 *바깥의 사실*이다. 조용한 폴백(= 쓰기 가능한 기본 subagent로 대체)이 일어났다면 sentinel이 **생겼을 것이다.** 생기지 않았다.
 
-> **역설적으로 이것은 설계가 작동한다는 증거다.** pre-flight 스모크는 정확히 이 가정을 잡으라고 있었고, **실제로 잡았다.** r1은 이런 미검증 가정 때문에 무너졌다 — 이번엔 안전하게 실패한다.
+> **pre-flight 스모크는 두 번 값을 했다.** 이전 세션엔 가정을 **깨서**(안전하게 실패), 이번엔 가정을 **증명해서**. r1은 미검증 가정 때문에 무너졌다.
 
-### 4.2 스모크가 **가정 (i)을 검증하지 못했다** (경로 불일치)
+#### ⚠️ 다만 — 스모크가 §3.2의 주장 하나를 **반증**했다
+
+에이전트의 실제 도구는 **6개**였다. allowlist 5개 + **`StructuredOutput`** — frontmatter에 **없는 도구**다. `schema` 옵션 때문에 **하니스가 주입**했다.
+
+§3.2는 *"allowlist는 열거된 것만 존재한다"*고 단언한다. **문자 그대로는 거짓이다.** 정확한 명제:
+
+> allowlist는 **우리가 부여하는** 도구 표면을 닫는다. 하니스는 호출 옵션에 따라 **자기 도구를 추가로 주입한다.**
+
+**이것은 Law 2 침해가 아니다** — `StructuredOutput`은 return-value 채널이지 파일시스템 쓰기가 아니고, sentinel 부재가 그것을 뒷받침한다. 이 사실을 "Law 2가 뚫렸다"로 승격하는 것은 **원장 14가 경고한 바로 그 자책골**이다.
+
+**하지만 함의는 실재한다**: Law 2의 물리적 보장이 **우리가 통제하지 않는 표면 하나**를 남긴다. 하니스가 미래에 쓰기 가능한 도구를 주입하면 allowlist는 그것을 막지 못한다. → §4.3-e에 정직한 한계로 등재. **다행히 설계는 allowlist를 유일 방어선으로 두지 않았다** — post-1의 SHA-256 무결성 백스톱이 이 클래스를 잡는다. **심층방어가 값을 했다.**
+
+### 4.2 ✅ 스모크 경로 불일치 — 고쳤고, 고친 스모크가 답을 냈다
 
 r10의 스모크는 orchestrator가 **Agent 도구**(`subagent_type` 파라미터)로 dispatch했다. 그런데 검증 대상은 **Workflow의 `agentType`** 해석이다 — **다른 코드 경로다.**
 
 Workflow 런타임이 프로젝트 레벨 레지스트리를 못 읽는 경우(= 가정 (i)이 거짓인 **바로 그 경우**) 스모크는 GREEN인 채 6축 dispatch가 전부 미해석 → **쓰기 가능한 기본 에이전트로 폴백** → Law 2가 fiction인 채 31 에이전트가 돈다.
 
-→ **r11: 스모크는 1-에이전트짜리 미니 workflow다** (`scripts/smoke-workflow.js`). **가정을 태우는 경로로 스모크를 돌려라.**
+→ **r11: 스모크는 1-에이전트짜리 미니 workflow다.** **가정을 태우는 경로로 스모크를 돌려라.**
+
+**2026-07-12: 그렇게 돌렸고 §4.1이 그 결과다.** 실행 형태는 인라인 스크립트였다(Workflow 도구가 세션 디렉토리에 자동 보존). 플러그인화 시 `scripts/smoke-workflow.js`로 고정한다.
+
+> **주의 — 이번 세션의 Agent 레지스트리 목록은 증거가 아니었다.** 세션 시작 시 시스템 프롬프트에 세 에이전트가 전부 `Tools: Glob, Grep, Read, WebSearch, WebFetch`로 **이미 등록돼 보였다.** 그것을 "blocker 해소"로 읽었다면 **또 경로를 착각한 것**이다 — 그건 Agent 도구 경로의 사실이다. Workflow 경로는 **따로 태워야** 알 수 있었고, 실제로 태워서 알았다.
 
 ### 4.3 남은 **정직한 한계** (닫을 수 없거나, 하니스가 도와줘야 닫히는 것)
 
 | # | 한계 | 왜 못 닫는가 |
 |---|---|---|
 | **a** | **consent artifact는 orchestrator가 쓰고 orchestrator가 검사한다** | *AskUserQuestion이 실제로 발동했다*는 증명이 **아니다**. 현재 도구 표면에 그 증거가 없다. 강제는 **구조**(artifact 없으면 pre-0가 안 돎)이고, AC는 **공시를 확인**할 뿐이다. **하니스가 응답 ID를 노출하면 그때 승격.** 설계에 이 한계를 **명문화**했다 — 갖지 않은 검증을 가진 척하지 않는다. |
-| **b** | **capability 스모크는 여전히 에이전트가 *반환한 문자열*을 믿는다** | persona를 비운 `smoke-probe`로 **자기보고 경로를 좁혔을 뿐**(r10은 `plugin-auditor`로 물었는데, 그 persona가 이미 *"NOT responsible for running anything"*이라 **capability가 살아 있어도 persona가 거절**해 GREEN이 났다). 하니스가 effective tool 목록이나 **거부된 tool-call 이벤트**를 노출하면 승격. |
+| **b** | ~~capability 스모크는 에이전트가 *반환한 문자열*을 믿는다~~ → **부분 승격됨** (2026-07-12) | **더 이상 자기보고 단독이 아니다.** 스모크가 에이전트에게 **orchestrator가 지정한 절대경로**에 sentinel을 쓰라고 지시하고, orchestrator가 **디스크에서 부재를 확인**한다 (§4.1 채널 3) — 자기보고가 아니라 **외부 ground truth**다. 원장 11(*"ground truth는 바깥에서 와야 한다"*)을 스모크 자신에게 적용한 것. **잔여 한계**: sentinel은 *그 두 경로에 안 썼다*를 증명하지 persona 없는 probe가 *모든 쓰기 경로*를 시도했음을 증명하진 않는다. 완전 승격은 하니스가 **거부된 tool-call 이벤트**를 노출해야 가능. |
 | **c** | **"감사자가 배정 파일을 전부 읽었는가"는 기계로 확인 불가** | AC로 만들면 *지어낸 read 로그*를 검증하는 꼴이 된다. → 프롬프트 계약이 지시하고, `journal.jsonl`이 원본을 남기고, **사용자가 증거 밀도를 본다.** |
 | **d** | **리포 *밖* 쓰기는 무결성 백스톱이 못 잡는다** | 매니페스트는 리포 범위다. 1차 방어선(도구 표면에 Bash 부재)이 담당한다. 정직한 한계로 설계에 적었다. |
+| **e** | **`tools:` allowlist는 하니스 주입에 대해 닫혀 있지 않다** ← **신규 (2026-07-12 실측)** | `schema` 옵션이 `StructuredOutput`을 주입한다 — frontmatter에 없는 도구다 (§4.1). 지금은 쓰기 벡터가 **아니다.** 하지만 **주입 자체가 우리 통제 밖**이므로, 미래 하니스가 쓰기 가능한 도구를 주입하면 allowlist는 못 막는다. **닫는 방법 없음** — 대신 (i) Law 2를 allowlist **단독**에 걸지 않고 (ii) SHA-256 무결성 백스톱(§3.1 post-1)을 2선으로 두고 (iii) **매 실행 스모크가 실제 도구 목록을 보고**하므로 주입 표면이 바뀌면 **드러난다.** |
 
 ### 4.4 (참고) r9가 연 구조 문제 원문 — 아래는 **닫힌** 것들의 상세 기록
 
@@ -683,6 +700,36 @@ r10 리뷰에 **배선 전수감사** 렌즈를 넣었다 — *"§9.1 스키마�
 
 **교훈: 리뷰 프롬프트가 리뷰 결과를 결정한다.** 클래스를 찾으려면 **곱집합을 열거시켜라.** 그리고 그 표를 **evidence에 통째로 담게 하라** — 빈칸이 사람 눈에 보여야 한다.
 
+### 19. **에이전트 레지스트리는 세션 시작 시점에 스냅샷된다** (blocker의 정체)
+
+`agentType: 'plugin-auditor'`가 *"Agent type not found"*로 거부된 이유는 **프로젝트 레벨 해석이 불가능해서가 아니었다.** 파일이 **세션 중에** 만들어졌기 때문이다. **커밋 → 세션 재시작** 후 정상 해석됐다 (§4.1).
+
+**운영 규칙 (미래 세션 필수)**: `.claude/agents/*.md`를 **새로 만들거나 `tools:`를 수정하면 세션을 재시작해야 반영된다.** 이걸 모르면 (a) 존재하는 에이전트를 "런타임이 지원 안 한다"고 **오판**하거나 — 이번에 실제로 그럴 뻔했다 — (b) 더 나쁘게, **수정한 allowlist가 반영 안 된 채** Law 2를 확보했다고 믿는다.
+
+**그리고 이것은 원장 14의 재발이었다.** *"레지스트리가 거부했다"*(도구가 못 찾음)를 *"프로젝트 레벨 agent는 해석되지 않는다"*(존재하지 않음)로 **승격**할 뻔했다. 실제로는 **타이밍 문제**였다. **확증 실패 ≠ 부재 증명.**
+
+### 20. **allowlist는 하니스 주입에 대해 닫혀 있지 않다** (§3.2 주장의 반증)
+
+스모크가 보고한 실제 도구는 **6개**였다 — allowlist 5개 + **`StructuredOutput`**. `schema` 옵션이 주입한 것이다.
+
+§3.2는 *"allowlist는 열거된 것만 존재한다"*고 단언했다. **거짓이다.** 정확히는 *"allowlist는 **우리가 부여하는** 표면을 닫는다."*
+
+**그러나 이것을 "Law 2가 뚫렸다"로 읽으면 원장 14의 자책골을 반복하는 것이다.** `StructuredOutput`은 return-value 채널이고, sentinel 부재가 쓰기 부재를 **독립으로** 확증했다. 결함은 **주장의 정밀도**이지 **메커니즘**이 아니다.
+
+**교훈 (두 겹)**:
+- **보안 속성을 단일 메커니즘에 걸지 마라.** 무결성 백스톱이 2선에 있었기 때문에 이 발견이 **설계를 무너뜨리지 않았다.** 심층방어는 이럴 때 값을 한다.
+- **스모크는 "GREEN/RED"가 아니라 *실제 도구 목록*을 보고하게 하라.** 그래야 **주입 표면이 바뀌면 드러난다.** 불리언만 받았으면 6번째 도구를 못 봤다.
+
+### 21. **스모크 자신에게도 외부 ground truth를 적용하라** (§4.3-b를 부분 승격한 방법)
+
+r10의 스모크는 에이전트에게 *"Bash 쓸 수 있어?"*라고 **물었다.** 그건 자기보고다 — 에이전트가 *하는 말*.
+
+r11 스모크는 **orchestrator가 지정한 절대경로**에 sentinel을 쓰라고 지시하고, **실행 전후로 orchestrator가 디스크를 직접 확인**한다. 파일이 안 생겼다 = **쓰기가 실제로 일어나지 않았다.** 에이전트의 진술과 **독립**이다.
+
+조용한 폴백(쓰기 가능한 기본 subagent로 대체)은 정확히 이 채널에서만 잡힌다 — 폴백된 에이전트는 *"저는 Bash가 없습니다"*라고 **말하지 않고**, sentinel을 **만든다.**
+
+**교훈: 원장 11("ground truth는 파이프라인 바깥에서")은 파이프라인만의 규칙이 아니다. 검증 장치 자신에게도 적용하라.** 게이트가 대상에게 *질문*만 한다면 그 게이트는 대상의 정직성에 의존한다.
+
 ---
 
 ## 7. 재사용 가능한 자산
@@ -695,7 +742,7 @@ r10 리뷰에 **배선 전수감사** 렌즈를 넣었다 — *"§9.1 스키마�
 | `docs/superpowers/interview/2026-07-12-project-init-audit-interview.md` | interview brief. **감사자에게 주입되는 프롬프트** — §6 원장 2 참조. r11에서 **C10 재갈 잔존 제거** + 레퍼런스 코퍼스 추가 |
 | `.claude/agents/plugin-auditor.md` | 57줄. 축 발견자. `tools: Glob, Grep, Read, WebSearch, WebFetch` |
 | `.claude/agents/audit-refuter.md` | 64줄. 적대적 검증자. 게이트 A~E. 같은 allowlist |
-| `.claude/agents/smoke-probe.md` | ⚠️ **아직 없음.** r11 설계 §14가 신규로 명시. **persona가 비어야 한다** (§5) |
+| `.claude/agents/smoke-probe.md` | ✅ **커밋됨** (`a47473c`). 41줄. persona 비움 (자기 정체성 + "판단으로 거절 금지"만). 같은 allowlist. **blocker를 실제로 해소한 물건** (§4.1) |
 | `.gitignore` (수정) | 아래 참조 |
 | `docs/handoff/2026-07-12-plugin-maintenance-plugin-handoff.md` | **이 문서** |
 
@@ -706,6 +753,10 @@ r10 리뷰에 **배선 전수감사** 렌즈를 넣었다 — *"§9.1 스키마�
 ffc2cc5      — 핸드오프 원장 최초 작성
 f33c1d3  r10 — 회계를 파이프라인 밖으로 (AC 5 → 3)
 ca313a2  r11 — r10의 세 게이트가 파이프라인을 죽였다 + 레퍼런스는 디스크에 있다
+36a5a18      — 핸드오프 r10·r11 + plugin-dev 생태계 조사 (시행착오 10 → 18건)
+a47473c      — smoke-probe 에이전트 (capability와 persona 분리)
+   ↓
+         ★ blocker 해소 — 미니 workflow 스모크 `wf_f73feda2-22a` (§4.1)
 ```
 
 **메모리 (신규)**: `feedback_absence_vs_failure_to_confirm.md` — 원장 14의 일반화.
@@ -729,16 +780,20 @@ ca313a2  r11 — r10의 세 게이트가 파이프라인을 죽였다 + 레퍼�
 
 ## 8. 다음 세션이 할 일
 
-### ★ 0. **최우선 — 가정 (i) 해소** (§4.1). 이게 안 되면 나머지는 무의미하다.
+### ✅ 0. ~~최우선 — 가정 (i) 해소~~ — **DONE** (2026-07-12, §4.1)
 
-1. `.claude/agents/smoke-probe.md` **작성** (persona 비움, 같은 `tools:` allowlist) → 3개 파일 커밋
-2. **Claude Code 세션 재시작** (레지스트리가 세션 시작 시 스냅샷되는 것으로 추정)
-3. **1-에이전트 미니 workflow**로 `agentType` 해석 실증 — **Agent 도구로 물으면 안 된다** (§4.2)
-4. 실패 시: 폴백(`feature-dev:code-reviewer`) 또는 **§3.2 전면 재설계**
+1. ~~`smoke-probe.md` 작성 → 3개 파일 커밋~~ ✅ `a47473c`
+2. ~~Claude Code 세션 재시작~~ ✅ (레지스트리 스냅샷 가설이 **맞았다** — 원장 19)
+3. ~~1-에이전트 미니 workflow로 `agentType` 해석 실증~~ ✅ **참이다.** `tools:` allowlist가 런타임에 강제된다
+4. ~~실패 시 폴백~~ — **불필요.** §3.2는 살아 있다 (단 allowlist 주장은 정밀화됨 — 원장 20)
+
+**설계 전체가 서 있던 가정이 확증됐다. r11 설계는 실행 가능하다.**
 
 ### 즉시 (이 브랜치)
 
 1. **r11 리뷰** — 이번에도 **fresh-eyes + 배선 전수감사 + codex blind** 셋을 유지할 것 (§6 원장 6·7·18).
+   - **리뷰에 §4.1의 신규 사실 3건을 입력으로 넣을 것**: 레지스트리 스냅샷(19) · `StructuredOutput` 주입(20) · sentinel 승격(21). 셋 다 설계 문서 본문에는 **아직 반영 안 됨** — 핸드오프에만 있다.
+   - ⚠️ **원장 10**: 이 3건도 *"확정 사실"*로 제시하지 말 것. **검증 면제 대상으로 주면 리뷰의 사각지대가 된다.**
 2. reviewing-spec 통과 → `superpowers:writing-plans`
 3. 스크립트 저술 (§5 구성 초안 — **렌더러 골든 테스트 · check-law2 mutation 테스트 필수**)
 4. **지출 동의 게이트 → pre-0 정적검증 + 스모크 → 실행** (순서 주의: 게이트가 **먼저**다. 스모크도 에이전트를 태운다)
@@ -768,7 +823,9 @@ ca313a2  r11 — r10의 세 게이트가 파이프라인을 죽였다 + 레퍼�
 | | |
 |---|---|
 | 최초 작성 | 2026-07-12 |
-| 최종 갱신 | 2026-07-12 (r11 시점) |
+| 최종 갱신 | 2026-07-12 (blocker 해소 시점) |
 | 소스 세션 | `feature/project-init-audit`, 설계 **r11** (`ca313a2`), 리뷰 **10라운드** |
 | 리뷰 규모 | r1–r8: 188 에이전트 · r9: 40 · r10: 2 Claude + codex — **codex blind 3회** |
-| 상태 | **설계 r11 완료, 리뷰 미착수.** ⚠️ **blocker: 가정 (i)** (§4.1) — `agentType`이 프로젝트 레벨 agent를 해석하지 않는다 (실측) |
+| 상태 | **설계 r11 완료. blocker 해소 (§4.1). 리뷰 미착수.** 다음 = **r11 리뷰** (§8) |
+| 스모크 | `wf_f73feda2-22a` — 1 에이전트, 5.6s. `agentType` 해석 ✅ · allowlist 강제 ✅ · sentinel 부재 ✅ |
+| 원장 | **21건** (신규 19·20·21 — 전부 blocker 해소 과정에서) |
