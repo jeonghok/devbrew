@@ -5,7 +5,7 @@
 
 - **Source brief**: [`docs/superpowers/interview/2026-07-12-project-init-audit-interview.md`](../interview/2026-07-12-project-init-audit-interview.md)
 - **Date**: 2026-07-12
-- **Revision**: r2 — Law 2 분리 리뷰(4 렌즈, 38 에이전트)에서 살아남은 9건 반영. r1의 세 토대(Explore 감사자 / Bash write-deny 주장 / codex 스크립트 재사용)가 전부 반증돼 교체됨. §19에 변경 이력.
+- **Revision**: r3 — 분리 리뷰 2라운드(각 4 렌즈, 총 69 에이전트) 반영. r1의 세 토대(Explore 감사자 / Bash write-deny 주장 / codex 스크립트 재사용)가 전부 반증돼 r2에서 교체됐고, r2가 새로 만든 §16 결함 3건(AC3 술어 반전 / AC6 vacuous quantifier / AC10 유령 체크)이 r3에서 정정됨. §19에 변경 이력.
 - **Cycle**: 1/2 — 읽기전용 감사 (2차 사이클 = 사용자가 고른 갭의 구현)
 - **cost_class**: `high` → **§6 phase 0의 `AskUserQuestion` 지출 동의 게이트가 필수** (CLAUDE.md: "`high`는 지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함")
 
@@ -221,7 +221,7 @@ phase '종합'
 
 post-1   ─ orchestrator (Bash, workflow 밖)
    무결성 스냅샷 AFTER → BEFORE와 비교. 다르면 **감사 무효, 커밋 금지**.
-   AC 검증 스크립트 9종 실행 (§16). 하나라도 RED → 커밋 금지.
+   AC 검증 스크립트 **11종** 실행 (AC1–AC11, §16). 하나라도 RED → 커밋 금지.
    리포트 저술 → docs/audits/ → 인덱스 포인터 추가 → 커밋.
 ```
 
@@ -245,9 +245,14 @@ CLAUDE.md는 **두 개의 별개 의무**를 건다:
 | 병합자 (`audit-refuter` — codex 갭 검증 겸) | 1 |
 | 심층검증 추가 렌즈 (`audit-refuter`) | ≤ 24 (12건 × 2렌즈) |
 | 종합자 (`plugin-auditor`) | 1 |
-| **최대** | **38** (예상 18–24) |
+| **최대 에이전트** | **38** (예상 18–24) |
 
 codex는 **에이전트가 아니라 외부 프로세스** 1회 (workflow 밖).
+
+**지출 게이트에 제시할 숫자는 정직해야 한다.** 38은 *에이전트* 상한이지 *모델 호출* 상한이 아니다 —
+스키마 위반 재시도(에이전트당 ≤2회)가 곱해지면 최악의 경우 호출 수는 3배까지 늘 수 있다. phase 0의
+`AskUserQuestion`은 **에이전트 수(예상/최대)와 재시도로 인한 호출 증폭을 함께** 제시한다. 사용자가
+동의하는 대상은 우리가 보여준 숫자이지 우리가 숨긴 숫자가 아니다.
 
 - 동시 실행은 Workflow 런타임이 `min(16, cores − 2)`로 자동 제한한다.
 - **루프 없음 — 단일 패스.** loop-until-dry 재스윕은 명시적으로 거부했다 (§17).
@@ -373,7 +378,9 @@ codex는 **에이전트가 아니라 외부 프로세스** 1회 (workflow 밖).
 | `docs/audits/2026-07-12-project-init-audit.md` | 감사 리포트 (신규 디렉토리) |
 | `docs/audits/README.md` | **신규** — 감사 인덱스 (Law 3 discoverability) |
 | `CLAUDE.md` | `docs/audits/` 포인터 1줄 추가 (Law 3 — 미래 세션이 찾을 수 있어야) |
-| `scripts/audit-verify.sh` 또는 workflow 인접 스크립트 | AC 9종 기계 검증 |
+| `.gitignore` | **수정됨 (load-bearing)** — `.claude/` 규칙이 런타임 상태를 겨냥하면서 *소스 설정*인 `.claude/agents/`까지 삼켰다. 루트 `/.claude/`만 열고 그 안에서 `agents/`만 재포함. 중첩 `plugins/**/.claude/` 배제는 유지 (D4 오염이 다시 추적되지 않음을 `git check-ignore`로 확증). |
+| 감사 workflow 스크립트 | AC9의 검증 대상 — Workflow 도구가 세션 디렉토리에 자동 보존하지만, **AC9가 이 파일을 읽으므로** 산출물로 명시한다. |
+| `scripts/audit-verify.sh` 또는 workflow 인접 스크립트 | **AC1–AC11 11종** 기계 검증 |
 
 `plugins/**`는 **한 줄도 바뀌지 않는다.** 따라서 이 PR에 어떤 `plugin.json` version bump도 **불필요**하다
 (bump 규칙은 "플러그인을 건드리는 PR"에 적용).
@@ -391,7 +398,7 @@ codex는 **에이전트가 아니라 외부 프로세스** 1회 (workflow 밖).
 | AC7 | 갭 목록이 LD3 4단 키(§11)로 결정론 정렬돼 있다. |
 | AC8 | 심층검증에서 kill된 갭 수와 상한 초과로 미검증된 갭 수가 리포트에 공시되고, 각 갭의 `verification` 필드가 채워져 있다. |
 | AC9 | 모든 감사 에이전트의 `agentType`이 **allowlist**(`plugin-auditor`, `audit-refuter`) 안에 있다. |
-| AC10 | **팬아웃 개시 전 `AskUserQuestion` 지출 동의 게이트가 발동했다** (`cost_class: high` 의무). |
+| AC10 | **팬아웃 개시 전 `AskUserQuestion` 지출 동의 게이트가 발동했다** (`cost_class: high` 의무). 강제는 구조(phase 0 ≺ pre-1)이고, 리포트는 그 사실을 헤더에 **공시**한다 — §16 참조. |
 | AC11 | 감사 리포트가 **인덱스에서 discoverable**하다 (`docs/audits/README.md` + `CLAUDE.md` 포인터). |
 
 ## 16. Verification Plan
@@ -404,18 +411,35 @@ codex는 **에이전트가 아니라 외부 프로세스** 1회 (workflow 밖).
 |---|---|---|
 | AC1 | 각 갭 블록 **안에서** `file:line` 패턴 ≥ 1개 카운트. 전역 grep 금지. | 블록-스코프 카운트 |
 | AC2 | 각 `## D<n>` 섹션 **안에서** `영향범위`·`수정안` 두 항목이 있고 각 항목 아래 **비공백 본문 ≥ 30자**. | 본문 길이 검사 |
-| AC3 | `## OQ 답변` 섹션이 존재하고 그 섹션 **안에서만** `OQ1`–`OQ6` 헤더 6개를 세며, 각 헤더 아래 본문이 비었거나 정확히 `증거 불충분` 마커를 포함해야 통과. 전역 grep은 `oq_ref` 필드 때문에 항상 만족되므로 **폐기**. | 섹션-스코프 + 본문 |
+| AC3 | `## OQ 답변` 섹션이 존재하고 그 섹션 **안에서만** `OQ1`–`OQ6` 헤더 6개를 세며, **각 헤더 아래 비공백 본문 ≥ 30자**가 있어야 통과. 그 본문은 실질 답이거나 정확히 `증거 불충분` 마커를 포함한다. **본문 공백 → RED.** 전역 grep은 `oq_ref` 필드 때문에 항상 만족되므로 **폐기**. | 섹션-스코프 + 본문 길이 (AC2와 대칭) |
 | AC4 | 좌·우 블록 **각각**에서 `file:line` 증거 개수를 센다 → (a) 양쪽 ≥ 1, (b) `max/min ≤ 3` (대칭 비율 하한). `steelman_condition`이 `none`이면 그 근거 문장 ≥ 30자 필수. | 구조 카운트 + 비율 |
 | AC5 | 사전/사후 SHA-256 매니페스트(git-ignored 포함) diff = 공집합. | 해시 비교 |
-| AC6 | codex 미실행 시 `head -20`에 `⚠ codex` 존재. 실행 시 `source: codex` 갭 ≥ 0건이 표에 구분 표시. | 위치-스코프 grep |
+| AC6 | codex **미실행** 시 `head -20`에 `⚠ codex` 배너 존재. codex **실행** 시: orchestrator가 정규화한 codex 갭 수 `N`(pre-1이 기록)과 리포트의 `source: codex` 행 수가 **정확히 일치**해야 통과. `N > 0`인데 표에 0건이면 RED. (`≥ 0`은 항상 참인 vacuous quantifier라 폐기 — 정규화가 통째로 깨져도 GREEN이었다.) | 건수 대조 (non-vacuous) |
 | AC7 | 리포트 표를 파싱해 4단 정렬 키가 **전부** 단조인지 스크립트 확인 (severity, fix_cost, reference_gap, id). | 전 키 검증 |
 | AC8 | `심층검증 kill: N건` · `미검증(상한초과): M건` 두 줄 존재 + 모든 갭 행의 `verification` 열이 비어있지 않음. | 열 완전성 |
 | AC9 | workflow 스크립트의 모든 `agentType:` 값이 **allowlist에 속하는지** 검사 (블랙리스트 grep이 아니라). | allowlist |
-| AC10 | 지출 게이트 응답이 세션에 기록됐고 `승인`이었는지 확인. 미발동 → 감사 자체가 규범 위반. | 게이트 기록 |
+| AC10 | **강제는 구조다, 체크가 아니다.** phase 0이 pre-1보다 앞서므로 게이트 거절 → workflow 미실행 → 리포트 자체가 존재하지 않는다. 사후에 "게이트가 돌았나"를 묻는 것은 공허하다(리포트가 있다는 사실이 이미 게이트 통과를 함의). 따라서 AC10은 **공시 요건**이다: 리포트 헤더에 `지출 동의: 승인 (YYYY-MM-DD, 선언 팬아웃 N 에이전트)` 한 줄이 있고 `N`이 §7의 선언값과 일치하는지 grep. | 구조적 선행 + 공시 grep |
 | AC11 | `docs/audits/README.md`가 리포트를 링크하고, `CLAUDE.md`에서 `docs/audits/`로 가는 경로가 존재하는지 grep. | 링크 해석 |
 
+### 실행 전 스모크 (pre-flight) — 가정을 실증한다
+
+r2 전체가 두 가정 위에 서 있다: **(i)** Workflow의 `agentType`이 프로젝트 레벨 `.claude/agents/*.md`를
+해석한다, **(ii)** frontmatter의 `tools:` allowlist가 *실제로* 도구를 제한한다. r1은 정확히 이런
+종류의 미검증 가정 때문에 무너졌다 — 같은 실수를 형태만 바꿔 반복하지 않는다.
+
+**팬아웃 개시 전에** 1-에이전트 스모크를 돌린다:
+
+- `agentType: 'plugin-auditor'`로 사소한 읽기 과업 1건을 dispatch한다.
+- 에이전트가 **해석되지 않으면** (unknown agent type) → **중단.** 설계 가정 (i)이 거짓이다.
+- 프롬프트에 "Bash로 `echo test`를 시도하고, 도구가 없으면 없다고 보고하라"를 넣는다.
+  에이전트가 Bash를 **실행할 수 있다고 보고하면** → **중단.** 가정 (ii)가 거짓이고 Law 2는 여전히
+  fiction이다. 이 경우 §5.5 무결성 스냅샷만으로는 부족하며 설계를 다시 연다.
+- 두 스모크가 모두 통과해야 6축 팬아웃을 개시한다.
+
 **회귀 락의 이빨 증명**: 각 체크는 "해당 body를 지웠을 때 RED가 되는지" mutation으로 확인한다 —
-GREEN이 유지되면 그 체크는 이빨이 없으므로 폐기·재작성한다.
+GREEN이 유지되면 그 체크는 이빨이 없으므로 폐기·재작성한다. **AC3가 이 규칙에 걸린 실례다** (r2에서
+술어가 뒤집혀 "본문이 비면 통과"였다 → r3에서 정정). 규칙을 문서에 적는 것과 그 규칙을 자기 문서에
+적용하는 것은 별개다.
 
 `docs/audits/**`는 project-init의 `docs-lint` hook 대상이 아니다 (그 hook은 root context 파일과
 `docs/project/*.md`만 본다). 다만 devbrew CLAUDE.md의 "300줄 이상 → 목차" 규칙은 리포트에도 적용한다.
@@ -470,6 +494,7 @@ GREEN이 유지되면 그 체크는 이빨이 없으므로 폐기·재작성한�
 |---|---|---|
 | r1 | 최초 설계 | brainstorming |
 | **r2** | **§5 전면 교체** — `Explore` → 로컬 `plugin-auditor`/`audit-refuter` (Bash 없음, Law 2가 사실이 됨). **codex를 workflow 밖으로** (blind 구조 보장 + qg 스크립트 재사용 폐기). **§6 phase 0 지출 동의 게이트 추가** (AC10). **§5.5 무결성 스냅샷** (AC5 재작성 — git-ignored 포함). **§16 전 체크 이빨 확보** (헤더/앵커-satisfiable 폐기). **§18 Handoff Context 신설**. §11 정렬 술어 정정. §8에 C10(AGENTS.md 불가침)·전체읽기 조항 추가. §7 재시도 상한. | Law 2 분리 리뷰 — 4 렌즈 38 에이전트, 생존 9건 (WF-1/2/3, F2×2, N2, F5, F6, F7) |
+| **r3** | **§16 AC3 술어 반전 정정** — r2는 "본문이 **비었거나** … 통과"라고 써서, 이빨 없음을 고치겠다며 이빨 없음을 *명시적 PASS 규칙으로 승격*시켰다. **§16 AC6의 `≥ 0건`** vacuous quantifier → 정규화 건수 대조로 교체. **§16 AC10 정직화** — 게이트 거절 시 workflow가 안 도므로 사후 확인은 공허하다; 강제는 구조(phase 0 ≺ pre-1), 리포트는 공시만. **§16 pre-flight 스모크 신설** — `agentType` 해석과 `tools:` allowlist 실효성을 실행 전 실증. §6 "9종"→"11종", §7 호출 증폭 공시, §14에 `.gitignore`·workflow 스크립트 추가. | r2 재리뷰 — 4 렌즈 31 에이전트, 27건 중 생존 4건 (R2-1, NEW-3, NEW-4/R2-2) + refuter가 확인한 기계적 사실 4건 |
 
 ## 20. Metadata
 
