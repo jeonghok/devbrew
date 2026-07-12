@@ -50,7 +50,13 @@ locked_directions:
 **재구성된 문제정의 (한 문장)**:
 > project-init v1.7.2는 *구조가 얇다는 이유로* 낡은 게 아니라, **자기 문서가 코드에 대해 거짓말을 하고 그 거짓말을 사용자 프로젝트로 배포하고 있으며**, 2026년 Claude Code 플러그인 레퍼런스 대비 자기 위치(내장 `/init`과의 관계, hook 계층 선택)를 한 번도 재평가한 적이 없다 — 그래서 필요한 것은 리팩터가 아니라 **증거 기반 감사**다.
 
-**진짜 goal**: "개선"의 대상을 추측이 아니라 증거로 확정하는 것. 1차 산출물은 코드가 아니라 **우선순위가 매겨진 갭 목록**이다.
+> ⚠️ **2026-07-12 강등 — 위 재구성은 이제 *발견*이 아니라 *가설*이다.** "문서가 코드에 대해
+> 거짓말한다"는 root cause는 D1–D4를 근거로 세워졌는데, 심층 검증 결과 **그 중 3건의 전제가
+> 틀렸다**(§2). 명백한 "문서가 코드에 대해 거짓말"로 남은 것은 **D3 하나**다. 감사자는 이
+> 재구성을 **전제로 깔지 않는다** — 전제하면 찾으려던 것만 찾게 된다. "낡지 않았다"도 정직한
+> 결과다.
+
+**진짜 goal**: "개선"의 대상을 추측이 아니라 증거로 확정하는 것. 1차 산출물은 코드가 아니라 **우선순위가 매겨진 갭 목록**이다. **갭이 적게 나오는 것은 실패가 아니다 — 없는 갭을 만들어내는 것이 실패다.**
 
 **(d) ontological 도출 타입**: `ROOT_CAUSE` — "낡음"이라는 증상의 원인을 물었더니 두 개의 서로 다른 원인이 나왔다: (i) 검증 가능한 **정직성 결함**(문서-코드 불일치, 유령 의존성), (ii) 검증되지 않은 **구조 가설**(scripts/skills 부재 = 낡음). steelman이 (ii)를 무너뜨림으로써 (i)이 진짜 root cause임이 드러났고, (ii)는 감사가 판정할 열린 질문으로 강등됐다.
 
@@ -65,7 +71,7 @@ frontmatter `locked_directions`와 1:1. 재논쟁 금지.
 - **LD5 — 범위 경계.** `plugins/project-init/**` + `docs/git-workflow/**`(project-init 생성물) + `.claude-plugin/marketplace.json`의 project-init 항목.
 - **LD6 — 입증책임 규칙.** shape 축에서 "형제와 다르다"는 논거 무효. 구조 변경 권고는 **재현 가능한 실패 모드** 또는 steelman 명시 조건 (a)~(d) 충족 필요. (결론은 OQ1로 보류 — 감사자는 양쪽 증거를 대칭으로 수집해 제출한다.)
 
-### 감사 시작 전 수집된 후보 단서 D1–D4 — **확정 사실이 아니다. 검증 필수.**
+### 감사 시작 전 수집된 후보 단서 D1–D5 — **확정 사실이 아니다. 검증 필수.**
 
 > ⚠️ **2026-07-12 전면 재분류.** 이 섹션은 원래 "이미 확정된 결함 (auto-confirmed, 목록 자동 진입,
 > 재발견 금지)"이었다. **그 범주는 폐기됐다.** 심층 재검증 결과 **4건 중 3건의 전제가 틀렸고**,
@@ -82,7 +88,7 @@ frontmatter `locked_directions`와 1:1. 재논쟁 금지.
 > 수 없는 유일한 영역**으로 만든다 — 그리고 그것들이 다른 모든 판단의 전제다. 감사 코퍼스는
 > ~1,600줄이라 재발견 비용은 **싸고**, 틀린 전제의 비용은 **한 사이클 전체**다. 균형이 맞지 않는다.
 
-**감사자에 대한 지시**: D1–D4는 **후보 단서**이지 사실이 아니다. 각 단서에 대해:
+**감사자에 대한 지시**: D1–D5는 **후보 단서**이지 사실이 아니다. 각 단서에 대해:
 
 1. **전제를 직접 검증하라** — 인용된 `file:line`을 열고, **주장된 메커니즘이 실제 구현에 존재하는지**
    확인하라. 인덱스·레지스트리·목차·description 필드만 읽고 판정하지 말 것. **구현을 읽어라.**
@@ -95,6 +101,7 @@ frontmatter `locked_directions`와 1:1. 재논쟁 금지.
 | ~~D2~~ | ❌ **철회 (WITHDRAWN — 최초 주장이 거짓이었다).** 최초 주장: *"거짓 통합 주장 — README의 'quality-gates: PR 생성 시 자동 트리거'는 거짓; qg 훅은 PostToolUse/SessionStart/SessionEnd뿐"*. **반증**: `plugins/quality-gates/hooks/post-tool-use.py`가 `PostToolUse(Bash)` 안에서 `gh\s+pr\s+create`를 정규식으로 잡고, stdout의 PR URL을 추출해 *"You MUST now initialize the quality-gates pipeline"* systemMessage를 주입한다. **README:79는 참이다.** `templates/shared/pr-process.md:78`은 `(설치 시)` 전제조건까지 이미 정확히 달아 놓았다. **기계적 원인**: `hooks.json`의 *이벤트 등록 목록*만 읽고 훅 **본문**을 안 읽음 — 그리고 `hooks.json` 자신의 description은 PR 트리거를 언급하지 않아 그 파일만 보면 오류가 *확증*된다. | 반증: `plugins/quality-gates/hooks/post-tool-use.py:2-7, 54, 78, 88-95`. 원 주장의 증거였던 `hooks.json`은 **불충분한 증거**였다. |
 | D3 | **marketplace description drift** — `.claude-plugin/marketplace.json`의 project-init 설명이 v1.6.0 Project Charter·docs-lint·AGENTS.md를 전혀 반영 안 함(plugin.json description은 최신). 마켓플레이스 카드가 플러그인의 절반을 숨김. | `.claude-plugin/marketplace.json` vs `plugins/project-init/.claude-plugin/plugin.json` |
 | D4 | **플러그인 폴더 오염** (사실은 참 — 단 **유출 메커니즘 주장은 철회**). git-ignored `.claude/quality-gates/<uuid>/files.md` 3개가 플러그인 디렉토리와 `templates/` 내부에 잔존하며, 내용은 이전 qg 세션의 **절대경로 목록**이다. ~~"templates 하위는 배포 경로라 잠재적 유출"~~ → **거짓**: `commands/project-init.md:139-143`은 템플릿을 **파일명으로 개별 지정해 읽지**(`templates/<strategy>/branch-strategy.md` 등) 디렉토리를 재귀 복사하지 않는다. 따라서 사용자 프로젝트로 새는 경로는 **없다.** 남는 것은 리포 위생 문제 + 플러그인 tarball 패키징 시 포함될 여지. **severity를 그에 맞게 낮춰 판정할 것.** | 존재: `plugins/project-init/.claude/quality-gates/*/files.md` (2), `templates/.claude/quality-gates/*/files.md` (1). 유출 부재 근거: `commands/project-init.md:136-143` |
+| **D5** | **AGENTS.md-canonical 설계가 2026 기준 정답인가?** (구 C10 — **2026-07-12 강등**). 이전 rev는 §3의 *"Claude Code는 AGENTS.md를 네이티브로 읽지 않는다"*를 근거로 **"이 설계를 훼손하는 권고 금지"**라는 **재갈**을 물렸다. 그 금지는 **삭제됐다** — 근거가 블로그 1편 + gist 1개뿐이고, 같은 등급의 주장들이 이미 세 번 틀렸으며, 그 재갈은 축④(외부대비·정체성)가 *"낡음"의 가장 큰 후보*에 대해 구조적으로 눈멀게 했다. **축④는 2026-07 현재 Claude Code의 AGENTS.md 네이티브 지원 여부를 web으로 직접 확인**하고 판정하라. `withdrawn`이면 **갭을 올릴 수 있다.** | §3의 해당 항목 (블로그 + gist). **감사자가 공식 문서로 재확인할 것** |
 
 ## 3. External Landscape
 
@@ -155,6 +162,6 @@ superpowers 가용 → 이 brief를 context로 `superpowers:brainstorming` 호�
 해답공간에서 설계할 대상은 **project-init의 개선안이 아니라 "감사 Workflow의 설계"**다:
 
 - Workflow 스크립트 구조: 6축(LD2) fan-out → codex 독립 감사(LD4) → 발견 병합·중복 제거 → LD3 3-키 정렬 → 갭 목록 산출.
-- 각 감사 에이전트의 프롬프트 계약: 읽기전용, LD5 범위, **LD6 입증책임 규칙**(shape 축에서 "형제와 다르다" 논거 무효, 양쪽 증거 대칭 제출), D1–D4는 재발견 금지·영향범위만.
+- 각 감사 에이전트의 프롬프트 계약: 읽기전용, **갭 범위=LD5 / 읽기 범위=무제한(검증 필수 파일은 반드시 읽을 것)**, **LD6 입증책임 규칙**(shape 축에서 "형제와 다르다" 논거 무효, 양쪽 증거 대칭 제출), **D1–D5는 후보 단서이지 사실이 아니다 — 감사자가 직접 검증해 confirmed/withdrawn/reclassified 판정**(⚠ 최초 브리핑의 "재발견 금지"는 폐기됐다: 4건 중 3건의 전제가 틀렸고, 그 범주가 감사의 사각지대를 만들었다), **인덱스가 아니라 구현을 읽을 것**.
 - 산출물 스키마: 각 갭 = {증거(file:line), 심각도, 수정 비용, 레퍼런스 격차, 권고안, 반대근거}.
 - 종료 조건과 비용 상한(fan-out ≥5는 devbrew hard review 게이트 — 6축은 이 선을 넘으므로 brainstorming에서 명시 선언 필요).
