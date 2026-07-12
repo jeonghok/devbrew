@@ -144,7 +144,7 @@ orchestrator(메인 루프)가 대신하면 감사자의 도구 표면은 `Read 
 
 | 파일 | `tools:` allowlist | model | 역할 |
 |---|---|---|---|
-| `.claude/agents/plugin-auditor.md` | `Glob, Grep, Read, WebSearch, WebFetch` | `inherit` | 축별 발견자 **+ 종합자**. "excerpt 금지, 전체 읽기" 강제. 반대근거 필수. |
+| `.claude/agents/plugin-auditor.md` | `Glob, Grep, Read, WebSearch, WebFetch` | `inherit` | 축별 발견자. **종합은 하지 않는다** (r12 — persona가 `judging other axes`를 금지한다; 종합은 orchestrator가 §6 post-1 2b에서). "excerpt 금지, 전체 읽기" 강제. 반대근거 필수. |
 | `.claude/agents/audit-refuter.md` | `Glob, Grep, Read, WebSearch, WebFetch` | `inherit` | 적대적 검증자. 기본 verdict = `refuted`. 5개 게이트(A~E). |
 | `.claude/agents/smoke-probe.md` | `Glob, Grep, Read, WebSearch, WebFetch` | `inherit` | **capability 스모크 전용. persona에 어떤 금지도 없다** (§16 — 거절이 capability에서 오는지 persona에서 오는지 구별하려면 persona가 비어야 한다). |
 
@@ -305,9 +305,29 @@ Law 2 통과**(반면 `plugin-validator`는 **Bash 보유** → 우리 파이프
 
 | 스냅샷 | 범위 | 언제 | 판정 |
 |---|---|---|---|
-| **BEFORE** | LD5 파일별 SHA-256 **+ 리포 전역 파일별 SHA-256** (tracked + untracked + **ignored**) | pre-1 | — |
-| **AFTER #1** | 동일 (LD5 + 리포 전역) | **workflow 직후, orchestrator가 무엇이든 쓰기 *전*** | **1바이트라도 다르면 감사 무효.** 이때는 정당한 delta가 **하나도 없다.** |
-| **AFTER #2** | **LD5 전용** | 커밋 직전 (모든 쓰기 뒤) | **1바이트라도 다르면 커밋 금지 + 비파괴 롤백** (§13). 감사 산출물은 전부 LD5 *밖*이므로 정당한 delta가 없다. |
+| **BEFORE** | **(a)** LD5 파일별 SHA-256 (tracked + untracked + **ignored**) **+ (b)** 리포 전역 파일별 SHA-256 (tracked + untracked + ignored **− volatile 제외목록**) | pre-1 | — |
+| **AFTER #1** | 동일 (a + b) | **workflow 직후, orchestrator가 무엇이든 쓰기 *전*** | **1바이트라도 다르면 감사 무효.** 이때는 정당한 delta가 **하나도 없다.** |
+| **AFTER #2** | **LD5 전용** (a) | 커밋 직전 (모든 쓰기 뒤) | **1바이트라도 다르면 커밋 금지 + 비파괴 롤백** (§13). 감사 산출물은 전부 LD5 *밖*이므로 정당한 delta가 없다. |
+
+**전역 스냅샷(b)은 volatile 경로를 제외한다 (r12 — B2).** 제외 목록:
+
+```
+.DS_Store            # macOS가 디렉토리를 열기만 해도 쓴다
+.pytest_cache/       # 감사 중 누가 테스트를 돌리면 바뀐다
+.claude/             # 다른 플러그인의 런타임 state (qg · spec-distill …)
+.superpowers/ .understand-anything/
+```
+
+**왜 load-bearing인가 — 이걸 안 빼면 정상 실행이 RED가 된다.** 실측: 이 리포의 git-ignored 파일은
+**76개**이고 위 경로들이 거기 있다. 감사가 도는 **몇 분** 동안 macOS가 `.DS_Store`를 쓰거나 다른
+플러그인이 `.claude/`에 state를 쓰면 → AFTER #1 불일치 → **감사 무효.** 감사자는 아무것도 안 했는데.
+
+**이것은 r10이 죽은 병의 재발이다.** r10은 백스톱의 **시점** 때문에 죽었고(자기 산출물을 오염으로
+판정), r11은 시점을 고쳤지만 **범위는 그대로 뒀다.** **범위와 시점은 반드시 함께 정해야 한다.**
+
+**LD5 스냅샷(a)에서는 ignored를 빼지 않는다** — D4가 우려한 오염(`plugins/project-init/.claude/…`)이
+정확히 git-ignored이고, **그것이 이 백스톱의 존재 이유이기 때문이다.** 제외는 *리포 전역* 스냅샷에만
+적용된다. 백스톱의 범위는 **"감사자가 쓸 수 있는 곳"**이지 **"변할 수 있는 모든 곳"**이 아니다.
 
 **이 분리가 load-bearing이다.** r10은 AFTER #2에 **리포 전역** 비교를 넣었는데, 그 시점엔
 `docs/audits/**`(신규)와 `M CLAUDE.md`가 이미 있다 — **정상 실행이 반드시 RED가 되고 리포트를
@@ -372,7 +392,18 @@ r5까지의 설계에는 **감사가 구조적으로 검증할 수 없는 영역
 
 ```
 phase 0  ─ 지출 동의 게이트 (orchestrator, workflow 밖) — **가장 먼저.**
-   AskUserQuestion: 예상/최대 에이전트 수 · 재시도 호출 증폭 · 취소 선택지
+
+   0a. **clean worktree precondition** (r12 — B1). `git status --porcelain`이 **비어 있지 않으면
+       중단**하고 사용자에게 커밋/stash를 요청한다.
+       ← 이것이 없으면 "읽기전용 감사"가 **사용자 작업을 파괴한다**. 두 경로가 있다:
+         (i) 실패 시 §13의 `git checkout -- CLAUDE.md` 롤백이 사용자의 **미커밋 변경까지** HEAD로
+             되돌린다 (감사자가 넣은 한 줄만 되돌리는 게 아니다).
+         (ii) 성공 시 post-1 step 9의 `git add CLAUDE.md`가 사용자의 **선행 변경을 감사 커밋에
+             섞는다** (commit ownership 탈취). AFTER #2는 LD5 전용이라 이를 거절하지 않는다.
+       **한 줄이 두 함정을 동시에 닫는다.** dirty를 허용하려면 "내 hunk만 stage"라는 별도 기계가
+       필요한데, 그 기계는 이 감사가 사는 값보다 비싸다.
+
+   0b. AskUserQuestion: 예상/최대 에이전트 수 · 재시도 호출 증폭 · 취소 선택지
    승인 → consent artifact 기록:  <session>/audit-consent.json
           {approved: true, at: <ISO8601>, fanout_declared: <§7 표 최대값>}
    거절 → 중단. 이 게이트 없이 **어떤 에이전트도** dispatch 금지 (C2 — 스모크 포함).
@@ -419,6 +450,24 @@ phase '감사' + '검증'  ─ pipeline(6축), 배리어 없음
       → kill된 갭은 `status: refuted` + `refutation: {stage, gate, reason, facts}`로 남는다 (§9.2).
         **상태값은 둘뿐이다** — `reported` / `refuted`.
 
+   ▸ **refuter가 *죽으면* 무슨 일이 일어나는가 (r12 — B4). 이건 이론이 아니다.**
+     r9 리뷰에서 40 에이전트 중 **34개가 세션 한도로 죽었다.** 개별 refuter 실패는 일상이다.
+     **규칙: fail-open + 공시.**
+        finding은 `status: reported` 유지 · `deep_verified: null` ·
+        `degraded_events[]`에 {what: "축N finding <id>: refuter 실패 — 미검증", why}
+        렌더러가 그 finding에 **"⚠ 미검증"** 라벨을 붙인다.
+     **fail-closed(refuted)로 하면 정직한 발견이 *검증도 없이* 죽는다.** 그리고 —
+     *"refuter의 기본 verdict가 refuted니까 실패도 refuted겠지"*는 **틀린 추론**이다:
+     persona의 기본 verdict는 **에이전트가 응답했을 때의 판단 규칙**이지 **응답이 없을 때의
+     상태 전이 규칙**이 아니다. 둘은 다른 층위이며, 후자를 안 정하면 구현자가 아무거나 고른다.
+
+   ▸ **스키마 재시도 소진의 손실 단위는 *갭 하나*가 아니라 *축 전체*다 (r12 — B8).**
+     `agent()`의 schema는 **응답 전체**를 검증한다. findings 5건 중 **하나의 evidence만**
+     위반해도 재시도 소진 시 **그 축의 모든 findings + D/OQ 판정이 함께 사라진다.**
+     → `axis_failures[]`에 {axis, why: "스키마 재시도 소진"} 기록 + orchestrator가 그 축이 소유한
+       D/OQ를 `unverified`로 채운다 (§9.3과 동일 경로). **"갭 하나만 폐기"는 하니스가 제공하지
+       않는 API다** — 설계가 그것을 지시하면 구현자는 존재하지 않는 것을 찾는다.
+
 phase '병합'  ──────── barrier ────────
    코드     : exact-key dedup (동일 file:line + 동일 축) — 흡수된 쪽은 `status: refuted`,
               `refutation: {stage: "dedup", reason: "<target_id>에 흡수"}`
@@ -438,12 +487,21 @@ phase '심층검증'
    `null` **비대상**(severity ∉ {CRITICAL, HIGH}). r10은 bool이라 MEDIUM/LOW 발견 전부에
    *"심층검증 미실시 (상한 초과)"*라는 **거짓 라벨**이 붙었다 — 정직성 컨트롤이 정직성을 훼손했다.
 
-phase '종합'
-   에이전트 : OQ1–OQ6 답변 종합 (§9.5 구조). 축⑥의 OQ4 결과를 축②의 `steelman_condition`
-              `pending` 필드에 반영해 **해소한다** (최종 데이터에 `pending`이 남으면 RED — §16).
+   ※ **'종합' phase는 삭제됐다 (r12 — B3). 종합은 orchestrator가 post-1에서 한다.**
+     이유는 실측이다: `plugin-auditor`의 persona가 *"NOT responsible for … **judging other
+     axes**"*(`plugin-auditor.md:16-17`)라고 못 박는데, 종합은 **정의상 축을 가로지른다.**
+     r11은 *"역할에 종합도 포함하도록 한 줄 수정"*이라 적어만 두고 파일을 안 고쳤다.
+     그리고 고치려 해도 **에이전트 레지스트리는 세션 시작 시 스냅샷**되므로 persona 수정은
+     세션 재시작 전엔 반영되지 않는다 (실측 — 미니 workflow 스모크).
+     **종합이 실제로 하는 일은 조립이다**: 각 축의 `oq_answers`를 모으고, 축⑥의 OQ4 판정을
+     축②의 `steelman_condition: pending`에 반영해 해소한다. §9.1이 이미 *"orchestrator가
+     조립한다"*를 원칙으로 세웠고, 이건 그 원칙의 일관된 적용이다.
+     **부수 효과: 에이전트 31 → 30. persona 충돌이 근본적으로 사라진다.**
+
    return   : **findings 뿐이다. meta는 없다.**
               {findings[], d_verdicts[], oq_answers[], new_open_questions[],
                axis_failures[], **degraded_events[]**}
+              — `steelman_condition`은 여기서 아직 `pending`일 수 있다 (post-1이 해소한다).
 
               `degraded_events[]` ← 축 사망이 *아닌* 결손(개별 refuter 실패 · 스키마 재시도 소진 ·
               WebSearch 부재)이 orchestrator에게 도달하는 **유일한 통로**. r10엔 이 채널이 없어
@@ -461,8 +519,26 @@ post-1   ─ orchestrator (Bash, workflow 밖) — **조립하고, 검증하고,
         + **pre-1의 codexDVerdicts / codexOqAnswers / codexNoqs 병합** (source: codex)
         + axis_failures[]의 각 축이 소유한 D/OQ를 `unverified` + `불가사유`로 **채워 넣음** (§10 소유표)
         + degraded[] = pre-1 폐기 + workflow의 degraded_events[] + axis_failures[]
+
+   2b. **종합** (r12 — B3. 구 '종합' phase가 여기로 왔다):
+        · Claude·codex의 `oq_answers[]`를 **`source`별로 나란히** 보존한다 (덮어쓰지 않는다 — §9.5).
+        · **`steelman_condition: pending` 해소**: 축⑥의 OQ4 판정(*"되돌릴 수 없는 파괴 등급
+          위험이 있는가"*)을 읽어 축②의 조건 (c) 필드를 `c` 또는 `none`으로 확정한다.
+          축⑥이 죽었으면 `none` + `degraded[]`에 사유. **최종 데이터에 `pending`이 남으면 RED** (§16).
+        · **두 모델의 판정이 엇갈리면 해소하지 않는다** — 나란히 드러낸다 (§9.3과 동일 규율).
+          독립 감사자 둘의 충돌은 **그 자체가 발견**이다. 조용히 한쪽을 고르면 팬아웃이 산 유일한
+          신호를 파괴한다.
+
    3. **journal.jsonl 복사** → docs/audits/…-journal.jsonl  ← 하니스가 쓴 외부 원장 (§9.4)
-   4. **validate-audit-data.py --data**  ← **데이터만.** consent 3필드 대조 · fanout==31 ·
+   3b. **secret scan** (r12 — B9). 복사한 journal + `degraded[].raw` + `new_open_questions[]`에
+       대해 크레덴셜 패턴 스캔(`sk-` · `ghp_` · `AKIA` · `-----BEGIN * PRIVATE KEY` · `password=` 등).
+       **하나라도 걸리면 커밋 금지 + loud 보고.**
+       ← 원장의 가치는 *"필터링 전 원본"*이라는 데 있고(§9.4), **그것이 곧 유출 경로다.** 읽기 범위는
+         의도적으로 무제한이고(LD5 밖 · 사용자 홈 · 설치 플러그인 캐시 — §8-3) NOQ는 범위 밖 관찰을
+         **보존하라고 요구**한다. devbrew CLAUDE.md는 *"Secret 기록 금지"*를 규정한다.
+         **감사 리포트 PR이 credential 유출 PR이 되어선 안 된다.** "모델이 알아서 안 담을 것"으로는
+         commit 안전성을 살 수 없다 — 원장은 정의상 모델이 필터링하기 *전*을 보존하기 때문이다.
+   4. **validate-audit-data.py --data**  ← **데이터만.** consent 3필드 대조 · fanout==30 ·
       D1–D5/OQ1–OQ6 완결성 · `pending` 잔존 0 · `degraded[]` 비었나 플래그.
       RED → **중단, 렌더링 안 함.**
       ※ **파일 검사는 여기서 하지 않는다.** r10은 이 단계에서 *step 5·6이 만들* README·CLAUDE.md를
@@ -485,7 +561,7 @@ post-1   ─ orchestrator (Bash, workflow 밖) — **조립하고, 검증하고,
 **축 사이 순서 의존은 없다** (그래서 배리어 없는 `pipeline`이 옳다). 축⑥→축② 의존은 *발견* 단계가
 아니라 **종합** 단계에서 해소된다 — 축②는 `steelman_condition`을 `pending`으로 두고(§9.2 enum에
 **`pending`이 포함돼 있다** — r10은 enum에 없는 값을 내라고 지시해 스키마 위반→재시도 소진→OQ1
-통째 폐기를 유발했다), 종합자가 축⑥의 OQ4 판정을 읽어 **해소한다**. 배리어는 cross-model dedup(phase '병합')에서 처음으로 정당해진다: 거기서는
+통째 폐기를 유발했다), **orchestrator가 post-1 2b에서** 축⑥의 OQ4 판정을 읽어 **해소한다**. 배리어는 cross-model dedup(phase '병합')에서 처음으로 정당해진다: 거기서는
 *모든* 발견이 한자리에 있어야 중복을 판정할 수 있다.
 
 ## 7. 팬아웃 선언 + 지출 동의 게이트
@@ -503,8 +579,8 @@ CLAUDE.md는 **두 개의 별개 의무**를 건다:
 | 축별 refuter (`audit-refuter`) | 6 |
 | codex 갭 refuter (`audit-refuter`) | 1 |
 | 심층검증 추가 렌즈 (`audit-refuter`) | ≤ 16 (8건 × 2렌즈) |
-| 종합자 (`plugin-auditor`) | 1 |
-| **최대 에이전트** | **31** (예상 17–22) |
+| ~~종합자~~ | **0** — orchestrator로 이관 (r12 — B3, §6) |
+| **최대 에이전트** | **30** (예상 16–21) |
 
 **r9(39)에서 31로 하향.** 심층검증 캡 12 → 8, 의미 중복 병합 에이전트 폐기. 근거: r9 리뷰 라운드에서
 40-에이전트 워크플로가 **세션 한도로 34개를 잃었다.** 팬아웃 예산은 토큰만이 아니라 **세션 한도**도
@@ -519,8 +595,10 @@ codex는 **에이전트가 아니라 외부 프로세스** 1회 (workflow 밖).
 
 - 동시 실행은 Workflow 런타임이 `min(16, cores − 2)`로 자동 제한한다.
 - **루프 없음 — 단일 패스.** loop-until-dry 재스윕은 명시적으로 거부했다 (§17).
-- **재시도 상한 (C3)**: 스키마 위반 재시도는 **에이전트당 최대 2회**. 초과 시 해당 갭을 폐기하고
-  `degraded[]`에 기록한다 (`findings[]`가 아니라 — §5.3). "반복 실패 시"라는 무한정 표현을 쓰지 않는다.
+- **재시도 상한 (C3)**: 스키마 위반 재시도는 **에이전트당 최대 2회**. 초과 시 **그 축의 결과 전체가
+  사라진다** — schema는 응답 하나를 통째로 검증하므로 손실 단위는 갭이 아니라 **축**이다 (r12 — B8).
+  → `axis_failures[]`에 기록 + orchestrator가 그 축의 D/OQ를 `unverified`로 채운다.
+  "반복 실패 시"라는 무한정 표현을 쓰지 않는다.
 
 ## 8. 프롬프트 계약
 
@@ -567,18 +645,41 @@ codex는 **에이전트가 아니라 외부 프로세스** 1회 (workflow 밖).
    구조**(`left_evidence[]` / `right_evidence[]` / `steelman_condition` / `근거`)로만 답한다 —
    **산문 금지**. 좌·우를 산문에 섞으면 렌더러가 나란히 놓을 수 없다. 한쪽이 정직하게 0건이면
    0건으로 기록하라 (지어내지 말 것). 축②는 `steelman_condition`을 `pending`으로 둘 수 있고,
-   종합자가 축⑥의 OQ4 판정으로 해소한다.
+   **orchestrator가** 축⑥의 OQ4 판정으로 해소한다 (post-1 2b).
 13. **레퍼런스는 웹에만 있지 않다 — 디스크에 있다 (§5.4).** 축④·축⑤는 evidence pack이 주입한
    설치된 공식 플러그인을 **직접 읽어라**: `plugin-dev`(공식 플러그인 규범 + 검증기 6개),
    `claude-md-management/references/quality-criteria.md`(**공식 CLAUDE.md 품질 기준** — project-init이
    *생성하는* 것이 바로 CLAUDE.md/AGENTS.md다), `claude-code-setup`(**project-init과 정면으로 겹치는**
    공식 플러그인), `skill-creator`, `hookify`. **취향이 아니라 인용 가능한 기준으로 판정하라.**
    `reference_gap` 필드에 웹 URL 대신 **`file:line`을 써도 된다** — 더 강한 증거다.
-14. **갭 요건에 못 미치는 발견은 버리지 말고 `new_open_questions[]`(NOQ)로 올려라 (§9.5).**
+14. **갭 요건에 못 미치는 발견은 버리지 말고 `new_open_questions[]`(NOQ)로 올려라 (§9.7).**
    여기에 해당하는 것: **LD5 범위 밖 결함**(형제 플러그인·설치 레지스트리에서 발견된 것),
    **brief 사실 주장의 오류**(D1–D5 외 — 예: External Landscape의 다른 주장, LD 정의의 모순),
    **감사 방법론 자체의 결함**, LD6 입증책임을 못 채운 구조 관찰. 각 NOQ에 *왜 갭이 아닌가*를
    적어라(예: "범위 밖 — quality-gates 소관"). **버려진 관찰은 조용한 증발이다.**
+
+15. **`severity`와 `fix_cost`의 판정 기준 (r12 — B10).** r11의 계약에는 이 두 단어가 **한 번도
+   나오지 않았다** — 스키마는 enum을 강제하지만 **기준**을 주지 않으므로 축마다 자기 잣대로 매겼다.
+   `severity`는 **심층검증 8건의 대상 선택**을 결정하고 `fix_cost`는 **최종 정렬**(§11)을 결정한다 →
+   **기준이 없으면 산출물(우선순위 갭 목록) 자체가 왜곡된다.**
+
+   | `severity` | 기준 — **사용자에게 무슨 일이 일어나는가**로 판정한다 (플러그인 내부 우아함이 아니라) |
+   |---|---|
+   | `CRITICAL` | 사용자 데이터·파일 파괴, 크레덴셜 유출, 또는 **생성물을 통해 거짓이 사용자 프로젝트로 배포**된다 |
+   | `HIGH` | 광고된 기능이 동작하지 않거나, 보안 컨트롤이 우회되거나, 문서가 코드에 대해 **거짓**이다 |
+   | `MEDIUM` | 동작하지만 사용자를 오도하거나 예측 가능하게 실패한다 (회복 가능) |
+   | `LOW` | 불편·비일관·유지보수 부담. 사용자가 알아채지 못할 수도 있다 |
+
+   | `fix_cost` | 기준 |
+   |---|---|
+   | `S` | 한 파일, 단일 국소 편집. 새 테스트 불필요하거나 사소 |
+   | `M` | 여러 파일 또는 새 동작 + 테스트 필요 |
+   | `L` | 구조 변경 · 마이그레이션 · 다른 플러그인과의 계약 변경 |
+
+   > **이것은 §8 서두가 금지한 "판정 주입"이 아니다.** 금지된 것은 *"231줄 < 500이므로 조건 (a)는
+   > 미충족"* 처럼 **감사자가 내려야 할 결론을 대신 내리는 것**이다. **판정 *기준*의 정의**(`CRITICAL`이
+   > 무엇을 뜻하는가)는 정반대로 — 그것이 없으면 여섯 감사자의 등급이 **서로 비교 불가능**해진다.
+   > 기준은 공유하고, 판정은 감사자가 한다.
 
 ## 9. 감사 데이터 (`audit-data.json`) — orchestrator가 조립한다
 
@@ -605,14 +706,14 @@ r9는 `audit-data.json`을 **Workflow의 return**으로 정의하고, 그 안에
 {
   meta: {                               # ← orchestrator만 씀
     date,
-    fanout_declared,                    # §7 표 최대값 (31)
+    fanout_declared,                    # §7 표 최대값 (30)
     consent: {approved, at},            # phase 0 artifact를 *읽어서* 채움 (파이프라인 자기신고 아님)
     codex: {ran, version|null, reason_if_skipped}
   },
   findings: [ … ],                      # 9.2
   d_verdicts: [ … ],                    # 9.3  (claude + codex, source별)
-  oq_answers: [ … ],                    # 9.5  (claude + codex)
-  new_open_questions: [ … ],            # NOQ — 갭 요건 미달 관찰의 종착지
+  oq_answers: [ … ],                    # 9.5  ← **`source` 필수** (r12 — B6)
+  new_open_questions: [ … ],            # 9.7  ← **원소 스키마 신설** (r12 — B6)
   axis_failures: [ {axis, why} ],       # 9.6  ← **원본 보존.** 렌더러가 "축 N 감사 실패" 표시에 읽는다.
   degraded: [ {what, why, raw?} ]       # 실패·결손의 **유일한** 종착지. raw = 폐기된 codex 갭 원문.
 }
@@ -631,16 +732,16 @@ r9는 `audit-data.json`을 **Workflow의 return**으로 정의하고, 그 안에
 | `source` | `claude｜codex` | |
 | `axis` | 1–6 | |
 | `title`, `user_harm`, `recommendation`, `counter_argument` | string | `counter_argument` 필수 |
-| `evidence[]` | `{file, line, quote}` | **≥ 1** — `agent()` schema 옵션이 tool-call 레이어에서 강제. 재시도 ≤ 2회, 소진 시 갭 폐기 + `degraded[]` |
+| `evidence[]` | `{file, line, quote}` | **≥ 1** — `agent()` schema 옵션이 tool-call 레이어에서 강제. 재시도 ≤ 2회, **소진 시 그 축 전체 손실** → `axis_failures[]` (r12 — B8: schema는 finding이 아니라 **응답**을 검증하므로, findings 5건 중 하나만 위반해도 나머지 4건과 D/OQ가 **함께** 사라진다) |
 | `severity` | `CRITICAL｜HIGH｜MEDIUM｜LOW` | |
 | `fix_cost` | `S｜M｜L` (**enum only**) | 정렬 키 (§11) |
 | `fix_cost_rationale` | string | 근거. **`fix_cost`와 분리한다** — r10은 한 필드에 enum과 산문을 섞어(`"M — 훅 20줄"`), 정렬 비교자가 `{S:0,M:1,L:2}[value] → undefined → NaN`을 내며 **정렬이 입력 순서 의존**이 됐다. 골든 픽스처가 깔끔한 값만 담으면 테스트는 GREEN인 채 프로덕션만 뒤집힌다 ("헤더-satisfiable 회귀 락"과 동형). |
 | `reference_gap` | string｜`none` | |
 | `oq_ref` | `OQ1..OQ6`｜null | |
-| `steelman_condition` | `a｜b｜c｜d｜none｜pending` | 축② 필수. **`pending`은 축②만 쓸 수 있고 종합자가 반드시 해소한다** — 최종 데이터에 `pending`이 하나라도 남으면 validator RED (§16). r10은 §6이 `pending`을 요구하는데 enum에 없어, 스키마 위반 → 재시도 소진 → **OQ1(이 감사의 간판 질문) 통째 폐기**를 유발했다. |
+| `steelman_condition` | `a｜b｜c｜d｜none｜pending` | 축② 필수. **`pending`은 축②만 쓸 수 있고 orchestrator가 post-1 2b에서 반드시 해소한다** — 최종 데이터에 `pending`이 하나라도 남으면 validator RED (§16). r10은 §6이 `pending`을 요구하는데 enum에 없어, 스키마 위반 → 재시도 소진 → **OQ1(이 감사의 간판 질문) 통째 폐기**를 유발했다. |
 | **`status`** | **`reported｜refuted`** | |
 | `refutation` | `{stage, gate?, reason, facts?, votes?}` | `status: refuted`일 때 필수. `stage ∈ {axis, dedup, codex, deep}` |
-| `deep_verified` | `true｜false｜null` (**3-상태**) | `true`=검증됨 / `false`=**대상이었으나 상한 8건 초과** → 렌더러가 *"심층검증 미실시 (상한 초과)"* 개별 표시 / `null`=**비대상**(severity ∉ {CRITICAL, HIGH}) → 렌더러가 **아무것도 붙이지 않는다**. r10은 bool이라 MEDIUM/LOW 발견 **전부**에 "상한 초과" 거짓 라벨이 붙었다 — 대개 발견의 다수가 MEDIUM/LOW이므로 리포트 전체가 잘못 읽힌다. |
+| `deep_verified` | `true｜false｜null` (**3-상태**) | `true`=검증됨 / `false`=**대상이었으나 상한 8건 초과** → 렌더러가 *"심층검증 미실시 (상한 초과)"* 개별 표시 / `null`=**심층검증 비대상** → 렌더러가 **아무것도 붙이지 않는다**. r10은 bool이라 MEDIUM/LOW 발견 **전부**에 "상한 초과" 거짓 라벨이 붙었다 — 대개 발견의 다수가 MEDIUM/LOW이므로 리포트 전체가 잘못 읽힌다. **`null`의 조건 (r12 — B5)**: severity ∉ {CRITICAL, HIGH} **또는** `status: refuted`(심층검증은 *생존* 갭에만 돈다) **또는** refuter 실패로 미검증(§6). r11은 `null`을 *severity 미달*로만 한정해서, **정상적으로 조기 기각된 HIGH 갭**이 세 값 중 어디에도 못 들어갔다 — `true`는 거짓, `false`는 "상한 초과"라는 거짓 라벨, `null`은 명세 위반. **FP를 일찍 죽이는 바람직한 경로가 상태공간에 없었다.** |
 
 **r9의 7갈래 `terminal` enum(`reported`/`refuted_axis`/`refuted_deep`/`merged`/`deduped`/
 `discarded_schema`/`unclassified`)과 항등식은 폐기했다.** 이유 셋:
@@ -689,12 +790,18 @@ Workflow 도구는 `<transcriptDir>/journal.jsonl`에 **에이전트별 원본 r
 > 태연히 보고했다 — **35 ≠ 2 + 0인데 아무 체크도 걸리지 않았다.** 잃어버린 33건을 복구해준 것은
 > `journal.jsonl`이었다. r9가 설계하던 회계 기계는 **이미 존재하는 원장의 열등한 재발명**이었다.
 
-### 9.5 OQ1 (축②)의 산출 형식
+### 9.5 `oq_answers[]` — `source` 필수, OQ1은 구조화
+
+**모든 OQ 엔트리는 `source: claude｜codex`를 갖는다 (r12 — B6).** Claude와 codex가 **둘 다** OQ1–OQ6에
+답하고 post-1이 병합한다. `source`가 없으면 병합이 **ID 기준 덮어쓰기**가 되어 **한쪽이 조용히
+사라진다** — `d_verdicts[]`가 `source`를 갖게 된 것과 **정확히 같은 이유**(§9.3)인데, r11은 같은 병합
+채널인 OQ/NOQ에는 그 필드를 안 넣었다. **D 하나당 최대 2개**와 마찬가지로, **OQ 하나당 최대 2개**다.
 
 `oq_answers[]`의 OQ1 엔트리는 좌·우를 **구조화**해 담는다 (산문에 섞으면 렌더러가 나란히 놓을 수 없다):
 
-`{id: "OQ1", left_evidence[], right_evidence[], steelman_condition, 근거}`
+`{id: "OQ1", source, left_evidence[], right_evidence[], steelman_condition, 근거}`
 — `left_evidence[]` / `right_evidence[]` 각 항목은 `{claim, file, line, quote}`.
+OQ2–OQ6 엔트리: `{id, source, 답변, evidence[], 근거}`.
 
 **한쪽이 정직하게 0건이면 0건으로 기록되고, 렌더러가 0건으로 표시한다.** r8의 AC4는 "양쪽 ≥ 1 +
 비율 ≤ 3"을 **커밋 게이트**로 걸어, 정직한 비대칭이 감사를 커밋 금지시켰다 — 감사자에게 **증거를
@@ -708,8 +815,31 @@ Workflow 도구는 `<transcriptDir>/journal.jsonl`에 **에이전트별 원본 r
 채우고 `degraded[]`에 **함께 기록한다** — `axis_failures[]`는 **원본으로 보존**된다(옮기는 것이 아니다).
 렌더러가 축별 섹션에서 이 배열을 읽어 "축 N 감사 실패"를 표시한다.
 
-축 사망이 *아닌* 결손(개별 refuter 실패 · 스키마 재시도 소진 · WebSearch 부재)은 `degraded_events[]`로
-간다 — Workflow 안의 결손이 orchestrator에게 도달하는 **유일한 통로**다.
+축 사망이 *아닌* 결손(개별 refuter 실패 · WebSearch 부재)은 `degraded_events[]`로 간다 — Workflow
+안의 결손이 orchestrator에게 도달하는 **유일한 통로**다. (**스키마 재시도 소진은 축 전체를 죽이므로
+`axis_failures[]`로 간다** — r12 B8, §6.)
+
+### 9.7 `new_open_questions[]` (NOQ) — 원소 스키마 (r12 — B6 신설)
+
+**r11에는 이 스키마가 없었다.** `new_open_questions: [ … ]`이라고만 적혀 있어서 **생산자도 렌더러도
+검증자도 무엇을 만들고 무엇을 읽어야 하는지 알 수 없었다** — 구현이 불가능했다. §8-14가 *"버려진
+관찰은 조용한 증발이다"*라며 NOQ로 올리라고 지시하는데, **담을 그릇의 모양이 없었다.**
+
+```
+{
+  id,                  # NOQ-<n>
+  source,              # claude | codex   ← OQ와 같은 이유로 필수 (§9.5)
+  axis,                # 1–6 | null (범위 밖 관찰이면 null)
+  observation,         # 무엇을 보았는가
+  why_not_gap,         # **왜 갭이 아닌가** — §8-14가 요구하는 필수 항목
+                       #   예: "LD5 범위 밖 — quality-gates 소관" / "LD6 입증책임 미충족"
+  evidence: [ {file, line, quote} ]   # 0건 허용 (갭이 아니므로 증거 요건이 없다)
+}
+```
+
+**`why_not_gap`이 필수인 이유**: 그게 없으면 NOQ는 *"갭인데 증거가 약한 것"*과 구별되지 않고,
+사용자가 **무엇을 다음 사이클로 넘길지 판단할 근거를 잃는다.** NOQ는 쓰레기통이 아니라 **분류된
+관찰의 착지점**이다.
 
 ## 10. 6개 감사 축과 OQ 배정
 
@@ -755,7 +885,7 @@ Workflow 도구는 `<transcriptDir>/journal.jsonl`에 **에이전트별 원본 r
 - `steelman_condition`: `a｜b｜c｜d｜none` + 근거.
 
 **OQ4 (축⑥)가 조건 (c)의 직접 후보다** ("되돌릴 수 없는 파괴 등급 위험"). 축⑥이 먼저 판정하고,
-**종합자**가 그 결과를 축②의 조건 (c) 필드에 반영한다 (발견 단계엔 순서 의존 없음 — §6).
+**orchestrator**가 post-1 2b에서 그 결과를 축②의 조건 (c) 필드에 반영한다 (발견 단계엔 순서 의존 없음 — §6).
 
 **OQ5 경계**: devbrew CI 부재는 LD5 범위 **밖**(리포지토리 전역 사안)이다. 축④는 이를 **갭이 아니라
 `oq_answers`의 범위 판단**으로 답한다 — "이번 사이클 범위인가 별건인가"에 답하되 갭 목록에는 올리지
@@ -790,8 +920,9 @@ Workflow 도구는 `<transcriptDir>/journal.jsonl`에 **에이전트별 원본 r
 | codex 미설치 (`detect_codex.sh` 실패) | **loud log + 계속 진행.** `meta.codex.ran: false` + `degraded[]`. 리포트 **첫 20줄 안에** `⚠ codex 독립 감사 미실행 — LD4 모델 다양성 결손` 배너 (AC-3, 골든 테스트가 검증). 조용히 넘어가면 사용자가 Claude-only 결과를 cross-model로 착각한다. |
 | codex 실행 실패 / 파싱 실패 | 동일 배너 + `degraded[]`에 실패 사유. |
 | codex 갭이 증거 요건 미달 | 폐기 + `degraded[]`에 원문 기록 (§5.3). **`findings[]`에 넣지 않는다.** |
+| 개별 refuter 사망 | **fail-open + 공시** (r12 — B4): finding은 `status: reported` 유지 · `deep_verified: null` · `degraded_events[]`에 "미검증" 기록 → 렌더러가 **⚠ 미검증** 라벨. fail-closed는 정직한 발견을 검증도 없이 죽인다. |
 | 축 에이전트 1개 사망 | `pipeline()`이 `null` → Workflow가 `axis_failures[]`에 기록. **post-1의 orchestrator가** 그 축이 소유한 D/OQ를 `unverified` + `불가사유`로 **채우고** `degraded[]`로 옮긴다. 나머지 축 계속. 렌더러가 "축 N 감사 실패"를 명시. **커밋은 금지되지 않는다** — r9는 여기서 데드락이었다(검증이 "D1–D5 전부"를 요구했다). |
-| 스키마 재시도 소진 | 갭 폐기 + `degraded[]`. |
+| 스키마 재시도 소진 | **축 전체 손실** (schema는 응답 단위로 검증한다 — r12 B8) → `axis_failures[]` + orchestrator가 그 축의 D/OQ를 `unverified`로 채움 + `degraded[]`. **"갭 하나만 폐기"는 하니스가 제공하지 않는 API다.** |
 | WebSearch 불가 | **레퍼런스 코퍼스(§5.4)는 디스크에 있으므로 축④·축⑤는 계속 판정한다** — r10은 web을 유일한 레퍼런스로 가정해 과잉 degrade했다. 다만 D5(*"Claude Code가 AGENTS.md를 네이티브로 읽는가"*)는 **공식 문서 확인이 필요**하므로 `unverified` + `degraded_events[]`, 리포트 상단에 `⚠ D5 미검증 — 공식 문서 확인 불가` 배너. crash 금지. |
 | 심층검증 8건 초과 | 초과 갭은 `status: reported` 그대로이되 `deep_verified: false` — 렌더러가 **개별 표시** (silent truncation 금지). |
 | 무결성 스냅샷 불일치 | **감사 무효. 커밋 금지 + 비파괴 롤백** (§13 — `rm -rf` 금지, 경로 열거). 변경된 파일 목록을 그대로 사용자에게 보고. |
@@ -812,8 +943,8 @@ Workflow 도구는 `<transcriptDir>/journal.jsonl`에 **에이전트별 원본 r
   한 번 더 돈다 (§6 post-1 step 7).
 - 부분 실패 시에도 산출물을 낸다. 단 `degraded[]`가 비어 있지 않으면 리포트 상단 배너가 필수이며,
   **완전 감사로 오인될 수 있는 표현을 쓰지 않는다.**
-- 스키마 위반은 tool-call 레이어에서 **최대 2회** 재시도. 초과 시 갭 폐기 + `degraded_events[]` 기록
-  (증거 없는 갭을 목록에 올리는 것보다 낫다).
+- 스키마 위반은 tool-call 레이어에서 **최대 2회** 재시도. 초과 시 **그 축 전체가 손실된다** (r12 — B8;
+  schema 검증 단위는 응답이지 finding이 아니다) → `axis_failures[]` + D/OQ `unverified` 보충.
 
 ### 비파괴 롤백 (r11 — load-bearing)
 
@@ -836,7 +967,7 @@ AFTER #2는 *정상 실행에서도* 100% RED였으므로 그 파괴 분기를 *
 |---|---|
 | `docs/superpowers/specs/2026-07-12-project-init-audit-workflow-design.md` | 이 문서 |
 | `docs/superpowers/interview/2026-07-12-project-init-audit-interview.md` | **수정 대상 (load-bearing)** — brief는 *읽기 전용 참조가 아니다*. **감사자·codex 프롬프트에 실제로 주입되는 것은 brief다.** r7은 구 C10 재갈을 설계에서만 삭제하고 brief에는 원문 그대로 남겨뒀다 — 즉 **삭제했다고 선언한 금지가 실제 주입 경로에는 살아 있었다**. 설계와 brief는 **항상 함께** 고친다. |
-| `.claude/agents/plugin-auditor.md` | **신규** — Bash 없는 감사자 (Law 2 필요조건). 역할에 *종합*도 포함하도록 한 줄 수정 (§7의 종합자가 이 persona다). |
+| `.claude/agents/plugin-auditor.md` | **커밋됨** — Bash 없는 축별 감사자 (Law 2 필요조건). r12에서 *"왜 종합하지 않는가"* 주석 추가 — **역할 확대가 아니라 축소 확정**이다 (종합은 orchestrator로 갔다). |
 | `.claude/agents/audit-refuter.md` | **신규** — Bash 없는 적대적 검증자. `mechanical_facts`의 목적지를 `refutation.facts`로 명시 (r9는 목적지를 약속해놓고 스키마에 필드가 없었다). |
 | `.claude/agents/smoke-probe.md` | **신규 (r10)** — pre-0 capability 스모크 전용. `tools:`는 감사자와 동일 allowlist이되 **persona에 어떤 금지도 없다**. 이유: r9의 스모크는 *"Bash를 쓸 수 있는지 보고하라"*고 물었는데, `plugin-auditor`의 persona가 이미 *"You are NOT responsible for running anything"*이라 **capability가 살아 있어도 persona가 거절**해 GREEN이 나올 수 있었다. 거절이 capability에서 오는지 persona에서 오는지 구별하려면 **persona가 비어 있어야 한다.** |
 | `docs/audits/2026-07-12-project-init-audit-data.json` | **감사 데이터** — orchestrator가 조립 (§9.1). |
@@ -868,7 +999,7 @@ AFTER #2는 *정상 실행에서도* 100% RED였으므로 그 파괴 분기를 *
 | # | 기준 | 왜 load-bearing인가 | 검증 시점 |
 |---|---|---|---|
 | **AC-1** | **읽기전용.** (a) workflow 스크립트에서 **식별자 `agent`가 정확히 2회**(두 헬퍼 정의 줄에서만) 나타나고, 그 agent 파일들의 `tools:`가 안전집합 `{Glob, Grep, Read, WebSearch, WebFetch}`의 **부분집합**이다. (b) **AFTER #1**(LD5 + 리포 전역, 파일별 SHA-256)이 BEFORE와 동일하고, **AFTER #2**(LD5 전용)가 BEFORE와 동일하다. | 도구 표면은 실행 전엔 안 보이고, `agentType` 누락은 **쓰기 가능한 기본 에이전트로 조용히 폴백**한다. 그리고 감사자가 쓴 파일은 눈에 안 띈다 — `git status`는 git-ignored 디렉토리를 **한 줄로 접는다**(D4 오염이 정확히 그 사각지대). | **(a) dispatch 전** · (b) AFTER#1 = workflow 직후·**쓰기 전** / AFTER#2 = 커밋 직전 |
-| **AC-2** | **지출 동의.** phase 0의 `AskUserQuestion` 게이트가 남긴 consent artifact가 존재하고, 그 **세 필드가 전부**(`approved` · `at` · `fanout_declared`) `meta.consent`/`meta.fanout_declared`와 일치하며, `fanout_declared == §7 표 최대값(31)`이다. | CLAUDE.md 의무 (`cost_class: high`). **강제는 구조**(artifact 없으면 pre-0가 안 돎)이고 **AC는 공시를 확인**한다. **정직한 한계**: artifact를 쓰는 것도 검사하는 것도 orchestrator이므로, 이것은 *AskUserQuestion이 실제로 발동했다는 증명*이 아니라 **orchestrator 구조 규약의 기계 검사**다. 하니스가 그 증거를 노출하면 그때 승격한다. | post-1 |
+| **AC-2** | **지출 동의.** phase 0의 `AskUserQuestion` 게이트가 남긴 consent artifact가 존재하고, 그 **세 필드가 전부**(`approved` · `at` · `fanout_declared`) `meta.consent`/`meta.fanout_declared`와 일치하며, `fanout_declared == §7 표 최대값(30)`이다. | CLAUDE.md 의무 (`cost_class: high`). **강제는 구조**(artifact 없으면 pre-0가 안 돎)이고 **AC는 공시를 확인**한다. **정직한 한계**: artifact를 쓰는 것도 검사하는 것도 orchestrator이므로, 이것은 *AskUserQuestion이 실제로 발동했다는 증명*이 아니라 **orchestrator 구조 규약의 기계 검사**다. 하니스가 그 증거를 노출하면 그때 승격한다. | post-1 |
 | **AC-3** | **정직성 + 발견가능성.** `degraded[]`가 비어 있지 않으면 **실제 리포트 파일**의 첫 20줄에 배너가 있다(`meta.codex.ran == false` 포함). `docs/audits/README.md`가 리포트를 링크하고 `CLAUDE.md`에 `docs/audits/` 포인터가 있다. 최종 데이터에 `steelman_condition: pending`이 **0건**이다. | 결손을 조용히 넘기면 사용자가 **Claude-only 결과를 cross-model로 착각**한다. 그리고 *"어떤 미래 agent도 읽지 않는 파일에 기록하는 것은 theater"* (Law 3). | **렌더링 후** (`--artifacts` 패스). 골든 테스트는 *픽스처*를 보므로 **실물을 보는 검사가 따로 필요하다.** |
 
 **AC로 만들지 *않은* 것과 그 이유** — 정직하게 적는다:
@@ -888,9 +1019,32 @@ AFTER #2는 *정상 실행에서도* 100% RED였으므로 그 파괴 분기를 *
 |---|---|---|---|
 | **AC-1a** | `scripts/check-law2.py` | `scripts/audit-workflow.js` 정적 검증 (아래 *식별자 판정식*). agent 파일 `tools:` ⊆ `{Glob, Grep, Read, WebSearch, WebFetch}`. | **dispatch 전 (pre-0b)** |
 | **AC-1b** | `scripts/check-integrity.sh` | **AFTER #1**: LD5 + **리포 전역** 파일별 SHA-256 (ignored 포함) — workflow 직후·**쓰기 전**, 정당한 delta 0. **AFTER #2**: **LD5 전용** — 커밋 직전. 다르면 **커밋 금지 + 비파괴 롤백**(§13). | post-1 step 1 · step 8 |
-| **AC-2 / AC-3(데이터)** | `validate-audit-data.py --data` | consent artifact **3필드 전부** ↔ `meta` 대조 · `fanout_declared == 31` · D1–D5/OQ1–OQ6 완결성(`unverified`/`증거 불충분`도 완결) · **`steelman_condition: pending` 잔존 0** · `degraded[]` 비었나 플래그. RED → **렌더링 안 함.** | post-1 step 4 (**렌더링 전**) |
+| **AC-2 / AC-3(데이터)** | `validate-audit-data.py --data` | consent artifact **3필드 전부** ↔ `meta` 대조 · `fanout_declared == 30` · D1–D5/OQ1–OQ6 완결성(`unverified`/`증거 불충분`도 완결) · **`steelman_condition: pending` 잔존 0** · `degraded[]` 비었나 플래그 · **⬛ codex 병합 검사 (r12 — B7)** · **⬛ NOQ 원소 스키마 검사** (§9.7 — `why_not_gap` 필수). RED → **렌더링 안 함.** | post-1 step 4 (**렌더링 전**) |
 | **AC-3(산출물)** | `validate-audit-data.py --artifacts` | **실제 파일**을 본다: `docs/audits/README.md`가 리포트를 링크하는가 · `CLAUDE.md`에 `docs/audits/` 포인터가 있는가 · `degraded[]`가 비지 않았으면 **리포트 첫 20줄에 배너**가 있는가. RED → **커밋 금지.** | post-1 step 7 (**렌더링 후**) |
 | — | `scripts/render-audit-report.py` + **골든 픽스처 테스트** | (1) 정렬 키 역전 mutation(`fix_cost`를 사전순 비교로)이 **RED**가 되는가 — 픽스처에 **산문이 섞인 `fix_cost` 값도 넣어** 파싱 의존을 태운다. (2) `meta.codex.ran == false` 픽스처에서 첫 20줄 배너. (3) `degraded[]` 비지 않은 픽스처에서 상단 배너. (4) `deep_verified`의 **세 상태**(`true`/`false`/`null`)가 각각 올바른 라벨(또는 무라벨)을 받는가. | 렌더링 전 (CI 없음 → post-1이 직접 실행) |
+
+### ⬛ codex 병합 검사 (r12 — B7). **codex 판정 증발의 세 번째 재발을 막는다.**
+
+```
+if meta.codex.ran == true:
+    for D in D1..D5:  assert ∃ d_verdicts[] entry with (id==D and source=="codex")
+    for OQ in OQ1..OQ6: assert ∃ oq_answers[] entry with (id==OQ and source=="codex")
+    RED otherwise
+```
+
+**계보를 보라 — 같은 버그가 세 번 살아남았다:**
+
+| | 상태 |
+|---|---|
+| **r9** | `source` **필드가 없었다** → codex 판정이 Claude 판정에 덮여 **증발** |
+| **r10** | 필드는 추가했지만 **배선을 안 했다** — args에 `codexFindings`만 있고 post-1 조립 목록에 병합 단계가 없었다 |
+| **r11** | 병합은 배선했지만 **검증이 없다** → 병합이 실패하거나 누락돼도 *"D1–D5 완결성"* 검사는 **Claude 엔트리만으로 GREEN**이다 |
+
+**이것이 왜 CRITICAL인가.** LD4(모델 다양성)는 이 감사의 **핵심 방어선**이다 — 이 리포의 반복 선례가
+말한다: qg v2.6.0(보안 fail-open) · v2.7.0(false-clean 2건) · v2.8.0(회귀락 teeth-gap) ·
+project-init v1.7.0(인코딩 버그) — **전부 Claude 리뷰어 다수가 놓치고 codex가 단독 적발**했다.
+그 방어선이 **조용히 사라져도 아무도 모르는 상태**로 두면, 리포트는 cross-model 감사를 **참칭**한다.
+`meta.codex.ran: true`인데 codex 판정이 없다면 그건 degraded가 아니라 **거짓말**이다.
 
 > **`--data`와 `--artifacts`를 나눈 것이 r11의 핵심 수정이다.** r10은 하나의 validator가 렌더링
 > **전에** README·CLAUDE.md를 grep했는데, 그 파일들은 **렌더링 *뒤*에** 만들어진다 → 첫 실행부터
@@ -998,7 +1152,7 @@ ignored   : git ls-files -z --others --ignored --exclude-standard -- <scope>
 
 **TL;DR** — 이 문서는 project-init에 대한 **읽기전용 6축 감사 Workflow**의 실행 인가를 요청한다.
 산출물은 코드가 아니라 `docs/audits/`에 커밋되는 **우선순위 갭 목록**이며, 실제 개선은 사용자가
-그 목록에서 고른 뒤 별도 사이클에서 이뤄진다. **최대 31 에이전트**(§7 표가 단일 진리원천) + codex 1회.
+그 목록에서 고른 뒤 별도 사이클에서 이뤄진다. **최대 30 에이전트**(§7 표가 단일 진리원천) + codex 1회.
 
 **Implicit context** (이 세션에서만 명확했던 전제 — 문서에 박제):
 
@@ -1045,6 +1199,7 @@ ignored   : git ls-files -z --others --ignored --exclude-standard -- <scope>
 
 | rev | 변경 | 계기 |
 |---|---|---|
+| **r12** | **리뷰 라운드가 아니다 — 실행-블로커 패치다.** 설계 리뷰는 r11에서 **끝났다**: 11 리비전 · 10 라운드 · 230+ 에이전트를 태우는 동안 **감사는 0회 실행**됐고 대상은 **0건 개선**됐다. 수단이 목적을 잡아먹었다(핸드오프 원장 29). 멈출 조건을 못 박았다 — **"실행을 깨뜨리거나 · 사용자를 해치거나 · 거짓 결과를 내는 것만 고치고 돌린다."** codex blind 2패스가 낸 14건 + 66행 곱집합 표 중 그 기준을 통과한 **10건만** 반영했다. **B1 clean-worktree precondition**(§6 phase 0a) — dirty 상태에서 §13 롤백의 `git checkout -- CLAUDE.md`가 **사용자 미커밋 변경을 파괴**하고 post-1 step 9의 `git add`가 **사용자 변경을 감사 커밋에 섞는다**(ownership 탈취). 한 줄이 두 함정을 닫는다. **B2 무결성 전역 스냅샷에서 volatile ignored 제외**(§5.5) — 실측 ignored **76개**(`.DS_Store`·`.pytest_cache/`·`.claude/`) → 감사 도는 몇 분 사이 background가 건드리면 **정상 실행이 RED**. **r10이 죽은 병(게이트가 자기 발을 쏨)의 재발** — r11은 **시점**만 고치고 **범위**를 안 고쳤다. **범위와 시점은 함께 정해야 한다.** **B3 종합자를 orchestrator로 이관**(§6 post-1 2b, 팬아웃 **31 → 30**) — `plugin-auditor` persona가 *"NOT responsible for … judging other axes"*(`:16-17`)를 못 박는데 §7이 그를 종합자로 썼다. r11은 *"한 줄 수정"*이라 적어만 두고 **파일을 안 고쳤고**, 고치려 해도 **레지스트리가 세션 시작에 스냅샷**돼 재시작 전엔 반영되지 않는다(실측). 종합은 조립이므로 §9.1 원칙대로 orchestrator가 한다. **B4 refuter *실패* 시 상태 전이 명문화**(§6) — fail-open + 공시. *"기본 verdict가 refuted니 실패도 refuted"*는 **틀린 추론**(판단 규칙 ≠ 응답 없을 때의 전이 규칙). r9에서 **40 중 34가 실제로 죽었다.** **B5 `deep_verified: null` 정의 확대**(§9.2) — 정상적으로 **조기 기각된 HIGH**가 세 값 어디에도 못 들어갔다. **B6 NOQ 원소 스키마 신설 + OQ/NOQ `source`**(§9.5·§9.7) — NOQ는 스키마가 **아예 없어** 구현 불가였고, `source` 없는 병합은 **덮어쓰기**다. **B7 codex 병합 검사**(§16) — **codex 판정 증발의 세 번째 재발**: r9=필드없음 → r10=배선없음 → **r11=검증없음**. `meta.codex.ran: true`인데 codex 판정이 없으면 그건 degraded가 아니라 **거짓말**이다(LD4 참칭). **B8 스키마 재시도 소진의 손실 단위를 사실에 맞게**(§6) — schema는 **응답 전체**를 검증하므로 손실은 갭 하나가 아니라 **축 전체**다. **B9 journal secret scan**(§6 post-1 3b) — 원장의 가치인 *"필터링 전 원본"*이 곧 유출 경로다. **B10 `severity`·`fix_cost` 판정 기준**(§8-15) — 계약 14항목에 두 단어가 **0회** 등장했다. `severity`는 심층검증 대상 선택을, `fix_cost`는 정렬을 결정한다 → **기준이 없으면 산출물(우선순위 갭 목록) 자체가 왜곡된다.** *(반영하지 **않은** 것 — 실행하며 관찰한다: 유니코드 이스케이프 우회 · codex MCP ambient 표면 · 빈 감사가 AC를 통과하는 것 · dedup 키 · steelman canonical owner.)* | **codex blind 2패스**(fresh-eyes 14건 · 배선 전수감사 66행 곱집합). 그리고 **자체 실측이 블로커 2건을 추가 적발**했다 — `git ls-files --others --ignored` 한 줄이 B2를, `plugin-auditor.md` 20줄 읽기가 B3을. **10라운드 종이 리뷰가 못 잡은 것들이다** |
 | **r11** | **r10이 새로 넣은 게이트 셋이 각각 파이프라인을 죽였다.** (1) **검증이 렌더링보다 먼저** → validator가 *step 5·6이 만들* README·CLAUDE.md를 grep → **첫 실행부터 결정론적 RED, 리포트가 영원히 안 만들어짐**. **r4가 이미 고친 버그의 재도입.** → `--data`(렌더 전) / `--artifacts`(렌더 후) 두 패스로 분리. (2) **무결성 AFTER#2에 리포 전역 비교** → orchestrator **자신의 산출물**(`?? docs/audits/`, ` M CLAUDE.md`)이 delta를 만들어 **정상 실행이 매번 RED + 리포트 삭제**. 게다가 *"산출물 삭제"*가 미정의라 **`rm -rf CLAUDE.md`류를 유발**. → AFTER#1=전역(쓰기 **전**, 정당 delta 0) / AFTER#2=**LD5 전용**(커밋 직전) + **비파괴 롤백** 명문화(§13). 전역 비교는 `git status`가 아니라 **파일별 해시**(status는 ignored 디렉토리를 한 줄로 접어 내용 변경을 못 본다 — codex 단독). (3) **`agent()` 직접 호출 금지 규약이 이빨 0** — `agent (`·`agent?.(`·`const go = agent`·`agent.call()`이 **전부 카운트 2를 유지하며 GREEN**. → 문법이 아니라 **식별자**를 센다(`(?<![\w$.])agent(?![\w$])` 정확히 2회, 헬퍼 줄 **바이트 핀**). mutation 5종으로 이빨 증명. **그 밖 배선 X 6개**: codex의 D/OQ/NOQ에 **채널 없음**(필드만 추가하고 배선 안 함) · workflow 내부 결손의 return 채널 없음(`degraded_events[]` 신설) · `steelman_condition`에 §6이 요구하는 `pending`이 **enum에 없어** OQ1 통째 폐기 유발 · `deep_verified` bool이 "비대상"과 "상한 초과"를 conflate해 MEDIUM/LOW 전부에 **거짓 라벨** · `axis_failures[]`가 **스키마 블록에 없음** · `degraded[].raw` 없음 · `fix_cost`가 enum+산문 한 필드라 **정렬 비교자가 NaN**. **스모크가 가정 (i)을 검증 못 함** — Agent 도구로 dispatch하는데 검증 대상은 *Workflow*의 `agentType` 해석(다른 코드 경로) → **미니 workflow로** 교체. **그리고 r10의 "위조 인용 자백"이 거짓이었다** — 그 인용은 실행 파일 `whenToUse`에 실재한다. **확증 실패를 부재 증명으로 승격시킨 것**(§18). **레퍼런스 코퍼스를 디스크에서 발견**(§5.4) — 축④·축⑤가 web 추측에서 **파일 대조**로 승격. | r10 리뷰 — **3 독립 리뷰어**(fresh-eyes · 배선 전수감사 · codex blind), 전원 **REVISE**. CRITICAL 3건이 **완전 수렴**. 배선 감사는 stale 참조 **0건**·숫자 정합 **전부 일치**도 확인 |
 | **r10** | **감량 — 회계 기계를 버리고 안전 속성만 남긴다.** r9 리뷰가 **5개 독립 리뷰어**(Claude 4렌즈 35건 + codex 14건)로 같은 곳에 수렴했다: **파이프라인이 자기 자신을 회계하는 검사는 이빨이 없다.** `meta.*`(consent·date·codex·fanout)는 **생산자가 없었고**(Workflow는 `new Date()`도 못 쓴다), `axis_stats ↔ findings[]` 항등식은 **좌·우변이 둘 다 파이프라인 산출물**이라 동어반복이었으며, `unclassified` catch-all은 *"항등식은 절대 깨지지 않는다"*를 **공허하게 참**으로 만들어 이빨을 뽑았고, `discarded_schema`는 **스키마와 논리적으로 모순**이었으며(증거 없어 폐기한 갭을 `evidence[] ≥ 1` 배열에), 축 하나가 죽으면 검증이 **정상 degraded를 커밋 금지**시켰다(데드락). → **회계를 파이프라인 밖으로**: Workflow는 findings만 반환하고 **orchestrator가 `audit-data.json`을 조립**한다(§9.1). 원장은 발명하지 않고 **하니스가 쓴 `journal.jsonl`을 커밋**한다(§9.4). Law 2 정적 검사를 **dispatch 전**으로 옮기고(r9는 39 에이전트를 다 태운 뒤에 돌렸다 — 사후 부검), 판정식을 *`agent()` 직접 호출 금지* 규약으로 교체해 **이빨을 만들었다**(r9의 개수 비교는 우회 가능 — codex 단독 적발). 스모크를 **persona가 빈** `smoke-probe`로 분리(r9는 *"실행할 책임 없음"*이라 말하는 persona에게 실행 가능 여부를 물었다 — capability와 persona를 구별 못 함). 무결성을 **모든 쓰기 뒤에도** 재검사. 렌더러에 **골든 테스트**(r9는 *"틀릴 수가 없다"*고 적고 검증을 삭제했으나, 정렬은 순회가 아니라 **비-사전순 4단 비교자**다). 팬아웃 39 → **31**(세션 한도 실측 반영). **AC 5 → 3.** | r9 리뷰 — **4 Claude 렌즈 40 에이전트 + codex blind — 49건(Claude 35 + codex 14)**. 반박자 34개가 **세션 한도로 사망** → 워크플로 return이 finding 35건 중 2건만 담고 `{total:35, survived:2, killed:0}`을 태연히 보고. **그 사고가 r10의 핵심 통찰을 낳았다** — 원장은 `journal.jsonl`이다 |
 | r1 | 최초 설계 | brainstorming |
