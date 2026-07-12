@@ -65,23 +65,36 @@ frontmatter `locked_directions`와 1:1. 재논쟁 금지.
 - **LD5 — 범위 경계.** `plugins/project-init/**` + `docs/git-workflow/**`(project-init 생성물) + `.claude-plugin/marketplace.json`의 project-init 항목.
 - **LD6 — 입증책임 규칙.** shape 축에서 "형제와 다르다"는 논거 무효. 구조 변경 권고는 **재현 가능한 실패 모드** 또는 steelman 명시 조건 (a)~(d) 충족 필요. (결론은 OQ1로 보류 — 감사자는 양쪽 증거를 대칭으로 수집해 제출한다.)
 
-### 감사 시작 전 이미 확정된 결함 (auto-confirmed, 목록 자동 진입)
+### 감사 시작 전 수집된 후보 단서 D1–D4 — **확정 사실이 아니다. 검증 필수.**
 
-감사자는 이 4건을 *재발견*하는 데 예산을 쓰지 말고, **영향 범위와 수정안**만 확정하라.
+> ⚠️ **2026-07-12 전면 재분류.** 이 섹션은 원래 "이미 확정된 결함 (auto-confirmed, 목록 자동 진입,
+> 재발견 금지)"이었다. **그 범주는 폐기됐다.** 심층 재검증 결과 **4건 중 3건의 전제가 틀렸고**,
+> 전부 같은 실패 유형이었다 — **인덱스만 읽고 구현을 안 읽음**:
+>
+> | | 최초 주장 | 심층 검증 |
+> |---|---|---|
+> | D1 | "존재하지 않는 `commit-commands` 플러그인" | ❌ 실재하는 공식 플러그인 (`installed_plugins.json` 미확인) |
+> | D2 | "qg PR 트리거 없음 → README는 거짓" | ❌ **README는 참** (`hooks.json` 이벤트 목록만 보고 훅 *본문* 미확인) |
+> | D3 | marketplace description drift | ✅ 참 |
+> | D4 | "templates 하위 = 배포 경로 → 유출 위험" | ⚠️ 파일 존재는 참, **유출 메커니즘은 거짓** (템플릿 *사용 코드* 미확인) |
+>
+> **왜 범주 자체를 폐기하는가**: "확정 사실 + 재발견 금지"는 그 항목들을 감사가 **구조적으로 검증할
+> 수 없는 유일한 영역**으로 만든다 — 그리고 그것들이 다른 모든 판단의 전제다. 감사 코퍼스는
+> ~1,600줄이라 재발견 비용은 **싸고**, 틀린 전제의 비용은 **한 사이클 전체**다. 균형이 맞지 않는다.
 
-> **단, "재발견 금지"는 "반증 금지"가 아니다.** 재발견 금지는 *재탐색 예산을 아끼려는* 규칙이지
-> *비판을 봉인하려는* 규칙이 아니다. D1–D4의 **전제·분류가 틀렸다는 증거**를 만나면 감사자는
-> 그것을 갭으로 올릴 **의무**가 있다. — 이 예외는 실제 사고에서 나왔다: D1은 최초에 "존재하지
-> 않는 플러그인"으로 분류됐으나 `commit-commands`는 **실재했고**, 그 오류는 6명의 Claude 감사자와
-> codex 전원에게 사실로 주입될 예정이었다. D1–D4가 감사의 검증 사각지대로 남으면, 감사는 자기가
-> 틀린 곳을 구조적으로 볼 수 없다.
+**감사자에 대한 지시**: D1–D4는 **후보 단서**이지 사실이 아니다. 각 단서에 대해:
+
+1. **전제를 직접 검증하라** — 인용된 `file:line`을 열고, **주장된 메커니즘이 실제 구현에 존재하는지**
+   확인하라. 인덱스·레지스트리·목차·description 필드만 읽고 판정하지 말 것. **구현을 읽어라.**
+2. 검증 결과를 `confirmed` / `withdrawn` / `reclassified` 중 하나로 리포트에 명시하고 근거를 붙여라.
+3. `confirmed`인 것만 갭 목록에 올린다. 나머지는 **철회 사유**와 함께 별도 표에 기록한다.
 
 | # | 결함 | 증거 |
 |---|---|---|
 | D1 | **미선언 외부 의존성 + 조건부 유령 안내** — ⚠ **2026-07-12 정정**: 최초 브리핑은 이를 *"존재하지 않는 `commit-commands` 플러그인"*으로 분류했으나 이는 **사실 오류**다. `commit-commands@claude-plugins-official`은 **실재하는 공식 Anthropic 플러그인**이며(`~/.claude/plugins/installed_plugins.json` + 캐시 디렉토리 확인), devbrew *자체* 마켓플레이스(3개)에 없을 뿐이다. 실제 결함은 두 겹: **(a) 미선언 의존성** — project-init README가 commit-commands 통합을 광고하면서 **prerequisites 섹션이 아예 없다**(README 섹션 전수: 아키텍처/동작 방식/기능/브랜치 전략/통합/설치된 Hook/인스턴스화한 원칙/사용). CLAUDE.md: *"Silent coupling은 버그."* **(b) 조건부 유령 안내** — `templates/shared/pr-process.md:77` 경유로 `/commit-push-pr` 권고가 **사용자 프로젝트로 복제**되는데, 그 사용자가 commit-commands를 설치하지 않았다면 존재하지 않는 명령을 안내받는다. → **수정 방향은 "삭제"가 아니라 "선언·설치 안내 추가 + 미설치 사용자를 위한 graceful 문구"다.** | 실재 증거: `~/.claude/plugins/installed_plugins.json` (`"commit-commands@claude-plugins-official"`), `~/.claude/plugins/cache/claude-plugins-official/commit-commands/`. 결함 증거: `README.md:77`(prerequisites 부재), `commands/project-init.md:231`, `templates/shared/pr-process.md:77`, `docs/git-workflow/pr-process.md:77` |
-| D2 | **거짓 통합 주장** — README "quality-gates: PR 생성 시 quality 파이프라인 자동 트리거". qg 훅은 PostToolUse(Bash/Edit)·SessionStart·SessionEnd뿐이며 PR 생성 트리거는 없음. | `README.md:79` vs `plugins/quality-gates/hooks/hooks.json` |
+| ~~D2~~ | ❌ **철회 (WITHDRAWN — 최초 주장이 거짓이었다).** 최초 주장: *"거짓 통합 주장 — README의 'quality-gates: PR 생성 시 자동 트리거'는 거짓; qg 훅은 PostToolUse/SessionStart/SessionEnd뿐"*. **반증**: `plugins/quality-gates/hooks/post-tool-use.py`가 `PostToolUse(Bash)` 안에서 `gh\s+pr\s+create`를 정규식으로 잡고, stdout의 PR URL을 추출해 *"You MUST now initialize the quality-gates pipeline"* systemMessage를 주입한다. **README:79는 참이다.** `templates/shared/pr-process.md:78`은 `(설치 시)` 전제조건까지 이미 정확히 달아 놓았다. **기계적 원인**: `hooks.json`의 *이벤트 등록 목록*만 읽고 훅 **본문**을 안 읽음 — 그리고 `hooks.json` 자신의 description은 PR 트리거를 언급하지 않아 그 파일만 보면 오류가 *확증*된다. | 반증: `plugins/quality-gates/hooks/post-tool-use.py:2-7, 54, 78, 88-95`. 원 주장의 증거였던 `hooks.json`은 **불충분한 증거**였다. |
 | D3 | **marketplace description drift** — `.claude-plugin/marketplace.json`의 project-init 설명이 v1.6.0 Project Charter·docs-lint·AGENTS.md를 전혀 반영 안 함(plugin.json description은 최신). 마켓플레이스 카드가 플러그인의 절반을 숨김. | `.claude-plugin/marketplace.json` vs `plugins/project-init/.claude-plugin/plugin.json` |
-| D4 | **플러그인 폴더 오염** — untracked `.claude/quality-gates/<uuid>/files.md`가 플러그인 디렉토리와 **`templates/` 내부**에 잔존. templates 하위는 배포 경로라 잠재적 유출. | `plugins/project-init/.claude/…`, `plugins/project-init/templates/.claude/…` |
+| D4 | **플러그인 폴더 오염** (사실은 참 — 단 **유출 메커니즘 주장은 철회**). git-ignored `.claude/quality-gates/<uuid>/files.md` 3개가 플러그인 디렉토리와 `templates/` 내부에 잔존하며, 내용은 이전 qg 세션의 **절대경로 목록**이다. ~~"templates 하위는 배포 경로라 잠재적 유출"~~ → **거짓**: `commands/project-init.md:139-143`은 템플릿을 **파일명으로 개별 지정해 읽지**(`templates/<strategy>/branch-strategy.md` 등) 디렉토리를 재귀 복사하지 않는다. 따라서 사용자 프로젝트로 새는 경로는 **없다.** 남는 것은 리포 위생 문제 + 플러그인 tarball 패키징 시 포함될 여지. **severity를 그에 맞게 낮춰 판정할 것.** | 존재: `plugins/project-init/.claude/quality-gates/*/files.md` (2), `templates/.claude/quality-gates/*/files.md` (1). 유출 부재 근거: `commands/project-init.md:136-143` |
 
 ## 3. External Landscape
 
