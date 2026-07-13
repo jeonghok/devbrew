@@ -258,7 +258,7 @@ devbrew에 돌렸더니 16개 체크 중 12개가 `fileExists`인 탓에 **`8/39
 | **version incoherence** | `plugin.json` version ↔ `CHANGELOG.md` 최신 `## [x.y.z]` ↔ README가 주장하는 버전 ↔ `marketplace.json` 항목 | 축① |
 | **description drift** | `plugin.json` description ↔ `marketplace.json`의 같은 플러그인 description (**D3의 기계화**) | 축① |
 | **declared-vs-actual surface** | README가 주장하는 컴포넌트 목록·개수(*"Hooks Installed"* 등) ↔ 디스크의 실제 파일 | 축① · 축⑤ |
-| **category absence** | 플러그인 규범이 요구하는 것 중 **통째로 없는 것** (CHANGELOG · Principles Instantiated · `cost_class` · kill switch · 테스트) | 축② · 축④ |
+| **category absence** | 플러그인 규범이 요구하는 것 중 **통째로 없는 것.** ⚠️ **이 클래스만은 규범을 *전제*한다** — 나머지 5개는 두 관측치를 비교하는 순수 동일성 검사인데 이건 *"있어야 한다"*를 깔고 있다. **따라서 조건을 명시적으로 게이팅한다** (안 하면 **규범이 적용되지 않는 경우에도 "부재"를 사실로 위장해 배달**한다 — 적발: spec-reviewer): `CHANGELOG.md` ← **`plugin.json` version ≥ 1.0.0일 때만** · `cost_class` ← **skill 컴포넌트가 있을 때만** · kill switch ← **hook이 있을 때만** · Principles Instantiated ← README가 있을 때. **조건이 안 걸리면 그 항목은 아예 emit하지 않는다** (`"해당 없음"`도 emit하지 않는다 — 사실 목록은 *관측된 것*만 담는다). | 축② · 축④ |
 
 **보편성 — 이것이 `plugin-audit` 플러그인의 핵심 자산이다.** 위 6개 클래스는 **project-init 특수가
 아니다.** 모든 devbrew 플러그인이 문서로 경로·명령·버전·컴포넌트를 주장하고, 그 주장은 코드보다 빨리
@@ -565,27 +565,49 @@ pre-0    ─ pre-flight (orchestrator) — **가정을 실증한다. 실패 시 
 
 pre-1    ─ orchestrator (Bash, workflow 밖)
 
-   ▸ **순서가 load-bearing이다 (r13 — 실측으로 배웠다).**
-     **orchestrator의 *쓰기 부작용이 있는 모든 단계*는 BEFORE 스냅샷 *이전*에 끝난다.**
-     ← *"대상의 검증 자산을 실행한다"*(§5.4b)는 **읽기가 아니라 실행**이고, **실행은 흔적을 남긴다.**
-       실측: stock CPython이 `plugins/project-init/hooks/**/__pycache__/*.pyc`를 만들어
-       **LD5 매니페스트가 51 → 53**이 됐다 → **AFTER #1 ≠ BEFORE → 감사 무효.**
-       (개발 머신의 Apple python은 bytecode를 리포 밖에 써서 **이 버그가 GREEN으로 위장했다.**)
+   ▸ ## ⬛ 스냅샷 불변식 (r13 — 두 번 뚫리고 나서야 제대로 세웠다)
+     > **BEFORE 스냅샷은 *첫 에이전트가 뜨기 직전*에 찍는다.**
+     > **orchestrator가 pre-1에서 하는 모든 일은 그 선 *이전*이다 — 무엇을 쓰든 상관없다.**
+
+     **왜 이 형태여야 하는가.** 백스톱의 목적은 **에이전트의 쓰기를 잡는 것**이다 (Law 2의 2차
+     방어선 — §5.5). orchestrator의 쓰기는 **정당하고 예상된 것**이다. 선을 **에이전트 경계에
+     정확히 맞추면** codex든 pytest든 sweep이든 **무엇을 쓰든 무관해진다.**
+
+     **r13은 이 불변식을 두 번 놓쳤고, 둘 다 같은 실패였다 — *도구를 열거하려 한 것*:**
+
+     | | 놓친 것 | 어떻게 드러났나 |
+     |---|---|---|
+     | 1차 | **§5.4b 자체 테스트 실행** — stock CPython이 `hooks/**/__pycache__/*.pyc`를 만들어 **LD5 매니페스트 51 → 53** → **AFTER#1 ≠ BEFORE → 감사 무효** | 자체 실측. ⚠️ **개발 머신의 Apple python은 bytecode를 리포 밖(`~/Library/Caches/`)에 써서 이 버그가 GREEN으로 위장했다** (원장 38) |
+     | 2차 | **codex 서브프로세스** — 1차 수정은 *"쓰기 부작용이 있는 단계를 앞으로 옮겨라"*였는데 **codex를 열거에서 빠뜨렸다.** `-s read-only`가 *"리포에 한 바이트도 안 쓴다"*는 **아무도 검증한 적 없는 가정**이었다 | **spec-reviewer 단독 적발** — *"Apple python이 pycache를 리포 밖에 써서 GREEN으로 위장했던 것과 **같은 미검증 쓰기 가정 클래스**"* |
+
+     **열거는 끝나지 않는다.** 다음엔 staleness sweep이, 그다음엔 어떤 린터가 빠진다. **그래서
+     열거를 버리고 불변식을 쓴다.**
+
+     *(codex 쓰기 흔적은 실측했다 — 전역 매니페스트 **333 → 333**, LD5 **51 → 51**, 바이트 동일.
+     codex는 `~/.codex/`(sqlite state·캐시)에 쓴다 = 리포 밖. **그러나 이 실측은 불변식의 근거가
+     아니라 부가 확인이다** — 불변식은 codex가 무엇을 쓰든 성립한다. 도구 하나의 안전성에 기대는
+     설계는 다음 도구에서 다시 뚫린다.)*
+
+   **pre-1 순서 (전부 BEFORE 스냅샷 *이전*):**
 
    1. **대상의 자체 검증 자산 실행** (§5.4b) — `PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest …`
-      `-B`로도 못 막는 부산물(`.pytest_cache/` 등)이 나오면 **그것은 BEFORE에 포함된다** → AFTER와 일치.
-   2. **무결성 스냅샷 BEFORE** (LD5 + 리포 전역, 파일별 SHA-256, ignored 포함 — §5.5)
-      ← **이 시점 이후로 orchestrator는 LD5에 아무것도 쓰지 않는다.**
-   3. evidence pack 계산 → evidence-pack.json
+      (`-B`는 defense in depth. 불변식이 이미 닫지만, `.pytest_cache/` 같은 다른 부산물도 있다.)
+   2. **결정론 staleness sweep** (§5.4a) → facts
+   3. **evidence pack 조립** → evidence-pack.json
       git history · 인벤토리(**tracked + untracked + ignored 합집합** — D4 증거가 ignored다)
-      · 오염 상태 · **staleness sweep facts** (§5.4a) · **자체 테스트 결과** (1의 산출)
+      · 오염 상태 · **staleness facts**(2) · **자체 테스트 결과**(1)
       · **레퍼런스 코퍼스 + 선례 코퍼스 경로** (§5.4)
-   detect_codex.sh → 가용? codex exec -s read-only --json  ← BLIND (Claude 발견이 아직 없음)
-   codex 출력 → §9 스키마로 정규화:
-      codexFindings[] · **codexDVerdicts[]** · **codexOqAnswers[]** · **codexNoqs[]**
-      ← r10은 findings만 받고 나머지를 버렸다. codex가 D1–D5를 판정하도록 지시해놓고
-        **받을 그릇이 없었다** — r9에서 고쳤다고 선언한 "codex 판정의 조용한 증발"의 재발.
-      증거 없는 갭은 폐기 + degraded[] 기록 (raw 보존).
+   4. **codex blind** — `detect_codex.sh` → `codex exec -s read-only -C <repo> --json`
+      **BLIND가 구조적으로 보장된다** — workflow *시작 전*에 도니 **Claude 발견이 아직 존재하지 않는다.**
+      r1처럼 *"await 하지 않기"*라는 규율에 기대지 않는다.
+      출력 → §9 스키마로 정규화. **네 개의 그릇을 전부 받는다**:
+         `codexFindings[]` · **`codexDVerdicts[]`** · **`codexOqAnswers[]`** · **`codexNoqs[]`**
+      ← r10은 findings만 받고 나머지를 버렸다. codex가 D1–D5를 판정하도록 **지시해놓고 받을 그릇이
+        없었다** — r9에서 *"고쳤다"*고 선언한 "codex 판정의 조용한 증발"의 재발. (§16 B7이 이것을 검증한다.)
+      증거 없는 갭은 폐기 + `degraded[]` 기록 (raw 보존).
+
+   5. ## ▸ **무결성 스냅샷 BEFORE** ← **선. 이 뒤로는 오직 에이전트만 움직인다.**
+      (LD5 + 리포 전역, 파일별 SHA-256, ignored 포함 — §5.5)
 
 ── Workflow 시작 (args = {evidencePack, codexFindings}) ──
    ※ codex의 D/OQ/NOQ 판정은 workflow에 넣지 않는다. **post-1이 조립 시 병합**한다 (§9.1) —
@@ -621,7 +643,9 @@ phase '감사' + '검증'  ─ pipeline(6축), 배리어 없음
 
 phase '병합'  ──────── barrier ────────
    코드     : exact-key dedup — 키는 **`source｜axis｜file｜line`** (r13). 흡수된 쪽은 `status: refuted`,
-              `refutation: {stage: "dedup", reason: "<target_id>에 흡수"}`
+              `refutation: {stage: "dedup", **target_id: "<흡수한 finding의 id>"**, reason: "…에 흡수"}`
+              ← **`target_id`는 구조화 필드다** (r13). `reason` 문자열에서 ID를 파싱하게 두면 §16의
+                cross-model 증발 검사가 **문구 한 글자에 무력화된다** (§9.2).
 
               ▸ **키에 `source`가 있는 것이 load-bearing이다 (r13).** r12까지 키는 `axis｜file｜line`
                 이었는데, 그러면 **Claude와 codex가 같은 결함을 독립 발견했을 때 dedup이 codex 쪽을
@@ -910,7 +934,7 @@ r9는 `audit-data.json`을 **Workflow의 return**으로 정의하고, 그 안에
 | `steelman_condition` | `a｜b｜c｜d｜none｜pending` | 축② 필수. **`pending`은 축②만 쓸 수 있고 orchestrator가 post-1 2b에서 반드시 해소한다** — 최종 데이터에 `pending`이 하나라도 남으면 validator RED (§16). r10은 §6이 `pending`을 요구하는데 enum에 없어, 스키마 위반 → 재시도 소진 → **OQ1(이 감사의 간판 질문) 통째 폐기**를 유발했다. |
 | **`status`** | **`reported｜refuted`** | |
 | `cross_model_confirmed` | `true｜false` | **r13.** Claude 발견과 codex 발견이 **같은 `file:line`을 독립적으로 지목**하면 **양쪽 모두** `true`. **병합하지 않고, 점수도 매기지 않고, 태그만 붙인다.** ← LD4(모델 다양성)의 **유일한 산출물**인데 r12까지 **조용히 버려졌다**: dedup은 Claude 내부에서만 돌고 codex 발견은 그 뒤에 append되므로, 두 모델이 같은 결함을 독립 발견해도 리포트엔 **그냥 비슷한 항목 두 개**로 보인다. 독립 감사자 둘의 **일치**는 그 자체가 발견이다 (엇갈림을 나란히 드러내는 §9.3의 대칭). **선행기술은 여기서 confidence를 +1 올리지만**(`gstack/review/SKILL.md:1495-1519` · `CE/…/synthesis-and-presentation.md:65-73`) **우리는 수를 만들지 않는다** — 점수는 증거 요구를 면제시킨다 (원장 31). 태그는 사실이고, 무게는 독자가 판단한다 |
-| `refutation` | `{stage, gate?, reason, facts?, votes?}` | `status: refuted`일 때 필수. `stage ∈ {axis, dedup, codex, deep}` |
+| `refutation` | `{stage, gate?, reason, facts?, votes?, **target_id?**}` | `status: refuted`일 때 필수. `stage ∈ {axis, dedup, codex, deep}`. **`target_id`는 `stage == "dedup"`일 때 필수 (r13)** — *어느 finding에 흡수됐는가*를 담는 **구조화 필드**다. r12까지 그 ID는 `reason` **자유문자열**(`"<target_id>에 흡수"`) 안에만 있었고, §16의 cross-model 증발 검사가 그것을 참조하려면 **문자열을 파싱**해야 했다 — 취약하고, 문구가 한 글자만 바뀌면 검사가 조용히 무력화된다. *(**적발: spec-reviewer 라운드 1.** 아이러니하게도 이건 *"필드를 추가하는 것과 채널을 배선하는 것은 다른 일이다"*라는 교훈을 **적용해서 만든 수정 안에서** 같은 버그를 다시 저지른 것이다 — 검사를 새로 넣으면서 그 검사가 읽을 필드를 안 만들었다.)* |
 | `deep_verified` | `true｜false｜null` (**3-상태**) | `true`=검증됨 / `false`=**대상이었으나 상한 8건 초과** → 렌더러가 *"심층검증 미실시 (상한 초과)"* 개별 표시 / `null`=**심층검증 비대상** → 렌더러가 **아무것도 붙이지 않는다**. r10은 bool이라 MEDIUM/LOW 발견 **전부**에 "상한 초과" 거짓 라벨이 붙었다 — 대개 발견의 다수가 MEDIUM/LOW이므로 리포트 전체가 잘못 읽힌다. **`null`의 조건 (r12 — B5)**: severity ∉ {CRITICAL, HIGH} **또는** `status: refuted`(심층검증은 *생존* 갭에만 돈다) **또는** refuter 실패로 미검증(§6). r11은 `null`을 *severity 미달*로만 한정해서, **정상적으로 조기 기각된 HIGH 갭**이 세 값 중 어디에도 못 들어갔다 — `true`는 거짓, `false`는 "상한 초과"라는 거짓 라벨, `null`은 명세 위반. **FP를 일찍 죽이는 바람직한 경로가 상태공간에 없었다.** |
 
 **r9의 7갈래 `terminal` enum(`reported`/`refuted_axis`/`refuted_deep`/`merged`/`deduped`/
@@ -1232,7 +1256,9 @@ if meta.codex.ran == true:
 # dedup은 source가 다른 두 발견을 죽여선 안 된다 (§6 — 키에 source가 있다).
 # 죽었다면 그것은 dedup 버그이고, LD4의 유일한 산출물이 조용히 증발한 것이다.
 for f in findings where f.refutation.stage == "dedup":
-    assert ∃ g in findings with (g.id == f.refutation.target and g.source == f.source)
+    assert f.refutation.target_id is present          # 구조화 필드 (§9.2) — reason 문자열 파싱 금지
+    g = findings[f.refutation.target_id]
+    assert g exists and g.source == f.source          # 흡수는 같은 source 안에서만
     RED otherwise      # cross-source dedup = 배선 버그
 
 # 그리고 일치가 실제로 태그됐는가.
