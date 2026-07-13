@@ -5,14 +5,17 @@
 # agents) is the first; this manifest exists for the case where that understanding
 # is wrong. It answers exactly one question: did anything on disk change?
 #
-# Usage:  check-integrity.sh <ld5|global> <out_path>
+# Usage:  check-integrity.sh <ld5|harness|global> <out_path>
 #
-# Two scopes, and the difference between them is load-bearing (design §5.5):
+# Three scopes, and the difference between them is load-bearing (design §5.5):
 #
 #   ld5     LD5 corpus, ignored files INCLUDED. The D4 contamination
 #           (plugins/project-init/.claude/...) is itself git-ignored — catching that
 #           class is the whole reason this backstop exists. Valid at any time, because
 #           every audit artifact lands outside LD5.
+#
+#   harness LD5 밖이지만 Law 2가 의존하는 파일: .claude/agents/*.md persona 3개 + scripts/*.
+#           감사 도중 tamper되면 그 게이트의 GREEN이 무의미하다. AFTER #2가 이걸 본다.
 #
 #   global  Whole repo, ignored files included MINUS the volatile list below. Only
 #           valid at AFTER #1, when zero legitimate deltas exist. Without the volatile
@@ -67,6 +70,9 @@ is_foreign_state() {
     .claude/*|*/.claude/*)                       return 0 ;;
     .superpowers/*|*/.superpowers/*)             return 0 ;;
     .understand-anything/*|*/.understand-anything/*) return 0 ;;
+    # 공유 다중-플러그인 파일: global에서만 제외 (형제 항목 편집이 AFTER#1을 오탐시킨다).
+    # 감사자는 이 파일을 쓸 수 없고(Law 2), D3 drift는 §5.4a staleness sweep이 잡는다.
+    .claude-plugin/marketplace.json)             return 0 ;;
   esac
   return 1
 }
