@@ -271,6 +271,47 @@ devbrew에 돌렸더니 16개 체크 중 12개가 `fileExists`인 탓에 **`8/39
   파일) · 플레이스홀더(`<name>` · `...`) · URL.
 - **mutation test로 이빨을 증명**한다 (결함을 재도입 → RED, 정상 → GREEN). GREEN만으로는 theater다.
 
+#### 5.4b 대상의 **자체 검증 자산을 실행**해 사실로 주입한다 (r13 — *Wrap, don't replace*)
+
+**감사자에겐 Bash가 없다.** 그것이 Law 2의 대가다 — 그리고 그 대가는 지금까지 **회계되지 않았다**:
+
+> 축③의 핵심 질문은 *"테스트가 훅의 **실제 능력**을 증명하는가, 통과하기 쉬운 대리 지표인가?"*이다
+> (§10). 그런데 project-init은 테스트 **24파일 1,593줄 / 95 케이스**를 갖고 있고, **어떤 감사자도
+> 그것을 실행할 수 없으며, 설계 어디에도 그것을 실행하는 단계가 없었다.** 감사자는 테스트 *코드*를
+> 읽고 그것이 **통과하는지조차 모르는 채로** 품질을 판정하게 돼 있었다.
+
+**선행기술이 이 원칙을 못 박았다** — `gstack/health/SKILL.md:1070` (verbatim):
+
+> *"**Wrap, don't replace** … Never substitute your own analysis for what the tool reports."*
+
+gstack/health가 1,076줄로 하는 일의 본질이 이것이다: **외부 결정론 도구(tsc·lint·테스트)를 돌리고,
+모델은 그 출력을 *감쌀 뿐* 대체하지 않는다.** 우리는 이 원칙을 *"shellcheck는 python 훅에 적용
+불가"*라며 도구와 함께 버렸다 — **버려야 했던 것은 도구이지 원칙이 아니었다** (핸드오프 원장 35).
+
+**따라서 pre-1이 대상 플러그인의 자체 테스트를 실행하고 결과를 evidence pack에 넣는다. 에이전트 0개.**
+
+```
+python3 -m unittest discover -s <plugin>/hooks/tests -t .     # repo root에서 (리포 교훈)
+→ evidence pack:  {ran: true, framework: "unittest", total: 95, passed: 95,
+                   failed: 0, failing: [], duration_s: 1.4, raw_tail: "…"}
+```
+
+**사실이지 판정이 아니다.** *"95개 중 95개 통과"*는 사실이다. *"따라서 훅은 잘 테스트돼 있다"*는
+**판정이며 감사자가 내린다.** 이 구분이 §5.4a와 동일하게 load-bearing이다.
+
+> ⚠️ **GREEN은 품질의 증거가 아니다 — 질문의 전제일 뿐이다.** devbrew 자신의 교훈: *"헤더만
+> 만족시켜도 GREEN인 회귀 락은 이빨이 없다"* ([[feedback_grep_lock_header_satisfiable]]).
+> **95개 GREEN이라는 사실은 축③이 진짜 질문을 던질 수 있게 해줄 뿐, 그 질문에 답해주지 않는다.**
+> RED였다면 그것도 똑같이 값진 사실이다 (devbrew main에는 다른 플러그인의 stale red가 실재한다).
+
+**graceful degradation (loud)**: 스위트를 실행할 수 없으면(프레임워크 부재 · 수집 실패 · 타임아웃)
+`{ran: false, why: "…"}`를 **사실로** 기록하고 `degraded[]`에 넣는다. **조용히 넘기지 않는다** —
+감사자가 *"테스트가 있다"*와 *"테스트가 돈다"*를 구별하지 못하면 축③의 판정이 근거를 잃는다.
+
+**보편성**: 모든 devbrew 플러그인이 자체 테스트를 갖는다(의무는 아니지만 규범이다). `plugin-audit`은
+대상 플러그인의 테스트 경로를 **탐지**해 같은 일을 한다 — `<plugin>/hooks/tests` · `<plugin>/tests` ·
+`<plugin>/scripts/tests`. **테스트가 아예 없다는 것도 사실이며, 그것은 §5.4a의 `category absence`다.**
+
 **레퍼런스 코퍼스 — 디스크에 있다 (r11).** 축④(외부대비)와 축⑤(템플릿 *내용* 품질)는 r10까지
 **WebSearch가 유일한 레퍼런스 소스**였다. 그래서 §12에 *"web 부재 → 판정 불가"* degraded 경로가
 있었다. 그런데 **공식 레퍼런스가 이미 설치돼 있다** — evidence pack이 경로를 사실로 주입한다:
