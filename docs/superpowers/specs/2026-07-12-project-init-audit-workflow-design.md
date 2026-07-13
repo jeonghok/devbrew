@@ -143,7 +143,7 @@ orchestrator(메인 루프)가 대신하면 감사자의 도구 표면은 `Read 
 | 파일 | `tools:` allowlist | model | 역할 |
 |---|---|---|---|
 | `.claude/agents/plugin-auditor.md` | `Glob, Grep, Read, WebSearch, WebFetch` | `inherit` | 축별 발견자. **종합은 하지 않는다** (r12 — persona가 `judging other axes`를 금지한다; 종합은 orchestrator가 §6 post-1 2b에서). "excerpt 금지, 전체 읽기" 강제. 반대근거 필수. |
-| `.claude/agents/audit-refuter.md` | `Glob, Grep, Read, WebSearch, WebFetch` | `inherit` | 적대적 검증자. 기본 verdict = `refuted`. 5개 게이트(A~E). |
+| `.claude/agents/audit-refuter.md` | `Glob, Grep, Read, WebSearch, WebFetch` | `inherit` | 적대적 검증자. 기본 verdict = `refuted`. 여섯 게이트(A–F). |
 | `.claude/agents/smoke-probe.md` | `Glob, Grep, Read, WebSearch, WebFetch` | `inherit` | **capability 스모크 전용. persona에 어떤 금지도 없다** (§16 — 거절이 capability에서 오는지 persona에서 오는지 구별하려면 persona가 비어야 한다). |
 
 > ⚠️ **가정 (i)은 아직 참이 아니다 (r11 — 실측).** *"Workflow의 `agentType`이 프로젝트 레벨
@@ -533,7 +533,7 @@ Workflow는 *발견*만 `return`한다. `audit-data.json` **조립**·마크다�
 한다 (§9). AC 검증은 **모델 판단이 아니라 스크립트**다 (§16) — orchestrator가 자기 산출물을 "보기에
 괜찮다"고 승인하는 self-approval을 피하는 유일한 방법이다.
 
-### 5.7 refuter 게이트 A–E — **박제 (r14)**
+### 5.7 refuter 게이트 A–F — **박제 (r14)**
 
 `audit-refuter`의 **기본 verdict는 `refuted`**다. 생존이 예외이고 kill이 기본값이다.
 **게이트 다섯 중 하나라도 실패하면 kill**이며, `refutation.gate`에 어느 게이트가 죽였는지 기록된다.
@@ -738,7 +738,7 @@ pre-1    ─ orchestrator (Bash, workflow 밖)
 phase '감사' + '검증'  ─ pipeline(6축), 배리어 없음
    find(축)  ──▶  refute(축의 findings)
    축②가 아직 읽는 동안 축①의 발견은 이미 검증되고 있다.
-   refuter 기본 verdict = refuted. 게이트 A~E 중 하나라도 실패 → kill.
+   refuter 기본 verdict = refuted. 게이트 A–F 중 하나라도 실패 → kill.
 
    **kill된 갭도 사라지지 않는다.** kill이 기본값이고 생존이 예외이므로, 회계가 없으면 리포트의
    "축⑤ 0건"이 *"문제 없음"*인지 *"전부 과잉 kill됨"*인지 사용자가 **구별할 수 없다.**
@@ -1595,7 +1595,7 @@ project-init v1.7.0(인코딩 버그) — **전부 Claude 리뷰어 다수가 �
 
 > 🔴 **이 게이트가 무엇이고 무엇이 *아닌지* (r14 — 정직화).** `check-law2.py`는 **best-effort 조기
 > 경보**이지 물리적 보장이 **아니다.** 세 리뷰어(codex 2회 · Claude 렌즈 1회)가 같은 곳에 수렴했다:
-> **정적 카운터는 JS가 `agent`에 닿는 모든 경로를 잡을 수 없다.** 어휘적(lexical) 우회 — 공백 ·
+> **정적 카운터는 JS가 `agent`에 닿는 모든 경로를 잡을 수 없다.** **알려진** 어휘적(lexical) 우회 — 공백 ·
 > optional-call · 별칭 · `.call` · spread 순서 · template 보간 · 유니코드 이스케이프 · regex literal
 > (뒤 둘은 *tokenize*하지 않고 **거부**한다) — 은 막지만, **동적 dispatch는 원리적으로 못 잡는다**:
 > `globalThis['agent']` · `globalThis['ag'+'ent']` · `eval("agent(p,{})")`. 그걸 더 많은 정적 분석으로

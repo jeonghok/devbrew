@@ -14,21 +14,28 @@ whole of Law 2 rests on two claims:
 
 ## What this gate is, and is NOT.
 
-It is a **best-effort early warning**, not the physical guarantee. Three independent reviewers
-(codex twice, a Claude lens once) drove the point home: a static counter cannot catch every way
-JS can reach `agent`. It handles the *lexical* dodges — spacing, optional-call, alias, `.call`,
-spread-order, template interpolation, unicode escapes, regex literals (the last two are *refused*,
-not tokenized around) — but **dynamic dispatch is out of reach and always will be**:
-`globalThis['agent']`, `globalThis['ag'+'ent']`, `eval("agent(p,{})")`. Trying to catch those with
-more static analysis is the enumeration game with no end (handoff ledger 39) — and, per devbrew's
-own Gate F, a cure worse than the disease.
+It is a **best-effort early warning**, not the physical guarantee. Four independent reviewers
+(codex twice, two Claude lenses) drove the point home: a static counter cannot catch every way
+JS can reach `agent`. It handles the *known* lexical dodges — spacing, optional-call, alias,
+`.call`, spread-order, template interpolation, unicode escapes, regex literals, and the four
+ECMAScript line terminators in `//` comments (interpolation/regex/unicode are *refused*, not
+tokenized around). It does **not** claim to handle every lexical trick — the U+2028-in-comment
+dodge was live until a reviewer reproduced it with Node (ledger 41) — and **dynamic dispatch is
+out of reach and always will be**: `globalThis['agent']`, `globalThis['ag'+'ent']`,
+`eval("agent(p,{})")`. Chasing those with more static analysis is the enumeration game with no end
+(ledger 39) — and, per devbrew's own Gate F, a cure worse than the disease.
 
-**The real, physical Law 2 guarantee is three layers, none of which is this file:**
+**The physical Law 2 guarantee is three layers, none of which is this file — but read the residual:**
   (a) the agent files' `tools:` allowlist — no Bash means an interpreted agent *cannot* write;
   (b) the pre-0 smoke — a sentinel file proves on disk whether a probe can actually write;
-  (c) the integrity snapshot — if any agent writes anything, BEFORE≠AFTER catches it, with rollback.
-This gate exists to catch the *honest mistake* (we forgot an agentType) early and cheaply, before
-30 agents spin up. It does not pretend to stop a determined obfuscator, because layers (a)–(c) do.
+  (c) the integrity snapshot — if any agent writes anything IN THE REPO, BEFORE≠AFTER catches it.
+This gate catches the *honest mistake* (we forgot an agentType) early, before 30 agents spin up.
+**Residual, stated honestly (a reviewer's point):** a dispatch with NO agentType falls back to a
+write-capable default agent, so (a) has no allowlist to apply; and (c) is a file hash, so a fallen-
+back agent doing *network* actions (WebFetch exfiltration, no local write) leaves no delta for (c)
+to see. For that specific path — agentType-less dispatch + network-only action — this static gate
+is in fact the first and best-positioned line, which is why closing the *known* lexical holes is
+load-bearing even though the gate is "best-effort." The residual beyond the known holes is real.
 
 Counting *identifiers*, not syntax. `\\bagent\\(` — the obvious predicate — is defeated
 five different ways, all legal JS:
@@ -106,7 +113,13 @@ def strip_js_noise(src: str) -> str:
         c = src[i]
         nxt = src[i + 1] if i + 1 < n else ""
         if c == "/" and nxt == "/":                       # line comment — legitimate
-            while i < n and src[i] != "\n":
+            # ECMAScript defines FOUR line terminators, not one. A `//` comment ends at any of
+            # \n \r U+2028 U+2029. Checking only \n let a dispatch hide after a U+2028 inside a
+            # comment: Node ends the comment there and RUNS `agent(...)`, while a \n-only stripper
+            # thinks the comment continues and blanks the call → GREEN. Reproduced with Node.
+            # (Claude regression lens, r14-6.) This is a lexical dodge — the docstring's claim of
+            # covering the lexical dodges was false until this line.
+            while i < n and src[i] not in ("\n", "\r", "\u2028", "\u2029"):
                 out[i] = " "
                 i += 1
         elif c == "/" and nxt == "*":                     # block comment — legitimate
