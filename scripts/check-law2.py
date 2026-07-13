@@ -81,95 +81,75 @@ class BypassError(Exception):
 
 def strip_js_noise(src: str) -> str:
     """Blank comments and string *text*, preserving offsets and lines, so the token counter
-    sees only code. Template `${...}` interpolations are code and are kept verbatim —
-    RECURSIVELY, because a string inside an interpolation is text again and its braces must
-    not be counted (codex: `${"}", agent(p,{})}` slipped through a flat brace counter).
+    sees only code.
 
-    Refuses (BypassError) two constructs it cannot safely tokenize:
-      - unicode escapes in code (`\\uXXXX`) — how `ag\\u0065nt` hid from the regex
-      - regex literals — `/agent/` would otherwise inject a phantom token
-    Neither has any business in a workflow we author.
+    Deliberately SIMPLE, not clever. An earlier version tried to recursively parse template
+    interpolations to keep any `${ agent(...) }` visible; codex then broke it three ways
+    (`${"}", agent}`, a comment inside `${}`, and `a++ / b` misread as regex). That is the
+    endless enumeration game (ledger 39, 41). The measured fact settles it: the real
+    audit-workflow.js has ZERO `/` and ZERO `${}` in code. So we do not parse those cases —
+    we REFUSE them:
+
+      - `${` inside a template literal  → BypassError  (would-be interpolation; kills the
+                                          `${agent(...)}` and `${"}", agent}` dodges at once)
+      - a bare `/` in code (not // or /*) → BypassError (regex-vs-division ambiguity; a
+                                          workflow we author needs neither)
+      - `\\` (unicode/char escape) in code → BypassError (how `ag\\u0065nt` hid)
+
+    A construct the checker will not cheaply reason about is a RED, not a silent pass.
+    Template literals are otherwise blanked exactly like '...' and "..." strings.
     """
     out = list(src)
     n = len(src)
-
-    def blank_range(a: int, b: int):
-        for k in range(a, b):
-            if src[k] != "\n":
-                out[k] = " "
-
-    # Consume a string starting at `i` (src[i] in quotes). For a template literal, recurse
-    # into each ${...} so nested strings are stripped and only real code braces are seen.
-    def consume_string(i: int) -> int:
-        quote = src[i]
-        out[i] = " "
-        i += 1
-        while i < n:
-            ch = src[i]
-            if ch == "\\":
-                blank_range(i, min(i + 2, n))
-                i += 2
-                continue
-            if quote == "`" and ch == "$" and i + 1 < n and src[i + 1] == "{":
-                i += 2                       # keep `${` verbatim — it is a code boundary
-                i = consume_interp(i)        # recurse: strip strings, count real braces
-                continue
-            if ch == quote:
-                out[i] = " "
-                return i + 1
-            if ch != "\n":
-                out[i] = " "
-            i += 1
-        return i
-
-    # Inside a ${...}: keep code verbatim, but recurse into nested strings/templates, and
-    # stop at the brace that closes THIS interpolation (depth tracked over real braces only).
-    def consume_interp(i: int) -> int:
-        depth = 1
-        while i < n:
-            ch = src[i]
-            if ch in "'\"`":
-                i = consume_string(i)        # nested string — its braces don't count
-                continue
-            if ch == "\\":
-                raise BypassError(f"unicode/char escape in code at offset {i}")
-            if ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    return i + 1
-            i += 1
-        return i
-
     i = 0
-    prev_significant = ""     # last non-space code char — distinguishes /regex/ from division
     while i < n:
         c = src[i]
         nxt = src[i + 1] if i + 1 < n else ""
-        if c == "/" and nxt == "/":
+        if c == "/" and nxt == "/":                       # line comment — legitimate
             while i < n and src[i] != "\n":
                 out[i] = " "
                 i += 1
-        elif c == "/" and nxt == "*":
-            j = i + 2
-            while j < n and not (src[j] == "*" and j + 1 < n and src[j + 1] == "/"):
-                j += 1
-            blank_range(i, min(j + 2, n))
-            i = j + 2
-        elif c == "/" and prev_significant in ("", "(", ",", "=", ":", "[", "!", "&", "|",
-                                               "?", "{", ";", "+", "-", "*", "%", "<", ">",
-                                               "~", "^", "\n"):
-            # A regex literal in a file we author is refused, not tokenized around.
-            raise BypassError(f"regex literal at offset {i}")
+        elif c == "/" and nxt == "*":                     # block comment — legitimate
+            out[i] = out[i + 1] = " "
+            i += 2
+            while i < n and not (src[i] == "*" and i + 1 < n and src[i + 1] == "/"):
+                if src[i] != "\n":
+                    out[i] = " "
+                i += 1
+            if i < n:
+                out[i] = " "
+                if i + 1 < n:
+                    out[i + 1] = " "
+                i += 2
+        elif c == "/":                                    # bare slash = regex or division
+            raise BypassError(f"bare '/' (regex or division) at offset {i} — "
+                              f"a workflow we author uses neither")
+        elif c == "\\":                                   # unicode/char escape in code
+            raise BypassError(f"'\\' escape in code at offset {i}")
         elif c in "'\"`":
-            i = consume_string(i)
-            prev_significant = "'"
-        elif c == "\\":
-            raise BypassError(f"unicode/char escape in code at offset {i}")
+            quote = c
+            out[i] = " "
+            i += 1
+            while i < n:
+                ch = src[i]
+                if ch == "\\":                            # escape inside string — blank both
+                    if src[i] != "\n":
+                        out[i] = " "
+                    if i + 1 < n and src[i + 1] != "\n":
+                        out[i + 1] = " "
+                    i += 2
+                    continue
+                if quote == "`" and ch == "$" and i + 1 < n and src[i + 1] == "{":
+                    raise BypassError(f"template interpolation `${{` at offset {i} — "
+                                      f"a dispatch could hide inside it; not parsed, refused")
+                if ch == quote:
+                    out[i] = " "
+                    i += 1
+                    break
+                if ch != "\n":
+                    out[i] = " "
+                i += 1
         else:
-            if not c.isspace():
-                prev_significant = c
             i += 1
     return "".join(out)
 

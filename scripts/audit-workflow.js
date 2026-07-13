@@ -487,32 +487,9 @@ for (const r of alive) {
   }
 }
 
-// exact-key dedup: same source|axis|file|line|title. `title` is load-bearing — one line can
-// carry two independent user harms, and a key without it (r13) killed the second as a "dup".
-// Noise < false negative: a near-dup showing up twice is visible (renderer groups by axis);
-// a killed real gap is a silent evaporation. So we only fold the truly identical.
-// `target_id` is a STRUCTURED field — the §16 cross-model check reads it, and parsing it out
-// of a `reason` string would break on a single word change (codex).
-const seen = new Map()
-for (const f of findings) {
-  if (f.status !== 'reported') continue
-  const ev = (f.evidence || [])[0] || {}
-  const key = f.source + '|' + f.axis + '|' + ev.file + '|' + ev.line + '|' + f.title
-  if (seen.has(key)) {
-    f.status = 'refuted'
-    f.refutation = {
-      stage: 'dedup',
-      target_id: seen.get(key),
-      reason: seen.get(key) + '에 흡수 (동일 source·축·file:line·제목)',
-    }
-    f.deep_verified = null
-  } else {
-    seen.set(key, f.id)
-  }
-}
-
 // codex gaps get one adversarial pass too — codex has produced false positives 4 times in
-// this repo's history, and an unrefuted finding is an unreviewed one.
+// this repo's history, and an unrefuted finding is an unreviewed one. Merge them into
+// `findings` BEFORE dedup, so dedup covers codex-vs-codex duplicates too (codex).
 if (codexFindings.length) {
   const cf = await refuter(refutePrompt(codexFindings, 'codex 독립 감사'), {
     label: 'refute codex',
@@ -536,6 +513,33 @@ if (codexFindings.length) {
       if (!v) rec.unverified = true
     }
     findings.push(rec)
+  }
+}
+
+// exact-key dedup: same source|axis|file|line|title. Runs AFTER the codex merge so it folds
+// codex-vs-codex duplicates as well as claude-vs-claude (codex). The `source` in the key means
+// a claude finding and a codex finding on the same line do NOT dedup each other — they survive
+// and get tagged cross_model_confirmed in post-1. `title` is load-bearing — one line can carry
+// two independent user harms, and a key without it (r13) killed the second as a "dup". Noise <
+// false negative: a near-dup showing up twice is visible (renderer groups by axis); a killed
+// real gap is a silent evaporation. So we only fold the truly identical. `target_id` is a
+// STRUCTURED field — the §16 cross-model check reads it, and parsing it out of a `reason`
+// string would break on a single word change (codex).
+const seen = new Map()
+for (const f of findings) {
+  if (f.status !== 'reported') continue
+  const ev = (f.evidence || [])[0] || {}
+  const key = f.source + '|' + f.axis + '|' + ev.file + '|' + ev.line + '|' + f.title
+  if (seen.has(key)) {
+    f.status = 'refuted'
+    f.refutation = {
+      stage: 'dedup',
+      target_id: seen.get(key),
+      reason: seen.get(key) + '에 흡수 (동일 source·축·file:line·제목)',
+    }
+    f.deep_verified = null
+  } else {
+    seen.set(key, f.id)
   }
 }
 

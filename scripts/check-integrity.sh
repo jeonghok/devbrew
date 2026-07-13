@@ -78,7 +78,12 @@ NAMES="$TMP/names.z"
 # bytes under macOS /bin/bash 3.2, which destroys the framing and makes the read
 # loop run zero times — silently (repo lesson).
 case "$MODE" in
-  ld5)     set -- plugins/project-init docs/git-workflow .claude-plugin/marketplace.json ;;
+  # marketplace.json is EXCLUDED from the integrity snapshot (design §5.5): it is a shared
+  # file holding every plugin's entry, so a concurrent edit to a SIBLING plugin's entry would
+  # false-RED a perfectly good audit. D3 (marketplace description drift) is caught by the
+  # staleness sweep reading the file, not by hashing it. Gap-scope ≠ integrity-scope: the
+  # auditor still READS marketplace.json; the backstop just doesn't hash it.
+  ld5)     set -- plugins/project-init docs/git-workflow ;;
   # The harness's own load-bearing files. Neither of the other two scopes covers them: global
   # excludes .claude/ wholesale (as "another plugin's runtime state" — but the only tracked
   # things under .claude/ here are our three personas), and they sit outside LD5. So the very

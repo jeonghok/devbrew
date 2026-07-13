@@ -1415,7 +1415,7 @@ AFTER #2는 *정상 실행에서도* 100% RED였으므로 그 파괴 분기를 *
 | `docs/audits/2026-07-12-project-init-audit-journal.jsonl` | **하니스 원장 사본** — 에이전트별 원본 return. 파이프라인이 손댈 수 없는 유일한 외부 ground truth (§9.4). |
 | `docs/audits/2026-07-12-project-init-audit.md` | 감사 리포트 — **렌더러 산출물** (손으로 쓰지 않는다) |
 | `scripts/render-audit-report.py` | **신규** — JSON → 마크다운. **골든 픽스처 테스트를 동반한다** (§16) — 신규 load-bearing 코드다. |
-| `scripts/check-law2.py` | **신규** — AC-1a. **pre-0에서 dispatch 전에** 돈다. **6종 우회 mutation 필수** (§16 — r14에서 **6번째(template literal 보간)가 실제로 뚫려 있었다.** 정통 렌즈가 코드에 mutation을 주입해 재현했다). |
+| `scripts/check-law2.py` | **신규** — AC-1a. **pre-0에서 dispatch 전에** 돈다. **8종 우회 mutation 필수** (§16 — r14에서 6번째(template 보간)·7번째(문자열 속 `}`)·8번째(유니코드 이스케이프)·9번째(regex literal)가 순차로 뚫렸다. **교훈: mutation test는 상상한 우회만 막는다** → 재귀 파싱을 버리고 **싸게 판단 못 하는 구문(`/`·`${`·`\`)은 tokenize 대신 `BypassError`로 거부.** 실측: 실제 workflow는 셋 다 안 쓴다. 원장 41). |
 | `scripts/audit-workflow.js` | **신규** — 6축 workflow. **`check-law2.py`의 검증 대상.** |
 | `scripts/smoke-workflow.js` | **신규 (r14 — §14에서 누락돼 있었다).** pre-0c 스모크 전용 **1-에이전트 미니 workflow.** §16이 *"별도 파일 · `check-law2.py`가 별도 화이트리스트로 검사(`agent` 1회 + `agentType: 'smoke-probe'`)"*라고 명시하는데 **Files to Modify에는 없었다** — *"감사 workflow 스크립트"* 한 행이 단수로만 적혀 있어 **두 개의 서로 다른 신규 파일이 필요하다는 사실이 드러나지 않았다** (적발: 정합성 렌즈). |
 | `scripts/check-no-verdict-injection.py` | **신규 (r14)** — §8 서두의 *"주입은 사실만"*을 **기계로 강제**한다. 산문은 자기를 강제하지 못했다 — 이 병은 **두 번 재발**했다 (구 C10 재갈 · r13 스포일러). **dispatch 전에** 돈다. |
@@ -1475,7 +1475,7 @@ r10에서 사라진 것은 *데이터 회계* AC들이다 — 파이프라인이
 |---|---|---|
 | **결정론성 — 2회 실행 시 출력이 바이트 동일** | 무결성 매니페스트가 비결정론이면 **AFTER #1이 허위 RED** → *"감사 무효, 아무것도 만들지 않음"*(§6 post-1 step 1). **정상 실행이 죽는다.** staleness sweep이 비결정론이면 감사자가 **실행마다 다른 사실**을 받는다 | `check-integrity.sh` · `check-staleness.py` |
 | **경계 케이스 픽스처** — 빈 플러그인 · 테스트 없는 플러그인 · git 아닌 디렉토리 · 파일 0개 | **빈 매니페스트는 어떤 빈 매니페스트와도 같다** — 아무것도 안 보는 방식으로 통과하는 백스톱. sweep이 빈 입력에 크래시하면 pre-1이 죽고, 조용히 0건을 내면 **"드리프트 없음"으로 배달된다** | 전 검증 스크립트 |
-| **mutation test — 이빨 증명** | 결함을 재도입 → **RED**, 정상 → **GREEN**. GREEN만으로는 theater다 ([[feedback_grep_lock_header_satisfiable]]) | `check-law2.py`(5종 우회) · `check-integrity.sh`(양방향: LD5는 ignored 오염을 **잡아야** 하고, 전역은 volatile churn을 **무시해야** 한다) · `check-staleness.py` |
+| **mutation test — 이빨 증명** | 결함을 재도입 → **RED**, 정상 → **GREEN**. GREEN만으로는 theater다 ([[feedback_grep_lock_header_satisfiable]]) | `check-law2.py`(8종 우회 + 거부구문 FP저항) · `check-integrity.sh`(4방향: LD5는 ignored 오염을 **잡아야** 하고, 전역은 volatile churn을 **무시해야** 한다) · `check-staleness.py` |
 | **FP 저항 — clean 픽스처에 0건** | sweep이 **거짓 dangling**을 내면 감사자가 **존재하지 않는 갭을 쫓는다.** 알려진 FP 클래스를 픽스처로 박제하라: **코드 펜스 내부** · 생성물 경로 · 플레이스홀더 · URL | `check-staleness.py` |
 
 > ⚠️ **실측 FP 사례 (2026-07-13, 이 문서를 쓰다가 걸렸다)**: spec-distill의 placeholder 검사기가
@@ -1602,10 +1602,18 @@ project-init v1.7.0(인코딩 버그) — **전부 Claude 리뷰어 다수가 �
 > 잡으려는 건 **끝없는 열거 게임**(원장 39)이고, devbrew 자신의 게이트 F가 말하는 *치료가 병보다
 > 나쁜* 경우다.
 >
-> **진짜 물리적 Law 2 보장은 세 층이고, 이 파일은 그중 하나가 아니다:**
-> **(a)** agent 파일 `tools:` allowlist — Bash 없으면 해석된 에이전트가 **물리적으로 못 쓴다** ·
-> **(b)** pre-0 스모크 — sentinel 파일이 **디스크에서** 쓰기 가능 여부를 증명 ·
-> **(c)** 무결성 스냅샷 — 에이전트가 뭐라도 쓰면 BEFORE≠AFTER가 잡고 롤백.
+> **진짜 물리적 Law 2 보장은 세 층이고, 이 파일은 그중 하나가 아니다** (배선 상태를 정직하게 적는다 —
+> *"3층이 보장한다"*도 (b)가 코드 없이 서술만이면 또 다른 과장이다. 적발: codex):
+> **(a)** agent 파일 `tools:` allowlist — Bash 없으면 해석된 에이전트가 **물리적으로 못 쓴다.**
+> **✅ 배선·실증** (`check-law2.py`가 검사, agent 파일 3개 실재) ·
+> **(b)** pre-0 스모크 — sentinel 파일이 **디스크에서** 쓰기 가능 여부를 증명.
+> **⚠️ 설계 완료, 코드 미작성** — `scripts/smoke-workflow.js`는 §14의 "신규" 파일이고 **plan의 구현
+> 항목이다.** 그때까지 (b)는 *약속*이지 *보장*이 아니다 · **(c)** 무결성 스냅샷 — 에이전트가 뭐라도
+> 쓰면 BEFORE≠AFTER가 잡고 롤백. **✅ 배선·실증** (`check-integrity.sh` 4방향 mutation 통과).
+>
+> **따라서 감사 실행 전 필수 순서**(§6): (a)와 (c)는 지금 살아 있고, **(b)는 plan이 `smoke-workflow.js`를
+> 구현한 *뒤에야* pre-0c가 실제로 돈다.** 그 전에 감사를 돌리면 (b) 층이 비어 있으므로 (a)+(c)에만
+> 의존한다 — 정직하게 알고 있어야 한다.
 > 이 게이트는 **정직한 실수**(agentType을 깜빡함)를 30 에이전트가 뜨기 전에 싸게 잡으려고 있다.
 > 작정한 난독화를 막는 척하지 않는다 — (a)–(c)가 그걸 한다.
 
@@ -1636,7 +1644,7 @@ const refuter = (prompt, opts) => agent(prompt, {...opts, agentType: 'audit-refu
 | 헬퍼 안에서 `{agentType: '…', ...opts}` — 스프레드 순서 역전 | "값이 allowlist 리터럴"만 봄 → **GREEN** (호출자의 `opts.agentType`이 이긴다) | 헬퍼 줄 **바이트 핀** → **RED** |
 
 `agentType`은 `(?<![\w$.])agent(?![\w$])`에 **매치되지 않는다**(뒤에 `T`) — 그래서 헬퍼 안의
-`agentType:`이 카운트를 오염시키지 않는다. **mutation 5종 전부로 이빨을 증명하는 테스트를 쓴다.**
+`agentType:`이 카운트를 오염시키지 않는다. **8종 우회 전부로 이빨을 증명한다** — 그리고 `/`·`${`·`\`을 만나면 tokenize하지 않고 `BypassError`로 거부한다(원장 41: 완벽한 파싱 대신 거부, 실제 workflow는 셋 다 안 씀).
 
 ### capability 스모크 (pre-0c) — **미니 workflow로** 돈다
 
