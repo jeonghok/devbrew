@@ -59,12 +59,16 @@ class TestRender(unittest.TestCase):
                          "M(산문)이 L보다 먼저여야 — naive whole-string lookup은 이 쌍에서 뒤집는다")
 
     def test_codex_absent_banner(self):
+        # degraded item의 "what"에 "codex" substring이 있으면 배너 분기와 무관하게
+        # assertIn("codex", ...)가 통과해버려 toothless — "what"에서 codex를 빼고
+        # 배너 고유 문구("codex 독립 감사 미실행")를 직접 단언한다.
         m = dict(META_OK); m["codex"] = {"ran": False}
         data = {"meta": m, "findings": [], "d_verdicts": [], "oq_answers": [],
-                "new_open_questions": [], "axis_failures": [], "degraded": [{"what": "codex 미실행", "why": "x"}]}
-        rc, md, _ = render(data)
+                "new_open_questions": [], "axis_failures": [], "degraded": [{"what": "기타 결손", "why": "x"}]}
+        rc, md, err = render(data)
+        self.assertEqual(rc, 0, err)
         head = "\n".join(md.splitlines()[:20])
-        self.assertIn("codex", head.lower())
+        self.assertIn("codex 독립 감사 미실행", head)
         self.assertIn("⚠", head)
 
     def test_all_axes_dead_no_report(self):  # AC-4(a)
@@ -82,14 +86,28 @@ class TestRender(unittest.TestCase):
         self.assertIn("/6", head)  # "5/6 축 완주" 류
 
     def test_deep_verified_three_states(self):  # §9.2
+        # toothless였던 원래 형태(assertIn("상한 초과", md) 전역 1건)는 3-state가 2-state로
+        # collapse돼도 GREEN — finding별 라인을 추출해 세 상태를 개별 단언한다.
         data = {"meta": META_OK, "findings": [
             f("A1-1", "HIGH", "S", deep_verified=True),
             f("A1-2", "HIGH", "S", deep_verified=False),
             f("A1-3", "MEDIUM", "S", deep_verified=None)],
             "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "axis_failures": [], "degraded": []}
-        rc, md, _ = render(data)
-        # false = "상한 초과" 라벨, null = 무라벨
-        self.assertIn("상한 초과", md)
+        rc, md, err = render(data)
+        self.assertEqual(rc, 0, err)
+        lines = md.splitlines()
+
+        def line_for(id_):
+            for ln in lines:
+                if f"({id_})" in ln:
+                    return ln
+            self.fail(f"{id_}에 대한 라인을 찾을 수 없음:\n{md}")
+
+        l1, l2, l3 = line_for("A1-1"), line_for("A1-2"), line_for("A1-3")
+        self.assertIn("통과", l1, "True → 심층검증 통과 라벨이 있어야")
+        self.assertIn("상한 초과", l2, "False → 상한 초과 라벨이 있어야")
+        self.assertNotIn("통과", l3, "None은 통과 라벨이 없어야")
+        self.assertNotIn("상한 초과", l3, "None은 상한 초과 라벨도 없어야 (무라벨)")
 
     def test_noq_section_and_cross_model_badge(self):
         data = {"meta": META_OK,
@@ -102,6 +120,61 @@ class TestRender(unittest.TestCase):
         self.assertIn("NOQ-1", md)
         self.assertIn("obs", md)
         self.assertIn("⚑", md)  # cross-model 배지
+
+    def test_sort_reference_gap_tiebreak(self):
+        # stage 3: severity·cost 동률, reference_gap 유무만 다름 — 있는 쪽이 먼저.
+        # id를 일부러 반대로 배정(A3-9=있음, A3-1=없음)해 stage-4(id) 낙폭으로
+        # 우연히 통과하는 걸 배제한다: id만으로 정렬되면 A3-1이 먼저 와야 하는데
+        # stage 3가 살아있으면 A3-9(레퍼런스 격차 있음)가 먼저 와야 한다.
+        data = {"meta": META_OK, "findings": [
+            f("A3-9", "HIGH", "S", reference_gap="OMC 있음"),
+            f("A3-1", "HIGH", "S", reference_gap="none")],
+            "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "axis_failures": [], "degraded": []}
+        rc, md, err = render(data)
+        self.assertEqual(rc, 0, err)
+        self.assertLess(md.index("A3-9"), md.index("A3-1"),
+                         "reference_gap 있는 A3-9가 없는 A3-1보다 먼저여야 (stage 3, id 역순 배치로 우연통과 배제)")
+
+    def test_sort_id_tiebreak(self):
+        # stage 4: severity·cost·reference_gap 유무까지 전부 동률 — id 오름차순만 남는다.
+        # 입력 순서를 내림차순(A4-9 먼저)으로 줘서, id 요소가 tuple에서 빠지면(stable sort로
+        # 입력 순서 그대로 유지) 실패하도록 만든다.
+        data = {"meta": META_OK, "findings": [
+            f("A4-9", "HIGH", "S", reference_gap="none"),
+            f("A4-1", "HIGH", "S", reference_gap="none")],
+            "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "axis_failures": [], "degraded": []}
+        rc, md, err = render(data)
+        self.assertEqual(rc, 0, err)
+        self.assertLess(md.index("A4-1"), md.index("A4-9"),
+                         "동률이면 id 오름차순(A4-1 먼저)이어야 (stage 4)")
+
+    def test_oq_answers_and_backref(self):
+        # Fix 1: oq_answers[]/oq_ref 렌더링. OQ1은 좌/우 대칭(빈 쪽=0건 명시),
+        # OQ2..6은 answer+evidence+reason. finding.oq_ref는 해당 OQ 서브섹션에
+        # 역참조로 나타나야 한다.
+        data = {"meta": META_OK,
+                "findings": [f("A2-1", "HIGH", "S", oq_ref="OQ2")],
+                "d_verdicts": [],
+                "oq_answers": [
+                    {"id": "OQ1", "source": "claude", "reason": "r1",
+                     "left_evidence": [{"claim": "좌주장", "file": "a.py", "line": 1, "quote": "q1"}],
+                     "right_evidence": []},
+                    {"id": "OQ2", "source": "claude", "answer": "답변입니다", "reason": "r2",
+                     "evidence": [{"file": "b.py", "line": 2, "quote": "q2"}]},
+                ],
+                "new_open_questions": [], "axis_failures": [], "degraded": []}
+        rc, md, err = render(data)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("배정된 열린 질문", md, "OQ 섹션 헤더가 있어야")
+        self.assertIn("좌주장", md, "OQ1 좌측 claim이 렌더돼야")
+        self.assertIn("0건", md, "OQ1 우측이 비었으면 0건으로 명시돼야 (숨기면 안 됨, §9.5)")
+        # OQ2 서브섹션만 슬라이스해 답변·역참조가 "그 서브섹션 안에" 있는지 확인
+        idx_oq2 = md.index("### OQ2")
+        rest = md[idx_oq2 + len("### OQ2"):]
+        next_hash = rest.find("### ")
+        oq2_section = rest if next_hash == -1 else rest[:next_hash]
+        self.assertIn("답변입니다", oq2_section, "OQ2 answer가 OQ2 서브섹션에 렌더돼야")
+        self.assertIn("A2-1", oq2_section, "oq_ref==OQ2인 finding이 OQ2 서브섹션에 역참조돼야")
 
 
 if __name__ == "__main__":

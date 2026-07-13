@@ -75,6 +75,38 @@ def render(data: dict) -> str | None:
             lines.append(f"- 레퍼런스 격차: {f.get('reference_gap')}")
         lines.append("")
 
+    oq_answers = data.get("oq_answers", [])
+    if oq_answers:
+        lines.append("## 배정된 열린 질문 (OQ)")
+        by_id: dict[str, list[dict]] = {}
+        for a in oq_answers:
+            by_id.setdefault(a.get("id"), []).append(a)
+        for oq_id in sorted(by_id.keys()):
+            lines.append(f"### {oq_id}")
+            for a in sorted(by_id[oq_id], key=lambda a: a.get("source") or ""):
+                lines.append(f"- 출처: {a.get('source')}")
+                if oq_id == "OQ1":
+                    # §9.5: 좌/우 대칭 — 빈 쪽도 0건으로 명시(숨기지 않는다)
+                    for side_label, side_key in (("좌", "left_evidence"), ("우", "right_evidence")):
+                        side_ev = a.get(side_key) or []
+                        if not side_ev:
+                            lines.append(f"  - {side_label}: 0건")
+                        else:
+                            lines.append(f"  - {side_label}:")
+                            for e in side_ev:
+                                lines.append(f"    - `{e.get('file')}:{e.get('line')}` — {e.get('claim')}: {e.get('quote')}")
+                    if a.get("steelman_condition"):
+                        lines.append(f"  - 스틸맨 조건: {a.get('steelman_condition')}")
+                else:
+                    lines.append(f"  - 답: {a.get('answer')}")
+                    for e in a.get("evidence") or []:
+                        lines.append(f"    - `{e.get('file')}:{e.get('line')}` — {e.get('quote')}")
+                lines.append(f"  - 근거: {a.get('reason')}")
+            ref_ids = [f.get("id") for f in findings if f.get("oq_ref") == oq_id]
+            if ref_ids:
+                lines.append(f"- 이 질문과 관련된 발견: {', '.join(ref_ids)}")
+            lines.append("")
+
     noqs = data.get("new_open_questions", [])
     if noqs:
         lines.append("## 열린 질문 (NOQ — 갭은 아니나 조용히 버리지 않는다)")
