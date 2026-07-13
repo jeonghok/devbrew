@@ -29,12 +29,12 @@ cd "$REPO_ROOT" || exit 1
 
 MODE="${1:-}"
 OUT="${2:-}"
-if [ "$MODE" != "ld5" ] && [ "$MODE" != "global" ]; then
-  echo "usage: check-integrity.sh <ld5|global> <out_path>" >&2
-  exit 2
-fi
+case "$MODE" in
+  ld5|harness|global) ;;
+  *) echo "usage: check-integrity.sh <ld5|harness|global> <out_path>" >&2; exit 2 ;;
+esac
 if [ -z "$OUT" ]; then
-  echo "usage: check-integrity.sh <ld5|global> <out_path>" >&2
+  echo "usage: check-integrity.sh <ld5|harness|global> <out_path>" >&2
   exit 2
 fi
 
@@ -43,15 +43,30 @@ fi
 TMP="$(mktemp -d)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
-# Volatile paths — excluded from the GLOBAL snapshot only, never from LD5.
-is_volatile() {
+# The line is not "is it git-ignored" — it is "does a machine generate it, or does it hold
+# content" (design §5.5).
+#
+# MACHINE: excluded from ld5 AND global. macOS writes .DS_Store just for opening a directory,
+# and stock CPython writes __pycache__ on import. Asking "did an agent hide something here"
+# is meaningless — there is no content — while leaving them in guarantees that a normal run
+# goes RED and the audit is voided for a change nobody made.
+is_machine_generated() {
   case "$1" in
     .DS_Store|*/.DS_Store)                       return 0 ;;
+    *.pyc|*/__pycache__/*)                       return 0 ;;
     .pytest_cache/*|*/.pytest_cache/*)           return 0 ;;
+  esac
+  return 1
+}
+
+# CONTENT: excluded from global only, KEPT inside LD5. plugins/project-init/**/.claude/... is
+# the D4 contamination — real files with real content — and catching that class is the reason
+# this backstop exists at all.
+is_foreign_state() {
+  case "$1" in
     .claude/*|*/.claude/*)                       return 0 ;;
     .superpowers/*|*/.superpowers/*)             return 0 ;;
     .understand-anything/*|*/.understand-anything/*) return 0 ;;
-    *.pyc|*/__pycache__/*)                       return 0 ;;
   esac
   return 1
 }
@@ -62,20 +77,23 @@ NAMES="$TMP/names.z"
 # -z output is written straight to a file. Capturing it with $(...) drops the NUL
 # bytes under macOS /bin/bash 3.2, which destroys the framing and makes the read
 # loop run zero times — silently (repo lesson).
-if [ "$MODE" = "ld5" ]; then
-  set -- plugins/project-init docs/git-workflow .claude-plugin/marketplace.json
-else
-  set -- .
-fi
+case "$MODE" in
+  ld5)     set -- plugins/project-init docs/git-workflow .claude-plugin/marketplace.json ;;
+  # The harness's own load-bearing files. Neither of the other two scopes covers them: global
+  # excludes .claude/ wholesale (as "another plugin's runtime state" — but the only tracked
+  # things under .claude/ here are our three personas), and they sit outside LD5. So the very
+  # files Law 2 rests on had no tamper detection at all while the audit ran.
+  harness) set -- .claude/agents scripts ;;
+  global)  set -- . ;;
+esac
 git ls-files -z --                            "$@" >> "$NAMES"
 git ls-files -z --others --exclude-standard -- "$@" >> "$NAMES"
 git ls-files -z --others --ignored --exclude-standard -- "$@" >> "$NAMES"
 
 while IFS= read -r -d '' f; do
   [ -f "$f" ] || continue
-  if [ "$MODE" = "global" ] && is_volatile "$f"; then
-    continue
-  fi
+  is_machine_generated "$f" && continue                       # excluded from every scope
+  [ "$MODE" = "global" ] && is_foreign_state "$f" && continue # excluded from global only
   shasum -a 256 "$f"
 done < "$NAMES" | LC_ALL=C sort -u > "$OUT"
 

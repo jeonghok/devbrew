@@ -436,26 +436,58 @@ Law 2 통과**(반면 `plugin-validator`는 **Bash 보유** → 우리 파이프
 틀렸을 경우"*인데, 그 경우 쓰기는 LD5 안에만 떨어질 이유가 없다. 하지만 **범위와 시점을 함께
 정하지 않으면 백스톱이 자기 산출물을 오염으로 잡는다** — r10이 정확히 그렇게 실패했다.
 
+**세 개의 범위** (r14 — **HARNESS 신설**):
+
+| 범위 | 무엇 | ignored |
+|---|---|---|
+| **(a) LD5** | `plugins/project-init/**` · `docs/git-workflow/**` · `.claude-plugin/marketplace.json` | **포함** — 단 **machine-generated volatile 제외** (아래) |
+| **(b) HARNESS** ⬛ **r14 신설** | **`.claude/agents/*.md` (persona 3개)** + `scripts/*.py` · `scripts/*.sh` · `scripts/*.js` | 해당 없음 (전부 tracked) |
+| **(c) 리포 전역** | 리포 전체 | 포함 **− volatile 제외목록** |
+
+> 🔴 **(b) HARNESS가 왜 필요한가 — 두 백스톱 어디에도 없던 사각지대** (적발: 정통 렌즈).
+> 전역 스냅샷은 *"다른 플러그인의 런타임 state"*를 피하려고 **`.claude/` 전체를 제외**했다. 그런데
+> **이 리포의 `.claude/` 하위 tracked 파일은 우리 persona 3개뿐이다** (`git ls-files .claude/` 실측).
+> 그리고 그 셋은 **LD5 밖**이다. → **Law 2 전체가 의존하는 파일 셋을 어느 백스톱도 안 본다.**
+> §5.5가 스스로 밝힌 존재 이유(*"도구 표면에 대한 내 이해가 틀렸을 경우"*)가 정확히 이 파일들인데,
+> **감사 도중 그것들이 조용히 수정·약화되는 것을 잡을 수단이 없었다.** §5.4a의 frontmatter
+> silent-truncation 검사는 **정적** 검사다 — 이건 **실행 중 tamper** 탐지이고, 다른 문제다.
+> **검증 스크립트(`scripts/*`)도 같은 이유로 포함한다** — 게이트가 실행 중 무력화되면 그 게이트의
+> GREEN은 아무 의미가 없다.
+
 | 스냅샷 | 범위 | 언제 | 판정 |
 |---|---|---|---|
-| **BEFORE** | **(a)** LD5 파일별 SHA-256 (tracked + untracked + **ignored**) **+ (b)** 리포 전역 파일별 SHA-256 (tracked + untracked + ignored **− volatile 제외목록**) | pre-1 | — |
-| **AFTER #1** | 동일 (a + b) | **workflow 직후, orchestrator가 무엇이든 쓰기 *전*** | **1바이트라도 다르면 감사 무효.** 이때는 정당한 delta가 **하나도 없다.** |
-| **AFTER #2** | **LD5 전용** (a) | 커밋 직전 (모든 쓰기 뒤) | **1바이트라도 다르면 커밋 금지 + 비파괴 롤백** (§13). 감사 산출물은 전부 LD5 *밖*이므로 정당한 delta가 없다. |
+| **`LD5-0`** ⬛ r14 | (a) + (b) | **pre-1 시작 *직전*** | — (기준) |
+| **`LD5-1` = BEFORE** | (a) + (b) + (c) | **pre-1 끝 = 팬아웃 직전** | 🔴 **`LD5-0 != LD5-1` → 중단.** pre-1이 LD5/HARNESS를 건드렸다 = **세탁하면 안 되는 버그** |
+| **AFTER #1** | (a) + (b) + (c) | **workflow 직후, orchestrator가 무엇이든 쓰기 *전*** | **1바이트라도 다르면 감사 무효.** 이때는 정당한 delta가 **하나도 없다.** |
+| **AFTER #2** | (a) + (b) | 커밋 직전 (모든 쓰기 뒤) | **1바이트라도 다르면 커밋 금지 + 비파괴 롤백** (§13). 감사 산출물은 전부 (a)·(b) *밖*이므로 정당한 delta가 없다. |
 
 **전역 스냅샷(b)은 volatile 경로를 제외한다 (r12 — B2).** 제외 목록:
 
+**경계선은 *"ignored인가"*가 아니라 *"기계가 생성하는가, 내용을 담는가"*다** (r14):
+
 ```
-.DS_Store            # macOS가 디렉토리를 열기만 해도 쓴다
-.pytest_cache/       # 감사 중 누가 테스트를 돌리면 바뀐다
-__pycache__/ *.pyc   # r13 — 대상 테스트 실행의 부산물 (아래 ⚠️)
-.claude/             # 다른 플러그인의 런타임 state (qg · spec-distill …)
-.superpowers/ .understand-anything/
+── 기계 생성 (MACHINE) — (a) LD5 · (c) 전역 **양쪽에서** 제외
+.DS_Store              macOS가 디렉토리를 *열기만 해도* 쓴다
+__pycache__/  *.pyc    python이 import만 해도 쓴다 (stock CPython)
+.pytest_cache/         테스트 러너 캐시
+
+── 내용 보유 (CONTENT) — (c) 전역에서만 제외. **(a) LD5에는 유지.**
+.claude/               다른 플러그인의 런타임 state (qg · spec-distill …)
+                       ⚠️ 단 `plugins/project-init/**/.claude/` = **D4 오염**은 LD5 안이므로
+                          유지된다 — 그것이 이 백스톱의 존재 이유다
+.superpowers/  .understand-anything/
 ```
 
-> ⚠️ **`__pycache__`는 *전역* 스냅샷에서만 뺀다 — LD5에서는 빼지 않는다** (r13). LD5는 백스톱의
-> 본진이므로 구멍을 내지 않는다. **LD5 안에서 `.pyc`가 생기는 문제는 *제외*가 아니라 *순서*와
-> `-B`로 닫는다** (§5.4b): orchestrator의 모든 쓰기 부작용이 BEFORE 스냅샷 **이전**에 끝나고,
-> 애초에 bytecode를 안 쓴다. **제외로 닫으려 하면 백스톱이 "감사자가 쓸 수 있는 곳"을 못 보게 된다.**
+> 🔴 **r13은 LD5에서 `.DS_Store`를 안 뺐다 — 정상 실행이 죽는다** (적발: 패턴사냥 렌즈).
+> macOS가 `plugins/project-init/` 디렉토리를 **열기만 해도** `.DS_Store`를 쓴다. LD5 스냅샷이
+> ignored를 포함하므로 → **AFTER #1 ≠ BEFORE → 감사 무효.** 감사자는 아무 짓도 안 했는데.
+> **r13은 전역에만 제외를 적용하고 LD5를 그대로 뒀다** — *"백스톱에 구멍을 내지 않는다"*는
+> 논리였는데, **그 논리가 틀린 층위에 적용됐다.**
+>
+> **올바른 구분**: `.DS_Store`·`__pycache__`는 **기계가 자동 생성하는 것**이라 *"감사자가 여기에
+> 무언가를 숨겼는가"*를 묻는 것이 무의미하고(내용이 없다), 안 빼면 **정상 실행이 확실히 죽는다.**
+> 반면 `.claude/quality-gates/*/files.md`(D4)는 **실제 내용을 담은 파일**이고, 그것을 잡는 것이
+> 백스톱의 존재 이유다. **제외 여부는 "ignored인가"가 아니라 "내용이 있는가"로 가른다.**
 
 **왜 load-bearing인가 — 이걸 안 빼면 정상 실행이 RED가 된다.** 실측: 이 리포의 git-ignored 파일은
 **76개**이고 위 경로들이 거기 있다. 감사가 도는 **몇 분** 동안 macOS가 `.DS_Store`를 쓰거나 다른
@@ -565,9 +597,35 @@ pre-0    ─ pre-flight (orchestrator) — **가정을 실증한다. 실패 시 
 
 pre-1    ─ orchestrator (Bash, workflow 밖)
 
-   ▸ ## ⬛ 스냅샷 불변식 (r13 — 두 번 뚫리고 나서야 제대로 세웠다)
-     > **BEFORE 스냅샷은 *팬아웃(축 감사자)이 뜨기 직전*에 찍는다.**
-     > **orchestrator가 pre-1에서 하는 모든 일은 그 선 *이전*이다 — 무엇을 쓰든 상관없다.**
+   ▸ ## ⬛ 스냅샷 불변식 (r14 — **세 번 뚫리고 나서** 제대로 세웠다)
+     > **① `LD5-0` = pre-1 *시작 직전* 스냅샷.  ② `LD5-1` = pre-1 *끝* 스냅샷 (= BEFORE).**
+     > **`LD5-0 == LD5-1`이 아니면 → 중단.** pre-1은 **LD5에 아무것도 쓰지 않는다** — 그리고
+     > 그것은 **가정이 아니라 검사다.**
+
+     **r13의 불변식은 반쪽이었다.** r13은 *"orchestrator가 pre-1에서 하는 모든 일은 BEFORE 이전이다 —
+     **무엇을 쓰든 상관없다**"*라고 적었다. **codex가 그것을 정면으로 반박했다** (verbatim):
+
+     > *"BEFORE를 테스트·sweep·codex 실행 **뒤에** 찍어, pre-1이 만든 비정상 변경을 **정상 기준선으로
+     > 세탁**한다. … 문서의 읽기전용 목표는 **행위자와 무관**하다."*
+
+     **맞다.** §14는 *"`plugins/**`는 **한 줄도** 바뀌지 않는다"*고 말한다 — **누가 썼든.** r13의
+     불변식은 백스톱의 목적을 *"에이전트의 쓰기만"*으로 좁혀서 **pre-1의 쓰기를 면제해버렸다.**
+
+     **세 지적이 서로 반대 방향을 요구했다:**
+
+     | | 요구 | 출처 |
+     |---|---|---|
+     | BEFORE를 pre-1 **앞**으로 | 안 그러면 pre-1의 쓰기가 **세탁**된다 | codex |
+     | BEFORE를 pre-1 **뒤**로 | 안 그러면 `__pycache__`가 **정상 실행을 죽인다** | 리뷰 라운드 2 |
+     | 범위를 **넓혀라** | persona 3개가 **두 백스톱 어디에도 없다** | 정통 렌즈 |
+
+     **시점을 고르는 것은 답이 아니다.** 답은 **"pre-1이 LD5를 안 건드린다"를 *검사*로 만드는 것**이다:
+     - 세탁 불가 — `LD5-0 == LD5-1`을 강제하므로 pre-1의 쓰기는 **RED로 드러난다.**
+     - 정상 실행 안 죽음 — `-B`(bytecode 미생성)가 `__pycache__`를 애초에 안 만든다.
+     - **그리고 검사가 실패하면 그것은 세탁이 아니라 *버그 리포트*다** — 무엇이 LD5를 건드렸는지
+       diff가 정확히 말해준다.
+
+     **`LD5-0 != LD5-1` → 중단. 감사를 시작하지 않는다.** (세탁하지도, 무시하지도 않는다.)
 
      ⚠️ **pre-0 스모크는 유일한 예외이며, 그것이 정당한 이유가 있다.** 스모크는 에이전트를 **하나
      태우고**(§7 표의 30 중 1) BEFORE 스냅샷보다 **먼저** 돈다 — 불변식의 문자를 어기는 것처럼 보인다.
@@ -597,16 +655,24 @@ pre-1    ─ orchestrator (Bash, workflow 밖)
      아니라 부가 확인이다** — 불변식은 codex가 무엇을 쓰든 성립한다. 도구 하나의 안전성에 기대는
      설계는 다음 도구에서 다시 뚫린다.)*
 
-   **pre-1 순서 (전부 BEFORE 스냅샷 *이전*):**
+   **pre-1 순서:**
+
+   0. ## ▸ **`LD5-0` 스냅샷** ← pre-1이 무엇이든 하기 **전**. (LD5 + HARNESS — §5.5)
 
    1. **대상의 자체 검증 자산 실행** (§5.4b) — `PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest …`
-      (`-B`는 defense in depth. 불변식이 이미 닫지만, `.pytest_cache/` 같은 다른 부산물도 있다.)
+      **타임아웃 필수** (§5.4b — 상한 초과 시 `{ran: false, why: "timeout"}` + `degraded[]`.
+      orchestrator 서브프로세스는 팬아웃 재시도 상한(C3)이 안 걸린다 → 무한 블록은
+      **Forbidden: unbounded autonomy**다. 적발: fresh-eyes 렌즈.)
    2. **결정론 staleness sweep** (§5.4a) → facts
    3. **evidence pack 조립** → evidence-pack.json
       git history · 인벤토리(**tracked + untracked + ignored 합집합** — D4 증거가 ignored다)
       · 오염 상태 · **staleness facts**(2) · **자체 테스트 결과**(1)
       · **레퍼런스 코퍼스 + 선례 코퍼스 경로** (§5.4)
-   4. **codex blind** — `detect_codex.sh` → `codex exec -s read-only -C <repo> --json`
+   4. **codex blind** — `detect_codex.sh` → `codex exec -s read-only -C <repo> --json` (**타임아웃 필수**)
+      ⚠️ **프롬프트는 `check-no-verdict-injection.py`를 통과해야 한다** (§16 — r14). 실측: r13의 codex
+      프롬프트에 **판정 주입이 5건** 있었고, 그 상태로 codex가 이미 한 번 돌았다 → 그 실행의 **D/OQ
+      판정은 오염됐고 독립 검증으로 신뢰할 수 없다.** *(두 모델이 같은 스포일러를 받으면, 그들의 일치는
+      독립 검증의 일치가 아니다.)*
       **BLIND가 구조적으로 보장된다** — workflow *시작 전*에 도니 **Claude 발견이 아직 존재하지 않는다.**
       r1처럼 *"await 하지 않기"*라는 규율에 기대지 않는다.
       출력 → §9 스키마로 정규화. **네 개의 그릇을 전부 받는다**:
@@ -615,8 +681,12 @@ pre-1    ─ orchestrator (Bash, workflow 밖)
         없었다** — r9에서 *"고쳤다"*고 선언한 "codex 판정의 조용한 증발"의 재발. (§16 B7이 이것을 검증한다.)
       증거 없는 갭은 폐기 + `degraded[]` 기록 (raw 보존).
 
-   5. ## ▸ **무결성 스냅샷 BEFORE** ← **선. 이 뒤로는 오직 에이전트만 움직인다.**
-      (LD5 + 리포 전역, 파일별 SHA-256, ignored 포함 — §5.5)
+   5. ## ▸ **`LD5-1` = BEFORE 스냅샷** ← **선. 이 뒤로는 오직 에이전트만 움직인다.**
+      (LD5 + **HARNESS** + 리포 전역, 파일별 SHA-256 — §5.5)
+
+      ## 🔴 **`LD5-0 == LD5-1` 검사. 다르면 → 중단.**
+      pre-1이 LD5를 건드렸다는 뜻이고, 그것은 **세탁하면 안 되는 버그**다. diff가 무엇이
+      건드렸는지 정확히 말해준다. **감사를 시작하지 않는다.**
 
 ── Workflow 시작 (args = {evidencePack, codexFindings}) ──
    ※ codex의 D/OQ/NOQ 판정은 workflow에 넣지 않는다. **post-1이 조립 시 병합**한다 (§9.1) —
