@@ -356,7 +356,12 @@ PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover -s <plugin>/hooks/test
 | `hookify` | hook 저작 (agent + command 4) | 축③ 보조 |
 | `commit-commands` | command 3개, **실제로 설치돼 있음** | **D1의 실물 확증** |
 
-#### 프로덕션 **선례** 코퍼스 (r13) — `~/Downloads/reference/`
+#### 프로덕션 **선례** 코퍼스 (r13) — 루트: **`~/Downloads/reference/`**
+
+> **이 문서에서 `CE/…` · `gstack/…` · `ECC/…` · `oh-my-*/…`로 시작하는 모든 경로는 이 루트 기준
+> 상대경로다** (r14 — 루트가 명시돼 있지 않아 *"`CE/skills/ce-compound/scripts/validate-doc-claims.py`를
+> 포팅하라"*는 지시를 받은 구현자가 **원본을 찾을 방법이 없었다.** 적발: fresh-eyes 렌즈).
+> **부재 시 degraded 경로는 §12에 있다** — crash도 감사 무효도 아니다.
 
 > ⚠️ **선례는 규범이 아니다.** 아래는 *"남들은 이렇게 한다"*이지 *"이렇게 해야 한다"*가 아니다.
 > **LD6이 그대로 적용된다**: *"형제와 다르다"는 논거는 무효.* 선례는 **가능성의 증거**이지 **의무의
@@ -438,9 +443,21 @@ Law 2 통과**(반면 `plugin-validator`는 **Bash 보유** → 우리 파이프
 
 | 범위 | 무엇 | ignored |
 |---|---|---|
-| **(a) LD5** | `plugins/project-init/**` · `docs/git-workflow/**` · `.claude-plugin/marketplace.json` | **포함** — 단 **machine-generated volatile 제외** (아래) |
+| **(a) LD5** | `plugins/project-init/**` · `docs/git-workflow/**` · **`.claude-plugin/marketplace.json`는 제외** (아래 ⚠️) | **포함** — 단 **machine-generated volatile 제외** (아래) |
 | **(b) HARNESS** ⬛ **r14 신설** | **`.claude/agents/*.md` (persona 3개)** + `scripts/*.py` · `scripts/*.sh` · `scripts/*.js` | 해당 없음 (전부 tracked) |
 | **(c) 리포 전역** | 리포 전체 | 포함 **− volatile 제외목록** |
+
+> ⚠️ **`.claude-plugin/marketplace.json`을 무결성 스냅샷에서 빼는 이유** (r14, 적발: fresh-eyes 렌즈).
+> **갭 범위**(C4)는 *"marketplace.json의 **project-init 항목**"*인데 **매니페스트는 파일 단위 SHA**다.
+> 그리고 이 파일은 **devbrew의 모든 플러그인 항목이 들어 있는 단일 공유 파일**이다. 딜레마:
+> **통째로 포함** → 감사 도는 중 **다른 플러그인의 항목**이 바뀌기만 해도 AFTER가 깨져 **감사 무효**
+> (이 리포는 여러 플러그인을 동시에 유지보수한다) / **통째로 제외** → **D3(description drift)를
+> 백스톱이 못 본다.**
+>
+> **답은 셋 중 어느 것도 아니다 — 백스톱과 감사는 *다른 일*을 한다.** 백스톱은 *"**감사자가 썼는가**"*를
+> 묻고, D3는 *"**내용이 낡았는가**"*를 묻는다. **D3는 §5.4a의 `description drift` 사실이 잡는다** —
+> 백스톱이 볼 필요가 **없다.** 그리고 감사자는 **쓸 수 없으므로**(Law 2) 이 파일을 오염시킬 수도 없다.
+> **백스톱의 범위는 "감사자가 쓸 수 있는 곳"이지 "우리가 관심 있는 모든 곳"이 아니다** (§5.5의 원칙).
 
 > 🔴 **(b) HARNESS가 왜 필요한가 — 두 백스톱 어디에도 없던 사각지대** (적발: 정통 렌즈).
 > 전역 스냅샷은 *"다른 플러그인의 런타임 state"*를 피하려고 **`.claude/` 전체를 제외**했다. 그런데
@@ -515,6 +532,30 @@ ignored **디렉토리를 한 줄로 접으므로**(`!! .pytest_cache/`), 그 �
 Workflow는 *발견*만 `return`한다. `audit-data.json` **조립**·마크다운 렌더링·검증·커밋은 orchestrator가
 한다 (§9). AC 검증은 **모델 판단이 아니라 스크립트**다 (§16) — orchestrator가 자기 산출물을 "보기에
 괜찮다"고 승인하는 self-approval을 피하는 유일한 방법이다.
+
+### 5.7 refuter 게이트 A–E — **박제 (r14)**
+
+`audit-refuter`의 **기본 verdict는 `refuted`**다. 생존이 예외이고 kill이 기본값이다.
+**게이트 다섯 중 하나라도 실패하면 kill**이며, `refutation.gate`에 어느 게이트가 죽였는지 기록된다.
+
+> 🔴 **r13까지 이 문서에는 Gate D만 있었다** (적발: fresh-eyes 렌즈). 나머지 넷은 `audit-refuter.md`
+> **persona 파일에만** 존재했다. 그런데 devbrew CLAUDE.md는 *"**Persona 파일은 보안-민감 코드**"*라고
+> 규정한다 — **보안 컨트롤이 설계에 없고 구현 파일에만 있으면 설계 리뷰가 그것을 검토할 수 없다.**
+> 실제로 **5개 리뷰 렌즈 중 아무도 게이트 A/B/C/E를 검토하지 못했다.** 그리고 이것은 이 파이프라인
+> 전체의 **FP 방어선**이다 — 잘못 추측하면 refuter가 **진짜 결함을 엉뚱한 이유로 죽이거나**, 걸러야 할
+> **FP를 통과시켜 사용자에게 거짓 갭을 배달**한다. **`refutation.gate` enum도 여기서 나온다.**
+
+| 게이트 | 질문 | kill 조건 |
+|---|---|---|
+| **A — 증거 실재** | 인용된 `file:line`을 **직접 열어라.** 그 줄이 감사자가 주장하는 것을 **실제로 말하는가?** | 인용이 틀렸거나 · 줄 번호가 어긋났거나 · **문맥이 주장을 뒤집으면** → refuted. **감사자의 보고는 코드에 대한 *미검증 주장*이다** — 네가 직접 본 것만 사실이다. |
+| **B — 사용자 피해 실재** | `user_harm`이 **구체적 시나리오**인가, 추상적 우려인가? **누가 무엇을 하면 무엇이 잘못되는가?** | *"유지보수가 어려워진다"* · *"혼란스러울 수 있다"* · *"미래의 관리자가 …"* 는 **피해가 아니다.** 재현 없는 이론 → refuted. |
+| **C — 결함인가 취향인가** | 계약 위반 · 문서화된 규칙 위반 · 재현 가능한 실패 · **자기 코드에 대해 거짓인 주장** — 이것들이 결함이다. | *"내가 쓰는 방식과 다르다"* → refuted. **감사자가 댄 근거(rationale)는 severity를 낮추지 못한다** — 이유를 댄다고 결함이 사라지지 않는다. |
+| **D — 입증책임 (C5/LD6)** | **경계는 축 사이가 아니라 *논거*와 *증거* 사이다.** *"남이 이렇게 하니 우리도"*(형제 플러그인이든 **프로덕션 선례**든)는 **어느 축에서든 논거가 아니다.** | 권고의 **유일한 근거**가 *"남이 그렇게 한다"*면 → refuted. **그러나 다른 컴포넌트에서 *온* 증거는 죽이지 마라** — *"형제는 X를 하고 이 문서도 X를 한다 주장하는데 안 한다"*는 **기록된 거짓**이고 정당하다. **판정 질문: 그 컴포넌트가 *이유*인가 *증인*인가?** |
+| **E — 범위 (LD5)** | 갭 **대상**이 `plugins/project-init/**` · `docs/git-workflow/**` · `.claude-plugin/marketplace.json`의 project-init 항목 안인가? | 밖이면 → refuted. **단 폐기가 아니라 NOQ로** (§8-14 — *"버려진 관찰은 조용한 증발이다"*). ⚠️ **읽기 범위와 혼동하지 마라** — 읽기는 무제한이다 (§8-3). |
+| — | **치료가 병보다 나쁜가** (게이트 E 다음, 마지막) | 권고가 **ceremony · 복잡도 부채 · 이미 구조적 escape hatch가 있는 곳의 결정론 가드**를 추가하는가? → refuted. devbrew Forbidden Patterns. |
+
+**반박하면서 확인한 기계적 사실은 `refutation.facts`에 반드시 기록한다** — **갭을 죽이더라도 그 사실은
+값지다.** (r9는 목적지를 약속해놓고 스키마에 필드가 없었다.)
 
 ### 5.6 "확정 결함" 범주의 폐기 — 감사의 사각지대를 *구조적으로* 없앤다
 
@@ -1290,6 +1331,10 @@ OQ2–OQ6 엔트리: `{id, source, 답변, evidence[], 근거}`.
 | 축 에이전트 1개 사망 | `pipeline()`이 `null` → Workflow가 `axis_failures[]`에 기록. **post-1의 orchestrator가** 그 축이 소유한 D/OQ를 `unverified` + `불가사유`로 **채우고** `degraded[]`로 옮긴다. 나머지 축 계속. 렌더러가 "축 N 감사 실패"를 명시. **커밋은 금지되지 않는다** — r9는 여기서 데드락이었다(검증이 "D1–D5 전부"를 요구했다). |
 | 스키마 재시도 소진 | **축 전체 손실** (schema는 응답 단위로 검증한다 — r12 B8) → `axis_failures[]` + orchestrator가 그 축의 D/OQ를 `unverified`로 채움 + `degraded[]`. **"갭 하나만 폐기"는 하니스가 제공하지 않는 API다.** |
 | WebSearch 불가 | **레퍼런스 코퍼스(§5.4)는 디스크에 있으므로 축④·축⑤는 계속 판정한다** — r10은 web을 유일한 레퍼런스로 가정해 과잉 degrade했다. 다만 D5(*"Claude Code가 AGENTS.md를 네이티브로 읽는가"*)는 **공식 문서 확인이 필요**하므로 `unverified` + `degraded_events[]`, 리포트 상단에 `⚠ D5 미검증 — 공식 문서 확인 불가` 배너. crash 금지. |
+| **선례 코퍼스 부재** ⬛ r14 | `~/Downloads/reference/` 가 없거나 비었을 때 (**다른 머신·다른 세션에서는 정상 상황이다**). → **loud log + 계속 진행.** `degraded[]`에 기록 + 배너. **축③은 OQ2를 *선례 없이* 답한다** — 그러면 *"중간지대가 존재하는가"*에 **`unverified`로 답할 수 있다**(추측으로 답하는 것보다 정직하다). 축⑥의 `path-safety.js` 규범도 마찬가지. **crash 금지 · 감사 무효 아님.** *(r13은 이 행이 없어서, 선례 코퍼스가 없는 머신에서 무슨 일이 일어나는지 아무도 몰랐다 — 적발: fresh-eyes 렌즈.)* |
+| **대상 테스트 타임아웃** ⬛ r14 | 상한 **120초**. 초과 시 프로세스 종료 + `own_tests: {ran: false, why: "timeout(120s)"}` + `degraded[]` + 배너. **계속 진행** (축③은 테스트를 *읽어서* 판정할 수 있다 — 다만 통과 여부를 모른다는 사실이 배너로 공시된다). |
+| **codex 타임아웃** ⬛ r14 | 상한 **900초**. 초과 시 프로세스 종료 + *"codex 실행 실패"* 행과 동일 처리 (배너 + `degraded[]`). |
+| **심층검증 렌즈 사망** ⬛ r14 | 3표 중 렌즈 하나가 죽으면 **분모가 줄지 않는다.** `refutes >= 2`가 kill 조건이므로, **살아남은 표만으로 2표를 못 채우면 생존**이다 (fail-open — 개별 refuter 사망과 같은 규율, r12 B4). `deep_verified: null` + `degraded_events[]`에 *"렌즈 N/2만 응답 — 부분 검증"* + 렌더러가 **⚠ 부분검증** 라벨. **fail-closed로 하면 정직한 발견이 *에이전트가 죽었다는 이유로* 죽는다.** *(r13은 이 경우를 정의하지 않아 구현자가 분모를 임의로 골랐을 것이다 — 적발: fresh-eyes 렌즈.)* |
 | 심층검증 8건 초과 | 초과 갭은 `status: reported` 그대로이되 `deep_verified: false` — 렌더러가 **개별 표시** (silent truncation 금지). |
 | 무결성 스냅샷 불일치 | **감사 무효. 커밋 금지 + 비파괴 롤백** (§13 — `rm -rf` 금지, 경로 열거). 변경된 파일 목록을 그대로 사용자에게 보고. |
 
@@ -1322,8 +1367,33 @@ AFTER #2는 *정상 실행에서도* 100% RED였으므로 그 파괴 분기를 *
 | 대상 | 롤백 |
 |---|---|
 | 신규 산출물 (`docs/audits/**`) | 경로를 **열거해서** `rm -f`. 디렉토리는 *이 실행에서 새로 생겼을 때만* `rmdir`. **glob/`rm -rf` 금지.** |
-| 추적 파일의 편집 (`CLAUDE.md`) | 삭제가 **아니라** `git checkout -- CLAUDE.md`로 되돌린다. |
+| 추적 파일의 편집 (`CLAUDE.md`) | 🔴 **조건부다 (r14).** 아래 참조 — `git checkout --`을 **무조건 쓰면 사용자 작업을 파괴한다.** |
 | git index | **건드리지 않는다.** `git add`는 post-1 step 9(커밋)에서만 일어난다. |
+
+#### 🔴 `CLAUDE.md` 롤백은 조건부다 — **모르면 손대지 않는다** (r14, 적발: codex)
+
+**B1의 clean-worktree precondition은 *시작 시점*만 본다.** 그런데 감사는 **몇 분간 돈다.** 그동안
+사용자나 다른 프로세스가 `CLAUDE.md`를 고칠 수 있고 — 이 문서는 이미 *"감사 도는 몇 분 사이 background가
+`.claude/`에 state를 쓴다"*를 **현실로 취급하고 있다** (§5.5의 volatile 제외 논거 전체가 그것이다).
+
+**그때 `git checkout -- CLAUDE.md`는 감사자가 넣은 한 줄뿐 아니라 *사용자의 편집 전체*를 HEAD로
+되돌린다.** 되돌릴 수 없는 파괴다. **B1은 pre-flight만 했고 post-verify가 없었다** — 이 리포의 교훈:
+*"파괴적 변경은 pre-flight + post-verify **둘 다**."*
+
+```
+롤백 전에:
+  1. post-1 step 6이 CLAUDE.md를 쓰기 *직전*의 내용을 세션 디렉토리에 보존한다 (pre_write_copy).
+  2. step 6이 쓴 결과(post_write_expected)도 보존한다.
+  3. 롤백 시점에 현재 CLAUDE.md를 읽어 비교:
+       현재 == post_write_expected  → **하니스만 건드렸다.** pre_write_copy로 복원. (안전)
+       현재 != post_write_expected  → **제3자가 그 뒤에 건드렸다.**
+                                       🔴 **롤백하지 않는다. loud 보고 후 중단.**
+                                       사용자가 무엇을 되돌릴지 결정한다.
+```
+
+**`git checkout --`을 쓰지 않는다** — 그것은 **HEAD로** 되돌리지 *우리가 쓰기 전 상태로* 되돌리지
+않는다. 둘은 사용자가 미커밋 변경을 갖고 있을 때 **다르다.** (B1이 시작 시 clean을 요구하므로 보통은
+같지만, **"보통"에 파괴적 연산을 걸지 않는다.**)
 
 ## 14. Files to Modify
 
@@ -1556,7 +1626,7 @@ const refuter = (prompt, opts) => agent(prompt, {...opts, agentType: 'audit-refu
 > (`subagent_type` 파라미터), 검증 대상은 **Workflow의 `agentType`** 해석이다 — **다른 코드 경로다.**
 > Workflow 런타임이 프로젝트 레벨 레지스트리를 못 읽는 경우(가정 (i)이 거짓인 바로 그 경우) 스모크는
 > GREEN인 채 6축 dispatch가 전부 미해석 → 쓰기 가능한 기본 에이전트로 폴백 → **Law 2가 fiction인 채
-> 31 에이전트가 돈다.** r1이 무너진 것과 정확히 같은 미검증 가정 실패다.
+> **30 에이전트**가 돈다.** r1이 무너진 것과 정확히 같은 미검증 가정 실패다.
 
 **스모크는 1-에이전트짜리 미니 workflow다** (`scripts/smoke-workflow.js` — `agent()`를 `smoke-probe`로
 한 번 호출하고 결과를 return). `check-law2.py`는 이 파일을 **별도 화이트리스트**로 검사한다
@@ -1564,19 +1634,49 @@ const refuter = (prompt, opts) => agent(prompt, {...opts, agentType: 'audit-refu
 
 - `agentType: 'smoke-probe'`가 해석 안 되면 → **중단** (가정 (i) 거짓).
   → **세션 재시작 후 재시도.** 그래도 실패면 §17 폴백(`feature-dev:code-reviewer`).
-- 프롬프트: *"Bash 도구로 `echo devbrew-smoke` 를 실행하고 출력을 그대로 반환하라. Bash 도구가
-  네 도구 목록에 없으면 정확히 `BASH_ABSENT` 를 반환하라."*
-  - `devbrew-smoke`가 돌아오면 → **중단** (가정 (ii) 거짓 → Law 2는 여전히 fiction).
-  - `BASH_ABSENT`가 돌아와야 통과.
+## 🔴 **스모크는 *묻지* 않는다. *증명시킨다*.** (r14 — §6과 §16이 정반대를 말하고 있었다)
+
+**r13까지 §6은 *"sentinel 파일의 부재를 디스크에서 확인 — 자기보고가 아니라 외부 ground truth"*라고
+적었고, §16은 `echo`의 반환 문자열만 믿는 **순수 자기보고**를 서술했다** (적발: fresh-eyes 렌즈).
+같은 게이트를 두 절이 **정반대 메커니즘**으로 규정했다 — 구현자는 무엇을 만들지 결정할 수 없다.
+
+**sentinel이 옳다. §16을 그쪽으로 통일한다.** 이유는 §16 자신이 이미 자백하고 있었다:
+
+> *"정직한 한계: 이 스모크는 여전히 에이전트가 **반환한 문자열**을 믿는다."*
+
+**그런데 조용한 폴백은 정확히 그 채널에서만 잡힌다.** `agentType`이 해석되지 않아 **쓰기 가능한 기본
+에이전트**로 폴백했다면, 그 에이전트는 자기보고로 `BASH_ABSENT`를 **똑같이 낼 수 있다** (persona가
+비었으니 무엇이든 답한다). **그러나 파일은 생긴다.**
+
+**프로토콜 (orchestrator가 sentinel 경로를 인자로 넘긴다):**
+
+```
+프롬프트: "두 가지를 하라. 설명하지 말고 그대로 하라.
+   1. Bash 도구로 실행: echo devbrew-smoke > <sentinel_path>
+      Bash 도구가 네 도구 목록에 없으면 아무것도 하지 말고 넘어가라.
+   2. self_identity / available_tools / bash_present 를 스키마대로 반환하라."
+```
+
+**판정 — 세 채널. 자기보고 단독은 아무것도 증명하지 않는다:**
+
+| # | 채널 | 무엇을 증명하는가 | 강도 |
+|---|---|---|---|
+| 1 | `self_identity`가 `.claude/agents/smoke-probe.md` 본문 첫 줄과 **바이트 일치** | persona가 **실제로 로드됐다** → **`agentType`이 해석됐다** (가정 i 참) | 강 |
+| 2 | `bash_present == false` · `available_tools`에 Bash 없음 | — | **약 (자기보고)** |
+| 3 | 🔴 **sentinel 파일이 디스크에 없다** + `git status --porcelain` clean + **HARNESS 스냅샷 불변** | **외부 ground truth.** 쓰기 가능한 기본 에이전트로 폴백했다면 파일이 **생겼을 것이다** (가정 ii 참) | **강 — 유일하게 폴백을 잡는 채널** |
+
+**셋 중 하나라도 실패 → 중단.** `agentType` 미해석이면 **세션 재시작 후 재시도** (레지스트리는 세션
+시작에 스냅샷된다 — 실측). 그래도 실패면 §17 폴백.
 
 `smoke-probe`의 **persona는 비어 있다** — r10의 스모크는 `plugin-auditor`로 물었는데 그 persona가 이미
 *"You are NOT responsible for … running anything"*이라, `tools:`가 무시돼 Bash가 살아 있어도
 **persona 때문에 거절**하고 GREEN이 났다. 거절이 **capability**에서 오는지 **persona**에서 오는지
-구별하려면 persona가 비어야 한다.
+구별하려면 persona가 비어야 한다. **그리고 persona가 비어 있기 때문에** 채널 2(자기보고)는 더욱
+믿을 수 없고, **채널 3이 load-bearing이 된다.**
 
-> **정직한 한계**: 이 스모크는 여전히 에이전트가 *반환한 문자열*을 믿는다. 하니스가 effective tool
-> 목록이나 거부된 tool-call 이벤트를 노출하면 그것으로 승격해야 한다 (codex 지적). 현재 도구 표면으로는
-> persona를 비우는 것이 자기보고 경로를 최대한 좁히는 방법이다.
+> **남은 정직한 한계**: 하니스가 *effective tool 목록*이나 *거부된 tool-call 이벤트*를 노출하면
+> 그것으로 승격해야 한다. 현재 도구 표면에서는 **sentinel + HARNESS 스냅샷**이 자기보고 경로를
+> 최대한 좁히는 방법이다.
 
 ### 무결성 매니페스트 열거
 
