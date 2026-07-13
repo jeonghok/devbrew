@@ -10,7 +10,7 @@ export const meta = {
 }
 
 // The only two dispatch sites in this file. check-law2.py pins both lines by content
-// (whitespace-insensitive) and asserts the identifier `agent` appears exactly twice — an
+// (leading/trailing whitespace ignored) and asserts the identifier `agent` appears exactly twice — an
 // agent() call with no agentType silently falls back to a write-capable default, and
 // that is the one way Law 2 dies here. The spread comes first so agentType cannot be
 // overridden by a caller's opts.
@@ -44,7 +44,7 @@ const AXIS_SCHEMA = {
         type: 'object',
         required: ['id', 'axis', 'title', 'user_harm', 'recommendation',
                    'counter_argument', 'evidence', 'severity', 'fix_cost',
-                   'fix_cost_rationale'],
+                   'fix_cost_rationale', 'reference_gap'],
         properties: {
           id: { type: 'string' },
           axis: { type: 'integer' },
@@ -68,7 +68,7 @@ const AXIS_SCHEMA = {
         type: 'object',
         required: ['id', 'verdict', 'reason'],
         properties: {
-          id: { type: 'string', enum: ['D1', 'D3', 'D4', 'D5'] },
+          id: { type: 'string', enum: ['D1', 'D2', 'D3', 'D4', 'D5'] },
           verdict: { type: 'string', enum: ['confirmed', 'withdrawn', 'reclassified', 'unverified'] },
           reason: { type: 'string' },
           impact: { type: 'string' },
@@ -100,7 +100,7 @@ const AXIS_SCHEMA = {
         required: ['id', 'observation', 'why_not_gap'],
         properties: {
           id: { type: 'string' },
-          axis: { type: 'integer' },
+          axis: { type: 'integer', minimum: 1, maximum: 6 },
           observation: { type: 'string' },
           why_not_gap: { type: 'string' },
           evidence: { type: 'array', items: { type: 'object' } },
@@ -118,7 +118,7 @@ const REFUTE_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['finding_id', 'verdict', 'gate', 'reason'],
+        required: ['finding_id', 'verdict', 'reason'],
         properties: {
           finding_id: { type: 'string' },
           verdict: { type: 'string', enum: ['refuted', 'survives'] },
@@ -126,6 +126,8 @@ const REFUTE_SCHEMA = {
           reason: { type: 'string' },
           facts: { type: 'array', items: { type: 'string' } },
         },
+        if: { properties: { verdict: { const: 'refuted' } } },
+        then: { required: ['gate'] },
       },
     },
   },
