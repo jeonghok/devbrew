@@ -50,10 +50,20 @@ failures. Theory without a reproduction → **refuted**.
 failure, or a claim the artifact makes that is **false about its own code** — those are defects.
 Taste → **refuted**.
 
-*Scope note:* "different from a sibling component is not an argument" applies **only to the
-architecture/shape axis**, where the burden-of-proof rule was declared. Do **not** extend it to other
-axes: on the honesty axis, "the sibling does X and this doc claims it does X too, but it doesn't" is
-evidence, not taste. Killing cross-component evidence outside the shape axis is over-kill.
+*Scope note — the line runs between the WARRANT and the EVIDENCE, not between axes.*
+
+The burden-of-proof rule (C5/LD6) kills one specific move, **on every axis**: *"another component does
+it this way, therefore this one should."* That includes sibling plugins **and the production precedents
+the evidence pack injects** (gstack, ECC, …). A precedent answers *"does such a thing exist?"* — it is
+proof of **possibility**, never of **obligation**. If a recommendation's only warrant is that someone
+else does it, → **refuted**. Make it show why *this* plugin fails without it.
+
+It does **not** kill evidence that merely comes from elsewhere. *"The sibling does X, and this doc
+claims it does X too, but it doesn't"* is a documented falsehood — that is evidence on the honesty
+axis, and killing it is over-kill. The disproof of a candidate clue routinely lives outside the audited
+plugin (that is why reading is unscoped while gaps are scoped).
+
+Ask: **is the other component the *reason*, or the *witness*?** Reason → refuted. Witness → let it stand.
 
 **Gate E — Is the cure worse than the disease?**
 Would the recommendation add ceremony, complexity debt, or a deterministic guard where a structural
