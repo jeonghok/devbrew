@@ -221,9 +221,55 @@ codex exec -s read-only -C <repo> --json "<§8 계약 + §9 스키마 + 6축 전
 - `plugins/project-init/**`의 git history 요약 (커밋·버전·수정 파일)
 - 파일 인벤토리 + 줄 수
 - 현재 오염 상태 (`git status --porcelain --ignored`)
+- **결정론 staleness sweep의 산출 사실** (§5.4a — r13)
 
 **주입은 사실만.** 판정("231줄 < 500이므로 조건 (a) 미충족")은 넣지 않는다 — 그것은 감사자가
 내려야 할 판단이며, 공유된 전제는 리뷰어를 눈멀게 한다.
+
+#### 5.4a 결정론 staleness sweep — **열거만 한다. 판정하지 않는다.** (r13 — 사용자 설계 입력)
+
+**왜 필요한가 — 모델은 "없는 것"을 구조적으로 못 본다.** 감사자는 파일을 *읽는다*. 읽기는 **있는 것**을
+본다. 그러나 *"README가 광고하는 `scripts/foo.sh`가 존재하지 않는다"* · *"CHANGELOG의 최신 버전이
+`plugin.json`과 다르다"* · *"문서가 참조하는 명령이 어느 플러그인에도 없다"* 같은 **flat한 부재**는
+전수 열거를 요구하며, 모델은 그것을 **놓쳐도 자기가 놓쳤다는 것을 모른다.** 그리고 놓친 갭은 §8-2가
+경고하듯 사용자에게 **"이 축엔 문제 없음"으로 배달된다** — 즉 **거짓 결과**다.
+
+**선행기술이 이것을 실증했다** (핸드오프 원장 31): 외부 결정론 채점기 `ECC/scripts/harness-audit.js`를
+devbrew에 돌렸더니 16개 체크 중 12개가 `fileExists`인 탓에 **`8/39`라는 무의미한 점수**가 나왔다 —
+같은 문제를 *다르게* 푼 리포를 0점으로 읽었다. **그러나 정확히 하나를 맞혔다**: `.github/` 부재(CI 전무).
+`fileExists` 한 줄이 0원에 잡았고, 모델 감사자 6명이 몇 분을 읽어도 그 부재는 **읽을 파일이 없어서**
+구조적으로 못 본다.
+
+> **결론: 결정론은 "flat한 부재"에, 모델 판단은 "잘못된 존재"에. 두 층이 각자 잘하는 것만 한다.**
+
+**따라서 sweep의 산출물은 `verdict`가 아니라 `facts[]`다.** 점수·등급·PASS/FAIL을 내지 않는다 —
+그것이 원장 31이 실증한 함정이기 때문이다(*"점수는 객관성처럼 보이기 때문에 더 위험하다 — 아무도
+`0/10`에 file:line 증거를 요구하지 않는다"*). **sweep은 사실을 열거하고, 감사자가 그것이 갭인지
+판정한다.** 이 분리가 load-bearing이다.
+
+`scripts/check-staleness.py <plugin-dir>` — **에이전트 0개. 순수 파일시스템.** 산출:
+
+| 사실 클래스 | 무엇을 전수 열거하는가 | 어느 축이 판정하는가 |
+|---|---|---|
+| **dangling doc-claim** | 플러그인 문서(README · CHANGELOG · `commands/**` · `templates/**` · `docs/git-workflow/**`)가 언급하는 **경로·파일·스크립트**가 디스크에 실재하는가 | 축① |
+| **dangling command/plugin ref** | 문서가 참조하는 `/command` · `other-plugin:agent`가 **설치 레지스트리에 실재하는가**, 그리고 **prerequisites에 선언됐는가** (CLAUDE.md: *"Silent coupling은 버그"*) | 축① · 축④ |
+| **version incoherence** | `plugin.json` version ↔ `CHANGELOG.md` 최신 `## [x.y.z]` ↔ README가 주장하는 버전 ↔ `marketplace.json` 항목 | 축① |
+| **description drift** | `plugin.json` description ↔ `marketplace.json`의 같은 플러그인 description (**D3의 기계화**) | 축① |
+| **declared-vs-actual surface** | README가 주장하는 컴포넌트 목록·개수(*"Hooks Installed"* 등) ↔ 디스크의 실제 파일 | 축① · 축⑤ |
+| **category absence** | 플러그인 규범이 요구하는 것 중 **통째로 없는 것** (CHANGELOG · Principles Instantiated · `cost_class` · kill switch · 테스트) | 축② · 축④ |
+
+**보편성 — 이것이 `plugin-audit` 플러그인의 핵심 자산이다.** 위 6개 클래스는 **project-init 특수가
+아니다.** 모든 devbrew 플러그인이 문서로 경로·명령·버전·컴포넌트를 주장하고, 그 주장은 코드보다 빨리
+낡는다. sweep은 대상 플러그인 디렉토리를 인자로 받는 **범용 검사기**이며, 2차 사이클에서 그대로
+`plugins/plugin-audit/scripts/`로 이관된다.
+
+**함정 — sweep 자신도 검증 대상이다** (원장 17·32). 이 검사기가 **거짓 dangling**을 내면(예: 코드 펜스
+안의 예시 경로, 사용자 프로젝트에 *생성될* 경로, 플레이스홀더) 감사자는 **존재하지 않는 갭을 쫓는다.**
+따라서:
+- 각 사실에 **원문 인용 + `file:line`**을 붙인다 — 감사자가 **직접 확인할 수 있게**.
+- **알려진 FP 클래스를 명시적으로 제외**한다: 코드 펜스 내부 · 생성물 경로(사용자 프로젝트에 만들어질
+  파일) · 플레이스홀더(`<name>` · `...`) · URL.
+- **mutation test로 이빨을 증명**한다 (결함을 재도입 → RED, 정상 → GREEN). GREEN만으로는 theater다.
 
 **레퍼런스 코퍼스 — 디스크에 있다 (r11).** 축④(외부대비)와 축⑤(템플릿 *내용* 품질)는 r10까지
 **WebSearch가 유일한 레퍼런스 소스**였다. 그래서 §12에 *"web 부재 → 판정 불가"* degraded 경로가
@@ -975,6 +1021,7 @@ AFTER #2는 *정상 실행에서도* 100% RED였으므로 그 파괴 분기를 *
 | `docs/audits/2026-07-12-project-init-audit.md` | 감사 리포트 — **렌더러 산출물** (손으로 쓰지 않는다) |
 | `scripts/render-audit-report.py` | **신규** — JSON → 마크다운. **골든 픽스처 테스트를 동반한다** (§16) — 신규 load-bearing 코드다. |
 | `scripts/check-law2.py` | **신규** — AC-1a. **pre-0에서 dispatch 전에** 돈다. |
+| `scripts/check-staleness.py` | **신규 (r13)** — 결정론 staleness sweep (§5.4a). **에이전트 0개.** 대상 플러그인 디렉토리를 **인자로** 받는 범용 검사기 → `plugin-audit`으로 그대로 이관. **판정하지 않고 사실만 열거**해 evidence pack에 넣는다. **mutation test 동반 필수** — 거짓 dangling은 감사자를 없는 갭으로 보낸다 (원장 17·32). |
 | `scripts/check-integrity.sh` | **신규** — AC-1b. SHA-256 매니페스트 (`--ignored` 포함) + 리포 전역 status. |
 | `scripts/validate-audit-data.py` | **신규** — AC-2 (동의) + AC-3 (정직성·discoverability) + 완결성. |
 | `docs/audits/README.md` | **신규** — 감사 인덱스 (Law 3) |
@@ -1199,6 +1246,7 @@ ignored   : git ls-files -z --others --ignored --exclude-standard -- <scope>
 
 | rev | 변경 | 계기 |
 |---|---|---|
+| **r13** | **리뷰 라운드가 아니다 — 사용자의 설계 입력이다.** (이 구분은 load-bearing이다: r12가 못 박은 *"리뷰 라운드 종료"*는 **내가 스스로 더 다듬는 것**을 막는 규칙이지, **사용자가 설계를 바꾸는 것**을 막는 규칙이 아니다.) **§5.4a 결정론 staleness sweep 신설** — 모델 감사자는 파일을 *읽고*, 읽기는 **있는 것**을 본다. *"README가 광고하는 스크립트가 없다"* · *"CHANGELOG 최신 버전이 `plugin.json`과 다르다"* 같은 **flat한 부재**는 전수 열거를 요구하며 **모델은 놓쳐도 놓친 줄을 모른다** → §8-2가 경고한 대로 *"이 축엔 문제 없음"*으로 배달된다 = **거짓 결과** (멈춤 조건 해당). 선행기술이 이것을 양방향으로 실증했다 (핸드오프 원장 31): `ECC/scripts/harness-audit.js`는 16체크 중 12개가 `fileExists`인 탓에 devbrew에 **`8/39`**라는 *다름을 잰* 무의미한 점수를 냈지만 — **`.github/` 부재(CI 전무)는 정확히 맞혔다.** 모델 6명이 몇 분을 읽어도 그 부재는 **읽을 파일이 없어서** 구조적으로 못 본다. → **결정론은 "flat한 부재"에, 모델은 "잘못된 존재"에.** **결정적 규율: sweep은 `verdict`가 아니라 `facts[]`를 낸다** — 점수·등급·PASS/FAIL 금지 (그게 원장 31이 실증한 함정이다). 사실 6클래스(dangling doc-claim · dangling command/plugin ref · version incoherence · description drift · declared-vs-actual surface · category absence)를 **전수 열거**해 evidence pack에 넣고, **갭인지는 감사자가 판정**한다. **에이전트 0개** (팬아웃 30 불변). `scripts/check-staleness.py <plugin-dir>`는 **대상을 인자로 받는 범용 검사기**이며 `plugin-audit`으로 그대로 이관된다 — **이것이 보편 플러그인의 핵심 자산이다.** sweep 자신도 검증 대상이다(원장 17·32): 알려진 FP 클래스(코드 펜스 · 생성물 경로 · 플레이스홀더 · URL) 제외 + **mutation test로 이빨 증명 필수** — 거짓 dangling은 감사자를 **없는 갭으로** 보낸다. | **사용자 지시** (2026-07-13): *"law만 체크하는 게 아니라 레퍼런스에서 교훈과 보편적으로 봤을 때 구현 stale 등 점검이 진행되는 건 필요하지 않아?"* — 정확했다. 나는 레퍼런스 라운드에서 CE의 `validate-doc-claims.py`를 *"refuter가 이미 한다"*며 기각했는데, **두 가지를 뭉갰다**: (a) *감사자가 인용한* `file:line` 검증 = refuter 소관 ✅ 기각 유효 / (b) ***대상 플러그인 자신의 문서*가 주장하는 경로·명령·버전의 실재 검증** = **아무도 안 함** ❌. 원장 34가 *"채택 0건"*으로 닫혔던 것이 이 구분을 놓친 결과였다. |
 | **r12** | **리뷰 라운드가 아니다 — 실행-블로커 패치다.** 설계 리뷰는 r11에서 **끝났다**: 11 리비전 · 10 라운드 · 230+ 에이전트를 태우는 동안 **감사는 0회 실행**됐고 대상은 **0건 개선**됐다. 수단이 목적을 잡아먹었다(핸드오프 원장 29). 멈출 조건을 못 박았다 — **"실행을 깨뜨리거나 · 사용자를 해치거나 · 거짓 결과를 내는 것만 고치고 돌린다."** codex blind 2패스가 낸 14건 + 66행 곱집합 표 중 그 기준을 통과한 **10건만** 반영했다. **B1 clean-worktree precondition**(§6 phase 0a) — dirty 상태에서 §13 롤백의 `git checkout -- CLAUDE.md`가 **사용자 미커밋 변경을 파괴**하고 post-1 step 9의 `git add`가 **사용자 변경을 감사 커밋에 섞는다**(ownership 탈취). 한 줄이 두 함정을 닫는다. **B2 무결성 전역 스냅샷에서 volatile ignored 제외**(§5.5) — 실측 ignored **76개**(`.DS_Store`·`.pytest_cache/`·`.claude/`) → 감사 도는 몇 분 사이 background가 건드리면 **정상 실행이 RED**. **r10이 죽은 병(게이트가 자기 발을 쏨)의 재발** — r11은 **시점**만 고치고 **범위**를 안 고쳤다. **범위와 시점은 함께 정해야 한다.** **B3 종합자를 orchestrator로 이관**(§6 post-1 2b, 팬아웃 **31 → 30**) — `plugin-auditor` persona가 *"NOT responsible for … judging other axes"*(`:16-17`)를 못 박는데 §7이 그를 종합자로 썼다. r11은 *"한 줄 수정"*이라 적어만 두고 **파일을 안 고쳤고**, 고치려 해도 **레지스트리가 세션 시작에 스냅샷**돼 재시작 전엔 반영되지 않는다(실측). 종합은 조립이므로 §9.1 원칙대로 orchestrator가 한다. **B4 refuter *실패* 시 상태 전이 명문화**(§6) — fail-open + 공시. *"기본 verdict가 refuted니 실패도 refuted"*는 **틀린 추론**(판단 규칙 ≠ 응답 없을 때의 전이 규칙). r9에서 **40 중 34가 실제로 죽었다.** **B5 `deep_verified: null` 정의 확대**(§9.2) — 정상적으로 **조기 기각된 HIGH**가 세 값 어디에도 못 들어갔다. **B6 NOQ 원소 스키마 신설 + OQ/NOQ `source`**(§9.5·§9.7) — NOQ는 스키마가 **아예 없어** 구현 불가였고, `source` 없는 병합은 **덮어쓰기**다. **B7 codex 병합 검사**(§16) — **codex 판정 증발의 세 번째 재발**: r9=필드없음 → r10=배선없음 → **r11=검증없음**. `meta.codex.ran: true`인데 codex 판정이 없으면 그건 degraded가 아니라 **거짓말**이다(LD4 참칭). **B8 스키마 재시도 소진의 손실 단위를 사실에 맞게**(§6) — schema는 **응답 전체**를 검증하므로 손실은 갭 하나가 아니라 **축 전체**다. **B9 journal secret scan**(§6 post-1 3b) — 원장의 가치인 *"필터링 전 원본"*이 곧 유출 경로다. **B10 `severity`·`fix_cost` 판정 기준**(§8-15) — 계약 14항목에 두 단어가 **0회** 등장했다. `severity`는 심층검증 대상 선택을, `fix_cost`는 정렬을 결정한다 → **기준이 없으면 산출물(우선순위 갭 목록) 자체가 왜곡된다.** *(반영하지 **않은** 것 — 실행하며 관찰한다: 유니코드 이스케이프 우회 · codex MCP ambient 표면 · 빈 감사가 AC를 통과하는 것 · dedup 키 · steelman canonical owner.)* | **codex blind 2패스**(fresh-eyes 14건 · 배선 전수감사 66행 곱집합). 그리고 **자체 실측이 블로커 2건을 추가 적발**했다 — `git ls-files --others --ignored` 한 줄이 B2를, `plugin-auditor.md` 20줄 읽기가 B3을. **10라운드 종이 리뷰가 못 잡은 것들이다** |
 | **r11** | **r10이 새로 넣은 게이트 셋이 각각 파이프라인을 죽였다.** (1) **검증이 렌더링보다 먼저** → validator가 *step 5·6이 만들* README·CLAUDE.md를 grep → **첫 실행부터 결정론적 RED, 리포트가 영원히 안 만들어짐**. **r4가 이미 고친 버그의 재도입.** → `--data`(렌더 전) / `--artifacts`(렌더 후) 두 패스로 분리. (2) **무결성 AFTER#2에 리포 전역 비교** → orchestrator **자신의 산출물**(`?? docs/audits/`, ` M CLAUDE.md`)이 delta를 만들어 **정상 실행이 매번 RED + 리포트 삭제**. 게다가 *"산출물 삭제"*가 미정의라 **`rm -rf CLAUDE.md`류를 유발**. → AFTER#1=전역(쓰기 **전**, 정당 delta 0) / AFTER#2=**LD5 전용**(커밋 직전) + **비파괴 롤백** 명문화(§13). 전역 비교는 `git status`가 아니라 **파일별 해시**(status는 ignored 디렉토리를 한 줄로 접어 내용 변경을 못 본다 — codex 단독). (3) **`agent()` 직접 호출 금지 규약이 이빨 0** — `agent (`·`agent?.(`·`const go = agent`·`agent.call()`이 **전부 카운트 2를 유지하며 GREEN**. → 문법이 아니라 **식별자**를 센다(`(?<![\w$.])agent(?![\w$])` 정확히 2회, 헬퍼 줄 **바이트 핀**). mutation 5종으로 이빨 증명. **그 밖 배선 X 6개**: codex의 D/OQ/NOQ에 **채널 없음**(필드만 추가하고 배선 안 함) · workflow 내부 결손의 return 채널 없음(`degraded_events[]` 신설) · `steelman_condition`에 §6이 요구하는 `pending`이 **enum에 없어** OQ1 통째 폐기 유발 · `deep_verified` bool이 "비대상"과 "상한 초과"를 conflate해 MEDIUM/LOW 전부에 **거짓 라벨** · `axis_failures[]`가 **스키마 블록에 없음** · `degraded[].raw` 없음 · `fix_cost`가 enum+산문 한 필드라 **정렬 비교자가 NaN**. **스모크가 가정 (i)을 검증 못 함** — Agent 도구로 dispatch하는데 검증 대상은 *Workflow*의 `agentType` 해석(다른 코드 경로) → **미니 workflow로** 교체. **그리고 r10의 "위조 인용 자백"이 거짓이었다** — 그 인용은 실행 파일 `whenToUse`에 실재한다. **확증 실패를 부재 증명으로 승격시킨 것**(§18). **레퍼런스 코퍼스를 디스크에서 발견**(§5.4) — 축④·축⑤가 web 추측에서 **파일 대조**로 승격. | r10 리뷰 — **3 독립 리뷰어**(fresh-eyes · 배선 전수감사 · codex blind), 전원 **REVISE**. CRITICAL 3건이 **완전 수렴**. 배선 감사는 stale 참조 **0건**·숫자 정합 **전부 일치**도 확인 |
 | **r10** | **감량 — 회계 기계를 버리고 안전 속성만 남긴다.** r9 리뷰가 **5개 독립 리뷰어**(Claude 4렌즈 35건 + codex 14건)로 같은 곳에 수렴했다: **파이프라인이 자기 자신을 회계하는 검사는 이빨이 없다.** `meta.*`(consent·date·codex·fanout)는 **생산자가 없었고**(Workflow는 `new Date()`도 못 쓴다), `axis_stats ↔ findings[]` 항등식은 **좌·우변이 둘 다 파이프라인 산출물**이라 동어반복이었으며, `unclassified` catch-all은 *"항등식은 절대 깨지지 않는다"*를 **공허하게 참**으로 만들어 이빨을 뽑았고, `discarded_schema`는 **스키마와 논리적으로 모순**이었으며(증거 없어 폐기한 갭을 `evidence[] ≥ 1` 배열에), 축 하나가 죽으면 검증이 **정상 degraded를 커밋 금지**시켰다(데드락). → **회계를 파이프라인 밖으로**: Workflow는 findings만 반환하고 **orchestrator가 `audit-data.json`을 조립**한다(§9.1). 원장은 발명하지 않고 **하니스가 쓴 `journal.jsonl`을 커밋**한다(§9.4). Law 2 정적 검사를 **dispatch 전**으로 옮기고(r9는 39 에이전트를 다 태운 뒤에 돌렸다 — 사후 부검), 판정식을 *`agent()` 직접 호출 금지* 규약으로 교체해 **이빨을 만들었다**(r9의 개수 비교는 우회 가능 — codex 단독 적발). 스모크를 **persona가 빈** `smoke-probe`로 분리(r9는 *"실행할 책임 없음"*이라 말하는 persona에게 실행 가능 여부를 물었다 — capability와 persona를 구별 못 함). 무결성을 **모든 쓰기 뒤에도** 재검사. 렌더러에 **골든 테스트**(r9는 *"틀릴 수가 없다"*고 적고 검증을 삭제했으나, 정렬은 순회가 아니라 **비-사전순 4단 비교자**다). 팬아웃 39 → **31**(세션 한도 실측 반영). **AC 5 → 3.** | r9 리뷰 — **4 Claude 렌즈 40 에이전트 + codex blind — 49건(Claude 35 + codex 14)**. 반박자 34개가 **세션 한도로 사망** → 워크플로 return이 finding 35건 중 2건만 담고 `{total:35, survived:2, killed:0}`을 태연히 보고. **그 사고가 r10의 핵심 통찰을 낳았다** — 원장은 `journal.jsonl`이다 |
