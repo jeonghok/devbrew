@@ -51,5 +51,14 @@ class TestFrontmatterScoped(unittest.TestCase):
         self.assertEqual(rc, 0, f"실제 workflow가 Law2 게이트에서 RED:\n{err}")
 
 
+class TestSmokeMode(unittest.TestCase):
+    def test_real_smoke_workflow_green(self):
+        r = subprocess.run(
+            [sys.executable, str(SCRIPT), str(REPO / "scripts" / "smoke-workflow.js"),
+             "--mode", "smoke", "--agents-dir", str(REPO / ".claude" / "agents")],
+            capture_output=True, text=True, cwd=str(REPO))
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
