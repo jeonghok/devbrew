@@ -223,6 +223,25 @@ const CONTRACT = [
   '⚠️ **함정 (실측)**: 공식 검증기 6개 중 5개를 project-init에 돌리면 **거짓 증거**가 나온다',
   '(`validate-hook-schema.sh` exit 5 크래시 · `hook-linter.sh`가 **Python 훅에 bash 전제 검사** 적용).',
   '**깨진 것은 공식 검증기다.** 그 출력을 증거로 쓰지 마라 — 규범 *문서*는 읽어도 좋다.',
+  '',
+  '## 결정론 staleness sweep — **사실만. 판정은 네가 한다** (§5.4a)',
+  '아래는 파일시스템 전수 열거가 낸 *관측된 사실*이다. 각 사실이 갭인지는 **네가** 판정한다',
+  '(코드 펜스·플레이스홀더·생성물 경로는 이미 제외됐다 — 그래도 원문을 직접 확인하라).',
+  ...((pack.staleness_facts || []).length
+    ? pack.staleness_facts.map((f) => '  - [' + f.class + '] `' + f.file + ':' + f.line + '` — ' + f.quote)
+    : ['  - (staleness sweep 미실행 또는 사실 0건 — 없음을 사실로 받는다)']),
+  '',
+  '## 대상의 자체 테스트 결과 — **사실. "잘 테스트됐다"는 네 판정** (§5.4b)',
+  pack.own_tests && pack.own_tests.ran
+    ? '  - ' + (pack.own_tests.framework || '자체 테스트') + ': ' + pack.own_tests.passed + '/' + pack.own_tests.total
+      + ' 통과, 실패 ' + pack.own_tests.failed + '건. **GREEN은 질문의 전제이지 품질의 증거가 아니다.**'
+    : '  - ⚠ 자체 테스트 미실행 (' + ((pack.own_tests && pack.own_tests.why) || '사유 미상')
+      + ') — 통과 여부를 모른다는 것이 사실이다.',
+  '',
+  '## 프로덕션 선례 코퍼스 (디스크에 있다 — 읽기 대상, 갭 대상 아님)',
+  ...((pack.precedent_paths || []).length
+    ? pack.precedent_paths.map((p) => '  - `' + p + '`')
+    : ['  - (선례 코퍼스 부재 — OQ2·축⑥은 선례 없이 판정하거나 `unverified` §12)']),
 ].join('\n')
 
 const STEELMAN = [
