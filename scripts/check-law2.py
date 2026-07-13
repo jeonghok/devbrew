@@ -47,7 +47,7 @@ five different ways, all legal JS:
     {agentType: 'x', ...opts}   spread order reversed → caller's opts.agentType wins
 
 The first four change the identifier count (2 → 3), so counting `agent` as a token catches
-them. The fifth does not, so the two helper lines are pinned byte-for-byte instead.
+them. The fifth does not, so the two helper lines are pinned by content (leading/trailing whitespace ignored).
 
 `agentType` does not match the token regex (a `T` follows), so the helpers' own
 `agentType:` keys never pollute the count.
@@ -64,7 +64,7 @@ SAFE_TOOLS = {"Glob", "Grep", "Read", "WebSearch", "WebFetch"}
 # Identifier `agent`, not preceded by a word char / $ / dot, not followed by a word char.
 AGENT_TOKEN = re.compile(r"(?<![\w$.])agent(?![\w$])")
 
-# The audit workflow's only two dispatch sites. Pinned byte-for-byte.
+# The audit workflow's only two dispatch sites. Pinned by line content (leading/trailing whitespace ignored).
 # The spread comes FIRST so agentType cannot be overridden by a caller's opts.
 CANONICAL_HELPERS = [
     "const auditor = (prompt, opts) => agent(prompt, {...opts, agentType: 'plugin-auditor'})",
@@ -176,9 +176,15 @@ def check_agent_files(agents_dir: Path, names: list[str]) -> list[str]:
             errs.append(f"agent file missing: {path}")
             continue
         text = path.read_text(encoding="utf-8")
-        m = re.search(r"^tools:\s*(.+)$", text, re.MULTILINE)
+        # tools: MUST live in the frontmatter block (between the first two `---`). A body
+        # `tools:` mention is not the allowlist the runtime reads — treating it as one lets a
+        # frontmatter-less agent pass while the runtime grants default (write-capable) tools
+        # (codex #5, Law 2 hole).
+        fm = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+        block = fm.group(1) if fm else ""
+        m = re.search(r"^tools:\s*(.+)$", block, re.MULTILINE)
         if not m:
-            errs.append(f"{path}: no `tools:` frontmatter — an agent with no allowlist "
+            errs.append(f"{path}: no `tools:` in frontmatter — an agent with no allowlist "
                         f"inherits everything, including Bash")
             continue
         declared = {t.strip() for t in m.group(1).split(",") if t.strip()}
@@ -225,7 +231,7 @@ def main() -> int:
             f"on lines {lines} — every dispatch must go through the pinned helper(s)"
         )
 
-    # Each occurrence must sit on a pinned helper line, matched byte-for-byte on the
+    # Each occurrence must sit on a pinned helper line, matched by content (leading/trailing whitespace ignored)
     # ORIGINAL source (not the noise-stripped copy).
     src_lines = src.splitlines()
     for h in hits:
@@ -240,7 +246,7 @@ def main() -> int:
 
     for want in helpers:
         if not any(l.strip() == want for l in src_lines):
-            errs.append(f"pinned helper line missing (byte-exact match required):\n    {want}")
+            errs.append(f"pinned helper line missing (content match, leading/trailing whitespace ignored):\n    {want}")
 
     errs.extend(check_agent_files(args.agents_dir, agents))
 
