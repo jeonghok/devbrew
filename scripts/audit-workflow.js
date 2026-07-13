@@ -505,6 +505,7 @@ for (const r of alive) {
       })
     } else {
       rec.status = 'reported'
+      rec.deep_verified = null   // deepPool에 들면 심층검증이 덮는다; 안 들면 null 유지 (3-상태, §9.2)
     }
     findings.push(rec)
   }
@@ -629,7 +630,9 @@ for (const f of deepTargets) {
     f.refutation = { stage: 'deep', reason: '심층검증 3표 중 ' + refutes + '표 refute', votes }
     f.deep_verified = null
   } else {
-    f.deep_verified = votes.length === LENSES.length ? true : null
+    // refuter가 죽었거나(unverified) 판정을 누락한 finding은 축 검증을 못 받았다 —
+    // 심층 2렌즈 통과만으로 "두 모델 독립 확인(true)"을 참칭할 수 없다. null 유지.
+    f.deep_verified = (!f.unverified && votes.length === LENSES.length) ? true : null
     f.deep_votes = votes
   }
 }
