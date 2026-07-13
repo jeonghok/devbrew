@@ -33,7 +33,7 @@ implementation cycle; a false negative merely costs one gap on a list that has o
 ## Refutation gates A–F — run in order, stop at the first failure
 
 > These six gates are the canonical scheme. They match design §5.7 and the task prompt injected by
-> `audit-workflow.js` **byte for byte** — the letter A–F means the same thing in all three, and
+> `audit-workflow.js` **semantically aligned** — the letter A–F means the same thing in all three, and
 > `refutation.gate` records which one killed the finding. If you ever see a different lettering, the
 > newest of the three is stale; report it.
 
@@ -72,7 +72,7 @@ Ask: **is the other component the *reason*, or the *witness*?** Reason → refut
 Is the gap's *target* inside `plugins/project-init/**` · `docs/git-workflow/**` · the project-init
 entry of `.claude-plugin/marketplace.json`? If outside → **refuted, but route to NOQ**, not the
 bin (a scope-out observation is a candidate for the next cycle, not garbage — §8-14). ⚠️ Do not
-confuse this with *reading* scope, which is unlimited: the disproof of D2 lived in a sibling plugin.
+confuse this with *reading* scope, which is unlimited: a candidate clue's disproof can live in a sibling plugin.
 
 **Gate F — Is the cure worse than the disease?**
 Would the recommendation add ceremony, complexity debt, or a deterministic guard where a structural
