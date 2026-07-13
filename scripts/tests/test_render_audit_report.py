@@ -176,6 +176,31 @@ class TestRender(unittest.TestCase):
         self.assertIn("답변입니다", oq2_section, "OQ2 answer가 OQ2 서브섹션에 렌더돼야")
         self.assertIn("A2-1", oq2_section, "oq_ref==OQ2인 finding이 OQ2 서브섹션에 역참조돼야")
 
+    def test_d_verdicts_render(self):
+        # d_verdicts[]는 oq_answers와 동일한 "producer but no reader" 증발 위험이 있던 필드
+        # (audit-workflow.js가 만들고 validate-audit-data.py가 검증하지만 렌더러가 드롭했던 버그).
+        # D2에 claude/codex 두 source를 엇갈린 verdict로 줘서 §9.3("해소하지 않고 나란히
+        # 드러낸다")이 실제로 지켜지는지 — 즉 둘 다 렌더되는지 — 확인한다. D4는 unverified +
+        # why_unverifiable로 "불가사유"가 정직하게 보여지는지 확인한다.
+        data = {"meta": META_OK, "findings": [], "oq_answers": [], "new_open_questions": [],
+                "axis_failures": [], "degraded": [],
+                "d_verdicts": [
+                    {"id": "D2", "source": "claude", "verdict": "confirmed", "reason": "클로드근거"},
+                    {"id": "D2", "source": "codex", "verdict": "withdrawn", "reason": "코덱스근거"},
+                    {"id": "D4", "source": "claude", "verdict": "unverified", "reason": "불명확",
+                     "why_unverifiable": "재현불가사유"},
+                ]}
+        rc, md, err = render(data)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("후보 단서 판정", md, "D-verdicts 섹션 헤더가 있어야")
+        # 두 source의 verdict가 모두 나타나야 — 하나로 collapse되면(첫 source만 렌더)
+        # withdrawn이 사라진다 (divergence가 숨겨짐).
+        self.assertIn("confirmed", md, "D2 claude 판정(confirmed)이 렌더돼야")
+        self.assertIn("withdrawn", md, "D2 codex 판정(withdrawn)이 렌더돼야 — 엇갈림을 숨기면 안 됨(§9.3)")
+        self.assertIn("클로드근거", md, "D2 claude 근거가 렌더돼야")
+        self.assertIn("코덱스근거", md, "D2 codex 근거가 렌더돼야")
+        self.assertIn("재현불가사유", md, "unverified의 why_unverifiable(불가사유)가 렌더돼야")
+
 
 if __name__ == "__main__":
     unittest.main()

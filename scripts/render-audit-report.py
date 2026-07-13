@@ -107,6 +107,26 @@ def render(data: dict) -> str | None:
                 lines.append(f"- 이 질문과 관련된 발견: {', '.join(ref_ids)}")
             lines.append("")
 
+    d_verdicts = data.get("d_verdicts", [])
+    if d_verdicts:
+        lines.append("## 후보 단서 판정 (D1–D5)")
+        by_d: dict[str, list[dict]] = {}
+        for d in d_verdicts:
+            by_d.setdefault(d.get("id", ""), []).append(d)
+        for d_id in sorted(by_d.keys()):
+            lines.append(f"### {d_id}")
+            # §9.3: 두 판정이 엇갈려도 해소하지 않고 나란히 드러낸다 — 각 source를 독립 렌더링.
+            for d in sorted(by_d[d_id], key=lambda d: d.get("source") or ""):
+                lines.append(f"- 출처: {d.get('source')} — 판정: {d.get('verdict')}")
+                lines.append(f"  - 근거: {d.get('reason')}")
+                if d.get("impact"):
+                    lines.append(f"  - 영향: {d.get('impact')}")
+                if d.get("fix"):
+                    lines.append(f"  - 수정: {d.get('fix')}")
+                if d.get("why_unverifiable"):
+                    lines.append(f"  - 불가사유: {d.get('why_unverifiable')}")
+            lines.append("")
+
     noqs = data.get("new_open_questions", [])
     if noqs:
         lines.append("## 열린 질문 (NOQ — 갭은 아니나 조용히 버리지 않는다)")
