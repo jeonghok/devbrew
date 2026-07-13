@@ -911,6 +911,49 @@ PostToolUse **advisory**인데 — **README·description이 "enforce한다"고 �
   매 실행마다 재보고되면 감사는 곧 무시된다. 단 **고쳐진 실이슈는 절대 억제하지 않는다**
   (`gstack/review/greptile-triage.md:156-168`).
 
+### 38. ★ **환경이 우연히 만들어준 GREEN은 GREEN이 아니다** (r13이 심은 실행-킬러)
+
+r13 §5.4b는 *"대상 플러그인의 자체 테스트를 실행해 결과를 사실로 주입하라"*고 지시한다. 좋은 원칙이다
+(*Wrap, don't replace* — 원장 35). **그런데 그 실행이 감사를 죽인다.**
+
+**stock CPython은 import한 모듈의 bytecode를 소스 옆 `__pycache__/`에 쓴다.** 그 경로는 git-ignored이고,
+**LD5 무결성 스냅샷은 ignored를 포함한다** (D4 백스톱의 존재 이유). BEFORE 스냅샷 *뒤에* 테스트를 돌리면:
+
+> **LD5 매니페스트 51 → 53** → **AFTER #1 ≠ BEFORE** → **"감사 무효, 즉시 중단, 아무것도 만들지 않음."**
+> 감사자는 아무 짓도 안 했는데.
+
+**이것이 r10을 죽인 병(게이트가 자기 발을 쏜다)의 6번째 재발이고, 내가 r13에서 다시 심었다.**
+
+**⚠️ 그런데 이 버그는 GREEN으로 위장했다 — 그게 진짜 교훈이다.**
+
+개발 머신의 python은 **Apple 시스템 python 3.9**이고, 그것은 `sys.pycache_prefix`를
+`~/Library/Caches/com.apple.python`으로 설정해 **bytecode를 리포 밖에 쓴다.** 그래서:
+
+- `find plugins/project-init -name __pycache__` → **아무것도 없음**
+- 무결성 매니페스트 **51 → 51 불변** → **통과**
+- **"✅ 무결성 유지"**
+
+**통과한 이유가 코드가 아니라 벤더 패치였다.** Homebrew·pyenv·CI·다른 개발자 머신 — **어디서든 감사가
+죽었을 것이다.** `sys.pycache_prefix = None`으로 stock 동작을 재현해서야 51 → 53이 드러났다.
+
+**교훈 (세 겹)**:
+- **"통과했다"가 아니라 "*왜* 통과했는가"를 물어라.** 설명할 수 없는 GREEN은 GREEN이 아니다.
+  나는 *"`__pycache__`가 안 생겼네"*를 보고 **넘어갈 뻔했다** — python이 bytecode를 쓴다는 것을
+  알면서도. **설명 안 되는 부재는 원장 32의 "균일한 결과"와 같은 클래스다.**
+- **로컬 GREEN은 이식되지 않는다.** 인터프리터 벤더·OS·locale·셸 버전이 게이트의 판정을 바꾼다.
+  이 리포는 이미 같은 부류를 세 번 겪었다 — macOS bash 3.2의 NUL 소실 · non-UTF-8 locale의
+  한글 파일 fail-open · `mktemp` 실패 시 `cd ""`. **이번엔 python bytecode 캐시다.**
+- **"대상의 검증 자산을 실행한다"는 읽기가 아니라 *실행*이고, 실행은 흔적을 남긴다.** 어떤
+  프레임워크든(pytest·jest·cargo·go test) 캐시·커버리지·빌드 부산물을 만든다. **하니스는 그 흔적을
+  BEFORE에 포함시키거나(순서), 애초에 못 만들게 하거나(`-B`), 둘 다 해야 한다.**
+  **`plugin-audit`은 이것을 반드시 상속해야 한다** — 대상 언어가 python이 아니어도 같은 함정이 있다.
+
+**수정 (순서와 범위를 *함께* — r11은 시점만 고치고 범위를 안 고쳐 같은 병을 남겼다)**:
+1. **pre-1 순서 역전** — orchestrator의 **쓰기 부작용이 있는 모든 단계가 BEFORE 스냅샷 *이전*에** 끝난다.
+2. **`PYTHONDONTWRITEBYTECODE=1 python3 -B`** — 애초에 안 쓴다 (defense in depth).
+3. **전역 스냅샷 volatile 제외에 `__pycache__/` · `*.pyc`** — 단 **LD5에서는 빼지 않는다**
+   (백스톱에 구멍을 내지 않는다. LD5 문제는 *제외*가 아니라 *순서*로 닫는다).
+
 ---
 
 ## 7. 재사용 가능한 자산
