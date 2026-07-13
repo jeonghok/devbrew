@@ -12,6 +12,24 @@ whole of Law 2 rests on two claims:
     every agent() call carries an agentType from a fixed allowlist, and
     every agent in that allowlist declares tools: ⊆ {Glob, Grep, Read, WebSearch, WebFetch}
 
+## What this gate is, and is NOT.
+
+It is a **best-effort early warning**, not the physical guarantee. Three independent reviewers
+(codex twice, a Claude lens once) drove the point home: a static counter cannot catch every way
+JS can reach `agent`. It handles the *lexical* dodges — spacing, optional-call, alias, `.call`,
+spread-order, template interpolation, unicode escapes, regex literals (the last two are *refused*,
+not tokenized around) — but **dynamic dispatch is out of reach and always will be**:
+`globalThis['agent']`, `globalThis['ag'+'ent']`, `eval("agent(p,{})")`. Trying to catch those with
+more static analysis is the enumeration game with no end (handoff ledger 39) — and, per devbrew's
+own Gate F, a cure worse than the disease.
+
+**The real, physical Law 2 guarantee is three layers, none of which is this file:**
+  (a) the agent files' `tools:` allowlist — no Bash means an interpreted agent *cannot* write;
+  (b) the pre-0 smoke — a sentinel file proves on disk whether a probe can actually write;
+  (c) the integrity snapshot — if any agent writes anything, BEFORE≠AFTER catches it, with rollback.
+This gate exists to catch the *honest mistake* (we forgot an agentType) early and cheaply, before
+30 agents spin up. It does not pretend to stop a determined obfuscator, because layers (a)–(c) do.
+
 Counting *identifiers*, not syntax. `\\bagent\\(` — the obvious predicate — is defeated
 five different ways, all legal JS:
 
@@ -50,14 +68,82 @@ CANONICAL_SMOKE = [
 ]
 
 
-def strip_js_noise(src: str) -> str:
-    """Blank out comments and string literals, preserving offsets and line structure.
+class BypassError(Exception):
+    """Raised when the source contains a construct this checker refuses to reason about.
 
-    A gap cited from inside a comment or a prompt string is not a dispatch site, and a
-    prompt that merely contains the word "agent" must not trip the count.
+    A regex literal or a unicode identifier escape is not something the audit workflow — a
+    file WE author — has any reason to contain. Rather than try to tokenize around them
+    (that is the losing enumeration game: codex found `${"}", agent(p,{})}` and `ag\\u0065nt`
+    inside the previous "fix"), we refuse them outright. A construct the checker cannot
+    reason about is a RED, not a silent pass.
+    """
+
+
+def strip_js_noise(src: str) -> str:
+    """Blank comments and string *text*, preserving offsets and lines, so the token counter
+    sees only code. Template `${...}` interpolations are code and are kept verbatim —
+    RECURSIVELY, because a string inside an interpolation is text again and its braces must
+    not be counted (codex: `${"}", agent(p,{})}` slipped through a flat brace counter).
+
+    Refuses (BypassError) two constructs it cannot safely tokenize:
+      - unicode escapes in code (`\\uXXXX`) — how `ag\\u0065nt` hid from the regex
+      - regex literals — `/agent/` would otherwise inject a phantom token
+    Neither has any business in a workflow we author.
     """
     out = list(src)
-    i, n = 0, len(src)
+    n = len(src)
+
+    def blank_range(a: int, b: int):
+        for k in range(a, b):
+            if src[k] != "\n":
+                out[k] = " "
+
+    # Consume a string starting at `i` (src[i] in quotes). For a template literal, recurse
+    # into each ${...} so nested strings are stripped and only real code braces are seen.
+    def consume_string(i: int) -> int:
+        quote = src[i]
+        out[i] = " "
+        i += 1
+        while i < n:
+            ch = src[i]
+            if ch == "\\":
+                blank_range(i, min(i + 2, n))
+                i += 2
+                continue
+            if quote == "`" and ch == "$" and i + 1 < n and src[i + 1] == "{":
+                i += 2                       # keep `${` verbatim — it is a code boundary
+                i = consume_interp(i)        # recurse: strip strings, count real braces
+                continue
+            if ch == quote:
+                out[i] = " "
+                return i + 1
+            if ch != "\n":
+                out[i] = " "
+            i += 1
+        return i
+
+    # Inside a ${...}: keep code verbatim, but recurse into nested strings/templates, and
+    # stop at the brace that closes THIS interpolation (depth tracked over real braces only).
+    def consume_interp(i: int) -> int:
+        depth = 1
+        while i < n:
+            ch = src[i]
+            if ch in "'\"`":
+                i = consume_string(i)        # nested string — its braces don't count
+                continue
+            if ch == "\\":
+                raise BypassError(f"unicode/char escape in code at offset {i}")
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return i + 1
+            i += 1
+        return i
+
+    i = 0
+    prev_significant = ""     # last non-space code char — distinguishes /regex/ from division
     while i < n:
         c = src[i]
         nxt = src[i + 1] if i + 1 < n else ""
@@ -66,54 +152,24 @@ def strip_js_noise(src: str) -> str:
                 out[i] = " "
                 i += 1
         elif c == "/" and nxt == "*":
-            out[i] = out[i + 1] = " "
-            i += 2
-            while i < n and not (src[i] == "*" and i + 1 < n and src[i + 1] == "/"):
-                if src[i] != "\n":
-                    out[i] = " "
-                i += 1
-            if i < n:
-                out[i] = " "
-                if i + 1 < n:
-                    out[i + 1] = " "
-                i += 2
+            j = i + 2
+            while j < n and not (src[j] == "*" and j + 1 < n and src[j + 1] == "/"):
+                j += 1
+            blank_range(i, min(j + 2, n))
+            i = j + 2
+        elif c == "/" and prev_significant in ("", "(", ",", "=", ":", "[", "!", "&", "|",
+                                               "?", "{", ";", "+", "-", "*", "%", "<", ">",
+                                               "~", "^", "\n"):
+            # A regex literal in a file we author is refused, not tokenized around.
+            raise BypassError(f"regex literal at offset {i}")
         elif c in "'\"`":
-            quote = c
-            out[i] = " "
-            i += 1
-            depth = 0          # brace depth inside a ${...} interpolation
-            while i < n:
-                ch = src[i]
-                if ch == "\\":
-                    if src[i] != "\n":
-                        out[i] = " "
-                    if i + 1 < n and src[i + 1] != "\n":
-                        out[i + 1] = " "
-                    i += 2
-                    continue
-                # A `${...}` interpolation is CODE, not string text. Blanking it hides a
-                # real dispatch: `${agent(p, {})}` is an agent() call with no agentType —
-                # a silent fallback to a write-capable default agent, which is the one way
-                # Law 2 dies here. Leave the expression intact so the token counter sees it.
-                if quote == "`" and depth == 0 and ch == "$" and i + 1 < n and src[i + 1] == "{":
-                    i += 2                       # keep `${` verbatim
-                    depth = 1
-                    continue
-                if depth > 0:
-                    if ch == "{":
-                        depth += 1
-                    elif ch == "}":
-                        depth -= 1
-                    i += 1                       # keep interpolated code verbatim
-                    continue
-                if ch == quote:
-                    out[i] = " "
-                    i += 1
-                    break
-                if ch != "\n":
-                    out[i] = " "
-                i += 1
+            i = consume_string(i)
+            prev_significant = "'"
+        elif c == "\\":
+            raise BypassError(f"unicode/char escape in code at offset {i}")
         else:
+            if not c.isspace():
+                prev_significant = c
             i += 1
     return "".join(out)
 
@@ -151,7 +207,15 @@ def main() -> int:
         return 1
 
     src = args.script.read_text(encoding="utf-8")
-    code = strip_js_noise(src)
+    try:
+        code = strip_js_noise(src)
+    except BypassError as e:
+        print(f"[check-law2] RED — {args.script} ({args.mode}): "
+              f"refused construct the checker will not tokenize around — {e}.\n"
+              f"  A workflow we author has no reason to use unicode identifier escapes or "
+              f"regex literals; they are exactly how a dispatch hides from a static counter.",
+              file=sys.stderr)
+        return 1
 
     if args.mode == "audit":
         helpers, agents, expect = CANONICAL_HELPERS, ["plugin-auditor", "audit-refuter"], 2

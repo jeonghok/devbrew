@@ -122,7 +122,7 @@ const REFUTE_SCHEMA = {
         properties: {
           finding_id: { type: 'string' },
           verdict: { type: 'string', enum: ['refuted', 'survives'] },
-          gate: { type: 'string' },
+          gate: { type: 'string', enum: ['A', 'B', 'C', 'D', 'E', 'F'] },
           reason: { type: 'string' },
           facts: { type: 'array', items: { type: 'string' } },
         },
@@ -371,12 +371,18 @@ const refutePrompt = (findings, label) => [
   '너의 **기본 verdict는 `refuted`다.** 갭이 살아남는 것은 예외이지 기본값이 아니다.',
   '확신이 없으면 `refuted`다. 다음 게이트 중 **하나라도** 실패하면 kill하라:',
   '',
+  '여섯 게이트 A–F는 네 시스템 프롬프트(persona)와 **바이트 단위로 일치**한다. `refutation.gate`에',
+  '어느 게이트가 죽였는지(A–F) 기록하라.',
+  '',
   '- **게이트 A — 증거 실재**: 인용된 `file:line`을 **직접 열어라.** 그 줄이 감사자가 주장하는 것을',
   '  **실제로 말하는가?** 인용이 틀렸거나, 줄 번호가 어긋났거나, 문맥이 주장을 뒤집으면 → refuted.',
-  '- **게이트 B — 사용자 피해 실재**: `user_harm`이 **구체적 시나리오**인가, 추상적 우려인가?',
-  '  "유지보수가 어려워진다"는 피해가 아니다. **누가 무엇을 하면 무엇이 잘못되는가?**',
-  '- **게이트 C — 취향이 결함으로 위장하지 않았는가**: "이렇게 하는 게 더 낫다"는 갭이 아니다.',
-  '  devbrew는 ceremony·over-engineering을 **금지**한다.',
+  '- **게이트 B — 피해 실재 / 이미 처리됐는가**: `user_harm`이 **구체적 시나리오**인가?',
+  '  "유지보수가 어려워진다"는 피해가 아니다 — **누가 무엇을 하면 무엇이 잘못되는가?** 그리고',
+  '  감사자가 언급 안 한 **가드·validator·나중 분기가 이미 그 구멍을 막고 있지 않은가?** 막혔으면',
+  '  안 깨진다. 재현 없는 이론 · 이미 처리된 구멍 → refuted.',
+  '- **게이트 C — 결함인가 취향인가**: 계약 위반 · 문서화된 규칙 위반 · 재현 가능한 실패 · 자기 코드에',
+  '  대해 거짓인 주장 — 이것들이 결함이다. "이렇게 하는 게 더 낫다" → refuted. **감사자가 댄 근거는',
+  '  severity를 낮추지 못한다.**',
   '- **게이트 D — 입증책임 (C5/LD6). 경계는 축 사이가 아니라 *논거*와 *증거* 사이다.**',
   '  *"다른 컴포넌트가 이렇게 하니까 이것도 그래야 한다"*는 **어느 축에서든 논거가 아니다** —',
   '  형제 플러그인이든, evidence pack이 주입한 **프로덕션 선례**든. 선례는 *"그런 것이 존재하는가?"*에만',
@@ -387,7 +393,10 @@ const refutePrompt = (findings, label) => [
   '  `quality-gates/hooks/post-tool-use.py` **본문**에 있었다).',
   '  **판정 질문: 그 컴포넌트가 *이유*인가, *증인*인가?** 이유 → refuted. 증인 → 존치.',
   '- **게이트 E — 범위(LD5)**: 갭 대상이 `plugins/project-init/**` · `docs/git-workflow/**` ·',
-  '  `.claude-plugin/marketplace.json`의 project-init 항목 안에 있는가? 밖이면 refuted (NOQ 소관).',
+  '  `.claude-plugin/marketplace.json`의 project-init 항목 안에 있는가? 밖이면 refuted **하되 NOQ로**',
+  '  (폐기가 아니다 — 버려진 관찰은 조용한 증발). ⚠️ 읽기 범위와 혼동 금지 — 읽기는 무제한.',
+  '- **게이트 F — 치료가 병보다 나쁜가**: 권고가 ceremony · 복잡도 부채 · 이미 구조적 escape hatch가',
+  '  있는 곳의 결정론 가드를 추가하는가? → refuted. devbrew Forbidden Patterns.',
   '',
   '**반박하면서 확인한 기계적 사실은 반드시 `facts`에 기록하라** — 갭을 죽이더라도 그 사실은 값지다.',
   '**모든 갭에 대해 정확히 하나의 verdict를 내라. 빠뜨리지 마라.**',
@@ -478,16 +487,24 @@ for (const r of alive) {
   }
 }
 
-// exact-key dedup: same file:line + same axis. Semantic merge was rejected — a near-dup
-// showing up twice is noise, not a safety defect, and the renderer groups by axis anyway.
+// exact-key dedup: same source|axis|file|line|title. `title` is load-bearing — one line can
+// carry two independent user harms, and a key without it (r13) killed the second as a "dup".
+// Noise < false negative: a near-dup showing up twice is visible (renderer groups by axis);
+// a killed real gap is a silent evaporation. So we only fold the truly identical.
+// `target_id` is a STRUCTURED field — the §16 cross-model check reads it, and parsing it out
+// of a `reason` string would break on a single word change (codex).
 const seen = new Map()
 for (const f of findings) {
   if (f.status !== 'reported') continue
   const ev = (f.evidence || [])[0] || {}
-  const key = f.axis + '|' + ev.file + '|' + ev.line
+  const key = f.source + '|' + f.axis + '|' + ev.file + '|' + ev.line + '|' + f.title
   if (seen.has(key)) {
     f.status = 'refuted'
-    f.refutation = { stage: 'dedup', reason: seen.get(key) + '에 흡수 (동일 file:line + 동일 축)' }
+    f.refutation = {
+      stage: 'dedup',
+      target_id: seen.get(key),
+      reason: seen.get(key) + '에 흡수 (동일 source·축·file:line·제목)',
+    }
     f.deep_verified = null
   } else {
     seen.set(key, f.id)

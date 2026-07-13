@@ -545,14 +545,18 @@ Workflow는 *발견*만 `return`한다. `audit-data.json` **조립**·마크다�
 > 전체의 **FP 방어선**이다 — 잘못 추측하면 refuter가 **진짜 결함을 엉뚱한 이유로 죽이거나**, 걸러야 할
 > **FP를 통과시켜 사용자에게 거짓 갭을 배달**한다. **`refutation.gate` enum도 여기서 나온다.**
 
+**여섯 게이트(A–F)가 canonical이다.** `.claude/agents/audit-refuter.md` persona와 `audit-workflow.js`의
+`refutePrompt()`가 **이 표와 바이트 단위로 일치해야 한다** — 글자 A–F가 세 곳에서 같은 뜻이고,
+`refutation.gate`가 어느 게이트가 죽였는지 기록한다. **`refutation.gate` enum = `{A,B,C,D,E,F}`.**
+
 | 게이트 | 질문 | kill 조건 |
 |---|---|---|
 | **A — 증거 실재** | 인용된 `file:line`을 **직접 열어라.** 그 줄이 감사자가 주장하는 것을 **실제로 말하는가?** | 인용이 틀렸거나 · 줄 번호가 어긋났거나 · **문맥이 주장을 뒤집으면** → refuted. **감사자의 보고는 코드에 대한 *미검증 주장*이다** — 네가 직접 본 것만 사실이다. |
-| **B — 사용자 피해 실재** | `user_harm`이 **구체적 시나리오**인가, 추상적 우려인가? **누가 무엇을 하면 무엇이 잘못되는가?** | *"유지보수가 어려워진다"* · *"혼란스러울 수 있다"* · *"미래의 관리자가 …"* 는 **피해가 아니다.** 재현 없는 이론 → refuted. |
-| **C — 결함인가 취향인가** | 계약 위반 · 문서화된 규칙 위반 · 재현 가능한 실패 · **자기 코드에 대해 거짓인 주장** — 이것들이 결함이다. | *"내가 쓰는 방식과 다르다"* → refuted. **감사자가 댄 근거(rationale)는 severity를 낮추지 못한다** — 이유를 댄다고 결함이 사라지지 않는다. |
-| **D — 입증책임 (C5/LD6)** | **경계는 축 사이가 아니라 *논거*와 *증거* 사이다.** *"남이 이렇게 하니 우리도"*(형제 플러그인이든 **프로덕션 선례**든)는 **어느 축에서든 논거가 아니다.** | 권고의 **유일한 근거**가 *"남이 그렇게 한다"*면 → refuted. **그러나 다른 컴포넌트에서 *온* 증거는 죽이지 마라** — *"형제는 X를 하고 이 문서도 X를 한다 주장하는데 안 한다"*는 **기록된 거짓**이고 정당하다. **판정 질문: 그 컴포넌트가 *이유*인가 *증인*인가?** |
-| **E — 범위 (LD5)** | 갭 **대상**이 `plugins/project-init/**` · `docs/git-workflow/**` · `.claude-plugin/marketplace.json`의 project-init 항목 안인가? | 밖이면 → refuted. **단 폐기가 아니라 NOQ로** (§8-14 — *"버려진 관찰은 조용한 증발이다"*). ⚠️ **읽기 범위와 혼동하지 마라** — 읽기는 무제한이다 (§8-3). |
-| — | **치료가 병보다 나쁜가** (게이트 E 다음, 마지막) | 권고가 **ceremony · 복잡도 부채 · 이미 구조적 escape hatch가 있는 곳의 결정론 가드**를 추가하는가? → refuted. devbrew Forbidden Patterns. |
+| **B — 피해 실재 / 이미 처리됐는가** | `user_harm`이 **구체적 시나리오**인가? **누가 무엇을 하면 무엇이 잘못되는가?** 그리고 감사자가 언급 안 한 **가드·validator·나중 분기가 이미 그 구멍을 막고 있지 않은가?** | *"유지보수가 어려워진다"* 류 · 재현 없는 이론 · **이미 처리된 구멍**(막혔으면 안 깨진다) → refuted. |
+| **C — 결함인가 취향인가** | 계약 위반 · 문서화된 규칙 위반 · 재현 가능한 실패 · **자기 코드에 대해 거짓인 주장** — 이것들이 결함이다. | *"내가 쓰는 방식과 다르다"* → refuted. **감사자가 댄 근거(rationale)는 severity를 낮추지 못한다.** |
+| **D — 입증책임 (C5/LD6)** | **경계는 축 사이가 아니라 *논거*와 *증거* 사이다.** *"남이 이렇게 하니 우리도"*(형제든 **프로덕션 선례**든)는 **어느 축에서든 논거가 아니다.** | 권고의 **유일한 근거**가 *"남이 그렇게 한다"*면 → refuted. **그러나 다른 컴포넌트에서 *온* 증거는 죽이지 마라.** **판정 질문: 그 컴포넌트가 *이유*인가 *증인*인가?** |
+| **E — 범위 (LD5)** | 갭 **대상**이 `plugins/project-init/**` · `docs/git-workflow/**` · `.claude-plugin/marketplace.json`의 project-init 항목 안인가? | 밖이면 → refuted **하되 폐기가 아니라 NOQ로** (§8-14). ⚠️ **읽기 범위와 혼동 금지** — 읽기는 무제한(§8-3). |
+| **F — 치료가 병보다 나쁜가** | 권고가 **ceremony · 복잡도 부채 · 이미 구조적 escape hatch가 있는 곳의 결정론 가드**를 추가하는가? | → refuted. devbrew Forbidden Patterns. |
 
 **반박하면서 확인한 기계적 사실은 `refutation.facts`에 반드시 기록한다** — **갭을 죽이더라도 그 사실은
 값지다.** (r9는 목적지를 약속해놓고 스키마에 필드가 없었다.)
@@ -609,7 +613,7 @@ phase 0  ─ 지출 동의 게이트 (orchestrator, workflow 밖) — **가장 �
          (i) 실패 시 §13의 `git checkout -- CLAUDE.md` 롤백이 사용자의 **미커밋 변경까지** HEAD로
              되돌린다 (감사자가 넣은 한 줄만 되돌리는 게 아니다).
          (ii) 성공 시 post-1 step 9의 `git add CLAUDE.md`가 사용자의 **선행 변경을 감사 커밋에
-             섞는다** (commit ownership 탈취). AFTER #2는 LD5 전용이라 이를 거절하지 않는다.
+             섞는다** (commit ownership 탈취). AFTER #2는 (a)+(b)(LD5+HARNESS) 전용이고 `CLAUDE.md`는 그 둘 다 밖이라 이를 거절하지 않는다.
        **한 줄이 두 함정을 동시에 닫는다.** dirty를 허용하려면 "내 hunk만 stage"라는 별도 기계가
        필요한데, 그 기계는 이 감사가 사는 값보다 비싸다.
 
@@ -896,7 +900,7 @@ post-1   ─ orchestrator (Bash, workflow 밖) — **조립하고, 검증하고,
       CLAUDE.md에 `docs/audits/` 포인터가 있는가 · **리포트 첫 20줄에 배너가 있는가**
       (degraded[] 비지 않았을 때). RED → 커밋 금지 (렌더링은 이미 끝났으므로 제재는 "커밋 안 함").
       ※ 골든 픽스처 테스트는 *픽스처*를 보지 *실제 산출물*을 보지 않는다 — 이 단계가 실물을 본다.
-   8. **무결성 AFTER #2** (**LD5 전용**) → RED면 **비파괴 롤백** (§13) + 커밋 금지.
+   8. **무결성 AFTER #2** (**(a)+(b) = LD5 + HARNESS** — 감사 도중 persona·scripts가 tamper되면 여기서 잡는다) → RED면 **비파괴 롤백** (§13) + 커밋 금지.
    9. 커밋: `audit-data.json` + 리포트 md + `journal.jsonl` + `docs/audits/README.md` + `CLAUDE.md`
       **+ `scripts/**` (검증 스크립트 · workflow · 스모크 — r14)**
       **`git add`는 이 단계에서만** 한다 (8이 RED면 index를 건드리지 않는다).
@@ -1439,7 +1443,7 @@ r10에서 사라진 것은 *데이터 회계* AC들이다 — 파이프라인이
 
 | # | 기준 | 왜 load-bearing인가 | 검증 시점 |
 |---|---|---|---|
-| **AC-1** | **읽기전용.** (a) workflow 스크립트에서 **식별자 `agent`가 정확히 2회**(두 헬퍼 정의 줄에서만) 나타나고, 그 agent 파일들의 `tools:`가 안전집합 `{Glob, Grep, Read, WebSearch, WebFetch}`의 **부분집합**이다. (b) **AFTER #1**(LD5 + 리포 전역, 파일별 SHA-256)이 BEFORE와 동일하고, **AFTER #2**(LD5 전용)가 BEFORE와 동일하다. | 도구 표면은 실행 전엔 안 보이고, `agentType` 누락은 **쓰기 가능한 기본 에이전트로 조용히 폴백**한다. 그리고 감사자가 쓴 파일은 눈에 안 띈다 — `git status`는 git-ignored 디렉토리를 **한 줄로 접는다**(D4 오염이 정확히 그 사각지대). | **(a) dispatch 전** · (b) AFTER#1 = workflow 직후·**쓰기 전** / AFTER#2 = 커밋 직전 |
+| **AC-1** | **읽기전용.** (a) workflow 스크립트에서 **식별자 `agent`가 정확히 2회**(두 헬퍼 정의 줄에서만) 나타나고, 그 agent 파일들의 `tools:`가 안전집합 `{Glob, Grep, Read, WebSearch, WebFetch}`의 **부분집합**이다. (b) **AFTER #1**(LD5 + 리포 전역, 파일별 SHA-256)이 BEFORE와 동일하고, **AFTER #2**((a)+(b)=LD5+HARNESS)가 BEFORE와 동일하다. | 도구 표면은 실행 전엔 안 보이고, `agentType` 누락은 **쓰기 가능한 기본 에이전트로 조용히 폴백**한다. 그리고 감사자가 쓴 파일은 눈에 안 띈다 — `git status`는 git-ignored 디렉토리를 **한 줄로 접는다**(D4 오염이 정확히 그 사각지대). | **(a) dispatch 전** · (b) AFTER#1 = workflow 직후·**쓰기 전** / AFTER#2 = 커밋 직전 |
 | **AC-2** | **지출 동의.** phase 0의 `AskUserQuestion` 게이트가 남긴 consent artifact가 존재하고, 그 **세 필드가 전부**(`approved` · `at` · `fanout_declared`) `meta.consent`/`meta.fanout_declared`와 일치하며, `fanout_declared == §7 표 최대값(30)`이다. | CLAUDE.md 의무 (`cost_class: high`). **강제는 구조**(artifact 없으면 pre-0가 안 돎)이고 **AC는 공시를 확인**한다. **정직한 한계**: artifact를 쓰는 것도 검사하는 것도 orchestrator이므로, 이것은 *AskUserQuestion이 실제로 발동했다는 증명*이 아니라 **orchestrator 구조 규약의 기계 검사**다. 하니스가 그 증거를 노출하면 그때 승격한다. | post-1 |
 | **AC-4** ⬛ **r14** | **빈 감사는 감사가 아니다.** (a) **`axis_failures.length == 6` → 리포트를 만들지 않는다.** 실패를 보고하고 중단. (b) `axis_failures.length >= 1`이면 리포트 첫 20줄 배너에 **`N/6 축 완주`**를 명시한다. (c) `findings.length == 0`이면 배너에 *"발견 0건 — 이것이 **깨끗함**인지 **감사 실패**인지 축 완주 수와 journal로 확인하라"*를 명시한다. | **빈 감사가 clean 리포트로 커밋되는 것을 막는다.** r13까지 **6축이 전부 죽어도 AC는 GREEN**이었다 — `unverified`로 채워진 D/OQ도 *"완결"*로 세고, `degraded[]`가 안 비었으니 **배너 하나만 뜨면 커밋된다.** 즉 **findings 0건 + 전부 degraded인 리포트가 "성공한 감사"로 보인다.** 이 리포는 **같은 클래스로 이미 두 번 당했다** — qg empty-scope false-clean(#85·#86). *(적발: 패턴사냥 렌즈.)* ⚠️ **과잉 강화 금지**: r8은 *"정상 degraded를 커밋 금지시키는 데드락"*으로 죽었다. **1~5축 사망은 정상 degraded이며 커밋된다** — 배너가 정직하게 말할 뿐이다. **전부 죽은 것만** 감사 아님으로 친다. | post-1 (렌더 전) |
 | **AC-3** | **정직성 + 발견가능성.** `degraded[]`가 비어 있지 않으면 **실제 리포트 파일**의 첫 20줄에 배너가 있다(`meta.codex.ran == false` 포함). `docs/audits/README.md`가 리포트를 링크하고 `CLAUDE.md`에 `docs/audits/` 포인터가 있다. 최종 데이터에 `steelman_condition: pending`이 **0건**이다. | 결손을 조용히 넘기면 사용자가 **Claude-only 결과를 cross-model로 착각**한다. 그리고 *"어떤 미래 agent도 읽지 않는 파일에 기록하는 것은 theater"* (Law 3). | **렌더링 후** (`--artifacts` 패스). 골든 테스트는 *픽스처*를 보므로 **실물을 보는 검사가 따로 필요하다.** |
@@ -1483,7 +1487,7 @@ r10에서 사라진 것은 *데이터 회계* AC들이다 — 파이프라인이
 | AC | 스크립트 | 무엇을 하는가 | 언제 |
 |---|---|---|---|
 | **AC-1a** | `scripts/check-law2.py` | `scripts/audit-workflow.js` 정적 검증 (아래 *식별자 판정식*). agent 파일 `tools:` ⊆ `{Glob, Grep, Read, WebSearch, WebFetch}`. | **dispatch 전 (pre-0b)** |
-| **AC-1b** | `scripts/check-integrity.sh` | **AFTER #1**: LD5 + **리포 전역** 파일별 SHA-256 (ignored 포함) — workflow 직후·**쓰기 전**, 정당한 delta 0. **AFTER #2**: **LD5 전용** — 커밋 직전. 다르면 **커밋 금지 + 비파괴 롤백**(§13). | post-1 step 1 · step 8 |
+| **AC-1b** | `scripts/check-integrity.sh` | **AFTER #1**: LD5 + **리포 전역** 파일별 SHA-256 (ignored 포함) — workflow 직후·**쓰기 전**, 정당한 delta 0. **AFTER #2**: **(a)+(b) = LD5 + HARNESS** — 커밋 직전 (persona·scripts tamper 탐지). 다르면 **커밋 금지 + 비파괴 롤백**(§13). | post-1 step 1 · step 8 |
 | **AC-2 / AC-3(데이터)** | `validate-audit-data.py --data` | consent artifact **3필드 전부** ↔ `meta` 대조 · `fanout_declared == 30` · D1–D5/OQ1–OQ6 완결성(`unverified`/`증거 불충분`도 완결) · **`steelman_condition: pending` 잔존 0** · `degraded[]` 비었나 플래그 · **⬛ codex 병합 검사 (r12 — B7)** · **⬛ NOQ 원소 스키마 검사** (§9.7 — `why_not_gap` 필수). RED → **렌더링 안 함.** | post-1 step 4 (**렌더링 전**) |
 | **AC-3(산출물)** | `validate-audit-data.py --artifacts` | **실제 파일**을 본다: `docs/audits/README.md`가 리포트를 링크하는가 · `CLAUDE.md`에 `docs/audits/` 포인터가 있는가 · `degraded[]`가 비지 않았으면 **리포트 첫 20줄에 배너**가 있는가. RED → **커밋 금지.** | post-1 step 7 (**렌더링 후**) |
 | — | `scripts/render-audit-report.py` + **골든 픽스처 테스트** | (1) 정렬 키 역전 mutation(`fix_cost`를 사전순 비교로)이 **RED**가 되는가 — 픽스처에 **산문이 섞인 `fix_cost` 값도 넣어** 파싱 의존을 태운다. (2) `meta.codex.ran == false` 픽스처에서 첫 20줄 배너. (3) `degraded[]` 비지 않은 픽스처에서 상단 배너. (4) `deep_verified`의 **세 상태**(`true`/`false`/`null`)가 각각 올바른 라벨(또는 무라벨)을 받는가. | 렌더링 전 (CI 없음 → post-1이 직접 실행) |
@@ -1589,8 +1593,25 @@ project-init v1.7.0(인코딩 버그) — **전부 Claude 리뷰어 다수가 �
 
 ### Law 2 판정식 — 문법이 아니라 **식별자**를 센다
 
-`check-law2.py`가 JS를 AST 파싱하지 않고도 *호출별* `agentType` 존재를 보장하려면, **규약으로 파싱
-문제를 없앤다.** workflow 스크립트는 `agent()`를 직접 호출하지 않고 상단에 헬퍼 둘만 정의한다:
+> 🔴 **이 게이트가 무엇이고 무엇이 *아닌지* (r14 — 정직화).** `check-law2.py`는 **best-effort 조기
+> 경보**이지 물리적 보장이 **아니다.** 세 리뷰어(codex 2회 · Claude 렌즈 1회)가 같은 곳에 수렴했다:
+> **정적 카운터는 JS가 `agent`에 닿는 모든 경로를 잡을 수 없다.** 어휘적(lexical) 우회 — 공백 ·
+> optional-call · 별칭 · `.call` · spread 순서 · template 보간 · 유니코드 이스케이프 · regex literal
+> (뒤 둘은 *tokenize*하지 않고 **거부**한다) — 은 막지만, **동적 dispatch는 원리적으로 못 잡는다**:
+> `globalThis['agent']` · `globalThis['ag'+'ent']` · `eval("agent(p,{})")`. 그걸 더 많은 정적 분석으로
+> 잡으려는 건 **끝없는 열거 게임**(원장 39)이고, devbrew 자신의 게이트 F가 말하는 *치료가 병보다
+> 나쁜* 경우다.
+>
+> **진짜 물리적 Law 2 보장은 세 층이고, 이 파일은 그중 하나가 아니다:**
+> **(a)** agent 파일 `tools:` allowlist — Bash 없으면 해석된 에이전트가 **물리적으로 못 쓴다** ·
+> **(b)** pre-0 스모크 — sentinel 파일이 **디스크에서** 쓰기 가능 여부를 증명 ·
+> **(c)** 무결성 스냅샷 — 에이전트가 뭐라도 쓰면 BEFORE≠AFTER가 잡고 롤백.
+> 이 게이트는 **정직한 실수**(agentType을 깜빡함)를 30 에이전트가 뜨기 전에 싸게 잡으려고 있다.
+> 작정한 난독화를 막는 척하지 않는다 — (a)–(c)가 그걸 한다.
+
+`check-law2.py`가 JS를 AST 파싱하지 않고도 *호출별* `agentType` 존재를 **best-effort로** 확인하려면,
+**규약으로 파싱 문제를 줄인다.** workflow 스크립트는 `agent()`를 직접 호출하지 않고 상단에 헬퍼 둘만
+정의한다:
 
 ```
 const auditor = (prompt, opts) => agent(prompt, {...opts, agentType: 'plugin-auditor'})
