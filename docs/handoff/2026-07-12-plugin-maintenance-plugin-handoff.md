@@ -859,6 +859,58 @@ devbrew CLAUDE.md는 *"Secret 기록 금지"*를 규정한다. **감사 리포�
 - **판정의 근거를 한 층 더 내려가서 물어라.** *"refuter가 이미 한다"* → **무엇을** 이미 하는가?
   *(감사자의 인용 ≠ 대상의 문서 주장)*. *"도구가 안 맞는다"* → **도구가 실어 나르던 원칙은 무엇인가?**
 
+### 36. **게이트는 "언급"과 "사용"을 구별하지 못한다** (이 문서를 쓰다가 실측)
+
+설계 §5.4a에 *"초안 잔재(`{{…}}` 플레이스홀더 · 미완료 마커)를 탐지한다"*고 **쓰는 순간**,
+spec-distill의 placeholder 검사기가 **그 문장을 플레이스홀더로 잡아 write를 block했다.** 두 번.
+(`placeholder hit: TODO` → 문구 교체 → `placeholder hit: FIXME` → 토큰을 전부 제거하고서야 통과.)
+
+**검사기는 옳게 동작했다. 판정이 틀렸을 뿐이다.** 그것은 마커를 *탐지하라고 지시하는 문장*과
+*마커가 남은 미완성 문서*를 구별할 수 없다 — **정규식에겐 둘이 같은 바이트다.**
+
+**이것이 `check-staleness.py`가 밟을 정확히 같은 함정이다**:
+- *"README가 `scripts/foo.sh`를 **언급한다**"* ≠ *"README가 `scripts/foo.sh`가 **있다고 주장한다**"*
+- **코드 펜스 안의 예시 경로** · **인용문** · **부정문**(*"~는 없다"*) · **생성물 경로**(사용자
+  프로젝트에 *만들어질* 파일) · **URL** — 전부 **주장이 아니다.**
+- 이걸 안 빼면 sweep은 **거짓 dangling**을 쏟아내고, 감사자는 **존재하지 않는 갭을 쫓는다.**
+  그리고 그 거짓은 *"결정론이 잡았다"*는 권위를 달고 온다 (원장 31 — **점수·기계 판정은 증거 요구를
+  면제시킨다**).
+
+**교훈**: 결정론 텍스트 검사기를 만들 때 **가장 먼저 쓰는 픽스처는 clean 픽스처다** — *"이 검사기를
+설명하는 문서"*를 넣고 **0건이 나와야 한다.** GREEN 픽스처보다 **FP 픽스처가 먼저다.**
+
+### 37. **레퍼런스 전수 열거가 채택 5건을 냈다 — 1차 판정은 0건이었다**
+
+원장 35가 판정을 뒤집은 뒤, 레퍼런스 코퍼스를 **조사자 2명으로 전수 열거**(메커니즘 40건, 채택 권고
+**금지** — *"판정은 설계를 아는 쪽이 한다"*, 원장 34의 유일하게 살아남은 교훈)했다. 결과 **채택 5건**:
+
+| 채택 | 출처 | 없으면 무슨 일이 나는가 |
+|---|---|---|
+| doc-claim **3-way lookup** (워킹트리→HEAD→upstream) | `CE/…/validate-doc-claims.py:198-249` | 워킹트리에 없는 것과 **애초에 없던 것**을 뭉개면 리베이스·이동을 **거짓 dangling**으로 신고 |
+| **frontmatter silent-truncation** (unquoted ` #`) | `CE/…/validate-frontmatter.py:12-34` | YAML이 **파서 에러 없이** 값을 잘라먹는다. ⚠️ **`.claude/agents/*.md`의 `tools:`가 잘리면 Law 2 allowlist에 구멍이 뚫린 채 아무도 모른다** — **읽어서는 절대 못 찾는다** |
+| **OQ2의 프로덕션 선례** — PreToolUse가 `deny`가 아니라 **`ask`** | `gstack/careful/bin/check-careful.sh:109` (실측 검증) | OQ2가 *"중간지대가 존재하는가?"*를 묻는데 **선례 없이는 축③이 상상으로 답한다** |
+| **`cross_model_confirmed` 태그** | `gstack/review:1495` · `CE/…:65-73` (단 **점수는 거부**) | Claude와 codex가 같은 `file:line`을 독립 지목한 사실 = **LD4의 유일한 산출물**인데 **조용히 버려지고 있었다** |
+| **검증기 자신의 결정론성·FP 테스트** | `ECC/tests/scripts/harness-audit.test.js:118-123` | 비결정론 매니페스트 = **AFTER#1 허위 RED = 정상 실행 사망** |
+
+**원장 33(이름 ≠ 기능)이 세 번 더 확증됐다** — 그리고 이번엔 **대조군이 있다**:
+- `oh-my-codex/src/document-refresh/enforcer.ts:256` — 이름은 *enforcer*, 자백은 *"does not add
+  CI/pre-commit hard blocking"*
+- `oh-my-claudecode/skills/merge-readiness/SKILL.md:51` — 이름은 *게이트*, 자백은 *"v1 is advisory:
+  an active gate does not block the session"*
+- **↔ `oh-my-claudecode/scripts/workflow-drift-guard.mjs:171-176` — 실제로 block한다.**
+
+**대조군이 있어야 패턴이 증명된다.** 그리고 이것이 **축③에 직결된다**: project-init의 훅은
+PostToolUse **advisory**인데 — **README·description이 "enforce한다"고 주장하는가?**
+
+**plugin-audit(2차)로 이월** (이번 사이클엔 안 넣는다):
+- **페르소나 메타-벤치마크** — known-ground-truth 결함 픽스처 + **clean 픽스처로 FP 저항 측정**
+  (`oh-my-claudecode/benchmarks/harsh-critic/README.md:25-45`). 감사기의 *탐지력*을 정량화한다.
+  우리 `plugin-auditor`·`audit-refuter` persona는 **한 번도 테스트된 적이 없다.**
+- **억제 이력 = 축소전용 allowlist** — *"the allow-list shrinks over time, never grows"*
+  (`gbrain/scripts/check-test-isolation.sh:28-34`). **반복 감사에는 필수다**: 사용자가 기각한 갭이
+  매 실행마다 재보고되면 감사는 곧 무시된다. 단 **고쳐진 실이슈는 절대 억제하지 않는다**
+  (`gstack/review/greptile-triage.md:156-168`).
+
 ---
 
 ## 7. 재사용 가능한 자산
