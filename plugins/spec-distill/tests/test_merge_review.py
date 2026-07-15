@@ -241,6 +241,44 @@ class TestMergeCore(unittest.TestCase):
         self.assertEqual(len(hist["issue_history"]), 1)   # same id → 1 record
         self.assertEqual(hist["issue_history"][0]["source"], "both")
 
+    # FIX 2 (whole-branch review, Important #2): when codex overturns Claude
+    # (combined_verdict != claude_verdict) in the both-available branch, the
+    # only prior signal was combined_verdict: needs_revise with NO reason —
+    # the headline feature ("codex flips Claude's fail-open approved") was
+    # otherwise invisible. A loud advisory must name the overturn.
+    def test_overturn_advisory(self):
+        claude = claude_output("approved", [])
+        cod = codex_yaml([{"category": "ambiguity", "target_section": "#2-goals", "severity": "high"}])
+        _, y, raw, _ = run_merge(claude, cod)
+        self.assertEqual(y["combined_verdict"], "needs_revise")
+        self.assertTrue(y["advisory"])  # non-empty
+        adv_block = raw[raw.index("advisory:"):]
+        self.assertTrue(
+            any(s in adv_block for s in ("뒤집", "override")),
+            f"expected overturn advisory naming the flip, got: {adv_block!r}",
+        )
+
+    # FIX 3 (whole-branch review, Important — display channel): codex's
+    # category/target_section/severity/summary must reach a NEW top-level
+    # codex_findings: display block — the persistent issue_history ledger
+    # only keeps {id, raised_count, dismissed_by_user, source, resolved},
+    # discarding content, so codex issues would otherwise reach the Human
+    # Gate as opaque 12-hex ids while Claude issues reach the author via prose.
+    def test_codex_findings_surfaced(self):
+        cod = codex_yaml([{"category": "isolation", "target_section": "#6-components",
+                            "severity": "high", "summary": "coupling issue detected"}])
+        _, y, raw, _ = run_merge(claude_output("approved", []), cod)
+        self.assertIn("codex_findings:", raw)
+        cf_block = raw[raw.index("codex_findings:"):raw.index("advisory:")]
+        self.assertIn("isolation", cf_block)
+        self.assertIn("coupling issue detected", cf_block)
+
+    # codex_findings: [] when codex unavailable/no findings — never bloats
+    # the block with stale content.
+    def test_codex_findings_empty_when_unavailable(self):
+        _, y, raw, _ = run_merge(claude_output("approved", []), codex_yaml(failed=True, reason="exit_nonzero"))
+        self.assertIn("codex_findings: []", raw)
+
 
 class TestMergeLedger(unittest.TestCase):
     def _issue(self, cat, sec, sev="high"):
@@ -278,6 +316,30 @@ class TestMergeLedger(unittest.TestCase):
         cod = codex_yaml([{"category": "isolation", "target_section": '"#6-components"', "severity": "high"}])
         _, y, raw, _ = run_merge(claude_output("approved", []), cod, history=prior)
         self.assertNotIn(codex_id, get_per_issue(raw))  # excluded from stagnation (still in history)
+
+    # FIX 1 (whole-branch review, Important #1 — CRITICAL convergence bug):
+    # an id that hit raised_count>=3 in a PRIOR round, then was FIXED (not
+    # raised this round → resolved=True, but raised_count persists), must
+    # NOT be re-escalated to the Human Gate every subsequent round. Gate is
+    # membership in this_round_ids (type-safe), not `not rec.get("resolved")`.
+    # Teeth: without the `and rec["id"] in this_round_ids` gate in
+    # build_ledger's per_issue comprehension, this id (raised_count=3,
+    # dismissed_by_user=0) would still satisfy the other two conditions and
+    # land in per_issue — this test goes RED without the fix.
+    def test_resolved_issue_not_re_escalated(self):
+        stuck_id = cid("isolation", "#6-components")
+        prior = {"issue_history": [
+            {"id": stuck_id, "raised_count": 3, "dismissed_by_user": 0,
+             "source": "codex", "resolved": False}
+        ]}
+        # neither claude nor codex raises this id THIS round — it was fixed.
+        claude = claude_output("approved", [])
+        cod = codex_yaml([])
+        _, y, raw, hist = run_merge(claude, cod, history=prior)
+        self.assertNotIn(stuck_id, get_per_issue(raw))
+        updated = [r for r in hist["issue_history"] if r["id"] == stuck_id][0]
+        self.assertTrue(updated["resolved"])
+        self.assertEqual(updated["raised_count"], 3)  # persists, but excluded from per_issue
 
     # OQ4: claude_degraded round is inconclusive for round-level stagnation.
     def test_degraded_round_inconclusive(self):

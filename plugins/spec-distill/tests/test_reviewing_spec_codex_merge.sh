@@ -70,4 +70,17 @@ else
 fi
 rm -f /tmp/sd_merge_$$
 
+# (10) FIX 3 (whole-branch review — codex content surfacing): the Step-3
+#      consume/display prose must reference `codex_findings` AND
+#      `codex_verdict` — without a content channel, codex issues would reach
+#      the Human Gate as opaque 12-hex issue_history ids while Claude issues
+#      reach the author via prose. Section-scoped to the "Parse merge_review
+#      output" step through the Deterministic Routing Table header, so this
+#      doesn't false-positive on unrelated mentions elsewhere.
+awk '/^3\. \*\*Parse merge_review output\*\*/{f=1} f{print} /^## Deterministic Routing Table/{exit}' "$SKILL" > /tmp/sd_parse_$$
+grep -q 'codex_findings' /tmp/sd_parse_$$ && grep -q 'codex_verdict' /tmp/sd_parse_$$ \
+  && note PASS "FIX3: Step-3 consume/display references codex_findings + codex_verdict" \
+  || note FAIL "FIX3: Step-3 consume/display missing codex_findings/codex_verdict"
+rm -f /tmp/sd_parse_$$
+
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"; [[ $fail -eq 0 ]]

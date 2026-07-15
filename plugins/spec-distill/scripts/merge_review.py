@@ -152,6 +152,32 @@ def derive_codex_verdict(findings: list[dict]) -> str:
     return "approved"
 
 
+# display keys surfaced for codex_findings (transient current-round display
+# block — see build_codex_findings_display docstring).
+CODEX_DISPLAY_KEYS = ("category", "target_section", "severity", "summary")
+
+
+def build_codex_findings_display(codex_findings: list[dict], codex_avail: bool) -> list[dict]:
+    """Project THIS round's parsed codex findings down to a display-only
+    shape (category/target_section/severity/summary, whichever present).
+
+    §5 requires surfacing codex issues with source labels — the persistent
+    issue_history ledger only keeps {id, raised_count, dismissed_by_user,
+    source, resolved} (category/severity/summary are parsed for verdict/id
+    then discarded there). Without a content channel, codex issues reach the
+    Human Gate as opaque 12-hex ids while Claude issues reach the author via
+    prose. This is a TRANSIENT current-round display block, separate from
+    the persistent ledger — it is NOT written back to --history."""
+    if not codex_avail or not codex_findings:
+        return []
+    out = []
+    for f in codex_findings:
+        if not isinstance(f, dict):
+            continue
+        out.append({k: f[k] for k in CODEX_DISPLAY_KEYS if k in f})
+    return out
+
+
 # --- merge -------------------------------------------------------------------
 def conservative(a: str, b: str) -> str:
     return INV_RANK[max(RANK[a], RANK[b])]
@@ -221,8 +247,11 @@ def build_ledger(claude_issues, codex_findings, claude_degraded, codex_avail, hi
 
     - raised_count += 1 per id per ROUND (both reviewers flagging = corroboration,
       not double count — AC11).
-    - per-issue stagnation: raised_count>=3 AND dismissed_by_user==0 (AC14),
-      dismissed excluded (P17).
+    - per-issue stagnation: raised_count>=3 AND dismissed_by_user==0 AND the
+      id is raised THIS round (AC14), dismissed excluded (P17). The
+      this-round gate prevents re-escalating an already-resolved id forever
+      (raised_count persists after resolution; membership in this_round_ids
+      is the type-safe check, not a `resolved` flag which may be non-bool).
     - round-level (§8): no NEW id this round AND unresolved prior ids persist.
       OQ4: when claude_degraded, the round is 'inconclusive' (a parse failure
       must not read as convergence).
@@ -260,10 +289,17 @@ def build_ledger(claude_issues, codex_findings, claude_degraded, codex_avail, hi
 
     new_history = list(by_id.values())
 
-    # per-issue stagnation
+    # per-issue stagnation — gated to ids raised THIS round (type-safe form:
+    # membership in this_round_ids, NOT `not rec.get("resolved")`, which is
+    # fragile if `resolved` is a non-bool). Without this gate, an id that hit
+    # raised_count>=3 and was later fixed (resolved=True, not raised this
+    # round) would still land in per_issue forever — re-escalating a
+    # resolved issue to the Human Gate every round until the hard cap,
+    # defeating convergence.
     per_issue = [rec["id"] for rec in new_history
                  if int(rec.get("raised_count", 0)) >= 3
-                 and int(rec.get("dismissed_by_user", 0)) == 0]
+                 and int(rec.get("dismissed_by_user", 0)) == 0
+                 and rec["id"] in this_round_ids]
 
     # round-level stagnation (OQ4)
     if claude_degraded:
@@ -306,6 +342,12 @@ def emit(result: dict) -> str:
     else:
         for r in result["issue_history"]:
             out.append("  - " + json.dumps(r, sort_keys=True))
+    out.append("codex_findings:")
+    if not result["codex_findings"]:
+        out[-1] = "codex_findings: []"
+    else:
+        for f in result["codex_findings"]:
+            out.append("  - " + json.dumps(f, sort_keys=True))
     out.append("advisory:")
     if not result["advisory"]:
         out[-1] = "advisory: []"
@@ -342,6 +384,11 @@ def main() -> int:
         # codex_avail True ⇒ codex_verdict derived) — narrow for the str×str merge.
         assert claude_verdict is not None and codex_verdict is not None
         combined = conservative(claude_verdict, codex_verdict)
+        if combined != claude_verdict:
+            advisory.append(
+                f"[spec-distill v0.20.0] codex co-review가 Claude verdict를 뒤집음 "
+                f"(claude={claude_verdict} → combined={combined}, codex={codex_verdict}) "
+                f"— codex 독립 판단이 override. 아래 codex_findings 참조.")
     elif not claude_unrecoverable and not codex_avail:
         combined = claude_verdict
         advisory.append(
@@ -378,6 +425,8 @@ def main() -> int:
     if not both_dead:
         _write_history(args.history, new_history)
 
+    codex_findings_display = build_codex_findings_display(codex_findings, codex_avail)
+
     result = {
         "combined_verdict": combined,
         "claude_verdict": claude_verdict,
@@ -387,6 +436,7 @@ def main() -> int:
         "claude_verdict_unrecoverable": claude_unrecoverable,
         "stagnation": stagnation,
         "issue_history": new_history,
+        "codex_findings": codex_findings_display,
         "advisory": advisory,
     }
     sys.stdout.write(emit(result))
