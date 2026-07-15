@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# AC3 + AC4 — 6 judgment categories + structured emit request + path-only input.
+set -u -o pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+BUILD="$PLUGIN_ROOT/scripts/build_spec_codex_prompt.py"
+TMP="$(mktemp -d -t sd-build-prompt-XXXXXX)"
+trap 'rm -rf "$TMP"' EXIT
+DOC="$TMP/some-design.md"
+printf '# X design\n\n## 2. Goals\nMake it robust.\n' > "$DOC"
+
+pass=0; fail=0
+note() { if [[ "$1" == PASS ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
+
+OUT="$(python3 "$BUILD" "$DOC")"
+
+# AC3: all 6 judgment categories present in the prompt
+for c in placeholder ambiguity scope_creep approaches_comparison isolation testing; do
+  echo "$OUT" | grep -q "$c" && note PASS "category $c present" || note FAIL "category $c missing"
+done
+
+# AC3: severity vocab is spec-distill {block,high,medium}, NOT qg vocab
+echo "$OUT" | grep -qE 'block[^A-Za-z]*\|?[^A-Za-z]*high[^A-Za-z]*\|?[^A-Za-z]*medium' \
+  && note PASS "severity vocab block|high|medium" || note FAIL "severity vocab wrong"
+echo "$OUT" | grep -qE 'CRITICAL|IMPORTANT|SUGGESTION' \
+  && note FAIL "qg vocab leaked (CRITICAL/IMPORTANT/SUGGESTION)" || note PASS "no qg vocab"
+
+# AC3: each finding requests category + target_section
+echo "$OUT" | grep -q 'category' && echo "$OUT" | grep -q 'target_section' \
+  && note PASS "requests category + target_section" || note FAIL "missing category/target_section request"
+
+# AC3: doc content is embedded (path was read, not ignored)
+echo "$OUT" | grep -q 'Make it robust' && note PASS "doc content embedded" || note FAIL "doc content not embedded"
+
+# AC4: path-only — passing inline content as argv must NOT be treated as a doc.
+# The script takes exactly one arg (a path); inline string that isn't a file → error.
+python3 "$BUILD" '# inline content ## 2. Goals not a path' >/dev/null 2>&1 \
+  && note FAIL "AC4: inline content accepted (should require a file path)" \
+  || note PASS "AC4: inline non-path rejected"
+
+# handoff_incomplete is OUT of codex scope (mechanical check) — must NOT be requested.
+echo "$OUT" | grep -q 'handoff_incomplete' \
+  && note FAIL "handoff_incomplete wrongly in codex scope" || note PASS "handoff_incomplete excluded"
+
+echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"; [[ $fail -eq 0 ]]
