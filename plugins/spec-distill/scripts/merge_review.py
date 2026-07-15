@@ -170,6 +170,23 @@ def _yaml_scalar(v) -> str:
     return s
 
 
+def _sanitize_history_record(rec: dict) -> dict:
+    """Coerce a persisted history record so every downstream int() site is
+    safe. dismissed_by_user is USER-EDITABLE (P17) — malformed values (e.g.
+    null from a hand-edited history file) are plausible. Global Constraint:
+    never crash on malformed input. Well-formed records (raised_count/
+    dismissed_by_user already int) round-trip byte-identically."""
+    out = dict(rec)
+    for key in ("raised_count", "dismissed_by_user"):
+        try:
+            out[key] = int(out.get(key, 0))
+        except (TypeError, ValueError):
+            out[key] = 0
+    if "resolved" in out and not isinstance(out["resolved"], bool):
+        out["resolved"] = bool(out["resolved"])
+    return out
+
+
 def load_history(path: str) -> list[dict]:
     if not path or not os.path.isfile(path):
         return []
@@ -179,7 +196,12 @@ def load_history(path: str) -> list[dict]:
     except (OSError, json.JSONDecodeError):
         return []
     ih = data.get("issue_history") if isinstance(data, dict) else None
-    return ih if isinstance(ih, list) else []
+    if not isinstance(ih, list):
+        return []
+    return [
+        _sanitize_history_record(r) for r in ih
+        if isinstance(r, dict) and "id" in r
+    ]
 
 
 def _origin_merge(prior_source: str, this_round: set) -> str:

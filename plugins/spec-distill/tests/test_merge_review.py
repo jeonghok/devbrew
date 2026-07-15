@@ -286,6 +286,30 @@ class TestMergeLedger(unittest.TestCase):
         # round_level must be the string 'inconclusive', not a boolean.
         self.assertIn("round_level: inconclusive", raw)
 
+    # Crash-safety: dismissed_by_user is USER-EDITABLE (P17) — a hand-edited
+    # history file can plausibly contain null/malformed values. int(None)
+    # raises TypeError; the Global Constraint is "never crash on malformed
+    # input". Also covers a non-dict record and a dict missing "id" (both
+    # unkeyable — must be dropped, not crash).
+    def test_malformed_history_no_crash(self):
+        codex_id = cid("isolation", "#6-components")
+        prior = {"issue_history": [
+            {"id": codex_id, "raised_count": None, "dismissed_by_user": None,
+             "source": "codex", "resolved": False},
+            "not-a-dict",
+            {"source": "codex"},  # missing "id" — unkeyable
+        ]}
+        cod = codex_yaml([{"category": "isolation", "target_section": '"#6-components"', "severity": "high"}])
+        rc, y, raw, hist = run_merge(claude_output("approved", []), cod, history=prior)
+        self.assertEqual(rc, 0)  # no crash
+        self.assertIn(y.get("combined_verdict"),
+                      {"approved", "needs_revise", "needs_interview"})  # valid stdout YAML produced
+        # the malformed record recovered raised_count from 0 (fallback), incremented to 1
+        # this round; the non-dict / no-id records were dropped, not carried forward.
+        updated = [r for r in hist["issue_history"] if r["id"] == codex_id][0]
+        self.assertEqual(updated["raised_count"], 1)
+        self.assertEqual(len(hist["issue_history"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
