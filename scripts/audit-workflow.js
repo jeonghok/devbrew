@@ -17,8 +17,12 @@ export const meta = {
 const auditor = (prompt, opts) => agent(prompt, {...opts, agentType: 'plugin-auditor'})
 const refuter = (prompt, opts) => agent(prompt, {...opts, agentType: 'audit-refuter'})
 
-const pack = args.evidencePack
-const codexFindings = args.codexFindings || []
+// The Workflow tool delivers `args` to the script as a JSON *string* at runtime (verified by an
+// args-diag probe — the tool doc's object-passing does not hold in this harness). Normalize so
+// both a string (real Workflow tool) and an object (test harness _wf_harness.mjs) resolve.
+const _args = typeof args === 'string' ? JSON.parse(args) : (args || {})
+const pack = _args.evidencePack
+const codexFindings = _args.codexFindings || []
 
 const EVIDENCE = {
   type: 'array',
