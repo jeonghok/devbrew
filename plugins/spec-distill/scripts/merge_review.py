@@ -23,6 +23,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import compute_issue_id  # noqa: E402  (sibling helper, centralized id — §8)
+
 # --- verdict precedence (§7b) ------------------------------------------------
 RANK = {"approved": 0, "needs_revise": 1, "needs_interview": 2}
 INV_RANK = {v: k for k, v in RANK.items()}
@@ -179,10 +182,91 @@ def load_history(path: str) -> list[dict]:
     return ih if isinstance(ih, list) else []
 
 
+def _origin_merge(prior_source: str, this_round: set) -> str:
+    seen = set()
+    if prior_source in ("claude", "codex", "both"):
+        seen.update({"claude", "codex"} if prior_source == "both" else {prior_source})
+    seen.update(this_round)
+    if {"claude", "codex"} <= seen:
+        return "both"
+    if "codex" in seen:
+        return "codex"
+    return "claude"
+
+
 def build_ledger(claude_issues, codex_findings, claude_degraded, codex_avail, history):
-    """Task 6 STUB — pass-through. Task 7 replaces this with the real
-    union-increment + unified-ledger stagnation scan."""
-    return history, {"per_issue": [], "round_level": False}
+    """Union-increment ledger + unified-ledger stagnation scan (§8).
+
+    - raised_count += 1 per id per ROUND (both reviewers flagging = corroboration,
+      not double count — AC11).
+    - per-issue stagnation: raised_count>=3 AND dismissed_by_user==0 (AC14),
+      dismissed excluded (P17).
+    - round-level (§8): no NEW id this round AND unresolved prior ids persist.
+      OQ4: when claude_degraded, the round is 'inconclusive' (a parse failure
+      must not read as convergence).
+    """
+    by_id = {r["id"]: dict(r) for r in history if isinstance(r, dict) and "id" in r}
+    prior_ids = set(by_id.keys())
+
+    # ids raised THIS round, tagged by origin.
+    round_origin: dict[str, set] = {}
+    for it in claude_issues:
+        iid = compute_issue_id.compute(it["category"], it["target_section"])
+        round_origin.setdefault(iid, set()).add("claude")
+    for f in codex_findings:
+        cat = str(f.get("category", ""))
+        sec = str(f.get("target_section", ""))
+        if not cat and not sec:
+            continue
+        iid = compute_issue_id.compute(cat, sec)
+        round_origin.setdefault(iid, set()).add("codex")
+
+    this_round_ids = set(round_origin.keys())
+
+    # mark prior ids not raised this round as resolved; increment raised ids.
+    for iid, rec in by_id.items():
+        if iid not in this_round_ids:
+            rec["resolved"] = True
+    for iid, origins in round_origin.items():
+        rec = by_id.get(iid) or {"id": iid, "raised_count": 0,
+                                  "dismissed_by_user": 0, "source": "", "resolved": False}
+        rec["raised_count"] = int(rec.get("raised_count", 0)) + 1
+        rec["dismissed_by_user"] = int(rec.get("dismissed_by_user", 0))
+        rec["source"] = _origin_merge(rec.get("source", ""), origins)
+        rec["resolved"] = False
+        by_id[iid] = rec
+
+    new_history = list(by_id.values())
+
+    # per-issue stagnation
+    per_issue = [rec["id"] for rec in new_history
+                 if int(rec.get("raised_count", 0)) >= 3
+                 and int(rec.get("dismissed_by_user", 0)) == 0]
+
+    # round-level stagnation (OQ4)
+    if claude_degraded:
+        round_level = "inconclusive"
+    else:
+        new_ids = this_round_ids - prior_ids
+        unresolved_persist = any(
+            (iid in this_round_ids) and int(by_id[iid].get("dismissed_by_user", 0)) == 0
+            for iid in prior_ids
+        )
+        round_level = (len(new_ids) == 0 and unresolved_persist)
+
+    return new_history, {"per_issue": per_issue, "round_level": round_level}
+
+
+def _write_history(path: str, issue_history: list[dict]) -> None:
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({"issue_history": issue_history}, fh, sort_keys=True)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except OSError:
+        pass  # graceful — ledger persistence best-effort; stdout still authoritative for this round
 
 
 def emit(result: dict) -> str:
@@ -257,7 +341,7 @@ def main() -> int:
             "[spec-distill v0.20.0] Claude issue block unparseable (sentinel malformed) "
             "— verdict recovered from **Status:**, this round's Claude issues skipped in ledger.")
 
-    # --- ledger (Task 6 stub; Task 7 real) ---
+    # --- ledger (§8): union-increment + unified-ledger stagnation scan ---
     both_dead = claude_unrecoverable and not codex_avail
     history = load_history(args.history)
     if both_dead:
@@ -268,6 +352,9 @@ def main() -> int:
             codex_findings if codex_avail else [],
             claude_degraded, codex_avail, history,
         )
+
+    if not both_dead:
+        _write_history(args.history, new_history)
 
     result = {
         "combined_verdict": combined,
