@@ -3,7 +3,7 @@ name: spec-distill-codex-coreviewer
 type: design-doc
 created_at: 2026-07-15
 revised_at: 2026-07-15
-status: draft (brainstorming 승인 — writing-plans 대기)
+status: draft (review round 1 반영 — merge_review 엔진 + 통합-원장 stagnation 추가)
 approach: "A — 전용 design-doc codex 경로 + detect_codex vendor"
 plugin: spec-distill
 version_bump: "0.19.3 → 0.20.0 (minor — 새 review surface)"
@@ -130,20 +130,30 @@ reviewing-spec SKILL
  ├─ [Step 2.5] codex_available면:
  │              run_spec_codex_reviewer.sh <doc> <proj> <out.yaml>
  │                → codex findings YAML: {category, severity, confidence, summary, target_section}
- ├─ [Step 3.5] codex severity → codex_verdict 결정론 유도 (approved | needs_revise)
- ├─ [Step 3.6] issue_id 계산(compute_issue_id.py) + 원장 union 병합
- ├─ [Step 3.7] 보수적 병합: combined = max(claude_verdict, codex_verdict)
- ├─ [Step 4]   기존 routing table에 combined_verdict 투입 (table 불변)
+ ├─ [Step 3.5] merge_review.py — 결정론 merge/ledger 엔진 (단일 검증 가능 경계):
+ │              입력: claude_verdict, claude_issues(category,target_section),
+ │                    codex YAML, prior issue_history(state)
+ │              출력: combined_verdict + 갱신 issue_history(union raised_count)
+ │                    + stagnation flags(per-issue·round-level) + degrade advisory
+ │              (내부: codex_verdict 유도 → 보수적 병합 → issue_id(compute_issue_id) →
+ │                     원장 union → **통합-원장 stagnation 스캔**)
+ ├─ [Step 4]   기존 routing table에 combined_verdict + stagnation flags 투입 (table 불변)
  └─ 출력: Claude + codex issues를 source 라벨(claude|codex|both)과 함께 surface
 ```
 
+**"병렬"의 정의 (모호성 제거)**: 병렬 = **논리적 상호 독립(order-agnostic)** 을 뜻한다. codex(Bash,
+동기)와 spec-reviewer(Agent, async)는 동시 진행 *가능*하나 정합성은 순서 무관 — 구현은 동시 dispatch든
+순차든 택일 가능하며 결과는 불변. **둘 다 완료된 뒤** merge_review.py로 병합한다(같은 턴 동시
+tool-dispatch를 강제하지 않음).
+
 **핵심 설계 결정**:
 
-1. **routing table 불변** — 병합된 단일 verdict만 소비. 기존 cap(5)·stagnation 로직 재사용.
-2. **리뷰 pass 상호 blind** — `spec-reviewer.md`는 codex 존재를 통보받지 않음. 병합은 오직 skill
-   orchestrator.
-3. **codex verdict는 findings에서 유도** — codex가 3-value vocab을 self-assign하도록 신뢰하지
-   않고 orchestrator가 severity→verdict 결정론 매핑.
+1. **routing table 불변** — 병합된 단일 verdict + stagnation flags만 소비. 기존 cap(5) 재사용.
+2. **리뷰 pass 상호 blind** — `spec-reviewer.md`는 codex 존재를 통보받지 않음. 병합·stagnation 판정은
+   오직 merge_review.py(orchestrator-side).
+3. **결정론 연산은 스크립트 경계로** — codex_verdict 유도·보수적 병합·issue_id·원장 union·stagnation
+   스캔은 전부 merge_review.py가 소유(C2: prose 암산 금지 → 검증 가능 CLI 경계). SKILL.md는 스크립트를
+   호출하고 그 출력을 routing table에 투입할 뿐.
 4. **degrade 불변식** — codex 부재/실패면 combined = claude_verdict (fail-open으로 통과시키지도,
    infra 실패로 spurious block하지도 않음) + loud advisory.
 
@@ -155,13 +165,14 @@ reviewing-spec SKILL
 | 2 | `scripts/build_spec_codex_prompt.py` | 신규 | design-doc **경로만** 받아(inline 금지 — injection 안전) **6개 판단형 category**(placeholder/ambiguity/scope_creep/approaches_comparison/isolation/testing — handoff_incomplete는 기계적 검사라 codex 범위 밖) 체크리스트 임베드 프롬프트를 stdout. 각 finding에 `category` + `target_section`(anchor) + `severity`(**spec-distill vocab `block`\|`high`\|`medium` — qg의 CRITICAL/IMPORTANT/SUGGESTION 아님, §7 병합 vocab 일치**) + confidence/summary/proposed_fix를 fenced JSON으로 요청. `build_spec_codex_prompt.py <design_doc_file>`. deps: python3 |
 | 3 | `scripts/run_spec_codex_reviewer.sh` | 신규 | 독립 codex subprocess. `run_spec_codex_reviewer.sh <doc_path> <project_dir> <out_yaml>`. cd proj → mktemp scratch(C7 가드) → prompt build(#2) → `codex exec "$(cat prompt)" -C proj -s read-only -c model_reasoning_effort=medium --json < /dev/null` → exit capture → findings_to_yaml(#4). **discover-spec.sh AC 주입 없음**(C3). deps: codex, #2, #4 |
 | 4 | `scripts/codex_findings_to_yaml.py` | vendor+적응 | JSONL→findings YAML. emit 키셋에 **`category`, `target_section` 추가**(design vocab). 하드닝된 3단 fallback(auth/malformed/missing) + last-fenced-block 안티인젝션 유지. iface: stdin JSONL, `--stderr-file`, `--meta-override-*` |
-| 5 | `scripts/compute_issue_id.py` | 신규 | `(category, target_section) → sha256_short`. 두 리뷰어 이슈 모두에 orchestrator가 적용(중앙화). deps: python3 hashlib |
-| 6 | `skills/reviewing-spec/SKILL.md` | 편집 | Step 2.4(detect)/2.5(codex dispatch)/3.5(verdict 유도)/3.6(id+원장 병합)/3.7(보수적 병합) 추가. routing table·cap·stagnation 로직 불변. degrade advisory 추가 |
-| 7 | `agents/spec-reviewer.md` | 편집 | issue별 `issue_id` self-report 대신 `(category, target_section)` emit(orchestrator가 id 계산). "Issue ID 정의" 섹션을 compute_issue_id.py 참조로. codex 존재 blind 유지 |
-| 8 | `.claude-plugin/plugin.json` | 편집 | 0.19.3 → 0.20.0 |
-| 9 | `CHANGELOG.md` | 편집 | `## [0.20.0] — 2026-07-15` Added/Changed |
-| 10 | `README.md` | 편집 | prerequisites(codex CLI optional + graceful) + "Principles Instantiated"에 model-diversity + kill switch 표에 `DEVBREW_DISABLE_SPEC_DISTILL_CODEX` |
-| 11 | `tests/*` | 신규+편집 | §13 참조 |
+| 5 | `scripts/compute_issue_id.py` | 신규 | `(category, target_section) → sha256_short`. 두 리뷰어 이슈 모두에 적용(중앙화). CLI: `compute_issue_id.py <category> <target_section>` → stdout에 sha256_short 1줄(standalone-testable). merge_review.py(#6)가 issue별로 호출. deps: python3 hashlib |
+| 6 | `scripts/merge_review.py` | 신규 | **결정론 merge/ledger 엔진** — §7·§8의 모든 결정론 연산을 소유하는 단일 검증 가능 경계(C2). CLI: `merge_review.py --claude-verdict <v> --claude-issues <json> --codex-yaml <path> --history <state_path>`. 출력(stdout, 파싱 가능): `combined_verdict` + 갱신 `issue_history`(union raised_count) + `stagnation`(per-issue `raised_count>=3 AND dismissed_by_user==0` + round-level) + `codex_degraded`(bool)+advisory. 내부: (a) codex_verdict 유도(severity→verdict), (b) 보수적 병합(max precedence), (c) issue_id(compute_issue_id 호출), (d) 원장 union increment, (e) **통합-원장 stagnation 스캔**. deps: python3, #5 |
+| 7 | `skills/reviewing-spec/SKILL.md` | 편집 | Step 2.4(detect)/2.5(codex dispatch)/3.5(**merge_review.py 호출**) 추가. routing table은 merge_review 출력(combined_verdict + stagnation flags)을 투입 — **기존 "Stagnation detection" 절도 수정**: Claude self-report 단독이 아니라 merge_review의 통합-원장 스캔 결과를 escalate 조건으로 사용(codex-only 반복 이슈 포착, [6647ebfa] fail-open 봉쇄). cap(5) 로직 불변. degrade advisory 추가 |
+| 8 | `agents/spec-reviewer.md` | 편집 | issue별 `issue_id` self-report 대신 `(category, target_section)` emit(merge_review가 id 계산). "Issue ID 정의" 섹션을 compute_issue_id.py 참조로. codex 존재 blind 유지 |
+| 9 | `.claude-plugin/plugin.json` | 편집 | 0.19.3 → 0.20.0 |
+| 10 | `CHANGELOG.md` | 편집 | `## [0.20.0] — 2026-07-15` Added/Changed |
+| 11 | `README.md` | 편집 | prerequisites(codex CLI optional + graceful) + "Principles Instantiated"에 model-diversity + kill switch 표에 `DEVBREW_DISABLE_SPEC_DISTILL_CODEX` |
+| 12 | `tests/*` | 신규+편집 | §13 참조 |
 
 **vendor 결정 근거**: qg의 4개 codex 스크립트 중 `detect_codex.sh`·`codex_findings_to_yaml.py`만
 리뷰 대상과 무관해 재활용 가능. `build_codex_prompt.py`·`run_codex_reviewer.sh`는 diff+AC 모델이라
@@ -169,7 +180,11 @@ design-doc 전용으로 신규 작성. vendor는 cross-plugin silent coupling(NG
 
 ## 7. Verdict 유도 + 보수적 병합 (load-bearing)
 
-**(a) codex_verdict 결정론 유도** — orchestrator가 codex YAML을 읽고:
+> 이 절의 모든 결정론 연산((a) 유도 + (b) 병합)은 **`merge_review.py`(§6 #6)가 소유**한다 —
+> SKILL.md 프로즈를 읽는 살아있는 세션의 암산이 아니라 검증 가능 CLI 경계(C2, [fc2ef911] 반영).
+> 아래 의사코드는 그 스크립트의 계약을 명세한다.
+
+**(a) codex_verdict 결정론 유도** — `merge_review.py`가 codex YAML을 읽고:
 
 ```
 if codex_available == false  OR  meta.codex_failed == true:
@@ -184,6 +199,14 @@ else:
 - **severity vocab**: codex 프롬프트(§6 #2)가 spec-reviewer.md와 동일한 `{block, high, medium}`을
   요청하므로 이 유도 규칙의 `{block, high}` 매칭이 성립. qg의 CRITICAL/IMPORTANT/SUGGESTION vocab을
   주입하지 않는다(vocab drift 방지).
+- **`block` 분기 = 의도된 defensive headroom (dead branch 아님, [98dbb215] 반영)**: codex 담당 6개
+  판단형 category의 persona-기본 심각도는 `{high, medium}`이라(spec-reviewer.md design checklist:
+  placeholder/ambiguity/isolation/testing=high, scope_creep/approaches_comparison=medium; block은
+  handoff_incomplete 전용=codex 범위 밖), 정상 흐름에서 codex가 `block`을 자연 발생시키지 않는다.
+  그럼에도 `{block, high}`에 `block`을 두는 것은 **codex가 스스로 어떤 finding을 critical로 판정해
+  `severity: block`을 emit할 경우 이를 존중(needs_revise)** 하기 위함이다 — codex의 독립 판단을
+  persona-기본 심각도로 상한 처리하지 않는다(model-diversity 취지). 향후 codex 범위에 block-severity
+  category가 추가돼도 무변경으로 동작. 이 headroom은 의도적이며 vocab 정합성 위반이 아니다.
 
 **(b) 보수적 병합** — precedence `needs_interview > needs_revise > approved`:
 
@@ -223,9 +246,22 @@ dismissed_by_user 는 출처 무관 (P17 — 사용자 기각은 codex 이슈에
 
 → per-issue stagnation(`raised_count >= 3 AND dismissed_by_user == 0`)이 codex 반복 이슈도 포착.
 
+**통합-원장 stagnation 스캔 (기존 트리거 교체 — [6647ebfa] fail-open 봉쇄)**: 현행 SKILL.md의
+"Stagnation detection" 절은 stagnation escalate를 **spec-reviewer(Claude)가 `Stagnation_signal:
+true`를 self-report할 때만** 발동한다. 그런데 blind-across-rounds(아래)로 Claude는 codex가 과거에
+올린 이슈를 못 보므로, **codex-only로 3회 이상 반복된 이슈에 대해 Claude는 Stagnation_signal을
+self-report할 근거가 없다** — Claude 시야에 그 이슈가 애초에 없으므로 반복도 인지 못 한다. Claude
+self-report 단독에 의존하면 G3의 핵심(codex 반복 이슈 escalate)이 조용히 무력화되는 fail-open이다.
+
+→ **수정**: `merge_review.py`가 매 라운드 **통합 원장 위에서 독립적으로** per-issue
+(`raised_count >= 3 AND dismissed_by_user == 0`) + round-level(새 issue_id 無 + 미해결 잔존)
+stagnation을 스캔해 `stagnation` flag를 emit한다. SKILL.md "Stagnation detection" 절은 이 flag를
+escalate 조건으로 사용하도록 수정된다(Claude self-report는 보조 신호로 남되 유일 트리거가 아님).
+이 통합-스캔 로직은 §6 #6·#7·§12 Files에 명시된다(설계-구현 연결 끊김 방지).
+
 **blind-across-rounds**: 통합 원장은 orchestrator-side 상태. 각 리뷰어에게는 **same-origin
-history만** 전달(Claude는 codex 과거 findings를 못 봄). stagnation 판정은 orchestrator가 통합 원장
-위에서 수행. "blind"는 리뷰 pass 수준 불변식이고 원장은 orchestrator 상태 — 양립(NG6).
+history만** 전달(Claude는 codex 과거 findings를 못 봄). stagnation 판정은 merge_review.py가 통합
+원장 위에서 수행. "blind"는 리뷰 pass 수준 불변식이고 원장은 orchestrator 상태 — 양립(NG6).
 
 ## 9. Error Handling & Degradation
 
@@ -283,16 +319,26 @@ fail-open(조용히 통과)도 fail-closed(infra 실패로 spurious block)도 �
   auth/malformed/missing 3단 fallback + last-fenced-block 선택을 보존한다.
 - **AC8**: `compute_issue_id.py`가 결정론 — 동일 `(category, target_section)`는 동일 id, 다른
   section은 다른 id.
-- **AC9**: `reviewing-spec`가 codex needs_revise + claude approved를 combined=needs_revise로
-  병합한다(보수적 precedence 표 전 행 검증).
-- **AC10**: codex 실패(meta.codex_failed=true) 시 combined=claude_verdict + loud advisory —
-  pass도 block도 아님.
-- **AC11**: 원장 병합이 라운드당 issue_id별 raised_count를 1회만 증가시킨다(두 리뷰어 동시 flag가
-  2배로 세지 않음).
+- **AC9**: `merge_review.py`가 codex needs_revise + claude approved를 combined=needs_revise로
+  병합한다(보수적 precedence 표 전 행 — 스크립트에 대한 behavioral 테스트로 검증).
+- **AC10**: codex 실패(meta.codex_failed=true) 또는 부재 시 `merge_review.py`가
+  combined=claude_verdict + `codex_degraded=true` + advisory를 emit — pass도 block도 아님.
+- **AC11**: `merge_review.py`의 원장 union이 라운드당 issue_id별 raised_count를 1회만 증가시킨다(두
+  리뷰어 동시 flag가 2배로 세지 않음).
 - **AC12**: 각 리뷰어는 same-origin history만 전달받는다(Claude가 codex 과거 findings를 안 봄 —
   reviewing-spec dispatch 프롬프트 검증).
 - **AC13**: plugin.json=0.20.0 + CHANGELOG `## [0.20.0]` + README kill switch 표에
   `DEVBREW_DISABLE_SPEC_DISTILL_CODEX` 존재(test_readme_sync 통과).
+- **AC14 (통합-원장 stagnation — [6647ebfa] 봉쇄)**: `merge_review.py`가 **codex-only로 3회 이상
+  반복된 issue_id**(Claude가 한 번도 안 올림, dismissed_by_user==0)에 대해 통합 원장 스캔으로
+  `stagnation` flag를 emit한다 — Claude의 Stagnation_signal self-report 없이도. (fixture: prior
+  history에 codex-origin id raised_count=2 → 이번 라운드 codex 재-raise → stagnation=true 검증.)
+- **AC15 (kill-switch 상호작용)**: `DEVBREW_DISABLE_SPEC_DISTILL=1`(전역)이 켜지면 codex 경로 진입
+  자체가 없다(detect/dispatch 미실행). `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1`은 codex만 skip하고
+  Claude 리뷰는 정상 — 둘의 독립성을 검증.
+- **AC16 ('block' headroom)**: `merge_review.py`가 codex finding `severity: block`을 emit받으면
+  codex_verdict=needs_revise로 존중한다(정상 6-category에서 자연 발생 안 하나 codex 자기-escalation
+  존중 — dead branch 아님, [98dbb215]).
 
 ## 12. Files to Modify
 
@@ -302,23 +348,31 @@ fail-open(조용히 통과)도 fail-closed(infra 실패로 spurious block)도 �
 - `plugins/spec-distill/scripts/run_spec_codex_reviewer.sh`
 - `plugins/spec-distill/scripts/codex_findings_to_yaml.py` (vendor+적응)
 - `plugins/spec-distill/scripts/compute_issue_id.py`
+- `plugins/spec-distill/scripts/merge_review.py` (**결정론 merge/ledger 엔진 — §6 #6·§7·§8**)
 - `plugins/spec-distill/tests/test_detect_codex.sh`
 - `plugins/spec-distill/tests/test_build_spec_codex_prompt.sh`
 - `plugins/spec-distill/tests/test_codex_findings_to_yaml.py`
 - `plugins/spec-distill/tests/test_compute_issue_id.py`
-- `plugins/spec-distill/tests/test_reviewing_spec_codex_merge.sh`
+- `plugins/spec-distill/tests/test_merge_review.py` (**behavioral — 병합 precedence + degrade + union 1회 + 통합-원장 stagnation 스캔 + block headroom, AC9–11·14·16**)
+- `plugins/spec-distill/tests/test_reviewing_spec_codex_merge.sh` (**구조적 grep-invariant — SKILL.md가 merge_review 출력을 routing table + Stagnation detection 절에 배선했는지**)
 - `plugins/spec-distill/tests/mocks/mock-codex-valid-json.sh`
 - `plugins/spec-distill/tests/mocks/mock-codex-exit1.sh`
 - `plugins/spec-distill/tests/mocks/mock-codex-auth-stderr.sh`
 - `plugins/spec-distill/tests/mocks/mock-codex-bad-json.sh`
 
 **편집**:
-- `plugins/spec-distill/skills/reviewing-spec/SKILL.md` (Step 2.4/2.5/3.5/3.6/3.7 + degrade advisory)
-- `plugins/spec-distill/agents/spec-reviewer.md` ((category, target_section) emit + Issue ID 섹션)
+- `plugins/spec-distill/skills/reviewing-spec/SKILL.md` (Step 2.4/2.5/3.5 merge_review 호출 + **기존 "Stagnation detection" 절 수정**(통합-원장 스캔 flag를 escalate 조건으로) + degrade advisory)
+- `plugins/spec-distill/agents/spec-reviewer.md` ((category, target_section) emit + Issue ID 섹션 → compute_issue_id 참조)
 - `plugins/spec-distill/.claude-plugin/plugin.json` (0.20.0)
 - `plugins/spec-distill/CHANGELOG.md`
 - `plugins/spec-distill/README.md`
 - `plugins/spec-distill/tests/test_readme_sync.sh` (codex prerequisites/kill switch 반영)
+
+**계약 변경 근거 (audit 흔적, advisory)**: `agents/spec-reviewer.md`의 output 계약 변경(issue별
+`issue_id` self-report 제거 → `(category, target_section)` emit)은 **현재 리포에 이 계약을 lock하는
+기존 회귀 테스트가 없다**(grep 확인). 변경 자체는 안전하나, 이 사실을 여기 남겨 향후 audit에서 "왜
+회귀 없이 바뀌었나" 재조사를 줄인다. 신규 `test_reviewing_spec_codex_merge.sh`가 새 계약(merge_review
+배선)을 lock한다.
 
 ## 13. Verification Plan
 
@@ -328,11 +382,19 @@ fail-open(조용히 통과)도 fail-closed(infra 실패로 spurious block)도 �
     injection 안전. **body-unique 문구를 섹션 윈도우서 grep**(header-satisfiable 함정 회피).
   - `test_compute_issue_id.py` — 결정론 + collision + 다른 section 구분.
   - `test_codex_findings_to_yaml.py` — `category`/`target_section` 키 + fallback 3단 + 안티인젝션.
-  - `test_reviewing_spec_codex_merge.sh` — precedence 표 전 행 + degrade=claude + 원장 union
-    1회 증가 + blind-across-rounds.
+  - `test_merge_review.py` (**behavioral — 실행 코드를 exercise**) — precedence 표 전 행 +
+    degrade=claude(codex 실패/부재) + 원장 union 1회 증가 + **통합-원장 stagnation 스캔**(codex-only
+    3회 반복 → stagnation=true, AC14) + block headroom(AC16). fixture로 codex YAML + prior
+    history 주입, stdout 파싱 검증.
+  - `test_reviewing_spec_codex_merge.sh` (**구조적 grep-invariant — SKILL.md 텍스트**) —
+    SKILL.md가 (i) merge_review.py를 호출하고, (ii) 그 `combined_verdict`를 routing table에,
+    (iii) `stagnation` flag를 "Stagnation detection" 절 escalate 조건에 배선했는지. 기존
+    `test_reviewing_spec_design_routing.sh`·`test_rereview_cap_consistency.sh` 선례와 동일 패턴.
+    **body-unique 문구를 섹션 윈도우서 grep + mutation으로 이빨 증명**(header-satisfiable 회피).
   - `test_readme_sync.sh` — kill switch/prerequisites 동기화.
 - **수동 e2e** (writing-plans 이후 구현 완료 시): codex 설치 환경에서 실제 design doc에
-  `reviewing-spec` 실행 → codex 병렬 dispatch 확인 → codex block이 approved를 뒤집는지 관찰 →
+  `reviewing-spec` 실행 → codex 독립 리뷰 완료·병합 확인 → codex block이 Claude approved를 뒤집는지
+  관찰 → 같은 codex 이슈를 3회 미해결로 반복 시 통합-원장 stagnation escalate 관찰(AC14 e2e) →
   codex kill switch로 degrade advisory 관찰.
 - **degradation 확인**: `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1`로 skip advisory, codex 미설치
   환경에서 not_installed degrade.
@@ -392,6 +454,12 @@ degrade. 접근법 A(전용 design-doc 경로 + detect_codex vendor)로 확정 �
 - codex는 needs_interview 트리거 안 함(approved↔needs_revise만) — 확정.
 - vendor 전략: `detect_codex.sh`+`codex_findings_to_yaml.py`만 재활용(리뷰 대상 무관),
   `build_*`/`run_*`는 design-doc 전용 신규 — 확정.
+- **결정론 merge/ledger 엔진 `merge_review.py`** (round-1 리뷰 반영) — verdict 유도·보수적 병합·
+  원장 union·**통합-원장 stagnation 스캔**을 전부 소유하는 단일 검증 가능 CLI 경계. SKILL.md 프로즈
+  암산이 아님(C2). 기존 SKILL.md "Stagnation detection" 절은 Claude self-report 단독 → merge_review
+  통합-스캔 flag로 교체(codex-only 반복 이슈 escalate; self-report는 보조 신호) — 확정.
+- codex severity vocab = `{block, high, medium}`(qg CRITICAL/IMPORTANT/SUGGESTION 아님); `block`
+  분기는 codex 자기-escalation 존중용 의도된 headroom(dead branch 아님) — 확정.
 
 **Deferred to plan** (writing-plans에서 결정):
 - OQ1(line 키 유지 여부), OQ2(codex reasoning effort medium vs 상향).
