@@ -3,7 +3,7 @@ name: spec-distill-codex-coreviewer
 type: design-doc
 created_at: 2026-07-15
 revised_at: 2026-07-15
-status: draft (review round 3 반영 — Claude-side 안티인젝션 sentinel fence + claude_degraded + C8 verbatim; fc2ef911 해소 확인)
+status: draft (review round 4 반영 — verdict 회수 계층: Status 라인 독립 추출 + both-degraded fail-safe; fc2ef911 해소 확인)
 approach: "A — 전용 design-doc codex 경로 + detect_codex vendor"
 plugin: spec-distill
 version_bump: "0.19.3 → 0.20.0 (minor — 새 review surface)"
@@ -175,9 +175,9 @@ reviewing-spec SKILL
 | 3 | `scripts/run_spec_codex_reviewer.sh` | 신규 | 독립 codex subprocess. `run_spec_codex_reviewer.sh <doc_path> <project_dir> <out_yaml>`. cd proj → mktemp scratch(C7 가드) → prompt build(#2) → `codex exec "$(cat prompt)" -C proj -s read-only -c model_reasoning_effort=medium --json < /dev/null` → exit capture → findings_to_yaml(#4). **discover-spec.sh AC 주입 없음**(C3). deps: codex, #2, #4 |
 | 4 | `scripts/codex_findings_to_yaml.py` | vendor+적응 | JSONL→findings YAML. emit 키셋에 **`category`, `target_section` 추가**(design vocab). 하드닝된 3단 fallback(auth/malformed/missing) + last-fenced-block 안티인젝션 유지. iface: stdin JSONL, `--stderr-file`, `--meta-override-*` |
 | 5 | `scripts/compute_issue_id.py` | 신규 | `(category, target_section) → sha256_short`. 두 리뷰어 이슈 모두에 적용(중앙화). CLI: `compute_issue_id.py <category> <target_section>` → stdout에 sha256_short 1줄(standalone-testable). merge_review.py(#6)가 issue별로 호출. deps: python3 hashlib |
-| 6 | `scripts/merge_review.py` | 신규 | **결정론 merge/ledger 엔진** — §7·§8의 모든 결정론 연산을 소유하는 단일 검증 가능 경계(C2). CLI: `merge_review.py --claude-output <path> --codex-yaml <path> --history <state_path>`. **양쪽 리뷰어 출력을 스크립트가 결정론 파싱**(LLM 전사 없음, [fc2ef911] 봉쇄), **codex 파서와 진짜 대칭인 하드닝**([bc365411]): (i) Claude 쪽은 spec-reviewer가 emit한 **sentinel-fenced block**(info-string ` ```spec-review-issues `, #8)에서 verdict + issue별 `(category, target_section, severity, message)`를 파싱 — **리뷰 대상 design doc이 자체 fenced block을 다수 포함**하므로(예: ```yaml frontmatter), sentinel 없는 임의 fence는 무시하고 **sentinel 블록만, 그중 마지막 것**을 선택(codex `last-fenced-block` 안티인젝션과 대칭 — 에코/인젝션된 블록 방어); (ii) codex 쪽은 `codex_findings_to_yaml.py`(#4) 출력을 파싱. collision-sensitive 값이 어느 쪽도 prose 암산을 거치지 않음. Claude block 파싱 실패/부재 시 `claude_degraded=true` + loud advisory + Claude stated-verdict 존중 + 그 라운드 issue 원장 skip(§9 매트릭스 행, codex fallback 3단과 대칭). 출력(stdout, 파싱 가능): `combined_verdict` + 갱신 `issue_history`(union raised_count) + `stagnation`(per-issue `raised_count>=3 AND dismissed_by_user==0` + round-level) + `codex_degraded`(bool) + `claude_degraded`(bool) + advisory. 내부: (a) 양쪽 파싱(sentinel 선택), (b) codex_verdict 유도(severity→verdict), (c) 보수적 병합(max precedence), (d) issue_id(compute_issue_id 호출), (e) 원장 union increment, (f) **통합-원장 stagnation 스캔**. deps: python3, #5 |
+| 6 | `scripts/merge_review.py` | 신규 | **결정론 merge/ledger 엔진** — §7·§8의 모든 결정론 연산을 소유하는 단일 검증 가능 경계(C2). CLI: `merge_review.py --claude-output <path> --codex-yaml <path> --history <state_path>`. **양쪽 리뷰어 출력을 스크립트가 결정론 파싱**(LLM 전사 없음, [fc2ef911] 봉쇄), **codex 파서와 진짜 대칭인 하드닝**([bc365411]): **verdict와 issue list를 분리 추출**(#8): (i-a) **verdict** ← spec-reviewer 출력의 top-level `**Status:** <verdict>` 라인 정규식(sentinel block과 독립 — block이 죽어도 회수 가능); (i-b) **issue list** ← **sentinel-fenced block**(` ```spec-review-issues `, #8)에서 issue별 `(category, target_section, severity, message)` 파싱 — **리뷰 대상 design doc이 자체 fenced block을 다수 포함**하므로(예: ```yaml frontmatter), sentinel 없는 임의 fence는 무시하고 **sentinel 블록만, 그중 마지막 것**을 선택(codex `last-fenced-block` 안티인젝션과 대칭 — 에코/인젝션된 블록 방어); (ii) codex 쪽은 `codex_findings_to_yaml.py`(#4) 출력을 파싱. collision-sensitive 값이 어느 쪽도 prose 암산을 거치지 않음. **verdict 회수 계층(결정론, §9 매트릭스 근거)**: 1) sentinel block OK → verdict=(i-a), issues=(i-b); 2) sentinel block 부재/malformed → `claude_degraded=true` + verdict는 여전히 (i-a)에서 회수 + 그 라운드 Claude issue 원장 skip + advisory; 3) (i-a) `**Status:**` 라인마저 부재/malformed → `claude_verdict_unrecoverable=true`: codex verdict 있으면 combined=codex_verdict 단독 + advisory; 4) **양쪽 다 회수 불가**(claude verdict 불능 AND codex_degraded/unavailable) → combined=`needs_revise` **fail-safe(비-approve)** + loud "review indeterminate" advisory + 원장 미갱신(§9 both-degraded 행). 출력(**stdout YAML** — 형제 스크립트 #1/#4와 일관): `combined_verdict` + 갱신 `issue_history`(union raised_count) + `stagnation`(per-issue `raised_count>=3 AND dismissed_by_user==0` + round-level) + `codex_degraded`(bool) + `claude_degraded`(bool) + `claude_verdict_unrecoverable`(bool) + advisory. 내부: (a) 양쪽 파싱(verdict/issue 분리 + sentinel 선택), (b) codex_verdict 유도(severity→verdict), (c) 보수적 병합(max precedence)/degrade 계층, (d) issue_id(compute_issue_id 호출), (e) 원장 union increment, (f) **통합-원장 stagnation 스캔**. deps: python3, #5 |
 | 7 | `skills/reviewing-spec/SKILL.md` | 편집 | ⟦detect⟧/⟦review-codex⟧/⟦merge⟧ 단계 추가(**merge_review.py 호출**). routing table은 merge_review 출력(combined_verdict + stagnation flags)을 투입 — **기존 "Stagnation detection" 절도 수정**: Claude self-report 단독이 아니라 merge_review의 통합-원장 스캔 결과를 escalate 조건으로 사용(codex-only 반복 이슈 포착, [6647ebfa] fail-open 봉쇄). cap(5) 로직 불변. degrade advisory 추가 |
-| 8 | `agents/spec-reviewer.md` | 편집 | issue를 **sentinel-fenced block**(info-string ` ```spec-review-issues `, YAML body)으로 emit — issue별 `category` + `target_section` + `severity` + `message`, 그리고 `verdict`. sentinel info-string은 리뷰 대상 doc의 일반 ```yaml/```json fence와 구분돼 merge_review가 안티인젝션 선택 가능([bc365411]). issue_id self-report 제거(merge_review가 compute_issue_id로 계산). 사람 가독 요약은 sentinel 블록 **밖**에 병기 가능(파서는 sentinel 블록만 읽음). "Issue ID 정의" 섹션을 compute_issue_id.py 참조로. codex 존재 blind 유지 |
+| 8 | `agents/spec-reviewer.md` | 편집 | **두 산출물을 emit(verdict와 issue list를 분리, [bc365411] spirit 봉쇄)**: (A) **top-level `**Status:** <verdict>` 라인**(기존 포맷 유지 — verdict의 정본 소스, sentinel block과 독립) + (B) **sentinel-fenced block**(info-string ` ```spec-review-issues `, YAML body)으로 issue list — issue별 `category`/`target_section`/`severity`/`message`. sentinel info-string은 리뷰 대상 doc의 일반 ```yaml/```json fence와 구분돼 merge_review가 안티인젝션 선택 가능. issue_id self-report 제거(merge_review가 compute_issue_id로 계산). **verdict는 (A) 라인에서, issue list는 (B) 블록에서 독립 추출** — sentinel block이 malformed여도 verdict는 (A)에서 회수 가능. 사람 가독 요약은 두 산출물 밖에 병기 가능. "Issue ID 정의" 섹션을 compute_issue_id.py 참조로. codex 존재 blind 유지 |
 | 9 | `.claude-plugin/plugin.json` | 편집 | 0.19.3 → 0.20.0 |
 | 10 | `CHANGELOG.md` | 편집 | `## [0.20.0] — 2026-07-15` Added/Changed |
 | 11 | `README.md` | 편집 | prerequisites(codex CLI optional + graceful) + "Principles Instantiated"에 model-diversity + kill switch 표에 `DEVBREW_DISABLE_SPEC_DISTILL_CODEX` |
@@ -290,7 +290,9 @@ history만** 전달(Claude는 codex 과거 findings를 못 봄). stagnation 판�
 | codex 실행됐으나 exit≠0 / malformed / auth-in-stderr | meta.codex_failed=true | **degrade to claude, loud advisory** (block 아님, silent pass 아님) |
 | codex OK, findings=[] | codex_failed=false | codex_verdict=approved |
 | codex OK, block/high 있음 | codex_failed=false | codex_verdict=needs_revise |
-| **Claude sentinel block 부재/malformed** ([bc365411]) | `claude_degraded=true` | **Claude stated-verdict 존중 + 그 라운드 Claude issue 원장 skip + loud advisory** (codex 병합은 정상 진행; block도 silent pass도 아님) |
+| **Claude sentinel block 부재/malformed, `**Status:**` 라인은 OK** ([bc365411]) | `claude_degraded=true` | **verdict를 `**Status:**` 라인에서 회수 + 그 라운드 Claude issue 원장 skip + loud advisory** (codex 병합 정상; block도 silent pass도 아님) |
+| **Claude `**Status:**` 라인마저 부재/malformed, codex는 OK** | `claude_verdict_unrecoverable=true` | combined=codex_verdict 단독 + loud advisory (원장은 codex issue만) |
+| **양쪽 다 회수 불가** (claude verdict 불능 AND codex_degraded/unavailable) | `claude_verdict_unrecoverable=true` + `codex_degraded`/unavailable | combined=`needs_revise` **fail-safe(비-approve)** + loud "review indeterminate" advisory + 원장 미갱신 (fail-open으로 approve 금지, crash 금지) |
 
 **핵심 불변식**: codex 인프라 실패는 Claude-only로 degrade + reason 명시 loud advisory —
 fail-open(조용히 통과)도 fail-closed(infra 실패로 spurious block)도 금지.
@@ -342,11 +344,15 @@ fail-open(조용히 통과)도 fail-closed(infra 실패로 spurious block)도 �
   sentinel-fenced block)과 `--codex-yaml` **양쪽을 스크립트로 파싱**해 issue별 `(category, target_section)`을
   추출한다 — 어느 쪽 값도 SKILL.md prose의 LLM 전사를 거치지 않는다(codex 파서 #4와 대칭). fixture:
   sentinel block에서 파싱한 category/target_section이 compute_issue_id 입력과 byte-identical.
-- **AC9c (Claude-side 안티인젝션 + degrade 대칭 — [bc365411])**: (i) `--claude-output`이 sentinel
-  없는 일반 ```yaml/```json fence를 **다수 포함**해도(리뷰 대상 doc 에코 fixture) merge_review는
-  ` ```spec-review-issues ` sentinel 블록만, **마지막 것**을 선택한다(에코/인젝션 방어, codex
-  last-fenced-block과 대칭). (ii) sentinel block 부재/malformed 시 `claude_degraded=true` 출력 +
-  Claude stated-verdict 존중 + 그 라운드 Claude issue 원장 skip(§9 매트릭스 행). codex 병합은 정상.
+- **AC9c (Claude-side 안티인젝션 + degrade 계층 — [bc365411] letter+spirit)**: (i) `--claude-output`이
+  sentinel 없는 일반 ```yaml/```json fence를 **다수 포함**해도(리뷰 대상 doc 에코 fixture)
+  merge_review는 ` ```spec-review-issues ` sentinel 블록만, **마지막 것**을 선택한다(에코/인젝션 방어,
+  codex last-fenced-block과 대칭). (ii) **verdict는 issue-block과 독립 추출**(top-level `**Status:**`
+  라인) — sentinel block 부재/malformed(`claude_degraded=true`)여도 verdict를 `**Status:**`에서
+  회수하고 그 라운드 Claude issue만 원장 skip. (iii) `**Status:**`마저 부재/malformed
+  (`claude_verdict_unrecoverable=true`) + codex OK → combined=codex_verdict 단독. (iv) **양쪽 회수
+  불가** → combined=`needs_revise` fail-safe(비-approve, crash·fail-open 금지) + "indeterminate"
+  advisory. fixture로 (i)~(iv) 각 분기 검증(§9 매트릭스 전 행).
 - **AC10**: codex 실패(meta.codex_failed=true) 또는 부재 시 `merge_review.py`가
   combined=claude_verdict + `codex_degraded=true` + advisory를 emit — pass도 block도 아님.
 - **AC11**: `merge_review.py`의 원장 union이 라운드당 issue_id별 raised_count를 1회만 증가시킨다(두
@@ -414,9 +420,11 @@ fail-open(조용히 통과)도 fail-closed(infra 실패로 spurious block)도 �
     3회 반복 → stagnation=true, AC14) + block headroom(AC16) + **대칭 결정론 파싱**(sentinel Claude
     block + codex YAML 양쪽에서 category/target_section 추출, compute_issue_id 입력 byte-identical,
     AC9b) + **안티인젝션**(sentinel 없는 ```yaml/```json fence 다수 포함 fixture에서 sentinel 마지막
-    블록만 선택, AC9c-i) + **Claude block 부재/malformed → `claude_degraded=true`+stated-verdict
-    존중+원장 skip**(AC9c-ii). fixture로 Claude output(sentinel block + 에코 fence) + codex YAML +
-    prior history 주입, stdout 파싱 검증.
+    블록만 선택, AC9c-i) + **verdict 회수 계층 4-분기**(AC9c ii~iv: sentinel OK / sentinel malformed→
+    `**Status:**` 회수+`claude_degraded` / `**Status:**`도 malformed→codex 단독+`claude_verdict_unrecoverable` /
+    양쪽 회수불가→`needs_revise` fail-safe+indeterminate advisory). fixture로 Claude output(sentinel
+    block + 에코 fence, 그리고 sentinel/Status 제거 변형) + codex YAML(정상/degraded) + prior history
+    주입, stdout YAML 파싱 검증.
   - `test_spec_reviewer_design_checklist.sh`(기존, 확장) — spec-reviewer가 issue를 **sentinel-fenced
     block**(` ```spec-review-issues `, category/target_section/severity/message + verdict)으로
     emit하는지 + issue_id self-report를 더는 강제하지 않는지(계약 변경 락).
@@ -425,7 +433,9 @@ fail-open(조용히 통과)도 fail-closed(infra 실패로 spurious block)도 �
     (iii) `stagnation` flag를 "Stagnation detection" 절 escalate 조건에 배선했는지. 추가로
     **AC12(blind-across-rounds)**: ⟦review-claude⟧ dispatch가 각 리뷰어에 same-origin history만
     전달(codex-origin 이슈를 Claude 프롬프트에 안 넣음); **AC15(전역 kill switch)**:
-    `DEVBREW_DISABLE_SPEC_DISTILL=1` 시 codex 경로(⟦detect⟧/⟦review-codex⟧) 미진입; **C8**:
+    `DEVBREW_DISABLE_SPEC_DISTILL=1` 시 codex 경로(⟦detect⟧/⟦review-codex⟧) 미진입 + **⟦review-claude⟧
+    dispatch가 어떤 codex-availability 조건문에도 중첩되지 않음**(codex kill switch가 Claude 리뷰를
+    막지 않음을 텍스트로 증명, AC15 나머지 절); **C8**:
     orchestrator가 spec-reviewer raw 출력을 `--claude-output`에 요약 없이 verbatim 저장 명시. 기존
     `test_reviewing_spec_design_routing.sh`·`test_rereview_cap_consistency.sh` 선례와 동일 패턴.
     **body-unique 문구를 섹션 윈도우서 grep + mutation으로 이빨 증명**(header-satisfiable 회피).
@@ -510,6 +520,11 @@ degrade. 접근법 A(전용 design-doc 경로 + detect_codex vendor)로 확정 �
   블록만·마지막 것을 선택(codex last-fenced-block 안티인젝션과 대칭). Claude 파싱 실패 시 named
   `claude_degraded` flag + §9 매트릭스 행. **C8**: orchestrator는 spec-reviewer raw 출력을
   `--claude-output`에 **verbatim** 저장(요약 금지) — 전사 재도입 방지 — 확정.
+- **verdict 회수 계층** (round-4 리뷰 반영, [bc365411] spirit) — verdict는 sentinel issue-block과
+  **독립**으로 top-level `**Status:**` 라인에서 추출. degrade 계층: sentinel malformed→Status에서
+  회수(claude_degraded) → Status도 malformed→codex 단독(claude_verdict_unrecoverable) → 양쪽 회수불가
+  →`needs_revise` fail-safe(비-approve, crash·fail-open 금지)+indeterminate advisory. §9 매트릭스가
+  전 분기 명세. merge_review stdout=YAML(형제 스크립트 일관) — 확정.
 
 **Deferred to plan** (writing-plans에서 결정):
 - OQ1(line 키 유지 여부), OQ2(codex reasoning effort medium vs 상향).
