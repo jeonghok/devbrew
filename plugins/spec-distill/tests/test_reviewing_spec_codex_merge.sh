@@ -45,4 +45,29 @@ grep -qE 'DEVBREW_DISABLE_SPEC_DISTILL\b' "$SKILL" \
 grep -qE 'degraded|degrade|model diversity 없음' "$SKILL" \
   && note PASS "degrade advisory present" || note FAIL "degrade advisory missing"
 
+# (9) N1: $LEDGER_JSON (merge_review's --history ledger) must live in the
+#     continuity (interview-UUID) state dir, NOT the harness-sid dir — a
+#     harness-sid ledger would reset re-review cap/stagnation continuity
+#     across /compact. Section-scoped: window is the ⟦merge⟧ region only
+#     (merge_review.py invocation through the $LEDGER_JSON placement
+#     sentence), so this doesn't false-positive on unrelated harness-sid
+#     mentions elsewhere in the file (e.g. Step 1's hook-facing trio).
+awk '/⟦merge⟧/{f=1} /blind-across-rounds/{if(f) exit} f{print}' "$SKILL" > /tmp/sd_merge_$$
+LEDGER_LINE="$(grep -E 'LEDGER_JSON.*둔다' /tmp/sd_merge_$$ | head -1)"
+if [[ -z "$LEDGER_LINE" ]]; then
+  note FAIL "N1: \$LEDGER_JSON placement sentence not found in ⟦merge⟧ window"
+else
+  # Cut at the placement verb "에 둔다(" — keeps only the affirmative
+  # "$LEDGER_JSON is placed in X" clause, dropping the trailing parenthetical
+  # (which legitimately mentions harness-sid only to say "collapse 금지").
+  PREFIX="$(printf '%s' "$LEDGER_LINE" | sed 's/에 둔다(.*//')"
+  if echo "$PREFIX" | grep -qE 'continuity|interview-UUID' \
+     && ! echo "$PREFIX" | grep -qiE 'harness[-_]?sid'; then
+    note PASS "N1: \$LEDGER_JSON documented under continuity(interview-UUID) dir, not harness-sid"
+  else
+    note FAIL "N1: \$LEDGER_JSON continuity-location invariant missing or harness-sid drift"
+  fi
+fi
+rm -f /tmp/sd_merge_$$
+
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"; [[ $fail -eq 0 ]]

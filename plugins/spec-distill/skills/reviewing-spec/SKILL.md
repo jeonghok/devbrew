@@ -81,7 +81,7 @@ python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/review_lock.py" s
 
 5. **blind-across-rounds (AC12, NG6)**: 각 리뷰어에게는 **same-origin history만** 전달한다 — Step 2의 spec-reviewer 프롬프트에는 codex 과거 findings를 넣지 않는다(두 리뷰 pass는 상호 blind). 통합 판정은 merge_review(orchestrator-side)만 수행한다.
 
-3. **Parse merge_review output** — `combined_verdict`, `stagnation.per_issue`, `stagnation.round_level`, degrade flags, advisory. (Claude raw 출력의 Status/Recommendations는 사람 표시용으로만 사용.)
+3. **Parse merge_review output** — `combined_verdict`, `stagnation.per_issue`, `stagnation.round_level`, degrade flags, advisory. (Claude raw 출력 중 Status/Recommendations **prose**만 사람 표시용으로 사용 — verdict는 merge_review의 `combined_verdict`에서 온다. `Stagnation_signal`은 이 display-only 범위 밖이다: 아래 Re-review cap 항목 2 / "Stagnation detection" 절의 **보조 OR-trigger**로 계속 escalate 판정에 투입된다 — display-only 취급하지 말 것.)
 4. **Apply routing table** — `combined_verdict`를 그대로 표에 투입한다(표 자체는 불변).
 5. **Ledger는 merge_review가 소유** — `rereview_count += 1`은 기존 continuity 메커니즘대로 갱신. `issue_history`는 merge_review가 `$LEDGER_JSON`에 기록하므로 세션이 손으로 갱신하지 않는다(id/count 전사 금지). 세션은 merge_review가 emit한 `issue_history`를 표시만 한다.
 
@@ -103,7 +103,7 @@ python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/review_lock.py" s
 두 조건 중 *하나라도* 충족 시 자동으로 [5] Human Gate로 forced escalate, 전체 `issue_history` 첨부:
 
 1. **Hard cap**: `rereview_count >= 5` 도달 시 (즉 6번째 reviewer dispatch 시도 시). 기존 v0.2.0의 cap=3을 v0.3.0에서 cap=5로 상향 — multi-round drift detection을 위한 budget 확장.
-2. **Round-level stagnation early-exit**: spec-reviewer가 `verdict: needs_revise` + `Stagnation_signal: true` 를 반환한 경우, `rereview_count`와 무관하게 즉시 [5] Human Gate로 escalate. 이는 *수렴 실패 조기 감지* — issue가 새로 발견되지 않고 같은 항목이 반복 raise되는 상황을 한 라운드 안에 끝낸다.
+2. **Round-level stagnation early-exit**: `rereview_count`와 무관하게 즉시 [5] Human Gate로 escalate. **Primary trigger**는 merge_review.py의 통합-원장 스캔이 emit하는 `stagnation.round_level == true`(상세는 아래 "Stagnation detection" 절) — blind-across-rounds 때문에 Claude 단독 self-report로는 codex-only로 반복된 이슈를 못 잡으므로, 이 통합 스캔이 round-level stagnation의 주 판정 경로다. spec-reviewer가 `verdict: needs_revise` + `Stagnation_signal: true`를 반환하는 경우도 **보조 OR-trigger**로 함께 escalate에 기여한다(단독 primary 트리거는 아님 — merge_review 미가용/degraded 상황에서도 fallback으로 작동). 이는 *수렴 실패 조기 감지* — issue가 새로 발견되지 않고 같은 항목이 반복 raise되는 상황을 한 라운드 안에 끝낸다.
 
 per-issue stagnation(`raised_count >= 3 AND dismissed_by_user == 0`)과 위 (2)의 round-level stagnation은 trigger가 다르다 — 둘 다 [5] Human Gate forced escalate로 수렴.
 
