@@ -18,9 +18,10 @@ description: >
   (docs/superpowers/specs/...-design.md) in the spec-distill flow. Hunts for
   unstated assumptions, placeholder/ambiguity, weak component isolation, missing
   approaches comparison, untestable verification, and handoff-incompleteness.
-  Output: Status / Issues / Recommendations / Stagnation_signal (superpowers
-  plan-document-reviewer format). Physically blocked from editing files (Law 2
-  frontmatter scoping). NOTE: the interview brief (docs/superpowers/interview/)
+  Output: **Status:** line + `spec-review-issues` sentinel JSON block
+  (category/target_section/severity/message) + Recommendations / Stagnation_signal
+  (superpowers plan-document-reviewer format). Physically blocked from editing
+  files (Law 2 frontmatter scoping). NOTE: the interview brief (docs/superpowers/interview/)
   is NOT this agent's target — the brief is gated by the Law 1 5-ritual structural
   check (check_brief.py), not separated review (NG3). This agent reviews the
   design doc only.
@@ -104,7 +105,7 @@ description: >
 
 다른 카테고리(`missing_section`, `ambiguous_requirement` 등)는 영향 없음.
 
-design mode 결과에서도 위와 동일한 Output 형식 (Status / Issues / Recommendations / Stagnation_signal) 준수. spec mode와 동일한 `issue_id` 알고리즘 (`sha256_short(category + ":" + target_section)`). `affects_locked_decisions:` 필드는 design.md에 frontmatter `locked_decisions:`가 없으면 `[]` (빈 리스트, *반드시 emit*).
+design mode 결과에서도 위와 동일한 Output 형식 (`**Status:**` 라인 + `spec-review-issues` sentinel JSON block + Recommendations / Stagnation_signal) 준수. issue_id는 spec mode와 동일하게 `scripts/compute_issue_id.py`가 `(category, target_section)`으로부터 결정론적으로 계산 — 리뷰어는 self-report하지 않는다. `affects_locked_decisions:` 필드는 design.md에 frontmatter `locked_decisions:`가 없으면 `[]` (빈 리스트, *반드시 emit*).
 
 ### Locked decisions 매핑 (G3, AC2)
 
@@ -119,11 +120,9 @@ design mode 결과에서도 위와 동일한 Output 형식 (Status / Issues / Re
 
 기존 v0.1.x spec.md (frontmatter `locked_decisions` 키 부재) 입력 시: empty list로 in-memory promote → 모든 issue가 `affects_locked_decisions: []` (AC7 backwards-compat).
 
-## Issue ID 정의 (rephrase dodge 방지)
+## Issue ID (중앙화 — merge_review가 계산)
 
-```
-issue_id = sha256_short(category + ":" + target_section)
-```
+issue_id는 **당신이 계산하지 않는다**. 각 issue에 `(category, target_section)`만 구조적으로 emit하면(아래 sentinel block), orchestrator의 `scripts/compute_issue_id.py`가 그 두 필드로부터 결정론적 sha256 기반 id를 부여한다. LLM in-head 해싱은 신뢰 불가하므로 self-report하지 말 것 — collision integrity(두 리뷰어 corroboration + cross-round stagnation)는 중앙 helper만 보장한다.
 
 - Categories: 위 6개
 - Target section: spec.md markdown anchor (e.g., `#goals`, `#acceptance-criteria`)
@@ -134,23 +133,34 @@ issue_id = sha256_short(category + ":" + target_section)
 
 ## Output 형식 (이 형식을 정확히 준수, AC5)
 
+두 산출물을 분리 emit — verdict(정본)와 issue list를 독립적으로:
+
 ```markdown
 ## Spec Review (round N)
 
 **Status:** approved | needs_revise | needs_interview
 
-**Issues:**
-- [<issue_id>] [<#section>]: <category> — "<message>" — raised <N>x ⚠ unresolved (if applicable)
-  affects_locked_decisions: [LD<n>, LD<m>] | []
-- ...
-
-(`issue_id`는 `sha256_short(category + ":" + target_section)`. *반드시 emit*. `affects_locked_decisions:` 줄은 모든 issue 뒤에 indented (2 spaces) emit — 빈 리스트도 `[]`로 명시.)
+(사람 가독 요약을 여기 자유롭게 병기 가능.)
 
 **Recommendations (advisory):**
 - ...
 
 **Stagnation_signal:** true | false
 ```
+
+그리고 issue list는 **sentinel-fenced block**으로 (info-string은 정확히 `spec-review-issues`, body는 JSON):
+
+```spec-review-issues
+{"issues": [
+  {"category": "<6개 중 하나>", "target_section": "#anchor", "severity": "block|high|medium", "message": "<한 문장>"}
+]}
+```
+
+- verdict는 **위의 `**Status:**` 라인**이 정본 — sentinel block이 malformed여도 verdict는 Status에서 회수된다.
+- issue가 없으면 `{"issues": []}`를 sentinel block에 emit.
+- `category`는 design mode 6개(placeholder/ambiguity/scope_creep/approaches_comparison/isolation/testing) 중 하나. `severity` vocab은 `block|high|medium` (CRITICAL/IMPORTANT/SUGGESTION 아님).
+- sentinel block은 **하나만** emit하고, 리뷰 대상 doc의 ` ```yaml `/` ```json ` fence와 구별되게 반드시 info-string `spec-review-issues`를 쓴다. orchestrator는 마지막 sentinel block만 파싱한다(anti-injection).
+- `affects_locked_decisions:` 매핑(다음 섹션)은 orthogonal — 이 issue의 JSON schema와 독립적으로 계속 산출.
 
 ## verdict 규칙
 

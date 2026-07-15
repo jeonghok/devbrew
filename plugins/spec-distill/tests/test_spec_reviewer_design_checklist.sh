@@ -31,6 +31,35 @@ grep -q 'Spec Review (round N)' "$AGENT" \
   && note PASS "AC7: Output 형식 (round N + Stagnation_signal) preserved" \
   || note FAIL "Output format regression"
 
+# --- v0.20.0 co-reviewer contract: sentinel block + Status line + no issue_id self-report ---
+
+# (A) sentinel fence info-string documented (exact token).
+grep -q 'spec-review-issues' "$AGENT" \
+  && note PASS "v0.20.0: sentinel fence 'spec-review-issues' documented" \
+  || note FAIL "v0.20.0: sentinel fence token missing"
+
+# (B) sentinel block JSON keys required (body-unique phrasing, not header-satisfiable).
+for key in 'category' 'target_section' 'severity' 'message'; do
+  grep -q "$key" "$AGENT" && note PASS "v0.20.0: sentinel key '$key'" || note FAIL "v0.20.0: sentinel key '$key' missing"
+done
+
+# (C) top-level **Status:** line still the verdict source of truth.
+grep -qE '\*\*Status:\*\*' "$AGENT" \
+  && note PASS "v0.20.0: **Status:** verdict line preserved" \
+  || note FAIL "v0.20.0: **Status:** line removed"
+
+# (D) issue_id self-report REMOVED — reviewer must no longer be told to emit
+#     sha256_short itself (merge_review + compute_issue_id own it). Teeth: the
+#     old self-report instruction phrase must be gone from the Output contract.
+grep -q 'sha256_short(category' "$AGENT" \
+  && note FAIL "v0.20.0: issue_id self-report (sha256_short) still instructed" \
+  || note PASS "v0.20.0: issue_id self-report removed"
+
+# (E) compute_issue_id referenced as the id authority.
+grep -q 'compute_issue_id' "$AGENT" \
+  && note PASS "v0.20.0: compute_issue_id referenced" \
+  || note FAIL "v0.20.0: compute_issue_id reference missing"
+
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]
