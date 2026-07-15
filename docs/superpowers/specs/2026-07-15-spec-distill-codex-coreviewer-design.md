@@ -3,7 +3,7 @@ name: spec-distill-codex-coreviewer
 type: design-doc
 created_at: 2026-07-15
 revised_at: 2026-07-15
-status: draft (review round 4 반영 — verdict 회수 계층: Status 라인 독립 추출 + both-degraded fail-safe; fc2ef911 해소 확인)
+status: approved (review round 5 — bc365411 letter+spirit 해소 확인, block 없음; advisory 3건 writing-plans 픽업)
 approach: "A — 전용 design-doc codex 경로 + detect_codex vendor"
 plugin: spec-distill
 version_bump: "0.19.3 → 0.20.0 (minor — 새 review surface)"
@@ -233,7 +233,11 @@ combined_verdict = 가장 심각한 값 (claude_verdict, codex_verdict)
 | approved | needs_revise | **needs_revise** | codex가 approved를 뒤집음 (fail-open 포착 — 핵심 가치) |
 | needs_revise | approved | needs_revise | Claude가 이미 block |
 | needs_interview | approved | needs_interview | Claude의 의도축 판단이 이김 |
+| needs_interview | needs_revise | needs_interview | precedence 최상위(needs_interview) — Claude 의도축 우선 |
 | approved | approved | approved | 둘 다 clean → 통과 |
+
+(codex_verdict ∈ {approved, needs_revise}이므로 codex 열은 이 두 값만; combined은 항상 precedence
+`needs_interview > needs_revise > approved`의 max. merge_review 구현/테스트는 이 표를 truth-table로 전수.)
 
 **(c) FP backstop**: codex FP로 인한 과도 revise 루프는 기존 re-review cap(5) + round-level
 stagnation이 bound — 5회 도달 시 [5] Human Gate로 forced escalate(NG2).
@@ -472,6 +476,15 @@ fail-open(조용히 통과)도 fail-closed(infra 실패로 spurious block)도 �
   둘 다 emit(anchor는 issue_id용 필수, line은 optional 참조).
 - **OQ2**: codex `model_reasoning_effort`를 qg와 동일 `medium`으로 둘지, design-doc 리뷰에서
   상향할지. 잠정 `medium`(qg 패리티) — 구현 후 수동 e2e에서 재평가.
+- **OQ3 (round-5 advisory)**: top-level `**Status:**` 추출의 정확한 anchor regex. sentinel의
+  "last-fenced-block"과 대칭으로, `## Spec Review (round N)` 헤더 직후 라인에 anchor할지 vs 리터럴
+  `**Status:**` 첫/마지막 match를 쓸지. 잠정: `## Spec Review` 헤더 스코프 내 첫 `**Status:**` 라인
+  (Recommendations 섹션이 "Status" 단어를 에코해도 안전). writing-plans에서 정확한 regex 확정.
+- **OQ4 (round-5 advisory)**: `claude_degraded` 라운드(파싱 실패로 Claude issue 원장 skip)와
+  round-level stagnation 스캔("새 issue_id 無 + 미해결 잔존")의 상호작용. degraded 라운드와 genuinely-clean
+  라운드(모두 수정돼 새 이슈 없음)가 둘 다 "이번 라운드 새 Claude issue_id 無"로 보임. 잠정: **degraded
+  라운드는 round-level stagnation 판정에서 inconclusive**(reset도 confirm도 아님)로 처리 — 파싱 실패를
+  수렴 증거로 오독 금지. writing-plans에서 merge_review 로직에 명시.
 
 ## 16. Metadata
 
