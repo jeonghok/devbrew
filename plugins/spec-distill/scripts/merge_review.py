@@ -28,7 +28,7 @@ RANK = {"approved": 0, "needs_revise": 1, "needs_interview": 2}
 INV_RANK = {v: k for k, v in RANK.items()}
 CODEX_SEVERITY_REVISE = {"block", "high"}
 
-SENTINEL_RE = re.compile(r"```spec-review-issues[^\n]*\n(.*?)\n?```", re.DOTALL)
+SENTINEL_RE = re.compile(r"```spec-review-issues[ \t]*\n(.*?)\n?```", re.DOTALL)
 STATUS_RE = re.compile(
     r"^\*\*Status:\*\*\s*(approved|needs_revise|needs_interview)\b", re.MULTILINE
 )
@@ -39,17 +39,19 @@ SPEC_REVIEW_HEADER_RE = re.compile(r"^##\s+Spec Review\b", re.MULTILINE)
 def extract_claude_verdict(text: str) -> str | None:
     """OQ3: first **Status:** line at/after the '## Spec Review' header; if the
     header is absent, fall back to the first **Status:** line anywhere. Returns
-    None if no well-formed Status line exists (unrecoverable)."""
+    None if no well-formed Status line exists (unrecoverable).
+
+    No whole-text fallback when the header IS found but its scope has no valid
+    Status line: re-searching from position 0 in that case would let a
+    pre-header **Status:**-shaped line (echoed reviewed-doc content, a quoted
+    prior transcript, or spec-reviewer.md's own output-format docs) get
+    scavenged — a fail-open. Unrecoverable in that case is correct; the
+    both-degraded fail-safe (needs_revise) takes over downstream."""
     m = SPEC_REVIEW_HEADER_RE.search(text)
     scope = text[m.start():] if m else text
     sm = STATUS_RE.search(scope)
     if sm:
         return sm.group(1)
-    # header found but no Status inside its scope → try whole doc as last resort
-    if m:
-        sm = STATUS_RE.search(text)
-        if sm:
-            return sm.group(1)
     return None
 
 
@@ -269,8 +271,8 @@ def main() -> int:
 
     result = {
         "combined_verdict": combined,
-        "claude_verdict": claude_verdict if claude_verdict else None,
-        "codex_verdict": codex_verdict if codex_verdict else None,
+        "claude_verdict": claude_verdict,
+        "codex_verdict": codex_verdict,
         "codex_degraded": not codex_avail,
         "claude_degraded": claude_degraded,
         "claude_verdict_unrecoverable": claude_unrecoverable,
