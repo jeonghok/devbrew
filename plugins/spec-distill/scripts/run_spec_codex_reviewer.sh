@@ -21,6 +21,13 @@ if [[ -z "$OUTPUT_PATH" ]]; then
   echo "usage: run_spec_codex_reviewer.sh <doc_path> <project_dir> <output_yaml_path>" >&2
   exit 2
 fi
+
+# Absolutize relative DOC_PATH/OUTPUT_PATH against the invocation cwd BEFORE
+# any `cd "$PROJECT_DIR"` below — otherwise a relative path silently resolves
+# against project_dir instead (wrong-location write / spurious prompt_build_failed).
+[[ "$OUTPUT_PATH" = /* ]] || OUTPUT_PATH="$PWD/$OUTPUT_PATH"
+[[ "$DOC_PATH" = /* ]] || DOC_PATH="$PWD/$DOC_PATH"
+
 if [[ -z "$PROJECT_DIR" ]]; then
   echo 'findings: []' > "$OUTPUT_PATH"
   echo 'meta:' >> "$OUTPUT_PATH"; echo '  codex_failed: true' >> "$OUTPUT_PATH"
@@ -74,8 +81,17 @@ else
   OVERRIDE_REASON=""
 fi
 
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/codex_findings_to_yaml.py" \
-    --stderr-file "$STDERR_FILE" \
-    --meta-override-exit-code "$EXIT_CODE" \
-    --meta-override-reason "$OVERRIDE_REASON" \
-    < "$STDOUT_FILE" > "$OUTPUT_PATH"
+# Guarded like the build_spec_codex_prompt.py call above: under `set -e` this
+# final pipeline is otherwise unguarded — a python3/write failure here would
+# abort the script non-zero with NO fallback YAML, breaking the
+# always-exit-0/always-writes-YAML contract.
+if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/codex_findings_to_yaml.py" \
+       --stderr-file "$STDERR_FILE" \
+       --meta-override-exit-code "$EXIT_CODE" \
+       --meta-override-reason "$OVERRIDE_REASON" \
+       < "$STDOUT_FILE" > "$OUTPUT_PATH"; then
+  echo 'findings: []' > "$OUTPUT_PATH"
+  echo 'meta:' >> "$OUTPUT_PATH"; echo '  codex_failed: true' >> "$OUTPUT_PATH"
+  echo '  reason: yaml_conversion_failed' >> "$OUTPUT_PATH"
+  exit 0
+fi
