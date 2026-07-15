@@ -61,6 +61,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - **Law 2 (Writer/Reviewer Never Share a Pass) — infrastructure operability**: spec-reviewer agent의 writer/reviewer 물리 분리가 의미를 가지려면 reviewer dispatch가 Claude context에 *실제로* 도달해야 한다. v0.5.0의 dual-target output fix가 이 baseline을 보장. dispatch가 silent하게 lost되면 reviewer persona 분리 자체가 무의미.
 - **Law 3 (Compounding)** — spec.md 파일 자체가 named, versioned, diff-able artifact (P5). state.local.md 보존 (실패 시) → 디버깅 + future session 추적.
 - **Law 3 (Every Cycle Must Leave the System Smarter)**: v0.5.0 PR이 hook 코드 fix + `tests/test_hook_output_schema.py` 회귀 방지 test + CHANGELOG 명시 + design.md (아카이브됨: `git show pre-slim-archive-2026-07-09:docs/superpowers/specs/2026-05-17-spec-distill-hook-context-injection-design.md`) — 4-layer compounding 흔적. 같은 클래스의 silent-output mistake가 미래에 들어오면 CI에서 즉시 잡힘.
+- **Law 3 (Compounding) — model diversity (v0.20.0)** — codex 병렬 co-reviewer를 design-doc 리뷰에 추가. codex가 Claude persona가 반복해 놓치는 결함류(fail-open)를 잡으면 → `spec-reviewer.md` 체크리스트 편집(persona = 보안-민감 코드)이 compounding 이벤트. quality-gates codex 패턴의 실증 이력을 상속.
 - **AP2 approval-gate 구분 (v0.11.0)** — handoff 다음-단계 추천을 hook(텍스트 주입만 가능)이 아니라 reviewing-spec Phase 5의 `AskUserQuestion` proceed 게이트로 전달. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 polite-stop 봉쇄 장치 (철학 AP2 앵커). `approve_handoff.sh`(v0.15.0)는 approved 문서를 `suppressed_paths`에 기록(same-key pending strip 포함)하는 finalizer로, suppression을 working-tree 존재검사 *앞*에 수행해 dangling/상대경로 경우에도 누락되지 않게 한다. 대칭으로 Stop hook(`review-dispatch.py`)이 `suppressed_paths`를 존중 — 트리거(강제)와 억제(approve/cancel)가 모두 hook 권위 레이어에 존재(Law 2 대칭). 세션 dir 삭제는 SessionEnd/TTL-GC로 이관.
 - **Law 1 fail-safe + Law 2 (v0.18.0)** — `review_in_progress` 문서별 락이 subagent 경계 Stop 오발만 제거하고 리뷰 강제는 보존. 락 조회의 어떤 실패(부재/stale/파싱·import 예외)도 정상 dispatch로 fail(over-review > under-review). 락 set/clear/pause는 skill·스크립트가, 판정은 훅이 — writer가 자기 리뷰를 억제할 물리적 경로 없음(이 설계 자체가 물리 분리 리뷰어에게 4라운드에 걸쳐 실버그 다수를 잡혔다).
 
@@ -118,6 +119,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 ## Kill switches
 
 - `DEVBREW_DISABLE_SPEC_DISTILL=1` — plugin 전체 abort, state 보존.
+- `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1` (v0.20.0) — codex 병렬 co-review만 skip. Claude 리뷰는 정상 동작, combined = Claude verdict + loud degrade advisory. 전역 `DEVBREW_DISABLE_SPEC_DISTILL`과 독립.
 - `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` — UserPromptSubmit hook만 skip.
 - `DEVBREW_RHYTHM_GUARD_THRESHOLD=N` — Dialectic Rhythm Guard threshold (default 3).
 - `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (v0.3.0) — PostToolUse Layer 1 (structural check) 정상 동작, Layer 2 (`pending_review:` ledger 기록) skip. 비상시 reviewer dispatch cost 회피용.
@@ -138,6 +140,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - **Claude Code built-in `general-purpose` agent** — 항상 사용 가능 (별도 설치 불필요). `conducting-interview` skill의 C43 ambiguity path가 dispatch.
 - **`jq`** (CLI, recommended) — hook 스크립트가 stdin JSON payload 파싱과 `{"systemMessage": "..."}` JSON 출력에 사용. 없으면 regex fallback + loud warning (devbrew "loud-logging graceful degradation").
 - **superpowers** (외부, optional) — 있으면 brief를 `brainstorming` 해답공간으로 넘기고 `writing-plans`로 이어집니다. 없으면 interview는 brief를 완료하고 loud advisory 후 정지 (단독 완결, AC13).
+- **codex CLI** (외부, optional) — 있으면 Phase 3 design-doc 리뷰에 병렬 독립 co-reviewer로 참여(model diversity). 없거나 auth 미설정이면 Claude-only로 graceful degrade + loud advisory(crash 없음). kill switch `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1`.
 
 ## License
 
