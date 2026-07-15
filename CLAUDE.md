@@ -75,3 +75,7 @@ Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md
 
 - **Korean-primary, English-terms-only.** `CLAUDE.md`와 `docs/philosophy/*.md` 등 user-facing 문서는 한국어를 primary로 작성. 영어는 **식별자**(P#, AP#, Law N, §X.Y, plugin 이름), **고유명사**(OMC, gstack, Ouroboros, CE, Anthropic 등), **원문 인용**(verbatim, 어느 방향으로도 gloss 추가 안 함), **기술 용어 중 자연스러운 한국어 대응이 없는 것**(`frontmatter`, `PreCompact`, `subagent`, `hook`, `skill` 등)에 한정. `*.ko.md` 동반 파일 모델은 폐기 (drift 비용 > 이중 노출 가치).
 - **`docs/**.md` 파일이 ~300줄 이상이면 상단(제목 + 에피그래프 + 한 줄 정체성 다음, 본문 진입 직전)에 `## 목차` 섹션 필수.** §X.Y depth로 anchor 링크. 섹션 추가/이름 변경/삭제 시 같은 commit에서 TOC도 동기화 (drift 시 cite-by-anchor 깨짐). 짧은 doc(<300줄, git-workflow 가이드 등)은 면제.
+
+## Audits
+
+읽기전용 플러그인 감사 리포트는 `docs/audits/`에 축적된다 (인덱스: `docs/audits/README.md`, 원장: `*-journal.jsonl`). Law 3 compounding substrate — 미래 세션이 과거 감사 결과와 우선순위 갭 목록을 여기서 찾는다.
