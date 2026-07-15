@@ -1,0 +1,1774 @@
+{
+ "meta": {
+  "date": "2026-07-15",
+  "fanout_declared": 30,
+  "consent": {
+   "approved": true,
+   "at": "2026-07-15T09:38:13Z"
+  },
+  "codex": {
+   "ran": true,
+   "version": "0.144.1"
+  }
+ },
+ "findings": [
+  {
+   "id": "A1-1",
+   "axis": 1,
+   "title": "marketplace.json 항목이 플러그인의 headline 기능(project charter · fact-routing interview · AGENTS.md 생성)을 광고하지 않음 — plugin.json과 description drift",
+   "user_harm": "마켓플레이스를 브라우징하는 사용자는 marketplace.json의 한 줄만 본다. 그 줄은 'select branching strategy … generate rules and auto-validate'만 말하고, plugin.json이 광고하는 v1.6.0 headline 기능(project charter, fact-routing interview, agent-readable AGENTS.md/CLAUDE.md 생성)을 완전히 누락한다. 사용자는 이 플러그인이 charter 인터뷰까지 한다는 사실을 리스팅에서 발견할 수 없다(discoverability 손실).",
+   "recommendation": "marketplace.json:17의 description을 plugin.json:3의 범위와 정합되도록 갱신하거나(최소한 charter/interview를 한 조각 포함), 두 소스가 의도적으로 다른 목적(terse blurb vs full manifest)임을 인정하고 charter를 blurb에 한 단어라도 넣는다. 어느 쪽이든 SemVer patch bump 동반.",
+   "counter_argument": "이 drift는 실수가 아니라 의도된 압축이다 — CHANGELOG.md:10이 'v1.7.1은 marketplace description 압축에 따른 doc-only patch bump — 동작 변경 없음'이라 명시한다. 두 필드는 서로 다른 목적(짧은 discovery blurb vs 상세 manifest)을 가지며 marketplace 문구의 모든 내용은 참이다(거짓 없음). devbrew의 design-lightness 철학상 terse blurb는 정당하다. 따라서 이건 '거짓'이 아니라 완결성 trade-off이고 severity는 LOW를 넘지 않는다.",
+   "evidence": [
+    {
+     "file": ".claude-plugin/marketplace.json",
+     "line": 17,
+     "quote": "\"description\": \"Git workflow initialization: select branching strategy (GitHub Flow, Git Flow, Trunk-based), generate rules and auto-validate.\","
+    },
+    {
+     "file": "plugins/project-init/.claude-plugin/plugin.json",
+     "line": 3,
+     "quote": "\"description\": \"Initialize git-workflow rules and a project charter via a fact-routing interview, then generate agent-readable AGENTS.md/CLAUDE.md docs with hook-based validation of branches, commits, doc conventions, and charter integrity.\","
+    },
+    {
+     "file": "plugins/project-init/CHANGELOG.md",
+     "line": 10,
+     "quote": "(v1.7.1은 marketplace description 압축에 따른 doc-only patch bump — 동작 변경 없음.)"
+    }
+   ],
+   "severity": "LOW",
+   "fix_cost": "S",
+   "fix_cost_rationale": "marketplace.json의 한 문자열 편집 + patch bump. 단일 파일, 국소.",
+   "reference_gap": "plugin.json:3(권위 있는 manifest)이 광고하는 기능 범위가 사용자-대면 discovery 표면(marketplace.json)에 반영되지 않음. 거짓은 아니나 불완전.",
+   "steelman_condition": "none",
+   "source": "claude",
+   "status": "refuted",
+   "refutation": {
+    "stage": "axis",
+    "gate": "C",
+    "reason": "Gate A passes: all three quotes are verbatim (marketplace.json:17, plugin.json:3, CHANGELOG.md:10). But the finding dies at Gate C — it is a completeness/taste trade-off, not an honesty defect. On axis 1 (정합·정직성) a defect requires a FALSE claim or a violated contract; there is neither. The finding itself concedes the point in reference_gap: '거짓은 아니나 불완전' (not false, but incomplete). The marketplace description is a true SUBSET of the plugin.json manifest, not a contradiction of it — every word ('select branching strategy … generate rules and auto-validate') is true. A marketplace one-liner omitting some features is universal and expected; no rule in CLAUDE.md requires marketplace.json to enumerate every feature or mirror plugin.json. Moreover the omission is INTENTIONAL and DOCUMENTED: CHANGELOG.md:10 records that v1.7.1 was a deliberate 'marketplace description 압축' (compression). The recommendation — expand the terse blurb to re-add charter — directly reverses a documented design decision and runs against devbrew's design-lightness convention. 'It would read more completely' is taste, not a defect. Discoverability is preserved because plugin.json/README carry the full feature set once a user clicks in.",
+    "facts": [
+     "marketplace.json:17 verbatim: '\"description\": \"Git workflow initialization: select branching strategy (GitHub Flow, Git Flow, Trunk-based), generate rules and auto-validate.\"' — citation accurate.",
+     "plugins/project-init/.claude-plugin/plugin.json:3 verbatim: '\"description\": \"Initialize git-workflow rules and a project charter via a fact-routing interview, then generate agent-readable AGENTS.md/CLAUDE.md docs with hook-based validation of branches, commits, doc conventions, and charter integrity.\"'; plugin.json:4 version is 1.7.2 — citation accurate.",
+     "CHANGELOG.md:8-10 verbatim: '## [1.7.2] — 2026-07-09' followed by '(v1.7.1은 marketplace description 압축에 따른 doc-only patch bump — 동작 변경 없음.)' — the compression was an intentional, documented decision.",
+     "The marketplace description contains no false statement; it is a true subset of the plugin.json manifest (no contradiction, only omission).",
+     "No rule in CLAUDE.md requires marketplace.json descriptions to enumerate all features or match plugin.json."
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": true
+  },
+  {
+   "id": "A1-2",
+   "axis": 1,
+   "title": "생성물 pr-process.md의 `/commit-push-pr` 권고가 의존 플러그인 조건 표기 없이 사용자 프로젝트로 복제됨(같은 섹션 line 78은 '(설치 시)' 표기, line 77은 누락)",
+   "user_harm": "templates/shared/pr-process.md:77이 'commit-commands: /commit-push-pr 사용'을 권고하며, 이 파일은 Step 4d에서 사용자 프로젝트의 docs/git-workflow/pr-process.md로 그대로 복제된다(이 리포의 docs/git-workflow/pr-process.md:77이 그 복제 증거). commit-commands 플러그인을 설치하지 않은 사용자가 이 생성 문서를 읽고 `/commit-push-pr`을 실행하면 명령이 없어 예측 가능하게 실패한다. 바로 아래 line 78(quality-gates)은 '(설치 시)' 조건을 달았는데 line 77은 달지 않아, 유지보수자가 조건 표기의 필요성을 알면서도 한 줄에서만 빠뜨린 비일관이다.",
+   "recommendation": "templates/shared/pr-process.md:77에 line 78과 대칭인 '(설치 시)' 또는 'commit-commands 플러그인 필요' 조건 표기를 추가한다. 선택적으로 project-init README에 prerequisites/optional-integrations 명시.",
+   "counter_argument": "line 77은 이미 굵은 '**commit-commands**:' 헤더로 명령의 출처 플러그인을 명시한다 — 사려 깊은 독자는 `/commit-push-pr`이 commit-commands 소속임을 알고 설치 필요를 유추한다. project-init은 commit-commands 에이전트를 *dispatch*하지 않고 명령을 *추천*만 하므로 CLAUDE.md의 'dispatch하는 플러그인은 prerequisites에 리스트' 규칙의 문자적 대상이 아니다(silent coupling이 아니라 named coupling). commit-commands는 공식 플러그인이라 회복이 쉽고 harm은 경미하다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/templates/shared/pr-process.md",
+     "line": 77,
+     "quote": "- **commit-commands**: 간소화된 PR 생성을 위해 `/commit-push-pr` 사용"
+    },
+    {
+     "file": "plugins/project-init/templates/shared/pr-process.md",
+     "line": 78,
+     "quote": "- **quality-gates** (설치 시): `gh pr create`에 quality 파이프라인 자동 트리거"
+    },
+    {
+     "file": "docs/git-workflow/pr-process.md",
+     "line": 77,
+     "quote": "- **commit-commands**: 간소화된 PR 생성을 위해 `/commit-push-pr` 사용"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 231,
+     "quote": "> 간결한 git 작업을 위해 `/commit` 또는 `/commit-push-pr` (commit-commands 플러그인) 사용."
+    }
+   ],
+   "severity": "LOW",
+   "fix_cost": "S",
+   "fix_cost_rationale": "템플릿 한 줄에 조건 표기 추가. 단일 파일. 이미 복제된 사용자 프로젝트 문서는 소급 수정 불가지만 향후 생성물은 정정됨.",
+   "reference_gap": "CLAUDE.md 'Silent coupling은 버그' 정신 + 같은 섹션 line 78의 '(설치 시)' 조건 표기 컨벤션에 line 77이 불일치. 생성물로 복제되는 의존 표기 누락.",
+   "steelman_condition": "none",
+   "source": "claude",
+   "status": "refuted",
+   "refutation": {
+    "stage": "axis",
+    "gate": "B",
+    "reason": "Gate A passes: pr-process.md:77/:78 and the docs/ copy are verbatim-accurate, and project-init.md:231 is verbatim. But the finding dies at Gate B — the hole is already closed and no user harm survives. Line 77 is NOT silent coupling: it leads with the bolded '**commit-commands**:' header that explicitly names the source plugin, so a reader (human or agent) reading the line knows `/commit-push-pr` belongs to the commit-commands plugin and requires it. This is the established convention in this codebase — project-init.md:231 does the same, naming '(commit-commands 플러그인)' in parentheses. The worst outcome for a user without commit-commands is a self-explaining 'command not found' whose remedy the line itself points at (install commit-commands). The CLAUDE.md coupling rule the finding invokes ('...를 dispatch하는 플러그인은 README prerequisites에 리스트; Silent coupling은 버그') targets plugins that DISPATCH another plugin's agent — project-init merely RECOMMENDS a command in a generated template, it does not dispatch, so the rule does not literally apply. The line-77-vs-line-78 asymmetry is also semantically justified, not an inconsistency: line 78 (quality-gates) describes a PASSIVE auto-trigger where '(설치 시)' explains WHEN the automatic behavior fires; line 77 (commit-commands) describes a MANUAL command whose owning plugin is already named in the header. Both statements are true — no falsehood on the honesty axis.",
+    "facts": [
+     "templates/shared/pr-process.md:77 verbatim: '- **commit-commands**: 간소화된 PR 생성을 위해 `/commit-push-pr` 사용' — the source plugin is named in the bolded line header.",
+     "templates/shared/pr-process.md:78 verbatim: '- **quality-gates** (설치 시): `gh pr create`에 quality 파이프라인 자동 트리거' — describes an automatic passive trigger, semantically distinct from a manual command.",
+     "docs/git-workflow/pr-process.md:77 is byte-identical to the template line 77 (confirms the template is copied into user projects verbatim).",
+     "commands/project-init.md:231 verbatim: '간결한 git 작업을 위해 `/commit` 또는 `/commit-push-pr` (commit-commands 플러그인) 사용.' — the established convention names the source plugin in parentheses; the coupling is named, not silent.",
+     "project-init recommends the command in a template rather than dispatching a commit-commands agent, so CLAUDE.md's dispatch-prerequisites rule does not literally apply."
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": false
+  },
+  {
+   "id": "A1-3",
+   "axis": 1,
+   "title": "git-flow 브랜치 전략 템플릿의 산문이 자기모순 — '소문자+숫자+하이픈만 허용'이라 적고 두 문장 뒤 'dot 포함은 OK'라 함(형제 템플릿은 'dot' 포함 명시)",
+   "user_harm": "templates/git-flow/branch-strategy.md:34가 '소문자 + 숫자 + 하이픈만 허용'(dot 배제)이라 단언한 직후 '`release/v1.2.0`처럼 dot 포함은 OK'라 정정해 같은 줄에서 모순된다. 이 파일은 Git Flow 선택 시 사용자 프로젝트의 docs/git-workflow/branch-strategy.md로 복제된다. github-flow(:15)와 trunk-based(:16) 형제 템플릿은 '소문자 + 숫자 + 하이픈 + dot만 허용'으로 올바르게 적었다. 사용자는 dot이 허용되는지 순간 혼동한다. regex(`[a-z0-9][a-z0-9.-]*`)가 진짜 소스이며 dot을 허용하므로 산문의 '하이픈만' 표현이 틀린 쪽이다.",
+   "recommendation": "templates/git-flow/branch-strategy.md:34의 '소문자 + 숫자 + 하이픈만 허용'을 형제 템플릿과 동일하게 '소문자 + 숫자 + 하이픈 + dot만 허용'으로 정정한다.",
+   "counter_argument": "같은 줄이 즉시 'dot 포함은 OK (`v` 시작 → `[a-z0-9]` 통과, `1.2.0`은 `[a-z0-9.-]*` 통과)'로 상세히 자기정정하므로 오해가 지속되지 않는다. 권위 있는 소스인 ```regex``` 블록은 정확하고, hook은 산문이 아니라 그 regex를 런타임에 읽으므로 enforcement에는 영향이 없다(순수 표현상 nitpick).",
+   "evidence": [
+    {
+     "file": "plugins/project-init/templates/git-flow/branch-strategy.md",
+     "line": 34,
+     "quote": "소문자 + 숫자 + 하이픈만 허용. URL-friendly + case-insensitive 파일시스템 충돌 방지. `release/v1.2.0`처럼 dot 포함은 OK (`v` 시작 → `[a-z0-9]` 통과, `1.2.0`은 `[a-z0-9.-]*` 통과)."
+    },
+    {
+     "file": "plugins/project-init/templates/github-flow/branch-strategy.md",
+     "line": 15,
+     "quote": "소문자 + 숫자 + 하이픈 + dot만 허용 (예: `feature/v1.2-fix`). URL-friendly + case-insensitive 파일시스템 충돌 방지 (예: macOS는 `feature/Foo`와 `feature/foo`를 같은 브랜치로 본다)."
+    }
+   ],
+   "severity": "LOW",
+   "fix_cost": "S",
+   "fix_cost_rationale": "한 단어 추가('+ dot'). 단일 파일 국소 편집.",
+   "reference_gap": "regex(source of truth)는 dot 허용인데 같은 파일의 산문이 'dot 배제'를 먼저 단언 → 문서-내부 및 형제 템플릿 간 비일관.",
+   "steelman_condition": "none",
+   "source": "claude",
+   "status": "refuted",
+   "refutation": {
+    "stage": "axis",
+    "gate": "C",
+    "reason": "Gate A passes: git-flow/branch-strategy.md:34, github-flow:15, and trunk-based:16 are verbatim-accurate, and the regex at git-flow:31 (`^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$`) does allow dots. But the finding dies at Gate C — read as a whole (which is the only honest reading), the git-flow sentence is TRUE and self-consistent, not self-contradictory. It uses a 'rule + explicit exception' rhetorical structure: '소문자 + 숫자 + 하이픈만 허용' (the 만/only there excludes uppercase/underscore, which is the actual point — URL-friendly, case-insensitive FS collisions) followed immediately IN THE SAME SENTENCE by '`release/v1.2.0`처럼 dot 포함은 OK' with a precise walk-through of how the string passes the regex. The net semantic content equals the siblings' '하이픈 + dot만 허용' — the git-flow version is if anything MORE informative because it explains WHY dots pass. This is a phrasing-style difference between sibling templates, which is pure taste; no rule requires the three templates to word the naming rule identically, and there is no false claim about the code (the regex source of truth is correct and the prose correctly affirms dots). The 'momentary confusion' the finding alleges self-resolves within the same sentence, and the finding concedes enforcement is unaffected because the hook reads the regex, not the prose — so nothing breaks (Gate B corroborates). 'Phrase it like the siblings' is a consistency preference, not a defect.",
+    "facts": [
+     "git-flow/branch-strategy.md:31 regex verbatim: '^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$' — dots ARE allowed by the character class [a-z0-9.-].",
+     "git-flow/branch-strategy.md:34 verbatim: '소문자 + 숫자 + 하이픈만 허용. URL-friendly + case-insensitive 파일시스템 충돌 방지. `release/v1.2.0`처럼 dot 포함은 OK (`v` 시작 → `[a-z0-9]` 통과, `1.2.0`은 `[a-z0-9.-]*` 통과).' — the same sentence explicitly affirms dots are allowed, resolving any tension internally.",
+     "github-flow/branch-strategy.md:15 verbatim: '소문자 + 숫자 + 하이픈 + dot만 허용 (예: `feature/v1.2-fix`). ...' and trunk-based/branch-strategy.md:16 identical wording — the siblings use a complete-enumeration phrasing while git-flow uses rule+exception; net meaning is the same.",
+     "The finding concedes and CHANGELOG.md:25 (v1.7.0 get_branch_pattern) confirms the hook reads the fenced regex block at runtime, not the prose — so the wording has zero enforcement impact.",
+     "Read as a complete sentence, the git-flow prose makes no false claim; the alleged 'self-contradiction' is a rule-then-exception structure that resolves within the same line."
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": false
+  },
+  {
+   "id": "A3-1",
+   "axis": 3,
+   "title": "Commit validator silently skips the most common commit form: git commit -am (and -m\"msg\", --message=)",
+   "user_harm": "A user who runs `git commit -am \"add thing\"` (staging + message in one combined short flag — one of the most common git commit forms) receives NO Conventional-Commits advisory, even though the identical message via `git commit -m \"add thing\"` is flagged. README:63 advertises \"커밋 메시지 포맷 자동 검증\" and README:95 claims the hook \"Conventional Commits 포맷을 지속적으로 강제\", so the user reasonably believes their commits are checked. The advisory has a large, silent blind spot for the exact invocation many people use every day.",
+   "recommendation": "Broaden COMMIT_MSG_RE so combined short flags and attached values are matched, e.g. allow other short flags before the m (`-[a-zA-Z]*m`) and permit the value to abut the flag (`\\s*` instead of `\\s+` before the quote), plus a branch for `--message[= ]`. Add regression tests for `git commit -am \"...\"`, `git commit -m\"...\"`, and `git commit --message=\"...\"` (test_post_tool_use.py currently tests only the `-m \"...\"` form). Keep it non-blocking.",
+   "counter_argument": "The hook is advisory and non-blocking, so even when it DOES fire it only prints a nudge — nothing is prevented either way, and the harm is a missing nudge, not a wrong outcome. Claude Code's own system prompt and the commit-commands plugin already shape commit messages, and `-am` is arguably a discouraged habit (it couples staging with committing). Broadening the regex risks false positives (e.g. matching a literal `-m` inside a path or an unrelated token), and devbrew's own philosophy (feedback_harness_lightness_trust_model) says convention nudges should trust the model rather than chase every syntactic form. So the maintainers could reasonably classify this as an accepted false-negative surface parallel to docs-lint's documented scope-outs.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/hooks/post-tool-use.py",
+     "line": 24,
+     "quote": "COMMIT_MSG_RE = re.compile(r\"\"\"git\\s+commit\\s+[^;|&]*-m\\s+(['\"])(.*?)\\1\"\"\")"
+    },
+    {
+     "file": "plugins/project-init/hooks/post-tool-use.py",
+     "line": 26,
+     "quote": "r\"\"\"git\\s+commit\\s+[^;|&]*-m\\s+['\"]\\$\\(cat\\s+<<['\"]?(\\w+)['\"]?\\n(.*?)\\n\\1\"\"\","
+    },
+    {
+     "file": "plugins/project-init/hooks/tests/test_post_tool_use.py",
+     "line": 193,
+     "quote": "msg = _hook.validate_commit('git commit -m \"add thing\"')"
+    }
+   ],
+   "severity": "MEDIUM",
+   "fix_cost": "S",
+   "fix_cost_rationale": "Single regex in one file plus a handful of new unittest cases. Slightly above trivial because the broadened pattern must be crafted to avoid false-positive matches (e.g. `-m` inside a path), so it needs its own regression tests — one file, new behavior + tests.",
+   "reference_gap": "test_post_tool_use.py exercises commit validation only through `git commit -m \"...\"` (line 191-196 and the compound-command tests at 283/304/321). No test uses `-am`, `-m\"...\"` (attached), or `--message=`, so the blind spot is entirely unlocked — a mutation removing commit validation for combined flags would stay GREEN.",
+   "oq_ref": "OQ2",
+   "steelman_condition": "none",
+   "impact": "Advertised commit-format validation silently does not fire on a top-frequency commit invocation; user is misled about coverage. Recoverable (advisory only), no data loss.",
+   "source": "claude",
+   "status": "refuted",
+   "refutation": {
+    "stage": "axis",
+    "gate": "B",
+    "reason": "Gate A passes — the regex at post-tool-use.py:24 is quoted verbatim and the three non-match claims are mechanically correct (`-am` has no `-m` substring; `-m\"...\"` lacks the required `\\s+`; `--message=` has `-m` but is followed by `essage`, not whitespace). But Gate B fails: the hook is explicitly advisory/non-blocking (README:83, README:86) and always exits 0 — a validator that does not fire on a given syntactic form produces a MISSING NUDGE, not a wrong outcome. The commit proceeds identically whether or not the advisory prints; nothing a user relies on breaks, no data loss, no misdirection. The claimed harm 'user reasonably believes their commits are checked / is misled about coverage' is exactly the speculative-confusion category Gate B rejects ('could be confusing'). README:95's '지속적으로 강제' sits in the Law-3 Compounding section and means the hook fires on every Bash invocation (which it does), not that it matches every git syntax — so no claim is false about its own code (Gate C would also fail). Gate F reinforces: broadening this non-load-bearing convention nudge to chase every syntactic variant contradicts the repo's documented harness-lightness principle (feedback_harness_lightness_trust_model: determinism only for load-bearing security/correctness gates), and the recommendation itself concedes the pattern 'must be crafted to avoid false-positive matches (e.g. `-m` inside a path)' — injecting nagging false positives into an advisory that is supposed to be a gentle nudge is a cure worse than the disease.",
+    "facts": [
+     "post-tool-use.py:24 verbatim: COMMIT_MSG_RE = re.compile(r\"\"\"git\\s+commit\\s+[^;|&]*-m\\s+(['\\\"])(.*?)\\1\"\"\") — matches the finding's evidence quote exactly.",
+     "Trace `git commit -am \"add thing\"`: after `git commit `, `[^;|&]*-m` cannot match because the substring `-m` (dash immediately followed by m) does not occur in `-am` — the only `-` is followed by `a`. NOT flagged. Confirmed.",
+     "Trace `git commit -m\"add thing\"`: `-m\\s+` requires >=1 whitespace; `-m\"` has none, so no match. NOT flagged. Confirmed.",
+     "Trace `git commit --message=\"add thing\"`: `-m` occurs inside `--m` but is followed by `essage`, not `\\s+`, so `-m\\s+(['\"])` fails. NOT flagged. Confirmed.",
+     "README:63 reads '브랜치 이름·커밋 메시지 포맷 자동 검증'; README:95 reads '...브랜치 명명과 Conventional Commits 포맷을 지속적으로 강제' — both cited quotes are accurate.",
+     "README:83 and README:86 explicitly label both hooks 'advisory, non-blocking'; README:83 describes the commit path with NO exhaustive-coverage promise.",
+     "main() always calls sys.exit(0) (post-tool-use.py:215); the hook only prints a systemMessage nudge — it blocks/prevents nothing.",
+     "HEREDOC form `git commit -m \"$(cat <<'EOF'...\"` IS handled by HEREDOC_COMMIT_RE (post-tool-use.py:25-28); plain `-m \"...\"` handled by COMMIT_MSG_RE.",
+     "test_post_tool_use.py exercises commit validation only via `-m \"...\"` (lines 191, 194) and compound `checkout -b ... && git commit -m \"...\"` forms (lines 283, 302, 321); no test uses `-am`, attached `-m\"...\"`, or `--message=` — the reference-gap claim is accurate."
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": false
+  },
+  {
+   "id": "A3-2",
+   "axis": 3,
+   "title": "Branch-name validator only matches checkout -b / switch -c; bare `git branch <name>`, `checkout -B`, `switch -C` are unchecked",
+   "user_harm": "A branch created with `git branch feature/Bad_Name` (bare create, no switch) or `git checkout -B Bad_Name` / `git switch -C Bad_Name` (force-create) receives no naming advisory, while the same name via `git checkout -b` would be flagged. The advisory's coverage is inconsistent across equivalent branch-creation forms, so a user who happens to create branches the un-covered way gets no naming feedback at all.",
+   "recommendation": "Extend BRANCH_CREATE_RE to also cover bare creation and the capital force forms without introducing false positives — e.g. add an alternation for `git branch` followed by a non-flag token (`git\\s+branch\\s+(?![-])(\\S+)`, which excludes `git branch -d/-m/-a/--show-current`) and accept `-B`/`-C`. Add regression tests for each new form and a negative test proving `git branch -d feature/x` is NOT flagged.",
+   "counter_argument": "This is the weakest of the two coverage findings: bare `git branch <name>` creates a branch the user is not yet working on, so an immediate naming nudge is less useful, and `-B`/`-C` (force re-create) are niche. More importantly, naively broadening the regex to `git\\s+branch\\s+(\\S+)` would capture flag tokens (`git branch -d feature/x` -> `-d`) and fire spurious warnings on rename/delete/list commands — the current narrowness is partly a deliberate false-positive guard. The hook is advisory and a mis-named branch is fully recoverable with one `git branch -m`, so the cost of the gap is near-zero. A maintainer could reasonably keep the regex narrow.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/hooks/post-tool-use.py",
+     "line": 23,
+     "quote": "BRANCH_CREATE_RE = re.compile(r\"git\\s+(?:checkout\\s+-b|switch\\s+-c)\\s+(\\S+)\")"
+    },
+    {
+     "file": "plugins/project-init/hooks/post-tool-use.py",
+     "line": 104,
+     "quote": "match = BRANCH_CREATE_RE.search(command)"
+    }
+   ],
+   "severity": "LOW",
+   "fix_cost": "S",
+   "fix_cost_rationale": "One targeted regex alternation in one file plus positive/negative unittest cases; the negative test (ensuring `git branch -d/-m` do not match) is the only subtlety.",
+   "reference_gap": "No test in test_post_tool_use.py exercises `git branch <name>`, `git checkout -B`, or `git switch -C`; DerivePrefixesTest / F2SuggestionTest only cover the `checkout -b`/`switch -c` paths. The uncovered creation forms are neither validated nor locked.",
+   "oq_ref": "OQ2",
+   "steelman_condition": "none",
+   "impact": "Inconsistent advisory coverage across equivalent branch-creation commands; recoverable, low frequency.",
+   "source": "claude",
+   "status": "refuted",
+   "refutation": {
+    "stage": "axis",
+    "gate": "B",
+    "reason": "Gate A passes — the regex at post-tool-use.py:23 is quoted verbatim and the non-match claims are correct (`git branch <name>` matches neither `checkout -b` nor `switch -c`; `-B`/`-C` are case-sensitive mismatches since the pattern has no re.IGNORECASE). But Gate B fails, and the finding refutes itself: its own counter-argument concedes the gap is 'fully recoverable with one `git branch -m`', of 'near-zero' cost, and that bare `git branch <name>` is a case where 'an immediate naming nudge is less useful.' That is a self-admission of no concrete broken outcome. The hook is advisory/non-blocking (README:83) — a mis-named branch created via an un-covered form is created identically whether or not the nudge prints; nothing breaks. 'Inconsistent advisory coverage across equivalent commands' is a taste/consistency observation, not a user harm. Gate F reinforces: the finding itself states a naive broadening (`git\\s+branch\\s+(\\S+)`) would capture flag tokens and fire spurious warnings on `git branch -d/-m/-a` (rename/delete/list) — a false-positive-generating cure on a non-load-bearing advisory, contradicting the documented harness-lightness principle (feedback_harness_lightness_trust_model). The current narrowness is a deliberate false-positive guard, which the finding acknowledges.",
+    "facts": [
+     "post-tool-use.py:23 verbatim: BRANCH_CREATE_RE = re.compile(r\"git\\s+(?:checkout\\s+-b|switch\\s+-c)\\s+(\\S+)\") — matches the finding's evidence quote exactly.",
+     "post-tool-use.py:104 verbatim: match = BRANCH_CREATE_RE.search(command) — matches the finding's evidence quote.",
+     "Trace `git branch feature/Bad_Name`: matches neither `checkout\\s+-b` nor `switch\\s+-c`, so no match. NOT flagged. Confirmed.",
+     "The pattern is compiled without re.IGNORECASE, so `-B` and `-C` (capital force-create forms) do not match the lowercase `-b`/`-c` literals. NOT flagged. Confirmed.",
+     "validate_branch always returns None or a string message; main() exits 0 — branch validation is advisory/non-blocking (README:83).",
+     "A naive broadening to `git\\s+branch\\s+(\\S+)` would capture flag tokens: `git branch -d feature/x` -> group(1)=='-d', producing spurious warnings on delete/rename/list — the finding itself concedes this false-positive risk.",
+     "test_post_tool_use.py DerivePrefixesTest and F2SuggestionTest exercise only `checkout -b`/`switch -c` paths; no test covers `git branch <name>`, `checkout -B`, or `switch -C` — the reference-gap claim is accurate.",
+     "The finding's own counter_argument concedes: mis-named branch is 'fully recoverable with one `git branch -m`', gap cost is 'near-zero', and the immediate nudge on bare create is 'less useful.'"
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": true
+  },
+  {
+   "id": "A5-1",
+   "axis": 5,
+   "title": "git-flow branch-strategy 산문이 dot 허용을 부정 — 자기 regex·형제 템플릿과 불일치, 사용자 프로젝트로 배포됨",
+   "user_harm": "이 파일은 `docs/git-workflow/branch-strategy.md`로 사용자 프로젝트에 복제된다. 사용자가 자기 프로젝트 문서에서 '소문자 + 숫자 + 하이픈만 허용'을 읽으면 브랜치명에 dot이 금지된다고 오해할 수 있고, `release/v1.2.0`이 실제로는 통과하는 것을 보고 혼란스러워하거나 유효한 dotted 이름(`release/v1.2.0`)을 불필요하게 회피할 수 있다. 다만 같은 문장 안에서 즉시 정정되므로 실질 피해는 낮다.",
+   "recommendation": "git-flow/branch-strategy.md:34의 '소문자 + 숫자 + 하이픈만 허용'을 형제 템플릿(trunk-based:16, github-flow:15)과 동일하게 '소문자 + 숫자 + 하이픈 + dot만 허용'으로 수정해 line 31의 regex(`[a-z0-9.-]*`, dot 허용)와 정합시킨다.",
+   "counter_argument": "같은 문장이 곧바로 '`release/v1.2.0`처럼 dot 포함은 OK'라고 명시하고 regex 통과 근거까지 괄호로 설명하므로 주의 깊은 독자는 실제로 오도되지 않는다. 순전히 cosmetic한 일관성 편집이고, devbrew의 '모든 PR patch-bump + CHANGELOG' 규칙 때문에 수정 비용(version bump + CHANGELOG entry)이 near-zero 이득을 초과할 수 있다 — 그래서 CRITICAL/HIGH가 아니라 LOW.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/templates/git-flow/branch-strategy.md",
+     "line": 34,
+     "quote": "소문자 + 숫자 + 하이픈만 허용. URL-friendly + case-insensitive 파일시스템 충돌 방지. `release/v1.2.0`처럼 dot 포함은 OK (`v` 시작 → `[a-z0-9]` 통과, `1.2.0`은 `[a-z0-9.-]*` 통과)."
+    },
+    {
+     "file": "plugins/project-init/templates/git-flow/branch-strategy.md",
+     "line": 31,
+     "quote": "^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$"
+    },
+    {
+     "file": "plugins/project-init/templates/trunk-based/branch-strategy.md",
+     "line": 16,
+     "quote": "소문자 + 숫자 + 하이픈 + dot만 허용 (예: `feature/v1.2-fix`). URL-friendly + case-insensitive 파일시스템 충돌 방지."
+    },
+    {
+     "file": "plugins/project-init/templates/github-flow/branch-strategy.md",
+     "line": 15,
+     "quote": "소문자 + 숫자 + 하이픈 + dot만 허용 (예: `feature/v1.2-fix`). URL-friendly + case-insensitive 파일시스템 충돌 방지 (예: macOS는 `feature/Foo`와 `feature/foo`를 같은 브랜치로 본다)."
+    }
+   ],
+   "severity": "LOW",
+   "fix_cost": "S",
+   "fix_cost_rationale": "한 파일 한 줄 편집(git-flow/branch-strategy.md:34) + devbrew 규칙상 project-init patch version bump + CHANGELOG 항목. 테스트 변경 불필요(산문 정정).",
+   "reference_gap": "quality-criteria.md의 Currency(항목 5: 'File references accurate')·Actionability(항목 6) 및 Red Flags('Outdated/inaccurate references'). 내부 레퍼런스: 두 형제 branch-strategy 템플릿과 이 파일 자신의 line 31 regex가 모두 dot을 허용/명시하는데 git-flow의 요약 절만 dot을 누락한 outlier다.",
+   "steelman_condition": "none",
+   "source": "claude",
+   "status": "refuted",
+   "refutation": {
+    "stage": "axis",
+    "gate": "B",
+    "reason": "Gate A passes — every cited quote is verbatim accurate: git-flow/branch-strategy.md:31 regex allows dot, and line 34's opening phrase does say '하이픈만 허용' while siblings say '하이픈 + dot만'. But Gate B fails: the claimed harm requires a user to read the opening clause '소문자 + 숫자 + 하이픈만 허용' and conclude dot is forbidden WITHOUT reading the rest of the SAME sentence on the SAME line, which immediately states '`release/v1.2.0`처럼 dot 포함은 OK' and explains the regex mechanics (`1.2.0`은 `[a-z0-9.-]*` 통과). The hole is closed inline; there is no realistic reading where a user reaches a wrong outcome about whether dot is allowed. The finding itself concedes '실질 피해는 낮다' and '주의 깊은 독자는 실제로 오도되지 않는다' — speculative 'could misunderstand' confusion with no concrete reproduction. Reinforced by Gate C: the auditor labels the fix '순전히 cosmetic한 일관성 편집', and the git-flow prose read as a whole is actually MORE informative about dots than the siblings (it alone provides the `release/v1.2.0` worked example and the regex breakdown that trunk-based:16 and github-flow:15 omit), so it is not less accurate — merely differently structured. That is a consistency/taste preference, not a defect that harms a user.",
+    "facts": [
+     "plugins/project-init/templates/git-flow/branch-strategy.md:31 — regex is `^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$` (character class `[a-z0-9.-]*` allows dot). Verbatim confirmed.",
+     "plugins/project-init/templates/git-flow/branch-strategy.md:34 — full text: '소문자 + 숫자 + 하이픈만 허용. URL-friendly + case-insensitive 파일시스템 충돌 방지. `release/v1.2.0`처럼 dot 포함은 OK (`v` 시작 → `[a-z0-9]` 통과, `1.2.0`은 `[a-z0-9.-]*` 통과).' The SAME sentence that says '하이픈만 허용' explicitly states dot is OK and gives the regex-mechanics justification. Verbatim matches the finding's quote.",
+     "plugins/project-init/templates/trunk-based/branch-strategy.md:16 — '소문자 + 숫자 + 하이픈 + dot만 허용 (예: `feature/v1.2-fix`). URL-friendly + case-insensitive 파일시스템 충돌 방지.' Verbatim confirmed. Note: no `release/v1.2.0` worked example and no regex breakdown.",
+     "plugins/project-init/templates/github-flow/branch-strategy.md:15 — '소문자 + 숫자 + 하이픈 + dot만 허용 (예: `feature/v1.2-fix`). URL-friendly + case-insensitive 파일시스템 충돌 방지 (예: macOS는 `feature/Foo`와 `feature/foo`를 같은 브랜치로 본다).' Verbatim confirmed. Also no `release/v1.2.0` worked example, no regex breakdown.",
+     "The git-flow line 34 sentence is internally consistent and agrees with its own regex (both permit dot); it is the only one of the three that supplies a concrete dotted example plus the per-token regex explanation, i.e. it is MORE explicit about the dot case than the siblings, not less accurate.",
+     "Target file is under plugins/project-init/templates/ — inside audit scope (Gate E not the killing gate).",
+     "The auditor's own counter_argument concedes the edit is '순전히 cosmetic한 일관성 편집' and that fix cost (version bump + CHANGELOG entry per devbrew's every-PR-patch-bump rule) may exceed the near-zero benefit."
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": false
+  },
+  {
+   "id": "A6-1",
+   "axis": 6,
+   "title": "S4(i) rewrites a divergent CLAUDE.md to a one-line pointer without migrating its content — deterministic user-content loss that contradicts the plugin's own \"preserve in all states\" invariant",
+   "user_harm": "A user who has an AGENTS.md (canonical) plus a separately hand-written CLAUDE.md containing Claude-specific instructions not present in AGENTS.md is in state S4. Running /project-init shows an advisory with two options; choosing option (i) rewrites CLAUDE.md to the single line `@AGENTS.md` while leaving AGENTS.md unchanged. The unique CLAUDE.md content is neither preserved in CLAUDE.md nor migrated into AGENTS.md — it is discarded. Because `@AGENTS.md` imports only AGENTS.md, that content also vanishes from the model's loaded context. There is no filesystem backup; recovery is possible only via git, which fails if the CLAUDE.md was uncommitted. Crucially, the tool's own spec (line 167) promises non-managed content is preserved in ALL states with a single named exception (S2a-d), so a user reading that promise reasonably believes option (i) is a safe reformat — the consent is obtained under a false safety guarantee.",
+   "recommendation": "Make the S4(i) action mirror the content-preserving S2a path: extract non-managed content from the divergent CLAUDE.md and merge it into AGENTS.md BEFORE rewriting CLAUDE.md to the pointer (so AGENTS.md is not left 'unchanged' when CLAUDE.md holds unique content). Alternatively, if S4(i) must remain a discard, (a) update the line-167 invariant to name S4(i) as a second explicit exception (so the spec stops lying), (b) require the S4 advisory to state verbatim that divergent CLAUDE.md content will be permanently discarded and recommend commit/backup first, and (c) add a contract-test lock in test_command_contract.py (which today locks only the S2a/AC21 prompt, not any S4 disclosure).",
+   "counter_argument": "S4 is an uncommon state (most repos have either CLAUDE.md or AGENTS.md, not a divergent pair), the destruction is gated behind an explicit two-option user choice (not silent), and project-init's entire domain is git repositories — so a committed CLAUDE.md is recoverable via `git checkout`. One could argue 'divergent CLAUDE.md when AGENTS.md is canonical' is by definition stale content the user intends to abandon, making the discard the desired behavior; and the AGENTS.md-canonical design (D5-confirmed correct) means consolidating on one file is the point. A reviewer could therefore rate this MEDIUM (gated + git-recoverable) rather than HIGH.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 165,
+     "quote": "**S4 (AGENTS exists, CLAUDE divergent or absent)** | 존재 | 없음 또는 divergent content | 사용자에게 advisory + 두 옵션 — (i) CLAUDE.md를 `@AGENTS.md` 한 줄로 *재작성* (AGENTS.md unchanged), (ii) abort. 승인 시 (i) 수행 + S3 action."
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 167,
+     "quote": "비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존. 유일한 예외는 4c S2a (d)의 H1 재제목 — 파일명을 지칭하는 제목은 이전 후 대상 파일을 잘못 가리키므로 보존 대상이 아니다."
+    }
+   ],
+   "severity": "HIGH",
+   "fix_cost": "M",
+   "fix_cost_rationale": "Changing the S4 matrix action to migrate-then-rewrite (mirroring S2a) is coupled with keeping the line-167 invariant true and adding a contract-test lock. Multiple interdependent edits within commands/project-init.md plus a new assertion in test_command_contract.py — a new behavior + test, not a one-line local edit.",
+   "reference_gap": "The plugin's OWN S2a path is the internal reference for how a canonical-switch should behave: 4c S2a migrates non-managed content into AGENTS.md before replacing CLAUDE.md with the pointer (line 163). S4(i) omits that migrate step while the line-167 invariant still asserts universal preservation. No external corpus precedent is required — the spec is internally self-contradicting, and S2a shows the correct pattern the S4 row fails to follow.",
+   "oq_ref": "OQ4",
+   "steelman_condition": "c",
+   "source": "claude",
+   "status": "reported",
+   "deep_verified": true,
+   "deep_votes": [
+    {
+     "id": "A6-1",
+     "refuted": false,
+     "lens": "재현성",
+     "reason": "SURVIVES the reproducibility lens. The failure is concretely, deterministically reproducible and no guard in the artifact prevents it.\n\nMECHANICAL FACTS (all verbatim from plugins/project-init/commands/project-init.md):\n- Line 165 (S4 row): \"**S4 (AGENTS exists, CLAUDE divergent or absent)** | 존재 | 없음 또는 divergent content | 사용자에게 advisory + 두 옵션 — (i) CLAUDE.md를 `@AGENTS.md` 한 줄로 *재작성* (AGENTS.md unchanged), (ii) abort. 승인 시 (i) 수행 + S3 action.\" → S4(i) overwrites CLAUDE.md to one line AND explicitly leaves AGENTS.md unchanged.\n- Line 167 (invariant): \"비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존. 유일한 예외는 4c S2a (d)의 H1 재제목...\" → promises preservation in ALL states with exactly ONE named exception (S2a(d) H1 retitle).\n- Line 163 (S2a, internal reference): \"(a) `## Git Workflow` 섹션 추출, (b) AGENTS.md로 이전·새 template과 merge, (c) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체\" → S2a migrates non-managed content into AGENTS.md BEFORE rewriting CLAUDE.md; S4(i) omits steps (a)+(b) while forbidding any AGENTS.md change.\n- docs-lint.py lines 374-375: advisory tells the user for a divergent pair to 'Make CLAUDE.md contain just \"@AGENTS.md\" or symlink it' — no content-loss warning; reinforces the reformat framing.\n- test_command_contract.py: locks only the S2a H1-retitle rule (TestS2aH1Retitle) and AC21 migration-prompt gating (TestMigrationPromptStillGated); NO assertion covers any S4 advisory/content-loss disclosure — confirming recommendation (c).\n\nREPRODUCIBILITY TRACE (deterministic): Input = AGENTS.md (canonical) + hand-written divergent CLAUDE.md with unique Claude-specific content. The Step-1 migration prompt (line 25) fires only when AGENTS.md is absent, so it does not fire here; the 4c matrix routes AGENTS-present + CLAUDE-divergent to S4. User chooses (i) → CLAUDE.md overwritten with the single line `@AGENTS.md`, AGENTS.md untouched → the unique content is in neither file and, because `@AGENTS.md` imports only AGENTS.md, vanishes from loaded context. Uncommitted CLAUDE.md is unrecoverable.\n\nGATE ANALYSIS: A pass (quotes verbatim, lines correct). B pass (real content loss; nothing closes it — line 165 specifies no warning, contract test locks no S4 disclosure). C pass (genuine internal self-contradiction: line 167 asserts universal preservation with one exception, S4(i) is an unnamed second exception that discards content — a false claim the spec makes about its own behavior, not taste). D pass (warrant is the spec contradicting itself + its own S2a path, not 'a sibling does X therefore this should'; the reference_gap explicitly requires no external precedent). E pass (target in plugins/project-init/**). F pass (lightweight cure available: name S4(i) as a second exception on line 167 + advisory warning). No gate kills it."
+    },
+    {
+     "id": "A6-1",
+     "refuted": true,
+     "lens": "devbrew 원칙",
+     "reason": "REFUTED at Gate B (broken user-harm chain), reinforced by Gate F (my assigned devbrew-principles lens: cure worse than disease).\n\nMECHANICAL FACTS VERIFIED (evidence is real — Gate A passes):\n- /Users/jeonghokim/Downloads/devbrew/plugins/project-init/commands/project-init.md line 165 (S4 row) is verbatim: \"사용자에게 advisory + 두 옵션 — (i) CLAUDE.md를 `@AGENTS.md` 한 줄로 *재작성* (AGENTS.md unchanged), (ii) abort. 승인 시 (i) 수행 + S3 action.\"\n- Same file line 167 verbatim: \"비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존. 유일한 예외는 4c S2a (d)의 H1 재제목...\"\n- S2a (line 163) runs in S2 where AGENTS.md is ABSENT (\"**S2 (CLAUDE-only legacy)** | 없음 | 존재\"); S4 (line 165) runs where AGENTS.md EXISTS (\"**S4** | 존재 | ...\").\n- test_command_contract.py lines 1-13 + line 3 self-describe the command file as \"a model-followed markdown instruction, not executable code\"; the S4 advisory is NOT locked (test guards only S2a/AC21).\n- README.md (lines 75-104, the user-facing doc) makes NO \"preserve in all states\" promise and does not describe the S4 advisory.\n\nGATE B — no concrete user break. The finding's harm mechanism is explicit: a user \"reading that promise [line 167]\" believes option (i) is safe, so consent is \"under a false safety guarantee.\" But line 167 is in the model-facing command spec, NOT a user-facing string; the user never reads it (README, the actual user surface, makes no such promise). So the consent-under-false-guarantee chain fails at its first link. At runtime the user sees \"advisory + two options\"; the model executing S4 reads the specific, unambiguous row (\"재작성, AGENTS.md unchanged\") — specific overrides the general line 167 — and, generating an advisory before a destructive rewrite, discloses the discard. Option (ii) abort is a structural escape hatch, and project-init operates only on git repos so a committed CLAUDE.md is recoverable. The residual (an uncommitted divergent CLAUDE.md overwritten by an explicitly-elected option) is the generic \"an edit you chose overwrites a file you chose\" risk, gated behind a two-option choice, not a specific unhandled defect. The honesty kernel (line 167's \"유일한 예외\" omitting S4(i)) admits a non-false reading: line 167 governs the plugin's migration/update behavior, while S4(i) is a USER-ELECTED discard (user picks 재작성 over abort) — the user, not the plugin, is the agent of loss. Given that genuine ambiguity, per the refuter rule (uncertain → refute).\n\nGATE F — the recommendation trips devbrew Forbidden Patterns (my lens). PRIMARY fix (auto-migrate divergent CLAUDE.md content into AGENTS.md, mirroring S2a) is cure-worse-than-disease: S2a is a clean create because AGENTS.md is absent, but in S4 AGENTS.md already exists with canonical content, so auto-merging divergent content into it is a 3-way reconciliation that risks duplicated/conflicting sections corrupting the single source of truth — worse than a clean, gated, git-recoverable discard. SECONDARY fix (mandate verbatim advisory wording + deterministic contract-test lock for an uncommon, gated, recoverable, model-generated NL advisory) over-constrains an NL-intent surface that already has a structural escape hatch — exactly the pattern devbrew's harness-lightness norm rejects (\"구조적 escape hatch가 이미 있는 영역엔 결정론 가드 쌓지 말고 모델 신뢰; 결정론은 보안/정확성 게이트에만\"). The only genuinely light residue (add S4(i) to line 167's exception list) is a one-line phrasing tweak to a spec no user reads — it does not earn a HIGH-severity slot on the user's implementation list, and the finding is pitched on the (broken) user-harm chain, not the doc nit."
+    }
+   ],
+   "cross_model_confirmed": false
+  },
+  {
+   "id": "A6-2",
+   "axis": 6,
+   "title": "No recoverability preflight (backup, or commit/stash check) before any wholesale overwrite of CLAUDE.md/AGENTS.md — the safety net is git-only, on files the plugin itself says agents truncate",
+   "user_harm": "Every destructive path (S2a migrate-and-replace, S4(i) rewrite, C-S2 in-place docs overwrite, git-workflow 'replace?' overwrite) mutates the user's primary context files with no filesystem backup step. The approval prompts obtain consent to the action but never instruct the user or agent to ensure recoverability first. The S2a path in particular reads the entire existing CLAUDE.md and re-writes it as AGENTS.md relying on the model to carry over every non-managed section; the plugin's own docs-lint rule warns that agents 'will likely truncate' files over 300 lines — the exact class of file being read-and-rewritten. If the model drops a section during that migration and the original CLAUDE.md was uncommitted, the content is unrecoverable. The whole recovery model rests on (a) the model migrating correctly and (b) the file having been committed to git.",
+   "recommendation": "Add a cheap preflight to Step 1 / Step 4c: before the first overwrite of any existing CLAUDE.md or AGENTS.md, use the already-available Bash tool to either (i) copy the file to a timestamped backup (e.g. `CLAUDE.md.project-init.bak`) that is removed on success, or (ii) run `git status --porcelain CLAUDE.md AGENTS.md` and, if either has uncommitted content, warn 'commit or stash before proceeding'. This converts an irreversible operation into a recoverable one for the uncommitted-file window that git alone cannot cover.",
+   "counter_argument": "project-init's domain is git repositories, and git IS the canonical, zero-litter backup — writing `.bak` files pollutes the working tree and duplicates what git already provides for committed content. The S2a truncation risk is probabilistic (model-dependent), not a deterministic failure with fixed inputs, so under a strict burden-of-proof it is closer to a hardening suggestion than a proven defect; the CHANGELOG (line 15) records a real WS5 sandbox S2a run where hand-curated content was preserved intact. A reviewer could reasonably say 'trust the model + git' and rate this LOW or treat it as an open question.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 27,
+     "quote": "\"기존 CLAUDE.md 발견. AGENTS.md로 migrate할까요? (CLAUDE.md는 `@AGENTS.md` thin pointer로 교체됩니다)\""
+    },
+    {
+     "file": "plugins/project-init/hooks/docs-lint.py",
+     "line": 125,
+     "quote": "return base + \" (STRONG: >300 lines means agent will likely truncate)\""
+    }
+   ],
+   "severity": "MEDIUM",
+   "fix_cost": "S",
+   "fix_cost_rationale": "A localized additive prose step in commands/project-init.md (backup copy or a git-status preflight), using the Bash tool already in the command's allowed-tools. One file, additive, optionally one test.",
+   "reference_gap": "No corpus reference mandates .bak files; the internal reference is docs-lint.py:125 — the plugin's own acknowledgment that agents truncate long files, applied to the very files the command reads-and-rewrites wholesale. gstack/freeze (check-freeze.sh:77, deny out-of-boundary writes) and ECC path-safety.js (fail-closed trust-root) show the sibling norm of guarding destructive writes, but those are boundary-deny controls, not recoverability backups — cited only as directional analogues, not as an exact precedent.",
+   "oq_ref": "OQ4",
+   "steelman_condition": "none",
+   "source": "claude",
+   "status": "refuted",
+   "refutation": {
+    "stage": "axis",
+    "gate": "B",
+    "reason": "Gate A passes (line 27 and docs-lint.py:125 are verbatim, and Grep confirms no backup/git-status/stash/commit preflight exists anywhere in the plugin — the absence claim is accurate). But Gate B fails: there is no deterministic failure with fixed inputs. Every stated harm is conditioned on 'if the model drops a section during migration' (model-dependent, probabilistic) AND 'if the original CLAUDE.md was uncommitted' — the finding's own counter_argument concedes it is 'closer to a hardening suggestion than a proven defect.' There is no reproduction, and the single real S2a execution on record (CHANGELOG v1.7.2 line 15, WS5 sandbox re-run performing the S2a approval path on a real repo copy) PRESERVED the hand-curated content intact and migrated it correctly to AGENTS.md (AC15/AC16 green) — the only defect found there was the unrelated H1 title, not content loss. So the observed behavior contradicts the theorized harm. The docs-lint:125 truncation warning is a post-write advisory about output-file LENGTH, not a migration-completeness check; it does not detect dropped sections, and the harm it is invoked for additionally requires a >300-line CLAUDE.md — a narrow, speculative intersection. (Secondary kill, Gate F: project-init's entire domain is git repositories, which already provide the structural, zero-litter recoverability escape hatch for committed content; adding a `.bak` copy or a `git status --porcelain` gate before every overwrite is exactly the deterministic guard layered on top of an existing structural escape hatch that the devbrew harness-lightness principle and Forbidden Patterns reject as ceremony.)",
+    "facts": [
+     "commands/project-init.md:27 verbatim — '기존 CLAUDE.md 발견. AGENTS.md로 migrate할까요? (CLAUDE.md는 `@AGENTS.md` thin pointer로 교체됩니다)' — the migration prompt cited; it obtains consent to the action but names no backup/commit step.",
+     "hooks/docs-lint.py:125 verbatim — 'return base + \" (STRONG: >300 lines means agent will likely truncate)\"' — a POST-write advisory keyed on line count (>300), fired after a Write/Edit; it is not a migration-completeness or dropped-section check.",
+     "Grep across plugins/project-init for backup/.bak/git status/porcelain/stash/commit-before/recover (case-insensitive) returned NO matches — confirms the finding's absence claim: no recoverability preflight exists. But absence of a preflight is not itself a break.",
+     "CHANGELOG.md:15 (v1.7.2) — the one real S2a execution (WS5 sandbox, /project-init run through the S2a approval path on a slimmed repo copy) reports '손-큐레이션 컨텐츠는 파괴되지 않고 AGENTS.md로 정상 이전됐으며(AC15/AC16 green)' — hand-curated content preserved intact, evidence against the theorized model-drop harm.",
+     "The finding's counter_argument itself concedes 'The S2a truncation risk is probabilistic (model-dependent), not a deterministic failure with fixed inputs' — no fixed-input reproduction is offered.",
+     "reference_gap cites gstack/freeze check-freeze.sh:77 and ECC path-safety.js as 'sibling norm of guarding destructive writes' but concedes they are 'boundary-deny controls, not recoverability backups... cited only as directional analogues' — a possibility-precedent, not proof this plugin fails without the guard."
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": false
+  },
+  {
+   "id": "CX-1",
+   "axis": 6,
+   "title": "기존 AGENTS.md·CLAUDE.md를 백업 없이 교체하며 일부 파괴 경로는 별도 승인 대상에서 빠진다",
+   "user_harm": "AGENTS.md에 수작업한 Git Workflow가 있고 CLAUDE.md와 docs/git-workflow/는 없는 저장소를 입력하면 Step 1은 기존 룰을 감지하지 못한다. 이후 S4 프롬프트는 CLAUDE.md pointer만 설명하지만 S3 action으로 AGENTS.md의 기존 Git Workflow까지 교체한다. 또한 divergent CLAUDE.md를 승인하면 고유 내용이 @AGENTS.md 한 줄로 사라진다. 어느 경로에도 byte-for-byte 백업이 없어 파일이 미추적·미커밋 상태라면 복구할 수 없다.",
+   "recommendation": "모든 쓰기 전에 기존 대상과 예정 action을 전수 표시하고 단일 destructive-write 승인을 받는다. 기존 파일은 hash·원래 경로를 포함한 run별 백업에 보존하고, 쓰기는 project-root realpath 경계 안에서 atomic하게 수행하며 실패 시 rollback한다.",
+   "counter_argument": "S2·S4와 기존 docs에는 이미 중단 가능한 프롬프트가 있고 비관리 내용 보존도 명시돼 있다. 파일이 Git에 커밋돼 있다면 사용자가 복구할 수 있으므로 모든 실행에 백업 계층을 추가하는 것은 ceremony가 될 수 있다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 16,
+     "quote": "프로젝트 root에 CLAUDE.md가 존재하는지 확인"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 165,
+     "quote": "S4 (AGENTS exists, CLAUDE divergent or absent): 승인 시 (i) 수행 + S3 action."
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 207,
+     "quote": "C-S3 (a) 섹션 항목 누락: Phase 1 보충 질문으로 채운 뒤 발행(in-place 교체)."
+    }
+   ],
+   "severity": "CRITICAL",
+   "fix_cost": "M",
+   "fix_cost_rationale": "여러 상태의 write contract와 승인 흐름을 고치고 백업·rollback 동작 및 테스트를 추가해야 한다.",
+   "reference_gap": "/Users/jeonghokim/Downloads/reference/ECC/scripts/lib/path-safety.js:48",
+   "oq_ref": "OQ4",
+   "source": "codex",
+   "status": "refuted",
+   "refutation": {
+    "stage": "codex",
+    "gate": "B",
+    "reason": "The destructive paths the finding names are already gated, not silent. In the exact scenario (AGENTS.md has hand-authored Git Workflow, CLAUDE.md absent, docs/git-workflow absent), Step 4c resolves to state S4, whose action is 'advisory + 두 옵션 — (i) rewrite CLAUDE.md / (ii) abort' BEFORE the S3 in-place update touches AGENTS.md. The user therefore receives an advisory and an abort option prior to any write. Option (i) is explicitly 'CLAUDE.md를 @AGENTS.md 한 줄로 재작성', so a user approving it is told their CLAUDE.md becomes a one-line pointer — the divergent-content loss is informed, not silent. Non-managed content is preserved in all states (line 167), and replacing the managed '## Git Workflow' section is the entire declared purpose of running /project-init. Step 5 (line 219) explicitly reports 'AGENTS.md — ## Git Workflow 섹션 추가'. The finding's own counter_argument concedes S2/S4 already have stoppable prompts. The backup/rollback/atomic-realpath layer recommended for every run (echoing reference_gap ECC path-safety.js) is ceremony in a git-versioned repo where git is the recovery mechanism (Gate F secondary). No un-gated silent destruction survives.",
+    "facts": [
+     "project-init.md:16-18 — Step 1 detection checks CLAUDE.md existence, CLAUDE.md's '## Git Workflow' section, and docs/git-workflow/ directory; it does NOT inspect AGENTS.md's '## Git Workflow'. So an AGENTS.md-only git-workflow repo does not trigger the Step 1 'replace?' prompt (finding's premise is factually correct here).",
+     "project-init.md:165 (S4 row) verbatim: 'S4 (AGENTS exists, CLAUDE divergent or absent): 사용자에게 advisory + 두 옵션 — (i) CLAUDE.md를 @AGENTS.md 한 줄로 재작성 (AGENTS.md unchanged), (ii) abort. 승인 시 (i) 수행 + S3 action.' — an advisory + abort gate precedes the S3 write.",
+     "project-init.md:167 verbatim: '비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존.' Only the managed '## Git Workflow' section is replaced.",
+     "project-init.md:25-29 — Step 1 migration prompt fires when CLAUDE.md exists; refusal aborts entire /project-init per AC21.",
+     "project-init.md:219 — Step 5 report explicitly lists the AGENTS.md '## Git Workflow' change back to the user.",
+     "S4's action does NOT migrate divergent CLAUDE.md content into AGENTS.md (unlike S2a lines 163), so divergent CLAUDE.md content is dropped — but only after the explicit advisory+abort gate and an option label that states CLAUDE.md becomes '@AGENTS.md 한 줄'."
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": false
+  },
+  {
+   "id": "CX-2",
+   "axis": 5,
+   "title": "Trunk-based legacy release 브랜치를 현재 main에서 잘못 생성한다",
+   "user_harm": "현재 main이 v2 코드인 프로젝트에서 이미 출시된 v1.x에 v1.2.5 hotfix를 하려고 템플릿을 따르면 release/v1.x가 v2 HEAD에서 생성된다. 이후 v1 fix를 cherry-pick하고 v1.2.5 태그를 찍으면 v2 계보의 생성물이 v1 패치로 배포될 수 있다.",
+   "recommendation": "legacy release 브랜치는 마지막 해당 계열 release 태그에서 생성하도록 명령을 바꾼다. 이미 브랜치가 있으면 새로 만들지 말고 checkout하도록 분기하고, 템플릿 계약 테스트에 branch base 검증을 추가한다.",
+   "counter_argument": "최초 release branch cut 시점의 main이 아직 정확히 v1 계보라면 현재 절차도 맞고, 이후에는 기존 release/v1.x를 재사용할 수 있다. 그러나 템플릿은 그 전제나 재사용 분기를 명시하지 않는다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/templates/trunk-based/branch-strategy.md",
+     "line": 86,
+     "quote": "이미 출시된 옛 version (예 v1.x)에 hotfix를 backport해야 할 때만"
+    },
+    {
+     "file": "plugins/project-init/templates/trunk-based/branch-strategy.md",
+     "line": 92,
+     "quote": "git checkout main"
+    },
+    {
+     "file": "plugins/project-init/templates/trunk-based/branch-strategy.md",
+     "line": 94,
+     "quote": "git checkout -b release/v1.x"
+    }
+   ],
+   "severity": "CRITICAL",
+   "fix_cost": "M",
+   "fix_cost_rationale": "템플릿 수정과 함께 잘못된 base에서 legacy tag가 만들어지지 않는 회귀 테스트가 필요하다.",
+   "reference_gap": "https://trunkbaseddevelopment.com/branch-for-release/",
+   "oq_ref": "OQ6",
+   "source": "codex",
+   "status": "reported",
+   "deep_verified": true,
+   "deep_votes": [
+    {
+     "id": "CX-2",
+     "refuted": false,
+     "lens": "재현성",
+     "reason": "SURVIVES the reproducibility lens. The failure is concretely reproducible with deterministic git mechanics, and it is the PRIMARY path of Pattern B, not an exotic edge.\n\nMECHANICAL FACTS (verified by Read of plugins/project-init/templates/trunk-based/branch-strategy.md):\n- Line 71: \"Pattern A — Tag from trunk (default)\" — the default release pattern cuts NO release branch (line 82: \"별도 release 브랜치 없음\").\n- Line 86 (verbatim, cited): \"이미 출시된 옛 version (예: v1.x)에 hotfix를 backport해야 할 때만:\" — Pattern B's header temporally locates its use AFTER the version shipped (main has moved on).\n- Line 91 (context): \"# 1. trunk에서 release 브랜치 cut (1회만; hook advisory 경고는 무시하고 진행)\".\n- Line 92 (verbatim, cited): \"git checkout main\".\n- Line 94 (verbatim, cited): \"git checkout -b release/v1.x\".\n- Lines 102-105: \"git checkout release/v1.x / git cherry-pick <sha> / git tag -a v1.2.5 ... / git push origin release/v1.x v1.2.5\".\nGate A passes: quotes are exact.\n\nDEPLOYMENT (commands/project-init.md Step 4a line 140 + Step 4d line 173): the command reads templates/trunk-based/branch-strategy.md and writes it VERBATIM to docs/git-workflow/branch-strategy.md; only {{SCOPE_CONVENTION}}/{{MERGE_STRATEGY}} are substituted and neither appears in this file. No correcting guidance about branch base is injected. The deployed doc is the authority Claude/users follow.\n\nREPRODUCTION (deterministic): Because Pattern A is the default and cuts no branch, a project tags v1.x from main, then main advances to v2. When a v1.x hotfix is first needed, Pattern B is reached for — its header names exactly this \"already-released old version\" state. Following step 1 literally, `git checkout main` (now v2) then `git checkout -b release/v1.x` creates release/v1.x AT v2 HEAD (immediate, objective, deterministic git behavior — not a subjective misreading). `git tag -a v1.2.5` then stamps a v1 patch tag onto a v2 tree; v1.2.5 ships v2-lineage code to users of the old line. This is a concrete input→wrong-output chain, not an abstract worry.\n\nNOTHING CLOSES THE HOLE: \"1회만\" (line 91) constrains how many times you cut, not the base; \"receive-only\" (line 108) constrains what the branch receives, not its base; \"Rules for Claude\" (line 113) verifies the current branch, never the base commit/tag. No instruction to branch from the v1 release tag or to checkout a pre-existing release branch.\n\nGATE D: the trunkbaseddevelopment.com/branch-for-release reference is a WITNESS (branch-from-tag is the correct mechanism) not the WARRANT; the warrant is the concrete wrong-base output, so C5/LD6 does not kill it. GATE E: target plugins/project-init/templates/trunk-based/branch-strategy.md is in scope. GATE F: core fix is a light doc change (`git checkout -b release/v1.x <v1-tag>` + checkout-if-exists note); no structural escape hatch exists because the template IS the guidance. The template gives concrete wrong commands for the exact scenario it names; the wrong base is deterministic and the production harm is real."
+    },
+    {
+     "id": "CX-2",
+     "refuted": false,
+     "lens": "devbrew 원칙",
+     "reason": "SURVIVES all six gates; my assigned Forbidden-Patterns/Gate-F lens finds the cure proportionate, not over-engineered.\n\nMECHANICAL FACTS VERIFIED:\n- Gate A: /Users/jeonghokim/Downloads/devbrew/plugins/project-init/templates/trunk-based/branch-strategy.md lines 86, 92, 94 exist verbatim. Line 86: \"이미 출시된 옛 version (예: v1.x)에 hotfix를 backport해야 할 때만:\" (finding quote drops one colon — immaterial). Lines 92-95: `git checkout main` / `git pull origin main` / `git checkout -b release/v1.x` / `git push -u origin release/v1.x`. Line 69 claims fidelity: \"trunkbaseddevelopment.com canonical\".\n- Pattern B is framed REACTIVELY: line 86 \"hotfix를 backport해야 할 때만\" (only when you need to backport) + line 91 comment \"1회만\" makes the cut a one-time event triggered at backport time — i.e., when main has already advanced past v1. Step 3 (lines 102-105): checkout release/v1.x, cherry-pick <fix-sha>, `git tag -a v1.2.5`, push. If the branch was cut from v2 HEAD, this tags v2+fix as v1.2.5.\n- CANONICAL TBD (fetched https://trunkbaseddevelopment.com/branch-for-release/): \"The branch point does not have to be the current HEAD of trunk\"; for legacy: \"branches can be created retroactively ... in the case of bugs after 'release from a tag'\" — create the release branch retroactively FROM THE ORIGINAL RELEASE TAG, then cherry-pick. The template does the opposite for legacy releases, contradicting the very canonical it cites.\n- Templates are model-followed markdown, NOT executable (per test_command_contract.py docstring: \"a test cannot exercise its behaviour. What it can lock is the existence of the contract\"). The project-init hook is non-blocking/advisory (line 88), so nothing guards the wrong base.\n\nGATE-BY-GATE: A pass (evidence real). B pass (concrete, reproducible harm: v2-lineage artifacts deployed under a v1.2.5 tag; not closed — the template's own reactive framing opens the hole). C pass (documented-contract violation: claims canonical TBD, deviates for legacy — defect, not taste). D pass (warrant is a real production failure + the artifact's own cited authority prescribes the opposite; reference is witness/correctness, not \"sibling does X therefore\"). E pass (target is plugins/project-init/templates/**). F pass (the fix — cut from the last release tag or reuse the existing branch — IS the canonical TBD pattern, which is simpler-and-correct, not added ceremony; the optional contract-test maps to the repo's existing lightweight prose grep-lock convention).\n\nFORBIDDEN-PATTERNS CHECK (my lens): no trivia ceremony (correctness fix on a load-bearing release procedure, not a one-sentence trivia diff), no over-engineering (recommended base-from-tag is less ceremony than a wrong-HEAD cut, and is the canonical practice), no unbounded autonomy, no subagent spray. Cure is not worse than the disease. I cannot refute."
+    }
+   ],
+   "cross_model_confirmed": false
+  },
+  {
+   "id": "CX-3",
+   "axis": 1,
+   "title": "Git Flow의 custom release naming 답변이 생성물에 반영되지 않는다",
+   "user_harm": "사용자가 release/2026-q3 또는 다른 custom 형식을 선택해도 치환 계약에는 release 관련 값이 없다. 생성된 regex·예시·명령은 계속 release/v-version을 사용하므로 사용자의 명시적 선택과 다른 규칙이 프로젝트에 배포되고 hook도 그 잘못된 규칙을 읽는다.",
+   "recommendation": "release pattern·example·prefix를 명시적 placeholder로 추가하고 질문 답변을 branch-strategy와 AGENTS 요약 양쪽에 치환한다. custom 형식을 선택하는 생성 회귀 테스트도 추가한다.",
+   "counter_argument": "명령을 수행하는 모델이 custom 답변을 바탕으로 템플릿을 임의 조정할 가능성은 있다. 그러나 명시된 치환 표는 두 placeholder만 허용하고 release template은 v 형식을 하드코딩하므로 재현 가능한 계약은 아니다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 77,
+     "quote": "Release branch 명명 — release 브랜치 포맷"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 149,
+     "quote": "template 컨텐츠에서 다음 placeholder들을 치환"
+    },
+    {
+     "file": "plugins/project-init/templates/git-flow/branch-strategy.md",
+     "line": 66,
+     "quote": "git checkout -b release/v-version"
+    }
+   ],
+   "severity": "CRITICAL",
+   "fix_cost": "M",
+   "fix_cost_rationale": "command contract, 여러 Git Flow 템플릿과 생성 회귀 테스트가 함께 바뀌어야 한다.",
+   "reference_gap": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/claude-md-management/1.0.0/skills/claude-md-improver/references/quality-criteria.md:106",
+   "oq_ref": "OQ6",
+   "source": "codex",
+   "status": "refuted",
+   "refutation": {
+    "stage": "codex",
+    "gate": "B",
+    "reason": "The finding's load-bearing claim — 'hook도 그 잘못된 규칙을 읽는다' (the hook reads/enforces the wrong v-format rule) — is false. The generated git-flow regex is '^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$' (branch-strategy.md:31), which is permissive over the branch suffix: a custom format like 'release/2026-q3' matches it ('2' satisfies [a-z0-9]; '026-q3' satisfies [a-z0-9.-]*). The hook validates against exactly this regex, so a user's custom lowercase release format PASSES validation with no spurious warning — the enforced rule does NOT contradict the user's choice. The only residual mismatch is that the prose EXAMPLE text still shows 'release/v<version>', which is cosmetic, non-blocking, and adaptable by the model executing the command (the model has the custom answer in context; the finding's own counter_argument concedes this). No functional break occurs. Adding a dedicated release placeholder + generation regression test to cover a Git-Flow-only, non-default, cosmetically-lagging example is deterministic ceremony in an NL/convenience surface (Gate F secondary).",
+    "facts": [
+     "project-init.md:77 — 'Release branch 명명' question is Git-Flow-only; default is 'release/v*', with a '커스텀 포맷' option (line 78-79).",
+     "project-init.md:149-154 — the 4b substitution table contains only {{SCOPE_CONVENTION}} and {{MERGE_STRATEGY}}; there is no release-pattern placeholder (finding's premise correct).",
+     "git-flow/branch-strategy.md:31 verbatim regex: '^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$' — permissive over suffix; accepts 'release/2026-q3', 'release/sprint-42', etc.",
+     "git-flow/branch-strategy.md:66 'git checkout -b release/v<version>' is a prose example, not an enforced constraint; the hook (post-tool-use.py:113 get_branch_pattern) reads the ```regex block, which is the permissive pattern above — it does not enforce the 'v' suffix.",
+     "post-tool-use.py:120 — if pattern.match(branch_name) returns None (pass), so custom lowercase release names produce no warning."
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": false
+  },
+  {
+   "id": "CX-4",
+   "axis": 3,
+   "title": "자동 검증 주장이 정상적인 Git 대체 문법과 Bash 기반 문서 수정을 놓친다",
+   "user_harm": "git switch --create Bad_Name 또는 git commit --message plain message는 정상 Git 문법이지만 두 regex에 매치되지 않아 경고 없이 통과한다. Bash로 AGENTS.md를 수정해도 docs-lint matcher가 Write Edit MultiEdit뿐이므로 문서 검증이 실행되지 않는다. commit과 push를 한 Bash 호출에 결합하면 PostToolUse 경고가 나오더라도 잘못된 commit은 이미 원격에 올라간 뒤다.",
+   "recommendation": "Git 명령을 토큰 단위로 파싱해 checkout switch branch의 장·단축 옵션과 commit의 message F 등을 처리하고, 다중 명령을 전수 검사한다. Bash 기반 대상 문서 변경을 신뢰성 있게 감지할 수 없다면 광고 문구를 지원 문법으로 한정한다.",
+   "counter_argument": "훅은 명시적으로 advisory이며 모든 Git 문법과 shell quoting을 완전 파싱하는 것은 복잡하다. 브랜치 보호·서버 CI가 최종 정책을 맡고 이 훅은 흔한 실수만 잡는 보조 장치로 볼 수 있다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/hooks/post-tool-use.py",
+     "line": 23,
+     "quote": "BRANCH_CREATE_RE checkout -b switch -c"
+    },
+    {
+     "file": "plugins/project-init/hooks/post-tool-use.py",
+     "line": 24,
+     "quote": "COMMIT_MSG_RE git commit -m"
+    },
+    {
+     "file": "plugins/project-init/hooks/hooks.json",
+     "line": 16,
+     "quote": "matcher Write Edit MultiEdit"
+    },
+    {
+     "file": "plugins/project-init/templates/git-flow/agents-md-section.md",
+     "line": 9,
+     "quote": "project-init 플러그인이 브랜치 명명·commit 포맷 자동 검증"
+    }
+   ],
+   "severity": "HIGH",
+   "fix_cost": "M",
+   "fix_cost_rationale": "명령 인식 동작과 문서 표현을 조정하고 여러 우회 문법에 대한 테스트를 추가해야 한다.",
+   "reference_gap": "/Users/jeonghokim/Downloads/reference/gstack/careful/bin/check-careful.sh:109",
+   "oq_ref": "OQ2",
+   "source": "codex",
+   "status": "refuted",
+   "refutation": {
+    "stage": "codex",
+    "gate": "B",
+    "reason": "The hook is a PostToolUse advisory that is non-blocking by design, and the plugin documents server-side branch protection as the actual enforcement — so the missed alternate syntaxes produce no broken outcome, only an absent nudge. Even when the hook fires it merely prints a systemMessage; it never blocks a branch creation or commit. Missing 'git switch --create' / 'git commit --message' therefore means the user does not receive an advisory reminder on those forms — a degraded convenience, not a wrong result. The commit+push-in-one-Bash-call point is inherent to a POST-tool advisory (it was never going to block), and pr-process.md:59-61 explicitly designates GitHub branch-protection / server-side rulesets as the real gate. docs-lint's Write|Edit|MultiEdit matcher deliberately targets the model's file-write path, not arbitrary Bash mutation. The generated '브랜치 명명·commit 포맷 자동 검증' claim is accurate for the primary paths and does not assert exhaustive git-syntax coverage (Gate C: no documented falsehood). The recommendation to tokenize/parse all git long+short options and multi-command shell lines (echoing reference_gap gstack check-careful.sh) is exactly the complexity the finding's own counter_argument admits is 'complex', building a git-CLI parser into a non-blocking advisory (Gate F secondary).",
+    "facts": [
+     "post-tool-use.py:23 verbatim: BRANCH_CREATE_RE = re.compile(r\"git\\s+(?:checkout\\s+-b|switch\\s+-c)\\s+(\\S+)\") — matches only 'checkout -b' and 'switch -c', not 'switch --create' or 'checkout --branch'.",
+     "post-tool-use.py:24 verbatim: COMMIT_MSG_RE = re.compile(r\"git\\s+commit\\s+[^;|&]*-m\\s+(['\\\"])(.*?)\\1\") — matches '-m', not '--message'.",
+     "post-tool-use.py:9 docstring and README.md:83 — 'advisory, non-blocking'; main() emits only systemMessage / {} and always sys.exit(0).",
+     "pr-process.md:59-61 verbatim: 'server-side enforcement는 GitHub Settings → Branches → Branch protection rules... server-side만이 진정한 enforcement.'",
+     "hooks.json:16 — docs-lint matcher is 'Write|Edit|MultiEdit'; Bash-based edits are out of scope by design (targets model file writes).",
+     "git-flow/agents-md-section.md:9 verbatim: '- project-init 플러그인이 브랜치 명명·commit 포맷 자동 검증' — claims validation, not exhaustive syntax coverage."
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": true
+  },
+  {
+   "id": "CX-5",
+   "axis": 1,
+   "title": "commit-commands를 조건 없이 사용자 프로젝트에 추천하지만 prerequisite가 없다",
+   "user_harm": "project-init만 설치한 팀원이 생성된 pr-process.md의 /commit-push-pr 지시를 실행하면 알 수 없는 명령이 된다. 감사 호스트에는 commit-commands가 설치돼 있어 현재 사용자에게는 재현되지 않지만, README와 생성물 어디에도 설치 조건이 없어서 다른 설치에서는 실패가 조용히 배포된다.",
+   "recommendation": "README에 optional prerequisite와 설치 방법·최소 호환 버전을 추가하고, 생성 템플릿과 완료 메시지는 quality-gates처럼 설치 시로 조건화한다.",
+   "counter_argument": "commit-commands는 core 동작에 필요한 runtime dependency가 아니라 편의 통합이며 현재 설치 레지스트리에도 실제로 존재한다. project-init의 생성·검증 기능 자체는 이 플러그인 없이 정상 동작한다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/README.md",
+     "line": 77,
+     "quote": "commit-commands: /commit과 /commit-push-pr이 CLAUDE.md 룰을 읽어 메시지 포맷 적용"
+    },
+    {
+     "file": "plugins/project-init/templates/shared/pr-process.md",
+     "line": 77,
+     "quote": "commit-commands: 간소화된 PR 생성을 위해 /commit-push-pr 사용"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 231,
+     "quote": "간결한 git 작업을 위해 /commit 또는 /commit-push-pr commit-commands 플러그인 사용."
+    },
+    {
+     "file": "CLAUDE.md",
+     "line": 42,
+     "quote": "최소 버전이 선언된 의존성. README prerequisites에 other-plugin을 리스트. Silent coupling은 버그."
+    },
+    {
+     "file": "/Users/jeonghokim/.claude/plugins/installed_plugins.json",
+     "line": 84,
+     "quote": "commit-commands@claude-plugins-official"
+    }
+   ],
+   "severity": "CRITICAL",
+   "fix_cost": "M",
+   "fix_cost_rationale": "README, command 완료 메시지와 복제되는 shared template을 함께 조건화해야 한다.",
+   "reference_gap": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/plugin-dev/skills/command-development/SKILL.md:443",
+   "oq_ref": null,
+   "source": "codex",
+   "status": "refuted",
+   "refutation": {
+    "stage": "codex",
+    "gate": "B",
+    "reason": "The coupling is not silent — every reference to /commit-push-pr explicitly names commit-commands as its source plugin, so a user without it installed is told exactly which plugin provides the command, and the core PR workflow is fully documented independently. README.md:77 leads with '**commit-commands**:', pr-process.md:77 leads with '**commit-commands**:', and project-init.md:231 says '/commit-push-pr (commit-commands 플러그인)'. All appear under '## 통합' / '## Plugin Integration' (optional-integration context). Running an unknown slash command yields a self-explanatory 'unknown command' that the surrounding text attributes to a named, installable plugin — no destructive or blocking outcome, and pr-process.md:14-31 provides a complete manual 'gh pr create' flow that needs no commit-commands. The devbrew rule cited (CLAUDE.md 'README prerequisites에 other-plugin을 리스트') is scoped to plugins that DISPATCH 'other-plugin:agent-name'; project-init dispatches no agent, it merely suggests a slash command, so the rule does not cleanly apply (Gate C weak-fit). The CRITICAL severity is unsupported: the worst case is a labeled, recoverable UX papercut. The only genuine nit — quality-gates carries '(설치 시)' while commit-commands does not — is a cosmetic consistency polish, not a broken outcome.",
+    "facts": [
+     "README.md:77 verbatim: '- **commit-commands**: /commit과 /commit-push-pr이 CLAUDE.md 룰을 읽어 메시지 포맷 적용' under '## 통합' (Integration).",
+     "pr-process.md:77 verbatim: '- **commit-commands**: 간소화된 PR 생성을 위해 /commit-push-pr 사용' under '## Plugin Integration'; pr-process.md:78 marks '- **quality-gates** (설치 시):' with an install qualifier.",
+     "project-init.md:231 verbatim: '간결한 git 작업을 위해 /commit 또는 /commit-push-pr (commit-commands 플러그인) 사용.' — explicitly names the source plugin.",
+     "pr-process.md:14-31 — a full manual 'gh pr create --title ... --body ...' flow exists independent of commit-commands.",
+     "CLAUDE.md rule cited targets plugins that 'other-plugin:agent-name을 dispatch'; project-init suggests a slash command and dispatches no agent.",
+     "installed_plugins.json:84 — commit-commands@claude-plugins-official is installed on the audit host, so the finding does not reproduce for the current user."
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": false
+  },
+  {
+   "id": "CX-6",
+   "axis": 1,
+   "title": "marketplace 설명이 필수 charter 인터뷰와 추가 생성물을 숨긴다",
+   "user_harm": "marketplace 카드만 보고 Git workflow 초기화 도구를 설치한 사용자는 실행 중 최대 네 개의 필수 charter 질문과 docs/project 파일 생성을 추가로 만나며, 답변 실패 시 charter 단계가 중단된다. plugin.json 설명은 이를 밝히지만 설치 전 노출되는 marketplace 설명에는 없다.",
+   "recommendation": "marketplace 설명에 fact-routing charter interview와 AGENTS.md/CLAUDE.md 및 docs/project 생성 범위를 짧게 포함해 plugin.json과 의미적으로 동기화한다.",
+   "counter_argument": "marketplace description은 검색 카드용 압축 문구이며 현재 문장도 실제 Git workflow 생성·검증 기능을 거짓으로 말하지 않는다. README에서 charter 단계가 상세히 설명된다.",
+   "evidence": [
+    {
+     "file": ".claude-plugin/marketplace.json",
+     "line": 17,
+     "quote": "Git workflow initialization: select branching strategy, generate rules and auto-validate."
+    },
+    {
+     "file": "plugins/project-init/.claude-plugin/plugin.json",
+     "line": 3,
+     "quote": "Initialize git-workflow rules and a project charter via a fact-routing interview"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 124,
+     "quote": "vision·non-goals·conventions·tech-stack가 채워질 때까지 진행을 막는다."
+    }
+   ],
+   "severity": "MEDIUM",
+   "fix_cost": "S",
+   "fix_cost_rationale": "marketplace의 project-init 설명 한 항목을 국소 수정하면 된다.",
+   "reference_gap": "",
+   "oq_ref": null,
+   "source": "codex",
+   "status": "refuted",
+   "refutation": {
+    "stage": "codex",
+    "gate": "B",
+    "reason": "No concrete broken outcome exists — the marketplace card is a terse, non-false summary, and the charter step is an interactive, declinable/abortable stage inside a command the user chose to run. marketplace.json:17 accurately describes the git-workflow feature; omitting the charter from a compressed search card is incompleteness, not a false claim (the finding itself says '거짓으로 말하지 않는다'), and plugin.json:3 (the plugin's own manifest, visible at install/detail) does disclose the charter. Encountering additional interactive prompts is not user harm: the Law 1 gate (line 124) blocks only the charter, retries at most 3× then aborts with a loud advisory while git-workflow output still generates (line 128); C-S2 charter updates can be declined (line 85). A user who wanted only git-workflow can decline/abort the charter and still receive the advertised deliverable. No devbrew rule requires marketplace.json to be semantically synced with plugin.json (Gate C: taste, card-terseness call). MEDIUM severity overstates a mild pre-install-disclosure surprise.",
+    "facts": [
+     "marketplace.json:17 verbatim: 'Git workflow initialization: select branching strategy (GitHub Flow, Git Flow, Trunk-based), generate rules and auto-validate.' — accurate about git-workflow; charter omitted.",
+     "plugin.json:3 verbatim: 'Initialize git-workflow rules and a project charter via a fact-routing interview...' — the charter IS disclosed in the plugin manifest.",
+     "project-init.md:124-128 — Law 1 gate applies to C-S1/C-S3(a), retries ≤3 then loud abort; abort does not block git-workflow generation ('git-workflow 산출물은 정상 생성').",
+     "project-init.md:85 — C-S2 (complete charter) update can be declined ('거절 시 Step 3.5를 건너뛴다').",
+     "No cited devbrew rule mandates marketplace.json ≡ plugin.json description parity."
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": true
+  },
+  {
+   "id": "CX-7",
+   "axis": 1,
+   "title": "CLAUDE.md용 200줄 권고를 docs/project 문서에도 Anthropic 권고로 오인 적용한다",
+   "user_harm": "250줄의 docs/project/charter.md를 쓰면 훅은 해당 파일이 이미 docs 아래 있는데도 상세를 docs로 옮기라는 Anthropic 권고를 출력한다. 사용자는 공식 기준으로 오해해 정상적인 상세 문서를 불필요하게 쪼개거나 경고를 무시하는 습관을 갖게 된다.",
+   "recommendation": "공식 200줄 메시지는 root context 파일에만 적용한다. docs/project에는 별도의 근거 있는 기준을 두거나 plugin 자체 정책임을 명시하고 Move detailed content 문구를 제거한다.",
+   "counter_argument": "docs/project 문서도 AGENTS.md에서 참조돼 모델 문맥에 들어갈 수 있으므로 간결성 경고 자체는 유용하고, 훅은 차단하지 않는다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/hooks/docs-lint.py",
+     "line": 68,
+     "quote": "startswith docs/project/ and endswith .md"
+    },
+    {
+     "file": "plugins/project-init/hooks/docs-lint.py",
+     "line": 122,
+     "quote": "Anthropic recommends 200. Move detailed content to docs and link from here."
+    },
+    {
+     "file": "plugins/project-init/hooks/tests/test_docs_lint.py",
+     "line": 787,
+     "quote": "assertIn Anthropic recommends"
+    },
+    {
+     "file": "plugins/project-init/CHANGELOG.md",
+     "line": 85,
+     "quote": "디자인 근거 Anthropic 공식 target under 200 lines"
+    }
+   ],
+   "severity": "MEDIUM",
+   "fix_cost": "M",
+   "fix_cost_rationale": "대상별 rule dispatch와 기존 테스트 기대값을 함께 수정해야 한다.",
+   "reference_gap": "https://code.claude.com/docs/en/memory",
+   "oq_ref": "OQ6",
+   "source": "codex",
+   "status": "refuted",
+   "refutation": {
+    "stage": "codex",
+    "gate": "B",
+    "reason": "The claimed harm is soft (a user 'might misunderstand' the ≤200 provenance or 'form a habit of ignoring warnings') rather than a concrete broken outcome, and the linting of docs/project/*.md for size is documented design intent. check_r1_size fires a single shared, non-blocking advisory across both root context files and docs/project detail docs; the message is accurate for its primary target class (CLAUDE.md/AGENTS.md, where Anthropic's ≤200 memory guidance genuinely applies) and reused verbatim for docs/project files that, per README:86, are linted for concision precisely because they enter model context via AGENTS.md references. Whether to label the provenance 'Anthropic recommends' versus 'plugin policy' is a wording-precision taste call (Gate C), not a functional defect; the hook blocks nothing, so a user is free to split or ignore. The recommended fix (per-target message dispatch + updating the pinned test expectation) adds branching complexity to a cosmetic wording concern on an advisory (Gate F secondary).",
+    "facts": [
+     "docs-lint.py:60-68 — is_charter_doc: 'rel_posix.startswith(\"docs/project/\") and rel_posix.endswith(\".md\")'; docs/project/*.md are additive lint targets (design intent, README.md:86).",
+     "docs-lint.py:120-125 — R1 message: 'project-init: {rel_display} is {lines} lines. Anthropic recommends ≤200. Move detailed content to docs/** and link from here.' — single shared string for all targets.",
+     "test_docs_lint.py:776-788 (TestCharterTarget.test_charter_doc_is_linted) — a 250-line docs/project/charter.md asserts 'Anthropic recommends' fires and rc==0 (non-blocking).",
+     "CHANGELOG.md:85 — attributes ≤200 to Anthropic 'target under 200 lines' from code.claude.com/docs/en/memory (guidance scoped to memory/context files).",
+     "docs-lint.py main() emits systemMessage only; the hook never blocks (advisory)."
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": false
+  },
+  {
+   "id": "CX-8",
+   "axis": 3,
+   "title": "유효한 중첩 backtick fence를 bare opener로 오판한다",
+   "user_harm": "AGENTS.md에 4-backtick markdown fence를 열고 그 안에 3-backtick 예시를 넣은 뒤 4-backtick으로 닫는 유효한 CommonMark 입력을 쓰면, linter는 내부 3-backtick을 바깥 fence의 닫힘으로 토글하고 다음 3-backtick을 언어 없는 새 opener로 경고한다.",
+   "recommendation": "열린 fence의 문자와 길이를 상태로 저장하고 같은 문자이면서 opening 길이 이상인 fence만 close로 처리한다. 4-backtick 외부 fence 안의 3-backtick 예시와 tilde fence를 회귀 테스트에 추가한다.",
+   "counter_argument": "이 경고는 non-blocking이고 중첩 fence는 일반적인 AGENTS.md에서 드물다. 현재 테스트는 단순한 3·4-backtick 사용에는 충분하다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/hooks/docs-lint.py",
+     "line": 155,
+     "quote": "FENCE_RE backtick 3 or more"
+    },
+    {
+     "file": "plugins/project-init/hooks/docs-lint.py",
+     "line": 183,
+     "quote": "in_fence = not in_fence"
+    },
+    {
+     "file": "plugins/project-init/hooks/tests/test_docs_lint.py",
+     "line": 401,
+     "quote": "4-backtick python fence"
+    }
+   ],
+   "severity": "MEDIUM",
+   "fix_cost": "M",
+   "fix_cost_rationale": "parser 상태 로직과 CommonMark 경계 사례 테스트를 함께 바꿔야 한다.",
+   "reference_gap": "https://spec.commonmark.org/0.31.2/",
+   "oq_ref": "OQ2",
+   "source": "codex",
+   "status": "refuted",
+   "refutation": {
+    "stage": "codex",
+    "gate": "B",
+    "reason": "The mechanical bug is real (FENCE_RE toggles on any 3+ backtick line without tracking fence character or length, so a 4-backtick outer fence containing a bare 3-backtick example mis-toggles state and can flag the inner closing fence as a bare opener) but it produces at most a spurious, non-blocking advisory warning on a rare input — not a broken outcome. The hook only emits a systemMessage; nothing is blocked or corrupted. The finding's own counter_argument concedes nested fences are 'rare in typical AGENTS.md'. Critically, this is the SAME class of acknowledged heuristic imperfection the plugin already documents accepting: check_r5_fences scopes out tilde fences (line 165) and check_r6_links documents 'links inside fenced code blocks... known false-positive surface' (lines 242-244). An undocumented instance of an explicitly-tolerated false-positive class on a rare input is a heuristic limitation, not a defect that harms a user. The recommended cure (a full CommonMark fence state machine tracking char+length, plus tilde-fence and nesting regression tests) is disproportionate complexity debt against the plugin's deliberate simple-heuristic-advisory design (Gate F secondary); the reference_gap (CommonMark spec) supplies possibility, not obligation (Gate D).",
+    "facts": [
+     "docs-lint.py:155 verbatim: FENCE_RE = re.compile(r\"^ {0,3}(`{3,})\\s*(\\S*)\\s*$\") — matches 3-or-more backticks; does not capture/compare fence length or character.",
+     "docs-lint.py:182-183 — comment 'Toggle either way (closing fence is always bare and intentional)' then 'in_fence = not in_fence' — unconditional toggle, no CommonMark length/char match.",
+     "Traced on '````'(open) / '```'(inner) / code / '```'(inner close) / '````'(outer close): inner close is mis-treated as a bare opener → false-positive warning at that line.",
+     "docs-lint.py:158-165 (R5 docstring) documents scope-out of tilde fences; docs-lint.py:242-244 (R6 docstring) documents accepted 'known false-positive surface' for links in fences — the plugin explicitly tolerates this class.",
+     "test_docs_lint.py:380-410 covers simple bare and lang-tagged 4-backtick fences but not the nested case; hook is non-blocking (systemMessage only)."
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": false
+  },
+  {
+   "id": "CX-9",
+   "axis": 5,
+   "title": "charter 미생성 경로에서도 완료 보고가 모든 charter 파일을 생성됐다고 말한다",
+   "user_harm": "필수 charter 답변이 세 번 실패해 charter 단계가 abort되거나 C-S2 업데이트를 거절해 unchanged가 되어도 Step 5는 AGENTS.md charter 섹션과 charter.md·conventions.md를 생성·업데이트된 파일로 열거한다. 사용자는 실제 파일을 확인하지 않고 초기화가 완전하다고 오인할 수 있다.",
+   "recommendation": "Step 5 보고를 실제 state와 수행 action에서 구성하도록 조건화한다. charter abort, C-S2 unchanged, glossary 미생성 및 각 Git state별 create/update/unchanged를 구분한다.",
+   "counter_argument": "charter abort 시 이미 loud advisory를 출력하고 Step 5 블록은 정상 성공 경로의 예시로 읽을 수 있다. 사용자가 직전 경고를 봤다면 오인은 제한적이다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 126,
+     "quote": "charter 미완료 항목 비어 abort. git-workflow 산출물은 정상 생성."
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 206,
+     "quote": "C-S2 complete 거절 시 전부 unchanged."
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 225,
+     "quote": "docs/project/charter.md — vision·goals·non-goals·success criteria·personas"
+    }
+   ],
+   "severity": "MEDIUM",
+   "fix_cost": "S",
+   "fix_cost_rationale": "command 파일의 완료 보고 분기만 국소적으로 수정할 수 있다.",
+   "reference_gap": "",
+   "oq_ref": "OQ6",
+   "source": "codex",
+   "status": "refuted",
+   "refutation": {
+    "stage": "codex",
+    "gate": "B",
+    "reason": "The 'user believes initialization is complete' harm is already closed by the command's own loud abort advisory plus docs-lint post-flagging, and Step 5 is a model-composed results report rather than a deterministic print. On charter abort, project-init.md:124-126 mandates a loud advisory in the same output stream stating exactly that the charter did NOT complete while git-workflow did ('charter 미완료: <항목> 비어 abort. git-workflow 산출물은 정상 생성되며, docs-lint이 ## Project Charter 미완을 사후 플래그합니다'), so the user is explicitly told the charter files were not produced immediately before the Step 5 block. For C-S2 'unchanged', the user THEMSELVES declined the update prompt (line 85/206), so they already know the state. The Step 5 block is a '생성 결과 보고' template the executing model fills from actual state — and it already demonstrates conditionality (glossary carries '(도메인 용어가 있으면)', line 227), so a model that just aborted would reasonably condition the charter lines too. docs-lint's R-charter (check_r_charter) independently post-flags an incomplete '## Project Charter'. With a mandatory preceding advisory plus a deterministic post-flag backstop, no un-mitigated deception survives; the MEDIUM finding is a report-precision polish, not a broken outcome.",
+    "facts": [
+     "project-init.md:124-126 — loud abort advisory is mandatory on charter Law-1 gate failure and states git-workflow succeeded while charter did not, and that docs-lint will post-flag the incomplete '## Project Charter'.",
+     "project-init.md:212-231 — Step 5 is prefaced by '생성 결과 보고:' (report the RESULTS); the blockquote is an example format, and line 227 already conditionalizes glossary with '(도메인 용어가 있으면)'.",
+     "project-init.md:85 and 206 — C-S2 'unchanged' arises from the user's own explicit refusal of the update prompt.",
+     "docs-lint.py check_r_charter (lines 411-449) deterministically flags an AGENTS.md '## Project Charter' with missing/empty/placeholder Vision·Non-goals·Tech Stack — an independent post-hoc backstop.",
+     "Step 5 output is composed by the executing model from actual state, not a fixed deterministic emission."
+    ]
+   },
+   "deep_verified": null,
+   "cross_model_confirmed": false
+  }
+ ],
+ "d_verdicts": [
+  {
+   "id": "D1",
+   "verdict": "reclassified",
+   "reason": "직접 검증: (레지스트리) installed_plugins.json:84에 commit-commands@claude-plugins-official가 설치돼 있고, 캐시의 commands/commit-push-pr.md·commit.md가 실재하므로 `/commit-push-pr`·`/commit` 권고는 존재하지 않는 명령을 가리키는 '거짓'이 아니다. (b) 그 권고는 templates/shared/pr-process.md:77을 통해 사용자 프로젝트 docs/git-workflow/pr-process.md:77로 실제 복제된다(확인). (a) README에 prerequisites 섹션은 없다. 그러나 CLAUDE.md의 prerequisites 규칙은 `other-plugin:agent-name`을 *dispatch*하는 플러그인을 대상으로 하며, project-init은 dispatch하지 않고 명령을 *추천*만 한다(pr-process.md:77이 '**commit-commands**:' 굵은 헤더로 출처를 명시 = named coupling, silent 아님). 따라서 'silent coupling HIGH 버그'가 아니라, line 78의 '(설치 시)' 조건 표기가 line 77에 빠진 LOW 비일관으로 재분류 — finding A1-2.",
+   "impact": "생성물로 복제되지만 출처가 명시된 soft coupling. commit-commands 미설치 사용자에게 예측 가능한 경미한 실패(회복 가능). LOW.",
+   "source": "claude"
+  },
+  {
+   "id": "D2",
+   "verdict": "withdrawn",
+   "reason": "인덱스가 아니라 본문을 검증: quality-gates/hooks/hooks.json은 PostToolUse(Bash) matcher만 등록해 이벤트 목록엔 PR 트리거가 안 보이지만, 훅 *본문* quality-gates/hooks/post-tool-use.py:54가 `re.search(r\"gh\\s+pr\\s+create\", command)`로 PR 생성을 감지하고, stdout에서 PR URL을 찾으면(78행) 'You MUST now initialize the quality-gates pipeline' systemMessage를 주입한다(88-96행). 즉 README:79('quality-gates: PR 생성 시 quality 파이프라인 자동 트리거')와 생성물 pr-process.md:78('gh pr create에 quality 파이프라인 자동 트리거')는 코드와 정합하는 참이다. 계약 6항의 index-vs-body 함정 — 본문이 트리거를 구현하므로 갭 아님.",
+   "impact": "허위 주장 없음. project-init README/생성물의 qg 자동 트리거 서술은 정확.",
+   "source": "claude"
+  },
+  {
+   "id": "D3",
+   "verdict": "confirmed",
+   "reason": "marketplace.json:17('Git workflow initialization: select branching strategy … generate rules and auto-validate.')과 plugin.json:3(charter·fact-routing interview·AGENTS.md/CLAUDE.md·charter integrity 명시)의 description은 실제로 다르다(staleness sweep 확증). drift는 사실. 다만 marketplace 문구의 모든 내용은 참이고 CHANGELOG.md:10이 밝힌 v1.7.1 의도적 압축의 결과라, '거짓'이 아니라 headline 기능(charter/interview) 누락으로 인한 discoverability 불완전 — LOW finding A1-1로 리포트.",
+   "impact": "브라우징 사용자가 리스팅에서 charter 기능을 발견 못 함. 거짓 없음. LOW.",
+   "source": "claude"
+  },
+  {
+   "id": "D4",
+   "verdict": "withdrawn",
+   "reason": "3개 파일 직접 확인: 두 개는 dogfooding 중 leak된 qg 세션 인덱스(.claude/quality-gates/<uuid>/files.md), 세 번째는 templates/.claude/… 하위. (1) 전부 .gitignore:214의 `.claude/`(임의 depth)에 매칭돼 untracked → git 배포 패키지에 포함되지 않음. (2) 복제 메커니즘 부재: 템플릿을 *쓰는* 코드(commands/project-init.md:138-143 Step 4a)는 `${CLAUDE_PLUGIN_ROOT}/templates/<strategy>/…`·`templates/shared/…`·`templates/project/…`의 *특정 명명 파일만* Read하고, `templates/`를 재귀/glob 복사하지 않는다. 따라서 templates/.claude/… 오염 파일도 사용자 프로젝트로 복제될 경로가 없다. 사용자 프로젝트로 새는 거짓 없음.",
+   "impact": "로컬 워킹트리 cruft(git-ignored). 배포·생성물 누출 없음. 축1 갭 아님(축② 위생 관찰로는 별개).",
+   "source": "claude"
+  },
+  {
+   "id": "D5",
+   "verdict": "confirmed",
+   "reason": "The premise 'Claude Code does not natively read AGENTS.md' is CONFIRMED TRUE by the authoritative official documentation as of 2026-07. Claude Code memory docs (code.claude.com/docs/en/memory.md, section 'AGENTS.md') state verbatim: 'Claude Code reads `CLAUDE.md`, not `AGENTS.md`. If your repository already uses `AGENTS.md` for other coding agents, create a `CLAUDE.md` that imports it...' and give the canonical example `@AGENTS.md` inside CLAUDE.md — which is EXACTLY what project-init emits (templates/shared/claude-md-pointer.md:1 = '@AGENTS.md'; commands/project-init.md:134 'AGENTS.md를 canonical content source로, CLAUDE.md를 @AGENTS.md thin pointer로 발행'). Two independent web sources corroborate: bestagent.dev/claude-md-vs-agents-md-2026 ('No. Claude Code does not natively read AGENTS.md as of June 2026') and gist yurukusa/d36197848911f025add142abefcde685 ('Does Claude Code read AGENTS.md? No — it reads CLAUDE.md. The @AGENTS.md import ... actually work'). The long-watched native-support request anthropics/claude-code#34235 remains unresolved. Because the premise is confirmed, project-init's AGENTS.md-canonical + @AGENTS.md-thin-pointer design is not merely defensible — it is the officially-recommended pattern. This is NOT a gap. The brief's rule ('withdrawn이면 갭으로, confirmed면 갭이 아니다') therefore yields 'not a gap'.",
+   "impact": "Positive for the identity axis: project-init's core file-layout design (AGENTS.md canonical for 16+ vendors, CLAUDE.md = @AGENTS.md import for Claude Code) matches Anthropic's own 2026-07 recommendation verbatim. The README claims at README.md:51-52 ('canonical content source, OpenAI Codex/Cursor/Aider 등 16+ 벤더 자동 인식' / 'Claude Code가 AGENTS.md content를 자동 import') are accurate against current official docs, not stale.",
+   "fix": "None required. Design is correct as of 2026-07. If native AGENTS.md support ever lands (issue #34235), the CLAUDE.md pointer becomes redundant-but-harmless; a future changelog note would suffice at that point.",
+   "source": "claude"
+  },
+  {
+   "id": "D1",
+   "verdict": "confirmed",
+   "reason": "설치 레지스트리 /Users/jeonghokim/.claude/plugins/installed_plugins.json:84-91에서 commit-commands가 실제 설치된 것은 확인했다. 그러나 README에는 prerequisites 섹션이 없고, plugins/project-init/templates/shared/pr-process.md:77이 조건 표시 없이 /commit-push-pr을 사용자 프로젝트에 복제하며 command 완료 메시지도 같은 명령을 권한다.",
+   "impact": "현재 감사 호스트에서는 동작하지만 project-init만 설치한 다른 사용자에게 실행 불가능한 명령이 생성물로 배포된다.",
+   "fix": "optional prerequisite를 문서화하고 설치 여부에 따라 생성물과 완료 메시지를 조건화한다.",
+   "source": "codex"
+  },
+  {
+   "id": "D2",
+   "verdict": "withdrawn",
+   "reason": "quality-gates hooks.json의 event 이름만으로는 PR trigger가 보이지 않지만 구현은 plugins/quality-gates/hooks/post-tool-use.py:54에서 gh pr create를 검출하고, :78에서 성공 PR URL을 확인한 뒤 :88-95에서 pipeline 초기화 systemMessage를 발행한다. project-init README:79와 pr-process.md:78의 직접 gh pr create 조건부 주장은 구현과 일치한다.",
+   "impact": "",
+   "source": "codex"
+  },
+  {
+   "id": "D3",
+   "verdict": "confirmed",
+   "reason": ".claude-plugin/marketplace.json:17은 Git workflow만 설명하지만 plugin.json:3은 필수 fact-routing charter interview와 AGENTS.md/CLAUDE.md·charter integrity를 포함한다. 단순 문자열 차이를 넘어 설치 전 설명에서 필수 질문과 추가 write 범위가 빠져 있다.",
+   "impact": "사용자가 설치 카드에서 예상한 범위보다 더 많은 질문과 프로젝트 파일 변경을 실행 중에 처음 접한다.",
+   "fix": "marketplace 문구를 plugin.json과 의미적으로 동기화한다.",
+   "source": "codex"
+  },
+  {
+   "id": "D4",
+   "verdict": "withdrawn",
+   "reason": "세 ignored files를 모두 직접 읽었고 session 파일 목록과 절대·임시 경로가 실제 존재한다. 그러나 .gitignore:214-220이 plugin 하위 .claude를 제외하고, 설치 cache에도 포함되지 않는다. 더 중요하게 command는 plugins/project-init/commands/project-init.md:138-145와 :181-185의 명시적 template 목록만 읽으므로 templates/.claude를 재귀 복제하지 않는다.",
+   "impact": "",
+   "source": "codex"
+  },
+  {
+   "id": "D5",
+   "verdict": "confirmed",
+   "reason": "2026-07 현재 공식 문서 https://code.claude.com/docs/en/memory 는 Claude Code가 AGENTS.md를 직접 읽지 않으며, 기존 AGENTS.md를 쓰는 저장소에는 이를 import하는 CLAUDE.md를 만들라고 명시한다. 따라서 AGENTS.md canonical + CLAUDE.md의 @AGENTS.md pointer 설계는 현재 공식 권고와 일치한다. /init이 AGENTS.md를 탐색해 CLAUDE.md에 관련 내용을 반영할 수 있는 것과 runtime native loading은 별개다.",
+   "impact": "D5 자체는 갭이 아니다.",
+   "source": "codex"
+  }
+ ],
+ "oq_answers": [
+  {
+   "id": "OQ1",
+   "steelman_condition": "c",
+   "reason": "얇음은 결함이 아니라 **적합 설계(fit design)**로 판정한다. 지배 규범 P8(Determinism Economy, philosophy:74-80)은 결정론 장치를 '모델 신뢰가 불충분하고 오류 비용이 높은 load-bearing 지점'에만 부과하고(부과 방향), '편의·라우팅·NL-의도처럼 구조적 escape hatch가 있는 영역엔 결정론 가드를 쌓지 말고 모델을 신뢰'(제거 방향, philosophy:77)하라고 대칭으로 명한다. project-init은 정확히 이 분할을 이미 구현한다: load-bearing 결정론 표면(브랜치/커밋 검증, 문서-컨벤션 린트)은 *실제 Python 코드*(post-tool-use.py, docs-lint.py; 95/95 테스트)로 존재하고, 모델-판단 표면(인터뷰, 문서 생성)만 산문이다. 생성 로직에 scripts/skills/agents를 추가하는 것은 P8의 제거 방향과 memory 선례('harness lightness — trust the model', 'harness is means not end')를 위반하는 과잉-결정론이다. LD6 입증책임: steelman 조건 중 현재 충족된 것이 없다 — (a) command 231줄 << 500(불충족); (b) 산문-로직 버그는 v1.7.2 단 1건, 아직 '반복' 패턴 아님(불충족); (d) 판정 로직을 재사용할 타 플러그인 소비자 부재(불충족). (c)=되돌릴 수 없는 파괴에 PreToolUse 게이트가 필요한 사례는 축6 OQ4에 의존 → pending. 재현 가능한 *미수정* 실패 모드도, 충족된 steelman도 없으므로 구조 변경을 권고하지 않는다. 결론: 축6이 (c)-급 파괴 사례를 확증하지 않는 한 얇음은 적합 설계다.",
+   "left_evidence": [
+    {
+     "file": "plugins/project-init/CHANGELOG.md",
+     "line": 14,
+     "quote": "**S2a migration이 `AGENTS.md`를 `# CLAUDE.md`로 잘못 제목 짓던 문제** — ... 산출된 `AGENTS.md`가 자기 자신이 아닌 원본 파일명을 제목으로 달았다."
+    },
+    {
+     "file": "plugins/project-init/CHANGELOG.md",
+     "line": 15,
+     "quote": "발견 경위: devbrew context-slimming WS5의 sandbox 재실행 — 감량된 repo 사본에서 `/project-init`을 S2a 승인 경로로 실제 수행해 산출물을 검사했다."
+    },
+    {
+     "file": "plugins/project-init/hooks/tests/test_command_contract.py",
+     "line": 4,
+     "quote": "a test cannot exercise its behaviour. What it *can* lock is the existence of the contract the model is meant to follow."
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 165,
+     "quote": "**S4 (AGENTS exists, CLAUDE divergent or absent)** | 존재 | 없음 또는 divergent content | 사용자에게 advisory + 두 옵션 — (i) CLAUDE.md를 `@AGENTS.md` 한 줄로 *재작성* (AGENTS.md unchanged)"
+    }
+   ],
+   "right_evidence": [
+    {
+     "file": "docs/philosophy/devbrew-harness-philosophy.md",
+     "line": 77,
+     "quote": "(제거 방향) 편의·라우팅·NL-의도처럼 구조적 escape hatch가 이미 있는 영역엔 결정론 가드를 쌓지 말고 모델을 신뢰한다."
+    },
+    {
+     "file": "docs/philosophy/devbrew-harness-philosophy.md",
+     "line": 78,
+     "quote": "(부과 방향) 결정론은 보안/정확성 게이트(fail-closed)라는 load-bearing 지점에만 정확히 부과한다."
+    },
+    {
+     "file": "plugins/project-init/hooks/hooks.json",
+     "line": 4,
+     "quote": "\"PostToolUse\": [ { \"matcher\": \"Bash\", ... \"command\": \"python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use.py\" ... }, { \"matcher\": \"Write|Edit|MultiEdit\", ... \"docs-lint.py\" ... } ]"
+    },
+    {
+     "file": "docs/philosophy/devbrew-harness-philosophy.md",
+     "line": 96,
+     "quote": "Subagent spray — 선언 없는 fan-out ≥5. single-agent가 default다 (P22)."
+    }
+   ],
+   "answer": "적합 설계. 얇음은 P8의 '제거 방향'을 올바르게 인스턴스화한 결과이며, load-bearing 결정론(검증)은 이미 코드로, 모델-판단(생성)은 산문으로 원칙에 맞게 분리돼 있다. 현재 충족된 steelman 조건이 없어 구조 변경(scripts/skills/agents 추가)은 정당화되지 않는다. 단 (c)는 축6 OQ4에 pending — 축6이 되돌릴 수 없는 silent-파괴 사례를 확증하면 이 답이 뒤집힌다.",
+   "source": "claude",
+   "_steelman_resolved_by": "OQ4 판정(되돌릴 수 없는 파괴 경로 존재)으로 orchestrator가 pending→c 해소 (post-1 2b)"
+  },
+  {
+   "id": "OQ2",
+   "answer": "Do NOT promote branch/commit validation to a BLOCKING PreToolUse. Keep the current PostToolUse advisory as the default. A genuine middle ground exists — a PreToolUse hook that emits a WARNING ONLY (never permissionDecision deny/ask) before `git checkout -b`/`switch -c`/`branch` runs — and it would modestly improve the branch-naming UX by warning before creation instead of suggesting a post-hoc rename. But that middle ground is optional polish, not a defect to fix: it adds a second hook on the Bash PreToolUse hot path and can fire noise on commands that ultimately fail, for a benefit (avoiding one recoverable `git branch -m`) that the existing advisory already makes cheap.",
+   "reason": "The post-hoc limitation is REAL and verified: PostToolUse fires after the tool executes, so by the time validate_branch runs the badly-named branch already exists and the hook can only offer `git branch -m <prefix>/{name_part}` (post-tool-use.py:128) — a rename, not a prevention. Likewise a commit is already made. That fact is what motivates the OQ. However, three lines of evidence make a BLOCKING promotion the wrong call: (1) branch naming is a recoverable STYLE rule, not a safety/correctness gate — a wrong name costs one rename, versus the destructive/boundary operations that legitimately warrant PreToolUse deny/ask in the precedent corpus (gstack freeze denies out-of-boundary writes, careful ASKS at check-careful.sh:109; ECC path-safety fails closed on trust-root escape). (2) The maintainers already made exactly this call deliberately: CHANGELOG.md:40 records that runtime base-branch/merge enforcement (F4/F5) was 'harness lightness — trust the model'로 명시 defer, and README.md:83 documents the hook as advisory/non-blocking on purpose. (3) devbrew's own standing lesson (feedback_harness_lightness_trust_model) reserves deterministic guards for load-bearing security/accuracy gates, not convention nudges — and sibling precedent (oh-my-claudecode merge-readiness: 'v1 is advisory does not block') keeps convention checks advisory. So: the middle ground is real but not compelled; promoting to deny would over-enforce a style rule against the plugin's own declared design and philosophy. Recommendation: keep PostToolUse advisory; only if the team specifically wants to kill the rename-dance should they add a PreToolUse WARNING-ONLY variant, and even then never deny/ask.",
+   "left_evidence": [
+    {
+     "file": "plugins/project-init/hooks/post-tool-use.py",
+     "line": 128,
+     "quote": "cmd = f\"Rename with: git branch -m <prefix>/{name_part}   (choose a prefix above)\""
+    },
+    {
+     "file": "/Users/jeonghokim/Downloads/reference/gstack/careful/bin/check-careful.sh",
+     "line": 109,
+     "quote": "PreToolUse가 차단이 아니라 묻는다(permissionDecision ask) — a before-the-fact middle ground exists in the precedent corpus"
+    }
+   ],
+   "right_evidence": [
+    {
+     "file": "plugins/project-init/CHANGELOG.md",
+     "line": 40,
+     "quote": "merge/base-branch 런타임 강제(F4/F5)는 \"harness lightness — trust the model\"로 명시 defer."
+    },
+    {
+     "file": "plugins/project-init/README.md",
+     "line": 83,
+     "quote": "브랜치 명·커밋 메시지 검증 (advisory, non-blocking). ... skill은 모델이 invoke하는 단위라 action 레이어에서의 결정적 실행을 보장하지 못함."
+    },
+    {
+     "file": "/Users/jeonghokim/Downloads/reference/oh-my-claudecode/skills/merge-readiness/SKILL.md",
+     "line": 51,
+     "quote": "v1 is advisory does not block — sibling precedent that convention checks stay advisory"
+    }
+   ],
+   "steelman_condition": "none",
+   "source": "claude"
+  },
+  {
+   "id": "OQ3",
+   "answer": "Phase 0's manifest/directory scan IS mechanically redundant with the built-in /init's codebase analysis, and the newer interactive /init (CLAUDE_CODE_NEW_INIT=1, documented in official memory docs) overlaps even further — it 'explores your codebase with a subagent, fills in gaps via follow-up questions, and presents a reviewable proposal,' which parallels project-init's Phase 0 (scan) + Phase 1 (AskUserQuestion elicitation). BUT project-init should NOT simply delegate to /init and it retains independent value, for three concrete reasons: (1) DIRECTION — /init is CLAUDE.md-canonical (it 'reads [AGENTS.md] and incorporates the relevant parts into the generated CLAUDE.md'), whereas project-init emits AGENTS.md-canonical + CLAUDE.md=@AGENTS.md, the officially-recommended multi-vendor direction (D5 confirmed). Delegating to /init would invert the canonical file. (2) SCOPE — Phase 0's scan is a means to charter elicitation (each hit gets a [감지됨] label confirmed at Phase 1 ④), not general memory-file authoring. (3) DELIVERABLE — /init 'discovers' conventions; it does not elicit a durable Project Charter (vision/non-goals/success/personas in docs/project/charter.md) behind a Law 1 completeness gate, nor does it generate the 3 branching-strategy templates + docs/git-workflow/ + branch/commit enforcement hooks. Conclusion: the Phase 0 scan overlaps but is a tolerable, partial duplication serving a distinct downstream purpose — it does not remove project-init's reason to exist. This is an open question resolved in project-init's favor, NOT a gap (LD6: no reproducible failure, no steelman condition met). A docs nicety worth considering: README/command do not mention /init at all, so a user who already ran /init isn't told Phase 0 re-scans; acknowledging /init would set expectations, but that is cosmetic, not load-bearing.",
+   "left_evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 89,
+     "quote": "`Glob`/`Read`로 repo를 스캔해 tech-stack 후보를 자동 생성한다. manifest → stack 라벨 매핑:"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 93,
+     "quote": "| `package.json` | Node.js/JavaScript. `tsconfig.json` 또는 `devDependencies.typescript` → TypeScript. ..."
+    },
+    {
+     "source": "code.claude.com/docs/en/memory.md (official, fetched 2026-07-15)",
+     "quote": "Run `/init` to generate a starting CLAUDE.md automatically. Claude analyzes your codebase and creates a file with build commands, test instructions, and project conventions it discovers. ... Set CLAUDE_CODE_NEW_INIT=1 to enable an interactive multi-phase flow. /init asks which artifacts to set up: CLAUDE.md files, skills, and hooks. It then explores your codebase with a subagent, fills in gaps via follow-up questions, and presents a reviewable proposal before writing any files."
+    }
+   ],
+   "right_evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 103,
+     "quote": "감지된 각 항목에 **`[감지됨]`** 라벨을 붙여 Phase 1 ④에서 확인만 받는다."
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 134,
+     "quote": "**AGENTS.md를 canonical content source로**, **CLAUDE.md를 `@AGENTS.md` thin pointer로** 발행한다 (Codex/Cursor 등 16+ 벤더 호환 + 단일 source of truth)."
+    },
+    {
+     "file": "plugins/project-init/README.md",
+     "line": 56,
+     "quote": "(v1.6.0) charter step — Phase 0가 manifest를 스캔해 tech-stack을 자동 감지하고, Phase 1이 vision·non-goals·conventions·tech-stack 확인을 ≤4개 질문으로 elicit."
+    },
+    {
+     "source": "code.claude.com/docs/en/memory.md (official, fetched 2026-07-15)",
+     "quote": "Running /init in a repo that already has an AGENTS.md reads it and incorporates the relevant parts into the generated CLAUDE.md. (i.e. /init is CLAUDE.md-canonical — the opposite direction from project-init)"
+    }
+   ],
+   "reason": "Overlap on the tech-stack scan is real but confined to Phase 0; project-init's AGENTS.md-canonical direction, charter-scoped elicitation, and git-workflow+charter deliverables are not provided by /init. Independent value holds; not a gap.",
+   "steelman_condition": "none",
+   "source": "claude"
+  },
+  {
+   "id": "OQ5",
+   "answer": "OUT OF SCOPE for this cycle — a separate concern (별건), not a project-init gap. CI absence is a devbrew-repo-level property, explicitly outside LD5 (gap scope = plugins/project-init/**, docs/git-workflow/**, marketplace project-init entry). The brief itself instructs this be answered as a scope judgment only, not a finding. On the merits: project-init already ships its own test infrastructure — the CHANGELOG/README describe smoke.sh as 'V2 자동화 smoke script (CI-runnable, no human eyeballing, macOS bash 3.2 호환)' and the suite is 95/95 green — so the plugin is testable in isolation. What is missing is a repo-wide CI runner that executes those suites automatically on every PR. That is a cross-cutting devbrew effort orthogonal to project-init's identity and to this read-only audit cycle. Verdict: 별건 (separate concern), defer to a devbrew-level CI initiative; do not attribute to project-init.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/CHANGELOG.md",
+     "line": 88,
+     "quote": "`hooks/tests/smoke.sh` — V2 자동화 smoke script (CI-runnable, no human eyeballing, macOS bash 3.2 호환)."
+    },
+    {
+     "file": "plugins/project-init/README.md",
+     "line": 22,
+     "quote": "smoke.sh                # V2 자동화 smoke script"
+    }
+   ],
+   "reason": "CI absence is repo-level and explicitly out of LD5 gap scope; the plugin ships CI-runnable tests. Answered as scope judgment: 별건, defer to devbrew-wide CI effort.",
+   "steelman_condition": "none",
+   "source": "claude"
+  },
+  {
+   "id": "OQ6",
+   "answer": "감사 대상이다 — 단 *검증 가능한 정확성*으로 한정하고, 취향은 제외한다. 3개 branching strategy 템플릿의 콘텐츠는 project-init이 사용자 프로젝트의 *운영 문서*(docs/git-workflow/*.md, AGENTS.md 섹션)로 발행하는 실물이므로, 거기 담긴 사실 주장(git/GitHub 동작, regex 허용 문자, canonical 소스 충실도)이 틀리면 '생성물을 통해 거짓이 사용자 프로젝트로 배포'되는 재현 가능한 실패다. 이 실패는 공식 quality-criteria.md(Currency 항목5 'File references accurate', Actionability 항목6, Red Flags 'inaccurate references')와 권위 있는 1차 출처로 객관 측정된다 — 실제로 이 축에서 세 건의 정확성 주장(GitHub `Closes:` 콜론형, qg `gh pr create` 자동 트리거, trunk-based Pattern B backport)을 authoritative 출처로 판정했고 그중 하나(git-flow:34 'dot 허용 부정')가 confirmed 부정확으로 드러났다. 반면 순수 스타일·문장 취향은 LD6(입증책임) 위반이라 감사하지 않는다 — 재현 실패도 steelman 조건도 없기 때문이다. 요컨대 '구조·정직성'은 바닥(floor)이고, 그 위에 '검증 가능한 콘텐츠 정확성'을 얹는다. 흥미롭게도 quality-criteria로 재면 템플릿은 대체로 통과한다: 사용자 미응답 필드를 `_명시되지 않음._` placeholder로 남기는 project-init의 선택은 quality-criteria Red Flags가 명시적으로 경계하는 'canned generic advice / uncustomized template copy'를 피하는 *옳은* 설계다.",
+   "reason": "축5 프롬프트가 '템플릿 *내용* 품질을 quality-criteria.md로 판정하라 — 네 취향이 아니라'와 'trunk-based Pattern B 내용이 실제로 정확한가'를 명시 지시하므로 콘텐츠 정확성은 스코프 안이다. 동시에 계약 4항(LD6 입증책임)이 취향 기반 구조 비판을 무효화하므로 스타일은 스코프 밖이다. 이 경계는 이 축의 실측으로 뒷받침된다: 콘텐츠 정확성 질문 3건이 전부 1차 출처로 결정 가능했고(2건 정확→갭 아님, 1건 부정확→A5-1), 이는 '콘텐츠 정확성은 객관 감사 가능, 취향은 아님'을 실증한다.",
+   "steelman_condition": "none",
+   "source": "claude"
+  },
+  {
+   "id": "OQ4",
+   "answer": "Yes — a reversible-only-via-git, irreversible-for-uncommitted-files destruction path exists, and approval prompts cover every path's ACTION but not, in the S4 case, its CONSEQUENCE. (1) Destruction paths enumerated: all destruction is in the LLM-executed prose of commands/project-init.md; both hooks (post-tool-use.py, docs-lint.py) always exit 0 and never Write. CLAUDE.md-mutating paths: S1 create (safe), S2a migrate-and-replace (content preserved by migrating to AGENTS.md), S4(i) rewrite-to-pointer (content DISCARDED, AGENTS.md unchanged), plus C-S2 in-place docs overwrite and the git-workflow 'replace?' overwrite. (2) Prompt coverage is complete at the path level: S2 has the Step-1 migration prompt (L25-27, test-locked as AC21), S4 has its 4c advisory (L165), the git-workflow overwrite has the Step-1 '교체할까요?' prompt (L20-21), and C-S2 has the '업데이트할까요?' prompt (L85). No CLAUDE.md overwrite is unprompted. (3) BUT: there is ZERO filesystem backup on any path — recovery depends entirely on git; the S4(i) advisory text is neither specified nor test-locked and need not disclose that divergent CLAUDE.md content is permanently discarded; and S4(i) directly contradicts the L167 invariant that non-managed content is preserved in all states. So prompts cover the actions, but the S4(i) consent is obtained under a false preservation promise, and no backup exists to recover from either an S4(i) discard or an S2a migration truncation on an uncommitted file.",
+   "reason": "The security question resolves to: prompt coverage exists everywhere, but for S4(i) it is coverage-without-informed-consent (false L167 safety promise) plus no backup, yielding a deterministic content-loss path (A6-1); and no path has any recoverability preflight, leaving git as the sole safety net that fails for uncommitted content (A6-2). D5 confirms the pointer target is functional, so this is content-loss, not also a broken-import double-harm.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 165,
+     "quote": "(i) CLAUDE.md를 `@AGENTS.md` 한 줄로 *재작성* (AGENTS.md unchanged), (ii) abort. 승인 시 (i) 수행 + S3 action."
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 167,
+     "quote": "비-관리 컨텐츠 (다른 헤딩, 단락, 코드 블록)는 모든 state에서 보존. 유일한 예외는 4c S2a (d)의 H1 재제목"
+    }
+   ],
+   "left_evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 27,
+     "quote": "\"기존 CLAUDE.md 발견. AGENTS.md로 migrate할까요? (CLAUDE.md는 `@AGENTS.md` thin pointer로 교체됩니다)\" (migration prompt exists but names no backup)"
+    },
+    {
+     "file": "plugins/project-init/hooks/post-tool-use.py",
+     "line": 213,
+     "quote": "print(json.dumps({}))  (hooks always emit advisory-only and exit 0 — no hook writes/destroys)"
+    }
+   ],
+   "right_evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 163,
+     "quote": "(c) CLAUDE.md를 `@AGENTS.md` 한 줄로 교체 ... 사용자 4-bullet 컨텐츠 silent drop 없음 (S2a preserves content by migrating it to AGENTS.md — the correct pattern S4 fails to follow)"
+    }
+   ],
+   "steelman_condition": "c",
+   "source": "claude"
+  },
+  {
+   "id": "OQ1",
+   "answer": "231줄 command 전체를 skill·scripts·agents로 분해할 shape 근거는 없다. 다만 destructive state transition과 백업·승인 부분은 테스트 가능한 작은 helper 또는 scoped guard로 추출할 근거가 생겼다.",
+   "reason": "500줄 기준은 SKILL.md 규범이고 현재 command는 231줄이라 조건 (a)가 아니다. command와 skill은 동일하게 로드되므로 단순 포맷 이동의 실행상 이득도 없다. 반면 기존 AGENTS-only workflow를 감지하지 못하는 실제 파괴 경로와 과거 산문 state bug가 존재하고, 현재 write에는 백업이 없으므로 steelman (c)가 충족된다. 추출 범위는 인터뷰 전체가 아니라 write inventory·backup·atomic commit으로 제한해야 중복 상태기계와 drift 비용을 줄일 수 있다.",
+   "left_evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 165,
+     "quote": "| **S4 (AGENTS exists, CLAUDE divergent or absent)** | 존재 | 없음 또는 divergent content | 사용자에게 advisory + 두 옵션 — (i) CLAUDE.md를 `@AGENTS.md` 한 줄로 *재작성* (AGENTS.md unchanged), (ii) abort. 승인 시 (i) 수행 + S3 action. |"
+    },
+    {
+     "file": "plugins/project-init/CHANGELOG.md",
+     "line": 14,
+     "quote": "- **S2a migration이 `AGENTS.md`를 `# CLAUDE.md`로 잘못 제목 짓던 문제**"
+    },
+    {
+     "file": "plugins/project-init/hooks/tests/test_command_contract.py",
+     "line": 3,
+     "quote": "`/project-init` is a model-followed markdown instruction, not executable code, so"
+    }
+   ],
+   "right_evidence": [
+    {
+     "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/plugin-dev/unknown/skills/command-development/SKILL.md",
+     "line": 9,
+     "quote": "Both are loaded identically — the only difference is file layout."
+    },
+    {
+     "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/skill-creator/unknown/skills/skill-creator/SKILL.md",
+     "line": 96,
+     "quote": "Keep SKILL.md under 500 lines; if you're approaching this limit, add an additional layer of hierarchy"
+    },
+    {
+     "file": "CLAUDE.md",
+     "line": 67,
+     "quote": "- **Trivia ceremony** — 한 문장 diff에 full pipeline 실행 (Anthropic *Best Practices*)."
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 231,
+     "quote": "> 간결한 git 작업을 위해 `/commit` 또는 `/commit-push-pr` (commit-commands 플러그인) 사용."
+    }
+   ],
+   "steelman_condition": "c",
+   "source": "codex"
+  },
+  {
+   "id": "OQ2",
+   "answer": "브랜치·커밋 검증 전체를 hard-blocking PreToolUse로 승격하지 않는다. 현재 PostToolUse 경고를 유지하되, commit+push 같은 원격 side effect가 한 호출에 결합된 경우에는 선택적 PreToolUse ask를 제공하는 중간지대가 적합하다.",
+   "reason": "현재 hook은 systemMessage만 반환하고 항상 exit 0이라 실제 차단 능력이 없다. local branch 생성과 commit은 대체로 복구 가능하고 release 예외도 있어 전면 deny는 오탐 비용이 크다. 반면 잘못된 commit 뒤 push까지 한 Bash 호출이면 사후 경고가 원격 결과를 막지 못한다. permissionDecision ask 선례는 사람에게 최종 선택을 남기는 비차단·비자동승인 중간지대다. 두 kill switch는 post-tool-use.py:178-183 및 docs-lint.py:31-40에서 main 진입 전에 실제로 존중된다. 기존 테스트는 지원된 checkout -b·switch -c·-m과 kill switch를 검증하지만 Git 전체 문법이나 사전 차단을 증명하지는 않는다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/hooks/hooks.json",
+     "line": 4,
+     "quote": "\"PostToolUse\": ["
+    },
+    {
+     "file": "plugins/project-init/hooks/post-tool-use.py",
+     "line": 208,
+     "quote": "warnings = [w for w in (validate_branch(command), validate_commit(command)) if w]"
+    },
+    {
+     "file": "plugins/project-init/hooks/post-tool-use.py",
+     "line": 211,
+     "quote": "print(json.dumps({\"systemMessage\": \"\\n\\n\".join(warnings)}))"
+    },
+    {
+     "file": "plugins/project-init/hooks/post-tool-use.py",
+     "line": 215,
+     "quote": "sys.exit(0)"
+    },
+    {
+     "file": "plugins/project-init/hooks/post-tool-use.py",
+     "line": 178,
+     "quote": "def kill_switch_active():"
+    },
+    {
+     "file": "/Users/jeonghokim/Downloads/reference/gstack/careful/bin/check-careful.sh",
+     "line": 109,
+     "quote": "printf '{\"permissionDecision\":\"ask\",\"message\":\"[careful] %s\"}\\n' \"$WARN_ESCAPED\""
+    },
+    {
+     "file": "/Users/jeonghokim/Downloads/reference/gstack/freeze/bin/check-freeze.sh",
+     "line": 77,
+     "quote": "printf '{\"permissionDecision\":\"deny\",\"message\":\"[freeze] Blocked: %s is outside the freeze boundary (%s). Only edits within the frozen directory are allowed.\"}\\n' \"$FILE_PATH\" \"$FREEZE_DIR\""
+    }
+   ],
+   "source": "codex"
+  },
+  {
+   "id": "OQ3",
+   "answer": "Phase 0은 내장 /init과 부분 중복하지만 대체 가능한 동일 기능은 아니다.",
+   "reason": "공식 /init은 build system·test framework·code pattern을 분석해 CLAUDE.md 초안을 만드는 범용 bootstrap이다. project-init Phase 0도 manifest와 디렉토리를 스캔하므로 tech-stack 탐색 비용은 겹친다. 그러나 project-init은 branching strategy를 선택하고 vision·non-goals·conventions를 확인해 세 Git 문서와 charter detail을 생성한다. claude-code-setup도 코드베이스를 분석하지만 파일을 쓰지 않고 자동화 후보만 추천한다. 따라서 정체성 갭은 아니며, 기존 /init 결과를 입력으로 재사용하는 최적화 여지는 있다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 89,
+     "quote": "`Glob`/`Read`로 repo를 스캔해 tech-stack 후보를 자동 생성한다. manifest → stack 라벨 매핑:"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 113,
+     "quote": "`AskUserQuestion`으로 다음 4개만 묻는다 (자동 감지된 사실은 open-ended 재질문 금지 — AC3):"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 171,
+     "quote": "`docs/git-workflow/` 디렉토리가 없으면 생성. 다음 3개 파일 작성:"
+    },
+    {
+     "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/claude-code-setup/1.0.0/skills/claude-automation-recommender/SKILL.md",
+     "line": 11,
+     "quote": "**This skill is read-only.** It analyzes the codebase and outputs recommendations. It does NOT create or modify any files."
+    },
+    {
+     "file": "https://code.claude.com/docs/en/best-practices",
+     "line": 0,
+     "quote": "/init analyzes the codebase and creates a CLAUDE.md starting point."
+    }
+   ],
+   "source": "codex"
+  },
+  {
+   "id": "OQ4",
+   "answer": "되돌릴 수 없는 파괴 위험이 있다. 백업은 없고, 승인 프롬프트는 모든 기존-content 교체 경로를 덮지 않는다.",
+   "reason": "write 전수 목록은 S1의 AGENTS.md·CLAUDE.md 신규 생성, S2a의 CLAUDE→AGENTS migration 후 pointer 교체, S2b의 AGENTS 생성, S3의 AGENTS Git Workflow 교체, S4의 CLAUDE 생성·재작성과 S3 action, docs/git-workflow 3파일 작성, C-S1의 charter append 및 docs/project 생성, C-S2 승인 시 charter·detail 갱신, C-S3(a)의 in-place 교체, C-S3(b)의 누락 detail 생성, 조건부 glossary 생성이다. hooks 두 개는 파일을 쓰지 않고 JSON·stderr만 출력한다. 기존 Git rules 감지 프롬프트, S2 migration, S4 pointer rewrite, C-S2 update에는 승인이 있지만 Step 1은 AGENTS.md의 기존 Git Workflow를 직접 검사하지 않고 C-S3(a)는 C-S2 update 승인 없이 교체한다. 어느 write 경로에도 백업·rollback 지시가 없다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 20,
+     "quote": "기존 Git Workflow 설정이 발견되면 사용자에게 묻는다:"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 25,
+     "quote": "또한 root에 `CLAUDE.md`가 존재하고 `AGENTS.md`가 없다면 사용자에게 묻는다:"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 162,
+     "quote": "| **S1 (clean slate)** | 없음 | 없음 | AGENTS.md 신규 작성 (`agents-md-section.md` content); CLAUDE.md 신규 작성 (`claude-md-pointer.md` content — `@AGENTS.md` 한 줄). |"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 164,
+     "quote": "| **S3 (AGENTS canonical, CLAUDE pointer)** | 존재 | 존재 + `@AGENTS.md` (R-pointer 통과) | AGENTS.md의 `## Git Workflow` 섹션만 in-place 갱신. CLAUDE.md는 unchanged. |"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 169,
+     "quote": "#### 4d: docs/git-workflow/ 파일 쓰기"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 205,
+     "quote": "| **C-S1 (clean)** | `AGENTS.md`에 `## Project Charter` 섹션 신규 추가(`agents-md-section.md` 치환본) + `docs/project/charter.md`·`conventions.md` 생성 (+용어 있으면 `glossary.md`). |"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 206,
+     "quote": "| **C-S2 (complete)** | 업데이트 승인 시: `## Project Charter` 섹션 in-place 교체 + `docs/project/` 파일 in-place 갱신. 거절 시: 전부 unchanged, 중복 `## Project Charter` 섹션 생성 안 함. |"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 207,
+     "quote": "| **C-S3 (a) 섹션 항목 누락** | Phase 1 보충 질문으로 채운 뒤 C-S1과 동일하게 발행(in-place 교체). |"
+    }
+   ],
+   "source": "codex"
+  },
+  {
+   "id": "OQ5",
+   "answer": "devbrew CI 부재는 관측 가능한 운영 위험이지만 LD5 밖이므로 finding으로 올리지 않는다.",
+   "reason": "project-init은 95개 unittest와 CI-runnable smoke를 제공하지만 repository-level workflow가 없어 자동 실행 연결은 없다. CI 설정은 plugins/project-init, docs/git-workflow 또는 marketplace project-init 항목에 속하지 않으므로 이번 갭 범위에서는 NOQ다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/CHANGELOG.md",
+     "line": 88,
+     "quote": "- `hooks/tests/smoke.sh` — V2 자동화 smoke script (CI-runnable, no human eyeballing, macOS bash 3.2 호환)."
+    }
+   ],
+   "source": "codex"
+  },
+  {
+   "id": "OQ6",
+   "answer": "세 branching strategy 템플릿의 내용 품질은 명백한 감사 대상이다.",
+   "reason": "command가 템플릿을 사용자 프로젝트의 docs/git-workflow로 직접 복제하므로 공식 quality-criteria의 currency·actionability·실행 가능한 명령·정확한 경로 기준이 적용된다. GitHub Flow는 대체로 간결하고 실행 가능하다. Git Flow는 custom release 답변을 반영하지 않고 dot을 허용하는 regex와 '하이픈만' 문장이 충돌한다. Trunk-based는 legacy branch base가 잘못됐다. UX 흐름은 전략 선택 후 공통 2문항, Git Flow만 1문항 추가, charter 최대 4문항과 항목별 최대 3회 재질문이다. Step 1 거절은 전체 abort지만 charter 실패는 Git 산출물을 남기며, 그 조건부 결과를 Step 5가 정확히 보고하지 않는다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 47,
+     "quote": "### Step 2: Branching Strategy 선택"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 59,
+     "quote": "### Step 3: 커스터마이징 질문"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 111,
+     "quote": "#### Phase 1 — 판단 질문 (AskUserQuestion, ≤4개)"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 124,
+     "quote": "각 필수 항목에 대해 빈/무의미 응답이면 AskUserQuestion 재질문을 **최대 3회**까지 한다."
+    },
+    {
+     "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/claude-md-management/1.0.0/skills/claude-md-improver/references/quality-criteria.md",
+     "line": 66,
+     "quote": "- Commands work as documented"
+    },
+    {
+     "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/claude-md-management/1.0.0/skills/claude-md-improver/references/quality-criteria.md",
+     "line": 79,
+     "quote": "- Commands can be copy-pasted"
+    },
+    {
+     "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/claude-md-management/1.0.0/skills/claude-md-improver/references/quality-criteria.md",
+     "line": 103,
+     "quote": "- Commands that would fail (wrong paths, missing deps)"
+    }
+   ],
+   "source": "codex"
+  }
+ ],
+ "new_open_questions": [
+  {
+   "id": "NOQ-c1",
+   "axis": 4,
+   "observation": "README:77이 'commit-commands: /commit과 /commit-push-pr이 CLAUDE.md 룰을 읽어 메시지 포맷 적용'이라 서술하나, 캐시의 commit.md·commit-push-pr.md는 CLAUDE.md를 *명시적으로 읽지 않는다*(context에 git status/diff/branch/log만 주입하고 'appropriate message' 작성만 지시). 또한 v1.4.0 이후 규칙은 CLAUDE.md가 아니라 AGENTS.md(canonical)에 살며 CLAUDE.md는 `@AGENTS.md` 포인터다. 따라서 '메커니즘' 서술이 이중으로 부정확하다.",
+   "why_not_gap": "효과는 사실상 성립한다 — CLAUDE.md(+@AGENTS.md import)는 모든 Claude Code 세션 컨텍스트에 상시 로드되므로 /commit 실행 시 모델이 컨벤션을 컨텍스트에서 참조해 적용한다. README는 명령의 파일-read가 아니라 사용자-관측 효과를 서술한 것으로 방어 가능하다. 게다가 이건 사용자 프로젝트로 복제되지 않는 plugin-layer README 문구이며, 정확히는 형제 플러그인의 *메커니즘 서술 정확성* 문제라 축④(의존성/커플링 서술) 소관에 가깝다. 확정 갭으로 승격하기엔 반대근거가 강해 관찰로 남긴다.",
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c2",
+   "axis": 2,
+   "observation": "README:98과 command Step 3.5(project-init.md:122-128)가 charter 완결을 '진행을 막는' 'clarity 구조 게이트'로 서술하나, 실제 enforcement는 command 마크다운 안의 모델-준수 지시문일 뿐이며 결정론적 강제가 없다(docs-lint의 R-charter는 advisory·non-blocking·사후 플래그). CLAUDE.md Law 1은 '구조적 게이트 = silent하게 skip할 수 없어야 함'으로 정의하는데, 이 게이트는 모델이 조용히 건너뛸 수 있다.",
+   "why_not_gap": "command 파일에는 그 게이트 지시문이 실제로 존재하고, README/command가 사후 advisory 성격(docs-lint 사후 플래그, 3회 후 loud abort, git-workflow는 독립 진행)을 정직하게 disclose한다. '이 게이트가 CLAUDE.md 정의상 충분히 structural한가'라는 판정은 축②(게이트 강도)의 소관이며, 축①이 포치하지 않도록 관찰로만 surface한다. 산문이 코드 동작에 대해 명백히 '거짓'을 말한다고 단정하기엔 disclosure가 충분해 갭으로 올리지 않는다.",
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c3",
+   "axis": 2,
+   "observation": "파일-상태 분류의 결정론 로직이 코드와 산문에 이중 존재한다. docs-lint.py는 AC16 pointer-정규화(`_normalize_pointer_content`:294-306)·proper-pointer 판정(`_is_proper_pointer`:309-336)·charter-섹션 추출(`CHARTER_SECTION_RE`/`_charter_field`)을 *구현·테스트*하는데, command는 같은 분류를 산문으로 재진술한다(Step1 charter 감지 :35-43; 4c S2 셀 'AC16 정규화 절차 (frontmatter strip → HTML comment strip → str.strip()) 준용해 분류' :163). 모델은 코드가 이미 결정론적으로 계산하는 상태를 런타임에 재도출해야 한다. 향후 command가 Bash로 호출하는 작은 classifier로 통합하면 드리프트를 없앨 수 있으나, 코드와 산문이 어긋나 잘못된 분기를 낸 재현 사례는 아직 없다.",
+   "why_not_gap": "구조/드리프트 비판(형제와 다르다·중복이다)은 LD6에서 명시적으로 논거가 아니다. 재현 가능한 실패 모드도, 충족된 steelman(b/d)도 없다. P8은 오히려 선제적 결정론화를 경계한다. 따라서 갭이 아니라 관찰.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/hooks/docs-lint.py",
+     "line": 294,
+     "quote": "def _normalize_pointer_content(content: str) -> str: ... (1) strip frontmatter (2) strip HTML comments (3) str.strip()."
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 163,
+     "quote": "AC16 정규화 절차 (frontmatter strip → HTML comment strip → str.strip()) 준용해 분류"
+    }
+   ],
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c4",
+   "axis": 2,
+   "observation": "생성 로직(S1–S4 AGENTS/CLAUDE 매트릭스 + C-S1..C-S3 charter 매트릭스, 사용자 파일 mutation)은 *행위* 테스트가 0이다. test_command_contract.py는 산문 규칙의 *존재*만 잠그며(4개 문구), docstring이 'a test cannot exercise its behaviour'라고 명시한다. 실제로 산문-로직 버그(v1.7.2 H1 재제목)가 릴리스로 탈출했고, 유닛/스모크가 아니라 out-of-band WS5 sandbox 재실행으로만 잡혔다. 이는 steelman (b)('v1.7.2류 버그가 반복적 규칙-부재 패턴으로 재발')의 tripwire다.",
+   "why_not_gap": "탈출한 버그는 이미 잡혀 수정됐고(현행 갭 아님), steelman (b)는 단일 사례가 아니라 *반복* 패턴을 요구한다 — 현재 명백한 산문-로직 버그 인스턴스는 v1.7.2 1건뿐이라 조건 미충족. 재발 감시 항목으로 기록. 두 번째 유사 규칙-부재 버그가 나오면 (b)가 충족되어 classifier 스크립트화가 정당화된다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/hooks/tests/test_command_contract.py",
+     "line": 4,
+     "quote": "a test cannot exercise its behaviour. What it *can* lock is the existence of the contract"
+    },
+    {
+     "file": "plugins/project-init/CHANGELOG.md",
+     "line": 15,
+     "quote": "발견 경위: devbrew context-slimming WS5의 sandbox 재실행 ... 산출물을 검사했다."
+    }
+   ],
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c5",
+   "axis": 2,
+   "observation": "4c S4(i) 경로는 divergent content를 가진 CLAUDE.md를 그 고유 내용을 AGENTS.md로 이전하지 *않고* `@AGENTS.md` 한 줄로 재작성한다(commands:165). S2a와 달리 S4는 AGENTS.md가 이미 canonical이라는 전제로 CLAUDE.md의 divergent 내용을 stale로 간주 — 사용자가 AGENTS.md에 없는 고유 섹션을 CLAUDE.md에 뒀다면 S4(i) 승인 시 그 내용이 소실될 수 있다. 이는 산문-해석이 되돌리기 어려운 mutation을 수행하는 표면으로, steelman (c)(PreToolUse급 게이트 필요 여부)의 입력이다.",
+   "why_not_gap": "이 mutation은 (1) 명시적 사용자 advisory+승인 게이트 뒤에 있고(silent 아님), (2) AGENTS.md/CLAUDE.md는 git-tracked라 회복 가능하다 — 따라서 '되돌릴 수 없는 silent overwrite' 등급인지의 파괴-severity 판정은 축6 OQ4 소관이지 축2가 단독 결정할 사안이 아니다. 축6이 (c)를 확증하면 OQ1 steelman이 pending→c로 해소된다. 축2 단독으로는 갭이 아니라 관찰.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 165,
+     "quote": "(i) CLAUDE.md를 `@AGENTS.md` 한 줄로 *재작성* (AGENTS.md unchanged), (ii) abort. 승인 시 (i) 수행 + S3 action."
+    }
+   ],
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c6",
+   "axis": 3,
+   "observation": "docs-lint.py declares several accepted false-positive / false-negative surfaces: tilde (~~~) fences are not linted (line 164), R6 does not exclude links inside fenced code blocks / inline backtick spans (lines 242-244), and R-charter matches a `**Label:**` line even inside a fenced code block within the charter section (lines 419-421). These are real gaps in rule precision.",
+   "why_not_gap": "Each is explicitly documented in-code as a deliberate scope-out accepted 'for parity with R5/R6', the hook is advisory/non-blocking, and behavior matches its documented scope — so there is no user deception and no reproducible wrong outcome beyond the disclosed limits. This is a documented design trade-off, not a hidden capability failure. Recorded so it is not silently dropped.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/hooks/docs-lint.py",
+     "line": 244,
+     "quote": "Scope-outs (v1.4.0 false-positive허용): links inside fenced code blocks /"
+    },
+    {
+     "file": "plugins/project-init/hooks/docs-lint.py",
+     "line": 420,
+     "quote": "within the section is matched as if it were a real field — known false-positive"
+    }
+   ],
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c7",
+   "axis": 3,
+   "observation": "The github-flow branch-strategy template states '**NEVER** `main`에 직접 commit' as a hard rule for Claude, but neither hook enforces base-branch protection: post-tool-use.py validates only the commit MESSAGE format, never which branch HEAD is on, so committing directly to main is never flagged.",
+   "why_not_gap": "This is an explicitly deferred non-goal, not a missing feature: CHANGELOG.md:40 records base-branch/merge runtime enforcement (F4/F5) as deliberately deferred under 'harness lightness — trust the model', and no plugin doc claims the hook enforces branch protection (README scopes the hook to branch-NAME and commit-FORMAT advisories). No false claim, no reproducible deception. Recorded to preserve the observation.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/templates/github-flow/branch-strategy.md",
+     "line": 58,
+     "quote": "- **NEVER** `main`에 직접 commit"
+    },
+    {
+     "file": "plugins/project-init/CHANGELOG.md",
+     "line": 40,
+     "quote": "merge/base-branch 런타임 강제(F4/F5)는 \"harness lightness — trust the model\"로 명시 defer."
+    }
+   ],
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c8",
+   "axis": 3,
+   "observation": "smoke.sh asserts only that the 'bad' fixtures produce a 'systemMessage' substring (line 92 `grep -q \"$expected\"`) and that 'good' fixtures produce exactly '{}' — it never checks WHICH rule fired. A fixture that triggered the wrong rule (e.g. an R6 link error where an R-pointer drift was intended) would still pass the smoke check.",
+   "why_not_gap": "The per-rule teeth live in test_docs_lint.py, which asserts specific rule strings ('drift risk', 'unresolved internal link', 'section is incomplete', line-number formats). smoke.sh is an intentionally coarse end-to-end presence check layered on top of the fine-grained unit suite, so the coarseness is not a capability gap. Recorded because it looked like a toothless proxy on first read but is backed by teeth elsewhere.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/hooks/tests/smoke.sh",
+     "line": 92,
+     "quote": "if ! echo \"$out\" | grep -q \"$expected\"; then"
+    },
+    {
+     "file": "plugins/project-init/hooks/tests/test_docs_lint.py",
+     "line": 683,
+     "quote": "self.assertIn(\"drift risk\", out)"
+    }
+   ],
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c9",
+   "axis": 4,
+   "observation": "The built-in /init gained an interactive multi-phase flow (CLAUDE_CODE_NEW_INIT=1, per official code.claude.com/docs/en/memory.md) that 'asks which artifacts to set up: CLAUDE.md files, skills, and hooks ... explores your codebase with a subagent, fills in gaps via follow-up questions, and presents a reviewable proposal before writing any files.' This overlaps project-init's Phase 0 (manifest scan) + Phase 1 (AskUserQuestion elicitation) noticeably more than the README/command acknowledge — neither project-init doc mentions /init at all.",
+   "why_not_gap": "No reproducible failure mode: project-init still produces AGENTS.md-canonical git-workflow templates, docs/git-workflow/, branch/commit enforcement hooks, and a durable Project Charter that /init does not, and it writes the opposite (officially-recommended) canonical direction. Per LD6, a structural overlap without a concrete wrong outcome is an observation, not a gap. Surfaced so the orchestrator can decide whether a one-line README acknowledgment of /init is worth a docs patch.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 87,
+     "quote": "#### Phase 0 — 사실 발견 (질문 0개)"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 111,
+     "quote": "#### Phase 1 — 판단 질문 (AskUserQuestion, ≤4개)"
+    },
+    {
+     "source": "code.claude.com/docs/en/memory.md (official, fetched 2026-07-15)",
+     "quote": "Set CLAUDE_CODE_NEW_INIT=1 to enable an interactive multi-phase flow. /init asks which artifacts to set up: CLAUDE.md files, skills, and hooks. It then explores your codebase with a subagent, fills in gaps via follow-up questions, and presents a reviewable proposal before writing any files."
+    }
+   ],
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c10",
+   "axis": 4,
+   "observation": "project-init's docs-lint.py enforces root-context-file conventions (size ≤200, TOC >300, fenced-code language, internal links resolve, CLAUDE/AGENTS drift, charter fields). Official Claude Code tooling now covers adjacent ground: the /doctor checkup (v2.1.206+) 'proposes trims for a checked-in CLAUDE.md' (official memory docs), and Anthropic ships an official claude-md-management plugin for CLAUDE.md quality. There is conceptual overlap with docs-lint's ruleset.",
+   "why_not_gap": "Modality differs and is genuinely additive: docs-lint is a deterministic PostToolUse hook that fires on every Write/Edit (enforcement at the action layer), whereas /doctor is on-demand and claude-md-management is a model-invoked skill — neither guarantees firing on every edit. No reproducible failure and no steelman condition met, so this is an external-comparison observation, not a gap (LD6). Note: the docs-lint mechanism itself is primarily an enforcement-axis concern, cited here only for the external-tooling comparison relevant to identity.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/README.md",
+     "line": 86,
+     "quote": "**`PostToolUse` (Write|Edit|MultiEdit matcher) — `docs-lint.py`**: root context 파일 ... 의 agent-readable convention ... 검증."
+    },
+    {
+     "source": "code.claude.com/docs/en/memory.md (official, fetched 2026-07-15)",
+     "quote": "The /doctor checkup proposes trims for a checked-in CLAUDE.md: it cuts content Claude can derive from the codebase ... and keeps pitfalls, rationale, and conventions that differ from tool defaults. The trim check requires Claude Code v2.1.206 or later."
+    }
+   ],
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c11",
+   "axis": 5,
+   "observation": "templates/shared/pr-process.md:77 'commit-commands: 간소화된 PR 생성을 위해 `/commit-push-pr` 사용'은 바로 아래 line 78('quality-gates (설치 시): …')과 달리 '설치 시' 같은 조건 한정어가 없다. 이 파일은 docs/git-workflow/pr-process.md로 사용자 프로젝트에 복제되므로(project-init.md:175), commit-commands 미설치 사용자는 자기 운영 문서에서 존재하지 않는 `/commit-push-pr`을 무조건 안내받는다. 같은 doc 내부의 조건-한정 문구 비일관(line 77 무한정 vs line 78 '설치 시')은 축5(콘텐츠 내부 일관성) 관점의 LOW 관찰이다.",
+   "why_not_gap": "실질 피해(미설치 시 깨진 명령 안내)의 최종 판정 — 이것이 '미선언 의존성/Silent coupling' 위반인지 — 은 후보 단서 D1이 소유한 의존성 선언 축의 primary 판정이라, 그 축의 독립성 보존을 위해 축5에서 갭으로 승격하지 않고 관찰로만 남긴다(계약 5: 다른 축 발견 추측 금지). 내부 문구 일관성 나aught 자체는 A5-1보다도 약해 별도 finding 가치가 낮다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/templates/shared/pr-process.md",
+     "line": 77,
+     "quote": "- **commit-commands**: 간소화된 PR 생성을 위해 `/commit-push-pr` 사용"
+    },
+    {
+     "file": "plugins/project-init/templates/shared/pr-process.md",
+     "line": 78,
+     "quote": "- **quality-gates** (설치 시): `gh pr create`에 quality 파이프라인 자동 트리거"
+    }
+   ],
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c12",
+   "axis": 5,
+   "observation": "결정론 staleness sweep가 trunk-based/branch-strategy.md:109('release 브랜치를 새 기능 개발에 쓰지 말 것 — 그 순간 long-lived feature branch가 되어 TBD 위반')를 '[draft residue]'로 관측 나열했다. 나는 직접 원문을 읽고 이것이 residue가 아니라 line 108('release 브랜치는 receive-only')을 보완해 *왜*(long-lived branch=TBD 위반)를 설명하는 완결된 유효 규칙이라고 판정한다.",
+   "why_not_gap": "문장이 문법적으로 완결이고 TBD canonical에 부합하며, quality-criteria.md 항목3(Non-Obvious Patterns, 'Why we do it this way for unusual patterns')이 오히려 가치를 인정하는 종류의 콘텐츠다. line 108과 약한 강조-중복은 있으나 108(무엇)+109(왜)로 상보적이라 Red Flag 'redundancy'에 해당하지 않는다. 갭 아님.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/templates/trunk-based/branch-strategy.md",
+     "line": 109,
+     "quote": "- release 브랜치를 새 기능 개발에 쓰지 말 것 — 그 순간 long-lived feature branch가 되어 TBD 위반."
+    },
+    {
+     "file": "plugins/project-init/templates/trunk-based/branch-strategy.md",
+     "line": 108,
+     "quote": "- 새 개발은 항상 `main` (trunk)에서. release 브랜치는 receive-only."
+    }
+   ],
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c13",
+   "axis": 5,
+   "observation": "commands/project-init.md는 상태 파일(.claude/<plugin>.local.md)이나 명시적 중단·재개 메커니즘이 없는 단일 인터랙티브 명령이다. Step 4 중간(4c AGENTS/CLAUDE 갱신, 4d docs/git-workflow/ 쓰기, 4e charter 발행)에서 중단되면 부분 산출물이 남고 롤백이 없다.",
+   "why_not_gap": "재현 가능한 실패가 아니다: 명령이 설계상 멱등이다. Step 1 감지 + 4c의 S1–S4 matrix(project-init.md:160-165) + charter C-S1/C-S2/C-S3 matrix(project-init.md:41-43, 203-208)가 '이미 부분 완료' 상태를 감지해 in-place로 라우팅하므로 중단 후 재실행이 곧 복구 경로다(예: charter 섹션만 있고 docs 누락 → C-S3(b)가 질문 없이 누락 파일 생성). 별도 resume 상태 파일이 없어도 matrix가 recovery를 제공하므로 갭 아님. plugin-shape의 state-file 규범은 런타임 상태를 갖는 hook/skill 대상이지 일회성 생성 명령의 강제 요건이 아니다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 208,
+     "quote": "**C-S3 (b) docs 파일만 누락** | 질문 없이(C-S3(b) 계약) 누락된 `docs/project/charter.md`·`conventions.md`를 생성하되"
+    }
+   ],
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c14",
+   "axis": 5,
+   "observation": "사용자가 conventions/charter 질문에 희소하게 답하면 생성된 docs/project/conventions.md·charter.md의 여러 헤딩이 `_명시되지 않음._` / `_명시되지 않음 — 추후 보강._` 마커로 채워질 수 있다(project-init.md:195-199, 208). quality-criteria.md Red Flags는 'TODO items never completed'를 경계 항목으로 든다.",
+   "why_not_gap": "이는 결함이 아니라 quality-criteria가 요구하는 방향의 *옳은* 선택이다. 같은 Red Flags가 'Copy-paste from templates without customization'과 'Generic advice not specific to the project'를 더 강하게 경계하는데, project-init은 의견 콘텐츠 주입을 금지(AC14)하고 사용자 elicited 값만 캡처한다. 빈 필드를 canned 문구로 채우는 대안이 오히려 Red Flag이므로, 정직한 placeholder 마커는 trade-off의 정답이다. 재현 실패 없음 → 갭 아님.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 196,
+     "quote": "canned persona 주입 금지, AC14)"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 197,
+     "quote": "Phase 1 ③ conventions 답변을 항목별로 분배; 해당 답변이 없으면 `_명시되지 않음._`"
+    }
+   ],
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c15",
+   "observation": "The git-workflow overwrite path (Step 4d writes docs/git-workflow/branch-strategy.md, commit-conventions.md, pr-process.md) is a wholesale file overwrite, not a section-merge. If a user hand-edited those generated files and then approves the Step-1 '기존 git workflow 룰이 감지됐습니다. 새 템플릿으로 교체할까요?' prompt (L20-21), their edits are replaced with no backup.",
+   "why_not_gap": "This overwrite is gated by an explicit 'replace?' prompt whose refusal aborts (L23), and the files are plugin-template-shaped generated artifacts (docs/git-workflow/*) rather than the user's primary hand-authored context file, so the expected-value content loss is low and consent is clear. It does not rise to a destruction gap on its own, but it shares A6-2's root cause (no backup on overwrite) and would be fixed by the same preflight.",
+   "axis": 6,
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 171,
+     "quote": "`docs/git-workflow/` 디렉토리가 없으면 생성. 다음 3개 파일 작성:"
+    }
+   ],
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-c16",
+   "observation": "The three git-ignored quality-gates session files under the plugin (and under templates/.claude/) embed the author's local absolute paths (e.g. /Users/jeonghokim/Downloads/devbrew/... and /private/tmp/claude-501/...).",
+   "why_not_gap": "They are git-ignored (excluded from the published tarball) and are never read/copied by the command (Step 4a reads only named templates/<strategy|shared|project> files), so they cannot leak into a user project or the marketplace and create no destruction path. The residual working-tree-hygiene concern belongs to axis 4, not the axis-6 destruction lens.",
+   "axis": 6,
+   "evidence": [
+    {
+     "file": "plugins/project-init/templates/.claude/quality-gates/c5b5d479-4c08-4c0b-bd17-b69dc75f3ce4/files.md",
+     "line": 3,
+     "quote": "- /private/tmp/claude-501/-Users-jeonghokim-Downloads-devbrew/c5b5d479-4c08-4c0b-bd17-b69dc75f3ce4/run-hooks.sh"
+    }
+   ],
+   "source": "claude"
+  },
+  {
+   "id": "NOQ-x1",
+   "axis": 1,
+   "observation": "git-ignored quality-gates session 파일 3개는 실제로 존재하며 사용자 절대 경로와 임시 scratch 경로를 담고 있다.",
+   "why_not_gap": "모두 .gitignore의 plugin-state 규칙에 의해 제외되고 설치 cache에도 없으며, 생성 command는 template 파일을 명시적으로 열거해 templates/.claude를 읽거나 재귀 복제하지 않는다. 따라서 현재 사용자 프로젝트로 전파되는 실패 모드가 없다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/.claude/quality-gates/3a082477-4f9e-4673-843a-e3c648b52cbd/files.md",
+     "line": 3,
+     "quote": "- /Users/jeonghokim/Downloads/devbrew/plugins/project-init/hooks/tests/test_docs_lint.py"
+    },
+    {
+     "file": "plugins/project-init/templates/.claude/quality-gates/c5b5d479-4c08-4c0b-bd17-b69dc75f3ce4/files.md",
+     "line": 5,
+     "quote": "- /private/tmp/claude-501/-Users-jeonghokim-Downloads-devbrew/c5b5d479-4c08-4c0b-bd17-b69dc75f3ce4/scratchpad/demo-shop/AGENTS.md"
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 138,
+     "quote": "플러그인에서 다음 파일을 읽는다:"
+    }
+   ],
+   "source": "codex"
+  },
+  {
+   "id": "NOQ-x2",
+   "axis": 1,
+   "observation": "quality-gates의 hooks event 이름에는 PR 전용 trigger가 없지만 hook 본문은 직접 gh pr create 성공을 검출한다.",
+   "why_not_gap": "구현이 성공 PR URL을 확인하고 quality pipeline 초기화를 지시하므로 project-init의 조건부 통합 설명은 참이다. 인덱스만 본 D2 가설이 철회됐다.",
+   "evidence": [
+    {
+     "file": "plugins/quality-gates/hooks/post-tool-use.py",
+     "line": 54,
+     "quote": "if not re.search(r\"gh\\s+pr\\s+create\", command):"
+    },
+    {
+     "file": "plugins/quality-gates/hooks/post-tool-use.py",
+     "line": 78,
+     "quote": "pr_url_match = re.search(r\"https://github\\.com/[^\\s]+/pull/\\d+\", stdout)"
+    },
+    {
+     "file": "plugins/quality-gates/hooks/post-tool-use.py",
+     "line": 90,
+     "quote": "f\"Quality Gates: PR created at {pr_url}. \""
+    }
+   ],
+   "source": "codex"
+  },
+  {
+   "id": "NOQ-x3",
+   "axis": 1,
+   "observation": "staleness sweep의 dangling doc-claim 27건은 역사적 삭제 기록, 사용자 프로젝트의 생성 대상 경로, pointer 본문을 파일 참조로 오인한 항목으로 분류됐다.",
+   "why_not_gap": "예를 들어 llm-guidelines.md는 현존한다고 주장한 것이 아니라 제거 사실을 기록한 것이고, README의 @AGENTS.md는 import 본문이다. 전수 대조에서 현재 구현이 dereference하는 존재하지 않는 파일은 발견되지 않았다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/CHANGELOG.md",
+     "line": 64,
+     "quote": "- `templates/shared/llm-guidelines.md` 파일 및 `## LLM Coding Guidelines` 섹션 emission 전면 제거."
+    },
+    {
+     "file": "plugins/project-init/README.md",
+     "line": 52,
+     "quote": "- `CLAUDE.md` — `@AGENTS.md` 한 줄 thin pointer (Claude Code가 AGENTS.md content를 자동 import)"
+    },
+    {
+     "file": "plugins/project-init/templates/shared/claude-md-pointer.md",
+     "line": 1,
+     "quote": "@AGENTS.md"
+    }
+   ],
+   "source": "codex"
+  },
+  {
+   "id": "NOQ-x4",
+   "axis": 1,
+   "observation": "sweep의 draft residue인 TBD는 출하 미완료 마커처럼 보인다.",
+   "why_not_gap": "해당 위치의 TBD는 바로 앞 문맥에서 Trunk-Based Development를 가리키는 약어이며 TODO·미결정 값이 아니다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/templates/trunk-based/branch-strategy.md",
+     "line": 69,
+     "quote": "[trunkbaseddevelopment.com](https://trunkbaseddevelopment.com/) canonical은 두 가지 release 패턴을 권장:"
+    },
+    {
+     "file": "plugins/project-init/templates/trunk-based/branch-strategy.md",
+     "line": 109,
+     "quote": "- release 브랜치를 새 기능 개발에 쓰지 말 것 — 그 순간 long-lived feature branch가 되어 TBD 위반."
+    }
+   ],
+   "source": "codex"
+  },
+  {
+   "id": "NOQ-x5",
+   "axis": 1,
+   "observation": "95/95 GREEN 중 command contract 테스트는 실제 command 수행이 아니라 산문 존재를 검증한다.",
+   "why_not_gap": "테스트와 CHANGELOG가 이 한계를 명시적으로 밝히므로 테스트 자체가 실행 능력을 거짓 주장하지는 않는다. 지원 hook 입력과 kill switch는 실제 Python 테스트가 검증하지만 모델이 산문을 정확히 따를지는 별도 sandbox 실행이 필요하다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/hooks/tests/test_command_contract.py",
+     "line": 3,
+     "quote": "`/project-init` is a model-followed markdown instruction, not executable code, so"
+    },
+    {
+     "file": "plugins/project-init/hooks/tests/test_command_contract.py",
+     "line": 4,
+     "quote": "a test cannot exercise its behaviour. What it *can* lock is the existence of the"
+    },
+    {
+     "file": "plugins/project-init/CHANGELOG.md",
+     "line": 19,
+     "quote": "명령서는 모델이 따르는 지시서라 동작을 실행할 수 없으므로, 규칙의 *존재*를 잠근다"
+    }
+   ],
+   "source": "codex"
+  },
+  {
+   "id": "NOQ-x6",
+   "axis": 4,
+   "observation": "claude-code-setup도 codebase를 스캔하므로 project-init과 표면적으로 겹친다.",
+   "why_not_gap": "공식 skill은 read-only로 hook·skill·MCP·subagent 자동화를 추천할 뿐 파일을 생성하지 않는다. project-init은 선택한 Git 정책과 사용자에게서 받은 charter를 프로젝트 파일로 발행하므로 산출물과 책임이 다르다.",
+   "evidence": [
+    {
+     "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/claude-code-setup/1.0.0/skills/claude-automation-recommender/SKILL.md",
+     "line": 9,
+     "quote": "Analyze codebase patterns to recommend tailored Claude Code automations across all extensibility options."
+    },
+    {
+     "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/claude-code-setup/1.0.0/skills/claude-automation-recommender/SKILL.md",
+     "line": 11,
+     "quote": "**This skill is read-only.** It analyzes the codebase and outputs recommendations. It does NOT create or modify any files."
+    },
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 132,
+     "quote": "선택된 strategy와 답변을 바탕으로 다음 파일들을 생성한다."
+    }
+   ],
+   "source": "codex"
+  },
+  {
+   "id": "NOQ-x7",
+   "axis": 4,
+   "observation": "devbrew에는 project-init 테스트를 자동 실행하는 repository CI가 없다.",
+   "why_not_gap": "운영상 의미는 있지만 CI 설정 위치는 LD5 밖이다. 이번 감사 계약에 따라 finding으로 승격하지 않았다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/CHANGELOG.md",
+     "line": 88,
+     "quote": "- `hooks/tests/smoke.sh` — V2 자동화 smoke script (CI-runnable, no human eyeballing, macOS bash 3.2 호환)."
+    }
+   ],
+   "source": "codex"
+  },
+  {
+   "id": "NOQ-x8",
+   "axis": 6,
+   "observation": "command write contract에는 생성 대상의 realpath가 project root 안인지 확인하는 명시적 경계가 없다.",
+   "why_not_gap": "symlink된 AGENTS.md 또는 docs 디렉토리를 Write/Edit가 실제로 어떻게 처리하는지 read-only 환경에서 재현할 수 없고, tool runtime의 symlink 정책도 범위 파일에 정의돼 있지 않다. 구체적 외부-path overwrite를 입증하지 못했으므로 구조 변경 finding이 아니라 unverified NOQ로 남긴다.",
+   "evidence": [
+    {
+     "file": "plugins/project-init/commands/project-init.md",
+     "line": 134,
+     "quote": "읽고, placeholder를 치환하고, 프로젝트에 쓴다."
+    },
+    {
+     "file": "/Users/jeonghokim/Downloads/reference/ECC/scripts/lib/path-safety.js",
+     "line": 48,
+     "quote": "function isWithinRoot(target, root) {"
+    },
+    {
+     "file": "/Users/jeonghokim/Downloads/reference/ECC/scripts/lib/path-safety.js",
+     "line": 62,
+     "quote": "* Fail-closed guard: throw unless `target` is contained within `root`."
+    }
+   ],
+   "source": "codex"
+  }
+ ],
+ "axis_failures": [],
+ "degraded": []
+}
