@@ -1205,6 +1205,25 @@ C12 예시 · BANNED 패턴 · §14 to-do가 전부 같은 D2/D4를 다룬다. (
 
 ---
 
+### 48. ★★ **감사가 처음으로 돌았다 — 첫 실행이 종이 15리비전이 못 잡은 하니스 버그를 즉시 잡았다** (2026-07-15, 감사 EXECUTION)
+
+**이 사이클의 진짜 산출물(§8-4)이 여기 있다.** 설계 r1~r15 + SDD 12태스크 + whole-branch까지 **종이로 완성한 하니스가, 실행 첫 dispatch에서 crash했다.** HEAD `3bf5cc5`(감사 산출물) + `451f9d4`(하니스 fix).
+
+**#1 — args는 객체가 아니라 문자열로 온다 (headline).** `Workflow({scriptPath, args})`는 `args`를 워크플로 스크립트 전역 `args`에 **JSON 문자열**로 전달한다. 하니스는 `const pack = args.evidencePack`(객체 접근)을 가정 → `undefined is not an object` 즉시 crash(0 에이전트, 5ms). **테스트 하니스 `_wf_harness.mjs`가 args를 *객체*로 넘겨 전 스위트가 green이라 15리비전·SDD·whole-branch가 은폐했다.** pre-0 스모크도 사실 `args.sentinelPath=undefined`였으나 smoke-probe가 어차피 못 써서 결론(Law2 강제)만 유효했다 — journal의 `echo devbrew-smoke > undefined`가 사후 증거. 처방: `typeof args==='string'?JSON.parse(args):(args||{})` 정규화(문자열=실도구, 객체=테스트하니스 양쪽 무회귀). 근본원인은 **0-agent 진단 워크플로**(`return {argsType: typeof args}`→`"string"`)로 확증 — 대상에게 질문 말고 프로브시켜라([[reference_workflow_args_string]], [[reference_workflow_law2_agenttype]] 스모크 교훈과 동형). **[[feedback_harness_is_means_not_end]]의 정확한 실증: 종이 10라운드보다 실행 1회.** → 편집 후 pre-0 재검증 + harness/BEFORE 재-baseline(팬아웃 0건 상태라 안전) 후 재실행 성공.
+
+**#2 — 나머지 파이프라인은 전부 clean하게 돌았다.** phase0~post-1 전 게이트 GREEN. 무결성 3중(BEFORE==AFTER#1 리포 무변경 실증 · LD5-0==LD5-1 · AFTER#2 harness/ld5 불변) 전부 성립. codex blind `-s read-only`가 전역/LD5에 한 바이트도 안 씀 실측(전역 350파일 동일). secret-scan GREEN. validate --data/--artifacts GREEN. **설계가 옳았다 — 단 args 계약 하나만 현실과 달랐다.**
+
+**#3 — §8-4 관찰 (plugin-audit 재료):**
+- **세션 한도**: 15 에이전트(30 상한의 절반) 전부 완주, refuter 무사망. r9의 34/40 사망과 대조 — 대상이 작아서(50파일 4,851줄)일 수 있다. **팬아웃 30은 넉넉했다.** 1.2M 토큰·246 tool-use·~34분.
+- **refuter 과잉 kill? 아니다.** 17 발견 중 15 refuted(gate C 취향 2·gate B 이미처리/미해악 5·codex 8·dedup). 살아남은 2건은 **둘 다 심층검증 3표 통과**한 진짜 결함(CX-2·A6-1). kill 표본검토 전부 정당(A1-1 marketplace drift=취향, A1-2 commit-commands=named coupling으로 이미 완화). **적대적 기본-refuted가 노이즈를 정확히 걸렀다.**
+- **심층검증 캡 8 미도달**(생존 CRITICAL/HIGH가 2뿐) · **degraded 배너 안 뜸**(degraded=0, 정직) · **빈 감사 안 남**(§15 한계 미발동, 2 발견).
+- **🔴 신규 관찰 — 비소유 축의 D-verdict 과잉생산**: `AXIS_SCHEMA`가 `d_verdicts`를 **모든 축 필수 필드**로 강제 → 비소유 축들이 D1-D5를 (대개 unverified로) 채워 반환, claude d_verdicts가 5여야 하는데 **25개**가 됐다. orchestrator가 journal에서 소유 축(D1-4=축1, D5=축4)만 골라 dedupe해야 했다(agent 라벨이 journal에서 비어 **OQ 소유로 역추적**). **plugin-audit 처방**: 축별로 owned-D/OQ만 반환하도록 스키마/프롬프트를 좁히거나, 조립이 owner-attribution을 journal에서 결정론적으로 뽑는 절차를 명문화. cross-model은 정상 작동(D1 codex confirmed / claude reclassified 엇갈림이 §9.3대로 나란히 보존, D2·D3·D4·D5 4/5 독립 일치).
+- **CONTRACT 소소한 stale**: axis5가 가리키는 `claude-md-management/references/quality-criteria.md`는 실제로 버전경로(`.../1.0.0/skills/claude-md-improver/references/...`)에 있음 — 감사자가 Glob로 찾음(모델 신뢰로 커버). 2차 사이클에서 CONTRACT 경로 정정 가치.
+
+**결과물(우선순위 갭 목록 — 1차 산출물)**: CX-2 CRITICAL(trunk legacy release를 현 main HEAD서 cut) + A6-1 HIGH(S4(i) divergent CLAUDE.md 백업없이 포인터 재작성=콘텐츠 소실, 플러그인 자기 line-167 불변식 모순). 후보단서: D3 confirmed(marketplace drift, staleness sweep 기계확인) · D2·D4 withdrawn · D5 confirmed(AGENTS.md-canonical 정답, 갭 아님) · D1 엇갈림. 산출=`docs/audits/2026-07-15-project-init-audit.{md,-data.json,-journal.jsonl}`.
+
+---
+
 ## 7. 재사용 가능한 자산
 
 브랜치 `feature/project-init-audit` (HEAD `ca313a2`)에 **이미 커밋된 것들**:
@@ -1304,17 +1323,13 @@ codex blind 2패스(fresh-eyes 14건 + 배선 전수감사 66행 곱집합)로 �
 - **그러나 그 채점기는 `.github/` 부재(CI 전무)를 정확히 맞혔다** — `fileExists` 한 줄이 0원에. **결정론은 "flat한 부재"에, 모델은 "잘못된 존재"에.** 이 비대칭이 §5.4a의 근거다.
 - **선행기술은 전부 결정론 채점기다** — 판단이 필요한 3축(훅 안전성·컴포넌트 격리·철학 준수)에 **아무도 답을 갖고 있지 않다.** 조사자가 REFUTE를 최대한 시도한 뒤 인정했다.
 
-### 3. 실행 ← **여기다**
+### ✅ 3. ~~실행~~ — **DONE** (2026-07-15, `3bf5cc5` + args fix `451f9d4`)
 
-**지출 동의 게이트 → pre-0(정적검증 + 스모크) → 감사 실행 → `docs/audits/` 커밋** (`journal.jsonl` 함께).
-순서 주의: **게이트가 먼저다.** 스모크도 에이전트를 태운다 (C2).
-**전제**: B1 clean worktree — `git status --porcelain`이 비어 있어야 시작한다.
+지출 동의 게이트(fanout 30) → pre-0(정적검증 + 미니-workflow 스모크) → pre-1(스냅샷·evidence pack·codex blind) → Workflow(6축) → post-1(조립·검증·렌더·`docs/audits/` 커밋). **게이트가 먼저**·B1 clean worktree 전제 전부 준수. **첫 dispatch가 args-string 버그로 crash → fix 후 재실행 성공 (원장 48).**
 
-### 4. ★ 관찰 기록 — **이것이 이 사이클의 진짜 산출물이다**
+### ✅ 4. ★ ~~관찰 기록~~ — **DONE → 원장 48** (이 사이클의 진짜 산출물)
 
-감사가 도는 동안 **무엇이 깨지고 · 무엇이 과했고 · 무엇이 없어서 아쉬웠는지**를 §6에 append하라. 보편 플러그인(`plugin-audit`)의 재료는 **설계 문서가 아니라 실행 관찰**이다 (원장 29).
-
-특히 볼 것: **30 에이전트**(r12 B3이 종합자를 orchestrator로 빼며 31 → 30)가 **세션 한도를 넘는가** · 6축이 **과잉인가** · refuter가 **과잉 kill하는가** · 심층검증 캡 8이 **맞는가** · degraded 배너가 **실제로 뜨는가** · **빈 감사가 나오는가**(§15가 의도적으로 수용한 한계 — 실제로 터지는지 본다).
+**무엇이 깨지고·과했고·없어서 아쉬웠는지 전부 원장 48에 기록됐다.** 핵심: args-string 버그(종이가 못 잡음) · 팬아웃 30은 넉넉(15 에이전트, 사망 0) · refuter 과잉 kill 아님(15/17 refute 전부 정당) · 심층검증 캡 미도달 · degraded 배너 미발동 · 빈 감사 미발생 · **신규: 비소유 축의 D-verdict 과잉생산**(스키마가 d_verdicts를 전축 필수로 강제). `plugin-audit` 일반화의 재료가 이제 **실행 관찰**로 존재한다.
 
 ### 2차 사이클
 
@@ -1340,10 +1355,10 @@ codex blind 2패스(fresh-eyes 14건 + 배선 전수감사 66행 곱집합)로 �
 | | |
 |---|---|
 | 최초 작성 | 2026-07-12 |
-| 최종 갱신 | 2026-07-12 (**설계 리뷰 종료** 시점) |
-| 소스 세션 | `feature/project-init-audit`, 설계 **r11** (`ca313a2`) |
-| 리뷰 규모 | r1–r8: 188 에이전트 · r9: 40 · r10: 2 Claude + codex · **r11: codex blind 2패스** — **총 11라운드, 230+ 에이전트** |
-| 상태 | **blocker 해소 ✅ · 설계 리뷰 종료 ✅ (r12 없음 — 원장 29).** 다음 = **실행-블로커 10건 수정 → 감사 실행** (§8) |
-| 스모크 | `wf_f73feda2-22a` — 1 에이전트, 5.6s. `agentType` 해석 ✅ · allowlist 강제 ✅ · sentinel 부재 ✅ |
-| 원장 | **29건.** 19–21 = blocker 해소 과정 · **22–28 = codex blind 2패스를 보편 함정으로** · **29 = 종이 리뷰의 수확체감** |
-| ⚠️ | **감사는 아직 0회 실행됐다.** 이 문서의 가치는 실행 관찰이 들어올 때 비로소 완성된다 (§8-4) |
+| 최종 갱신 | **2026-07-15 (감사 EXECUTION 완료 — 원장 48)** |
+| 소스 세션 | `feature/project-init-audit`, HEAD **`3bf5cc5`** (설계 r15 → SDD 12태스크 → 감사 실행) |
+| 리뷰 규모 | 설계 r1–r15 + SDD 12태스크 2단계리뷰 + whole-branch(opus) + **감사 실행 15 에이전트(1.2M tok, ~34분)** |
+| 상태 | ✅ **감사 EXECUTION 완료.** 2 생존 갭(CX-2 CRITICAL·A6-1 HIGH) + D 판정 5건 + OQ 6건 + NOQ 24건. 다음 = **2차 사이클(사용자가 갭 선택) 또는 브랜치 push/PR/merge** (§8) |
+| 스모크 | pre-0c `wf_9653e190-770` — sentinel 부재 실증(Law2). ⚠️ args-string 버그로 `sentinelPath=undefined`였으나 결론 유효 (원장 48) |
+| 원장 | **48건.** 19–21 = blocker 해소 · 22–29 = codex 2패스 보편함정 · 43–47 = r15 첫 독립리뷰 + 라운드3 · **48 = 감사 첫 실행 관찰(args-string 버그 + 우선순위 갭 목록)** |
+| ✅ | **감사가 돌았다.** 이 문서의 가치가 실행 관찰(원장 48)로 완성됐다. 종이가 못 잡은 것을 실행 1회가 잡았다 ([[feedback_harness_is_means_not_end]]) |
