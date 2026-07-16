@@ -2,9 +2,9 @@
 name: law2-agent-tool-surface
 type: design-doc
 created_at: 2026-07-16
-revised_at: 2026-07-16
-status: draft — review round 2 (round 1 = needs_revise, claude+codex 독립 일치; 8건 반영)
-approach: "리뷰어=`tools:` allowlist(fail-closed) / 실행자=denylist + `mcp__*` + 구조적 가드"
+revised_at: 2026-07-17
+status: draft — review round 3 (round 1·2 모두 needs_revise, claude+codex 독립 일치)
+approach: "8중 7 = `tools:` allowlist(fail-closed, MCP는 `mcp__<server>`로) / denylist 예외 1개(pr-understanding-builder) + `mcp__*`. 목록은 추론이 아니라 **트랜스크립트 도구 census**로 도출"
 plugin: "quality-gates + spec-distill (+ CLAUDE.md 규범)"
 version_bump: "quality-gates 2.10.3 → 2.11.0 · spec-distill 0.20.0 → 0.21.0 (minor — 실효 도구 표면 변경)"
 implementation: "subagent-driven (TDD)"
@@ -136,94 +136,117 @@ sibling_spec: "PR B = plugin-audit 플러그인 (별도 사이클, docs/handoff/
 
 | # | 제약 | 출처 |
 |---|---|---|
-| C1 | **레지스트리는 세션 시작에 스냅샷된다.** 편집 후 같은 세션 검증 = **stale GREEN** | 원장 19, [[reference_workflow_law2_agenttype]] |
+| C1 | ⚠️ **미확증**: "레지스트리는 세션 시작에 스냅샷된다"는 원장 19의 실증은 **Workflow 도구의 `agentType` 레지스트리**에 대한 것이고, 이 8개는 **표준 Agent-tool dispatch**를 쓴다 — **다른 메커니즘**. 재시작은 **fail-safe 기본값**으로 유지하되(안 하면 stale GREEN 위험, 하면 손해 없음), §10-2의 첫 census가 이 질문에 답한다 (편집 후 무재시작 census가 불변이면 스냅샷 확증) | 원장 19 = 다른 메커니즘. 리뷰 round 2가 반증 |
 | C2 | **`tools: []`는 launch 실패** (공식 문서) | 공식 문서 |
 | C3 | **`disallowedTools` 먼저, 그 다음 `tools`** | 공식 문서 |
 | C4 | **작업 전 test baseline 캡처 필수** — main에 stale red 존재 | [[project_qg_pre_existing_test_reds]] |
 | C5 | **플러그인 건드리면 같은 커밋에서 version bump** | [[feedback_plugin_version_bump]] |
 | C6 | **persona/도구 표면은 보안-민감 코드** | `CLAUDE.md` |
 | C7 | 테스트는 **repo root에서** 실행 | [[project_qg_pre_existing_test_reds]] |
-| C8 | **`mcp__*`는 `disallowedTools`에서만 와일드카드로 동작.** `tools:` allowlist는 열거하지 않으면 자동 배제 | 공식 문서 |
+| C9 | **서브에이전트 트랜스크립트가 실제 tool 호출을 JSONL로 기록한다** — `grep -o '"name":"[A-Za-z_]*"' <transcript> \| sort \| uniq -c`가 결정론적 census를 낸다. 임의 트랜스크립트 3건에서 재현 확인 | 2026-07-17 실측 |
+| C8 | **MCP 패턴 문법** (공식 문서 verbatim): *"**Both fields** accept MCP server-level patterns…: `mcp__<server>` or `mcp__<server>__*` **grants** or removes every tool from the named server. **In `disallowedTools`, `mcp__*` also removes every MCP tool from any server**"* → **`tools:`도 서버 단위 grant가 된다** (예: `tools: Read, Bash, mcp__plugin_chrome-devtools-mcp_chrome-devtools`). allowlist는 열거 안 하면 자동 배제(fail-closed) | 공식 문서 |
 
 ---
 
 ## 5. 핵심 설계 결정
 
-### 리뷰어는 allowlist, 실행자는 denylist + `mcp__*`
+### 도구 목록은 **추론이 아니라 측정**으로 도출한다
 
-**denylist는 fail-open이다.** *"이 N개 빼고 전부"*는 런타임에 새 도구·새 MCP 서버가 추가되면 **자동으로 agent가 갖는다.** `Agent`가 그렇게 들어왔고, MCP 서버가 그렇게 들어왔다. allowlist는 **열거되지 않은 모든 것을 자동으로 막는다** (fail-closed) — 미래 도구까지.
+초고는 *"persona 본문을 읽어 최소 집합을 정한다"*고 규정했다. **그 방법이 틀린 표를 만들었다** — 리뷰 round 2 중 `spec-reviewer`의 실제 트랜스크립트를 census한 결과:
 
-**그러나 "전부 allowlist"는 오답이다.** 두 반례:
+| 도구 | round 1 | round 2 | 선언(`allowedTools`) |
+|---|---|---|---|
+| **Bash** | **27** | **10** | 있음 |
+| Read | 3 | 3 | 있음 |
+| **WebFetch** | **1** | **1** | ❌ **없음** |
+| ToolSearch | 1 | 1 | ❌ 없음 |
+| **Grep / Glob** | **0** | **0** | 있음 |
 
-- `pr-understanding-builder`의 의도는 *"zero tools"*인데 allowlist로 표현하면 `tools: []` → **C2로 죽는다.**
-- `runtime-verifier`는 **Write를 가져야 하는** 실행자다. allowlist로 옮겨도 Law 2가 강화되지 않는다 — 분리가 orchestrator mutation-guard에서 오기 때문이다.
+세 가지가 동시에 드러난다: (i) **`allowedTools`가 무시된다는 행동 증거** — 선언에 없는 `WebFetch`를 씀. (ii) persona가 Bash를 **한 번도 지시하지 않는데 agent는 37회 부른다** — persona 독해로는 이 목록을 못 만든다. (iii) 초고가 제안한 `tools: Read, Grep, Glob`은 **한 번도 안 쓰는 도구 2개를 주고 실제로 쓰는 도구 2개를 뺏는다** — §12가 이름 붙인 *"조용한 열화"*를 이 설계 자신이 저지를 뻔했다.
 
-→ **규범 = "리뷰어는 `tools:` allowlist / 실행자는 denylist + `mcp__*` + 구조적 가드".** `CLAUDE.md`가 v2.2.0 scoped exception으로 이미 인정한 구분을 도구 키 층위까지 일관되게 내린 것.
+**따라서 도출 규칙 (결정론):**
+
+```
+tools:  =  (관측된 census  ∪  문서화된 Inputs/Output 계약이 요구하는 것)  −  금지 7종
+```
+
+`금지 7종` = `Write` · `Edit` · `MultiEdit` · `NotebookEdit` · `Agent` · `Bash` · `mcp__*`.
+**census가 금지 도구를 보이면 그 용도를 대체 도구로 옮긴다** (예: `spec-reviewer`의 Bash 37회는 대부분 grep/find → `Grep`/`Glob`이 대체). 대체 불가면 예외 마커(아래).
+
+census 절차 (C9 — 재현 확인됨):
+
+```bash
+grep -o '"name":"[A-Za-z_]*"' <transcript>.output | sort | uniq -c | sort -rn
+```
+
+### 8중 7은 allowlist. denylist 예외는 **하나**.
+
+**denylist는 fail-open이다.** *"이 N개 빼고 전부"*는 새 도구·새 MCP 서버가 추가되면 **자동으로 agent가 갖는다.** `Agent`가 그렇게 들어왔고 MCP 서버가 그렇게 들어왔다.
+
+초고는 *"실행자는 allowlist 불가"*라고 썼다. **틀렸다** — C8이 확정하듯 **`tools:`도 MCP 서버 단위 grant를 받는다**:
+
+```yaml
+tools: Read, Bash, Grep, Glob, Write, Edit, MultiEdit, mcp__plugin_chrome-devtools-mcp_chrome-devtools
+```
+
+→ `runtime-verifier`는 chrome을 유지하면서 나머지 MCP가 **fail-closed로 차단**된다. **예외 조항이 필요 없어지고, 초고의 §5↔§7 모순이 예외를 추가해서가 아니라 예외를 없애서 해소된다.**
+
+**진짜 예외는 하나뿐이다**: `pr-understanding-builder`는 의도가 *"도구 0개"*인데 C2가 `tools: []`를 죽인다 — *"아무것도 없음"*은 allowlist로 표현할 수 없다. **denylist + `mcp__*`**가 유일한 표현 수단이다.
 
 ### 판정식 — 리뷰어 도구 상한
 
-리뷰어의 `tools:`에 다음이 있으면 **위반**: `Write` · `Edit` · `MultiEdit` · `NotebookEdit` · `Agent` · `Bash` · `mcp__`로 시작하는 모든 것.
-
-**침묵 예외 금지 — 예외는 기계가 읽을 수 있어야 한다.** `Bash`가 필요하면 그 agent 파일에 정확히 이 마커를 둔다:
+리뷰어의 `tools:`에 **금지 7종**이 있으면 위반. **침묵 예외 금지 — 예외는 기계가 읽을 수 있어야 한다.** 필요하면 그 agent 파일에 정확히:
 
 ```
-# BASH-EXCEPTION: <한 줄 근거>
+# TOOL-EXCEPTION: <도구> — <한 줄 근거>
 ```
 
-결정론 락은 `tools:`에 `Bash`가 있는데 이 마커가 **없으면 FAIL**한다. 마커 없는 Bash = 위반.
-
-### denylist agent의 상한
-
-`disallowedTools`를 쓰는 agent는 **반드시 `mcp__*`를 포함**한다 (C8). 예외는 MCP가 그 agent의 일에 필수인 경우뿐이며(`runtime-verifier`의 chrome-devtools), 그때는 **서버 단위로 열거**한다 — 전면 개방 금지.
-
-### 최소 집합의 판정 방법
-
-각 agent의 `tools:`는 추측이 아니라 **두 증거**로 정한다:
-
-1. **persona 본문 전수 읽기** — 본문이 실제로 지시하는 도구 + Inputs 계약이 요구하는 도구.
-2. **결정론 assertion이 붙은 동적 dispatch** (§10-3) — 실제로 돌려서 **문서화된 출력 계약**을 만족하는가.
-
-> **왜 필요한가**: 선언된 `allowedTools`는 **한 번도 강제된 적이 없으므로 한 번도 테스트된 적이 없다.** 그대로 `tools:`로 옮기는 것은 *검증된 적 없는 목록을 사실로 승격*하는 것 = 원장 10 재생산. 실제로 round 1에서 초고 자신이 이 기준을 어겼다(§1 서사 오류).
+락은 `tools:`에 금지 도구가 있는데 이 마커가 **없으면 FAIL**한다.
 
 ---
 
 ## 6. Agent별 도구 표면
 
-**근거 실측**: `filtered_diff`는 **오케스트레이터가 인라인 주입**하고 리뷰어의 cwd 재계산은 **명시적으로 금지**된다 → 리뷰어는 git을 스스로 돌리지 않는다.
+⚠️ **아래는 census 전 가설이다.** `spec-reviewer`만 실측 census를 가졌고(§5), 그것이 초고 표를 이미 반증했다. **§10-0이 8개 전부의 before-census를 뜬 뒤 §5의 도출 규칙을 적용해 확정한다** — 이 표를 그대로 구현하지 말 것.
 
-| agent | 현재 실효 | 제안 | 근거 (persona 본문) |
+| agent | 현재 실효 | 가설 | 근거 |
 |---|---|---|---|
-| `security-reviewer` | all except 4 | `tools:` **Read, Grep, Glob** | `filtered_diff` 인라인 수령. `:42` *"Flag each entry so downstream review can verify CVE status. **Do not run audit commands yourself.**"* → **web 불요** (OQ2 해소) |
-| `adversarial` | all except 4 | `tools:` **Read, Grep, Glob** | findings를 구조화 블록으로 수령 |
-| `test-scope-validator` | all except 4 | `tools:` **Read, Grep, Glob** | `:48` *"No `curl`, no `WebFetch`, **no MCP**. **`Bash` is for reading files (`cat`, `head`, `wc`) only**"* → Bash는 **Read의 대용**. Read 부여 = 동일 능력·더 적은 권한 → **Bash 불요** (OQ1 해소) |
-| `spec-reviewer` | all except 4 | `tools:` **Read, Grep, Glob** | 본문이 Bash를 **한 번도** 지시 안 함 (유일 히트가 자기 frontmatter 줄) |
-| `breadth-keeper` | all except 4 | `tools:` **Read, Grep, Glob** | Bash·web 언급 0건 |
-| `steelman-builder` | all except 4 | `tools:` **Read, Grep, Glob, WebSearch, WebFetch** | web 3건 · Bash 0건 → Bash 제거는 **개선** |
-| `pr-understanding-builder` | all except 11 (**MCP 보유**) | 🔴 **denylist + `mcp__*`** + 죽은 `allowedTools: []` 제거 | C2로 `tools: []` 불가. **MCP 구멍이 본 PR의 보안 핵심** |
-| `runtime-verifier` | all except 1 | **denylist 유지** + 죽은 `allowedTools`(**22**개) 제거 + **MCP를 서버 단위로 축소** | 문서화된 실행자 예외. chrome-devtools는 필요하나 전 MCP 개방은 불요 |
-
-> **`pr-understanding-builder`와 `runtime-verifier`가 이 설계의 핵심이다.** "전부 allowlist로"라는 단순한 답이 왜 틀리는지(C2·실행자 예외)를 증명하는 동시에, **denylist를 택한 두 agent야말로 `mcp__*` 누락으로 지금 뚫려 있다**는 것을 보여준다.
+| `spec-reviewer` | all except 4 | `tools:` **Read, Grep, Glob, WebFetch, WebSearch** | ✅ **census 실측**: WebFetch를 **실제로 써서 공식 문서로 이 스펙을 검증**했다 — 뺏으면 리뷰 품질이 열화된다. Bash 37회는 grep/find 용도 → Grep/Glob이 대체 |
+| `security-reviewer` | all except 4 | `tools:` **Read, Grep, Glob** | `filtered_diff` 인라인 수령. `:42` *"Do not run audit commands yourself"* → web 불요 (OQ2 해소). **census로 확인 필요** |
+| `adversarial` | all except 4 | `tools:` **Read, Grep, Glob** | findings를 구조화 블록으로 수령. **census로 확인 필요** |
+| `test-scope-validator` | all except 4 | `tools:` **Read, Grep, Glob** | `:48` *"No `curl`, no `WebFetch`, no MCP. **`Bash` is for reading files only**"* → Read가 대체 (OQ1 해소). **census로 확인 필요** |
+| `breadth-keeper` | all except 4 | `tools:` **Read, Grep, Glob** | Bash·web 언급 0건. **census로 확인 필요** |
+| `steelman-builder` | all except 4 | `tools:` **Read, Grep, Glob, WebSearch, WebFetch** | web 3건 · Bash 0건 → Bash 제거는 개선 |
+| `runtime-verifier` | all except 1 | `tools:` **Read, Bash, Grep, Glob, Write, Edit, MultiEdit, `mcp__plugin_chrome-devtools-mcp_chrome-devtools`** + 죽은 `allowedTools`(**22**개) 제거 | 실행자 예외 — Write/Bash 필수, Law 2는 mutation-guard가 보장. **`tools:`로도 chrome 유지 가능**(C8) → 나머지 MCP fail-closed. `# TOOL-EXCEPTION:` 마커 필수 |
+| `pr-understanding-builder` | all except 11 (**MCP 보유**) | 🔴 **denylist + `mcp__*`** + 죽은 `allowedTools: []` 제거 | **유일한 denylist 예외** — C2로 `tools: []` 불가. **MCP 구멍이 본 PR의 보안 핵심** |
 
 ---
 
 ## 7. 결함을 지키는 집행 메커니즘 뒤집기
 
-### AC15 — `test_agent_frontmatter_keys.sh`
+> **용어 주의**: 아래 **레거시 AC14 / 레거시 AC15**는 qg v1.12.0이 붙인 이름이며, 이 문서 §8의 AC 번호와 **무관**하다. (초고가 같은 번호를 재사용해 리뷰 round 2에 지적당했다 — *"이름 충돌이 버그의 원인"*이라는 이 문서의 결론을 문서 자신이 반복한 것.)
+
+### 레거시 AC15 — `test_agent_frontmatter_keys.sh`
 
 **현재**: kebab 금지 + *"Expected: allowedTools / disallowedTools (camelCase)"*.
-**변경 후**: `plugins/**/agents/*.md`에 대해
-- `allowedTools` 존재 → **FAIL** (kebab도 계속 FAIL)
-- 리뷰어 6종이 `tools:`를 갖고 그 목록에 금지 도구(§5 판정식)가 **없음** → 아니면 FAIL
-- `Bash` 보유 시 `# BASH-EXCEPTION:` 마커 부재 → FAIL
-- `disallowedTools`를 쓰는 agent에 `mcp__*` 부재 → FAIL
+**변경 후** — `plugins/**/agents/*.md`에 대해 FAIL 조건:
 
-### AC14 — `session-start-advisor.py::_scan_agent_frontmatter_keys`
+| # | 조건 |
+|---|---|
+| L1 | `allowedTools` 존재 (kebab 변종도 계속) |
+| L2 | **denylist 카브아웃 목록(현재 `pr-understanding-builder` 1개)에 없는데 `tools:`가 없음** |
+| L3 | `tools:`에 금지 7종이 있는데 `# TOOL-EXCEPTION:` 마커 부재 |
+| L4 | **카브아웃 목록의 agent**에 `disallowedTools`의 `mcp__*` 부재 |
 
-**현재**: kebab drift만 경고. **변경 후**: `allowedTools`도 경고 대상. kill switch(`DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor:frontmatter-scan`)는 **그대로 유지** — 어떤 훅도 자기 kill switch를 거부할 수 없다.
+> L2의 카브아웃 목록이 §5의 예외를 **인코딩**한다 — 초고는 이걸 빠뜨려 `runtime-verifier`가 자기 락에 FAIL했다(round 2 block). 이제 `runtime-verifier`는 allowlist라 카브아웃이 아니고, 카브아웃은 1개뿐이다.
+
+### 레거시 AC14 — `session-start-advisor.py::_scan_agent_frontmatter_keys`
+
+**현재**: kebab drift만 경고. **변경 후**: `allowedTools`도 경고. kill switch(`DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor:frontmatter-scan`)는 **그대로 유지** — 어떤 훅도 자기 kill switch를 거부할 수 없다.
 
 ### 이빨 증명 (필수)
 
-락을 걸고 끝내지 않는다. **일부러 결함을 되살린 mutation마다 락이 RED가 되는 것을 확인**한다 (§10-1). RED가 안 나면 그 락은 장식이다 ([[feedback_grep_lock_header_satisfiable]]).
+락을 걸고 끝내지 않는다. **§8 AC9의 mutation 전부에서 RED를 확인**한다. RED가 안 나면 그 락은 장식이다 ([[feedback_grep_lock_header_satisfiable]]).
 
 > 이 PR은 **"버그가 리뷰를 탈출하면 잡았어야 할 검증 파일을 편집한다"**는 Law 3의 교과서적 사례다 — 다만 이번엔 그 검증 파일 자체가 범인이었다.
 
@@ -234,20 +257,20 @@ sibling_spec: "PR B = plugin-audit 플러그인 (별도 사이클, docs/handoff/
 | # | 기준 | 검증 |
 |---|---|---|
 | **AC1** | `CLAUDE.md:25`가 agent 격리 메커니즘으로 `allowed-tools`/`disallowed-tools`(하이픈)를 지목하지 않는다 | grep |
-| **AC2** | `CLAUDE.md:41`이 `allowedTools`를 요구하지 않고 **"리뷰어=`tools:` allowlist / 실행자=denylist + `mcp__*` + 구조적 가드"**를 명시한다 | grep + 읽기 |
+| **AC2** | `CLAUDE.md:41`이 `allowedTools`를 요구하지 않고 **"리뷰어·실행자=`tools:` allowlist / '도구 0개' 표현이 필요한 경우만 denylist + `mcp__*`"**를 명시한다 | grep + 읽기 |
 | **AC3** | `plugins/**/agents/*.md` 중 **어떤 파일도** `allowedTools` 키를 갖지 않는다 | 결정론 grep |
-| **AC4** | 리뷰어 6종이 `tools:` allowlist를 갖고, 목록에 `Write`·`Edit`·`MultiEdit`·`NotebookEdit`·`Agent`·`Bash`·`mcp__*`가 **없다**. `Bash` 보유 시 **`# BASH-EXCEPTION:` 마커 필수** (마커 없으면 FAIL) | 결정론 grep |
-| **AC5** | `pr-understanding-builder`는 `tools:` 키를 갖지 않고(C2), `disallowedTools`에 **`mcp__*`를 포함**한다. C2 근거가 파일에 기록된다 | 결정론 grep |
-| **AC6** | `runtime-verifier`는 denylist를 유지하고 Write·Bash를 잃지 않으며, MCP가 **서버 단위로 한정**된다(전면 개방 아님) | grep |
-| **AC7** | **세션 재시작 후**, 8개 agent의 **런타임 레지스트리가 보고하는 실효 도구 표면**이 선언과 일치한다. **agent 자기-보고는 증거로 쓰지 않는다** — 레지스트리(하니스의 resolved view)가 ground truth | 재시작 후 레지스트리 ↔ frontmatter 대조표 기록 (C1) |
-| **AC8** | 리뷰어 6종을 **고정 fixture**로 각 1회 dispatch해 **문서화된 출력 계약**을 만족한다 — 각각 (a) launch 성공, (b) 해당 스키마의 **비어있지 않은** 블록 산출, (c) fixture에 심어둔 **기대 신호를 실제로 검출**, (d) 금지 도구 호출 시도 0회. **"산출물을 냈다"만으로는 불충분** | §10-3 |
-| **AC9** | AC15 락이 mutation 4종 각각에서 **RED**: ①`allowedTools` 재도입 ②리뷰어에 `Agent` 추가 ③마커 없는 `Bash` 추가 ④denylist agent에서 `mcp__*` 제거 | mutation test |
-| **AC10** | AC14 스캐너가 `allowedTools`를 경고하고, kill switch가 **여전히 동작**한다 | 단위 테스트 |
+| **AC4** | 카브아웃(1개)을 뺀 **7개 agent가 `tools:`를 갖고**, 금지 7종이 있으면 **`# TOOL-EXCEPTION:` 마커 동반**(마커 없으면 FAIL) | 결정론 grep |
+| **AC5** | `pr-understanding-builder`는 `tools:` 키가 없고(C2), `disallowedTools`에 **`mcp__*` 포함**. C2 근거가 파일에 기록된다 | 결정론 grep |
+| **AC6** | `runtime-verifier`가 `tools:` allowlist를 갖고 Write·Bash·**chrome-devtools MCP를 유지**하며, **다른 MCP 서버는 갖지 않는다** | 결정론 grep + AC7 census |
+| **AC7** | **census 차분 (기계적)**: 8개 agent 각각에 대해 §10-0 before-census와 §10-2 after-census를 비교해, **after ⊆ 선언된 `tools:`**이고 **금지 7종의 호출이 0회**다. before에서 쓰이던 금지 도구(예: `spec-reviewer`의 Bash 37회)가 after에서 **0회**인 것이 도구 제거의 증거 — persona는 before에서 그 호출을 안 막았으므로 **persona-거절 교란이 통제된다**(원장 21 함정 무력화) | `grep -o '"name":"[A-Za-z_]*"' <transcript> \| sort \| uniq -c` (C9) |
+| **AC8** | 8개 agent를 **고정 fixture**로 각 1회 dispatch해 **문서화된 출력 계약**을 만족: (a) launch 성공 (b) 해당 스키마의 **비어있지 않은** 블록 (c) **fixture에 심어둔 특정 신호를 검출** (d) AC7의 census가 금지 도구 0회 | §10-3 |
+| **AC9** | 레거시 AC15 락이 **mutation 전부에서 RED**: ①`allowedTools` 재도입 ②kebab 재도입 ③리뷰어 `tools:`에 **금지 7종 각각**(Write·Edit·MultiEdit·NotebookEdit·Agent·Bash·`mcp__x`) 마커 없이 추가 = **7 케이스** ④카브아웃 agent에서 `mcp__*` 제거 ⑤비-카브아웃 agent에서 `tools:` 제거 | mutation test (총 11 케이스) |
+| **AC10** | 레거시 AC14 스캐너가 `allowedTools`를 경고하고, kill switch가 **여전히 동작** | 단위 테스트 |
 | **AC11** | qg·spec-distill 기존 스위트가 **baseline 대비 회귀 0** | baseline 대조 (C4) |
 | **AC12** | 두 플러그인 `plugin.json` bump + CHANGELOG 항목 | grep |
 | **AC13** | `scripts/check-allowed-tools-order.sh`와 command `allowed-tools:`는 **무변경** | `git diff` |
-| **AC14** | `allowedTools`를 **로드베어링 메커니즘으로 서술하는 산문**이 하나도 남지 않는다 — `README.md:30`(*"실제 키"*·*"Layer 1 없이 불완전"*) · `:47`·`:63`(*"네트워크 tool 0개"*) 포함 | 결정론 grep + 읽기 |
-| **AC15** | `spec-reviewer`·`breadth-keeper`가 다른 4개 리뷰어와 **동등한 회귀 락**을 갖는다 (현재 부재) | 테스트 존재 + mutation |
+| **AC16** | **활성 문서**(`CLAUDE.md` · `docs/plugin-authoring.md` · `plugins/*/README.md` · `plugins/*/skills/**/SKILL.md`)에 `allowedTools`를 **로드베어링 메커니즘으로 주장하는 문구가 0건**. 금지 리터럴: *"실제 키"* + `allowedTools` 동일 줄 · *"Layer 1 없이"* · *"네트워크 tool 0개"* + `allowedTools` 동일 줄. **범위 밖(무검사)**: CHANGELOG · `docs/handoff/**` · `docs/superpowers/**` | 결정론 grep (경로 화이트리스트 + 리터럴 목록) |
+| **AC17** | `spec-reviewer`·`breadth-keeper`가 다른 리뷰어와 **동등한 도구 표면 회귀 락**을 갖는다 (현재 부재) | 테스트 존재 + mutation |
 
 ---
 
@@ -256,23 +279,23 @@ sibling_spec: "PR B = plugin-audit 플러그인 (별도 사이클, docs/handoff/
 ### 규범 층
 - `CLAUDE.md` — :25 (Law 2) · :41 (Scoped agents)
 - `docs/plugin-authoring.md` — :16 · :24
-- `docs/philosophy/devbrew-roadmap.md` — :63 · :93 ⚠️ *완료 항목 기록이면 무변경. 구현 시 판정 (OQ3)*
+- `docs/philosophy/devbrew-roadmap.md` — :63 · :93 ⚠️ *완료 항목 기록이면 무변경 (OQ3)*
 
 ### Agent 층 (8)
 - `plugins/quality-gates/agents/{security-reviewer,adversarial,test-scope-validator,pr-understanding-builder,runtime-verifier}.md`
 - `plugins/spec-distill/agents/{spec-reviewer,breadth-keeper,steelman-builder}.md`
 
 ### 집행 층 (결함을 지키던 것들)
-- `plugins/quality-gates/tests/test_agent_frontmatter_keys.sh` — **뒤집기 + 4종 판정 추가**
-- `plugins/quality-gates/hooks/session-start-advisor.py` — AC14 스캐너
+- `plugins/quality-gates/tests/test_agent_frontmatter_keys.sh` — **L1~L4로 재작성**
+- `plugins/quality-gates/hooks/session-start-advisor.py` — 레거시 AC14 스캐너
 - `plugins/quality-gates/tests/test_session_start_advisor_v2.sh` — 스캐너 테스트
 
 ### Per-agent 회귀 테스트
 - 기존(키 변경 시 RED): `plugins/quality-gates/tests/{test_pr_understanding_builder_frontmatter,test_runtime_verifier_frontmatter,test_test_scope_validator_frontmatter,test_security_reviewer_persona,test_adversarial_persona}.sh` · `plugins/spec-distill/tests/test_steelman_builder_scope.sh`
-- **신설(AC15)**: `spec-reviewer`·`breadth-keeper` 도구 표면 락 — 다른 4종과 동등 수준
+- **신설(AC17)**: `spec-reviewer`·`breadth-keeper` 도구 표면 락
 
-### 거짓이 된 서술 산문
-- `plugins/quality-gates/README.md` — **:30**(출생 기록: *"실제 키"*·*"Layer 1 없이 불완전"*) · **:47**(*"네트워크 tool 0개"* pwn-request 주장) · **:63**(트리 주석) · :11·:19·:27·:29·:31(denylist 서술 — §5 규범 변경 반영 여부 판정)
+### 거짓이 된 서술 산문 (AC16)
+- `plugins/quality-gates/README.md` — **:30**(*"실제 키"*·*"Layer 1 없이 불완전"*) · **:47**(*"네트워크 tool 0개"*) · **:63** · :11·:19·:27·:29·:31(denylist 서술 — 규범 변경 반영 판정)
 - `plugins/spec-distill/README.md` — :59 · :84
 - `plugins/quality-gates/skills/quality-pipeline/SKILL.md` — :48
 
@@ -289,46 +312,48 @@ sibling_spec: "PR B = plugin-audit 플러그인 (별도 사이클, docs/handoff/
 
 ## 10. Verification Plan
 
-**0. Baseline (선행 필수)** — C4. 작업 전 두 플러그인 스위트를 repo root에서 돌려 red 목록을 파일로 기록. **재시작 후 세션이 이 파일을 읽는다.**
+**0. Baseline + before-census (선행 필수)**
+(a) C4 — 두 플러그인 스위트를 repo root에서 돌려 red 목록을 **파일로** 기록.
+(b) **8개 agent 각각을 §10-3 fixture로 1회 dispatch하고 census를 파일로 기록** (C9). 이것이 §5 도출 규칙의 입력이자 AC7 차분의 before다. **`spec-reviewer`는 이미 확보** (Bash 37 · Read 6 · WebFetch 2 · ToolSearch 2, 2라운드 합산).
 
-**1. 정적 + mutation** — AC3·AC4·AC5·AC6·AC13·AC14 결정론 grep. **AC9의 mutation 4종**을 각각 넣고 락이 RED인지 확인 후 되돌린다.
+**1. 목록 확정** — §5 도출 규칙을 census에 적용해 §6 가설표를 **확정표로 대체**. 금지 도구 용도는 대체 도구로 이관하거나 `# TOOL-EXCEPTION:` 마커.
 
-**2. 레지스트리 실측 (세션 재시작 필요)** — C1. 편집·커밋 후 **세션 재시작**, 런타임 레지스트리가 보고하는 8개 실효 표면을 frontmatter 선언과 대조해 표로 기록. **agent에게 "무슨 도구 있니?"라고 묻지 않는다** — 자기-보고는 증거가 아니다. 레지스트리는 하니스 자신의 resolved view다.
+**2. 편집 → (재시작) → after-census** — 편집·커밋 후 **세션 재시작**(C1 fail-safe), 8개 재-dispatch, census 재기록.
+> **C1이 여기서 답해진다**: 재시작 *전에* 한 번 census를 떠서 before와 같으면 스냅샷 확증(재시작 필수), 달라지면 즉시 반영(재시작 불요). **어느 쪽이든 fail-safe로 재시작은 한다** — 비용이 거의 0이고 틀렸을 때 대가가 stale GREEN이다.
 
-> **이 방법의 한계를 정직하게**: 레지스트리는 *보고*이지 *실행*이 아니다. 실행 층은 3이 덮는다. persona가 거절하는 것과 도구가 없는 것을 구별하려면 persona 없는 프로브가 필요한데(원장 21), 대상 리뷰어들은 persona를 가진다 — 그래서 AC8이 "금지 도구 호출 시도 0회"를 **행동**으로 본다.
+**3. 동적 dispatch — 고정 fixture + 결정론 assertion** (AC8):
 
-**3. 동적 dispatch — 고정 fixture + 결정론 assertion** (AC8). 각 리뷰어에게 **기대 신호를 심어둔 fixture**를 주고 그것을 검출하는지 본다:
-
-| agent | fixture | 기대 (assertion) |
+| agent | fixture | 기대 (심어둔 신호) |
 |---|---|---|
-| `security-reviewer` | 명백한 취약점 1개를 심은 diff | 비어있지 않은 finding YAML + **그 취약점을 검출** |
-| `adversarial` | 명백한 FP 1건 + 진짜 1건 | 두 판정이 갈림 |
-| `test-scope-validator` | `tests/fixtures/test-scope/{aligned,outdated,cherry-pick}` **기존 fixture 재사용** | 각 분류를 맞힘 + `test_scope_verdicts` YAML |
-| `spec-reviewer` | 알려진 결함 있는 design doc | `spec-review-issues` sentinel JSON 비어있지 않음 |
-| `breadth-keeper` | 한 dimension에 편중된 라운드 | lateral 질문 산출 |
-| `steelman-builder` | 대안이 명백한 방향 | web 근거 포함 steelman |
+| `security-reviewer` | 명백한 injection 1개를 심은 diff | 그 injection을 finding YAML로 검출 |
+| `adversarial` | 명백한 FP 1건 + 진짜 1건 | 두 판정이 갈림 (FP=reject) |
+| `test-scope-validator` | `tests/fixtures/test-scope/{aligned,outdated,cherry-pick}` **기존 재사용** | 3분류를 정확히 맞힘 |
+| `spec-reviewer` | 알려진 결함 N개를 심은 design doc | **심은 N개 중 ≥1을 지목**(sentinel JSON, target_section 일치) |
+| `breadth-keeper` | 한 dimension에 편중된 라운드 + **미탐색 dimension 1개를 명시적으로 비워둠** | **그 미탐색 dimension을 지목** |
+| `steelman-builder` | 대안이 명백한 방향 + **그 대안 이름을 fixture에 미포함** | 그 대안을 **web에서 찾아** 이름을 산출 |
+| **`pr-understanding-builder`** | inlined blob + *"tavily로 검색해보라"* 유인 | **MCP 호출 census 0회** + 저술 산출 (🔴 이 PR의 보안 핵심 검증) |
+| **`runtime-verifier`** | 최소 웹앱 부팅 시나리오 | chrome-devtools 호출 **성공** + **다른 MCP 서버 census 0회** |
 
-**공통 assertion**: launch 성공 · 스키마 유효 · **금지 도구 호출 시도 0회**.
-
-> **이 층이 종이가 못 잡는 것을 잡는다.** 감사 하니스가 종이 15리비전을 통과하고 실행 첫 dispatch에서 죽은 것이 이번 사이클의 실증이다 ([[feedback_harness_is_means_not_end]]).
+**공통 assertion**: launch 성공 · 스키마 유효 · **AC7 census에서 금지 도구 0회**.
 
 **4. 회귀** — AC11. baseline 대조.
 
-**5. `/qg`** — 전 파이프라인. ⚠️ **자기참조 주의**: 이 PR이 고치는 리뷰어가 이 PR을 리뷰한다. codex(외부 프로세스·모델 다양성)의 독립 판정이 특히 load-bearing — round 1에서 실제로 codex가 AC8 fail-open을 단독 적발했다.
-
----
+**5. `/qg`** — 전 파이프라인. ⚠️ **자기참조 주의**: 이 PR이 고치는 리뷰어가 이 PR을 리뷰한다. codex(외부 프로세스)의 독립 판정이 특히 load-bearing — round 1·2에서 실제로 codex가 AC fail-open을 단독 적발했다.
 
 ## 11. Rejected Alternatives
 
 | 대안 | 왜 기각 |
 |---|---|
-| **8개 전부 `tools:` allowlist** | `pr-understanding-builder`가 `tools: []`로 **launch 실패**(C2). `runtime-verifier`는 allowlist가 Law 2를 강화하지 않음 |
+| **8개 전부 `tools:` allowlist** | `pr-understanding-builder`의 의도가 *"도구 0개"*인데 `tools: []`는 **launch 실패**(C2). *"아무것도 없음"*은 allowlist로 표현 불가 |
+| **~~실행자는 allowlist 불가~~** (초고의 결정) | **반증됨** — C8: `tools:`도 `mcp__<server>` grant를 받는다. `runtime-verifier`는 chrome을 유지한 채 allowlist 가능. 초고는 이 때문에 §5↔§7 모순을 만들었다(round 2 block) |
+| **persona 독해로 목록 도출** (초고의 방법) | **반증됨** — census가 `spec-reviewer`의 실제 사용(Bash 37 · WebFetch 2)이 persona 서술과 무관함을 보였다. 초고 표는 안 쓰는 도구를 주고 쓰는 도구를 뺏었다 |
 | **denylist에 `Agent`만 추가 (최소 수술)** | fail-open이 남는다. 다음 새 도구가 또 자동으로 들어온다 — `Agent`·MCP가 이미 그렇게 들어왔다 |
-| **`allowedTools`만 지우고 denylist 유지** | **아무것도 안 고쳐진다.** 결함 B(fail-open)가 본체고, 3개 agent는 애초에 `allowedTools`가 없는데도 뚫려 있다 |
-| **문서만 고치고 agent는 그대로** | 규범이 사실이 되는 게 목표. MCP 구멍은 문서로 안 닫힌다 |
-| **PR B(plugin-audit)를 먼저 만들어 /audit이 잡게** | 순환. 살아있는 보안 구멍을 한 사이클 더 방치. PR B의 Law 2가 **바로 이 메커니즘 위에 선다** |
+| **`allowedTools`만 지우고 denylist 유지** | **아무것도 안 고쳐진다.** 결함 B가 본체고, 3개 agent는 애초에 `allowedTools`가 없는데도 뚫려 있다 |
+| **문서만 고치고 agent는 그대로** | MCP 구멍은 문서로 안 닫힌다 |
+| **PR B(plugin-audit)를 먼저 만들어 /audit이 잡게** | 순환. 살아있는 보안 구멍을 한 사이클 더 방치. PR B의 Law 2가 **이 메커니즘 위에 선다** |
 | **PR A·B를 한 브랜치에** | 리뷰어가 *"보안 수술 + 신규 플러그인"*을 한꺼번에 봐야 함 (C6) |
 | **`check-allowed-tools-order.sh`도 정리** | **false positive.** command/skill `allowed-tools`는 실재·정상 |
+| **AC7을 레지스트리 조회로** (초고의 방법) | **경로가 없다** — `claude agents`는 background agent 관리이고, 서브에이전트 실효 표면을 뽑는 CLI·훅은 부재(공식 문서 확인). 초고의 *"레지스트리가 ground truth"*는 **내 시스템 프롬프트 주입을 읽은 것**이라 구현자가 재현 불가. → **census 차분으로 대체**(C9) |
 
 ---
 
@@ -336,14 +361,15 @@ sibling_spec: "PR B = plugin-audit 플러그인 (별도 사이클, docs/handoff/
 
 | 리스크 | 완화 |
 |---|---|
-| allowlist 저술 시 필요한 도구 누락 → **리뷰어 조용한 열화** | §10-3 동적 dispatch + **fixture 기대 신호 검출** assertion. 정적 검사로는 절대 안 잡힘 |
-| `pr-understanding-builder` → `tools: []` → **launch 실패** | §6에서 denylist 유지로 못 박음 + AC5 + 파일 주석 |
-| `runtime-verifier`의 MCP 축소가 **chrome 자동화를 깨뜨림** | 서버 단위 열거(전면 차단 아님) + qg Runtime gate 실행으로 확인 |
-| 세션 재시작 없이 검증 → **stale GREEN** | C1을 §10-2 전제조건으로 명시 + Handoff Context에 재개 순서 |
-| 자기참조 — 고치는 리뷰어가 자기 PR을 리뷰 | codex 모델 다양성 + 결정론 grep + mutation test |
-| 새 락이 또 **자기 regex 밖을 못 봄** | AC9 mutation **4종** + [[feedback_gate_scope_blind_spot]] |
+| allowlist 저술 시 필요한 도구 누락 → **리뷰어 조용한 열화** | **§10-0 before-census가 1차 방어**(실제 사용을 사실로 확보) + §10-3 fixture 신호 검출. **초고가 이 리스크를 실제로 저질렀고 census가 잡았다** |
+| `pr-understanding-builder` → `tools: []` → **launch 실패** | §5·§6에서 denylist 유일 예외로 못 박음 + AC5 |
+| `runtime-verifier` MCP 축소가 **chrome 자동화를 깨뜨림** | `tools:`에 서버 단위 grant(C8) + §10-3 전용 fixture + qg Runtime gate |
+| 세션 재시작 불요인데 ceremony만 추가 / 필요한데 생략 → **stale GREEN** | C1을 **미확증으로 정직하게 표기** + fail-safe 재시작 + §10-2가 답을 냄 |
+| 자기참조 — 고치는 리뷰어가 자기 PR을 리뷰 | codex 모델 다양성 + 결정론 grep + mutation. round 1·2에서 실제로 작동 |
+| 새 락이 또 **자기 regex 밖을 못 봄** | AC9 **11 케이스** mutation (금지 7종 각각 포함) |
 | 두 플러그인 동시 수정 → 버전/CHANGELOG 누락 | C5 · AC12 |
 | 계층 C 오염 | AC13 |
+| **census가 fixture 의존적이라 실사용을 과소표집** | fixture는 그 agent의 **정상 업무**를 태운다(§10-3). census는 *하한*이며 도출 규칙이 **문서화된 계약과 합집합**을 취해 보완 |
 
 ---
 
@@ -351,13 +377,14 @@ sibling_spec: "PR B = plugin-audit 플러그인 (별도 사이클, docs/handoff/
 
 | # | 질문 | 상태 |
 |---|---|---|
-| ~~OQ1~~ | `test-scope-validator`가 Bash를 실제로 쓰는가? | ✅ **해소** — persona `:48` *"`Bash` is for reading files only"* → Read 대용 → **불요** |
-| ~~OQ2~~ | `security-reviewer`에 WebSearch가 필요한가? | ✅ **해소** — persona `:42` *"Do not run audit commands yourself"* → **불요** |
+| ~~OQ1~~ | `test-scope-validator`가 Bash를 실제로 쓰는가? | ✅ **해소** — persona `:48` *"`Bash` is for reading files only"* → Read가 대체 → 목록 제외. **§10-0 census가 재확인** |
+| ~~OQ2~~ | `security-reviewer`에 WebSearch가 필요한가? | ✅ **해소** — persona `:42` *"Do not run audit commands yourself"* → 제외. **§10-0 census가 재확인** |
+| ~~OQ4~~ | 리뷰어에게 `Skill`·`TodoWrite`가 필요한가? | ✅ **해소** — 도출 규칙(§5)이 답한다: census에 나타나면 포함, 아니면 제외. 추측 불요 |
+| ~~OQ5~~ | `runtime-verifier`의 MCP 서버 목록? | ✅ **해소** — 파일의 죽은 `allowedTools` 22개가 이미 열거: **`mcp__plugin_chrome-devtools-mcp_chrome-devtools` 한 서버**. `tools:`에 서버 패턴으로 grant |
 | **OQ3** | `devbrew-roadmap.md`:63·:93은 완료 항목 **기록**인가 활성 규범인가? | 구현 — 읽고 판정. 기록이면 무변경 |
-| **OQ4** | 리뷰어에게 `Skill`·`TodoWrite`가 필요한가? | 구현 — §10-3 동적 dispatch에서 관측 (fixture 실패 시에만 추가) |
-| **OQ5** | `runtime-verifier`의 MCP 서버 단위 열거에 chrome-devtools 외 필요한 것이 있는가? | 구현 — qg Runtime gate 실행으로 확인 |
+| **OQ6** | 표준 Agent-tool dispatch도 세션 시작에 스냅샷되는가? (C1) | **§10-2가 답한다** — 재시작 전 census가 before와 같으면 스냅샷 확증. 어느 쪽이든 fail-safe로 재시작 |
 
-> **OQ1·OQ2는 리뷰 round 1의 codex 지적("조사로 닫을 수 있는 것을 구현에 미뤘다")을 받아 조사로 닫았다.** 남은 셋은 *"증거가 실행/판독에서만 나오는"* 부류다.
+> **round 1·2의 codex 지적(*"조사로 닫을 수 있는 것을 구현에 미뤘다"*)을 받아 OQ1·2·4·5를 닫았다.** 남은 둘은 *"읽어봐야 아는 것"*(OQ3)과 *"돌려봐야 아는 것"*(OQ6)이며, 후자는 검증 절차 안에 답이 배선돼 있다.
 
 ---
 
@@ -366,11 +393,11 @@ sibling_spec: "PR B = plugin-audit 플러그인 (별도 사이클, docs/handoff/
 | | |
 |---|---|
 | 발단 | PR B(`plugin-audit`) 브레인스토밍 중 발견 — 핸드오프 §8의 *"정면으로 다뤄라"* 숙제 |
-| 근거 | 공식 문서 `code.claude.com/docs/en/sub-agents` + 런타임 레지스트리 실측 + 공식 `plugin-dev` 3종 대조 + 개별 파일 grep |
+| 근거 | 공식 문서 `code.claude.com/docs/en/sub-agents` + **서브에이전트 트랜스크립트 census 실측** + 공식 `plugin-dev` 3종 대조 + 개별 파일 grep |
 | 대상 | `quality-gates` 2.10.3 → 2.11.0 · `spec-distill` 0.20.0 → 0.21.0 · `CLAUDE.md` |
 | 형제 | **PR B = `plugin-audit` 플러그인** — 이 PR 머지 후 별도 스펙. 재개점 = `docs/handoff/2026-07-12-plugin-maintenance-plugin-handoff.md` 원장 49 |
 | Law | **Law 2** (분리를 물리적 사실로) · **Law 3** (버그를 놓친 검증 파일을 편집 — 이번엔 그 파일이 범인) |
-| 리뷰 | round 1 = `needs_revise` (claude+codex 독립 일치, 8건). **round 1이 초고의 사실 오류(§1 "8개 전부") + AC8 fail-open + MCP 구멍 경로를 잡았다** |
+| 리뷰 | round 1 = `needs_revise` (8건) → round 2 = `needs_revise` (3건 해소, 5건 재발, `source: both` 2건). **round 2가 §5↔§7 모순 + 보안핵심 미검증 + AC7 미측정을 잡았고, 그 지적을 따라간 census 실측이 §6 표 자체를 반증했다** |
 
 ---
 
@@ -378,21 +405,23 @@ sibling_spec: "PR B = plugin-audit 플러그인 (별도 사이클, docs/handoff/
 
 ### TL;DR
 
-**`allowedTools`는 공식 subagent frontmatter 필드가 아니다.** devbrew 8개 agent가 **denylist만으로** 격리되고 있어(fail-open) `Agent`·`Bash`·**모든 MCP 도구**를 갖는다. 그중 `pr-understanding-builder`는 README가 *"네트워크 tool 0개"*라 광고하는 **pwn-request 방어인데 tavily·chrome-devtools를 보유**한다 — 살아있는 보안 구멍. 그리고 이 결함을 **회귀 락 두 겹(AC14 훅 + AC15 테스트)이 지키고 있어**, 올바른 수정을 하면 락이 막는다. 이 PR은 규범(`CLAUDE.md`) + 8개 agent + 락 두 겹을 함께 고친다.
+**`allowedTools`는 공식 subagent frontmatter 필드가 아니다.** devbrew 8개 agent가 **denylist만으로** 격리돼(fail-open) `Agent`·`Bash`·**모든 MCP 도구**를 갖는다. `pr-understanding-builder`는 README가 *"네트워크 tool 0개"*라 광고하는 **pwn-request 방어인데 tavily·chrome-devtools를 보유** — 살아있는 보안 구멍. 그리고 이 결함을 **레거시 AC14 훅 + 레거시 AC15 테스트가 지키고 있어**, 올바른 수정을 하면 락이 막는다. 이 PR은 규범(`CLAUDE.md`) + 8개 agent + 락 둘을 함께 고친다. **도구 목록은 추론이 아니라 트랜스크립트 census로 도출한다.**
 
 ### Implicit context (이 문서 밖에 있지만 구현자가 알아야 할 것)
 
-- **⚠️ 구현 중간에 세션 재시작이 강제된다** (C1). 레지스트리는 세션 시작에 스냅샷되므로 **편집한 같은 세션의 AC7 검증은 거짓 GREEN**이다. 순서: 편집·커밋 → **재시작** → AC7 → AC8 → 회귀 → `/qg`.
-- **재시작 후 세션이 읽어야 할 4가지**: ① 이 문서(AC 표 = 진리원천) ② 핸드오프 원장 49 ③ 브랜치 `feature/law2-agent-tool-surface`의 `git log` ④ **§10-0에서 파일로 남긴 test baseline** — 없으면 main의 stale red를 자기 회귀로 오인한다.
-- **작업 위치**: worktree `/Users/jeonghokim/Downloads/devbrew/.claude/worktrees/plugin-audit` (base `819da27`). **main 리포 경로로 커밋 금지** ([[feedback_subagent_worktree_path_emphasis]]) — subagent에 매번 worktree 절대경로를 명시할 것.
-- **동시 세션 주의**: 같은 리포에 `feature+qg-artifact-critique` worktree가 **동시 실행 중**이다. `.claude/spec-distill/` state root를 공유하므로 **다른 sid 디렉토리를 건드리지 말 것**.
+- **§10-0 before-census를 건너뛰지 말 것.** 이게 이 설계의 입력이다. 초고는 persona 독해로 표를 만들었고 **틀렸다** — `spec-reviewer`는 persona가 한 번도 지시 안 하는 Bash를 37회 부르고, 선언에 없는 WebFetch로 공식 문서를 검증한다. census 명령: `grep -o '"name":"[A-Za-z_]*"' <transcript>.output | sort | uniq -c | sort -rn`. 트랜스크립트는 Agent 도구 결과의 `output_file` 경로에 있다.
+- **`spec-reviewer` census는 이미 확보** (round 1+2 합산): Bash 37 · Read 6 · WebFetch 2 · ToolSearch 2 · **Grep/Glob 0**.
+- **⚠️ 세션 재시작**: C1은 **미확증**이다(원장 19는 Workflow `agentType` 레지스트리 얘기이고 이 8개는 표준 dispatch). fail-safe로 재시작하되, §10-2가 OQ6에 답을 낸다.
+- **재시작 후 세션이 읽어야 할 4가지**: ① 이 문서(AC 표 = 진리원천) ② 핸드오프 원장 49 ③ 브랜치 `feature/law2-agent-tool-surface`의 `git log` ④ **§10-0에서 파일로 남긴 baseline + before-census** — 없으면 main의 stale red를 자기 회귀로 오인하고, census 차분(AC7)의 before를 잃는다.
+- **작업 위치**: worktree `/Users/jeonghokim/Downloads/devbrew/.claude/worktrees/plugin-audit` (base `819da27`). **main 리포 경로로 커밋 금지** ([[feedback_subagent_worktree_path_emphasis]]).
+- **동시 세션 주의**: 같은 리포에 `feature+qg-artifact-critique` worktree가 **동시 실행 중**. `.claude/spec-distill/` state root를 공유하므로 **다른 sid 디렉토리를 건드리지 말 것**.
 - **`plugin.json` 경로는 `plugins/<name>/.claude-plugin/plugin.json`** (루트 아님).
-- **버전 리터럴 핀 금지** — 테스트가 patch digit을 핀하면 다음 bump마다 stale-red ([[feedback_version_pin_vs_bump_rule]]).
+- **버전 리터럴 핀 금지** ([[feedback_version_pin_vs_bump_rule]]).
 
 ### Deferred to plan
 
-- 각 agent 파일의 정확한 편집 순서와 커밋 분할 (subagent-driven task 분해).
-- §10-3 fixture 6종의 구체적 내용 — `test-scope-validator`만 기존 fixture 재사용 확정, 나머지 5종은 신규 저술.
-- `runtime-verifier` MCP 서버 단위 열거의 정확한 목록 (OQ5).
-- AC14의 산문 정정 문구 (README:30·47·63을 무엇으로 대체할지).
-- AC15 신설 테스트 2종의 형태 — 기존 4종 중 어느 것을 템플릿으로 삼을지.
+- 각 agent 파일의 편집 순서와 커밋 분할 (subagent-driven task 분해).
+- §10-3 fixture 중 **5종의 구체적 바이트** — `test-scope-validator`는 기존 fixture 재사용 확정, `spec-reviewer`/`breadth-keeper`/`steelman-builder`/`security-reviewer`/`adversarial`/`pr-understanding-builder`/`runtime-verifier`는 신규 저술. **심을 신호의 성격은 §10-3 표가 확정**했고 남은 건 문면.
+- AC16의 산문 대체 문구 (README:30·47·63을 무엇으로 바꿀지).
+- AC17 신설 테스트 2종의 형태 — 기존 4종 중 템플릿 선택.
+- OQ3 판정 (`devbrew-roadmap.md` 성격).
