@@ -97,8 +97,10 @@ def phase_synth(findings_path, adversarial_path):
     adv_parse_failed = adv_doc == "__ERR__"
     verdicts, new_findings = [], []
     if isinstance(adv_doc, dict):
-        verdicts = adv_doc.get("verdicts") if isinstance(adv_doc.get("verdicts"), list) else []
-        new_findings = adv_doc.get("new_findings") if isinstance(adv_doc.get("new_findings"), list) else []
+        _v = adv_doc.get("verdicts")
+        verdicts = _v if isinstance(_v, list) else []
+        _nf = adv_doc.get("new_findings")
+        new_findings = _nf if isinstance(_nf, list) else []
     elif adv_doc is None:
         # No adversarial file provided at all -> treat as parse failure for the guard.
         adv_parse_failed = True
