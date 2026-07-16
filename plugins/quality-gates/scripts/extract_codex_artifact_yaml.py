@@ -23,6 +23,17 @@ FENCE = re.compile(r"```(?:ya?ml)?\s*\n(.*?)```", re.DOTALL)
 
 
 def extract_text(stream):
+    """Extract the last non-empty agent-message text from a codex JSONL stream.
+
+    Real codex 0.130+ event shape (ground truth — see
+    tests/spike/fixtures/codex_jsonl_sample.json and the sibling
+    codex_findings_to_yaml.py's extract_last_agent_message):
+        {"type":"item.completed","item":{"type":"agent_message","text":"..."}}
+    Legacy/flat shape (also handled, mirroring the sibling): the event itself
+    carries type=="agent_message" with text/message directly on it.
+    The old invented {"msg": {...}} shape is retained only as a defensive
+    fallback — it does not occur in real codex output.
+    """
     text = None
     for ln in stream.splitlines():
         ln = ln.strip()
@@ -32,12 +43,21 @@ def extract_text(stream):
             obj = json.loads(ln)
         except json.JSONDecodeError:
             continue
-        msg = obj.get("msg") if isinstance(obj, dict) else None
+        if not isinstance(obj, dict):
+            continue
+        # Drill into nested item if present (Codex 0.130+), else use event directly (legacy).
+        raw_item = obj.get("item")
+        item = raw_item if isinstance(raw_item, dict) else obj
         candidate = None
-        if isinstance(msg, dict):
-            candidate = msg.get("message") or msg.get("text") or msg.get("content")
-        elif isinstance(obj, dict):
-            candidate = obj.get("message") or obj.get("text")
+        if item.get("type") == "agent_message":
+            candidate = item.get("text") or item.get("message") or item.get("content")
+        if candidate is None:
+            # Defensive fallback for the pre-existing (invented) shape — not real codex output.
+            msg = obj.get("msg")
+            if isinstance(msg, dict):
+                candidate = msg.get("message") or msg.get("text") or msg.get("content")
+            else:
+                candidate = obj.get("message") or obj.get("text")
         if isinstance(candidate, str) and candidate.strip():
             text = candidate   # keep the last non-empty message
     return text
@@ -61,8 +81,11 @@ def main():
     text = extract_text(sys.stdin.read())
     if not text:
         return degrade("no_agent_message")
-    m = FENCE.search(text)
-    block = m.group(1) if m else text
+    # AC9(b) parity with codex_findings_to_yaml.py: pick the LAST fenced block
+    # to defeat adversarial diff-injected earlier blocks (the artifact-critique
+    # prompt embeds untrusted artifact content codex may quote/echo).
+    matches = re.findall(FENCE, text)
+    block = matches[-1] if matches else text
     try:
         data = yaml.safe_load(block)
     except yaml.YAMLError:
