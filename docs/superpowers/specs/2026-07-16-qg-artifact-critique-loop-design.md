@@ -140,6 +140,9 @@ read-only 코드 게이트 파이프라인에 섞이지 않는다.
     루프로 새어들지 않는다.
   - allowlist는 결정론적(테스트 대상). 확장자 목록의 정확한 최종본은 plan에서 확정하되,
     "코드 확장자→종료 / 비-코드→진행 / 모호→확인"의 **3분기 계약은 이 설계가 고정**한다.
+    **allowlist는 완전할 필요 없다** — 목록에 없는 확장자는 자동으로 '모호' 분기(→확인)로
+    떨어져 코드가 무단 진입 못 하므로 **fail-safe**. 목록은 UX 편의(흔한 코드 확장자 즉시
+    종료)일 뿐, 안전 보장은 3분기 계약 + 모호→확인 fallback이 담당한다.
 - **E2** 브랜치 안전(§8/C4) — `main`/기본 브랜치면 **거부**, non-default 브랜치 안내 후 종료.
 - **E3** Upfront 게이트 (`AskUserQuestion`): *"대상=`<resolved path>`, 최대 5라운드
   비평-수정 루프를 브랜치 `<branch>`에 라운드별 커밋하며 실행할까요?"*
@@ -166,9 +169,15 @@ read-only 코드 게이트 파이프라인에 섞이지 않는다.
 6. **수정 적용** — 오케스트레이터(writer)가 kept CRITICAL/IMPORTANT를 해소하도록
    산출물을 `Edit`/`Write`. 리뷰어가 제안한 경로는 `path-auth`(canonicalize,
    symlink escape 방지 — 기존 Retry: file-write safety 재사용)로 검증.
-7. **커밋** (`commit-scope`) — **대상 파일만** 명시 `git add <artifact-path>`(§C5) 후
-   원자적 커밋: 메시지 `critique(round N): <해소한 finding 요약>`.
-8. **stagnation 체크** (`stagnation-check`, 순수 함수 — §8 predicate) → 정체 시 종료.
+   - **6b. 변경 신호 (커밋 *전* — 반드시 여기서 캡처):**
+     `git diff --quiet HEAD -- <artifact-path>`로 이번 편집이 파일을 실제로 바꿨는지
+     판정: `changed = (exit ≠ 0)`. `not changed`(편집이 no-op — 모델이 진전을 못 냄)면
+     커밋을 skip하고 `stagnant_b = true`로 기록. *커밋 후엔 워킹트리가 항상 clean이라
+     이 신호가 무의미해지므로 반드시 커밋 전에 캡처한다.*
+7. **커밋** (`commit-scope`, `changed`일 때만) — pathspec 커밋으로 **대상 파일만**
+   반영(§7 계약): 메시지 `critique(round N): <해소한 finding 요약>`.
+8. **stagnation 체크** (`stagnation-check`, 순수 함수 — §8 predicate; 입력 = (이번 kept
+   canonical-key 집합, 직전 kept 집합, step 6b의 `changed` 신호)) → 정체 시 종료.
 9. N+1로 반복.
 
 ## §7 아키텍처 — 컴포넌트 & Law 2
@@ -187,7 +196,11 @@ read-only 코드 게이트 파이프라인에 섞이지 않는다.
 - `convergence-check` — kept 집합 → `converged: bool` (CRITICAL/IMPORTANT count == 0).
 - `stagnation-check` — (이번 kept, 직전 kept, git-diff 결과) → `stagnant: bool` (§8 predicate).
 - `path-auth` — (project_dir, 후보 경로) → canonical 경로 or reject (symlink escape 가드).
-- `commit-scope` — (artifact_path) → 대상 경로만 add + 커밋 (`-A` 금지).
+- `commit-scope` — 입력 `(artifact_path, msg)` → 출력 `{committed_sha}` | `{no_op}` |
+  `{error, stderr}`. 동작: `git add -- <path>` 후 **pathspec 커밋**
+  `git commit --only -- <path> -m <msg>` — `--only`라 무관한 pre-existing staged 변경을
+  쓸어담지 않음(§C5). 실패(add/commit nonzero) → `error` 반환, 부분 상태 없음(commit 원자적);
+  오케스트레이터가 loud surface + 루프 중단. `no_op`은 step 6b가 이미 거른 방어적 경로.
 각 헬퍼는 model dispatch·파일 편집과 독립적으로 단위 테스트된다.
 
 **신규 스크립트:**
@@ -217,13 +230,20 @@ read-only 코드 게이트 파이프라인에 섞이지 않는다.
      사용자에게 묻지 않는다.
   3. **stagnation** (`stagnation-check` predicate, 결정론):
      stagnation ⟺ **(a)** 이번 라운드 kept 집합의 canonical-key 집합이 직전 라운드와
-     동일(새 key 無 + 미해결 잔존) — set 비교(정확), **또는** **(b)** 수정 적용 후
-     `git diff --quiet <artifact>` 참(파일 무변경). 둘 다 새 진전 없음의 결정론 신호.
+     동일(새 key 無 + 미해결 잔존) — set 비교(정확), **또는** **(b)** §6 step 6b의
+     `changed == false`(커밋 *전* 캡처한 no-op 신호). 둘 다 새 진전 없음의 결정론 신호.
+     *(b)는 반드시 커밋 전 신호를 쓴다 — 커밋 후 `git diff`는 항상 clean이라 무의미(라운드-2
+     리뷰가 잡은 block 버그의 fix).*
   4. **kill switch** — 전역 `DEVBREW_DISABLE_QUALITY_GATES=1` + 모드 전용
      `DEVBREW_QG_DISABLE_CRITIQUE=1`.
   → 넷 다 bounded → P18 충족.
-- **브랜치 안전 (C4):** `main`/기본 브랜치에서 자율 커밋 **거부**(경고 아님). E2에서
-  차단하고 non-default 브랜치 안내.
+- **브랜치 안전 (C4) — default 판별 (결정론, fail-closed):** E2에서 차단(경고 아님).
+  - **detached HEAD** → 거부(커밋 대상 브랜치 없음).
+  - default 이름 = `git symbolic-ref --quiet refs/remotes/origin/HEAD`의 basename(성공 시);
+    실패(원격/HEAD ref 없음) 시 리터럴 `main`,`master`로 fallback.
+  - 현재 브랜치 == default 이름, 또는 리터럴 `main`/`master` → **거부** + non-default 브랜치 안내.
+  - 그 외 → 진행. 판별 애매성은 항상 **거부 쪽**(보호 브랜치 오커밋보다 안전).
+  - 테스트 fixture: origin/HEAD 설정 repo / 없는 repo / detached HEAD 각각(AC8).
 - **커밋 스코핑 (C5, `commit-scope`):** 대상 산출물 경로만 add — dirty 워킹트리의 무관
   변경 미포함.
 - **cost_class & fan-out (거버넌스 정합 — 리뷰 반영):**
@@ -263,28 +283,51 @@ canonical finding YAML과 정렬).
 ```yaml
 - agent: artifact-critic        # 또는 codex-reviewer
   category: logic               # §9 루브릭 축
-  target: "#5-아키텍처--호출--라우팅"   # 섹션 앵커 또는 라인 범위
+  target_anchor: "#5-아키텍처--호출--라우팅"  # 라운드-안정 섹션 앵커 — canonical key의 유일 위치 성분
+  target_lines: "120-134"       # 선택, 사람 표시용 — canonical key에 미포함(라인 drift 무해화)
   severity: IMPORTANT           # CRITICAL | IMPORTANT | SUGGESTION
   summary: "한 줄 지적"
   proposed_fix: "제안 수정(선택)"
 ```
 
-**Adversarial verdict 스키마** (adversarial 출력, finding별):
+**Adversarial 출력 스키마** (두 부분 — 기존 finding 판정 + 신규 finding 추가):
 
 ```yaml
-- finding_key: "a1b2c3d4e5f6"   # 대상 finding의 canonical key (아래)
-  verdict: confirm              # confirm | downgrade | reject
-  evidence: "판정 근거"
+verdicts:                       # 기존 critic/codex finding에 대한 판정
+  - finding_key: "a1b2c3d4e5f6" # 대상 finding의 canonical key (아래)
+    verdict: confirm            # confirm | downgrade | reject
+    evidence: "판정 근거"
+new_findings:                   # adversarial이 놓쳤다고 본 신규 finding (Finding 스키마, agent=artifact-adversarial)
+  - agent: artifact-adversarial
+    category: assumption
+    target_anchor: "#8-종료-조건--안전장치"
+    severity: IMPORTANT
+    summary: "..."
 ```
 
-**Canonical key & dedup:** finding의 canonical key =
-`sha1(category + "\0" + normalized(target) + "\0" + normalized(summary))[:12]`.
-`synthesize`는 같은 key를 dedup하고, adversarial `reject`(제거)·`downgrade`(severity
-강등)를 반영해 **kept 집합**을 결정론 산출한다.
+`new_findings`도 Finding 스키마를 따르므로 아래 canonical-key/kept 규칙이 그대로 적용된다
+(adversarial과 synthesize 사이 인터페이스 완결 — verdict만으론 신규 finding을 표현 못 하던 갭 해소).
 
-**kept 집합:** adversarial `confirm`, 또는 `downgrade` 후 severity ≥ IMPORTANT인
-findings. 이 집합이 §6 수렴·수정·stagnation의 **단일 입력** — 세 판정이 동일 자료구조
-위에서 동작하므로 각각 독립 단위 테스트 가능(§7 헬퍼).
+**Canonical key & dedup:** finding의 canonical key =
+`sha1(category + "\0" + normalized(target_anchor) + "\0" + normalized(summary))[:12]`.
+**앵커만** 쓰고 `target_lines`는 제외 — 편집으로 라인이 밀려도 같은 미해결 finding이
+라운드 간 **동일 key를 유지**한다(dedup·stagnation (a) 결정론의 근거; line-range를 key에
+넣으면 매 라운드 key가 흔들려 이 메커니즘이 붕괴). `synthesize`는 같은 key를 dedup한다.
+
+**kept 집합 (fail-closed):** 각 critic/codex finding을 adversarial verdict와 매칭:
+- `confirm` → kept. `downgrade` 후 severity ≥ IMPORTANT → kept. `reject` → drop.
+- **verdict 없음(un-adjudicated)** → **kept 제외**(미검증 finding으로 자율 편집 금지 =
+  편집 방향 fail-closed) + loud log `> adversarial 미판정 <N>건 — 이번 라운드 편집 제외`.
+- adversarial `new_findings`는 canonical-key dedup 후 kept에 추가(adversarial 산출이므로 confirm 취급).
+
+**degraded-adversarial 가드 (수렴 fail-open 봉쇄):** adversarial 출력이 파싱 불가 또는
+완전 비어있음(0 verdict)이면 그 라운드는 **degraded** — kept-empty를 **수렴으로 읽지
+않는다**. loud advisory 후 NEEDS_RESOLUTION(사용자에게 재시도/중단 질문)로 처리. kept-empty를
+무조건 "수렴 clean"으로 읽으면 adversarial 실패가 false-convergence가 됨 — 이 repo 이력이
+반복 적발한 fail-open류 봉쇄.
+
+이 kept 집합이 §6 수렴·수정·stagnation의 **단일 입력** — 세 판정이 동일 자료구조 위에서
+동작하므로 각각 독립 단위 테스트 가능(§7 헬퍼).
 
 ## §11 Acceptance Criteria
 
@@ -305,10 +348,13 @@ findings. 이 집합이 §6 수렴·수정·stagnation의 **단일 입력** — 
 - **AC6 — 수렴:** kept CRITICAL/IMPORTANT == 0일 때만 루프 종료(SUGGESTION-only는
   수렴 허용). 수렴 판정은 독립 kept 집합(§10)이 결정(오케스트레이터 자기판단 아님).
 - **AC7 — bounded + stagnation predicate:** `max_rounds=5`(env override), §8 stagnation
-  predicate((a) canonical-key set 동일 OR (b) `git diff --quiet` 참), kill switch —
-  무한 루프 불가. predicate가 결정론이라 단위 테스트 가능.
-- **AC8 — 브랜치 안전:** `main`/기본(default) 브랜치에서 파일 손대기 전 거부 +
-  non-default 브랜치 안내. (규칙 = 보호 브랜치 자동 커밋 금지; `feature/*` 강제 아님.)
+  predicate((a) canonical-key set 동일 OR (b) §6 step 6b의 **커밋-전** `changed==false`
+  신호), kill switch — 무한 루프 불가. predicate 결정론이라 단위 테스트 가능. (b)는 커밋
+  전 신호를 쓴다(커밋 후 diff는 항상 clean이라 라운드-1 조기종료 버그 방지).
+- **AC8 — 브랜치 안전:** 파일 손대기 전 §8 default-판별(origin/HEAD symbolic-ref →
+  main/master fallback; detached HEAD → 거부; 애매성 → 거부 쪽 fail-closed)로 default/보호
+  브랜치면 거부 + non-default 안내. (규칙 = 보호 브랜치 자동 커밋 금지; `feature/*` 강제
+  아님.) fixture: origin/HEAD 유/무/detached.
 - **AC9 — 커밋 스코핑:** 각 라운드가 대상 경로만 `git add` — `git add -A` 부재.
 - **AC10 — Law 2:** writer(오케스트레이터) ≠ reviewer(subagent); 라운드 수정은
   후속 독립 critic 패스가 게이트; 독립 kept 집합이 남은 채 자기-certify 불가.
@@ -322,12 +368,20 @@ findings. 이 집합이 §6 수렴·수정·stagnation의 **단일 입력** — 
   라운드당 fan-out ≤3(<5)임을 §8이 명시.
 - **AC15 — E1 분류:** 코드 확장자→코드 안내 종료; 비-코드 확장자→진행; 모호→
   AskUserQuestion 확인 후에만 루프 진입. allowlist는 결정론(단위 테스트).
-- **AC16 — 데이터 계약:** critic/codex/adversarial가 §10 스키마 준수; `synthesize`가
-  canonical-key로 결정론 dedup + verdict 반영 → kept 집합.
+- **AC16 — 데이터 계약:** critic/codex/adversarial가 §10 스키마 준수(finding =
+  target_anchor 기반; adversarial = `verdicts` + `new_findings`); canonical key는 **앵커만**
+  써 라운드-안정; `synthesize`가 canonical-key로 결정론 dedup + verdict 반영 → kept 집합;
+  un-adjudicated finding은 **kept 제외(fail-closed)**.
 - **AC17 — 결정론 헬퍼 isolation:** `convergence-check`·`stagnation-check`·`path-auth`·
   `commit-scope`가 model dispatch와 독립적으로 단위 테스트됨(§7 인터페이스).
 - **AC18 — max_rounds 상수:** `max_rounds=5` 고정 상수 + env override; E3 게이트는 N
   미질문(문구는 고정값 고지).
+- **AC19 — commit-scope 계약:** `git commit --only -- <path>` pathspec 커밋으로 무관
+  pre-existing staged 변경 미포함; 출력 `{committed_sha|no_op|error}`, commit 원자적,
+  실패 시 loud surface + 중단.
+- **AC20 — degraded-adversarial 수렴 봉쇄:** adversarial 출력이 파싱 불가/0-verdict면
+  그 라운드 kept-empty를 수렴으로 읽지 않고 NEEDS_RESOLUTION + loud advisory
+  (false-convergence fail-open 봉쇄).
 
 ## §12 Files to Modify
 
@@ -358,8 +412,18 @@ findings. 이 집합이 §6 수렴·수정·stagnation의 **단일 입력** — 
   - 커밋 스코핑: `-A` 부재 grep(AC9/AC13c) — body-unique 문구 + 헤더-satisfiable
     함정 회피([[feedback_grep_lock_header_satisfiable]]).
   - codex degrade: 미가용 stub + 가용-후-실패 stub 각각 degradation 라인(AC5/AC13d).
-  - 데이터 계약/헬퍼: canonical-key dedup 결정론(AC16), `convergence-check`·
-    `stagnation-check` predicate가 고정 입력→고정 출력(AC7/AC17).
+  - 데이터 계약/헬퍼: canonical-key dedup 결정론 + **앵커만 써 라운드-안정**(라인 drift
+    fixture로 동일 key 확인, AC16); `convergence-check`·`stagnation-check` predicate 고정
+    입력→고정 출력(AC7/AC17).
+  - stagnation (b) 커밋-전 신호: no-op 편집 fixture → `stagnant_b=true`, 실제 편집 → false;
+    **커밋 후 diff로 판정 안 함**을 회귀 락으로(라운드-1 조기종료 버그 재발 방지, AC7).
+  - un-adjudicated disposition: adversarial 일부 미판정 fixture → 그 finding kept 제외 +
+    loud log(AC16 fail-closed).
+  - degraded-adversarial: adversarial 0-verdict/파싱불가 fixture → kept-empty가 수렴 아닌
+    NEEDS_RESOLUTION(AC20 false-convergence 봉쇄).
+  - default-branch 판별: origin/HEAD 유/무/detached fixture 각각 거부/진행 결정론(AC8).
+  - commit-scope 격리: pre-existing staged 무관 변경 fixture에서 pathspec 커밋이 그걸 안
+    쓸어담음 + 원자성(AC19).
 - **수동 e2e:** feature 브랜치에서 실제 문서에 `/qg critique <doc>` 실행 →
   라운드·커밋·수렴 관찰; NL 라우팅("이 문서 비평해줘") 확인; 잔여 findings·롤백 확인.
 - **dogfood:** 이 브랜치 자체에 `/qg`(코드 Review 게이트) 실행 — 구현 검증.
