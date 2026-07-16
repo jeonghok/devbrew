@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Stub: timeout N cmd [args...] — strip the timeout N and run cmd directly.
+shift  # remove N
+exec "$@"

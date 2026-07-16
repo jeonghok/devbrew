@@ -47,9 +47,45 @@ python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/review_lock.py" s
      prompt: "Review spec.md at <path>. Previous issue history: <list>"
    })
    ```
-3. **Parse output** — Status, Issues, Recommendations, Stagnation_signal.
-4. **Apply routing table** (다음 섹션).
-5. **Update state.local.md** — `rereview_count += 1`, `issue_history`에 새 issues 추가/raised_count 증가.
+
+### Step 2.5 — codex 병렬 co-review + 결정론 병합 (v0.20.0)
+
+전역 kill switch(`DEVBREW_DISABLE_SPEC_DISTILL=1`)가 켜져 있으면 이 스텝을 포함해 스킬 전체에 진입하지 않는다 — `review-dispatch.py`(Stop)가 dispatch 이전에 이미 걸러낸다. 아래는 codex 경로이며, **Claude 리뷰(Step 2)는 codex 가용성과 무관하게 항상 수행**된다 — codex kill switch가 Claude 리뷰를 막지 않는다(AC15: Claude dispatch는 codex-availability 조건 아래 nest되지 않음).
+
+1. **⟦review-claude⟧ verbatim 저장 (C8)**: Step 2에서 받은 spec-reviewer의 **raw 출력을 요약·바꿔쓰기 없이 그대로(verbatim)** scratch 파일 `$CLAUDE_OUT`에 저장한다. 파싱은 merge_review가 그 파일에서 수행하므로, orchestrating 세션이 여기서 category/target_section을 전사(轉寫)하면 안 된다([fc2ef911] 재도입 금지).
+
+2. **⟦detect⟧**:
+   ```bash
+   codex_avail="$(bash "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/detect_codex.sh" | sed -n 's/^codex_available: //p')"
+   ```
+   `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1`이면 `codex_available: false` + `skip_reason: kill_switch` — codex만 skip, Claude 리뷰는 이미 정상 수행됨.
+
+3. **⟦review-codex⟧** (`codex_avail=true`일 때만):
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/run_spec_codex_reviewer.sh" \
+     "$spec_path" "$(pwd)" "$CODEX_YAML"
+   ```
+   `codex_avail=false`면 이 스텝을 skip하고 loud degrade advisory를 낸다:
+   > `[spec-distill v0.20.0] codex co-review SKIPPED (reason: <skip_reason>) — Claude-only, model diversity 없음 (degraded).`
+
+4. **⟦merge⟧ (barrier)** — 두 리뷰가 모두 끝난 뒤 결정론 병합:
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/merge_review.py" \
+     --claude-output "$CLAUDE_OUT" \
+     --codex-yaml "${CODEX_YAML:-/nonexistent}" \
+     --history "$LEDGER_JSON"
+   ```
+   `$LEDGER_JSON`은 **continuity(interview-UUID) state dir**에 둔다(harness-sid로 collapse 금지 — /compact 넘어 re-review cap/stagnation 보존, N1). merge_review가 read-modify-write하므로 issue_history id/count를 세션이 손으로 전사하지 않는다.
+
+   merge_review stdout(`combined_verdict` / `claude_verdict` / `codex_verdict` / `stagnation` / `codex_degraded` / `claude_degraded` / `claude_verdict_unrecoverable` / `codex_findings` / `advisory`)을 파싱한다. `advisory:` 항목은 사용자에게 **그대로 표시**(degrade 인지 + codex overturn 인지 — combined_verdict가 claude_verdict를 뒤집었을 때 merge_review가 내는 advisory도 여기 포함). `--codex-yaml`이 없거나 codex가 실패했으면 merge_review가 `codex_degraded: true`로 처리한다.
+
+5. **blind-across-rounds (AC12, NG6)**: 각 리뷰어에게는 **same-origin history만** 전달한다 — Step 2의 spec-reviewer 프롬프트에는 codex 과거 findings를 넣지 않는다(두 리뷰 pass는 상호 blind). 통합 판정은 merge_review(orchestrator-side)만 수행한다.
+
+3. **Parse merge_review output** — `combined_verdict`, `claude_verdict`, `codex_verdict`, `stagnation.per_issue`, `stagnation.round_level`, degrade flags, `codex_findings`, advisory. (Claude raw 출력 중 Status/Recommendations **prose**만 사람 표시용으로 사용 — verdict는 merge_review의 `combined_verdict`에서 온다. `Stagnation_signal`은 이 display-only 범위 밖이다: 아래 Re-review cap 항목 2 / "Stagnation detection" 절의 **보조 OR-trigger**로 계속 escalate 판정에 투입된다 — display-only 취급하지 말 것.)
+
+   **codex 귀속 표시 (v0.20.1 — §5 codex 이슈 노출)**: `combined_verdict == needs_revise`이면 `codex_findings`(현재 라운드, category/target_section/severity/summary — 있는 키만) + (있다면) codex-overturn advisory를 저자에게 렌더한다. `issue_history`는 opaque id만 담고 codex의 실제 내용(category/summary 등)은 버리므로, `codex_findings`가 codex가 잡은 것이 **무엇**인지 보여주는 유일한 채널이다 — codex 소스 라벨을 붙여 표시(Claude 이슈는 prose로, codex 이슈는 이 블록으로 구분). Re-review cap이 hard cap/round-level stagnation으로 [5] Human Gate forced escalate할 때도 이 `codex_findings`를 (opaque id 대신) 함께 첨부한다 — 저자/사람이 codex가 실제로 무엇을 잡았는지 보게 한다.
+4. **Apply routing table** — `combined_verdict`를 그대로 표에 투입한다(표 자체는 불변).
+5. **Ledger는 merge_review가 소유** — `rereview_count += 1`은 기존 continuity 메커니즘대로 갱신. `issue_history`는 merge_review가 `$LEDGER_JSON`에 기록하므로 세션이 손으로 갱신하지 않는다(id/count 전사 금지). 세션은 merge_review가 emit한 `issue_history`를 표시만 한다.
 
 ## Deterministic Routing Table (AC15 — design-mode only, v0.12.0)
 
@@ -60,24 +96,27 @@ python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/review_lock.py" s
 |---|---|---|---|
 | **design** | `approved` | - | **[5] Human Gate** (proceed 게이트 — ①/② → `superpowers:writing-plans`) |
 | **design** | `needs_revise` | < 5 | **brainstorming author 회귀**: 메인 agent가 design.md 직접 수정 후 reviewing-spec 재dispatch. |
-| **design** | `needs_revise` | >= 5 | **[5] Human Gate** (forced escalate, full issue_history 첨부) |
+| **design** | `needs_revise` | >= 5 | **[5] Human Gate** (forced escalate, full issue_history + codex_findings 첨부) |
 
 매 dispatch 후 위 표를 *그대로* 적용. prose-based 결정 금지.
 
 ### Re-review cap (rereview_count, hybrid policy — v0.3.0 hook 통합)
 
-두 조건 중 *하나라도* 충족 시 자동으로 [5] Human Gate로 forced escalate, 전체 `issue_history` 첨부:
+두 조건 중 *하나라도* 충족 시 자동으로 [5] Human Gate로 forced escalate, 전체 `issue_history` + `codex_findings` 첨부:
 
 1. **Hard cap**: `rereview_count >= 5` 도달 시 (즉 6번째 reviewer dispatch 시도 시). 기존 v0.2.0의 cap=3을 v0.3.0에서 cap=5로 상향 — multi-round drift detection을 위한 budget 확장.
-2. **Round-level stagnation early-exit**: spec-reviewer가 `verdict: needs_revise` + `Stagnation_signal: true` 를 반환한 경우, `rereview_count`와 무관하게 즉시 [5] Human Gate로 escalate. 이는 *수렴 실패 조기 감지* — issue가 새로 발견되지 않고 같은 항목이 반복 raise되는 상황을 한 라운드 안에 끝낸다.
+2. **Round-level stagnation early-exit**: `rereview_count`와 무관하게 즉시 [5] Human Gate로 escalate. **Primary trigger**는 merge_review.py의 통합-원장 스캔이 emit하는 `stagnation.round_level == true`(상세는 아래 "Stagnation detection" 절) — blind-across-rounds 때문에 Claude 단독 self-report로는 codex-only로 반복된 이슈를 못 잡으므로, 이 통합 스캔이 round-level stagnation의 주 판정 경로다. spec-reviewer가 `verdict: needs_revise` + `Stagnation_signal: true`를 반환하는 경우도 **보조 OR-trigger**로 함께 escalate에 기여한다(단독 primary 트리거는 아님 — merge_review 미가용/degraded 상황에서도 fallback으로 작동). 이는 *수렴 실패 조기 감지* — issue가 새로 발견되지 않고 같은 항목이 반복 raise되는 상황을 한 라운드 안에 끝낸다.
 
 per-issue stagnation(`raised_count >= 3 AND dismissed_by_user == 0`)과 위 (2)의 round-level stagnation은 trigger가 다르다 — 둘 다 [5] Human Gate forced escalate로 수렴.
 
-### Stagnation detection
+### Stagnation detection (v0.20.0)
 
-spec-reviewer agent가 `Stagnation_signal: true` 반환 시: 해당 issue에 대해 `raised_count >= 3 AND dismissed_by_user == 0` 검증. 두 조건 모두 충족 시 [5] Human Gate forced escalate.
+stagnation escalate는 이제 **merge_review.py의 통합-원장 스캔** 결과(`stagnation` flag)로 발동한다 — Claude의 `Stagnation_signal: true` self-report 단독이 아니다. blind-across-rounds 때문에 Claude는 codex가 과거에 올린 이슈를 못 보므로, codex-only로 반복된 이슈는 Claude self-report로는 절대 잡히지 않는다([6647ebfa] fail-open). merge_review가 통합 원장 위에서 독립적으로 스캔한다:
 
-`dismissed_by_user >= 1`인 issue는 stagnation count에서 제외 — 사용자 명시 거절은 P17 sovereignty 행사이지 stagnation이 아님.
+- **per-issue**: `stagnation.per_issue`에 든 issue_id는 `raised_count >= 3 AND dismissed_by_user == 0` — 두 조건 충족 시 [5] Human Gate forced escalate.
+- **round-level**: `stagnation.round_level == true`(새 issue_id 無 + 미해결 잔존)면 즉시 [5] Human Gate escalate. `round_level == inconclusive`(claude_degraded 라운드 — 파싱 실패를 수렴으로 오독 금지, OQ4)면 escalate 트리거로 쓰지 않는다.
+
+Claude의 `Stagnation_signal: true`는 **보조 신호**로 남는다(유일 트리거 아님) — merge_review flag가 primary trigger. `dismissed_by_user >= 1`인 issue는 stagnation에서 제외(P17) — 사용자 명시 거절은 P17 sovereignty 행사이지 stagnation이 아님.
 
 ## Phase 5 Human Gate — proceed 게이트
 
@@ -175,3 +214,4 @@ corruption 시 → "v0.1.x in-flight state 호환 실패 — 세션 재시작 �
 ## kill switch
 
 - `DEVBREW_DISABLE_SPEC_DISTILL=1`: 즉시 abort, state.local.md 보존.
+- `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1`: codex co-review만 skip(Claude 리뷰 정상). combined = Claude verdict + loud degrade advisory.

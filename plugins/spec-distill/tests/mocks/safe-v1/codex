@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+case "${1:-}" in
+  --version) echo "1.0.0" ;;
+  *) echo "mock-codex-safe-v1: unexpected arg $*" >&2; exit 2 ;;
+esac
