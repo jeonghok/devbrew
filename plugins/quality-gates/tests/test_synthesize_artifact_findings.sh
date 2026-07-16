@@ -71,6 +71,7 @@ verdicts: []
 Y
 out="$(python3 "$S" --phase synth --findings "$tmp/merged.yaml" --adversarial "$tmp/adv_empty.yaml")"
 echo "$out" | grep -q "degraded: true" && echo "$out" | grep -q "converged: false" \
+  && echo "$out" | grep -q "degraded_reason: adversarial" \
   && ok "degraded adversarial blocks false-convergence" || no "degraded guard failed ($out)"
 
 # --- genuine clean: NO findings + empty verdicts -> converged, NOT degraded ---
@@ -80,7 +81,41 @@ Y
 python3 "$S" --phase key --findings "$tmp/none.yaml" > "$tmp/none_merged.yaml"
 out="$(python3 "$S" --phase synth --findings "$tmp/none_merged.yaml" --adversarial "$tmp/adv_empty.yaml")"
 echo "$out" | grep -q "converged: true" && echo "$out" | grep -q "degraded: false" \
+  && echo "$out" | grep -q "degraded_reason: none" \
   && ok "empty findings = genuine clean (not degraded)" || no "empty findings misread ($out)"
+
+# --- T5-Important fix: findings-load fail-closed (missing --findings file) ---
+out="$(python3 "$S" --phase synth --findings "$tmp/does_not_exist.yaml" --adversarial "$tmp/adv_empty.yaml")"
+echo "$out" | grep -q "degraded: true" && echo "$out" | grep -q "converged: false" \
+  && echo "$out" | grep -q "degraded_reason: findings_load" \
+  && ok "missing --findings file forces degraded (fail-closed)" || no "missing findings file should force degraded ($out)"
+
+# --- T5-Important fix: findings-load fail-closed (unparseable YAML) ---
+printf ': : : bad yaml\n' > "$tmp/bad.yaml"
+out="$(python3 "$S" --phase synth --findings "$tmp/bad.yaml" --adversarial "$tmp/adv_empty.yaml")"
+echo "$out" | grep -q "degraded: true" && echo "$out" | grep -q "converged: false" \
+  && echo "$out" | grep -q "degraded_reason: findings_load" \
+  && ok "unparseable --findings file forces degraded (fail-closed)" || no "unparseable findings file should force degraded ($out)"
+
+# --- T5-Important fix: key phase counts a failed source instead of silently skipping it ---
+python3 "$S" --phase key --findings "$tmp/critic.yaml" --findings "$tmp/does_not_exist.yaml" > "$tmp/partial_merged.yaml"
+python3 -c "
+import yaml
+d = yaml.safe_load(open('$tmp/partial_merged.yaml'))
+assert d.get('sources_failed') == 1, ('sources_failed', d.get('sources_failed'))
+assert len(d['findings']) == 1, ('findings', d['findings'])
+assert d['findings'][0]['target_anchor'] == '#s1', d['findings'][0]
+" && ok "key phase counts failed source + keeps loadable finding" || no "key phase sources_failed / partial findings wrong"
+
+# --- T5-Important fix: synth on a merged doc carrying sources_failed>0 -> degraded ---
+cat > "$tmp/merged_with_failure.yaml" <<'Y'
+findings: []
+sources_failed: 1
+Y
+out="$(python3 "$S" --phase synth --findings "$tmp/merged_with_failure.yaml" --adversarial "$tmp/adv_empty.yaml")"
+echo "$out" | grep -q "degraded: true" && echo "$out" | grep -q "converged: false" \
+  && echo "$out" | grep -q "degraded_reason: sources_failed" \
+  && ok "sources_failed>0 on merged doc forces degraded (fail-closed)" || no "sources_failed>0 should force degraded ($out)"
 
 # --- new_findings from adversarial added to kept ---
 cat > "$tmp/adv5.yaml" <<Y

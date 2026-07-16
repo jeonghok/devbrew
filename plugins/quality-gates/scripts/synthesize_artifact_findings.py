@@ -6,12 +6,20 @@ Two phases (the same dedup_key/stagnation_key algorithm lives once here):
   --phase key --findings A [--findings B ...]
       Merge critic + codex findings, within-round dedup by dedup_key (first wins,
       merge `agent` into `sources`), inject dedup_key + stagnation_key, emit
-      `findings: [...]`. Runs BEFORE adversarial so adversarial can echo dedup_key.
+      `findings: [...]` plus `sources_failed: <N>` (count of source files that
+      failed to load — made visible instead of silently skipped, so a partial
+      merge can't masquerade as a complete one). Runs BEFORE adversarial so
+      adversarial can echo dedup_key.
 
   --phase synth --findings MERGED --adversarial VERDICTS
       Apply verdicts (confirm/downgrade/reject) by finding_key == dedup_key,
       compute the fail-closed kept set, and emit convergence / degraded /
-      unadjudicated / severity counts / stagnation_keys / kept list.
+      degraded_reason (adversarial|findings_load|sources_failed|none) /
+      unadjudicated / severity counts / stagnation_keys / kept list. A
+      findings-side load failure (missing/unparseable --findings file) or a
+      nonzero `sources_failed` carried on the merged doc also forces
+      degraded=true (fail-closed), symmetric to the adversarial-side guard —
+      neither can silently false-converge.
 
 Schema: see plan Global Constraints "데이터 계약".
 """
@@ -61,9 +69,11 @@ def _findings_of(doc):
 
 def phase_key(paths):
     by_key = {}
+    sources_failed = 0
     for p in paths:
         doc = _load(p)
         if doc == "__ERR__":
+            sources_failed += 1  # skip this source's findings but keep the loss visible
             continue
         for f in _findings_of(doc):
             if not isinstance(f, dict):
@@ -82,16 +92,25 @@ def phase_key(paths):
                 by_key[k] = g
     fields = ("agent", "sources", "category", "target_anchor", "target_lines",
               "severity", "summary", "proposed_fix", "dedup_key", "stagnation_key")
-    out = {"findings": [{k: f.get(k) for k in fields if f.get(k) is not None} for f in by_key.values()]}
+    out = {
+        "findings": [{k: f.get(k) for k in fields if f.get(k) is not None} for f in by_key.values()],
+        "sources_failed": sources_failed,
+    }
     sys.stdout.write(yaml.safe_dump(out, allow_unicode=True, sort_keys=False))
 
 
 def phase_synth(findings_path, adversarial_path):
     merged_doc = _load(findings_path)
+    # fail-closed: a missing/unparseable --findings file must not silently read as "no findings"
+    findings_load_failed = bool(findings_path) and merged_doc == "__ERR__"
     findings = [dict(f) for f in _findings_of(merged_doc) if isinstance(f, dict)]
     for f in findings:
         f.setdefault("dedup_key", dedup_key(f))
         f["severity"] = _norm_sev(f)
+
+    sources_failed = merged_doc.get("sources_failed", 0) if isinstance(merged_doc, dict) else 0
+    if not isinstance(sources_failed, int):
+        sources_failed = 0
 
     adv_doc = _load(adversarial_path) if adversarial_path else None
     adv_parse_failed = adv_doc == "__ERR__"
@@ -138,7 +157,19 @@ def phase_synth(findings_path, adversarial_path):
         kept.append(g)
 
     had_findings = len(findings) > 0
-    degraded = had_findings and (adv_parse_failed or len(verdicts) == 0)
+    adv_degraded = had_findings and (adv_parse_failed or len(verdicts) == 0)
+    # symmetric fail-closed guard: an adversarial-side failure, a findings-side load
+    # failure, or a lossy phase-key merge (sources_failed>0) must each independently
+    # force degraded=true — none of them may silently read as a genuine clean round.
+    degraded = adv_degraded or findings_load_failed or (sources_failed > 0)
+    if adv_degraded:
+        degraded_reason = "adversarial"
+    elif findings_load_failed:
+        degraded_reason = "findings_load"
+    elif sources_failed > 0:
+        degraded_reason = "sources_failed"
+    else:
+        degraded_reason = "none"
 
     crit = sum(1 for f in kept if f["severity"] == "CRITICAL")
     imp = sum(1 for f in kept if f["severity"] == "IMPORTANT")
@@ -149,6 +180,7 @@ def phase_synth(findings_path, adversarial_path):
     out = {
         "converged": converged,
         "degraded": degraded,
+        "degraded_reason": degraded_reason,
         "unadjudicated": unadjudicated,
         "kept_critical": crit,
         "kept_important": imp,
