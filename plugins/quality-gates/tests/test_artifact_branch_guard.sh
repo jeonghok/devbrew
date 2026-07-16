@@ -38,7 +38,8 @@ rm -rf "$d"
 d="$(mkrepo)"; ( cd "$d"; git commit -q --allow-empty -m second
   git checkout -q "$(git rev-parse HEAD)" )
 out="$(cd "$d" && bash "$SCRIPT")"
-[ "$(field "$out" reason)" = "detached_head" ] && { PASS=$((PASS+1)); echo "  PASS: detached rejected"; } \
+[ "$(field "$out" reason)" = "detached_head" ] && [ "$(field "$out" branch_ok)" = "false" ] \
+  && { PASS=$((PASS+1)); echo "  PASS: detached rejected"; } \
   || { FAIL=$((FAIL+1)); echo "  ✗ FAIL: detached should be rejected ($out)"; }
 rm -rf "$d"
 
