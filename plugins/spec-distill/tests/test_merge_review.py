@@ -1,4 +1,5 @@
 import json
+import os
 import re as _re
 import subprocess
 import sys
@@ -155,6 +156,48 @@ class TestMergeCore(unittest.TestCase):
         _, y, _, _ = run_merge(claude_output("approved", []), markerless)
         self.assertEqual(y["codex_degraded"], "true")
         self.assertEqual(y["combined_verdict"], "approved")  # follows claude, not the untrusted block
+
+    # /qg iter-2 CX-fix-1: a codex_failed marker with a GARBAGE/EMPTY value
+    # (producer drift or corruption) is NOT a valid success token → fail-closed,
+    # not silently approved. Mutation guard: reverting to `failed = (v=="true")`
+    # (any non-"true" value → success) flips these to codex_degraded=false.
+    def test_codex_yaml_garbage_marker_failclosed(self):
+        for badval in ("maybe", "", "falsegarbage", "0", "False", "TRUE"):
+            cod = f"findings: []\nmeta:\n  codex_failed: {badval}\n"
+            _, y, _, _ = run_merge(claude_output("approved", []), cod)
+            self.assertEqual(
+                y["codex_degraded"], "true",
+                f"garbage codex_failed={badval!r} must fail-closed, got codex_degraded={y['codex_degraded']}")
+
+    # /qg iter-2 CX-fix-2: a codex YAML that passes isfile() but cannot be OPENED
+    # (permission / TOCTOU) must degrade loudly, NOT crash the merge with an
+    # uncaught OSError. Mutation guard: removing the try/except lets the open()
+    # raise → non-zero returncode → this fails.
+    def test_codex_yaml_unreadable_failclosed(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "claude.md").write_text(claude_output("approved", []))
+            cod = d / "codex.yaml"
+            cod.write_text(codex_yaml([]))
+            os.chmod(cod, 0)  # unreadable
+            try:
+                with open(cod) as _fh:
+                    _fh.read()
+                self.skipTest("codex.yaml still readable (running as root?) — cannot exercise unreadable path")
+            except OSError:
+                pass
+            hist = d / "history.json"
+            hist.write_text(json.dumps({"issue_history": []}))
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT),
+                 "--claude-output", str(d / "claude.md"),
+                 "--codex-yaml", str(cod),
+                 "--history", str(hist)],
+                capture_output=True, text=True,
+            )
+            os.chmod(cod, 0o644)  # restore for temp-dir cleanup
+            self.assertEqual(r.returncode, 0)                 # never crash
+            self.assertIn("codex_degraded: true", r.stdout)   # loud fail-closed degrade
 
     # /qg iter-1 I-3 (unsafe severity default): an OFF-VOCAB codex severity
     # (LLM drift beyond block|high|medium) must ESCALATE, not silently resolve

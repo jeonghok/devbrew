@@ -110,51 +110,66 @@ def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str]:
     findings: list[dict] = []
     failed = False
     reason = ""
-    saw_failed_key = False  # opt-in-to-success sentinel: a valid run sets this
+    saw_valid_marker = False  # opt-in-to-success: set ONLY on an exact true/false marker
     section = None
     cur: dict | None = None
-    with open(path, "r", encoding="utf-8", errors="replace") as fh:
-        for raw in fh.readlines():
-            line = raw.rstrip("\n")
-            if line.startswith("findings:"):
-                section = "findings"
-                if "[]" in line:
-                    section = None
-                continue
-            if line.startswith("meta:"):
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()
+    except OSError:
+        # isfile() passed but the file can't be opened/read (permission /
+        # TOCTOU race / vanished) → degrade loudly, never crash the merge with
+        # an uncaught OSError (symmetric with load_history's guard).
+        return [], True, "codex_yaml_unreadable"
+    for raw in lines:
+        line = raw.rstrip("\n")
+        if line.startswith("findings:"):
+            section = "findings"
+            if "[]" in line:
+                section = None
+            continue
+        if line.startswith("meta:"):
+            if cur:
+                findings.append(cur); cur = None
+            section = "meta"
+            continue
+        if section == "findings":
+            if line.strip().startswith("- "):
                 if cur:
-                    findings.append(cur); cur = None
-                section = "meta"
-                continue
-            if section == "findings":
-                if line.strip().startswith("- "):
-                    if cur:
-                        findings.append(cur)
-                    cur = {}
-                    # first inline key may follow "- "
-                    rest = line.strip()[2:]
-                    if ":" in rest:
-                        k, _, v = rest.partition(":")
-                        cur[k.strip()] = _yaml_unscalar(v.strip())
-                elif ":" in line and cur is not None:
-                    k, _, v = line.strip().partition(":")
+                    findings.append(cur)
+                cur = {}
+                # first inline key may follow "- "
+                rest = line.strip()[2:]
+                if ":" in rest:
+                    k, _, v = rest.partition(":")
                     cur[k.strip()] = _yaml_unscalar(v.strip())
-            elif section == "meta":
-                if ":" in line:
-                    k, _, v = line.strip().partition(":")
-                    k = k.strip(); v = v.strip()
-                    if k == "codex_failed":
-                        saw_failed_key = True
-                        failed = (v == "true")
-                    elif k == "reason":
-                        reason = _yaml_unscalar(v)
+            elif ":" in line and cur is not None:
+                k, _, v = line.strip().partition(":")
+                cur[k.strip()] = _yaml_unscalar(v.strip())
+        elif section == "meta":
+            if ":" in line:
+                k, _, v = line.strip().partition(":")
+                k = k.strip(); v = v.strip()
+                if k == "codex_failed":
+                    # opt-in-to-success: trust the file as a real codex run ONLY
+                    # on an exactly-recognized marker. "true" → failed; "false"
+                    # → success; ANY other value (garbage/empty from producer
+                    # drift or corruption) leaves the marker UNSET → the
+                    # post-loop check fails closed. A half-recognized marker
+                    # must not read as a clean approval.
+                    if v == "true":
+                        saw_valid_marker = True; failed = True
+                    elif v == "false":
+                        saw_valid_marker = True
+                elif k == "reason":
+                    reason = _yaml_unscalar(v)
     if cur:
         findings.append(cur)
-    # opt-in-to-success: no explicit codex_failed marker ⇒ the file is empty,
-    # truncated, or malformed ⇒ fail-closed (never trust a markerless file as a
+    # opt-in-to-success: no recognized codex_failed marker (missing, empty,
+    # truncated, or garbage value) ⇒ fail-closed (never trust the file as a
     # clean codex run). Discard any partial findings — an untrusted file's
     # content must not feed the verdict or the ledger.
-    if not saw_failed_key:
+    if not saw_valid_marker:
         return [], True, "codex_yaml_malformed"
     return findings, failed, reason
 
