@@ -12,7 +12,7 @@ ag '^model: inherit$' "model is inherit (session-tier, no downgrade)"
 ng '^model: (opus|sonnet|haiku)' "model is NOT a pinned cheap/fixed tier"
 ag '^color: (cyan|green|yellow|blue|red|purple|orange|pink)$' "color in 8-color enum"
 ag '^disallowedTools: \[.*Write.*Edit.*MultiEdit.*NotebookEdit.*\]' "disallowedTools blocks all write tools"
-ag 'artifact-critic' "persona names the critic role"
+ag 'You are \*\*Artifact Critic\*\*' "persona body frames the critic role (body-unique, not header-satisfiable)"
 ag 'NOT responsible' "persona has explicit non-responsibility (Law 2 role framing)"
 ag 'findings:' "output schema documented"
 
