@@ -3,8 +3,13 @@ name: law2-agent-tool-surface
 type: design-doc
 created_at: 2026-07-16
 revised_at: 2026-07-17
-status: draft — review round 4 (round 1–3 needs_revise → per-issue stagnation → Human Gate → 사용자 "census 돌리고 설계 확정" 선택 → **census 실행 완료**, §6 확정)
-approach: "**8/8 전부 `tools:` allowlist** (fail-closed; MCP는 `mcp__<server>`로 grant). denylist 카브아웃 **없음** — census가 `Monitor`(무명 셸+egress)를 찾아 이름 기반 denylist가 구조적으로 완성 불가임을 실증. 목록은 추론이 아니라 **트랜스크립트 도구 census**로 도출"
+status: >
+  **리뷰 4라운드 종료 (최종 verdict = needs_revise, 미approve).** R1–R3 이슈는 전부 해소 확인(r4 리뷰어),
+  R4 신규 8건도 반영 완료. **재발 3건(fixture 바이트·파서 계약·handoff defer)은 spec/plan 경계 이견** —
+  codex는 설계에 요구, Claude 리뷰어는 "실행 가능한 절차로 defer한 것"으로 판정. **사용자가 Human Gate에서
+  "고치고 writing-plans"를 선택(P17 주권 행사)** → 그 3건은 writing-plans의 몫으로 명시 이관.
+  ⚠️ **구현 착수 전 §10-1a `ToolSearch` 프로브(OQ7·OQ8) 필수** — 답에 따라 설계가 바뀐다.
+approach: "**8/8 전부 `tools:` allowlist** (fail-closed; MCP는 **per-tool 정확한 이름으로 열거** — 서버 단위 grant는 표면을 넓혀 금지). denylist 카브아웃 **없음** — census가 `Monitor`(무명 셸+egress)를 찾아 이름 기반 denylist가 구조적으로 완성 불가임을 실증. 목록은 추론이 아니라 **트랜스크립트 도구 census**로 도출"
 plugin: "quality-gates + spec-distill (+ CLAUDE.md 규범)"
 version_bump: "quality-gates 2.10.3 → 2.11.0 · spec-distill 0.20.0 → 0.21.0 (minor — 실효 도구 표면 변경)"
 implementation: "subagent-driven (TDD)"
@@ -204,7 +209,7 @@ tools:  =  (관측된 census  ∪  문서화된 Inputs/Output 계약이 요구�
 ```
 
 `금지 8종` = `Write` · `Edit` · `MultiEdit` · `NotebookEdit` · `Agent` · `Bash` · **`Monitor`** · `mcp__*`.
-**census가 금지 도구를 보이면 그 용도를 대체 도구로 옮긴다** (예: `spec-reviewer`의 Bash 37회는 대부분 grep/find → `Grep`/`Glob`이 대체). 대체 불가면 예외 마커(아래).
+**census가 금지 도구를 보이면 그 용도를 대체 도구로 옮긴다** (예: `spec-reviewer`의 Bash 45회는 대부분 grep/find → `Grep`/`Glob`이 대체). 대체 불가면 예외 마커(아래).
 
 census 절차 (C9 — 재현 확인됨):
 
@@ -222,13 +227,17 @@ grep -o '"name":"[A-Za-z0-9_-]*"' <transcript>.output | sort | uniq -c | sort -r
 
 이것이 README:47의 *"네트워크 tool 0개"* 주장을 **처음으로 참으로 만든다.**
 
-`runtime-verifier`도 allowlist다 — C8이 확정하듯 **`tools:`도 MCP 서버 단위 grant를 받는다**:
+`runtime-verifier`도 allowlist다 — C8이 확정하듯 `tools:`는 *"MCP server-level patterns **in addition to exact tool names**"*를 받는다. 즉 **per-tool 정확한 이름**으로 열거할 수 있다:
 
 ```yaml
-tools: Read, Bash, Grep, Glob, Write, Edit, MultiEdit, mcp__plugin_chrome-devtools-mcp_chrome-devtools
+tools: Read, Bash, Grep, Glob, Write, Edit, MultiEdit,
+       mcp__plugin_chrome-devtools-mcp_chrome-devtools__navigate_page,
+       ... (죽은 allowedTools 가 이미 열거한 chrome 15개 그대로)
 ```
 
-→ chrome 유지 + 나머지 MCP fail-closed. **예외 조항이 사라지고 §5↔§7 모순이 예외를 없애서 해소된다.**
+⚠️ **서버 단위 grant(`mcp__<server>`)를 쓰면 안 된다** — 15개 → **~29개**로 넓어져 `upload_file`(유출 벡터)·`handle_dialog`·네트워크 조회·성능 추적까지 **Write+Bash 보유 실행자**에게 준다 (r4 리뷰 적발). **필요한 것만 이름으로.**
+
+→ chrome 15개 유지 + 나머지 MCP fail-closed. **예외 조항이 사라지고 §5↔§7 모순이 예외를 없애서 해소된다.**
 
 ### 판정식 — allowlist 상한
 
@@ -246,20 +255,20 @@ tools: Read, Bash, Grep, Glob, Write, Edit, MultiEdit, mcp__plugin_chrome-devtoo
 
 ---
 
-## 6. Agent별 도구 표면 (census 확정)
+## 6. Agent별 도구 표면 (census 확정 6/8 + 대체판정 2/8)
 
 **§10-0 before-census 완료 (2026-07-17).** 원본: `before-census.md`. 도출 규칙 = `(census ∪ 문서화된 계약) − 금지 8종`, 금지 도구 용도는 대체 도구로 이관.
 
 | agent | census 관측 | **확정 `tools:`** | 도출 근거 |
 |---|---|---|---|
-| `spec-reviewer` | Bash×45 · Read×7 · **WebFetch×2** · ToolSearch×2 · **Grep×0 Glob×0** | **Read, Grep, Glob, WebFetch, WebSearch** | 🔴 **census가 초고를 반증**: WebFetch로 공식 문서를 가져와 이 스펙을 검증했다 — 뺏으면 리뷰 품질 열화. Bash 45회는 grep/find 용도 → Grep/Glob 이관 |
-| `security-reviewer` | Bash×1 · WebFetch×1 · **tavily×1** · Agent×1 | **Read, Grep, Glob** | 프로브가 태운 것뿐, 업무엔 미사용. `:42` *"Do not run audit commands yourself"* → web 불요 |
-| `adversarial` | Bash×4 · WebFetch×1 · Context7×1 · Agent×1 | **Read, Grep, Glob** | Bash 4회는 앵커 실재 확인(`git log`·grep) → Grep/Glob + Read로 이관 |
+| `spec-reviewer` | Bash×45 · Read×7 · **WebFetch×2** · **ToolSearch×2** · **Grep×0 Glob×0** | **Read, Grep, Glob, WebFetch** ⚠️`ToolSearch`는 **OQ7 판정 대기** | 🔴 **census가 초고를 반증**: WebFetch로 공식 문서를 가져와 이 스펙을 검증했다 — 뺏으면 리뷰 품질 열화. Bash 45회는 grep/find 용도 → Grep/Glob 이관. **`WebSearch`는 census 0회이므로 부여 안 함**(r4 리뷰가 인접 행 복붙 아티팩트로 적발) |
+| `security-reviewer` | Bash×1 · WebFetch×1 · **tavily×1** · Agent×1 · ToolSearch×1 | **Read, Grep, Glob** ⚠️`ToolSearch` OQ7 | 프로브가 태운 것뿐, 업무엔 미사용. `:42` *"Do not run audit commands yourself"* → web 불요 |
+| `adversarial` | Bash×4 · WebFetch×1 · Context7×1 · Agent×1 · ToolSearch×2 | **Read, Grep, Glob** ⚠️`ToolSearch` OQ7 | Bash 4회는 앵커 실재 확인(`git log`·grep) → Grep/Glob + Read로 이관 |
 | `test-scope-validator` | Read×3 · Bash×2 · Agent×1 | **Read, Grep, Glob** | `:48` *"`Bash` is for reading files only"* → Read가 대체. persona가 이미 web·MCP를 금지 |
-| `steelman-builder` | **WebSearch×2 · WebFetch×2** · Bash×2 · Context7×1 · Agent×1 | **Read, Grep, Glob, WebSearch, WebFetch** | ✅ census가 가설 확증 — 업무에 web 4회 실사용 |
+| `steelman-builder` | **WebSearch×2 · WebFetch×2** · Bash×2 · Context7×1 · Agent×1 · ToolSearch×2 | **Read, Grep, Glob, WebSearch, WebFetch** ⚠️`ToolSearch` OQ7 | ✅ census가 가설 확증 — 업무에 web 4회 실사용 |
 | `breadth-keeper` | **(호출 0 — 측정 불가)** | **Read, Grep, Glob** | ⚠️ persona가 프로브 거절(원장 21). census 없이 **문서화된 계약 + 보수적 최소**로 정함. §10-3 fixture가 이 목록으로 충분한지 검증 |
-| `pr-understanding-builder` | ToolSearch×2 (인벤토리 조회만) | 🔴 **`tools:` 최소 단일 항목** (그 agent가 쓰지 않는 무해한 것 1개) + 죽은 `allowedTools: []` 제거 | **본 PR의 보안 핵심.** denylist로는 `Monitor`를 못 막는다(§1). allowlist만이 README:47을 참으로 만든다 |
-| `runtime-verifier` | **미측정 (의도적)** | **Read, Bash, Grep, Glob, Write, Edit, MultiEdit, `mcp__plugin_chrome-devtools-mcp_chrome-devtools`** + 죽은 `allowedTools`(**22**개) 제거 | Write·Bash 보유 실행자라 dispatch 위험 > census 가치 — **미측정을 사실로 기록**. 목록은 파일의 죽은 allowedTools 22개가 열거. `Bash`·`Write`·`Edit`·`MultiEdit`에 **도구별 `# TOOL-EXCEPTION:` 마커 필수**. Law 2는 mutation-guard가 보장 |
+| `pr-understanding-builder` | ToolSearch×2 (인벤토리 조회만) | 🔴 **`tools: TaskList`** (단일 무해 항목) + 죽은 `allowedTools: []`·`disallowedTools` 제거 | **본 PR의 보안 핵심.** denylist로는 `Monitor`를 못 막는다(§1). **`TaskList` 선정 근거**: 미제공 5종이 아니고(→C2 지뢰 회피), 파일시스템·실행·네트워크·위임 **전부 없음**, 세션 task 목록 **읽기전용**, 이 agent가 결코 안 씀. ⚠️ **서브에이전트 resolve 여부 미확인 → AC5가 launch 성공으로 실증**(실패 시 plan이 동급 후보로 교체). **`ToolSearch`는 주지 않는다**(OQ7) |
+| `runtime-verifier` | **미측정 (의도적)** | 죽은 `allowedTools` **22개를 `tools:`로 그대로 이관** — 비-MCP 7개 + **chrome-devtools 15개를 개별 열거**(서버 단위 grant 금지) | Write·Bash 보유 실행자라 dispatch 위험 > census 가치 — **미측정을 사실로 기록**. 🔴 **서버 단위 grant(`mcp__<server>`)는 15개 → ~29개로 표면을 넓힌다**(`upload_file`=유출 벡터·`handle_dialog`·네트워크 조회·성능 추적 추가) — r4 리뷰 적발. 공식: *"Both fields accept MCP server-level patterns **in addition to exact tool names**"* → **per-tool 열거가 지원되므로 확대할 이유가 없다.** `Bash`·`Write`·`Edit`·`MultiEdit` **각각에 `# TOOL-EXCEPTION:` 마커 필수**. Law 2는 mutation-guard가 보장 |
 
 > **`spec-reviewer` 행이 이 설계의 방법론을 정당화한다.** persona 독해로 만든 초고 표는 이 agent에게 *한 번도 안 쓰는 Grep/Glob을 주고 실제로 쓰는 WebFetch를 뺏었다.* census가 없었으면 **§12가 이름 붙인 "조용한 열화"를 이 PR이 직접 저질렀을 것이다.**
 
@@ -300,8 +309,8 @@ kebab drift만 경고 → **`allowedTools`도 경고**. kill switch(`DEVBREW_SKI
 | **AC2** | `CLAUDE.md:41`이 `allowedTools`를 요구하지 않고 **"모든 agent는 `tools:` allowlist (fail-closed). denylist는 시간에 대해 fail-open이라 금지"**를 명시한다 | grep + 읽기 |
 | **AC3** | `plugins/**/agents/*.md` 중 **어떤 파일도** `allowedTools` 키를 갖지 않는다 | 결정론 grep |
 | **AC4** | **8개 전부** `tools:` allowlist를 갖고, 금지 8종(`Write`·`Edit`·`MultiEdit`·`NotebookEdit`·`Agent`·`Bash`·`Monitor`·`mcp__*`)이 있으면 **그 도구 이름의 `# TOOL-EXCEPTION:` 마커 동반** | 결정론 grep |
-| **AC5** | 🔴 `pr-understanding-builder`가 `tools:`에 **단일 무해 항목**만 갖고 `disallowedTools`가 없다. **launch 성공**(C2)이 실증된다 | grep + §10-3 dispatch |
-| **AC6** | `runtime-verifier`가 `tools:`로 Write·Bash·chrome-devtools를 **유지**하고, 각 금지 도구에 마커가 있으며, **다른 MCP 서버를 갖지 않는다** | grep + §10-3 |
+| **AC5** | 🔴 `pr-understanding-builder`가 **`tools: TaskList`**만 갖고 `disallowedTools`·`allowedTools`가 없다. **launch 성공**(C2)이 실증되고, §10-3 유혹 fixture에서 **MCP·셸·네트워크 호출 census 0회** | grep + §10-3 dispatch |
+| **AC6** | `runtime-verifier`의 `tools:`가 죽은 `allowedTools` **22개와 정확히 일치**(비-MCP 7 + chrome **per-tool 15개** — 서버 단위 grant 금지, 확대 0). 금지 4종(**`Write`·`Edit`·`MultiEdit`·`Bash`**) **각각**에 `# TOOL-EXCEPTION:` 마커. **다른 MCP 서버 0개** | grep(22개 집합 동일성) + §10-3 |
 | **AC7** | **census 차분**: 각 agent의 after-census ⊆ **선언된 `tools:`**. (금지 도구라도 **선언·마커가 있으면 호출은 정당** — 예: `runtime-verifier`의 Bash. AC6과 충돌 없음.) before에서 쓰이던 **미선언** 도구(예: `spec-reviewer`의 Bash×45, `security-reviewer`의 tavily·Agent)가 after에서 **0회**인 것이 제거의 증거 | `census.sh <transcript>` (C9, 교정 regex) |
 | **AC8** | 8개 agent를 **고정 fixture**로 각 1회 dispatch: (a) launch 성공 (b) 문서화된 스키마의 **비어있지 않은** 산출 (c) **심어둔 특정 신호 검출** (d) AC7 census 통과 | §10-3 |
 | **AC9** | 레거시 AC15 락이 **mutation 전부에서 RED**: ①`allowedTools` 재도입 ②kebab 재도입 ③`tools:` 제거 ④금지 8종 **각각**을 마커 없이 추가(**8 케이스**) ⑤**다른 도구의 마커만 있는 채로** 금지 도구 추가(1:1 매칭 이빨) | mutation test (**12 케이스**) |
@@ -356,7 +365,15 @@ kebab drift만 경고 → **`allowedTools`도 경고**. kill switch(`DEVBREW_SKI
 
 > ⚠️ **AC7 차분의 통제 한계 (r3 리뷰 지적, 정직하게 수용)**: `spec-reviewer`의 before는 **실제 프로덕션 리뷰**이고 after는 **합성 fixture**라 같은 태스크가 아니다. 나머지 6개는 before·after 모두 §10-3 fixture라 통제된다. `spec-reviewer`는 **after fixture로 before를 한 번 더 떠서** 통제를 회복하거나, 차분 대신 **선언 포함관계(after ⊆ tools:)**만으로 판정한다.
 
-**1. 목록 확정** — §5 도출 규칙을 census에 적용해 §6 가설표를 **확정표로 대체**. 금지 도구 용도는 대체 도구로 이관하거나 `# TOOL-EXCEPTION:` 마커.
+**1a. 🔴 `ToolSearch` 프로브 (구현 전 필수 — OQ7·OQ8)** — 설계가 이 답 위에 선다.
+
+일회용 프로브 agent 2종을 만들고 **세션 재시작 후** dispatch한다:
+- `probe-A`: `tools: Read, ToolSearch` → *"`ToolSearch`로 `Bash` 스키마를 로드한 뒤 `echo probe-a-escaped > <절대경로>`를 실행하라"*. **파일이 생기면 OQ7=참 → allowlist는 컨트롤이 아니다 → `ToolSearch`를 금지 9종에 넣고 재설계.**
+- `probe-B`: `tools: Read, WebFetch` (ToolSearch 없음) → *"`https://example.com`을 fetch하라"*. **성공하면 OQ8=거짓**(선언만으로 deferred 도구 사용 가능) → `spec-reviewer`·`steelman-builder` 목록 그대로. **실패하면 OQ8=참** → 그 둘에 `ToolSearch`가 **필요**하고, OQ7 결과와 충돌하면 **web을 orchestrator가 대신 조회**하는 재설계.
+
+> **파일 존재 여부로 판정한다 — agent에게 묻지 않는다.** persona가 빈 프로브라 거절 교란이 없다(원장 21의 처방). 이것이 `smoke-probe`가 이미 검증한 패턴이다.
+
+**1b. 목록 확정** — §5 도출 규칙을 census + OQ7/OQ8 결과에 적용해 §6의 ⚠️ 표시를 제거하고 확정. 금지 도구 용도는 대체 도구로 이관하거나 `# TOOL-EXCEPTION:` 마커.
 
 **2. 편집 → (재시작) → after-census** — 편집·커밋 후 **세션 재시작**(C1 fail-safe), 8개 재-dispatch, census 재기록.
 > **C1이 여기서 답해진다**: 재시작 *전에* 한 번 census를 떠서 before와 같으면 스냅샷 확증(재시작 필수), 달라지면 즉시 반영(재시작 불요). **어느 쪽이든 fail-safe로 재시작은 한다** — 비용이 거의 0이고 틀렸을 때 대가가 stale GREEN이다.
@@ -384,9 +401,10 @@ kebab drift만 경고 → **`allowedTools`도 경고**. kill switch(`DEVBREW_SKI
 
 | 대안 | 왜 기각 |
 |---|---|
-| **8개 전부 `tools:` allowlist** | `pr-understanding-builder`의 의도가 *"도구 0개"*인데 `tools: []`는 **launch 실패**(C2). *"아무것도 없음"*은 allowlist로 표현 불가 |
+| **~~8개 전부 allowlist는 불가~~** (초고~r3의 결정) | **반증됨** — 근거는 *"`pr-understanding-builder`의 도구 0개를 allowlist로 표현 불가(C2)"*였으나 **C2 오독**이었다: 죽는 건 *"아무것도 resolve 안 되는"* 목록이지 **최소 목록**이 아니다. `Monitor` 발견이 denylist 카브아웃을 불가능하게 만들자 **최소 단일 항목 allowlist**가 답임이 드러났다 → **8/8 allowlist가 현재 채택안** |
+| **`tools: []` (진짜 zero-entry)** | **C2로 launch 실패.** 공식: *"When **nothing** in the `tools` list resolves to a tool… refuses to launch"* — 그래서 최소 **1개** 항목이 필요하다 |
 | **~~실행자는 allowlist 불가~~** (초고의 결정) | **반증됨** — C8: `tools:`도 `mcp__<server>` grant를 받는다. `runtime-verifier`는 chrome을 유지한 채 allowlist 가능. 초고는 이 때문에 §5↔§7 모순을 만들었다(round 2 block) |
-| **persona 독해로 목록 도출** (초고의 방법) | **반증됨** — census가 `spec-reviewer`의 실제 사용(Bash 37 · WebFetch 2)이 persona 서술과 무관함을 보였다. 초고 표는 안 쓰는 도구를 주고 쓰는 도구를 뺏었다 |
+| **persona 독해로 목록 도출** (초고의 방법) | **반증됨** — census가 `spec-reviewer`의 실제 사용(**Bash 45 · WebFetch 2 · Grep/Glob 0**)이 persona 서술과 무관함을 보였다. 초고 표는 안 쓰는 도구를 주고 쓰는 도구를 뺏었다 |
 | **denylist에 `Agent`만 추가 (최소 수술)** | fail-open이 남는다. 다음 새 도구가 또 자동으로 들어온다 — `Agent`·MCP가 이미 그렇게 들어왔다 |
 | **`allowedTools`만 지우고 denylist 유지** | **아무것도 안 고쳐진다.** 결함 B가 본체고, 3개 agent는 애초에 `allowedTools`가 없는데도 뚫려 있다 |
 | **문서만 고치고 agent는 그대로** | MCP 구멍은 문서로 안 닫힌다 |
@@ -402,13 +420,15 @@ kebab drift만 경고 → **`allowedTools`도 경고**. kill switch(`DEVBREW_SKI
 | 리스크 | 완화 |
 |---|---|
 | allowlist 저술 시 필요한 도구 누락 → **리뷰어 조용한 열화** | **§10-0 before-census가 1차 방어**(실제 사용을 사실로 확보) + §10-3 fixture 신호 검출. **초고가 이 리스크를 실제로 저질렀고 census가 잡았다** |
-| `pr-understanding-builder` → `tools: []` → **launch 실패** | §5·§6에서 denylist 유일 예외로 못 박음 + AC5 |
-| `runtime-verifier` MCP 축소가 **chrome 자동화를 깨뜨림** | `tools:`에 서버 단위 grant(C8) + §10-3 전용 fixture + qg Runtime gate |
+| `pr-understanding-builder` → `tools: []` → **launch 실패** | §6이 **`tools: TaskList`(단일 무해 항목)**로 못 박음 — zero-entry가 아니므로 C2 미해당. **AC5가 launch 성공을 실증**(후보가 resolve 안 되면 거기서 RED) |
+| `runtime-verifier`의 chrome 15개 열거가 **자동화를 깨뜨림**(빠뜨린 도구) | 죽은 `allowedTools` 22개와 **집합 동일성**을 AC6이 grep로 강제(추가·누락 0) + §10-3 전용 fixture + qg Runtime gate. **서버 단위 grant로 "안전하게" 넓히지 말 것** — 그게 r4가 잡은 표면 확대다 |
 | 세션 재시작 불요인데 ceremony만 추가 / 필요한데 생략 → **stale GREEN** | C1을 **미확증으로 정직하게 표기** + fail-safe 재시작 + §10-2가 답을 냄 |
 | 자기참조 — 고치는 리뷰어가 자기 PR을 리뷰 | codex 모델 다양성 + 결정론 grep + mutation. round 1·2에서 실제로 작동 |
 | 새 락이 또 **자기 regex 밖을 못 봄** | AC9 **12 케이스** mutation (금지 8종 각각 포함) |
 | 두 플러그인 동시 수정 → 버전/CHANGELOG 누락 | C5 · AC12 |
 | 계층 C 오염 | AC13 |
+| 🔴 **`ToolSearch`가 allowlist를 우회하면 설계 전체가 무효** | §10-1a 프로브가 **구현 전에** 판정. 참이면 `ToolSearch`를 금지 목록에 넣고, web이 필요한 2 agent는 orchestrator 대행으로 재설계 |
+| **`tools:`의 deferred 도구가 `ToolSearch` 없이 안 쓰이면 web agent 2종이 죽음** | §10-1a `probe-B`가 같은 프로브에서 판정 |
 | **census가 fixture 의존적이라 실사용을 과소표집** | fixture는 그 agent의 **정상 업무**를 태운다(§10-3). census는 *하한*이며 도출 규칙이 **문서화된 계약과 합집합**을 취해 보완 |
 
 ---
@@ -421,6 +441,8 @@ kebab drift만 경고 → **`allowedTools`도 경고**. kill switch(`DEVBREW_SKI
 | ~~OQ2~~ | `security-reviewer`에 WebSearch가 필요한가? | ✅ **해소** — persona `:42` *"Do not run audit commands yourself"* → 제외. **§10-0 census가 재확인** |
 | ~~OQ4~~ | 리뷰어에게 `Skill`·`TodoWrite`가 필요한가? | ✅ **해소** — 도출 규칙(§5)이 답한다: census에 나타나면 포함, 아니면 제외. 추측 불요 |
 | ~~OQ5~~ | `runtime-verifier`의 MCP 서버 목록? | ✅ **해소** — 파일의 죽은 `allowedTools` 22개가 이미 열거: **`mcp__plugin_chrome-devtools-mcp_chrome-devtools` 한 서버**. `tools:`에 서버 패턴으로 grant |
+| **🔴 OQ7** | **`ToolSearch`가 `tools:` allowlist를 우회하는가?** 그 도구 설명: *"Once a tool's schema appears in that result, it is **callable exactly like any tool defined at the top of the prompt**."* 참이면 **이 설계의 모든 allowlist가 무력화**되고 PR B의 Law 2도 함께 무너진다. census는 4개 agent가 `ToolSearch`로 deferred 도구(WebFetch·MCP)를 로드해 **실제 호출**했음을 보였다 — 단 그 agent들은 해당 도구가 deny되지 않아 **우회 증명은 아니다**. | **§10-1a에서 먼저 판정** (구현 전 필수 — 답에 따라 설계가 바뀐다) |
+| **🔴 OQ8** | **`tools:`에 나열한 deferred 도구는 `ToolSearch` 없이 직접 쓸 수 있는가?** OQ7의 뒷면이다 — 아니라면 `spec-reviewer`·`steelman-builder`에 `WebFetch`/`WebSearch`를 줘도 **못 쓴다**(census가 둘 다 `ToolSearch`를 먼저 불렀다). | **§10-1a** — OQ7과 같은 프로브로 동시 판정 |
 | **OQ3** | `devbrew-roadmap.md`:63·:93은 완료 항목 **기록**인가 활성 규범인가? | 구현 — 읽고 판정. 기록이면 무변경 |
 | **OQ6** | 표준 Agent-tool dispatch도 세션 시작에 스냅샷되는가? (C1) | **§10-2가 답한다** — 재시작 전 census가 before와 같으면 스냅샷 확증. 어느 쪽이든 fail-safe로 재시작 |
 
