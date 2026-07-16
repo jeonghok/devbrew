@@ -95,8 +95,9 @@ upfront 게이트가 지출-전 명시 승인이다.
 
 ## 루프 (라운드 N = 1..effective_max_rounds)
 
-라운드당 **동시 디스패치 ≤3**(critic + codex + adversarial) — Fan-out factor N≥5 hard
-review gate 미해당. 누적(3×N)은 순차 실행이라 subagent spray 아님.
+라운드당 디스패치 ≤3(critic + 조건부 codex + adversarial), 최대 동시 실행 2(critic ∥ codex;
+adversarial는 병합 후 순차) — 어느 쪽이든 Fan-out factor N≥5 hard gate 미해당. 누적(3×N)은
+순차 실행이라 subagent spray 아님.
 
 **1. critic** — `artifact-critic` 디스패치(read-only). 프롬프트에 frozen `project_dir` +
    `artifact_path` 스레딩. 출력 `findings:` YAML을 scratch `critic.yaml`에 저장.
@@ -173,7 +174,9 @@ skip한다. *커밋 후엔 워킹트리가 항상 clean이라 이 신호가 무�
 artifact_commit.sh <path> "critique(round N): <해소한 finding 요약>"
 ```
 
-`committed_sha:`를 라운드 히스토리에 기록. `error:`면 loud surface 후 루프 중단.
+`committed_sha:`를 라운드 히스토리에 기록. `no_op: true`면 이번 라운드는 커밋 없음으로
+기록(SHA 미기재; step 6b가 이미 걸렀어야 하나 방어적 재확인 경로). `error:`면 loud surface
+후 루프 중단.
 
 **8. stagnation 체크** —
 

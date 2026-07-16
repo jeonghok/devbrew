@@ -28,16 +28,41 @@ agf 'DEVBREW_QG_DISABLE_CRITIQUE' "E0 mode kill switch"
 # E1 three-branch classify
 ag 'code.*(종료|안내|exit)|코드.*종료' "E1 code -> stop"
 agf 'ambiguous' "E1 ambiguous branch"
-agf 'AskUserQuestion' "E1/E3 gates use AskUserQuestion"
+# NOTE: the old pattern `agf 'AskUserQuestion'` was frontmatter-satisfiable —
+# the term is necessarily declared in the frontmatter allowed-tools list (plain,
+# no backticks), so deleting every actual gate invocation in the body while
+# leaving that declaration intact stayed GREEN (verified by mutation).
+# `` `AskUserQuestion`(으로|:) `` matches only the backtick-wrapped body
+# invocations (E1/E3/degraded gates) and not the bare frontmatter list entry.
+ag '`AskUserQuestion`(으로|:)' "E1/E3 gates use AskUserQuestion (body invocation, not frontmatter)"
 
 # E2b clean precondition + E3 consent-integrity
-ag 'E2b|clean 전제|HEAD.*clean|dirty' "E2b clean precondition"
-agf 'effective_max_rounds' "E3 uses effective_max_rounds (consent-integrity)"
+# NOTE: the old pattern `E2b|clean 전제|HEAD.*clean|dirty` was header-satisfiable —
+# the section HEADING itself (`### E2b — 대상 clean 전제`) already contains both
+# `E2b` and `clean 전제`, so the assertion passed on the heading alone (verified:
+# gutting the E2b ENFORCEMENT body — the changed:true reject / changed:false
+# proceed lines — while leaving the heading intact stayed GREEN under the old
+# pattern). `커밋/stash 후 재실행` is unique to the enforcement body's dirty-reject
+# guidance and absent from the heading and frontmatter.
+agf '커밋/stash 후 재실행' "E2b clean precondition (enforcement body, not heading)"
+# NOTE: the old pattern `agf 'effective_max_rounds'` was header-satisfiable — the
+# term also appears in the LOOP section heading (`## 루프 (라운드 N =
+# 1..effective_max_rounds)`), so deleting E3's own consent-integrity body while
+# leaving that unrelated heading intact stayed GREEN (verified by mutation).
+# `consent-integrity` is the design-term unique to E3's body sentence and absent
+# from any heading/frontmatter.
+agf 'consent-integrity' "E3 uses effective_max_rounds (consent-integrity, body-unique)"
 
 # read-only reviewer dispatch (Law 2)
 agf 'artifact-critic' "dispatches artifact-critic"
 agf 'artifact-adversarial' "dispatches artifact-adversarial"
-agf 'project_dir' "threads project_dir to reviewers"
+# NOTE: the old pattern `agf 'project_dir'` was header-satisfiable — the term
+# also appears in the UNRELATED E2 heading (`### E2 — 브랜치 안전 (project_dir
+# 좌표 freeze)`), so deleting every actual reviewer-threading reference (steps
+# 1/2.5/3/6) while leaving that heading intact stayed GREEN (verified by
+# mutation). `스레딩` ("threading") co-occurs with `project_dir` only on the
+# step-3 dispatch line and appears nowhere in any heading or frontmatter.
+ag 'project_dir.*스레딩|스레딩.*project_dir' "threads project_dir to reviewers (body-unique)"
 
 # codex degrade: two DISTINCT lines (unavailable vs runtime-fail).
 # NOTE: the loose alternative `가용.*실패` was dropped — the unavailable-arm's
