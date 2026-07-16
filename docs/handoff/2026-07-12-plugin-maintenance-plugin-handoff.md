@@ -1,9 +1,18 @@
 ---
 type: plugin-handoff
 target_plugin: plugin-audit (가칭)
-status: in-progress — **설계 리뷰 종료** (r11, 총 11라운드). 다음 = 실행-블로커 10건 수정 → **감사 실행** (§8)
-source_session: 2026-07-12 project-init 감사 설계 (branch `feature/project-init-audit`, HEAD `ca313a2`)
-blocker: **없음** — `agentType`이 프로젝트 레벨 `.claude/agents/*.md`를 해석하고 `tools:` allowlist를 강제함을 미니 workflow 스모크로 실증 (§4.1)
+status: >
+  ✅ 감사 하니스 + 첫 실행 **MERGED to main** (PR #101, `e6c0509`) — 산출 `docs/audits/2026-07-15-project-init-audit.*`.
+  ⏭️ 다음 = **PR A** (Law 2 도구 표면 교정, 선결 — 설계 `specs/2026-07-16-law2-agent-tool-surface-design.md`, 리뷰 대기)
+  **→ PR B** (plugin-audit 플러그인화, 별도 스펙). 분해 근거 = 원장 49.
+source_session: 2026-07-16 플러그인화 브레인스토밍 (worktree `.claude/worktrees/plugin-audit`, branch `worktree-plugin-audit`, base `819da27`)
+blocker: >
+  **없음.** `agentType`이 `.claude/agents/*.md`를 해석하고 `tools:` allowlist를 강제함을 미니 workflow 스모크로 실증 (§4.1).
+  플러그인 이관도 안전 확증 — 공식 문서상 plugin subagent가 무시하는 건 `permissionMode`·`mcpServers`·`hooks`뿐이고
+  `tools`/`disallowedTools`는 살아 있다 (공식 `plugin-dev:skill-reviewer`로 실측, 원장 49).
+resume_hazard: >
+  ⚠️ **PR A 구현 중간에 세션 재시작이 강제된다** — 레지스트리는 세션 시작에 스냅샷되므로 편집한 같은 세션의 검증은
+  stale GREEN이다 (원장 19). §8 "재개 프로토콜" + 재시작 전 test baseline 캡처 필수.
 ---
 
 # `plugin-audit` 핸드오프 — 플러그인 보수 감사 하니스
@@ -1222,6 +1231,28 @@ C12 예시 · BANNED 패턴 · §14 to-do가 전부 같은 D2/D4를 다룬다. (
 
 **결과물(우선순위 갭 목록 — 1차 산출물)**: CX-2 CRITICAL(trunk legacy release를 현 main HEAD서 cut) + A6-1 HIGH(S4(i) divergent CLAUDE.md 백업없이 포인터 재작성=콘텐츠 소실, 플러그인 자기 line-167 불변식 모순). 후보단서: D3 confirmed(marketplace drift, staleness sweep 기계확인) · D2·D4 withdrawn · D5 confirmed(AGENTS.md-canonical 정답, 갭 아님) · D1 엇갈림. 산출=`docs/audits/2026-07-15-project-init-audit.{md,-data.json,-journal.jsonl}`.
 
+### 49. ★★ **§8의 "정면으로 다뤄라" 숙제가 참이었다 — Law 2가 프롬프트로만 서 있었고, 그 결함을 락 두 겹이 지키고 있었다** (2026-07-16, PR B 브레인스토밍)
+
+**플러그인화(§8) 브레인스토밍이 선결 결함을 파냈다.** §8이 남긴 *"`allowedTools` vs `tools:` 키 불일치를 정면으로 다뤄라 — 우리 Law 2 규범 자체가 문서상으로만 존재하는 것이다"*를 확인하러 갔다가, **그 문장이 정확히 맞다는 것을 공식 규격으로 확정**했다. 결과 → 사이클을 **PR A(Law 2 수술) → PR B(plugin-audit)**로 분해. **PR A 설계 = `docs/superpowers/specs/2026-07-16-law2-agent-tool-surface-design.md`.**
+
+**#1 — `allowedTools`는 존재하지 않는 필드다 (공식 규격).** `code.claude.com/docs/en/sub-agents`의 *Supported frontmatter fields* 표: `name`·`description`·**`tools`**·**`disallowedTools`**·`model`·`permissionMode`·`maxTurns`·`skills`·`mcpServers`·`hooks`·`color`·`memory`·`effort`·`background`·`isolation`·`initialPrompt`. **`allowedTools`는 없다.** 런타임 실측이 규격과 일치: `spec-distill:spec-reviewer`(선언 allow 4개)의 실효 표면이 *"All tools except 4"* = allowlist 무시. 대조로 `plugin-auditor`·공식 `plugin-dev:skill-reviewer`(둘 다 `tools:`)는 **선언 = 실효 정확히 일치**. → **`tools:`와 `disallowedTools`만 산다.**
+
+**#2 — 이름 충돌이 버그의 원인이다.** 세 계층에 비슷한 이름이 있고 agent 계층에만 `allowedTools`가 없다: `allowed-tools`(**command/skill** frontmatter — 실재·정상) · `--allowedTools`(**CLI 플래그** — 실재) · `allowedTools`(**agent** — 허구). 초기 grep sweep이 이 셋을 뭉개 `scripts/check-allowed-tools-order.sh`를 대상으로 끌어들일 뻔했다(**false positive** — 그건 SKILL.md의 command 키라 건드리면 회귀). **정밀 sweep(camelCase 한정)이 FP를 걷어내는 동시에 놓칠 뻔한 per-agent 테스트 6개 + SessionStart 훅 스캐너를 끌어냈다** — 양방향 오류를 한 번에.
+
+**#3 — 🔴 실재하는 구멍: 위임 사슬.** 공식 문서가 *"서브에이전트에게 제공되지 않는 도구"*로 명시한 건 `AskUserQuestion`·`EnterPlanMode`·`ExitPlanMode`·`ScheduleWakeup`·`WaitForMcpServers` **5개뿐**이고 **`Agent`는 없다.** devbrew 리뷰어 8개는 deny 4개만 걸어 **`Agent` 보유** → `general-purpose`(도구 `*`)를 띄우면 **그 부하가 쓴다.** Write를 뺏고 *"Write를 가진 부하를 부르는 능력"*은 안 뺏었다. `Bash`(write vector)도 동일. **denylist는 fail-open이다** — 새 도구가 추가되면 자동으로 리뷰어가 갖는다. `Agent`가 바로 그렇게 들어왔다. `tools:` allowlist는 fail-closed(미래 도구까지 자동 차단).
+
+**#4 — ★ 가장 비싼 발견: 결함을 지키는 회귀 락 두 겹.** 누군가 이 버그의 **절반**을 이미 잡았다(C1 = kebab-case가 agent에 잘못 쓰임). 그리고 Law 3 compounding을 적용해 집행기 둘을 신설했다 — **그런데 고친 방향이 틀렸다**(kebab→camel; 정답은 kebab→`tools:`):
+- **AC15** `quality-gates/tests/test_agent_frontmatter_keys.sh` — kebab FAIL + *"Expected: allowedTools / disallowedTools (camelCase)"*
+- **AC14** `quality-gates/hooks/session-start-advisor.py::_scan_agent_frontmatter_keys` — **매 세션** `plugins/*/agents/*.md` kebab drift 경고
+
+**이제 올바른 수정을 하면 이 둘이 "컨벤션 위반"이라며 막는다.** [[feedback_gate_scope_blind_spot]]의 교과서적 실례 — 게이트의 regex `^(allowed-tools|disallowed-tools):`는 *"그런데 camelCase는 유효한가?"*를 **물어볼 능력 자체가 없다.** → **PR A는 락을 거는 게 아니라 뒤집는다.** 교훈: **결함을 반쯤 고치고 락을 걸면, 락이 나머지 절반을 영구화한다.** 락을 걸 땐 *"내가 고른 정답이 맞다는 근거가 무엇인가"*를 외부 규격에 물어라.
+
+**#5 — "전부 allowlist로"는 오답이다** (설계 §5의 핵심). 두 반례: `pr-understanding-builder`는 의도가 *"zero filesystem tools"*이고 `allowedTools: []`인데, `tools: []`로 옮기면 공식 docs *"When nothing in the `tools` list resolves to a tool… **refuses to launch**"*로 **에이전트가 안 뜬다** — 의도를 표현할 수 있는 유일한 키가 denylist. `runtime-verifier`는 **Write를 가져야 하는** 실행자라 allowlist가 Law 2를 강화하지 않는다(분리는 orchestrator mutation-guard에서 옴). → 규범은 *"모든 agent는 allowlist"*가 아니라 **"리뷰어=allowlist / 실행자=denylist + 구조적 가드"**.
+
+**#6 — 강제된 적 없는 allowlist = 테스트된 적 없는 allowlist.** 8개의 `allowedTools`는 전부 장식이었으므로 **그 목록이 옳은지 아무도 검증한 적이 없다.** 그대로 `tools:`로 옮기는 것은 *검증된 적 없는 목록을 사실로 승격*하는 것 = **원장 10 재생산**. 그래서 PR A는 각 agent의 최소 집합을 (a)persona 전수 읽기 (b)**동적 dispatch**로 정한다. 실측이 걱정을 상당히 뒤집었다: `security-reviewer`·`adversarial`의 bash/git 언급은 대부분 **사용이 아니라 금지**(*"`git rev-parse` 재계산 금지"*)이고 `filtered_diff`는 **오케스트레이터가 인라인 주입**한다 → 리뷰어는 git을 스스로 안 돌린다. `spec-reviewer`의 유일한 Bash 히트는 **자기 frontmatter 줄**.
+
+**#7 — PR B 재개 시 갱신할 것**: 핸드오프 §3.2·§7·§5.5-(4)가 `allowedTools`/`tools:` 혼용 상태다. **PR A 머지 후 PR B 설계가 이 문서의 해당 서술을 사실로 정정**해야 한다. 그리고 **PR A의 동적 dispatch 결과(무엇이 도구를 잃고도 살았나)가 PR B의 Law 2 설계 입력**이다 — PR B를 지금 설계하지 않는 이유가 이것이다(원장 29).
+
 ---
 
 ## 7. 재사용 가능한 자산
@@ -1336,16 +1367,64 @@ codex blind 2패스(fresh-eyes 14건 + 배선 전수감사 66행 곱집합)로 �
 사용자가 갭 목록에서 **고른 것만** 구현. 감사가 우선순위를 정하지 않는다.
 **`plugin-dev:skill-reviewer`를 활용할 수 있다** — `tools: ["Read","Grep","Glob"]`, Law 2 통과 (§5.5).
 
-### 그 이후 — 플러그인화
+### 🔴 PR A — Law 2 도구 표면 교정 (**PR B보다 먼저**, 2026-07-16 분해)
 
-전체를 `plugins/plugin-audit/`으로 일반화:
+플러그인화 브레인스토밍이 **선결 결함**을 파냈다 (원장 49). 설계 = **`docs/superpowers/specs/2026-07-16-law2-agent-tool-surface-design.md`**.
 
-- 대상 플러그인을 **인자로** 받는다 (`/audit <plugin-name>`).
+한 줄 요약: **`allowedTools`는 공식 규격에 없는 필드**라 devbrew 8개 agent의 Law 2 격리가 **프롬프트로만** 서 있고, 그 결함을 **회귀 락 두 겹(AC14 훅 + AC15 테스트)이 지키고 있다.**
+
+| | |
+|---|---|
+| 범위 | `CLAUDE.md` 규범 + 8개 agent 도구 표면 + **락 두 겹 뒤집기** + 락 이빨 mutation 증명 |
+| 대상 | `quality-gates` 2.10.3 → 2.11.0 · `spec-distill` 0.20.0 → 0.21.0 |
+| 핵심 결정 | **리뷰어=`tools:` allowlist(fail-closed) / 실행자=denylist + 구조적 가드.** "전부 allowlist"는 오답 (원장 49-#5) |
+| 무변경 | command/skill `allowed-tools` 계층 — 실재·정상. `check-allowed-tools-order.sh` 건드리면 회귀 (FP) |
+
+#### ⚠️ 구현 중간에 **세션 재시작**이 끼어든다 — 재개 프로토콜
+
+**레지스트리는 세션 시작에 스냅샷된다** (원장 19, [[reference_workflow_law2_agenttype]]). agent frontmatter를 편집한 **같은 세션**에서 검증하면 **옛 값을 보고 stale GREEN**이 난다. 그래서 순서가 강제된다:
+
+1. 편집 + 커밋 (정적 AC1–AC6·AC9·AC10·AC12–AC13 통과까지)
+2. **← 여기서 세션 재시작** (필수. 건너뛰면 AC7이 거짓 GREEN)
+3. **AC7** — 런타임 레지스트리가 보고하는 8개 실효 표면을 선언과 대조
+4. **AC8** — 리뷰어 6종 **실제 dispatch** (도구 잃고도 사는가). *종이가 못 잡는 유일한 층*
+5. AC11 회귀 대조 → `/qg` → PR
+
+**재시작 후 세션이 알아야 할 전부**: ① 이 문서 원장 49 ② 설계 문서(AC 표 = 진리원천) ③ 브랜치 HEAD의 `git log` ④ **작업 전 캡처한 test baseline** (없으면 stale red를 내 탓으로 오인 — [[project_qg_pre_existing_test_reds]]).
+
+### 그 이후 — PR B: 플러그인화
+
+**PR A 머지 후** 별도 스펙으로. 전체를 `plugins/plugin-audit/`으로 일반화:
+
+**브레인스토밍에서 이미 잠근 것** (2026-07-16):
+
+| 결정 | 내용 |
+|---|---|
+| 대상 범위 | **devbrew 리포 내 플러그인 전용**, 하드코딩 0 — 대상별 지식은 프로필로 분리. 밖으로 넓힐 땐 norm 프로필 추가(재설계 ✘). **한 번에 대상 하나** (`/audit <plugin-name>`), 일괄 스캔 없음 |
+| 플러그인 경계 | **감사(읽기전용) + 인계 게이트 1개.** 구현은 기존 기계(spec-distill → writing-plans → `/qg`)가. Law 2·LD1 유지 + polite-handoff 봉쇄 |
+| 단서 주입 | **호출 시 대화형** 1회 자유서술, 없으면 빈 채 진행. **커밋되는 프로필 파일 없음** — 감사 도구가 stale 설정을 갖는 자기모순 차단. 사실 계층은 전부 자동 추출 |
+| Law 3 승계 | 과거 감사는 **에이전트가 `docs/audits/`에서 직접 읽음** (기계 0). 계약에 *"과거 판정은 사실이 아니라 검증 대상"* 한 줄 |
+| 규모 유연성 | **크기에 따라 축내 분할.** 팬아웃 가변 (project-init 30 → qg ~50). 정직한 비용은 어느 쪽이든 동의 게이트에 공시 |
+
+**실측 (일반화 시 재계산 근거)**:
+
+| 대상 | 파일 | 줄 | 바이트 | ≈토큰 |
+|---|---|---|---|---|
+| project-init | 44 | 4,596 | 168,669 | **42k** (실측 감사: 1.2M tok · 15 에이전트 · 34분) |
+| spec-distill | 114 | 10,703 | 504,157 | **126k** |
+| quality-gates | 176 | 17,263 | 838,886 | **210k** ← **에이전트 컨텍스트 창(200k) 초과** |
+
+> 🔴 **계약 2항의 정당화가 큰 대상에서 무너진다.** `audit-workflow.js:158-159`의 *"excerpt 샘플링 금지 — **코퍼스는 51파일 4,879줄로 작다**"*는 "작으니 가능"에 기대는데, qg는 한 에이전트가 **물리적으로 다 못 읽는다**. 고정 팬아웃을 유지하면 에이전트가 조용히 샘플링하고, 그 결과가 바로 계약 2항이 막으려던 것 — *"놓친 갭이 **'이 축엔 문제 없음'으로 배달**된다"*. 한국어 UTF-8(자당 3바이트) 때문에 위 추정은 **과소평가**다.
+
+**남은 숙제**:
+
 - 6축은 devbrew 플러그인 일반에 대해 유효한가? project-init 특수 축(템플릿 생성물 유출)이 섞여 있지 않은가 재검토.
-- brief의 D1~D5 같은 **후보 단서 주입 메커니즘**을 일반화한다 — 사용자가 의심 지점을 넣을 수 있게. 단 **§6 원장 10**을 잊지 말 것: 주입된 단서는 **검증 대상**이지 전제가 아니다.
-- `plugin.json` + `CHANGELOG.md` + README "Principles Instantiated" (devbrew Plugin Shape 의무).
-- **`.claude/agents/*.md` 3개를 `plugins/plugin-audit/agents/`로 이관**하고 `.gitignore` negation을 되돌린다.
-- **`allowedTools` vs `tools:` 키 불일치를 정면으로 다뤄라** (§5.5-(4)) — devbrew CLAUDE.md가 요구하는 키가 런타임이 읽는 키와 다르다면, **우리 Law 2 규범 자체가 문서상으로만 존재**하는 것이다.
+- **비소유 축의 D-verdict 과잉생산** 처방 (원장 48) — 스키마를 축별 owned-D/OQ로 좁히거나 owner-attribution을 결정론으로.
+- `plugin.json` + `CHANGELOG.md` + README "Principles Instantiated" (devbrew Plugin Shape 의무). `cost_class: high` + 동의 게이트.
+- **`.claude/agents/*.md` 3개를 `plugins/plugin-audit/agents/`로 이관**하고 `.gitignore` negation을 되돌린다. ✅ **안전 확증**: 공식 문서가 *"Ignored for plugin subagents"*로 명시한 건 `permissionMode`·`mcpServers`·`hooks`뿐 — **`tools`/`disallowedTools`는 무시 목록에 없고**, 공식 `plugin-dev:skill-reviewer`(플러그인 agent, `tools:` 3개)의 실효 표면이 정확히 3개임을 실측했다.
+- ~~`allowedTools` vs `tools:` 키 불일치~~ → **PR A로 분리** (원장 49).
+- **PR A의 동적 dispatch 결과가 입력이다** — 무엇이 도구를 잃고도 살았는지 보고 나서 설계할 것. 지금 설계하면 *"allowlist는 잘 동작한다"*를 **전제**로 쓰게 되고 그게 원장 10이다.
+- 이 문서 **§3.2·§5.5-(4)·§7의 `allowedTools` 서술을 사실로 정정**할 것 (PR A 머지 후).
 - **devbrew 전용 `/create-plugin` 포크**를 검토 (§5.5-(5)).
 
 ---
@@ -1355,10 +1434,11 @@ codex blind 2패스(fresh-eyes 14건 + 배선 전수감사 66행 곱집합)로 �
 | | |
 |---|---|
 | 최초 작성 | 2026-07-12 |
-| 최종 갱신 | **2026-07-15 (감사 EXECUTION 완료 — 원장 48)** |
-| 소스 세션 | `feature/project-init-audit`, HEAD **`3bf5cc5`** (설계 r15 → SDD 12태스크 → 감사 실행) |
+| 최종 갱신 | **2026-07-16 (PR A/B 분해 — 원장 49)** |
+| 소스 세션 | 감사: `feature/project-init-audit` → **MERGED to main (PR #101, `e6c0509`)**. 현재: worktree `.claude/worktrees/plugin-audit`, 브랜치 `worktree-plugin-audit`, base `819da27` |
 | 리뷰 규모 | 설계 r1–r15 + SDD 12태스크 2단계리뷰 + whole-branch(opus) + **감사 실행 15 에이전트(1.2M tok, ~34분)** |
-| 상태 | ✅ **감사 EXECUTION 완료.** 2 생존 갭(CX-2 CRITICAL·A6-1 HIGH) + D 판정 5건 + OQ 6건 + NOQ 24건. 다음 = **2차 사이클(사용자가 갭 선택) 또는 브랜치 push/PR/merge** (§8) |
+| 상태 | ✅ 감사 EXECUTION 완료 (2 생존 갭 · D 5건 · OQ 6건 · NOQ 24건, `docs/audits/`). ⏭️ **다음 = PR A** (Law 2 도구 표면 교정 — 설계 `specs/2026-07-16-law2-agent-tool-surface-design.md`, 리뷰 대기) **→ 그 다음 PR B** (plugin-audit 플러그인, 별도 스펙) |
+| ⚠️ 재개 함정 | **PR A 구현 중간에 세션 재시작이 강제된다** (레지스트리 스냅샷 — 원장 19). §8 "재개 프로토콜" 참조. 재시작 전 **test baseline 캡처 필수** |
 | 스모크 | pre-0c `wf_9653e190-770` — sentinel 부재 실증(Law2). ⚠️ args-string 버그로 `sentinelPath=undefined`였으나 결론 유효 (원장 48) |
-| 원장 | **48건.** 19–21 = blocker 해소 · 22–29 = codex 2패스 보편함정 · 43–47 = r15 첫 독립리뷰 + 라운드3 · **48 = 감사 첫 실행 관찰(args-string 버그 + 우선순위 갭 목록)** |
-| ✅ | **감사가 돌았다.** 이 문서의 가치가 실행 관찰(원장 48)로 완성됐다. 종이가 못 잡은 것을 실행 1회가 잡았다 ([[feedback_harness_is_means_not_end]]) |
+| 원장 | **49건.** 19–21 = blocker 해소 · 22–29 = codex 2패스 보편함정 · 43–47 = r15 첫 독립리뷰 + 라운드3 · 48 = 감사 첫 실행 관찰(args-string 버그 + 갭 목록) · **49 = `allowedTools`는 없는 필드 + 결함을 지키는 락 두 겹 → PR A/B 분해** |
+| ✅ | **감사가 돌았다.** 종이가 못 잡은 것을 실행 1회가 잡았다 ([[feedback_harness_is_means_not_end]]). 그리고 **플러그인화 브레인스토밍이 살아있는 Law 2 구멍을 파냈다** (원장 49) — 하니스를 만들려는 시도가 대상을 개선한 두 번째 사례 |
