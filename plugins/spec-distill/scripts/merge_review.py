@@ -30,6 +30,12 @@ import compute_issue_id  # noqa: E402  (sibling helper, centralized id — §8)
 RANK = {"approved": 0, "needs_revise": 1, "needs_interview": 2}
 INV_RANK = {v: k for k, v in RANK.items()}
 CODEX_SEVERITY_REVISE = {"block", "high"}
+# The prompt-enumerated codex severity vocabulary (build_spec_codex_prompt.py).
+# "medium" is the ONE recognized non-escalating value (§8: advisory surface).
+# Any severity outside this set — missing ("") or off-vocab from LLM drift
+# ("critical", "blocker") — is treated as escalating (fail-closed): the unsafe
+# direction for a severe-but-mislabeled finding is to resolve toward approved.
+CODEX_SEVERITY_KNOWN = {"block", "high", "medium"}
 
 SENTINEL_RE = re.compile(r"```spec-review-issues[ \t]*\n(.*?)\n?```", re.DOTALL)
 STATUS_RE = re.compile(
@@ -88,12 +94,23 @@ def extract_claude_issues(text: str) -> tuple[list[dict] | None, bool]:
 # --- codex side --------------------------------------------------------------
 def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str]:
     """Line-parse codex_findings_to_yaml.py output (known shape). Returns
-    (findings, codex_failed, reason). Missing file → failed."""
+    (findings, codex_failed, reason).
+
+    Fail-CLOSED (opt-in-to-success). The well-formed producer contract ALWAYS
+    emits a `meta:` block carrying `codex_failed: true|false`
+    (codex_findings_to_yaml.py + every run_spec_codex_reviewer.sh fallback). A
+    present-but-empty / truncated / markerless file — e.g. OUTPUT_PATH left
+    0-byte by an external SIGKILL/OOM/disk-full mid-write — lacks that key.
+    Absence of a success token is treated as FAILURE, not as a successful empty
+    review: trusting a markerless file would resolve codex to `approved` with
+    NO degrade advisory, silently defeating the human-gate backstop that every
+    other degrade path raises. Missing file → failed."""
     if not path or not os.path.isfile(path):
         return [], True, "codex_yaml_missing"
     findings: list[dict] = []
     failed = False
     reason = ""
+    saw_failed_key = False  # opt-in-to-success sentinel: a valid run sets this
     section = None
     cur: dict | None = None
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
@@ -127,11 +144,18 @@ def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str]:
                     k, _, v = line.strip().partition(":")
                     k = k.strip(); v = v.strip()
                     if k == "codex_failed":
+                        saw_failed_key = True
                         failed = (v == "true")
                     elif k == "reason":
                         reason = _yaml_unscalar(v)
     if cur:
         findings.append(cur)
+    # opt-in-to-success: no explicit codex_failed marker ⇒ the file is empty,
+    # truncated, or malformed ⇒ fail-closed (never trust a markerless file as a
+    # clean codex run). Discard any partial findings — an untrusted file's
+    # content must not feed the verdict or the ledger.
+    if not saw_failed_key:
+        return [], True, "codex_yaml_malformed"
     return findings, failed, reason
 
 
@@ -146,8 +170,15 @@ def _yaml_unscalar(v: str):
 
 
 def derive_codex_verdict(findings: list[dict]) -> str:
+    """approved unless a finding escalates. Fail-CLOSED on unknown severity:
+    escalate on block/high (§7b) AND on any severity outside the recognized
+    vocabulary — a MISSING or OFF-VOCAB value (e.g. "", "critical", "blocker"
+    from LLM drift) escalates to needs_revise rather than silently resolving
+    toward approved. Only an explicitly-recognized "medium" (§8 advisory-only)
+    is non-escalating."""
     for f in findings:
-        if str(f.get("severity", "")).lower() in CODEX_SEVERITY_REVISE:
+        sev = str(f.get("severity", "")).lower()
+        if sev in CODEX_SEVERITY_REVISE or sev not in CODEX_SEVERITY_KNOWN:
             return "needs_revise"
     return "approved"
 
@@ -192,7 +223,10 @@ def _yaml_scalar(v) -> str:
         return "null"
     s = str(v)
     if any(c in s for c in ":#\"'\n") or s.strip() != s:
-        return json.dumps(s)
+        # ensure_ascii=False: this repo is Korean-primary and advisories are
+        # Korean; escaping them to \uXXXX (sibling check_brief.py avoids this)
+        # makes the human-gate advisory unreadable. The output file is UTF-8.
+        return json.dumps(s, ensure_ascii=False)
     return s
 
 
@@ -242,7 +276,7 @@ def _origin_merge(prior_source: str, this_round: set) -> str:
     return "claude"
 
 
-def build_ledger(claude_issues, codex_findings, claude_degraded, codex_avail, history):
+def build_ledger(claude_issues, codex_findings, claude_degraded, history):
     """Union-increment ledger + unified-ledger stagnation scan (§8).
 
     - raised_count += 1 per id per ROUND (both reviewers flagging = corroboration,
@@ -315,7 +349,12 @@ def build_ledger(claude_issues, codex_findings, claude_degraded, codex_avail, hi
     return new_history, {"per_issue": per_issue, "round_level": round_level}
 
 
-def _write_history(path: str, issue_history: list[dict]) -> None:
+def _write_history(path: str, issue_history: list[dict]) -> bool:
+    """Persist the ledger atomically (tmp + fsync + os.replace). Returns True on
+    success, False on any OSError — the caller raises a LOUD advisory on failure
+    (CLAUDE.md loud-degrade; this-round verdict/stagnation stay authoritative on
+    stdout regardless). On failure the tmp file is removed so no orphan .tmp is
+    left beside the ledger (S-5)."""
     tmp = path + ".tmp"
     try:
         with open(tmp, "w", encoding="utf-8") as fh:
@@ -323,8 +362,13 @@ def _write_history(path: str, issue_history: list[dict]) -> None:
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp, path)
+        return True
     except OSError:
-        pass  # graceful — ledger persistence best-effort; stdout still authoritative for this round
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        return False
 
 
 def emit(result: dict) -> str:
@@ -347,7 +391,9 @@ def emit(result: dict) -> str:
         out[-1] = "codex_findings: []"
     else:
         for f in result["codex_findings"]:
-            out.append("  - " + json.dumps(f, sort_keys=True))
+            # ensure_ascii=False: codex summaries may be Korean (Korean-primary
+            # repo); this is the only content channel for codex findings.
+            out.append("  - " + json.dumps(f, sort_keys=True, ensure_ascii=False))
     out.append("advisory:")
     if not result["advisory"]:
         out[-1] = "advisory: []"
@@ -419,11 +465,15 @@ def main() -> int:
         new_history, stagnation = build_ledger(
             claude_issues if not claude_degraded else [],
             codex_findings if codex_avail else [],
-            claude_degraded, codex_avail, history,
+            claude_degraded, history,
         )
 
     if not both_dead:
-        _write_history(args.history, new_history)
+        if not _write_history(args.history, new_history):
+            advisory.append(
+                "[spec-distill v0.20.0] issue_history 원장 기록 실패 (OSError) "
+                "— cross-round stagnation 추적이 이번 세션 degraded. verdict와 "
+                "이번-라운드 stagnation은 stdout에서 여전히 authoritative.")
 
     codex_findings_display = build_codex_findings_display(codex_findings, codex_avail)
 

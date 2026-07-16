@@ -133,6 +133,87 @@ class TestMergeCore(unittest.TestCase):
         self.assertEqual(y["combined_verdict"], "approved")
         self.assertEqual(y["codex_degraded"], "true")
 
+    # /qg iter-1 I-1 (fail-open): a present-but-EMPTY codex YAML (OUTPUT_PATH
+    # left 0-byte by an external SIGKILL/OOM/disk-full mid-write) lacks the
+    # meta.codex_failed success marker → must be treated as codex-DEGRADED
+    # (fail-closed), NOT as a successful empty review that silently approves
+    # with no advisory. Mutation guard: reverting to opt-in-to-failed
+    # (failed=False default, no saw_failed_key) flips codex_degraded to false
+    # and drops the advisory → this test fails.
+    def test_codex_yaml_empty_file_failclosed(self):
+        _, y, raw, _ = run_merge(claude_output("approved", []), "")  # 0-byte codex yaml
+        self.assertEqual(y["codex_degraded"], "true")
+        self.assertEqual(y["combined_verdict"], "approved")  # claude's real verdict
+        self.assertIn("degraded", raw.lower())  # loud advisory, not silent
+
+    # /qg iter-1 I-1: a codex YAML with findings but NO meta.codex_failed marker
+    # (truncated before the meta block) is untrusted → fail-closed, and its
+    # partial findings must NOT feed the verdict (a stray block severity must
+    # not escalate on the strength of an untrusted file).
+    def test_codex_yaml_markerless_failclosed(self):
+        markerless = "findings:\n  - agent: codex-reviewer\n    severity: block\n"
+        _, y, _, _ = run_merge(claude_output("approved", []), markerless)
+        self.assertEqual(y["codex_degraded"], "true")
+        self.assertEqual(y["combined_verdict"], "approved")  # follows claude, not the untrusted block
+
+    # /qg iter-1 I-3 (unsafe severity default): an OFF-VOCAB codex severity
+    # (LLM drift beyond block|high|medium) must ESCALATE, not silently resolve
+    # toward approved. Mutation guard: the old `sev in {block,high}` test alone
+    # let "critical" fall through to approved → this fails.
+    def test_codex_offvocab_severity_failclosed(self):
+        _, y, _, _ = run_merge(
+            claude_output("approved", []),
+            codex_yaml([{"category": "isolation", "target_section": "#c", "severity": "critical"}]),
+        )
+        self.assertEqual(y["codex_verdict"], "needs_revise")
+        self.assertEqual(y["combined_verdict"], "needs_revise")
+
+    # /qg iter-1 I-3: a codex finding with NO severity field → escalates (fail-closed).
+    def test_codex_missing_severity_failclosed(self):
+        cod = ("findings:\n  - agent: codex-reviewer\n    category: isolation\n"
+               "    target_section: \"#c\"\nmeta:\n  codex_failed: false\n")
+        _, y, _, _ = run_merge(claude_output("approved", []), cod)
+        self.assertEqual(y["codex_verdict"], "needs_revise")
+
+    # /qg iter-1 I-3 over-strengthen guard: explicit "medium" is the ONE
+    # recognized non-escalating severity (§8 advisory-only) — the fail-closed
+    # default must NOT over-escalate it. Mutation guard: a naive "escalate on
+    # anything != block/high" would wrongly flip medium → needs_revise.
+    def test_codex_medium_severity_non_escalating(self):
+        _, y, _, _ = run_merge(
+            claude_output("approved", []),
+            codex_yaml([{"category": "isolation", "target_section": "#c", "severity": "medium"}]),
+        )
+        self.assertEqual(y["codex_verdict"], "approved")
+
+    # /qg iter-1 S-1 (Korean-primary faithfulness): a colon-bearing Korean
+    # degrade advisory must render raw UTF-8, not \uXXXX escapes.
+    def test_korean_advisory_not_escaped(self):
+        _, y, raw, _ = run_merge(
+            claude_output("approved", []), codex_yaml(failed=True, reason="exit_nonzero"))
+        self.assertIn("degraded", raw)
+        self.assertNotIn("\\u", raw)  # no unicode-escape sequences
+
+    # /qg iter-1 S-2 (loud-degrade): a ledger persistence failure must raise a
+    # LOUD advisory (not silent `except OSError: pass`) and never crash.
+    def test_history_write_failure_loud_advisory(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            (d / "claude.md").write_text(
+                claude_output("approved", [{"category": "a", "target_section": "#x", "severity": "high"}]))
+            (d / "codex.yaml").write_text(codex_yaml([]))
+            histdir = d / "hist_is_a_dir"   # a directory → os.replace onto it fails
+            histdir.mkdir()
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT),
+                 "--claude-output", str(d / "claude.md"),
+                 "--codex-yaml", str(d / "codex.yaml"),
+                 "--history", str(histdir)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(r.returncode, 0)          # never crash
+            self.assertIn("원장 기록 실패", r.stdout)   # loud advisory present
+
     # AC9c-i: anti-injection — sentinel last block wins, echo fences ignored.
     def test_sentinel_last_block_and_echo_ignored(self):
         claude = claude_output("approved", [{"category": "ambiguity", "target_section": "#real", "severity": "high"}],
