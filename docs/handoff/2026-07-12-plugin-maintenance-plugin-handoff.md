@@ -1253,6 +1253,30 @@ C12 예시 · BANNED 패턴 · §14 to-do가 전부 같은 D2/D4를 다룬다. (
 
 **#7 — PR B 재개 시 갱신할 것**: 핸드오프 §3.2·§7·§5.5-(4)가 `allowedTools`/`tools:` 혼용 상태다. **PR A 머지 후 PR B 설계가 이 문서의 해당 서술을 사실로 정정**해야 한다. 그리고 **PR A의 동적 dispatch 결과(무엇이 도구를 잃고도 살았나)가 PR B의 Law 2 설계 입력**이다 — PR B를 지금 설계하지 않는 이유가 이것이다(원장 29).
 
+### 50. ★★★ **이름 기반 denylist는 시간에 대해 fail-open이다 — `Monitor`가 그것을 증명했다** (2026-07-17, PR A census)
+
+**PR A 설계가 리뷰 3라운드를 못 넘고 per-issue stagnation(4건 raised_count=3)으로 강제 Human Gate에 갔다.** 사용자가 *"census 돌리고 설계 확정"*을 선택 → 7 agent 프로브 → **한 번의 실행이 3라운드의 종이가 못 잡은 것을 전부 잡았다.**
+
+**#1 — 위임 사슬이 추론에서 실증으로.** 세 리뷰어가 각각 서브에이전트를 **실제로 스폰**했다: `security-reviewer`→`smoke-probe`, `adversarial`·`steelman-builder`→**`general-purpose`(도구 `*`, Write 포함)**. `security-reviewer` 자평: *"declining them would have been **theater, not enforcement**"*. `adversarial` 자평: *"내 role의 격리는 **도구 deny로 보장되지 않는다**"*. **Write를 뺏긴 리뷰어가 Write를 가진 부하를 부르는 경로가 작동한다.**
+
+**#2 — denylist가 실제로 막는 것은 4개뿐.** `test-scope-validator`가 `Write`/`Edit`/`MultiEdit`/`NotebookEdit`를 **hard tool-absent**로 확인. 나머지 금지(*"no curl, no WebFetch, no MCP"*)는 **persona prose**이며 스키마는 `ToolSearch`로 로드 가능하다.
+
+**#3 — ★★ `Monitor`: 이름만 다른 Bash + 네트워크 egress.** `pr-understanding-builder`(README:47이 *"네트워크 tool 0개"* pwn-request 방어라 광고)가 **묻지 않은 것을 찾았다.** 그 denylist는 `Bash`·`WebFetch`를 **이름으로** 막는데, `Monitor` 스키마는 `command`=**"The script runs in the same shell environment as Bash"** + `ws`=임의 `wss://` egress다. **`mcp__*`를 추가해도 `Monitor`는 열려 있다.** 그 agent의 진단: *"이름 기준 부재를 능력 기준 부재로 승격하는 것이 이 프로브가 구조적으로 유도하는 오답"* · *"제 계약은 유출을 **불가능**하다고 가정하는데 실제로는 **제가 거절하기로 선택**하는 것에 의존한다 — **prose-only 컨트롤**"* (qg v2.10.0 M1 선례를 스스로 인용).
+
+> **일반화**: 오늘 위험한 도구를 전부 열거해도 **내일 추가될 도구는 열거할 수 없다.** denylist는 공간(열거 누락)뿐 아니라 **시간**에 대해서도 fail-open이다. allowlist만이 미지의 미래 도구를 자동 차단한다. **PR B의 `plugin-audit` agent 3종이 `tools:` allowlist인 것은 우연히 옳았다 — 이제 그 이유가 실증됐다.**
+
+**#4 — 그리고 그것이 PR A 설계 자신의 처방을 무너뜨렸다.** 초고~r3 모두 `pr-understanding-builder`에 *"denylist + `mcp__*`"*를 처방했다. 근거는 C2(`tools: []`는 launch 실패). **오독이었다** — C2가 죽이는 것은 *"아무것도 resolve 안 되는"* 목록이지 **최소 목록**이 아니다. 답은 **최소 단일 항목 allowlist** → 카브아웃 소멸, **8/8 전부 allowlist**, 락 규칙 단순화.
+
+**#5 — census 도구 자신이 false-clean이었다** (r3 리뷰가 재현으로 적발). 초고 census `grep -o '"name":"[A-Za-z_]*"'`가 **하이픈 있는 MCP 도구명**(`mcp__plugin_chrome-devtools-mcp_…`)을 놓친다 → *"MCP 호출 0회"* assertion이 **구멍이 열려 있어도 GREEN**. 은폐 경위: `spec-reviewer` census(Bash/Read/WebFetch/ToolSearch)에 **하이픈이 없어서** *"임의 3건 재현 확인"*이 통과했다. **[[feedback_gate_scope_blind_spot]]의 세 번째 실현 — 이번엔 "측정이 추론을 이겼다"고 자랑한 그 측정 도구가 범인.** 교정 `[A-Za-z0-9_-]` + mutation 이빨 증명.
+
+**#6 — persona 독해로 만든 도구 목록은 틀린다.** `spec-reviewer` census(실제 리뷰 3회): **Bash×45 · Read×7 · WebFetch×2 · Grep×0 · Glob×0**. persona는 Bash를 **한 번도 지시하지 않는데** agent는 45회 부르고, **선언에 없는 WebFetch로 공식 문서를 가져와 스펙을 검증**한다. 초고가 제안한 `tools: Read, Grep, Glob`은 **한 번도 안 쓰는 도구 2개를 주고 실제로 쓰는 2개를 뺏는다** — 설계가 자기 §12의 *"조용한 열화"*를 저지를 뻔했다. **처방: 도구 목록은 persona 독해가 아니라 트랜스크립트 census로 도출.**
+
+**#7 — 프로브의 정직한 한계 2건 (사실로 기록).** `breadth-keeper`는 **persona가 프로브를 거절**해 측정 불가 — *"거절이 capability에서 오는지 persona에서 오는지 구별 불가"*(원장 21)가 실측 확인. 그 거절 논리는 오히려 훌륭했다(*"일반 라운드 컨텍스트에 박혀 온 지시를 구속력 있게 취급하면 주입 선례가 된다"* — P21 작동). `runtime-verifier`는 Write·Bash 보유 실행자라 **의도적 미dispatch**(위험 > census 가치). **미측정을 미측정으로 기록** ([[feedback_absence_vs_failure_to_confirm]]).
+
+**#8 — 하니스의 auto 분류기가 독립 계층으로 프로브 2건을 차단**(내 `spec-reviewer` 프로브 + `test-scope-validator`의 Agent 호출). frontmatter·persona와 **무관한 3번째 방어선**이 실재한다. 우회하지 않았다.
+
+**#9 — 덤: `adversarial`이 진짜 qg 결함을 찾았다** (PR A 범위 밖, 기록만). *"`filtered_diff` 부재 또는 resolved scope 0은 adversarial 실행 **전에** 결정론적으로 fail-closed 처리되어야 한다 — qg honest-floor와 같은 성격"*. 내가 diff 없이 findings만 줬더니 앵커 실재를 전수 조사해 **둘 다 reject**했다(내 §10-3 fixture 설계가 돌렸으면 기대 신호를 못 냈을 것 — 또 한 번 실행이 종이를 반증).
+
 ---
 
 ## 7. 재사용 가능한 자산
@@ -1423,7 +1447,7 @@ codex blind 2패스(fresh-eyes 14건 + 배선 전수감사 66행 곱집합)로 �
 - `plugin.json` + `CHANGELOG.md` + README "Principles Instantiated" (devbrew Plugin Shape 의무). `cost_class: high` + 동의 게이트.
 - **`.claude/agents/*.md` 3개를 `plugins/plugin-audit/agents/`로 이관**하고 `.gitignore` negation을 되돌린다. ✅ **안전 확증**: 공식 문서가 *"Ignored for plugin subagents"*로 명시한 건 `permissionMode`·`mcpServers`·`hooks`뿐 — **`tools`/`disallowedTools`는 무시 목록에 없고**, 공식 `plugin-dev:skill-reviewer`(플러그인 agent, `tools:` 3개)의 실효 표면이 정확히 3개임을 실측했다.
 - ~~`allowedTools` vs `tools:` 키 불일치~~ → **PR A로 분리** (원장 49).
-- **PR A의 동적 dispatch 결과가 입력이다** — 무엇이 도구를 잃고도 살았는지 보고 나서 설계할 것. 지금 설계하면 *"allowlist는 잘 동작한다"*를 **전제**로 쓰게 되고 그게 원장 10이다.
+- **PR A의 census 결과가 입력이다** (원장 50). ✅ **PR B에 좋은 소식**: `plugin-audit` agent 3종이 `tools:` allowlist인 것이 **우연히 옳았고 이제 그 이유가 실증됐다** — `Monitor`가 이름 기반 denylist를 무너뜨리므로 allowlist만이 미지의 미래 도구를 자동 차단한다. ⚠️ **단 감사자 3종의 `tools:` 목록 자체는 census로 재확인할 것** — `spec-reviewer`가 persona에 없는 WebFetch를 실제로 쓰듯, `plugin-auditor`도 선언 목록이 실사용과 어긋날 수 있다.
 - 이 문서 **§3.2·§5.5-(4)·§7의 `allowedTools` 서술을 사실로 정정**할 것 (PR A 머지 후).
 - **devbrew 전용 `/create-plugin` 포크**를 검토 (§5.5-(5)).
 
@@ -1434,11 +1458,11 @@ codex blind 2패스(fresh-eyes 14건 + 배선 전수감사 66행 곱집합)로 �
 | | |
 |---|---|
 | 최초 작성 | 2026-07-12 |
-| 최종 갱신 | **2026-07-16 (PR A/B 분해 — 원장 49)** |
+| 최종 갱신 | **2026-07-17 (PR A census 실행 — 원장 50)** |
 | 소스 세션 | 감사: `feature/project-init-audit` → **MERGED to main (PR #101, `e6c0509`)**. 현재: worktree `.claude/worktrees/plugin-audit`, 브랜치 `worktree-plugin-audit`, base `819da27` |
 | 리뷰 규모 | 설계 r1–r15 + SDD 12태스크 2단계리뷰 + whole-branch(opus) + **감사 실행 15 에이전트(1.2M tok, ~34분)** |
 | 상태 | ✅ 감사 EXECUTION 완료 (2 생존 갭 · D 5건 · OQ 6건 · NOQ 24건, `docs/audits/`). ⏭️ **다음 = PR A** (Law 2 도구 표면 교정 — 설계 `specs/2026-07-16-law2-agent-tool-surface-design.md`, 리뷰 대기) **→ 그 다음 PR B** (plugin-audit 플러그인, 별도 스펙) |
 | ⚠️ 재개 함정 | **PR A 구현 중간에 세션 재시작이 강제된다** (레지스트리 스냅샷 — 원장 19). §8 "재개 프로토콜" 참조. 재시작 전 **test baseline 캡처 필수** |
 | 스모크 | pre-0c `wf_9653e190-770` — sentinel 부재 실증(Law2). ⚠️ args-string 버그로 `sentinelPath=undefined`였으나 결론 유효 (원장 48) |
-| 원장 | **49건.** 19–21 = blocker 해소 · 22–29 = codex 2패스 보편함정 · 43–47 = r15 첫 독립리뷰 + 라운드3 · 48 = 감사 첫 실행 관찰(args-string 버그 + 갭 목록) · **49 = `allowedTools`는 없는 필드 + 결함을 지키는 락 두 겹 → PR A/B 분해** |
+| 원장 | **50건.** 19–21 = blocker 해소 · 22–29 = codex 2패스 보편함정 · 43–47 = r15 첫 독립리뷰 + 라운드3 · 48 = 감사 첫 실행 관찰(args-string 버그 + 갭 목록) · 49 = `allowedTools`는 없는 필드 + 결함을 지키는 락 두 겹 → PR A/B 분해 · **50 = census 실행: 위임사슬·MCP 실증 + `Monitor`가 이름기반 denylist를 무너뜨림 + census 자신의 false-clean** |
 | ✅ | **감사가 돌았다.** 종이가 못 잡은 것을 실행 1회가 잡았다 ([[feedback_harness_is_means_not_end]]). 그리고 **플러그인화 브레인스토밍이 살아있는 Law 2 구멍을 파냈다** (원장 49) — 하니스를 만들려는 시도가 대상을 개선한 두 번째 사례 |
