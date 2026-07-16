@@ -110,7 +110,8 @@ def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str]:
     findings: list[dict] = []
     failed = False
     reason = ""
-    saw_valid_marker = False  # opt-in-to-success: set ONLY on an exact true/false marker
+    marker_seen = False       # opt-in-to-success: require EXACTLY ONE exact marker
+    marker_invalid = False    # any garbage value OR duplicate marker → malformed
     section = None
     cur: dict | None = None
     try:
@@ -152,24 +153,28 @@ def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str]:
                 k = k.strip(); v = v.strip()
                 if k == "codex_failed":
                     # opt-in-to-success: trust the file as a real codex run ONLY
-                    # on an exactly-recognized marker. "true" → failed; "false"
-                    # → success; ANY other value (garbage/empty from producer
-                    # drift or corruption) leaves the marker UNSET → the
-                    # post-loop check fails closed. A half-recognized marker
-                    # must not read as a clean approval.
+                    # on EXACTLY ONE exactly-recognized marker. "true" → failed;
+                    # "false" → success; any other value (garbage/empty) OR a
+                    # duplicate marker ⇒ malformed → the post-loop check fails
+                    # closed. A half-recognized or conflicting marker must not
+                    # read as a clean approval. (`failed` is sticky-True: any
+                    # `true` seen forces failure regardless of marker order.)
+                    if marker_seen:
+                        marker_invalid = True   # duplicate marker → malformed
+                    marker_seen = True
                     if v == "true":
-                        saw_valid_marker = True; failed = True
-                    elif v == "false":
-                        saw_valid_marker = True
+                        failed = True
+                    elif v != "false":
+                        marker_invalid = True    # garbage/empty value → malformed
                 elif k == "reason":
                     reason = _yaml_unscalar(v)
     if cur:
         findings.append(cur)
-    # opt-in-to-success: no recognized codex_failed marker (missing, empty,
-    # truncated, or garbage value) ⇒ fail-closed (never trust the file as a
-    # clean codex run). Discard any partial findings — an untrusted file's
-    # content must not feed the verdict or the ledger.
-    if not saw_valid_marker:
+    # opt-in-to-success: require EXACTLY ONE exact true/false marker. Missing,
+    # garbage, empty, truncated, or DUPLICATE marker ⇒ fail-closed (never trust
+    # the file as a clean codex run). Discard any partial findings — an
+    # untrusted file's content must not feed the verdict or the ledger.
+    if not marker_seen or marker_invalid:
         return [], True, "codex_yaml_malformed"
     return findings, failed, reason
 

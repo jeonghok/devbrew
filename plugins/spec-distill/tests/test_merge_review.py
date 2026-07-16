@@ -169,6 +169,22 @@ class TestMergeCore(unittest.TestCase):
                 y["codex_degraded"], "true",
                 f"garbage codex_failed={badval!r} must fail-closed, got codex_degraded={y['codex_degraded']}")
 
+    # /qg iter-3 (codex final): a DUPLICATE codex_failed marker (even if one is
+    # a valid true/false) is malformed → fail-closed, not trusted as success.
+    # The exact-match value check alone (iter-2) validated the value but not
+    # uniqueness — `codex_failed: false` + a garbage duplicate latched success.
+    # Mutation guard: reverting to `marker_seen` (set-once, no duplicate flag)
+    # trusts the first valid marker → codex_degraded=false.
+    def test_codex_yaml_duplicate_marker_failclosed(self):
+        for dup in ("codex_failed: false\n  codex_failed: maybe",
+                    "codex_failed: false\n  codex_failed: false",
+                    "codex_failed: true\n  codex_failed: false"):
+            cod = f"findings: []\nmeta:\n  {dup}\n"
+            _, y, _, _ = run_merge(claude_output("approved", []), cod)
+            self.assertEqual(
+                y["codex_degraded"], "true",
+                f"duplicate marker {dup!r} must fail-closed, got codex_degraded={y['codex_degraded']}")
+
     # /qg iter-2 CX-fix-2: a codex YAML that passes isfile() but cannot be OPENED
     # (permission / TOCTOU) must degrade loudly, NOT crash the merge with an
     # uncaught OSError. Mutation guard: removing the try/except lets the open()
