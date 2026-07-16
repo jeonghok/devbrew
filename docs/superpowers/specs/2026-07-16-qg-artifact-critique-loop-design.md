@@ -133,21 +133,29 @@ read-only 코드 게이트 파이프라인에 섞이지 않는다.
   kill(`DEVBREW_QG_DISABLE_CRITIQUE=1`) 존중.
 - **E1** 대상 해석 + **코드/비-코드 분류**(Non-goal 실질 가드):
   - **코드 확장자 allowlist**(`.py .js .ts .tsx .jsx .go .rs .java .kt .c .h .cpp .cc .rb .php .swift .scala .sh .bash .zsh` 등) → 코드로 판정 → "코드 리뷰는 `/qg`로" 안내 후 **종료**.
-  - **비-코드 확장자**(`.md .markdown .txt .rst .adoc .org` + 문서화용 텍스트) → 산출물 모드 진행.
-  - **모호**(확장자 없음 / allowlist·비-코드 목록 어디에도 없는 확장자 / 경계 사례) →
+  - **비-코드 확장자**(고정 목록 `.md .markdown .txt .rst .adoc .org`) → 산출물 모드 진행.
+    (개방형 "+문서화용 텍스트" 절 제거 — 목록에 없으면 아래 '모호' 분기로 가야 fail-safe.)
+  - **모호**(확장자 없음 / 위 두 고정 목록 어디에도 없는 확장자 / 디렉터리 / 경계 사례) →
     E3 *이전에* `AskUserQuestion`으로 "이 파일을 산출물로 비평할까요?" 확인. **확인 없이
     자율 루프 진입 금지.** 이로써 코드가 security-reviewer 없는 prose-critic 자율 커밋
     루프로 새어들지 않는다.
+  - **정규화(결정론):** 확장자 매칭은 대소문자 무시(`.MD`==`.md`); 복합 확장자는 마지막
+    세그먼트 기준(`.tar.gz`→`.gz`); 디렉터리·확장자 없는 경로는 '모호' 분기(→확인).
   - allowlist는 결정론적(테스트 대상). 확장자 목록의 정확한 최종본은 plan에서 확정하되,
     "코드 확장자→종료 / 비-코드→진행 / 모호→확인"의 **3분기 계약은 이 설계가 고정**한다.
     **allowlist는 완전할 필요 없다** — 목록에 없는 확장자는 자동으로 '모호' 분기(→확인)로
     떨어져 코드가 무단 진입 못 하므로 **fail-safe**. 목록은 UX 편의(흔한 코드 확장자 즉시
     종료)일 뿐, 안전 보장은 3분기 계약 + 모호→확인 fallback이 담당한다.
 - **E2** 브랜치 안전(§8/C4) — `main`/기본 브랜치면 **거부**, non-default 브랜치 안내 후 종료.
-- **E3** Upfront 게이트 (`AskUserQuestion`): *"대상=`<resolved path>`, 최대 5라운드
-  비평-수정 루프를 브랜치 `<branch>`에 라운드별 커밋하며 실행할까요?"*
-  → **실행** / **대상 변경** / **취소**. (라운드 수는 고정 상수 `max_rounds=5`(§8) —
-  게이트는 N을 사용자에게 묻지 않는다; 문구의 "5"는 그 고정값을 알리는 것.)
+- **E2b** 대상 clean 전제 — 대상 경로가 HEAD 대비 clean이 아니면(uncommitted 변경 존재)
+  **거부** + "먼저 커밋/stash 후 재실행" 안내. 이로써 각 라운드 커밋이 *그 라운드 수정만*
+  담아 Goal 3 버저닝이 성립(pre-existing 변경이 라운드-1 커밋에 섞이지 않음). (라운드-3 반영.)
+- **E3** Upfront 게이트 (`AskUserQuestion`): 먼저 `effective_max_rounds`를 계산한다
+  (= `DEVBREW_QG_CRITIQUE_MAX_ROUNDS` env를 0..10 clamp, 미설정 시 5). 게이트 문구는
+  *"대상=`<resolved path>`, 최대 `<effective_max_rounds>`라운드 비평-수정 루프를 브랜치
+  `<branch>`에 라운드별 커밋하며 실행할까요?"* → **실행** / **대상 변경** / **취소**.
+  루프도 **동일한 `effective_max_rounds`**를 쓴다 — 동의 문구와 실행 한도가 항상 일치
+  (env override가 승인 범위와 실행 범위를 어긋나게 하지 않음; 라운드-3 consent-integrity 반영).
 
 **루프 (라운드 N = 1..max_rounds, §8):**
 1. **critic** — `artifact-critic`(inherit-tier, read-only) 디스패치. *현재 커밋된*
@@ -167,8 +175,9 @@ read-only 코드 게이트 파이프라인에 섞이지 않는다.
 5. **수렴 체크** (`convergence-check`, 순수 함수) — kept 중 CRITICAL/IMPORTANT == 0 →
    **수렴, 루프 종료**. SUGGESTION만 남으면 수렴으로 간주(목록만 surface, 수정 안 함).
 6. **수정 적용** — 오케스트레이터(writer)가 kept CRITICAL/IMPORTANT를 해소하도록
-   산출물을 `Edit`/`Write`. 리뷰어가 제안한 경로는 `path-auth`(canonicalize,
-   symlink escape 방지 — 기존 Retry: file-write safety 재사용)로 검증.
+   **E3에서 확정된 단일 대상 경로**를 `Edit`/`Write`. `path-auth`는 그 고정 경로를
+   방어적으로 canonical 재확인(symlink escape 가드)만 한다 — Finding에는 path 필드가 없고
+   `proposed_fix` 자유 텍스트에서 경로를 추출하지 않는다(단일-대상 불변; 라운드-3 반영).
    - **6b. 변경 신호 (커밋 *전* — 반드시 여기서 캡처):**
      `git diff --quiet HEAD -- <artifact-path>`로 이번 편집이 파일을 실제로 바꿨는지
      판정: `changed = (exit ≠ 0)`. `not changed`(편집이 no-op — 모델이 진전을 못 냄)면
@@ -176,8 +185,8 @@ read-only 코드 게이트 파이프라인에 섞이지 않는다.
      이 신호가 무의미해지므로 반드시 커밋 전에 캡처한다.*
 7. **커밋** (`commit-scope`, `changed`일 때만) — pathspec 커밋으로 **대상 파일만**
    반영(§7 계약): 메시지 `critique(round N): <해소한 finding 요약>`.
-8. **stagnation 체크** (`stagnation-check`, 순수 함수 — §8 predicate; 입력 = (이번 kept
-   canonical-key 집합, 직전 kept 집합, step 6b의 `changed` 신호)) → 정체 시 종료.
+8. **stagnation 체크** (`stagnation-check`, 순수 함수 — §8 predicate; 입력 = (이번 kept의
+   `stagnation_key` 집합, 직전 `stagnation_key` 집합, step 6b의 `changed` 신호)) → 정체 시 종료.
 9. N+1로 반복.
 
 ## §7 아키텍처 — 컴포넌트 & Law 2
@@ -194,13 +203,16 @@ read-only 코드 게이트 파이프라인에 섞이지 않는다.
 **결정론 헬퍼 (테스트 가능한 순수 단위 — isolation 지적 반영):**
 - `synthesize` — canonical-key dedup + verdict 반영 → kept 집합 (`synthesize_findings.py` 확장/재사용).
 - `convergence-check` — kept 집합 → `converged: bool` (CRITICAL/IMPORTANT count == 0).
-- `stagnation-check` — (이번 kept, 직전 kept, git-diff 결과) → `stagnant: bool` (§8 predicate).
-- `path-auth` — (project_dir, 후보 경로) → canonical 경로 or reject (symlink escape 가드).
+- `stagnation-check` — (이번 kept의 `stagnation_key` 집합, 직전 집합, step 6b `changed` 신호)
+  → `stagnant: bool` (§8 predicate; (b)+effective_max_rounds가 load-bearing, (a)는 supplementary).
+- `path-auth` — (project_dir, **E3-확정 대상 경로**) → canonical 경로 or reject (symlink
+  escape 가드). 입력은 E3의 단일 고정 대상뿐 — reviewer 텍스트에서 경로를 추출하지 않는다.
 - `commit-scope` — 입력 `(artifact_path, msg)` → 출력 `{committed_sha}` | `{no_op}` |
-  `{error, stderr}`. 동작: `git add -- <path>` 후 **pathspec 커밋**
-  `git commit --only -- <path> -m <msg>` — `--only`라 무관한 pre-existing staged 변경을
-  쓸어담지 않음(§C5). 실패(add/commit nonzero) → `error` 반환, 부분 상태 없음(commit 원자적);
-  오케스트레이터가 loud surface + 루프 중단. `no_op`은 step 6b가 이미 거른 방어적 경로.
+  `{error, stderr}`. 동작: **단일 명령** `git commit --only -- <path> -m <msg>` — `--only`
+  pathspec은 사전 `git add` 불필요(git 계약)하며 무관한 pre-existing staged 변경을 쓸어담지
+  않는다(§C5). **별도 `git add` 단계가 없으므로 "add 성공·commit 실패" 부분상태가 원천
+  없음**(진짜 원자성; 라운드-3 반영). 실패(nonzero) → `error` 반환 + loud surface + 루프
+  중단. `no_op`은 step 6b가 이미 거른 방어적 경로.
 각 헬퍼는 model dispatch·파일 편집과 독립적으로 단위 테스트된다.
 
 **신규 스크립트:**
@@ -225,12 +237,13 @@ read-only 코드 게이트 파이프라인에 섞이지 않는다.
 
 - **종료 (넷 중 하나):**
   1. **수렴** — kept CRITICAL/IMPORTANT == 0 (`convergence-check`).
-  2. **max-rounds** — `max_rounds = 5` (고정 상수, Review 게이트와 대칭). env override
-     `DEVBREW_QG_CRITIQUE_MAX_ROUNDS`(정수, 0..10 clamp)로만 조정 — E3 게이트는 N을
-     사용자에게 묻지 않는다.
+  2. **max-rounds** — `effective_max_rounds` (= `DEVBREW_QG_CRITIQUE_MAX_ROUNDS` env를
+     0..10 clamp, 미설정 시 5, Review 게이트와 대칭). **E3에서 이 값을 계산해 동의 문구에
+     넣고 루프도 같은 값을 쓴다** — 동의 범위 = 실행 범위(라운드-3 consent-integrity). E3
+     게이트는 N을 사용자에게 되묻지 않는다(값은 고지).
   3. **stagnation** (`stagnation-check` predicate, 결정론):
-     stagnation ⟺ **(a)** 이번 라운드 kept 집합의 canonical-key 집합이 직전 라운드와
-     동일(새 key 無 + 미해결 잔존) — set 비교(정확), **또는** **(b)** §6 step 6b의
+     stagnation ⟺ **(a)** 이번 라운드 kept 집합의 `stagnation_key` 집합이 직전 라운드와
+     동일(새 key 無 + 미해결 잔존) — set 비교(supplementary), **또는** **(b)** §6 step 6b의
      `changed == false`(커밋 *전* 캡처한 no-op 신호). 둘 다 새 진전 없음의 결정론 신호.
      *(b)는 반드시 커밋 전 신호를 쓴다 — 커밋 후 `git diff`는 항상 clean이라 무의미(라운드-2
      리뷰가 잡은 block 버그의 fix).*
@@ -294,8 +307,9 @@ canonical finding YAML과 정렬).
 
 ```yaml
 verdicts:                       # 기존 critic/codex finding에 대한 판정
-  - finding_key: "a1b2c3d4e5f6" # 대상 finding의 canonical key (아래)
+  - finding_key: "a1b2c3d4e5f6" # 대상 finding의 dedup_key (아래)
     verdict: confirm            # confirm | downgrade | reject
+    new_severity: IMPORTANT     # downgrade일 때만 필수(강등된 새 severity); confirm/reject는 무시
     evidence: "판정 근거"
 new_findings:                   # adversarial이 놓쳤다고 본 신규 finding (Finding 스키마, agent=artifact-adversarial)
   - agent: artifact-adversarial
@@ -308,11 +322,19 @@ new_findings:                   # adversarial이 놓쳤다고 본 신규 finding
 `new_findings`도 Finding 스키마를 따르므로 아래 canonical-key/kept 규칙이 그대로 적용된다
 (adversarial과 synthesize 사이 인터페이스 완결 — verdict만으론 신규 finding을 표현 못 하던 갭 해소).
 
-**Canonical key & dedup:** finding의 canonical key =
-`sha1(category + "\0" + normalized(target_anchor) + "\0" + normalized(summary))[:12]`.
-**앵커만** 쓰고 `target_lines`는 제외 — 편집으로 라인이 밀려도 같은 미해결 finding이
-라운드 간 **동일 key를 유지**한다(dedup·stagnation (a) 결정론의 근거; line-range를 key에
-넣으면 매 라운드 key가 흔들려 이 메커니즘이 붕괴). `synthesize`는 같은 key를 dedup한다.
+**Canonical keys (두 종류 — 용도별):**
+- `dedup_key` = `sha1(category + "\0" + normalized(target_anchor) + "\0" + normalized(summary))[:12]`
+  — **한 라운드 내** dedup(critic·codex가 같은 지점을 각자 보고 시 병합). `target_lines`는 제외.
+- `stagnation_key` = `sha1(category + "\0" + normalized(target_anchor))[:12]` — **summary 제외**.
+  라운드 간 stagnation (a) 비교 전용: `summary`는 매 라운드 LLM이 재서술할 수 있는 자유
+  텍스트라 key에 넣으면 같은 미해결 finding도 key가 흔들려 (a)가 무력화되므로, across-round
+  비교는 summary-independent한 이 key로 한다. (라운드-3 리뷰 반영.)
+
+**stagnation (a)의 위상 (정직한 재포지셔닝):** (a)는 `stagnation_key` 집합 비교 기반의
+**supplementary early-exit heuristic**이다 — 신뢰 가능하되 완벽하진 않다(같은 섹션·category에
+서로 다른 두 finding이 번갈아 나오면 조기 종료 가능; 드묾). **load-bearing한 P18 bound는
+(b) no-op 신호 + `effective_max_rounds`(§8)**이며, (a)는 그 위의 효율 heuristic이다.
+`synthesize`는 `dedup_key`로 같은 라운드 내 중복을 병합한다.
 
 **kept 집합 (fail-closed):** 각 critic/codex finding을 adversarial verdict와 매칭:
 - `confirm` → kept. `downgrade` 후 severity ≥ IMPORTANT → kept. `reject` → drop.
@@ -347,10 +369,11 @@ new_findings:                   # adversarial이 놓쳤다고 본 신규 finding
   런타임 실패**면 inherit-only + loud degradation 라인(둘은 구분된 문구). crash 없음.
 - **AC6 — 수렴:** kept CRITICAL/IMPORTANT == 0일 때만 루프 종료(SUGGESTION-only는
   수렴 허용). 수렴 판정은 독립 kept 집합(§10)이 결정(오케스트레이터 자기판단 아님).
-- **AC7 — bounded + stagnation predicate:** `max_rounds=5`(env override), §8 stagnation
-  predicate((a) canonical-key set 동일 OR (b) §6 step 6b의 **커밋-전** `changed==false`
-  신호), kill switch — 무한 루프 불가. predicate 결정론이라 단위 테스트 가능. (b)는 커밋
-  전 신호를 쓴다(커밋 후 diff는 항상 clean이라 라운드-1 조기종료 버그 방지).
+- **AC7 — bounded + stagnation predicate:** `effective_max_rounds`(env clamp 0..10, 기본 5),
+  §8 stagnation predicate((a) `stagnation_key`(summary 제외) set 동일 — supplementary; OR
+  (b) §6 step 6b **커밋-전** `changed==false` — load-bearing), kill switch — 무한 루프 불가.
+  predicate 결정론이라 단위 테스트 가능. (b)+effective_max_rounds가 P18 load-bearing bound,
+  (a)는 supplementary heuristic.
 - **AC8 — 브랜치 안전:** 파일 손대기 전 §8 default-판별(origin/HEAD symbolic-ref →
   main/master fallback; detached HEAD → 거부; 애매성 → 거부 쪽 fail-closed)로 default/보호
   브랜치면 거부 + non-default 안내. (규칙 = 보호 브랜치 자동 커밋 금지; `feature/*` 강제
@@ -369,19 +392,25 @@ new_findings:                   # adversarial이 놓쳤다고 본 신규 finding
 - **AC15 — E1 분류:** 코드 확장자→코드 안내 종료; 비-코드 확장자→진행; 모호→
   AskUserQuestion 확인 후에만 루프 진입. allowlist는 결정론(단위 테스트).
 - **AC16 — 데이터 계약:** critic/codex/adversarial가 §10 스키마 준수(finding =
-  target_anchor 기반; adversarial = `verdicts` + `new_findings`); canonical key는 **앵커만**
-  써 라운드-안정; `synthesize`가 canonical-key로 결정론 dedup + verdict 반영 → kept 집합;
+  target_anchor 기반; adversarial = `verdicts`(downgrade 시 `new_severity` 포함) +
+  `new_findings`); `dedup_key`(within-round) / `stagnation_key`(across-round, summary 제외)
+  분리; `synthesize`가 `dedup_key`로 결정론 dedup + verdict 반영 → kept 집합;
   un-adjudicated finding은 **kept 제외(fail-closed)**.
 - **AC17 — 결정론 헬퍼 isolation:** `convergence-check`·`stagnation-check`·`path-auth`·
   `commit-scope`가 model dispatch와 독립적으로 단위 테스트됨(§7 인터페이스).
-- **AC18 — max_rounds 상수:** `max_rounds=5` 고정 상수 + env override; E3 게이트는 N
-  미질문(문구는 고정값 고지).
-- **AC19 — commit-scope 계약:** `git commit --only -- <path>` pathspec 커밋으로 무관
-  pre-existing staged 변경 미포함; 출력 `{committed_sha|no_op|error}`, commit 원자적,
-  실패 시 loud surface + 중단.
+- **AC18 — effective_max_rounds consent-integrity:** E3가 `effective_max_rounds`(env clamp
+  0..10, 기본 5)를 게이트 *전* 계산해 동의 문구에 넣고 루프도 같은 값 사용 — 동의 범위 =
+  실행 범위. E3는 N을 되묻지 않음.
+- **AC19 — commit-scope 계약:** **단일** `git commit --only -- <path>`(사전 git add 없음)로
+  무관 pre-existing staged 변경 미포함 + 진짜 원자성(부분상태 원천 없음); 출력
+  `{committed_sha|no_op|error}`, 실패 시 loud surface + 중단.
 - **AC20 — degraded-adversarial 수렴 봉쇄:** adversarial 출력이 파싱 불가/0-verdict면
   그 라운드 kept-empty를 수렴으로 읽지 않고 NEEDS_RESOLUTION + loud advisory
   (false-convergence fail-open 봉쇄).
+- **AC21 — 대상 clean 전제:** 루프 진입 전(E2b) 대상 경로가 HEAD 대비 dirty면 거부 +
+  커밋/stash 안내 — pre-existing 변경이 라운드-1 커밋에 섞이지 않음(Goal 3 무결성).
+- **AC22 — E1 고정 목록 + 정규화:** 코드·비-코드 확장자는 **고정 목록**(개방형 절 없음),
+  둘 다 아니면 모호→확인; 매칭은 대소문자 무시 + 복합확장자 last-segment + 디렉터리→모호.
 
 ## §12 Files to Modify
 
@@ -459,7 +488,8 @@ Law 2(read-only 리뷰어 + 매 라운드 독립 게이트), GitHub Flow(main �
   "inherit 성능" 요건 위반 + 페르소나가 코드-diff 전용. 신규 문서용 에이전트가 정답.
 - **worktree 언급 = 개발 workspace 지시**(모드 동작 아님). 버저닝은 git 커밋으로(사용자
   명시). 이 설계 자체가 `feature/qg-artifact-critique` 워크트리에서 저술됨.
-- **N=5는 고정 상수**(env override만) — 사용자 5개 분기 질문으로 합의된 값들: 대상=비-코드,
+- **max_rounds 기본 5** (`effective_max_rounds` = env `DEVBREW_QG_CRITIQUE_MAX_ROUNDS` clamp
+  0..10; E3 동의 문구 = 실행 한도로 항상 일치) — 사용자 5개 분기 질문으로 합의된 값들: 대상=비-코드,
   루프=비평-수정-재비평, 자율성=upfront-동의-후-자율, 버저닝=커밋, critic=단일+adversarial,
   packaging=하이브리드, codex=조건부.
 - **stagnation·수렴·분류가 결정론인 이유:** 자율 수정 루프라 FP가 실제 편집으로 증폭됨 →
