@@ -10,7 +10,7 @@ path="${1:-}"
 msg="${2:-}"
 if [ -z "$path" ] || [ -z "$msg" ]; then
   echo "error: missing_args" >&2
-  exit 2
+  exit 1
 fi
 # Defensive no-op guard (step 6b already gates this in the SKILL).
 if git diff --quiet HEAD -- "$path" 2>/dev/null; then
