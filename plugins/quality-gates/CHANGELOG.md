@@ -3,6 +3,49 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.11.0] — 2026-07-17
+
+`/qg`에 비-코드 산출물(문서·스펙·계획·설정·산문)용 **비평 → 수정 → 재비평** 자율 루프
+모드를 추가한다. inherit-tier `artifact-critic` + `artifact-adversarial`(+ 설치 시 codex
+co-reviewer)가 read-only로 §10 스키마 finding을 내고, 오케스트레이터(writer)가 수정 →
+**라운드별 git 커밋** → 재비평한다. 판정(수렴·수정·stagnation)은 산문이 아니라 결정론
+헬퍼(순수 함수)가 내려 테스트·감사 가능. 별도 skill `critiquing-artifacts`로 위임 —
+기존 2게이트(Review/Runtime) 파이프라인은 무변경.
+
+### Added
+- `commands/qg.md` `critique` 라우팅: `/qg critique <path>` 또는 자연어 비평 의도 →
+  `Skill("quality-gates:critiquing-artifacts")` (코드 파이프라인 우회; 결정론 진입 +
+  모델-소유 NL 라우팅, P8).
+- skill `critiquing-artifacts`: 진입 게이트(E0 kill switch → E1 코드/비-코드 분류 →
+  E2 브랜치 안전 → E2b clean 전제 → E3 upfront 동의)와 bounded 루프(critic → 조건부 codex
+  → adversarial → synthesize → 수렴 → 수정 → **커밋-전 변경신호** → 커밋 → stagnation).
+- 에이전트 `artifact-critic`·`artifact-adversarial` (`model: inherit`, read-only —
+  `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]`).
+- 결정론 헬퍼: `classify_artifact_target.py`(E1 3분기), `artifact_branch_guard.sh`(C4/AC8),
+  `artifact_path_auth.py`(symlink 가드), `artifact_change_signal.sh`(커밋-전 신호),
+  `artifact_commit.sh`(원자적 단일-경로 커밋), `synthesize_artifact_findings.py`
+  (key+synth: dedup/verdict/kept/수렴/degraded), `artifact_max_rounds.sh`(clamp),
+  `artifact_stagnation.py`(predicate).
+- codex 산출물 서브파이프라인: `build_artifact_codex_prompt.py` +
+  `extract_codex_artifact_yaml.py` + `run_artifact_codex_reviewer.sh`(`-s read-only`;
+  미가용/런타임 실패 각각 구분된 graceful degrade).
+- kill switch `DEVBREW_QG_DISABLE_CRITIQUE`(모드 전용); env `DEVBREW_QG_CRITIQUE_MAX_ROUNDS`
+  (0..10 clamp, 기본 5).
+
+### Changed
+- **버전 2.10.3 → 2.11.0** (minor — 새 표면: 산출물 비평 루프 모드).
+- `tests/test_qg_publish_docs.sh` 버전 핀을 `2.10.x` → `≥2.10 minor`로 완화(minor bump
+  stale-red 방지; publish 표면 shipped 불변식은 유지).
+
+### Principles Instantiated
+- Law 1 (Clarity Before Code) — 자율 수정 전 E3 upfront 동의 게이트.
+- Law 2 (Writer ≠ Reviewer) — read-only 리뷰어 + 오케스트레이터 writer + 매 라운드 독립
+  critic 게이트.
+- Law 3 (Compounding) — 라운드별 커밋 감사추적; 버그가 리뷰 탈출 시 critic/adversarial
+  페르소나 편집이 compounding 이벤트.
+- P18 (bounded autonomy) — max-rounds + stagnation predicate + kill switch.
+- P8 (determinism-economy) — NL 라우팅은 모델 신뢰, 결정론은 `critique <path>` + §10 스키마.
+
 ## [2.10.0] — 2026-07-07
 
 `/qg` 파이프라인이 비중단 완료되면 커맨드 계층이 "PR 이해글을 이어서 생성·게시?"를

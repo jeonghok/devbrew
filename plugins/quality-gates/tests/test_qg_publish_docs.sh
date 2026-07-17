@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # test_qg_publish_docs.sh — AC15: version bump + honesty framing + kill-switch inventory.
-# plugin.json version은 2.10.x로 assert(patch digit는 의도적으로 unpin) — devbrew의
-# "플러그인 건드리는 모든 PR은 patch-bump" 규칙 때문에 리터럴 2.10.0 pin은 다음 doc-only
-# bump마다 stale-red. minor(2.10)는 v2.10.0 feature가 여전히 shipped임을 뜻하는 invariant라 pin 유지.
+# plugin.json version은 ≥2.10 minor(publish 표면 shipped 불변식; patch·minor 모두 unpin,
+# floor만 핀)로 assert — devbrew의 "플러그인 건드리는 모든 PR은 patch-bump" 규칙 때문에
+# 리터럴 2.10.0 pin은 다음 minor bump마다 stale-red. floor(>=2.10)는 v2.10.0 feature가
+# 여전히 shipped임을 뜻하는 invariant라 pin 유지.
 # CHANGELOG [2.10.0] 엔트리는 append-only 기록이라 리터럴 pin이 correct.
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,8 +12,8 @@ PASS=0; FAIL=0
 pass() { PASS=$((PASS+1)); echo "  → PASS: $1"; }
 fail() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
 
-grep -qE '"version":[[:space:]]*"2\.10\.[0-9]+"' "$PLUGIN_ROOT/.claude-plugin/plugin.json" \
-  && pass "plugin.json version 2.10.x" || fail "plugin.json not 2.10.x (reverted below 2.10.0 or wrong minor?)"
+grep -qE '"version":[[:space:]]*"2\.(1[0-9]|[2-9][0-9])\.[0-9]+"' "$PLUGIN_ROOT/.claude-plugin/plugin.json" \
+  && pass "plugin.json version >=2.10 minor (publish surface shipped)" || fail "plugin.json below 2.10 (publish surface reverted?)"
 grep -qE '^## \[2\.10\.0\]' "$PLUGIN_ROOT/CHANGELOG.md" \
   && pass "CHANGELOG has [2.10.0]" || fail "CHANGELOG missing [2.10.0]"
 README="$PLUGIN_ROOT/README.md"
