@@ -69,13 +69,16 @@ artifact_branch_guard.sh
 - `reason: detached_head` → `> [quality-gates] detached HEAD — 커밋 대상 브랜치가 없습니다. 브랜치를 체크아웃한 뒤 재실행하세요.`
 - `reason: on_default_or_protected_branch` → `> [quality-gates] 현재 '<branch>'는 기본/보호 브랜치입니다. 자율 커밋을 막습니다 — feature/fix 브랜치에서 재실행하세요.`
 
-### E2b — 대상 clean 전제
+### E2b — 대상 HEAD-tracked + clean 전제
 
 ```
 artifact_change_signal.sh <path>
 ```
 
-`changed: true`(HEAD 대비 uncommitted 변경 존재)면 종료: `> [quality-gates] '<path>'에 커밋되지 않은 변경이 있습니다. 먼저 커밋/stash 후 재실행하세요(라운드별 커밋 무결성 — pre-existing 변경이 라운드-1 커밋에 섞이지 않도록).` `changed: false`면 진행.
+`tracked:`와 `changed:` 두 줄을 **모두** 읽는다(순서대로 판정):
+- `tracked: false` → **종료**: `> [quality-gates] '<path>'가 아직 커밋되지 않은(untracked) 파일입니다. 먼저 git add+커밋한 뒤 재실행하세요(라운드별 커밋은 HEAD-tracked 기준선 대비 diff을 커밋합니다).` (`git diff --quiet HEAD`는 untracked 경로를 보지 못해 `changed: false`로 오독될 수 있으므로 — E2b는 `tracked:`를 먼저 판정해 이 오독을 구조적으로 차단한다.)
+- `tracked: true` AND `changed: true`(HEAD 대비 uncommitted 변경 존재) → **종료**: `> [quality-gates] '<path>'에 커밋되지 않은 변경이 있습니다. 먼저 커밋/stash 후 재실행하세요(라운드별 커밋 무결성 — pre-existing 변경이 라운드-1 커밋에 섞이지 않도록).`
+- `tracked: true` AND `changed: false` → 진행.
 
 ### E3 — Upfront 동의 게이트
 
@@ -125,7 +128,18 @@ synthesize_artifact_findings.py --phase key --findings critic.yaml [--findings c
 
 **3. adversarial** — `artifact-adversarial` 디스패치(read-only). `merged.yaml`을 프롬프트에
    넣어 §10 verdict를 받는다(`finding_key`=각 finding의 `dedup_key`). 출력을 `verdicts.yaml`에
-   저장. `project_dir`/`artifact_path` 스레딩.
+   저장. `project_dir`/`artifact_path` 스레딩. **`merged.yaml`의 keyed 내용(각 finding의
+   `dedup_key` 포함)을 프롬프트에 그대로 inline** — 이 스레딩이 빠지면 adversarial이
+   `finding_key`를 echo할 수 없어 모든 finding이 미판정(unadjudicated) 처리된다(§10 fail-closed
+   경로, Issue 1의 false-convergence 가드가 막아주는 케이스와 직결):
+
+```
+Agent({
+  subagent_type: "quality-gates:artifact-adversarial",
+  description: "Artifact adversarial review round N",
+  prompt: "project_dir: <project_dir>\nartifact_path: <path>\n다음은 병합된 keyed findings(merged.yaml)이다 — 각 finding의 dedup_key를 finding_key로 echo하며 §10 verdict(confirm/downgrade/reject)를 매겨라:\n<merged.yaml 전체 내용을 여기 inline>"
+})
+```
 
 **4. synthesize (결정론)** —
 

@@ -55,6 +55,20 @@ Y
 out="$(python3 "$S" --phase synth --findings "$tmp/merged.yaml" --adversarial "$tmp/adv3.yaml")"
 echo "$out" | grep -q "unadjudicated: 1" && ok "un-adjudicated counted" || no "unadjudicated should be 1 ($out)"
 
+# --- whole-branch review fix: un-adjudicated CRITICAL must NOT false-converge ---
+# Only #s2 (IMPORTANT) is judged here; #s1 (CRITICAL, K1) is left entirely
+# un-adjudicated. kept excludes #s1 (fail-closed) so kept_critical=0, and verdicts
+# is non-empty so NOT degraded -- the pre-fix formula (converged = not degraded and
+# crit+imp==0) read this as converged:true (false-clean over a CRITICAL that was
+# never adjudicated or fixed, and not even surfaced as residual).
+cat > "$tmp/adv_partial_crit.yaml" <<Y
+verdicts:
+  - {finding_key: "$K2", verdict: reject, evidence: fp}
+Y
+out="$(python3 "$S" --phase synth --findings "$tmp/merged.yaml" --adversarial "$tmp/adv_partial_crit.yaml")"
+echo "$out" | grep -q "converged: false" && echo "$out" | grep -q "unadjudicated: 1" \
+  && ok "un-adjudicated CRITICAL blocks false-convergence" || no "un-adjudicated CRITICAL must not converge ($out)"
+
 # --- downgrade needs new_severity: CRITICAL -> SUGGESTION drops out of crit/imp ---
 cat > "$tmp/adv4.yaml" <<Y
 verdicts:

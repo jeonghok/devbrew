@@ -174,7 +174,14 @@ def phase_synth(findings_path, adversarial_path):
     crit = sum(1 for f in kept if f["severity"] == "CRITICAL")
     imp = sum(1 for f in kept if f["severity"] == "IMPORTANT")
     sug = sum(1 for f in kept if f["severity"] == "SUGGESTION")
-    converged = (not degraded) and (crit + imp == 0)
+    # An un-adjudicated finding (adversarial never returned a verdict for it) is
+    # excluded from kept fail-closed, so it can't inflate crit/imp -- but that
+    # also means it must NOT be silently read as "resolved". Requiring
+    # unadjudicated==0 closes that false-convergence gap: a persistently
+    # un-adjudicated finding then makes no edit (kept is missing it) -> step 6b
+    # reports changed:false -> stagnation(b) ends the loop as *stagnant*
+    # (honest), never as *converged* (false-clean).
+    converged = (not degraded) and (crit + imp == 0) and (unadjudicated == 0)
     skeys = sorted({stagnation_key(f) for f in kept})
 
     out = {

@@ -45,6 +45,15 @@ ag '`AskUserQuestion`(으로|:)' "E1/E3 gates use AskUserQuestion (body invocati
 # pattern). `커밋/stash 후 재실행` is unique to the enforcement body's dirty-reject
 # guidance and absent from the heading and frontmatter.
 agf '커밋/stash 후 재실행' "E2b clean precondition (enforcement body, not heading)"
+# whole-branch review fix: E2b must reject an UNTRACKED target too (`git diff
+# --quiet HEAD` is blind to untracked paths and silently reads changed:false --
+# without this, E2b would misread a wholly-uncommitted file as "clean" and
+# proceed, silently breaking the round-by-round-commit guarantee). Body-unique
+# phrase (not header-satisfiable): the E2b heading only says "HEAD-tracked +
+# clean 전제" -- this exact reject-guidance sentence appears solely in the
+# tracked:false enforcement line (verified: gutting just that line while
+# leaving the heading intact reddens this assertion).
+agf '아직 커밋되지 않은(untracked) 파일입니다' "E2b rejects an untracked target (tracked: false reject line, body-unique)"
 # NOTE: the old pattern `agf 'effective_max_rounds'` was header-satisfiable — the
 # term also appears in the LOOP section heading (`## 루프 (라운드 N =
 # 1..effective_max_rounds)`), so deleting E3's own consent-integrity body while
