@@ -69,6 +69,10 @@ artifact_branch_guard.sh
 - `reason: detached_head` → `> [quality-gates] detached HEAD — 커밋 대상 브랜치가 없습니다. 브랜치를 체크아웃한 뒤 재실행하세요.`
 - `reason: on_default_or_protected_branch` → `> [quality-gates] 현재 '<branch>'는 기본/보호 브랜치입니다. 자율 커밋을 막습니다 — feature/fix 브랜치에서 재실행하세요.`
 
+`branch_ok: true`이고 출력에 `warn: default_branch_unverified`가 있으면(origin/HEAD 미설정 —
+repo의 default를 authoritative하게 결정 못 함) 진행하되 loud advisory를 표시한다: `> [quality-gates]
+origin/HEAD 미설정 — '<branch>'가 보호 기본 브랜치가 아님을 확인하세요(heuristic 통과·미검증).`
+
 ### E2b — 대상 HEAD-tracked + clean 전제
 
 ```
@@ -79,6 +83,28 @@ artifact_change_signal.sh <path>
 - `tracked: false` → **종료**: `> [quality-gates] '<path>'가 아직 커밋되지 않은(untracked) 파일입니다. 먼저 git add+커밋한 뒤 재실행하세요(라운드별 커밋은 HEAD-tracked 기준선 대비 diff을 커밋합니다).` (`git diff --quiet HEAD`는 untracked 경로를 보지 못해 `changed: false`로 오독될 수 있으므로 — E2b는 `tracked:`를 먼저 판정해 이 오독을 구조적으로 차단한다.)
 - `tracked: true` AND `changed: true`(HEAD 대비 uncommitted 변경 존재) → **종료**: `> [quality-gates] '<path>'에 커밋되지 않은 변경이 있습니다. 먼저 커밋/stash 후 재실행하세요(라운드별 커밋 무결성 — pre-existing 변경이 라운드-1 커밋에 섞이지 않도록).`
 - `tracked: true` AND `changed: false` → 진행.
+
+### E2c — 대상 경로 인가 (canonical freeze; 리뷰어 read 前)
+
+산출물을 **읽기 전에** 대상 경로를 인가하고 canonical을 freeze한다 — critic/codex가
+symlink을 따라 project_dir 밖 파일을 읽어(codex는 외부 프로세스로 유출) 커밋 없이
+종료(수렴)하는 경로를 봉쇄한다(인가가 편집 직전 step 6에만 있고 수렴 시 skip되면
+리뷰어 read가 인가보다 앞서는 순서 버그):
+
+```
+artifact_path_auth.py <project_dir> <path>
+```
+
+- `auth: reject` → **종료**: `> [quality-gates] '<path>'가 project_dir 밖을 가리킵니다(symlink/traversal escape) — 대상 거부.`
+- `auth: ok` → 반환된 `canonical:`을 이후 **모든** 단계(critic·codex·adversarial read, 편집)의
+  **frozen 대상 경로**로 삼는다. **세 리뷰어 모두**의 read와 편집은 raw `<path>`가 아니라
+  `canonical`을 쓴다(git 커밋/change-signal은 E2b가 검증한 tracked `<path>` 그대로).
+
+> **알려진 한계 (TOCTOU):** E2c는 경로 *문자열*을 freeze하지 캐노니컬 *inode*를 freeze하지
+> 않는다 — 인가와 read 사이 동시 로컬 프로세스가 파일을 교체하면 reviewer가 교체된 대상을
+> 읽을 수 있다. dev 도구의 위협 모델(자기 repo에서 자기 문서 비평)에선 비현실적이라
+> 스냅샷-복사까지 하지 않는다. static escape(committed symlink이 project_dir 밖을 가리킴)는
+> E2c가 read 前에 차단하고, step 6는 편집 직전 canonical 불변을 재검증한다.
 
 ### E3 — Upfront 동의 게이트
 
@@ -103,18 +129,20 @@ adversarial는 병합 후 순차) — 어느 쪽이든 Fan-out factor N≥5 hard
 순차 실행이라 subagent spray 아님.
 
 **1. critic** — `artifact-critic` 디스패치(read-only). 프롬프트에 frozen `project_dir` +
-   `artifact_path` 스레딩. 출력 `findings:` YAML을 scratch `critic.yaml`에 저장.
+   E2c가 인가한 `canonical` 경로(raw `<path>` 아님 — symlink escape 봉쇄) 스레딩. 출력
+   `findings:` YAML을 scratch `critic.yaml`에 저장.
 
 ```
 Agent({
   subagent_type: "quality-gates:artifact-critic",
   description: "Artifact critique round N",
-  prompt: "project_dir: <project_dir>\nartifact_path: <path>\n현재 커밋된 산출물을 비평하고 §10 Finding YAML을 emit하라."
+  prompt: "project_dir: <project_dir>\nartifact_path: <canonical>\n현재 커밋된 산출물을 비평하고 §10 Finding YAML을 emit하라."
 })
 ```
 
 **2. codex co-reviewer (조건부)** — `detect_codex.sh`로 가용성 확인:
-- `codex_available: true` → `run_artifact_codex_reviewer.sh <path> <project_dir> <codex.yaml>`.
+- `codex_available: true` → `run_artifact_codex_reviewer.sh <canonical> <project_dir> <codex.yaml>`
+  (E2c가 인가한 canonical — codex 프롬프트에 산출물이 임베드되므로 escape symlink는 read 前 거부됨).
   - 출력이 `codex_failed: true`면 **가용 판정 후 런타임 실패**: `> [quality-gates] codex 가용 판정 후 런타임 실패(<reason>) — degraded, inherit-tier 단독.` (crash 아님, C7) codex.yaml은 병합에서 제외.
 - `codex_available: false` → **미가용**: `> [quality-gates] codex 미가용(<skip_reason>) — inherit-tier 단독 비평.` (위 런타임-실패 문구와 **구분**된 별도 라인.)
 
@@ -128,7 +156,9 @@ synthesize_artifact_findings.py --phase key --findings critic.yaml [--findings c
 
 **3. adversarial** — `artifact-adversarial` 디스패치(read-only). `merged.yaml`을 프롬프트에
    넣어 §10 verdict를 받는다(`finding_key`=각 finding의 `dedup_key`). 출력을 `verdicts.yaml`에
-   저장. `project_dir`/`artifact_path` 스레딩. **`merged.yaml`의 keyed 내용(각 finding의
+   저장. `project_dir` + E2c가 인가한 `canonical`(raw `<path>` 아님 — adversarial도 산출물을
+   read하고 egress 도구를 가지므로 critic/codex와 동일하게 canonical로 freeze) 스레딩.
+   **`merged.yaml`의 keyed 내용(각 finding의
    `dedup_key` 포함)을 프롬프트에 그대로 inline** — 이 스레딩이 빠지면 adversarial이
    `finding_key`를 echo할 수 없어 모든 finding이 미판정(unadjudicated) 처리된다(§10 fail-closed
    경로, Issue 1의 false-convergence 가드가 막아주는 케이스와 직결):
@@ -137,7 +167,7 @@ synthesize_artifact_findings.py --phase key --findings critic.yaml [--findings c
 Agent({
   subagent_type: "quality-gates:artifact-adversarial",
   description: "Artifact adversarial review round N",
-  prompt: "project_dir: <project_dir>\nartifact_path: <path>\n다음은 병합된 keyed findings(merged.yaml)이다 — 각 finding의 dedup_key를 finding_key로 echo하며 §10 verdict(confirm/downgrade/reject)를 매겨라:\n<merged.yaml 전체 내용을 여기 inline>"
+  prompt: "project_dir: <project_dir>\nartifact_path: <canonical>\n다음은 병합된 keyed findings(merged.yaml)이다 — 각 finding의 dedup_key를 finding_key로 echo하며 §10 verdict(confirm/downgrade/reject)를 매겨라:\n<merged.yaml 전체 내용을 여기 inline>"
 })
 ```
 
@@ -161,15 +191,18 @@ synthesize_artifact_findings.py --phase synth --findings merged.yaml --adversari
    루프 종료**. SUGGESTION만 남으면 수렴으로 간주(목록만 surface, 수정 안 함). 수렴 판정은
    독립 kept 집합이 결정(오케스트레이터 자기판단 아님 — Law 2).
 
-**6. 수정 적용** — 미수렴이면, 편집 대상 경로를 방어적으로 재확인:
+**6. 수정 적용** — 미수렴이면, 편집 *직전* 대상 경로를 다시 인가한다(E2c가 read 前
+primary 인가를 했고, 이 재확인은 라운드 간 symlink swap을 잡는 TOCTOU 재검증):
 
 ```
 artifact_path_auth.py <project_dir> <path>
 ```
 
-`auth: reject`면 종료(symlink/traversal escape). `auth: ok`면 반환된 `canonical:` 경로를
-곧바로(check와 write 사이 다른 도구 호출 없이 — TOCTOU 방지) 대상으로 kept의
-CRITICAL/IMPORTANT finding을 해소하도록 `Edit`/`Write`. Finding에는 path 필드가 없고
+`auth: reject`면 종료(symlink/traversal escape). `auth: ok`이고 반환된 `canonical:`이
+**E2c에서 freeze한 canonical과 정확히 동일**할 때만 그 경로를 곧바로(check와 write 사이
+다른 도구 호출 없이 — TOCTOU 방지) 대상으로 kept의 CRITICAL/IMPORTANT finding을 해소하도록
+`Edit`/`Write`. 재확인 canonical이 E2c freeze 값과 **다르면**(라운드 중 symlink이 다른
+in-tree 파일로 swap됨) 종료: `> [quality-gates] 대상 경로가 인가 후 변경됨(canonical mismatch) — 중단.` Finding에는 path 필드가 없고
 `proposed_fix` 자유 텍스트에서 경로를 추출하지 않는다(단일-대상 불변).
 
 **6b. 변경 신호 (커밋 *전* — 반드시 여기서 캡처)** —

@@ -21,9 +21,15 @@ agf 'artifact_max_rounds.sh' "wires max-rounds"
 agf 'run_artifact_codex_reviewer.sh' "wires codex wrapper"
 agf 'detect_codex.sh' "reuses codex detection"
 
-# E0 both kill switches
-agf 'DEVBREW_DISABLE_QUALITY_GATES' "E0 global kill switch"
-agf 'DEVBREW_QG_DISABLE_CRITIQUE' "E0 mode kill switch"
+# E0 both kill switches (ENFORCEMENT body, not the bottom kill-switch inventory).
+# NOTE: the old `agf 'DEVBREW_DISABLE_QUALITY_GATES'` / `agf 'DEVBREW_QG_DISABLE_CRITIQUE'`
+# were inventory-satisfiable — both var names ALSO appear in the "kill switch (보안
+# 컨트롤)" inventory at the SKILL foot, so gutting the E0 enforcement body stayed
+# GREEN (verified by mutation: deleting E0's exit lines while leaving the inventory
+# passed). These exact user-facing exit messages appear ONLY in the E0 enforcement
+# lines and nowhere in the inventory.
+agf 'critique skipped: quality-gates globally disabled' "E0 global kill switch (enforcement body, not inventory)"
+agf 'critique mode disabled via DEVBREW_QG_DISABLE_CRITIQUE' "E0 mode kill switch (enforcement body, not inventory)"
 
 # E1 three-branch classify
 ag 'code.*(종료|안내|exit)|코드.*종료' "E1 code -> stop"
@@ -65,13 +71,14 @@ agf 'consent-integrity' "E3 uses effective_max_rounds (consent-integrity, body-u
 # read-only reviewer dispatch (Law 2)
 agf 'artifact-critic' "dispatches artifact-critic"
 agf 'artifact-adversarial' "dispatches artifact-adversarial"
-# NOTE: the old pattern `agf 'project_dir'` was header-satisfiable — the term
-# also appears in the UNRELATED E2 heading (`### E2 — 브랜치 안전 (project_dir
-# 좌표 freeze)`), so deleting every actual reviewer-threading reference (steps
-# 1/2.5/3/6) while leaving that heading intact stayed GREEN (verified by
-# mutation). `스레딩` ("threading") co-occurs with `project_dir` only on the
-# step-3 dispatch line and appears nowhere in any heading or frontmatter.
-ag 'project_dir.*스레딩|스레딩.*project_dir' "threads project_dir to reviewers (body-unique)"
+# NOTE: the reviewer dispatches thread project_dir via the literal prompt field
+# `project_dir: <project_dir>` (critic + adversarial Agent prompts). This is
+# body-unique: the E2 heading uses `project_dir 좌표 freeze` and E2c uses
+# `<project_dir>` only as a script arg — neither contains the `project_dir:
+# <project_dir>` prompt field. (The prior `project_dir.*스레딩` same-line proxy
+# broke when the iter-2 canonical rewrite wrapped the prose across two lines; the
+# actual threading field is a stronger, wrap-immune anchor.)
+agf 'project_dir: <project_dir>' "threads project_dir to reviewers (prompt field, body-unique)"
 
 # codex degrade: two DISTINCT lines (unavailable vs runtime-fail).
 # NOTE: the loose alternative `가용.*실패` was dropped — the unavailable-arm's
@@ -85,7 +92,11 @@ ag '미가용|not.*available|codex_available: false' "codex unavailable degrade 
 ag '런타임 실패|runtime.*fail|가용 판정 후.*실패' "codex runtime-fail degrade line (distinct)"
 
 # degraded-adversarial -> NEEDS_RESOLUTION ; un-adjudicated fail-closed loud log
-agf 'NEEDS_RESOLUTION' "degraded adversarial -> NEEDS_RESOLUTION"
+# NOTE: the old `agf 'NEEDS_RESOLUTION'` was header-satisfiable — the token also
+# appears in the 종료 사유 summary ("NEEDS_RESOLUTION-중단" / "needs_resolution"), so
+# gutting the degraded->NEEDS_RESOLUTION handling body stayed GREEN (verified by
+# mutation). This exact degraded-gate question phrase is unique to step 4's body.
+agf '이번 라운드 adversarial 판정 실패' "degraded adversarial -> NEEDS_RESOLUTION (enforcement body, not 종료 summary)"
 ag '미판정|un-adjudicated|unadjudicated' "un-adjudicated loud log"
 
 # fan-out <=3 statement
@@ -110,6 +121,43 @@ else
 fi
 # ...and the SKILL states the signal is pre-commit
 ag '커밋 전|커밋-전|pre-commit|BEFORE.*commit|before the commit' "SKILL states signal is pre-commit"
+
+# F-G ORDERING LOCK: path-auth (E2c) must run BEFORE the reviewers read the artifact.
+# A tracked symlink escaping project_dir would otherwise be read by critic/codex
+# (and its target exfiltrated to codex) before path_auth ran at step 6 — which is
+# SKIPPED entirely on a converged round. Assert the FIRST body occurrence of
+# artifact_path_auth.py precedes the FIRST artifact-critic dispatch. Body-scoped
+# (path_auth is also declared in the frontmatter allowed-tools) + first-occurrence
+# (path_auth recurs at the step-6 TOCTOU re-verify). Mutation: moving path-auth back
+# to step-6-only (removing E2c) puts its first body occurrence after the critic
+# dispatch -> RED.
+auth_ln="$(body_lines | grep -nF 'artifact_path_auth.py' | head -1 | cut -d: -f1)"
+critic_ln="$(body_lines | grep -nF 'quality-gates:artifact-critic' | head -1 | cut -d: -f1)"
+if [ -n "$auth_ln" ] && [ -n "$critic_ln" ] && [ "$auth_ln" -lt "$critic_ln" ]; then
+  PASS=$((PASS+1)); echo "  PASS: path-auth (E2c) precedes reviewer reads (F-G symlink-exfil lock)"
+else
+  FAIL=$((FAIL+1)); echo "  ✗ FAIL: path-auth must precede critic dispatch (auth=$auth_ln critic=$critic_ln)"
+fi
+
+# F-G completion (iter-2 re-review): ALL THREE reviewer dispatches must thread the
+# E2c-frozen <canonical>, NEVER raw `artifact_path: <path>`. The adversarial dispatch
+# was the drift caught in re-review (critic/codex were threaded, adversarial was not).
+# critic + adversarial thread `artifact_path: <canonical>`; codex threads <canonical>
+# as run_artifact_codex_reviewer.sh's first arg. (git commit/change-signal keep the
+# tracked <path> — those are NOT `artifact_path:` prompt fields, so the raw-path check
+# below is specific to reviewer reads.) Mutation proof: reverting any reviewer
+# dispatch to `artifact_path: <path>` reddens the raw-path check (and drops the count).
+canon_n="$(grep -cF 'artifact_path: <canonical>' "$S")"
+[ "$canon_n" -ge 2 ] && ok "critic + adversarial thread artifact_path: <canonical> (F-G, count=$canon_n)" || no "expected >=2 artifact_path: <canonical> (got $canon_n)"
+if grep -qF 'artifact_path: <path>' "$S"; then
+  FAIL=$((FAIL+1)); echo "  ✗ FAIL: a reviewer dispatch still threads raw artifact_path: <path> (F-G drift)"
+else
+  PASS=$((PASS+1)); echo "  PASS: no reviewer dispatch threads raw artifact_path: <path> (F-G)"
+fi
+agf 'run_artifact_codex_reviewer.sh <canonical>' "codex wrapper receives <canonical> arg, not raw <path> (F-G)"
+# step-6 edit must re-verify the canonical is UNCHANGED vs E2c (swap detection), not
+# blindly re-resolve; body-unique phrase from the step-6 mismatch-reject guidance.
+agf 'canonical mismatch' "step-6 rejects on canonical mismatch (TOCTOU swap detection, F-G)"
 
 # final summary contract
 ag '라운드.*히스토리|round.*history|커밋 SHA|commit SHA' "final summary: rounds + commit SHAs"

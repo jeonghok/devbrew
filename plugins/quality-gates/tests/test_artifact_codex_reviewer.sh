@@ -82,6 +82,44 @@ else
   no "run_artifact_codex_reviewer.sh missing"
 fi
 
+# F-D: the TERMINAL extract must be guarded like the prompt build -- an extract
+# crash that truncates OUT to empty must yield codex_failed (a dropped reviewer,
+# not a silent codex-succeeded-with-no-findings). Stub codex on PATH (so the real
+# one never runs) + a broken extract that exits nonzero writing nothing; the guard
+# must convert that empty OUT into codex_failed. Mutation proof: reverting the
+# wrapper's `if ! ... || [ ! -s "$OUT" ]; then emit_fail` to the bare
+# `python3 extract > "$OUT"` leaves OUT empty -> RED.
+if [ -f "$SCRIPTS/run_artifact_codex_reviewer.sh" ]; then
+  stub="$(mktemp -d)"; mkdir -p "$stub/scripts" "$stub/bin"
+  cp "$BUILD" "$stub/scripts/build_artifact_codex_prompt.py"
+  printf '#!/usr/bin/env python3\nimport sys\nsys.exit(3)\n' > "$stub/scripts/extract_codex_artifact_yaml.py"
+  printf '#!/bin/sh\nexit 0\n' > "$stub/bin/codex"; chmod +x "$stub/bin/codex"
+  echo "# artifact" > "$stub/art.md"
+  PATH="$stub/bin:$PATH" CLAUDE_PLUGIN_ROOT="$stub" \
+    bash "$SCRIPTS/run_artifact_codex_reviewer.sh" "$stub/art.md" "$stub" "$stub/out.yaml" >/dev/null 2>&1
+  { [ -s "$stub/out.yaml" ] && grep -q "codex_failed: true" "$stub/out.yaml"; } \
+    && ok "terminal extract guarded: crash -> codex_failed, OUT never empty (F-D)" \
+    || no "extract crash must yield codex_failed, not empty OUT ($(cat "$stub/out.yaml" 2>/dev/null))"
+  rm -rf "$stub"
+
+  # F-D/iter2: the `[ ! -s "$OUT" ]` sub-clause specifically -- an extractor that
+  # exits 0 but writes NOTHING (empty OUT) must ALSO yield codex_failed. Mutation
+  # proof: deleting just `|| [ ! -s "$OUT" ]` leaves THIS case RED (exit 0 -> the
+  # `if !` clause is false -> OUT stays empty, un-degraded). The earlier F-D stub
+  # exits nonzero so it can't exercise this branch (codex iter-2 finding).
+  stub2="$(mktemp -d)"; mkdir -p "$stub2/scripts" "$stub2/bin"
+  cp "$BUILD" "$stub2/scripts/build_artifact_codex_prompt.py"
+  printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$stub2/scripts/extract_codex_artifact_yaml.py"
+  printf '#!/bin/sh\nexit 0\n' > "$stub2/bin/codex"; chmod +x "$stub2/bin/codex"
+  echo "# artifact" > "$stub2/art.md"
+  PATH="$stub2/bin:$PATH" CLAUDE_PLUGIN_ROOT="$stub2" \
+    bash "$SCRIPTS/run_artifact_codex_reviewer.sh" "$stub2/art.md" "$stub2" "$stub2/out.yaml" >/dev/null 2>&1
+  { [ -s "$stub2/out.yaml" ] && grep -q "codex_failed: true" "$stub2/out.yaml"; } \
+    && ok "terminal extract: exit-0-but-empty OUT -> codex_failed (F-D [ ! -s ] branch)" \
+    || no "exit-0 empty extract must yield codex_failed ($(cat "$stub2/out.yaml" 2>/dev/null))"
+  rm -rf "$stub2"
+fi
+
 rm -rf "$tmp"
 echo ""; echo "Total: $((PASS+FAIL)), PASS=$PASS, FAIL=$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

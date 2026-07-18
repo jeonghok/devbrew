@@ -49,6 +49,21 @@ out="$(cd "$d" && bash "$COMMIT" doc.md "msg")"
 echo "$out" | grep -q "^no_op: true" && ok "no-op reported" || no "no-op should be reported ($out)"
 rm -rf "$d"
 
+# F-H: kill-switch commit-sink backstop -- the commit sink refuses to commit when
+# a kill switch is set, even if the orchestrator's prose E0 were bypassed. Mutation
+# proof: deleting the switch check lets the commit land -> HEAD advances -> RED.
+d="$(mkrepo)"
+( cd "$d"; echo "v1" >> doc.md )   # a real, committable change is present
+head0="$(cd "$d" && git rev-parse HEAD)"
+out="$(cd "$d" && DEVBREW_QG_DISABLE_CRITIQUE=1 bash "$COMMIT" doc.md "critique(round 1): x" 2>&1)"; rc=$?
+head1="$(cd "$d" && git rev-parse HEAD)"
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q "killed_by_switch" && [ "$head0" = "$head1" ]; } \
+  && ok "mode kill switch blocks commit at the sink, no commit made (F-H)" || no "kill switch should block commit ($out rc=$rc head0=$head0 head1=$head1)"
+out="$(cd "$d" && DEVBREW_DISABLE_QUALITY_GATES=1 bash "$COMMIT" doc.md "msg" 2>&1)"; rc=$?
+{ [ "$rc" -ne 0 ] && echo "$out" | grep -q "killed_by_switch"; } \
+  && ok "global kill switch also blocks the commit sink (F-H)" || no "global kill switch should block ($out rc=$rc)"
+rm -rf "$d"
+
 # no `git add -A` anywhere in either script (C5 grep lock)
 grep -qE 'git[[:space:]]+add[[:space:]]+-A' "$COMMIT" "$SIG" && no "git add -A present (forbidden)" || ok "no git add -A"
 

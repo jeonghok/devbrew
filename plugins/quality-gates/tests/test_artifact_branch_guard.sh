@@ -43,6 +43,26 @@ out="$(cd "$d" && bash "$SCRIPT")"
   || { FAIL=$((FAIL+1)); echo "  ✗ FAIL: detached should be rejected ($out)"; }
 rm -rf "$d"
 
+# Case E (F-E): default branch named `develop`, origin/HEAD UNSET -> rejected
+# fail-closed via the common-default literal list. Pre-fix this was ALLOWED
+# (branch != main/master) -> autonomous commits on the protected mainline.
+d="$(mktemp -d)"; ( cd "$d"; git init -q; git config user.email t@t; git config user.name t
+  git commit -q --allow-empty -m init; git branch -m develop )
+out="$(cd "$d" && bash "$SCRIPT")"
+[ "$(field "$out" branch_ok)" = "false" ] && { PASS=$((PASS+1)); echo "  PASS: develop (origin/HEAD unset) rejected fail-closed"; } \
+  || { FAIL=$((FAIL+1)); echo "  ✗ FAIL: develop should be rejected ($out)"; }
+rm -rf "$d"
+
+# Case F (F-E): feature branch with origin/HEAD UNSET -> allowed BUT a loud warn
+# so the user can confirm it isn't their (custom-named) protected mainline.
+d="$(mktemp -d)"; ( cd "$d"; git init -q; git config user.email t@t; git config user.name t
+  git commit -q --allow-empty -m init; git branch -m feature/y )
+out="$(cd "$d" && bash "$SCRIPT")"
+[ "$(field "$out" branch_ok)" = "true" ] && [ "$(field "$out" warn)" = "default_branch_unverified" ] \
+  && { PASS=$((PASS+1)); echo "  PASS: origin/HEAD unset -> allowed + loud warn"; } \
+  || { FAIL=$((FAIL+1)); echo "  ✗ FAIL: unset origin/HEAD should warn ($out)"; }
+rm -rf "$d"
+
 # project_dir emitted
 d="$(mkrepo)"; out="$(cd "$d" && bash "$SCRIPT")"
 [ -n "$(field "$out" project_dir)" ] && { PASS=$((PASS+1)); echo "  PASS: project_dir emitted"; } \
