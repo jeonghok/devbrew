@@ -14,8 +14,8 @@ CHANGELOG="$REPO_ROOT/plugins/spec-distill/CHANGELOG.md"
 pass=0; fail=0
 note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
 
-grep -qE '"version": "0\.20\.[0-9]+"' "$PLUGIN_JSON" \
-  && note PASS "AC13: plugin.json version 0.20.x" || note FAIL "AC13: plugin.json not 0.20.x (reverted below 0.20.0 or wrong minor?)"
+grep -qE '"version": "0\.21\.[0-9]+"' "$PLUGIN_JSON" \
+  && note PASS "AC13: plugin.json version 0.21.x" || note FAIL "AC13: plugin.json not 0.21.x (0.21.0 미만으로 되돌아갔거나 minor 오류)"
 grep -qE '^## \[0\.20\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
   && note PASS "AC13: CHANGELOG [0.20.0] entry with ISO date" || note FAIL "AC13: CHANGELOG [0.20.0] missing/!ISO"
 grep -qE '^## \[0\.20\.0\].*XX' "$CHANGELOG" \

@@ -11,8 +11,8 @@ PASS=0; FAIL=0
 pass() { PASS=$((PASS+1)); echo "  → PASS: $1"; }
 fail() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
 
-grep -qE '"version":[[:space:]]*"2\.10\.[0-9]+"' "$PLUGIN_ROOT/.claude-plugin/plugin.json" \
-  && pass "plugin.json version 2.10.x" || fail "plugin.json not 2.10.x (reverted below 2.10.0 or wrong minor?)"
+grep -qE '"version":[[:space:]]*"2\.11\.[0-9]+"' "$PLUGIN_ROOT/.claude-plugin/plugin.json" \
+  && pass "plugin.json version 2.11.x" || fail "plugin.json not 2.11.x (2.11.0 미만으로 되돌아갔거나 minor 오류)"
 grep -qE '^## \[2\.10\.0\]' "$PLUGIN_ROOT/CHANGELOG.md" \
   && pass "CHANGELOG has [2.10.0]" || fail "CHANGELOG missing [2.10.0]"
 README="$PLUGIN_ROOT/README.md"
