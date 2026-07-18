@@ -38,7 +38,7 @@ Review gate의 몫), artifact **내용**의 저술(그건 read-nothing `pr-under
 에이전트의 몫 — 너는 그 텍스트를 판정·수정하지 않는다). 이 SKILL은 이 파이프라인에서
 **gh·network를 가진 유일한 컴포넌트**다 — 그 권한을 신중히 다뤄라.
 
-**Law-2형 물리 분리:** 생성기(빌더)는 파일시스템·네트워크 tool 0개이고, 오케스트레이터
+**Law-2형 물리 분리:** 생성기(빌더)는 `tools:`에 무해한 항목 하나만 선언한 fail-closed allowlist(파일시스템·네트워크 도구 0개)이고, 오케스트레이터
 (너)만 gh/git push를 쥔다. 생성(무권한 read-only)과 게시(권한 소비)는 물리적으로 갈린다.
 
 ## INVARIANTS
