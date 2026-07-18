@@ -12,6 +12,10 @@
 # 규칙 (plugins/*/agents/*.md 전부):
 #   L1  `allowedTools` / kebab 변종 존재            -> FAIL
 #   L2  `tools:` 부재                                -> FAIL  (카브아웃 없음 — 8/8 해당)
+#       + `tools:` 키 중복(YAML 은 마지막 값으로 resolve, grep -m1 은 첫 값을 봄) -> FAIL
+#       + `tools:` 값이 비어있거나 block scalar(`>`/`|`, 진짜 목록이 다음 줄에 있음) -> FAIL
+#       (인용부호 `"..."`/`'...'` 는 한 겹 벗기고 계속 검증 — quote 로 금지 도구를
+#        가릴 수 없게. adversarial review 가 실제 /tmp 픽스처로 재현한 YAML-구문 우회.)
 #   L3  `tools:` 의 금지 도구에 **그 도구 이름의**
 #       `# TOOL-EXCEPTION:` 마커가 frontmatter 에 없음 -> FAIL
 #
@@ -57,6 +61,18 @@ for f in plugins/*/agents/*.md; do
   fi
 
   # --- L2 ---
+  # 중복 `tools:` 키 → FAIL. YAML 파서는 중복 키를 마지막 값으로 resolve 하는데
+  # `grep -m1` 은 첫 값을 본다 — 앞에 무해한 decoy, 뒤에 금지 도구를 두면 이 락이
+  # decoy 만 검증하고 런타임은 진짜(금지) 목록을 부여받는다. 보안 필드의 중복 키는
+  # 그 자체로 모호/의심스럽다 — 조용히 첫 값을 취하지 않고 FAIL.
+  tools_key_count="$(grep -cE '^tools:' <<<"$FM")"
+  if [ "$tools_key_count" -gt 1 ]; then
+    echo "FAIL [L2] $f: 'tools:' 키가 $tools_key_count 번 중복 선언됨 — 보안 필드의 중복 키는" >&2
+    echo "  모호하다(YAML 은 마지막 값으로 resolve, 이 락은 grep -m1 으로 첫 값을 봄). 하나로 합칠 것." >&2
+    violations=$((violations+1))
+    continue
+  fi
+
   tools_line="$(grep -m1 -E '^tools:' <<<"$FM" || true)"
   if [ -z "$tools_line" ]; then
     echo "FAIL [L2] $f: 'tools:' allowlist 부재. denylist 단독은 공간(열거 누락)뿐 아니라" >&2
@@ -64,6 +80,25 @@ for f in plugins/*/agents/*.md; do
     violations=$((violations+1))
     continue
   fi
+
+  # `tools:` 값을 정규화: 트림 → block-scalar/empty 거절 → 인용 한 겹 벗기기.
+  # 이 락은 단일 라인 plain scalar 만 검증할 수 있다 — block scalar(`>`/`|`, 접힘/유지
+  # 변종 포함)는 진짜 목록이 다음 줄들(창 밖일 수도 있음)에 있어 여기서 보면 놓친다,
+  # 그래서 FAIL 로 거절한다. 인용부호는 한 겹만 벗겨 값을 quoting 이전과 동일하게
+  # 만든다 — 안 그러면 `"Read, Grep, Write"` 의 `Write"` 가 quote 에 가려 L3 를 피한다.
+  tools_val="$(printf '%s' "${tools_line#tools:}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  case "$tools_val" in
+    ''|'>'*|'|'*)
+      echo "FAIL [L2] $f: 'tools:' 값이 비어있거나 YAML block scalar(>, |, 접힘/유지 변종 포함) 다." >&2
+      echo "  이 락은 단일 라인 plain scalar 만 검증 가능 — 'tools: A, B, C' 형태로 바꿀 것." >&2
+      violations=$((violations+1))
+      continue
+      ;;
+  esac
+  case "$tools_val" in
+    \"*\") tools_val="${tools_val#\"}"; tools_val="${tools_val%\"}" ;;
+    \'*\') tools_val="${tools_val#\'}"; tools_val="${tools_val%\'}" ;;
+  esac
 
   # --- L3 ---
   # ⚠️ 이 루프의 세 줄은 실측으로 세 번 고쳤다 (아래 "이 루프를 고치지 말 것" 참조).
@@ -82,7 +117,7 @@ for f in plugins/*/agents/*.md; do
     echo "FAIL [L3] $f: tools: 에 금지 도구 '$tok' 가 있는데 마커가 없다." >&2
     echo "  필요하면 frontmatter 에 정확히: # TOOL-EXCEPTION: $tok — <한 줄 근거>" >&2
     violations=$((violations+1))
-  done < <(printf '%s\n' "${tools_line#tools:}" | tr ',' '\n')
+  done < <(printf '%s\n' "$tools_val" | tr ',' '\n')
 done
 
 if [ "$violations" -gt 0 ]; then

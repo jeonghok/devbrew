@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# AC9 — test_agent_frontmatter_keys.sh 의 이빨 증명. 12 mutation 전부에서 RED 여야 한다.
+# AC9 — test_agent_frontmatter_keys.sh 의 이빨 증명. 25개 케이스(mutation 은 RED,
+# 보강/기준선 케이스는 GREEN) 가 각 want 대로 정확히 나와야 한다.
 # RED 가 안 나는 락은 장식이다.
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -84,6 +85,31 @@ write_agent 'tools: Read, mcp__plugin_chrome-devtools-mcp_chrome-devtools'
 expect RED "mcp__<server> 서버 단위 grant"
 write_agent 'tools: Read, mcp__plugin_chrome-devtools-mcp_chrome-devtools__*'
 expect RED "mcp__<server>__* 서버 전체 grant"
+
+# 🔴 adversarial review (Task 8 재현) — YAML-구문 우회 4종. 8/8 실 agent 는 plain
+# 단일 라인 unquoted 라서 오늘은 안전하지만, 락이 이 형태를 못 잡으면 quote/block
+# scalar/중복 키로 금지 도구를 숨긴 agent 가 조용히 GREEN 을 받는다.
+echo "== ⑥ YAML-구문 우회: 이중 인용 =="
+write_agent 'tools: "Read, Grep, Write"'
+expect RED "이중 인용 안의 Write 는 quote 로 안 가려짐"
+
+echo "== ⑦ YAML-구문 우회: 단일 인용 =="
+write_agent "tools: 'Read, Grep, Write'"
+expect RED "단일 인용 안의 Write 는 quote 로 안 가려짐"
+
+echo "== ⑧ YAML-구문 우회: block scalar (>) =="
+write_agent 'tools: >
+  Read, Grep, Write'
+expect RED "block scalar 뒤에 숨은 진짜 목록은 단일 라인 검증 불가 -> FAIL"
+
+echo "== ⑨ YAML-구문 우회: 중복 tools: 키 (첫 값=무해한 decoy) =="
+write_agent 'tools: Read, Grep
+tools: Read, Write'
+expect RED "중복 tools: 키는 grep -m1 이 decoy 만 보게 만듦 -> FAIL"
+
+echo "== 보강: 이중 인용이라도 안전한 목록이면 GREEN (over-reject 아님) =="
+write_agent 'tools: "Read, Grep, Glob"'
+expect GREEN "quote 벗기기가 안전한 목록까지 거절하지 않음"
 
 echo; echo "mutation: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
