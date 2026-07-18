@@ -43,10 +43,14 @@ check "frontmatter cost_class medium" \
   "grep -c '^cost_class: medium$' '$PERSONA'" 1
 check "frontmatter model inherit" \
   "grep -c '^model: inherit$' '$PERSONA'" 1
-check "frontmatter disallowedTools camelCase" \
-  "grep -c '^disallowedTools:' '$PERSONA'" 1
-check "disallowedTools blocks Write/Edit/MultiEdit/NotebookEdit" \
-  "grep -cE '\\- Write$|\\- Edit$|\\- MultiEdit$|\\- NotebookEdit$' '$PERSONA'" 4
+check "frontmatter tools: allowlist (fail-closed)" \
+  "grep -c '^tools: Read, Grep, Glob$' '$PERSONA'" 1
+check "죽은 allowedTools 없음" \
+  "grep -c '^allowedTools:' '$PERSONA'" 0
+check "disallowedTools 없음 (allowlist 가 컨트롤)" \
+  "grep -c '^disallowedTools:' '$PERSONA'" 0
+check "쓰기·실행·위임 도구가 tools: 에 없음" \
+  "grep -cE '^tools:.*(Write|Edit|MultiEdit|NotebookEdit|Bash|Agent|Monitor|mcp__)' '$PERSONA'" 0
 
 # Canonical schema keys present in persona body
 check "schema key agent: security-reviewer" \

@@ -4,11 +4,7 @@ description: Phase 1 of the Review gate — always-run code-level security revie
 model: inherit
 color: purple
 cost_class: medium
-disallowedTools:
-  - Write
-  - Edit
-  - MultiEdit
-  - NotebookEdit
+tools: Read, Grep, Glob
 ---
 
 You are **security-reviewer**, the code-level security specialist for the Review gate Phase 1.

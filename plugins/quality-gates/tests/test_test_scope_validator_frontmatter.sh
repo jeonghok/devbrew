@@ -60,33 +60,19 @@ echo "$FM" | grep -qE '^cost_class:[[:space:]]*low$' \
   && { PASS=$((PASS + 1)); note "PASS: cost_class=low"; } \
   || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: cost_class field"; }
 
-# Extract sublist for a top-level YAML key in the frontmatter.
-# Emits all `  - <value>` lines until the next non-indented, non-list line.
-extract_sublist() {
-  local key="$1"
-  echo "$FM" | awk -v key="$key" '
-    $0 ~ "^"key":[[:space:]]*$" { in_list=1; next }
-    in_list && /^[[:space:]]*-[[:space:]]/ { print; next }
-    in_list { in_list=0 }
-  '
-}
+# v2.11.0: allowedTools(죽은 필드) / disallowedTools 블록 리스트 → tools: 한 줄 allowlist
+echo "== tools: allowlist (fail-closed) =="
+echo "$FM" | grep -qE '^tools: Read, Grep, Glob$' \
+  && { PASS=$((PASS + 1)); note "PASS: tools: Read, Grep, Glob"; } \
+  || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: tools: 가 'Read, Grep, Glob' 이 아님"; }
 
-ALLOWED_LIST=$(extract_sublist allowedTools)
-DISALLOWED_LIST=$(extract_sublist disallowedTools)
+assert_not_grep '^allowedTools:' "죽은 allowedTools 제거됨"
+assert_not_grep '^disallowedTools:' "disallowedTools 제거됨 (allowlist 가 컨트롤)"
 
-echo "== allowedTools (positive list, scoped to allowedTools: sublist) =="
-for t in Read Grep Glob Bash; do
-  echo "$ALLOWED_LIST" | grep -qE "^[[:space:]]*-[[:space:]]*${t}$" \
-    && { PASS=$((PASS + 1)); note "PASS: allowedTools includes $t"; } \
-    || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: allowedTools missing $t"; }
-done
-
-echo "== disallowedTools (Law 2 enforcement, scoped to disallowedTools: sublist) =="
-for t in Write Edit MultiEdit NotebookEdit; do
-  echo "$DISALLOWED_LIST" | grep -qE "^[[:space:]]*-[[:space:]]*${t}$" \
-    && { PASS=$((PASS + 1)); note "PASS: disallowedTools includes $t"; } \
-    || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: disallowedTools missing $t"; }
-done
+echo "== 금지 도구가 tools: 에 없음 =="
+# Bash 제거 근거: persona ':48' — "Bash is for reading files only" → Read 가 대체한다.
+assert_not_grep '^tools:.*(Write|Edit|MultiEdit|NotebookEdit|Bash|Agent|Monitor|mcp__)' \
+  "tools: 에 쓰기·실행·위임·MCP 도구 없음"
 
 echo "== body claims (scoped to markdown body) =="
 assert_body_grep 'aligned' "body mentions aligned classification"

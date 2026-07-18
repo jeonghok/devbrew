@@ -43,8 +43,12 @@ check "frontmatter name adversarial" \
   "grep -c '^name: adversarial$' '$PERSONA'" 1
 check "frontmatter model opus" \
   "grep -c '^model: opus$' '$PERSONA'" 1
-check "frontmatter disallowedTools blocks Write/Edit/MultiEdit/NotebookEdit" \
-  "grep -cE 'disallowedTools:.*Write.*Edit.*MultiEdit.*NotebookEdit' '$PERSONA'" 1
+check "frontmatter tools: allowlist (fail-closed)" \
+  "grep -c '^tools: Read, Grep, Glob$' '$PERSONA'" 1
+check "죽은 allowedTools / denylist 없음" \
+  "grep -cE '^(allowedTools|disallowedTools):' '$PERSONA'" 0
+check "쓰기·실행·위임 도구가 tools: 에 없음" \
+  "grep -cE '^tools:.*(Write|Edit|MultiEdit|NotebookEdit|Bash|Agent|Monitor|mcp__)' '$PERSONA'" 0
 
 # Gate A–D structure present
 check "Gate A header present" "grep -c '\\*\\*Gate A' '$PERSONA'" 1

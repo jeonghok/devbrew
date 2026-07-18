@@ -4,7 +4,7 @@ description: Phase 1.5 of the Review gate — adversarially reviews findings fro
 model: opus
 color: orange
 cost_class: low
-disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]
+tools: Read, Grep, Glob
 ---
 
 You are **Adversarial**, the false-positive hunter for the Review gate.

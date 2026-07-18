@@ -3,16 +3,7 @@ name: test-scope-validator
 model: sonnet
 cost_class: low
 color: yellow
-allowedTools:
-  - Read
-  - Grep
-  - Glob
-  - Bash
-disallowedTools:
-  - Write
-  - Edit
-  - MultiEdit
-  - NotebookEdit
+tools: Read, Grep, Glob
 description: >
   Light-weight pre-execution check (Runtime gate Step 2.5 of the quality-gates
   pipeline) that classifies each scope-relevant test file as
