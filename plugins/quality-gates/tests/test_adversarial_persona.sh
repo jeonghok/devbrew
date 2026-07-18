@@ -25,6 +25,17 @@ check() {
     echo "  FAIL: $name (got $actual, expected >= $expected)"; fail=$((fail + 1))
   fi
 }
+# Real boolean absence assert — `check ... 0` above is vacuous (count >= 0 is
+# always true), so it can never fail even when the forbidden pattern IS
+# present. Used for the dead-key / forbidden-tool checks below.
+assert_absent() {
+  local name="$1" pattern="$2"
+  if grep -qE "$pattern" "$PERSONA"; then
+    echo "  FAIL: $name (pattern '$pattern' unexpectedly present)"; fail=$((fail + 1))
+  else
+    echo "  PASS: $name (pattern absent, as expected)"; pass=$((pass + 1))
+  fi
+}
 
 # Section extractor — Gate C window between the Gate C and Gate D headers.
 gateC_section() {
@@ -45,10 +56,9 @@ check "frontmatter model opus" \
   "grep -c '^model: opus$' '$PERSONA'" 1
 check "frontmatter tools: allowlist (fail-closed)" \
   "grep -c '^tools: Read, Grep, Glob$' '$PERSONA'" 1
-check "죽은 allowedTools / denylist 없음" \
-  "grep -cE '^(allowedTools|disallowedTools):' '$PERSONA'" 0
-check "쓰기·실행·위임 도구가 tools: 에 없음" \
-  "grep -cE '^tools:.*(Write|Edit|MultiEdit|NotebookEdit|Bash|Agent|Monitor|mcp__)' '$PERSONA'" 0
+assert_absent "죽은 allowedTools / denylist 없음" '^(allowedTools|disallowedTools):'
+assert_absent "쓰기·실행·위임 도구가 tools: 에 없음" \
+  '^tools:.*(Write|Edit|MultiEdit|NotebookEdit|Bash|Agent|Monitor|mcp__)'
 
 # Gate A–D structure present
 check "Gate A header present" "grep -c '\\*\\*Gate A' '$PERSONA'" 1

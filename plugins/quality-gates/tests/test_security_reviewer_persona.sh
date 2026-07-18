@@ -25,6 +25,17 @@ check() {
     echo "  FAIL: $name (got $actual, expected >= $expected)"; fail=$((fail + 1))
   fi
 }
+# Real boolean absence assert — `check ... 0` above is vacuous (count >= 0 is
+# always true), so it can never fail even when the forbidden pattern IS
+# present. Used for the dead-key / forbidden-tool checks below.
+assert_absent() {
+  local name="$1" pattern="$2"
+  if grep -qE "$pattern" "$PERSONA"; then
+    echo "  FAIL: $name (pattern '$pattern' unexpectedly present)"; fail=$((fail + 1))
+  else
+    echo "  PASS: $name (pattern absent, as expected)"; pass=$((pass + 1))
+  fi
+}
 
 # Section extractors — lock placement, not just presence. A rule moved out of
 # its section makes the window empty → the grep RED. (AC5: section-scoped, not
@@ -45,12 +56,10 @@ check "frontmatter model inherit" \
   "grep -c '^model: inherit$' '$PERSONA'" 1
 check "frontmatter tools: allowlist (fail-closed)" \
   "grep -c '^tools: Read, Grep, Glob$' '$PERSONA'" 1
-check "죽은 allowedTools 없음" \
-  "grep -c '^allowedTools:' '$PERSONA'" 0
-check "disallowedTools 없음 (allowlist 가 컨트롤)" \
-  "grep -c '^disallowedTools:' '$PERSONA'" 0
-check "쓰기·실행·위임 도구가 tools: 에 없음" \
-  "grep -cE '^tools:.*(Write|Edit|MultiEdit|NotebookEdit|Bash|Agent|Monitor|mcp__)' '$PERSONA'" 0
+assert_absent "죽은 allowedTools 없음" '^allowedTools:'
+assert_absent "disallowedTools 없음 (allowlist 가 컨트롤)" '^disallowedTools:'
+assert_absent "쓰기·실행·위임 도구가 tools: 에 없음" \
+  '^tools:.*(Write|Edit|MultiEdit|NotebookEdit|Bash|Agent|Monitor|mcp__)'
 
 # Canonical schema keys present in persona body
 check "schema key agent: security-reviewer" \
