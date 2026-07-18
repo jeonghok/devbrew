@@ -21,6 +21,53 @@ if ! grep -qE 'frontmatter|scan_agent' "$ADVISOR"; then
 fi
 echo "PASS: V8-pre"
 
+# ============== V9 (AC10, v2.11.0): 스캐너가 죽은 allowedTools 를 경고 ==============
+echo "--- V9: AC10 frontmatter 스캐너 ---"
+run_scan() {  # run_scan <frontmatter 본문> ; stderr 를 stdout 으로
+  local fm="$1" tmp
+  tmp="$(mktemp -d)" || return 1
+  [ -n "$tmp" ] && [ -d "$tmp" ] || return 1
+  mkdir -p "$tmp/plugins/probe/agents"
+  printf -- '---\nname: probe\n%s\n---\n\nbody\n' "$fm" > "$tmp/plugins/probe/agents/probe.md"
+  printf '{"session_id":"v9","cwd":"%s"}' "$tmp" | python3 "$ADVISOR" 2>&1
+  rm -rf "$tmp"
+}
+
+out="$(run_scan 'allowedTools:
+  - Read')"
+if grep -q 'allowedTools' <<<"$out"; then
+  echo "PASS: V9a — 죽은 allowedTools 를 경고"
+else
+  echo "FAIL: V9a — allowedTools 가 경고되지 않음 (조용히 무시되는 필드가 조용히 통과)"; exit 1
+fi
+
+out="$(run_scan 'allowed-tools:
+  - Read')"
+grep -q 'allowed-tools' <<<"$out" \
+  && echo "PASS: V9b — kebab allowed-tools 계속 경고" \
+  || { echo "FAIL: V9b — kebab 경고가 회귀"; exit 1; }
+
+# 스캐너가 camelCase 를 '올바른 컨벤션'으로 가르치던 문구는 사라져야 한다.
+out="$(run_scan 'allowedTools:
+  - Read')"
+if grep -qE 'camelCase.*올바른|올바른.*camelCase' <<<"$out"; then
+  echo "FAIL: V9c — 스캐너가 여전히 camelCase 를 올바른 컨벤션으로 가르친다"; exit 1
+fi
+echo "PASS: V9c — camelCase 권고 문구 제거됨"
+
+# kill switch 는 보안 컨트롤 — 반드시 살아있어야 한다.
+tmp_ks="$(mktemp -d)" || exit 1
+[ -n "$tmp_ks" ] && [ -d "$tmp_ks" ] || exit 1
+mkdir -p "$tmp_ks/plugins/probe/agents"
+printf -- '---\nname: probe\nallowedTools:\n  - Read\n---\n\nbody\n' > "$tmp_ks/plugins/probe/agents/probe.md"
+out="$(printf '{"session_id":"v9","cwd":"%s"}' "$tmp_ks" \
+       | DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor:frontmatter-scan python3 "$ADVISOR" 2>&1)"
+rm -rf "$tmp_ks"
+if grep -q 'allowedTools' <<<"$out"; then
+  echo "FAIL: V9d — kill switch 가 스캔을 막지 못했다"; exit 1
+fi
+echo "PASS: V9d — kill switch 여전히 동작"
+
 # ============== V8 split (Medium): per-session vs flat-legacy fixtures ==============
 # V8a: per-session fixture ONLY (.claude/quality-gates/<sid>/pipeline.md).
 # V8b: flat-legacy fixture ONLY (.claude/quality-gates.local.md).

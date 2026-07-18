@@ -6,8 +6,9 @@ v1.32.0 behaviors:
   one-shot advisory pointing to `/cancel-qg`.
 - Legacy v1.5.0 flat state files (.claude/quality-gates.local.md etc.) →
   stderr one-shot advisory pointing to `/qg --reset`.
-- frontmatter-scan sub-feature: warn about kebab-case allowed-tools /
-  disallowed-tools in plugins/*/agents/*.md (unchanged from v1.x).
+- frontmatter-scan sub-feature: warn about the dead `allowedTools` key and
+  wrong-layer kebab keys in plugins/*/agents/*.md (v2.11.0: the advice used
+  to point at camelCase `allowedTools`, which is not a real subagent field).
 
 In-flight pipeline detection was removed in v1.32.0 — pipelines no longer
 span turns, so there is nothing to "resume" across sessions.
@@ -89,25 +90,35 @@ def _subfeature_disabled(feature: str) -> bool:
 
 # AC14: frontmatter scan sub-feature
 def _scan_agent_frontmatter_keys(payload: dict) -> None:
-    """plugins/*/agents/*.md 스캔, kebab-case allowed-tools/disallowed-tools 발견 시 advice."""
+    """plugins/*/agents/*.md 스캔 — 죽은 allowedTools / 잘못된 계층의 kebab 키 경고.
+
+    v2.11.0 정정: 이 스캐너는 kebab -> camelCase 를 권고했으나 `allowedTools` 는
+    공식 subagent frontmatter 필드가 아니다 (실재 키는 `tools` / `disallowedTools`).
+    잘못된 방향의 권고가 결함을 매 세션 재확인해 주고 있었다.
+    """
     if _subfeature_disabled("frontmatter-scan"):
         return
     repo_root = Path(payload.get("cwd") or os.getcwd())
     for agent_file in repo_root.glob("plugins/*/agents/*.md"):
         try:
-            parts = agent_file.read_text().split("---", 2)
+            # encoding 명시: agent 파일은 한국어를 담는다. 비-UTF-8 locale 에서
+            # UnicodeDecodeError 가 아래 except 에 삼켜지면 스캐너가 조용히 fail-open 한다.
+            parts = agent_file.read_text(encoding="utf-8").split("---", 2)
             if len(parts) < 3:
                 continue
             frontmatter = parts[1]
-            for bad_key in ("allowed-tools", "disallowed-tools"):
+            for bad_key, why in (
+                ("allowedTools", "공식 subagent 규격에 없는 필드 — 런타임이 조용히 무시한다"),
+                ("allowed-tools", "command/skill 계층의 키 — agent 에는 없다"),
+                ("disallowed-tools", "kebab 변종 — agent 의 실재 키는 disallowedTools"),
+            ):
+                # '^' 앵커 필수: 앵커 없이 검사하면 'disallowedTools:' 안의
+                # 'allowedTools' 부분문자열에 매칭돼 정상 파일에 false-positive.
                 if re.search(rf"^{re.escape(bad_key)}:", frontmatter, re.MULTILINE):
-                    correct = "".join(
-                        p.capitalize() if i else p
-                        for i, p in enumerate(bad_key.split("-"))
-                    )
                     sys.stderr.write(
-                        f"⚠️ {agent_file.relative_to(repo_root)}: agent frontmatter에 "
-                        f"kebab-case '{bad_key}' 발견. '{correct}' (camelCase)가 올바른 컨벤션.\n"
+                        f"⚠️ {agent_file.relative_to(repo_root)}: agent frontmatter 에 "
+                        f"'{bad_key}' 발견 ({why}). Law 2 격리는 `tools:` allowlist 로 "
+                        f"선언할 것 — denylist 는 시간에 대해 fail-open 이다.\n"
                     )
         except (OSError, UnicodeDecodeError):
             continue
