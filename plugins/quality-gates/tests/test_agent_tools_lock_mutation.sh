@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AC9 — test_agent_frontmatter_keys.sh 의 이빨 증명. 25개 케이스(mutation 은 RED,
+# AC9 — test_agent_frontmatter_keys.sh 의 이빨 증명. 26개 케이스(mutation 은 RED,
 # 보강/기준선 케이스는 GREEN) 가 각 want 대로 정확히 나와야 한다.
 # RED 가 안 나는 락은 장식이다.
 set -u
@@ -106,6 +106,10 @@ echo "== ⑨ YAML-구문 우회: 중복 tools: 키 (첫 값=무해한 decoy) =="
 write_agent 'tools: Read, Grep
 tools: Read, Write'
 expect RED "중복 tools: 키는 grep -m1 이 decoy 만 보게 만듦 -> FAIL"
+
+echo "== ⑩ YAML-구문 우회: flow-sequence 대괄호 ([...]) =="
+write_agent 'tools: [Read, Bash]'
+expect RED "flow-sequence 는 토큰이 '[Read'/'Bash]' 로 쪼개져 정확매칭을 피해감 -> FAIL"
 
 echo "== 보강: 이중 인용이라도 안전한 목록이면 GREEN (over-reject 아님) =="
 write_agent 'tools: "Read, Grep, Glob"'

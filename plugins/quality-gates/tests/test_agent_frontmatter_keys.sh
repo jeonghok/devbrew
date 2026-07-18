@@ -88,9 +88,11 @@ for f in plugins/*/agents/*.md; do
   # 만든다 — 안 그러면 `"Read, Grep, Write"` 의 `Write"` 가 quote 에 가려 L3 를 피한다.
   tools_val="$(printf '%s' "${tools_line#tools:}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
   case "$tools_val" in
-    ''|'>'*|'|'*)
-      echo "FAIL [L2] $f: 'tools:' 값이 비어있거나 YAML block scalar(>, |, 접힘/유지 변종 포함) 다." >&2
-      echo "  이 락은 단일 라인 plain scalar 만 검증 가능 — 'tools: A, B, C' 형태로 바꿀 것." >&2
+    ''|'>'*|'|'*|'['*)
+      echo "FAIL [L2] $f: 'tools:' 값이 비어있거나 YAML block scalar(>, |, 접힘/유지 변종 포함) 또는" >&2
+      echo "  flow-sequence(\`[...]\`) 다. 이 락은 단일 라인 plain scalar 만 검증 가능 —" >&2
+      echo "  'tools: A, B, C' 형태로 바꿀 것 (flow-sequence 는 토큰이 '[A'/'B]' 로 쪼개져 금지 이름" >&2
+      echo "  정확매칭을 피해갈 수 있어 같은 fail-closed 정신으로 거절한다)." >&2
       violations=$((violations+1))
       continue
       ;;

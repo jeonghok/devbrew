@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # build-pr-context.sh — deterministic PR-understanding context blob (design §4).
 # Pure read-only git. This blob is the ONLY input the de-privileged
-# pr-understanding-builder agent ever sees (it has zero filesystem tools), and
+# pr-understanding-builder agent ever sees (its sole declared tool is an inert
+# Read it never invokes — no write/exec/network/delegation), and
 # it is the secret-scan corpus. Same input → byte-identical output.
 #
 # Usage: build-pr-context.sh [--base <ref>] [--history]   (default base: origin/main → main)

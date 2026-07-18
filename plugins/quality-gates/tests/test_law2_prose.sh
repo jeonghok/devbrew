@@ -39,6 +39,20 @@ for lit in '실제 키' 'Layer 1 없이' '네트워크 tool 0개' 'tool 0개'; d
   fi
 done
 
+# --- AC16-3: `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]` 배열 리터럴 산문 0건 ---
+# 왜: 이관된 3개 reviewer agent(security-reviewer/adversarial/test-scope-validator)는
+# 이제 `tools: Read, Grep, Glob` fail-closed allowlist를 선언하고 disallowedTools 키가
+# 없다. 이 배열 리터럴이 활성 문서에 남아 있으면 다음 저자가 "denylist를 복원해야
+# 한다"고 오독할 수 있다 (I2, whole-branch review). CLAUDE.md의 "denylist(`disallowedTools`)
+# 단독 금지" 같은 정당한 언급은 이 배열 리터럴을 포함하지 않으므로 false-positive 없음.
+dt_lit='disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]'
+hits="$(grep -rlF "$dt_lit" "${FILES[@]}" 2>/dev/null || true)"
+if [ -n "$hits" ]; then
+  fail "AC16: disallowedTools 배열 리터럴 잔존 → $hits"
+else
+  pass "AC16: disallowedTools 배열 리터럴 없음"
+fi
+
 # --- AC1: CLAUDE.md 가 agent 격리로 kebab 을 지목하지 않는다 ---
 if grep -nE '`allowed-tools`[[:space:]]*/[[:space:]]*`disallowed-tools`' CLAUDE.md | grep -q .; then
   fail "AC1: CLAUDE.md 가 여전히 agent 격리 메커니즘으로 kebab allowed-tools/disallowed-tools 를 지목"
