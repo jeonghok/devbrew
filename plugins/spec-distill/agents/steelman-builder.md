@@ -3,17 +3,7 @@ name: steelman-builder
 model: sonnet
 cost_class: variable
 color: red
-allowedTools:
-  - Read
-  - Grep
-  - Glob
-  - WebSearch
-  - WebFetch
-disallowedTools:
-  - Write
-  - Edit
-  - MultiEdit
-  - NotebookEdit
+tools: Read, Grep, Glob, WebSearch, WebFetch
 description: >
   Use this agent during a spec-distill interview when a direction is suspect
   (landscape contradiction / known anti-pattern / locked-direction conflict /
