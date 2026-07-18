@@ -19,16 +19,34 @@ FM="$(fm)"
 grep -qE '^model:[[:space:]]*opus[[:space:]]*$' <<<"$FM" \
   && pass "model: opus pinned" || fail "model: opus not pinned"
 
-grep -qE '^allowedTools:[[:space:]]*\[\][[:space:]]*$' <<<"$FM" \
-  && pass "allowedTools: [] (zero FS tools)" || fail "allowedTools not empty"
+# AC5 (v2.11.0): 단일 무해 항목 allowlist. denylist 시대 종료.
+# 왜 바뀌었나: `allowedTools`는 공식 subagent 필드가 아니라 조용히 무시됐고, 실효 표면은
+# "denied 11개를 뺀 전부"였다 — 거기에 `mcp__*`가 없어 tavily·chrome-devtools 가 열려 있었다.
+# 이름 기반 denylist는 원리적으로 닫히지 않는다(`Monitor` = 이름 없는 셸 + egress).
+grep -qE '^tools:[[:space:]]*Read[[:space:]]*$' <<<"$FM" \
+  && pass "tools: Read (단일 무해 항목 — fail-closed)" \
+  || fail "tools: 가 단일 무해 항목이 아님"
 
-for t in Write Edit MultiEdit NotebookEdit Read Grep Glob Bash WebFetch WebSearch Agent; do
-  if grep -qE "^[[:space:]]*-[[:space:]]*$t[[:space:]]*$" <<<"$FM"; then
-    pass "disallowedTools denies $t"
+grep -qE '^allowedTools:' <<<"$FM" \
+  && fail "죽은 allowedTools 키 잔존" \
+  || pass "allowedTools 없음"
+
+grep -qE '^disallowedTools:' <<<"$FM" \
+  && fail "disallowedTools 잔존 (allowlist가 컨트롤 — denylist 병기 금지)" \
+  || pass "disallowedTools 없음"
+
+# 이 agent가 결코 가져선 안 되는 것들이 tools: 에 없음 (도구별 확인)
+TOOLS_VAL="$(grep -m1 -E '^tools:' <<<"$FM" | sed 's/^tools:[[:space:]]*//')"
+for t in Write Edit MultiEdit NotebookEdit Grep Glob Bash WebFetch WebSearch Agent Monitor ToolSearch; do
+  if grep -qE "(^|,)[[:space:]]*${t}[[:space:]]*(,|$)" <<<"$TOOLS_VAL"; then
+    fail "tools: 에 $t 가 있다 (생성기가 스스로를 게시할 길이 열림)"
   else
-    fail "disallowedTools MISSING $t (builder could reach files)"
+    pass "tools: 에 $t 없음"
   fi
 done
+grep -q 'mcp__' <<<"$TOOLS_VAL" \
+  && fail "tools: 에 MCP grant 가 있다" \
+  || pass "tools: 에 MCP 없음"
 
 # AC3: no findings section in the persona body.
 if ! grep -qiE 'findings|무엇을 고쳤' "$AGENT"; then
