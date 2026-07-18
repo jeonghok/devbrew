@@ -45,6 +45,7 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **P17 (Consent) — 게시는 게이트가 아니라 opt-in consent-gated 표면** (v2.9.0) — `/qg-publish`는 매 실행마다 사람이 읽는 preview 뒤 AskUserQuestion으로 명시 동의를 받아야만 GitHub에 쓴다(비가역·영구 노출 고지 포함; cross-repo "always" 없음). **`/qg`의 Review gate/Runtime gate 자체는 이 기능으로 변경되지 않는다 — publish는 그 위에 얹힌 별도 opt-in 표면이지 세 번째 게이트가 아니다.**
 - **P18 (Bounded idempotency)** (v2.9.0) — `comment-upsert.py`가 인증 `user.id` 스코프 내에서 버전-패밀리 마커(`<!-- pr-understanding:v1 -->`, 첫 줄 anchored 매칭이 optional `tier=N` 접미사를 허용 — 빌더는 `tier=N`을 emit하지만 tier는 변경 파일 수에 따라 드리프트하므로 매칭은 tier를 무시해 멱등이 깨지지 않게 함)로 기존 코멘트를 조회해 0개→POST, 1개→PATCH, ≥2개(비정상)→REFUSE — 모호성 앞에서 임의로 고르지 않고 결정론적으로 멈추고 사용자 확인을 요구한다.
 - **pwn-request Law-2형 물리 분리 — 생성 ≠ 게시** (v2.9.0) — `pr-understanding-builder` 에이전트는 `allowedTools: []`(파일시스템·네트워크 tool 0개, 유일 입력 = inlined `build-pr-context.sh` blob)로 저술만 하고, `gh`/네트워크는 오직 `publishing-pr-understanding` skill(오케스트레이터)만 보유한다. Review gate의 writer≠reviewer 물리적 격리와 같은 형태를 생성↔게시 축에 적용한 것 — 생성기가 스스로를 게시할 길이 구조적으로 없다.
+- **Law 1/2/3 + P8/P18 (산출물 비평 루프, v2.11.0)** — `/qg critique`가 비-코드 산출물에 대해 inherit-tier `artifact-critic`+`artifact-adversarial`(+조건부 codex)의 read-only 비평 → 오케스트레이터 수정 → 라운드별 커밋 루프를 돈다. Law 1=E3 upfront 동의 게이트; Law 2=read-only 리뷰어(`disallowedTools`)+매 라운드 독립 critic 게이트; Law 3=라운드별 커밋 감사추적; P18=max-rounds+stagnation predicate+kill switch(`DEVBREW_QG_DISABLE_CRITIQUE`); P8=NL 라우팅 모델-소유, 결정론은 `critique <path>`+§10 스키마. 별도 skill `critiquing-artifacts`로 위임(코드 2게이트 파이프라인 무변경).
 
 ## 구조
 
@@ -140,6 +141,8 @@ The optional `codex-reviewer` agent has `cost_class: variable` — it invokes th
 `adversarial` agent uses `model: opus`. It is the **Opus-critic over the Sonnet Phase 1 workers** (cf. Anthropic multi-agent patterns: spend capability at the judgment bottleneck): the Phase 1/2 reviewers run on cheaper models and the synthesizer after it is a deterministic script, so adversarial is the *single model-based judgment gate* in the Review gate — every finding the user sees passed through its verdict. Its persona runs a per-finding 3-gate verification (real? / introduced-by-this-diff? / handled-elsewhere?) plus a severity realist check, which is reasoning-heavy enough to warrant opus. A prior cost pass (T2-8) drifted the frontmatter/README toward sonnet while the SKILL dispatch still pinned opus; the three sites are now reconciled to opus and locked by `tests/test_adversarial_model_consistency.sh`. Runs ~once per Review gate fix-loop iteration (≤5×). AskUserQuestion fan-out count excludes `adversarial`/`scout`/`synthesizer` (infrastructure dispatches; not user-visible cost). To reduce its cost, lower the *number* of Review gate iterations or the diff scope — not this model.
 
 ## 게이트
+
+> **비-코드 산출물 비평 모드 (v2.11.0):** `/qg critique <path>` 또는 자연어 비평 의도로 문서·스펙·계획·설정·산문을 대상으로 비평-수정-재비평 루프를 돈다(라운드별 커밋; 코드 리뷰 아님 — 코드는 위 2게이트). 상세는 skill `critiquing-artifacts`.
 
 | 게이트 | 주체 | 목적 | 위임 대상 |
 |------|-----|------|---------|
