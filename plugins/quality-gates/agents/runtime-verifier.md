@@ -3,31 +3,11 @@ name: runtime-verifier
 model: inherit
 cost_class: variable
 color: green
-allowedTools:
-  - Read
-  - Bash
-  - Grep
-  - Glob
-  - Write
-  - Edit
-  - MultiEdit
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__navigate_page
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_screenshot
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_snapshot
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__list_console_messages
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__get_console_message
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__close_page
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__new_page
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__wait_for
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__click
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__fill
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__fill_form
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__type_text
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__hover
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__press_key
-  - mcp__plugin_chrome-devtools-mcp_chrome-devtools__evaluate_script
-disallowedTools:
-  - NotebookEdit
+# TOOL-EXCEPTION: Bash — sandbox executor: 실제 서비스를 부팅해 AC 를 실행한다 (qg v2.2.0). Law 2 는 도구 deny 가 아니라 orchestrator 의 git-diff mutation guard 가 구조적으로 보장한다.
+# TOOL-EXCEPTION: Write — 샌드박스 전용 setup fix (예: cp .env.example .env). product 소스 쓰기는 mutation guard 가 잡아 verdict 를 ≤FAIL 로 강제하고 샌드박스는 폐기된다.
+# TOOL-EXCEPTION: Edit — Write 와 동일한 sandbox-executor 계약.
+# TOOL-EXCEPTION: MultiEdit — Write 와 동일한 sandbox-executor 계약.
+tools: Read, Bash, Grep, Glob, Write, Edit, MultiEdit, mcp__plugin_chrome-devtools-mcp_chrome-devtools__navigate_page, mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_screenshot, mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_snapshot, mcp__plugin_chrome-devtools-mcp_chrome-devtools__list_console_messages, mcp__plugin_chrome-devtools-mcp_chrome-devtools__get_console_message, mcp__plugin_chrome-devtools-mcp_chrome-devtools__close_page, mcp__plugin_chrome-devtools-mcp_chrome-devtools__new_page, mcp__plugin_chrome-devtools-mcp_chrome-devtools__wait_for, mcp__plugin_chrome-devtools-mcp_chrome-devtools__click, mcp__plugin_chrome-devtools-mcp_chrome-devtools__fill, mcp__plugin_chrome-devtools-mcp_chrome-devtools__fill_form, mcp__plugin_chrome-devtools-mcp_chrome-devtools__type_text, mcp__plugin_chrome-devtools-mcp_chrome-devtools__hover, mcp__plugin_chrome-devtools-mcp_chrome-devtools__press_key, mcp__plugin_chrome-devtools-mcp_chrome-devtools__evaluate_script
 description: >
   Use this agent for runtime verification of applications as the Runtime gate of
   the quality-gates pipeline. It runs INSIDE a disposable git-worktree sandbox
