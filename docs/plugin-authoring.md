@@ -13,7 +13,7 @@ plugins/<your-plugin>/
 ├── commands/                 # optional — 짧은 명령형: qg.md, review.md
 ├── skills/<gerund-name>/     # optional — running-x, authoring-y (동명사)
 │   └── SKILL.md              # cost_class 선언, frontmatter trigger
-├── agents/                   # optional — 각각 allowedTools/disallowedTools 선언
+├── agents/                   # optional — 각각 tools: allowlist 선언 (fail-closed)
 ├── hooks/                    # optional — 각각 DEVBREW_DISABLE_<PLUGIN>=1 opt-out
 ├── scripts/                  # optional — hook에서 호출하는 shell/python 헬퍼
 └── templates/                # optional — 플러그인이 설치하는 정적 파일
@@ -21,7 +21,7 @@ plugins/<your-plugin>/
 
 **Reference 구현** — 본인 플러그인의 형태와 맞는 것을 읽으세요:
 
-- [`plugins/quality-gates/`](../plugins/quality-gates/) — **writer + reviewer + hook 파이프라인**. 3-gate `allowedTools`/`disallowedTools` 격리로 Laws 1–2를 embody. `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`를 shipping.
+- [`plugins/quality-gates/`](../plugins/quality-gates/) — **writer + reviewer + hook 파이프라인**. 3-gate `tools:` allowlist 격리로 Laws 1–2를 embody. `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`를 shipping.
 - [`plugins/project-init/`](../plugins/project-init/) — **git-workflow enforcement**. Compounding hook과 branching-strategy 템플릿으로 Law 3를 embody. `commands/`, `hooks/`, `templates/`를 shipping. `agents/`나 `skills/` 없음 — hooks-and-templates 플러그인도 유효한 형태.
 
 **Merge 전:** [Plugin Shape](../CLAUDE.md#plugin-shape)의 모든 bullet 만족 + 시작 버전 `0.1.0`.

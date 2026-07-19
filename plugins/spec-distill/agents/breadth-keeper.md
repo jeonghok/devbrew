@@ -3,11 +3,7 @@ name: breadth-keeper
 model: sonnet
 cost_class: low
 color: blue
-disallowedTools:
-  - Write
-  - Edit
-  - MultiEdit
-  - NotebookEdit
+tools: Read, Grep, Glob
 description: >
   Use this agent during a spec-distill interview round to detect narrow tunneling
   (예: 사용자와 interviewer가 한 dimension에 너무 깊이 들어가서 다른 가능성을

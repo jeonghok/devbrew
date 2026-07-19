@@ -245,7 +245,7 @@ artifact_stagnation.py --this "<이번 stagnation_keys>" --prev "<직전 stagnat
 
 ## Law 2 보증
 
-critic·adversarial·codex는 read-only(`disallowedTools` / codex `-s read-only`). 수정·커밋은
+critic·adversarial·codex는 read-only(`tools:` allowlist / codex `-s read-only`). 수정·커밋은
 이 오케스트레이터만. **매 라운드 독립 critic이 게이트**: 라운드 N의 수정을 라운드 N+1의
 *독립* critic이 재검토하며, 최종 "수렴"은 마지막 독립 critic 패스의 kept 집합이 결정 —
 자기 편집을 자기 판단으로 승인하는 경로가 구조적으로 없다.

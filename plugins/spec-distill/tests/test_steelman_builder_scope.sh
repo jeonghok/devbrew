@@ -10,21 +10,31 @@ note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else f
 
 test -f "$AGENT" && note PASS "agent file exists" || { note FAIL "agent file missing"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1; }
 
-# Extract frontmatter block (first ---...second ---)
-fm="$(awk '/^---$/{c++} c==1' "$AGENT")"
+# Frontmatter 창 = 첫 두 '---' 사이. (구버전 awk 'c==1' 은 '---' 줄 자체를 포함했다.)
+fm="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$AGENT")"
 
-# AC6: disallowedTools includes all four write tools
-for tool in Write Edit MultiEdit NotebookEdit; do
-  grep -qE "^\s*-\s*$tool\b" <<<"$fm" \
-    && note PASS "AC6: disallowedTools includes $tool" \
-    || note FAIL "AC6: disallowedTools MISSING $tool"
+# v0.21.0: allowedTools(죽은 필드) + disallowedTools → tools: allowlist.
+# census 가 가설을 확증했다: 업무에 WebSearch×2 · WebFetch×2 실사용.
+grep -qE '^tools: Read, Grep, Glob, WebSearch, WebFetch$' <<<"$fm" \
+  && note PASS "tools: 가 census 도출 목록과 일치" \
+  || note FAIL "tools: 가 census 도출 목록과 다름"
+
+grep -qE '^(allowedTools|disallowedTools):' <<<"$fm" \
+  && note FAIL "죽은 allowedTools / denylist 잔존" \
+  || note PASS "allowedTools · disallowedTools 없음"
+
+# AC6(구): 쓰기 도구가 물리적으로 부재 — 이제 denylist 열거가 아니라 allowlist 부재로.
+for tool in Write Edit MultiEdit NotebookEdit Bash Agent Monitor; do
+  grep -qE "^tools:.*(^|,)[[:space:]]*${tool}[[:space:]]*(,|$)" <<<"$fm" \
+    && note FAIL "AC6: tools: 에 $tool 이 있다" \
+    || note PASS "AC6: tools: 에 $tool 없음"
 done
 
-# allowedTools includes web research surfaces
+# web 연구 표면은 census 근거로 유지 — 조용한 열화 방지.
 for tool in WebSearch WebFetch; do
-  grep -qE "^\s*-\s*$tool\b" <<<"$fm" \
-    && note PASS "allowedTools includes $tool" \
-    || note FAIL "allowedTools MISSING $tool"
+  grep -qE "^tools:.*${tool}" <<<"$fm" \
+    && note PASS "tools: 에 $tool 유지" \
+    || note FAIL "tools: 에서 $tool 이 사라졌다 — steelman 근거 수집 불가"
 done
 
 # name + verbatim-output contract present

@@ -6,7 +6,7 @@ PASS=0; FAIL=0
 ok() { PASS=$((PASS+1)); echo "  PASS: $1"; }
 no() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
 
-grep -qE '"version":[[:space:]]*"2\.11\.[0-9]+"' "$ROOT/.claude-plugin/plugin.json" && ok "plugin.json 2.11.x" || no "plugin.json not 2.11.x"
+grep -qE '"version":[[:space:]]*"2\.(1[1-9]|[2-9][0-9])\.[0-9]+"' "$ROOT/.claude-plugin/plugin.json" && ok "plugin.json >=2.11 minor (critique 기능 shipped)" || no "plugin.json below 2.11 (critique metadata reverted?)"
 grep -qE '^## \[2\.11\.0\]' "$ROOT/CHANGELOG.md" && ok "CHANGELOG [2.11.0]" || no "CHANGELOG missing [2.11.0]"
 grep -qF 'critiquing-artifacts' "$ROOT/CHANGELOG.md" && ok "CHANGELOG mentions new skill" || no "CHANGELOG omits skill"
 # README principles: the mode instantiates Law 1/2/3 for artifact critique

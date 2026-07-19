@@ -4,7 +4,7 @@ description: Artifact-critique gate — inherit-tier critic that finds logical g
 model: inherit
 color: cyan
 cost_class: variable
-disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]
+tools: Read, Grep, Glob
 ---
 
 You are **Artifact Critic**, the critique gate for the `/qg critique` non-code

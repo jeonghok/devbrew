@@ -3,6 +3,23 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.12.0] — 2026-07-19
+
+### Security
+- **`pr-understanding-builder` MCP 유출 경로 봉쇄** — 이 agent 는 README 가 *"파일시스템·네트워크 tool 0개"* pwn-request 방어로 광고해 왔으나, 실효 격리는 존재하지 않는 필드(`allowedTools`) + 11개 이름 denylist 였고 **그 denylist 에 `mcp__*` 가 없어** tavily 웹검색·chrome-devtools 브라우저 제어를 보유하고 있었다. `tools:` 단일 무해 항목 allowlist 로 전환해 광고된 계약을 **처음으로 사실로** 만들었다.
+- **8개 agent 전부 `tools:` allowlist 로 전환** (fail-closed). 이전에는 8/8 이 denylist 만으로 격리돼 `Agent`(위임 사슬)·`Bash`·모든 MCP 도구를 보유했다 — 트랜스크립트 census 실측으로 리뷰어 3종이 서브에이전트를 실제 스폰했고 그중 둘이 `general-purpose`(Write 보유)를 띄운 것이 확인됐다.
+
+### Changed
+- **`allowedTools` 키 제거 (BREAKING for agent 저자)** — 공식 subagent 규격의 필드가 아니라 조용히 무시된다. agent 격리는 `tools:` allowlist 로 선언한다. `allowed-tools`(command/skill)와 `--allowedTools`(CLI)는 **실재·정상**이며 무관하다.
+- `runtime-verifier` 의 죽은 `allowedTools` 22개를 `tools:` 로 이관 + `list_network_requests` 1개 추가 = 23개 — chrome-devtools 는 **per-tool 그대로**(서버 단위 grant 는 표면을 넓혀 `upload_file` 유출 벡터를 준다). network 도구는 persona Hard Rule 5 의 network-status 증거를 위해 추가하되 `get_network_request`(auth 헤더·토큰 노출)는 least-privilege 로 제외. `Bash`·`Write`·`Edit`·`MultiEdit` 는 `# TOOL-EXCEPTION:` 마커로 근거를 명시.
+- **`artifact-critic`·`artifact-adversarial`(v2.11.0 산출물 비평 루프의 신규 agent)도 `tools: Read, Grep, Glob` allowlist 로 이관** — origin/main 병합 시 repo-wide 락 불변식(모든 agent = `tools:` allowlist) 유지.
+- 레거시 AC15 락(`tests/test_agent_frontmatter_keys.sh`)이 **camelCase 허구 대신 `tools:` allowlist 를 강제**하도록 뒤집힘. **34 mutation 으로 이빨 증명**(YAML 우회 17종 RED + over-reject 방지 GREEN; 락은 '단일 라인 plain scalar 만 허용, 그 외 전부 거절' whitelist).
+- 레거시 AC14 스캐너(`hooks/session-start-advisor.py`)가 죽은 `allowedTools` 를 경고. kill switch 불변.
+
+### Fixed
+- `README.md` 의 거짓 서술 정정 — *"실제 키 `allowedTools`"* · *"Layer 1 없이 Layer 2/3 는 불완전"* · *"네트워크 tool 0개"*. `codex-reviewer` 의 3-layer 서술은 이중으로 죽어 있었다: 필드가 무시됐고, T3-3 에서 agent 자체가 스크립트로 이관돼 frontmatter 가 사라졌다.
+- **`/qg` self-dogfood(Review gate) 하드닝** — publishing SKILL 의 빌더 격리 서술을 정직화(빌더가 inert `Read` 를 보유한다는 사실 반영; prose lock 을 조사 변종까지 확장). frontmatter 락의 YAML-구문 우회(inline-comment·anchor·tag·multiline)를 whitelist 재설계로 봉쇄. codex 독립 재검증 3라운드가 적발한 self-regression 다수 수정.
+
 ## [2.11.0] — 2026-07-17
 
 `/qg`에 비-코드 산출물(문서·스펙·계획·설정·산문)용 **비평 → 수정 → 재비평** 자율 루프
