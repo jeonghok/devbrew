@@ -1694,7 +1694,7 @@ git commit -m "feat(plugin-audit): C — untrusted-data (P21) clause across 3 pe
 **Interfaces:**
 - Consumes: `check-shape-completeness.py <plugin_dir> [--repo-root <dir>]`.
 - Produces: stdout JSON `{"shape_gaps": [{"requirement", "present", "source_doc"}]}` — **판정 없음, 사실만**. canonical shape는 **하드코딩 checklist**(런타임 CLAUDE.md 파싱 아님 — C15). 판정부는 축⑤에 fold(auditor가 `pack.shape_gaps`를 읽어 판정; Task 8이 pack.shape_gaps를 CONTRACT/축⑤에 렌더, Task 21 skill이 이 스크립트 출력을 pack에 주입). exit 0. 모든 read `encoding="utf-8"`.
-- 회귀 락: CLAUDE.md §Plugin Shape의 각 항목이 checklist에 반영됐는지 **body-unique 문구 grep** + bullet 수 정합(drift/추가 = RED).
+- 회귀 락: CLAUDE.md §Plugin Shape의 각 checklist requirement가 그 섹션에 여전히 반영돼 있는지 **body-unique 문구(anchor) grep**으로 확인 — anchor의 drift/제거 = RED. **⚠ 정정(Task 18 리뷰):** checklist는 §Plugin Shape bullet의 *부분집합*(F가 검사 가능한 7개)이라 1:1 매핑이 없어 "새 bullet *추가* 자동 감지(bullet 수 정합)"는 구현하지 않는다 — 추가된 CLAUDE.md 요구는 checklist 수동 확장이 필요(무결성은 drift-lock이 아니라 리뷰가 담당).
 
 - [ ] **Step 1: 테스트 작성 (RED 먼저) — AC-10 + 회귀 락**
 
