@@ -19,7 +19,7 @@ has "comment-analyzer"                'comment-analyzer'
 has "feature-dev:code-architect"      'feature-dev:code-architect'
 
 echo "== AC4: scope-signal 팔레트 토큰 =="
-for tok in '역직렬화' '인젝션' 'XSS' 'crypto' 'TLS' 'XXE' 'GHA' 'SRI' 'deps' 'migration' 'public-API' '삭제 파일'; do
+for tok in '역직렬화' '인젝션' 'XSS' 'crypto' 'TLS' 'XXE' 'GHA' 'SRI' 'deps-manifest' 'migration' 'public-API' '삭제 파일'; do
   has "팔레트 토큰: $tok" "$tok"
 done
 
@@ -40,7 +40,7 @@ has "transparency 제외 절"  '제외:'
 
 echo "== AC11: graceful degradation loud log =="
 has "degrade: specialist"      'specialist'
-has "degrade: unavailable"     'unavailable'
+has "degrade: unavailable"     'unavailable (<plugin> 미설치)'
 has "degrade: degraded coverage" 'degraded coverage'
 
 echo "== AC13 (negative): 수치 0-100 스코어링 미도입 =="
