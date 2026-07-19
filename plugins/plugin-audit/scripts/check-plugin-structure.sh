@@ -28,8 +28,10 @@ if [ -z "$VA$VH$HL" ]; then
   exit 0
 fi
 
-# hook-linter.sh (정상 동작 — 사실로)
-if [ -n "$HL" ]; then
+# hook-linter.sh (정상 동작 — 사실로) — .sh 훅이 실제로 있을 때만 호출.
+# 없으면 (예: python-only hooks) unguarded glob이 literal "*.sh" 문자열로 linter에 전달되어
+# 거짓 fact를 남길 수 있음 (non-nullglob bash). compgen -G로 존재 확인 후에만 호출.
+if [ -n "$HL" ] && compgen -G "$TARGET/hooks/*.sh" >/dev/null 2>&1; then
   out=$(bash "$HL" "$TARGET"/hooks/*.sh 2>&1); rc=$?
   if [ $rc -le 1 ]; then
     add_fact "$(python3 -c "import json,sys; print(json.dumps({'validator':'hook-linter.sh','target':sys.argv[1],'fact':sys.argv[2][:400],'verifier_ok':True}))" "$TARGET" "$out")"
