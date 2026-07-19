@@ -272,6 +272,10 @@ project-init 하드코딩(엔진 §14 B2 인벤토리) → 인자. 파일별:
 → **quality-gates의 `qg-worktree.sh`(disposable git-worktree 샌드박스 + mutation-guard)를 재사용**한다
 (devbrew 내부 렌즈: 이미 이 문제의 답이 리포에 있음). 테스트는 샌드박스에서 돌고, product 변경은
 mutation-guard가 잡아 사실을 무효화한다. **crash 금지 · 타임아웃 120초 → degrade**(엔진 §12 상속).
+**adapter 계약 (design-level — codex r2#2/r3#2)**: quality-gates를 optional versioned 의존으로 선언
+(README prerequisites); invocation = `qg-worktree.sh` create-sandbox → 탐지된 러너로 target 테스트 실행 →
+`mutation-guard` → 정규화 결과(`own_tests:{ran,passed,total,forced_downgrade}`); **quality-gates 미설치 시
+degrade**(축③은 테스트를 읽어 판정, 실행 skip + 배너). full 결과-JSON 필드 스키마·exit 매핑은 writing-plans.
 
 ## 10. Seed 파일 포맷
 
@@ -302,7 +306,7 @@ generic 엔진 프롬프트는 clue-free가 되므로 재발 사이트가 seed �
 > **⚠ 문자 충돌 주의 (spec-review r2).** 이 문서에서 대문자 단독 문자 **A/B/C/E/F**는 *능력*(Tier1
 > A·B·C, 구조 E·F)을 가리킨다 — 엔진에서 상속한 refuter의 축별 판정 게이트 **Gate A–F**(§7·§9의
 > "refuter Gate E" 등)와는 별개다. **"Gate"가 붙으면 refuter 게이트, 안 붙으면 능력 컴포넌트.** §12가
-> "A"에 대해 한 구분(§A(orchestrator) vs refuter Gate A)을 E·F에도 동일 적용.
+> "A"에 대해 한 구분(A(orchestrator) vs refuter Gate A)을 E·F에도 동일 적용.
 
 ### E — `check-plugin-structure.sh`
 
@@ -467,13 +471,16 @@ checklist 원소 = `{requirement_id, check_fn, claude_md_anchor}`:
   해석되고 `tools:` allowlist가 런타임 강제 — 캐시 갱신 + 세션 재시작 후, GC8).
 - AC-6: **generalization 회귀 없음 (결정론 측정 — codex #6)** — 비결정론 multi-agent discovery는 "동일
   발견"으로 측정 불가하므로, 2026-07-15 project-init 감사의 **기록된 journal(에이전트 raw return)을 stub**
-  으로 generalized post-1 파이프라인에 흘려 조립된 audit-data.json이 baseline과 **필드-동일**(finding
-  id·status·정렬·스키마)임을 assert(CX-2·A6-1 baseline대로 재현 포함). 결정론 조립·렌더·grounding이
-  일반화로 안 바뀜을 검증(discovery는 stub이라 결정론).
+  으로 generalized post-1 파이프라인에 흘려 조립된 audit-data.json을 baseline과 diff. **비교 projection
+  (additive-only 등가 — spec-review/codex r3)**: baseline에 없는 이번 사이클 새 필드(§13: grounding_verified·
+  structure_facts·shape_gaps·meta.target/seed_provided)는 *예상된 추가*로 diff서 제외하고, **legacy 필드만
+  value-동일**을 요구한다(finding id·status·정렬 + grounding-유발 line 교정/폐기는 baseline fixture 대비
+  예상 변화로 명시). CX-2·A6-1이 baseline대로 재현됨을 포함. 결정론 조립·렌더·grounding이 일반화로 안
+  바뀜을 검증(discovery는 stub이라 결정론).
 
 **신규 능력:**
 - AC-7 (A): 생존 finding의 인용이 orchestrator 결정론 재읽기로 resolve되거나 **명시적 null-degrade**
-  (파일 부재/읽기불가 예외 — §12 4번째 케이스). 즉 검증 안 된 인용은 조용히 통과하지 않는다(null이면
+  (파일 부재/읽기불가 예외 — §12 목록 첫 케이스). 즉 검증 안 된 인용은 조용히 통과하지 않는다(null이면
   ⚠ 미검증 라벨). mutation: 인용을 틀리게 만든 fixture가 폐기, 파일 없는 fixture가 null-degrade되는지 RED.
 - AC-8 (B, codex #9): (a) `check-no-verdict-injection.py`가 {audit-workflow.js CONTRACT/AXES/refutePrompt,
   codex 프롬프트, 3 persona, **seed 파일**}에서 banned verdict 토큰(엔진 BANNED + 일반화)을 검출 —
@@ -484,14 +491,14 @@ checklist 원소 = `{requirement_id, check_fn, claude_md_anchor}`:
   깨진 검증기 stub이 `degraded[]`로 가는지 RED로 증명.
 - AC-10 (F): canonical shape 누락이 finding/shape_gap으로, **단일 패스**(loop 없음). mutation:
   version 필드 제거한 fixture가 누락으로 잡히는지 RED.
-- AC-13 (자체 테스트 격리, §9 — spec-review r2): target 테스트를 disposable worktree 샌드박스
+- AC-11 (자체 테스트 격리, §9 — spec-review r2): target 테스트를 disposable worktree 샌드박스
   (`qg-worktree.sh` 재사용)에서 실행, **product-변경 테스트를 mutation-guard가 잡아 사실 무효화** +
   120s 타임아웃 → `own_tests:{ran:false}`. mutation: product를 건드리는 target 테스트 fixture가
   mutation-guard에 잡히는지 RED로 증명.
 
 **전역:**
-- AC-11: 신규/이관 스크립트마다 mutation test로 이빨 증명(회귀 락 헤더-satisfiable 금지, C11).
-- AC-12: 생성 파일 read는 `encoding="utf-8"` (한글 파일 fail-open 방지, [[reference_explicit_utf8_korean_primary]]).
+- AC-12: 신규/이관 스크립트마다 mutation test로 이빨 증명(회귀 락 헤더-satisfiable 금지, C11).
+- AC-13: 생성 파일 read는 `encoding="utf-8"` (한글 파일 fail-open 방지, [[reference_explicit_utf8_korean_primary]]).
 
 ## 17. Verification Plan
 
@@ -505,7 +512,7 @@ checklist 원소 = `{requirement_id, check_fn, claude_md_anchor}`:
 - **AC-6 회귀 (결정론)**: 2026-07-15 journal을 stub으로 generalized post-1에 흘려 조립 audit-data.json을
   baseline과 field-diff — CX-2 CRITICAL·A6-1 HIGH 재현 + 정렬/스키마 불변. mutation: 조립 로직 변경 시 RED.
 - **컴포넌트 계약 fixture**: 각 pre-check 스크립트를 argv/stdin → stdout/exit 고정 fixture로 독립 단위 테스트(§8).
-- **자체 테스트 격리 (AC-13)**: product-mutating target 테스트 fixture가 mutation-guard에 잡혀 사실이
+- **자체 테스트 격리 (AC-11)**: product-mutating target 테스트 fixture가 mutation-guard에 잡혀 사실이
   무효화되는지 + 120s 타임아웃이 `own_tests:{ran:false}`를 내는지 골든 검증.
 - **스모크(pre-0, GC8 후)**: `smoke-workflow.js`가 namespaced agent 해석 + allowlist를 sentinel
   디스크 부재로 실증(persona 자기보고 아님).
@@ -541,9 +548,13 @@ checklist 원소 = `{requirement_id, check_fn, claude_md_anchor}`:
   정밀화(§16) · AC-6 검증 스텝(§17).
 - **r3 (2026-07-19)** — round-2 리뷰(r1 4건 RESOLVED 확인 + 수정이 만든 회귀 6건) 반영: §8 E exit-code
   degrade carve-out · §12 grounding null(파일 부재) 4번째 케이스 + AC-7 정합 · §11 component E/F ↔
-  refuter Gate E/F 문자 구분 · §16 AC-13(sandbox 격리) + §17 스텝 · §2 Goal 3 결정론-범위로 축소
+  refuter Gate E/F 문자 구분 · §16 AC(sandbox 격리) + §17 스텝 · §2 Goal 3 결정론-범위로 축소
   (discovery=by-construction) · §18 테스트-격리 대안 비교. codex의 "설계에 완전 스키마 요구"는 design→plan
   경계로 명시 deferral(§8).
+- **r4 (2026-07-19)** — round-3 리뷰(r2 4건 RESOLVED 확인 + 정밀 결함 3) 반영: AC-6 additive-only 비교
+  projection(새 필드 제외) · AC-7 §12 ordinal 교정(첫 케이스) · sandbox AC를 AC-11로 이동해 AC 번호 단조화
+  (7–13, §17 참조 동기화) · §9 qg-worktree adapter 계약(design-level) · §11 "§A" nit. codex의 완전-스키마
+  demand(raised_count 3)는 design↔plan 경계 문제로 사용자 판정 대상.
 
 ## 20. Handoff Context
 
