@@ -27,9 +27,9 @@ echo "== AC10: §166 3-tier + prerequisites =="
 present "§166 3-tier 헤딩"       '3-tier'
 present "Tier A floor"           'Tier A'
 present "Tier B codex"           'Tier B'
-present "Tier C 전문가"           'Tier C'
-present "prerequisites pr-review-toolkit optional" 'pr-review-toolkit'
-present "prerequisites feature-dev optional"       'feature-dev'
+present "prereq: Tier C optional decl (body-unique)" 'Tier C optional dependencies'
+present "prereq: pr-review-toolkit named (body-unique)" 'pr-review-toolkit`(code-reviewer'
+present "prereq: feature-dev named (body-unique)"       'feature-dev`(code-architect)'
 
 echo; echo "readme-scope-reconcile: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -361,7 +361,7 @@ plan과 달리 **legacy-global 소스는 없습니다** — spec은 프로젝트
 
 | 플러그인 | 필수 | 사용처 | 목적 |
 |---------|------|-------|------|
-| pr-review-toolkit | 예 | Review gate | 핵심 review agent |
+| pr-review-toolkit | 아니오 | Review gate | Tier C 전문가(code-reviewer 강한 default 등); 미설치 시 graceful degrade |
 | feature-dev | 아니오 | Review gate | 컨벤션 리뷰, 아키텍처, 구현 추적 |
 | superpowers | 아니오 | Review gate | plan 정합성, 증거 검증 |
 | chrome-devtools-mcp / playwright | 아니오 | Runtime gate | 브라우저 자동화 |
