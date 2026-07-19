@@ -3,7 +3,7 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [2.11.0] — 2026-07-19
+## [2.12.0] — 2026-07-19
 
 ### Security
 - **`pr-understanding-builder` MCP 유출 경로 봉쇄** — 이 agent 는 README 가 *"파일시스템·네트워크 tool 0개"* pwn-request 방어로 광고해 왔으나, 실효 격리는 존재하지 않는 필드(`allowedTools`) + 11개 이름 denylist 였고 **그 denylist 에 `mcp__*` 가 없어** tavily 웹검색·chrome-devtools 브라우저 제어를 보유하고 있었다. `tools:` 단일 무해 항목 allowlist 로 전환해 광고된 계약을 **처음으로 사실로** 만들었다.
@@ -11,12 +11,57 @@
 
 ### Changed
 - **`allowedTools` 키 제거 (BREAKING for agent 저자)** — 공식 subagent 규격의 필드가 아니라 조용히 무시된다. agent 격리는 `tools:` allowlist 로 선언한다. `allowed-tools`(command/skill)와 `--allowedTools`(CLI)는 **실재·정상**이며 무관하다.
-- `runtime-verifier` 의 죽은 `allowedTools` 22개를 `tools:` 로 이관 — chrome-devtools 는 **per-tool 15개 그대로**(서버 단위 grant 는 표면을 15→~29 로 넓혀 `upload_file` 유출 벡터를 준다). `Bash`·`Write`·`Edit`·`MultiEdit` 는 `# TOOL-EXCEPTION:` 마커로 근거를 명시.
-- 레거시 AC15 락(`tests/test_agent_frontmatter_keys.sh`)이 **camelCase 허구 대신 `tools:` allowlist 를 강제**하도록 뒤집힘. 12 mutation 으로 이빨 증명.
+- `runtime-verifier` 의 죽은 `allowedTools` 22개를 `tools:` 로 이관 + `list_network_requests` 1개 추가 = 23개 — chrome-devtools 는 **per-tool 그대로**(서버 단위 grant 는 표면을 넓혀 `upload_file` 유출 벡터를 준다). network 도구는 persona Hard Rule 5 의 network-status 증거를 위해 추가하되 `get_network_request`(auth 헤더·토큰 노출)는 least-privilege 로 제외. `Bash`·`Write`·`Edit`·`MultiEdit` 는 `# TOOL-EXCEPTION:` 마커로 근거를 명시.
+- **`artifact-critic`·`artifact-adversarial`(v2.11.0 산출물 비평 루프의 신규 agent)도 `tools: Read, Grep, Glob` allowlist 로 이관** — origin/main 병합 시 repo-wide 락 불변식(모든 agent = `tools:` allowlist) 유지.
+- 레거시 AC15 락(`tests/test_agent_frontmatter_keys.sh`)이 **camelCase 허구 대신 `tools:` allowlist 를 강제**하도록 뒤집힘. **34 mutation 으로 이빨 증명**(YAML 우회 17종 RED + over-reject 방지 GREEN; 락은 '단일 라인 plain scalar 만 허용, 그 외 전부 거절' whitelist).
 - 레거시 AC14 스캐너(`hooks/session-start-advisor.py`)가 죽은 `allowedTools` 를 경고. kill switch 불변.
 
 ### Fixed
 - `README.md` 의 거짓 서술 정정 — *"실제 키 `allowedTools`"* · *"Layer 1 없이 Layer 2/3 는 불완전"* · *"네트워크 tool 0개"*. `codex-reviewer` 의 3-layer 서술은 이중으로 죽어 있었다: 필드가 무시됐고, T3-3 에서 agent 자체가 스크립트로 이관돼 frontmatter 가 사라졌다.
+- **`/qg` self-dogfood(Review gate) 하드닝** — publishing SKILL 의 빌더 격리 서술을 정직화(빌더가 inert `Read` 를 보유한다는 사실 반영; prose lock 을 조사 변종까지 확장). frontmatter 락의 YAML-구문 우회(inline-comment·anchor·tag·multiline)를 whitelist 재설계로 봉쇄. codex 독립 재검증 3라운드가 적발한 self-regression 다수 수정.
+
+## [2.11.0] — 2026-07-17
+
+`/qg`에 비-코드 산출물(문서·스펙·계획·설정·산문)용 **비평 → 수정 → 재비평** 자율 루프
+모드를 추가한다. inherit-tier `artifact-critic` + `artifact-adversarial`(+ 설치 시 codex
+co-reviewer)가 read-only로 §10 스키마 finding을 내고, 오케스트레이터(writer)가 수정 →
+**라운드별 git 커밋** → 재비평한다. 판정(수렴·수정·stagnation)은 산문이 아니라 결정론
+헬퍼(순수 함수)가 내려 테스트·감사 가능. 별도 skill `critiquing-artifacts`로 위임 —
+기존 2게이트(Review/Runtime) 파이프라인은 무변경.
+
+### Added
+- `commands/qg.md` `critique` 라우팅: `/qg critique <path>` 또는 자연어 비평 의도 →
+  `Skill("quality-gates:critiquing-artifacts")` (코드 파이프라인 우회; 결정론 진입 +
+  모델-소유 NL 라우팅, P8).
+- skill `critiquing-artifacts`: 진입 게이트(E0 kill switch → E1 코드/비-코드 분류 →
+  E2 브랜치 안전 → E2b clean 전제 → E3 upfront 동의)와 bounded 루프(critic → 조건부 codex
+  → adversarial → synthesize → 수렴 → 수정 → **커밋-전 변경신호** → 커밋 → stagnation).
+- 에이전트 `artifact-critic`·`artifact-adversarial` (`model: inherit`, read-only —
+  `disallowedTools: [Write, Edit, MultiEdit, NotebookEdit]`).
+- 결정론 헬퍼: `classify_artifact_target.py`(E1 3분기), `artifact_branch_guard.sh`(C4/AC8),
+  `artifact_path_auth.py`(symlink 가드), `artifact_change_signal.sh`(커밋-전 신호),
+  `artifact_commit.sh`(원자적 단일-경로 커밋), `synthesize_artifact_findings.py`
+  (key+synth: dedup/verdict/kept/수렴/degraded), `artifact_max_rounds.sh`(clamp),
+  `artifact_stagnation.py`(predicate).
+- codex 산출물 서브파이프라인: `build_artifact_codex_prompt.py` +
+  `extract_codex_artifact_yaml.py` + `run_artifact_codex_reviewer.sh`(`-s read-only`;
+  미가용/런타임 실패 각각 구분된 graceful degrade).
+- kill switch `DEVBREW_QG_DISABLE_CRITIQUE`(모드 전용); env `DEVBREW_QG_CRITIQUE_MAX_ROUNDS`
+  (0..10 clamp, 기본 5).
+
+### Changed
+- **버전 2.10.3 → 2.11.0** (minor — 새 표면: 산출물 비평 루프 모드).
+- `tests/test_qg_publish_docs.sh` 버전 핀을 `2.10.x` → `≥2.10 minor`로 완화(minor bump
+  stale-red 방지; publish 표면 shipped 불변식은 유지).
+
+### Principles Instantiated
+- Law 1 (Clarity Before Code) — 자율 수정 전 E3 upfront 동의 게이트.
+- Law 2 (Writer ≠ Reviewer) — read-only 리뷰어 + 오케스트레이터 writer + 매 라운드 독립
+  critic 게이트.
+- Law 3 (Compounding) — 라운드별 커밋 감사추적; 버그가 리뷰 탈출 시 critic/adversarial
+  페르소나 편집이 compounding 이벤트.
+- P18 (bounded autonomy) — max-rounds + stagnation predicate + kill switch.
+- P8 (determinism-economy) — NL 라우팅은 모델 신뢰, 결정론은 `critique <path>` + §10 스키마.
 
 ## [2.10.0] — 2026-07-07
 

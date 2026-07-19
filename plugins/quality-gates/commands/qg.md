@@ -1,6 +1,6 @@
 ---
 description: "Run the quality gates pipeline (review → runtime verification)"
-argument-hint: "[review|runtime|both] [branch [<name>]|--paths <glob>...|--reset] [--skip-runtime] [--plan <path>] [--pr-url <url>]"
+argument-hint: "[critique <path>|review|runtime|both] [branch [<name>]|--paths <glob>...|--reset] [--skip-runtime] [--plan <path>] [--pr-url <url>]"
 allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)", "Bash(rm:*)", "Bash(test:*)", "Agent", "Skill", "Bash", "Read", "Edit", "Write", "Glob", "Grep", "AskUserQuestion"]
 ---
 
@@ -37,6 +37,24 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/qg-gc.py"
 ```
 
 `--gc` 단독: 종료. 다른 인자와 함께: GC 후 setup 진행.
+
+## Special mode: `critique` (비-코드 산출물 비평 루프)
+
+`$ARGUMENTS`가 `critique`로 시작하거나(예: `/qg critique docs/design.md`), 사용자가
+자연어로 **비-코드 산출물** 비평 의도를 밝히면(예: `이 설계문서 비평해줘`), 이는 코드
+2게이트 파이프라인이 아니라 **산출물 비평-수정 루프** 모드다. 이 경우 `setup-qg.sh`·
+`quality-pipeline`을 실행하지 말고 곧장 신규 skill을 호출한다:
+
+`Skill("quality-gates:critiquing-artifacts")`
+
+그 skill이 소유: E0 kill switch → E1 코드/비-코드 분류(코드면 "코드는 /qg로" 안내 후 종료)
+→ E2 브랜치 안전 → E2b clean 전제 → E3 upfront 동의 게이트 → 비평-수정-재비평 루프
+(라운드별 커밋). `critique <path>`는 결정론적 진입(고정 라우팅), 자연어 의도는 모델이
+해석(별도 토큰 parser 없음 — P8 determinism-economy). 코드/산출물 의도가 **진짜 모호**할
+때만 mode-branch를 확인하고, 명확하면 안 띄운다(dominant한 코드 경로에 마찰 0).
+
+**코드 파이프라인 인자**(bare `/qg`, `both|review|runtime|branch|--paths ...`)는 아래
+기존 경로 그대로 — 무변경.
 
 ## Instructions
 
@@ -103,6 +121,7 @@ is aborted at a decision point.
 
 | Command | Effect |
 |---------|--------|
+| `/qg critique <path>` | 비-코드 산출물 비평-수정 루프(별도 skill; 라운드별 커밋; 코드 아님) |
 | `/qg` | Ask gate scope (Review only / both), then run; session-scoped diff |
 | `/qg both` | Full pipeline (both gates), no gate-scope question; session-scoped diff |
 | `/qg branch` | Ask gate scope, then run; full-branch diff (vs `main`) |
