@@ -62,6 +62,44 @@ class TestShapeCompleteness(unittest.TestCase):
         for req, anchor in ANCHORS.items():
             self.assertIn(anchor, shape, f"checklist '{req}' anchor drifted from CLAUDE.md §Plugin Shape")
 
+    def test_deps_declared_gap_when_cross_plugin_dispatch_without_prereqs(self):
+        # cross-plugin dispatch present + no "Prerequisites" section in README → real gap
+        with tempfile.TemporaryDirectory() as d:
+            _mk_plugin(d)   # README has no "Prerequisites" section
+            agents_dir = Path(d) / "agents"
+            agents_dir.mkdir()
+            (agents_dir / "x.md").write_text(
+                "---\ntools: Read\n---\nDispatch: agentType: 'quality-gates:security-reviewer'\n",
+                encoding="utf-8",
+            )
+            r, obj = run(d)
+            gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
+            self.assertFalse(gaps["deps_declared"]["present"],
+                              "cross-plugin dispatch without Prerequisites not flagged")
+
+    def test_deps_declared_ok_when_no_cross_plugin_dispatch(self):
+        # no cross-plugin dispatch at all → nothing to declare, not a gap
+        with tempfile.TemporaryDirectory() as d:
+            _mk_plugin(d)
+            r, obj = run(d)
+            gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
+            self.assertTrue(gaps["deps_declared"]["present"])
+
+    def test_deps_declared_self_reference_not_counted_as_cross_plugin(self):
+        # agents/x.md references the plugin's OWN namespace ("myplugin:helper") → not cross-plugin
+        with tempfile.TemporaryDirectory() as d:
+            _mk_plugin(d)   # plugin.json name == "myplugin"; README has no "Prerequisites"
+            agents_dir = Path(d) / "agents"
+            agents_dir.mkdir()
+            (agents_dir / "x.md").write_text(
+                "---\ntools: Read\n---\nDispatch: agentType: 'myplugin:helper'\n",
+                encoding="utf-8",
+            )
+            r, obj = run(d)
+            gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
+            self.assertTrue(gaps["deps_declared"]["present"],
+                             "self-reference should not count as cross-plugin dispatch")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -50,8 +50,32 @@ def check(plugin_dir):
     hooks = _hook_scripts(pd)
     add("hooks_killswitch", all(_has_killswitch(_read(h) or "") for h in hooks) if hooks else True)
 
-    add("deps_declared", ("Prerequisites" in readme) or ("prerequisites" in readme.lower()) or True)  # advisory
+    own_name = pj.get("name", "")
+    cross_dispatch = _has_cross_plugin_dispatch(pd, own_name)
+    add("deps_declared",
+        (not cross_dispatch) or ("Prerequisites" in readme) or ("prerequisites" in readme.lower()))
     return {"shape_gaps": gaps}
+
+
+_NS_REF_RE = re.compile(r"\b([a-z][a-z0-9-]+):([a-z][a-z0-9-]+)\b")
+
+
+def _has_cross_plugin_dispatch(pd, own_name):
+    """CLAUDE.md §컴포넌트 격리: cross-plugin(다른 plugin의) namespaced agent dispatch가
+    있는지 단일 bounded pass로 스캔. self-reference(자기 자신 namespace)는 제외."""
+    files = []
+    if (pd / "agents").exists():
+        files += sorted((pd / "agents").glob("*.md"))
+    if (pd / "commands").exists():
+        files += sorted((pd / "commands").glob("*.md"))
+    if (pd / "skills").exists():
+        files += sorted((pd / "skills").rglob("SKILL.md"))
+    for f in files:
+        text = _read(f) or ""
+        for m in _NS_REF_RE.finditer(text):
+            if m.group(1) != own_name:
+                return True
+    return False
 
 
 def _semver_ge(a, b):
