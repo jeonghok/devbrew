@@ -57,6 +57,24 @@ class TestBannedSync(unittest.TestCase):
         rc, err = run_gate()
         self.assertEqual(rc, 0, f"실제 주입 표면에 판정이 새어 있다:\n{err}")
 
+    def test_seed_with_verdict_is_red(self):
+        # 일반(target 무관) verdict 토큰은 seed(=extra argv 표면)에서 잡혀야 한다.
+        # audit-workflow.js의 d_verdicts.verdict enum은 고정 SURFACES 경로로만 스캔되므로
+        # 여기서 seed 표면에만 적용되는 SEED_EXTRA가 있어야 이 케이스가 RED가 된다.
+        with tempfile.TemporaryDirectory() as d:
+            seed = Path(d) / "seed.md"
+            seed.write_text("## 후보 단서\n- D1 (축1): 이 주장은 confirmed — a.py:1\n", encoding="utf-8")
+            r = subprocess.run([sys.executable, str(SCRIPT), str(seed)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 1)   # verdict token in seed
+
+    def test_seed_clean_clue_is_green(self):
+        # 판정 토큰 없이 주장 + file:line만 있는 seed는 GREEN.
+        with tempfile.TemporaryDirectory() as d:
+            seed = Path(d) / "seed.md"
+            seed.write_text("## 후보 단서\n- D1 (축1): README가 없는 기능 광고 — a.py:1\n", encoding="utf-8")
+            r = subprocess.run([sys.executable, str(SCRIPT), str(seed)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

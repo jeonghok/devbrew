@@ -58,27 +58,60 @@ BANNED = [
     (r"다시\s*열지\s*마", "재갈 — settled 판정을 강제한다"),
 ]
 
+# Generic (target-무관) verdict 토큰 — Task 16 (component B). audit-workflow.js가 스캔하는
+# 것과 seed(후보 단서 파일, parse-seed.py 산출물)가 스캔하는 것은 다른 위생 기준을 가진다:
+# audit-workflow.js는 `d_verdicts.verdict`의 JSON-schema enum으로
+# confirmed/withdrawn/reclassified를 **정당하게** 갖고, 감사자에게 그 중 하나를 *산출*하라고
+# 지시한다 (판정을 미리 받는 게 아니라 판정을 내리라는 지시). 이 토큰들을 고정 SURFACES에
+# 적용하면 그 스키마 자체가 오탐된다 — 그래서 BANNED에는 넣지 않는다.
+#
+# 반대로 seed는 invoker가 공급하는 "후보 단서"일 뿐이라 주장만 담아야 한다 — `D1 ... confirmed`
+# 처럼 seed가 스스로 판정을 미리 내리면 감사자를 그 판정 쪽으로 앵커링한다. 그래서 이 토큰들은
+# 고정 SURFACES가 아니라 argv로 넘어온 추가 표면(=seed)에만 적용한다.
+SEED_EXTRA = [
+    (r"\bconfirmed\b", "판정(confirmed)을 미리 준다 — 주장만 허용"),
+    (r"\bwithdrawn\b", "판정(withdrawn)을 미리 준다"),
+    (r"\breclassified\b", "판정(reclassified)을 미리 준다"),
+    (r"입증(됨|됐|된다)", "판정(입증)을 미리 준다"),
+    (r"확정(됨|됐|된다|적)", "판정(확정)을 미리 준다"),
+]
+
+
+def _scan(p: Path, root: Path, banned: list[tuple[str, str]]) -> list[str]:
+    """p를 banned 패턴 목록으로 스캔해 히트(포맷된 문자열) 목록을 돌려준다."""
+    found: list[str] = []
+    text = p.read_text(encoding="utf-8", errors="replace")
+    for i, line in enumerate(text.splitlines(), 1):
+        for pat, why in banned:
+            if re.search(pat, line):
+                found.append(f"{p.relative_to(root) if root in p.parents else p}:{i}\n"
+                             f"      {line.strip()[:110]}\n"
+                             f"      → {why}")
+    return found
+
 
 def main() -> int:
     root = Path(__file__).resolve().parents[1]
     hits: list[str] = []
     scanned = 0
 
-    targets = list(SURFACES)
-    targets += [a for a in sys.argv[1:]]          # extra surfaces (e.g. the codex prompt file)
-
-    for rel in targets:
-        p = Path(rel) if Path(rel).is_absolute() else root / rel
+    # 고정 주입 표면 (design §14) — BANNED만. audit-workflow.js의 verdict enum을
+    # SEED_EXTRA로 오탐시키지 않기 위해 이 목록에는 절대 SEED_EXTRA를 섞지 않는다.
+    for rel in SURFACES:
+        p = root / rel
         if not p.is_file():
             continue                               # a surface that does not exist yet is not a leak
         scanned += 1
-        text = p.read_text(encoding="utf-8", errors="replace")
-        for i, line in enumerate(text.splitlines(), 1):
-            for pat, why in BANNED:
-                if re.search(pat, line):
-                    hits.append(f"{p.relative_to(root) if root in p.parents else p}:{i}\n"
-                                f"      {line.strip()[:110]}\n"
-                                f"      → {why}")
+        hits += _scan(p, root, BANNED)
+
+    # argv로 넘어온 추가 표면 — 감사 seed(또는 그 밖의 invoker 공급 후보-단서 파일).
+    # BANNED + SEED_EXTRA로 스캔: seed는 주장만 담아야 하고 판정을 미리 주면 안 된다.
+    for a in sys.argv[1:]:
+        p = Path(a) if Path(a).is_absolute() else root / a
+        if not p.is_file():
+            continue                               # a surface that does not exist yet is not a leak
+        scanned += 1
+        hits += _scan(p, root, BANNED + SEED_EXTRA)
 
     if not scanned:
         print("[check-no-verdict-injection] FATAL: no injected surface found — "
