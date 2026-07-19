@@ -34,7 +34,12 @@ assert_nogrep "^allowedTools:" "죽은 allowedTools 제거됨"
 assert_nogrep "^disallowedTools:" "disallowedTools 제거됨 (allowlist가 컨트롤)"
 assert_grep "^tools:" "tools: allowlist 선언"
 
-# AC6: tools: 집합이 v2.10.3 의 죽은 allowedTools 22개와 정확히 일치 (확대 0 · 누락 0).
+# AC6: tools: 집합 = v2.10.3 의 죽은 allowedTools 22개 + iter-1 리뷰로 추가한 network-query MCP 1개
+# (list_network_requests) = 23개. 근거: persona Hard Rule 5 가 web PASS 증거로 'network status'(URL+status)
+# 를 요구하는데 chrome 15개엔 network 조회 도구가 없어 구조적으로 못 만들던 갭을 메운 것(구 denylist 는
+# 모든 MCP 를 줘서 갭이 가려졌고 이 PR 이 allowlist 로 노출시켰다). get_network_request 는 요청/응답 상세
+# (auth 헤더·쿠키·토큰·바디)를 노출해 evidence-log(main repo)로 secret 유출 벡터가 되므로 least-privilege
+# 상 제외 — status 는 list_network_requests 로 충분(codex iter-1 적발). per-tool 이름이라 서버 grant 아님.
 FM="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$FILE")"
 TOOLS_VAL="$(grep -m1 -E '^tools:' <<<"$FM" | sed 's/^tools:[[:space:]]*//')"
 CHROME="mcp__plugin_chrome-devtools-mcp_chrome-devtools"
@@ -47,14 +52,15 @@ want_tools() {
   local t
   for t in navigate_page take_screenshot take_snapshot list_console_messages \
            get_console_message close_page new_page wait_for click fill \
-           fill_form type_text hover press_key evaluate_script; do
+           fill_form type_text hover press_key evaluate_script \
+           list_network_requests; do
     printf '%s\n' "${CHROME}__${t}"
   done
 }
 ACTUAL="$(printf '%s\n' "$TOOLS_VAL" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' | sort)"
 WANT="$(want_tools | sort)"
 if [ "$ACTUAL" = "$WANT" ]; then
-  PASS=$((PASS + 1)); echo "  PASS: AC6 tools: 가 죽은 allowedTools 22개와 집합 동일 ($(printf '%s\n' "$ACTUAL" | wc -l | tr -d ' ')개)"
+  PASS=$((PASS + 1)); echo "  PASS: AC6 tools: 가 죽은 allowedTools 22개 + network-query 1개와 집합 동일 ($(printf '%s\n' "$ACTUAL" | wc -l | tr -d ' ')개)"
 else
   FAIL=$((FAIL + 1)); echo "  ✗ FAIL: AC6 집합 불일치"
   echo "    누락: $(comm -13 <(printf '%s\n' "$ACTUAL") <(printf '%s\n' "$WANT") | tr '\n' ' ')"

@@ -70,7 +70,8 @@ assert_not_grep '^allowedTools:' "죽은 allowedTools 제거됨"
 assert_not_grep '^disallowedTools:' "disallowedTools 제거됨 (allowlist 가 컨트롤)"
 
 echo "== 금지 도구가 tools: 에 없음 =="
-# Bash 제거 근거: persona ':48' — "Bash is for reading files only" → Read 가 대체한다.
+# Bash 제거 근거: persona 는 후보 파일 읽기를 `Read` 로 지시하고(Inputs/Step 1) Bash 를 업무에
+# 쓰지 않는다 → allowlist(`Read, Grep, Glob`)에서 제외. (줄번호는 drift 하므로 인용하지 않음.)
 assert_not_grep '^tools:.*(Write|Edit|MultiEdit|NotebookEdit|Bash|Agent|Monitor|mcp__)' \
   "tools: 에 쓰기·실행·위임·MCP 도구 없음"
 

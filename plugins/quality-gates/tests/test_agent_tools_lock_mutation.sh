@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AC9 — test_agent_frontmatter_keys.sh 의 이빨 증명. 26개 케이스(mutation 은 RED,
+# AC9 — test_agent_frontmatter_keys.sh 의 이빨 증명. 34개 케이스(mutation 은 RED,
 # 보강/기준선 케이스는 GREEN) 가 각 want 대로 정확히 나와야 한다.
 # RED 가 안 나는 락은 장식이다.
 set -u
@@ -91,11 +91,11 @@ expect RED "mcp__<server>__* 서버 전체 grant"
 # scalar/중복 키로 금지 도구를 숨긴 agent 가 조용히 GREEN 을 받는다.
 echo "== ⑥ YAML-구문 우회: 이중 인용 =="
 write_agent 'tools: "Read, Grep, Write"'
-expect RED "이중 인용 안의 Write 는 quote 로 안 가려짐"
+expect RED "이중 인용 scalar 는 plain 이 아니라 거절(fail-closed)"
 
 echo "== ⑦ YAML-구문 우회: 단일 인용 =="
 write_agent "tools: 'Read, Grep, Write'"
-expect RED "단일 인용 안의 Write 는 quote 로 안 가려짐"
+expect RED "단일 인용 scalar 는 plain 이 아니라 거절(fail-closed)"
 
 echo "== ⑧ YAML-구문 우회: block scalar (>) =="
 write_agent 'tools: >
@@ -111,9 +111,52 @@ echo "== ⑩ YAML-구문 우회: flow-sequence 대괄호 ([...]) =="
 write_agent 'tools: [Read, Bash]'
 expect RED "flow-sequence 는 토큰이 '[Read'/'Bash]' 로 쪼개져 정확매칭을 피해감 -> FAIL"
 
-echo "== 보강: 이중 인용이라도 안전한 목록이면 GREEN (over-reject 아님) =="
+# 🔴 adversarial review (iter-1 재현) — YAML-구문 우회 2종 추가. codex 가 ⑪ 을,
+# adversarial 이 ⑫ 를 실 픽스처로 재현했다. ⑪ 은 inline 주석, ⑫ 는 anchor 접두.
+echo "== ⑪ YAML-구문 우회: 인라인 주석 (tools: Read, Write # 주석) =="
+write_agent 'tools: Read, Grep, Glob, Write # 무해해 보이는 주석'
+expect RED "인라인 주석 뒤 Write 는 YAML 이 주석을 벗겨 부여 -> 토큰화 前 주석 제거로 잡아야 FAIL"
+
+echo "== ⑫ YAML-구문 우회: anchor 접두 (tools: &a [Read, Write]) =="
+write_agent 'tools: &a [Read, Write]'
+expect RED "anchor 접두는 flow-seq 가드(\`[\`*)를 피하므로 거절 -> FAIL"
+
+# 🔴 codex iter-1 재검증 적발 — 내 첫 comment-strip 이 YAML-비인식이라 인용 안 `#` 에서
+# 잘려 새 우회를 열었다. quote-aware 처리(인용 먼저 벗기고 토큰화)로 봉쇄.
+echo "== ⑬ YAML-구문 우회: 인용 안의 # (tools: \"Read, Grep # x, Write\") =="
+write_agent 'tools: "Read, Grep # x, Write"'
+expect RED "인용 scalar 거절이 인용 안 # 우회를 원천 차단(harness 는 Write 부여)"
+
+echo "== ⑭ YAML-구문 우회: tag (tools: !!seq [Read, Write]) =="
+write_agent 'tools: !!seq [Read, Write]'
+expect RED "tag(!!seq) 접두는 plain scalar 가 아니므로 거절 -> FAIL"
+
+# 🔴 codex iter-1 재검증(2차) 적발 — 인용 scalar 가 다음 줄로 이어지면 grep -m1 이 첫 줄만
+# 봐서 Write 를 놓친다(block-scalar 와 같은 클래스). 인용 전면 거절로 봉쇄.
+echo "== ⑮ YAML-구문 우회: multiline 인용 scalar (값이 다음 줄로) =="
+write_agent 'tools: "Read,
+  Write"'
+expect RED "multiline 인용은 첫 줄만 봐서는 Write 를 놓친다 -> 인용 거절로 봉쇄"
+
+echo "== ⑯ YAML-구문 우회: multiline plain scalar (tools: Read,⏎  Write) =="
+write_agent 'tools: Read,
+  Write'
+expect RED "plain 값이 다음 줄로 접히면 continuation 탐지로 거절 (첫 줄만 보면 Write 놓침)"
+
+# 🔴 codex 3차 재검증 적발 — continuation 이 빈 줄을 낀 경우(YAML 은 여전히 한 scalar).
+echo "== ⑰ YAML-구문 우회: 빈 줄 낀 multiline plain (tools: Read,⏎<빈줄>⏎  Write) =="
+write_agent 'tools: Read,
+
+  Write'
+expect RED "빈 줄을 건너뛰고 첫 비어있지 않은 indented 줄을 검사 -> Write continuation 거절"
+
+echo "== 보강: plain 안전 목록의 인라인 주석은 GREEN (주석 제거가 over-reject 아님) =="
+write_agent 'tools: Read, Grep, Glob # 정상 주석'
+expect GREEN "plain scalar 는 주석 제거 후 통과"
+
+echo "== 보강: 안전해 보여도 인용은 거절(fail-closed; 8 실 agent 는 unquoted plain) =="
 write_agent 'tools: "Read, Grep, Glob"'
-expect GREEN "quote 벗기기가 안전한 목록까지 거절하지 않음"
+expect RED "인용 scalar 는 plain 이 아니라 거절 — plain 'Read, Grep, Glob' 로 쓸 것"
 
 echo; echo "mutation: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -30,7 +30,10 @@ for f in "${FILES[@]}"; do
 done
 
 # --- AC16-2: 로드베어링 주장 리터럴 0건 ---
-for lit in '실제 키' 'Layer 1 없이' '네트워크 tool 0개' 'tool 0개'; do
+# 'tool이 0개' (조사 '이'): iter-1 리뷰에서 publishing SKILL 이 'tool이 0개'로 'tool 0개' 를
+# 피해 거짓 physical-boundary 주장(빌더가 Read 를 갖는데 "파일시스템 tool 0개")을 유지 →
+# 조사 변종을 명시 금지에 추가. codex model-diversity 가 단독 적발.
+for lit in '실제 키' 'Layer 1 없이' '네트워크 tool 0개' 'tool 0개' 'tool이 0개'; do
   hits="$(grep -rlF "$lit" "${FILES[@]}" 2>/dev/null || true)"
   if [ -n "$hits" ]; then
     fail "AC16: 금지 리터럴 '$lit' 잔존 → $hits"

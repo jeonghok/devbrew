@@ -13,7 +13,9 @@
 #   L1  `allowedTools` / kebab 변종 존재            -> FAIL
 #   L2  `tools:` 부재                                -> FAIL  (카브아웃 없음 — 8/8 해당)
 #       + `tools:` 키 중복(YAML 은 마지막 값으로 resolve, grep -m1 은 첫 값을 봄) -> FAIL
-#       + `tools:` 값이 비어있거나 block scalar(`>`/`|`, 진짜 목록이 다음 줄에 있음) -> FAIL
+#       + `tools:` 값이 plain(unquoted) 단일 라인 comma-scalar 가 아니면 -> FAIL
+#         (인용 "..."/'...', block scalar >/|, flow-seq [...], anchor &a/*a, tag !!seq 전부 거절 — M2 구조적 봉쇄)
+#       + plain scalar 의 인라인 주석(` # ...`)은 토큰화 前 제거(인용이 없으니 `#` 은 늘 comment) -> 금지 도구 은닉 차단
 #       (인용부호 `"..."`/`'...'` 는 한 겹 벗기고 계속 검증 — quote 로 금지 도구를
 #        가릴 수 없게. adversarial review 가 실제 /tmp 픽스처로 재현한 YAML-구문 우회.)
 #   L3  `tools:` 의 금지 도구에 **그 도구 이름의**
@@ -81,26 +83,41 @@ for f in plugins/*/agents/*.md; do
     continue
   fi
 
-  # `tools:` 값을 정규화: 트림 → block-scalar/empty 거절 → 인용 한 겹 벗기기.
-  # 이 락은 단일 라인 plain scalar 만 검증할 수 있다 — block scalar(`>`/`|`, 접힘/유지
-  # 변종 포함)는 진짜 목록이 다음 줄들(창 밖일 수도 있음)에 있어 여기서 보면 놓친다,
-  # 그래서 FAIL 로 거절한다. 인용부호는 한 겹만 벗겨 값을 quoting 이전과 동일하게
-  # 만든다 — 안 그러면 `"Read, Grep, Write"` 의 `Write"` 가 quote 에 가려 L3 를 피한다.
+  # `tools:` 값 정규화 — fail-closed: **단일 라인 plain(unquoted) comma-scalar 만** 검증 가능하고,
+  # 그 외 YAML 형태는 전부 거절한다. 하나의 syntax 씩 막는 건 새는 게임이다 — codex 가 3회에 걸쳐
+  # inline-comment → 인용 안 `#` → multiline-quoted 로 매번 새 우회를 재현했다(M2). 그래서 인용
+  # ("..."/'...')·block scalar(`>`/`|`)·flow-seq(`[...]`)·anchor/alias(`&a`/`*a`)·tag(`!!seq`) 를
+  # 통째로 거절한다: 이들은 값이 다음 줄로 이어지거나(multiline quoted/block scalar), 토큰이
+  # 쪼개지거나(flow-seq), 참조/태그/이스케이프로 숨겨(anchor/tag/quoted) 금지 이름 정확매칭을
+  # 피할 수 있다. 8 실 agent 는 전부 plain unquoted 라 이 거절로 잃는 것이 없다.
   tools_val="$(printf '%s' "${tools_line#tools:}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
   case "$tools_val" in
-    ''|'>'*|'|'*|'['*)
-      echo "FAIL [L2] $f: 'tools:' 값이 비어있거나 YAML block scalar(>, |, 접힘/유지 변종 포함) 또는" >&2
-      echo "  flow-sequence(\`[...]\`) 다. 이 락은 단일 라인 plain scalar 만 검증 가능 —" >&2
-      echo "  'tools: A, B, C' 형태로 바꿀 것 (flow-sequence 는 토큰이 '[A'/'B]' 로 쪼개져 금지 이름" >&2
-      echo "  정확매칭을 피해갈 수 있어 같은 fail-closed 정신으로 거절한다)." >&2
+    ''|\"*|\'*|'>'*|'|'*|'['*|'&'*|'*'*|'!'*)
+      echo "FAIL [L2] $f: 'tools:' 값이 비어있거나 plain(unquoted) 단일 라인 scalar 가 아니다" >&2
+      echo "  (인용 \"...\"/'...', block scalar >/|, flow-seq [...], anchor/alias &a/*a, tag !!seq)." >&2
+      echo "  'tools: A, B, C' 형태로 바꿀 것 — 그 외 형태는 값이 다음 줄로 이어지거나 토큰이 쪼개져/" >&2
+      echo "  참조·태그·이스케이프로 숨어 금지 이름 정확매칭을 피할 수 있어 fail-closed 로 거절한다." >&2
       violations=$((violations+1))
       continue
       ;;
   esac
-  case "$tools_val" in
-    \"*\") tools_val="${tools_val#\"}"; tools_val="${tools_val%\"}" ;;
-    \'*\') tools_val="${tools_val#\'}"; tools_val="${tools_val%\'}" ;;
-  esac
+  # multiline plain scalar 탐지: `tools:` 다음 줄이 들여쓰기된 비어있지 않은 줄이면 값이 여러 줄로
+  # 접혀 이어진다(plain 값이 tools: 줄에서 시작). grep -m1 은 첫 줄만 보므로 뒤 토큰을 놓친다 → 거절.
+  # (block sequence `tools:\n  - X` 는 empty-value 로, block scalar `>`/`|` 와 인용 multiline 은 시작
+  #  문자로 이미 거절됨. plain-multiline 이 그 외 유일한 잔여 경로 — 이걸 닫으면 "단일 라인 plain
+  #  scalar 만 허용" 불변식이 완성된다.) `# TOOL-EXCEPTION:` 마커는 tools: 줄 *앞* 이라 무관.
+  # awk 주의: main rule 의 `exit` 는 END 를 트리거하므로(END 가 exit code 를 덮어씀) 여기선
+  # 플래그(ml)만 세우고 END 에서 한 번만 exit. tools: 다음의 빈 줄은 건너뛰고(YAML plain scalar 는
+  # 빈 줄을 낀 채로도 이어질 수 있다 — `Read,\n\n  Write`) 첫 비어있지 않은 줄을 검사한다: 들여쓰기된
+  # content 면 multiline(거절), top-level key/`---` 면 단일 라인(통과).
+  if awk 'seen==1{if($0~/^[[:space:]]*$/)next; if($0~/^[[:space:]]+[^[:space:]]/)ml=1; seen=2} /^tools:/&&seen==0{seen=1} END{exit(ml?0:1)}' <<<"$FM"; then
+    echo "FAIL [L2] $f: 'tools:' 값이 다음 줄로 이어지는 multiline scalar 다 — 단일 라인" >&2
+    echo "  'tools: A, B, C' 로 바꿀 것 (multiline 은 첫 줄만 봐서는 뒤 토큰을 놓친다)." >&2
+    violations=$((violations+1))
+    continue
+  fi
+  # 이제 단일 라인 plain unquoted scalar 만 남았다 — 인라인 주석(` #...`)만 처리(인용이 없으니 `#` 은 늘 comment).
+  tools_val="$(printf '%s' "$tools_val" | sed 's/[[:space:]]#.*$//; s/[[:space:]]*$//')"
 
   # --- L3 ---
   # ⚠️ 이 루프의 세 줄은 실측으로 세 번 고쳤다 (아래 "이 루프를 고치지 말 것" 참조).
