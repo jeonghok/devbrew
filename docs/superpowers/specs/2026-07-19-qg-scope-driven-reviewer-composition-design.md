@@ -139,11 +139,11 @@ Tier C — Dynamic (모델이 스코프로 선택, advisory, 외부 에이전트
 
 ### 5.4 Security Considerations (write-capable 외부 리뷰어 magnitude)
 
-**정직한 before/after (리뷰 지적 반영 — 유비 아닌 수치):**
-- **Before(현행):** write-capable 외부 advisory 리뷰어 **1개**(`code-reviewer`, "가용하면" 조건부 디스패치). README §186에 AP9 fan-out 게이트(`>=4 → AskUserQuestion`) 문서화(단, 현행 SKILL이 phase-2 dispatch 미구현이라 **사실상 dead**).
-- **After(본 스펙):** write-capable 외부 advisory 리뷰어 **최대 6개**(pr-review-toolkit 5 = inherit-all/Bash+Write, + code-architect), 모델이 iteration별 선택. **동시에 AP9 게이트 문서 선언 제거**, **신규 구조 가드 미도입.**
+**정직한 before/after (리뷰 지적 반영 — 유비 아닌 수치; tool census 일치):**
+- **Before(현행):** write-capable 외부 advisory 리뷰어 **1개**(`code-reviewer`, "가용하면" 조건부 디스패치). README가 fan-out consent 게이트(`>=4 → AskUserQuestion`)를 여러 곳에 문서화(단, 현행 SKILL에 카운트 체크가 **구현된 적 없음** → documented-not-implemented drift).
+- **After(본 스펙):** Tier C 후보 **최대 6개** = **write-capable 5**(pr-review-toolkit, inherit-all/Bash+Write) **+ read/web-only 1**(`feature-dev:code-architect` — tools: Glob/Grep/LS/Read/NotebookRead/WebFetch/TodoWrite/WebSearch, **Write/Edit/Bash 없음**). 즉 write-capable 증가는 **1→최대 5**이고 code-architect는 write-capable이 아니다. 모델이 iteration별 선택. **동시에 fan-out consent 게이트 문서 주장 reconcile(제거)**, **신규 구조 가드 미도입.**
 
-이는 리스크 **category**(외부 advisory 리뷰어의 write-capable soft-spot, 기존 code-reviewer와 동종)가 아니라 **magnitude**(1→최대 6, 게이트 제거)의 확대다 — 이 스펙은 그 확대를 **의도적으로 수용**한다:
+이는 리스크 **category**(외부 advisory 리뷰어의 write-capable soft-spot, 기존 code-reviewer와 동종)가 아니라 **magnitude**(write-capable **1→최대 5**, + read/web-only 1, 게이트 주장 제거)의 확대다 — 이 스펙은 그 확대를 **의도적으로 수용**한다:
 - **qg-own floor는 #104 락으로 물리적 read-only 유지** — 이 스펙은 qg의 Law-2 posture를 안 바꾼다.
 - 외부 리뷰어는 **advisory**(오케스트레이터가 fix를 소유; 리뷰어 출력은 findings YAML). 이들이 write-capable인 건 upstream posture이며 qg가 통제 불가.
 - 무-게이트/무-가드는 **명시적 lightness tradeoff** — 통제는 예방(prevention)이 아니라 **가시성(transparency 라인) + 자연 바운드(rubric) + 재계산 max fan-out 선언 + authoring hard-review**. 예방적 구조 가드(mutation-guard/consent-gate)는 사용자 결정으로 제외(§9); 원하면 별도 후속 스펙 사안.
@@ -159,7 +159,7 @@ Tier C — Dynamic (모델이 스코프로 선택, advisory, 외부 에이전트
 6. **AC6 — code-reviewer tier 명확화:** code-reviewer는 Tier C(강한 default, quick-depth drop 가능), floor(AC1) 목록엔 없다 — §5.1/§5.2 정합, floor에 "항상" 표기 부재. (grep: floor 목록에 code-reviewer 부재 + Tier C 강한-default 문구 존재)
 7. **AC7 — Tool posture 무변경:** `agents/security-reviewer.md`·`agents/adversarial.md` `tools:` = `Read, Grep, Glob`(#104 그대로; Bash/Web 부재). (tools-lock 테스트 — #104 회귀 방지, YAML-우회 봉쇄)
 8. **AC8 — "loud" 정의 + transparency:** SKILL에 매 iter 선택/제외 한 줄(`> [quality-gates] Review iter N — 선택:… / 제외:…`); degrade도 `> [quality-gates]` prefix. (grep-lock)
-9. **AC9 — max fan-out 재계산 + AP9 제거 (충돌 방지):** README §186의 AP9 fan-out 게이트 선언(`len(phase1)+len(phase2)>=4 → AskUserQuestion`)은 제거하되, **새 로스터 max fan-out 수치는 재계산해 존치**한다 — phase-1 병렬 ≤ 8(security-reviewer + codex + Tier C 최대 6), 총/iteration ≤ 10(+ adversarial + synthesizer; code-simplifier Phase 3 없음). (a) negative grep: AP9 게이트 선언 부재; (b) positive grep: 재계산된 max fan-out 수치 존재(AP9 제거가 수치까지 지우면 fail).
+9. **AC9 — fan-out consent 게이트 주장 whole-file reconcile + max fan-out 재계산:** `len(phase1)+len(phase2)>=4 → AskUserQuestion` fan-out consent 게이트 주장은 README **한 곳이 아니라 여러 곳**(현행 대략 line 15 `P22 anti-corollary(former AP9) hard gate`, 37–39 `P22 generalization / same tool gates subagent fan-out`, 141 `AskUserQuestion fan-out count excludes …`, 186 `>=4 … AskUserQuestion`, 190 `동일한 도구가 subagent fan-out gate…`, 240 동일)에 산재한다. **§186만 편집하면 자기모순**([[feedback_gate_scope_blind_spot]] cross-ref drift). 따라서: (a) 이 주장을 전 위치에서 reconcile — qg는 fan-out consent 게이트를 **fire하지 않음**(documented-not-implemented였음); fan-out은 rubric+transparency+**재계산 max fan-out 선언**으로 bound. **P22 instantiation은 "consent 게이트"가 아니라 "transparency 라인 + 선언된 max fan-out + authoring hard-review" 기반으로 restate**(P22 자체는 불변; qg의 instantiation 문구만 정정). (b) **max fan-out 재계산 존치** — phase-1 병렬 ≤ 8(security-reviewer + codex + Tier C 최대 6), 총/iteration ≤ 10(+ adversarial + synthesizer; code-simplifier Phase 3 없음). **검증:** whole-file negative grep(`>=4`/`≥4`-fan-out-AskUserQuestion 게이트 주장 부재) + positive grep(재계산 max fan-out 수치 존재) + P22 instantiation 문구가 transparency-기반으로 정정됐는지. (line 번호는 현재 스냅샷 — plan은 문자열 기준으로 전수 grep.)
 10. **AC10 — README §166 정합:** README §166이 새 3-tier 모델 반영 + prerequisites에 pr-review-toolkit·feature-dev optional dep. (grep: 리뷰어 목록 ↔ SKILL 정합)
 11. **AC11 — Graceful degradation:** pr-review-toolkit/feature-dev 부재 시 floor+codex 계속 + loud log. (SKILL grep + §8 census 확인)
 12. **AC12 — 버전 + CHANGELOG:** plugin.json=2.13.0; CHANGELOG `## [2.13.0] — 2026-07-19`. (grep-lock; minor만 핀, patch digit unpin — [[feedback_version_pin_vs_bump_rule]])
@@ -172,7 +172,7 @@ Tier C — Dynamic (모델이 스코프로 선택, advisory, 외부 에이전트
 |---|---|
 | `skills/quality-pipeline/SKILL.md` | Review gate dispatch 재작성 — scout 힌트 소비 + 3-tier + rubric + scope-signal 팔레트 + depth 가이드라인 + transparency 라인 + graceful degrade. **tool 관련 변경 없음.** |
 | `scripts/scout.py` | `docs_touched` 입력 신호(경계=filter-docs.sh) + docs→comment-analyzer phase2 힌트 |
-| `README.md` | §166 새 모델 정합 + §186 AP9 fan-out 게이트 선언 제거(max fan-out 수치는 재계산 존치) + prerequisites(pr-review-toolkit·feature-dev optional dep) |
+| `README.md` | §166 새 모델 정합 + **fan-out consent 게이트 주장 전 위치 reconcile**(대략 line 15·37–39·141·186·190·240 — 문자열 grep 전수; P22 instantiation을 transparency-기반으로 restate) + max fan-out 수치 재계산 존치 + prerequisites(pr-review-toolkit·feature-dev optional dep) |
 | `.claude-plugin/plugin.json` | version → 2.13.0 |
 | `CHANGELOG.md` | `## [2.13.0]` — Added(스코프-구동 선택·팔레트·docs_touched) / Changed(scout 힌트 강등·README 정합·AP9 선언 제거) |
 | `tests/` | AC1–AC14 grep-lock/behavior/mutation-teeth/census 테스트 신규·갱신 |
@@ -206,6 +206,6 @@ Tier C — Dynamic (모델이 스코프로 선택, advisory, 외부 에이전트
 - **Target plugin:** quality-gates v2.12.0 → **v2.13.0**(minor)
 - **Branch:** `feature/qg-scope-driven-reviewers` (base: main @ `9d41efd` = #104 머지 후, 확인됨)
 - **관련 원장(memory):** [[project_qg_detector_simplification]] · [[project_law2_agent_tool_surface]] · [[feedback_harness_lightness_trust_model]] · [[feedback_respect_upstream_model_hardcoding]] · [[project_qg_scope_capture]] · [[reference_workflow_law2_agenttype]]
-- **차용 출처:** `pr-review-toolkit`(전문가·§4 rubric) · `code-review` 플러그인(히스토리/이전-PR 렌즈; 수치 스코어링 제외) · `security-guidance`(scope-signal 팔레트)
+- **차용 출처:** `pr-review-toolkit`(전문가·§4 rubric) · `code-review` 플러그인(히스토리/이전-PR 렌즈; 수치 스코어링 제외) · `security-guidance`(설치된 hook 플러그인 — `marketplaces/claude-plugins-official/plugins/security-guidance/hooks/patterns.py`의 25 보안 패턴; agent/skill이 아니라 hook이라 agent registry엔 없음 — scope-signal 팔레트 출처)
 - **결정 로그:** 동기=완전 동적 / floor=security+adversarial 고정 / codex=availability-floor / selection=모델 판단·scout 힌트(결정론 selector 스키마 기각) / 메뉴=pr-review-toolkit5+code-architect+히스토리렌즈 / 신호=docs+산문 팔레트 / fan-out 게이트=없음(magnitude 정직 수용) / **tool posture=무변경(#104 락 유지)** / **SAST 제거** / **graft defer** / **원장 무개정** / **mutation guard 없음**
 - **후속(구현 단계):** writing-plans → subagent-driven 구현(TDD) → whole-branch 리뷰 → `/qg branch` self-dogfood → 사용자 검토/머지
