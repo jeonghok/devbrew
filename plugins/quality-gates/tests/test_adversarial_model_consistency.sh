@@ -78,7 +78,7 @@ fi
 
 # 3. README must describe adversarial as opus, consistently in both the model
 #    note and the Gate 2 phase diagram.
-assert_grep "$README" 'Adversarial \(Standard/Deep, opus\)' "README phase diagram tags Adversarial as opus"
+assert_grep "$README" 'quality-gates:adversarial[[:space:]]+\(Phase 1\.5, opus\)' "README phase diagram tags Adversarial as opus"
 assert_grep "$README" '`adversarial` agent uses `model: opus`' "README model note states opus"
 assert_not_grep "$README" '`adversarial` agent uses `model: sonnet`' "README model note does not state sonnet"
 

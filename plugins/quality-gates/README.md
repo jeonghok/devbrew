@@ -173,7 +173,7 @@ publish의 informed-consent(2차) 둘 다 사람의 명시 동의가 필요하�
 ```
 Tier A — Floor (비-trivia면 항상, 스코프 무관; 모델이 못 뺌)
   ├── quality-gates:security-reviewer   (Phase 1)   tools: Read, Grep, Glob (#104 락)
-  └── quality-gates:adversarial          (Phase 1.5)  tools: Read, Grep, Glob (#104 락)
+  └── quality-gates:adversarial          (Phase 1.5, opus)  tools: Read, Grep, Glob (#104 락)
 Tier B — codex (availability-floor: detect_codex 참이면 무조건, 스코프 무관)
   └── codex-reviewer (별도 프로세스/모델 패밀리, OS read-only 샌드박스)
 Tier C — Dynamic (모델이 스코프로 선택, advisory 외부 에이전트; 최대 6 후보)
