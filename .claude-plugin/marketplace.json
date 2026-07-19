@@ -23,6 +23,12 @@
       "description": "A devbrew-native plugin that turns ambiguity into clarity through relentless interviewing to produce a superpowers-compatible spec.md. Drop-in replacement for superpowers/brainstorming.",
       "source": "./plugins/spec-distill",
       "category": "development"
+    },
+    {
+      "name": "plugin-audit",
+      "description": "Read-only, evidence-based multi-agent audit of an arbitrary devbrew plugin.",
+      "source": "./plugins/plugin-audit",
+      "category": "development"
     }
   ]
 }
