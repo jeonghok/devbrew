@@ -80,8 +80,9 @@ LLM 감사 방법론 2025–26)로 증거를 세운 뒤 사용자가 골랐다. 
    플러그인 shape(§7), command + skill + agents + scripts surface, `0.1.0` 시작 버전.
 2. **임의 devbrew 플러그인**을 감사하도록 일반화한다 — target 플러그인 이름을 인자로, scope는
    `plugins/<target>/**`로 도출, project-init 전용 seed(OQ·후보 단서)는 optional 입력으로 이관(§9·§10).
-3. 검증된 엔진 능력 18종(엔진 §5–§13)을 **동작 무변경**으로 이관한다 — generic 대상에 대해 project-init
-   감사와 동일 품질(회귀 없음).
+3. 검증된 엔진 능력 18종(엔진 §5–§13)을 이관한다 — **결정론 동작(조립·렌더·게이트) 무변경**(AC-6가
+   결정론 측정). discovery *품질*은 비결정론이라 회귀테스트 대상이 아니며, **축 프롬프트를 안 바꾸고
+   scope/seed만 파라미터화**하므로 by-construction 보존된다(codex #6 정합).
 4. **값싼 고레버리지 하드닝**을 얹는다 — A(grounding 강제) · B(프레이밍 위생) · C(untrusted-data 절).
    리서치가 가리킨 최대 측정 오류원(confirmation-bias 16–93%)과 read-only가 못 하는 실증-검증의
    대체물(인용 ground-truth)을 봉쇄한다(§12).
@@ -234,11 +235,13 @@ medium, smoke-probe=low — 이관).
 
 ### 컴포넌트 계약 (codex #8 — 독립 단위 테스트 가능하게)
 
-각 컴포넌트는 서술이 아니라 계약을 갖는다(full JSON 필드 스키마는 plan; 여기선 인터페이스 shape·exit 의미):
+각 컴포넌트는 서술이 아니라 계약을 갖는다. **인터페이스 shape·exit 의미·소유권은 여기서 결정**하고,
+필드-레벨 JSON 스키마(nullability·error record)는 writing-plans 몫이다 — design→plan 2단계 프로세스의
+의도된 경계이지 누락이 아니다(codex r2 #4의 plan-level 인정):
 
 | 컴포넌트 | 입력 | 출력(stdout) | exit code | 실패 전파 |
 |---|---|---|---|---|
-| pre-check 스크립트 (check-law2/no-verdict-injection/plugin-structure/shape-completeness) | target dir·검사 대상 경로 (argv) | `key: value` 라인 또는 JSON 사실 블록 | 0=검사 완료, 非0=hard error | stderr=advisory. hard error → skill이 verbatim surface + abort |
+| pre-check 스크립트 (check-law2/no-verdict-injection/plugin-structure/shape-completeness) | target dir·검사 대상 경로 (argv) | `key: value` 라인 또는 JSON 사실 블록 | **0=검사 완료**(E의 degrade[plugin-dev 부재·검증기 크래시]도 exit 0 + stdout `degrade-fact` — abort 아님) · **非0=스크립트 자체 hard error** | stderr=advisory. hard error(非0) → skill이 verbatim surface + abort. **E degrade는 hard error 아님**(§11·§14) |
 | evidence pack 조립 (orchestrator) | 각 pre-check stdout + git history | `evidence-pack.json`(§13) | — | pre-check degrade → pack `degraded[]` |
 | Workflow (audit-workflow.js) | `args:{target,seedPath,evidencePack}` (JSON 문자열 — [[reference_workflow_args_string]]) | 축별 finding 배열(schema-검증) | — | 축 사망 → `axis_failures[]`, null |
 | post-1 (orchestrator) | Workflow return + journal + evidence pack | `audit-data.json` + A grounding + render | — | 무결성 AFTER 불일치 → 비파괴 롤백(§14) |
@@ -295,6 +298,11 @@ target: <plugin-name>
 generic 엔진 프롬프트는 clue-free가 되므로 재발 사이트가 seed 하나로 줄고, 그 하나를 게이트가 검사한다.
 
 ## 11. 신규 컴포넌트 — E(구조 hard-check) · F(완결성)
+
+> **⚠ 문자 충돌 주의 (spec-review r2).** 이 문서에서 대문자 단독 문자 **A/B/C/E/F**는 *능력*(Tier1
+> A·B·C, 구조 E·F)을 가리킨다 — 엔진에서 상속한 refuter의 축별 판정 게이트 **Gate A–F**(§7·§9의
+> "refuter Gate E" 등)와는 별개다. **"Gate"가 붙으면 refuter 게이트, 안 붙으면 능력 컴포넌트.** §12가
+> "A"에 대해 한 구분(§A(orchestrator) vs refuter Gate A)을 E·F에도 동일 적용.
 
 ### E — `check-plugin-structure.sh`
 
@@ -362,9 +370,10 @@ checklist 원소 = `{requirement_id, check_fn, claude_md_anchor}`:
 
 - **A (orchestrator, 결정론)** — 생존 finding마다: 인용 파일을 재읽어, finding의 `evidence_quote`를
   **공백 정규화** 후 그 파일에서 substring 검색. **입력** `{file, line, evidence_quote}` · **출력**
-  `grounding_verified: bool` + 교정 line. **오직 문자열·경로 연산 — 의미 해석 없음.**
-  - quote가 파일 어디에도 없음 → **폐기**(날조/stale 인용) + `grounding_verified: false` + `degraded_events[]`.
-  - quote가 인용 line(±3줄 window) 밖의 다른 위치 → **존치 + line 교정** + `degraded_events[]`에 line drift.
+  `grounding_verified: bool｜null` + 교정 line. **오직 문자열·경로 연산 — 의미 해석 없음.** 4개 경우 (spec-review r2 — null 추가):
+  - **인용 파일 부재/읽기 불가** → `grounding_verified: null`(검증 못 함, degrade) + `degraded_events[]` + ⚠ 미검증 라벨(§13).
+  - quote가 (읽힌) 파일 어디에도 없음 → **폐기**(날조/stale 인용) + `grounding_verified: false` + `degraded_events[]`.
+  - quote가 인용 line(±3줄 window) 밖의 다른 위치 → **존치 + line 교정** + `grounding_verified: true` + `degraded_events[]`에 line drift.
   - quote가 인용 line(±3줄)에 있음 → `grounding_verified: true`, 통과.
 - **refuter Gate A (agent, 판정)** — "그 *실재하는* 인용이 주장을 실제로 뒷받침하는가?"는 여전히
   refuter의 판정 몫이다. A는 그것을 대체하지 않고 **선행**한다: A가 인용의 실재를 결정론으로 보장한 뒤,
@@ -463,8 +472,9 @@ checklist 원소 = `{requirement_id, check_fn, claude_md_anchor}`:
   일반화로 안 바뀜을 검증(discovery는 stub이라 결정론).
 
 **신규 능력:**
-- AC-7 (A): 생존 finding의 인용이 orchestrator 결정론 재읽기로 100% resolve(불일치는 강등/degrade).
-  mutation: 인용을 틀리게 만든 fixture가 강등되는지 RED로 증명.
+- AC-7 (A): 생존 finding의 인용이 orchestrator 결정론 재읽기로 resolve되거나 **명시적 null-degrade**
+  (파일 부재/읽기불가 예외 — §12 4번째 케이스). 즉 검증 안 된 인용은 조용히 통과하지 않는다(null이면
+  ⚠ 미검증 라벨). mutation: 인용을 틀리게 만든 fixture가 폐기, 파일 없는 fixture가 null-degrade되는지 RED.
 - AC-8 (B, codex #9): (a) `check-no-verdict-injection.py`가 {audit-workflow.js CONTRACT/AXES/refutePrompt,
   codex 프롬프트, 3 persona, **seed 파일**}에서 banned verdict 토큰(엔진 BANNED + 일반화)을 검출 —
   positive fixture(seed에 "D1 confirmed/철회됨") RED / negative("D1: 주장 + file:line") GREEN. (b) 프롬프트
@@ -474,6 +484,10 @@ checklist 원소 = `{requirement_id, check_fn, claude_md_anchor}`:
   깨진 검증기 stub이 `degraded[]`로 가는지 RED로 증명.
 - AC-10 (F): canonical shape 누락이 finding/shape_gap으로, **단일 패스**(loop 없음). mutation:
   version 필드 제거한 fixture가 누락으로 잡히는지 RED.
+- AC-13 (자체 테스트 격리, §9 — spec-review r2): target 테스트를 disposable worktree 샌드박스
+  (`qg-worktree.sh` 재사용)에서 실행, **product-변경 테스트를 mutation-guard가 잡아 사실 무효화** +
+  120s 타임아웃 → `own_tests:{ran:false}`. mutation: product를 건드리는 target 테스트 fixture가
+  mutation-guard에 잡히는지 RED로 증명.
 
 **전역:**
 - AC-11: 신규/이관 스크립트마다 mutation test로 이빨 증명(회귀 락 헤더-satisfiable 금지, C11).
@@ -491,6 +505,8 @@ checklist 원소 = `{requirement_id, check_fn, claude_md_anchor}`:
 - **AC-6 회귀 (결정론)**: 2026-07-15 journal을 stub으로 generalized post-1에 흘려 조립 audit-data.json을
   baseline과 field-diff — CX-2 CRITICAL·A6-1 HIGH 재현 + 정렬/스키마 불변. mutation: 조립 로직 변경 시 RED.
 - **컴포넌트 계약 fixture**: 각 pre-check 스크립트를 argv/stdin → stdout/exit 고정 fixture로 독립 단위 테스트(§8).
+- **자체 테스트 격리 (AC-13)**: product-mutating target 테스트 fixture가 mutation-guard에 잡혀 사실이
+  무효화되는지 + 120s 타임아웃이 `own_tests:{ran:false}`를 내는지 골든 검증.
 - **스모크(pre-0, GC8 후)**: `smoke-workflow.js`가 namespaced agent 해석 + allowlist를 sentinel
   디스크 부재로 실증(persona 자기보고 아님).
 - **/qg 파이프라인**: 구현 후 Review gate(+codex model-diversity) — 보안 컨트롤(read-only·판정주입·
@@ -511,6 +527,9 @@ checklist 원소 = `{requirement_id, check_fn, claude_md_anchor}`:
 - **majority-vote consensus** — popularity trap(능동적 유해). union+independent-refute로.
 - **codex 스크립트(run_codex_reviewer.sh) 재사용** — diff-shaped + 최신 spec AC 자동 주입이 blind를
   깸(엔진 §5.3). `codex exec` 직접 호출 + `detect_codex.sh`만 재사용.
+- **테스트 격리: 컨테이너 / OS sandbox / 실행-skip** (codex r2 #3) — 컨테이너=무거움+런타임 의존 ·
+  OS sandbox=플랫폼 종속 · 실행-skip=축③이 테스트 통과여부 상실. vs **`qg-worktree.sh` 재사용**(이미
+  repo에 있고 mutation-guard로 검증됨 · git-worktree 이식성) → 후자 채택(§9).
 
 ## 19. Revision History
 
@@ -520,6 +539,11 @@ checklist 원소 = `{requirement_id, check_fn, claude_md_anchor}`:
   재작성(§20) · E path-resolution + bonus-degradable / F load-bearing 재정의(§11) · F impl 결정(하드코딩
   +회귀 락) · A 결정론/semantic entailment 분리(§12) · 컴포넌트 계약(§8) · AC-6 결정론 측정 + AC-8
   정밀화(§16) · AC-6 검증 스텝(§17).
+- **r3 (2026-07-19)** — round-2 리뷰(r1 4건 RESOLVED 확인 + 수정이 만든 회귀 6건) 반영: §8 E exit-code
+  degrade carve-out · §12 grounding null(파일 부재) 4번째 케이스 + AC-7 정합 · §11 component E/F ↔
+  refuter Gate E/F 문자 구분 · §16 AC-13(sandbox 격리) + §17 스텝 · §2 Goal 3 결정론-범위로 축소
+  (discovery=by-construction) · §18 테스트-격리 대안 비교. codex의 "설계에 완전 스키마 요구"는 design→plan
+  경계로 명시 deferral(§8).
 
 ## 20. Handoff Context
 
