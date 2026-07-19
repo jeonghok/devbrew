@@ -59,6 +59,24 @@ class TestData(unittest.TestCase):
         bad["meta"]["fanout_declared"] = 25  # consent.fanout(30)과 불일치
         rc, _ = run_validate(bad); self.assertEqual(rc, 1)
 
+    def test_fanout_declared_mismatch_is_red(self):
+        # fanout_declared==30이지만 consent.fanout=25로 불일치시킨다. 구 리터럴(!= 30)
+        # 아래서는 30==30이라 통과(GREEN)해버리므로, 이 케이스는 신구 형태를 판별한다.
+        bad = copy.deepcopy(VALID)
+        bad["meta"]["fanout_declared"] = 30
+        bad["meta"]["consent"]["fanout"] = 25
+        rc, err = run_validate(bad)
+        self.assertEqual(rc, 1, f"fanout_declared(30) != consent.fanout(25) should RED:\n{err}")
+
+    def test_fanout_match_nonzero_is_green(self):
+        # 30이 아닌 값(42)으로 둘을 일치시킨다. 구 리터럴(!= 30) 아래서는 42 != 30이라
+        # 거짓 RED가 나므로, 이 케이스는 "상수 30에 여전히 묶여있는" 회귀를 잡는다.
+        ok = copy.deepcopy(VALID)
+        ok["meta"]["fanout_declared"] = 42
+        ok["meta"]["consent"]["fanout"] = 42
+        rc, err = run_validate(ok)
+        self.assertEqual(rc, 0, f"fanout_declared(42) == consent.fanout(42) should GREEN:\n{err}")
+
     def test_assigned_sets_are_data_driven(self):  # 하드코딩 D1–D5/OQ1–OQ6 제거 증명
         ok = copy.deepcopy(VALID)
         ok["meta"]["assigned_d"] = ["D1", "D2"]
