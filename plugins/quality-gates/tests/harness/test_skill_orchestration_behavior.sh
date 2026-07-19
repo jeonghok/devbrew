@@ -103,7 +103,10 @@ itercap_line=$(first_line 'max_review_iterations')
 # Locality bound widened 100→120 in v2.6.0 review-iter3: the Step-1 $effective_diff_scope
 # single-source paragraph + scout/dispatch annotations legitimately grew the Review-gate
 # region between the iter cap and the decision tool. Still a tight locality sanity check.
-assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 120
+# Locality bound 120→160 in v2.13.0 scope-driven-composition: step 3의 Tier B/C
+# dispatch 프로즈(codex availability-floor + Tier C 선택 + transparency + graceful)가
+# adversarial dispatch와 iter-boundary 결정 사이 영역을 정당하게 키움. 여전히 tight sanity.
+assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 160
 
 # DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS near Runtime gate dispatch — use first mention
 # AT OR AFTER the Runtime gate dispatch line (the top-of-file "up to ..." preview
