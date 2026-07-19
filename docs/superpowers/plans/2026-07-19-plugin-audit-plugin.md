@@ -670,7 +670,7 @@ git commit -m "feat(plugin-audit): port check-no-verdict-injection.py + re-path 
 - Create: `plugins/plugin-audit/scripts/tests/audit-workflow.test.mjs` (복사 + assertion 일반화)
 
 **Interfaces:**
-- Consumes: `args`(JSON 문자열) `{target, seedPath, evidencePack, codexFindings}`. `evidencePack`(§13)은 `{plugin_version, file_count, total_lines, staleness_facts, own_tests, precedent_corpus, extra_scope[], open_questions[], candidate_clues[], structure_facts[], shape_gaps[]}`. `candidate_clues[]` = `[{id, axis, claim, file, line}]`(seed-도출, 없으면 []), `open_questions[]` = `[{id, axis, question}]`.
+- Consumes: `args`(JSON 문자열) `{target, seedPath, evidencePack, codexFindings}`. `evidencePack`(§13)은 `{plugin_version, file_count, total_lines, staleness_facts, own_tests, precedent_paths, steelman_hints, extra_scope[], open_questions[], candidate_clues[], structure_facts[], shape_gaps[]}`. **⚠ 워크플로가 실제로 읽는 필드명은 `precedent_paths`**(Task 8 리뷰 확정 — `precedent_corpus`가 아님) · `steelman_hints`(optional). `candidate_clues[]` = `[{id, axis, claim, file, line}]`(seed-도출, 없으면 []), `open_questions[]` = `[{id, axis, question}]`.
 - Produces: `{findings[], d_verdicts[], oq_answers[], new_open_questions[], axis_failures[], degraded_events[]}`. agentType은 namespaced `plugin-audit:plugin-auditor`/`:audit-refuter`. dedup·refute·deep-verify 로직 무변경.
 
 - [ ] **Step 1: 복사 (workflow + harness + test)**
@@ -687,7 +687,7 @@ cp scripts/tests/audit-workflow.test.mjs plugins/plugin-audit/scripts/tests/audi
 ```js
 const DEFAULT_PACK = {
   plugin_version: '0.0.0', file_count: 10, total_lines: 500,
-  staleness_facts: [], own_tests: null, precedent_corpus: [],
+  staleness_facts: [], own_tests: null, precedent_paths: [], steelman_hints: [],
   extra_scope: [], open_questions: [], candidate_clues: [],
   structure_facts: [], shape_gaps: [],
 }
