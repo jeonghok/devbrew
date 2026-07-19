@@ -13,9 +13,9 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 // candidate_clues/open_questions default to [] so the schema enums are omitted (not enum:[]).
 export const DEFAULT_PACK = {
   plugin_version: '0.0.0', file_count: 10, total_lines: 500,
-  staleness_facts: [], own_tests: null, precedent_corpus: [],
+  staleness_facts: [], own_tests: null, precedent_paths: [],
   extra_scope: [], open_questions: [], candidate_clues: [],
-  structure_facts: [], shape_gaps: [],
+  structure_facts: [], shape_gaps: [], steelman_hints: [],
 }
 
 // Run a Workflow script (top-level await + return) by wrapping it in an AsyncFunction and
