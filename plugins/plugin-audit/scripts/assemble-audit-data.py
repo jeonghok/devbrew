@@ -9,7 +9,17 @@ def load(p):
 
 
 def ev_keys(f):
-    return {(e.get("file"), e.get("line")) for e in f.get("evidence", [])}
+    # 대표(첫) evidence만 — cross_model_confirmed는 "같은 file:line을 독립적으로
+    # 지목"(§9.2)한다는 뜻이고, 이는 finding의 주 근거(evidence[0])를 가리킨다.
+    # 전체 evidence 배열의 합집합으로 넓히면 finding이 부수적으로 인용한 배경
+    # 파일이 우연히 겹치는 것까지 "교차확인"으로 오판한다 (2026-07-15 baseline
+    # 재현에서 실측: A1-2/A3-1/A6-1/CX-1/CX-5가 전체-합집합 기준으로는 false
+    # positive였다 — AC-6).
+    ev = f.get("evidence") or []
+    if not ev:
+        return set()
+    e = ev[0]
+    return {(e.get("file"), e.get("line"))}
 
 
 def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):

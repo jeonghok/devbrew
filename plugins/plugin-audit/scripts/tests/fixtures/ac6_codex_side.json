@@ -1,0 +1,448 @@
+{
+  "d_verdicts": [
+    {
+      "id": "D1",
+      "verdict": "confirmed",
+      "reason": "설치 레지스트리 /Users/jeonghokim/.claude/plugins/installed_plugins.json:84-91에서 commit-commands가 실제 설치된 것은 확인했다. 그러나 README에는 prerequisites 섹션이 없고, plugins/project-init/templates/shared/pr-process.md:77이 조건 표시 없이 /commit-push-pr을 사용자 프로젝트에 복제하며 command 완료 메시지도 같은 명령을 권한다.",
+      "impact": "현재 감사 호스트에서는 동작하지만 project-init만 설치한 다른 사용자에게 실행 불가능한 명령이 생성물로 배포된다.",
+      "fix": "optional prerequisite를 문서화하고 설치 여부에 따라 생성물과 완료 메시지를 조건화한다.",
+      "source": "codex"
+    },
+    {
+      "id": "D2",
+      "verdict": "withdrawn",
+      "reason": "quality-gates hooks.json의 event 이름만으로는 PR trigger가 보이지 않지만 구현은 plugins/quality-gates/hooks/post-tool-use.py:54에서 gh pr create를 검출하고, :78에서 성공 PR URL을 확인한 뒤 :88-95에서 pipeline 초기화 systemMessage를 발행한다. project-init README:79와 pr-process.md:78의 직접 gh pr create 조건부 주장은 구현과 일치한다.",
+      "impact": "",
+      "source": "codex"
+    },
+    {
+      "id": "D3",
+      "verdict": "confirmed",
+      "reason": ".claude-plugin/marketplace.json:17은 Git workflow만 설명하지만 plugin.json:3은 필수 fact-routing charter interview와 AGENTS.md/CLAUDE.md·charter integrity를 포함한다. 단순 문자열 차이를 넘어 설치 전 설명에서 필수 질문과 추가 write 범위가 빠져 있다.",
+      "impact": "사용자가 설치 카드에서 예상한 범위보다 더 많은 질문과 프로젝트 파일 변경을 실행 중에 처음 접한다.",
+      "fix": "marketplace 문구를 plugin.json과 의미적으로 동기화한다.",
+      "source": "codex"
+    },
+    {
+      "id": "D4",
+      "verdict": "withdrawn",
+      "reason": "세 ignored files를 모두 직접 읽었고 session 파일 목록과 절대·임시 경로가 실제 존재한다. 그러나 .gitignore:214-220이 plugin 하위 .claude를 제외하고, 설치 cache에도 포함되지 않는다. 더 중요하게 command는 plugins/project-init/commands/project-init.md:138-145와 :181-185의 명시적 template 목록만 읽으므로 templates/.claude를 재귀 복제하지 않는다.",
+      "impact": "",
+      "source": "codex"
+    },
+    {
+      "id": "D5",
+      "verdict": "confirmed",
+      "reason": "2026-07 현재 공식 문서 https://code.claude.com/docs/en/memory 는 Claude Code가 AGENTS.md를 직접 읽지 않으며, 기존 AGENTS.md를 쓰는 저장소에는 이를 import하는 CLAUDE.md를 만들라고 명시한다. 따라서 AGENTS.md canonical + CLAUDE.md의 @AGENTS.md pointer 설계는 현재 공식 권고와 일치한다. /init이 AGENTS.md를 탐색해 CLAUDE.md에 관련 내용을 반영할 수 있는 것과 runtime native loading은 별개다.",
+      "impact": "D5 자체는 갭이 아니다.",
+      "source": "codex"
+    }
+  ],
+  "oq_answers": [
+    {
+      "id": "OQ1",
+      "answer": "231줄 command 전체를 skill·scripts·agents로 분해할 shape 근거는 없다. 다만 destructive state transition과 백업·승인 부분은 테스트 가능한 작은 helper 또는 scoped guard로 추출할 근거가 생겼다.",
+      "reason": "500줄 기준은 SKILL.md 규범이고 현재 command는 231줄이라 조건 (a)가 아니다. command와 skill은 동일하게 로드되므로 단순 포맷 이동의 실행상 이득도 없다. 반면 기존 AGENTS-only workflow를 감지하지 못하는 실제 파괴 경로와 과거 산문 state bug가 존재하고, 현재 write에는 백업이 없으므로 steelman (c)가 충족된다. 추출 범위는 인터뷰 전체가 아니라 write inventory·backup·atomic commit으로 제한해야 중복 상태기계와 drift 비용을 줄일 수 있다.",
+      "left_evidence": [
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 165,
+          "quote": "| **S4 (AGENTS exists, CLAUDE divergent or absent)** | 존재 | 없음 또는 divergent content | 사용자에게 advisory + 두 옵션 — (i) CLAUDE.md를 `@AGENTS.md` 한 줄로 *재작성* (AGENTS.md unchanged), (ii) abort. 승인 시 (i) 수행 + S3 action. |"
+        },
+        {
+          "file": "plugins/project-init/CHANGELOG.md",
+          "line": 14,
+          "quote": "- **S2a migration이 `AGENTS.md`를 `# CLAUDE.md`로 잘못 제목 짓던 문제**"
+        },
+        {
+          "file": "plugins/project-init/hooks/tests/test_command_contract.py",
+          "line": 3,
+          "quote": "`/project-init` is a model-followed markdown instruction, not executable code, so"
+        }
+      ],
+      "right_evidence": [
+        {
+          "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/plugin-dev/unknown/skills/command-development/SKILL.md",
+          "line": 9,
+          "quote": "Both are loaded identically — the only difference is file layout."
+        },
+        {
+          "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/skill-creator/unknown/skills/skill-creator/SKILL.md",
+          "line": 96,
+          "quote": "Keep SKILL.md under 500 lines; if you're approaching this limit, add an additional layer of hierarchy"
+        },
+        {
+          "file": "CLAUDE.md",
+          "line": 67,
+          "quote": "- **Trivia ceremony** — 한 문장 diff에 full pipeline 실행 (Anthropic *Best Practices*)."
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 231,
+          "quote": "> 간결한 git 작업을 위해 `/commit` 또는 `/commit-push-pr` (commit-commands 플러그인) 사용."
+        }
+      ],
+      "steelman_condition": "c",
+      "source": "codex"
+    },
+    {
+      "id": "OQ2",
+      "answer": "브랜치·커밋 검증 전체를 hard-blocking PreToolUse로 승격하지 않는다. 현재 PostToolUse 경고를 유지하되, commit+push 같은 원격 side effect가 한 호출에 결합된 경우에는 선택적 PreToolUse ask를 제공하는 중간지대가 적합하다.",
+      "reason": "현재 hook은 systemMessage만 반환하고 항상 exit 0이라 실제 차단 능력이 없다. local branch 생성과 commit은 대체로 복구 가능하고 release 예외도 있어 전면 deny는 오탐 비용이 크다. 반면 잘못된 commit 뒤 push까지 한 Bash 호출이면 사후 경고가 원격 결과를 막지 못한다. permissionDecision ask 선례는 사람에게 최종 선택을 남기는 비차단·비자동승인 중간지대다. 두 kill switch는 post-tool-use.py:178-183 및 docs-lint.py:31-40에서 main 진입 전에 실제로 존중된다. 기존 테스트는 지원된 checkout -b·switch -c·-m과 kill switch를 검증하지만 Git 전체 문법이나 사전 차단을 증명하지는 않는다.",
+      "evidence": [
+        {
+          "file": "plugins/project-init/hooks/hooks.json",
+          "line": 4,
+          "quote": "\"PostToolUse\": ["
+        },
+        {
+          "file": "plugins/project-init/hooks/post-tool-use.py",
+          "line": 208,
+          "quote": "warnings = [w for w in (validate_branch(command), validate_commit(command)) if w]"
+        },
+        {
+          "file": "plugins/project-init/hooks/post-tool-use.py",
+          "line": 211,
+          "quote": "print(json.dumps({\"systemMessage\": \"\\n\\n\".join(warnings)}))"
+        },
+        {
+          "file": "plugins/project-init/hooks/post-tool-use.py",
+          "line": 215,
+          "quote": "sys.exit(0)"
+        },
+        {
+          "file": "plugins/project-init/hooks/post-tool-use.py",
+          "line": 178,
+          "quote": "def kill_switch_active():"
+        },
+        {
+          "file": "/Users/jeonghokim/Downloads/reference/gstack/careful/bin/check-careful.sh",
+          "line": 109,
+          "quote": "printf '{\"permissionDecision\":\"ask\",\"message\":\"[careful] %s\"}\\n' \"$WARN_ESCAPED\""
+        },
+        {
+          "file": "/Users/jeonghokim/Downloads/reference/gstack/freeze/bin/check-freeze.sh",
+          "line": 77,
+          "quote": "printf '{\"permissionDecision\":\"deny\",\"message\":\"[freeze] Blocked: %s is outside the freeze boundary (%s). Only edits within the frozen directory are allowed.\"}\\n' \"$FILE_PATH\" \"$FREEZE_DIR\""
+        }
+      ],
+      "source": "codex"
+    },
+    {
+      "id": "OQ3",
+      "answer": "Phase 0은 내장 /init과 부분 중복하지만 대체 가능한 동일 기능은 아니다.",
+      "reason": "공식 /init은 build system·test framework·code pattern을 분석해 CLAUDE.md 초안을 만드는 범용 bootstrap이다. project-init Phase 0도 manifest와 디렉토리를 스캔하므로 tech-stack 탐색 비용은 겹친다. 그러나 project-init은 branching strategy를 선택하고 vision·non-goals·conventions를 확인해 세 Git 문서와 charter detail을 생성한다. claude-code-setup도 코드베이스를 분석하지만 파일을 쓰지 않고 자동화 후보만 추천한다. 따라서 정체성 갭은 아니며, 기존 /init 결과를 입력으로 재사용하는 최적화 여지는 있다.",
+      "evidence": [
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 89,
+          "quote": "`Glob`/`Read`로 repo를 스캔해 tech-stack 후보를 자동 생성한다. manifest → stack 라벨 매핑:"
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 113,
+          "quote": "`AskUserQuestion`으로 다음 4개만 묻는다 (자동 감지된 사실은 open-ended 재질문 금지 — AC3):"
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 171,
+          "quote": "`docs/git-workflow/` 디렉토리가 없으면 생성. 다음 3개 파일 작성:"
+        },
+        {
+          "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/claude-code-setup/1.0.0/skills/claude-automation-recommender/SKILL.md",
+          "line": 11,
+          "quote": "**This skill is read-only.** It analyzes the codebase and outputs recommendations. It does NOT create or modify any files."
+        },
+        {
+          "file": "https://code.claude.com/docs/en/best-practices",
+          "line": 0,
+          "quote": "/init analyzes the codebase and creates a CLAUDE.md starting point."
+        }
+      ],
+      "source": "codex"
+    },
+    {
+      "id": "OQ4",
+      "answer": "되돌릴 수 없는 파괴 위험이 있다. 백업은 없고, 승인 프롬프트는 모든 기존-content 교체 경로를 덮지 않는다.",
+      "reason": "write 전수 목록은 S1의 AGENTS.md·CLAUDE.md 신규 생성, S2a의 CLAUDE→AGENTS migration 후 pointer 교체, S2b의 AGENTS 생성, S3의 AGENTS Git Workflow 교체, S4의 CLAUDE 생성·재작성과 S3 action, docs/git-workflow 3파일 작성, C-S1의 charter append 및 docs/project 생성, C-S2 승인 시 charter·detail 갱신, C-S3(a)의 in-place 교체, C-S3(b)의 누락 detail 생성, 조건부 glossary 생성이다. hooks 두 개는 파일을 쓰지 않고 JSON·stderr만 출력한다. 기존 Git rules 감지 프롬프트, S2 migration, S4 pointer rewrite, C-S2 update에는 승인이 있지만 Step 1은 AGENTS.md의 기존 Git Workflow를 직접 검사하지 않고 C-S3(a)는 C-S2 update 승인 없이 교체한다. 어느 write 경로에도 백업·rollback 지시가 없다.",
+      "evidence": [
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 20,
+          "quote": "기존 Git Workflow 설정이 발견되면 사용자에게 묻는다:"
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 25,
+          "quote": "또한 root에 `CLAUDE.md`가 존재하고 `AGENTS.md`가 없다면 사용자에게 묻는다:"
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 162,
+          "quote": "| **S1 (clean slate)** | 없음 | 없음 | AGENTS.md 신규 작성 (`agents-md-section.md` content); CLAUDE.md 신규 작성 (`claude-md-pointer.md` content — `@AGENTS.md` 한 줄). |"
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 164,
+          "quote": "| **S3 (AGENTS canonical, CLAUDE pointer)** | 존재 | 존재 + `@AGENTS.md` (R-pointer 통과) | AGENTS.md의 `## Git Workflow` 섹션만 in-place 갱신. CLAUDE.md는 unchanged. |"
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 169,
+          "quote": "#### 4d: docs/git-workflow/ 파일 쓰기"
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 205,
+          "quote": "| **C-S1 (clean)** | `AGENTS.md`에 `## Project Charter` 섹션 신규 추가(`agents-md-section.md` 치환본) + `docs/project/charter.md`·`conventions.md` 생성 (+용어 있으면 `glossary.md`). |"
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 206,
+          "quote": "| **C-S2 (complete)** | 업데이트 승인 시: `## Project Charter` 섹션 in-place 교체 + `docs/project/` 파일 in-place 갱신. 거절 시: 전부 unchanged, 중복 `## Project Charter` 섹션 생성 안 함. |"
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 207,
+          "quote": "| **C-S3 (a) 섹션 항목 누락** | Phase 1 보충 질문으로 채운 뒤 C-S1과 동일하게 발행(in-place 교체). |"
+        }
+      ],
+      "source": "codex"
+    },
+    {
+      "id": "OQ5",
+      "answer": "devbrew CI 부재는 관측 가능한 운영 위험이지만 LD5 밖이므로 finding으로 올리지 않는다.",
+      "reason": "project-init은 95개 unittest와 CI-runnable smoke를 제공하지만 repository-level workflow가 없어 자동 실행 연결은 없다. CI 설정은 plugins/project-init, docs/git-workflow 또는 marketplace project-init 항목에 속하지 않으므로 이번 갭 범위에서는 NOQ다.",
+      "evidence": [
+        {
+          "file": "plugins/project-init/CHANGELOG.md",
+          "line": 88,
+          "quote": "- `hooks/tests/smoke.sh` — V2 자동화 smoke script (CI-runnable, no human eyeballing, macOS bash 3.2 호환)."
+        }
+      ],
+      "source": "codex"
+    },
+    {
+      "id": "OQ6",
+      "answer": "세 branching strategy 템플릿의 내용 품질은 명백한 감사 대상이다.",
+      "reason": "command가 템플릿을 사용자 프로젝트의 docs/git-workflow로 직접 복제하므로 공식 quality-criteria의 currency·actionability·실행 가능한 명령·정확한 경로 기준이 적용된다. GitHub Flow는 대체로 간결하고 실행 가능하다. Git Flow는 custom release 답변을 반영하지 않고 dot을 허용하는 regex와 '하이픈만' 문장이 충돌한다. Trunk-based는 legacy branch base가 잘못됐다. UX 흐름은 전략 선택 후 공통 2문항, Git Flow만 1문항 추가, charter 최대 4문항과 항목별 최대 3회 재질문이다. Step 1 거절은 전체 abort지만 charter 실패는 Git 산출물을 남기며, 그 조건부 결과를 Step 5가 정확히 보고하지 않는다.",
+      "evidence": [
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 47,
+          "quote": "### Step 2: Branching Strategy 선택"
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 59,
+          "quote": "### Step 3: 커스터마이징 질문"
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 111,
+          "quote": "#### Phase 1 — 판단 질문 (AskUserQuestion, ≤4개)"
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 124,
+          "quote": "각 필수 항목에 대해 빈/무의미 응답이면 AskUserQuestion 재질문을 **최대 3회**까지 한다."
+        },
+        {
+          "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/claude-md-management/1.0.0/skills/claude-md-improver/references/quality-criteria.md",
+          "line": 66,
+          "quote": "- Commands work as documented"
+        },
+        {
+          "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/claude-md-management/1.0.0/skills/claude-md-improver/references/quality-criteria.md",
+          "line": 79,
+          "quote": "- Commands can be copy-pasted"
+        },
+        {
+          "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/claude-md-management/1.0.0/skills/claude-md-improver/references/quality-criteria.md",
+          "line": 103,
+          "quote": "- Commands that would fail (wrong paths, missing deps)"
+        }
+      ],
+      "source": "codex"
+    }
+  ],
+  "new_open_questions": [
+    {
+      "id": "NOQ-x1",
+      "axis": 1,
+      "observation": "git-ignored quality-gates session 파일 3개는 실제로 존재하며 사용자 절대 경로와 임시 scratch 경로를 담고 있다.",
+      "why_not_gap": "모두 .gitignore의 plugin-state 규칙에 의해 제외되고 설치 cache에도 없으며, 생성 command는 template 파일을 명시적으로 열거해 templates/.claude를 읽거나 재귀 복제하지 않는다. 따라서 현재 사용자 프로젝트로 전파되는 실패 모드가 없다.",
+      "evidence": [
+        {
+          "file": "plugins/project-init/.claude/quality-gates/3a082477-4f9e-4673-843a-e3c648b52cbd/files.md",
+          "line": 3,
+          "quote": "- /Users/jeonghokim/Downloads/devbrew/plugins/project-init/hooks/tests/test_docs_lint.py"
+        },
+        {
+          "file": "plugins/project-init/templates/.claude/quality-gates/c5b5d479-4c08-4c0b-bd17-b69dc75f3ce4/files.md",
+          "line": 5,
+          "quote": "- /private/tmp/claude-501/-Users-jeonghokim-Downloads-devbrew/c5b5d479-4c08-4c0b-bd17-b69dc75f3ce4/scratchpad/demo-shop/AGENTS.md"
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 138,
+          "quote": "플러그인에서 다음 파일을 읽는다:"
+        }
+      ],
+      "source": "codex"
+    },
+    {
+      "id": "NOQ-x2",
+      "axis": 1,
+      "observation": "quality-gates의 hooks event 이름에는 PR 전용 trigger가 없지만 hook 본문은 직접 gh pr create 성공을 검출한다.",
+      "why_not_gap": "구현이 성공 PR URL을 확인하고 quality pipeline 초기화를 지시하므로 project-init의 조건부 통합 설명은 참이다. 인덱스만 본 D2 가설이 철회됐다.",
+      "evidence": [
+        {
+          "file": "plugins/quality-gates/hooks/post-tool-use.py",
+          "line": 54,
+          "quote": "if not re.search(r\"gh\\s+pr\\s+create\", command):"
+        },
+        {
+          "file": "plugins/quality-gates/hooks/post-tool-use.py",
+          "line": 78,
+          "quote": "pr_url_match = re.search(r\"https://github\\.com/[^\\s]+/pull/\\d+\", stdout)"
+        },
+        {
+          "file": "plugins/quality-gates/hooks/post-tool-use.py",
+          "line": 90,
+          "quote": "f\"Quality Gates: PR created at {pr_url}. \""
+        }
+      ],
+      "source": "codex"
+    },
+    {
+      "id": "NOQ-x3",
+      "axis": 1,
+      "observation": "staleness sweep의 dangling doc-claim 27건은 역사적 삭제 기록, 사용자 프로젝트의 생성 대상 경로, pointer 본문을 파일 참조로 오인한 항목으로 분류됐다.",
+      "why_not_gap": "예를 들어 llm-guidelines.md는 현존한다고 주장한 것이 아니라 제거 사실을 기록한 것이고, README의 @AGENTS.md는 import 본문이다. 전수 대조에서 현재 구현이 dereference하는 존재하지 않는 파일은 발견되지 않았다.",
+      "evidence": [
+        {
+          "file": "plugins/project-init/CHANGELOG.md",
+          "line": 64,
+          "quote": "- `templates/shared/llm-guidelines.md` 파일 및 `## LLM Coding Guidelines` 섹션 emission 전면 제거."
+        },
+        {
+          "file": "plugins/project-init/README.md",
+          "line": 52,
+          "quote": "- `CLAUDE.md` — `@AGENTS.md` 한 줄 thin pointer (Claude Code가 AGENTS.md content를 자동 import)"
+        },
+        {
+          "file": "plugins/project-init/templates/shared/claude-md-pointer.md",
+          "line": 1,
+          "quote": "@AGENTS.md"
+        }
+      ],
+      "source": "codex"
+    },
+    {
+      "id": "NOQ-x4",
+      "axis": 1,
+      "observation": "sweep의 draft residue인 TBD는 출하 미완료 마커처럼 보인다.",
+      "why_not_gap": "해당 위치의 TBD는 바로 앞 문맥에서 Trunk-Based Development를 가리키는 약어이며 TODO·미결정 값이 아니다.",
+      "evidence": [
+        {
+          "file": "plugins/project-init/templates/trunk-based/branch-strategy.md",
+          "line": 69,
+          "quote": "[trunkbaseddevelopment.com](https://trunkbaseddevelopment.com/) canonical은 두 가지 release 패턴을 권장:"
+        },
+        {
+          "file": "plugins/project-init/templates/trunk-based/branch-strategy.md",
+          "line": 109,
+          "quote": "- release 브랜치를 새 기능 개발에 쓰지 말 것 — 그 순간 long-lived feature branch가 되어 TBD 위반."
+        }
+      ],
+      "source": "codex"
+    },
+    {
+      "id": "NOQ-x5",
+      "axis": 1,
+      "observation": "95/95 GREEN 중 command contract 테스트는 실제 command 수행이 아니라 산문 존재를 검증한다.",
+      "why_not_gap": "테스트와 CHANGELOG가 이 한계를 명시적으로 밝히므로 테스트 자체가 실행 능력을 거짓 주장하지는 않는다. 지원 hook 입력과 kill switch는 실제 Python 테스트가 검증하지만 모델이 산문을 정확히 따를지는 별도 sandbox 실행이 필요하다.",
+      "evidence": [
+        {
+          "file": "plugins/project-init/hooks/tests/test_command_contract.py",
+          "line": 3,
+          "quote": "`/project-init` is a model-followed markdown instruction, not executable code, so"
+        },
+        {
+          "file": "plugins/project-init/hooks/tests/test_command_contract.py",
+          "line": 4,
+          "quote": "a test cannot exercise its behaviour. What it *can* lock is the existence of the"
+        },
+        {
+          "file": "plugins/project-init/CHANGELOG.md",
+          "line": 19,
+          "quote": "명령서는 모델이 따르는 지시서라 동작을 실행할 수 없으므로, 규칙의 *존재*를 잠근다"
+        }
+      ],
+      "source": "codex"
+    },
+    {
+      "id": "NOQ-x6",
+      "axis": 4,
+      "observation": "claude-code-setup도 codebase를 스캔하므로 project-init과 표면적으로 겹친다.",
+      "why_not_gap": "공식 skill은 read-only로 hook·skill·MCP·subagent 자동화를 추천할 뿐 파일을 생성하지 않는다. project-init은 선택한 Git 정책과 사용자에게서 받은 charter를 프로젝트 파일로 발행하므로 산출물과 책임이 다르다.",
+      "evidence": [
+        {
+          "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/claude-code-setup/1.0.0/skills/claude-automation-recommender/SKILL.md",
+          "line": 9,
+          "quote": "Analyze codebase patterns to recommend tailored Claude Code automations across all extensibility options."
+        },
+        {
+          "file": "/Users/jeonghokim/.claude/plugins/cache/claude-plugins-official/claude-code-setup/1.0.0/skills/claude-automation-recommender/SKILL.md",
+          "line": 11,
+          "quote": "**This skill is read-only.** It analyzes the codebase and outputs recommendations. It does NOT create or modify any files."
+        },
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 132,
+          "quote": "선택된 strategy와 답변을 바탕으로 다음 파일들을 생성한다."
+        }
+      ],
+      "source": "codex"
+    },
+    {
+      "id": "NOQ-x7",
+      "axis": 4,
+      "observation": "devbrew에는 project-init 테스트를 자동 실행하는 repository CI가 없다.",
+      "why_not_gap": "운영상 의미는 있지만 CI 설정 위치는 LD5 밖이다. 이번 감사 계약에 따라 finding으로 승격하지 않았다.",
+      "evidence": [
+        {
+          "file": "plugins/project-init/CHANGELOG.md",
+          "line": 88,
+          "quote": "- `hooks/tests/smoke.sh` — V2 자동화 smoke script (CI-runnable, no human eyeballing, macOS bash 3.2 호환)."
+        }
+      ],
+      "source": "codex"
+    },
+    {
+      "id": "NOQ-x8",
+      "axis": 6,
+      "observation": "command write contract에는 생성 대상의 realpath가 project root 안인지 확인하는 명시적 경계가 없다.",
+      "why_not_gap": "symlink된 AGENTS.md 또는 docs 디렉토리를 Write/Edit가 실제로 어떻게 처리하는지 read-only 환경에서 재현할 수 없고, tool runtime의 symlink 정책도 범위 파일에 정의돼 있지 않다. 구체적 외부-path overwrite를 입증하지 못했으므로 구조 변경 finding이 아니라 unverified NOQ로 남긴다.",
+      "evidence": [
+        {
+          "file": "plugins/project-init/commands/project-init.md",
+          "line": 134,
+          "quote": "읽고, placeholder를 치환하고, 프로젝트에 쓴다."
+        },
+        {
+          "file": "/Users/jeonghokim/Downloads/reference/ECC/scripts/lib/path-safety.js",
+          "line": 48,
+          "quote": "function isWithinRoot(target, root) {"
+        },
+        {
+          "file": "/Users/jeonghokim/Downloads/reference/ECC/scripts/lib/path-safety.js",
+          "line": 62,
+          "quote": "* Fail-closed guard: throw unless `target` is contained within `root`."
+        }
+      ],
+      "source": "codex"
+    }
+  ]
+}
