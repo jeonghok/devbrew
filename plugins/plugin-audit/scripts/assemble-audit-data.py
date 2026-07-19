@@ -59,7 +59,6 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
 
     # (7) grounding (Task 14) — --no-grounding이면 annotate-only skip
     if do_grounding:
-        from importlib import import_module
         ground = _load_grounding()
         for f in findings:
             if f.get("status") in ("reported", None):
@@ -79,6 +78,8 @@ def _load_grounding():
     import importlib.util
     p = Path(__file__).resolve().parent / "check-grounding.py"
     spec = importlib.util.spec_from_file_location("check_grounding", p)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("check-grounding.py not loadable")
     mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
     return mod.ground_finding
 
