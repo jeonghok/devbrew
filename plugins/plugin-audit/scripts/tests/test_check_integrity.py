@@ -97,6 +97,32 @@ class TestIntegrity(unittest.TestCase):
             run_integrity(fx, "ld5", b, "--target", "myplugin")
             self.assertEqual(a.read_text(encoding="utf-8"), b.read_text(encoding="utf-8"))
 
+    def test_ld5_missing_target_exits_2(self):
+        # ld5 모드는 --target 없이 실행되면 안 된다 (조용히 전체 repo를 스캔하는 대신
+        # 즉시 exit 2로 실패해야 한다 — check-integrity.sh:77-80의 loud guard).
+        with tempfile.TemporaryDirectory() as d:
+            fx = make_fixture(d)
+            out = fx / "m.txt"
+            rc, err = run_integrity(fx, "ld5", out)
+            self.assertEqual(rc, 2, err)
+
+    def test_ld5_extra_path_included(self):
+        # --extra-path로 넘긴 스코프가 실제로 해싱되는지 확인한다. make_fixture가 이미
+        # plugins/myplugin/ 밖에 내용 있는 파일(docs/git-workflow/g.md)을 두고 있으므로
+        # 그대로 재사용한다 — 대조를 위해 --extra-path 없는 실행도 함께 확인.
+        with tempfile.TemporaryDirectory() as d:
+            fx = make_fixture(d)
+            without = fx / "without.txt"
+            run_integrity(fx, "ld5", without, "--target", "myplugin")
+            manifest_without = without.read_text(encoding="utf-8")
+            self.assertNotIn("docs/git-workflow/g.md", manifest_without,
+                             "--extra-path 없이도 ld5가 이미 docs를 포함한다 (대조 실패)")
+            with_extra = fx / "with_extra.txt"
+            run_integrity(fx, "ld5", with_extra, "--target", "myplugin", "--extra-path", "docs")
+            manifest_with = with_extra.read_text(encoding="utf-8")
+            self.assertIn("docs/git-workflow/g.md", manifest_with,
+                          "--extra-path docs가 매니페스트에 반영되지 않았다")
+
 
 if __name__ == "__main__":
     unittest.main()
