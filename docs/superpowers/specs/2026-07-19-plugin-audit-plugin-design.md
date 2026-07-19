@@ -36,7 +36,7 @@
 - [17. Verification Plan](#17-verification-plan)
 - [18. Rejected Alternatives](#18-rejected-alternatives)
 - [19. Revision History](#19-revision-history)
-- [20. Handoff Context / Metadata](#20-handoff-context--metadata)
+- [20. Handoff Context](#20-handoff-context)
 
 ## 1. Context / Why
 
@@ -232,6 +232,21 @@ medium, smoke-probe=low — 이관).
 실제 dispatch해 검증하는 것은 **캐시 갱신 + 세션 재시작 후**에만 가능하다 — PR A의 AC8과 동일 패턴.
 `smoke-workflow.js`(pre-0)가 이를 실행 시점에 실증하는 장치다.
 
+### 컴포넌트 계약 (codex #8 — 독립 단위 테스트 가능하게)
+
+각 컴포넌트는 서술이 아니라 계약을 갖는다(full JSON 필드 스키마는 plan; 여기선 인터페이스 shape·exit 의미):
+
+| 컴포넌트 | 입력 | 출력(stdout) | exit code | 실패 전파 |
+|---|---|---|---|---|
+| pre-check 스크립트 (check-law2/no-verdict-injection/plugin-structure/shape-completeness) | target dir·검사 대상 경로 (argv) | `key: value` 라인 또는 JSON 사실 블록 | 0=검사 완료, 非0=hard error | stderr=advisory. hard error → skill이 verbatim surface + abort |
+| evidence pack 조립 (orchestrator) | 각 pre-check stdout + git history | `evidence-pack.json`(§13) | — | pre-check degrade → pack `degraded[]` |
+| Workflow (audit-workflow.js) | `args:{target,seedPath,evidencePack}` (JSON 문자열 — [[reference_workflow_args_string]]) | 축별 finding 배열(schema-검증) | — | 축 사망 → `axis_failures[]`, null |
+| post-1 (orchestrator) | Workflow return + journal + evidence pack | `audit-data.json` + A grounding + render | — | 무결성 AFTER 불일치 → 비파괴 롤백(§14) |
+
+**파일 소유권**: consent·evidence-pack·audit-data는 **orchestrator만 write**. pre-check 스크립트는
+stdout만(파일 write 없음). agent는 read-only. 각 스크립트는 **계약 fixture**(argv/stdin → stdout/exit
+고정)로 독립 단위 테스트한다.
+
 ## 9. 일반화 — 파라미터화 상세
 
 project-init 하드코딩(엔진 §14 B2 인벤토리) → 인자. 파일별:
@@ -286,52 +301,76 @@ generic 엔진 프롬프트는 clue-free가 되므로 재발 사이트가 seed �
 plugin-dev 공식 검증 스크립트를 read-only로 호출해 결과를 evidence pack의 *사실*로 정규화:
 - `validate-agent.sh` (agent frontmatter 스키마) · `validate-hook-schema.sh` (hooks.json) ·
   `hook-linter.sh` (hook 스크립트 13 lint) · `quick_validate.py` (skill frontmatter).
-- 경로는 **plugin+스크립트 이름으로 해석**(캐시 버전 경로를 박지 않음 — drift).
+- **경로 해석 (결정)**: plugin-dev는 이 repo 플러그인이 **아니라 공식 캐시**에 있다
+  (`~/.claude/plugins/cache/*/plugin-dev/*/skills/*/scripts/<script>`). E는 이 glob로 스크립트를
+  해석한다(캐시 버전 경로 하드코딩 금지 — drift). glob 다중 매치 → **semver 최신** 선택. glob 0 매치 →
+  plugin-dev 미설치(아래).
 
-**🔴 C14 — 검증기를 먼저 검증한다.** 각 검증기 출력은 **후보 사실**이다:
-- 검증기가 없거나 크래시/스퓨리어스 non-zero(예: 실측상 `validate-hook-schema.sh`가 plugin-dev 자신의
+**🔴 E는 bonus-degradable 층이지 load-bearing이 아니다 (spec-review #2 해소).** plugin-dev가 이 repo에
+설치돼 있지 않을 수 있다(다른 머신·다른 사용자). E가 core 구조 감사를 지지하면 "기본적으로 조용히
+무기능"이 된다 → 관계를 재정의:
+- **F(아래, 외부 의존 0)가 load-bearing core 구조 검사다** — plugin.json 필드·agent `tools:` allowlist·
+  skill cost_class·hook kill-switch 등 devbrew 불변식을 self-contained로 검사. **E 없이도 항상 돈다.**
+- **E는 plugin-dev의 *심층* 스키마 검사(13 lint 등)를 있을 때만 얹는 bonus다.** plugin-dev 미설치/glob
+  0 매치 → **loud degrade**(`⚠ plugin-dev 미설치 — 심층 구조 검사 생략` 배너 + `degraded[]`) — crash도
+  거짓 증거도 아니고, core 감사는 F로 온전. (이 "부재" 경로는 아래 C14의 "설치됐으나 크래시" 경로와 별개.)
+
+**🔴 C14 — (설치된) 검증기를 먼저 검증한다.** 각 검증기 출력은 **후보 사실**이다:
+- 검증기가 크래시/스퓨리어스 non-zero(예: 실측상 `validate-hook-schema.sh`가 plugin-dev 자신의
   wrapper 포맷에 exit 5) → **loud log + `degraded[]` + 그 검증기 사실 생략.** 거짓 증거 주입 금지.
 - 검증기 판정이 직접 독해와 모순 → 직접 독해 우선, 모순을 `degraded_events[]`에 기록.
 - E는 **판정하지 않는다** — "agent frontmatter가 스키마 위반" 같은 사실만 낸다. 그 사실의 갭 여부는
   축① 감사자가 판정한다.
 - **mutation test 동반** — 검증기 사실 누락/오탐이 감사자를 없는 갭으로 보내면 안 됨.
 
-### F — `check-shape-completeness.py` (결정론부) + 축 판정부
+### F — `check-shape-completeness.py` (결정론부) + 축⑤ 판정부
 
-canonical devbrew-플러그인 shape 대비 **누락**을 검사. 단일 bounded 패스(C15).
+canonical devbrew-플러그인 shape 대비 **누락**을 검사. 단일 bounded 패스(C15). **외부 의존 0** — E와
+달리 plugin-dev를 필요로 하지 않는 load-bearing core 검사(§11 E 관계).
 
-**canonical shape**(CLAUDE.md §Plugin Shape + `docs/plugin-authoring.md`에서 **읽어서** 도출 — 하드코딩
-금지):
-- `.claude-plugin/plugin.json` 존재 + `name`/`version`/`description` 필수 필드.
-- `README.md` 존재 + "Principles Instantiated" 섹션.
-- `CHANGELOG.md` (version ≥ 1.0.0이면 필수).
-- 모든 agent가 `tools:` allowlist 선언(denylist 단독 금지 — PR A 불변식).
-- 모든 skill이 `cost_class` 선언.
+**canonical shape 도출 (결정 — codex #5): 하드코딩 checklist + 회귀 락** (런타임 CLAUDE.md 파싱 아님).
+런타임에 산문을 파싱하는 것은 취약하다 → checklist를 `check-shape-completeness.py`에 명시 리스트로 박고,
+**회귀 락 테스트**가 CLAUDE.md §Plugin Shape의 각 항목이 checklist에 반영됐는지 body-unique 문구로 grep
+확인한다(drift = 테스트 RED, 조용한 stale 아님 — C15·[[feedback_grep_lock_header_satisfiable]]).
+checklist 원소 = `{requirement_id, check_fn, claude_md_anchor}`:
+- `.claude-plugin/plugin.json` 존재 + `name`/`version`/`description`.
+- `README.md` + "Principles Instantiated" 섹션.
+- `CHANGELOG.md` (version ≥ 1.0.0이면).
+- 모든 agent가 `tools:` allowlist(denylist 단독 금지 — PR A 불변식).
+- 모든 skill이 `cost_class`.
 - 모든 hook이 kill-switch(`DEVBREW_DISABLE_<PLUGIN>` 또는 `DEVBREW_SKIP_HOOKS`) 존중.
 - 최소 버전 선언된 cross-plugin 의존(README prerequisites).
 
-**결정론부**(`check-shape-completeness.py`): 파일/필드 존재를 사실로 열거(예: "plugin.json에 version
-없음", "hook X에 kill-switch 부재"). **판정부**(축⑤ 또는 전용 bounded 단계): 존재하는 섹션이 *유의미*
-한가(예: "Principles Instantiated가 한 줄뿐이고 실제 원칙 인용 0"). 판정부는 loop 없이 1회.
+**결정론부**(`check-shape-completeness.py`): 위 checklist를 target에 적용해 **누락을 사실로 열거**
+(`shape_gaps[]`, 각 `{requirement, present, source_doc}`). 판정 없음 — 사실만.
+**판정부 (결정 — spec #3): 축⑤(UX·디테일)에 fold**, 전용 단계 아님. 존재하는 섹션이 *유의미*한가
+(예: "Principles Instantiated가 한 줄뿐 실제 원칙 인용 0")는 축⑤ auditor가 `shape_gaps[]` 사실을 읽어
+판정한다 — 축⑤가 이미 "template content quality" 판정 성격이라 자연스러운 소유. **loop 없이 1회**
+(축⑤ 발견 패스 안).
 
-**🔴 C15 — shape 정의 stale 주의.** canonical shape를 코드에 박으면 CLAUDE.md가 진화할 때 F가 거짓
-"누락"을 낸다. 결정론부는 CLAUDE.md §Plugin Shape를 **읽어** 요구 항목을 도출하거나, 최소한 그 문서를
-진리원천으로 명시하고 회귀 락으로 동기화를 강제한다.
+**동기화 실패·오류 처리 (codex #5)**: checklist ↔ CLAUDE.md §Plugin Shape drift → 회귀 락 RED. target
+파일 부재 → 해당 requirement `present:false` shape_gap. checklist가 하드코딩이라 런타임 "CLAUDE.md 도출
+불가"는 발생하지 않는다(회귀 락만 CLAUDE.md를 읽고, 그 실패는 감사가 아니라 테스트에서 잡힘).
+**test fixture**: version 필드 제거한 plugin.json → 누락 검출 RED 증명(AC-10).
 
 ## 12. Tier 1 하드닝 — A(grounding) · B(프레이밍 위생) · C(untrusted-data)
 
 ### A — grounding 강제 (orchestrator-side 결정론, C16)
 
-post-1에서 **생존 finding마다**: 인용 `file:line`을 orchestrator가 재읽어 finding의 verbatim quote와
-일치하는지 결정론 확인.
-- 일치 → 통과.
-- 불일치(라인 이동·off-by-many·인용이 주장을 뒷받침 안 함) → **강등 또는 폐기** + `degraded_events[]`에
-  "grounding 실패" 기록 + 렌더러가 ⚠ 라벨.
+**A는 인용의 *실재성*만 결정론으로 검증한다 — 인용이 주장을 뒷받침하는지(semantic entailment)는
+검증하지 않는다.** 두 개념을 섞으면 결정론 검사에 판정을 밀어넣게 된다(codex 적발). 명확히 분리:
+
+- **A (orchestrator, 결정론)** — 생존 finding마다: 인용 파일을 재읽어, finding의 `evidence_quote`를
+  **공백 정규화** 후 그 파일에서 substring 검색. **입력** `{file, line, evidence_quote}` · **출력**
+  `grounding_verified: bool` + 교정 line. **오직 문자열·경로 연산 — 의미 해석 없음.**
+  - quote가 파일 어디에도 없음 → **폐기**(날조/stale 인용) + `grounding_verified: false` + `degraded_events[]`.
+  - quote가 인용 line(±3줄 window) 밖의 다른 위치 → **존치 + line 교정** + `degraded_events[]`에 line drift.
+  - quote가 인용 line(±3줄)에 있음 → `grounding_verified: true`, 통과.
+- **refuter Gate A (agent, 판정)** — "그 *실재하는* 인용이 주장을 실제로 뒷받침하는가?"는 여전히
+  refuter의 판정 몫이다. A는 그것을 대체하지 않고 **선행**한다: A가 인용의 실재를 결정론으로 보장한 뒤,
+  Gate A가 그 위에서 entailment를 판정한다(판정은 agent, 실재는 orchestrator).
 - 근거(LLM 렌즈 #1): read-only 감사는 "실증 검증 게이트"(코드 실행)를 못 돌린다. 그 대체물이 **인용
-  ground-truth**다 — "10명이 만장일치로 없는 버그를 승인"한 shared-prior FP는 논증(refuter Gate A의
-  self-report)이 아니라 인용 재확인으로만 죽는다.
-- **refuter Gate A와의 관계**: Gate A는 여전히 auditor가 재읽으라 요구하지만, A는 그 **주장을 믿지 않고**
-  orchestrator가 독립 재확인하는 백스톱이다(self-approval 방지의 grounding 판).
+  ground-truth**다 — 날조된 `file:line`은 논증(refuter self-report)이 아니라 인용 재확인(A)으로만 죽는다.
 
 ### B — 프레이밍 위생 (C17)
 
@@ -367,12 +406,13 @@ post-1에서 **생존 finding마다**: 인용 `file:line`을 orchestrator가 재
 
 | 상황 | 동작 |
 |---|---|
-| plugin-dev 검증기 부재/크래시/스퓨리어스 exit (E) | loud log + `degraded[]` + 그 검증기 사실 생략. crash 금지. (C14) |
+| plugin-dev 미설치 (glob 0 매치, E) | loud degrade 배너(`⚠ plugin-dev 미설치 — 심층 구조 검사 생략`) + `degraded[]`. **core 구조 검사는 F가 온전히 커버**(§11). crash·거짓증거 0. |
+| plugin-dev 설치됐으나 검증기 크래시/스퓨리어스 exit (E, C14) | loud log + `degraded[]` + 그 검증기 사실 생략. 거짓 증거 주입 금지. |
 | 검증기 판정 vs 직접 독해 모순 (E) | 직접 독해 우선 + `degraded_events[]`. |
 | A grounding 재읽기 실패 (인용 불일치) | finding 강등/폐기 + `degraded_events[]` + ⚠ 라벨. |
 | seed 부재 | fresh 6축 discovery로 진행 + "seed 없음" 배너. 감사 무효 아님. |
 | target 테스트 격리 샌드박스 실패/타임아웃(120s) | `own_tests: {ran:false, why}` + `degraded[]` + 배너. 축③은 테스트를 *읽어서* 판정 계속. |
-| CLAUDE.md §Plugin Shape 도출 실패 (F) | F 결정론부 degrade + 배너("canonical shape 도출 불가 — 완결성 검사 부분"). |
+| F checklist ↔ CLAUDE.md §Plugin Shape drift | **런타임 아님** — 회귀 락 테스트가 RED(하드코딩 checklist라 감사 중엔 발생 안 함, §11). |
 | target 부재/`plugins/<target>/` 없음 | 즉시 abort + loud("target 플러그인 없음"). consent 전. |
 
 `degraded[]` 비어있지 않으면 리포트 상단 배너 필수(정직성 컨트롤, 품질 게이트 아님).
@@ -380,7 +420,8 @@ post-1에서 **생존 finding마다**: 인용 `file:line`을 orchestrator가 재
 ## 15. Files to Create / Modify / Delete
 
 ### Create — `plugins/plugin-audit/`
-- `.claude-plugin/plugin.json` (0.1.0) · `README.md` (Principles Instantiated).
+- `.claude-plugin/plugin.json` (0.1.0) · `README.md` (Principles Instantiated + **prerequisites: plugin-dev
+  optional · quality-gates `qg-worktree.sh` — optional versioned 의존, spec-review 비차단 rec**).
 - `commands/plugin-audit.md` · `skills/auditing-plugins/SKILL.md`.
 - `agents/{plugin-auditor,audit-refuter,smoke-probe}.md` (repo-root에서 이관 + Gate E 인자화).
 - `scripts/{audit-workflow.js, smoke-workflow.js, check-law2.py, check-integrity.sh,
@@ -415,13 +456,20 @@ post-1에서 **생존 finding마다**: 인용 `file:line`을 orchestrator가 재
 **마이그레이션:**
 - AC-5: **namespaced agent 해석·allowlist 스모크 GREEN** (`plugin-audit:plugin-auditor` dispatch가
   해석되고 `tools:` allowlist가 런타임 강제 — 캐시 갱신 + 세션 재시작 후, GC8).
-- AC-6: **project-init 대상 회귀 없음** — generic 엔진으로 project-init을 감사하면 기존 baseline과
-  동일 발견(CX-2·A6-1 재현 가능; 동작 무변경).
+- AC-6: **generalization 회귀 없음 (결정론 측정 — codex #6)** — 비결정론 multi-agent discovery는 "동일
+  발견"으로 측정 불가하므로, 2026-07-15 project-init 감사의 **기록된 journal(에이전트 raw return)을 stub**
+  으로 generalized post-1 파이프라인에 흘려 조립된 audit-data.json이 baseline과 **필드-동일**(finding
+  id·status·정렬·스키마)임을 assert(CX-2·A6-1 baseline대로 재현 포함). 결정론 조립·렌더·grounding이
+  일반화로 안 바뀜을 검증(discovery는 stub이라 결정론).
 
 **신규 능력:**
 - AC-7 (A): 생존 finding의 인용이 orchestrator 결정론 재읽기로 100% resolve(불일치는 강등/degrade).
   mutation: 인용을 틀리게 만든 fixture가 강등되는지 RED로 증명.
-- AC-8 (B): target 자기서술이 verdict 프레임으로 주입 안 됨(grep 검사) + seed의 판정 주입이 RED.
+- AC-8 (B, codex #9): (a) `check-no-verdict-injection.py`가 {audit-workflow.js CONTRACT/AXES/refutePrompt,
+  codex 프롬프트, 3 persona, **seed 파일**}에서 banned verdict 토큰(엔진 BANNED + 일반화)을 검출 —
+  positive fixture(seed에 "D1 confirmed/철회됨") RED / negative("D1: 주장 + file:line") GREEN. (b) 프롬프트
+  조립이 target README/description을 신뢰 preamble 필드에 안 넣음(grep: 프레이밍 섹션에 target 자기서술
+  부재; 읽기 대상 파일 목록엔 허용).
 - AC-9 (E): 외부 검증기 부재/크래시/스퓨리어스 exit 시 degrade(거짓 증거 주입 0·crash 0). mutation:
   깨진 검증기 stub이 `degraded[]`로 가는지 RED로 증명.
 - AC-10 (F): canonical shape 누락이 finding/shape_gap으로, **단일 패스**(loop 없음). mutation:
@@ -440,6 +488,9 @@ post-1에서 **생존 finding마다**: 인용 `file:line`을 orchestrator가 재
   객체를 넘겨 은폐하지 않도록.
 - **골든 픽스처**: render-audit-report(정렬 키 역전 mutation RED) · A grounding(인용 불일치 RED) ·
   E(깨진 검증기 degrade RED) · F(shape 누락 RED).
+- **AC-6 회귀 (결정론)**: 2026-07-15 journal을 stub으로 generalized post-1에 흘려 조립 audit-data.json을
+  baseline과 field-diff — CX-2 CRITICAL·A6-1 HIGH 재현 + 정렬/스키마 불변. mutation: 조립 로직 변경 시 RED.
+- **컴포넌트 계약 fixture**: 각 pre-check 스크립트를 argv/stdin → stdout/exit 고정 fixture로 독립 단위 테스트(§8).
 - **스모크(pre-0, GC8 후)**: `smoke-workflow.js`가 namespaced agent 해석 + allowlist를 sentinel
   디스크 부재로 실증(persona 자기보고 아님).
 - **/qg 파이프라인**: 구현 후 Review gate(+codex model-diversity) — 보안 컨트롤(read-only·판정주입·
@@ -465,17 +516,40 @@ post-1에서 **생존 finding마다**: 인용 `file:line`을 orchestrator가 재
 
 - **r1 (2026-07-19)** — 초안. 4갈래 사용자 결정(generic 엔진 / target+seed / 능력 = Tier0+Tier1+E+F) +
   4각도 외부 리서치 종합 반영. `/superpowers:brainstorming`에서 저술.
+- **r2 (2026-07-19)** — round-1 분리 리뷰(spec-reviewer + codex, needs_revise 9건) 반영: handoff packet
+  재작성(§20) · E path-resolution + bonus-degradable / F load-bearing 재정의(§11) · F impl 결정(하드코딩
+  +회귀 락) · A 결정론/semantic entailment 분리(§12) · 컴포넌트 계약(§8) · AC-6 결정론 측정 + AC-8
+  정밀화(§16) · AC-6 검증 스텝(§17).
 
-## 20. Handoff Context / Metadata
+## 20. Handoff Context
 
-- **Reference 엔진**: `2026-07-12-project-init-audit-workflow-design.md` (r15) — 검증된 내부의 진리원천.
-- **repo-root 하니스**: `scripts/*` + `.claude/agents/{plugin-auditor,audit-refuter,smoke-probe}.md`
-  (이관 원본; §15에서 삭제).
-- **선행 PR**: PR #104 (law2 agent tool surface, MERGED) — 감사 대상이자 자기 준수 불변식.
-- **핵심 함정**: GC8 registry 세션-시작 스냅샷(§8) · Workflow args=JSON 문자열
-  ([[reference_workflow_args_string]]) · 검증기를 먼저 검증(C14) · shape 정의 stale(C15) ·
-  판정 주입 재발(§10) · macOS bash NUL/`cd ""` footgun([[reference_bash_nul_command_substitution]],
-  [[reference_mktemp_cd_empty_footgun]]).
-- **관련 메모리**: [[project_project_init_audit]] · [[reference_workflow_law2_agenttype]] ·
-  [[project_law2_agent_tool_surface]] · [[reference_codex_reviewer_spec_ac_injection]].
-- **다음 단계**: spec self-review → 사용자 spec 리뷰(+ spec-distill 분리 리뷰 게이트) → writing-plans.
+**TL;DR**: repo-root 검증된 감사 하니스(3 agents + 8 scripts, PR #101로 실행·머지됨)를
+`plugins/plugin-audit/` 정식 플러그인으로 승격·일반화 + Tier1 하드닝(A grounding · B 프레이밍위생 ·
+C untrusted-data) + E(plugin-dev wrap, **bonus-degradable**) + F(shape 완결성, **load-bearing
+self-contained**). 4갈래 결정 확정(§5·§6·§10). 다음 = round-2 재리뷰 통과 → writing-plans.
+
+**Implicit context (문서만으론 안 보이는 것)**:
+- Reference 엔진 진리원천 = `2026-07-12-project-init-audit-workflow-design.md` (r15). 이 문서는 검증된
+  내부를 재도출하지 않고 참조만 한다 — "엔진 §N" 인용은 그 문서.
+- repo-root 하니스(`scripts/*` + `.claude/agents/{plugin-auditor,audit-refuter,smoke-probe}.md`)가
+  이관 원본이자 §15 삭제 대상.
+- **plugin-dev는 repo 플러그인이 아니라 공식 캐시에 있다**(이 머신 존재, 다른 머신 부재 가능) — E의
+  degrade 설계 이유(§11). F는 plugin-dev와 무관하게 도는 core.
+- 선행 PR #104(law2 agent tool surface, MERGED) — 감사 대상 불변식이자 F가 검사하는 `tools:` allowlist.
+
+**Deferred to plan (writing-plans가 결정/구현)**:
+- **Tier 0 migration(기계적·회귀테스트 가능)을 E/F보다 앞선 별도 plan phase로** — migration이 plugin-dev
+  의존 해소에 안 막히게(spec-review 비차단 rec).
+- 각 pre-check 스크립트의 **완전한 JSON I/O 필드 스키마**(§8 계약은 인터페이스·exit 의미까지).
+- 일반화 파일별 편집 순서 · mutation test 목록(§9 표 → task 매핑) · seed 파서 구현.
+
+**핵심 함정**: GC8 registry 세션-시작 스냅샷(§8, namespaced agent 실검증은 캐시갱신+재시작 후) ·
+Workflow args=JSON 문자열([[reference_workflow_args_string]]) · 검증기를 먼저 검증(C14) · macOS bash
+NUL/`cd ""` footgun([[reference_bash_nul_command_substitution]] · [[reference_mktemp_cd_empty_footgun]]) ·
+codex 직접호출 시 `CLAUDE_PLUGIN_ROOT` 필요.
+
+**관련 메모리**: [[project_project_init_audit]] · [[reference_workflow_law2_agenttype]] ·
+[[project_law2_agent_tool_surface]] · [[reference_codex_reviewer_spec_ac_injection]] ·
+[[reference_workflow_args_string]].
+
+**Metadata**: Revision=§19 · cost_class=high · 선행 PR=#104(MERGED) · 다음=round-2 재리뷰 → proceed 게이트 → writing-plans.
