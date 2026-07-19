@@ -239,7 +239,7 @@ git commit -m "feat(plugin-audit): scaffold plugin (plugin.json 0.1.0 + README +
 
 ## Phase 1 — Tier 0 migration (port + generalize)
 
-> **재앵커 (모든 이관 태스크 공통 패턴).** 이관 원본 테스트는 repo-root 기준 `REPO = Path(__file__).resolve().parents[2]`(= repo root) + `SCRIPT = REPO/"scripts"/<name>`를 쓴다. 플러그인으로 옮기면 파일이 `plugins/plugin-audit/scripts/tests/`로 내려가 depth가 +2 된다. 새 앵커: `parents[1]` = `plugins/plugin-audit/scripts`(스크립트 디렉토리 자체), `parents[2]` = `plugins/plugin-audit`(agents/ 부모). 각 태스크에서 정확한 before/after를 명시한다. Node 테스트는 repo root에서 실행하되 `runWorkflow('plugins/plugin-audit/scripts/<name>.js', ...)`로 경로를 갱신한다.
+> **재앵커 (이관 태스크 공통 — Task 2 실측 정정).** 이관 원본 테스트는 `REPO = Path(__file__).resolve().parents[2]` + `SCRIPT = REPO/"scripts"/<name>`를 쓴다. **⚠ 중요 정정:** 이 `parents[2]/"scripts"/<name>` 패턴은 depth 변화에 **self-correct**한다 — repo-root에선 `parents[2]`=repo root, 플러그인에선 `parents[2]`=`plugins/plugin-audit`이고 둘 다 뒤에 `/"scripts"/<name>`를 붙이면 올바른(각 scope의) 스크립트를 가리킨다. 따라서 **순수 스크립트-경로 참조 포트(staleness·integrity·render·validate·no-verdict)는 `cp` 후 테스트가 이미 GREEN이고 "RED 먼저"가 재현되지 않는다** — 정상이며 이빨은 **mutation test**가 제공한다(`parents[1]/<name>` 정규화는 동등·선택). **재앵커가 실제로 필요한 두 참조만:** (a) `.claude/agents` → `agents` (플러그인 agent는 `plugins/plugin-audit/agents` = `parents[2]/"agents"`; Task 10) · (b) **TRUE repo root** 참조(CLAUDE.md·`docs/audits` baseline)는 `parents[4]` (Task 15·18). Node 테스트는 repo root에서 실행하되 `runWorkflow('plugins/plugin-audit/scripts/<name>.js', ...)`로 경로 갱신.
 >
 > **이관은 `cp`(not `git mv`).** 원본은 Task 22 cutover에서 삭제한다 — 그 전까지 repo-root 원본을 남겨 전환 중 참조 무결성을 유지한다.
 
