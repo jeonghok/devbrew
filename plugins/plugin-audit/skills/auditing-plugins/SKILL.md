@@ -15,8 +15,10 @@ scoping되어 있어 물리적으로 쓸 수 없다. 모든 파일 write(consent
 리포트)는 **orchestrator만** 한다 (Law 2).
 
 **모든 스크립트 호출은 리포 root에서** 실행한다. `check-law2.py`의 `--agents-dir` 기본값
-(`plugins/plugin-audit/agents`)과 `check-shape-completeness.py --repo-root`가 cwd-relative라, 다른
-cwd에서 부르면 조용히 엉뚱한(또는 부재하는) 경로를 본다.
+(`plugins/plugin-audit/agents`)이 cwd-relative고, pre-check 스크립트들(`check-shape-completeness.py
+<plugin_dir>`, `check-integrity.sh --target`)도 cwd-relative positional/path 인자를 받는다 — 다른
+cwd에서 부르면 조용히 엉뚱한(또는 부재하는) 경로를 본다. (`check-shape-completeness.py --repo-root`는
+parse만 되고 `check()`엔 전달되지 않는 dead flag — cwd 민감성의 원인이 아니다.)
 
 ## phase 0 — consent (dispatch 전 필수)
 
@@ -39,7 +41,10 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
 커버하는 load-bearing 게이트라 그 자체의 크래시(非0)는 abort다:
 
 - `check-law2.py plugins/plugin-audit/scripts/audit-workflow.js --agents-dir plugins/plugin-audit/agents`
-  (`--mode smoke`로 `smoke-workflow.js`도 별도 호출).
+  + 별도 호출로 `check-law2.py plugins/plugin-audit/scripts/smoke-workflow.js --mode smoke
+  --agents-dir plugins/plugin-audit/agents` (`audit-workflow.js`에 `--mode smoke`만 붙이면 실패한다 —
+  CANONICAL_SMOKE는 정확히 agent 식별자 1개를 기대하는데 `audit-workflow.js`는 2개(`plugin-auditor`,
+  `audit-refuter`)를 쓴다).
 - `check-no-verdict-injection.py <seedPath>` — seed **하나만** argv-extra로 넘긴다(B). 다른 파일을
   섞지 않는다: `SEED_EXTRA`의 일반 판정 토큰(`confirmed`/`withdrawn`/`reclassified`/`입증`/`확정` 등)은
   seed처럼 "주장만 담아야 하는" 표면 전용이라, 판정 스키마를 정당하게 쓰는 다른 파일(예:
@@ -55,7 +60,10 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
 
 ## pre-1 — evidence pack + codex (orchestrator)
 
-1. **무결성 BEFORE** 스냅샷: `check-integrity.sh ld5 <before.txt> --target <target> [--extra-path ...]`.
+1. **무결성 BEFORE** 스냅샷: `check-integrity.sh ld5 <before.txt> --target <target> [--extra-path ...]`
+   + `check-integrity.sh harness <before-harness.txt>`. `harness` 스코프는 plugin-audit 자신의
+   `agents/`+`scripts/`(Law 2의 두 번째 방어선)를 커버한다 — ld5(target-only)는 볼 수 없는, 감사 실행
+   *도중* 감사 자신의 persona/스크립트가 변조되는 걸 잡기 위함.
 2. **evidence pack 조립** — 결과 evidence pack이 Workflow(`audit-workflow.js`)가 실제로 읽는 필드 이름과
    정확히 일치해야 한다:
    `plugin_version, file_count, total_lines, staleness_facts, own_tests, precedent_paths`
@@ -64,11 +72,12 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
    `structure_facts[]`, `shape_gaps[]`.
 
    🔴 **base pack 먼저, seed는 그 위에 merge.** `parse-seed.py <seedPath>`는 섹션이 비어 있으면 그
-   키를 아예 **드롭**한다(빈 `[]`가 아니라 키 부재). Workflow 코드는 `(pack.extra_scope || [])`처럼
-   `||` fallback을 쓰는 곳도 있지만 `pack.candidate_clues.map(...)`처럼 직접 `.filter`/`.map`을 호출하는
-   곳도 있어, seed가 드롭한 키가 그대로 새어 들어가면 `undefined`에서 죽는다. 그래서 조립 순서는
-   **모든 배열 필드가 `[]`인 base pack을 먼저 만들고, `parse-seed.py`의 출력(있는 키만)을 그 위에
-   overlay**한다 — 절대 seed의 raw JSON을 evidence pack으로 직접 쓰지 않는다.
+   키를 아예 **드롭**한다(빈 `[]`가 아니라 키 부재). 현재 `audit-workflow.js`의 `pack.*` 배열 접근은
+   전부 `|| []`(또는 length 삼항) 가드가 걸려 있어 오늘 당장의 `undefined` 크래시 경로는 없다 — 이건
+   defense-in-depth다: **모든 배열 필드가 `[]`인 base pack을 먼저 만들고, `parse-seed.py`의 출력(있는
+   키만)을 그 위에 overlay**하는 조립 순서를 고정해 두면 pack 스키마가 항상 total로 유지돼, 나중에
+   가드 없는 필드가 하나 추가돼도 `undefined` 크래시로 퇴행하지 않는다 — 절대 seed의 raw JSON을
+   evidence pack으로 직접 쓰지 않는다.
    - `plugin_version`/`file_count`/`total_lines`는 LD5 코퍼스 스캔(BEFORE 스냅샷과 같은 스코프)에서
      채운다.
    - `staleness_facts`는 `check-staleness.py plugins/<target>`, `own_tests`는
@@ -92,7 +101,7 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
 
 ```
 Workflow({scriptPath: "${CLAUDE_PLUGIN_ROOT}/scripts/audit-workflow.js",
-          args: {target, seedPath, evidencePack, codexFindings}})
+          args: {target, evidencePack, codexFindings}})
 ```
 args는 JSON 문자열로 전달됨([[reference_workflow_args_string]]) — 스크립트가 정규화. command/skill이
 Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
@@ -105,11 +114,16 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
 2. `validate-audit-data.py --data <data.json>` → RED면 abort(완결성·consent·codex-merge·NOQ·gate-E).
 3. `render-audit-report.py <data.json> --out docs/audits/<date>-<target>-audit.md --readme docs/audits/README.md`.
    6축 전멸(exit 1) → 리포트 없음(AC-4).
-4. **무결성 AFTER**: `check-integrity.sh ld5 <after.txt> --target <target>` → BEFORE와 diff. 불일치 →
-   비파괴 롤백(감사 중 target 변경 감지).
+4. **무결성 AFTER**: `check-integrity.sh ld5 <after.txt> --target <target>` +
+   `check-integrity.sh harness <after-harness.txt>` → 각각 대응하는 BEFORE와 diff. 둘 중 하나라도
+   불일치 → 비파괴 롤백(ld5=감사 중 target 변경 감지, harness=감사 중 plugin-audit 자신의
+   agents/scripts 변조 감지).
 5. **정직성 배너 (AC-3)**: `degraded[]` 비어있지 않으면 리포트 상단 배너 필수 + discoverability
    (`docs/audits/README.md` 인덱스 + 필요 시 `CLAUDE.md` 포인터).
-6. `validate-audit-data.py --artifacts docs/audits/` → 산출물(README 링크·배너) 검사.
+6. `validate-audit-data.py --artifacts docs/audits/<date>-<target>-audit-data.json --report
+   docs/audits/<date>-<target>-audit.md --repo-root .` → 산출물(README 링크·배너) 검사. (`--artifacts`는
+   렌더된 파일이 아니라 audit-data JSON을 가리켜야 한다 — 스크립트가 그 경로를 `read_text()`+
+   `json.loads()`하므로 디렉토리를 넘기면 `IsADirectoryError`로 죽는다.)
 
 ## kill switch / degrade
 

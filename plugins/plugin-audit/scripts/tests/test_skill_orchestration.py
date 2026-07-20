@@ -1,7 +1,11 @@
+import re
 import unittest
 from pathlib import Path
 
 SKILL = Path(__file__).resolve().parents[2] / "skills" / "auditing-plugins" / "SKILL.md"
+# 버그 형태: `--artifacts docs/audits/` 뒤에 공백/개행 — 디렉토리를 그대로 넘기면
+# validate-audit-data.py가 `read_text()`+`json.loads()`에서 IsADirectoryError로 죽는다 (review fix 1).
+_BUGGY_ARTIFACTS_DIR_FORM = re.compile(r"--artifacts docs/audits/\s")
 # 각 불변식 = body-unique 문구 (헤더-satisfiable 금지)
 INVARIANTS = [
     "cost_class: high",                                    # 지출 게이트 owner
@@ -30,6 +34,24 @@ class TestSkillOrchestration(unittest.TestCase):
     def test_cost_class_high_in_frontmatter(self):
         fm = SKILL.read_text(encoding="utf-8").split("---")[1]
         self.assertIn("cost_class: high", fm)
+
+    def test_validate_artifacts_invocation_is_not_bare_directory(self):
+        # review fix 1 regression lock: `--artifacts docs/audits/` (bare directory, immediately
+        # followed by whitespace/newline) crashes validate-audit-data.py with IsADirectoryError —
+        # the real contract points --artifacts at the audit-data JSON file + passes --report.
+        body = SKILL.read_text(encoding="utf-8")
+        self.assertIsNone(
+            _BUGGY_ARTIFACTS_DIR_FORM.search(body),
+            "SKILL.md still tells the orchestrator to call "
+            "`validate-audit-data.py --artifacts docs/audits/` (bare directory) — this crashes "
+            "with IsADirectoryError; --artifacts must point at the audit-data JSON file.",
+        )
+        self.assertIn(
+            "--report",
+            body,
+            "SKILL.md's corrected --artifacts invocation must also pass --report "
+            "(the rendered .md), per validate-audit-data.py's real CLI contract.",
+        )
 
 
 if __name__ == "__main__":
