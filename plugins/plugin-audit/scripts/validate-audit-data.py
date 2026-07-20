@@ -78,13 +78,17 @@ def validate_data(data: dict) -> list:
     # gate-E → NOQ 회수 (row 8 이빨). scope-out NOQ는 **구조화 마커 reason_code로 식별**한다
     # (assemble-audit-data.py의 producer 계약). 지역화 산문 "범위 밖" 부분문자열은 legacy
     # 하위호환으로만 함께 받는다 — producer 문자열이 바뀌어도 거짓 RED가 나지 않도록.
-    gate_e = [f for f in findings if f.get("status") == "refuted"
-              and f.get("refutation", {}).get("gate") == "E"]
-    scope_noq = [q for q in data.get("new_open_questions", [])
-                 if q.get("reason_code") == "gate_e_scope_out"
-                 or "범위 밖" in (q.get("why_not_gap") or "")]
-    if len(gate_e) > len(scope_noq):
-        errs.append(f"gate-E refuted {len(gate_e)}건 > scope-out NOQ {len(scope_noq)}건 "
+    # identity 기반: 각 gate-E refuted finding **id**마다 대응하는 scope-out NOQ(같은 id)가
+    # 있어야 한다. count 비교만 하면 무관/중복 scope-out NOQ가 특정 finding의 누락을 가려
+    # 거짓 GREEN이 된다 (codex fix-review). NOQ.id는 producer(assemble)가 finding.id로 만든다.
+    gate_e_ids = {f.get("id") for f in findings if f.get("status") == "refuted"
+                  and f.get("refutation", {}).get("gate") == "E"}
+    scope_noq_ids = {q.get("id") for q in data.get("new_open_questions", [])
+                     if q.get("reason_code") == "gate_e_scope_out"
+                     or "범위 밖" in (q.get("why_not_gap") or "")}
+    missing_scope = gate_e_ids - scope_noq_ids
+    if missing_scope:
+        errs.append(f"gate-E refuted {sorted(missing_scope)}의 scope-out NOQ 부재 "
                     f"(gate-E → NOQ 회수 미배선 — §9.7 🔴, 조용한 증발)")
 
     # cross-model 증발: dedup은 같은 source 안에서만

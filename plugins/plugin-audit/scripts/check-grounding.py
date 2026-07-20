@@ -18,10 +18,12 @@ def ground_finding(f, repo_root):
     f.setdefault("degraded_events", [])
     any_absent = False
     any_unreadable = False
+    checked_any = False   # 실제로 검증한(비어있지 않은) 인용이 하나라도 있었는가
     for ev in (f.get("evidence") or []):
         quote = _norm(ev.get("quote", ""))
         if not quote:
             continue
+        checked_any = True
         path = Path(repo_root) / ev.get("file", "")
         try:
             raw = path.read_text(encoding="utf-8")
@@ -43,7 +45,9 @@ def ground_finding(f, repo_root):
         if isinstance(cited, int) and abs(hit - cited) > 3:
             ev["line"] = hit
             f["degraded_events"].append({"id": f.get("id"), "kind": "line_drift", "from": cited, "to": hit})
-    if any_absent:
+    if any_absent or not checked_any:
+        # 부재 인용(가장 강한 신호) OR 검증할 인용이 아예 없음(빈 evidence/전부 공백) → 폐기.
+        # evidenceless finding을 grounded로 통과시키면 안 된다 (codex fix-review).
         f["grounding_verified"] = False
         f["status"] = "discarded"
     elif any_unreadable:

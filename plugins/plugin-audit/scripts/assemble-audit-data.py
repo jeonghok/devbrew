@@ -71,10 +71,10 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     for f in findings:
         if f.get("status") == "refuted" and (f.get("refutation") or {}).get("gate") == "E":
             ax = f.get("axis")
-            try:
-                ax = int(ax)
-            except (TypeError, ValueError):
-                pass
+            # canonical 1–6 문자열만 정수로 강제한다. 3.9(float)/True(bool)/"10" 같은 값은
+            # 그대로 두어 validate가 무효 axis로 보고하게 한다 (silent 의미 변경 금지, codex).
+            if isinstance(ax, str) and ax.strip() in {"1", "2", "3", "4", "5", "6"}:
+                ax = int(ax.strip())
             noq.append({"id": f["id"], "axis": ax,
                         "observation": f.get("title", ""),
                         "why_not_gap": "scope-out (gate E) — 범위 밖",

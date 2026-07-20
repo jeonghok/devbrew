@@ -37,6 +37,10 @@ def check(plugin_dir):
         # 존재하지만 malformed한 plugin.json은 감사를 중단시키는 크래시가 아니라 shape
         # gap(present=False)으로 기록한다 — F는 바로 이 malformation을 잡으라고 있다.
         pj = {}
+    if not isinstance(pj, dict):
+        # 문법상 유효하나 top-level이 object가 아닌 경우([], null, 문자열, 숫자) —
+        # 뒤의 pj.get()/`k in pj`가 크래시하지 않게 dict로 강등(present=False로 기록).
+        pj = {}
     add("plugin_json_fields", bool(pj_text) and all(k in pj for k in ("name", "version", "description")))
 
     readme = _read(pd / "README.md") or ""

@@ -99,6 +99,21 @@ class TestShapeCompleteness(unittest.TestCase):
             self.assertFalse(gaps["plugin_json_fields"]["present"],
                              "malformed plugin.json이 shape gap으로 기록되지 않음")
 
+    def test_non_object_plugin_json_is_gap_not_crash(self):
+        # 회귀 방지 (codex fix-review): 문법상 유효하나 top-level이 object가 아닌 plugin.json
+        # ([], null, 문자열, 숫자)은 크래시(pj.get AttributeError / k in None TypeError)가 아니라
+        # shape gap이어야 한다.
+        for content in ("[]", "null", '"a string"', "42"):
+            with tempfile.TemporaryDirectory() as d:
+                dd = Path(d)
+                (dd / ".claude-plugin").mkdir(parents=True)
+                (dd / ".claude-plugin" / "plugin.json").write_text(content, encoding="utf-8")
+                (dd / "README.md").write_text("# x\n## Principles Instantiated\n- L\n", encoding="utf-8")
+                r, obj = run(dd)
+                self.assertEqual(r.returncode, 0, f"비-object plugin.json({content})이 크래시:\n{r.stderr}")
+                gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
+                self.assertFalse(gaps["plugin_json_fields"]["present"], f"{content}이 gap으로 기록 안 됨")
+
     def test_cost_class_body_mention_does_not_satisfy(self):
         # C7: cost_class 체크는 frontmatter 키만 인정해야 한다 — 본문(prose) 언급은 gap을 못
         # 가려야 (whole-file grep은 header-satisfiable 함정, 같은 파일 _has_tools_allowlist는

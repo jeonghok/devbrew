@@ -114,14 +114,39 @@ class TestData(unittest.TestCase):
         self.assertEqual(rc, 1, "gate-E refuted가 NOQ로 회수되지 않았는데 통과 (조용한 증발)")
 
     def test_gate_e_refuted_with_noq_is_green(self):
+        # NOQ id는 producer(assemble)가 refuted finding의 **같은 id**로 만든다 — identity 기반
+        # 검증에 맞게 NOQ.id == finding.id로 둔다. reason_code 구조화 마커로 인식.
         ok = copy.deepcopy(VALID)
         ok["findings"] = [{"id": "A1-1", "source": "claude", "axis": 1, "status": "refuted",
                            "refutation": {"stage": "axis", "gate": "E", "reason": "범위 밖"},
                            "evidence": [{"file": "f", "line": 1, "quote": "q"}]}]
-        ok["new_open_questions"] = [{"id": "NOQ-1", "source": "claude", "axis": 1,
-                                     "observation": "A1-1", "why_not_gap": "LD5 범위 밖", "evidence": []}]
+        ok["new_open_questions"] = [{"id": "A1-1", "source": "claude", "axis": 1,
+                                     "observation": "A1-1", "why_not_gap": "scope-out (gate E) — 범위 밖",
+                                     "reason_code": "gate_e_scope_out", "evidence": []}]
         rc, err = run_validate(ok)
         self.assertEqual(rc, 0, err)
+
+    def test_gate_e_duplicate_noq_masks_missing_is_red(self):
+        # codex fix-review: count-기반 검증이면 무관/중복 scope-out NOQ가 특정 refuted finding의
+        # 누락 NOQ를 가려 거짓 GREEN이 된다. gate-E finding 2개(A1-1,A1-2) 중 A1-1의 NOQ만
+        # 2개(중복) 두면 count==2로 gate_e와 같지만 A1-2의 NOQ는 부재 — identity 기반이면 RED.
+        bad = copy.deepcopy(VALID)
+        bad["findings"] = [
+            {"id": "A1-1", "source": "claude", "axis": 1, "status": "refuted",
+             "refutation": {"stage": "axis", "gate": "E", "reason": "x"},
+             "evidence": [{"file": "f", "line": 1, "quote": "q"}]},
+            {"id": "A1-2", "source": "claude", "axis": 1, "status": "refuted",
+             "refutation": {"stage": "axis", "gate": "E", "reason": "x"},
+             "evidence": [{"file": "f", "line": 1, "quote": "q"}]},
+        ]
+        bad["new_open_questions"] = [
+            {"id": "A1-1", "source": "claude", "axis": 1, "observation": "o",
+             "why_not_gap": "scope-out (gate E)", "reason_code": "gate_e_scope_out", "evidence": []},
+            {"id": "A1-1", "source": "claude", "axis": 1, "observation": "o2",
+             "why_not_gap": "scope-out (gate E)", "reason_code": "gate_e_scope_out", "evidence": []},
+        ]
+        rc, err = run_validate(bad)
+        self.assertEqual(rc, 1, f"중복 NOQ가 A1-2의 누락 NOQ를 가려 거짓 GREEN:\n{err}")
 
     def test_gate_e_real_assemble_output_is_green(self):
         # HAND-SHAPE 함정 봉쇄: 위 test_gate_e_refuted_with_noq_is_green은 why_not_gap을 손으로

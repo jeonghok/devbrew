@@ -60,6 +60,24 @@ class TestGrounding(unittest.TestCase):
             self.assertFalse(f["grounding_verified"], "둘째 인용이 부재인데 grounding 통과 (evidence[0]만 봄)")
             self.assertEqual(f["status"], "discarded", "부재 인용 포함 finding이 폐기되지 않음")
 
+    def test_empty_evidence_is_not_verified(self):
+        # 회귀 방지 (codex fix-review): evidence가 비었으면 검증할 인용이 없으므로
+        # grounding_verified=True로 새면 안 된다 (evidenceless finding = grounded 오판).
+        with tempfile.TemporaryDirectory() as d:
+            f = {"id": "F", "status": "reported", "evidence": [], "degraded_events": []}
+            cg.ground_finding(f, Path(d))
+            self.assertNotEqual(f.get("grounding_verified"), True, "빈 evidence가 grounded로 통과")
+
+    def test_blank_quote_is_not_verified(self):
+        # 회귀 방지 (codex fix-review): 모든 quote가 공백이면 실제로 검증된 인용이 0개 —
+        # grounding_verified=True로 새면 안 된다.
+        with tempfile.TemporaryDirectory() as d:
+            self._fixture(d)
+            f = {"id": "F", "status": "reported",
+                 "evidence": [{"file": "src.py", "line": 3, "quote": "   "}], "degraded_events": []}
+            cg.ground_finding(f, Path(d))
+            self.assertNotEqual(f.get("grounding_verified"), True, "공백 quote가 grounded로 통과")
+
     def test_multiline_quote_is_grounded(self):
         # C5: 여러 줄에 걸친 인용은 단일-라인 매칭으론 거짓 폐기된다. 전체파일 정규화 검색으로 실재 인정.
         with tempfile.TemporaryDirectory() as d:
