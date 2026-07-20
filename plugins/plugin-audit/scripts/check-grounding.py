@@ -19,12 +19,21 @@ def ground_finding(f, repo_root):
     any_absent = False
     any_unreadable = False
     checked_any = False   # 실제로 검증한(비어있지 않은) 인용이 하나라도 있었는가
+    root = Path(repo_root).resolve()
     for ev in (f.get("evidence") or []):
         quote = _norm(ev.get("quote", ""))
         if not quote:
             continue
         checked_any = True
-        path = Path(repo_root) / ev.get("file", "")
+        # containment: 인용 경로가 repo_root 밖(절대경로/../ /symlink)이면 판독 불가로 처리한다 —
+        # repo 밖 임의 파일을 grounding read로 열지 않는다 (read-oracle 차단, codex final-review).
+        try:
+            path = (root / ev.get("file", "")).resolve()
+            path.relative_to(root)
+        except (ValueError, OSError):
+            any_unreadable = True
+            f["degraded_events"].append({"id": f.get("id"), "kind": "citation_unreadable", "file": ev.get("file")})
+            continue
         try:
             raw = path.read_text(encoding="utf-8")
         except (FileNotFoundError, OSError, UnicodeDecodeError):
@@ -48,6 +57,9 @@ def ground_finding(f, repo_root):
     if any_absent or not checked_any:
         # 부재 인용(가장 강한 신호) OR 검증할 인용이 아예 없음(빈 evidence/전부 공백) → 폐기.
         # evidenceless finding을 grounded로 통과시키면 안 된다 (codex fix-review).
+        if not checked_any:
+            # 검증 가능한 인용이 0개여서 폐기 — AC-3 정직성 배너에 흔적을 남긴다 (조용한 증발 금지).
+            f["degraded_events"].append({"id": f.get("id"), "kind": "evidence_missing"})
         f["grounding_verified"] = False
         f["status"] = "discarded"
     elif any_unreadable:

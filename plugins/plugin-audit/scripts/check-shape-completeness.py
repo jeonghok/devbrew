@@ -41,12 +41,16 @@ def check(plugin_dir):
         # 문법상 유효하나 top-level이 object가 아닌 경우([], null, 문자열, 숫자) —
         # 뒤의 pj.get()/`k in pj`가 크래시하지 않게 dict로 강등(present=False로 기록).
         pj = {}
-    add("plugin_json_fields", bool(pj_text) and all(k in pj for k in ("name", "version", "description")))
+    add("plugin_json_fields", bool(pj_text)
+        and all(k in pj for k in ("name", "version", "description"))
+        and isinstance(pj.get("version"), str))   # version이 non-string(null 등)이면 gap (codex)
 
     readme = _read(pd / "README.md") or ""
     add("readme_principles", "Principles Instantiated" in readme)
 
     version = pj.get("version", "0.0.0")
+    if not isinstance(version, str):
+        version = "0.0.0"   # non-string version은 _semver_ge(re.findall) 크래시 유발 → 안전 기본값
     needs_changelog = _semver_ge(version, "1.0.0")
     add("changelog_if_v1", (not needs_changelog) or (pd / "CHANGELOG.md").exists())
 

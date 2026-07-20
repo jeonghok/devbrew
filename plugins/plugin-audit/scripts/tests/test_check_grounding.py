@@ -62,11 +62,27 @@ class TestGrounding(unittest.TestCase):
 
     def test_empty_evidence_is_not_verified(self):
         # 회귀 방지 (codex fix-review): evidence가 비었으면 검증할 인용이 없으므로
-        # grounding_verified=True로 새면 안 된다 (evidenceless finding = grounded 오판).
+        # grounding_verified=True로 새면 안 되고, 폐기 시 degraded_event 흔적을 남겨야 한다
+        # (AC-3 조용한 증발 금지 — codex final-review).
         with tempfile.TemporaryDirectory() as d:
             f = {"id": "F", "status": "reported", "evidence": [], "degraded_events": []}
             cg.ground_finding(f, Path(d))
             self.assertNotEqual(f.get("grounding_verified"), True, "빈 evidence가 grounded로 통과")
+            self.assertEqual(f["status"], "discarded")
+            self.assertTrue(f["degraded_events"], "폐기됐는데 degraded_event 흔적 없음 (AC-3 조용한 증발)")
+
+    def test_path_traversal_is_not_grounded(self):
+        # codex final-review: 인용 파일 경로가 repo_root 밖(절대경로/../ /symlink)이면
+        # grounding해선 안 된다 (repo 밖 임의 파일 read-oracle 차단).
+        with tempfile.TemporaryDirectory() as outside:
+            secret = Path(outside) / "secret.txt"
+            secret.write_text("TOPSECRET\n", encoding="utf-8")
+            with tempfile.TemporaryDirectory() as d:  # repo_root
+                f = {"id": "F", "status": "reported", "degraded_events": [],
+                     "evidence": [{"file": str(secret), "line": 1, "quote": "TOPSECRET"}]}
+                cg.ground_finding(f, Path(d))
+                self.assertNotEqual(f.get("grounding_verified"), True,
+                                    "repo_root 밖 절대경로 파일이 grounded로 통과 (path traversal)")
 
     def test_blank_quote_is_not_verified(self):
         # 회귀 방지 (codex fix-review): 모든 quote가 공백이면 실제로 검증된 인용이 0개 —

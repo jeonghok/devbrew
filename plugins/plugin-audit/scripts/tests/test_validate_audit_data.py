@@ -225,6 +225,15 @@ class TestData(unittest.TestCase):
         rc, err = run_validate(bad)
         self.assertEqual(rc, 1, f"NOQ axis=9 (not 1-6) should RED:\n{err}")
 
+    def test_noq_bool_axis_is_red(self):
+        # codex final-review: bool은 int의 subclass라 axis=True가 isinstance(int)+1<=True<=6을
+        # 통과해 axis 1로 새어든다. type(ax) is int로 bool을 거부해야 한다.
+        bad = copy.deepcopy(VALID)
+        bad["new_open_questions"] = [{"id": "NOQ-1", "source": "claude", "axis": True,
+                                      "observation": "x", "why_not_gap": "y", "evidence": []}]
+        rc, err = run_validate(bad)
+        self.assertEqual(rc, 1, f"axis=True(bool)가 axis 1로 통과 (bool is int subclass):\n{err}")
+
 
 # --- --artifacts 모드: 실제 파일을 본다 (골든 픽스처는 실물을 안 본다) ---
 

@@ -72,7 +72,9 @@ def validate_data(data: dict) -> list:
         if not q.get("source"):
             errs.append(f"{q.get('id')}: source 없음")
         ax = q.get("axis")
-        if not (isinstance(ax, int) and 1 <= ax <= 6):
+        # bool은 int의 subclass라 isinstance(ax, int)면 True/False가 1/0으로 새어든다 —
+        # type(ax) is int로 bool을 거부한다 (codex final-review).
+        if not (type(ax) is int and 1 <= ax <= 6):
             errs.append(f"{q.get('id')}: axis 1–6 아님 ({ax})")
 
     # gate-E → NOQ 회수 (row 8 이빨). scope-out NOQ는 **구조화 마커 reason_code로 식별**한다
