@@ -45,6 +45,22 @@ BASE_META = {"date": "2026-01-01", "fanout_declared": 30,
 
 
 class TestAssemble(unittest.TestCase):
+    def test_malformed_codex_finding_does_not_crash_assembly(self):  # V2-1/V2-2 (codex re-verify round-2 근본 봉쇄)
+        # codex findings는 schema 미검증으로 findings에 병합돼(audit-workflow.js) evidence/refutation이
+        # 비정상형일 수 있다. ev_keys(line22)는 비-dict evidence 원소의 .get()에서 크래시 + list file/line로
+        # unhashable set-key 크래시, gate-E(line72)는 truthy non-dict refutation의 .get()에서 크래시 → post-1
+        # 조립 전체 DoS(grounding·validate 하드닝이 우회된다). ingestion 정규화(_sanitize_finding)로 근본 봉쇄.
+        r, data = run(
+            workflow_return={"findings": [
+                {"id": "CX-1", "source": "codex", "status": "refuted", "refutation": "gate E",
+                 "evidence": [{"file": ["a.py"], "line": [1], "quote": 5}, "not-a-dict"]}],
+                "d_verdicts": [], "oq_answers": [], "new_open_questions": [],
+                "axis_failures": [], "degraded_events": []},
+            codex_side={"d_verdicts": [], "oq_answers": [], "new_open_questions": []},
+            meta=BASE_META, assigned={"assigned_d": [], "assigned_oq": []})
+        self.assertEqual(r.returncode, 0, f"malformed codex finding이 조립을 크래시시킴:\n{r.stderr}")
+        self.assertIsNotNone(data, "출력 미생성 (크래시)")
+
     def test_codex_side_merged_with_source(self):
         r, data = run(
             workflow_return={"findings": [], "d_verdicts": [{"id": "D1", "verdict": "confirmed", "reason": "x", "source": "claude"}],

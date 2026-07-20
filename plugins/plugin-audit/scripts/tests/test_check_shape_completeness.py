@@ -1,4 +1,4 @@
-import json, subprocess, sys, tempfile, unittest
+import json, os, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "check-shape-completeness.py"
@@ -190,6 +190,26 @@ class TestShapeCompleteness(unittest.TestCase):
             gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
             self.assertFalse(gaps["hooks_killswitch"]["present"],
                              "등록된 hook 스크립트가 부재(dangling)인데 통과 (검증 불가 fail-open)")
+
+    def test_hooks_killswitch_path_traversal_is_gap(self):  # V2-4 (codex re-verify round-2, security)
+        # 악성 hooks.json의 등록 command가 `../`로 plugin root 밖을 가리키면, 무관한 외부 파일로
+        # kill-switch 검사를 만족시키는 read-oracle/traversal이 된다. containment로 plugin root 밖은
+        # 판독 전에 거부(gap)해야 한다. 외부 파일은 kill-switch 토큰을 가져 — 미차단 시 present=True(버그).
+        with tempfile.TemporaryDirectory() as outside:
+            evil = Path(outside) / "evil.py"
+            evil.write_text("# DEVBREW_DISABLE_X — plugin 밖 파일\n", encoding="utf-8")
+            with tempfile.TemporaryDirectory() as d:
+                dd = _mk_plugin(d)
+                hooks = dd / "hooks"; hooks.mkdir()
+                rel = os.path.relpath(evil, dd)   # ${CLAUDE_PLUGIN_ROOT}(=dd) 기준 상대경로 (../ 포함)
+                (hooks / "hooks.json").write_text(json.dumps({
+                    "hooks": {"PostToolUse": [{"hooks": [
+                        {"type": "command", "command": f"python3 ${{CLAUDE_PLUGIN_ROOT}}/{rel}"}]}]}
+                }), encoding="utf-8")
+                r, obj = run(dd)
+                gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
+                self.assertFalse(gaps["hooks_killswitch"]["present"],
+                                 "../ traversal이 외부 파일로 kill-switch 검사를 만족 (read-oracle 미차단)")
 
     def test_hooks_killswitch_flags_registered_hook_without_switch(self):  # F 반대 이빨
         # 검사 무력화 방지: hooks.json이 등록한 훅이 kill switch를 안 가지면 여전히 gap이어야 한다.

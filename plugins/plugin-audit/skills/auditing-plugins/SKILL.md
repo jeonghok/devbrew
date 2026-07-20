@@ -135,9 +135,11 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
 6. **정직성 배너 (AC-3)**: `degraded[]` 비어있지 않으면 리포트 상단 배너 필수 + discoverability
    (`docs/audits/README.md` 인덱스 + 필요 시 `CLAUDE.md` 포인터). step 1의 원장 미확보/secret degrade도 여기 포함.
 7. `validate-audit-data.py --artifacts docs/audits/<date>-<target>-audit-data.json --report
-   docs/audits/<date>-<target>-audit.md --repo-root .` → 산출물(README 링크·배너 + 원장 실재) 검사.
-   (`--artifacts`는 렌더된 파일이 아니라 audit-data JSON을 가리켜야 한다 — 스크립트가 그 경로를
-   `read_text()`+`json.loads()`하므로 디렉토리를 넘기면 `IsADirectoryError`로 죽는다.)
+   docs/audits/<date>-<target>-audit.md --repo-root .` → 산출물(README 링크·배너) 검사. (`--artifacts`는
+   렌더된 파일이 아니라 audit-data JSON을 가리켜야 한다 — 스크립트가 그 경로를 `read_text()`+
+   `json.loads()`하므로 디렉토리를 넘기면 `IsADirectoryError`로 죽는다.) 원장(journal) 실재 검증은
+   validate_artifacts에 아직 없다 — step 1의 persist 성공/degrade 사실이 배너로 드러나는 것으로 갈음한다
+   (journal artifact 정합 검사는 향후 하드닝, codex re-verify round-2 V2-5).
 
 ## kill switch / degrade
 

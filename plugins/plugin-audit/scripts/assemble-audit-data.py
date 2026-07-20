@@ -8,6 +8,29 @@ def load(p):
     return json.loads(Path(p).read_text(encoding="utf-8"))
 
 
+def _sanitize_finding(f):
+    """codex findings는 schema 미검증으로 findings에 병합된다(audit-workflow.js) → evidence/refutation
+    원소가 비정상형(비-dict evidence·list file/line·정수 quote·비-dict refutation)일 수 있고, 그대로 두면
+    ev_keys(unhashable set-key/.get())·gate-E(.get())·grounding·validate·render 어디서든 크래시한다.
+    **ingestion에서 한 번** 정규형으로 강등하면 downstream 소비자 전부가 malformed 입력에서 안전해진다
+    (근본 봉쇄 — 소비자마다 개별 가드하는 whack-a-mole 대신, codex re-verify round-2). claude findings는
+    이미 AXIS_SCHEMA로 정형이라 이 정규화가 no-op이다."""
+    g = dict(f)
+    ev = []
+    for e in (g.get("evidence") or []):
+        if not isinstance(e, dict):
+            continue   # 비-dict evidence 원소 드롭
+        ne = dict(e)
+        ne["file"] = e.get("file") if isinstance(e.get("file"), str) else ""
+        ne["quote"] = e.get("quote") if isinstance(e.get("quote"), str) else ""
+        ne["line"] = e.get("line") if (isinstance(e.get("line"), int) and not isinstance(e.get("line"), bool)) else None
+        ev.append(ne)
+    g["evidence"] = ev
+    if "refutation" in g and not isinstance(g.get("refutation"), dict):
+        g["refutation"] = None   # 비-dict refutation → None (gate-E 안전 + validate가 refuted+None을 malformed RED)
+    return g
+
+
 def ev_keys(f):
     # 대표(첫) evidence만 — cross_model_confirmed는 "같은 file:line을 독립적으로
     # 지목"(§9.2)한다는 뜻이고, 이는 finding의 주 근거(evidence[0])를 가리킨다.
@@ -23,7 +46,7 @@ def ev_keys(f):
 
 
 def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
-    findings = [dict(f) for f in wf["findings"]]
+    findings = [_sanitize_finding(f) for f in wf["findings"]]   # codex-source malformed 입력 근본 봉쇄
     d_verdicts = list(wf.get("d_verdicts", []))
     oq_answers = list(wf.get("oq_answers", []))
     noq = list(wf.get("new_open_questions", []))

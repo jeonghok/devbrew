@@ -151,10 +151,18 @@ def _hooks_killswitch_present(pd):
         return False  # malformed hooks.json → 판정 불가 → gap (fail-closed)
     if not isinstance(data, (dict, list)):
         return False
+    root = pd.resolve()
     scripts, seen = [], set()
     for cmd in _walk_hook_commands(data):
         for m in _CMD_SCRIPT_RE.finditer(cmd):
-            cand = pd / m.group(1).lstrip("/")
+            cand = (pd / m.group(1).lstrip("/")).resolve()
+            # containment: command가 `../`/symlink로 plugin root 밖을 가리키면(악성 hooks.json) 무관한
+            # 외부 파일로 kill-switch 검사를 만족시키는 read-oracle/traversal이 된다 → 판독 전에 거부(gap,
+            # fail-closed). grounding의 containment와 같은 패턴 (codex re-verify round-2, security).
+            try:
+                cand.relative_to(root)
+            except ValueError:
+                return False
             if cand not in seen:
                 seen.add(cand)
                 scripts.append(cand)
