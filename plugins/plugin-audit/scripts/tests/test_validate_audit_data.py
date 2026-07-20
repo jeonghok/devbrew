@@ -123,6 +123,38 @@ class TestData(unittest.TestCase):
         rc, err = run_validate(ok)
         self.assertEqual(rc, 0, err)
 
+    def test_gate_e_real_assemble_output_is_green(self):
+        # HAND-SHAPE 함정 봉쇄: 위 test_gate_e_refuted_with_noq_is_green은 why_not_gap을 손으로
+        # "LD5 범위 밖"이라 써서 producer(assemble-audit-data.py)가 실제로 내는
+        # "scope-out (gate E)"를 한 번도 안 태웠다. 여기선 gate-E refuted finding을 **실제
+        # assemble에 태워** 그 산출 NOQ를 validate에 먹인다 — fix 전에는 assemble이 "범위 밖"
+        # 없는 문자열을 내고 validate가 그것만 인정해 거짓 RED(조용한 증발 오탐).
+        assemble = SCRIPTS_DIR / "assemble-audit-data.py"
+        with tempfile.TemporaryDirectory() as t:
+            t = Path(t)
+            wf = {"findings": [{"id": "A1-9", "axis": 1, "source": "claude", "status": "refuted",
+                                "refutation": {"stage": "axis", "gate": "E", "reason": "scope-out"},
+                                "evidence": [{"file": "x", "line": 1, "quote": "q"}], "severity": "LOW"}],
+                  "d_verdicts": [], "oq_answers": [], "new_open_questions": [],
+                  "axis_failures": [], "degraded_events": []}
+            codex = {"d_verdicts": [], "oq_answers": [], "new_open_questions": []}
+            meta = {"date": "2026-01-01", "fanout_declared": 0,
+                    "consent": {"approved": True, "at": "t", "fanout": 0},
+                    "codex": {"ran": False}, "target": "myplugin", "seed_provided": False}
+            assigned = {"assigned_d": [], "assigned_oq": []}
+            paths = {}
+            for name, obj in (("wf", wf), ("codex", codex), ("meta", meta), ("assigned", assigned)):
+                p = t / f"{name}.json"; p.write_text(json.dumps(obj), encoding="utf-8"); paths[name] = p
+            out = t / "data.json"
+            subprocess.run([sys.executable, str(assemble),
+                            "--workflow-return", str(paths["wf"]), "--codex-side", str(paths["codex"]),
+                            "--meta", str(paths["meta"]), "--assigned", str(paths["assigned"]),
+                            "--repo-root", str(t), "--no-grounding", "--out", str(out)],
+                           check=True, capture_output=True, text=True)
+            data = json.loads(out.read_text(encoding="utf-8"))
+            rc, err = run_validate(data)
+            self.assertEqual(rc, 0, f"실제 assemble gate-E 산출이 validate에서 거짓 RED:\n{err}")
+
     def test_noq_missing_why_not_gap_is_red(self):
         bad = copy.deepcopy(VALID)
         bad["new_open_questions"] = [{"id": "NOQ-1", "source": "claude", "axis": 1,

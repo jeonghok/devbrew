@@ -85,6 +85,37 @@ class TestShapeCompleteness(unittest.TestCase):
             gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
             self.assertTrue(gaps["deps_declared"]["present"])
 
+    def test_malformed_plugin_json_is_gap_not_crash(self):
+        # C6: 존재하지만 malformed한 plugin.json은 크래시(감사 중단)가 아니라 shape gap이어야.
+        # F는 바로 이 malformation을 잡으라고 있는데, 무가드 json.loads는 그 입력에서 죽는다.
+        with tempfile.TemporaryDirectory() as d:
+            dd = Path(d)
+            (dd / ".claude-plugin").mkdir(parents=True)
+            (dd / ".claude-plugin" / "plugin.json").write_text("{ not valid json ", encoding="utf-8")
+            (dd / "README.md").write_text("# x\n## Principles Instantiated\n- L\n", encoding="utf-8")
+            r, obj = run(dd)
+            self.assertEqual(r.returncode, 0, f"malformed plugin.json이 크래시했다:\n{r.stderr}")
+            gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
+            self.assertFalse(gaps["plugin_json_fields"]["present"],
+                             "malformed plugin.json이 shape gap으로 기록되지 않음")
+
+    def test_cost_class_body_mention_does_not_satisfy(self):
+        # C7: cost_class 체크는 frontmatter 키만 인정해야 한다 — 본문(prose) 언급은 gap을 못
+        # 가려야 (whole-file grep은 header-satisfiable 함정, 같은 파일 _has_tools_allowlist는
+        # 이미 frontmatter를 추출한다).
+        with tempfile.TemporaryDirectory() as d:
+            dd = _mk_plugin(d)
+            skill = dd / "skills" / "s"
+            skill.mkdir(parents=True)
+            # frontmatter엔 cost_class 없음, 본문에만 'cost_class' 언급
+            (skill / "SKILL.md").write_text(
+                "---\nname: s\ndescription: d\n---\n이 스킬의 cost_class는 본문에서만 논한다.\n",
+                encoding="utf-8")
+            r, obj = run(dd)
+            gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
+            self.assertFalse(gaps["skills_cost_class"]["present"],
+                             "frontmatter에 cost_class 없는데 본문 언급이 present=True로 통과 (header-satisfiable)")
+
     def test_deps_declared_self_reference_not_counted_as_cross_plugin(self):
         # agents/x.md references the plugin's OWN namespace ("myplugin:helper") → not cross-plugin
         with tempfile.TemporaryDirectory() as d:

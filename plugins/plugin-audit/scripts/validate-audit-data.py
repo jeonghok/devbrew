@@ -75,11 +75,14 @@ def validate_data(data: dict) -> list:
         if not (isinstance(ax, int) and 1 <= ax <= 6):
             errs.append(f"{q.get('id')}: axis 1–6 아님 ({ax})")
 
-    # gate-E → NOQ 회수 (row 8 이빨)
+    # gate-E → NOQ 회수 (row 8 이빨). scope-out NOQ는 **구조화 마커 reason_code로 식별**한다
+    # (assemble-audit-data.py의 producer 계약). 지역화 산문 "범위 밖" 부분문자열은 legacy
+    # 하위호환으로만 함께 받는다 — producer 문자열이 바뀌어도 거짓 RED가 나지 않도록.
     gate_e = [f for f in findings if f.get("status") == "refuted"
               and f.get("refutation", {}).get("gate") == "E"]
     scope_noq = [q for q in data.get("new_open_questions", [])
-                 if "범위 밖" in (q.get("why_not_gap") or "")]
+                 if q.get("reason_code") == "gate_e_scope_out"
+                 or "범위 밖" in (q.get("why_not_gap") or "")]
     if len(gate_e) > len(scope_noq):
         errs.append(f"gate-E refuted {len(gate_e)}건 > scope-out NOQ {len(scope_noq)}건 "
                     f"(gate-E → NOQ 회수 미배선 — §9.7 🔴, 조용한 증발)")

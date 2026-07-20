@@ -86,7 +86,9 @@ def _scan(p: Path, root: Path, banned: list[tuple[str, str]]) -> list[str]:
     text = p.read_text(encoding="utf-8", errors="replace")
     for i, line in enumerate(text.splitlines(), 1):
         for pat, why in banned:
-            if re.search(pat, line):
+            # IGNORECASE: SEED_EXTRA 영어 판정 토큰(confirmed/withdrawn/reclassified)이
+            # 대문자(CONFIRMED)로 게이트를 우회하지 못하게 한다. 한국어 BANNED 패턴엔 무해.
+            if re.search(pat, line, re.IGNORECASE):
                 found.append(f"{p.relative_to(root) if root in p.parents else p}:{i}\n"
                              f"      {line.strip()[:110]}\n"
                              f"      → {why}")

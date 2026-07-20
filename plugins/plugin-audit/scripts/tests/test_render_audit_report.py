@@ -223,6 +223,18 @@ class TestRender(unittest.TestCase):
         self.assertIn("코덱스근거", md, "D2 codex 근거가 렌더돼야")
         self.assertIn("재현불가사유", md, "unverified의 why_unverifiable(불가사유)가 렌더돼야")
 
+    def test_string_degraded_does_not_crash(self):
+        # producer 계약: check-plugin-structure.sh(Gate E)는 degraded를 **평문 문자열**로
+        # 방출한다 (add_degr가 str append). render가 x.get('what')을 무조건 호출하면 문자열에서
+        # AttributeError로 리포트가 전멸한다 — "plugin-dev 미설치"는 문서화된 흔한 degrade다.
+        # E의 실제 산출 shape를 먹여 크래시하지 않고 렌더되는지 락한다.
+        data = {"meta": META_OK, "findings": [], "d_verdicts": [], "oq_answers": [],
+                "new_open_questions": [], "axis_failures": [],
+                "degraded": ["⚠ plugin-dev 미설치 — 심층 구조 검사 생략"]}
+        rc, md, err = render(data)
+        self.assertEqual(rc, 0, f"평문 문자열 degraded에서 render가 크래시:\n{err}")
+        self.assertIn("plugin-dev 미설치", md, "문자열 degraded 내용이 렌더돼야")
+
     def test_title_uses_meta_target(self):
         # plugin-audit로 이관하며 유일한 project-init 리터럴이던 title을 meta.target에서
         # 유도하도록 일반화한다 (Task 5). 하드코딩된 "project-init"이 남아있으면 이 테스트가

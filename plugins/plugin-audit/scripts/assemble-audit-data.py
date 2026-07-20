@@ -39,13 +39,16 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     for v in codex_side.get("new_open_questions", []):
         noq.append({**v, "source": "codex"})
 
-    # (3) unverified backfill (dead/incomplete axis — assigned에 있으나 부재)
-    have_d = {v["id"] for v in d_verdicts}
+    # (3) unverified backfill (dead/incomplete axis — assigned에 있으나 *Claude* 판정 부재).
+    # have_d/have_oq는 codex merge(2) *후*의 전체 목록(any-source)이 아니라 **claude source만**
+    # 봐야 한다: codex가 답한 축이라도 Claude가 죽었으면 'axis incomplete' 정직성 backfill이
+    # 떠야 한다. any-source로 보면 codex 답변이 죽은 Claude 축을 조용히 가린다 (LD4 정직성 갭).
+    have_d = {v["id"] for v in d_verdicts if v.get("source") == "claude"}
     for did in assigned.get("assigned_d", []):
         if did not in have_d:
             d_verdicts.append({"id": did, "verdict": "unverified",
                                "reason": "axis incomplete — backfilled", "source": "claude"})
-    have_oq = {v["id"] for v in oq_answers}
+    have_oq = {v["id"] for v in oq_answers if v.get("source") == "claude"}
     for oid in assigned.get("assigned_oq", []):
         if oid not in have_oq:
             # steelman_condition enum(a|b|c|d|none|pending)을 침범하지 않음 — reason으로만 unverified 표시
@@ -60,11 +63,22 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     for f in findings:
         f["cross_model_confirmed"] = bool(ev_keys(f) & other.get(f.get("source"), set()))
 
-    # (5) gate-E refuted → NOQ 변환
+    # (5) gate-E refuted → NOQ 변환. consumer(validate-audit-data.py)와의 계약:
+    # scope-out NOQ는 **구조화 마커 `reason_code: "gate_e_scope_out"`**로 식별한다 (지역화 산문
+    # "범위 밖" 부분문자열 매칭에 의존하지 않음 — producer 문자열이 바뀌면 조용히 거짓 RED가
+    # 나던 버그). axis는 validate가 `isinstance(int) and 1<=x<=6`을 요구하므로 정수로 강제한다
+    # ("3" 같은 문자열 axis가 두 번째 거짓 RED 경로였다).
     for f in findings:
         if f.get("status") == "refuted" and (f.get("refutation") or {}).get("gate") == "E":
-            noq.append({"id": f["id"], "axis": f.get("axis"),
-                        "observation": f.get("title", ""), "why_not_gap": "scope-out (gate E)",
+            ax = f.get("axis")
+            try:
+                ax = int(ax)
+            except (TypeError, ValueError):
+                pass
+            noq.append({"id": f["id"], "axis": ax,
+                        "observation": f.get("title", ""),
+                        "why_not_gap": "scope-out (gate E) — 범위 밖",
+                        "reason_code": "gate_e_scope_out",
                         "source": f.get("source", "claude")})
 
     # (7) grounding (Task 14) — --no-grounding이면 annotate-only skip
@@ -77,8 +91,12 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     # (6) meta 부착 + 최상위 degraded. grounding이 finding에 붙인 degraded_events
     # (citation_absent/discarded · citation_unreadable · line_drift)를 최상위 degraded[]로
     # 승격한다 — 폐기된 finding이 정직성 배너에 흔적을 남겨야 한다 (AC-3, 조용한 증발 금지).
-    # renderer가 기대하는 {what, why} 모양으로 정규화한다.
-    degraded = list(wf.get("degraded_events", [])) + list(meta.get("pre1_degraded", []))
+    # renderer가 기대하는 {what, why} 모양으로 정규화한다 — pre-0/pre-1 게이트
+    # (check-plugin-structure.sh 등)는 degraded를 **평문 문자열**로 방출하므로, 문자열을
+    # {what, why}로 감싸지 않으면 render-audit-report.py가 x.get('what')에서 크래시한다.
+    raw_degraded = list(wf.get("degraded_events", [])) + list(meta.get("pre1_degraded", []))
+    degraded = [d if isinstance(d, dict) else {"what": str(d), "why": "pre-0/pre-1 degrade"}
+                for d in raw_degraded]
     for f in findings:
         for gev in f.get("degraded_events", []):
             degraded.append(_grounding_degraded_note(gev))

@@ -101,7 +101,11 @@ class TestAssemble(unittest.TestCase):
             codex_side={"d_verdicts": [], "oq_answers": [], "new_open_questions": []},
             meta=BASE_META, assigned={"assigned_d": [], "assigned_oq": []})
         self.assertEqual(data["meta"]["target"], "myplugin")
-        self.assertIn("codex timeout", data["degraded"])
+        # degraded 항목은 {what,why}로 정규화된다 (pre-0/pre-1 게이트가 방출하는 평문 문자열이
+        # render의 x.get('what')을 크래시시키지 않도록). 내용 존재는 직렬화본으로 확인한다.
+        self.assertIn("codex timeout", json.dumps(data["degraded"], ensure_ascii=False))
+        self.assertTrue(all(isinstance(x, dict) for x in data["degraded"]),
+                        "degraded 항목이 {what,why} dict로 정규화되지 않음 (render 크래시 위험)")
 
     def test_assemble_runs_grounding_live(self):
         # REVIEW FIX (Task 14): 5개 기존 테스트는 전부 --no-grounding으로 grounding을
@@ -142,6 +146,41 @@ class TestAssemble(unittest.TestCase):
         blob = json.dumps(data["degraded"], ensure_ascii=False)
         self.assertIn("G-9", blob,
                       "discarded finding left no note in top-level degraded[] (silent evaporation)")
+
+    def test_backfill_claude_unverified_even_when_codex_supplied(self):
+        # C2: dead Claude 축이라도 codex가 답하면 'axis incomplete' backfill이 떠야 한다.
+        # have_d를 codex 병합 *후* 전체(any-source)로 보면 codex D2가 Claude 죽음을 조용히
+        # 가린다 — claude-source만 봐야 정직(LD4). codex만 D2를 답하고 Claude는 부재.
+        r, data = run(
+            workflow_return={"findings": [], "d_verdicts": [], "oq_answers": [],
+                             "new_open_questions": [], "axis_failures": [], "degraded_events": []},
+            codex_side={"d_verdicts": [{"id": "D2", "verdict": "confirmed", "reason": "codex만"}],
+                        "oq_answers": [], "new_open_questions": []},
+            meta=BASE_META, assigned={"assigned_d": ["D2"], "assigned_oq": []})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        d2 = [v for v in data["d_verdicts"] if v["id"] == "D2"]
+        srcs = sorted(v["source"] for v in d2)
+        self.assertIn("codex", srcs, "codex D2 판정이 있어야")
+        self.assertIn("claude", srcs,
+                      "codex만 답한 죽은 Claude 축에도 claude unverified backfill이 떠야 (C2)")
+        claude_d2 = [v for v in d2 if v["source"] == "claude"]
+        self.assertEqual(claude_d2[0]["verdict"], "unverified", "backfill은 unverified여야")
+
+    def test_gate_e_noq_has_structured_marker_and_int_axis(self):
+        # 계약 락: gate-E NOQ는 구조화 마커 reason_code + 정수 axis를 가져야 validate가 인정한다.
+        # 문자열 axis "3"과 지역화-only why_not_gap이 두 개의 거짓 RED 경로였다.
+        f = {"id": "A3-9", "axis": "3", "source": "claude", "status": "refuted",
+             "refutation": {"stage": "axis", "gate": "E", "reason": "scope-out"},
+             "evidence": [{"file": "x", "line": 1, "quote": "q"}], "severity": "LOW"}
+        r, data = run(
+            workflow_return={"findings": [f], "d_verdicts": [], "oq_answers": [],
+                             "new_open_questions": [], "axis_failures": [], "degraded_events": []},
+            codex_side={"d_verdicts": [], "oq_answers": [], "new_open_questions": []},
+            meta=BASE_META, assigned={"assigned_d": [], "assigned_oq": []})
+        n = [q for q in data["new_open_questions"] if q["id"] == "A3-9"]
+        self.assertTrue(n, "gate-E NOQ 미생성")
+        self.assertEqual(n[0].get("reason_code"), "gate_e_scope_out", "구조화 마커(reason_code) 부재")
+        self.assertIsInstance(n[0].get("axis"), int, "axis가 정수로 강제돼야 (validate isinstance int 요건)")
 
 
 if __name__ == "__main__":

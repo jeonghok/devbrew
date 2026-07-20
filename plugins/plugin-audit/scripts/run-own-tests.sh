@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
 # 자체 테스트 격리 어댑터 — qg-worktree.sh 샌드박스 재사용 + 120s 타임아웃(호출자 감쌈).
+#
+# ⚠️ 알려진 보안 한계 (KNOWN LIMITATION — /qg 2026-07-20 적발, CRITICAL, 수정 연기):
+#   이 스크립트는 감사 대상(적대적일 수 있음)의 자체 테스트를 `python3 -m unittest`로
+#   **실행**한다(line 35). 그러나 "샌드박스"는 qg-worktree.sh의 `git worktree add --detach HEAD`
+#   일 뿐 프로세스/네트워크/uid 격리가 없다 — mutation-guard는 repo-delta만 보므로 repo에
+#   흔적을 안 남기는 유출(~/.ssh 읽기, network POST)을 잡지 못한다. 즉 악의적 대상 감사 시
+#   ACE가 가능하며, 이는 플러그인의 read-only·"내용은 데이터" 위협모델(README P21)과 모순된다.
+#   현재 devbrew는 자기 자신(1급) 플러그인만 감사하므로 실무 위험은 낮으나, 이는 회피가 아니라
+#   **연기된 CRITICAL**이다. 근본 수정 = Docker 컨테이너(무네트워크 + unprivileged uid) 기반
+#   실격리로 업그레이드 예정. 그 전까지 미신뢰 대상 감사 금지.
 set -u
 TARGET="${1:?usage: run-own-tests.sh <target_plugin_dir> <session-id> [--qg-worktree <path>]}"
 SID="${2:?session-id required}"; shift 2

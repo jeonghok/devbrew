@@ -143,7 +143,12 @@ def render(data: dict) -> str | None:
     if degraded:
         lines.append("## 결손 (degraded)")
         for x in degraded:
-            lines.append(f"- {x.get('what')} — {x.get('why')}")
+            # assemble-audit-data.py가 {what,why}로 정규화하지만, 평문 문자열 degraded
+            # (pre-0/pre-1 게이트 방출 형태)에도 방어적으로 대응한다 — .get() 크래시 금지.
+            if isinstance(x, dict):
+                lines.append(f"- {x.get('what')} — {x.get('why')}")
+            else:
+                lines.append(f"- {x}")
         lines.append("")
 
     return "\n".join(lines) + "\n"

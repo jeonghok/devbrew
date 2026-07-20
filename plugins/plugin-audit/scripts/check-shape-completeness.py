@@ -31,8 +31,13 @@ def check(plugin_dir):
         gaps.append({"requirement": req, "present": bool(present), "source_doc": src})
 
     pj_text = _read(pd / ".claude-plugin" / "plugin.json")
-    pj = json.loads(pj_text) if pj_text else {}
-    add("plugin_json_fields", pj_text and all(k in pj for k in ("name", "version", "description")))
+    try:
+        pj = json.loads(pj_text) if pj_text else {}
+    except (ValueError, TypeError):
+        # 존재하지만 malformed한 plugin.json은 감사를 중단시키는 크래시가 아니라 shape
+        # gap(present=False)으로 기록한다 — F는 바로 이 malformation을 잡으라고 있다.
+        pj = {}
+    add("plugin_json_fields", bool(pj_text) and all(k in pj for k in ("name", "version", "description")))
 
     readme = _read(pd / "README.md") or ""
     add("readme_principles", "Principles Instantiated" in readme)
@@ -45,7 +50,7 @@ def check(plugin_dir):
     add("agents_allowlist", all(_has_tools_allowlist(_read(a) or "") for a in agents) if agents else True)
 
     skills = list((pd / "skills").glob("*/SKILL.md")) if (pd / "skills").exists() else []
-    add("skills_cost_class", all("cost_class" in (_read(s) or "") for s in skills) if skills else True)
+    add("skills_cost_class", all(_has_cost_class(_read(s) or "") for s in skills) if skills else True)
 
     hooks = _hook_scripts(pd)
     add("hooks_killswitch", all(_has_killswitch(_read(h) or "") for h in hooks) if hooks else True)
@@ -87,6 +92,13 @@ def _semver_ge(a, b):
 def _has_tools_allowlist(text):
     fm = text.split("---")[1] if text.count("---") >= 2 else ""
     return bool(re.search(r"^tools:", fm, re.M)) and "disallowedTools" not in fm  # allowlist, denylist 단독 금지
+
+
+def _has_cost_class(text):
+    # frontmatter 안의 cost_class: 키만 인정한다 — 본문(prose)이 'cost_class'를 언급해도
+    # frontmatter에 키가 없으면 gap이다 (whole-file grep은 header-satisfiable 함정).
+    fm = text.split("---")[1] if text.count("---") >= 2 else ""
+    return bool(re.search(r"^cost_class:", fm, re.M))
 
 
 def _hook_scripts(pd):
