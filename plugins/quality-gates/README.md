@@ -126,13 +126,13 @@ quality-gates/
 | Trivia | ~0% (즉시 skip) |
 | Quick | ~25–35% |
 | Standard | ~30–45% |
-| Deep | ~55–75% (Tier C 전문가 다수 + codex) |
+| Deep | ~55–75% (Tier C 전문가 다수) |
 
 트리거 조건과 override flag는 [`commands/qg.md`](commands/qg.md) 참고.
 
 ### Codex reviewer cost
 
-The optional `codex-reviewer` agent has `cost_class: variable` — it invokes the user's Codex CLI subscription/API on each `standard`/`deep` Review gate dispatch. First-use cost consent gate prompts via `AskUserQuestion`. Disable globally with `DEVBREW_DISABLE_QG_CODEX=1`.
+The optional `codex-reviewer` agent has `cost_class: variable` — as a Tier B **availability-floor** it invokes the user's Codex CLI subscription/API on **every non-trivia Review gate dispatch when detected (all depths incl. `quick` — scope/depth-independent)**, separate from the depth-specific baseline in the table above (so it is not attributed to any single depth row). First-use cost consent gate prompts via `AskUserQuestion`. Disable globally with `DEVBREW_DISABLE_QG_CODEX=1`.
 
 ### PR-understanding publish cost (`/qg-publish`, separate from the two gates)
 

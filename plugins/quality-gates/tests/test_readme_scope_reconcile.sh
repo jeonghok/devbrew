@@ -31,5 +31,18 @@ present "prereq: Tier C optional decl (body-unique)" 'Tier C optional dependenci
 present "prereq: pr-review-toolkit named (body-unique)" 'pr-review-toolkit`(code-reviewer'
 present "prereq: feature-dev named (body-unique)"       'feature-dev`(code-architect)'
 
+echo "== C5 regression lock: codex-depth reconcile (availability-floor vs standard/deep-only) =="
+# §166 documents codex as a Tier B *availability-floor* (runs on ALL non-trivia
+# depths when detected). This section locks the Cost prose against re-introducing
+# the superseded "standard/deep-only" codex-cost claim — the exact scope-blind
+# drift a fan-out-only reconcile missed (self-dogfood C5, v2.13.0: §166 was
+# rewritten to availability-floor while the Cost section still said standard/deep).
+# Teeth boundary (cf. AC11): the negatives pin the known old phrasings; a fresh
+# paraphrase that re-contradicts would slip the grep — the dynamic codex review
+# is the backstop for that residue.
+presentE "codex cost = availability-floor, all depths (body-unique)" 'every non-trivia Review gate dispatch when detected'
+goneE    "old 'standard/deep-only' codex-cost claim 제거"            'on each .standard./.deep. Review gate dispatch'
+goneE    "Deep 비용행 codex depth-귀속 제거"                          'Tier C 전문가 다수 \+ codex'
+
 echo; echo "readme-scope-reconcile: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

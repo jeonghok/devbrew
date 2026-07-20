@@ -33,6 +33,17 @@ diff 스코프로 Tier C 전문가를 선택(모델 판단 + scout 힌트 + revi
 - stale RED 회복: `test_codex_dispatch_invariant.sh`·`test_scout_codex_integration.sh`를 새
   3-tier dispatch 구조에 맞게 갱신.
 
+### Fixed
+- codex depth-계약 whole-file reconcile(`/qg` self-dogfood C5): §166이 codex를
+  availability-floor(전 depth)로 재작성했으나 Cost 섹션은 `standard`/`deep`-only를 계속 주장한
+  자기모순 해소 — README Cost 노트를 availability-floor화 + Deep 비용행의 codex depth-귀속 제거.
+- `test_codex_backward_compat.sh` Check 2를 폐기된 standard/deep-only 계약 assert에서 v2.13.0
+  availability-floor 계약(무조건·스코프 무관 + unavailable-degrade)으로 재작성(body-unique
+  anchor·mutation-teeth). Check 3의 무관한 pre-existing red는 범위 밖 잔존.
+- `test_readme_scope_reconcile.sh`에 codex-depth 재정합 회귀 락 추가(Law 3 compounding):
+  fan-out 전용이던 lock이 못 본 C5 부류를 봉쇄 — availability-floor positive +
+  standard/deep-only negative(teeth 검증).
+
 ### Principles Instantiated
 - P8 (determinism-economy / harness lightness) — 리뷰어 선택은 model-owned routing; 결정론은
   floor 불변·transparency·rubric-embed에만.
