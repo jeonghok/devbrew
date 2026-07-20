@@ -122,6 +122,46 @@ test('row 4 — CONTRACT renders staleness facts, own-test result, precedent pat
   assert.ok(/check-careful\.sh/.test(p), 'precedent path must render')
 })
 
+test('WB1 — CONTRACT renders structure_facts/shape_gaps OBJECTS, not [object Object]', async () => {
+  // 실제 producer는 OBJECT를 낸다 (check-plugin-structure.sh / check-shape-completeness.py).
+  // 예전 bare `'  - ' + f` concat은 `[object Object]`를 배달했다 — REAL 오브젝트 shape를 주입해 봉쇄.
+  const args = {
+    target: 'sample',
+    evidencePack: {
+      ...DEFAULT_PACK,
+      structure_facts: [{ validator: 'hook-linter.sh', target: 'x', fact: 'clean', verifier_ok: true }],
+      shape_gaps: [{ requirement: 'plugin_json_fields', present: false, source_doc: 'CLAUDE.md' }],
+    },
+    codexFindings: [],
+  }
+  const { calls } = await runWorkflow(WF, { args, stubAgent: stubOneFinding() })
+  const p = calls.find((c) => c.opts.phase === '감사').prompt
+  assert.ok(/hook-linter\.sh/.test(p), 'structure_fact.validator must render')
+  assert.ok(/plugin_json_fields/.test(p), 'shape_gap.requirement must render')
+  assert.ok(!/\[object Object\]/.test(p),
+    'objects must be field-formatted, not stringified to [object Object]')
+})
+
+test('WB3 — own_tests consumer reads the REAL contract shape (no undefined / null/null)', async () => {
+  // producer(run-own-tests.sh)의 실제 shape: {ran, passed, total, forced_downgrade, why}.
+  // passed/total은 현재 항상 null이고 .failed/.framework는 존재하지 않는다. 예전 소비자는
+  // `null/null 통과, 실패 undefined건`을 렌더했다 — REAL shape로 graceful-null 소비를 봉쇄.
+  const args = {
+    target: 'sample',
+    evidencePack: {
+      ...DEFAULT_PACK,
+      own_tests: { ran: true, passed: null, total: null, forced_downgrade: false, why: null },
+    },
+    codexFindings: [],
+  }
+  const { calls } = await runWorkflow(WF, { args, stubAgent: stubOneFinding() })
+  const p = calls.find((c) => c.opts.phase === '감사').prompt
+  assert.ok(!/undefined/.test(p), 'no undefined from never-produced own_tests fields')
+  assert.ok(!/null\/null/.test(p), 'no null/null numeric render when passed/total are null')
+  assert.ok(/자체 테스트: 샌드박스에서 실행됨/.test(p),
+    'ran-but-uncounted own_tests must still render a signal line')
+})
+
 test('row 4b — CONTRACT degrades loudly when staleness/own-test absent', async () => {
   const { calls } = await runWorkflow(WF, { stubAgent: stubOneFinding() })
   const p = calls.find((c) => c.opts.phase === '감사').prompt

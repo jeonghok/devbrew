@@ -86,7 +86,11 @@ def render(data: dict) -> str | None:
             lines.append(f"### {oq_id}")
             for a in sorted(by_id[oq_id], key=lambda a: a.get("source") or ""):
                 lines.append(f"- 출처: {a.get('source')}")
-                if oq_id == "OQ1":
+                # WB4: 구조로 분기한다 (id 아님). OQ id는 seed-derived라 어떤 id든 붙을 수 있고,
+                # 2026-07-15 baseline은 OQ1~OQ4에 left/right evidence를 달았다 — `oq_id=="OQ1"`
+                # 하드코딩은 OQ2~4의 증거를 조용히 드롭했다. left/right evidence 키가 있으면 좌/우
+                # 대칭으로, 없으면 `답:` 산문 형태로 렌더한다.
+                if "left_evidence" in a or "right_evidence" in a:
                     # §9.5: 좌/우 대칭 — 빈 쪽도 0건으로 명시(숨기지 않는다)
                     for side_label, side_key in (("좌", "left_evidence"), ("우", "right_evidence")):
                         side_ev = a.get(side_key) or []
@@ -110,7 +114,7 @@ def render(data: dict) -> str | None:
 
     d_verdicts = data.get("d_verdicts", [])
     if d_verdicts:
-        lines.append("## 후보 단서 판정 (D1–D5)")
+        lines.append("## 후보 단서 판정")
         by_d: dict[str, list[dict]] = {}
         for d in d_verdicts:
             by_d.setdefault(d.get("id", ""), []).append(d)

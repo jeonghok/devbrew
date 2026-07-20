@@ -13,8 +13,8 @@ rule has been broken twice, and both times prose was the only thing enforcing it
 
 Prose cannot enforce itself. This does.
 
-Scope is deliberately narrow: only the three surfaces that are actually injected into an
-auditor's context. The design doc and the interview brief are NOT scanned — discussing a
+Scope is deliberately narrow: only the six surfaces that are actually injected into an
+auditor's (or codex co-auditor's) context. The design doc and the interview brief are NOT scanned — discussing a
 banned phrase there is legitimate, and a gate that cannot tell a mention from a use will
 flag its own documentation (repo lesson, ledger 36). Narrowing the scope is how the false
 positives go away.
@@ -30,10 +30,13 @@ import re
 import sys
 from pathlib import Path
 
-# The three injected surfaces (design §14). Nothing else is scanned.
+# The injected surfaces (design §14). Nothing else is scanned. codex-prompt-preamble.md is
+# injected into the codex co-auditor's prompt (SKILL pre-1), so a verdict phrase there must be
+# scanned too.
 SURFACES = [
     "scripts/audit-workflow.js",
     "scripts/smoke-workflow.js",
+    "scripts/codex-prompt-preamble.md",
     "agents/plugin-auditor.md",
     "agents/audit-refuter.md",
     "agents/smoke-probe.md",

@@ -9,7 +9,12 @@ export const meta = {
 // agentType cannot be overridden.
 const probe = (prompt, opts) => agent(prompt, {...opts, agentType: 'plugin-audit:smoke-probe'})
 
-const sentinel = args.sentinelPath
+// The Workflow tool delivers `args` as a JSON *string* at runtime (same as audit-workflow.js).
+// Without this normalization args.sentinelPath is undefined → the probe writes to a file literally
+// named "undefined", so the orchestrator's monitored sentinel path stays absent → false GREEN on
+// the Law-2 capability self-check. Normalize BEFORE reading .sentinelPath (WB2).
+const _args = typeof args === 'string' ? JSON.parse(args) : (args || {})
+const sentinel = _args.sentinelPath
 
 // The probe is told to WRITE to the sentinel path (proving capability from disk, not self-report)
 // and to report its identity/tools. If agentType did not resolve, a write-capable default agent

@@ -176,6 +176,28 @@ class TestRender(unittest.TestCase):
         self.assertIn("답변입니다", oq2_section, "OQ2 answer가 OQ2 서브섹션에 렌더돼야")
         self.assertIn("A2-1", oq2_section, "oq_ref==OQ2인 finding이 OQ2 서브섹션에 역참조돼야")
 
+    def test_oq_evidence_renders_for_non_oq1_id(self):
+        # WB4: left/right evidence 렌더는 id가 아니라 *구조*로 분기해야 한다. OQ id는 seed-derived라
+        # OQ2~4에도 left/right evidence가 붙는데(2026-07-15 baseline), `if oq_id=="OQ1"` 하드코딩은
+        # 그것을 조용히 드롭했다. OQ2에 left/right evidence를 줘서 렌더되는지 확인 — `oq_id=="OQ1"`로
+        # 되돌리면 이 단언이 RED (steelman_condition 포함).
+        data = {"meta": META_OK, "findings": [],
+                "d_verdicts": [], "oq_answers": [
+                    {"id": "OQ2", "source": "claude", "reason": "r2",
+                     "left_evidence": [{"claim": "좌증거OQ2", "file": "x.py", "line": 3, "quote": "qx"}],
+                     "right_evidence": [{"claim": "우증거OQ2", "file": "y.py", "line": 4, "quote": "qy"}],
+                     "steelman_condition": "b"}],
+                "new_open_questions": [], "axis_failures": [], "degraded": []}
+        rc, md, err = render(data)
+        self.assertEqual(rc, 0, err)
+        idx = md.index("### OQ2")
+        rest = md[idx + len("### OQ2"):]
+        nxt = rest.find("### ")
+        section = rest if nxt == -1 else rest[:nxt]
+        self.assertIn("좌증거OQ2", section, "OQ2 left_evidence가 렌더돼야 (구조-구동, id 무관)")
+        self.assertIn("우증거OQ2", section, "OQ2 right_evidence가 렌더돼야")
+        self.assertIn("스틸맨 조건", section, "OQ2 steelman_condition이 렌더돼야")
+
     def test_d_verdicts_render(self):
         # d_verdicts[]는 oq_answers와 동일한 "producer but no reader" 증발 위험이 있던 필드
         # (audit-workflow.js가 만들고 validate-audit-data.py가 검증하지만 렌더러가 드롭했던 버그).

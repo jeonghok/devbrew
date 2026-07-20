@@ -215,10 +215,13 @@ const CONTRACT = [
   '- 대상: `plugins/' + target + '` **v' + pack.plugin_version + '**',
   '- LD5 코퍼스: **' + pack.file_count + ' 파일 / ' + pack.total_lines + ' 줄** (tracked + git-ignored)',
   '- 구조/shape 관측 (사실 — 직접 확인하라):',
+  // 실제 producer는 OBJECT를 낸다: check-plugin-structure.sh → structure_facts[{validator,
+  // target, fact, verifier_ok}], check-shape-completeness.py → shape_gaps[{requirement, present,
+  // source_doc}]. bare 문자열 concat은 `[object Object]`를 낳는다 — 필드를 포맷한다 (WB1).
   ...((pack.structure_facts || []).length || (pack.shape_gaps || []).length
     ? [
-      ...(pack.structure_facts || []).map((f) => '  - ' + f),
-      ...(pack.shape_gaps || []).map((g) => '  - [shape] ' + g),
+      ...(pack.structure_facts || []).map((f) => '  - [' + f.validator + '] ' + f.target + ': ' + f.fact + (f.verifier_ok ? '' : ' (verifier_ok=false)')),
+      ...(pack.shape_gaps || []).map((g) => '  - [shape] ' + g.requirement + ': present=' + g.present + ' (' + g.source_doc + ')'),
     ]
     : ['  - (구조/shape 관측 미제공 — 파일 트리를 직접 열거해 판정하라)']),
   '',
@@ -237,11 +240,23 @@ const CONTRACT = [
     : ['  - (staleness sweep 미실행 또는 사실 0건 — 없음을 사실로 받는다)']),
   '',
   '## 대상의 자체 테스트 결과 — **사실. "잘 테스트됐다"는 네 판정** (§5.4b)',
-  pack.own_tests && pack.own_tests.ran
-    ? '  - ' + (pack.own_tests.framework || '자체 테스트') + ': ' + pack.own_tests.passed + '/' + pack.own_tests.total
-      + ' 통과, 실패 ' + pack.own_tests.failed + '건. **GREEN은 질문의 전제이지 품질의 증거가 아니다.**'
-    : '  - ⚠ 자체 테스트 미실행 (' + ((pack.own_tests && pack.own_tests.why) || '사유 미상')
-      + ') — 통과 여부를 모른다는 것이 사실이다.',
+  // 실제 producer(run-own-tests.sh)의 계약은 {ran, passed, total, forced_downgrade, why}뿐이다.
+  // .framework/.failed는 결코 방출되지 않고, passed/total은 현재 항상 null(러너 stdout 미파싱)이다.
+  // 그래서 수치는 둘 다 non-null일 때만 렌더하고, 아니면 ran/forced_downgrade/why 신호만 낸다 (WB3).
+  ((ot) => {
+    if (!ot || !ot.ran) {
+      return '  - ⚠ 자체 테스트 미실행 (' + ((ot && ot.why) || '사유 미상')
+        + ') — 통과 여부를 모른다는 것이 사실이다.'
+    }
+    const dg = ot.forced_downgrade
+      ? ' ⚠ mutation-guard가 product 변경을 감지 — 이 결과는 무효다.' : ''
+    if (ot.passed != null && ot.total != null) {
+      return '  - 자체 테스트: ' + ot.passed + '/' + ot.total
+        + ' 통과. **GREEN은 질문의 전제이지 품질의 증거가 아니다.**' + dg
+    }
+    return '  - 자체 테스트: 샌드박스에서 실행됨 (통과/전체 카운트 미파싱, GREEN 여부 불명)'
+      + (ot.why ? ' — ' + ot.why : '') + dg
+  })(pack.own_tests),
   '',
   '## 프로덕션 선례 코퍼스 (디스크에 있다 — 읽기 대상, 갭 대상 아님)',
   ...((pack.precedent_paths || []).length

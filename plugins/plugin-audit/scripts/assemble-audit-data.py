@@ -74,14 +74,36 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
             if f.get("status") in ("reported", None):
                 ground(f, repo_root)   # sets grounding_verified, may discard/line-correct
 
-    # (6) meta 부착 + 최상위 degraded
+    # (6) meta 부착 + 최상위 degraded. grounding이 finding에 붙인 degraded_events
+    # (citation_absent/discarded · citation_unreadable · line_drift)를 최상위 degraded[]로
+    # 승격한다 — 폐기된 finding이 정직성 배너에 흔적을 남겨야 한다 (AC-3, 조용한 증발 금지).
+    # renderer가 기대하는 {what, why} 모양으로 정규화한다.
     degraded = list(wf.get("degraded_events", [])) + list(meta.get("pre1_degraded", []))
+    for f in findings:
+        for gev in f.get("degraded_events", []):
+            degraded.append(_grounding_degraded_note(gev))
     out_meta = {k: meta[k] for k in ("date", "fanout_declared", "consent", "codex", "target", "seed_provided") if k in meta}
     out_meta["assigned_d"] = assigned.get("assigned_d", [])
     out_meta["assigned_oq"] = assigned.get("assigned_oq", [])
     return {"meta": out_meta, "findings": findings, "d_verdicts": d_verdicts,
             "oq_answers": oq_answers, "new_open_questions": noq,
             "axis_failures": wf.get("axis_failures", []), "degraded": degraded}
+
+
+def _grounding_degraded_note(gev):
+    """grounding이 finding에 남긴 degraded_event({id,kind,...})를 renderer가 기대하는
+    최상위 {what, why} 모양으로 변환한다 (AC-3 정직성 배너)."""
+    fid, kind = gev.get("id"), gev.get("kind")
+    if kind == "citation_absent":
+        return {"what": f"{fid} 폐기 — 인용이 파일에 부재",
+                "why": f"grounding citation_absent ({gev.get('file')})"}
+    if kind == "citation_unreadable":
+        return {"what": f"{fid} — 인용 파일 판독 불가",
+                "why": f"grounding citation_unreadable ({gev.get('file')})"}
+    if kind == "line_drift":
+        return {"what": f"{fid} — 인용 줄 보정",
+                "why": f"grounding line_drift {gev.get('from')}→{gev.get('to')}"}
+    return {"what": f"{fid} — grounding {kind}", "why": "grounding degraded"}
 
 
 def _load_grounding():

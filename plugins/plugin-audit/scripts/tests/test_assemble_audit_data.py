@@ -124,6 +124,25 @@ class TestAssemble(unittest.TestCase):
         self.assertFalse(by["G-2"]["grounding_verified"], "live grounding wrongly verified a non-matching quote")
         self.assertEqual(by["G-2"]["status"], "discarded", "non-matching quote finding not discarded by live grounding")
 
+    def test_grounding_degraded_promoted_to_toplevel(self):
+        # WB-minor: grounding이 폐기한 finding의 degraded_event가 최상위 degraded[]로 승격돼
+        # 정직성 배너에 흔적을 남겨야 한다 (AC-3, 조용한 증발 금지). LIVE grounding 경로로
+        # (--no-grounding 없이) 인용이 부재한 finding을 태운다 — 승격 루프를 제거하면 RED.
+        f_absent = {"id": "G-9", "axis": 1, "source": "claude", "status": "reported",
+                    "evidence": [{"file": "src.py", "line": 1, "quote": "NOT PRESENT ANYWHERE"}], "severity": "HIGH"}
+        r, data = run_live_grounding(
+            {"src.py": "line1\nline2\n"},
+            workflow_return={"findings": [f_absent], "d_verdicts": [], "oq_answers": [],
+                             "new_open_questions": [], "axis_failures": [], "degraded_events": []},
+            codex_side={"d_verdicts": [], "oq_answers": [], "new_open_questions": []},
+            meta=BASE_META, assigned={"assigned_d": [], "assigned_oq": []})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        by = {f["id"]: f for f in data["findings"]}
+        self.assertEqual(by["G-9"]["status"], "discarded", "absent-citation finding not discarded by live grounding")
+        blob = json.dumps(data["degraded"], ensure_ascii=False)
+        self.assertIn("G-9", blob,
+                      "discarded finding left no note in top-level degraded[] (silent evaporation)")
+
 
 if __name__ == "__main__":
     unittest.main()
