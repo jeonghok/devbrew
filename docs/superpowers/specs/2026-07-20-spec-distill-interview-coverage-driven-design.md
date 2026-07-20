@@ -125,7 +125,7 @@ locked_decisions:
     focused_dimension: "<현재 probe 대상 차원 이름 또는 null>"
     no_progress_streak: <int, 기본 0>          # C11 연속 무진전 probe 수; focused 변경·진전 시 0 reset
     blind_spot_dispatched: <bool, 기본 false>  # C8 인터뷰당 1회 보장; 첫 dispatch 시 true
-    coverage_mapper_last_probe: <int 또는 null>
+    coverage_mapper_last_probe: <int 또는 null>  # 마지막 coverage-mapper dispatch 시 probe_count; redispatch rate-limit(C11)
   probe_count: <int, 0 이상>
   probe_cap_override: <int, 0 이상, 기본 0>    # C1 '계속'이 base cap만큼 raise (probe_budget.py raise-cap)
   ```
@@ -141,19 +141,19 @@ locked_decisions:
   - derived:<name> — closed — <rationale>; <evidence>
   ```
 
-  derived 0건이면 sentinel 한 줄 `- derived: N/A — floor로 충분`. `check_brief`는 floor 5행 각 존재 + status 토큰 `closed` + evidence 세그먼트 non-empty + derived(≥1행 OR sentinel)를 검사한다. `orchestration` 필드도 orchestrator만 갱신하며(agent read-only) brief에는 직렬화하지 않는다(state 전용); reset 규칙은 스키마 주석대로(no_progress_streak: focused 변경·진전 시 0, blind_spot_dispatched: 첫 dispatch 시 true), migration 기본값은 AC5.
+  derived 0건이면 sentinel 한 줄 `- derived: N/A — floor로 충분`. `check_brief`는 floor 5행 각 존재 + status 토큰 `closed` + evidence 세그먼트 non-empty + derived(≥1행 OR sentinel)를 검사한다. `orchestration` 필드도 orchestrator만 갱신하며(agent read-only) brief에는 직렬화하지 않는다(state 전용); reset 규칙은 스키마 주석대로(no_progress_streak: focused 변경·진전 시 0; blind_spot_dispatched: 첫 dispatch 시 true; coverage_mapper_last_probe: dispatch 시 probe_count로 갱신, C11 rate-limit), migration 기본값은 AC5.
 - **C10**: **probe 백스톱 집행.** `probe_budget.py`(scripts/, `web_budget.py` sibling) CLI 계약:
 
   ```
-  probe_budget.py increment <state.local.md>  → probe_count += 1; exit 0 (≤effective_cap) | 1 (>)
-  probe_budget.py check <state.local.md>      → exit 0 (≤effective_cap) | 1 (>); stdout: remaining
+  probe_budget.py check <state.local.md>      → exit 0 if probe_count < effective_cap else 1 (gate, mutation 없음); stdout: remaining
+  probe_budget.py increment <state.local.md>  → probe_count += 1; exit 0 (probe 제기 *후* 호출)
   probe_budget.py raise-cap <state.local.md>  → probe_cap_override += base_cap; persist; exit 0
   base_cap = int(env DEVBREW_SPEC_DISTILL_PROBE_CAP) if set else 12
   effective_cap = base_cap + probe_cap_override
   ```
 
-  SKILL은 매 probe 전 `increment`를 호출하고 non-zero exit 시 C1 escalation을 발화한다. C1 '계속' 선택은 `raise-cap`으로 effective_cap을 base만큼 올린다.
-- **C11**: **coverage-mapper dispatch 트리거** = "한 focused 차원이 연속 3 probe 동안 status·evidence 무변경(진전 없음) OR floor 차원의 첫 open→in-progress 전이." 진전 = status 전이(open→in-progress→closed) 또는 evidence append. 연속 카운터는 focused 차원이 바뀌거나 진전 발생 시 reset. 기존 `interview_round >= 2` 트리거를 이 커버리지 조건으로 교체한다(라운드 참조 잔존 금지).
+  **원자성**: SKILL은 probe 조립 *전에* `check`를 호출한다(gate). non-zero(`probe_count ≥ effective_cap`) & floor 미충족 → C1 escalation(질문 미제기 → `increment` 안 함, phantom 증가 없음). zero → 질문 제기·답 수신 → `increment`(제기된 probe만 카운트 — "probe 정의"와 정합). C1 '계속' 선택은 `raise-cap`으로 effective_cap을 base만큼 올린다.
+- **C11**: **coverage-mapper dispatch 트리거** = "한 focused 차원이 연속 3 probe 동안 status·evidence 무변경(진전 없음) OR floor 차원의 첫 open→in-progress 전이." 진전 = status 전이(open→in-progress→closed) 또는 evidence append. 연속 카운터는 focused 차원이 바뀌거나 진전 발생 시 reset. 기존 `interview_round >= 2` 트리거를 이 커버리지 조건으로 교체한다(라운드 참조 잔존 금지). **redispatch 바운드(Unbounded-autonomy 가드)**: dispatch 시 `coverage_mapper_last_probe = probe_count` 기록; 재dispatch는 `probe_count - coverage_mapper_last_probe >= 3`일 때만 허용(무진전이 지속돼도 최소 3 probe 간격 — 레벨-트리거 무한 재dispatch 방지). `coverage_mapper_last_probe == null`이면 첫 dispatch 허용.
 - **C12**: teach-beat *발화 시점*은 모델 판단 적응 행동이다(LD1/G5 harness-lightness) — 결정론 게이트로 기계화하지 않는다. AC8 신호는 결정 규칙이 아니라 모델 휴리스틱 가이드이며, 검증 가능한 것은 SKILL의 신호 열거 + 크기 한도(teach-lite ≤1문장 / teach-heavy ≥1 URL)뿐이다. per-firing 결정성은 non-goal(모델 판단을 결정론으로 대체하지 않음 — 이 재구성의 핵심 논지). 이 문서 C12는 자기-참조이며 SKILL.md의 C-넘버링과 무관.
 
 ## Acceptance Criteria
@@ -161,22 +161,22 @@ locked_decisions:
 - **AC1**: `state.local.md` 스키마에서 **오직** `interview_round`만 제거되고 `coverage`(floor 5 + derived[]) + `probe_count` + `probe_cap_override` + `orchestration`(focused_dimension/no_progress_streak/blind_spot_dispatched/coverage_mapper_last_probe)가 추가된다. 기존 필드 `non_user_streak`·`web_sweep_count`·`web_search_count`·`rereview_count`·`trivia_escape_armed`·`issue_history`·`pending_locked_decisions`는 전부 **유지**(삭제 금지 — 이 목록은 non-exhaustive 유지 선언).
 - **AC2**: 종료 게이트 = (a) orchestrator가 floor 5차원 전부 status `closed`임을 `state.local.md`에서 확인하고 brief `## Coverage Ledger`에 직렬화, AND (b) `check_brief.py gate`가 brief의 `## Coverage Ledger`에서 floor 5행 존재 + 각 `closed` + evidence 비어있지 않음 + derived(≥1행 OR sentinel)를 검증해 exit 0. floor 한 행이라도 `open`/`in-progress`/evidence-공백이면 exit ≠ 0.
 - **AC3**: `check_brief.py`가 (a) `## Coverage Ledger`의 floor 5행 all-`closed` + evidence non-empty + derived 존재/sentinel, (b) `## Blind Spots & Premortem` 섹션 존재를 검증하고 미충족 시 exit ≠ 0.
-- **AC4**: `probe_budget.py increment`가 `probe_count`를 전진시키고 cap(기본 12) 초과 시 non-zero exit. SKILL은 non-zero exit & floor 미충족 시 `AskUserQuestion` 3옵션 escalation을 발화하고, 각 옵션의 종료 의미론(계속=effective cap 상향 / 박제=floor 행 `closed`+박제 표식 후 §Open Questions 이동 / abort=brief 미작성·state 보존)은 C1대로 처리한다.
+- **AC4**: `probe_budget.py check`(probe 조립 *전* 호출, gate)가 `probe_count ≥ effective_cap`에서 non-zero exit. SKILL은 non-zero & floor 미충족 시 `AskUserQuestion` 3옵션 escalation을 발화하고, 각 옵션의 종료 의미론(계속=effective cap 상향 / 박제=floor 행 `closed`+박제 표식 후 §Open Questions 이동 / abort=brief 미작성·state 보존)은 C1대로 처리한다. `increment`는 질문 제기 *후*에만 호출돼 phantom 증가가 없다(cap 원자성).
 - **AC5**: 구세션(`interview_round` 존재 / `coverage` 부재) 로드 시 floor 전부 status `open`으로 seed + `probe_count`·`probe_cap_override`·`orchestration`(focused_dimension=null, no_progress_streak=0, blind_spot_dispatched=false, coverage_mapper_last_probe=null) 전부 **fresh 초기화**(probe_count=0 — interview_round 값 승계 금지, 라운드 수는 probe 수가 아님) + advisory 한 줄(`[spec-distill v0.22.0] state schema migration: coverage/probe_count added`) 출력, frontmatter는 backward-rewrite하지 않는다.
 - **AC6**: 신규 `agents/blind-spot-prober.md`가 `tools: Read, Grep, Glob, WebSearch, WebFetch`(Write/Edit 부재) frontmatter + 명시적 Output YAML 스키마(`hidden_assumptions[]{assumption, why_risky, evidence[]}`, `failure_modes[]{mode, trigger, evidence[]}`, `confidence`)를 갖고, blind_spot floor 차원의 첫 open→in-progress 전이 시(그 차원에 첫 probe 착수 — C11·AC8 신호#3과 동일 정밀도) 인터뷰당 1회 dispatch된다. 출력은 orchestrator가 brief `## Blind Spots & Premortem`에 기록.
 - **AC7**: `breadth-keeper`가 `coverage-mapper`로 전환 — Output 스키마가 `derived_dimensions: [{name, rationale}]` + `neglect_flag` + `neglected_dimensions[]` + `confidence`. read-only frontmatter 유지. 출력은 **advisory**(orchestrator가 원장 admit 판정, G2). 복수 dispatch 시 name 기준 union·dedup. 재명명이 README/dispatch/테스트 + `steelman-builder.md` description 용어(NG3 예외) 전반에 반영. C45 dispatch 트리거(SKILL.md의 `interview_round >= 2`)가 C11 커버리지 조건으로 교체.
-- **AC8**: teach-beat = 모든 probe에 teach-lite(**≤1문장 근거, web 호출 없음**) + 열거 신호 시 evidence-heavy(**≥1 prior-art/URL 또는 landscape 인용**). 신호(모델 판단 휴리스틱 가이드 — 결정 규칙 아님, C12): (1) 사용자 답이 `## External Landscape` 한 항목과 모순, (2) hold·satisficing 답(기존 locked-판정 트리의 "보류" 분기 재사용 — "모르겠음/둘 다/아무거나"), (3) floor 차원의 첫 open→in-progress 전이(그 차원에 첫 probe 착수), (4) coverage-mapper/blind-spot-prober 출력 비어있지 않음. 복수 신호 동시 발화 시 heavy beat 1회로 합침(중복 억제). 모든 teach는 질문 형태·단정 금지(C3). **AC 검증 대상**은 SKILL이 이 신호 목록 + 크기 한도(teach-lite ≤1문장 / teach-heavy ≥1 URL)를 명문화했는지(grep)이며, 각 발화의 per-firing 결정성은 검증 대상이 아니다(C12).
+- **AC8**: teach-beat = 모든 probe에 teach-lite(**≤1문장 근거, web 호출 없음**) + 열거 신호 시 evidence-heavy(**≥1 prior-art/URL 또는 landscape 인용**). 신호(모델 판단 휴리스틱 가이드 — 결정 규칙 아님, C12): (1) 사용자 답이 `## External Landscape` 한 항목과 모순, (2) hold·satisficing 답(기존 locked-판정 트리의 "보류" 분기 재사용 — "모르겠음/둘 다/아무거나"), (3) floor 차원의 첫 open→in-progress 전이(그 차원에 첫 probe 착수), (4) coverage-mapper/blind-spot-prober 출력 비어있지 않음. 복수 신호 동시 발화 시 heavy beat 1회로 합치고, heavy는 그 probe의 teach-lite를 **대체**한다(추가 아님 — 한 probe당 teach-beat 최대 1회). 모든 teach는 질문 형태·단정 금지(C3). **AC 검증 대상**은 SKILL이 이 신호 목록 + 크기 한도(teach-lite ≤1문장 / teach-heavy ≥1 URL)를 명문화했는지(grep)이며, 각 발화의 per-firing 결정성은 검증 대상이 아니다(C12).
 - **AC9**: `rhythm-guard`(`non_user_streak`) 카운터가 probe 기준으로 재프레임되고, SKILL.md에서 **종료-scoped** round 참조가 커버리지 기반으로 교체된다. 검증은 두 레이어 — (i) 종료 로직 블록에 "round" 잔존 0(grep), (ii) 빈도-scoped round 언급(`round당 최대 1회` 류)은 교체 대상 아님을 리뷰가 확인. mechanical grep이 종료-scoped와 빈도-scoped round 언급을 구분 못 하는 한계는 리뷰 레이어가 보완한다(이 문서 검증의 mechanical 한계 인정).
 - **AC10**: `templates/interview-brief-template.md`가 최종 9-섹션 순서(Handoff Context "Locked in this doc"에 명시)로 재구성 — `## Blind Spots & Premortem`(§5), `## Coverage Ledger`(§6) 신규 삽입, 기존 Tried & Discarded/Open Questions/Concrete Next Action은 §7/§8/§9로 renumber + stale `source:` 버전 동기화. `check_brief` 신규 fixture(valid-with-coverage / floor-open / floor-evidence-empty / missing-blind-spot / missing-derived-row / derived-sentinel / web-disabled-blind-spot) 통과.
 - **AC11**: `plugin.json` 0.22.0, `CHANGELOG.md [0.22.0]`, `README.md`(Agents·Hooks·Principles Instantiated) 동기화. 버전 리터럴 핀 테스트는 minor 불변식만 검사(patch digit unpin).
-- **AC12**: `probe_budget.py`가 mutation-검증 가능 — cap을 넘긴 상태 fixture에 `increment`가 non-zero exit(AC4). cap enforcement 제거 시 테스트 RED(teeth).
+- **AC12**: `probe_budget.py`가 mutation-검증 가능 — (a) `probe_count = effective_cap` 상태 fixture에 `check`가 non-zero exit(gate 제거 시 RED), (b) 같은 fixture에 `raise-cap` 실행 후 `check`가 zero exit(`probe_cap_override` 지속 + `effective_cap` 합성 확증; raise-cap 로직 제거 시 RED). (teeth)
 
 ## Files to Modify
 
 ```
 plugins/spec-distill/.claude-plugin/plugin.json           — version 0.21.0 → 0.22.0
 plugins/spec-distill/skills/conducting-interview/SKILL.md  — 라운드 루프 → 커버리지 루프; 상태 스키마(3-state); teach-beat(AC8); C45 dispatch 트리거(interview_round>=2 → C11); rhythm-guard 재프레임; blind-spot dispatch; probe 백스톱 호출; 헤더 stale AC-ref 위생
-plugins/spec-distill/scripts/probe_budget.py               — NEW web_budget.py sibling(increment/check, cap 12, DEVBREW_SPEC_DISTILL_PROBE_CAP)
+plugins/spec-distill/scripts/probe_budget.py               — NEW web_budget.py sibling(check/increment/raise-cap; base_cap 12 + probe_cap_override; DEVBREW_SPEC_DISTILL_PROBE_CAP)
 plugins/spec-distill/scripts/check_brief.py                — Coverage Ledger floor all-closed + Blind Spots 섹션 게이트
 plugins/spec-distill/templates/interview-brief-template.md — 9-섹션 재구성(§Blind Spots & Premortem, §Coverage Ledger 신규) + source: 버전 동기화
 plugins/spec-distill/agents/coverage-mapper.md             — breadth-keeper 재명명·재목적화(Output = derived_dimensions[] + neglect_flag, advisory)
@@ -185,8 +185,9 @@ plugins/spec-distill/agents/steelman-builder.md            — description 내 '
 plugins/spec-distill/README.md                             — Agents/Hooks/Principles Instantiated 동기화
 plugins/spec-distill/CHANGELOG.md                          — [0.22.0] 항목
 plugins/spec-distill/tests/fixtures/interview-brief-*.md   — 커버리지 게이트 신규 fixture 7종
+plugins/spec-distill/tests/fixtures/state-legacy-interview-round.md — NEW 구세션 마이그레이션 fixture(interview_round 포함; V4·V7b 예외 경로)
 plugins/spec-distill/tests/test_check_brief.sh             — Coverage Ledger + Blind Spots 게이트 assertion
-plugins/spec-distill/tests/test_probe_budget.sh            — NEW cap increment/초과 mutation 테스트
+plugins/spec-distill/tests/test_probe_budget.sh            — NEW check-gate + raise-cap/probe_cap_override mutation 테스트(AC12)
 plugins/spec-distill/tests/test_coverage_mapper_frontmatter.sh — breadth-keeper 테스트 재명명·전환
 plugins/spec-distill/tests/test_blind_spot_prober_frontmatter.sh — NEW read-only + Output 스키마 존재 테스트
 plugins/spec-distill/tests/test_conducting_interview_*.sh  — 커버리지 루프·마이그레이션(probe_count seed=0)·백스톱 assertion
@@ -198,7 +199,7 @@ plugins/spec-distill/tests/test_readme_sync.sh             — 재명명된 에�
 - **V1**: `cd plugins/spec-distill && python3 -m pytest tests/ -q` 및 bash 스위트 실행 — baseline(작업 전 캡처) 대비 회귀 0. 테스트는 repo root/plugin dir 규약대로 실행.
 - **V2**: `python3 scripts/check_brief.py gate <fixture>` — valid-with-coverage exit 0; floor-open / floor-evidence-empty / missing-blind-spot / missing-derived-row exit 1; derived-sentinel / web-disabled-blind-spot exit 0.
 - **V3**: 신규 `blind-spot-prober`·재명명 `coverage-mapper` frontmatter 테스트 — `tools:` allowlist에 Write/Edit 부재를 grep으로 확증(mutation: Write 추가 시 RED) + blind-spot-prober Output 스키마 키(`hidden_assumptions`/`failure_modes`) 존재. (Law 2 teeth)
-- **V4**: 마이그레이션 테스트 — 구 `interview_round` state fixture 로드 시 coverage floor all-`open` seed + `probe_count: 0` + advisory 출력, 원본 frontmatter 미변경 확인.
+- **V4**: 마이그레이션 계약 검증(static, model-owned — 현행 SKILL `## In-flight state migration` 패턴과 동일이라 executable 마이그레이션 스크립트는 두지 않음) — (i) SKILL.md에 구세션 감지(`interview_round` 존재 / `coverage` 부재) → floor `open` seed + `probe_count=0` + orchestration fresh + advisory 문구가 명문화됐는지 grep, (ii) legacy state fixture(`tests/fixtures/state-legacy-interview-round.md`)가 그 필드를 담는지 확인. runtime 승격은 model-owned 프로즈라 assertion은 문서·fixture 레벨.
 - **V5**: 백스톱 mutation 테스트 — `probe_budget.py increment`가 cap+1 상태에서 non-zero exit(AC12). cap 집행 코드 제거 시 RED. (프로즈 grep 아님 — 기계적 집행 확증)
 - **V6**: `bash tests/test_readme_sync.sh` — README가 `breadth-keeper` 잔여 참조 0, `coverage-mapper`·`blind-spot-prober` 신규 참조 존재, 버전 0.22.0 정합.
 - **V7**: stale-term 잔존 검사(두 term 분리 — V4와의 모순 회피). **(a) `breadth-keeper`**: `grep -rn 'breadth-keeper' plugins/spec-distill/` 잔존 0(코드·README·테스트·steelman description 전부, AC7·NG3). **(b) `interview_round`**: 활성 상태-스키마 선언 + 종료 로직에 잔존 0이되, 마이그레이션 감지 코드(AC5, `## In-flight state migration` 라벨 블록)와 `tests/fixtures/` legacy state fixture는 명시적 예외(구세션 감지에 필드명 필요 — V4 fixture와 정합). grep은 이 두 예외 경로를 제외하고 0(예: `--include` 스코프 또는 예외 경로 필터).
