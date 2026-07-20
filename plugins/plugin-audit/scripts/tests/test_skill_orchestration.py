@@ -22,6 +22,11 @@ INVARIANTS = [
     "codex exec -s read-only",                             # blind codex (P11)
     "자기서술은 감사 material이지 verdict 프레임이 아니다",   # AC-8b redaction (C17)
     "캐시 갱신 + 세션 재시작",                               # GC8
+    # H (/qg 2026-07-20 round-2): step-1 --out은 step-6이 검증하는 canonical 경로에 pin돼야 한다
+    # (placeholder tmp 경로면 step-6 --artifacts가 파일을 못 찾아 깨진다).
+    "--out docs/audits/<date>-<target>-audit-data.json",
+    # H: Workflow journal을 canonical 원장 파일로 persist (README/CLAUDE.md §Audits + render 포인터의 실체).
+    "audit-journal.jsonl",
 ]
 
 

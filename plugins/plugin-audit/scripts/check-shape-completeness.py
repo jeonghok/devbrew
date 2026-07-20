@@ -109,11 +109,51 @@ def _has_cost_class(text):
     return bool(re.search(r"^cost_class:", fm, re.M))
 
 
+# hook command 문자열에서 참조 스크립트 경로 추출 (`${CLAUDE_PLUGIN_ROOT}/hooks/foo.py` 등).
+# 접두 `${CLAUDE_PLUGIN_ROOT}/`(또는 중괄호 없는 `$CLAUDE_PLUGIN_ROOT/`)는 optional로 소비하고
+# .py/.sh로 끝나는 상대 경로를 캡처한다.
+_CMD_SCRIPT_RE = re.compile(r"(?:\$\{?CLAUDE_PLUGIN_ROOT\}?/)?([\w./-]+\.(?:py|sh))")
+
+
+def _registered_hook_commands(hj_text):
+    """hooks.json에서 **등록된** hook의 command 문자열만 재귀 수집. malformed면 [] (F가 별도로 잡음)."""
+    try:
+        data = json.loads(hj_text) if hj_text else {}
+    except (ValueError, TypeError):
+        return []
+    cmds = []
+
+    def walk(o):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k == "command" and isinstance(v, str):
+                    cmds.append(v)
+                else:
+                    walk(v)
+        elif isinstance(o, list):
+            for x in o:
+                walk(x)
+
+    walk(data)
+    return cmds
+
+
 def _hook_scripts(pd):
+    # CLAUDE.md §런타임 "모든 훅에 kill switch" — 여기서 "훅"은 hooks.json이 **등록한** 스크립트다.
+    # hooks/ 아래를 통째 rglob하면 tests/·__init__.py·공유 헬퍼(state_path.py 등 비-등록 파일)까지
+    # 훅으로 오인해 정상 플러그인(project-init·spec-distill 실측)에 거짓 "kill switch 부재" 사실을 낸다
+    # (/qg 2026-07-20 codex, over-glob). hooks.json의 command가 실제로 가리키는 스크립트만 검증한다.
     hj = pd / "hooks" / "hooks.json"
     if not hj.exists():
         return []
-    return [p for p in (pd / "hooks").rglob("*.py")] + [p for p in (pd / "hooks").rglob("*.sh")]
+    scripts, seen = [], set()
+    for cmd in _registered_hook_commands(_read(hj) or ""):
+        for m in _CMD_SCRIPT_RE.finditer(cmd):
+            cand = pd / m.group(1).lstrip("/")
+            if cand.is_file() and cand not in seen:
+                seen.add(cand)
+                scripts.append(cand)
+    return scripts
 
 
 def _has_killswitch(text):

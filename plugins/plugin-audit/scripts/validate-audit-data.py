@@ -49,6 +49,20 @@ def validate_data(data: dict) -> list:
         if x.get("verdict") not in VALID_VERDICT:
             errs.append(f"{x.get('id')}/{x.get('source')} verdict 무효: {x.get('verdict')}")
 
+    # claude-source 완결성 (SF2 — LD4 dead-axis masking backstop, /qg 2026-07-20):
+    # 위 완결성 루프는 any-source 존재만, B7(아래)은 codex-source 존재만 강제한다. 대칭인
+    # claude-source 검사가 없어, assemble backfill이 회귀해 dead Claude 축이 codex 답변에
+    # 가려지면(codex만 있고 claude 부재) 두 검사 모두 통과해 validate가 GREEN이 된다 — dead 축은
+    # 리포트에서 unverified로 드러나야 한다(§9.1). backfill이 매 배정 D/OQ에 claude 판정을
+    # 보장하므로 이 검사는 무조건(codex.ran 무관)이며 정상 데이터엔 거짓 RED가 없다. 이 validator가
+    # "producer를 회계"하려 존재하는데(docstring §9.1) 이 한 곳만 producer에 의존하던 비대칭을 닫는다.
+    for did in assigned_d:
+        if not any(x.get("id") == did and x.get("source") == "claude" for x in data.get("d_verdicts", [])):
+            errs.append(f"배정 D {did}의 claude 판정 부재 (dead-axis masking — LD4, backfill 회귀)")
+    for oid in assigned_oq:
+        if not any(x.get("id") == oid and x.get("source") == "claude" for x in data.get("oq_answers", [])):
+            errs.append(f"배정 OQ {oid}의 claude 답변 부재 (dead-axis masking — LD4)")
+
     # codex 병합 (B7): codex.ran이면 codex source 판정이 D·OQ에 있어야
     if meta.get("codex", {}).get("ran") is True:
         for did in assigned_d:
@@ -84,7 +98,7 @@ def validate_data(data: dict) -> list:
     # 있어야 한다. count 비교만 하면 무관/중복 scope-out NOQ가 특정 finding의 누락을 가려
     # 거짓 GREEN이 된다 (codex fix-review). NOQ.id는 producer(assemble)가 finding.id로 만든다.
     gate_e_ids = {f.get("id") for f in findings if f.get("status") == "refuted"
-                  and f.get("refutation", {}).get("gate") == "E"}
+                  and (f.get("refutation") or {}).get("gate") == "E"}  # null refutation 크래시 가드 (:99와 대칭)
     scope_noq_ids = {q.get("id") for q in data.get("new_open_questions", [])
                      if q.get("reason_code") == "gate_e_scope_out"
                      or "범위 밖" in (q.get("why_not_gap") or "")}

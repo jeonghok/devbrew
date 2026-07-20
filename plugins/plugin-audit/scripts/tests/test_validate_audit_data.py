@@ -234,6 +234,36 @@ class TestData(unittest.TestCase):
         rc, err = run_validate(bad)
         self.assertEqual(rc, 1, f"axis=True(bool)가 axis 1로 통과 (bool is int subclass):\n{err}")
 
+    def test_refutation_null_does_not_crash(self):  # C (/qg 2026-07-20 round-2)
+        # code-reviewer + silent-failure-hunter: gate_e_ids 계산의 `f.get("refutation", {}).get("gate")`는
+        # 키가 *부재*할 때만 {} 기본값을 쓴다. `"refutation": null`(키 존재, 값 None)이면 None.get()가
+        # AttributeError → traceback(깨끗한 RED가 아니라 크래시). :99는 이미 `f.get("refutation") or {}`로
+        # 올바르게 가드한다 — :86도 맞춰야. 크래시(traceback) 금지가 이빨.
+        data = copy.deepcopy(VALID)
+        data["findings"] = [{"id": "A1-1", "source": "claude", "axis": 1, "status": "refuted",
+                             "refutation": None, "evidence": [{"file": "f", "line": 1, "quote": "q"}]}]
+        rc, err = run_validate(data)
+        self.assertNotIn("Traceback", err, f"refutation:null이 크래시(traceback)했다:\n{err}")
+        self.assertNotIn("AttributeError", err, f"refutation:null이 AttributeError:\n{err}")
+        self.assertEqual(rc, 0, f"refutation:null이 크래시 (다른 검사는 통과해야 GREEN):\n{err}")
+
+    def test_missing_claude_source_verdict_is_red(self):  # SF2 (/qg 2026-07-20 round-2)
+        # silent-failure-hunter: 완결성(40-47)은 any-source 존재만, B7(53-59)은 codex-source 존재만
+        # 강제한다. 대칭인 claude-source 존재 검사가 없어, backfill 회귀로 dead Claude 축이 codex 답변에
+        # 가려져도 validate가 GREEN. D2의 claude 판정만 제거(codex는 유지) → fix 후 RED여야.
+        bad = copy.deepcopy(VALID)
+        bad["d_verdicts"] = [x for x in bad["d_verdicts"]
+                             if not (x["id"] == "D2" and x["source"] == "claude")]
+        rc, err = run_validate(bad)
+        self.assertEqual(rc, 1, f"D2 claude-source 판정 부재(dead-axis masking, LD4)가 통과 (backstop 없음):\n{err}")
+
+    def test_missing_claude_source_oq_is_red(self):  # SF2 대칭 (OQ)
+        bad = copy.deepcopy(VALID)
+        bad["oq_answers"] = [x for x in bad["oq_answers"]
+                             if not (x["id"] == "OQ2" and x["source"] == "claude")]
+        rc, err = run_validate(bad)
+        self.assertEqual(rc, 1, f"OQ2 claude-source 답변 부재가 통과 (backstop 없음):\n{err}")
+
 
 # --- --artifacts 모드: 실제 파일을 본다 (골든 픽스처는 실물을 안 본다) ---
 

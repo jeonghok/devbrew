@@ -104,6 +104,29 @@ class TestGrounding(unittest.TestCase):
             self.assertTrue(f["grounding_verified"], "여러 줄 인용이 거짓 폐기됨 (단일-라인 매칭)")
             self.assertNotEqual(f["status"], "discarded")
 
+    def test_null_quote_does_not_crash(self):  # B (/qg 2026-07-20 round-2)
+        # security-reviewer: `ev.get("quote", "")`는 키 *부재*시만 "" — {"quote": null}(키 존재, 값 None)이면
+        # None 반환 → `_norm(None)`=re.sub(None) TypeError. line 24는 try 밖이라 uncaught. codex findings는
+        # schema 미검증으로 findings에 병합되므로(assemble step-7), 미신뢰 대상이 유도한 null-quote 인용
+        # 하나가 post-1 조립 전체를 죽인다(full-audit DoS, AC-3 degrade-not-crash 무력화). 재현: 크래시하면
+        # ground_finding 호출이 여기서 TypeError를 던져 이 테스트가 ERROR(RED)가 된다.
+        with tempfile.TemporaryDirectory() as d:
+            self._fixture(d)
+            f = {"id": "F", "status": "reported", "degraded_events": [],
+                 "evidence": [{"file": "src.py", "line": 1, "quote": None}]}
+            cg.ground_finding(f, Path(d))
+            self.assertNotEqual(f.get("grounding_verified"), True, "null quote가 grounded로 통과")
+
+    def test_null_file_does_not_crash(self):  # B — file 필드 null
+        # {"file": null}이면 `(root / ev.get("file",""))`가 root / None → PosixPath/NoneType TypeError,
+        # except (ValueError, OSError)가 못 잡는다. 크래시 금지가 이빨.
+        with tempfile.TemporaryDirectory() as d:
+            self._fixture(d)
+            f = {"id": "F", "status": "reported", "degraded_events": [],
+                 "evidence": [{"file": None, "line": 1, "quote": "HELLO WORLD"}]}
+            cg.ground_finding(f, Path(d))
+            self.assertNotEqual(f.get("grounding_verified"), True, "null file이 grounded로 통과")
+
 
 if __name__ == "__main__":
     unittest.main()

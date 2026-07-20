@@ -43,11 +43,24 @@ ran=false; passed=null; total=null; why='no test runner found in target'
 for cand in tests scripts/tests hooks/tests; do
   if [ -d "$tgt_in_sb/$cand" ]; then
     ( cd "$SANDBOX" && $TO python3 -m unittest discover -s "$tgt_in_sb/$cand" -t . ) >/dev/null 2>&1
-    ran=true; why=
+    rc=$?
+    # AC-11(spec §14): "120s 타임아웃 → own_tests:{ran:false}". timeout/gtimeout는 kill 시 exit 124.
+    # exit code를 버리고 ran=true를 무조건 세우면 타임아웃·크래시-on-import가 성공과 구별 불가하고
+    # §14 배너 신호도 안 뜬다 → 실행 무효(ran:false)로 정직하게 보고한다. (다른 비정상 종료는 러너가
+    # 실제로 돌긴 했으므로 ran:true를 유지하되 why에 사유를 남긴다 — 축③이 테스트를 *읽어* 판정.)
+    if [ -n "$TO" ] && [ "$rc" -eq 124 ]; then
+      ran=false; why='120s 타임아웃 초과 (AC-11 — 실행 무효)'
+    else
+      ran=true; why=
+      [ "$rc" -ne 0 ] && why="러너 비정상 종료 (exit $rc)"
+    fi
     break
   fi
 done
-[ "$ran" = true ] && [ -z "$TO" ] && why='timeout 유틸 부재 — 무타임아웃 실행(gtimeout 권장)'
+if [ "$ran" = true ] && [ -z "$TO" ]; then   # 무타임아웃 실행 경고는 비정상-종료 사유를 덮지 않고 덧붙인다
+  note='timeout 유틸 부재 — 무타임아웃 실행(gtimeout 권장)'
+  if [ -n "$why" ]; then why="$why; $note"; else why="$note"; fi
+fi
 
 # mutation-guard — product 변경 감지. qg-worktree 자체 계약: exit 4=indeterminate/2=die는
 # "절대 PASS 아님"(never trust as clean). exit code를 무시하고 stdout만 파싱하면 4/2에서

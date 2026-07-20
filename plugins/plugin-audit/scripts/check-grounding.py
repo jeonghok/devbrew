@@ -21,14 +21,18 @@ def ground_finding(f, repo_root):
     checked_any = False   # 실제로 검증한(비어있지 않은) 인용이 하나라도 있었는가
     root = Path(repo_root).resolve()
     for ev in (f.get("evidence") or []):
-        quote = _norm(ev.get("quote", ""))
+        # `.get(k, "")`는 키 *부재*시만 "" — {"quote": null}(값 None)이면 None을 반환해 _norm(None)이
+        # re.sub(None)로 크래시한다(line 24는 아래 try 밖이라 uncaught). codex findings는 schema 미검증으로
+        # 병합되므로 null quote/file 하나가 post-1 조립 전체를 죽인다 → `or ""`로 null을 빈 문자열로 강등
+        # (검증 불가 → 폐기/판독불가 degrade 경로로 흐름). validate:99와 같은 `or {}` 관용구의 문자열판.
+        quote = _norm(ev.get("quote") or "")
         if not quote:
             continue
         checked_any = True
         # containment: 인용 경로가 repo_root 밖(절대경로/../ /symlink)이면 판독 불가로 처리한다 —
         # repo 밖 임의 파일을 grounding read로 열지 않는다 (read-oracle 차단, codex final-review).
         try:
-            path = (root / ev.get("file", "")).resolve()
+            path = (root / (ev.get("file") or "")).resolve()   # null file → "" (root, 아래 read에서 판독불가 degrade)
             path.relative_to(root)
         except (ValueError, OSError):
             any_unreadable = True

@@ -1,4 +1,4 @@
-import json, stat, subprocess, tempfile, unittest
+import json, os, stat, subprocess, tempfile, unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "run-own-tests.sh"
@@ -38,9 +38,13 @@ def _sandbox_with_tests(root, rel_target="plugins/myplugin"):
     return tests_dir
 
 
-def run(target, sid, qg):
+def run(target, sid, qg, extra_path=None):
+    env = None
+    if extra_path is not None:
+        env = dict(os.environ)
+        env["PATH"] = f"{extra_path}:{env['PATH']}"
     r = subprocess.run(["bash", str(SCRIPT), str(target), sid, "--qg-worktree", str(qg)],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, env=env)
     return r, (json.loads(r.stdout) if r.stdout.strip() else {})
 
 
@@ -89,6 +93,21 @@ class TestRunOwnTests(unittest.TestCase):
             _stub_qg(qg, sbx, guard="no")
             r, obj = run("plugins/myplugin", "sid12345678", qg)
             self.assertTrue(obj["own_tests"]["ran"])
+
+    def test_timeout_reports_ran_false(self):   # E (AC-11, /qg 2026-07-20 round-2)
+        # AC-11 (spec §14 L496): "120s 타임아웃 → own_tests:{ran:false}". 현재 line 46은 exit code를
+        # 버리고 ran=true를 무조건 세워, 타임아웃(timeout/gtimeout kill = exit 124)·크래시-on-import가
+        # 성공과 구별 불가하고 §14 배너 신호도 안 뜬다. fake `timeout`(exit 124)로 타임아웃 kill을 흉내.
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d); qg = d / "qg.sh"; sbx = d / "sbx"
+            _sandbox_with_tests(sbx)
+            _stub_qg(qg, sbx, guard="no")
+            bindir = d / "bin"; bindir.mkdir()
+            for name in ("timeout", "gtimeout"):   # 둘 다 심어 어느 유틸을 고르든 exit 124
+                _exe(bindir / name, "#!/usr/bin/env bash\nexit 124\n")
+            r, obj = run("plugins/myplugin", "sid12345678", qg, extra_path=str(bindir))
+            self.assertFalse(obj["own_tests"]["ran"], "타임아웃(exit 124)인데 ran=true (AC-11 위반)")
+            self.assertIn("타임아웃", (obj["own_tests"]["why"] or ""), "타임아웃 사유가 why에 없음")
 
     def test_mutation_guard_indeterminate_forces_downgrade(self):
         # mutation-guard 가 exit 4(indeterminate)로 죽으면 stdout 파싱과 무관하게 보수적으로

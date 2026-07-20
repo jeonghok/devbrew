@@ -108,9 +108,13 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
 
 ## post-1 — 조립·검증·렌더 (orchestrator, 결정론)
 
+이하 `<data.json>` = **canonical 경로** `docs/audits/<date>-<target>-audit-data.json` (step 6의 `--artifacts`가
+검증하는 바로 그 파일). tmp/scratch 경로에 쓰면 step 6이 파일을 못 찾아 산출물 검증이 깨진다 (H /qg 2026-07-20).
+
 1. `assemble-audit-data.py --workflow-return <wf.json> --codex-side <codex.json> --meta <meta.json>
-   --assigned <assigned.json> --repo-root . --out <data.json>` (내부에서 `check-grounding.py`를 동적
-   import해 재읽기 — A grounding: 인용 실재 검증, null-degrade/폐기/line-교정. 별도 CLI 호출이 아니다).
+   --assigned <assigned.json> --repo-root . --out docs/audits/<date>-<target>-audit-data.json` (내부에서
+   `check-grounding.py`를 동적 import해 재읽기 — A grounding: 인용 실재 검증, null-degrade/폐기/line-교정.
+   별도 CLI 호출이 아니다).
 2. `validate-audit-data.py --data <data.json>` → RED면 abort(완결성·consent·codex-merge·NOQ·gate-E).
 3. `render-audit-report.py <data.json> --out docs/audits/<date>-<target>-audit.md --readme docs/audits/README.md`.
    6축 전멸(exit 1) → 리포트 없음(AC-4).
@@ -124,6 +128,11 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    docs/audits/<date>-<target>-audit.md --repo-root .` → 산출물(README 링크·배너) 검사. (`--artifacts`는
    렌더된 파일이 아니라 audit-data JSON을 가리켜야 한다 — 스크립트가 그 경로를 `read_text()`+
    `json.loads()`하므로 디렉토리를 넘기면 `IsADirectoryError`로 죽는다.)
+7. **원장 축적 (Law 3 — discoverability)**: Workflow 실행이 남긴 `journal.jsonl`(그 run의 transcript
+   디렉토리)을 `docs/audits/<date>-<target>-audit-journal.jsonl`로 복사·커밋한다. 이 파일이 README:40
+   ("journal.jsonl이 named/diff-able history")·CLAUDE.md §Audits 원장 계약과 `render-audit-report.py`의
+   "축 완주 수와 journal로 확인하라" 포인터의 **실체**다 — persist하지 않으면 그 포인터가 부재 아티팩트를
+   가리키는 dangling 참조가 된다. journal을 얻을 수 없으면 그 사실을 `degraded[]`로 기록(조용한 결손 금지).
 
 ## kill switch / degrade
 
