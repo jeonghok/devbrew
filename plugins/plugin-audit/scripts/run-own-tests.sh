@@ -23,25 +23,39 @@ if [ $rc -eq 3 ]; then emit "$(fact false null null false 'sandbox kill-switch (
 if [ $rc -ne 0 ]; then emit "$(fact false null null false 'sandbox 생성 실패')"; exit 0; fi
 SANDBOX=$(echo "$sb_out" | sed -n '1p'); BASE=$(echo "$sb_out" | sed -n '2p'); DIGEST=$(echo "$sb_out" | sed -n '3p')
 
-# 러너 탐지 (tests/·scripts/tests/·hooks/tests/) — 판정은 TARGET(원본, 읽기전용)에서;
-# 실행은 반드시 샌드박스 사본에서만(격리 보장 — 원본 TARGET의 코드는 절대 직접 실행하지 않음).
-tgt_in_sb="$SANDBOX/${TARGET#*/}"; [ -d "$tgt_in_sb" ] || tgt_in_sb="$SANDBOX"
-ran=false; passed=null; total=null; why=
+# 러너 탐지·실행 둘 다 샌드박스 사본 내부에서만 수행 — qg-worktree create-sandbox가 저장소
+# 루트 전체를 미러링하고 TARGET은 저장소-루트-상대 경로이므로, 샌드박스 대응 경로는 단순히
+# "$SANDBOX/$TARGET" (첫 세그먼트를 자르거나 sandbox root로 fallback하지 않음 — 그러면
+# plugins/* 타겟이 저장소 루트 자신의 디렉토리를 오탐/오실행하게 됨). 원본 TARGET은 절대
+# 직접 탐지·실행하지 않음(격리 보장 + ran이 "샌드박스에서 실제로 실행했다"를 정확히 반영).
+tgt_in_sb="$SANDBOX/$TARGET"
+ran=false; passed=null; total=null; why='no test runner found in target'
 for cand in tests scripts/tests hooks/tests; do
-  if [ -d "$TARGET/$cand" ]; then
-    ran=true
-    if [ -d "$tgt_in_sb/$cand" ]; then
-      ( cd "$SANDBOX" && $TO python3 -m unittest discover -s "${tgt_in_sb#$SANDBOX/}/$cand" -t . ) >/dev/null 2>&1
-    fi
+  if [ -d "$tgt_in_sb/$cand" ]; then
+    ( cd "$SANDBOX" && $TO python3 -m unittest discover -s "$tgt_in_sb/$cand" -t . ) >/dev/null 2>&1
+    ran=true; why=
     break
   fi
 done
-[ -z "$TO" ] && why='timeout 유틸 부재 — 무타임아웃 실행(gtimeout 권장)'
+[ "$ran" = true ] && [ -z "$TO" ] && why='timeout 유틸 부재 — 무타임아웃 실행(gtimeout 권장)'
 
-# mutation-guard — product 변경 감지
-guard=$(bash "$QG" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null)
-forced=$(echo "$guard" | sed -n 's/^forced_downgrade: *//p' | tail -1)
-fd=false; [ "$forced" = "yes" ] && fd=true
+# mutation-guard — product 변경 감지. qg-worktree 자체 계약: exit 4=indeterminate/2=die는
+# "절대 PASS 아님"(never trust as clean). exit code를 무시하고 stdout만 파싱하면 4/2에서
+# forced가 빈 문자열로 파싱되어 fd=false(clean)로 새는 fail-open이 됨 — 그러므로 exit code를
+# 먼저 검사해 4/2는 무조건 보수적으로 fd=true로 강제한다.
+guard=$(bash "$QG" mutation-guard "$SANDBOX" "$BASE" "$DIGEST" 2>/dev/null); guard_rc=$?
+guard_why=''
+if [ $guard_rc -eq 4 ]; then
+  fd=true; guard_why='mutation-guard indeterminate (exit 4) — conservatively invalidated'
+elif [ $guard_rc -eq 2 ]; then
+  fd=true; guard_why='mutation-guard die (exit 2) — conservatively invalidated'
+else
+  forced=$(echo "$guard" | sed -n 's/^forced_downgrade: *//p' | tail -1)
+  fd=false; [ "$forced" = "yes" ] && fd=true
+fi
+if [ -n "$guard_why" ]; then
+  if [ -n "$why" ]; then why="$why; $guard_why"; else why="$guard_why"; fi
+fi
 
 bash "$QG" remove "$SANDBOX" >/dev/null 2>&1 || true
 emit "$(fact "$ran" "$passed" "$total" "$fd" "$why")"
