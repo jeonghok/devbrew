@@ -25,7 +25,9 @@ def parse(text):
             continue
         if section and section.startswith("추가 scope") and h.startswith("- "):
             out["extra_scope"].append(h[2:].strip())
-        elif section and section.startswith("Open Questions") and h.startswith("- "):
+        elif section and section.startswith("Open Questions") and h.startswith("-"):
+            # 가드는 정규식(`-\s*`) 관용도와 일치시킨다 — `- `(dash-space) 강제하면 원래 파싱되던
+            # no-space 불릿(`-OQ1:`)이 조용히 드롭돼 새 회귀가 된다. dash로 시작하면 파싱 시도.
             mm = OQ_RE.match(h)
             if mm:
                 out["open_questions"].append({
@@ -35,7 +37,7 @@ def parse(text):
                 })
             else:  # 형식 불일치 불릿 — 드롭 사실을 기록 (조용한 증발 금지)
                 warnings.append(("Open Questions", h))
-        elif section and section.startswith("후보 단서") and h.startswith("- "):
+        elif section and section.startswith("후보 단서") and h.startswith("-"):
             mm = CLUE_RE.match(h)
             if mm:
                 out["candidate_clues"].append({

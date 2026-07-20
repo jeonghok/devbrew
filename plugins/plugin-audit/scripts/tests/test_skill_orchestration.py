@@ -27,6 +27,8 @@ INVARIANTS = [
     "--out docs/audits/<date>-<target>-audit-data.json",
     # H: Workflow journal을 canonical 원장 파일로 persist (README/CLAUDE.md §Audits + render 포인터의 실체).
     "audit-journal.jsonl",
+    # H R5 (codex re-verify): raw transcript journal 커밋 전 P21 secret 스캔 필수 (자격증명 유출 방지).
+    "P21 secret 스캔",
 ]
 
 
@@ -39,6 +41,16 @@ class TestSkillOrchestration(unittest.TestCase):
     def test_cost_class_high_in_frontmatter(self):
         fm = SKILL.read_text(encoding="utf-8").split("---")[1]
         self.assertIn("cost_class: high", fm)
+
+    def test_journal_acquired_before_assembly(self):  # H R4 (codex re-verify)
+        # journal 확보가 assemble/render 뒤에 오면, journal 미획득을 degraded[]에 넣어 배너에 반영할 수
+        # 없다(이미 렌더됨). 원장(journal) 확보 스텝이 assemble --out(post-1 조립)보다 **앞서야** 한다.
+        body = SKILL.read_text(encoding="utf-8")
+        j = body.find("audit-journal.jsonl")
+        a = body.find("--out docs/audits/<date>-<target>-audit-data.json")
+        self.assertNotEqual(j, -1, "journal persist 스텝 부재")
+        self.assertNotEqual(a, -1, "assemble --out canonical 경로 부재")
+        self.assertLess(j, a, "journal 확보가 assemble 뒤에 옴 — 미획득 degrade가 배너에 못 실린다 (R4)")
 
     def test_validate_artifacts_invocation_is_not_bare_directory(self):
         # review fix 1 regression lock: `--artifacts docs/audits/` (bare directory, immediately

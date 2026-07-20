@@ -60,6 +60,18 @@ class TestParseSeed(unittest.TestCase):
             self.assertEqual(len(obj.get("candidate_clues", [])), 1, "정상 단서 1개만 파싱돼야")
             self.assertIn("파싱 실패", r.stderr, "드롭된 malformed 불릿에 경고 없음 (조용한 증발)")
 
+    def test_no_space_bullet_still_parses(self):  # SF1 guard-tightening 회귀 락
+        # 가드를 `- `(dash-space)로 좁히면 정규식(`-\s*`)이 받아들이던 no-space 불릿(`-OQ1:`)이 조용히
+        # 드롭돼 새 회귀가 된다. `-`로 시작하면 파싱 시도해 원래 관용도를 보존함을 증명.
+        seed = "## Open Questions\n-OQ1: 축2 — 공백 없는 불릿도 파싱되나?\n"
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "seed.md"; p.write_text(seed, encoding="utf-8")
+            r = run(p)
+            self.assertEqual(r.returncode, 0)
+            obj = json.loads(r.stdout)
+            self.assertEqual((obj.get("open_questions") or [{}])[0].get("id"), "OQ1",
+                             "no-space 불릿(-OQ1:)이 드롭됨 (가드가 정규식보다 엄격)")
+
     def test_nonempty_unparseable_seed_has_distinct_diagnostic(self):  # SF1
         # 완전히 인식 불가한 non-empty seed는 {}를 내지만 absent-seed의 {}와 **구별되는** 진단을 남겨야
         # (둘이 동일 출력이면 사용자 단서가 조용히 사라진 걸 모른다).

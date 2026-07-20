@@ -234,18 +234,21 @@ class TestData(unittest.TestCase):
         rc, err = run_validate(bad)
         self.assertEqual(rc, 1, f"axis=True(bool)가 axis 1로 통과 (bool is int subclass):\n{err}")
 
-    def test_refutation_null_does_not_crash(self):  # C (/qg 2026-07-20 round-2)
-        # code-reviewer + silent-failure-hunter: gate_e_ids 계산의 `f.get("refutation", {}).get("gate")`는
-        # 키가 *부재*할 때만 {} 기본값을 쓴다. `"refutation": null`(키 존재, 값 None)이면 None.get()가
-        # AttributeError → traceback(깨끗한 RED가 아니라 크래시). :99는 이미 `f.get("refutation") or {}`로
-        # 올바르게 가드한다 — :86도 맞춰야. 크래시(traceback) 금지가 이빨.
-        data = copy.deepcopy(VALID)
-        data["findings"] = [{"id": "A1-1", "source": "claude", "axis": 1, "status": "refuted",
-                             "refutation": None, "evidence": [{"file": "f", "line": 1, "quote": "q"}]}]
-        rc, err = run_validate(data)
-        self.assertNotIn("Traceback", err, f"refutation:null이 크래시(traceback)했다:\n{err}")
-        self.assertNotIn("AttributeError", err, f"refutation:null이 AttributeError:\n{err}")
-        self.assertEqual(rc, 0, f"refutation:null이 크래시 (다른 검사는 통과해야 GREEN):\n{err}")
+    def test_refutation_null_is_clean_red_not_crash(self):  # C (/qg 2026-07-20 round-2 + codex re-verify)
+        # code-reviewer + silent-failure-hunter: `f.get("refutation", {}).get("gate")`는 키 *부재*시만 {}.
+        # `"refutation": null`이면 None.get()가 AttributeError → traceback(깨끗한 RED가 아닌 크래시).
+        # codex re-verify(R3): `or {}`조차 truthy non-dict(문자열·리스트)는 통과시켜 여전히 크래시.
+        # 정상 refuted는 항상 {stage,gate,reason} dict이므로, 비-dict refutation은 malformed → validate가
+        # 크래시가 아니라 **clean RED**로 잡아야 한다(§9.1 producer 회계). null·문자열·리스트 전부 검증.
+        for bad_ref in (None, "gate E", ["E"], 5):
+            data = copy.deepcopy(VALID)
+            data["findings"] = [{"id": "A1-1", "source": "claude", "axis": 1, "status": "refuted",
+                                 "refutation": bad_ref, "evidence": [{"file": "f", "line": 1, "quote": "q"}]}]
+            rc, err = run_validate(data)
+            self.assertNotIn("Traceback", err, f"refutation={bad_ref!r}이 크래시(traceback):\n{err}")
+            self.assertNotIn("AttributeError", err, f"refutation={bad_ref!r}이 AttributeError:\n{err}")
+            self.assertEqual(rc, 1, f"비-dict refutation({bad_ref!r})이 clean RED로 안 잡힘:\n{err}")
+            self.assertIn("refutation", err, f"malformed refutation 사유가 stderr에 없음:\n{err}")
 
     def test_missing_claude_source_verdict_is_red(self):  # SF2 (/qg 2026-07-20 round-2)
         # silent-failure-hunter: 완결성(40-47)은 any-source 존재만, B7(53-59)은 codex-source 존재만

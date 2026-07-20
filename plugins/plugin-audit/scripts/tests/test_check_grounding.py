@@ -127,6 +127,21 @@ class TestGrounding(unittest.TestCase):
             cg.ground_finding(f, Path(d))
             self.assertNotEqual(f.get("grounding_verified"), True, "null file이 grounded로 통과")
 
+    def test_nonstring_quote_or_file_does_not_crash(self):  # B round-2 (codex re-verify)
+        # `.get(k) or ""`는 falsy(null)만 강등하고 **truthy non-string**(정수·리스트·dict)은 그대로
+        # 통과시켜 _norm(5)=re.sub(5)·(root/[...])에서 여전히 크래시한다. codex findings는 schema
+        # 미검증 병합이라 이 값들이 실제로 흘러올 수 있다 → str일 때만 쓰고 아니면 판독불가 처리.
+        with tempfile.TemporaryDirectory() as d:
+            self._fixture(d)
+            for ev in ({"file": "src.py", "line": 1, "quote": 5},          # quote=int
+                       {"file": "src.py", "line": 1, "quote": ["x"]},       # quote=list
+                       {"file": ["src.py"], "line": 1, "quote": "HELLO WORLD"},  # file=list
+                       {"file": 42, "line": 1, "quote": "HELLO WORLD"}):    # file=int
+                f = {"id": "F", "status": "reported", "degraded_events": [], "evidence": [ev]}
+                cg.ground_finding(f, Path(d))  # 크래시하면 여기서 TypeError → ERROR(RED)
+                self.assertNotEqual(f.get("grounding_verified"), True,
+                                    f"non-string 필드({ev})가 grounded로 통과")
+
 
 if __name__ == "__main__":
     unittest.main()

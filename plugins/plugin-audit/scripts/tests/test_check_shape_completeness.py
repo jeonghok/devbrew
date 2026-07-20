@@ -165,6 +165,32 @@ class TestShapeCompleteness(unittest.TestCase):
             self.assertTrue(gaps["hooks_killswitch"]["present"],
                             "비-등록 hooks/tests/ 파일이 훅으로 오인돼 거짓 kill-switch 부재 (over-glob)")
 
+    def test_hooks_killswitch_malformed_json_is_gap(self):  # F round-2 (codex re-verify R2)
+        # malformed hooks.json → 파싱 실패 → 등록 스크립트 []  → all([])로 조용히 통과하던 fail-open.
+        # 판정 불가는 fail-closed로 gap이어야 한다.
+        with tempfile.TemporaryDirectory() as d:
+            dd = _mk_plugin(d)
+            hooks = dd / "hooks"; hooks.mkdir()
+            (hooks / "hooks.json").write_text("{ not valid json ", encoding="utf-8")
+            r, obj = run(dd)
+            gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
+            self.assertFalse(gaps["hooks_killswitch"]["present"],
+                             "malformed hooks.json이 all([])로 조용히 통과 (fail-open)")
+
+    def test_hooks_killswitch_dangling_registered_script_is_gap(self):  # F round-2 R2
+        # hooks.json이 등록한 command가 참조하는 스크립트가 디스크에 부재 → 검증 불가(dangling) → gap.
+        with tempfile.TemporaryDirectory() as d:
+            dd = _mk_plugin(d)
+            hooks = dd / "hooks"; hooks.mkdir()
+            (hooks / "hooks.json").write_text(json.dumps({
+                "hooks": {"PostToolUse": [{"hooks": [
+                    {"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/ghost.py"}]}]}
+            }), encoding="utf-8")   # ghost.py를 만들지 않음
+            r, obj = run(dd)
+            gaps = {g["requirement"]: g for g in obj["shape_gaps"]}
+            self.assertFalse(gaps["hooks_killswitch"]["present"],
+                             "등록된 hook 스크립트가 부재(dangling)인데 통과 (검증 불가 fail-open)")
+
     def test_hooks_killswitch_flags_registered_hook_without_switch(self):  # F 반대 이빨
         # 검사 무력화 방지: hooks.json이 등록한 훅이 kill switch를 안 가지면 여전히 gap이어야 한다.
         with tempfile.TemporaryDirectory() as d:

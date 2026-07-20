@@ -60,8 +60,7 @@ def check(plugin_dir):
     skills = list((pd / "skills").glob("*/SKILL.md")) if (pd / "skills").exists() else []
     add("skills_cost_class", all(_has_cost_class(_read(s) or "") for s in skills) if skills else True)
 
-    hooks = _hook_scripts(pd)
-    add("hooks_killswitch", all(_has_killswitch(_read(h) or "") for h in hooks) if hooks else True)
+    add("hooks_killswitch", _hooks_killswitch_present(pd))
 
     own_name = pj.get("name", "")
     cross_dispatch = _has_cross_plugin_dispatch(pd, own_name)
@@ -115,12 +114,8 @@ def _has_cost_class(text):
 _CMD_SCRIPT_RE = re.compile(r"(?:\$\{?CLAUDE_PLUGIN_ROOT\}?/)?([\w./-]+\.(?:py|sh))")
 
 
-def _registered_hook_commands(hj_text):
-    """hooks.json에서 **등록된** hook의 command 문자열만 재귀 수집. malformed면 [] (F가 별도로 잡음)."""
-    try:
-        data = json.loads(hj_text) if hj_text else {}
-    except (ValueError, TypeError):
-        return []
+def _walk_hook_commands(data):
+    """이미 파싱된 hooks.json 데이터에서 command 문자열을 재귀 수집."""
     cmds = []
 
     def walk(o):
@@ -138,22 +133,34 @@ def _registered_hook_commands(hj_text):
     return cmds
 
 
-def _hook_scripts(pd):
+def _hooks_killswitch_present(pd):
     # CLAUDE.md §런타임 "모든 훅에 kill switch" — 여기서 "훅"은 hooks.json이 **등록한** 스크립트다.
     # hooks/ 아래를 통째 rglob하면 tests/·__init__.py·공유 헬퍼(state_path.py 등 비-등록 파일)까지
-    # 훅으로 오인해 정상 플러그인(project-init·spec-distill 실측)에 거짓 "kill switch 부재" 사실을 낸다
-    # (/qg 2026-07-20 codex, over-glob). hooks.json의 command가 실제로 가리키는 스크립트만 검증한다.
+    # 훅으로 오인해 정상 플러그인(project-init·spec-distill 실측)에 거짓 "kill switch 부재"를 낸다
+    # (/qg 2026-07-20 codex, over-glob) → hooks.json의 command가 가리키는 스크립트만 검증한다.
+    # 단, **판정 불가**는 fail-closed로 gap이어야 한다 (codex re-verify R2): malformed hooks.json /
+    # 해석 불가 command / 등록됐으나 디스크에 부재한 스크립트를 빈 리스트→all([])로 조용히 통과시키면
+    # fail-open이다. 판정할 수 있을 때만 True/False, 판정 불가면 False.
     hj = pd / "hooks" / "hooks.json"
     if not hj.exists():
-        return []
+        return True   # 훅 없음 → kill switch 요건 없음
+    try:
+        text = _read(hj)
+        data = json.loads(text) if text else None
+    except (ValueError, TypeError):
+        return False  # malformed hooks.json → 판정 불가 → gap (fail-closed)
+    if not isinstance(data, (dict, list)):
+        return False
     scripts, seen = [], set()
-    for cmd in _registered_hook_commands(_read(hj) or ""):
+    for cmd in _walk_hook_commands(data):
         for m in _CMD_SCRIPT_RE.finditer(cmd):
             cand = pd / m.group(1).lstrip("/")
-            if cand.is_file() and cand not in seen:
+            if cand not in seen:
                 seen.add(cand)
                 scripts.append(cand)
-    return scripts
+    if any(not c.is_file() for c in scripts):
+        return False  # 등록된 hook 스크립트가 디스크에 부재(dangling) → 검증 불가 → gap
+    return all(_has_killswitch(_read(c) or "") for c in scripts)
 
 
 def _has_killswitch(text):

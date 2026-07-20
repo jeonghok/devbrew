@@ -78,6 +78,12 @@ def validate_data(data: dict) -> list:
     for f in findings:
         if f.get("steelman_condition") == "pending":
             errs.append(f"{f.get('id')}: steelman_condition=pending 잔존 (post-1 2b 미해소)")
+        # refuted finding은 {stage,gate,reason} dict refutation을 가져야 한다 (C round-2 codex re-verify).
+        # null·문자열·리스트 등 비-dict refutation은 (a) 아래 gate_e/dedup의 .get()을 크래시시키고
+        # (b) 애초에 malformed다 — `or {}`로 삼켜 GREEN 내지 말고 clean RED로 잡는다(§9.1 producer 회계).
+        if f.get("status") == "refuted" and not isinstance(f.get("refutation"), dict):
+            errs.append(f"{f.get('id')}: refuted인데 refutation이 dict 아님 "
+                        f"({type(f.get('refutation')).__name__}) — malformed refutation")
 
     # NOQ 원소 스키마 (§9.7)
     for q in data.get("new_open_questions", []):
@@ -98,7 +104,8 @@ def validate_data(data: dict) -> list:
     # 있어야 한다. count 비교만 하면 무관/중복 scope-out NOQ가 특정 finding의 누락을 가려
     # 거짓 GREEN이 된다 (codex fix-review). NOQ.id는 producer(assemble)가 finding.id로 만든다.
     gate_e_ids = {f.get("id") for f in findings if f.get("status") == "refuted"
-                  and (f.get("refutation") or {}).get("gate") == "E"}  # null refutation 크래시 가드 (:99와 대칭)
+                  and isinstance(f.get("refutation"), dict)            # 비-dict는 위에서 malformed로 이미 RED
+                  and f.get("refutation").get("gate") == "E"}
     scope_noq_ids = {q.get("id") for q in data.get("new_open_questions", [])
                      if q.get("reason_code") == "gate_e_scope_out"
                      or "범위 밖" in (q.get("why_not_gap") or "")}
@@ -110,7 +117,7 @@ def validate_data(data: dict) -> list:
     # cross-model 증발: dedup은 같은 source 안에서만
     by_id = {f.get("id"): f for f in findings}
     for f in findings:
-        r = f.get("refutation") or {}
+        r = f.get("refutation") if isinstance(f.get("refutation"), dict) else {}  # truthy non-dict도 안전
         if r.get("stage") == "dedup":
             tid = r.get("target_id")
             if not tid or tid not in by_id:
