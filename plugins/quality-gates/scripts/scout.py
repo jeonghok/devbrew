@@ -12,7 +12,8 @@ Input (stdin JSON):
     "new_files": int,
     "config_touched": bool,
     "type_design": bool,
-    "test_change": bool
+    "test_change": bool,
+    "docs_touched": bool
   }
 
 Output (stdout YAML):
@@ -32,6 +33,7 @@ def decide(s):
     config = bool(s.get("config_touched", False))
     type_design = bool(s.get("type_design", False))
     test_change = bool(s.get("test_change", False))
+    docs_touched = bool(s.get("docs_touched", False))
 
     # Depth decision (v1.x scout.md L42-44)
     if changed >= 200 or new_files >= 1 or config or type_design:
@@ -62,6 +64,13 @@ def decide(s):
             phase2.append("pr-test-analyzer")
         if new_files > 0:
             phase2.append("feature-dev:code-architect")
+
+    # docs_touched surfaces comment-analyzer as a phase2 hint regardless of
+    # depth — a small pure-docs diff is quick-depth but still wants the comment
+    # specialist. Boundary = filter-docs.sh doc-path set (the orchestrator
+    # computes this boolean; scout only routes it). AC5.
+    if docs_touched:
+        phase2.append("comment-analyzer")
 
     return {
         "depth": depth,

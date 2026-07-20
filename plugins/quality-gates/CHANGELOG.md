@@ -3,6 +3,53 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.13.0] — 2026-07-19
+
+Review gate 리뷰어 구성을 **고정 로스터 → 스코프-구동 동적 구성**으로 전환. 오케스트레이터가
+diff 스코프로 Tier C 전문가를 선택(모델 판단 + scout 힌트 + review-pr §4 rubric + scope-signal
+팔레트)하고, 고정 보안 floor(security-reviewer + adversarial)와 codex availability-floor는
+스코프 무관 항상 유지. **qg 에이전트 tool posture는 #104 락(`Read, Grep, Glob`) 그대로 무변경** —
+순수 라우팅 기능.
+
+### Added
+- Review gate 3-tier 리뷰어 구성: Tier A floor(security-reviewer + adversarial, 항상) /
+  Tier B codex(availability-floor) / Tier C 스코프-선택 전문가(pr-review-toolkit 5 +
+  feature-dev:code-architect, 최대 6 후보).
+- review-pr §4 rubric(스코프 신호 → 전문가 매핑) + scope-signal 팔레트(역직렬화·인젝션·XSS·
+  crypto·TLS·XXE·GHA·SRI·deps·migration·public-API·삭제 파일) SKILL embed.
+- 매 iteration 선택/제외 transparency 라인(`> [quality-gates] Review iter N — 선택:… / 제외:…`).
+- scout `docs_touched` 입력 신호(경계 = filter-docs.sh doc-path 집합) → docs 변경 시
+  comment-analyzer를 phase2 힌트로.
+- Tier C 미설치 시 graceful degradation loud log(floor + codex는 무영향).
+
+### Changed
+- scout.py를 권위 selector에서 **힌트 provider로 강등**(결정론 로직·테스트 유지; 선택은 모델 판단).
+- README §166 Review 단계를 3-tier 모델로 재작성 + prerequisites에 pr-review-toolkit·feature-dev를
+  Tier C optional dependency로 선언.
+- README의 fan-out consent 게이트(`len(phase1)+len(phase2)>=4 → AskUserQuestion`) 주장을 전 위치에서
+  reconcile — 이 게이트는 구현된 적 없다(documented-not-implemented). P22 instantiation을
+  transparency 라인 + 선언된 max fan-out(phase-1 병렬 ≤ 8, 총/iteration ≤ 10) + authoring
+  hard-review 기반으로 restate.
+- stale RED 회복: `test_codex_dispatch_invariant.sh`·`test_scout_codex_integration.sh`를 새
+  3-tier dispatch 구조에 맞게 갱신.
+
+### Fixed
+- codex depth-계약 whole-file reconcile(`/qg` self-dogfood C5): §166이 codex를
+  availability-floor(전 depth)로 재작성했으나 Cost 섹션은 `standard`/`deep`-only를 계속 주장한
+  자기모순 해소 — README Cost 노트를 availability-floor화 + Deep 비용행의 codex depth-귀속 제거.
+- `test_codex_backward_compat.sh` Check 2를 폐기된 standard/deep-only 계약 assert에서 v2.13.0
+  availability-floor 계약(무조건·스코프 무관 + unavailable-degrade)으로 재작성(body-unique
+  anchor·mutation-teeth). Check 3의 무관한 pre-existing red는 범위 밖 잔존.
+- `test_readme_scope_reconcile.sh`에 codex-depth 재정합 회귀 락 추가(Law 3 compounding):
+  fan-out 전용이던 lock이 못 본 C5 부류를 봉쇄 — availability-floor positive +
+  standard/deep-only negative(teeth 검증).
+
+### Principles Instantiated
+- P8 (determinism-economy / harness lightness) — 리뷰어 선택은 model-owned routing; 결정론은
+  floor 불변·transparency·rubric-embed에만.
+- Law 2 (Writer ≠ Reviewer) — qg floor tool posture 무변경(#104 `Read, Grep, Glob` 락 유지).
+- Law 3 (Compounding) — scout 힌트·rubric·팔레트가 미래 리뷰어 선택의 학습 substrate.
+
 ## [2.12.0] — 2026-07-19
 
 ### Security

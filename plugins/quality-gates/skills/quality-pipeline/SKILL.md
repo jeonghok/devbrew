@@ -62,6 +62,7 @@ handles deletion.
 2. **Per-gate dispatch logic:**
    - [Trivia escape](#trivia-escape) — one-sentence diff → all gates skipped
    - [Review gate](#review-gate) — scout + Phase 1 + adversarial + synthesizer; iter loop with decision tool at every boundary
+   - [Reviewer composition (scope-driven)](#reviewer-composition-scope-driven) — 3-tier + rubric + palette
    - [Runtime gate](#runtime-gate) — test-scope-validator + runtime-verifier
 3. **Decision points (AskUserQuestion templates):**
    - [Review iter boundary decision](#review-iter-boundary-decision)
@@ -295,9 +296,18 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
    metrics from the review scope you resolved at step 1 (the session `files.md` set, the
    `branch` diff, or the `--paths` globs). Scope is model-owned; there is no cached scope
    variable to thread.
-3. Dispatch reviewer subagents in parallel (per [Reviewer dispatch contract](#reviewer-dispatch-contract)).
-   `quality-gates:security-reviewer` and `quality-gates:adversarial` are
-   the in-house dispatches that MUST include `project_dir: "$project_dir"`:
+3. **Compose and dispatch the reviewer set (scope-driven).** You (orchestrator)
+   select which reviewers to dispatch this iteration from three tiers. Selection is
+   **model-owned routing** (P8 lightness — not a deterministic gate): the floor is
+   fixed, codex is an availability-floor, and Tier C specialists are chosen by the
+   diff scope per [Reviewer composition (scope-driven)](#reviewer-composition-scope-driven).
+   Re-select every iteration. **No qg-own tool posture changes here (#104 lock kept).**
+
+   **Tier A — Floor (스코프 무관, 항상 디스패치; 모델이 스코프 판단으로 뺄 수 없음).**
+   `quality-gates:security-reviewer` (Phase 1) and `quality-gates:adversarial`
+   (Phase 1.5) run **every non-trivia iteration regardless of scope** — their `tools:`
+   posture (`Read, Grep, Glob`, #104 lock) is unchanged. Both MUST include
+   `project_dir: "$project_dir"`:
 
 ```
 Agent({
@@ -317,24 +327,46 @@ Agent({
   prompt: "Re-review findings from Phase-1 reviewers for false positives
     and missed exploit paths.
     project_dir: \"$project_dir\"
-    phase1_findings: <yaml from security-reviewer + code-reviewer + codex>
+    phase1_findings: <yaml from security-reviewer + Tier C specialists + codex>
     iteration: N"
 })
 ```
 
-   `pr-review-toolkit:code-reviewer` (if pr-review-toolkit available) and
-   the codex reviewer (if `detect_codex.sh` returns true) are dispatched
-   with their own contracts; they do not require `project_dir` because
-   they re-derive scope from the inlined diff blob — **build that blob from the
-   review scope you resolved at step 1** (the explicit branch / paths / session
-   target). Scope is model-owned (the honesty norm above); the floor independently
-   guards the empty-scope-with-changes case.
-   The codex reviewer additionally injects the project spec's Acceptance
-   Criteria into its `<spec_context>` slot — resolved **script-internally** by
-   `run_codex_reviewer.sh` (via `discover-spec.sh`), so no `spec_path` dispatch
-   field and no `allowed-tools` change are needed here (invocation parity with
-   the existing `discover-plan.sh` mechanism). `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1`
-   empties the slot — `run_codex_reviewer.sh` reads the env variable directly, so the orchestrator passes no additional argument for the codex path.
+   **Tier B — codex (availability-floor: 있으면 무조건, 스코프 무관).** If the codex
+   reviewer is available (`detect_codex.sh` returns true), it is dispatched via
+   `run_codex_reviewer.sh` this iteration **regardless of scope** — model-family
+   diversity is load-bearing. It re-derives scope from the inlined diff blob (build
+   that blob from the review scope you resolved at step 1) and additionally injects
+   the project spec's Acceptance Criteria into its `<spec_context>` slot, resolved
+   **script-internally** by `run_codex_reviewer.sh` (via `discover-spec.sh`) — so no
+   `spec_path` dispatch field and no `allowed-tools` change are needed.
+   `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1` empties the slot (the script reads the env
+   var directly). If codex is unavailable, continue without it — scope does not change
+   this.
+
+   **Tier C — Dynamic specialists (모델이 diff 스코프로 선택; 외부 advisory agent).**
+   Choose zero or more from the menu in [Reviewer composition (scope-driven)](#reviewer-composition-scope-driven)
+   by matching the diff to the rubric + scope-signal palette there.
+   `pr-review-toolkit:code-reviewer` is the **강한 default** (Tier C, NOT floor):
+   include it on any non-trivial diff; drop it only on a quick-depth diff. Tier C
+   agents are advisory — you own fixes; their output is findings YAML. Do NOT thread a
+   `model:` override into their dispatch (upstream model pinning is respected).
+
+   **Transparency (loud — 매 iteration user-visible stdout 한 줄).** Emit exactly one
+   line documenting the composition, so drops/degrades are never silent:
+
+   > `> [quality-gates] Review iter N — 선택: <디스패치한 리뷰어 목록>(근거: <스코프 신호>) / 제외: <이유 또는 "해당 신호 없음">`
+
+   **Graceful degradation (loud).** If a Tier C candidate is unavailable
+   (pr-review-toolkit / feature-dev not installed), continue with floor(A) + codex(B) +
+   whatever is installed, and print:
+
+   > `> [quality-gates] specialist <X> unavailable (<plugin> 미설치) — degraded coverage`
+
+   Floor and codex are **not** affected by this degrade. There is **no fan-out consent
+   gate** (lightness) — fan-out is bounded by the rubric's natural signal-binding, the
+   transparency line above, the recomputed max fan-out declared in the README, and the
+   authoring-time hard-review (CLAUDE.md fan-out ≥5 gate).
 4. Dispatch `quality-gates:synthesizer` (or local synthesize_findings.py)
    to consolidate findings. **Capture the script's complete stdout** — the
    synthesized Markdown block (counts line + findings table + suggested-fixes
@@ -501,6 +533,53 @@ AskUserQuestion({
 No silent retry-skip — every Edit failure surfaces a user choice. Labels
 are explicit: "Abort retry" terminates the iteration; "Skip this file"
 continues with remaining patches.
+
+## Reviewer composition (scope-driven)
+
+The Review gate reviewer set is composed by scope (spec §5). Selection is
+**model-owned** (lightness) — there is no deterministic selector schema; scout is a
+hint, not an authority. The 3-tier model:
+
+- **Tier A — Floor** (`quality-gates:security-reviewer` + `quality-gates:adversarial`):
+  스코프 무관 항상. `tools: Read, Grep, Glob` (#104 락, 무변경). 모델이 못 뺀다.
+- **Tier B — codex** (availability-floor): `detect_codex.sh` 참이면 무조건, 스코프 무관.
+- **Tier C — Dynamic specialists** (아래 rubric으로 diff 스코프에 맞춰 가감; 최대 6 후보):
+
+**rubric (review-pr §4 흡수):**
+
+| 스코프 신호 | 전문가 |
+|---|---|
+| 비-trivial diff 기본 | `pr-review-toolkit:code-reviewer` (강한 default; quick-depth만 drop) |
+| 에러핸들링 변경 | `pr-review-toolkit:silent-failure-hunter` |
+| 타입 추가/변경 | `pr-review-toolkit:type-design-analyzer` |
+| 테스트 파일 변경 | `pr-review-toolkit:pr-test-analyzer` |
+| docs/주석 추가 | `pr-review-toolkit:comment-analyzer` |
+| 대형 구조/아키텍처 변경 | `feature-dev:code-architect` |
+
+**depth→Tier C 크기 가이드라인 (scout 힌트, 재현성 게이트 아님):** `quick` →
+code-reviewer만(또는 없음); `standard` → + 신호-매칭 전문가 1–2; `deep` → + 신호-매칭
+전문가(구조 변경이면 code-architect). scout의 `phase1_agents`/`phase2_agents`는 힌트일 뿐
+권위가 아니다(Retry마다 재선택).
+
+**scope-signal 팔레트 (모델 판단 보강, 결정론 아님; `security-guidance` 카테고리 출처):**
+역직렬화(pickle/yaml/torch) · 인젝션(eval/exec/os.system/subprocess-shell) ·
+XSS(innerHTML/dangerouslySetInnerHTML) · crypto(createCipher/AES-ECB) · TLS-verify-disabled ·
+XXE · GHA-workflow-injection · SRI · deps-manifest 변경 · migration/schema · public-API 변경 ·
+삭제 파일. 이 신호가 보이면 해당 전문가(또는 code-reviewer 프롬프트 힌트)를 풍부하게 고른다.
+
+**비-규범 예시 (illustrative only — 테스트 대상 아님; 모델이 최종 판단):**
+
+| diff 예 | scout depth | 예상 Tier C 선택 |
+|---|---|---|
+| 1-파일 버그픽스 | quick | code-reviewer |
+| 기능 추가(에러핸들링+테스트) | standard | code-reviewer, silent-failure-hunter, pr-test-analyzer |
+| 신규 모듈(새 타입+구조) | deep | code-reviewer, type-design-analyzer, code-architect |
+| 순수 docs 개편 | standard | comment-analyzer (+ code-reviewer) |
+
+**git-history/이전-PR 렌즈**는 이미 Bash-무장된 `pr-review-toolkit:code-reviewer`가 프롬프트
+힌트로 수행한다 — qg-own 에이전트는 Bash/Web을 갖지 않는다(무변경). Tier C 외부 에이전트는
+write-capable(pr-review-toolkit inherit-all)이거나 read/web-only(feature-dev:code-architect)이며
+모두 advisory다(오케스트레이터가 fix 소유).
 
 ## Reviewer dispatch contract
 

@@ -12,7 +12,7 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 3 (Compounding)** — scout `rationale` 필드가 매 iteration마다 state 파일에 로깅; reviewer-persona 편집이 학습된 교훈을 인코딩하는 substrate.
 - **Law 3 (Compounding) — cross-plugin reader contract** — Runtime gate의 test-scope-validator(`scripts/discover-plan.sh`)가 sister-plugin (`superpowers:writing-plans`)의 출력 경로 `docs/superpowers/plans/`를 1순위 source로 명시 consume; convention drift가 silent breakage가 되지 않도록 README "Plan Discovery Sources" 섹션이 reader/writer 약속을 문서화.
 - **P12 anti-corollary (former AP5, trivia ceremony) 회피** — `check-trivia.sh`가 단일 파일·≤3줄 whitespace/rename을 파이프라인 전체 skip. *현재 coverage는 whitespace + rename에 국한. P12 canonical 자격(typo/comment-only/single-file formatting)을 완전히 충족하기 위한 확장은 deferred 항목 — Tier 2 spec은 아카이브됨: `git show pre-slim-archive-2026-07-09:docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md`.*
-- **P22 anti-corollary (former AP9, over-dispatching / subagent spray) hard gate** — Phase 1+2 dispatch 수가 ≥4일 때 AskUserQuestion 발동.
+- **P22 anti-corollary (former AP9, over-dispatching / subagent spray) 회피** — Review gate는 fan-out consent 게이트를 fire하지 않고(documented-not-implemented였음), transparency 라인 + 선언된 max fan-out(Phase 1 병렬 ≤ 8, 총/iteration ≤ 10) + authoring-time hard-review로 subagent spray를 억제.
 - **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — Review gate 내부 fix-loop이 `max_review_iterations=5` + repeat-detection (no-progress check) + kill switch로 묶임.
 - **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (`*.local.md` gitignore 패턴으로 자동 제외; TTL sweep + SessionEnd hook으로 폴더 GC).
 - **Law 1 (Verification Plan)** (v1.8.0) — Runtime gate가 evidence-required SKIP을 강제. runtime-verifier가 manifest의 모든 surface를 attempt하고 evidence-log를 산출해야 하며, 증거 없는 SKIP은 skill이 거부하여 FAIL로 격상.
@@ -36,8 +36,10 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 1 (Clarity Before Code) — single-turn dispatch contract** (v1.32.0) — pipeline progression이 `quality-pipeline` SKILL의 단일 assistant turn 내 serial dispatch로 일원화. cross-turn state machine (transition compute helpers, no-signal counter, 시간 기반 guard) 전부 삭제 — 진행 결정은 SKILL의 명시적 boundary + AskUserQuestion으로만 발생. State file은 GC mtime anchor + worktree tracking + Review gate iter counter reporting만 보존.
 - **P22 generalization (consent gate → progression gate):** AskUserQuestion
   is reused as a **progression primitive** at every gate boundary and Gate
-  2 fix-loop iteration. The same tool that gates subagent fan-out now
-  gates inter-gate progression — no new principle ID needed.
+  2 fix-loop iteration. It gates inter-gate progression and fix-loop consent
+  (it does NOT gate subagent fan-out — that consent gate was never implemented;
+  fan-out is bounded by the transparency line + declared max fan-out) — no new
+  principle ID needed.
 - **C66 (Linked Artifact Flow) — spec을 truth로 instantiate** (v2.1.0) — qg가 처음으로 사용자 프로젝트 spec을 읽어(`scripts/discover-spec.sh`) test-scope-validator의 기준 축을 plan items → **spec Acceptance Criteria**로 전환하고, AC별 커버리지를 advisory `ac_coverage` 블록으로 surface하며, codex 경로(`run_codex_reviewer.sh`)가 spec AC를 `<spec_context>`에 주입. cycle 위계(spec=truth ⊃ plan=구현 방식)를 instantiate — spec→test 커버리지를 역방향 walk. plan은 구현-방식 보조 hint로 강등(제거 아님; `discover-plan.sh` byte-identical). **advisory only — Runtime gate를 block하지 않음.** spec 부재 시 loud log + v2.0.0 기능 동작 fallback. kill switch `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1`.
 - **P21 (Untrusted input — diff is data, not instructions)** (v2.8.0) — Review gate의 두 diff-reading reviewer(`security-reviewer`/`adversarial`)가 attacker-influenced `filtered_diff`(및 finding 텍스트)를 데이터로만 다루고 그 안의 prompt-injection·안전성 주장을 verdict 근거로 삼지 않도록 persona에 명시. 더해 언어/프레임워크 FP precedent 5건을 기능별 단일 배치(DRY)로 흡수 — suppress-at-source 3(security-reviewer anti-flag) + reject-at-verify 2(adversarial Gate C). 섹션-스코프 grep 회귀 락(`test_security_reviewer_persona.sh`/`test_adversarial_persona.sh`)으로 persona 약화 검출. 신규 P# 0, 결정론 가드 0 (Anthropic *"Using LLMs to Secure Source Code"* 평가 Tier-1; design-lightness).
 - **P21 (Secret이 prompt context에 들어가지 않음) — 출력값 유출 차단으로 확장 (publish sink)** (v2.9.0) — `/qg-publish`가 게시 직전 `secret-scan.py`로 전체 payload(artifact + PR title + 브랜치명 + 커밋메시지; PR-create 시 히스토리까지)에서 시크릿 **값**(quoted string / vendor 패턴 / corpus-substring, keyword는 보조 신호)을 스캔해 hit 시 게시를 FAIL CLOSED로 거부한다 — 스캔 에러·타임아웃도 hit 취급. 기존 인스턴스(v1.8.0, secret 값이 prompt로 들어가지 않음)와 자매지만 방향이 반대다: 여기는 모델이 저술한 텍스트가 GitHub로 **나가기 전** 값 유출을 막는다. regression: `tests/test_secret_scan.py`, `tests/test_secret_scan_fp.py`.
@@ -124,13 +126,13 @@ quality-gates/
 | Trivia | ~0% (즉시 skip) |
 | Quick | ~25–35% |
 | Standard | ~30–45% |
-| Deep | ~55–75% (AskUserQuestion 게이트 발동) |
+| Deep | ~55–75% (Tier C 전문가 다수) |
 
 트리거 조건과 override flag는 [`commands/qg.md`](commands/qg.md) 참고.
 
 ### Codex reviewer cost
 
-The optional `codex-reviewer` agent has `cost_class: variable` — it invokes the user's Codex CLI subscription/API on each `standard`/`deep` Review gate dispatch. First-use cost consent gate prompts via `AskUserQuestion`. Disable globally with `DEVBREW_DISABLE_QG_CODEX=1`.
+The optional `codex-reviewer` agent has `cost_class: variable` — as a Tier B **availability-floor** it invokes the user's Codex CLI subscription/API on **every non-trivia Review gate dispatch when detected (all depths incl. `quick` — scope/depth-independent)**, separate from the depth-specific baseline in the table above (so it is not attributed to any single depth row). First-use cost consent gate prompts via `AskUserQuestion`. Disable globally with `DEVBREW_DISABLE_QG_CODEX=1`.
 
 ### PR-understanding publish cost (`/qg-publish`, separate from the two gates)
 
@@ -138,7 +140,7 @@ The optional `codex-reviewer` agent has `cost_class: variable` — it invokes th
 
 ### Adversarial reviewer model
 
-`adversarial` agent uses `model: opus`. It is the **Opus-critic over the Sonnet Phase 1 workers** (cf. Anthropic multi-agent patterns: spend capability at the judgment bottleneck): the Phase 1/2 reviewers run on cheaper models and the synthesizer after it is a deterministic script, so adversarial is the *single model-based judgment gate* in the Review gate — every finding the user sees passed through its verdict. Its persona runs a per-finding 3-gate verification (real? / introduced-by-this-diff? / handled-elsewhere?) plus a severity realist check, which is reasoning-heavy enough to warrant opus. A prior cost pass (T2-8) drifted the frontmatter/README toward sonnet while the SKILL dispatch still pinned opus; the three sites are now reconciled to opus and locked by `tests/test_adversarial_model_consistency.sh`. Runs ~once per Review gate fix-loop iteration (≤5×). AskUserQuestion fan-out count excludes `adversarial`/`scout`/`synthesizer` (infrastructure dispatches; not user-visible cost). To reduce its cost, lower the *number* of Review gate iterations or the diff scope — not this model.
+`adversarial` agent uses `model: opus`. It is the **Opus-critic over the Sonnet Phase 1 workers** (cf. Anthropic multi-agent patterns: spend capability at the judgment bottleneck): the Phase 1/2 reviewers run on cheaper models and the synthesizer after it is a deterministic script, so adversarial is the *single model-based judgment gate* in the Review gate — every finding the user sees passed through its verdict. Its persona runs a per-finding 3-gate verification (real? / introduced-by-this-diff? / handled-elsewhere?) plus a severity realist check, which is reasoning-heavy enough to warrant opus. A prior cost pass (T2-8) drifted the frontmatter/README toward sonnet while the SKILL dispatch still pinned opus; the three sites are now reconciled to opus and locked by `tests/test_adversarial_model_consistency.sh`. Runs ~once per Review gate fix-loop iteration (≤5×). `adversarial`/`scout`/`synthesizer`는 infrastructure dispatch(사용자-가시 비용 아님)이며, 위 재계산 max fan-out 선언에서 floor/codex/Tier C와 구분해 계산한다. To reduce its cost, lower the *number* of Review gate iterations or the diff scope — not this model.
 
 ## 게이트
 
@@ -163,31 +165,46 @@ publish의 informed-consent(2차) 둘 다 사람의 명시 동의가 필요하�
 세 번째 게이트도 아니고, gh는 여전히 게이트 어디에도 없다. 자세한 내용은
 [`commands/qg-publish.md`](commands/qg-publish.md).
 
-## Review gate 리뷰 단계 (v1.5.0 재설계)
+## Review gate 리뷰 단계 (v2.13.0 스코프-구동 구성)
+
+리뷰어 구성은 **오케스트레이터가 diff 스코프로 선택**한다(모델 판단 + scout 힌트 + review-pr
+§4 rubric + scope-signal 팔레트). 3-tier 모델:
 
 ```
-Phase 0  Scout (항상, sonnet) — dispatch plan 산출: depth + agent subset
-Phase 1  Critical analysis (depth-aware, 병렬)
-  ├── pr-review-toolkit:code-reviewer        (항상; upstream Opus)
-  ├── pr-review-toolkit:silent-failure-hunter (Standard/Deep; sonnet override)
-  ├── feature-dev:code-reviewer              (Deep 전용)
-  └── codex-reviewer                         (external; Codex CLI 가용 + consent 시 자동 포함, LD5)
-Phase 2  Conditional (scout 추천만)
-  ├── pr-review-toolkit:type-design-analyzer  → 신규 타입
+Tier A — Floor (비-trivia면 항상, 스코프 무관; 모델이 못 뺌)
+  ├── quality-gates:security-reviewer   (Phase 1)   tools: Read, Grep, Glob (#104 락)
+  └── quality-gates:adversarial          (Phase 1.5, opus)  tools: Read, Grep, Glob (#104 락)
+Tier B — codex (availability-floor: detect_codex 참이면 무조건, 스코프 무관)
+  └── codex-reviewer (별도 프로세스/모델 패밀리, OS read-only 샌드박스)
+Tier C — Dynamic (모델이 스코프로 선택, advisory 외부 에이전트; 최대 6 후보)
+  ├── pr-review-toolkit:code-reviewer        ← 강한 default(비-trivial diff), quick-depth만 drop
+  ├── pr-review-toolkit:silent-failure-hunter → 에러핸들링 변경
+  ├── pr-review-toolkit:type-design-analyzer  → 신규/변경 타입
   ├── pr-review-toolkit:pr-test-analyzer      → 테스트 변경
-  ├── pr-review-toolkit:comment-analyzer      → 문서
-  ├── superpowers:code-reviewer               → plan 정합성
-  └── feature-dev:code-architect              → 아키텍처
-Phase 1.5  Adversarial (Standard/Deep, opus) — false-positive 사냥
-Phase 1.6  Synthesizer (Phase 1 실행 시 항상, sonnet) — dedupe/rank
-Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
+  ├── pr-review-toolkit:comment-analyzer      → docs/주석 변경
+  └── feature-dev:code-architect             → 대형 구조/아키텍처 변경
+Phase 1.6  Synthesizer (Phase 1 실행 시 항상) — dedupe/rank (결정론 스크립트)
 ```
 
-`len(phase1) + len(phase2) >= 4`일 때 AskUserQuestion 발동 (philosophy AP9). 최대 fan-out: Phase 1 (4) + Phase 2 (5) + Phase 1.5 (1) + Phase 1.6 (1) + Phase 3 (1) = 12.
+선택은 **model-owned routing**(P8 lightness) — 결정론 selector 스키마 없음. 상세 rubric·
+팔레트는 SKILL `## Reviewer composition (scope-driven)` 섹션. scout(`scripts/scout.py`)는
+`depth` + 추천 subset을 emit하는 **힌트 provider**(권위 아님).
+
+**Prerequisites (Tier C optional dependencies):** `pr-review-toolkit`(code-reviewer +
+silent-failure-hunter + type-design-analyzer + pr-test-analyzer + comment-analyzer),
+`feature-dev`(code-architect). 미설치 시 해당 Tier C는 unavailable로 degrade하고 floor(A) +
+codex(B) + 설치된 것으로 계속(loud log). floor·codex는 이 degrade의 영향을 받지 않는다.
+
+**Fan-out:** Review gate는 fan-out consent 게이트를 fire하지 **않는다**(과거
+dispatch-수 기반 consent 게이트 주장은 documented-not-implemented였음). P22
+anti-corollary(subagent spray) instantiation은 **transparency 라인(매 iter 선택/제외 가시화)
++ 선언된 max fan-out + authoring-time hard-review(CLAUDE.md fan-out ≥5)** 기반으로 억제한다.
+재계산 max fan-out: **Phase 1 병렬 ≤ 8**(security-reviewer + codex + Tier C 최대 6),
+**총/iteration ≤ 10**(+ adversarial + synthesizer; code-simplifier Phase 3 없음).
 
 ## 파이프라인 흐름 (single-turn serial dispatch, v1.32.0)
 
-`v1.32.0`에서 SKILL이 전체 파이프라인을 단일 assistant turn 내에서 serial dispatch로 실행합니다. Inter-gate progression과 Review gate fix-loop iteration은 모두 AskUserQuestion으로 사용자 동의를 받아 진행 — 동일한 도구가 subagent fan-out gate와 inter-gate progression gate를 함께 담당합니다. (v1.5.0의 turn-by-turn state machine 다이어그램은 제거됨; 단일 다이어그램만 유지.)
+`v1.32.0`에서 SKILL이 전체 파이프라인을 단일 assistant turn 내에서 serial dispatch로 실행합니다. Inter-gate progression과 Review gate fix-loop iteration은 모두 AskUserQuestion으로 사용자 동의를 받아 진행합니다 — 이 도구는 progression/consent를 담당하며, subagent fan-out은 게이트하지 않습니다(fan-out은 transparency + 선언된 max fan-out으로 bound). (v1.5.0의 turn-by-turn state machine 다이어그램은 제거됨; 단일 다이어그램만 유지.)
 
 
 ```
@@ -237,7 +254,7 @@ Phase 3   Polish (one-shot, upstream Opus): pr-review-toolkit:code-simplifier
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-**v1.32.0 변경 요약**: 파이프라인 진행은 더 이상 turn-by-turn state machine으로 진행되지 않고, `quality-pipeline` SKILL이 단일 assistant turn 내에서 serial dispatch로 끝까지 실행합니다. AskUserQuestion이 subagent fan-out gate와 inter-gate progression gate를 함께 담당합니다.
+**v1.32.0 변경 요약**: 파이프라인 진행은 더 이상 turn-by-turn state machine으로 진행되지 않고, `quality-pipeline` SKILL이 단일 assistant turn 내에서 serial dispatch로 끝까지 실행합니다. AskUserQuestion이 inter-gate progression gate와 fix-loop consent를 담당합니다(subagent fan-out은 게이트하지 않음).
 
 ### Trivia detector coverage
 
@@ -344,7 +361,7 @@ plan과 달리 **legacy-global 소스는 없습니다** — spec은 프로젝트
 
 | 플러그인 | 필수 | 사용처 | 목적 |
 |---------|------|-------|------|
-| pr-review-toolkit | 예 | Review gate | 핵심 review agent |
+| pr-review-toolkit | 아니오 | Review gate | Tier C 전문가(code-reviewer 강한 default 등); 미설치 시 graceful degrade |
 | feature-dev | 아니오 | Review gate | 컨벤션 리뷰, 아키텍처, 구현 추적 |
 | superpowers | 아니오 | Review gate | plan 정합성, 증거 검증 |
 | chrome-devtools-mcp / playwright | 아니오 | Runtime gate | 브라우저 자동화 |

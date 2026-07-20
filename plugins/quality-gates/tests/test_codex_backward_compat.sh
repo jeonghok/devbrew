@@ -4,8 +4,10 @@
 #
 # Three checks:
 #   1. Probe with kill switch returns false (uses AC1 test's logic)
-#   2. Scout's static rules omit codex-reviewer when codex_available=false
-#      (already covered by AC2 test, repeated here for completeness)
+#   2. SKILL.md documents codex as a Tier B availability-floor (dispatched on
+#      every non-trivia iteration when detected, regardless of scope/depth) with
+#      an unavailable-degrade path (v2.13.0 contract; supersedes the pre-v2.11.0
+#      standard/deep-only gate + v1.10.x byte-equivalent fallback).
 #   3. All existing qg test files (those not touching codex) pass —
 #      no regressions in unrelated tests after the feature lands.
 
@@ -26,38 +28,42 @@ else
   fail=$((fail + 1))
 fi
 
-# Check 2 (updated for Task 2/3 architecture): SKILL.md owns codex dispatch and
-# enforces standard/deep-only gate + v1.10.x byte-equivalent fallback.
-# Three sub-checks; all must pass.
+# Check 2 (v2.13.0 availability-floor contract): SKILL.md documents codex as a
+# Tier B availability-floor — dispatched every non-trivia iteration when
+# detect_codex is true, regardless of scope/depth, with an unavailable-degrade
+# path. (Supersedes the pre-v2.11.0 standard/deep-only gate + v1.10.x
+# byte-equivalent fallback, which no longer exist in the SKILL.)
+# Three sub-checks; all must pass. Anchors are body-unique (mutation-tested).
 SKILL_MD="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 c2_fail=0
 
-# 2a: SKILL.md is the sole decision-maker for codex-reviewer dispatch (not scout)
-if grep -qE 'SKILL\.md.*codex-reviewer.*dispatch.*단독|codex-reviewer dispatch.*단독' "$SKILL_MD"; then
+# 2a: SKILL.md documents codex as a Tier B availability-floor
+if grep -qE 'Tier B — codex \(availability-floor' "$SKILL_MD"; then
   : # sub-check pass
 else
-  echo "  FAIL: SKILL.md does not declare sole ownership of codex-reviewer dispatch"
+  echo "  FAIL: SKILL.md does not document codex as a Tier B availability-floor"
   c2_fail=$((c2_fail + 1))
 fi
 
-# 2b: codex-reviewer is evaluated on standard/deep only (excluded from quick)
-if grep -qE 'Standard/deep depth.*평가|standard.*deep.*only|depth.*quick.*phase2_agents.*\[\]|depth == quick.*phase2_agents' "$SKILL_MD"; then
+# 2b: the availability-floor is unconditional regardless of scope/depth (NOT
+#     depth-gated — the semantics that superseded the old standard/deep-only gate)
+if grep -qE '있으면 무조건, 스코프 무관' "$SKILL_MD"; then
   : # sub-check pass
 else
-  echo "  FAIL: SKILL.md does not gate codex-reviewer to standard/deep depth"
+  echo "  FAIL: SKILL.md does not state codex dispatches unconditionally, scope/depth-independent"
   c2_fail=$((c2_fail + 1))
 fi
 
-# 2c: codex unavailable path preserves v1.10.x byte-equivalent 3-agent dispatch
-if grep -qE 'byte-equivalent' "$SKILL_MD"; then
+# 2c: codex-unavailable path degrades gracefully (continue without codex)
+if grep -qE 'If codex is unavailable, continue without it' "$SKILL_MD"; then
   : # sub-check pass
 else
-  echo "  FAIL: SKILL.md does not document v1.10.x byte-equivalent fallback"
+  echo "  FAIL: SKILL.md does not document the codex-unavailable degrade path"
   c2_fail=$((c2_fail + 1))
 fi
 
 if [[ $c2_fail -eq 0 ]]; then
-  echo "  PASS: SKILL.md owns codex dispatch, depth-gates standard/deep, preserves v1.10.x fallback"
+  echo "  PASS: SKILL.md documents codex as Tier B availability-floor (all non-trivia depths) with unavailable-degrade"
   pass=$((pass + 1))
 else
   fail=$((fail + 1))

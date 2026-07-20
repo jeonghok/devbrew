@@ -56,68 +56,46 @@ else
   echo "  PASS: old Agent() scout dispatch absent from SKILL.md"; pass=$((pass + 1))
 fi
 
-# Scenario 5 (T2-2 / AC7-AC8) — unified dispatch heading + fan-out gate
-# applies to both primary and fallback paths.
-test_scenario_5_unified_dispatch() {
-  echo "=== Scenario 5: Phase 1 unified dispatch + fan-out gate ==="
+# Scenario 5 (v2.13.0) — scope-driven 3-tier dispatch replaced the old
+# `#### Phase 1 (unified dispatch)` heading structure. Guard the new prose so
+# scout stays a HINT provider under the 3-tier model (not the authority).
+test_scenario_5_scope_driven() {
+  echo "=== Scenario 5: scope-driven 3-tier dispatch (v2.13.0) ==="
   local skill="$SKILL_MD"
 
-  # AC7-a: exactly one unified heading (4 hashes — preserves Gate 2 nesting).
-  local count_unified
-  count_unified=$(grep -c '^#### Phase 1 (unified dispatch)' "$skill" || true)
-  if [[ "$count_unified" == "1" ]]; then
-    echo "  PASS: AC7-a: unified heading count=$count_unified (expected 1)"
-    pass=$((pass + 1))
-  else
-    echo "  FAIL AC7-a: unified heading count=$count_unified (expected 1)"
+  # 5a: old unified-dispatch heading must be GONE.
+  if grep -qF '#### Phase 1 (unified dispatch)' "$skill"; then
+    echo "  FAIL 5a: stale '#### Phase 1 (unified dispatch)' heading still present"
     fail=$((fail + 1))
+  else
+    echo "  PASS: 5a: stale unified-dispatch heading absent"
+    pass=$((pass + 1))
   fi
 
-  # AC7-b: legacy/fallback heading absent.
-  local count_legacy
-  count_legacy=$(grep -cE '^#### Phase 1 \(legacy/fallback\)' "$skill" || true)
-  if [[ "$count_legacy" == "0" ]]; then
-    echo "  PASS: AC7-b: legacy heading count=$count_legacy (expected 0)"
-    pass=$((pass + 1))
+  # 5b: Tier A floor anchor present (scope-independent floor).
+  if grep -qF 'Tier A — Floor (스코프 무관, 항상 디스패치' "$skill"; then
+    echo "  PASS: 5b: Tier A floor anchor present"; pass=$((pass + 1))
   else
-    echo "  FAIL AC7-b: legacy heading count=$count_legacy (expected 0)"
-    fail=$((fail + 1))
+    echo "  FAIL 5b: Tier A floor anchor missing"; fail=$((fail + 1))
   fi
 
-  # Extract unified block (heading → next #### heading).
-  local block
-  block=$(awk '/^#### Phase 1 \(unified dispatch\)/{flag=1; print; next} flag && /^#### /{exit} flag{print}' "$skill")
-
-  # AC7-c: unified block contains AskUserQuestion + Task invocation.
-  if echo "$block" | grep -q 'AskUserQuestion('; then
-    echo "  PASS: AC7-c: AskUserQuestion present in unified block"
-    pass=$((pass + 1))
+  # 5c: scope-driven composition section present (rubric owner).
+  if grep -qF '## Reviewer composition (scope-driven)' "$skill"; then
+    echo "  PASS: 5c: Reviewer composition section present"; pass=$((pass + 1))
   else
-    echo "  FAIL AC7-c: AskUserQuestion missing from unified block"
-    fail=$((fail + 1))
+    echo "  FAIL 5c: Reviewer composition section missing"; fail=$((fail + 1))
   fi
 
-  if echo "$block" | grep -qE 'Task\(|Task tool|parallel=true'; then
-    echo "  PASS: AC7-c: parallel dispatch prose present in unified block"
-    pass=$((pass + 1))
+  # 5d: scout is referenced as a HINT, not the authority (phase2 hint phrasing).
+  if grep -qE 'scout.*힌트|힌트.*scout' "$skill"; then
+    echo "  PASS: 5d: scout framed as a hint"; pass=$((pass + 1))
   else
-    echo "  FAIL AC7-c: parallel dispatch prose missing from unified block"
-    fail=$((fail + 1))
-  fi
-
-  # AC8: fallback branch is named within the unified block (so reader knows
-  # the same gate applies to both paths).
-  if echo "$block" | grep -qiE 'fallback|scout.failed|rule-based'; then
-    echo "  PASS: AC8: fallback branch documented in unified block"
-    pass=$((pass + 1))
-  else
-    echo "  FAIL AC8: fallback branch not documented in unified block"
-    fail=$((fail + 1))
+    echo "  FAIL 5d: scout hint framing missing"; fail=$((fail + 1))
   fi
 
   echo "=== Scenario 5 done ==="
 }
-test_scenario_5_unified_dispatch
+test_scenario_5_scope_driven
 
 echo ""
 echo "Total: $((pass + fail)), pass: $pass, fail: $fail"
