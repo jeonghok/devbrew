@@ -1,0 +1,15 @@
+{
+  "date": "2026-07-15",
+  "fanout_declared": 30,
+  "consent": {
+    "approved": true,
+    "at": "2026-07-15T09:38:13Z",
+    "fanout": 30
+  },
+  "codex": {
+    "ran": true,
+    "version": "0.144.1"
+  },
+  "target": "project-init",
+  "seed_provided": true
+}
