@@ -107,6 +107,25 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 매 round의 4-block에서 어떤 path로 routing했는지 transcript에 명시하십시오.
 
+## teach-beat (AC8/C3/C12 — 미지를 드러내 가르치기)
+
+매 probe에 **teach-lite**를 붙인다: prior-art/trade-off를 **≤1문장**, **web 호출 없이**, 그리고
+**단정이 아닌 질문 형태**로 제시해 사용자가 모르는 지형을 살짝 연다(C3 — 공유된 전제가 사용자 답을
+오염시키지 않게).
+
+다음 **열거 신호** 중 하나가 발화하면 그 probe의 teach-lite를 **teach-heavy**로 *대체*한다
+(추가 아님 — probe당 teach-beat 최대 1회). teach-heavy = **≥1 prior-art/URL 또는 landscape 인용**:
+
+1. 사용자 답이 `## External Landscape` 한 항목과 모순.
+2. hold·satisficing 답("모르겠음/둘 다/아무거나" — locked-판정 트리의 "보류" 분기 재사용).
+3. floor 차원의 첫 open→in-progress 전이(그 차원에 첫 probe 착수).
+4. coverage-mapper/blind-spot-prober 출력이 비어있지 않음.
+
+복수 신호 동시 발화 시 heavy beat 1회로 합친다. **발화 시점은 모델 판단 적응 행동**이다(C12 —
+결정론 게이트로 기계화하지 않는다; 위 신호는 결정 규칙이 아니라 휴리스틱 가이드). 검증 가능한 것은
+이 신호 목록 + 크기 한도(teach-lite ≤1문장 / teach-heavy ≥1 URL)뿐이며, 각 발화의 per-firing
+결정성은 non-goal(모델 판단을 결정론으로 대체하지 않음 — 이 재구성의 핵심 논지).
+
 ## Locked 판정 트리거 (G1, AC1)
 
 매 round 끝에 사용자 응답을 `pending_locked_decisions`에 append할지 다음 decision table로 판정:
@@ -132,7 +151,7 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 ## C44 Dialectic Rhythm Guard
 
-`non_user_streak` 카운터 — 직전 N round 동안 *사용자 답변이 없었던* 횟수.
+`non_user_streak` 카운터 — 직전 N probe 동안 *사용자 답변이 없었던* 횟수.
 
 - (a) factual auto-confirm: streak +1
 - (c) sub-agent adversarial: streak +1
@@ -142,7 +161,7 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 `non_user_streak >= DEVBREW_RHYTHM_GUARD_THRESHOLD` (default 3) 도달 시:
 
-→ 다음 round의 질문은 **반드시 (b) judgment path** (사용자에게 직접 질문)로 라우팅. 강제.
+→ 다음 probe의 질문은 **반드시 (b) judgment path** (사용자에게 직접 질문)로 라우팅. 강제.
 
 ## probe 백스톱 (C1/C10 — Unbounded-autonomy 가드)
 
@@ -181,15 +200,50 @@ fi
 
 kill switch: `DEVBREW_SPEC_DISTILL_PROBE_CAP=N` 으로 base cap override.
 
-## breadth-keeper dispatch (C45, AC13)
+## coverage-mapper dispatch (C11, AC7)
 
-매 round 끝에 다음 조건 모두 만족하면 `breadth-keeper` agent를 1회 dispatch:
+`coverage-mapper`는 고정 floor 위 **주제-도출 차원**을 *제안*하는 advisory 에이전트다(원장 admit
+판정은 orchestrator, G2). 다음 조건 중 하나에서 dispatch:
 
-1. `interview_round >= 2` (첫 round는 탐색기 — skip)
-2. 직전 3 round가 같은 dimension(같은 spec 섹션)에 집중함
-3. 이번 round에서 dispatch 안 한 경우 (round당 max 1, AC13)
+1. 한 focused 차원이 **연속 3 probe** 동안 status·evidence 무변경(진전 없음), OR
+2. floor 차원의 **첫 open→in-progress 전이**.
 
-dispatch 결과 (`narrow_tunneling: true`) 면 다음 round 시작 시 `suggested_lateral_questions` 중 하나를 추천 답안으로 제시.
+진전 = status 전이(open→in-progress→closed) 또는 evidence append. `orchestration.no_progress_streak`는
+focused 차원이 바뀌거나 진전 발생 시 0으로 reset.
+
+**redispatch 바운드(Unbounded-autonomy 가드)**: dispatch 시 `orchestration.coverage_mapper_last_probe =
+probe_count` 기록. 재dispatch는 `probe_count - coverage_mapper_last_probe >= 3`일 때만 허용(무진전이
+지속돼도 최소 3 probe 간격 — 레벨-트리거 무한 재dispatch 방지). `coverage_mapper_last_probe == null`이면
+첫 dispatch 허용.
+
+```
+Agent({ description: "Map coverage dimensions", subagent_type: "spec-distill:coverage-mapper",
+        prompt: "열린/닫힌 차원 요약: <...>. focused_dimension: <...>, no_progress_streak: <N>. 이 주제가 요구하는 derived 차원과 neglect를 제안." })
+```
+
+출력(`derived_dimensions[] + neglect_flag`)은 **advisory** — orchestrator가 원장에 admit할지 판정한다.
+`neglect_flag: true`면 다음 probe에서 neglected 차원 하나를 추천 답안으로 제시. 복수 dispatch 시
+name 기준 union·dedup.
+
+## blind-spot-prober dispatch (AC6, C8 — blind_spot floor 차원)
+
+`blind_spot` floor 차원의 **첫 open→in-progress 전이**(그 차원에 첫 probe 착수) 시 `blind-spot-prober`를
+**인터뷰당 1회** dispatch한다(fan-out 1, C8). `orchestration.blind_spot_dispatched`가 false일 때만
+dispatch하고, dispatch 후 true로 세팅(재dispatch 금지).
+
+```
+Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind-spot-prober",
+        prompt: "재구성된 문제정의: <...>. locked_directions: <...>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
+```
+
+출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 brief §5 `## Blind Spots & Premortem`에
+기록하고, `blind_spot` floor 차원을 in-progress→closed로 전이(사용자에게 표면화된 blind-spot 확인 후).
+
+**Web 부재 시 graceful degradation (C5)**: kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web
+도구 부재로 blind-spot-prober를 돌릴 수 없으면 — R2/R3 web-absent 강등과 대칭으로 — opaque gate-fail로
+떨어뜨리지 말고 **loud advisory** 후 **inline premortem**으로 전환:
+`[spec-distill] web 비활성 — blind-spot-prober 자동 생략, inline premortem으로 전환`. 이 경우 §5는
+codebase 근거 또는 사용자 판단으로 기록(URL 부재 사유 명시).
 
 ## 5 통과 의례 (Law 1 구조 게이트, R1–R5)
 
@@ -228,7 +282,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" increment "$ROOT/<session-
 
 ### R3 — Steelman 의심 게이트 (P17)
 
-의심 trigger = landscape 모순 / 알려진 anti-pattern / 기존 LD 불일치 / breadth-keeper tunneling.
+의심 trigger = landscape 모순 / 알려진 anti-pattern / 기존 LD 불일치 / coverage-mapper neglect.
 
 1. `steelman-builder` 에이전트를 **순차** dispatch(병렬·투기적 금지 — C5):
    ```
@@ -238,8 +292,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" increment "$ROOT/<session-
 2. builder 출력(`alternative_statement` + `evidence[].url`)을 **verbatim**으로 4-block에 반대
    케이스로 제시 — conducting-interview는 이를 **약화·편집하지 않습니다**(AC5).
 3. **게이트**(P17): 사용자가 (방어 → 원안 lock + `defense` 기록, steelman: defended) /
-   (전환 → 대안 lock, 원안은 R4로, steelman: switched-to-this) / (보류 → §6 OQ).
-4. builder 출력 그대로 brief §4 Skepticism Log에 기록 — 각 항목은 (대안 statement + 웹근거 URL + `verdict ∈ {defended | switched | deferred}`). 게이트 매핑: 방어→`defended`, 전환→`switched`, 보류→`deferred`(§6 OQ에도 박제). 프론트매터 `steelman:` 라벨(`switched-to-this`)과 §4 `verdict` 어휘(`switched`)는 별개 — §4에는 위 세 단어만 사용.
+   (전환 → 대안 lock, 원안은 R4로, steelman: switched-to-this) / (보류 → §8 OQ).
+4. builder 출력 그대로 brief §4 Skepticism Log에 기록 — 각 항목은 (대안 statement + 웹근거 URL + `verdict ∈ {defended | switched | deferred}`). 게이트 매핑: 방어→`defended`, 전환→`switched`, 보류→`deferred`(§8 OQ에도 박제). 프론트매터 `steelman:` 라벨(`switched-to-this`)과 §4 `verdict` 어휘(`switched`)는 별개 — §4에는 위 세 단어만 사용.
 5. 한 방향당 steelman 1회(새 근거 없으면 재steelman 금지 — AP16 harassment 방지).
 
 **Web 부재 시 graceful degradation (AC8 대칭)**: `steelman-builder`는 WebSearch/WebFetch를 요구합니다.

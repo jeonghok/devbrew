@@ -105,6 +105,97 @@ grep -q 'interview_round' <<<"$term_block" \
   && note FAIL "AC9/V7b: interview_round in termination block" \
   || note PASS "AC9/V7b: no interview_round in termination logic"
 
+# --- v0.22.0: teach-beat + blind-spot/coverage-mapper dispatch (AC6/AC7/AC8/AC9/C11/C12) ---
+
+# teach-beat 섹션 (scoped — feedback_grep_lock_header_satisfiable teeth)
+teach_block="$(awk '/^## teach-beat/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
+{ [[ -n "$teach_block" ]] && grep -qi 'teach-lite' <<<"$teach_block"; } \
+  && note PASS "AC8: teach-beat section present (teach-lite)" \
+  || note FAIL "AC8: teach-beat section present (teach-lite)"
+grep -qE '≤1문장' <<<"$teach_block" \
+  && note PASS "AC8: teach-lite size bound (<=1 sentence)" \
+  || note FAIL "AC8: teach-lite size bound (<=1 sentence)"
+{ grep -q 'teach-heavy' <<<"$teach_block" && grep -q '≥1' <<<"$teach_block" && grep -q 'URL' <<<"$teach_block"; } \
+  && note PASS "AC8: teach-heavy needs >=1 URL" \
+  || note FAIL "AC8: teach-heavy needs >=1 URL"
+grep -qE '단정이 아닌 질문 형태|질문 형태' <<<"$teach_block" \
+  && note PASS "C3: teach as question, not assertion" \
+  || note FAIL "C3: teach as question, not assertion"
+grep -qE '모델 판단|non-goal' <<<"$teach_block" \
+  && note PASS "C12: firing time is model-judged, not mechanized" \
+  || note FAIL "C12: firing time is model-judged, not mechanized"
+
+# coverage-mapper dispatch (C11/AC7, scoped)
+covmap_block="$(awk '/^## coverage-mapper dispatch/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
+{ [[ -n "$covmap_block" ]] && grep -q 'coverage-mapper' <<<"$covmap_block"; } \
+  && note PASS "AC7: coverage-mapper dispatch section present" \
+  || note FAIL "AC7: coverage-mapper dispatch section present"
+grep -qE '연속 3 probe|no_progress' <<<"$covmap_block" \
+  && note PASS "C11: coverage-mapper trigger (3 no-progress probes OR floor first transition)" \
+  || note FAIL "C11: coverage-mapper trigger (3 no-progress probes OR floor first transition)"
+grep -q 'coverage_mapper_last_probe' <<<"$covmap_block" \
+  && note PASS "C11: redispatch bound via coverage_mapper_last_probe" \
+  || note FAIL "C11: redispatch bound via coverage_mapper_last_probe"
+grep -q 'advisory' <<<"$covmap_block" \
+  && note PASS "C11: coverage-mapper output is advisory (orchestrator admits)" \
+  || note FAIL "C11: coverage-mapper output is advisory (orchestrator admits)"
+
+# blind-spot-prober dispatch (AC6/C8, scoped)
+blindspot_block="$(awk '/^## blind-spot-prober dispatch/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
+{ [[ -n "$blindspot_block" ]] && grep -q 'blind-spot-prober' <<<"$blindspot_block"; } \
+  && note PASS "AC6: blind-spot-prober dispatch section present" \
+  || note FAIL "AC6: blind-spot-prober dispatch section present"
+grep -qE 'open→in-progress' <<<"$blindspot_block" \
+  && note PASS "AC6: dispatch on blind_spot floor's first open→in-progress transition" \
+  || note FAIL "AC6: dispatch on blind_spot floor's first open→in-progress transition"
+grep -qE 'fan-out 1|인터뷰당 1회' <<<"$blindspot_block" \
+  && note PASS "C8: fan-out 1 (blind_spot_dispatched guard)" \
+  || note FAIL "C8: fan-out 1 (blind_spot_dispatched guard)"
+grep -q 'blind_spot_dispatched' <<<"$blindspot_block" \
+  && note PASS "C8: blind_spot_dispatched guard referenced" \
+  || note FAIL "C8: blind_spot_dispatched guard referenced"
+grep -qE 'web 비활성|inline premortem' <<<"$blindspot_block" \
+  && note PASS "C5: web-absent loud degrade to inline premortem" \
+  || note FAIL "C5: web-absent loud degrade to inline premortem"
+
+# rhythm-guard 재프레임 (AC9, scoped)
+rhythm_block="$(awk '/^## C44 Dialectic Rhythm Guard/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
+grep -qE '직전 N probe|N probe 동안' <<<"$rhythm_block" \
+  && note PASS "AC9: rhythm-guard streak reframed to probe-based" \
+  || note FAIL "AC9: rhythm-guard streak reframed to probe-based"
+grep -qi 'round' <<<"$rhythm_block" \
+  && note FAIL "AC9: rhythm-guard no longer references round" \
+  || note PASS "AC9: rhythm-guard no longer references round"
+
+# R3 트리거 용어 교체 + §6 OQ → §8 OQ (scoped)
+r3_block="$(awk '/^### R3 — Steelman/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$SKILL")"
+grep -q 'coverage-mapper neglect' <<<"$r3_block" \
+  && note PASS "R3: trigger term breadth-keeper tunneling replaced by coverage-mapper neglect" \
+  || note FAIL "R3: trigger term breadth-keeper tunneling replaced by coverage-mapper neglect"
+grep -q '§6 OQ' <<<"$r3_block" \
+  && note FAIL "R3: stale §6 OQ reference removed (should be §8 OQ)" \
+  || note PASS "R3: stale §6 OQ reference removed (should be §8 OQ)"
+[[ "$(grep -c '§8 OQ' <<<"$r3_block")" -ge 2 ]] \
+  && note PASS "R3: §8 OQ reference present (x2)" \
+  || note FAIL "R3: §8 OQ reference present (x2)"
+
+# C45 interview_round>=2 트리거가 제거됐는지 (AC7)
+grep -q 'interview_round >= 2\|interview_round>=2' "$SKILL" \
+  && note FAIL "AC7: C45 interview_round>=2 trigger still present" \
+  || note PASS "AC7: interview_round>=2 dispatch trigger replaced by C11"
+
+# breadth-keeper 용어 잔존 0 (SKILL 본문, AC7/V7a)
+grep -qi 'breadth-keeper\|breadth_keeper' "$SKILL" \
+  && note FAIL "V7a: breadth-keeper term remains in SKILL" \
+  || note PASS "V7a: breadth-keeper term removed from SKILL"
+
+# interview_round confinement — migration section only (SHARP, Task 9 V9)
+mig_ir_count="$(awk '/^## In-flight state migration/{f=1;print;next} /^## /{f=0} f' "$SKILL" | grep -c interview_round)"
+total_ir_count="$(grep -c interview_round "$SKILL")"
+[[ "$mig_ir_count" -eq "$total_ir_count" ]] \
+  && note PASS "V9: interview_round confined to migration section (mig=$mig_ir_count total=$total_ir_count)" \
+  || note FAIL "V9: interview_round confined to migration section (mig=$mig_ir_count total=$total_ir_count)"
+
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]
