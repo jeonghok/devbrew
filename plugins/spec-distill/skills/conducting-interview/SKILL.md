@@ -2,9 +2,10 @@
 name: conducting-interview
 description: >
   Runs the spec-distill problem-space interview stage and produces a terminal
-  interview-brief at docs/superpowers/interview/. Brief authoring is gated by the
-  5 통과 의례 (R1-R5) Law 1 structural check (check_brief.py). Optionally hands the
-  brief to superpowers:brainstorming.
+  interview-brief at docs/superpowers/interview/. 종료는 커버리지 원장의 floor
+  5차원(root-problem/landscape/skepticism/blind-spot/open-questions)이 모두
+  closed일 때이며, check_brief.py의 구조적 게이트로 기계적 검증합니다(Law 1).
+  Optionally hands the brief to superpowers:brainstorming.
 cost_class: variable
 user-invocable: false
 ---
@@ -13,8 +14,10 @@ user-invocable: false
 
 당신은 spec-distill의 인터뷰 stage를 진행 중입니다. 이 stage는 *받아적는* 인터뷰가
 아니라 **강한 문제공간 stage**입니다(Double Diamond 1st diamond — brainstorming 해답공간
-앞단, 상보적·비중복). 4-block Korean Socratic format으로 round를 진행하되, 종료 전 **5
-통과 의례**를 모두 통과해야 brief 작성이 허용됩니다(Law 1 구조 게이트).
+앞단, 상보적·비중복). 4-block Korean Socratic format으로 round를 진행하되, 종료는
+**커버리지 원장의 floor 5차원**(root-problem/landscape/skepticism/blind-spot/open-questions)이
+**모두 `closed`**일 때만 허용됩니다 — landscape·skepticism 등 통과 의례 메커니즘이 각 차원을
+채우는 수단이며, `check_brief.py`가 이를 기계적으로 검증합니다(Law 1 구조 게이트).
 
 산출물은 `spec.md`가 아니라 **interview brief**(brainstorming용 meta-prompt)이며, 이
 brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으면 brainstorming으로
@@ -150,12 +153,17 @@ bound한다(프로즈 self-tracking 금지). **원자성**: probe(= (b)/(d)-path
 ```bash
 ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" state-root)"
 STATE="$ROOT/<session-id>/state.local.md"
-# 1) probe 조립 전 gate
-if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" check "$STATE"; then
-  : # probe_count >= effective_cap — floor 미충족이면 아래 C1 escalation, 질문 미제기(increment 안 함)
+# 1) probe 조립 전 gate (check가 유일한 gate — C10)
+if python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" check "$STATE"; then
+  # gate 통과 → (b)/(d) 질문을 실제로 제기하고 답을 받는다
+  # <질문 제기 + 답 수신>
+  # 2) 질문을 제기한 *후에만* increment (phantom 증가 없음 — C10 원자성)
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" increment "$STATE"
+else
+  # probe_count >= effective_cap & floor 미충족 → 질문 미제기(increment 안 함),
+  # 아래 C1 escalation(AskUserQuestion 3옵션)으로.
+  :
 fi
-# 2) 질문 실제 제기 후에만
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" increment "$STATE"
 ```
 
 `check`가 non-zero(`probe_count ≥ effective_cap`) & floor 미충족이면 **C1 escalation**을 발화한다
@@ -193,8 +201,8 @@ brief 작성(+ optional brainstorming invoke)은 다음 5 의례를 **모두 통
 | R1 | **Reframe (메타 프롬프트)** | 받은 요청을 재구성한 한 문장 문제정의 + 진짜 goal. | (d) ontological 5-type (ESSENCE/ROOT_CAUSE/...) → brief §1 |
 | R2 | **Landscape 수집** | web sweep ≥1회, prior-art/대안이 **인용과 함께** 표면화. | path(a) 확장 → brief §3 |
 | R3 | **Skepticism 통과** | 의심 triggered 방향이 모두 steelman 후 *방어 또는 전환*. un-challenged 의심 방향 lock 불가. | steelman-builder dispatch → brief §4 |
-| R4 | **시행착오 기록** | steelman switch된 방향 **또는** 사용자가 명시적으로 폐기한 방향이 *이유와 함께* 기록. 0건이면 `N/A — 전부 first-time defend+lock` 명시(빈 섹션 금지). | brief §5 |
-| R5 | **Open Questions 박제** | 미해결 명시("유추 금지"). | brief §6 |
+| R4 | **시행착오 기록** | steelman switch된 방향 **또는** 사용자가 명시적으로 폐기한 방향이 *이유와 함께* 기록. 0건이면 `N/A — 전부 first-time defend+lock` 명시(빈 섹션 금지). | brief §7 |
+| R5 | **Open Questions 박제** | 미해결 명시("유추 금지"). | brief §8 |
 
 ### R2 — 웹 Landscape (bounded, AC7/AC8)
 
