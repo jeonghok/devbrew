@@ -68,7 +68,10 @@ has 'pending_locked_decisions' "AC1: pending_locked_decisions retained"
 # AC5: 마이그레이션 — 구세션 감지 + fresh seed + advisory
 has 'coverage.*부재|coverage 부재|interview_round.*존재' "AC5: legacy detection (interview_round present / coverage absent)"
 has 'state schema migration.*coverage|coverage/probe_count added' "AC5: migration advisory wording"
-has 'probe_count.*0|probe_count=0' "AC5: probe_count seeded fresh (not from interview_round)"
+mig_block="$(awk '/^## In-flight state migration/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
+{ grep -qi 'probe_count' <<<"$mig_block" && grep -qiE '승계 금지|라운드 수는 probe 수가 아니' <<<"$mig_block"; } \
+  && note PASS "AC5: probe_count seeded fresh (not from interview_round)" \
+  || note FAIL "AC5: probe_count seeded fresh (not from interview_round)"
 
 # state 스키마 블록(첫 yaml)에서 interview_round가 능동 필드로 남지 않았는지 (V7b)
 # — 마이그레이션 섹션의 언급은 허용, 스키마 선언은 금지.
