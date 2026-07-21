@@ -2,9 +2,10 @@
 name: conducting-interview
 description: >
   Runs the spec-distill problem-space interview stage and produces a terminal
-  interview-brief at docs/superpowers/interview/. Brief authoring is gated by the
-  5 통과 의례 (R1-R5) Law 1 structural check (check_brief.py). Optionally hands the
-  brief to superpowers:brainstorming.
+  interview-brief at docs/superpowers/interview/. 종료는 커버리지 원장의 floor
+  5차원(root-problem/landscape/skepticism/blind-spot/open-questions)이 모두
+  closed일 때이며, check_brief.py의 구조적 게이트로 기계적 검증합니다(Law 1).
+  Optionally hands the brief to superpowers:brainstorming.
 cost_class: variable
 user-invocable: false
 ---
@@ -13,8 +14,10 @@ user-invocable: false
 
 당신은 spec-distill의 인터뷰 stage를 진행 중입니다. 이 stage는 *받아적는* 인터뷰가
 아니라 **강한 문제공간 stage**입니다(Double Diamond 1st diamond — brainstorming 해답공간
-앞단, 상보적·비중복). 4-block Korean Socratic format으로 round를 진행하되, 종료 전 **5
-통과 의례**를 모두 통과해야 brief 작성이 허용됩니다(Law 1 구조 게이트).
+앞단, 상보적·비중복). 4-block Korean Socratic format으로 round를 진행하되, 종료는
+**커버리지 원장의 floor 5차원**(root-problem/landscape/skepticism/blind-spot/open-questions)이
+**모두 `closed`**일 때만 허용됩니다 — landscape·skepticism 등 통과 의례 메커니즘이 각 차원을
+채우는 수단이며, `check_brief.py`가 이를 기계적으로 검증합니다(Law 1 구조 게이트).
 
 산출물은 `spec.md`가 아니라 **interview brief**(brainstorming용 meta-prompt)이며, 이
 brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으면 brainstorming으로
@@ -30,7 +33,21 @@ State frontmatter schema:
 ---
 session_id: <uuid>
 phase: 1
-interview_round: <int>
+coverage:                            # G1 커버리지 원장 (floor 5 + derived[]). 종료 driver.
+  floor:
+    root_problem:   {status: open, evidence: ""}
+    landscape:      {status: open, evidence: ""}
+    skepticism:     {status: open, evidence: ""}
+    blind_spot:     {status: open, evidence: ""}
+    open_questions: {status: open, evidence: ""}
+  derived: []                        # 주제-도출 차원 (coverage-mapper 제안 → orchestrator admit; {name, rationale, status, evidence})
+orchestration:                       # C11/C8 across-resumption 상태 (orchestrator 소유, agent read-only)
+  focused_dimension: null            # 현재 probe 대상 차원 이름 또는 null
+  no_progress_streak: 0              # C11 연속 무진전 probe 수; focused 변경·진전 시 0 reset
+  blind_spot_dispatched: false       # C8 인터뷰당 1회 보장; 첫 dispatch 시 true
+  coverage_mapper_last_probe: null   # 마지막 coverage-mapper dispatch 시 probe_count (C11 rate-limit)
+probe_count: 0                       # C10 probe 백스톱 카운터 (probe 제기 *후* +1)
+probe_cap_override: 0                # C1 '계속'이 base cap(12)만큼 raise
 non_user_streak: <int>
 web_sweep_count: 0                   # 현재 sweep 내 web 검색 호출 수 (AP9, ≤4). sweep 종료 시 0으로 reset.
 web_search_count: 0                  # 세션 누적 web 검색 호출 수 (AP16, ≤8 soft cap).
@@ -41,7 +58,7 @@ pending_locked_decisions: []         # 매 round 끝 append (b/d path 명시 응
 ---
 ```
 
-State body: 각 round의 4-block 출력 + 사용자 답변 + (있다면) breadth-keeper 출력 transcript.
+State body: 각 round의 4-block 출력 + 사용자 답변 + (있다면) coverage-mapper 출력 transcript.
 
 **Secret 기록 금지** (P21): 사용자 답변에 token/key/credential 패턴 감지 시 placeholder로 치환 후 기록.
 
@@ -90,6 +107,25 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 매 round의 4-block에서 어떤 path로 routing했는지 transcript에 명시하십시오.
 
+## teach-beat (AC8/C3/C12 — 미지를 드러내 가르치기)
+
+매 probe에 **teach-lite**를 붙인다: prior-art/trade-off를 **≤1문장**, **web 호출 없이**, 그리고
+**단정이 아닌 질문 형태**로 제시해 사용자가 모르는 지형을 살짝 연다(C3 — 공유된 전제가 사용자 답을
+오염시키지 않게).
+
+다음 **열거 신호** 중 하나가 발화하면 그 probe의 teach-lite를 **teach-heavy**로 *대체*한다
+(추가 아님 — probe당 teach-beat 최대 1회). teach-heavy = **≥1 prior-art/URL 또는 landscape 인용**:
+
+1. 사용자 답이 `## External Landscape` 한 항목과 모순.
+2. hold·satisficing 답("모르겠음/둘 다/아무거나" — locked-판정 트리의 "보류" 분기 재사용).
+3. floor 차원의 첫 open→in-progress 전이(그 차원에 첫 probe 착수).
+4. coverage-mapper/blind-spot-prober 출력이 비어있지 않음.
+
+복수 신호 동시 발화 시 heavy beat 1회로 합친다. **발화 시점은 모델 판단 적응 행동**이다(C12 —
+결정론 게이트로 기계화하지 않는다; 위 신호는 결정 규칙이 아니라 휴리스틱 가이드). 검증 가능한 것은
+이 신호 목록 + 크기 한도(teach-lite ≤1문장 / teach-heavy ≥1 URL)뿐이며, 각 발화의 per-firing
+결정성은 non-goal(모델 판단을 결정론으로 대체하지 않음 — 이 재구성의 핵심 논지).
+
 ## Locked 판정 트리거 (G1, AC1)
 
 매 round 끝에 사용자 응답을 `pending_locked_decisions`에 append할지 다음 decision table로 판정:
@@ -115,7 +151,7 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 ## C44 Dialectic Rhythm Guard
 
-`non_user_streak` 카운터 — 직전 N round 동안 *사용자 답변이 없었던* 횟수.
+`non_user_streak` 카운터 — 직전 N probe 동안 *사용자 답변이 없었던* 횟수.
 
 - (a) factual auto-confirm: streak +1
 - (c) sub-agent adversarial: streak +1
@@ -125,17 +161,98 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 `non_user_streak >= DEVBREW_RHYTHM_GUARD_THRESHOLD` (default 3) 도달 시:
 
-→ 다음 round의 질문은 **반드시 (b) judgment path** (사용자에게 직접 질문)로 라우팅. 강제.
+→ 다음 probe의 질문은 **반드시 (b) judgment path** (사용자에게 직접 질문)로 라우팅. 강제.
 
-## breadth-keeper dispatch (C45, AC13)
+## probe 백스톱 (C1/C10 — Unbounded-autonomy 가드)
 
-매 round 끝에 다음 조건 모두 만족하면 `breadth-keeper` agent를 1회 dispatch:
+floor 미충족이면 종료가 막히므로 probe가 무한히 돌 수 있다. `probe_budget.py`가 이를 기계적으로
+bound한다(프로즈 self-tracking 금지). **원자성**: probe(= (b)/(d)-path 질문 1회)를 조립하기
+*전에* `check`(gate)를 호출하고, 질문을 실제로 제기한 *후에만* `increment`한다.
 
-1. `interview_round >= 2` (첫 round는 탐색기 — skip)
-2. 직전 3 round가 같은 dimension(같은 spec 섹션)에 집중함
-3. 이번 round에서 dispatch 안 한 경우 (round당 max 1, AC13)
+```bash
+ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" state-root)"
+STATE="$ROOT/<session-id>/state.local.md"
+# 1) probe 조립 전 gate (check가 유일한 gate — C10)
+if python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" check "$STATE"; then
+  # gate 통과 → (b)/(d) 질문을 실제로 제기하고 답을 받는다
+  # <질문 제기 + 답 수신>
+  # 2) 질문을 제기한 *후에만* increment (phantom 증가 없음 — C10 원자성)
+  #    increment는 fail-closed(exit 1: 카운터 부재/malformed/state unwritable)다. web_budget(아래 270)과
+  #    대칭으로 그 exit를 반드시 확인한다 — 무시하면 카운터가 전진하지 않아 check가 영원히 통과하고
+  #    백스톱이 조용히 무력화된다(fail-open, Unbounded-autonomy Forbidden Pattern).
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" increment "$STATE" || {
+    echo "[spec-distill] probe_count increment 실패 — 백스톱 무력화 위험(카운터 부재/malformed/state unwritable). 자동 진행 중단, 상태 재영속화(마이그레이션 persist) 또는 세션 확인 후 재시도." >&2
+    # blocked check와 동일하게 fail-closed 취급 — 다음 probe를 제기하지 말고 아래 C1 escalation으로.
+  }
+else
+  # probe_count >= effective_cap & floor 미충족 → 질문 미제기(increment 안 함),
+  # 아래 C1 escalation(AskUserQuestion 3옵션)으로.
+  :
+fi
+```
 
-dispatch 결과 (`narrow_tunneling: true`) 면 다음 round 시작 시 `suggested_lateral_questions` 중 하나를 추천 답안으로 제시.
+`check`가 non-zero(`probe_count ≥ effective_cap`) & floor 미충족이면 **C1 escalation**을 발화한다
+(`AskUserQuestion`, 3옵션):
+
+- **① 계속**: `probe_budget.py raise-cap "$STATE"` — `probe_cap_override`를 base cap(12)만큼 올려
+  `effective_cap = base + override`로 상향(persist) 후 진행.
+- **② 박제 후 종료**: 미충족 floor 행을 `status: closed` + evidence `사용자-승인 박제(@probe N) —
+  §Open Questions 참조`로 기록하고 그 내용을 brief §8 Open Questions로 이동 → AC2 게이트 통과(floor
+  closed)하되 박제 표식이 원장에 가시적(silent bypass 아님).
+- **③ abort**: brief 미작성, state 보존.
+
+`increment`는 질문 제기 후에만 호출돼 phantom 증가가 없다(gate에서 막힌 probe는 카운트 안 됨).
+`increment`는 gate하지 않는다 — gating은 오직 `check`(C10 원자성). 단 `increment`의 exit는
+반드시 확인한다: fail-closed(exit 1) 시 카운터가 디스크에 전진하지 못한 것이므로 자동으로 다음
+probe를 제기하지 말고 fail-closed로 처리한다(위 `|| {…}` 가드, web_budget과 대칭). 이 exit를
+버리면 백스톱이 조용히 무력화된다.
+
+kill switch: `DEVBREW_SPEC_DISTILL_PROBE_CAP=N` 으로 base cap override.
+
+## coverage-mapper dispatch (C11, AC7)
+
+`coverage-mapper`는 고정 floor 위 **주제-도출 차원**을 *제안*하는 advisory 에이전트다(원장 admit
+판정은 orchestrator, G2). 다음 조건 중 하나에서 dispatch:
+
+1. 한 focused 차원이 **연속 3 probe** 동안 status·evidence 무변경(진전 없음), OR
+2. floor 차원의 **첫 open→in-progress 전이**.
+
+진전 = status 전이(open→in-progress→closed) 또는 evidence append. `orchestration.no_progress_streak`는
+focused 차원이 바뀌거나 진전 발생 시 0으로 reset.
+
+**redispatch 바운드(Unbounded-autonomy 가드)**: dispatch 시 `orchestration.coverage_mapper_last_probe =
+probe_count` 기록. 재dispatch는 `probe_count - coverage_mapper_last_probe >= 3`일 때만 허용(무진전이
+지속돼도 최소 3 probe 간격 — 레벨-트리거 무한 재dispatch 방지). `coverage_mapper_last_probe == null`이면
+첫 dispatch 허용.
+
+```
+Agent({ description: "Map coverage dimensions", subagent_type: "spec-distill:coverage-mapper",
+        prompt: "열린/닫힌 차원 요약: <...>. focused_dimension: <...>, no_progress_streak: <N>. 이 주제가 요구하는 derived 차원과 neglect를 제안." })
+```
+
+출력(`derived_dimensions[] + neglect_flag`)은 **advisory** — orchestrator가 원장에 admit할지 판정한다.
+`neglect_flag: true`면 다음 probe에서 neglected 차원 하나를 추천 답안으로 제시. 복수 dispatch 시
+name 기준 union·dedup.
+
+## blind-spot-prober dispatch (AC6, C8 — blind_spot floor 차원)
+
+`blind_spot` floor 차원의 **첫 open→in-progress 전이**(그 차원에 첫 probe 착수) 시 `blind-spot-prober`를
+**인터뷰당 1회** dispatch한다(fan-out 1, C8). `orchestration.blind_spot_dispatched`가 false일 때만
+dispatch하고, dispatch 후 true로 세팅(재dispatch 금지).
+
+```
+Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind-spot-prober",
+        prompt: "재구성된 문제정의: <...>. locked_directions: <...>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
+```
+
+출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 brief §5 `## Blind Spots & Premortem`에
+기록하고, `blind_spot` floor 차원을 in-progress→closed로 전이(사용자에게 표면화된 blind-spot 확인 후).
+
+**Web 부재 시 graceful degradation (C5)**: kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web
+도구 부재로 blind-spot-prober를 돌릴 수 없으면 — R2/R3 web-absent 강등과 대칭으로 — opaque gate-fail로
+떨어뜨리지 말고 **loud advisory** 후 **inline premortem**으로 전환:
+`[spec-distill] web 비활성 — blind-spot-prober 자동 생략, inline premortem으로 전환`. 이 경우 §5는
+codebase 근거 또는 사용자 판단으로 기록(URL 부재 사유 명시).
 
 ## 5 통과 의례 (Law 1 구조 게이트, R1–R5)
 
@@ -147,8 +264,8 @@ brief 작성(+ optional brainstorming invoke)은 다음 5 의례를 **모두 통
 | R1 | **Reframe (메타 프롬프트)** | 받은 요청을 재구성한 한 문장 문제정의 + 진짜 goal. | (d) ontological 5-type (ESSENCE/ROOT_CAUSE/...) → brief §1 |
 | R2 | **Landscape 수집** | web sweep ≥1회, prior-art/대안이 **인용과 함께** 표면화. | path(a) 확장 → brief §3 |
 | R3 | **Skepticism 통과** | 의심 triggered 방향이 모두 steelman 후 *방어 또는 전환*. un-challenged 의심 방향 lock 불가. | steelman-builder dispatch → brief §4 |
-| R4 | **시행착오 기록** | steelman switch된 방향 **또는** 사용자가 명시적으로 폐기한 방향이 *이유와 함께* 기록. 0건이면 `N/A — 전부 first-time defend+lock` 명시(빈 섹션 금지). | brief §5 |
-| R5 | **Open Questions 박제** | 미해결 명시("유추 금지"). | brief §6 |
+| R4 | **시행착오 기록** | steelman switch된 방향 **또는** 사용자가 명시적으로 폐기한 방향이 *이유와 함께* 기록. 0건이면 `N/A — 전부 first-time defend+lock` 명시(빈 섹션 금지). | brief §7 |
+| R5 | **Open Questions 박제** | 미해결 명시("유추 금지"). | brief §8 |
 
 ### R2 — 웹 Landscape (bounded, AC7/AC8)
 
@@ -174,7 +291,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" increment "$ROOT/<session-
 
 ### R3 — Steelman 의심 게이트 (P17)
 
-의심 trigger = landscape 모순 / 알려진 anti-pattern / 기존 LD 불일치 / breadth-keeper tunneling.
+의심 trigger = landscape 모순 / 알려진 anti-pattern / 기존 LD 불일치 / coverage-mapper neglect.
 
 1. `steelman-builder` 에이전트를 **순차** dispatch(병렬·투기적 금지 — C5):
    ```
@@ -184,8 +301,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" increment "$ROOT/<session-
 2. builder 출력(`alternative_statement` + `evidence[].url`)을 **verbatim**으로 4-block에 반대
    케이스로 제시 — conducting-interview는 이를 **약화·편집하지 않습니다**(AC5).
 3. **게이트**(P17): 사용자가 (방어 → 원안 lock + `defense` 기록, steelman: defended) /
-   (전환 → 대안 lock, 원안은 R4로, steelman: switched-to-this) / (보류 → §6 OQ).
-4. builder 출력 그대로 brief §4 Skepticism Log에 기록 — 각 항목은 (대안 statement + 웹근거 URL + `verdict ∈ {defended | switched | deferred}`). 게이트 매핑: 방어→`defended`, 전환→`switched`, 보류→`deferred`(§6 OQ에도 박제). 프론트매터 `steelman:` 라벨(`switched-to-this`)과 §4 `verdict` 어휘(`switched`)는 별개 — §4에는 위 세 단어만 사용.
+   (전환 → 대안 lock, 원안은 R4로, steelman: switched-to-this) / (보류 → §8 OQ).
+4. builder 출력 그대로 brief §4 Skepticism Log에 기록 — 각 항목은 (대안 statement + 웹근거 URL + `verdict ∈ {defended | switched | deferred}`). 게이트 매핑: 방어→`defended`, 전환→`switched`, 보류→`deferred`(§8 OQ에도 박제). 프론트매터 `steelman:` 라벨(`switched-to-this`)과 §4 `verdict` 어휘(`switched`)는 별개 — §4에는 위 세 단어만 사용.
 5. 한 방향당 steelman 1회(새 근거 없으면 재steelman 금지 — AP16 harassment 방지).
 
 **Web 부재 시 graceful degradation (AC8 대칭)**: `steelman-builder`는 WebSearch/WebFetch를 요구합니다.
@@ -202,27 +319,39 @@ Law 1급 skepticism 의례입니다(verbatim pass-through로 무력화 방지).
 
 ## 종료 — brief 작성 + optional handoff
 
-다음을 모두 만족하고 **5 통과 의례가 모두 통과**하면 brief를 작성합니다:
+종료 driver는 **커버리지 원장의 floor 5차원이 전부 `closed`** 인 것이다(고정 라운드 수 아님, G1).
+다음을 모두 만족하면 brief를 작성합니다:
 
-- Goal/진짜 problem이 한 문장으로 재구성됨(R1).
-- Landscape가 인용과 함께 수집됨(R2).
-- 의심 방향이 모두 steelman 통과(R3).
-- 시행착오가 기록됨(R4).
-- Open Questions 박제(R5).
+- floor `root_problem` closed — 진짜 problem이 한 문장으로 재구성(R1 계열).
+- floor `landscape` closed — landscape가 인용과 함께 수집(R2 계열, web sweep 메커니즘 유지).
+- floor `skepticism` closed — 의심 방향이 모두 steelman 통과(R3 계열, steelman-builder 게이트 유지).
+- floor `blind_spot` closed — blind-spot-prober가 unknown-unknown을 표면화하고 §5에 기록.
+- floor `open_questions` closed — 미해결 명시(박제, "유추 금지").
+
+각 차원의 status 전이(open→in-progress→closed)와 evidence 기록은 **orchestrator만** 수행하며
+(coverage-mapper·blind-spot-prober는 read-only 제안자, Law 2), state.local.md에 쓰는 동시에
+brief §6 `## Coverage Ledger`에 직렬화합니다.
 
 ### Step A — brief 작성 (terminal 산출물)
 
-1. `${CLAUDE_PLUGIN_ROOT}/templates/interview-brief-template.md`로 7-section 구조 확보.
+1. `${CLAUDE_PLUGIN_ROOT}/templates/interview-brief-template.md`로 9-section 구조 확보(§5 Blind
+   Spots & Premortem, §6 Coverage Ledger 포함).
 2. 경로: `docs/superpowers/interview/<YYYY-MM-DD>-<kebab-topic>-interview.md` (워크트리 안 → `Write` tool 사용).
    - frontmatter: `type: interview-brief`, `next_phase: superpowers:brainstorming`,
      `session_id`(기존 spec-distill 세션 재사용 — 새 세션 생성 안 함), `locked_directions[]`
      (state `pending_locked_decisions` + steelman verdict 반영).
-3. **기계적 게이트 검증**(AC3) — 작성 직후:
+3. **Coverage Ledger 직렬화** (check_brief 게이트 *전*): state.local.md의 `coverage`를 brief §6
+   `## Coverage Ledger`에 한 줄당 한 차원으로 직렬화(floor 5행 + derived; 템플릿 §6 문법 —
+   `- floor:<key> — closed — <evidence>` / `- derived:<name> — closed — <evidence>` 또는
+   부재 시 `- derived: N/A`). floor 전부 `closed`가 아니면 이 시점에 도달하면 안 됩니다(종료
+   driver 위반 — 위 종료 기준을 만족하지 않은 채 Step A에 진입하지 않는다).
+4. **기계적 게이트 검증**(AC3) — 직렬화 직후:
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check_brief.py" gate "docs/superpowers/interview/<file>"
    ```
    exit ≠ 0 이면 **brief를 finalize하지 말고** 보고된 미충족 의례를 보완(누락 섹션/무인용
-   landscape/형식 미달 steelman/빈 Tried&Discarded). 통과(exit 0)할 때까지 반복.
+   landscape/형식 미달 steelman/빈 Tried&Discarded/floor open 또는 evidence 공백/Blind Spots
+   부재). 통과(exit 0)할 때까지 반복.
 
 ### Step B — proceed 게이트 (handoff 방식 제안)
 
@@ -307,21 +436,38 @@ AskUserQuestion({
 
 이 stage는 brief까지로 종료됩니다. handoff를 *강제하지 않습니다*(NG7).
 
-## In-flight state migration (C10)
+## In-flight state migration (AC5)
 
-state.local.md 로드 시 v0.1.x schema (신규 필드 부재)를 감지하면 *non-mutating read*로 자동 promote:
+state.local.md 로드 시 **구세션 스키마**(`interview_round` 존재 / `coverage` 부재)를 감지하면
+*non-mutating read*로 fresh 초기화(승격):
 
-- `pending_locked_decisions` 부재 → `[]`로 in-memory default.
-- `issue_history[].dismissed_by_user` / `accepted_by_user` / `reconsensus_count` 부재 → `0`으로 in-memory default.
+- `coverage.floor`의 5개 차원(root_problem/landscape/skepticism/blind_spot/open_questions) 전부
+  `{status: open, evidence: ""}`로 seed.
+- `coverage.derived`: `[]`.
+- `probe_count`: **0** (interview_round 값 승계 금지 — 라운드 수는 probe 수가 아니다).
+- `probe_cap_override`: `0`.
+- `orchestration`: `{focused_dimension: null, no_progress_streak: 0, blind_spot_dispatched: false, coverage_mapper_last_probe: null}`.
 
-다음 state write 시점에 frontmatter에 자연스럽게 추가 (backward-rewriting 금지 — 명시적 write 시점에만 frontmatter 갱신).
+기존 필드(`non_user_streak`·`web_*`·`issue_history`·`pending_locked_decisions` 등)는 유지.
+
+**영속화 시점**: 승격된 스키마는 재개된 세션의 첫 액션으로, 첫 probe나 `probe_budget.py increment`/`raise-cap` 호출보다 먼저 Bash 전체-frontmatter write로 즉시 디스크에 반영한다(PN1 state write contract). 이 즉시 write가 AC5의 "다음 명시적 state write"다 — 연기가 아니라 resume 직후 1회.
+
+근거: `increment`/`raise-cap`은 카운터 라인이 부재하면 fail-closed(exit 1, silent-create
+금지)이므로, 이 write 없이는 `probe_count`가 디스크에 없는 채로 첫 probe가 발생해 백스톱이
+무력화된다.
+
+이 write는 신규 필드(coverage/probe_count/probe_cap_override/orchestration)만 추가하는
+forward promotion이며 backward-rewrite가 아니다 — `interview_round`는 이 write에서 자연
+소멸하되 다른 기존 필드는 고치지 않는다. AC5의 backward-rewrite 금지·P14 실패-상태 보존과
+무충돌: 이것은 성공적 resume의 promotion write이지 실패-상태 mutation이 아니다.
 
 사용자에게 advisory 한 줄 출력:
 ```
-[spec-distill v0.2.0] state.local.md schema migration: <fields> added with defaults.
+[spec-distill v0.22.0] state schema migration: coverage/probe_count added (interview_round retired).
 ```
 
-자동 promote 실패 시 (파일 corruption 등) → 사용자에게 "v0.1.x in-flight state 호환 실패 — 세션 재시작 권장" 알림 + state.local.md 보존 (P14).
+자동 promote 실패 시(파일 corruption 등) → "구세션 in-flight state 호환 실패 — 세션 재시작 권장"
+알림 + state.local.md 보존 (P14).
 
 ## kill switch
 

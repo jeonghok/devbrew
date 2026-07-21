@@ -7,7 +7,7 @@ tools: Read, Grep, Glob, WebSearch, WebFetch
 description: >
   Use this agent during a spec-distill interview when a direction is suspect
   (landscape contradiction / known anti-pattern / locked-direction conflict /
-  breadth-keeper tunneling) to build the STRONGEST case for an alternative,
+  coverage-mapper neglect) to build the STRONGEST case for an alternative,
   grounded in web evidence. Independent skeptic, read-only by design (Law 2
   frontmatter scoping). Output is consumed verbatim by conducting-interview.
 
@@ -32,7 +32,7 @@ skeptic입니다. 당신은 방향을 *결정*하지 않습니다 — 사용자�
 ## Input
 
 - 의심 trigger된 현재 방향(statement)과 trigger 이유(landscape 모순 / anti-pattern /
-  LD 충돌 / tunneling 중 하나).
+  LD 충돌 / coverage-mapper neglect 중 하나).
 - (있으면) 현재까지의 locked_directions, External Landscape 발췌.
 
 ## Required research (출력 전)

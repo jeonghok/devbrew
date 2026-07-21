@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.22.0] — 2026-07-21
+
+### Added
+- **커버리지-구동 인터뷰 재구성** — 종료 driver를 고정 `interview_round` 카운터에서 미지-차원
+  커버리지 원장(고정 floor 5 + 주제-도출 차원, 각 status ∈ {open, in-progress, closed})으로 교체.
+  집요함·깊이·차원이 주제에 적응한다(길이 아님).
+- `scripts/probe_budget.py` — Unbounded-autonomy 백스톱(check/increment/raise-cap; base_cap 12 +
+  probe_cap_override; env `DEVBREW_SPEC_DISTILL_PROBE_CAP`). `web_budget.py` sibling, mutation-testable.
+- `agents/blind-spot-prober.md` — blind_spot floor 차원을 구현하는 적대적 premortem 에이전트
+  (read-only, fan-out 1, hidden_assumptions/failure_modes 출력).
+- brief 템플릿 §5 Blind Spots & Premortem + §6 Coverage Ledger 신규 섹션. `check_brief.py`가 원장 form
+  (floor all-closed + evidence non-empty + derived)을 게이트.
+- teach-beat — 모든 probe teach-lite(≤1문장) + 열거 신호 시 teach-heavy(≥1 URL/prior-art 인용). 발화
+  시점은 model-judged(C12, 결정론 미기계화).
+
+### Changed
+- `agents/breadth-keeper.md` → `agents/coverage-mapper.md` 재명명·재목적화 — tunneling 검출에서
+  주제-도출 차원 advisory 제안자로 승격(원장 admit 판정은 orchestrator, Law 2). `coverage-mapper`
+  dispatch 트리거를 `interview_round >= 2`에서 C11 커버리지 조건(연속 3 probe 무진전 OR floor 첫
+  open→in-progress) + redispatch 바운드로 교체.
+- `skills/conducting-interview/SKILL.md` — 상태 스키마(interview_round 제거, coverage/probe_count/
+  probe_cap_override/orchestration 추가), 종료 게이트(floor all-closed), probe 백스톱 호출, rhythm-guard
+  probe 재프레임, in-flight 마이그레이션(구세션 fresh seed).
+- `agents/steelman-builder.md` — description 용어 'breadth-keeper' → 'coverage-mapper'(terminology-only).
+
+### Security
+- 신규/변경 에이전트(coverage-mapper·blind-spot-prober)는 `tools:` allowlist fail-closed(Write/Edit 물리
+  부재) — Law 2 read-only 불변. probe 백스톱은 기계적 집행(프로즈 self-tracking 아님).
+
 ## [0.21.0] — 2026-07-19
 
 ### Changed

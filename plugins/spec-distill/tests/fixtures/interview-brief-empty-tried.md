@@ -3,7 +3,7 @@ name: sample-topic
 type: interview-brief
 created_at: 2026-05-31
 session_id: testsession01
-source: spec-distill conducting-interview v0.12.0
+source: spec-distill conducting-interview v0.22.0
 next_phase: superpowers:brainstorming
 locked_directions:
   - id: LD1
@@ -31,12 +31,25 @@ The real goal is reducing time-to-first-paint, not "make it a SPA" (ESSENCE).
 
 - Alternative: islands architecture could beat full SSR here — https://jasonformat.com/islands-architecture/ — verdict: defended
 
-## 5. Tried & Discarded
+## 5. Blind Spots & Premortem
 
-## 6. Open Questions
+- 숨은 가정: SSR host가 항상 저지연 — 왜 위험: cold start 시 TTFP 역전 — https://vercel.com/docs/functions/serverless-functions
+
+## 6. Coverage Ledger
+
+- floor:root_problem — closed — §1 Reframed Problem (ROOT_CAUSE)
+- floor:landscape — closed — §3 Next.js SSR 인용
+- floor:skepticism — closed — §4 islands steelman defended
+- floor:blind_spot — closed — §5 cold-start premortem
+- floor:open_questions — closed — §8 caching OQ1
+- derived:rendering-strategy — closed — 이 대시보드는 SSR/islands 선택이 핵심; §4 근거
+
+## 7. Tried & Discarded
+
+## 8. Open Questions
 
 - OQ1: caching layer for authenticated views — deferred to solution space.
 
-## 7. Concrete Next Action
+## 9. Concrete Next Action
 
 superpowers 있으면 이 brief를 context로 brainstorming 호출 → -design.md → reviewer → writing-plans.

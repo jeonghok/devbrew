@@ -3,21 +3,21 @@ name: sample-topic
 type: interview-brief
 created_at: 2026-05-31
 session_id: testsession01
-source: spec-distill conducting-interview v0.12.0
+source: spec-distill conducting-interview v0.22.0
 next_phase: superpowers:brainstorming
 locked_directions:
   - id: LD1
     statement: "use server-side rendering for the dashboard"
     source_path: b
     steelman: defended
-    defense: "user judgment — web disabled this session"
+    defense: "client hydration cost measured higher for this data shape"
 ---
 
 # Sample Topic — Interview Brief (meta-prompt for brainstorming)
 
 ## 1. Reframed Problem
 
-The real goal is reducing time-to-first-paint (ESSENCE).
+The real goal is reducing time-to-first-paint, not "make it a SPA" (ESSENCE).
 
 ## 2. Locked Directions
 
@@ -25,20 +25,33 @@ The real goal is reducing time-to-first-paint (ESSENCE).
 
 ## 3. External Landscape
 
-web 비활성 — landscape 생략, codebase 근거만 사용.
+- Next.js app-router SSR — https://nextjs.org/docs/app — [취함] — matches data shape
 
 ## 4. Skepticism Log
 
 - Alternative: a static-export build could avoid SSR infra — verdict: defended (web 비활성, 사용자 판단 근거, URL 부재)
 
-## 5. Tried & Discarded
+## 5. Blind Spots & Premortem
 
-- N/A — 전부 first-time defend+lock
+- 숨은 가정: SSR host가 항상 저지연 — 왜 위험: cold start 시 TTFP 역전 — https://vercel.com/docs/functions/serverless-functions
 
-## 6. Open Questions
+## 6. Coverage Ledger
 
-- OQ1: caching layer — deferred.
+- floor:root_problem — closed — §1 Reframed Problem (ROOT_CAUSE)
+- floor:landscape — closed — §3 Next.js SSR 인용
+- floor:skepticism — closed — §4 islands steelman defended
+- floor:blind_spot — closed — §5 cold-start premortem
+- floor:open_questions — closed — §8 caching OQ1
+- derived:rendering-strategy — closed — 이 대시보드는 SSR/islands 선택이 핵심; §4 근거
 
-## 7. Concrete Next Action
+## 7. Tried & Discarded
 
-brainstorming 호출.
+- Tried full client SPA → discarded: TTFP regression on cold load.
+
+## 8. Open Questions
+
+- OQ1: caching layer for authenticated views — deferred to solution space.
+
+## 9. Concrete Next Action
+
+superpowers 있으면 이 brief를 context로 brainstorming 호출 → -design.md → reviewer → writing-plans.
