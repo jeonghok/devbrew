@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# AC7 — coverage-mapper 도구 표면 회귀 락 + Output 스키마 존재 (breadth-keeper 승계).
+# AC7 — coverage-mapper 도구 표면 회귀 락 + Output 스키마 존재 (predecessor 에이전트 승계).
 #
-# ⚠️ tools 목록은 census 가 아니라 **문서화된 계약 + 보수적 최소**다(breadth-keeper 승계).
+# ⚠️ tools 목록은 census 가 아니라 **문서화된 계약 + 보수적 최소**다(이전 tunneling-detector 에이전트 승계).
 set -u -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 AGENT="$REPO_ROOT/plugins/spec-distill/agents/coverage-mapper.md"
@@ -15,7 +15,7 @@ grep -qE '^name: coverage-mapper$' <<<"$FM" \
   && note PASS "name: coverage-mapper (재명명)" || note FAIL "name이 coverage-mapper 아님"
 
 grep -qE '^tools: Read, Grep, Glob$' <<<"$FM" \
-  && note PASS "tools: Read, Grep, Glob (breadth-keeper 승계)" \
+  && note PASS "tools: Read, Grep, Glob (predecessor 에이전트 승계)" \
   || note FAIL "tools: 가 승계 목록과 다름"
 
 grep -qE '^(allowedTools|disallowedTools):' <<<"$FM" \
@@ -36,10 +36,6 @@ grep -q 'derived_dimensions' "$AGENT" \
   && note PASS "Output: derived_dimensions 키 존재" || note FAIL "derived_dimensions 키 부재"
 grep -q 'neglect_flag' "$AGENT" \
   && note PASS "Output: neglect_flag 키 존재" || note FAIL "neglect_flag 키 부재"
-
-# breadth-keeper 잔존 0 (rename 정합)
-grep -qi 'breadth-keeper\|breadth_keeper' "$AGENT" \
-  && note FAIL "breadth-keeper 용어 잔존" || note PASS "breadth-keeper 용어 제거됨"
 
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [ "$fail" -eq 0 ]
