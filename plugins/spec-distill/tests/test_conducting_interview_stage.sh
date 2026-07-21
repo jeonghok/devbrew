@@ -107,6 +107,15 @@ grep -qi 'AskUserQuestion' <<<"$backstop_block" \
 { grep -q '계속' <<<"$backstop_block" && grep -qi '박제' <<<"$backstop_block" && grep -qi 'abort' <<<"$backstop_block"; } \
   && note PASS "C1: 3-option escalation semantics (계속/박제/abort, scoped to probe 백스톱)" \
   || note FAIL "C1: 3-option escalation semantics (계속/박제/abort, scoped to probe 백스톱)"
+# C5 fail-open fix: 소비자가 increment의 fail-closed exit(1)를 반드시 확인해야 한다(web_budget:270
+# 과 대칭). bare `increment "$STATE"`(exit 무시)면 카운터 부재 시 전진 못해 check가 영원히 통과 →
+# 백스톱 무력(fail-open). teeth: 가드를 bare increment로 되돌리면 grep -F가 RED. "## probe 백스톱" 스코프.
+grep -qF 'increment "$STATE" ||' <<<"$backstop_block" \
+  && note PASS "C5: probe increment exit is checked (|| guard, scoped to probe 백스톱)" \
+  || note FAIL "C5: probe increment exit is checked (|| guard, scoped to probe 백스톱)"
+grep -qi 'increment 실패' <<<"$backstop_block" \
+  && note PASS "C5: increment-fail loud advisory present (scoped to probe 백스톱)" \
+  || note FAIL "C5: increment-fail loud advisory present (scoped to probe 백스톱)"
 # 종료 로직에 interview_round 잔존 0 (AC9/V7b)
 term_block="$(awk '/^## 종료/{f=1} f&&/^## [^종]/{exit} f' "$SKILL")"
 grep -q 'interview_round' <<<"$term_block" \

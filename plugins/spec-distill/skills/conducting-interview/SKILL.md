@@ -177,7 +177,13 @@ if python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" check "$STATE"; then
   # gate 통과 → (b)/(d) 질문을 실제로 제기하고 답을 받는다
   # <질문 제기 + 답 수신>
   # 2) 질문을 제기한 *후에만* increment (phantom 증가 없음 — C10 원자성)
-  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" increment "$STATE"
+  #    increment는 fail-closed(exit 1: 카운터 부재/malformed/state unwritable)다. web_budget(아래 270)과
+  #    대칭으로 그 exit를 반드시 확인한다 — 무시하면 카운터가 전진하지 않아 check가 영원히 통과하고
+  #    백스톱이 조용히 무력화된다(fail-open, Unbounded-autonomy Forbidden Pattern).
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" increment "$STATE" || {
+    echo "[spec-distill] probe_count increment 실패 — 백스톱 무력화 위험(카운터 부재/malformed/state unwritable). 자동 진행 중단, 상태 재영속화(마이그레이션 persist) 또는 세션 확인 후 재시도." >&2
+    # blocked check와 동일하게 fail-closed 취급 — 다음 probe를 제기하지 말고 아래 C1 escalation으로.
+  }
 else
   # probe_count >= effective_cap & floor 미충족 → 질문 미제기(increment 안 함),
   # 아래 C1 escalation(AskUserQuestion 3옵션)으로.
@@ -196,7 +202,10 @@ fi
 - **③ abort**: brief 미작성, state 보존.
 
 `increment`는 질문 제기 후에만 호출돼 phantom 증가가 없다(gate에서 막힌 probe는 카운트 안 됨).
-`increment`는 gate하지 않는다 — gating은 오직 `check`(C10 원자성).
+`increment`는 gate하지 않는다 — gating은 오직 `check`(C10 원자성). 단 `increment`의 exit는
+반드시 확인한다: fail-closed(exit 1) 시 카운터가 디스크에 전진하지 못한 것이므로 자동으로 다음
+probe를 제기하지 말고 fail-closed로 처리한다(위 `|| {…}` 가드, web_budget과 대칭). 이 exit를
+버리면 백스톱이 조용히 무력화된다.
 
 kill switch: `DEVBREW_SPEC_DISTILL_PROBE_CAP=N` 으로 base cap override.
 
