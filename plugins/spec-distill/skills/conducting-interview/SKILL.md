@@ -30,7 +30,21 @@ State frontmatter schema:
 ---
 session_id: <uuid>
 phase: 1
-interview_round: <int>
+coverage:                            # G1 커버리지 원장 (floor 5 + derived[]). 종료 driver.
+  floor:
+    root_problem:   {status: open, evidence: ""}
+    landscape:      {status: open, evidence: ""}
+    skepticism:     {status: open, evidence: ""}
+    blind_spot:     {status: open, evidence: ""}
+    open_questions: {status: open, evidence: ""}
+  derived: []                        # 주제-도출 차원 (coverage-mapper 제안 → orchestrator admit; {name, rationale, status, evidence})
+orchestration:                       # C11/C8 across-resumption 상태 (orchestrator 소유, agent read-only)
+  focused_dimension: null            # 현재 probe 대상 차원 이름 또는 null
+  no_progress_streak: 0              # C11 연속 무진전 probe 수; focused 변경·진전 시 0 reset
+  blind_spot_dispatched: false       # C8 인터뷰당 1회 보장; 첫 dispatch 시 true
+  coverage_mapper_last_probe: null   # 마지막 coverage-mapper dispatch 시 probe_count (C11 rate-limit)
+probe_count: 0                       # C10 probe 백스톱 카운터 (probe 제기 *후* +1)
+probe_cap_override: 0                # C1 '계속'이 base cap(12)만큼 raise
 non_user_streak: <int>
 web_sweep_count: 0                   # 현재 sweep 내 web 검색 호출 수 (AP9, ≤4). sweep 종료 시 0으로 reset.
 web_search_count: 0                  # 세션 누적 web 검색 호출 수 (AP16, ≤8 soft cap).
@@ -41,7 +55,7 @@ pending_locked_decisions: []         # 매 round 끝 append (b/d path 명시 응
 ---
 ```
 
-State body: 각 round의 4-block 출력 + 사용자 답변 + (있다면) breadth-keeper 출력 transcript.
+State body: 각 round의 4-block 출력 + 사용자 답변 + (있다면) coverage-mapper 출력 transcript.
 
 **Secret 기록 금지** (P21): 사용자 답변에 token/key/credential 패턴 감지 시 placeholder로 치환 후 기록.
 
@@ -307,21 +321,29 @@ AskUserQuestion({
 
 이 stage는 brief까지로 종료됩니다. handoff를 *강제하지 않습니다*(NG7).
 
-## In-flight state migration (C10)
+## In-flight state migration (AC5)
 
-state.local.md 로드 시 v0.1.x schema (신규 필드 부재)를 감지하면 *non-mutating read*로 자동 promote:
+state.local.md 로드 시 **구세션 스키마**(`interview_round` 존재 / `coverage` 부재)를 감지하면
+*non-mutating read*로 fresh 초기화(승격):
 
-- `pending_locked_decisions` 부재 → `[]`로 in-memory default.
-- `issue_history[].dismissed_by_user` / `accepted_by_user` / `reconsensus_count` 부재 → `0`으로 in-memory default.
+- `coverage.floor`의 5개 차원(root_problem/landscape/skepticism/blind_spot/open_questions) 전부
+  `{status: open, evidence: ""}`로 seed.
+- `coverage.derived`: `[]`.
+- `probe_count`: **0** (interview_round 값 승계 금지 — 라운드 수는 probe 수가 아니다).
+- `probe_cap_override`: `0`.
+- `orchestration`: `{focused_dimension: null, no_progress_streak: 0, blind_spot_dispatched: false, coverage_mapper_last_probe: null}`.
 
-다음 state write 시점에 frontmatter에 자연스럽게 추가 (backward-rewriting 금지 — 명시적 write 시점에만 frontmatter 갱신).
+기존 필드(`non_user_streak`·`web_*`·`issue_history`·`pending_locked_decisions` 등)는 유지.
+다음 명시적 state write 시점에만 frontmatter에 신규 필드를 추가(backward-rewrite 금지 —
+`interview_round` 필드는 그 write에서 자연 소멸하되, 그 전까지 파일 내용을 되쓰지 않는다).
 
 사용자에게 advisory 한 줄 출력:
 ```
-[spec-distill v0.2.0] state.local.md schema migration: <fields> added with defaults.
+[spec-distill v0.22.0] state schema migration: coverage/probe_count added (interview_round retired).
 ```
 
-자동 promote 실패 시 (파일 corruption 등) → 사용자에게 "v0.1.x in-flight state 호환 실패 — 세션 재시작 권장" 알림 + state.local.md 보존 (P14).
+자동 promote 실패 시(파일 corruption 등) → "구세션 in-flight state 호환 실패 — 세션 재시작 권장"
+알림 + state.local.md 보존 (P14).
 
 ## kill switch
 

@@ -55,6 +55,28 @@ has 'state_path\.py state-root|Bash.*state|state.*Bash' "PN1: state-write-via-Ba
 
 grep -q 'drafting-spec' "$SKILL" && note FAIL "AC10: drafting-spec still referenced" || note PASS "AC10: no drafting-spec reference"
 
+# --- v0.22.0: 커버리지 상태 스키마 + 마이그레이션 (AC1/AC5) ---
+has 'coverage:' "AC1: coverage ledger in state schema"
+has 'probe_count' "AC1: probe_count counter in state schema"
+has 'probe_cap_override' "AC1: probe_cap_override in state schema"
+has 'no_progress_streak' "AC1: orchestration.no_progress_streak in schema"
+has 'blind_spot_dispatched' "AC1: orchestration.blind_spot_dispatched in schema"
+has 'coverage_mapper_last_probe' "AC1: orchestration.coverage_mapper_last_probe in schema"
+# AC1: 기존 필드 보존
+has 'non_user_streak' "AC1: non_user_streak retained"
+has 'pending_locked_decisions' "AC1: pending_locked_decisions retained"
+# AC5: 마이그레이션 — 구세션 감지 + fresh seed + advisory
+has 'coverage.*부재|coverage 부재|interview_round.*존재' "AC5: legacy detection (interview_round present / coverage absent)"
+has 'state schema migration.*coverage|coverage/probe_count added' "AC5: migration advisory wording"
+has 'probe_count.*0|probe_count=0' "AC5: probe_count seeded fresh (not from interview_round)"
+
+# state 스키마 블록(첫 yaml)에서 interview_round가 능동 필드로 남지 않았는지 (V7b)
+# — 마이그레이션 섹션의 언급은 허용, 스키마 선언은 금지.
+schema_block="$(awk '/^State frontmatter schema:/{f=1} f&&/^```yaml/{y=1;next} y&&/^```/{exit} y' "$SKILL")"
+grep -q 'interview_round' <<<"$schema_block" \
+  && note FAIL "V7b: interview_round still an active schema field" \
+  || note PASS "V7b: interview_round removed from active state schema"
+
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]
