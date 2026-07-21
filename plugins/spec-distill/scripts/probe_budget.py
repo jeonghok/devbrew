@@ -6,16 +6,18 @@ probe가 무한히 돌 수 있다 — 이를 web_budget.py와 같은 방식으�
 (프로즈 self-tracking 아님).
 
 "probe" = 사용자와의 (b)/(d)-path 질문-답변 교환 1회. probe_count는 probe를 *제기한 뒤*
-+1 된다(제기 전 gate에서 막힌 probe는 phantom 증가하면 안 됨). check가 유일한 gate이며,
-increment는 항상 exit 0 이다.
++1 된다(제기 전 gate에서 막힌 probe는 phantom 증가하면 안 됨). check가 유일한 *gate*이며,
+increment는 절대 cap을 이유로 gate하지 않는다 — 단, increment/raise-cap 자체는 exit 0을
+보장하지 않는다: state가 unreadable/absent이거나 카운터 라인이 부재/malformed면 check와
+동일하게 fail-closed(exit 1)하며, 누락된 카운터 라인을 silent하게 생성하지 않는다.
 
   effective_cap = base_cap + probe_cap_override
   base_cap = int(env DEVBREW_SPEC_DISTILL_PROBE_CAP) if set else 12
 
 CLI (모두 JSON 출력):
   probe_budget.py check <state.local.md>      → exit 0 if probe_count < effective_cap else 1 (gate, mutation 없음); stdout: remaining
-  probe_budget.py increment <state.local.md>  → probe_count += 1; persist; exit 0 (probe 제기 *후* 호출)
-  probe_budget.py raise-cap <state.local.md>  → probe_cap_override += base_cap; persist; exit 0 (C1 '계속')
+  probe_budget.py increment <state.local.md>  → probe_count += 1; persist; exit 0 on 성공 (probe 제기 *후* 호출). check와 동일하게 state unreadable/absent/malformed(카운터 라인 부재 포함) 시 fail-closed(exit 1) — 카운터를 silent 생성하지 않는다.
+  probe_budget.py raise-cap <state.local.md>  → probe_cap_override += base_cap; persist; exit 0 on 성공 (C1 '계속'). check와 동일하게 state unreadable/absent/malformed(카운터 라인 부재 포함) 시 fail-closed(exit 1) — 카운터를 silent 생성하지 않는다.
 """
 from __future__ import annotations
 
@@ -88,8 +90,10 @@ def _bump_line(text: str, key: str, delta: int) -> str:
 
 
 def increment(state_path: Path) -> int:
-    """+1 probe_count, persist, exit 0. probe 제기 *후* 호출. gate는 check가 담당하며
-    increment는 절대 gate하지 않는다(C10 원자성)."""
+    """+1 probe_count, persist, exit 0 on 성공. probe 제기 *후* 호출. cap 도달을 이유로는
+    절대 gate하지 않는다(C10 원자성) — 그 gate는 check 전담. 단 check와 마찬가지로 fail-closed:
+    state가 unreadable/absent이거나 probe_count 카운터 라인이 부재/malformed면 exit 1이며,
+    부재한 카운터 라인을 silent-create하지 않는다(GC-reset race 안전)."""
     try:
         text = state_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
@@ -110,8 +114,10 @@ def increment(state_path: Path) -> int:
 
 
 def raise_cap(state_path: Path) -> int:
-    """probe_cap_override += base_cap; persist; exit 0 (C1 '계속' — effective_cap이
-    base cap 하나만큼 올라 soft cap 이후에도 인터뷰가 계속될 수 있다)."""
+    """probe_cap_override += base_cap; persist; exit 0 on 성공 (C1 '계속' — effective_cap이
+    base cap 하나만큼 올라 soft cap 이후에도 인터뷰가 계속될 수 있다). check/increment와
+    마찬가지로 fail-closed: state가 unreadable/absent이거나 probe_cap_override 카운터 라인이
+    부재/malformed면 exit 1이며, 부재한 카운터 라인을 silent-create하지 않는다."""
     try:
         text = state_path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:

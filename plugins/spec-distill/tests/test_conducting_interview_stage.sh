@@ -73,6 +73,14 @@ mig_block="$(awk '/^## In-flight state migration/{f=1;print;next} /^## /{f=0} f'
   && note PASS "AC5: probe_count seeded fresh (not from interview_round)" \
   || note FAIL "AC5: probe_count seeded fresh (not from interview_round)"
 
+# Unbounded-autonomy backstop fail-open fix: migration must persist BEFORE the first probe/
+# increment — probe_budget.py's increment/raise-cap fail-closed (exit 1) when the counter
+# line is absent, and never silent-create it (GC-race safety). Deferring persistence to "the
+# next explicit state write" leaves probe_count off disk while the backstop is bypassed.
+grep -qE '첫 probe.*먼저' <<<"$mig_block" \
+  && note PASS "AC5/backstop: migration persists before first probe (scoped to In-flight state migration)" \
+  || note FAIL "AC5/backstop: migration persists before first probe (scoped to In-flight state migration)"
+
 # state 스키마 블록(첫 yaml)에서 interview_round가 능동 필드로 남지 않았는지 (V7b)
 # — 마이그레이션 섹션의 언급은 허용, 스키마 선언은 금지.
 schema_block="$(awk '/^State frontmatter schema:/{f=1} f&&/^```yaml/{y=1;next} y&&/^```/{exit} y' "$SKILL")"

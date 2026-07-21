@@ -440,8 +440,17 @@ state.local.md 로드 시 **구세션 스키마**(`interview_round` 존재 / `co
 - `orchestration`: `{focused_dimension: null, no_progress_streak: 0, blind_spot_dispatched: false, coverage_mapper_last_probe: null}`.
 
 기존 필드(`non_user_streak`·`web_*`·`issue_history`·`pending_locked_decisions` 등)는 유지.
-다음 명시적 state write 시점에만 frontmatter에 신규 필드를 추가(backward-rewrite 금지 —
-`interview_round` 필드는 그 write에서 자연 소멸하되, 그 전까지 파일 내용을 되쓰지 않는다).
+
+**영속화 시점**: 승격된 스키마는 재개된 세션의 첫 액션으로, 첫 probe나 `probe_budget.py increment`/`raise-cap` 호출보다 먼저 Bash 전체-frontmatter write로 즉시 디스크에 반영한다(PN1 state write contract). 이 즉시 write가 AC5의 "다음 명시적 state write"다 — 연기가 아니라 resume 직후 1회.
+
+근거: `increment`/`raise-cap`은 카운터 라인이 부재하면 fail-closed(exit 1, silent-create
+금지)이므로, 이 write 없이는 `probe_count`가 디스크에 없는 채로 첫 probe가 발생해 백스톱이
+무력화된다.
+
+이 write는 신규 필드(coverage/probe_count/probe_cap_override/orchestration)만 추가하는
+forward promotion이며 backward-rewrite가 아니다 — `interview_round`는 이 write에서 자연
+소멸하되 다른 기존 필드는 고치지 않는다. AC5의 backward-rewrite 금지·P14 실패-상태 보존과
+무충돌: 이것은 성공적 resume의 promotion write이지 실패-상태 mutation이 아니다.
 
 사용자에게 advisory 한 줄 출력:
 ```

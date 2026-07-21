@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # V5 / AC4 / AC12 / C10 — probe_budget.py 백스톱: check가 cap에서 gate,
-# increment는 항상 전진(gating 아님), raise-cap이 effective_cap을 올린다. mutation-testable(teeth).
+# increment는 cap을 이유로는 절대 gate하지 않고 전진하지만(gating 아님) state가
+# unreadable/absent/malformed(카운터 라인 부재 포함)면 check와 동일하게 fail-closed(exit 1).
+# raise-cap이 effective_cap을 올린다. mutation-testable(teeth).
 set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -31,22 +33,31 @@ python3 "$SCRIPT" check "$tmp" >/dev/null 2>&1 \
   || note FAIL "AC12(b): raise-cap should lift effective_cap past probe_count"
 rm -f "$tmp"
 
-# increment는 항상 exit 0 (gating은 check 담당 — C10 원자성) + 카운터 전진.
+# well-formed state → increment succeeds (gating은 check 담당 — C10 원자성) + 카운터 전진.
 tmp2="$(mktemp)"; printf -- '---\nprobe_count: 0\nprobe_cap_override: 0\n---\n' > "$tmp2"
 python3 "$SCRIPT" increment "$tmp2" >/dev/null 2>&1 \
-  && note PASS "increment returns exit 0 (never gates — C10)" \
-  || note FAIL "increment should always exit 0"
+  && note PASS "increment on well-formed state returns exit 0 (never cap-gates — C10)" \
+  || note FAIL "increment on well-formed state should exit 0"
 grep -qE '^probe_count: 1\b' "$tmp2" \
   && note PASS "increment advanced probe_count to 1" \
   || note FAIL "increment did not advance probe_count"
 rm -f "$tmp2"
 
-# increment at/over cap도 exit 0 (오직 check만 gate — 원자성 분리 증명).
+# increment at/over cap도 (well-formed state라면) exit 0 (오직 check만 cap-gate — 원자성 분리 증명).
 tmp3="$(mktemp)"; cp "$FX/state-probe-at-cap.md" "$tmp3"
 python3 "$SCRIPT" increment "$tmp3" >/dev/null 2>&1 \
   && note PASS "increment at cap still exits 0 (gating is check-only, C10)" \
   || note FAIL "increment must not gate even at cap"
 rm -f "$tmp3"
+
+# increment fails closed when the probe_count counter line is absent (no silent create —
+# this is exactly the legacy in-flight-migration hazard: a resumed pre-0.22.0 session that
+# hasn't yet persisted the migrated schema has no probe_count line on disk).
+tmp6="$(mktemp)"; printf -- '---\nphase: 1\n---\n' > "$tmp6"
+python3 "$SCRIPT" increment "$tmp6" >/dev/null 2>&1 \
+  && note FAIL "increment with absent probe_count should fail closed" \
+  || note PASS "increment with absent probe_count fails closed (exit 1)"
+rm -f "$tmp6"
 
 # env override: DEVBREW_SPEC_DISTILL_PROBE_CAP가 base_cap을 올린다.
 tmp4="$(mktemp)"; printf -- '---\nprobe_count: 12\nprobe_cap_override: 0\n---\n' > "$tmp4"
