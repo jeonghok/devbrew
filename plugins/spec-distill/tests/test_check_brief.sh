@@ -88,6 +88,48 @@ DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-w
   && note PASS "F8: web-disabled gate accepts URL-less user-judgment skepticism (AC8)" \
   || note FAIL "F8: web-disabled gate should accept URL-less skepticism per the SKILL clause"
 
+# --- v0.22.0: Coverage Ledger + Blind Spots 게이트 (AC2/AC3/C9) ---
+
+# valid-with-coverage → gate exit 0 (이미 위에서 valid 통과 확인됨; 명시 재확인)
+python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" >/dev/null 2>&1 \
+  && note PASS "coverage: valid 9-section brief passes gate" \
+  || note FAIL "coverage: valid 9-section brief should pass"
+
+# floor status open → fail (AC2)
+python3 "$SCRIPT" gate "$FX/interview-brief-floor-open.md" >/dev/null 2>&1 \
+  && note FAIL "AC2: floor:open should block termination" \
+  || note PASS "AC2: floor status open blocks termination"
+
+# floor evidence empty → fail (AC2)
+python3 "$SCRIPT" gate "$FX/interview-brief-floor-evidence-empty.md" >/dev/null 2>&1 \
+  && note FAIL "AC2: floor evidence empty should block" \
+  || note PASS "AC2: floor evidence empty blocks termination"
+
+# §5 Blind Spots 섹션 부재 → fail (AC3)
+python3 "$SCRIPT" gate "$FX/interview-brief-missing-blind-spot.md" >/dev/null 2>&1 \
+  && note FAIL "AC3: missing Blind Spots section should block" \
+  || note PASS "AC3: missing Blind Spots section blocks termination"
+
+# derived 행·sentinel 둘 다 부재 → fail (C9)
+python3 "$SCRIPT" gate "$FX/interview-brief-missing-derived-row.md" >/dev/null 2>&1 \
+  && note FAIL "C9: missing derived row + no sentinel should block" \
+  || note PASS "C9: missing derived (no sentinel) blocks termination"
+
+# derived N/A sentinel → pass (C9 edge)
+python3 "$SCRIPT" gate "$FX/interview-brief-derived-sentinel.md" >/dev/null 2>&1 \
+  && note PASS "C9: derived N/A sentinel passes gate" \
+  || note FAIL "C9: derived sentinel should pass"
+
+# web-disabled → URL-less §4/§5가 통과 (AC8 대칭)
+DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-web-disabled-blind-spot.md" >/dev/null 2>&1 \
+  && note PASS "AC8: web-disabled brief with URL-less blind spots passes" \
+  || note FAIL "AC8: web-disabled gate should accept URL-less blind spots"
+
+# coverage 서브커맨드: floor-open이 실패 리스트를 emit
+python3 "$SCRIPT" coverage "$FX/interview-brief-floor-open.md" 2>/dev/null | grep -q 'floor:landscape' \
+  && note PASS "coverage subcommand flags floor:landscape not closed" \
+  || note FAIL "coverage subcommand should flag the open floor row"
+
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]

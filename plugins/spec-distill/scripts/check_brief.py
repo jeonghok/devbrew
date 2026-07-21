@@ -19,6 +19,7 @@ CLI subcommands (all print JSON):
   check_brief.py landscape-citations <brief> → {"uncited": [...]}        (AC4/V6)
   check_brief.py skepticism <brief>          → {"malformed": [...]}      (AC5/V3)
   check_brief.py tried-discarded <brief>     → {"ok": bool}              (V2/R4)
+  check_brief.py coverage <brief>            → {"failures": [...]}       (AC2/C9)
   check_brief.py frontmatter <brief>         → {"errors": [...]}         (AC1)
   check_brief.py gate <brief>                → {"pass": bool, "failures": [...]}
                                                exit 0 if pass else 1
@@ -51,10 +52,14 @@ SECTIONS = [
     ("2", "Locked Directions"),
     ("3", "External Landscape"),
     ("4", "Skepticism Log"),
-    ("5", "Tried & Discarded"),
-    ("6", "Open Questions"),
-    ("7", "Concrete Next Action"),
+    ("5", "Blind Spots & Premortem"),
+    ("6", "Coverage Ledger"),
+    ("7", "Tried & Discarded"),
+    ("8", "Open Questions"),
+    ("9", "Concrete Next Action"),
 ]
+
+FLOOR_KEYS = ["root_problem", "landscape", "skepticism", "blind_spot", "open_questions"]
 
 
 def _body(text: str) -> str:
@@ -151,12 +156,49 @@ def skepticism_malformed(text: str) -> list[str]:
 
 
 def tried_discarded_ok(text: str) -> bool:
-    sec = _section_text(text, "5", "Tried & Discarded").strip()
+    sec = _section_text(text, "7", "Tried & Discarded").strip()
     if not sec:
         return False
     if re.search(r"\bN/?A\b", sec, re.IGNORECASE):
         return True  # explicit "N/A — 전부 first-time defend+lock" sentinel (R4 edge)
     return bool(_entry_lines(sec))
+
+
+def coverage_ledger_failures(text: str) -> list[str]:
+    """§6 Coverage Ledger form 검증 (C9 직렬화 / AC2 / AC3).
+    Form-level only (C2): floor 5행 각 존재 + status 토큰 'closed' + evidence 세그먼트
+    non-empty; derived는 >=1 derived 행 OR N/A sentinel. 'closed'가 실질적으로 참인지는
+    검사하지 않는다(모델 + 독립 adversary의 몫 — 게이트는 이 한계를 숨기지 않는다)."""
+    sec = _section_text(text, "6", "Coverage Ledger")
+    if not sec.strip():
+        return ["Coverage Ledger empty or absent"]
+    fails: list[str] = []
+    floor_rows: dict[str, tuple[str, str]] = {}
+    derived_rows = 0
+    derived_sentinel = False
+    for ln in _entry_lines(sec):
+        body = ln.lstrip("- ").strip()
+        fm = re.match(r"^floor:(\w+)\s*—\s*(\S+)\s*—\s*(.*)$", body)
+        if fm:
+            floor_rows[fm.group(1)] = (fm.group(2).strip(), fm.group(3).strip())
+            continue
+        if re.match(r"^derived:\s*N/?A\b", body, re.IGNORECASE):
+            derived_sentinel = True
+            continue
+        if body.startswith("derived:"):
+            derived_rows += 1
+    for key in FLOOR_KEYS:
+        if key not in floor_rows:
+            fails.append(f"floor:{key} row missing")
+            continue
+        status, evidence = floor_rows[key]
+        if status != "closed":
+            fails.append(f"floor:{key} status {status!r} != closed")
+        if not evidence:
+            fails.append(f"floor:{key} evidence empty")
+    if derived_rows == 0 and not derived_sentinel:
+        fails.append("derived: no derived row and no N/A sentinel")
+    return fails
 
 
 def frontmatter_errors(text: str) -> list[str]:
@@ -202,10 +244,16 @@ def gate(path: Path) -> int:
     if shortfall:
         failures.append(
             f"{shortfall} steelman-claimed direction(s) without a §4 Skepticism Log entry")
-    # Only check content of §5 when the section exists; absence is already in miss.
-    sec5_absent = any(m.startswith("5.") for m in miss)
-    if not sec5_absent and not tried_discarded_ok(text):
+    # §7 Tried & Discarded 내용은 섹션이 존재할 때만 검사(부재는 이미 miss에 있음).
+    sec7_absent = any(m.startswith("7.") for m in miss)
+    if not sec7_absent and not tried_discarded_ok(text):
         failures.append("Tried & Discarded empty (no entries and no N/A sentinel)")
+    # §6 Coverage Ledger 내용은 섹션이 존재할 때만 검사(부재는 이미 miss에 있음).
+    sec6_absent = any(m.startswith("6.") for m in miss)
+    if not sec6_absent:
+        cov = coverage_ledger_failures(text)
+        if cov:
+            failures.append(f"coverage ledger: {cov}")
     ok = not failures
     print(json.dumps({"pass": ok, "failures": failures}, ensure_ascii=False))
     return 0 if ok else 1
@@ -234,6 +282,9 @@ def main(argv: list[str]) -> int:
         return 0
     if sub == "tried-discarded":
         print(json.dumps({"ok": tried_discarded_ok(text)}, ensure_ascii=False))
+        return 0
+    if sub == "coverage":
+        print(json.dumps({"failures": coverage_ledger_failures(text)}, ensure_ascii=False))
         return 0
     if sub == "frontmatter":
         print(json.dumps({"errors": frontmatter_errors(text)}, ensure_ascii=False))

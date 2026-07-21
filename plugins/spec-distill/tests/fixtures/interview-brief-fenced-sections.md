@@ -20,10 +20,19 @@ goal text here long enough to pass
 - foo — https://example.com — [취함] — reason
 ## 4. Skepticism Log
 - alternative statement here — https://example.com — verdict: defended
-## 5. Tried & Discarded
+## 5. Blind Spots & Premortem
+- 숨은 가정: x — 왜 위험: y — https://example.com
+## 6. Coverage Ledger
+- floor:root_problem — closed — evidence
+- floor:landscape — closed — evidence
+- floor:skepticism — closed — evidence
+- floor:blind_spot — closed — evidence
+- floor:open_questions — closed — evidence
+- derived: N/A — floor로 충분
+## 7. Tried & Discarded
 - N/A — 전부 first-time defend+lock
-## 6. Open Questions
+## 8. Open Questions
 - OQ1: open
-## 7. Concrete Next Action
+## 9. Concrete Next Action
 - do x
 ```

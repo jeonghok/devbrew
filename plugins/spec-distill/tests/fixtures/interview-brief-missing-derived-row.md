@@ -1,6 +1,6 @@
 ---
 name: sample-topic
-type: design-doc
+type: interview-brief
 created_at: 2026-05-31
 session_id: testsession01
 source: spec-distill conducting-interview v0.22.0
@@ -42,7 +42,6 @@ The real goal is reducing time-to-first-paint, not "make it a SPA" (ESSENCE).
 - floor:skepticism — closed — §4 islands steelman defended
 - floor:blind_spot — closed — §5 cold-start premortem
 - floor:open_questions — closed — §8 caching OQ1
-- derived:rendering-strategy — closed — 이 대시보드는 SSR/islands 선택이 핵심; §4 근거
 
 ## 7. Tried & Discarded
 
