@@ -141,6 +141,38 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 → 다음 round의 질문은 **반드시 (b) judgment path** (사용자에게 직접 질문)로 라우팅. 강제.
 
+## probe 백스톱 (C1/C10 — Unbounded-autonomy 가드)
+
+floor 미충족이면 종료가 막히므로 probe가 무한히 돌 수 있다. `probe_budget.py`가 이를 기계적으로
+bound한다(프로즈 self-tracking 금지). **원자성**: probe(= (b)/(d)-path 질문 1회)를 조립하기
+*전에* `check`(gate)를 호출하고, 질문을 실제로 제기한 *후에만* `increment`한다.
+
+```bash
+ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" state-root)"
+STATE="$ROOT/<session-id>/state.local.md"
+# 1) probe 조립 전 gate
+if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" check "$STATE"; then
+  : # probe_count >= effective_cap — floor 미충족이면 아래 C1 escalation, 질문 미제기(increment 안 함)
+fi
+# 2) 질문 실제 제기 후에만
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" increment "$STATE"
+```
+
+`check`가 non-zero(`probe_count ≥ effective_cap`) & floor 미충족이면 **C1 escalation**을 발화한다
+(`AskUserQuestion`, 3옵션):
+
+- **① 계속**: `probe_budget.py raise-cap "$STATE"` — `probe_cap_override`를 base cap(12)만큼 올려
+  `effective_cap = base + override`로 상향(persist) 후 진행.
+- **② 박제 후 종료**: 미충족 floor 행을 `status: closed` + evidence `사용자-승인 박제(@probe N) —
+  §Open Questions 참조`로 기록하고 그 내용을 brief §8 Open Questions로 이동 → AC2 게이트 통과(floor
+  closed)하되 박제 표식이 원장에 가시적(silent bypass 아님).
+- **③ abort**: brief 미작성, state 보존.
+
+`increment`는 질문 제기 후에만 호출돼 phantom 증가가 없다(gate에서 막힌 probe는 카운트 안 됨).
+`increment`는 gate하지 않는다 — gating은 오직 `check`(C10 원자성).
+
+kill switch: `DEVBREW_SPEC_DISTILL_PROBE_CAP=N` 으로 base cap override.
+
 ## breadth-keeper dispatch (C45, AC13)
 
 매 round 끝에 다음 조건 모두 만족하면 `breadth-keeper` agent를 1회 dispatch:
@@ -216,27 +248,39 @@ Law 1급 skepticism 의례입니다(verbatim pass-through로 무력화 방지).
 
 ## 종료 — brief 작성 + optional handoff
 
-다음을 모두 만족하고 **5 통과 의례가 모두 통과**하면 brief를 작성합니다:
+종료 driver는 **커버리지 원장의 floor 5차원이 전부 `closed`** 인 것이다(고정 라운드 수 아님, G1).
+다음을 모두 만족하면 brief를 작성합니다:
 
-- Goal/진짜 problem이 한 문장으로 재구성됨(R1).
-- Landscape가 인용과 함께 수집됨(R2).
-- 의심 방향이 모두 steelman 통과(R3).
-- 시행착오가 기록됨(R4).
-- Open Questions 박제(R5).
+- floor `root_problem` closed — 진짜 problem이 한 문장으로 재구성(R1 계열).
+- floor `landscape` closed — landscape가 인용과 함께 수집(R2 계열, web sweep 메커니즘 유지).
+- floor `skepticism` closed — 의심 방향이 모두 steelman 통과(R3 계열, steelman-builder 게이트 유지).
+- floor `blind_spot` closed — blind-spot-prober가 unknown-unknown을 표면화하고 §5에 기록.
+- floor `open_questions` closed — 미해결 명시(박제, "유추 금지").
+
+각 차원의 status 전이(open→in-progress→closed)와 evidence 기록은 **orchestrator만** 수행하며
+(coverage-mapper·blind-spot-prober는 read-only 제안자, Law 2), state.local.md에 쓰는 동시에
+brief §6 `## Coverage Ledger`에 직렬화합니다.
 
 ### Step A — brief 작성 (terminal 산출물)
 
-1. `${CLAUDE_PLUGIN_ROOT}/templates/interview-brief-template.md`로 7-section 구조 확보.
+1. `${CLAUDE_PLUGIN_ROOT}/templates/interview-brief-template.md`로 9-section 구조 확보(§5 Blind
+   Spots & Premortem, §6 Coverage Ledger 포함).
 2. 경로: `docs/superpowers/interview/<YYYY-MM-DD>-<kebab-topic>-interview.md` (워크트리 안 → `Write` tool 사용).
    - frontmatter: `type: interview-brief`, `next_phase: superpowers:brainstorming`,
      `session_id`(기존 spec-distill 세션 재사용 — 새 세션 생성 안 함), `locked_directions[]`
      (state `pending_locked_decisions` + steelman verdict 반영).
-3. **기계적 게이트 검증**(AC3) — 작성 직후:
+3. **Coverage Ledger 직렬화** (check_brief 게이트 *전*): state.local.md의 `coverage`를 brief §6
+   `## Coverage Ledger`에 한 줄당 한 차원으로 직렬화(floor 5행 + derived; 템플릿 §6 문법 —
+   `- floor:<key> — closed — <evidence>` / `- derived:<name> — closed — <evidence>` 또는
+   부재 시 `- derived: N/A`). floor 전부 `closed`가 아니면 이 시점에 도달하면 안 됩니다(종료
+   driver 위반 — 위 종료 기준을 만족하지 않은 채 Step A에 진입하지 않는다).
+4. **기계적 게이트 검증**(AC3) — 직렬화 직후:
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check_brief.py" gate "docs/superpowers/interview/<file>"
    ```
    exit ≠ 0 이면 **brief를 finalize하지 말고** 보고된 미충족 의례를 보완(누락 섹션/무인용
-   landscape/형식 미달 steelman/빈 Tried&Discarded). 통과(exit 0)할 때까지 반복.
+   landscape/형식 미달 steelman/빈 Tried&Discarded/floor open 또는 evidence 공백/Blind Spots
+   부재). 통과(exit 0)할 때까지 반복.
 
 ### Step B — proceed 게이트 (handoff 방식 제안)
 

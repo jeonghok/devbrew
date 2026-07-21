@@ -80,6 +80,31 @@ grep -q 'interview_round' <<<"$schema_block" \
   && note FAIL "V7b: interview_round still an active schema field" \
   || note PASS "V7b: interview_round removed from active state schema"
 
+# --- v0.22.0: 커버리지 종료 루프 + probe 백스톱 (G1/AC2/AC4/C1/C10) ---
+has 'probe_budget\.py' "AC4: probe backstop calls probe_budget.py"
+has 'probe_budget\.py"? check' "C10: check gate before posing a probe"
+has 'probe_budget\.py"? increment' "C10: increment after posing a probe"
+has 'probe_budget\.py"? raise-cap' "C1: raise-cap on '계속' escalation"
+has 'floor.*(closed|전부.*closed|모두.*closed)' "G1/AC2: termination = floor all closed"
+has 'Coverage Ledger' "AC2/C9: brief Coverage Ledger serialization"
+has '9-section|9-섹션|9 섹션' "AC10: Step A references 9-section template"
+
+# AskUserQuestion 및 3옵션 어휘(박제/abort/계속)는 이미 Step B 핸드오프 게이트·kill switch
+# 안내에도 등장 — 전-파일 grep은 새 probe 백스톱 섹션이 없어도 satisfied돼 teeth가 없다
+# (feedback_grep_lock_header_satisfiable). "## probe 백스톱" 섹션으로 스코프.
+backstop_block="$(awk '/^## probe 백스톱/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
+grep -qi 'AskUserQuestion' <<<"$backstop_block" \
+  && note PASS "AC4: cap escalation uses AskUserQuestion (scoped to probe 백스톱)" \
+  || note FAIL "AC4: cap escalation uses AskUserQuestion (scoped to probe 백스톱)"
+{ grep -q '계속' <<<"$backstop_block" && grep -qi '박제' <<<"$backstop_block" && grep -qi 'abort' <<<"$backstop_block"; } \
+  && note PASS "C1: 3-option escalation semantics (계속/박제/abort, scoped to probe 백스톱)" \
+  || note FAIL "C1: 3-option escalation semantics (계속/박제/abort, scoped to probe 백스톱)"
+# 종료 로직에 interview_round 잔존 0 (AC9/V7b)
+term_block="$(awk '/^## 종료/{f=1} f&&/^## [^종]/{exit} f' "$SKILL")"
+grep -q 'interview_round' <<<"$term_block" \
+  && note FAIL "AC9/V7b: interview_round in termination block" \
+  || note PASS "AC9/V7b: no interview_round in termination logic"
+
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]
