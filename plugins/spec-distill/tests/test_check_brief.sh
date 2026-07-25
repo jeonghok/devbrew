@@ -204,6 +204,48 @@ printf '%s' "$out" | grep -qi 'Traceback' \
   && note FAIL "coverage: traceback이 stdout으로 샜다" || note PASS "coverage: traceback 누출 없음"
 rmdir "$TMPD/not-a-file.audit.md" 2>/dev/null || true
 
+# --- Task 2: user_sourced_items 스키마 + bijection C + confirmed sentinel ---
+
+# T3: user_sourced_items 부재 → red
+python3 "$SCRIPT" gate "$FX/interview-brief-no-items.md" >/dev/null 2>&1 \
+  && note FAIL "T3: user_sourced_items 부재가 통과됨" || note PASS "T3: user_sourced_items 부재 → red"
+
+# T4: evidence 없음 → red
+python3 "$SCRIPT" gate "$FX/interview-brief-item-no-evidence.md" >/dev/null 2>&1 \
+  && note FAIL "T4: evidence 없는 항목이 통과됨" || note PASS "T4: evidence 없는 항목 → red"
+
+# T5: source: inferred가 리스트에 있음 → red
+python3 "$SCRIPT" gate "$FX/interview-brief-item-inferred.md" >/dev/null 2>&1 \
+  && note FAIL "T5: source: inferred가 통과됨 (리스트 이름과 내용 불일치)" \
+  || note PASS "T5: source: inferred → red"
+
+# T6: 잘못된 status / source → red ×2
+python3 "$SCRIPT" gate "$FX/interview-brief-item-bad-status.md" >/dev/null 2>&1 \
+  && note FAIL "T6: 잘못된 status가 통과됨" || note PASS "T6: 잘못된 status → red"
+python3 "$SCRIPT" gate "$FX/interview-brief-item-bad-source.md" >/dev/null 2>&1 \
+  && note FAIL "T6: 잘못된 source가 통과됨" || note PASS "T6: 잘못된 source → red"
+
+# T22: bijection C — evidence: S9인데 §6에 S9 없음 → red
+python3 "$SCRIPT" gate "$FX/interview-brief-evidence-dangling.md" >/dev/null 2>&1 \
+  && note FAIL "T22: dangling evidence가 통과됨 (bijection C 미집행)" \
+  || note PASS "T22: dangling evidence → red (bijection C)"
+
+# T23: statement 161자 → red / 160자 → green (hard cap)
+python3 "$SCRIPT" gate "$FX/interview-brief-statement-161.md" >/dev/null 2>&1 \
+  && note FAIL "T23: 161자 statement가 통과됨 (cap이 hard가 아님)" \
+  || note PASS "T23: 161자 statement → red"
+python3 "$SCRIPT" gate "$FX/interview-brief-statement-160.md" >/dev/null 2>&1 \
+  && note PASS "T23: 160자 statement → green (경계 포함)" \
+  || note FAIL "T23: 160자는 통과해야 한다 (off-by-one)"
+
+# T14: confirmed 0건 + sentinel 없음 → red / 있음 → green
+python3 "$SCRIPT" gate "$FX/interview-brief-confirmed-zero.md" >/dev/null 2>&1 \
+  && note FAIL "T14: confirmed 0건 + sentinel 없음이 통과됨 (확인 게이트 우회)" \
+  || note PASS "T14: confirmed 0건 + sentinel 없음 → red"
+python3 "$SCRIPT" gate "$FX/interview-brief-confirmed-zero-sentinel.md" >/dev/null 2>&1 \
+  && note PASS "T14: confirmed 0건 + sentinel → green" \
+  || note FAIL "T14: sentinel이 있으면 통과해야 한다"
+
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]

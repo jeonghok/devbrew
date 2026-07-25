@@ -25,6 +25,7 @@ CLI subcommands (all print JSON):
   check_brief.py tried-discarded <payload>     → {"ok": bool}              (V2/R4, §5 기각)
   check_brief.py coverage <payload>            → {"failures": [...]}       (AC2/C9, audit §1 해석)
   check_brief.py frontmatter <payload>         → {"errors": [...]}         (AC1)
+  check_brief.py items <payload>               → {"errors": [...], "bijection_c": [...]}  (AC6)
   check_brief.py gate <payload>                → {"pass": bool, "failures": [...]}
                                                  exit 0 if pass else 1
 """
@@ -141,6 +142,126 @@ def resolve_audit(payload: Path, fm: str):
     if not p.exists():
         return None, f"audit file not found: {name}"
     return p, None
+
+
+VALID_SOURCES = ("verbatim", "chosen")
+VALID_STATUSES = ("confirmed", "provisional", "open")
+REQUIRED_ITEM_FIELDS = ("id", "source", "status", "statement", "evidence")
+STATEMENT_MAX = 160
+CONFIRMED_SENTINEL = "# confirmed 0건 — 사용자가 전부 잠정으로 판단"
+
+ITEMS_KEY_RE = re.compile(r"^user_sourced_items\s*:", re.MULTILINE)
+ITEM_START_RE = re.compile(r"^\s*-\s+id:\s*(\S+)\s*$")
+ITEM_FIELD_RE = re.compile(r"^\s+(\w+):\s*(.*?)\s*$")
+ITEM_BULLET_RE = re.compile(r"^\s*-\s")
+EVIDENCE_RE = re.compile(r"^S\d+$")
+
+
+def parse_user_sourced_items(fm: str):
+    """frontmatter의 user_sourced_items 블록을 손으로 파싱한다.
+
+    PyYAML을 쓰지 않는 이유: 이 플러그인의 어떤 스크립트도 third-party import를 하지
+    않는다 — 훅은 임의 사용자 환경에서 실행되고, 게이트가 ImportError로 죽으면 Law 1
+    구조 게이트가 통째로 fail-open된다.
+
+    반환: (items, raw_bullets). raw_bullets는 블록 안 `- ` 줄 수로, items와 개수가
+    다르면 파서-포맷 불일치이므로 호출자가 fail-closed로 처리한다(인라인 dict 형식 등).
+    """
+    lines = fm.splitlines()
+    start = None
+    for i, ln in enumerate(lines):
+        if ITEMS_KEY_RE.match(ln):
+            start = i
+            break
+    if start is None:
+        return [], 0
+    items = []
+    raw = 0
+    cur = None
+    for ln in lines[start + 1:]:
+        if ln.strip() and not ln[0].isspace():
+            break  # 다음 최상위 키 → 블록 종료
+        if ITEM_BULLET_RE.match(ln):
+            raw += 1
+        m = ITEM_START_RE.match(ln)
+        if m:
+            cur = {"id": m.group(1).strip().strip('"').strip("'")}
+            items.append(cur)
+            continue
+        if cur is None:
+            continue
+        f = ITEM_FIELD_RE.match(ln)
+        if f:
+            cur[f.group(1)] = f.group(2).strip().strip('"').strip("'")
+    return items, raw
+
+
+def user_sourced_errors(text: str) -> list[str]:
+    """user_sourced_items 스키마 검증 (AC6)."""
+    fm = _frontmatter(text)
+    if not ITEMS_KEY_RE.search(fm):
+        return ["user_sourced_items key absent"]
+    items, raw = parse_user_sourced_items(fm)
+    errs: list[str] = []
+    if raw != len(items):
+        errs.append(f"user_sourced_items unparseable ({raw} bullets, {len(items)} parsed)")
+    seen = set()
+    for it in items:
+        iid = it.get("id") or "<no-id>"
+        if iid in seen:
+            errs.append(f"{iid}: duplicate id")
+        seen.add(iid)
+        for field in REQUIRED_ITEM_FIELDS:
+            if not it.get(field):
+                errs.append(f"{iid}: {field} missing")
+        src = it.get("source")
+        if src and src not in VALID_SOURCES:
+            # `inferred`는 이 리스트에 들어올 수 없다 — 모델 추론은 본문 ✎ 프로즈로만 산다.
+            errs.append(f"{iid}: source {src!r} not in {VALID_SOURCES}")
+        st = it.get("status")
+        if st and st not in VALID_STATUSES:
+            errs.append(f"{iid}: status {st!r} not in {VALID_STATUSES}")
+        stmt = it.get("statement") or ""
+        if len(stmt) > STATEMENT_MAX:
+            errs.append(f"{iid}: statement {len(stmt)}자 > {STATEMENT_MAX} (hard cap)")
+        ev = it.get("evidence") or ""
+        if ev and not EVIDENCE_RE.match(ev):
+            errs.append(f"{iid}: evidence {ev!r} is not S<N>")
+    return errs
+
+
+def confirmed_zero_unsentineled(text: str) -> bool:
+    """빈 확정 금지 (AC12) — sentinel 없는 confirmed 0건은 확인 게이트를 건너뛴 신호다."""
+    fm = _frontmatter(text)
+    items, _ = parse_user_sourced_items(fm)
+    if any(it.get("status") == "confirmed" for it in items):
+        return False
+    return CONFIRMED_SENTINEL not in fm
+
+
+S_ANCHOR_RE = re.compile(r"^\s*-\s+\*\*(S\d+)\*\*", re.MULTILINE)
+
+
+def verbatim_anchors(text: str) -> set:
+    """§6 사용자 원문이 제공하는 S<N> 앵커 집합."""
+    return set(S_ANCHOR_RE.findall(_section_text(text, "6", "사용자 원문")))
+
+
+def bijection_c_errors(text: str) -> list[str]:
+    """bijection C — 모든 evidence: S<N>이 §6에서 해석된다 (AC6).
+
+    한계: 이 검사는 인용된 S<N>의 **존재**만 본다. 요약이 그 원문을 실제로 뒷받침하는지
+    (의미적 정합)는 기계 검증하지 않는다 — V9 수동 spot-check가 그 갭을 맡는다.
+    역방향(모든 S<N>이 인용될 것)은 요구하지 않는다: 제약으로 승격되지 않은 발화가 있다.
+    """
+    anchors = verbatim_anchors(text)
+    items, _ = parse_user_sourced_items(_frontmatter(text))
+    errs = []
+    for it in items:
+        ev = it.get("evidence")
+        if ev and EVIDENCE_RE.match(ev) and ev not in anchors:
+            errs.append(f"{it.get('id')}: evidence {ev} not found in §6")
+    return errs
 
 
 def landscape_uncited(text: str) -> list[str]:
@@ -274,6 +395,17 @@ def gate(path: Path) -> int:
     if fe:
         failures.append(f"frontmatter: {fe}")
 
+    ue = user_sourced_errors(text)
+    if ue:
+        failures.append(f"user_sourced_items: {ue}")
+    if confirmed_zero_unsentineled(text):
+        failures.append("confirmed 0건인데 명시 sentinel 없음 (확인 게이트 우회 신호)")
+    sec6_absent = any(m.startswith("6.") for m in miss)
+    if not sec6_absent:
+        ce = bijection_c_errors(text)
+        if ce:
+            failures.append(f"bijection C (evidence→§6): {ce}")
+
     # --- audit 해석 (fail-closed): 못 열면 audit 측 검증 전체를 skip하지 않고 red ---
     audit_path, audit_err = resolve_audit(path, fm)
     audit_text = ""
@@ -353,6 +485,10 @@ def main(argv: list[str]) -> int:
         return 0
     if sub == "frontmatter":
         print(json.dumps({"errors": frontmatter_errors(text)}, ensure_ascii=False))
+        return 0
+    if sub == "items":
+        print(json.dumps({"errors": user_sourced_errors(text),
+                          "bijection_c": bijection_c_errors(text)}, ensure_ascii=False))
         return 0
     print(f"unknown subcommand: {sub}", file=sys.stderr)
     return 64
