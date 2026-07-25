@@ -308,6 +308,42 @@ python3 "$SCRIPT" gate "$FX/interview-brief-marker-vs16.md" >/dev/null 2>&1 \
   && note PASS "VS16 마커(☑️/🗣️)가 정상 항목으로 파싱돼 green" \
   || note FAIL "VS16 마커가 있으면 정상 항목으로 통과해야 한다 (VS16 불관용)"
 
+# --- Task 4: bijection A + §5 verdict 강화 + 표기 블록 ---
+
+# T10: 한쪽에만 있는 ST<N> → red ×2 (양방향)
+python3 "$SCRIPT" gate "$FX/interview-brief-st-orphan-payload.md" >/dev/null 2>&1 \
+  && note FAIL "T10: payload만 참조하는 ST가 통과됨 (원문 없는 판정)" \
+  || note PASS "T10: payload-only ST → red"
+python3 "$SCRIPT" gate "$FX/interview-brief-st-orphan-audit.md" >/dev/null 2>&1 \
+  && note FAIL "T10: audit에만 있는 ST가 통과됨 (판정 없는 steelman)" \
+  || note PASS "T10: audit-only ST → red"
+
+# T12: 양쪽 steelman 공집합 + 기각 항목 존재 + sentinel 없음 → green
+python3 "$SCRIPT" gate "$FX/interview-brief-steelman-empty.md" >/dev/null 2>&1 \
+  && note PASS "T12: steelman 양쪽 공집합은 sentinel 없이 green (R4 sentinel과 다른 조건)" \
+  || note FAIL "T12: steelman 공집합은 sentinel을 요구받지 않는다"
+
+# T11: verdict 항목 결손 → red ×4
+for v in no-url no-token short no-st; do
+  python3 "$SCRIPT" gate "$FX/interview-brief-verdict-$v.md" >/dev/null 2>&1 \
+    && note FAIL "T11/$v: 결손 verdict 항목이 통과됨" || note PASS "T11/$v: 결손 verdict 항목 → red"
+done
+
+# T17: web 비활성 시 §4·§5 URL 요구 완화 (기존 graceful degradation 선례 유지)
+DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-verdict-no-url.md" >/dev/null 2>&1 \
+  && note PASS "T17: web 비활성 시 URL 없는 verdict 항목 → green (AC8/AC11)" \
+  || note FAIL "T17: web 비활성 시 URL 요구가 완화돼야 한다"
+# ...단 ST 참조 요구는 완화되지 않는다 (web과 무관한 파일-축 drift-guard)
+DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-verdict-no-st.md" >/dev/null 2>&1 \
+  && note FAIL "T17: web 비활성이 ST 참조 요구까지 완화시켰다 (과잉 완화)" \
+  || note PASS "T17: web 비활성이어도 ST 참조는 계속 요구됨"
+
+# T18: 출처 표기 블록 부재 / 세 기호 중 하나 누락 → red ×2
+python3 "$SCRIPT" gate "$FX/interview-brief-no-attribution.md" >/dev/null 2>&1 \
+  && note FAIL "T18: 표기 블록 부재가 통과됨" || note PASS "T18: 표기 블록 부재 → red"
+python3 "$SCRIPT" gate "$FX/interview-brief-attribution-partial.md" >/dev/null 2>&1 \
+  && note FAIL "T18: 기호 누락 표기 블록이 통과됨" || note PASS "T18: 기호 누락 표기 블록 → red"
+
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]

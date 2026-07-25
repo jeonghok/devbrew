@@ -5,7 +5,7 @@ created_at: 2026-07-26
 session_id: testsession01
 source: spec-distill conducting-interview v0.23.0
 next_phase: superpowers:brainstorming
-audit_file: interview-brief-missing-blind-spot.audit.md
+audit_file: interview-brief-valid.audit.md
 user_sourced_items:
   - id: C1
     source: verbatim
@@ -47,13 +47,15 @@ TTFP를 줄이는 것이 진짜 목표다. SPA 전환은 수단이었지 목표�
 
 - Next.js app-router SSR — https://nextjs.org/docs/app — [취함] — 데이터 형태와 부합
 
+## 5. 기각 · Blind Spots
+
 - 기각 — 전체 클라이언트 SPA → cold load에서 TTFP 회귀
 - 기각 — islands architecture 우선 도입 → https://jasonformat.com/islands-architecture/ — verdict: defended — ST1
 - 위험 — 숨은 가정 | SSR 호스트가 항상 저지연: cold start 시 TTFP 역전 — https://vercel.com/docs/functions
 
 ## 6. 사용자 원문
 
-> **출처 표기** — 🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론
+> **출처 표기** — 🗣 사용자 발화 · ☑ 사용자 선택
 
 - **S1** 🗣 최초 요청:
   > "대시보드가 너무 느려요. 서버에서 그려주면 안 되나요?"

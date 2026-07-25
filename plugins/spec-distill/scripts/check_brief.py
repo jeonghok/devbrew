@@ -352,6 +352,51 @@ def section5_entries(text: str) -> list[str]:
     return _entry_lines(_section_text(text, "5", "기각 · Blind Spots"))
 
 
+ST_HEADING_RE = re.compile(r"^####\s+(ST\d+)\b", re.MULTILINE)
+ST_REF_RE = re.compile(r"\b(ST\d+)\b")
+ATTRIBUTION_MARKERS = ("🗣", "☑", "✎")
+# skepticism_malformed의 statement<10c 측정에서 "verdict: defended" 같은 판정 어구 자체를
+# 제외한다 — 이 어구(>=17자)를 남겨두면 PN4가 약속하는 ">=10자 statement" 검사가 항상
+# has_verdict=True와 동시에 통과해버려 구조적으로 도달 불가능해진다(deadcode). Task 4에서
+# ST 참조 요구를 추가하며 발견 — brief Step 3 원문 그대로는 이 분기가 절대 발화하지 않는다.
+VERDICT_CLAUSE_RE = re.compile(r"verdict:\s*\S+", re.IGNORECASE)
+
+
+def verdict_entries(entries: list[str]) -> list[str]:
+    return [ln for ln in entries if "verdict:" in ln]
+
+
+def bijection_a_errors(payload_text: str, audit_text: str) -> list[str]:
+    """bijection A — payload §5 ↔ audit §3 (AC11).
+
+    개수 비교가 아니라 **id 집합 비교**다. 실제 steelman 항목은 다단락 블록이지 단일
+    불릿이 아니어서 "무엇을 한 항목으로 셀 것인가"가 미정이고, 그러면 집행이 불가능하다.
+    양쪽 공집합(steelman 0건)은 그대로 허용한다 — 공집합 == 공집합은 정합이고 steelman은
+    조건부 발동이라 0건이 정상이다. sentinel이 필요한 것은 R4(`기각` 0건)뿐이다.
+    """
+    refs = set()
+    for ln in verdict_entries(section5_entries(payload_text)):
+        refs |= set(ST_REF_RE.findall(ln))
+    declared = set(ST_HEADING_RE.findall(_section_text(audit_text, "3", "Steelman 원문")))
+    errs = []
+    for st in sorted(refs - declared):
+        errs.append(f"{st}: payload §5가 참조하지만 audit §3에 없음 (원문 없는 판정)")
+    for st in sorted(declared - refs):
+        errs.append(f"{st}: audit §3에 있지만 payload §5가 참조하지 않음 (판정 없는 steelman)")
+    return errs
+
+
+def attribution_block_missing(text: str) -> bool:
+    """§6 상단 2줄 출처 표기 블록 존재 검사 (AC5/C3).
+
+    템플릿이 상속시키지만 개별 brief에서 지워질 수 있으므로 게이트가 확인한다.
+    """
+    for ln in _section_text(text, "6", "사용자 원문").splitlines():
+        if ln.lstrip().startswith(">") and all(m in ln for m in ATTRIBUTION_MARKERS):
+            return False
+    return True
+
+
 def skepticism_malformed(text: str) -> list[str]:
     """§5의 `verdict:` 항목 형식 검사. PN4: 정확한 문자열 일치가 아니라 containment."""
     require_url = not _web_disabled()
@@ -360,10 +405,14 @@ def skepticism_malformed(text: str) -> list[str]:
         if "verdict:" not in ln:
             continue
         has_url = bool(URL_RE.search(ln))
-        has_verdict = any(v in ln.lower() for v in VALID_VERDICTS)
-        stripped = URL_RE.sub("", ln).lstrip("- ").strip()
+        has_verdict = bool(re.search(r"verdict:\s*(?:%s)\b" % "|".join(VALID_VERDICTS),
+                                     ln, re.IGNORECASE))
+        has_st = bool(ST_REF_RE.search(ln))
+        stripped = VERDICT_CLAUSE_RE.sub(
+            "", ST_REF_RE.sub("", URL_RE.sub("", ln))
+        ).lstrip("- ").strip()
         has_stmt = len(stripped) >= 10
-        if not (has_verdict and has_stmt and (has_url or not require_url)):
+        if not (has_verdict and has_stmt and has_st and (has_url or not require_url)):
             miss = []
             if not has_stmt:
                 miss.append("statement<10c")
@@ -371,6 +420,10 @@ def skepticism_malformed(text: str) -> list[str]:
                 miss.append("no-url")
             if not has_verdict:
                 miss.append("no-verdict")
+            if not has_st:
+                # web kill switch는 URL 요구만 완화한다 — ST 참조는 파일-축 drift-guard라
+                # 웹 가용성과 무관하다.
+                miss.append("no-ST-ref")
             bad.append(f"{ln[:60]} :: {','.join(miss)}")
     return bad
 
@@ -471,6 +524,8 @@ def gate(path: Path) -> int:
         ce = bijection_c_errors(text)
         if ce:
             failures.append(f"bijection C (evidence→§6): {ce}")
+    if not sec6_absent and attribution_block_missing(text):
+        failures.append("§6 출처 표기 블록 부재 (🗣·☑·✎ 세 기호를 모두 담은 인용 줄 필요)")
 
     sec2_absent = any(m.startswith("2.") for m in miss)
     if not sec2_absent:
@@ -492,6 +547,10 @@ def gate(path: Path) -> int:
             amiss = find_missing_sections(audit_text, AUDIT_SECTIONS)
             if amiss:
                 failures.append(f"missing audit sections: {amiss}")
+            if not any(m.startswith("3.") for m in amiss):
+                ae = bijection_a_errors(text, audit_text)
+                if ae:
+                    failures.append(f"bijection A (payload §5↔audit §3): {ae}")
 
     sec4_absent = any(m.startswith("4.") for m in miss)
     if not sec4_absent and not landscape_present(text):
