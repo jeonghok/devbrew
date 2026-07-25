@@ -1543,15 +1543,6 @@ python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" 2>/dev/null | grep -q '트
   && note FAIL "T16: 예산 이내 brief에 advisory가 붙었다" \
   || note PASS "T16: 예산 이내 brief에는 advisory 없음"
 
-# §6 원문은 계수에서 제외된다 — 원문이 길어져도 트립와이어가 울리지 않는다
-python3 - <<'PY' > /dev/null
-import pathlib, subprocess, sys, tempfile, shutil, os
-PY
-```
-
-마지막 python 헤레독은 지우고, §6 제외 확인은 아래 한 줄로 대신한다:
-
-```bash
 # §6 제외 확인: canonical의 지표가 §6 줄 수만큼 부풀지 않았는지 (본문 40줄대여야 한다)
 n="$(python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" 2>/dev/null \
      | python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_body_lines_excl_verbatim"])')"
