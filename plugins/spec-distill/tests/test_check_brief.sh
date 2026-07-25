@@ -41,9 +41,15 @@ p, hdr = pathlib.Path(sys.argv[1]), sys.argv[2]
 lines = p.read_text(encoding="utf-8").splitlines(True)
 p.write_text("".join(l for l in lines if l.strip() != f"## {hdr}"), encoding="utf-8")
 PY
-  python3 "$SCRIPT" gate "$TMPD/p.md" >/dev/null 2>&1 \
-    && note FAIL "T1: payload §$hdr 제거가 통과됨" \
-    || note PASS "T1: payload §$hdr 제거 → red"
+  # exit code만 보면 13개 섹션-헤더 규칙 전부가 잠금 없이 산다: SECTIONS에서 항목을
+  # 통째로 지워도 landscape_uncited/skepticism_malformed 등 다른 §5 소비자가 여전히
+  # red를 내 exit code가 안 흔들린다(리뷰 발견). 메시지가 그 헤더 문자열을 실제로
+  # 담고 있는지까지 확인해야 "이 규칙이 이 헤더를 잡는다"는 주장에 이빨이 생긴다.
+  out="$(python3 "$SCRIPT" gate "$TMPD/p.md" 2>/dev/null)"; rc=$?
+  { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'missing payload sections' \
+      && printf '%s' "$out" | grep -qF "$hdr"; } \
+    && note PASS "T1: payload §$hdr 제거 → red, missing payload sections에 헤더 명시 (message teeth)" \
+    || note FAIL "T1: payload §$hdr 제거가 통과됐거나 메시지에 해당 헤더가 없음"
 done
 
 # T2: audit 5섹션을 각각 제거 → red ×5
@@ -56,9 +62,11 @@ p, hdr = pathlib.Path(sys.argv[1]), sys.argv[2]
 lines = p.read_text(encoding="utf-8").splitlines(True)
 p.write_text("".join(l for l in lines if l.strip() != f"## {hdr}"), encoding="utf-8")
 PY
-  python3 "$SCRIPT" gate "$TMPD/p.md" >/dev/null 2>&1 \
-    && note FAIL "T2: audit §$hdr 제거가 통과됨" \
-    || note PASS "T2: audit §$hdr 제거 → red"
+  out="$(python3 "$SCRIPT" gate "$TMPD/p.md" 2>/dev/null)"; rc=$?
+  { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'missing audit sections' \
+      && printf '%s' "$out" | grep -qF "$hdr"; } \
+    && note PASS "T2: audit §$hdr 제거 → red, missing audit sections에 헤더 명시 (message teeth)" \
+    || note FAIL "T2: audit §$hdr 제거가 통과됐거나 메시지에 해당 헤더가 없음"
 done
 
 # T7: audit_file 부재 / 파일 부재 → red ×2 (AC9 fail-closed)
@@ -317,6 +325,22 @@ python3 "$SCRIPT" gate "$FX/interview-brief-st-orphan-payload.md" >/dev/null 2>&
 python3 "$SCRIPT" gate "$FX/interview-brief-st-orphan-audit.md" >/dev/null 2>&1 \
   && note FAIL "T10: audit에만 있는 ST가 통과됨 (판정 없는 steelman)" \
   || note PASS "T10: audit-only ST → red"
+# T10 message teeth: exit code만으론 방향(direction)이 아니라 존재만 증명된다. 단
+# "고유 문구가 있는지"만 보면 부족하다 — `refs - declared`를 `refs ^ declared`로
+# 바꿔도 st-orphan-payload는 declared⊆refs라 값이 우연히 안 바뀌고, st-orphan-audit는
+# 잘못된 방향 문구가 옳은 문구 **옆에 추가로** 붙을 뿐 옳은 문구를 안 지운다 — "문구가
+# 있다"만 보면 두 경우 다 여전히 통과해버린다(직접 재현해 확인). 그래서 각 픽스처마다
+# "제 방향 문구가 있다" + "반대 방향 문구는 없다"를 함께 확인해야 방향 자체가 잠긴다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-st-orphan-payload.md" 2>/dev/null)"
+{ printf '%s' "$out" | grep -q '원문 없는 판정' \
+    && ! printf '%s' "$out" | grep -q '판정 없는 steelman'; } \
+  && note PASS "T10: payload-only ST → '원문 없는 판정'만 발화 (반대 방향 없음, message teeth)" \
+  || note FAIL "T10: payload-only ST 메시지 방향이 틀렸거나 반대 방향이 섞여 있음"
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-st-orphan-audit.md" 2>/dev/null)"
+{ printf '%s' "$out" | grep -q '판정 없는 steelman' \
+    && ! printf '%s' "$out" | grep -q '원문 없는 판정'; } \
+  && note PASS "T10: audit-only ST → '판정 없는 steelman'만 발화 (반대 방향 없음, message teeth)" \
+  || note FAIL "T10: audit-only ST 메시지 방향이 틀렸거나 반대 방향이 섞여 있음"
 
 # T12: 양쪽 steelman 공집합 + 기각 항목 존재 + sentinel 없음 → green
 python3 "$SCRIPT" gate "$FX/interview-brief-steelman-empty.md" >/dev/null 2>&1 \
@@ -328,6 +352,18 @@ for v in no-url no-token short no-st; do
   python3 "$SCRIPT" gate "$FX/interview-brief-verdict-$v.md" >/dev/null 2>&1 \
     && note FAIL "T11/$v: 결손 verdict 항목이 통과됨" || note PASS "T11/$v: 결손 verdict 항목 → red"
 done
+
+# FIX4 (리뷰 라운드): URL 경로 조각에 우연히 낀 word-bounded ST<N>(예: `/ST9/`)는
+# 실제 참조로 치지 않는다 — has_st/refs 모두 URL을 먼저 벗겨낸 뒤 계산해야 한다.
+# exit code만으론 부족(bijection A가 phantom ref를 orphan으로 잡아 우연히 red가 될 수
+# 있음) — skepticism 서브커맨드 출력에서 no-ST-ref 태그를 직접 확인한다(message teeth).
+skep="$(python3 "$SCRIPT" skepticism "$FX/interview-brief-verdict-st-in-url.md" 2>/dev/null)"
+printf '%s' "$skep" | grep -q 'no-ST-ref' \
+  && note PASS "FIX4: URL 안 phantom ST9는 ST 요구를 충족시키지 못함 (no-ST-ref)" \
+  || note FAIL "FIX4: URL 안 ST 토큰이 ST 요구를 잘못 충족시킴"
+python3 "$SCRIPT" gate "$FX/interview-brief-verdict-st-in-url.md" >/dev/null 2>&1 \
+  && note FAIL "FIX4: URL 안 phantom ST9 픽스처가 게이트를 통과함" \
+  || note PASS "FIX4: URL 안 phantom ST9 픽스처 → red"
 
 # T17: web 비활성 시 §4·§5 URL 요구 완화 (기존 graceful degradation 선례 유지)
 DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-verdict-no-url.md" >/dev/null 2>&1 \

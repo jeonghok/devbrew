@@ -376,7 +376,9 @@ def bijection_a_errors(payload_text: str, audit_text: str) -> list[str]:
     """
     refs = set()
     for ln in verdict_entries(section5_entries(payload_text)):
-        refs |= set(ST_REF_RE.findall(ln))
+        # URL을 먼저 벗겨낸다 — 그러지 않으면 URL 경로 조각에 우연히 낀 word-bounded
+        # ST<N> 토큰(예: `/ST9/`)이 실제 참조인 양 집합에 섞여든다(phantom ref).
+        refs |= set(ST_REF_RE.findall(URL_RE.sub("", ln)))
     declared = set(ST_HEADING_RE.findall(_section_text(audit_text, "3", "Steelman 원문")))
     errs = []
     for st in sorted(refs - declared):
@@ -407,10 +409,11 @@ def skepticism_malformed(text: str) -> list[str]:
         has_url = bool(URL_RE.search(ln))
         has_verdict = bool(re.search(r"verdict:\s*(?:%s)\b" % "|".join(VALID_VERDICTS),
                                      ln, re.IGNORECASE))
-        has_st = bool(ST_REF_RE.search(ln))
-        stripped = VERDICT_CLAUSE_RE.sub(
-            "", ST_REF_RE.sub("", URL_RE.sub("", ln))
-        ).lstrip("- ").strip()
+        # URL을 먼저 벗겨낸 뒤 ST<N>을 찾는다 — 안 그러면 URL 경로 조각에 우연히 낀
+        # word-bounded ST<N>(예: `/ST9/`)이 실제 참조인 양 요구를 충족시켜버린다.
+        ln_no_url = URL_RE.sub("", ln)
+        has_st = bool(ST_REF_RE.search(ln_no_url))
+        stripped = VERDICT_CLAUSE_RE.sub("", ST_REF_RE.sub("", ln_no_url)).lstrip("- ").strip()
         has_stmt = len(stripped) >= 10
         if not (has_verdict and has_stmt and has_st and (has_url or not require_url)):
             miss = []
@@ -533,6 +536,11 @@ def gate(path: Path) -> int:
         if be:
             failures.append(f"bijection B (body §2↔frontmatter): {be}")
 
+    # payload §5 소비자가 여럿(landscape/skepticism/R4/bijection A)이라 한 번만 계산해
+    # 공유한다 — bijection A만 이 가드를 빼먹으면 §5 부재 시 audit 쪽 ST가 전부
+    # "판정 없는 steelman"으로 오탐된다(§5가 없으면 refs가 항상 공집합이므로).
+    sec5_absent = any(m.startswith("5.") for m in miss)
+
     # --- audit 해석 (fail-closed): 못 열면 audit 측 검증 전체를 skip하지 않고 red ---
     audit_path, audit_err = resolve_audit(path, fm)
     audit_text = ""
@@ -547,7 +555,7 @@ def gate(path: Path) -> int:
             amiss = find_missing_sections(audit_text, AUDIT_SECTIONS)
             if amiss:
                 failures.append(f"missing audit sections: {amiss}")
-            if not any(m.startswith("3.") for m in amiss):
+            if not sec5_absent and not any(m.startswith("3.") for m in amiss):
                 ae = bijection_a_errors(text, audit_text)
                 if ae:
                     failures.append(f"bijection A (payload §5↔audit §3): {ae}")
@@ -562,7 +570,6 @@ def gate(path: Path) -> int:
     if mal:
         failures.append(f"malformed §5 verdict entries: {len(mal)}")
 
-    sec5_absent = any(m.startswith("5.") for m in miss)
     if not sec5_absent and not tried_discarded_ok(text):
         failures.append("§5 기각 항목 0건 (N/A sentinel 없음)")
 
