@@ -27,8 +27,12 @@ CLI subcommands (all print JSON):
   check_brief.py frontmatter <payload>         → {"errors": [...]}         (AC1)
   check_brief.py items <payload>               → {"errors": [...], "bijection_c": [...],
                                                     "bijection_b": [...]}  (AC6/AC7)
-  check_brief.py gate <payload>                → {"pass": bool, "failures": [...]}
-                                                 exit 0 if pass else 1
+  check_brief.py metrics <payload>              → {"payload_body_lines_excl_verbatim": int}
+                                                    (AC15, advisory)
+  check_brief.py gate <payload>                → {"pass": bool, "failures": [...],
+                                                    "payload_body_lines_excl_verbatim": int,
+                                                    "advisories": [...]}
+                                                 exit 0 if pass else 1 (advisories never flip this)
 """
 from __future__ import annotations
 
@@ -81,6 +85,24 @@ def _body(text: str) -> str:
     m = FRONTMATTER_RE.match(text)
     body = text[m.end():] if m else text
     return FENCE_RE.sub("", body)
+
+
+LINE_TRIPWIRE = 150  # §5.3 절별 예산 합계 137 + slack 13. 목표이지 정확성 조건이 아니다.
+
+
+def payload_body_lines_excl_verbatim(text: str) -> int:
+    """분량 지표 (AC15, advisory).
+
+    계수법: frontmatter 제외, `## 6.` 섹션 전체 제외, 빈 줄 제외, 나머지 줄 수.
+    원문(§6)은 분량 무제한이므로 총량에서 빼야 인터뷰 길이가 지표를 오염시키지 않는다.
+    """
+    body = _body(text)
+    m = re.search(r"^##\s+6\.\s+", body, re.MULTILINE)
+    if m:
+        rest = body[m.end():]
+        nxt = re.search(r"^##\s+\d+\.", rest, re.MULTILINE)
+        body = body[: m.start()] + (rest[nxt.start():] if nxt else "")
+    return len([ln for ln in body.splitlines() if ln.strip()])
 
 
 def find_missing_sections(text: str, sections: list = SECTIONS) -> list[str]:
@@ -580,7 +602,18 @@ def gate(path: Path) -> int:
             failures.append(f"coverage ledger: {cov}")
 
     ok = not failures
-    print(json.dumps({"pass": ok, "failures": failures}, ensure_ascii=False))
+    metric = payload_body_lines_excl_verbatim(text)
+    advisories: list[str] = []
+    if metric > LINE_TRIPWIRE:
+        advisories.append(
+            f"[spec-distill] payload 본문 {metric}줄(§6 제외) — 예산 137 / 트립와이어 "
+            f"{LINE_TRIPWIRE} 초과. 분량은 목표이지 정확성 조건이 아니므로 차단하지 않는다."
+        )
+    for a in advisories:
+        print(a, file=sys.stderr)
+    print(json.dumps({"pass": ok, "failures": failures,
+                      "payload_body_lines_excl_verbatim": metric,
+                      "advisories": advisories}, ensure_ascii=False))
     return 0 if ok else 1
 
 
@@ -628,6 +661,10 @@ def main(argv: list[str]) -> int:
         print(json.dumps({"errors": user_sourced_errors(text),
                           "bijection_c": bijection_c_errors(text),
                           "bijection_b": bijection_b_errors(text)}, ensure_ascii=False))
+        return 0
+    if sub == "metrics":
+        print(json.dumps({"payload_body_lines_excl_verbatim":
+                          payload_body_lines_excl_verbatim(text)}, ensure_ascii=False))
         return 0
     print(f"unknown subcommand: {sub}", file=sys.stderr)
     return 64

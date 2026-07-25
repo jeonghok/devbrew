@@ -391,6 +391,30 @@ python3 "$SCRIPT" gate "$FX/interview-brief-no-attribution.md" >/dev/null 2>&1 \
 python3 "$SCRIPT" gate "$FX/interview-brief-attribution-partial.md" >/dev/null 2>&1 \
   && note FAIL "T18: 기호 누락 표기 블록이 통과됨" || note PASS "T18: 기호 누락 표기 블록 → red"
 
+# --- Task 5: 분량 지표 (AC15, advisory — fail하지 않는다) ---
+
+# T16: 본문 150줄 초과(§6 제외) → **green** + advisory 문자열
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-over-budget.md" 2>/dev/null)"; rc=$?
+[[ $rc -eq 0 ]] \
+  && note PASS "T16: 분량 초과는 fail하지 않는다 (advisory)" \
+  || note FAIL "T16: 분량 초과가 게이트를 red로 만들었다 (advisory여야 함)"
+printf '%s' "$out" | grep -q 'payload_body_lines_excl_verbatim' \
+  && note PASS "T16: 게이트가 분량 지표를 출력" || note FAIL "T16: 분량 지표 키가 없음"
+printf '%s' "$out" | grep -q '트립와이어 150 초과' \
+  && note PASS "T16: 150 초과 시 advisory 문자열 출력" || note FAIL "T16: advisory 문자열이 없음"
+
+# 정상 brief는 advisory를 내지 않는다 (false-positive 방지)
+python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" 2>/dev/null | grep -q '트립와이어 150 초과' \
+  && note FAIL "T16: 예산 이내 brief에 advisory가 붙었다" \
+  || note PASS "T16: 예산 이내 brief에는 advisory 없음"
+
+# §6 제외 확인: canonical의 지표가 §6 줄 수만큼 부풀지 않았는지 (본문 40줄대여야 한다)
+n="$(python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" 2>/dev/null \
+     | python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_body_lines_excl_verbatim"])')"
+[[ "$n" -lt 60 ]] \
+  && note PASS "T16: §6 사용자 원문이 계수에서 제외됨 (n=$n)" \
+  || note FAIL "T16: §6가 계수에 포함된 것으로 보임 (n=$n)"
+
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]
