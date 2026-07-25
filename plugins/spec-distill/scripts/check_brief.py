@@ -2,27 +2,31 @@
 """spec-distill — interview brief structural gate (AC2/AC4/AC5, V2/V3/V6, PN4).
 
 The Law 1 termination gate for the conducting-interview problem-space stage,
-made mechanical. conducting-interview runs `check_brief.py gate <brief>` before
+made mechanical. conducting-interview runs `check_brief.py gate <payload>` before
 finalizing the brief / before any optional brainstorming invoke; a non-zero exit
 BLOCKS termination (one of the 5 통과 의례 unmet).
+
+v0.23.0부터 brief는 payload + audit 2파일 쌍이다. `gate <payload>`는 payload 경로만
+받고, payload frontmatter의 `audit_file`(basename-only, P21 계보)로 audit을 스스로
+해석한다(AC9, fail-closed) — audit_file 부재·traversal·파일 부재는 전부 red다.
 
 This is NOT a Law 2 reviewer (NG3) — the brief gets no separated review. It is a
 structural self-check (Law 1), analogous to parse_spec_structure.py for specs.
 
 PN4: the steelman "verbatim" guarantee is checked by substring containment — each
-Skepticism Log entry must contain >=1 URL + a >=10-char statement + a valid
+§5 기각 `verdict:` entry must contain >=1 URL + a >=10-char statement + a valid
 verdict — NOT exact-string match (avoids flakiness). Whether the steelman is a
 genuine counter-argument is V10 manual.
 
 CLI subcommands (all print JSON):
-  check_brief.py sections <brief>            → {"missing": [...]}        (AC2)
-  check_brief.py landscape-citations <brief> → {"uncited": [...]}        (AC4/V6)
-  check_brief.py skepticism <brief>          → {"malformed": [...]}      (AC5/V3)
-  check_brief.py tried-discarded <brief>     → {"ok": bool}              (V2/R4)
-  check_brief.py coverage <brief>            → {"failures": [...]}       (AC2/C9)
-  check_brief.py frontmatter <brief>         → {"errors": [...]}         (AC1)
-  check_brief.py gate <brief>                → {"pass": bool, "failures": [...]}
-                                               exit 0 if pass else 1
+  check_brief.py sections <payload>            → {"missing": [...]}        (AC2)
+  check_brief.py landscape-citations <payload> → {"uncited": [...]}        (AC4/V6)
+  check_brief.py skepticism <payload>          → {"malformed": [...]}      (AC5/V3)
+  check_brief.py tried-discarded <payload>     → {"ok": bool}              (V2/R4, §5 기각)
+  check_brief.py coverage <payload>            → {"failures": [...]}       (AC2/C9, audit §1 해석)
+  check_brief.py frontmatter <payload>         → {"errors": [...]}         (AC1)
+  check_brief.py gate <payload>                → {"pass": bool, "failures": [...]}
+                                                 exit 0 if pass else 1
 """
 from __future__ import annotations
 
@@ -48,15 +52,24 @@ VALID_VERDICTS = ("defended", "switched", "deferred")
 FENCE_RE = re.compile(r"^[ \t]*```.*?^[ \t]*```[^\n]*$", re.DOTALL | re.MULTILINE)
 
 SECTIONS = [
-    ("1", "Reframed Problem"),
-    ("2", "Locked Directions"),
-    ("3", "External Landscape"),
-    ("4", "Skepticism Log"),
-    ("5", "Blind Spots & Premortem"),
-    ("6", "Coverage Ledger"),
-    ("7", "Tried & Discarded"),
-    ("8", "Open Questions"),
-    ("9", "Concrete Next Action"),
+    ("0", "한눈에"),
+    ("1", "Goal · Non-goal"),
+    ("2", "제약"),
+    ("3", "Open Questions"),
+    ("4", "External Landscape"),
+    ("5", "기각 · Blind Spots"),
+    ("6", "사용자 원문"),
+    ("7", "Next Action"),
+]
+
+# audit 섹션도 계약이다 — coverage_ledger_failures()와 steelman 대조가 섹션 번호+제목으로
+# 본문을 잘라내므로, audit 쪽 번호가 바뀌면 검증이 조용히 빈 문자열을 읽고 통과한다.
+AUDIT_SECTIONS = [
+    ("1", "Coverage Ledger"),
+    ("2", "Budget"),
+    ("3", "Steelman 원문"),
+    ("4", "게이트 실행 기록"),
+    ("5", "프로세스 로그"),
 ]
 
 FLOOR_KEYS = ["root_problem", "landscape", "skepticism", "blind_spot", "open_questions"]
@@ -68,10 +81,10 @@ def _body(text: str) -> str:
     return FENCE_RE.sub("", body)
 
 
-def find_missing_sections(text: str) -> list[str]:
+def find_missing_sections(text: str, sections: list = SECTIONS) -> list[str]:
     body = _body(text)
     missing = []
-    for num, title in SECTIONS:
+    for num, title in sections:
         pat = re.compile(
             rf"^##\s+{num}\.\s+{re.escape(title)}\b",
             re.MULTILINE | re.IGNORECASE,
@@ -101,18 +114,44 @@ def _entry_lines(section: str) -> list[str]:
     ]
 
 
+def _frontmatter(text: str) -> str:
+    m = FRONTMATTER_RE.match(text)
+    return m.group(1) if m else ""
+
+
+AUDIT_FILE_RE = re.compile(r"^audit_file:\s*(\S+)\s*$", re.MULTILINE)
+
+
+def resolve_audit(payload: Path, fm: str):
+    """payload frontmatter의 audit_file을 해석한다 (AC9, fail-closed).
+
+    audit_file은 신뢰 경계 밖 입력이므로 **basename만** 허용한다(P21 계보) — `../x.md`,
+    `/etc/x.md`, `a/b.md`는 전부 Path(...).name != 원문이라 거부된다. 부재·미해석은
+    전부 게이트 red이며, 조용히 payload-only 검사로 degrade하지 않는다(2파일 fail-open 봉쇄).
+    """
+    m = AUDIT_FILE_RE.search(fm)
+    if not m:
+        return None, "audit_file key absent"
+    name = m.group(1).strip().strip('"').strip("'")
+    if Path(name).name != name:
+        return None, f"audit_file {name!r} is not a basename (traversal rejected)"
+    p = payload.parent / name
+    if not p.exists():
+        return None, f"audit file not found: {name}"
+    return p, None
+
+
 def landscape_uncited(text: str) -> list[str]:
     if _web_disabled():
         return []  # web off → no URLs obtainable; citation requirement relaxed (AC8)
-    sec = _section_text(text, "3", "External Landscape")
+    sec = _section_text(text, "4", "External Landscape")
     return [ln for ln in _entry_lines(sec) if not URL_RE.search(ln)]
 
 
 def landscape_present(text: str) -> bool:
-    """§3 External Landscape must carry >=1 entry, OR an explicit web-disabled
-    sentinel (AC8 graceful degradation). An empty §3 means no landscape was
-    surfaced — R2 unmet. Header presence alone is not research (F3)."""
-    sec = _section_text(text, "3", "External Landscape").strip()
+    """§4 External Landscape must carry >=1 entry, OR an explicit web-disabled
+    sentinel (AC8 graceful degradation). Header presence alone is not research (F3)."""
+    sec = _section_text(text, "4", "External Landscape").strip()
     if not sec:
         return False
     if re.search(r"\bN/?A\b|비활성|생략|web[ -]?disabled", sec, re.IGNORECASE):
@@ -120,25 +159,17 @@ def landscape_present(text: str) -> bool:
     return bool(_entry_lines(sec))
 
 
-def steelman_unlogged(text: str) -> int:
-    """Count locked directions whose frontmatter claims a steelman outcome
-    (`defended` / `switched-to-this`) but which have no corresponding §4
-    Skepticism Log entry. The brief template requires every suspicion-triggered
-    direction to log a §4 entry; this enforces the count. Whether the entry is a
-    genuine counter-argument stays V10 manual (F6)."""
-    m = FRONTMATTER_RE.match(text)
-    fm = m.group(1) if m else ""
-    claimed = len(re.findall(
-        r"^\s*steelman\s*:\s*(?:defended|switched-to-this)\s*$", fm, re.MULTILINE))
-    logged = len(_entry_lines(_section_text(text, "4", "Skepticism Log")))
-    return max(0, claimed - logged)
+def section5_entries(text: str) -> list[str]:
+    return _entry_lines(_section_text(text, "5", "기각 · Blind Spots"))
 
 
 def skepticism_malformed(text: str) -> list[str]:
-    sec = _section_text(text, "4", "Skepticism Log")
-    require_url = not _web_disabled()  # AC8: web off → user-judgment skepticism may lack a URL
+    """§5의 `verdict:` 항목 형식 검사. PN4: 정확한 문자열 일치가 아니라 containment."""
+    require_url = not _web_disabled()
     bad: list[str] = []
-    for ln in _entry_lines(sec):
+    for ln in section5_entries(text):
+        if "verdict:" not in ln:
+            continue
         has_url = bool(URL_RE.search(ln))
         has_verdict = any(v in ln.lower() for v in VALID_VERDICTS)
         stripped = URL_RE.sub("", ln).lstrip("- ").strip()
@@ -155,13 +186,19 @@ def skepticism_malformed(text: str) -> list[str]:
     return bad
 
 
+REJECT_NA_RE = re.compile(r"^-\s*기각\s*—\s*N/?A\b", re.IGNORECASE)
+
+
 def tried_discarded_ok(text: str) -> bool:
-    sec = _section_text(text, "7", "Tried & Discarded").strip()
-    if not sec:
-        return False
-    if re.search(r"\bN/?A\b", sec, re.IGNORECASE):
-        return True  # explicit "N/A — 전부 first-time defend+lock" sentinel (R4 edge)
-    return bool(_entry_lines(sec))
+    """R4 통과 의례 이관 — 구 §7 Tried & Discarded가 §5로 병합됐다.
+
+    병합은 표현의 통합이지 의례의 폐기가 아니다: `기각` 항목이 0건이면 명시 N/A sentinel
+    없이는 통과할 수 없다. steelman과 무관하게 사용자가 폐기한 방향도 여기 남는다.
+    """
+    rej = [ln for ln in section5_entries(text) if ln.lstrip("- ").startswith("기각")]
+    sentinel = any(REJECT_NA_RE.match(ln) for ln in rej)
+    real = [ln for ln in rej if not REJECT_NA_RE.match(ln)]
+    return bool(real) or sentinel
 
 
 def coverage_ledger_failures(text: str) -> list[str]:
@@ -169,7 +206,7 @@ def coverage_ledger_failures(text: str) -> list[str]:
     Form-level only (C2): floor 5행 각 존재 + status 토큰 'closed' + evidence 세그먼트
     non-empty; derived는 >=1 derived 행 OR N/A sentinel. 'closed'가 실질적으로 참인지는
     검사하지 않는다(모델 + 독립 adversary의 몫 — 게이트는 이 한계를 숨기지 않는다)."""
-    sec = _section_text(text, "6", "Coverage Ledger")
+    sec = _section_text(text, "1", "Coverage Ledger")
     if not sec.strip():
         return ["Coverage Ledger empty or absent"]
     fails: list[str] = []
@@ -211,8 +248,10 @@ def frontmatter_errors(text: str) -> list[str]:
         errs.append("type != interview-brief")
     if not re.search(r"^next_phase:\s*superpowers:brainstorming\s*$", fm, re.MULTILINE):
         errs.append("next_phase != superpowers:brainstorming")
-    if not re.search(r"^locked_directions\s*:", fm, re.MULTILINE):
-        errs.append("locked_directions key absent")
+    if not AUDIT_FILE_RE.search(fm):
+        errs.append("audit_file key absent")
+    if not re.search(r"^user_sourced_items\s*:", fm, re.MULTILINE):
+        errs.append("user_sourced_items key absent")
     return errs
 
 
@@ -224,36 +263,50 @@ def gate(path: Path) -> int:
                          ensure_ascii=False))
         return 1
     failures: list[str] = []
+    fm = _frontmatter(text)
+
     miss = find_missing_sections(text)
     if miss:
-        failures.append(f"missing sections: {miss}")
+        failures.append(f"missing payload sections: {miss}")
     fe = frontmatter_errors(text)
     if fe:
         failures.append(f"frontmatter: {fe}")
-    # Only check §3 content when the section exists; absence is already in miss.
-    sec3_absent = any(m.startswith("3.") for m in miss)
-    if not sec3_absent and not landscape_present(text):
+
+    # --- audit 해석 (fail-closed): 못 열면 audit 측 검증 전체를 skip하지 않고 red ---
+    audit_path, audit_err = resolve_audit(path, fm)
+    audit_text = ""
+    if audit_err:
+        failures.append(f"audit: {audit_err}")
+    else:
+        try:
+            audit_text = audit_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            failures.append(f"audit unreadable: {exc}")
+        else:
+            amiss = find_missing_sections(audit_text, AUDIT_SECTIONS)
+            if amiss:
+                failures.append(f"missing audit sections: {amiss}")
+
+    sec4_absent = any(m.startswith("4.") for m in miss)
+    if not sec4_absent and not landscape_present(text):
         failures.append("External Landscape empty (no entries and no web-disabled sentinel)")
     unc = landscape_uncited(text)
     if unc:
         failures.append(f"uncited landscape entries: {len(unc)}")
     mal = skepticism_malformed(text)
     if mal:
-        failures.append(f"malformed skepticism entries: {len(mal)}")
-    shortfall = steelman_unlogged(text)
-    if shortfall:
-        failures.append(
-            f"{shortfall} steelman-claimed direction(s) without a §4 Skepticism Log entry")
-    # §7 Tried & Discarded 내용은 섹션이 존재할 때만 검사(부재는 이미 miss에 있음).
-    sec7_absent = any(m.startswith("7.") for m in miss)
-    if not sec7_absent and not tried_discarded_ok(text):
-        failures.append("Tried & Discarded empty (no entries and no N/A sentinel)")
-    # §6 Coverage Ledger 내용은 섹션이 존재할 때만 검사(부재는 이미 miss에 있음).
-    sec6_absent = any(m.startswith("6.") for m in miss)
-    if not sec6_absent:
-        cov = coverage_ledger_failures(text)
+        failures.append(f"malformed §5 verdict entries: {len(mal)}")
+
+    sec5_absent = any(m.startswith("5.") for m in miss)
+    if not sec5_absent and not tried_discarded_ok(text):
+        failures.append("§5 기각 항목 0건 (N/A sentinel 없음)")
+
+    # Coverage Ledger는 이제 audit에 산다 — audit을 못 열었으면 위에서 이미 red.
+    if audit_text and not any(m.startswith("1.") for m in find_missing_sections(audit_text, AUDIT_SECTIONS)):
+        cov = coverage_ledger_failures(audit_text)
         if cov:
             failures.append(f"coverage ledger: {cov}")
+
     ok = not failures
     print(json.dumps({"pass": ok, "failures": failures}, ensure_ascii=False))
     return 0 if ok else 1
@@ -284,7 +337,13 @@ def main(argv: list[str]) -> int:
         print(json.dumps({"ok": tried_discarded_ok(text)}, ensure_ascii=False))
         return 0
     if sub == "coverage":
-        print(json.dumps({"failures": coverage_ledger_failures(text)}, ensure_ascii=False))
+        audit_path, audit_err = resolve_audit(path, _frontmatter(text))
+        if audit_err:
+            print(json.dumps({"failures": [audit_err]}, ensure_ascii=False))
+            return 1
+        audit_text = audit_path.read_text(encoding="utf-8")
+        print(json.dumps({"failures": coverage_ledger_failures(audit_text)},
+                         ensure_ascii=False))
         return 0
     if sub == "frontmatter":
         print(json.dumps({"errors": frontmatter_errors(text)}, ensure_ascii=False))
