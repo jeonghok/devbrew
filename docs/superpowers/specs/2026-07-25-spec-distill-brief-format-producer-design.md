@@ -7,6 +7,7 @@ interview brief를 핸드오프 아티팩트로 재설계한다. 라운드마다
 
 ## 목차
 
+- [Handoff Context](#handoff-context)
 - [1. Context / Why](#1-context--why)
 - [2. Goals](#2-goals)
 - [3. Non-goals](#3-non-goals)
@@ -17,17 +18,44 @@ interview brief를 핸드오프 아티팩트로 재설계한다. 라운드마다
   - [5.3 payload 레이아웃](#53-payload-레이아웃)
   - [5.4 게이트 계약](#54-게이트-계약)
   - [5.5 에러 처리 · graceful degradation](#55-에러-처리--graceful-degradation)
-  - [5.6 legacy 비계와 락의 순서 의존](#56-legacy-비계와-락의-순서-의존)
+  - [5.6 락 스코프 — legacy 경로 없음](#56-락-스코프--legacy-경로-없음)
 - [6. Acceptance Criteria](#6-acceptance-criteria)
 - [7. Files to Modify](#7-files-to-modify)
 - [8. Verification Plan](#8-verification-plan)
   - [8.1 구조 테스트](#81-구조-테스트)
   - [8.2 회귀 락 + mutation](#82-회귀-락--mutation)
-  - [8.3 탐색 폭 회귀 검증 (AC13)](#83-탐색-폭-회귀-검증-ac13)
+  - [8.3 탐색 폭 회귀 검증 (AC15, advisory)](#83-탐색-폭-회귀-검증-ac15-advisory)
   - [8.4 수동 검증](#84-수동-검증)
 - [9. Rejected Alternatives](#9-rejected-alternatives)
 - [10. Open Questions 처리](#10-open-questions-처리)
 - [11. Metadata](#11-metadata)
+
+---
+
+## Handoff Context
+
+> 이 spec을 처음 보는 사람(또는 `/compact` 후 자기 자신)이 30초에 핵심을 파악할 수 있게. 대화 컨텍스트를 가정하지 않는다.
+
+**TL;DR** (무엇을·왜):
+
+- spec-distill의 interview brief가 해답공간 결정을 *"확정·재논쟁 금지"* 로 박제해 다음 stage(`superpowers:brainstorming`)의 탐색을 죽인다. 이 spec은 그 권위 문법을 **네 곳에서 동시에** 제거하고 — 그중 진짜 원인은 템플릿이 아니라 라운드마다 결정을 잠그는 `SKILL.md`의 producer다 — 확정 권한을 사용자에게 되돌린다.
+- 산출물은 여전히 interview brief다. payload는 역피라미드 8섹션으로 재배치·압축하고, audit(텔레메트리)을 별도 파일로 가른다. **신규 에이전트 0개** — 리뷰 파이프라인은 후속 Spec B.
+
+**Implicit context** (Constraints에 안 박힌, 작업에 필요한 외부 사실):
+
+- `superpowers` brainstorming skill(6.1.1·6.2.0 모두)은 `interview`/`brief`/`locked_directions`를 **한 번도 참조하지 않는다.** frontmatter 필드는 소비자가 없고 전달은 순수 프로즈 경로다 — 그래서 `status` 같은 새 필드도 하류가 자동으로 읽어주지 않는다. 계약 전달 채널은 orchestrator의 호출 프롬프트뿐이다.
+- `superpowers` 6.2.0에서 `Key Principles`의 *"Explore alternatives — Always propose 2-3 approaches before settling"* 줄이 삭제됐다. 하류의 탐색 지시가 체크리스트 4번 1곳으로 줄어 brief의 과잉결정이 더 해롭다. 외부 플러그인이라 손대지 않는다.
+- `check_brief.py gate`는 **인터뷰 종료 직전 방금 쓴 brief에만** 실행된다. 과거 brief 파일을 게이트에 넣는 경로는 코드에도 절차에도 없다 — 이 사실이 §5.6(legacy 경로 불필요)의 근거다.
+- `check_brief.py`는 `state.local.md`를 읽지 않는다. brief 파일만 본다. state에 있는 것을 게이트로 집행하려면 brief에 직렬화돼 있어야 한다.
+- `_web_disabled()`(`DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`)가 §4 인용 요구를 완화하는 기존 graceful-degradation 선례다.
+- devbrew 금지 패턴 *Unbounded autonomy* — 사용자 확인 루프에는 상한과 초과 시 동작이 반드시 있어야 한다.
+
+**Deferred to plan** (이 spec이 의도적으로 lock하지 않은 것):
+
+- 템플릿 §0–§7 각 섹션의 **문구·설명문 표현.** 섹션 이름·번호·분량 예산만 lock하고 안내문 wording은 구현 재량.
+- `check_brief.py` 내부 함수 분해 방식(기존 `_section_text`/`_entry_lines` 재사용 범위, 신규 헬퍼 이름).
+- 테스트 파일 배치(기존 `tests/` 구조에 맞춰 구현이 결정).
+- `CHANGELOG.md` 항목 문구.
 
 ---
 
@@ -48,8 +76,6 @@ interview brief를 핸드오프 아티팩트로 재설계한다. 라운드마다
 
 과거 brief 3건의 LD 개수 9 / 6 / 5는 모델의 과잉 잠금이 아니라 **skill이 지시한 대로 동작한 결과**다. 그러므로 템플릿만 고치면 producer가 계속 LD를 찍어낸다.
 
-**보조 근거**: `superpowers` 6.1.1·6.2.0 brainstorming skill 전문에 `interview`/`brief`/`locked_directions` 언급 0건 — frontmatter `locked_directions[]`는 소비자가 없고 전달은 순수 프로즈 경로다. 6.2.0에서 `Key Principles`의 *"Explore alternatives — Always propose 2-3 approaches before settling"* 줄이 삭제되어 탐색 지시가 체크리스트 1곳으로 줄었다 — 하류가 약해진 만큼 brief의 과잉결정이 더 해롭다.
-
 **이 spec의 범위**: 인터뷰 결과물은 「포맷·producer 교체」와 「리뷰 파이프라인 신설」 두 덩어리다. 사용자 결정으로 **두 spec으로 분리**하고, 이 문서는 전자(Spec A)만 다룬다. Spec B(brief-critic / 방향성 리뷰 / readback / codex)는 Spec A가 실제 brief를 산출한 뒤 그 실물을 입력으로 설계한다.
 
 ---
@@ -58,9 +84,9 @@ interview brief를 핸드오프 아티팩트로 재설계한다. 라운드마다
 
 1. **라운드별 잠금 producer 제거.** 인터뷰가 진행 중 결정을 확정하지 않는다.
 2. **확정 권한을 사용자에게.** `status: confirmed`는 사용자의 명시적 확인 행위로만 발생한다.
-3. **payload 재배치·압축.** 행동 항목(제약·Open Questions)을 앞으로, 근거·원문을 뒤로. 모델 산문을 압축하되 사용자 원문은 전문 보존.
+3. **payload 재배치·압축.** 행동 항목(제약·Open Questions)을 앞으로, 근거·원문을 뒤로. 모델 산문을 압축하되 사용자 원문은 전문 보존. 정량 목표는 AC14가 지표로 집행한다(advisory).
 4. **Spec B가 소비할 frontmatter 계약 확정.** `source × status × evidence`를 지금 못 박아 B가 포맷을 재작업하지 않게 한다.
-5. **2파일 분리로 생기는 게이트 fail-open 봉쇄.**
+5. **drift-guard 두 축.** payload↔audit(§5.4 ST bijection)과 body↔frontmatter(§5.4 항목 bijection). 후자가 ☑ laundering을 막는 안전-critical 축이다.
 6. **재발 방지 락.** 권위 문법 재도입을 기계적으로 막는다.
 
 ---
@@ -69,9 +95,10 @@ interview brief를 핸드오프 아티팩트로 재설계한다. 라운드마다
 
 - **리뷰 파이프라인** — brief-critic(D2) / 방향성 리뷰(D5) / readback(D3) / codex 프롬프트 빌더(D4)는 전부 Spec B.
 - **`agents/spec-reviewer.md` NG3 문구 수정** — Spec A는 리뷰어를 만들지 않으므로 *"brief는 분리 review 대상이 아니다"* 가 여전히 사실이다. `check_brief.py` docstring의 NG3 서술도 동일하게 유지.
-- **기존 brief 3건 마이그레이션** — §5.5 참조. 불필요.
-- **`superpowers` 플러그인 자체 수정** — 외부 플러그인. 하류의 약화(6.2.0 원칙 줄 삭제)는 관측 사실로 기록만 하고 손대지 않는다.
+- **기존 brief 3건 마이그레이션** — §5.5·§5.6 참조. 불필요.
+- **`superpowers` 플러그인 자체 수정** — 외부 플러그인. 하류의 약화(6.2.0 원칙 줄 삭제)는 관측 사실로 기록만 한다.
 - **분량 감축을 위한 사용자 원문 발췌** — 원문은 압축 대상이 아니다(§5.3).
+- **모델 추론 항목의 기계 검증** — ✎ 항목은 frontmatter 계약 밖 프로즈다(§5.2). 게이트 대상이 아니다.
 
 ---
 
@@ -97,7 +124,9 @@ interview brief를 핸드오프 아티팩트로 재설계한다. 라운드마다
 | B2 | ☑ | `status`는 종료 직전 사용자 일괄 확인으로 결정 |
 | B3 | ☑ | payload 레이아웃 = 역피라미드 + 압축, 8섹션, 원문 전문 보존 |
 | B4 | ☑ | 탐색 폭 측정은 **설계 후 회귀 검증**으로 배치 |
-| B5 | 🗣 | legacy 지원은 임시 비계 — 마지막 시점에 제거 |
+| B5 | 🗣 | legacy 지원을 남기지 않는다 |
+
+> ✎ **B5 원문은 "legacy는 마지막 시점에 제거하자"였다.** 리뷰가 legacy 분기의 존치 근거를 반증했으므로(§5.6·§9) 처음부터 만들지 않는 강화형으로 해석했다. 사용자 의도(legacy를 잔존시키지 않음)는 보존되고 중간 상태만 사라진다. 되돌리려면 §5.6과 AC12만 고치면 된다.
 
 **보안·정책 제약**: `CLAUDE.md` P21(state에 secret 금지 — placeholder 참조), Law 2(리뷰어는 `tools:` allowlist로 쓰기 차단 — Spec A는 에이전트를 만들지 않으므로 해당 없음), 킬 스위치 `DEVBREW_DISABLE_SPEC_DISTILL=1`, 플러그인 편집 시 `plugin.json` SemVer bump 필수.
 
@@ -113,11 +142,11 @@ interview brief를 핸드오프 아티팩트로 재설계한다. 라운드마다
 | `SKILL.md` 종료 단계 | `pending_locked_decisions` → `locked_directions[]` | 기존 `/compact` proceed 게이트에 **확정 확인을 흡수** |
 | `templates/interview-brief-template.md` | §2 Locked Directions, *"재논쟁 금지"* | §0–§7 역피라미드 + `user_sourced_items[]` |
 | `SKILL.md:405` compact handoff | *"Locked Directions … 보존"* | 새 섹션명 + **C4 프로토콜을 호출 프롬프트로 전달** |
-| `check_brief.py` | `locked_directions` 필수 | `user_sourced_items` 필수 + source/status/evidence 검증 + 2파일 스코프 |
+| `check_brief.py` | `locked_directions` 필수 | `user_sourced_items` 필수 + 스키마 검증 + 2파일 스코프 + 두 bijection |
 
 **C5 ↔ OQ1 충돌 해소.** `superpowers:brainstorming`은 spec-distill을 모르고 `locked_directions`를 0건 참조한다. 그러니 `status`도 참조하지 않을 것이다. C4 프로토콜을 brief에 넣으면 C5 위반이고, 넣지 않으면 하류 도달 경로가 없다.
 
-→ 규약은 C5가 지정한 자리 그대로 **orchestrator의 호출 프롬프트**에 산다. brief 파일은 순수 데이터(`source`/`status`/`evidence`)만 나르고, *"confirmed 항목은 근거 있으면 보고 후 재결정, 임의 변경 금지"* 는 `SKILL.md`가 brainstorming을 호출할 때 함께 보내는 문장이다. orchestrator는 두 stage 사이에 계속 존재하므로 채널이 있다. `/compact` 경로(옵션 ①)와 직행 경로(옵션 ②) 양쪽 모두에 동일 문장을 싣는다.
+→ 규약은 C5가 지정한 자리 그대로 **orchestrator의 호출 프롬프트**에 산다. brief 파일은 순수 데이터(`source`/`status`/`evidence`)만 나르고, *"confirmed 항목은 근거 있으면 보고 후 재결정, 임의 변경 금지"* 는 `SKILL.md`가 brainstorming을 호출할 때 함께 보내는 문장이다. `/compact` 경로(옵션 ①)와 직행 경로(옵션 ②) 양쪽 모두에 동일 문장을 싣는다.
 
 ### 5.2 데이터 흐름
 
@@ -139,39 +168,64 @@ brief 초안 작성 (user_sourced_items 전부 status: provisional)
   → 확정 후보 목록을 프로즈로 출력
   → AskUserQuestion  ① 이대로 확정하고 진행 / ② 확정 목록 수정 / ③ 중단
        ① → status 반영 → 재저장 → 게이트 재실행 → /compact 노출 → STOP
-       ② → 수정 반영 후 재제시 (최대 2회, 초과 시 전부 provisional 강등 + loud advisory)
+       ② → 수정 반영 후 재제시
        ③ → 정지
 ```
 
-**후보 선별은 모델이 한다.** `user_statements` 전체를 훑어 각 항목에 후보 `status`를 붙이고, `confirmed` 후보만 목록으로 제시한다 — 제외한 것도 한 줄로 함께 보여야 사용자가 누락을 잡을 수 있다. 확정 목록이 길 수 있으므로 목록은 **프로즈로 출력**하고 `AskUserQuestion`은 3지선다만 담당한다. 모델의 후보 판정은 제안일 뿐이고 `confirmed`로의 전이는 옵션 ① 선택으로만 일어난다.
+**재제시 상한**: 최초 제시는 0회째다. 옵션 ②를 고를 때마다 재제시 횟수가 1 증가하고 **2회까지** 허용한다. 3번째 ② 요구 시 전 항목을 `provisional`로 강등하고 고정 문자열 advisory를 출력한 뒤 진행한다:
+
+```
+[spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등
+```
+
+**후보 선별은 모델이 한다.** `user_statements` 전체를 훑어 각 항목에 후보 `status`를 붙이고, `confirmed` 후보를 목록으로 제시한다 — 제외한 것도 한 줄로 함께 보여야 사용자가 누락을 잡을 수 있다. 확정 목록이 길 수 있으므로 목록은 **프로즈로 출력**하고 `AskUserQuestion`은 3지선다만 담당한다. 모델의 후보 판정은 제안일 뿐이고 `confirmed`로의 전이는 옵션 ① 선택으로만 일어난다.
 
 **frontmatter 계약** (Spec B의 critic이 소비):
 
 ```yaml
+audit_file: 2026-07-25-<topic>-interview.audit.md   # basename only (AC8)
 user_sourced_items:
   - id: C1
-    source: verbatim | chosen | inferred
+    source: verbatim | chosen        # inferred는 이 리스트에 들어가지 않는다
     status: confirmed | provisional | open
     statement: "<160자 이내, P21 placeholder 치환>"
-    evidence: S3            # §6 원문의 어느 발화에서 나왔는가
+    evidence: S3                     # §6 원문의 어느 발화에서 나왔는가 — 필수
 ```
 
-`evidence`가 이 설계의 이빨이다. **`source ∈ {verbatim, chosen}`인데 `evidence`가 없으면 게이트 fail** — codex 리뷰가 인터뷰 brief에서 적발한 "☑ laundering"(사용자가 고르지 않은 것을 ☑로 표기)이 기계적으로 봉쇄된다. `inferred`는 `evidence` 없음이 정상이다.
+**`user_sourced_items`는 이름 그대로 사용자 출처만 담는다.** `source: inferred`는 이 리스트에 들어갈 수 없고(게이트 fail), 모델 추론은 본문 프로즈에 ✎ 표기로만 산다 — 하류가 C4의 재결정 프로토콜을 적용할 대상이 아니기 때문이다. 그 결과 **`evidence`는 예외 없이 필수**가 되고, codex 리뷰가 인터뷰 brief에서 적발한 "☑ laundering"(사용자가 고르지 않은 것을 ☑로 표기)이 기계적으로 봉쇄된다.
+
+**body §2 항목 문법** — frontmatter와 대조되는 쪽이므로 형식을 고정한다:
+
+```markdown
+- 🗣 confirmed **C1** — <statement>
+- ☑ provisional **D2** — <statement>
+```
+
+기호↔`source` 매핑은 🗣→`verbatim`, ☑→`chosen`. ✎ 항목은 이 문법을 쓰지 않는다(프로즈 주석).
+
+§6 원문 섹션이 `S<N>` 앵커를 제공한다:
+
+```markdown
+- **S1** 🗣 최초 요청:
+  > "..."
+```
 
 ### 5.3 payload 레이아웃
 
 역피라미드 + 압축. 목표 ~165줄(현행 272 → -40%). **압축 대상은 모델이 쓴 산문에 한정**하고 사용자 원문은 손대지 않는다 — 원문을 발췌본으로 만들면 Spec B critic의 ground truth가 무너져 「Blind Spots」가 경고한 *"재구성 대 재구성의 순환 검증"* 이 실제로 성립한다.
 
-| § | 섹션 | 분량 | 역할 |
+| § | 섹션 | 분량 예산 | 역할 |
 |---|---|---|---|
-| 0 | 한눈에 | ~12줄 | 무엇/왜/확정/열림/다음 stage |
-| 1 | Goal · Non-goal | ~10줄 | |
-| 2 | 제약 | ~25줄 | source × status 표 + 항목 |
-| 3 | Open Questions | ~20줄 | **탐색 대상을 앞으로** |
-| 4 | External Landscape | ~18줄 | 1항목 = 1줄, URL 필수 |
-| 5 | 기각 · Blind Spots | ~20줄 | 통합. verdict 토큰 보유 항목 = steelman 대응 |
-| 6 | 사용자 원문 | ~50줄 | **전문 보존.** `S<N>` 앵커 제공 |
-| 7 | Next Action | ~8줄 | |
+| 0 | 한눈에 | ≤15줄 | 무엇/왜/확정/열림/다음 stage |
+| 1 | Goal · Non-goal | ≤12줄 | |
+| 2 | 제약 | ≤30줄 | §5.2 항목 문법 + ✎ 프로즈 |
+| 3 | Open Questions | ≤25줄 | **탐색 대상을 앞으로** |
+| 4 | External Landscape | ≤20줄 | 1항목 = 1줄, URL 필수 |
+| 5 | 기각 · Blind Spots | ≤25줄 | verdict 항목은 `ST<N>` 참조 필수 |
+| 6 | 사용자 원문 | 무제한 | **전문 보존.** `S<N>` 앵커 제공 |
+| 7 | Next Action | ≤10줄 | |
+
+예산 합계(§6 제외) = 137줄. 게이트는 이를 **advisory 지표**로만 다룬다(AC14) — 예산 초과가 brief를 막지는 않는다.
 
 §6 상단에 C3의 2줄 고정 블록:
 
@@ -179,16 +233,7 @@ user_sourced_items:
 > **출처 표기** — 🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론
 ```
 
-항목 형식:
-
-```markdown
-- **S1** 🗣 최초 요청:
-  > "..."
-```
-
 U자 배치: 앞 = 스냅샷 + 행동 항목(제약·OQ), 뒤 = 원문(대조용 참조) + Next Action.
-
-**audit 레이아웃**: `1. Coverage Ledger` / `2. Budget` / `3. Steelman 원문` / `4. 게이트 실행 기록` / `5. 프로세스 로그`.
 
 ### 5.4 게이트 계약
 
@@ -201,7 +246,7 @@ AUDIT_SECTIONS = [("1","Coverage Ledger"), ("2","Budget"), ("3","Steelman 원문
                   ("4","게이트 실행 기록"), ("5","프로세스 로그")]
 ```
 
-audit 섹션도 계약이다. `coverage_ledger_failures()`와 steelman 계수는 섹션 번호+제목 정규식으로 본문을 잘라내므로, audit 쪽 번호가 바뀌면 검증이 조용히 빈 문자열을 읽고 통과한다 — 두 목록을 함께 못 박는다.
+**두 목록 모두 존재 검사 대상이다.** audit 섹션도 계약이다 — `coverage_ledger_failures()`와 steelman 대조는 섹션 번호+제목 정규식으로 본문을 잘라내므로, audit 쪽 번호가 바뀌면 검증이 조용히 빈 문자열을 읽고 통과한다.
 
 **2파일 fail-open 봉쇄.** Coverage Ledger와 Steelman이 audit으로 이동하는데 게이트가 payload만 읽으면 두 검증이 통째로 증발한다 — interview brief가 OQ7로 경고한 지점이다.
 
@@ -210,16 +255,34 @@ audit_file = fm["audit_file"]                    # 필수 키, 없으면 FAIL
 if Path(audit_file).name != audit_file: FAIL     # basename만 — traversal 거부
 audit = payload.parent / audit_file
 if not audit.exists(): FAIL                      # fail-closed
-coverage_ledger_failures(audit.read_text(encoding="utf-8"))
 ```
 
 `audit_file`은 frontmatter에서 오는 신뢰 경계 밖 입력이므로 basename으로 제한한다(P21 계보). 파일 읽기는 `encoding="utf-8"` 명시 — non-UTF-8 locale에서 fail-open 방지.
 
-**cross-file 정합.** payload §5에서 `verdict:` 토큰을 가진 항목 수 == audit 「Steelman 원문」 항목 수. 불일치는 양방향 모두 결함이다 — payload가 많으면 *원문 없는 판정*(근거 증발), audit이 많으면 *판정 없는 steelman*(R3 미충족). `0 == 0`(양쪽 N/A sentinel)은 허용. 현행 `steelman_unlogged()`가 세던 frontmatter `steelman:` 필드가 사라지므로 이 검사가 그 자리를 대체한다.
+#### bijection A — payload §5 ↔ audit §3 (drift-guard, 파일 축)
 
-**의도적으로 엄격하게 등호를 쓴다.** `>=`로 완화하면 audit에 steelman 10개를 두고 payload에 verdict 1개만 써도 통과하여, 봉쇄하려던 fail-open이 그대로 돌아온다.
+**개수 비교가 아니라 id 집합 비교다.** 개수 비교는 "무엇을 한 항목으로 셀 것인가"가 미정이라 집행이 불가능하다 — 실제 audit의 steelman 항목은 다단락 블록이지 단일 `- ` 불릿이 아니다. 대신 양쪽에 안정 id를 박는다:
+
+- audit §3 항목: `#### ST<N> — <한 줄 요지>` 헤딩. 본문(verbatim 원문)은 그 아래 자유 형식.
+- payload §5 verdict 항목: `- <요지> — <URL> — verdict: defended|switched|deferred — ST<N>`
+
+게이트는 payload §5가 참조하는 `ST<N>` 집합 == audit §3의 `#### ST<N>` 집합인지 검사한다. 불일치는 양방향 모두 결함이다 — payload가 남으면 *원문 없는 판정*(근거 증발), audit이 남으면 *판정 없는 steelman*(R3 미충족). 양쪽 공집합(steelman 0건)은 허용하되 payload §5에 N/A sentinel을 요구한다.
+
+payload §5 verdict 항목 자체는 기존 `skepticism_malformed()` 규칙에 `ST<N>` 참조를 더해 검사한다: URL ≥1 + statement ≥10자 + 유효 verdict 토큰 + `ST<N>` 참조. (`_web_disabled()` 시 URL 요구는 기존대로 완화.)
+
+#### bijection B — body §2 ↔ frontmatter (drift-guard, 안전 축)
+
+파일 축에 drift-guard를 두면서 **어떤 항목이 실제로 `confirmed`인가** 라는 더 안전-critical한 축을 비워두면, 이 재설계의 존재 이유 바로 그 자리에 사각지대가 남는다. §5.2가 body 항목 문법을 고정한 것은 이 대조를 가능하게 하기 위해서다.
+
+- frontmatter `user_sourced_items[].id` 집합 == body §2의 🗣/☑ 항목 id 집합 (양방향 — 어느 쪽이 남아도 fail)
+- 각 id에 대해 body 기호와 frontmatter `source`가 일치 (🗣↔`verbatim`, ☑↔`chosen`)
+- 각 id에 대해 body `status` 토큰과 frontmatter `status`가 일치
 
 **빈 확정 금지.** `status: confirmed` 항목이 0건이면 명시 sentinel(`# confirmed 0건 — 사용자가 전부 잠정으로 판단`) 없이는 fail. sentinel 없는 0건은 확인 게이트를 건너뛴 신호다.
+
+#### 분량 지표 (advisory)
+
+게이트가 `payload_body_lines_excl_verbatim` 값을 출력한다. 계수법: frontmatter 제외, `## 6.` 섹션 전체 제외, 빈 줄 제외, 나머지 줄 수. 150 초과 시 advisory 한 줄을 내되 **fail하지 않는다** — 분량은 목표이지 정확성 조건이 아니다.
 
 ### 5.5 에러 처리 · graceful degradation
 
@@ -227,44 +290,43 @@ coverage_ledger_failures(audit.read_text(encoding="utf-8"))
 |---|---|
 | audit 파일 부재·읽기 실패 | **fail-closed** — 게이트 red |
 | `audit_file`이 basename 아님 | fail |
-| web 비활성 (`DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`) | 기존 `_web_disabled()` 완화 유지 — §4 인용 요구 완화 |
-| 확정 확인 루프 3회 도달 | 전부 `provisional` 강등 + loud advisory. **fail-closed 방향(덜 잠금)이 안전한 쪽** |
-| 구 포맷 brief를 게이트에 투입 | §5.6의 legacy 비계가 존재하는 동안은 명시 메시지 + red, 제거 후에는 `user_sourced_items` 부재로 red |
+| web 비활성 (`DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`) | 기존 `_web_disabled()` 완화 유지 — §4·§5 인용 요구 완화 |
+| 확정 확인 재제시 상한 초과 | 전부 `provisional` 강등 + 고정 advisory. **fail-closed 방향(덜 잠금)이 안전한 쪽** |
+| 구 포맷 brief를 게이트에 투입 | `user_sourced_items` 부재 + 섹션 불일치로 red. 별도 안내 분기 없음(§5.6) |
 
-**기존 brief 3건 마이그레이션은 불필요하다.** `check_brief.py gate`는 종료 직전 방금 쓴 brief에만 실행된다 — 과거 파일은 아무도 게이트에 넣지 않는다. 다만 **보존은 필수**다(§8 회귀 검증의 대조군, Law 3 기록).
+**기존 brief 3건 마이그레이션은 불필요하다.** `check_brief.py gate`는 종료 직전 방금 쓴 brief에만 실행된다 — 과거 파일을 게이트에 넣는 경로가 코드에도 절차에도 없다. 다만 **보존은 필수**다(§8.3 회귀 검증의 대조군, Law 3 기록).
 
-### 5.6 legacy 비계와 락의 순서 의존
+### 5.6 락 스코프 — legacy 경로 없음
 
-legacy 감지 분기(`locked_directions`가 있고 `user_sourced_items`가 없으면 `[spec-distill] legacy v≤0.22 brief — 이 게이트는 v0.23+ 전용` 후 red)는 **임시 비계**다. 존재 이유는 구현·회귀 검증 중 구 brief를 게이트에 넣을 때 혼란을 막는 것뿐이다.
+초안은 구 포맷 brief를 위한 legacy 감지 분기를 두려 했다. **기각한다.** 존치 근거로 든 시나리오("구현·회귀 검증 중 구 brief를 게이트에 넣을 때")가 실재하지 않기 때문이다 — §8.3의 회귀 검증은 구 brief를 fresh 서브에이전트의 brainstorming에 투입할 뿐 `check_brief.py gate`에 넣지 않고, 다른 어떤 절차도 넣지 않는다. 존재하지 않는 시나리오의 오류 메시지를 다듬으려고 분기 + 2단계 락 스코프 + 제거 태스크 + 전용 T-case를 유지하는 것은 순비용이다.
 
-그리고 이 분기는 회귀 락과 **같은 파일에서 공존할 수 없다** — 분기가 있는 동안 `check_brief.py`에 `locked_directions` 문자열이 살아 있기 때문이다. 따라서 순서가 강제된다:
+**결과적으로 락이 단일 단계가 된다.** legacy 분기가 없으므로 `check_brief.py`에 `locked_directions` 문자열이 남을 이유가 없고, 회귀 락은 처음부터 production 전 파일을 스코프로 삼는다. AC 예외 조항도, 제거 태스크도 없다.
 
-1. 구현 + legacy 분기 (락 스코프에서 `check_brief.py` **제외**)
-2. 탐색 폭 회귀 검증 — 구 brief를 게이트에 넣는 마지막 시점
-3. **legacy 분기 제거 → 락 스코프를 `check_brief.py`까지 확장 → mutation 재검증**
-
-제거 후 별도 legacy 테스트는 불필요하다. 회귀 락이 `locked_directions` 문자열 자체를 금지하므로 **legacy 분기의 재도입을 자동으로 봉쇄**한다.
+구 brief를 게이트에 넣으면 `user_sourced_items` 부재와 섹션 불일치로 red가 난다. 그것이 옳은 동작이다 — 과거 brief는 역사적 기록이지 이 게이트의 입력이 아니다.
 
 ---
 
 ## 6. Acceptance Criteria
 
+AC1–AC13은 hard(미충족 시 미완료), AC14–AC15는 **advisory**(측정·기록이 조건이고 결과값은 통과 기준이 아니다).
+
 | # | 기준 |
 |---|---|
-| AC1 | `SKILL.md`에 라운드별 `locked?` decision table과 `pending_locked_decisions`가 존재하지 않는다. state는 `user_statements`(id/source/round/text)만 기록하며 `status`·`section` 앵커를 갖지 않는다 |
-| AC2 | `status: confirmed`는 종료 proceed 게이트에서 사용자가 옵션 ①을 고를 때만 발생한다. 옵션 ②(목록 수정) 재제시는 **최대 2회**까지 허용하고, 3회째 요구 시 전부 `provisional` 강등 + loud advisory 후 진행 |
+| AC1 | `SKILL.md`에 라운드별 `locked?` decision table과 `pending_locked_decisions`가 존재하지 않고, `user_statements`(id/source/round/text) 스키마 블록이 존재한다 |
+| AC2 | `status: confirmed`는 종료 proceed 게이트에서 사용자가 옵션 ①을 고를 때만 발생한다. 최초 제시는 0회째이고 옵션 ② 재제시는 **2회**까지 허용하며, 3번째 요구 시 전 항목 `provisional` 강등 + 고정 문자열 `[spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등` 출력 |
 | AC3 | payload 템플릿이 §0–§7 8섹션 역피라미드이며, 사용자 원문이 §6에 전문 보존된다 |
 | AC4 | 템플릿 §6 상단에 2줄 출처 표기 블록이 고정되어 모든 brief가 상속한다 |
-| AC5 | `user_sourced_items[]`의 각 항목이 id/source/status/statement를 갖고, `source ∈ {verbatim, chosen}`이면 `evidence: S<N>`가 필수다 |
-| AC6 | payload 템플릿·`SKILL.md`·게이트 어디에도 독자에게 행동을 지시하는 규약 문장이 없다(C5). C4 프로토콜은 `SKILL.md`가 brainstorming을 호출할 때 프롬프트로 전달하며, `/compact` 경로와 직행 경로 양쪽에 실린다 |
-| AC7 | `check_brief.py`가 `audit_file`을 필수 키로 요구하고, basename이 아니면 fail, 파일이 없으면 fail한다 |
-| AC8 | Coverage Ledger·Steelman 원문 검증이 audit 파일에 대해 실행된다 |
-| AC9 | payload §5 verdict 항목 수 ≠ audit Steelman 항목 수이면 fail (`0 == 0` 허용) |
-| AC10 | `confirmed` 0건이면 명시 sentinel 없이는 fail |
-| AC11 | 회귀 락이 `locked_directions`·`pending_locked_decisions`·`재논쟁 금지`·`Locked Directions` 4개를 잡고, mutation test로 이빨이 증명된다. 스코프는 production only (`tests/`·`CHANGELOG.md`·`docs/` 제외), 검사 문구는 body-unique. **1단계 스코프는 `check_brief.py`를 제외**한다(§5.6 — legacy 비계가 그 문자열을 합법적으로 보유) |
-| AC12 | 회귀 검증 완료 후 legacy 분기가 제거되고, **같은 커밋에서** 락 스코프가 `check_brief.py`까지 확장되며 mutation이 재검증된다. 이 시점에 AC11의 예외가 사라진다 |
-| AC13 | 탐색 폭 회귀 검증이 구/신 포맷 쌍으로 조건당 3회 실행되고 결과가 audit에 기록된다. 두 brief는 **내용이 동일**해야 하며, 변환이 내용을 바꾸지 않았음을 대조로 확인한다 |
-| AC14 | `plugin.json` `0.23.0` + `CHANGELOG.md` `## [0.23.0]` 항목 + `README.md`의 "Principles Instantiated"·"Hooks Installed" 갱신 |
+| AC5 | `user_sourced_items[]`의 각 항목이 id/source/status/statement/**evidence**를 갖는다. `source`는 `verbatim`\|`chosen`만 허용하며 `inferred`는 fail |
+| AC6 | **bijection B**: frontmatter id 집합 == body §2 🗣/☑ 항목 id 집합(양방향), 각 id의 기호↔`source`·`status` 일치 |
+| AC7 | C5 준수 — production 파일에 AC12의 4개 문자열과 열거된 규약 문구(`다시 묻지 않는다`, `확정·재논쟁`)가 없다. **개방형 "어디에도 규약 문장 없음" 판정은 기계 검증 불가**이며 V4 수동 검토가 담당한다(이 한계를 숨기지 않는다) |
+| AC8 | `check_brief.py`가 `audit_file`을 필수 키로 요구하고, basename이 아니면 fail, 파일이 없으면 fail한다 |
+| AC9 | `AUDIT_SECTIONS` 5개 전부에 존재 검사가 있고, Coverage Ledger 검증이 audit 파일에 대해 실행된다 |
+| AC10 | **bijection A**: payload §5가 참조하는 `ST<N>` 집합 == audit §3 `#### ST<N>` 집합(양방향). payload §5 항목은 URL + statement ≥10자 + verdict 토큰 + `ST<N>` 참조를 갖는다. 양쪽 공집합은 payload §5의 N/A sentinel과 함께 허용 |
+| AC11 | `confirmed` 0건이면 명시 sentinel 없이는 fail |
+| AC12 | 회귀 락이 `locked_directions`·`pending_locked_decisions`·`재논쟁 금지`·`Locked Directions` 4개를 잡고, mutation test로 이빨이 증명된다. 스코프는 production 전 파일(`tests/`·`CHANGELOG.md`·`docs/` 제외) — **예외 없음** |
+| AC13 | `plugin.json` `0.23.0` + `CHANGELOG.md` `## [0.23.0]` 항목 + `README.md`의 "Principles Instantiated" 갱신 |
+| AC14 *(advisory)* | 게이트가 `payload_body_lines_excl_verbatim`을 출력하고 150 초과 시 advisory를 낸다. **fail하지 않는다** |
+| AC15 *(advisory)* | 탐색 폭 회귀 검증(§8.3)이 실행되고 결과가 audit에 기록된다. **통과 조건은 실행·기록이며 관측 결과값이 아니다** — 어떤 결과도 shipping을 막지 않는다 |
 
 ---
 
@@ -272,13 +334,13 @@ legacy 감지 분기(`locked_directions`가 있고 `user_sourced_items`가 없�
 
 | 파일 | 성격 |
 |---|---|
-| `plugins/spec-distill/templates/interview-brief-template.md` | 재작성 — payload 8섹션 |
+| `plugins/spec-distill/templates/interview-brief-template.md` | 재작성 — payload 8섹션 + 분량 예산 + 항목 문법 |
 | `plugins/spec-distill/templates/interview-audit-template.md` | 신규 — 텔레메트리 5섹션 |
-| `plugins/spec-distill/scripts/check_brief.py` | 수정 — SECTIONS 교체, `user_sourced_items` 검증, 2파일 fail-closed, cross-file 정합, legacy 비계(→ 마지막에 제거) |
+| `plugins/spec-distill/scripts/check_brief.py` | 수정 — SECTIONS/AUDIT_SECTIONS 교체, `user_sourced_items` 스키마, 2파일 fail-closed, bijection A·B, 분량 지표 |
 | `plugins/spec-distill/skills/conducting-interview/SKILL.md` | 수정 — producer 교체, 종료 확인 흡수, compact 문구, 호출 프롬프트 계약 |
 | `plugins/spec-distill/plugin.json` | `0.23.0` |
 | `plugins/spec-distill/CHANGELOG.md` | `## [0.23.0] — 2026-07-25` |
-| `plugins/spec-distill/tests/` | 신규 케이스 (§8) |
+| `plugins/spec-distill/tests/` | 신규 케이스 (§8.1) |
 | `plugins/spec-distill/README.md` | "Principles Instantiated" 갱신 |
 
 **신규 에이전트 0개.** Law 2 tool posture는 변경 없음.
@@ -289,42 +351,58 @@ legacy 감지 분기(`locked_directions`가 있고 `user_sourced_items`가 없�
 
 ### 8.1 구조 테스트
 
-| # | 케이스 | 기대 |
-|---|---|---|
-| T1 | 새 섹션 8개 각각 제거 | red ×8 |
-| T2 | `user_sourced_items` 부재 | red |
-| T3 | `source: verbatim` + `evidence` 없음 | **red** — ☑ laundering 봉쇄 |
-| T4 | `source: chosen` + `evidence` 없음 | red |
-| T5 | `source: inferred` + `evidence` 없음 | green |
-| T6 | 잘못된 `status` / `source` 값 | red ×2 |
-| T7 | `audit_file` 부재 / `../foo.md` / 파일 없음 | red ×3 |
-| T8 | Coverage Ledger가 audit에 없음 | red |
-| T9 | verdict 수 ≠ steelman 수 (양방향) | red ×2 |
-| T10 | 양쪽 N/A sentinel (`0 == 0`) | green |
-| T11 | `confirmed` 0건 + sentinel 없음 / 있음 | red / green |
-| T12 | 정상 payload + audit 쌍 | green |
+| # | 케이스 | 기대 | AC |
+|---|---|---|---|
+| T1 | payload 섹션 8개 각각 제거 | red ×8 | AC3 |
+| T2 | audit 섹션 5개 각각 제거 | red ×5 | AC9 |
+| T3 | `user_sourced_items` 부재 | red | AC5 |
+| T4 | 항목에 `evidence` 없음 | red | AC5 |
+| T5 | `source: inferred`가 리스트에 있음 | red | AC5 |
+| T6 | 잘못된 `status` / `source` 값 | red ×2 | AC5 |
+| T7 | `audit_file` 부재 / `../foo.md` / 파일 없음 | red ×3 | AC8 |
+| T8 | body §2에만 있는 id / frontmatter에만 있는 id | red ×2 | AC6 |
+| T9 | 기호↔`source` 불일치 / `status` 불일치 | red ×2 | AC6 |
+| T10 | payload에만 있는 `ST<N>` / audit에만 있는 `ST<N>` | red ×2 | AC10 |
+| T11 | §5 항목 결손: URL 없음 / verdict 없음 / statement <10자 / `ST` 참조 없음 | red ×4 | AC10 |
+| T12 | 양쪽 steelman 공집합 + N/A sentinel | green | AC10 |
+| T13 | Coverage Ledger가 audit에 없음 | red | AC9 |
+| T14 | `confirmed` 0건 + sentinel 없음 / 있음 | red / green | AC11 |
+| T15 | 정상 payload + audit 쌍 | green | — |
+| T16 | 본문 160줄(§6 제외) 입력 | green + advisory 문자열 출력 | AC14 |
+| T17 | `_web_disabled()` 시 §4·§5 URL 요구 완화 | green | AC10 |
 
 실행: `python3 -m unittest`(`-m unittest`로만 — pytest 미사용), repo root에서.
 
 ### 8.2 회귀 락 + mutation
 
-4개 금지 문자열을 production 파일에서 검사. **mutation test로 이빨 증명** — 문자열을 각각 맨앞·중간·맨끝 한 곳에 되살려 실제로 red가 되는지 확인한다. 락의 PASS는 이빨의 증거가 아니다. 셸 파싱(IFS·nullglob·후행 개행)이 집행을 조용히 0으로 만드는 사례가 이 리포에 있으므로, 락이 bash라면 세 케이스를 모두 흔든다.
+AC12의 4개 문자열을 production 파일에서 검사. **mutation test로 이빨 증명** — 문자열을 각각 맨앞·중간·맨끝 한 곳에 되살려 실제로 red가 되는지 확인한다. 락의 PASS는 이빨의 증거가 아니다. 셸 파싱(IFS·nullglob·후행 개행)이 집행을 조용히 0으로 만드는 사례가 이 리포에 있으므로, 락이 bash라면 세 위치를 모두 흔든다.
 
-### 8.3 탐색 폭 회귀 검증 (AC13)
+락 스코프에 `check_brief.py`가 처음부터 포함된다(§5.6 — legacy 분기가 없으므로 예외 조항이 필요 없다).
 
-구 brief(`2026-07-20-spec-distill-interview-coverage-driven-*`)를 **내용은 그대로 두고 새 포맷으로만 변환**해 쌍을 만든다. 각각을 fresh 서브에이전트에 동일 프롬프트로 투입하고, `superpowers:brainstorming` 체크리스트 4번("Propose 2-3 approaches")의 발화 여부를 관측한다. 조건당 3회, 같은 superpowers 버전(6.2.0)·같은 모델로 통제. 결과는 audit에 기록.
+AC1의 긍정 주장(`user_statements` 스키마 존재)은 `SKILL.md` 본문에 대한 positive grep으로 잠근다 — **body-unique 문구**를 섹션 윈도우 안에서 찾고, 헤더만 남긴 mutation으로 이빨을 증명한다(헤더-satisfiable 함정 회피).
 
-**변환 편향 통제**: 변환자는 포맷을 설계한 당사자이므로 무의식적으로 내용을 개선할 수 있다 — 그러면 측정 대상이 "포맷"이 아니라 "다시 쓴 내용"이 된다. 변환은 재배치·섹션 재라벨·권위 문구 제거로만 한정하고, 변환 전후 문장 집합이 동치인지 대조한 결과를 audit에 남긴다. 새로 추가된 정보가 있으면 그 실행은 무효 처리한다.
+### 8.3 탐색 폭 회귀 검증 (AC15, advisory)
 
-**한계를 미리 명시한다**: n=3은 통계적 검정력이 없고, 관측치는 이진이며, 하류가 6.2.0에서 "Explore alternatives" 원칙 줄을 잃었으므로 음성이 나와도 원인이 brief가 아닐 수 있다. **방향 전환의 근거가 아니라 Spec B 조준용 신호**로 쓴다.
+구 brief(`2026-07-20-spec-distill-interview-coverage-driven-*`)를 새 포맷으로 변환해 쌍을 만든다. 각각을 fresh 서브에이전트에 동일 프롬프트로 투입하고, `superpowers:brainstorming` 체크리스트 4번("Propose 2-3 approaches")의 발화 여부를 관측한다. 조건당 3회, 같은 superpowers 버전(6.2.0)·같은 모델로 통제. 결과는 audit에 기록.
+
+**변환 규칙 — 화이트리스트.** "내용 동일"이나 "문장 집합 동치"는 성립할 수 없다(권위 문구를 지우는 것이 변환의 목적이므로). 대신 허용 연산을 열거한다:
+
+- 허용: 섹션 재배치 · 섹션 재라벨 · AC12의 4개 문자열과 §2 권위 헤더 문장 삭제 · 출처 기호(🗣/☑/✎) 부착 · `S<N>`/`ST<N>` id 부여
+- 금지: 새 주장 추가 · 기존 주장 재서술 · 위 목록 밖의 정보 삭제
+
+**검증**: 원 brief의 각 문장을 {유지, 이동, 허용된 삭제} 중 하나로 분류한 매핑을 남긴다. **"신규" 분류가 1건이라도 있으면 그 실행은 무효**다. 변환자가 포맷 설계 당사자이므로 무의식적 개선이 측정 대상을 "포맷"에서 "다시 쓴 내용"으로 바꿀 수 있고, 이 매핑이 그것을 잡는다.
+
+**한계**: n=3은 통계적 검정력이 없고, 관측치는 이진이며, 하류가 6.2.0에서 "Explore alternatives" 원칙 줄을 잃었으므로 음성이 나와도 원인이 brief가 아닐 수 있다. **방향 전환의 근거가 아니라 Spec B 조준용 신호**로 쓴다 — 그래서 advisory다.
 
 ### 8.4 수동 검증
 
-| # | 항목 |
-|---|---|
-| V1 | 새 포맷으로 인터뷰 1회 e2e — 확정 확인 게이트가 실제로 뜨고 `status`가 반영되는지 |
-| V2 | 확인 루프 2회 초과 시 전부 `provisional` 강등 + advisory 출력 |
-| V3 | `/compact` 경로와 직행 경로 양쪽에서 C4 프로토콜 문장이 실리는지 |
+| # | 항목 | AC |
+|---|---|---|
+| V1 | 새 포맷으로 인터뷰 1회 e2e — 확정 확인 게이트가 실제로 뜨고 `status`가 반영되는지 | AC2 |
+| V2 | 재제시 상한 초과 시 전부 `provisional` 강등 + 고정 advisory 출력 | AC2 |
+| V3 | `/compact` 경로와 직행 경로 양쪽에서 C4 프로토콜 문장이 실리는지 | AC1 |
+| V4 | **C5 개방형 판정** — 새 템플릿·`SKILL.md`를 사람이 읽고 독자에게 행동을 지시하는 문장이 남아 있지 않은지 확인. 기계 검증 불가 영역 | AC7 |
+| V5 | 첫 실산출 brief의 분량 지표가 예산 대비 어디인지 | AC14 |
 
 ---
 
@@ -340,8 +418,10 @@ legacy 감지 분기(`locked_directions`가 있고 `user_sourced_items`가 없�
 | **설계 전 선측정** | codex의 OQ11 원안. 사용자가 이미 "방향 유지"를 선택한 사안을 사실상 다시 묻는 것이고, 결과와 무관하게 방향을 유지한다면 의사결정 가치가 낮다. 같은 데이터는 §8.3이 얻는다 |
 | **별도 `status` 확인 게이트 신설** | 종료 시 사용자 상호작용이 2회가 된다. 기존 `/compact` proceed 게이트에 흡수하면 1회 유지 — trivia ceremony 금지 + P17 동시 만족 |
 | **기존 brief 3건 마이그레이션** | 게이트는 방금 쓴 brief에만 돈다. 변환 비용 0의 가치 |
-| **legacy 분기 영구 유지** | `check_brief.py`에 `locked_directions` 문자열이 남아 회귀 락을 그 파일에 걸 수 없다. 락과 공존 불가 |
-| **cross-file 정합을 `>=`로 완화** | audit에 steelman 10개 + payload에 verdict 1개가 통과한다. 봉쇄하려던 fail-open이 복귀 |
+| **legacy 감지 분기 (초안)** | 존치 근거로 든 "회귀 검증 중 구 brief를 게이트에 넣는다"가 §8.3 실제 절차와 불일치. 실재하지 않는 시나리오를 위해 분기 + 2단계 락 스코프 + 제거 태스크 + T-case를 유지하는 순비용 (리뷰 round-1이 적발) |
+| **payload↔audit 개수 등호 비교 (초안)** | "무엇을 한 항목으로 셀 것인가"가 미정이라 집행 불가 — 실제 steelman 항목은 다단락 블록이지 단일 불릿이 아니다. `ST<N>` id 집합 비교로 대체 (리뷰 round-1이 적발) |
+| **`user_sourced_items`에 `inferred` 포함 (초안)** | 리스트 이름과 내용이 어긋나고 `evidence` 필수 규칙에 예외 구멍이 생긴다. 모델 추론은 하류가 C4 재결정 프로토콜을 적용할 대상도 아니다 → 프로즈 ✎ 표기로만 |
+| **AC7을 기계 검증으로 주장** | "어디에도 규약 문장 없음"은 개방형 부정 명제라 리터럴 락으로 증명할 수 없다. 닫힌 열거 + V4 수동으로 분리하고 한계를 명시 |
 | **`agents/spec-reviewer.md` NG3 문구를 지금 수정** | Spec A는 리뷰어를 만들지 않으므로 NG3가 여전히 사실. 사실이 아닌 문서를 미리 쓰는 것은 drift |
 
 ---
@@ -356,8 +436,8 @@ interview brief의 OQ1–OQ12 중:
 | **OQ7** 게이트 스키마 + 기존 3건 (§5.4·§5.5) | OQ3 readback 판정자 |
 | **OQ9** 섹션 레이아웃 (§5.3) | OQ4 red-flag 기준 위치 |
 | **OQ12** 2파일 유지 + fail-closed 봉쇄 | OQ5 "사용자와 Claude 양쪽"의 의미 |
-| **OQ6** (부분) 규약 0개를 실증하고 재발은 락이 감시 | OQ8 리뷰 역할 배치 (D2 ↔ D5 도구 계약 충돌) |
-| **OQ11** (부분) 설계 후 회귀 검증으로 배치 | OQ10 readback을 hard verdict로 쓸 수 있는가 |
+| **OQ6** (부분) 규약 0개를 실증하고 재발은 락 + V4가 감시 | OQ8 리뷰 역할 배치 (D2 ↔ D5 도구 계약 충돌) |
+| **OQ11** (부분) 설계 후 회귀 검증으로 배치 (§8.3) | OQ10 readback을 hard verdict로 쓸 수 있는가 |
 
 **OQ4는 A에서 부분적으로 선제 처리된다** — payload에 red-flag 기준을 넣지 않음으로써(C5의 귀결) readback 오염원이 미리 제거된다. 기준의 *내용*과 배치처는 B의 몫.
 
@@ -369,5 +449,6 @@ interview brief의 OQ1–OQ12 중:
 - **입력 brief**: `docs/superpowers/interview/2026-07-25-spec-distill-brief-handoff-redesign-interview.md` (+ `.audit.md`)
 - **대상 플러그인**: `plugins/spec-distill` — `v0.22.0` → `v0.23.0`
 - **후속 spec**: Spec B (brief-critic / 방향성 리뷰 / readback / codex) — Spec A 산출 brief 실물을 입력으로 설계
-- **철학 근거**: Law 1(구조 게이트 — `check_brief.py`), Law 3(회귀 락 = compounding), P17(사용자 주권 — 확정 확인 게이트), P21(untrusted input — `audit_file` basename 제한), 금지 패턴 *trivia ceremony*(확인 게이트 흡수)·*unbounded autonomy*(확인 루프 max 2회)
+- **철학 근거**: Law 1(구조 게이트 — `check_brief.py`), Law 3(회귀 락 = compounding), P17(사용자 주권 — 확정 확인 게이트), P21(untrusted input — `audit_file` basename 제한), 금지 패턴 *trivia ceremony*(확인 게이트 흡수)·*unbounded autonomy*(재제시 상한)
 - **Law 2**: 신규 에이전트 0개. tool posture 변경 없음
+- **리뷰 이력**: round-1 — Claude `spec-reviewer` 7건(block 1 / high 4 / medium 2) + codex 4건(high 2 / medium 2), `combined_verdict: needs_revise`. 11건 전부 반영
