@@ -50,6 +50,17 @@ PY
       && printf '%s' "$out" | grep -qF "$hdr"; } \
     && note PASS "T1: payload §$hdr 제거 → red, missing payload sections에 헤더 명시 (message teeth)" \
     || note FAIL "T1: payload §$hdr 제거가 통과됐거나 메시지에 해당 헤더가 없음"
+  if [[ "$hdr" == "5. 기각 · Blind Spots" ]]; then
+    # FIX1 lock (negative assertion): §5가 없으면 section5_entries가 공집합을 반환해
+    # bijection A의 refs가 항상 비므로, audit(여기선 canonical valid.audit.md)이 ST1을
+    # 선언 중이면 declared-refs가 발화해 "판정 없는 steelman"이 진짜 원인(missing
+    # payload sections) 옆에 phantom으로 낀다(Important, 리뷰 발견) — sec5_absent 가드가
+    # 이걸 막는다. 이 실패 모드는 red/green을 안 바꾸는 **추가 노이즈**라 exit code나
+    # "메시지가 있다" 류 assertion으론 절대 못 잡는다 — "없다"를 직접 확인해야 한다.
+    ! printf '%s' "$out" | grep -q 'bijection A' \
+      && note PASS "FIX1: §5 부재 + audit ST1 선언 상태에서도 bijection A는 조용함 (negative lock)" \
+      || note FAIL "FIX1: §5가 없는데 bijection A가 여전히 발화함 (phantom steelman-orphan 회귀)"
+  fi
 done
 
 # T2: audit 5섹션을 각각 제거 → red ×5
