@@ -9,12 +9,12 @@ audit_file: interview-brief-valid.audit.md
 user_sourced_items:
   - id: C1
     source: verbatim
-    status: locked
+    status: confirmed
     statement: "대시보드는 SSR로 렌더한다"
     evidence: S1
   - id: D2
     source: chosen
-    status: provisional
+    status: locked
     statement: "캐시 계층은 인증 뷰까지 확장하지 않는다"
     evidence: S2
 ---
@@ -34,8 +34,8 @@ TTFP를 줄이는 것이 진짜 목표다. SPA 전환은 수단이었지 목표�
 
 이 절의 진술은 모델이 쓴 요약이다. 원문은 §6, `⟨S<N>⟩`가 그것을 가리킨다.
 
-- 🗣 locked **C1** — 대시보드는 SSR로 렌더한다 ⟨S1⟩
-- ☑ provisional **D2** — 캐시 계층은 인증 뷰까지 확장하지 않는다 ⟨S2⟩
+- 🗣 confirmed **C1** — 대시보드는 SSR로 렌더한다 ⟨S1⟩
+- ☑ locked **D2** — 캐시 계층은 인증 뷰까지 확장하지 않는다 ⟨S2⟩
 
 ✎ 렌더링 전략 선택이 이 토픽의 축으로 보인다 (모델 추론).
 
