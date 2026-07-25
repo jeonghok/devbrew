@@ -246,6 +246,38 @@ python3 "$SCRIPT" gate "$FX/interview-brief-confirmed-zero-sentinel.md" >/dev/nu
   && note PASS "T14: confirmed 0건 + sentinel → green" \
   || note FAIL "T14: sentinel이 있으면 통과해야 한다"
 
+# --- Task 3: bijection B (body §2 ↔ frontmatter) ---
+
+# T8: 한쪽에만 있는 id → red ×2 (양방향)
+python3 "$SCRIPT" gate "$FX/interview-brief-body-only-id.md" >/dev/null 2>&1 \
+  && note FAIL "T8: body §2에만 있는 id가 통과됨" || note PASS "T8: body-only id → red"
+python3 "$SCRIPT" gate "$FX/interview-brief-fm-only-id.md" >/dev/null 2>&1 \
+  && note FAIL "T8: frontmatter에만 있는 id가 통과됨" || note PASS "T8: frontmatter-only id → red"
+
+# T9: 기호↔source / status 불일치 → red ×2
+python3 "$SCRIPT" gate "$FX/interview-brief-marker-mismatch.md" >/dev/null 2>&1 \
+  && note FAIL "T9: 기호↔source 불일치가 통과됨 (☑ laundering)" || note PASS "T9: 기호↔source 불일치 → red"
+python3 "$SCRIPT" gate "$FX/interview-brief-status-mismatch.md" >/dev/null 2>&1 \
+  && note FAIL "T9: status 불일치가 통과됨" || note PASS "T9: status 불일치 → red"
+
+# T21: statement 내용 drift → red / 공백·강조기호만 다름 → green
+python3 "$SCRIPT" gate "$FX/interview-brief-statement-drift.md" >/dev/null 2>&1 \
+  && note FAIL "T21: statement 내용 drift가 통과됨 (같은 라벨, 다른 제약)" \
+  || note PASS "T21: statement 내용 drift → red"
+python3 "$SCRIPT" gate "$FX/interview-brief-statement-whitespace.md" >/dev/null 2>&1 \
+  && note PASS "T21: 공백·강조기호 차이는 정규화로 흡수 → green" \
+  || note FAIL "T21: 정규화가 공백·강조 차이를 흡수해야 한다"
+
+# T24: ⟨S<N>⟩ 불일치 / 접미 부재 → red ×2
+python3 "$SCRIPT" gate "$FX/interview-brief-anchor-mismatch.md" >/dev/null 2>&1 \
+  && note FAIL "T24: ⟨S<N>⟩ 불일치가 통과됨" || note PASS "T24: ⟨S<N>⟩ 불일치 → red"
+python3 "$SCRIPT" gate "$FX/interview-brief-anchor-absent.md" >/dev/null 2>&1 \
+  && note FAIL "T24: ⟨S<N>⟩ 접미 부재가 통과됨 (요약 신호 소실)" || note PASS "T24: ⟨S<N>⟩ 부재 → red"
+
+# 형식 미달 §2 항목은 조용히 사라지지 않고 loud하게 red가 된다
+python3 "$SCRIPT" gate "$FX/interview-brief-body-malformed.md" >/dev/null 2>&1 \
+  && note FAIL "형식 미달 §2 항목이 통과됨 (silent drop)" || note PASS "형식 미달 §2 항목 → red (loud)"
+
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]

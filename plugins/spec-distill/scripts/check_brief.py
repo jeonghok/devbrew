@@ -25,7 +25,8 @@ CLI subcommands (all print JSON):
   check_brief.py tried-discarded <payload>     → {"ok": bool}              (V2/R4, §5 기각)
   check_brief.py coverage <payload>            → {"failures": [...]}       (AC2/C9, audit §1 해석)
   check_brief.py frontmatter <payload>         → {"errors": [...]}         (AC1)
-  check_brief.py items <payload>               → {"errors": [...], "bijection_c": [...]}  (AC6)
+  check_brief.py items <payload>               → {"errors": [...], "bijection_c": [...],
+                                                    "bijection_b": [...]}  (AC6/AC7)
   check_brief.py gate <payload>                → {"pass": bool, "failures": [...]}
                                                  exit 0 if pass else 1
 """
@@ -264,6 +265,65 @@ def bijection_c_errors(text: str) -> list[str]:
     return errs
 
 
+MARKER_SOURCE = {"🗣": "verbatim", "☑": "chosen"}
+
+# `- 🗣 confirmed **C1** — <statement> ⟨S3⟩`
+BODY_ITEM_RE = re.compile(
+    r"^\s*-\s+(🗣|☑)\s+(\S+)\s+\*\*([^*]+)\*\*\s+—\s+(.*?)\s+⟨(S\d+)⟩\s*$"
+)
+# 기호로 시작하지만 위 문법에 맞지 않는 줄을 잡아내기 위한 느슨한 매처.
+# 이게 없으면 오타 한 글자가 항목을 id 집합에서 조용히 지워 "frontmatter-only id"라는
+# 엉뚱한 메시지로 나타난다 — 원인과 증상이 어긋나면 디버깅이 배로 든다.
+BODY_ITEM_LOOSE_RE = re.compile(r"^\s*-\s+(?:🗣|☑)\s")
+EMPH_RE = re.compile(r"[*`]")
+
+
+def _norm_stmt(s: str) -> str:
+    """정규화 = 앞뒤 공백 제거 + 연속 공백 1개로 축약 + 마크다운 강조 기호 제거."""
+    return re.sub(r"\s+", " ", EMPH_RE.sub("", s)).strip()
+
+
+def bijection_b_errors(text: str) -> list[str]:
+    """bijection B — body §2 ↔ frontmatter (AC7).
+
+    frontmatter가 canonical이고 body는 그 렌더다. id·기호·status·evidence만 맞추면
+    두 표현이 같은 라벨을 달고 **서로 다른 제약을 말해도** 통과하므로 statement 내용까지
+    정규화 후 대조한다. ✎ 항목은 이 문법을 쓰지 않으므로(프로즈 주석) 대상이 아니다.
+    """
+    items = {}
+    for it in parse_user_sourced_items(_frontmatter(text))[0]:
+        if it.get("id"):
+            items[it["id"]] = it
+    errs: list[str] = []
+    body = {}
+    for ln in _section_text(text, "2", "제약").splitlines():
+        if not BODY_ITEM_LOOSE_RE.match(ln):
+            continue
+        m = BODY_ITEM_RE.match(ln)
+        if not m:
+            errs.append(f"malformed §2 item: {ln.strip()[:60]}")
+            continue
+        marker, status, iid, stmt, ev = m.groups()
+        if iid in body:
+            errs.append(f"{iid}: duplicate §2 item")
+        body[iid] = {"marker": marker, "status": status, "statement": stmt, "evidence": ev}
+    for iid in sorted(set(body) - set(items)):
+        errs.append(f"{iid}: in body §2 but not in frontmatter")
+    for iid in sorted(set(items) - set(body)):
+        errs.append(f"{iid}: in frontmatter but not in body §2")
+    for iid in sorted(set(body) & set(items)):
+        b, f = body[iid], items[iid]
+        if MARKER_SOURCE.get(b["marker"]) != f.get("source"):
+            errs.append(f"{iid}: body marker {b['marker']} != frontmatter source {f.get('source')!r}")
+        if b["status"] != f.get("status"):
+            errs.append(f"{iid}: body status {b['status']!r} != frontmatter {f.get('status')!r}")
+        if b["evidence"] != f.get("evidence"):
+            errs.append(f"{iid}: body ⟨{b['evidence']}⟩ != frontmatter evidence {f.get('evidence')!r}")
+        if _norm_stmt(b["statement"]) != _norm_stmt(f.get("statement") or ""):
+            errs.append(f"{iid}: body statement != frontmatter statement (정규화 후)")
+    return errs
+
+
 def landscape_uncited(text: str) -> list[str]:
     if _web_disabled():
         return []  # web off → no URLs obtainable; citation requirement relaxed (AC8)
@@ -406,6 +466,12 @@ def gate(path: Path) -> int:
         if ce:
             failures.append(f"bijection C (evidence→§6): {ce}")
 
+    sec2_absent = any(m.startswith("2.") for m in miss)
+    if not sec2_absent:
+        be = bijection_b_errors(text)
+        if be:
+            failures.append(f"bijection B (body §2↔frontmatter): {be}")
+
     # --- audit 해석 (fail-closed): 못 열면 audit 측 검증 전체를 skip하지 않고 red ---
     audit_path, audit_err = resolve_audit(path, fm)
     audit_text = ""
@@ -488,7 +554,8 @@ def main(argv: list[str]) -> int:
         return 0
     if sub == "items":
         print(json.dumps({"errors": user_sourced_errors(text),
-                          "bijection_c": bijection_c_errors(text)}, ensure_ascii=False))
+                          "bijection_c": bijection_c_errors(text),
+                          "bijection_b": bijection_b_errors(text)}, ensure_ascii=False))
         return 0
     print(f"unknown subcommand: {sub}", file=sys.stderr)
     return 64
