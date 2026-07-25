@@ -119,7 +119,9 @@ def _frontmatter(text: str) -> str:
     return m.group(1) if m else ""
 
 
-AUDIT_FILE_RE = re.compile(r"^audit_file:\s*(\S+)\s*$", re.MULTILINE)
+# 값은 첫 공백 또는 `#`(YAML 인라인 주석)에서 끊는다 — 템플릿의
+# `audit_file: <...>.md   # basename만 (같은 디렉토리)` 라인 자체가 파싱 대상이다.
+AUDIT_FILE_RE = re.compile(r"^audit_file:\s*([^\s#]+)", re.MULTILINE)
 
 
 def resolve_audit(payload: Path, fm: str):
@@ -341,7 +343,11 @@ def main(argv: list[str]) -> int:
         if audit_err:
             print(json.dumps({"failures": [audit_err]}, ensure_ascii=False))
             return 1
-        audit_text = audit_path.read_text(encoding="utf-8")
+        try:
+            audit_text = audit_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            print(json.dumps({"failures": [f"audit unreadable: {exc}"]}, ensure_ascii=False))
+            return 1
         print(json.dumps({"failures": coverage_ledger_failures(audit_text)},
                          ensure_ascii=False))
         return 0

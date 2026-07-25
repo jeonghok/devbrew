@@ -18,7 +18,11 @@ note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else f
 # macOS bash 3.2: mktemp 대입 실패 시 빈 문자열이 `rm -rf`에 흘러가면 repo가 지워진다 → || exit 1 필수.
 TMPD="$(mktemp -d)" || exit 1
 [[ -n "$TMPD" && -d "$TMPD" ]] || exit 1
-trap 'rm -rf "$TMPD"' EXIT
+# TMPD2는 T7/traversal(parent-dir) 전용 — 통제된 우리 소유 디렉토리라야 그 부모에 decoy를
+# 놓고 rm -rf해도 안전하다(mktemp의 실제 시스템 부모 디렉토리를 절대 rm -rf하지 않는다).
+# set -u 하에서 미생성 시점에도 trap이 죽지 않도록 빈 문자열로 선언 + ${TMPD2:-} 폴백.
+TMPD2=""
+trap 'rm -rf "$TMPD" "${TMPD2:-}"' EXIT
 
 # T15: 정상 payload + audit 쌍 → green
 python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" >/dev/null 2>&1 \
@@ -57,19 +61,50 @@ PY
     || note PASS "T2: audit §$hdr 제거 → red"
 done
 
-# T7: audit_file 부재 / traversal / 파일 부재 → red ×3 (AC9 fail-closed)
+# T7: audit_file 부재 / 파일 부재 → red ×2 (AC9 fail-closed)
 cp "$FX/interview-brief-valid.audit.md" "$TMPD/interview-brief-valid.audit.md"
-for variant in absent traversal missing; do
+for variant in absent missing; do
   cp "$FX/interview-brief-valid.md" "$TMPD/p.md"
   case "$variant" in
-    absent)    sed -i.bak '/^audit_file:/d' "$TMPD/p.md" ;;
-    traversal) sed -i.bak 's|^audit_file:.*|audit_file: ../interview-brief-valid.audit.md|' "$TMPD/p.md" ;;
-    missing)   sed -i.bak 's|^audit_file:.*|audit_file: __no_such_audit__.md|' "$TMPD/p.md" ;;
+    absent)  sed -i.bak '/^audit_file:/d' "$TMPD/p.md" ;;
+    missing) sed -i.bak 's|^audit_file:.*|audit_file: __no_such_audit__.md|' "$TMPD/p.md" ;;
   esac
   rm -f "$TMPD/p.md.bak"
   python3 "$SCRIPT" gate "$TMPD/p.md" >/dev/null 2>&1 \
     && note FAIL "T7/$variant: audit_file 결함이 통과됨 (fail-open)" \
     || note PASS "T7/$variant: audit_file 결함 → red"
+done
+
+# T7/traversal(parent-dir): basename 가드가 exit code가 아니라 실제 메시지로 발화하는지 확인.
+# decoy를 진짜로 traversal target(TMPD2/interview-brief-valid.audit.md)에 놓는다 — 가드가
+# 없으면 "file not found"로 위장되지 않고 코드 그대로 그 decoy를 읽어 {"pass": true}로
+# 뚫린다(리뷰가 mutation으로 실증). TMPD2는 우리가 mktemp -d로 만든 전용 디렉토리이므로
+# 그 부모(TMPD2 자체)에 decoy를 두고 통째로 rm -rf해도 안전 — 시스템 공유 tmp 부모를
+# 건드리지 않는다.
+TMPD2="$(mktemp -d)" || exit 1
+[[ -n "$TMPD2" && -d "$TMPD2" ]] || exit 1
+mkdir -p "$TMPD2/inner"
+cp "$FX/interview-brief-valid.audit.md" "$TMPD2/interview-brief-valid.audit.md"
+cp "$FX/interview-brief-valid.md" "$TMPD2/inner/p.md"
+sed -i.bak 's|^audit_file:.*|audit_file: ../interview-brief-valid.audit.md|' "$TMPD2/inner/p.md"
+rm -f "$TMPD2/inner/p.md.bak"
+out="$(python3 "$SCRIPT" gate "$TMPD2/inner/p.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'not a basename'; } \
+  && note PASS "T7/traversal(parent-dir): decoy 존재해도 basename 가드가 발화 (teeth 증명)" \
+  || note FAIL "T7/traversal(parent-dir): basename 가드 메시지를 못 찾음"
+
+# T7/traversal(절대경로·서브디렉토리): 스펙이 명시한 3개 거부 케이스를 모두 메시지로 확인.
+for variant2 in abs subdir; do
+  cp "$FX/interview-brief-valid.md" "$TMPD/p.md"
+  case "$variant2" in
+    abs)    sed -i.bak 's|^audit_file:.*|audit_file: /etc/__no_such_audit__.md|' "$TMPD/p.md" ;;
+    subdir) sed -i.bak 's|^audit_file:.*|audit_file: a/__no_such_audit__.md|' "$TMPD/p.md" ;;
+  esac
+  rm -f "$TMPD/p.md.bak"
+  out="$(python3 "$SCRIPT" gate "$TMPD/p.md" 2>/dev/null)"; rc=$?
+  { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'not a basename'; } \
+    && note PASS "T7/traversal($variant2): basename 가드가 발화" \
+    || note FAIL "T7/traversal($variant2): basename 가드 메시지를 못 찾음"
 done
 
 # R2/AC4: 무인용 landscape → red
@@ -150,6 +185,24 @@ python3 "$SCRIPT" gate "$FX/interview-brief-audit-no-coverage.md" >/dev/null 2>&
 python3 "$SCRIPT" coverage "$FX/interview-brief-floor-open.md" 2>/dev/null | grep -q 'floor:landscape' \
   && note PASS "coverage 서브커맨드가 audit을 해석해 열린 floor를 플래그" \
   || note FAIL "coverage 서브커맨드가 열린 floor를 플래그해야 한다"
+
+# AC9: audit_file 값 뒤 YAML 인라인 주석(템플릿의 실제 라인 모양)이 파싱을 깨서는 안 된다.
+python3 "$SCRIPT" gate "$FX/interview-brief-audit-file-comment.md" >/dev/null 2>&1 \
+  && note PASS "audit_file 인라인 주석이 있어도 게이트 통과 (템플릿 라인 형태)" \
+  || note FAIL "audit_file 인라인 주석이 파싱을 깨서는 안 된다"
+
+# F5 대칭: coverage 서브커맨드도 audit을 못 읽으면(디렉토리 등) traceback 없이 구조화 JSON + exit 1.
+cp "$FX/interview-brief-valid.md" "$TMPD/p.md"
+mkdir -p "$TMPD/not-a-file.audit.md"
+sed -i.bak 's|^audit_file:.*|audit_file: not-a-file.audit.md|' "$TMPD/p.md"
+rm -f "$TMPD/p.md.bak"
+out="$(python3 "$SCRIPT" coverage "$TMPD/p.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '"failures"'; } \
+  && note PASS "coverage: 읽을 수 없는 audit(디렉토리) → 구조화 JSON + exit 1" \
+  || note FAIL "coverage: 읽을 수 없는 audit도 구조화 JSON이어야 한다"
+printf '%s' "$out" | grep -qi 'Traceback' \
+  && note FAIL "coverage: traceback이 stdout으로 샜다" || note PASS "coverage: traceback 누출 없음"
+rmdir "$TMPD/not-a-file.audit.md" 2>/dev/null || true
 
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
