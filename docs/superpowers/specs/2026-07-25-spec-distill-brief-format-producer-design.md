@@ -230,6 +230,17 @@ user_sourced_items:
 
 **세 수치의 관계** — 현행 payload 272줄은 사용자 원문 53줄 + 모델 산문 219줄이다. 위 예산 합계(§6 제외)는 **137줄**이므로 모델 산문 기준 **-37%**다. 게이트의 advisory 임계치는 **150줄**(§6 제외) — 예산 137에 slack 13줄을 얹은 트립와이어다. 절별 예산은 저술 목표이고 150은 총량 경보선이며, 둘 다 **advisory**라 brief를 막지 않는다(AC15). 원문(§6)은 분량 무제한이므로 총 줄수는 인터뷰 길이에 따라 달라진다.
 
+#### "전문 보존"의 정의
+
+*전문 보존*은 **글자 불변이 아니라 provenance 보존**이다(인터뷰 brief의 결론 이관). 글자 불변으로 못 박으면 `CLAUDE.md` P21의 secret placeholder 치환과 정면충돌한다.
+
+- **대상 코퍼스** = `state.local.md`의 `user_statements`에 기록된 발화 전부. 모든 사용자 턴이 아니라 orchestrator가 라운드 중 기록한 것들이며, 각각이 §6의 한 `S<N>` 항목이 된다.
+- **허용 변환**: P21 secret placeholder 치환(**필수**) · 앞뒤 공백 정리 · 마크다운 인용 블록 래핑.
+- **금지**: 요약 · 재서술 · 발췌 · 문장 삭제.
+- 기록 이후의 변경(오타 정정·사용자 철회)은 원문 덮어쓰기가 아니라 **사용자 승인 정정 이벤트 + 이유**로 남긴다.
+
+게이트가 검증할 수 있는 것은 **bijection C**(모든 `evidence: S<N>`가 §6에 해석됨)까지다. **완전성**(기록된 발화가 하나도 빠지지 않고 §6에 있는가)은 `check_brief.py`가 `state.local.md`를 읽지 않으므로 기계 검증이 불가능하며 V8 수동 검토가 담당한다.
+
 §6 상단에 C3의 2줄 고정 블록:
 
 ```markdown
@@ -269,7 +280,7 @@ if not audit.exists(): FAIL                      # fail-closed
 - audit §3 항목: `#### ST<N> — <한 줄 요지>` 헤딩. 본문(verbatim 원문)은 그 아래 자유 형식.
 - payload §5 verdict 항목: `- <요지> — <URL> — verdict: defended|switched|deferred — ST<N>`
 
-게이트는 payload §5가 참조하는 `ST<N>` 집합 == audit §3의 `#### ST<N>` 집합인지 검사한다. 불일치는 양방향 모두 결함이다 — payload가 남으면 *원문 없는 판정*(근거 증발), audit이 남으면 *판정 없는 steelman*(R3 미충족). 양쪽 공집합(steelman 0건)은 허용하되 payload §5에 N/A sentinel을 요구한다.
+게이트는 payload §5가 참조하는 `ST<N>` 집합 == audit §3의 `#### ST<N>` 집합인지 검사한다. 불일치는 양방향 모두 결함이다 — payload가 남으면 *원문 없는 판정*(근거 증발), audit이 남으면 *판정 없는 steelman*(R3 미충족). **양쪽 공집합(steelman 0건)은 그대로 허용하며 별도 sentinel을 요구하지 않는다** — 공집합 == 공집합은 그 자체로 정합이고, steelman은 조건부로 발동하므로 0건이 정상 상태다. sentinel이 필요한 것은 R4(`기각` 0건)뿐이다: 거기서는 *"검토를 안 함"* 과 *"검토했으나 폐기가 없었음"* 을 가려야 하기 때문이다. 두 공집합 조건(`기각`=0 vs steelman=0)은 서로 다르므로 같은 sentinel을 공유하지 않는다.
 
 payload §5 verdict 항목 자체는 기존 `skepticism_malformed()` 규칙에 `ST<N>` 참조를 더해 검사한다: URL ≥1 + statement ≥10자 + 유효 verdict 토큰 + `ST<N>` 참조. (`_web_disabled()` 시 URL 요구는 기존대로 완화.)
 
@@ -298,6 +309,7 @@ payload §5 verdict 항목 자체는 기존 `skepticism_malformed()` 규칙에 `
 - frontmatter `user_sourced_items[].id` 집합 == body §2의 🗣/☑ 항목 id 집합 (양방향 — 어느 쪽이 남아도 fail)
 - 각 id에 대해 body 기호와 frontmatter `source`가 일치 (🗣↔`verbatim`, ☑↔`chosen`)
 - 각 id에 대해 body `status` 토큰과 frontmatter `status`가 일치
+- 각 id에 대해 **body statement가 frontmatter `statement`와 정규화 후 동일**. frontmatter가 canonical이고 body는 그 렌더다 — id·기호·status만 맞추면 두 표현이 같은 라벨을 달고 **서로 다른 제약을 말해도 통과**한다. 정규화 = 앞뒤 공백 제거 + 연속 공백 1개로 축약 + 마크다운 강조 기호(`**`, `*`, `` ` ``) 제거
 
 **빈 확정 금지.** `status: confirmed` 항목이 0건이면 명시 sentinel(`# confirmed 0건 — 사용자가 전부 잠정으로 판단`) 없이는 fail. sentinel 없는 0건은 확인 게이트를 건너뛴 신호다.
 
@@ -338,14 +350,14 @@ AC1–AC14는 hard(미충족 시 미완료), AC15–AC16은 **advisory**(측정�
 | AC3 | `SKILL.md`가 `brainstorming`을 호출할 때 C4 재결정 프로토콜 문장(*"confirmed 항목은 근거 있으면 보고 후 재결정, 임의 변경 금지"*)을 함께 싣는다. `/compact` 경로와 직행 경로 **양쪽 모두** | V3 |
 | AC4 | payload 템플릿이 §0–§7 8섹션 역피라미드이며, 사용자 원문이 §6에 전문 보존된다 | T1 |
 | AC5 | §6에 `🗣`·`☑`·`✎` 세 기호를 모두 포함한 출처 표기 블록이 존재한다(템플릿이 상속, 게이트가 확인) | T18 |
-| AC6 | `user_sourced_items[]`의 각 항목이 id/source/status/statement/**evidence**를 갖는다. `source`는 `verbatim`\|`chosen`만 허용하며 `inferred`는 fail | T3–T6 |
+| AC6 | `user_sourced_items[]`의 각 항목이 id/source/status/statement/**evidence**를 갖는다. `source`는 `verbatim`\|`chosen`만 허용하며 `inferred`는 fail. **bijection C**: 모든 `evidence: S<N>` 값이 §6에 대응 항목으로 존재한다(역방향은 요구하지 않음 — 제약으로 승격되지 않은 발화가 있을 수 있다) | T3–T6, T22 |
 | AC7 | **bijection B**: frontmatter id 집합 == body §2 🗣/☑ 항목 id 집합(양방향), 각 id의 기호↔`source`·`status` 일치 | T8, T9 |
-| AC8 | C5 준수 — production 파일에 AC13의 4개 문자열과 열거된 규약 문구(`다시 묻지 않는다`, `확정·재논쟁`)가 없다. **개방형 "어디에도 규약 문장 없음" 판정은 기계 검증 불가**이며 V5 수동 검토가 담당한다(이 한계를 숨기지 않는다) | §8.2 + V5 |
+| AC8 | C5 준수 — 닫힌 리터럴 6개는 AC13 락이 전부 잠근다(개방형이 아니므로 수동에 미루지 않는다). **남는 것은 열거되지 않은 규약 문장이며 이 개방형 부정 판정만 기계 검증 불가**다 — V5 수동 검토가 그 몫을 진다(한계를 숨기지 않는다) | §8.2 + V5 |
 | AC9 | `check_brief.py`가 `audit_file`을 필수 키로 요구하고, basename이 아니면 fail, 파일이 없으면 fail한다 | T7 |
 | AC10 | `AUDIT_SECTIONS` 5개 전부에 존재 검사가 있고, Coverage Ledger 검증이 audit 파일에 대해 실행된다 | T2, T13 |
-| AC11 | **bijection A + R4 보존**: payload §5가 참조하는 `ST<N>` 집합 == audit §3 `#### ST<N>` 집합(양방향). `verdict:` 항목은 URL + statement ≥10자 + verdict 토큰 + `ST<N>` 참조를 갖는다. **`기각` 항목이 0건이면 명시 N/A sentinel 없이는 fail**(구 R4 의례 이관) | T10–T12, T19 |
+| AC11 | **bijection A + R4 보존**: payload §5가 참조하는 `ST<N>` 집합 == audit §3 `#### ST<N>` 집합(양방향). steelman 0건(양쪽 공집합)은 sentinel 없이 허용. `verdict:` 항목은 URL + statement ≥10자 + verdict 토큰 + `ST<N>` 참조를 갖는다. **`기각` 항목이 0건이면 명시 N/A sentinel 없이는 fail**(구 R4 의례 이관 — steelman 공집합과는 다른 조건) | T10–T12, T17, T19 |
 | AC12 | `confirmed` 0건이면 명시 sentinel 없이는 fail | T14 |
-| AC13 | 회귀 락이 `locked_directions`·`pending_locked_decisions`·`재논쟁 금지`·`Locked Directions` 4개를 잡고, mutation test로 이빨이 증명된다. 스코프는 production 전 파일(`tests/`·`CHANGELOG.md`·`docs/` 제외) — **예외 없음** | §8.2 |
+| AC13 | 회귀 락이 `locked_directions`·`pending_locked_decisions`·`재논쟁 금지`·`Locked Directions`·`다시 묻지 않는다`·`확정·재논쟁` **6개**를 잡고, mutation test로 이빨이 증명된다. 스코프는 production 전 파일(`tests/`·`CHANGELOG.md`·`docs/` 제외) — **예외 없음** | §8.2 |
 | AC14 | `plugin.json` version이 `0.23.x` + `CHANGELOG.md`에 `## [0.23.` 항목 + `README.md`의 "Principles Instantiated" 갱신. 버전 리터럴은 **minor까지만 핀**한다(patch digit unpin — doc-only bump마다 stale-red 방지) | T20 + V6 |
 | AC15 *(advisory)* | 게이트가 `payload_body_lines_excl_verbatim`을 출력하고 150 초과 시 advisory를 낸다. **fail하지 않는다** | T16, V7 |
 | AC16 *(advisory)* | 탐색 폭 회귀 검증(§8.3)이 실행되고 결과가 audit에 기록된다. **통과 조건은 실행·기록이며 관측 결과값이 아니다** — 어떤 결과도 shipping을 막지 않는다 | §8.3 |
@@ -386,7 +398,7 @@ AC1–AC14는 hard(미충족 시 미완료), AC15–AC16은 **advisory**(측정�
 | T9 | 기호↔`source` 불일치 / `status` 불일치 | red ×2 | AC7 |
 | T10 | payload에만 있는 `ST<N>` / audit에만 있는 `ST<N>` | red ×2 | AC11 |
 | T11 | `verdict:` 항목 결손: URL 없음 / verdict 토큰 없음 / statement <10자 / `ST` 참조 없음 | red ×4 | AC11 |
-| T12 | 양쪽 steelman 공집합 + `기각` 항목 존재 | green | AC11 |
+| T12 | 양쪽 steelman 공집합 + `기각` 항목 존재 + **sentinel 없음** | green | AC11 |
 | T13 | Coverage Ledger가 audit에 없음 | red | AC10 |
 | T14 | `confirmed` 0건 + sentinel 없음 / 있음 | red / green | AC12 |
 | T15 | 정상 payload + audit 쌍 | green | — |
@@ -395,6 +407,8 @@ AC1–AC14는 hard(미충족 시 미완료), AC15–AC16은 **advisory**(측정�
 | T18 | §6에 표기 블록 없음 / 세 기호 중 하나 누락 | red ×2 | AC5 |
 | T19 | §5에 `기각` 항목 0건 + N/A sentinel 없음 / 있음 | red / green | AC11 |
 | T20 | `plugin.json` version이 `0.23.` 로 시작하지 않음 / `CHANGELOG.md`에 `## [0.23.` 없음 | red ×2 | AC14 |
+| T21 | body statement와 frontmatter `statement`가 다름(정규화 후) / 공백·강조기호만 다름 | red / green | AC7 |
+| T22 | `evidence: S9`인데 §6에 `S9` 없음 | red | AC6 |
 
 실행: `python3 -m unittest`(`-m unittest`로만 — pytest 미사용), repo root에서.
 
@@ -402,7 +416,7 @@ T19는 구 `tried_discarded_ok()` 테스트의 이관분이다 — 섹션이 §7
 
 ### 8.2 회귀 락 + mutation
 
-AC13의 4개 문자열을 production 파일에서 검사. **mutation test로 이빨 증명** — 문자열을 각각 맨앞·중간·맨끝 한 곳에 되살려 실제로 red가 되는지 확인한다. 락의 PASS는 이빨의 증거가 아니다. 셸 파싱(IFS·nullglob·후행 개행)이 집행을 조용히 0으로 만드는 사례가 이 리포에 있으므로, 락이 bash라면 세 위치를 모두 흔든다.
+AC13의 6개 문자열을 production 파일에서 검사. **mutation test로 이빨 증명** — 문자열을 각각 맨앞·중간·맨끝 한 곳에 되살려 실제로 red가 되는지 확인한다. 락의 PASS는 이빨의 증거가 아니다. 셸 파싱(IFS·nullglob·후행 개행)이 집행을 조용히 0으로 만드는 사례가 이 리포에 있으므로, 락이 bash라면 세 위치를 모두 흔든다.
 
 락 스코프에 `check_brief.py`가 처음부터 포함된다(§5.6 — legacy 분기가 없으므로 예외 조항이 필요 없다).
 
@@ -414,7 +428,7 @@ AC1의 긍정 주장(`user_statements` 스키마 존재)은 `SKILL.md` 본문에
 
 **변환 규칙 — 화이트리스트.** "내용 동일"이나 "문장 집합 동치"는 성립할 수 없다(권위 문구를 지우는 것이 변환의 목적이므로). 대신 허용 연산을 열거한다:
 
-- 허용: 섹션 재배치 · 섹션 재라벨 · AC12의 4개 문자열과 §2 권위 헤더 문장 삭제 · 출처 기호(🗣/☑/✎) 부착 · `S<N>`/`ST<N>` id 부여
+- 허용: 섹션 재배치 · 섹션 재라벨 · **AC13의 6개 금지 문자열**과 §2 권위 헤더 문장 삭제 · 출처 기호(🗣/☑/✎) 부착 · `S<N>`/`ST<N>` id 부여
 - 금지: 새 주장 추가 · 기존 주장 재서술 · 위 목록 밖의 정보 삭제
 
 **검증**: 원 brief의 각 문장을 {유지, 이동, 허용된 삭제} 중 하나로 분류한 매핑을 남긴다. **"신규" 분류가 1건이라도 있으면 그 실행은 무효**다. 변환자가 포맷 설계 당사자이므로 무의식적 개선이 측정 대상을 "포맷"에서 "다시 쓴 내용"으로 바꿀 수 있고, 이 매핑이 그것을 잡는다.
@@ -432,8 +446,9 @@ AC1의 긍정 주장(`user_statements` 스키마 존재)은 `SKILL.md` 본문에
 | V5 | **C5 개방형 판정** — 새 템플릿·`SKILL.md`를 사람이 읽고 독자에게 행동을 지시하는 문장이 남아 있지 않은지 확인. 기계 검증 불가 영역 | AC8 |
 | V6 | `README.md` "Principles Instantiated" 항목이 이 변경을 실제로 반영하는지(문자열 존재가 아니라 내용 적절성) | AC14 |
 | V7 | 첫 실산출 brief의 분량 지표가 예산 대비 어디인지 | AC15 |
+| V8 | **원문 완전성** — `state.local.md`의 `user_statements`와 brief §6을 대조해 기록된 발화가 빠짐없이 옮겨졌는지 확인. 게이트는 state를 읽지 않으므로 기계 검증 불가 | AC4 |
 
-V4·V5는 둘 다 개방형 부정 명제라 기계 검증이 불가능하다. **이 한계를 숨기지 않는 것이 설계의 일부다** — 락이 커버한다고 주장하면 커버되지 않은 영역이 커버된 것으로 보인다.
+V4·V5·V8은 기계 검증이 불가능하다 — 앞의 둘은 개방형 부정 명제라서, V8은 게이트의 입력 범위 밖(state 파일)을 대조해야 해서다. **이 한계를 숨기지 않는 것이 설계의 일부다** — 락이 커버한다고 주장하면 커버되지 않은 영역이 커버된 것으로 보인다.
 
 ---
 
@@ -454,6 +469,9 @@ V4·V5는 둘 다 개방형 부정 명제라 기계 검증이 불가능하다. *
 | **`user_sourced_items`에 `inferred` 포함 (초안)** | 리스트 이름과 내용이 어긋나고 `evidence` 필수 규칙에 예외 구멍이 생긴다. 모델 추론은 하류가 C4 재결정 프로토콜을 적용할 대상도 아니다 → 프로즈 ✎ 표기로만 |
 | **AC8을 기계 검증으로 주장** | "어디에도 규약 문장 없음"은 개방형 부정 명제라 리터럴 락으로 증명할 수 없다. 닫힌 열거 + V5 수동으로 분리하고 한계를 명시. AC1의 부정 절반도 같은 처리(V4) |
 | **§5 병합 시 R4 의례 폐기 (초안)** | 구 §7 `Tried & Discarded`를 §5로 합치면서 검증을 steelman verdict 항목에만 걸면 스키마는 단순해지지만, **steelman이 트리거되지 않은 사용자 폐기 방향이 무기록으로 사라진다** — 하류 재탐색 차단이라는 R4의 목적이 그대로 증발하고 §5는 헤더만 있어도 통과한다. 병합은 표현의 통합이지 의례의 폐기가 아니므로 `기각`/`위험` 항목 문법으로 가르고 "기각 0건 금지"를 이관 (리뷰 round-2가 적발) |
+| **두 공집합 조건에 같은 sentinel 공유 (초안)** | bijection A(steelman=0)와 R4(`기각`=0)는 서로 다른 조건인데 하나의 sentinel 문구를 공유하려 했다. `기각`은 있고 steelman만 0건인 **가장 흔한 정상 상태**에서 그 문구(*"전부 first-time defend+lock"*)가 거짓 진술이 되어 쓸 수 없고, 규칙과 T12가 정면으로 모순됐다 → steelman 공집합은 sentinel 면제 (리뷰 round-3이 적발) |
+| **bijection B를 메타데이터만 대조 (초안)** | id·기호·status만 맞추면 frontmatter와 body가 같은 라벨을 달고 **서로 다른 제약을 말해도** 통과한다. bijection B는 round-2에서 신설한 것인데 정작 지키려던 축의 *내용*을 비워뒀다 → frontmatter canonical + 정규화 후 statement 동일 (리뷰 round-3이 적발) |
+| **"전문 보존"을 글자 불변으로 정의** | `CLAUDE.md` P21의 secret placeholder 치환과 정면충돌한다. 불변식은 글자가 아니라 **provenance**이며, 허용 변환을 열거하고 완전성은 V8 수동으로 분리 |
 | **hard AC를 검증 배정 없이 선언 (초안)** | 구 AC4(표기 블록)·AC13(버전 bump)이 T-case도 V-item도 없이 hard로 선언돼 있었다. 검증이 배정되지 않은 AC는 *"미충족 시 미완료"* 를 집행할 수단이 없어 사실상 주석이다 → AC 표에 **검증 열**을 추가하고 전 hard AC에 명시 배정 (리뷰 round-2가 적발) |
 | **`agents/spec-reviewer.md` NG3 문구를 지금 수정** | Spec A는 리뷰어를 만들지 않으므로 NG3가 여전히 사실. 사실이 아닌 문서를 미리 쓰는 것은 drift |
 
@@ -484,4 +502,4 @@ interview brief의 OQ1–OQ12 중:
 - **후속 spec**: Spec B (brief-critic / 방향성 리뷰 / readback / codex) — Spec A 산출 brief 실물을 입력으로 설계
 - **철학 근거**: Law 1(구조 게이트 — `check_brief.py`), Law 3(회귀 락 = compounding), P17(사용자 주권 — 확정 확인 게이트), P21(untrusted input — `audit_file` basename 제한), 금지 패턴 *trivia ceremony*(확인 게이트 흡수)·*unbounded autonomy*(재제시 상한)
 - **Law 2**: 신규 에이전트 0개. tool posture 변경 없음
-- **리뷰 이력**: round-1 — Claude 7건(block 1·high 4·medium 2) + codex 4건(high 2·medium 2) → 11건 반영. round-2 — Claude 5건(high 4·medium 1, round-1 7건 종결 확인) + codex 0건(`approved`) → 5건 반영
+- **리뷰 이력**: round-1 — Claude 7(block 1·high 4·medium 2) + codex 4(high 2·medium 2) → 11건 반영. round-2 — Claude 5(high 4·medium 1) + codex 0(`approved`) → 5건 반영. round-3 — Claude 4(high 3·medium 1) + codex 2(high 1·medium 1) → 6건 반영. 누적 22건, 매 라운드 직전 지적은 전부 종결 확인됨
