@@ -268,13 +268,19 @@ def bijection_c_errors(text: str) -> list[str]:
 MARKER_SOURCE = {"🗣": "verbatim", "☑": "chosen"}
 
 # `- 🗣 confirmed **C1** — <statement> ⟨S3⟩`
+# 마커 뒤 U+FE0F(VS16, variation selector-16) 선택적 허용 — 대부분의 이모지 입력
+# 경로가 내보내는 형태(예: 겉보기로 구별 안 되는 두 글자짜리 마커)를 거부하면 "D2:
+# in frontmatter but not in body §2"처럼 원인과 무관해 보이는 오탐이 뜬다. 소스에
+# 보이지 않는 문자를 직접 심지 않도록 정규식 이스케이프(re가 코드포인트로 해석)로
+# 표기해 향후 편집 시 실수로 지워질 위험을 없앤다. 캡처 그룹은 맨 글리프만 잡아
+# MARKER_SOURCE 조회가 그대로 동작한다. 불릿도 `-`/`*` 둘 다 허용(`[-*]`).
 BODY_ITEM_RE = re.compile(
-    r"^\s*-\s+(🗣|☑)\s+(\S+)\s+\*\*([^*]+)\*\*\s+—\s+(.*?)\s+⟨(S\d+)⟩\s*$"
+    r"^\s*[-*]\s+(🗣|☑)\uFE0F?\s+(\S+)\s+\*\*([^*]+)\*\*\s+—\s+(.*?)\s+⟨(S\d+)⟩\s*$"
 )
 # 기호로 시작하지만 위 문법에 맞지 않는 줄을 잡아내기 위한 느슨한 매처.
 # 이게 없으면 오타 한 글자가 항목을 id 집합에서 조용히 지워 "frontmatter-only id"라는
 # 엉뚱한 메시지로 나타난다 — 원인과 증상이 어긋나면 디버깅이 배로 든다.
-BODY_ITEM_LOOSE_RE = re.compile(r"^\s*-\s+(?:🗣|☑)\s")
+BODY_ITEM_LOOSE_RE = re.compile(r"^\s*[-*]\s+(?:🗣|☑)\uFE0F?\s")
 EMPH_RE = re.compile(r"[*`]")
 
 

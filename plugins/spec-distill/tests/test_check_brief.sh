@@ -213,17 +213,40 @@ python3 "$SCRIPT" gate "$FX/interview-brief-no-items.md" >/dev/null 2>&1 \
 # T4: evidence 없음 → red
 python3 "$SCRIPT" gate "$FX/interview-brief-item-no-evidence.md" >/dev/null 2>&1 \
   && note FAIL "T4: evidence 없는 항목이 통과됨" || note PASS "T4: evidence 없는 항목 → red"
+# T4 message teeth: 이 fixture는 bijection B(§2 body ⟨S1⟩ 부재)도 같이 red를 내므로
+# exit code만 보면 evidence-required 규칙 자체를 지워도 assertion이 안 걸린다(가짜 teeth,
+# bijection B 도입 리뷰 발견). items의 errors 키 안에서 그 규칙 고유 메시지를 직접 찾는다.
+errs="$(python3 "$SCRIPT" items "$FX/interview-brief-item-no-evidence.md" 2>/dev/null \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["errors"])')"
+printf '%s' "$errs" | grep -q 'evidence missing' \
+  && note PASS "T4: user_sourced_errors가 evidence missing을 flag (message teeth)" \
+  || note FAIL "T4: evidence missing 메시지를 items.errors에서 못 찾음"
 
 # T5: source: inferred가 리스트에 있음 → red
 python3 "$SCRIPT" gate "$FX/interview-brief-item-inferred.md" >/dev/null 2>&1 \
   && note FAIL "T5: source: inferred가 통과됨 (리스트 이름과 내용 불일치)" \
   || note PASS "T5: source: inferred → red"
+# T5 message teeth: MARKER_SOURCE는 verbatim/chosen만 반환하므로 source 값이 무엇이든
+# 유효하지 않으면 bijection B도 구조적으로 같이 red를 낸다 — exit code만으론 이 규칙의
+# 삭제를 못 잡는다(가짜 teeth). items.errors에서 규칙 고유 메시지를 직접 확인.
+errs="$(python3 "$SCRIPT" items "$FX/interview-brief-item-inferred.md" 2>/dev/null \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["errors"])')"
+printf '%s' "$errs" | grep -q "source 'inferred' not in" \
+  && note PASS "T5: user_sourced_errors가 source 'inferred'를 flag (message teeth)" \
+  || note FAIL "T5: source 'inferred' 메시지를 items.errors에서 못 찾음"
 
 # T6: 잘못된 status / source → red ×2
 python3 "$SCRIPT" gate "$FX/interview-brief-item-bad-status.md" >/dev/null 2>&1 \
   && note FAIL "T6: 잘못된 status가 통과됨" || note PASS "T6: 잘못된 status → red"
 python3 "$SCRIPT" gate "$FX/interview-brief-item-bad-source.md" >/dev/null 2>&1 \
   && note FAIL "T6: 잘못된 source가 통과됨" || note PASS "T6: 잘못된 source → red"
+# T6 message teeth (source만 — status는 bijection B와 충돌하지 않아 exit code로 이미 충분):
+# 위 T5와 같은 이유로 source allowlist 삭제 시 exit code가 bijection B로 계속 red를 유지한다.
+errs="$(python3 "$SCRIPT" items "$FX/interview-brief-item-bad-source.md" 2>/dev/null \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["errors"])')"
+printf '%s' "$errs" | grep -q "source '사용자' not in" \
+  && note PASS "T6: user_sourced_errors가 잘못된 source를 flag (message teeth)" \
+  || note FAIL "T6: source '사용자' 메시지를 items.errors에서 못 찾음"
 
 # T22: bijection C — evidence: S9인데 §6에 S9 없음 → red
 python3 "$SCRIPT" gate "$FX/interview-brief-evidence-dangling.md" >/dev/null 2>&1 \
@@ -277,6 +300,13 @@ python3 "$SCRIPT" gate "$FX/interview-brief-anchor-absent.md" >/dev/null 2>&1 \
 # 형식 미달 §2 항목은 조용히 사라지지 않고 loud하게 red가 된다
 python3 "$SCRIPT" gate "$FX/interview-brief-body-malformed.md" >/dev/null 2>&1 \
   && note FAIL "형식 미달 §2 항목이 통과됨 (silent drop)" || note PASS "형식 미달 §2 항목 → red (loud)"
+
+# VS16 관용: 마커 뒤 U+FE0F(대부분의 이모지 입력 경로가 내는 변형 선택자)가 붙어도
+# 정상 항목으로 파싱돼야 한다(loud로 그치지 않고 green) — 리뷰 발견, BODY_ITEM_LOOSE_RE의
+# 원래 취지("기호로 시작하지만 문법에 안 맞으면 loud")가 VS16 앞에서는 과잉발화였다.
+python3 "$SCRIPT" gate "$FX/interview-brief-marker-vs16.md" >/dev/null 2>&1 \
+  && note PASS "VS16 마커(☑️/🗣️)가 정상 항목으로 파싱돼 green" \
+  || note FAIL "VS16 마커가 있으면 정상 항목으로 통과해야 한다 (VS16 불관용)"
 
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
