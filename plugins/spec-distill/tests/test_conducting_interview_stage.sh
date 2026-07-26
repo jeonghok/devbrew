@@ -53,9 +53,15 @@ b0_block="$(awk '/^#### B-0/{f=1;print;next} /^#### /{f=0} f' "$SKILL")"
 grep -qF '[spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등' <<<"$b0_block" \
   && note PASS "AC2: 상한 초과 고정 advisory 문자열 (verbatim)" \
   || note FAIL "AC2: 상한 초과 advisory 문자열이 정확히 일치하지 않는다"
-grep -qE '전부 provisional|전 항목 .*provisional' <<<"$b0_block" \
-  && note PASS "AC2: 상한 초과 시 덜-잠그는 쪽으로 강등" \
-  || note FAIL "AC2: 상한 초과 동작(provisional 강등)이 명시되지 않았다"
+# 이 assert는 위 advisory 고정 문자열이 아니라 **강등 프로즈**를 잠근다. 원래 패턴
+# ('전부 provisional|전 항목 .*provisional')은 프로즈(백틱·조사 때문에 불일치)가 아니라
+# advisory 문자열에만 매치돼 바로 위 grep -qF에 포섭됐다 — 프로즈만 지워도 GREEN인 가짜 이빨.
+# 아래 두 구절은 advisory 문자열에 등장하지 않는 body-unique 문구다: 강등 *동작*과 *방향 근거*.
+# teeth: 프로즈만 삭제 → 이 assert만 RED / advisory만 삭제 → 위 assert만 RED (서로 독립).
+{ grep -qF '전 항목을 `provisional`로 강등' <<<"$b0_block" \
+  && grep -qF '확정이 덜 되는 쪽이 안전한 방향' <<<"$b0_block"; } \
+  && note PASS "AC2: 상한 초과 시 덜-잠그는 쪽으로 강등 (프로즈 — advisory와 독립)" \
+  || note FAIL "AC2: 강등 프로즈(전 항목 provisional 강등 + 덜 되는 쪽이 안전)가 없다"
 grep -qE '제외한 것도|제외 항목' <<<"$b0_block" \
   && note PASS "AC2: 확정 후보에서 제외한 항목도 함께 제시 (누락 검출 가능)" \
   || note FAIL "AC2: 제외 항목 제시 요구가 없다"
