@@ -188,22 +188,32 @@ grep -qi 'round' <<<"$rhythm_block" \
   && note FAIL "AC9: rhythm-guard no longer references round" \
   || note PASS "AC9: rhythm-guard no longer references round"
 
-# R3 트리거 용어 교체 + §6 OQ → §8 OQ (scoped)
+# R3 트리거 용어 교체 + OQ 좌표 (scoped)
+# v0.23.0: payload가 9섹션 → 8섹션(§0–§7)이 되면서 OQ 좌표가 §8 → §3으로 이동했다.
+# 락도 새 좌표를 겨눈다 — 부정은 은퇴 좌표 §8(및 v0.22.0의 §6)을, 긍정은 §3을 잡는다.
 r3_block="$(awk '/^### R3 — Steelman/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$SKILL")"
 grep -q 'coverage-mapper neglect' <<<"$r3_block" \
   && note PASS "R3: trigger term breadth-keeper tunneling replaced by coverage-mapper neglect" \
   || note FAIL "R3: trigger term breadth-keeper tunneling replaced by coverage-mapper neglect"
-grep -q '§6 OQ' <<<"$r3_block" \
-  && note FAIL "R3: stale §6 OQ reference removed (should be §8 OQ)" \
-  || note PASS "R3: stale §6 OQ reference removed (should be §8 OQ)"
-[[ "$(grep -c '§8 OQ' <<<"$r3_block")" -ge 2 ]] \
-  && note PASS "R3: §8 OQ reference present (x2)" \
-  || note FAIL "R3: §8 OQ reference present (x2)"
+grep -qE '§[68] OQ' <<<"$r3_block" \
+  && note FAIL "R3: 은퇴 OQ 좌표(§6/§8) 잔존 (should be §3 OQ)" \
+  || note PASS "R3: 은퇴 OQ 좌표(§6/§8) 제거됨 (should be §3 OQ)"
+[[ "$(grep -c '§3 OQ' <<<"$r3_block")" -ge 2 ]] \
+  && note PASS "R3: §3 OQ reference present (x2)" \
+  || note FAIL "R3: §3 OQ reference present (x2)"
 
 # C45 interview_round>=2 트리거가 제거됐는지 (AC7)
 grep -q 'interview_round >= 2\|interview_round>=2' "$SKILL" \
   && note FAIL "AC7: C45 interview_round>=2 trigger still present" \
   || note PASS "AC7: interview_round>=2 dispatch trigger replaced by C11"
+
+# v0.23.0: 은퇴한 payload 좌표(§8/§9) 잔존 0 — 새 payload는 §0–§7 8섹션뿐이다.
+# §8/§9로 보내는 지시는 존재하지 않는 섹션을 만들어 게이트를 RED로 만든다(부분 sweep 방지 락).
+# `§8.2`처럼 뒤에 `.`나 숫자가 오는 것은 설계 문서 §-참조라 제외한다.
+retired_secs="$(grep -nE '§[89]([^.0-9]|$)' "$SKILL" || true)"
+[[ -z "$retired_secs" ]] \
+  && note PASS "V11: 은퇴 payload 좌표(§8/§9) 잔존 0" \
+  || { note FAIL "V11: 은퇴 payload 좌표(§8/§9)가 SKILL에 잔존:"; printf '%s\n' "$retired_secs"; }
 
 # breadth-keeper 용어 잔존 0 (SKILL 본문, AC7/V7a)
 grep -qi 'breadth-keeper\|breadth_keeper' "$SKILL" \

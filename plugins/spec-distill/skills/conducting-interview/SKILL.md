@@ -202,7 +202,7 @@ fi
 - **① 계속**: `probe_budget.py raise-cap "$STATE"` — `probe_cap_override`를 base cap(12)만큼 올려
   `effective_cap = base + override`로 상향(persist) 후 진행.
 - **② 박제 후 종료**: 미충족 floor 행을 `status: closed` + evidence `사용자-승인 박제(@probe N) —
-  §Open Questions 참조`로 기록하고 그 내용을 brief §8 Open Questions로 이동 → AC2 게이트 통과(floor
+  §Open Questions 참조`로 기록하고 그 내용을 payload §3 Open Questions로 이동 → AC2 게이트 통과(floor
   closed)하되 박제 표식이 원장에 가시적(silent bypass 아님).
 - **③ abort**: brief 미작성, state 보존.
 
@@ -250,14 +250,15 @@ Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind
         prompt: "재구성된 문제정의: <...>. 지금까지의 사용자 제약 요지: <...>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
 ```
 
-출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 brief §5 `## Blind Spots & Premortem`에
-기록하고, `blind_spot` floor 차원을 in-progress→closed로 전이(사용자에게 표면화된 blind-spot 확인 후).
+출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 payload §5 `## 5. 기각 · Blind Spots`의
+**`위험` 항목**(`- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>`)으로 기록하고, `blind_spot` floor
+차원을 in-progress→closed로 전이(사용자에게 표면화된 blind-spot 확인 후).
 
 **Web 부재 시 graceful degradation (C5)**: kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web
 도구 부재로 blind-spot-prober를 돌릴 수 없으면 — R2/R3 web-absent 강등과 대칭으로 — opaque gate-fail로
 떨어뜨리지 말고 **loud advisory** 후 **inline premortem**으로 전환:
-`[spec-distill] web 비활성 — blind-spot-prober 자동 생략, inline premortem으로 전환`. 이 경우 §5는
-codebase 근거 또는 사용자 판단으로 기록(URL 부재 사유 명시).
+`[spec-distill] web 비활성 — blind-spot-prober 자동 생략, inline premortem으로 전환`. 이 경우 §5의
+`위험` 항목은 codebase 근거 또는 사용자 판단으로 기록(URL 부재 사유 명시).
 
 ## 5 통과 의례 (Law 1 구조 게이트, R1–R5)
 
@@ -266,11 +267,11 @@ brief 작성(+ optional brainstorming invoke)은 다음 5 의례를 **모두 통
 
 | # | 의례 | 통과 기준 | 메커니즘 |
 |---|---|---|---|
-| R1 | **Reframe (메타 프롬프트)** | 받은 요청을 재구성한 한 문장 문제정의 + 진짜 goal. | (d) ontological 5-type (ESSENCE/ROOT_CAUSE/...) → brief §1 |
-| R2 | **Landscape 수집** | web sweep ≥1회, prior-art/대안이 **인용과 함께** 표면화. | path(a) 확장 → brief §3 |
-| R3 | **Skepticism 통과** | 의심 triggered 방향이 모두 steelman 후 *방어 또는 전환*. un-challenged 의심 방향 lock 불가. | steelman-builder dispatch → brief §4 |
-| R4 | **시행착오 기록** | steelman switch된 방향 **또는** 사용자가 명시적으로 폐기한 방향이 *이유와 함께* 기록. 0건이면 `N/A — 전부 first-time defend+lock` 명시(빈 섹션 금지). | brief §7 |
-| R5 | **Open Questions 박제** | 미해결 명시("유추 금지"). | brief §8 |
+| R1 | **Reframe (메타 프롬프트)** | 받은 요청을 재구성한 한 문장 문제정의 + 진짜 goal. | (d) ontological 5-type (ESSENCE/ROOT_CAUSE/...) → payload §0 한눈에(스냅샷) + §1 Goal · Non-goal(진짜 goal) |
+| R2 | **Landscape 수집** | web sweep ≥1회, prior-art/대안이 **인용과 함께** 표면화. | path(a) 확장 → payload §4 External Landscape |
+| R3 | **Skepticism 통과** | 의심 triggered 방향이 모두 steelman 후 *방어 또는 전환*. un-challenged 의심 방향은 확정 후보가 될 수 없다. | steelman-builder dispatch → payload §5의 **`verdict:` 항목** |
+| R4 | **시행착오 기록** | steelman switch된 방향 **또는** 사용자가 명시적으로 폐기한 방향이 *이유와 함께* 기록. 0건이면 `- 기각 — N/A — 전부 first-time defend+lock` 한 줄 명시(빈 섹션 금지). | payload §5의 **`기각` 항목** |
+| R5 | **Open Questions 박제** | 미해결 명시("유추 금지"). | payload §3 Open Questions |
 
 ### R2 — 웹 Landscape (bounded, AC7/AC8)
 
@@ -286,7 +287,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" increment "$ROOT/<session-
 ```
 
 - budget 초과(sweep>4 또는 session>8) → advisory + **강제 (b) 사용자 질문**(AP16).
-- 모든 외부 주장은 **출처 URL 필수**(AC4) — brief §3에 `[취함|피함|중립]` + 이유와 함께.
+- 모든 외부 주장은 **출처 URL 필수**(AC4) — payload §4 External Landscape에 `[취함|피함|중립]` + 이유와 함께.
 - **kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`** 또는 web 도구 부재 → landscape를 **loud하게
   생략**하고 계속(crash 금지, graceful degradation — AC8): `[spec-distill] web 비활성 — landscape 생략, codebase 근거만 사용`.
 - sweep 종료 시 `reset-sweep`로 `web_sweep_count`를 0으로 reset(session 카운터는 유지):
@@ -305,17 +306,17 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" increment "$ROOT/<session-
    ```
 2. builder 출력(`alternative_statement` + `evidence[].url`)을 **verbatim**으로 4-block에 반대
    케이스로 제시 — conducting-interview는 이를 **약화·편집하지 않습니다**(AC5).
-3. **게이트**(P17): 사용자가 (방어 → 원안 lock + `defense` 기록, steelman: defended) /
-   (전환 → 대안 lock, 원안은 R4로, steelman: switched-to-this) / (보류 → §8 OQ).
-4. builder 출력 그대로 brief §4 Skepticism Log에 기록 — 각 항목은 (대안 statement + 웹근거 URL + `verdict ∈ {defended | switched | deferred}`). 게이트 매핑: 방어→`defended`, 전환→`switched`, 보류→`deferred`(§8 OQ에도 박제). 프론트매터 `steelman:` 라벨(`switched-to-this`)과 §4 `verdict` 어휘(`switched`)는 별개 — §4에는 위 세 단어만 사용.
+3. **게이트**(P17): 사용자가 (방어 → 원안 유지 + `defense` 기록, steelman: defended) /
+   (전환 → 대안 채택, 원안은 R4로, steelman: switched-to-this) / (보류 → §3 OQ).
+4. builder 출력 그대로 payload §5의 **`verdict:` 항목**으로 기록 — 각 항목은 (대안 statement + 웹근거 URL + `verdict ∈ {defended | switched | deferred}` + audit §3의 `ST<N>` 참조). 게이트 매핑: 방어→`defended`, 전환→`switched`, 보류→`deferred`(§3 OQ에도 박제). 프론트매터 `steelman:` 라벨(`switched-to-this`)과 §5 `verdict` 어휘(`switched`)는 별개 — §5의 `verdict:`에는 위 세 단어만 사용.
 5. 한 방향당 steelman 1회(새 근거 없으면 재steelman 금지 — AP16 harassment 방지).
 
 **Web 부재 시 graceful degradation (AC8 대칭)**: `steelman-builder`는 WebSearch/WebFetch를 요구합니다.
 kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구 부재로 steelman을 돌릴 수 없으면 —
 R2 landscape와 대칭으로 — opaque한 "malformed skepticism (no-url)" 게이트 실패로 떨어뜨리지 말고
 **loud advisory**를 내고 **수동 의심 게이트**로 전환합니다:
-`[spec-distill] web 비활성 — steelman 자동 생략, 사용자에게 의심 방향 수동 확인 요청`. 이 경우 §4
-Skepticism Log은 사용자 판단(방어/전환/보류)을 근거로 기록하되 URL 부재 사유를 명시합니다(`check_brief.py`의
+`[spec-distill] web 비활성 — steelman 자동 생략, 사용자에게 의심 방향 수동 확인 요청`. 이 경우 §5의
+`verdict:` 항목은 사용자 판단(방어/전환/보류)을 근거로 기록하되 URL 부재 사유를 명시합니다(`check_brief.py`의
 skepticism 형식 검사는 web-disabled 시 V10 manual로 위임).
 
 **Law 2 경계**: steelman 게이트는 Law 2 분리 메커니즘이 *아닙니다* — Law 2 분리 reviewer는
@@ -330,7 +331,7 @@ Law 1급 skepticism 의례입니다(verbatim pass-through로 무력화 방지).
 - floor `root_problem` closed — 진짜 problem이 한 문장으로 재구성(R1 계열).
 - floor `landscape` closed — landscape가 인용과 함께 수집(R2 계열, web sweep 메커니즘 유지).
 - floor `skepticism` closed — 의심 방향이 모두 steelman 통과(R3 계열, steelman-builder 게이트 유지).
-- floor `blind_spot` closed — blind-spot-prober가 unknown-unknown을 표면화하고 §5에 기록.
+- floor `blind_spot` closed — blind-spot-prober가 unknown-unknown을 표면화하고 payload §5의 `위험` 항목에 기록.
 - floor `open_questions` closed — 미해결 명시(박제, "유추 금지").
 
 각 차원의 status 전이(open→in-progress→closed)와 evidence 기록은 **orchestrator만** 수행하며
