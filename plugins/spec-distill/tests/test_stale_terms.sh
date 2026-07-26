@@ -3,10 +3,14 @@
 # (a) breadth-keeper → coverage-mapper 재명명이 production에 완결(잔존 0).
 # (b) interview_round는 활성 코드서 제거, SKILL은 migration 섹션에만.
 # (c) v0.23.0 권위 문법 6개 리터럴이 production에서 제거됐다(AC13).
-#     이 검사만 README.md를 **추가로 제외**한다 — README의 "Principles Instantiated"는
-#     무엇이 왜 사라졌는지 설명하려면 옛 용어를 인용해야 하고(CHANGELOG를 뺀 것과 같은 이유),
-#     우회해야 하는 락은 그 자체로 설계 결함이다. 그 대가로 README는 기계 커버리지가 0이며
-#     V10 수동 검토가 그 갭을 맡는다 — 숨기지 않는다.
+#     이 검사만 README.md를 **추가로 제외**한다 — 이유는 예방적(precautionary)이고 현재는
+#     미행사(unexercised)다: v0.23.0 시점 README "Principles Instantiated"는 이 6개 리터럴을
+#     **하나도 인용하지 않는다**(grep -cF 전수 확인 — locked_directions/pending_locked_decisions/
+#     재논쟁 금지/Locked Directions/다시 묻지 않는다/확정·재논쟁 전부 0회) — 무엇이 왜 사라졌는지
+#     개념적으로만 서술하고 옛 식별자를 그대로 인용하지 않기 때문이다. 제외는 향후 편집이
+#     CHANGELOG.md처럼 정당하게 옛 용어를 인용해야 할 때를 위한 예약 공간이다. 비용은 명확히
+#     진다: 제외돼 있는 한 README는 이 6개 리터럴에 대해 기계 커버리지가 0이고, 그 갭은 V10
+#     수동 검토가 맡는다 — 숨기지 않는다.
 # 스코프: $SD 아래 전체 production 파일 — 확장자 whitelist 없이 sweep(SKILL.md/README.md/agents/
 #         templates/scripts/plugin.json 뿐 아니라 scripts/ambiguity-blacklist.txt 같은 .txt/.yaml/
 #         확장자없는 production 파일도 포함). 확장자 whitelist는 header 주장(scripts/ 커버)보다

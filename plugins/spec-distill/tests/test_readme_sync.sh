@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
-# AC13/AC16 — README/plugin.json/CHANGELOG synced with v0.22.0 (coverage-driven interview).
-# plugin.json version은 0.22.x로 assert(patch digit는 의도적으로 unpin) — devbrew의
-# "플러그인 건드리는 모든 PR은 patch-bump" 규칙 때문에 리터럴 0.22.0 pin은 다음 doc-only
-# bump마다 stale-red. minor(0.22)는 v0.22.0 feature가 여전히 shipped임을 뜻하는 invariant라 pin 유지.
-# CHANGELOG [0.20.0]/[0.22.0] 엔트리는 append-only 기록이라 리터럴 pin이 correct.
+# T20/AC11/AC13/AC14/AC16 — README/plugin.json/CHANGELOG synced with v0.23.0
+# (interview brief handoff 재설계: payload/audit 분리 + user_statements + 4옵션 게이트).
+# plugin.json version은 0.23.x로 assert(patch digit는 의도적으로 unpin) — devbrew의
+# "플러그인 건드리는 모든 PR은 patch-bump" 규칙 때문에 리터럴 0.23.0 pin은 다음 doc-only
+# bump마다 stale-red. minor(0.23)는 v0.23.0 feature가 여전히 shipped임을 뜻하는 invariant라 pin 유지.
+# CHANGELOG [0.20.0]/[0.22.0]/[0.23.0] 엔트리는 append-only 기록이라 리터럴 pin이 correct —
+# 버전 bump마다 최신 엔트리 pin을 **추가**하고 과거 pin은 절대 빼지 않는다(누산). 뺀 순간
+# 그 히스토리 엔트리가 삭제돼도 이 스위트가 조용히 통과해 append-only 보장이 깨진다.
+# AC14는 README "## Principles Instantiated" 섹션(awk 윈도우, 다음 "^## "까지)에 국한된
+# 네 사실(라운드별 잠금 제거/종료 시 사용자 일괄 확인/payload-audit 분리/user_sourced_items)
+# 어서션 — 내용의 정확성은 검증하지 않는다(누락만 잡음, 정확성은 V6 수동 리뷰 몫).
 set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -22,6 +28,9 @@ grep -qE '^## \[0\.23\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
   || note FAIL "T20: CHANGELOG [0.23.0] 누락/비-ISO"
 grep -qE '^## \[0\.2[02]\.0\].*XX' "$CHANGELOG" \
   && note FAIL "T20: CHANGELOG 날짜에 XX placeholder" || note PASS "T20: XX placeholder 없음"
+grep -qE '^## \[0\.20\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
+  && note PASS "AC13: CHANGELOG [0.20.0] 엔트리 보존 (append-only)" \
+  || note FAIL "AC13: CHANGELOG [0.20.0] 엔트리가 사라졌다"
 grep -qE '^## \[0\.22\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
   && note PASS "AC11: CHANGELOG [0.22.0] 엔트리 보존 (append-only)" \
   || note FAIL "AC11: CHANGELOG [0.22.0] 엔트리가 사라졌다"
