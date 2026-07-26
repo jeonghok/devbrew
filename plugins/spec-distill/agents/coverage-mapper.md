@@ -34,7 +34,7 @@ admit 판정은 orchestrator가 합니다(G2, Law 2).
 
 - 지금까지 열린/닫힌 커버리지 차원(floor + 이미 admit된 derived) 요약.
 - 최근 probe들이 집중한 focused_dimension + no_progress 신호.
-- (있으면) 현재 locked_directions, External Landscape 발췌.
+- (있으면) 현재까지의 사용자 제약 요지, External Landscape 발췌.
 
 ## Output 형식 (이 형식을 정확히 준수 — conducting-interview가 advisory로 소비)
 

@@ -23,7 +23,7 @@ user-invocable: false
 brief는 **단독 완결 terminal 산출물**입니다 — superpowers가 있으면 brainstorming으로
 넘기고(optional), 없으면 brief 자체로 완료합니다.
 
-## State location (AC2)
+## State location
 
 `.claude/spec-distill/<session-id>/state.local.md` (per-session 격리, devbrew §4.8 준수)
 
@@ -54,7 +54,8 @@ web_search_count: 0                  # 세션 누적 web 검색 호출 수 (AP16
 rereview_count: 0
 trivia_escape_armed: false
 issue_history: []                    # 각 항목: {id, raised_count, dismissed_by_user, accepted_by_user, reconsensus_count, resolved, escalated}
-pending_locked_decisions: []         # 매 round 끝 append (b/d path 명시 응답만). brief frontmatter locked_directions로 변환.
+user_statements: []                  # 매 round 끝 append. 판정 없음 — 확정은 종료 게이트가 결정.
+confirm_repost_count: 0              # 종료 확정 확인 재제시 횟수 (상한 2, Unbounded-autonomy 가드)
 ---
 ```
 
@@ -76,7 +77,7 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 **brief는 예외**: `docs/superpowers/interview/`는 워크트리 *안*이라 `Write` tool로 정상 작성.
 
-## 4-block Korean format (devbrother2024 deep-interview 흡수, AC1)
+## 4-block Korean format (devbrother2024 deep-interview 흡수)
 
 매 round마다 다음 4 block을 출력하십시오:
 
@@ -107,7 +108,7 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 매 round의 4-block에서 어떤 path로 routing했는지 transcript에 명시하십시오.
 
-## teach-beat (AC8/C3/C12 — 미지를 드러내 가르치기)
+## teach-beat (C3/C12 — 미지를 드러내 가르치기)
 
 매 probe에 **teach-lite**를 붙인다: prior-art/trade-off를 **≤1문장**, **web 호출 없이**, 그리고
 **단정이 아닌 질문 형태**로 제시해 사용자가 모르는 지형을 살짝 연다(C3 — 공유된 전제가 사용자 답을
@@ -117,7 +118,7 @@ STATE="$ROOT/<session-id>/state.local.md"
 (추가 아님 — probe당 teach-beat 최대 1회). teach-heavy = **≥1 prior-art/URL 또는 landscape 인용**:
 
 1. 사용자 답이 `## External Landscape` 한 항목과 모순.
-2. hold·satisficing 답("모르겠음/둘 다/아무거나" — locked-판정 트리의 "보류" 분기 재사용).
+2. hold·satisficing 답("모르겠음/둘 다/아무거나" — 발화 기록 표의 "보류" 행 재사용).
 3. floor 차원의 첫 open→in-progress 전이(그 차원에 첫 probe 착수).
 4. coverage-mapper/blind-spot-prober 출력이 비어있지 않음.
 
@@ -126,28 +127,32 @@ STATE="$ROOT/<session-id>/state.local.md"
 이 신호 목록 + 크기 한도(teach-lite ≤1문장 / teach-heavy ≥1 URL)뿐이며, 각 발화의 per-firing
 결정성은 non-goal(모델 판단을 결정론으로 대체하지 않음 — 이 재구성의 핵심 논지).
 
-## Locked 판정 트리거 (G1, AC1)
+## 사용자 발화 기록 (G1, AC1)
 
-매 round 끝에 사용자 응답을 `pending_locked_decisions`에 append할지 다음 decision table로 판정:
+매 round 끝에 사용자가 실제로 답한 것을 `user_statements`에 append합니다. **여기서 무엇도
+판정하지 않습니다** — 이 stage는 문제공간이고, 무엇이 확정인지는 종료 직전 사용자 일괄
+확인(Step B-0)이 결정합니다.
 
-| 사용자 응답 유형 | path | locked? |
-|---|---|---|
-| 명시적 수락 (예/동의/선택지 1개 선택/자유 텍스트로 결정 명시) | b, d | ✅ true |
-| 명시적 거절 (아니오/거절/대안 제시) | b, d | ✅ true (반대 명제로 locked) |
-| 보류 ("잘 모르겠음", "둘 다 괜찮음", "나중에 결정") | b, d | ❌ false — Open Questions로 박제 |
-| "추가 정보 필요" / "더 설명해주세요" | b, d | ❌ false — re-ask 또는 OQ |
-| factual auto-confirm | a | ❌ false (사용자 미답변) |
-| sub-agent ambiguity 답안 | c | ✅ true ONLY IF 사용자 confirm 받음 |
-
-`locked? == true` 항목은 매 round 끝에 다음 형식으로 `pending_locked_decisions`에 append:
+| 사용자 응답 유형 | path | 기록? | `source` |
+|---|---|---|---|
+| 자유 텍스트 응답 (수락·거절·요구 무관) | b, d | ✅ | `verbatim` |
+| 선택지 선택 | b, d | ✅ | `chosen` |
+| 보류 ("잘 모르겠음", "둘 다 괜찮음") | b, d | ✅ — §3 Open Questions로도 이월 | `verbatim` |
+| factual auto-confirm | a | ❌ (사용자 발화 아님) | — |
+| sub-agent ambiguity 답안 | c | ✅ ONLY IF 사용자 confirm — **confirm 발화**를 기록 | `verbatim` |
 
 ```yaml
-- id: LD<N>                          # N = pending_locked_decisions.length + 1
-  section: "#<spec-section-anchor>"  # 답변이 spec의 어느 섹션에 박힐지 (예: "#goals", "#acceptance-criteria")
-  summary: "<160자 이내 한 줄 요약>"   # P21 secret placeholder 치환 적용
-  source: interview-round-<N>        # 운영 경로 표시
-  source_path: b | c | d             # 어느 routing path에서 왔는지
+- id: S<N>                 # N = user_statements.length + 1
+  source: verbatim         # verbatim(발화 그대로) | chosen(고른 선택지 라벨 + 요지)
+  round: <int>
+  text: "<사용자가 실제로 한 말>"    # P21 secret placeholder 치환 적용
 ```
+
+`status` 필드는 없습니다. `section:` 해답공간 앵커도 없습니다 — 문제공간의 답변을 답이
+들어갈 슬롯에 미리 바인딩하면 다음 stage의 탐색이 그 슬롯 모양대로 갇힙니다.
+
+거절도 수락과 똑같이 **발화 그대로** 기록합니다. 반대 명제로 뒤집어 "잠긴 방향"으로
+승격시키지 않습니다 — 그 승격이 라운드마다 결정을 박제하던 경로였습니다.
 
 ## C44 Dialectic Rhythm Guard
 
@@ -197,7 +202,7 @@ fi
 - **① 계속**: `probe_budget.py raise-cap "$STATE"` — `probe_cap_override`를 base cap(12)만큼 올려
   `effective_cap = base + override`로 상향(persist) 후 진행.
 - **② 박제 후 종료**: 미충족 floor 행을 `status: closed` + evidence `사용자-승인 박제(@probe N) —
-  §Open Questions 참조`로 기록하고 그 내용을 brief §8 Open Questions로 이동 → AC2 게이트 통과(floor
+  §Open Questions 참조`로 기록하고 그 내용을 payload §3 Open Questions로 이동 → 종료 게이트 통과(floor
   closed)하되 박제 표식이 원장에 가시적(silent bypass 아님).
 - **③ abort**: brief 미작성, state 보존.
 
@@ -209,7 +214,7 @@ probe를 제기하지 말고 fail-closed로 처리한다(위 `|| {…}` 가드, 
 
 kill switch: `DEVBREW_SPEC_DISTILL_PROBE_CAP=N` 으로 base cap override.
 
-## coverage-mapper dispatch (C11, AC7)
+## coverage-mapper dispatch (C11)
 
 `coverage-mapper`는 고정 floor 위 **주제-도출 차원**을 *제안*하는 advisory 에이전트다(원장 admit
 판정은 orchestrator, G2). 다음 조건 중 하나에서 dispatch:
@@ -234,7 +239,7 @@ Agent({ description: "Map coverage dimensions", subagent_type: "spec-distill:cov
 `neglect_flag: true`면 다음 probe에서 neglected 차원 하나를 추천 답안으로 제시. 복수 dispatch 시
 name 기준 union·dedup.
 
-## blind-spot-prober dispatch (AC6, C8 — blind_spot floor 차원)
+## blind-spot-prober dispatch (C8 — blind_spot floor 차원)
 
 `blind_spot` floor 차원의 **첫 open→in-progress 전이**(그 차원에 첫 probe 착수) 시 `blind-spot-prober`를
 **인터뷰당 1회** dispatch한다(fan-out 1, C8). `orchestration.blind_spot_dispatched`가 false일 때만
@@ -242,32 +247,33 @@ dispatch하고, dispatch 후 true로 세팅(재dispatch 금지).
 
 ```
 Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind-spot-prober",
-        prompt: "재구성된 문제정의: <...>. locked_directions: <...>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
+        prompt: "재구성된 문제정의: <...>. 지금까지의 사용자 제약 요지: <...>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
 ```
 
-출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 brief §5 `## Blind Spots & Premortem`에
-기록하고, `blind_spot` floor 차원을 in-progress→closed로 전이(사용자에게 표면화된 blind-spot 확인 후).
+출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 payload §5 `## 5. 기각 · Blind Spots`의
+**`위험` 항목**(`- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>`)으로 기록하고, `blind_spot` floor
+차원을 in-progress→closed로 전이(사용자에게 표면화된 blind-spot 확인 후).
 
 **Web 부재 시 graceful degradation (C5)**: kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web
 도구 부재로 blind-spot-prober를 돌릴 수 없으면 — R2/R3 web-absent 강등과 대칭으로 — opaque gate-fail로
 떨어뜨리지 말고 **loud advisory** 후 **inline premortem**으로 전환:
-`[spec-distill] web 비활성 — blind-spot-prober 자동 생략, inline premortem으로 전환`. 이 경우 §5는
-codebase 근거 또는 사용자 판단으로 기록(URL 부재 사유 명시).
+`[spec-distill] web 비활성 — blind-spot-prober 자동 생략, inline premortem으로 전환`. 이 경우 §5의
+`위험` 항목은 codebase 근거 또는 사용자 판단으로 기록(URL 부재 사유 명시).
 
 ## 5 통과 의례 (Law 1 구조 게이트, R1–R5)
 
 brief 작성(+ optional brainstorming invoke)은 다음 5 의례를 **모두 통과**해야 허용됩니다.
-하나라도 미충족이면 종료 차단. 종료 직전 `check_brief.py gate`로 **기계적 검증**(AC3):
+하나라도 미충족이면 종료 차단. 종료 직전 `check_brief.py gate`로 **기계적 검증**:
 
 | # | 의례 | 통과 기준 | 메커니즘 |
 |---|---|---|---|
-| R1 | **Reframe (메타 프롬프트)** | 받은 요청을 재구성한 한 문장 문제정의 + 진짜 goal. | (d) ontological 5-type (ESSENCE/ROOT_CAUSE/...) → brief §1 |
-| R2 | **Landscape 수집** | web sweep ≥1회, prior-art/대안이 **인용과 함께** 표면화. | path(a) 확장 → brief §3 |
-| R3 | **Skepticism 통과** | 의심 triggered 방향이 모두 steelman 후 *방어 또는 전환*. un-challenged 의심 방향 lock 불가. | steelman-builder dispatch → brief §4 |
-| R4 | **시행착오 기록** | steelman switch된 방향 **또는** 사용자가 명시적으로 폐기한 방향이 *이유와 함께* 기록. 0건이면 `N/A — 전부 first-time defend+lock` 명시(빈 섹션 금지). | brief §7 |
-| R5 | **Open Questions 박제** | 미해결 명시("유추 금지"). | brief §8 |
+| R1 | **Reframe (메타 프롬프트)** | 받은 요청을 재구성한 한 문장 문제정의 + 진짜 goal. | (d) ontological 5-type (ESSENCE/ROOT_CAUSE/...) → payload §0 한눈에(스냅샷) + §1 Goal · Non-goal(진짜 goal) |
+| R2 | **Landscape 수집** | web sweep ≥1회, prior-art/대안이 **인용과 함께** 표면화. | path(a) 확장 → payload §4 External Landscape |
+| R3 | **Skepticism 통과** | 의심 triggered 방향이 모두 steelman 후 *방어 또는 전환*. un-challenged 의심 방향은 확정 후보가 될 수 없다. | steelman-builder dispatch → payload §5의 **`verdict:` 항목** |
+| R4 | **시행착오 기록** | steelman switch된 방향 **또는** 사용자가 명시적으로 폐기한 방향이 *이유와 함께* 기록. 0건이면 `- 기각 — N/A — 전부 first-time defend+lock` 한 줄 명시(빈 섹션 금지). | payload §5의 **`기각` 항목** |
+| R5 | **Open Questions 박제** | 미해결 명시("유추 금지"). | payload §3 Open Questions |
 
-### R2 — 웹 Landscape (bounded, AC7/AC8)
+### R2 — 웹 Landscape (bounded)
 
 토픽이 잡히면(round 1–2) landscape sweep **1회**를 수행합니다. 각 web 검색 *전에* `increment`로
 state의 `web_sweep_count`/`web_search_count`를 +1 하고(PN1 Bash write — `increment`가 read-modify-write를
@@ -281,9 +287,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" increment "$ROOT/<session-
 ```
 
 - budget 초과(sweep>4 또는 session>8) → advisory + **강제 (b) 사용자 질문**(AP16).
-- 모든 외부 주장은 **출처 URL 필수**(AC4) — brief §3에 `[취함|피함|중립]` + 이유와 함께.
+- 모든 외부 주장은 **출처 URL 필수** — payload §4 External Landscape에 `[취함|피함|중립]` + 이유와 함께.
 - **kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`** 또는 web 도구 부재 → landscape를 **loud하게
-  생략**하고 계속(crash 금지, graceful degradation — AC8): `[spec-distill] web 비활성 — landscape 생략, codebase 근거만 사용`.
+  생략**하고 계속(crash 금지, graceful degradation): `[spec-distill] web 비활성 — landscape 생략, codebase 근거만 사용`.
 - sweep 종료 시 `reset-sweep`로 `web_sweep_count`를 0으로 reset(session 카운터는 유지):
   ```bash
   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" reset-sweep "$ROOT/<session-id>/state.local.md"
@@ -291,7 +297,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" increment "$ROOT/<session-
 
 ### R3 — Steelman 의심 게이트 (P17)
 
-의심 trigger = landscape 모순 / 알려진 anti-pattern / 기존 LD 불일치 / coverage-mapper neglect.
+의심 trigger = landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의 충돌 / coverage-mapper neglect.
 
 1. `steelman-builder` 에이전트를 **순차** dispatch(병렬·투기적 금지 — C5):
    ```
@@ -299,19 +305,18 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" increment "$ROOT/<session-
            prompt: "의심 방향: <statement>. trigger: <이유>. 대안의 강한 케이스를 웹근거와 함께." })
    ```
 2. builder 출력(`alternative_statement` + `evidence[].url`)을 **verbatim**으로 4-block에 반대
-   케이스로 제시 — conducting-interview는 이를 **약화·편집하지 않습니다**(AC5).
-3. **게이트**(P17): 사용자가 (방어 → 원안 lock + `defense` 기록, steelman: defended) /
-   (전환 → 대안 lock, 원안은 R4로, steelman: switched-to-this) / (보류 → §8 OQ).
-4. builder 출력 그대로 brief §4 Skepticism Log에 기록 — 각 항목은 (대안 statement + 웹근거 URL + `verdict ∈ {defended | switched | deferred}`). 게이트 매핑: 방어→`defended`, 전환→`switched`, 보류→`deferred`(§8 OQ에도 박제). 프론트매터 `steelman:` 라벨(`switched-to-this`)과 §4 `verdict` 어휘(`switched`)는 별개 — §4에는 위 세 단어만 사용.
+   케이스로 제시 — conducting-interview는 이를 **약화·편집하지 않습니다**.
+3. **게이트**(P17): 사용자가 (방어 → 원안 유지 / 전환 → 대안 채택, 원안은 R4로 / 보류 → §3 OQ) 중 하나를 선택한다.
+4. 판정을 payload §5의 **`verdict:` 항목**으로 기록 — 각 항목은 (대안 statement + 웹근거 URL + `verdict ∈ {defended | switched | deferred}` + audit §3의 `ST<N>` 참조). 게이트 매핑: 방어→`defended`, 전환→`switched`, 보류→`deferred`(§3 OQ에도 박제). builder 출력 verbatim은 audit §3에 `#### ST<N>` 헤딩으로 남고, payload §5와 audit §3은 이 `ST<N>` id로 맞물린다(bijection A) — frontmatter에는 별도 필드를 두지 않는다.
 5. 한 방향당 steelman 1회(새 근거 없으면 재steelman 금지 — AP16 harassment 방지).
 
-**Web 부재 시 graceful degradation (AC8 대칭)**: `steelman-builder`는 WebSearch/WebFetch를 요구합니다.
+**Web 부재 시 graceful degradation (R2 대칭)**: `steelman-builder`는 WebSearch/WebFetch를 요구합니다.
 kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구 부재로 steelman을 돌릴 수 없으면 —
 R2 landscape와 대칭으로 — opaque한 "malformed skepticism (no-url)" 게이트 실패로 떨어뜨리지 말고
 **loud advisory**를 내고 **수동 의심 게이트**로 전환합니다:
-`[spec-distill] web 비활성 — steelman 자동 생략, 사용자에게 의심 방향 수동 확인 요청`. 이 경우 §4
-Skepticism Log은 사용자 판단(방어/전환/보류)을 근거로 기록하되 URL 부재 사유를 명시합니다(`check_brief.py`의
-skepticism 형식 검사는 web-disabled 시 V10 manual로 위임).
+`[spec-distill] web 비활성 — steelman 자동 생략, 사용자에게 의심 방향 수동 확인 요청`. 이 경우 §5의
+`verdict:` 항목은 사용자 판단(방어/전환/보류)을 근거로 기록하되 URL 부재 사유를 명시합니다(`check_brief.py`의
+skepticism 형식 검사는 web-disabled 시 수동 판단으로 위임).
 
 **Law 2 경계**: steelman 게이트는 Law 2 분리 메커니즘이 *아닙니다* — Law 2 분리 reviewer는
 오직 design doc(brainstorming `-design.md`)에만 적용됩니다. steelman은 문제공간 품질을 끌어올리는
@@ -325,33 +330,51 @@ Law 1급 skepticism 의례입니다(verbatim pass-through로 무력화 방지).
 - floor `root_problem` closed — 진짜 problem이 한 문장으로 재구성(R1 계열).
 - floor `landscape` closed — landscape가 인용과 함께 수집(R2 계열, web sweep 메커니즘 유지).
 - floor `skepticism` closed — 의심 방향이 모두 steelman 통과(R3 계열, steelman-builder 게이트 유지).
-- floor `blind_spot` closed — blind-spot-prober가 unknown-unknown을 표면화하고 §5에 기록.
+- floor `blind_spot` closed — blind-spot-prober가 unknown-unknown을 표면화하고 payload §5의 `위험` 항목에 기록.
 - floor `open_questions` closed — 미해결 명시(박제, "유추 금지").
 
 각 차원의 status 전이(open→in-progress→closed)와 evidence 기록은 **orchestrator만** 수행하며
 (coverage-mapper·blind-spot-prober는 read-only 제안자, Law 2), state.local.md에 쓰는 동시에
-brief §6 `## Coverage Ledger`에 직렬화합니다.
+audit §1 `## Coverage Ledger`에 직렬화합니다.
 
-### Step A — brief 작성 (terminal 산출물)
+### Step A — brief 작성 (terminal 산출물, 2파일)
 
-1. `${CLAUDE_PLUGIN_ROOT}/templates/interview-brief-template.md`로 9-section 구조 확보(§5 Blind
-   Spots & Premortem, §6 Coverage Ledger 포함).
-2. 경로: `docs/superpowers/interview/<YYYY-MM-DD>-<kebab-topic>-interview.md` (워크트리 안 → `Write` tool 사용).
-   - frontmatter: `type: interview-brief`, `next_phase: superpowers:brainstorming`,
-     `session_id`(기존 spec-distill 세션 재사용 — 새 세션 생성 안 함), `locked_directions[]`
-     (state `pending_locked_decisions` + steelman verdict 반영).
-3. **Coverage Ledger 직렬화** (check_brief 게이트 *전*): state.local.md의 `coverage`를 brief §6
-   `## Coverage Ledger`에 한 줄당 한 차원으로 직렬화(floor 5행 + derived; 템플릿 §6 문법 —
-   `- floor:<key> — closed — <evidence>` / `- derived:<name> — closed — <evidence>` 또는
-   부재 시 `- derived: N/A`). floor 전부 `closed`가 아니면 이 시점에 도달하면 안 됩니다(종료
-   driver 위반 — 위 종료 기준을 만족하지 않은 채 Step A에 진입하지 않는다).
-4. **기계적 게이트 검증**(AC3) — 직렬화 직후:
+1. `${CLAUDE_PLUGIN_ROOT}/templates/interview-brief-template.md`로 payload **8-section**
+   구조(§0 한눈에 – §7 Next Action)를, `${CLAUDE_PLUGIN_ROOT}/templates/interview-audit-template.md`로
+   audit **5-section** 구조를 확보합니다.
+2. 경로 (둘 다 워크트리 안 → `Write` tool 사용):
+   - payload: `docs/superpowers/interview/<YYYY-MM-DD>-<kebab-topic>-interview.md`
+   - audit:   `docs/superpowers/interview/<YYYY-MM-DD>-<kebab-topic>-interview.audit.md`
+   - payload frontmatter: `type: interview-brief`, `next_phase: superpowers:brainstorming`,
+     `session_id`(기존 spec-distill 세션 재사용), `audit_file`(audit의 **basename만** —
+     경로 구분자가 들어가면 게이트가 거부합니다), `user_sourced_items[]`.
+3. **`user_sourced_items` 직렬화**: state의 `user_statements`를 훑어 제약으로 승격할 항목을
+   고르고, 각각에 id·`source`·`statement`(160자 이내)·`evidence`(그 발화의 `S<N>`)를 붙입니다.
+   **이 시점의 `status`는 전부 `provisional`입니다** — `confirmed`는 Step B-0의 사용자 확인
+   으로만 발생합니다. 모델 추론은 이 리스트에 넣지 말고 본문에 ✎ 프로즈로 씁니다.
+   `user_statements`의 발화 전부를 payload §6에 **전문 보존**하고 `S<N>` 앵커를 답니다.
+   구조상 이 시점의 `confirmed`는 **항상 0건**이므로, frontmatter에 sentinel 한 줄
+   (`# confirmed 0건 — 사용자가 전부 잠정으로 판단`)을 **반드시** 함께 씁니다 — 템플릿이
+   `user_sourced_items:` 블록 첫 줄로 상속시키는 그 줄입니다. 이 줄이 sentinel로 인정되려면
+   **한 줄 전체**가 그 문구여야 합니다(다른 문장 안에 인용된 같은 문자열은 무효). 없으면
+   게이트가 "확인 게이트 우회 신호"로 red를 냅니다 — sentinel은 *확인을 건너뛴 brief*와
+   *사용자가 전부 잠정으로 판단한 brief*를 가르는 유일한 표식이라 생략할 수 없습니다.
+   확정 반영 시에는 B-3 「확정 반영 절차」대로 같은 write에서 이 줄을 지웁니다.
+4. **Coverage Ledger 직렬화**(게이트 *전*): state의 `coverage`를 **audit §1**에 한 줄당 한
+   차원으로 직렬화(floor 5행 + derived 또는 `- derived: N/A`). floor 전부 `closed`가 아니면
+   이 시점에 도달하면 안 됩니다(종료 driver 위반). steelman 원문은 audit §3에
+   `#### ST<N> — <한 줄 요지>` 헤딩과 함께 verbatim으로 남기고, payload §5의 `verdict:` 항목이
+   그 `ST<N>`을 참조합니다 — 양방향 일치가 게이트 대상입니다.
+5. **기계적 게이트 검증** — 직렬화 직후. payload 경로만 넘기면 게이트가 `audit_file`로
+   audit을 해석합니다:
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/scripts/check_brief.py" gate "docs/superpowers/interview/<file>"
    ```
-   exit ≠ 0 이면 **brief를 finalize하지 말고** 보고된 미충족 의례를 보완(누락 섹션/무인용
-   landscape/형식 미달 steelman/빈 Tried&Discarded/floor open 또는 evidence 공백/Blind Spots
-   부재). 통과(exit 0)할 때까지 반복.
+   exit ≠ 0 이면 **brief를 finalize하지 말고** 보고된 미충족 항목을 보완(누락 섹션·무인용
+   landscape·형식 미달 verdict 항목·`기각` 0건·floor open·bijection 불일치·**`confirmed`
+   0건 sentinel 누락**). 통과(exit 0)할 때까지 반복합니다. 마지막 항목은 이 단계에서
+   **매번** 발화할 수 있는 유일한 실패입니다 — Step A는 정의상 전부 `provisional`이므로,
+   위 3의 sentinel을 빠뜨리면 첫 게이트 실행이 항상 red입니다.
 
 ### Step B — proceed 게이트 (handoff 방식 제안)
 
@@ -362,15 +385,50 @@ Step B는 단일 책임 단위입니다: *brief가 완결되면 다음 stage(bra
 같은 두 가드(AP2 + cross-compact)를 interview 어휘로 독립 저술합니다(상세 모델:
 `skills/reviewing-spec/SKILL.md` Phase 5).
 
-#### B-1 — superpowers 가용성 분기 (AC13 보존)
+#### B-0 — 확정 후보 제시 (게이트에 흡수, AC2)
 
-- **superpowers 부재 시 (AC13)**: 현행 graceful degradation 그대로 — brief를 완료하고 **loud advisory**를 낸 뒤 **정지(STOP)**. 게이트 없음(compact 후 넘길 대상 자체가 없음). crash·spec-mode fallback **금지**(단독 완결, graceful degrade):
+Step A가 끝난 시점에 `user_sourced_items`는 **전부 `provisional`**입니다. `confirmed`로의
+전이는 아래 B-2 게이트에서 사용자가 확정-후-진행 옵션(①/②)을 고를 때만 일어납니다.
+별도 확인 의례를 만들지 않는 이유는 종료 시 사용자 상호작용이 2회가 되기 때문입니다 —
+확인을 기존 proceed 게이트에 흡수해 1회로 유지합니다.
+
+게이트를 띄우기 *전에* 확정 후보 목록을 **프로즈로** 출력합니다(목록이 길 수 있으므로
+`AskUserQuestion`은 선택지만 담당):
+
+- 각 후보를 `<id> — <statement> (source, ⟨S<N>⟩)` 한 줄로.
+- **확정 후보에서 제외한 항목도** 한 줄씩 이유와 함께 보여줍니다 — 제외 항목을 감추면
+  사용자가 누락을 잡을 수 없습니다.
+- 모델의 후보 판정은 **제안일 뿐**입니다. 어떤 항목도 이 출력만으로 `confirmed`가 되지 않습니다.
+
+**재제시 상한** (금지 패턴 *Unbounded autonomy* 가드): 최초 제시는 0회째입니다. 사용자가
+옵션 ③(확정 목록 수정)을 고를 때마다 state의 `confirm_repost_count`를 +1 하고 **2회까지**
+허용합니다. 3번째 ③ 요구 시 전 항목을 `provisional`로 강등하고 아래 **고정 문자열**을 출력한
+뒤 게이트를 재제시하지 않고 **④와 동일한 terminal 경로로 종료합니다**(handoff 안 함 —
+사용자가 ③을 골랐지 ①/②를 고른 적이 없으므로, 게이트 없이 brainstorming으로 자동 진행하는
+것은 B-4의 P17/AP2 금지 대상이다). 종료 방향인 이유는 확정이 덜 되는 쪽이 안전한 방향이기
+때문입니다:
+
+```
+[spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등
+```
+
+카운터는 프로즈 self-tracking이 아니라 state에 씁니다(PN1 Bash write contract):
+
+```bash
+ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" state-root)"
+STATE="$ROOT/<session-id>/state.local.md"
+# confirm_repost_count read-modify-write via python3 -c / heredoc
+```
+
+#### B-1 — superpowers 가용성 분기
+
+- **superpowers 부재 시**: 현행 graceful degradation 그대로 — brief를 완료하고 **loud advisory**를 낸 뒤 **정지(STOP)**. 게이트 없음(compact 후 넘길 대상 자체가 없음). crash·spec-mode fallback **금지**(단독 완결, graceful degrade):
 
   > `[spec-distill] interview brief 완결: docs/superpowers/interview/<file>. superpowers 설치 시 brainstorming 해답공간 단계로 이어집니다. 미설치 시 이 brief를 직접 다음 작업의 입력으로 사용하세요.`
 
 - **superpowers 가용 시**: B-2 proceed 게이트 제시.
 
-#### B-2 — 단일 `AskUserQuestion` proceed 게이트 (3옵션, AC20)
+#### B-2 — 단일 `AskUserQuestion` proceed 게이트 (4옵션, AC2)
 
 게이트 *이전*에 brief 경로 존재를 확인합니다(`[[ -f <brief-path> ]]` — race 방어 경량 가드,
 `AskUserQuestion` 게이트 자체는 아님). 부재 시 reviewing-spec Phase 5 Step A와 대칭으로
@@ -385,12 +443,13 @@ brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안�
 ```javascript
 AskUserQuestion({
   questions: [{
-    question: "interview brief 완결: <brief-path> (5 통과 의례 통과). 다음 단계?",
+    question: "interview brief 완결: <brief-path> (구조 게이트 통과). 확정 후보는 위 목록대로. 다음 단계?",
     header: "Proceed",
     options: [
-      {label: "/compact 후 brainstorming (권장)", description: "verbatim /compact 노출 → 사용자 실행 시 brainstorming. 긴 인터뷰 context(round 대화·web sweep·steelman 중간산출) 정리 이점. brief 보존."},
-      {label: "바로 brainstorming", description: "즉시 Skill superpowers:brainstorming <brief-path> 호출 (compact 없이, 전체 context 유지)."},
-      {label: "brief만 종료", description: "brief는 단독 완결 terminal (NG7). handoff 안 함, 종료."}
+      {label: "확정하고 /compact 후 brainstorming (권장)", description: "확정 후보를 status: confirmed로 반영 → 재저장 → 게이트 재실행 → verbatim /compact 노출. 긴 인터뷰 context 정리 이점."},
+      {label: "확정하고 바로 brainstorming", description: "확정 반영 후 즉시 Skill superpowers:brainstorming <brief-path> 호출 (compact 없이, 전체 context 유지)."},
+      {label: "확정 목록 수정", description: "확정 후보를 고쳐 다시 제시 (상한 2회). 확정 전이 없음."},
+      {label: "brief만 종료", description: "brief는 단독 완결 terminal (NG7). 전 항목 provisional 유지, handoff 안 함."}
     ],
     multiSelect: false
   }]
@@ -399,33 +458,52 @@ AskUserQuestion({
 
 #### B-3 — 응답 처리
 
-- **① /compact 후 brainstorming**: 아래 verbatim `/compact` 명령을 *그대로 보이게* 노출
-  (`<brief-path>`는 실제 brief 경로로 치환) + "compact 후 brainstorming 진입 준비됨" 안내:
+**규약의 거처 (C5).** `superpowers:brainstorming`은 spec-distill을 모르고 brief frontmatter를
+읽지 않습니다 — 전달은 순수 프로즈 경로입니다. 그래서 C4 재결정 프로토콜은 brief 파일이
+아니라 **orchestrator의 호출 프롬프트**에 싣습니다. brief는 순수 데이터(`source`/`status`/
+`evidence`)만 나릅니다. 아래 ①과 ② **양쪽 모두** 같은 문장을 싣습니다.
 
-  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 Reframe, Landscape, Locked Directions, Open Questions)과 경로 참조 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. 다음 단계: Skill superpowers:brainstorming <brief-path>.`
+**확정 반영 절차 (①/② 공통).** `provisional` → `confirmed` 전이와 함께, Step A가 confirmed
+0건일 때 넣었던 sentinel 한 줄(`# confirmed 0건 — 사용자가 전부 잠정으로 판단`)이 남아 있으면
+**같은 write에서 삭제**합니다. `check_brief.py`는 이 잔존을 잡지 못합니다 — confirmed가 한 건이라도
+있으면 sentinel *요구*가 해제될 뿐 잔존을 거부하지는 않아, 지우지 않으면 confirmed 항목 옆에
+"전부 잠정"이라 적힌 자기모순 brief가 그대로 나갑니다. 삭제까지 마친 뒤 재저장 → 게이트 재실행.
+
+- **① 확정하고 /compact 후 brainstorming**: 확정 후보를 `status: confirmed`로 반영 →
+  brief 재저장 → `check_brief.py gate` 재실행(통과 확인) → 아래 verbatim `/compact` 명령을
+  *그대로 보이게* 노출 + "compact 후 brainstorming 진입 준비됨" 안내:
+
+  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 §0 한눈에, §2 제약, §3 Open Questions, §6 사용자 원문), audit 파일 경로 참조, **그리고 아래 '재결정 규약' 문장**을 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. 재결정 규약: confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 다음 단계: Skill superpowers:brainstorming <brief-path>.`
 
   → **여기서 턴 종료(STOP). 같은 턴에서 `brainstorming`을 호출하지 말 것**(compact 전
   brainstorming 진입 = 옵션 ① 무력화). `Skill superpowers:brainstorming <brief-path>` 진입은
   사용자가 `/compact`를 *실제 실행한 다음 턴*에 **사용자 트리거**(예: `/compact write design`처럼
   compact 뒤에 붙인 진행 인자, 또는 명시적 진행 요청)로만 일어난다 — 모델은 다음 턴에 자동
-  진입하지 *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17). compact된 fresh
-  context에서 brainstorming이 brief를 다시 읽어 해답공간을 설계한다.
+  진입하지 *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17).
 
-- **② 바로 brainstorming**: 즉시 `Skill superpowers:brainstorming <brief-path>` 호출(rich
-  context 유지 — 현행 동작과 동일). 이것은 아래 cross-compact 정지 요건의 *명시적 예외*다.
+- **② 확정하고 바로 brainstorming**: 확정 반영 → 재저장 → 게이트 재실행 → 즉시
+  `Skill superpowers:brainstorming <brief-path>` 호출하되, **호출 프롬프트에 C4 문장을 함께
+  싣는다**:
 
-- **③ brief만 종료**: brief terminal advisory(B-1 부재 advisory와 동일 톤) 출력 후 종료.
-  handoff 안 함. state는 SessionEnd hook이 cleanup(별도 cleanup 호출 없음).
+  > `confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.`
+
+  이것은 아래 cross-compact 정지 요건의 *명시적 예외*다.
+
+- **③ 확정 목록 수정**: 확정 전이 없음. `confirm_repost_count` +1 후 B-0으로 돌아가 수정된
+  목록을 재제시(상한 2회 — 초과 시 B-0의 강등 경로).
+
+- **④ brief만 종료**: 전 항목 `provisional` 유지. brief terminal advisory(B-1 부재 advisory와
+  같은 톤) 출력 후 종료. handoff 안 함. state는 SessionEnd hook이 cleanup.
 
 #### B-4 — 두 가드 (load-bearing)
 
 - **AP2 polite-stop 금지**: ①/② 선택 후 "brief 완결!"만 narrate하고 게이트 제시/Skill 호출을
   skip하는 것은 **polite stop** — 금지. Step B를 *종료*하는 모든 경로는 (a) 위 proceed 게이트를
-  거치거나(①/②/③), (b) 게이트를 거치지 않는 예외(superpowers 부재)는 명시적 advisory 단락을
+  거치거나(①/②/③/④), (b) 게이트를 거치지 않는 예외(superpowers 부재)는 명시적 advisory 단락을
   동반해야 한다 — 게이트-less **silent 종료 금지**. (게이트는 사용자가 redirect 가능한 approval
   gate이므로 P17 주권에 기여, polite-stop 아님 — 철학 §AP2.)
 
-- **cross-compact 조기진행 금지 (AC21, AC19 대칭)**: 옵션 ① 선택 시 `/compact`를 노출한 *직후*
+- **cross-compact 조기진행 금지 (reviewing-spec AC19 대칭)**: 옵션 ① 선택 시 `/compact`를 노출한 *직후*
   같은 턴에서 `brainstorming`으로 직진하는 것은 금지. compact가 무거운 작업 *뒤에* 오면 context
   위생 이점이 사라져 옵션 ①이 무의미해진다(reviewing-spec AC19에서 실측된 실패 패턴의 대칭).
   **다음 턴** 진입은 *사용자 트리거*(B-3 ①의 정규 문구: compact 뒤에 붙인 진행 인자 예 `/compact
@@ -436,7 +514,7 @@ AskUserQuestion({
 
 이 stage는 brief까지로 종료됩니다. handoff를 *강제하지 않습니다*(NG7).
 
-## In-flight state migration (AC5)
+## In-flight state migration
 
 state.local.md 로드 시 **구세션 스키마**(`interview_round` 존재 / `coverage` 부재)를 감지하면
 *non-mutating read*로 fresh 초기화(승격):
@@ -448,9 +526,12 @@ state.local.md 로드 시 **구세션 스키마**(`interview_round` 존재 / `co
 - `probe_cap_override`: `0`.
 - `orchestration`: `{focused_dimension: null, no_progress_streak: 0, blind_spot_dispatched: false, coverage_mapper_last_probe: null}`.
 
-기존 필드(`non_user_streak`·`web_*`·`issue_history`·`pending_locked_decisions` 등)는 유지.
+기존 필드(`non_user_streak`·`web_*`·`issue_history` 등)는 유지. 구세션의 라운드별 잠금
+레코드 리스트(v0.22.0까지의 잠금 필드)는 승계하지 않고 `user_statements: []`로 fresh
+seed합니다 — 잠금 레코드를 발화 레코드로 승격하면 판정이 없던 척하는 잠금이 그대로
+넘어옵니다.
 
-**영속화 시점**: 승격된 스키마는 재개된 세션의 첫 액션으로, 첫 probe나 `probe_budget.py increment`/`raise-cap` 호출보다 먼저 Bash 전체-frontmatter write로 즉시 디스크에 반영한다(PN1 state write contract). 이 즉시 write가 AC5의 "다음 명시적 state write"다 — 연기가 아니라 resume 직후 1회.
+**영속화 시점**: 승격된 스키마는 재개된 세션의 첫 액션으로, 첫 probe나 `probe_budget.py increment`/`raise-cap` 호출보다 먼저 Bash 전체-frontmatter write로 즉시 디스크에 반영한다(PN1 state write contract). 이 write는 "다음 명시적 state write"를 기다리지 않는다 — 연기가 아니라 resume 직후 1회다.
 
 근거: `increment`/`raise-cap`은 카운터 라인이 부재하면 fail-closed(exit 1, silent-create
 금지)이므로, 이 write 없이는 `probe_count`가 디스크에 없는 채로 첫 probe가 발생해 백스톱이
@@ -458,7 +539,7 @@ state.local.md 로드 시 **구세션 스키마**(`interview_round` 존재 / `co
 
 이 write는 신규 필드(coverage/probe_count/probe_cap_override/orchestration)만 추가하는
 forward promotion이며 backward-rewrite가 아니다 — `interview_round`는 이 write에서 자연
-소멸하되 다른 기존 필드는 고치지 않는다. AC5의 backward-rewrite 금지·P14 실패-상태 보존과
+소멸하되 다른 기존 필드는 고치지 않는다. backward-rewrite 금지·P14 실패-상태 보존과
 무충돌: 이것은 성공적 resume의 promotion write이지 실패-상태 mutation이 아니다.
 
 사용자에게 advisory 한 줄 출력:
@@ -473,4 +554,4 @@ forward promotion이며 backward-rewrite가 아니다 — `interview_round`는 �
 
 - `DEVBREW_DISABLE_SPEC_DISTILL=1`: 즉시 abort, state.local.md 보존 (실패 분석용).
 - `DEVBREW_RHYTHM_GUARD_THRESHOLD=N`: rhythm guard threshold override.
-- `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`: web landscape(R2) 비활성 — loud advisory 후 codebase 근거만 사용 (AC8).
+- `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`: web landscape(R2) 비활성 — loud advisory 후 codebase 근거만 사용.
