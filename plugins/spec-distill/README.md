@@ -6,9 +6,10 @@
 
 `/interview <rough request>` 호출 시 4-block Korean Socratic 인터뷰가 **강한 문제공간 stage**로
 동작합니다: 요청을 재구성(메타프롬프팅)하고, 외부 사례를 웹으로 조사하고(bounded), 약한 방향을
-steelman으로 깨뜨려, **interview brief**(brainstorming용 meta-prompt, 7-section 포맷은
-`templates/interview-brief-template.md`)를
-`docs/superpowers/interview/YYYY-MM-DD-<topic>-interview.md`에 산출합니다. 5 통과 의례(R1–R5)가
+steelman으로 깨뜨려, **interview brief**(brainstorming용 meta-prompt)를 **2파일 쌍**으로
+산출합니다 — payload `docs/superpowers/interview/YYYY-MM-DD-<topic>-interview.md`(8섹션 역피라미드,
+`templates/interview-brief-template.md`) + audit `…-interview.audit.md`(5섹션 텔레메트리,
+`templates/interview-audit-template.md`). audit 이름은 payload 파일명에서 유도됩니다. 5 통과 의례(R1–R5)가
 Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpowers가 있으면 brainstorming
 해답공간으로(optional), design doc은 물리 분리된 reviewer가 Law 2로 검증합니다.
 

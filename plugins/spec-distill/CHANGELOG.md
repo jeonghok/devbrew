@@ -17,11 +17,15 @@
   인터뷰의 audit**을 가리켜 그 §1 Coverage Ledger(Law 1 종료 판정의 근거)를 상속할 수 있었다 —
   끝나지 않은 인터뷰가 `audit_file` 한 줄만 바꿔 exit 1에서 exit 0이 됐다. 결합은 파일명이 아닌
   `session_id` 동등성 + audit `type`으로 건다.
-  **알려진 한계 — 세션 경계까지만 막는다.** `SKILL`이 payload에 기존 spec-distill 세션 id
-  재사용을 규정하므로 한 세션에서 진행한 두 인터뷰는 payload·audit이 전부 같은 id를 갖는다.
-  즉 이 검사는 *교차 세션* 차용만 막고 *동일 세션* 차용은 막지 못한다(실측: floor가 열린
-  payload의 `audit_file:` 한 줄을 완료된 audit으로 바꾸면 여전히 exit 0). interview-level
-  결합은 payload마다 고유 audit이 필요해 후속 결정 사항으로 남긴다.
+  1차 방어는 **이름 유도**다 — `audit_file`은 `<payload stem>.audit.md`여야 한다. 신뢰하지 않는
+  값을 검증하는 대신 아예 받지 않는 쪽이다: payload가 자기 audit을 고를 수 있는 한, 세션 id
+  동등성만으로는 부족했다(`SKILL`이 세션 id 재사용을 규정해 한 세션의 두 인터뷰가 같은 id를
+  가지므로 *동일 세션* 차용이 그대로 통과했다 — 실측 exit 0). `session_id`/`type` 검사는 파일
+  이동·개명에 대한 2차 방어로 남는다.
+- **web 킬 스위치 완화를 advisory로 알린다** — `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`은 §4 인용
+  요구와 §5 verdict URL 요구를 동시에 완화해 같은 brief를 red에서 green으로 바꾸는데 지금까지
+  아무 흔적도 남기지 않았다(이전 세션의 export가 남아 있으면 이후 모든 brief가 이유 없이 통과).
+  CLAUDE.md의 loud-degradation 요구.
   부재도, **중복 키도** 불일치와 동일하게 red — 못 읽은 값을 일치로 간주하거나 모호한 입력에서
   값을 하나 골라주면 이 검사 자체가 fail-open이 된다(첫 매치만 쓰면 남의 audit 맨 앞에 맞는
   `session_id` 한 줄을 얹어 바인딩을 우회할 수 있다). frontmatter 키-값 구분자는 `\s*`가 아니라

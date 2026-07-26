@@ -33,7 +33,8 @@ python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" >/dev/null 2>&1 \
 for hdr in "0. 한눈에" "1. Goal · Non-goal" "2. 제약" "3. Open Questions" \
            "4. External Landscape" "5. 기각 · Blind Spots" "6. 사용자 원문" "7. Next Action"; do
   cp "$FX/interview-brief-valid.md" "$TMPD/p.md"
-  cp "$FX/interview-brief-valid.audit.md" "$TMPD/interview-brief-valid.audit.md"
+  cp "$FX/interview-brief-valid.audit.md" "$TMPD/p.audit.md"
+  sed -i.bak 's|^audit_file:.*|audit_file: p.audit.md|' "$TMPD/p.md"; rm -f "$TMPD/p.md.bak"
   # 헤더 줄만 지운다 — 섹션 본문은 남겨 "헤더 존재 검사"가 실제로 이빨을 갖는지 본다.
   python3 - "$TMPD/p.md" "$hdr" <<'PY'
 import sys, pathlib
@@ -66,8 +67,9 @@ done
 # T2: audit 5섹션을 각각 제거 → red ×5
 for hdr in "1. Coverage Ledger" "2. Budget" "3. Steelman 원문" "4. 게이트 실행 기록" "5. 프로세스 로그"; do
   cp "$FX/interview-brief-valid.md" "$TMPD/p.md"
-  cp "$FX/interview-brief-valid.audit.md" "$TMPD/interview-brief-valid.audit.md"
-  python3 - "$TMPD/interview-brief-valid.audit.md" "$hdr" <<'PY'
+  cp "$FX/interview-brief-valid.audit.md" "$TMPD/p.audit.md"
+  sed -i.bak 's|^audit_file:.*|audit_file: p.audit.md|' "$TMPD/p.md"; rm -f "$TMPD/p.md.bak"
+  python3 - "$TMPD/p.audit.md" "$hdr" <<'PY'
 import sys, pathlib
 p, hdr = pathlib.Path(sys.argv[1]), sys.argv[2]
 lines = p.read_text(encoding="utf-8").splitlines(True)
@@ -81,12 +83,13 @@ PY
 done
 
 # T7: audit_file 부재 / 파일 부재 → red ×2 (AC9 fail-closed)
-cp "$FX/interview-brief-valid.audit.md" "$TMPD/interview-brief-valid.audit.md"
 for variant in absent missing; do
   cp "$FX/interview-brief-valid.md" "$TMPD/p.md"
+  rm -f "$TMPD/p.audit.md"
   case "$variant" in
     absent)  sed -i.bak '/^audit_file:/d' "$TMPD/p.md" ;;
-    missing) sed -i.bak 's|^audit_file:.*|audit_file: __no_such_audit__.md|' "$TMPD/p.md" ;;
+    # 유도 이름 그대로지만 파일이 없다 — not-found 분기를 계속 시험한다.
+    missing) sed -i.bak 's|^audit_file:.*|audit_file: p.audit.md|' "$TMPD/p.md" ;;
   esac
   rm -f "$TMPD/p.md.bak"
   python3 "$SCRIPT" gate "$TMPD/p.md" >/dev/null 2>&1 \
@@ -211,11 +214,14 @@ python3 "$SCRIPT" gate "$FX/interview-brief-audit-file-comment.md" >/dev/null 2>
   || note FAIL "audit_file 인라인 주석이 파싱을 깨서는 안 된다"
 
 # F5 대칭: coverage 서브커맨드도 audit을 못 읽으면(디렉토리 등) traceback 없이 구조화 JSON + exit 1.
-cp "$FX/interview-brief-valid.md" "$TMPD/p.md"
+# payload를 not-a-file.md로 두어야 유도 이름이 not-a-file.audit.md가 되고, 그 자리에 놓인
+# **디렉토리**가 unreadable 분기를 시험한다 — 다른 이름이면 유도 검사에서 먼저 걸려
+# 정작 시험하려는 분기에 도달하지 못한다.
+cp "$FX/interview-brief-valid.md" "$TMPD/not-a-file.md"
 mkdir -p "$TMPD/not-a-file.audit.md"
-sed -i.bak 's|^audit_file:.*|audit_file: not-a-file.audit.md|' "$TMPD/p.md"
-rm -f "$TMPD/p.md.bak"
-out="$(python3 "$SCRIPT" coverage "$TMPD/p.md" 2>/dev/null)"; rc=$?
+sed -i.bak 's|^audit_file:.*|audit_file: not-a-file.audit.md|' "$TMPD/not-a-file.md"
+rm -f "$TMPD/not-a-file.md.bak"
+out="$(python3 "$SCRIPT" coverage "$TMPD/not-a-file.md" 2>/dev/null)"; rc=$?
 { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '"failures"'; } \
   && note PASS "coverage: 읽을 수 없는 audit(디렉토리) → 구조화 JSON + exit 1" \
   || note FAIL "coverage: 읽을 수 없는 audit도 구조화 JSON이어야 한다"
@@ -228,7 +234,7 @@ printf '%s' "$out" | grep -qi 'Traceback' \
 # skip되고 {"pass": true}가 찍힌다 — check_brief.py 헤더가 "조용히 payload-only 검사로 degrade하지
 # 않는다"고 주장하는 바로 그 fail-open이다. exit code만 보는 assertion으로는 못 잡으므로
 # (a) 메시지가 'audit unreadable'을 담을 것 + (b) 하류 검사가 실제로 skip됐다는 negative를 함께 건다.
-out="$(python3 "$SCRIPT" gate "$TMPD/p.md" 2>/dev/null)"; rc=$?
+out="$(python3 "$SCRIPT" gate "$TMPD/not-a-file.md" 2>/dev/null)"; rc=$?
 { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'audit unreadable' \
     && ! printf '%s' "$out" | grep -q 'coverage ledger'; } \
   && note PASS "F8: gate도 읽을 수 없는 audit에 fail-closed ('audit unreadable' + 하류 skip)" \
@@ -324,6 +330,28 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-dup-auditfile.md" 2>/dev/null
     && ! printf '%s' "$out" | grep -q 'audit_file key absent'; } \
   && note PASS "R8: audit_file 중복 → 중복으로 거부(부재로 오보고 안 함)" \
   || note FAIL "R8: audit_file 중복이 거부되지 않거나 부재로 오보고됐다"
+
+# R9: audit 이름은 payload 파일명에서 **유도**된다 — payload가 자기 audit을 고를 수 없다.
+# session_id 동등성만으로는 부족했다: SKILL이 세션 id 재사용을 규정해 한 세션의 두 인터뷰가
+# 같은 id를 가지므로, 동일-세션 차용은 그대로 통과했다(실측: floor가 열린 payload의 audit_file
+# 한 줄을 완료된 audit으로 바꾸면 exit 0). fixture는 valid와 **한 줄만** 다르고 가리키는 audit은
+# 실재·유효·같은 세션이라, 유도 규칙 말고는 red가 될 이유가 없다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-borrowed-audit.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q "is not this payload's sidecar"; } \
+  && note PASS "R9: 남의 audit 채택 → red (이름 유도, 같은 세션이어도)" \
+  || note FAIL "R9: 같은 세션의 남의 audit을 채택해 Coverage Ledger를 상속했다"
+
+# R10: web 킬 스위치가 verdict를 뒤집으면 **말해야** 한다 (CLAUDE.md loud-degradation).
+# 같은 brief가 web ON에서 red, OFF에서 green이 되는데 stdout·stderr 어디에도 흔적이 없었다 —
+# 이전 세션의 export가 셸에 남아 있으면 이후 모든 brief가 이유 없이 통과한다. 두 방향을 다
+# 확인해야 이빨이 있다: 켜져 있을 때 나오고, **꺼져 있을 때는 안 나온다**(negative half —
+# 없으면 advisory를 무조건 붙이는 구현도 통과한다).
+out_off="$(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-no-landscape.md" 2>/dev/null)"
+out_on="$(python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" 2>/dev/null)"
+{ printf '%s' "$out_off" | grep -q 'web 비활성' \
+    && ! printf '%s' "$out_on" | grep -q 'web 비활성'; } \
+  && note PASS "R10: web 킬 스위치가 verdict를 완화하면 advisory로 알린다 (양방향)" \
+  || note FAIL "R10: web 킬 스위치 완화가 조용하거나, 꺼져 있을 때도 advisory가 나온다"
 
 # --- Task 2: user_sourced_items 스키마 + bijection C + confirmed sentinel ---
 

@@ -209,12 +209,30 @@ def resolve_audit(payload: Path, fm: str):
 
     값 읽기는 `frontmatter_value`에 위임한다 — `audit_file`은 **다른 모든 audit-측 검사가
     무엇을 검증할지 고르는** 키라, 중복·빈 값·개행 포획 규칙에서 제외될 이유가 가장 없다.
+
+    이름은 **payload 파일명에서 유도**된다 (`<payload stem>.audit.md`). 신뢰하지 않는 값을
+    *검증*하는 대신 아예 *받지 않는* 것이다 — audit §1 Coverage Ledger가 Law 1 종료 판정의
+    근거이므로, payload가 어떤 audit을 자기 것이라 부를지 스스로 고르게 두면 끝나지 않은
+    인터뷰가 남의 완료된 원장을 상속한다(실행 실증: `audit_file:` 한 줄 편집으로 exit 1 → 0).
+    `session_id` 동등성 검사만으로는 부족했다 — SKILL이 세션 id 재사용을 규정해 한 세션의 두
+    인터뷰가 같은 id를 갖기 때문이다. 유도는 그 구멍까지 닫는다: 한 payload가 가리킬 수 있는
+    audit은 정의상 하나뿐이다. `session_id`/`type` 검사는 그대로 남는다 — 파일이 옮겨지거나
+    이름이 바뀌는 경우의 2차 방어다.
+
+    검사 순서는 basename → 유도 → 존재다. traversal은 유도 실패로 뭉개지 말고 자기 메시지로
+    거절해야 원인과 증상이 어긋나지 않는다.
     """
     name, err = frontmatter_value("audit_file", fm)
     if err:
         return None, err
     if Path(name).name != name:
         return None, f"audit_file {name!r} is not a basename (traversal rejected)"
+    expected = payload.stem + ".audit.md"
+    if name != expected:
+        return None, (
+            f"audit_file {name!r} is not this payload's sidecar (expected {expected!r} — "
+            "다른 인터뷰의 audit 채택 금지)"
+        )
     p = payload.parent / name
     if not p.exists():
         return None, f"audit file not found: {name}"
@@ -771,6 +789,16 @@ def gate(path: Path) -> int:
     ok = not failures
     metric = payload_body_lines_excl_verbatim(text)
     advisories: list[str] = []
+    # 킬 스위치가 verdict를 뒤집었으면 **반드시** 말한다. `_web_disabled()`는 §4 인용 요구와 §5
+    # verdict URL 요구를 동시에 완화해 같은 brief를 red에서 green으로 바꾸는데, 지금까지 stdout·
+    # stderr 어디에도 흔적이 없었다 — 이전 세션에서 export한 env가 남아 있으면 이후 모든 brief가
+    # 이유 없이 통과한다. CLAUDE.md는 graceful degradation에 loud logging을 요구한다. 이 PR이
+    # 추가한 advisories 채널이 바로 그 자리다.
+    if _web_disabled():
+        advisories.append(
+            "[spec-distill] web 비활성(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1) — "
+            "§4 출처 URL 인용 요구 + §5 verdict URL 요구가 완화됨 (degraded)"
+        )
     if metric > LINE_TRIPWIRE:
         advisories.append(
             f"[spec-distill] payload 본문 {metric}줄(§6 제외) — 예산 137 / 트립와이어 "

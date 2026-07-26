@@ -35,7 +35,16 @@ has 'docs/superpowers/interview/' "brief written under docs/superpowers/intervie
 has 'interview-brief-template' "uses brief template"
 
 has 'optional|선택' "brainstorming invoke is optional"
-has 'superpowers.*(부재|없).*advisory|advisory.*superpowers' "AC13: superpowers-absent loud advisory"
+# AC13: superpowers 부재 시 graceful degradation (CLAUDE.md 필수 항목).
+# 전-파일 grep은 이빨이 0이었다 — 이 패턴은 B-1 본문(:425)과 B-4 가드 산문(:502) **두 줄**에
+# 매치돼서, B-1 블록을 통째로 지워도 B-4 줄이 남아 green이었다(header-satisfiable). 그래서
+# B-0/B-2/B-3에 이미 쓰는 awk 윈도우 방식으로 **그 블록 안에서만** 찾고, 헤더가 아니라
+# 본문에만 있는 문구(`crash·spec-mode fallback`)를 함께 요구한다.
+b1_block="$(awk '/^#### B-1/{f=1;print;next} /^#### /{f=0} f' "$SKILL")"
+{ printf '%s' "$b1_block" | grep -qE 'superpowers.*(부재|없).*advisory|advisory.*superpowers' \
+    && printf '%s' "$b1_block" | grep -qF 'crash·spec-mode fallback'; } \
+  && note PASS "AC13: superpowers-absent loud advisory (B-1 블록 스코프)" \
+  || note FAIL "AC13: B-1 블록 안에 graceful-degradation 지시가 없다"
 
 # --- v0.23.0: 확정 확인을 흡수한 단일 proceed 게이트 (AC2/AC3) ---
 # 이 게이트를 전-파일 grep으로 잠그면 이빨이 0이다. 'AskUserQuestion'은 probe 백스톱 C1

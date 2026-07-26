@@ -62,6 +62,14 @@ grep -qE 'payload.*audit|2파일|두 파일' <<<"$pi_block" \
 grep -q 'user_sourced_items' <<<"$pi_block" \
   && note PASS "AC14/4: user_sourced_items 계약 명시" || note FAIL "AC14/4: user_sourced_items 계약이 없다"
 
+# v0.23.0: README 서두가 산출물을 **2파일 쌍**으로 설명해야 한다. 이 문장은 오랫동안 "7-section
+# 단일 파일"이라 적혀 있었고(옛 포맷), 어떤 assertion도 그걸 잡지 않았다 — AC14 블록만 잠겨 있어
+# 서두는 무검증이었다. 사용자가 README "What it does"를 따라 쓰면 게이트가 거부하는 포맷이 나온다.
+{ grep -qF '2파일 쌍' "$README" && grep -qF '.audit.md' "$README" \
+    && grep -qF '8섹션' "$README"; } \
+  && note PASS "v0.23.0: README 서두가 payload+audit 2파일 쌍을 설명" \
+  || note FAIL "README 서두가 산출물을 2파일 쌍으로 설명하지 않는다"
+
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]

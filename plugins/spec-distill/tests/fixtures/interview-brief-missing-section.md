@@ -5,7 +5,7 @@ created_at: 2026-07-26
 session_id: testsession01
 source: spec-distill conducting-interview v0.23.0
 next_phase: superpowers:brainstorming
-audit_file: interview-brief-valid.audit.md
+audit_file: interview-brief-missing-section.audit.md
 user_sourced_items:
   - id: C1
     source: verbatim
