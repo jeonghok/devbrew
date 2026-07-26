@@ -288,6 +288,42 @@ python3 "$SCRIPT" gate "$FX/interview-brief-confirmed-zero-sentinel.md" >/dev/nu
   && note PASS "T14: confirmed 0건 + sentinel → green" \
   || note FAIL "T14: sentinel이 있으면 통과해야 한다"
 
+# T14/anchoring — sentinel은 **한 줄 전체**여야 한다. substring 검사였을 때, 템플릿이
+# 사용법을 설명하려고 인쇄하는 주석(`#   # confirmed 0건 — …`)이 그 검사를 만족시켜
+# **템플릿대로 만든 brief가 AC12를 통째로 우회**했다(리뷰가 재현). 픽스처는 그 주석 블록을
+# 축자로 담는다 — 템플릿이 나중에 그 문구를 다시 인쇄해도 이 락이 먼저 시끄러워진다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-template-comment-zero.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'sentinel 없음'; } \
+  && note PASS "T14/anchoring: 템플릿 안내 주석은 sentinel을 만족시키지 못한다 → red" \
+  || note FAIL "T14/anchoring: 템플릿 안내 주석이 AC12를 우회했다 (substring 회귀)"
+# 같은 앵커링이 **인용값 안에 숨은** 문자열도 거절한다. 그리고 이 픽스처는 statement 값 안에
+# ` #`를 담으므로 인라인-주석 제거의 **따옴표 보호**도 함께 잠근다 — 보호가 없으면 값이
+# `게이트는`으로 잘려 bijection B statement drift가 *추가로* 발화한다(부정 assert가 그걸 본다).
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-sentinel-in-statement.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'sentinel 없음' \
+    && ! printf '%s' "$out" | grep -q 'bijection B'; } \
+  && note PASS "T14/anchoring: statement 값 안의 sentinel 문자열은 무효 + 인용값 `#` 보존" \
+  || note FAIL "T14/anchoring: 인용값 안 sentinel이 인정됐거나 인용값 `#`가 잘렸다"
+# 템플릿은 sentinel을 "이 블록 안에" 쓰라고 지시한다 — 들여쓰지 않은 주석 줄이 블록을
+# 끊어 항목이 전부 증발하면 게이트가 "in body §2 but not in frontmatter"라는 원인과
+# 어긋난 말을 한다. 파서가 주석 줄을 건너뛰므로 블록 안 선언이 정상 동작해야 한다.
+python3 "$SCRIPT" gate "$FX/interview-brief-sentinel-in-block.md" >/dev/null 2>&1 \
+  && note PASS "T14/anchoring: items 블록 *안*의 sentinel → green (주석 줄이 파싱을 안 끊음)" \
+  || note FAIL "T14/anchoring: 블록 안 sentinel이 항목 파싱을 끊었다"
+
+# T-TPL: shipping되는 템플릿 쌍은 자기 게이트를 통과해야 한다.
+# 게이트가 첫 인터뷰마다 거짓 오류 벽을 내던 실제 결함이 여기서 났다 — `audit_file`은
+# 인라인 주석을 떼는데 항목 필드는 안 떼서, 같은 frontmatter를 두 규칙이 반대로 읽었다.
+# 템플릿을 픽스처로 복제하지 않고 **shipping 파일 자체**를 복사해 돌린다(복제본은 drift한다).
+cp "$REPO_ROOT/plugins/spec-distill/templates/interview-brief-template.md" "$TMPD/tpl.md"
+cp "$REPO_ROOT/plugins/spec-distill/templates/interview-audit-template.md" "$TMPD/tpl.audit.md"
+sed -i.bak 's|^audit_file:.*|audit_file: tpl.audit.md|' "$TMPD/tpl.md"
+rm -f "$TMPD/tpl.md.bak"
+out="$(python3 "$SCRIPT" gate "$TMPD/tpl.md" 2>/dev/null)"; rc=$?
+[[ $rc -eq 0 ]] \
+  && note PASS "T-TPL: shipping 템플릿 쌍(payload+audit)이 자기 게이트를 통과" \
+  || { note FAIL "T-TPL: shipping 템플릿 쌍이 자기 게이트에 걸린다"; printf '    %s\n' "$out"; }
+
 # --- Task 3: bijection B (body §2 ↔ frontmatter) ---
 
 # T8: 한쪽에만 있는 id → red ×2 (양방향)

@@ -9,14 +9,21 @@ audit_file: <YYYY-MM-DD>-<kebab-topic>-interview.audit.md   # basename만 (같�
 # user_sourced_items — **사용자 출처 항목만**. `source: inferred`는 여기 들어갈 수 없다(게이트 fail).
 # 모델 추론은 본문 프로즈에 ✎ 표기로만 산다.
 # status는 인터뷰 종료 직전 사용자 일괄 확인으로만 confirmed가 된다 — 라운드 중에는 전부 provisional.
-# confirmed 0건이면 다음 sentinel 한 줄을 이 블록 안에 명시한다:
-#   # confirmed 0건 — 사용자가 전부 잠정으로 판단
+# 그래서 brief를 처음 쓰는 시점(Step A)에는 confirmed가 0건이고, 아래 블록 첫 줄의 sentinel이
+# 반드시 있어야 게이트를 통과한다. 확정 반영(proceed 게이트 ①/②) 시 그 줄을 같은 write에서 지운다.
+# 각 항목의 값 뒤 `# ...`는 YAML 인라인 주석이며 게이트가 값에서 떼어낸다(값의 일부가 아니다).
 user_sourced_items:
+# confirmed 0건 — 사용자가 전부 잠정으로 판단
   - id: C1
     source: verbatim          # verbatim(발화 그대로) | chosen(선택지 선택)
     status: provisional       # confirmed | provisional | open
-    statement: "<160자 이내 — 모델이 쓴 제약 한 줄. P21 secret placeholder 치환>"
+    statement: "<C1 제약 한 줄>"   # 160자 이내(hard) — 모델이 쓴 요약. P21 secret placeholder 치환
     evidence: S1              # §6의 어느 발화에서 나왔는가 — 필수
+  - id: D2
+    source: chosen
+    status: provisional
+    statement: "<D2 제약 한 줄>"
+    evidence: S2
 ---
 
 # <Topic> — Interview Brief
@@ -38,10 +45,12 @@ user_sourced_items:
 
 ## 2. 제약
 
-(≤30줄. 이 절의 진술은 모델이 쓴 요약이다. 원문은 §6, `⟨S<N>⟩`가 그것을 가리킨다.)
+(≤30줄. 이 절의 진술은 모델이 쓴 요약이다. 원문은 §6, `⟨S<N>⟩`가 그것을 가리킨다.
+ 한 줄이 frontmatter 한 항목의 렌더다 — id·기호↔`source`·`status`·`⟨S<N>⟩`·statement 문구가
+ **전부** 일치해야 한다(bijection B). 한쪽만 고치면 게이트가 red를 낸다.)
 
-- 🗣 confirmed **C1** — <statement> ⟨S1⟩
-- ☑ provisional **D2** — <statement> ⟨S2⟩
+- 🗣 provisional **C1** — <C1 제약 한 줄> ⟨S1⟩
+- ☑ provisional **D2** — <D2 제약 한 줄> ⟨S2⟩
 
 ✎ (모델 추론은 이 프로즈 형식으로만. frontmatter 계약 밖이라 게이트 대상이 아니다.)
 

@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""spec-distill — interview brief structural gate (AC2/AC4/AC5, V2/V3/V6, PN4).
+"""spec-distill — interview brief structural gate.
+
+집행하는 AC (2026-07-25-spec-distill-brief-format-producer-design.md §6):
+AC4/AC5/AC6/AC7/AC9/AC10/AC11/AC12/AC15. 이 파일의 AC 번호는 **그 spec의 §6 표**를
+가리킨다 — 옛 spec의 번호를 물려 쓰면 같은 숫자가 다른 뜻을 가리켜 traceability가 거짓이
+된다(design doc Rejected Alternatives의 "AC↔T/V 편도 참조" 클래스). 이 spec에 대응 AC가
+없는 검사(§4 인용 요구, `type`/`next_phase` 규약 등)는 AC 번호를 붙이지 않는다.
 
 The Law 1 termination gate for the conducting-interview problem-space stage,
 made mechanical. conducting-interview runs `check_brief.py gate <payload>` before
@@ -16,15 +22,15 @@ structural self-check (Law 1), analogous to parse_spec_structure.py for specs.
 PN4: the steelman "verbatim" guarantee is checked by substring containment — each
 §5 기각 `verdict:` entry must contain >=1 URL + a >=10-char statement + a valid
 verdict — NOT exact-string match (avoids flakiness). Whether the steelman is a
-genuine counter-argument is V10 manual.
+genuine counter-argument is not machine-checked at all (모델 + 독립 adversary의 몫).
 
 CLI subcommands (all print JSON):
-  check_brief.py sections <payload>            → {"missing": [...]}        (AC2)
-  check_brief.py landscape-citations <payload> → {"uncited": [...]}        (AC4/V6)
-  check_brief.py skepticism <payload>          → {"malformed": [...]}      (AC5/V3)
-  check_brief.py tried-discarded <payload>     → {"ok": bool}              (V2/R4, §5 기각)
-  check_brief.py coverage <payload>            → {"failures": [...]}       (AC2/C9, audit §1 해석)
-  check_brief.py frontmatter <payload>         → {"errors": [...]}         (AC1)
+  check_brief.py sections <payload>            → {"missing": [...]}        (AC4)
+  check_brief.py landscape-citations <payload> → {"uncited": [...]}        (§4 인용 요구)
+  check_brief.py skepticism <payload>          → {"malformed": [...]}      (AC11)
+  check_brief.py tried-discarded <payload>     → {"ok": bool}              (AC11, R4 이관)
+  check_brief.py coverage <payload>            → {"failures": [...]}       (AC10, audit §1 해석)
+  check_brief.py frontmatter <payload>         → {"errors": [...]}         (AC6/AC9 키 존재)
   check_brief.py items <payload>               → {"errors": [...], "bijection_c": [...],
                                                     "bijection_b": [...]}  (AC6/AC7)
   check_brief.py metrics <payload>              → {"payload_body_lines_excl_verbatim": int}
@@ -44,10 +50,10 @@ from pathlib import Path
 
 
 def _web_disabled() -> bool:
-    """AC8 graceful degradation: when web research is killed, URLs cannot be
-    obtained, so the gate relaxes the citation requirement on §3/§4 (the SKILL's
-    R2/R3 web-absent clauses). The judgment of whether the (URL-less) skepticism
-    is genuine stays V10 manual."""
+    """Graceful degradation (선재 동작 — 이 spec에 대응 AC 없음, T17이 검증): when web
+    research is killed, URLs cannot be obtained, so the gate relaxes the citation
+    requirement on §3/§4 (the SKILL's R2/R3 web-absent clauses). The judgment of
+    whether the (URL-less) skepticism is genuine stays manual."""
     return os.environ.get("DEVBREW_SPEC_DISTILL_DISABLE_WEB") == "1"
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
@@ -171,13 +177,46 @@ VALID_SOURCES = ("verbatim", "chosen")
 VALID_STATUSES = ("confirmed", "provisional", "open")
 REQUIRED_ITEM_FIELDS = ("id", "source", "status", "statement", "evidence")
 STATEMENT_MAX = 160
-CONFIRMED_SENTINEL = "# confirmed 0건 — 사용자가 전부 잠정으로 판단"
+# AC12 sentinel — 축자 형태는 `# confirmed 0건 — 사용자가 전부 잠정으로 판단` 한 줄이다.
+# **substring 검사를 쓰면 안 된다**: 템플릿이 이 문자열을 *사용법 안내 주석 안에* 그대로
+# 인쇄하므로(`#   # confirmed 0건 — …`), 템플릿을 복사해 만든 brief는 sentinel을 실제로
+# 선언하지 않고도 AC12를 만족시켜 확인 게이트 우회 검출이 통째로 fail-open된다(리뷰 실증).
+# 그래서 **한 줄 전체**가 sentinel이어야 한다 — 줄 시작(들여쓰기 허용) + `#` + 문구 + 줄 끝.
+# 이 앵커링은 인용값(`statement: "... # confirmed 0건 — …"`) 안에 숨은 문자열도 함께 거절한다.
+CONFIRMED_SENTINEL_RE = re.compile(
+    r"^[ \t]*#[ \t]*confirmed 0건 — 사용자가 전부 잠정으로 판단[ \t]*$", re.MULTILINE
+)
 
 ITEMS_KEY_RE = re.compile(r"^user_sourced_items\s*:", re.MULTILINE)
 ITEM_START_RE = re.compile(r"^\s*-\s+id:\s*(\S+)\s*$")
 ITEM_FIELD_RE = re.compile(r"^\s+(\w+):\s*(.*?)\s*$")
 ITEM_BULLET_RE = re.compile(r"^\s*-\s")
+ITEM_COMMENT_RE = re.compile(r"^\s*#")
 EVIDENCE_RE = re.compile(r"^S\d+$")
+# YAML 인라인 주석 시작: 공백 뒤의 `#`(또는 값 맨 앞의 `#`). `audit_file`이 쓰는
+# `[^\s#]+` 컷과 달리 값에 공백이 있어도 안전해야 한다 — `statement`는 문장이다.
+INLINE_COMMENT_RE = re.compile(r"(?:^|\s)#")
+
+
+def _strip_inline_comment(v: str) -> str:
+    """필드 값에서 YAML 인라인 주석을 제거한다.
+
+    `audit_file`은 이미 `[^\\s#]`로 값을 끊는데(AUDIT_FILE_RE) 항목 필드는 끊지 않아,
+    **같은 템플릿의 같은 frontmatter 블록**을 두 규칙이 반대로 읽는 상태였다 — 템플릿이
+    상속시킨 `source: verbatim          # verbatim(…) | chosen(…)` 한 줄이 "source 값이
+    allowlist 밖" + bijection B 4건이라는, 원인(값 뒤 주석)과 무관해 보이는 오류 벽을
+    만든다(리뷰 실증). 원인과 증상이 어긋나면 디버깅 비용이 배로 든다.
+
+    따옴표 스칼라 안의 `#`는 주석이 아니므로 보존한다 — 그러지 않으면 `#`를 담은 정상
+    statement가 조용히 잘려 bijection B가 엉뚱한 drift를 보고한다.
+    """
+    if v[:1] in ('"', "'"):
+        end = v.find(v[0], 1)
+        if end != -1:
+            return v[: end + 1]
+        return v  # 닫히지 않은 따옴표 → 원문 유지(값을 임의로 자르지 않는다)
+    m = INLINE_COMMENT_RE.search(v)
+    return v[: m.start()] if m else v
 
 
 def parse_user_sourced_items(fm: str):
@@ -202,6 +241,13 @@ def parse_user_sourced_items(fm: str):
     raw = 0
     cur = None
     for ln in lines[start + 1:]:
+        # 주석 줄은 데이터가 아니므로 건너뛴다 — 들여쓰지 않은 `#` 한 줄이 "다음 최상위 키"로
+        # 오인돼 블록을 끊으면 **항목 전체가 사라지고** 게이트는 "C1: in body §2 but not in
+        # frontmatter"라는 엉뚱한 말을 한다(리뷰 실증). 템플릿이 AC12 sentinel을 "이 블록 안에"
+        # 쓰라고 지시하므로 그 지시를 따른 brief가 정확히 이 함정을 밟는다. 주석은 값을 나르지
+        # 않으므로 이 관용이 결함 brief를 통과시킬 수는 없다(fail-closed 중립).
+        if ITEM_COMMENT_RE.match(ln):
+            continue
         if ln.strip() and not ln[0].isspace():
             break  # 다음 최상위 키 → 블록 종료
         if ITEM_BULLET_RE.match(ln):
@@ -215,7 +261,8 @@ def parse_user_sourced_items(fm: str):
             continue
         f = ITEM_FIELD_RE.match(ln)
         if f:
-            cur[f.group(1)] = f.group(2).strip().strip('"').strip("'")
+            val = _strip_inline_comment(f.group(2)).strip()
+            cur[f.group(1)] = val.strip('"').strip("'")
     return items, raw
 
 
@@ -259,7 +306,7 @@ def confirmed_zero_unsentineled(text: str) -> bool:
     items, _ = parse_user_sourced_items(fm)
     if any(it.get("status") == "confirmed" for it in items):
         return False
-    return CONFIRMED_SENTINEL not in fm
+    return not CONFIRMED_SENTINEL_RE.search(fm)
 
 
 S_ANCHOR_RE = re.compile(r"^\s*-\s+\*\*(S\d+)\*\*", re.MULTILINE)
@@ -354,14 +401,14 @@ def bijection_b_errors(text: str) -> list[str]:
 
 def landscape_uncited(text: str) -> list[str]:
     if _web_disabled():
-        return []  # web off → no URLs obtainable; citation requirement relaxed (AC8)
+        return []  # web off → no URLs obtainable; citation requirement relaxed
     sec = _section_text(text, "4", "External Landscape")
     return [ln for ln in _entry_lines(sec) if not URL_RE.search(ln)]
 
 
 def landscape_present(text: str) -> bool:
     """§4 External Landscape must carry >=1 entry, OR an explicit web-disabled
-    sentinel (AC8 graceful degradation). Header presence alone is not research (F3)."""
+    sentinel (graceful degradation). Header presence alone is not research (F3)."""
     sec = _section_text(text, "4", "External Landscape").strip()
     if not sec:
         return False
@@ -469,8 +516,10 @@ def tried_discarded_ok(text: str) -> bool:
 
 
 def coverage_ledger_failures(text: str) -> list[str]:
-    """§6 Coverage Ledger form 검증 (C9 직렬화 / AC2 / AC3).
-    Form-level only (C2): floor 5행 각 존재 + status 토큰 'closed' + evidence 세그먼트
+    """audit §1 Coverage Ledger form 검증 (AC10).
+
+    입력은 **audit 텍스트**다 — 원장은 v0.23.0에서 payload §6을 떠나 audit §1로 옮겨갔다.
+    Form-level only: floor 5행 각 존재 + status 토큰 'closed' + evidence 세그먼트
     non-empty; derived는 >=1 derived 행 OR N/A sentinel. 'closed'가 실질적으로 참인지는
     검사하지 않는다(모델 + 독립 adversary의 몫 — 게이트는 이 한계를 숨기지 않는다)."""
     sec = _section_text(text, "1", "Coverage Ledger")

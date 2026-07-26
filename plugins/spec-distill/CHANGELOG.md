@@ -20,6 +20,10 @@
 - 분량 지표 `payload_body_lines_excl_verbatim`(§6 제외) — 150 초과 시 advisory, **fail 안 함**.
 - `check_brief.py items` / `metrics` 서브커맨드.
 - `tests/test_stale_terms.sh` V8 — 권위 문법 6개 리터럴 회귀 락 + mutation 이빨 증명.
+- **AC12 sentinel 앵커링** — `confirmed` 0건 brief는 `# confirmed 0건 — 사용자가 전부 잠정으로
+  판단`이 **한 줄 전체**로 frontmatter에 있어야 통과한다. 다른 문장 안에 인용된 같은 문자열
+  (템플릿 안내 주석, `statement` 값 등)은 sentinel이 아니다 — substring 검사였다면 템플릿대로
+  만든 brief가 확인-게이트 우회 검출을 통째로 우회했다.
 
 ### Changed
 - **라운드별 잠금 producer 제거** — 매 round 끝 `locked?` decision table이 사라지고,
@@ -29,6 +33,9 @@
 - brief 템플릿을 8섹션 역피라미드로 재작성 — 행동 항목(제약·Open Questions)이 앞, 근거·원문이
   뒤. 사용자 원문은 §6에 전문 보존(허용 변환은 P21 placeholder 치환·공백 정리·인용 래핑뿐).
 - Coverage Ledger 검증이 payload §6 → audit §1로 이동.
+- `user_sourced_items[]` 항목 필드도 값 뒤 YAML 인라인 주석(`status: provisional  # …`)을
+  떼어낸다 — `audit_file`과 같은 규칙(같은 frontmatter를 두 규칙이 반대로 읽던 불일치 해소).
+  따옴표 스칼라 안의 `#`는 값의 일부로 보존한다. 블록 안의 주석 줄도 항목 파싱을 끊지 않는다.
 - R4 통과 의례가 payload §5 `기각` 항목 문법으로 이관 — 0건이면 명시 N/A sentinel 없이 fail.
 - `/compact` 핸드오프 문구가 새 섹션명을 가리키고 **C4 재결정 프로토콜**을 함께 싣는다.
   직행 경로(옵션 ②)의 호출 프롬프트에도 같은 문장이 실린다 — 규약은 brief가 아니라
