@@ -56,7 +56,7 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 ## Building a New Plugin
 
-새 플러그인 스캐폴딩(Starter 트리 + reference 구현 워크스루)은 [docs/plugin-authoring.md](docs/plugin-authoring.md) 참조.
+새 플러그인 스캐폴딩(Starter 트리 + reference 구현 워크스루)은 [docs/plugin-authoring.md](docs/plugin-authoring.md) 참조. 새 플러그인을 brainstorming/설계할 때는 `plugin-dev:plugin-structure` skill을 먼저 로드 — 컴포넌트 타입과 `plugin.json` 스키마를 실재하는 surface 위에서 확정한다. 단계별 문법 레퍼런스 매핑도 같은 문서에.
 
 ## Forbidden Patterns
 
