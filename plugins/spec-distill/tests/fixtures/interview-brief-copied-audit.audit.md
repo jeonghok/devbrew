@@ -1,9 +1,8 @@
 ---
 type: interview-audit
-payload: interview-brief-dup-session.md
+payload: interview-brief-valid.md
 created_at: 2026-07-26
 session_id: testsession01
-session_id: othersession99
 source: spec-distill conducting-interview v0.23.0
 ---
 

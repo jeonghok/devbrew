@@ -353,6 +353,28 @@ out_on="$(python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" 2>/dev/null)"
   && note PASS "R10: web 킬 스위치가 verdict를 완화하면 advisory로 알린다 (양방향)" \
   || note FAIL "R10: web 킬 스위치 완화가 조용하거나, 꺼져 있을 때도 advisory가 나온다"
 
+# R11: 유도된 이름 자리에 **남의 audit 내용**이 놓인 경우. 이름 유도는 "어느 파일을 읽을지"만
+# 고정하므로 이 케이스는 통과했다(실측: floor-open의 sidecar 자리에 완료된 audit을 복사 → exit 0).
+# audit이 스스로 선언하는 `payload:` 역참조만이 이걸 잡는다 — 두 템플릿과 모든 fixture가 이미
+# 담고 있으면서 아무도 읽지 않던 필드다. fixture는 파일명·session_id·type이 전부 정상이라
+# 역참조 말고는 red가 될 이유가 없다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-copied-audit.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'audit payload'; } \
+  && note PASS "R11: 유도 경로에 복사된 남의 audit 내용 → red (payload 역참조)" \
+  || note FAIL "R11: 남의 audit 내용을 sidecar 자리에 복사해 통과했다"
+
+# R12: `gate` 말고 `_web_disabled()`가 결과를 바꾸는 다른 서브커맨드도 완화를 알려야 한다.
+# stdout은 JSON 계약이므로 advisory는 **stderr**로 간다 — 여기 섞이면 소비자 파싱이 깨진다.
+# 양방향: 꺼져 있을 때 나오고, 켜져 있을 때는 안 나온다.
+err_off="$(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" landscape-citations "$FX/interview-brief-no-landscape.md" 2>&1 1>/dev/null)"
+err_on="$(python3 "$SCRIPT" landscape-citations "$FX/interview-brief-no-landscape.md" 2>&1 1>/dev/null)"
+out_off="$(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" landscape-citations "$FX/interview-brief-no-landscape.md" 2>/dev/null)"
+{ printf '%s' "$err_off" | grep -q 'web 비활성' \
+    && ! printf '%s' "$err_on" | grep -q 'web 비활성' \
+    && printf '%s' "$out_off" | grep -q '^{'; } \
+  && note PASS "R12: 단독 서브커맨드도 web 완화를 stderr로 알린다 (stdout JSON 무오염)" \
+  || note FAIL "R12: 단독 서브커맨드가 조용히 완화되거나 advisory가 stdout을 오염시켰다"
+
 # --- Task 2: user_sourced_items 스키마 + bijection C + confirmed sentinel ---
 
 # T3: user_sourced_items 부재 → red
@@ -448,7 +470,10 @@ python3 "$SCRIPT" gate "$FX/interview-brief-sentinel-in-block.md" >/dev/null 2>&
 cp "$REPO_ROOT/plugins/spec-distill/templates/interview-brief-template.md" "$TMPD/tpl.md"
 cp "$REPO_ROOT/plugins/spec-distill/templates/interview-audit-template.md" "$TMPD/tpl.audit.md"
 sed -i.bak 's|^audit_file:.*|audit_file: tpl.audit.md|' "$TMPD/tpl.md"
-rm -f "$TMPD/tpl.md.bak"
+# audit의 payload 역참조도 이 쌍의 실제 이름으로 맞춘다 — 템플릿은 placeholder를 싣고 출하되고,
+# 그 placeholder는 어떤 실제 payload 이름과도 같지 않다(그게 정상이다).
+sed -i.bak 's|^payload:.*|payload: tpl.md|' "$TMPD/tpl.audit.md"
+rm -f "$TMPD/tpl.md.bak" "$TMPD/tpl.audit.md.bak"
 out="$(python3 "$SCRIPT" gate "$TMPD/tpl.md" 2>/dev/null)"; rc=$?
 [[ $rc -eq 0 ]] \
   && note PASS "T-TPL: shipping 템플릿 쌍(payload+audit)이 자기 게이트를 통과" \

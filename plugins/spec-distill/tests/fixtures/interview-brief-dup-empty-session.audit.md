@@ -1,6 +1,6 @@
 ---
 type: interview-audit
-payload: interview-brief-valid.md
+payload: interview-brief-dup-empty-session.md
 created_at: 2026-07-26
 session_id:
 session_id: testsession01

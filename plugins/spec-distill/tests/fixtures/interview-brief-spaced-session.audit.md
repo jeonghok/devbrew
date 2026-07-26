@@ -1,6 +1,6 @@
 ---
 type: interview-audit
-payload: interview-brief-valid.md
+payload: interview-brief-spaced-session.md
 created_at: 2026-07-26
 session_id: shared audit
 source: spec-distill conducting-interview v0.23.0

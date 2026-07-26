@@ -49,6 +49,12 @@ import sys
 from pathlib import Path
 
 
+WEB_DISABLED_ADVISORY = (
+    "[spec-distill] web 비활성(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1) — "
+    "§4 출처 URL 인용 요구 + §5 verdict URL 요구가 완화됨 (degraded)"
+)
+
+
 def _web_disabled() -> bool:
     """Graceful degradation (선재 동작 — 이 spec에 대응 AC 없음, T17이 검증): when web
     research is killed, URLs cannot be obtained, so the gate relaxes the citation
@@ -239,7 +245,7 @@ def resolve_audit(payload: Path, fm: str):
     return p, None
 
 
-def audit_pairing_errors(payload_fm: str, audit_text: str) -> list[str]:
+def audit_pairing_errors(payload_fm: str, audit_text: str, payload_name: str) -> list[str]:
     """audit이 *이 payload의* sidecar인지 확인한다 (fail-closed).
 
     `resolve_audit`은 basename이 같은 디렉토리에 존재하기만 하면 받아들이므로, payload가
@@ -287,6 +293,17 @@ def audit_pairing_errors(payload_fm: str, audit_text: str) -> list[str]:
     atype = _one("type", afm, "audit frontmatter에 type")
     if atype is not None and atype != "interview-audit":
         errs.append(f"audit type {atype!r} != 'interview-audit'")
+    # audit이 **어느 payload의 것이라고 스스로 선언하는지**를 읽는다. 이름 유도는 "어느 파일을
+    # 읽을지"를 고정하지만 그 파일의 *내용*까지 묶지는 못한다 — 남의 audit을 유도 경로에 복사해
+    # 넣으면 그대로 통과했다(실행 실증: floor가 열린 payload의 sidecar 자리에 완료된 audit을
+    # 복사 → exit 0). 이 역참조는 두 템플릿과 모든 fixture가 이미 담고 있으면서 아무도 읽지
+    # 않던 필드다 — 선언만 있고 읽는 코드가 없으면 그건 계약이 아니다.
+    apay = _one("payload", afm, "audit frontmatter에 payload")
+    if apay is not None and apay != payload_name:
+        errs.append(
+            f"audit payload {apay!r} != {payload_name!r} "
+            "(다른 인터뷰의 audit 내용 — Coverage Ledger 차용)"
+        )
     psid = _one("session_id", payload_fm, "payload frontmatter에 session_id")
     asid = _one("session_id", afm, "audit frontmatter에 session_id")
     if psid is not None and asid is not None and psid != asid:
@@ -759,7 +776,7 @@ def gate(path: Path) -> int:
                 failures.append(f"missing audit sections: {amiss}")
             # 섹션 형태 검사보다 **먼저** 이 쌍이 같은 인터뷰인지 묻는다 — 형태가 완벽한 남의
             # audit이야말로 이 검사가 잡으려는 대상이다.
-            pair = audit_pairing_errors(fm, audit_text)
+            pair = audit_pairing_errors(fm, audit_text, path.name)
             if pair:
                 failures.append(f"audit pairing: {pair}")
             if not sec5_absent and not any(m.startswith("3.") for m in amiss):
@@ -795,10 +812,7 @@ def gate(path: Path) -> int:
     # 이유 없이 통과한다. CLAUDE.md는 graceful degradation에 loud logging을 요구한다. 이 PR이
     # 추가한 advisories 채널이 바로 그 자리다.
     if _web_disabled():
-        advisories.append(
-            "[spec-distill] web 비활성(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1) — "
-            "§4 출처 URL 인용 요구 + §5 verdict URL 요구가 완화됨 (degraded)"
-        )
+        advisories.append(WEB_DISABLED_ADVISORY)
     if metric > LINE_TRIPWIRE:
         advisories.append(
             f"[spec-distill] payload 본문 {metric}줄(§6 제외) — 예산 137 / 트립와이어 "
@@ -817,6 +831,11 @@ def main(argv: list[str]) -> int:
         print("usage: check_brief.py <subcommand> <brief.md>", file=sys.stderr)
         return 64
     sub, path = argv[1], Path(argv[2])
+    # `gate`는 advisories JSON으로 알리고, `_web_disabled()`가 결과를 바꾸는 **나머지**
+    # 서브커맨드는 stderr로 알린다. 한쪽만 loud하면 다른 쪽을 쓰는 사람은 완화된 결과를
+    # 완화된 줄 모른 채 받는다 — 킬 스위치는 보안 컨트롤이고 침묵은 그 자체가 결함이다.
+    if sub in ("landscape-citations", "skepticism") and _web_disabled():
+        print(WEB_DISABLED_ADVISORY, file=sys.stderr)
     if sub == "gate":
         return gate(path)
     try:

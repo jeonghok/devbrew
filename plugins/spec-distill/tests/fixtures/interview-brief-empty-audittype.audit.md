@@ -1,6 +1,6 @@
 ---
 type:
-payload: interview-brief-valid.md
+payload: interview-brief-empty-audittype.md
 created_at: 2026-07-26
 session_id: testsession01
 source: spec-distill conducting-interview v0.23.0
