@@ -298,6 +298,21 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-empty-audittype.md" 2>/dev/nu
   && note PASS "R5: 빈 audit type은 부재로 읽힌다 (다음 줄 포획 금지)" \
   || note FAIL "R5: 빈 audit type이 다음 줄 키를 값으로 삼켰다"
 
+# R6: 중복 키의 **첫 항목이 비어 있어도** 중복으로 세어야 한다. 개수를 값 추출 패턴으로 세면
+# 값이 빈 키는 hit이 안 잡혀 개수가 1이 되고 중복 거부가 통째로 우회된다 — R3(빈 값을 부재로
+# 읽기)이 R2(중복 거부)를 되열어놓은 자리다. 그래서 개수는 값이 아니라 **키 라인**으로 센다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-dup-empty-session.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'session_id 중복'; } \
+  && note PASS "R6: 첫 항목이 빈 중복 session_id도 중복으로 거부된다" \
+  || note FAIL "R6: 빈 첫 항목이 중복 카운트에서 빠져 바인딩이 우회됐다"
+
+# R7: 값을 첫 공백에서 끊으면 `shared payload`와 `shared audit`이 둘 다 `shared`로 읽혀 서로
+# 다른 인터뷰가 동일 비교로 통과한다. 값은 라인 끝까지 읽고 주석만 뗀 뒤, 공백이 남으면 거부한다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-spaced-session.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '단일 토큰'; } \
+  && note PASS "R7: 공백 포함 session_id는 부분 비교되지 않고 거부된다" \
+  || note FAIL "R7: session_id가 첫 토큰만으로 비교됐다"
+
 # --- Task 2: user_sourced_items 스키마 + bijection C + confirmed sentinel ---
 
 # T3: user_sourced_items 부재 → red

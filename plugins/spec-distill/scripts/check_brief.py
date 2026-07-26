@@ -200,11 +200,6 @@ def resolve_audit(payload: Path, fm: str):
     return p, None
 
 
-# `[ \t]*` — AUDIT_FILE_RE 위의 주석 참조. 빈 값이 다음 줄 키를 삼키면 페어링이 상수로 붕괴한다.
-SESSION_ID_RE = re.compile(r"^session_id:[ \t]*([^\s#]+)", re.MULTILINE)
-TYPE_RE = re.compile(r"^type:[ \t]*([^\s#]+)", re.MULTILINE)
-
-
 def audit_pairing_errors(payload_fm: str, audit_text: str) -> list[str]:
     """audit이 *이 payload의* sidecar인지 확인한다 (fail-closed).
 
@@ -227,28 +222,43 @@ def audit_pairing_errors(payload_fm: str, audit_text: str) -> list[str]:
     errs: list[str] = []
     afm = _frontmatter(audit_text)
 
-    def _one(pattern, text: str, label: str):
-        """키가 **정확히 하나**일 때만 값을 돌려준다 (부재·중복은 red).
+    def _one(key: str, text: str, label: str):
+        """키가 **정확히 하나**이고 값이 **단일 토큰**일 때만 값을 돌려준다.
 
-        `search`로 첫 매치만 쓰면 중복 키가 fail-open이 된다 — 남의 audit 맨 앞에 맞는
-        `session_id:` 한 줄만 얹으면 원래 식별자를 그대로 둔 채 바인딩을 통과한다(codex 적발).
-        중복 키는 YAML로도 부정하므로 어느 쪽 값을 쓸지 고르지 말고 거부한다. 모호한 입력에
-        값을 하나 골라주는 것이 바로 이 함수가 막으려는 실패 모드다.
+        세 가지를 각각 따로 본다 — 하나로 합치면 서로를 가린다:
+
+        1. **개수는 값이 아니라 키 라인으로 센다.** 값 추출 패턴으로 개수를 세면 값이 빈 중복 키가
+           카운트에서 빠진다 — `session_id:` + `session_id: <맞는 값>`이면 hit이 1개라 중복 거부를
+           통과했다(codex 적발, 실행 실증: exit 0). 이건 값이 빈 키를 '부재'로 읽게 만든 바로 그
+           수정이 되열어놓은 구멍이라, 두 규칙을 분리하지 않으면 한쪽을 고칠 때마다 다른 쪽이
+           열린다.
+        2. **값은 라인 끝까지 읽고 주석만 뗀다.** `([^\\s#]+)`처럼 첫 공백에서 끊으면
+           `shared payload`와 `shared audit`이 둘 다 `shared`로 읽혀 서로 다른 인터뷰가 동일
+           비교로 통과한다(codex 적발).
+        3. **공백이 남은 값은 거부한다.** session_id·type은 단일 토큰이다. 모호한 입력에 값을
+           하나 골라주지 않는 것이 이 함수의 존재 이유다.
         """
-        hits = pattern.findall(text)
-        if not hits:
+        raw = re.findall(rf"^{key}:([^\n]*)$", text, re.MULTILINE)
+        if not raw:
             errs.append(f"{label} 없음")
             return None
-        if len(hits) > 1:
-            errs.append(f"{label} 중복 {len(hits)}건 (모호 — 거부)")
+        if len(raw) > 1:
+            errs.append(f"{label} 중복 {len(raw)}건 (모호 — 거부)")
             return None
-        return hits[0]
+        val = _strip_inline_comment(raw[0]).strip()
+        if not val:
+            errs.append(f"{label} 없음")
+            return None
+        if len(val.split()) > 1:
+            errs.append(f"{label} 값에 공백 {val!r} (단일 토큰이어야 함 — 부분 비교 금지)")
+            return None
+        return val
 
-    atype = _one(TYPE_RE, afm, "audit frontmatter에 type")
+    atype = _one("type", afm, "audit frontmatter에 type")
     if atype is not None and atype != "interview-audit":
         errs.append(f"audit type {atype!r} != 'interview-audit'")
-    psid = _one(SESSION_ID_RE, payload_fm, "payload frontmatter에 session_id")
-    asid = _one(SESSION_ID_RE, afm, "audit frontmatter에 session_id")
+    psid = _one("session_id", payload_fm, "payload frontmatter에 session_id")
+    asid = _one("session_id", afm, "audit frontmatter에 session_id")
     if psid is not None and asid is not None and psid != asid:
         errs.append(
             f"audit session_id {asid!r} != payload {psid!r} "
