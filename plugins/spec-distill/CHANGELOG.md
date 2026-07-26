@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.23.0] — 2026-07-26
+
+### Added
+- **brief 2파일 계약** — payload(`<topic>-interview.md`, 8섹션 역피라미드)와 audit
+  (`<topic>-interview.audit.md`, 5섹션 텔레메트리)로 분할. payload frontmatter의 `audit_file`
+  (basename만 — traversal 거부)이 audit을 가리키고, 게이트가 두 파일을 함께 검사한다.
+  audit 부재·미해석은 fail-closed.
+- `templates/interview-audit-template.md` — Coverage Ledger / Budget / Steelman 원문 /
+  게이트 실행 기록 / 프로세스 로그.
+- **frontmatter `user_sourced_items[]` 계약** — `id`/`source`(`verbatim`|`chosen`)/`status`
+  (`confirmed`|`provisional`|`open`)/`statement`(160자 hard cap)/`evidence`(`S<N>`, 필수).
+  `source: inferred`는 이 리스트에 들어갈 수 없다 — 모델 추론은 본문 ✎ 프로즈로만 산다.
+- **세 bijection** — A: payload §5 `ST<N>` ↔ audit §3 `#### ST<N>`(양방향, 공집합 허용) /
+  B: body §2 ↔ frontmatter(id·기호·status·`⟨S<N>⟩`·**statement 내용**까지) /
+  C: 모든 `evidence: S<N>`가 payload §6에서 해석됨.
+- **종료 확정 확인** — proceed 게이트에 흡수(상호작용 1회 유지). 재제시 상한 2회, 초과 시
+  전 항목 `provisional` 강등 + 고정 advisory.
+- 분량 지표 `payload_body_lines_excl_verbatim`(§6 제외) — 150 초과 시 advisory, **fail 안 함**.
+- `check_brief.py items` / `metrics` 서브커맨드.
+- `tests/test_stale_terms.sh` V8 — 권위 문법 6개 리터럴 회귀 락 + mutation 이빨 증명.
+
+### Changed
+- **라운드별 잠금 producer 제거** — 매 round 끝 `locked?` decision table이 사라지고,
+  판정 없는 `user_statements`(`{id: S<N>, source, round, text}`) 기록으로 대체. `status`도
+  해답공간 `section:` 앵커도 붙이지 않는다. 과거 brief의 LD 9/6/5는 모델의 과잉 잠금이 아니라
+  skill이 지시한 대로 동작한 결과였다.
+- brief 템플릿을 8섹션 역피라미드로 재작성 — 행동 항목(제약·Open Questions)이 앞, 근거·원문이
+  뒤. 사용자 원문은 §6에 전문 보존(허용 변환은 P21 placeholder 치환·공백 정리·인용 래핑뿐).
+- Coverage Ledger 검증이 payload §6 → audit §1로 이동.
+- R4 통과 의례가 payload §5 `기각` 항목 문법으로 이관 — 0건이면 명시 N/A sentinel 없이 fail.
+- `/compact` 핸드오프 문구가 새 섹션명을 가리키고 **C4 재결정 프로토콜**을 함께 싣는다.
+  직행 경로(옵션 ②)의 호출 프롬프트에도 같은 문장이 실린다 — 규약은 brief가 아니라
+  호출 프롬프트에 산다(C5).
+- `agents/{blind-spot-prober,steelman-builder,coverage-mapper}.md`의 Input 절이
+  `locked_directions` 대신 "사용자 제약 요지"를 받는다.
+
+### Removed
+- frontmatter `locked_directions[]` 및 state `pending_locked_decisions[]`.
+- brief §2 *"Locked Directions"* 섹션과 *"재논쟁 금지"* 헤더 문구.
+- `check_brief.py`의 `steelman_unlogged()` — frontmatter `steelman:` 라벨이 사라져 죽은 코드가
+  됐고, 그 보장은 bijection A가 이어받는다.
+
 ## [0.22.0] — 2026-07-21
 
 ### Added
