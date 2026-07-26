@@ -136,11 +136,19 @@ def _section_text(text: str, num: str, title: str) -> str:
     return rest[: nxt.start()] if nxt else rest
 
 
+# 불릿 문자는 `-`와 `*`를 **둘 다** 받는다 — §2 본문을 읽는 `BODY_ITEM_RE`(`^\s*[-*]\s+`)와 반드시
+# 같은 관례여야 한다. 같은 아티팩트를 두 규칙이 서로 다른 관례로 읽으면 불릿 한 글자로 검사를
+# 우회할 수 있다: `- 인용된 항목` 하나와 `* 출처 없는 주장` 하나를 §4에 두면 `landscape_present`는
+# 하이픈 항목으로 만족되고 `landscape_uncited`는 애스터리스크 항목을 아예 못 봐서, R2의 "출처 URL
+# 필수"가 통째로 통과한다(리뷰 실증: 같은 줄을 `-`로 쓰면 red, `*`로 쓰면 green).
+ENTRY_BULLET_RE = re.compile(r"^\s*[-*]\s")
+
+
 def _entry_lines(section: str) -> list[str]:
     return [
         ln.strip()
         for ln in section.splitlines()
-        if ln.lstrip().startswith("- ") and ln.strip() != "-"
+        if ENTRY_BULLET_RE.match(ln) and ln.strip() not in ("-", "*")
     ]
 
 
@@ -171,6 +179,50 @@ def resolve_audit(payload: Path, fm: str):
     if not p.exists():
         return None, f"audit file not found: {name}"
     return p, None
+
+
+SESSION_ID_RE = re.compile(r"^session_id:\s*([^\s#]+)", re.MULTILINE)
+TYPE_RE = re.compile(r"^type:\s*([^\s#]+)", re.MULTILINE)
+
+
+def audit_pairing_errors(payload_fm: str, audit_text: str) -> list[str]:
+    """audit이 *이 payload의* sidecar인지 확인한다 (fail-closed).
+
+    `resolve_audit`은 basename이 같은 디렉토리에 존재하기만 하면 받아들이므로, payload가
+    **다른 인터뷰의 audit**을 가리켜도 통과했다. audit §1 Coverage Ledger는 Law 1 종료 판정
+    (floor 5 전부 closed)의 근거이므로, 끝나지 않은 인터뷰가 남의 원장을 상속해 green이 된다 —
+    리뷰가 실행으로 실증했다: 같은 payload가 `audit_file: mine.audit.md`(floor 5 전부 open)에는
+    exit 1, `audit_file: <남의 것>`(전부 closed)에는 exit 0. 한 줄 편집이 실패를 통과로 바꿨다.
+    `bijection_a_errors`는 백스톱이 못 된다 — `ST<N>`은 인터뷰마다 1부터 매겨져 steelman 1건짜리
+    인터뷰 둘은 양쪽 다 `ST1`이라 불일치가 발생하지 않는다.
+
+    결합은 **파일명이 아니라 `session_id`**로 건다. 파일명 결합(`<payload stem>.audit.md` 강제)은
+    payload 하나당 audit 하나를 요구해 fixture 코퍼스(payload 39개가 audit 1개를 공유)를 전부
+    다시 쓰게 만들지만, `session_id`는 두 템플릿과 모든 fixture가 이미 담고 있어 churn이 0이다.
+    SKILL이 payload에 기존 spec-distill 세션 id를 재사용하도록 이미 규정한다.
+
+    부재는 불일치와 똑같이 red다 — 못 읽은 값을 "일치로 간주"하면 이 검사 자체가 fail-open이 되고,
+    그건 이 함수가 막으려는 바로 그 실패 모드다.
+    """
+    errs: list[str] = []
+    afm = _frontmatter(audit_text)
+    atype = TYPE_RE.search(afm)
+    if not atype:
+        errs.append("audit frontmatter에 type 없음")
+    elif atype.group(1) != "interview-audit":
+        errs.append(f"audit type {atype.group(1)!r} != 'interview-audit'")
+    psid = SESSION_ID_RE.search(payload_fm)
+    asid = SESSION_ID_RE.search(afm)
+    if not psid:
+        errs.append("payload frontmatter에 session_id 없음")
+    if not asid:
+        errs.append("audit frontmatter에 session_id 없음")
+    if psid and asid and psid.group(1) != asid.group(1):
+        errs.append(
+            f"audit session_id {asid.group(1)!r} != payload {psid.group(1)!r} "
+            "(다른 인터뷰의 audit — Coverage Ledger 차용)"
+        )
+    return errs
 
 
 VALID_SOURCES = ("verbatim", "chosen")
@@ -626,6 +678,11 @@ def gate(path: Path) -> int:
             amiss = find_missing_sections(audit_text, AUDIT_SECTIONS)
             if amiss:
                 failures.append(f"missing audit sections: {amiss}")
+            # 섹션 형태 검사보다 **먼저** 이 쌍이 같은 인터뷰인지 묻는다 — 형태가 완벽한 남의
+            # audit이야말로 이 검사가 잡으려는 대상이다.
+            pair = audit_pairing_errors(fm, audit_text)
+            if pair:
+                failures.append(f"audit pairing: {pair}")
             if not sec5_absent and not any(m.startswith("3.") for m in amiss):
                 ae = bijection_a_errors(text, audit_text)
                 if ae:

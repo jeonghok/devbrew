@@ -221,7 +221,37 @@ out="$(python3 "$SCRIPT" coverage "$TMPD/p.md" 2>/dev/null)"; rc=$?
   || note FAIL "coverage: 읽을 수 없는 audit도 구조화 JSON이어야 한다"
 printf '%s' "$out" | grep -qi 'Traceback' \
   && note FAIL "coverage: traceback이 stdout으로 샜다" || note PASS "coverage: traceback 누출 없음"
+
+# F8: gate도 audit을 못 읽으면 fail-closed여야 한다 — 2파일 seal의 **나머지 절반**.
+# coverage만 잠그면 gate 쪽 `audit unreadable` append는 지워도 스위트가 green이다(측정된 blast
+# radius 0): audit_text가 ""로 남아 audit 섹션 검사·pairing·bijection A·coverage ledger가 통째로
+# skip되고 {"pass": true}가 찍힌다 — check_brief.py 헤더가 "조용히 payload-only 검사로 degrade하지
+# 않는다"고 주장하는 바로 그 fail-open이다. exit code만 보는 assertion으로는 못 잡으므로
+# (a) 메시지가 'audit unreadable'을 담을 것 + (b) 하류 검사가 실제로 skip됐다는 negative를 함께 건다.
+out="$(python3 "$SCRIPT" gate "$TMPD/p.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'audit unreadable' \
+    && ! printf '%s' "$out" | grep -q 'coverage ledger'; } \
+  && note PASS "F8: gate도 읽을 수 없는 audit에 fail-closed ('audit unreadable' + 하류 skip)" \
+  || note FAIL "F8: gate가 읽을 수 없는 audit에 fail-closed여야 한다"
 rmdir "$TMPD/not-a-file.audit.md" 2>/dev/null || true
+
+# F13: 불릿 문자 비대칭으로 R2(출처 URL 필수)를 우회할 수 없다.
+# `_entry_lines`가 `- `만 받고 `BODY_ITEM_RE`는 `[-*]`를 받던 시절, §4에 인용된 `-` 항목 하나와
+# 인용 없는 `*` 항목 하나를 두면 landscape_present는 만족되고 landscape_uncited는 `*`를 못 봐서
+# 게이트가 green이었다. fixture는 valid와 **한 줄만** 다르므로 red 이유가 하나로 고정된다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-star-bullet-uncited.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'uncited landscape'; } \
+  && note PASS "F13: '*' 불릿 uncited 항목도 R2에 걸린다" \
+  || note FAIL "F13: '*' 불릿으로 출처 URL 요구가 우회됐다"
+
+# F1: payload는 **다른 인터뷰의 audit**을 채택할 수 없다 (Coverage Ledger 차용 봉쇄).
+# fixture는 valid와 session_id 한 줄만 다르고 가리키는 audit은 완전히 유효하다 — 그래서 red 이유가
+# pairing 하나로 고정된다. 메시지까지 확인하는 이유: exit code만 보면 무관한 실패로도 만족된다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-foreign-audit.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'audit pairing' \
+    && printf '%s' "$out" | grep -q 'session_id'; } \
+  && note PASS "F1: 다른 인터뷰의 audit 채택 → red (session_id 바인딩)" \
+  || note FAIL "F1: 남의 audit을 채택해 Coverage Ledger를 상속했다"
 
 # --- Task 2: user_sourced_items 스키마 + bijection C + confirmed sentinel ---
 

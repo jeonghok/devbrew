@@ -12,6 +12,12 @@
 - **frontmatter `user_sourced_items[]` 계약** — `id`/`source`(`verbatim`|`chosen`)/`status`
   (`confirmed`|`provisional`|`open`)/`statement`(160자 hard cap)/`evidence`(`S<N>`, 필수).
   `source: inferred`는 이 리스트에 들어갈 수 없다 — 모델 추론은 본문 ✎ 프로즈로만 산다.
+- **audit 페어링 검사(`session_id` 바인딩)** — audit이 *이 payload의* sidecar인지 확인한다.
+  `audit_file`만으로는 basename이 같은 디렉토리에 존재하기만 하면 통과해서, payload가 **다른
+  인터뷰의 audit**을 가리켜 그 §1 Coverage Ledger(Law 1 종료 판정의 근거)를 상속할 수 있었다 —
+  끝나지 않은 인터뷰가 `audit_file` 한 줄만 바꿔 exit 1에서 exit 0이 됐다. 결합은 파일명이 아닌
+  `session_id` 동등성 + audit `type`으로 건다(두 템플릿과 기존 fixture가 이미 담고 있어 churn 0).
+  부재는 불일치와 동일하게 red — 못 읽은 값을 일치로 간주하면 이 검사 자체가 fail-open이 된다.
 - **세 bijection** — A: payload §5 `ST<N>` ↔ audit §3 `#### ST<N>`(양방향, 공집합 허용) /
   B: body §2 ↔ frontmatter(id·기호·status·`⟨S<N>⟩`·**statement 내용**까지) /
   C: 모든 `evidence: S<N>`가 payload §6에서 해석됨.
@@ -37,6 +43,10 @@
   떼어낸다 — `audit_file`과 같은 규칙(같은 frontmatter를 두 규칙이 반대로 읽던 불일치 해소).
   따옴표 스칼라 안의 `#`는 값의 일부로 보존한다. 블록 안의 주석 줄도 항목 파싱을 끊지 않는다.
 - R4 통과 의례가 payload §5 `기각` 항목 문법으로 이관 — 0건이면 명시 N/A sentinel 없이 fail.
+- **섹션 항목 추출이 `-`와 `*` 불릿을 모두 받는다** — body §2를 읽는 `BODY_ITEM_RE`는 `[-*]`를
+  받는데 §4·§5·audit §1을 읽는 `_entry_lines`는 `- `만 받아, 같은 아티팩트를 두 규칙이 다른
+  관례로 읽었다. §4에 인용된 `-` 항목과 인용 없는 `*` 항목을 함께 두면 `landscape_present`는
+  만족되고 `landscape_uncited`는 `*`를 못 봐서 R2의 "출처 URL 필수"가 불릿 한 글자로 우회됐다.
 - `/compact` 핸드오프 문구가 새 섹션명을 가리키고 **C4 재결정 프로토콜**을 함께 싣는다.
   직행 경로(옵션 ②)의 호출 프롬프트에도 같은 문장이 실린다 — 규약은 brief가 아니라
   호출 프롬프트에 산다(C5).
