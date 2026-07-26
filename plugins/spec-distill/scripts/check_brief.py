@@ -172,7 +172,13 @@ def _frontmatter(text: str) -> str:
 
 # 값은 첫 공백 또는 `#`(YAML 인라인 주석)에서 끊는다 — 템플릿의
 # `audit_file: <...>.md   # basename만 (같은 디렉토리)` 라인 자체가 파싱 대상이다.
-AUDIT_FILE_RE = re.compile(r"^audit_file:\s*([^\s#]+)", re.MULTILINE)
+#
+# 키와 값 사이는 `\s*`가 아니라 **`[ \t]*`**로 띄운다. `\s`는 개행을 포함하므로 `\s*`는 값이 빈
+# 키에서 **다음 줄의 토큰을 값으로 포획한다** — `session_id:`만 있는 frontmatter는 바로 아래
+# `source:`를 값으로 읽었고, payload와 audit이 둘 다 값을 비워두면 양쪽이 똑같이 `'source:'`로
+# 해석돼 페어링 검사를 **통과했다**(리뷰가 실행으로 실증: exit 0). 부재를 부재로 읽지 못하면
+# fail-closed 검사가 통째로 무너진다. 세 키 모두 같은 규칙을 쓴다 — 하나만 고치면 나머지가 남는다.
+AUDIT_FILE_RE = re.compile(r"^audit_file:[ \t]*([^\s#]+)", re.MULTILINE)
 
 
 def resolve_audit(payload: Path, fm: str):
@@ -194,8 +200,9 @@ def resolve_audit(payload: Path, fm: str):
     return p, None
 
 
-SESSION_ID_RE = re.compile(r"^session_id:\s*([^\s#]+)", re.MULTILINE)
-TYPE_RE = re.compile(r"^type:\s*([^\s#]+)", re.MULTILINE)
+# `[ \t]*` — AUDIT_FILE_RE 위의 주석 참조. 빈 값이 다음 줄 키를 삼키면 페어링이 상수로 붕괴한다.
+SESSION_ID_RE = re.compile(r"^session_id:[ \t]*([^\s#]+)", re.MULTILINE)
+TYPE_RE = re.compile(r"^type:[ \t]*([^\s#]+)", re.MULTILINE)
 
 
 def audit_pairing_errors(payload_fm: str, audit_text: str) -> list[str]:

@@ -270,6 +270,34 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-dup-session.md" 2>/dev/null)"
   && note PASS "R2: session_id 중복 키 → red (첫 매치 채택 금지)" \
   || note FAIL "R2: 중복 session_id의 첫 매치로 바인딩이 우회됐다"
 
+# R3: **빈 값**은 부재로 읽혀야 한다. 키-값 구분자가 `\s*`면 `\s`가 개행을 포함하므로 값이 빈 키가
+# 다음 줄 토큰을 값으로 포획한다 — payload와 audit이 둘 다 session_id를 비우면 양쪽이 똑같이
+# 바로 아래 `source:`로 해석돼 페어링이 **상수로 붕괴하고 통과**했다(실행 실증: exit 0).
+# 두 메시지를 모두 확인한다: 한쪽만 보면 반대쪽 키가 여전히 다음 줄을 삼켜도 통과한다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-empty-session.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'payload frontmatter에 session_id 없음' \
+    && printf '%s' "$out" | grep -q 'audit frontmatter에 session_id 없음'; } \
+  && note PASS "R3: 빈 session_id는 양쪽 다 부재로 읽힌다 (다음 줄 포획 금지)" \
+  || note FAIL "R3: 빈 session_id가 다음 줄 키를 값으로 삼켰다"
+
+# R4: 같은 규칙이 audit_file에도 적용된다 — 하나만 고치면 나머지가 남는다(같은 모양 3개 전수 교정).
+# 빈 audit_file:이 다음 줄 `created_at:`을 파일명으로 포획하면 원인과 무관한 'not found'가 뜬다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-empty-auditfile.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'audit_file key absent' \
+    && ! printf '%s' "$out" | grep -q 'created_at'; } \
+  && note PASS "R4: 빈 audit_file은 부재로 읽힌다 (다음 줄 포획 금지)" \
+  || note FAIL "R4: 빈 audit_file이 다음 줄 키를 파일명으로 삼켰다"
+
+# R5: 세 번째 키(type)도 같은 규칙. R3/R4를 고쳤을 때 이 케이스만 blast radius가 0이었다 —
+# 세 regex를 함께 고쳤는데 검증은 둘만 덮은 상태였다는 뜻이라, 셋째도 명시적으로 잠근다.
+# 빈 `type:`은 다음 줄 `payload:`를 값으로 삼켜도 값 불일치로 red가 되므로 exit code로는 구분이
+# 안 된다 — **부재 메시지**를 요구하고 삼킨 값이 등장하지 않음을 함께 확인해야 이빨이 생긴다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-empty-audittype.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'audit frontmatter에 type 없음' \
+    && ! printf '%s' "$out" | grep -q "type 'payload:'"; } \
+  && note PASS "R5: 빈 audit type은 부재로 읽힌다 (다음 줄 포획 금지)" \
+  || note FAIL "R5: 빈 audit type이 다음 줄 키를 값으로 삼켰다"
+
 # --- Task 2: user_sourced_items 스키마 + bijection C + confirmed sentinel ---
 
 # T3: user_sourced_items 부재 → red

@@ -19,7 +19,10 @@
   `session_id` 동등성 + audit `type`으로 건다(두 템플릿과 기존 fixture가 이미 담고 있어 churn 0).
   부재도, **중복 키도** 불일치와 동일하게 red — 못 읽은 값을 일치로 간주하거나 모호한 입력에서
   값을 하나 골라주면 이 검사 자체가 fail-open이 된다(첫 매치만 쓰면 남의 audit 맨 앞에 맞는
-  `session_id` 한 줄을 얹어 바인딩을 우회할 수 있다).
+  `session_id` 한 줄을 얹어 바인딩을 우회할 수 있다). frontmatter 키-값 구분자는 `\s*`가 아니라
+  `[ \t]*`다 — `\s`는 개행을 포함해 값이 빈 키가 **다음 줄 토큰을 값으로 포획**하고, payload와
+  audit이 둘 다 `session_id`를 비우면 양쪽이 똑같이 아래 `source:`로 읽혀 페어링이 상수로
+  붕괴했다. `audit_file`·`type`도 같은 모양이라 셋을 함께 고쳤다.
 - **세 bijection** — A: payload §5 `ST<N>` ↔ audit §3 `#### ST<N>`(양방향, 공집합 허용) /
   B: body §2 ↔ frontmatter(id·기호·status·`⟨S<N>⟩`·**statement 내용**까지) /
   C: 모든 `evidence: S<N>`가 payload §6에서 해석됨.
