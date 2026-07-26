@@ -8,7 +8,7 @@ source: spec-distill conducting-interview v0.23.0
 
 # <Topic> — Interview Audit
 
-> 순수 텔레메트리. 재논쟁 차단에 쓰이는 것은 payload이고, 여기에는 프로세스 기록만 남는다(D1).
+> 순수 텔레메트리 — 다음 stage가 읽는 핸드오프 산출물은 payload이고, 여기에는 이 인터뷰가 어떻게 진행됐는지의 프로세스 기록만 남는다(D1).
 > payload frontmatter의 `audit_file`이 이 파일을 가리키며, 게이트는 두 파일을 함께 검사한다.
 
 ## 1. Coverage Ledger
