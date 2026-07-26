@@ -415,6 +415,27 @@ n="$(python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" 2>/dev/null \
   && note PASS "T16: §6 사용자 원문이 계수에서 제외됨 (n=$n)" \
   || note FAIL "T16: §6가 계수에 포함된 것으로 보임 (n=$n)"
 
+# T16/teeth — §6 제외 로직의 mutation lock.
+# 위의 `n < 60`은 이빨이 없다: canonical의 §6은 6줄뿐이라 제외 로직을 통째로 지워도
+# 21→27로 여전히 60 미만이라 0개 assertion이 반전된다(prior 라운드 mutation으로 실측).
+# 그 검사가 증명하는 건 "canonical brief가 작다"이지 "§6이 제외된다"가 아니다.
+#
+# 여기서 잠그는 성질: **원문이 긴 brief는 트립와이어를 건드리면 안 된다.** §6은 분량
+# 무제한이므로, §6이 계수에 들어가면 지표가 모델 프로즈가 아니라 인터뷰 길이를 추적하게
+# 되고 — 정확히 올바르게 행동한 brief에서 advisory가 발화한다(false positive).
+# interview-brief-long-verbatim.md는 §0–§5·§7이 canonical 크기(본문 22줄)인데 §6이
+# 커서 합계는 244줄이다. 제외가 살아 있으면 22 → advisory 없음. 제외를 지우면 244 →
+# 150 초과 → advisory가 붙어 아래 assertion이 뒤집힌다.
+# 수치 리터럴은 일부러 핀하지 않는다 — 픽스처를 조금만 손대도 stale-red가 되는 반면
+# negative-advisory assertion은 소폭 편집에 강건하면서 mutation에는 그대로 반응한다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-long-verbatim.md" 2>&1)"; rc=$?
+[[ $rc -eq 0 ]] \
+  && note PASS "T16/teeth: 긴 §6 원문 픽스처가 게이트를 통과 (green 전제)" \
+  || note FAIL "T16/teeth: 긴 §6 원문 픽스처가 red — 다른 규칙을 위반한다 (전제 붕괴)"
+printf '%s' "$out" | grep -q '트립와이어 150 초과' \
+  && note FAIL "T16/teeth: 긴 §6 원문에 advisory가 발화 (§6 제외 로직 회귀)" \
+  || note PASS "T16/teeth: 긴 §6 원문에도 advisory 없음 (§6 제외가 실제로 동작)"
+
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]
