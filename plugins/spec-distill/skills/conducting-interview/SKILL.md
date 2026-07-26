@@ -377,6 +377,38 @@ Step B는 단일 책임 단위입니다: *brief가 완결되면 다음 stage(bra
 같은 두 가드(AP2 + cross-compact)를 interview 어휘로 독립 저술합니다(상세 모델:
 `skills/reviewing-spec/SKILL.md` Phase 5).
 
+#### B-0 — 확정 후보 제시 (게이트에 흡수, AC2)
+
+Step A가 끝난 시점에 `user_sourced_items`는 **전부 `provisional`**입니다. `confirmed`로의
+전이는 아래 B-2 게이트에서 사용자가 확정-후-진행 옵션(①/②)을 고를 때만 일어납니다.
+별도 확인 의례를 만들지 않는 이유는 종료 시 사용자 상호작용이 2회가 되기 때문입니다 —
+확인을 기존 proceed 게이트에 흡수해 1회로 유지합니다.
+
+게이트를 띄우기 *전에* 확정 후보 목록을 **프로즈로** 출력합니다(목록이 길 수 있으므로
+`AskUserQuestion`은 선택지만 담당):
+
+- 각 후보를 `<id> — <statement> (source, ⟨S<N>⟩)` 한 줄로.
+- **확정 후보에서 제외한 항목도** 한 줄씩 이유와 함께 보여줍니다 — 제외 항목을 감추면
+  사용자가 누락을 잡을 수 없습니다.
+- 모델의 후보 판정은 **제안일 뿐**입니다. 어떤 항목도 이 출력만으로 `confirmed`가 되지 않습니다.
+
+**재제시 상한** (금지 패턴 *Unbounded autonomy* 가드): 최초 제시는 0회째입니다. 사용자가
+옵션 ③(확정 목록 수정)을 고를 때마다 state의 `confirm_repost_count`를 +1 하고 **2회까지**
+허용합니다. 3번째 ③ 요구 시 전 항목을 `provisional`로 강등하고 아래 **고정 문자열**을 출력한
+뒤 게이트를 재제시하지 않고 진행합니다 — 확정이 덜 되는 쪽이 안전한 방향입니다:
+
+```
+[spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등
+```
+
+카운터는 프로즈 self-tracking이 아니라 state에 씁니다(PN1 Bash write contract):
+
+```bash
+ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" state-root)"
+STATE="$ROOT/<session-id>/state.local.md"
+# confirm_repost_count read-modify-write via python3 -c / heredoc
+```
+
 #### B-1 — superpowers 가용성 분기 (AC13 보존)
 
 - **superpowers 부재 시 (AC13)**: 현행 graceful degradation 그대로 — brief를 완료하고 **loud advisory**를 낸 뒤 **정지(STOP)**. 게이트 없음(compact 후 넘길 대상 자체가 없음). crash·spec-mode fallback **금지**(단독 완결, graceful degrade):
@@ -385,7 +417,7 @@ Step B는 단일 책임 단위입니다: *brief가 완결되면 다음 stage(bra
 
 - **superpowers 가용 시**: B-2 proceed 게이트 제시.
 
-#### B-2 — 단일 `AskUserQuestion` proceed 게이트 (3옵션, AC20)
+#### B-2 — 단일 `AskUserQuestion` proceed 게이트 (4옵션, AC20/AC2)
 
 게이트 *이전*에 brief 경로 존재를 확인합니다(`[[ -f <brief-path> ]]` — race 방어 경량 가드,
 `AskUserQuestion` 게이트 자체는 아님). 부재 시 reviewing-spec Phase 5 Step A와 대칭으로
@@ -400,12 +432,13 @@ brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안�
 ```javascript
 AskUserQuestion({
   questions: [{
-    question: "interview brief 완결: <brief-path> (5 통과 의례 통과). 다음 단계?",
+    question: "interview brief 완결: <brief-path> (구조 게이트 통과). 확정 후보는 위 목록대로. 다음 단계?",
     header: "Proceed",
     options: [
-      {label: "/compact 후 brainstorming (권장)", description: "verbatim /compact 노출 → 사용자 실행 시 brainstorming. 긴 인터뷰 context(round 대화·web sweep·steelman 중간산출) 정리 이점. brief 보존."},
-      {label: "바로 brainstorming", description: "즉시 Skill superpowers:brainstorming <brief-path> 호출 (compact 없이, 전체 context 유지)."},
-      {label: "brief만 종료", description: "brief는 단독 완결 terminal (NG7). handoff 안 함, 종료."}
+      {label: "확정하고 /compact 후 brainstorming (권장)", description: "확정 후보를 status: confirmed로 반영 → 재저장 → 게이트 재실행 → verbatim /compact 노출. 긴 인터뷰 context 정리 이점."},
+      {label: "확정하고 바로 brainstorming", description: "확정 반영 후 즉시 Skill superpowers:brainstorming <brief-path> 호출 (compact 없이, 전체 context 유지)."},
+      {label: "확정 목록 수정", description: "확정 후보를 고쳐 다시 제시 (상한 2회). 확정 전이 없음."},
+      {label: "brief만 종료", description: "brief는 단독 완결 terminal (NG7). 전 항목 provisional 유지, handoff 안 함."}
     ],
     multiSelect: false
   }]
@@ -414,29 +447,42 @@ AskUserQuestion({
 
 #### B-3 — 응답 처리
 
-- **① /compact 후 brainstorming**: 아래 verbatim `/compact` 명령을 *그대로 보이게* 노출
-  (`<brief-path>`는 실제 brief 경로로 치환) + "compact 후 brainstorming 진입 준비됨" 안내:
+**규약의 거처 (C5).** `superpowers:brainstorming`은 spec-distill을 모르고 brief frontmatter를
+읽지 않습니다 — 전달은 순수 프로즈 경로입니다. 그래서 C4 재결정 프로토콜은 brief 파일이
+아니라 **orchestrator의 호출 프롬프트**에 싣습니다. brief는 순수 데이터(`source`/`status`/
+`evidence`)만 나릅니다. 아래 ①과 ② **양쪽 모두** 같은 문장을 싣습니다.
 
-  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 Reframe, Landscape, Locked Directions, Open Questions)과 경로 참조 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. 다음 단계: Skill superpowers:brainstorming <brief-path>.`
+- **① 확정하고 /compact 후 brainstorming**: 확정 후보를 `status: confirmed`로 반영 →
+  brief 재저장 → `check_brief.py gate` 재실행(통과 확인) → 아래 verbatim `/compact` 명령을
+  *그대로 보이게* 노출 + "compact 후 brainstorming 진입 준비됨" 안내:
+
+  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 §0 한눈에, §2 제약, §3 Open Questions, §6 사용자 원문)과 audit 파일 경로 참조 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 다음 단계: Skill superpowers:brainstorming <brief-path>.`
 
   → **여기서 턴 종료(STOP). 같은 턴에서 `brainstorming`을 호출하지 말 것**(compact 전
   brainstorming 진입 = 옵션 ① 무력화). `Skill superpowers:brainstorming <brief-path>` 진입은
   사용자가 `/compact`를 *실제 실행한 다음 턴*에 **사용자 트리거**(예: `/compact write design`처럼
   compact 뒤에 붙인 진행 인자, 또는 명시적 진행 요청)로만 일어난다 — 모델은 다음 턴에 자동
-  진입하지 *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17). compact된 fresh
-  context에서 brainstorming이 brief를 다시 읽어 해답공간을 설계한다.
+  진입하지 *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17).
 
-- **② 바로 brainstorming**: 즉시 `Skill superpowers:brainstorming <brief-path>` 호출(rich
-  context 유지 — 현행 동작과 동일). 이것은 아래 cross-compact 정지 요건의 *명시적 예외*다.
+- **② 확정하고 바로 brainstorming**: 확정 반영 → 재저장 → 게이트 재실행 → 즉시
+  `Skill superpowers:brainstorming <brief-path>` 호출하되, **호출 프롬프트에 C4 문장을 함께
+  싣는다**:
 
-- **③ brief만 종료**: brief terminal advisory(B-1 부재 advisory와 동일 톤) 출력 후 종료.
-  handoff 안 함. state는 SessionEnd hook이 cleanup(별도 cleanup 호출 없음).
+  > `confirmed 항목은 근거 있으면 보고 후 재결정 가능, 임의 변경은 금지.`
+
+  이것은 아래 cross-compact 정지 요건의 *명시적 예외*다.
+
+- **③ 확정 목록 수정**: 확정 전이 없음. `confirm_repost_count` +1 후 B-0으로 돌아가 수정된
+  목록을 재제시(상한 2회 — 초과 시 B-0의 강등 경로).
+
+- **④ brief만 종료**: 전 항목 `provisional` 유지. brief terminal advisory(B-1 부재 advisory와
+  같은 톤) 출력 후 종료. handoff 안 함. state는 SessionEnd hook이 cleanup.
 
 #### B-4 — 두 가드 (load-bearing)
 
 - **AP2 polite-stop 금지**: ①/② 선택 후 "brief 완결!"만 narrate하고 게이트 제시/Skill 호출을
   skip하는 것은 **polite stop** — 금지. Step B를 *종료*하는 모든 경로는 (a) 위 proceed 게이트를
-  거치거나(①/②/③), (b) 게이트를 거치지 않는 예외(superpowers 부재)는 명시적 advisory 단락을
+  거치거나(①/②/③/④), (b) 게이트를 거치지 않는 예외(superpowers 부재)는 명시적 advisory 단락을
   동반해야 한다 — 게이트-less **silent 종료 금지**. (게이트는 사용자가 redirect 가능한 approval
   gate이므로 P17 주권에 기여, polite-stop 아님 — 철학 §AP2.)
 

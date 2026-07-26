@@ -37,12 +37,42 @@ has 'interview-brief-template' "uses brief template"
 has 'optional|선택' "brainstorming invoke is optional"
 has 'superpowers.*(부재|없).*advisory|advisory.*superpowers' "AC13: superpowers-absent loud advisory"
 
-# --- v0.13.0: Step B /compact proceed 게이트 (AC20/AC21/AC22) ---
-has 'AskUserQuestion' "AC20: Step B proceed gate uses AskUserQuestion"
-has '/compact 후 brainstorming' "AC20: option ① label (/compact 후 brainstorming)"
-has '바로 brainstorming' "AC20: option ② label (바로 brainstorming)"
-has 'brief만 종료' "AC20: option ③ label (brief만 종료)"
-has '/compact interview brief at' "AC20: verbatim /compact command exposed"
+# --- v0.23.0: 확정 확인을 흡수한 단일 proceed 게이트 (AC2/AC3) ---
+has 'AskUserQuestion' "AC20: Step B proceed 게이트가 AskUserQuestion 사용"
+has '확정하고 /compact 후 brainstorming' "AC2: 옵션 ① 라벨 (확정 + /compact)"
+has '확정하고 바로 brainstorming' "AC2: 옵션 ② 라벨 (확정 + 즉시)"
+has '확정 목록 수정' "AC2: 옵션 ③ 라벨 (재제시)"
+has 'brief만 종료' "AC20: 옵션 ④ 라벨 (terminal)"
+has '/compact interview brief at' "AC20: verbatim /compact 명령 노출"
+
+# AC2: 재제시 상한 + 초과 시 강등 + 고정 advisory 문자열 (Unbounded-autonomy 가드)
+b0_block="$(awk '/^#### B-0/{f=1;print;next} /^#### /{f=0} f' "$SKILL")"
+{ [[ -n "$b0_block" ]] && grep -q 'confirm_repost_count' <<<"$b0_block"; } \
+  && note PASS "AC2: 재제시 카운터가 state에 기록됨 (프로즈 self-tracking 아님)" \
+  || note FAIL "AC2: confirm_repost_count가 B-0 블록에 없다"
+grep -qF '[spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등' <<<"$b0_block" \
+  && note PASS "AC2: 상한 초과 고정 advisory 문자열 (verbatim)" \
+  || note FAIL "AC2: 상한 초과 advisory 문자열이 정확히 일치하지 않는다"
+grep -qE '전부 provisional|전 항목 .*provisional' <<<"$b0_block" \
+  && note PASS "AC2: 상한 초과 시 덜-잠그는 쪽으로 강등" \
+  || note FAIL "AC2: 상한 초과 동작(provisional 강등)이 명시되지 않았다"
+grep -qE '제외한 것도|제외 항목' <<<"$b0_block" \
+  && note PASS "AC2: 확정 후보에서 제외한 항목도 함께 제시 (누락 검출 가능)" \
+  || note FAIL "AC2: 제외 항목 제시 요구가 없다"
+
+# AC3: C4 재결정 프로토콜이 **양쪽 경로**의 호출 프롬프트에 실린다
+b3_block="$(awk '/^#### B-3/{f=1;print;next} /^#### /{f=0} f' "$SKILL")"
+c4=$(grep -c '보고 후 재결정' <<<"$b3_block")
+[[ "$c4" -ge 2 ]] \
+  && note PASS "AC3: C4 프로토콜이 ①/② 양쪽 경로에 실림 (n=$c4)" \
+  || note FAIL "AC3: C4 프로토콜이 한쪽 경로에만 있다 (n=$c4)"
+grep -qE '임의 변경.*금지' <<<"$b3_block" \
+  && note PASS "AC3: 임의 변경 금지 절반이 명시됨" || note FAIL "AC3: 임의 변경 금지가 없다"
+
+# C5: 규약은 brief가 아니라 호출 프롬프트에 산다
+grep -qE '호출 프롬프트|invocation prompt' <<<"$b3_block" \
+  && note PASS "C5: 규약의 거처가 호출 프롬프트로 명시됨" \
+  || note FAIL "C5: 규약이 brief에 실리지 않는다는 명시가 없다"
 
 # AC21(i) mechanical only — review layer (ii) coexistence judgment = spec-reviewer persona
 cc=$(grep -cE "턴 종료|다음 턴" "$SKILL"); [[ "$cc" -ge 1 ]] \
