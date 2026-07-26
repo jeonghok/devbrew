@@ -170,15 +170,34 @@ def _frontmatter(text: str) -> str:
     return m.group(1) if m else ""
 
 
-# 값은 첫 공백 또는 `#`(YAML 인라인 주석)에서 끊는다 — 템플릿의
-# `audit_file: <...>.md   # basename만 (같은 디렉토리)` 라인 자체가 파싱 대상이다.
-#
-# 키와 값 사이는 `\s*`가 아니라 **`[ \t]*`**로 띄운다. `\s`는 개행을 포함하므로 `\s*`는 값이 빈
-# 키에서 **다음 줄의 토큰을 값으로 포획한다** — `session_id:`만 있는 frontmatter는 바로 아래
-# `source:`를 값으로 읽었고, payload와 audit이 둘 다 값을 비워두면 양쪽이 똑같이 `'source:'`로
-# 해석돼 페어링 검사를 **통과했다**(리뷰가 실행으로 실증: exit 0). 부재를 부재로 읽지 못하면
-# fail-closed 검사가 통째로 무너진다. 세 키 모두 같은 규칙을 쓴다 — 하나만 고치면 나머지가 남는다.
-AUDIT_FILE_RE = re.compile(r"^audit_file:[ \t]*([^\s#]+)", re.MULTILINE)
+def frontmatter_value(key: str, text: str):
+    """frontmatter에서 키 하나의 값을 읽는다. `(값, 오류)` — 둘 중 하나만 non-None.
+
+    frontmatter 키를 읽는 곳은 **여기 하나**다. 이 규칙들은 각각 실제 우회로를 닫은 것이고,
+    한 곳에 모아두지 않으면 키마다 규칙이 갈려 고친 키만 안전해진다(실측: 세 키 중 둘만
+    하드닝하고 `audit_file`을 남겨두자 그 키가 자기 docstring이 금지한 두 패턴을 그대로 썼다):
+
+    1. **개수는 값이 아니라 키 라인으로 센다.** 값 추출 패턴으로 세면 값이 빈 중복 키가 카운트에서
+       빠진다 — `session_id:` + `session_id: <맞는 값>`이면 hit이 1개라 중복 거부를 통과한다.
+    2. **키와 값 사이로 개행을 넘지 않는다.** `\\s`는 개행을 포함하므로 `\\s*`를 쓰면 값이 빈 키가
+       **다음 줄 토큰을 값으로 포획한다** — payload와 audit이 둘 다 `session_id:`를 비우면 양쪽이
+       똑같이 아래 `source:`로 읽혀 페어링이 상수로 붕괴했다(실행 실증: exit 0).
+    3. **값은 라인 끝까지 읽고 주석만 뗀다.** 첫 공백에서 끊으면 `shared payload`와 `shared audit`이
+       둘 다 `shared`로 읽혀 서로 다른 인터뷰가 동일 비교로 통과한다.
+    4. **공백이 남은 값은 거부한다.** 이 키들은 전부 단일 토큰이다. 모호한 입력에서 값을 하나
+       골라주지 않는 것이 이 함수의 존재 이유다.
+    """
+    raw = re.findall(rf"^{re.escape(key)}:([^\n]*)$", text, re.MULTILINE)
+    if not raw:
+        return None, f"{key} key absent"
+    if len(raw) > 1:
+        return None, f"{key} 중복 {len(raw)}건 (모호 — 거부)"
+    val = _strip_inline_comment(raw[0]).strip().strip('"').strip("'")
+    if not val:
+        return None, f"{key} key absent"
+    if len(val.split()) > 1:
+        return None, f"{key} 값에 공백 {val!r} (단일 토큰이어야 함 — 부분 비교 금지)"
+    return val, None
 
 
 def resolve_audit(payload: Path, fm: str):
@@ -187,11 +206,13 @@ def resolve_audit(payload: Path, fm: str):
     audit_file은 신뢰 경계 밖 입력이므로 **basename만** 허용한다(P21 계보) — `../x.md`,
     `/etc/x.md`, `a/b.md`는 전부 Path(...).name != 원문이라 거부된다. 부재·미해석은
     전부 게이트 red이며, 조용히 payload-only 검사로 degrade하지 않는다(2파일 fail-open 봉쇄).
+
+    값 읽기는 `frontmatter_value`에 위임한다 — `audit_file`은 **다른 모든 audit-측 검사가
+    무엇을 검증할지 고르는** 키라, 중복·빈 값·개행 포획 규칙에서 제외될 이유가 가장 없다.
     """
-    m = AUDIT_FILE_RE.search(fm)
-    if not m:
-        return None, "audit_file key absent"
-    name = m.group(1).strip().strip('"').strip("'")
+    name, err = frontmatter_value("audit_file", fm)
+    if err:
+        return None, err
     if Path(name).name != name:
         return None, f"audit_file {name!r} is not a basename (traversal rejected)"
     p = payload.parent / name
@@ -211,48 +232,39 @@ def audit_pairing_errors(payload_fm: str, audit_text: str) -> list[str]:
     `bijection_a_errors`는 백스톱이 못 된다 — `ST<N>`은 인터뷰마다 1부터 매겨져 steelman 1건짜리
     인터뷰 둘은 양쪽 다 `ST1`이라 불일치가 발생하지 않는다.
 
-    결합은 **파일명이 아니라 `session_id`**로 건다. 파일명 결합(`<payload stem>.audit.md` 강제)은
-    payload 하나당 audit 하나를 요구해 fixture 코퍼스(payload 39개가 audit 1개를 공유)를 전부
-    다시 쓰게 만들지만, `session_id`는 두 템플릿과 모든 fixture가 이미 담고 있어 churn이 0이다.
-    SKILL이 payload에 기존 spec-distill 세션 id를 재사용하도록 이미 규정한다.
-
     부재는 불일치와 똑같이 red다 — 못 읽은 값을 "일치로 간주"하면 이 검사 자체가 fail-open이 되고,
     그건 이 함수가 막으려는 바로 그 실패 모드다.
+
+    **알려진 한계 — 이 검사는 세션 경계까지만 막는다 (interview-level 미봉쇄).**
+    결합 키는 `session_id`인데 `SKILL.md`가 payload에 **기존 spec-distill 세션 id 재사용**을
+    규정하므로, 한 세션에서 진행한 두 인터뷰는 payload 2개와 audit 2개가 전부 같은 id를 갖는다.
+    그 사이의 차용은 이 검사가 구분하지 못한다 — 실행으로 확인됨: `interview-brief-floor-open.md`의
+    `audit_file:` 한 줄을 `interview-brief-valid.audit.md`로 바꾸면 exit 1 → **exit 0**.
+    즉 위 문단이 서술한 공격은 *교차 세션*에서만 닫혔고, 정작 흔한 *동일 세션* 경우는 열려 있다.
+    이 한계를 처음 놓친 이유는 증명 fixture(`interview-brief-foreign-audit.md`)가 다른 세션 id를
+    써서 **쉬운 절반만** 시험했기 때문이다. 초기 서술이 자랑한 "fixture churn 0"이 바로 그 신호였다 —
+    churn이 0인 것은 payload 39개가 이미 세션 id 하나를 공유하기 때문이고, 그건 곧 이 키가 그
+    39개를 서로 구분하지 못한다는 뜻이다.
+
+    interview-level 결합에는 payload마다 고유한 audit이 필요하다 — `audit_file`을 payload 파일명에서
+    유도하거나, audit이 이미 선언하지만 아무도 읽지 않는 `payload:` 역참조를 검사하는 것. 둘 다
+    audit fixture를 payload별로 분리해야 해서 이 라운드의 스코프 밖이며, 사용자 판단 사항이다.
     """
     errs: list[str] = []
     afm = _frontmatter(audit_text)
 
     def _one(key: str, text: str, label: str):
-        """키가 **정확히 하나**이고 값이 **단일 토큰**일 때만 값을 돌려준다.
+        """`frontmatter_value`의 오류를 **어느 파일의** 어떤 키인지 밝히는 문구로 바꾼다.
 
-        세 가지를 각각 따로 본다 — 하나로 합치면 서로를 가린다:
-
-        1. **개수는 값이 아니라 키 라인으로 센다.** 값 추출 패턴으로 개수를 세면 값이 빈 중복 키가
-           카운트에서 빠진다 — `session_id:` + `session_id: <맞는 값>`이면 hit이 1개라 중복 거부를
-           통과했다(codex 적발, 실행 실증: exit 0). 이건 값이 빈 키를 '부재'로 읽게 만든 바로 그
-           수정이 되열어놓은 구멍이라, 두 규칙을 분리하지 않으면 한쪽을 고칠 때마다 다른 쪽이
-           열린다.
-        2. **값은 라인 끝까지 읽고 주석만 뗀다.** `([^\\s#]+)`처럼 첫 공백에서 끊으면
-           `shared payload`와 `shared audit`이 둘 다 `shared`로 읽혀 서로 다른 인터뷰가 동일
-           비교로 통과한다(codex 적발).
-        3. **공백이 남은 값은 거부한다.** session_id·type은 단일 토큰이다. 모호한 입력에 값을
-           하나 골라주지 않는 것이 이 함수의 존재 이유다.
+        페어링 진단에서 가장 먼저 알아야 하는 것은 payload 쪽인지 audit 쪽인지다 — 두 파일이
+        같은 키 이름을 쓰므로 키 이름만 담은 원본 문구로는 구분이 안 된다.
         """
-        raw = re.findall(rf"^{key}:([^\n]*)$", text, re.MULTILINE)
-        if not raw:
-            errs.append(f"{label} 없음")
-            return None
-        if len(raw) > 1:
-            errs.append(f"{label} 중복 {len(raw)}건 (모호 — 거부)")
-            return None
-        val = _strip_inline_comment(raw[0]).strip()
-        if not val:
-            errs.append(f"{label} 없음")
-            return None
-        if len(val.split()) > 1:
-            errs.append(f"{label} 값에 공백 {val!r} (단일 토큰이어야 함 — 부분 비교 금지)")
-            return None
-        return val
+        val, err = frontmatter_value(key, text)
+        if err is None:
+            return val
+        detail = "없음" if err == f"{key} key absent" else err[len(key) + 1:]
+        errs.append(f"{label} {detail}")
+        return None
 
     atype = _one("type", afm, "audit frontmatter에 type")
     if atype is not None and atype != "interview-audit":
@@ -295,7 +307,7 @@ INLINE_COMMENT_RE = re.compile(r"(?:^|\s)#")
 def _strip_inline_comment(v: str) -> str:
     """필드 값에서 YAML 인라인 주석을 제거한다.
 
-    `audit_file`은 이미 `[^\\s#]`로 값을 끊는데(AUDIT_FILE_RE) 항목 필드는 끊지 않아,
+    `audit_file`은 이미 `frontmatter_value`가 주석을 떼는데 항목 필드는 떼지 않아,
     **같은 템플릿의 같은 frontmatter 블록**을 두 규칙이 반대로 읽는 상태였다 — 템플릿이
     상속시킨 `source: verbatim          # verbatim(…) | chosen(…)` 한 줄이 "source 값이
     allowlist 밖" + bijection B 4건이라는, 원인(값 뒤 주석)과 무관해 보이는 오류 벽을
@@ -403,7 +415,9 @@ def confirmed_zero_unsentineled(text: str) -> bool:
     return not CONFIRMED_SENTINEL_RE.search(fm)
 
 
-S_ANCHOR_RE = re.compile(r"^\s*-\s+\*\*(S\d+)\*\*", re.MULTILINE)
+# 같은 이유로 `[-*]` — `*`로 쓴 §6 앵커가 안 보이면 그 항목의 evidence가 전부 dangling으로
+# 잡혀 원인과 무관한 red가 난다.
+S_ANCHOR_RE = re.compile(r"^\s*[-*]\s+\*\*(S\d+)\*\*", re.MULTILINE)
 
 
 def verbatim_anchors(text: str) -> set:
@@ -594,7 +608,9 @@ def skepticism_malformed(text: str) -> list[str]:
     return bad
 
 
-REJECT_NA_RE = re.compile(r"^-\s*기각\s*—\s*N/?A\b", re.IGNORECASE)
+# 불릿은 `_entry_lines`와 같은 관례여야 한다 — `^-`만 보면 `* 기각 — N/A`가 sentinel로
+# 인식되지 않고 **실제 기각 1건**으로 오분류돼 R4가 헛통과한다(기각 0건인데 통과).
+REJECT_NA_RE = re.compile(r"^[-*]\s*기각\s*—\s*N/?A\b", re.IGNORECASE)
 
 
 def tried_discarded_ok(text: str) -> bool:
@@ -658,8 +674,11 @@ def frontmatter_errors(text: str) -> list[str]:
         errs.append("type != interview-brief")
     if not re.search(r"^next_phase:\s*superpowers:brainstorming\s*$", fm, re.MULTILINE):
         errs.append("next_phase != superpowers:brainstorming")
-    if not AUDIT_FILE_RE.search(fm):
-        errs.append("audit_file key absent")
+    # 실제 오류를 그대로 싣는다 — 어떤 오류든 "key absent"로 뭉개면 중복 키가 부재로 보고돼
+    # 원인과 증상이 어긋난다(중복 2건인데 "없다"고 말하면 사용자는 키를 하나 더 추가한다).
+    _af_err = frontmatter_value("audit_file", fm)[1]
+    if _af_err:
+        errs.append(_af_err)
     if not re.search(r"^user_sourced_items\s*:", fm, re.MULTILINE):
         errs.append("user_sourced_items key absent")
     return errs

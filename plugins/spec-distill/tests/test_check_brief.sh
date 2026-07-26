@@ -281,10 +281,12 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-empty-session.md" 2>/dev/null
   || note FAIL "R3: 빈 session_id가 다음 줄 키를 값으로 삼켰다"
 
 # R4: 같은 규칙이 audit_file에도 적용된다 — 하나만 고치면 나머지가 남는다(같은 모양 3개 전수 교정).
-# 빈 audit_file:이 다음 줄 `created_at:`을 파일명으로 포획하면 원인과 무관한 'not found'가 뜬다.
+# negative는 이 fixture의 **실제 인접 줄**을 짚어야 한다: `audit_file:` 다음 줄은 `user_sourced_items:`다.
+# 처음엔 `created_at`을 썼는데 그 키는 세 줄 *위*라 어떤 경우에도 출력에 나올 수 없었다 — 즉 그
+# conjunct는 항상 참인 죽은 절이었다(리뷰 적발). 주장하는 이빨과 실제 이빨이 다르면 락이 아니다.
 out="$(python3 "$SCRIPT" gate "$FX/interview-brief-empty-auditfile.md" 2>/dev/null)"; rc=$?
 { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'audit_file key absent' \
-    && ! printf '%s' "$out" | grep -q 'created_at'; } \
+    && ! printf '%s' "$out" | grep -q 'user_sourced_items'; } \
   && note PASS "R4: 빈 audit_file은 부재로 읽힌다 (다음 줄 포획 금지)" \
   || note FAIL "R4: 빈 audit_file이 다음 줄 키를 파일명으로 삼켰다"
 
@@ -312,6 +314,16 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-spaced-session.md" 2>/dev/nul
 { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '단일 토큰'; } \
   && note PASS "R7: 공백 포함 session_id는 부분 비교되지 않고 거부된다" \
   || note FAIL "R7: session_id가 첫 토큰만으로 비교됐다"
+
+# R8: `audit_file`도 나머지 frontmatter 키와 **같은** 규칙(중복 거부·빈 값·개행 포획 금지)을 쓴다.
+# session_id/type만 하드닝하고 audit_file을 남겼을 때, 그 키가 자기 docstring이 금지한 두 패턴
+# (first-match search + 첫 공백 컷)을 그대로 쓰고 있었다. audit_file은 **다른 모든 audit-측 검사가
+# 무엇을 읽을지 고르는** 키라 규칙에서 빠질 이유가 가장 없다. 중복이 '부재'로 뭉개지지 않는지도 본다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-dup-auditfile.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'audit_file 중복' \
+    && ! printf '%s' "$out" | grep -q 'audit_file key absent'; } \
+  && note PASS "R8: audit_file 중복 → 중복으로 거부(부재로 오보고 안 함)" \
+  || note FAIL "R8: audit_file 중복이 거부되지 않거나 부재로 오보고됐다"
 
 # --- Task 2: user_sourced_items 스키마 + bijection C + confirmed sentinel ---
 

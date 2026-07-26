@@ -16,7 +16,12 @@
   `audit_file`만으로는 basename이 같은 디렉토리에 존재하기만 하면 통과해서, payload가 **다른
   인터뷰의 audit**을 가리켜 그 §1 Coverage Ledger(Law 1 종료 판정의 근거)를 상속할 수 있었다 —
   끝나지 않은 인터뷰가 `audit_file` 한 줄만 바꿔 exit 1에서 exit 0이 됐다. 결합은 파일명이 아닌
-  `session_id` 동등성 + audit `type`으로 건다(두 템플릿과 기존 fixture가 이미 담고 있어 churn 0).
+  `session_id` 동등성 + audit `type`으로 건다.
+  **알려진 한계 — 세션 경계까지만 막는다.** `SKILL`이 payload에 기존 spec-distill 세션 id
+  재사용을 규정하므로 한 세션에서 진행한 두 인터뷰는 payload·audit이 전부 같은 id를 갖는다.
+  즉 이 검사는 *교차 세션* 차용만 막고 *동일 세션* 차용은 막지 못한다(실측: floor가 열린
+  payload의 `audit_file:` 한 줄을 완료된 audit으로 바꾸면 여전히 exit 0). interview-level
+  결합은 payload마다 고유 audit이 필요해 후속 결정 사항으로 남긴다.
   부재도, **중복 키도** 불일치와 동일하게 red — 못 읽은 값을 일치로 간주하거나 모호한 입력에서
   값을 하나 골라주면 이 검사 자체가 fail-open이 된다(첫 매치만 쓰면 남의 audit 맨 앞에 맞는
   `session_id` 한 줄을 얹어 바인딩을 우회할 수 있다). frontmatter 키-값 구분자는 `\s*`가 아니라
