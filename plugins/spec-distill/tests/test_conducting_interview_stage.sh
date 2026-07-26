@@ -38,11 +38,31 @@ has 'optional|선택' "brainstorming invoke is optional"
 has 'superpowers.*(부재|없).*advisory|advisory.*superpowers' "AC13: superpowers-absent loud advisory"
 
 # --- v0.23.0: 확정 확인을 흡수한 단일 proceed 게이트 (AC2/AC3) ---
-has 'AskUserQuestion' "AC20: Step B proceed 게이트가 AskUserQuestion 사용"
-has '확정하고 /compact 후 brainstorming' "AC2: 옵션 ① 라벨 (확정 + /compact)"
-has '확정하고 바로 brainstorming' "AC2: 옵션 ② 라벨 (확정 + 즉시)"
-has '확정 목록 수정' "AC2: 옵션 ③ 라벨 (재제시)"
-has 'brief만 종료' "AC20: 옵션 ④ 라벨 (terminal)"
+# 이 게이트를 전-파일 grep으로 잠그면 이빨이 0이다. 'AskUserQuestion'은 probe 백스톱 C1
+# escalation에도 등장하고(이 스위트가 아래 :~176 주석에서 이미 지적한 함정 — 거기선
+# backstop_block으로 스코프해 해결했다), 옵션 라벨 4종은 B-3의 bullet 제목이 verbatim
+# 반복하므로 각각 2~3회 등장한다. 실측: B-2의 AskUserQuestion({…}) 블록을 통째로 지워도
+# 5건 전부 GREEN이었다. → "#### B-2" 블록으로 스코프한다.
+# 라벨은 grep -qE가 아니라 **grep -qF**로 잡는다: 한국어 조사와 마크다운 백틱이 정규식
+# 경계를 조용히 깨뜨린 전례가 이 파일 안에 이미 있다(아래 강등 프로즈 락 주석 참조).
+# 헤더-satisfiable 회피: B-2 헤더에 `AskUserQuestion`이 있으므로 여는 괄호까지 요구한다.
+b2_block="$(awk '/^#### B-2/{f=1;print;next} /^#### /{f=0} f' "$SKILL")"
+{ [[ -n "$b2_block" ]] && grep -qF 'AskUserQuestion(' <<<"$b2_block"; } \
+  && note PASS "AC20: Step B proceed 게이트가 AskUserQuestion 호출 (B-2 스코프)" \
+  || note FAIL "AC20: B-2 블록에 AskUserQuestion( 호출이 없다"
+grep -qF '확정하고 /compact 후 brainstorming' <<<"$b2_block" \
+  && note PASS "AC2: 옵션 ① 라벨 (확정 + /compact, B-2 스코프)" \
+  || note FAIL "AC2: 옵션 ① 라벨이 B-2 게이트에 없다"
+grep -qF '확정하고 바로 brainstorming' <<<"$b2_block" \
+  && note PASS "AC2: 옵션 ② 라벨 (확정 + 즉시, B-2 스코프)" \
+  || note FAIL "AC2: 옵션 ② 라벨이 B-2 게이트에 없다"
+grep -qF '확정 목록 수정' <<<"$b2_block" \
+  && note PASS "AC2: 옵션 ③ 라벨 (재제시, B-2 스코프)" \
+  || note FAIL "AC2: 옵션 ③ 라벨이 B-2 게이트에 없다"
+grep -qF 'brief만 종료' <<<"$b2_block" \
+  && note PASS "AC20: 옵션 ④ 라벨 (terminal, B-2 스코프)" \
+  || note FAIL "AC20: 옵션 ④ 라벨이 B-2 게이트에 없다"
+# 이건 전-파일로 둔다 — SKILL 전체에서 1회뿐이라 이미 이빨이 있다.
 has '/compact interview brief at' "AC20: verbatim /compact 명령 노출"
 
 # AC2: 재제시 상한 + 초과 시 강등 + 고정 advisory 문자열 (Unbounded-autonomy 가드)
@@ -68,10 +88,15 @@ grep -qE '제외한 것도|제외 항목' <<<"$b0_block" \
 
 # AC3: C4 재결정 프로토콜이 **양쪽 경로**의 호출 프롬프트에 실린다
 b3_block="$(awk '/^#### B-3/{f=1;print;next} /^#### /{f=0} f' "$SKILL")"
-c4=$(grep -c '보고 후 재결정' <<<"$b3_block")
-[[ "$c4" -ge 2 ]] \
-  && note PASS "AC3: C4 프로토콜이 ①/② 양쪽 경로에 실림 (n=$c4)" \
-  || note FAIL "AC3: C4 프로토콜이 한쪽 경로에만 있다 (n=$c4)"
+# B-3 전체에서 count>=2를 세면 "①에 두 문장, ②에 0"도 통과한다 — AC3의 계약은 개수가 아니라
+# **경로별 존재**다. 각 옵션 bullet을 자기 윈도우로 잘라 양쪽에 각각 >=1을 요구한다.
+b3_opt1="$(awk '/^- \*\*① /{f=1} /^- \*\*② /{f=0} f' <<<"$b3_block")"
+b3_opt2="$(awk '/^- \*\*② /{f=1} /^- \*\*③ /{f=0} f' <<<"$b3_block")"
+c4_1=$(grep -cF '보고 후 재결정' <<<"$b3_opt1")
+c4_2=$(grep -cF '보고 후 재결정' <<<"$b3_opt2")
+{ [[ "$c4_1" -ge 1 ]] && [[ "$c4_2" -ge 1 ]]; } \
+  && note PASS "AC3: C4 프로토콜이 ①/② 각 경로에 실림 (①=$c4_1 ②=$c4_2)" \
+  || note FAIL "AC3: C4 프로토콜이 양쪽 경로에 있지 않다 (①=$c4_1 ②=$c4_2)"
 grep -qE '임의 변경.*금지' <<<"$b3_block" \
   && note PASS "AC3: 임의 변경 금지 절반이 명시됨" || note FAIL "AC3: 임의 변경 금지가 없다"
 

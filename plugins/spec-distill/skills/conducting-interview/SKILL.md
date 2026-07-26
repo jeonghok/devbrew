@@ -395,7 +395,10 @@ Step A가 끝난 시점에 `user_sourced_items`는 **전부 `provisional`**입�
 **재제시 상한** (금지 패턴 *Unbounded autonomy* 가드): 최초 제시는 0회째입니다. 사용자가
 옵션 ③(확정 목록 수정)을 고를 때마다 state의 `confirm_repost_count`를 +1 하고 **2회까지**
 허용합니다. 3번째 ③ 요구 시 전 항목을 `provisional`로 강등하고 아래 **고정 문자열**을 출력한
-뒤 게이트를 재제시하지 않고 진행합니다 — 확정이 덜 되는 쪽이 안전한 방향입니다:
+뒤 게이트를 재제시하지 않고 **④와 동일한 terminal 경로로 종료합니다**(handoff 안 함 —
+사용자가 ③을 골랐지 ①/②를 고른 적이 없으므로, 게이트 없이 brainstorming으로 자동 진행하는
+것은 B-4의 P17/AP2 금지 대상이다). 종료 방향인 이유는 확정이 덜 되는 쪽이 안전한 방향이기
+때문입니다:
 
 ```
 [spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등
@@ -452,11 +455,17 @@ AskUserQuestion({
 아니라 **orchestrator의 호출 프롬프트**에 싣습니다. brief는 순수 데이터(`source`/`status`/
 `evidence`)만 나릅니다. 아래 ①과 ② **양쪽 모두** 같은 문장을 싣습니다.
 
+**확정 반영 절차 (①/② 공통).** `provisional` → `confirmed` 전이와 함께, Step A가 confirmed
+0건일 때 넣었던 sentinel 한 줄(`# confirmed 0건 — 사용자가 전부 잠정으로 판단`)이 남아 있으면
+**같은 write에서 삭제**합니다. `check_brief.py`는 이 잔존을 잡지 못합니다 — confirmed가 한 건이라도
+있으면 sentinel *요구*가 해제될 뿐 잔존을 거부하지는 않아, 지우지 않으면 confirmed 항목 옆에
+"전부 잠정"이라 적힌 자기모순 brief가 그대로 나갑니다. 삭제까지 마친 뒤 재저장 → 게이트 재실행.
+
 - **① 확정하고 /compact 후 brainstorming**: 확정 후보를 `status: confirmed`로 반영 →
   brief 재저장 → `check_brief.py gate` 재실행(통과 확인) → 아래 verbatim `/compact` 명령을
   *그대로 보이게* 노출 + "compact 후 brainstorming 진입 준비됨" 안내:
 
-  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 §0 한눈에, §2 제약, §3 Open Questions, §6 사용자 원문)과 audit 파일 경로 참조 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 다음 단계: Skill superpowers:brainstorming <brief-path>.`
+  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 §0 한눈에, §2 제약, §3 Open Questions, §6 사용자 원문), audit 파일 경로 참조, **그리고 아래 '재결정 규약' 문장**을 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. 재결정 규약: confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 다음 단계: Skill superpowers:brainstorming <brief-path>.`
 
   → **여기서 턴 종료(STOP). 같은 턴에서 `brainstorming`을 호출하지 말 것**(compact 전
   brainstorming 진입 = 옵션 ① 무력화). `Skill superpowers:brainstorming <brief-path>` 진입은
