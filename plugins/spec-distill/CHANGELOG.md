@@ -17,7 +17,9 @@
   인터뷰의 audit**을 가리켜 그 §1 Coverage Ledger(Law 1 종료 판정의 근거)를 상속할 수 있었다 —
   끝나지 않은 인터뷰가 `audit_file` 한 줄만 바꿔 exit 1에서 exit 0이 됐다. 결합은 파일명이 아닌
   `session_id` 동등성 + audit `type`으로 건다(두 템플릿과 기존 fixture가 이미 담고 있어 churn 0).
-  부재는 불일치와 동일하게 red — 못 읽은 값을 일치로 간주하면 이 검사 자체가 fail-open이 된다.
+  부재도, **중복 키도** 불일치와 동일하게 red — 못 읽은 값을 일치로 간주하거나 모호한 입력에서
+  값을 하나 골라주면 이 검사 자체가 fail-open이 된다(첫 매치만 쓰면 남의 audit 맨 앞에 맞는
+  `session_id` 한 줄을 얹어 바인딩을 우회할 수 있다).
 - **세 bijection** — A: payload §5 `ST<N>` ↔ audit §3 `#### ST<N>`(양방향, 공집합 허용) /
   B: body §2 ↔ frontmatter(id·기호·status·`⟨S<N>⟩`·**statement 내용**까지) /
   C: 모든 `evidence: S<N>`가 payload §6에서 해석됨.

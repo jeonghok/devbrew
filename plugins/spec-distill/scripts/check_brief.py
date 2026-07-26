@@ -152,6 +152,19 @@ def _entry_lines(section: str) -> list[str]:
     ]
 
 
+# 불릿을 떼는 곳은 여기 하나다. 소비자들이 각자 `lstrip("- ")`를 쓰면 안 된다 — 그건 **문자 집합**
+# strip이라 `*`를 벗기지 않아서, `_entry_lines`가 `*`를 받아들인 직후 소비자는 그 줄을 못 알아본다
+# (`* 기각 — …`이 R4에 안 세지고, `* floor:root_problem — …`이 원장 행 부재로 읽힌다). 방향은
+# fail-closed라 우회는 안 되지만, 항목을 받아들이는 규칙과 해석하는 규칙이 어긋나는 건 이 커밋이
+# 방금 닫은 바로 그 결함이다 — 한 층 아래에서 되풀이하지 않는다.
+BULLET_PREFIX_RE = re.compile(r"^\s*[-*]\s+")
+
+
+def _strip_bullet(ln: str) -> str:
+    """항목 줄에서 선행 불릿(`-` 또는 `*`) **하나**와 뒤따르는 공백을 뗀다."""
+    return BULLET_PREFIX_RE.sub("", ln, count=1)
+
+
 def _frontmatter(text: str) -> str:
     m = FRONTMATTER_RE.match(text)
     return m.group(1) if m else ""
@@ -206,20 +219,32 @@ def audit_pairing_errors(payload_fm: str, audit_text: str) -> list[str]:
     """
     errs: list[str] = []
     afm = _frontmatter(audit_text)
-    atype = TYPE_RE.search(afm)
-    if not atype:
-        errs.append("audit frontmatter에 type 없음")
-    elif atype.group(1) != "interview-audit":
-        errs.append(f"audit type {atype.group(1)!r} != 'interview-audit'")
-    psid = SESSION_ID_RE.search(payload_fm)
-    asid = SESSION_ID_RE.search(afm)
-    if not psid:
-        errs.append("payload frontmatter에 session_id 없음")
-    if not asid:
-        errs.append("audit frontmatter에 session_id 없음")
-    if psid and asid and psid.group(1) != asid.group(1):
+
+    def _one(pattern, text: str, label: str):
+        """키가 **정확히 하나**일 때만 값을 돌려준다 (부재·중복은 red).
+
+        `search`로 첫 매치만 쓰면 중복 키가 fail-open이 된다 — 남의 audit 맨 앞에 맞는
+        `session_id:` 한 줄만 얹으면 원래 식별자를 그대로 둔 채 바인딩을 통과한다(codex 적발).
+        중복 키는 YAML로도 부정하므로 어느 쪽 값을 쓸지 고르지 말고 거부한다. 모호한 입력에
+        값을 하나 골라주는 것이 바로 이 함수가 막으려는 실패 모드다.
+        """
+        hits = pattern.findall(text)
+        if not hits:
+            errs.append(f"{label} 없음")
+            return None
+        if len(hits) > 1:
+            errs.append(f"{label} 중복 {len(hits)}건 (모호 — 거부)")
+            return None
+        return hits[0]
+
+    atype = _one(TYPE_RE, afm, "audit frontmatter에 type")
+    if atype is not None and atype != "interview-audit":
+        errs.append(f"audit type {atype!r} != 'interview-audit'")
+    psid = _one(SESSION_ID_RE, payload_fm, "payload frontmatter에 session_id")
+    asid = _one(SESSION_ID_RE, afm, "audit frontmatter에 session_id")
+    if psid is not None and asid is not None and psid != asid:
         errs.append(
-            f"audit session_id {asid.group(1)!r} != payload {psid.group(1)!r} "
+            f"audit session_id {asid!r} != payload {psid!r} "
             "(다른 인터뷰의 audit — Coverage Ledger 차용)"
         )
     return errs
@@ -534,7 +559,7 @@ def skepticism_malformed(text: str) -> list[str]:
         # word-bounded ST<N>(예: `/ST9/`)이 실제 참조인 양 요구를 충족시켜버린다.
         ln_no_url = URL_RE.sub("", ln)
         has_st = bool(ST_REF_RE.search(ln_no_url))
-        stripped = VERDICT_CLAUSE_RE.sub("", ST_REF_RE.sub("", ln_no_url)).lstrip("- ").strip()
+        stripped = _strip_bullet(VERDICT_CLAUSE_RE.sub("", ST_REF_RE.sub("", ln_no_url))).strip()
         has_stmt = len(stripped) >= 10
         if not (has_verdict and has_stmt and has_st and (has_url or not require_url)):
             miss = []
@@ -561,7 +586,7 @@ def tried_discarded_ok(text: str) -> bool:
     병합은 표현의 통합이지 의례의 폐기가 아니다: `기각` 항목이 0건이면 명시 N/A sentinel
     없이는 통과할 수 없다. steelman과 무관하게 사용자가 폐기한 방향도 여기 남는다.
     """
-    rej = [ln for ln in section5_entries(text) if ln.lstrip("- ").startswith("기각")]
+    rej = [ln for ln in section5_entries(text) if _strip_bullet(ln).startswith("기각")]
     sentinel = any(REJECT_NA_RE.match(ln) for ln in rej)
     real = [ln for ln in rej if not REJECT_NA_RE.match(ln)]
     return bool(real) or sentinel
@@ -582,7 +607,7 @@ def coverage_ledger_failures(text: str) -> list[str]:
     derived_rows = 0
     derived_sentinel = False
     for ln in _entry_lines(sec):
-        body = ln.lstrip("- ").strip()
+        body = _strip_bullet(ln).strip()
         fm = re.match(r"^floor:(\w+)\s*—\s*(\S+)\s*—\s*(.*)$", body)
         if fm:
             floor_rows[fm.group(1)] = (fm.group(2).strip(), fm.group(3).strip())

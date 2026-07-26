@@ -253,6 +253,23 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-foreign-audit.md" 2>/dev/null
   && note PASS "F1: 다른 인터뷰의 audit 채택 → red (session_id 바인딩)" \
   || note FAIL "F1: 남의 audit을 채택해 Coverage Ledger를 상속했다"
 
+# R1: 항목을 **받아들이는** 규칙(_entry_lines, `[-*]`)과 불릿을 **떼는** 규칙(_strip_bullet)이
+# 일치한다. 소비자가 `lstrip("- ")`(문자 집합 strip)를 쓰면 `*`가 안 벗겨져, 받아들여진 줄을
+# 소비자가 못 알아본다 — `* 기각 …`이 R4에 안 세어져 이 fixture가 red가 된다. green이 정답인
+# assertion이라 이빨은 mutation으로 증명한다(strip을 되돌리면 이 케이스만 red).
+python3 "$SCRIPT" gate "$FX/interview-brief-star-bullet-rejection.md" >/dev/null 2>&1 \
+  && note PASS "R1: '*' 불릿 기각 항목도 R4에 세어진다 (수용≡해석 관례 일치)" \
+  || note FAIL "R1: '*' 불릿 기각 항목을 소비자가 못 알아본다 (lstrip 문자집합 회귀)"
+
+# R2: pairing 키가 **중복**이면 값을 고르지 말고 거부한다. 첫 매치만 쓰면 남의 audit 맨 앞에
+# 맞는 session_id 한 줄만 얹어 바인딩을 우회할 수 있다 — 모호한 입력에 값을 하나 골라주는 것이
+# 이 검사가 막으려는 fail-open 그 자체다. 메시지까지 확인해 무관한 실패로 만족되지 않게 한다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-dup-session.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'audit pairing' \
+    && printf '%s' "$out" | grep -q '중복'; } \
+  && note PASS "R2: session_id 중복 키 → red (첫 매치 채택 금지)" \
+  || note FAIL "R2: 중복 session_id의 첫 매치로 바인딩이 우회됐다"
+
 # --- Task 2: user_sourced_items 스키마 + bijection C + confirmed sentinel ---
 
 # T3: user_sourced_items 부재 → red
