@@ -89,7 +89,10 @@ interview brief에 Law 2 분리 리뷰를 붙인다. 축은 둘(충실도·방�
 3. **원문 완전성의 기계 집행.** payload-only 리뷰어가 볼 수 없는 축(발화 누락·요약 삽입)을 state 원장 대조로 닫는다.
 4. **핸드오프 품질의 측정.** 순진한 냉독으로 *"이 문서가 실제로 어떻게 읽히나"* 를 재고, 판정은 사용자에게 남긴다.
 5. **모델 다양성을 두 축 모두에.** codex를 축별 2회 호출로 붙이고, codex 부재가 어느 축도 죽이지 않게 한다.
-6. **하니스 무게 0 증가.** 훅 0개 추가, 상한은 실재 루프에만, 이빨 없는 체크 0개 (E10).
+6. **하니스의 *제약* 무증가** (E10). 리뷰가 지적한 대로 *"무게 0 증가"* 는 비측정 표현이었다 — 이 spec은 에이전트 3 · 모델 호출 5 · 스크립트 4 · state 키 3 · 승인 게이트 1을 **늘린다.** 그것들은 **능력 증가**이고 E10의 대상이 아니다. E10이 금지하는 것은 *모델을 옥죄는 규칙*이며, 측정 가능한 세 항목으로 못 박는다:
+   - **훅 파일 · `hooks.json` 항목 추가 0개** (AC22)
+   - **이빨 없는 결정론 체크 0개** — 검사 대상이 통과 조건을 직접 쓰는 검사를 도입하지 않는다(§9의 기각 항목)
+   - **횟수 상한은 실재 루프에만** — 단일 호출(codex `exec`, 각 에이전트 1회 dispatch)에 상한 0개. 상한이 붙는 곳은 critic 재리뷰 루프 하나뿐(AC13)
 
 ---
 
@@ -157,18 +160,40 @@ D5의 두 축은 **한 에이전트에 들어갈 수 없다.** (a)는 문서 내
 
 | 컴포넌트 | 책임 (X / NOT Z) | `tools:` | `model:` | 입력 | 격리 | 판정 권한 |
 |---|---|---|---|---|---|---|
-| **`brief-critic`** | 충실도(D5a) — §2 요약이 §6 원문을 왜곡·누락·삽입했나. **NOT** 방향의 옳음, **NOT** 외부 근거 | `Read` (inert) | `inherit` | payload **전문 inline**, **경로 미제공** | 완전 — 경로가 없으므로 audit 도달 경로 자체가 없음 | **hard gate** (D2) |
+| **`brief-critic`** | 충실도(D5a) — §2 요약이 §6 원문을 왜곡·누락·삽입했나. **NOT** 방향의 옳음, **NOT** 외부 근거 | `Read` (inert) | `inherit` | payload **전문 inline**(`audit_file` redact), **경로 미제공** | 예방+검출 2층 (아래) — 완전 격리는 원리적으로 불가 | **hard gate** (D2) |
 | **`brief-direction-reviewer`** | 방향성(D5b) — 사용자가 잡은 방향 자체가 틀렸을 가능성. **NOT** 충실도, **NOT** 문서 수정, **NOT** 방향 변경 | `Read, Grep, Glob, WebSearch, WebFetch` | `inherit` | payload 경로 + repo + 웹 | 없음 — 이 축엔 근거 폭이 본질 | **보고만** → C4 경로 |
-| **`brief-readback`** | 냉독(D3) — 이 문서가 실제로 어떻게 읽히나. **NOT** 검증, **NOT** 의도 확인, **NOT** 결함 사냥 | `Read` (inert) | `inherit` | payload **전문 inline**, **판정 기준·출력 스키마 무제공** | 완전 | **advisory 측정** |
+| **`brief-readback`** | 냉독(D3) — 이 문서가 실제로 어떻게 읽히나. **NOT** 검증, **NOT** 의도 확인, **NOT** 결함 사냥 | `Read` (inert) | `inherit` | payload **전문 inline**(`audit_file` redact), **판정 기준·출력 스키마 무제공** | 예방+검출 2층 (아래) | **advisory 측정** |
 | **codex** (에이전트 파일 아님) | 별-모델 독립(D4) — 축별 2회 호출 | `codex exec -s read-only`, `-c tools.web_search=true` | 사용자 config 상속 | payload 경로 + repo + 웹 | 없음 (E6) | 축별로 위 1·2에 병합 |
 
 **inert `Read`가 유일한 도구인 이유.** `tools:`를 비우면 agent 정의가 유효하지 않고, `Grep`/`Glob`을 주면 `docs/superpowers/interview/*`를 훑어 audit(`<payload-basename>.audit.md` — 이름이 결정론적)에 도달한다. 리포 선례: `quality-gates:pr-understanding-builder`(*"단일 inline 컨텍스트 blob만 받는, 호출하지 않는 inert `Read`가 유일한 도구인 read-nothing 생성기"*).
 
-**격리의 진짜 담보는 도구가 아니라 경로 미제공이다.** `Read`가 있어도 파일명을 모르면 읽을 수 없다. 그래서 dispatch 프롬프트에 payload 경로를 **싣지 않는 것**이 load-bearing이며 T8이 그 닫힌 절반을 잠근다.
+**격리는 예방이 아니라 예방+검출의 2층이다.** 초안은 *"경로를 안 주면 도달 불가"* 로 완전 격리를 주장했으나 두 경로로 뚫린다:
+
+1. **payload frontmatter의 `audit_file`** 키에 audit 파일 basename이 그대로 실려 있다(`templates/interview-brief-template.md:8`). payload 전문을 inline하면 그 basename도 함께 들어간다.
+2. **재구성.** `audit_file`을 redact해도 payload의 `name:`(kebab-topic) + `created_at:`으로 `<date>-<topic>-interview.audit.md` 를 조립할 수 있고, 관행 디렉토리(`docs/superpowers/interview/`)는 리포 전역에 서술돼 있다.
+
+즉 **`Read`를 가진 에이전트에게 완전 격리는 원리적으로 불가능하다.** 그래서 두 층으로 간다:
+
+**층 1 — 예방(부분).** inline blob을 만들 때 frontmatter의 `audit_file` **값을 redact**한다(`audit_file: <redacted>`). 직접 벡터를 없앤다. critic이 이 값을 잃어도 손실이 없다 — 충실도 판정은 body §2 ↔ §6 대조이고, frontmatter ↔ body 일치는 게이트의 bijection B가 이미 기계 보장한다.
+
+**층 2 — 검출(실질).** audit에는 payload에 **결코 없는 어휘**가 있고 그것은 **닫힌 열거**다: `Coverage Ledger` · `floor:root_problem` · `floor:landscape` · `floor:skepticism` · `floor:blind_spot` · `floor:open_questions` · `probe_count` · `web_sweep_count` · `web_search_count` · `ST<N>` 헤딩. critic·readback **산출물**에 이 중 하나라도 나타나면 그 에이전트가 audit에 도달했다는 증거이므로 **그 라운드를 무효화하고 fresh 에이전트로 재dispatch**한다(재dispatch는 `brief_critic_rounds` 상한과 별개 — 오염 라운드는 리뷰가 아니었으므로 카운트하지 않는다).
+
+**프롬프트에 *"audit을 읽지 마라"* 를 넣지 않는다.** audit의 존재와 그것이 인터뷰 프레이밍을 담는다는 사실을 알리는 것 자체가 힌트이며, readback 오염(기준을 알면 그 답을 회피)의 같은 클래스다. 금지 문구 대신 **모르게 두고 검출**한다.
 
 **격리는 능력 억제가 아니라 실험 설계다** — E10의 적용 대상이 아니다. critic이 audit을 읽으면 *"왜 이렇게 재구성했는지"* 를 먼저 납득해 재구성 오류 자체를 정당화하고(D2의 명시 근거), readback이 판정 기준을 읽으면 확인해주는 쪽으로 붕괴한다(Spec A 인터뷰에서 **실측**: 시범 에이전트가 payload 안 red-flag 기준을 읽고 그 답을 회피했다고 스스로 보고).
 
-**codex의 비격리는 손실이 아니라 정보로 쓴다.** codex는 repo를 보므로(E6) audit에 도달할 수 있고 프레이밍을 흡수할 수 있다. 격리된 critic이 잡은 것과 전체를 본 codex가 잡은 것의 **차이가 곧 "사정을 알면 안 보이게 되는 것"의 측정치**다. 대신 병합 산출에 `codex_isolated: false`를 항상 명시해 두 리뷰어 findings를 같은 등급으로 읽지 않게 하고, **충실도 축의 최종 권위는 격리된 critic**이다(codex findings는 보조 입력).
+**codex의 비격리는 손실이 아니라 정보로 쓴다.** codex는 repo를 보므로(E6) audit에 도달할 수 있고 프레이밍을 흡수할 수 있다. 격리된 critic이 잡은 것과 전체를 본 codex가 잡은 것의 **차이가 곧 "사정을 알면 안 보이게 되는 것"의 측정치**다.
+
+**권위 계약 (precedence) — 명시.** 두 리뷰어의 관계를 한 가지로 못 박는다:
+
+| 층 | 규칙 |
+|---|---|
+| **verdict** | **fail-closed 합집합.** critic 또는 codex 중 **어느 쪽이든** Issues를 내면 `fidelity_verdict = needs_revise`. codex는 advisory가 아니라 **binding**이며 verdict를 단독으로 만들 수 있다 |
+| **finding 기각** | 저자(orchestrator)는 어느 리뷰어의 finding도 **임의로 기각하지 못한다.** 반영하지 않을 findings는 이유와 함께 Step B 게이트에서 **사용자에게 올린다**(P17) — 저자의 자기승인 경로 차단 |
+| **`codex_isolated: false`** | **verdict 입력이 아니다.** 저자가 findings를 *읽을 때* 붙는 라벨 — 이 finding은 프레이밍을 흡수한 리뷰어가 낸 것일 수 있으니 그 가능성을 함께 고려하라는 뜻. 등급을 낮추는 근거가 아니다 |
+| **disagreement** | 합집합이므로 verdict를 흔들지 않는다. 어느 한쪽만 올린 finding도 그대로 verdict를 만든다 |
+
+`reviewing-spec`의 기존 `merge_review.py`가 이미 이 모델이다 — codex verdict가 Claude verdict를 **overturn**할 수 있고 그때 advisory를 낸다. codex를 advisory로 두는 것은 리포가 반복 학습한 것(별-모델이 유일 backstop)의 정반대 방향 회귀다.
 
 ### 5.2 데이터 흐름 — 3단계
 
@@ -267,10 +292,13 @@ Step B  proceed 게이트 = 확정 후보 + 방향성 C4 항목 + readback 요�
 |---|---|---|
 | `0` | 위반 없음 | 진행 |
 | `1` | **위반 발견** (`missing_ids` 또는 `not_contained` 비어 있지 않음) | **차단** — §6 보완 후 재실행. 리뷰 단계로 넘어가지 않는다 |
-| `3` | **검사 불가** (state 파일 부재·파싱 실패) | **degrade 후 계속** — loud advisory + *"원문 완전성 미검증"* 을 Step B 게이트까지 전파 |
+| `3` | **검사 불가** (state 파일 부재·파싱 실패 — *의도적으로 매핑된* 경로) | **degrade 후 계속** — degradation record 기록 + Step B 게이트까지 전파 |
+| `4` | **내부 오류** (미처리 예외) | `3`과 동일 처리 + 오류 전문을 record의 `reason`에 |
 | 그 외 non-zero | 예측 못 한 실패 | `3`과 동일하게 취급(indeterminate ≠ clean) |
 
 `1`과 `3`을 합치면 *"검사를 못 했다"* 가 *"원문이 빠졌다"* 로 읽혀 정상 brief를 막거나, 반대로 합쳐서 degrade로 처리하면 실제 누락이 통과한다.
+
+> ⚠️ **`4`가 반드시 필요한 이유 (리뷰가 적발).** Python 미처리 예외의 **기본 종료 코드가 `1`** 이다. 예외 처리 규율을 안 적으면 예상 못 한 버그가 *"위반 발견"* 으로 오분류돼 **정상 brief를 차단**한다. 그래서 `main()`을 top-level `try/except`로 감싸 **어떤 예외도 `4`로 내리는 것을 계약으로** 못 박는다 — *"exit 1은 오직 명시적 위반 판정에서만 나온다"*. T20이 이 계약을 잠그고 mutation(고의 `raise` 주입)으로 이빨을 증명한다.
 
 **L2가 실질 값이다** — Spec A가 *"§6은 압축 대상이 아니다"* 를 못 박았지만 집행 수단이 없었다. L2는 §6 append-only(E14)를 **부분적으로** 집행한다: 기존 항목 본문만 바뀌면 state `text` 포함이 깨져 red가 난다.
 
@@ -284,18 +312,35 @@ Step B  proceed 게이트 = 확정 후보 + 방향성 C4 항목 + readback 요�
 
 **3-에이전트 분리(E3)의 배당금이 여기서 나온다.** codex가 사라지면 두 축 모두 Claude 담당자가 남아 **축이 죽지 않고 모델 다양성만 잃는다.** 기각한 "방향성을 codex에 몰기" 안에서는 같은 부재가 축 전체의 fail-open이었다.
 
-| 실패 | 처리 | 축 생존 |
-|---|---|---|
-| `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1` 또는 codex 미설치 | 두 codex 호출 skip + loud advisory. `codex_degraded: true` | ✅ 양 축 — Claude 담당자 잔존 |
-| 웹 예산 소진 (`SESSION_CAP = 8`) | `direction-reviewer`가 웹 없이 repo+payload 근거로 진행 + loud advisory. **codex #1의 웹은 이 예산 밖이라 살아 있음** | ✅ 외부 근거가 완전히 죽지 않음 (이중화) |
-| `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` | 양쪽 웹 없이 진행 + loud advisory (게이트의 인용 완화 선례와 정합) | ⚠️ 방향성이 repo 근거만으로 축소 — 명시 |
-| `check_verbatim_coverage.py`가 state를 못 읽음 | **loud degrade + 검사 skip 명시.** 조용한 통과 금지 — *"원문 완전성 미검증"* 을 Step B 게이트까지 들고 감 | ⚠️ 명시된 미검증 |
-| `brief-readback` 실패·빈 출력 | `readback: unavailable` 명시. **"gap 0"으로 읽지 않음** (indeterminate ≠ clean — qg mutation guard 선례) | — advisory 축 |
-| critic 재리뷰 상한 2 초과 | Step B 게이트에 전체 issue 이력 첨부해 **사용자 판정**(forced escalate — `reviewing-spec` hard-cap 선례) | ✅ 사용자가 최종 |
-| `DEVBREW_DISABLE_SPEC_DISTILL=1` | 즉시 abort, state 보존 | — |
-| `DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW=1` (신규) | `reviewing-brief` 전체 skip + loud advisory 후 Step B로 직행 | 사용자 통제(P17) |
+**"loud advisory"의 정의 — degradation record.** 초안은 이 말을 반복하면서 표현·목적지·지속성·렌더링을 정의하지 않았다(리뷰가 적발). 구조를 못 박는다:
 
-**모든 degrade는 Step B 게이트 출력까지 전파된다**(AC15). 사용자가 *"무엇이 안 돌았는지"* 를 게이트 화면에서 본다 — **리뷰 생략 방지의 실제 메커니즘이 이것이다.** 결정론 체크가 아니다: 게이트는 *존재*만 보고 사용자는 *내용*을 보므로 사람이 더 강한 백스톱이며, 그래서 이빨 없는 기록 검사를 넣지 않는다(§9).
+```yaml
+brief_review_degradations:          # state.local.md, append-only
+  - component: codex | direction_reviewer | verbatim_coverage | readback | pipeline
+    reason: <한 줄 — 원인. exit 4면 오류 전문>
+    affected_axis: fidelity | direction | readback | completeness | all
+    verification_status: skipped | degraded | unavailable
+```
+
+- **목적지**: state의 `brief_review_degradations[]`에 append(지속) **AND** 발생 즉시 사용자에게 표시(즉시성).
+- **렌더링**: Step B `AskUserQuestion`의 **question 텍스트에** 각 record를 한 줄로 싣는다 — 옵션 description이 아니라 question 본문이어야 사용자가 옵션을 고르기 *전에* 본다.
+- **비어 있음의 의미**: 배열이 비면 *"degrade 없음"* 이고, 그 자체를 게이트에 한 줄로 명시한다(침묵과 구분).
+
+| 실패 | 처리 | 축 생존 | AC |
+|---|---|---|---|
+| `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1` 또는 codex 미설치 | 두 codex 호출 skip + record(`component: codex`, `affected_axis: all`). `codex_degraded: true` | ✅ 양 축 — Claude 담당자 잔존 | AC9 |
+| **웹 예산 소진** (`SESSION_CAP = 8`) | **orchestrator가 dispatch 전에** `web_budget.py check`를 호출하고, 소진이면 *"웹 없이 repo+payload 근거로"* 조건을 프롬프트에 실어 dispatch + record. **codex #1의 웹은 이 예산 밖이라 살아 있음** | ✅ 외부 근거가 완전히 죽지 않음 (이중화) | **AC24** |
+| `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` | 양쪽 웹 없이 진행 + record (게이트의 인용 완화 선례와 정합) | ⚠️ 방향성이 repo 근거만으로 축소 — 명시 | **AC24** |
+| `check_verbatim_coverage.py` exit `3`/`4` | degrade 후 계속 + record(`affected_axis: completeness`, `verification_status: skipped`). 조용한 통과 금지 | ⚠️ 명시된 미검증 | AC12 · AC15 |
+| `brief-readback` 실패·빈 출력 | record(`verification_status: unavailable`). **"gap 0"으로 읽지 않음** (indeterminate ≠ clean — qg mutation guard 선례) | — advisory 축 | AC15 |
+| critic·readback 산출에 **audit 전용 어휘** 검출 | 그 라운드 무효화 + fresh 재dispatch + record. 상한에 카운트하지 않음(§5.1 층 2) | ✅ 오염 라운드 폐기 | AC2 · AC3 |
+| critic 재리뷰 상한 2 초과 | Step B 게이트에 전체 issue 이력 첨부해 **사용자 판정**(forced escalate — `reviewing-spec` hard-cap 선례) | ✅ 사용자가 최종 | AC13 |
+| `DEVBREW_DISABLE_SPEC_DISTILL=1` | 즉시 abort, state 보존 | — | — |
+| `DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW=1` (신규) | `reviewing-brief` 전체 skip + record 후 Step B로 직행 | 사용자 통제(P17) | AC18 |
+
+**`brief-direction-reviewer`는 자기 예산을 확인할 수 없다** — `tools:`에 `Bash`가 없다(Law 2). 그래서 `web_budget.py` 판정은 **orchestrator 책임**이고, 기존 인터뷰의 increment-then-check 관행과 같은 위치다. 리뷰어에게 `Bash`를 주는 것은 Law 2 위반이므로 대안이 아니다.
+
+**모든 degrade는 Step B 게이트 question 텍스트까지 전파된다**(AC15). 사용자가 *"무엇이 안 돌았는지"* 를 옵션 선택 **전에** 본다 — **리뷰 생략 방지의 실제 메커니즘이 이것이다.** 결정론 체크가 아니다: 게이트는 *존재*만 보고 사용자는 *내용*을 보므로 사람이 더 강한 백스톱이며, 그래서 이빨 없는 기록 검사를 넣지 않는다(§9).
 
 ### 5.7 모듈 구조 · 상태 · 비용
 
@@ -322,12 +367,15 @@ Step B  proceed 게이트 = 확정 후보 + 방향성 C4 항목 + readback 요�
 
 ```yaml
 brief_review_stage: direction | fidelity | readback | done
-brief_critic_rounds: 0        # 재리뷰 상한 2 (E8)
+brief_critic_rounds: 0            # 재리뷰 상한 2 (E8). 오염 라운드는 카운트 안 함
+brief_review_degradations: []     # §5.6 degradation record, append-only
 ```
 
-in-flight migration: 키 부재 → in-memory default(`direction`, `0`) + advisory. 기존 선례 그대로(backward-rewriting 금지).
+in-flight migration: 키 부재 → in-memory default(`direction`, `0`, `[]`) + advisory. 기존 선례 그대로(backward-rewriting 금지).
 
-**비용** — `reviewing-brief`의 `cost_class: high`(에이전트 3 + codex 2). **동시 fan-out은 최대 2**(1단계)라 `N ≥ 5` hard 게이트에는 해당 없다. `high`이므로 CLAUDE.md 규약에 따라 **진입 시 1회** `AskUserQuestion` 승인 게이트를 둔다 — Step B의 proceed 게이트와 목적이 다르다(*"돈 쓸까요"* vs *"다음 단계"*)이므로 중복 의례가 아니다. 단 억제 제거 sweep이 *"`cost_class: high` 승인 게이트의 실질 효과"* 를 사용자판단 항목으로 들고 있으므로, 그 결론이 게이트를 빼는 쪽이면 여기도 따라간다.
+**비용** — `reviewing-brief`의 `cost_class: high`(에이전트 3 + codex 2). **동시 fan-out은 최대 2**(1단계)라 `N ≥ 5` hard 게이트에는 해당 없다. `high`이므로 CLAUDE.md 규약에 따라 **진입 시 1회** `AskUserQuestion` 승인 게이트를 둔다 — Step B의 proceed 게이트와 목적이 다르다(*"돈 쓸까요"* vs *"다음 단계"*)이므로 중복 의례가 아니다.
+
+> **이 결정은 무조건이다** (리뷰가 적발). 초안은 이 게이트의 존속을 별 문서(억제 제거 sweep)의 *미래 결론*에 조건부로 걸었다 — hard AC를 외부 문서의 미정 결론에 의존시키면 이행 시점도 주체도 없어 집행할 수 없다. AC21은 조건 없이 성립하며, sweep이 나중에 `cost_class: high` 게이트 관행을 바꾸면 **그때 이 문서를 재오픈하는 별 사이클**로 처리한다(§11 ⑧에 갭으로 명시).
 
 ---
 
@@ -338,32 +386,37 @@ in-flight migration: 키 부재 → in-memory default(`direction`, `0`) + adviso
 | # | 기준 | 등급 | 검증 |
 |---|---|---|---|
 | AC1 | 파이프라인이 선언된 순서로 실행된다 — 진입 완전성 검사 → 방향성 → 충실도 → 냉독 → Step B | hard | V1 |
-| AC2 | `brief-critic` dispatch 프롬프트에 payload 전문이 inline되고 **payload 경로가 실리지 않는다** | hard | T8 · V6 |
-| AC3 | `brief-readback` dispatch 프롬프트에 출력 스키마·판정 기준이 없다 | hard | T9 · V2 |
+| AC2 | `brief-critic` dispatch 프롬프트에 payload 전문이 inline되고 **payload 경로가 실리지 않으며**, inline blob의 frontmatter `audit_file` 값이 **redact**된다 | hard | T8 · T24 · V6 |
+| AC2b | critic·readback **산출물**에 audit 전용 어휘(닫힌 열거)가 나타나면 그 라운드가 **무효화**되고 fresh 재dispatch된다. 상한에 카운트하지 않는다 | hard | T23 · V6 |
+| AC3 | `brief-readback` dispatch 프롬프트에 출력 스키마·판정 기준이 없고, *"audit을 읽지 마라"* 류 금지 문구도 없다(존재 누설 방지) | hard | T9 · T24 · V2 |
 | AC4 | 3 신규 에이전트의 `tools:`에 쓰기·실행·위임 도구가 없다 (Law 2) | hard | T7 |
 | AC5 | 3 신규 에이전트의 `model:`이 `inherit`이다 (리터럴 핀 금지 — E10 선제 적용) | hard | T7 |
 | AC6 | codex는 축별로 2회 호출되고 각 호출 프롬프트는 **한 축의 체크리스트만** 담는다 | hard | T11 · V1 |
-| AC7 | `merge_brief_review.py`는 **어느 리뷰어든** Issues가 있으면 `needs_revise`를 낸다 (fail-closed) | hard | T5 |
-| AC8 | 병합 산출에 `codex_isolated: false`가 **항상** 있다 | hard | T5 |
+| AC7 | `merge_brief_review.py`는 **어느 리뷰어든** Issues가 있으면 `needs_revise`를 낸다 (fail-closed 합집합). codex는 **binding** — 단독으로 verdict를 만들 수 있다 | hard | T5 |
+| AC7b | 저자는 어느 리뷰어의 finding도 임의 기각하지 못한다 — 미반영 findings는 이유와 함께 Step B 게이트에서 사용자에게 올라간다 | hard | T25 · V4 |
+| AC8 | 병합 산출에 `codex_isolated: false`가 **항상** 있다. 이 필드는 **verdict 입력이 아니라 저자용 라벨**이며 finding 등급을 낮추는 근거가 아니다 | hard | T5 |
 | AC9 | codex 부재 시 두 축 모두 Claude 담당자로 진행되고 `codex_degraded: true` + loud advisory | hard | T5 · V4 |
 | AC10 | `check_verbatim_coverage.py`가 state `S<N>` 누락(L1)을 red로 낸다 | hard | T1 |
 | AC11 | 동 스크립트가 §6의 원문 미포함(L2)을 red로 내고, P21 placeholder 관여 시 advisory로 강등한다 | hard | T2 · T3 |
-| AC12 | exit code가 **위반(`1`)과 검사 불가(`3`)를 가른다.** 호출자는 `1`에 차단, `3`에 degrade-and-continue. **조용한 통과 없음** | hard | T4 · T19 |
+| AC12 | exit code가 **위반(`1`) · 검사 불가(`3`) · 내부 오류(`4`)를 가른다.** 호출자는 `1`에 차단, `3`/`4`에 degrade-and-continue. `main()`이 top-level `try/except`로 감싸여 **미처리 예외가 `1`로 새지 않는다** | hard | T4 · T19 · T20 |
 | AC13 | 수정 발생 시 fresh critic 재리뷰 1회 필수. 이후 Issues면 orchestrator 판단, `brief_critic_rounds` 상한 2 초과 시 Step B forced escalate | hard | T6 · V1 |
 | AC14 | payload §6은 append-only — **§6만 고친 경우** 기존 항목 본문 변경이 red (P21 치환 예외). 조율된 양쪽 편집은 기계 검증 밖(§6.1) | hard | T2 · V5 |
-| AC15 | 모든 degrade가 Step B 게이트 출력에 전파된다 | hard | V4 |
+| AC15 | 모든 degrade가 §5.6의 **degradation record 4필드**(`component`/`reason`/`affected_axis`/`verification_status`)로 state에 append되고 Step B `AskUserQuestion`의 **question 텍스트**에 렌더된다. 빈 배열도 *"degrade 없음"* 으로 한 줄 명시 | hard | T22 · V4 |
 | AC16 | `check_brief.py`의 "brief 파일만 읽는다" 불변식 유지 — state 의존 추가 없음 | hard | T12 · T10 |
 | AC17 | NG3 서술 2곳(`check_brief.py` docstring · `spec-reviewer.md`)이 교정된다 | hard | T13 |
 | AC18 | `DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW=1`이 파이프라인 전체를 skip하고 loud advisory를 낸다 | hard | T14 · V4 |
 | AC19 | `plugin.json` `0.24.0` + `CHANGELOG.md` 항목 + `README.md` Principles Instantiated | hard | T15 |
 | AC20 | runner·빌더는 각 1개, 축별 체크리스트는 데이터 파일 2개. `build_spec_codex_prompt.py` 미참조 | hard | T16 |
-| AC21 | `reviewing-brief`에 `cost_class: high` 선언 + 진입 승인 게이트 | hard | T17 · V7 |
-| AC22 | 하니스 무게 0 증가 — 훅 파일·`hooks.json` 항목 추가 0개 | hard | T18 |
-| AC23 | 격리 critic과 비격리 codex의 findings 차이가 관측된다 — `codex_isolated: false` 명시의 값과 §5.1 프레이밍-오염 전제의 근거 | **soft**(관측) | V3 |
+| AC21 | `reviewing-brief`에 `cost_class: high` 선언 + 진입 승인 게이트. **조건 없음** — 외부 문서의 미래 결론에 의존하지 않는다 | hard | T17 · V7 |
+| AC22 | 훅 파일 · `hooks.json` 항목 추가 **0개** + 이빨 없는 결정론 체크 **0개** + 단일 호출 상한 **0개** (Goal 6의 측정 가능한 세 항목) | hard | T18 |
+| ~~AC23~~ | **삭제** — *"findings 차이가 관측된다"* 는 판정 기준이 없어 AC가 될 수 없었다(리뷰 적발). 연구 가설로 §11 ⑦로 이동하고 V3를 그쪽에 배정 | — | — |
+| **AC24** | 웹 예산 소진·`DISABLE_WEB` degrade 경로가 배정된다 — **orchestrator가 dispatch 전에** `web_budget.py check`를 호출하고 결과를 프롬프트 조건으로 실으며 record를 남긴다. 리뷰어에게 `Bash`를 주지 않는다(Law 2) | hard | T21 · V4 |
 
 ### 6.1 기계 검증의 한계 (명시)
 
 - **AC2·AC3의 개방 절반**: *"어디에도 경로/기준이 없다"* 는 개방형 부정 명제라 리터럴 락으로 증명할 수 없다. T8·T9는 **dispatch 블록 윈도우 안**만 보는 닫힌 열거이고 나머지는 V6(사람 판단)로 분리한다 — Spec A의 AC8 처리 선례.
+- **격리는 예방되지 않는다 — 검출된다.** `Read`를 가진 에이전트는 payload의 `name:`+`created_at:`으로 audit basename을 **재구성**할 수 있다(§5.1). AC2의 redaction은 직접 벡터만 없애고, 실제 담보는 AC2b의 산출물 검출이다. **검출은 사후이므로 오염된 라운드가 한 번 발생하는 것은 막지 못한다** — 그 라운드를 폐기할 뿐이다. 그리고 검출은 *어휘가 산출물에 드러난 경우*만 잡는다: 에이전트가 audit을 읽고 그 내용을 자기 말로만 반영하면 검출되지 않는다. 이 잔여는 V6가 본다.
+- **표 무결성 규칙의 범위 (명시)**: 규칙의 목적은 *"검증이 어디에도 연결되지 않아 고아가 되는 것"* 방지다. 따라서 V-item은 §6 또는 **§11(갭·연구 가설)** 중 한 곳에서 인용되면 규칙을 만족한다 — AC23 삭제로 V3는 §11 ⑦이 인용한다.
 - **AC14는 부분 집행이다.** L2는 *§6만 고친 경우* 를 잡는다. orchestrator가 §6과 state `user_statements[].text`를 **함께** 고치면 통과한다 — 양쪽 다 orchestrator가 쓸 수 있고 state는 git-ignored라 이력 대조가 불가능하다. 조율된 양쪽 편집은 V5(사람)가 본다. **"기계적으로 봉쇄"라고 주장하지 않는다.**
 - **`evidence_unsupported`는 모델 판단이다.** *"요약이 그 원문을 뒷받침하는가"* 는 기계 검증 대상이 아니다. critic이 잡고, 못 잡으면 category·체크리스트 편집이 compounding 이벤트다(Law 3).
 - **AC19의 버전 핀**: `0.24.0`의 minor 자리만 검증하고 patch 자리는 unpin한다 — doc-only bump마다 stale-red가 되는 함정을 피한다.
@@ -428,10 +481,16 @@ in-flight migration: 키 부재 → in-memory default(`direction`, `0`) + adviso
 | T13 | NG3 문구 | 옛 문구 부재 **AND** 새 문구 존재, 2파일 각각 | AC17 |
 | T14 | kill switch | `DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW` 가 `reviewing-brief` skip 경로에 실재 | AC18 |
 | T15 | 메타데이터 | `plugin.json` minor == `24` (patch unpin) · CHANGELOG에 `0.24.0` 항목 · README에 신규 컴포넌트 3 + kill switch | AC19 |
-| T16 | 모듈 경계 | runner 1개 · 빌더 1개 · `scripts/brief-codex-{direction,fidelity}-checklist.md` 2개 존재 · 어느 신규 파일도 `build_spec_codex_prompt` 미참조 · `prompts/` 디렉토리 부재(canonical 트리 준수) | AC20 |
+| T16 | 모듈 경계 | runner 1개 · 빌더 1개 · `scripts/brief-codex-{direction,fidelity}-checklist.md` 2개 존재 · 어느 신규 파일도 `build_spec_codex_prompt` 미참조 · `prompts/` 디렉토리 부재(canonical 트리 준수) · **runner가 `${CLAUDE_PLUGIN_ROOT:-...}` fallback 보유**(§11 ⑨의 기존 스크립트 결함 미반복) | AC20 |
 | T17 | `reviewing-brief` frontmatter | `cost_class: high` 존재 · 진입 승인 게이트 서술 존재 | AC21 |
 | T18 | 훅 무증가 | `hooks/` 파일 집합이 **고정 열거와 정확히 일치**(`hooks.json` · `pending-review-reminder.py` · `review-dispatch.py` · `session-end-cleanup.py` · `spec-write-validator.py` · `state_path.py` — 6개) · `hooks.json`에 `brief` 문자열 부재. *"변경 전과 동일"* 은 테스트가 알 수 없으므로 집합을 못 박는다 | AC22 |
 | T19 | `check_verbatim_coverage.py` exit code | 위반 fixture → **exit 1** · state 부재 → **exit 3**. 두 값이 서로 달라야 하고 둘 다 0이 아니어야 한다 | AC12 |
+| T20 | 동 예외 계약 | `main()`이 top-level `try/except`로 감싸여 있고, 고의 예외 주입 시 **exit 4**(≠ `1`) | AC12 |
+| T21 | 웹 degrade 경로 | `reviewing-brief`가 direction dispatch **전에** `web_budget.py check`를 호출하는 서술 존재 · 소진 시 프롬프트 조건 분기 서술 존재 · `brief-direction-reviewer` `tools:`에 `Bash` **부재** | AC24 |
+| T22 | degradation record | `brief_review_degradations` state 키 + 4필드(`component`/`reason`/`affected_axis`/`verification_status`) 열거 · Step B **question 텍스트** 렌더 서술 · 빈 배열 명시 서술 | AC15 |
+| T23 | audit 전용 어휘 검출기 | 닫힌 열거 10항목(`Coverage Ledger`·`floor:*` 5·`probe_count`·`web_sweep_count`·`web_search_count`·`ST<N>`)이 `reviewing-brief`에 실재 · 검출 시 라운드 무효화 + 상한 미카운트 서술 존재 | AC2b |
+| T24 | inline blob redaction | 빌드된 critic·readback blob에 `.audit.md` 문자열 **부재** · `audit_file: <redacted>` 형태 존재 | AC2 · AC3 |
+| T25 | finding 기각 경로 | *"저자 임의 기각 금지"* + *"미반영 findings를 Step B 게이트에 이유와 함께"* 서술이 `reviewing-brief`에 실재 | AC7b |
 
 **락 작성 규율** (리포 누적 교훈):
 
@@ -460,6 +519,15 @@ in-flight migration: 키 부재 → in-memory default(`direction`, `0`) + adviso
 | T13 | 옛 NG3 문구 복원 | red |
 | T16 | runner를 2개로 복제 / `build_spec_codex_prompt` 참조 추가 | 각각 red |
 | T18 | `hooks.json`에 항목 1개 추가 / `hooks/`에 새 `.py` 파일 추가 | 각각 red |
+| T14 | kill switch 이름을 한 글자 바꿈 | red |
+| T15 | `plugin.json` minor를 `23`으로 되돌림 / CHANGELOG 항목 삭제 | 각각 red |
+| T17 | `cost_class`를 `medium`으로 / 승인 게이트 서술 삭제 | 각각 red |
+| T20 | `main()` 안에 `raise RuntimeError` 주입 | **exit 4** (1이 나오면 red — 계약 파괴) |
+| T21 | `web_budget.py check` 호출 서술 삭제 / `brief-direction-reviewer`에 `Bash` 추가 | 각각 red |
+| T22 | record 4필드 중 하나 삭제 / 렌더 위치를 옵션 description으로 옮김 | 각각 red |
+| T23 | 열거에서 `Coverage Ledger` 삭제 / 무효화 서술 삭제 | 각각 red |
+| T24 | blob 빌더에서 redaction 제거 | red (`.audit.md`가 blob에 등장) |
+| T25 | 기각 금지 서술 삭제 | red |
 
 **효과 0인 mutation이 나오면 그 락은 가짜다** — 없애거나 다시 설계하고, 못 잠그는 것은 정직하게 §6.1에 한계로 적는다.
 
@@ -504,7 +572,15 @@ in-flight migration: 키 부재 → in-memory default(`direction`, `0`) + adviso
 | **`prompts/` 신규 디렉토리 (초안)** | `docs/plugin-authoring.md`의 canonical 트리에 없다(정의된 것은 `commands/`·`skills/`·`agents/`·`hooks/`·`scripts/`·`templates/` 여섯). 데이터 파일 선례는 `scripts/ambiguity-blacklist.txt` → 체크리스트를 `scripts/`로. 새 디렉토리로 트리를 넓히는 것은 이 spec의 스코프가 아니다 (**self-review가 적발**) |
 | **T18을 *"변경 전과 동일"* 로 서술 (초안)** | 테스트는 *before* 를 알 수 없다 — 실행 시점에 비교 대상이 없는 assert는 이빨이 없다. `hooks/` 파일 집합을 6개 고정 열거로 못 박는다 (**self-review가 적발**) |
 | **T12를 `state` 토큰으로 grep (초안)** | `check_brief.py`에 `statement`가 10곳 있어 **항상 red**가 된다(실측 확인). 정확 토큰 `state.local.md`·`state_path`·`state-root`로 좁힌다 (**self-review가 적발** — 값싼 assert가 대상을 구분 못 하는 클래스) |
-| **V3를 AC 배정 없이 두기 (초안)** | §8의 V-item이 §6에서 인용되지 않아 **편도 참조**가 됐다 — Spec A에서 두 번 재발한 클래스이고 이 문서 자신의 표 무결성 규칙 위반. soft AC23으로 배정 (**self-review가 적발**) |
+| **V3를 AC 배정 없이 두기 (초안)** | §8의 V-item이 §6에서 인용되지 않아 **편도 참조**가 됐다 — Spec A에서 두 번 재발한 클래스이고 이 문서 자신의 표 무결성 규칙 위반. soft AC23으로 배정 (**self-review가 적발**) → 그 AC23마저 판정 기준이 없어 round-1 리뷰가 다시 기각. 최종: AC23 삭제 + §11 ⑦ 가설 + 규칙 범위 명시 |
+| **격리를 "경로 미제공 = 도달 불가"로 주장 (초안)** | payload frontmatter의 `audit_file`에 audit basename이 **그대로 실려** inline blob에 들어간다(`templates/interview-brief-template.md:8`). 더 나아가 redact해도 `name:`+`created_at:`으로 **재구성** 가능하고 관행 디렉토리는 리포 전역에 서술돼 있다 — `Read`를 가진 에이전트에게 완전 격리는 **원리적으로 불가능**하다. 예방(redaction) + **검출**(audit 전용 어휘 닫힌 열거 → 라운드 무효화) 2층으로 교체 (**round-1 Claude 리뷰가 적발 — 이 라운드의 최대 값**) |
+| **프롬프트에 *"audit을 읽지 마라"* 를 넣기** | audit의 존재와 그것이 인터뷰 프레이밍을 담는다는 사실을 알리는 것 자체가 힌트다 — readback 오염(기준을 알면 그 답을 회피)의 같은 클래스. 금지 대신 **모르게 두고 검출**한다 |
+| **codex findings를 advisory로 두기 (초안)** | §5.1은 *"보조 입력"*·*"최종 권위는 격리된 critic"* 이라 쓰고 AC7은 *"어느 리뷰어든 Issues면 `needs_revise`"* 라고 썼다 — advisory는 verdict를 만들 수 없으므로 **권위 계약이 자기모순**이고 precedence가 미정의였다. fail-closed 합집합 + codex binding으로 통일. codex를 advisory로 두는 것은 리포가 반복 학습한 것(별-모델이 유일 backstop)의 정반대 회귀 (**round-1 codex 리뷰가 block으로 적발**) |
+| **`check_verbatim_coverage.py`의 예외 계약을 안 적기 (초안)** | Python 미처리 예외의 **기본 종료 코드가 `1`** 이라 예상 못 한 버그가 *"위반 발견"* 으로 오분류돼 **정상 brief를 차단**한다. exit `4` 신설 + top-level `try/except` 계약 + T20 mutation (**round-1 Claude 리뷰가 적발**) |
+| **"loud advisory"를 정의 없이 반복 (초안)** | 표현·목적지·지속성·렌더링이 전부 미정이라 AC15가 집행 불가였다. `component`/`reason`/`affected_axis`/`verification_status` 4필드 record + state append + **Step B question 텍스트** 렌더로 구체화 (**round-1 codex 리뷰가 적발**) |
+| **웹 예산 degrade를 AC 배정 없이 서술 (초안)** | 이 문서 자신의 표 무결성 규칙 위반. 게다가 `brief-direction-reviewer`에 `Bash`가 없어 자기 예산 소진을 확인할 경로가 없었다 → **orchestrator 사전 체크 + 프롬프트 조건 분기** 명시 + AC24 신설. 리뷰어에게 `Bash`를 주는 것은 Law 2 위반이므로 대안이 아니다 (**round-1 양쪽이 적발**) |
+| **Goal 6을 *"하니스 무게 0 증가"* 로 표현 (초안)** | 비측정이고 사실과도 어긋난다 — 이 설계는 에이전트·모델 호출·스크립트·state·게이트를 **늘린다**(그건 능력 증가이고 E10 대상이 아니다). 측정 가능한 세 항목(훅 0 · 이빨 없는 체크 0 · 단일 호출 상한 0)으로 교체 (**round-1 codex 리뷰가 적발**) |
+| **AC21(hard)의 존속을 외부 문서의 미래 결론에 조건부로 걸기 (초안)** | hard AC를 미정 결론에 의존시키면 이행 시점도 주체도 없어 집행할 수 없다. 무조건 확정 + 미래 변경은 재오픈 사이클(§11 ⑧) (**round-1 Claude 리뷰가 적발**) |
 
 ---
 
@@ -533,7 +609,9 @@ in-flight migration: 키 부재 → in-memory default(`direction`, `0`) + adviso
 4. **codex의 웹 사용은 예산 계측 밖.** `web_budget.py`는 Claude 측 카운터라 codex 내부 검색을 세지 않는다. 단일 `exec` 호출이라 턴으로 경계가 있어 unbounded는 아니지만, 총량 관측치는 없다. E10에 따라 상한을 씌우지 않는다.
 5. **방향성 findings의 중복 제거가 결정론이 아니다.** Claude와 codex가 같은 지적을 다른 문구로 내면 orchestrator가 판단해 합친다. 판단이 틀리면 사용자가 중복을 보거나 하나를 놓친다 — E10에 따라 모델을 신뢰하는 쪽을 택했다.
 6. **§6 append-only의 조율된 우회는 잡히지 않는다.** orchestrator가 §6과 state `user_statements[].text`를 함께 고치면 L2 포함 검사가 통과한다 — 둘 다 orchestrator가 쓸 수 있고 state는 git-ignored라 이력 대조가 없다. L2는 *§6만 고친 흔한 경우* 를 잡고, 조율된 편집은 V5(사람)가 본다. AC14를 *"기계적으로 봉쇄"* 라고 주장하지 않는다.
-7. **V3가 설계 전제의 반증 가능성을 열어둔다.** 격리 critic과 비격리 codex의 findings 차이가 0이면 `codex_isolated: false` 명시의 값이 없다는 뜻이고 §5.1의 프레이밍-오염 전제가 반증된다. 그 경우 처리는 이 spec이 정하지 않는다(관측 후 결정).
+7. **연구 가설 (AC 아님) — 프레이밍 효과의 실재.** *"격리 critic과 비격리 codex의 findings 차이가 프레이밍 효과를 보인다"* 는 **판정 기준이 없어 AC가 될 수 없다**(리뷰 적발: 무엇을 유의미한 차이로 볼지, 그 차이가 프레이밍 때문인지 단순 모델 분산인지 구분하는 규칙이 없다). 그래서 삭제하고 여기 가설로 남긴다. **V3**가 이 가설을 관측하며, 차이가 0이면 `codex_isolated: false` 라벨의 값이 없다는 뜻이고 §5.1의 프레이밍-오염 전제가 반증된다. 후속 처리는 이 spec이 정하지 않는다(관측 후 결정). 정식 검증으로 승격하려면 비교 rubric·코딩된 finding 분류·최소 관측 수·모델 분산과의 구분 규칙이 필요하다.
+8. **AC21의 미래 변경 경로.** 억제 제거 sweep이 `cost_class: high` 승인 게이트 관행을 바꾸면 AC21이 낡는다. 이 spec은 그 결론에 **조건부로 의존하지 않고**(초안의 결함) 무조건 확정하며, 변경이 필요해지면 **이 문서를 재오픈하는 별 사이클**로 처리한다. 자동 이행 메커니즘은 없다 — 없는 것이 정직하다.
+9. **`run_spec_codex_reviewer.sh`의 env 의존 (부수 발견, 이 spec 스코프 밖).** 이 문서를 리뷰하는 과정에서 실측: 그 스크립트 `:57`이 `CLAUDE_PLUGIN_ROOT`를 fallback 없이 참조하는데 `set -u`가 걸려 있어, 훅이 env를 주지 않는 컨텍스트(스킬 수동 호출)에서 즉시 죽는다. 스킬 문서는 `${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}` fallback을 쓰는데 스크립트에는 없다 — 비대칭. loud하게 죽으므로 치명적이지 않지만, **신규 `run_brief_codex_reviewer.sh`는 같은 실수를 반복하지 않는다**(fallback 필수).
 
 ---
 
@@ -555,5 +633,6 @@ in-flight migration: 키 부재 → in-memory default(`direction`, `0`) + adviso
   - **금지 패턴 회피** — *trivia ceremony*(루프 제거 · 이빨 없는 체크 철회) · *unbounded autonomy*(상한은 실재 루프에만) · *subagent spray*(동시 fan-out 2) · *polite handoff*(degrade 전파 + Step B 게이트 필수 경유)
 - **Law 2 tool posture**: 신규 에이전트 3개 전부 fail-closed `tools:` allowlist, 쓰기·실행·위임 도구 0개. 기존 8 에이전트의 posture는 무변경(v2.12.0 #104 락 유지)
 - **실측 기록**: codex 웹 검색 가용성(2026-07-26, codex-cli 0.144.6, `codex exec -s read-only`가 라이브 검색 수행) · v0.23.0 포맷 실물 brief 0건(같은 날, `check_brief.py gate` 6 failures)
+- **리뷰 이력**: **round-1** — Claude `spec-reviewer` 4건(high 4, `Stagnation_signal: false`) + codex 4건(block 1 · high 2 · medium 1) → `merge_review.py` 결정론 병합: `combined_verdict: needs_revise`, distinct 6건(both 2 · claude-only 2 · codex-only 2), stagnation false. **6건 전부 반영**(기각 0). 최대 값: **Claude가 `audit_file` basename 누출로 격리 전제를 무너뜨린 것**(예방→예방+검출 2층으로 재설계), codex가 **권위 계약 자기모순을 block으로** 적발한 것. 두 리뷰어가 서로 다른 결함류를 잡았다 — 겹친 2건은 §5.1 격리와 §5.6 degrade
 - **self-review 이력**: 인라인 자기검토가 6건 적발 — exit code 단일화 모순 · AC14 기계 집행 과장 · `prompts/` canonical 트리 위반 · T18의 비교 불가 assert · T12의 `statement` 오매칭 · V3 편도 참조. 전부 §9에 기각 항목으로 기록. placeholder 0건, TOC 존재 확인
 - **브레인스토밍 이력**: 사용자 교정 3회 — (1) 에이전트 개수 확인 질문으로 역할↔에이전트 매핑 명료화, (2) 파이프라인 순서 재배치(방향성 먼저 + critic 루프 제거) — 초안의 재작업 결함을 사용자가 적발, (3) **E10 위반 2건 적발**(codex 검색 상한 · 이빨 없는 게이트 체크) → 철회 + 리포 전역 sweep 핸드오프 분리. 그리고 codex 웹 검색 가용성 지적 → 실측으로 초안 서술 반증
