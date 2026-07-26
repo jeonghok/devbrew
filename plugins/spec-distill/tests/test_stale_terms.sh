@@ -2,15 +2,11 @@
 # V7 — stale-term 회귀 락. rename 완결을 **production artifacts**에서 확인한다.
 # (a) breadth-keeper → coverage-mapper 재명명이 production에 완결(잔존 0).
 # (b) interview_round는 활성 코드서 제거, SKILL은 migration 섹션에만.
-# (c) v0.23.0 권위 문법 6개 리터럴이 production에서 제거됐다(AC13).
-#     이 검사만 README.md를 **추가로 제외**한다 — 이유는 예방적(precautionary)이고 현재는
-#     미행사(unexercised)다: v0.23.0 시점 README "Principles Instantiated"는 이 6개 리터럴을
-#     **하나도 인용하지 않는다**(grep -cF 전수 확인 — locked_directions/pending_locked_decisions/
-#     재논쟁 금지/Locked Directions/다시 묻지 않는다/확정·재논쟁 전부 0회) — 무엇이 왜 사라졌는지
-#     개념적으로만 서술하고 옛 식별자를 그대로 인용하지 않기 때문이다. 제외는 향후 편집이
-#     CHANGELOG.md처럼 정당하게 옛 용어를 인용해야 할 때를 위한 예약 공간이다. 비용은 명확히
-#     진다: 제외돼 있는 한 README는 이 6개 리터럴에 대해 기계 커버리지가 0이고, 그 갭은 V10
-#     수동 검토가 맡는다 — 숨기지 않는다.
+# (c) v0.23.0 권위 문법 6개 리터럴이 production에서 제거됐다(AC13). README.md도 스코프 안 —
+#     제외했던 근거("Principles Instantiated가 무엇이 왜 사라졌는지 설명하려면 옛 용어를
+#     인용해야 한다")는 검증 가능한 예측이었고 실패했다: v0.23.0 README는 이 6개 리터럴을
+#     grep -cF로 **0건** 인용한다. CHANGELOG.md는 실제로 4건 인용하므로(released 기록) 그
+#     제외만 유효하다.
 # 스코프: $SD 아래 전체 production 파일 — 확장자 whitelist 없이 sweep(SKILL.md/README.md/agents/
 #         templates/scripts/plugin.json 뿐 아니라 scripts/ambiguity-blacklist.txt 같은 .txt/.yaml/
 #         확장자없는 production 파일도 포함). 확장자 whitelist는 header 주장(scripts/ 커버)보다
@@ -23,7 +19,6 @@
 #           출하하는 artifact가 아니다(quality-gates 세션 파일 등, git-untracked). 아무도 작성하지
 #           않은 일시 파일이 락을 빨갛게 만들 수 있으면 사람들이 락을 무시하도록 훈련된다.
 #           .claude-plugin/은 production이라 제외되지 않는다 — 패턴이 '*/.claude/*'라 안 걸린다.
-#       (5) README.md — **(c)만** 추가 제외. (a)/(b)는 여전히 README를 검사한다(헤더 주장 = 본문 검사).
 #       테스트의 토큰 참조는 제거를 강제하는 enforcement 층이지 stale 참조가 아니다.
 set -u -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -97,40 +92,31 @@ else
 fi
 
 # --- V8 (AC13): v0.23.0 권위 문법 6개 리터럴 회귀 락 ---
-# 스코프 = prod_files − README.md. prod_files를 그대로 재사용하면 AC13의 명시 예외와
-# 모순되므로 별도 배열을 만든다.
-lock_files=()
-for f in "${prod_files[@]}"; do
-  [[ "$(basename "$f")" == "README.md" ]] && continue
-  lock_files+=("$f")
+# 스코프 = prod_files 그대로(README.md 포함) — AC13이 production 전체를 요구한다.
+# prod_files는 위에서 이미 비어있지 않음이 확인됐으므로 별도 empty-guard는 불필요하다.
+# 배열 리터럴 + "${arr[@]}" 확장으로만 다룬다 — 6개 중 3개가 공백을 품은 구(句)라
+# 단일 문자열 word-split은 그것들을 조용히 쪼갠다. 각 원소는 quote된 채 grep에 그대로 간다.
+# 매칭은 반드시 -F(고정 문자열): 한국어 조사·markdown 백틱이 regex 경계를 소리 없이
+# 깨뜨린 전례가 있다(Task 7). '·'는 metachar가 아니지만 -F면 그 판단 자체가 불필요해진다.
+authority_terms=(
+  'locked_directions'
+  'pending_locked_decisions'
+  '재논쟁 금지'
+  'Locked Directions'
+  '다시 묻지 않는다'
+  '확정·재논쟁'
+)
+for term in "${authority_terms[@]}"; do
+  scan -InIF -- "$term" "${prod_files[@]}"
+  if [[ $SCAN_RC -ge 2 ]]; then
+    note FAIL "V8/AC13: '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
+    printf '%s\n' "$SCAN_OUT"
+  elif [[ $SCAN_RC -eq 0 ]]; then
+    note FAIL "V8/AC13: '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
+  else
+    note PASS "V8/AC13: '$term' 잔존 0건 (production)"
+  fi
 done
-if [[ ${#lock_files[@]} -eq 0 ]]; then
-  note FAIL "V8: lock scope empty — filter broken"
-else
-  # 배열 리터럴 + "${arr[@]}" 확장으로만 다룬다 — 6개 중 3개가 공백을 품은 구(句)라
-  # 단일 문자열 word-split은 그것들을 조용히 쪼갠다. 각 원소는 quote된 채 grep에 그대로 간다.
-  # 매칭은 반드시 -F(고정 문자열): 한국어 조사·markdown 백틱이 regex 경계를 소리 없이
-  # 깨뜨린 전례가 있다(Task 7). '·'는 metachar가 아니지만 -F면 그 판단 자체가 불필요해진다.
-  authority_terms=(
-    'locked_directions'
-    'pending_locked_decisions'
-    '재논쟁 금지'
-    'Locked Directions'
-    '다시 묻지 않는다'
-    '확정·재논쟁'
-  )
-  for term in "${authority_terms[@]}"; do
-    scan -InIF -- "$term" "${lock_files[@]}"
-    if [[ $SCAN_RC -ge 2 ]]; then
-      note FAIL "V8/AC13: '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
-      printf '%s\n' "$SCAN_OUT"
-    elif [[ $SCAN_RC -eq 0 ]]; then
-      note FAIL "V8/AC13: '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
-    else
-      note PASS "V8/AC13: '$term' 잔존 0건 (production, README 제외)"
-    fi
-  done
-fi
 
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]

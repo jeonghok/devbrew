@@ -170,19 +170,30 @@ user_statements:                    # pending_locked_decisions 대체
 brief 초안 작성 (user_sourced_items 전부 status: provisional)
   → check_brief.py gate                    (confirmed 0건 sentinel 허용)
   → 확정 후보 목록을 프로즈로 출력
-  → AskUserQuestion  ① 이대로 확정하고 진행 / ② 확정 목록 수정 / ③ 중단
-       ① → status 반영 → 재저장 → 게이트 재실행 → /compact 노출 → STOP
-       ② → 수정 반영 후 재제시
-       ③ → 정지
+  → AskUserQuestion  ① 확정하고 /compact 후 brainstorming (권장)
+                      ② 확정하고 바로 brainstorming
+                      ③ 확정 목록 수정
+                      ④ brief만 종료
+       ①/② → status 반영 → 재저장 → 게이트 재실행
+              ① → /compact 노출 → STOP (다음 턴 사용자 트리거로 brainstorming 진입)
+              ② → 즉시 brainstorming 호출 (compact 없이)
+       ③ → 수정 반영 후 재제시 (상한 2회)
+       ④ → terminal 종료, handoff 없음
 ```
 
-**재제시 상한**: 최초 제시는 0회째다. 옵션 ②를 고를 때마다 재제시 횟수가 1 증가하고 **2회까지** 허용한다. 3번째 ② 요구 시 전 항목을 `provisional`로 강등하고 고정 문자열 advisory를 출력한 뒤 진행한다:
+**옵션이 넷인 이유.** 설계 초안의 확정 확인 3지선다(①/②/③ = 확정·수정·중단)와 이미 shipping된
+handoff 3지선다(`/compact` 경유 / 직행 / brief만 종료)를 그대로 합치면 종료 시 사용자 상호작용이
+2회가 되어 §9가 기각한 *"별도 status 확인 게이트 신설"*과 동형이 된다. 반대로 `바로 brainstorming`을
+없애면 Non-goals가 제거 대상으로 적지 않은 shipped 기능이 조용히 사라진다. 단일 게이트에 옵션을
+4개(`AskUserQuestion`은 2–4옵션 허용) 실어 두 요구를 동시에 만족한다 — 상호작용은 여전히 1회.
+
+**재제시 상한**: 최초 제시는 0회째다. 옵션 ③을 고를 때마다 재제시 횟수가 1 증가하고 **2회까지** 허용한다. 3번째 ③ 요구 시 전 항목을 `provisional`로 강등하고 고정 문자열 advisory를 출력한 뒤, 게이트를 재제시하지 않고 ④와 동일한 terminal 경로로 종료한다(handoff 없음 — 사용자가 확정-후-진행 옵션(①/②)을 고른 적이 없으므로, 게이트 없이 brainstorming으로 자동 진행하는 쪽이 아니라 종료하는 쪽이 안전한 방향이다):
 
 ```
 [spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등
 ```
 
-**후보 선별은 모델이 한다.** `user_statements` 전체를 훑어 각 항목에 후보 `status`를 붙이고, `confirmed` 후보를 목록으로 제시한다 — 제외한 것도 한 줄로 함께 보여야 사용자가 누락을 잡을 수 있다. 확정 목록이 길 수 있으므로 목록은 **프로즈로 출력**하고 `AskUserQuestion`은 3지선다만 담당한다. 모델의 후보 판정은 제안일 뿐이고 `confirmed`로의 전이는 옵션 ① 선택으로만 일어난다.
+**후보 선별은 모델이 한다.** `user_statements` 전체를 훑어 각 항목에 후보 `status`를 붙이고, `confirmed` 후보를 목록으로 제시한다 — 제외한 것도 한 줄로 함께 보여야 사용자가 누락을 잡을 수 있다. 확정 목록이 길 수 있으므로 목록은 **프로즈로 출력**하고 `AskUserQuestion`은 4지선다만 담당한다. 모델의 후보 판정은 제안일 뿐이고 `confirmed`로의 전이는 확정-후-진행 옵션(①/②) 선택으로만 일어난다.
 
 **frontmatter 계약** (Spec B의 critic이 소비):
 
@@ -360,18 +371,18 @@ AC1–AC14는 hard(미충족 시 미완료), AC15–AC16은 **advisory**(측정�
 | # | 기준 | 검증 |
 |---|---|---|
 | AC1 | `SKILL.md`에 `user_statements`(id/source/round/text) 스키마 블록이 존재하고, 라운드별 `locked?` decision table과 `pending_locked_decisions`가 존재하지 않는다. **부정 절반은 기계 검증이 불완전하다** — 리터럴 락은 이름만 바꾼 동일 구조(예: 변수명을 갈아끼운 라운드별 lock table)를 못 잡는다. AC8과 같은 개방형-부정이므로 V4 수동 검토가 그 몫을 진다 | §8.2 positive grep + V4 |
-| AC2 | `status: confirmed`는 종료 proceed 게이트에서 사용자가 옵션 ①을 고를 때만 발생한다. 최초 제시는 0회째이고 옵션 ② 재제시는 **2회**까지 허용하며, 3번째 요구 시 전 항목 `provisional` 강등 + 고정 문자열 `[spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등` 출력 | V1, V2 |
+| AC2 | `status: confirmed`는 종료 proceed 게이트에서 사용자가 확정-후-진행 옵션(①/②)을 고를 때만 발생한다. 최초 제시는 0회째이고 옵션 ③ 재제시는 **2회**까지 허용하며, 3번째 요구 시 전 항목 `provisional` 강등 + 고정 문자열 `[spec-distill] 확정 확인 재제시 상한(2회) 초과 — 전 항목 provisional 강등` 출력 | V1, V2 |
 | AC3 | `SKILL.md`가 `brainstorming`을 호출할 때 C4 재결정 프로토콜 문장(*"confirmed 항목은 근거 있으면 보고 후 재결정, 임의 변경 금지"*)을 함께 싣는다. `/compact` 경로와 직행 경로 **양쪽 모두** | V3 |
 | AC4 | payload 템플릿이 §0–§7 8섹션 역피라미드이며, 사용자 원문이 §6에 전문 보존된다(정의는 §5.3) | T1, V8 |
 | AC5 | §6에 `🗣`·`☑`·`✎` 세 기호를 모두 포함한 출처 표기 블록이 존재한다(템플릿이 상속, 게이트가 확인) | T18 |
 | AC6 | `user_sourced_items[]`의 각 항목이 id/source/status/statement/**evidence**를 갖는다. `source`는 `verbatim`\|`chosen`만 허용하며 `inferred`는 fail. `statement`는 **160자 이내(hard)** — 모델이 작성한 제약 진술이며 원문이 아니다(§5.2). **bijection C**: 모든 `evidence: S<N>` 값이 §6에 대응 항목으로 존재한다(역방향은 요구하지 않음 — 제약으로 승격되지 않은 발화가 있을 수 있다) | T3, T4, T5, T6, T22, T23, V9 |
 | AC7 | **bijection B**: frontmatter id 집합 == body §2 🗣/☑ 항목 id 집합(양방향), 각 id의 기호↔`source`·`status` 일치, body의 `⟨S<N>⟩` == frontmatter `evidence`, **그리고 body statement == frontmatter `statement`(정규화 후)** | T8, T9, T21, T24 |
-| AC8 | C5 준수 — 닫힌 리터럴 6개는 락 스코프 안의 파일에서 AC13이 전부 잠근다. **락 스코프 밖 파일(`README.md`)은 기계 커버리지가 0**이고, 열거되지 않은 규약 문장이라는 개방형 부정 판정도 기계 검증 불가다 — 전자는 V10, 후자는 V5가 맡는다(한계를 숨기지 않는다) | §8.2 + V5 + V10 |
+| AC8 | C5 준수 — 닫힌 리터럴 6개는 AC13이 production 전 파일(`README.md` 포함)에서 전부 잠근다(폐쇄 절반). 열거되지 않은 규약 문장이라는 개방형 부정 판정은 리터럴 락으로 증명 불가능하다(개방 절반) — V5가 새 템플릿·`SKILL.md`·`README.md`를 사람이 읽고 그 갭을 맡는다(한계를 숨기지 않는다) | §8.2 + V5 |
 | AC9 | `check_brief.py`가 `audit_file`을 필수 키로 요구하고, basename이 아니면 fail, 파일이 없으면 fail한다 | T7 |
 | AC10 | `AUDIT_SECTIONS` 5개 전부에 존재 검사가 있고, Coverage Ledger 검증이 audit 파일에 대해 실행된다 | T2, T13 |
 | AC11 | **bijection A + R4 보존**: payload §5가 참조하는 `ST<N>` 집합 == audit §3 `#### ST<N>` 집합(양방향). steelman 0건(양쪽 공집합)은 sentinel 없이 허용. `verdict:` 항목은 URL + statement ≥10자 + verdict 토큰 + `ST<N>` 참조를 갖는다. **`기각` 항목이 0건이면 명시 N/A sentinel 없이는 fail**(구 R4 의례 이관 — steelman 공집합과는 다른 조건) | T10, T11, T12, T17, T19 |
 | AC12 | `confirmed` 0건이면 명시 sentinel 없이는 fail | T14 |
-| AC13 | 회귀 락이 `locked_directions`·`pending_locked_decisions`·`재논쟁 금지`·`Locked Directions`·`다시 묻지 않는다`·`확정·재논쟁` **6개**를 잡고, mutation test로 이빨이 증명된다. 스코프는 production 전 파일(`tests/`·`CHANGELOG.md`·`README.md`·`docs/` 제외) | §8.2 |
+| AC13 | 회귀 락이 `locked_directions`·`pending_locked_decisions`·`재논쟁 금지`·`Locked Directions`·`다시 묻지 않는다`·`확정·재논쟁` **6개**를 잡고, mutation test로 이빨이 증명된다. 스코프는 production 전 파일(`tests/`·`CHANGELOG.md`·`docs/` 제외) | §8.2 |
 | AC14 | `plugin.json` version이 `0.23.x` + `CHANGELOG.md`에 `## [0.23.` 항목 + `README.md`의 "Principles Instantiated"가 **네 사실을 각각 명시**: 라운드별 잠금 제거 · 종료 시 사용자 일괄 확인 · payload/audit 분리 · `user_sourced_items` 계약(V6가 이 체크리스트를 대조한다). 버전 리터럴은 **minor까지만 핀**한다(patch digit unpin — doc-only bump마다 stale-red 방지) | T20 + V6 |
 | AC15 *(advisory)* | 게이트가 `payload_body_lines_excl_verbatim`을 출력하고 150 초과 시 advisory를 낸다. **fail하지 않는다** | T16, V7 |
 | AC16 *(advisory)* | 탐색 폭 회귀 검증(§8.3)이 실행되고 결과가 audit에 기록된다. **통과 조건은 실행·기록이며 관측 결과값이 아니다** — 어떤 결과도 shipping을 막지 않는다 | §8.3 |
@@ -461,11 +472,10 @@ AC1의 긍정 주장(`user_statements` 스키마 존재)은 `SKILL.md` 본문에
 | V2 | 재제시 상한 초과 시 전부 `provisional` 강등 + 고정 advisory 출력 | AC2 |
 | V3 | `/compact` 경로와 직행 경로 양쪽에서 C4 프로토콜 문장이 실리는지 | AC3 |
 | V4 | **AC1 부정 절반** — `SKILL.md`를 사람이 읽고, 이름만 바꾼 라운드별 잠금 구조(변수명을 갈아끼운 decision table 등)가 남아 있지 않은지 확인. 리터럴 락이 못 잡는 영역 | AC1 |
-| V5 | **C5 개방형 판정** — 새 템플릿·`SKILL.md`를 사람이 읽고 독자에게 행동을 지시하는 문장이 남아 있지 않은지 확인. 기계 검증 불가 영역 | AC8 |
+| V5 | **C5 개방형 판정** — 새 템플릿·`SKILL.md`·`README.md`를 사람이 읽고 독자에게 행동을 지시하는 문장이 남아 있지 않은지 확인. 기계 검증 불가 영역 | AC8 |
 | V6 | `README.md` "Principles Instantiated" 항목이 이 변경을 실제로 반영하는지(문자열 존재가 아니라 내용 적절성) | AC14 |
 | V7 | 첫 실산출 brief의 분량 지표가 예산 대비 어디인지 | AC15 |
 | V9 | **`evidence` 의미적 정합** — `statement` 표본을 골라 인용된 `⟨S<N>⟩` 원문이 실제로 그 요약을 뒷받침하는지 확인. bijection C가 존재성만 보므로 남는 갭 | AC6 |
-| V10 | **README C5 준수** — `README.md`가 AC13의 6개 리터럴을 *옛 용어를 인용해 설명하는 맥락 밖에서* 재도입하지 않았는지 확인. 락 스코프 밖이라 기계 커버리지 0 | AC8 |
 | V8 | **원문 완전성** — `state.local.md`의 `user_statements`와 brief §6을 대조해 기록된 발화가 빠짐없이 옮겨졌는지 확인. 게이트는 state를 읽지 않으므로 기계 검증 불가 | AC4 |
 
 V4·V5·V8은 기계 검증이 불가능하다 — 앞의 둘은 개방형 부정 명제라서, V8은 게이트의 입력 범위 밖(state 파일)을 대조해야 해서다. **이 한계를 숨기지 않는 것이 설계의 일부다** — 락이 커버한다고 주장하면 커버되지 않은 영역이 커버된 것으로 보인다.
@@ -491,11 +501,11 @@ V4·V5·V8은 기계 검증이 불가능하다 — 앞의 둘은 개방형 부�
 | **§5 병합 시 R4 의례 폐기 (초안)** | 구 §7 `Tried & Discarded`를 §5로 합치면서 검증을 steelman verdict 항목에만 걸면 스키마는 단순해지지만, **steelman이 트리거되지 않은 사용자 폐기 방향이 무기록으로 사라진다** — 하류 재탐색 차단이라는 R4의 목적이 그대로 증발하고 §5는 헤더만 있어도 통과한다. 병합은 표현의 통합이지 의례의 폐기가 아니므로 `기각`/`위험` 항목 문법으로 가르고 "기각 0건 금지"를 이관 (리뷰 round-2가 적발) |
 | **`evidence`가 laundering을 봉쇄한다고 서술 (초안)** | bijection C는 `S<N>`의 *존재*만 검사한다 — 요약이 그 원문을 뒷받침하는지는 검증하지 않으므로 실재하는 아무 id나 붙여도 통과한다. "기계적으로 봉쇄"는 사실과 다른 확정 진술이었고, V4·V5·V8에서 지킨 *"안 닫히는 갭은 명시한다"* 규율을 이 항목에서만 어겼다 → 주장을 낮추고 V9 신설 (리뷰 round-5가 적발) |
 | **§2 body에 요약 신호 없이 🗣만 표기 (초안)** | 🗣를 provenance로 재정의했지만 렌더 문법에 시각 신호가 없어, 이 구분을 모르는 독자는 C2가 약속한 대로 *"🗣 = 한 말 그대로"* 로 읽는다 → `⟨S<N>⟩` 접미 + §2 머리 한 줄 + C2 표 명문화. **사용자 재확인을 받았다**(C4 경로, round-5 게이트) |
-| **README를 락 스코프에서 빼고 대체 검증 미배정 (초안)** | 락에서 빼는 것 자체는 옳았지만(옛 용어 인용 필요) V5는 템플릿·SKILL만 스코프라 README가 **완전 무검증**으로 남았다 — 정작 권위 문법 재도입 위험이 가장 높은 파일이다 → V10 신설 (리뷰 round-5가 적발) |
+| **README를 락 스코프에서 빼고 대체 검증 미배정 (초안)** | 락에서 빼는 것 자체는 옳았지만(옛 용어 인용 필요) V5는 템플릿·SKILL만 스코프라 README가 **완전 무검증**으로 남았다 — 정작 권위 문법 재도입 위험이 가장 높은 파일이다 → V10 신설 (리뷰 round-5가 적발). **사후 반증(구현 완료 후)**: "옛 용어 인용 필요"라는 전제 자체가 틀렸다 — shipped README는 `grep -cF`로 6개 리터럴을 **0건** 인용한다. V10이 메운 갭은 애초에 비어 있었다. 아래 행 참고 |
 | **편도 참조 감사를 Verification Plan에 배치 (초안)** | §8은 shipped artifact 검증 목록인데 그 감사는 *이 설계 문서 자신의* 저술 일관성 점검이다 — category error이고, "기계 대조"라 쓰면서 스크립트가 §7에 없었다 → §6 표 무결성 규칙(저술용)으로 이동, 라운드 참조는 Metadata로 (리뷰 round-5가 적발) |
 | **`statement`를 사용자 원문으로 취급 (초안)** | 160자 cap이 붙은 필드를 원문으로 읽으면 임의 길이 발화를 압축 없이 담을 수 없어 §5.3의 *"사용자 원문은 압축 대상 아님"* 과 정면충돌한다. `statement`는 모델이 쓴 요약이고 §6이 원문이며, §2의 기호는 **저자가 아니라 provenance**를 가리킨다 — 이 구분을 붙드는 것이 `evidence` 필수 규칙이다 (리뷰 round-4가 적발) |
 | **"정정 이벤트"를 스키마 없이 서술 (초안)** | 저장 위치·필드·검증 배정이 전부 없는 규칙을 §5.3에 남겼다 — 이 문서 자신의 원칙(*"검증 배정 없는 hard AC는 사실상 주석"*)을 스스로 위반. Spec A는 원문 편집 경로를 만들지 않으므로 Deferred to plan으로 이동 (리뷰 round-4가 적발) |
-| **README를 락 스코프에 포함 (초안)** | README의 "Principles Instantiated"는 *무엇이 왜 사라졌는지* 설명하려면 옛 용어를 인용해야 한다 — `CHANGELOG.md`를 뺀 것과 같은 이유다. **우회해야 하는 락은 그 자체로 설계 결함** (리뷰 round-4가 적발) |
+| **README를 락 스코프에 포함 (초안)** | README의 "Principles Instantiated"는 *무엇이 왜 사라졌는지* 설명하려면 옛 용어를 인용해야 한다 — `CHANGELOG.md`를 뺀 것과 같은 이유다. **우회해야 하는 락은 그 자체로 설계 결함** (리뷰 round-4가 적발). **사후 반증·결정 반전(구현 완료 후)**: 이 예측은 검증 가능했고 실패했다 — shipped README는 `grep -cF`로 6개 리터럴을 **0건** 인용하는 반면(README 제외를 시행한 구현 태스크의 예측과 반대), `CHANGELOG.md`는 실제로 4건 인용한다(`locked_directions` 2 · `pending_locked_decisions` 3 · `재논쟁 금지` 1 · `Locked Directions` 1 — 이쪽 제외는 여전히 정당). 두 파일은 종류가 다르다: CHANGELOG는 *코드가 부르던 이름*을 기록하고 README는 *플러그인이 하는 일*을 기록한다 — 후자에는 은퇴한 식별자를 인용할 이유가 없었다. **결정을 반전**한다 — README를 AC13 스코프에 편입(위 행의 V10은 그래서 폐지), AC8 검증열은 §8.2+V5로 통합해 개방 절반(사람 판단)만 남긴다 |
 | **두 공집합 조건에 같은 sentinel 공유 (초안)** | bijection A(steelman=0)와 R4(`기각`=0)는 서로 다른 조건인데 하나의 sentinel 문구를 공유하려 했다. `기각`은 있고 steelman만 0건인 **가장 흔한 정상 상태**에서 그 문구(*"전부 first-time defend+lock"*)가 거짓 진술이 되어 쓸 수 없고, 규칙과 T12가 정면으로 모순됐다 → steelman 공집합은 sentinel 면제 (리뷰 round-3이 적발) |
 | **bijection B를 메타데이터만 대조 (초안)** | id·기호·status만 맞추면 frontmatter와 body가 같은 라벨을 달고 **서로 다른 제약을 말해도** 통과한다. bijection B는 round-2에서 신설한 것인데 정작 지키려던 축의 *내용*을 비워뒀다 → frontmatter canonical + 정규화 후 statement 동일 (리뷰 round-3이 적발) |
 | **"전문 보존"을 글자 불변으로 정의** | `CLAUDE.md` P21의 secret placeholder 치환과 정면충돌한다. 불변식은 글자가 아니라 **provenance**이며, 허용 변환을 열거하고 완전성은 V8 수동으로 분리 |
