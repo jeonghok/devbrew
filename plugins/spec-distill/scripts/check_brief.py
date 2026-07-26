@@ -865,6 +865,15 @@ def main(argv: list[str]) -> int:
         except (OSError, UnicodeDecodeError) as exc:
             print(json.dumps({"failures": [f"audit unreadable: {exc}"]}, ensure_ascii=False))
             return 1
+        # 원장을 읽기 **전에** 이 쌍이 같은 인터뷰인지 묻는다 — `gate`는 거부하는 쌍을
+        # `coverage`는 `{"failures": []}`로 답하고 있었다(codex 적발, 실행 실증). 같은 질문에
+        # 두 진입점이 다른 답을 내면 둘 중 하나는 거짓이고, 여기선 느슨한 쪽이 거짓이다:
+        # 남의 audit에서 읽은 원장은 이 payload에 대해 아무것도 말해주지 않는다.
+        pair = audit_pairing_errors(_frontmatter(text), audit_text, path.name)
+        if pair:
+            print(json.dumps({"failures": [f"audit pairing: {p}" for p in pair]},
+                             ensure_ascii=False))
+            return 1
         print(json.dumps({"failures": coverage_ledger_failures(audit_text)},
                          ensure_ascii=False))
         return 0

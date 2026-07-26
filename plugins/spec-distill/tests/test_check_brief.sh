@@ -375,6 +375,14 @@ out_off="$(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" landscape-citati
   && note PASS "R12: 단독 서브커맨드도 web 완화를 stderr로 알린다 (stdout JSON 무오염)" \
   || note FAIL "R12: 단독 서브커맨드가 조용히 완화되거나 advisory가 stdout을 오염시켰다"
 
+# R13: 같은 쌍에 대해 `gate`와 `coverage`가 같은 답을 내야 한다. `coverage`는 페어링을 건너뛰어
+# gate가 거부하는 쌍을 {"failures": []}로 답했다 — 두 진입점이 같은 질문에 다른 답을 내면 느슨한
+# 쪽이 거짓이다. 원장 자체가 유효한 사본이라 exit code만으로는 원인이 안 보이므로 메시지까지 본다.
+out="$(python3 "$SCRIPT" coverage "$FX/interview-brief-copied-audit.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'audit pairing'; } \
+  && note PASS "R13: coverage도 mispaired audit을 거부 (gate와 동일 판정)" \
+  || note FAIL "R13: coverage가 gate와 다른 답을 냈다 (mispaired audit을 clean으로 보고)"
+
 # --- Task 2: user_sourced_items 스키마 + bijection C + confirmed sentinel ---
 
 # T3: user_sourced_items 부재 → red
