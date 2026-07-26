@@ -64,7 +64,11 @@ has 'blind_spot_dispatched' "AC1: orchestration.blind_spot_dispatched in schema"
 has 'coverage_mapper_last_probe' "AC1: orchestration.coverage_mapper_last_probe in schema"
 # AC1: 기존 필드 보존
 has 'non_user_streak' "AC1: non_user_streak retained"
-has 'pending_locked_decisions' "AC1: pending_locked_decisions retained"
+# AC1: 라운드별 잠금 producer 제거 — pending_locked_decisions는 사라지고 user_statements가 대체
+grep -q 'pending_locked_decisions' "$SKILL" \
+  && note FAIL "AC1: pending_locked_decisions가 SKILL에 잔존 (라운드별 잠금 producer)" \
+  || note PASS "AC1: pending_locked_decisions 제거됨"
+has 'user_statements' "AC1: user_statements가 state 스키마에 존재"
 # AC5: 마이그레이션 — 구세션 감지 + fresh seed + advisory
 has 'coverage.*부재|coverage 부재|interview_round.*존재' "AC5: legacy detection (interview_round present / coverage absent)"
 has 'state schema migration.*coverage|coverage/probe_count added' "AC5: migration advisory wording"
@@ -95,7 +99,7 @@ has 'probe_budget\.py"? increment' "C10: increment after posing a probe"
 has 'probe_budget\.py"? raise-cap' "C1: raise-cap on '계속' escalation"
 has 'floor.*(closed|전부.*closed|모두.*closed)' "G1/AC2: termination = floor all closed"
 has 'Coverage Ledger' "AC2/C9: brief Coverage Ledger serialization"
-has '9-section|9-섹션|9 섹션' "AC10: Step A references 9-section template"
+has '8-section|8-섹션|8 섹션' "AC10: Step A가 8섹션 템플릿을 참조"
 
 # AskUserQuestion 및 3옵션 어휘(박제/abort/계속)는 이미 Step B 핸드오프 게이트·kill switch
 # 안내에도 등장 — 전-파일 grep은 새 probe 백스톱 섹션이 없어도 satisfied돼 teeth가 없다
@@ -212,6 +216,27 @@ total_ir_count="$(grep -c interview_round "$SKILL")"
 [[ "$mig_ir_count" -eq "$total_ir_count" ]] \
   && note PASS "V9: interview_round confined to migration section (mig=$mig_ir_count total=$total_ir_count)" \
   || note FAIL "V9: interview_round confined to migration section (mig=$mig_ir_count total=$total_ir_count)"
+
+# --- v0.23.0: 발화 기록 producer (AC1 positive, §8.2) ---
+# 전-파일 grep은 헤더-satisfiable 함정에 걸린다(섹션 제목만 남겨도 통과) → awk 블록 스코프 +
+# body-unique 문구로 잠근다. mutation: 아래 yaml 블록을 지우면 RED여야 한다.
+stmt_block="$(awk '/^## 사용자 발화 기록/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
+{ [[ -n "$stmt_block" ]] && grep -q 'user_statements' <<<"$stmt_block"; } \
+  && note PASS "AC1: 사용자 발화 기록 섹션이 user_statements 스키마를 담는다" \
+  || note FAIL "AC1: 사용자 발화 기록 섹션에 user_statements 스키마가 없다"
+{ grep -q 'id: S<N>' <<<"$stmt_block" && grep -qE 'source: verbatim' <<<"$stmt_block"; } \
+  && note PASS "AC1: 발화 레코드가 id/source 필드를 명시" \
+  || note FAIL "AC1: 발화 레코드 스키마(id: S<N> / source: verbatim)가 없다"
+grep -qE 'status 필드는 없습니다|앵커도 없습니다' <<<"$stmt_block" \
+  && note PASS "AC1: 라운드 중 status·해답공간 앵커 부재가 명시됨" \
+  || note FAIL "AC1: status/앵커 부재 명시가 없다"
+
+# agents 3종의 Input 절이 더 이상 locked_directions를 참조하지 않는다 (spec §7 누락 보강)
+for a in blind-spot-prober steelman-builder coverage-mapper; do
+  grep -q 'locked_directions' "$REPO_ROOT/plugins/spec-distill/agents/$a.md" \
+    && note FAIL "AC13: agents/$a.md가 locked_directions를 참조" \
+    || note PASS "AC13: agents/$a.md에 locked_directions 없음"
+done
 
 echo
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"

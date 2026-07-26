@@ -32,7 +32,7 @@ failure mode(unknown-unknown)를 웹 근거와 함께 표면화합니다. 당신
 
 ## Input
 
-- 현재 재구성된 문제정의(Reframed Problem) + 지금까지의 locked_directions.
+- 현재 재구성된 문제정의(Reframed Problem) + 지금까지 사용자가 말한 제약의 요지.
 - (있으면) External Landscape 발췌.
 
 ## Required research (출력 전)
