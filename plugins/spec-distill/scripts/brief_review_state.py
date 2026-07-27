@@ -17,6 +17,9 @@
 
 fail-closed 규율은 `probe_budget.py`와 동일하다: state가 unreadable/absent이면
 mutating 서브커맨드는 exit 1이고, 카운터 라인을 silent-create하지 않는다(`init`만 생성).
+같은 규율이 **존재하지만 값이 비어 있는 라인**(`key:` 뒤 같은 줄에 내용이 없는 malformed
+상태)에도 적용된다 — absent(라인 자체가 없음, `migrated` + in-memory default)와는 다른
+사실이므로 default로 조용히 승격하지 않고 raise한다(`parse()`/`_set_scalar()` 참고).
 """
 from __future__ import annotations
 
@@ -80,21 +83,37 @@ def _frontmatter_bounds(text: str) -> tuple[int, int]:
 
 
 def parse(text: str) -> dict:
-    """세 키를 읽는다. 부재는 default + `migrated` 열거(쓰지 않는다)."""
+    """세 키를 읽는다. **부재**는 default + `migrated` 열거(쓰지 않는다) — §5.7 migration
+    계약. **존재하지만 값이 비어 있음**(콜론 뒤 같은 줄에 내용이 없음)은 부재와 다른 사실이며
+    fail-closed다(ValueError) — probe_budget.py의 '존재하지만 비-정수 → ValueError' 규율과
+    동일: malformed 입력을 조용히 '예산 내'/default로 읽으면 안 된다. 특히 brief_critic_rounds가
+    비어 있는데 0으로 읽으면 escalate 루프-가드 방향으로 fail-OPEN(실제로는 알 수 없는 상태인데
+    재dispatch를 계속 허용)이 되므로 반드시 raise한다.
+
+    콜론 앞뒤 공백은 `[ \\t]*`(같은 줄 안)로 한정한다 — `\\s*`는 `\\n`도 삼켜, 값이 빈 줄
+    (`key:` 다음 줄부터 내용이 시작하는 형태)에서 **다음 줄의 첫 토큰을 이 줄의 값으로 오인**한다
+    (KEY_DEGRADE에서 실제로 터졌던 것과 동일 클래스의 버그 — 여기서는 STAGE/ROUNDS가 각각
+    "닫힌 열거 밖 값을 조용히 통과"·"손상된 카운터를 조용히 읽기"로 나타난다)."""
     out = {"brief_review_stage": "direction", "brief_critic_rounds": 0,
            "brief_review_degradations": [], "migrated": [], "clamped": False}
-    m = re.search(rf"^{KEY_STAGE}\s*:\s*(\S+)", text, re.MULTILINE)
+    m = re.search(rf"^{KEY_STAGE}[ \t]*:[ \t]*(.*)$", text, re.MULTILINE)
     if m:
-        val = _unscalar(m.group(1))
+        tok_m = re.match(r"\S+", m.group(1))
+        if not tok_m:
+            raise ValueError(f"{KEY_STAGE} 라인이 있으나 값이 비어 있다(malformed) — fail-closed")
+        val = _unscalar(tok_m.group(0))
         if val not in STAGES:
             raise ValueError(f"{KEY_STAGE} 값이 닫힌 열거 밖: {val!r}")
         out["brief_review_stage"] = val
     else:
         out["migrated"].append(KEY_STAGE)
 
-    m = re.search(rf"^{KEY_ROUNDS}\s*:\s*(\S+)", text, re.MULTILINE)
+    m = re.search(rf"^{KEY_ROUNDS}[ \t]*:[ \t]*(.*)$", text, re.MULTILINE)
     if m:
-        tok = m.group(1)
+        tok_m = re.match(r"\S+", m.group(1))
+        if not tok_m:
+            raise ValueError(f"{KEY_ROUNDS} 라인이 있으나 값이 비어 있다(malformed) — fail-closed")
+        tok = tok_m.group(0)
         if not tok.isdigit():
             raise ValueError(f"{KEY_ROUNDS} 가 비음수 정수가 아니다: {tok!r}")
         n = int(tok)
@@ -110,9 +129,9 @@ def parse(text: str) -> dict:
 
 
 def _parse_degradations(text: str, out: dict) -> list:
-    # 콜론 뒤는 [ \t]*(줄 안 공백만) — \s*는 \n도 삼켜 값이 비면(멀티라인 블록 시작)
+    # 콜론 앞뒤 모두 [ \t]*(줄 안 공백만) — \s*는 \n도 삼켜 값이 비면(멀티라인 블록 시작)
     # 다음 줄의 첫 `- component:` 불릿까지 매치에 먹혀 m.end()가 record 1 중간에 앉는다.
-    m = re.search(rf"^{KEY_DEGRADE}\s*:[ \t]*(.*)$", text, re.MULTILINE)
+    m = re.search(rf"^{KEY_DEGRADE}[ \t]*:[ \t]*(.*)$", text, re.MULTILINE)
     if not m:
         out["migrated"].append(KEY_DEGRADE)
         return []
@@ -136,10 +155,20 @@ def _parse_degradations(text: str, out: dict) -> list:
 
 
 def _set_scalar(text: str, key: str, value) -> str:
-    pat = re.compile(rf"^({re.escape(key)}\s*:\s*)(\S.*?)(\s*(?:#.*)?)$", re.MULTILINE)
+    """`key`의 인라인 스칼라 값을 새 값으로 교체한다. 콜론 앞뒤 공백은 전부 `[ \\t]*`
+    (같은 줄 안)로 한정한다 — `\\s*`는 `\\n`도 삼키므로, 값이 빈 줄(`key:` 다음 줄부터
+    새 키/블록이 시작하는 형태)에서 **다음 줄의 내용을 이 줄의 기존 값으로 오인**해
+    그 줄 전체를 새 값으로 갈아치워 삭제해버린다(실제로 재현된 사고: brief_review_stage가
+    비어 있고 바로 다음 줄에 brief_critic_rounds: 0이 있으면, set-stage가 그 줄 전체를
+    지우고 새 stage 값으로 대체했다). 존재하지만 값이 비어 있으면(같은 줄에 내용 없음)
+    fail-closed — 조용히 덮어쓰지 않고, 라인이 아예 부재한 경우와 구분되는 메시지를 낸다."""
+    if not re.search(rf"^{re.escape(key)}[ \t]*:", text, re.MULTILINE):
+        raise ValueError(f"{key} 라인 부재 — init을 먼저 실행하라 (silent-create 금지)")
+    pat = re.compile(rf"^({re.escape(key)}[ \t]*:[ \t]*)(\S.*?)([ \t]*(?:#.*)?)$", re.MULTILINE)
     m = pat.search(text)
     if not m:
-        raise ValueError(f"{key} 라인 부재 — init을 먼저 실행하라 (silent-create 금지)")
+        raise ValueError(f"{key} 라인이 있으나 값이 비어 있다(malformed) — fail-closed, "
+                          f"조용히 덮어쓰지 않는다(인접 라인을 삼키는 사고를 막는다)")
     return text[:m.start()] + f"{m.group(1)}{_yaml_scalar(value)}{m.group(3)}" + text[m.end():]
 
 
@@ -158,7 +187,7 @@ def cmd_init(args) -> int:
     inject = ""
     for key, default in ((KEY_STAGE, "direction"), (KEY_ROUNDS, "0"),
                          (KEY_DEGRADE, "[]")):
-        if not re.search(rf"^{key}\s*:", text, re.MULTILINE):
+        if not re.search(rf"^{key}[ \t]*:", text, re.MULTILINE):
             inject += f"{key}: {default}\n"
             added.append(key)
     if inject:
@@ -257,8 +286,8 @@ def cmd_degrade_append(args) -> int:
         text = _read(path)
     except (OSError, UnicodeDecodeError) as exc:
         return _fail(f"state unreadable: {exc}")
-    # 콜론 뒤는 [ \t]*(줄 안 공백만) — _parse_degradations와 동일 이유.
-    m = re.search(rf"^{KEY_DEGRADE}\s*:[ \t]*(.*)$", text, re.MULTILINE)
+    # 콜론 앞뒤 모두 [ \t]*(줄 안 공백만) — _parse_degradations와 동일 이유.
+    m = re.search(rf"^{KEY_DEGRADE}[ \t]*:[ \t]*(.*)$", text, re.MULTILINE)
     if not m:
         return _fail(f"{KEY_DEGRADE} 라인 부재 — init을 먼저 실행하라")
     record = (f"  - component: {_yaml_scalar(args.component)}\n"

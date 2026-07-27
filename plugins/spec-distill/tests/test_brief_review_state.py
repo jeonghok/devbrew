@@ -196,5 +196,66 @@ class TestDegradationRecord(Base):
         self.assertNotEqual(rc, 0)
 
 
+class TestBlankValueNewlineHazard(Base):
+    """`\\s*`가 콜론 뒤에서 `\\n`을 삼켜 다음 줄의 내용을 이 라인의 값으로 오인하는 클래스의
+    회귀 — KEY_STAGE/KEY_ROUNDS 읽기 경로 및 _set_scalar 쓰기 경로 양쪽 모두.
+    fix round 1: 리뷰어가 재현한 3개 repro(§task-3-report.md 참고)의 회귀 락."""
+
+    def setUp(self):
+        super().setUp()
+        run("init", str(self.state))
+
+    def test_blank_stage_with_bare_word_next_line_fails_closed(self):
+        # brief_review_stage:  (값 없음) 다음 줄에 `done`이 있어도 그 값을 조용히 흡수하면 안 된다.
+        t = self.state_text().replace("brief_review_stage: direction",
+                                       "brief_review_stage:\ndone")
+        self.state.write_text(t, encoding="utf-8")
+        rc, out, _ = run("get", str(self.state))
+        self.assertNotEqual(rc, 0,
+                             "빈 stage 값이 다음 줄의 `done`을 조용히 흡수했다 (newline hazard)")
+
+    def test_blank_rounds_with_bare_number_next_line_fails_closed(self):
+        # brief_critic_rounds:  (값 없음) 다음 줄에 `42`가 있어도 조용히 읽고 clamp하면 안 된다
+        # — 카운터를 알 수 없는 상태에서 0으로 읽는 것은 escalate 가드 방향으로 fail-open이다.
+        t = self.state_text().replace("brief_critic_rounds: 0",
+                                       "brief_critic_rounds:\n42")
+        self.state.write_text(t, encoding="utf-8")
+        rc, out, _ = run("get", str(self.state))
+        self.assertNotEqual(rc, 0,
+                             "빈 rounds 값이 다음 줄의 42를 조용히 흡수했다 (newline hazard)")
+
+    def test_set_stage_on_blank_stage_does_not_delete_adjacent_line(self):
+        # 실제로 재현됐던 사고: brief_review_stage가 비어 있고 바로 다음 줄에
+        # brief_critic_rounds: 0이 있으면, set-stage가 그 줄 전체를 삼켜 삭제했다.
+        t = self.state_text().replace("brief_review_stage: direction",
+                                       "brief_review_stage:")
+        self.state.write_text(t, encoding="utf-8")
+        self.assertIn("brief_critic_rounds: 0", self.state_text(),
+                      "픽스처 전제 오류: 인접 라인이 없다")
+        before = self.state_text()
+        rc, _, _ = run("set-stage", str(self.state), "fidelity")
+        self.assertNotEqual(rc, 0, "빈 stage 값 위에 set-stage가 조용히 성공했다")
+        self.assertEqual(before, self.state_text(),
+                         "실패한 set-stage가 인접 라인(brief_critic_rounds)을 삭제/변경했다")
+        self.assertIn("brief_critic_rounds: 0", self.state_text(),
+                      "인접 라인이 삭제됐다")
+
+    def test_bump_on_blank_rounds_does_not_delete_adjacent_line(self):
+        # 동일 클래스의 쓰기 경로 회귀 — ROUNDS 쪽. cmd_bump는 parse()를 먼저 호출하므로
+        # _set_scalar에 도달하기 전에 fail-closed 되어야 하며, 인접 라인도 살아남아야 한다.
+        t = self.state_text().replace("brief_critic_rounds: 0",
+                                       "brief_critic_rounds:\n99")
+        self.state.write_text(t, encoding="utf-8")
+        self.assertIn("brief_review_degradations: []", self.state_text(),
+                      "픽스처 전제 오류: 인접 라인이 없다")
+        before = self.state_text()
+        rc, _, _ = run("bump-critic-round", str(self.state))
+        self.assertNotEqual(rc, 0, "빈 rounds 값 위에 bump가 조용히 성공했다")
+        self.assertEqual(before, self.state_text(),
+                         "실패한 bump가 인접 라인(brief_review_degradations)을 삭제/변경했다")
+        self.assertIn("brief_review_degradations: []", self.state_text(),
+                      "인접 라인이 삭제됐다")
+
+
 if __name__ == "__main__":
     unittest.main()
