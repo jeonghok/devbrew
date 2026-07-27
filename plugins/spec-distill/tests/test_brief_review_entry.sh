@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Spec B AC1 지원 (V1 보완) — conducting-interview → reviewing-brief 진입 + Step B 실기.
 # 기존 종료 조건·Step A 게이트·B-2 4옵션 구조가 **불변**임을 함께 잠근다(회귀 방지).
+# Fix round 2: fence-aware scoping — Task 7(test_reviewing_brief_skill.sh)의 scoped_window()/
+# fence() 관용구를 재사용한다. 느슨한(anywhere-in-window) substring 체크만으로는 "펜스 밖 프로즈
+# mention"·"주석 처리된 데코이 펜스"·"펜스 안이지만 무관한 첫 줄"로 satisfiable하다는 것이
+# fix round 1 리뷰에서 mutation으로 실증됐다(NB1/NB2). load-bearing lock은 반드시 실제 펜스
+# 내부 콘텐츠(전체-라인 주석 제외)를 지목해야 한다.
 # Run: bash plugins/spec-distill/tests/test_brief_review_entry.sh
 set -u -o pipefail
 
@@ -9,21 +14,72 @@ CI="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/SKILL.md"
 
 pass=0; fail=0
 note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
-window() { awk -v pat="$1" '$0 ~ pat {inw=1; next} inw && /^#{3,4} / {exit} inw' "$CI"; }
+
+# $1 = 시작 헤더 정규식, $2 = 종료 판단 헤딩 정규식 → fence-aware(Task 7 scoped_window() 재사용):
+# ``` 펜스 안에서는 종료 조건을 무시한다(펜스 안의 컬럼-0 텍스트가 헤딩처럼 보여 조기
+# 종료시키는 것을 막는다 — 잘린 윈도우 안에서는 이후의 모든 스코프 락이 vacuous하게든
+# 다른 섹션 텍스트로든 무너질 수 있다).
+scoped_window() {
+  awk -v pat="$1" -v endpat="$2" '
+    $0 ~ pat {inw=1; next}
+    inw && /^```/ {fence=!fence}
+    inw && !fence && $0 ~ endpat {exit}
+    inw
+  ' "$CI"
+}
+window() { scoped_window "$1" '^#{3,4} '; }
+
+# 윈도우 문자열 안에서 특정 태그의 펜스 내부만 추출(Task 7 fence() 관용구를 태그 파라미터로
+# 일반화 — 이 SKILL은 ```bash·```javascript·bare ``` 세 종류를 다 쓴다). 전체-라인 주석은
+# 버린다(주석 처리해 실행되지 않는 줄이 grep에는 그대로 잡히는 것을 막는다). $2="" 이면
+# bare ``` 펜스(태그 없음)를 지목한다 — bare 펜스의 열기/닫기 마커가 둘 다 리터럴 "```"이므로
+# 상태(infence)로 열기/닫기를 구분한다(리터럴 매칭만으로는 앞선 다른 펜스의 닫기 마커를
+# 열기로 오인한다).
+fence() {
+  awk -v tag="$2" '
+    !infence && $0 == "```" tag { infence=1; want=1; next }
+    !infence && /^```/          { infence=1; want=0; next }
+    infence && $0 == "```"      { infence=0; want=0; next }
+    infence && want && $0 !~ /^[[:space:]]*#/ { print }
+  ' <<<"$1"
+}
 
 test -f "$CI" || { note FAIL "SKILL 부재"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1; }
+
+# --- 윈도우 전제조건 : 코드 펜스 균형 (Task 7 관용구 재사용) -----------------
+# scoped_window()/fence()의 상태 토글은 문서의 ``` 마커가 짝을 이룬다는 전제 위에서만 성립한다.
+# 마커가 홀수면 토글이 뒤집힌 채로 남아 윈도우가 EOF까지 흘러넘치거나 fence()가 엉뚱한
+# 구간을 "펜스 안"으로 오인한다.
+n_fence="$(grep -c '^```' "$CI" || true)"
+if [[ "$n_fence" -gt 0 ]] && [[ "$((n_fence % 2))" -eq 0 ]]; then
+  note PASS "펜스 균형: 코드 펜스 마커 ${n_fence}개 — 짝수(균형), 윈도우/펜스 스코프 유효"
+else
+  note FAIL "펜스 불균형: 코드 펜스 마커 ${n_fence}개 — scoped_window()/fence()가 스코프를 잃는다"
+fi
 
 # --- 진입 블록 -------------------------------------------------------------
 grep -qE '^### Step A\.5' "$CI" && note PASS "Step A.5 헤더 존재" || note FAIL "Step A.5 헤더 부재"
 WA5="$(window '^### Step A\.5')"
 grep -qF 'reviewing-brief' <<<"$WA5" && note PASS "A.5가 reviewing-brief를 지목 (느슨한 substring, defense-in-depth)" || note FAIL "A.5에 reviewing-brief 부재"
-# 위 substring 체크는 프로즈 한 줄만으로도 satisfiable하다(실측: invocation 라인 전체를 지워도
-# 프로즈의 "`reviewing-brief` skill로 넘깁니다"가 남아 계속 PASS로 읽힌다). load-bearing lock은
-# 아래 anchor 체크 — 실제 invocation directive 라인(줄 맨 앞 "Skill spec-distill:reviewing-brief")
-# 존재를 직접 확인한다.
-grep -qE '^Skill spec-distill:reviewing-brief\b' <<<"$WA5" \
-  && note PASS "A.5가 invocation directive 라인을 실제로 포함 (anchor, load-bearing)" \
-  || note FAIL "A.5에 invocation directive 라인 부재 (prose mention만으로는 이 assert가 만족되지 않는다)"
+# 위 substring 체크는 프로즈 한 줄만으로도, 또는 펜스 밖 아무 데나 같은 리터럴을 흘려놔도
+# satisfiable하다 — fix round 1 리뷰가 mutation으로 실증(invocation 라인을 지우고 "위 형식
+# 참고용" 데코이로 치환해도, 또는 "이전 형식 참고" 펜스를 따로 추가해도 계속 PASS). load-bearing
+# lock은 (a) 실제 invocation directive가 사는 bare ``` 펜스 내부(주석 제외)를 지목하고,
+# (b) 그 안의 라인이 $PAYLOAD·$CODEX_DIR_YAML·$CODEX_FID_YAML 세 핸드오프 변수를 실제로
+# 실어 나르는지까지 확인한다 — "Skill spec-distill:reviewing-brief"라는 문자열만 있고 세
+# 변수를 나르지 않는 장식용 데코이 라인(예: "위 형식 참고용" 주석)은 이 조건에서 걸러진다.
+# anchor는 들여쓰기·"- " 불릿을 허용한다(무해한 리포맷이 col-0 강제로 false-fail하지 않게 —
+# 펜스 경계가 lock을 정직하게 만드는 것이지 column 0이 아니다).
+INVOKE_FENCE="$(fence "$WA5" "")"
+grep -qE '^[[:space:]]*-?[[:space:]]*Skill spec-distill:reviewing-brief\b' <<<"$INVOKE_FENCE" \
+  && note PASS "A.5 bare 펜스 안에 invocation 라인 실재 (load-bearing)" \
+  || note FAIL "A.5 bare 펜스 안에 invocation 라인 부재 (펜스 밖 mention·데코이 펜스로는 만족 안 됨)"
+INVOKE_LINE="$(grep -E '^[[:space:]]*-?[[:space:]]*Skill spec-distill:reviewing-brief\b' <<<"$INVOKE_FENCE" | head -1)"
+for handoff_var in '$PAYLOAD' '$CODEX_DIR_YAML' '$CODEX_FID_YAML'; do
+  grep -qF "$handoff_var" <<<"$INVOKE_LINE" \
+    && note PASS "invocation 라인이 ${handoff_var} 전달 (load-bearing)" \
+    || note FAIL "invocation 라인에 ${handoff_var} 부재 — 장식용 데코이일 수 있다"
+done
 grep -qF 'DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW' <<<"$WA5" \
   && note PASS "A.5에 kill switch 경로" || note FAIL "A.5에 kill switch 경로 부재"
 # 한 블록만 추가 — A.5가 파이프라인 절차를 복제하면 두 곳 drift가 생긴다
@@ -64,10 +120,17 @@ grep -qE 'question 텍스트|question 본문' "$CI" \
   && note PASS "degrade가 question 텍스트에 렌더 (프로즈 서술, defense-in-depth)" || note FAIL "렌더 위치(question 텍스트) 명시 부재"
 # 위 두 체크는 어휘(prose가 "degrade"·"question 텍스트"를 언급하는지)만 본다 — §5.6/AC15가
 # 요구하는 실제 property는 *배치*(옵션 description이 아니라 question: 문자열 그 자체)다.
-# 실측: degrade 렌더를 question:에서 빼 첫 옵션 description으로 옮기고 프로즈는 그대로 둬도
-# 위 체크들은 계속 PASS로 읽힌다. load-bearing lock은 question: 라인 그 자체를 지목해 검사한다.
-QLINE="$(grep -E '^\s*question:' <<<"$WB2" | head -1)"
-[[ -n "$QLINE" ]] && note PASS "B-2 question: 라인 실재" || note FAIL "B-2 question: 라인을 찾지 못함"
+# fix round 1 리뷰가 mutation으로 실증: 펜스 앞에 "question: 필드는 ... degrade record를
+# 담습니다" 같은 프로즈 aside를 얹으면(이 SKILL 자체가 coverage:/orchestration: 필드를 프로즈로
+# 설명하는 기존 관용구를 모방) 위 체크들이 계속 PASS — 그 aside는 펜스 밖에 있을 뿐이다.
+# load-bearing lock은 실제 AskUserQuestion 호출이 사는 ```javascript 펜스 내부만 지목하고,
+# 그 안에 question: 라인이 정확히 1개인지(중복 키로 가려질 수 없게)까지 확인한다.
+QFENCE="$(fence "$WB2" "javascript")"
+n_qline="$(grep -cE '^[[:space:]]*question:' <<<"$QFENCE" || true)"
+[[ "$n_qline" == "1" ]] \
+  && note PASS "B-2 AskUserQuestion 펜스 안에 question: 라인 정확히 1개 (load-bearing)" \
+  || note FAIL "B-2 AskUserQuestion 펜스 안 question: 라인이 ${n_qline}개 (중복 키로 가려질 위험)"
+QLINE="$(grep -E '^[[:space:]]*question:' <<<"$QFENCE" | head -1)"
 grep -qF 'degrade' <<<"$QLINE" \
   && note PASS "B-2 question: 라인이 degrade record를 직접 실음 (placement, load-bearing)" \
   || note FAIL "B-2 question: 라인에 degrade 부재 — 렌더가 description 등 다른 곳으로 이동했을 수 있다"
