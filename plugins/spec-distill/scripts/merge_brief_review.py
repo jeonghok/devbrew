@@ -43,15 +43,23 @@ except Exception:  # noqa: BLE001 — import 실패는 codex 축 degrade로 흡�
 # 줄 앵커 + 인정 토큰. `**Status:**` 와 `## Status:` 둘 다 받는다(round-4 실측 결함).
 # 산문 속 "Status:"는 잡지 않는다 — 줄 시작 + 열거된 verdict 토큰이 필수다.
 #
-# 감사(Task 4): capture group 바로 앞은 `[ \t]*`(수평 공백만)이지 `\s*`가 아니다.
-# `\s*`였다면 (Task 3에서 실측된 클래스) "Status:" 줄과 그 다음 줄 시작 단어가
-# "Approved"/"Issues Found"이기만 하면 개행을 건너뛰고 매치돼, verdict가 없는
-# "## Status:\n\n어떤 서술"류 구조에서 오탐이 난다. `[ \t]*`로 좁혀 verdict 토큰이
-# `Status:`와 **같은 줄**에 있을 것을 강제한다 — 아래 heading-hash separator( `\s+` )는
-# 개행을 건너뛰어도 결과적으로 "bare Status:" 분기(마킹 없는 3번째 허용 형태, 의도적으로
-# 유지)로 수렴하므로 별도 조치하지 않는다.
+# 감사(Task 4, fix round 1): 이 패턴 안의 두 `\s` 자리 모두 개행을 건너뛸 수 없도록
+# 수평 공백 전용 클래스(`[ \t]`)로 좁혔다 — Task 3에서 실측된 "\s가 ^ 인접 또는 capture
+# group 직전에서 개행을 삼켜 다음 줄 내용을 오매치"하는 결함군의 두 인스턴스였다:
+#   1) capture group 바로 앞: `Status:\**[ \t]*(...)` — `\s*`였다면 "Status:" 줄과
+#      검증 토큰이 다음 줄에 있어도(예: "## Status:\n\n어떤 서술") 매치돼 verdict가
+#      없는 구조에서 오탐이 난다.
+#   2) heading-hash separator: `#{1,6}[ \t]+` — `\s+`였다면 "##"만 있는 content-free
+#      줄 다음, 들여쓰기된 "  Status: Approved" 줄까지 개행+공백을 건너뛰어 매치한다.
+#      이건 "bare Status:" 분기(마킹 없는 3번째 허용 형태, 그대로 유지)로 수렴하지
+#      **않는다** — bare 분기는 `^Status:`가 줄 시작에 앞선 공백 없이 와야 하므로
+#      들여쓰기된 "  Status:"는 그 분기로도 잡히지 않는, `\s+`만이 만들 수 있는
+#      별도의 오탐 경로였다(실측: `"##\n  Status: Approved"`).
+# 이 두 자리를 모두 좁힌 뒤 패턴 전체를 다시 확인함 — `\**`(문자 그대로의 `*`), 캡처
+# 그룹 안의 리터럴 공백(`Issues Found`의 한 칸), `\b` 중 어느 것도 `\n`과 매치하지
+# 않는다. 개행을 삼킬 수 있는 `\s` 메타문자는 이 패턴에 더 이상 남아 있지 않다.
 STATUS_RE = re.compile(
-    r"^(?:\*\*|#{1,6}\s+)?Status:\**[ \t]*(Approved|Issues Found)\b",
+    r"^(?:\*\*|#{1,6}[ \t]+)?Status:\**[ \t]*(Approved|Issues Found)\b",
     re.MULTILINE | re.IGNORECASE)
 SENTINEL_RE = re.compile(r"```brief-critic-issues[ \t]*\n(.*?)\n?```", re.DOTALL)
 
