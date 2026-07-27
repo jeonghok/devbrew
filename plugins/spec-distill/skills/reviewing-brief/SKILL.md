@@ -140,8 +140,10 @@ python3 "$PR/scripts/web_budget.py" check "$STATE"; web_rc=$?
 dispatch 후 1회 increment:
 
 ```bash
-python3 "$PR/scripts/web_budget.py" increment "$STATE"
+python3 "$PR/scripts/web_budget.py" increment "$STATE"; inc_rc=$?
 ```
+
+`check`와 마찬가지로 종료 코드를 **그 자리에서** 잡습니다 — 파이프를 걸면 `$?`가 파이프 마지막 명령의 것이 되어 실패한 increment가 성공으로 읽힙니다(위 §진입 첫 액션과 같은 이유). `inc_rc != 0`이면 dispatch는 이미 일어났는데 카운터는 오르지 않은 것이라 이후 예산이 과소 계상됩니다 — 조용히 넘기지 않고 record(`component: direction_reviewer`, `affected_axis: direction`, `verification_status: degraded`, reason=*"웹 예산 increment 실패 — <script가 낸 실제 reason>"*)를 남깁니다. 예산 판정 자체는 계속 위의 `check` 결과를 따릅니다.
 
 > ⚠️ **계측은 dispatch 단위입니다.** 리뷰어 turn *내부*의 개별 `WebSearch`/`WebFetch` 호출 수는 리뷰어도(`Bash` 없음) orchestrator도(subagent 내부 도구 호출을 볼 수 없음) 셀 수 없습니다. 그래서 `SESSION_CAP = 8`은 이 컴포넌트에 대해 *"검색 8회"* 가 아니라 **dispatch 8회**입니다. 프롬프트로 검색 횟수를 묶는 것은 E10 위반이므로 대안이 아닙니다.
 

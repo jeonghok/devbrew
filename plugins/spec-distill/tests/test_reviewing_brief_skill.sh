@@ -64,6 +64,23 @@ grep -qF 'DEVBREW_DISABLE_SPEC_DISTILL_CODEX' "$SKILL" \
 grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' "$SKILL" \
   && note PASS "T14: 웹 kill switch 존중" || note FAIL "T14: 웹 kill switch 부재"
 
+# --- 윈도우 전제조건 : 코드 펜스 균형 ----------------------------------------
+# scoped_window()의 fence 토글은 문서의 ``` 마커가 짝을 이룬다는 전제 위에서만 성립한다.
+# 마커가 홀수면 토글이 뒤집힌 채로 남아 종료 헤딩이 전부 무시되고 윈도우가 EOF까지
+# 흘러넘친다(실측: W2A 25줄 → 160줄, 즉 EOF까지). 그 상태에서 negative assert는 오히려 강해지지만
+# (fail-closed), positive·containment assert는 **다른 섹션의 텍스트**로 충족되어 조용히
+# green이 된다 — 실측 2건: (1) 2-a의 blob 빌더 호출을 지우고 2-a 펜스를 하나 깨뜨리면
+# T8이 green으로 되돌아갔고(펜스가 멀쩡하면 정상 RED), (2) '## 3단계' 서문에 상한 문장을
+# 넣고 2-c 펜스를 깨뜨리면 T28이 green으로 되돌아갔다(펜스가 멀쩡하면 정상 RED).
+# 펜스 마커가 하나 빠지는 것은 위장이 아니라 흔한 편집 사고다 — 어떤 리터럴도 보존하지
+# 않으므로 이 태스크의 위협 모델(선의의 저자가 저지르는 사고) 안에 있다.
+n_fence="$(grep -c '^```' "$SKILL" || true)"
+if [[ "$n_fence" -gt 0 ]] && [[ "$((n_fence % 2))" -eq 0 ]]; then
+  note PASS "펜스 균형: 코드 펜스 마커 ${n_fence}개 — 짝수(균형), 윈도우 스코프 유효"
+else
+  note FAIL "펜스 불균형: 코드 펜스 마커 ${n_fence}개 — 홀수(닫히지 않은 코드 펜스). scoped_window()가 종료 헤딩을 무시하고 윈도우가 EOF까지 흘러넘쳐, 모든 블록 스코프 락이 다른 섹션 텍스트로 충족 가능해진다"
+fi
+
 # --- T8 / AC2 : critic dispatch 블록 안에 payload 경로가 없다 ----------------
 W2A="$(window '^### 2-a\.')"
 minlines "$W2A" 15 && note PASS "T8: '### 2-a. critic dispatch 블록' 윈도우 충분히 존재 (>=15줄)" \
@@ -119,7 +136,10 @@ WOK="$(scoped_window '^#### probe 통과 분기' '^#{1,4} ')"
 # WOK에는 minlines 가드를 두지 않는다 — 자연 크기가 이미 2줄(빈 줄 + 문장 1개)이라 truncation을
 # 걸러낼 여유 임계값이 존재하지 않는다(2로 잡아도 절단된 필러가 그대로 통과함, 직접 확인함).
 # 이 윈도우의 유일한 assert가 POSITIVE('hard gate' 존재)이므로 truncation은 그 자체로 이미 걸린다
-# (문장이 잘려나가면 'hard gate' 부재로 자연히 fail) — W3A류의 all-negative 취약점과는 다른 케이스.
+# (문장이 잘려나가면 'hard gate' 부재로 자연히 fail). W3A처럼 assert가 전부 negative인 윈도우는
+# 절단이 곧 vacuous PASS였지만, 그건 지금 살아있는 취약점이 아니다: 펜스 안 컬럼-0 헤딩 모양의
+# 절단은 scoped_window()가 구조적으로 막고, 남은 하나(펜스 불균형으로 인한 EOF 흘러넘침)는 위의
+# 펜스 균형 assert가 잡는다. 여기 minlines를 두지 않는 근거는 여전히 '자연 크기 2줄'뿐이다.
 has "$WOK" 'hard gate' && note PASS "T23: 통과 분기가 hard gate" || note FAIL "T23: 통과 분기에 hard gate 부재"
 
 # --- T22 / AC15 : degradation record ----------------------------------------
