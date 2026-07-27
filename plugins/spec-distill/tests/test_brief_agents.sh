@@ -34,21 +34,47 @@ for a in "${ALL[@]}"; do
     && note PASS "$a: model: inherit" || note FAIL "$a: model이 inherit이 아님 (E10 위반)"
 
   # AC4 — 쓰기·실행·위임 물리적 부재
-  # tools: 값을 정규화(대괄호 제거 → comma split → trim)한 뒤 토큰 단위 정확 일치로 비교한다.
-  # 이전의 raw-line grep(`^tools:.*(:|,)?[[:space:]]*${t}([[:space:],]|$)`)은 YAML
-  # flow-sequence 형태(`tools: [Read, Write]`)에서 토큰 뒤에 `]`가 오면 경계 문자로 인식하지
-  # 못해 탐지를 피해가는 gap이 있었다(review round 1 적발, `tools: [Read, Write]`가
-  # false PASS). 정규화 + exact-element 비교는 대괄호 유무·토큰 위치(첫/중간/끝)·공백과
-  # 무관하게 동작하고, `WriteFile` 같은 상위 문자열에 `Write`가 우연히 포함되는 substring
-  # collision도 배제한다(줄 단위 완전 일치이므로).
+  # tools: 값을 정규화한 뒤 토큰 단위 정확 일치(대소문자 무시)로 비교한다.
+  # 정규화 파이프라인(round 1→2 누적):
+  #   1) `tools:` 접두어 제거
+  #   2) 트레일링 `# ...` 코멘트 절단 — split 이전에 잘라내므로 주석 안의 문자열은
+  #      아예 토큰 후보에 들어오지 않는다(주석에 금지어를 적어도 오탐하지 않음 — round 2 probe)
+  #   3) `[`/`]` 제거 (flow-sequence 대괄호)
+  #   4) 콤마로 split
+  #   5) 각 요소: 앞뒤 공백/탭 trim → 앞뒤 `"`/`'` 1겹 제거 → 다시 trim (quoted element 대응)
+  #   6) 전부 소문자로 casefold — fail-closed: `write`도 잡아야 한다. 레지스트리가 소문자
+  #      토큰을 실제로 resolve하는지는 이 락의 책임이 아니다. 이 방향이 정당한 allowlist
+  #      (Read/Grep/Glob/WebSearch/WebFetch)와 금지 목록 사이에 대소문자 무시 충돌을 만들지
+  #      않음을 확인했다 — 두 집합의 이름이 애초에 겹치지 않는다.
+  #   7) 빈 줄 제거
+  # 이전(raw-line grep) 방식은 bracket-form에서 경계 문자(`]`)를 인식 못 해 뚫렸다(round 1).
+  # round 2 리뷰가 이 정규화-비교 자체도 quote·trailing comment·case에 아직 blind함을
+  # 추가 적발해(quoted `["Write", Read]`, 코멘트 `Read, Write  # note`, 대소문자
+  # `[read, write]`가 전부 회피) 5·6단계를 더했다. `WriteFile` 같은 상위 문자열에 `Write`가
+  # 우연히 포함되는 substring collision은 여전히 배제된다(줄 단위 완전 일치이므로).
+  #
+  # YAML block-sequence(`tools:` 단독 헤더 줄 + 다음 줄부터 `- Read`/`- Write` 나열)는 이
+  # 루프가 직접 파싱하지 **않는다** — 의도적 결정이다. 이 레포의 모든 agent frontmatter
+  # 관례가 단일 줄 inline 선언(`tools: []` / `tools: Read` / `tools: Read, Grep, ...`)이고
+  # block-sequence를 쓰는 기존 파일이 하나도 없다. block-sequence를 쓰면 헤더 줄이
+  # `tools:`만 있고 값이 없는 형태가 되므로, 아래 bare-`tools:` guard가 그 줄 자체를
+  # YAML null(fail-open 위험)로 fail-closed 처리해 잡는다 — AC4 루프에 별도 YAML
+  # block-sequence 파서를 추가하지 않고 이 guard 하나로 충분하다고 판단했다(round 2).
   tools_line="$(grep -E '^tools:' <<<"$FM" | head -1)"
   tools_val="${tools_line#tools:}"
+  tools_val="${tools_val%%#*}"
   tools_val="${tools_val//[/}"
   tools_val="${tools_val//]/}"
-  tools_norm="$(tr ',' '\n' <<<"$tools_val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -v '^$')"
+  tools_norm="$(tr ',' '\n' <<<"$tools_val" \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+          -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'\$//" \
+          -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
+    | tr '[:upper:]' '[:lower:]' \
+    | grep -v '^$')"
   for t in Write Edit MultiEdit NotebookEdit Bash Agent Monitor Task; do
-    if grep -qxF "$t" <<<"$tools_norm"; then
-      note FAIL "$a: tools:에 $t 가 있다 (Law 2 위반)"
+    t_lc="$(tr '[:upper:]' '[:lower:]' <<<"$t")"
+    if grep -qxF "$t_lc" <<<"$tools_norm"; then
+      note FAIL "$a: tools:에 $t 가 있다 (Law 2 위반, 대소문자 무시)"
     else
       note PASS "$a: tools:에 $t 없음"
     fi
@@ -59,9 +85,11 @@ for a in "${ALL[@]}"; do
   grep -qE '^(allowedTools|disallowedTools):' <<<"$FM" \
     && note FAIL "$a: allowedTools/denylist 잔존" || note PASS "$a: allowedTools·disallowedTools 없음"
 
-  # bare `tools:` 금지 — YAML null = "키 미지정"으로 읽혀 조용한 fail-open이 된다
+  # bare `tools:` 금지 — YAML null = "키 미지정"으로 읽혀 조용한 fail-open이 된다.
+  # 이 guard는 YAML block-sequence 헤더 줄(`tools:`만 있고 값이 다음 줄부터 `- Read`로
+  # 이어지는 형태)도 겸해서 잡는다 — 위 AC4 정규화 파이프라인의 의도적 scope 결정 참조.
   grep -qE '^tools:[[:space:]]*$' <<<"$FM" \
-    && note FAIL "$a: bare 'tools:' (YAML null → 전체 허용 fail-open 위험)" \
+    && note FAIL "$a: bare 'tools:' (YAML null → 전체 허용 fail-open 위험; block-sequence 헤더도 이 경로로 잡힌다)" \
     || note PASS "$a: bare 'tools:' 아님"
 
   grep -qE '^cost_class: (low|medium|high|variable)$' <<<"$FM" \
