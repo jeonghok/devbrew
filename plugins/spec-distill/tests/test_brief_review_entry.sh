@@ -16,7 +16,14 @@ test -f "$CI" || { note FAIL "SKILL 부재"; echo "Total: 1 | Pass: 0 | Fail: 1"
 # --- 진입 블록 -------------------------------------------------------------
 grep -qE '^### Step A\.5' "$CI" && note PASS "Step A.5 헤더 존재" || note FAIL "Step A.5 헤더 부재"
 WA5="$(window '^### Step A\.5')"
-grep -qF 'reviewing-brief' <<<"$WA5" && note PASS "A.5가 reviewing-brief를 지목" || note FAIL "A.5에 reviewing-brief 부재"
+grep -qF 'reviewing-brief' <<<"$WA5" && note PASS "A.5가 reviewing-brief를 지목 (느슨한 substring, defense-in-depth)" || note FAIL "A.5에 reviewing-brief 부재"
+# 위 substring 체크는 프로즈 한 줄만으로도 satisfiable하다(실측: invocation 라인 전체를 지워도
+# 프로즈의 "`reviewing-brief` skill로 넘깁니다"가 남아 계속 PASS로 읽힌다). load-bearing lock은
+# 아래 anchor 체크 — 실제 invocation directive 라인(줄 맨 앞 "Skill spec-distill:reviewing-brief")
+# 존재를 직접 확인한다.
+grep -qE '^Skill spec-distill:reviewing-brief\b' <<<"$WA5" \
+  && note PASS "A.5가 invocation directive 라인을 실제로 포함 (anchor, load-bearing)" \
+  || note FAIL "A.5에 invocation directive 라인 부재 (prose mention만으로는 이 assert가 만족되지 않는다)"
 grep -qF 'DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW' <<<"$WA5" \
   && note PASS "A.5에 kill switch 경로" || note FAIL "A.5에 kill switch 경로 부재"
 # 한 블록만 추가 — A.5가 파이프라인 절차를 복제하면 두 곳 drift가 생긴다
@@ -51,10 +58,19 @@ grep -qF 'AskUserQuestion' <<<"$WB2" && note PASS "B-2 게이트 보존" || note
 n_opt="$(grep -cE '^\s*\{label:' <<<"$WB2" || true)"
 [[ "$n_opt" == "4" ]] && note PASS "B-2 4옵션 구조 불변 (${n_opt})" || note FAIL "B-2 옵션이 ${n_opt} 개 (구조 변경)"
 for tok in '방향성' 'readback' 'gap' 'degrade'; do
-  grep -qF "$tok" <<<"$WB2" && note PASS "B-2 question에 '$tok' 실림" || note FAIL "B-2에 '$tok' 부재"
+  grep -qF "$tok" <<<"$WB2" && note PASS "B-2 question에 '$tok' 실림 (느슨한 substring, defense-in-depth)" || note FAIL "B-2에 '$tok' 부재"
 done
 grep -qE 'question 텍스트|question 본문' "$CI" \
-  && note PASS "degrade가 question 텍스트에 렌더" || note FAIL "렌더 위치(question 텍스트) 명시 부재"
+  && note PASS "degrade가 question 텍스트에 렌더 (프로즈 서술, defense-in-depth)" || note FAIL "렌더 위치(question 텍스트) 명시 부재"
+# 위 두 체크는 어휘(prose가 "degrade"·"question 텍스트"를 언급하는지)만 본다 — §5.6/AC15가
+# 요구하는 실제 property는 *배치*(옵션 description이 아니라 question: 문자열 그 자체)다.
+# 실측: degrade 렌더를 question:에서 빼 첫 옵션 description으로 옮기고 프로즈는 그대로 둬도
+# 위 체크들은 계속 PASS로 읽힌다. load-bearing lock은 question: 라인 그 자체를 지목해 검사한다.
+QLINE="$(grep -E '^\s*question:' <<<"$WB2" | head -1)"
+[[ -n "$QLINE" ]] && note PASS "B-2 question: 라인 실재" || note FAIL "B-2 question: 라인을 찾지 못함"
+grep -qF 'degrade' <<<"$QLINE" \
+  && note PASS "B-2 question: 라인이 degrade record를 직접 실음 (placement, load-bearing)" \
+  || note FAIL "B-2 question: 라인에 degrade 부재 — 렌더가 description 등 다른 곳으로 이동했을 수 있다"
 grep -qE 'degrade 없음' "$CI" && note PASS "빈 배열도 명시" || note FAIL "빈 배열 명시 부재"
 
 # --- P21 canonical 토큰 (checker와 producer가 같은 집합) --------------------
