@@ -48,8 +48,13 @@ n_brief="$(grep -cF 'brief' "$HOOKS/hooks.json" || true)"
                         || note FAIL "T18: hooks.json에 'brief' ${n_brief}건 (훅 표면 확장)"
 
 # --- T29 / AC22c : 결정론 체크 전수 열거표 ----------------------------------
+# 윈도우 종료는 진입과 같은 레벨(###)뿐 아니라 상위 레벨(##)에서도 exit해야 한다.
+# `/^## /`만 걸면 형제 `### 6.4`를 못 잡고 넘어가 표가 §6.4까지 흡수 — 오늘은 §6.3이
+# §6 마지막 하위섹션이라 우연히 무해했을 뿐, 문서 구조가 바뀌면 열거 누락도 조용히
+# green이 된다(round-2 리뷰가 지적한 shape (c)). `/^### /`만으로 바꾸면 반대로
+# `## 7.` 같은 상위 헤더를 못 잡아 EOF까지 흘러가므로, 두 레벨 모두에서 exit한다.
 test -f "$SPEC" || note FAIL "spec 문서 부재: $SPEC"
-T63="$(awk '/^### 6\.3/{inw=1; next} inw && /^## /{exit} inw' "$SPEC")"
+T63="$(awk '/^### 6\.3/{inw=1; next} inw && /^#{2,3} /{exit} inw' "$SPEC")"
 [[ -n "$T63" ]] && note PASS "T29: spec §6.3 열거표 실재" || note FAIL "T29: §6.3 표 부재"
 for chk in 'check_verbatim_coverage' 'zero-tool probe' 'merge_brief_review' 'T-lock'; do
   grep -qF "$chk" <<<"$T63" && note PASS "T29: 열거표에 '$chk'" || note FAIL "T29: 열거표에 '$chk' 누락"
@@ -64,7 +69,9 @@ for s in check_verbatim_coverage merge_brief_review; do
 done
 
 # --- T31(문서) / AC11 : 정규화 순서·NFC 계약이 spec에 명시 -------------------
-S55="$(awk '/^### 5\.5/{inw=1; next} inw && /^### /{exit} inw' "$SPEC")"
+# T63과 같은 이유로 진입·종료 레벨을 맞춘다 — `/^### /`만으로는 §5.5가 §5의 마지막
+# 하위섹션이 되는 순간 `## 6.`을 못 잡고 넘어간다.
+S55="$(awk '/^### 5\.5/{inw=1; next} inw && /^#{2,3} /{exit} inw' "$SPEC")"
 grep -qF 'N1 → N2 → N3 → N4 → N5' <<<"$S55" \
   && note PASS "T31: 고정 순서 N1 → N5 명시" || note FAIL "T31: 고정 순서 명시 부재"
 grep -qE 'N3보다 N1이 (반드시 )?먼저' <<<"$S55" \
@@ -81,11 +88,15 @@ grep -qF 'unicodedata.normalize("NFC"' "$SD/scripts/check_verbatim_coverage.py" 
 # skills/reviewing-brief/SKILL.md:359는 이 패턴을 이름으로 지목해 "넣지 않는다"고
 # 기각하는 서술이다 — 원래 assertion(단일 grep)은 그 문장 자체와 매치해 항상 FAIL하는
 # 오탐이었다(문서가 안티패턴을 *기술*하는 것과 실제로 *도입*하는 것을 구분 못 함).
-# 같은 줄에 부정 문맥(넣지 않/도입하지 않/않습니다)이 있으면 서술로 보고 제외한다 —
-# 검사 대상 자신이 부정 문맥까지 함께 조작하지 않는 한 통과 조건을 못 바꾼다는 뜻은
-# 아니다(§6.3의 T-lock 계열과 같은 한계). 분류 정확성은 V8(사람) 몫 — 기계는 열거만 본다.
+# 같은 줄에 부정 문맥이 있으면 서술로 보고 제외한다 — 단 "않습니다"는 제외 목록에
+# 넣지 않는다: 그건 일반 한국어 부정 종결어미일 뿐 안티패턴을 "기각한다"는 표지가
+# 아니다("리뷰 라운드 기록이 존재하지 않습니다"처럼 정확히 그 안티패턴을 실행하는
+# 에러 메시지에도 등장한다 — round-2 리뷰가 잡은 false negative). 관행 자체를
+# 부정하는 어구(넣지 않/도입하지 않)만 남긴다 — 검사 대상 자신이 그 어구까지 함께
+# 조작하지 않는 한 통과 조건을 못 바꾼다는 뜻은 아니다(§6.3의 T-lock 계열과 같은
+# 한계). 분류 정확성은 V8(사람) 몫 — 기계는 열거만 본다.
 E10_HITS="$(grep -rnE '리뷰 라운드 기록이 (있는가|존재)' "$SD/scripts" "$SD/skills" 2>/dev/null \
-  | grep -vE '넣지 않|도입하지 않|않습니다')"
+  | grep -vE '넣지 않|도입하지 않')"
 [[ -z "$E10_HITS" ]] \
   && note PASS "AC22c: 이빨 없는 기록 검사 부재(서술 언급 제외)" \
   || note FAIL "AC22c: 이빨 없는 '리뷰 라운드 기록' 검사가 도입됐다: ${E10_HITS}"
