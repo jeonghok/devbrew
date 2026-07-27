@@ -53,7 +53,7 @@ source: spec-distill conducting-interview v0.23.0
 검사는 이빨이 없으므로, 리뷰 생략 방지는 Step B 게이트의 degrade 전파가 담당한다.)
 
 - 방향성: Claude <n>건 / codex <n>건 — 사용자 재결정 <n>건
-- 충실도: verdict <approved|needs_revise|advisory> — critic <n>건 / codex <n>건 — 재라운드 <n>/2
+- 충실도 기록(게이트 아님, 마지막 관측 verdict만 기재): <approved|needs_revise|advisory> — critic <n>건 / codex <n>건 — 재라운드 <n>/2
 - 냉독: gap <n>건 (<G1..G5 중 어느 클래스>)
 - degrade: <component:reason 한 줄씩 | 없음>
 - 격리: zero-tool probe <ZERO_TOOL_OK|ZERO_TOOL_UNAVAILABLE> — `codex_isolated: false`

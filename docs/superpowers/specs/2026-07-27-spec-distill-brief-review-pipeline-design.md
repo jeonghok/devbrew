@@ -498,7 +498,7 @@ in-flight migration: 키 부재 → in-memory default(`direction`, `0`, `[]`) + 
 - **AC14는 부분 집행이다.** L2는 *§6만 고친 경우* 를 잡는다. orchestrator가 §6과 state `user_statements[].text`를 **함께** 고치면 통과한다 — 양쪽 다 orchestrator가 쓸 수 있고 state는 git-ignored라 이력 대조가 불가능하다. 조율된 양쪽 편집은 V5(사람)가 본다. **"기계적으로 봉쇄"라고 주장하지 않는다.**
 - **`evidence_unsupported`는 모델 판단이다.** *"요약이 그 원문을 뒷받침하는가"* 는 기계 검증 대상이 아니다. critic이 잡고, 못 잡으면 category·체크리스트 편집이 compounding 이벤트다(Law 3).
 - **AC19의 버전 핀**: `0.24.0`의 minor 자리만 검증하고 patch 자리는 unpin한다 — doc-only bump마다 stale-red가 되는 함정을 피한다.
-- **T12의 grep 토큰**: `state` 단독으로 걸면 **항상 red**가 된다 — 실측(2026-07-27): `check_brief.py`의 `grep -c state` 와 `grep -c statement` 가 **둘 다 15** 로, 모든 `state` 매칭이 `statement`다. 락은 `state.local.md` · `state_path` · `state-root` **정확 토큰**으로만 건다. (수치를 인용하지 않고 *"모든 매칭이 `statement`"* 로 적는 편이 stale에 강하다 — 초안은 `10곳`이라 써서 round-2에 stale로 지적됐다.)
+- **T12의 grep 토큰**: `state` 단독으로 걸면 **항상 red**가 된다는 전제는 더 이상 성립하지 않는다 — 재실측(2026-07-27, task-9 NG3 교정 이후): `check_brief.py`의 `grep -c state`=16 / `grep -c statement`=15로, bare `state` 매칭이 1건 존재한다(task-9가 추가한 불변식 설명 문단의 "state 원장 대조" 구절 — 실제 코드 의존이 아니라 그 개념을 설명하는 문맥). 그래도 락은 무너지지 않는다: T12는 bare `state`를 검사하지 않고 `state.local.md` · `state_path` · `state-root` **정확 토큰**으로만 건다 — 이 토큰들은 재실측에도 0건이다. (수치를 고정 인용하지 않고 *"모든 매칭이 `statement`이거나 그 개념을 설명하는 문맥"* 으로 적는 편이 stale에 강하다 — 초안은 `10곳`이라 써서 round-2에, `둘 다 15`라 써서 task-9 리뷰에 각각 stale로 지적됐다.)
 - **격리 주장의 최종 형태**: V9(zero-tool probe) 결과가 나오기 전까지 이 문서는 격리를 **조건부로만** 주장한다 — *"probe 통과 시 도구 표면으로 보장, 실패 시 미보장이며 그때 verdict를 advisory로 내린다"*(§5.1.1·AC2b). `audit_file`·`name`·`created_at` redaction은 두 분기 공통 **위생 조치이고 보장이 아니다.** 검출로 벌충하려던 시도는 round-3에서 삭제했다 — 패러프레이즈를 원리적으로 못 잡아 격리를 대신할 수 없었고, 그 부분 가드가 2라운드 연속 새 결함을 냈다(§9).
 
 ### 6.2 충실도 루프 전이 표 (AC13)

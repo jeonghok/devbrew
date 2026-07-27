@@ -37,7 +37,9 @@ grep -qE 'design doc (only|만)' "$REVIEWER" \
   && note PASS "T13: spec-reviewer 역할 경계 유지 (design doc only)" || note FAIL "T13: 역할 경계 서술 손실"
 
 # --- T12 / AC16 : state 의존 부재 (정확 토큰) --------------------------------
-# `state` 단독 grep은 항상 red다 — check_brief.py의 모든 `state` 매칭이 `statement`다(실측).
+# `state` 단독 grep은 쓰지 않는다 — check_brief.py에서 모든 매칭이 `statement`이거나
+# 이 파일이 그 개념을 설명하는 문맥이다(실측, task-9 이후 bare `state` 1건 존재). 정확 토큰만
+# 실제 의존을 가리키므로, 락은 토큰 단위로 건다.
 for tok in 'state.local.md' 'state_path' 'state-root'; do
   grep -qF -- "$tok" "$GATE" && note FAIL "T12: check_brief.py가 '${tok}'를 참조 (불변식 위반)" \
                             || note PASS "T12: check_brief.py에 '${tok}' 부재"
