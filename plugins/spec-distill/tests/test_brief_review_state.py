@@ -207,22 +207,36 @@ class TestBlankValueNewlineHazard(Base):
 
     def test_blank_stage_with_bare_word_next_line_fails_closed(self):
         # brief_review_stage:  (값 없음) 다음 줄에 `done`이 있어도 그 값을 조용히 흡수하면 안 된다.
+        # rc != 0만으로는 "어떤 실패든" 통과하므로(엉뚱한 crash도 lock을 만족시킨다), reason이
+        # 구체적으로 이 키·이 blank-value 가드를 지목하는지까지 확인한다.
         t = self.state_text().replace("brief_review_stage: direction",
                                        "brief_review_stage:\ndone")
         self.state.write_text(t, encoding="utf-8")
         rc, out, _ = run("get", str(self.state))
         self.assertNotEqual(rc, 0,
                              "빈 stage 값이 다음 줄의 `done`을 조용히 흡수했다 (newline hazard)")
+        d = json.loads(out)
+        self.assertIn("brief_review_stage", d["reason"],
+                      "실패 사유가 brief_review_stage를 지목하지 않는다 (엉뚱한 실패일 수 있다)")
+        self.assertIn("비어 있다", d["reason"],
+                      "실패 사유가 blank-value 가드를 지목하지 않는다 (엉뚱한 실패일 수 있다)")
 
     def test_blank_rounds_with_bare_number_next_line_fails_closed(self):
         # brief_critic_rounds:  (값 없음) 다음 줄에 `42`가 있어도 조용히 읽고 clamp하면 안 된다
         # — 카운터를 알 수 없는 상태에서 0으로 읽는 것은 escalate 가드 방향으로 fail-open이다.
+        # rc != 0만으로는 "어떤 실패든" 통과하므로, reason이 구체적으로 이 키·이 blank-value
+        # 가드를 지목하는지까지 확인한다.
         t = self.state_text().replace("brief_critic_rounds: 0",
                                        "brief_critic_rounds:\n42")
         self.state.write_text(t, encoding="utf-8")
         rc, out, _ = run("get", str(self.state))
         self.assertNotEqual(rc, 0,
                              "빈 rounds 값이 다음 줄의 42를 조용히 흡수했다 (newline hazard)")
+        d = json.loads(out)
+        self.assertIn("brief_critic_rounds", d["reason"],
+                      "실패 사유가 brief_critic_rounds를 지목하지 않는다 (엉뚱한 실패일 수 있다)")
+        self.assertIn("비어 있다", d["reason"],
+                      "실패 사유가 blank-value 가드를 지목하지 않는다 (엉뚱한 실패일 수 있다)")
 
     def test_set_stage_on_blank_stage_does_not_delete_adjacent_line(self):
         # 실제로 재현됐던 사고: brief_review_stage가 비어 있고 바로 다음 줄에
