@@ -34,8 +34,20 @@ for a in "${ALL[@]}"; do
     && note PASS "$a: model: inherit" || note FAIL "$a: model이 inherit이 아님 (E10 위반)"
 
   # AC4 — 쓰기·실행·위임 물리적 부재
+  # tools: 값을 정규화(대괄호 제거 → comma split → trim)한 뒤 토큰 단위 정확 일치로 비교한다.
+  # 이전의 raw-line grep(`^tools:.*(:|,)?[[:space:]]*${t}([[:space:],]|$)`)은 YAML
+  # flow-sequence 형태(`tools: [Read, Write]`)에서 토큰 뒤에 `]`가 오면 경계 문자로 인식하지
+  # 못해 탐지를 피해가는 gap이 있었다(review round 1 적발, `tools: [Read, Write]`가
+  # false PASS). 정규화 + exact-element 비교는 대괄호 유무·토큰 위치(첫/중간/끝)·공백과
+  # 무관하게 동작하고, `WriteFile` 같은 상위 문자열에 `Write`가 우연히 포함되는 substring
+  # collision도 배제한다(줄 단위 완전 일치이므로).
+  tools_line="$(grep -E '^tools:' <<<"$FM" | head -1)"
+  tools_val="${tools_line#tools:}"
+  tools_val="${tools_val//[/}"
+  tools_val="${tools_val//]/}"
+  tools_norm="$(tr ',' '\n' <<<"$tools_val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -v '^$')"
   for t in Write Edit MultiEdit NotebookEdit Bash Agent Monitor Task; do
-    if grep -qE "^tools:.*(:|,)?[[:space:]]*${t}([[:space:],]|$)" <<<"$FM"; then
+    if grep -qxF "$t" <<<"$tools_norm"; then
       note FAIL "$a: tools:에 $t 가 있다 (Law 2 위반)"
     else
       note PASS "$a: tools:에 $t 없음"

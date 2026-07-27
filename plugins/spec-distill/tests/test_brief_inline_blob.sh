@@ -56,9 +56,11 @@ grep -qF "2026-07-27-x-interview.audit.md" <<<"$BLOB2" \
   && note PASS "T24: 본문 원문은 보존된다 (§6 verbatim > 위생)" || note FAIL "T24: 본문 원문을 지웠다"
 rm -f "$tmp"
 
-# 파일 부재는 usage 오류
-python3 "$SCRIPT" "$FX/nonexistent.md" >/dev/null 2>&1 \
-  && note FAIL "부재 파일이 exit 0" || note PASS "부재 파일 거부"
+# 파일 부재는 usage 오류 — exit 2를 구체적으로 요구한다(review round 1: "0이 아니면 OK"는
+# 느슨해서 실수로 3이나 1을 반환해도 통과시킨다 — 실제로는 항상 2를 내므로 강화해도 무해하다)
+python3 "$SCRIPT" "$FX/nonexistent.md" >/dev/null 2>&1
+rc3=$?
+[[ "$rc3" == "2" ]] && note PASS "부재 파일 거부 (exit 2)" || note FAIL "부재 파일이 exit $rc3 (2가 아님)"
 
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ "$fail" -eq 0 ]]
