@@ -13,14 +13,29 @@ SKILL="$SD/skills/reviewing-brief/SKILL.md"
 
 pass=0; fail=0
 note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
-# $1 = 시작 헤더 정규식 → 다음 '^### ' 직전까지
-window() { awk -v pat="$1" '$0 ~ pat {inw=1; next} inw && /^#{1,3} / {exit} inw' "$SKILL"; }
+# $1 = 시작 헤더 정규식, $2 = 종료 판단 헤딩 정규식 → fence-aware: ``` 펜스 안에서는 종료
+# 조건을 무시한다(펜스 안의 컬럼-0 bash 주석이 헤딩처럼 보여 조기 종료시키는 것을 막는다 —
+# 그 상태에서도 '-n'/존재 체크만으로는 잘린 윈도우가 통과해버려 안의 negative assert가
+# 전부 vacuous하게 PASS한다, 특히 W3A처럼 assert가 전부 negative인 윈도우에서 치명적).
+scoped_window() {
+  awk -v pat="$1" -v endpat="$2" '
+    $0 ~ pat {inw=1; next}
+    inw && /^```/ {fence=!fence}
+    inw && !fence && $0 ~ endpat {exit}
+    inw
+  ' "$SKILL"
+}
+# $1 = 시작 헤더 정규식 → 다음 '^### ' 직전까지(fence-aware, 위 참고)
+window() { scoped_window "$1" '^#{1,3} '; }
 has() { grep -qF -- "$2" <<<"$1"; }
-# 윈도우 문자열 안의 첫 ```bash 펜스 본문만 추출 — T23의 record 확인을 코드 자체로 스코프한다
-# (프롬프트/주석이 아니라 실행되는 bash 라인이 실제로 그 문자열을 담고 있는지).
-fence() { awk '/^```bash$/{f=1;next} /^```$/{f=0;next} f' <<<"$1"; }
-# 최소 라인수 가드 — window()가 fenced code block 안의 컬럼-0 주석에 조기 종료되면
-# 안이 텅 빈 채(또는 크게 잘린 채)로 '-n' 체크만 통과하는 vacuous-window를 잡는다.
+# 윈도우 문자열 안의 ```bash 펜스 본문 중 "실행되는" 라인만 추출(컬럼-0/들여쓰기 bash 주석은
+# 버린다 — 주석 처리해서 실행되지 않는 줄이 grep에는 그대로 잡히는 것을 막는다). 펜스가
+# 여러 개면 전부 이어붙인다(첫 번째만이 아니다) — 지금 쓰이는 윈도우엔 항상 하나뿐이라
+# 실제 영향은 없지만, "첫 펜스만"이라고 쓰면 코드가 하는 일과 다른 거짓 주석이 된다.
+fence() { awk '/^```bash$/{f=1;next} /^```$/{f=0;next} f && $0 !~ /^[[:space:]]*#/' <<<"$1"; }
+# 최소 라인수 가드 — fence-comment로 인한 조기 종료는 이제 scoped_window() 자체가 막는다
+# (그게 이 가드가 났던 원래 이유였다). 이건 그 자리를 대신하는 backstop이 아니라 *부차적인*
+# defense-in-depth: 펜스와 무관한 이유로 섹션이 크게 깎여나가는 미래의 편집 사고를 잡는다.
 minlines() { local n; n="$(wc -l <<<"$1" | tr -d ' ')"; [[ "$n" -ge "$2" ]]; }
 
 test -f "$SKILL" || { note FAIL "SKILL 부재: $SKILL"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1; }
@@ -52,7 +67,7 @@ grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' "$SKILL" \
 # --- T8 / AC2 : critic dispatch 블록 안에 payload 경로가 없다 ----------------
 W2A="$(window '^### 2-a\.')"
 minlines "$W2A" 15 && note PASS "T8: '### 2-a. critic dispatch 블록' 윈도우 충분히 존재 (>=15줄)" \
-               || note FAIL "T8: 2-a 윈도우가 비었거나 너무 짧다 (헤더 drift 또는 fence 내 컬럼-0 주석에 조기 절단 — 락이 스코프를 잃었다)"
+               || note FAIL "T8: 2-a 윈도우가 비었거나 너무 짧다 (헤더 drift 또는 예상 밖 조기 절단 — 락이 스코프를 잃었다. fence-comment 절단은 scoped_window()가 이미 막으므로 이 가드는 부차적 defense-in-depth)"
 has "$W2A" 'docs/superpowers/interview/' \
   && note FAIL "T8: critic dispatch 블록에 interview 디렉토리 경로" \
   || note PASS "T8: critic dispatch 블록에 payload 경로 부재"
@@ -64,7 +79,7 @@ has "$W2A" 'brief-critic' \
 # --- T9 / AC3 : readback dispatch 블록에 스키마 어휘가 없다 ------------------
 W3A="$(window '^### 3-a\.')"
 minlines "$W3A" 15 && note PASS "T9: '### 3-a. readback dispatch 블록' 윈도우 충분히 존재 (>=15줄)" \
-               || note FAIL "T9: 3-a 윈도우가 비었거나 너무 짧다 (헤더 drift 또는 fence 내 컬럼-0 주석에 조기 절단 — 이 윈도우는 부재 확인 전용이라 절단되면 모든 negative assert가 vacuous하게 통과한다)"
+               || note FAIL "T9: 3-a 윈도우가 비었거나 너무 짧다 (헤더 drift 또는 예상 밖 조기 절단 — 이 윈도우는 부재 확인 전용이라 절단되면 모든 negative assert가 vacuous하게 통과한다. fence-comment 절단은 scoped_window()가 이미 막으므로 이 가드는 부차적 defense-in-depth)"
 for tok in 'category' 'severity' 'sentinel' 'JSON'; do
   has "$W3A" "$tok" && note FAIL "T9: readback 블록에 스키마 어휘 '$tok'" \
                     || note PASS "T9: readback 블록에 '$tok' 부재"
@@ -90,8 +105,8 @@ for tok in 'P1' 'P2' 'P3' 'canary' 'census' 'ZERO_TOOL_OK' 'ZERO_TOOL_UNAVAILABL
 done
 grep -qE 'probe (미실행|를 실행하지 않은).*진행(하지 않|을 금지)' "$SKILL" \
   && note PASS "T23: probe 미실행 시 진행 금지 서술" || note FAIL "T23: probe 미실행 금지 서술 부재"
-WFAIL="$(awk '/^#### probe 실패 분기/{inw=1; next} inw && /^#{1,4} /{exit} inw' "$SKILL")"
-minlines "$WFAIL" 9 && note PASS "T23: '#### probe 실패 분기' 윈도우 충분히 존재 (>=9줄)" || note FAIL "T23: 실패 분기 윈도우가 비었거나 너무 짧다 (조기 절단)"
+WFAIL="$(scoped_window '^#### probe 실패 분기' '^#{1,4} ')"
+minlines "$WFAIL" 9 && note PASS "T23: '#### probe 실패 분기' 윈도우 충분히 존재 (>=9줄)" || note FAIL "T23: 실패 분기 윈도우가 비었거나 너무 짧다 (예상 밖 조기 절단 — 부차적 defense-in-depth, 주 방어는 scoped_window())"
 has "$WFAIL" 'hard gate' && note FAIL "T23: 실패 분기에 'hard gate' 문구 (주장 > 보장)" \
                          || note PASS "T23: 실패 분기에 'hard gate' 문구 부재"
 has "$WFAIL" 'advisory' && note PASS "T23: 실패 분기가 advisory 강등" || note FAIL "T23: advisory 강등 부재"
@@ -100,7 +115,7 @@ WFAIL_BASH="$(fence "$WFAIL")"
 has "$WFAIL_BASH" '--component critic' && note PASS "T23: 실패 분기 record — critic" || note FAIL "T23: critic record 부재 (실제 bash 호출 아님)"
 has "$WFAIL_BASH" '--component readback' && note PASS "T23: 실패 분기 record — readback (2건)" \
                                   || note FAIL "T23: readback record 부재 (냉독 신뢰도 하향 신호 없음 · 실제 bash 호출 아님)"
-WOK="$(awk '/^#### probe 통과 분기/{inw=1; next} inw && /^#{1,4} /{exit} inw' "$SKILL")"
+WOK="$(scoped_window '^#### probe 통과 분기' '^#{1,4} ')"
 # WOK에는 minlines 가드를 두지 않는다 — 자연 크기가 이미 2줄(빈 줄 + 문장 1개)이라 truncation을
 # 걸러낼 여유 임계값이 존재하지 않는다(2로 잡아도 절단된 필러가 그대로 통과함, 직접 확인함).
 # 이 윈도우의 유일한 assert가 POSITIVE('hard gate' 존재)이므로 truncation은 그 자체로 이미 걸린다
@@ -145,7 +160,7 @@ CAP_RE='최대 [0-9]+회|[0-9]+회까지|max_[a-zA-Z_]+ *= *[0-9]'
 total="$(grep -cE "$CAP_RE" "$SKILL" || true)"
 W2C="$(window '^### 2-c\.')"
 inloop="$(grep -cE "$CAP_RE" <<<"$W2C" || true)"
-minlines "$W2C" 25 && note PASS "T28: '### 2-c. 충실도 루프 전이' 윈도우 충분히 존재 (>=25줄)" || note FAIL "T28: 2-c 윈도우가 비었거나 너무 짧다 (조기 절단)"
+minlines "$W2C" 25 && note PASS "T28: '### 2-c. 충실도 루프 전이' 윈도우 충분히 존재 (>=25줄)" || note FAIL "T28: 2-c 윈도우가 비었거나 너무 짧다 (예상 밖 조기 절단 — 부차적 defense-in-depth, 주 방어는 scoped_window())"
 [[ "$total" -ge 1 ]] && note PASS "T28: 상한 표현이 실재 ($total)" || note FAIL "T28: 상한 표현이 0 — 루프 가드가 없다"
 [[ "$total" == "$inloop" ]] && note PASS "T28: 상한 표현이 루프 문맥에만 ($inloop/$total)" \
   || note FAIL "T28: 루프 문맥 밖 상한 표현 $((total-inloop))건 (E10 위반)"
@@ -191,6 +206,20 @@ grep -qF 'merge_brief_review.py' "$SKILL" \
 n_codex="$(grep -cE '^[[:space:]]*bash "\$PR/scripts/run_brief_codex_reviewer\.sh" (direction|fidelity) ' "$SKILL" || true)"
 [[ "$n_codex" -ge 2 ]] && note PASS "AC6: codex 축별 2회 호출 서술 ($n_codex)" || note FAIL "AC6: codex 호출이 $n_codex 건"
 grep -qF 'detect_codex.sh' "$SKILL" && note PASS "AC9: detect_codex.sh 선행 확인" || note FAIL "AC9: detect_codex.sh 부재"
+
+# --- AC15 : 축별 codex 런타임 실패 degrade record (1-c 방향성 / 2-b 충실도) ---
+# 각 축의 러너가 살아있었는데 이번 라운드에 실패한 경우(pre-flight 부재와 다른 케이스)의
+# record를 자기 섹션 윈도우(fence-aware)로 스코프해서 확인한다 — 'component: codex'는
+# 1-c에 pre-flight-skip record(affected_axis: all)도 있어 단독으로는 구분 못 하므로,
+# 이 라운드가 추가한 사실인 'affected_axis: direction/fidelity'와의 co-occurrence로 좁힌다.
+W1C="$(window '^### 1-c\.')"
+{ has "$W1C" 'component: codex' && grep -qE 'affected_axis: direction' <<<"$W1C"; } \
+  && note PASS "AC15: 1-c 방향성 축 codex 런타임 실패 record 명시" \
+  || note FAIL "AC15: 1-c 방향성 축 codex 런타임 실패 record 부재"
+W2B="$(window '^### 2-b\.')"
+{ has "$W2B" 'component: codex' && grep -qE 'affected_axis: fidelity' <<<"$W2B"; } \
+  && note PASS "AC15: 2-b 충실도 축 codex 런타임 실패 record 명시" \
+  || note FAIL "AC15: 2-b 충실도 축 codex 런타임 실패 record 부재"
 
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ "$fail" -eq 0 ]]

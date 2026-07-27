@@ -133,7 +133,8 @@ python3 "$PR/scripts/web_budget.py" check "$STATE"; web_rc=$?
 `brief-direction-reviewer`는 `tools:`에 `Bash`가 **없습니다**(Law 2) — 자기 예산을 확인할 경로가 없으므로 판정은 **orchestrator 책임**입니다. 리뷰어에게 `Bash`를 주는 것은 Law 2 위반이므로 대안이 아닙니다.
 
 - `web_rc == 0` → 평소대로 dispatch.
-- `web_rc != 0`(소진) → dispatch 프롬프트에 *"웹 없이 repo + payload 근거로 답하라"* 조건을 실어 dispatch하고 record(`component: direction_reviewer`, `affected_axis: direction`, `verification_status: degraded`, reason=*"웹 예산 소진 — repo 근거만"*). **codex #1의 웹은 이 카운터 밖이라 살아 있습니다** — 외부 근거가 완전히 죽지 않습니다(이중화).
+- `web_rc != 0`이고 JSON `reason`이 `sweep`/`session` 초과(진짜 소진) → dispatch 프롬프트에 *"웹 없이 repo + payload 근거로 답하라"* 조건을 실어 dispatch하고 record(`component: direction_reviewer`, `affected_axis: direction`, `verification_status: degraded`, reason=*"웹 예산 소진 — repo 근거만"*). **codex #1의 웹은 이 카운터 밖이라 살아 있습니다** — 외부 근거가 완전히 죽지 않습니다(이중화).
+- `web_rc != 0`인데 `reason`이 `sweep`/`session` 초과가 **아님**(state unreadable·counter malformed 등 `check`/`increment` 자체의 실패) → 예산 소진으로 오독하지 않습니다(indeterminate ≠ 소진 확정). 같은 안전한 동작(웹 없이 dispatch)을 취하되 record의 reason은 실제 원인을 그대로 남깁니다: `verification_status: degraded`, reason=*"웹 예산 확인 불가 — <script가 낸 실제 reason>"*.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` → 양쪽 웹 없이 + record.
 
 dispatch 후 1회 increment:
