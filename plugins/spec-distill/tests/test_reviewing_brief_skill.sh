@@ -16,6 +16,12 @@ note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else f
 # $1 = 시작 헤더 정규식 → 다음 '^### ' 직전까지
 window() { awk -v pat="$1" '$0 ~ pat {inw=1; next} inw && /^#{1,3} / {exit} inw' "$SKILL"; }
 has() { grep -qF -- "$2" <<<"$1"; }
+# 윈도우 문자열 안의 첫 ```bash 펜스 본문만 추출 — T23의 record 확인을 코드 자체로 스코프한다
+# (프롬프트/주석이 아니라 실행되는 bash 라인이 실제로 그 문자열을 담고 있는지).
+fence() { awk '/^```bash$/{f=1;next} /^```$/{f=0;next} f' <<<"$1"; }
+# 최소 라인수 가드 — window()가 fenced code block 안의 컬럼-0 주석에 조기 종료되면
+# 안이 텅 빈 채(또는 크게 잘린 채)로 '-n' 체크만 통과하는 vacuous-window를 잡는다.
+minlines() { local n; n="$(wc -l <<<"$1" | tr -d ' ')"; [[ "$n" -ge "$2" ]]; }
 
 test -f "$SKILL" || { note FAIL "SKILL 부재: $SKILL"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1; }
 
@@ -45,8 +51,8 @@ grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' "$SKILL" \
 
 # --- T8 / AC2 : critic dispatch 블록 안에 payload 경로가 없다 ----------------
 W2A="$(window '^### 2-a\.')"
-[[ -n "$W2A" ]] && note PASS "T8: '### 2-a. critic dispatch 블록' 윈도우 존재" \
-               || note FAIL "T8: 2-a 윈도우가 비었다 (헤더 drift — 락이 스코프를 잃었다)"
+minlines "$W2A" 15 && note PASS "T8: '### 2-a. critic dispatch 블록' 윈도우 충분히 존재 (>=15줄)" \
+               || note FAIL "T8: 2-a 윈도우가 비었거나 너무 짧다 (헤더 drift 또는 fence 내 컬럼-0 주석에 조기 절단 — 락이 스코프를 잃었다)"
 has "$W2A" 'docs/superpowers/interview/' \
   && note FAIL "T8: critic dispatch 블록에 interview 디렉토리 경로" \
   || note PASS "T8: critic dispatch 블록에 payload 경로 부재"
@@ -57,8 +63,8 @@ has "$W2A" 'brief-critic' \
 
 # --- T9 / AC3 : readback dispatch 블록에 스키마 어휘가 없다 ------------------
 W3A="$(window '^### 3-a\.')"
-[[ -n "$W3A" ]] && note PASS "T9: '### 3-a. readback dispatch 블록' 윈도우 존재" \
-               || note FAIL "T9: 3-a 윈도우가 비었다 (헤더 drift)"
+minlines "$W3A" 15 && note PASS "T9: '### 3-a. readback dispatch 블록' 윈도우 충분히 존재 (>=15줄)" \
+               || note FAIL "T9: 3-a 윈도우가 비었거나 너무 짧다 (헤더 drift 또는 fence 내 컬럼-0 주석에 조기 절단 — 이 윈도우는 부재 확인 전용이라 절단되면 모든 negative assert가 vacuous하게 통과한다)"
 for tok in 'category' 'severity' 'sentinel' 'JSON'; do
   has "$W3A" "$tok" && note FAIL "T9: readback 블록에 스키마 어휘 '$tok'" \
                     || note PASS "T9: readback 블록에 '$tok' 부재"
@@ -85,15 +91,20 @@ done
 grep -qE 'probe (미실행|를 실행하지 않은).*진행(하지 않|을 금지)' "$SKILL" \
   && note PASS "T23: probe 미실행 시 진행 금지 서술" || note FAIL "T23: probe 미실행 금지 서술 부재"
 WFAIL="$(awk '/^#### probe 실패 분기/{inw=1; next} inw && /^#{1,4} /{exit} inw' "$SKILL")"
-[[ -n "$WFAIL" ]] && note PASS "T23: '#### probe 실패 분기' 윈도우 존재" || note FAIL "T23: 실패 분기 윈도우 부재"
+minlines "$WFAIL" 9 && note PASS "T23: '#### probe 실패 분기' 윈도우 충분히 존재 (>=9줄)" || note FAIL "T23: 실패 분기 윈도우가 비었거나 너무 짧다 (조기 절단)"
 has "$WFAIL" 'hard gate' && note FAIL "T23: 실패 분기에 'hard gate' 문구 (주장 > 보장)" \
                          || note PASS "T23: 실패 분기에 'hard gate' 문구 부재"
 has "$WFAIL" 'advisory' && note PASS "T23: 실패 분기가 advisory 강등" || note FAIL "T23: advisory 강등 부재"
 has "$WFAIL" 'D2' && note PASS "T23: 실패 분기가 D2 미충족 보고" || note FAIL "T23: D2 미충족 보고 부재"
-has "$WFAIL" '--component critic' && note PASS "T23: 실패 분기 record — critic" || note FAIL "T23: critic record 부재"
-has "$WFAIL" '--component readback' && note PASS "T23: 실패 분기 record — readback (2건)" \
-                                  || note FAIL "T23: readback record 부재 (냉독 신뢰도 하향 신호 없음)"
+WFAIL_BASH="$(fence "$WFAIL")"
+has "$WFAIL_BASH" '--component critic' && note PASS "T23: 실패 분기 record — critic" || note FAIL "T23: critic record 부재 (실제 bash 호출 아님)"
+has "$WFAIL_BASH" '--component readback' && note PASS "T23: 실패 분기 record — readback (2건)" \
+                                  || note FAIL "T23: readback record 부재 (냉독 신뢰도 하향 신호 없음 · 실제 bash 호출 아님)"
 WOK="$(awk '/^#### probe 통과 분기/{inw=1; next} inw && /^#{1,4} /{exit} inw' "$SKILL")"
+# WOK에는 minlines 가드를 두지 않는다 — 자연 크기가 이미 2줄(빈 줄 + 문장 1개)이라 truncation을
+# 걸러낼 여유 임계값이 존재하지 않는다(2로 잡아도 절단된 필러가 그대로 통과함, 직접 확인함).
+# 이 윈도우의 유일한 assert가 POSITIVE('hard gate' 존재)이므로 truncation은 그 자체로 이미 걸린다
+# (문장이 잘려나가면 'hard gate' 부재로 자연히 fail) — W3A류의 all-negative 취약점과는 다른 케이스.
 has "$WOK" 'hard gate' && note PASS "T23: 통과 분기가 hard gate" || note FAIL "T23: 통과 분기에 hard gate 부재"
 
 # --- T22 / AC15 : degradation record ----------------------------------------
@@ -134,7 +145,7 @@ CAP_RE='최대 [0-9]+회|[0-9]+회까지|max_[a-zA-Z_]+ *= *[0-9]'
 total="$(grep -cE "$CAP_RE" "$SKILL" || true)"
 W2C="$(window '^### 2-c\.')"
 inloop="$(grep -cE "$CAP_RE" <<<"$W2C" || true)"
-[[ -n "$W2C" ]] && note PASS "T28: '### 2-c. 충실도 루프 전이' 윈도우 존재" || note FAIL "T28: 2-c 윈도우 부재"
+minlines "$W2C" 25 && note PASS "T28: '### 2-c. 충실도 루프 전이' 윈도우 충분히 존재 (>=25줄)" || note FAIL "T28: 2-c 윈도우가 비었거나 너무 짧다 (조기 절단)"
 [[ "$total" -ge 1 ]] && note PASS "T28: 상한 표현이 실재 ($total)" || note FAIL "T28: 상한 표현이 0 — 루프 가드가 없다"
 [[ "$total" == "$inloop" ]] && note PASS "T28: 상한 표현이 루프 문맥에만 ($inloop/$total)" \
   || note FAIL "T28: 루프 문맥 밖 상한 표현 $((total-inloop))건 (E10 위반)"
@@ -155,13 +166,16 @@ grep -qE '첫 액션' "$SKILL" && note PASS "AC1: 진입 첫 액션 명시" || n
 for code in 'exit 1' 'exit 3' 'exit 4'; do
   grep -qF "$code" "$SKILL" && note PASS "AC1/AC12: 호출자가 $code 분기" || note FAIL "AC1/AC12: $code 분기 부재"
 done
-# 순서: 방향성 → 충실도 → 냉독 (헤더 순서로 확인)
-ORDER="$(grep -nE '^## [123]단계' "$SKILL" | sed 's/:.*//' | tr '\n' ' ')"
-o1="$(echo "$ORDER" | awk '{print $1}')"; o2="$(echo "$ORDER" | awk '{print $2}')"; o3="$(echo "$ORDER" | awk '{print $3}')"
-if [[ -n "${o3:-}" ]] && [[ "$o1" -lt "$o2" ]] && [[ "$o2" -lt "$o3" ]]; then
+# 순서: 방향성 → 충실도 → 냉독. 각 헤더 "고유 텍스트"의 실제 라인 번호로 비교한다 — 세 개의
+# "## N단계" 헤더가 *존재*하기만 해도 file-order라 항상 참이 되는 tautology(헤더 텍스트를
+# 무시하고 카운트만 봄)를 피한다. 세 헤더를 서로 바꿔치기해도(swap) 이 비교는 잡아낸다.
+l1="$(grep -nE '^## 1단계 — 방향성' "$SKILL" | head -1 | cut -d: -f1)"
+l2="$(grep -nE '^## 2단계 — 충실도' "$SKILL" | head -1 | cut -d: -f1)"
+l3="$(grep -nE '^## 3단계 — 냉독' "$SKILL" | head -1 | cut -d: -f1)"
+if [[ -n "$l1" ]] && [[ -n "$l2" ]] && [[ -n "$l3" ]] && [[ "$l1" -lt "$l2" ]] && [[ "$l2" -lt "$l3" ]]; then
   note PASS "AC1: 1단계(방향성) → 2단계(충실도) → 3단계(냉독) 순서"
 else
-  note FAIL "AC1: 단계 헤더가 3개가 아니거나 순서가 어긋남 ($ORDER)"
+  note FAIL "AC1: 단계 헤더 순서가 어긋나거나 부재함 (1단계=${l1:-없음} 2단계=${l2:-없음} 3단계=${l3:-없음})"
 fi
 grep -qE '^## 1단계 — 방향성' "$SKILL" && note PASS "AC1: 1단계가 방향성" || note FAIL "AC1: 1단계 헤더가 방향성이 아님"
 grep -qE '^## 2단계 — 충실도' "$SKILL" && note PASS "AC1: 2단계가 충실도" || note FAIL "AC1: 2단계 헤더가 충실도가 아님"
@@ -174,7 +188,7 @@ grep -qF 'merge_brief_review.py' "$SKILL" \
   && note PASS "AC7: 충실도 병합 스크립트 호출" || note FAIL "AC7: merge_brief_review.py 부재"
 
 # --- codex 축별 2회 --------------------------------------------------------
-n_codex="$(grep -cE 'run_brief_codex_reviewer\.sh" (direction|fidelity)' "$SKILL" || true)"
+n_codex="$(grep -cE '^[[:space:]]*bash "\$PR/scripts/run_brief_codex_reviewer\.sh" (direction|fidelity) ' "$SKILL" || true)"
 [[ "$n_codex" -ge 2 ]] && note PASS "AC6: codex 축별 2회 호출 서술 ($n_codex)" || note FAIL "AC6: codex 호출이 $n_codex 건"
 grep -qF 'detect_codex.sh' "$SKILL" && note PASS "AC9: detect_codex.sh 선행 확인" || note FAIL "AC9: detect_codex.sh 부재"
 

@@ -48,7 +48,7 @@ AskUserQuestion({
 
 ## 상태
 
-state는 새 파일을 만들지 않고 기존 `.claude/spec-distill/<session-id>/state.local.md`에 키 3개를 씁니다. 훅이 읽는 파일과 **같은 리졸버**로 경로를 구합니다. 이 섹션을 zero-tool 선결 조건보다 먼저 두는 이유는 단순합니다 — 아래 probe 실패 분기가 `$STATE`에 쓰므로, `$STATE`가 먼저 정의돼 있어야 문서를 위에서 아래로 그대로 실행할 수 있습니다:
+state는 새 파일을 만들지 않고 기존 `.claude/spec-distill/<session-id>/state.local.md`에 키 3개를 씁니다. 훅이 읽는 파일과 **같은 리졸버**로 경로를 구합니다. `$STATE`를 zero-tool 선결 조건보다 먼저 정의하는 이유는 하나뿐입니다 — 아래 probe 실패 분기가 `$STATE`에 쓰므로 그 값이 먼저 있어야 합니다(이 문서 전체가 위에서 아래로 그대로 실행 가능하다는 주장은 아닙니다: `$PAYLOAD`·`$CODEX_DIR_YAML`·`$CODEX_FID_YAML`은 이 skill이 정의하지 않는 입력이고, 호출자 `conducting-interview`가 진입 시점에 이미 쥐고 넘기는 값입니다):
 
 ```bash
 PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
@@ -173,6 +173,8 @@ codex 부재 시 loud advisory:
 > `[spec-distill v0.24.0] codex 방향성 co-review SKIPPED (reason: <skip_reason>) — Claude-only, 모델 다양성 없음 (degraded).`
 
 **축은 죽지 않습니다** — Claude 담당자가 남습니다. 이것이 3-에이전트 분리(E3)의 배당금입니다.
+
+`codex_avail == true`였는데도 `$CODEX_DIR_YAML`에 `codex_failed: true`가 남으면 (timeout·exec 실패·`payload_missing` 등 러너 자체의 런타임 실패) record(`component: codex`, `affected_axis: direction`, `verification_status: degraded`)를 남깁니다 — `codex_avail`은 pre-flight **부재**만 잡고, 이 케이스는 2-b가 fidelity 축에서 잡는 것과 대칭인 **런타임 실패**입니다.
 
 ### 1-d. 보고 (병합 없음)
 
