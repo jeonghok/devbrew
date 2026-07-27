@@ -18,11 +18,14 @@ note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else f
 # $1 = 시작 헤더 정규식, $2 = 종료 판단 헤딩 정규식 → fence-aware(Task 7 scoped_window() 재사용):
 # ``` 펜스 안에서는 종료 조건을 무시한다(펜스 안의 컬럼-0 텍스트가 헤딩처럼 보여 조기
 # 종료시키는 것을 막는다 — 잘린 윈도우 안에서는 이후의 모든 스코프 락이 vacuous하게든
-# 다른 섹션 텍스트로든 무너질 수 있다).
+# 다른 섹션 텍스트로든 무너질 수 있다). 펜스 마커는 들여쓰기를 허용한다(fix round 3 —
+# 불릿 리스트 아래 중첩된 펜스, 이 SKILL 자체에 실재하는 관용구, 마커 자체가 들여써진다.
+# 아래 FENCE_MARKER_RE가 fence()/펜스-균형 전제조건과 동일 패턴이어야 셋이 드리프트하지 않는다).
+FENCE_MARKER_RE='^[[:space:]]*```'
 scoped_window() {
-  awk -v pat="$1" -v endpat="$2" '
+  awk -v pat="$1" -v endpat="$2" -v fre="$FENCE_MARKER_RE" '
     $0 ~ pat {inw=1; next}
-    inw && /^```/ {fence=!fence}
+    inw && $0 ~ fre {fence=!fence}
     inw && !fence && $0 ~ endpat {exit}
     inw
   ' "$CI"
@@ -34,13 +37,39 @@ window() { scoped_window "$1" '^#{3,4} '; }
 # 버린다(주석 처리해 실행되지 않는 줄이 grep에는 그대로 잡히는 것을 막는다). $2="" 이면
 # bare ``` 펜스(태그 없음)를 지목한다 — bare 펜스의 열기/닫기 마커가 둘 다 리터럴 "```"이므로
 # 상태(infence)로 열기/닫기를 구분한다(리터럴 매칭만으로는 앞선 다른 펜스의 닫기 마커를
-# 열기로 오인한다).
+# 열기로 오인한다). 마커 자체의 들여쓰기를 허용(위 FENCE_MARKER_RE와 동일 접두 — fix round 3
+# NB: 불릿 아래 중첩된 펜스가 false RED를 냈었다). 태그 매칭은 흔한 별칭을 허용한다(js/javascript
+# — fix round 3: 리네임만으로 무관 펜스가 되어 락 전체가 무력화되는 false RED를 막는다). 단
+# 다른 언어 펜스(예 ```bash)는 여전히 매칭되지 않는다.
 fence() {
-  awk -v tag="$2" '
-    !infence && $0 == "```" tag { infence=1; want=1; next }
-    !infence && /^```/          { infence=1; want=0; next }
-    infence && $0 == "```"      { infence=0; want=0; next }
+  local tag="$2" tag_re
+  case "$tag" in
+    javascript|js) tag_re='(javascript|js)' ;;
+    *) tag_re="$tag" ;;
+  esac
+  awk -v tag_re="$tag_re" -v fre="$FENCE_MARKER_RE" '
+    !infence && $0 ~ fre tag_re "[[:space:]]*$" { infence=1; want=1; next }
+    !infence && $0 ~ fre                        { infence=1; want=0; next }
+    infence && $0 ~ fre "[[:space:]]*$"          { infence=0; want=0; next }
     infence && want && $0 !~ /^[[:space:]]*#/ { print }
+  ' <<<"$1"
+}
+
+# 한 줄에서 JS 문자열 리터럴의 *마지막 닫는 따옴표 뒤*에 오는 트레일링 "//..." 라인-코멘트만
+# 제거한다(fix round 3 — Decoy 2: 실제 degrade 렌더를 문자열에서 지우고 죽은
+# "// TODO: degrade..." 코멘트만 남겨도 순수 substring 체크는 속는다). 따옴표 *안의* 내용은
+# 절대 건드리지 않는다 — 닫는 따옴표 위치로 code span과 comment span을 가른다(이 파일의
+# fence()가 전체-라인 "#" 주석을 거르는 것과 같은 종류의 구분을, 트레일링 "//"까지 확장).
+strip_trailing_linecomment() {
+  awk '
+    { line = $0; q = -1
+      for (i = length(line); i >= 1; i--) { if (substr(line, i, 1) == "\"") { q = i; break } }
+      if (q > 0) {
+        rest = substr(line, q+1)
+        if (match(rest, /[[:space:]]*\/\/.*$/)) { rest = substr(rest, 1, RSTART-1) }
+        print substr(line, 1, q) rest
+      } else { print line }
+    }
   ' <<<"$1"
 }
 
@@ -49,8 +78,14 @@ test -f "$CI" || { note FAIL "SKILL 부재"; echo "Total: 1 | Pass: 0 | Fail: 1"
 # --- 윈도우 전제조건 : 코드 펜스 균형 (Task 7 관용구 재사용) -----------------
 # scoped_window()/fence()의 상태 토글은 문서의 ``` 마커가 짝을 이룬다는 전제 위에서만 성립한다.
 # 마커가 홀수면 토글이 뒤집힌 채로 남아 윈도우가 EOF까지 흘러넘치거나 fence()가 엉뚱한
-# 구간을 "펜스 안"으로 오인한다.
-n_fence="$(grep -c '^```' "$CI" || true)"
+# 구간을 "펜스 안"으로 오인한다. 카운트는 위 FENCE_MARKER_RE와 **문자 그대로 동일한 패턴**을
+# 써야 한다 — 다른 패턴을 쓰면(예: 들여쓰기 불허) 들여쓰인 마커 쌍이 이 카운트에서만 안 보여서
+# "균형"이라고 오판하면서 fence()/scoped_window()는 그 마커를 실제로 인식(또는 오인식)하는
+# drift가 생긴다(fix round 3 NB: 정확히 이 drift로 인덱테이션된 펜스가 false RED를 내면서도
+# 이 전제조건은 계속 PASS를 냈다). 이 전제조건은 **전역**(윈도우 스코프 아님) — 무관한 섹션의
+# 마커 하나가 빠져도 트립된다(Task 7과 동일한 의도적 coarse-ness: 위장이 아니라 흔한 편집
+# 사고를 잡는 게 목적이라 스코프를 좁히지 않는다).
+n_fence="$(grep -cE "$FENCE_MARKER_RE" "$CI" || true)"
 if [[ "$n_fence" -gt 0 ]] && [[ "$((n_fence % 2))" -eq 0 ]]; then
   note PASS "펜스 균형: 코드 펜스 마커 ${n_fence}개 — 짝수(균형), 윈도우/펜스 스코프 유효"
 else
@@ -131,9 +166,14 @@ n_qline="$(grep -cE '^[[:space:]]*question:' <<<"$QFENCE" || true)"
   && note PASS "B-2 AskUserQuestion 펜스 안에 question: 라인 정확히 1개 (load-bearing)" \
   || note FAIL "B-2 AskUserQuestion 펜스 안 question: 라인이 ${n_qline}개 (중복 키로 가려질 위험)"
 QLINE="$(grep -E '^[[:space:]]*question:' <<<"$QFENCE" | head -1)"
-grep -qF 'degrade' <<<"$QLINE" \
-  && note PASS "B-2 question: 라인이 degrade record를 직접 실음 (placement, load-bearing)" \
-  || note FAIL "B-2 question: 라인에 degrade 부재 — 렌더가 description 등 다른 곳으로 이동했을 수 있다"
+# 트레일링 "//" 코멘트는 문자열 리터럴 밖이라 실제 렌더가 아니다(fix round 3 Decoy 2) — 이를
+# 잘라낸 뒤에 검사해야 "죽은 // TODO 코멘트에 degrade가 적혀있을 뿐 실제 문자열엔 없다"는
+# 케이스를 놓치지 않는다. 반대로 진짜 렌더가 문자열 안에 있으면 트레일링 "//" 코멘트가
+# 나중에 붙어도(무해한 편집) false-fail 없이 계속 PASS다.
+QLINE_CODE="$(strip_trailing_linecomment "$QLINE")"
+grep -qF 'degrade' <<<"$QLINE_CODE" \
+  && note PASS "B-2 question: 라인이 degrade record를 직접 실음 (placement, load-bearing; 트레일링 // 코멘트 제외하고 검사)" \
+  || note FAIL "B-2 question: 라인(트레일링 // 코멘트 제외)에 degrade 부재 — 렌더가 description 등 다른 곳으로 이동했거나 죽은 // 코멘트일 수 있다"
 grep -qE 'degrade 없음' "$CI" && note PASS "빈 배열도 명시" || note FAIL "빈 배열 명시 부재"
 
 # --- P21 canonical 토큰 (checker와 producer가 같은 집합) --------------------
