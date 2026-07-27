@@ -41,7 +41,19 @@ source: spec-distill conducting-interview v0.23.0
 ## 4. 게이트 실행 기록
 
 - check_brief.py gate — <pass|fail> (<YYYY-MM-DD>)
+- check_verbatim_coverage.py — <exit 0|1|3|4> (<YYYY-MM-DD>)
 
 ## 5. 프로세스 로그
 
 - round <n>: <path (a|b|c|d)> — <한 줄 요약>
+
+### brief 리뷰 라운드 (reviewing-brief, v0.24.0)
+
+(순수 텔레메트리 — **기록이며 게이트 통과 조건이 아니다.** 검사 대상이 통과 조건을 직접 쓰는
+검사는 이빨이 없으므로, 리뷰 생략 방지는 Step B 게이트의 degrade 전파가 담당한다.)
+
+- 방향성: Claude <n>건 / codex <n>건 — 사용자 재결정 <n>건
+- 충실도: verdict <approved|needs_revise|advisory> — critic <n>건 / codex <n>건 — 재라운드 <n>/2
+- 냉독: gap <n>건 (<G1..G5 중 어느 클래스>)
+- degrade: <component:reason 한 줄씩 | 없음>
+- 격리: zero-tool probe <ZERO_TOOL_OK|ZERO_TOOL_UNAVAILABLE> — `codex_isolated: false`
