@@ -67,20 +67,40 @@ rc="$(rc_of "$FX/brief-verbatim-nfkc.md" "$FX/state-verbatim-nfkc.md")"
 [[ "$rc" == "1" ]] && note PASS "T31: ①↔1 불일치 → exit 1 (NFC 유지)" \
                    || note FAIL "T31: ①↔1이 통과했다 — NFKC 징후 (rc=$rc)"
 
-# --- T3 / AC11 : P21 placeholder 강등 --------------------------------------
+# --- T3 / AC11 : P21 placeholder 강등 (양쪽 모두 관여 — 서로 다른 구체 토큰) ---
 rc="$(rc_of "$FX/brief-verbatim-placeholder.md" "$FX/state-verbatim-placeholder.md")"
-[[ "$rc" == "0" ]] && note PASS "T3: placeholder 관여 → advisory 강등 (exit 0)" \
+[[ "$rc" == "0" ]] && note PASS "T3: placeholder 관여(양쪽) → advisory 강등 (exit 0)" \
                    || note FAIL "T3: placeholder 강등이 없다 (rc=$rc)"
 json_of "$FX/brief-verbatim-placeholder.md" "$FX/state-verbatim-placeholder.md" | grep -q 'P21 placeholder' \
   && note PASS "T3: advisories에 P21 문구" || note FAIL "T3: advisories가 P21을 언급하지 않음"
 
-# --- T3 mutation: placeholder 토큰 제거 → red 승격 -------------------------
+# --- T3 / AC11 : P21 placeholder — state 쪽만 관여 --------------------------
+rc="$(rc_of "$FX/brief-verbatim-placeholder-state-only.md" "$FX/state-verbatim-placeholder-state-only.md")"
+[[ "$rc" == "0" ]] && note PASS "T3: placeholder 관여(state만) → advisory 강등 (exit 0)" \
+                   || note FAIL "T3: state쪽 단독 placeholder가 강등되지 않는다 (rc=$rc)"
+
+# --- T3 / AC11 : P21 placeholder — payload 쪽만 관여 (spec §5.5의 설계된 예외:
+# payload가 P21 secret placeholder로 치환하는 것은 §6 append-only의 유일한 예외이며,
+# state(ground truth, git-ignored)가 리터럴을 들고 있어도 payload가 그것을 redact해
+# 보여주는 것은 정상 경로다 — 이 케이스가 비어 있으면 회귀가 락에 보이지 않는다) -----
+rc="$(rc_of "$FX/brief-verbatim-placeholder-payload-only.md" "$FX/state-verbatim-placeholder-payload-only.md")"
+[[ "$rc" == "0" ]] && note PASS "T3: placeholder 관여(payload만, §5.5 예외) → advisory 강등 (exit 0)" \
+                   || note FAIL "T3: payload쪽 단독 placeholder(§5.5 예외)가 강등되지 않는다 — state의 리터럴이 정상적으로 차단된다 (rc=$rc)"
+out="$(json_of "$FX/brief-verbatim-placeholder-payload-only.md" "$FX/state-verbatim-placeholder-payload-only.md")"
+grep -q 'P21 placeholder' <<<"$out" \
+  && note PASS "T3: payload쪽만 관여해도 advisories에 P21 문구" || note FAIL "T3: payload쪽만 관여 시 advisories가 P21을 언급하지 않음"
+
+# --- T3 mutation: 양쪽 모두에서 placeholder 토큰 제거 → red 승격 ------------
+# (state만 벗기면 payload의 bare <REDACTED>가 독자적으로 매치해 OR가 절대 red로
+# 못 넘어간다 — 양쪽을 다 벗겨야 "제거하면 실제로 escalate한다"는 이빨이 성립한다.)
 tmps="$(mktemp)" || exit 1
+tmpb="$(mktemp)" || exit 1
 sed 's/<REDACTED:api-key>/plainsecret/' "$FX/state-verbatim-placeholder.md" > "$tmps"
-rc="$(rc_of "$FX/brief-verbatim-placeholder.md" "$tmps")"
-[[ "$rc" == "1" ]] && note PASS "T3 mutation: 토큰 제거 → advisory가 red로 승격" \
-                   || note FAIL "T3 mutation: 토큰 없이도 통과했다 (rc=$rc)"
-rm -f "$tmps"
+sed 's/<REDACTED>/unknown-value/' "$FX/brief-verbatim-placeholder.md" > "$tmpb"
+rc="$(rc_of "$tmpb" "$tmps")"
+[[ "$rc" == "1" ]] && note PASS "T3 mutation: 양쪽 토큰 제거 → advisory가 red로 승격" \
+                   || note FAIL "T3 mutation: 양쪽에서 토큰을 제거해도 통과했다 (rc=$rc)"
+rm -f "$tmps" "$tmpb"
 
 # --- T4 · T19 / AC12 : exit 1 ≠ exit 3 -------------------------------------
 rc3="$(rc_of "$FX/brief-verbatim-ok.md" "$FX/nonexistent-state-file.md")"

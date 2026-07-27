@@ -8,11 +8,13 @@ payload(§6 사용자 원문)와 state.local.md(`user_statements` 원장)를 대
 
   L1: state `user_statements[].id` ⊆ payload §6 `**S<N>**` 앵커 집합.  위반 → red
   L2: 정규화 후 payload §6 항목 본문이 state `text`를 **포함**하는가.   위반 → red
-      state `text`(ground truth)에 P21 placeholder 토큰이 있으면 advisory로 강등 —
-      state가 이미 redact된 값을 들고 있으면 원문을 재구성할 방법이 없어 엄격 비교가
-      성립하지 않는다. payload 쪽에만 placeholder 모양 문자열이 있고 state가 리터럴
-      값을 들고 있는 경우는 강등하지 않는다(ground truth가 있는데 payload가 그것을
-      보존하지 못한 것은 L2가 잡아야 할 진짜 위반이다).
+      P21 placeholder 토큰이 **어느 한쪽**(state `text` 또는 payload §6 항목 본문)에
+      관여하면 advisory로 강등한다(spec §5.5). payload 쪽 P21 secret placeholder
+      치환은 §6 append-only 규칙의 유일한 설계된 예외다(design doc §"§6 변경 금지 —
+      P21 secret placeholder 치환만 예외") — payload는 `docs/`에 커밋되는 산출물이고
+      state.local.md는 git-ignored이므로, "state는 리터럴을 들고 있는데 payload가
+      그것을 redact해 보여주는" 시나리오가 정확히 의도된 정상 경로다. 따라서 어느
+      한쪽이라도 placeholder를 보이면 엄격 비교가 성립하지 않으므로 강등한다.
 
 정규화 N1–N5 (spec §5.5) — **순서 고정 `N1 → N2 → N3 → N4 → N5`**:
   N1 각 줄 앞 인용 마커 1회 제거 · N2 강조/링크 제거 · N3 연속 whitespace(개행 포함)
@@ -220,10 +222,10 @@ def run(payload_path: Path, state_path: Path) -> tuple[int, dict]:
         have = normalize(items[sid])
         if want and want in have:
             continue
-        if P21_PLACEHOLDER_RE.search(raw_state):
-            # ground truth(state)가 이미 redact돼 있으면 원문을 알 수 없다 — advisory.
-            # payload 쪽에만 placeholder 모양 문자열이 있는 경우는 강등하지 않는다:
-            # state에 리터럴 값이 있는데 payload가 그것을 보존 못 한 것은 진짜 위반이다.
+        if P21_PLACEHOLDER_RE.search(raw_state) or P21_PLACEHOLDER_RE.search(items[sid]):
+            # 어느 한쪽에라도 P21 placeholder가 있으면 강등한다. payload 쪽 치환이
+            # §6 append-only의 유일한 설계된 예외(spec §5.5) — state가 리터럴을
+            # 들고 있어도 payload가 그것을 redact해 보여주는 것은 정상 경로다.
             result["advisories"].append(
                 f"{sid}: P21 placeholder 관여 — L2를 advisory로 강등 (원문 미포함)")
             continue
