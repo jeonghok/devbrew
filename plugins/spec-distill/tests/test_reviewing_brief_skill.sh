@@ -14,7 +14,7 @@ SKILL="$SD/skills/reviewing-brief/SKILL.md"
 pass=0; fail=0
 note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
 # $1 = 시작 헤더 정규식 → 다음 '^### ' 직전까지
-window() { awk -v pat="$1" '$0 ~ pat {inw=1; next} inw && /^### / {exit} inw' "$SKILL"; }
+window() { awk -v pat="$1" '$0 ~ pat {inw=1; next} inw && /^#{1,3} / {exit} inw' "$SKILL"; }
 has() { grep -qF -- "$2" <<<"$1"; }
 
 test -f "$SKILL" || { note FAIL "SKILL 부재: $SKILL"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1; }
@@ -90,8 +90,8 @@ has "$WFAIL" 'hard gate' && note FAIL "T23: 실패 분기에 'hard gate' 문구 
                          || note PASS "T23: 실패 분기에 'hard gate' 문구 부재"
 has "$WFAIL" 'advisory' && note PASS "T23: 실패 분기가 advisory 강등" || note FAIL "T23: advisory 강등 부재"
 has "$WFAIL" 'D2' && note PASS "T23: 실패 분기가 D2 미충족 보고" || note FAIL "T23: D2 미충족 보고 부재"
-has "$WFAIL" 'component: critic' && note PASS "T23: 실패 분기 record — critic" || note FAIL "T23: critic record 부재"
-has "$WFAIL" 'component: readback' && note PASS "T23: 실패 분기 record — readback (2건)" \
+has "$WFAIL" '--component critic' && note PASS "T23: 실패 분기 record — critic" || note FAIL "T23: critic record 부재"
+has "$WFAIL" '--component readback' && note PASS "T23: 실패 분기 record — readback (2건)" \
                                   || note FAIL "T23: readback record 부재 (냉독 신뢰도 하향 신호 없음)"
 WOK="$(awk '/^#### probe 통과 분기/{inw=1; next} inw && /^#{1,4} /{exit} inw' "$SKILL")"
 has "$WOK" 'hard gate' && note PASS "T23: 통과 분기가 hard gate" || note FAIL "T23: 통과 분기에 hard gate 부재"
@@ -174,7 +174,7 @@ grep -qF 'merge_brief_review.py' "$SKILL" \
   && note PASS "AC7: 충실도 병합 스크립트 호출" || note FAIL "AC7: merge_brief_review.py 부재"
 
 # --- codex 축별 2회 --------------------------------------------------------
-n_codex="$(grep -cE 'run_brief_codex_reviewer\.sh (direction|fidelity)' "$SKILL" || true)"
+n_codex="$(grep -cE 'run_brief_codex_reviewer\.sh" (direction|fidelity)' "$SKILL" || true)"
 [[ "$n_codex" -ge 2 ]] && note PASS "AC6: codex 축별 2회 호출 서술 ($n_codex)" || note FAIL "AC6: codex 호출이 $n_codex 건"
 grep -qF 'detect_codex.sh' "$SKILL" && note PASS "AC9: detect_codex.sh 선행 확인" || note FAIL "AC9: detect_codex.sh 부재"
 

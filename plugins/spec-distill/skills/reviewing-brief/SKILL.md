@@ -46,6 +46,20 @@ AskUserQuestion({
 
 *"건너뛰고 Step B로"* 선택은 kill switch와 동일 경로입니다 — record + loud advisory 후 Step B. 사용자 주권(P17)이고 polite stop이 아닙니다(게이트를 실제로 띄웠고 사용자가 redirect했으므로).
 
+## 상태
+
+state는 새 파일을 만들지 않고 기존 `.claude/spec-distill/<session-id>/state.local.md`에 키 3개를 씁니다. 훅이 읽는 파일과 **같은 리졸버**로 경로를 구합니다. 이 섹션을 zero-tool 선결 조건보다 먼저 두는 이유는 단순합니다 — 아래 probe 실패 분기가 `$STATE`에 쓰므로, `$STATE`가 먼저 정의돼 있어야 문서를 위에서 아래로 그대로 실행할 수 있습니다:
+
+```bash
+PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+harness_sid="$(python3 "$PR/hooks/state_path.py" session-id)"
+ROOT="$(python3 "$PR/hooks/state_path.py" state-root)"
+STATE="$ROOT/$harness_sid/state.local.md"
+python3 "$PR/scripts/brief_review_state.py" init "$STATE"     # 키 3개 idempotent 추가
+```
+
+`init`은 부재 키만 default로 추가합니다(`brief_review_stage: direction` · `brief_critic_rounds: 0` · `brief_review_degradations: []`). 기존 값을 backward-rewrite하지 않습니다. `harness_sid`가 빈 값이면 상태 기록 없이 진행하되 **loud advisory**를 남기고 모든 degrade를 Step B 게이트 텍스트로만 전달합니다(기록 실패를 조용히 삼키지 않습니다).
+
 ## zero-tool 격리 선결 조건
 
 `brief-critic`·`brief-readback`의 격리는 **도구 표면으로 성립하거나 성립하지 않습니다.** 판정은 `docs/audits/2026-07-27-spec-distill-zero-tool-probe.md`의 `**분기 판정:**` 한 줄입니다. 그 파일이 없거나 판정을 읽을 수 없으면 **파이프라인을 시작하지 않습니다** — probe 미실행 상태로 구현·실행을 진행하지 않습니다(AC2b).
@@ -60,10 +74,10 @@ critic·readback이 `tools: []`이므로 audit 도달 경로가 물리적으로 
 
 critic·readback이 `tools: Read`를 유지하므로 격리가 **보장되지 않습니다.** 그러면 충실도 verdict를 **advisory**로 내립니다 — findings를 Step B에 올리고 사용자가 판정하며, 파이프라인을 자동 차단하지 않습니다. 독립성이 보장되지 않는 리뷰어의 판정으로 차단하면 담보하는 것이 없는데 담보하는 척하는 것입니다.
 
-이 분기에서는 `component: critic`/`affected_axis: fidelity`와 `component: readback`/`affected_axis: readback` **record 2건**을 남깁니다(양쪽 도구가 함께 되돌아가므로 냉독의 *순진함* 전제도 같은 원인으로 훼손됩니다 — gap 판정을 그만큼 낮게 읽어야 합니다):
+이 분기에서는 아래 두 호출로 **record 2건**을 남깁니다(양쪽 도구가 함께 되돌아가므로 냉독의 *순진함* 전제도 같은 원인으로 훼손됩니다 — gap 판정을 그만큼 낮게 읽어야 합니다):
 
 ```bash
-BRS="python3 ${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/brief_review_state.py"
+BRS="python3 $PR/scripts/brief_review_state.py"
 $BRS degrade-append "$STATE" --component critic   --axis fidelity \
     --status degraded --reason "zero-tool 불가 — 격리 미보장"
 $BRS degrade-append "$STATE" --component readback --axis readback \
@@ -71,20 +85,6 @@ $BRS degrade-append "$STATE" --component readback --axis readback \
 ```
 
 그리고 **D2(payload 파일 하나만 받는다는 구조 조건) 미충족을 조용히 넘기지 않고** C4 경로로 사용자에게 보고합니다(Step B 게이트 question 텍스트).
-
-## 상태
-
-state는 새 파일을 만들지 않고 기존 `.claude/spec-distill/<session-id>/state.local.md`에 키 3개를 씁니다. 훅이 읽는 파일과 **같은 리졸버**로 경로를 구합니다:
-
-```bash
-PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
-harness_sid="$(python3 "$PR/hooks/state_path.py" session-id)"
-ROOT="$(python3 "$PR/hooks/state_path.py" state-root)"
-STATE="$ROOT/$harness_sid/state.local.md"
-python3 "$PR/scripts/brief_review_state.py" init "$STATE"     # 키 3개 idempotent 추가
-```
-
-`init`은 부재 키만 default로 추가합니다(`brief_review_stage: direction` · `brief_critic_rounds: 0` · `brief_review_degradations: []`). 기존 값을 backward-rewrite하지 않습니다. `harness_sid`가 빈 값이면 상태 기록 없이 진행하되 **loud advisory**를 남기고 모든 degrade를 Step B 게이트 텍스트로만 전달합니다(기록 실패를 조용히 삼키지 않습니다).
 
 ## 진입 첫 액션 — 원문 완전성 (§6 ↔ state 원장)
 
@@ -159,8 +159,6 @@ Every finding must carry exactly one question for the user to decide.
 
 ### 1-c. codex #1 (방향성 축)
 
-codex 가용 시 `run_brief_codex_reviewer.sh direction`을 호출해 방향성 축을 검토합니다:
-
 ```bash
 codex_avail="$(bash "$PR/scripts/detect_codex.sh" | sed -n 's/^codex_available: //p')"
 if [[ "$codex_avail" == "true" ]]; then
@@ -205,7 +203,7 @@ python3 "$PR/scripts/brief_review_state.py" set-stage "$STATE" fidelity
 BLOB="$(python3 "$PR/scripts/build_brief_inline_blob.py" "$PAYLOAD")"; blob_rc=$?
 ```
 
-`blob_rc == 3`이면 본문에 위생 미달 잔존이 있다는 뜻입니다 — 원문 보존이 우선이라 지우지 않고 record(`component: critic`, `affected_axis: fidelity`, `verification_status: degraded`)를 남기고 계속합니다.
+`blob_rc == 2`면 payload가 없거나 사용법 오류입니다 — 빈 `<brief>`로 critic을 dispatch하면 indeterminate를 clean으로 오독하는 fail-open이므로 **critic을 dispatch하지 않습니다.** record(`component: critic`, `affected_axis: fidelity`, `verification_status: unavailable`)를 남기고 Step B로 조기 보고합니다. `blob_rc == 3`이면 본문에 위생 미달 잔존이 있다는 뜻입니다 — 원문 보존이 우선이라 지우지 않고 record(`component: critic`, `affected_axis: fidelity`, `verification_status: degraded`)를 남기고 계속합니다.
 
 ```javascript
 Agent({
@@ -221,11 +219,9 @@ ${BLOB}
 })
 ```
 
-critic의 raw 출력을 **요약·바꿔쓰기 없이 그대로** scratch 파일에 저장합니다 — 파싱은 병합 스크립트가 그 파일에서 수행합니다(orchestrator가 category/target_section을 전사하면 안 됩니다).
+critic의 raw 출력을 **요약·바꿔쓰기 없이 그대로** `CRITIC_OUT="$ROOT/$harness_sid/brief-critic-raw.txt"`에 저장합니다 — `$STATE`와 같은 세션 디렉토리(`.claude/spec-distill/<session-id>/`) 아래라 plugin state 배치 규약(P13)과 정합합니다. 파싱은 병합 스크립트가 그 파일에서 수행합니다(orchestrator가 category/target_section을 전사하면 안 됩니다).
 
 ### 2-b. codex #2 (충실도 축) + 병합
-
-`run_brief_codex_reviewer.sh fidelity`를 호출해 충실도 축을 검토하고, 결과를 critic 출력과 결정론 병합합니다:
 
 ```bash
 bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$PAYLOAD" "$(pwd)" "$CODEX_FID_YAML"
@@ -237,6 +233,8 @@ codex #2는 **항상 최종 문서를 봅니다** — stale이 원리적으로 �
 
 병합 stdout의 키를 그대로 씁니다: `fidelity_verdict` · `critic_verdict` · `codex_verdict` · `critic_verdict_unrecoverable` · `codex_isolated` · `codex_degraded` · `fidelity_findings` · `advisory[]`. `advisory[]`는 사용자에게 **그대로** 표시합니다.
 
+`codex_degraded: true`이면 (`run_brief_codex_reviewer.sh`가 timeout·exec 실패·`payload_missing` 등으로 fallback YAML을 낸 경우) record(`component: codex`, `affected_axis: fidelity`, `verification_status: degraded`)를 남깁니다 — 1-c의 `affected_axis: all` record는 codex가 애초에 **없는** 케이스만 다루고, 이 record는 codex가 있었는데 **이 라운드에 실패한** 케이스를 다룹니다. 이걸 남기지 않으면 merge 스크립트의 `advisory[]`에만 흔적이 남고 AC15의 degrade 원장에는 흔적이 남지 않습니다.
+
 **권위 계약** — codex는 advisory가 아니라 **binding**입니다. 어느 리뷰어든 Issues를 내면 `needs_revise`이고, codex 단독으로도 verdict가 만들어집니다. `codex_isolated: false`는 **verdict 입력이 아니라 저자용 라벨**입니다 — 이 finding은 프레이밍을 흡수한 리뷰어가 낸 것일 수 있으니 그 가능성을 함께 고려하라는 뜻이고, **등급을 낮추는 근거가 아닙니다.**
 
 `critic_verdict_unrecoverable: true`이고 `codex_degraded: true`면 **approved로 해소하지 않고** 사람에게 올립니다(round-4에서 실측된 verdict 소실의 봉쇄).
@@ -247,9 +245,15 @@ codex #2는 **항상 최종 문서를 봅니다** — stale이 원리적으로 �
 
 ```bash
 python3 "$PR/scripts/brief_review_state.py" can-redispatch "$STATE"; can=$?
-# can == 0 → 재dispatch 허용.  can == 1 → escalate (더 이상 재dispatch 없음)
-python3 "$PR/scripts/brief_review_state.py" bump-critic-round "$STATE"   # 재dispatch 시점에 +1
+if [[ "$can" -eq 0 ]]; then
+  python3 "$PR/scripts/brief_review_state.py" bump-critic-round "$STATE"   # 재dispatch 허용된 시점에만 +1
+  # ... fresh critic 재dispatch
+else
+  : # can == 1 → escalate. 더 이상 재dispatch 없음 — Step B forced escalate로 수렴
+fi
 ```
+
+`can == 0`일 때만 카운터를 올리고 재dispatch합니다 — 분기를 주석 하나로 서술하지 않고 `if`로 명시하는 이유는, escalate 경로에서 실수로 카운터가 한 번 더 올라가는 shape을 애초에 봉쇄하기 위해서입니다(clamp가 상한 초과는 막아도, 게이트를 거치지 않고 bump가 실행되는 모양 자체는 AC13이 load-bearing으로 보는 지점입니다).
 
 | # | 상태 | 이벤트 | 동작 | `brief_critic_rounds` |
 |---|---|---|---|---|
@@ -290,8 +294,10 @@ python3 "$PR/scripts/brief_review_state.py" set-stage "$STATE" readback
 ### 3-a. readback dispatch 블록
 
 ```bash
-BLOB="$(python3 "$PR/scripts/build_brief_inline_blob.py" "$PAYLOAD")"
+BLOB="$(python3 "$PR/scripts/build_brief_inline_blob.py" "$PAYLOAD")"; blob_rc=$?
 ```
+
+`blob_rc == 2`면 payload가 없거나 사용법 오류입니다 — 빈 `<document>`로 dispatch하지 않습니다. record(`component: readback`, `affected_axis: readback`, `verification_status: unavailable`)를 남기고 Step B로 조기 보고합니다. `blob_rc == 3`이면 본문에 위생 미달 잔존이 있다는 뜻입니다 — 이 라운드는 그대로 dispatch하되, 그 함의는 3-b에서 다룹니다.
 
 ```javascript
 Agent({
@@ -324,6 +330,8 @@ ${BLOB}
 | G5 | **다음 행동 오독** — §7 Next Action과 다른 다음 단계를 서술 | 요약의 next step ≠ §7 |
 
 **성공 조건**: G1–G5 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 Step B 게이트에 **세 조각**으로 올립니다 — *어느 클래스 / 요약의 어느 문장 / payload의 어느 절*.
+
+3-a에서 `blob_rc == 3`이었던 라운드는 redaction되지 않은 audit 파일명이 본문에 그대로 남아 있었다는 뜻입니다 — 냉독 에이전트가 문서 메타데이터(파일명 규약)까지 함께 봤을 수 있으므로, 그 라운드의 gap 판정은 **신뢰도 하향**으로 읽습니다(zero-tool 격리 미보장 분기와 동일한 원인의 신뢰도 저하).
 
 **이 판정은 advisory입니다** — pass/fail이 파이프라인을 차단하지 않고 사용자가 최종 판정합니다. 프레시 에이전트는 *잘못 재구성된* payload도 정확히 요약할 수 있습니다 — 원래 의도와 비교할 독립 ground truth가 없으므로 hard verdict로 쓰면 false block이 납니다.
 
