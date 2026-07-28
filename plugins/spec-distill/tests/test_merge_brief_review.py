@@ -41,6 +41,31 @@ CRITIC_HEADING_STATUS = CRITIC_ISSUES.replace("**Status:** Issues Found",
                                               "## Status: Issues Found")
 CRITIC_NO_STATUS = CRITIC_ISSUES.replace("**Status:** Issues Found", "판정 없음")
 
+# --- CR-1 픽스처: garbled issues 리스트 -------------------------------------
+# `**Status:** Approved` + issues 원소가 계약을 어긴 경우들. 이 입력들은 fix 전에
+# control(`{"issues": []}`)과 **바이트 동일** 출력을 냈다 — "리뷰어가 아무것도 못
+# 찾았다"로 읽혔다는 뜻이다(indeterminate ≠ clean 위반).
+def _critic_with_issues(issues_json: str) -> str:
+    return ("# Brief Fidelity Review\n\n**Status:** Approved\n\n"
+            "```brief-critic-issues\n" + issues_json + "\n```\n")
+
+
+CRITIC_GARBLED_NON_DICT = _critic_with_issues('{"issues": ["not-a-record"]}')
+CRITIC_GARBLED_MISSING_FIELD = _critic_with_issues(
+    '{"issues": [{"category": "distortion", "target_section": "#2-제약", '
+    '"severity": "high"}]}')          # message 없음
+CRITIC_GARBLED_NON_STRING_FIELD = _critic_with_issues(
+    '{"issues": [{"category": "distortion", "target_section": "#2-제약", '
+    '"severity": 3, "message": "x"}]}')   # severity가 문자열이 아님
+CRITIC_GARBLED_EMPTY_FIELD = _critic_with_issues(
+    '{"issues": [{"category": "distortion", "target_section": "#2-제약", '
+    '"severity": "high", "message": "   "}]}')   # message가 공백뿐
+CRITIC_CONTROL_EMPTY = _critic_with_issues('{"issues": []}')
+CRITIC_WELLFORMED_EXTRA_KEYS = _critic_with_issues(
+    '{"issues": [{"category": "distortion", "target_section": "#2-제약", '
+    '"severity": "high", "message": "C1이 S1을 왜곡했다", "confidence": 8, '
+    '"proposed_fix": "제약 문구 교체"}]}')
+
 CODEX_CLEAN = "findings: []\nmeta:\n  codex_failed: false\n"
 CODEX_ISSUE = """findings:
   - agent: codex-reviewer
@@ -228,6 +253,69 @@ class TestCriticVerdictParsing(unittest.TestCase):
         self.assertTrue(
             any("critic verdict unrecoverable AND codex degraded" in a for a in adv),
             f"양쪽 판정 불가 전용 advisory 사유가 실리지 않았다: {adv}")
+
+
+class TestGarbledIssueElements(unittest.TestCase):
+    """CR-1 — issues 원소가 계약을 어기면 `malformed`다 (조용히 버리지 않는다).
+
+    fix 전에는 `extract_critic_issues`가 non-dict 원소를 `continue`로 버리고
+    `malformed=False`를 반환해, garbled 입력이 control(`{"issues": []}`)과
+    **바이트 동일** 출력을 냈다 — 잘린/깨진 critic 출력이 *"리뷰어가 아무것도
+    찾지 못했다"* 로 읽혔다. 필수 4필드(`category`/`target_section`/`severity`/
+    `message`; agents/brief-critic.md의 선언 스키마)는 존재해야 하고 비지 않은
+    문자열이어야 한다.
+    """
+
+    GARBLED = (
+        ("non-dict 원소", CRITIC_GARBLED_NON_DICT),
+        ("필수 필드 누락", CRITIC_GARBLED_MISSING_FIELD),
+        ("필수 필드가 non-string", CRITIC_GARBLED_NON_STRING_FIELD),
+        ("필수 필드가 빈 문자열", CRITIC_GARBLED_EMPTY_FIELD),
+    )
+
+    def test_each_garbled_shape_escalates(self):
+        for label, text in self.GARBLED:
+            with self.subTest(shape=label):
+                _, out, _ = merge(text, CODEX_CLEAN)
+                self.assertNotEqual(
+                    kv(out)["fidelity_verdict"], "approved",
+                    f"{label}: garbled critic issues가 approved로 해소됐다 (fail-open)")
+
+    def test_each_garbled_shape_raises_specific_advisory(self):
+        for label, text in self.GARBLED:
+            with self.subTest(shape=label):
+                _, out, _ = merge(text, CODEX_CLEAN)
+                adv = advisories(out)
+                self.assertTrue(
+                    any("critic issues 원소" in a for a in adv),
+                    f"{label}: 원소 단위 malformed 사유가 advisory에 없다: {adv}")
+
+    def test_garbled_differs_materially_from_control(self):
+        """CR-1의 재현 그 자체 — garbled과 control이 구별 가능해야 한다."""
+        _, control_out, _ = merge(CRITIC_CONTROL_EMPTY, CODEX_CLEAN)
+        self.assertEqual(kv(control_out)["fidelity_verdict"], "approved")
+        self.assertEqual(advisories(control_out), [])
+        for label, text in self.GARBLED:
+            with self.subTest(shape=label):
+                _, out, _ = merge(text, CODEX_CLEAN)
+                self.assertNotEqual(
+                    out, control_out,
+                    f"{label}: garbled 출력이 control과 바이트 동일하다")
+
+    def test_wellformed_issue_with_extra_keys_is_not_malformed(self):
+        """과잉 강화 방지 — 선택 키가 더 붙은 정상 finding은 malformed가 아니다."""
+        _, out, _ = merge(CRITIC_WELLFORMED_EXTRA_KEYS, CODEX_CLEAN)
+        adv = advisories(out)
+        self.assertFalse(
+            any("critic issues 원소" in a for a in adv),
+            f"정상 finding이 malformed로 오분류됐다: {adv}")
+        self.assertEqual(kv(out)["fidelity_verdict"], "needs_revise")
+        self.assertIn("source: critic", out)
+
+    def test_garbled_dict_element_is_still_carried_into_findings(self):
+        """malformed 표시는 하되 정보는 버리지 않는다 — dict 원소는 그대로 실린다."""
+        _, out, _ = merge(CRITIC_GARBLED_MISSING_FIELD, CODEX_CLEAN)
+        self.assertIn("source: critic", out)
 
 
 if __name__ == "__main__":

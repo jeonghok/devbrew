@@ -66,6 +66,10 @@ SENTINEL_RE = re.compile(r"```brief-critic-issues[ \t]*\n(.*?)\n?```", re.DOTALL
 CRITIC_CATEGORIES = ("distortion", "omission", "insertion", "provenance_mislabel",
                      "authority_syntax", "evidence_unsupported")
 
+# `agents/brief-critic.md`가 선언한 record 스키마 그대로. 이 넷은 전부 **비어 있지 않은
+# 문자열**이어야 한다 — 하나라도 없거나 타입이 다르면 그 record는 판독 불가다.
+CRITIC_REQUIRED_FIELDS = ("category", "target_section", "severity", "message")
+
 
 def extract_critic_verdict(text: str) -> str | None:
     m = STATUS_RE.search(text)
@@ -74,19 +78,54 @@ def extract_critic_verdict(text: str) -> str | None:
     return "approved" if m.group(1).strip().lower() == "approved" else "needs_revise"
 
 
-def extract_critic_issues(text: str) -> tuple[list[dict], bool]:
-    """반환 (issues, malformed). sentinel 블록 부재/깨짐은 malformed=True."""
+def extract_critic_issues(text: str) -> tuple[list[dict], bool, list[str]]:
+    """반환 (issues, malformed, reasons). sentinel 블록 부재/깨짐은 malformed=True.
+
+    **원소 단위로도 malformed다** (CR-1). 이전 구현은 non-dict 원소를 조용히
+    버리면서 `malformed=False`를 반환했다 — 그 결과 잘리거나 깨진 critic 출력이
+    control(`{"issues": []}`)과 **바이트 동일**한 병합 출력을 냈고, *"리뷰어가
+    아무것도 찾지 못했다"* 로 읽혔다. 실행 못 한 검사를 통과한 검사로 기록하는
+    것이 정확히 이 spec이 금지하는 것이다(indeterminate ≠ clean).
+
+    판정 규칙:
+      - 원소가 dict가 아니다 → malformed. 그 원소는 findings로 승격할 수 없으므로
+        버리되, **버렸다는 사실이 reason으로 남는다.**
+      - dict인데 `CRITIC_REQUIRED_FIELDS` 중 하나라도 부재/non-string/공백뿐이다
+        → malformed. 단 **record 자체는 findings에 그대로 싣는다** — 부분적으로라도
+        읽히는 지적을 버리면 정보 손실이고, malformed 플래그가 이미 escalate를
+        만들기 때문에 버려서 얻는 안전은 없다. (공백뿐인 값을 포함하는 이유:
+        `emit()`이 빈 값을 아예 출력하지 않아, 빈 `message`는 내용 없는 finding으로
+        렌더돼 같은 "판독 불가를 clean으로" 클래스가 된다.)
+    """
     m = SENTINEL_RE.search(text)
     if not m:
-        return [], True
+        return [], True, []
     try:
         payload = json.loads(m.group(1))
     except json.JSONDecodeError:
-        return [], True
+        return [], True, []
     issues = payload.get("issues")
     if not isinstance(issues, list):
-        return [], True
-    return [i for i in issues if isinstance(i, dict)], False
+        return [], True, []
+    kept: list[dict] = []
+    reasons: list[str] = []
+    malformed = False
+    for idx, it in enumerate(issues):
+        if not isinstance(it, dict):
+            malformed = True
+            reasons.append(
+                f"critic issues 원소 #{idx}가 record(JSON object)가 아니다 "
+                f"(type: {type(it).__name__}, finding으로 승격 불가)")
+            continue
+        bad = [k for k in CRITIC_REQUIRED_FIELDS
+               if not isinstance(it.get(k), str) or not it.get(k, "").strip()]
+        if bad:
+            malformed = True
+            reasons.append(
+                f"critic issues 원소 #{idx}의 필수 필드가 부재/비문자열/공백: "
+                f"{', '.join(bad)}")
+        kept.append(it)
+    return kept, malformed, reasons
 
 
 def _yaml_scalar(v) -> str:
@@ -142,16 +181,24 @@ def main() -> int:
         critic_text = ""
         advisory.append(f"[spec-distill v0.24.0] critic 출력 읽기 실패: {exc}")
     critic_verdict = extract_critic_verdict(critic_text)
-    critic_issues, critic_malformed = extract_critic_issues(critic_text)
+    critic_issues, critic_malformed, critic_malformed_reasons = \
+        extract_critic_issues(critic_text)
     if critic_verdict is None:
         advisory.append(
             "[spec-distill v0.24.0] critic verdict 파싱 불가 (Status 줄 부재) — "
             "findings는 sentinel에서 별 경로로 파싱했다. 이 라운드의 충실도 판정은 "
             "codex 단독이거나(codex 가용) 판정 불가다(codex degraded).")
     if critic_malformed:
-        advisory.append(
-            "[spec-distill v0.24.0] critic sentinel 블록(`brief-critic-issues`) 부재/깨짐 "
-            "— issues 0건으로 읽지 않는다(indeterminate ≠ clean).")
+        if critic_malformed_reasons:
+            # 원소 단위 파손 — 어느 원소가 왜 판독 불가였는지를 그대로 올린다.
+            for r in critic_malformed_reasons:
+                advisory.append(
+                    f"[spec-distill v0.24.0] {r}. 이 라운드를 정상 0건으로 읽지 "
+                    "않는다(indeterminate ≠ clean).")
+        else:
+            advisory.append(
+                "[spec-distill v0.24.0] critic sentinel 블록(`brief-critic-issues`) 부재/깨짐 "
+                "— issues 0건으로 읽지 않는다(indeterminate ≠ clean).")
     for i in critic_issues:
         cat = str(i.get("category", ""))
         if cat not in CRITIC_CATEGORIES:
