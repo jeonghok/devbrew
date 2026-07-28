@@ -192,7 +192,9 @@ def main() -> int:
         if bad_elements:
             schema_mismatch = True
 
-    meta = {"codex_failed": schema_mismatch}
+    # `dict[str, object]` 명시 — 리터럴만 두면 추론이 `dict[str, bool]`이 되어 아래
+    # 문자열 대입 3건이 전부 타입 오류로 잡힌다(런타임 영향은 없다).
+    meta: dict[str, object] = {"codex_failed": schema_mismatch}
     if schema_mismatch:
         meta["reason"] = "schema_mismatch"
         meta["raw_findings_type"] = meta_type

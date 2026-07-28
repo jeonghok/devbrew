@@ -21,14 +21,22 @@ grep -qE '"version": "0\.24\.[0-9]+"' "$PJ" \
   && note PASS "T15: plugin.json 0.24.x" || note FAIL "T15: plugin.json이 0.24.x가 아님"
 grep -qE '^## \[0\.24\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CL" \
   && note PASS "T15: CHANGELOG [0.24.0] + ISO 날짜" || note FAIL "T15: CHANGELOG [0.24.0] 누락/비-ISO"
-# append-only 누산 — 과거 엔트리 pin은 절대 빼지 않는다
-for v in '0\.20\.0' '0\.22\.0' '0\.23\.0'; do
-  grep -qE "^## \[$v\]" "$CL" && note PASS "T15: CHANGELOG 과거 엔트리 [$v] 보존" \
-                              || note FAIL "T15: 과거 엔트리 [$v]가 사라졌다 (append-only 위반)"
+# append-only 누산 — 과거 엔트리 pin은 절대 빼지 않는다.
+# 정규식(`0\.20\.0`)과 사람이 읽을 라벨(`0.20.0`)을 분리한다 — 하나로 쓰면 실패 메시지에
+# 이스케이프된 정규식이 그대로 찍혀("[0\.20\.0]가 사라졌다") 읽는 사람이 CHANGELOG에서
+# 그 문자열을 찾다 헤맨다.
+for v in '0.20.0' '0.22.0' '0.23.0'; do
+  v_re="${v//./\\.}"
+  grep -qE "^## \[$v_re\]" "$CL" && note PASS "T15: CHANGELOG 과거 엔트리 [$v] 보존" \
+                                 || note FAIL "T15: 과거 엔트리 [$v]가 사라졌다 (append-only 위반)"
 done
 PRIN="$(section '^## Principles Instantiated' "$RM")"
+# 두 섹션 캡처를 이어붙일 때는 **구분자를 명시**한다. `"$A$(f B)"`는 A의 마지막 줄과 B의
+# 첫 줄을 한 줄로 붙여, 경계에 걸친 유령 매치를 만들 수 있다(오늘 안전한 이유는 Flow
+# 섹션의 첫 줄이 마침 빈 줄이라서일 뿐 — 그 우연이 사라지면 조용히 성립이 바뀐다).
+RM_SCAN="$(printf '%s\n%s\n' "$PRIN" "$(section '^## Flow' "$RM")")"
 for kw in 'brief-critic' 'brief-direction-reviewer' 'brief-readback' 'reviewing-brief'; do
-  grep -qF "$kw" <<<"$PRIN$(section '^## Flow' "$RM")" \
+  grep -qF "$kw" <<<"$RM_SCAN" \
     && note PASS "T15: README에 신규 컴포넌트 '$kw'" || note FAIL "T15: README에 '$kw' 부재"
 done
 KS="$(section '^## Kill switches' "$RM")"
@@ -89,7 +97,10 @@ n_brief="$(grep -cF 'brief' "$HOOKS/hooks.json" || true)"
 # §6 마지막 하위섹션이라 우연히 무해했을 뿐, 문서 구조가 바뀌면 열거 누락도 조용히
 # green이 된다(round-2 리뷰가 지적한 shape (c)). `/^### /`만으로 바꾸면 반대로
 # `## 7.` 같은 상위 헤더를 못 잡아 EOF까지 흘러가므로, 두 레벨 모두에서 exit한다.
-test -f "$SPEC" || note FAIL "spec 문서 부재: $SPEC"
+# 가드는 **양쪽 분기 모두** note를 부른다. `test -f … || note FAIL` 형태만 두면 파일이
+# 있는 정상 경로에서 note가 한 번도 안 불려, 출력되는 Total이 어느 분기를 탔느냐에 따라
+# 달라진다(총계가 조건부면 "몇 개가 돌았나"를 신뢰할 수 없다).
+test -f "$SPEC" && note PASS "T29: spec 문서 실재" || note FAIL "T29: spec 문서 부재: $SPEC"
 T63="$(awk '/^### 6\.3/{inw=1; next} inw && /^#{2,3} /{exit} inw' "$SPEC")"
 [[ -n "$T63" ]] && note PASS "T29: spec §6.3 열거표 실재" || note FAIL "T29: §6.3 표 부재"
 for chk in 'check_verbatim_coverage' 'zero-tool probe' 'merge_brief_review' 'T-lock'; do

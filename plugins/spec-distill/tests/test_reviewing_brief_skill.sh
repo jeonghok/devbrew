@@ -17,11 +17,16 @@ note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else f
 # 조건을 무시한다(펜스 안의 컬럼-0 bash 주석이 헤딩처럼 보여 조기 종료시키는 것을 막는다 —
 # 그 상태에서도 '-n'/존재 체크만으로는 잘린 윈도우가 통과해버려 안의 negative assert가
 # 전부 vacuous하게 PASS한다, 특히 W3A처럼 assert가 전부 negative인 윈도우에서 치명적).
+# 패턴은 `-v`가 아니라 ENVIRON으로 넘긴다 — `awk -v`는 대입값의 escape sequence를 처리해서
+# `\[`·`\$`·`\t` 같은 것이 뭉개진다. 지금 쓰이는 패턴이 `\.`뿐이라 뭉개져도 `.`이 같은 자리를
+# 매치해 **우연히** 무해했을 뿐이고, 대괄호나 `$`가 든 패턴이 하나 들어오는 순간 조용히
+# 아무것도 매치하지 않는다(잘린/빈 윈도우 → negative assert 전부 vacuous PASS).
+# branch_body()가 이미 이 이유로 ENVIRON을 쓰고 있다 — 같은 파일 안에서 규약을 통일한다.
 scoped_window() {
-  awk -v pat="$1" -v endpat="$2" '
-    $0 ~ pat {inw=1; next}
+  SW_PAT="$1" SW_END="$2" awk '
+    $0 ~ ENVIRON["SW_PAT"] {inw=1; next}
     inw && /^```/ {fence=!fence}
-    inw && !fence && $0 ~ endpat {exit}
+    inw && !fence && $0 ~ ENVIRON["SW_END"] {exit}
     inw
   ' "$SKILL"
 }

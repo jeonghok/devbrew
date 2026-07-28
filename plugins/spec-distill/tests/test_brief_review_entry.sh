@@ -22,11 +22,15 @@ note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else f
 # 불릿 리스트 아래 중첩된 펜스, 이 SKILL 자체에 실재하는 관용구, 마커 자체가 들여써진다.
 # 아래 FENCE_MARKER_RE가 fence()/펜스-균형 전제조건과 동일 패턴이어야 셋이 드리프트하지 않는다).
 FENCE_MARKER_RE='^[[:space:]]*```'
+# 패턴은 `-v`가 아니라 ENVIRON으로 넘긴다 — `awk -v`는 대입값의 escape sequence를 처리한다
+# (`\[`·`\$`·`\t`가 뭉개진다). 지금 패턴이 `\.`뿐이라 우연히 무해할 뿐이고, 대괄호나 `$`가
+# 든 패턴이 들어오면 조용히 아무것도 매치하지 않아 윈도우가 비고 그 안의 assert가 전부
+# vacuous해진다. 아래 fence()도 같은 이유로 함께 옮긴다.
 scoped_window() {
-  awk -v pat="$1" -v endpat="$2" -v fre="$FENCE_MARKER_RE" '
-    $0 ~ pat {inw=1; next}
-    inw && $0 ~ fre {fence=!fence}
-    inw && !fence && $0 ~ endpat {exit}
+  SW_PAT="$1" SW_END="$2" SW_FRE="$FENCE_MARKER_RE" awk '
+    $0 ~ ENVIRON["SW_PAT"] {inw=1; next}
+    inw && $0 ~ ENVIRON["SW_FRE"] {fence=!fence}
+    inw && !fence && $0 ~ ENVIRON["SW_END"] {exit}
     inw
   ' "$CI"
 }
@@ -47,7 +51,8 @@ fence() {
     javascript|js) tag_re='(javascript|js)' ;;
     *) tag_re="$tag" ;;
   esac
-  awk -v tag_re="$tag_re" -v fre="$FENCE_MARKER_RE" '
+  FN_TAG="$tag_re" FN_FRE="$FENCE_MARKER_RE" awk '
+    BEGIN { tag_re = ENVIRON["FN_TAG"]; fre = ENVIRON["FN_FRE"] }
     !infence && $0 ~ fre tag_re "[[:space:]]*$" { infence=1; want=1; next }
     !infence && $0 ~ fre                        { infence=1; want=0; next }
     infence && $0 ~ fre "[[:space:]]*$"          { infence=0; want=0; next }

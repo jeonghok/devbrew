@@ -37,9 +37,23 @@ CRITIC_ISSUES = """# Brief Fidelity Review
 ```
 """
 
-CRITIC_HEADING_STATUS = CRITIC_ISSUES.replace("**Status:** Issues Found",
-                                              "## Status: Issues Found")
-CRITIC_NO_STATUS = CRITIC_ISSUES.replace("**Status:** Issues Found", "판정 없음")
+def sub1(text: str, old: str, new: str) -> str:
+    """`old` → `new` 치환. **치환이 실제로 일어났는지 확인한다.**
+
+    `str.replace()`는 대상이 없으면 조용히 no-op이다. 픽스처 원본이 드리프트하면
+    파생 픽스처가 원본과 **동일**해져 시나리오가 뒤바뀌고, 그런데도 양쪽에서 참인
+    assertion 덕에 테스트는 계속 green이다(예: "findings 없음" 픽스처가 조용히
+    "findings 있음"으로 되돌아가는 케이스). test_check_verbatim_coverage.sh가
+    이미 `assert old in t, "fixture drift"` 관용구로 이 클래스를 막고 있다 —
+    같은 가드를 파이썬 쪽에도 건다.
+    """
+    assert old in text, f"fixture drift: 치환 대상을 찾지 못했다 — {old[:60]!r}"
+    return text.replace(old, new)
+
+
+CRITIC_HEADING_STATUS = sub1(CRITIC_ISSUES, "**Status:** Issues Found",
+                             "## Status: Issues Found")
+CRITIC_NO_STATUS = sub1(CRITIC_ISSUES, "**Status:** Issues Found", "판정 없음")
 
 # --- CR-1 픽스처: garbled issues 리스트 -------------------------------------
 # `**Status:** Approved` + issues 원소가 계약을 어긴 경우들. 이 입력들은 fix 전에
@@ -217,8 +231,8 @@ class TestCriticVerdictParsing(unittest.TestCase):
         content-free한 `##` 줄 다음, 들여쓰기된 `  Status: Approved` 줄까지 오매치한다
         — bare `Status:` 분기로는 잡히지 않는(들여쓰기가 있어) `\\s+`만의 결함이었다.
         """
-        critic_text = CRITIC_APPROVED.replace("**Status:** Approved",
-                                              "##\n  Status: Approved")
+        critic_text = sub1(CRITIC_APPROVED, "**Status:** Approved",
+                           "##\n  Status: Approved")
         _, out, _ = merge(critic_text, CODEX_CLEAN)
         d = kv(out)
         self.assertEqual(
@@ -236,10 +250,16 @@ class TestCriticVerdictParsing(unittest.TestCase):
 
     def test_both_indeterminate_never_approves(self):
         """critic verdict 파싱 실패 + codex degraded → 사람에게. approved 금지."""
-        no_findings = CRITIC_NO_STATUS.replace(
+        # sub1이 치환 성공을 assert한다 — 드리프트하면 이 픽스처가 조용히
+        # "findings 있음"으로 되돌아가고, 아래 두 assertion은 양쪽에서 참이라
+        # 시나리오가 바뀐 채로 계속 green이 된다.
+        no_findings = sub1(
+            CRITIC_NO_STATUS,
             '{"issues": [\n  {"category": "distortion", "target_section": "#2-제약", '
             '"severity": "high",\n   "message": "C1 statement가 S1 원문의 뜻을 바꿨다"}\n]}',
             '{"issues": []}')
+        self.assertIn('{"issues": []}', no_findings,
+                      "픽스처가 실제로 'findings 없음'이 되지 않았다")
         _, out, _ = merge(no_findings, omit_codex=True)
         d = kv(out)
         self.assertNotEqual(d["fidelity_verdict"], "approved",
