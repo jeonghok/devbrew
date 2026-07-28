@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# AC9 — test_agent_frontmatter_keys.sh 의 이빨 증명. 34개 케이스(mutation 은 RED,
+# AC9 — test_agent_frontmatter_keys.sh 의 이빨 증명. 각 케이스(mutation 은 RED,
 # 보강/기준선 케이스는 GREEN) 가 각 want 대로 정확히 나와야 한다.
 # RED 가 안 나는 락은 장식이다.
 #
 # ⚠️ 이 하니스가 증명하는 것은 락 **술어의 모양**뿐이다. *"락이 검증했다고 믿은 값 = 파서가
-# 실제로 resolve 하는 값"* 이라는 **의미론적 속성**은 증명하지 않는다 — 실증: 아래 45 케이스는
-# 중복 키 `tools : [Write]` 와 NBSP-패딩 `tools: <NBSP>[]` 두 실제 우회를 **45/45 GREEN 인 채로**
-# 통과시켰다(v2.14.1 S-3). 그 속성은 `test_agent_tools_lock_differential.sh` 가 담당한다.
+# 실제로 resolve 하는 값"* 이라는 **의미론적 속성**은 증명하지 않는다 — 실증: 이 하니스는
+# v2.14.1 직전 중복 키 `tools : [Write]` 와 NBSP-패딩 `tools: <NBSP>[]` 두 실제 우회를
+# **45/45 GREEN 인 채로** 통과시켰다(S-3). 그 속성은 `test_agent_tools_lock_differential.sh`
+# 가 담당한다.
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 LOCK="$ROOT/plugins/quality-gates/tests/test_agent_frontmatter_keys.sh"
@@ -91,7 +92,7 @@ expect RED "mcp__<server> 서버 단위 grant"
 write_agent 'tools: Read, mcp__plugin_chrome-devtools-mcp_chrome-devtools__*'
 expect RED "mcp__<server>__* 서버 전체 grant"
 
-# 🔴 adversarial review (Task 8 재현) — YAML-구문 우회 4종. 8/8 실 agent 는 plain
+# 🔴 adversarial review (Task 8 재현) — YAML-구문 우회 4종. 실 agent 17개는 전부 plain
 # 단일 라인 unquoted 라서 오늘은 안전하지만, 락이 이 형태를 못 잡으면 quote/block
 # scalar/중복 키로 금지 도구를 숨긴 agent 가 조용히 GREEN 을 받는다.
 echo "== ⑥ YAML-구문 우회: 이중 인용 =="
@@ -159,7 +160,7 @@ echo "== 보강: plain 안전 목록의 인라인 주석은 GREEN (주석 제거
 write_agent 'tools: Read, Grep, Glob # 정상 주석'
 expect GREEN "plain scalar 는 주석 제거 후 통과"
 
-echo "== 보강: 안전해 보여도 인용은 거절(fail-closed; 8 실 agent 는 unquoted plain) =="
+echo "== 보강: 안전해 보여도 인용은 거절(fail-closed; 실 agent 17개는 unquoted plain) =="
 write_agent 'tools: "Read, Grep, Glob"'
 expect RED "인용 scalar 는 plain 이 아니라 거절 — plain 'Read, Grep, Glob' 로 쓸 것"
 
@@ -209,6 +210,54 @@ echo "== 카브아웃 경계: [] 뒤 continuation 줄 (multiline 가드가 살�
 write_agent 'tools: []
   Write'
 expect RED "tools: [] 뒤 indented continuation — 카브아웃이 multiline 가드를 건너뛰면 안 된다"
+
+# ── A-1 (v2.14.2): 진단 스위치가 verdict 를 뒤집던 fail-open ──────────────────
+# 199d682 은 DECL 진단을 **agent 루프 안에서 fd 1** 로 printf 했다. stdout 이 쓰기 불가면
+# (`>&-`) 그 printf 는 실패하지만 bash 의 stdio 버퍼에 내용이 **남고**, 바로 뒤 L3 토큰 루프의
+# process substitution 이 fork 하는 자식이 그 버퍼를 상속해 **토큰 파이프로 flush** 했다.
+# 토큰 루프는 도구 이름 대신 DECL 텍스트를 읽었고 금지 도구 Write 를 놓쳤다. 실측:
+#                     정상 stdout   stdout 닫힘(`>&-`)
+#     EMIT 미설정         rc=1            rc=1
+#     EMIT=1              rc=1            rc=0   ← 진짜 Law 2 위반이 PASS
+# 진단은 이제 전용 fd 3 으로만 나간다(락의 "진단 채널" 참조). 아래 16 케이스가 그 불변식이다:
+# **EMIT 값과 stdout 가용성의 어떤 조합도 verdict 를 바꿀 수 없다.**
+# 🔴 이 섹션을 지우지 말 것 — 진단 emission 을 fd 1 로 되돌리는 한 줄이 다시 통과한다.
+emit_expect() {  # emit_expect <RED|GREEN> <EMIT 값|UNSET> <open|closed> <설명>
+  local want="$1" ev="$2" so="$3" msg="$4" got rc
+  # stdout 닫기는 하위 셸에서만 — 이 하니스 자신의 stdout 은 살려 둔다.
+  if [ "$so" = closed ]; then
+    if [ "$ev" = UNSET ]; then
+      bash -c 'bash "$0" "$1" >&- 2>/dev/null' "$LOCK" "$TMP"; rc=$?
+    else
+      DEVBREW_AGENT_TOOLS_LOCK_EMIT="$ev" bash -c 'bash "$0" "$1" >&- 2>/dev/null' "$LOCK" "$TMP"; rc=$?
+    fi
+  else
+    if [ "$ev" = UNSET ]; then
+      bash "$LOCK" "$TMP" >/dev/null 2>&1; rc=$?
+    else
+      DEVBREW_AGENT_TOOLS_LOCK_EMIT="$ev" bash "$LOCK" "$TMP" >/dev/null 2>&1; rc=$?
+    fi
+  fi
+  if [ "$rc" -eq 0 ]; then got=GREEN; else got=RED; fi
+  if [ "$got" = "$want" ]; then PASS=$((PASS+1)); echo "  ✓ $msg ($got)"
+  else FAIL=$((FAIL+1)); echo "  ✗ FAIL: $msg — want $want, got $got"; fi
+}
+
+echo "== A-1: 진단 스위치(EMIT) × stdout 가용성은 verdict 를 바꿀 수 없다 — 위반 코퍼스 =="
+write_agent 'tools: Read, Write'
+for ev in UNSET 0 1 arbitrary; do
+  for so in open closed; do
+    emit_expect RED "$ev" "$so" "금지 도구 Write: EMIT=${ev}, stdout=${so}"
+  done
+done
+
+echo "== A-1: 같은 조합, 정상 코퍼스 (진단이 GREEN 도 흔들지 않는다) =="
+write_agent 'tools: Read, Grep, Glob'
+for ev in UNSET 0 1 arbitrary; do
+  for so in open closed; do
+    emit_expect GREEN "$ev" "$so" "정상 allowlist: EMIT=${ev}, stdout=${so}"
+  done
+done
 
 echo; echo "mutation: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

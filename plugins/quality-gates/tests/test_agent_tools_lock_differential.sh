@@ -124,8 +124,12 @@ dcase() {
   write_agent "$frag"
 
   # ── L1: verdict (의존성 없음) ──
+  # DECL 은 **fd 3** 으로 온다 (락의 "진단 채널" 참조, v2.14.2 A-1). `3>&1 1>/dev/null` 로
+  # 진단만 캡처하고 락의 실제 stdout 은 버린다 — 진단이 stdout 을 공유하면 락 안에서
+  # 실패한 printf 의 stdio 버퍼가 토큰 루프의 process substitution 으로 새어
+  # verdict 를 뒤집는다. 채널을 호출자가 명시적으로 주는 것이 그 계약이다.
   local got_lock decl
-  if decl="$(DEVBREW_AGENT_TOOLS_LOCK_EMIT=1 bash "$LOCK" "$TMP" 2>/dev/null)"; then
+  if decl="$(DEVBREW_AGENT_TOOLS_LOCK_EMIT=1 bash "$LOCK" "$TMP" 3>&1 1>/dev/null 2>/dev/null)"; then
     got_lock=GREEN
   else
     got_lock=RED
@@ -241,6 +245,42 @@ dcase RED err:-   "tools: Read, Gre<VT>p — 토큰 중간 제어문자(패딩 �
 echo "== S-2 파생: 주석 introducer 는 space/tab 선행일 때만 =="
 dcase GREEN ok:str "tools: Read, Grep<NBSP># x — 주석이 아니라 값의 일부(양쪽 합치)" 'tools: Read, Grep\0302\0240# x'
 dcase RED   ok:str "tools: Read<NBSP># x, Write — 주석으로 오인해 벗기면 Write 를 놓친다" 'tools: Read\0302\0240# x, Write'
+
+# 🔴 A-2 (v2.14.2) — 콜론 뒤 구분자 없음. `tools:[]` 는 파서에게 `tools` 키가 **아니다**:
+# 구분이 없으면 콜론은 mapping indicator 가 아니라 plain scalar 의 한 글자라 문서 전체가
+# 하나의 root scalar 가 되고 ScannerError 다. 그런데 c982607 의 카브아웃은 이 줄을 통과시키고
+# `[]` 정확 일치로 **basis=zero-seq** 를, 즉 *"이 agent 는 도구가 0개"* 를 적극적으로 단언했다
+# (5b0caff FAIL → c982607 PASS → 199d682 PASS). 어떤 파서도 읽지 못하는 문서에 대한 단언이다.
+echo "== A-2: 콜론 뒤 YAML 구분자가 없으면 그 줄은 'tools' 키가 아니다 =="
+dcase RED err:- "tools:[] — 구분자 없음, 파서는 ScannerError (zero-seq 로 단언하던 fail-open)" 'tools:[]'
+dcase RED err:- "tools:Read, Grep — 구분자 없음, 파서는 ScannerError"                          'tools:Read, Grep'
+dcase RED err:- "tools:<TAB>[] — 콜론 직후 tab, 파서는 ScannerError"                           'tools:\t[]'
+
+# 🔴 A-3 (v2.14.2) — 형태 화이트리스트의 경계를 다섯 줄 전부 **의도적으로** 못 박는다.
+# codex 감사는 네 형태를 "정당한 YAML 인데 거절된다" 고 보고했지만 파서로 재보니 둘만 진짜
+# over-reject 였다. 나머지는 거절이 load-bearing 이다 — 특히 merge key.
+echo "== A-3 완화: 파서가 정상 resolve 하는 두 형태는 GREEN 이어야 한다 =="
+dcase GREEN ok:str "column-0 블록 시퀀스 항목 (skills: / - code-review)" 'skills:\n- code-review\n- other\ntools: Read, Grep'
+dcase GREEN ok:str "column-0 블록 시퀀스 + 빈-값 키의 인라인 주석"        'skills: # 목록\n- code-review\ntools: Read, Grep'
+dcase GREEN ok:str "'.' 을 포함한 최상위 키 (x.y: 1)"                    'x.y: 1\ntools: Read, Grep'
+dcase GREEN ok:str "'_' 로 시작하는 최상위 키 (_foo: 1)"                 '_foo: 1\ntools: Read, Grep'
+
+echo "== A-3 유지: 계속 거절해야 하는 세 형태 =="
+# ⚠️ merge key 는 앵커가 **실제로 tools 를 실어야** 의미가 있다. 두 변형을 다 못 박는다:
+#   (1) column-0 `tools:` 줄이 하나도 없는 형태 — 파서는 ['Write'] 를 부여하는데 락의
+#       TOOLS_KEY_RE·중복 카운트·값 검사는 전부 발화하지 않는다(오늘 잡는 건 "부재" 검사뿐).
+#   (2) `tools: []` 를 덧붙여 부재 검사를 만족시킨 형태 — 이때 파서는 명시 키를 우선해
+#       `[]` 로 resolve 한다(실측). 락을 RED 로 지키는 것은 **형태 화이트리스트뿐**이라
+#       이 줄이 (A) 거절의 이빨이다. 여기를 풀면 안전성이 파서의 merge 우선순위에 얹힌다.
+dcase RED ok:list "merge key '<<: *d' — 앵커가 tools: [Write] 를 실어 주입(키 줄 0개)"   'defaults: &d\n  tools: [Write]\n<<: *d'
+dcase RED ok:list "merge key + 'tools: []' — 부재 검사를 만족시켜도 형태로 거절"          'defaults: &d\n  tools: [Write]\ntools: []\n<<: *d'
+dcase RED err:-   "document-end 마커 '...' — 파서도 못 읽는다(ParserError)"              '...\ntools: Read, Grep'
+dcase RED ok:str  "인용 키 '\"description\": fixture' — 열면 \"tools\": 스펠링이 같이 열린다" '"description": fixture\ntools: Read, Grep'
+
+echo "== A-3 완화가 새로 열지 않았는지: 블록 시퀀스는 직전 빈-값 키에 속할 때만 =="
+dcase RED err:- "tools: [] 뒤 column-0 '- Write' — 파서는 ParserError"      'tools: []\n- Write'
+dcase RED err:- "skills:/- a 뒤 tools: [] 뒤 '- Write' — seq_ok 가 리셋되는가" 'skills:\n- a\ntools: []\n- Write'
+dcase RED err:- "선행 빈-값 키 없는 column-0 '- Write'"                      'tools: Read\n- Write'
 
 # 사용자가 RED 로 유지하라고 못 박은 4종 — 카브아웃이 이걸 열면 안 된다.
 echo "== 카브아웃 경계: 사용자 지정 stay-red 4종 =="
