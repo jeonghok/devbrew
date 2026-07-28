@@ -23,7 +23,7 @@ user-invocable: false
 
   > `[spec-distill v0.24.0] brief 리뷰 파이프라인 SKIPPED (DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW=1) — 충실도·방향성·냉독 전부 미검증. Step B 게이트에서 확인하세요.`
 
-- `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1` → codex 2회 호출만 skip(Claude 리뷰는 정상).
+- `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1` → codex 호출만 skip(Claude 리뷰는 정상). `detect_codex.sh`가 이 스위치를 `codex_available: false`로 옮기고, **codex를 부르는 지점 전부**(1-c 방향성 · 2-b 충실도 · 2-c 충실도 재실행)가 같은 `$codex_avail`로 게이트됩니다. 러너(`run_brief_codex_reviewer.sh`)는 이 변수를 보지 않습니다 — 게이트는 **호출자 책임**입니다(`run_spec_codex_reviewer.sh`와 같은 규약). 한 지점이라도 게이트 밖이면 사용자 opt-out이 무시된 채 외부 모델에 지출이 나가고, 아래 `affected_axis: all` record가 거짓이 됩니다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` → 양쪽 웹 없이 진행 + record.
 
 ## 진입 승인 게이트 (`cost_class: high`)
@@ -163,7 +163,7 @@ Every finding must carry exactly one question for the user to decide.
 ### 1-c. codex #1 (방향성 축)
 
 ```bash
-codex_avail="$(bash "$PR/scripts/detect_codex.sh" | sed -n 's/^codex_available: //p')"
+codex_avail="$(bash "$PR/scripts/detect_codex.sh" | sed -n 's/^codex_available: //p')"   # 판정 1회 — 2-b·2-c가 이 값을 재사용
 if [[ "$codex_avail" == "true" ]]; then
   bash "$PR/scripts/run_brief_codex_reviewer.sh" direction "$PAYLOAD" "$(pwd)" "$CODEX_DIR_YAML"
 else
@@ -176,6 +176,8 @@ codex 부재 시 loud advisory:
 > `[spec-distill v0.24.0] codex 방향성 co-review SKIPPED (reason: <skip_reason>) — Claude-only, 모델 다양성 없음 (degraded).`
 
 **축은 죽지 않습니다** — Claude 담당자가 남습니다. 이것이 3-에이전트 분리(E3)의 배당금입니다.
+
+`codex_avail`은 **여기서 한 번만** 구하고 2-b·2-c가 같은 값을 재사용합니다. `affected_axis: all`(양 축 모두 skip)이 참인 근거가 바로 이 공유입니다 — 충실도 쪽 호출이 게이트 밖에 있으면 원장에는 *"codex가 양 축에서 없었다"* 가 남는데 실제로는 codex가 충실도를 봤다는, 기록이 거짓이 되는 상태가 됩니다. 그래서 `skipped` record는 이 한 곳에서만 남기고, 2-b·2-c는 중복 record 없이 같은 게이트만 다시 겁니다.
 
 `codex_avail == true`였는데도 `$CODEX_DIR_YAML`에 `codex_failed: true`가 남으면 (timeout·exec 실패·`payload_missing` 등 러너 자체의 런타임 실패) record(`component: codex`, `affected_axis: direction`, `verification_status: degraded`)를 남깁니다 — `codex_avail`은 pre-flight **부재**만 잡고, 이 케이스는 2-b가 fidelity 축에서 잡는 것과 대칭인 **런타임 실패**입니다.
 
@@ -229,16 +231,22 @@ critic의 raw 출력을 **요약·바꿔쓰기 없이 그대로** `CRITIC_OUT="$
 ### 2-b. codex #2 (충실도 축) + 병합
 
 ```bash
-bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$PAYLOAD" "$(pwd)" "$CODEX_FID_YAML"
+if [[ "${codex_avail:-}" == "true" ]]; then
+  bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$PAYLOAD" "$(pwd)" "$CODEX_FID_YAML"
+else
+  : # skip — 1-c의 affected_axis: all record가 이 축까지 덮는다(중복 record 없음)
+fi
 python3 "$PR/scripts/merge_brief_review.py" \
     --critic-output "$CRITIC_OUT" --codex-yaml "${CODEX_FID_YAML:-/nonexistent}"
 ```
+
+**병합은 skip 라운드에도 그대로 돕니다.** codex YAML이 없으면 병합이 `codex_degraded: true` + advisory로 그 부재를 loud하게 보고하고, critic 판정이 살아 있으면 `approved`를 막지 않습니다(양쪽 판정 불가일 때만 escalate). 그래서 게이트를 건다고 kill switch가 강제 수정 루프로 바뀌지 않습니다.
 
 codex #2는 **항상 최종 문서를 봅니다** — stale이 원리적으로 불가능합니다. 그 불가능성을 만드는 것은 서술이 아니라 2-c입니다: payload가 수정되는 모든 라운드에서 codex #2와 구조 게이트를 **수정된 바이트에 다시 돌립니다.** 재실행이 없으면 이 문장은 거짓이 되고, 충실도 verdict는 **서로 다른 두 버전의 문서**에서 계산한 합집합이 되어 합집합의 보장을 잃습니다.
 
 병합 stdout의 키를 그대로 씁니다: `fidelity_verdict` · `critic_verdict` · `codex_verdict` · `critic_verdict_unrecoverable` · `codex_isolated` · `codex_degraded` · `fidelity_findings` · `advisory[]`. `advisory[]`는 사용자에게 **그대로** 표시합니다.
 
-`codex_degraded: true`이면 (`run_brief_codex_reviewer.sh`가 timeout·exec 실패·`payload_missing` 등으로 fallback YAML을 낸 경우) record(`component: codex`, `affected_axis: fidelity`, `verification_status: degraded`)를 남깁니다 — 1-c의 `affected_axis: all` record는 codex가 애초에 **없는** 케이스만 다루고, 이 record는 codex가 있었는데 **이 라운드에 실패한** 케이스를 다룹니다. 이걸 남기지 않으면 merge 스크립트의 `advisory[]`에만 흔적이 남고 AC15의 degrade 원장에는 흔적이 남지 않습니다.
+`codex_avail == true`였는데도 `codex_degraded: true`이면 (`run_brief_codex_reviewer.sh`가 timeout·exec 실패·`payload_missing` 등으로 fallback YAML을 낸 경우) record(`component: codex`, `affected_axis: fidelity`, `verification_status: degraded`)를 남깁니다 — 1-c의 `affected_axis: all` record는 codex가 애초에 **없는**(kill switch 포함) 케이스만 다루고, 이 record는 codex가 있었는데 **이 라운드에 실패한** 케이스를 다룹니다. `codex_avail == false`인 라운드에도 병합은 YAML 부재를 `codex_degraded: true`로 보고하지만 그건 skip의 결과이므로 여기서 record를 **중복으로 남기지 않습니다**(1-c의 `all`이 이미 덮습니다). 이걸 남기지 않으면 merge 스크립트의 `advisory[]`에만 흔적이 남고 AC15의 degrade 원장에는 흔적이 남지 않습니다.
 
 **권위 계약** — codex는 advisory가 아니라 **binding**입니다. 어느 리뷰어든 Issues를 내면 `needs_revise`이고, codex 단독으로도 verdict가 만들어집니다. `codex_isolated: false`는 **verdict 입력이 아니라 저자용 라벨**입니다 — 이 finding은 프레이밍을 흡수한 리뷰어가 낸 것일 수 있으니 그 가능성을 함께 고려하라는 뜻이고, **등급을 낮추는 근거가 아닙니다.**
 
@@ -252,7 +260,8 @@ codex #2는 **항상 최종 문서를 봅니다** — stale이 원리적으로 �
 # (1) 구조 게이트 재실행 — payload를 고쳤으면 무조건. 값싸고 결정론적입니다.
 python3 "$PR/scripts/check_brief.py" gate "$PAYLOAD"; gate_rc=$?
 if [[ "$gate_rc" -ne 0 ]]; then
-  exit_reason="구조 회귀 — 충실도 수정이 frontmatter/섹션 구조를 깨뜨렸다 (Law 1)"
+  echo "[spec-distill v0.24.1] 구조 회귀 — 충실도 수정이 frontmatter/섹션 구조를 깨뜨렸다 (Law 1). 재리뷰·재병합으로 넘어가지 않는다; 구조를 먼저 고치고 이 블록을 처음부터 다시 탄다." >&2
+  exit 1
 fi
 # (2) §6에 S<N>을 추가한 라운드면 원문 완전성도 재실행 (진입 첫 액션과 같은 규칙)
 python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE"; vc_rc=$?
@@ -261,8 +270,12 @@ python3 "$PR/scripts/brief_review_state.py" can-redispatch "$STATE"; can=$?
 if [[ "$can" -eq 0 ]]; then
   python3 "$PR/scripts/brief_review_state.py" bump-critic-round "$STATE"   # 재dispatch 허용된 시점에만 +1
   # ... fresh critic 재dispatch (2-a 블록 그대로, $CRITIC_OUT 덮어쓰기)
-  # (3) codex #2도 **수정된 바이트**에 다시 돌린 뒤 재병합한다
-  bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$PAYLOAD" "$(pwd)" "$CODEX_FID_YAML"
+  # (3) codex #2도 **수정된 바이트**에 다시 돌린 뒤 재병합한다 — 게이트 통과 후, 이 분기 안에서만
+  if [[ "${codex_avail:-}" == "true" ]]; then
+    bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$PAYLOAD" "$(pwd)" "$CODEX_FID_YAML"
+  else
+    : # skip — 1-c의 affected_axis: all record가 이 라운드까지 덮는다
+  fi
   python3 "$PR/scripts/merge_brief_review.py" \
       --critic-output "$CRITIC_OUT" --codex-yaml "${CODEX_FID_YAML:-/nonexistent}"
 else
@@ -270,9 +283,9 @@ else
 fi
 ```
 
-**(1) 구조 게이트는 경고가 아니라 차단입니다.** `gate_rc != 0`이면 재리뷰로 넘어가지 않고 구조 회귀를 먼저 고칩니다 — 충실도 수정이 만든 frontmatter·섹션 구조 위반은 **새로 생긴 Law 1 실패**이고, 그것을 안고 진행하면 Step B는 *"구조 게이트가 통과했다"* 를 거짓으로 보고하게 됩니다. 게이트가 초록이 된 뒤 이 블록을 다시 탑니다. `vc_rc`는 진입 첫 액션과 **같은 표**(`0` 진행 / `1` 차단 / `3`·`4`·그 외 non-zero는 degrade 후 계속 + record)로 처리합니다.
+**(1) 구조 게이트는 경고가 아니라 차단입니다.** `gate_rc != 0`이면 블록이 `exit 1`로 **거기서 멈춥니다** — 뒤의 `check_verbatim_coverage.py`·`can-redispatch`·`bump-critic-round`·재dispatch가 하나도 실행되지 않습니다. 이유를 변수에만 담고 흘려보내면 서술만 차단이고 실행은 통과입니다(이 파일의 이전 판이 정확히 그 shape이었고, 대입한 변수를 읽는 곳이 리포 전체에 0곳이었습니다). 충실도 수정이 만든 frontmatter·섹션 구조 위반은 **새로 생긴 Law 1 실패**이고, 그것을 안고 진행하면 Step B는 *"구조 게이트가 통과했다"* 를 거짓으로 보고하게 됩니다. 게이트가 초록이 된 뒤 이 블록을 처음부터 다시 탑니다. `vc_rc`는 진입 첫 액션과 **같은 표**(`0` 진행 / `1` 차단 / `3`·`4`·그 외 non-zero는 degrade 후 계속 + record)로 처리합니다.
 
-**(3) codex #2 재실행이 필수인 이유.** 충실도 verdict는 critic과 codex findings의 **fail-closed 합집합**입니다. 두 입력이 서로 다른 버전의 문서에서 나오면 그 합집합은 어느 한 버전에 대해서도 완전하지 않습니다 — 합집합이 주는 보장 자체가 사라집니다. 그리고 codex는 binding이므로, 수정이 새로 만든 왜곡을 codex가 보지 못한 채 승인이 나올 수 있습니다. 재실행 비용은 이미 재dispatch 상한 2가 묶고 있으므로 무한 루프가 되지 않습니다(critic·codex 각각 최대 3회 = 최초 1 + 재2). `$CRITIC_OUT`·`$CODEX_FID_YAML`은 라운드마다 **덮어씁니다** — 이전 라운드의 산출이 남으면 그게 곧 stale입니다. 재실행 라운드에도 2-b의 `codex_degraded` record 규칙이 그대로 적용됩니다.
+**(3) codex #2 재실행이 필수인 이유.** 충실도 verdict는 critic과 codex findings의 **fail-closed 합집합**입니다. 두 입력이 서로 다른 버전의 문서에서 나오면 그 합집합은 어느 한 버전에 대해서도 완전하지 않습니다 — 합집합이 주는 보장 자체가 사라집니다. 그리고 codex는 binding이므로, 수정이 새로 만든 왜곡을 codex가 보지 못한 채 승인이 나올 수 있습니다. 재실행 비용은 이미 재dispatch 상한 2가 묶고 있으므로 무한 루프가 되지 않습니다(critic·codex 각각 최대 3회 = 최초 1 + 재2). `$CRITIC_OUT`·`$CODEX_FID_YAML`은 라운드마다 **덮어씁니다** — 이전 라운드의 산출이 남으면 그게 곧 stale입니다. 재실행 라운드에도 2-b의 `codex_degraded` record 규칙이 그대로 적용됩니다. 그리고 이 재실행도 **2-b와 같은 `$codex_avail` 게이트 안**에 있습니다 — 게이트 없이 돌면 사용자 opt-out이 하필 재실행 경로로 새어나가고, 라운드마다 외부 모델 지출이 반복됩니다.
 
 `can == 0`일 때만 카운터를 올리고 재dispatch합니다 — 분기를 주석 하나로 서술하지 않고 `if`로 명시하는 이유는, escalate 경로에서 실수로 카운터가 한 번 더 올라가는 shape을 애초에 봉쇄하기 위해서입니다(clamp가 상한 초과는 막아도, 게이트를 거치지 않고 bump가 실행되는 모양 자체는 AC13이 load-bearing으로 보는 지점입니다).
 
