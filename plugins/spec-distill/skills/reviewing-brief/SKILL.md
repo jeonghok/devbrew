@@ -28,7 +28,7 @@ user-invocable: false
 
 ## 진입 승인 게이트 (`cost_class: high`)
 
-이 skill은 에이전트 3 + codex 2 = 모델 호출 5회를 씁니다. CLAUDE.md 규약대로 **진입 시 1회** 지출 승인을 받습니다. 이 게이트는 **무조건**이며 외부 문서의 미래 결론에 의존하지 않습니다.
+이 skill은 에이전트 3 + codex 2 = 모델 호출 5회를 씁니다 — 수정이 **없는** 경로의 값입니다. 충실도 수정이 일어나면 그 라운드마다 critic과 codex #2가 함께 재실행되므로(2-c) 호출 수가 늘고, 그 증가는 2-c의 재dispatch 게이트가 묶습니다. CLAUDE.md 규약대로 **진입 시 1회** 지출 승인을 받습니다. 이 게이트는 **무조건**이며 외부 문서의 미래 결론에 의존하지 않습니다.
 
 ```javascript
 AskUserQuestion({
@@ -234,7 +234,7 @@ python3 "$PR/scripts/merge_brief_review.py" \
     --critic-output "$CRITIC_OUT" --codex-yaml "${CODEX_FID_YAML:-/nonexistent}"
 ```
 
-codex #2는 **항상 최종 문서를 봅니다** — stale이 원리적으로 불가능합니다.
+codex #2는 **항상 최종 문서를 봅니다** — stale이 원리적으로 불가능합니다. 그 불가능성을 만드는 것은 서술이 아니라 2-c입니다: payload가 수정되는 모든 라운드에서 codex #2와 구조 게이트를 **수정된 바이트에 다시 돌립니다.** 재실행이 없으면 이 문장은 거짓이 되고, 충실도 verdict는 **서로 다른 두 버전의 문서**에서 계산한 합집합이 되어 합집합의 보장을 잃습니다.
 
 병합 stdout의 키를 그대로 씁니다: `fidelity_verdict` · `critic_verdict` · `codex_verdict` · `critic_verdict_unrecoverable` · `codex_isolated` · `codex_degraded` · `fidelity_findings` · `advisory[]`. `advisory[]`는 사용자에게 **그대로** 표시합니다.
 
@@ -249,14 +249,30 @@ codex #2는 **항상 최종 문서를 봅니다** — stale이 원리적으로 �
 `fidelity_verdict`가 `needs_revise`면 수정하고 **fresh critic 재리뷰 1회는 구조적으로 필수**입니다(E8 — writer가 자기 수정을 승인하는 경로 차단). 재dispatch **전에** 게이트를 통과해야 합니다:
 
 ```bash
+# (1) 구조 게이트 재실행 — payload를 고쳤으면 무조건. 값싸고 결정론적입니다.
+python3 "$PR/scripts/check_brief.py" gate "$PAYLOAD"; gate_rc=$?
+if [[ "$gate_rc" -ne 0 ]]; then
+  exit_reason="구조 회귀 — 충실도 수정이 frontmatter/섹션 구조를 깨뜨렸다 (Law 1)"
+fi
+# (2) §6에 S<N>을 추가한 라운드면 원문 완전성도 재실행 (진입 첫 액션과 같은 규칙)
+python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE"; vc_rc=$?
+
 python3 "$PR/scripts/brief_review_state.py" can-redispatch "$STATE"; can=$?
 if [[ "$can" -eq 0 ]]; then
   python3 "$PR/scripts/brief_review_state.py" bump-critic-round "$STATE"   # 재dispatch 허용된 시점에만 +1
-  # ... fresh critic 재dispatch
+  # ... fresh critic 재dispatch (2-a 블록 그대로, $CRITIC_OUT 덮어쓰기)
+  # (3) codex #2도 **수정된 바이트**에 다시 돌린 뒤 재병합한다
+  bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$PAYLOAD" "$(pwd)" "$CODEX_FID_YAML"
+  python3 "$PR/scripts/merge_brief_review.py" \
+      --critic-output "$CRITIC_OUT" --codex-yaml "${CODEX_FID_YAML:-/nonexistent}"
 else
   : # can == 1 → escalate. 더 이상 재dispatch 없음 — Step B forced escalate로 수렴
 fi
 ```
+
+**(1) 구조 게이트는 경고가 아니라 차단입니다.** `gate_rc != 0`이면 재리뷰로 넘어가지 않고 구조 회귀를 먼저 고칩니다 — 충실도 수정이 만든 frontmatter·섹션 구조 위반은 **새로 생긴 Law 1 실패**이고, 그것을 안고 진행하면 Step B는 *"구조 게이트가 통과했다"* 를 거짓으로 보고하게 됩니다. 게이트가 초록이 된 뒤 이 블록을 다시 탑니다. `vc_rc`는 진입 첫 액션과 **같은 표**(`0` 진행 / `1` 차단 / `3`·`4`·그 외 non-zero는 degrade 후 계속 + record)로 처리합니다.
+
+**(3) codex #2 재실행이 필수인 이유.** 충실도 verdict는 critic과 codex findings의 **fail-closed 합집합**입니다. 두 입력이 서로 다른 버전의 문서에서 나오면 그 합집합은 어느 한 버전에 대해서도 완전하지 않습니다 — 합집합이 주는 보장 자체가 사라집니다. 그리고 codex는 binding이므로, 수정이 새로 만든 왜곡을 codex가 보지 못한 채 승인이 나올 수 있습니다. 재실행 비용은 이미 재dispatch 상한 2가 묶고 있으므로 무한 루프가 되지 않습니다(critic·codex 각각 최대 3회 = 최초 1 + 재2). `$CRITIC_OUT`·`$CODEX_FID_YAML`은 라운드마다 **덮어씁니다** — 이전 라운드의 산출이 남으면 그게 곧 stale입니다. 재실행 라운드에도 2-b의 `codex_degraded` record 규칙이 그대로 적용됩니다.
 
 `can == 0`일 때만 카운터를 올리고 재dispatch합니다 — 분기를 주석 하나로 서술하지 않고 `if`로 명시하는 이유는, escalate 경로에서 실수로 카운터가 한 번 더 올라가는 shape을 애초에 봉쇄하기 위해서입니다(clamp가 상한 초과는 막아도, 게이트를 거치지 않고 bump가 실행되는 모양 자체는 AC13이 load-bearing으로 보는 지점입니다).
 

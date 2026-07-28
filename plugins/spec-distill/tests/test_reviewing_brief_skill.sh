@@ -194,6 +194,43 @@ grep -qE '최초 리뷰.*0 유지|0 유지.*최초' <<<"$W2C" \
 grep -qE 'fresh critic.*(필수|1회)' "$SKILL" \
   && note PASS "AC13/E8: 수정 후 fresh critic 재리뷰 1회 필수" || note FAIL "AC13/E8: fresh 재리뷰 필수 서술 부재"
 
+# --- CR-3 : 수정 후 재검증 — 구조 게이트 + codex #2가 **수정된 바이트**를 본다 ---
+# 이전 계약은 fresh critic 재리뷰만 요구했다. codex #2와 check_brief.py 구조 게이트는
+# 둘 다 수정 루프 **이전**에만 돌았으므로 (a) codex가 수정 전 바이트만 보고 낸 판정으로
+# 합집합이 계산되고(두 버전의 문서에서 계산한 합집합은 합집합의 보장을 잃는다),
+# (b) 충실도 수정이 만든 frontmatter·섹션 구조 회귀가 Law 1 게이트를 통과한 것으로
+# 보고됐다. 아래 assert는 전부 **실행되는 fence 라인**(fence()가 주석을 버린다)에
+# 걸린다 — 산문 한 줄로 만족되지 않게 하기 위해서다.
+W2C_BASH="$(fence "$W2C")"
+# ⚠️ 모든 패턴은 **줄 시작 앵커**다(`^[[:space:]]*<명령>`). fence()가 걸러주는 것은
+#    `#` 주석뿐이라, 같은 문구를 품은 *산문 한 줄*이 펜스 안에 들어와도 substring
+#    검사(`has`)는 통과한다 — 실측으로 확인한 decoy다("이 시점에 python3 … 를 반드시
+#    재실행합니다."). 앵커를 걸면 그 줄은 명령으로 시작하지 않아 red가 된다.
+CR3_GATE_RE='^[[:space:]]*python3 "\$PR/scripts/check_brief\.py" gate '
+CR3_CODEX_RE='^[[:space:]]*bash "\$PR/scripts/run_brief_codex_reviewer\.sh" fidelity '
+CR3_MERGE_RE='^[[:space:]]+python3 "\$PR/scripts/merge_brief_review\.py"'
+grep -qE "$CR3_GATE_RE" <<<"$W2C_BASH" \
+  && note PASS "CR-3: 2-c가 payload 수정 후 check_brief.py gate를 재실행(실행 라인, 줄-시작 앵커)" \
+  || note FAIL "CR-3: 2-c에 check_brief.py gate 재실행 호출 부재 — 충실도 수정이 만든 구조 회귀가 통과한다"
+grep -qE '^[[:space:]]*if \[\[ "\$gate_rc" -ne 0 \]\]' <<<"$W2C_BASH" \
+  && note PASS "CR-3: 구조 게이트 실패가 분기로 차단됨(경고 아님)" \
+  || note FAIL "CR-3: 구조 게이트 실패 차단 분기 부재 (rc를 잡아 non-zero에 분기하지 않는다)"
+grep -qE "$CR3_CODEX_RE" <<<"$W2C_BASH" \
+  && note PASS "CR-3: 2-c가 codex #2를 수정된 바이트에 재실행(실행 라인, 줄-시작 앵커)" \
+  || note FAIL "CR-3: 2-c에 codex #2 재실행 호출 부재 — 합집합이 서로 다른 두 버전에서 계산된다"
+grep -qE "$CR3_MERGE_RE" <<<"$W2C_BASH" \
+  && note PASS "CR-3: 2-c가 재리뷰 결과를 재병합(실행 라인, 줄-시작 앵커)" \
+  || note FAIL "CR-3: 2-c에 재병합 호출 부재 — 재리뷰 결과가 verdict로 수렴하지 않는다"
+# 자기 서술과 shipping의 정합 — "항상 최종 문서를 본다"는 주장이 문서에 있다면
+# 그것을 참으로 만드는 재실행 호출이 루프 윈도우에 실재해야 한다.
+if grep -qE 'codex #2는 \*\*항상 최종 문서' "$SKILL"; then
+  grep -qE "$CR3_CODEX_RE" <<<"$W2C_BASH" \
+    && note PASS "CR-3: '항상 최종 문서' 주장이 2-c 재실행 호출로 뒷받침됨" \
+    || note FAIL "CR-3: '항상 최종 문서'를 주장하면서 2-c에 codex 재실행이 없다 (주장 > shipping)"
+else
+  note PASS "CR-3: '항상 최종 문서' 주장이 문서에 없음 (주장-shipping 불일치 없음)"
+fi
+
 # --- AC1 : 파이프라인 순서 + 진입 첫 액션 ------------------------------------
 grep -qF 'check_verbatim_coverage.py' "$SKILL" \
   && note PASS "AC1: 완전성 검사 호출" || note FAIL "AC1: check_verbatim_coverage.py 부재"
