@@ -3,6 +3,36 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.0] — 2026-07-28
+
+repo-wide Law 2 락 `tests/test_agent_frontmatter_keys.sh`에 **리터럴 빈 시퀀스 카브아웃**을
+추가. 락은 flow-sequence `tools: [...]`를 통째로 거절했는데, 그 결과 *"도구를 하나도 갖지
+않는다"* 를 선언할 수 있는 형태가 리포에 하나도 남지 않았다 — zero-tool 격리 리뷰어를
+선언하려는 플러그인이 이 락과 자기 락 사이에서 어떤 형태로도 양쪽을 만족할 수 없었다.
+**보안 컨트롤 편집이므로 카브아웃은 가능한 가장 좁게** 열었다.
+
+### Changed
+- `tests/test_agent_frontmatter_keys.sh` L2 — `tools:` 값이 **정확히 `[]`** 이면(콜론 앞뒤
+  수평 공백은 기존 trim 이 이미 처리) flow-seq 거절을 면제한다. flow-seq 전면 거절의 근거는
+  *"토큰이 다음 줄로 이어지거나 쪼개져/숨어 금지 이름 정확매칭을 피할 수 있다"* 인데, 리터럴
+  빈 시퀀스에는 **숨길 토큰이 0개**라 그 근거가 적용되지 않는다.
+- 같은 FAIL 메시지에 *"도구를 하나도 주지 않으려면 정확히 `tools: []` 로 쓸 것"* 안내를 추가.
+
+**카브아웃이 열지 **않는** 것 (전부 계속 FAIL, mutation 으로 락함):**
+`tools: [Write]` · `tools: [ Read ]` · `tools: [Read, Write]` · `tools: [ ]`(내부 공백만 있어도
+정확 일치가 아니다) · `tools: [], Write` · `tools: []Write` · `tools: []` 다음 줄의 들여쓴
+continuation · bare `tools:`(YAML null — 런타임이 *"키 미설정 = 전 도구 허용"* 으로 읽을 수 있는
+silent fail-open 이며 빈 시퀀스와 **다른 값**이다).
+
+카브아웃 술어는 2바이트 문자열 `[]` 에 대한 **정확 일치**이고 `case` glob 이 아니라 `[ = ]`
+문자열 비교다(`case` 패턴의 `[]` 는 bracket expression 으로 해석될 여지가 있어 조용히 뜻이
+달라진다). 그리고 카브아웃은 이 `case` 의 거절만 면제하고 **`continue` 하지 않는다** — 아래
+multiline continuation 가드를 건너뛰면 `tools: []` 다음 줄에 들여쓴 `Write` 를 붙이는 우회가
+열린다(그 케이스도 mutation 으로 락함).
+
+### Added
+- `tests/test_agent_tools_lock_mutation.sh` — 카브아웃 경계 11 케이스(GREEN 3 / RED 8). 34 → 45.
+
 ## [2.13.0] — 2026-07-19
 
 Review gate 리뷰어 구성을 **고정 로스터 → 스코프-구동 동적 구성**으로 전환. 오케스트레이터가

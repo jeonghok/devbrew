@@ -91,16 +91,41 @@ for f in plugins/*/agents/*.md; do
   # 쪼개지거나(flow-seq), 참조/태그/이스케이프로 숨겨(anchor/tag/quoted) 금지 이름 정확매칭을
   # 피할 수 있다. 8 실 agent 는 전부 plain unquoted 라 이 거절로 잃는 것이 없다.
   tools_val="$(printf '%s' "${tools_line#tools:}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+  # ── v2.14.0 카브아웃: **리터럴 빈 시퀀스** `tools: []` 하나만 ──────────────
+  # 위 flow-seq 전면 거절의 근거는 *"토큰이 다음 줄로 이어지거나 쪼개져/숨어 금지 이름
+  # 정확매칭을 피할 수 있다"* 이다. 리터럴 빈 시퀀스에는 **숨길 토큰이 0개**라 그 근거가
+  # 적용되지 않는다 — zero-tool agent(도구를 하나도 갖지 않는 격리 리뷰어)를 선언하는
+  # 유일하게 안전한 형태다. bare `tools:`(YAML null)는 계속 거절한다: null 은 런타임이
+  # "키 미설정 = 전 도구 허용"으로 읽을 수 있는 silent fail-open 이고 빈 시퀀스와 **다른
+  # 값**이다.
+  #
+  # 술어는 2바이트 문자열 `[]` 에 대한 **정확 일치**다(위 sed 가 앞뒤 수평 공백을 이미
+  # 벗겨 `tools:   []   ` 도 여기 도달한다). 대괄호 안에 무엇이든 허용하는 술어는 경계를
+  # 가진 술어이고 경계는 틀릴 수 있다 — `[ ]` 를 열면 `[  ]`·`[\t]`·`[ , ]` 로 이어지는
+  # 열거 게임이 시작된다(이 락이 ⑥~⑰ 로 세 라운드에 걸쳐 배운 그 게임). 그래서 `[ ]` 도
+  # 거절한다. glob 이 아니라 `[ = ]` 문자열 비교를 쓰는 이유: `case` 패턴에서 `[]` 는
+  # bracket expression 으로 해석될 여지가 있어 조용히 뜻이 달라진다.
+  #
+  # ⚠️ 여기서 `continue` 하지 말 것. 아래 multiline continuation 가드를 건너뛰면
+  # `tools: []` 다음 줄에 들여쓴 `Write` 를 붙이는 우회가 열린다(mutation 케이스로 락함).
+  # 카브아웃은 **이 case 의 거절만** 면제하고 나머지 검증은 그대로 통과시킨다.
+  # (`[]` 는 아래 토큰 루프에서 금지 8종에도 MCP 서버 grant 에도 매칭되지 않는 무해 토큰.)
+  is_zero_tool_seq=no
+  [ "$tools_val" = "[]" ] && is_zero_tool_seq=yes
+  if [ "$is_zero_tool_seq" = no ]; then
   case "$tools_val" in
     ''|\"*|\'*|'>'*|'|'*|'['*|'&'*|'*'*|'!'*)
       echo "FAIL [L2] $f: 'tools:' 값이 비어있거나 plain(unquoted) 단일 라인 scalar 가 아니다" >&2
       echo "  (인용 \"...\"/'...', block scalar >/|, flow-seq [...], anchor/alias &a/*a, tag !!seq)." >&2
       echo "  'tools: A, B, C' 형태로 바꿀 것 — 그 외 형태는 값이 다음 줄로 이어지거나 토큰이 쪼개져/" >&2
       echo "  참조·태그·이스케이프로 숨어 금지 이름 정확매칭을 피할 수 있어 fail-closed 로 거절한다." >&2
+      echo "  도구를 하나도 주지 않으려면 **정확히** 'tools: []' 로 쓸 것 (bare 'tools:' 는 YAML null" >&2
+      echo "  이라 런타임이 '키 미설정 = 전 도구 허용'으로 읽을 수 있어 거절된다)." >&2
       violations=$((violations+1))
       continue
       ;;
   esac
+  fi
   # multiline plain scalar 탐지: `tools:` 다음 줄이 들여쓰기된 비어있지 않은 줄이면 값이 여러 줄로
   # 접혀 이어진다(plain 값이 tools: 줄에서 시작). grep -m1 은 첫 줄만 보므로 뒤 토큰을 놓친다 → 거절.
   # (block sequence `tools:\n  - X` 는 empty-value 로, block scalar `>`/`|` 와 인용 multiline 은 시작

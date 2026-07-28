@@ -158,5 +158,52 @@ echo "== 보강: 안전해 보여도 인용은 거절(fail-closed; 8 실 agent �
 write_agent 'tools: "Read, Grep, Glob"'
 expect RED "인용 scalar 는 plain 이 아니라 거절 — plain 'Read, Grep, Glob' 로 쓸 것"
 
+# 🔴 v2.14.0 카브아웃 — **리터럴 빈 시퀀스** `tools: []` 하나만 열린다.
+# flow-seq 전면 거절의 근거(위 ⑩)는 *"토큰이 쪼개져/숨어 금지 이름 정확매칭을 피한다"* 인데,
+# 리터럴 빈 시퀀스에는 **숨길 토큰이 0개**라 그 근거가 적용되지 않는다. 아래 케이스들이
+# 카브아웃의 경계를 양방향으로 못 박는다 — 하나라도 GREEN 으로 새면 카브아웃이 flow-seq
+# 거절 전체를 무력화한 것이다.
+echo "== 카브아웃: 리터럴 빈 시퀀스는 유효한 zero-tool 선언 =="
+write_agent 'tools: []'
+expect GREEN "tools: [] — 숨길 토큰이 0개라 flow-seq 거절 근거가 적용되지 않는다"
+write_agent 'tools:   []'
+expect GREEN "tools:   [] — 콜론 뒤 수평 공백은 이미 trim 된다"
+write_agent 'tools: []   '
+expect GREEN "tools: []<후행공백> — 후행 수평 공백도 이미 trim 된다"
+
+echo "== 카브아웃 경계: 토큰이 하나라도 있으면 여전히 RED =="
+write_agent 'tools: [Write]'
+expect RED "tools: [Write] — 카브아웃이 이걸 열면 안 된다"
+write_agent 'tools: [ Read ]'
+expect RED "tools: [ Read ] — 내부 공백이 있어도 토큰이 있으면 거절"
+write_agent 'tools: [Read, Write]'
+expect RED "tools: [Read, Write] — 다중 토큰 flow-seq 거절 유지(⑩ 과 같은 클래스)"
+
+# `[ ]` 를 **거절**하기로 한 결정과 그 근거:
+#   카브아웃 술어는 2바이트 문자열 `[]` 에 대한 **정확 일치**다. 대괄호 안에 무엇이든
+#   허용하는 술어는 경계를 가진 술어이고, 경계는 틀릴 수 있다(`[ ]` 를 허용하면 다음은
+#   `[  ]`, `[\t]`, `[ , ]` … 열거 게임이 열린다 — 이 파일이 ⑥~⑰ 로 세 라운드에 걸쳐
+#   배운 바로 그 게임이다). 보안 컨트롤에서 카브아웃은 **가능한 가장 좁게**가 옳고,
+#   `[ ]` 는 zero-tool 을 뜻하려는 저자가 실수로 쓰는 형태도 아니다(실 agent 2개 모두
+#   `[]`). 거절 비용은 *"tools: [] 로 쓰라"* 는 명확한 FAIL 메시지 하나다.
+echo "== 카브아웃 경계: 내부 공백만 있는 [ ] 도 거절(카브아웃은 정확 일치) =="
+write_agent 'tools: [ ]'
+expect RED "tools: [ ] — 카브아웃은 리터럴 '[]' 정확 일치이며 그 밖은 열지 않는다"
+
+echo "== 카브아웃 경계: bare tools: (YAML null) 는 계속 거절 =="
+write_agent 'tools:'
+expect RED "bare tools: 는 YAML null — 런타임이 '키 미설정 = 전 도구 허용'으로 읽을 수 있는 fail-open"
+
+echo "== 카브아웃 경계: [] 뒤에 토큰을 이어 붙이는 우회 =="
+write_agent 'tools: [], Write'
+expect RED "tools: [], Write — 정확 일치가 아니므로 flow-seq 거절로 떨어진다"
+write_agent 'tools: []Write'
+expect RED "tools: []Write — 정확 일치가 아니므로 flow-seq 거절로 떨어진다"
+
+echo "== 카브아웃 경계: [] 뒤 continuation 줄 (multiline 가드가 살아있는가) =="
+write_agent 'tools: []
+  Write'
+expect RED "tools: [] 뒤 indented continuation — 카브아웃이 multiline 가드를 건너뛰면 안 된다"
+
 echo; echo "mutation: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
