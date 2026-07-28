@@ -384,7 +384,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 
 게이트(Step A 5)를 통과한 payload는 **Law 1 구조 자기검사**를 마친 것이고, 아직 **분리 리뷰**를
 받지 않았습니다. 여기서 `reviewing-brief` skill로 넘깁니다 — 축은 둘(충실도·방향성), 담당은
-셋 + codex 2회이며, 절차는 그 skill이 소유합니다(여기에 복제하지 않습니다).
+셋 + codex이며, 절차는 그 skill이 소유합니다(여기에 복제하지 않습니다).
 
 핸드오프 변수 3개를 그 skill과 같은 리졸버로 세팅합니다(state 배치 규약 정합, PN1):
 
@@ -400,7 +400,7 @@ CODEX_FID_YAML="$ROOT/$harness_sid/codex-fidelity.yaml"
 Skill spec-distill:reviewing-brief   # 인자: $PAYLOAD, $CODEX_DIR_YAML, $CODEX_FID_YAML
 ```
 
-- 그 skill이 `cost_class: high` 진입 승인 게이트를 띄웁니다(모델 호출 5회).
+- 그 skill이 `cost_class: high` 진입 승인 게이트를 띄웁니다(모델 호출 하한 5 · 상한 9).
 - `DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW=1`이면 파이프라인이 전체 skip되고 skip record가
   Step B 게이트 질문에 표시됩니다 — 조용한 생략이 아닙니다.
 - 리뷰가 payload를 수정할 수 있습니다(§2 제약·§3 OQ 등). 수정이 일어나면 Step B는 **리뷰 후

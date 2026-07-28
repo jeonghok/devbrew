@@ -82,6 +82,15 @@ grep -q 'CLAUDE_PLUGIN_ROOT:-' "$RUNNER" \
 grep -qE '^set -euo pipefail' "$RUNNER" \
   && note PASS "T16: runner set -euo pipefail" || note FAIL "T16: runner에 set -euo pipefail 없음"
 
+# B1: 추론 강도를 하니스가 핀하지 않는다 — 사용자 codex 설정이 지배한다.
+# `-c model_reasoning_effort=...`를 박으면 high/xhigh로 설정한 사용자가 조용히 하향되고,
+# 그 하향은 이 co-reviewer의 유일한 존재 이유(별-모델 적발력)를 정확히 깎는다.
+# 주석의 언급(핀하지 *않는다*는 설명)과 실제 인자를 구분해야 하므로 **실행 인자 라인**만 본다:
+# `-c ...` 로 시작하는(선행 공백 허용) 줄 — 주석은 `#`로 시작해 이 앵커에 걸리지 않는다.
+grep -qE '^[[:space:]]*-c .*model_reasoning_effort' "$RUNNER" \
+  && note FAIL "B1: runner가 model_reasoning_effort를 인자로 핀 — 사용자 설정을 하향 억제한다" \
+  || note PASS "B1: runner가 추론 강도를 핀하지 않는다 (사용자 codex 설정이 지배)"
+
 # env 없이도 죽지 않고 항상 YAML을 쓴다 (codex 부재 환경에서 확인)
 tmpout="$(mktemp)" || exit 1
 ( unset CLAUDE_PLUGIN_ROOT; PATH=/usr/bin:/bin bash "$RUNNER" fidelity "$PAYLOAD" "$REPO_ROOT" "$tmpout" >/dev/null 2>&1 )

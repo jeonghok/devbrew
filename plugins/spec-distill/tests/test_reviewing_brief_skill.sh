@@ -72,6 +72,20 @@ grep -qE 'sweep(의|이)? (결론|판단)에 따라|sweep 이후에 (결정|재�
   && note FAIL "T17: 승인 게이트를 외부 문서 결론에 조건부로 걸었다" \
   || note PASS "T17: 승인 게이트가 무조건 확정"
 
+# --- B4 : 승인 게이트가 싣는 숫자는 **상한**이다 -----------------------------
+# 사용자가 승인하는 것은 실제로 나갈 수 있는 최대치여야 한다. 2-c 재실행이 들어오면서
+# 천장은 에이전트 5 + codex 4가 됐는데 question 텍스트는 하한(3 + 2)만 말하고 있었다.
+# 검사는 **question: 라인 자체**(사용자가 읽는 문자열)를 지목한다 — 근처 산문이
+# 상한을 말해도 게이트가 말하지 않으면 승인의 근거가 아니다.
+QGATE_LINE="$(grep -E '^[[:space:]]*question: "brief 리뷰 파이프라인' "$SKILL" | head -1)"
+[[ -n "$QGATE_LINE" ]] \
+  && note PASS "B4: 진입 승인 게이트의 question: 라인 실재" \
+  || note FAIL "B4: 승인 게이트 question: 라인을 찾지 못했다"
+{ grep -qF '상한' <<<"$QGATE_LINE" && grep -qE '에이전트 5' <<<"$QGATE_LINE" \
+    && grep -qE 'codex 4회' <<<"$QGATE_LINE"; } \
+  && note PASS "B4: 게이트 텍스트가 상한(에이전트 5 + codex 4회)을 명시" \
+  || note FAIL "B4: 게이트 텍스트가 하한만 말한다 — 사용자가 승인한 값보다 더 쓰게 된다"
+
 # --- T14 / AC18 : 신규 kill switch --------------------------------------------
 grep -qF 'DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW' "$SKILL" \
   && note PASS "T14: 신규 kill switch 실재" || note FAIL "T14: DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW 부재"

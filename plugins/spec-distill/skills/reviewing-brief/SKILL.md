@@ -12,7 +12,7 @@ user-invocable: false
 
 # Reviewing Brief (interview 종료 단계)
 
-당신은 `conducting-interview` Step A가 게이트를 통과시킨 brief(payload)에 **분리 리뷰**를 붙이는 중입니다. 축은 둘(충실도·방향성), 담당은 셋 + 별-모델 codex 2회입니다.
+당신은 `conducting-interview` Step A가 게이트를 통과시킨 brief(payload)에 **분리 리뷰**를 붙이는 중입니다. 축은 둘(충실도·방향성), 담당은 셋 + 별-모델 codex입니다 — 수정 없는 경로에서 에이전트 3 + codex 2회이고, 충실도 수정 라운드마다 둘이 함께 재실행되어 **상한은 에이전트 5 + codex 4회**입니다.
 
 **당신(orchestrator)의 책임**: dispatch · 결정론 스크립트 호출 · 결과 표면화 · Step B로 전달. **당신의 책임이 아닌 것**: finding을 임의로 기각하는 것 · 방향을 바꾸는 것 · 리뷰어 대신 판정하는 것.
 
@@ -28,12 +28,20 @@ user-invocable: false
 
 ## 진입 승인 게이트 (`cost_class: high`)
 
-이 skill은 에이전트 3 + codex 2 = 모델 호출 5회를 씁니다 — 수정이 **없는** 경로의 값입니다. 충실도 수정이 일어나면 그 라운드마다 critic과 codex #2가 함께 재실행되므로(2-c) 호출 수가 늘고, 그 증가는 2-c의 재dispatch 게이트가 묶습니다. CLAUDE.md 규약대로 **진입 시 1회** 지출 승인을 받습니다. 이 게이트는 **무조건**이며 외부 문서의 미래 결론에 의존하지 않습니다.
+이 skill의 지출은 **하한 5 / 상한 9 모델 호출**입니다.
+
+| | 에이전트 dispatch | codex 실행 |
+|---|---|---|
+| 하한 (수정 없는 경로) | 3 — direction 1 · critic 1 · readback 1 | 2 — 방향성 1 · 충실도 1 |
+| 재리뷰 라운드마다 (2-c, 최대 2 라운드) | +1 (fresh critic) | +1 (충실도 재실행) |
+| **상한** | **5** | **4** |
+
+재dispatch 상한 2가 이 표의 마지막 행을 묶습니다(2-c). CLAUDE.md 규약대로 **진입 시 1회** 지출 승인을 받고, 승인 질문에는 하한이 아니라 **상한**을 싣습니다 — 사용자가 승인하는 것은 실제로 나갈 수 있는 최대치여야 합니다. 이 게이트는 **무조건**이며 외부 문서의 미래 결론에 의존하지 않습니다.
 
 ```javascript
 AskUserQuestion({
   questions: [{
-    question: "brief 리뷰 파이프라인을 돌립니다 — 에이전트 3 + codex 2회 (cost_class: high). 진행할까요?",
+    question: "brief 리뷰 파이프라인을 돌립니다 — 에이전트 3 + codex 2회로 시작하고, 충실도 수정이 일어나면 상한 에이전트 5 + codex 4회 (cost_class: high). 진행할까요?",
     header: "Review cost",
     options: [
       {label: "전체 리뷰 진행 (권장)", description: "방향성(Claude+codex) → 충실도(격리 critic+codex) → 냉독. 4개 산출물을 Step B 게이트에 올립니다."},
@@ -151,8 +159,10 @@ python3 "$PR/scripts/brief_review_state.py" set-stage "$STATE" direction
 ### 1-a. 웹 예산 확인 (dispatch 전 check)
 
 ```bash
-python3 "$PR/scripts/web_budget.py" check "$STATE"; web_rc=$?
+python3 "$PR/scripts/web_budget.py" check --prospective "$STATE"; web_rc=$?
 ```
+
+`--prospective`가 load-bearing입니다. 맨 `check`는 `> CAP`만 거부하므로 `session == 8`(인터뷰 리서치가 세션 상한을 이미 다 쓴 상태)에서 **통과**하고, 그대로 dispatch한 뒤 아래 increment가 9를 만듭니다 — 상한을 한 번 넘긴 dispatch입니다. `--prospective`는 `count + 1`로 평가해 *"지금 하려는 이 호출이 예산에 들어가는가"* 를 답합니다.
 
 `brief-direction-reviewer`는 `tools:`에 `Bash`가 **없습니다**(Law 2) — 자기 예산을 확인할 경로가 없으므로 판정은 **orchestrator 책임**입니다. 리뷰어에게 `Bash`를 주는 것은 Law 2 위반이므로 대안이 아닙니다.
 
@@ -167,7 +177,14 @@ dispatch 후 1회 increment:
 python3 "$PR/scripts/web_budget.py" increment "$STATE"; inc_rc=$?
 ```
 
-`check`와 마찬가지로 종료 코드를 **그 자리에서** 잡습니다 — 파이프를 걸면 `$?`가 파이프 마지막 명령의 것이 되어 실패한 increment가 성공으로 읽힙니다(위 §진입 첫 액션과 같은 이유). `inc_rc != 0`이면 dispatch는 이미 일어났는데 카운터는 오르지 않은 것이라 이후 예산이 과소 계상됩니다 — 조용히 넘기지 않고 record(`component: direction_reviewer`, `affected_axis: direction`, `verification_status: degraded`, reason=*"웹 예산 increment 실패 — <script가 낸 실제 reason>"*)를 남깁니다. 예산 판정 자체는 계속 위의 `check` 결과를 따릅니다.
+`check`와 마찬가지로 종료 코드를 **그 자리에서** 잡습니다 — 파이프를 걸면 `$?`가 파이프 마지막 명령의 것이 되어 실패한 increment가 성공으로 읽힙니다(위 §진입 첫 액션과 같은 이유).
+
+**`inc_rc != 0`은 "카운터가 오르지 않았다"는 뜻이 아닙니다.** `increment`는 bump-then-check라, 예산 경계에서는 카운터를 **올린 다음** 그 결과가 상한을 넘었다고 1을 냅니다 — 기록은 성공했습니다. 그래서 1-a와 **같은 방식으로 JSON `reason`을 보고 갈라야** 합니다:
+
+- `reason`이 `sweep`/`session` 초과 → increment는 **성공**했습니다(카운터가 올랐습니다). 방금 dispatch가 예산의 마지막이었다는 신호일 뿐이므로 *"increment 실패"* record를 남기지 않습니다. 남기면 사실이 아닌 degrade가 Step B 질문에 렌더됩니다.
+- 그 밖의 `reason`(`state unreadable` · `state unwritable` · `increment failed: … counter line absent`) → 카운터가 **오르지 않았습니다.** 이후 예산이 과소 계상되므로 record(`component: direction_reviewer`, `affected_axis: direction`, `verification_status: degraded`, reason=*"웹 예산 increment 실패 — \<script가 낸 실제 reason\>"*)를 남깁니다.
+
+예산 판정 자체는 계속 위의 `check --prospective` 결과를 따릅니다.
 
 > ⚠️ **계측은 dispatch 단위입니다.** 리뷰어 turn *내부*의 개별 `WebSearch`/`WebFetch` 호출 수는 리뷰어도(`Bash` 없음) orchestrator도(subagent 내부 도구 호출을 볼 수 없음) 셀 수 없습니다. 그래서 `SESSION_CAP = 8`은 이 컴포넌트에 대해 *"검색 8회"* 가 아니라 **dispatch 8회**입니다. 프롬프트로 검색 횟수를 묶는 것은 E10 위반이므로 대안이 아닙니다.
 

@@ -64,6 +64,11 @@ fi
 
 command -v codex >/dev/null 2>&1 || emit_fallback codex_not_installed
 
+# 추론 강도(`model_reasoning_effort`)는 **핀하지 않는다.** 사용자 codex 설정이 지배한다.
+# 하니스가 여기서 "medium"을 박으면 high/xhigh로 설정한 사용자가 조용히 하향되고, 그 하향은
+# 이 co-reviewer의 유일한 존재 이유(별-모델 적발력)를 정확히 깎는다 — 하니스는 능력을
+# 억제하지 않는다. 바닥값이 필요하다는 판단이 서면 그때 명시적으로 문서화해서 넣는다.
+#
 # 웹 검색: 사용자 kill switch(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1)만 끈다. 그 밖에는
 # 명시적으로 켠다 — `--search`는 TUI 전용이고 `codex exec` 경로는 이 config다.
 # 검색 *횟수* 상한은 두지 않는다 (E10: 단일 exec은 이미 턴으로 경계가 있다).
@@ -77,7 +82,6 @@ codex exec "$(cat "$PROMPT_FILE")" \
     -C "$PROJECT_DIR" \
     -s read-only \
     "${WEB_ARGS[@]}" \
-    -c 'model_reasoning_effort="medium"' \
     --json \
     < /dev/null \
     > "$STDOUT_FILE" \
