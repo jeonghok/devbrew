@@ -1,5 +1,100 @@
 # Changelog
 
+## [0.24.2] — 2026-07-29
+
+지배 원칙 하나: **`indeterminate ≠ clean`** — 돌지 못한 검사는 통과한 검사로 기록되지 않는다.
+
+### Fixed
+- **state 기록 실패가 "degrade 0건"으로 렌더되던 것** — `brief_review_state.py`의 쓰기
+  서브커맨드는 state 부재·판독 불가·쓰기 불가·frontmatter 손상에 exit 1 + `{"ok": false}`를
+  내는데 `reviewing-brief`가 그 종료 코드를 한 번도 보지 않았다. `init`이 실패하면 이후
+  `degrade-append`가 전부 실패하고 마지막 `get`도 실패해, *"모든 degradation을 Step B에
+  올린다"* 는 요구가 조용히 *"degrade 없음"* 으로 바뀐다. `init_rc` 캡처 + `$DEGRADE_FALLBACK`
+  턴-내 사본 채널(§5.6이 요구하는 즉시 표면화의 나머지 절반) + `get` 실패를 *비어 있음* 과
+  구분해 명시.
+- **`check_verbatim_coverage.py`가 malformed 원장을 exit 0으로 통과시키던 것** — (a) `- id:`로
+  시작하지 않는 리스트 항목은 통째로 무시됐고, (b) `text` 키 부재는 advisory 한 줄 뒤 success,
+  (c) `text`가 비었거나 정규화 후 비면 역시 advisory 후 계속이었다. 셋 다 그 발화가 payload §6과
+  **한 번도 대조되지 않았는데** 호출자는 0을 "위반 없음"으로 매핑한다. 셋을 exit 3(검사 불가)로.
+  세 가드는 서로 겹치지 않게 갈랐다 — 겹치면 어느 쪽을 지워도 회귀 테스트가 green이라
+  mutation으로 이빨을 증명할 수 없다.
+- **방향성 축에 unavailable 경로가 없던 것** — 냉독은 빈 출력을 명시적으로 degrade하는데
+  방향성은 `brief-direction-findings` 센티널 검증도 record도 없었다. 리뷰어가 죽고 codex #1도
+  없는(kill switch·미설치·스키마 파손) 라운드에서 축 전체가 미검증인 채 원장이 침묵했다.
+  냉독과 대칭인 결정론 검증 + `component: direction_reviewer` / `verification_status: unavailable`.
+- **`can-redispatch`의 exit 1이 두 사실을 싣던 것** — escalate(상한 도달)와 `_fail`(state
+  부재·손상)이 같은 코드다. 스킬의 `else`가 둘 다 escalate로 취급해, state가 죽었을 뿐인
+  라운드에 *"재리뷰 상한 2 초과, 미해결 findings 잔존"* 이라는 사실이 아닌 record를 남겼다.
+  실패 페이로드에 없는 `escalate` 키로 가른다.
+- **웹 예산이 상한을 1회 넘겨 dispatch할 수 있던 것** — `check`는 `> 8`만 거부하므로
+  `session == 8`에서 통과하고, dispatch 후 `increment`가 9를 만든다. `web_budget.py check
+  --prospective`(`count + 1`로 평가)를 추가해 사전 게이트가 *"지금 하려는 이 호출이 예산에
+  들어가는가"* 를 묻게 했다. 기존 `check` 계약과 `increment`의 bump-then-check는 무변경 —
+  increment-before-dispatch로 이미 올바른 `conducting-interview` 호출자에 영향이 없다.
+- **`inc_rc != 0`을 "카운터가 오르지 않았다"로 서술하던 것** — `increment`는 bump-then-check라
+  예산 경계에서는 카운터를 **올린 뒤** 1을 낸다(기록은 성공). 그 상태에서 *"웹 예산 increment
+  실패"* record가 Step B 질문에 렌더되면 거짓 degrade다. 1-a가 이미 쓰는 방식대로 JSON `reason`
+  으로 갈랐다.
+- **`build_brief_inline_blob.py`의 `\s`-개행 버그** — `^(key\s*:\s*)(.*)$`에서 `\s*`가 개행을
+  넘어, 값이 빈 redact 키가 **다음 줄을 삼켜** 그 줄을 `<redacted>`로 갈아치웠다(실측: 빈
+  `audit_file:` 다음의 `created_at:` 줄이 삭제). `check_brief.py`의 frontmatter 검증이
+  `name`·`created_at`을 보지 않으므로 빈 `name:`이 구조 게이트를 통과한 뒤 한 줄이 지워진
+  사본이 격리 critic에게 가는, 도달 가능한 경로였다. `brief_review_state.py`가 같은 클래스를
+  두 번 닫았고 이 파일이 남은 하나였다 — 형제들과 같이 `[ \t]*`로.
+- **핸드오프 invocation이 인자를 주석 안에서만 넘기던 것** — `Skill spec-distill:reviewing-brief
+  # 인자: $PAYLOAD, …`. callee는 이 세 값을 스스로 정의하지 않는다고 명시하므로 호출은 인자
+  없이 나간다. 인자를 호출 라인 위로 옮겼다.
+
+### Changed
+- **codex 추론 강도 핀 제거** — `run_brief_codex_reviewer.sh`가 `model_reasoning_effort="medium"`
+  을 박아 사용자 codex 설정을 조용히 하향시켰다. `high`/`xhigh`로 설정한 사용자가 medium으로
+  깎이고, 그 하향은 이 co-reviewer의 유일한 존재 이유(별-모델 적발력)를 정확히 겨냥한다.
+  하니스는 능력을 억제하지 않는다 — 이제 사용자 설정이 지배한다.
+- **진입 승인 게이트가 상한을 말한다** — 2-c 재실행이 들어오면서 실제 천장은 에이전트 5 +
+  codex 4인데, 사용자가 실제로 승인하는 `AskUserQuestion` 질문 텍스트는 하한(3 + 2)만 말했다.
+  `cost_class: high` 게이트가 싣는 숫자는 상한이어야 한다. 하한/상한 표를 명시하고 호출자
+  (`conducting-interview`)의 같은 주장도 동기화.
+- **P21 placeholder 집합을 producer ↔ checker 합치** — `conducting-interview`가 예시로 드는
+  `<REDACTED:라벨>`이 checker의 라벨 문자류(`[A-Za-z0-9._-]`)에 안 잡혀 정당한 치환이 hard
+  violation으로 갔다. **checker 쪽을** 넓혀 맞췄다(`[\w.-]`) — 한국어 라벨은 이 리포의
+  Korean-primary 규약상 정상이고 producer를 ASCII로 좁히면 규약과 싸운다. 넓힌 것은 글자
+  종류뿐이고 공백·`<`·`>` 불가와 길이 상한 64는 그대로라, 산문을 라벨로 위장해 L2 비교를
+  통째로 강등시키는 경로는 열리지 않는다.
+- **README가 코드를 따라잡았다** — `## Flow (v0.24.0)`으로 버전만 올라가고 다이어그램은
+  brief를 Step B로 직행시키고 있었다. 리뷰 3단계를 다이어그램에 그리고, 붙을 리스트가 없던
+  `5.5.` 고아 번호를 형제와 같은 버전 노트 문단으로, `DEVBREW_DISABLE_SPEC_DISTILL_CODEX`
+  항목에 brief 파이프라인 호출 지점 3곳(1-c · 2-b · 2-c)과 호출자-게이트 규약을 명시.
+- **회귀 락 하드닝(teeth)** — 이번 wave가 추가·수정한 assert 32개 전부 mutation으로 이빨을
+  확인했다(각 assert를 red로 만드는 단일 편집 수행 → 확인 → 바이트 동일 복원). 주요한 것:
+  README 락이 컴포넌트 이름을 섹션 전체에서 찾아 **다이어그램을 통째로 지워도 산문으로
+  충족**되던 것을 펜스 안 다이어그램 순서 락으로 교체. 핸드오프 인자 락이 `#` 뒤 텍스트를
+  세어 **주석을 보호하며 green**이던 것을, 같은 사이클이 만든 따옴표-상태 스캐너에 마커
+  인자만 추가해 재사용하는 방식으로 교체(두 번째 스트리퍼 금지). §6.3 열거표는 스스로
+  *"기계가 열거 완전성을 본다"* 고 적어놓았지만 그 기계가 없어서(리터럴 4개 존재 확인뿐)
+  실제 열거 대조를 구현했고, 표에 행이 없는 shipping 체크 2건을 **선언된 gap 목록**으로
+  리포에 박았다(아래 Known gaps).
+- **테스트 위생** — 픽스처 `.replace()`가 조용히 no-op이 되면 시나리오가 뒤바뀌어도 green이던
+  것을 `sub1()` 치환-확인 헬퍼로 봉쇄. `test -f … || note FAIL` 가드가 정상 경로에서 note를
+  안 불러 출력 Total이 조건부이던 것, 두 섹션 캡처를 구분자 없이 이어붙이던 것, 실패 메시지에
+  이스케이프된 정규식이 그대로 찍히던 것을 수정. `scoped_window()`/`fence()`가 패턴을 `awk -v`로
+  넘겨 `\[`·`\$`가 뭉개지던 것(지금 패턴이 `\.`뿐이라 **우연히** 무해했다)을 `ENVIRON`으로 통일.
+  `codex_findings_to_yaml.py`의 `meta` 추론 타입을 `dict[str, object]`로 명시.
+
+### Known gaps
+- 설계 문서 §6.3 결정론 체크 열거표에 **행이 없는 shipping 체크 2건**:
+  `build_brief_inline_blob.py`의 exit-3 잔존 검사, `brief_review_state.py`의 닫힌 열거 검증 ·
+  rounds clamp · `can-redispatch` 게이트. 특히 후자는 통과 조건(`brief_critic_rounds`)을
+  **orchestrator 자신이 쓰므로** 표가 존재하는 이유인 범주에 해당하고, 이빨 등급 판정은 기계가
+  못 한다. 설계 문서 수정은 사람 몫이라 이 사이클에서는 문서를 건드리지 않고
+  `test_brief_review_meta.sh`의 `DESIGN_GAP` 선언으로 gap을 greppable·강제 가능하게만 만들었다
+  — 새 체크가 표 없이 들어오거나, 표에서 행이 사라지거나, 사람이 표를 채운 뒤 waiver를
+  안 비우면 전부 red다.
+- `merge_review.py`(design-doc 리뷰 경로, 이 브랜치 밖)가 `codex_failed: true`인 라운드에서
+  파싱된 codex findings를 **전량 폐기**한다. mixed 라운드(정상 finding 1 + malformed 원소 1)에서
+  `combined_verdict: approved` + degrade advisory만 남고 `severity: high` finding이 사라지는 것을
+  실측했다. `merge_brief_review.py`(brief 경로)는 이미 findings를 보존한 채 degrade 마커를 함께
+  낸다 — 남은 격차는 공유 경로 한 곳이다. blast radius가 이 브랜치 밖이라 미변경.
+
 ## [0.24.1] — 2026-07-29
 
 ### Fixed
