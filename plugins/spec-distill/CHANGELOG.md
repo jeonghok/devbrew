@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.24.1] — 2026-07-29
+
+### Fixed
+- **`DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1`이 충실도 축에서 무시되던 것** — `reviewing-brief`의
+  가용성 게이트가 1-c 방향성 호출만 감쌌고, 2-b 충실도 호출과 2-c 재실행 호출은 무조건
+  실행됐다. 러너는 이 변수를 보지 않으므로(호출자-게이트 규약) `cost_class: high` skill에서
+  사용자의 명시적 opt-out이 무시된 채 외부 모델에 지출이 나갔고, 1-c가 남기는
+  `affected_axis: all` record가 거짓이 됐다. 세 지점을 모두 같은 `$codex_avail`로 게이트한다.
+  skip 라운드에도 병합은 그대로 돌아 `codex_degraded: true`로 loud하게 보고하므로 kill switch가
+  강제 수정 루프로 바뀌지 않는다. 2-b의 `codex_degraded` record에는 `codex_avail == true`
+  전제를 달아 skip의 결과에 중복 record를 남기지 않는다.
+- **구조 게이트 실패 분기가 차단하지 않던 것** — 2-c의 `gate_rc != 0` 분기가 하던 일은
+  `exit_reason=` 변수 대입 하나였고 그 변수를 읽는 곳은 리포 전체에 0곳이었다. 분기는 그대로
+  흘러내려 완전성 검사·`can-redispatch`·`bump-critic-round`·재dispatch를 전부 실행했다.
+  서술은 차단이라고 단언했으므로 문서가 shipping보다 강했다. `exit 1`로 실제 정지를 넣었다.
+
+### Changed
+- **회귀 락 하드닝(teeth)** — 이빨 없이 green이던 assert들을 교체했다. codex 호출 락은 축별로
+  세고(방향성 ≥ 1 · 충실도 ≥ 2 — 합산 하한 2는 재실행이 3번째 호출이 된 순간 방향성 호출을
+  통째로 지워도 green이었다), 구조 게이트 락은 분기 **본문**의 정지 동작을 요구하며, codex
+  재실행 락은 존재에 더해 **순서**(게이트 → `can-redispatch` → 재실행 → 재병합)와 `can == 0`
+  분기 내 포함까지 본다. 실행 라인이 주어인 assert는 전부 줄-시작 앵커로 바꿨다 — 같은 문구를
+  실은 산문 한 줄로 satisfiable했다. `run_brief_codex_reviewer.sh` 호출 3개가 전부 게이트
+  본문 안에 있는지 세는 락을 새로 추가했다.
+- `test_brief_review_entry.sh`의 `strip_trailing_linecomment()`가 문자열 경계를 줄의 마지막
+  따옴표로 잡아, 트레일링 코멘트가 따옴표 쌍을 품으면 통째로 no-op이었다. 왼쪽에서 오른쪽으로
+  훑는 따옴표-상태 스캔으로 교체(`\"` 이스케이프 존중, `"`·`'`·`` ` `` 세 종류).
+- 락의 들여쓰기 강제(`^[[:space:]]+`)를 완화(`*`) — 호출이 살아 있는데 dedent만으로 RED가
+  나던 false-red였다.
+
 ## [0.24.0] — 2026-07-27
 
 ### Added
