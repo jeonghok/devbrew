@@ -28,7 +28,15 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
                                        · 4-block Socratic + 4-path (web=path(a))
                                        · R1 Reframe / R2 Landscape / R3 Steelman / R4 Tried&Discarded / R5 OQ
                                        ▼ 5 의례 통과 (check_brief.py gate, Law 1)
-                                   interview brief → docs/superpowers/interview/   ← terminal 산출물
+                                   interview brief (payload + audit) → docs/superpowers/interview/   ← terminal 산출물
+                                       ▼ [Step A.5]  ※ 구조 게이트를 통과했을 뿐 아직 분리 리뷰 전
+                                   [2] reviewing-brief (Law 2 분리 리뷰, cost_class: high 승인 게이트)
+                                       │  진입 첫 액션: check_verbatim_coverage.py (§6 원문 ↔ state 원장)
+                                       ├─ 1단계 방향성  brief-direction-reviewer + codex #1  (보고만, 병합 없음)
+                                       ├─ 2단계 충실도  brief-critic(격리) + codex #2  fail-closed 합집합
+                                       │                needs_revise → 수정 → fresh 재리뷰 (재dispatch 상한 2)
+                                       └─ 3단계 냉독    brief-readback  (advisory, G1–G5 gap)
+                                       ▼ 산출물 4종 (확정 후보 / 방향성 C4 / readback+gap / 모든 degrade record)
                                        ▼ [Step B proceed 게이트] ①/compact 후 brainstorming · ②바로 brainstorming · ③확정 목록 수정 · ④brief만 종료  (superpowers 있을 때만)
                                    superpowers:brainstorming → -design.md
                                        ▼ [PostToolUse: design mode → pending_review]  (기존 hook)
@@ -53,10 +61,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 **v0.22.0**: [1] Interview 종료 driver를 고정 라운드 카운터에서 커버리지 원장(고정 floor 5 + 주제-도출 차원, status ∈ {open, in-progress, closed})으로 재구성 — 집요함·깊이·차원이 주제에 적응한다. tunneling 검출 에이전트는 `coverage-mapper`(주제-도출 차원 advisory 제안자)로 재명명·재목적화되었고, `blind-spot-prober`(적대적 premortem, fan-out 1)가 blind-spot floor 차원 구현으로 신설되었다. `probe_budget.py`가 Unbounded-autonomy 백스톱.
 
-5.5. **brief 리뷰 (`reviewing-brief`, v0.24.0)** — 구조 게이트를 통과한 payload에 Law 2 분리
-     리뷰를 얹는다. 방향성(`brief-direction-reviewer` + codex #1, 보고만) → 충실도
-     (`brief-critic` 격리 + codex #2, fail-closed 합집합) → 냉독(`brief-readback`, advisory).
-     `check_verbatim_coverage.py`가 진입 첫 액션으로 §6 원문 완전성을 state 원장과 대조한다.
+**v0.24.0**: 구조 게이트를 통과한 interview brief에 **Law 2 분리 리뷰**(`reviewing-brief`)를 얹었다. 방향성(`brief-direction-reviewer` + codex #1, 보고만) → 충실도(`brief-critic` 격리 + codex #2, fail-closed 합집합) → 냉독(`brief-readback`, advisory) 3단계이고, `check_verbatim_coverage.py`가 진입 첫 액션으로 §6 원문 완전성을 state 원장과 대조한다. 리뷰어 셋은 전부 fail-closed `tools:` allowlist이며 `brief-critic`·`brief-readback`은 payload를 경로가 아니라 전문 inline으로 받는다. 모든 degradation은 `brief_review_degradations` 원장 + Step B 게이트 질문 텍스트로 표면화된다 — 돌지 못한 검사가 통과한 검사로 집계되지 않는다.
 
 ## Principles Instantiated
 
@@ -140,7 +145,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 ## Kill switches
 
 - `DEVBREW_DISABLE_SPEC_DISTILL=1` — plugin 전체 abort, state 보존.
-- `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1` (v0.20.0) — codex 병렬 co-review만 skip. Claude 리뷰는 정상 동작, combined = Claude verdict + loud degrade advisory. 전역 `DEVBREW_DISABLE_SPEC_DISTILL`과 독립.
+- `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1` (v0.20.0, v0.24.0 확대) — codex 병렬 co-review만 skip. Claude 리뷰는 정상 동작, combined = Claude verdict + loud degrade advisory. 전역 `DEVBREW_DISABLE_SPEC_DISTILL`과 독립. **적용 범위는 두 경로 전부**: (a) design-doc 리뷰(`reviewing-spec`), (b) brief 리뷰(`reviewing-brief`)의 **호출 지점 3곳** — 1-c 방향성 축 · 2-b 충실도 축 · 2-c 충실도 재실행. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`로 옮기고 세 지점이 같은 `$codex_avail`로 묶이며, 러너(`run_brief_codex_reviewer.sh`)는 이 변수를 보지 않는다. 한 지점이라도 게이트 밖이면 opt-out이 무시된 채 지출이 나가고 `affected_axis: all` degradation record가 거짓이 된다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` — UserPromptSubmit hook만 skip.
 - `DEVBREW_RHYTHM_GUARD_THRESHOLD=N` — Dialectic Rhythm Guard threshold (default 3).
 - `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (v0.3.0) — PostToolUse Layer 1 (structural check) 정상 동작, Layer 2 (`pending_review:` ledger 기록) skip. 비상시 reviewer dispatch cost 회피용.

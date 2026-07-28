@@ -397,8 +397,10 @@ CODEX_FID_YAML="$ROOT/$harness_sid/codex-fidelity.yaml"
 ```
 
 ```
-Skill spec-distill:reviewing-brief   # 인자: $PAYLOAD, $CODEX_DIR_YAML, $CODEX_FID_YAML
+Skill spec-distill:reviewing-brief $PAYLOAD $CODEX_DIR_YAML $CODEX_FID_YAML
 ```
+
+세 인자는 **주석이 아니라 호출 라인 위에** 있어야 합니다 — `reviewing-brief`는 이 값들을 스스로 정의하지 않는다고 명시하므로, `#` 뒤에만 적혀 있으면 호출은 인자 없이 나가고 callee는 정의되지 않은 변수를 쥡니다.
 
 - 그 skill이 `cost_class: high` 진입 승인 게이트를 띄웁니다(모델 호출 하한 5 · 상한 9).
 - `DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW=1`이면 파이프라인이 전체 skip되고 skip record가

@@ -102,6 +102,45 @@ rc="$(rc_of "$tmpb" "$tmps")"
                    || note FAIL "T3 mutation: 양쪽에서 토큰을 제거해도 통과했다 (rc=$rc)"
 rm -f "$tmps" "$tmpb"
 
+# --- C2 : producer와 checker의 P21 토큰 집합이 실제로 같다 ------------------
+# conducting-interview SKILL.md(producer)가 문서로 약속한 토큰 **전부**를
+# check_verbatim_coverage.py(checker)의 정규식에 그대로 먹여본다. 문서에서 토큰을
+# 긁어오므로 어느 쪽을 바꿔도 이 락이 발화한다(한쪽만 고치는 drift 방지). 리터럴을
+# 테스트에 박아두면 producer가 바뀌어도 조용히 통과한다.
+CI_SKILL="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/SKILL.md"
+P21_LINES="$(grep -n 'REDACTED' "$CI_SKILL" | head -1 | cut -d: -f1)"
+if [[ -n "$P21_LINES" ]]; then
+  # P21 문단(해당 줄부터 4줄)에서 `<TOKEN>` / `<TOKEN:라벨>` 모양을 전부 뽑는다.
+  TOKENS="$(sed -n "${P21_LINES},$((P21_LINES+3))p" "$CI_SKILL" \
+            | grep -oE '<(REDACTED|SECRET|TOKEN|KEY|CREDENTIAL|PLACEHOLDER)(:[^ `>]*)?>' | sort -u)"
+  n_tok="$(grep -c . <<<"$TOKENS" || true)"
+  [[ "$n_tok" -ge 2 ]] \
+    && note PASS "C2: producer 문서에서 P21 예시 토큰 ${n_tok}종을 추출" \
+    || note FAIL "C2: producer 문서에서 토큰을 못 뽑았다 (${n_tok}종) — 이 락이 vacuous하다"
+  unmatched=""
+  while IFS= read -r tok; do
+    [[ -z "$tok" ]] && continue
+    TOK="$tok" python3 - "$SCRIPT" <<'PY' || unmatched="${unmatched} ${tok}"
+import os, re, runpy, sys
+mod = runpy.run_path(sys.argv[1])
+sys.exit(0 if mod["P21_PLACEHOLDER_RE"].search(os.environ["TOK"]) else 1)
+PY
+  done <<<"$TOKENS"
+  [[ -z "$unmatched" ]] \
+    && note PASS "C2: producer가 약속한 토큰을 checker가 전부 인식 (한국어 라벨 포함)" \
+    || note FAIL "C2: checker가 인식 못 하는 producer 토큰:${unmatched} — 정당한 치환이 red로 잡힌다"
+else
+  note FAIL "C2: conducting-interview SKILL.md에서 P21 줄을 찾지 못했다"
+fi
+# 경계는 넓히지 않았다 — 공백이 든 라벨(산문 위장)은 여전히 토큰이 아니다.
+TOK='<REDACTED:이건 라벨이 아니라 문장이다>' python3 - "$SCRIPT" <<'PY' \
+  && note FAIL "C2: 공백 포함 라벨이 토큰으로 인식됐다 — 산문으로 L2를 통째로 강등시킬 수 있다" \
+  || note PASS "C2: 공백 포함 라벨은 토큰이 아니다 (경계 유지)"
+import os, re, runpy, sys
+mod = runpy.run_path(sys.argv[1])
+sys.exit(0 if mod["P21_PLACEHOLDER_RE"].search(os.environ["TOK"]) else 1)
+PY
+
 # --- T4 · T19 / AC12 : exit 1 ≠ exit 3 -------------------------------------
 rc3="$(rc_of "$FX/brief-verbatim-ok.md" "$FX/nonexistent-state-file.md")"
 [[ "$rc3" == "3" ]] && note PASS "T4: state 부재 → exit 3" || note FAIL "T4: state 부재가 exit 3이 아님 (rc=$rc3)"

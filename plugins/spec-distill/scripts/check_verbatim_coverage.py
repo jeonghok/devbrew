@@ -53,9 +53,16 @@ SECTION6_RE = re.compile(r"^##\s*6\.", re.MULTILINE)
 NEXT_SECTION_RE = re.compile(r"^##\s", re.MULTILINE)
 ITEM_RE = re.compile(r"^\s*[-*]\s+\*\*(S\d+)\*\*(.*)$")
 # P21 canonical placeholder 토큰 (conducting-interview SKILL.md의 P21 줄과 같은 집합).
+# 라벨 문자류는 `[\w.-]` — 파이썬 3에서 `\w`는 유니코드 인식이라 `[A-Za-z0-9_]`에
+# **다른 문자 체계의 글자/숫자**가 더해진다. producer 문서(Korean-primary)가 예시로
+# 드는 `<REDACTED:라벨>`이 checker에 안 잡히던 drift를 producer가 아니라 **checker**
+# 쪽을 넓혀서 맞춘다: 한국어 라벨은 이 리포의 문서 규약상 정상이고, producer를 ASCII로
+# 좁히면 규약과 싸우게 된다. 넓힌 것은 **글자 종류뿐**이고 경계는 그대로다 —
+# 공백·`>`·`<`는 여전히 못 들어가고 길이 상한 64도 유지한다. 즉 산문 한 문장을 라벨로
+# 위장해 L2 비교를 통째로 강등시키는 경로는 열리지 않는다.
 P21_PLACEHOLDER_RE = re.compile(
     r"<(?:REDACTED|SECRET|TOKEN|KEY|CREDENTIAL|PLACEHOLDER)"
-    r"(?:[:_-][A-Za-z0-9._-]{0,64})?>"
+    r"(?:[:_-][\w.-]{0,64})?>"
 )
 
 

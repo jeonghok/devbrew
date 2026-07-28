@@ -69,10 +69,19 @@ fence() {
 #
 # 그래서 **왼쪽에서 오른쪽으로** 훑으며 문자열 상태를 토글한다. 여는 따옴표 문자를 기억해
 # 같은 문자로만 닫고(", ', ` 세 종류 — 이 SKILL은 셋을 다 쓴다), 문자열 안의 백슬래시
-# 이스케이프(\" 포함)는 다음 한 글자를 통째로 건너뛴다. 문자열 밖에서 처음 만난 "//"가
+# 이스케이프(\" 포함)는 다음 한 글자를 통째로 건너뛴다. 문자열 밖에서 처음 만난 마커가
 # 코멘트의 시작이다. URL의 "https://"는 문자열 안이라 자연히 안전하다.
+#
+# 마커는 인자다($2, default "//"). 이 SKILL은 JS 펜스의 "//"와 bare 펜스 invocation
+# 라인의 "#" 두 종류를 쓰는데, **같은 스캐너**가 둘을 처리해야 한다 — 두 번째 스트리퍼를
+# 따로 쓰면 위 문단이 기록한 no-op 결함(따옴표 상태를 안 보는 판)을 한 쪽에서 되풀이한다.
+# 마커는 `-v`가 아니라 ENVIRON으로 넘긴다(이 파일 다른 곳과 같은 이유: `-v`는 대입값의
+# escape sequence를 처리한다).
 strip_trailing_linecomment() {
-  awk '
+  local mark="//"
+  [[ $# -ge 2 ]] && mark="$2"
+  STLC_MARK="$mark" awk '
+    BEGIN { mark = ENVIRON["STLC_MARK"]; mlen = length(mark) }
     { line = $0; n = length(line); q = ""; out = line
       for (i = 1; i <= n; i++) {
         c = substr(line, i, 1)
@@ -82,7 +91,7 @@ strip_trailing_linecomment() {
           continue
         }
         if (c == "\"" || c == "'"'"'" || c == "`") { q = c; continue }
-        if (c == "/" && substr(line, i+1, 1) == "/") {
+        if (substr(line, i, mlen) == mark) {
           out = substr(line, 1, i-1); sub(/[[:space:]]+$/, "", out); break
         }
       }
@@ -128,10 +137,17 @@ grep -qE '^[[:space:]]*-?[[:space:]]*Skill spec-distill:reviewing-brief\b' <<<"$
   && note PASS "A.5 bare 펜스 안에 invocation 라인 실재 (load-bearing)" \
   || note FAIL "A.5 bare 펜스 안에 invocation 라인 부재 (펜스 밖 mention·데코이 펜스로는 만족 안 됨)"
 INVOKE_LINE="$(grep -E '^[[:space:]]*-?[[:space:]]*Skill spec-distill:reviewing-brief\b' <<<"$INVOKE_FENCE" | head -1)"
+# 트레일링 "#" 코멘트는 **인자가 아니다.** 이전 판은 라인 전체에서 세 변수를 찾았고,
+# shipping은 그 셋을 `#` 뒤에만 실어 놓았다("… reviewing-brief   # 인자: $PAYLOAD, …") —
+# 즉 이 락은 호출 인자가 아니라 **주석**을 보호하면서 green이었다(실측). callee는 이 세 값을
+# 스스로 정의하지 않는다고 명시하므로, 주석에만 있으면 호출은 인자 없이 나간다.
+# fence()가 전체-라인 주석만 거르는 것과 같은 구분을 트레일링 "#"까지 확장한다 —
+# 같은 따옴표-상태 스캐너를 마커만 바꿔 재사용한다(두 번째 스트리퍼를 쓰지 않는다).
+INVOKE_CODE="$(strip_trailing_linecomment "$INVOKE_LINE" '#')"
 for handoff_var in '$PAYLOAD' '$CODEX_DIR_YAML' '$CODEX_FID_YAML'; do
-  grep -qF "$handoff_var" <<<"$INVOKE_LINE" \
-    && note PASS "invocation 라인이 ${handoff_var} 전달 (load-bearing)" \
-    || note FAIL "invocation 라인에 ${handoff_var} 부재 — 장식용 데코이일 수 있다"
+  grep -qF "$handoff_var" <<<"$INVOKE_CODE" \
+    && note PASS "invocation 라인이 ${handoff_var} 전달 (트레일링 # 코멘트 제외하고 검사)" \
+    || note FAIL "invocation 라인(코멘트 제외)에 ${handoff_var} 부재 — 주석에만 적혀 있으면 호출은 인자 없이 나간다"
 done
 grep -qF 'DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW' <<<"$WA5" \
   && note PASS "A.5에 kill switch 경로" || note FAIL "A.5에 kill switch 경로 부재"

@@ -31,7 +31,22 @@ AUDIT_SUFFIX_RE = re.compile(r"\.audit\.md\b")
 
 
 def redact_frontmatter(text: str) -> str:
-    """frontmatter 블록 안에서만 세 키의 값을 치환한다(body 동명 문자열은 불변)."""
+    """frontmatter 블록 안에서만 세 키의 값을 치환한다(body 동명 문자열은 불변).
+
+    콜론 앞뒤 공백은 **`[ \\t]*`(같은 줄 안)** 로 한정한다. `\\s*`는 `\\n`도 삼키므로,
+    값이 빈 키(`name:` / `audit_file:` 처럼 콜론 뒤에 내용이 없는 줄)에서 `(.*)$`가
+    **다음 줄**을 이 줄의 값으로 잡아 그 줄 전체를 `<redacted>`로 갈아치운다 — 인접
+    frontmatter 키가 통째로 사라진다(실측: `audit_file:`가 비었을 때 바로 다음 줄의
+    `created_at: 2026-07-27`이 삭제됐다).
+
+    도달 가능성이 이론적이지 않다: `check_brief.py`의 frontmatter 검증은 `type` ·
+    `next_phase` · `audit_file` · `user_sourced_items`를 보고 `name`·`created_at`은
+    보지 않으므로, 빈 `name:`은 구조 게이트를 통과한 뒤 여기서 조용히 한 줄을 지운
+    사본이 격리 critic에게 간다.
+
+    `brief_review_state.py`의 `parse()`/`_set_scalar()`, `_parse_degradations()`가
+    같은 클래스의 버그를 이미 같은 방식으로 닫았다 — 이 파일이 남은 하나였다.
+    """
     if not text.startswith("---"):
         return text
     end = text.find("\n---", 3)
@@ -39,7 +54,7 @@ def redact_frontmatter(text: str) -> str:
         return text
     head, body = text[:end], text[end:]
     for key in REDACT_KEYS:
-        head = re.sub(rf"(?m)^({re.escape(key)}\s*:\s*)(.*)$",
+        head = re.sub(rf"(?m)^({re.escape(key)}[ \t]*:[ \t]*)(.*)$",
                       lambda m: m.group(1) + REDACTED, head)
     return head + body
 

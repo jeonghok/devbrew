@@ -36,6 +36,42 @@ grep -qF 'DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW' <<<"$KS" \
   && note PASS "T15: README Kill switches에 신규 스위치" || note FAIL "T15: 신규 kill switch 미문서화"
 grep -qF 'Law 2' <<<"$PRIN" && note PASS "T15: Principles Instantiated에 Law 2" || note FAIL "T15: Law 2 항목 부재"
 
+# --- C4 : Flow **다이어그램**이 리뷰 단계를 통과한다 -------------------------
+# 위 T15 스윕은 `$PRIN$(section Flow)` 전체에서 컴포넌트 이름을 찾으므로, 다이어그램에서
+# 리뷰 단계를 통째로 지워도 아래 v0.24.0 산문 한 문단이 같은 이름들을 실어 계속 green이다
+# (헤더 만족과 같은 클래스). 그래서 **펜스 안의 다이어그램만** 따로 지목한다 — 이 파일이
+# `## Flow (v0.24.0)`으로 버전을 주장하는 이상, 그 버전의 경로가 그림에 있어야 한다.
+FLOW="$(section '^## Flow' "$RM")"
+DIAGRAM="$(awk '/^```/{f=!f; next} f' <<<"$FLOW")"
+minlines_ok() { [[ "$(wc -l <<<"$1" | tr -d ' ')" -ge "$2" ]]; }
+minlines_ok "$DIAGRAM" 10 \
+  && note PASS "C4: Flow 다이어그램 펜스 실재 (>=10줄)" \
+  || note FAIL "C4: Flow 다이어그램을 못 찾았다 (펜스 불균형 또는 삭제) — 아래 assert가 vacuous해진다"
+grep -qF 'reviewing-brief' <<<"$DIAGRAM" \
+  && note PASS "C4: 다이어그램이 reviewing-brief 단계를 그린다" \
+  || note FAIL "C4: 다이어그램에 리뷰 단계가 없다 — brief가 Step B로 직행하는 옛 경로를 그리고 있다"
+# 순서: brief 산출 → 리뷰 → Step B 게이트. 존재만 잠그면 리뷰 단계를 게이트 **뒤**로
+# 옮겨도 통과한다(리뷰는 게이트 전에 끝나야 산출물 4종이 게이트에 실린다).
+i_brief="$(grep -nF 'interview brief' <<<"$DIAGRAM" | head -1 | cut -d: -f1)"
+i_rev="$(grep -nF 'reviewing-brief' <<<"$DIAGRAM" | head -1 | cut -d: -f1)"
+i_gate="$(grep -nF 'Step B proceed 게이트' <<<"$DIAGRAM" | head -1 | cut -d: -f1)"
+if [[ -n "$i_brief" && -n "$i_rev" && -n "$i_gate" ]] \
+   && [[ "$i_brief" -lt "$i_rev" ]] && [[ "$i_rev" -lt "$i_gate" ]]; then
+  note PASS "C4: 다이어그램 순서 — brief 산출 → 분리 리뷰 → Step B 게이트"
+else
+  note FAIL "C4: 다이어그램 순서 위반 (brief=${i_brief:-없음} review=${i_rev:-없음} gate=${i_gate:-없음})"
+fi
+# 고아 리스트 번호 금지 — 이 섹션은 버전 노트 문단들만 있고 붙을 리스트가 없다.
+ORPHAN="$(grep -nE '^[0-9]+\.[0-9]*\.? ' <<<"$FLOW" || true)"
+[[ -z "$ORPHAN" ]] \
+  && note PASS "C4: Flow 섹션에 고아 리스트 번호 없음" \
+  || note FAIL "C4: Flow 섹션에 붙을 리스트가 없는 번호 항목: ${ORPHAN}"
+# codex kill switch가 brief 파이프라인까지 문서화됐는가 (design-doc 경로만 적혀 있었다)
+KS_CODEX="$(grep -F 'DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1' <<<"$KS" | head -1)"
+{ grep -qF 'reviewing-brief' <<<"$KS_CODEX" && grep -qE '3곳|세 곳' <<<"$KS_CODEX"; } \
+  && note PASS "C4: codex kill switch가 brief 파이프라인 호출 지점까지 문서화" \
+  || note FAIL "C4: codex kill switch가 design-doc 경로만 말한다 — brief 3개 호출 지점이 미문서화"
+
 # --- T18 / AC22a : 훅 집합 고정 열거 + 'brief' 문자열 0건 --------------------
 EXPECTED="hooks.json pending-review-reminder.py review-dispatch.py session-end-cleanup.py spec-write-validator.py state_path.py"
 ACTUAL="$(cd "$HOOKS" && ls -1 | sort | tr '\n' ' ' | sed 's/ $//')"
@@ -65,8 +101,37 @@ grep -qE '어휘 검출|오염 검출|contamination' <<<"$T63" \
   && note FAIL "T29: 삭제된 검출 메커니즘을 열거표가 요구" || note PASS "T29: 삭제된 검출 요구 부재"
 # 신규 결정론 체크가 표에 빠지지 않았는가 — 구현된 스크립트 목록과 대조
 for s in check_verbatim_coverage merge_brief_review; do
-  test -f "$SD/scripts/$s.py" || note FAIL "T29: ${s}.py 부재 (Task 순서 이상)"
+  test -f "$SD/scripts/$s.py" \
+    && note PASS "T29: ${s}.py 실재" \
+    || note FAIL "T29: ${s}.py 부재 (Task 순서 이상)"
 done
+
+# --- C5 : §6.3 열거 **완전성** 기계 (design doc은 이 사이클에서 read-only) ----
+# 표 스스로 "기계는 표의 존재와 열거 완전성(신규 결정론 체크 전부가 표에 있는지)만 본다"고
+# 적어놓았지만, 위 리터럴 4개 존재 확인에는 그 기계가 없었다 — 표에 없는 결정론 체크를
+# 잡을 수단이 0이었다. 아래가 실제 열거 대조다.
+#
+# 판정 대상 = 파이프라인이 **게이트 결정이나 degrade 강등에 쓰는** 결정론 체크.
+DET_CHECKS="check_brief.py check_verbatim_coverage zero-tool merge_brief_review T-lock build_brief_inline_blob brief_review_state"
+# 아래 둘은 shipping에 실재하지만 §6.3 표에 **행이 없다**. design doc 수정은 사람 몫이라
+# (이 사이클에서 문서는 read-only) 여기에 이름을 박아 gap을 greppable·강제 가능하게 만든다:
+#   - build_brief_inline_blob.py : 본문 audit 파일명 잔존 → exit 3 (호출자가 degrade 기록)
+#   - brief_review_state.py      : 닫힌 열거 검증 + rounds clamp + can-redispatch 게이트.
+#     특히 can-redispatch의 통과 조건은 `brief_critic_rounds`이고 그 값을 **orchestrator
+#     자신이 쓴다** — 표가 존재하는 이유인 "검사 대상이 통과 조건을 직접 쓴다" 범주다.
+#     사람이 표에 행을 추가할 때 이빨 등급도 함께 판정해야 한다(기계가 못 하는 부분).
+DESIGN_GAP="build_brief_inline_blob brief_review_state"
+missing=""
+for chk in $DET_CHECKS; do
+  grep -qF "$chk" <<<"$T63" || missing="${missing}${missing:+ }${chk}"
+done
+if [[ "$missing" == "$DESIGN_GAP" ]]; then
+  note PASS "C5: §6.3 미기재 체크가 선언된 gap 목록과 정확히 일치 (${DESIGN_GAP}) — 사람 amendment 대기"
+elif [[ -z "$missing" ]]; then
+  note FAIL "C5: 표가 전부 채워졌다 — DESIGN_GAP 선언을 비우고 이 분기를 제거하라(waiver가 stale)"
+else
+  note FAIL "C5: §6.3 열거 gap이 선언과 다르다 — 미기재[${missing}] 선언[${DESIGN_GAP}]. 새 결정론 체크가 표 없이 들어왔거나 표에서 행이 사라졌다"
+fi
 
 # --- T31(문서) / AC11 : 정규화 순서·NFC 계약이 spec에 명시 -------------------
 # T63과 같은 이유로 진입·종료 레벨을 맞춘다 — `/^### /`만으로는 §5.5가 §5의 마지막
