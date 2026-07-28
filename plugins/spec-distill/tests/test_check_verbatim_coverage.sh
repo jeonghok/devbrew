@@ -120,6 +120,48 @@ rc="$(rc_of "$FX/brief-verbatim-ok.md" "$tmpe")"
 [[ "$rc" == "3" ]] && note PASS "T4: 빈 state → exit 3" || note FAIL "T4: 빈 state가 exit 3이 아님 (rc=$rc)"
 rm -f "$tmpe"
 
+# --- A2 : malformed state가 exit 0으로 새지 않는다 (indeterminate ≠ clean) ---
+# 이 셋은 fix 전에 **전부 exit 0**이었다 — 그 statement가 payload §6과 한 번도 대조되지
+# 않았는데 호출자는 0을 "위반 없음"으로 매핑했다. 각 케이스는 payload 쪽에 실제 왜곡
+# (S1 본문이 state의 text와 완전히 다름)을 함께 심어, 검사가 *돌기만 했다면* exit 1이
+# 났어야 하는 입력이다 — 그래야 "0이 아니다"가 아니라 "검사가 눈감았다"를 잡는다.
+mal_payload="$(mktemp)" || exit 1
+cat > "$mal_payload" <<'MALP'
+---
+type: interview-brief
+---
+## 6. 사용자 원문
+
+- **S1** (출처: turn 1)
+  > 원문과 완전히 다른 문장
+MALP
+# 세 케이스는 **서로 다른 단독 가드**가 책임진다(가드가 겹치면 어느 쪽을 지워도 green이라
+# mutation으로 이빨을 증명할 수 없다 — 실측으로 확인하고 구조를 갈랐다):
+#   no-id        → parse_user_statements의 `- id:` 아닌 리스트 항목 raise
+#   missing-text → parse_user_statements의 text 키 부재 raise
+#   empty-text / normalized-empty → run()의 `not want` indeterminate 분기
+for case in missing-text no-id empty-text normalized-empty; do
+  tmpm="$(mktemp)" || exit 1
+  case "$case" in
+    missing-text)     printf -- '---\nuser_statements:\n  - id: S1\n---\n' > "$tmpm" ;;
+    no-id)            printf -- '---\nuser_statements:\n  - text: "대조되지 못한 발화"\n---\n' > "$tmpm" ;;
+    empty-text)       printf -- '---\nuser_statements:\n  - id: S1\n    text: ""\n---\n' > "$tmpm" ;;
+    normalized-empty) printf -- '---\nuser_statements:\n  - id: S1\n    text: "**"\n---\n' > "$tmpm" ;;
+  esac
+  rc="$(rc_of "$mal_payload" "$tmpm")"
+  [[ "$rc" == "3" ]] && note PASS "A2($case): 판독 불가 원장 → exit 3 (검사불가)" \
+                     || note FAIL "A2($case): exit 3이 아님 (rc=$rc) — 대조되지 않은 statement가 clean으로 집계된다"
+  rm -f "$tmpm"
+done
+# 대칭 통제: 같은 payload에 **정상** 원장을 물리면 exit 1(진짜 위반)이 나야 한다.
+# 이게 없으면 위 셋은 "무엇을 넣어도 3"이라는 이빨 없는 assert와 구별되지 않는다.
+tmpok="$(mktemp)" || exit 1
+printf -- '---\nuser_statements:\n  - id: S1\n    text: "원문 그대로의 문장"\n---\n' > "$tmpok"
+rc="$(rc_of "$mal_payload" "$tmpok")"
+[[ "$rc" == "1" ]] && note PASS "A2(통제): 정상 원장 + 같은 왜곡 payload → exit 1 (위반)" \
+                   || note FAIL "A2(통제): 정상 원장이 exit 1을 내지 않는다 (rc=$rc) — 위 exit 3들이 무조건 3인 것과 구별 불가"
+rm -f "$tmpok" "$mal_payload"
+
 # --- §6 섹션 부재 → 검사불가(3). 구조는 check_brief.py 소관 --------------
 tmpn="$(mktemp)" || exit 1
 awk '!/^## 6\./{print} /^## 6\./{skip=1} skip&&/^## 7\./{skip=0;print}' "$FX/brief-verbatim-ok.md" > "$tmpn"

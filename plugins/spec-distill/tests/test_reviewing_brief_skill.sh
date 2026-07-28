@@ -375,5 +375,46 @@ W2B="$(window '^### 2-b\.')"
   && note PASS "AC15: 2-b 충실도 축 codex 런타임 실패 record 명시" \
   || note FAIL "AC15: 2-b 충실도 축 codex 런타임 실패 record 부재"
 
+# --- A1 : state 기록 실패가 'degrade 0건'으로 새지 않는다 --------------------
+# 쓰기 서브커맨드는 전부 exit 1 + {"ok": false}를 낼 수 있다. 종료 코드를 안 잡으면
+# init 실패 → 이후 degrade-append 전부 실패 → get 실패가 연쇄해 "모든 degrade를 Step B에
+# 올린다"가 조용히 "degrade 0건 표시"가 된다(§5.6이 요구하는 즉시 표면화 채널이 없다).
+# 실행 라인 앵커 — 산문 한 줄로는 종료 코드가 잡히지 않는다.
+grep -qE '^[[:space:]]*python3 "\$PR/scripts/brief_review_state\.py" init "\$STATE"; *init_rc=\$\?' "$SKILL" \
+  && note PASS "A1: init 호출이 종료 코드를 그 자리에서 잡는다 (실행 라인 앵커)" \
+  || note FAIL "A1: init의 종료 코드를 잡지 않는다 — 기록 경로가 통째로 죽어도 조용하다"
+WSTEPB="$(scoped_window '^## Step B로 전달' '^## ')"
+minlines "$WSTEPB" 8 && note PASS "A1: 'Step B로 전달' 윈도우 충분히 존재 (>=8줄)" \
+                     || note FAIL "A1: Step B 전달 윈도우가 비었거나 너무 짧다"
+has "$WSTEPB" 'DEGRADE_FALLBACK' \
+  && note PASS "A1: Step B 전달이 state 원장 **밖의** 두 번째 채널(DEGRADE_FALLBACK)도 싣는다" \
+  || note FAIL "A1: Step B 전달이 state 원장 하나에만 의존 — init/degrade-append가 죽은 라운드는 degrade 0건으로 보고된다"
+grep -qE 'get_rc *!= *0|get_rc" *-ne 0' <<<"$WSTEPB" \
+  && note PASS "A1: get 실패를 '비어 있음'과 구분해 명시" \
+  || note FAIL "A1: get 실패 분기 부재 — 판독 불가가 'degrade 없음'으로 렌더된다"
+
+# --- A3 : 방향성 리뷰어의 unavailable 경로 (냉독과 대칭) ---------------------
+# 냉독(3-a)은 빈 출력을 명시적으로 degrade한다. 방향성 축에 같은 경로가 없으면,
+# 리뷰어가 죽고 codex #1도 없는 라운드에서 축 전체가 미검증인데 원장이 침묵한다.
+W1B="$(window '^### 1-b\.')"
+minlines "$W1B" 12 && note PASS "A3: '### 1-b.' 윈도우 충분히 존재 (>=12줄)" \
+                   || note FAIL "A3: 1-b 윈도우가 비었거나 너무 짧다"
+{ has "$W1B" 'component: direction_reviewer' && has "$W1B" 'verification_status: unavailable'; } \
+  && note PASS "A3: 방향성 리뷰어 빈/파손 출력 → unavailable record 명시" \
+  || note FAIL "A3: 방향성 축에 unavailable record가 없다 — 미검증이 '지적 없음'으로 읽힌다"
+has "$W1B" 'brief-direction-findings' \
+  && note PASS "A3: 검증 대상이 계약 센티널(brief-direction-findings)로 지목됨" \
+  || note FAIL "A3: 센티널 이름 부재 — '유효한 0건'과 '출력 없음'을 가를 기준이 없다"
+
+# --- A4 : can-redispatch의 exit 1이 두 사실을 싣는다 ------------------------
+# escalate(상한 도달)와 _fail(state 부재·손상)이 같은 코드 1이다. 코드만 보고 escalate로
+# 단정하면 state가 죽었을 뿐인 라운드에 "재리뷰 상한 2 초과" 라는 거짓 record가 남는다.
+grep -qE '^[[:space:]]*if grep -q .\\?"escalate": true' <<<"$W2C_BASH" \
+  && note PASS "A4: can!=0을 escalate 키로 가르는 분기가 실행 라인으로 실재" \
+  || note FAIL "A4: can!=0을 단일 사실로 취급 — state 실패에 '상한 초과' record가 붙는다"
+grep -qE '^[[:space:]]*python3 "\$PR/scripts/brief_review_state\.py" can-redispatch "\$STATE" > "\$CAN_OUT"' <<<"$W2C_BASH" \
+  && note PASS "A4: can-redispatch stdout을 파일로 잡아 분기 근거로 쓴다" \
+  || note FAIL "A4: can-redispatch stdout을 잡지 않는다 — escalate 키를 읽을 경로가 없다"
+
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ "$fail" -eq 0 ]]

@@ -117,7 +117,25 @@ def _read_block_scalar(lines: list[str], i: int, key_indent: int) -> tuple[str, 
 
 
 def parse_user_statements(fm: str) -> list[dict]:
-    """state frontmatter의 `user_statements` 리스트를 파싱한다(서드파티 YAML 금지)."""
+    """state frontmatter의 `user_statements` 리스트를 파싱한다(서드파티 YAML 금지).
+
+    **필수 필드 누락과 판독 불가 항목은 ParseError(→ exit 3)다.** 조용히 건너뛰면
+    그 statement는 payload §6과 **한 번도 대조되지 않은 채** 검사가 exit 0으로 끝난다 —
+    호출자는 0을 "위반 없음"으로 매핑하므로 완전성 검사가 돌지도 않고 clean으로 보인다
+    (indeterminate ≠ clean). 두 경로를 모두 닫는다:
+
+      (1) `- id:`로 시작하지 않는 리스트 항목 — 이전엔 통째로 무시됐다(항목이 원장에서
+          사라져 L1/L2 어느 쪽도 그 id를 찾지 않았다).
+      (2) `text` 키 자체가 부재 — 이전엔 advisory 한 줄만 남기고 exit 0이었다.
+
+    스키마(conducting-interview SKILL.md)는 각 레코드의 **첫 키가 `id`**임을 규정하므로
+    (1)은 새 제약이 아니라 기존 계약의 집행이다.
+
+    `text`가 **존재하지만 비어 있는**(또는 정규화 후 비는) 경우는 여기서 보지 않는다 —
+    그 사실은 `run()`의 `not want` 분기가 단독으로 책임진다. 두 곳에서 같은 입력을 막으면
+    어느 쪽도 load-bearing이 아니게 되어(한쪽을 지워도 회귀 테스트가 green) mutation으로
+    이빨을 증명할 수 없다.
+    """
     lines = fm.splitlines()
     start = None
     for i, ln in enumerate(lines):
@@ -142,6 +160,10 @@ def parse_user_statements(fm: str) -> list[dict]:
             items.append(cur)
             i += 1
             continue
+        if re.match(r"^\s*-\s+\S", ln):
+            raise ParseError(
+                f"user_statements 항목이 `- id:`로 시작하지 않는다: {ln.strip()!r} "
+                "— 조용히 버리면 그 발화가 대조 대상에서 사라진다")
         m = re.match(r"^(\s*)text\s*:\s*(.*)$", ln)
         if m and cur is not None:
             raw = m.group(2).strip()
@@ -152,6 +174,11 @@ def parse_user_statements(fm: str) -> list[dict]:
             i += 1
             continue
         i += 1
+    for it in items:
+        if it["text"] is None:
+            raise ParseError(
+                f"user_statements {it['id']}에 필수 필드 text가 없다 "
+                "— 이 발화는 대조가 불가능하므로 '위반 없음'으로 집계하지 않는다")
     return items
 
 
@@ -215,9 +242,6 @@ def run(payload_path: Path, state_path: Path) -> tuple[int, dict]:
             result["missing_ids"].append(sid)
             continue
         raw_state = st["text"]
-        if raw_state is None:
-            result["advisories"].append(f"{sid}: state에 text 필드 부재 — L2 검사 생략")
-            continue
         want = normalize(raw_state)
         have = normalize(items[sid])
         if want and want in have:
@@ -230,8 +254,14 @@ def run(payload_path: Path, state_path: Path) -> tuple[int, dict]:
                 f"{sid}: P21 placeholder 관여 — L2를 advisory로 강등 (원문 미포함)")
             continue
         if not want:
-            result["advisories"].append(f"{sid}: state text가 빈 문자열 — L2 검사 생략")
-            continue
+            # state text가 존재하지만 비어 있거나 정규화(N1–N5) 후 비었다. 비교할 것이
+            # 없으므로 이 발화는 **대조되지 않았다** — advisory 한 줄로 흘려보내고
+            # 계속하면 그 사실이 exit 0("위반 없음")으로 집계된다(indeterminate ≠ clean).
+            # 이 분기가 이 사실의 **단독** 책임자다(parse_user_statements는 키 부재만 본다).
+            result["advisories"].append(
+                f"검사 불가 — {sid}: state text가 비어 있다(또는 정규화 후 빈 문자열) "
+                "— L2 대조가 성립하지 않는다")
+            return EXIT_INDETERMINATE, result
         result["not_contained"].append(sid)
 
     if result["missing_ids"] or result["not_contained"]:
