@@ -2,6 +2,11 @@
 # AC9 — test_agent_frontmatter_keys.sh 의 이빨 증명. 34개 케이스(mutation 은 RED,
 # 보강/기준선 케이스는 GREEN) 가 각 want 대로 정확히 나와야 한다.
 # RED 가 안 나는 락은 장식이다.
+#
+# ⚠️ 이 하니스가 증명하는 것은 락 **술어의 모양**뿐이다. *"락이 검증했다고 믿은 값 = 파서가
+# 실제로 resolve 하는 값"* 이라는 **의미론적 속성**은 증명하지 않는다 — 실증: 아래 45 케이스는
+# 중복 키 `tools : [Write]` 와 NBSP-패딩 `tools: <NBSP>[]` 두 실제 우회를 **45/45 GREEN 인 채로**
+# 통과시켰다(v2.14.1 S-3). 그 속성은 `test_agent_tools_lock_differential.sh` 가 담당한다.
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 LOCK="$ROOT/plugins/quality-gates/tests/test_agent_frontmatter_keys.sh"

@@ -3,6 +3,66 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.1] — 2026-07-28
+
+두 건의 독립 감사가 v2.14.0 카브아웃을 **우회 가능**하다고 보고했다. 락은 frontmatter 를
+`grep`/`sed`/`case` 로 읽는데 실제 소비자는 YAML 파서다 — 둘이 *어느 줄이 `tools` 키인가* 와
+*그 값이 무엇인가* 에 대해 서로 다를 수 있었고, 카브아웃이 그 간극의 가장 나쁜 사례를
+도달 가능하게 만들었다. 이번 수정의 원칙은 **스펠링을 하나 더 열거하지 않는 것**이다.
+
+### Fixed
+- **S-1 중복 키 fail-open** — 중복 가드의 `^tools:` 정규식은 콜론 앞 공백을 못 봤다. 실측:
+  `tools: []` + `tools : [Write]` 에서 가드가 발화하지 않고 `grep -m1` 이 `tools: []` 를 집어
+  카브아웃으로 통과, 그런데 PyYAML 은 같은 문서를 `{'tools': ['Write']}` 로 resolve 한다 —
+  락은 zero-tool 이라 믿고 런타임은 `Write` 를 부여한다(Law 2 보장 전면 무효화).
+  `"tools":` · `'tools':` · `tools   :` 도 같은 키로 resolve 된다.
+  - 대응 (1) — 중복/정규형 판정을 인용 키와 콜론 앞 공백까지 포함하도록 넓힘.
+    후보가 2개 이상이면 중복으로 FAIL, 1개인데 column 0 의 정규 `tools:` 가 아니면 FAIL.
+  - 대응 (2) **닫힘 보증** — (1) 은 여전히 열거이고 `!!str tools:` · `&a tools:` ·
+    `? tools\n: …` · `"tools":` · flow mapping 은 열거로 잡히지 않는다(전부 실측으로
+    같은 `tools` 키로 resolve 확인). 그래서 **여집합**으로 닫는다: frontmatter 의 column-0
+    줄은 `# 주석` 이거나 `^[A-Za-z][A-Za-z0-9_-]*:` 여야 한다. 이 형태 안에서는 키 문자열이
+    바이트 그대로라(plain scalar 에는 인용·이스케이프·태그·앵커가 없다) 대체 스펠링이
+    **원리적으로** 존재할 수 없다. block mapping 의 키는 반드시 column 0 이고 값의
+    continuation 은 반드시 들여쓰기되므로 키 공간이 전부 덮인다.
+- **S-2 값 패딩 fail-open** — 값 정규화의 POSIX `[[:space:]]` 트림이 코드 주석과 CHANGELOG 가
+  주장해 온 "수평 공백"보다 넓었다. `tools: <CR>[]` 는 v2.14.0 에서 RED→GREEN 으로 뒤집혔고
+  (`[[:space:]]` 에 CR/VT/FF 포함), UTF-8 로케일에서는 `tools: <NBSP>[]` 의 트림 결과가 정확히
+  `5b 5d` 가 되어 카브아웃이 열렸다 — 파서는 그 값을 빈 시퀀스가 아니라 **문자열** `'\xa0[]'`
+  로 읽는다. 코드포인트 열거(U+1680·U+2000..200A·U+202F·U+205F·U+3000·U+FEFF…)는 닫히지
+  않으므로 여집합으로 간다:
+  - 값에 ASCII 제어문자(tab 포함)가 있으면 FAIL. 실측(PyYAML 6.0.3): `tools:` 값 안의
+    CR/VT/FF/TAB 은 위치를 불문하고 ScannerError/ReaderError 다(YAML 은 tab 을 노드 구분자로
+    금지) — 즉 파서가 읽지도 못하는 선언이므로 거절이 곧 **정확한 합치**다.
+  - 값의 패딩 자리(첫 graphic 문자 앞 / 마지막 graphic 문자 뒤)에 ASCII space 아닌 바이트가
+    있으면 FAIL. 인라인 주석은 파서가 값에서 버리므로 검사 사본에서만 벗겨 한국어 주석을
+    over-reject 하지 않는다(본 흐름은 무변경 — 주석 제거를 앞당기면 `tools: [] # x` 가
+    카브아웃으로 새어 수용이 **넓어진다**).
+  - 트림을 `LC_ALL=C` 의 `[[:blank:]]`(= space + tab) 로 좁혀 문서가 주장하는 것과 일치시킴.
+- 같은 클래스의 파생 — 주석 introducer 판정도 `LC_ALL=C [[:blank:]]` 로 고정. YAML 이 `#` 을
+  주석 시작으로 보는 조건은 space/tab 선행뿐이라 NBSP 선행 `#` 은 파서에게 값의 일부인데,
+  로케일 의존 `[[:space:]]` 는 그것을 주석으로 벗겨 `tools: Read<NBSP># x, Write` 의 `Write` 를
+  놓쳤다.
+
+### Added
+- `tests/test_agent_tools_lock_differential.sh` — **파서 합치 증명**(S-3). 60 assertion.
+  `test_agent_tools_lock_mutation.sh` 는 락 **술어의 모양**만 증명한다 — 그 45 케이스는 위
+  두 우회를 **45/45 GREEN 인 채로** 통과시켰다. 이 하니스는 코퍼스마다 락 verdict 를 PyYAML 이
+  같은 바이트에서 실제로 resolve 하는 값과 대조해 *"락이 GREEN 을 준 파일은 파서가 실제로
+  파싱할 수 있어야 하고, zero-tool 근거로 통과했다면 파서도 **실제 빈 시퀀스**로 resolve 해야
+  하며, scalar 근거로 통과했다면 토큰 집합이 정확히 같아야 한다"* 를 단언한다.
+  - 두 레이어를 분리해 센다: **L1 verdict** 는 의존성이 없어 항상 실행되고, **L2 파서 합치**는
+    테스트-타임 의존성(PyYAML)이 없으면 **loud 하게 skip** 한다(`‼️ DEGRADED` 배너 + 요약의
+    `SKIPPED` 카운트). 조용히 pass 로 세지 않는다. 락 자체는 regex 기반 fail-closed 로 남는다 —
+    파서는 락을 **검증**하는 도구이지 락을 **실행**하는 도구가 아니다.
+  - "락이 믿은 값" 은 재구현하지 않고 `DEVBREW_AGENT_TOOLS_LOCK_EMIT=1` 진단 emission(verdict
+    무영향, 기본 off)에서 읽는다. 테스트에 재구현하면 같은 버그를 두 번 쓰게 되어(순환)
+    NBSP 우회가 그대로 새어나간다.
+
+### Changed
+- v2.14.0 항목의 *"콜론 앞뒤 수평 공백은 기존 trim 이 이미 처리"* 서술을 정정(아래 주석 참조).
+  히스토리를 조용히 고쳐 쓰지 않고 해당 항목에 정정 주석을 남긴다.
+
 ## [2.14.0] — 2026-07-28
 
 repo-wide Law 2 락 `tests/test_agent_frontmatter_keys.sh`에 **리터럴 빈 시퀀스 카브아웃**을
@@ -13,7 +73,8 @@ repo-wide Law 2 락 `tests/test_agent_frontmatter_keys.sh`에 **리터럴 빈 �
 
 ### Changed
 - `tests/test_agent_frontmatter_keys.sh` L2 — `tools:` 값이 **정확히 `[]`** 이면(콜론 앞뒤
-  수평 공백은 기존 trim 이 이미 처리) flow-seq 거절을 면제한다. flow-seq 전면 거절의 근거는
+  수평 공백은 기존 trim 이 이미 처리 — ⚠️ **정정: 아래 주석 참조**) flow-seq 거절을 면제한다.
+  flow-seq 전면 거절의 근거는
   *"토큰이 다음 줄로 이어지거나 쪼개져/숨어 금지 이름 정확매칭을 피할 수 있다"* 인데, 리터럴
   빈 시퀀스에는 **숨길 토큰이 0개**라 그 근거가 적용되지 않는다.
 - 같은 FAIL 메시지에 *"도구를 하나도 주지 않으려면 정확히 `tools: []` 로 쓸 것"* 안내를 추가.
@@ -32,6 +93,16 @@ multiline continuation 가드를 건너뛰면 `tools: []` 다음 줄에 들여�
 
 ### Added
 - `tests/test_agent_tools_lock_mutation.sh` — 카브아웃 경계 11 케이스(GREEN 3 / RED 8). 34 → 45.
+
+> ⚠️ **정정 (v2.14.1, 2026-07-28)** — 위 *"콜론 앞뒤 수평 공백은 기존 trim 이 이미 처리"* 는
+> **사실이 아니었다.** 당시 trim 은 POSIX `[[:space:]]` 였고 이는 수평 공백보다 넓다 — CR·VT·FF
+> 는 물론 UTF-8 로케일에서는 NBSP(U+00A0) 등 비-ASCII 공백까지 먹었다. 그래서 `tools: <CR>[]`
+> 가 이 릴리스에서 RED→GREEN 으로 뒤집혔고 `tools: <NBSP>[]` 도 카브아웃을 통과했다(파서는
+> 후자를 빈 시퀀스가 **아니라** 문자열 `'\xa0[]'` 로 읽는다). 또한 위 *"전부 계속 FAIL,
+> mutation 으로 락함"* 목록은 **중복 키 우회를 포함하지 않는다** — `tools: []` + `tools : [Write]`
+> 는 이 릴리스의 45 mutation 을 전부 통과했다. v2.14.1 이 두 결함을 모두 닫고 트림을 실제로
+> 수평 공백(`LC_ALL=C [[:blank:]]`)으로 좁혔다. 이 항목은 히스토리 보존을 위해 원문을 남기고
+> 정정만 덧붙인다.
 
 ## [2.13.0] — 2026-07-19
 
