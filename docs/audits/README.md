@@ -4,3 +4,4 @@
 
 - [2026-07-15-project-init-audit](2026-07-15-project-init-audit.md) — 2026-07-15
 - [2026-07-27-spec-distill-zero-tool-probe](2026-07-27-spec-distill-zero-tool-probe.md) — 2026-07-27
+- [2026-07-28-agent-tools-lock-value-path-gaps](2026-07-28-agent-tools-lock-value-path-gaps.md) — 2026-07-28 · Law 2 락 값 경로의 선행 결함 4건 (기록 전용, 미수정)
