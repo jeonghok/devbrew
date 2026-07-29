@@ -31,12 +31,15 @@ CHANGELOG="$REPO_ROOT/plugins/spec-distill/CHANGELOG.md"
 pass=0; fail=0
 note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
 
-grep -qE '"version": "0\.23\.[0-9]+"' "$PLUGIN_JSON" \
-  && note PASS "T20: plugin.json version 0.23.x" \
-  || note FAIL "T20: plugin.json이 0.23.x가 아님"
+grep -qE '"version": "0\.24\.[0-9]+"' "$PLUGIN_JSON" \
+  && note PASS "T20: plugin.json version 0.24.x" \
+  || note FAIL "T20: plugin.json이 0.24.x가 아님"
 grep -qE '^## \[0\.23\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
   && note PASS "T20: CHANGELOG [0.23.0] 엔트리 + ISO 날짜" \
   || note FAIL "T20: CHANGELOG [0.23.0] 누락/비-ISO"
+grep -qE '^## \[0\.24\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
+  && note PASS "T20: CHANGELOG [0.24.0] 엔트리 + ISO 날짜" \
+  || note FAIL "T20: CHANGELOG [0.24.0] 누락/비-ISO"
 grep -qE '^## \[0\.2[02]\.0\].*XX' "$CHANGELOG" \
   && note FAIL "T20: CHANGELOG 날짜에 XX placeholder" || note PASS "T20: XX placeholder 없음"
 grep -qE '^## \[0\.20\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \

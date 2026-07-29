@@ -61,7 +61,11 @@ confirm_repost_count: 0              # 종료 확정 확인 재제시 횟수 (�
 
 State body: 각 round의 4-block 출력 + 사용자 답변 + (있다면) coverage-mapper 출력 transcript.
 
-**Secret 기록 금지** (P21): 사용자 답변에 token/key/credential 패턴 감지 시 placeholder로 치환 후 기록.
+**Secret 기록 금지** (P21): 사용자 답변에 token/key/credential 패턴 감지 시 placeholder로 치환 후
+기록합니다. **치환 토큰은 `<REDACTED>` 또는 `<REDACTED:라벨>` 형태**로 씁니다(다른 허용 형태:
+`<SECRET:...>` · `<TOKEN:...>` · `<KEY:...>` · `<CREDENTIAL:...>` · `<PLACEHOLDER:...>`).
+`check_verbatim_coverage.py`가 §6 원문 대조에서 **이 토큰 집합**을 보고 L2를 advisory로 강등하므로,
+다른 형태로 치환하면 정당한 치환이 red로 잡혀 사용자가 Step B에서 판정해야 합니다(fail-closed 방향).
 
 ### State write contract (PN1 — worktree-safe)
 
@@ -376,6 +380,36 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    **매번** 발화할 수 있는 유일한 실패입니다 — Step A는 정의상 전부 `provisional`이므로,
    위 3의 sentinel을 빠뜨리면 첫 게이트 실행이 항상 red입니다.
 
+### Step A.5 — brief 리뷰 파이프라인 진입 (Law 2 분리 리뷰, v0.24.0)
+
+게이트(Step A 5)를 통과한 payload는 **Law 1 구조 자기검사**를 마친 것이고, 아직 **분리 리뷰**를
+받지 않았습니다. 여기서 `reviewing-brief` skill로 넘깁니다 — 축은 둘(충실도·방향성), 담당은
+셋 + codex이며, 절차는 그 skill이 소유합니다(여기에 복제하지 않습니다).
+
+핸드오프 변수 3개를 그 skill과 같은 리졸버로 세팅합니다(state 배치 규약 정합, PN1):
+
+```bash
+ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" state-root)"
+harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" session-id)"
+PAYLOAD="docs/superpowers/interview/<file>"          # Step A가 방금 쓰고 검증한 경로
+CODEX_DIR_YAML="$ROOT/$harness_sid/codex-direction.yaml"
+CODEX_FID_YAML="$ROOT/$harness_sid/codex-fidelity.yaml"
+```
+
+```
+Skill spec-distill:reviewing-brief $PAYLOAD $CODEX_DIR_YAML $CODEX_FID_YAML
+```
+
+세 인자는 **주석이 아니라 호출 라인 위에** 있어야 합니다 — `reviewing-brief`는 이 값들을 스스로 정의하지 않는다고 명시하므로, `#` 뒤에만 적혀 있으면 호출은 인자 없이 나가고 callee는 정의되지 않은 변수를 쥡니다.
+
+- 그 skill이 `cost_class: high` 진입 승인 게이트를 띄웁니다(모델 호출 하한 5 · 상한 9).
+- `DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW=1`이면 파이프라인이 전체 skip되고 skip record가
+  Step B 게이트 질문에 표시됩니다 — 조용한 생략이 아닙니다.
+- 리뷰가 payload를 수정할 수 있습니다(§2 제약·§3 OQ 등). 수정이 일어나면 Step B는 **리뷰 후
+  최종 문서**를 봅니다.
+- 산출물 4종(확정 후보 / 방향성 C4 항목 / readback 요약 + gap / 모든 degrade record)이
+  Step B 게이트로 넘어옵니다.
+
 ### Step B — proceed 게이트 (handoff 방식 제안)
 
 brief는 **단독 완결 terminal 산출물**입니다(NG7 — handoff는 강제가 아니라 사용자 선택).
@@ -440,10 +474,21 @@ STATE="$ROOT/<session-id>/state.local.md"
 
 brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안합니다:
 
+게이트를 띄우기 *전에* Step A.5 리뷰 산출물을 프로즈로 출력합니다(B-0 확정 후보 목록 다음):
+
+1. **방향성 C4 항목** — `<출처(Claude|codex)> — <무엇을 뒤집자는 것인가> — <근거> — <결정할 질문>`.
+2. **readback 요약 전문** + gap 목록(*어느 클래스 / 요약의 어느 문장 / payload의 어느 절*).
+3. **미반영 findings** — 있으면 각각 이유와 함께. 저자가 임의로 기각한 것이 아니라 사용자 판정
+   대상입니다.
+
+그리고 `question` 텍스트에 **모든 degrade record를 한 줄씩** 싣습니다 — 옵션 description이
+아니라 question 본문이어야 사용자가 옵션을 고르기 *전에* 봅니다. record가 없으면
+`degrade 없음`을 한 줄로 명시합니다(침묵과 구분).
+
 ```javascript
 AskUserQuestion({
   questions: [{
-    question: "interview brief 완결: <brief-path> (구조 게이트 통과). 확정 후보는 위 목록대로. 다음 단계?",
+    question: "interview brief 완결: <brief-path> (구조 게이트 통과, 리뷰 <verdict 요약>). 확정 후보·방향성 항목·readback gap은 위 목록대로. degrade: <record 한 줄씩 | degrade 없음>. 다음 단계?",
     header: "Proceed",
     options: [
       {label: "확정하고 /compact 후 brainstorming (권장)", description: "확정 후보를 status: confirmed로 반영 → 재저장 → 게이트 재실행 → verbatim /compact 노출. 긴 인터뷰 context 정리 이점."},

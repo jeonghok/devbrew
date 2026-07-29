@@ -90,7 +90,9 @@ python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/review_lock.py" s
 ## Deterministic Routing Table (AC15 — design-mode only, v0.12.0)
 
 이 skill은 brainstorming의 `-design.md`만 검토합니다(spec-mode + 별도 spec-draft skill은 v0.12.0에서
-제거됨 — interview는 brief까지 단독 완결, design doc만 Law 2 분리 reviewer 대상).
+제거됨). **이것은 이 skill의 스코프이지 brief에 리뷰가 없다는 뜻이 아닙니다** — v0.24.0부터
+interview brief에는 전용 분리 리뷰어 3종(`brief-critic`·`brief-direction-reviewer`·`brief-readback`)과
+별-모델 codex co-review가 `reviewing-brief` skill로 붙습니다. 여기서 다루는 것은 design doc 경로뿐입니다.
 
 | Mode | Verdict | rereview_count | → Next Phase |
 |---|---|---|---|

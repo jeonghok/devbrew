@@ -27,6 +27,30 @@ python3 "$SCRIPT" check "$FX/state-web-over-session.md" >/dev/null 2>&1 \
   && note FAIL "AC7: session=9 should be rejected" \
   || note PASS "AC7: session=9 > 8 rejected (exit 1)"
 
+# B2: a pre-dispatch gate must evaluate the PROSPECTIVE count. The plain check
+# rejects only `> CAP`, so at `count == CAP` it passes → caller dispatches →
+# increment lands on CAP+1: one dispatch past the stated cap (reproduced).
+# The two assertions are deliberately paired on the SAME fixture: the plain
+# check must still pass (the historical contract is untouched) while the
+# prospective one must reject. A single assertion on either alone cannot tell
+# "the flag works" from "the fixture is over/under budget for both".
+python3 "$SCRIPT" check "$FX/state-web-within.md" >/dev/null 2>&1 \
+  && note PASS "B2: sweep=4/session=8 plain check → exit 0 (기존 계약 불변)" \
+  || note FAIL "B2: plain check의 기존 경계 동작이 바뀌었다"
+python3 "$SCRIPT" check --prospective "$FX/state-web-within.md" >/dev/null 2>&1 \
+  && note FAIL "B2: --prospective가 cap 도달 상태를 통과 — dispatch 1회가 상한을 넘는다" \
+  || note PASS "B2: --prospective가 cap 도달 상태를 거부 (exit 1)"
+# 한 칸 아래에서는 통과해야 한다 — 아니면 "무엇이든 거부"라 이빨이 없다.
+tmp_p="$(mktemp)"; printf -- '---\nweb_sweep_count: 3\nweb_search_count: 7\n---\n' > "$tmp_p"
+python3 "$SCRIPT" check --prospective "$tmp_p" >/dev/null 2>&1 \
+  && note PASS "B2: --prospective가 cap-1 상태는 통과 (무조건 거부가 아님)" \
+  || note FAIL "B2: --prospective가 예산 내에서도 거부한다"
+rm -f "$tmp_p"
+# 플래그는 check 전용 — increment는 bump-then-check라 prospective가 이중 계상이 된다.
+python3 "$SCRIPT" increment --prospective "$FX/state-web-within.md" >/dev/null 2>&1 \
+  && note FAIL "B2: increment가 --prospective를 받아들였다 (이중 계상)" \
+  || note PASS "B2: --prospective는 check 전용 (increment는 거부)"
+
 # AC8: kill switch forces ok even when over budget (graceful degradation)
 DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" check "$FX/state-web-over-sweep.md" >/dev/null 2>&1 \
   && note PASS "AC8: DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 → exit 0 (web disabled)" \

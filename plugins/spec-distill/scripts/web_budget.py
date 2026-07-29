@@ -24,6 +24,13 @@ caller skips landscape and logs loudly — AC8 graceful degradation).
 
 CLI (all print JSON):
   web_budget.py check <state.local.md>       → exit 0 within budget, 1 if over.
+  web_budget.py check --prospective <state>  → same, but evaluated at count+1
+      ("will the call I am about to make fit?"). A pre-dispatch gate MUST use
+      this: the plain check rejects only `> CAP`, so at `count == CAP` it
+      passes, the caller dispatches, and the follow-up increment lands on
+      CAP+1 — one dispatch past the stated cap. Callers that increment
+      *before* dispatching (conducting-interview) already avoid that and keep
+      the default.
   web_budget.py increment <state.local.md>   → +1 both counters, persist, check.
   web_budget.py reset-sweep <state.local.md> → web_sweep_count := 0 (keep session).
 """
@@ -67,7 +74,20 @@ def _evaluate(sweep: int, session: int) -> tuple[bool, str]:
     return (not over), "; ".join(over)
 
 
-def check(state_path: Path) -> int:
+def check(state_path: Path, prospective: bool = False) -> int:
+    """Evaluate the budget against the counters on disk.
+
+    Default (`prospective=False`) answers *"are the counters currently within
+    budget?"* — the historical contract, used by `increment`'s bump-then-check.
+
+    `prospective=True` answers the question a **pre-dispatch gate** actually
+    asks: *"will the call I am about to make fit?"* It evaluates `count + 1`.
+    Without it a pre-dispatch gate is off by one: at `session == SESSION_CAP`
+    the plain check passes (it rejects only `> CAP`), the caller dispatches,
+    and the follow-up `increment` lands on `CAP + 1` — one dispatch past the
+    stated cap. Callers that increment *before* dispatching are already
+    correct and must keep the default.
+    """
     if os.environ.get("DEVBREW_SPEC_DISTILL_DISABLE_WEB") == "1":
         print(json.dumps({"ok": True, "reason": "web disabled (kill switch)"}))
         return 0
@@ -82,12 +102,16 @@ def check(state_path: Path) -> int:
     except ValueError as exc:
         print(json.dumps({"ok": False, "reason": f"counter malformed: {exc}"}))
         return 1
-    ok, reason = _evaluate(sweep, session)
+    bump = 1 if prospective else 0
+    ok, reason = _evaluate(sweep + bump, session + bump)
+    payload = {"ok": ok, "sweep": sweep, "session": session}
+    if prospective:
+        payload["prospective"] = True
     if not ok:
-        print(json.dumps({"ok": False, "sweep": sweep, "session": session,
-                          "reason": reason}))
+        payload["reason"] = reason
+        print(json.dumps(payload))
         return 1
-    print(json.dumps({"ok": True, "sweep": sweep, "session": session}))
+    print(json.dumps(payload))
     return 0
 
 
@@ -152,13 +176,25 @@ def reset_sweep(state_path: Path) -> int:
 
 SUBCOMMANDS = {"check": check, "increment": increment, "reset-sweep": reset_sweep}
 
+USAGE = ("usage: web_budget.py {check [--prospective]|increment|reset-sweep} "
+         "<state.local.md>")
+
 
 def main(argv: list[str]) -> int:
-    if len(argv) < 3 or argv[1] not in SUBCOMMANDS:
-        print("usage: web_budget.py {check|increment|reset-sweep} <state.local.md>",
-              file=sys.stderr)
+    args = argv[1:]
+    prospective = False
+    if "--prospective" in args:
+        prospective = True
+        args = [a for a in args if a != "--prospective"]
+    if len(args) < 2 or args[0] not in SUBCOMMANDS:
+        print(USAGE, file=sys.stderr)
         return 64
-    return SUBCOMMANDS[argv[1]](Path(argv[2]))
+    if prospective and args[0] != "check":
+        print(f"--prospective is only valid for `check` (got: {args[0]})", file=sys.stderr)
+        return 64
+    if args[0] == "check":
+        return check(Path(args[1]), prospective=prospective)
+    return SUBCOMMANDS[args[0]](Path(args[1]))
 
 
 if __name__ == "__main__":

@@ -52,6 +52,63 @@ class TestCodexFindingsToYaml(unittest.TestCase):
         self.assertIn("reason: auth_error_in_stderr", out)
         f.unlink()
 
+    # --- CR-2: 스키마 불일치는 성공으로 마킹하지 않는다 ---------------------
+    # 수정 전 실측: `{"findings": {}}` → `findings: []` + `codex_failed: false`
+    # + `reason: schema_mismatch`. 소비자(`merge_review.parse_codex_yaml`)는
+    # `codex_failed: false`를 성공으로 읽으므로, 스키마가 깨진 codex 실행이
+    # **findings 0건 + degradation record 0건**으로 흡수됐다.
+    def _schema_stdin(self, findings_literal):
+        import json as _json
+        text = "```json\n{\"findings\": " + findings_literal + "}\n```"
+        return _json.dumps({"type": "item.completed",
+                            "item": {"type": "agent_message", "text": text}}) + "\n"
+
+    def test_non_list_findings_is_codex_failed(self):
+        for literal in ("{}", "\"oops\"", "7", "null"):
+            with self.subTest(findings=literal):
+                out = run(self._schema_stdin(literal))
+                self.assertIn("codex_failed: true", out,
+                              f"findings={literal} 가 성공으로 마킹됐다 (fail-open)")
+                self.assertIn("reason: schema_mismatch", out)
+
+    def test_non_dict_element_is_codex_failed(self):
+        for literal in ('["garbage"]', "[7]", "[null]"):
+            with self.subTest(findings=literal):
+                out = run(self._schema_stdin(literal))
+                self.assertIn("codex_failed: true", out,
+                              f"findings={literal} 가 성공으로 마킹됐다 (fail-open)")
+                self.assertIn("reason: schema_mismatch", out)
+
+    def test_mixed_good_and_garbage_element_is_codex_failed(self):
+        """정상 finding과 쓰레기 원소가 섞이면 그 라운드는 판독 불가다."""
+        out = run(self._schema_stdin(
+            '[{"category":"omission","target_section":"#2","severity":"high"},'
+            ' "garbage"]'))
+        self.assertIn("codex_failed: true", out)
+        self.assertIn("reason: schema_mismatch", out)
+
+    def test_int_element_does_not_crash(self):
+        """수정 전 `[7]`은 yaml_emit의 `if k in f`에서 TypeError로 죽었다."""
+        out = run(self._schema_stdin("[7]"))
+        self.assertIn("meta:", out, "변환기가 죽어 YAML을 내지 못했다")
+
+    def test_wellformed_findings_stay_successful(self):
+        """과잉 강화 방지 — 선언 필드가 일부 없어도 dict 원소면 성공이다.
+
+        레포 자신의 valid 픽스처(`test_last_fenced_block_wins`)가 `confidence`/
+        `summary`/`proposed_fix` 없이 통과한다. 필드 단위 검증까지 올리면 그
+        라운드 전체가 degrade가 되고, spec-review 소비자
+        (`merge_review.py:487` · `build_codex_findings_display`)는 `codex_failed`
+        시 findings를 **통째로 버리므로** 정상 finding이 소실된다.
+        """
+        out = run(VALID)
+        self.assertIn("codex_failed: false", out)
+        self.assertNotIn("schema_mismatch", out)
+        out2 = run(self._schema_stdin(
+            '[{"category":"omission","target_section":"#2","severity":"high"}]'))
+        self.assertIn("codex_failed: false", out2)
+        self.assertNotIn("schema_mismatch", out2)
+
     def test_last_fenced_block_wins(self):
         # anti-injection: an earlier fenced block must be ignored.
         stdin = (
