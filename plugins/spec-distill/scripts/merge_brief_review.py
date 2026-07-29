@@ -71,11 +71,38 @@ CRITIC_CATEGORIES = ("distortion", "omission", "insertion", "provenance_mislabel
 CRITIC_REQUIRED_FIELDS = ("category", "target_section", "severity", "message")
 
 
-def extract_critic_verdict(text: str) -> str | None:
-    m = STATUS_RE.search(text)
-    if not m:
-        return None
-    return "approved" if m.group(1).strip().lower() == "approved" else "needs_revise"
+def extract_critic_verdict(text: str) -> tuple[str | None, str | None]:
+    """반환 (verdict, conflict_reason).
+
+    `search()`(첫 매치)를 쓰지 않는다. `agents/brief-critic.md`의 출력 형식 절에는
+    리터럴 `**Status:** Approved` / `**Status:** Issues Found`가 **디코이로** 들어
+    있고, brief 본문(§6 사용자 원문 = 비신뢰 verbatim)이 critic 프롬프트에 그대로
+    inline되므로 원문에 심긴 문자열도 같은 표면이다. 첫 매치를 취하면 복창·주입이
+    실제 판정보다 앞서 잡힌다.
+
+    형제 규칙과 정렬한다 — `codex_findings_to_yaml.py`는 `matches[-1]`을 쓰며
+    "last block defeats injected earlier blocks"를 주석으로 명시한다. 다만 여기서는
+    한 걸음 더 간다: **값이 서로 다른 Status가 공존하면 판정 불가로 fail-closed**
+    (`needs_revise`)하고 그 사실을 reason으로 올린다. 값이 모두 같으면 그 값을 쓴다
+    (같은 값의 중복은 충돌이 아니므로 과잉 차단하지 않는다).
+    """
+    ms = STATUS_RE.findall(text)
+    if not ms:
+        return None, None
+    verdicts = ["approved" if m.strip().lower() == "approved" else "needs_revise"
+                for m in ms]
+    last = verdicts[-1]
+    if len(set(verdicts)) > 1:
+        # **마지막을 취하고, 충돌은 advisory로만 올린다.** 값이 갈리면 무조건
+        # needs_revise로 밀면 `approved`가 사실상 **도달 불가**가 된다 — agent 파일의
+        # 출력 형식 절에 리터럴 Status 두 줄이 있어서, critic이 자기 형식을 복창하는
+        # (매 라운드 동일하게 일어날 수 있는) 순간 모든 라운드가 강제 escalate로 타버린다.
+        # 형제 규칙(`codex_findings_to_yaml.py`: "last block defeats injected earlier
+        # blocks")과 정렬하되, 충돌 사실 자체는 사람에게 반드시 도달시킨다.
+        return last, (
+            f"Status 줄 {len(ms)}개의 판정이 서로 다르다(마지막 값 '{last}'를 채택) — "
+            "복창이나 주입이 섞였을 수 있으니 critic 원문을 직접 확인하라")
+    return last, None
 
 
 def extract_critic_issues(text: str) -> tuple[list[dict], bool, list[str]]:
@@ -97,9 +124,22 @@ def extract_critic_issues(text: str) -> tuple[list[dict], bool, list[str]]:
         `emit()`이 빈 값을 아예 출력하지 않아, 빈 `message`는 내용 없는 finding으로
         렌더돼 같은 "판독 불가를 clean으로" 클래스가 된다.)
     """
-    m = SENTINEL_RE.search(text)
-    if not m:
+    # 첫 블록이 아니라 **마지막** 블록을 취한다 — 형제 규칙
+    # (`codex_findings_to_yaml.py`: "last block defeats injected earlier blocks")과
+    # 같은 이유다. brief 본문이 프롬프트에 inline되므로 앞선 디코이 블록이 진짜
+    # 지적을 덮을 수 있다.
+    matches = list(SENTINEL_RE.finditer(text))
+    if not matches:
         return [], True, []
+    m = matches[-1]
+    if len(matches) > 1:
+        # 마지막을 채택하되(형제 규칙) **조용히 넘어가지 않는다.** brief 본문(§6 = 비신뢰
+        # verbatim)이 critic 프롬프트에 inline되므로, 뒤에 붙은 블록이 권위를 갖는다는 사실
+        # 자체가 주입 표면이다. 다중 블록은 판독 불가로 표시해 escalate를 만든다.
+        extra_reason = (f"sentinel 블록 {len(matches)}개 — 어느 것이 리뷰어의 실제 출력인지 "
+                        "확정 불가(마지막 블록을 채택했으나 그대로 신뢰하지 않는다)")
+    else:
+        extra_reason = None
     try:
         payload = json.loads(m.group(1))
     except json.JSONDecodeError:
@@ -110,6 +150,9 @@ def extract_critic_issues(text: str) -> tuple[list[dict], bool, list[str]]:
     kept: list[dict] = []
     reasons: list[str] = []
     malformed = False
+    if extra_reason:
+        malformed = True
+        reasons.append(extra_reason)
     for idx, it in enumerate(issues):
         if not isinstance(it, dict):
             malformed = True
@@ -180,9 +223,13 @@ def main() -> int:
     except OSError as exc:
         critic_text = ""
         advisory.append(f"[spec-distill v0.24.0] critic 출력 읽기 실패: {exc}")
-    critic_verdict = extract_critic_verdict(critic_text)
+    critic_verdict, critic_verdict_conflict = extract_critic_verdict(critic_text)
     critic_issues, critic_malformed, critic_malformed_reasons = \
         extract_critic_issues(critic_text)
+    if critic_verdict_conflict:
+        advisory.append(
+            f"[spec-distill v0.24.0] {critic_verdict_conflict}. "
+            "복창·주입된 Status 줄이 실제 판정을 덮지 않도록 fail-closed 처리한다.")
     if critic_verdict is None:
         advisory.append(
             "[spec-distill v0.24.0] critic verdict 파싱 불가 (Status 줄 부재) — "

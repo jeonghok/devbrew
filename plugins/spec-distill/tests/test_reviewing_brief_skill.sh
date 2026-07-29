@@ -318,6 +318,48 @@ fi
 grep -qE '^[[:space:]]*python3 "\$PR/scripts/check_verbatim_coverage\.py" "\$PAYLOAD" "\$STATE"' "$SKILL" \
   && note PASS "AC1: 완전성 검사 실행 라인 실재 (줄-시작 앵커)" || note FAIL "AC1: check_verbatim_coverage.py 호출 라인 부재 (산문 참조는 검사를 돌리지 않는다)"
 grep -qE '첫 액션' "$SKILL" && note PASS "AC1: 진입 첫 액션 명시" || note FAIL "AC1: 첫 액션 명시 부재"
+
+# --- /qg iter-1 CRITICAL(증폭기) : rc 표 row 0이 advisories를 라우팅한다 -----
+# 결함: check_verbatim_coverage.py는 rc 0에서도 advisories를 담아 내보내는데, rc 표의
+# row `0` 동작이 "1단계로"뿐이라 그 payload를 읽으라는 지시가 없었다. record로 라우팅하는
+# 행은 3·4뿐이라 rc-0 run의 advisory는 **전량 폐기**된다 — P21 강등 문구("원문 미포함")가
+# 기록되자마자 버려지므로, 검사가 "이 발화는 대조하지 못했다"고 말해도 사용자에게 닿지 않는다.
+W_ENTRY="$(scoped_window '^## 진입 첫 액션' '^## ')"
+minlines "$W_ENTRY" 10 \
+  && note PASS "AMP: 진입 첫 액션 윈도우가 잘리지 않음" \
+  || note FAIL "AMP: 진입 첫 액션 윈도우가 비었거나 잘렸다 — 아래 assert가 vacuous하다"
+has "$W_ENTRY" 'advisories' \
+  && note PASS "AMP: rc 표가 advisories 처리를 언급" \
+  || note FAIL "AMP: rc 표에 advisories 처리가 없다 — rc-0 advisory가 조용히 버려진다"
+# body-unique 문구로 건다(헤더/목차 만족 방지). 이 문장은 이 섹션 본문에만 존재해야 한다.
+has "$W_ENTRY" '비어 있지 않으면' \
+  && note PASS "AMP: row 0이 'advisories가 비어 있지 않으면' 조건부 액션을 가짐" \
+  || note FAIL "AMP: row 0에 advisory 조건부 액션 부재 — 강등이 사용자에게 도달하지 않는다"
+# 구조 위반(중복 앵커)이 이제 exit 1로 오므로 그 구제책이 append로는 불가함을 표가 말해야 한다.
+has "$W_ENTRY" '구조 위반' \
+  && note PASS "AMP: exit 1 행이 구조 위반(중복 앵커) 경로를 구분" \
+  || note FAIL "AMP: exit 1 행이 구조 위반을 구분하지 않는다 — append 지시가 중복 앵커에 무효다"
+
+# --- /qg iter-1 CRITICAL : blob_rc 표에 catch-all이 있다 (critic·readback 양쪽) ---
+# 결함: 표가 2와 3만 라우팅해서, 스크립트가 내는 그 외 코드(비-UTF-8 읽기 실패로 새던
+# exit 1 등)가 어느 분기에도 안 걸리고 `${BLOB}`이 빈 문자열인 채 Agent()에 보간됐다.
+# 스크립트는 이제 읽기 실패를 2로 매핑하지만, 표에 catch-all이 없으면 **다음** 미지의
+# 코드가 같은 구멍으로 다시 샌다 — 코드가 아니라 계약을 닫는다.
+# 전체파일 `grep -c == 2`는 **한 섹션에 둘 다 넣어도** 통과한다(iter-2가 mutation으로
+# 실증: readback 절의 catch-all을 지우고 critic 절에 복제 → 122/122 green). 각 dispatch
+# 지점의 **자기 윈도우 안에서** 확인한다.
+for sec in '2-a' '3-a'; do
+  W_BLOB="$(scoped_window "^### ${sec}\\." '^#{1,3} ')"
+  minlines "$W_BLOB" 6 \
+    && note PASS "BLOB($sec): 윈도우 확보" \
+    || note FAIL "BLOB($sec): 윈도우가 비었다 — 아래 assert가 vacuous하다"
+  grep -qE '^[[:space:]]*BLOB="\$\(python3 "\$PR/scripts/build_brief_inline_blob\.py" ' <<<"$W_BLOB" \
+    && note PASS "BLOB($sec): blob 빌더 호출이 이 윈도우 안에 실재" \
+    || note FAIL "BLOB($sec): 이 dispatch 지점에 blob 빌더 호출이 없다"
+  has "$W_BLOB" '그 외 non-zero는 `2`와 동일하게 취급' \
+    && note PASS "BLOB($sec): catch-all 행이 **이 지점의** 표에 존재" \
+    || note FAIL "BLOB($sec): 이 지점의 표에 catch-all이 없다 — 표 밖 코드가 빈 blob 디스패치로 샌다"
+done
 for code in 'exit 1' 'exit 3' 'exit 4'; do
   grep -qF "$code" "$SKILL" && note PASS "AC1/AC12: 호출자가 $code 분기" || note FAIL "AC1/AC12: $code 분기 부재"
 done
@@ -335,6 +377,79 @@ fi
 grep -qE '^## 1단계 — 방향성' "$SKILL" && note PASS "AC1: 1단계가 방향성" || note FAIL "AC1: 1단계 헤더가 방향성이 아님"
 grep -qE '^## 2단계 — 충실도' "$SKILL" && note PASS "AC1: 2단계가 충실도" || note FAIL "AC1: 2단계 헤더가 충실도가 아님"
 grep -qE '^## 3단계 — 냉독' "$SKILL" && note PASS "AC1: 3단계가 냉독" || note FAIL "AC1: 3단계 헤더가 냉독이 아님"
+
+# --- /qg iter-1 IMPORTANT : vc_rc의 차단 행이 실행형이다 ---------------------
+# 결함: `vc_rc=$?`가 대입만 되고 `if`가 없어, exit 1(확정 §6 원문 위반)이 차단 없이
+# can-redispatch → bump → 재리뷰로 흘러갔다. 바로 위 gate_rc는 실행형 if를 가진다.
+W2C="$(scoped_window '^### 2-c\.' '^#{1,3} ')"
+minlines "$W2C" 10 && note PASS "VCRC: 2-c 윈도우 확보"                    || note FAIL "VCRC: 2-c 윈도우가 비었다 — 아래 assert가 vacuous하다"
+F2C="$(fence "$W2C")"
+grep -qE '\[\[ "\$vc_rc" -eq 1 \]\]' <<<"$F2C" \
+  && note PASS "VCRC: vc_rc == 1 차단 분기가 실행 코드로 존재" \
+  || note FAIL "VCRC: vc_rc를 읽는 실행형 분기가 없다 — 서술만 차단이고 실행은 통과한다"
+branch_body '\[\[ "\$vc_rc" -eq 1 \]\]' "$F2C" | grep -q 'exit 1' \
+  && note PASS "VCRC: 그 분기 본문이 실제로 exit 1 한다" \
+  || note FAIL "VCRC: vc_rc 분기 본문이 파이프라인을 멈추지 않는다"
+
+# --- /qg iter-1 IMPORTANT : merge 호출도 exit code + 빈 stdout을 라우팅한다 --
+# 결함: 파일 내 모든 결정론 호출이 rc 표를 갖는데 merge만 없었다. 그 stdout이 2-c 분기
+# 전체가 읽는 verdict인데, 실패하면 빈 stdout + non-zero로 나가고 지시가 없다.
+# 전체파일 grep은 bash **주석**으로 충족된다(iter-2 실증: 실행 라인을 지우고 `if false`로
+# 바꿔도 주석이 남아 122/122 green). VCRC 관용구를 그대로 적용한다 — fence 추출 후 실행
+# 라인 앵커 + 분기 본문 검사.
+grep -qE '^[[:space:]]*python3 "\$PR/scripts/merge_brief_review\.py"' <<<"$F2C" \
+  && note PASS "MERGE: merge 호출이 2-c 실행 라인으로 실재 (줄-시작 앵커)" \
+  || note FAIL "MERGE: 2-c에 merge 실행 라인이 없다"
+grep -qE 'merge_rc=\$\?' <<<"$F2C" \
+  && note PASS "MERGE: merge_rc를 실행 코드에서 포착 (주석 아님)" \
+  || note FAIL "MERGE: merge_rc 포착이 실행 코드에 없다 — 주석만으로는 verdict를 지키지 못한다"
+grep -qE '\[\[ "\$merge_rc" -ne 0 \|\| ! -s "\$MERGE_OUT" \]\]' <<<"$F2C" \
+  && note PASS "MERGE: non-zero **또는 빈 출력** 가드가 실행 분기로 존재" \
+  || note FAIL "MERGE: 빈-출력 가드가 실행 분기에 없다 — 잘린 write는 exit code로 안 잡힌다"
+# verdict가 실제로 읽히는가 — 파일로 리다이렉트해놓고 아무도 열지 않으면 2-c의 판정이 보이지 않는다.
+grep -qE '^[[:space:]]*cat "\$MERGE_OUT"' <<<"$F2C" \
+  && note PASS "MERGE: MERGE_OUT을 실제로 읽는다 (verdict 가시성)" \
+  || note FAIL "MERGE: MERGE_OUT을 아무도 cat하지 않는다 — rc를 잡으려다 verdict를 눈멀게 했다"
+
+# --- /qg iter-1 IMPORTANT : 두 번째 채널이 셸 변수가 아니라 파일이다 --------
+# 결함: `$DEGRADE_FALLBACK`은 Bash 호출마다 새 셸이라 소멸한다(실측). 누산기라서
+# 재도출도 불가능하다 — append가 매번 빈 값에서 시작하고 Step B에서 비어 있다.
+# 이 채널은 원장이 죽었을 때만 작동하는 백업이므로, 침묵하면 "degrade 없음"이 된다.
+grep -q 'DEGRADE_FALLBACK_FILE' "$SKILL" \
+  && note PASS "FALLBACK: 두 번째 채널이 파일 기반" \
+  || note FAIL "FALLBACK: 두 번째 채널이 여전히 셸 변수 — Bash 호출 간 소멸해 Step B에서 빈다"
+grep -qE '>>[ \t]*"\$DEGRADE_FALLBACK_FILE"' "$SKILL" \
+  && note PASS "FALLBACK: append가 >> 리다이렉트로 누적" \
+  || note FAIL "FALLBACK: 파일에 append하는 실행 형태가 없다"
+
+# --- /qg iter-1 IMPORTANT : skip_reason 포착 + direction 축 양성 마커 -------
+# 결함(a): detect_codex.sh에서 codex_available만 뽑고 skip_reason을 버리는데,
+# advisory 템플릿은 `(reason: <skip_reason>)`를 요구한다 — 렌더할 값이 없다.
+# 결함(b): direction 축은 CODEX_DIR_YAML을 소비하는 스크립트가 없어, `codex_failed: true`
+# 라는 프로즈 술어에 fail-closed 보수가 없다 — 부재·0바이트·판독불가가 전부 '정상'이다.
+grep -q 'skip_reason=' "$SKILL" \
+  && note PASS "CODEXDIR: skip_reason을 실제로 포착" \
+  || note FAIL "CODEXDIR: skip_reason이 버려진다 — advisory 템플릿이 렌더 불가다"
+grep -q 'codex_failed: false' "$SKILL" \
+  && note PASS "CODEXDIR: direction 축이 성공 마커 **양성** 요구" \
+  || note FAIL "CODEXDIR: 성공을 opt-in으로 요구하지 않는다 — 부재/0바이트가 정상으로 읽힌다"
+
+# --- /qg iter-1 IMPORTANT : 전사 채널의 교차검증 -----------------------------
+# critic이 `tools: []`이라 자기 출력을 못 쓰므로, SKILL은 **저자**에게 critic 원문을
+# $CRITIC_OUT로 전사하라고 지시한다. 깨끗한 전사면 codex_degraded여도 escalate가
+# 걸리지 않아 approved가 난다 — 판정이 저자가 쓴 파일 하나에 얹힌다. 채널은 zero-tool
+# 격리의 대가라 제거 대상이 아니고, 대신 Step B에서 사람이 대조할 수 있어야 한다.
+grep -q 'CRITIC_OUT' "$SKILL" \
+  && note PASS "TRANSCRIBE: \$CRITIC_OUT 참조 실재" \
+  || note FAIL "TRANSCRIBE: \$CRITIC_OUT 참조가 없다"
+W_STEPB="$(scoped_window '^## Step B로 전달' '^## ')"
+minlines "$W_STEPB" 8 && note PASS "TRANSCRIBE: Step B 윈도우 확보" \
+                     || note FAIL "TRANSCRIBE: Step B 윈도우가 비었다 — 아래 assert가 vacuous하다"
+has "$W_STEPB" 'CRITIC_OUT' \
+  && note PASS "TRANSCRIBE: Step B가 critic 원문 전문을 함께 올린다 (사람이 병합 결과와 대조 가능)" \
+  || note FAIL "TRANSCRIBE: Step B에 critic 원문이 없다 — 전사본 검증이 불가능하고 판정이 저자 손 안에 남는다"
+
+
 
 # --- 방향성은 병합하지 않는다 (verdict 없음) --------------------------------
 grep -qE '방향성(은|을)? 병합하지 않' "$SKILL" \

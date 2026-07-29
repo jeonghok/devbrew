@@ -537,8 +537,8 @@ in-flight migration: 키 부재 → in-memory default(`direction`, `0`, `[]`) + 
 |---|---|---|
 | `check_brief.py gate` (기존, 로직 무변경) | brief 파일 — **저자** | ⚠️ 부분 — 3 bijection이 body ↔ frontmatter ↔ §6 **교차** 대조라 한쪽만 고치면 red. 단일 파일 자기충족은 아니지만 조율 편집엔 열림 |
 | `check_verbatim_coverage.py` L1·L2 | **두 파일**(state 원장 + payload) | ✅ — 우회에 양쪽 조작 필요(조율 편집 한계는 §11 ⑥) |
-| zero-tool probe 분기 (AC2b) | **런타임** — 저자도 리뷰어도 쓰지 않음 | ✅ — 통과/실패가 런타임 사실이고 실패 시 verdict가 자동 강등 |
-| `merge_brief_review.py` fail-closed 합집합 | **리뷰어 findings** — 저자가 쓰지 않음 | ✅ |
+| zero-tool probe 분기 (AC2b) | ⚠️ **저자** — 분기 조건이 `docs/audits/…-zero-tool-probe.md`의 `**분기 판정:**` 한 줄이고 오케스트레이터가 그 파일에 쓸 수 있다 | ⚠️ 부분 — probe 자체는 런타임 사실이지만 **그 결과를 담은 앵커는 검사 대상의 손 안**이다. `test_brief_agents.sh`도 기대값을 같은 줄에서 도출하므로 협조적 flip은 스위트 green(2026-07-29 /qg 적발). 봉쇄: 두 분기 모두 Write/Edit/Bash/Agent를 금지하고 실패 분기를 `tools: Read`로 고정하므로 flip이 **쓰기 권한을 줄 수는 없고** 충실도를 hard gate → advisory로 강등할 뿐이며, findings는 그대로 Step B에 오른다 |
+| `merge_brief_review.py` fail-closed 합집합 | ⚠️ **저자(전사 채널)** — `brief-critic`이 `tools: []`이라 자기 출력을 파일로 쓸 수 없어, SKILL이 오케스트레이터(=brief 저자)에게 critic 원문을 `$CRITIC_OUT`로 전사하도록 지시한다 | ⚠️ 부분 — codex 축이 살아 있으면 저자가 쓰지 않은 입력이 함께 들어오지만, `codex_degraded`(kill switch·not_installed·auth_missing에서 일상 발동)면 판정이 전사본 하나에 얹힌다. 채널은 zero-tool 격리의 대가라 제거 대상이 아니고, 대신 **Step B에 `$CRITIC_OUT` 전문을 병합 결과와 나란히 올려 사람이 대조**한다(2026-07-29 /qg 적발) |
 | T-lock 계열 (T1–T29) | 저자가 쓴 파일 — 단 **mutation으로 이빨 증명**(§8.2) | ✅ mutation 배정된 것만. T10은 락이 아님(회귀 실행) |
 | ~~audit에 *"리뷰 라운드 기록"* 요구~~ | 저자 — 한 줄 쓰면 통과 | ❌ → **도입하지 않음**(§9 기각) |
 

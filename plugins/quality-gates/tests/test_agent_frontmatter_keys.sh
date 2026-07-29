@@ -96,6 +96,16 @@ is_server_grant() {
 }
 
 shopt -s nullglob
+# 스캔 대상이 0개면 이 락은 **빈 집합 위에서 전칭명제를 참이라 선언**한다 — 루프가 통째로
+# skip되고 violations=0이라 마지막 줄이 "PASS: 모든 agent 가 …"를 rc 0으로 출력한다.
+# nullglob 하에서 glob이 안 맞는 것(디렉토리 구조 변경·오타난 fixture root·잘못된 cwd)은
+# 위장이 아니라 흔한 사고이고, 그 사고가 보안 락을 조용히 무력화한다. 개수를 먼저 센다.
+set -- plugins/*/agents/*.md
+scanned_agents=$#
+if [ "$scanned_agents" -lt 1 ]; then
+  echo "FAIL: 스캔된 agent 파일 0개 (cwd=$(pwd)) — 락이 빈 집합 위에서 통과할 뻔했다" >&2
+  exit 1
+fi
 for f in plugins/*/agents/*.md; do
   FM="$(fm_of "$f")"
 
@@ -398,5 +408,5 @@ if [ "$violations" -gt 0 ]; then
   echo "FAIL: agent 도구 표면 위반 $violations 건" >&2
   exit 1
 fi
-echo "PASS: 모든 agent 가 tools: allowlist 를 선언하고 금지 도구는 마커를 동반한다"
+echo "PASS: agent ${scanned_agents}개 전부가 tools: allowlist 를 선언하고 금지 도구는 마커를 동반한다"
 exit 0

@@ -3,6 +3,16 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.3] — 2026-07-29
+
+### Fixed
+- **Law 2 도구 표면 락이 빈 코퍼스 위에서 PASS를 내던 것** — `shopt -s nullglob` 하에서
+  `plugins/*/agents/*.md`가 하나도 안 맞으면 루프가 통째로 skip되고 `violations=0`이라
+  *"PASS: 모든 agent 가 tools: allowlist 를 선언하고…"* 가 rc 0으로 출력됐다. **0개 파일을
+  검사하고 전칭명제를 참이라 선언**한 것이다. glob 불일치(디렉토리 구조 변경·오타난 fixture
+  root·잘못된 cwd)는 위장이 아니라 흔한 편집 사고이고, 그 사고가 보안 락을 조용히 0으로
+  만든다. 스캔 개수를 먼저 세어 0이면 FAIL하고, PASS 문구가 **실제 스캔 개수**를 보고한다.
+
 ## [2.14.2] — 2026-07-28
 
 독립 Claude 리뷰와 codex conformance 감사가 v2.14.0/v2.14.1 이 락에 **새로 집어넣은** 결함

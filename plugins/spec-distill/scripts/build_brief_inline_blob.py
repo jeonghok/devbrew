@@ -17,7 +17,9 @@
 §6 사용자 원문은 **절대 건드리지 않는다.** 본문이 audit 파일명을 언급하면 원문 보존이
 이기고 **exit 3**으로 알린다 — 호출자가 degradation record를 남기고 계속한다.
 
-exit: 0 깨끗한 redaction / 3 본문에 audit 파일명 잔존(위생 미달) / 2 usage·파일 부재
+exit: 0 깨끗한 redaction / 3 본문에 audit 파일명 잔존(위생 미달) / 2 usage·파일 부재·읽기 실패
+     (비-UTF-8·권한). **1은 절대 내지 않는다** — 호출자 표가 0/2/3만 라우팅하므로
+     표 밖 코드는 빈 blob 디스패치로 샌다.
 """
 from __future__ import annotations
 
@@ -67,7 +69,16 @@ def main(argv: list[str]) -> int:
     if not path.is_file():
         print(f"payload file not found: {path}", file=sys.stderr)
         return 2
-    text = path.read_text(encoding="utf-8")
+    # 읽기 실패를 **문서화된** exit 2로 매핑한다. 가드가 없으면 UnicodeDecodeError가
+    # 그대로 새어 Python 기본 exit 1이 되는데, 호출 SKILL의 표는 0/2/3만 라우팅하므로
+    # 1은 어느 분기에도 걸리지 않는다. 그 상태에서 `BLOB`은 빈 문자열이고 `${BLOB}`이
+    # 그대로 Agent() 프롬프트에 보간돼 critic이 **빈 `<brief>`** 를 리뷰하고 "왜곡 없음"을
+    # 보고한다 — SKILL이 프로즈로 금지한 fail-open이 코드 경로로는 열려 있었다.
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        print(f"payload 읽기 실패 ({type(exc).__name__}): {path} — {exc}", file=sys.stderr)
+        return 2
     blob = redact_frontmatter(text)
     sys.stdout.write(blob)
     if AUDIT_SUFFIX_RE.search(blob):

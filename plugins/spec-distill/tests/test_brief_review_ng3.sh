@@ -17,6 +17,38 @@ OLD_EN='the brief gets no separated review'
 OLD_KO='brief는 검토 대상이 아닙니다'
 OLD_KO2='brief는 분리 review 대상이 아니다'
 
+# --- /qg iter-1 IMPORTANT : 식별자가 아니라 **개념 별칭**으로 스윕 -----------
+# 결함: 위 assert들은 $GATE·$REVIEWER 두 경로를 하드코딩해, 같은 주장을 **다른 문구로**
+# 하는 세 번째 인스턴스를 구조적으로 볼 수 없었다 — 실제로 reviewing-spec/SKILL.md가
+# 현재시제로 "interview는 brief까지 단독 완결, design doc만 Law 2 분리 reviewer 대상"을
+# 단언한 채 출하됐고 이 브랜치가 그것을 반증한다. 리터럴이 아니라 개념으로 쓸어야 한다.
+#
+# 스코프는 **production 파일만**이다(리포 기록: forbidden-string 락이 CHANGELOG·테스트
+# 자신을 잡아 2회 재발). CHANGELOG는 과거를 기록하는 것이 정당하고, 이 테스트 파일은
+# 검사 문자열을 담아야 하므로 둘 다 제외한다.
+# 별칭은 **주장 형태**로 좁힌다. '단독 완결' 단독은 NG7(handoff는 강제가 아니라 사용자
+# 선택)의 정당한 어휘와 충돌하고, 'design doc만' 단독은 spec-reviewer가 자기 스코프를
+# 옳게 서술한 문장까지 잡는다(둘 다 실측 FP). 잡아야 하는 것은 '**brief에는 분리
+# 리뷰어가 없다**'는 주장 하나다.
+CONCEPT_ALIASES=('brief까지 단독 완결' 'design doc만 Law 2' 'brief는 검토 대상이 아' 'brief만 단독으로 완결')
+sweep_hits=""
+while IFS= read -r prod; do
+  for alias in "${CONCEPT_ALIASES[@]}"; do
+    if grep -qF -- "$alias" "$prod"; then
+      sweep_hits="${sweep_hits}
+  - ${prod#$REPO_ROOT/} :: '$alias'"
+    fi
+  done
+done < <(find "$SD/skills" "$SD/agents" "$SD/scripts" "$SD/templates" -type f \( -name '*.md' -o -name '*.py' -o -name '*.sh' \) 2>/dev/null)
+
+n_prod="$(find "$SD/skills" "$SD/agents" "$SD/scripts" "$SD/templates" -type f \( -name '*.md' -o -name '*.py' -o -name '*.sh' \) 2>/dev/null | grep -c . || true)"
+[[ "$n_prod" -ge 10 ]] \
+  && note PASS "NG3-sweep: production 파일 ${n_prod}개를 스캔 (코퍼스 비어 있지 않음)" \
+  || note FAIL "NG3-sweep: 스캔 대상이 ${n_prod}개뿐 — 이 스윕이 vacuous하다"
+[[ -z "$sweep_hits" ]] \
+  && note PASS "NG3-sweep: 별칭 ${#CONCEPT_ALIASES[@]}종이 production에 잔존하지 않음" \
+  || note FAIL "NG3-sweep: brief가 분리 리뷰 대상이 아니라는 주장이 아직 살아 있다:$sweep_hits"
+
 grep -qiF "$OLD_EN" "$GATE" && note FAIL "T13: check_brief.py에 옛 NG3 문구 잔존" \
                             || note PASS "T13: check_brief.py 옛 문구 부재"
 grep -qE 'Law 2 (분리 리뷰|separated review).*(얹|on top|added)' "$GATE" \

@@ -67,28 +67,16 @@ rc="$(rc_of "$FX/brief-verbatim-nfkc.md" "$FX/state-verbatim-nfkc.md")"
 [[ "$rc" == "1" ]] && note PASS "T31: ①↔1 불일치 → exit 1 (NFC 유지)" \
                    || note FAIL "T31: ①↔1이 통과했다 — NFKC 징후 (rc=$rc)"
 
-# --- T3 / AC11 : P21 placeholder 강등 (양쪽 모두 관여 — 서로 다른 구체 토큰) ---
-rc="$(rc_of "$FX/brief-verbatim-placeholder.md" "$FX/state-verbatim-placeholder.md")"
-[[ "$rc" == "0" ]] && note PASS "T3: placeholder 관여(양쪽) → advisory 강등 (exit 0)" \
-                   || note FAIL "T3: placeholder 강등이 없다 (rc=$rc)"
-json_of "$FX/brief-verbatim-placeholder.md" "$FX/state-verbatim-placeholder.md" | grep -q 'P21 placeholder' \
-  && note PASS "T3: advisories에 P21 문구" || note FAIL "T3: advisories가 P21을 언급하지 않음"
-
-# --- T3 / AC11 : P21 placeholder — state 쪽만 관여 --------------------------
-rc="$(rc_of "$FX/brief-verbatim-placeholder-state-only.md" "$FX/state-verbatim-placeholder-state-only.md")"
-[[ "$rc" == "0" ]] && note PASS "T3: placeholder 관여(state만) → advisory 강등 (exit 0)" \
-                   || note FAIL "T3: state쪽 단독 placeholder가 강등되지 않는다 (rc=$rc)"
-
-# --- T3 / AC11 : P21 placeholder — payload 쪽만 관여 (spec §5.5의 설계된 예외:
-# payload가 P21 secret placeholder로 치환하는 것은 §6 append-only의 유일한 예외이며,
-# state(ground truth, git-ignored)가 리터럴을 들고 있어도 payload가 그것을 redact해
-# 보여주는 것은 정상 경로다 — 이 케이스가 비어 있으면 회귀가 락에 보이지 않는다) -----
-rc="$(rc_of "$FX/brief-verbatim-placeholder-payload-only.md" "$FX/state-verbatim-placeholder-payload-only.md")"
-[[ "$rc" == "0" ]] && note PASS "T3: placeholder 관여(payload만, §5.5 예외) → advisory 강등 (exit 0)" \
-                   || note FAIL "T3: payload쪽 단독 placeholder(§5.5 예외)가 강등되지 않는다 — state의 리터럴이 정상적으로 차단된다 (rc=$rc)"
-out="$(json_of "$FX/brief-verbatim-placeholder-payload-only.md" "$FX/state-verbatim-placeholder-payload-only.md")"
-grep -q 'P21 placeholder' <<<"$out" \
-  && note PASS "T3: payload쪽만 관여해도 advisories에 P21 문구" || note FAIL "T3: payload쪽만 관여 시 advisories가 P21을 언급하지 않음"
+# --- T3 / AC11 : P21 관여 시 판정 포기 (구 계약 'exit 0 강등'은 iter-2에서 폐기) ---
+# 세 fixture(양쪽·state만·payload만)의 계약은 이제 C1 블록이 단독으로 집행한다.
+# 여기서는 advisory 문구가 **어느 쪽 때문인지**를 말하는지만 본다(사용자가 Step B에서
+# 원인을 구분할 수 있어야 한다).
+for pair in placeholder placeholder-payload-only placeholder-state-only; do
+  out="$(json_of "$FX/brief-verbatim-$pair.md" "$FX/state-verbatim-$pair.md")"
+  grep -qE 'P21 placeholder 관여\((양쪽|state|payload)\)' <<<"$out" \
+    && note PASS "T3($pair): advisory가 관여 측(양쪽/state/payload)을 지목" \
+    || note FAIL "T3($pair): advisory가 어느 쪽 때문인지 말하지 않는다"
+done
 
 # --- T3 mutation: 양쪽 모두에서 placeholder 토큰 제거 → red 승격 ------------
 # (state만 벗기면 payload의 bare <REDACTED>가 독자적으로 매치해 OR가 절대 red로
@@ -227,6 +215,133 @@ rc=$?
 [[ "$rc" == "4" ]] && note PASS "T20: 주입된 예외 → exit 4 (1이 아님)" \
                    || note FAIL "T20: 주입된 예외가 exit $rc — 예외가 '위반 발견'으로 오분류된다"
 rm -rf "$tmpd"
+
+# === /qg 회귀 락 (C1·C2·C3) ==================================================
+# C1은 iter-2 리뷰(리뷰어 4/4 CRITICAL) 후 **계약 자체를 바꿨다**. redaction 뒤에 무엇이
+# 있었는지는 원리적으로 알 수 없으므로, 부분 매칭으로 통과/차단을 가르려는 시도는 어느
+# 앵커를 걸어도 한쪽에서 샌다(누락 세탁 통과) 또는 다른 쪽을 잘못 막는다(정당한 superset
+# payload 차단). 그래서 판정은 하나다:
+#
+#     **P21 placeholder가 어느 쪽에든 관여하면 검사 결과는 절대 rc 0이 아니다.**
+#
+# rc 3(검사 불가)은 SKILL rc 표에서 degradation record가 **의무**인 행이라 Step B 사용자에게
+# 반드시 도달한다. 원래 CRITICAL의 본질은 "통과했다"가 아니라 "강등이 조용했다"였다.
+
+# --- C1 : P21 관여 → 절대 clean이 아니다 ------------------------------------
+for pair in placeholder placeholder-payload-only placeholder-state-only; do
+  rc="$(rc_of "$FX/brief-verbatim-$pair.md" "$FX/state-verbatim-$pair.md")"
+  [[ "$rc" == "3" ]] \
+    && note PASS "C1($pair): P21 관여 → exit 3 (검사 불가, record 의무)" \
+    || note FAIL "C1($pair): exit $rc — 0이면 조용한 통과, 1이면 정당한 redaction 오차단"
+  out="$(json_of "$FX/brief-verbatim-$pair.md" "$FX/state-verbatim-$pair.md")"
+  grep -q 'P21' <<<"$out" \
+    && note PASS "C1($pair): advisory가 P21 관여를 명시" \
+    || note FAIL "C1($pair): 어느 쪽 때문에 검사 불가인지 advisory에 없다"
+done
+
+# 세탁 시도(의미 반전 + 토큰) — 통과(0)해서는 안 된다.
+rc="$(rc_of "$FX/brief-verbatim-p21-laundering.md" "$FX/state-verbatim-ok.md")"
+[[ "$rc" != "0" ]] \
+  && note PASS "C1 세탁(변조): exit $rc — clean이 아니다" \
+  || note FAIL "C1 세탁(변조): exit 0 — 토큰 하나로 §6을 다시 써도 통과한다"
+
+# **누락** 세탁 — iter-2가 적발한 경로. 한 단어만 남기고 나머지를 토큰으로 덮는다.
+tmpo="$(mktemp)" || exit 1
+sed 's|> "브리프에 리뷰를 붙이고 싶다"|> "브리프에 <REDACTED:rest>"|' \
+    "$FX/brief-verbatim-ok.md" > "$tmpo"
+rc="$(rc_of "$tmpo" "$FX/state-verbatim-ok.md")"
+[[ "$rc" != "0" ]] \
+  && note PASS "C1 세탁(누락): exit $rc — 원문 대부분을 토큰으로 지워도 clean이 아니다" \
+  || note FAIL "C1 세탁(누락): exit 0 — 완전성 검사가 완전성을 검사하지 않는다"
+rm -f "$tmpo"
+
+# 본문이 통째로 placeholder — 대조할 리터럴이 0인데 clean이면 총체적 소거가 통과한다.
+tmpw="$(mktemp)" || exit 1
+sed 's|> "브리프에 리뷰를 붙이고 싶다"|> "<REDACTED:whole>"|' "$FX/brief-verbatim-ok.md" > "$tmpw"
+rc="$(rc_of "$tmpw" "$FX/state-verbatim-ok.md")"
+[[ "$rc" != "0" ]] \
+  && note PASS "C1 총체 소거: exit $rc — 본문이 토큰뿐이어도 clean이 아니다" \
+  || note FAIL "C1 총체 소거: exit 0 — 문장 전체를 지우고 통과한다"
+rm -f "$tmpw"
+
+# 정당한 superset payload(원문 + 맥락 주석) + 토큰 — **오차단하면 안 된다**(1이 아님).
+tmps="$(mktemp)" || exit 1
+sed 's|> "브리프에 리뷰를 붙이고 싶다"|> "브리프에 <REDACTED:x> 붙이고 싶다" (맥락: 1라운드)|' \
+    "$FX/brief-verbatim-ok.md" > "$tmps"
+rc="$(rc_of "$tmps" "$FX/state-verbatim-ok.md")"
+[[ "$rc" != "1" ]] \
+  && note PASS "C1 오차단 방지: 맥락이 덧붙은 payload가 위반으로 잡히지 않음 (exit $rc)" \
+  || note FAIL "C1 오차단 방지: 정당한 superset payload를 위반으로 차단했다"
+rm -f "$tmps"
+
+# C1 mutation: P21 분기의 강등 플래그만 제거한다. (def rename은 NameError→exit 4를 내는데
+# 그건 "세탁이 통과했다"가 아니라 "스크립트가 죽었다"이고, `!= 1` 같은 단방향 assert는 그것을
+# 통과로 오독한다 — iter-2가 이 위양성을 적발했다. mutation은 **정확한 기대값**을 요구한다.)
+tmpm="$(mktemp)" || exit 1
+MUT_PY="$(mktemp)" || exit 1
+cat > "$MUT_PY" <<'MUTEOF'
+import re, sys
+src, dst = sys.argv[1], sys.argv[2]
+t = open(src, encoding="utf-8").read()
+i = t.find("P21 placeholder 관여({side})")
+if i < 0:
+    print("UNCHANGED"); sys.exit(0)
+j = t.find("saw_indeterminate = True", i)
+if j < 0:
+    print("UNCHANGED"); sys.exit(0)
+t2 = t[:j] + "pass  # mutated" + t[j + len("saw_indeterminate = True"):]
+open(dst, "w", encoding="utf-8").write(t2)
+print("MUTATED")
+MUTEOF
+mutres="$(python3 "$MUT_PY" "$SCRIPT" "$tmpm")"
+if [[ "$mutres" == "MUTATED" ]]; then
+  python3 "$tmpm" "$FX/brief-verbatim-placeholder-payload-only.md" \
+                  "$FX/state-verbatim-placeholder-payload-only.md" >/dev/null 2>&1
+  rcm=$?
+  [[ "$rcm" == "0" ]] \
+    && note PASS "C1 mutation: 강등 플래그 제거 → exit 0(조용한 통과) 재현, 락에 이빨 있음" \
+    || note FAIL "C1 mutation: 플래그를 없애도 exit $rcm — 이 락은 다른 이유로 통과한다(4=크래시는 증명이 아니다)"
+else
+  note FAIL "C1 mutation: 치환 대상을 못 찾았다 ($mutres) — 락이 vacuous하다"
+fi
+rm -f "$tmpm" "$MUT_PY"
+
+# --- C2 : §6 앵커 중복은 '검사 불가(3)'가 아니라 위반(1) --------------------
+rc="$(rc_of "$FX/brief-verbatim-dup-anchor.md" "$FX/state-verbatim-ok.md")"
+[[ "$rc" == "1" ]] \
+  && note PASS "C2: §6 앵커 중복 → exit 1 (전 statement skip 아님)" \
+  || note FAIL "C2: 앵커 중복이 exit $rc — 한 줄 중복으로 완전성 게이트 전체가 꺼진다"
+
+# C2 순서: state가 판독 불가여도 payload의 구조 위반이 선점당하면 안 된다(iter-2 적발).
+tmpb="$(mktemp)" || exit 1
+grep -v 'user_statements:' "$FX/state-verbatim-ok.md" | grep -v '^- id:\|^  source:\|^  round:\|^  text:' > "$tmpb"
+rc="$(rc_of "$FX/brief-verbatim-dup-anchor.md" "$tmpb")"
+[[ "$rc" == "1" ]] \
+  && note PASS "C2 순서: state 판독 실패가 구조 위반을 선점하지 않음" \
+  || note FAIL "C2 순서: exit $rc — state에서 키 하나만 빼면 hard block이 soft continue로 되돌아간다"
+rm -f "$tmpb"
+
+# --- C3 : 확정 위반이 뒤 항목의 불확정에 밀려 강등되지 않는다 ---------------
+rc="$(rc_of "$FX/brief-verbatim-mixed.md" "$FX/state-verbatim-mixed.md")"
+[[ "$rc" == "1" ]] \
+  && note PASS "C3: 위반(S1) + 불확정(S2) 혼합 → exit 1 (위반이 불확정보다 우선)" \
+  || note FAIL "C3: 혼합 케이스가 exit $rc — 확정 위반이 강등돼 차단되지 않는다"
+out="$(json_of "$FX/brief-verbatim-mixed.md" "$FX/state-verbatim-mixed.md")"
+grep -q '"not_contained": \["S1"\]' <<<"$out" \
+  && note PASS "C3: 강등 대신 S1 위반이 보존됨" || note FAIL "C3: S1 위반이 결과에서 사라졌다"
+rc="$(rc_of "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-mixed.md")"
+[[ "$rc" == "3" ]] \
+  && note PASS "C3 대칭: 불확정만 → 여전히 exit 3 (위반으로 과승격하지 않음)" \
+  || note FAIL "C3 대칭: 불확정 단독이 exit $rc — 과승격은 정상 brief를 차단한다"
+
+# --- C4(iter-2) : 빈 원장은 '전건 검증 완료'가 아니다 -----------------------
+tmpe="$(mktemp)" || exit 1
+printf -- '---\nsession_id: 11111111-1111-1111-1111-111111111111\nphase: 1\nuser_statements: []\n---\n\nbody\n' > "$tmpe"
+rc="$(rc_of "$FX/brief-verbatim-ok.md" "$tmpe")"
+[[ "$rc" == "3" ]] \
+  && note PASS "C4: user_statements 0건 → exit 3 (빈 전칭명제는 clean이 아니다)" \
+  || note FAIL "C4: 빈 원장이 exit $rc — 원장을 비우는 것만으로 L1·L2가 조용히 우회된다"
+rm -f "$tmpe"
 
 # --- usage -----------------------------------------------------------------
 python3 "$SCRIPT" >/dev/null 2>&1; rc=$?

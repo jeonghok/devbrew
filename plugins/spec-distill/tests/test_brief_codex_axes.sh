@@ -114,5 +114,54 @@ for f in "$CL_DIR" "$CL_FID" "$BUILDER"; do
   fi
 done
 
+# === /qg iter-1 IMPORTANT : stale YAML이 이번 라운드 판정으로 읽히지 않는다 ====
+# 결함: OUTPUT_PATH를 선-truncate하지 않아 조기 exit(잘못된 axis·인자 부족)·SIGKILL·
+# 쓰기 실패 시 **직전 라운드의 YAML이 그대로 남았다**. 호출 SKILL은 러너의 exit code를
+# 잡지 않으므로, merge는 남아 있던 clean YAML을 이번 라운드의 codex 판정으로 읽고
+# `codex_degraded: false` → approved를 낸다(흔적 0). SKILL이 "라운드마다 덮어씁니다"로
+# 보장한다고 적은 바로 그 속성이 파일 잔존으로 무력화돼 있었다.
+STALE="$(mktemp)" || exit 1
+write_stale() { printf '%s\n' 'findings: []' 'meta:' '  codex_failed: false' > "$STALE"; }
+
+write_stale
+bash "$RUNNER" WRONGAXIS "$FX/brief-verbatim-ok.md" "$REPO_ROOT" "$STALE" >/dev/null 2>&1
+grep -q 'codex_failed: false' "$STALE" \
+  && note FAIL "STALE: 잘못된 axis 조기 exit 후 이전 라운드 clean YAML 잔존 — 이번 라운드 판정으로 읽힌다" \
+  || note PASS "STALE: 조기 exit이 이전 라운드 산출물을 남기지 않음"
+
+write_stale
+bash "$RUNNER" fidelity "$FX/nonexistent-payload.md" "$REPO_ROOT" "$STALE" >/dev/null 2>&1
+grep -q 'codex_failed: true' "$STALE" \
+  && note PASS "STALE: payload 부재 → codex_failed: true로 덮어씀" \
+  || note FAIL "STALE: payload 부재인데 codex_failed: true가 아니다 — stale이 살아남았다"
+
+write_stale
+bash "$RUNNER" fidelity "$FX/brief-verbatim-ok.md" "" "$STALE" >/dev/null 2>&1
+grep -q 'codex_failed: false' "$STALE" \
+  && note FAIL "STALE: project_dir 부재 경로에서 clean YAML이 잔존" \
+  || note PASS "STALE: project_dir 부재 경로도 stale을 남기지 않음"
+
+# mutation: 선-기록(seed_failclosed)을 제거하면 위 (1)이 다시 통과해야 한다.
+MUT="$(mktemp)" || exit 1
+mutres="$(python3 - "$RUNNER" "$MUT" <<'PY'
+import sys
+src, dst = sys.argv[1], sys.argv[2]
+t = open(src, encoding="utf-8").read()
+out = "\n".join(l for l in t.splitlines() if not l.strip().startswith("seed_failclosed"))
+open(dst, "w", encoding="utf-8").write(out + "\n")
+print("MUTATED" if out.strip() != t.strip() else "UNCHANGED")
+PY
+)"
+if [[ "$mutres" == "MUTATED" ]]; then
+  write_stale
+  bash "$MUT" WRONGAXIS "$FX/brief-verbatim-ok.md" "$REPO_ROOT" "$STALE" >/dev/null 2>&1
+  grep -q 'codex_failed: false' "$STALE" \
+    && note PASS "STALE mutation: seed 제거 → stale이 다시 살아남음 (락에 이빨 있음)" \
+    || note FAIL "STALE mutation: seed를 없애도 stale이 안 남는다 — 이 락은 다른 이유로 통과한다"
+else
+  note FAIL "STALE mutation: seed 호출 라인을 못 찾았다 ($mutres) — 락이 vacuous하다"
+fi
+rm -f "$STALE" "$MUT"
+
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ "$fail" -eq 0 ]]

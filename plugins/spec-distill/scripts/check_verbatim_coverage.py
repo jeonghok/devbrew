@@ -9,12 +9,16 @@ payload(§6 사용자 원문)와 state.local.md(`user_statements` 원장)를 대
   L1: state `user_statements[].id` ⊆ payload §6 `**S<N>**` 앵커 집합.  위반 → red
   L2: 정규화 후 payload §6 항목 본문이 state `text`를 **포함**하는가.   위반 → red
       P21 placeholder 토큰이 **어느 한쪽**(state `text` 또는 payload §6 항목 본문)에
-      관여하면 advisory로 강등한다(spec §5.5). payload 쪽 P21 secret placeholder
-      치환은 §6 append-only 규칙의 유일한 설계된 예외다(design doc §"§6 변경 금지 —
-      P21 secret placeholder 치환만 예외") — payload는 `docs/`에 커밋되는 산출물이고
-      state.local.md는 git-ignored이므로, "state는 리터럴을 들고 있는데 payload가
-      그것을 redact해 보여주는" 시나리오가 정확히 의도된 정상 경로다. 따라서 어느
-      한쪽이라도 placeholder를 보이면 엄격 비교가 성립하지 않으므로 강등한다.
+      관여하면 그 statement는 **판정하지 않는다 → exit 3(검사 불가)**. clean도 violation도
+      아니다. redaction 뒤에 무엇이 있었는지는 원리적으로 알 수 없고, 부분 매칭으로
+      통과/차단을 가르려는 시도는 어느 앵커를 걸어도 한쪽에서 샌다 — 토큰이 문장 끝에
+      붙으면 그 뒤의 임의 누락이 허용되고(누락 세탁), 앵커를 조이면 원문에 맥락을 덧붙인
+      정당한 payload를 오차단한다. 두 실패는 같은 함수의 양면이라 동시에 없앨 수 없다.
+      (2026-07-29 /qg iter-2: 부분 매칭 술어를 리뷰어 4/4가 CRITICAL로 판정 → 제거.)
+
+      exit 3은 호출자 rc 표에서 degradation record가 **의무**인 행이다. 원래 결함의
+      본질은 "통과했다"가 아니라 **"강등이 조용했다"** 였다(rc 0의 advisory는 호출자
+      표에서 폐기됐다). 판정을 포기하되 그 사실을 사람에게 반드시 도달시킨다.
 
 정규화 N1–N5 (spec §5.5) — **순서 고정 `N1 → N2 → N3 → N4 → N5`**:
   N1 각 줄 앞 인용 마커 1회 제거 · N2 강조/링크 제거 · N3 연속 whitespace(개행 포함)
@@ -68,6 +72,16 @@ P21_PLACEHOLDER_RE = re.compile(
 
 class ParseError(Exception):
     """검사 불가(exit 3)로 매핑되는, 의도적으로 처리된 파싱 실패."""
+
+
+class StructuralViolation(Exception):
+    """위반(exit 1)로 매핑되는 **구조적** 규칙 위반.
+
+    `ParseError`(판독 불가)와 구분한다. 판독에 실패한 것이 아니라 판독에 성공했고
+    그 결과가 규칙 위반인 경우다 — 3(degrade 후 계속)으로 내면 위반 항목뿐 아니라
+    **전 statement**의 L1·L2가 함께 skip되고 호출자는 그것을 "계속"으로 읽는다.
+    """
+
 
 
 def normalize(s: str) -> str:
@@ -207,7 +221,11 @@ def parse_payload_section6(text: str) -> dict[str, str]:
         if m2:
             cur = m2.group(1)
             if cur in bodies:
-                raise ParseError(f"payload §6에 {cur} 앵커가 중복 (구조는 check_brief.py 소관)")
+                # 위임하지 않는다. `check_brief.py`의 `verbatim_anchors()`는 §6 앵커를
+                # set()으로 모아 중복을 **아예 보지 않으므로**, 여기서 3(검사 불가)으로
+                # 내면 그 사실을 아무도 잡지 못한 채 전 statement의 L1·L2가 skip된다.
+                # 중복 앵커는 판독 실패가 아니라 append-only 규칙의 구조적 위반이다.
+                raise StructuralViolation(f"payload §6에 {cur} 앵커가 중복 — append-only 위반")
             bodies[cur] = []
             heads[cur] = m2.group(2)
             order.append(cur)
@@ -237,10 +255,33 @@ def run(payload_path: Path, state_path: Path) -> tuple[int, dict]:
         result["advisories"].append(f"검사 불가 — state unreadable: {exc}")
         return EXIT_INDETERMINATE, result
     try:
-        statements = parse_user_statements(_frontmatter(state_text))
+        # payload를 **먼저** 판다. 순서를 뒤집으면 state의 ParseError가 payload의
+        # StructuralViolation을 선점해, state에서 키 하나만 빼는 것으로 구조 위반(차단)이
+        # 검사 불가(계속)로 되돌아간다 — state는 저자가 쓰는 git-ignored 파일이다.
         items = parse_payload_section6(payload_text)
+        statements = parse_user_statements(_frontmatter(state_text))
+    except StructuralViolation as exc:
+        result["not_contained"].append("§6")
+        result["advisories"].append(f"구조 위반 — {exc}")
+        return EXIT_VIOLATION, result
     except ParseError as exc:
         result["advisories"].append(f"검사 불가 — parse failed: {exc}")
+        return EXIT_INDETERMINATE, result
+
+    # 확정 위반은 뒤 항목의 불확정에 밀려 강등되지 않는다. 루프 안에서 곧바로
+    # `return EXIT_INDETERMINATE` 하면 이미 누적한 not_contained가 rc 3(= 호출자에겐
+    # "degrade 후 계속")으로 나가 차단되지 않는다. 판정은 루프 **밖**에서 한 번,
+    # 위반 > 불확정 순으로 한다.
+    saw_indeterminate = False
+
+    # 빈 전칭명제는 clean이 아니다. 원장에 statement가 0건이면 L1·L2 어느 것도 돌지 않고
+    # 루프가 통째로 skip되는데, 그것을 "위반 없음"으로 집계하면 **원장을 비우는 것만으로**
+    # 완전성 검사가 조용히 우회된다(같은 diff가 test_agent_frontmatter_keys.sh의 빈-glob
+    # 구멍을 닫은 것과 같은 클래스다).
+    if not statements:
+        result["advisories"].append(
+            "검사 불가 — state 원장에 user_statements가 0건이다 (대조 대상 없음). "
+            "빈 집합 위의 '위반 없음'은 검증이 아니다")
         return EXIT_INDETERMINATE, result
 
     for st in statements:
@@ -253,30 +294,49 @@ def run(payload_path: Path, state_path: Path) -> tuple[int, dict]:
         have = normalize(items[sid])
         if want and want in have:
             continue
-        if P21_PLACEHOLDER_RE.search(raw_state) or P21_PLACEHOLDER_RE.search(items[sid]):
-            # 어느 한쪽에라도 P21 placeholder가 있으면 강등한다. payload 쪽 치환이
-            # §6 append-only의 유일한 설계된 예외(spec §5.5) — state가 리터럴을
-            # 들고 있어도 payload가 그것을 redact해 보여주는 것은 정상 경로다.
-            result["advisories"].append(
-                f"{sid}: P21 placeholder 관여 — L2를 advisory로 강등 (원문 미포함)")
-            continue
         if not want:
-            # state text가 존재하지만 비어 있거나 정규화(N1–N5) 후 비었다. 비교할 것이
-            # 없으므로 이 발화는 **대조되지 않았다** — advisory 한 줄로 흘려보내고
-            # 계속하면 그 사실이 exit 0("위반 없음")으로 집계된다(indeterminate ≠ clean).
-            # 이 분기가 이 사실의 **단독** 책임자다(parse_user_statements는 키 부재만 본다).
+            # state text가 존재하지만 비어 있거나 정규화(N1–N5) 후 비었다 — 대조 불가.
             result["advisories"].append(
                 f"검사 불가 — {sid}: state text가 비어 있다(또는 정규화 후 빈 문자열) "
                 "— L2 대조가 성립하지 않는다")
-            return EXIT_INDETERMINATE, result
+            saw_indeterminate = True
+            continue
+        state_tok = P21_PLACEHOLDER_RE.search(raw_state)
+        item_tok = P21_PLACEHOLDER_RE.search(items[sid])
+        if state_tok or item_tok:
+            # **P21이 관여하면 판정하지 않는다.** redaction 뒤에 무엇이 있었는지는 원리적으로
+            # 알 수 없으므로, 부분 매칭으로 통과/차단을 가르려는 시도는 어느 앵커를 걸어도
+            # 한쪽에서 샌다: 토큰이 문장 끝에 붙으면 그 뒤 임의 누락이 허용되고(누락 세탁),
+            # 앵커를 조이면 원문에 맥락을 덧붙인 정당한 payload를 오차단한다. 그래서 이
+            # 경로의 결과는 clean(0)도 violation(1)도 아닌 **검사 불가(3)** 다.
+            #
+            # 이것으로 원래 결함의 본질이 닫힌다 — 문제는 "통과했다"가 아니라 "강등이
+            # 조용했다"였고(rc 0의 advisory는 호출자 표에서 폐기됐다), rc 3은 SKILL rc 표에서
+            # degradation record가 **의무**인 행이라 Step B 사용자에게 반드시 도달한다.
+            side = "양쪽" if (state_tok and item_tok) else ("state" if state_tok else "payload")
+            result["advisories"].append(
+                f"검사 불가 — {sid}: P21 placeholder 관여({side}) — redaction 뒤의 원문을 "
+                "확인할 수 없어 L2를 판정하지 않는다(통과로 집계하지 않는다)")
+            saw_indeterminate = True
+            continue
         result["not_contained"].append(sid)
 
     if result["missing_ids"] or result["not_contained"]:
         return EXIT_VIOLATION, result
+    if saw_indeterminate:
+        return EXIT_INDETERMINATE, result
     return EXIT_OK, result
 
 
 def main(argv: list[str]) -> int:
+    # 이 스크립트는 한국어 advisory를 stdout/stderr로 낸다. locale이 UTF-8이 아니면
+    # (`LC_ALL=C`) print가 UnicodeEncodeError로 죽어 **exit 1**이 되고, 호출자 rc 표는
+    # 1을 "위반 발견 → 차단"으로 읽는다 — 인코딩 사고가 정상 brief를 막는다.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     if len(argv) != 3:
         print("usage: check_verbatim_coverage.py <payload> <state.local.md>",
               file=sys.stderr)

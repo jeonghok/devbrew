@@ -87,5 +87,72 @@ python3 "$SCRIPT" "$FX/nonexistent.md" >/dev/null 2>&1
 rc3=$?
 [[ "$rc3" == "2" ]] && note PASS "부재 파일 거부 (exit 2)" || note FAIL "부재 파일이 exit $rc3 (2가 아님)"
 
+# === /qg iter-1 CRITICAL : 읽기 실패는 문서화된 exit 2 (1이 아니다) ==========
+# 결함: `path.read_text(encoding="utf-8")`가 try 밖에 있어 비-UTF-8 payload가
+# uncaught UnicodeDecodeError → Python 기본 **exit 1**을 냈다. 호출 SKILL의 표는
+# 0/2/3만 라우팅하므로 1은 어느 분기에도 안 걸리고, `BLOB`이 빈 문자열인 채로
+# `${BLOB}`이 그대로 Agent() 프롬프트에 보간된다 → critic이 **빈 `<brief>`** 를
+# 리뷰하고 "왜곡 없음"을 보고한다(SKILL이 프로즈로 금지한 바로 그 fail-open).
+tmpbin="$(mktemp)" || exit 1
+# `printf '---…'`는 bash가 `--`를 옵션 종결자로 파싱해 실패한다 — 포맷을 `%s`로 분리한다.
+{ printf '%s\n' '---' 'name: x' '---'; printf '\xff\xfe invalid utf-8 \xff\n'; } > "$tmpbin"
+out="$(python3 "$SCRIPT" "$tmpbin" 2>/dev/null)"; rc=$?
+[[ "$rc" == "2" ]] \
+  && note PASS "비-UTF-8 payload → exit 2 (문서화된 '디스패치 금지' 코드)" \
+  || note FAIL "비-UTF-8 payload가 exit $rc — 표에 없는 코드는 빈 blob 디스패치로 샌다"
+[[ -z "$out" ]] \
+  && note PASS "비-UTF-8 payload → stdout 비어 있음 (부분 blob 아님)" \
+  || note FAIL "비-UTF-8 payload가 stdout에 무언가를 냈다 — 잘린 blob이 디스패치될 수 있다"
+# `set -o pipefail` 하에서 `cmd | grep`으로 바로 연결하면 파이프 상태가 grep(성공)이 아니라
+# cmd(exit 2)로 오염돼 항상 FAIL로 오분류된다 — test_check_verbatim_coverage.sh가 같은 함정을
+# 이미 주석으로 남겼다. 변수에 캡처한 뒤 grep해 파이프를 피한다.
+err="$(python3 "$SCRIPT" "$tmpbin" 2>&1 >/dev/null)"
+grep -q 'payload' <<<"$err" \
+  && note PASS "비-UTF-8 payload → stderr에 원인 명시 (조용한 실패 아님)" \
+  || note FAIL "비-UTF-8 payload 실패가 stderr에 설명되지 않는다"
+rm -f "$tmpbin"
+
+# 읽기 권한 없음도 같은 계약(1로 새지 않는다).
+tmpperm="$(mktemp)" || exit 1
+cp "$PAYLOAD" "$tmpperm"; chmod 000 "$tmpperm"
+if [[ ! -r "$tmpperm" ]]; then   # root로 돌리면 항상 읽히므로 그때는 건너뛴다
+  python3 "$SCRIPT" "$tmpperm" >/dev/null 2>&1; rc=$?
+  [[ "$rc" == "2" ]] \
+    && note PASS "읽기 불가 payload → exit 2 (1이 아님)" \
+    || note FAIL "읽기 불가 payload가 exit $rc"
+else
+  note PASS "읽기 불가 케이스 건너뜀 (root 실행 — 권한이 적용되지 않음)"
+fi
+chmod 644 "$tmpperm"; rm -f "$tmpperm"
+
+# mutation: 읽기 가드를 제거하면 비-UTF-8이 다시 표 밖 코드로 새야 한다(락에 이빨).
+# 치환이 실제로 일어났는지 먼저 확인한다 — UNCHANGED인 채로 "2가 아니다"를 통과시키면
+# 이 mutation은 아무것도 증명하지 않는다(vacuous pass).
+tmpmut="$(mktemp)" || exit 1
+mutres="$(python3 - "$SCRIPT" "$tmpmut" <<'PY'
+import sys
+src, dst = sys.argv[1], sys.argv[2]
+t = open(src, encoding="utf-8").read()
+GUARDED = '''    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:'''
+BARE = '    text = path.read_text(encoding="utf-8")\n    if False:  # noqa\n        exc = None'
+t2 = t.replace(GUARDED, BARE, 1)
+open(dst, "w", encoding="utf-8").write(t2)
+print("MUTATED" if t2 != t else "UNCHANGED")
+PY
+)"
+tmpbin2="$(mktemp)" || exit 1
+{ printf '%s\n' '---' 'name: x' '---'; printf '\xff\xfe bad \xff\n'; } > "$tmpbin2"
+if [[ "$mutres" == "MUTATED" ]]; then
+  python3 "$tmpmut" "$tmpbin2" >/dev/null 2>&1; rcm=$?
+  [[ "$rcm" != "2" ]] \
+    && note PASS "mutation: 읽기 가드 제거 → exit $rcm (2가 아님, 락에 이빨 있음)" \
+    || note FAIL "mutation: 가드를 제거해도 exit 2 — 이 락은 다른 이유로 통과한다"
+else
+  note FAIL "mutation: 가드 텍스트를 못 찾아 치환이 일어나지 않았다 ($mutres) — 이 락은 vacuous하다"
+fi
+rm -f "$tmpmut" "$tmpbin2"
+
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ "$fail" -eq 0 ]]

@@ -5,9 +5,14 @@
 #
 # Usage:  run_brief_codex_reviewer.sh <axis: direction|fidelity> <payload> <project_dir> <out_yaml>
 #
-# 계약(기존 run_spec_codex_reviewer.sh와 동일): **항상 exit 0** 이고 **항상 <out_yaml>에
-# codex_findings_to_yaml.py 스키마 YAML을 쓴다.** 병합(merge_brief_review.py)이 파일 부재를
-# codex_yaml_missing → fail-closed로 읽으므로, 어떤 실패 경로에서도 YAML을 남긴다.
+# 계약: 정상·실패 어느 경로에서도 **exit 0** 이고 **<out_yaml>에 codex_findings_to_yaml.py
+# 스키마 YAML을 쓴다.** 병합(merge_brief_review.py)이 파일 부재를 codex_yaml_missing →
+# fail-closed로 읽으므로, 어떤 실패 경로에서도 YAML을 남긴다.
+#
+# **예외 하나 — exit 3**: out_yaml 자체를 쓸 수 없으면(디렉토리 부재·권한·RO 마운트) YAML을
+# 남길 수 없다. 그때는 stderr에 loud하게 알리고 exit 3으로 죽는다. 호출자는 3을 보면
+# **out_yaml을 지워야 한다** — 직전 라운드 산출물이 남아 있으면 그것이 이번 라운드의
+# codex 판정으로 읽힌다(rc를 안 잡으면 정확히 그 사고가 난다).
 #
 # §11 ⑪ 반복 금지: CLAUDE_PLUGIN_ROOT를 fallback 없이 참조하면 set -u 하에서 훅이 env를
 # 주지 않는 컨텍스트(스킬 수동 호출)에서 즉사한다. 여기서는 스크립트 위치로 유도한다.
@@ -31,15 +36,31 @@ fi
 [[ "$OUTPUT_PATH" = /* ]] || OUTPUT_PATH="$PWD/$OUTPUT_PATH"
 [[ "$PAYLOAD" = /* ]] || PAYLOAD="$PWD/$PAYLOAD"
 
-emit_fallback() {                      # $1 = reason
+write_failclosed() {                   # $1 = reason — 리다이렉트 실패를 삼키지 않는다
   {
     echo 'findings: []'
     echo 'meta:'
     echo '  codex_failed: true'
     echo "  reason: $1"
-  } > "$OUTPUT_PATH"
+  } > "$OUTPUT_PATH" || {
+    echo "[spec-distill] fail-closed YAML 기록 실패: $OUTPUT_PATH ($1)" >&2
+    return 1
+  }
+}
+
+emit_fallback() {                      # $1 = reason
+  write_failclosed "$1" || exit 3
   exit 0
 }
+
+# **선-기록(seed).** OUTPUT_PATH를 여기서 fail-closed 산출물로 덮어쓴 뒤, 성공 경로가
+# 마지막에 진짜 결과로 덮어쓰게 한다. 선-기록이 없으면 아래 조기 exit들과 SIGKILL·OOM이
+# OUTPUT_PATH를 **손대지 않은 채** 끝나므로 직전 라운드의 YAML이 그대로 남고, 호출 SKILL이
+# 러너의 exit code를 잡지 않으므로 merge가 그 stale clean YAML을 이번 라운드의 codex
+# 판정으로 읽는다(codex_degraded: false → approved, 흔적 0). SKILL이 "라운드마다
+# 덮어씁니다"라고 보장한 속성은 이 한 줄이 있어야 실제로 성립한다.
+seed_failclosed() { write_failclosed "runner_incomplete" || exit 3; }
+seed_failclosed
 
 case "$AXIS" in
   direction|fidelity) ;;

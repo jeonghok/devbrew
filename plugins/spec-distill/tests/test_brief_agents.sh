@@ -10,6 +10,7 @@ AUDIT="$REPO_ROOT/docs/audits/2026-07-27-spec-distill-zero-tool-probe.md"
 ISOLATED=("brief-critic" "brief-readback")
 ALL=("brief-critic" "brief-readback" "brief-direction-reviewer")
 
+SKILL_BRIEF="$SD/skills/reviewing-brief/SKILL.md"
 pass=0; fail=0
 note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
 fm_of() { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$1"; }
@@ -118,8 +119,52 @@ for t in WebSearch WebFetch; do
 done
 
 # 역할 프롬프트가 X / NOT Z를 명시한다 (CLAUDE.md 컴포넌트 격리 규약)
-grep -q "NOT" "$SD/agents/brief-critic.md" && note PASS "brief-critic: NOT 책임 명시" || note FAIL "brief-critic: NOT 절 없음"
-grep -q "NOT" "$SD/agents/brief-readback.md" && note PASS "brief-readback: NOT 책임 명시" || note FAIL "brief-readback: NOT 절 없음"
+# /qg iter-1: 이전 형태 `grep -q "NOT"`는 **"NOTE"·"NOTHING"으로 충족**됐다 — 세 `**NOT**`
+# 불릿을 "NOTE: 자유롭게 쓰세요."로 바꿔 역할 경계를 뒤집어도 green이었다. 마커 형태와
+# 열거 크기를 함께 핀하고, 대상도 세 agent 전부로 넓힌다(direction-reviewer가 빠져 있었다).
+for a in brief-critic brief-readback brief-direction-reviewer; do
+  n_not="$(grep -cE '^[[:space:]]*-[[:space:]]+\*\*NOT\*\* ' "$SD/agents/$a.md" || true)"
+  # `-ge 2`는 3개 중 **어느 하나를 지워도** 통과한다(iter-2가 맨앞·중간·맨끝 3곳 모두
+  # 실증했고, 맨끝은 Law 2 역할 경계 불릿이었다). 실제 출하 개수로 핀한다.
+  [[ "$n_not" -eq 3 ]] \
+    && note PASS "$a: NOT 불릿 정확히 3개 (마커 형태 + 열거 크기 핀)" \
+    || note FAIL "$a: '- **NOT** …' 불릿이 ${n_not}개 — 3개여야 한다(하나만 지워도 역할 경계가 깨진다)"
+done
+
+# --- /qg iter-1 IMPORTANT : 출력 계약이 **생산자 쪽에서도** 락된다 ------------
+# 결함: `brief-critic-issues` 펜스명과 `**Status:**`는 merge_brief_review.py가 리터럴로
+# 핀하는데 agent 파일 쪽에는 아무 assert가 없었다 — 생산자에서 rename하면 10개 스위트가
+# 전부 green인 채로 매 라운드 critic_verdict=None + malformed → 영구 needs_revise →
+# cap에서 강제 escalate가 난다(테스트 신호 0). 형제 agent엔 이 락이 이미 있다
+# (test_spec_reviewer_design_checklist.sh). 리터럴을 여기 박지 않고 **소비자 코드에서
+# 추출**해 대조한다 — 어느 쪽에서 rename해도 red가 되도록.
+MERGE_PY="$SD/scripts/merge_brief_review.py"
+SENTINEL_LIT="$(grep -oE '```brief-[a-z-]+' "$MERGE_PY" | head -1 | sed 's/^```//')"
+[[ -n "$SENTINEL_LIT" ]] \
+  && note PASS "PRODUCER: 소비자에서 sentinel 리터럴 추출 ($SENTINEL_LIT)" \
+  || note FAIL "PRODUCER: merge_brief_review.py에서 sentinel 리터럴을 못 뽑았다 — 이 락이 vacuous하다"
+# 빈 문자열이면 `grep -qF ""`가 모든 파일에 매치해 **가짜 PASS**가 난다(iter-2 실증).
+# 추출 실패 시 이 assert 자체를 FAIL로 떨어뜨린다.
+if [[ -n "$SENTINEL_LIT" ]] && grep -qF "$SENTINEL_LIT" "$SD/agents/brief-critic.md"; then
+  note PASS "PRODUCER: critic 파일이 소비자가 핀한 sentinel($SENTINEL_LIT)을 실제로 emit"
+else
+  note FAIL "PRODUCER: critic sentinel이 소비자 리터럴과 불일치(또는 추출 실패) — 매 라운드 malformed로 강제 escalate된다"
+fi
+grep -qE '\*\*Status:\*\*' "$SD/agents/brief-critic.md" \
+  && note PASS "PRODUCER: critic 파일에 **Status:** 마커 실재 (소비자 STATUS_RE와 정합)" \
+  || note FAIL "PRODUCER: critic 파일에 **Status:** 가 없다 — verdict 파싱이 항상 실패한다"
+
+# direction-reviewer 본문도 락한다 — SKILL이 이 출력 위에 결정 표를 세우는데 지금까지
+# frontmatter만 검사됐고 본문 전체(센티널 포함)가 무테스트였다.
+# SKILL은 이 센티널을 **인라인 코드 스팬**(`brief-…-findings`)으로 참조한다(펜스가 아니다).
+# 소비자 표기에서 뽑아 생산자(agent 본문)와 대조하므로, 어느 쪽에서 rename해도 red가 된다.
+DIR_SENT="$(grep -oE '`brief-[a-z-]+-findings`' "$SKILL_BRIEF" | head -1 | tr -d '`')"
+[[ -n "$DIR_SENT" ]] \
+  && note PASS "PRODUCER: SKILL이 direction sentinel을 참조 ($DIR_SENT)" \
+  || note FAIL "PRODUCER: SKILL에서 direction sentinel을 못 찾았다 — 아래 대조가 vacuous하다"
+[[ -n "$DIR_SENT" ]] && grep -qF "$DIR_SENT" "$SD/agents/brief-direction-reviewer.md" \
+  && note PASS "PRODUCER: direction-reviewer 본문이 SKILL이 기대하는 sentinel을 emit" \
+  || note FAIL "PRODUCER: direction-reviewer sentinel이 SKILL 기대와 불일치 — 결정 표가 'unavailable'로만 떨어진다"
 
 # AC3 — readback 프롬프트에 출력 스키마 어휘와 '금지 문구'가 둘 다 없다
 RB="$SD/agents/brief-readback.md"

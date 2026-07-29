@@ -63,7 +63,13 @@ PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
 harness_sid="$(python3 "$PR/hooks/state_path.py" session-id)"
 ROOT="$(python3 "$PR/hooks/state_path.py" state-root)"
 STATE="$ROOT/$harness_sid/state.local.md"
-DEGRADE_FALLBACK=""                                           # 기록 실패 record의 턴-내 사본
+# 두 번째 채널. 경로는 **세션의 순수 함수**여야 한다 — 어느 블록이 언제 재도출해도 같은
+# 파일을 가리켜야 하기 때문이다. `$$`(PID)는 Bash 호출마다 달라 재발견이 불가능하고,
+# `: >`(truncate)는 이 블록을 다시 실행할 때마다 그때까지 쌓인 record를 지운다.
+# 그래서 truncate하지 않고 **touch**만 하며, fallback 경로도 sid로 결정한다.
+DEGRADE_FALLBACK_FILE="$ROOT/$harness_sid/brief-degrade-fallback.txt"
+touch "$DEGRADE_FALLBACK_FILE" 2>/dev/null \
+  || DEGRADE_FALLBACK_FILE="${TMPDIR:-/tmp}/brief-degrade-fallback.${harness_sid:-nosid}.txt"
 python3 "$PR/scripts/brief_review_state.py" init "$STATE"; init_rc=$?   # 키 3개 idempotent 추가
 ```
 
@@ -79,14 +85,19 @@ python3 "$PR/scripts/brief_review_state.py" init "$STATE"; init_rc=$?   # 키 3�
 
    > `[spec-distill v0.24.2] brief 리뷰 state 기록 불가 (<init이 낸 실제 reason>) — degrade 원장이 이 세션에 없습니다. 아래 record는 이 턴 안에서 Step B 질문 텍스트로 직접 전달됩니다.`
 
-2. **모든** `degrade-append` 호출은 종료 코드를 그 자리에서 잡고(파이프 금지 — 진입 첫 액션과 같은 이유), non-zero면 그 record를 `$DEGRADE_FALLBACK`에 한 줄로 이어 붙입니다:
+2. **모든** `degrade-append` 호출은 종료 코드를 그 자리에서 잡고(파이프 금지 — 진입 첫 액션과 같은 이유), non-zero면 그 record를 `$DEGRADE_FALLBACK_FILE`에 한 줄로 **이어 붙입니다**(`>>`):
 
    ```bash
-   ... degrade-append ... || DEGRADE_FALLBACK="${DEGRADE_FALLBACK}
-   - (state 기록 실패) component=<c> axis=<a> status=<s> reason=<r>"
+   ... degrade-append ... || echo "- (state 기록 실패) component=<c> axis=<a> status=<s> reason=<r>" >> "$DEGRADE_FALLBACK_FILE"
    ```
 
-Step B로 전달할 때는 `get`의 `brief_review_degradations`와 `$DEGRADE_FALLBACK`을 **합쳐서** 싣습니다. `get` 자체가 실패하면(`ok: false`) 원장 쪽은 비어 있는 것이 아니라 **알 수 없는** 것이므로, `degrade 없음`이라고 쓰지 않고 그 사실을 한 줄로 명시합니다.
+   **셸 변수가 아니라 파일인 이유**: `Bash` 도구는 호출마다 **새 셸**입니다 — 유지되는 것은 cwd뿐이고
+   변수·`export`는 소멸합니다(실측). `$PR`·`$ROOT`·`$STATE`처럼 환경의 순수 함수인 값은 각 블록에서
+   다시 계산하면 되지만, 이 채널은 여러 블록에 걸쳐 record를 모으는 **누산기**라 재도출이 불가능합니다.
+   변수로 두면 매 append가 빈 값에서 시작해 Step B에서 비어 있고, 원장이 죽었을 때만 작동하는 백업이
+   침묵하므로 그 침묵이 그대로 `degrade 없음`으로 렌더됩니다.
+
+Step B로 전달할 때는 `get`의 `brief_review_degradations`와 `$DEGRADE_FALLBACK_FILE`의 줄들을 **합쳐서** 싣습니다. `get` 자체가 실패하면(`ok: false`) 원장 쪽은 비어 있는 것이 아니라 **알 수 없는** 것이므로, `degrade 없음`이라고 쓰지 않고 그 사실을 한 줄로 명시합니다.
 
 ## zero-tool 격리 선결 조건
 
@@ -108,12 +119,10 @@ critic·readback이 `tools: Read`를 유지하므로 격리가 **보장되지 �
 BRS="python3 $PR/scripts/brief_review_state.py"
 $BRS degrade-append "$STATE" --component critic   --axis fidelity \
     --status degraded --reason "zero-tool 불가 — 격리 미보장" \
-    || DEGRADE_FALLBACK="${DEGRADE_FALLBACK}
-- (state 기록 실패) component=critic axis=fidelity status=degraded reason=zero-tool 불가 — 격리 미보장"
+    || echo "- (state 기록 실패) component=critic axis=fidelity status=degraded reason=zero-tool 불가 — 격리 미보장" >> "$DEGRADE_FALLBACK_FILE"
 $BRS degrade-append "$STATE" --component readback --axis readback \
     --status degraded --reason "zero-tool 불가 — 격리 미보장" \
-    || DEGRADE_FALLBACK="${DEGRADE_FALLBACK}
-- (state 기록 실패) component=readback axis=readback status=degraded reason=zero-tool 불가 — 격리 미보장"
+    || echo "- (state 기록 실패) component=readback axis=readback status=degraded reason=zero-tool 불가 — 격리 미보장" >> "$DEGRADE_FALLBACK_FILE"
 ```
 
 그리고 **D2(payload 파일 하나만 받는다는 구조 조건) 미충족을 조용히 넘기지 않고** C4 경로로 사용자에게 보고합니다(Step B 게이트 question 텍스트).
@@ -128,11 +137,14 @@ python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE"; rc=$?
 
 | rc | 뜻 | 동작 |
 |---|---|---|
-| `0` | 위반 없음 | 1단계로 |
+| `0` | 위반 없음 | 1단계로. **단 `advisories`가 비어 있지 않으면** 그 줄들을 record(`component: verbatim_coverage`, `affected_axis: completeness`, `verification_status: degraded`)로 남기고 Step B에 함께 올립니다 |
 | `exit 1` | 위반 발견(`missing_ids`/`not_contained`) | **차단.** §6를 보완(추가만 — 아래 append-only)하고 `check_brief.py gate` → 이 검사를 **재실행**. 리뷰 단계로 넘어가지 않습니다 |
+| `exit 1` + `not_contained: ["§6"]` | **구조 위반** (§6 `S<N>` 앵커 중복) | **차단.** append로는 고칠 수 없습니다 — 잘못 추가된 중복 항목을 **제거**해야 합니다(중복 자체가 append-only 위반이고, 남겨두면 어느 쪽이 원문인지 확정되지 않습니다) |
 | `exit 3` | 검사 불가(파일 부재·파싱 실패) | degrade 후 계속 + record(`component: verbatim_coverage`, `affected_axis: completeness`, `verification_status: skipped`) |
 | `exit 4` | 내부 오류 | `3`과 동일 처리 + 오류 전문을 `--reason`에 |
 | 그 외 non-zero | 예측 못 한 실패 | `3`과 동일 취급 — indeterminate ≠ clean |
+
+**rc 0에 `advisories`가 실리는 이유**는 검사가 *"이 발화는 대조하지 못했다"* 를 말할 수 있기 때문입니다(P21 placeholder가 걸친 span, state 쪽 redaction 등). rc만 보고 payload를 버리면 그 사실이 사라져 **강등이 통과로 보입니다** — 강등이 사람에게 닿지 않으면 그것은 강등이 아니라 통과입니다.
 
 **왜 진입에 두는가**: §6가 불완전하면 방향성 리뷰도 불완전한 문서를 보고, critic은 §6를 ground truth로 쓰므로 판정 자체가 무의미해집니다. §6에 append가 일어날 때마다 **재실행**합니다.
 
@@ -213,9 +225,18 @@ Every finding must carry exactly one question for the user to decide.
 ### 1-c. codex #1 (방향성 축)
 
 ```bash
-codex_avail="$(bash "$PR/scripts/detect_codex.sh" | sed -n 's/^codex_available: //p')"   # 판정 1회 — 2-b·2-c가 이 값을 재사용
+# 두 필드를 한 번에 포착한다. `codex_available`만 뽑고 `skip_reason`을 버리면 아래
+# advisory 템플릿의 `(reason: <skip_reason>)`을 렌더할 값이 없다(사용자는 이유 없는
+# "SKIPPED"만 본다). detect_codex.sh 출력은 한 번만 받아 두 값을 함께 읽는다.
+DETECT_OUT="$(bash "$PR/scripts/detect_codex.sh")"
+codex_avail="$(sed -n 's/^codex_available: //p' <<<"$DETECT_OUT")"   # 판정 1회 — 2-b·2-c가 이 값을 재사용
+skip_reason="$(sed -n 's/^skip_reason: //p' <<<"$DETECT_OUT")"
 if [[ "$codex_avail" == "true" ]]; then
-  bash "$PR/scripts/run_brief_codex_reviewer.sh" direction "$PAYLOAD" "$(pwd)" "$CODEX_DIR_YAML"
+  bash "$PR/scripts/run_brief_codex_reviewer.sh" direction "$PAYLOAD" "$(pwd)" "$CODEX_DIR_YAML"; runner_rc=$?
+  # 러너는 fail-closed 산출물을 **쓰지 못하면** exit 3으로 죽는다(쓰기 불가·디렉토리 부재).
+  # 그 경우 직전 라운드 YAML이 그대로 남아 이번 라운드 판정으로 읽히므로, 잔존물을
+  # 제거하고 degraded로 기록한다 — 부재는 아래 양성-마커 규칙이 degraded로 잡는다.
+  if [[ "$runner_rc" -eq 3 ]]; then rm -f "$CODEX_DIR_YAML"; fi
 else
   : # skip + record(component: codex, affected_axis: all, verification_status: skipped)
 fi
@@ -229,7 +250,7 @@ codex 부재 시 loud advisory:
 
 `codex_avail`은 **여기서 한 번만** 구하고 2-b·2-c가 같은 값을 재사용합니다. `affected_axis: all`(양 축 모두 skip)이 참인 근거가 바로 이 공유입니다 — 충실도 쪽 호출이 게이트 밖에 있으면 원장에는 *"codex가 양 축에서 없었다"* 가 남는데 실제로는 codex가 충실도를 봤다는, 기록이 거짓이 되는 상태가 됩니다. 그래서 `skipped` record는 이 한 곳에서만 남기고, 2-b·2-c는 중복 record 없이 같은 게이트만 다시 겁니다.
 
-`codex_avail == true`였는데도 `$CODEX_DIR_YAML`에 `codex_failed: true`가 남으면 (timeout·exec 실패·`payload_missing` 등 러너 자체의 런타임 실패) record(`component: codex`, `affected_axis: direction`, `verification_status: degraded`)를 남깁니다 — `codex_avail`은 pre-flight **부재**만 잡고, 이 케이스는 2-b가 fidelity 축에서 잡는 것과 대칭인 **런타임 실패**입니다.
+방향성 축은 병합 스크립트가 없으므로(§"방향성은 병합하지 않습니다") `$CODEX_DIR_YAML`을 **성공 마커 양성 요구**로 읽습니다 — `meta.codex_failed: false`가 **있어야** 정상이고, 파일 부재·0바이트·잘림·판독 불가·`codex_failed: true`는 **전부** degraded입니다. `codex_failed: true`가 "없는지"만 보면 그 술어에 fail-closed 보수가 없어 부재·0바이트·직전 라운드 잔존이 모두 "정상"으로 읽힙니다(fidelity 축은 `merge_review.py`가 같은 opt-in-to-success 규칙을 이미 문서화하고 있습니다). `codex_avail == true`였는데 양성 마커가 없으면 (timeout·exec 실패·`payload_missing` 등 러너 자체의 런타임 실패) record(`component: codex`, `affected_axis: direction`, `verification_status: degraded`)를 남깁니다 — `codex_avail`은 pre-flight **부재**만 잡고, 이 케이스는 2-b가 fidelity 축에서 잡는 것과 대칭인 **런타임 실패**입니다.
 
 ### 1-d. 보고 (병합 없음)
 
@@ -260,7 +281,7 @@ python3 "$PR/scripts/brief_review_state.py" set-stage "$STATE" fidelity
 BLOB="$(python3 "$PR/scripts/build_brief_inline_blob.py" "$PAYLOAD")"; blob_rc=$?
 ```
 
-`blob_rc == 2`면 payload가 없거나 사용법 오류입니다 — 빈 `<brief>`로 critic을 dispatch하면 indeterminate를 clean으로 오독하는 fail-open이므로 **critic을 dispatch하지 않습니다.** record(`component: critic`, `affected_axis: fidelity`, `verification_status: unavailable`)를 남기고 Step B로 조기 보고합니다. `blob_rc == 3`이면 본문에 위생 미달 잔존이 있다는 뜻입니다 — 원문 보존이 우선이라 지우지 않고 record(`component: critic`, `affected_axis: fidelity`, `verification_status: degraded`)를 남기고 계속합니다.
+`blob_rc == 2`면 payload가 없거나 사용법 오류·읽기 실패(비-UTF-8·권한)입니다 — 빈 `<brief>`로 critic을 dispatch하면 indeterminate를 clean으로 오독하는 fail-open이므로 **critic을 dispatch하지 않습니다.** record(`component: critic`, `affected_axis: fidelity`, `verification_status: unavailable`)를 남기고 Step B로 조기 보고합니다. `blob_rc == 3`이면 본문에 위생 미달 잔존이 있다는 뜻입니다 — 원문 보존이 우선이라 지우지 않고 record(`component: critic`, `affected_axis: fidelity`, `verification_status: degraded`)를 남기고 계속합니다. **`0`·`3`이 아닌 그 외 non-zero는 `2`와 동일하게 취급합니다 — dispatch하지 않습니다**(표에 없는 코드를 "계속"으로 흘리면 `${BLOB}`이 빈 문자열인 채 프롬프트에 보간돼 critic이 빈 문서를 리뷰하고 "왜곡 없음"을 보고합니다; indeterminate ≠ clean).
 
 ```javascript
 Agent({
@@ -315,6 +336,13 @@ if [[ "$gate_rc" -ne 0 ]]; then
 fi
 # (2) §6에 S<N>을 추가한 라운드면 원문 완전성도 재실행 (진입 첫 액션과 같은 규칙)
 python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE"; vc_rc=$?
+# 차단 행은 **실행형**이어야 한다. 대입만 하고 흘려보내면 서술만 차단이고 실행은 통과다 —
+# 바로 위 gate_rc가 같은 이유로 실행형 if를 갖는다. 확정 §6 원문 위반이 여기서 안 멈추면
+# can-redispatch → bump → 재리뷰로 흘러가 approved가 날 수 있다.
+if [[ "$vc_rc" -eq 1 ]]; then
+  echo "[spec-distill] §6 원문 완전성 위반 — 충실도 수정이 원장 대조를 깨뜨렸다. 재리뷰·재병합으로 넘어가지 않는다; §6를 보완하고 이 블록을 처음부터 다시 탄다." >&2
+  exit 1
+fi
 
 CAN_OUT="$ROOT/$harness_sid/brief-can-redispatch.json"
 python3 "$PR/scripts/brief_review_state.py" can-redispatch "$STATE" > "$CAN_OUT"; can=$?
@@ -323,12 +351,26 @@ if [[ "$can" -eq 0 ]]; then
   # ... fresh critic 재dispatch (2-a 블록 그대로, $CRITIC_OUT 덮어쓰기)
   # (3) codex #2도 **수정된 바이트**에 다시 돌린 뒤 재병합한다 — 게이트 통과 후, 이 분기 안에서만
   if [[ "${codex_avail:-}" == "true" ]]; then
-    bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$PAYLOAD" "$(pwd)" "$CODEX_FID_YAML"
+    bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$PAYLOAD" "$(pwd)" "$CODEX_FID_YAML"; runner_rc=$?
+    if [[ "$runner_rc" -eq 3 ]]; then rm -f "$CODEX_FID_YAML"; fi   # stale 잔존 방지 (위 1-c와 같은 이유)
   else
     : # skip — 1-c의 affected_axis: all record가 이 라운드까지 덮는다
   fi
+  MERGE_OUT="$ROOT/$harness_sid/brief-merge.out"
   python3 "$PR/scripts/merge_brief_review.py" \
-      --critic-output "$CRITIC_OUT" --codex-yaml "${CODEX_FID_YAML:-/nonexistent}"
+      --critic-output "$CRITIC_OUT" --codex-yaml "${CODEX_FID_YAML:-/nonexistent}" > "$MERGE_OUT"; merge_rc=$?
+  # 이 파일의 다른 결정론 호출은 전부 rc 표를 갖는데 merge만 없었다 — 그 stdout이
+  # 2-c 분기 전체가 읽는 verdict인데도. non-zero **또는 빈 stdout**이면 판정이 계산되지
+  # 않은 것이다: `fidelity_verdict` 없이 아래 분기로 내려가면 존재하지 않는 키를 읽는다.
+  # **빈 stdout 절반이 핵심**이다 — 잘린 write는 exit code로 잡히지 않는다.
+  cat "$MERGE_OUT"        # 판정을 **눈으로 볼 수 있게** 되돌린다 — rc를 잡으려고 파일로
+                          # 리다이렉트만 하고 아무도 열지 않으면, 2-c(=needs_revise → approved
+                          # 전이가 일어나는 바로 그 라운드)의 verdict가 보이지 않는다.
+  if [[ "$merge_rc" -ne 0 || ! -s "$MERGE_OUT" ]]; then
+    : # record(component: pipeline, affected_axis: fidelity, verification_status: unavailable,
+      # reason="merge rc=$merge_rc, 출력 $( [[ -s "$MERGE_OUT" ]] && echo 있음 || echo '비어 있음(잘린 write)' )")
+      # 후 Step B로 상신한다. 계산되지 않은 verdict는 approved가 아니다.
+  fi
 else
   # can == 1은 **두 가지 다른 사실**을 싣고 온다. `escalate` 키로 가른다 —
   # 실패 페이로드({"ok": false, "reason": …})에는 이 키가 아예 없다.
@@ -392,7 +434,7 @@ python3 "$PR/scripts/brief_review_state.py" set-stage "$STATE" readback
 BLOB="$(python3 "$PR/scripts/build_brief_inline_blob.py" "$PAYLOAD")"; blob_rc=$?
 ```
 
-`blob_rc == 2`면 payload가 없거나 사용법 오류입니다 — 빈 `<document>`로 dispatch하지 않습니다. record(`component: readback`, `affected_axis: readback`, `verification_status: unavailable`)를 남기고 Step B로 조기 보고합니다. `blob_rc == 3`이면 본문에 위생 미달 잔존이 있다는 뜻입니다 — 이 라운드는 그대로 dispatch하되, 그 함의는 3-b에서 다룹니다.
+`blob_rc == 2`면 payload가 없거나 사용법 오류·읽기 실패(비-UTF-8·권한)입니다 — 빈 `<document>`로 dispatch하지 않습니다. record(`component: readback`, `affected_axis: readback`, `verification_status: unavailable`)를 남기고 Step B로 조기 보고합니다. `blob_rc == 3`이면 본문에 위생 미달 잔존이 있다는 뜻입니다 — 이 라운드는 그대로 dispatch하되, 그 함의는 3-b에서 다룹니다. **`0`·`3`이 아닌 그 외 non-zero는 `2`와 동일하게 취급합니다 — dispatch하지 않습니다**(냉독은 빈 문서를 받으면 "이해할 내용이 없다"가 아니라 그럴듯한 무내용 요약을 낼 수 있어 gap 판정 자체가 무의미해집니다).
 
 ```javascript
 Agent({
@@ -439,12 +481,13 @@ python3 "$PR/scripts/brief_review_state.py" set-stage "$STATE" done
 python3 "$PR/scripts/brief_review_state.py" get "$STATE"; get_rc=$?   # degradations 회수
 ```
 
-`conducting-interview` Step B의 proceed 게이트에 **네 가지**를 싣습니다:
+`conducting-interview` Step B의 proceed 게이트에 **다섯 가지**를 싣습니다:
 
 1. 확정 후보 목록(기존 B-0 프로즈).
 2. **방향성 C4 항목** — 출처 라벨 + 사용자가 결정할 질문.
 3. **readback 요약 전문 + gap 목록**(세 조각 형식).
-4. **모든 degrade record** — `AskUserQuestion`의 **question 텍스트에** 각 record를 한 줄로. 옵션 description이 아니라 question 본문이어야 사용자가 옵션을 고르기 *전에* 봅니다. 배열이 비면 `degrade 없음`을 한 줄로 명시합니다(침묵과 구분). 원천은 **둘**입니다 — `get`의 `brief_review_degradations` **와** `$DEGRADE_FALLBACK`(state 기록이 실패한 record의 턴-내 사본). 둘을 합쳐 싣습니다. `get_rc != 0`이면 원장은 *비어 있는* 것이 아니라 *알 수 없는* 것이므로 `degrade 없음` 대신 `degrade 원장 판독 불가 — <get이 낸 실제 reason>`을 한 줄로 명시합니다.
+4. **모든 degrade record** — `AskUserQuestion`의 **question 텍스트에** 각 record를 한 줄로. 옵션 description이 아니라 question 본문이어야 사용자가 옵션을 고르기 *전에* 봅니다. 배열이 비면 `degrade 없음`을 한 줄로 명시합니다(침묵과 구분). 원천은 **둘**입니다 — `get`의 `brief_review_degradations` **와** `$DEGRADE_FALLBACK_FILE`의 줄들(state 기록이 실패한 record의 두 번째 채널 — 셸 변수는 Bash 호출 간 소멸하므로 파일이어야 합니다). 둘을 합쳐 싣습니다. `get_rc != 0`이면 원장은 *비어 있는* 것이 아니라 *알 수 없는* 것이므로 `degrade 없음` 대신 `degrade 원장 판독 불가 — <get이 낸 실제 reason>`을 한 줄로 명시합니다.
+5. **critic 원문 전문(`$CRITIC_OUT`)** — 병합 결과(`fidelity_verdict` · `fidelity_findings`)와 **나란히** 올립니다. `brief-critic`은 `tools: []`이라 자기 출력을 파일로 쓸 수 없어 전사는 **저자**가 합니다(격리의 대가입니다 — 채널 자체는 없앨 수 없습니다). 그래서 `codex_degraded`인 라운드에서는 충실도 판정이 *저자가 쓴 파일 하나*에 얹힙니다. 원문을 함께 올리면 사용자가 전사본과 파싱된 판정을 직접 대조할 수 있습니다 — 검증 불가능한 프로즈 의무를 사람이 실제로 확인 가능한 것으로 바꾸는 장치이고, 아래 "실제 메커니즘은 이 전파"와 같은 백스톱입니다.
 
 **리뷰 생략 방지의 실제 메커니즘이 이 전파입니다.** 결정론 체크가 아닙니다 — 게이트는 *존재*만 보고 사용자는 *내용*을 보므로 사람이 더 강한 백스톱이며, 그래서 *"리뷰 라운드 기록이 있는가"* 같은 이빨 없는 검사를 넣지 않습니다(검사 대상이 통과 조건을 직접 쓰므로).
 

@@ -1,5 +1,138 @@
 # Changelog
 
+## [0.24.4] — 2026-07-29
+
+v0.24.3의 **자기 수정을 독립 리뷰**한 결과(리뷰어 5 + codex). 그 라운드가 만든 신규 결함과
+못 닫은 경로를 고친다. 교훈 한 줄: **검증할 수 없는 것을 통과/차단으로 가르려 하지 말고,
+검증하지 못했다는 사실을 사람에게 도달시켜라.**
+
+### Changed
+- **P21 placeholder 관여 시 판정을 포기한다 (`exit 3`).** v0.24.3은 `masked_contains`라는
+  부분 매칭 술어를 도입해 "토큰이 덮는 span만 면제"하려 했으나, 리뷰어 4/4가 독립적으로
+  CRITICAL 판정했다: 양끝이 암묵 와일드카드라 **누락 세탁**이 그대로 통과했고(`"브리프에
+  <REDACTED:rest>"` → rc 0), 방향이 반전돼 원문에 맥락을 덧붙인 **정당한 payload를 새로
+  차단**했으며, 토큰 개수가 무제한이라 in-order subsequence 검사가 되어 의미 반전이
+  통과했다. 세 실패는 같은 함수의 양면이라 앵커를 어디에 걸어도 동시에 없앨 수 없다 —
+  redaction 뒤를 알 수 없다는 것은 원리적 한계이기 때문이다. 술어를 제거하고, 이 경로의
+  결과를 clean도 violation도 아닌 **검사 불가**로 통일했다. 원래 결함의 본질은 "통과했다"가
+  아니라 **"강등이 조용했다"** 였고, `exit 3`은 호출자 rc 표에서 degradation record가
+  **의무**인 행이라 Step B 사용자에게 반드시 도달한다.
+- **Status 충돌 시 마지막 판정을 채택**하고 충돌은 advisory로만 올린다. v0.24.3의
+  무조건 `needs_revise`는 `approved`를 **도달 불가**로 만들었다 — agent 파일 출력 형식 절에
+  리터럴 Status 두 줄이 있어 critic이 자기 형식을 복창하면 매 라운드 충돌이 잡히고 재리뷰
+  상한 2를 전부 태운다.
+
+### Fixed
+- **빈 원장이 "전건 검증 완료"로 집계되던 것** — `user_statements: []`면 루프가 0회 돌고
+  `EXIT_OK`가 났다. 원장을 비우는 것만으로 L1·L2가 조용히 우회된다. 빈 전칭명제는 clean이
+  아니다 → `exit 3`.
+- **state 판독 실패가 payload 구조 위반을 선점하던 것** — 파싱 순서 때문에 state에서 키
+  하나만 빼면 §6 앵커 중복(차단)이 검사 불가(계속)로 되돌아갔다. payload를 먼저 판다.
+- **한국어 출력이 비-UTF-8 locale에서 exit 1을 내던 것** — `LC_ALL=C`에서
+  `UnicodeEncodeError` → Python 기본 exit 1이고, 호출자 표는 1을 "위반 → 차단"으로 읽어
+  멀쩡한 brief를 막는다. stdout/stderr를 UTF-8로 고정.
+- **merge verdict가 보이지 않게 된 것** — v0.24.3이 exit code를 잡으려고 stdout을 파일로
+  리다이렉트했는데 그 파일을 아무도 열지 않았다. 2-c는 `needs_revise → approved` 전이가
+  일어나는 라운드다. `cat`을 되돌렸다.
+- **codex 러너 `exit 3`이 라우팅되지 않던 것** — seed가 산출물을 **쓰지 못하면** 아무것도
+  안 남기고 죽어, 막으려던 stale-YAML 경로가 그대로 재현된다. 호출 지점에서 rc 3이면
+  잔존물을 제거한다. 러너 헤더의 "항상 exit 0" 계약도 실제와 맞췄다.
+- **두 번째 degrade 채널이 재실행마다 truncate되던 것** — 변수를 정의하는 유일한 블록이
+  동시에 `: >`로 비웠고, fallback 경로는 `$$`(PID)라 Bash 호출마다 달라 재발견이 불가능했다.
+  경로를 세션의 순수 함수로 고정하고 truncate 대신 `touch`.
+- **sentinel 블록 다중성 무가드** — 마지막을 조용히 채택하면 §6에 심긴 블록이 권위를 갖는다.
+  마지막을 쓰되 판독 불가로 표시해 escalate시킨다.
+- **직접 실행 시 신규 테스트 8개가 조용히 누락되던 것** — 클래스가 `if __name__` 가드 뒤에
+  정의돼 `python3 test_x.py`가 23개 중 19개만 돌고 `OK`를 찍었다.
+
+### Added
+- **이빨 없던 자체 락 4종 교정** (전부 iter-2가 mutation으로 실증): BLOB catch-all이
+  전체파일 `grep -c == 2`라 한 섹션에 둘 다 넣어도 통과 → 각 dispatch 지점 윈도우로 스코프 /
+  MERGE 락이 bash **주석**만으로 충족 → 실행 라인·분기 본문 앵커로 교체 / C1 mutation이
+  `def` rename의 `NameError`(exit 4)를 "세탁 통과"로 오독 → 호출 지점을 흔들고 **정확한
+  기대값(exit 0)** 요구 / `**NOT**` 불릿 `-ge 2`가 3개 중 하나를 지워도 통과(맨끝이 Law 2
+  역할 경계였다) → `-eq 3` / 빈 `SENTINEL_LIT`이면 `grep -qF ""`가 전부 매치해 가짜 PASS →
+  추출 실패 시 FAIL / direction sentinel 추출이 tautology → 소비자 표기에서 뽑아 양방향 rename에 red.
+
+## [0.24.3] — 2026-07-29
+
+`/qg` 브랜치 리뷰(6 독립 리뷰어 + adversarial 선별)가 적발한 CRITICAL 4 + IMPORTANT 15 수정.
+지배 원칙은 0.24.2와 같다: **`indeterminate ≠ clean`**. 이번 라운드가 더한 것은
+**"강등이 사람에게 닿지 않으면 그것은 강등이 아니라 통과다"**.
+
+### Fixed
+- **P21 placeholder 한 토큰이 §6 원문 대조를 통째로 무력화하던 것** (CRITICAL) —
+  `check_verbatim_coverage.py`가 `P21_PLACEHOLDER_RE.search()`로 **문자열 전체**를 훑어,
+  어느 한쪽에 토큰이 하나만 있어도 그 statement의 L2 containment를 waive하고 EXIT_OK를 냈다.
+  SKILL이 허용하는 유일한 §6 편집(P21 치환)이 곧 검사를 끄는 편집이 되어 append-only
+  세탁방지가 우회됐다. 이제 **payload 쪽** 토큰은 자기가 덮는 span만 면제하고 나머지 문면을
+  그대로 대조한다(`masked_contains`). **state 쪽** 토큰은 원 진실 자체가 미지이므로 기존
+  강등을 유지한다 — 좁힌 것은 공격자가 통제하는 면뿐이라 정당한 redaction 3종은 무변경.
+- **§6 앵커 중복이 "검사 불가"로 흘러 전 statement 검사를 끄던 것** (CRITICAL) —
+  중복 `**S<N>**`이 `ParseError` → exit 3(degrade 후 계속)이었고, 중복 항목뿐 아니라
+  **모든** statement의 L1·L2가 함께 skip됐다. 위임 대상이라던 `check_brief.py`는 §6 앵커를
+  `set()`으로 모아 중복을 아예 보지 않으므로 그 위임은 실재하지 않았다. 신규
+  `StructuralViolation` → exit 1(차단). 판독 실패가 아니라 규칙 위반이다.
+- **확정 위반이 뒤 항목의 불확정에 밀려 강등되던 것** (CRITICAL) — `EXIT_INDETERMINATE`
+  반환이 statement 루프 **안**에 있어 이미 누적된 `not_contained`를 버리고 rc 3으로 나갔다.
+  판정을 루프 밖으로 옮겨 **위반 > 불확정** 순으로 결정한다.
+- **비-UTF-8 payload가 빈 `<brief>` 디스패치로 새던 것** (CRITICAL) —
+  `build_brief_inline_blob.py`의 `read_text()`가 try 밖이라 `UnicodeDecodeError`가 Python
+  기본 **exit 1**로 나갔고, 호출 SKILL의 표는 0/2/3만 라우팅해 어느 분기에도 안 걸렸다.
+  `BLOB`이 빈 문자열인 채 프롬프트에 보간돼 critic이 빈 문서를 리뷰하고 "왜곡 없음"을
+  보고한다. 읽기 실패를 문서화된 exit 2로 매핑 + 두 호출 지점 표에 **catch-all 행** 추가
+  (코드가 아니라 계약을 닫는다 — 다음 미지의 코드가 같은 구멍으로 새지 않도록).
+- **rc-0 run의 advisory가 전량 폐기되던 것** — 검사는 *"이 발화는 대조하지 못했다"* 를
+  advisory로 말할 수 있는데 rc 표 row `0`의 동작이 "1단계로"뿐이었다. record로 라우팅하는
+  행이 3·4뿐이라 P21 강등 문구가 기록되자마자 버려졌다. row 0에 조건부 액션 추가.
+- **`vc_rc` 차단 행이 서술뿐이고 실행형이 아니던 것** — 확정 §6 위반(exit 1)이 차단 없이
+  can-redispatch → bump → 재리뷰로 흘러갔다. 바로 위 `gate_rc`와 같은 실행형 `if`로 교정.
+- **merge 호출만 exit code 계약이 없던 것** — 그 stdout이 2-c 분기 전체가 읽는 verdict인데
+  rc도 표도 없었다. `merge_rc` + **빈 출력**(잘린 write는 exit code로 안 잡힌다) 라우팅 추가.
+- **두 번째 degrade 채널이 Bash 호출 간 소멸하던 것** — `$DEGRADE_FALLBACK`은 셸 변수인데
+  `Bash` 도구는 호출마다 새 셸이다(유지되는 것은 cwd뿐, 실측). 재도출 가능한 값과 달리
+  **누산기**라 매 append가 빈 값에서 시작해 Step B에서 비어 있었다 — 원장이 죽었을 때만
+  작동하는 백업이 침묵하면 그 침묵이 곧 `degrade 없음`이다. 파일(`$DEGRADE_FALLBACK_FILE`,
+  `>>` append)로 교체.
+- **`skip_reason`을 버리면서 advisory 템플릿이 그것을 요구하던 것** + **direction 축에
+  fail-closed 리더가 없던 것** — `codex_failed: true`가 "없는지"만 보면 부재·0바이트·잘림·
+  직전 라운드 잔존이 전부 "정상"으로 읽힌다. `meta.codex_failed: false` **양성 요구**로 전환.
+- **codex 러너의 stale YAML이 이번 라운드 판정으로 읽히던 것** — `OUTPUT_PATH`를
+  선-truncate하지 않아 조기 exit·SIGKILL이 직전 라운드 산출을 남겼고, 호출자가 러너의 exit
+  code를 잡지 않으므로 merge가 그것을 이번 라운드 codex 판정으로 읽었다(`codex_degraded:
+  false` → approved, 흔적 0). fail-closed 산출물 **선-기록**(seed) 후 성공이 덮어쓰도록 전환.
+- **critic의 first-match `**Status:**` / sentinel 파싱** — 형제 규칙
+  (`codex_findings_to_yaml.py`: "last block defeats injected earlier blocks")의 정확한 역이었고,
+  `brief-critic.md` 출력 형식 절에 리터럴 Status 두 줄이 디코이로 있다. §6(비신뢰 원문)이
+  프롬프트에 inline되므로 주입 표면이기도 하다. 값이 다른 Status 공존 → **fail-closed
+  needs_revise + advisory**, sentinel은 마지막 블록 채택.
+- **degradation 원장만 값 검증이 없던 것** — 형제 두 키는 빈 값·열거 밖·비-digit에
+  `ValueError`를 내는데 원장은 `[]`/`[ ]`만 특수 처리해 `null`·임의 스칼라가 빈 리스트로
+  읽혔다(손상 원장과 깨끗한 run의 Step B 텍스트가 바이트 동일). `degrade-append`도 스칼라
+  아래 splice + `{"ok": true}`를 냈다. 양쪽 fail-closed.
+- **NG3 stale claim 세 번째 인스턴스** — `reviewing-spec/SKILL.md`가 현재시제로 "design doc만
+  Law 2 분리 reviewer 대상"을 단언한 채 출하됐다. 회귀 락이 알려진 2개 경로를 하드코딩해
+  세 번째를 구조적으로 볼 수 없었다 — **개념 별칭 스윕**으로 전환(식별자 grep은 같은 것을
+  다른 이름으로 부른 참조를 놓친다).
+
+### Changed
+- design 문서 §6.3 teeth 표의 **거짓 ✅ 두 개를 ⚠️로 정정**. (1) zero-tool probe 분기는
+  "런타임 — 저자도 리뷰어도 쓰지 않음"이라 적혀 있었으나 분기 앵커가 오케스트레이터가 쓸 수
+  있는 audit 파일 한 줄이고 테스트도 기대값을 같은 줄에서 도출한다(협조적 flip = 스위트
+  green). (2) merge 입력이 "리뷰어 findings — 저자가 쓰지 않음"이라 적혀 있었으나 critic이
+  `tools: []`이라 전사는 저자가 한다. 둘 다 봉쇄 조건을 표에 함께 명시.
+- Step B 전달 항목 4 → **5**: critic 원문 전문(`$CRITIC_OUT`)을 병합 결과와 나란히 올려
+  사람이 전사본과 파싱된 판정을 대조할 수 있게 했다(검증 불가능한 프로즈 의무 → 확인 가능).
+
+### Added
+- 회귀 락 전부 **mutation으로 이빨 증명**: C1 마스킹 제거 → 세탁 통과, blob 읽기 가드 제거
+  → exit 1 재발, codex seed 제거 → stale 생존, critic sentinel·`**Status:**`·`**NOT**` 불릿·
+  direction sentinel 각각 rename/치환 → RED. 생산자 쪽 계약은 리터럴을 테스트에 박지 않고
+  **소비자 코드에서 추출**해 대조한다(어느 쪽에서 rename해도 red).
+- `test_brief_agents.sh`의 `grep -q "NOT"`이 **"NOTE"로 충족되던** 것을 마커 형태 + 열거
+  크기 핀으로 교체하고 대상을 세 agent 전부로 확대(`brief-direction-reviewer` 본문은
+  그동안 완전 무테스트였다).
+
 ## [0.24.2] — 2026-07-29
 
 지배 원칙 하나: **`indeterminate ≠ clean`** — 돌지 못한 검사는 통과한 검사로 기록되지 않는다.

@@ -271,5 +271,69 @@ class TestBlankValueNewlineHazard(Base):
                       "인접 라인이 삭제됐다")
 
 
+
+class TestDegradationLedgerValueValidation(unittest.TestCase):
+    """/qg iter-1 IMPORTANT — degradation 원장만 값 검증이 없던 결함.
+
+    형제 두 키는 엄격하다: `brief_review_stage`는 빈 값에 ValueError·닫힌 열거 밖에
+    ValueError, `brief_critic_rounds`는 빈 값·비-digit에 ValueError를 낸다. 그런데
+    `brief_review_degradations`는 `[]`/`[ ]`만 특수 처리하고 **그 외 스칼라는 전부
+    record 스캔으로 흘러가** 빈 리스트를 반환했다.
+
+    결과: `brief_review_degradations: null`인 손상 원장이 `[]` + rc 0으로 읽혀,
+    Step B 텍스트가 **깨끗한 run과 바이트 동일**해진다. SKILL.md가 명시로 금지한
+    "기록이 없는 것과 degrade가 없는 것이 구분되지 않는다"(indeterminate ≠ clean).
+
+    원장은 이 설계 전체가 얹힌 산출물이므로 셋 중 **가장 엄격**해야 한다.
+    """
+
+    def _state(self, degrade_line: str) -> Path:
+        d = Path(tempfile.mkdtemp())
+        p = d / "state.local.md"
+        p.write_text(
+            "---\n"
+            "session_id: 11111111-1111-1111-1111-111111111111\n"
+            "brief_review_stage: direction\n"
+            "brief_critic_rounds: 0\n"
+            f"{degrade_line}\n"
+            "---\n\nbody\n", encoding="utf-8")
+        return p
+
+    def test_null_ledger_is_rejected_not_read_as_empty(self):
+        p = self._state("brief_review_degradations: null")
+        rc, out, _ = run("get", str(p))
+        self.assertNotEqual(
+            rc, 0,
+            "`null` 원장이 rc 0으로 읽혔다 — 손상 원장과 깨끗한 run이 구분되지 않는다")
+        self.assertNotIn(
+            '"brief_review_degradations": []', out,
+            "손상 원장이 빈 리스트로 렌더됐다 — 'degrade 없음'으로 표시된다")
+
+    def test_arbitrary_scalar_ledger_is_rejected(self):
+        for bad in ("not-a-list", "~", "0", "{}"):
+            with self.subTest(value=bad):
+                p = self._state(f"brief_review_degradations: {bad}")
+                rc, _, _ = run("get", str(p))
+                self.assertNotEqual(
+                    rc, 0, f"스칼라 원장 {bad!r}이 통과했다 — 판독 불가를 빈 원장으로 읽는다")
+
+    def test_degrade_append_refuses_to_splice_under_a_scalar(self):
+        p = self._state("brief_review_degradations: not-a-list")
+        rc, out, _ = run("degrade-append", str(p), "--component", "codex", "--reason", "x",
+                          "--axis", "all", "--status", "skipped")
+        self.assertNotEqual(
+            rc, 0,
+            "스칼라 값 아래에 record를 splice하고 ok:true를 반환했다 — 무효 frontmatter를 성공으로 보고한다")
+        self.assertNotIn('"ok": true', out)
+
+    def test_empty_block_form_and_bracket_form_still_parse(self):
+        # 정상 두 형태는 계속 통과해야 한다(과잉 엄격으로 정상 경로를 잡지 않는다).
+        for good in ("[]", "[ ]"):
+            with self.subTest(value=good):
+                p = self._state(f"brief_review_degradations: {good}")
+                rc, out, _ = run("get", str(p))
+                self.assertEqual(rc, 0, f"정상 원장 {good!r}이 거부됐다")
+                self.assertIn('"brief_review_degradations": []', out)
+
 if __name__ == "__main__":
     unittest.main()

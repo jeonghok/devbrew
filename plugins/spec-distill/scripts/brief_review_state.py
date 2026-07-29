@@ -135,8 +135,19 @@ def _parse_degradations(text: str, out: dict) -> list:
     if not m:
         out["migrated"].append(KEY_DEGRADE)
         return []
-    if m.group(1).strip() in ("[]", "[ ]"):
+    raw = m.group(1).strip()
+    if raw in ("[]", "[ ]"):
         return []
+    # 형제 두 키(STAGE·ROUNDS)와 같은 규율을 적용한다. 여기만 검증이 없어서
+    # `brief_review_degradations: null`(또는 임의 스칼라)이 record 스캔으로 흘러가
+    # 빈 리스트를 반환했다 — 손상 원장과 깨끗한 run의 Step B 텍스트가 바이트 동일해져
+    # "degrade 없음"으로 렌더된다. 원장은 indeterminate ≠ clean 설계 전체가 얹힌
+    # 산출물이므로 셋 중 가장 엄격해야 한다. 허용 형태는 둘뿐이다: `[]`(빈 flow)와
+    # 값이 비어 있는 블록 시퀀스 시작(`brief_review_degradations:` + 다음 줄부터 `- …`).
+    if raw:
+        raise ValueError(
+            f"{KEY_DEGRADE} 값이 리스트가 아니다: {raw!r} — 빈 `[]`이거나 블록 시퀀스여야 한다"
+            " (판독 불가를 '기록 없음'으로 읽지 않는다)")
     lines = text[m.end():].splitlines()
     recs: list = []
     cur: dict | None = None
@@ -294,7 +305,13 @@ def cmd_degrade_append(args) -> int:
               f"    reason: {_yaml_scalar(args.reason)}\n"
               f"    affected_axis: {_yaml_scalar(args.axis)}\n"
               f"    verification_status: {_yaml_scalar(args.status)}\n")
-    if m.group(1).strip() in ("[]", "[ ]"):
+    raw_ledger = m.group(1).strip()
+    if raw_ledger and raw_ledger not in ("[]", "[ ]"):
+        # 스칼라 값 아래에 record를 splice하면 무효 YAML을 frontmatter에 써 넣고도
+        # `{"ok": true}`를 반환한다 — 훅과 state_path.py 소비자가 읽는 파일이다.
+        return _fail(
+            f"{KEY_DEGRADE} 값이 리스트가 아니다: {raw_ledger!r} — 손상된 원장에 append하지 않는다")
+    if raw_ledger in ("[]", "[ ]"):
         text = text[:m.start()] + f"{KEY_DEGRADE}:\n" + record + text[m.end() + 1:]
     else:
         # 기존 블록의 마지막 항목 뒤에 삽입 (append-only).
