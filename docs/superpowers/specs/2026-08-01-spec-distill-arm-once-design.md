@@ -52,11 +52,14 @@ design doc auto-review를 **문서가 처음 생길 때 한 번만** 발동시�
 
 ## 2. Goals
 
-- G1. design doc auto-review의 **dispatch emit**(Stop 훅이 `decision: block`을 내는 횟수)이 한 문서에 대해, 그 문서가 git-tracked가 되기 전에는 **세션당 최대 1회**, git-tracked가 된 뒤로는 **0회**. 정상 경로(생성 → 리뷰 → 커밋)에서 이것이 "생애 1회"로 귀결되지만 무조건적 불변식은 아니다 — 커밋하지 않은 채 세션을 넘기면 한 번 더 발동한다. 세는 단위는 pending 파일 쓰기 횟수가 아니라 dispatch emit 횟수다(§5.2의 덮어쓰기는 의도된 동작).
+- G1. **리뷰가 완료된**(verdict 산출) 문서는 그 세션에서 dispatch emit(Stop 훅의 `decision: block`) **0회**, git-tracked가 된 뒤로는 **영구히 0회**. 정상 경로(생성 → 리뷰 1회 → 커밋)에서 문서 생애 dispatch는 1회다.
+
+  이 상한은 **완료된 리뷰**를 기준으로 한다. verdict 없이 중단된 리뷰의 재시도는 상한에서 제외된다(§5.2·T8) — 재시도가 없으면 그 문서는 유일한 자동 리뷰 기회를 조용히 잃기 때문이며, 이 제외는 회피가 아니라 명시된 계약이다. 재시도의 상한은 G6이 따로 정한다. 커밋하지 않은 채 세션을 넘기면 dispatch가 한 번 더 발동한다(조건부 보장 — V5가 검증). 세는 단위는 pending 파일 쓰기 횟수가 아니라 dispatch emit 횟수다(§5.2의 덮어쓰기는 의도된 동작).
 - G2. Layer 1 구조 검증은 **모든** Write/Edit/MultiEdit에서 그대로 유지된다 (Law 1).
 - G3. 재발동을 막으려고 존재하던 하니스를 제거한다 — 축소가 아니라 삭제.
 - G4. arm 판정 로직은 **한 파일에만** 존재한다.
 - G5. 신규 환경변수·신규 커맨드·신규 훅 없음. 하니스 총량이 순감소한다.
+- G6. verdict 없이 끝난 dispatch의 재시도는 **문서당 3회**로 제한된다. 상한에 닿으면 자동 dispatch를 중단하고 수동 호출을 안내하는 loud advisory를 낸다. 상한 없는 재시도는 CLAUDE.md Forbidden Patterns의 *Unbounded autonomy*(max-iter 없는 루프)에 해당한다.
 
 ## 3. Non-goals
 
@@ -135,8 +138,9 @@ should_arm(state_file, path) =
 ```
 편집 1 → validator: should_arm=true → pending_review 기록
 편집 2 → validator: should_arm=true → pending_review 덮어쓰기 (같은 문서, 멱등)
-턴 종료 → Stop: pending strip + last_dispatched_at 갱신 → fsync → decision:block emit
-          (원장은 건드리지 않는다)
+턴 종료 → Stop: pending strip + last_dispatched_at 갱신 + dispatch_attempts += 1
+          → fsync → decision:block emit
+          (attempts < 3이면 armed_paths는 건드리지 않는다)
 skill 진입 → pending strip (멱등 — reminder 경로 대비, §5.4)
 verdict   → mark-reviewed: armed_paths 추가
 편집 3 → validator: should_arm=false (원장에 있음) → arm 없음
@@ -144,7 +148,15 @@ verdict   → mark-reviewed: armed_paths 추가
 
 중단 시 동작이 핵심이다. verdict 전에 어떤 이유로든 끊기면 원장이 비어 있고 다음 arming 편집이 dispatch를 다시 낸다. **리뷰가 끝나지 않으면 재시도되는 것이 의도된 동작이다** — 재시도가 없으면 그 문서는 유일한 자동 리뷰 기회를 조용히 잃는다.
 
-이 재시도에는 대가가 있다. 리뷰어가 반복 실패하는 환경에서는 편집마다 dispatch가 반복돼 옛 동작으로 degrade한다. 사용자는 매번 실패하는 리뷰로 그것을 인지하며 kill switch 3종이 탈출구다. **조용한 리뷰 유실보다 시끄러운 재시도**를 택했다 (Law 1).
+이 재시도에는 대가가 있다. 리뷰어가 반복 실패하는 환경에서는 편집마다 dispatch가 반복돼 옛 동작으로 degrade한다. **조용한 리뷰 유실보다 시끄러운 재시도**를 택했지만(Law 1), 시끄러운 재시도가 무한하면 그것은 Forbidden Pattern이다.
+
+그래서 재시도에 상한을 둔다(G6). Stop은 dispatch할 때마다 `dispatch_attempts[key]`를 1 올리고, 값이 3에 닿으면 그 키를 `armed_paths`에도 넣은 뒤 block 메시지에 아래를 덧붙인다.
+
+> `[spec-distill] '<path>' 리뷰가 3회 시도됐으나 verdict 없이 끝났다 — 자동 dispatch를 중단한다. 리뷰가 필요하면 reviewing-spec을 직접 호출하라.`
+
+`mark-reviewed`(verdict)는 키를 `armed_paths`에 넣고 `dispatch_attempts` 항목을 **삭제**한다 — 완료된 리뷰는 시도 이력을 남길 이유가 없고, 남기면 다음 계산에 섞인다.
+
+따라서 `armed_paths`의 기록자는 둘이지만 의미는 하나다("더 이상 dispatch 안 함"). verdict는 **완료**로, G6 상한은 **포기**로 같은 결론에 이른다. Stop이 원장을 건드리는 경우는 상한에 닿는 그 순간뿐이며 정상 dispatch에서는 건드리지 않는다.
 
 reminder 훅(UserPromptSubmit)도 원장에 기록하지 않는다. reminder는 아직 소비되지 않은 pending의 재-nag일 뿐 리뷰의 완료가 아니다.
 
@@ -165,8 +177,10 @@ reminder 훅(UserPromptSubmit)도 원장에 기록하지 않는다. reminder는 
 - review_in_progress:        # 리뷰 중 재arm 오발을 막던 문서별 락
 -   - path: ...
 -     since: ...
-+ armed_paths:               # verdict 시점에 리뷰 자신이 기록. 사후 기록자 없음
++ armed_paths:               # "더 이상 dispatch 안 함" — verdict 완료 또는 G6 상한 도달
 +   - docs/superpowers/specs/...
++ dispatch_attempts:          # verdict 없이 끝난 시도 횟수. verdict 시 삭제 (G6)
++   docs/superpowers/specs/...: 2
 
   last_dispatched_at: ...
 ```
@@ -252,7 +266,7 @@ arm이 skip될 때의 advisory 문구는 사용자가 **왜** 리뷰가 안 붙�
 
 ### `hooks/review-dispatch.py`
 
-suppress 블록과 review_lock 블록을 삭제한다(~35줄). `rewrite_state()`가 armed 키 추가를 흡수한다. TTL 가드는 유지.
+suppress 블록과 review_lock 블록을 삭제한다(~35줄). `rewrite_state()`는 pending strip + `last_dispatched_at` 갱신 + `dispatch_attempts` 증가를 한 원자적 write로 수행하고, **`armed_paths`는 G6 상한(3)에 닿는 순간에만** 함께 기록한다(§5.2). 정상 dispatch에서 원장을 쓰는 일은 없다 — 완료 기록은 verdict 시점의 `mark-reviewed` 몫이다. TTL 가드는 유지.
 
 ### `hooks/pending-review-reminder.py`
 
@@ -399,7 +413,7 @@ find "$SD" -type f -not -path '*/.claude/*' ...
 
 | ID | 락 | mutation |
 |---|---|---|
-| T1 | 같은 문서 2회 Write + Stop 2회 → 그 문서에 대한 **dispatch emit 총 1회**(두 번째 Stop은 무-emit) | 원장 게이트 제거 → RED |
+| T1 | Write → Stop(emit) → **verdict → `mark-reviewed`** → Write → Stop → **무-emit**. 리뷰가 완료된 뒤의 편집은 재arm하지 않는다 | 원장 게이트 제거 → RED |
 | T2 | git-tracked 문서 Write → `armed_paths`가 비어 있어도 arm 없음 | git 조건 제거 → RED |
 | T3 | `git` 미가용(PATH 조작) → arm 발생 **및** stderr advisory 존재 | fail 방향을 arm-skip으로 뒤집기 → RED |
 | T4 | stale-term 스윕에 개념 별칭 전수 추가 | 각 항목을 production에 되살리기 → RED |
@@ -407,8 +421,11 @@ find "$SD" -type f -not -path '*/.claude/*' ...
 | T6 | pending이 살아 있는 상태에서 `strip-pending` 실행 후 Stop 재발화 → 무-emit (§5.4 5단계 재현) | Step 1 strip 제거 → RED |
 | T7 | `mark-reviewed`(verdict) 후 `armed_paths`에 그 키가 존재하고, **이어지는 두 번째 편집이 재arm하지 않는다**(Stop 무-emit) | `mark-reviewed`의 원장 기록 제거 → RED |
 | T8 | verdict **없이** 중단된 리뷰(원장 미기록) 후 편집 → **재arm되고 Stop이 dispatch한다**(자기치유) | 원장 기록을 verdict에서 진입 시점으로 되돌리기 → RED |
+| T9 | verdict 없는 dispatch를 3회 반복 → 4회차는 **무-emit + 상한 advisory** (G6) | 상한 검사 제거 → RED (무한 재시도) |
 
 T1은 **파일 쓰기 횟수가 아니라 dispatch emit 횟수**를 잰다. §5.2가 명시한 대로 두 번째 편집이 pending을 덮어쓰는 것은 의도된 동작이므로, "기록 1회"를 assert하면 설계와 모순되는 것을 재게 된다 (라운드 1 codex 지적).
+
+T1의 시퀀스에 `mark-reviewed`가 **반드시 포함**된다 — 그것이 T1(verdict 이후 재arm 없음)과 T8(verdict 이전 재시도 있음)을 가르는 유일한 사건이기 때문이다. 이를 빼면 두 락이 같은 상태에 반대 결과를 요구해 하나는 반드시 실패한다 (라운드 4 codex 지적).
 
 T3은 **양방향** 락이다. fail-open 방향(arm 발생)만 잠그면 advisory 없이 조용히 arm해도 통과하므로, stderr 존재도 함께 assert한다.
 
@@ -424,7 +441,7 @@ T4의 스윕 대상은 식별자만이 아니라 **같은 것을 다른 이름�
 
 - bash 스위트: F0 수정 후 `test_stale_terms.sh` green, 그 외 red 0건. 스위트 규모는 베이스라인(51종)에서 삭제 5·신규 1을 반영해 47종이 된다 — 종료 조건은 개수가 아니라 **red 0건**이다
 - python 스위트: 삭제 2를 반영해 8종. NG9 cross-resolver 1건(워크트리 환경 의존) 외 green — 베이스라인과 동일
-- T1–T8 각각의 mutation 결과 기록
+- T1–T9 각각의 mutation 결과 기록
 - `git grep`으로 삭제 대상 식별자가 production에 0건
 
 ### 수동 검증 (자동화 밖)
@@ -476,7 +493,7 @@ T4의 스윕 대상은 식별자만이 아니라 **같은 것을 다른 이름�
 2. **arm_ledger.py** — TDD. `should_arm`/`is_born`/`mark_armed` 단위 테스트 먼저
 3. **훅 3종** — validator 게이트 → dispatch 원자적 write → reminder 정리
 4. **skill** — `reviewing-spec` Step 1 strip-pending + Step 3 mark-reviewed + approve `check-born` (§5.2·§5.4·§6)
-5. **T1–T3·T6·T7·T8** — 훅·skill 레벨 통합 락 + mutation (T7·T8은 반대 방향 쌍이라 **함께** 작성한다 — 한쪽만 두면 반대편 구현이 조용히 통과한다)
+5. **T1–T3·T6·T7·T8·T9** — 훅·skill 레벨 통합 락 + mutation (T7·T8은 반대 방향 쌍이라 **함께** 작성한다 — 한쪽만 두면 반대편 구현이 조용히 통과한다. T9는 G6 상한)
 6. **삭제 스윕** — 파일 9종 삭제 → skill·테스트 참조 정리 → T4·T5
 7. **문서 동기화** — README(P17 서술 포함)·CHANGELOG·plugin.json 0.25.0
 
