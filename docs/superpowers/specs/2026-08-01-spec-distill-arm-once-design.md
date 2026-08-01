@@ -239,8 +239,10 @@ CLI는 세 개만 남긴다 (`suppress_state.py`의 add/remove/is-suppressed 3�
 | CLI | 호출자 | 역할 |
 |---|---|---|
 | `strip-pending <sid> <raw_path>` | `reviewing-spec` Step 1 진입 | §5.4 — 지연 재소비 봉쇄 |
-| `mark-reviewed <sid> <raw_path>` | `reviewing-spec` verdict 직후 (Step 3) | §5.2 — `armed_paths` 기록 |
+| `mark-reviewed <sid> <raw_path>` | `reviewing-spec` verdict 직후 (Step 3, 아래 예외) | §5.2 — `armed_paths` 기록 + `dispatch_attempts` 삭제 |
 | `check-born <raw_path>` | `reviewing-spec` approve(①/②) | 미커밋 문서 loud advisory |
+
+`mark-reviewed`는 **실질 리뷰가 0인 라운드에서는 호출하지 않는다**. `merge_review.py`는 두 리뷰어가 모두 죽어도 항상 `combined_verdict`를 emit한다 — `claude_verdict_unrecoverable`이면서 `codex_degraded`인 fail-safe 분기에서 `needs_revise`를 내놓는다. 그 값을 verdict로 받아 원장에 기록하면 아무 리뷰도 일어나지 않은 라운드가 "리뷰됨"으로 남아, §5.2가 verdict 시점을 고른 근거("리뷰가 실제로 일어났을 때만 표시된다")가 그대로 무너진다. 따라서 skill Step 3은 `claude_verdict_unrecoverable AND codex_degraded`인 라운드를 배제하고 호출한다. 배제된 라운드는 원장이 비어 다음 편집이 재시도하며, `dispatch_attempts`는 계속 올라 G6 상한이 결국 멈춘다.
 
 `check-born`은 `is_born()`을 그대로 노출한다 (신규 로직 없음). approve 시점에 문서가 아직 git-tracked가 아니면 이렇게 알린다.
 
@@ -248,7 +250,7 @@ CLI는 세 개만 남긴다 (`suppress_state.py`의 add/remove/is-suppressed 3�
 
 이 advisory는 `approve_handoff.sh`(줄 77–96)가 내던 미커밋 권고를 승계한다. 라운드 1 리뷰가 지적한 대로 그 권고는 단순 편의가 아니라 **G1의 cross-session 보장이 기대는 `is_born` 전제를 사용자가 충족하도록 유도하는 유일한 신호**였다. 동시에 approve가 관측 가능한 부수효과를 남기게 해 AP2 앵커 역할도 한다.
 
-`mark_armed`가 파일이 아니라 문자열을 반환하는 것은 §5.2의 원자성 요구 때문이다. Stop 훅이 pending strip·armed 추가·타임스탬프를 하나의 write로 커밋해야 하는데, 여기서 파일을 따로 쓰면 write가 둘로 갈라져 중간 크래시에 부분 상태가 남는다.
+`mark_armed`가 파일이 아니라 문자열을 반환하는 것은 §5.2의 원자성 요구 때문이다. Stop 훅은 **G6 상한에 닿는 그 순간에만** pending strip·`dispatch_attempts`·`armed_paths`·타임스탬프를 하나의 write로 커밋해야 하는데, 여기서 파일을 따로 쓰면 write가 둘로 갈라져 중간 크래시에 부분 상태가 남는다. 정상 dispatch에서 Stop은 `armed_paths`를 쓰지 않는다 — 완료 기록은 verdict 시점의 `mark-reviewed` 몫이다.
 
 ### `hooks/spec-write-validator.py`
 
@@ -354,7 +356,7 @@ plugins/spec-distill/scripts/suppress_state.py → plugins/spec-distill/scripts/
 
 ```
 plugins/spec-distill/hooks/spec-write-validator.py       arm 게이트
-plugins/spec-distill/hooks/review-dispatch.py            suppress+lock 삭제, armed 기록 흡수
+plugins/spec-distill/hooks/review-dispatch.py            suppress+lock 삭제, dispatch_attempts 증가, armed는 G6 상한 도달 시에만
 plugins/spec-distill/hooks/pending-review-reminder.py    lock 블록 삭제
 plugins/spec-distill/skills/reviewing-spec/SKILL.md      락 절 → strip-pending, Step 3 → mark-reviewed, handoff 절 → check-born, :176 대체 문구(아래)
 plugins/spec-distill/skills/conducting-interview/SKILL.md  :469 approve_handoff 참조
@@ -372,8 +374,11 @@ plugins/spec-distill/.claude-plugin/plugin.json          0.25.0
 ### 신규
 
 ```
-plugins/spec-distill/tests/test_arm_once.sh              T1–T3
+plugins/spec-distill/tests/test_arm_once.sh              T1·T2·T3 (arm 게이트)
+plugins/spec-distill/tests/test_arm_ledger_timing.sh     T6·T7·T8·T9·T10 (기록 시점·자기치유·상한·훅 통합)
 ```
+
+T4(stale-term 스윕)와 T5(삭제 대상 부재·무참조)는 신규 파일이 아니라 기존 `tests/test_stale_terms.sh`에 추가한다 — 그 스위트가 이미 production 전수 스윕을 소유하고 있고, F0로 워크트리에서도 실행 가능해진다. **모든 T 락은 이 세 파일 중 하나에 배정된다**; 라운드 4 리뷰가 지적한 대로 산문·구현 순서에만 존재하고 파일 매니페스트에 없는 락은 만들어지지 않는다.
 
 ## 10. Verification Plan
 
@@ -422,10 +427,15 @@ find "$SD" -type f -not -path '*/.claude/*' ...
 | T7 | `mark-reviewed`(verdict) 후 `armed_paths`에 그 키가 존재하고, **이어지는 두 번째 편집이 재arm하지 않는다**(Stop 무-emit) | `mark-reviewed`의 원장 기록 제거 → RED |
 | T8 | verdict **없이** 중단된 리뷰(원장 미기록) 후 편집 → **재arm되고 Stop이 dispatch한다**(자기치유) | 원장 기록을 verdict에서 진입 시점으로 되돌리기 → RED |
 | T9 | verdict 없는 dispatch를 3회 반복 → 4회차는 **무-emit + 상한 advisory** (G6) | 상한 검사 제거 → RED (무한 재시도) |
+| T10 | **Stop의 dispatch 단독**(verdict 없음, 상한 미달) 후 `armed_paths`가 **비어 있다** | Stop에 `mark_armed` 추가 → RED |
 
 T1은 **파일 쓰기 횟수가 아니라 dispatch emit 횟수**를 잰다. §5.2가 명시한 대로 두 번째 편집이 pending을 덮어쓰는 것은 의도된 동작이므로, "기록 1회"를 assert하면 설계와 모순되는 것을 재게 된다 (라운드 1 codex 지적).
 
 T1의 시퀀스에 `mark-reviewed`가 **반드시 포함**된다 — 그것이 T1(verdict 이후 재arm 없음)과 T8(verdict 이전 재시도 있음)을 가르는 유일한 사건이기 때문이다. 이를 빼면 두 락이 같은 상태에 반대 결과를 요구해 하나는 반드시 실패한다 (라운드 4 codex 지적).
+
+**T1 픽스처는 `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0`을 설정한다 (lock — 계획 재량 아님).** `review-dispatch.py`에는 이미 30초 redispatch TTL 가드가 있어서, 두 Stop이 30초 안에 일어나면 **원장 게이트가 없어도** 두 번째 Stop이 무-emit한다. TTL을 0으로 두지 않으면 "원장 게이트 제거 → RED"라는 mutation 주장이 성립하지 않고 T1은 이빨 없는 락이 된다 (라운드 4 지적). 같은 이유로 T7·T8·T9·T10 픽스처도 TTL을 0으로 둔다.
+
+T10은 라운드 4가 요구한 **훅 통합 지점**의 락이다. T7·T8은 `arm_ledger.py` CLI 의미만 재므로, `mark_armed`를 Stop과 skill **양쪽에서** 호출하는 잘못된 구현도 둘 다 통과한다. T10만이 그 구현을 RED로 만든다 — 산문이 아니라 실행으로 소유권을 고정한다.
 
 T3은 **양방향** 락이다. fail-open 방향(arm 발생)만 잠그면 advisory 없이 조용히 arm해도 통과하므로, stderr 존재도 함께 assert한다.
 
@@ -441,7 +451,7 @@ T4의 스윕 대상은 식별자만이 아니라 **같은 것을 다른 이름�
 
 - bash 스위트: F0 수정 후 `test_stale_terms.sh` green, 그 외 red 0건. 스위트 규모는 베이스라인(51종)에서 삭제 5·신규 1을 반영해 47종이 된다 — 종료 조건은 개수가 아니라 **red 0건**이다
 - python 스위트: 삭제 2를 반영해 8종. NG9 cross-resolver 1건(워크트리 환경 의존) 외 green — 베이스라인과 동일
-- T1–T9 각각의 mutation 결과 기록
+- T1–T10 각각의 mutation 결과 기록
 - `git grep`으로 삭제 대상 식별자가 production에 0건
 
 ### 수동 검증 (자동화 밖)
@@ -484,7 +494,7 @@ T4의 스윕 대상은 식별자만이 아니라 **같은 것을 다른 이름�
 
 - `arm_ledger.py` 내부의 함수 배치·정규식 형태·docstring 문구. 공개 API 목록(§6 표)과 `should_arm`의 논리식은 lock됐고 그 아래 구현 재량은 열려 있다
 - arm skip advisory의 정확한 문면. **두 사유(원장/git)를 구분해 표시한다**는 요건은 lock, 문장은 자유
-- T1–T6 픽스처의 구성 방식(임시 리포 생성 대 기존 리포 사용 등). 각 락이 재는 **대상**은 lock, 재는 방법은 자유
+- T 락 픽스처의 구성 방식(임시 리포 생성 대 기존 리포 사용 등). 각 락이 재는 **대상**과 `REDISPATCH_TTL_SEC=0` 설정은 lock, 그 외 구성 방법은 자유
 - 승계된 dangling-경로 불변식(§9)을 T2 픽스처 안에 어떻게 배치할지 — 별도 케이스로 뺄지 기존 케이스에 붙일지
 
 **구현 순서** (의존 관계 — 이것은 lock):
@@ -493,7 +503,7 @@ T4의 스윕 대상은 식별자만이 아니라 **같은 것을 다른 이름�
 2. **arm_ledger.py** — TDD. `should_arm`/`is_born`/`mark_armed` 단위 테스트 먼저
 3. **훅 3종** — validator 게이트 → dispatch 원자적 write → reminder 정리
 4. **skill** — `reviewing-spec` Step 1 strip-pending + Step 3 mark-reviewed + approve `check-born` (§5.2·§5.4·§6)
-5. **T1–T3·T6·T7·T8·T9** — 훅·skill 레벨 통합 락 + mutation (T7·T8은 반대 방향 쌍이라 **함께** 작성한다 — 한쪽만 두면 반대편 구현이 조용히 통과한다. T9는 G6 상한)
+5. **T1–T3·T6–T10** — 훅·skill 레벨 통합 락 + mutation. T7·T8은 반대 방향 쌍이라 **함께** 작성한다(한쪽만 두면 반대편 구현이 조용히 통과). T9는 G6 상한, T10은 Stop의 원장 무-기록. 모든 픽스처는 `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0`
 6. **삭제 스윕** — 파일 9종 삭제 → skill·테스트 참조 정리 → T4·T5
 7. **문서 동기화** — README(P17 서술 포함)·CHANGELOG·plugin.json 0.25.0
 
