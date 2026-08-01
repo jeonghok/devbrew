@@ -18,7 +18,9 @@
 #       (4) .claude/ — 플러그인 디렉토리 아래 .claude/는 **툴링이 쓰는 세션 상태**이지 플러그인이
 #           출하하는 artifact가 아니다(quality-gates 세션 파일 등, git-untracked). 아무도 작성하지
 #           않은 일시 파일이 락을 빨갛게 만들 수 있으면 사람들이 락을 무시하도록 훈련된다.
-#           .claude-plugin/은 production이라 제외되지 않는다 — 패턴이 '*/.claude/*'라 안 걸린다.
+#           패턴은 **$SD 기준으로 앵커**한다('*/.claude/*'는 앵커가 없어, 하니스 워크트리가
+#           <repo>/.claude/worktrees/<name>/ 아래 사는 순간 production 전량을 삼켰다 — 락이
+#           워크트리에서 실행 불가였다). .claude-plugin/은 이름이 달라 여전히 제외되지 않는다.
 #       테스트의 토큰 참조는 제거를 강제하는 enforcement 층이지 stale 참조가 아니다.
 set -u -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -45,7 +47,7 @@ prod_files=()
 while IFS= read -r f; do prod_files+=("$f"); done < <(
   find "$SD" -type f \
     -not -path '*/tests/*' -not -name 'CHANGELOG.md' \
-    -not -path '*/.claude/*' \
+    -not -path "$SD/.claude/*" \
     -not -path '*/.pytest_cache/*' -not -path '*/__pycache__/*' -not -path '*/.git/*'
 )
 # macOS bash 3.2: 빈 배열에 "${arr[@]}" 확장은 set -u 하에서 crash — 명시 guard(빈 집합=find 깨짐=FAIL).
