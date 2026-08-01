@@ -29,6 +29,7 @@ Runtime 게이트가 *"전체 앱을 무조건 돌린다"* 를 버리고 **이�
   - [5.11 GC 충돌 — 신규 위험이 드러낸 기존 결함](#511-gc-충돌--신규-위험이-드러낸-기존-결함)
 - [6. Acceptance Criteria](#6-acceptance-criteria)
   - [6.1 리뷰 라운드 1에서 추가된 AC (AC31–AC37)](#61-리뷰-라운드-1에서-추가된-ac-ac31ac37)
+  - [6.2 리뷰 라운드 2에서 추가된 AC (AC38–AC44)](#62-리뷰-라운드-2에서-추가된-ac-ac38ac44)
 - [7. Files to Modify](#7-files-to-modify)
 - [8. Verification Plan](#8-verification-plan)
   - [8.1 자동 테스트](#81-자동-테스트)
@@ -226,9 +227,14 @@ R-init  resolve-baseline.sh                          [신규]
           → base · base_ref · merge_base · degraded
           공유: check-review-scope.sh · compute-test-scope-candidates.sh · 이 게이트
 
-R1      영향 판정 ── 오케스트레이터(모델)               ← LD5 전반부
-          보조 입력 4종 (§5.3)
-          산출: 영향 테스트 파일 목록 + 상황별 층 여부
+R1a     러너 감지 ── run-test-selection.sh detect <project_dir>   [신규]
+          → runner · granularity · setup_cmd
+          이 셋이 R2 산문 · R4 · R5b · R6(--granularity)로 스레드된다.
+          오케스트레이터는 감지 표를 재구현하지 않는다.
+
+R1b     영향 판정 ── 오케스트레이터(모델)               ← LD5 전반부
+          스코프 보조 입력 4종 (§5.3) — 러너 신호와 별개 축
+          산출: 영향 unit 목록 + 상황별 층 여부
 
 R2      계획 산문 + 비용 신호 ── 오케스트레이터          ← LD4 · B5
           필수 필드 §5.8
@@ -237,22 +243,25 @@ R3      갭 게이트 ── 생략이 있을 때만 AskUserQuestion   ← B3
           생략 0 → zero-click
 
 R4      기준선 측 — 전 단계 오케스트레이터 소유 (verifier 미개입)
-          ① baseline-cache.sh get   (키 = merge_base × runner × file)      [신규]
+          ① baseline-cache.sh get   (키 = merge_base × runner × unit)      [신규]
           ② 미적중분만: qg-worktree.sh create-baseline <merge_base> <sid>  [서브커맨드 추가]
-             → deps 설치 (생태계 공유 캐시) → run-test-selection.sh        [신규]
+             → run-test-selection.sh run …  (setup_cmd를 스크립트가 실행)   [신규]
           ③ baseline-cache.sh put · 워크트리 폐기
 
 R5a     HEAD 측 — verifier 턴 (판단이 필요한 것만)
           기존 create-sandbox (무변경) → runtime-verifier (페르소나 개정)
-          setup fix · 상황별 부팅/플로우. **테스트 실행은 여기 없다.**
+          **앱 부팅용** setup fix · 상황별 부팅/플로우.
+          **테스트 실행도, 테스트 러너용 deps 설치도 여기 없다.**
 
 R5b     HEAD 측 — verifier 턴 *종료 후*, 오케스트레이터가 직접
-          run-test-selection.sh <sandbox> <runner> ...
+          run-test-selection.sh run <sandbox> <runner> …
           ← 불변식 ②. verifier의 evidence-log 테스트 결과는 advisory,
             이 호출 결과가 authoritative.
+          ← setup_cmd를 R4와 **동일하게** 실행 (양측 준비 동등성)
 
-R6      대조 ── diff-test-results.py                   [신규]  ← OQ1 + LD5 백스톱
-          귀속 8종 + SILENT_DROP + BASELINE_UNRUNNABLE
+R6      대조 ── diff-test-results.py --granularity <g>  [신규]  ← OQ1 + LD5 백스톱
+          귀속 8종(총 함수) + SILENT_DROP + BASELINE_UNRUNNABLE
+          + granularity=bulk의 PRE_EXISTING → attribution 원장 degraded
 
 R7      mutation-guard ── 기존, 바이트 무변경             ← Law 2
 
@@ -261,9 +270,9 @@ R8      원장 5차원 닫힘 검사 (check_qa_ledger.py) → verdict  [신규]
 R9      샌드박스 폐기 (기존 remove)
 ```
 
-**"상황별 층"의 정의 (floor 위에 얹히는 것).** LD3의 floor는 R4·R5b의 테스트 러너 표면까지다(R5a의 부팅·플로우는 floor가 아니다). 그 **위**는 기존 계약이 그대로 담당한다 — `spec_acceptance_criteria` → `plan_features` → smoke의 fallback 사슬(`runtime-verifier.md:85-88`)과 `approved_surfaces` 부팅. 이 사슬은 내용이 바뀌지 않고 **위치만 재배치**된다: 예전엔 그것이 게이트의 전부였고, 이제는 floor 위의 선택 층이다. R1에서 모델이 "이 변경에 이 층이 필요한가"를 판정하고 그 판단을 계획 산문에 쓴다.
+**"상황별 층"의 정의 (floor 위에 얹히는 것).** LD3의 floor는 R4·R5b의 테스트 러너 표면까지다(R5a의 부팅·플로우는 floor가 아니다). 그 **위**는 기존 계약이 그대로 담당한다 — `spec_acceptance_criteria` → `plan_features` → smoke의 fallback 사슬(`runtime-verifier.md:85-88`)과 `approved_surfaces` 부팅. 이 사슬은 내용이 바뀌지 않고 **위치만 재배치**된다: 예전엔 그것이 게이트의 전부였고, 이제는 floor 위의 선택 층이다. R1b에서 모델이 "이 변경에 이 층이 필요한가"를 판정하고 그 판단을 계획 산문에 쓴다.
 
-**R4가 R5보다 먼저인 이유** — 기준선 실행이 HEAD 샌드박스와 **다른 트리에서, verifier 개입 없이** 끝나야 한다. 같은 트리에서 코드를 되감았다 복원하면 mutation-guard의 의미가 흐려지고, verifier가 기준선을 조작해 진짜 회귀를 `PRE_EXISTING`으로 위장할 수 있는 경로가 생긴다 (누락 방향).
+**R4가 R5a/R5b보다 먼저인 이유** — 기준선 실행이 HEAD 샌드박스와 **다른 트리에서, verifier 개입 없이** 끝나야 한다. 같은 트리에서 코드를 되감았다 복원하면 mutation-guard의 의미가 흐려지고, verifier가 기준선을 조작해 진짜 회귀를 `PRE_EXISTING`으로 위장할 수 있는 경로가 생긴다 (누락 방향).
 
 **R5b가 R5a *뒤*인 이유** — deps 설치·`.env` 같은 setup은 판단이 필요해 verifier의 몫이고, 테스트는 그 setup이 끝난 트리에서 돌아야 한다. 순서를 뒤집으면 setup 전 상태를 재는 셈이다. 그러나 **같은 턴 안에서 섞으면 안 된다** — 불변식 ②.
 
@@ -273,7 +282,9 @@ R9      샌드박스 폐기 (기존 remove)
 
 스코프 결정은 모델이 한다. 아래 넷은 **입력이지 규칙이 아니다** (CE `ce-test-browser/SKILL.md:51` — *"a starting point of common patterns, not an exhaustive rule set — apply judgment"*).
 
-| 보조 입력 | 무엇 | 신뢰 등급 |
+> **용어 경계.** 이 절의 "**스코프 보조 입력**"은 *어떤 파일을 돌릴까*의 입력이고, §5.9의 "**러너 감지 신호**"는 *무엇으로 돌릴까*의 입력이다. 축이 다르므로 아래 4종에 러너 신호는 포함되지 않는다. `detect-runtime.sh` 매니페스트는 **스코프 보조 입력이 아니며**, 이 설계에서 그것이 쓰이는 곳은 R5a의 상황별 층 하나뿐이다(`approved_surfaces` 기반 부팅 — 기존 계약 그대로). 실행할 러너 식별에는 쓰지 않는다(§5.9).
+
+| 스코프 보조 입력 | 무엇 | 신뢰 등급 |
 |---|---|---|
 | `compute-test-scope-candidates.sh` 후보 목록 | diff의 src → 이름 매칭 test 파일 (Python/JS/TS) | **구조적** — 있으면 강한 신호, 없다고 없는 것은 아님 |
 | git diff + commit message + PR description | 무엇이 바뀌었고 무엇을 **의도**했나 | **구조적** — gstack `:1190` 의도 대조 |
@@ -288,7 +299,7 @@ R9      샌드박스 폐기 (기존 remove)
 
 ### 5.4 차등 실행과 기준선 캐시
 
-**캐시 키 = `(merge_base sha, runner, test file path)`.** 전부 결정론적·내용주소.
+**캐시 키 = `(merge_base sha, runner, unit)`.** 전부 결정론적·내용주소. `unit`의 의미는 어댑터의 `granularity`가 정한다(아래 계약 참조).
 
 - **무효화 로직이 없다.** rebase나 main 머지로 merge_base가 바뀌면 키 자체가 바뀐다. 구조적으로 stale이 불가능하다.
 - **기준선 실행은 `/qg` 호출당이 아니라 merge_base당 1회.** 브랜치 수명 동안 `/qg`를 8번 돌리면 설치+실행 비용은 1번.
@@ -300,10 +311,12 @@ R9      샌드박스 폐기 (기존 remove)
 <!-- qg-baseline-cache:v1 -->
 merge_base: <full sha>
 ---
-<runner>\t<file-or-BULK>\t<pass|fail|error>\t<exit-code>
+<runner>\t<unit>\t<pass|fail|error|unrun|absent>\t<exit-code>
 ```
 
-`merge_base` 전체 sha를 **본문에도** 적는다 — 파일명은 short sha라 충돌 가능성이 0이 아니고, 본문 sha가 요청한 merge_base와 다르면 미적중으로 떨어뜨린다. 캐시 키의 세 요소(merge_base × runner × file)가 전부 파일 안에 있으므로 조회는 순수 문자열 매칭이다.
+`merge_base` 전체 sha를 **본문에도** 적는다 — 파일명은 short sha라 충돌 가능성이 0이 아니고, 본문 sha가 요청한 merge_base와 다르면 미적중으로 떨어뜨린다. 캐시 키의 세 요소(merge_base × runner × unit)가 전부 파일 안에 있으므로 조회는 순수 문자열 매칭이다.
+
+**`unrun`은 캐시에 넣지 않는다.** 실행하지 못했다는 사실은 환경 상태(설치 실패·네트워크)에 달렸고 merge_base의 함수가 아니므로, 캐시하면 다음 실행에서 복구 가능한 실패가 영구화된다. `absent`는 캐시한다 — merge_base 트리의 함수라 안정적이다.
 
 **소유 컴포넌트 — `scripts/baseline-cache.sh` (신규).** 캐시의 조회·검증·부분적중·갱신·동시성을 **한 스크립트가 전부** 갖는다. §5.1의 3분업 어디에도 안 들어가는 로직을 남기지 않기 위한 것이며, 오케스트레이터는 이 두 서브커맨드만 호출한다:
 
@@ -338,15 +351,49 @@ usage: baseline-cache.sh put <cache-root> <merge_base> <runner> < results.tsv
 
 흔한 경우(green) 2회, 비싼 경우에만 정밀해진다. 러너별 출력 파서 없이 **exit code만** 쓰므로 §5.9의 러너 전부에 같은 코드가 적용된다.
 
-**`run-test-selection.sh` 계약:**
+**`run-test-selection.sh` 계약 — 2개 서브커맨드.**
 
 ```
-usage: run-test-selection.sh <worktree-abs> <runner> <mode> <file>...
-  mode = bulk | per-file
-stdout (per invocation): 한 줄에 하나
-  <file-or-BULK>\t<pass|fail|error>\t<exit-code>
-exit: 0 = 실행 완료(테스트 실패 포함) · 3 = 러너 부재/설치 실패(BASELINE_UNRUNNABLE) · 2 = 사용 오류
+usage: run-test-selection.sh detect <worktree-abs>
+stdout (정확히 3줄):
+  runner: <8개 식별자 중 하나>          # 미감지면 runner: none
+  granularity: file | package | bulk
+  setup_cmd: <결정론적 설치 명령 | ->    # '-' = 설치 불필요
+exit: 0 = 감지 완료(none 포함) · 2 = 사용 오류
+
+usage: run-test-selection.sh run <worktree-abs> <runner> <mode> <unit>...
+  mode = bulk | per-unit
+stdout: **입력 unit 하나당 정확히 한 줄** (총 함수 — 빠짐 없음)
+  <unit>\t<pass|fail|error|unrun|absent>\t<exit-code>
+exit: 0 = 실행 시도 완료(테스트 실패 포함) · 3 = 러너 부재/설치 실패 · 2 = 사용 오류
+      exit 3 이어도 **모든 unit에 대해 `unrun` 행을 emit**한다.
 ```
+
+**`detect`가 별도 서브커맨드인 이유 (라운드 2 Finding B).** `<runner>`가 `run`의 CLI 인자인데 감지가 스크립트 내부 로직이면 순환이다. 또 계획 산문(R2)은 R4/R5b **이전**에 러너 이름을 노출해야 한다. `detect`를 분리하면 감지 지식은 여전히 한 스크립트가 단독 소유하고(어댑터 표 = 유일 소유자), 오케스트레이터는 R1a에서 한 번 호출해 그 값을 R2 산문·R4·R5b·R6에 스레드한다. 오케스트레이터가 감지 표를 재구현하는 경로는 없다.
+
+**`unit`이 `file`을 대체한다.** `granularity`에 따라 의미가 정해진다:
+
+| granularity | unit의 의미 | 이 러너들 |
+|---|---|---|
+| `file` | 테스트 파일 경로 (repo-relative) | pytest · unittest · shell · jest/vitest |
+| `package` | 패키지 디렉토리 | go |
+| `bulk` | 리터럴 `BULK` **하나뿐** | cargo · make · npm-script |
+
+**`BULK`가 캐시 키로 안전한 이유 (라운드 2 codex Finding).** `granularity: bulk`인 어댑터는 §5.9 표대로 **파일 인자를 무시한다** — `cargo test`·`make test`·`npm test`는 선택 집합과 무관하게 같은 명령이다. 따라서 그 결과는 `(merge_base, runner)`만의 함수이고, 선택 집합이 달라도 같은 결과가 나오는 것이 **정의상** 맞다. 서로 다른 선택이 한 키를 공유하는 오염이 원리적으로 불가능하다.
+반대로 `granularity ∈ {file, package}`에서는 **`BULK` 키가 아예 생기지 않는다**: bulk 모드로 green이 나오면 *"집합 전체가 통과했으므로 각 unit이 통과했다"* 가 성립하므로 **unit별 `pass` 행으로 분해해** 캐시에 넣는다. red이면 unit별 재실행 결과를 넣는다. 캐시의 키 공간은 언제나 unit 하나다.
+
+**5개 상태값과 총 함수 (라운드 2 codex Finding).** §5.5 귀속 표의 `없음`·`미실행` 축을 생산하는 주체가 여기다:
+
+| 상태 | 의미 | §5.5 축 |
+|---|---|---|
+| `pass` / `fail` | 러너가 판정함 | pass / fail |
+| `error` | 수집·import 실패 등 러너가 실행조차 못한 결함 | fail로 접힘 + `(error)` 병기 |
+| `absent` | 그 워크트리에 unit이 존재하지 않음 (스크립트가 직접 확인) | **없음** |
+| `unrun` | 어댑터 부재(exit 3)이거나 러너가 그 unit에 판정을 안 냄 | **미실행** |
+
+**행이 빠지는 것은 계약 위반이다.** 소비자(`diff-test-results.py`)는 입력 unit 목록과 수신 행을 대조해, 행이 없는 unit이 있으면 `SILENT_DROP`으로 fail-closed한다 — 부재를 추론으로 메우지 않는다.
+
+**`setup_cmd`가 어댑터 소유인 이유 (라운드 2 codex Finding).** deps 설치가 기준선은 오케스트레이터, HEAD는 verifier 소유이면 두 측이 다른 명령·다른 환경으로 준비되어 **차등 비교가 사과와 오렌지**가 된다 — OQ1의 존재 이유가 무너진다. 그래서 **테스트 러너용 설치는 어댑터가 선언하고 `run`이 양측에서 동일하게 실행**한다. verifier가 하는 setup은 *앱 부팅용*(서버 `.env` 등)에 한정되며 테스트 러너 준비와 겹치지 않는다. HEAD에만 적용된 추가 setup이 있으면 그것은 양측 비대칭이므로 evidence-log와 `gap` 차원에 **기록하고 표면화**한다.
 
 exit 0과 테스트 실패를 분리하는 것이 핵심이다 — UltraQA의 *"misleading success output: success phrases with non-zero exits"* 의 뒤집힌 형태로, 실행 실패와 테스트 실패를 뭉치면 귀속이 무너진다.
 
@@ -365,10 +412,25 @@ exit 0과 테스트 실패를 분리하는 것이 핵심이다 — UltraQA의 *"
 | 실행됨 | 미실행 | `SILENT_DROP` | **PASS 불가** ← LD5 백스톱 발화 |
 | 미실행 | 실행됨 | `BASELINE_UNRUNNABLE` | degrade → git귀속 + **PASS 불가** |
 
-**`error` 상태의 매핑.** `run-test-selection.sh`는 파일당 `pass|fail|error` 셋을 emit하는데(§5.4), 위 표는 pass/fail 축이다. 규칙:
+**표의 축 ← `run-test-selection.sh`의 5개 상태값 (§5.4).** 축은 추론이 아니라 스크립트가 emit한 값에서 온다:
+
+| 표의 축 | 스크립트 상태값 |
+|---|---|
+| pass | `pass` |
+| fail | `fail` · `error`(라벨에 `(error)` 병기) |
+| 없음 | `absent` |
+| 미실행 | `unrun` |
+| (행 자체가 없음) | **계약 위반 → `SILENT_DROP`** |
 
 - **`error`는 `fail`로 접는다.** 수집 에러·import 실패는 *실제 결함*이지 실행 불능이 아니다 — 이번 변경이 import를 깼다면 그것은 회귀다. 다만 귀속 라벨에 `(error)`를 병기해 원인이 assertion이 아님을 보인다: `NEW_REGRESSION(error)`.
-- **러너 부재·설치 실패(스크립트 exit 3)는 `error`가 아니라 "미실행"이다.** 표의 `미실행` 축으로 가서 `BASELINE_UNRUNNABLE` 또는 `SILENT_DROP`이 된다. 이 둘을 뭉치면 "실행했는데 깨졌다"와 "아예 못 돌렸다"가 같은 결론을 받게 되므로 §5.4 계약이 exit code로 분리한다.
+- **러너 부재·설치 실패(스크립트 exit 3)는 `error`가 아니라 `unrun`이다.** 표의 `미실행` 축으로 가서 `BASELINE_UNRUNNABLE` 또는 `SILENT_DROP`이 된다. 이 둘을 뭉치면 "실행했는데 깨졌다"와 "아예 못 돌렸다"가 같은 결론을 받게 되므로 §5.4 계약이 상태값과 exit code로 분리한다.
+- **양측 모두 `unrun`이면** 그 unit은 어느 방향으로도 판정되지 않았다 → `BASELINE_UNRUNNABLE`과 같은 취급(귀속 불가, PASS 불가). 조용히 `STILL_GREEN`으로 떨어지지 않는다.
+
+**`granularity`가 표를 바꾸지는 않는다 — 원장 상태를 바꾼다 (라운드 2 Finding A).** `diff-test-results.py`는 `--granularity file|package|bulk`를 **명시적 인자로** 받는다(어댑터 표를 재구현하지 않는다). 8종 귀속 표는 granularity와 무관하게 **총 함수로 그대로** 적용되고 — `BULK` unit의 fail/fail도 `PRE_EXISTING`이다 — 대신 다음 한 줄이 얹힌다:
+
+> `granularity == bulk` 이고 어떤 unit이 `PRE_EXISTING`이면, 그 실행의 **`attribution` 원장 차원을 `degraded`로** 표시한다. 그 안에 새 회귀가 숨었는지 구분할 수 없기 때문이다.
+
+즉 **귀속 카테고리(§5.5)와 원장 상태(§5.6)와 verdict(§5.7)는 서로 다른 층**이고, bulk-only의 모호성은 카테고리 층이 아니라 원장 층에서 표현된다. 이렇게 하면 AC11의 *"8종 전부"* 가 granularity와 무관하게 참이 되고, §5.9의 bulk 표와 이 표가 서로 다른 답을 주는 모순이 사라진다.
 
 **`PRE_EXISTING`이 FAIL이 아닌 것이 이 표의 핵심이다.** devbrew 자신의 stale red가 첫 실행부터 게이트를 막지 않으면서도 침묵하지 않는다 — `attribution` 차원에 기록되고 보고서에 나온다.
 
@@ -475,18 +537,27 @@ evidence-log 안에 산다. spec-distill 커버리지 원장과 같은 줄 모�
 
 **미지원 러너 처리.** 위 8개 중 어느 것도 감지되지 않으면 `run-test-selection.sh`는 **exit 3**(실행 불가)을 내고 그 표면은 미실행으로 기록된다. **임의 명령을 추측해 실행하지 않는다** — 추측한 명령이 배포·마이그레이션 같은 부작용을 낼 수 있다.
 
-**감지 우선순위**는 위 표의 행 순서다(위가 먼저). 복수 감지 시 파일 지목이 가능한 쪽이 위에 오도록 배열돼 있으므로, 우선순위가 곧 입도 최대화다. 감지 결과는 계획 산문(§5.8)에 러너 이름으로 노출된다.
+**감지 우선순위**는 위 표의 행 순서다(위가 먼저). 복수 감지 시 파일 지목이 가능한 쪽이 위에 오도록 배열돼 있으므로, 우선순위가 곧 입도 최대화다.
 
-**`detect-runtime.sh`와의 관계.** 기존 매니페스트의 `test_runners: [npm|pytest|cargo|go|make]`는 이 8개 집합과 **일치하지 않는다**(`unittest`·`shell`·`jest`/`vitest` 분리가 없다). 매니페스트는 **보조 입력**으로만 읽고, 실행에 쓰는 식별자는 이 어댑터 감지가 소유한다 — `detect-runtime.sh`를 바이트 무변경으로 두기 위한 결정이며(AC21), 두 집합이 다르다는 사실 자체가 계획 산문에 드러날 필요는 없다.
+**감지의 실행 지점 — `run-test-selection.sh detect` (§5.4).** 감지 지식은 이 스크립트가 **단독 소유**하되, 오케스트레이터가 **R1a에서 `detect` 서브커맨드를 한 번 호출**해 `runner`/`granularity`/`setup_cmd` 셋을 얻는다. 그 값이 R2 계획 산문의 러너 이름, R4·R5b의 `<runner>` 인자, `diff-test-results.py --granularity`로 스레드된다. 오케스트레이터가 이 표를 재구현하는 경로는 **없다** — 라운드 2 Finding B가 지적한 "CLI 인자 vs 내부 감지" 순환을 서브커맨드 분리로 끊었다.
 
-**bulk-only는 확실성이 아니라 입도만 떨어뜨린다:**
+**`detect-runtime.sh`와의 관계 — 겹치지 않는 두 축.** 기존 매니페스트의 `test_runners: [npm|pytest|cargo|go|make]`는 이 8개 집합과 **일치하지 않는다**(`unittest`·`shell`·`jest`/`vitest` 분리가 없다). 해소는 **역할 분리**다:
 
-| bulk 기준선 | bulk HEAD | 판정 |
+| | 무엇을 정하나 | 소유 |
 |---|---|---|
-| green | green | **통과 확정** |
-| green | red | **새 회귀 확정** (파일 단위 불필요) |
-| red | green | `FIXED` 확정 |
-| **red** | **red** | **유일한 진짜 모호 지점** → `attribution: degraded` + `SKIP_WITH_EVIDENCE` |
+| `detect-runtime.sh` 매니페스트 | 상황별 층의 **부팅 표면**(`runnable_surfaces`·`approved_surfaces`) | 기존 계약, 바이트 무변경 (AC21) |
+| `run-test-selection.sh detect` | floor의 **테스트 러너 식별**(`runner`/`granularity`/`setup_cmd`) | 이 설계의 신규 |
+
+매니페스트의 `test_runners` 필드는 **이 설계의 실행 경로에서 소비되지 않는다** — 부팅 표면 목록만 쓴다. 두 집합이 다른 것은 결함이 아니라 두 축이 다르기 때문이며(§5.3의 용어 경계 참조), 이 사실을 계획 산문에 노출할 필요는 없다. 다만 매니페스트가 **스코프 보조 입력이 아니라는 것**은 §5.3에 못박혀 있다.
+
+**bulk-only는 확실성이 아니라 입도만 떨어뜨린다.** 아래는 §5.5의 귀속 표를 **대체하지 않는다** — 같은 표를 `granularity: bulk`에서 읽은 결과이고, 마지막 행에서만 §5.6 원장 상태가 갈린다(§5.5의 granularity 규칙):
+
+| `BULK` 기준선 | `BULK` HEAD | §5.5 귀속 | 원장 `attribution` | verdict 영향 |
+|---|---|---|---|---|
+| pass | pass | `STILL_GREEN` | `closed` | **통과 확정** |
+| pass | fail | `NEW_REGRESSION` | `closed` | **새 회귀 확정** (unit 분해 불필요) |
+| fail | pass | `FIXED` | `closed` | 확정 |
+| **fail** | **fail** | `PRE_EXISTING` | **`degraded`** | **`SKIP_WITH_EVIDENCE`** — 유일한 모호 지점 |
 
 모호 지점의 정직한 문장 (필수):
 
@@ -504,13 +575,21 @@ evidence-log 안에 산다. spec-distill 커버리지 원장과 같은 줄 모�
 |---|---|---|
 | `resolve-baseline.sh` degraded (detached/shallow/base 없음) | 차등 불가 → git-귀속 degrade, PASS 불가 | `> [quality-gates] baseline 확정 불가 (<사유>) — 차등 귀속 없이 진행, verdict는 PASS 불가` |
 | 기준선 deps 설치 실패 / 오프라인 | `BASELINE_UNRUNNABLE` → git-귀속 degrade, PASS 불가 | `> [quality-gates] 기준선 실행 불가 (<사유>) — 귀속을 git 이력 추론으로 대체(확증 아님)` |
-| 러너 부재 (exit 3) | 해당 러너 표면 skip, 다른 표면 계속 | `> [quality-gates] runner <x> 부재 — 이 표면 미실행` |
+| 러너 부재 (exit 3) — **영향분을 못 돌림** | `verification: degraded` → **PASS 불가** | `> [quality-gates] 영향 테스트를 돌릴 러너가 없습니다 (<사유>) — floor 미충족, 인증 없음` |
+| 러너 부재 (exit 3) — **영향분과 무관한 표면** | `gap: closed`에 열거, PASS 가능 | `> [quality-gates] runner <x> 부재 — 이 표면 미실행(영향분 아님)` |
 | bulk-only 러너 양쪽 red | `attribution: degraded` → SKIP_WITH_EVIDENCE | §5.9의 정직한 문장 |
 | 캐시 파일 손상/파싱 실패 | 미적중으로 취급, 재실행 | `> [quality-gates] baseline 캐시 손상 — 재계산` |
 | 영향분 0개 | `SKIP_WITH_EVIDENCE` + gap 기록 | `> [quality-gates] 영향분에 해당하는 기존 테스트 없음 — 실행 없음, 인증 없음` |
 | `check_qa_ledger.py` 실패 | verdict를 PASS로 올리지 않음 | 게이트의 stderr verbatim |
 
-**모든 degrade가 PASS를 막는 것은 아니다.** 러너 부재로 한 표면을 못 돌린 것은 `gap`에 기록되고 다른 표면의 PASS를 막지 않는다. **귀속에 관한 degrade만** PASS를 막는다 — 귀속이 없으면 "이 변경이 깼는가"에 답을 못 한 것이고, 그게 이 게이트의 존재 이유이기 때문이다.
+**모든 degrade가 PASS를 막는 것은 아니다 — 판별 기준은 "영향분인가"다** (라운드 2 codex Finding). 라운드 1 초안은 *"어느 floor 차원이 degraded면 PASS 불가"*(§5.7)와 *"러너 부재는 PASS를 막지 않는다"* 를 나란히 써서 **자기모순**이었다. 정정된 단일 규칙:
+
+| 못 확인한 것 | 원장 | PASS |
+|---|---|---|
+| **영향분**을 못 돌림 (러너 부재·baseline 불가·귀속 불가) | `verification` 또는 `attribution`이 **`degraded`** | **불가** |
+| **영향분과 무관한** 표면을 안 돌림 (다른 러너 부재, 자동화 불가 플로우, 미선택분) | `gap`에 **열거하고 `closed`** | 가능 |
+
+핵심은 **`gap: closed`와 `verification: degraded`가 다른 뜻**이라는 것이다 — `gap`은 *"못 확인한 것을 빠짐없이 열거했다"* 이므로 열거가 곧 닫힘이고, `degraded`는 *"확인하기로 한 것을 못 확인했다"* 이므로 인증 불가다. LD3의 floor가 "영향분을 실제로 실행"이므로, floor에 해당하는 것을 못 돌린 순간 인증 근거가 없다.
 
 ### 5.11 GC 충돌 — 신규 위험이 드러낸 기존 결함
 
@@ -602,6 +681,16 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 - **AC36** (`error` 매핑) — `error` 상태는 `fail`로 접히고 귀속 라벨에 `(error)`가 병기된다. 스크립트 **exit 3**은 `error`가 아니라 미실행 축(`BASELINE_UNRUNNABLE`/`SILENT_DROP`)으로 간다.
 - **AC37** (분모 M) — 계획 산문의 분모 M이 `compute-test-scope-candidates.sh --total`의 출력이며, 모델이 산출한 값이 아니다.
 
+### 6.2 리뷰 라운드 2에서 추가된 AC (AC38–AC44)
+
+- **AC38** (감지 분리) — `run-test-selection.sh detect <worktree>`가 `runner`/`granularity`/`setup_cmd` 3줄을 emit한다. `SKILL.md`가 R1a에서 이를 호출하고 그 값을 R2 산문·R4·R5b·`--granularity`로 스레드하며, **오케스트레이터 쪽에 어댑터 감지 표의 재구현이 없다**.
+- **AC39** (총 함수) — `run-test-selection.sh run`이 **입력 unit 하나당 정확히 한 행**을 emit한다. exit 3에서도 모든 unit에 `unrun` 행이 나온다. 행이 빠진 입력에 대해 `diff-test-results.py`는 `SILENT_DROP`으로 fail-closed한다.
+- **AC40** (상태 5종) — 상태값 집합이 `pass|fail|error|unrun|absent` 5종이며, `absent`는 워크트리 부재, `unrun`은 미판정이다. `unrun`은 캐시에 기록되지 않고 `absent`는 기록된다.
+- **AC41** (setup 동등성) — 테스트 러너용 설치는 어댑터의 `setup_cmd`이며 **기준선·HEAD 양측이 같은 명령**으로 실행된다. `runtime-verifier` 페르소나에 *"테스트 러너용 deps 설치는 하지 않는다"* 가 명시된다. HEAD-only 추가 setup은 evidence-log와 `gap`에 기록된다.
+- **AC42** (bulk 키 안전성) — `BULK` unit은 `granularity: bulk` 어댑터에서만 생성된다. `granularity ∈ {file, package}`에서는 bulk-green이 unit별 `pass` 행으로 분해되어 캐시되고 `BULK` 키가 생기지 않는다.
+- **AC43** (granularity → 원장) — `diff-test-results.py`가 `--granularity`를 인자로 받고, `bulk`에서 `PRE_EXISTING`이 나오면 `attribution` 원장 차원을 `degraded`로 표시한다. 귀속 카테고리 자체는 8종에서 벗어나지 않는다.
+- **AC44** (영향분 러너 부재) — 영향분을 돌릴 러너가 없으면 `verification: degraded` → **PASS 불가**. 영향분과 무관한 표면의 러너 부재는 `gap`에 열거되어 `closed`이며 PASS를 막지 않는다.
+
 ---
 
 ## 7. Files to Modify
@@ -611,7 +700,7 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 | 경로 | 무엇 |
 |---|---|
 | `scripts/resolve-baseline.sh` | base/base_ref/merge_base/degraded 공유 resolution (OQ5) |
-| `scripts/run-test-selection.sh` | 결정론 테스트 실행 — 러너 어댑터 8종, bulk/per-file, exit 3 = 실행 불가 |
+| `scripts/run-test-selection.sh` | `detect`(러너·입도·setup 감지) + `run`(결정론 실행, unit당 1행 총 함수). 러너 어댑터 8종 단독 소유 |
 | `scripts/baseline-cache.sh` | 기준선 결과 캐시 get/put — 부분적중·원자적 쓰기·손상 처리 소유 |
 | `scripts/diff-test-results.py` | 기준선×HEAD 짝짓기 → 귀속 8종 + SILENT_DROP |
 | `scripts/check_qa_ledger.py` | floor 5차원 구조 게이트 (Law 1) |
@@ -677,6 +766,14 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 | T31 | **영향분 0개 → `SKIP_WITH_EVIDENCE`** + gap 차원에 "기존 테스트 없음" 기록 + verdict ≠ PASS | AC15(빈 스코프 분기) |
 | T32 | `check-allowed-tools-order.sh` 통과 (신규 5종 등재) | AC3 |
 | T33 | `README.md` — Principles Instantiated 3줄 + 컴포넌트 트리 신규 5종 등재 | AC30 |
+| T34 | `detect` 서브커맨드 — 8 어댑터 각각 3줄 emit · 미감지 `runner: none` · **SKILL 쪽 감지-표 재구현 0회**(어댑터 표의 감지 조건 문자열이 SKILL.md에 없음) | AC38 |
+| T35 | `run`이 입력 unit 수 == 출력 행 수 (정상·exit 3·일부 absent 3 픽스처) + 행 누락 입력에서 `SILENT_DROP` | AC39 |
+| T36 | 상태 5종 각각 1 픽스처 + `unrun`은 `put` 후 캐시에 부재 / `absent`는 존재 | AC40 |
+| T37 | `setup_cmd`가 기준선·HEAD 호출에서 **동일 문자열**로 실행됨(호출 로그 대조) + verifier 페르소나에 deps-설치 배제 문구 | AC41 |
+| T38 | `granularity=file`에서 bulk-green → unit별 `pass` 캐시 · `BULK` 키 부재 / `granularity=bulk`에서만 `BULK` 키 생성 | AC42 |
+| T39 | `diff-test-results.py --granularity bulk` + fail/fail → 귀속 `PRE_EXISTING` **이면서** `attribution: degraded` | AC43 |
+| T40 | 영향분 러너 부재 → verdict ≠ PASS + `verification: degraded` / 무관 표면 러너 부재 → PASS 가능 + `gap: closed` (두 픽스처) | AC44 |
+| T41 | **아티팩트 유출** — `make`/`npm-script` 스텁 레포에서 `run` 실행 후 비-ignored 신규 파일이 생기는지 실측 (§11 ⑨의 측정 경로) | §11 ⑨ |
 
 **AC ↔ 검증 완전성 (라운드 1 갭).** AC1–AC37 전부가 위 T 또는 §8.3의 V에 대응한다. 자동 테스트가 없는 것은 **AC20 하나**이며 `V4`(대화형 게이트 미발화)가 담당한다 — `AskUserQuestion` 발화 여부는 대화형이라 자동화하지 않는다. 이 매핑 자체를 구현 시 표로 유지하고, AC 추가 시 대응 T/V 없이 머지하지 않는다.
 
@@ -703,6 +800,10 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 | **M13** | `baseline-cache.sh get`이 손상 파일을 부분 파싱해 일부를 적중으로 냄 | T23 |
 | **M14** | 미감지 러너에서 exit 3 대신 `npm test`를 추측 실행 | T25 |
 | **M15** | precedence를 뒤집어 `SILENT_DROP`이 확증 회귀를 `SKIP`으로 downgrade | T26 |
+| **M16** | `run`이 실패한 unit의 행을 **생략**(총 함수 위반) | T35 — 결과 배열이 짧아질 뿐 값은 정상이라 **개수 대조**로만 잡힌다 |
+| **M17** | `setup_cmd`를 HEAD 측에서만 다른 명령으로 바꿈 | T37 — 양측 결과가 그럴듯하게 나오므로 **호출 문자열 대조**로만 잡힌다 |
+| **M18** | `granularity=file`에서도 bulk-green을 `BULK` 한 행으로 캐시 | T38 — 캐시 적중률이 오히려 올라가 성능만 보면 개선처럼 보인다 |
+| **M19** | 영향분 러너 부재에서 `gap: closed`로 처리해 PASS 허용 | T40 — 라운드 2에서 실제로 문서에 있던 모순 그 자체 |
 
 > **M6·M8·M12가 이 계획의 취약 지점이다.** 셋 다 "결과가 같아 보이는" mutation이라 결과값만 보는 assert로는 GREEN이 나온다 — M6은 **호출 카운터**(+ 유한 종료 stub), M8은 **body-unique + 섹션 윈도우**, M12는 **호출 위치**가 필요하다. 구현 시 이 셋을 **먼저** 쓴다.
 >
@@ -763,7 +864,8 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 6. **bulk-only 러너의 "양쪽 red" 빈도가 미실측이다.** cargo/make 레포에서 이 상태가 흔하면 그 레포들은 사실상 늘 `SKIP_WITH_EVIDENCE`를 받는다.
 7. **`test-scope-validator`의 `ac_coverage`는 여전히 advisory다.** 이 spec은 그 출력을 `verification` 차원의 입력으로 소비하지만 블로킹으로 승격하지 않는다 (v2.1.0 계약 유지).
 8. **LD4의 "쉽게"는 기계 검증 밖이다.** Goal 5의 사람 판정 층(V8)은 통과 기준이 사람이다. 어휘 금지 목록·최대 길이 같은 기계 임계는 LD7이 경계한 천장이 되므로 세우지 않았다 — 대신 필드 존재/포맷만 기계로 잡는다(AC19). **"필드는 다 있는데 읽히지 않는 계획"은 자동으로 잡히지 않는다.**
-9. **아티팩트 억제가 불가능한 러너가 있다.** `make`·`npm-script`는 내부 명령을 우리가 모르므로 `.pytest_cache` 같은 산출물을 억제할 수단이 없다. 대상 레포의 `.gitignore`가 그것을 덮지 않으면 mutation-guard가 `disallowed_new_files`로 잡아 **거짓 FAIL**을 낸다. 첫 dogfood(V1)에서 실측하고, 흔하면 guard 쪽 예외 목록이 아니라 **어댑터별 작업 디렉토리 격리**로 푼다(guard를 느슨하게 하는 방향은 금지 — Law 2 표면).
+9. **아티팩트 억제가 불가능한 러너가 있다.** `make`·`npm-script`는 내부 명령을 우리가 모르므로 `.pytest_cache` 같은 산출물을 억제할 수단이 없다. 대상 레포의 `.gitignore`가 그것을 덮지 않으면 mutation-guard가 `disallowed_new_files`로 잡아 **거짓 FAIL**을 낸다.
+   **측정 경로 정정 (라운드 2 Finding C).** 초안은 *"첫 dogfood(V1)에서 실측"* 이라 썼지만 **V1은 이것을 측정할 수 없다** — V1은 devbrew 자신을 대상으로 하고 devbrew에는 Makefile 기반 테스트도 npm-script 테스트도 없다. 측정은 **T41**(픽스처 기반: `Makefile`/`package.json` 스텁 레포에서 `run` 실행 후 비-ignored 신규 파일 발생 여부)이 담당한다. 실측 결과가 "흔함"이면 guard 예외 목록이 아니라 **어댑터별 작업 디렉토리 격리**로 푼다 — guard를 느슨하게 하는 방향은 금지다(Law 2 표면).
 10. **baseline 캐시는 GC되지 않는다.** merge_base마다 파일이 하나씩 쌓이고 정리는 `/cancel-qg --all`에 위임했다. 장수 브랜치·잦은 rebase 환경에서 파일 수가 늘어나는데, 각 파일이 수 KB라 실질 부담은 아니지만 **자동 정리 경로가 없다**는 사실은 남는다.
 11. **러너 어댑터 8종은 초기 집합이며 커버리지 주장이 아니다.** Java/Gradle·Ruby/RSpec·PHP/PHPUnit·.NET 등은 exit 3(미지원)으로 떨어져 그 레포에서는 이 게이트가 floor를 제공하지 못한다. 확장은 case 절 추가지만, **미지원 레포에서 이 게이트가 무엇을 못 하는지가 사용자에게 보여야** 한다(§5.10의 loud 경로).
 
@@ -778,7 +880,8 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 | 버전 영향 | **major — v2.14.x → v3.0.0** (`/qg runtime` 인터페이스 유지, "전체 앱 실행" 동작 제거) |
 | 브랜치 | `feature/qg-impact-driven-runtime` |
 | 신규/수정/문서 | 신규 5 · 수정 7 · 문서 3 |
-| 리뷰 라운드 1 | Claude `spec-reviewer` 8건(block 1·high 4·medium 3) + codex `spec-codex-reviewer` 4건(high 3·medium 1) → `merge_review.py` combined `needs_revise` → 전량 반영 + 전수 스캔에서 자체 발견 3건 추가 (AC3·AC20 검증 부재, §5.6 예시의 `AC4` 토큰 충돌) |
+| 리뷰 라운드 1 | Claude `spec-reviewer` 8건(block 1·high 4·medium 3) + codex 4건(high 3·medium 1) → combined `needs_revise` → 전량 반영 + 전수 스캔 자체 발견 3건 (AC3·AC20 검증 부재, §5.6 예시의 `AC4` 토큰 충돌) |
+| 리뷰 라운드 2 | Claude 4건(high 3·medium 1) + codex 4건(high 4) → combined `needs_revise`, stagnation 없음(반복 이슈 0). **두 리뷰어의 발견이 거의 disjoint** — 라운드 1 수정이 연 새 계약 지점을 서로 다른 각도에서 적발. 핵심: 러너 감지 소유권 순환 · `BULK` 키 식별 · `없음`/`미실행` 생산자 부재 · §5.10↔§5.7 자기모순 · deps setup 비대칭 |
 | 신규 에이전트 | **0** |
 | 신규 훅 | **0** |
 | 신규 verdict 토큰 | **0** |
