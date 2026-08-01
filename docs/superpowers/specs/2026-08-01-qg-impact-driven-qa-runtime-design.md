@@ -30,6 +30,7 @@ Runtime 게이트가 *"전체 앱을 무조건 돌린다"* 를 버리고 **이�
 - [6. Acceptance Criteria](#6-acceptance-criteria)
   - [6.1 리뷰 라운드 1에서 추가된 AC (AC31–AC37)](#61-리뷰-라운드-1에서-추가된-ac-ac31ac37)
   - [6.2 리뷰 라운드 2에서 추가된 AC (AC38–AC44)](#62-리뷰-라운드-2에서-추가된-ac-ac38ac44)
+  - [6.3 리뷰 라운드 3에서 추가된 AC (AC45–AC51)](#63-리뷰-라운드-3에서-추가된-ac-ac45ac51)
 - [7. Files to Modify](#7-files-to-modify)
 - [8. Verification Plan](#8-verification-plan)
   - [8.1 자동 테스트](#81-자동-테스트)
@@ -228,13 +229,15 @@ R-init  resolve-baseline.sh                          [신규]
           공유: check-review-scope.sh · compute-test-scope-candidates.sh · 이 게이트
 
 R1a     러너 감지 ── run-test-selection.sh detect <project_dir>   [신규]
-          → runner · granularity · setup_cmd
-          이 셋이 R2 산문 · R4 · R5b · R6(--granularity)로 스레드된다.
+          → 어댑터 **집합** (runner · granularity · setup_cmd) × N
+          이 집합이 R2 산문 · R4 · R5b · R6(--granularity)로 스레드된다.
           오케스트레이터는 감지 표를 재구현하지 않는다.
 
 R1b     영향 판정 ── 오케스트레이터(모델)               ← LD5 전반부
           스코프 보조 입력 4종 (§5.3) — 러너 신호와 별개 축
-          산출: 영향 unit 목록 + 상황별 층 여부
+          산출: 영향 unit 목록(어댑터별로 배정) + unclaimed 목록
+                + 상황별 층 여부
+          이 unit 목록이 R6의 `--expected` 독립 입력이 된다.
 
 R2      계획 산문 + 비용 신호 ── 오케스트레이터          ← LD4 · B5
           필수 필드 §5.8
@@ -245,7 +248,8 @@ R3      갭 게이트 ── 생략이 있을 때만 AskUserQuestion   ← B3
 R4      기준선 측 — 전 단계 오케스트레이터 소유 (verifier 미개입)
           ① baseline-cache.sh get   (키 = merge_base × runner × unit)      [신규]
           ② 미적중분만: qg-worktree.sh create-baseline <merge_base> <sid>  [서브커맨드 추가]
-             → run-test-selection.sh run …  (setup_cmd를 스크립트가 실행)   [신규]
+             → **기준선 트리에서 detect 재실행** (HEAD 집합 재사용 금지)
+             → 어댑터마다 run-test-selection.sh run … (setup_cmd 포함)     [신규]
           ③ baseline-cache.sh put · 워크트리 폐기
 
 R5a     HEAD 측 — verifier 턴 (판단이 필요한 것만)
@@ -259,7 +263,8 @@ R5b     HEAD 측 — verifier 턴 *종료 후*, 오케스트레이터가 직접
             이 호출 결과가 authoritative.
           ← setup_cmd를 R4와 **동일하게** 실행 (양측 준비 동등성)
 
-R6      대조 ── diff-test-results.py --granularity <g>  [신규]  ← OQ1 + LD5 백스톱
+R6      대조 ── diff-test-results.py (어댑터마다)      [신규]  ← OQ1 + LD5 백스톱
+          --expected 는 R1b의 unit 목록 (생산자 산출물이 아닌 독립 입력)
           귀속 8종(총 함수) + SILENT_DROP + BASELINE_UNRUNNABLE
           + granularity=bulk의 PRE_EXISTING → attribution 원장 degraded
 
@@ -269,6 +274,21 @@ R8      원장 5차원 닫힘 검사 (check_qa_ledger.py) → verdict  [신규]
 
 R9      샌드박스 폐기 (기존 remove)
 ```
+
+**기존 SKILL.md 스텝 → 새 스텝 매핑 (라운드 3 Finding 5 — 라벨이 같은데 내용이 다르다).** 기존 Runtime 섹션도 `R-init`/`R0`…`R6`를 쓰고 그 중 다섯 개는 `tests/harness/test_skill_orchestration_behavior.sh`가 **이름+위치로 락**한다. 새 흐름이 같은 라벨을 다른 뜻으로 재사용하므로, 매핑을 명시하고 **기존 로직이 전부 새 자리를 갖는지** 못박는다. 자리 없는 기존 로직은 삭제가 아니라 누락이다.
+
+| 기존 스텝 | 기존 내용 | 새 자리 |
+|---|---|---|
+| `R-init` | `detect-runtime.sh` manifest · `approved_surfaces` · `block_policy` · **zero-click 폴백**(AC23이 보존 요구) | **R5a⁰** — R5a 진입 직전. 내용·조건 무변경 |
+| `R0` | `create-sandbox` (3줄 파싱 + digest) | **R5a¹** — R5a 시작. 무변경 |
+| `R1` | `test-scope-validator` dispatch | **R1b⁰** — 영향 판정의 보조 입력 하나(§5.3 4번째 행). dispatch 지점만 이동, 계약 무변경 |
+| `R2` | spec AC 수집 + Runtime scope transparency 문구 | **R5a²** — 상황별 층의 assertion basis. transparency 문구는 §5.8 계획 산문으로 흡수(AC1/AC2 락 이전) |
+| `R3` | `runtime-verifier` dispatch | **R5a³** — 페르소나만 개정 |
+| `R4` | `mutation-guard` | **R7** — 무변경 |
+| `R5` | sandbox `remove` | **R9** — 무변경 |
+| `R6` | outcome routing + publish sentinel | **R8** — verdict 규칙만 §5.7로 교체, sentinel 경로 무변경 |
+
+**락 이전 의무.** 위 테스트가 락하는 스텝 라벨(`Step R0`/`Step R-init`/`Step R2`/`Step R3`/`Step R6`)은 SKILL.md 개정과 **같은 커밋에서** 새 라벨로 옮긴다. AC1/AC2의 "regardless of Review scope" 락 이전과 같은 처리이며, 라벨만 지우고 테스트를 남기면 스위트가 빨개지고 테스트만 지우면 회귀 방어가 사라진다.
 
 **"상황별 층"의 정의 (floor 위에 얹히는 것).** LD3의 floor는 R4·R5b의 테스트 러너 표면까지다(R5a의 부팅·플로우는 floor가 아니다). 그 **위**는 기존 계약이 그대로 담당한다 — `spec_acceptance_criteria` → `plan_features` → smoke의 fallback 사슬(`runtime-verifier.md:85-88`)과 `approved_surfaces` 부팅. 이 사슬은 내용이 바뀌지 않고 **위치만 재배치**된다: 예전엔 그것이 게이트의 전부였고, 이제는 floor 위의 선택 층이다. R1b에서 모델이 "이 변경에 이 층이 필요한가"를 판정하고 그 판단을 계획 산문에 쓴다.
 
@@ -341,7 +361,15 @@ usage: baseline-cache.sh put <cache-root> <merge_base> <runner> < results.tsv
 
 **gstack 대비 개선.** gstack의 `baseline.json`(`qa/SKILL.md:1330,1341-1345`)은 **시간주소**다 — *"이전 실행"* 과 비교하지 *변경 전 코드 상태*와 비교하지 않는다(brief §8이 지적한 약점). 같은 아이디어를 merge_base sha로 내용주소화하면 그 갭이 사라진다.
 
-**deps 전략 — 옵션 ②(HEAD의 deps를 기준선으로 복사) 기각.** lockfile을 건드리는 diff에서 기준선이 HEAD의 의존성으로 돌아 어느 쪽도 아닌 hybrid 상태가 되고, 귀속이 **조용히** 틀린다. 누락 방향 fail-open이고 하필 가장 위험한 diff(의존성 변경)에서 발동한다. 채택: 각 트리에 정직하게 설치하되 생태계 공유 캐시(`GOMODCACHE` · `CARGO_HOME` · npm/uv 캐시)를 가리켜 다운로드 비용을 없애고, 나머지는 캐시로 상각한다.
+**deps 전략 — 옵션 ②(HEAD의 deps를 기준선으로 복사) 기각.** lockfile을 건드리는 diff에서 기준선이 HEAD의 의존성으로 돌아 어느 쪽도 아닌 hybrid 상태가 되고, 귀속이 **조용히** 틀린다. 누락 방향 fail-open이고 하필 가장 위험한 diff(의존성 변경)에서 발동한다. 채택: 각 트리에 정직하게 설치하되 생태계 공유 캐시를 가리켜 다운로드 비용을 없애고, 나머지는 기준선 캐시로 상각한다.
+
+**공유 범위는 "다운로드 캐시만, 빌드 산출물은 절대 아님" (라운드 3 Finding 3).** 이 구분이 옵션 ② 기각 사유와 같은 오염을 뒷문으로 들이지 않는 경계다:
+
+| 공유함 (머신 전역, 기본 위치 그대로) | 공유 안 함 (트리별 독립) |
+|---|---|
+| `GOMODCACHE` · `CARGO_HOME/registry` · npm `_cacache` · uv/pip wheel 캐시 | `CARGO_TARGET_DIR` · `target/` · `node_modules/` · `.venv/` |
+
+왼쪽은 **내용주소**(패키지 해시가 키)라 두 트리가 같은 항목을 봐도 정의상 같은 바이트다. 오른쪽은 **트리 의존**(그 트리 소스로 빌드된 산출물)이라 공유하면 기준선이 HEAD의 컴파일 결과를 재사용해 조용히 틀린 귀속을 만든다 — 옵션 ②를 기각한 바로 그 이유다. 재컴파일을 아끼려 `CARGO_TARGET_DIR`를 공유하려는 유혹이 특히 강하므로 명시적으로 금지한다.
 
 **실행 형태 — 2단.** 파일당 실행이 아니다.
 
@@ -355,11 +383,12 @@ usage: baseline-cache.sh put <cache-root> <merge_base> <runner> < results.tsv
 
 ```
 usage: run-test-selection.sh detect <worktree-abs>
-stdout (정확히 3줄):
-  runner: <8개 식별자 중 하나>          # 미감지면 runner: none
+stdout: 감지된 어댑터 **하나당 3줄** (0개 이상 — 폴리글랏 레포는 복수)
+  runner: <8개 식별자 중 하나>
   granularity: file | package | bulk
   setup_cmd: <결정론적 설치 명령 | ->    # '-' = 설치 불필요
-exit: 0 = 감지 완료(none 포함) · 2 = 사용 오류
+  (빈 줄로 구분; 감지 0개면 stdout 비움)
+exit: 0 = 감지 완료(0개 포함) · 2 = 사용 오류
 
 usage: run-test-selection.sh run <worktree-abs> <runner> <mode> <unit>...
   mode = bulk | per-unit
@@ -369,7 +398,32 @@ exit: 0 = 실행 시도 완료(테스트 실패 포함) · 3 = 러너 부재/설
       exit 3 이어도 **모든 unit에 대해 `unrun` 행을 emit**한다.
 ```
 
-**`detect`가 별도 서브커맨드인 이유 (라운드 2 Finding B).** `<runner>`가 `run`의 CLI 인자인데 감지가 스크립트 내부 로직이면 순환이다. 또 계획 산문(R2)은 R4/R5b **이전**에 러너 이름을 노출해야 한다. `detect`를 분리하면 감지 지식은 여전히 한 스크립트가 단독 소유하고(어댑터 표 = 유일 소유자), 오케스트레이터는 R1a에서 한 번 호출해 그 값을 R2 산문·R4·R5b·R6에 스레드한다. 오케스트레이터가 감지 표를 재구현하는 경로는 없다.
+**`detect`는 어댑터를 **집합**으로 반환한다 (라운드 3 block).** 초안은 정확히 하나를 반환했는데, 그러면 **폴리글랏 레포에서 우선순위 밖 러너의 테스트가 floor에서 영구 누락**된다. 이 레포에서 실측한 결과가 그 실패의 정확한 사례다:
+
+```
+devbrew: .sh 테스트 130개 · .py 테스트 50개 · repo-root 러너 설정 없음
+단일-러너 계약 → unittest 선택 → shell 테스트 130개 전량 미실행 (조용히)
+```
+
+LD5가 금지한 **누락 방향 실패**이고, 하필 이 게이트가 처음 돌 레포다. 따라서 다중 어댑터는 선택이 아니라 floor가 의미를 갖기 위한 필수 조건이다.
+
+**우선순위 표(§5.9)의 역할이 바뀐다 — 배제가 아니라 소유권 충돌 해소다.** 각 어댑터는 자기가 **소유하는 파일 패턴**이 있고, 표의 순서는 *같은 패턴을 두 어댑터가 주장할 때만* 발동한다:
+
+| 파일 패턴 | 주장하는 어댑터 | 충돌 해소 |
+|---|---|---|
+| `test_*.py` / `*_test.py` | pytest · unittest | pytest 설정이 있으면 pytest, 없으면 unittest |
+| 실행비트 `tests/*.sh` | shell | 단독 |
+| `*.test.[jt]sx?` / `*.spec.*` | jest · vitest | devDeps에 있는 쪽 |
+| 패키지 내 `*_test.go` | go | 단독 |
+| (패턴 무관) | cargo · make · npm-script | bulk — 아래 참조 |
+
+**unit → 어댑터 배정.** R1b가 고른 각 unit은 파일 패턴으로 **정확히 하나의 어댑터**에 배정된다. 어느 어댑터도 주장하지 않는 unit은 **`unclaimed`** 로 기록되고 `gap` 차원에 열거된다 — 조용히 사라지지 않는다. bulk 어댑터(cargo/make/npm-script)는 패턴 소유가 없으므로, **다른 어댑터가 주장하지 않은 unit이 남아 있고 bulk 어댑터가 감지됐을 때만** 그 잔여를 `BULK` 하나로 흡수한다.
+
+**실행은 어댑터별로 반복된다.** R4·R5b는 감지된 어댑터마다 `run`을 호출하고, R6은 어댑터마다 대조한다. 캐시 키가 이미 `runner`를 포함하므로(§5.4) 어댑터 간 결과가 섞이지 않는다. verdict는 어댑터별 결과를 §5.7 우선순위로 **집계**한다 — 한 어댑터의 확증 회귀는 다른 어댑터가 green이어도 FAIL이다.
+
+**양측 재감지 (라운드 3 Finding 2).** `detect`는 **HEAD 트리(R1a)와 기준선 워크트리(R4②) 양쪽에서** 실행된다. diff가 테스트 인프라 자체를 바꾸는 경우(unittest→pytest 마이그레이션, `package.json`에 jest 신규 추가)에 두 집합이 다를 수 있고, 그때 한쪽에만 있는 어댑터의 unit은 반대편에서 `unrun`이 되어 **귀속 불가로 degrade**된다. HEAD 감지를 기준선에 그대로 재사용하면 spurious `error`가 나와 회귀를 `PRE_EXISTING`으로 은폐할 수 있다 — 이 설계의 존재 이유를 정면으로 훼손하는 경로다. 두 집합이 다르면 그 사실을 계획 산문과 `gap`에 명시한다.
+
+**`detect`가 별도 서브커맨드인 이유 (라운드 2 Finding B).** `<runner>`가 `run`의 CLI 인자인데 감지가 스크립트 내부 로직이면 순환이다. 또 계획 산문(R2)은 R4/R5b **이전**에 러너 이름을 노출해야 한다. `detect`를 분리하면 감지 지식은 여전히 한 스크립트가 단독 소유하고(어댑터 표 = 유일 소유자), 오케스트레이터는 R1a(HEAD)와 R4②(기준선) 양쪽에서 호출해 그 어댑터 집합을 R2 산문·R4·R5b·R6에 스레드한다. 오케스트레이터가 감지 표를 재구현하는 경로는 없다.
 
 **`unit`이 `file`을 대체한다.** `granularity`에 따라 의미가 정해진다:
 
@@ -379,7 +433,11 @@ exit: 0 = 실행 시도 완료(테스트 실패 포함) · 3 = 러너 부재/설
 | `package` | 패키지 디렉토리 | go |
 | `bulk` | 리터럴 `BULK` **하나뿐** | cargo · make · npm-script |
 
-**`BULK`가 캐시 키로 안전한 이유 (라운드 2 codex Finding).** `granularity: bulk`인 어댑터는 §5.9 표대로 **파일 인자를 무시한다** — `cargo test`·`make test`·`npm test`는 선택 집합과 무관하게 같은 명령이다. 따라서 그 결과는 `(merge_base, runner)`만의 함수이고, 선택 집합이 달라도 같은 결과가 나오는 것이 **정의상** 맞다. 서로 다른 선택이 한 키를 공유하는 오염이 원리적으로 불가능하다.
+**`BULK`가 캐시 키로 안전한 이유 — 그리고 그 논증이 보장하지 *않는* 것 (라운드 2·3).** `granularity: bulk`인 어댑터는 §5.9 표대로 **파일 인자를 무시한다** — `cargo test`·`make test`·`npm test`는 선택 집합과 무관하게 같은 명령이다. 따라서 그 결과는 `(merge_base, runner)`만의 함수이고, 서로 다른 선택이 한 키를 공유하는 **캐시 오염은 원리적으로 불가능**하다.
+
+> **이 논증은 *재현성*만 증명하고 *커버리지 완전성*은 증명하지 않는다** (라운드 3 Finding 3). 같은 명령이 같은 결과를 준다는 것과, 그 명령이 diff가 건드린 코드를 전부 커버한다는 것은 별개다. 실제 함정: 루트 패키지가 있는 Cargo 워크스페이스에서 `--workspace` 없는 `cargo test`는 sibling crate를 조용히 건너뛴다 — exit 0 + green이라 어떤 degrade 신호도 없다. 우리가 명령 내부를 통제하지 않으므로 이것은 **검증할 수 없다**.
+>
+> **처리:** bulk 어댑터에서는 `verification` 차원 evidence에 `커버리지 미보장(러너가 선택을 무시함)`을 **의무 기재**하고, 같은 문구를 계획 산문(§5.8)과 최종 보고서에 항상 노출한다. verdict를 막지는 않는다 — 막으면 cargo/make 레포에서 게이트가 영구히 무용해진다. 대신 **주장의 강도를 낮춘다**: 그 실행은 "영향분을 확인했다"가 아니라 "러너 전체를 돌렸고 그 안에 영향분이 포함되기를 기대한다"이다. §11 ⑫에 잔여 갭으로 기록.
 반대로 `granularity ∈ {file, package}`에서는 **`BULK` 키가 아예 생기지 않는다**: bulk 모드로 green이 나오면 *"집합 전체가 통과했으므로 각 unit이 통과했다"* 가 성립하므로 **unit별 `pass` 행으로 분해해** 캐시에 넣는다. red이면 unit별 재실행 결과를 넣는다. 캐시의 키 공간은 언제나 unit 하나다.
 
 **5개 상태값과 총 함수 (라운드 2 codex Finding).** §5.5 귀속 표의 `없음`·`미실행` 축을 생산하는 주체가 여기다:
@@ -399,7 +457,31 @@ exit 0과 테스트 실패를 분리하는 것이 핵심이다 — UltraQA의 *"
 
 ### 5.5 귀속 표 · flaky 처리
 
-`diff-test-results.py`의 전 출력. 기준선 × HEAD 짝짓기:
+**`diff-test-results.py` 계약 (라운드 3 Finding 4 — 다른 넷과 달리 이것만 계약이 없었다):**
+
+```
+usage: diff-test-results.py --expected <file> --baseline <file> --head <file>
+                            --granularity file|package|bulk --runner <id>
+  --expected  R1b가 고른 unit 목록 (한 줄에 하나) — **독립 입력**
+  --baseline  기준선 측 run 출력 (캐시 적중분 병합 후)
+  --head      HEAD 측 run 출력
+stdout (YAML):
+  runner: <id>
+  attributions:
+    - unit: <unit>
+      verdict: STILL_GREEN|NEW_REGRESSION|PRE_EXISTING|FIXED|NEW_TEST_GREEN
+               |NEW_TEST_RED|SILENT_DROP|BASELINE_UNRUNNABLE
+      note: "<(error) 병기 등>"
+  attribution_status: closed | degraded
+  counts: {new_regression: N, pre_existing: N, ...}
+exit: 0 = 대조 완료 · 4 = 입력 파싱 실패/중복 unit 행(fail-closed) · 2 = 사용 오류
+```
+
+**`--expected`가 독립 입력인 것이 이 계약의 핵심이다.** `SILENT_DROP`을 *두 생산자 산출물의 상호 대조*로 계산하면, 두 스크립트가 **같은 unit-이름 정규화 버그**로 같은 unit을 대칭적으로 누락할 때 아무도 눈치채지 못한다 — "총 함수" 보장이 소비자의 독립 검증이 아니라 **생산자의 자기일관성**에 기대게 된다. 그래서 기준은 R1b가 고른 원본 목록이다: `--expected`에 있는데 어느 쪽 산출물에도 행이 없으면 `SILENT_DROP`이다.
+
+**중복 unit 행은 exit 4다.** 같은 unit이 두 번 나오면 어느 쪽을 믿을지 결정할 근거가 없고, 조용히 last-wins하면 결과가 입력 순서에 의존한다.
+
+아래는 그 `attributions[].verdict`의 전 범위다. 기준선 × HEAD 짝짓기:
 
 | 기준선 | HEAD | 귀속 | 게이트 영향 |
 |---|---|---|---|
@@ -537,9 +619,9 @@ evidence-log 안에 산다. spec-distill 커버리지 원장과 같은 줄 모�
 
 **미지원 러너 처리.** 위 8개 중 어느 것도 감지되지 않으면 `run-test-selection.sh`는 **exit 3**(실행 불가)을 내고 그 표면은 미실행으로 기록된다. **임의 명령을 추측해 실행하지 않는다** — 추측한 명령이 배포·마이그레이션 같은 부작용을 낼 수 있다.
 
-**감지 우선순위**는 위 표의 행 순서다(위가 먼저). 복수 감지 시 파일 지목이 가능한 쪽이 위에 오도록 배열돼 있으므로, 우선순위가 곧 입도 최대화다.
+**표의 행 순서는 배제 우선순위가 아니라 *같은 파일 패턴을 두 어댑터가 주장할 때*의 충돌 해소 순서다** (§5.4의 소유권 표 참조). 감지된 어댑터는 **모두** 반환되고 **모두** 실행된다 — 폴리글랏 레포에서 한 러너만 골라 나머지를 버리는 것은 라운드 3에서 block으로 잡힌 누락 방향 실패다.
 
-**감지의 실행 지점 — `run-test-selection.sh detect` (§5.4).** 감지 지식은 이 스크립트가 **단독 소유**하되, 오케스트레이터가 **R1a에서 `detect` 서브커맨드를 한 번 호출**해 `runner`/`granularity`/`setup_cmd` 셋을 얻는다. 그 값이 R2 계획 산문의 러너 이름, R4·R5b의 `<runner>` 인자, `diff-test-results.py --granularity`로 스레드된다. 오케스트레이터가 이 표를 재구현하는 경로는 **없다** — 라운드 2 Finding B가 지적한 "CLI 인자 vs 내부 감지" 순환을 서브커맨드 분리로 끊었다.
+**감지의 실행 지점 — `run-test-selection.sh detect` (§5.4).** 감지 지식은 이 스크립트가 **단독 소유**하되, 오케스트레이터가 **R1a(HEAD 트리)와 R4②(기준선 워크트리) 양쪽에서** `detect`를 호출해 어댑터 집합을 얻는다. 그 값이 R2 계획 산문의 러너 이름들, R4·R5b의 `<runner>` 인자, `diff-test-results.py --granularity`로 스레드된다. 오케스트레이터가 이 표를 재구현하는 경로는 **없다** — 라운드 2 Finding B가 지적한 "CLI 인자 vs 내부 감지" 순환을 서브커맨드 분리로 끊었다.
 
 **`detect-runtime.sh`와의 관계 — 겹치지 않는 두 축.** 기존 매니페스트의 `test_runners: [npm|pytest|cargo|go|make]`는 이 8개 집합과 **일치하지 않는다**(`unittest`·`shell`·`jest`/`vitest` 분리가 없다). 해소는 **역할 분리**다:
 
@@ -599,7 +681,7 @@ qg-gc.py:27   SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
 
 `baseline-cache`(14자)가 매치한다 → 24시간 TTL로 세션 폴더인 줄 알고 삭제된다.
 
-**같은 패턴에 기존 `worktrees`(9자)도 매치한다.** 그 디렉토리엔 직접 파일이 없으므로 `_folder_mtime_ns`(`:51-55`)가 디렉토리 자신의 mtime으로 떨어지고, 24시간 넘게 새 worktree가 추가되지 않았다면 `rename` → `rmtree`된다(`:89-94`) — 안에 살아있는 worktree가 있어도. **코드 경로상의 결함이며 실행 재현은 구현 시 먼저 쓴다** (V-M1).
+**같은 패턴에 기존 `worktrees`(9자)도 매치한다.** 그 디렉토리엔 직접 파일이 없으므로 `_folder_mtime_ns`(`:51-55`)가 디렉토리 자신의 mtime으로 떨어지고, 24시간 넘게 새 worktree가 추가되지 않았다면 `rename` → `rmtree`된다(`:89-94`) — 안에 살아있는 worktree가 있어도. **코드 경로상의 결함이며 실행 재현(T49)을 수정보다 먼저 쓴다.**
 
 **수정: 이름의 charset이 아니라 내용으로 세션 폴더를 식별한다.** 알려진 세션 상태 파일 중 하나라도 든 디렉토리만 sweep 대상:
 
@@ -691,6 +773,16 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 - **AC43** (granularity → 원장) — `diff-test-results.py`가 `--granularity`를 인자로 받고, `bulk`에서 `PRE_EXISTING`이 나오면 `attribution` 원장 차원을 `degraded`로 표시한다. 귀속 카테고리 자체는 8종에서 벗어나지 않는다.
 - **AC44** (영향분 러너 부재) — 영향분을 돌릴 러너가 없으면 `verification: degraded` → **PASS 불가**. 영향분과 무관한 표면의 러너 부재는 `gap`에 열거되어 `closed`이며 PASS를 막지 않는다.
 
+### 6.3 리뷰 라운드 3에서 추가된 AC (AC45–AC51)
+
+- **AC45** (다중 어댑터 — block 해소) — `detect`가 어댑터를 **집합**으로 반환한다(0개 이상). `test_*.py`와 실행비트 `tests/*.sh`가 공존하는 픽스처에서 **2개 이상**이 반환되고, 둘 다 실행된다. 첫 어댑터만 반환·실행하는 코드 경로가 없다.
+- **AC46** (unit 배정) — R1b가 고른 각 unit이 파일 패턴으로 정확히 한 어댑터에 배정된다. 어느 어댑터도 주장하지 않는 unit은 `unclaimed`로 `gap` 차원에 **열거**된다(조용히 누락 금지).
+- **AC47** (양측 재감지) — `detect`가 HEAD 트리와 기준선 워크트리 **양쪽에서** 실행된다. 두 어댑터 집합이 다르면 한쪽에만 있는 어댑터의 unit은 반대편에서 `unrun`이 되어 귀속이 `degraded`이며, 그 사실이 계획 산문과 `gap`에 나타난다. HEAD 감지 결과를 기준선에 재사용하는 경로가 없다.
+- **AC48** (대조기 계약) — `diff-test-results.py`가 §5.5의 `usage:` 블록대로 `--expected`/`--baseline`/`--head`/`--granularity`/`--runner`를 받는다. `SILENT_DROP`은 **`--expected` 기준**으로 계산되며(두 산출물의 상호 대조가 아님), 중복 unit 행은 **exit 4**다.
+- **AC49** (bulk 커버리지 공시) — `granularity: bulk` 어댑터가 실행되면 `verification` evidence·계획 산문·최종 보고서에 `커버리지 미보장(러너가 선택을 무시함)` 취지의 문구가 **항상** 나타난다. verdict는 막지 않는다.
+- **AC50** (캐시 공유 경계) — 다운로드 캐시(`GOMODCACHE`·`CARGO_HOME/registry`·npm `_cacache`·wheel 캐시)는 공유하고, **빌드 산출물 디렉토리(`CARGO_TARGET_DIR`·`target/`·`node_modules/`·`.venv/`)를 두 트리가 공유하는 코드 경로가 없다.**
+- **AC51** (스텝 락 이전) — 기존 SKILL.md의 락된 스텝 라벨 5종(`Step R0`/`Step R-init`/`Step R2`/`Step R3`/`Step R6`)이 `tests/harness/test_skill_orchestration_behavior.sh`에서 새 라벨로 이전되고, §5.2 매핑표의 기존 로직 8종이 모두 새 자리에 존재한다(`detect-runtime.sh` 호출 · `approved_surfaces`/`block_policy` zero-click 폴백 · `create-sandbox` 3줄 파싱 · `test-scope-validator` dispatch · spec AC 수집 · `runtime-verifier` dispatch · `mutation-guard` · publish sentinel).
+
 ---
 
 ## 7. Files to Modify
@@ -716,6 +808,22 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 | `scripts/qg-worktree.sh` | `create-baseline` case 절 추가 (기존 절 무변경 — AC22) |
 | `scripts/qg-gc.py` | 내용 기반 세션 식별 (§5.11) |
 | `scripts/check-allowed-tools-order.sh` | 신규 5종 순서 등재 (C5) |
+
+### 구현 의존 순서 (라운드 3 Finding 9 — `writing-plans`가 12파일 단일 diff로 뭉치지 않도록)
+
+신규 5종은 인과적으로 결합돼 있어 설계 문서를 쪼갤 대상은 아니지만, **구현 순서는 강제된다**:
+
+```
+1) resolve-baseline.sh          ← 독립. 소비자(check-review-scope · compute-test-scope)와 함께
+2) run-test-selection.sh        ← 독립(어댑터 8종 + detect/run). 5-상태값 계약을 여기서 확정
+3) baseline-cache.sh            ← 2의 상태값 계약에 의존
+4) diff-test-results.py         ← 2·3 둘 다에 의존
+5) check_qa_ledger.py           ← 독립(원장 형식만). 1~4와 병행 가능
+6) qg-worktree.sh create-baseline · qg-gc.py 수정   ← 독립. 1~5와 병행 가능
+7) SKILL.md · runtime-verifier.md · 락 이전         ← 전부에 의존. 마지막
+```
+
+1·2·5·6은 병행 가능하고 3→4→7이 직렬이다. 각 단계가 자기 테스트와 함께 닫히는 단위이므로 최소 6개 task로 분해된다.
 
 ### 문서 (3)
 
@@ -774,8 +882,16 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 | T39 | `diff-test-results.py --granularity bulk` + fail/fail → 귀속 `PRE_EXISTING` **이면서** `attribution: degraded` | AC43 |
 | T40 | 영향분 러너 부재 → verdict ≠ PASS + `verification: degraded` / 무관 표면 러너 부재 → PASS 가능 + `gap: closed` (두 픽스처) | AC44 |
 | T41 | **아티팩트 유출** — `make`/`npm-script` 스텁 레포에서 `run` 실행 후 비-ignored 신규 파일이 생기는지 실측 (§11 ⑨의 측정 경로) | §11 ⑨ |
+| T42 | `detect` 다중 반환 — `test_*.py` + 실행비트 `tests/*.sh` 공존 픽스처에서 어댑터 **2개** 반환 · 둘 다 `run` 호출됨 (호출 로그) | AC45 |
+| T43 | 어느 패턴에도 안 걸리는 unit → `unclaimed`로 `gap`에 열거 (조용한 누락 0) | AC46 |
+| T44 | 기준선 트리에서 `detect` 재실행 · HEAD와 집합이 다른 픽스처(한쪽만 pytest)에서 해당 unit 귀속 `degraded` | AC47 |
+| T45 | `diff-test-results.py` — `--expected`에 있으나 양측 산출물에 행 없음 → `SILENT_DROP` / 중복 unit 행 → exit 4 | AC48 |
+| T46 | bulk 어댑터 실행 → `verification` evidence·계획 산문에 커버리지 미보장 문구 존재 | AC49 |
+| T47 | 기준선·HEAD 실행의 `CARGO_TARGET_DIR`/`node_modules`/`.venv` 경로가 서로 다름 (env·경로 대조) | AC50 |
+| T48 | 락 라벨 5종이 새 라벨로 이전 + §5.2 매핑표의 기존 로직 8종이 새 SKILL.md에 모두 존재 (grep 8건) | AC51 |
+| T49 | `qg-gc.py` **실패 재현** — TTL 초과 + 직접 파일 없는 `worktrees`가 수정 전 코드에서 삭제됨을 먼저 증명 (§5.11이 약속한 재현) | §5.11 |
 
-**AC ↔ 검증 완전성 (라운드 1 갭).** AC1–AC37 전부가 위 T 또는 §8.3의 V에 대응한다. 자동 테스트가 없는 것은 **AC20 하나**이며 `V4`(대화형 게이트 미발화)가 담당한다 — `AskUserQuestion` 발화 여부는 대화형이라 자동화하지 않는다. 이 매핑 자체를 구현 시 표로 유지하고, AC 추가 시 대응 T/V 없이 머지하지 않는다.
+**AC ↔ 검증 완전성.** **AC1–AC51 전부**가 위 T 또는 §8.3의 V에 대응한다. 자동 테스트가 없는 것은 **AC20 하나**이며 `V4`(대화형 게이트 미발화)가 담당한다 — `AskUserQuestion` 발화 여부는 대화형이라 자동화하지 않는다. 이 매핑 자체를 구현 시 표로 유지하고, **AC 추가 시 대응 T/V 없이 머지하지 않는다.** (라운드 3에서 이 선언문이 AC38–AC44를 반영하지 않은 채 stale했다 — 선언문도 갱신 대상이다.)
 
 > **T20의 형태 주의** — 버전을 `"version": "3.0.0"` 리터럴로 핀하면 doc-only bump마다 stale-red가 된다. major 불변식만 검사하고 patch digit은 unpin한다.
 
@@ -804,6 +920,10 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 | **M17** | `setup_cmd`를 HEAD 측에서만 다른 명령으로 바꿈 | T37 — 양측 결과가 그럴듯하게 나오므로 **호출 문자열 대조**로만 잡힌다 |
 | **M18** | `granularity=file`에서도 bulk-green을 `BULK` 한 행으로 캐시 | T38 — 캐시 적중률이 오히려 올라가 성능만 보면 개선처럼 보인다 |
 | **M19** | 영향분 러너 부재에서 `gap: closed`로 처리해 PASS 허용 | T40 — 라운드 2에서 실제로 문서에 있던 모순 그 자체 |
+| **M20** | `detect`가 우선순위 1위 어댑터만 반환 (라운드 3 block 재도입) | T42 — **이 레포에서 실측된 실패**(shell 130개 누락). 단일 어댑터 픽스처만 쓰면 GREEN이므로 **폴리글랏 픽스처**가 필수 |
+| **M21** | 기준선에서 HEAD의 어댑터 집합을 재사용 | T44 — 동종 레포에서는 결과가 같아 보이므로 **인프라 변경 픽스처**로만 잡힌다 |
+| **M22** | `SILENT_DROP`을 `--expected` 대신 두 산출물 상호 대조로 계산 | T45 — 대칭 누락 픽스처(양측이 같은 unit을 빠뜨림)로만 잡힌다 |
+| **M23** | `CARGO_TARGET_DIR`를 양측 공유로 변경 | T47 — 속도만 보면 개선처럼 보이고 결과도 대개 같다 |
 
 > **M6·M8·M12가 이 계획의 취약 지점이다.** 셋 다 "결과가 같아 보이는" mutation이라 결과값만 보는 assert로는 GREEN이 나온다 — M6은 **호출 카운터**(+ 유한 종료 stub), M8은 **body-unique + 섹션 윈도우**, M12는 **호출 위치**가 필요하다. 구현 시 이 셋을 **먼저** 쓴다.
 >
@@ -813,7 +933,7 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 
 | id | 시나리오 | 왜 수동인가 |
 |---|---|---|
-| **V1** | devbrew 자신에 `/qg runtime` self-dogfood — pytest + unittest + bash 셋 다 파일 단위 귀속이 나오는지 | 실제 러너 3종 동시 존재는 픽스처로 재현 불가 |
+| **V1** | devbrew 자신에 `/qg runtime` self-dogfood — **실측상 `unittest`(50개) + `shell`(130개) 두 어댑터가 감지되어 둘 다 실행되는지**, 그리고 어느 쪽도 조용히 누락되지 않는지 | 실제 폴리글랏 레포의 전체 파이프라인 동작은 픽스처로 근사만 가능(T42가 감지·실행 계약은 이미 커버) |
 | **V2** | 기준선 캐시 적중 — 같은 브랜치에서 `/qg runtime` 2회, 두 번째가 기준선을 안 돌리는지 | 캐시 수명이 세션을 넘음 |
 | **V3** | stale red 위에서의 첫 실행 — devbrew의 알려진 pre-existing red가 `PRE_EXISTING`으로 찍히고 FAIL을 안 만드는지 | 실제 red 목록이 환경 의존 |
 | **V4** | 갭 게이트 zero-click — 생략 0인 diff에서 질문이 안 뜨는지 | AskUserQuestion 발화는 대화형 |
@@ -867,7 +987,9 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 9. **아티팩트 억제가 불가능한 러너가 있다.** `make`·`npm-script`는 내부 명령을 우리가 모르므로 `.pytest_cache` 같은 산출물을 억제할 수단이 없다. 대상 레포의 `.gitignore`가 그것을 덮지 않으면 mutation-guard가 `disallowed_new_files`로 잡아 **거짓 FAIL**을 낸다.
    **측정 경로 정정 (라운드 2 Finding C).** 초안은 *"첫 dogfood(V1)에서 실측"* 이라 썼지만 **V1은 이것을 측정할 수 없다** — V1은 devbrew 자신을 대상으로 하고 devbrew에는 Makefile 기반 테스트도 npm-script 테스트도 없다. 측정은 **T41**(픽스처 기반: `Makefile`/`package.json` 스텁 레포에서 `run` 실행 후 비-ignored 신규 파일 발생 여부)이 담당한다. 실측 결과가 "흔함"이면 guard 예외 목록이 아니라 **어댑터별 작업 디렉토리 격리**로 푼다 — guard를 느슨하게 하는 방향은 금지다(Law 2 표면).
 10. **baseline 캐시는 GC되지 않는다.** merge_base마다 파일이 하나씩 쌓이고 정리는 `/cancel-qg --all`에 위임했다. 장수 브랜치·잦은 rebase 환경에서 파일 수가 늘어나는데, 각 파일이 수 KB라 실질 부담은 아니지만 **자동 정리 경로가 없다**는 사실은 남는다.
-11. **러너 어댑터 8종은 초기 집합이며 커버리지 주장이 아니다.** Java/Gradle·Ruby/RSpec·PHP/PHPUnit·.NET 등은 exit 3(미지원)으로 떨어져 그 레포에서는 이 게이트가 floor를 제공하지 못한다. 확장은 case 절 추가지만, **미지원 레포에서 이 게이트가 무엇을 못 하는지가 사용자에게 보여야** 한다(§5.10의 loud 경로).
+11. **러너 어댑터 8종은 초기 집합이며 커버리지 주장이 아니다.** Java/Gradle·Ruby/RSpec·PHP/PHPUnit·.NET 등은 감지 0개로 떨어져 그 레포에서는 이 게이트가 floor를 제공하지 못한다. 확장은 case 절 추가지만, **미지원 레포에서 이 게이트가 무엇을 못 하는지가 사용자에게 보여야** 한다(§5.10의 loud 경로).
+12. **bulk 어댑터는 커버리지를 보장하지 못한다.** `cargo test`가 `--workspace` 없이 sibling crate를 건너뛰는 식의 함정이 발동하면 영향분이 조용히 미실행되는데 exit 0 + green이라 신호가 없다. 명령 내부를 통제하지 않으므로 **검증 불가**이며, 대응은 봉쇄가 아니라 **공시**다(AC49). 즉 cargo/make/npm-script 레포에서 이 게이트의 주장은 "영향분을 확인했다"가 아니라 "러너 전체를 돌렸다"로 약해진다.
+13. **verifier의 부팅용 setup이 만드는 환경 비대칭은 기계로 안 잡힌다.** AC41은 `setup_cmd` 채널만 결정론적으로 맞춘다. R5a에서 verifier가 앱 부팅을 위해 설치한 것이 우연히 테스트 결과에 영향을 주면, 그것은 git-외부 상태라 mutation-guard가 못 보고 `gap` 기재는 verifier 자기보고에 의존한다 — 불변식 ②가 *결과값*에서 없앤 self-report 신뢰가 *실행 환경* 축에는 남아 있다. 완화: R5b는 R5a와 같은 샌드박스에서 돌므로 비대칭이 발생하면 **양측 차등에 나타난다**(기준선에는 그 setup이 없으므로) — 즉 조용한 오귀속이 아니라 시끄러운 불일치로 드러날 가능성이 높다. 그래도 보장은 아니다.
 
 ---
 
@@ -882,6 +1004,7 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 | 신규/수정/문서 | 신규 5 · 수정 7 · 문서 3 |
 | 리뷰 라운드 1 | Claude `spec-reviewer` 8건(block 1·high 4·medium 3) + codex 4건(high 3·medium 1) → combined `needs_revise` → 전량 반영 + 전수 스캔 자체 발견 3건 (AC3·AC20 검증 부재, §5.6 예시의 `AC4` 토큰 충돌) |
 | 리뷰 라운드 2 | Claude 4건(high 3·medium 1) + codex 4건(high 4) → combined `needs_revise`, stagnation 없음(반복 이슈 0). **두 리뷰어의 발견이 거의 disjoint** — 라운드 1 수정이 연 새 계약 지점을 서로 다른 각도에서 적발. 핵심: 러너 감지 소유권 순환 · `BULK` 키 식별 · `없음`/`미실행` 생산자 부재 · §5.10↔§5.7 자기모순 · deps setup 비대칭 |
+| 리뷰 라운드 3 | Claude 9건(**block 1**·high 4·medium 4) + codex 3건(high 2·medium 1) → combined `needs_revise`. 원장 3개 이슈가 `raised_count == 3`에 도달해 **per-issue stagnation → Human Gate 강제 escalate**(같은 결함 미해결이 아니라 §5.9/§5.4/§5.2 세 영역이 매 라운드 새 계약 표면을 낳은 패턴). 사용자 선택으로 라운드 4 진행. **block = 단일-러너 `detect`가 폴리글랏 레포에서 누락 방향 실패** — 이 레포 실측으로 확인(`.sh` 130 / `.py` 50 → shell 전량 미실행). 다중 어댑터로 해소 |
 | 신규 에이전트 | **0** |
 | 신규 훅 | **0** |
 | 신규 verdict 토큰 | **0** |
