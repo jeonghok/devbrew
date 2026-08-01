@@ -1,0 +1,374 @@
+---
+name: spec-distill-arm-once
+date: 2026-08-01
+plugin: spec-distill
+target_version: 0.25.0
+branch: worktree-feature+spec-distill-arm-once
+---
+
+# spec-distill — 스펙 리뷰 훅을 arm-once로
+
+> 원인을 지우면 그 원인을 막던 방어층도 같이 지워진다.
+
+design doc auto-review를 **문서가 처음 생길 때 한 번만** 발동시키고, 그 결과로 존재 이유를 잃는 방어 하니스를 제거한다.
+
+## 목차
+
+- [§1 Context / Why](#1-context--why)
+- [§2 Goals](#2-goals)
+- [§3 Non-goals](#3-non-goals)
+- [§4 확정된 결정](#4-확정된-결정)
+- [§5 Architecture](#5-architecture)
+  - [§5.1 arm 판정의 단일 지점](#51-arm-판정의-단일-지점)
+  - [§5.2 기록 시점 — dispatch가 기록한다](#52-기록-시점--dispatch가-기록한다)
+  - [§5.3 상태 스키마](#53-상태-스키마)
+- [§6 컴포넌트](#6-컴포넌트)
+- [§7 제거 목록](#7-제거-목록)
+- [§8 에러 처리와 degradation](#8-에러-처리와-degradation)
+- [§9 Files to Modify](#9-files-to-modify)
+- [§10 Verification Plan](#10-verification-plan)
+- [§11 Rejected Alternatives](#11-rejected-alternatives)
+- [§12 Handoff Context](#12-handoff-context)
+
+## 1. Context / Why
+
+`spec-write-validator.py`(PostToolUse)는 `docs/superpowers/specs/` 아래 `.md`에 대한 **모든** Write/Edit/MultiEdit에서 두 가지 일을 한다.
+
+- **Layer 1 — 구조 검증**: ambiguity/placeholder 스캔, 실패 시 `exit 2`로 차단. 싸고 결정론적.
+- **Layer 2 — arm**: `pending_review:`를 상태 파일에 기록. Stop 훅(`review-dispatch.py`)이 이를 읽고 `decision: block`으로 `reviewing-spec` skill 호출을 강제한다. 그 skill은 `spec-reviewer` 서브에이전트 + codex co-reviewer를 돌린다. 비싸다.
+
+문제는 Layer 2가 **편집 한 번마다** 다시 발동한다는 것이다. 오탈자 하나를 고쳐도, 이미 승인된 문서의 서술을 다듬어도 전체 리뷰 파이프라인이 다시 돈다.
+
+이 재발동을 막으려고 세 번의 릴리스가 **같은 근본 원인의 증상을 하나씩** 패치해 왔다.
+
+| 릴리스 | 추가된 것 | 막으려던 증상 |
+|---|---|---|
+| v0.14.0 | `suppress_state.py` + `suppressed_paths` + `/cancel-review` | 사용자가 중단을 요청해도 다음 편집이 재arm |
+| v0.15.0 | `approve_handoff.sh`의 suppress 기록 순서 역전 | approve 후 같은 턴에 재dispatch |
+| v0.18.0 | `review_lock.py` + `review_in_progress` | 리뷰 진행 중 재arm된 pending이 subagent 경계 Stop에서 오발 |
+
+세 층 모두 **훅이 자기가 만든 재발동을 자기가 막는** 구조다. 사용자 기능이 아니다. 원인을 제거하면 셋 다 근거를 잃는다.
+
+## 2. Goals
+
+- G1. design doc auto-review는 그 문서당 **정확히 한 번** 발동한다.
+- G2. Layer 1 구조 검증은 **모든** Write/Edit/MultiEdit에서 그대로 유지된다 (Law 1).
+- G3. 재발동을 막으려고 존재하던 하니스를 제거한다 — 축소가 아니라 삭제.
+- G4. arm 판정 로직은 **한 파일에만** 존재한다.
+- G5. 신규 환경변수·신규 커맨드·신규 훅 없음. 하니스 총량이 순감소한다.
+
+## 3. Non-goals
+
+- NG1. 커밋된 design doc의 사후 변경에 대한 자동 재리뷰 경로를 만들지 않는다. 사용자가 요청하면 모델이 skill을 호출한다.
+- NG2. "실질 변경 대 서술 변경"을 판별하는 휴리스틱을 만들지 않는다.
+- NG3. interview brief 파이프라인(`reviewing-brief`, `check_brief.py`, brief 리뷰어 3종)은 건드리지 않는다. 이 설계는 design doc 경로에만 해당한다.
+- NG4. 진행 중인 세션의 상태 파일을 마이그레이션하지 않는다. `.claude/spec-distill/` 아래 상태는 git-ignored·세션 스코프·GC 대상이다.
+- NG5. arm-once를 끄고 옛 동작으로 되돌리는 escape hatch를 만들지 않는다. 기존 kill switch 3종으로 충분하다.
+
+## 4. 확정된 결정
+
+브레인스토밍 대화에서 사용자가 명시적으로 고른 것들이다. 재논의 대상이 아니다.
+
+| # | 결정 | 대안 |
+|---|---|---|
+| D1 | arm 조건 = 세션 원장에 없음 **AND** git이 모르는 문서 | 세션 원장 단독 / Write 도구만 arm |
+| D2 | 커밋된 문서의 사후 변경에 **자동 재리뷰 경로 없음** | 명시적 재리뷰 커맨드 / 실질 변경 휴리스틱 |
+| D3 | fix 루프(needs_revise → 수정 → 재리뷰)의 훅 강제를 **떼낸다** | 미커밋 조건만 써서 fix 루프 강제 유지 |
+| D4 | `approve_handoff.sh`를 shim으로 남기지 않고 **삭제** | ~25줄 advisory shim 유지 |
+| D5 | UserPromptSubmit reminder 훅은 **유지** | 통째 삭제 |
+
+D3의 대가를 명시한다. fix 루프의 재리뷰는 이제 `reviewing-spec` skill의 결정론 라우팅 표(verdict → 재dispatch)와 re-review cap이 담당하며, 훅이 강제하지 않는다. Law 1이 그만큼 얇아진다는 것을 알고 선택했다.
+
+## 5. Architecture
+
+### 5.1 arm 판정의 단일 지점
+
+Layer 2 진입 앞에 게이트 하나를 둔다.
+
+```
+should_arm(state_file, path) =
+      not is_armed(state_file, path)     # 세션 원장 — 세션 안쪽 시간축
+  and not is_born(path)                  # git 추적 여부 — 세션 바깥 시간축
+```
+
+두 조건이 서로 다른 시간축을 덮는다. 원장 단독이면 세션이 바뀔 때마다 그 문서가 한 번씩 다시 리뷰된다. git 단독이면 리뷰 fix 루프(문서가 아직 미커밋인 구간)에서 계속 재arm되어 지금 문제가 남는다. 둘을 AND로 묶어야 "생애 한 번"이 된다.
+
+`is_born`은 `git ls-files --error-unmatch -- <path>`의 exit 0 여부다. **git이 아는 문서 = 이미 태어난 문서**로 본다. index 조회라 history walk보다 가볍고, `git add`만 된 문서도 태어난 것으로 취급한다 — 저자가 그 문서를 리포에 넣기로 이미 결정했다는 뜻이므로 의도한 경계다.
+
+이 판정은 `scripts/arm_ledger.py`에만 존재한다 (G4). 훅은 `should_arm()` 하나만 호출한다.
+
+### 5.2 기록 시점 — dispatch가 기록한다
+
+원장에 키를 넣는 주체는 **Stop 훅의 성공한 dispatch**다. validator가 아니다.
+
+validator가 `pending_review:`를 쓰는 시점에 기록하면, dispatch가 실패한 경우(상태 rewrite OSError 등) 그 문서는 "arm 완료"로 표시된 채 **리뷰를 한 번도 받지 못한다**. 되돌릴 경로가 없다 — 이것이 이 설계에서 가장 위험한 실패 모드다.
+
+dispatch 시점 기록은 이를 구조적으로 막는다.
+
+```
+편집 1 → validator: should_arm=true → pending_review 기록
+편집 2 → validator: should_arm=true → pending_review 덮어쓰기 (같은 문서, 멱등)
+턴 종료 → Stop: pending 읽음 → 단일 원자적 write로
+                  (a) pending strip  (b) armed_paths 추가  (c) last_dispatched_at 갱신
+              → fsync → decision:block emit
+편집 3 → validator: should_arm=false (원장에 있음) → arm 없음
+```
+
+기록·strip·타임스탬프가 **한 번의 `rewrite_state()` 원자적 write**로 묶인다. 실패하면 셋 다 안 일어나고 emit도 안 된다 — 기존 AC7.2 계약(rewrite 실패 시 무-emit) 위에 그대로 얹힌다.
+
+reminder 훅(UserPromptSubmit)은 원장에 기록하지 않는다. reminder는 pending을 strip하지 않는 재-nag이므로, 여기서 기록하면 "리뷰 안 받았는데 arm 완료" 창이 다시 열린다. reminder만으로 리뷰가 진행된 경우 원장이 비어 재arm될 수 있으나, 방향이 과리뷰 쪽이라 안전하다.
+
+### 5.3 상태 스키마
+
+```diff
+  ---
+  session_id: <sid>
+  ---
+
+  pending_review:
+    path: / mode: / worktree_path: / triggered_at:
+
+- suppressed_paths:          # approve·cancel이 사후 기록하던 "다시 arm 마라" 집합
+-   - docs/superpowers/specs/...
+- review_in_progress:        # 리뷰 중 재arm 오발을 막던 문서별 락
+-   - path: ...
+-     since: ...
++ armed_paths:               # dispatch가 즉시 기록. 사후 기록자 없음
++   - docs/superpowers/specs/...
+
+  last_dispatched_at: ...
+```
+
+`suppressed_paths`와 `armed_paths`는 자료구조가 동형이고 의미도 같다 — "이 문서는 더 이상 arm하지 마라". 다른 것은 **누가 언제 쓰는가**뿐이다. `suppressed_paths`는 사후 기록이라 기록자가 셋 필요했다(`cancel_review.py`, `approve_handoff.sh`, skill의 pause 경로). `armed_paths`는 arm한 주체가 그 자리에서 쓰므로 기록자가 하나다. 제거되는 하니스 대부분이 이 한 줄에서 나온다.
+
+기존 세션의 상태 파일에 남은 `suppressed_paths`/`review_in_progress` 키는 읽는 사람이 없어져 무시된다 (NG4).
+
+## 6. 컴포넌트
+
+### `scripts/arm_ledger.py` (신규 — `suppress_state.py` 대체)
+
+`suppress_state.py`(242줄)에서 억제 의미를 걷어내고 arm 판정을 넣는다. 목표 ~120줄.
+
+| 함수 | 책임 |
+|---|---|
+| `canonical_key(raw_path)` | `docs/superpowers/specs/` 이후 substring. 워크트리·절대·상대 경로를 같은 키로. 스코프 밖이면 `None` |
+| `state_file_for(sid)` | sid → `state.local.md` 경로 |
+| `pending_path(body)` / `strip_pending(body)` | pending 블록 조회·제거 (훅이 공유) |
+| `armed_keys(body)` | `armed_paths` 항목 |
+| `is_armed(state_file, raw_path)` | 원장 조회 |
+| `is_born(raw_path)` | git 추적 여부 |
+| `should_arm(state_file, raw_path)` | 위 둘의 AND 부정 — **훅이 부르는 유일한 판정 진입점** |
+| `mark_armed(body, raw_path)` | body에 키를 멱등 추가해 **문자열로 반환** (파일 write 안 함 — 호출자가 원자적 write에 합류시킨다) |
+
+CLI는 `strip-pending <sid> <raw_path>` **한 개**만 남긴다 (`suppress_state.py`의 add/remove/is-suppressed 3종 삭제). 호출자는 `reviewing-spec` skill의 approve(①/②)와 멈춤(④)이다. 이 두 경로는 reminder 훅이 발동시킨 리뷰에서 pending이 아직 살아 있을 수 있으므로 명시적 strip이 필요하다.
+
+`mark_armed`가 파일이 아니라 문자열을 반환하는 것은 §5.2의 원자성 요구 때문이다. Stop 훅이 pending strip·armed 추가·타임스탬프를 하나의 write로 커밋해야 하는데, 여기서 파일을 따로 쓰면 write가 둘로 갈라져 중간 크래시에 부분 상태가 남는다.
+
+### `hooks/spec-write-validator.py`
+
+suppression 게이트를 arm 게이트로 교체한다. Layer 1은 위치·동작 모두 불변.
+
+```
+Layer 1 검증 (모든 경로)
+  → 실패면 exit 2
+  → 통과 시:
+      should_arm(state_file, file_path) 이 false면 → advisory만 내고 return 0
+      true면 → pending_review 기록 + 기존 advisory
+```
+
+arm이 skip될 때의 advisory 문구는 사용자가 **왜** 리뷰가 안 붙었는지 알 수 있어야 한다 (loud degradation). 두 사유를 구분해 표시한다: 이미 이 세션에서 arm됨 / git이 아는 문서.
+
+### `hooks/review-dispatch.py`
+
+suppress 블록과 review_lock 블록을 삭제한다(~35줄). `rewrite_state()`가 armed 키 추가를 흡수한다. TTL 가드는 유지.
+
+### `hooks/pending-review-reminder.py`
+
+review_lock 블록만 삭제한다(~20줄). 훅 자체는 유지 (D5) — arm 기회가 문서당 한 번뿐이라 놓친 dispatch의 복구가 이전보다 더 중요해진다.
+
+### `skills/reviewing-spec/SKILL.md`
+
+- Step 1의 리뷰 락 refresh 절 삭제
+- Phase 5 "옵션 ↔ 리뷰 락 매핑" 표 삭제
+- "Approve handoff sequence" 절을 `arm_ledger.py strip-pending` 한 줄 호출로 교체
+- ④ 멈춤도 같은 호출. `review_lock.py pause`의 "엔트리 제거 + pending strip" 이중 책임이 pending strip 하나로 줄어든다
+
+AP2(polite stop) 검증 앵커는 `approve_handoff.sh` 호출에서 이 `strip-pending` 호출로 옮겨간다 — approve가 여전히 **관측 가능한 부수효과를 남기는 행위**로 남으므로, "approved라고 말만 하고 끝내기"는 그대로 검출 가능하다.
+
+## 7. 제거 목록
+
+| 대상 | 줄수 | 조치 | 근거 |
+|---|---|---|---|
+| `scripts/review_lock.py` | 240 | 삭제 | 리뷰 중 재arm이 구조적으로 불가능 → 막을 대상 소멸 |
+| `scripts/cancel_review.py` | 99 | 삭제 | 억제할 자동 발동이 없음 |
+| `commands/cancel-review.md` | — | 삭제 | 진행 중 리뷰 중단은 skill 옵션 ④가 담당 |
+| `scripts/approve_handoff.sh` | 98 | 삭제 | 상태 변경 책임이 pending strip 한 줄로 축소, 존재 advisory는 Phase 5 Step A와 중복 |
+| `scripts/suppress_state.py` | 242 | `arm_ledger.py`로 대체 (~120) | CLI 3종·`remove`·`suppress_path` 삭제 |
+| env `DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC` | — | 삭제 | 락 소멸 |
+| 테스트 5종 | ~900 | 삭제 | 대상 소멸 (§9) |
+
+**유지**: redispatch TTL 30초(reminder의 매-프롬프트 nag 억제에 여전히 필요), GC·SessionEnd 정리, kill switch 3종(`DEVBREW_DISABLE_SPEC_DISTILL`, `DEVBREW_SKIP_HOOKS`, `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW`).
+
+spec-distill은 0.24.4로 v1.0.0 미만이므로 CLAUDE.md의 "제거 전 one-minor deprecation window"(v1.0.0 이상 플러그인 대상)가 구속하지 않는다. `/cancel-review`를 즉시 삭제한다.
+
+## 8. 에러 처리와 degradation
+
+모든 실패는 **arm하는 쪽으로 fail-open**한다 (Law 1: 과리뷰 > under-review). 원장 기록이 1회로 제한하므로 storm이 되지 않는다.
+
+| 실패 | 동작 | 관측 |
+|---|---|---|
+| `git` 미설치·timeout·exit ≥ 2 | `is_born=false` → arm | stderr loud (exit code 포함) |
+| 경로가 git 리포 밖 (exit 128) | `is_born=false` → arm | stderr loud |
+| 원장 read 실패 | `is_armed=false` → arm | stderr loud |
+| 원장 write 실패 (Stop) | 무-emit·무-기록 → 다음 턴 reminder가 회수 | stderr loud (기존 AC7.2) |
+| `session_id` 미해석 | state write skip, arm 없음, advisory 유지 | 기존 동작 |
+
+git 호출 timeout은 5초로 둔다 (PostToolUse 훅 전체 timeout이 10초).
+
+## 9. Files to Modify
+
+### 삭제
+
+```
+plugins/spec-distill/scripts/review_lock.py
+plugins/spec-distill/scripts/cancel_review.py
+plugins/spec-distill/scripts/approve_handoff.sh
+plugins/spec-distill/commands/cancel-review.md
+plugins/spec-distill/tests/test_review_lock.py
+plugins/spec-distill/tests/test_review_lock_session_id.sh
+plugins/spec-distill/tests/test_reviewing_spec_lock.sh
+plugins/spec-distill/tests/test_cancel_review.py
+plugins/spec-distill/tests/test_approve_handoff.sh
+```
+
+### 대체
+
+```
+plugins/spec-distill/scripts/suppress_state.py → plugins/spec-distill/scripts/arm_ledger.py
+```
+
+### 수정
+
+```
+plugins/spec-distill/hooks/spec-write-validator.py       arm 게이트
+plugins/spec-distill/hooks/review-dispatch.py            suppress+lock 삭제, armed 기록 흡수
+plugins/spec-distill/hooks/pending-review-reminder.py    lock 블록 삭제
+plugins/spec-distill/skills/reviewing-spec/SKILL.md      락·handoff 절 → strip-pending
+plugins/spec-distill/skills/conducting-interview/SKILL.md  :469 approve_handoff 참조
+plugins/spec-distill/tests/test_stale_terms.sh           F0 + 신규 stale term
+plugins/spec-distill/tests/test_readme_sync.sh           죽은 키워드 3종 제거, 0.25.x
+plugins/spec-distill/tests/test_spec_write_validator.sh  arm 게이트 반영
+plugins/spec-distill/tests/test_review_dispatch.sh       suppress·lock 케이스 제거
+plugins/spec-distill/tests/test_reminder_hook.sh         lock 케이스 제거
+plugins/spec-distill/tests/test_hook_output_schema.py    suppress·lock 참조 제거
+plugins/spec-distill/tests/test_handoff_compact_chain.sh       approve_handoff 참조 분류
+plugins/spec-distill/tests/test_handoff_spec_path_validation.sh approve_handoff 참조 분류
+plugins/spec-distill/README.md                           Hooks Installed·Principles 동기화
+plugins/spec-distill/CHANGELOG.md                        [0.25.0] Removed/Changed
+plugins/spec-distill/.claude-plugin/plugin.json          0.25.0
+```
+
+### 신규
+
+```
+plugins/spec-distill/tests/test_arm_once.sh              T1–T3
+```
+
+## 10. Verification Plan
+
+### 베이스라인 (측정 완료)
+
+이 워크트리(`e45619b`, main과 동일 커밋)에서 측정한 pre-existing red 2건. 회귀 판정의 기준선이다.
+
+| 스위트 | 상태 | 사유 |
+|---|---|---|
+| bash 51종 | 50 pass / 1 fail | `test_stale_terms.sh` — F0 (아래) |
+| python 10종 | 9 OK / 1 fail | `test_hook_output_schema.py::test_python_and_bash_resolvers_agree` — 알려진 NG9 cross-resolver, 워크트리 환경 의존 |
+
+### F0 — `test_stale_terms.sh`의 find 필터 버그 (이 작업에서 수정)
+
+`test_stale_terms.sh`는 production 파일 집합을 이렇게 만든다.
+
+```bash
+find "$SD" -type f -not -path '*/.claude/*' ...
+```
+
+`*/.claude/*`에 앵커가 없어서 **절대경로 어디에든** `/.claude/`가 있으면 제외된다. 하니스가 만드는 워크트리는 `<repo>/.claude/worktrees/<name>/` 아래 살므로, 워크트리 안에서는 production 파일 279개가 전부 걸러진다. 락은 empty-guard 덕분에 조용히 통과하지 않고 FAIL하지만(fail-closed 설계가 제 역할을 했다), **워크트리에서는 실행 자체가 불가능**하다.
+
+의도는 "플러그인 디렉토리 *아래의* `.claude/` 세션 상태 제외"였으므로 `$SD` 기준으로 앵커한다.
+
+```diff
+- -not -path '*/.claude/*'
++ -not -path "$SD/.claude/*"
+```
+
+실측: 워크트리에서 0개 → 47개. main 체크아웃에서 48개이고 플러그인-로컬 `.claude/` 7개 파일은 여전히 제외됨(의도 보존).
+
+이 수정은 T4의 전제다 — 고치지 않으면 삭제 스윕 완결을 증명하는 락을 green으로 볼 수 없다.
+
+### 신규 회귀 락
+
+각 락은 **mutation으로 이빨을 증명**한다. 통과가 정답인 assert는 모양만으로 판별할 수 없으므로, 대응하는 production 코드를 망가뜨렸을 때 실제로 RED가 되는지 확인한 결과를 커밋 메시지에 남긴다.
+
+| ID | 락 | mutation |
+|---|---|---|
+| T1 | 같은 문서 2회 Write → `pending_review` 1회만 기록 | 원장 게이트 제거 → RED |
+| T2 | git-tracked 문서 Write → `armed_paths`가 비어 있어도 arm 없음 | git 조건 제거 → RED |
+| T3 | `git` 미가용(PATH 조작) → arm 발생 **및** stderr advisory 존재 | fail 방향을 arm-skip으로 뒤집기 → RED |
+| T4 | stale-term 스윕에 개념 별칭 전수 추가 | 각 항목을 production에 되살리기 → RED |
+| T5 | 삭제 대상 파일 부재 + production 무참조 | 파일 복원 → RED |
+
+T3은 **양방향** 락이다. fail-open 방향(arm 발생)만 잠그면 advisory 없이 조용히 arm해도 통과하므로, stderr 존재도 함께 assert한다.
+
+T4의 스윕 대상은 식별자만이 아니라 **같은 것을 다른 이름으로 부른 참조**까지다: `review_lock`, `review_in_progress`, `suppress_state`, `suppressed_paths`, `cancel_review`, `cancel-review`, `approve_handoff`, `DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC`. 스코프는 기존 락과 동일한 production-only(테스트·CHANGELOG 제외) — 테스트의 토큰 참조는 집행 층이지 stale 참조가 아니다.
+
+### 종료 조건
+
+- bash 스위트: F0 수정 후 `test_stale_terms.sh` green, 그 외 red 0건. 스위트 규모는 베이스라인(51종)에서 삭제 3·신규 1을 반영해 49종이 된다 — 종료 조건은 개수가 아니라 **red 0건**이다
+- python 스위트: 삭제 2를 반영해 8종. NG9 cross-resolver 1건(워크트리 환경 의존) 외 green — 베이스라인과 동일
+- T1–T5 각각의 mutation 결과 기록
+- `git grep`으로 삭제 대상 식별자가 production에 0건
+
+### 수동 검증 (자동화 밖)
+
+- V1. 새 design doc을 Write → 리뷰 1회 발동
+- V2. 그 리뷰의 fix 루프에서 문서 수정 → 재발동 없음, skill 라우팅 표로 재리뷰 진행
+- V3. 문서 커밋 후 편집 → 리뷰 없음, Layer 1 구조 검증은 여전히 동작(placeholder 삽입 시 차단)
+- V4. 새 세션에서 커밋된 문서 편집 → 리뷰 없음
+
+## 11. Rejected Alternatives
+
+| 대안 | 기각 사유 |
+|---|---|
+| **미커밋 조건만** (git 단독) | 커밋 전 편집마다 재arm되므로 `review_lock.py`가 살아남는다. 사용자 고통은 해결되나 하니스 제거량이 ~250줄에 그친다. 사용자가 D3에서 arm-once를 명시 선택 |
+| **Write 도구만 arm** | 원장·git 모두 불필요해 가장 가볍지만, arm-once 보장이 도구 선택에 의존한다. Write로 전체 재작성하면 재arm |
+| **실질 변경 휴리스틱** (Goals/AC 섹션 diff) | 자동성은 유지되나 섹션-diff 파서가 신규로 필요하다. "덜어내기" 요청과 반대 방향 |
+| **명시적 재리뷰 커맨드 유지** | D2에서 사용자가 "완전 신뢰"를 선택. 커맨드 하나가 남으면 그 커맨드의 상태 조작 경로도 남는다 |
+| **`approve_handoff.sh`를 advisory shim으로 축소 유지** | 남는 책임이 advisory뿐이면 이빨 없는 앵커가 된다. AP2 검증은 `strip-pending` 호출로 옮기면 관측 가능성이 유지되므로 shim이 불필요 (D4) |
+| **`suppressed_paths`를 `armed_paths`로 마이그레이션** | 상태 파일은 git-ignored·세션 스코프·GC 대상이고, approve된 문서는 커밋되어 git 조건에 걸린다. 마이그레이션 코드의 수명이 그 코드가 막는 창보다 길다 (NG4) |
+| **`arm-once` kill switch 신설** | 옛 동작으로 되돌리는 스위치는 두 동작 경로를 영구 유지한다는 뜻. 기존 kill switch 3종으로 충분 (NG5) |
+
+## 12. Handoff Context
+
+### 이 문서가 전제하는 사실
+
+- 작업 브랜치: `worktree-feature+spec-distill-arm-once`, 워크트리 `/Users/jeonghokim/Downloads/devbrew/.claude/worktrees/feature+spec-distill-arm-once`, 기준 커밋 `e45619b`
+- `suppress_state`·`review_lock`·`cancel_review`의 참조는 **전부 spec-distill 내부**다. 크로스-플러그인 커플링 없음 (리포 루트 `docs/` 아래 과거 plan/spec의 언급은 역사 기록이라 스코프 밖)
+- 상태 파일 위치는 `state_path.py`가 `git rev-parse --git-common-dir`로 해석하므로 워크트리에서도 main repo의 `.claude/spec-distill/`을 가리킨다
+
+### 구현 순서 (의존 관계)
+
+1. **F0** — `test_stale_terms.sh` find 앵커 수정. 다른 모든 검증의 전제
+2. **arm_ledger.py** — TDD. `should_arm`/`is_born`/`mark_armed` 단위 테스트 먼저
+3. **훅 3종** — validator 게이트 → dispatch 원자적 write → reminder 정리
+4. **T1–T3** — 훅 레벨 통합 락 + mutation
+5. **삭제 스윕** — 파일 9종 삭제 → skill·테스트 참조 정리 → T4·T5
+6. **문서 동기화** — README·CHANGELOG·plugin.json 0.25.0
+
+3번이 2번보다 먼저 가면 훅이 존재하지 않는 모듈을 import한다. 5번을 3번보다 먼저 하면 훅이 아직 참조 중인 파일이 사라진다.
+
+### 알려진 함정
+
+- 이 워크트리에서 `test_hook_output_schema.py`의 cross-resolver 테스트는 **환경 의존으로 red**다. 회귀로 오인하지 말 것
+- Python 테스트는 `-m unittest`로 실행한다
+- 이 design doc 자체가 `spec-write-validator.py`의 Layer 1 대상이다. `scripts/ambiguity-blacklist.txt`의 항목과 placeholder 토큰을 본문에 넣으면 Write가 `exit 2`로 차단된다. 매칭은 substring·대소문자 무시이며 **인용과 사용을 구분하지 않는다** — 이 줄의 초안이 금지어를 예시로 나열했다가 차단당했다. 항목을 문서에 인용해야 하면 그 occurrence 앞에 `~`를 붙여 opt-out한다
