@@ -59,7 +59,9 @@ design doc auto-review를 **문서가 처음 생길 때 한 번만** 발동시�
 - G3. 재발동을 막으려고 존재하던 하니스를 제거한다 — 축소가 아니라 삭제.
 - G4. arm 판정 로직은 **한 파일에만** 존재한다.
 - G5. 신규 환경변수·신규 커맨드·신규 훅 없음. 하니스 총량이 순감소한다.
-- G6. verdict 없이 끝난 dispatch의 재시도는 **문서당 3회**로 제한된다. 상한에 닿으면 자동 dispatch를 중단하고 수동 호출을 안내하는 loud advisory를 낸다. 상한 없는 재시도는 CLAUDE.md Forbidden Patterns의 *Unbounded autonomy*(max-iter 없는 루프)에 해당한다.
+- G6. verdict 없이 끝난 dispatch의 재시도는 **세션당·문서당 3회**로 제한된다. 상한에 닿으면 자동 dispatch를 중단하고 수동 호출을 안내하는 loud advisory를 낸다. 상한 없는 재시도는 CLAUDE.md Forbidden Patterns의 *Unbounded autonomy*(max-iter 없는 루프)에 해당한다.
+
+  경계가 **세션당**인 이유를 명시한다. `dispatch_attempts`는 세션 스코프 상태(`.claude/spec-distill/<sid>/`)에 살므로 세션이 바뀌면 예산이 초기화된다 — 미커밋인 채 N개 세션에 걸친 문서는 세션마다 최대 3회를 새로 받는다. 이를 문서 생애 상한으로 만들려면 세션 밖에 살아남는 문서-키 저장소가 필요한데, 그것은 NG4(상태는 세션 스코프·git-ignored·GC 대상)가 배제한다. 세션당 경계는 G1의 조건부 보장, NG5-(c)의 세션당 비용과 같은 축이며, 이 셋의 경계를 하나로 맞추는 편이 저장소를 새로 만드는 것보다 가볍다. 세션을 넘겨도 멈추게 하는 진짜 수단은 문서를 커밋하는 것이고(`is_born`), `check-born` advisory가 그것을 촉구한다.
 
 ## 3. Non-goals
 
@@ -150,7 +152,20 @@ verdict   → mark-reviewed: armed_paths 추가
 
 이 재시도에는 대가가 있다. 리뷰어가 반복 실패하는 환경에서는 편집마다 dispatch가 반복돼 옛 동작으로 degrade한다. **조용한 리뷰 유실보다 시끄러운 재시도**를 택했지만(Law 1), 시끄러운 재시도가 무한하면 그것은 Forbidden Pattern이다.
 
-그래서 재시도에 상한을 둔다(G6). Stop은 dispatch할 때마다 `dispatch_attempts[key]`를 1 올리고, 값이 3에 닿으면 그 키를 `armed_paths`에도 넣은 뒤 block 메시지에 아래를 덧붙인다.
+그래서 재시도에 상한을 둔다(G6 — 세션당·문서당 3회).
+
+**상한의 상태기계를 여기 한 곳에 못 박는다.** 라운드 5 리뷰가 §5.2와 T9가 서로 다른 상태기계를 서술한다고 적발했으므로, 아래가 유일한 정의이고 T9는 이것을 잠근다.
+
+| 사건 | `dispatch_attempts` | `armed_paths` | emit |
+|---|---|---|---|
+| dispatch 1회차 | 0 → 1 | 불변 | `decision:block` |
+| dispatch 2회차 | 1 → 2 | 불변 | `decision:block` |
+| **dispatch 3회차** | 2 → 3 | **키 추가** | `decision:block` + 상한 advisory 덧붙임 |
+| 이후 편집 | 불변 | 불변 | **arm 자체가 안 됨** — validator의 `should_arm`이 false, pending 미생성이므로 Stop이 볼 것이 없다 |
+
+즉 **3회차가 마지막 자동 dispatch이고, 그 emit이 상한을 알리는 vehicle이다.** "4회차 dispatch가 억제된다"가 아니다 — 4회차라는 사건은 존재하지 않는다. 상한 도달 후의 편집은 Stop이 아니라 **validator 층에서** 멈추며, 그때 나오는 arm-skip advisory가 세 번째 사유(G6 상한)를 표시한다(§6).
+
+3회차 block 메시지에 덧붙이는 문구는 아래와 같다.
 
 > `[spec-distill] '<path>' 리뷰가 3회 시도됐으나 verdict 없이 끝났다 — 자동 dispatch를 중단한다. 리뷰가 필요하면 reviewing-spec을 직접 호출하라.`
 
@@ -264,7 +279,7 @@ Layer 1 검증 (모든 경로)
       true면 → pending_review 기록 + 기존 advisory
 ```
 
-arm이 skip될 때의 advisory 문구는 사용자가 **왜** 리뷰가 안 붙었는지 알 수 있어야 한다 (loud degradation). 두 사유를 구분해 표시한다: 이미 이 세션에서 arm됨 / git이 아는 문서.
+arm이 skip될 때의 advisory 문구는 사용자가 **왜** 리뷰가 안 붙었는지 알 수 있어야 한다 (loud degradation). **세 사유를 구분해** 표시한다: (1) 이 세션에서 리뷰가 완료됨, (2) git이 아는 문서, (3) G6 상한 도달(§5.2) — (1)과 (3)은 둘 다 `armed_paths`에 있지만 사용자가 취해야 할 행동이 다르다. (1)은 정상이고 (3)은 리뷰가 세 번 실패했다는 뜻이라 수동 호출이 필요하다. `dispatch_attempts`에 그 키가 남아 있는지로 구분한다 — `mark-reviewed`는 완료 시 그 항목을 삭제하므로, 키가 남아 있으면 상한 도달이다.
 
 ### `hooks/review-dispatch.py`
 
@@ -336,7 +351,7 @@ plugins/spec-distill/tests/test_handoff_spec_path_validation.sh
 
 **`SKILL.md:176` 대체 문구 (NG5-(d) — 스윕에 맡기지 않고 명시)**
 
-기존 문장은 `harness_sid`가 빈 값일 때 `/spec-distill:cancel-review <path>`를 수동 억제 경로로 안내한다. 이를 아래로 교체한다.
+기존 문장은 `harness_sid`가 빈 값일 때 `/spec-distill:cancel-review <path>`를 수동 억제 경로로 안내하며, ④ 멈춤의 `review_lock.py pause` 블록 안에 있다. 그 블록은 통째로 삭제되므로(④는 상태 조작 없이 종료 — §6) 이것은 **제자리 교체가 아니라 이동**이다. 대체 문구는 **Step 3(`mark-reviewed` 호출 지점) 옆**에 놓는다 — `harness_sid` 미해석이 실제로 문제가 되는 유일한 지점이 거기이기 때문이다(라운드 5 지적).
 
 > `[spec-distill] harness_sid 미해석 — 이 세션의 상태 파일을 특정할 수 없어 리뷰 완료 기록(mark-reviewed)을 남기지 못했다. 같은 문서가 다시 dispatch될 수 있다. 해소: DEVBREW_SPEC_DISTILL_SESSION_ID로 sid를 명시하거나, 이 세션 동안 DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1로 arm을 끈다.`
 
@@ -344,7 +359,7 @@ T4의 stale-term 스윕이 옛 문장을 기계적으로 지우기 *전에* 이 
 
 **두 handoff 테스트**는 실측 결과 **전적으로 `approve_handoff.sh`만** 검증한다 (`compact_chain`: exit 0 · marker dir 부재 · `suppressed_paths` 기록 · 세션 dir 보존 / `spec_path_validation`: in-scope dangling 경로여도 abort 안 함). 대상 스크립트가 사라지므로 수정이 아니라 삭제다.
 
-잔여 커버리지는 이렇게 처리한다. 세션 dir 보존은 `test_gc.py`·`test_session_end_cleanup.py`가 이미 잠그고 있다. `spec_path_validation`이 잠근 불변식 하나 — **스코프 안이지만 working-tree에 없는 경로가 abort를 유발하지 않는다** — 는 살릴 값어치가 있으므로 `check-born`에 대한 assert로 T2 픽스처에 승계한다(`check-born`이 dangling 경로에서 crash하지 않고 "미커밋" 판정 + advisory로 끝나는지).
+잔여 커버리지는 이렇게 처리한다. 세션 dir 보존은 `test_gc.py`·`test_session_end_cleanup.py`가 이미 잠그고 있다. `spec_path_validation`이 잠근 불변식 하나 — **스코프 안이지만 working-tree에 없는 경로가 abort를 유발하지 않는다** — 는 살릴 값어치가 있으므로 **T11**로 승계한다(§10). 라운드 5 리뷰가 지적한 대로 초안은 이 승계를 "T2 픽스처에"라고 적었지만 T2는 `should_arm`의 git 조건을 재는 다른 함수라, 승계 주장에 대응하는 락이 실제로는 없었다.
 
 ### 대체
 
@@ -358,7 +373,7 @@ plugins/spec-distill/scripts/suppress_state.py → plugins/spec-distill/scripts/
 plugins/spec-distill/hooks/spec-write-validator.py       arm 게이트
 plugins/spec-distill/hooks/review-dispatch.py            suppress+lock 삭제, dispatch_attempts 증가, armed는 G6 상한 도달 시에만
 plugins/spec-distill/hooks/pending-review-reminder.py    lock 블록 삭제
-plugins/spec-distill/skills/reviewing-spec/SKILL.md      락 절 → strip-pending, Step 3 → mark-reviewed, handoff 절 → check-born, :176 대체 문구(아래)
+plugins/spec-distill/skills/reviewing-spec/SKILL.md      락 절 → strip-pending, Step 3 → mark-reviewed(**both-dead fail-safe 라운드 배제** — §6), handoff 절 → check-born, :176 대체 문구(아래)
 plugins/spec-distill/skills/conducting-interview/SKILL.md  :469 approve_handoff 참조
 plugins/spec-distill/tests/test_stale_terms.sh           F0 + 신규 stale term
 plugins/spec-distill/tests/test_readme_sync.sh           죽은 키워드 3종 제거, 0.25.x
@@ -375,7 +390,7 @@ plugins/spec-distill/.claude-plugin/plugin.json          0.25.0
 
 ```
 plugins/spec-distill/tests/test_arm_once.sh              T1·T2·T3 (arm 게이트)
-plugins/spec-distill/tests/test_arm_ledger_timing.sh     T6·T7·T8·T9·T10 (기록 시점·자기치유·상한·훅 통합)
+plugins/spec-distill/tests/test_arm_ledger_timing.sh     T6·T7·T8·T9·T10·T11·T12 (기록 시점·자기치유·상한·훅 통합·check-born·fail-safe 배제)
 ```
 
 T4(stale-term 스윕)와 T5(삭제 대상 부재·무참조)는 신규 파일이 아니라 기존 `tests/test_stale_terms.sh`에 추가한다 — 그 스위트가 이미 production 전수 스윕을 소유하고 있고, F0로 워크트리에서도 실행 가능해진다. **모든 T 락은 이 세 파일 중 하나에 배정된다**; 라운드 4 리뷰가 지적한 대로 산문·구현 순서에만 존재하고 파일 매니페스트에 없는 락은 만들어지지 않는다.
@@ -426,8 +441,10 @@ find "$SD" -type f -not -path '*/.claude/*' ...
 | T6 | pending이 살아 있는 상태에서 `strip-pending` 실행 후 Stop 재발화 → 무-emit (§5.4 5단계 재현) | Step 1 strip 제거 → RED |
 | T7 | `mark-reviewed`(verdict) 후 `armed_paths`에 그 키가 존재하고, **이어지는 두 번째 편집이 재arm하지 않는다**(Stop 무-emit) | `mark-reviewed`의 원장 기록 제거 → RED |
 | T8 | verdict **없이** 중단된 리뷰(원장 미기록) 후 편집 → **재arm되고 Stop이 dispatch한다**(자기치유) | 원장 기록을 verdict에서 진입 시점으로 되돌리기 → RED |
-| T9 | verdict 없는 dispatch를 3회 반복 → 4회차는 **무-emit + 상한 advisory** (G6) | 상한 검사 제거 → RED (무한 재시도) |
+| T9 | 한 세션 안에서 verdict 없는 dispatch 3회 → **3회차 emit에 상한 advisory가 붙고 `armed_paths`에 키가 생긴다**. 이후 편집은 **pending 자체가 안 생긴다**(validator 층 차단) | 상한 검사 제거 → 4회차 pending 생성 + emit → RED |
 | T10 | **Stop의 dispatch 단독**(verdict 없음, 상한 미달) 후 `armed_paths`가 **비어 있다** | Stop에 `mark_armed` 추가 → RED |
+| T11 | `check-born`이 **스코프 안이지만 working-tree에 없는 경로**에서 crash하지 않고 "미커밋" 판정 + advisory로 끝난다 | dangling 경로에서 예외를 던지게 → RED |
+| T12 | `merge_review`가 both-dead fail-safe(`claude_verdict_unrecoverable` AND `codex_degraded`)를 낸 라운드에서 **`mark-reviewed`가 호출되지 않는다**(원장 미기록) | 배제 조건 제거 → RED |
 
 T1은 **파일 쓰기 횟수가 아니라 dispatch emit 횟수**를 잰다. §5.2가 명시한 대로 두 번째 편집이 pending을 덮어쓰는 것은 의도된 동작이므로, "기록 1회"를 assert하면 설계와 모순되는 것을 재게 된다 (라운드 1 codex 지적).
 
@@ -451,7 +468,7 @@ T4의 스윕 대상은 식별자만이 아니라 **같은 것을 다른 이름�
 
 - bash 스위트: F0 수정 후 `test_stale_terms.sh` green, 그 외 red 0건. 스위트 규모는 베이스라인(51종)에서 삭제 5·신규 1을 반영해 47종이 된다 — 종료 조건은 개수가 아니라 **red 0건**이다
 - python 스위트: 삭제 2를 반영해 8종. NG9 cross-resolver 1건(워크트리 환경 의존) 외 green — 베이스라인과 동일
-- T1–T10 각각의 mutation 결과 기록
+- T1–T12 각각의 mutation 결과 기록
 - `git grep`으로 삭제 대상 식별자가 production에 0건
 
 ### 수동 검증 (자동화 밖)
@@ -495,7 +512,7 @@ T4의 스윕 대상은 식별자만이 아니라 **같은 것을 다른 이름�
 - `arm_ledger.py` 내부의 함수 배치·정규식 형태·docstring 문구. 공개 API 목록(§6 표)과 `should_arm`의 논리식은 lock됐고 그 아래 구현 재량은 열려 있다
 - arm skip advisory의 정확한 문면. **두 사유(원장/git)를 구분해 표시한다**는 요건은 lock, 문장은 자유
 - T 락 픽스처의 구성 방식(임시 리포 생성 대 기존 리포 사용 등). 각 락이 재는 **대상**과 `REDISPATCH_TTL_SEC=0` 설정은 lock, 그 외 구성 방법은 자유
-- 승계된 dangling-경로 불변식(§9)을 T2 픽스처 안에 어떻게 배치할지 — 별도 케이스로 뺄지 기존 케이스에 붙일지
+- T11·T12 픽스처가 `check-born`·`merge_review` 실패를 흉내 내는 방식(스텁 대 실제 호출). 재는 **대상**은 lock, 흉내 방법은 자유
 
 **구현 순서** (의존 관계 — 이것은 lock):
 
@@ -503,7 +520,7 @@ T4의 스윕 대상은 식별자만이 아니라 **같은 것을 다른 이름�
 2. **arm_ledger.py** — TDD. `should_arm`/`is_born`/`mark_armed` 단위 테스트 먼저
 3. **훅 3종** — validator 게이트 → dispatch 원자적 write → reminder 정리
 4. **skill** — `reviewing-spec` Step 1 strip-pending + Step 3 mark-reviewed + approve `check-born` (§5.2·§5.4·§6)
-5. **T1–T3·T6–T10** — 훅·skill 레벨 통합 락 + mutation. T7·T8은 반대 방향 쌍이라 **함께** 작성한다(한쪽만 두면 반대편 구현이 조용히 통과). T9는 G6 상한, T10은 Stop의 원장 무-기록. 모든 픽스처는 `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0`
+5. **T1–T3·T6–T12** — 훅·skill 레벨 통합 락 + mutation. T7·T8은 반대 방향 쌍이라 **함께** 작성한다(한쪽만 두면 반대편 구현이 조용히 통과). T9는 G6 상한, T10은 Stop의 원장 무-기록, T11은 `check-born` dangling, T12는 fail-safe 배제. 다중-dispatch 픽스처(T1·T7·T8·T9·T10)는 `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0`
 6. **삭제 스윕** — 파일 9종 삭제 → skill·테스트 참조 정리 → T4·T5
 7. **문서 동기화** — README(P17 서술 포함)·CHANGELOG·plugin.json 0.25.0
 
