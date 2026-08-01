@@ -41,6 +41,7 @@
 |---|---|
 | `plugins/spec-distill/scripts/arm_ledger.py` | arm 판정의 단일 지점(§5.1·G4). 정규화·원장 읽기/쓰기·git 조회·G6 상태기계 |
 | `plugins/spec-distill/tests/test_arm_ledger.py` | `arm_ledger` 단위 테스트 (python) |
+| `plugins/spec-distill/tests/arm_test_helpers.sh` | 두 신규 스위트가 `source` 하는 공유 하니스 (**source 전용** — `test_` 접두어 없음). pre-flight ruling |
 | `plugins/spec-distill/tests/test_arm_once.sh` | T1·T2·T3 — arm 게이트 통합 락 |
 | `plugins/spec-distill/tests/test_arm_ledger_timing.sh` | T6–T12 — 기록 시점·자기치유·G6 상한·훅 통합·check-born·fail-safe 배제 |
 
@@ -73,7 +74,7 @@ tests/test_approve_handoff.sh     tests/test_handoff_compact_chain.sh
 tests/test_handoff_spec_path_validation.sh
 ```
 
-스위트 규모: bash 51 − 5 + 2 = **48**, python 10 − 2 + 1 = **9**.
+스위트 규모: bash `test_*.sh` 51 − 5 + 2 = **48**, python 10 − 2 + 1 = **9**. `arm_test_helpers.sh` 는 실행 대상이 아니므로 이 셈에 들어가지 않는다 — **스위트를 도는 루프는 반드시 `tests/test_*.sh` 로 글롭한다**(`tests/*.sh` 로 돌면 헬퍼를 테스트로 실행하고 개수가 어긋난다).
 
 ---
 
@@ -1609,46 +1610,57 @@ EOF
 arm 게이트의 통합 락. **재는 것은 pending 파일 쓰기 횟수가 아니라 dispatch emit 횟수**다 — §5.2 가 명시한 대로 두 번째 편집이 pending 을 덮어쓰는 것은 의도된 동작이므로 "기록 1회"를 assert 하면 설계와 모순되는 것을 재게 된다.
 
 **Files:**
+- Create: `plugins/spec-distill/tests/arm_test_helpers.sh` (공유 하니스 — 아래 ruling)
 - Create: `plugins/spec-distill/tests/test_arm_once.sh`
 
 **Interfaces:**
 - Consumes: `hooks/spec-write-validator.py`, `hooks/review-dispatch.py`, `scripts/arm_ledger.py`, `tests/fixtures/2026-05-17-test-design.md`
-- Produces: Task 8 이 같은 하니스 구조(`run_validator`/`run_stop`/`run_ledger`)를 재사용한다
+- Produces: `arm_test_helpers.sh` — Task 8 이 `source` 로 재사용한다. 노출 이름: 변수 `REPO_ROOT`·`SD`·`VALIDATOR`·`DISPATCH`·`LEDGER`·`MERGE`·`SKILL`·`FIX`·`WORK`·`pass`·`fail`, 함수 `note`·`arm_work_init`·`new_doc`·`edit_doc`·`run_validator`·`run_validator_all`·`run_stop`·`run_ledger`·`run_ledger_rc`·`state_of`·`arm_summary`
 
-- [ ] **Step 1: 테스트 파일 작성**
+> **Ruling (pre-flight, 사용자 확정)** — 초안은 Task 8 이 이 하니스를 verbatim 복제하도록 적혀 있었다. 리뷰 루브릭이 "로직 블록의 verbatim 중복"을 결함으로 보므로 사용자에게 물었고 **공유 헬퍼 추출**로 확정됐다. 파일은 `tests/lib/` 가 아니라 `tests/` 직하에 둔다 — 리포 루트 `.gitignore` 의 `lib/` 규칙이 `tests/lib/` 하위를 조용히 untracked 로 만들기 때문이다(`plugins/quality-gates/tests/lib/` 만 negation 으로 구제돼 있다).
+
+- [ ] **Step 1: 공유 하니스 작성 — `tests/arm_test_helpers.sh`**
 
 ```bash
 #!/usr/bin/env bash
-# T1·T2·T3 — arm-once 게이트 (v0.25.0 §5.1).
+# arm-once 테스트 공유 하니스 (v0.25.0).
+# test_arm_once.sh(T1–T3)와 test_arm_ledger_timing.sh(T6–T12)가 source한다.
+# **source 전용** — 이 파일 자체는 테스트가 아니다(이름에 test_ 접두어가 없는 이유).
 #
-# 재는 것은 **pending 파일 쓰기 횟수가 아니라 dispatch emit 횟수**다(§10 T1). 두 번째
-# 편집이 pending을 덮어쓰는 것은 §5.2가 명시한 의도된 동작이므로 "기록 1회"를 assert하면
-# 설계와 모순되는 것을 재게 된다.
+# 계약: source하는 쪽이 `set -u -o pipefail`을 먼저 켜고, arm_work_init로 작업 리포를
+# 만들고, 마지막에 arm_summary로 집계·종료 코드를 받는다.
 #
-# 모든 다중-dispatch 픽스처는 DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0을 설정한다(lock).
-# review-dispatch.py의 30초 redispatch TTL 가드가 원장 게이트 없이도 두 번째 emit을
-# 막아버리면 "원장 게이트 제거 → RED"라는 mutation 주장이 성립하지 않고 락이 이빨을 잃는다.
-set -u -o pipefail
+# 모든 다중-dispatch 헬퍼는 DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0을 건다(lock —
+# 계획 재량 아님). review-dispatch.py의 30초 redispatch TTL 가드가 원장 게이트 없이도
+# 두 번째 emit을 막아버리면 "원장 게이트 제거 → RED"라는 mutation 주장이 성립하지 않고
+# 락이 이빨을 잃는다.
+#
+# 위치가 tests/lib/이 아닌 이유: 리포 루트 .gitignore의 `lib/` 규칙이 tests/lib/ 하위를
+# 조용히 untracked로 만든다(quality-gates만 negation으로 구제됨).
 
-REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
 VALIDATOR="$SD/hooks/spec-write-validator.py"
 DISPATCH="$SD/hooks/review-dispatch.py"
 LEDGER="$SD/scripts/arm_ledger.py"
+MERGE="$SD/scripts/merge_review.py"
+SKILL="$SD/skills/reviewing-spec/SKILL.md"
 FIX="$SD/tests/fixtures"
-
-WORK=$(mktemp -d -t specdistill-armonce-XXXXXX) || exit 1
-# macOS /var → /private/var symlink 해소. 두 대입 모두 || exit 1 — 빈 WORK가
-# trap rm -rf로 흘러들어가는 laundering을 막는다.
-WORK=$(cd "$WORK" && pwd -P) || exit 1
-trap 'rm -rf "$WORK"' EXIT
-( cd "$WORK" && git init -q && git config user.email t@t.t && git config user.name t \
-  && git commit -q --allow-empty -m seed ) || exit 1
 
 pass=0; fail=0
 note() {
   if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"
   else fail=$((fail+1)); echo "  ✗ $2"; fi
+}
+
+arm_work_init() {  # $1 = mktemp prefix
+  # 두 대입 모두 || exit 1 — 빈 WORK가 trap rm -rf로 흘러들어가는 laundering을 막는다.
+  # (macOS bash의 `cd ""`는 exit 0 + cwd 불변이라 빈 값이 조용히 통과한다.)
+  WORK=$(mktemp -d -t "$1-XXXXXX") || exit 1
+  WORK=$(cd "$WORK" && pwd -P) || exit 1   # /var → /private/var symlink 해소
+  trap 'rm -rf "$WORK"' EXIT
+  ( cd "$WORK" && git init -q && git config user.email t@t.t && git config user.name t \
+    && git commit -q --allow-empty -m seed ) || exit 1
 }
 
 new_doc() {  # $1 = WORK 기준 상대 경로
@@ -1677,7 +1689,30 @@ run_stop() {  # $1=sid
 run_ledger() {  # arm_ledger CLI — cwd가 WORK여야 state_root·git이 이 리포를 본다
   ( cd "$WORK" && python3 "$LEDGER" "$@" )
 }
+run_ledger_rc() {  # rc를 살려서 부르는 변형(T11). stdout+stderr 합본.
+  ( cd "$WORK" && python3 "$LEDGER" "$@" ) 2>&1
+}
 state_of() { echo "$WORK/.claude/spec-distill/$1/state.local.md"; }
+
+arm_summary() {
+  echo
+  echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
+  [[ $fail -eq 0 ]]
+}
+```
+
+- [ ] **Step 1b: 테스트 파일 작성 — `tests/test_arm_once.sh`**
+
+```bash
+#!/usr/bin/env bash
+# T1·T2·T3 — arm-once 게이트 (v0.25.0 §5.1).
+#
+# 재는 것은 **pending 파일 쓰기 횟수가 아니라 dispatch emit 횟수**다(§10 T1). 두 번째
+# 편집이 pending을 덮어쓰는 것은 §5.2가 명시한 의도된 동작이므로 "기록 1회"를 assert하면
+# 설계와 모순되는 것을 재게 된다.
+set -u -o pipefail
+source "$(dirname "$0")/arm_test_helpers.sh"
+arm_work_init specdistill-armonce
 
 # --- T1: 리뷰가 완료된 뒤의 편집은 재arm 하지 않는다 (dispatch emit 1회) ---
 # mark-reviewed가 시퀀스에 반드시 포함된다 — 그것이 T1(verdict 이후 재arm 없음)과
@@ -1732,9 +1767,7 @@ else
   note FAIL "T3 실패: out='$all3' state=$( [[ -f "$sf3" ]] && cat "$sf3" || echo '(없음)')"
 fi
 
-echo
-echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[[ $fail -eq 0 ]]
+arm_summary
 ```
 
 - [ ] **Step 2: 실행 — GREEN 확인**
@@ -1795,9 +1828,10 @@ bash tests/test_arm_once.sh 2>&1 | tail -2                 # 기대: Fail: 0
 - [ ] **Step 4: 커밋**
 
 ```bash
-git add plugins/spec-distill/tests/test_arm_once.sh
+git add plugins/spec-distill/tests/arm_test_helpers.sh plugins/spec-distill/tests/test_arm_once.sh
+git status --short plugins/spec-distill/tests/   # 두 파일 모두 staged인지 눈으로 확인
 git commit -m "$(cat <<'EOF'
-test(spec-distill): T1·T2·T3 — arm 게이트 회귀 락
+test(spec-distill): T1·T2·T3 — arm 게이트 회귀 락 + 공유 하니스
 
 T1은 emit 횟수를 잰다(파일 쓰기 횟수 아님 — §5.2의 덮어쓰기는 의도된 동작).
 시퀀스에 mark-reviewed가 포함돼야 T8과 갈린다. TTL=0 고정.
@@ -1821,19 +1855,19 @@ EOF
 - Create: `plugins/spec-distill/tests/test_arm_ledger_timing.sh`
 
 **Interfaces:**
-- Consumes: Task 7 과 동일한 하니스 + `scripts/merge_review.py` + `skills/reviewing-spec/SKILL.md`
+- Consumes: `tests/arm_test_helpers.sh` (Task 7 이 만든 공유 하니스 — `MERGE`·`SKILL`·`run_ledger_rc` 포함), `scripts/merge_review.py`, `skills/reviewing-spec/SKILL.md`
 - Produces: 없음 (최종 락)
 
-- [ ] **Step 1: 테스트 파일 작성 (헤더 + 하니스)**
+- [ ] **Step 1: 테스트 파일 헤더 — 하니스를 `source` 한다**
 
-Task 7 의 헤더·헬퍼를 그대로 복제하되 `WORK` prefix 를 `specdistill-armtiming-XXXXXX` 로 바꾸고, 아래 헬퍼를 추가한다:
+**복제하지 않는다** (pre-flight ruling — Task 7 참조). 헤더는 이 다섯 줄이 전부다:
 
 ```bash
-SKILL="$SD/skills/reviewing-spec/SKILL.md"
-MERGE="$SD/scripts/merge_review.py"
-
-# rc를 살려서 부르는 변형 (T11). set -e를 쓰지 않으므로 안전.
-run_ledger_rc() { ( cd "$WORK" && python3 "$LEDGER" "$@" ) 2>&1; }
+#!/usr/bin/env bash
+# T6–T12 — 기록 시점·자기치유·G6 상한·훅 통합·check-born·fail-safe 배제 (v0.25.0).
+set -u -o pipefail
+source "$(dirname "$0")/arm_test_helpers.sh"
+arm_work_init specdistill-armtiming
 ```
 
 - [ ] **Step 2: T6·T7·T8 본문**
@@ -1997,9 +2031,7 @@ else
   note FAIL "T12b 실패: window=$(wc -l <<<"$win")줄"
 fi
 
-echo
-echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[[ $fail -eq 0 ]]
+arm_summary
 ```
 
 - [ ] **Step 5: 실행 — GREEN 확인**
@@ -2141,8 +2173,8 @@ git rm -q \
   tests/test_approve_handoff.sh \
   tests/test_handoff_compact_chain.sh \
   tests/test_handoff_spec_path_validation.sh
-ls tests/*.sh | wc -l    # 기대: 48
-ls tests/*.py | wc -l    # 기대: 9
+ls tests/test_*.sh | wc -l    # 기대: 48  (arm_test_helpers.sh 는 테스트가 아니라 제외)
+ls tests/test_*.py | wc -l    # 기대: 9
 ```
 
 > 두 handoff 테스트는 실측 결과 **전적으로 `approve_handoff.sh` 만** 검증한다(`compact_chain`: exit 0 · marker dir 부재 · 억제 기록 · 세션 dir 보존 / `spec_path_validation`: in-scope dangling 경로여도 abort 안 함). 대상 스크립트가 사라지므로 수정이 아니라 삭제다. 잔여 커버리지: 세션 dir 보존은 `test_gc.py`·`test_session_end_cleanup.py` 가 이미 잠그고 있고, dangling 경로 불변식은 **T11** 이 승계했다(Task 8).
@@ -2201,7 +2233,7 @@ ls tests/*.py | wc -l    # 기대: 9
 
 ```bash
 red=0
-for t in tests/*.sh; do
+for t in tests/test_*.sh; do
   bash "$t" >/dev/null 2>&1 || { echo "RED: $t"; red=$((red+1)); }
 done
 python3 -m unittest discover -s tests -p 'test_*.py' 2>&1 | tail -3
@@ -2445,10 +2477,10 @@ grep -qE '^## \[0\.25\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
 
 ```bash
 red=0
-for t in tests/*.sh; do
+for t in tests/test_*.sh; do
   bash "$t" >/dev/null 2>&1 || { echo "RED: $t"; red=$((red+1)); }
 done
-echo "bash: $(ls tests/*.sh | wc -l)종, red=$red"
+echo "bash: $(ls tests/test_*.sh | wc -l)종, red=$red"
 python3 -m unittest discover -s tests -p 'test_*.py' 2>&1 | tail -4
 git grep -nIF -e review_lock -e suppress_state -e approve_handoff -e cancel_review \
   -- 'plugins/spec-distill' ':!plugins/spec-distill/CHANGELOG.md' ':!plugins/spec-distill/tests' | wc -l
