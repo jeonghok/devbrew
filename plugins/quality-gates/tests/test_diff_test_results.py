@@ -3,6 +3,7 @@
 
 AC11 AC13 AC14 AC15 AC16 AC36 AC43 AC48 · T9 T10 T11 T12 T13 T27 T39 T45 · M4 M22
 """
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -10,6 +11,16 @@ import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "diff-test-results.py"
+
+
+def load_module():
+    """`diff-test-results.py`는 하이픈 파일명이라 `import`로 못 부른다 — 순수
+    함수(`yaml_str`) 단위 테스트를 위해 파일 경로로 직접 로드한다."""
+    spec = importlib.util.spec_from_file_location("diff_test_results", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def run_diff(expected, baseline, head, granularity="file", runner="pytest"):
@@ -151,6 +162,96 @@ class TestAttribution(unittest.TestCase):
                 [sys.executable, str(SCRIPT),
                  "--expected", str(p / "e.txt"),
                  "--baseline", str(p / "missing.tsv"),
+                 "--head", str(p / "h.tsv"),
+                 "--granularity", "file", "--runner", "pytest"],
+                capture_output=True, text=True,
+            )
+        self.assertEqual(r.returncode, 4)
+        self.assertEqual(r.stdout.strip(), "")
+
+    # Finding 1 — 빈 --expected는 attributions: null이 아니라 attributions: []을
+    # 낸다. bare `attributions:` 다음 줄이 `attribution_status:`이면 YAML 소비자가
+    # `None`을 받아 `for a in doc["attributions"]:`가 TypeError로 죽는다.
+    def test_empty_expected_emits_empty_attributions_list(self):
+        rc, out, err = run_diff([], [], [])
+        self.assertEqual(rc, 0, err)
+        self.assertIn("attributions: []", out)
+        self.assertNotIn("attributions:\n", out)
+        self.assertIn(
+            "counts: {still_green: 0, new_regression: 0, pre_existing: 0, "
+            "fixed: 0, new_test_green: 0, new_test_red: 0, silent_drop: 0, "
+            "baseline_unrunnable: 0}",
+            out,
+        )
+        for key in ("confirmed_product_defect", "silent_drop", "baseline_unrunnable"):
+            self.assertEqual(flag_of(out, key), "false", key)
+
+    # Finding 2 — yaml_str은 \n \r \t를 이스케이프해 한 줄을 유지해야 한다.
+    # 이 세 문자는 splitlines() 기반 입력 파싱(--expected/TSV 둘 다)을 통해서는
+    # 구조적으로 unit 값에 도달할 수 없다(줄 경계 자체이므로 파싱 단계에서
+    # 이미 잘린다) — 그래서 이 테스트는 CLI 왕복이 아니라 순수 함수를 직접
+    # 호출해 이스케이프 로직 자체를 검증한다(디펜스-인-뎁스: 이 스크립트가
+    # 아닌 다른 생산자가 같은 함수를 재사용할 미래를 가정).
+    def test_yaml_str_escapes_control_chars(self):
+        mod = load_module()
+        raw = "a\nb\tc\rd"
+        escaped = mod.yaml_str(raw)
+        # 결과 자체가 물리적으로 한 줄이어야 한다 — 라인-지향 파서(Task 7)가
+        # 값 중간에서 줄이 갈라지면 안 된다.
+        self.assertEqual(len(escaped.splitlines()), 1)
+        self.assertEqual(escaped, '"a\\nb\\tc\\rd"')
+        # 왕복: 이스케이프를 손으로 되돌리면 원본과 같아야 한다.
+        body = escaped[1:-1]
+        roundtrip = (
+            body.replace("\\t", "\t")
+            .replace("\\r", "\r")
+            .replace("\\n", "\n")
+            .replace('\\"', '"')
+            .replace("\\\\", "\\")
+        )
+        self.assertEqual(roundtrip, raw)
+
+    # Finding 3a — 한쪽만 빠진 행(baseline에만 없음)도 SILENT_DROP이어야 한다.
+    # 기존 test_symmetric_omission_is_caught은 양쪽 다 없는 경우만 본다.
+    def test_one_sided_missing_row_baseline_only(self):
+        rc, out, _ = run_diff(["a"], [], [("a", "pass", "0")])
+        self.assertEqual(rc, 0)
+        self.assertEqual(verdict_of(out, "a"), "SILENT_DROP")
+
+    # Finding 3a(2) — head에만 없는 반대 방향.
+    def test_one_sided_missing_row_head_only(self):
+        rc, out, _ = run_diff(["a"], [("a", "pass", "0")], [])
+        self.assertEqual(rc, 0)
+        self.assertEqual(verdict_of(out, "a"), "SILENT_DROP")
+
+    # Finding 3b — read_text_or_fail4는 baseline/head/expected 셋이 공유하는
+    # 헬퍼다. 기존 케이스는 --baseline 부재만 봤다 — 나머지 둘도 같은 계약을
+    # 지키는지 개별 확인(미래 리팩터가 한쪽만 특별취급해도 안 새게).
+    def test_missing_head_file_is_exit_4(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d)
+            (p / "e.txt").write_text("a\n", encoding="utf-8")
+            (p / "b.tsv").write_text("a\tpass\t0\n", encoding="utf-8")
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT),
+                 "--expected", str(p / "e.txt"),
+                 "--baseline", str(p / "b.tsv"),
+                 "--head", str(p / "missing.tsv"),
+                 "--granularity", "file", "--runner", "pytest"],
+                capture_output=True, text=True,
+            )
+        self.assertEqual(r.returncode, 4)
+        self.assertEqual(r.stdout.strip(), "")
+
+    def test_missing_expected_file_is_exit_4(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d)
+            (p / "b.tsv").write_text("a\tpass\t0\n", encoding="utf-8")
+            (p / "h.tsv").write_text("a\tpass\t0\n", encoding="utf-8")
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT),
+                 "--expected", str(p / "missing.txt"),
+                 "--baseline", str(p / "b.tsv"),
                  "--head", str(p / "h.tsv"),
                  "--granularity", "file", "--runner", "pytest"],
                 capture_output=True, text=True,

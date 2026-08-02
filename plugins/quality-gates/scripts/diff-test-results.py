@@ -79,7 +79,18 @@ def read_results(path: str, label: str) -> dict[str, tuple[str, str]]:
 
 
 def yaml_str(s: str) -> str:
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    # 백슬래시 → 따옴표 → 제어문자(\n \r \t) 순. 백슬래시를 먼저 두 배로 만들지
+    # 않으면 이후 단계가 삽입하는 백슬래시가 다시 이스케이프돼 이중으로 샌다.
+    # \n/\r을 놔두면 라인-지향 파서(Task 7의 aggregate — hand-rolled, per-line
+    # 정규식 매치)가 값 중간에서 줄이 갈라져 귀속을 오염시킨다.
+    escaped = (
+        s.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
+    return '"' + escaped + '"'
 
 
 def per_adapter(args: argparse.Namespace) -> int:
@@ -119,11 +130,19 @@ def per_adapter(args: argparse.Namespace) -> int:
         args.granularity == "bulk" and counts["pre_existing"] > 0
     )
 
-    out = [f"runner: {args.runner}", "attributions:"]
-    for unit, verdict, note in attributions:
-        out.append(f"  - unit: {yaml_str(unit)}")
-        out.append(f"    verdict: {verdict}")
-        out.append(f"    note: {yaml_str(note)}")
+    out = [f"runner: {args.runner}"]
+    if attributions:
+        out.append("attributions:")
+        for unit, verdict, note in attributions:
+            out.append(f"  - unit: {yaml_str(unit)}")
+            out.append(f"    verdict: {verdict}")
+            out.append(f"    note: {yaml_str(note)}")
+    else:
+        # 빈 목록을 bare `attributions:`로 내면 YAML에서 null로 파싱된다 —
+        # `for a in doc["attributions"]:`가 TypeError로 죽는다. 영향분 0개는
+        # 실제 케이스(테스트-무관 변경)이고 Task 7이 이 출력을 소비하므로
+        # 명시적으로 빈 flow-sequence를 낸다.
+        out.append("attributions: []")
     out.append(f"attribution_status: {'degraded' if degraded else 'closed'}")
     # counts는 flow-mapping(한 줄)으로 emit한다 — 블록 스타일(키 한 줄씩)로 쓰면
     # `silent_drop`/`baseline_unrunnable`이 카운트 키와 verdict_input 플래그 키에서
