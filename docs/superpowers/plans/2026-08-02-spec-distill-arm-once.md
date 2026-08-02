@@ -18,7 +18,7 @@
 - **Python 테스트 실행**: `python3 -m unittest` 로만 (`pytest` 금지).
 - **베이스라인 red 2건** (회귀로 오인 금지):
   - `tests/test_stale_terms.sh` — Task 1이 고치는 F0.
-  - `tests/test_hook_output_schema.py::TestSessionIdResolution::test_python_and_bash_resolvers_agree` — 워크트리 환경 의존(python은 main repo `.claude/`, bash는 워크트리 `.claude/`로 해석). 이 계획은 건드리지 않는다.
+  - `tests/test_hook_output_schema.py::TestCrossResolverAdvisory::test_python_and_bash_resolvers_agree` — 워크트리 환경 의존(python은 main repo `.claude/`, bash는 워크트리 `.claude/`로 해석). 이 계획은 건드리지 않는다. (초안은 클래스명을 `TestSessionIdResolution`으로 잘못 적었다 — 실제 정의는 `tests/test_hook_output_schema.py:503`. 잘못된 이름으로 grep하면 "알려진 red가 존재하지 않는다"는 오판이 나오고, 진짜 red를 회귀로 오인하게 된다.)
 - **다중-dispatch 테스트 픽스처는 반드시 `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0`** (§10 lock — 계획 재량 아님). `review-dispatch.py`의 30초 redispatch TTL 가드가 원장 게이트 없이도 두 번째 emit을 막아버려, 이걸 빼면 "원장 게이트 제거 → RED" mutation 주장이 성립하지 않고 락이 이빨을 잃는다.
 - **모든 신규 회귀 락은 mutation으로 이빨을 증명**하고 결과를 커밋 메시지에 남긴다. 통과가 정답인 assert는 모양만으로 판별할 수 없다.
 - **커밋 메시지**는 Conventional Commits + 아래 trailer로 끝난다:
