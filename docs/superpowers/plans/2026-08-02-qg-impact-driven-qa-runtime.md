@@ -26,8 +26,23 @@
 - **버전**: `.claude-plugin/plugin.json`을 `2.14.3` → `3.0.0`으로 major bump (AC29). 테스트는 major digit만 핀하고 patch digit은 unpin한다(리터럴 `"version": "3.0.0"` 핀 금지 — doc-only bump마다 stale-red).
 - **문서 언어**: CHANGELOG/README는 Korean-primary (`scripts/check-changelog-korean-primary.py`가 검사).
 - **커밋**: Conventional Commits, scope는 `quality-gates`. 예: `feat(quality-gates): resolve-baseline.sh — 공유 baseline resolution`.
-- **테스트 실행 위치**: 리포 루트. bash는 `bash plugins/quality-gates/tests/<name>.sh`, python은 `python3 plugins/quality-gates/tests/<name>.py` (직접 실행 — `unittest discover -t .`는 import 경로가 깨져 전부 빨개진다).
-- **기존 red 베이스라인** (2026-08-02 측정, 이 브랜치 HEAD `051352f`): bash 78개 중 **6개 red**, python 17개 중 **0개 red**. red 6종:
+- **테스트 실행 위치**: 리포 루트.
+  - bash: `bash plugins/quality-gates/tests/<name>.sh`
+  - python: **`python3 -m pytest plugins/quality-gates/tests/test_*.py -q`** (전체 91 tests).
+    개별 파일은 `python3 -m pytest plugins/quality-gates/tests/<name>.py -q`.
+
+  > **`python3 <file>.py` 직접 실행 금지 — fail-open이다.** 이 디렉토리의 17개 파일 중
+  > **6개**(`test_adversarial_behavior` · `test_agent_stub_harness` · `test_hook_cwd_contract` ·
+  > `test_runtime_verifier_behavior` · `test_security_reviewer_behavior` ·
+  > `test_test_scope_validator_behavior`)는 pytest 스타일 bare 함수라 `unittest.TestCase`가
+  > 없다. 직접 실행하면 **0개 테스트를 돌리고 exit 0**을 낸다(5개는 `__main__` 가드조차 없다).
+  > `python3 -m unittest`도 같은 이유로 이 6개에서 0개를 수집한다. 두 방법 다 **29개 테스트를
+  > 안 돌리고 "통과"라고 보고**한다 — 이 설계가 러너 감지에서 막으려는 바로 그 누락 방향 실패를
+  > 검증 하니스 자신이 저지르는 것이다. `-q` 출력의 **총계 숫자**를 매번 확인할 것.
+  >
+  > `python3 -m pytest plugins/quality-gates/tests/`(디렉토리 통째)도 금지 — `tests/fixtures/`
+  > 아래 픽스처 테스트를 수집해 collection error 3건으로 죽는다. 반드시 `test_*.py` glob.
+- **기존 red 베이스라인** (2026-08-02 재측정): bash 78개 중 **6개 red**, python **91 tests 전부 green**. red 6종:
   `test_codex_backward_compat.sh` · `test_codex_reviewer_frontmatter.sh` · `test_consent_marker_write_failure.sh` · `test_sandbox_enforced.sh` · `test_security_reviewer_kill_switch.sh` · `test_skill_codex_skip_prose.sh`.
   **이 6개는 이 작업 이전부터 빨갛다.** 여기에 7번째를 추가하면 그것은 회귀다. 매 task 종료 시 이 목록과 대조한다.
 - **락에는 이빨이 있어야 한다**: grep 기반 회귀 락을 추가할 때는 (a) 헤딩이 아니라 **본문에만** 존재하는 문구를 쓰고, (b) 그 문구를 지운 mutation이 실제로 RED가 되는지 손으로 확인한 뒤 되돌린다. 통과하는 assert는 모양만으로 이빨을 증명하지 못한다.
