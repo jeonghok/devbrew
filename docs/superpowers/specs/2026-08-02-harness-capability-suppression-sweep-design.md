@@ -20,6 +20,7 @@ devbrew의 모든 컨텍스트 표면에서 하니스가 모델(Claude·codex)�
 - [9. Verification Plan](#9-verification-plan)
 - [10. Rejected Alternatives](#10-rejected-alternatives)
 - [11. 이 사이클에서 제외 — 별건 목록](#11-이-사이클에서-제외--별건-목록)
+- [Handoff Context](#handoff-context)
 - [12. Metadata](#12-metadata)
 
 ---
@@ -63,15 +64,25 @@ default다"* 를 load-bearing 판정 없이 규약화한다. 이 작업은 **새
 
 ## 2. Goals
 
-1. `plugins/*`의 모든 `model:` 리터럴 핀을 `model: inherit`으로 정규화하고, 그 핀을 강제하던 테스트
-   락을 **양방향 락으로 반전**한다.
-2. codex 호출에서 능력 상한(`model_reasoning_effort`)을 제거하되 보안 플래그(`-s read-only`, `-C`)와
-   파싱 계약(`--json`)은 보존한다.
-3. 조사가 본질인 역할의 도구 결핍(WebSearch 부재 비대칭)을 해소한다.
-4. 단일 호출에 씌운 횟수 상한과 탐색 폭을 좁히는 프롬프트 문구를 제거한다.
-5. `CLAUDE.md`·philosophy의 규약화된 억제를 **P8 쪽으로 정렬**한다 (새 P# 추가 없이).
-6. 억제를 지시하는 메모리를 수정하고, 과거 기록에는 정정을 append한다.
-7. 재도입을 막는 회귀 락을 mutation으로 이빨을 증명해 남긴다.
+각 goal은 **기계적 판별 질의**를 갖는다. 질의가 없으면 완료 여부가 census가 미리 고른 목록과
+독립적으로 측정되지 않는다 — 그러면 "다 했다"는 주장이 곧 "내가 고른 것만 했다"가 된다.
+질의에 매칭되는 항목은 **전부 변경되거나, load-bearing으로 문서에 명시 정당화**돼야 한다 (AC13).
+
+| # | Goal | 판별 질의 (repo 전역) |
+|---|---|---|
+| 1 | `model:` 리터럴 핀을 `inherit`으로 정규화하고, 그 핀을 강제하던 테스트 락을 **양방향으로 반전** | `grep -rn '^model:' plugins/ \| grep -v inherit` 그리고 `grep -rln 'model: *\(opus\|sonnet\|haiku\)' plugins/*/tests/` |
+| 2 | codex 호출의 능력 상한 제거, 보안 플래그(`-s read-only`·`-C`)와 파싱 계약(`--json`)은 보존 | `grep -rn 'model_reasoning_effort\|codex exec' plugins/*/scripts/` |
+| 3 | 조사가 본질인 역할의 도구 결핍 해소 | `plugins/*/agents/*.md` 중 본문이 web 근거·prior-art·landscape·CVE 조회를 **요구**하면서 `tools:`에 `WebSearch`가 없는 것. `WebFetch`만 있고 `WebSearch`가 없는 비대칭은 자동 후보 |
+| 4 | 단일 호출 횟수 상한과 탐색 폭을 좁히는 문구 제거 | `grep -rnE '최대 [0-9]+회\|[0-9]+회까지\|[0-9]–[0-9]회\|max_[a-z_]+ *= *[0-9]\|병렬.{0,6}금지\|only\b.*categories' plugins/*/agents/ plugins/*/scripts/ plugins/*/skills/` (spec-distill E10 락의 패턴을 확장) |
+| 5 | `CLAUDE.md`·philosophy의 규약화된 억제를 **P8 쪽으로 정렬** (새 P# 추가 없이) | `CLAUDE.md`·`docs/philosophy/*.md`·`docs/plugin-authoring.md`에서 숫자 임계·기본값 편향·필수 예산을 규정한 문장 전수 |
+| 6 | 억제를 지시하는 메모리 수정, 과거 기록에는 정정 append | memory dir 전수 중 `type: feedback`이면서 모델·도구·탐색 폭을 **줄이라고 지시**하는 것 |
+| 7 | 재도입을 막는 회귀 락을 **mutation으로 이빨을 증명**해 남김 | 각 신규/수정 락에 대해 억제를 되돌리는 mutation이 RED를 만드는지 |
+
+**질의의 한계를 명시한다** (이 sweep의 판별식을 자기 자신에게 적용): goal 3·5·6의 질의는 어휘가
+아니라 판단을 요구하므로 완전 기계화가 불가능하다. 따라서 이 세 항목은 **census 원장
+(`docs/audits/`에 보존)을 근거 목록으로 삼고, 후속 세션이 재현할 수 있도록 census 방법을 §5.2에
+기록**한다. 이것은 결함이 아니라 명시된 한계다 — `check_brief.py`의 `evidence: S<N>` 앵커가
+존재만 검사하고 그 한계를 spec에 적어 별도 수동 검증으로 분리한 것과 같은 처리다.
 
 ## 3. Non-goals
 
@@ -158,11 +169,37 @@ reference 구현은 `plugins/plugin-audit/agents/*.md` 3개 — `model: inherit`
 - `blind-spot-prober`·`steelman-builder`의 *"1–2회"* 상한과 *"병렬·투기적 금지"* 삭제
 - `test-scope-validator:39`의 허용 컨텍스트 열거에 `spec_path` 추가 — 현재 :46이 spec을 *"PRIMARY
   reference axis"*로 선언하는데 :39의 허용 목록에서 빠져 있어 **자기모순**이다
-- `build_spec_codex_prompt.py`의 *"SIX judgment categories only"* 를 개방 (스키마는 유지하되 범주 추가)
-- **`web_budget.py` 제거** + 호출부(`conducting-interview/SKILL.md`) + 락 + 문서 정리.
-  근거: 인터뷰 루프의 상한은 `probe_budget.py`(12 + raise-cap escape hatch)가 이미 담당하므로
-  web 상한은 중복이고, 실질 효과는 인터뷰의 핵심 값인 landscape 조사 깊이를 깎는 것뿐이었다.
-- `adversarial.md:149` — 신규 발견의 finding 승격 허용, `source: adversarial`로 출처 구분 (C3)
+- `build_spec_codex_prompt.py`의 *"SIX judgment categories only"* 를 개방한다. **범주 계약을
+  명시한다**: 기존 6개는 그대로 두고 `other`를 추가하며, `other`를 쓸 때는 `summary`가 스스로
+  설명하도록 요구한다. 하류 소비자는 이미 이 확장을 견딘다 — `merge_review.py`는 codex의
+  `category`를 **닫힌 열거로 필터하지 않고 자유 문자열로 통과**시키고(BUDGET 축 census가 확인),
+  `compute_issue_id.py`는 category를 id 해시 입력으로만 쓴다. 따라서 파서 변경은 불필요하고,
+  회귀 락이 "6개로 닫혀 있지 않음 + 미지 범주가 drop되지 않음"을 assert한다 (AC16).
+- **`web_budget.py`의 상한 제거** — **소비자가 둘이므로 단순 삭제가 아니다** (round-1 리뷰 적발):
+
+  | 소비자 | 계측 단위 | `probe_budget.py`가 대체하는가 |
+  |---|---|---|
+  | `conducting-interview/SKILL.md:289,299` | 웹 호출 단위 | **예** — probe 12 + `raise-cap` escape hatch |
+  | `reviewing-brief/SKILL.md:174,189` | **dispatch 단위** | **아니오** — `probe_budget.py`는 conducting-interview에서만 참조된다 |
+
+  두 번째 소비자는 `brief-direction-reviewer`가 `Bash`를 갖지 않아(Law 2) orchestrator가 대신
+  재는 구조다. 그리고 kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB`이 `web_budget.py:91,134`
+  **내부에** 구현돼 있다. 따라서 조치는:
+  1. `SWEEP_CAP`·`SESSION_CAP`과 그에 기반한 **게이트(exit 1) 제거** — 상한이 사라진다.
+  2. **kill switch는 두 소비자 각각의 인라인 env 체크로 이전**한다 (`check_brief.py:71`이 이미
+     쓰는 패턴). 보안 컨트롤이 스크립트와 함께 사라지면 안 된다 (C1).
+  3. 상한이 없어지면 `reviewing-brief`의 *"예산 소진 시 웹 없이 판정"* degrade 분기는 **도달
+     불가**가 되므로 그 분기와 그것을 잠그는 `test_reviewing_brief_skill.sh:206-207`(T21)을
+     함께 정리하고, 새 락이 *"상한 게이트 부재 + kill switch 동작"* 을 assert하게 바꾼다.
+  4. 스크립트는 카운터·게이트가 모두 사라지면 남는 책임이 없으므로 삭제한다.
+- **`adversarial.md`의 신규 발견 승격** (C3) — `:149`만 고치면 persona가 자기모순이 된다.
+  같은 선언이 **네 곳**에 있다: `:3`(description) · `:12`("single model-based judgment gate") ·
+  `:22`("You are NOT responsible for: producing new findings of your own") · `:149`.
+  네 곳을 함께 고치고, 승격된 발견은 `source: adversarial`로 출처를 구분한다.
+- **`parse_spec_structure.py:162`의 단어경계 없는 매칭** (round-1 리뷰가 §11에서 끌어올림) —
+  `re.escape(phrase)`를 단어경계로 감싸 정상 기술 용어 안의 부분문자열에서 발화하지 않게 한다.
+  이것은 fail-open(검사가 약함)이 아니라 **과잉 차단**이고, 이 sweep의 판별식이 정확히 겨냥하는
+  능력 억제다 — §11 표를 쓰는 동안 실제로 write를 exit 2로 막았다.
 
 ### S4 — 규약 정렬
 
@@ -174,7 +211,7 @@ reference 구현은 `plugins/plugin-audit/agents/*.md` 3개 — `model: inherit`
 | philosophy `:20` | *"모델 성능이 향상돼도 이 메커니즘은 불변이다"* 를 완화 — 현재 비용 임계치까지 재평가 불가로 선언해 **이 sweep 자체를 규칙 위반으로 읽게 만든다** |
 | philosophy `:43` | trivia escape의 *single-file* 제약 완화 — 두 파일 이상의 한 줄 변경(오타 3곳, symbol rename)에 full 게이트를 강제해 스스로 금지한 trivia ceremony를 요구한다 |
 | `docs/plugin-authoring.md` | `model: inherit` 규약을 명시 — 신규 플러그인이 reference 구현의 리터럴 핀을 복제하는 것을 차단 |
-| project-init 템플릿 | rebase 조항을 *"공유된 브랜치를 rebase하지 않는다"* 로 완화 (C3). 리포 루트 `docs/git-workflow/`는 사용자 선호로 **유지** |
+| project-init 템플릿 **2개** | rebase 조항을 *"공유된 브랜치를 rebase하지 않는다"* 로 완화 (C3). **동일 문구가 `templates/github-flow/branch-strategy.md:63`과 `templates/git-flow/branch-strategy.md:99` 양쪽에 있다** — 한쪽만 고치면 억제가 다른 variant로 살아남는다 (round-1 리뷰 적발). 리포 루트 `docs/git-workflow/branch-strategy.md:63`은 사용자 본인 선호이므로 **유지** |
 
 ### S5 — 메모리 + 과거 기록
 
@@ -197,15 +234,41 @@ reference 구현은 `plugins/plugin-audit/agents/*.md` 3개 — `model: inherit`
 - **AC4** `security-reviewer`의 `tools:` 는 변경되지 않는다 (`Read, Grep, Glob`).
 - **AC5** `blind-spot-prober`·`steelman-builder` 본문에 검색 횟수 상한 표현과 병렬 금지 문구가 없다.
 - **AC6** `test-scope-validator:39`의 허용 열거에 `spec_path`가 포함된다.
-- **AC7** `web_budget.py`가 삭제되고, 이를 호출하던 지점과 테스트가 함께 정리되며,
-  `DEVBREW_SPEC_DISTILL_DISABLE_WEB` kill switch는 계속 동작한다.
-- **AC8** `CLAUDE.md`·philosophy에 `N ≥ 5`·`single-agent를 default`·`wall-clock` 문구가 없고,
-  `cost_class: high` 승인 게이트 문장은 남아 있다.
+- **AC7** `web_budget.py`가 삭제되고 **두 소비자 모두**에서 상한 게이트가 사라진다. 검증은
+  소비자별로 분리한다 — 하나가 다른 하나를 대신 green으로 만들지 못하게:
+  - **AC7a** `grep -rn 'web_budget' plugins/` 이 0건 (production 경로. CHANGELOG의 이력 언급은 제외).
+  - **AC7b** `conducting-interview/SKILL.md`에 `DEVBREW_SPEC_DISTILL_DISABLE_WEB` 인라인 체크가
+    존재하고, 그 값이 `1`일 때 웹 경로를 타지 않음을 테스트가 확인한다.
+  - **AC7c** `reviewing-brief/SKILL.md`에 대해 AC7b와 **같은 검증을 독립적으로** 수행한다.
+    (round-1 리뷰: 이 분리가 없으면 AC7은 `check_brief.py`의 별도 경로만으로 green이 되는
+    green-expected AC다.)
+  - **AC7d** `test_reviewing_brief_skill.sh`의 T21이 *"`web_budget.py` 호출 실재"* 대신
+    *"상한 게이트 부재 + kill switch 동작"* 을 assert하도록 교체되고, mutation(상한 재도입)이 RED.
+- **AC8** S4 표의 **7행 전부**가 기계 검증된다 — 3행만 덮는 AC는 나머지 4행을 조용히 통과시킨다:
+  - **AC8a** `CLAUDE.md`·philosophy에 `N ≥ 5`·`single-agent를 default`·`wall-clock` 문구 부재,
+    `cost_class: high` 승인 게이트 문장은 존속.
+  - **AC8b** philosophy `:20`의 *"모델 성능이 향상돼도 이 메커니즘은 불변이다"* 가 완화돼,
+    비용 임계치가 재평가 대상임이 문장으로 확인된다.
+  - **AC8c** philosophy `:43`의 trivia escape에 *single-file* 제약이 없다.
+  - **AC8d** `docs/plugin-authoring.md`에 agent `model: inherit` 규약 문장이 존재한다.
+  - **AC8e** `templates/github-flow/branch-strategy.md`와 `templates/git-flow/branch-strategy.md`
+    **둘 다** 무조건 rebase 금지 문구가 없고, 리포 루트 `docs/git-workflow/branch-strategy.md`는
+    **변경되지 않는다**(사용자 선호 보존 — 양방향 assert).
 - **AC9** 모든 회귀 락이 **양방향**이고, 각 락에 대해 mutation(핀 재도입)이 RED를 만든다.
 - **AC10** 변경 후 테스트 스위트의 red가 baseline 6건을 초과하지 않는다.
 - **AC11** dispatch 실측으로 (a) `inherit` 에이전트가 세션 모델을 상속하고, (b) `spec-reviewer`가
   `WebSearch`를 실제로 호출할 수 있음을 **트랜스크립트로** 확인한다 (자기보고 불가).
 - **AC12** 각 플러그인의 `plugin.json` version bump + `CHANGELOG.md` 항목이 같은 커밋에 있다.
+- **AC13** §2의 각 판별 질의를 변경 후 실행했을 때, 매칭되는 항목은 **전부** 변경됐거나 이 문서에
+  load-bearing으로 명시 정당화돼 있다. 잔여 매칭이 있는데 정당화가 없으면 sweep은 미완이다.
+- **AC14** `adversarial.md`의 *"신규 발견 금지"* 선언이 `:3`·`:12`·`:22`·`:149` **네 곳 모두**에서
+  해소되고, 승격된 발견은 `source: adversarial`로 구분된다. 한 곳이라도 남으면 persona 자기모순.
+- **AC15** `parse_spec_structure.py`의 ambiguity 매칭이 단어경계를 갖는다 — 정상 기술 용어
+  (`~fast`-forward, `in`+`~efficient`)가 hit되지 않고, blacklist의 온전한 단어는 계속 hit된다
+  (양방향 assert: 완화가 검사를 무력화하지 않았음도 확인). **이 AC를 쓰는 동안 이 검사가 세 번째로
+  발화해 write를 막았다** — 두 예시에 붙은 `~`는 검사기 자신의 opt-out 마커다.
+- **AC16** `build_spec_codex_prompt.py`의 범주가 6개로 닫혀 있지 않고, 미지 범주를 담은 codex
+  출력이 `merge_review.py`를 통과할 때 drop되지 않는다.
 
 ## 8. Files to Modify
 
@@ -213,16 +276,19 @@ reference 구현은 `plugins/plugin-audit/agents/*.md` 3개 — `model: inherit`
 `spec-distill/agents/{blind-spot-prober,steelman-builder,coverage-mapper,spec-reviewer}.md`
 (+ `security-reviewer.md`는 :38 문구만)
 
-**scripts (5)** — `quality-gates/scripts/{run_codex_reviewer.sh,run_artifact_codex_reviewer.sh}` ·
-`spec-distill/scripts/{run_spec_codex_reviewer.sh,build_spec_codex_prompt.py}` ·
+**scripts (6)** — `quality-gates/scripts/{run_codex_reviewer.sh,run_artifact_codex_reviewer.sh}` ·
+`spec-distill/scripts/{run_spec_codex_reviewer.sh,build_spec_codex_prompt.py,parse_spec_structure.py}` ·
 `spec-distill/scripts/web_budget.py` (삭제)
 
-**skills / commands (4)** — `spec-distill/skills/conducting-interview/SKILL.md` ·
+**skills / commands (5)** — `spec-distill/skills/conducting-interview/SKILL.md` ·
+**`spec-distill/skills/reviewing-brief/SKILL.md`** (web_budget 두 번째 소비자 — round-1 리뷰 적발) ·
 `quality-gates/skills/publishing-pr-understanding/SKILL.md` ·
 `quality-gates/skills/quality-pipeline/references/{dependency-check,state-file-format}.md`
 
-**tests (8)** — `quality-gates/tests/{test_adversarial_model_consistency,test_adversarial_persona,test_pr_understanding_builder_frontmatter,test_test_scope_validator_frontmatter}.sh` ·
-`spec-distill/tests/{test_spec_reviewer_frontmatter,test_coverage_mapper_frontmatter,test_web_sweep_bound,test_run_spec_codex_reviewer}.sh`
+**tests (11)** — `quality-gates/tests/{test_adversarial_model_consistency,test_adversarial_persona,test_pr_understanding_builder_frontmatter,test_test_scope_validator_frontmatter}.sh` ·
+`spec-distill/tests/{test_spec_reviewer_frontmatter,test_coverage_mapper_frontmatter,test_web_sweep_bound,test_run_spec_codex_reviewer}.sh` ·
+**`spec-distill/tests/{test_reviewing_brief_skill,test_conducting_interview_stage,test_parse_spec_structure}.sh`**
+(앞의 둘은 `web_budget.py` 호출을 잠그고 있어 함께 고치지 않으면 RED)
 
 **docs / 규약 (6)** — `CLAUDE.md` · `docs/philosophy/devbrew-harness-philosophy.md` ·
 `docs/plugin-authoring.md` · `quality-gates/README.md` · `spec-distill/README.md` ·
@@ -265,19 +331,58 @@ reference 구현은 `plugins/plugin-audit/agents/*.md` 3개 — `model: inherit`
 
 ## 11. 이 사이클에서 제외 — 별건 목록
 
-census가 발견했으나 **sweep의 반대 방향**(억제가 아니라 구멍)인 결함들이다. 섞으면 리뷰가 흐려지므로
-분리한다. 별도 사이클에서 다룬다.
+census가 발견했으나 **sweep의 반대 방향**(억제가 아니라 구멍 — 검사가 너무 *약해서* 틀린 것이
+조용히 통과)인 결함들이다. 섞으면 리뷰가 흐려지므로 분리한다. 별도 사이클에서 다룬다.
+
+> **CHECKS-02는 이 표에서 빠졌다** (round-1 리뷰 적발). `parse_spec_structure.py:162`의 단어경계
+> 없는 매칭은 fail-open이 아니라 **과잉 차단**이므로 방향이 반대이고, 이 sweep의 대상이다 →
+> §6 S3로 이동. 이 표에 남은 항목들은 전부 *"검사가 약해서 틀린 것이 통과"* 형이라 성격이 같다.
 
 | ID | 위치 | 결함 |
 |---|---|---|
 | CHECKS-01 | `spec-distill/scripts/parse_spec_structure.py:45` | 코드 펜스 안에 인용된 헤더 한 줄로 Law 1 구조 게이트가 만족됨 (fail-open) |
-| CHECKS-02 | `parse_spec_structure.py:162` | 단어 경계(`\b`) 없는 부분문자열 매칭 — blacklist 항목이 그것을 포함하는 정상 기술 용어 안에서 발화한다 (git의 `~fast`-forward, 부정 접두사가 붙은 `in`+`~efficient`). **이 표를 처음 쓸 때 실제로 발화해 write가 exit 2로 차단됐다** — 위 두 예시는 검사기 자신의 opt-out 마커 `~`를 붙여야만 기록할 수 있었다 |
 | CHECKS-03 | `plugin-audit/scripts/check-shape-completeness.py:100` | frontmatter가 없는 agent도 본문의 `tools:` 한 줄로 Law 2 검사 통과 |
 | CHECKS-04 | 같은 파일 `:175` | kill switch를 docstring에 **적기만** 한 훅이 통과 |
 | CHECKS-05 | `quality-gates/scripts/check-changelog-korean-primary.py:77` | 얼어붙은 `[1.32.0]` 절만 검사 — 이후 항목에 발화하지 않음 |
 | CHECKS-06 | `quality-gates/scripts/synthesize_findings.py:180` | `--show-low-confidence` 가 리포 어디에도 구현돼 있지 않아 findings가 영구 은닉됨 |
 | CHECKS-07 | 같은 파일 `:70` | 같은 file:line·severity의 서로 다른 지적을 접으며 **허위 귀속** 발생 |
 | SDSKILL-06 | `spec-distill/skills/reviewing-brief/SKILL.md:104` | 리포 밖(마켓플레이스 설치 시) 참조 파일 부재로 brief 리뷰 파이프라인 전체가 degrade |
+
+## Handoff Context
+
+### TL;DR
+
+devbrew 전 표면에서 하니스가 모델 능력을 깎는 지점을 제거한다. 실행자는 §6의 S1→S5를 순서대로,
+각각 독립 커밋으로 진행하면 된다. 가장 중요한 사실 하나: **핀의 실제 이빨은 agent frontmatter가
+아니라 테스트 락**이므로, 락을 함께 반전하지 않으면 스위트가 RED가 되어 변경이 되돌려진다.
+
+### Implicit context (문서에 안 적혀 있으면 실행자가 모를 것들)
+
+- **baseline은 이미 캡처됐다.** `e45619b`에서 bash 128개 중 6 red(전부 quality-gates, pre-existing),
+  python 189+95 green. 이 6건은 내가 만든 것이 아니므로 고치려 들지 말 것. qg는 CI가 없어 main에
+  stale red가 누적돼 있다.
+- **`plugins/spec-distill/tests/`의 python 테스트는 `-m unittest`로만 돈다** (pytest 아님), 그리고
+  테스트는 **repo root에서** 실행해야 경로가 맞는다.
+- **`~/Downloads` 아래라 TCC 권한 회수가 일어나면** `stat`은 되는데 `open`이 실패하며 테스트가
+  대량 실패한다 — 회귀로 오인하지 말 것.
+- **`model: opus` 별칭은 현재 세션 세대를 따라간다.** 그래서 opus 핀 2건은 오늘 손실이 0이다.
+  이 사실을 모르면 "왜 이것도 고치나"라는 리뷰 반론에 답할 수 없다 — 근거는 잠재 상한과
+  `cost_class` 자기모순이지, 측정된 downgrade가 아니다.
+- **spec-distill의 Stop 훅이 모든 `*-design.md` write에 리뷰를 강제한다.** 이 문서를 고치면
+  턴 종료 시 `reviewing-spec`이 다시 요구된다. 정상 동작이다.
+- **`parse_spec_structure.py`의 ambiguity 검사가 이 문서 작성을 세 번 막았다.** S3에서 고치기
+  전까지는 `~` opt-out 마커로 우회해야 한다.
+- **census 원장**은 `$CLAUDE_JOB_DIR/tmp/{census,merged}.json`에 있고, 근거 요약은
+  `$CLAUDE_JOB_DIR/tmp/facts.md`다. 세션이 끝나면 사라지므로, 구현 시작 전에 보존이 필요하면
+  `docs/audits/`로 옮긴다 (Law 3).
+
+### Deferred to plan
+
+- S1~S5 각각의 파일별 편집 순서와 커밋 경계
+- 각 회귀 락의 mutation 시나리오 (무엇을 되돌려 넣어 RED를 확인할지)
+- AC11 dispatch 실측의 구체 절차 — 레지스트리 스냅샷 때문에 세션 재시작이 필요할 수 있다
+- 3개 플러그인을 한 PR로 낼지 플러그인 단위로 쪼갤지 (round-1 리뷰의 advisory)
+- §11 별건 8개를 다룰 후속 사이클의 범위
 
 ## 12. Metadata
 
