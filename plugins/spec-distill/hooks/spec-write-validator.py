@@ -182,8 +182,15 @@ def write_state(session_id: str, path: str, mode: str, worktree_path: str) -> No
         return
     # Matching session_id (or no frontmatter — backward compat per AC8 case iii)
     # — strip pending_review block and append fresh
-    import suppress_state  # pyright: ignore[reportMissingImports]
-    body = suppress_state.strip_pending(body)
+    try:
+        import arm_ledger  # pyright: ignore[reportMissingImports]
+        body = arm_ledger.strip_pending(body)
+    except Exception as exc:  # noqa: BLE001 — graceful degradation
+        print(
+            f"[spec-distill] arm_ledger import failed in write_state "
+            f"(non-fatal, pending_review strip skipped): {exc}",
+            file=sys.stderr,
+        )
     state_file.write_text(body.rstrip() + "\n\n" + block, encoding="utf-8")
 
 
@@ -196,28 +203,37 @@ def emit_block(reasons: list[str]) -> None:
         print(f"[spec-distill] {r}", file=sys.stderr)
 
 
-def emit_suppress_advisory(mode: str, key: str) -> None:
-    """v0.14.0 — suppressed 문서 arm skip advisory. 기존 'Reviewer will be
-    dispatched' 출력을 *교체*(이중 방출 금지, AC18)."""
+ARM_SKIP_REASONS = {
+    "reviewed": "이 세션에서 리뷰가 이미 완료됨 (arm-once)",
+    "capped": (
+        "리뷰가 3회 시도됐으나 verdict 없이 끝나 자동 dispatch를 중단함 (G6 상한) "
+        "— 리뷰가 필요하면 reviewing-spec을 직접 호출하라"
+    ),
+    "born": "git이 아는 문서 — 커밋 이후에는 자동 리뷰가 붙지 않는다",
+    "out-of-scope": "스코프 밖 경로",
+}
+
+
+def emit_arm_skip_advisory(mode: str, key: str, reason: str) -> None:
+    """v0.25.0 — arm-once 게이트가 arm을 건너뛸 때의 advisory.
+
+    기존 'Reviewer will be dispatched' 출력을 *교체*한다(이중 방출 금지). 사유를
+    구분해 표시하는 것이 요건이다 — 'reviewed'와 'capped'는 둘 다 armed_paths에
+    있지만 사용자가 취해야 할 행동이 다르다(전자는 정상, 후자는 수동 호출 필요).
+    """
+    why = ARM_SKIP_REASONS.get(reason, reason)
+    text = f"[spec-distill] {key} arm skipped — {why}."
     print(
         json.dumps({
             "hookSpecificOutput": {
                 "hookEventName": "PostToolUse",
-                "additionalContext": (
-                    f"[spec-distill] {key} review suppressed this session "
-                    "(cancel-review/approved) — arm skipped. "
-                    f"Re-enable: /spec-distill:cancel-review --reset {key}"
-                ),
+                "additionalContext": text,
             },
-            "systemMessage": f"[spec-distill] {mode} arm suppressed for {key}",
+            "systemMessage": f"[spec-distill] {mode} arm skipped ({reason}) for {key}",
         }),
         flush=True,
     )
-    print(
-        f"[spec-distill] {key} review suppressed this session — arm skipped. "
-        f"Re-enable: /spec-distill:cancel-review --reset {key}",
-        file=sys.stderr,
-    )
+    print(text, file=sys.stderr)
 
 
 def main() -> int:
@@ -271,19 +287,22 @@ def main() -> int:
         from state_path import resolve_session_id
         session_id = resolve_session_id(payload)
         if session_id is not None:
-            # v0.14.0 suppression 게이트 — per-doc, session-scoped (Layer 2).
-            # Layer 1 구조 검증은 위에서 이미 실행됨(NG1·AC10): suppressed 문서도
-            # 구조 실패면 exit 2로 차단. 여기 도달 = Layer 1 통과.
+            # v0.25.0 arm-once 게이트 (Layer 2). Layer 1 구조 검증은 위에서 이미
+            # 실행됐다(G2) — arm이 skip돼도 구조 실패는 exit 2로 차단된다.
+            # 판정 실패(모듈 부재·원장 read 실패·git 불능)는 전부 arm 쪽으로
+            # fail-open한다 (Law 1: 과리뷰 > under-review). 원장이 1회로 제한하므로
+            # storm이 되지 않는다.
             try:
-                import suppress_state  # pyright: ignore[reportMissingImports]
-                sfile = suppress_state.state_file_for(session_id)
-                if suppress_state.is_suppressed(sfile, file_path):
-                    key = suppress_state.canonical_key(file_path) or file_path
-                    emit_suppress_advisory(mode, key)
-                    return 0  # arm skip — 기존 advisory 미방출(AC18)
+                import arm_ledger  # pyright: ignore[reportMissingImports]
+                sfile = arm_ledger.state_file_for(session_id)
+                if not arm_ledger.should_arm(sfile, file_path):
+                    key = arm_ledger.canonical_key(file_path) or file_path
+                    emit_arm_skip_advisory(
+                        mode, key, arm_ledger.skip_reason(sfile, file_path))
+                    return 0  # arm skip — 기존 advisory 미방출
             except Exception as exc:  # noqa: BLE001 — graceful degradation
                 print(
-                    f"[spec-distill] suppress check failed "
+                    f"[spec-distill] arm gate failed "
                     f"(non-fatal, arming normally): {exc}",
                     file=sys.stderr,
                 )

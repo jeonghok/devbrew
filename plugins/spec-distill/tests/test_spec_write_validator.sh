@@ -141,54 +141,74 @@ triggered_count=$(grep -c '^  triggered_at:' "$WORK/.claude/spec-distill/test-id
   && note PASS "I1: state file remains idempotent on re-write" \
   || note FAIL "I1: state file has $pending_count pending_review and $triggered_count triggered_at (expected 1 each)"
 
-# Case 12: AC9/AC18 — suppressed doc → arm skip + suppress advisory가 normal advisory 교체
-mkdir -p "$WORK/docs/superpowers/specs" "$WORK/.claude/spec-distill/test-supp"
-cp "$FIX/spec-valid.md" "$WORK/docs/superpowers/specs/2026-05-16-supp-spec.md"
-cat > "$WORK/.claude/spec-distill/test-supp/state.local.md" <<EOF
+# Case 12: arm-once — 원장에 있는 문서 → arm skip + skip advisory가 normal advisory를 교체
+mkdir -p "$WORK/docs/superpowers/specs" "$WORK/.claude/spec-distill/test-armed"
+cp "$FIX/spec-valid.md" "$WORK/docs/superpowers/specs/2026-05-16-armed-spec.md"
+cat > "$WORK/.claude/spec-distill/test-armed/state.local.md" <<EOF
 ---
-session_id: test-supp
+session_id: test-armed
 ---
 
-suppressed_paths:
-  - docs/superpowers/specs/2026-05-16-supp-spec.md
+armed_paths:
+  - docs/superpowers/specs/2026-05-16-armed-spec.md
 EOF
-out=$(run_hook_stdout "$WORK/docs/superpowers/specs/2026-05-16-supp-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-supp")
+out=$(run_hook_stdout "$WORK/docs/superpowers/specs/2026-05-16-armed-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-armed")
 rc=$?
-sf="$WORK/.claude/spec-distill/test-supp/state.local.md"
+sf="$WORK/.claude/spec-distill/test-armed/state.local.md"
 if [[ $rc -eq 0 ]] \
   && ! grep -qE '^pending_review:' "$sf" \
-  && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("suppressed")' >/dev/null \
+  && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("arm skipped")' >/dev/null \
   && ! echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("Reviewer will be dispatched")' >/dev/null; then
-  note PASS "AC9/AC18: suppressed doc → arm skip + suppress advisory (no normal advisory)"
+  note PASS "arm-once: armed doc → arm skip + skip advisory (no normal advisory)"
 else
-  note FAIL "AC9/AC18 failed (rc=$rc out=$out)"
+  note FAIL "arm-once armed-doc case failed (rc=$rc out=$out)"
 fi
 
-# Case 13: AC10 — suppressed doc도 Layer 1 실행 (구조 실패 → exit 2)
-cp "$FIX/spec-missing-goals.md" "$WORK/docs/superpowers/specs/2026-05-16-supp2-spec.md"
-mkdir -p "$WORK/.claude/spec-distill/test-supp2"
-cat > "$WORK/.claude/spec-distill/test-supp2/state.local.md" <<EOF
+# Case 12b: skip 사유 3종 구분 — 원장에 있고 attempts가 남아 있으면 'capped'(G6 상한),
+# 없으면 'reviewed'. 둘 다 armed_paths에 있지만 사용자가 취해야 할 행동이 다르다.
+mkdir -p "$WORK/.claude/spec-distill/test-capped"
+cp "$FIX/spec-valid.md" "$WORK/docs/superpowers/specs/2026-05-16-capped-spec.md"
+cat > "$WORK/.claude/spec-distill/test-capped/state.local.md" <<EOF
 ---
-session_id: test-supp2
+session_id: test-capped
 ---
 
-suppressed_paths:
-  - docs/superpowers/specs/2026-05-16-supp2-spec.md
+armed_paths:
+  - docs/superpowers/specs/2026-05-16-capped-spec.md
+
+dispatch_attempts:
+  docs/superpowers/specs/2026-05-16-capped-spec.md: 3
 EOF
-out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-supp2-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-supp2")
+out=$(run_hook_stdout "$WORK/docs/superpowers/specs/2026-05-16-capped-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-capped")
+echo "$out" | jq -e '.systemMessage | contains("capped")' >/dev/null \
+  && note PASS "arm-once: G6 상한 도달은 'capped'로 구분 표시" \
+  || note FAIL "capped advisory 구분 실패 (out=$out)"
+
+# Case 13: 원장에 있는 문서도 Layer 1은 그대로 실행 (구조 실패 → exit 2) — G2
+cp "$FIX/spec-missing-goals.md" "$WORK/docs/superpowers/specs/2026-05-16-armed2-spec.md"
+mkdir -p "$WORK/.claude/spec-distill/test-armed2"
+cat > "$WORK/.claude/spec-distill/test-armed2/state.local.md" <<EOF
+---
+session_id: test-armed2
+---
+
+armed_paths:
+  - docs/superpowers/specs/2026-05-16-armed2-spec.md
+EOF
+out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-armed2-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-armed2")
 rc=$?
 [[ $rc -eq 2 ]] && echo "$out" | grep -qE "missing sections:" \
-  && note PASS "AC10: suppressed doc still subject to Layer 1 (exit 2)" \
-  || note FAIL "AC10 failed (rc=$rc out=$out)"
+  && note PASS "G2: armed doc still subject to Layer 1 (exit 2)" \
+  || note FAIL "G2 failed (rc=$rc out=$out)"
 
-# Case 14: AC11 — 다른 비-suppressed 문서 write_state가 suppressed_paths 보존
+# Case 14: 다른 비-armed 문서의 write_state가 armed_paths를 보존 (multi-key)
 mkdir -p "$WORK/.claude/spec-distill/test-pres"
 cat > "$WORK/.claude/spec-distill/test-pres/state.local.md" <<EOF
 ---
 session_id: test-pres
 ---
 
-suppressed_paths:
+armed_paths:
   - docs/superpowers/specs/2026-05-16-docA-design.md
 EOF
 cp "$FIX/spec-valid.md" "$WORK/docs/superpowers/specs/2026-05-16-docB-spec.md"
@@ -196,9 +216,9 @@ run_hook "$WORK/docs/superpowers/specs/2026-05-16-docB-spec.md" "DEVBREW_SPEC_DI
 sf="$WORK/.claude/spec-distill/test-pres/state.local.md"
 if grep -q "  - docs/superpowers/specs/2026-05-16-docA-design.md" "$sf" \
    && grep -qE '^pending_review:' "$sf"; then
-  note PASS "AC11: suppressed_paths preserved across other-doc write_state"
+  note PASS "multi-key: armed_paths preserved across other-doc write_state"
 else
-  note FAIL "AC11 failed ($(cat "$sf"))"
+  note FAIL "multi-key preservation failed ($(cat "$sf"))"
 fi
 
 echo ""
