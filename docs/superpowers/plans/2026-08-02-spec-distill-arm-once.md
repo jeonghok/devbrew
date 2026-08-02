@@ -1695,15 +1695,22 @@ new_doc() {  # $1 = WORK 기준 상대 경로
 edit_doc() { printf '\n<!-- edit %s -->\n' "$2" >> "$WORK/$1"; }
 
 # stdout만 (advisory JSON 검사용)
-run_validator() {  # $1=rel $2=sid [$3=extra env]
+# $3(추가 env)는 **배열로 감싼다**. unquoted ${3:-} 는 값에 공백이 있으면 word-split 되어
+# env 가 KEY=VALUE 하나가 아니라 여러 인자로 오인한다 — 이 기계의 $PATH 에 공백 섞인
+# 시스템 경로가 있어 T3 이 실제로 `env: ...: No such file or directory` 로 깨졌다.
+# bash 3.2(macOS 기본)는 set -u 아래 빈 배열 "${extra[@]}" 확장에서 죽으므로
+# ${extra[@]+"${extra[@]}"} 로 우회한다(비어 있으면 통째로 사라진다).
+run_validator() {  # $1=rel $2=sid [$3=extra env — 단일 KEY=VALUE 토큰]
   local payload; payload=$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$WORK/$1")
-  ( cd "$WORK" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$2" ${3:-} \
+  local extra=(); [[ -n "${3:-}" ]] && extra=("$3")
+  ( cd "$WORK" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$2" ${extra[@]+"${extra[@]}"} \
       bash -c "echo '$payload' | python3 '$VALIDATOR'" 2>/dev/null )
 }
 # stdout+stderr 합본 (loud degradation 검사용)
-run_validator_all() {  # $1=rel $2=sid [$3=extra env]
+run_validator_all() {  # $1=rel $2=sid [$3=extra env — 단일 KEY=VALUE 토큰]
   local payload; payload=$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$WORK/$1")
-  ( cd "$WORK" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$2" ${3:-} \
+  local extra=(); [[ -n "${3:-}" ]] && extra=("$3")
+  ( cd "$WORK" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$2" ${extra[@]+"${extra[@]}"} \
       bash -c "echo '$payload' | python3 '$VALIDATOR'" 2>&1 )
 }
 run_stop() {  # $1=sid
@@ -1725,6 +1732,14 @@ arm_summary() {
   [[ $fail -eq 0 ]]
 }
 ```
+
+> **모든 픽스처 세션 id 는 8자 이상이어야 한다 (Task 7 실행 중 발견).** `hooks/state_path.py:21`
+> 의 `SESSION_PATTERN = ^[A-Za-z0-9_-]{8,}$` 가 짧은 id 를 거부하고, 거부되면 validator 의
+> **Layer 2 블록 전체가 건너뛰어진다** — pending 도 안 생기고 arm 게이트도 조회되지 않으며,
+> 훅은 평범한 "structural OK" advisory 로 끝난다. 초안은 `t2-born`(7자)·`t9-cap`(6자)을 썼다.
+> 실측 결과 T2 는 **공허하게 통과한 것이 아니라 즉시 RED** 였다(세 번째 AND 절인 advisory
+> 문구 검사가 실패). 즉 이 버그의 실제 위험은 "보이지 않는 통과"가 아니라 "엉뚱한 이유의
+> 실패"이고, 그 상태로 mutation 을 돌리면 **락이 무엇을 재는지 오독**하게 된다.
 
 - [ ] **Step 1b: 테스트 파일 작성 — `tests/test_arm_once.sh`**
 
@@ -1759,7 +1774,7 @@ else
 fi
 
 # --- T2: git이 아는 문서는 armed_paths가 비어 있어도 arm 하지 않는다 ---
-SID2=t2-born
+SID2=t2-borned
 REL2="docs/superpowers/specs/2026-08-01-t2-design.md"
 new_doc "$REL2"
 ( cd "$WORK" && git add "$REL2" && git commit -q -m born ) || exit 1
@@ -2008,7 +2023,7 @@ fi
 # --- T9: G6 상한 (§5.2 상태기계) ---
 # 3회차가 마지막 자동 dispatch이고 그 emit이 상한을 알리는 vehicle이다.
 # "4회차가 억제된다"가 아니다 — 이후 편집은 validator 층에서 pending 자체가 안 생긴다.
-SID9=t9-cap
+SID9=t9-capped
 REL9="docs/superpowers/specs/2026-08-01-t9-design.md"
 new_doc "$REL9"
 e1=""; e2=""; e3=""
