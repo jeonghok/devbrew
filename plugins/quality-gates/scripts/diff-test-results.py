@@ -235,6 +235,12 @@ def _aggregate(args: argparse.Namespace) -> int:
             combined[key] = combined[key] or flags[key]
         degraded = degraded or status == "degraded"
 
+    # runner 이름은 여기서도, per_adapter()의 `runner: {args.runner}`에서도
+    # yaml_str()로 따옴표 처리하지 않는다 — parse_adapter_yaml()의 `^runner: (\S+)$`
+    # 가 공백 없는 토큰만 받아들이고, runner는 자유 입력이 아니라 §5.9의 닫힌
+    # 8-어댑터 표에서만 오는 값이라 `]`/`,`/`{`/`}` 같이 이 파일의 손-롤 flow
+    # 문법을 깨는 문자가 들어올 경로가 없다. 자유 입력(unit 이름 등)은 yaml_str로
+    # 이스케이프한다 — 이 둘을 섞으면 안 된다.
     out = [f"adapters: [{', '.join(adapters)}]", "verdict_input:"]
     for key in ("confirmed_product_defect", "silent_drop", "baseline_unrunnable"):
         out.append(f"  {key}: {'true' if combined[key] else 'false'}")

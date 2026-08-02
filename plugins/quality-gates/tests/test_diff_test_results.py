@@ -446,6 +446,85 @@ class TestAggregate(unittest.TestCase):
             )
         self.assertEqual(r.returncode, 2)
 
+    # 리뷰 Finding 2 — `--expected-adapters 0`에 입력 파일 0개는 legal한 경계로
+    # 명시 취급한다(설계·brief 둘 다 이 경계를 언급하지 않는다). exit 0, 빈
+    # `adapters: []`, `per_adapter: {}`(bare `per_adapter:`는 YAML null이 됨 —
+    # `attributions: []`와 같은 함정, 위 `_aggregate`의 주석 참고) — 이 선택을
+    # 의도된 것으로 기록해 우연이 아니게 한다.
+    def test_zero_adapters_is_a_legal_empty_result(self):
+        rc, out, err = run_aggregate([], expected_adapters=0)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("adapters: []", out)
+        self.assertIn("per_adapter: {}", out)
+        self.assertNotIn("per_adapter:\n", out)
+        for key in ("confirmed_product_defect", "silent_drop", "baseline_unrunnable"):
+            self.assertEqual(flag_of(out, key), "false", key)
+        self.assertEqual(flag_of(out, "attribution_status"), "closed")
+
+
+def write_real_adapter_yaml(d, runner, expected, baseline, head, granularity="file"):
+    """`write_adapter_yaml`과 달리 손으로 형상을 재현하지 않는다 — `run_diff`를 통해
+    per-adapter 모드를 실제로 실행하고, 그 진짜 stdout을 파일에 그대로 옮겨 적는다.
+
+    2026-08-02 리뷰 Finding 1: brief의 파서와 brief의 픽스처는 같은(틀린) 가정을
+    공유해서 서로 맞아떨어졌다 — 픽스처 기반 `TestAggregate`만으로는 프로듀서
+    포맷이 바뀌어도 손으로 쓴 `write_adapter_yaml`은 따라 바뀌지 않으므로 desync를
+    구조적으로 못 잡는다. 이 헬퍼는 그 결합을 끊는다: 픽스처가 아니라 진짜
+    프로듀서(및 그 CLI 계약)를 통해 입력을 만든다.
+    """
+    rc, out, err = run_diff(expected, baseline, head, granularity=granularity, runner=runner)
+    assert rc == 0, f"real per-adapter invocation failed for {runner}: {err}"
+    f = Path(d) / f"{runner}.yaml"
+    f.write_text(out, encoding="utf-8")
+    return str(f)
+
+
+class TestAggregateRealProducer(unittest.TestCase):
+    """`--aggregate`를 손으로 쓴 픽스처가 아니라 실제 per-adapter 모드가 emit한
+    YAML로 먹인다 (리뷰 Finding 1). `write_adapter_yaml` 기반 `TestAggregate`는
+    프로듀서 포맷 자체의 회귀(가령 `counts` flow-mapping의 콜론 뒤 공백이
+    사라지는 변경)에는 눈이 멀어 있다 — 픽스처가 프로듀서 코드와 독립적으로
+    같은 문자열을 손으로 유지하기 때문이다. 이 클래스는 그 사각을 없앤다.
+    """
+
+    # 두 실제 어댑터 — 하나는 NEW_REGRESSION, 하나는 전부 green.
+    def test_real_producer_regression_plus_green_is_defect_true(self):
+        with tempfile.TemporaryDirectory() as d:
+            f1 = write_real_adapter_yaml(
+                d, "pytest", ["a"], [("a", "pass", "0")], [("a", "fail", "1")]
+            )
+            f2 = write_real_adapter_yaml(
+                d, "shell", ["b"], [("b", "pass", "0")], [("b", "pass", "0")]
+            )
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT), "--aggregate",
+                 "--expected-adapters", "2", f1, f2],
+                capture_output=True, text=True,
+            )
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(flag_of(r.stdout, "confirmed_product_defect"), "true")
+        self.assertIn("pytest", r.stdout)
+        self.assertIn("shell", r.stdout)
+
+    # 두 실제 어댑터 모두 green — false/closed 방향도 실제 프로듀서 출력으로 확인
+    # (한쪽 방향만 real-producer로 확인하면 "항상 true"로 깨져도 못 잡는다).
+    def test_real_producer_all_green_is_defect_false(self):
+        with tempfile.TemporaryDirectory() as d:
+            f1 = write_real_adapter_yaml(
+                d, "pytest", ["a"], [("a", "pass", "0")], [("a", "pass", "0")]
+            )
+            f2 = write_real_adapter_yaml(
+                d, "shell", ["b"], [("b", "pass", "0")], [("b", "pass", "0")]
+            )
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT), "--aggregate",
+                 "--expected-adapters", "2", f1, f2],
+                capture_output=True, text=True,
+            )
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(flag_of(r.stdout, "confirmed_product_defect"), "false")
+        self.assertEqual(flag_of(r.stdout, "attribution_status"), "closed")
+
 
 if __name__ == "__main__":
     unittest.main()
