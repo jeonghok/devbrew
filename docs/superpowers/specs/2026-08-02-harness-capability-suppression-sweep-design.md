@@ -238,9 +238,19 @@ S3은 **독립 커밋 6개**로 쪼갠다 (codex 리뷰: 하나의 구현 단위
     `by_id = {v["finding_id"]: v ...}`를 만든 뒤 **원본 `findings`만 순회**한다. 매칭되는
     `finding_id`가 없는 verdict — 즉 정의상 *신규* 발견 — 은 `out`에 들어갈 경로가 없다.
     승격을 허용해도 synthesizer가 조용히 drop한다.
-  - 따라서 `synthesize_findings.py`에 **신규 발견 수용 경로**를 추가한다: verdict가 기존
-    finding에 매칭되지 않고 finding 본문 필드를 갖추고 있으면 `source: adversarial`을 달아
-    출력에 추가한다. 스키마가 불완전한 항목은 조용히 버리지 않고 loud하게 기록한다.
+  - 따라서 `synthesize_findings.py`에 **신규 발견 수용 경로**를 추가한다. 인터페이스를 명시한다
+    (codex 리뷰: *"finding 본문 필드"* 로는 구현이 갈린다):
+
+    | 항목 | 규정 |
+    |---|---|
+    | 수용 조건 | verdict에 `finding_id`가 없거나 기존 어느 finding과도 매칭되지 않으면서, `file`·`severity`·`summary` 세 필드를 **전부** 가질 때 |
+    | id | 기존 `finding_id(f)` 헬퍼로 **합성**한다 — verdict가 준 id를 신뢰하지 않는다(리뷰어가 기존 id를 참칭할 수 있다). 충돌하면 기존 finding이 이긴다 |
+    | 출처 | `source: "adversarial"` 를 강제로 덮어쓴다. verdict가 다른 값을 넣어도 무시 |
+    | 순서 | 기존 findings **뒤에** append — 기존 표의 순서를 흔들지 않는다 |
+    | 불완전 항목 | **조용히 버리지 않는다**: 출력에 넣지 않되 stderr에 `synthesize_findings: dropped malformed adversarial finding: <누락 필드>` 를 찍고, 요약의 `dropped_malformed` 카운터를 증가시킨다. **exit code는 바꾸지 않는다** — 리뷰어 출력 불량으로 파이프라인 전체를 죽이면 그 자체가 새 fail-closed 억제가 된다 |
+
+    이 인터페이스는 persona 프롬프트와 **독립적으로** 테스트한다 — 픽스처 JSON을 직접 넣어
+    synthesizer만 검증한다(AC14c). 그래야 persona 편집이 테스트를 green으로 만들지 못한다.
   - 이것은 round-1이 `web_budget.py`에서 잡은 것과 **같은 클래스**(한 층에서 켜고 소비하는
     층에 배선하지 않음)가 그 수정 안에서 재발한 사례다. AC14가 파이프라인 통과를 요구한다.
 - **`parse_spec_structure.py:162`의 단어경계 없는 매칭** (round-1 리뷰가 §11에서 끌어올림) —
@@ -505,9 +515,16 @@ devbrew 전 표면에서 하니스가 모델 능력을 깎는 지점을 제거�
 계획 단계에 남는 것은 이 넷뿐이다:
 
 - 각 하위 단계 안에서의 파일별 편집 **순서** (무엇을 먼저 건드려야 중간 상태의 RED가 최소인지)
-- 기존 테스트가 RED로 도는 중간 커밋을 허용할지, 아니면 각 커밋을 green으로 유지할지
 - §11 별건 8개를 다룰 후속 사이클의 범위와 우선순위
-- 메모리 편집을 커밋에 포함할지 (메모리는 리포 밖 — git에 안 들어간다)
+
+아래 둘은 **여기서 확정한다** (codex 리뷰: 미해결로 남기면 커밋 유효성 판정이 갈린다):
+
+- **커밋 유효성**: 각 커밋은 baseline(bash red 6 · python green)을 **유지하거나 개선**해야 한다.
+  중간 커밋이 baseline보다 red를 늘리는 것은 허용하지 않는다 — 락 반전과 대상 변경을 **같은
+  커밋에** 넣으면 이 조건이 자연스럽게 성립한다(락만 먼저 고치면 그 커밋이 RED가 된다).
+- **메모리 편집은 산출물에 포함되지만 커밋에는 들어가지 않는다.** 메모리 디렉토리는 리포 밖
+  (`~/.claude/projects/.../memory/`)이라 git이 추적하지 않는다. 따라서 S5의 메모리 변경은
+  커밋 대신 **이 문서 §12에 변경 목록으로 기록**하고, 그것이 유일한 감사 흔적이다.
 
 ## 12. Metadata
 
