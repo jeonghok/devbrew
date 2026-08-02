@@ -2720,8 +2720,14 @@ Expected: PASS
 3. `SKILL.md`에 `PARTIAL` 을 단어로 포함한 줄 추가 → `case_no_new_surfaces`의 verdict
    토큰 assert만 **RED** 확인 → 되돌림
 
-각 되돌림 후 `git diff --quiet -- <그 파일>` 로 복원을 확인한다. 되돌리지 않은 mutation이
-남으면 다음 task가 원인 모를 red를 물려받는다.
+각 되돌림 후 복원을 확인한다. 되돌리지 않은 mutation이 남으면 다음 task가 원인 모를 red를
+물려받는다.
+
+> **복원 증명 방법은 파일마다 다르다.** `git diff --quiet -- <파일>` 은 **이 task가 달리
+> 수정하지 않는 파일**(`detect-runtime.sh`·`SKILL.md`)에만 유효하다. `qg-worktree.sh` 는
+> 이 task 자신의 미커밋 변경을 이미 안고 있으므로 clean diff 가 나올 수 없다 — 그 파일은
+> mutation **직전** 사본을 떠 두고 바이트 비교(`cmp`/`shasum`)로 증명한다. 두 경우를
+> 뭉뚱그리면 복원 확인이 통과할 수 없거나(전자), 아무것도 확인하지 않게 된다(후자).
 
 > 특히 3번은 grep 워드 경계(`\b`)가 이 환경의 grep에서 실제로 동작하는지까지 같이
 > 확인하는 자리다 — 경계가 안 먹으면 락은 조용히 아무것도 못 잡는다.
