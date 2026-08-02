@@ -51,6 +51,20 @@ has_pytest_config() {
   return 1
 }
 
+# 이 **레포**가 pytest 를 쓰는가 — 이 **머신**에 pytest 가 깔렸는가가 아니다.
+# 앰비언트 인터프리터 probe(호출부 python3 로 pytest 모듈 가용성을 직접 찔러보는 방식)는
+# 두 질문을 뭉개서 같은 레포가 머신마다 다르게 감지되게 만든다. 선언은 레포 안에 있다.
+repo_declares_pytest() {
+  local w=$1
+  # conftest.py 는 pytest 전용 파일이다 — 설정 섹션 없는 pytest 레포의 주된 신호.
+  find "$w" -name .git -prune -o -type f -name 'conftest.py' -print 2>/dev/null | head -1 | grep -q . && return 0
+  local f
+  for f in requirements.txt requirements-dev.txt requirements/dev.txt pyproject.toml setup.cfg tox.ini; do
+    [[ -f "$w/$f" ]] && grep -qiE '(^|[^a-z-])pytest([^a-z-]|$)' "$w/$f" 2>/dev/null && return 0
+  done
+  return 1
+}
+
 has_python_tests() {
   find "$1" -name .git -prune -o -type f \
        \( -name 'test_*.py' -o -name '*_test.py' \) -print 2>/dev/null | head -1 | grep -q .
@@ -84,14 +98,10 @@ setup_cmd_of() {   # setup_cmd_of <worktree> <runner>
 # 나머지 러너의 테스트가 floor에서 조용히 누락된다 (AC45; 이 레포 실측: .sh 130개).
 detect_set() {
   local w=$1 out=""
-  # 파이썬: pytest 설정 > (tests/ + pytest 설치) > unittest. 상호배타 (AC54).
+  # 파이썬: pytest 설정 > (pytest를 레포가 선언 + python 테스트 존재) > unittest. 상호배타 (AC54).
   if has_pytest_config "$w"; then
     out="$out pytest"
-  # -S: 사이트 패키지(전역 pip 설치)를 무시하고 순수 인터프리터로만 import를 시도한다.
-  # 대상 worktree와 무관하게 이 머신에 전역 설치된 pytest가 "이 프로젝트가 pytest를
-  # 쓴다"는 오탐 신호가 되는 것을 막는다 — 이 감지 로직 전체의 존재 이유(결정론)와
-  # 정확히 같은 이유다.
-  elif [[ -d "$w/tests" ]] && python3 -S -c 'import pytest' >/dev/null 2>&1 && has_python_tests "$w"; then
+  elif has_python_tests "$w" && repo_declares_pytest "$w"; then
     out="$out pytest"
   elif has_python_tests "$w"; then
     out="$out unittest"

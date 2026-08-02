@@ -22,6 +22,15 @@ case_pytest()   { mkw; : > "$W/pytest.ini"; mkdir -p "$W/tests"; : > "$W/tests/t
   [[ "$(runners "$W")" == "pytest" ]] && pass "pytest.ini → pytest" || fail "pytest ($(runners "$W"))"; rmw; }
 case_unittest() { mkw; mkdir -p "$W/tests"; : > "$W/tests/test_a.py"
   [[ "$(runners "$W")" == "unittest" ]] && pass "설정 없는 test_*.py → unittest" || fail "unittest ($(runners "$W"))"; rmw; }
+# 설정 섹션이 없어도 레포가 pytest 를 선언하면 pytest — 이 케이스가 없으면
+# tier 2 가 죽은 코드인지 산 코드인지 스위트가 구분하지 못한다.
+case_pytest_declared_without_config() {
+  mkw; mkdir -p "$W/tests"; : > "$W/tests/test_a.py"; : > "$W/conftest.py"
+  [[ "$(runners "$W")" == "pytest" ]] \
+    && pass "conftest.py + test_*.py (설정 섹션 없음) → pytest" \
+    || fail "tier2 conftest ($(runners "$W"))"
+  rmw
+}
 case_shell()    { mkw; mkdir -p "$W/tests"; printf '#!/usr/bin/env bash\nexit 0\n' > "$W/tests/t.sh"; chmod +x "$W/tests/t.sh"
   [[ "$(runners "$W")" == "shell" ]] && pass "실행비트 tests/*.sh → shell" || fail "shell ($(runners "$W"))"; rmw; }
 case_jest()     { mkw; printf '{"devDependencies":{"jest":"29"}}' > "$W/package.json"
@@ -89,7 +98,7 @@ case_no_reimpl_in_skill() {
   [[ $bad -eq 0 ]] && pass "SKILL.md에 어댑터 감지 표 재구현 0회" || fail "SKILL.md 감지 표 재구현"
 }
 
-for c in case_pytest case_unittest case_shell case_jest case_vitest case_go case_cargo \
+for c in case_pytest case_unittest case_pytest_declared_without_config case_shell case_jest case_vitest case_go case_cargo \
          case_make case_npmscript case_zero_adapters case_polyglot \
          case_conflict_python case_conflict_js_ambiguous case_conflict_js_resolved \
          case_no_reimpl_in_skill; do
