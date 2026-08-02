@@ -2350,6 +2350,12 @@ DERIVED_NONE_RE = re.compile(r"^-\s+derived:\s*없음\s+—\s+(?P<why>\S.*?)\s*$
 DERIVED_NAMED_RE = re.compile(
     r"^-\s+derived:(?P<name>[^\s—]+)\s+—\s+(?P<status>\w+)\s+—\s+(?P<evidence>\S.*?)\s*$"
 )
+# "없음 선언인가"는 **이름 자리**로만 판정한다. 줄 전체에 대한 substring 검사
+# (`"없음" in ln`)를 쓰면 evidence 산문의 흔한 낱말("회귀 없음 확인", "차이 없음")까지
+# 없음-선언으로 오인해, 정상적인 명명 derived 줄 하나를 모순으로 거절한다. 그러면 이
+# 게이트가 구조가 아니라 **낱말 선택**을 판정하게 되어 §5.6의 "의미 판정 없음"을 어긴다.
+# 명명 형식에 맞는 줄은 그쪽이 더 구체적인 매치이므로 명명으로 본다.
+DERIVED_NONE_ANY_RE = re.compile(r"^-\s+derived:\s*없음(?=\s|$)")
 
 
 def check(text: str) -> list[str]:
@@ -2382,14 +2388,17 @@ def check(text: str) -> list[str]:
         # 줄 자체가 없으면 모델이 목록까지만 하고 멈춘 것과 구분할 수 없다.
         errors.append("`- derived:` 줄이 없습니다 (0개여도 판단은 기록해야 합니다)")
     else:
-        none_lines = [ln for ln in derived_lines if "없음" in ln]
         named_ok = [ln for ln in derived_lines if DERIVED_NAMED_RE.match(ln)]
+        none_lines = [
+            ln for ln in derived_lines
+            if DERIVED_NONE_ANY_RE.match(ln) and not DERIVED_NAMED_RE.match(ln)
+        ]
         if none_lines and named_ok:
             errors.append("`derived: 없음` 과 명명 derived 차원이 함께 선언됨 (모순)")
         for ln in derived_lines:
             if DERIVED_NONE_RE.match(ln) or DERIVED_NAMED_RE.match(ln):
                 continue
-            if "없음" in ln:
+            if DERIVED_NONE_ANY_RE.match(ln):
                 errors.append(f"`derived: 없음` 에 이유 절이 없습니다: {ln.strip()}")
             else:
                 errors.append(
@@ -2416,7 +2425,14 @@ def main() -> int:
             print(f"check_qa_ledger: 읽기 실패: {exc}", file=sys.stderr)
             return 2
     else:
-        text = sys.stdin.read()
+        # stdin 도 파일 경로와 **같은** UTF-8 계약으로 읽는다. `sys.stdin.read()` 는
+        # 프로세스 IO 인코딩(로케일 의존)으로 디코드하므로 C/POSIX 로케일에서 한국어
+        # 원장이 UnicodeDecodeError traceback 으로 죽는다 — 종료코드 계약 밖의 실패.
+        try:
+            text = sys.stdin.buffer.read().decode("utf-8")
+        except UnicodeDecodeError as exc:
+            print(f"check_qa_ledger: stdin 이 UTF-8 이 아닙니다: {exc}", file=sys.stderr)
+            return 2
 
     errors = check(text)
     if errors:
