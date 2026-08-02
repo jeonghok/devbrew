@@ -1,6 +1,6 @@
 ---
 name: spec-reviewer
-model: sonnet
+model: inherit
 cost_class: medium
 color: orange
 tools: Read, Grep, Glob, WebFetch

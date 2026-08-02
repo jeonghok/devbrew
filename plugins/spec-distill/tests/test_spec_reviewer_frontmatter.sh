@@ -14,6 +14,19 @@ note() { if [ "$1" = "PASS" ]; then pass=$((pass+1)); echo "  ✓ $2"; else fail
 test -f "$AGENT" || { note FAIL "agent 파일 부재: $AGENT"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1; }
 FM="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$AGENT")"
 
+# 모델 티어 양방향 락 — 하니스가 세션의 모델 선택을 덮어쓰지 않는다.
+# 이 리뷰어는 devbrew에서 가장 많이 dispatch되는 리뷰어인데 `model: sonnet`으로
+# 핀돼 있었다: 실측 6회 전부 opus-5 세션이 sonnet-5 리뷰어를 받았다 — 리뷰어가
+# writer보다 약한 상태가 매 dispatch 재현됐다.
+# positive+negative 둘 다 필요하다. negative만 두면 `model:` 줄을 통째로 지워도
+# 통과하고, positive만 두면 두 줄을 넣는 mutation이 통과한다.
+grep -qE '^model: inherit$' <<<"$FM" \
+  && note PASS "model: inherit (세션 티어 상속)" \
+  || note FAIL "model이 inherit이 아님 — 하니스가 티어를 덮어쓴다"
+grep -qE '^model: (opus|sonnet|haiku)$' <<<"$FM" \
+  && note FAIL "고정 티어 핀 잔존" \
+  || note PASS "고정 티어 핀 없음"
+
 grep -qE '^tools: Read, Grep, Glob, WebFetch$' <<<"$FM" \
   && note PASS "tools: Read, Grep, Glob, WebFetch (census 도출)" \
   || note FAIL "tools: 가 census 도출 목록과 다름"

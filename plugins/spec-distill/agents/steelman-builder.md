@@ -1,6 +1,6 @@
 ---
 name: steelman-builder
-model: sonnet
+model: inherit
 cost_class: variable
 color: red
 tools: Read, Grep, Glob, WebSearch, WebFetch

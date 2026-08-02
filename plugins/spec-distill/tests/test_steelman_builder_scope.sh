@@ -13,6 +13,12 @@ test -f "$AGENT" && note PASS "agent file exists" || { note FAIL "agent file mis
 # Frontmatter 창 = 첫 두 '---' 사이. (구버전 awk 'c==1' 은 '---' 줄 자체를 포함했다.)
 fm="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$AGENT")"
 
+# 모델 티어 양방향 락 — 하니스가 세션 모델을 덮어쓰지 않는다(리터럴 핀 = 조용한 하향).
+grep -qE '^model: inherit$' <<<"$fm" \
+  && note PASS "model: inherit (세션 티어 상속)" || note FAIL "model이 inherit이 아님"
+grep -qE '^model: (opus|sonnet|haiku)$' <<<"$fm" \
+  && note FAIL "고정 티어 핀 잔존" || note PASS "고정 티어 핀 없음"
+
 # v0.21.0: allowedTools(죽은 필드) + disallowedTools → tools: allowlist.
 # census 가 가설을 확증했다: 업무에 WebSearch×2 · WebFetch×2 실사용.
 grep -qE '^tools: Read, Grep, Glob, WebSearch, WebFetch$' <<<"$fm" \

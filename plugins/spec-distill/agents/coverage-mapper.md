@@ -1,6 +1,6 @@
 ---
 name: coverage-mapper
-model: sonnet
+model: inherit
 cost_class: low
 color: blue
 tools: Read, Grep, Glob

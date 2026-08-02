@@ -11,6 +11,12 @@ note() { if [ "$1" = "PASS" ]; then pass=$((pass+1)); echo "  ✓ $2"; else fail
 test -f "$AGENT" || { note FAIL "agent 파일 부재: $AGENT"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1; }
 FM="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$AGENT")"
 
+# 모델 티어 양방향 락 — 하니스가 세션 모델을 덮어쓰지 않는다(리터럴 핀 = 조용한 하향).
+grep -qE '^model: inherit$' <<<"$FM" \
+  && note PASS "model: inherit (세션 티어 상속)" || note FAIL "model이 inherit이 아님"
+grep -qE '^model: (opus|sonnet|haiku)$' <<<"$FM" \
+  && note FAIL "고정 티어 핀 잔존" || note PASS "고정 티어 핀 없음"
+
 grep -qE '^name: coverage-mapper$' <<<"$FM" \
   && note PASS "name: coverage-mapper (재명명)" || note FAIL "name이 coverage-mapper 아님"
 

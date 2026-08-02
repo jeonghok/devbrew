@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.24.5] — 2026-08-03
+
+### Changed
+- `spec-reviewer` · `coverage-mapper` · `blind-spot-prober` · `steelman-builder`의
+  `model: sonnet` 리터럴 핀을 `model: inherit`으로 교체. **실측된 활성 손실이다** —
+  지난 일주일 spec-review 6회가 전부 opus-5 세션에서 sonnet-5로 실행됐다(리뷰어가
+  writer보다 약한 상태가 매 dispatch 재현). steelman-builder 1회도 같은 패턴.
+
+### Added
+- 네 에이전트 frontmatter 테스트에 **양방향 모델 락 신설** — 이전에는 `model:`에 대한
+  assert가 아예 없어서 `haiku`로 강등해도 스위트가 GREEN이었다(신설 전 mutation으로 확인).
+  positive(`inherit` 실재) + negative(고정 티어 부재) 둘 다 둔다.
+
 ## [0.24.4] — 2026-07-29
 
 v0.24.3의 **자기 수정을 독립 리뷰**한 결과(리뷰어 5 + codex). 그 라운드가 만든 신규 결함과
