@@ -176,6 +176,7 @@ case "${1:-}" in
 
     residual=0
     seen_pkgs=""
+    seen_files=""
     while IFS= read -r f; do
       [[ -z "$f" ]] && continue
       claimed=""
@@ -187,8 +188,12 @@ case "${1:-}" in
         case "$f" in test_*.py|*/test_*.py|*_test.py) claimed="$py" ;; esac
       fi
       if [[ -z "$claimed" ]] && has_adapter shell; then
+        # detect 의 has_exec_shell_tests 와 **같은 스코프**여야 한다 (설계 §5.9:
+        # "실행비트가 선 tests/*.sh"). 경로 제한 없이 실행비트만 보면 diff 에 섞여 온
+        # scripts/deploy.sh 같은 비-테스트 스크립트를 테스트 unit 으로 주장하게 되고,
+        # run 이 그것을 HEAD 와 기준선 양쪽에서 실행한다 — 설계가 금지한 추측 실행이다.
         case "$f" in
-          *.sh) [[ -x "$w/$f" ]] && claimed=shell ;;
+          tests/*.sh|*/tests/*.sh) [[ -x "$w/$f" ]] && claimed=shell ;;
         esac
       fi
       if [[ -z "$claimed" && -n "$js" ]]; then
@@ -210,14 +215,26 @@ case "${1:-}" in
 $pkg"
           fi
         else
-          printf '%s\t%s\tfile\n' "$f" "$claimed"
+          # file 축약도 package 와 같은 규칙: 중복 stdin 입력은 한 unit 행으로
+          # 수렴한다 — diff-test-results.py 는 중복 unit 행을 exit 4(사용 오류)로
+          # 본다, 정당한 실행이 입력 중복만으로 죽어서는 안 된다.
+          if ! printf '%s\n' "$seen_files" | grep -qx "$f"; then
+            printf '%s\t%s\tfile\n' "$f" "$claimed"
+            seen_files="$seen_files
+$f"
+          fi
         fi
       elif [[ -n "$absorber" ]]; then
         residual=1
       else
         # 실행 수단이 없다. 조용히 버리지 않고 unclaimed로 표면화한다 —
         # 소비자(SKILL)가 이것을 `verification: degraded`로 라우팅한다 (AC53).
-        printf '%s\tunclaimed\tfile\n' "$f"
+        # 여기도 같은 중복-수렴 규칙이 적용된다 (위 file 분기와 동일 사유).
+        if ! printf '%s\n' "$seen_files" | grep -qx "$f"; then
+          printf '%s\tunclaimed\tfile\n' "$f"
+          seen_files="$seen_files
+$f"
+        fi
       fi
     done
 

@@ -63,6 +63,47 @@ case_assign_residual_no_absorber() {
   rmw
 }
 
+# 경로 밖 실행 스크립트는 shell 이 주장하지 않는다 — 주장하면 run 이 그것을 실행한다.
+case_assign_shell_scope_excludes_non_test() {
+  mkw; mkdir -p "$W/tests" "$W/scripts"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$W/tests/t.sh";       chmod +x "$W/tests/t.sh"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$W/scripts/deploy.sh"; chmod +x "$W/scripts/deploy.sh"
+  local out; out=$(printf 'tests/t.sh\nscripts/deploy.sh\n' | bash "$RTS" assign "$W" | sort | tr '\n' ';')
+  if [[ "$out" == "scripts/deploy.sh${TAB}unclaimed${TAB}file;tests/t.sh${TAB}shell${TAB}file;" ]]; then
+    pass "tests/ 밖 실행 스크립트 → unclaimed (shell 미주장)"
+  else fail "shell 스코프 (got: $out)"; fi
+  rmw
+}
+
+# 중첩된 tests/ 는 여전히 주장한다 — 스코프를 좁히다 정당한 대상을 놓치면 안 된다.
+case_assign_shell_scope_includes_nested() {
+  mkw; mkdir -p "$W/pkg/tests"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$W/pkg/tests/t.sh"; chmod +x "$W/pkg/tests/t.sh"
+  local out; out=$(printf 'pkg/tests/t.sh\n' | bash "$RTS" assign "$W")
+  [[ "$out" == "pkg/tests/t.sh${TAB}shell${TAB}file" ]] \
+    && pass "중첩 tests/ 실행 스크립트 → shell" || fail "중첩 tests/ (got: $out)"
+  rmw
+}
+
+# 중복 stdin 입력 (claimed file 축약) → 한 unit 행으로 수렴한다.
+case_assign_dedup_claimed_file() {
+  mkw; mkdir -p "$W/tests"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$W/tests/t.sh"; chmod +x "$W/tests/t.sh"
+  local out; out=$(printf 'tests/t.sh\ntests/t.sh\n' | bash "$RTS" assign "$W")
+  [[ "$out" == "tests/t.sh${TAB}shell${TAB}file" ]] \
+    && pass "중복 stdin (claimed) → unit 행 1개" || fail "중복 claimed (got: $out)"
+  rmw
+}
+
+# 중복 stdin 입력 (unclaimed) → 한 unit 행으로 수렴한다.
+case_assign_dedup_unclaimed() {
+  mkw; mkdir -p "$W/tests"; : > "$W/tests/test_a.py"   # unittest만 감지 — .rb는 미주장
+  local out; out=$(printf 'spec/foo_spec.rb\nspec/foo_spec.rb\n' | bash "$RTS" assign "$W")
+  [[ "$out" == "spec/foo_spec.rb${TAB}unclaimed${TAB}file" ]] \
+    && pass "중복 stdin (unclaimed) → unit 행 1개" || fail "중복 unclaimed (got: $out)"
+  rmw
+}
+
 # ── run ─────────────────────────────────────────────────────────────────────
 
 mk_shell_repo() {   # 통과 1 + 실패 1 셸 테스트
@@ -124,7 +165,9 @@ case_run_bulk_green() {
 }
 
 for c in case_assign_go_package case_assign_unclaimed case_assign_bulk_conflict \
-         case_assign_residual_no_absorber case_run_test_failure_vs_absent_runner \
+         case_assign_residual_no_absorber case_assign_shell_scope_excludes_non_test \
+         case_assign_shell_scope_includes_nested case_assign_dedup_claimed_file \
+         case_assign_dedup_unclaimed case_run_test_failure_vs_absent_runner \
          case_run_total_function case_run_absent case_run_bulk_green; do
   echo "== $c"; $c
 done
