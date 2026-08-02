@@ -23,15 +23,28 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
   exit 1
 fi
 
-# Review range — identical formula to the Review gate Step 0 (SKILL.md §"Step 0").
+# Review range — baseline은 resolve-baseline.sh가 소유 (C2 수정: `main` 하드코딩 +
+# merge-base 부재를 제거). 워킹트리가 깨끗할 때만 브랜치 범위를 본다 (기존 동작 유지).
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REVIEW_RANGE=""
-if [ -z "$(git diff --name-only 2>/dev/null)" ] \
-   && git rev-parse --verify --quiet main >/dev/null \
-   && [ -n "$(git log --oneline main..HEAD 2>/dev/null)" ]; then
-  REVIEW_RANGE="main...HEAD"
+if [ -z "$(git diff --name-only 2>/dev/null)" ]; then
+  RB_OUT=$("$SCRIPT_DIR/resolve-baseline.sh" 2>/dev/null || true)
+  RB_DEGRADED=$(printf '%s\n' "$RB_OUT" | awk '$1 == "degraded:" { print $2 }')
+  RB_MERGE_BASE=$(printf '%s\n' "$RB_OUT" | awk '$1 == "merge_base:" { print $2 }')
+  if [ "$RB_DEGRADED" = "no" ] && [ -n "$RB_MERGE_BASE" ] && [ "$RB_MERGE_BASE" != "-" ]; then
+    REVIEW_RANGE="$RB_MERGE_BASE..HEAD"
+  fi
 fi
 
 TESTRE='(test|spec)\.[jt]sx?$|_test\.py$|\.test\.|\.spec\.|(^|/)tests?/'
+
+# --total: 리포 전체 테스트 파일 수를 emit (계획 산문의 분모 M — AC37).
+# 후보 산출과 **같은 TESTRE**를 전 트리에 적용한다. 분모가 모델 자기보고이면
+# 과선택이 심해질수록 분모도 같이 부풀려 비율이 정상으로 보인다.
+if [ "${1:-}" = "--total" ]; then
+  git ls-files | grep -cE "$TESTRE" || true
+  exit 0
+fi
 
 # shellcheck disable=SC2086  # REVIEW_RANGE intentionally word-splits
 CHANGED_ALL=$(git diff $REVIEW_RANGE --name-only 2>/dev/null || true)
