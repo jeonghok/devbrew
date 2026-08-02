@@ -161,7 +161,7 @@ case "${1:-}" in
     w=$2
     [[ -d "$w" ]] || die "not a directory: $w"
     adapters=$(detect_set "$w")
-    has_adapter() { printf '%s\n' "$adapters" | grep -qx "$1"; }
+    has_adapter() { printf '%s\n' "$adapters" | grep -qxF "$1"; }
 
     # bulk 잔여 흡수자 = 표 순서상 첫 bulk 어댑터. 나머지는 감지됐어도 실행하지 않는다
     # — 같은 스위트를 두 번 돌리지 않기 위해서다 (AC54). 버리는 대신 loud하게 알린다.
@@ -199,7 +199,7 @@ case "${1:-}" in
       if [[ -z "$claimed" && -n "$js" ]]; then
         case "$f" in
           *.test.ts|*.test.tsx|*.test.js|*.test.jsx| \
-          *.spec.ts|*.spec.tsx|*.spec.js|*.spec.jsx) claimed="$js" ;;
+          *.spec.*) claimed="$js" ;;
         esac
       fi
 
@@ -209,7 +209,7 @@ case "${1:-}" in
           # 파일 → 패키지 디렉토리 축약은 **여기서** 일어난다. 오케스트레이터가
           # 이 변환을 수행하는 경로는 없다 (AC52) — 배정 입력은 언제나 파일 경로다.
           pkg=$(dirname "$f")
-          if ! printf '%s\n' "$seen_pkgs" | grep -qx "$pkg"; then
+          if ! printf '%s\n' "$seen_pkgs" | grep -qxF "$pkg"; then
             printf '%s\t%s\tpackage\n' "$pkg" "$claimed"
             seen_pkgs="$seen_pkgs
 $pkg"
@@ -218,7 +218,7 @@ $pkg"
           # file 축약도 package 와 같은 규칙: 중복 stdin 입력은 한 unit 행으로
           # 수렴한다 — diff-test-results.py 는 중복 unit 행을 exit 4(사용 오류)로
           # 본다, 정당한 실행이 입력 중복만으로 죽어서는 안 된다.
-          if ! printf '%s\n' "$seen_files" | grep -qx "$f"; then
+          if ! printf '%s\n' "$seen_files" | grep -qxF "$f"; then
             printf '%s\t%s\tfile\n' "$f" "$claimed"
             seen_files="$seen_files
 $f"
@@ -230,7 +230,7 @@ $f"
         # 실행 수단이 없다. 조용히 버리지 않고 unclaimed로 표면화한다 —
         # 소비자(SKILL)가 이것을 `verification: degraded`로 라우팅한다 (AC53).
         # 여기도 같은 중복-수렴 규칙이 적용된다 (위 file 분기와 동일 사유).
-        if ! printf '%s\n' "$seen_files" | grep -qx "$f"; then
+        if ! printf '%s\n' "$seen_files" | grep -qxF "$f"; then
           printf '%s\tunclaimed\tfile\n' "$f"
           seen_files="$seen_files
 $f"

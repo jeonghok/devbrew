@@ -104,6 +104,35 @@ case_assign_dedup_unclaimed() {
   rmw
 }
 
+# 정규식 메타문자가 든 경로가 서로 다른 unit 으로 남는가 — dedup 이 grep 패턴으로
+# 비교하면 `a.sh` 가 `axsh` 를 삼켜 후자가 조용히 사라진다. 조용한 누락은 이 스크립트가
+# 막으라고 있는 바로 그 실패다.
+case_assign_dedup_is_literal_not_regex() {
+  mkw; mkdir -p "$W/tests"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$W/tests/a.sh";  chmod +x "$W/tests/a.sh"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$W/tests/axsh";  chmod +x "$W/tests/axsh"
+  : > "$W/tests/test_keep.py"
+  # 순서가 핵심: 점 없는 경로("axsh")가 먼저 seen_files 에 들어가야, 점 있는 경로("a.sh")를
+  # 나중에 PATTERN 으로 grep -qx 검사할 때 "."가 "x" 를 와일드카드 매치해 오탐이 난다.
+  # 반대 순서(a.sh 먼저)는 이 결함을 통과시키지 못한다 — 이 순서로 mutation-확인했다.
+  local out; out=$(printf 'tests/axsh\ntests/a.sh\n' | bash "$RTS" assign "$W" | sort | tr '\n' ';')
+  if [[ "$out" == "tests/a.sh${TAB}shell${TAB}file;tests/axsh${TAB}unclaimed${TAB}file;" ]]; then
+    pass "메타문자 경로가 서로를 삼키지 않는다 (literal dedup)"
+  else fail "dedup literal (got: $out)"; fi
+  rmw
+}
+
+# 설계 §5.4 표는 jest/vitest 소유를 `*.test.[jt]sx?` / `*.spec.*` 로 쓴다 — .spec. 뒤는
+# 확장자 무관. 순수 ESM Vitest 레포의 foo.spec.mjs 가 unclaimed 로 떨어지면 verification 이
+# 이유 없이 degraded 가 되어 PASS 를 막는다.
+case_assign_spec_any_extension() {
+  mkw; printf '{"devDependencies":{"vitest":"1"}}' > "$W/package.json"
+  local out; out=$(printf 'src/foo.spec.mjs\n' | bash "$RTS" assign "$W")
+  [[ "$out" == "src/foo.spec.mjs${TAB}vitest${TAB}file" ]] \
+    && pass ".spec.mjs → vitest (설계 표의 *.spec.*)" || fail "spec 확장자 (got: $out)"
+  rmw
+}
+
 # ── run ─────────────────────────────────────────────────────────────────────
 
 mk_shell_repo() {   # 통과 1 + 실패 1 셸 테스트
@@ -167,7 +196,8 @@ case_run_bulk_green() {
 for c in case_assign_go_package case_assign_unclaimed case_assign_bulk_conflict \
          case_assign_residual_no_absorber case_assign_shell_scope_excludes_non_test \
          case_assign_shell_scope_includes_nested case_assign_dedup_claimed_file \
-         case_assign_dedup_unclaimed case_run_test_failure_vs_absent_runner \
+         case_assign_dedup_unclaimed case_assign_dedup_is_literal_not_regex \
+         case_assign_spec_any_extension case_run_test_failure_vs_absent_runner \
          case_run_total_function case_run_absent case_run_bulk_green; do
   echo "== $c"; $c
 done
