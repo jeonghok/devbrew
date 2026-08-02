@@ -98,10 +98,21 @@ case_no_reimpl_in_skill() {
   [[ $bad -eq 0 ]] && pass "SKILL.md에 어댑터 감지 표 재구현 0회" || fail "SKILL.md 감지 표 재구현"
 }
 
+# 컨트롤러 룰링 회귀 락: pytest 감지는 **레포 선언**만 본다. 앰비언트 인터프리터 프로브가
+# 다시 들어오면 같은 레포가 머신마다 다르게 감지되고, 설정 없는 pytest 레포가 unittest 로
+# 새어 bare 함수 테스트가 조용히 0개 실행된다.
+case_no_ambient_pytest_probe() {
+  if grep -q 'import pytest' "$RTS"; then
+    fail "앰비언트 pytest 프로브 재도입됨 (레포 선언 기반이어야 함)"
+  else
+    pass "앰비언트 pytest 프로브 0회 — 감지는 레포 선언만 본다"
+  fi
+}
+
 for c in case_pytest case_unittest case_pytest_declared_without_config case_shell case_jest case_vitest case_go case_cargo \
          case_make case_npmscript case_zero_adapters case_polyglot \
          case_conflict_python case_conflict_js_ambiguous case_conflict_js_resolved \
-         case_no_reimpl_in_skill; do
+         case_no_reimpl_in_skill case_no_ambient_pytest_probe; do
   echo "== $c"; $c
 done
 echo "── runner adapters: $PASS passed, $FAIL failed"

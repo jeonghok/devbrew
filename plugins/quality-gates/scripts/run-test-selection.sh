@@ -148,9 +148,11 @@ case "${1:-}" in
       [[ -z "$r" ]] && continue
       [[ $first -eq 1 ]] || echo
       first=0
+      g=$(granularity_of "$r")     || die "unknown runner from detect_set: $r"
+      s=$(setup_cmd_of "$w" "$r")  || die "unknown runner from detect_set: $r"
       echo "runner: $r"
-      echo "granularity: $(granularity_of "$r")"
-      echo "setup_cmd: $(setup_cmd_of "$w" "$r")"
+      echo "granularity: $g"
+      echo "setup_cmd: $s"
     done < <(detect_set "$w")
     exit 0
     ;;
