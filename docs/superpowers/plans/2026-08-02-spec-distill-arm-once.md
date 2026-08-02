@@ -1013,7 +1013,7 @@ fi
             shutil.rmtree(repo, ignore_errors=True)
 ```
 
-> `write_state` 도 `import arm_ledger` 를 쓰므로 모킹 아래에서 `strip_pending` 이 실패할 수 있다. 픽스처의 state 파일에 `pending_review` 가 **없게** 두면(위처럼 `armed_paths` 만) `write_state` 의 신규-파일 경로가 아니라 기존-파일 경로를 타되 strip 대상이 없어 정상 동작한다. 그래도 실패하면 `write_state` 의 import 를 함수 상단 `try/except` 로 감싸 `body` 를 그대로 쓰는 degrade 를 넣는다(loud stderr 필수).
+> **초안 각주 폐기 (Task 3 리뷰 ruling — 사용자 확정).** 초안은 여기서 "`write_state` 의 import 를 `try/except` 로 감싸 `body` 를 그대로 쓰는 degrade" 를 지시했다. 리뷰어가 그 형태의 결함을 **실증**했다: import 실패로 strip 이 생략되면 `pending_review` 블록이 둘 생기고, Stop 은 `PENDING_RE.search`(첫 매치)로 **다른 문서**의 stale 블록을 집어 dispatch 하며, `rewrite_state` 의 전역 `re.sub`(`count=1` 없음)이 방금 arm 된 문서의 트리거까지 함께 지운다. 그 문서는 오류 한 줄 없이 영영 리뷰되지 않는다 — Law 1 이 금지하는 silent under-review 다. 해소는 Step 5 로 옮겼다: **`write_state` 는 fallible import 에 의존하지 않는다.** 따라서 이 픽스처에 degrade 를 넣을 이유 자체가 없다.
 
 - [ ] **Step 3: RED 확인**
 
@@ -1088,12 +1088,24 @@ def emit_arm_skip_advisory(mode: str, key: str, reason: str) -> None:
                 )
 ```
 
-같은 파일 185–186행의 `write_state` 안 import 도 바꾼다:
+같은 파일 185–186행의 `write_state` 안 sibling import 는 **제거한다** (Task 3 리뷰 ruling — 사용자 확정). 모듈 상단에 로컬 정규식을 두고 무조건 strip 한다:
 
 ```python
-    import arm_ledger  # pyright: ignore[reportMissingImports]
-    body = arm_ledger.strip_pending(body)
+# 모듈 상단 — arm_ledger 와 같은 패턴이지만 의도적으로 로컬이다.
+# 이 플러그인은 이미 review-dispatch.py·pending-review-reminder.py·arm_ledger.py·
+# suppress_state.py 네 곳에서 이 정규식을 각자 정의한다 — 새 중복이 아니라 기존 관례.
+PENDING_RE = re.compile(r"^pending_review:\n(?:  [^\n]*\n)*", re.MULTILINE)
 ```
+
+```python
+    # write_state 안 (기존 import 두 줄을 대체)
+    # "pending_review 블록은 정확히 하나" 는 모듈 가용성과 무관하게 성립해야 한다.
+    # 두 블록이 생기면 Stop 이 첫 블록(다른 문서)을 소비하고 rewrite_state 의 전역
+    # re.sub 가 방금 arm 된 문서의 트리거까지 지운다 — 오류 없는 under-review.
+    body = PENDING_RE.sub("", body)
+```
+
+arm 게이트(Step 5 아래)의 `try/except` 는 그대로 둔다 — 그쪽은 판정이라 fail-open 이 옳다. 멱등성은 판정이 아니다.
 
 - [ ] **Step 6: GREEN 확인**
 
