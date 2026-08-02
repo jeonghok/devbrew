@@ -41,8 +41,8 @@ BLACKLIST = SCRIPT_DIR.parent / "scripts" / "ambiguity-blacklist.txt"
 PATH_PREFIX = "docs/superpowers/specs/"
 
 # arm_ledger 와 같은 패턴이지만 의도적으로 로컬이다. 이 플러그인은 이미
-# review-dispatch.py·pending-review-reminder.py·arm_ledger.py·suppress_state.py
-# 네 곳에서 이 정규식을 각자 정의한다 — 새 중복이 아니라 기존 관례.
+# review-dispatch.py·pending-review-reminder.py·arm_ledger.py
+# 세 곳에서 이 정규식을 각자 정의한다 — 새 중복이 아니라 기존 관례.
 PENDING_RE = re.compile(r"^pending_review:\n(?:  [^\n]*\n)*", re.MULTILINE)
 
 
