@@ -3835,8 +3835,16 @@ HEAD 에만 적용한 추가 setup 이 있으면 그것은 양측 비대칭이�
 Run: `bash plugins/quality-gates/tests/test_runtime_verifier_frontmatter.sh`
 Expected: PASS
 
-Run: `python3 plugins/quality-gates/tests/test_runtime_verifier_behavior.py`
-Expected: PASS (evidence-log 스키마 무변경)
+Run: `python3 -m pytest plugins/quality-gates/tests/test_runtime_verifier_behavior.py -q`
+Expected: PASS (evidence-log 스키마 무변경) — **개수를 눈으로 확인할 것.**
+
+> 이 파일은 `if __name__ == "__main__"` 가드가 **없다**. `python3 <file>.py` 로 돌리면
+> **0개를 실행하고 exit 0** 을 낸다 — 통과처럼 보이지만 아무것도 검증하지 않는다.
+> 이 리포에 그런 파일이 5개 있고(`test_adversarial_behavior.py` ·
+> `test_agent_stub_harness.py` · `test_runtime_verifier_behavior.py` ·
+> `test_security_reviewer_behavior.py` · `test_test_scope_validator_behavior.py`),
+> 이 계획의 최초 베이스라인 측정이 정확히 이 방식으로 91개 중 29개를 안 돌리고
+> "green" 이라 보고했다. 반드시 pytest 로 돌리고 총계를 본다.
 
 Run: `bash plugins/quality-gates/tests/test_agent_frontmatter_keys.sh`
 Run: `bash plugins/quality-gates/tests/test_agent_tools_lock_differential.sh`
