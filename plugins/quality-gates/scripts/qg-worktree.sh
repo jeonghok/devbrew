@@ -6,6 +6,10 @@
 #   validate-branch <name>       -> exit 0 if git ref exists; exit 2 otherwise
 #   create <name> <session-id>   -> echoes absolute worktree path; idempotent
 #   remove <abs-path>            -> best-effort `git worktree remove --force`
+#   create-baseline <merge-base-sha> <session-id>
+#                                -> echoes absolute worktree path; detached at merge_base,
+#                                   NO working-tree overlay (baseline must not inherit
+#                                   HEAD's uncommitted changes)
 #   create-sandbox <session-id> -> echoes 3 lines: sandbox abs path, baseline SHA,
 #                                  snapshot digest (disposable worktree mirroring the
 #                                  working tree, git-ignored files excluded; sealed as
@@ -493,6 +497,32 @@ case "${1:-}" in
       echo "guard_flags: []"
     fi
     echo "forced_downgrade: $forced"
+    ;;
+  create-baseline)
+    # merge_base 상태의 detached 워크트리. create-sandbox와 달리 **working-tree
+    # 오버레이를 하지 않는다** — 기준선이 HEAD의 미커밋 변경을 물면 차등의 의미가
+    # 사라진다. 같은 worktrees/ 네임스페이스에 만들어 remove 가드를 그대로 받는다.
+    [[ $# -eq 3 ]] || die "usage: create-baseline <merge-base-sha> <session-id>"
+    sha="$2"; sid="$3"
+    git rev-parse --verify --quiet "$sha^{commit}" >/dev/null 2>&1 \
+      || die "not a commit: $sha"
+    sid_short="${sid:0:8}"
+    [[ -n "$sid_short" ]] || die "empty session-id"
+    main_root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not a git repo"
+    main_root=$(cd "$main_root" && pwd -P) || die "cd failed: $main_root"
+    parent="$main_root/.claude/quality-gates/worktrees"
+    mkdir -p "$parent" || die "cannot create $parent"
+    baseline_wt="$parent/base-${sid_short}"
+
+    # Idempotent: 이전 실행의 기준선 트리가 남아 있으면 갈아엎는다.
+    git worktree prune >/dev/null 2>&1 || true
+    if [[ -e "$baseline_wt" ]]; then
+      git worktree remove --force "$baseline_wt" >/dev/null 2>&1 || rm -rf "$baseline_wt"
+      git worktree prune >/dev/null 2>&1 || true
+    fi
+    git worktree add --detach "$baseline_wt" "$sha" >/dev/null 2>&1 \
+      || die "git worktree add failed (baseline: $baseline_wt)"
+    printf '%s\n' "$baseline_wt"
     ;;
   remove)
     [[ $# -eq 2 ]] || die "usage: remove <abs-path>"
