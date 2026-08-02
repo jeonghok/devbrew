@@ -145,11 +145,52 @@ case_put_merge_preserves_other_runner() {
   rmroot
 }
 
+# Not in the brief — added during self-review. task-11-brief.md §R4③ shows the
+# orchestrator's real put payload is only the miss-set (units re-run in the baseline
+# worktree), never the runner's full unit set: a later /qg run at the SAME merge_base
+# can select a different impacted-unit subset (new commits, no rebase) and only the
+# newly-missed units get put. A same-runner "wipe section, write payload" merge would
+# silently evict previously-cached, still-valid units that just weren't touched by
+# this call — breaking the "amortize to once per merge_base" guarantee the whole
+# component exists to provide. This is a correctness-of-purpose bug, not just an
+# untested edge case: revert the (runner,unit)-keyed merge back to a runner-only wipe
+# and this goes RED.
+case_put_partial_preserves_uninvolved_units_same_runner() {
+  mkroot; seed "$SHA_A" pytest   # caches a.py=pass, b.py=fail for pytest
+  # A later run at the same merge_base only re-runs (and puts) c.py for pytest —
+  # a.py/b.py are untouched cache hits, not part of this put's payload.
+  printf 'c.py\tpass\t0\n' | bash "$BC" put "$ROOT" "$SHA_A" pytest
+  local out; out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py b.py c.py | tr '\n' ';')
+  [[ "$out" == "a.py${TAB}pass${TAB}0;b.py${TAB}fail${TAB}1;c.py${TAB}pass${TAB}0;" ]] \
+    && pass "부분 payload put이 같은 runner의 미포함 unit을 보존" \
+    || fail "부분 payload put이 미포함 unit을 지움 (got: $out)"
+  rmroot
+}
+
+# Not in the brief — added during self-review (coordinator round 2). The
+# (runner,unit)-keyed preservation fix above must not regress the pre-existing
+# "same key, new value wins" contract (case_put_merge_preserves_other_runner) into
+# "never overwrite on collision." This exercises BOTH properties in a single put
+# call: a.py is already cached and is ALSO present in this call's payload with a
+# different status (must overwrite), while b.py is cached and NOT in this call's
+# payload (must be preserved unchanged).
+case_put_partial_overwrites_matching_unit_preserves_others() {
+  mkroot; seed "$SHA_A" pytest   # a.py=pass/0, b.py=fail/1
+  printf 'a.py\tfail\t9\n' | bash "$BC" put "$ROOT" "$SHA_A" pytest
+  local out; out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py b.py | tr '\n' ';')
+  [[ "$out" == "a.py${TAB}fail${TAB}9;b.py${TAB}fail${TAB}1;" ]] \
+    && pass "충돌 키는 새 값이 이기고 미포함 키는 보존 (동시 성립)" \
+    || fail "충돌+보존 동시성 (got: $out)"
+  rmroot
+}
+
 for c in case_key_includes_merge_base case_key_includes_runner case_get_full_hit \
          case_get_partial_hit case_get_corrupt_header case_get_corrupt_body \
          case_get_merge_base_mismatch case_put_atomic \
          case_unrun_not_cached_absent_cached case_bulk_key_isolation \
-         case_put_merge_preserves_other_runner; do
+         case_put_merge_preserves_other_runner \
+         case_put_partial_preserves_uninvolved_units_same_runner \
+         case_put_partial_overwrites_matching_unit_preserves_others; do
   echo "== $c"; $c
 done
 echo "── baseline-cache: $PASS passed, $FAIL failed"

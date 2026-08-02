@@ -72,14 +72,6 @@ case "${1:-}" in
     mkdir -p "$root" 2>/dev/null || { echo "baseline-cache: mkdir 실패: $root" >&2; exit 4; }
     f=$(cache_file "$root" "$mb")
 
-    # 기존 유효 본문에서 **이 runner의 행만** 제거하고 나머지는 보존한다.
-    kept=""
-    if old=$(read_valid_body "$f" "$mb"); then
-      kept=$(printf '%s\n' "$old" | awk -F'\t' -v r="$runner" '$1 != r')
-    elif [[ -f "$f" ]]; then
-      echo "baseline-cache: 기존 캐시 손상 — 새로 씀: $f" >&2
-    fi
-
     # stdin 정규화. `unrun`은 환경 상태에 달렸고 merge_base의 함수가 아니므로
     # 캐시하지 않는다 — 캐시하면 복구 가능한 실패가 영구화된다.
     fresh=$(awk -F'\t' -v r="$runner" '
@@ -88,6 +80,27 @@ case "${1:-}" in
       $2 !~ /^(pass|fail|error|absent)$/ { next }
       { printf "%s\t%s\t%s\t%s\n", r, $1, $2, $3 }
     ')
+
+    # 기존 유효 본문에서 **이번 put이 갱신하는 (runner, unit) 키만** 제거하고
+    # 나머지는 보존한다. 호출자(오케스트레이터)의 실제 payload는 보통 캐시
+    # 미스분(부분집합)뿐이다 — 이 runner 섹션 전체를 통째로 지우면, 이번 호출에
+    # 없는 unit의 유효한 과거 결과까지 사라져 "merge_base당 1회" 상각이 무너진다.
+    # 멤버십 비교는 grep -qxF(고정 문자열)로 한다 — bare `grep -qx`는 unit을
+    # 정규식으로 취급해 `a.py`가 저장된 `axpy`에 매치하는 등 조용한 오판을 만든다.
+    kept=""
+    if old=$(read_valid_body "$f" "$mb"); then
+      fresh_units=$(printf '%s\n' "$fresh" | awk -F'\t' 'NF { print $2 }')
+      kept=$(printf '%s\n' "$old" | while IFS=$'\t' read -r orunner ounit ostatus oexit; do
+        [[ -z "$orunner" ]] && continue
+        if [[ "$orunner" != "$runner" ]]; then
+          printf '%s\t%s\t%s\t%s\n' "$orunner" "$ounit" "$ostatus" "$oexit"
+        elif ! printf '%s\n' "$fresh_units" | grep -qxF "$ounit"; then
+          printf '%s\t%s\t%s\t%s\n' "$orunner" "$ounit" "$ostatus" "$oexit"
+        fi
+      done)
+    elif [[ -f "$f" ]]; then
+      echo "baseline-cache: 기존 캐시 손상 — 새로 씀: $f" >&2
+    fi
 
     # file-granularity 러너에 BULK 키가 섞이면 캐시 오염 신호다 (AC42). 저장은 하되
     # 조용히 넘기지 않는다 — 호출자가 bulk-green을 unit별로 분해하지 않은 것이다.
