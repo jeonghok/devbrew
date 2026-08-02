@@ -18,7 +18,10 @@ devbrew의 모든 컨텍스트 표면에서 하니스가 모델(Claude·codex)�
 - [7. Acceptance Criteria](#7-acceptance-criteria)
 - [8. Files to Modify](#8-files-to-modify)
 - [9. Verification Plan](#9-verification-plan)
+  - [9.1 Mutation 시나리오](#91-mutation-시나리오--각-락이-무엇에-반응해야-하는가)
+  - [9.2 AC11 dispatch 실측 절차](#92-ac11-dispatch-실측-절차)
 - [10. Rejected Alternatives](#10-rejected-alternatives)
+  - [10.1 Rollout 구조 — 3안 비교](#101-rollout-구조--3안-비교-후-선택)
 - [11. 이 사이클에서 제외 — 별건 목록](#11-이-사이클에서-제외--별건-목록)
 - [Handoff Context](#handoff-context)
 - [12. Metadata](#12-metadata)
@@ -78,8 +81,18 @@ default다"* 를 load-bearing 판정 없이 규약화한다. 이 작업은 **새
 | 6 | 억제를 지시하는 메모리 수정, 과거 기록에는 정정 append | memory dir 전수 중 `type: feedback`이면서 모델·도구·탐색 폭을 **줄이라고 지시**하는 것 |
 | 7 | 재도입을 막는 회귀 락을 **mutation으로 이빨을 증명**해 남김 | 각 신규/수정 락에 대해 억제를 되돌리는 mutation이 RED를 만드는지 |
 
-**질의의 한계를 명시한다** (이 sweep의 판별식을 자기 자신에게 적용): goal 3·5·6의 질의는 어휘가
-아니라 판단을 요구하므로 완전 기계화가 불가능하다. 따라서 이 세 항목은 **census 원장
+**질의의 한계를 명시한다** (이 sweep의 판별식을 자기 자신에게 적용):
+
+- **goal 1의 두 번째 질의(`plugins/*/tests/`)는 완료 판정에 쓸 수 없다** (round-2 리뷰 적발).
+  올바르게 반전된 락도 금지 문자열을 **부정 assert의 인자로 명시해야** 하므로
+  (`assert_not_grep "$AGENT" '^model: sonnet$'`), 이 질의는 반전 전후 모두 같은 파일들을 반환한다 —
+  *"아직 핀을 강제함"* 과 *"이제 핀을 금지함"* 을 구분하지 못한다. 이것은 이 리포가 이미 문서화한
+  **grep-lock header-satisfiable 함정**이 회귀 락이 아니라 *완료 오라클 자체*에 적용된 형태다.
+  따라서 이 질의는 **후보 열거(triage) 도구**이고, 락의 방향을 실제로 판정하는 것은 **AC9의
+  mutation**뿐이다 — 억제를 되돌려 넣었을 때 RED가 나는지가 유일한 판별자다.
+  (goal 1의 *첫* 질의 `grep -rn '^model:'`는 `^model:` 줄-시작 앵커라 실제 frontmatter만 잡으므로
+  영향받지 않는다. goal 2의 `codex exec` 질의도 같은 성질이라 육안 확인이 필요하다.)
+- goal 3·5·6의 질의는 어휘가 아니라 판단을 요구하므로 완전 기계화가 불가능하다. 따라서 이 세 항목은 **census 원장
 (`docs/audits/`에 보존)을 근거 목록으로 삼고, 후속 세션이 재현할 수 있도록 census 방법을 §5.2에
 기록**한다. 이것은 결함이 아니라 명시된 한계다 — `check_brief.py`의 `evidence: S<N>` 앵커가
 존재만 검사하고 그 한계를 spec에 적어 별도 수동 검증으로 분리한 것과 같은 처리다.
@@ -166,6 +179,18 @@ reference 구현은 `plugins/plugin-audit/agents/*.md` 3개 — `model: inherit`
 
 ### S3 — 단일호출 상한·탐색 좁힘
 
+S3은 **독립 커밋 6개**로 쪼갠다 (codex 리뷰: 하나의 구현 단위가 아니다). 각각 별도 AC를 갖고
+서로를 블록하지 않는다 — 하나가 막히면 나머지는 진행한다.
+
+| 하위 | 내용 | AC |
+|---|---|---|
+| **S3a** | 검색 횟수 상한·병렬 금지 문구 제거 (`blind-spot-prober`·`steelman-builder`) | AC5 |
+| **S3b** | `test-scope-validator`의 허용 컨텍스트 자기모순 해소 | AC6 |
+| **S3c** | codex 범주 개방 + 하류 계약 | AC16 |
+| **S3d** | `web_budget.py` 상한 제거 + kill switch 이전 (소비자 2곳) | AC7a–d |
+| **S3e** | `adversarial` 신규 발견 승격 (persona 4곳 + synthesizer 배선) | AC14a–c |
+| **S3f** | ambiguity 매칭 단어경계 | AC15 |
+
 - `blind-spot-prober`·`steelman-builder`의 *"1–2회"* 상한과 *"병렬·투기적 금지"* 삭제
 - `test-scope-validator:39`의 허용 컨텍스트 열거에 `spec_path` 추가 — 현재 :46이 spec을 *"PRIMARY
   reference axis"*로 선언하는데 :39의 허용 목록에서 빠져 있어 **자기모순**이다
@@ -188,14 +213,36 @@ reference 구현은 `plugins/plugin-audit/agents/*.md` 3개 — `model: inherit`
   1. `SWEEP_CAP`·`SESSION_CAP`과 그에 기반한 **게이트(exit 1) 제거** — 상한이 사라진다.
   2. **kill switch는 두 소비자 각각의 인라인 env 체크로 이전**한다 (`check_brief.py:71`이 이미
      쓰는 패턴). 보안 컨트롤이 스크립트와 함께 사라지면 안 된다 (C1).
+
+     **kill switch 계약** (codex 리뷰 2라운드 연속 지적 — 인라인 복제는 계약이 명시돼야 안전하다):
+
+     | 항목 | 규정 |
+     |---|---|
+     | 변수 | `DEVBREW_SPEC_DISTILL_DISABLE_WEB` |
+     | 참으로 취급하는 값 | **정확히 문자열 `"1"`** 하나만. `true`·`yes`·`0`·빈 문자열은 전부 거짓 |
+     | 미설정 시 | 웹 **활성** (fail-open이 맞다 — 이건 사용자가 켜는 스위치이지 안전 기본값이 아니다) |
+     | 평가 시점 | 각 웹 작업 **직전**. 세션 시작 시 한 번 읽어 캐시하지 않는다 |
+     | 적용 범위 | 그 소비자가 수행하는 모든 웹 작업 — 일부만 막으면 스위치가 거짓말이 된다 |
+     | 소유 | 각 소비자가 자기 경로를 책임진다. 공유 헬퍼를 새로 만들지 않는다 — 스크립트 하나를 없애려는 작업에서 다른 스크립트를 만드는 것은 순환이다 |
+     | 검증 | 소비자별 독립 테스트 (AC7b·AC7c). 한 소비자의 테스트가 다른 소비자를 덮지 않는다 |
   3. 상한이 없어지면 `reviewing-brief`의 *"예산 소진 시 웹 없이 판정"* degrade 분기는 **도달
      불가**가 되므로 그 분기와 그것을 잠그는 `test_reviewing_brief_skill.sh:206-207`(T21)을
      함께 정리하고, 새 락이 *"상한 게이트 부재 + kill switch 동작"* 을 assert하게 바꾼다.
   4. 스크립트는 카운터·게이트가 모두 사라지면 남는 책임이 없으므로 삭제한다.
-- **`adversarial.md`의 신규 발견 승격** (C3) — `:149`만 고치면 persona가 자기모순이 된다.
-  같은 선언이 **네 곳**에 있다: `:3`(description) · `:12`("single model-based judgment gate") ·
-  `:22`("You are NOT responsible for: producing new findings of your own") · `:149`.
-  네 곳을 함께 고치고, 승격된 발견은 `source: adversarial`로 출처를 구분한다.
+- **`adversarial.md`의 신규 발견 승격** (C3) — **쓰기 쪽만 고치면 동작하지 않는다**
+  (round-2 리뷰가 block으로 적발, 원문 확인 완료).
+  - *쓰기 쪽*: `:149`만 고치면 persona가 자기모순이 된다. 같은 선언이 **네 곳**에 있다 —
+    `:3`(description) · `:12`("single model-based judgment gate") ·
+    `:22`("You are NOT responsible for: producing new findings of your own") · `:149`.
+  - *읽기 쪽*: `synthesize_findings.py`의 `apply_verdicts()`(`:44-64`)는
+    `by_id = {v["finding_id"]: v ...}`를 만든 뒤 **원본 `findings`만 순회**한다. 매칭되는
+    `finding_id`가 없는 verdict — 즉 정의상 *신규* 발견 — 은 `out`에 들어갈 경로가 없다.
+    승격을 허용해도 synthesizer가 조용히 drop한다.
+  - 따라서 `synthesize_findings.py`에 **신규 발견 수용 경로**를 추가한다: verdict가 기존
+    finding에 매칭되지 않고 finding 본문 필드를 갖추고 있으면 `source: adversarial`을 달아
+    출력에 추가한다. 스키마가 불완전한 항목은 조용히 버리지 않고 loud하게 기록한다.
+  - 이것은 round-1이 `web_budget.py`에서 잡은 것과 **같은 클래스**(한 층에서 켜고 소비하는
+    층에 배선하지 않음)가 그 수정 안에서 재발한 사례다. AC14가 파이프라인 통과를 요구한다.
 - **`parse_spec_structure.py:162`의 단어경계 없는 매칭** (round-1 리뷰가 §11에서 끌어올림) —
   `re.escape(phrase)`를 단어경계로 감싸 정상 기술 용어 안의 부분문자열에서 발화하지 않게 한다.
   이것은 fail-open(검사가 약함)이 아니라 **과잉 차단**이고, 이 sweep의 판별식이 정확히 겨냥하는
@@ -259,10 +306,26 @@ reference 구현은 `plugins/plugin-audit/agents/*.md` 3개 — `model: inherit`
 - **AC11** dispatch 실측으로 (a) `inherit` 에이전트가 세션 모델을 상속하고, (b) `spec-reviewer`가
   `WebSearch`를 실제로 호출할 수 있음을 **트랜스크립트로** 확인한다 (자기보고 불가).
 - **AC12** 각 플러그인의 `plugin.json` version bump + `CHANGELOG.md` 항목이 같은 커밋에 있다.
-- **AC13** §2의 각 판별 질의를 변경 후 실행했을 때, 매칭되는 항목은 **전부** 변경됐거나 이 문서에
-  load-bearing으로 명시 정당화돼 있다. 잔여 매칭이 있는데 정당화가 없으면 sweep은 미완이다.
-- **AC14** `adversarial.md`의 *"신규 발견 금지"* 선언이 `:3`·`:12`·`:22`·`:149` **네 곳 모두**에서
-  해소되고, 승격된 발견은 `source: adversarial`로 구분된다. 한 곳이라도 남으면 persona 자기모순.
+- **AC13** §2의 각 판별 질의를 변경 후 실행했을 때, 매칭되는 항목은 **전부** 변경됐거나
+  **아래 스키마를 갖춘 load-bearing allowlist 항목**으로 §12에 등재돼 있다. 잔여 매칭이 있는데
+  등재가 없거나 등재가 불완전하면 sweep은 미완이다 — *"정당화돼 있다"* 만으로는 무엇이든 통과한다
+  (codex 리뷰 지적). 등재 필수 필드:
+
+  | 필드 | 내용 |
+  |---|---|
+  | `위치` | `file:line` |
+  | `막는 실패` | 이것을 제거하면 **무엇이 조용히 통과하게 되는가** — 이 sweep의 판별식 그대로. "조심스러워서"는 실패 서술이 아니다 |
+  | `근거` | 그 실패가 가설이 아니라 실재함을 보이는 것 — 커밋·테스트·과거 사고 기록 |
+  | `대안 검토` | 더 가벼운 수단으로 같은 실패를 막을 수 있는지, 왜 안 되는지 |
+  | `재검토 조건` | 이 항목을 다시 열 조건. *"영구"* 는 허용하지 않는다 (philosophy `:20`을 완화하는 이 sweep이 자기 예외를 영구화하면 자기모순) |
+- **AC14** 승격이 **끝에서 끝까지 동작한다** — persona 편집만으로는 green이 되지 않는다:
+  - **AC14a** `adversarial.md`의 *"신규 발견 금지"* 선언이 `:3`·`:12`·`:22`·`:149` **네 곳 모두**에서
+    해소된다. 한 곳이라도 남으면 persona 자기모순.
+  - **AC14b** `synthesize_findings.py`에 기존 `finding_id`와 매칭되지 않는 verdict를 출력에
+    추가하는 경로가 있고, 그 항목에 `source: adversarial`이 붙는다.
+  - **AC14c** *(teeth)* 기존 finding 0건 + adversarial 신규 발견 1건을 넣은 픽스처가
+    synthesizer를 통과해 **출력에 그 발견이 실재**한다. mutation: 신규 수용 경로를 되돌리면 RED.
+    AC14a만으로는 이 AC가 green이 될 수 없다.
 - **AC15** `parse_spec_structure.py`의 ambiguity 매칭이 단어경계를 갖는다 — 정상 기술 용어
   (`~fast`-forward, `in`+`~efficient`)가 hit되지 않고, blacklist의 온전한 단어는 계속 hit된다
   (양방향 assert: 완화가 검사를 무력화하지 않았음도 확인). **이 AC를 쓰는 동안 이 검사가 세 번째로
@@ -276,7 +339,8 @@ reference 구현은 `plugins/plugin-audit/agents/*.md` 3개 — `model: inherit`
 `spec-distill/agents/{blind-spot-prober,steelman-builder,coverage-mapper,spec-reviewer}.md`
 (+ `security-reviewer.md`는 :38 문구만)
 
-**scripts (6)** — `quality-gates/scripts/{run_codex_reviewer.sh,run_artifact_codex_reviewer.sh}` ·
+**scripts (7)** — `quality-gates/scripts/{run_codex_reviewer.sh,run_artifact_codex_reviewer.sh}` ·
+**`quality-gates/scripts/synthesize_findings.py`** (승격된 발견의 읽기 쪽 배선 — round-2 리뷰 적발) ·
 `spec-distill/scripts/{run_spec_codex_reviewer.sh,build_spec_codex_prompt.py,parse_spec_structure.py}` ·
 `spec-distill/scripts/web_budget.py` (삭제)
 
@@ -290,9 +354,12 @@ reference 구현은 `plugins/plugin-audit/agents/*.md` 3개 — `model: inherit`
 **`spec-distill/tests/{test_reviewing_brief_skill,test_conducting_interview_stage,test_parse_spec_structure}.sh`**
 (앞의 둘은 `web_budget.py` 호출을 잠그고 있어 함께 고치지 않으면 RED)
 
-**docs / 규약 (6)** — `CLAUDE.md` · `docs/philosophy/devbrew-harness-philosophy.md` ·
+**docs / 규약 (7)** — `CLAUDE.md` · `docs/philosophy/devbrew-harness-philosophy.md` ·
 `docs/plugin-authoring.md` · `quality-gates/README.md` · `spec-distill/README.md` ·
-`project-init/templates/github-flow/branch-strategy.md`
+`project-init/templates/github-flow/branch-strategy.md` ·
+**`project-init/templates/git-flow/branch-strategy.md`** — 동일 rebase 문구가 양쪽에 있다.
+round-2 리뷰: round-1이 지적한 *단일-variant 누락*이 Files to Modify 레벨에서 재발했었다.
+(리포 루트 `docs/git-workflow/branch-strategy.md`는 **변경 대상이 아니다** — 사용자 선호 보존)
 
 **메타 (6)** — 3× `plugin.json` + 3× `CHANGELOG.md` (quality-gates · spec-distill · project-init).
 `plugin-audit`은 이 sweep에서 변경 대상이 아니다 — 이미 reference 구현이다.
@@ -315,6 +382,45 @@ reference 구현은 `plugins/plugin-audit/agents/*.md` 3개 — `model: inherit`
 5. **`/qg branch`** — 별-모델(codex) 포함 리뷰. 리포가 반복 실증한 대로 same-family 리뷰어들이
    공유 맹점을 갖기 때문이다.
 
+### 9.1 Mutation 시나리오 — 각 락이 무엇에 반응해야 하는가
+
+락이 통과한다는 사실은 이빨의 증거가 아니다. **억제를 되돌려 넣었을 때 RED가 나야** 이빨이다.
+각 변경 락마다 아래 mutation을 적용하고 RED를 확인한 뒤 revert한다.
+
+| 락 | mutation (되돌려 넣을 것) | 기대 |
+|---|---|---|
+| 모델 핀 양방향 락 5개 | 해당 agent frontmatter를 `model: opus`/`model: sonnet`으로 되돌림 | RED |
+| 같은 락 (반대 방향) | `model:` 줄을 **삭제** — 핀도 `inherit`도 없는 상태 | RED (`inherit` 존재를 positive assert하므로) |
+| codex 추론 상한 락 | `-c 'model_reasoning_effort="medium"'` 재삽입 | RED |
+| 같은 락 (보안 보존) | `-s read-only` 제거 | RED — 상한 제거가 샌드박스까지 걷어내지 않았음을 증명 |
+| E10 상한 문구 락 | agent 본문에 `최대 2회` 재삽입 | RED |
+| `web_budget` T21 교체 락 | 어느 한 소비자에 상한 게이트 재도입 | RED (**소비자별 독립** — 한쪽만 되돌려도 잡혀야 AC7c가 의미 있다) |
+| kill switch 락 | `DEVBREW_SPEC_DISTILL_DISABLE_WEB` 체크 제거 | RED, 소비자 각각에 대해 |
+| AC14c 승격 락 | `synthesize_findings.py`의 신규 수용 경로 revert | RED |
+| AC15 단어경계 락 | `re.escape(phrase)`에서 경계 제거 | RED (정상 용어가 hit) |
+| 같은 락 (반대 방향) | blacklist의 온전한 단어 하나를 넣은 픽스처 | **여전히 hit** — 완화가 검사를 죽이지 않았음 |
+
+**락 문구는 body-unique여야 한다.** assert 문구가 헤더나 주석에도 있으면 본문을 삭제해도 GREEN이
+나온다 — 이 리포가 이미 겪은 함정이다. 각 락은 섹션 윈도우 안에서 grep하고, 헤더만 남긴
+mutation으로 그 사실을 증명한다.
+
+### 9.2 AC11 dispatch 실측 절차
+
+프론트매터에 적혔다는 것은 런타임 반영의 증거가 아니다 — agent 레지스트리는 **세션 시작 시
+스냅샷**되므로 편집 직후 같은 세션에서 dispatch하면 옛 정의가 돌 수 있다.
+
+1. S1·S2 커밋 후 **세션을 재시작**한다 (또는 headless `claude -p --plugin-dir`로 fresh 세션).
+2. `spec-reviewer`를 1회 dispatch한다 (아무 design doc 대상).
+3. `~/.claude/projects/<proj>/<sid>/subagents/agent-<id>.meta.json`에서 `agentType`으로 신원을 확정하고,
+   같은 id의 `.jsonl`에서 확인한다:
+   - `grep -o '"model":"[^"]*"' …` → `claude-opus-5` (세션 모델). `claude-sonnet-5`면 **핀이 살아 있다**.
+   - `grep -o '"name":"[A-Za-z0-9_-]*"' …` → `WebSearch` 실재. 없으면 도구가 프론트매터에만 있고
+     런타임에 없다는 뜻이다.
+4. 두 관측을 이 문서 §12에 날짜와 함께 기록한다. **에이전트의 자기보고는 증거가 아니다** —
+   트랜스크립트만 증거다.
+
+이 절차의 baseline은 이미 있다: 변경 *전* 측정치가 §1.1 표이고, 같은 방법으로 얻었다.
+
 ## 10. Rejected Alternatives
 
 - **`web_budget.py`를 승인 게이트로 전환** — 핸드오프 §1이 제시한 처방이고 비용 동의를 보존하지만,
@@ -328,6 +434,21 @@ reference 구현은 `plugins/plugin-audit/agents/*.md` 3개 — `model: inherit`
 - **철학 doc에 새 P# 추가** — 판별 기준을 새 원칙으로 못 박는 안. devbrew의 default는 기존 원칙
   흡수이고, 이 기준은 이미 P8이 담고 있다. 새 원칙을 더하는 것 자체가 이 sweep이 줄이려는 무게다.
 - **한 커밋으로 일괄 수정** — 리뷰 가능성이 무너진다. 핸드오프 §4가 명시적으로 금지한다.
+
+### 10.1 Rollout 구조 — 3안 비교 후 선택
+
+세 플러그인 + 루트 규약 + 메모리를 건드리므로 배포 단위를 정해야 한다 (codex 리뷰 지적).
+
+| 안 | 원자성 | 롤백 | SemVer | 리뷰 가능성 |
+|---|---|---|---|---|
+| **A. 관심사별 커밋 1 PR** (S1→S5, 채택) | 각 커밋이 한 관심사 | 커밋 단위 revert | PR당 3 플러그인 bump 1회씩 | 리뷰어가 *"핀 제거"* 를 세 플러그인에서 한 번에 봄 — 이 sweep의 논거가 **교차-플러그인 일관성**이라 같이 봐야 판단이 선다 |
+| B. 플러그인별 PR 3개 | 플러그인 경계 | PR 단위 | PR당 1 bump — 가장 단순 | *같은* 결함이 3 PR에 흩어져 각 리뷰어가 부분만 봄. `CLAUDE.md`·philosophy는 어느 PR에도 자연스럽게 속하지 않음 |
+| C. 단일 커밋 단일 PR | 없음 | 전부 아니면 전무 | 1회 | 붕괴 — 핸드오프 §4가 금지 |
+
+**A를 채택한다.** 근거: 이 sweep의 핵심 주장이 *"같은 억제가 플러그인 경계를 넘어 반복된다"* 이므로,
+경계로 자르면 그 주장을 리뷰어가 검증할 수 없다. B의 장점(bump 추적 단순화)은 커밋 단위 분리로
+이미 대부분 확보된다. 다만 **S1이 예상보다 커지면 S1만 먼저 PR로 내는 것을 허용**한다 — 모델 핀은
+독립적으로 완결되고 나머지를 블록하지 않는다.
 
 ## 11. 이 사이클에서 제외 — 별건 목록
 
@@ -378,11 +499,15 @@ devbrew 전 표면에서 하니스가 모델 능력을 깎는 지점을 제거�
 
 ### Deferred to plan
 
-- S1~S5 각각의 파일별 편집 순서와 커밋 경계
-- 각 회귀 락의 mutation 시나리오 (무엇을 되돌려 넣어 RED를 확인할지)
-- AC11 dispatch 실측의 구체 절차 — 레지스트리 스냅샷 때문에 세션 재시작이 필요할 수 있다
-- 3개 플러그인을 한 PR로 낼지 플러그인 단위로 쪼갤지 (round-1 리뷰의 advisory)
-- §11 별건 8개를 다룰 후속 사이클의 범위
+아래 넷은 round-2 리뷰가 *"AC가 요구하는데 미완"* 으로 지적해 **설계로 끌어올렸다** —
+`§9.1`(mutation 시나리오) · `§9.2`(AC11 절차) · `§10.1`(rollout 선택) · `§6 S3`(하위 단위와 커밋 경계).
+
+계획 단계에 남는 것은 이 넷뿐이다:
+
+- 각 하위 단계 안에서의 파일별 편집 **순서** (무엇을 먼저 건드려야 중간 상태의 RED가 최소인지)
+- 기존 테스트가 RED로 도는 중간 커밋을 허용할지, 아니면 각 커밋을 green으로 유지할지
+- §11 별건 8개를 다룰 후속 사이클의 범위와 우선순위
+- 메모리 편집을 커밋에 포함할지 (메모리는 리포 밖 — git에 안 들어간다)
 
 ## 12. Metadata
 
