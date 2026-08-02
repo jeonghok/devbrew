@@ -2003,7 +2003,12 @@ REL8="docs/superpowers/specs/2026-08-01-t8-design.md"
 new_doc "$REL8"
 run_validator "$REL8" "$SID8" >/dev/null
 emit8a=$(run_stop "$SID8")
-# verdict 없이 중단 — mark-reviewed를 부르지 않는다.
+# 리뷰가 **시작은 했다** — skill Step 1 의 진입 strip 이 돌았다는 뜻이다. 이 한 줄이 없으면
+# T8 은 "verdict 없는 dispatch 2회"를 잴 뿐 선언한 시나리오("중단된 리뷰의 자기치유")를
+# 재지 못하고, Step 6 의 T8 mutation(기록을 진입 시점으로 되돌리기)이 픽스처에 **닿지
+# 않아** GREEN 이 난다 — 도달 불가능한 mutation 은 이빨의 증거가 아니다.
+run_ledger strip-pending "$SID8" "$WORK/$REL8" >/dev/null 2>&1
+# 그리고 verdict 없이 죽었다 — mark-reviewed 를 부르지 않는다.
 edit_doc "$REL8" 2
 run_validator "$REL8" "$SID8" >/dev/null
 emit8b=$(run_stop "$SID8")
@@ -2161,6 +2166,8 @@ bash tests/test_arm_ledger_timing.sh 2>&1 | grep -E '^\s+[✓✗] T[78]'
 cp /tmp/al.bak scripts/arm_ledger.py
 
 # T8: 기록을 진입 시점으로 되돌리기(strip 이 armed 도 찍게) → T8 RED (T7은 GREEN)
+# 이 mutation 은 T8 픽스처가 strip-pending 을 **실제로 부를 때만** 도달한다(위 참조).
+# 초안은 그 호출이 없어 mutation 이 GREEN 을 냈다 — Task 8 실행 중 발견·교정.
 m scripts/arm_ledger.py '        state_file.write_text(strip_pending(body).rstrip() + "\n", encoding="utf-8")' \
   '        state_file.write_text(mark_armed(strip_pending(body), raw_path), encoding="utf-8")'
 bash tests/test_arm_ledger_timing.sh 2>&1 | grep -E '^\s+[✓✗] T[678]'
