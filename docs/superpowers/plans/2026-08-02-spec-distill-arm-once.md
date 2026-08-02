@@ -2114,7 +2114,7 @@ fi
 # 윈도우 안에서 찾는다. 빈 윈도우는 앵커가 깨진 것이므로 FAIL(조용한 통과 금지).
 win="$(awk '/리뷰 완료 기록/{f=1} /^## /{f=0} f' "$SKILL")"
 if [[ -n "$win" ]] \
-  && grep -q 'mark-reviewed' <<<"$win" \
+  && grep -qF 'arm_ledger.py" mark-reviewed' <<<"$win" \
   && grep -q 'claude_verdict_unrecoverable' <<<"$win" \
   && grep -q 'codex_degraded' <<<"$win"; then
   note PASS "T12b: SKILL Step 3의 mark-reviewed 지시가 both-dead 배제 조건과 같은 블록"
@@ -2134,7 +2134,40 @@ bash tests/test_arm_ledger_timing.sh
 
 Expected: `Total: 8 | Pass: 8 | Fail: 0` (T6·T7·T8·T9·T10·T11·T12a·T12b)
 
-- [ ] **Step 6: mutation 6종**
+> **Step 6 레시피 정정 (Task 8 실행 중 발견 — 초안의 mutation 셋에 결함 3종이 있었다).**
+> mutation 은 락의 이빨을 증명하는 계측기다. 계측기가 대상을 못 건드리면 나오는 GREEN 은
+> "이빨 없음"이 아니라 **"측정 안 됨"** 인데, 둘은 출력이 같아 구분되지 않는다. 아래 셋을
+> 적용하지 않고 초안대로 돌리면 가짜 GREEN 둘을 이빨의 증거로 읽게 된다.
+>
+> - **T8 mutation 은 `strip_pending_file` 의 내부 write 를 건드리면 안 된다.** 그 줄은 pending
+>   이 살아 있는 동안에만 도달하는데(`arm_ledger.py` 의 pending 가드가 먼저 early-return),
+>   Stop 의 `rewrite_state` 가 **같은 write 에서** pending 을 이미 지운다. 대신 skill Step 1 이
+>   실제로 부르는 **CLI `strip-pending` 분기**를 mutate 해 진입 시점에 원장을 쓰게 만든다 —
+>   그것이 초안이 의도한 성질("기록을 진입 시점으로 되돌리면 영구-표시 버그가 재발한다")과
+>   같은 성질이다. (초안이 도달 불가라고 단정한 것도 과장이었다: `edit_doc`+`run_validator`
+>   사이클을 한 번 더 넣으면 pending 이 되살아나 내부 write 도 도달한다. 도달 불가한 것은
+>   **이 픽스처 배치에서**일 뿐이다.)
+> - **`m()` 헬퍼의 `replace(old, new, 1)` 은 첫 occurrence 를 때린다.** `SKILL.md` 에서
+>   `claude_verdict_unrecoverable` 는 :80(merge_review 키 목록, 윈도우 **밖**)과 :94(윈도우 안)에
+>   있으므로 T12b mutation 이 :80 을 바꾸고 락이 읽는 :94 는 멀쩡히 남는다. 대상이 여러 곳에
+>   있는 토큰을 mutate 할 때는 **윈도우 안의 그 줄**을 지목하라.
+> - **T12a 에도 mutation 이 필요하다.** green-expected 락은 모양으로 이빨을 판별할 수 없다.
+>   `merge_review` 가 두 degrade flag 를 emit 하지 않게 만들어 T12a RED 를 관측한다.
+>
+> **추가 mutation 2종 (T12b 의 진짜 이빨 증명).** 초안에는 없었다.
+> **M9** — `SKILL.md` 의 `mark-reviewed` **명령 줄 자체를 삭제** → T12b RED. layer (b) 가
+> 존재하는 이유가 정확히 이 시나리오인데 초안은 이것을 한 번도 증명하지 않았다.
+> **M10** — 그 줄을 **다른 섹션으로 이동**(파일 전체 occurrence 수는 1로 유지) → T12b RED.
+> 삭제만으로는 "토큰이 어딘가 있다"와 "토큰이 이 윈도우 안에 있다"를 구분하지 못하는데,
+> **co-location 이 layer (b) 의 내용 전부**다. 이동 mutation 만이 그것을 잰다.
+>
+> **paired check 의 정직한 한계.** T12a 는 `merge_review` 출력만 읽고 `$SKILL` 을 열지 않으므로
+> "M9/M10 아래 T12a 가 GREEN 유지"는 **구조적으로 보장된 것**이지 층 독립의 증거가 아니다
+> (두 층의 입력이 애초에 서로소다). 두 층 각각은 이빨이 있지만, 이 pairing 이 실어 나르는
+> 정보는 T7↔T8 의 pairing 보다 약하다 — T7·T8 은 **같은 상태**에 반대 결과를 요구하므로
+> 그쪽 pairing 은 진짜 상호 제약이다.
+
+- [ ] **Step 6: mutation (초안 6종 + 위 정정 · T12a 1종 · M9·M10 2종 = 9종)**
 
 ```bash
 cp scripts/arm_ledger.py /tmp/al.bak
