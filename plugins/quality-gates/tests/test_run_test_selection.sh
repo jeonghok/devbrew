@@ -212,8 +212,61 @@ case_run_shell_refuses_out_of_scope_unit() {
 # 조용히 흘러 이후 case 문에서 아무 분기도 안 타는 malformed 출력이 된다.
 case_run_unknown_runner_usage_error() {
   mkw
-  local rc; bash "$RTS" run "$W" bogus-runner bulk X >/dev/null 2>&1; rc=$?
-  [[ $rc -eq 2 ]] && pass "알 수 없는 runner → exit 2 (usage)" || fail "unknown runner exit (rc=$rc)"
+  local out rc; out=$(bash "$RTS" run "$W" bogus-runner bulk X 2>/dev/null); rc=$?
+  if [[ $rc -eq 2 && -z "$out" ]]; then
+    pass "알 수 없는 runner → exit 2 (usage) + stdout 없음"
+  else fail "unknown runner exit (rc=$rc out='$out')"; fi
+  rmw
+}
+
+# 리뷰 Finding 1: bulk 모드의 absent 행은 present_count-eq-0 short-circuit 이나 per-unit
+# absent 분기와 다른 코드 경로다(:387 부근). 이 케이스가 없으면 bulk 쪽 printf 를 지워도
+# 스위트가 GREEN 이다 — 총 함수 계약이 소리 없이 깨진다.
+case_run_bulk_partial_absent() {
+  mk_shell_repo
+  local out; out=$(bash "$RTS" run "$W" shell bulk tests/ok.sh tests/gone.sh 2>/dev/null)
+  local n; n=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
+  if [[ "$n" == "2" ]] \
+     && printf '%s\n' "$out" | grep -q "^tests/ok\.sh${TAB}" \
+     && printf '%s\n' "$out" | grep -q "^tests/gone\.sh${TAB}absent${TAB}-$"; then
+    pass "bulk 부분 부재 → 2행 (존재분 + absent)"
+  else fail "bulk partial absent (got: $out)"; fi
+  rmw
+}
+
+# 리뷰 Finding 2: 거부된 unit 이 같은 bulk 호출의 형제 unit 상태를 오염시키지 않는다.
+# per-unit 단일-거부 케이스만으로는 refused_units 북키핑이 bulk_status 계산과 잘못된
+# 순서로 얽히는 경로를 못 잡는다.
+case_run_bulk_refused_does_not_corrupt_sibling() {
+  mkw; mkdir -p "$W/tests" "$W/scripts"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$W/tests/ok.sh"; chmod +x "$W/tests/ok.sh"
+  printf '#!/usr/bin/env bash\ntouch PWNED\nexit 0\n' > "$W/scripts/deploy.sh"
+  chmod +x "$W/scripts/deploy.sh"
+  local out; out=$(bash "$RTS" run "$W" shell bulk tests/ok.sh scripts/deploy.sh 2>/dev/null)
+  if printf '%s\n' "$out" | grep -q "^tests/ok\.sh${TAB}pass${TAB}0$" \
+     && printf '%s\n' "$out" | grep -q "^scripts/deploy\.sh${TAB}unrun${TAB}-$" \
+     && [[ ! -e "$W/PWNED" ]]; then
+    pass "bulk 거부 unit 이 형제 상태를 오염시키지 않음 (부작용 없음)"
+  else fail "bulk 혼합 거부 (out='$out', PWNED=$([[ -e "$W/PWNED" ]] && echo yes || echo no))"; fi
+  rmw
+}
+
+# 리뷰 Finding 4: bulk 모드에서 공백이 든 unit 경로가 공백-연결(unquoted word-splitting)로
+# 두 위치 인자로 쪼개지지 않는다. git 경로는 공백을 금지하지 않는다.
+#
+# shell 러너로는 이 결함을 잡을 수 없다: run_units 가 shell을 이미 unit별로 순회하고,
+# shell_unit_in_scope 가드가 쪼개진 두 조각(둘 다 tests/*.sh 패턴을 만족 못함) 을 각각
+# 거부하면서 rc 를 건드리지 않아 우연히 초기값 0(pass)이 살아남는다 — 실행 거부 가드가
+# 쪼개짐 결함을 가려버린다. pytest 는 "$@" 를 한 번에 통째로 넘기므로 쪼개지면 pytest
+# 자신이 "file or directory not found" 로 exit 4(error) 를 낸다 — 실측: 단일 인자는
+# exit 0, 두 조각으로 쪼개면 exit 4.
+case_run_bulk_unit_path_with_space() {
+  mkw; mkdir -p "$W/tests"; : > "$W/pytest.ini"
+  printf 'def test_ok():\n    assert True\n' > "$W/tests/test my.py"
+  local out; out=$(bash "$RTS" run "$W" pytest bulk "tests/test my.py" 2>/dev/null)
+  [[ "$out" == "tests/test my.py${TAB}pass${TAB}0" ]] \
+    && pass "공백 포함 unit 경로가 bulk 모드에서 쪼개지지 않음" \
+    || fail "공백 경로 bulk (got: $out)"
   rmw
 }
 
@@ -223,7 +276,9 @@ for c in case_assign_go_package case_assign_unclaimed case_assign_bulk_conflict 
          case_assign_dedup_unclaimed case_assign_dedup_is_literal_not_regex \
          case_assign_spec_any_extension case_run_test_failure_vs_absent_runner \
          case_run_total_function case_run_absent case_run_bulk_green \
-         case_run_shell_refuses_out_of_scope_unit case_run_unknown_runner_usage_error; do
+         case_run_shell_refuses_out_of_scope_unit case_run_unknown_runner_usage_error \
+         case_run_bulk_partial_absent case_run_bulk_refused_does_not_corrupt_sibling \
+         case_run_bulk_unit_path_with_space; do
   echo "== $c"; $c
 done
 echo "── run-test-selection: $PASS passed, $FAIL failed"

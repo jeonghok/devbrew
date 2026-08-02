@@ -13,6 +13,11 @@ set -u
 
 die() { echo "run-test-selection: $*" >&2; exit 2; }
 
+# cargo 빌드 산출물의 트리-로컬 경로 — **유일 소유자**. cargo-target-dir 서브커맨드와
+# run 의 cargo 실행 분기가 각자 리터럴을 들고 있으면 한쪽만 편집됐을 때 AC50이 조용히
+# 깨진다 (기준선이 HEAD 산출물을 재사용). 반드시 이 함수를 통해서만 쓴다.
+cargo_target_dir_for() { printf '%s/.qg-cargo-target\n' "$1"; }
+
 # ── 어댑터 표 (§5.9). 배열 순서 = 소유권 충돌 해소 순서이자 detect 출력 순서. ──
 granularity_of() {
   case "$1" in
@@ -248,7 +253,7 @@ $f"
     # read-only 내성: 이 워크트리에 쓸 CARGO_TARGET_DIR. 트리별 독립임을 밖에서
     # 검증할 수 있게 노출한다 (AC50/T47). 아무것도 실행하지 않는다.
     [[ $# -eq 2 ]] || die "usage: cargo-target-dir <worktree-abs>"
-    printf '%s/.qg-cargo-target\n' "$2"
+    cargo_target_dir_for "$2"
     exit 0
     ;;
   run)
@@ -279,6 +284,7 @@ $f"
     # 러너 집합에서 성공했으므로 setup_cmd_of가 같은 이름으로 die 할 일은 없다.
     scmd=$(setup_cmd_of "$w" "$runner")
     if [[ "$scmd" != "-" ]]; then
+      # 순서 주의: >&2 로 fd1 을 먼저 고정한 뒤 2>&1 은 no-op dup — 단순화 금지
       if ! ( cd "$w" && sh -c "$scmd" ) >&2 2>&1; then
         echo "run-test-selection: setup 실패: $scmd" >&2
         emit_all_unrun "$@"; exit 3
@@ -346,7 +352,9 @@ $u"
         cargo)
           # 빌드 산출물은 트리별 독립 (AC50). 다운로드 캐시(CARGO_HOME/registry)는
           # 내용주소라 공유해도 두 트리가 같은 바이트를 본다 — 기본 위치 그대로 둔다.
-          ( cd "$w" && CARGO_TARGET_DIR="$w/.qg-cargo-target" cargo test ) >&2 || rc=$? ;;
+          # cargo-target-dir 서브커맨드와 같은 함수(cargo_target_dir_for)로 계산한다 —
+          # 두 리터럴로 흩어지면 한쪽만 편집됐을 때 AC50이 조용히 깨진다.
+          ( cd "$w" && CARGO_TARGET_DIR="$(cargo_target_dir_for "$w")" cargo test ) >&2 || rc=$? ;;
         make)
           ( cd "$w" && make test ) >&2 || rc=$? ;;
         npm-script)
@@ -364,10 +372,14 @@ $u"
     fi
 
     if [[ "$mode" == "bulk" ]]; then
-      present_units=""
-      for u in "$@"; do exists_unit "$u" && present_units="$present_units $u"; done
-      # shellcheck disable=SC2086  # unit 경로에 공백 없음 (git 경로 계약)
-      run_units $present_units; bulk_rc=$?
+      # 배열로 모은다 — 공백-연결 문자열을 그대로 펼치면(unquoted word-splitting) 경로에
+      # 공백이 든 unit이 여러 위치 인자로 쪼개져 러너에 전달된다. git 경로는 공백을
+      # 금지하지 않으므로 "경로에 공백 없음" 은 성립하지 않는 가정이었다 — 배열이 유일한
+      # 안전한 형태다. present_count > 0 이 위에서 이미 보장되므로 빈 배열을
+      # set -u 아래서 펼치는 문제도 없다.
+      present_units=()
+      for u in "$@"; do exists_unit "$u" && present_units+=("$u"); done
+      run_units "${present_units[@]}"; bulk_rc=$?
       bulk_status=$(status_of_exit "$bulk_rc")
       for u in "$@"; do
         if is_refused "$u"; then printf '%s\tunrun\t-\n' "$u"

@@ -165,11 +165,37 @@ case_artifact_leak_measurement() {
   rm -rf "$t"
 }
 
+# 리뷰 Finding 3: cargo-target-dir 서브커맨드와 run 의 cargo 실행 분기가 실제로 같은 값을
+# 쓰는지 실행으로 검증한다 — 소스가 흩어진 두 리터럴로 재발하면(한쪽만 편집) 이 케이스가
+# 잡는다. cargo 를 PATH 스텁으로 바꿔 실제 CARGO_TARGET_DIR 환경변수를 관측한다
+# (실물 cargo/rustc 설치에 의존하지 않는다).
+case_run_cargo_uses_cargo_target_dir_helper() {
+  local w bindir expected observed
+  w=$(mktemp -d); printf '[package]\nname="x"\n' > "$w/Cargo.toml"
+  bindir=$(mktemp -d)
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'echo "$CARGO_TARGET_DIR" > "%s/.observed-target"\n' "$w"
+    printf 'exit 0\n'
+  } > "$bindir/cargo"
+  chmod +x "$bindir/cargo"
+  expected=$(bash "$RTS" cargo-target-dir "$w")
+  PATH="$bindir:$PATH" bash "$RTS" run "$w" cargo bulk BULK >/dev/null 2>&1
+  observed=$(cat "$w/.observed-target" 2>/dev/null || echo "<관측 안 됨>")
+  if [[ "$observed" == "$expected" ]]; then
+    pass "run 의 cargo 실행이 cargo-target-dir 서브커맨드와 같은 값을 씀 ('$expected')"
+  else
+    fail "cargo target dir 불일치 (expected='$expected' observed='$observed')"
+  fi
+  rm -rf "$w" "$bindir"
+}
+
 for c in case_pytest case_unittest case_pytest_declared_without_config case_shell case_jest case_vitest case_go case_cargo \
          case_make case_npmscript case_zero_adapters case_polyglot \
          case_conflict_python case_conflict_js_ambiguous case_conflict_js_resolved \
          case_no_reimpl_in_skill case_no_ambient_pytest_probe \
-         case_setup_cmd_identical_both_sides case_build_output_not_shared case_artifact_leak_measurement; do
+         case_setup_cmd_identical_both_sides case_build_output_not_shared case_artifact_leak_measurement \
+         case_run_cargo_uses_cargo_target_dir_helper; do
   echo "== $c"; $c
 done
 echo "── runner adapters: $PASS passed, $FAIL failed"
