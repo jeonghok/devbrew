@@ -40,6 +40,11 @@ BLACKLIST = SCRIPT_DIR.parent / "scripts" / "ambiguity-blacklist.txt"
 
 PATH_PREFIX = "docs/superpowers/specs/"
 
+# arm_ledger 와 같은 패턴이지만 의도적으로 로컬이다. 이 플러그인은 이미
+# review-dispatch.py·pending-review-reminder.py·arm_ledger.py·suppress_state.py
+# 네 곳에서 이 정규식을 각자 정의한다 — 새 중복이 아니라 기존 관례.
+PENDING_RE = re.compile(r"^pending_review:\n(?:  [^\n]*\n)*", re.MULTILINE)
+
 
 def kill_switch_active() -> bool:
     if os.environ.get("DEVBREW_DISABLE_SPEC_DISTILL") == "1":
@@ -182,15 +187,10 @@ def write_state(session_id: str, path: str, mode: str, worktree_path: str) -> No
         return
     # Matching session_id (or no frontmatter — backward compat per AC8 case iii)
     # — strip pending_review block and append fresh
-    try:
-        import arm_ledger  # pyright: ignore[reportMissingImports]
-        body = arm_ledger.strip_pending(body)
-    except Exception as exc:  # noqa: BLE001 — graceful degradation
-        print(
-            f"[spec-distill] arm_ledger import failed in write_state "
-            f"(non-fatal, pending_review strip skipped): {exc}",
-            file=sys.stderr,
-        )
+    # "pending_review 블록은 정확히 하나" 는 모듈 가용성과 무관하게 성립해야 한다.
+    # 두 블록이 생기면 Stop 이 첫 블록(다른 문서)을 소비하고 rewrite_state 의 전역
+    # re.sub 가 방금 arm 된 문서의 트리거까지 지운다 — 오류 없는 under-review.
+    body = PENDING_RE.sub("", body)
     state_file.write_text(body.rstrip() + "\n\n" + block, encoding="utf-8")
 
 
