@@ -184,13 +184,85 @@ case_put_partial_overwrites_matching_unit_preserves_others() {
   rmroot
 }
 
+# Not in the brief — added during self-review (coordinator round 3, Finding 1).
+# `{ list; } > file` exits with the status of its LAST command, not whether the
+# writes/redirect succeeded. The last statement inside put's write block is
+# `[[ -n "$fresh" ]] && printf ...` — when $fresh is empty, that `&&` short-circuits
+# to a false/1 exit status even though every printf before it succeeded and the file
+# was written fine. The `||` error branch then fires, deletes the just-written tmp
+# file, logs a FALSE "write failed", and exits 4 — on a normal, anticipated outcome
+# (baseline setup failed for every requested unit is a first-class case the design
+# names explicitly). Exercises all three ways a put's payload can normalize to
+# empty: literally empty stdin, an all-`unrun` payload, and an all-malformed payload
+# (no tabs / wrong field count). Revert the trailing `:` guard and this goes RED.
+case_put_empty_payload_normalizes_to_empty_exits_zero() {
+  mkroot; seed "$SHA_A" pytest   # a.py=pass/0, b.py=fail/1
+  local rc out expect="a.py${TAB}pass${TAB}0;b.py${TAB}fail${TAB}1;"
+
+  printf '' | bash "$BC" put "$ROOT" "$SHA_A" pytest 2>/dev/null; rc=$?
+  out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py b.py | tr '\n' ';')
+  if [[ $rc -eq 0 && "$out" == "$expect" ]]; then
+    pass "빈 stdin put → exit 0 + 기존 행 보존"
+  else fail "빈 stdin put (rc=$rc out='$out')"; fi
+
+  printf 'c.py\tunrun\t-\n' | bash "$BC" put "$ROOT" "$SHA_A" pytest 2>/dev/null; rc=$?
+  out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py b.py | tr '\n' ';')
+  if [[ $rc -eq 0 && "$out" == "$expect" ]]; then
+    pass "전량 unrun payload → exit 0 + 기존 행 보존"
+  else fail "전량 unrun payload (rc=$rc out='$out')"; fi
+
+  printf 'z.py\tbogus\t0\nnotabs\n' | bash "$BC" put "$ROOT" "$SHA_A" pytest 2>/dev/null; rc=$?
+  out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py b.py | tr '\n' ';')
+  if [[ $rc -eq 0 && "$out" == "$expect" ]]; then
+    pass "전량 malformed payload → exit 0 + 기존 행 보존"
+  else fail "전량 malformed payload (rc=$rc out='$out')"; fi
+
+  rmroot
+}
+
+# Not in the brief — added during self-review (coordinator round 3, Finding 2). The
+# 0-vs-4 distinction is get's whole contract (0 = normal including zero hits, 4 =
+# corrupt/loud). No existing case pinned exit 0 for the "no cache file at all yet"
+# path distinctly from the corrupt-file exit-4 cases — every fixture piped stderr
+# away and only counted stdout lines, so a mutation that deletes the `[[ -f "$f" ]]`
+# branch (making every read_valid_body failure exit 4, missing file included) leaves
+# stdout empty in every existing case and slips through.
+case_get_missing_cache_file_exits_zero() {
+  mkroot   # cache ROOT exists (mktemp -d) but no .md was ever put for this merge_base
+  local out rc
+  out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py 2>/dev/null); rc=$?
+  if [[ $rc -eq 0 && -z "$out" ]]; then
+    pass "캐시 파일 부재 → exit 0 + 무출력 (손상의 exit 4와 구분)"
+  else fail "캐시 파일 부재 (rc=$rc out='$out')"; fi
+  rmroot
+}
+
+# Not in the brief — added during self-review (coordinator round 3, Minor 5). Every
+# other fixture pre-creates the cache root via mkroot's `mktemp -d`, so put's
+# `mkdir -p "$root"` on a genuinely non-existent root was never exercised.
+case_put_creates_nonexistent_cache_root() {
+  local parent; parent=$(mktemp -d) || exit 1
+  ROOT="$parent/nested/cache-root"   # deliberately absent — put must mkdir -p it
+  local rc out
+  printf 'a.py\tpass\t0\n' | bash "$BC" put "$ROOT" "$SHA_A" pytest; rc=$?
+  out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py)
+  if [[ $rc -eq 0 && -d "$ROOT" && "$out" == "a.py${TAB}pass${TAB}0" ]]; then
+    pass "존재하지 않는 cache-root → mkdir -p 후 정상 기록·조회"
+  else fail "cache-root 최초 생성 (rc=$rc out='$out')"; fi
+  cd / && rm -rf "$parent"
+  ROOT=""
+}
+
 for c in case_key_includes_merge_base case_key_includes_runner case_get_full_hit \
          case_get_partial_hit case_get_corrupt_header case_get_corrupt_body \
          case_get_merge_base_mismatch case_put_atomic \
          case_unrun_not_cached_absent_cached case_bulk_key_isolation \
          case_put_merge_preserves_other_runner \
          case_put_partial_preserves_uninvolved_units_same_runner \
-         case_put_partial_overwrites_matching_unit_preserves_others; do
+         case_put_partial_overwrites_matching_unit_preserves_others \
+         case_put_empty_payload_normalizes_to_empty_exits_zero \
+         case_get_missing_cache_file_exits_zero \
+         case_put_creates_nonexistent_cache_root; do
   echo "== $c"; $c
 done
 echo "── baseline-cache: $PASS passed, $FAIL failed"

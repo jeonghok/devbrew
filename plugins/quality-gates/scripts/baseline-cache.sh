@@ -116,6 +116,8 @@ case "${1:-}" in
       printf -- '---\n'
       [[ -n "$kept"  ]] && printf '%s\n' "$kept"
       [[ -n "$fresh" ]] && printf '%s\n' "$fresh"
+      :   # 블록의 종료 상태는 마지막 명령의 것이다 — 위 `[[ ]] &&` 가 빈 payload 에서
+          # 1 로 단락되면 쓰기가 전부 성공했는데도 거짓 실패(exit 4)가 난다. 제거 금지.
     } > "$tmp" 2>/dev/null || { rm -f "$tmp"; echo "baseline-cache: 임시 파일 쓰기 실패" >&2; exit 4; }
     mv "$tmp" "$f" 2>/dev/null || { rm -f "$tmp"; echo "baseline-cache: rename 실패: $f" >&2; exit 4; }
     exit 0
