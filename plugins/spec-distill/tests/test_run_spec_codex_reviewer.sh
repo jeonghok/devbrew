@@ -32,10 +32,20 @@ else
   note FAIL "AC6: SCRATCH guard does NOT precede trap arm (guard=${scratch_guard_line:-<missing>} trap=${trap_line:-<missing>})"
 fi
 
-grep -qE 'model_reasoning_effort.*medium' "$RUN" \
-  && note PASS "OQ2: model_reasoning_effort=medium" || note FAIL "OQ2: effort not medium"
-grep -qE '\-s read-only' "$RUN" \
-  && note PASS "Law2: -s read-only sandbox flag" || note FAIL "-s read-only missing"
+# 추론 강도 상한 부재 락 — `run_brief_codex_reviewer.sh`가 이미 쓰는 계약을 전파한다.
+# 하니스가 medium을 박으면 high/xhigh로 설정한 사용자가 조용히 하향되고, 그 하향은
+# codex co-review의 유일한 존재 이유(별-모델 적발력)를 정확히 깎는다.
+# `-c` 인자 줄만 본다 — 주석·문서에서 이름을 *언급*하는 것은 위반이 아니다(실행 경로가 기준).
+grep -qE '^[[:space:]]*-c .*model_reasoning_effort' "$RUN" \
+  && note FAIL "추론 강도가 실행 인자로 핀됨 — 사용자 codex 설정을 하향 억제한다" \
+  || note PASS "추론 강도 미핀 (사용자 codex 설정이 지배)"
+# 반대 방향 — 상한 제거가 샌드박스까지 걷어내지 않았음을 증명한다(C1 유지선).
+grep -qE '^[[:space:]]*-s read-only' "$RUN" \
+  && note PASS "Law2: -s read-only 샌드박스 플래그 존속" || note FAIL "-s read-only 사라짐"
+grep -qE '^[[:space:]]*-C ' "$RUN" \
+  && note PASS "-C 작업디렉토리 핀 존속" || note FAIL "-C 사라짐"
+grep -qE '^[[:space:]]*--json' "$RUN" \
+  && note PASS "--json 파싱 계약 존속" || note FAIL "--json 사라짐"
 
 # --- Behavioral: mock codex on PATH produces parsed YAML at out path ---
 DOC="$TMP/x-design.md"; printf '# X\n\n## 2. Goals\nrobust.\n' > "$DOC"

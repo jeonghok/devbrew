@@ -101,6 +101,13 @@ fi
 #   -C "$PROJECT_DIR": working directory pin (single pipeline coordinate)
 #   --json           : JSONL stream output
 #   < /dev/null      : detach stdin (prevents stdin deadlock on some codex versions)
+#
+# 추론 강도(`model_reasoning_effort`)는 핀하지 않는다 — 사용자 codex 설정이 지배한다.
+# 하니스가 "medium"을 박으면 high/xhigh로 설정한 사용자가 조용히 하향되고, 그 하향은
+# 이 co-reviewer의 유일한 존재 이유(별-모델 적발력)를 정확히 깎는다. 바닥값이
+# 필요하다는 판단이 서면 그때 명시적으로 문서화해서 넣는다.
+# (`run_brief_codex_reviewer.sh`가 이미 쓰던 계약을 전파한 것이다.)
+#
 # Direct codex invocation — no per-call timeout (hang risk accepted; backstops:
 # Bash tool timeout, DEVBREW_DISABLE_QG_CODEX=1, /cancel-qg). Layer 3 sandbox
 # (-s read-only) preserved. `|| EXIT_CODE=$?` keeps capture safe under set -e.
@@ -108,7 +115,6 @@ EXIT_CODE=0
 codex exec "$(cat "$PROMPT_FILE")" \
     -C "$PROJECT_DIR" \
     -s read-only \
-    -c 'model_reasoning_effort="medium"' \
     --json \
     < /dev/null \
     > "$STDOUT_FILE" \

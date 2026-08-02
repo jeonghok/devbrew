@@ -3,6 +3,21 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.5] — 2026-08-03
+
+### Changed
+- `run_codex_reviewer.sh` · `run_artifact_codex_reviewer.sh`(qg) /
+  `run_spec_codex_reviewer.sh`(spec-distill)에서 `-c 'model_reasoning_effort="medium"'`
+  실행 인자 삭제. 하니스가 medium을 박으면 high/xhigh로 설정한 사용자가 조용히 하향되고,
+  그 하향은 codex co-review의 유일한 존재 이유(별-모델 적발력)를 정확히 깎는다.
+  `run_brief_codex_reviewer.sh`가 이미 쓰던 계약을 전파한 것이다.
+  **load-bearing 플래그는 그대로다** — `-s read-only`(샌드박스) · `-C`(작업디렉토리 핀) ·
+  `--json`(파싱 계약) · `< /dev/null`(stdin detach).
+
+### Added
+- codex 러너 상한 부재 락(양방향) — 상한 재삽입과 샌드박스 제거 **둘 다** RED.
+  한 방향만 재면 "상한만 사라졌다"를 증명하지 못한다.
+
 ## [2.14.4] — 2026-08-03
 
 ### Changed
