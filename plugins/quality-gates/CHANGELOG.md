@@ -3,6 +3,18 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.4] — 2026-08-03
+
+### Changed
+- `adversarial` · `pr-understanding-builder` · `test-scope-validator`의 `model:` 리터럴 핀
+  (`opus`/`opus`/`sonnet`)을 `model: inherit`으로 교체. 하니스가 세션의 모델 선택을 덮어쓰지
+  않는다 — 리터럴 핀은 세션이 더 강한 모델을 쓸 때 조용히 하향시키고(`test-scope-validator`는
+  opus-4.8 세션에서 sonnet-5로 실행된 관측 2회), 더 약한 모델을 쓸 때 사용자 동의 없이 비용을
+  올린다. `plugin-audit` 3개 에이전트가 이미 쓰던 reference 패턴을 전파한 것이다.
+- 모델 락 4개를 **양방향**으로 교체 — `inherit` 실재(positive) + 고정 티어 부재(negative).
+  한쪽만으로는 반대 방향 mutation(`model:` 줄 삭제 / 핀 재도입)이 통과한다.
+- README·`publishing-pr-understanding` SKILL의 모델 서술 5곳 동기화.
+
 ## [2.14.3] — 2026-07-29
 
 ### Fixed

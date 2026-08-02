@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # AC6 — adversarial persona structural conformance (symmetric to
-# test_security_reviewer_persona.sh). Locks: frontmatter (name / model: opus /
+# test_security_reviewer_persona.sh). Locks: frontmatter (name / model: inherit /
 # disallowedTools 4) + Gate A–D structure + v2.8.0 untrusted-input norm (A)
 # positioned before ## Verification protocol + 2 Gate C reject-at-verify
 # precedents (B) INSIDE the Gate C block, each specifying reject. Section-scoped
@@ -52,8 +52,10 @@ untrusted_section() {
 # Frontmatter required keys
 check "frontmatter name adversarial" \
   "grep -c '^name: adversarial$' '$PERSONA'" 1
-check "frontmatter model opus" \
-  "grep -c '^model: opus$' '$PERSONA'" 1
+check "frontmatter model inherit" \
+  "grep -c '^model: inherit$' '$PERSONA'" 1
+assert_absent "고정 티어 핀 없음 (하니스가 세션 모델을 덮어쓰지 않는다)" \
+  '^model: (opus|sonnet|haiku)$'
 check "frontmatter tools: allowlist (fail-closed)" \
   "grep -c '^tools: Read, Grep, Glob$' '$PERSONA'" 1
 assert_absent "죽은 allowedTools / denylist 없음" '^(allowedTools|disallowedTools):'

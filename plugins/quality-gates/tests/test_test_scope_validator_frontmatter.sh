@@ -53,9 +53,12 @@ echo "== Frontmatter declarations =="
 echo "$FM" | grep -qE '^name:[[:space:]]*test-scope-validator$' \
   && { PASS=$((PASS + 1)); note "PASS: name=test-scope-validator"; } \
   || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: name field"; }
-echo "$FM" | grep -qE '^model:[[:space:]]*sonnet$' \
-  && { PASS=$((PASS + 1)); note "PASS: model=sonnet"; } \
-  || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: model field"; }
+echo "$FM" | grep -qE '^model:[[:space:]]*inherit$' \
+  && { PASS=$((PASS + 1)); note "PASS: model=inherit"; } \
+  || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: model field (inherit 아님)"; }
+echo "$FM" | grep -qE '^model:[[:space:]]*(opus|sonnet|haiku)$' \
+  && { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: 고정 티어 핀 잔존"; } \
+  || { PASS=$((PASS + 1)); note "PASS: 고정 티어 핀 없음"; }
 echo "$FM" | grep -qE '^cost_class:[[:space:]]*low$' \
   && { PASS=$((PASS + 1)); note "PASS: cost_class=low"; } \
   || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: cost_class field"; }

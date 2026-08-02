@@ -63,7 +63,7 @@ quality-gates/
 │   ├── synthesizer.md           # Review gate Phase 1.6 — finding dedupe/rank
 │   ├── codex-reviewer.md        # Review gate Phase 1 — external OpenAI reviewer (Layer 2/3 isolation)
 │   ├── security-reviewer.md     # Review gate Phase 1 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`
-│   └── pr-understanding-builder.md  # publish 생성기 — model: opus, tools: Read 1개 (inert·미호출; fail-closed; 쓰기·실행·네트워크·위임 0; 유일 입력 = inlined blob)
+│   └── pr-understanding-builder.md  # publish 생성기 — model: inherit, tools: Read 1개 (inert·미호출; fail-closed; 쓰기·실행·네트워크·위임 0; 유일 입력 = inlined blob)
 ├── commands/
 │   ├── qg.md               # /qg slash command (--reset, --paths, branch flag 포함)
 │   ├── qg-publish.md       # /qg-publish slash command ([--dry-run]; publish skill로 얇은 dispatch)
@@ -136,11 +136,11 @@ The optional `codex-reviewer` agent has `cost_class: variable` — as a Tier B *
 
 ### PR-understanding publish cost (`/qg-publish`, separate from the two gates)
 
-`publishing-pr-understanding` skill은 `cost_class: variable` (context 크기·tier에 따라 다름). 저술을 맡는 `pr-understanding-builder`는 매 tier `model: opus`로 고정 — Deep tier만 실행 전 upfront cost 고지(AskUserQuestion)를 하며, 작은 diff는 비용이 자연히 bounded되고 `/qg-publish`는 명시적 실행이 곧 비용 수용이며, `/qg` 완료 시의 command-layer opt-in offer로도 이어질 수 있으나 자동 실행이 아니다(offer + 자체 consent = 2 touchpoint). Review/Runtime 두 게이트의 비용 표(위)와는 **완전히 별도** — publish는 게이트가 아니므로 depth 기반 자동 트리거가 없다.
+`publishing-pr-understanding` skill은 `cost_class: variable` (context 크기·tier에 따라 다름). 저술을 맡는 `pr-understanding-builder`는 `model: inherit` — 세션이 쓰는 티어를 그대로 받는다(하니스가 티어를 덮어쓰지 않는다). Deep tier만 실행 전 upfront cost 고지(AskUserQuestion)를 하며, 작은 diff는 비용이 자연히 bounded되고 `/qg-publish`는 명시적 실행이 곧 비용 수용이며, `/qg` 완료 시의 command-layer opt-in offer로도 이어질 수 있으나 자동 실행이 아니다(offer + 자체 consent = 2 touchpoint). Review/Runtime 두 게이트의 비용 표(위)와는 **완전히 별도** — publish는 게이트가 아니므로 depth 기반 자동 트리거가 없다.
 
 ### Adversarial reviewer model
 
-`adversarial` agent uses `model: opus`. It is the **Opus-critic over the Sonnet Phase 1 workers** (cf. Anthropic multi-agent patterns: spend capability at the judgment bottleneck): the Phase 1/2 reviewers run on cheaper models and the synthesizer after it is a deterministic script, so adversarial is the *single model-based judgment gate* in the Review gate — every finding the user sees passed through its verdict. Its persona runs a per-finding 3-gate verification (real? / introduced-by-this-diff? / handled-elsewhere?) plus a severity realist check, which is reasoning-heavy enough to warrant opus. A prior cost pass (T2-8) drifted the frontmatter/README toward sonnet while the SKILL dispatch still pinned opus; the three sites are now reconciled to opus and locked by `tests/test_adversarial_model_consistency.sh`. Runs ~once per Review gate fix-loop iteration (≤5×). `adversarial`/`scout`/`synthesizer`는 infrastructure dispatch(사용자-가시 비용 아님)이며, 위 재계산 max fan-out 선언에서 floor/codex/Tier C와 구분해 계산한다. To reduce its cost, lower the *number* of Review gate iterations or the diff scope — not this model.
+`adversarial` agent uses `model: inherit`. It is the **single model-based judgment gate** in the Review gate: the Phase 1/2 reviewers emit findings and the synthesizer after it is a deterministic script, so every finding the user sees passed through its verdict. Its persona runs a per-finding 3-gate verification (real? / introduced-by-this-diff? / handled-elsewhere?) plus a severity realist check. Because it is the judgment bottleneck it must run at **the session's own tier** — pinning a literal tier here silently downgrades the bottleneck whenever the session runs something stronger, and silently raises cost whenever it runs something cheaper. Both directions overwrite the user's model choice, which the harness does not do. Locked bidirectionally by `tests/test_adversarial_model_consistency.sh` (inherit present AND no fixed tier). Runs ~once per Review gate fix-loop iteration (≤5×). To reduce its cost, lower the *number* of Review gate iterations or the diff scope.
 
 ## 게이트
 
@@ -173,7 +173,7 @@ publish의 informed-consent(2차) 둘 다 사람의 명시 동의가 필요하�
 ```
 Tier A — Floor (비-trivia면 항상, 스코프 무관; 모델이 못 뺌)
   ├── quality-gates:security-reviewer   (Phase 1)   tools: Read, Grep, Glob (#104 락)
-  └── quality-gates:adversarial          (Phase 1.5, opus)  tools: Read, Grep, Glob (#104 락)
+  └── quality-gates:adversarial          (Phase 1.5, inherit)  tools: Read, Grep, Glob (#104 락)
 Tier B — codex (availability-floor: detect_codex 참이면 무조건, 스코프 무관)
   └── codex-reviewer (별도 프로세스/모델 패밀리, OS read-only 샌드박스)
 Tier C — Dynamic (모델이 스코프로 선택, advisory 외부 에이전트; 최대 6 후보)

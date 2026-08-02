@@ -1,6 +1,6 @@
 ---
 name: test-scope-validator
-model: sonnet
+model: inherit
 cost_class: low
 color: yellow
 tools: Read, Grep, Glob
