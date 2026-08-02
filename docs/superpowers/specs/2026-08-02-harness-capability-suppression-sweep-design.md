@@ -243,9 +243,10 @@ S3은 **독립 커밋 6개**로 쪼갠다 (codex 리뷰: 하나의 구현 단위
 
     | 항목 | 규정 |
     |---|---|
-    | 수용 조건 | verdict에 `finding_id`가 없거나 기존 어느 finding과도 매칭되지 않으면서, `file`·`severity`·`summary` 세 필드를 **전부** 가질 때 |
-    | id | 기존 `finding_id(f)` 헬퍼로 **합성**한다 — verdict가 준 id를 신뢰하지 않는다(리뷰어가 기존 id를 참칭할 수 있다). 충돌하면 기존 finding이 이긴다 |
-    | 출처 | `source: "adversarial"` 를 강제로 덮어쓴다. verdict가 다른 값을 넣어도 무시 |
+    | **쓰기 쪽 채널** | `adversarial.md`에 **새 최상위 블록 `new_findings:`** 를 정의한다 — 리스트이고 각 원소는 `file`·`line`·`severity`·`summary`·`reason`. 현재 verdict 스키마(`:127-130`)에는 `file`/`severity`/`summary`가 **아예 없고** 놓친 이슈의 유일한 채널이 자유 텍스트 `meta_note:`(`:58`,`:129`)이므로, 금지 문구만 지우면 리뷰어는 계속 `meta_note`를 쓴다 (round-3 리뷰 적발). `meta_note`는 *구조화되지 않은 관찰*용으로 **존치**한다 — 승격 채널과 역할이 다르다 |
+    | 수용 조건 | `new_findings[]` 원소가 `file`·`severity`·`summary`를 **전부** 가질 때. `line`은 선택이며 없으면 `0`으로 채운다 |
+    | id | `agent`를 `"adversarial"`로 먼저 세팅한 뒤 기존 `finding_id(f)`(= `agent-file-line`, `:40-41`)로 **합성**한다 — verdict가 준 id는 신뢰하지 않는다(기존 id 참칭 방지). 합성 id가 기존 finding과 충돌하면 **기존이 이긴다**(신규를 버리고 loud 기록). 신규끼리 충돌하면(같은 file·line) 뒤엣것에 `-2`, `-3`… 를 붙여 결정론적으로 분리한다 |
+    | 출처 | **`agent: "adversarial"`** 을 강제로 덮어쓴다. `source`(단수)가 **아니다** — `dedup()`(`:76`)은 `agent`를 모아 `sources`를 만들고 `render()`(`:160`)는 `sources`/`agent`만 읽으므로, `source`로 쓰면 Source 컬럼이 `?`로 렌더된다 (round-3 리뷰 적발) |
     | 순서 | 기존 findings **뒤에** append — 기존 표의 순서를 흔들지 않는다 |
     | 불완전 항목 | **조용히 버리지 않는다**: 출력에 넣지 않되 stderr에 `synthesize_findings: dropped malformed adversarial finding: <누락 필드>` 를 찍고, 요약의 `dropped_malformed` 카운터를 증가시킨다. **exit code는 바꾸지 않는다** — 리뷰어 출력 불량으로 파이프라인 전체를 죽이면 그 자체가 새 fail-closed 억제가 된다 |
 
@@ -331,15 +332,27 @@ S3은 **독립 커밋 6개**로 쪼갠다 (codex 리뷰: 하나의 구현 단위
 - **AC14** 승격이 **끝에서 끝까지 동작한다** — persona 편집만으로는 green이 되지 않는다:
   - **AC14a** `adversarial.md`의 *"신규 발견 금지"* 선언이 `:3`·`:12`·`:22`·`:149` **네 곳 모두**에서
     해소된다. 한 곳이라도 남으면 persona 자기모순.
-  - **AC14b** `synthesize_findings.py`에 기존 `finding_id`와 매칭되지 않는 verdict를 출력에
-    추가하는 경로가 있고, 그 항목에 `source: adversarial`이 붙는다.
+  - **AC14b** `adversarial.md`에 `new_findings:` 블록 스키마가 정의돼 있고(`file`·`line`·
+    `severity`·`summary`·`reason`), `synthesize_findings.py`에 그 항목을 출력에 추가하는 경로가
+    있으며, 추가된 항목의 필드명은 **`agent: "adversarial"`**(코드가 실제로 읽는 이름)이다.
   - **AC14c** *(teeth)* 기존 finding 0건 + adversarial 신규 발견 1건을 넣은 픽스처가
-    synthesizer를 통과해 **출력에 그 발견이 실재**한다. mutation: 신규 수용 경로를 되돌리면 RED.
-    AC14a만으로는 이 AC가 green이 될 수 없다.
-- **AC15** `parse_spec_structure.py`의 ambiguity 매칭이 단어경계를 갖는다 — 정상 기술 용어
-  (`~fast`-forward, `in`+`~efficient`)가 hit되지 않고, blacklist의 온전한 단어는 계속 hit된다
-  (양방향 assert: 완화가 검사를 무력화하지 않았음도 확인). **이 AC를 쓰는 동안 이 검사가 세 번째로
-  발화해 write를 막았다** — 두 예시에 붙은 `~`는 검사기 자신의 opt-out 마커다.
+    synthesizer를 통과해 **출력에 그 발견이 실재하고, 렌더된 Source 컬럼이 `?`가 아니라
+    `adversarial`로 표시된다.** 후자를 빼면 필드명이 틀려도 green이 난다 (round-3 리뷰 적발).
+    mutation: 신규 수용 경로를 되돌리면 RED. AC14a만으로는 green이 될 수 없다.
+- **AC15** `parse_spec_structure.py`의 ambiguity 매칭이 **`(?<![\w-])phrase(?![\w-])`** 를 쓴다.
+  단순 `\b` 감싸기는 **틀렸다** — 하이픈은 `\w`가 아니라서 하이픈 복합어 안에서도 단어경계가
+  성립해 버린다 (round-3 리뷰 적발). 아래는 실측이다:
+
+  | phrase | text | `\b…\b` | `(?<![\w-])…(?![\w-])` |
+  |---|---|---|---|
+  | `~fast` | `~fast`-forward | **hit (오탐)** | miss ✅ |
+  | `~efficient` | `in`+`~efficient` | miss | miss ✅ |
+  | `~fast` | break+`~fast` | miss | miss ✅ |
+  | `~fast` | `~fast` (단독) | hit | **hit ✅** |
+
+  양방향 assert: 정상 기술 용어가 hit되지 않고 **동시에** blacklist의 온전한 단어는 계속 hit된다.
+  후자가 없으면 완화가 검사를 통째로 죽여도 green이 난다. **이 AC를 쓰는 동안 이 검사가 세 번째로
+  발화해 write를 막았다** — 예시에 붙은 `~`는 검사기 자신의 opt-out 마커다.
 - **AC16** `build_spec_codex_prompt.py`의 범주가 6개로 닫혀 있지 않고, 미지 범주를 담은 codex
   출력이 `merge_review.py`를 통과할 때 drop되지 않는다.
 
@@ -420,12 +433,18 @@ mutation으로 그 사실을 증명한다.
 스냅샷**되므로 편집 직후 같은 세션에서 dispatch하면 옛 정의가 돌 수 있다.
 
 1. S1·S2 커밋 후 **세션을 재시작**한다 (또는 headless `claude -p --plugin-dir`로 fresh 세션).
-2. `spec-reviewer`를 1회 dispatch한다 (아무 design doc 대상).
+2. `spec-reviewer`를 1회 dispatch한다. 대상은 **외부 근거 확인이 반드시 필요한 design doc**을
+   고르거나, 프롬프트에 *"이 문서가 인용하는 외부 사실을 검색으로 확인하라"* 를 명시한다 —
+   *"아무 문서"* 로는 리뷰어가 이번엔 검색이 불필요하다고 판단한 경우와 도구 부재를 구분할 수
+   없다 (round-3 리뷰 적발).
 3. `~/.claude/projects/<proj>/<sid>/subagents/agent-<id>.meta.json`에서 `agentType`으로 신원을 확정하고,
    같은 id의 `.jsonl`에서 확인한다:
-   - `grep -o '"model":"[^"]*"' …` → `claude-opus-5` (세션 모델). `claude-sonnet-5`면 **핀이 살아 있다**.
-   - `grep -o '"name":"[A-Za-z0-9_-]*"' …` → `WebSearch` 실재. 없으면 도구가 프론트매터에만 있고
-     런타임에 없다는 뜻이다.
+   - **모델은 리터럴로 비교하지 않는다.** 메인 세션 트랜스크립트의 최빈 `"model"` 값과 subagent의
+     `"model"` 값이 **같은지**를 본다. 리터럴 `claude-opus-5`를 기대값으로 박으면 다음 세대가
+     나왔을 때 옳은 수정에도 stale-red가 난다 — 이 문서가 §1.1에서 스스로 경고한 별칭 세대 이동에
+     자기 절차가 걸리는 것이다 (round-3 리뷰 적발). 두 값이 다르면 **핀이 살아 있다**.
+   - `grep -o '"name":"[A-Za-z0-9_-]*"' …` → `WebSearch` tool_use 실재. 2단계에서 검색을 요구했는데도
+     없으면 도구가 프론트매터에만 있고 런타임에 없다는 뜻이다.
 4. 두 관측을 이 문서 §12에 날짜와 함께 기록한다. **에이전트의 자기보고는 증거가 아니다** —
    트랜스크립트만 증거다.
 
@@ -451,8 +470,8 @@ mutation으로 그 사실을 증명한다.
 
 | 안 | 원자성 | 롤백 | SemVer | 리뷰 가능성 |
 |---|---|---|---|---|
-| **A. 관심사별 커밋 1 PR** (S1→S5, 채택) | 각 커밋이 한 관심사 | 커밋 단위 revert | PR당 3 플러그인 bump 1회씩 | 리뷰어가 *"핀 제거"* 를 세 플러그인에서 한 번에 봄 — 이 sweep의 논거가 **교차-플러그인 일관성**이라 같이 봐야 판단이 선다 |
-| B. 플러그인별 PR 3개 | 플러그인 경계 | PR 단위 | PR당 1 bump — 가장 단순 | *같은* 결함이 3 PR에 흩어져 각 리뷰어가 부분만 봄. `CLAUDE.md`·philosophy는 어느 PR에도 자연스럽게 속하지 않음 |
+| **A. 관심사별 커밋 1 PR** (S1→S5, 채택) | 각 커밋이 한 관심사 | 커밋 단위 revert | **커밋마다 bump (C4)** — 그 커밋이 건드린 플러그인만. spec-distill은 S1·S2·S3a·S3c·S3d·S3f·S4로 최대 7회, quality-gates 4회, project-init 1회 | 리뷰어가 *"핀 제거"* 를 세 플러그인에서 한 번에 봄 — 이 sweep의 논거가 **교차-플러그인 일관성**이라 같이 봐야 판단이 선다 |
+| B. 플러그인별 PR 3개 | 플러그인 경계 | PR 단위 | 커밋마다 bump는 동일 — PR 경계만 다름 | *같은* 결함이 3 PR에 흩어져 각 리뷰어가 부분만 봄. `CLAUDE.md`·philosophy는 어느 PR에도 자연스럽게 속하지 않음 |
 | C. 단일 커밋 단일 PR | 없음 | 전부 아니면 전무 | 1회 | 붕괴 — 핸드오프 §4가 금지 |
 
 **A를 채택한다.** 근거: 이 sweep의 핵심 주장이 *"같은 억제가 플러그인 경계를 넘어 반복된다"* 이므로,
