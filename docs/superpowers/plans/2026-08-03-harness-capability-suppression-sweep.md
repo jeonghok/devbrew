@@ -1536,6 +1536,7 @@ bump: sd `0.24.11`.
 | philosophy `:63` | *"N≥5는 hard gate이며,"* 삭제. 나머지 문장 유지 |
 | philosophy `:96` | *"single-agent가 default다 (P22)."* 삭제 |
 | `docs/plugin-authoring.md` | agent `model: inherit` 규약 문장 **신설** — 신규 플러그인이 리터럴 핀을 복제하는 것을 차단 |
+| `plugins/quality-gates/README.md:161` | **Task 1에서 이월** — `opus 빌더가 저술한` → `빌더가 저술한`. Task 1 브리프의 줄 목록(66/139/143/176)에 빠져 있던 리터럴 티어 산문 잔존이고, Task 1 리뷰어가 *"implementer scope creep이 아니라 brief 자체의 gap"* 으로 판정했다. 닫지 않으면 Task 13의 판별 질의에 걸린다 |
 | project-init 템플릿 **2개** | rebase 조항 완화 |
 
 `:20`이 왜 중요한가: 현재 문장은 *비용 임계치까지* 재평가 불가로 선언해 **이 sweep 자체를 규칙 위반으로 읽게 만든다**.
