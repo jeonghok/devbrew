@@ -1642,13 +1642,21 @@ bump: project-init `1.7.3`. `CLAUDE.md`·philosophy·plugin-authoring은 리포 
 
 - [ ] **Step 1: AC13 — §2의 판별 질의를 전수 재실행한다**
 
+> ⚠️ **`command grep`을 쓴다** (Task 2 실행 중 확증). 이 환경에서 `grep`의 정체가 층마다 다르다:
+> 컨트롤러 세션의 `grep`은 shell-snapshot이 정의한 **셸 함수**(ugrep 래퍼)라 다중 파일 인자에서
+> **출력 순서가 비결정적**이고(같은 명령 2회가 다른 순서를 냈다) `ugrep: warning:`을 낸다.
+> 반면 테스트 스크립트는 `bash <script>`로 도는 자식 프로세스라 셸 함수를 상속하지 않고
+> **`/usr/bin/grep`(BSD grep 2.6.0)** 을 쓴다. **락은 영향받지 않는다** — 영향받는 것은 아래처럼
+> 내가 직접 치는 검증 질의다. 두 질의를 양쪽으로 대조했을 때 건수는 일치했지만(goal-1 0=0,
+> goal-4 2=2), 결정론과 테스트-일치를 위해 검증에는 `command grep`을 쓴다.
+
 ```bash
-echo "== goal 1 =="; grep -rn '^model:' plugins/ | grep -v inherit          # 기대: 0건
-echo "== goal 2 =="; grep -rnE "^[[:space:]]*-c .*model_reasoning_effort" plugins/*/scripts/   # 기대: 0건
-echo "== goal 4 =="; grep -rnE '최대 [0-9]+회|[0-9]+회까지|[0-9]–[0-9]회|max_[a-z_]+ *= *[0-9]|병렬.{0,8}금지' \
+echo "== goal 1 =="; command grep -rn '^model:' plugins/ | command grep -v inherit   # 기대: 0건
+echo "== goal 2 =="; command grep -rnE "^[[:space:]]*-c .*model_reasoning_effort" plugins/*/scripts/   # 기대: 0건
+echo "== goal 4 =="; command grep -rnE '최대 [0-9]+회|[0-9]+회까지|[0-9]–[0-9]회|max_[a-z_]+ *= *[0-9]|병렬.{0,8}금지' \
   plugins/*/agents/ plugins/*/skills/                                       # 기대: 락의 assert 인자만
-echo "== goal 5 =="; grep -rnE 'N ≥ 5|N≥5|single-agent를 default|wall-clock' CLAUDE.md docs/philosophy/  # 기대: 0건
-echo "== AC7a =="; grep -rn 'web_budget' plugins/ --exclude-dir=tests --exclude=CHANGELOG.md   # 기대: 0건
+echo "== goal 5 =="; command grep -rnE 'N ≥ 5|N≥5|single-agent를 default|wall-clock' CLAUDE.md docs/philosophy/  # 기대: 0건
+echo "== AC7a =="; command grep -rn 'web_budget' plugins/ --exclude-dir=tests --exclude=CHANGELOG.md   # 기대: 0건
 ```
 
 **잔여 매칭이 있으면 전부 설계 §12의 load-bearing allowlist에 등재한다.** 등재 필수 필드: `위치`(file:line) · `막는 실패`(이것을 제거하면 무엇이 조용히 통과하는가 — *"조심스러워서"* 는 실패 서술이 아니다) · `근거`(커밋·테스트·과거 사고 기록) · `대안 검토`(더 가벼운 수단이 왜 안 되는지) · `재검토 조건`(*"영구"* 는 허용하지 않는다).
