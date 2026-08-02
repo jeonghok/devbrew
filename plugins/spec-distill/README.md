@@ -115,7 +115,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - **AP5 (Trivia ceremony)** — `/interview` first-step trivia escape (5 패턴).
 - **AP9 (Subagent spray)** — agent 4종(spec-reviewer/steelman-builder/coverage-mapper/blind-spot-prober), coverage-mapper C11 rate-limit + blind-spot-prober fan-out 1.
 - **P11 (Cross-Model Adversarial)** — sub-agent reviewer adversarial review + **`steelman-builder` 의심 게이트(v0.12.0)**: 의심 방향은 웹근거 기반 대안 steelman을 통과해야 brief에 실린다.
-- **AP16 (Unbounded autonomy)** — re-review max 5 (hybrid policy, v0.3.0: hard cap + stagnation early-exit), rhythm guard 3, kill switch.
+- **AP16 (Unbounded autonomy)** — re-review max 5 (hybrid policy, v0.3.0: hard cap + stagnation early-exit), rhythm guard 3, **자동 dispatch 재시도 상한 3 (v0.25.0, 세션당·문서당)**, kill switch.
 - **P14 (State Survives Compaction)** — state.local.md frontmatter 보존.
 - **P3 — graceful degradation with loud logging**: `resolve_session_id` 검증 실패 시 None 반환 + stderr advisory, advisory hook output은 유지. cleanup 실패 시 silent skip (SessionEnd) 또는 advisory (check-born) — 사용자 attention 가용성에 따라 loud 정도 조정.
 - **P14 — failure-time state preservation**: `write_state`가 stale-session 검출 시 *명시적* truncate (정상 케이스), 그러나 unreadable file은 보존 (failure preservation). TTL-GC도 self-session 보호 + grace window로 in-flight data 보호.
@@ -158,6 +158,9 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - `DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW=1` (v0.24.0) — brief 리뷰 파이프라인 전체 skip.
   `component: pipeline` degradation record + loud advisory를 남기고 Step B로 직행한다(조용한
   생략이 아니다). 충실도·방향성·냉독 전부 미검증 상태가 게이트 질문에 표시된다.
+- 자동 dispatch 가 G6 상한(3회)에 닿으면 그 문서는 이 세션에서 더 이상 자동으로 리뷰되지
+  않는다. 리뷰가 필요하면 `reviewing-spec` skill 을 직접 호출한다. 초안을 오래 다듬는 동안
+  dispatch 를 0 으로 두고 싶으면 `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1`.
 
 ## Prerequisites
 

@@ -31,9 +31,9 @@ CHANGELOG="$REPO_ROOT/plugins/spec-distill/CHANGELOG.md"
 pass=0; fail=0
 note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
 
-grep -qE '"version": "0\.24\.[0-9]+"' "$PLUGIN_JSON" \
-  && note PASS "T20: plugin.json version 0.24.x" \
-  || note FAIL "T20: plugin.json이 0.24.x가 아님"
+grep -qE '"version": "0\.25\.[0-9]+"' "$PLUGIN_JSON" \
+  && note PASS "T20: plugin.json version 0.25.x" \
+  || note FAIL "T20: plugin.json이 0.25.x가 아님"
 grep -qE '^## \[0\.23\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
   && note PASS "T20: CHANGELOG [0.23.0] 엔트리 + ISO 날짜" \
   || note FAIL "T20: CHANGELOG [0.23.0] 누락/비-ISO"
@@ -48,6 +48,9 @@ grep -qE '^## \[0\.20\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
 grep -qE '^## \[0\.22\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
   && note PASS "CHANGELOG append-only: [0.22.0] 엔트리 보존" \
   || note FAIL "CHANGELOG append-only: [0.22.0] 엔트리가 사라졌다"
+grep -qE '^## \[0\.25\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
+  && note PASS "CHANGELOG append-only: [0.25.0] 엔트리 보존" \
+  || note FAIL "CHANGELOG append-only: [0.25.0] 엔트리가 없다"
 
 for kw in 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' 'armed_paths' 'arm-once' 'interview-brief' 'steelman-builder' 'DEVBREW_DISABLE_SPEC_DISTILL_CODEX' 'model diversity' 'coverage-mapper' 'blind-spot-prober' 'probe_budget' 'user_sourced_items' 'audit_file' 'user_statements' 'bijection'; do
   grep -q "$kw" "$README" \

@@ -120,5 +120,64 @@ for term in "${authority_terms[@]}"; do
   fi
 done
 
+# --- V9 (v0.25.0 / T4): arm-once 삭제 스윕 완결 락 ---
+# 스코프 = prod_files 그대로(README.md 포함, tests/·CHANGELOG.md 제외).
+# 식별자만이 아니라 **같은 것을 다른 이름으로 부른 참조**까지 열거한다 — 식별자만
+# grep하면 개념 별칭으로 살아남은 참조를 놓친다.
+# CHANGELOG.md 제외는 released 기록이라 유효하다(이 삭제를 서술하는 [0.25.0] 엔트리가
+# 이 리터럴들을 인용해야 한다). tests/ 제외는 이 파일 자신이 토큰을 *집행*하는 층이기
+# 때문이다 — 배열 리터럴이 매치를 자기 자신에게서 찾으면 락이 영구 RED가 된다.
+removed_terms=(
+  'review_lock'
+  'review_in_progress'
+  'suppress_state'
+  'suppressed_paths'
+  'cancel_review'
+  'cancel-review'
+  'approve_handoff'
+  'DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC'
+)
+for term in "${removed_terms[@]}"; do
+  scan -InIF -- "$term" "${prod_files[@]}"
+  if [[ $SCAN_RC -ge 2 ]]; then
+    note FAIL "V9/T4: '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
+    printf '%s\n' "$SCAN_OUT"
+  elif [[ $SCAN_RC -eq 0 ]]; then
+    note FAIL "V9/T4: '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
+  else
+    note PASS "V9/T4: '$term' 잔존 0건 (production)"
+  fi
+done
+
+# --- V10 (v0.25.0 / T5): 삭제 대상 파일 부재 ---
+# 파일이 되살아나면 무참조 상태로 조용히 눌러앉는다 — 참조 스윕(V9)만으로는 못 잡는다.
+removed_files=(
+  'scripts/review_lock.py'
+  'scripts/cancel_review.py'
+  'scripts/approve_handoff.sh'
+  'scripts/suppress_state.py'
+  'commands/cancel-review.md'
+  'tests/test_review_lock.py'
+  'tests/test_review_lock_session_id.sh'
+  'tests/test_reviewing_spec_lock.sh'   # Task 7 에서 test_reviewing_spec_state_keying.sh 로 개명
+  'tests/test_cancel_review.py'
+  'tests/test_approve_handoff.sh'
+  'tests/test_handoff_compact_chain.sh'
+  'tests/test_handoff_spec_path_validation.sh'
+)
+for rf in "${removed_files[@]}"; do
+  [[ ! -e "$SD/$rf" ]] \
+    && note PASS "V10/T5: '$rf' 부재" \
+    || note FAIL "V10/T5: '$rf' 가 되살아났다"
+done
+
+# --- V11 (v0.25.0): 대체 surface 가 실재한다 (음의 락만 두면 전부 지워도 통과) ---
+[[ -f "$SD/scripts/arm_ledger.py" ]] \
+  && note PASS "V11: arm_ledger.py 실재" || note FAIL "V11: arm_ledger.py 부재"
+scan -InIF -- 'should_arm' "$SD/hooks/spec-write-validator.py"
+[[ $SCAN_RC -eq 0 ]] \
+  && note PASS "V11: validator 가 should_arm 게이트를 부른다" \
+  || note FAIL "V11: validator 에 should_arm 호출이 없다 (게이트 증발)"
+
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]

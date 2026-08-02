@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""spec-distill Stop hook — review dispatch enforcer (v0.18.0).
+"""spec-distill Stop hook — review dispatch enforcer (v0.25.0: dispatch_attempts
+G6 cap via arm_ledger; the review-in-progress lock this file carried since
+v0.18.0 was removed in v0.25.0 — pending-strip on reviewing-spec entry is the
+sole re-dispatch guard now).
 
 Reads state.local.md for the current session. If `pending_review:` block
 is present AND last_dispatched_at is empty or older than the redispatch TTL,

@@ -1,5 +1,56 @@
 # Changelog
 
+## [0.25.0] — 2026-08-02
+
+design doc auto-review 를 **문서가 처음 생길 때 한 번만** 발동시키고, 그 재발동을 막으려
+v0.14.0–v0.18.0 에 쌓인 방어층 4개를 원인과 함께 걷어냈다. 교훈 한 줄: **원인을 지우면
+그 원인을 막던 방어층도 같이 지워진다** — 셋 다 사용자 기능이 아니라 훅이 자기가 만든
+문제를 자기가 막는 내부 하니스였다.
+
+### Changed
+- **arm 조건이 `(세션 원장에 없음) AND (git 이 모르는 문서)` 로 바뀌었다.** 판정은
+  `scripts/arm_ledger.py` 의 `should_arm()` 한 곳에만 존재하고 훅은 그것만 부른다.
+  두 조건이 서로 다른 시간축을 덮는다 — 원장 단독이면 세션마다 한 번씩 다시 리뷰되고,
+  git 단독이면 커밋 전 fix 루프에서 계속 재arm 된다.
+- **원장 기록의 주체가 "완료된 리뷰" 로 확정됐다.** validator·Stop·skill 진입은 쓰지
+  않는다. 그 셋 중 어디에 써도 "리뷰를 받지 않았는데 표시된" 창이 생기고, 삭제된
+  락이 TTL 로 얻던 자기치유를 잃는다. verdict 시점 기록은 TTL 을 새로 만들지 않고
+  같은 자기치유를 얻는다 — **표시되지 않은 문서는 다음 arming 편집에서 다시 dispatch 되기 때문**.
+- **리뷰 진행 중 오발 방지가 락에서 pending strip 으로 바뀌었다.** dispatch 의 연료는
+  `pending_review` 이므로 `reviewing-spec` 진입 시 연료를 없애면 락이 필요 없다.
+  하나의 불변식에 두 표현을 두면 두 표현이 어긋나는 순간이 곧 버그다.
+- **PostToolUse arm-skip advisory 가 사유를 세 가지로 구분**한다 — 세션 내 리뷰 완료 /
+  git 이 아는 문서 / G6 상한 도달. 앞의 둘과 셋째는 사용자가 취해야 할 행동이 다르다.
+
+### Added
+- **G6 재시도 상한 (세션당·문서당 3회).** verdict 없이 끝난 dispatch 의 재시도는
+  의도된 동작이지만 무한하면 Forbidden Pattern(*Unbounded autonomy*)이다.
+  `dispatch_attempts` 가 3 에 닿는 dispatch 가 마지막이고, 그 emit 이 상한을 알린다.
+  경계가 세션당인 이유: 그 상태는 세션 스코프이고, 문서 생애 상한으로 만들려면
+  세션 밖에 살아남는 저장소가 필요한데 그것은 NG4 가 배제한다. 세션을 넘겨도 멈추게
+  하는 진짜 수단은 문서를 커밋하는 것이고 approve 시점 `check-born` advisory 가 그것을 촉구한다.
+- 회귀 락 T1–T12 (`tests/test_arm_once.sh`, `tests/test_arm_ledger_timing.sh`) —
+  전부 mutation 으로 이빨을 증명했다. T7·T8 은 서로 반대 방향이라 함께 있어야 이빨이
+  생기고, T10 은 `arm_ledger` CLI 의미가 아니라 **Stop 훅의 원장 무-기록**을 잰다.
+
+### Removed
+- `scripts/review_lock.py`(240) · `scripts/cancel_review.py`(99) ·
+  `scripts/approve_handoff.sh`(98) · `scripts/suppress_state.py`(242) — 합계 679 줄이
+  사라지고 `scripts/arm_ledger.py`(369줄) 한 파일이 그 자리를 대신한다.
+- `/spec-distill:cancel-review` 커맨드. 네 용도 중 (a) approve 후 재arm 억제와
+  (b) 고착 pending 정리는 **대상이 소멸**했고, (c) 미리 옵트아웃은 **인정된 손실**이며
+  (남는 비용은 미커밋인 채 넘긴 세션당 dispatch 1회, `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1`
+  로 0 이 된다), (d) `harness_sid` 미해석 시 수동 억제는 대체 안내로 지정했다
+  (그 지시는 원래도 부정확했다 — sid 가 없으면 그 커맨드도 상태를 못 썼다).
+- 환경변수 `DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC` (락 소멸).
+- 전용 테스트 7종. 두 handoff 테스트가 잠그던 dangling-경로 무-abort 불변식은 T11 이 승계.
+
+### Fixed
+- `tests/test_stale_terms.sh` 의 production 파일 필터가 앵커 없는 `*/.claude/*` 라,
+  하니스 워크트리(`<repo>/.claude/worktrees/`) 안에서 production 47 개를 전부 삼켰다.
+  락은 empty-guard 로 FAIL 했지만(fail-closed 설계가 제 역할을 했다) **워크트리에서는
+  실행 자체가 불가능**했다. `$SD` 기준으로 앵커했다.
+
 ## [0.24.4] — 2026-07-29
 
 v0.24.3의 **자기 수정을 독립 리뷰**한 결과(리뷰어 5 + codex). 그 라운드가 만든 신규 결함과
