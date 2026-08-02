@@ -1408,6 +1408,9 @@ EOF
 **Files:**
 - Modify: `plugins/spec-distill/hooks/pending-review-reminder.py:100-118`
 - Modify: `plugins/spec-distill/tests/test_reminder_hook.sh:72-108`
+- **Delete: `plugins/spec-distill/tests/test_review_lock_session_id.sh`** (Task 4 실행이 드러낸 계획 갭 — 아래)
+
+> **계획 정정 (Task 4 실행 중 발견).** 이 파일의 삭제는 초안에서 Task 9(삭제 스윕)에 예약돼 있었다. 그런데 Task 4 가 Stop 훅의 락 블록을 지운 순간 이 테스트가 고아가 되어 **스위트가 red 로 남는다** — 태스크마다 green 으로 끝난다는 규약 위반이다. 더 나쁜 것은 두 assert 중 하나가 **공허하게 통과**한다는 점이다: "mis-keyed 락 → dispatch" 가 이제 키가 틀려서가 아니라 **락 검사 자체가 없어서** 통과한다. 이빨 없이 통과하는 assert 는 red 보다 위험하다. 그래서 원인을 만든 쪽(락 블록 제거) 가까이로 삭제를 앞당긴다. §12 가 lock 한 의존("6번을 3–4번보다 먼저 하면 아직 참조 중인 파일이 사라진다")은 **참조되는 production 파일**에 관한 것이고, 이 파일은 이미 삭제된 코드 경로의 테스트라 아무도 참조하지 않는다.
 
 **Interfaces:**
 - Consumes: 없음 (삭제만)
@@ -1434,6 +1437,15 @@ bash tests/test_reminder_hook.sh 2>&1 | tail -4
 ```
 
 Expected: 새 케이스는 통과하지만 AC5a/AC5b 제거 전이면 `review_lock` 참조가 남아 있다. (락 블록이 아직 살아 있으므로 이 단계의 RED 는 없을 수 있다 — 그렇다면 Step 3 을 진행하고 Step 4 에서 회귀 없음을 확인한다.)
+
+- [ ] **Step 2b: 고아가 된 락 테스트 삭제**
+
+```bash
+bash tests/test_review_lock_session_id.sh; echo "rc=$?"   # 기대: rc=1 (Task 4 이후 red)
+git rm -q tests/test_review_lock_session_id.sh
+```
+
+이 파일은 `review_lock` 의 session-id 키잉(AC7)만 검증한다 — Task 4 가 Stop 훅에서 그 게이트를 지웠고 Task 9 가 `scripts/review_lock.py` 자체를 지운다. 잔여 커버리지 없음: harness-sid 해석 자체는 `tests/test_session_id_resolution.sh` 와 `tests/test_state_path.sh` 가 각자 잠근다.
 
 - [ ] **Step 3: 락 블록 삭제**
 
@@ -2179,7 +2191,6 @@ git rm -q \
   scripts/suppress_state.py \
   commands/cancel-review.md \
   tests/test_review_lock.py \
-  tests/test_review_lock_session_id.sh \
   tests/test_reviewing_spec_lock.sh \
   tests/test_cancel_review.py \
   tests/test_approve_handoff.sh \
@@ -2188,6 +2199,8 @@ git rm -q \
 ls tests/test_*.sh | wc -l    # 기대: 48  (arm_test_helpers.sh 는 테스트가 아니라 제외)
 ls tests/test_*.py | wc -l    # 기대: 9
 ```
+
+> `tests/test_review_lock_session_id.sh` 는 이 목록에 없다 — **Task 5 에서 이미 삭제**됐다(계획 정정: Task 4 가 그 테스트를 고아로 만들어 스위트를 red 로 남겼다). Task 10 의 T5 부재 락은 여전히 그 파일을 열거한다 — 언제 지웠든 부재는 부재다.
 
 > 두 handoff 테스트는 실측 결과 **전적으로 `approve_handoff.sh` 만** 검증한다(`compact_chain`: exit 0 · marker dir 부재 · 억제 기록 · 세션 dir 보존 / `spec_path_validation`: in-scope dangling 경로여도 abort 안 함). 대상 스크립트가 사라지므로 수정이 아니라 삭제다. 잔여 커버리지: 세션 dir 보존은 `test_gc.py`·`test_session_end_cleanup.py` 가 이미 잠그고 있고, dangling 경로 불변식은 **T11** 이 승계했다(Task 8).
 
