@@ -156,6 +156,77 @@ case "${1:-}" in
     done < <(detect_set "$w")
     exit 0
     ;;
+  assign)
+    [[ $# -eq 2 ]] || die "usage: assign <worktree-abs>   # stdin: candidate file paths"
+    w=$2
+    [[ -d "$w" ]] || die "not a directory: $w"
+    adapters=$(detect_set "$w")
+    has_adapter() { printf '%s\n' "$adapters" | grep -qx "$1"; }
+
+    # bulk 잔여 흡수자 = 표 순서상 첫 bulk 어댑터. 나머지는 감지됐어도 실행하지 않는다
+    # — 같은 스위트를 두 번 돌리지 않기 위해서다 (AC54). 버리는 대신 loud하게 알린다.
+    absorber=""; unused_bulk=""
+    for r in cargo make npm-script; do
+      if has_adapter "$r"; then
+        if [[ -z "$absorber" ]]; then absorber="$r"; else unused_bulk="$unused_bulk $r"; fi
+      fi
+    done
+    py=""; has_adapter pytest && py=pytest; has_adapter unittest && py=unittest
+    js=""; has_adapter jest   && js=jest;   has_adapter vitest   && js=vitest
+
+    residual=0
+    seen_pkgs=""
+    while IFS= read -r f; do
+      [[ -z "$f" ]] && continue
+      claimed=""
+      # 파일 패턴 소유권. 순서는 §5.9 표 순서 — 한 파일은 정확히 한 어댑터에 간다 (AC46).
+      case "$f" in
+        *_test.go) has_adapter go && claimed=go ;;
+      esac
+      if [[ -z "$claimed" && -n "$py" ]]; then
+        case "$f" in test_*.py|*/test_*.py|*_test.py) claimed="$py" ;; esac
+      fi
+      if [[ -z "$claimed" ]] && has_adapter shell; then
+        case "$f" in
+          *.sh) [[ -x "$w/$f" ]] && claimed=shell ;;
+        esac
+      fi
+      if [[ -z "$claimed" && -n "$js" ]]; then
+        case "$f" in
+          *.test.ts|*.test.tsx|*.test.js|*.test.jsx| \
+          *.spec.ts|*.spec.tsx|*.spec.js|*.spec.jsx) claimed="$js" ;;
+        esac
+      fi
+
+      if [[ -n "$claimed" ]]; then
+        claimed_gran=$(granularity_of "$claimed") || die "unknown runner: $claimed"
+        if [[ "$claimed_gran" == "package" ]]; then
+          # 파일 → 패키지 디렉토리 축약은 **여기서** 일어난다. 오케스트레이터가
+          # 이 변환을 수행하는 경로는 없다 (AC52) — 배정 입력은 언제나 파일 경로다.
+          pkg=$(dirname "$f")
+          if ! printf '%s\n' "$seen_pkgs" | grep -qx "$pkg"; then
+            printf '%s\t%s\tpackage\n' "$pkg" "$claimed"
+            seen_pkgs="$seen_pkgs
+$pkg"
+          fi
+        else
+          printf '%s\t%s\tfile\n' "$f" "$claimed"
+        fi
+      elif [[ -n "$absorber" ]]; then
+        residual=1
+      else
+        # 실행 수단이 없다. 조용히 버리지 않고 unclaimed로 표면화한다 —
+        # 소비자(SKILL)가 이것을 `verification: degraded`로 라우팅한다 (AC53).
+        printf '%s\tunclaimed\tfile\n' "$f"
+      fi
+    done
+
+    [[ $residual -eq 1 ]] && printf 'BULK\t%s\tbulk\n' "$absorber"
+    for r in $unused_bulk; do
+      echo "run-test-selection: 미실행 러너: $r (bulk 잔여는 $absorber 가 흡수)" >&2
+    done
+    exit 0
+    ;;
   *)
     die "unknown subcommand: ${1:-} (expected detect|assign|run)"
     ;;
