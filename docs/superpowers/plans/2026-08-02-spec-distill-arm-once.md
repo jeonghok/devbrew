@@ -1636,6 +1636,7 @@ arm 게이트의 통합 락. **재는 것은 pending 파일 쓰기 횟수가 아
 **Files:**
 - Create: `plugins/spec-distill/tests/arm_test_helpers.sh` (공유 하니스 — 아래 ruling)
 - Create: `plugins/spec-distill/tests/test_arm_once.sh`
+- **두 번째 산출물 (독립 커밋):** `plugins/spec-distill/tests/test_reviewing_spec_lock.sh` → `plugins/spec-distill/tests/test_reviewing_spec_state_keying.sh` 로 **좁혀서 승계** (Step 3b)
 
 **Interfaces:**
 - Consumes: `hooks/spec-write-validator.py`, `hooks/review-dispatch.py`, `scripts/arm_ledger.py`, `tests/fixtures/2026-05-17-test-design.md`
@@ -1848,6 +1849,52 @@ cp /tmp/al.bak scripts/arm_ledger.py && rm -f /tmp/al.bak /tmp/v.bak
 
 bash tests/test_arm_once.sh 2>&1 | tail -2                 # 기대: Fail: 0
 ```
+
+- [ ] **Step 3b: 죽은 락 테스트를 살아 있는 불변식만 남겨 승계 (독립 커밋)**
+
+> **계획 정정 (Task 6 실행 중 발견).** 초안은 `tests/test_reviewing_spec_lock.sh` 를 Task 9 에서 **통째로 삭제**하도록 적었다("대상 소멸"). Task 6 이 SKILL 을 재배선하자 이 파일이 red 가 됐고, 실측해 보니 13개 assert 중 **11개만** 대상이 소멸했다. 나머지 둘은 락과 무관하게 **아직 살아 있는 불변식**이다:
+>
+> - **AC12** — Step 1 이 훅과 같은 리졸버(`state_path.py session-id`)로 상태를 연다. 이게 깨지면 스킬이 훅과 **다른 파일**을 읽어 arm-once 전체가 무의미해진다. SKILL 에 그 문자열 2건 실재 확인.
+> - **AC13** — `rereview_count`/`issue_history` continuity 를 harness sid 로 collapse 하지 말라는 가드. 깨지면 인터뷰-선행 플로우에서 re-review cap 이 조용히 리셋된다. SKILL 에 실재 확인.
+>
+> 게다가 **AC8-count**("trio 명령이 전부 `$harness_sid` 로 키잉된다")는 대상이 소멸한 게 아니라 **형태만 바뀌었다** — 이제 `strip-pending`·`mark-reviewed` 둘이 sid 를 받는다(`check-born` 은 안 받는다). 내용이 살아 있는 불변식을 형태가 바뀌었다는 이유로 버리는 것이 [[삭제 스윕은 개념 별칭으로]] 가 경고하는 실패다. 파일을 지우는 대신 **좁혀서 이름을 바꾼다.**
+
+기존 파일에서 `step1_window` 헬퍼 정의와 AC12·AC13 두 assert 를 **그대로 옮기고**(이미 이 SKILL 에 대해 동작한다 — 새로 쓰지 말 것), AC8-count 의 후속 assert 를 더한다. 나머지 11개(`review_lock set`/`pause`/`approve_handoff` 존재, AC11 degradation 리터럴 둘, AC14 body-unique, AC8-a/b/c)는 대상이 소멸했으므로 버린다.
+
+```bash
+git mv tests/test_reviewing_spec_lock.sh tests/test_reviewing_spec_state_keying.sh
+```
+
+새 파일이 가져야 할 assert 는 다섯이다. 앞의 셋은 승계, 뒤의 둘은 이 락 자신의 이빨 증명이다.
+
+| ID | assert | 출처 |
+|---|---|---|
+| W  | Step 1 윈도우가 비어 있지 않다 (앵커 생존) | 신규 — 빈 윈도우는 앵커 파손이지 통과가 아니다 |
+| S1 | Step 1 윈도우가 `state_path.py" session-id` 를 포함 | 전 AC12 그대로 |
+| S2 | SKILL 에 `continuity read collapse 금지` 프로즈 존재 | 전 AC13 그대로 |
+| S3 | `arm_ledger.py" (strip-pending\|mark-reviewed) "$harness_sid"` 매치가 **정확히 2건** | 전 AC8-count 승계 |
+| S4 | S3 의 정규식이 `"$session_id"` 를 쓴 가짜 줄을 **배제**한다 | 신규 — S3 이 값이 아니라 존재만 재는 위양성 봉쇄 |
+
+S4 는 heredoc 프로브 문자열 하나에 대해 같은 grep 을 돌려 0건이 나오는지 보는 것으로 족하다 — production 파일을 건드리지 않는다.
+
+- [ ] **Step 3c: Step 3b 검증 + 독립 커밋**
+
+```bash
+bash tests/test_reviewing_spec_state_keying.sh     # 기대: Fail: 0
+# 이빨 증명: SKILL 의 $harness_sid 를 $session_id 로 바꾸면 S3 이 RED
+cp skills/reviewing-spec/SKILL.md /tmp/skill.bak
+python3 - <<'PY'
+import pathlib
+p = pathlib.Path("skills/reviewing-spec/SKILL.md")
+p.write_text(p.read_text(encoding="utf-8").replace('mark-reviewed "$harness_sid"',
+                                                   'mark-reviewed "$session_id"'), encoding="utf-8")
+PY
+bash tests/test_reviewing_spec_state_keying.sh     # 기대: S3 FAIL
+cp /tmp/skill.bak skills/reviewing-spec/SKILL.md && rm /tmp/skill.bak
+bash tests/test_reviewing_spec_state_keying.sh     # 기대: Fail: 0
+```
+
+Step 3b·3c 는 **T1–T3 와 별개 커밋**으로 남긴다 — 리뷰어가 한쪽을 승인하면서 다른 쪽을 거절할 수 있어야 한다.
 
 - [ ] **Step 4: 커밋**
 
@@ -2191,7 +2238,6 @@ git rm -q \
   scripts/suppress_state.py \
   commands/cancel-review.md \
   tests/test_review_lock.py \
-  tests/test_reviewing_spec_lock.sh \
   tests/test_cancel_review.py \
   tests/test_approve_handoff.sh \
   tests/test_handoff_compact_chain.sh \
@@ -2349,7 +2395,7 @@ removed_files=(
   'commands/cancel-review.md'
   'tests/test_review_lock.py'
   'tests/test_review_lock_session_id.sh'
-  'tests/test_reviewing_spec_lock.sh'
+  'tests/test_reviewing_spec_lock.sh'   # Task 7 에서 test_reviewing_spec_state_keying.sh 로 개명
   'tests/test_cancel_review.py'
   'tests/test_approve_handoff.sh'
   'tests/test_handoff_compact_chain.sh'
