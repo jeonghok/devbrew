@@ -109,10 +109,67 @@ case_no_ambient_pytest_probe() {
   fi
 }
 
+# T37 + M17 + AC41: setup_cmd가 양측에서 **동일 문자열**로 나온다.
+# 결과값만 보면 두 측이 그럴듯하게 나오므로 호출 문자열 대조로만 잡힌다.
+case_setup_cmd_identical_both_sides() {
+  local a b t sa sb
+  a=$(mktemp -d); b=$(mktemp -d)
+  for t in "$a" "$b"; do
+    mkdir -p "$t/tests"; : > "$t/tests/test_x.py"; : > "$t/requirements.txt"
+  done
+  sa=$(bash "$RTS" detect "$a" | awk '$1 == "setup_cmd:" { $1=""; sub(/^ /,""); print }')
+  sb=$(bash "$RTS" detect "$b" | awk '$1 == "setup_cmd:" { $1=""; sub(/^ /,""); print }')
+  if [[ -n "$sa" && "$sa" == "$sb" && "$sa" != "-" ]]; then
+    pass "동일 형상 두 트리 → setup_cmd 동일 문자열 ('$sa')"
+  else fail "setup_cmd 비대칭 (a='$sa' b='$sb')"; fi
+  rm -rf "$a" "$b"
+}
+
+# T47 + M23 + AC50: 빌드 산출물 디렉토리는 트리별로 **다른** 경로여야 한다.
+# 공유하면 기준선이 HEAD의 컴파일 결과를 재사용해 조용히 틀린 귀속을 만든다.
+case_build_output_not_shared() {
+  local a b ta tb
+  a=$(mktemp -d); b=$(mktemp -d)
+  ta=$(bash "$RTS" cargo-target-dir "$a" 2>/dev/null || true)
+  tb=$(bash "$RTS" cargo-target-dir "$b" 2>/dev/null || true)
+  if [[ -n "$ta" && -n "$tb" && "$ta" != "$tb" && "$ta" == "$a"* && "$tb" == "$b"* ]]; then
+    pass "CARGO_TARGET_DIR가 트리별 독립 ('$ta' != '$tb')"
+  else fail "CARGO_TARGET_DIR 공유 위험 (a='$ta' b='$tb')"; fi
+  # node_modules / .venv를 트리 밖으로 내보내는 코드 경로가 없어야 한다
+  if grep -qE 'NODE_PATH=|VIRTUAL_ENV=|--prefix[[:space:]]' "$RTS"; then
+    fail "트리 밖 deps 경로 지정 코드 존재"
+  else
+    pass "node_modules/.venv 트리 밖 지정 0회"
+  fi
+  rm -rf "$a" "$b"
+}
+
+# T41 + §11 ⑨: 아티팩트 유출 **실측** — make 스텁 레포에서 run 후 비-ignored 신규 파일.
+# V1(devbrew self-dogfood)은 Makefile/npm-script 테스트가 없어 이것을 구조적으로 측정
+# 못 한다. 이 픽스처가 §11 ⑨의 유일한 측정 경로다.
+case_artifact_leak_measurement() {
+  local t leaked; t=$(mktemp -d)
+  ( cd "$t" && git init -q && git config user.email t@t.test && git config user.name tester )
+  printf 'test:\n\t@touch build.log\n' > "$t/Makefile"
+  ( cd "$t" && git add -A && git commit -qm init )
+  bash "$RTS" run "$t" make bulk BULK >/dev/null 2>&1
+  leaked=$( cd "$t" && git ls-files --others --exclude-standard )
+  echo "    [측정] make 어댑터 실행 후 비-ignored 신규 파일: ${leaked:-<없음>}"
+  # 실패 조건은 **스크립트 자신이** 유출을 만드는 경우뿐이다. 러너가 만든 유출은
+  # 통제 밖이므로 §11 ⑨의 잔여 갭으로 기록될 뿐 여기서 RED가 아니다.
+  if printf '%s\n' "$leaked" | grep -q '^\.qg-'; then
+    fail "run 자신이 비-ignored 아티팩트를 남김"
+  else
+    pass "run 자신은 비-ignored 아티팩트를 남기지 않음"
+  fi
+  rm -rf "$t"
+}
+
 for c in case_pytest case_unittest case_pytest_declared_without_config case_shell case_jest case_vitest case_go case_cargo \
          case_make case_npmscript case_zero_adapters case_polyglot \
          case_conflict_python case_conflict_js_ambiguous case_conflict_js_resolved \
-         case_no_reimpl_in_skill case_no_ambient_pytest_probe; do
+         case_no_reimpl_in_skill case_no_ambient_pytest_probe \
+         case_setup_cmd_identical_both_sides case_build_output_not_shared case_artifact_leak_measurement; do
   echo "== $c"; $c
 done
 echo "── runner adapters: $PASS passed, $FAIL failed"

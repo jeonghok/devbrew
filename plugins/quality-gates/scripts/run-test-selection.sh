@@ -244,6 +244,151 @@ $f"
     done
     exit 0
     ;;
+  cargo-target-dir)
+    # read-only 내성: 이 워크트리에 쓸 CARGO_TARGET_DIR. 트리별 독립임을 밖에서
+    # 검증할 수 있게 노출한다 (AC50/T47). 아무것도 실행하지 않는다.
+    [[ $# -eq 2 ]] || die "usage: cargo-target-dir <worktree-abs>"
+    printf '%s/.qg-cargo-target\n' "$2"
+    exit 0
+    ;;
+  run)
+    [[ $# -ge 4 ]] || die "usage: run <worktree-abs> <runner> <mode> <unit>..."
+    w=$2; runner=$3; mode=$4; shift 4
+    [[ -d "$w" ]] || die "not a directory: $w"
+    case "$mode" in bulk|per-unit) ;; *) die "unknown mode: $mode (expected bulk|per-unit)" ;; esac
+    # die() 는 $(...) 안에서 서브셸만 죽인다 — 캡처-후-체크가 없으면 상위 스크립트가
+    # 빈 gran으로 계속 진행한다. <runner> 는 여기서 CLI 인자라 이 경로가 도달 가능하다
+    # (Task 2 리뷰; detect 안 호출부는 도달 불가라 그때는 급하지 않았다).
+    gran=$(granularity_of "$runner") || die "unknown runner: $runner"
+
+    emit_all_unrun() { local u; for u in "$@"; do printf '%s\tunrun\t-\n' "$u"; done; }
+
+    # 어댑터가 **이 트리에서** 쓸 수 있는가. HEAD 감지 결과를 기준선에 재사용하지
+    # 않는다 — 인프라를 바꾸는 diff에서 spurious error가 회귀를 PRE_EXISTING으로
+    # 은폐할 수 있다 (AC47). 재감지 비용보다 오귀속 비용이 크다.
+    # -qxF: runner 는 CLI 인자다 — -qx 로 매칭하면 PATTERN(BRE)로 해석되어 "pyt.st" 같은
+    # 입력이 "pytest" 를 정규식으로 오매치한다 (Task 3 리뷰에서 같은 등급의 결함이 assign
+    # 의 dedup에서 실제로 재현됐다).
+    if ! detect_set "$w" | grep -qxF "$runner"; then
+      echo "run-test-selection: 어댑터 사용 불가: $runner (in $w)" >&2
+      emit_all_unrun "$@"; exit 3
+    fi
+
+    # setup_cmd — 어댑터 소유. 기준선·HEAD 양측에서 **같은 명령**이 돈다 (AC41).
+    # 문자열은 위 닫힌 표에서만 오므로 외부 입력이 아니다. gran이 이미 같은 닫힌
+    # 러너 집합에서 성공했으므로 setup_cmd_of가 같은 이름으로 die 할 일은 없다.
+    scmd=$(setup_cmd_of "$w" "$runner")
+    if [[ "$scmd" != "-" ]]; then
+      if ! ( cd "$w" && sh -c "$scmd" ) >&2 2>&1; then
+        echo "run-test-selection: setup 실패: $scmd" >&2
+        emit_all_unrun "$@"; exit 3
+      fi
+    fi
+
+    exists_unit() {
+      case "$gran" in
+        file)    [[ -e "$w/$1" ]] ;;
+        package) [[ -d "$w/$1" ]] ;;
+        bulk)    [[ "$1" == "BULK" ]] ;;
+      esac
+    }
+
+    # 실행 지점의 방어(defense in depth). assign 은 shell 소유를 tests/*.sh|*/tests/*.sh
+    # + 실행비트로 스코프했다(Task 3) — 하지만 run 은 <unit>... 을 커맨드라인에서
+    # 그대로 받으므로, assign 을 우회하는 호출자(또는 assign 의 미래 버그)가 여전히
+    # 임의 경로를 넘길 수 있다. 실행이 실제로 일어나는 이 지점에서 같은 스코프를 다시
+    # 검증한다 — 설계 §5.9 "임의 명령을 추측해 실행하지 않는다".
+    shell_unit_in_scope() {
+      case "$1" in
+        tests/*.sh|*/tests/*.sh) [[ -x "$w/$1" ]] ;;
+        *) return 1 ;;
+      esac
+    }
+    refused_units=""
+    is_refused() { printf '%s\n' "$refused_units" | grep -qxF "$1"; }
+
+    # exit code만 읽는다 — 러너별 출력 파서 없이 8종 전부에 같은 코드가 적용된다.
+    # 0=pass, 1=fail, 그 외=error. error는 §5.5에서 fail 축으로 접히므로 error/fail
+    # 사이의 오분류는 귀속을 바꾸지 않는다 (라벨의 `(error)` 병기만 달라진다).
+    status_of_exit() { case "$1" in 0) echo pass ;; 1) echo fail ;; *) echo error ;; esac; }
+
+    run_units() {   # run_units <unit>... → 러너의 종료 코드
+      local rc=0 u d b dotted
+      case "$runner" in
+        pytest)
+          ( cd "$w" && PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider -q "$@" ) >&2 || rc=$? ;;
+        unittest)
+          for u in "$@"; do
+            d=$(dirname "$u"); b=$(basename "$u")
+            if [[ "$d" == "." || -f "$w/$d/__init__.py" ]]; then
+              dotted="${u%.py}"; dotted=$(printf '%s' "$dotted" | tr '/' '.')
+              ( cd "$w" && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest "$dotted" ) >&2 || rc=$?
+            else
+              ( cd "$w" && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$d" -p "$b" ) >&2 || rc=$?
+            fi
+          done ;;
+        shell)
+          for u in "$@"; do
+            if ! shell_unit_in_scope "$u"; then
+              echo "run-test-selection: 실행 거부: $u — shell 어댑터의 스코프(tests/*.sh, 실행비트) 밖" >&2
+              refused_units="$refused_units
+$u"
+              continue
+            fi
+            # $w 를 인자로 넘긴다 — 셸 테스트가 자신이 도는 워크트리 루트를 알 수
+            # 있게 하는 관례(다른 러너는 인터프리터/툴체인이 cwd로 이를 대체한다).
+            ( cd "$w" && bash "$u" "$w" ) >&2 || rc=$?
+          done ;;
+        jest)
+          ( cd "$w" && npx --no-install jest --cache=false --ci "$@" ) >&2 || rc=$? ;;
+        vitest)
+          ( cd "$w" && npx --no-install vitest run "$@" ) >&2 || rc=$? ;;
+        go)
+          ( cd "$w" && go test "$@" ) >&2 || rc=$? ;;
+        cargo)
+          # 빌드 산출물은 트리별 독립 (AC50). 다운로드 캐시(CARGO_HOME/registry)는
+          # 내용주소라 공유해도 두 트리가 같은 바이트를 본다 — 기본 위치 그대로 둔다.
+          ( cd "$w" && CARGO_TARGET_DIR="$w/.qg-cargo-target" cargo test ) >&2 || rc=$? ;;
+        make)
+          ( cd "$w" && make test ) >&2 || rc=$? ;;
+        npm-script)
+          ( cd "$w" && npm test ) >&2 || rc=$? ;;
+      esac
+      return $rc
+    }
+
+    # unit 인자를 그대로 순회한다 (총 함수: 입력 하나당 정확히 한 행).
+    present_count=0
+    for u in "$@"; do exists_unit "$u" && present_count=$((present_count + 1)); done
+    if [[ $present_count -eq 0 ]]; then
+      for u in "$@"; do printf '%s\tabsent\t-\n' "$u"; done
+      exit 0
+    fi
+
+    if [[ "$mode" == "bulk" ]]; then
+      present_units=""
+      for u in "$@"; do exists_unit "$u" && present_units="$present_units $u"; done
+      # shellcheck disable=SC2086  # unit 경로에 공백 없음 (git 경로 계약)
+      run_units $present_units; bulk_rc=$?
+      bulk_status=$(status_of_exit "$bulk_rc")
+      for u in "$@"; do
+        if is_refused "$u"; then printf '%s\tunrun\t-\n' "$u"
+        elif exists_unit "$u"; then printf '%s\t%s\t%s\n' "$u" "$bulk_status" "$bulk_rc"
+        else printf '%s\tabsent\t-\n' "$u"; fi
+      done
+    else
+      for u in "$@"; do
+        if exists_unit "$u"; then
+          run_units "$u"; unit_rc=$?
+          if is_refused "$u"; then printf '%s\tunrun\t-\n' "$u"
+          else printf '%s\t%s\t%s\n' "$u" "$(status_of_exit "$unit_rc")" "$unit_rc"; fi
+        else
+          printf '%s\tabsent\t-\n' "$u"
+        fi
+      done
+    fi
+    exit 0
+    ;;
   *)
     die "unknown subcommand: ${1:-} (expected detect|assign|run)"
     ;;

@@ -193,12 +193,37 @@ case_run_bulk_green() {
   rmw
 }
 
+# 실행 지점의 방어: assign 을 우회해 임의 경로를 넘겨도 shell 어댑터는 그것을 실행하지
+# 않는다. 설계 §5.9 "임의 명령을 추측해 실행하지 않는다".
+case_run_shell_refuses_out_of_scope_unit() {
+  mkw; mkdir -p "$W/tests" "$W/scripts"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$W/tests/ok.sh"; chmod +x "$W/tests/ok.sh"
+  printf '#!/usr/bin/env bash\ntouch "$1/PWNED"\nexit 0\n' > "$W/scripts/deploy.sh"
+  chmod +x "$W/scripts/deploy.sh"
+  local out; out=$(bash "$RTS" run "$W" shell per-unit scripts/deploy.sh 2>/dev/null)
+  if [[ "$out" == "scripts/deploy.sh${TAB}unrun${TAB}-" && ! -e "$W/PWNED" ]]; then
+    pass "스코프 밖 unit → 실행 거부 + unrun (부작용 없음)"
+  else fail "실행 거부 (out='$out', PWNED=$([[ -e "$W/PWNED" ]] && echo yes || echo no))"; fi
+  rmw
+}
+
+# die() 가 $(...) 안에서 삼켜지는 문제 (Task 2 리뷰) — <runner> 는 여기서 CLI 인자라
+# 도달 가능하다. 캡처-후-체크가 없으면 잘못된 runner 이름이 exit 2 대신 빈 gran으로
+# 조용히 흘러 이후 case 문에서 아무 분기도 안 타는 malformed 출력이 된다.
+case_run_unknown_runner_usage_error() {
+  mkw
+  local rc; bash "$RTS" run "$W" bogus-runner bulk X >/dev/null 2>&1; rc=$?
+  [[ $rc -eq 2 ]] && pass "알 수 없는 runner → exit 2 (usage)" || fail "unknown runner exit (rc=$rc)"
+  rmw
+}
+
 for c in case_assign_go_package case_assign_unclaimed case_assign_bulk_conflict \
          case_assign_residual_no_absorber case_assign_shell_scope_excludes_non_test \
          case_assign_shell_scope_includes_nested case_assign_dedup_claimed_file \
          case_assign_dedup_unclaimed case_assign_dedup_is_literal_not_regex \
          case_assign_spec_any_extension case_run_test_failure_vs_absent_runner \
-         case_run_total_function case_run_absent case_run_bulk_green; do
+         case_run_total_function case_run_absent case_run_bulk_green \
+         case_run_shell_refuses_out_of_scope_unit case_run_unknown_runner_usage_error; do
   echo "== $c"; $c
 done
 echo "── run-test-selection: $PASS passed, $FAIL failed"
