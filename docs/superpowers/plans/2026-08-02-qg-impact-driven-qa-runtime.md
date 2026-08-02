@@ -2241,13 +2241,12 @@ case_each_missing_dimension() {
 }
 
 # degraded는 1급 상태 — 통과해야 한다 (실패가 아니다)
+# 원본 verification 줄을 **치환**한다(추가가 아니라). 추가하면 같은 차원이 두 번
+# 선언돼 중복 검사에 걸리고, 이 테스트는 degraded와 무관한 이유로 red가 된다.
 case_degraded_is_valid() {
-  setup
-  write_ledger "$TMP/l.md"
-  sed -i.bak 's/floor:verification  — closed  /floor:verification  — degraded/' "$TMP/l.md" 2>/dev/null || true
-  printf -- '- floor:verification — degraded — unclaimed 2건, 실행 수단 없음\n' >> "$TMP/l.md"
-  # 중복 방지를 위해 원본 verification 줄을 제거
-  grep -v 'floor:verification — closed' "$TMP/l.md" > "$TMP/l2.md"
+  setup; write_ledger "$TMP/l.md"
+  grep -vF 'floor:verification' "$TMP/l.md" > "$TMP/l2.md"
+  printf -- '- floor:verification — degraded — unclaimed 2건, 실행 수단 없음\n' >> "$TMP/l2.md"
   run_ledger "$TMP/l2.md" && pass "status=degraded → exit 0 (1급 상태)" || fail "degraded가 red"
   cleanup
 }
@@ -2434,11 +2433,31 @@ if __name__ == "__main__":
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `bash plugins/quality-gates/tests/test_qa_ledger.sh`
-Expected: PASS — `qa ledger: 12 passed, 0 failed`
+Expected: PASS — `qa ledger: 11 passed, 0 failed`
 
 - [ ] **Step 5: M8 mutation 확인 (손으로, 되돌릴 것)**
 
-`FLOOR_RE`를 `re.compile(r"floor:(?P<dim>[a-z_]+)")`(헤딩 매칭 수준)으로 완화 → `case_heading_does_not_satisfy`가 **RED**여야 한다. 완화된 정규식은 `## floor:gap` 헤딩만으로 차원을 닫아버린다. 확인 후 되돌린다.
+"헤딩 언급만으로 차원이 닫히는" 완화를 실제로 재현한다. `FLOOR_RE`를 아래로 바꾸고
+(status·evidence 절을 **선택**으로 만들고 줄머리 `- ` 강제를 푼다), `check()` 안의
+`status` 대입 한 줄을 관대하게 고친다:
+
+```python
+FLOOR_RE = re.compile(
+    r"^\W*\s*floor:(?P<dim>[a-z_]+)(?:\s+—\s+(?P<status>\w+)\s+—\s+(?P<evidence>\S.*?))?\s*$"
+)
+...
+        status = m.group("status") or "closed"   # ← 헤딩엔 status가 없으니 관대하게
+```
+
+기대 결과 — **대비가 증거다**: `case_heading_does_not_satisfy`만 **RED**로 뒤집히고
+(`## floor:gap` 헤딩이 gap을 닫아버림), `case_complete`·`case_empty_evidence`·
+`case_unknown_status`를 포함한 나머지 10개는 **GREEN 유지**. 확인 후 되돌린다.
+
+> **`re.compile(r"floor:(?P<dim>[a-z_]+)")` 로 바꾸는 것은 mutation이 아니다** —
+> `.match()`는 위치 0에 앵커되는데 모든 원장 줄이 `- `/`## `로 시작하므로 *아무것도*
+> 매치되지 않고, `m.group("status")`는 `IndexError`로 죽는다. 그러면 정상 원장까지
+> red가 되어 "전부 빨개지는 mutation"이 된다 — 이 락에 대해 아무것도 증명하지 못한다.
+> 계측기가 대상에 **닿는지**를 먼저 확인할 것.
 
 > 이 mutation이 **이 계획의 취약 지점 셋 중 하나**다. 결과값만 보면 완화된 정규식도 정상 원장에서 GREEN이므로, 헤딩-only 픽스처 없이는 이빨이 없다.
 
