@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import NoReturn
 
 STATUSES = {"pass", "fail", "error", "unrun", "absent"}
 
@@ -43,15 +44,25 @@ CATEGORIES = [
 DEFECTS = {"NEW_REGRESSION", "NEW_TEST_RED"}
 
 
-def fail4(msg: str) -> "NoReturn":  # noqa: F821
+def fail4(msg: str) -> NoReturn:
     print(f"diff-test-results: {msg}", file=sys.stderr)
     raise SystemExit(4)
+
+
+def read_text_or_fail4(path: str, label: str) -> str:
+    """입력 파일을 읽는다. 부재·권한 오류 등(OSError)은 계약상 exit 4(파싱 실패)다 —
+    처리되지 않은 traceback으로 exit 1이 새면 오케스트레이터의 0/2/4 분기가 미분류
+    크래시를 받는다."""
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        fail4(f"{label} 파일을 읽을 수 없음: {path} ({exc})")
 
 
 def read_results(path: str, label: str) -> dict[str, tuple[str, str]]:
     """3열 TSV → {unit: (status, exit)}. 중복 unit / 미지 상태 / 필드 수 오류는 exit 4."""
     rows: dict[str, tuple[str, str]] = {}
-    for lineno, raw in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
+    for lineno, raw in enumerate(read_text_or_fail4(path, label).splitlines(), 1):
         if not raw.strip():
             continue
         parts = raw.split("\t")
@@ -74,7 +85,7 @@ def yaml_str(s: str) -> str:
 def per_adapter(args: argparse.Namespace) -> int:
     expected = [
         ln.strip()
-        for ln in Path(args.expected).read_text(encoding="utf-8").splitlines()
+        for ln in read_text_or_fail4(args.expected, "expected").splitlines()
         if ln.strip()
     ]
     base = read_results(args.baseline, "baseline")

@@ -131,12 +131,32 @@ class TestAttribution(unittest.TestCase):
         self.assertEqual(flag_of(out, "attribution_status"), "degraded")
         # file granularity의 같은 입력은 closed
         rc2, out2, _ = run_diff(["a"], [("a", "fail", "1")], [("a", "fail", "1")])
+        self.assertEqual(rc2, 0)
         self.assertEqual(flag_of(out2, "attribution_status"), "closed")
 
     # 알 수 없는 상태값은 조용히 통과하지 않는다
     def test_unknown_status_is_exit_4(self):
         rc, out, _ = run_diff(["a"], [("a", "weird", "0")], [("a", "pass", "0")])
         self.assertEqual(rc, 4)
+        self.assertEqual(out.strip(), "")
+
+    # Finding 3 — 입력 파일 부재는 파싱 실패다: 처리 안 된 OSError로 exit 1이 새면
+    # 오케스트레이터의 0/2/4 분기가 미분류 크래시를 받는다. exit 4 + 빈 stdout이어야 한다.
+    def test_missing_baseline_file_is_exit_4(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d)
+            (p / "e.txt").write_text("a\n", encoding="utf-8")
+            (p / "h.tsv").write_text("a\tpass\t0\n", encoding="utf-8")
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT),
+                 "--expected", str(p / "e.txt"),
+                 "--baseline", str(p / "missing.tsv"),
+                 "--head", str(p / "h.tsv"),
+                 "--granularity", "file", "--runner", "pytest"],
+                capture_output=True, text=True,
+            )
+        self.assertEqual(r.returncode, 4)
+        self.assertEqual(r.stdout.strip(), "")
 
 
 if __name__ == "__main__":
