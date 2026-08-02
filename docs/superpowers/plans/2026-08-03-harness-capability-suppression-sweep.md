@@ -45,6 +45,23 @@
 | **C6** | 커밋 유효성 | 각 커밋은 아래 baseline을 **유지하거나 개선**해야 한다. 중간 커밋이 red를 늘리는 것은 허용하지 않는다 |
 | **C7** | 버전 리터럴 | patch bump만 사용한다 (아래 [버전 시퀀스](#버전-시퀀스)). minor를 올리면 `test_readme_sync.sh:34`(`"version": "0\.24\.[0-9]+"`)·`test_artifact_metadata.sh:9`·`test_qg_publish_docs.sh:17`의 minor floor 핀이 함께 바뀌어야 한다 |
 | **C8** | 문서 규약 | Korean-primary. 영어는 식별자(P#·AP#·Law N·플러그인 이름)·고유명사·원문 인용·자연스러운 한국어 대응이 없는 기술 용어(`frontmatter`·`subagent`·`hook`·`skill`)에 한정 |
+| **C9** | **mutation은 커밋 *뒤에*** | 아래 참조 |
+
+### C9 — mutation 순서 (Task 1 실행 중 발견된 계획 결함)
+
+계획 초안은 mutation을 커밋 **앞에** 두고 `git checkout -- <file>`로 복원하라고 적었다. **그 조합은 수정을 조용히 지운다** — 아직 커밋하지 않은 상태에서 `git checkout --`는 HEAD로 되돌리므로, 되돌아가는 지점이 *억제가 살아 있던 원래 상태*다. Task 1 구현자가 실제로 한 번 당했고(즉시 `git diff`로 잡아 커밋에는 잔재가 없었다), Task 2·3·10이 같은 패턴을 반복한다.
+
+**따라서 순서를 고정한다:**
+
+```
+락 수정 → RED 확인 → 대상 수정 → GREEN 확인 → 스위트 → bump/CHANGELOG → 커밋
+  → mutation (커밋 뒤) → git checkout -- <file> → git status --short 가 깨끗한지 확인
+  → 락이 이빨 없으면 락을 고치고 git commit --amend
+```
+
+커밋 뒤에 하면 `git checkout --`가 **수정된 상태로** 복원하므로 안전하고, `git status --short`가 비어 있다는 사실이 잔재 없음의 진짜 증거가 된다. 커밋 앞에 mutation을 돌려야 할 이유는 없다 — 이빨이 없는 락이 나오면 `--amend`로 고치면 되고, 아직 push 전이다.
+
+**`git checkout --`를 쓰지 않는 대안도 허용한다**: mutation 전에 `git diff > <workspace>/pre-mutation.patch`를 떠 두고 `git checkout -- <file> && git apply <workspace>/pre-mutation.patch`로 복원. 커밋 앞에서 mutation을 돌려야 하는 상황(예: 커밋 자체가 락 방향에 달려 있을 때)에만 쓴다.
 
 ### 버전 시퀀스
 
@@ -400,6 +417,12 @@ Expected: 네 개 전부 GREEN.
 
 - [ ] **Step 8: mutation으로 이빨을 증명한다 (양방향)**
 
+> ⚠️ **C9 정정 (Task 1 실행 중 발견).** 아래는 mutation을 커밋 *앞에* 두고 `git checkout --`로
+> 복원하는데, **그 조합은 아직 커밋되지 않은 Step 5의 수정을 지운다** — `git checkout --`가
+> 되돌아가는 지점이 HEAD, 즉 억제가 살아 있던 상태이기 때문이다. Task 1은 이 함정에 한 번
+> 걸렸고 복원 방식을 바꿔 통과했다. **Task 2 이후는 mutation을 커밋 뒤에 돌린다 (C9).** 이
+> 태스크를 다시 실행한다면 Step 8을 Step 11 뒤로 옮길 것.
+
 ```bash
 A=plugins/quality-gates/agents/adversarial.md
 # mutation 1 — 핀 재도입
@@ -574,26 +597,16 @@ plugins/spec-distill/agents/blind-spot-prober.md:3   model: sonnet → model: in
 plugins/spec-distill/agents/steelman-builder.md:3    model: sonnet → model: inherit
 ```
 
-- [ ] **Step 6: GREEN 확인 + mutation 양방향**
+- [ ] **Step 6: GREEN 확인**
 
 ```bash
 for t in test_spec_reviewer_frontmatter test_coverage_mapper_frontmatter \
          test_blind_spot_prober_frontmatter test_steelman_builder_scope; do
   printf '%-42s ' "$t"; bash "plugins/spec-distill/tests/$t.sh" >/dev/null 2>&1 && echo GREEN || echo RED
 done
-
-A=plugins/spec-distill/agents/spec-reviewer.md
-sed -i '' 's/^model: inherit$/model: sonnet/' "$A"
-bash plugins/spec-distill/tests/test_spec_reviewer_frontmatter.sh >/dev/null 2>&1 \
-  && echo "❌ 핀 재도입이 통과" || echo "✅ mutation 1 RED"
-sed -i '' 's/^model: sonnet$/model: inherit/' "$A"
-sed -i '' '/^model: inherit$/d' "$A"
-bash plugins/spec-distill/tests/test_spec_reviewer_frontmatter.sh >/dev/null 2>&1 \
-  && echo "❌ 줄 삭제가 통과" || echo "✅ mutation 2 RED"
-git checkout -- "$A"; git status --short plugins/spec-distill/agents/
 ```
 
-Expected: GREEN ×4, `✅ mutation 1 RED`, `✅ mutation 2 RED`, 그리고 `git status`에 `spec-reviewer.md`가 **없어야** 한다(되돌려졌다). 나머지 세 에이전트에도 같은 두 mutation을 반복한다.
+Expected: GREEN ×4. **mutation은 커밋 뒤 Step 8에서 돈다 (C9)** — 커밋 전에 `git checkout --`로 복원하면 수정이 통째로 지워진다.
 
 - [ ] **Step 7: 스위트 확인 + bump + CHANGELOG + 커밋**
 
@@ -636,6 +649,31 @@ spec-review 6회 실측 전부 opus-5 세션 → sonnet-5 리뷰어. model: inhe
 네 frontmatter 테스트에 양방향 모델 락을 신설했다 — 기존에는 model: assert가 없어
 haiku 강등도 조용히 통과했다(신설 전 mutation으로 확인)."
 ```
+
+- [ ] **Step 8: mutation 양방향 (커밋 뒤 — C9)**
+
+네 에이전트 각각에 대해 반복한다. 아래는 `spec-reviewer` 예시:
+
+```bash
+A=plugins/spec-distill/agents/spec-reviewer.md
+T=plugins/spec-distill/tests/test_spec_reviewer_frontmatter.sh
+
+# mutation 1 — 핀 재도입
+sed -i '' 's/^model: inherit$/model: sonnet/' "$A"
+bash "$T" >/dev/null 2>&1 && echo "❌ 핀 재도입이 통과 (락에 이빨 없음)" || echo "✅ mutation 1 RED"
+git checkout -- "$A"
+
+# mutation 2 — model: 줄 통째 삭제 (positive assert가 있어야 잡힌다)
+sed -i '' '/^model: inherit$/d' "$A"
+bash "$T" >/dev/null 2>&1 && echo "❌ 줄 삭제가 통과 (positive assert 없음)" || echo "✅ mutation 2 RED"
+git checkout -- "$A"
+
+git status --short plugins/spec-distill/agents/    # 비어 있어야 한다
+```
+
+Expected: 에이전트 4개 × mutation 2방향 = `✅` 8건, 그리고 `git status`가 **빈 출력**. 커밋 뒤라 `git checkout --`가 *수정된* 상태로 복원한다 — 커밋 전에 같은 명령을 쓰면 수정이 지워진다(C9).
+
+이빨 없는 락이 나오면 락을 고치고 `git commit --amend` 한다 (아직 push 전이다).
 
 ---
 
@@ -836,27 +874,7 @@ bash plugins/spec-distill/tests/test_run_spec_codex_reviewer.sh
 
 Expected: 둘 다 `Fail: 0`. `test_run_spec_codex_reviewer.sh`는 mock codex를 PATH에 올려 **실제 실행 경로**까지 통과시키므로, 플래그 삭제가 `codex exec` 호출을 깨뜨리지 않았음이 함께 증명된다.
 
-- [ ] **Step 6: mutation 양방향**
-
-```bash
-R=plugins/spec-distill/scripts/run_spec_codex_reviewer.sh
-# mutation 1 — 상한 재삽입
-sed -i '' 's|^    -s read-only \\$|    -s read-only \\\
-    -c '"'"'model_reasoning_effort="medium"'"'"' \\|' "$R"
-bash plugins/spec-distill/tests/test_run_spec_codex_reviewer.sh >/dev/null 2>&1 \
-  && echo "❌ 상한 재삽입이 통과" || echo "✅ mutation 1 RED"
-git checkout -- "$R"
-
-# mutation 2 (반대 방향) — 샌드박스 제거
-sed -i '' '/^    -s read-only \\$/d' "$R"
-bash plugins/spec-distill/tests/test_run_spec_codex_reviewer.sh >/dev/null 2>&1 \
-  && echo "❌ 샌드박스 제거가 통과 — 상한 제거가 보안까지 걷어낼 수 있다" || echo "✅ mutation 2 RED"
-git checkout -- "$R"; git status --short plugins/spec-distill/scripts/
-```
-
-Expected: `✅ mutation 1 RED` + `✅ mutation 2 RED` + `git status` 깨끗. quality-gates 두 러너에도 같은 두 mutation을 반복해 `test_codex_runner_no_effort_pin.sh`로 확인한다.
-
-- [ ] **Step 7: 잔여 매칭을 확인하고 등재한다 (AC13)**
+- [ ] **Step 6: 잔여 매칭을 확인하고 등재한다 (AC13)**
 
 ```bash
 grep -rn 'model_reasoning_effort' plugins/ | grep -v CHANGELOG
@@ -878,7 +896,7 @@ grep -rnE "^[[:space:]]*-c .*model_reasoning_effort" plugins/*/scripts/
 
 Expected: 출력 없음 (exit 1).
 
-- [ ] **Step 8: 스위트 + 두 플러그인 bump + 커밋**
+- [ ] **Step 7: 스위트 + 두 플러그인 bump + 커밋**
 
 ```bash
 red=0; for t in plugins/*/tests/*.sh; do bash "$t" >/dev/null 2>&1 || red=$((red+1)); done; echo "red=$red"
@@ -917,6 +935,34 @@ git commit -m "fix(quality-gates,spec-distill): codex 추론 상한 제거 — �
 유지하고, 그 사실을 락으로 양방향 증명했다(상한 재삽입 RED + 샌드박스 제거 RED).
 run_brief_codex_reviewer.sh가 이미 쓰던 계약을 전파한 것이다."
 ```
+
+- [ ] **Step 8: mutation 양방향 (커밋 뒤 — C9)**
+
+세 러너 각각에 대해 반복한다. 아래는 `run_spec_codex_reviewer.sh` 예시:
+
+```bash
+R=plugins/spec-distill/scripts/run_spec_codex_reviewer.sh
+T=plugins/spec-distill/tests/test_run_spec_codex_reviewer.sh
+
+# mutation 1 — 상한 재삽입 (`-s read-only` 줄 뒤에 한 줄 끼워넣는다)
+awk '{print} /^    -s read-only \\$/{print "    -c '"'"'model_reasoning_effort=\"medium\"'"'"' \\"}' \
+  "$R" > "$R.mut" && mv "$R.mut" "$R"
+bash "$T" >/dev/null 2>&1 && echo "❌ 상한 재삽입이 통과 (락에 이빨 없음)" || echo "✅ mutation 1 RED"
+git checkout -- "$R"
+
+# mutation 2 (반대 방향) — 샌드박스 제거. 상한 제거가 보안까지 걷어내지 않았음을 증명한다.
+sed -i '' '/^    -s read-only \\$/d' "$R"
+bash "$T" >/dev/null 2>&1 && echo "❌ 샌드박스 제거가 통과" || echo "✅ mutation 2 RED"
+git checkout -- "$R"
+
+git status --short plugins/spec-distill/scripts/ plugins/quality-gates/scripts/   # 비어 있어야 한다
+```
+
+quality-gates 두 러너는 같은 두 mutation을 적용하고 `test_codex_runner_no_effort_pin.sh`로 확인한다.
+
+Expected: 러너 3개 × 2방향 = `✅` 6건 + `git status` 빈 출력. **mutation 1의 `.mut` 임시파일이 남지 않았는지** `git status`로 함께 확인한다 — `mv`가 실패하면 추적되지 않은 파일이 남는다.
+
+이빨 없는 락이 나오면 락을 고치고 `git commit --amend` 한다.
 
 ---
 
