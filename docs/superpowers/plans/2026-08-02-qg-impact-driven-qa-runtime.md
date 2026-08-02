@@ -2617,7 +2617,9 @@ echo "── runtime contract invariance: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]
 ```
 
-> **`hooks`/`agents` 기대값**: 위 `4`/`7`은 현 리포 실측값이다. Step 2에서 실제로 세어 확인하고 다르면 그 값으로 고친다.
+> **`hooks`/`agents` 기대값**: 위 `4`/`7`은 이 브랜치 HEAD에서 **실측 확인된 값**이다
+> (`hooks.json` 항목 4개 · `agents/` 파일 7개). Step 2에서 다시 세어 확인하되, 다른 값이
+> 나오면 그것은 이 task가 만든 변화이므로 **핀을 고치기 전에 왜 달라졌는지 먼저 밝힌다.**
 
 - [ ] **Step 2: 테스트가 실패하는지 확인 + 핀 값 산출**
 
@@ -2669,16 +2671,44 @@ ls plugins/quality-gates/agents | wc -l
     ;;
 ```
 
+같은 커밋에서 파일 상단의 **`# Subcommands:` 주석 블록에도 `create-baseline` 한 줄을
+추가한다** (`remove` 항목 다음). 그 블록은 이 스크립트의 유일한 사용법 문서이고, 새
+서브커맨드를 거기 안 적으면 코드보다 문서가 뒤처진다:
+
+```bash
+#   create-baseline <merge-base-sha> <session-id>
+#                                -> echoes absolute worktree path; detached at merge_base,
+#                                   NO working-tree overlay (baseline must not inherit
+#                                   HEAD's uncommitted changes)
+```
+
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `bash plugins/quality-gates/tests/test_runtime_contract_invariance.sh`
-Expected: PASS — `runtime contract invariance: 10 passed, 0 failed`
+Expected: PASS — `runtime contract invariance: 13 passed, 0 failed`
 
 Run: `bash plugins/quality-gates/tests/test_qg_worktree_helper.sh` (기존)
 Expected: PASS
 
 Run: `bash plugins/quality-gates/tests/test_qg_mutation_guard.sh` (기존)
 Expected: PASS
+
+- [ ] **Step 4.5: 무변경 락 3종의 이빨 확인 (손으로, 되돌릴 것)**
+
+이 task의 락은 **전부 green-expected**다 — 지금 통과하는 것이 정답이므로, 모양만 보고는
+이빨이 있는지 알 수 없다. 통과는 이빨의 증거가 아니다. 셋 다 흔들어 본다:
+
+1. `detect-runtime.sh` 끝에 주석 한 줄 추가 → `case_detect_runtime_frozen` **RED** 확인 → 되돌림
+2. `create-sandbox)` 본문 안 주석 한 줄 수정 → `case_sandbox_guard_frozen`의
+   create-sandbox 쪽만 **RED**, mutation-guard 쪽은 **GREEN 유지** 확인 → 되돌림
+3. `SKILL.md`에 `PARTIAL` 을 단어로 포함한 줄 추가 → `case_no_new_surfaces`의 verdict
+   토큰 assert만 **RED** 확인 → 되돌림
+
+각 되돌림 후 `git diff --quiet -- <그 파일>` 로 복원을 확인한다. 되돌리지 않은 mutation이
+남으면 다음 task가 원인 모를 red를 물려받는다.
+
+> 특히 3번은 grep 워드 경계(`\b`)가 이 환경의 grep에서 실제로 동작하는지까지 같이
+> 확인하는 자리다 — 경계가 안 먹으면 락은 조용히 아무것도 못 잡는다.
 
 - [ ] **Step 5: 커밋**
 
@@ -2788,6 +2818,10 @@ SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
 # 마커 기반은 반대로 시간에 fail-closed다 — 새 형제 디렉토리는 자동으로 안전하다.
 # 오판 방향도 옳다: 안 지우는 누수(빈 디렉토리 0바이트)가 살아있는 것을 지우는
 # 것보다 안전하다.
+# `pipeline.md`·`files.md`·`publish-eligible.md`는 SKILL.md가 실제로 쓰는 이름이다.
+# `runtime-evidence.md`는 Runtime gate의 evidence-log 이름 — 현재 코드에서 리터럴로
+# 찾기 어려우므로 **실재 여부를 확인하고**, 이름이 다르면 실제 이름으로 고친다.
+# 목록에서 빠진 마커의 오판 방향은 "안 지움"(누수)이라 안전하다 — 반대 방향이 아니다.
 SESSION_MARKERS = ("pipeline.md", "files.md", "publish-eligible.md", "runtime-evidence.md")
 
 
@@ -2812,7 +2846,14 @@ def _is_session_folder(folder: Path) -> bool:
 - [ ] **Step 4: 테스트 통과 확인**
 
 Run: `python3 plugins/quality-gates/tests/test_qg_gc.py`
-Expected: PASS — `Ran 13 tests ... OK`
+Expected: PASS — `Ran 13 tests ... OK` (기존 9 + 신규 4 — 기존 개수는 실측 확인됨)
+
+그리고 회귀 확인은 파일 단독 실행이 아니라 스위트로 한다:
+
+Run: `python3 -m pytest plugins/quality-gates/tests/test_*.py -q`
+Expected: 122 passed + 이 task가 추가한 4개 = **126 passed**. (`test_qg_gc.py`는
+`__main__` 가드가 있어 파일 단독 실행도 유효하지만, 이 리포의 다른 6개 파일은 그렇지
+않아 파일 단독 실행이 0개를 돌리고 exit 0을 낸다 — 회귀 확인엔 반드시 스위트를 쓴다.)
 
 - [ ] **Step 5: M1 / M2 mutation 확인 (손으로, 되돌릴 것)**
 
@@ -3598,7 +3639,7 @@ for lg in "${legacy_logic[@]}"; do
     missing_logic=$((missing_logic + 1))
   fi
 done
-[[ $missing_logic -eq 0 ]] && echo "PASS: 기존 로직 8종 전부 새 자리에 존재" || FAILURES=$((FAILURES + 1))
+[[ $missing_logic -eq 0 ]] && echo "PASS: 기존 로직 8종 전부 새 자리에 존재" || fail=$((fail + 1))
 
 # 새 라벨 5종이 실제로 존재하고 순서가 맞다
 r5a0=$(first_line 'Step R5a⁰'); r5a1=$(first_line 'Step R5a¹')
@@ -3620,14 +3661,14 @@ old_literal=$(grep -cF 'regardless of Review scope' "$SKILL_MD" || true)
 if [[ "$old_literal" -eq 0 ]]; then
   echo "PASS: 구 리터럴 'regardless of Review scope' 0회"
 else
-  echo "FAIL: 구 리터럴이 ${old_literal}회 잔존"; FAILURES=$((FAILURES + 1))
+  echo "FAIL: 구 리터럴이 ${old_literal}회 잔존"; fail=$((fail + 1))
 fi
 new_anchor='이번 변경의 영향분만 기준선 대비로 돌린다'
 anchor_count=$(grep -cF "$new_anchor" "$SKILL_MD" || true)
 if [[ "$anchor_count" -eq 1 ]]; then
   echo "PASS: 신 앵커 정확히 1회"
 else
-  echo "FAIL: 신 앵커가 ${anchor_count}회 (정확히 1회여야 함)"; FAILURES=$((FAILURES + 1))
+  echo "FAIL: 신 앵커가 ${anchor_count}회 (정확히 1회여야 함)"; fail=$((fail + 1))
 fi
 # 앵커는 R2(계획 산문)와 R3(갭 게이트) 사이에 있어야 한다
 anchor_line=$(first_line "$new_anchor")
@@ -3635,7 +3676,7 @@ r2_marker=$(first_line '^\*\*Step R2'); r3_marker=$(first_line '^\*\*Step R3')
 if [[ -n "$anchor_line" && "$anchor_line" -gt "$r2_marker" && "$anchor_line" -lt "$r3_marker" ]]; then
   echo "PASS: 앵커가 Step R2($r2_marker)와 Step R3($r3_marker) 사이 ($anchor_line)"
 else
-  echo "FAIL: 앵커 위치 ($anchor_line, R2=$r2_marker R3=$r3_marker)"; FAILURES=$((FAILURES + 1))
+  echo "FAIL: 앵커 위치 ($anchor_line, R2=$r2_marker R3=$r3_marker)"; fail=$((fail + 1))
 fi
 
 # ── T22 / AC31 / M12: 호출 주체 — run-test-selection.sh 가 verifier dispatch 블록 밖 ──
@@ -3650,16 +3691,25 @@ if [[ "$in_block" -eq 0 ]]; then
   echo "PASS: run-test-selection.sh 호출이 verifier dispatch 블록(R5a³..R5b) 안에 0회"
 else
   echo "FAIL: verifier dispatch 블록 안에서 run-test-selection.sh 호출 ${in_block}회"
-  FAILURES=$((FAILURES + 1))
+  fail=$((fail + 1))
 fi
 if grep -qF '이 호출 결과가 authoritative' "$SKILL_MD"; then
   echo "PASS: authoritative 문장 존재"
 else
-  echo "FAIL: authoritative 문장 부재"; FAILURES=$((FAILURES + 1))
+  echo "FAIL: authoritative 문장 부재"; fail=$((fail + 1))
 fi
 ```
 
-> **`FAILURES` / `SKILL_MD` / `first_line` / `first_line_after` / `assert_line` / `assert_order`** 는 이 파일에 이미 있는 헬퍼다. 이름을 확인하고 그대로 쓴다 — 새로 정의하면 두 카운터가 갈린다.
+> **카운터 이름은 `fail` 이다 — `FAILURES` 가 아니다.** 이 파일은 `set -euo pipefail`
+> 아래에서 `fail` 을 세고 마지막에 `[[ "$fail" -eq 0 ]]` 로 종료 코드를 정한다. 다른
+> 이름을 쓰면 (a) `set -u` 때문에 첫 실패에서 unbound variable 로 죽어 나머지 assert 가
+> 아예 안 돌거나, (b) `set -u` 가 없는 셸에서는 두 번째 카운터가 조용히 생겨 **FAIL 을
+> 출력하고도 exit 0** 이 된다. 실측 확인된 값이다.
+>
+> `SKILL_MD` / `first_line` / `first_line_after` / `assert_line` / `assert_order` 는
+> 이 파일에 이미 있다 (`:19`, `:25`, `:32`, `:40`, `:50`). `first_line` 은 **awk ERE**
+> 로 매칭하므로 `'^\*\*Step R2'` 같은 정규식이 유효하고, `assert_line`/`assert_order`
+> 는 스스로 `fail` 을 올린다 — 그 뒤에 카운터를 또 올리면 이중 계상이다.
 
 - [ ] **Step 2: 새 락이 통과하는지 확인**
 
@@ -3678,7 +3728,21 @@ Expected: 새 블록은 PASS. **기존 락(`:205` `Step R0`, `:303` `Step R-init
 - [ ] **Step 4: 전체 통과 확인**
 
 Run: `bash plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh`
-Expected: PASS — `FAILURES=0`
+Expected: PASS — `test_skill_orchestration_behavior: all protocol-shape assertions PASS` (exit 0)
+
+- [ ] **Step 4.5: 이전된 락에 이빨이 있는지 확인 (손으로, 되돌릴 것)**
+
+이 task 의 락은 전부 green-expected 다 — **통과는 이빨의 증거가 아니다.** 특히 이
+task 가 막으려는 실패는 "락은 통과하는데 검사 대상이 바뀜"이므로, 라벨을 흔들어 본다:
+
+1. SKILL.md 에서 `Step R5a⁰` 를 `Step R5aX` 로 바꾼다 → `새 라벨 R5a⁰ 존재` 와
+   `R5a⁰ runs detect-runtime` 와 `R5a⁰ precedes R5a¹` 가 **RED** → 되돌림
+2. 신 앵커 문장을 한 벌 더 복사해 넣는다 → `신 앵커 정확히 1회` 만 **RED**
+   (`0회`가 아니라 `2회`로 잡히는지 확인 — 존재만 보는 락이었다면 GREEN 이다) → 되돌림
+3. `이 호출 결과가 authoritative` 문장을 지운다 → 그 assert 만 **RED** → 되돌림
+
+각 되돌림 후 `git diff --quiet -- plugins/quality-gates/skills/quality-pipeline/SKILL.md`
+로 복원을 확인한다.
 
 Run: `bash plugins/quality-gates/tests/test_skill_orchestration.sh` (형제 스위트)
 Expected: PASS
