@@ -260,5 +260,192 @@ class TestAttribution(unittest.TestCase):
         self.assertEqual(r.stdout.strip(), "")
 
 
+def write_adapter_yaml(path: Path, runner, defect, drop, unrunnable, status="closed"):
+    """per-adapter 모드가 실제로 내는 출력 형상 그대로 재현한 픽스처.
+
+    `counts`는 per_adapter()가 flow-mapping 한 줄로 emit한다 (scripts/diff-test-
+    results.py의 `# counts는 flow-mapping...` 주석 참고) — block 스타일(2칸
+    들여쓰기 키:값 줄마다)로 쓰면 이 스크립트가 실제로 만드는 출력과 다른 것을
+    파싱하는 셈이라 회귀를 못 잡는다. 8개 카테고리 전부를 채운다 — 집계 파서가
+    누락된 카테고리를 exit 4로 잡는지 다른 테스트가 확인한다.
+    """
+    counts_body = ", ".join([
+        "still_green: 0",
+        f"new_regression: {1 if defect else 0}",
+        "pre_existing: 0",
+        "fixed: 0",
+        "new_test_green: 0",
+        "new_test_red: 0",
+        "silent_drop: 0",
+        "baseline_unrunnable: 0",
+    ])
+    path.write_text(
+        f"runner: {runner}\n"
+        "attributions: []\n"
+        f"attribution_status: {status}\n"
+        f"counts: {{{counts_body}}}\n"
+        "verdict_input:\n"
+        f"  confirmed_product_defect: {'true' if defect else 'false'}\n"
+        f"  silent_drop: {'true' if drop else 'false'}\n"
+        f"  baseline_unrunnable: {'true' if unrunnable else 'false'}\n",
+        encoding="utf-8",
+    )
+
+
+def run_aggregate(specs, expected_adapters=None, extra_args=None):
+    """specs: [(runner, defect, drop, unrunnable, status)] → (rc, stdout, stderr)"""
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d)
+        files = []
+        for i, (runner, defect, drop, unrunnable, status) in enumerate(specs):
+            f = p / f"{i}.yaml"
+            write_adapter_yaml(f, runner, defect, drop, unrunnable, status)
+            files.append(str(f))
+        n = len(specs) if expected_adapters is None else expected_adapters
+        r = subprocess.run(
+            [sys.executable, str(SCRIPT), "--aggregate", "--expected-adapters", str(n)]
+            + files + (extra_args or []),
+            capture_output=True, text=True,
+        )
+    return r.returncode, r.stdout, r.stderr
+
+
+class TestAggregate(unittest.TestCase):
+    # T53 — 어댑터 A 회귀 + B green → confirmed_product_defect: true (AC55)
+    def test_one_adapter_regression_makes_the_whole_run_a_defect(self):
+        rc, out, err = run_aggregate([
+            ("pytest", True, False, False, "closed"),
+            ("shell", False, False, False, "closed"),
+        ])
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(flag_of(out, "confirmed_product_defect"), "true")
+        self.assertIn("pytest", out)
+        self.assertIn("shell", out)
+
+    # T53(2) + M25 — 입력 YAML 개수 부족 → exit 4, 남은 것만 낙관적으로 합치지 않는다
+    def test_missing_adapter_yaml_is_exit_4(self):
+        rc, out, _ = run_aggregate(
+            [("pytest", False, False, False, "closed")], expected_adapters=2
+        )
+        self.assertEqual(rc, 4)
+        self.assertEqual(out.strip(), "")
+
+    # 같은 runner의 YAML이 두 번 오면 한 어댑터가 빠진 것을 개수로 못 잡는다 → exit 4
+    def test_duplicate_runner_is_exit_4(self):
+        rc, out, _ = run_aggregate([
+            ("pytest", False, False, False, "closed"),
+            ("pytest", False, False, False, "closed"),
+        ])
+        self.assertEqual(rc, 4)
+        self.assertEqual(out.strip(), "")
+
+    # T26 + AC35 — 확증 회귀와 SILENT_DROP이 **동시** 성립해도 둘 다 살아남는다.
+    # degrade 사실이 확증 결함에 삼켜지지 않고, 확증 결함이 degrade로 downgrade되지도
+    # 않는다. §5.7 우선순위 표는 이 두 플래그를 함께 받아야 성립한다.
+    def test_defect_and_degrade_are_both_reported(self):
+        rc, out, _ = run_aggregate([
+            ("pytest", True, False, False, "closed"),
+            ("shell", False, True, False, "closed"),
+        ])
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "confirmed_product_defect"), "true")
+        self.assertEqual(flag_of(out, "silent_drop"), "true")
+
+    # 어느 한 어댑터라도 degraded면 집계도 degraded (구조적 보장이 없으면 인증 없음)
+    def test_degraded_propagates(self):
+        rc, out, _ = run_aggregate([
+            ("pytest", False, False, False, "closed"),
+            ("cargo", False, False, False, "degraded"),
+        ])
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "attribution_status"), "degraded")
+
+    # 어느 어댑터도 degraded가 아니면 집계도 closed — degraded_propagates의 대칭
+    # (양방향 확인 없으면 "OR"가 아니라 "항상 degraded"로 회귀해도 못 잡는다).
+    def test_all_closed_stays_closed(self):
+        rc, out, _ = run_aggregate([
+            ("pytest", False, False, False, "closed"),
+            ("cargo", False, False, False, "closed"),
+        ])
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "attribution_status"), "closed")
+
+    # 모든 어댑터가 green이면 confirmed_product_defect도 false — OR 병합이
+    # "누구든 회귀면 true"이지 "항상 true"로 고정 회귀해도 못 잡는 것을 막는다.
+    def test_all_green_is_not_a_defect(self):
+        rc, out, _ = run_aggregate([
+            ("pytest", False, False, False, "closed"),
+            ("shell", False, False, False, "closed"),
+        ])
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "confirmed_product_defect"), "false")
+        self.assertEqual(flag_of(out, "silent_drop"), "false")
+        self.assertEqual(flag_of(out, "baseline_unrunnable"), "false")
+
+    # per_adapter 블록이 실제로 어댑터별 counts를 실어나른다 (값 캡처만 하고
+    # 끝나면 회귀를 못 잡는다 — 값 자체를 assert한다).
+    def test_per_adapter_counts_are_reported(self):
+        rc, out, _ = run_aggregate([
+            ("pytest", True, False, False, "closed"),
+            ("shell", False, False, False, "closed"),
+        ])
+        self.assertEqual(rc, 0)
+        self.assertIn("pytest: {baseline_unrunnable: 0, fixed: 0, new_regression: 1, "
+                       "new_test_green: 0, new_test_red: 0, pre_existing: 0, "
+                       "silent_drop: 0, still_green: 0}", out)
+        self.assertIn("shell: {baseline_unrunnable: 0, fixed: 0, new_regression: 0, "
+                       "new_test_green: 0, new_test_red: 0, pre_existing: 0, "
+                       "silent_drop: 0, still_green: 0}", out)
+
+    # 형상이 깨진 YAML은 조용히 무시되지 않는다
+    def test_malformed_yaml_is_exit_4(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "bad.yaml"
+            f.write_text("runner: pytest\n(garbage)\n", encoding="utf-8")
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT), "--aggregate",
+                 "--expected-adapters", "1", str(f)],
+                capture_output=True, text=True,
+            )
+        self.assertEqual(r.returncode, 4)
+        self.assertEqual(r.stdout.strip(), "")
+
+    # counts 블록이 카테고리 하나를 빠뜨리면(예: 손상된 상류 어댑터 출력) 0으로
+    # 조용히 메우지 않고 exit 4 — 그 카테고리의 회귀가 집계에서 사라지는 것을 막는다.
+    def test_incomplete_counts_block_is_exit_4(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "bad.yaml"
+            f.write_text(
+                "runner: pytest\n"
+                "attributions: []\n"
+                "attribution_status: closed\n"
+                "counts: {still_green: 0, new_regression: 1}\n"
+                "verdict_input:\n"
+                "  confirmed_product_defect: true\n"
+                "  silent_drop: false\n"
+                "  baseline_unrunnable: false\n",
+                encoding="utf-8",
+            )
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT), "--aggregate",
+                 "--expected-adapters", "1", str(f)],
+                capture_output=True, text=True,
+            )
+        self.assertEqual(r.returncode, 4)
+        self.assertEqual(r.stdout.strip(), "")
+
+    # --expected-adapters 없이 --aggregate만 주면 사용 오류(exit 2) — 입력 검증
+    # 실패(exit 4)와 구별된다.
+    def test_aggregate_without_expected_adapters_is_exit_2(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "a.yaml"
+            write_adapter_yaml(f, "pytest", False, False, False)
+            r = subprocess.run(
+                [sys.executable, str(SCRIPT), "--aggregate", str(f)],
+                capture_output=True, text=True,
+            )
+        self.assertEqual(r.returncode, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

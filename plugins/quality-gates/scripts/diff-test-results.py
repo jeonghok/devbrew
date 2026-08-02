@@ -4,7 +4,8 @@
 두 모드:
   per-adapter : --expected/--baseline/--head/--granularity/--runner  → 어댑터 1개의 귀속 YAML
   aggregate   : --aggregate --expected-adapters N <yaml>...          → verdict_input 집계
-                (Task 7이 채운다 — 이 파일은 per-adapter 경로만 구현한다)
+                (N개 어댑터 YAML을 하나의 verdict_input으로 합친다 — 오케스트레이터가
+                N개를 읽고 최악값을 고르는 경로를 없앤다. §5.5 참고)
 
 결정론이 지키는 것은 *선택*이 아니라 *짝짓기*다. 모델 주장과 독립이어야 백스톱이 된다.
 표준 라이브러리만 사용한다 (PyYAML 금지 — 대상 레포에 없을 수 있다).
@@ -12,6 +13,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 from typing import NoReturn
@@ -161,6 +163,97 @@ def per_adapter(args: argparse.Namespace) -> int:
     return 0
 
 
+def _one(pattern: str, text: str, path: str, what: str) -> str:
+    """정확히 한 번 매치되는 값을 뽑는다. 0회도 2회도 exit 4 — 집계는 fail-closed다."""
+    hits = re.findall(pattern, text, re.M)
+    if len(hits) != 1:
+        fail4(f"{path}: '{what}' 가 {len(hits)}회 매치 (정확히 1회여야 함)")
+    return hits[0]
+
+
+def parse_adapter_yaml(path: str) -> tuple[str, str, dict[str, bool], dict[str, int]]:
+    """per_adapter()가 실제로 내는 형상을 파싱한다.
+
+    `counts`는 per_adapter()가 flow-mapping 한 줄로 emit한다(위 주석 참고) — 블록
+    스타일(`  key: value` 줄마다)로 가정하면 이 파일의 실제 출력에서 0회 매치돼
+    유효한 입력 전부에서 exit 4가 난다. `attributions:`는 집계가 쓰지 않으므로
+    건드리지 않는다 — 빈 `attributions: []`도 그냥 지나간다.
+    """
+    text = read_text_or_fail4(path, "aggregate-input")
+    runner = _one(r"^runner: (\S+)$", text, path, "runner")
+    status = _one(r"^attribution_status: (closed|degraded)$", text, path, "attribution_status")
+    flags: dict[str, bool] = {}
+    for key in ("confirmed_product_defect", "silent_drop", "baseline_unrunnable"):
+        flags[key] = _one(rf"^  {key}: (true|false)$", text, path, key) == "true"
+
+    counts_body = _one(r"^counts: \{(.*)\}$", text, path, "counts")
+    counts: dict[str, int] = {}
+    for key, val in re.findall(r"([a-z_]+): (\d+)", counts_body):
+        if key in counts:
+            # 조용한 last-wins는 집계를 입력 순서에 의존하게 만든다 (T45의 unit
+            # 중복 처리와 같은 이유).
+            fail4(f"{path}: counts 키 '{key}' 중복 (정확히 1회여야 함)")
+        counts[key] = int(val)
+    expected_keys = {c.lower() for c in CATEGORIES}
+    if set(counts) != expected_keys:
+        # 0회도 기본값(0)으로 메우지 않는다 — 누락된 카테고리를 조용히 0으로
+        # 취급하면 그 카테고리의 회귀가 집계에서 사라진다.
+        missing = sorted(expected_keys - set(counts))
+        extra = sorted(set(counts) - expected_keys)
+        fail4(f"{path}: counts 키 불일치 (missing={missing}, extra={extra})")
+    return runner, status, flags, counts
+
+
+def _aggregate(args: argparse.Namespace) -> int:
+    if args.expected_adapters is None:
+        print("diff-test-results: --aggregate 에는 --expected-adapters 가 필요합니다",
+              file=sys.stderr)
+        return 2
+    if len(args.yamls) != args.expected_adapters:
+        # 어댑터 하나의 결과 파일이 통째로 빠졌을 때 verdict가 낙관적으로 새는 것을
+        # 막는다. 남은 것만 조용히 합치지 않는다 (M25 — 이 블록이 지켜야 하는 mutation).
+        fail4(f"입력 YAML {len(args.yamls)}개 != --expected-adapters "
+              f"{args.expected_adapters} (낙관적 부분 집계 금지)")
+
+    adapters: list[str] = []
+    per_adapter_counts: dict[str, dict[str, int]] = {}
+    combined = {"confirmed_product_defect": False, "silent_drop": False,
+                "baseline_unrunnable": False}
+    degraded = False
+    for path in args.yamls:
+        runner, status, flags, counts = parse_adapter_yaml(path)
+        if runner in adapters:
+            # 같은 runner가 두 번 오면 개수 대조가 무력해진다 (다른 어댑터 하나가
+            # 통째로 빠져도 총 개수는 맞아떨어질 수 있다).
+            fail4(f"중복 runner '{runner}' — 어댑터 축 개수 대조가 무력해짐")
+        adapters.append(runner)
+        per_adapter_counts[runner] = counts
+        for key in combined:
+            # OR — 한 어댑터의 확증 회귀는 다른 어댑터가 전부 green이어도 전체
+            # 판정을 확증 결함으로 만든다. degrade(silent_drop 등)도 같은 이유로
+            # confirmed_product_defect에 삼켜지지 않고 독립적으로 살아남는다.
+            combined[key] = combined[key] or flags[key]
+        degraded = degraded or status == "degraded"
+
+    out = [f"adapters: [{', '.join(adapters)}]", "verdict_input:"]
+    for key in ("confirmed_product_defect", "silent_drop", "baseline_unrunnable"):
+        out.append(f"  {key}: {'true' if combined[key] else 'false'}")
+    out.append(f"attribution_status: {'degraded' if degraded else 'closed'}")
+    if adapters:
+        out.append("per_adapter:")
+        for runner in adapters:
+            pairs = ", ".join(
+                f"{k}: {v}" for k, v in sorted(per_adapter_counts[runner].items())
+            )
+            out.append(f"  {runner}: {{{pairs}}}")
+    else:
+        # 빈 매핑을 bare `per_adapter:`로 내면 YAML에서 null로 파싱된다 — 같은
+        # 함정을 per_adapter()의 `attributions: []`가 이미 한 번 봉쇄했다(위 주석).
+        out.append("per_adapter: {}")
+    print("\n".join(out))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(add_help=True)
     p.add_argument("--expected")
@@ -176,9 +269,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = build_parser().parse_args()
-    # --aggregate는 Task 7이 채운다. 이 시점에는 per-adapter 경로만 동작한다 —
-    # 여기서 `_aggregate`를 참조하면 Task 7 없이는 NameError로 이어지므로,
-    # 그 분기는 아예 만들지 않는다 (조정자 지시).
+    if args.aggregate:
+        return _aggregate(args)
     missing = [
         f"--{n}" for n in ("expected", "baseline", "head", "granularity", "runner")
         if getattr(args, n) is None
