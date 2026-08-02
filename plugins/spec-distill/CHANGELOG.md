@@ -43,7 +43,10 @@ v0.14.0–v0.18.0 에 쌓인 방어층 4개를 원인과 함께 걷어냈다. �
   로 0 이 된다), (d) `harness_sid` 미해석 시 수동 억제는 대체 안내로 지정했다
   (그 지시는 원래도 부정확했다 — sid 가 없으면 그 커맨드도 상태를 못 썼다).
 - 환경변수 `DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC` (락 소멸).
-- 전용 테스트 7종. 두 handoff 테스트가 잠그던 dangling-경로 무-abort 불변식은 T11 이 승계.
+- 전용 테스트 7종 중 **6종 삭제 + 1종은 개명·축소 승계**(`tests/test_reviewing_spec_lock.sh`
+  → `tests/test_reviewing_spec_state_keying.sh`, Task 7 — 삭제가 아니다). 삭제된 6종 중
+  두 handoff 테스트(`test_handoff_compact_chain.sh`·`test_handoff_spec_path_validation.sh`)가
+  잠그던 dangling-경로 무-abort 불변식은 T11 이 승계.
 
 ### Fixed
 - `tests/test_stale_terms.sh` 의 production 파일 필터가 앵커 없는 `*/.claude/*` 라,

@@ -172,12 +172,22 @@ for rf in "${removed_files[@]}"; do
 done
 
 # --- V11 (v0.25.0): 대체 surface 가 실재한다 (음의 락만 두면 전부 지워도 통과) ---
-[[ -f "$SD/scripts/arm_ledger.py" ]] \
-  && note PASS "V11: arm_ledger.py 실재" || note FAIL "V11: arm_ledger.py 부재"
-scan -InIF -- 'should_arm' "$SD/hooks/spec-write-validator.py"
+# 두 conjunct는 "대체 machinery가 진짜로 있다"는 하나의 주장을 나눠 진다 — 어느 한쪽만으로는
+# 부족하다. (1) 파일 존재만 보면 빈 파일도 통과하므로 arm_ledger.py가 should_arm을 **정의**
+# 하는지(`^def should_arm(`)까지 확인한다. (2) 'should_arm'이라는 bare 토큰 존재만 grep하면
+# 세 가지 거짓양성을 놓친다 — 주석(`# should_arm 대신 항상 arm`), neutered 호출(반환값을
+# 버리는 `arm_ledger.should_arm(...)` 단독 문장), 스텁화된 정의(`should_arm` 이 항상 True를
+# 반환). 앞의 둘은 호출부가 **소비 위치**(`if (not )?arm_ledger\.should_arm\(`)에 있는지로
+# 잡는다 — 반환값이 실제로 control flow를 가른다는 증거. 스텁화는 이 락의 범위 밖이다(함수
+# 본문 의미는 grep으로 못 잡는다 — T-lock류의 한계와 같은 이유).
+scan -InE -- '^def should_arm\(' "$SD/scripts/arm_ledger.py"
 [[ $SCAN_RC -eq 0 ]] \
-  && note PASS "V11: validator 가 should_arm 게이트를 부른다" \
-  || note FAIL "V11: validator 에 should_arm 호출이 없다 (게이트 증발)"
+  && note PASS "V11: arm_ledger.py 가 should_arm 을 정의한다" \
+  || note FAIL "V11: arm_ledger.py 에 should_arm 정의가 없다 (파일 부재 포함 — 대체 machinery 없음)"
+scan -InE -- 'if (not )?arm_ledger\.should_arm\(' "$SD/hooks/spec-write-validator.py"
+[[ $SCAN_RC -eq 0 ]] \
+  && note PASS "V11: validator 가 should_arm 을 소비 위치(if)에서 부른다" \
+  || note FAIL "V11: validator 의 should_arm 호출이 소비 위치에 없다 (주석/neutered 호출 의심 — 게이트 증발)"
 
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]
