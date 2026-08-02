@@ -198,7 +198,7 @@ case_run_bulk_green() {
 case_run_shell_refuses_out_of_scope_unit() {
   mkw; mkdir -p "$W/tests" "$W/scripts"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$W/tests/ok.sh"; chmod +x "$W/tests/ok.sh"
-  printf '#!/usr/bin/env bash\ntouch "$1/PWNED"\nexit 0\n' > "$W/scripts/deploy.sh"
+  printf '#!/usr/bin/env bash\ntouch PWNED\nexit 0\n' > "$W/scripts/deploy.sh"
   chmod +x "$W/scripts/deploy.sh"
   local out; out=$(bash "$RTS" run "$W" shell per-unit scripts/deploy.sh 2>/dev/null)
   if [[ "$out" == "scripts/deploy.sh${TAB}unrun${TAB}-" && ! -e "$W/PWNED" ]]; then

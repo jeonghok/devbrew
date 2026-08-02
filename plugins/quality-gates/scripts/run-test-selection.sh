@@ -335,9 +335,7 @@ $f"
 $u"
               continue
             fi
-            # $w 를 인자로 넘긴다 — 셸 테스트가 자신이 도는 워크트리 루트를 알 수
-            # 있게 하는 관례(다른 러너는 인터프리터/툴체인이 cwd로 이를 대체한다).
-            ( cd "$w" && bash "$u" "$w" ) >&2 || rc=$?
+            ( cd "$w" && bash "$u" ) >&2 || rc=$?
           done ;;
         jest)
           ( cd "$w" && npx --no-install jest --cache=false --ci "$@" ) >&2 || rc=$? ;;
