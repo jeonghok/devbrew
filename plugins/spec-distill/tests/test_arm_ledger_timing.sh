@@ -50,8 +50,14 @@ run_validator "$REL8" "$SID8" >/dev/null
 emit8a=$(run_stop "$SID8")
 # 리뷰가 **시작은 했다** — skill Step 1 의 진입 strip 이 돌았다는 뜻이다. 이 한 줄이 없으면
 # T8 은 "verdict 없는 dispatch 2회"를 잴 뿐 선언한 시나리오("중단된 리뷰의 자기치유")를
-# 재지 못하고, Step 6 의 T8 mutation(기록을 진입 시점으로 되돌리기)이 픽스처에 **닿지
-# 않아** GREEN 이 난다 — 도달 불가능한 mutation 은 이빨의 증거가 아니다.
+# 재지 못한다.
+#
+# 이 락의 이빨 검증은 arm_ledger.py 의 **CLI `strip-pending` 분기**가 원장에 기록하도록
+# 바꾸는 mutation 으로 한다(= 기록을 verdict 시점에서 skill Step 1 진입 시점으로 되돌리기).
+# strip_pending_file() **내부** write 라인을 때리는 변형을 쓰지 말 것 — 그 라인은 pending 이
+# 남아 있을 때만 도달하는데 Stop 훅의 rewrite_state 가 dispatch 와 같은 write 로 pending 을
+# 이미 지우므로, 이 픽스처 배치에서는 닿지 않아 GREEN 이 난다. 도달 못 한 mutation 을
+# 이빨의 증거로 읽으면 안 된다.
 run_ledger strip-pending "$SID8" "$WORK/$REL8" >/dev/null 2>&1
 # 그리고 verdict 없이 죽었다 — mark-reviewed 를 부르지 않는다.
 edit_doc "$REL8" 2
@@ -149,9 +155,15 @@ fi
 
 # 섹션 윈도우 — 헤더-satisfiable 회피를 위해 blockquote/헤더가 아닌 **본문 고유** 토큰을
 # 윈도우 안에서 찾는다. 빈 윈도우는 앵커가 깨진 것이므로 FAIL(조용한 통과 금지).
+#
+# 맨 토큰 'mark-reviewed' 로는 부족하다 — 같은 윈도우 안 advisory 산문("…리뷰 완료
+# 기록(mark-reviewed)을 남기지 못했다…")이 그 grep 을 혼자 만족시킨다. 그러면 정작
+# load-bearing 한 명령 줄을 지워도, 다른 섹션으로 옮겨도 GREEN 이라 이 층이 주장하는
+# **공존(co-location)** 을 전혀 재지 못한다. 명령형(`arm_ledger.py" mark-reviewed`)은
+# 그 줄에만 있으므로 body-unique 하다.
 win="$(awk '/리뷰 완료 기록/{f=1} /^## /{f=0} f' "$SKILL")"
 if [[ -n "$win" ]] \
-  && grep -q 'mark-reviewed' <<<"$win" \
+  && grep -qF 'arm_ledger.py" mark-reviewed' <<<"$win" \
   && grep -q 'claude_verdict_unrecoverable' <<<"$win" \
   && grep -q 'codex_degraded' <<<"$win"; then
   note PASS "T12b: SKILL Step 3의 mark-reviewed 지시가 both-dead 배제 조건과 같은 블록"
