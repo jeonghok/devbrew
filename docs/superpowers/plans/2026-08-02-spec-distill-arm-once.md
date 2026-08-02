@@ -74,7 +74,7 @@ tests/test_approve_handoff.sh     tests/test_handoff_compact_chain.sh
 tests/test_handoff_spec_path_validation.sh
 ```
 
-스위트 규모: bash `test_*.sh` 51 − 5 + 2 = **48**, python 10 − 2 + 1 = **9**. `arm_test_helpers.sh` 는 실행 대상이 아니므로 이 셈에 들어가지 않는다 — **스위트를 도는 루프는 반드시 `tests/test_*.sh` 로 글롭한다**(`tests/*.sh` 로 돌면 헬퍼를 테스트로 실행하고 개수가 어긋난다).
+스위트 규모: bash `test_*.sh` 51 − 3 삭제 − 1(Task 5 고아) + 2 신규 = **49**  (`test_reviewing_spec_lock.sh` 는 삭제가 아니라 **개명**이라 계속 셈다 — 초안의 48 은 그걸 삭제로 셀 산술 오류), python 10 − 2 + 1 = **9**. `arm_test_helpers.sh` 는 실행 대상이 아니므로 이 셈에 들어가지 않는다 — **스위트를 도는 루프는 반드시 `tests/test_*.sh` 로 글롭한다**(`tests/*.sh` 로 돌면 헬퍼를 테스트로 실행하고 개수가 어긋난다).
 
 ---
 
@@ -2297,7 +2297,7 @@ git rm -q \
   tests/test_approve_handoff.sh \
   tests/test_handoff_compact_chain.sh \
   tests/test_handoff_spec_path_validation.sh
-ls tests/test_*.sh | wc -l    # 기대: 48  (arm_test_helpers.sh 는 테스트가 아니라 제외)
+ls tests/test_*.sh | wc -l    # 기대: 49  (arm_test_helpers.sh 는 테스트가 아니라 제외)
 ls tests/test_*.py | wc -l    # 기대: 9
 ```
 
@@ -2606,14 +2606,14 @@ red=0
 for t in tests/test_*.sh; do
   bash "$t" >/dev/null 2>&1 || { echo "RED: $t"; red=$((red+1)); }
 done
-echo "bash: $(ls tests/test_*.sh | wc -l)종, red=$red"
+echo "bash: $(ls tests/test_*.sh | wc -l)종, red=$red"   # 기대: 49종, red=0
 python3 -m unittest discover -s tests -p 'test_*.py' 2>&1 | tail -4
 git grep -nIF -e review_lock -e suppress_state -e approve_handoff -e cancel_review \
   -- 'plugins/spec-distill' ':!plugins/spec-distill/CHANGELOG.md' ':!plugins/spec-distill/tests' | wc -l
 ```
 
 Expected:
-- `bash: 48종, red=0`
+- `bash: 49종, red=0`
 - python: 9 파일, 알려진 cross-resolver 1건 외 OK (베이스라인과 동일)
 - `git grep` 카운트 `0`
 
