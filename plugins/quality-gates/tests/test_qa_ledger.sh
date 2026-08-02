@@ -106,9 +106,61 @@ case_heading_does_not_satisfy() {
   cleanup
 }
 
+# C1 회귀, 양방향: evidence 산문 속 "없음"(흔한 단어)은 모순으로 오판되면 안 되고,
+# 진짜 모순(없음 선언 + 명명 derived 공존)은 여전히 잡혀야 한다. 둘째 방향이 없으면
+# 모순 검사를 통째로 지우는 fix도 이 테스트를 통과해 버린다.
+case_c1_no_false_contradiction() {
+  setup
+  # 방향 A: 명명 derived의 evidence 안에 "없음"이 등장해도 통과해야 한다.
+  write_ledger "$TMP/ok.md" "" '- derived:migration — closed — 스키마 변경 회귀 없음, 양방향 확인 완료'
+  run_ledger "$TMP/ok.md" && pass "evidence 속 '없음'은 명명 derived를 모순으로 만들지 않음" \
+                          || fail "evidence 속 '없음' 때문에 정상 명명 derived가 red (C1)"
+
+  # 방향 B: 진짜 모순 — `derived: 없음` 선언과 명명 derived가 함께 있으면 non-zero.
+  write_ledger "$TMP/bad.md" "" '- derived: 없음 — 이 diff엔 추가 확인 축 없음'
+  printf -- '- derived:migration — closed — 스키마 up/down 양방향 확인\n' >> "$TMP/bad.md"
+  run_ledger "$TMP/bad.md" && fail "'없음' 선언 + 명명 derived 공존이 통과함 (모순 검사 소실)" \
+                           || pass "'없음' 선언 + 명명 derived 공존 → non-zero (진짜 모순은 여전히 잡힘)"
+  cleanup
+}
+
+# I1: stdin 경로도 UTF-8을 명시해야 한다 — 로케일이 ascii여도 안 깨져야 한다.
+# run_ledger()는 항상 파일 인자를 쓰므로 이 테스트는 python3를 직접, stdin으로 호출한다.
+case_stdin_utf8_locale_independent() {
+  setup; write_ledger "$TMP/l.md"
+  if PYTHONIOENCODING=ascii LC_ALL=C python3 "$LEDGER" < "$TMP/l.md" >/dev/null 2>&1; then
+    pass "stdin 경로: ascii 로케일에서도 exit 0 (UTF-8 명시)"
+  else
+    fail "stdin 경로가 로케일 의존 디코딩으로 깨짐 (I1)"
+  fi
+  cleanup
+}
+
+# 같은 floor 차원이 두 번 선언되면 non-zero — 어느 것을 믿을지 불명해지기 때문.
+case_duplicate_floor_dimension() {
+  setup; write_ledger "$TMP/l.md"
+  printf -- '- floor:changed      — degraded — 중복 선언\n' >> "$TMP/l.md"
+  run_ledger "$TMP/l.md" && fail "중복 floor 차원 선언이 통과함" \
+                         || pass "중복 floor 차원 선언 → non-zero"
+  cleanup
+}
+
+# 명명 derived의 status가 {closed,degraded} 밖이면 non-zero. 픽스처는 문법을
+# 완전히 만족해서 DERIVED_NAMED_RE에 실제로 매치해야 한다 — status/evidence가
+# 아예 없는 픽스처는 문법위반 분기로 새서 이 검사 자체에 닿지 못한다.
+case_derived_named_bad_status() {
+  setup
+  write_ledger "$TMP/l.md" "" '- derived:migration — bogus — evidence for migration'
+  run_ledger "$TMP/l.md" && fail "out-of-set status인 명명 derived가 통과함" \
+                         || pass "명명 derived의 status가 {closed,degraded} 밖 → non-zero"
+  cleanup
+}
+
 for c in case_complete case_each_missing_dimension case_degraded_is_valid \
          case_unknown_status case_empty_evidence case_derived_reason_required \
-         case_derived_named case_heading_does_not_satisfy; do
+         case_derived_named case_heading_does_not_satisfy \
+         case_c1_no_false_contradiction case_stdin_utf8_locale_independent \
+         case_duplicate_floor_dimension case_derived_named_bad_status; do
   echo "== $c"; $c
 done
 echo "── qa ledger: $PASS passed, $FAIL failed"

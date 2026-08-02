@@ -27,6 +27,9 @@ DERIVED_NONE_RE = re.compile(r"^-\s+derived:\s*없음\s+—\s+(?P<why>\S.*?)\s*$
 DERIVED_NAMED_RE = re.compile(
     r"^-\s+derived:(?P<name>[^\s—]+)\s+—\s+(?P<status>\w+)\s+—\s+(?P<evidence>\S.*?)\s*$"
 )
+# "없음"이 derived의 *이름 자리*에 있는지만 본다 — evidence 산문 안 "없음"(흔한 단어,
+# 예: "회귀 없음")까지 뽑으면 정상 명명 derived를 모순으로 오판한다 (C1).
+DERIVED_NONE_ANY_RE = re.compile(r"^-\s+derived:\s*없음(?=\s|$)")
 
 
 def check(text: str) -> list[str]:
@@ -59,14 +62,20 @@ def check(text: str) -> list[str]:
         # 줄 자체가 없으면 모델이 목록까지만 하고 멈춘 것과 구분할 수 없다.
         errors.append("`- derived:` 줄이 없습니다 (0개여도 판단은 기록해야 합니다)")
     else:
-        none_lines = [ln for ln in derived_lines if "없음" in ln]
+        # 이름 자리의 "없음"만 none 선언으로 센다. `- derived:없음 — closed — e`처럼
+        # 명명 문법까지 만족하면 그건 "없음"이라는 이름의 명명 차원이지 none 선언이
+        # 아니다 — 더 구체적인 명명 매치가 이긴다.
+        none_lines = [
+            ln for ln in derived_lines
+            if DERIVED_NONE_ANY_RE.match(ln) and not DERIVED_NAMED_RE.match(ln)
+        ]
         named_ok = [ln for ln in derived_lines if DERIVED_NAMED_RE.match(ln)]
         if none_lines and named_ok:
             errors.append("`derived: 없음` 과 명명 derived 차원이 함께 선언됨 (모순)")
         for ln in derived_lines:
             if DERIVED_NONE_RE.match(ln) or DERIVED_NAMED_RE.match(ln):
                 continue
-            if "없음" in ln:
+            if DERIVED_NONE_ANY_RE.match(ln):
                 errors.append(f"`derived: 없음` 에 이유 절이 없습니다: {ln.strip()}")
             else:
                 errors.append(
@@ -93,7 +102,11 @@ def main() -> int:
             print(f"check_qa_ledger: 읽기 실패: {exc}", file=sys.stderr)
             return 2
     else:
-        text = sys.stdin.read()
+        try:
+            text = sys.stdin.buffer.read().decode("utf-8")
+        except UnicodeDecodeError as exc:
+            print(f"check_qa_ledger: stdin이 UTF-8이 아닙니다: {exc}", file=sys.stderr)
+            return 2
 
     errors = check(text)
     if errors:
