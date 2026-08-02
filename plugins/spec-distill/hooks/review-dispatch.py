@@ -18,7 +18,6 @@ Kill switches:
 - DEVBREW_DISABLE_SPEC_DISTILL=1
 - DEVBREW_SKIP_HOOKS=spec-distill:Stop  (or :review-dispatch)
 - DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=<int>  (default 30; self-ref cycle guard)
-- DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC=<int>  (default 1800; document-keyed review-lock freshness)
 """
 from __future__ import annotations
 
@@ -74,7 +73,9 @@ def parse_iso(s: str) -> Optional[datetime]:
         return None
 
 
-def rewrite_state(path: Path, body: str, now: datetime) -> None:
+def rewrite_state(
+    path: Path, body: str, now: datetime, spec_path: str, attempt_n: int,
+) -> None:
     body = re.sub(
         r"^pending_review:\n(?:  [^\n]*\n)*", "", body, flags=re.MULTILINE
     )
@@ -83,6 +84,19 @@ def rewrite_state(path: Path, body: str, now: datetime) -> None:
         body = LAST_DISPATCHED_RE.sub(f"last_dispatched_at: {new_ts}", body)
     else:
         body = body.rstrip() + f"\nlast_dispatched_at: {new_ts}\n"
+    # §5.2 — dispatch_attempts 증가는 pending strip·타임스탬프와 **한 write**로
+    # 커밋된다. armed_paths는 G6 상한에 닿는 그 순간에만 record_attempt가 함께 찍고,
+    # 정상 dispatch에서는 원장을 건드리지 않는다(완료 기록 = verdict 시점 mark-reviewed).
+    if attempt_n > 0:
+        try:
+            import arm_ledger  # pyright: ignore[reportMissingImports]
+            body = arm_ledger.record_attempt(body, spec_path, attempt_n)
+        except Exception as exc:  # noqa: BLE001 — loud degradation
+            print(
+                f"[spec-distill] dispatch_attempts 기록 실패 "
+                f"(non-fatal, 이번 dispatch에 G6 상한 미적용): {exc}",
+                file=sys.stderr,
+            )
     # AC7.1: explicit flush + fsync for OS-level durability before any emit.
     with open(path, "w", encoding="utf-8") as f:
         f.write(body)
@@ -129,48 +143,6 @@ def main() -> int:
     m = PENDING_RE.search(body)
     if not m:
         return 0  # no pending dispatch
-    # A2 (v0.15.0): honor suppressed_paths — approve/cancel된 문서는 절대 재dispatch
-    # 안 함(Law 2 트리거/억제 대칭 복원 — Stop이 이제 두 신호를 모두 읽음). suppressed면
-    # stale pending을 strip하되 last_dispatched_at은 건드리지 않는다 — suppress는
-    # dispatch가 아니므로 TTL 시계를 시작하면 안 됨(cancel-review --reset 직후 정당한
-    # pending이 TTL window 동안 막히는 재발 window 방지). fail-safe 방향은 "리뷰가
-    # 일어나는 쪽": 이 블록의 어떤 예외(suppress_state import 실패 포함)도 정상
-    # dispatch로 귀결(과리뷰가 under-review보다 안전 — Law 1).
-    try:
-        import suppress_state  # scripts/ deferred import, fails-open (AC4)  # pyright: ignore[reportMissingImports]
-        if suppress_state.is_suppressed(state_path, m.group("path").strip()):
-            stripped = suppress_state.strip_pending(body).rstrip() + "\n"
-            with open(state_path, "w", encoding="utf-8") as f:
-                f.write(stripped)
-                f.flush()
-                os.fsync(f.fileno())
-            return 0  # suppressed → no dispatch, no emit, last_dispatched_at 불변
-    except Exception as exc:  # noqa: BLE001 — fail-open to dispatch (Law 1, NEW-001)
-        print(
-            f"[spec-distill] suppress check failed (non-fatal, dispatching): {exc}",
-            file=sys.stderr,
-        )
-    # Document-keyed review lock (v0.18.0): 이 문서의 리뷰가 in-flight(신선 엔트리)면
-    # 재-arm된 pending은 subagent 경계 Stop 오발 — no-op하고 pending을 보존한다.
-    # fail-safe = 강제: 엔트리 부재/stale/파싱·import 예외 중 하나라도면 정상 dispatch로
-    # 진행(Law 1, over-review > under-review). 다른 문서의 신선 엔트리는 pending_key로
-    # 조회하므로 이 문서를 억제하지 않는다(AC16).
-    try:
-        import review_lock  # scripts/ deferred import, fails-open (AC4)  # pyright: ignore[reportMissingImports]
-        try:
-            lock_ttl = int(os.environ.get("DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC", "1800"))
-        except ValueError:
-            lock_ttl = 1800
-        pending_key = review_lock.canonical_key(m.group("path").strip())
-        if pending_key is not None and review_lock.is_review_active(
-            body, pending_key, datetime.now(timezone.utc), lock_ttl
-        ):
-            return 0  # review in progress for this doc → no dispatch, pending preserved
-    except Exception as exc:  # noqa: BLE001 — fail-open to dispatch (Law 1)
-        print(
-            f"[spec-distill] review-lock check failed (non-fatal, dispatching): {exc}",
-            file=sys.stderr,
-        )
     # TTL guard against self-ref cycle
     try:
         ttl_sec = int(os.environ.get("DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC", "30"))
@@ -185,6 +157,21 @@ def main() -> int:
     spec_path = m.group("path").strip()
     mode = m.group("mode").strip()
     wt = (m.group("wt") or "").strip()
+    # §5.2 — 이번 dispatch의 시도 번호는 rewrite *이전에* 순수 함수로 계산한다.
+    # rewrite_state를 bare 표현식 호출로 유지해야 AC7.3.1 AST 락(rewrite 먼저,
+    # print 나중)이 그대로 성립한다 — 반환값 대입으로 바꾸면 그 락이 호출을 못 본다.
+    attempt_n = 0
+    cap = 0
+    try:
+        import arm_ledger  # pyright: ignore[reportMissingImports]
+        attempt_n = arm_ledger.next_attempt(body, spec_path)
+        cap = arm_ledger.DISPATCH_ATTEMPT_CAP
+    except Exception as exc:  # noqa: BLE001 — loud degradation
+        print(
+            f"[spec-distill] dispatch 시도 카운트 실패 "
+            f"(non-fatal, G6 상한 미적용): {exc}",
+            file=sys.stderr,
+        )
     msg_lines = [
         "MANDATORY: 다음 turn 첫 액션으로 reviewing-spec skill 호출.",
         f"spec path: {spec_path}.",
@@ -195,10 +182,16 @@ def main() -> int:
     msg_lines.append(
         "호출 skill의 terminal handoff(writing-plans 등)는 review pass 이후로 보류."
     )
+    if cap and attempt_n >= cap:
+        msg_lines.append(
+            f"[spec-distill] '{spec_path}' 리뷰가 {cap}회 시도됐으나 verdict 없이 "
+            "끝났다 — 자동 dispatch를 중단한다. 리뷰가 필요하면 reviewing-spec을 "
+            "직접 호출하라."
+        )
     msg = " ".join(msg_lines)
     # AC7.1: rewrite BEFORE emit. AC7.2: rewrite-fail → no emit (block storm guard).
     try:
-        rewrite_state(state_path, body, now)
+        rewrite_state(state_path, body, now, spec_path, attempt_n)
     except OSError as e:
         print(
             f"[spec-distill] state rewrite failed (non-fatal, dispatch suppressed): {e}",
