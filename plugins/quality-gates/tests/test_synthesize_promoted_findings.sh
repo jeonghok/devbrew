@@ -225,6 +225,28 @@ else
   echo "$out10" | sed 's/^/      /'
 fi
 
+# 11 — 표기가 다른 CRITICAL이 **낮은 confidence에서도** 억제되지 않는다.
+#      케이스 9만으로는 부족하다: 거기 픽스처는 confidence 9라 suppress()가
+#      severity를 raw로 읽어 비-CRITICAL로 판정해도 바닥(<=4)을 넘어 어차피
+#      kept였다 — 정규화를 suppress에서 되돌려도 GREEN이었다(mutation N6).
+#      CRITICAL의 계약은 "어떤 confidence에서도 항상 kept"이므로, 그 특권이
+#      걸리는 유일한 값 영역(conf<=4)에서 재야 이 정규화에 이빨이 생긴다.
+cat > "$tmp/findings_sevcase_lowconf.yaml" <<'Y'
+findings:
+  - file: src/auth.py
+    line: 42
+    severity: Critical
+    confidence: 2
+    summary: "low-confidence critical must survive suppression"
+    agent: security-reviewer
+Y
+if python3 "$SCRIPT" --findings "$tmp/findings_sevcase_lowconf.yaml" 2>/dev/null \
+     | grep -q 'low-confidence critical must survive suppression'; then
+  ok "11 — 표기가 다른 CRITICAL이 낮은 confidence에서도 억제되지 않는다"
+else
+  no "11 — 표기가 다른 CRITICAL이 낮은 confidence에서도 억제되지 않는다"
+fi
+
 echo ""
 echo "Total: $((PASS+FAIL)), PASS=$PASS, FAIL=$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1
