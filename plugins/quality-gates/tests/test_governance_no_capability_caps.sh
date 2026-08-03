@@ -36,6 +36,19 @@ else
   pass "AC8a: fan-out 하드 게이트 임계(≥5, N-접두 여부 무관) 없음"
 fi
 
+# 위 assert는 **글리프**만 막는다 — 숫자와 언어 차원은 열려 있었다. 산문형
+# 'fan-out이 5 이상이면 … 금지'와 임계값 4가 둘 다 GREEN이었다(mutation M6/M6b).
+# 리터럴 값을 쫓는 대신 **개념**을 잠근다: fan-out을 숫자 임계에 묶는 문장 자체.
+# 오탐 점검: 두 파일의 현재 fan-out 언급(CLAUDE.md:68, philosophy:63·96)에는
+# 임계 숫자가 없다 — philosophy:63의 'fan-out N'은 *선언* 요구이지 임계가 아니다.
+if grep -hE 'fan-out|팬아웃' "$CLAUDE_MD" "$PHIL" \
+     | grep -E '[0-9]' \
+     | grep -qE '이상|초과|넘으|부터|≥|>=|이면'; then
+  fail "AC8a: fan-out을 숫자 임계에 묶는 문장이 잔존한다 (값·표기를 바꿔도 같은 억제다)"
+else
+  pass "AC8a: fan-out을 숫자 임계에 묶는 문장 없음 (개념 단위 잠금)"
+fi
+
 # 두 particle 변형(를/가) 모두 커버 — CLAUDE.md는 "single-agent를 default로",
 # philosophy AP9 앵커는 "single-agent가 default다"로 다르게 적혀 있었다.
 if grep -qE 'single-agent(를|가) default' "$CLAUDE_MD" "$PHIL"; then
@@ -66,10 +79,19 @@ else
 fi
 
 # --- AC8b: philosophy :20 — Three Laws 집행은 불변, 개별 임계치는 재평가 대상 ---
-if grep -qE '재평가 대상' "$PHIL"; then
-  pass "AC8b: 임계치·예산·상한이 재평가 대상임을 명시하는 문구 실재"
+# 부분 문자열 assert는 **자기 부정문에도 만족된다**: '재평가 대상'은
+# '재평가 대상이 **아니다**' 안에 그대로 들어 있어, 정반대 정책으로 바꿔도 GREEN이었다
+# (2026-08-04 /qg 라운드 1, pr-test-analyzer mutation M7). 문장 전체를 앵커하고
+# 부정형을 따로 막는다 — 긍정 assert 하나로는 의미를 잴 수 없다.
+if grep -qF '재평가 대상이다' "$PHIL"; then
+  pass "AC8b: 임계치·예산·상한이 재평가 대상임을 명시하는 문장 실재"
 else
-  fail "AC8b: philosophy에 '재평가 대상' 문구가 없다 — sweep 자체가 규칙 위반으로 읽힌다"
+  fail "AC8b: philosophy에 '재평가 대상이다' 문장이 없다 — sweep 자체가 규칙 위반으로 읽힌다"
+fi
+if grep -qE '재평가 대상이[[:space:]]*아니' "$PHIL"; then
+  fail "AC8b: '재평가 대상이 아니다'로 정책이 뒤집혔다 — 긍정 assert만으로는 못 잡는 반전이다"
+else
+  pass "AC8b: 재평가 가능성을 부정하는 문구 없음"
 fi
 if grep -qF '모델 성능이 향상돼도 이 메커니즘은 불변이다' "$PHIL"; then
   fail "AC8b: philosophy :20 원문(전면 불변 선언)이 아직 남아 있다"
@@ -90,10 +112,18 @@ else
 fi
 
 # --- AC8d: docs/plugin-authoring.md에 agent model: inherit 규약 신설 ---
-if grep -qE 'model:.*`inherit`' "$AUTHORING"; then
-  pass "AC8d: plugin-authoring.md에 agent model: inherit 규약 존재"
+# 예전 정규식('model:.*`inherit`')은 토큰이 근처에 있다는 것만 증명했다 — **처방과
+# 금지를 구별하지 못한다**. "`inherit`을 쓰지 말고 리터럴 티어를 박아라"로 바꿔도
+# GREEN이었다(mutation M8). 처방 문장 전체를 앵커하고, 금지 어법을 따로 막는다.
+if grep -qF '**agent `model:`은 `inherit`.**' "$AUTHORING"; then
+  pass "AC8d: plugin-authoring.md에 agent model: inherit **처방** 존재"
 else
-  fail "AC8d: plugin-authoring.md에 agent model: inherit 규약이 없다 — 신규 플러그인이 리터럴 티어 핀을 복제할 수 있다"
+  fail "AC8d: agent model: inherit 처방 문장이 없다 — 신규 플러그인이 리터럴 티어 핀을 복제할 수 있다"
+fi
+if grep -nE 'inherit' "$AUTHORING" | grep -qE '쓰지[[:space:]]*(마|말)|금지|말고[[:space:]]*리터럴'; then
+  fail "AC8d: inherit을 **금지**하는 어법이 있다 — 규약이 뒤집혔다"
+else
+  pass "AC8d: inherit을 금지하는 어법 없음"
 fi
 
 echo; echo "Total: $((PASS+FAIL)) | Pass: $PASS | Fail: $FAIL"
