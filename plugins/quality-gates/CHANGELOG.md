@@ -45,6 +45,40 @@
   **시간에 fail-open** 이기 때문이다 — 내일 추가될 형제 디렉토리를 오늘 열거할 수 없다.
 - **`compute-test-scope-candidates.sh` 의 `main` 하드코딩 + merge-base 부재** — Review
   게이트가 이미 고친 버그 클래스가 Runtime 쪽에 남아 있었다.
+- **cargo 어댑터가 모든 Rust 레포에서 terminal false FAIL 을 보장하던 것** —
+  `CARGO_TARGET_DIR` 가 qg 가 발명한 이름(`.qg-cargo-target`)이라 어떤 레포의
+  `.gitignore` 도 그것을 덮지 않았고, 빌드 산출물 전량이 `disallowed_new_files` →
+  `forced_downgrade: yes` → **어떤 것으로도 downgrade 되지 않는 FAIL** 이 됐다
+  (실측 68 파일). 이제 `<트리>/target` 을 쓴다 — cargo 의 기본값이 이미 트리-로컬이라
+  AC50 의 트리별 독립은 유지되고, `cargo new` 가 쓰는 `/target` 이 그것을 덮는다.
+- **도구 부재가 `PRE_EXISTING` 으로 채점되어 테스트 0개로 PASS 가 나던 것** — 감지는
+  레포 선언(`go.mod` 존재)을 보는데(그것이 옳다) 실행 실패는 exit 127 → `error` →
+  fail 축 → 양측 fail → `PRE_EXISTING` → `attribution_status: closed` 였다. `run` 이
+  실행 **직전** 도구 가용성을 따로 찌르고 부재 시 exit 3(전 unit `unrun`)로 가며,
+  exit 127 도 `error` 가 아니라 `unrun` 으로 접힌다 (설계 §5.10 row 3 · AC34 · AC44).
+- **pytest 선언 감지가 `pytest-cov`/`pytest-mock` 만 선언한 레포를 놓치던 것** — 그런
+  레포가 unittest 로 새면 모듈-레벨 bare `def test_…` 가 0개 수집 + exit 0 으로 조용히
+  통과한다(초록 exit 이라 degrade 신호가 없다).
+- **Python setup 이 run 이 쓰지 않는 환경에 설치하던 것 + 한 분기의 샌드박스 탈출** —
+  `uv sync`/`poetry install` 로 준비해놓고 앰비언트 `python3 -m pytest` 로 실행했고,
+  `requirements.txt` 분기는 사용자의 system/user site-packages 를 바꿔 기준선과 HEAD 가
+  **한 패키지 집합을 공유**하게 만들었다(§5.4 가 옵션 ②를 기각한 바로 그 오염). 이제
+  설치처와 실행처가 `python_env_of` 한 곳에서 갈라지고, `requirements.txt` 는
+  트리-로컬 `.venv` 를 쓴다.
+- **`run`/`assign` 의 셸-스코프 검사가 담김이 아니라 부분문자열 검사였던 것** —
+  `../<other>/tests/evil.sh` 가 `*/tests/*.sh` 글롭과 실행비트를 둘 다 만족해
+  워크트리 **밖** 스크립트가 (양측에서 각각) 실행됐다. 설계 §5.9 의 "임의 명령을
+  추측해 실행하지 않는다" 위반.
+- **락파일 없는 npm 레포에서 `npm install` 이 `package-lock.json` 을 만들던 것** —
+  cargo target 과 같은 terminal-FAIL 클래스. `--no-package-lock` 추가.
+- **`create-baseline` 이 사용자의 워크트리를 파괴할 수 있던 것** — `create` 의
+  `${sanitized}-${sid_short}` 와 `base-${sid_short}` 가 같은 세션의 `/qg branch base`
+  에서 **같은 경로**가 되고, idempotent 정리의 `--force` 가 미커밋 작업을 되돌릴 수 없이
+  지웠다. 이제 non-force `git worktree remove` 를 먼저 시도하고 git 이 거부하면 죽는다
+  (git-ignored 산출물만 있는 정상 기준선 트리는 그대로 제거된다).
+- **`runtime-verifier` Hard Rule 1 의 `installing deps` 무한정 허용** — 두 줄 아래
+  Rule 3 의 한정(`not test-runner deps`)과 모순됐다. 이 산문은 §11⑬ 이 verifier-생성
+  환경 비대칭에 대해 가진 유일한 통제다.
 
 ## [2.14.3] — 2026-07-29
 
