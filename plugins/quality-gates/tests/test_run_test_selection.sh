@@ -270,6 +270,76 @@ case_run_bulk_unit_path_with_space() {
   rmw
 }
 
+# 최종 whole-branch 리뷰 I5 — `run` 의 셸-스코프 검사가 담김(containment)이 아니라
+# 부분문자열 검사였다. `../<other>/tests/evil.sh` 는 `*/tests/*.sh` 글롭과 `-x "$w/$f"`
+# 를 **둘 다** 만족하고, `cd "$w" && bash "$u"` 가 그것을 워크트리 밖에서 실행했다
+# (리뷰어 실측: EXECUTED-OUTSIDE-WORKTREE 마커). 양측이 같은 unit 목록을 돌므로
+# **두 번** 실행된다. 이 컴포넌트의 명시된 안전 계약은 설계 §5.9 의
+# "임의 명령을 추측해 실행하지 않는다" 이다.
+#
+# 두 호출 지점을 **모두** 잰다 — run 만 막으면 assign 이 여전히 그것을 unit 으로
+# 주장해 다른 소비자에게 흘린다.
+case_unit_outside_worktree_is_refused() {
+  local root w evil out n
+  root=$(mktemp -d); w="$root/victim"
+  mkdir -p "$w/tests" "$root/other/tests"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$w/tests/ok.sh"; chmod +x "$w/tests/ok.sh"
+  evil="$root/other/tests/evil.sh"
+  printf '#!/usr/bin/env bash\ntouch %s/ESCAPED\nexit 0\n' "$root" > "$evil"; chmod +x "$evil"
+
+  out=$(printf '../other/tests/evil.sh\n' | bash "$RTS" assign "$w")
+  [[ "$out" == "../other/tests/evil.sh${TAB}unclaimed${TAB}file" ]] \
+    && pass "assign: 워크트리 밖 unit 미주장 (unclaimed → verification degraded)" \
+    || fail "assign 담김 (got: $out)"
+
+  out=$(bash "$RTS" run "$w" shell per-unit ../other/tests/evil.sh 2>/dev/null)
+  if [[ ! -e "$root/ESCAPED" ]]; then
+    pass "run: 워크트리 밖 unit 미실행 (부작용 없음)"
+  else
+    fail "run 이 워크트리 밖 스크립트를 실행함 (out='$out')"
+    rm -f "$root/ESCAPED"
+  fi
+  n=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
+  [[ "$n" == "1" ]] && pass "거부해도 입력당 정확히 1행 (총 함수 유지)" \
+                    || fail "총 함수 깨짐 ($n 행: '$out')"
+
+  # 절대경로도 같은 클래스다 — `..` 만 막으면 절반만 막은 것이다.
+  out=$(bash "$RTS" run "$w" shell per-unit "$evil" 2>/dev/null)
+  [[ ! -e "$root/ESCAPED" ]] && pass "절대경로 unit 도 미실행" \
+                             || fail "절대경로 unit 이 실행됨 (out='$out')"
+
+  # 트리 밖을 가리키는 심볼릭 링크도 같은 클래스다 (글롭·실행비트 둘 다 만족한다)
+  ln -s "$root/other/tests" "$w/tests/link"
+  out=$(bash "$RTS" run "$w" shell per-unit tests/link/evil.sh 2>/dev/null)
+  [[ ! -e "$root/ESCAPED" ]] && pass "트리 밖 심볼릭 링크 경유 unit 도 미실행" \
+                             || fail "심볼릭 링크로 탈출 (out='$out')"
+
+  # 정당한 트리-안 unit 은 여전히 돈다 — 담김 검사가 대상을 통째로 죽이지 않았는가
+  out=$(bash "$RTS" run "$w" shell per-unit tests/ok.sh 2>/dev/null)
+  [[ "$out" == "tests/ok.sh${TAB}pass${TAB}0" ]] \
+    && pass "트리 안 정당한 unit 은 그대로 실행" || fail "정당 unit 회귀 (got: $out)"
+  rm -rf "$root"
+}
+
+# 최종 whole-branch 리뷰 C2 백스톱 — 실행 **도중** 도구가 없어 나온 127 을 `error` 로
+# 두면 §5.5 가 fail 축으로 접어 양측 fail → PRE_EXISTING → attribution closed →
+# 테스트 0개 PASS 로 간다. 127 은 미실행 축(`unrun`)이다. 가용성 프로브는 실행
+# **직전**만 보므로 이 매핑이 그 뒤를 받는다.
+case_run_exit_127_is_unrun() {
+  mkw; mkdir -p "$W/tests"
+  printf '#!/usr/bin/env bash\nexit 127\n' > "$W/tests/gone.sh"; chmod +x "$W/tests/gone.sh"
+  printf '#!/usr/bin/env bash\nexit 2\n'   > "$W/tests/err.sh";  chmod +x "$W/tests/err.sh"
+  local out
+  out=$(bash "$RTS" run "$W" shell per-unit tests/gone.sh 2>/dev/null)
+  [[ "$out" == "tests/gone.sh${TAB}unrun${TAB}127" ]] \
+    && pass "exit 127 → unrun (미실행 축)" || fail "127 매핑 (got: $out)"
+  # 127 이 아닌 그 외 코드는 여전히 error 다 — 매핑을 통째로 바꾼 게 아님을 고정한다
+  out=$(bash "$RTS" run "$W" shell per-unit tests/err.sh 2>/dev/null)
+  [[ "$out" == "tests/err.sh${TAB}error${TAB}2" ]] \
+    && pass "exit 2 → error (기존 매핑 무변경)" || fail "error 매핑 회귀 (got: $out)"
+  rmw
+}
+
 for c in case_assign_go_package case_assign_unclaimed case_assign_bulk_conflict \
          case_assign_residual_no_absorber case_assign_shell_scope_excludes_non_test \
          case_assign_shell_scope_includes_nested case_assign_dedup_claimed_file \
@@ -278,7 +348,8 @@ for c in case_assign_go_package case_assign_unclaimed case_assign_bulk_conflict 
          case_run_total_function case_run_absent case_run_bulk_green \
          case_run_shell_refuses_out_of_scope_unit case_run_unknown_runner_usage_error \
          case_run_bulk_partial_absent case_run_bulk_refused_does_not_corrupt_sibling \
-         case_run_bulk_unit_path_with_space; do
+         case_run_bulk_unit_path_with_space \
+         case_unit_outside_worktree_is_refused case_run_exit_127_is_unrun; do
   echo "== $c"; $c
 done
 echo "── run-test-selection: $PASS passed, $FAIL failed"
