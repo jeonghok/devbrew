@@ -17,8 +17,8 @@ note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else f
 section() { awk -v pat="$1" '$0 ~ pat {inw=1; next} inw && /^## / {exit} inw' "$2"; }
 
 # --- T15 / AC19 : 메타데이터 (minor만 pin, patch unpin) ---------------------
-grep -qE '"version": "0\.24\.[0-9]+"' "$PJ" \
-  && note PASS "T15: plugin.json 0.24.x" || note FAIL "T15: plugin.json이 0.24.x가 아님"
+grep -qE '"version": "0\.25\.[0-9]+"' "$PJ" \
+  && note PASS "T15: plugin.json 0.25.x" || note FAIL "T15: plugin.json이 0.25.x가 아님"
 grep -qE '^## \[0\.24\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CL" \
   && note PASS "T15: CHANGELOG [0.24.0] + ISO 날짜" || note FAIL "T15: CHANGELOG [0.24.0] 누락/비-ISO"
 # append-only 누산 — 과거 엔트리 pin은 절대 빼지 않는다.

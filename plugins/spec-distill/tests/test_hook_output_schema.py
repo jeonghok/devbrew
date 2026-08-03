@@ -181,39 +181,44 @@ class TestReviewDispatchSchema(HookOutputSchemaTestBase):
         self.assertIn("state rewrite failed", result.stderr)
         self.assertIn("dispatch suppressed", result.stderr)
 
-    def test_suppress_import_failure_falls_open_to_dispatch(self):
-        """AC4 — `import suppress_state`가 실패하면(예: 모킹) 억제된 문서라도
-        Stop hook은 정상 dispatch한다 (fail-safe = 리뷰가 일어나는 쪽)."""
+    def test_arm_gate_import_failure_falls_open_to_arm(self):
+        """`import arm_ledger`가 실패하면(예: 모킹) validator는 게이트를 건너뛰고
+        정상 arm한다 (fail-safe = 리뷰가 일어나는 쪽, Law 1)."""
         import importlib.util
         import io
         import contextlib
         spec_module = importlib.util.spec_from_file_location(
-            "review_dispatch_ac4", HOOKS_DIR / "review-dispatch.py",
+            "spec_write_validator_failopen", HOOKS_DIR / "spec-write-validator.py",
         )
         mod = importlib.util.module_from_spec(spec_module)
         spec_module.loader.exec_module(mod)
 
         repo = _make_temp_repo()
         try:
-            session_id = "test-ac4-failopen"
-            spec = "docs/superpowers/specs/2026-01-01-x-design.md"
-            # 진짜 억제된 state: pending + 매칭되는 suppressed_paths.
+            session_id = "test-armgate-failopen"
+            rel = "docs/superpowers/specs/2026-01-01-x-design.md"
+            doc = repo / rel
+            doc.parent.mkdir(parents=True, exist_ok=True)
+            doc.write_text(
+                "# Doc\n\n## Goal\n\n한 줄.\n", encoding="utf-8")
+            # 게이트가 살아 있었다면 arm을 막았을 진짜 원장 상태.
             state_dir = repo / ".claude" / "spec-distill" / session_id
             state_dir.mkdir(parents=True, exist_ok=True)
             (state_dir / "state.local.md").write_text(
-                f"---\nsession_id: {session_id}\n---\n\n"
-                f"pending_review:\n  path: {spec}\n  mode: design\n"
-                f"  triggered_at: 2026-01-01T00:00:00Z\n\n"
-                f"suppressed_paths:\n  - {spec}\n",
+                f"---\nsession_id: {session_id}\n---\n\narmed_paths:\n  - {rel}\n",
                 encoding="utf-8",
             )
+            payload = json.dumps({
+                "tool_name": "Write",
+                "tool_input": {"file_path": str(doc)},
+            })
             out, err = io.StringIO(), io.StringIO()
-            # sys.modules['suppress_state'] = None → `import suppress_state` ImportError.
-            with mock.patch.dict(sys.modules, {"suppress_state": None}), \
+            # sys.modules['arm_ledger'] = None → `import arm_ledger` ImportError.
+            with mock.patch.dict(sys.modules, {"arm_ledger": None}), \
                  mock.patch.dict(os.environ, {
                      "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
                  }), \
-                 mock.patch("sys.stdin", new=io.StringIO("{}")), \
+                 mock.patch("sys.stdin", new=io.StringIO(payload)), \
                  contextlib.redirect_stdout(out), \
                  contextlib.redirect_stderr(err):
                 cwd_before = os.getcwd()
@@ -222,16 +227,83 @@ class TestReviewDispatchSchema(HookOutputSchemaTestBase):
                     rc = mod.main()
                 finally:
                     os.chdir(cwd_before)
+            self.assertEqual(rc, 0)
+            self.assertIn("arm gate failed", err.getvalue())
+            state_body = (state_dir / "state.local.md").read_text(encoding="utf-8")
+            self.assertIn(
+                "pending_review:", state_body,
+                msg="fail-open 시에도 arm(pending_review 기록)해야 함",
+            )
         finally:
             shutil.rmtree(repo, ignore_errors=True)
-        self.assertEqual(rc, 0)
-        stdout = out.getvalue().strip()
-        self.assertTrue(
-            stdout, msg="fail-open 시에도 decision:block을 emit해야 함",
+
+    def test_write_state_collapses_stale_pending_under_arm_gate_import_failure(self):
+        """리뷰 발견 — `import arm_ledger`가 실패해도 write_state는 기존(다른 문서의)
+        pending_review를 무조건 strip해야 한다. strip이 생략되면 블록이 둘 남고,
+        Stop은 `PENDING_RE.search`(첫 매치)로 stale 블록(다른 문서)을 집어 dispatch하며,
+        `rewrite_state`의 전역 `re.sub`가 방금 arm된 문서의 트리거까지 함께 지운다
+        — 오류 한 줄 없는 under-review(Law 1이 금지하는 방향)."""
+        import importlib.util
+        import io
+        import contextlib
+        spec_module = importlib.util.spec_from_file_location(
+            "spec_write_validator_doublepending", HOOKS_DIR / "spec-write-validator.py",
         )
-        payload = json.loads(stdout)
-        self.assertEqual(payload.get("decision"), "block")
-        self.assertIn("suppress check failed", err.getvalue())
+        mod = importlib.util.module_from_spec(spec_module)
+        spec_module.loader.exec_module(mod)
+
+        repo = _make_temp_repo()
+        try:
+            session_id = "test-armgate-doublepending"
+            rel_a = "docs/superpowers/specs/2026-01-01-docA-design.md"
+            rel_b = "docs/superpowers/specs/2026-01-01-docB-design.md"
+            doc_b = repo / rel_b
+            doc_b.parent.mkdir(parents=True, exist_ok=True)
+            doc_b.write_text(
+                "# Doc B\n\n## Goal\n\n한 줄.\n", encoding="utf-8")
+            # 같은 세션 안에 이미 다른 문서(docA)의 미소비 pending_review가 있다 —
+            # 같은 turn에 두 문서를 쓰고 Stop이 아직 안 돈, 정상적인 워크플로우.
+            state_dir = repo / ".claude" / "spec-distill" / session_id
+            state_dir.mkdir(parents=True, exist_ok=True)
+            (state_dir / "state.local.md").write_text(
+                f"---\nsession_id: {session_id}\n---\n\n"
+                f"pending_review:\n  path: {rel_a}\n  mode: design\n"
+                f"  triggered_at: 2026-01-01T00:00:00Z\n",
+                encoding="utf-8",
+            )
+            payload = json.dumps({
+                "tool_name": "Write",
+                "tool_input": {"file_path": str(doc_b)},
+            })
+            out, err = io.StringIO(), io.StringIO()
+            # sys.modules['arm_ledger'] = None → arm 게이트의 `import arm_ledger`도
+            # ImportError. write_state는 이 import에 의존하지 않아야 통과한다.
+            with mock.patch.dict(sys.modules, {"arm_ledger": None}), \
+                 mock.patch.dict(os.environ, {
+                     "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
+                 }), \
+                 mock.patch("sys.stdin", new=io.StringIO(payload)), \
+                 contextlib.redirect_stdout(out), \
+                 contextlib.redirect_stderr(err):
+                cwd_before = os.getcwd()
+                try:
+                    os.chdir(repo)
+                    rc = mod.main()
+                finally:
+                    os.chdir(cwd_before)
+            self.assertEqual(rc, 0)
+            state_body = (state_dir / "state.local.md").read_text(encoding="utf-8")
+            self.assertEqual(
+                state_body.count("pending_review:"), 1,
+                msg=(
+                    "두 블록이 남으면 Stop이 stale 블록(docA)을 소비하고 docB의 "
+                    f"트리거까지 함께 지운다 — state: {state_body!r}"
+                ),
+            )
+            self.assertIn(str(doc_b), state_body, msg="fresh block은 docB여야 함")
+            self.assertNotIn(rel_a, state_body, msg="stale docA 블록이 남아있으면 안 됨")
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
 
 
 class TestReviewDispatchOrdering(unittest.TestCase):
