@@ -27,8 +27,8 @@ grep -qE '^model: (opus|sonnet|haiku)$' <<<"$FM" \
   && note FAIL "고정 티어 핀 잔존" \
   || note PASS "고정 티어 핀 없음"
 
-grep -qE '^tools: Read, Grep, Glob, WebFetch$' <<<"$FM" \
-  && note PASS "tools: Read, Grep, Glob, WebFetch (census 도출)" \
+grep -qE '^tools: Read, Grep, Glob, WebSearch, WebFetch$' <<<"$FM" \
+  && note PASS "tools: Read, Grep, Glob, WebSearch, WebFetch (조사 도구 결핍 해소)" \
   || note FAIL "tools: 가 census 도출 목록과 다름"
 
 grep -qE '^(allowedTools|disallowedTools):' <<<"$FM" \
@@ -44,10 +44,12 @@ done
 grep -qE '^tools:.*mcp__' <<<"$FM" \
   && note FAIL "tools: 에 MCP grant" || note PASS "tools: 에 MCP 없음"
 
-# WebFetch 는 census 근거로 유지되어야 한다 — 조용한 열화 방지 (spec §12).
-grep -qE '^tools:.*WebFetch' <<<"$FM" \
-  && note PASS "WebFetch 유지 (공식 문서 검증에 실사용 — census 2회)" \
-  || note FAIL "WebFetch 가 제거됐다 — 리뷰 품질 조용한 열화"
+# WebSearch/WebFetch 는 유지되어야 한다 — 조용한 열화 방지 (spec §12).
+for tool in WebSearch WebFetch; do
+  grep -qE "^tools:.*${tool}" <<<"$FM" \
+    && note PASS "tools: 에 $tool 유지" \
+    || note FAIL "tools: 에서 $tool 이 사라졌다 — 외부 근거 확인 불가"
+done
 
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [ "$fail" -eq 0 ]

@@ -3,6 +3,20 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.6] — 2026-08-03
+
+### Changed
+- `security-reviewer` persona의 dependency-manifest 문구에 "no web tools 는 명시된 한계"를
+  기록. 이 리뷰어는 diff의 전 소스를 읽으므로 `WebSearch`/`WebFetch` 부여는 exfiltration
+  채널(P21)이 되어 **`tools:`는 바꾸지 않는다** — 이 sweep의 다른 모든 항목과 반대 방향으로,
+  억제를 유지하는 것이 옳은 유일한 지점이다. CVE 판정 불가를 갭이 아니라 설계로 명시하고,
+  판정은 이 게이트 밖 별도 경로에 위임한다고 못 박았다.
+
+### Added
+- `test_security_reviewer_persona.sh`에 AC4 양방향 억제-보존 락 — `tools:` 가 정확히
+  `Read, Grep, Glob`이고 `WebSearch`/`WebFetch`가 부재함을 assert. 다음 sweep이 "일관성"을
+  이유로 무심코 웹 도구를 추가하지 못하게 막는다.
+
 ## [2.14.5] — 2026-08-03
 
 ### Changed

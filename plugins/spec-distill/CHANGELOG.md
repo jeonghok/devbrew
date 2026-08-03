@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.24.7] — 2026-08-03
+
+### Changed
+- `spec-reviewer`의 `tools:`에 `WebSearch` 추가 — 기존 `Read, Grep, Glob, WebFetch`는
+  URL은 열 수 있는데 찾을 수는 없는 비대칭이었다(순수 억제, 아무것도 보호하지 않음).
+  이제 `Read, Grep, Glob, WebSearch, WebFetch`.
+- `coverage-mapper`의 `tools:`에 `WebSearch, WebFetch` 추가 — 주제가 요구하는 커버리지
+  차원을 제안하는 역할인데 웹 도구가 아예 없었다. 이제 `Read, Grep, Glob, WebSearch, WebFetch`.
+
+### Added
+- `test_spec_reviewer_frontmatter.sh` · `test_coverage_mapper_frontmatter.sh`에
+  조용한-열화 방지 락 신설 — `tools:`에서 `WebSearch`/`WebFetch`가 사라지면 RED.
+  Law 2 `for t in Write Edit MultiEdit NotebookEdit Bash Agent Monitor` 루프와 `mcp__`
+  assert는 그대로 두었다 — 두 도구 추가가 그 루프를 통과하는지 GREEN으로 확인.
+
 ## [0.24.6] — 2026-08-03
 
 ### Changed
