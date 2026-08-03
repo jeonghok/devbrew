@@ -155,6 +155,76 @@ else
   echo "    rows=$rows7  row: $row7" | sed 's/^/      /'
 fi
 
+# ── 8·9·10: 값이 malformed일 때의 계약 (2026-08-04 /qg 라운드 1) ──────────────
+# 셋 다 "어떤 리뷰어의 잘못된 한 필드가 리뷰 전체의 진실성을 무너뜨리지 않는다"를
+# 잰다. 승격 경로 전용이 아니다 — 크래시 지점은 정렬·억제·표시 어디에나 있었고,
+# 소비자별로 막으면 새 소비자에서 다시 터진다.
+
+# 8 — 어느 리뷰어든 비수치 confidence가 합성을 죽이지 않는다.
+#     예전: dedup/suppress/sort/render의 맨 int()가 ValueError → exit 1 + stdout 공백.
+#     같이 죽는 것에 다른 리뷰어의 진짜 CRITICAL이 포함된다는 점이 이 케이스의 핵심이라
+#     픽스처에 진짜 CRITICAL을 함께 넣는다.
+cat > "$tmp/findings_badconf.yaml" <<'Y'
+findings:
+  - file: src/auth.py
+    line: 42
+    severity: CRITICAL
+    confidence: 9
+    summary: "real SQL injection"
+    agent: security-reviewer
+  - file: src/util.py
+    line: 7
+    severity: IMPORTANT
+    confidence: high
+    summary: "malformed confidence"
+    agent: code-reviewer
+Y
+if out8="$(python3 "$SCRIPT" --findings "$tmp/findings_badconf.yaml" 2>/dev/null)" \
+   && echo "$out8" | grep -q 'real SQL injection'; then
+  ok "8 — 비수치 confidence가 있어도 exit 0이고 다른 리뷰어의 CRITICAL이 살아남는다"
+else
+  no "8 — 비수치 confidence가 있어도 exit 0이고 다른 리뷰어의 CRITICAL이 살아남는다"
+fi
+
+# 9 — severity 표기 차이가 CRITICAL을 강등시키지 않는다.
+#     예전: 멤버십 검사가 정확 일치라 `Critical`이 SUGGESTION으로 렌더됐고,
+#     SKILL은 counts line으로 경계를 판정하므로 판정 자체가 틀렸다.
+cat > "$tmp/findings_sevcase.yaml" <<'Y'
+findings:
+  - file: src/auth.py
+    line: 42
+    severity: Critical
+    confidence: 9
+    summary: "casing must not demote"
+    agent: security-reviewer
+Y
+if python3 "$SCRIPT" --findings "$tmp/findings_sevcase.yaml" 2>/dev/null \
+     | grep -q '^\*\*Findings:\*\* 1 CRITICAL'; then
+  ok "9 — severity 표기 차이가 counts line에서 강등되지 않는다"
+else
+  no "9 — severity 표기 차이가 counts line에서 강등되지 않는다"
+fi
+
+# 10 — 승격 발견이 전부 malformed일 때 stdout이 clean으로 읽히면 안 된다.
+#      예전: render()가 findings 비면 먼저 return해 drop 공지가 도달 불가였고,
+#      SKILL은 stdout만 읽어 counts=0 → `## Review gate: clean`을 찍었다.
+#      stderr에만 있는 공지는 이 경로에서 없는 것과 같다.
+cat > "$tmp/adv_all_malformed.yaml" <<'Y'
+verdicts: []
+new_findings:
+  - severity: CRITICAL
+    summary: "auth bypass — no file key"
+  - file: x.py
+    summary: "no severity key"
+Y
+out10="$(python3 "$SCRIPT" --adversarial "$tmp/adv_all_malformed.yaml" --findings "$tmp/findings_empty.yaml" 2>/dev/null)"
+if echo "$out10" | grep -qE '^2 adversarial finding\(s\) dropped as malformed'; then
+  ok "10 — 전부 malformed일 때 소실이 stdout에 드러난다 (clean으로 읽히지 않는다)"
+else
+  no "10 — 전부 malformed일 때 소실이 stdout에 드러난다 (clean으로 읽히지 않는다)"
+  echo "$out10" | sed 's/^/      /'
+fi
+
 echo ""
 echo "Total: $((PASS+FAIL)), PASS=$PASS, FAIL=$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

@@ -77,6 +77,32 @@ NEW_FINDING_REQUIRED = ("file", "severity", "summary")
 NEW_FINDING_DEFAULT_CONFIDENCE = 5
 
 
+def _conf(f):
+    """Coerce a finding's confidence to an int without ever raising.
+
+    `confidence` arrives from reviewer-authored YAML and is read wherever a
+    finding is ordered, filtered, or displayed. 예전에는 그 자리마다 맨 `int()`가
+    있었다: 어느 리뷰어든 `confidence: high`나 YAML null 하나를 실으면
+    ValueError/TypeError로 합성 전체가 죽고 **stdout이 완전히 비었다**. 같이 죽는
+    것에는 다른 리뷰어의 진짜 CRITICAL도 포함된다 (2026-08-04 재현).
+
+    소비 지점마다 가드를 붙이지 않고 여기 한 곳에서 강제하는 이유: 부분 가드는
+    malformed 입력 앞에서 한 겹씩 샌다 — 새 소비자가 생기면 그 자리에서 다시
+    터진다. 실제로 이 수정을 처음 넣을 때 소비자 세 곳만 세고 네 번째
+    (sort_findings)를 놓쳐 그대로 재현됐다. 값을 버리지 않고 기본값 + loud
+    stderr로 낮추는 이유: 잘못된 숫자 하나 때문에 진짜 결함을 숨기는 것보다,
+    보이되 검증 안 됨으로 표시하는 것이 정직하다.
+    """
+    raw = f.get("confidence", 0)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        print("[synthesize_findings] non-numeric confidence "
+              f"{raw!r} on {f.get('file')}:{f.get('line')} — "
+              f"treating as {NEW_FINDING_DEFAULT_CONFIDENCE}", file=sys.stderr)
+        return NEW_FINDING_DEFAULT_CONFIDENCE
+
+
 def promote_new_findings(raw_new, existing):
     """adversarial의 `new_findings:` 항목을 진짜 finding으로 승격한다.
 
@@ -173,11 +199,11 @@ def dedup(findings):
     for f in findings:
         if f.get("promoted"):
             continue
-        key = (f.get("file"), f.get("line"), f.get("severity"))
+        key = (f.get("file"), f.get("line"), _norm_sev(f))
         by_key[key].append(f)
     deduped = []
     for key, group in by_key.items():
-        group.sort(key=lambda f: int(f.get("confidence", 0)), reverse=True)
+        group.sort(key=_conf, reverse=True)
         merged = dict(group[0])
         merged["sources"] = sorted({g.get("agent", "?") for g in group})
         deduped.append(merged)
@@ -195,8 +221,11 @@ def suppress(findings):
     """
     kept, suppressed = [], []
     for f in findings:
-        sev = f.get("severity", "SUGGESTION")
-        conf = int(f.get("confidence", 0))
+        # render()와 같은 정규화를 쓴다 — 예전에는 여기만 raw였고 render만
+        # 정규화해서, 같은 발견이 억제 판정과 표시 판정에서 다른 severity로
+        # 읽혔다(표기가 다른 CRITICAL이 여기서 비-CRITICAL로 취급됨).
+        sev = _norm_sev(f)
+        conf = _conf(f)
         if sev != "CRITICAL" and conf <= 4:
             suppressed.append(f)
         else:
@@ -206,8 +235,8 @@ def suppress(findings):
 
 def sort_findings(findings):
     return sorted(findings, key=lambda f: (
-        SEV_ORDER.get(f.get("severity", "SUGGESTION"), 9),
-        -int(f.get("confidence", 0)),
+        SEV_ORDER.get(_norm_sev(f), 9),
+        -_conf(f),
         f.get("file", ""),
     ))
 
@@ -230,8 +259,15 @@ def _norm_sev(f):
     a table row yet be omitted from the counts line — and the SKILL boundary
     keys on that counts line, so a visible finding could be read as clean
     (kept=0). Normalize to SUGGESTION (warn to stderr) so counts == rows.
+
+    대소문자를 먼저 접는 이유: 멤버십 검사가 정확 일치였을 때 `severity: Critical`
+    한 글자 차이가 진짜 CRITICAL을 SUGGESTION으로 **강등**시켰다(2026-08-04 재현).
+    강등은 조용하지 않았지만(stderr) 판정에 쓰이는 counts line은 이미 틀린 뒤였다.
+    버킷을 못 알아본 것과 표기가 다른 것은 다른 사건이므로 다르게 다룬다.
     """
     sev = f.get("severity", "SUGGESTION")
+    if isinstance(sev, str) and sev.strip().upper() in SEV_ORDER:
+        return sev.strip().upper()
     if sev not in SEV_ORDER:
         print(
             f"[synthesize_findings] unknown severity {sev!r}; treating as SUGGESTION",
@@ -243,11 +279,25 @@ def _norm_sev(f):
 
 def render(findings, suppressed_count, dropped_malformed=0):
     if not findings:
-        return (
-            "## Review Findings (Synthesized)\n\n"
+        # drop 공지는 이 분기에도 반드시 나가야 한다. 예전에는 아래 표-있는
+        # 경로에만 있었고, 살아남은 발견이 0이면 여기서 먼저 return해 공지가
+        # 도달 불가였다. 그 조합(전부 malformed → kept 0 → suppressed 0)에서
+        # SKILL은 stdout만 읽어 counts=0을 보고 `## Review gate: clean`을
+        # 찍었다 — 버려진 CRITICAL 주장이 **깨끗함으로 렌더**됐다는 뜻이다
+        # (2026-08-04 재현, exit 0). 소실을 stdout에서 볼 수 있게 만든다.
+        out = [
+            "## Review Findings (Synthesized)",
+            "",
             f"No high-confidence findings. {suppressed_count} low-confidence "
-            "findings suppressed.\n"
-        )
+            "findings suppressed.",
+        ]
+        if dropped_malformed > 0:
+            out.append(
+                f"{dropped_malformed} adversarial finding(s) dropped as "
+                "malformed (missing file/severity/summary) — see stderr. "
+                "**이 실행은 clean이 아니다**: 버려진 주장은 심사되지 않았다."
+            )
+        return "\n".join(out) + "\n"
 
     counts = {"CRITICAL": 0, "IMPORTANT": 0, "SUGGESTION": 0}
     rows = []
@@ -255,7 +305,7 @@ def render(findings, suppressed_count, dropped_malformed=0):
     for f in findings:
         sev = _norm_sev(f)
         counts[sev] += 1
-        conf = int(f.get("confidence", 0))
+        conf = _conf(f)
         if conf <= 6:
             conf_cell = f"{conf} *"
             any_caveat = True

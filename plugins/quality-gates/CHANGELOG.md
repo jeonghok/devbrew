@@ -3,6 +3,37 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.15] — 2026-08-04
+
+### Fixed
+
+- **`synthesize_findings.py` — malformed 입력 하나가 리뷰 전체의 진실성을 무너뜨리던
+  경로 3종 봉쇄** (`/qg branch` self-dogfood 라운드 1, silent-failure-hunter +
+  comment-analyzer 적발).
+  - **거짓 clean 판정**: 승격 발견이 전부 malformed면 `kept=0`이 되어 `render()`가
+    표-없는 분기에서 먼저 return했고, drop 공지는 그 아래 표-있는 경로에만 있어
+    **도달 불가**였다. SKILL은 stdout만 읽으므로 counts=0을 보고
+    `## Review gate: clean`을 찍었다 — 버려진 CRITICAL 주장이 깨끗함으로 렌더됐다.
+    이제 empty 분기도 소실 건수를 stdout에 낸다.
+  - **비수치 `confidence` 하나가 합성 전체를 죽임**: `confidence: high`나 YAML null이
+    `ValueError`/`TypeError`를 던져 exit 1 + **stdout 완전 공백**. 같이 죽는 것에
+    다른 리뷰어의 진짜 CRITICAL이 포함된다. `_conf()` 한 곳으로 강제 — 소비자별
+    가드는 새 소비자에서 다시 터진다(이 수정을 처음 넣을 때 소비자 세 곳만 세고
+    `sort_findings`를 놓쳐 그대로 재현됐다. 최종 확인은 열거가 아니라
+    `int(f.get("confidence"` 잔존 0건 전수 확인).
+  - **severity 표기 차이가 CRITICAL을 강등**: 멤버십 검사가 정확 일치라
+    `severity: Critical`이 SUGGESTION으로 렌더됐고, 경계 판정에 쓰이는 counts line이
+    이미 틀린 뒤였다. `_norm_sev()`가 대소문자를 접고, `suppress()`·`dedup()`·
+    `sort_findings()`가 raw 대신 같은 정규화를 쓴다(예전엔 `render()`만 정규화해
+    억제 판정과 표시 판정이 갈렸다).
+
+### Added
+
+- `tests/test_synthesize_promoted_findings.sh` 케이스 8·9·10 — 위 세 계약의 회귀 락.
+  이빨 증명은 **삭제한 바이트를 되돌리는 mutation이 아니라** *다른* 소비자에서의
+  회귀(`sort_findings`만 raw로 되돌리기 등)로 한다 — 라운드 1이 적발한 가장 큰
+  구조적 결함이 "락과 mutation을 같은 전제로 써서 서로 합격 도장을 찍어준 것"이었다.
+
 ## [2.14.14] — 2026-08-03
 
 **락이 열거였기 때문에 S1이 미완이었다.** `tests/spike/test_codex_json_extraction.sh:33`에
