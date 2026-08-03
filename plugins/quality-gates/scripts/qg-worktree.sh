@@ -515,9 +515,23 @@ case "${1:-}" in
     baseline_wt="$parent/base-${sid_short}"
 
     # Idempotent: 이전 실행의 기준선 트리가 남아 있으면 갈아엎는다.
+    #
+    # 경로 충돌 가드. `create` 는 `${sanitized}-${sid_short}` 를 쓰므로 같은 세션의
+    # `/qg branch base` 가 **바로 이 경로**를 만든다. 무조건 `--force` 로 갈아엎으면
+    # 사용자의 미커밋 작업이 되돌릴 수 없이 사라진다.
+    #
+    # 판별자로 "HEAD 가 심볼릭 ref 인가"(=브랜치 워크트리)는 쓸 수 없다 — `create` 도
+    # `git worktree add --detach` 라서 둘 다 detached 다 (실측). 대신 **non-force**
+    # `git worktree remove` 를 먼저 시도한다: git 자신이 "수정된 파일이나 추적되지 않은
+    # 파일이 있으면 거부" 를 정의하고 있고, 그 거부가 곧 "여기 잃을 것이 있다" 는
+    # 신호다. git-ignored 파일만 있는 트리는 정상 제거된다(실측) — 우리가 만든 기준선
+    # 트리(빌드 산출물은 전부 ignored, C1 참조)는 언제나 이 경로로 지워지므로 정상
+    # 동작에는 영향이 없다. 거부되면 조용히 파괴하지 않고 죽는다.
     git worktree prune >/dev/null 2>&1 || true
     if [[ -e "$baseline_wt" ]]; then
-      git worktree remove --force "$baseline_wt" >/dev/null 2>&1 || rm -rf "$baseline_wt"
+      if ! git worktree remove "$baseline_wt" >/dev/null 2>&1; then
+        [[ -e "$baseline_wt" ]] && die "refuse to clobber existing path: $baseline_wt (has uncommitted work, or is not a registered worktree). \`/qg branch <name>\` in the same session can own this exact path — remove it yourself, or rerun in a new session."
+      fi
       git worktree prune >/dev/null 2>&1 || true
     fi
     git worktree add --detach "$baseline_wt" "$sha" >/dev/null 2>&1 \
