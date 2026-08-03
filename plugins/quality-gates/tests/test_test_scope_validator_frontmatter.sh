@@ -92,9 +92,15 @@ rule4="$(grep -F 'Do not fetch context outside' "$AGENT")"
 grep -q 'spec' <<<"$rule4" \
   && { PASS=$((PASS + 1)); note "PASS: Hard Rule 허용 컨텍스트에 spec 포함"; } \
   || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: Hard Rule이 spec을 배제 — Inputs의 PRIMARY axis와 자기모순"; }
-grep -q 'PRIMARY reference axis' "$AGENT" \
-  && { PASS=$((PASS + 1)); note "PASS: spec이 PRIMARY axis로 선언됨"; } \
-  || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: PRIMARY axis 선언 소실"; }
+# assert 2는 `## Inputs` 섹션 윈도우로 스코프한다 — Hard Rule 4 자체도 이 fix로
+# "PRIMARY reference axis" 문구를(agent에게 왜 spec을 읽어도 되는지 설명하려고) 포함하게
+# 되었으므로, 전체 파일 grep은 header-satisfiable(Inputs 절의 선언을 지워도 Hard Rule 4의
+# 사본이 살아남아 GREEN으로 남는 함정)이다. 특정 다음 heading 이름이 아니라 다음 `## `
+# 아무 heading에서나 종료해 섹션 윈도우가 향후 편집에도 생존하게 한다.
+inputs_block="$(awk '/^## Inputs/{f=1;print;next} /^## /{f=0} f' "$AGENT")"
+grep -q 'PRIMARY reference axis' <<<"$inputs_block" \
+  && { PASS=$((PASS + 1)); note "PASS: spec이 PRIMARY axis로 선언됨 (Inputs 절)"; } \
+  || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: PRIMARY axis 선언 소실 (Inputs 절)"; }
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

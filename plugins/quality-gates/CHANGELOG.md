@@ -3,6 +3,20 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.8] — 2026-08-03
+
+### Fixed
+- `test_test_scope_validator_frontmatter.sh`의 자기모순 방지 락 중 두 번째 assert가
+  header-satisfiable이었다: v2.14.7의 Hard Rule 4 교체 문구 자체가 (agent에게 왜 spec을
+  읽어도 되는지 설명하려고) "PRIMARY reference axis" 문구를 포함하게 되었는데, assert는
+  전체 파일을 grep했다. 그 결과 이 락이 보호해야 할 실제 회귀 — Inputs 절의
+  `spec_path: ... PRIMARY reference axis` 선언 삭제 — 를 지워도 Hard Rule 4의 사본이
+  살아남아 GREEN으로 남았다. assert를 `## Inputs` 섹션 윈도우로 스코프해 그 섹션 안에서만
+  문구 존재를 확인하도록 좁혔다. 다음 `## ` heading 어디서나 종료하도록 만들어(특정 heading
+  이름에 앵커하지 않음) 향후 섹션 추가/재배열에도 창이 생존한다. Hard Rule 4의 설명 문구는
+  그대로 둔다 — agent에게 왜 이제 spec을 읽어도 되는지 알려주는 것이 fix의 취지이고, 중복은
+  스코프 안 된 assert에만 문제였다.
+
 ## [2.14.7] — 2026-08-03
 
 ### Fixed
