@@ -85,6 +85,17 @@ assert_body_grep 'cherry-pick-suspicion' "body mentions cherry-pick-suspicion"
 assert_body_grep 'unclear' "body mentions unclear"
 assert_body_grep 'test_scope_verdicts' "body mentions output key"
 
+echo "== 자기모순 방지 (Hard Rule 4 vs Inputs PRIMARY axis) =="
+# Hard Rule의 허용 컨텍스트 열거가 Inputs의 PRIMARY axis(spec_path)를 포함해야 한다.
+# 라인번호가 아니라 문자열로 앵커한다(앞선 편집에 취약하지 않게).
+rule4="$(grep -F 'Do not fetch context outside' "$AGENT")"
+grep -q 'spec' <<<"$rule4" \
+  && { PASS=$((PASS + 1)); note "PASS: Hard Rule 허용 컨텍스트에 spec 포함"; } \
+  || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: Hard Rule이 spec을 배제 — Inputs의 PRIMARY axis와 자기모순"; }
+grep -q 'PRIMARY reference axis' "$AGENT" \
+  && { PASS=$((PASS + 1)); note "PASS: spec이 PRIMARY axis로 선언됨"; } \
+  || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: PRIMARY axis 선언 소실"; }
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]]

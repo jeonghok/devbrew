@@ -3,6 +3,25 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.7] — 2026-08-03
+
+### Fixed
+- `test-scope-validator`의 Hard Rule 4가 허용 컨텍스트를 "candidate files + plan + diff"로
+  열거해 `spec`을 누락시키는 동안, 같은 파일의 Inputs 절은 `spec_path`를 "PRIMARY reference
+  axis"로 선언하고 있었다 — 에이전트가 자신의 1차 근거를 읽지 못하도록 금지당한 채 그것을
+  1차 근거로 쓰라는 지시를 동시에 받는 자기모순. Hard Rule 4를 "candidate files + spec + plan
+  + diff"로 넓히고, spec_path를 `Read` 도구로 읽으라고 명시했다. `curl`/`WebFetch`/MCP 금지
+  문구는 그대로 — 이미 프롬프트에 제공된 컨텍스트의 열람 범위를 넓힌 것이지 네트워크 접근을
+  새로 연 것이 아니다. `tools:`는 변경하지 않는다(`Read, Grep, Glob` 그대로) — 이미 가진
+  `Read` 도구로 이미 받은 파일을 읽도록 허용하는 것뿐, 새 capability는 없다.
+
+### Added
+- `test_test_scope_validator_frontmatter.sh`에 자기모순 방지 양방향 락 — Hard Rule의 허용
+  컨텍스트 열거가 `spec`을 포함함과, Inputs의 `PRIMARY reference axis` 선언이 여전히 존재함을
+  각각 assert. 앞의 것만 두면 PRIMARY 선언을 지워 자기모순을 "해소"해도 GREEN이 되므로 두
+  assert가 함께 필요하다. 문자열 앵커(`grep -F 'Do not fetch context outside'`)로 라인번호
+  drift에 취약하지 않게 했다.
+
 ## [2.14.6] — 2026-08-03
 
 ### Changed
