@@ -102,6 +102,20 @@ assert_grep "테스트 실행 결과는 판정에 들어가지 않는다" "AC31:
 # 양측에서 같은 명령으로 돌아야 차등 비교가 사과와 오렌지가 되지 않는다.
 assert_grep "테스트 러너용 deps 설치는 하지 않는다" "AC41: deps 설치 배제 문구"
 
+# 최종 whole-branch 리뷰 (이월분 승격) — Hard Rule 1 의 `installing deps` 는 **무한정
+# 허용**으로 읽혔고, 두 줄 아래 Hard Rule 3 의 한정(`not test-runner deps`)과 정면으로
+# 모순됐다. 이 페르소나 산문은 §11⑬ 이 verifier-생성 환경 비대칭에 대해 가진 **유일한**
+# 통제이고, CLAUDE.md 상 persona 파일은 보안-민감 코드다.
+#
+# 검사는 **규칙 1 그 줄 안에서** 한다. 파일 어디든 있으면 통과하는 검사는 규칙 3 문구
+# 하나로 이미 만족되므로 이빨이 없다 (락이 헤더-satisfiable 이 되는 것과 같은 함정).
+rule1_line=$(grep -n '^1\. \*\*Product source is sacred' "$FILE" | head -1 | cut -d: -f1)
+if [[ -n "$rule1_line" ]] && sed -n "${rule1_line}p" "$FILE" | grep -q 'test-runner deps'; then
+  PASS=$((PASS + 1)); echo "  PASS: Hard Rule 1 의 deps 허용이 test-runner deps 를 한정한다"
+else
+  FAIL=$((FAIL + 1)); echo "  ✗ FAIL: Hard Rule 1 의 'installing deps' 가 한정 없이 허용됨 (Rule 3 과 모순)"
+fi
+
 echo ""
 echo "Tests passed: $PASS, failed: $FAIL"
 [[ $FAIL -eq 0 ]] || exit 1
