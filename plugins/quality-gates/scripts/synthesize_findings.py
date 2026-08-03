@@ -37,8 +37,95 @@ def load_yaml(path):
     return data or []
 
 
+def load_yaml_doc(path):
+    """Load a YAML file and return the raw parsed document (no key flattening).
+
+    load_yaml() flattens `{verdicts: [...]}` down to the list, which discards
+    every sibling key. The adversarial document now carries a second top-level
+    key (`new_findings`), so the raw document has to survive the load.
+    """
+    if not path:
+        return None
+    try:
+        with open(path) as f:
+            return yaml.safe_load(f)
+    except FileNotFoundError:
+        return None
+
+
+def extract_verdicts(doc):
+    if isinstance(doc, dict):
+        return doc.get("verdicts") or []
+    return doc or []
+
+
+def extract_new_findings(doc):
+    if isinstance(doc, dict):
+        return doc.get("new_findings") or []
+    return []
+
+
 def finding_id(f):
     return f"{f.get('agent', 'unknown')}-{f.get('file', '')}-{f.get('line', '')}"
+
+
+NEW_FINDING_REQUIRED = ("file", "severity", "summary")
+# 승격된 발견의 기본 confidence. suppress()의 바닥(<=4)보다는 위라 표에 실리고,
+# render()의 caveat 임계(<=6) 아래라 `*`가 붙는다 — 이 발견은 어떤 리뷰어의
+# 판정도 통과하지 않았다(adversarial 자신의 주장이다). 보이되 검증 안 됨으로
+# 표시하는 것이 정직한 인코딩이다. 리뷰어가 명시적으로 confidence를 주면 그것을 쓴다.
+NEW_FINDING_DEFAULT_CONFIDENCE = 5
+
+
+def promote_new_findings(raw_new, existing):
+    """adversarial의 `new_findings:` 항목을 진짜 finding으로 승격한다.
+
+    Returns (promoted, dropped_malformed).
+
+    출처는 `agent`에 쓴다 — `source`(단수)가 **아니다**. dedup()은 `agent`를 모아
+    `sources`를 만들고 render()는 `sources`/`agent`만 읽으므로, `source`로 쓰면
+    Source 컬럼이 fallback `?`로 렌더된다.
+
+    id는 verdict가 준 값을 믿지 않고 기존 finding_id() 헬퍼로 합성한다 — 그래야
+    신규 발견이 다른 agent의 finding id를 참칭할 수 없다. 기존과 충돌하면 기존이
+    이기고(신규를 버리고 loud 기록), 신규끼리 충돌하면 `-2`, `-3` … 를 붙여
+    결정론적으로 분리한다.
+
+    한계(범위 밖): dedup()의 (file, line, severity) 그룹핑은 바꾸지 않으므로,
+    같은 좌표·같은 severity의 신규 두 건은 렌더 단계에서 여전히 한 행으로 합쳐진다.
+    그 병합 동작 자체는 별건(설계 §11 CHECKS-07)이다.
+    """
+    promoted, dropped = [], 0
+    seen = {finding_id(f) for f in existing if isinstance(f, dict)}
+    for item in raw_new:
+        if not isinstance(item, dict):
+            dropped += 1
+            print("[synthesize_findings] dropped malformed adversarial finding: "
+                  "not a mapping", file=sys.stderr)
+            continue
+        missing = [k for k in NEW_FINDING_REQUIRED if not item.get(k)]
+        if missing:
+            dropped += 1
+            print("[synthesize_findings] dropped malformed adversarial finding: "
+                  f"missing {', '.join(missing)}", file=sys.stderr)
+            continue
+        f = dict(item)
+        f["agent"] = "adversarial"
+        f["line"] = f.get("line") or 0
+        f.setdefault("confidence", NEW_FINDING_DEFAULT_CONFIDENCE)
+        fid = finding_id(f)
+        if fid in seen:
+            base = fid
+            suffix = 2
+            while f"{base}-{suffix}" in seen:
+                suffix += 1
+            fid = f"{base}-{suffix}"
+            print("[synthesize_findings] adversarial finding id collision on "
+                  f"{base}; disambiguated to {fid}", file=sys.stderr)
+        seen.add(fid)
+        f["finding_id"] = fid
+        promoted.append(f)
+    return promoted, dropped
 
 
 def apply_verdicts(findings, verdicts):
@@ -135,7 +222,7 @@ def _norm_sev(f):
     return sev
 
 
-def render(findings, suppressed_count):
+def render(findings, suppressed_count, dropped_malformed=0):
     if not findings:
         return (
             "## Review Findings (Synthesized)\n\n"
@@ -179,6 +266,11 @@ def render(findings, suppressed_count):
             f"{suppressed_count} finding(s) suppressed (conf <= 4); "
             "re-run with `/qg --show-low-confidence` to see all."
         )
+    if dropped_malformed > 0:
+        out.append(
+            f"{dropped_malformed} adversarial finding(s) dropped as malformed "
+            "(missing file/severity/summary) — see stderr."
+        )
     out.append("")
     out.append("**Suggested fixes:**")
     for f in findings:
@@ -193,15 +285,18 @@ def main():
     ap.add_argument("--findings", default="")
     args = ap.parse_args()
 
-    verdicts = load_yaml(args.adversarial) if args.adversarial else []
+    doc = load_yaml_doc(args.adversarial) if args.adversarial else None
+    verdicts = extract_verdicts(doc)
     raw = load_yaml(args.findings) if args.findings else []
 
     findings = apply_verdicts(raw, verdicts)
+    promoted, dropped_malformed = promote_new_findings(extract_new_findings(doc), findings)
+    findings = findings + promoted          # 기존 뒤에 append — 기존 표 순서를 흔들지 않는다
     findings = dedup(findings)
     kept, suppressed = suppress(findings)
     kept = sort_findings(kept)
 
-    sys.stdout.write(render(kept, len(suppressed)))
+    sys.stdout.write(render(kept, len(suppressed), dropped_malformed))
 
 
 if __name__ == "__main__":

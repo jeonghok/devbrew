@@ -87,6 +87,12 @@ check "client-side trust-boundary precedent in Gate C, specifies reject" \
 check "trusted-config-values precedent in Gate C, specifies reject" \
   "gateC_section | grep -cE 'Trusted configuration values.*reject'" 1
 
+# AC14a — 신규 발견 금지 선언이 네 곳 모두에서 해소됐다. 한 곳이라도 남으면 persona 자기모순.
+assert_absent "신규 발견 금지 선언 부재 (승격 허용)" \
+  'producing new findings of your own|No new findings as verdicts'
+check "new_findings 블록 스키마 정의" "grep -c '^new_findings:' '$PERSONA'" 1
+check "meta_note 채널 존치 (구조화되지 않은 관찰용)" "grep -c 'meta_note' '$PERSONA'" 1
+
 echo ""
 echo "Total: $((pass + fail)), pass: $pass, fail: $fail"
 [ "$fail" -eq 0 ] || exit 1

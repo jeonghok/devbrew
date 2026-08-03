@@ -3,6 +3,47 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.9] — 2026-08-03
+
+harness-capability-suppression-sweep Task 9(S3e) — adversarial 신규 발견 승격.
+쓰기 쪽(persona)만 고치면 동작하지 않는다: `apply_verdicts()`는 `by_id`를 만든 뒤
+**원본 findings만 순회**하므로, 매칭되는 `finding_id`가 없는 verdict — 정의상 신규
+발견 — 는 출력 경로가 아예 없었다. 이번 변경은 쓰기·읽기 양쪽을 함께 배선한다.
+
+### Added
+- `synthesize_findings.py`: `load_yaml_doc`(원본 문서 보존 — 기존 `load_yaml`은
+  `{verdicts: [...]}`을 리스트로 flatten해 형제 키를 버림) + `extract_verdicts` /
+  `extract_new_findings` + `promote_new_findings`. `file`/`severity`/`summary` 필수,
+  `line`은 옵션. 출처는 `agent`에 강제로 쓴다(`source`가 아니다 — `dedup()`은 `agent`만
+  모아 `sources`를 만들고 `render()`는 `sources`/`agent`만 읽는다). id는 verdict가 준
+  값을 믿지 않고 기존 `finding_id()`로 합성 — 신규 발견이 다른 agent의 id를 참칭할 수
+  없다. id 충돌 시 `-2`/`-3` 접미사로 결정론적으로 분리. `confidence` 기본값 5 —
+  `suppress()`의 confidence<=4 바닥보다 위라 표에 실리고, `render()`의 caveat 임계<=6
+  이하라 `*`(미검증 — 어떤 리뷰어의 판정도 통과하지 않은, adversarial 자신의 주장)로
+  표시된다.
+- `main()`: promoted findings를 기존 findings 뒤에 append(기존 표 순서 불변)한 뒤
+  `dedup()`. malformed `new_findings` 항목은 조용히 버리지 않고 stderr에 기록 +
+  카운트해 `render()`의 counts 줄 아래 한 줄로 노출한다. **exit code는 바꾸지 않는다**
+  — 리뷰어 출력 불량으로 파이프라인을 죽이면 그 자체가 새 fail-closed 억제다.
+- `agents/adversarial.md`: 신규 발견 금지 선언 네 곳(description / 모델-티어 정당화 /
+  "NOT responsible for" / Forbidden 절)을 모두 해소하고 `## Reporting an issue the
+  reviewers missed` 절을 신설(`new_findings:` 스키마). `meta_note:`는 그대로 존치 —
+  비구조화 관찰(부재 컨트롤, 눈여겨볼 패턴)용으로 `new_findings:`(구조화된 결함
+  보고)와 역할이 다르다.
+- `test_synthesize_promoted_findings.sh` — 신규, persona 미참조(fixture YAML을
+  synthesizer에 직접 주입). 4 assert: 신규 발견 행 실재 / Source 컬럼이 `adversarial`
+  (필드명 오타면 여기서 `?`로 잡힘) / `*` caveat 부착 / summary 누락 항목은 stderr에
+  기록되고 드롭되며 exit code는 0.
+- `test_adversarial_persona.sh` AC14a 락 — 금지 선언 부재(`assert_absent`) +
+  `new_findings:` 스키마 실재 + `meta_note` 채널 존치.
+
+### Fixed
+- `adversarial.md:12`의 역할 정당화가 "the Phase 1/2 reviewers run on cheaper
+  models"를 근거로 들었으나, 이 브랜치에서는 전 리뷰어가 `model: inherit`이라
+  이미 거짓이었다. 모델-티어 논증을 지우고 "Phase 1/2는 패턴매치로 raw finding만
+  내고 synthesizer는 무판단 결정론 스크립트"라는 참인 서술로 교체했다(README의
+  기존 서술과 동일 형태).
+
 ## [2.14.8] — 2026-08-03
 
 ### Fixed
