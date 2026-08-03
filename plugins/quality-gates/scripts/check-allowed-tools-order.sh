@@ -23,6 +23,11 @@ EXPECTED_ORDER=(
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)'
+  'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-baseline.sh:*)'
+  'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh:*)'
+  'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/baseline-cache.sh:*)'
+  'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py:*)'
+  'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check_qa_ledger.py:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py:*)'
   # Group 4 — Meta

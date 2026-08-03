@@ -23,6 +23,11 @@ allowed-tools:
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/detect_codex.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/compute-test-scope-candidates.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/resolve-baseline.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/baseline-cache.sh:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py:*)
+  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check_qa_ledger.py:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py:*)
   # Group 4 — Meta (orchestration primitives)
@@ -63,14 +68,14 @@ handles deletion.
    - [Trivia escape](#trivia-escape) — one-sentence diff → all gates skipped
    - [Review gate](#review-gate) — scout + Phase 1 + adversarial + synthesizer; iter loop with decision tool at every boundary
    - [Reviewer composition (scope-driven)](#reviewer-composition-scope-driven) — 3-tier + rubric + palette
-   - [Runtime gate](#runtime-gate) — test-scope-validator + runtime-verifier
+   - [Runtime gate](#runtime-gate) — 영향 판정 + 기준선 대비 차등 실행 + test-scope-validator/runtime-verifier
 3. **Decision points (AskUserQuestion templates):**
    - [Review iter boundary decision](#review-iter-boundary-decision)
    - [Review max-iter decision](#review-max-iter-decision)
    - [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision)
 4. **Output templates** (verbatim, field substitution):
    - Review / Runtime result templates
-   - [Publish-eligible sentinel](#publish-eligible-sentinel) — fail-safe write contract shared by Final Summary + Runtime R6
+   - [Publish-eligible sentinel](#publish-eligible-sentinel) — fail-safe write contract shared by Final Summary + Runtime R8
    - Final summary template
    - [Rules](#rules) — Law 2 invariants, state file invariants
 
@@ -166,7 +171,7 @@ Parse from `/qg` invocation:
 Single-gate mode (`review`/`runtime`) runs ONLY the named gate and
 emits its verdict directly — no inter-gate progression. `/qg runtime`
 bypasses the Dispatch Loop (and Decision 2), so it produces its
-runtime-scope inputs at the Runtime gate's [Step R-init](#runtime-gate)
+runtime-scope inputs at the Runtime gate's [Step R5a⁰](#runtime-gate)
 instead — `detect-runtime.sh` → `manifest` / `approved_surfaces` /
 `block_policy` (and the runtime-scope question if a `requires_decision`
 surface exists) — preserving main's single-gate behavior (spec §3
@@ -206,9 +211,9 @@ AskUserQuestion({
 
 ### Decision 2 — Runtime scope + block policy (conditional)
 
-Reached when gate scope = both via the full-pipeline Dispatch Loop (interactive `Run both gates`, or the `gate=both` argument). **Single-gate `/qg runtime` bypasses the Dispatch Loop and runs the equivalent runtime-scope init at the Runtime gate's [Step R-init](#runtime-gate) instead** — so every path that reaches the Runtime gate produces `manifest` / `approved_surfaces` / `block_policy` for R3. Decide runtime scope ONCE, but only when there is something risky to decide.
+Reached when gate scope = both via the full-pipeline Dispatch Loop (interactive `Run both gates`, or the `gate=both` argument). **Single-gate `/qg runtime` bypasses the Dispatch Loop and runs the equivalent runtime-scope init at the Runtime gate's [Step R5a⁰](#runtime-gate) instead** — so every path that reaches the Runtime gate produces `manifest` / `approved_surfaces` / `block_policy` for R5a³. Decide runtime scope ONCE, but only when there is something risky to decide.
 
-1. Run `${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh` to get the manifest with `requires_decision` flags. This runs whenever gate scope = both — the manifest is also threaded to the Runtime gate's R3 dispatch.
+1. Run `${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh` to get the manifest with `requires_decision` flags. This runs whenever gate scope = both — the manifest is also threaded to the Runtime gate's R5a³ dispatch.
 2. **Gate firing condition (mechanical):** fire an `AskUserQuestion` **only if** the manifest has ≥1 surface with `requires_decision: true` AND no argument already pre-answers the *surface selection*. `gate=both` answers **gate scope only** — it does NOT pre-answer runtime scope, so Decision 2 still fires for `/qg both` when a `requires_decision` surface exists (matching bare `/qg` runtime behavior). Otherwise (pure-local test runners only / no risky surface / surface-arg-answered) print a one-line plan and proceed **zero-click**.
 3. When firing, confirm in ONE question: **runtime scope** (which `requires_decision` surfaces to opt into — test runners are automatic) and **block policy** (`stop` / `skip` / `ask`). Record the opted-in surfaces as `approved_surfaces` and the chosen `block_policy`.
 
@@ -242,7 +247,7 @@ Full pipeline mode:
 2. Run [Upfront Execution Plan](#upfront-execution-plan). **Decision 1 (gate scope)** fires first (always, unless an arg pre-answers it): if the user chooses **Review gate only** (or `gate=review` / `--skip-runtime`), run the Review gate then **short-circuit** — skip Decision 2 and the Runtime gate, and go straight to the final summary (step 6). If **Run both gates** (or `gate=both`), continue. **Decision 2 (runtime scope + `block_policy`)** then fires only when a `requires_decision` surface exists and its surface selection is not arg-answered (zero-click otherwise); it records `approved_surfaces` and `block_policy`.
 3. Run [Review gate](#review-gate) (unless gate scope excludes it). Iterate up to 5 times; at each iteration end: findings empty → continue; non-empty → [Review iter boundary decision](#review-iter-boundary-decision).
 4. If `effective_skip_runtime` or gate scope excludes runtime, skip the Runtime gate and emit final summary.
-5. Otherwise run [Runtime gate](#runtime-gate) (R0–R6).
+5. Otherwise run [Runtime gate](#runtime-gate) (R-init–R9).
 6. Emit final summary.
 
 ## Trivia escape
@@ -629,19 +634,54 @@ this user-consent termination.)
 
 If `effective_skip_runtime` was set, skip this entire section.
 
-**Step R-init — Runtime-scope inputs (every path that reaches this gate).** The R3 dispatch requires `manifest`, `approved_surfaces`, and `block_policy`. The full-pipeline `Run both gates` / `gate=both` path produced them in [Decision 2](#decision-2--runtime-scope--block-policy-conditional). **Single-gate `/qg runtime` bypassed the Dispatch Loop, so if `approved_surfaces` / `block_policy` are still unset on entry here, produce them now**: run `${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh` to get the `manifest`, then apply Decision 2's firing logic on the result — fire the runtime-scope `AskUserQuestion` only if ≥1 `requires_decision` surface exists and no surface-selection arg pre-answers it; otherwise zero-click with the automatic test runners as `approved_surfaces` and a default `block_policy=skip`. (`gate=runtime` pre-answers gate scope, NOT surface selection — same as main; spec §3 Non-goal preserves single-gate behavior.) After this step `manifest` / `approved_surfaces` / `block_policy` are guaranteed defined for R3. If Decision 2 already ran (gate scope = both), this step is a no-op.
+이 게이트는 **이번 변경의 영향분**을 골라 merge_base 기준선 대비로 돌린다. 모델이
+*무엇을 돌릴지* 한 번 고르고, 그 선택을 결정론이 기준선·HEAD 양쪽에서 두 번 실행해
+짝짓는다 — 귀속(이 fail 은 내 탓인가)과 백스톱(결과가 조용히 비었나)이 같은
+메커니즘에 얹힌다.
 
-**Step R0 — Create the sandbox (or fall back).** Seal the code-under-review into a disposable git-worktree:
+> **호출 주체 불변식 (load-bearing).** `run-test-selection.sh` 는 기준선 측(R4)과
+> HEAD 측(R5b) **둘 다 오케스트레이터가 직접** 호출한다. `runtime-verifier` 가 자기
+> 턴 안에서 테스트를 돌려 결과를 evidence-log 로 self-report 하는 경로는 **금지**다.
+> verifier 의 evidence-log 에 적힌 테스트 결과는 advisory 이며, 이 스크립트의
+> 오케스트레이터 호출 결과가 authoritative 다 — 둘이 다르면 후자를 쓴다. (R7 의
+> mutation-guard 가 verifier 의 `writes:` self-report 를 대하는 방식과 같은 패턴.)
+
+**Step R-init — baseline 확정.**
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-sandbox "<session-id>"
+"${CLAUDE_PLUGIN_ROOT}/scripts/resolve-baseline.sh"
 ```
 
-- Exit 0 → capture **line 1 = `sandbox_dir`**, **line 2 = `baseline_sha`**, **line 3 = `snapshot_digest`**. Parse contract (fixed): read exactly three lines with three successive `IFS= read -r` (`sandbox_dir` → `baseline_sha` → `snapshot_digest`) and strip trailing whitespace/CR from `snapshot_digest` (`tr -d '[:space:]'` or equivalent) — a stray newline/space in the hex makes the guard fail-closed on every run. Hold all three as orchestrator variables (verifier-unreachable: they live in this SKILL turn's context, not in the sandbox). Set `runtime_project_dir = sandbox_dir` (the verifier's `project_dir` for this gate, frozen — overrides the preflight `project_dir` for the Runtime gate only).
-- **Exit 3** (kill switch `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`) → graceful fallback (no sandbox): set `runtime_project_dir = project_dir` (the preflight main-repo dir; `sandbox_dir`/`baseline_sha` stay UNSET). The verifier runs in read-only smoke mode against the real tree. Because the verifier still holds Write tools (frontmatter cannot be revoked per-dispatch), the fallback verdict is **capped at SKIP_WITH_EVIDENCE — never PASS** (no sandbox = no structural Law-2 guarantee = no certification; I-A). BEFORE the R3 dispatch, capture `fallback_pre` = `git -C "$project_dir" status --porcelain --untracked-files=all` plus a tracked content tree-hash baseline (`GIT_INDEX_FILE=<tmp> git -C "$project_dir" add -A -- . && git write-tree`). Print: `> [quality-gates] runtime sandbox disabled — read-only smoke mode on the real tree; verdict capped at SKIP_WITH_EVIDENCE (DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1).`
-- Any other non-zero → surface stderr verbatim and mark the Runtime gate failed.
+4키(`base` / `base_ref` / `merge_base` / `degraded`)를 캡처한다. `degraded: yes` 면
+차등 실행이 불가능하므로 loud advisory 를 내고 **verdict 를 PASS 로 올리지 않는다**:
 
-**Step R1 — test-scope-validator** (read-only reviewer; `project_dir` is the *preflight* dir, not the sandbox — it reviews the real diff). Per [Reviewer dispatch contract](#reviewer-dispatch-contract):
+> `> [quality-gates] baseline 확정 불가 (<사유>) — 차등 귀속 없이 진행, verdict 는 PASS 불가`
+
+**Step R1a — 러너 어댑터 감지 (HEAD 트리).**
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" detect "$project_dir"
+```
+
+감지된 어댑터를 **집합으로** 캡처한다(0개 이상 — 폴리글랏 레포는 복수). 각 어댑터는
+`runner` / `granularity` / `setup_cmd` 3줄이다. 이 집합이 R2 산문·R4·R5b·R6 의
+`--granularity` 로 스레드된다. **감지 표를 여기서 재구현하지 않는다** — 감지 지식은
+그 스크립트가 단독 소유한다. 감지 0개(빈 stdout + exit 0)는 오류가 아니라 결과이며,
+그 경우 floor 를 제공할 수 없다는 사실이 R8 에서 loud 하게 나온다.
+
+**Step R1b — 영향 판정 (모델 소유) + unit 배정.**
+
+스코프 결정은 **당신**이 한다. 아래 넷은 *입력이지 규칙이 아니다*:
+
+| 스코프 보조 입력 | 무엇 | 신뢰 등급 |
+|---|---|---|
+| `compute-test-scope-candidates.sh` 후보 목록 | diff 의 src → 이름 매칭 test 파일 | **구조적** — 있으면 강한 신호, 없다고 없는 것은 아님 |
+| git diff + commit message + PR description | 무엇이 바뀌었고 무엇을 **의도**했나 | **구조적** |
+| 레포 CI 설정의 test-selection | CI 가 무엇을 고르는가 | **참고** — 대체 금지, 차이는 R2 산문에 한 줄 |
+| `test-scope-validator` 분류 | `outdated-suspicion`/`cherry-pick-suspicion` | **부정 신호** — 그렇게 찍힌 테스트는 커버리지로 세지 않음 |
+
+`test-scope-validator` 를 여기서 dispatch 한다 (read-only reviewer; `project_dir` 는
+*preflight* 디렉토리 — 실제 diff 를 본다). Per [Reviewer dispatch contract](#reviewer-dispatch-contract):
 
 ```
 Agent({
@@ -651,32 +691,178 @@ Agent({
     project_dir: \"$project_dir\"
     spec_path: <path or 'auto'; pass 'none' if DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1>
     plan_path: <path or 'auto'>
-    candidate_test_files: <list from scope-detection step>"
+    candidate_test_files: <compute-test-scope-candidates.sh 출력>"
 })
 ```
 
-**Step R2 — gather spec Acceptance Criteria.** Resolve the spec (reuse `discover-spec.sh` semantics already used by test-scope-validator) and build `spec_acceptance_criteria` as a `{ac_id, text}` list. If no spec, pass an empty list (the verifier falls back to plan_features → smoke).
+**빈 스코프 fail-safe**: 후보 목록이 비었다고 검증을 건너뛰지 않는다. 백엔드·설정·
+인프라 변경도 앱 동작에 영향을 준다 — 영향분이 안 잡히면 그것 자체를 `gap` 차원에
+기록하고, 러너 전체 실행 또는 smoke 로 폭을 넓힐지 R2 산문에 쓴다.
 
-Also derive `evidence_dir = "$project_dir/.claude/quality-gates/$CLAUDE_CODE_SESSION_ID/"` (the preflight main-repo `project_dir`, NOT the sandbox — so it survives the R5 sandbox discard; `$CLAUDE_CODE_SESSION_ID` is the same value used for the pipeline state file). This absolute path is threaded to the verifier so its evidence-log + screenshots land in the main repo, not inside the disposable sandbox.
-(detect-runtime.sh runs from this same main-repo `project_dir` during the Upfront Execution Plan, so its `attempted_log_path` resolves to the identical `evidence_dir`.)
+고른 **후보 파일 경로**를 배정 스크립트에 넘긴다. 당신이 고르는 것은 *파일*이고,
+그것을 unit 으로 바꾸는 것은 스크립트다 — 파일→패키지 축약 같은 결정론 변환을
+여기서 손으로 하지 않는다:
 
-**Runtime scope transparency (additive — AC11).** Emit exactly one user-visible
-line here (Step R2 complete → before the R3 dispatch), now that the
-manifest, approved surfaces, and spec AC are all known:
+```bash
+printf '%s\n' "${candidate_files[@]}" \
+  | "${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" assign "$project_dir"
+```
 
-> `> Runtime scope: full project (<project_type>) — boots <surface summary>, asserts <K> spec AC. Runtime runs the whole app regardless of Review scope.`
+`<unit>\t<runner|unclaimed>\t<granularity>` 행을 캡처한다. stderr 의 `미실행 러너:`
+줄도 함께 잡아 `gap` 차원에 열거한다. **`unclaimed` 행이 하나라도 있으면** 그 목록을
+R8 의 `verification` 차원으로 가져간다 (`gap` 이 아니다 — 이유는 R8).
 
-Substitute `<project_type>` and `<surface summary>` from the `detect-runtime.sh`
-manifest (`project_type` + a short `runnable_surfaces` / `test_runners` digest);
-`<K>` = the number of `spec_acceptance_criteria` gathered in Step R2 (`0 spec AC (smoke fallback)`
-when none). The final clause is the OQ4 asymmetry marker (literal — do not
-paraphrase; it is the unique `grep -cE` anchor for this emission point). This is the ONLY emission point — every path that reaches the Runtime
-gate (both-gates and single `/qg runtime`) flows through R3, so one line covers
-them all; the Review-gate-only path never reaches here (correct — there is no
-Runtime to describe). This is purely additive: no new gate, no diff-scope forcing,
-no behavior change (NG3 / AC12).
+**Step R2 — 계획 산문 + 비용 신호.**
 
-**Step R3 — dispatch runtime-verifier (executor)** with `project_dir = runtime_project_dir`, the spec AC, the approved surfaces, and the block policy:
+사람 말로 쓴다. 전문용어 나열은 산출물 실패다. 어투는 재량이지만 **여섯 필드는 필수**:
+
+1. **무엇이 바뀌었나** — 파일 나열이 아니라 "무엇을 하는 코드가"
+2. **어떤 행동에 닿나** — 행동/경로를 이름으로 지목
+3. **무엇을 돌리나 + 선택 비율** — `영향 테스트 12개 선택 (전체 47개 중)` 형태.
+   분모는 반드시 `compute-test-scope-candidates.sh --total` 의 출력이다 —
+   당신이 센 값이 아니다. 분모가 모델 자기보고이면 과선택이 심해질수록 분모도 같이
+   부풀려 비율이 정상으로 보인다.
+4. **비용 신호** — `즉시`(캐시 전량 적중·설치 불필요) / `수 분`(기준선 실행 필요·
+   설치 불필요) / `설치 포함`(deps 설치 필요) 셋 중 하나. **숫자 시간 추정을 쓰지
+   않는다** — 추정기가 없으므로 지어낸 숫자가 된다.
+5. **무엇을 안 돌리나** — 미선택분 · 자동화 불가 플로우 · blocked 표면 · `unclaimed`
+   · `미실행 러너`
+6. **CI 와 다르면 그 차이** — 한 줄. 대체하지 않고 설명만 한다.
+
+`granularity: bulk` 어댑터가 하나라도 있으면 이 산문에 **항상** 다음을 넣는다:
+
+> `커버리지 미보장(러너가 선택을 무시함)`
+
+`assign` 이 낸 `BULK` 행 — 어느 파일 어댑터도 주장하지 않은 잔여를 bulk 러너가
+흡수한 결과 — 도 같은 공시 대상이다. 흡수자는 정의상 bulk 어댑터이고, 그 실행은
+파일 지목 없이 러너 전체를 돌린다. 잔여 흡수는 언어를 가리지 않으므로
+(`.rb`·`.java` 같은 미지원 확장자도 흡수된다) 공시를 "원래 bulk 인 러너"에만
+붙이면 흡수분이 조용히 공시 없이 돈다.
+
+그리고 정확히 한 줄의 scope transparency 앵커를 emit 한다:
+
+> `> Runtime scope: 영향 테스트 <N>개 선택 (전체 <M>개 중), 러너 <runners> — 이번 변경의 영향분만 기준선 대비로 돌린다.`
+
+**Step R3 — 갭 게이트 (생략이 있을 때만).**
+
+R2 의 5번이 곧 생략 목록이다. **생략 목록이 비어 있으면 `AskUserQuestion` 을 발화하지 않는다** — 계획 한 줄만 출력하고 zero-click 으로 R4 로 간다.
+
+비어 있지 않으면 정확히 1회 `AskUserQuestion`: 생략 목록을 보여주고
+`그대로 진행` / `범위 넓혀서 다시 계획` / `중단`. 질문 빈도가 생략의 양에
+비례하므로, 질문이 뜰 때는 반드시 정보가 있다.
+
+**Step R4 — 기준선 측 (오케스트레이터 단독 — verifier 미개입).**
+
+`degraded: yes` 면 이 스텝 전체를 건너뛰고 R8 에서 `BASELINE_UNRUNNABLE` 로 처리한다.
+건너뛸 때 기준선 행 파일은 **비우지 않고** 선택한 unit 마다 `<unit>\tunrun\t-` 로
+채운다 — 빈 파일을 R6 에 넘기면 행 부재가 `SILENT_DROP` 으로 라벨된다. 둘 다 PASS 는
+아니지만 보고되는 사유가 달라진다(기준선을 못 돌린 것 vs 고른 것이 사라진 것).
+
+① 캐시 조회 — 어댑터마다:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/baseline-cache.sh" get \
+  ".claude/quality-gates/baseline-cache" "$merge_base" "$runner" "${units[@]}"
+```
+
+적중분만 나온다. 입력 목록과 차집합해 **미적중분**을 얻는다. exit 4(손상)는 전량
+미적중으로 취급하고 loud advisory 를 낸다.
+
+② 미적중분이 있을 때만 기준선 워크트리를 만든다:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-baseline "$merge_base" "<session-id>"
+```
+
+그 트리에서 **`detect` 를 다시 실행한다 — HEAD 의 어댑터 집합을 재사용하지 않는다.**
+diff 가 테스트 인프라 자체를 바꾸는 경우(unittest→pytest 마이그레이션, `package.json`
+에 jest 신규 추가) 두 집합이 다를 수 있고, HEAD 감지를 기준선에 그대로 쓰면 spurious
+`error` 가 나와 진짜 회귀를 `PRE_EXISTING` 으로 은폐한다. 두 집합이 다르면 한쪽에만
+있는 어댑터의 unit 은 반대편에서 `unrun` 이 되어 귀속이 degrade 되고, 그 사실을 R2
+산문과 `gap` 에 명시한다.
+
+그다음 어댑터마다:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" run \
+  "$baseline_wt" "$runner" bulk "${miss_units[@]}"
+```
+
+bulk 가 red 면 실패한 unit 에 대해서만 `per-unit` 으로 재실행한다 (2단 구조).
+
+③ 결과를 캐시에 기록하고 기준선 워크트리를 폐기한다:
+
+```bash
+printf '%s\n' "${rows[@]}" | "${CLAUDE_PLUGIN_ROOT}/scripts/baseline-cache.sh" put \
+  ".claude/quality-gates/baseline-cache" "$merge_base" "$runner"
+"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "$baseline_wt"
+```
+
+`granularity ∈ {file, package}` 에서 bulk-green 이 나오면 **unit 별 `pass` 행으로
+분해해** 기록한다 — 집합 전체가 통과했으므로 각 unit 이 통과했다. `BULK` 키는
+`granularity: bulk` 어댑터에서만 생긴다.
+
+**R4 가 R5 보다 먼저인 이유** — 기준선 실행이 HEAD 샌드박스와 **다른 트리에서,
+verifier 개입 없이** 끝나야 한다. 같은 트리에서 코드를 되감았다 복원하면
+mutation-guard 의 의미가 흐려지고, verifier 가 기준선을 조작해 진짜 회귀를
+`PRE_EXISTING` 으로 위장할 수 있는 경로가 생긴다.
+
+**Step R5a⁰ — Runtime-scope inputs (every path that reaches this gate).** The R5a³
+dispatch requires `manifest`, `approved_surfaces`, and `block_policy`. The
+full-pipeline `Run both gates` / `gate=both` path produced them in
+[Decision 2](#decision-2--runtime-scope--block-policy-conditional). **Single-gate
+`/qg runtime` bypassed the Dispatch Loop, so if `approved_surfaces` / `block_policy`
+are still unset on entry here, produce them now**: run
+`${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh` to get the `manifest`, then apply
+Decision 2's firing logic on the result — fire the runtime-scope `AskUserQuestion`
+only if ≥1 `requires_decision` surface exists and no surface-selection arg
+pre-answers it; otherwise zero-click with the automatic test runners as
+`approved_surfaces` and a default `block_policy=skip`. (`gate=runtime` pre-answers
+gate scope, NOT surface selection — same as main; spec §3 Non-goal preserves
+single-gate behavior.) After this step `manifest` /
+`approved_surfaces` / `block_policy` are guaranteed defined for R5a³. If Decision 2
+already ran (gate scope = both), this step is a no-op.
+
+> **매니페스트의 `test_runners` 필드는 이 게이트의 실행 경로에서 소비되지 않는다.**
+> 매니페스트는 **부팅 표면**(`runnable_surfaces` / `approved_surfaces`)만 정하고,
+> 실행할 테스트 러너 식별은 R1a 가 소유한다. 두 집합이 다른 것은 결함이 아니라 축이
+> 다르기 때문이다.
+
+**Step R5a¹ — Create the sandbox (or fall back).** Seal the code-under-review into
+a disposable git-worktree:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-sandbox "<session-id>"
+```
+
+- Exit 0 → capture **line 1 = `sandbox_dir`**, **line 2 = `baseline_sha`**, **line 3
+  = `snapshot_digest`**. Parse contract (fixed): read exactly three lines with three
+  successive `IFS= read -r` and strip trailing whitespace/CR from `snapshot_digest`
+  (`tr -d '[:space:]'` or equivalent) — a stray newline/space in the hex makes the
+  guard fail-closed on every run. Hold all three as orchestrator variables
+  (verifier-unreachable). Set `runtime_project_dir = sandbox_dir`.
+- **Exit 3** (kill switch `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`) → graceful fallback
+  (no sandbox): set `runtime_project_dir = project_dir`. The verdict is **capped at
+  SKIP_WITH_EVIDENCE — never PASS** (no sandbox = no structural Law-2 guarantee = no
+  certification). BEFORE the R5a³ dispatch, capture `fallback_pre` = `git -C
+  "$project_dir" status --porcelain --untracked-files=all` plus a tracked content
+  tree-hash baseline. Print: `> [quality-gates] runtime sandbox disabled — read-only
+  smoke mode on the real tree; verdict capped at SKIP_WITH_EVIDENCE
+  (DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1).`
+- Any other non-zero → surface stderr verbatim and mark the Runtime gate failed.
+
+**Step R5a² — gather spec Acceptance Criteria.** Resolve the spec (reuse
+`discover-spec.sh` semantics) and build `spec_acceptance_criteria` as a
+`{ac_id, text}` list. If no spec, pass an empty list (the verifier falls back to
+plan_features → smoke).
+
+Also derive `evidence_dir = "$project_dir/.claude/quality-gates/$CLAUDE_CODE_SESSION_ID/"`
+(the preflight main-repo `project_dir`, NOT the sandbox — so it survives the R9
+sandbox discard).
+
+**Step R5a³ — dispatch runtime-verifier (executor).** 이 dispatch 는 **판단이 필요한
+것만** 맡는다: 앱 부팅용 setup fix · 상황별 부팅 · 브라우저/CLI 플로우. **테스트 실행도,
+테스트 러너용 deps 설치도 여기 없다.**
 
 ```
 Agent({
@@ -693,52 +879,196 @@ Agent({
 })
 ```
 
-**Step R4 — Mutation guard (authoritative verdict cap).** Unless in read-only fallback, compute the product-mutation oracle:
+**Step R5b — HEAD 측 테스트 실행 (verifier 턴 *종료 후*, 오케스트레이터가 직접).**
+
+verifier 의 dispatch 가 **끝난 뒤**, 어댑터마다:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" run \
+  "$runtime_project_dir" "$runner" bulk "${units[@]}"
+```
+
+**bulk 가 green 이면 per-unit 재실행을 하지 않는다** — 집합 전체가 통과했으므로 귀속할
+것이 없다. red 일 때만 실패한 unit 에 대해 `per-unit` 으로 재실행한다. 흔한 경우 2회,
+비싼 경우에만 정밀해진다.
+
+이 호출은 R5a³ 의 `Agent({…})` 블록 **밖**에 있어야 한다 — 위 호출 주체 불변식.
+verifier 가 디버깅 중 테스트를 돌리는 것 자체를 막지는 않지만(Bash 를 갖고 있고 setup
+확인에 필요하다), **그 결과가 판정에 들어가는 경로**를 막는다. verifier 의 evidence-log
+테스트 결과는 advisory 이고 이 호출 결과가 authoritative 다.
+
+**Step R6 — 대조 (결정론).** 어댑터마다 한 번씩:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py" \
+  --expected "$expected_units_file" \
+  --baseline "$baseline_rows_file" --head "$head_rows_file" \
+  --granularity "$granularity" --runner "$runner" > "$per_adapter_yaml"
+```
+
+`--expected` 는 R1b 가 고른 unit 목록이다 — **두 산출물의 상호 대조가 아니라 독립
+입력**이라야 두 스크립트가 같은 정규화 버그로 같은 unit 을 대칭 누락할 때 잡힌다.
+
+**flaky — 재실행은 정확히 1회다 — green 이 나올 때까지가 아니다.** `NEW_REGRESSION`
+후보만 HEAD 에서 1회 재실행한다. 또 fail 이면 확증 `NEW_REGRESSION`, pass 면 `FLAKY`
+로 기록하고 게이트를 FAIL 시키지 않되 **보고서에 올린다**. 기준선에서 이미 red 인 것은
+재실행 대상이 아니다(이미 `PRE_EXISTING`). 재실행 후에는 갱신된 `--head` 로
+`diff-test-results.py` 를 다시 호출하고, **그 마지막 호출의 결과가 authoritative** 다.
+여기서 위험은 false green 이 아니라 false red 이고, **무한 재실행이 바로 false green
+경로**이므로 1회로 잠근다.
+
+그다음 어댑터 YAML 들을 집계한다:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py" --aggregate \
+  --expected-adapters "$adapter_count" "${per_adapter_yamls[@]}"
+```
+
+`verdict_input`(`confirmed_product_defect` / `silent_drop` / `baseline_unrunnable`)과
+`attribution_status` 를 캡처한다. 이 집계를 손으로 하지 않는다 — N 개 YAML 을 읽고
+최악값을 고르면 불변식 ②가 결과값에서 없앤 "모델 요약이 판정을 결정"이 집계 레이어에서
+재입장한다. 입력 개수가 안 맞으면 스크립트가 exit 4 로 fail-closed 한다.
+
+**Step R7 — Mutation guard (authoritative verdict cap).** Unless in read-only
+fallback, compute the product-mutation oracle:
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" mutation-guard "<sandbox_dir>" "<baseline_sha>" "<snapshot_digest>"
 ```
 
-Read the YAML. **If `forced_downgrade: yes`**, the verdict is capped at FAIL regardless of the verifier's emitted verdict (Law 2 — the verifier cannot self-approve a product change). Surface `tracked_diff` + `disallowed_new_files` as evidence ("the app only ran after this change — fix it in a normal writer→review cycle"). The verifier's own `writes:` self-report is advisory only; this git result is authoritative.
+Read the YAML. **If `forced_downgrade: yes`**, the verdict is capped at FAIL
+regardless of the verifier's emitted verdict (Law 2 — the verifier cannot
+self-approve a product change). Surface `tracked_diff` + `disallowed_new_files` as
+evidence. The verifier's own `writes:` self-report is advisory only; this git result
+is authoritative.
 
-**R4 exit-code routing (C-C — mirror R0's discipline; an indeterminate guard is never a PASS).** Capture BOTH the guard's stdout YAML AND its exit code:
+**R7 exit-code routing (an indeterminate guard is never a PASS).** Capture BOTH the
+guard's stdout YAML AND its exit code:
 
-| Guard result | R4 routing |
+| Guard result | R7 routing |
 |---|---|
-| exit 0 + `forced_downgrade: no` (all §6.1 snapshot keys valid) | no product mutation → proceed to R5/R6 normally |
+| exit 0 + `forced_downgrade: no` | no product mutation → proceed to R8 normally |
 | exit 0 + `forced_downgrade: yes` | cap verdict at FAIL; surface `tracked_diff` / `disallowed_new_files` / `guard_flags` as evidence |
 | **exit 4** (`guard_fail`), OR any other non-zero exit, OR a missing/invalid `forced_downgrade` key, OR a `guard_error:` line present | treat as `forced_downgrade: yes` → cap verdict at FAIL; surface the guard's `guard_error` + **stderr verbatim**; mark the Runtime gate failed. **Never read an errored or garbled guard as PASS** (indeterminate ≠ clean). |
 
-An errored guard (corrupt index, lost gitdir, missing/truncated snapshot, bad baseline) must not present as "not a downgrade." This is the orchestration-layer half of the bypass closure — the guard script's layers 0–3 (§6.2) cover C-A/C-B/C-D/C-E; this table covers C-C.
+A digest mismatch (the verifier forged the snapshot) surfaces here as **exit 4** with
+`guard_error: snapshot integrity check failed` — the seal the guard checks is held by
+the orchestrator, out of the verifier's reach.
 
-A digest mismatch (the verifier forged the snapshot) surfaces here as **exit 4** with `guard_error: snapshot integrity check failed` — the same fail-closed path as any other indeterminate guard. This is the round-2 closure of C-NEW-1: the seal the guard checks is held by the orchestrator, out of the verifier's reach.
+**Fallback working-tree guard (read-only mode only).** When the sandbox was disabled
+(Exit 3), do NOT run the sandbox `mutation-guard`. The verdict is already capped at
+SKIP_WITH_EVIDENCE (R5a¹); this guard is a pure SAFETY SIGNAL, not a verdict input.
+After the R5a³ dispatch, recompute `fallback_post`. If anything changed, emit a loud
+warning to user-visible stdout AND record it in `evidence_dir`:
+`> [quality-gates] WARNING: runtime fallback 에서 working tree 가 변경됨 — <changed files>. sandbox 미사용으로 구조적 보호 없음; 검토 요망 (git diff 후 revert 권장).`
+git-ignored files do not appear in `--porcelain`, so a setup-only `.env` fix is
+correctly NOT flagged. The warning does not change the verdict and does not block
+the gate.
 
-**Fallback working-tree guard (read-only mode only — I-A/I-B).** When the sandbox was disabled (Exit 3), do NOT run the sandbox `mutation-guard`. The verdict is already capped at SKIP_WITH_EVIDENCE (R0); this guard is a pure SAFETY SIGNAL, not a verdict input. After the R3 dispatch, recompute `fallback_post` (porcelain + tracked content tree-hash, same as `fallback_pre`). If anything changed (a porcelain entry in `fallback_post` not in `fallback_pre`, or a differing tree-hash), emit a loud warning **to user-visible stdout** AND record it in `evidence_dir` (§6.6): `> [quality-gates] WARNING: runtime fallback에서 working tree가 변경됨 — <changed files>. sandbox 미사용으로 구조적 보호 없음; 검토 요망 (git diff 후 revert 권장).` git-ignored files do not appear in `--porcelain`, so a setup-only `.env` fix is correctly NOT flagged. The warning does not change the verdict (already ≤SKIP cap) and does not block the gate (P18 — no extra loop).
+**Step R8 — 원장 + verdict + outcome routing.**
 
-**Step R5 — Discard the sandbox** (verdict-independent), unless in read-only fallback:
+evidence-log — verifier 가 R5a³ 에서 쓴 `$evidence_dir/runtime-evidence.md`, 없으면
+같은 경로로 새로 만든다 — 에 floor 5차원 원장을 이어 쓴다 (spec-distill 커버리지
+원장과 같은 줄 모양):
+
+```
+- floor:changed      — closed   — <무엇이 바뀌었나; 러너 특정>
+- floor:behavior     — closed   — <어떤 행동/경로에 닿나>
+- floor:verification — closed   — <실행된 것 + 실행 방식(차등/bulk)>
+- floor:attribution  — closed   — <모든 fail 의 귀속 라벨>
+- floor:gap          — closed   — <못 확인한 것 전부 열거 (0개면 "없음"도 명시)>
+- derived: 없음 — <왜 0개인지>
+```
+
+`degraded` 는 실패가 아니라 **1급 상태**다. 다음 라우팅으로 status 를 정한다:
+
+| 못 확인한 것 | 원장 | PASS |
+|---|---|---|
+| **영향분**을 못 돌림 (러너 부재 exit 3 · baseline 불가 · 귀속 불가 · `unclaimed` 존재) | `verification` 또는 `attribution` 이 **`degraded`** | **불가** |
+| **영향분과 무관한** 표면을 안 돌림 (다른 러너 부재 · 자동화 불가 플로우 · 미선택분 · `미실행 러너`) | `gap` 에 **열거하고 `closed`** | 가능 |
+
+R6 이 낸 `attribution_status` 를 그대로 `floor:attribution` 의 status 로 옮긴다 —
+집계값을 원장에 안 옮기면 그 캡처는 아무 데도 닿지 않는다. verdict 입력은
+`verdict_input` 3플래그와 `attribution_status` 뿐이며, `per_adapter` 카운트는 사람이
+읽을 진단이다 — verdict 를 그리로 라우팅하지 않는다.
+
+`gap: closed` 와 `verification: degraded` 는 다른 뜻이다 — `gap` 은 *"못 확인한 것을
+빠짐없이 열거했다"* 이므로 열거가 곧 닫힘이고, `degraded` 는 *"확인하기로 한 것을 못
+확인했다"* 이므로 인증 불가다.
+
+> **`unclaimed` 가 하나라도 있으면 `verification: degraded` 이고 verdict 를 PASS 로 올리지 않는다.**
+>
+> 목록은 `gap` 에도 열거하되, **열거가 인증을 대신하지 않는다.** `unclaimed` unit 은
+> 정의상 R1b 가 **영향분으로 판정한** 것이고, 실행 수단이 없다는 것은 위 표의
+> "영향분을 못 돌림"을 만족한다. 이 규칙이 없으면 8종 미지원 레포에서 **테스트가 한
+> 개도 안 돈 채 PASS** 가 나온다.
+
+구조 게이트를 돌린다:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/check_qa_ledger.py" "$evidence_dir/runtime-evidence.md"
+```
+
+non-zero 면 stderr 를 verbatim 으로 노출하고 **verdict 를 PASS 로 올리지 않는다**.
+
+verdict 결정:
+
+| verdict | 조건 |
+|---|---|
+| `PASS` | floor 5차원 전부 `closed` **and** `confirmed_product_defect: false` **and** `silent_drop: false` **and** `forced_downgrade: no` **and** 상황별 층 통과 |
+| `FAIL` | `confirmed_product_defect: true` **or** `forced_downgrade: yes` **or** 상황별 층(부팅/플로우) 실패 |
+| `SKIP_WITH_EVIDENCE` | 영향분 0개 → `SKIP_WITH_EVIDENCE` **or** `baseline_unrunnable: true` **or** `silent_drop: true` **or** 어느 floor 차원이 `degraded` |
+| `NEEDS_RESOLUTION` | setup-fixable 잔존 — **기존 무변경** |
+
+**동시 성립 시 총 순서** (표의 행은 배타가 아니다):
+
+```
+확증 제품결함(FAIL, terminal)  >  NEEDS_RESOLUTION  >  SKIP_WITH_EVIDENCE  >  PASS
+```
+
+- **확증 제품결함**(`confirmed_product_defect: true` · `forced_downgrade: yes`)은
+  **terminal** 이며 어떤 degrade 사유로도 downgrade 되지 않는다. `silent_drop` 이나
+  floor degraded 가 같이 성립해도 verdict 는 `FAIL` 이다.
+  그리고 **degrade 사실은 원장과 보고서에 함께 기록된다** — 삼켜지지 않는다.
+- 그 외의 FAIL 사유(부팅 실패 등)와 `NEEDS_RESOLUTION` 이 동시면 `NEEDS_RESOLUTION`
+  이 이긴다 (기존 `runtime-verifier.md` 선례 승계).
+- **어느 방향으로도 degrade 사유가 PASS 를 만들지 못하고, degrade 사유가 확증 결함을
+  지우지도 못한다.**
+
+`granularity: bulk` 어댑터가 실행됐으면 최종 보고서에도 **항상**
+`커버리지 미보장(러너가 선택을 무시함)` 을 남긴다 — 그 실행의 주장은 "영향분을
+확인했다"가 아니라 "러너 전체를 돌렸고 그 안에 영향분이 포함되기를 기대한다"이다.
+양쪽 red 인 bulk 어댑터에는 다음을 그대로 쓴다:
+
+> `기준선도 빨간 상태입니다. 이 러너(<runner>)는 파일 단위 지목이 안 되므로 그 안에 새 회귀가 숨었는지 구분하지 못했습니다.`
+
+**Outcome routing** (verdict = min(위 verdict, guard cap, fallback cap)):
+
+- **Fallback mode (sandbox disabled)** → a `PASS` becomes **SKIP_WITH_EVIDENCE**;
+  `FAIL`/`NEEDS_RESOLUTION` pass through unchanged.
+- **Clean (PASS) AND `forced_downgrade: no`** → print `## Runtime gate — clean` and
+  continue to final summary.
+- **`forced_downgrade: yes`** → print the Runtime gate FAIL block including the
+  surfaced diff; emit final summary marked Runtime gate failure. Do NOT auto-restart,
+  do NOT apply the diff.
+- **FAIL** → print verdict block (귀속 표 + 원장 포함); final summary marked failure.
+- **SKIP_WITH_EVIDENCE** → print evidence (원장 포함); continue.
+- **NEEDS_RESOLUTION** → invoke [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision).
+
+**Publish-eligible sentinel (single-gate `/qg runtime` — non-aborted terminal
+only).** `/qg runtime` 은 Dispatch Loop 를 우회하므로 Final Summary 기록 지점에
+도달하지 않을 수 있다. R8 이 **비중단 terminal**(clean / `forced_downgrade: yes` /
+FAIL / SKIP_WITH_EVIDENCE)로 종결하면 여기서
+`.claude/quality-gates/<sid>/publish-eligible.md` 에 [Publish-eligible
+sentinel](#publish-eligible-sentinel)을 `Write` 한다(`<verdict>` = 그 R8 verdict
+token). **NEEDS_RESOLUTION → Stop 및 사용자 Stop 경로에서는 쓰지 않는다.** Final
+Summary 도 도달했다면 idempotent overwrite 라 무해.
+
+**Step R9 — Discard the sandbox** (verdict-independent), unless in read-only fallback:
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "<sandbox_dir>"
 ```
-
-**Step R6 — Outcome routing** (verdict = min(verifier verdict, guard cap, fallback cap)):
-
-- **Fallback mode (sandbox disabled)** → the verifier's verdict is capped: a `PASS` becomes **SKIP_WITH_EVIDENCE** (no structural guarantee), `FAIL`/`NEEDS_RESOLUTION` pass through unchanged. The R4 fallback warning (if any) is printed but does not alter the verdict.
-- **Clean (PASS) AND `forced_downgrade: no`** → print `## Runtime gate — clean` and continue to final summary.
-- **`forced_downgrade: yes`** → print the Runtime gate FAIL block including the surfaced diff; emit final summary marked Runtime gate failure. Do NOT auto-restart, do NOT apply the diff (in-gate accept is out of scope).
-- **FAIL** (product bug / unrecoverable) → print verdict block; final summary marked failure.
-- **SKIP_WITH_EVIDENCE** → print evidence; continue.
-- **NEEDS_RESOLUTION** → invoke [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision).
-
-**Publish-eligible sentinel (single-gate `/qg runtime` — non-aborted terminal
-only).** `/qg runtime`은 Dispatch Loop를 우회하므로(위 [Arguments](#arguments))
-Final Summary 기록 지점에 도달하지 않을 수 있다. R6이 **비중단 terminal**
-(clean / `forced_downgrade: yes` / FAIL / SKIP_WITH_EVIDENCE)로 종결하면 여기서
-`.claude/quality-gates/<sid>/publish-eligible.md`에 [Publish-eligible
-sentinel](#publish-eligible-sentinel)을 `Write`한다(`<verdict>`
-= 그 R6 verdict token). **NEEDS_RESOLUTION → Stop 및 사용자 Stop 경로에서는 쓰지
-않는다**(abort → offer 미발동). Final Summary도 도달했다면 idempotent overwrite라
-무해.
 
 ## Blocked-path routing
 
@@ -787,14 +1117,14 @@ AskUserQuestion({
 ```
 
 Branch:
-- **Yes, retry** → increment resolution counter; if exceeds env limit, fall through to Skip with evidence. Otherwise re-create the sandbox (Step R0) and re-capture the new output's `sandbox_dir` (line 1), `baseline_sha` (line 2), and `snapshot_digest` (line 3) with the same three successive `IFS= read -r` + digest-strip idiom as R0 — refreshing **all three** orchestrator variables. create-sandbox emits a NEW commit `B` AND a NEW snapshot (hence a new digest) each call, so reusing the old `baseline_sha` makes the guard `guard_fail "bad baseline sha"` and reusing the old `snapshot_digest` makes it `guard_fail "snapshot integrity check failed"` — both false FAILs. The new snapshot is auto-recorded in the new gitdir; the stale sandbox + its old snapshot are force-removed by R0's idempotent cleanup. Then re-dispatch runtime-verifier with the refreshed `sandbox_dir`, and call R4 as 3-arg with the refreshed `snapshot_digest`. (Fix the parse order: capturing the digest as line 2 swaps `baseline_sha`/`snapshot_digest` and fails-closed every run.)
+- **Yes, retry** → increment resolution counter; if exceeds env limit, fall through to Skip with evidence. Otherwise re-create the sandbox (Step R5a¹) and re-capture the new output's `sandbox_dir` (line 1), `baseline_sha` (line 2), and `snapshot_digest` (line 3) with the same three successive `IFS= read -r` + digest-strip idiom as R5a¹ — refreshing **all three** orchestrator variables. create-sandbox emits a NEW commit `B` AND a NEW snapshot (hence a new digest) each call, so reusing the old `baseline_sha` makes the guard `guard_fail "bad baseline sha"` and reusing the old `snapshot_digest` makes it `guard_fail "snapshot integrity check failed"` — both false FAILs. The new snapshot is auto-recorded in the new gitdir; the stale sandbox + its old snapshot are force-removed by R5a¹'s idempotent cleanup. Then re-dispatch runtime-verifier with the refreshed `sandbox_dir`, and call R7 as 3-arg with the refreshed `snapshot_digest`. (Fix the parse order: capturing the digest as line 2 swaps `baseline_sha`/`snapshot_digest` and fails-closed every run.)
 - **Skip with evidence** → record SKIP_WITH_EVIDENCE and continue.
 - **Stop** → final summary aborted at the Runtime gate.
 
 ## Publish-eligible sentinel
 
 비중단 완료 시, 커맨드 계층이 읽을 fail-safe sentinel을 `Write`한다. **두 종결
-지점**(Final Summary, Runtime R6)이 이 포맷을 공유한다 — 재정의 말고 여기를 참조.
+지점**(Final Summary, Runtime R8)이 이 포맷을 공유한다 — 재정의 말고 여기를 참조.
 
 - **경로:** `.claude/quality-gates/<sid>/publish-eligible.md` (`<sid>` =
   `$CLAUDE_CODE_SESSION_ID`, state file과 동일). setup-qg.sh가 Preflight마다
@@ -813,7 +1143,7 @@ Branch:
   Runtime `aborted`). disposition = aborted면 **sentinel을 쓰지 않는다.** 그 외
   (clean/proceeded-with-findings/failed/skipped/SKIP_WITH_EVIDENCE)는 non-aborted
   → 쓴다.
-- **Write는 idempotent** — 같은 경로 overwrite. 한 실행이 Final Summary와 R6에
+- **Write는 idempotent** — 같은 경로 overwrite. 한 실행이 Final Summary와 R8에
   모두 도달해도 동일 sentinel을 다시 쓸 뿐(무해).
 
 ## Final Summary
