@@ -3664,9 +3664,14 @@ done
 [[ $missing_logic -eq 0 ]] && echo "PASS: 기존 로직 8종 전부 새 자리에 존재" || fail=$((fail + 1))
 
 # 새 라벨 5종이 실제로 존재하고 순서가 맞다
-r5a0=$(first_line 'Step R5a⁰'); r5a1=$(first_line 'Step R5a¹')
-r5a2=$(first_line 'Step R5a²'); r5a3=$(first_line 'Step R5a³')
-r8=$(first_line 'Step R8')
+# 라벨은 **줄머리 볼드 헤딩**으로만 앵커한다. 맨 라벨로 찾으면 본문 cross-reference 가
+# 먼저 잡힌다 — 실측: `first_line 'Step R5a⁰'` = **174**(다른 섹션의 참조), 실제 헤딩은
+# **810**. 그러면 `r5a0 < r5a1` 순서 assert 가 "참조 < 헤딩"을 비교해 헤딩이 어디로
+# 옮겨가도 통과하는 vacuous 락이 된다. 나머지 다섯은 지금 우연히 헤딩이 먼저일 뿐이므로
+# 여섯 개 전부 같은 방식으로 못 박는다. (`\*` 금지 — 위 주석 참조.)
+r5a0=$(first_line '^[*][*]Step R5a⁰'); r5a1=$(first_line '^[*][*]Step R5a¹')
+r5a2=$(first_line '^[*][*]Step R5a²'); r5a3=$(first_line '^[*][*]Step R5a³')
+r8=$(first_line '^[*][*]Step R8')
 for pair in "R5a⁰:$r5a0" "R5a¹:$r5a1" "R5a²:$r5a2" "R5a³:$r5a3" "R8:$r8"; do
   assert_line "새 라벨 ${pair%%:*} 존재" "${pair#*:}"
 done
@@ -3694,7 +3699,10 @@ else
 fi
 # 앵커는 R2(계획 산문)와 R3(갭 게이트) 사이에 있어야 한다
 anchor_line=$(first_line "$new_anchor")
-r2_marker=$(first_line '^\*\*Step R2'); r3_marker=$(first_line '^\*\*Step R3')
+# awk 패턴에 `\*` 를 쓰지 않는다 — `-v` 가 백슬래시를 떼어내 `**…` 가 되고, 그러면
+# `illegal primary in regular expression` 으로 매치 0건이 된다(실측: awk 20200816).
+# `^` 가 앞에 붙으면 이 awk 의 관대한 처리로 *우연히* 통과할 뿐이라 `[*]` 로 못 박는다.
+r2_marker=$(first_line '^[*][*]Step R2'); r3_marker=$(first_line '^[*][*]Step R3')
 if [[ -n "$anchor_line" && "$anchor_line" -gt "$r2_marker" && "$anchor_line" -lt "$r3_marker" ]]; then
   echo "PASS: 앵커가 Step R2($r2_marker)와 Step R3($r3_marker) 사이 ($anchor_line)"
 else
@@ -3703,7 +3711,7 @@ fi
 
 # ── T22 / AC31 / M12: 호출 주체 — run-test-selection.sh 가 verifier dispatch 블록 밖 ──
 echo "== 호출 주체 불변식"
-r5b=$(first_line 'Step R5b')
+r5b=$(first_line '^[*][*]Step R5b')   # 헤딩 앵커 — cross-reference latch 방지
 in_block=0
 while IFS= read -r ln; do
   n="${ln%%:*}"
