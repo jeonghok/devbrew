@@ -3752,6 +3752,24 @@ Expected: 새 블록은 PASS. **기존 락(`:205` `Step R0`, `:303` `Step R-init
 Run: `bash plugins/quality-gates/tests/harness/test_skill_orchestration_behavior.sh`
 Expected: PASS — `test_skill_orchestration_behavior: all protocol-shape assertions PASS` (exit 0)
 
+> **⚠️ 이 task 는 "빨간 assert 4개 고치기"가 아니다.** Task 11 리뷰가 독립 검증한 사실:
+> Step 3 표의 락 중 **둘은 이미 GREEN 인데 아무것도 검사하지 않는다.**
+>
+> - **`:205`** — `first_line 'Step R0'` 이 **0** 을 반환하고(파일에 `Step R0` 없음),
+>   `first_line_after 'snapshot_digest' 0` 은 **53**(파일 최상단 Law-2 헤더)을 잡는다.
+>   `53 > 0 && 53 < 869` → PASS. 검사 대상이 R5a¹ 이 아니라 헤더다.
+> - **`:450`** — `first_line 'Step R6'` = 900(이제 *대조*), 윈도우 끝이 1073 이라
+>   **R7~R9 를 통째로 삼키고** R8 의 `publish-eligible.md`(`:1062`)를 찾아 PASS 한다.
+> - `:300-306` 도 base 에서 이미 `first_line 'Step R-init'` 이 `:169`(cross-reference)로
+>   해석돼 부분적으로 vacuous 했다.
+>
+> **라벨을 옮기는 것만으로는 빨간 스위트가 강제하지 않는다** — 옮기지 않아도 계속 GREEN 이다.
+> 그러므로 이 task 의 완료 조건은 "스위트가 초록"이 아니라 **"옮긴 락 하나하나가 자기
+> 대상에서 실제로 이빨을 갖는다"** 이다. Step 4.5 가 그것을 요구한다.
+>
+> 또한 **Task 11 이 disarm 한 `:165-168` 락은 Task 11 의 fix round 가 재-앵커한다** —
+> 이 task 의 범위가 아니다. 다만 Step 4 에서 그 assert 가 살아 있고 이빨이 있는지 확인할 것.
+
 - [ ] **Step 4.5: 이전된 락에 이빨이 있는지 확인 (손으로, 되돌릴 것)**
 
 이 task 의 락은 전부 green-expected 다 — **통과는 이빨의 증거가 아니다.** 특히 이
@@ -3763,8 +3781,23 @@ task 가 막으려는 실패는 "락은 통과하는데 검사 대상이 바뀜"
    (`0회`가 아니라 `2회`로 잡히는지 확인 — 존재만 보는 락이었다면 GREEN 이다) → 되돌림
 3. `이 호출 결과가 authoritative` 문장을 지운다 → 그 assert 만 **RED** → 되돌림
 
+**그리고 이전한 락 4종 각각에 대해 — 이것이 이 task 의 실질이다.** 위 셋은 *새로 추가한*
+블록만 흔든다. 옮긴 락은 따로 증명해야 한다. 각 락이 **자기 대상 스텝 안의** 내용을 보는지,
+표적을 지워서 확인한다:
+
+| 이전한 락 | 표적을 이렇게 지운다 | 기대 |
+|---|---|---|
+| `:205` (구 R0 → R5a¹) | R5a¹ 본문에서 `snapshot_digest` 를 지운다 | 그 assert **RED** |
+| `:300-306` (구 R-init → R5a⁰) | R5a⁰ 본문에서 `detect-runtime.sh` 를 지운다 | 그 assert **RED** |
+| `:450` (구 R6 → R8) | R8 본문에서 `publish-eligible.md` 를 지운다 | 그 assert **RED** |
+| `:406-417` | 삭제 대상이므로 mutation 대신 **부재**를 확인 | 중복 검사 0건 |
+
+**하나라도 GREEN 이면 그 락은 아직 다른 곳(헤더·인접 스텝·cross-reference)을 보고 있다** —
+윈도우를 좁히거나 앵커를 body-unique 한 것으로 바꾼 뒤 다시 흔든다. 위 vacuous 3건이 정확히
+그 상태였다.
+
 각 되돌림 후 `git diff --quiet -- plugins/quality-gates/skills/quality-pipeline/SKILL.md`
-로 복원을 확인한다.
+로 복원을 확인한다 (이 task 는 SKILL.md 를 수정하지 않으므로 이 방법이 유효하다).
 
 Run: `bash plugins/quality-gates/tests/test_skill_orchestration.sh` (형제 스위트)
 Expected: PASS
