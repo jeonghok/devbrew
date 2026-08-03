@@ -50,6 +50,21 @@ else
   no "3 — degrade가 stderr에 loud하게 남는다"
 fi
 
+# ── 두 번째 실패 형태: 추출기가 exit 0 하면서 아무것도 쓰지 않는 경우 ──────────
+# 위 케이스(exit 1)만으로는 `-s` 빈-파일 검사에 이빨이 없다: `if ! cmd || [ ! -s ]`
+# 에서 cmd가 실패하면 `!`가 이미 참이라 `-s` 절은 평가조차 되지 않는다. `-s`가
+# 유일하게 중요해지는 입력은 **exit 0 + 빈 출력**이다(부분 쓰기, 파이프 실패).
+printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$tmp/root/scripts/codex_findings_to_yaml.py"
+chmod +x "$tmp/root/scripts/codex_findings_to_yaml.py"
+out2="$tmp/out2.yaml"
+PATH="$tmp/bin:$PATH" CLAUDE_PLUGIN_ROOT="$tmp/root" \
+  bash "$QG/scripts/run_codex_reviewer.sh" "$tmp/tiny.diff" "$ROOT" "$out2" >/dev/null 2>&1
+if [ -s "$out2" ] && grep -q 'codex_failed: *true' "$out2" 2>/dev/null; then
+  ok "4 — 추출기가 exit 0 + 빈 출력이어도 codex_failed로 표시된다"
+else
+  no "4 — 추출기가 exit 0 + 빈 출력이어도 codex_failed로 표시된다 (size=$(wc -c < "$out2" 2>/dev/null || echo MISSING))"
+fi
+
 echo ""
 echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [ "$fail" -eq 0 ]
