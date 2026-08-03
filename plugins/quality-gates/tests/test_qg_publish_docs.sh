@@ -14,7 +14,10 @@ PASS=0; FAIL=0
 pass() { PASS=$((PASS+1)); echo "  → PASS: $1"; }
 fail() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
 
-grep -qE '"version":[[:space:]]*"2\.(1[0-9]|[2-9][0-9])\.[0-9]+"' "$PLUGIN_ROOT/.claude-plugin/plugin.json" \
+# floor는 minor(>=2.10) invariant다 — 리터럴 major "2" 로 짠 원래 regex는 v3.0.0
+# major bump(비관련 기능인 Runtime 게이트 재설계)에서 stale-red 됐다. major 도
+# unpin — 2.10+든 3.x+ 든 publish 표면이 shipped 라는 사실은 안 바뀐다.
+grep -qE '"version":[[:space:]]*"([3-9]|[1-9][0-9]+)\.[0-9]+\.[0-9]+"|"version":[[:space:]]*"2\.(1[0-9]|[2-9][0-9])\.[0-9]+"' "$PLUGIN_ROOT/.claude-plugin/plugin.json" \
   && pass "plugin.json version >=2.10 minor (publish surface shipped)" || fail "plugin.json below 2.10 (publish surface reverted?)"
 grep -qE '^## \[2\.10\.0\]' "$PLUGIN_ROOT/CHANGELOG.md" \
   && pass "CHANGELOG has [2.10.0]" || fail "CHANGELOG missing [2.10.0]"

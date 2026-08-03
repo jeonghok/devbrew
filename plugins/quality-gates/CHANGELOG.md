@@ -3,6 +3,49 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [3.0.0] — 2026-08-03
+
+### Changed
+- **Runtime 게이트가 "전체 앱을 무조건 돌린다"를 버리고 영향-구동 차등 실행으로 바뀌었다.**
+  `SKILL.md` 의 *"Runtime runs the whole app regardless of Review scope."* 리터럴이
+  사라지고 그 자리에 *"이번 변경의 영향분만 기준선 대비로 돌린다"* 가 들어간다. 모델이
+  무엇을 돌릴지 한 번 고르고, 그 선택을 결정론이 merge_base 기준선과 HEAD 양쪽에서 두 번
+  실행해 짝짓는다 — 귀속(이 fail 은 내 탓인가)과 백스톱(결과가 조용히 비었나)이 같은
+  메커니즘에 얹힌다.
+- **`runtime-verifier` 는 floor 가 아니라 floor 위의 상황별 층을 담당한다.** setup·부팅·
+  플로우만 맡고, 테스트 실행 결과는 판정에 들어가지 않는다 — 오케스트레이터가 verifier 턴
+  *밖에서* `run-test-selection.sh` 를 직접 호출한 결과가 authoritative 다. verifier 가 자기
+  결과를 self-report 하면 오케스트레이터가 받는 것이 raw 출력이 아니라 모델의 요약이 되고,
+  결정론 백스톱이 모델 주장과 독립이라는 전제가 무너진다.
+- **baseline resolution 이 공유 모듈로 추출됐다.** `check-review-scope.sh` 의 하드닝된
+  resolution(origin/HEAD→main→master→local · merge-base · shallow/detached 감지)을
+  `resolve-baseline.sh` 가 소유하고, Review·Runtime 양쪽이 함께 쓴다.
+
+### Added
+- `scripts/resolve-baseline.sh` — `base`/`base_ref`/`merge_base`/`degraded` 4키.
+- `scripts/run-test-selection.sh` — 러너 어댑터 8종(pytest·unittest·shell·jest·vitest·
+  go·cargo·make·npm-script)의 유일 소유자. `detect`(감지, **집합** 반환) /
+  `assign`(파일→unit 배정) / `run`(총 함수 결정론 실행).
+- `scripts/baseline-cache.sh` — `(merge_base, runner, unit)` 내용주소 캐시. 기준선 실행이
+  `/qg` 호출당이 아니라 merge_base 당 1회가 된다.
+- `scripts/diff-test-results.py` — 귀속 8종 + 어댑터 간 `--aggregate`.
+- `scripts/check_qa_ledger.py` — floor 5차원(changed/behavior/verification/attribution/gap)
+  구조 게이트.
+- `qg-worktree.sh create-baseline` · `compute-test-scope-candidates.sh --total`.
+
+### Removed
+- `SKILL.md` 의 `regardless of Review scope` 리터럴과 그것이 서술하던 동작.
+
+### Fixed
+- **`qg-gc.py` 가 살아있는 `worktrees/` 를 삭제할 수 있던 결함** — `SESSION_PATTERN`
+  (charset)이 형제 디렉토리 `worktrees`(9자)·`baseline-cache`(14자)도 매치했다.
+  `worktrees/` 엔 직접 파일이 없어 폴더 mtime 으로 TTL 이 계산되고, 24시간 넘게 새
+  worktree 가 추가되지 않으면 **안에 살아있는 worktree 를 안고** rmtree 됐다. 이제 알려진
+  세션 마커 파일을 가진 디렉토리만 sweep 한다. denylist 를 쓰지 않은 이유는 공간에는 맞지만
+  **시간에 fail-open** 이기 때문이다 — 내일 추가될 형제 디렉토리를 오늘 열거할 수 없다.
+- **`compute-test-scope-candidates.sh` 의 `main` 하드코딩 + merge-base 부재** — Review
+  게이트가 이미 고친 버그 클래스가 Runtime 쪽에 남아 있었다.
+
 ## [2.14.3] — 2026-07-29
 
 ### Fixed
