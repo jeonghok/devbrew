@@ -985,7 +985,8 @@ Expected: 러너 3개 × 2방향 = `✅` 6건 + `git status` 빈 출력. **mutat
 - `test_spec_reviewer_frontmatter.sh:16` `'^tools: Read, Grep, Glob, WebFetch$'` → `'^tools: Read, Grep, Glob, WebSearch, WebFetch$'`
 - `test_coverage_mapper_frontmatter.sh:17` `'^tools: Read, Grep, Glob$'` → `'^tools: Read, Grep, Glob, WebSearch, WebFetch$'`
 
-두 파일 모두에 `blind-spot-prober`가 이미 쓰는 조용한-열화 방지 assert를 추가한다:
+두 파일 모두에 조용한-열화 방지 assert를 추가한다. 선례는 **`test_steelman_builder_scope.sh`** 다
+(초안은 `blind-spot-prober`로 잘못 귀속했다 — 그 파일에는 이 패턴이 없다. Task 4 구현자 적발):
 
 ```bash
 for tool in WebSearch WebFetch; do
