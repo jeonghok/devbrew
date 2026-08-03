@@ -43,13 +43,16 @@ case_changelog_entry() {
   [[ $ok -eq 1 ]] && pass "CHANGELOG 3.0.0 에 Added/Changed/Removed" || fail "CHANGELOG 섹션 누락"
 }
 
-# T33 + AC30: README 컴포넌트 트리에 신규 5종이 전부 등재
+# T33 + AC30: README ## 구조 트리에 신규 5종이 전부 등재. 전체 파일에 걸린 grep은
+# 무관한 산문에 이름이 언급되는 것만으로 통과하고 트리 부재를 못 잡는다 — "## 구조"
+# 섹션 윈도우(다음 "## " 헤딩에서 종료)로 스코프한다.
 case_readme_component_tree() {
-  local s missing=0
+  local tree s missing=0
+  tree=$(awk '/^## 구조/{i=1;next} i && /^## /{exit} i' "$README")
   for s in "${NEW_SCRIPTS[@]}"; do
-    grep -qF "$s" "$README" || { echo "    README 미등재: $s"; missing=1; }
+    printf '%s\n' "$tree" | grep -qF "$s" || { echo "    README ## 구조 트리 미등재: $s"; missing=1; }
   done
-  [[ $missing -eq 0 ]] && pass "README 에 신규 스크립트 5종 등재" || fail "README 컴포넌트 트리 누락"
+  [[ $missing -eq 0 ]] && pass "README ## 구조 트리에 신규 스크립트 5종 등재" || fail "README 컴포넌트 트리 누락"
 }
 
 # T33 + AC30: 인스턴스화한 원칙에 LD3/LD5/LD7 줄
@@ -62,7 +65,9 @@ case_readme_principles() {
   [[ $ok -eq 1 ]] && pass "인스턴스화한 원칙에 LD3/LD5/LD7" || fail "원칙 줄 누락"
 }
 
-# 신규 스크립트 5종이 실제로 존재하고 실행 가능 (6번째가 생기지 않았는지도 확인)
+# 신규 스크립트 5종이 실제로 존재하고 실행 가능. 이 5개 이름만 확인한다 — scripts/를
+# 전수 열거하거나 개수를 세지 않으므로 6번째(스트레이/중복) 스크립트의 존재 여부는
+# 이 케이스로 잡히지 않는다.
 case_exactly_five_new_scripts() {
   local s ok=1
   for s in "${NEW_SCRIPTS[@]}"; do
