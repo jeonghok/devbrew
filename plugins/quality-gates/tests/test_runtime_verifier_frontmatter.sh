@@ -93,6 +93,15 @@ assert_grep "product" "body addresses product-source rule"
 assert_grep "SKIP_WITH_EVIDENCE" "SKIP_WITH_EVIDENCE verdict documented"
 assert_grep "NEEDS_RESOLUTION" "NEEDS_RESOLUTION verdict documented"
 
+# AC31 — 테스트 실행 결과 self-report 가 판정에 쓰이지 않음을 페르소나가 명시한다.
+# 이 문장이 없으면 verifier 는 자기 턴에서 돌린 테스트 결과를 evidence-log 에 실어
+# 보내도 된다고 읽고, 오케스트레이터가 받는 것이 raw 출력이 아니라 모델의 요약이 된다.
+assert_grep "테스트 실행 결과는 판정에 들어가지 않는다" "AC31: self-report 배제 문구"
+
+# AC41 — 테스트 러너용 deps 설치는 verifier 의 책임이 아니다. 어댑터의 setup_cmd 가
+# 양측에서 같은 명령으로 돌아야 차등 비교가 사과와 오렌지가 되지 않는다.
+assert_grep "테스트 러너용 deps 설치는 하지 않는다" "AC41: deps 설치 배제 문구"
+
 echo ""
 echo "Tests passed: $PASS, failed: $FAIL"
 [[ $FAIL -eq 0 ]] || exit 1
