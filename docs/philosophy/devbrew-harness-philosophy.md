@@ -17,7 +17,7 @@
 
 ## Structural Mechanisms
 
-KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트리는 prose 재진술이 아니라 집행 파일을 가리킨다. 모델 성능이 향상돼도 이 메커니즘은 불변이다.
+KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트리는 prose 재진술이 아니라 집행 파일을 가리킨다. Three Laws의 집행 자체는 모델 성능과 무관하게 불변이다. 다만 개별 임계치·예산·상한은 재평가 대상이다 — 모델이 강해지면 결정론이 사던 것의 값이 달라지기 때문이다(P8).
 
 ### P2 — The Ambiguity Gate
 **Law 1 집행.** 명세는 명확도 임계를 통과했거나 아직 못 했거나 둘 중 하나이고, 게이트는 visible·declared·refusable해야 한다. Load-bearing: 게이트가 silent pass-through를 허용하는 순간 Law 1이 prose로 전락한다 — 수치 스코어링은 scorer=generator라 brittle하므로 구조적 baseline이 default이고 adversarial self-review가 enhancement다.
@@ -40,7 +40,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 코드: `plugins/quality-gates/scripts/run_codex_reviewer.sh` · `plugins/quality-gates/agents/adversarial.md`
 
 ### P12 — Transparency of Planning
-**Law 1 집행.** Agent는 실행 전에 계획을 보이고 사용자가 redirect할 수 있어야 하며, 계획은 chat 요약이 아니라 파일에 기록된다. Load-bearing: 한 문장으로 묘사 가능한 trivia diff(typo·rename·comment-only·single-file formatting)만 게이트를 우회하고, multi-file·behavior·public-API 변경은 자격이 없다 — triviality 판정은 invoking skill의 책임이다.
+**Law 1 집행.** Agent는 실행 전에 계획을 보이고 사용자가 redirect할 수 있어야 하며, 계획은 chat 요약이 아니라 파일에 기록된다. Load-bearing: 한 문장으로 묘사 가능한 trivia diff(typo·rename·comment-only formatting — 파일 수와 무관하게)만 게이트를 우회하고, behavior·public-API 변경은 자격이 없다 — triviality 판정은 invoking skill의 책임이다.
 코드: `plugins/spec-distill/commands/interview.md` (trivia escape) · CLAUDE.md Trivia escape
 
 ### P13 — Hooks for Enforcement, Skills for Capability, Agents for Personas
@@ -60,7 +60,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 코드: `plugins/quality-gates/scripts/comment-upsert.py` (untrusted-input) · hooks kill switch · persona=보안-민감
 
 ### P22 — Cost Awareness
-**Cross-cutting (L1·L2·L3) 집행.** 모든 스킬은 worst-case 기반으로 `cost_class: low|medium|high|variable`를 frontmatter에 선언하고, fan-out N을 `<Use_When>`에 명시한다. Load-bearing: `cost_class: high`는 지출 전 `AskUserQuestion` 승인 게이트가 필수이고(비용에 대한 동의), N≥5는 hard gate이며, 클래스보다 비싸게 도는 스킬은 버그다.
+**Cross-cutting (L1·L2·L3) 집행.** 모든 스킬은 worst-case 기반으로 `cost_class: low|medium|high|variable`를 frontmatter에 선언하고, fan-out N을 `<Use_When>`에 명시한다. Load-bearing: `cost_class: high`는 지출 전 `AskUserQuestion` 승인 게이트가 필수이고(비용에 대한 동의), 클래스보다 비싸게 도는 스킬은 버그다.
 코드: `plugins/quality-gates/skills/quality-pipeline/SKILL.md` frontmatter `cost_class`
 
 ### AP3 — Self-Approval (the #1 anti-pattern)
@@ -93,7 +93,7 @@ Polite Stop — verified-done 후 사용자가 요청하지 않은 내러티브 
 Trivia ceremony — 한 문장 diff에 full pipeline을 실행하는 것 (P12 trivia escape의 anti-corollary).
 
 ### AP9 → CLAUDE.md Forbidden Patterns
-Subagent spray — 선언 없는 fan-out ≥5. single-agent가 default다 (P22).
+Subagent spray — 선언 없는 fan-out ≥5.
 
 ### AP16 → CLAUDE.md Forbidden Patterns
 Unbounded autonomy — max-iter 카운트·repeat 감지·사용자-override kill switch 없는 루프 (P18의 anti-corollary).

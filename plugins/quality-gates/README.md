@@ -158,7 +158,7 @@ The optional `codex-reviewer` agent has `cost_class: variable` — as a Tier B *
 격리된 **consent-gated opt-in 표면**이지, `/qg`의 Review/Runtime gate에 자동으로 연결되지
 않는다. 정직 문구: 이 표면은 **deterministic envelope + model-authored content** —
 gh I/O·secret-scan·marker-scoped idempotent upsert는 결정론 스크립트가 통제하고, 사람이
-읽는 실제 산출물 텍스트는 opus 빌더가 저술한 model-authored content다. 게시는 매 실행
+읽는 실제 산출물 텍스트는 빌더가 저술한 model-authored content다. 게시는 매 실행
 사람이 preview를 읽고 AskUserQuestion으로 명시 동의한 뒤에만 일어난다. `/qg` 완료 시
 command-layer opt-in offer로 이어질 수 있으나 **자동 실행은 아니다** — offer(1차)와
 publish의 informed-consent(2차) 둘 다 사람의 명시 동의가 필요하다(2 touchpoint).

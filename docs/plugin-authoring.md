@@ -19,6 +19,8 @@ plugins/<your-plugin>/
 └── templates/                # optional — 플러그인이 설치하는 정적 파일
 ```
 
+- **agent `model:`은 `inherit`.** 리터럴 티어(`opus`/`sonnet`/`haiku`)를 박으면 하니스가 사용자의 모델 선택을 덮어쓴다 — 세션이 더 강한 모델을 쓸 때는 조용한 하향이고, 더 약한 모델을 쓸 때는 동의 없는 비용 증가다. 어느 방향이든 P8(Determinism Economy) 위반이다. reference: `plugins/plugin-audit/agents/*.md`.
+
 **Reference 구현** — 본인 플러그인의 형태와 맞는 것을 읽으세요:
 
 - [`plugins/quality-gates/`](../plugins/quality-gates/) — **writer + reviewer + hook 파이프라인**. 3-gate `tools:` allowlist 격리로 Laws 1–2를 embody. `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`를 shipping.

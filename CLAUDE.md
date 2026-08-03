@@ -40,7 +40,7 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 - **Scoped agents — default-everything 금지.** 모든 agent는 `tools:` allowlist를 선언한다 (fail-closed — 열거하지 않은 것은 전부 차단). **denylist(`disallowedTools`) 단독 금지**: 공간에 대해 fail-open(열거를 잊은 도구는 허용)이고 **denylist는 시간에 대해 fail-open**이다 — 내일 추가될 도구는 오늘 열거할 수 없다 (`Monitor`가 이름만 다른 셸+네트워크 egress로 그 실증). 역할 프롬프트는 *"You are X. You are responsible for Y. You are NOT responsible for Z."*로 시작. 쓰기 권한이 있는 리뷰어는 Law 2 위반. **agent frontmatter의 실재 필드는 `tools`(allowlist)와 `disallowedTools`(denylist) 둘뿐이다** — 이와 헷갈려 command/skill 계층의 `allowed-tools`(kebab, 실재 키)를 agent에 camelCase로 옮겨 적으면 존재하지 않는 필드가 되어 조용히 무시된다.
 - **최소 버전이 선언된 의존성.** `other-plugin:agent-name`을 dispatch하는 플러그인은 README prerequisites에 `other-plugin`을 리스트. Silent coupling은 버그.
-- **모든 skill에 `cost_class` 선언** (`low`|`medium`|`high`|`variable`). `high`는 지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함. Fan-out factor N ≥ 5는 hard review 게이트.
+- **모든 skill에 `cost_class` 선언** (`low`|`medium`|`high`|`variable`). `high`는 지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함.
 
 ### 런타임 상태 & 훅
 
@@ -65,8 +65,8 @@ Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md
 - **Self-approval** — 같은 턴의 writer/reviewer (Law 2 위반).
 - **Polite stop** — 긍정적 리뷰 후 다음 액션으로 가지 않고 요약을 narrate. Approval gate와 구분: gate는 사용자가 redirect 가능, polite stop은 acknowledge만 가능.
 - **Trivia ceremony** — 한 문장 diff에 full pipeline 실행 (Anthropic *Best Practices*).
-- **Subagent spray** — 선언 없는 fan-out ≥ 5; single-agent를 default로.
-- **Unbounded autonomy** — max-iter count, wall-clock budget, repeat 감지, 사용자-override kill switch 없는 루프.
+- **Subagent spray** — 선언 없는 fan-out. 비용과 fan-out을 선언하지 않고 대규모로 퍼뜨리는 것이 anti-pattern이다 (규모 자체가 아니라 선언 없음이).
+- **Unbounded autonomy** — max-iter count, repeat 감지, 사용자-override kill switch 없는 루프.
 - **Polite handoff** — brainstorming/spec-distill review-approved 후 다음 단계를 narrate만 하고 spec-distill reviewing-spec Phase 5의 `AskUserQuestion` proceed 게이트를 띄우지 않음. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 봉쇄 장치 — 게이트를 skip한 narrate-only 종료가 polite-stop의 한 종류 (AP2 variant). 대칭으로, 옵션 ①(/compact 후 writing-plans) 선택 시 /compact 노출 후 같은 턴에 writing-plans로 직진하는 cross-compact 조기 진행도 게이트 P17 우회의 대칭 실패로 금지 (AP2 variant, spec-distill v0.11.0 AC19).
 
 **버그가 리뷰를 탈출하면**, 해결책은 잡았어야 할 reviewer persona 파일을 편집하는 것 — 코드만 패치하는 게 아님. 그 commit이 compounding 이벤트 (Law 3).

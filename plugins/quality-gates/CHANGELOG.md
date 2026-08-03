@@ -3,6 +3,42 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.10] — 2026-08-03
+
+harness-capability-suppression-sweep Task 11(S4) — 규약 정렬. 앞선 태스크들은
+코드·프롬프트에서 능력 억제를 제거했지만, 그 억제를 정당화하던 규약(`CLAUDE.md`·철학
+문서)이 그대로면 다음 저자가 같은 억제를 "규약을 따른 것"이라며 재도입한다 — 이
+sweep의 실제 사례로, 한 agent 프롬프트가 순차 호출 강제를 정당화하며 철학 문서의
+`AP9`를 근거로 인용했다.
+
+### Changed
+- `CLAUDE.md`: `cost_class` 불릿에서 "Fan-out factor N ≥ 5는 hard review 게이트"
+  삭제(`cost_class: high` 승인 게이트 문장은 유지 — 비용 동의는 P17 load-bearing).
+  Forbidden Patterns의 "Subagent spray"를 "선언 없는 fan-out. 비용과 fan-out을
+  선언하지 않고 대규모로 퍼뜨리는 것이 anti-pattern이다(규모 자체가 아니라 선언
+  없음이)"로 재정의 — 숫자 임계 대신 선언 여부를 기준으로. "Unbounded autonomy"에서
+  `wall-clock budget` 삭제(spec-distill v0.17.0이 이미 폐기한 것을 규약이 요구하던
+  상태).
+- `docs/philosophy/devbrew-harness-philosophy.md`: `:20` "모델 성능이 향상돼도 이
+  메커니즘은 불변이다"를 "Three Laws의 집행 자체는 모델 성능과 무관하게 불변이다.
+  다만 개별 임계치·예산·상한은 재평가 대상이다(P8)"로 완화 — 원문 그대로면 이
+  sweep 자체가 규칙 위반으로 읽힌다. P12 trivia escape에서 `single-file` 제약
+  제거(오타 3곳·symbol rename 같은 multi-file trivia diff가 더는 게이트에 걸리지
+  않는다). P22에서 "N≥5는 hard gate이며," 삭제(나머지 cost_class 승인 게이트 문장은
+  유지). AP9 앵커에서 "single-agent가 default다 (P22)." 삭제.
+- `docs/plugin-authoring.md`: agent `model:`은 `inherit`이어야 한다는 규약 신설 —
+  리터럴 티어(`opus`/`sonnet`/`haiku`) 핀이 하니스의 모델 선택 덮어쓰기(P8 위반)로
+  이어지는 것을 신규 플러그인 저자에게 차단.
+- `README.md:161`: `opus 빌더가 저술한` → `빌더가 저술한` — Task 1(모델-핀 제거)이
+  이월한 리터럴 티어 산문 잔존, Task 1 브리프의 gap으로 확인됨.
+
+### Added
+- `tests/test_governance_no_capability_caps.sh` — AC8a–AC8d 락. `CLAUDE.md`·philosophy·
+  `docs/plugin-authoring.md`에서 능력 상한 규약(N≥5 하드 게이트·기본값 편향·wall-clock·
+  single-file trivia 제약)의 부재와 `cost_class: high` 승인 게이트의 존속을 함께
+  검증한다. P12 단언은 섹션 윈도우(다음 `##`/`###` 헤딩 전까지)로 스코프 — 전역
+  grep은 문서 다른 절의 우연한 "single-file" 언급에도 만족될 수 있다.
+
 ## [2.14.9] — 2026-08-03
 
 harness-capability-suppression-sweep Task 9(S3e) — adversarial 신규 발견 승격.
