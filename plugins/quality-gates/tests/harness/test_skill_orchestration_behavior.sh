@@ -158,15 +158,35 @@ assert_line "v2.7.0 in SKILL" "$(first_line 'v2.7.0|2\.7\.0')"
 
 # --- v2.2.0 mutation-guard hardening protocol-shape ---
 
-# C-C: R4 must route an errored/garbled guard as ≤FAIL, never PASS.
-# Anchor on `exit 4` (unique to the R4 routing table), then require the
-# fail-closed phrases to appear AT/AFTER it — so deleting them from R4 fails
-# the test even though similar words appear earlier (R0 / TOC).
-r4_tbl=$(first_line 'exit 4')
-assert_line "R4 routes guard exit 4 as FAIL"          "$r4_tbl"
-assert_line "R4 surfaces guard_error"                 "$(first_line 'guard_error')"
-assert_line "R4 surfaces guard stderr verbatim"       "$(first_line_after 'stderr verbatim' "$((r4_tbl - 1))")"
-assert_line "R4 never-PASS for indeterminate guard"   "$(first_line_after 'indeterminate' "$((r4_tbl - 1))")"
+# C-C: the mutation-guard step (R7 since the impact-driven rewrite; R4 before it)
+# must route an errored/garbled guard as ≤FAIL, never PASS.
+#
+# Anchor history: this block used to anchor on `exit 4`, asserted to be "unique to
+# the R4 routing table". That premise died when the impact-driven R4 (baseline
+# side) introduced a baseline-cache corruption advisory that also says `exit 4`,
+# ~184 lines EARLIER than the guard table. The anchor slid backwards and the
+# AT/AFTER assertions became satisfiable by R5a¹'s unrelated "surface stderr
+# verbatim" sentence — measured: deleting `**stderr verbatim**` from the guard row
+# still printed PASS. Two fixes, both required:
+#   (a) anchor on the routing table's own heading (`R7 exit-code routing`), and
+#       assert the heading EXISTS — if it is renamed, $r7_tbl becomes 0 and every
+#       `first_line_after … 0` degenerates into a whole-file search, i.e. the same
+#       vacuous-pass failure in a new costume;
+#   (b) use BODY-UNIQUE needles for the two row phrases. `**stderr verbatim**`
+#       (bold) and `indeterminate ≠ clean` exist only in the table row — the
+#       heading's own "an indeterminate guard is never a PASS" would otherwise
+#       satisfy a bare `indeterminate` needle (header-satisfiable = no teeth).
+#       The bold needle is written `[*][*]…` and NOT `\*\*…`: macOS awk strips the
+#       backslash during `-v` assignment, leaving a leading `**` that dies with
+#       "illegal primary in regular expression" and yields a silent NO-MATCH.
+# `exit 4` / `guard_error` remain existence checks WITHIN R7 (the digest-mismatch
+# paragraph below the table repeats both), which is what the base file had.
+r7_tbl=$(first_line 'R7 exit-code routing')
+assert_line "R7 routing-table anchor present"         "$r7_tbl"
+assert_line "R7 routes guard exit 4 as FAIL"          "$(first_line_after 'exit 4' "$r7_tbl")"
+assert_line "R7 surfaces guard_error"                 "$(first_line_after 'guard_error' "$r7_tbl")"
+assert_line "R7 surfaces guard stderr verbatim"       "$(first_line_after '[*][*]stderr verbatim[*][*]' "$r7_tbl")"
+assert_line "R7 never-PASS for indeterminate guard"   "$(first_line_after 'indeterminate ≠ clean' "$r7_tbl")"
 
 # I-A/I-B: fallback caps at SKIP_WITH_EVIDENCE (never PASS) + single runtime_project_dir.
 assert_line "runtime_project_dir variable used"      "$(first_line 'runtime_project_dir')"

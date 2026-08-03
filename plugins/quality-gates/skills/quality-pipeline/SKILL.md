@@ -837,16 +837,20 @@ a disposable git-worktree:
 
 - Exit 0 → capture **line 1 = `sandbox_dir`**, **line 2 = `baseline_sha`**, **line 3
   = `snapshot_digest`**. Parse contract (fixed): read exactly three lines with three
-  successive `IFS= read -r` and strip trailing whitespace/CR from `snapshot_digest`
+  successive `IFS= read -r` (`sandbox_dir` → `baseline_sha` → `snapshot_digest`) and
+  strip trailing whitespace/CR from `snapshot_digest`
   (`tr -d '[:space:]'` or equivalent) — a stray newline/space in the hex makes the
   guard fail-closed on every run. Hold all three as orchestrator variables
-  (verifier-unreachable). Set `runtime_project_dir = sandbox_dir`.
+  (verifier-unreachable). Set `runtime_project_dir = sandbox_dir` (frozen — it
+  overrides the preflight `project_dir` for the Runtime gate only).
 - **Exit 3** (kill switch `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`) → graceful fallback
-  (no sandbox): set `runtime_project_dir = project_dir`. The verdict is **capped at
+  (no sandbox): set `runtime_project_dir = project_dir` (the preflight main-repo dir;
+  `sandbox_dir`/`baseline_sha` stay UNSET). The verdict is **capped at
   SKIP_WITH_EVIDENCE — never PASS** (no sandbox = no structural Law-2 guarantee = no
   certification). BEFORE the R5a³ dispatch, capture `fallback_pre` = `git -C
   "$project_dir" status --porcelain --untracked-files=all` plus a tracked content
-  tree-hash baseline. Print: `> [quality-gates] runtime sandbox disabled — read-only
+  tree-hash baseline (`GIT_INDEX_FILE=<tmp> git -C "$project_dir" add -A -- . && git
+  write-tree`). Print: `> [quality-gates] runtime sandbox disabled — read-only
   smoke mode on the real tree; verdict capped at SKIP_WITH_EVIDENCE
   (DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1).`
 - Any other non-zero → surface stderr verbatim and mark the Runtime gate failed.
@@ -929,6 +933,23 @@ verifier 가 디버깅 중 테스트를 돌리는 것 자체를 막지는 않지
 최악값을 고르면 불변식 ②가 결과값에서 없앤 "모델 요약이 판정을 결정"이 집계 레이어에서
 재입장한다. 입력 개수가 안 맞으면 스크립트가 exit 4 로 fail-closed 한다.
 
+**R6 exit-code routing (실패한 대조는 결코 PASS 가 아니다).** 위 두 호출 —
+어댑터별 호출과 `--aggregate` 호출 **양쪽** — 에서 stdout 과 **exit code 를 함께**
+잡는다. R7 표와 같은 이유의 오케스트레이션 층 규칙이다: 판정 입력을 *만드는* 단계가
+죽었는데 그 죽음이 조용하면, 캡처되지 않은 `verdict_input` 이 "결함 보고 없음"으로
+읽혀 R8 의 PASS 행(`confirmed_product_defect: false` **and** `silent_drop: false`)을
+그대로 만족시킨다. 값의 부재는 음성 결과가 아니다.
+
+| 대조 결과 | R6 라우팅 |
+|---|---|
+| exit 0 + `verdict_input` 3키와 `attribution_status` 를 모두 읽음 | 정상 — 그 값으로 R8 로 간다 |
+| **exit 4**(어댑터 개수 불일치 · 입력 파일 부재/파싱 실패 · 중복 unit 행 · 미지 상태값), **그 외 non-zero**, 또는 **3키·`attribution_status` 중 하나라도 못 읽음** | stderr 를 그대로 노출하고 원장의 `attribution` 을 **`degraded`** 로 적은 뒤 **verdict 를 PASS 로 올리지 않는다**(≤`SKIP_WITH_EVIDENCE`). 캡처 실패를 "결함 없음"으로 읽지 않는다 |
+
+어댑터별 호출 하나가 이 경로로 떨어지면 그 어댑터 YAML 은 신뢰할 수 없다. **그렇다고
+`--expected-adapters` 를 줄여 개수를 맞추지 않는다** — 개수 대조가 바로 그 누락을 잡는
+장치이므로, 분모를 낮추면 백스톱을 스스로 끄는 것이다. 그 어댑터를 `verification`
+차원의 degrade 사유로 열거하고 집계는 원래 개수로 돌린다.
+
 **Step R7 — Mutation guard (authoritative verdict cap).** Unless in read-only
 fallback, compute the product-mutation oracle:
 
@@ -947,7 +968,7 @@ guard's stdout YAML AND its exit code:
 
 | Guard result | R7 routing |
 |---|---|
-| exit 0 + `forced_downgrade: no` | no product mutation → proceed to R8 normally |
+| exit 0 + `forced_downgrade: no` (all §6.1 snapshot keys valid) | no product mutation → proceed to R8 normally |
 | exit 0 + `forced_downgrade: yes` | cap verdict at FAIL; surface `tracked_diff` / `disallowed_new_files` / `guard_flags` as evidence |
 | **exit 4** (`guard_fail`), OR any other non-zero exit, OR a missing/invalid `forced_downgrade` key, OR a `guard_error:` line present | treat as `forced_downgrade: yes` → cap verdict at FAIL; surface the guard's `guard_error` + **stderr verbatim**; mark the Runtime gate failed. **Never read an errored or garbled guard as PASS** (indeterminate ≠ clean). |
 
@@ -958,8 +979,10 @@ the orchestrator, out of the verifier's reach.
 **Fallback working-tree guard (read-only mode only).** When the sandbox was disabled
 (Exit 3), do NOT run the sandbox `mutation-guard`. The verdict is already capped at
 SKIP_WITH_EVIDENCE (R5a¹); this guard is a pure SAFETY SIGNAL, not a verdict input.
-After the R5a³ dispatch, recompute `fallback_post`. If anything changed, emit a loud
-warning to user-visible stdout AND record it in `evidence_dir`:
+After the R5a³ dispatch, recompute `fallback_post` (porcelain + tracked content
+tree-hash, **same recipe as `fallback_pre`**). If anything changed — a porcelain entry
+in `fallback_post` that is not in `fallback_pre`, **or** a differing tree-hash — emit a
+loud warning to user-visible stdout AND record it in `evidence_dir`:
 `> [quality-gates] WARNING: runtime fallback 에서 working tree 가 변경됨 — <changed files>. sandbox 미사용으로 구조적 보호 없음; 검토 요망 (git diff 후 revert 권장).`
 git-ignored files do not appear in `--porcelain`, so a setup-only `.env` fix is
 correctly NOT flagged. The warning does not change the verdict and does not block
@@ -1118,6 +1141,8 @@ AskUserQuestion({
 
 Branch:
 - **Yes, retry** → increment resolution counter; if exceeds env limit, fall through to Skip with evidence. Otherwise re-create the sandbox (Step R5a¹) and re-capture the new output's `sandbox_dir` (line 1), `baseline_sha` (line 2), and `snapshot_digest` (line 3) with the same three successive `IFS= read -r` + digest-strip idiom as R5a¹ — refreshing **all three** orchestrator variables. create-sandbox emits a NEW commit `B` AND a NEW snapshot (hence a new digest) each call, so reusing the old `baseline_sha` makes the guard `guard_fail "bad baseline sha"` and reusing the old `snapshot_digest` makes it `guard_fail "snapshot integrity check failed"` — both false FAILs. The new snapshot is auto-recorded in the new gitdir; the stale sandbox + its old snapshot are force-removed by R5a¹'s idempotent cleanup. Then re-dispatch runtime-verifier with the refreshed `sandbox_dir`, and call R7 as 3-arg with the refreshed `snapshot_digest`. (Fix the parse order: capturing the digest as line 2 swaps `baseline_sha`/`snapshot_digest` and fails-closed every run.)
+
+  **재시도는 R5b·R6 도 다시 돈다 — verifier 재-dispatch 만으로 끝나지 않는다.** 재시도가 만드는 것은 **새 트리**이고, 이전 `head_rows_file` 은 이미 폐기된 트리에서 나온 행이다. 그것을 그대로 R6 에 넘기면 `.env` 하나 고쳐 초록이 된 트리에서 옛 red 로 `confirmed_product_defect: true` 가 서서 **고쳐진 코드에 FAIL** 이 나고, 반대 방향은 더 나쁘다 — 옛 green 행이 재시도가 새로 만든 회귀를 가린다. 재-dispatch 뒤 순서는 **R5b(새 `runtime_project_dir` 로 HEAD 측 재실행) → R6(대조 + 집계 재호출) → R7 → R8** 이고, 이전 HEAD 행은 **버린다**(덮어쓰지 말고 새로 만든다 — 부분 덮어쓰기는 두 트리의 행을 한 파일에 섞는다). 기준선 측 R4 는 다시 돌리지 않는다: `merge_base` 가 그대로라 캐시 키가 같고, 기준선은 재시도로 바뀌지 않는다.
 - **Skip with evidence** → record SKIP_WITH_EVIDENCE and continue.
 - **Stop** → final summary aborted at the Runtime gate.
 
