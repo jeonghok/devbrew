@@ -360,6 +360,91 @@ case_requirements_env_is_sandbox_local() {
   rm -rf "$w" "$bindir"
 }
 
+# 라운드 2 NEW-1 — 환경 디렉토리 ignore 질의는 **후행 슬래시**여야 한다.
+#
+# `.gitignore` 의 디렉토리 전용 패턴(`.venv/`·`**/.venv/`·`/.venv/`)은 **아직 존재하지
+# 않는** 경로에 대해 `check-ignore .venv` 로 매치되지 않는다(git 2.50.1 실측). 그리고
+# 프로덕션은 언제나 부재 상태로 질의한다 — 기준선 워크트리는 갓 만들어지고,
+# create-sandbox 는 git-ignored 파일을 일부러 제외한다. 그래서 **완전히 정상인 레포**의
+# setup 이 조용히 꺼졌고, 준비 안 된 실행이 양측에서 똑같이 실패해
+# `error → PRE_EXISTING → closed` = 테스트 0개 PASS 로 접혔다 — C2 가 죽이려던 verdict
+# 행을 I3 의 게이트가 다른 문으로 되살린 것이다.
+#
+# **픽스처는 반드시 실제 git 레포여야 한다.** `mktemp -d` 는 비-git 이라 dir_is_ignored
+# 가 무조건 안전을 반환해 게이트를 **아예 태우지 않는다** — 앞 라운드의 I3 테스트 두 개가
+# 정확히 그 이유로 이 결함을 구조적으로 못 잡았다.
+mk_git_repo() {   # mk_git_repo <ignore-line> → repo 경로
+  local t; t=$(mktemp -d)
+  ( cd "$t" && git init -q && git config user.email t@t.test && git config user.name tester )
+  printf '%s\n' "$1" > "$t/.gitignore"
+  printf '%s' "$t"
+}
+case_env_dir_gate_uses_directory_pattern() {
+  local t b out rc yaml
+
+  # ① 디렉토리 전용 패턴 = 정상 레포. setup 이 돌고 테스트가 실행돼야 한다.
+  t=$(mk_git_repo '.venv/'); b=$(mktemp -d)
+  : > "$t/uv.lock"; : > "$t/conftest.py"; mkdir -p "$t/tests"; : > "$t/tests/test_a.py"
+  ( cd "$t" && git add -A && git commit -qm init )
+  record_stub "$b/uv" uv "$t/.observed"
+  out=$(PATH="$b:$PATH" bash "$RTS" run "$t" pytest per-unit tests/test_a.py 2>/dev/null); rc=$?
+  if [[ $rc -eq 0 && "$out" == "tests/test_a.py${TAB}pass${TAB}0" ]]; then
+    pass "'.venv/' 디렉토리 패턴 레포에서 실행이 정상 진행 (부재 상태 질의)"
+  else
+    fail "정상 레포의 setup 이 꺼짐 → 테스트 0개 PASS 경로 (rc=$rc out='$out')"
+  fi
+  grep -q '^uv sync --frozen$' "$t/.observed" 2>/dev/null \
+    && pass "그 레포에서 setup 이 실제로 실행됨" \
+    || fail "setup 미실행 (관측: $(cat "$t/.observed" 2>/dev/null))"
+  rm -rf "$t" "$b"
+
+  # ② 진짜로 무시하지 않는 레포 → **조용한 setup skip 이 아니라** exit 3 degrade.
+  #    조용히 건너뛰면 그 실행이 PRE_EXISTING 으로 접혀 PASS 가 된다(원 결함의 형태).
+  t=$(mk_git_repo 'unrelated'); b=$(mktemp -d)
+  : > "$t/uv.lock"; : > "$t/conftest.py"; mkdir -p "$t/tests"; : > "$t/tests/test_a.py"
+  ( cd "$t" && git add -A && git commit -qm init )
+  record_stub "$b/uv" uv "$t/.observed"
+  out=$(PATH="$b:$PATH" bash "$RTS" run "$t" pytest per-unit tests/test_a.py 2>/dev/null); rc=$?
+  if [[ $rc -eq 3 && "$out" == "tests/test_a.py${TAB}unrun${TAB}-" ]]; then
+    pass ".venv 미무시 레포 → exit 3 + unrun (조용한 skip 아님)"
+  else
+    fail "미무시 레포 처리 (rc=$rc out='$out')"
+  fi
+  # 측정하는 것을 그대로 적는다: 거부는 setup **이전**에 일어나므로 uv 는 setup·프로브·
+  # 실행 어느 것으로도 호출되지 않는다. 한 번이라도 불렸다면 `.venv` 가 생겼다는 뜻이고
+  # 그것이 terminal FAIL 의 씨앗이다.
+  [[ ! -s "$t/.observed" ]] && pass "그 경우 uv 를 한 번도 호출하지 않음 (트리 오염 0)" \
+                            || fail "거부했어야 할 트리에서 uv 가 호출됨 ($(cat "$t/.observed"))"
+  printf 'tests/test_a.py\n' > "$t/expected.txt"; printf '%s\n' "$out" > "$t/side.tsv"
+  yaml=$(python3 "$PLUGIN_ROOT/scripts/diff-test-results.py" --expected "$t/expected.txt" \
+           --baseline "$t/side.tsv" --head "$t/side.tsv" --granularity file --runner pytest 2>&1)
+  printf '%s\n' "$yaml" | grep -q 'baseline_unrunnable: true' \
+    && pass "그 degrade 가 PASS 를 막는다 (baseline_unrunnable)" || fail "PASS 가 가능:
+$yaml"
+  rm -rf "$t" "$b"
+
+  # ③ node_modules 쌍둥이 — 같은 헬퍼가 JS 쪽도 덮는가 (보고서 §9① 이월분)
+  t=$(mk_git_repo 'node_modules/'); b=$(mktemp -d)
+  printf '{"scripts":{"test":"true"}}' > "$t/package.json"
+  ( cd "$t" && git add -A && git commit -qm init )
+  record_stub "$b/npm" npm "$t/.observed"
+  out=$(PATH="$b:$PATH" bash "$RTS" run "$t" npm-script bulk BULK 2>/dev/null); rc=$?
+  [[ $rc -eq 0 && "$out" == "BULK${TAB}pass${TAB}0" ]] \
+    && pass "'node_modules/' 패턴 레포에서 실행이 정상 진행" \
+    || fail "node_modules 정상 레포가 막힘 (rc=$rc out='$out')"
+  rm -rf "$t" "$b"
+
+  t=$(mk_git_repo 'unrelated'); b=$(mktemp -d)
+  printf '{"scripts":{"test":"true"}}' > "$t/package.json"
+  ( cd "$t" && git add -A && git commit -qm init )
+  record_stub "$b/npm" npm "$t/.observed"
+  out=$(PATH="$b:$PATH" bash "$RTS" run "$t" npm-script bulk BULK 2>/dev/null); rc=$?
+  [[ $rc -eq 3 && "$out" == "BULK${TAB}unrun${TAB}-" ]] \
+    && pass "node_modules 미무시 레포 → exit 3 + unrun (terminal FAIL 도, 조용한 PASS 도 아님)" \
+    || fail "node_modules 미무시 처리 (rc=$rc out='$out')"
+  rm -rf "$t" "$b"
+}
+
 # 최종 whole-branch 리뷰 I6 — 락파일 없는 레포에 `npm install` 을 돌리면 npm 이
 # package-lock.json 을 새로 만든다. 그런 레포는 정의상 그것을 gitignore 하지 않으므로
 # C1 과 **같은 terminal-FAIL 클래스**가 된다.
@@ -427,7 +512,8 @@ for c in case_pytest case_unittest case_pytest_declared_without_config case_shel
          case_run_cargo_uses_cargo_target_dir_helper \
          case_cargo_artifacts_are_gitignored case_missing_toolchain_blocks_pass \
          case_pytest_plugin_only_declaration case_python_setup_and_run_share_env \
-         case_requirements_env_is_sandbox_local case_npm_install_writes_no_lockfile; do
+         case_requirements_env_is_sandbox_local case_npm_install_writes_no_lockfile \
+         case_env_dir_gate_uses_directory_pattern; do
   echo "== $c"; $c
 done
 echo "── runner adapters: $PASS passed, $FAIL failed"

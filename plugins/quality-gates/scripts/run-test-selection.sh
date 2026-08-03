@@ -35,28 +35,93 @@ cargo_target_dir_for() { printf '%s/target\n' "$1"; }
 # 주장하고 run 이 `cd "$w" && bash "$u"` 로 워크트리 밖 스크립트를 실행한다 — 게다가
 # 양측이 같은 unit 목록을 돌므로 **두 번** 실행된다. 실측으로 재현된 경로이며, 설계
 # §5.9 의 "임의 명령을 추측해 실행하지 않는다" 를 정면으로 깬다.
+#
+# **잎(leaf)까지 해소해야 한다.** `dirname` 만 `pwd -P` 로 해소하면 디렉토리 심볼릭
+# 링크는 걸리지만 **잎 심볼릭 링크**(`tests/evil.sh -> ../../outside/evil.sh`)는 그대로
+# 통과한다 — `-x`/`-e` 는 링크를 따라가므로 assign 이 그것을 주장하고 run 이 트리 밖
+# 스크립트를 실행한다. 실측으로 shell·pytest 양쪽에서 재현됐다(라운드 2 NEW-2).
+resolve_leaf_dir() {   # resolve_leaf_dir <abs-path> → 최종 대상의 디렉토리 (pwd -P)
+  # 체인을 직접 따라간다 — `readlink -f`/`realpath` 는 macOS 구버전에 없거나 다르게
+  # 동작한다. 홉 상한은 순환 링크 방어이고, 상한 초과는 fail-closed(거부)다.
+  local p=$1 hops=0 t
+  while [[ -L "$p" && $hops -lt 20 ]]; do
+    t=$(readlink "$p") || return 1
+    case "$t" in
+      /*) p=$t ;;
+      *)  p="$(dirname "$p")/$t" ;;
+    esac
+    hops=$((hops + 1))
+  done
+  [[ -L "$p" ]] && return 1
+  (cd "$(dirname "$p")" 2>/dev/null && pwd -P) || return 1
+}
+
 unit_within_worktree() {   # unit_within_worktree <worktree> <unit>
-  local w=$1 u=$2 root d
+  local w=$1 u=$2 root d leaf
   case "$u" in
     /*)                            return 1 ;;   # 절대경로
     ..|../*|*/../*|*/..)           return 1 ;;   # `..` 성분
   esac
   root=$(cd "$w" 2>/dev/null && pwd -P) || return 1
-  d=$(cd "$w/$(dirname "$u")" 2>/dev/null && pwd -P) || return 1
-  # 심볼릭 링크까지 해소한 뒤 접두 비교 — 트리 밖을 가리키는 링크도 여기서 걸린다.
+  # 1) 디렉토리 성분 — `pwd -P` 가 경로 중간의 심볼릭 링크를 전부 해소한다.
+  #
+  # **해소 실패(=경로가 이 트리에 없음)는 "트리 밖"이 아니다.** assign 은 그 트리에
+  # 존재하지 않는 후보 경로도 받는다 — 기준선 트리에 아직 없는 신규 테스트, 다른
+  # 어댑터가 가져갈 소스 파일 등. 부재를 담김 위반으로 승격하면 정당한 unit 이 조용히
+  # `unclaimed` 가 되어 verification 이 이유 없이 degraded 된다(실측: 이 스위트의
+  # case_assign_bulk_conflict·case_assign_spec_any_extension 가 즉시 RED 였다).
+  # 위의 렉시컬 검사(절대경로·`..` 성분)가 이미 끝났고, 존재하지 않는 경로는 하류의
+  # `-e`/`-x` 검사에서 `absent`/미주장으로 걸러지므로 여기서 통과시켜도 실행되지 않는다.
+  d=$(cd "$w/$(dirname "$u")" 2>/dev/null && pwd -P) || return 0
   case "$d" in
-    "$root"|"$root"/*) return 0 ;;
+    "$root"|"$root"/*) ;;
     *) return 1 ;;
   esac
+  # 2) 잎 — 위 검사가 보지 못하는 축이다. 링크가 아니면 비용 0.
+  if [[ -L "$w/$u" ]]; then
+    leaf=$(resolve_leaf_dir "$w/$u") || return 1
+    case "$leaf" in
+      "$root"|"$root"/*) ;;
+      *) return 1 ;;
+    esac
+  fi
+  return 0
 }
 
-# `.venv` 가 이 트리에서 git-ignored 인가. 어댑터가 트리 안에 만드는 환경 디렉토리가
-# 그 레포의 .gitignore 로 덮이지 않으면 mutation-guard 가 전량을
-# `disallowed_new_files` 로 잡아 terminal FAIL 을 낸다 — cargo target 과 같은 클래스다.
-# 비-git 트리(테스트 픽스처)는 guard 대상이 아니므로 안전으로 본다.
-venv_dir_is_ignored() {   # venv_dir_is_ignored <worktree>
+# <dir> 가 이 트리에서 git-ignored 인가.
+#
+# **반드시 후행 슬래시로 질의한다.** `.gitignore` 의 디렉토리 전용 패턴(`.venv/`,
+# `**/.venv/`, `/.venv/`)은 **아직 존재하지 않는** 경로에 대해 `check-ignore .venv` 로는
+# 매치되지 않는다 — 그리고 프로덕션은 언제나 부재 상태로 질의한다(기준선 워크트리는 갓
+# 만들어지고, create-sandbox 는 git-ignored 파일을 일부러 제외한다). 같은 레포·같은
+# `.gitignore` 인데 디렉토리 유무로 답이 갈리는 **상태 의존** 질의이기도 했다.
+# 실측 (git 2.50.1) — 후행 슬래시 질의는 다섯 형태 전부에 매치된다:
+#
+#   패턴        `.venv` 질의   `.venv/` 질의
+#   .venv           0              0
+#   .venv/          1              0        ← 정상 레포가 여기서 조용히 새어나갔다
+#   **/.venv/       1              0
+#   /.venv/         1              0
+#   .venv*          0              0
+#
+# 비-git 트리(테스트 픽스처)는 mutation-guard 대상이 아니므로 안전으로 본다.
+dir_is_ignored() {   # dir_is_ignored <worktree> <dir-name>
   git -C "$1" rev-parse --git-dir >/dev/null 2>&1 || return 0
-  git -C "$1" check-ignore -q .venv 2>/dev/null
+  git -C "$1" check-ignore -q "$2/" 2>/dev/null
+}
+
+# 어댑터의 setup 이 이 트리 **안에** 만드는 환경 디렉토리 (없으면 빈 문자열).
+# 이것이 그 레포의 .gitignore 로 덮이지 않으면 R7 mutation-guard 가 전량을
+# `disallowed_new_files` 로 잡아 terminal FAIL 을 낸다 — cargo target 과 같은 클래스다.
+# poetry 의 기본 venv 는 트리 밖(`~/.cache/pypoetry/virtualenvs/<name>-<경로해시>`)이라
+# 트리별로 이미 분리되고 트리 안에 아무것도 남기지 않는다 — 그래서 빈 문자열이다.
+setup_env_dir_of() {   # setup_env_dir_of <worktree> <runner>
+  case "$2" in
+    pytest|unittest)
+      case "$(python_env_of "$1")" in uv|venv) echo .venv ;; *) echo "" ;; esac ;;
+    jest|vitest|npm-script) echo node_modules ;;
+    *) echo "" ;;
+  esac
 }
 
 # 이 트리의 파이썬 실행 환경 — **setup_cmd 와 run 의 인터프리터가 같은 곳에서 온다**.
@@ -64,16 +129,17 @@ venv_dir_is_ignored() {   # venv_dir_is_ignored <worktree>
 # 된다 (uv/poetry 레포에서 실제로 그랬다: setup 은 `uv sync`, 실행은 앰비언트
 # `python3 -m pytest`). 토큰: uv | poetry | venv | ambient.
 #
-# uv 와 venv 는 트리 안에 `.venv` 를 만들므로 그 디렉토리가 ignored 일 때만 고른다.
-# 아니면 ambient 로 떨어지고, 그때 러너를 못 쓰면 아래 가용성 프로브가 exit 3 로
-# 정직하게 degrade 한다 (§5.10 row 3) — terminal FAIL 을 내는 것보다 낫다.
-# poetry 의 기본 venv 는 트리 밖(`~/.cache/pypoetry/virtualenvs/<name>-<경로해시>`)이라
-# 트리별로 이미 분리되고 트리 안에 아무것도 남기지 않는다 — 그래서 게이트가 없다.
+# **여기서 ignore 상태를 보지 않는다.** 한때 `.venv` 가 ignored 일 때만 uv/venv 를 골랐는데,
+# 그러면 아닌 레포에서 setup_cmd 가 조용히 `-` 로 내려가고, 준비 안 된 실행이 양측에서
+# 똑같이 실패해 `error → PRE_EXISTING → closed` = **테스트 0개 PASS** 가 된다 — C2 가
+# 죽이려던 바로 그 verdict 행을 다른 문으로 되살린 것이다. 게이트는 아래 run 에서
+# **어댑터를 못 쓴다고 선언**(exit 3)하는 형태로만 존재한다. 부수적으로 setup_cmd 가
+# `.gitignore` 내용에 의존하지 않게 되어 AC41 의 양측 동일성도 더 견고해진다.
 python_env_of() {   # python_env_of <worktree>
   local w=$1
-  if   [[ -f "$w/uv.lock"          ]] && venv_dir_is_ignored "$w"; then echo uv
+  if   [[ -f "$w/uv.lock"          ]]; then echo uv
   elif [[ -f "$w/poetry.lock"      ]]; then echo poetry
-  elif [[ -f "$w/requirements.txt" ]] && venv_dir_is_ignored "$w"; then echo venv
+  elif [[ -f "$w/requirements.txt" ]]; then echo venv
   else echo ambient; fi
 }
 
@@ -273,6 +339,19 @@ case "${1:-}" in
     seen_files=""
     while IFS= read -r f; do
       [[ -z "$f" ]] && continue
+      # 워크트리 밖 경로는 **어떤 어댑터의 소유도 아니다** — 이 트리의 unit 이 아니기
+      # 때문이다. 러너별 분기 안이 아니라 여기서 한 번에 거른다: 원래 결함은 shell 글롭이
+      # 담김을 검사하지 않는 것이었지만, pytest/jest 분기도 같은 축으로 열려 있었다.
+      # bulk 흡수자에게 넘기지도 않는다 — 흡수는 그 사실을 감춘다. `unclaimed` 로
+      # 표면화해 `verification: degraded` → PASS 불가로 보낸다 (AC53).
+      if ! unit_within_worktree "$w" "$f"; then
+        if ! printf '%s\n' "$seen_files" | grep -qxF "$f"; then
+          printf '%s\tunclaimed\tfile\n' "$f"
+          seen_files="$seen_files
+$f"
+        fi
+        continue
+      fi
       claimed=""
       # 파일 패턴 소유권. 순서는 §5.9 표 순서 — 한 파일은 정확히 한 어댑터에 간다 (AC46).
       case "$f" in
@@ -286,11 +365,9 @@ case "${1:-}" in
         # "실행비트가 선 tests/*.sh"). 경로 제한 없이 실행비트만 보면 diff 에 섞여 온
         # scripts/deploy.sh 같은 비-테스트 스크립트를 테스트 unit 으로 주장하게 되고,
         # run 이 그것을 HEAD 와 기준선 양쪽에서 실행한다 — 설계가 금지한 추측 실행이다.
-        # 담김 검사가 글롭과 **함께** 있어야 한다: `../other/tests/evil.sh` 는
-        # `*/tests/*.sh` 와 `-x` 를 둘 다 만족하지만 이 워크트리 밖이다 (I5 실측).
+        # 담김은 루프 머리에서 이미 걸렀다 (모든 어댑터 공통).
         case "$f" in
-          tests/*.sh|*/tests/*.sh)
-            unit_within_worktree "$w" "$f" && [[ -x "$w/$f" ]] && claimed=shell ;;
+          tests/*.sh|*/tests/*.sh) [[ -x "$w/$f" ]] && claimed=shell ;;
         esac
       fi
       if [[ -z "$claimed" && -n "$js" ]]; then
@@ -375,6 +452,27 @@ $f"
     # 문자열은 위 닫힌 표에서만 오므로 외부 입력이 아니다. gran이 이미 같은 닫힌
     # 러너 집합에서 성공했으므로 setup_cmd_of가 같은 이름으로 die 할 일은 없다.
     scmd=$(setup_cmd_of "$w" "$runner")
+
+    # setup 이 이 트리 안에 만드는 환경 디렉토리(`.venv`·`node_modules`)를 그 레포가
+    # gitignore 하지 않으면, 그대로 두면 R7 mutation-guard 가 그 전량을
+    # `disallowed_new_files` 로 잡아 **어떤 것으로도 downgrade 되지 않는 terminal FAIL**
+    # 을 낸다 (cargo target 과 같은 클래스).
+    #
+    # 그렇다고 setup 을 **조용히 건너뛰면 안 된다.** 준비 안 된 실행은 양측에서 똑같이
+    # 실패하고, `error` 는 §5.5 에서 fail 축으로 접혀 `PRE_EXISTING → closed` 가 되며
+    # 그것이 정확히 SKILL.md 의 PASS 행이다 — 테스트 0개로 PASS. C2 를 다른 문으로
+    # 되살리는 경로이므로 명시적으로 막는다.
+    #
+    # 남는 정직한 선택지는 하나뿐이다: **이 어댑터는 이 트리에서 못 쓴다**고 선언한다.
+    # exit 3 + 전 unit `unrun` → `verification: degraded` → PASS 불가 (§5.10 row 3).
+    if [[ "$scmd" != "-" ]]; then
+      env_dir=$(setup_env_dir_of "$w" "$runner")
+      if [[ -n "$env_dir" ]] && ! dir_is_ignored "$w" "$env_dir"; then
+        echo "run-test-selection: 어댑터 사용 불가: $runner — setup 이 만드는 '$env_dir/' 를 이 레포가 gitignore 하지 않습니다 (in $w). 설치하면 mutation-guard 가 terminal FAIL 을 내고, 설치를 건너뛰면 준비 안 된 실행이 PRE_EXISTING 으로 접혀 조용히 PASS 가 됩니다 — 미실행으로 degrade 합니다." >&2
+        emit_all_unrun "$@"; exit 3
+      fi
+    fi
+
     if [[ "$scmd" != "-" ]]; then
       # 순서 주의: >&2 로 fd1 을 먼저 고정한 뒤 2>&1 은 no-op dup — 단순화 금지
       if ! ( cd "$w" && sh -c "$scmd" ) >&2 2>&1; then

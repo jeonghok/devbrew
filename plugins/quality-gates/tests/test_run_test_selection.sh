@@ -308,16 +308,64 @@ case_unit_outside_worktree_is_refused() {
   [[ ! -e "$root/ESCAPED" ]] && pass "절대경로 unit 도 미실행" \
                              || fail "절대경로 unit 이 실행됨 (out='$out')"
 
-  # 트리 밖을 가리키는 심볼릭 링크도 같은 클래스다 (글롭·실행비트 둘 다 만족한다)
+  # 심볼릭 링크에는 **두 축**이 있고 서로 다른 코드가 막는다. 디렉토리 축만 재면
+  # 잎(leaf) 축이 열린 채로 통과한다 — 라운드 2 NEW-2 가 그 상태를 실측으로 뚫었다.
+  #
+  # 축 A — 디렉토리 심볼릭 링크: `dirname` 의 `pwd -P` 해소가 막는다.
   ln -s "$root/other/tests" "$w/tests/link"
   out=$(bash "$RTS" run "$w" shell per-unit tests/link/evil.sh 2>/dev/null)
-  [[ ! -e "$root/ESCAPED" ]] && pass "트리 밖 심볼릭 링크 경유 unit 도 미실행" \
-                             || fail "심볼릭 링크로 탈출 (out='$out')"
+  [[ ! -e "$root/ESCAPED" ]] && pass "축 A: 디렉토리 심볼릭 링크 경유 unit 미실행" \
+                             || fail "디렉토리 링크로 탈출 (out='$out')"
+
+  # 축 B — **잎** 심볼릭 링크: `dirname` 은 트리 안이고 `-x`/`-e` 는 링크를 따라간다.
+  # 잎을 해소하지 않으면 assign 이 주장하고 run 이 트리 밖 스크립트를 실행한다(실측).
+  ln -s ../../other/tests/evil.sh "$w/tests/evil.sh"
+  out=$(printf 'tests/evil.sh\n' | bash "$RTS" assign "$w")
+  [[ "$out" == "tests/evil.sh${TAB}unclaimed${TAB}file" ]] \
+    && pass "축 B: assign 이 잎 심볼릭 링크 unit 을 미주장" \
+    || fail "assign 잎 링크 (got: $out)"
+  out=$(bash "$RTS" run "$w" shell per-unit tests/evil.sh 2>/dev/null)
+  if [[ ! -e "$root/ESCAPED" ]]; then
+    pass "축 B: run 이 잎 심볼릭 링크 unit 을 미실행"
+  else
+    fail "잎 심볼릭 링크로 탈출 (out='$out')"; rm -f "$root/ESCAPED"
+  fi
 
   # 정당한 트리-안 unit 은 여전히 돈다 — 담김 검사가 대상을 통째로 죽이지 않았는가
   out=$(bash "$RTS" run "$w" shell per-unit tests/ok.sh 2>/dev/null)
   [[ "$out" == "tests/ok.sh${TAB}pass${TAB}0" ]] \
     && pass "트리 안 정당한 unit 은 그대로 실행" || fail "정당 unit 회귀 (got: $out)"
+  # 트리 **안**을 가리키는 잎 심볼릭 링크는 막지 않는다 (과잉 차단 방지)
+  ln -s ok.sh "$w/tests/alias.sh"
+  out=$(bash "$RTS" run "$w" shell per-unit tests/alias.sh 2>/dev/null)
+  [[ "$out" == "tests/alias.sh${TAB}pass${TAB}0" ]] \
+    && pass "트리 안을 가리키는 잎 링크는 그대로 실행 (과잉 차단 없음)" \
+    || fail "트리 안 링크 과잉 차단 (got: $out)"
+  rm -rf "$root"
+}
+
+# 라운드 2 NEW-2 (두 번째 소비 지점) — 잎 심볼릭 링크 구멍은 `exists_unit` 를 통해
+# pytest/jest unit 에도 그대로 닿았다. shell 픽스처 하나로는 그 축을 못 잰다:
+# shell 은 `shell_unit_in_scope` 라는 두 번째 층이 있지만 pytest 는 `exists_unit` 뿐이다.
+case_leaf_symlink_escape_via_pytest() {
+  local root w out
+  root=$(mktemp -d); w="$root/victim"
+  mkdir -p "$w/tests" "$root/other/tests"
+  : > "$w/pytest.ini"
+  printf 'def test_x():\n    open("%s/ESCAPED", "w").write("x")\n' "$root" \
+    > "$root/other/tests/test_evil.py"
+  ln -s ../../other/tests/test_evil.py "$w/tests/test_evil.py"
+
+  out=$(printf 'tests/test_evil.py\n' | bash "$RTS" assign "$w")
+  [[ "$out" == "tests/test_evil.py${TAB}unclaimed${TAB}file" ]] \
+    && pass "pytest: assign 이 잎 링크 unit 을 미주장" || fail "pytest assign 잎 링크 (got: $out)"
+
+  out=$(bash "$RTS" run "$w" pytest per-unit tests/test_evil.py 2>/dev/null)
+  if [[ ! -e "$root/ESCAPED" ]]; then
+    pass "pytest: run 이 잎 링크 unit 을 미실행 (exists_unit 축)"
+  else
+    fail "pytest 잎 링크로 탈출 (out='$out')"
+  fi
   rm -rf "$root"
 }
 
@@ -349,7 +397,8 @@ for c in case_assign_go_package case_assign_unclaimed case_assign_bulk_conflict 
          case_run_shell_refuses_out_of_scope_unit case_run_unknown_runner_usage_error \
          case_run_bulk_partial_absent case_run_bulk_refused_does_not_corrupt_sibling \
          case_run_bulk_unit_path_with_space \
-         case_unit_outside_worktree_is_refused case_run_exit_127_is_unrun; do
+         case_unit_outside_worktree_is_refused case_leaf_symlink_escape_via_pytest \
+         case_run_exit_127_is_unrun; do
   echo "== $c"; $c
 done
 echo "── run-test-selection: $PASS passed, $FAIL failed"
