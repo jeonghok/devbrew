@@ -222,14 +222,28 @@ fi
 
 # --- round-2 digest-seal wiring ---
 
-# R0 must capture snapshot_digest in the R0 section (after the "Step R0" heading,
-# before the runtime-verifier dispatch) — NOT the Law-2 header at the top.
-r0_section=$(first_line 'Step R0')
-r0_digest=$(first_line_after 'snapshot_digest' "$r0_section")
-if [[ "$r0_digest" -gt 0 && "$r0_digest" -lt "$runtime_line" ]]; then
-  echo "PASS: R0 captures snapshot_digest (line 3) at $r0_digest"
+# R5a¹ (formerly R0) must capture snapshot_digest in the R5a¹ section (after the
+# "Step R5a¹" heading, before the runtime-verifier dispatch) — NOT the Law-2
+# header at the top. Anchored on the line-start bold heading, NOT the bare
+# label — a bare 'Step R5a¹' resolves to an earlier prose cross-reference
+# (measured: bare label = 174, actual heading = 810), which would degenerate
+# this into a whole-file-ish search that can't tell the heading moved.
+r5a1_section=$(first_line '^[*][*]Step R5a¹')
+# Guard the degenerate case explicitly: if the heading is gone, r5a1_section
+# is 0 and `first_line_after … 0` searches the WHOLE FILE from the top — this
+# is the exact bug that made the pre-migration :205 lock vacuous (it found
+# the top-of-file Law-2 header's own `snapshot_digest` mention at line 53 and
+# passed). Measured on this file: without this guard, renaming the R5a¹
+# heading away still leaves this assertion GREEN via that top-of-file match.
+if [[ "$r5a1_section" -gt 0 ]]; then
+  r5a1_digest=$(first_line_after 'snapshot_digest' "$r5a1_section")
 else
-  echo "FAIL: R0 does not capture snapshot_digest in the R0 section (found=$r0_digest, runtime=$runtime_line)"
+  r5a1_digest=0
+fi
+if [[ "$r5a1_digest" -gt 0 && "$r5a1_digest" -lt "$runtime_line" ]]; then
+  echo "PASS: R5a¹ captures snapshot_digest (line 3) at $r5a1_digest"
+else
+  echo "FAIL: R5a¹ does not capture snapshot_digest in the R5a¹ section (found=$r5a1_digest, runtime=$runtime_line, section_heading=$r5a1_section)"
   fail=$((fail + 1))
 fi
 
@@ -316,14 +330,31 @@ assert_line "Dispatch Loop references short-circuit" "$(first_line_after 'short-
 
 # --- v2.4.0 review-fix F1: single-gate /qg runtime produces the manifest ---
 # /qg runtime bypasses the Dispatch Loop (and thus Decision 2), so the Runtime
-# gate itself must produce manifest/approved_surfaces/block_policy for R3.
-# Guard: a Step R-init must run detect-runtime.sh on the single-gate runtime
-# path, BEFORE the runtime-verifier (R3) dispatch.
+# gate itself must produce manifest/approved_surfaces/block_policy for R3
+# (now R5a³). Guard: a Step R5a⁰ (formerly R-init — the "R-init" label was
+# reused by the impact-driven rewrite for baseline resolution, an unrelated
+# step, so this lock MUST move or it silently starts checking the wrong
+# section) must run detect-runtime.sh on the single-gate runtime path, BEFORE
+# the runtime-verifier (R5a³) dispatch. Anchored on the line-start bold
+# heading, NOT the bare label, for the same reason as the R5a¹ lock above.
 rg_header=$(first_line '^## Runtime gate')
-rinit_line=$(first_line 'Step R-init')
-assert_line "Runtime gate Step R-init present" "$rinit_line"
-assert_order "R-init precedes runtime-verifier dispatch" "$rinit_line" "$runtime_line"
-assert_line "R-init runs detect-runtime in the Runtime gate" "$(first_line_after 'detect-runtime' "$rg_header")"
+r5a0_line=$(first_line '^[*][*]Step R5a⁰')
+r5a1_bound=$(first_line '^[*][*]Step R5a¹')
+assert_line "Runtime gate Step R5a⁰ present" "$r5a0_line"
+assert_order "R5a⁰ precedes runtime-verifier dispatch" "$r5a0_line" "$runtime_line"
+# Window-bound the detect-runtime search to [rg_header, R5a¹) — an earlier cut of
+# this lock searched with NO upper bound at all (`first_line_after` only takes a
+# lower bound) and stayed GREEN after deleting the actual detect-runtime.sh call
+# from R5a⁰'s body, because it fell through to an unrelated LATER mention
+# (`manifest: <output of detect-runtime.sh>` inside R5a³'s dispatch prompt, line
+# 879) — measured on this file. Bounding to before R5a¹ closes that.
+if [[ "$r5a0_line" -gt 0 && "$r5a1_bound" -gt 0 ]] && \
+   awk -v s="$rg_header" -v e="$r5a1_bound" 'NR>s && NR<e && /detect-runtime/ {f=1} END{exit !f}' "$SKILL_MD"; then
+  echo "PASS: R5a⁰ runs detect-runtime in the Runtime gate (window $rg_header..$r5a1_bound)"
+else
+  echo "FAIL: R5a⁰ does not run detect-runtime within its own section (window $rg_header..$r5a1_bound)"
+  fail=$((fail + 1))
+fi
 if awk -v a="$rg_header" -v b="$runtime_line" 'NR>a && NR<b && /single-gate/ {f=1} END{exit !f}' "$SKILL_MD"; then
   echo "PASS: Runtime gate documents the single-gate runtime manifest path"
 else
@@ -422,25 +453,12 @@ for pat in 'effective_diff_scope' 'DEVBREW_QG_DISABLE_SCOPE_REDIRECT' 'scope_sig
   fi
 done
 
-# --- v2.6.0 AC11: Runtime scope transparency line, single + between R2 and R3 ---
-r2_marker=$(first_line '^\*\*Step R2')
-r3_marker=$(first_line '^\*\*Step R3')
-rtscope_line=$(first_line 'regardless of Review scope')
-assert_line "Runtime scope asymmetry marker present" "$rtscope_line"
-assert_line "Runtime scope observable anchor present" "$(first_line 'Runtime scope: full project')"
-if [[ "$rtscope_line" -gt "$r2_marker" && "$rtscope_line" -lt "$r3_marker" ]]; then
-  echo "PASS: Runtime scope line between Step R2 ($r2_marker) and Step R3 ($r3_marker) at $rtscope_line"
-else
-  echo "FAIL: Runtime scope line not between R2/R3 (r2=$r2_marker line=$rtscope_line r3=$r3_marker)"
-  fail=$((fail + 1))
-fi
-rtscope_count=$(grep -cE 'regardless of Review scope' "$SKILL_MD" || true)
-if [[ "$rtscope_count" -eq 1 ]]; then
-  echo "PASS: Runtime scope asymmetry marker unique (1)"
-else
-  echo "FAIL: Runtime scope asymmetry marker not unique ($rtscope_count)"
-  fail=$((fail + 1))
-fi
+# --- v2.6.0 AC11: Runtime scope transparency line — MOVED to the "T1 / AC1 /
+# AC2 / M3: 앵커 이전" block near the end of this file (Task 12). The old
+# literal 'regardless of Review scope' no longer exists post-rewrite; the new
+# anchor is a different sentence with a different uniqueness/position
+# contract. Keeping both here and there would drift as soon as either wording
+# changes — so this block does not survive, it moves whole. ---
 
 # --- v2.10.0 publish-eligible sentinel wiring ---
 
@@ -466,13 +484,30 @@ else
   echo "FAIL: Final Summary missing publish-eligible.md write"; fail=$((fail+1))
 fi
 
-# (c) Runtime gate R6 wires the sentinel too (single-gate /qg runtime bypasses Final Summary).
-r6_start="$(first_line 'Step R6')"
-r6_end="$(first_line_after '^## ' "$r6_start")"
-if awk -v s="$r6_start" -v e="$r6_end" 'NR>s && NR<e' "$SKILL_MD" | grep -qF 'publish-eligible.md'; then
-  echo "PASS: Runtime R6 wires publish-eligible.md write (line window $r6_start..$r6_end)"
+# (c) Runtime gate R8 (formerly R6 — outcome routing + publish sentinel;
+# "Step R6" is now the diff-test-results.py comparison step and its own
+# section-window swallows R7-R9 looking for a `^## ` boundary, measured:
+# old anchor='Step R6' found the *comparison* step at line 900, whose window
+# runs to 1073 and still finds publish-eligible.md inside R8 — a vacuous
+# pass) wires the sentinel too (single-gate /qg runtime bypasses Final
+# Summary). Anchored on the line-start bold heading, NOT the bare label, for
+# the same reason as the R5a¹/R5a⁰ locks above.
+r8_start="$(first_line '^[*][*]Step R8')"
+# Guard the degenerate case explicitly: if the R8 heading is gone, $r8_start
+# is 0 and the window becomes "line 1 .. first `## ` heading in the whole
+# file" — a narrow but UNRELATED window near the top of the file that
+# happens (today) not to contain 'publish-eligible.md', so it would fail for
+# the wrong reason (lucky miss, not a designed check) rather than a clear one.
+if [[ "$r8_start" -gt 0 ]]; then
+  r8_end="$(first_line_after '^## ' "$r8_start")"
+  if awk -v s="$r8_start" -v e="$r8_end" 'NR>s && NR<e' "$SKILL_MD" | grep -qF 'publish-eligible.md'; then
+    echo "PASS: Runtime R8 wires publish-eligible.md write (line window $r8_start..$r8_end)"
+  else
+    echo "FAIL: Runtime R8 missing publish-eligible.md write"; fail=$((fail+1))
+  fi
 else
-  echo "FAIL: Runtime R6 missing publish-eligible.md write"; fail=$((fail+1))
+  echo "FAIL: Runtime R8 missing publish-eligible.md write (Step R8 heading not found)"
+  fail=$((fail+1))
 fi
 
 # (d) The write is guarded by a non-aborted disposition — SECTION-SCOPED to the
@@ -493,6 +528,107 @@ if awk -v s="$fs_start" -v e="$fs_end" 'NR>s && NR<e' "$SKILL_MD" | grep -qF 'di
   echo "PASS: Final Summary sentinel write guarded by non-aborted disposition (in-window)"
 else
   echo "FAIL: Final Summary sentinel write missing non-aborted disposition guard (in-window)"; fail=$((fail+1))
+fi
+
+# ── T48 / AC51: 스텝 락 이전 + 기존 로직 8종이 전부 새 자리를 갖는다 ──
+# 자리 없는 기존 로직은 삭제가 아니라 누락이다. 8종을 이름으로 센다.
+echo "== 락 이전 검사"
+legacy_logic=(
+  'detect-runtime.sh'                       # 매니페스트
+  'block_policy'                            # zero-click 폴백
+  'snapshot_digest'                         # create-sandbox 3줄 파싱
+  'quality-gates:test-scope-validator'      # 분류 dispatch
+  'spec_acceptance_criteria'                # spec AC 수집
+  'quality-gates:runtime-verifier'          # verifier dispatch
+  'mutation-guard'                          # Law 2 오라클
+  'publish-eligible.md'                     # publish sentinel
+)
+missing_logic=0
+for lg in "${legacy_logic[@]}"; do
+  if ! grep -qF "$lg" "$SKILL_MD"; then
+    echo "FAIL: 기존 로직 '$lg' 가 새 SKILL.md 에 없음 (자리 없는 로직 = 누락)"
+    missing_logic=$((missing_logic + 1))
+  fi
+done
+[[ $missing_logic -eq 0 ]] && echo "PASS: 기존 로직 8종 전부 새 자리에 존재" || fail=$((fail + 1))
+
+# 새 라벨 5종이 실제로 존재하고 순서가 맞다
+# 라벨은 **줄머리 볼드 헤딩**으로만 앵커한다. 맨 라벨로 찾으면 본문 cross-reference 가
+# 먼저 잡힌다 — 실측: `first_line 'Step R5a⁰'` = **174**(다른 섹션의 참조), 실제 헤딩은
+# **810**. 그러면 `r5a0 < r5a1` 순서 assert 가 "참조 < 헤딩"을 비교해 헤딩이 어디로
+# 옮겨가도 통과하는 vacuous 락이 된다. 나머지 다섯은 지금 우연히 헤딩이 먼저일 뿐이므로
+# 여섯 개 전부 같은 방식으로 못 박는다. (`\*` 금지 — 위 주석 참조.)
+r5a0=$(first_line '^[*][*]Step R5a⁰'); r5a1=$(first_line '^[*][*]Step R5a¹')
+r5a2=$(first_line '^[*][*]Step R5a²'); r5a3=$(first_line '^[*][*]Step R5a³')
+r8=$(first_line '^[*][*]Step R8')
+for pair in "R5a⁰:$r5a0" "R5a¹:$r5a1" "R5a²:$r5a2" "R5a³:$r5a3" "R8:$r8"; do
+  assert_line "새 라벨 ${pair%%:*} 존재" "${pair#*:}"
+done
+assert_order "R5a⁰ precedes R5a¹" "$r5a0" "$r5a1"
+assert_order "R5a¹ precedes R5a²" "$r5a1" "$r5a2"
+assert_order "R5a² precedes R5a³" "$r5a2" "$r5a3"
+
+# 기존 R-init 락이 검사하던 것(detect-runtime 실행)은 이제 R5a⁰ 의 책임이다.
+# 두 겹 vacuous-pass 실측(수정 전), 둘 다 이제 막는다:
+#   (a) $r5a0 이 0 이면(헤딩 실종) first_line_after 는 전체 파일을 처음부터
+#       검색해 frontmatter 의 `detect-runtime.sh` 언급(:23)에 우연히 만족한다.
+#   (b) $r5a0 이 유효해도 first_line_after 는 상한이 없어서, R5a⁰ 본문의
+#       실제 호출을 지워도 R5a³ dispatch 프롬프트 안의 무관한 언급
+#       (`manifest: <output of detect-runtime.sh>`, :879)에 만족해 버린다.
+# 그래서 하한(R5a⁰)과 상한(R5a¹) 둘 다로 창을 좁힌다.
+if [[ "$r5a0" -gt 0 && "$r5a1" -gt 0 ]] && \
+   awk -v s="$r5a0" -v e="$r5a1" 'NR>s && NR<e && /detect-runtime/ {f=1} END{exit !f}' "$SKILL_MD"; then
+  echo "PASS: R5a⁰ runs detect-runtime (window $r5a0..$r5a1)"
+else
+  echo "FAIL: R5a⁰ runs detect-runtime (heading missing or no in-window match; window $r5a0..$r5a1)"
+  fail=$((fail + 1))
+fi
+
+# ── T1 / AC1 / AC2 / M3: 앵커 이전 ──
+echo "== transparency 앵커 이전"
+old_literal=$(grep -cF 'regardless of Review scope' "$SKILL_MD" || true)
+if [[ "$old_literal" -eq 0 ]]; then
+  echo "PASS: 구 리터럴 'regardless of Review scope' 0회"
+else
+  echo "FAIL: 구 리터럴이 ${old_literal}회 잔존"; fail=$((fail + 1))
+fi
+new_anchor='이번 변경의 영향분만 기준선 대비로 돌린다'
+anchor_count=$(grep -cF "$new_anchor" "$SKILL_MD" || true)
+if [[ "$anchor_count" -eq 1 ]]; then
+  echo "PASS: 신 앵커 정확히 1회"
+else
+  echo "FAIL: 신 앵커가 ${anchor_count}회 (정확히 1회여야 함)"; fail=$((fail + 1))
+fi
+# 앵커는 R2(계획 산문)와 R3(갭 게이트) 사이에 있어야 한다
+anchor_line=$(first_line "$new_anchor")
+# awk 패턴에 `\*` 를 쓰지 않는다 — `-v` 가 백슬래시를 떼어내 `**…` 가 되고, 그러면
+# `illegal primary in regular expression` 으로 매치 0건이 된다(실측: awk 20200816).
+# `^` 가 앞에 붙으면 이 awk 의 관대한 처리로 *우연히* 통과할 뿐이라 `[*]` 로 못 박는다.
+r2_marker=$(first_line '^[*][*]Step R2'); r3_marker=$(first_line '^[*][*]Step R3')
+if [[ -n "$anchor_line" && "$anchor_line" -gt "$r2_marker" && "$anchor_line" -lt "$r3_marker" ]]; then
+  echo "PASS: 앵커가 Step R2($r2_marker)와 Step R3($r3_marker) 사이 ($anchor_line)"
+else
+  echo "FAIL: 앵커 위치 ($anchor_line, R2=$r2_marker R3=$r3_marker)"; fail=$((fail + 1))
+fi
+
+# ── T22 / AC31 / M12: 호출 주체 — run-test-selection.sh 가 verifier dispatch 블록 밖 ──
+echo "== 호출 주체 불변식"
+r5b=$(first_line '^[*][*]Step R5b')   # 헤딩 앵커 — cross-reference latch 방지
+in_block=0
+while IFS= read -r ln; do
+  n="${ln%%:*}"
+  if [[ "$n" -gt "$r5a3" && "$n" -lt "$r5b" ]]; then in_block=$((in_block + 1)); fi
+done < <(grep -n 'run-test-selection.sh' "$SKILL_MD")
+if [[ "$in_block" -eq 0 ]]; then
+  echo "PASS: run-test-selection.sh 호출이 verifier dispatch 블록(R5a³..R5b) 안에 0회"
+else
+  echo "FAIL: verifier dispatch 블록 안에서 run-test-selection.sh 호출 ${in_block}회"
+  fail=$((fail + 1))
+fi
+if grep -qF '이 호출 결과가 authoritative' "$SKILL_MD"; then
+  echo "PASS: authoritative 문장 존재"
+else
+  echo "FAIL: authoritative 문장 부재"; fail=$((fail + 1))
 fi
 
 if [[ "$fail" -eq 0 ]]; then
