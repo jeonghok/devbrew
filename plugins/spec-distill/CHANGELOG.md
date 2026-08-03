@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.24.9] — 2026-08-03
+
+### Changed
+- `conducting-interview` SKILL.md의 R3 steelman dispatch 지시(`:306`)에서
+  `**순차** dispatch(병렬·투기적 금지 — C5)` 문구를 삭제 — 0.24.8에서 `steelman-builder`
+  에이전트 persona에서 지운 것과 같은 억제가 오케스트레이터 쪽 dispatch 지시문에도
+  거울처럼 남아 있었다(0.24.8의 브리프 file list 누락, 이번 sweep의 repo-wide 판별
+  질의가 적발). 인용된 두 근거 다 성립하지 않는다: `C5`는 web 부재 시 graceful
+  degradation을 가리키지 dispatch 순서와 무관하고(design.md:107), `AP9`의 병렬 fan-out
+  게이트는 N≥5부터인데(philosophy.md:95-96) R3는 의심 트리거당 steelman 1회로 fan-out=1
+  이라 그 문턱에 닿지 않는다. `투기적 금지`는 R3의 numbered step이 의심 트리거가 이미
+  발화한 뒤에만 도달하므로 애초에 발생 불가능한 경로를 금지하는 무의미한 문구였다.
+  `:311`의 "한 방향당 steelman 1회(재steelman 금지 — AP16 harassment 방지)" load-bearing
+  bound는 그대로 둔다.
+
+### Added
+- `test_conducting_interview_stage.sh`에 R3-스코프 E10 락 신설 — 기존 `r3_block`
+  awk 윈도우(`### R3 — Steelman` ~ 다음 `### `/`## ` 헤딩)를 재사용해 병렬·투기적 금지
+  문구 재삽입 시 RED. 전-파일 grep이 아니라 R3 윈도우로 스코프한 이유: 같은 SKILL에
+  `:122`의 `teach-beat 최대 1회`, `:438`의 `2회까지`가 legitimately 남아있다.
+
 ## [0.24.8] — 2026-08-03
 
 ### Changed

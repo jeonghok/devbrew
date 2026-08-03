@@ -303,7 +303,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" increment "$ROOT/<session-
 
 의심 trigger = landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의 충돌 / coverage-mapper neglect.
 
-1. `steelman-builder` 에이전트를 **순차** dispatch(병렬·투기적 금지 — C5):
+1. `steelman-builder` 에이전트를 dispatch:
    ```
    Agent({ description: "Steelman alternative", subagent_type: "spec-distill:steelman-builder",
            prompt: "의심 방향: <statement>. trigger: <이유>. 대안의 강한 케이스를 웹근거와 함께." })
