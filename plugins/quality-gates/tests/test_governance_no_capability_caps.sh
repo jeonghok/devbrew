@@ -23,10 +23,17 @@ PHIL="docs/philosophy/devbrew-harness-philosophy.md"
 AUTHORING="docs/plugin-authoring.md"
 
 # --- AC8a: 숫자 임계 · 기본값 편향 · wall-clock 부재, 승인 게이트는 존속 ---
-if grep -qE 'N ≥ 5|N≥5' "$CLAUDE_MD" "$PHIL"; then
-  fail "AC8a: 'N ≥ 5' fan-out 하드 게이트 문구가 CLAUDE.md/philosophy에 잔존한다"
+# N-접두 형태("N ≥ 5"/"N≥5")만 찾으면 맹점이 생긴다 — philosophy AP9 스텁은 접두
+# 없이 bare "≥5"로 같은 임계를 적었었고, 원래 sweep의 판별 질의(N-접두 전용)가
+# 이걸 놓쳤다(fix round 1). ≥/>= 뒤에 5가 바로 오는 형태를 접두 유무와 무관하게
+# 잡는다 — "N ≥ 5"·"N≥5"·bare "≥5"·"≥ 5"·">=5"·">= 5" 전부 이 한 패턴에 포함된다.
+# 오탐 점검(둘 다 무매치 확인됨): CLAUDE.md의 `<PLUGIN>=1` 킬스위치 placeholder
+# ("PLUGIN>" 다음 "=1" — 5가 아니라 1이라 애초에 후보 밖), philosophy의
+# "re-review cap 5"·"Phase 5"·"5-ritual gate"(비교 연산자 없이 숫자만 등장).
+if grep -qE '(≥|>=)[[:space:]]*5' "$CLAUDE_MD" "$PHIL"; then
+  fail "AC8a: fan-out 하드 게이트 임계(≥5, N-접두 여부 무관)가 CLAUDE.md/philosophy에 잔존한다"
 else
-  pass "AC8a: 'N ≥ 5' fan-out 하드 게이트 문구 없음"
+  pass "AC8a: fan-out 하드 게이트 임계(≥5, N-접두 여부 무관) 없음"
 fi
 
 # 두 particle 변형(를/가) 모두 커버 — CLAUDE.md는 "single-agent를 default로",

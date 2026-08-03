@@ -93,7 +93,7 @@ Polite Stop — verified-done 후 사용자가 요청하지 않은 내러티브 
 Trivia ceremony — 한 문장 diff에 full pipeline을 실행하는 것 (P12 trivia escape의 anti-corollary).
 
 ### AP9 → CLAUDE.md Forbidden Patterns
-Subagent spray — 선언 없는 fan-out ≥5.
+Subagent spray — 선언 없는 fan-out. 규모 자체가 아니라 선언 없음이 anti-pattern이다 (P22).
 
 ### AP16 → CLAUDE.md Forbidden Patterns
 Unbounded autonomy — max-iter 카운트·repeat 감지·사용자-override kill switch 없는 루프 (P18의 anti-corollary).

@@ -3,6 +3,31 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.11] — 2026-08-03
+
+Task 11(S4) fix round 1 — coordinator 재검사가 실제 잔여를 찾았다: philosophy
+문서의 AP9 스텁(`docs/philosophy/devbrew-harness-philosophy.md:96`)이 CLAUDE.md의
+새 Forbidden Patterns 정의("규모가 아니라 선언 없음이 anti-pattern")와 어긋난 채
+`선언 없는 fan-out ≥5.`로 숫자 임계를 그대로 들고 있었다 — 이 sweep이 통째로
+막으려던 바로 그 실패 모드(agent 프롬프트가 인용할 수 있는 근거로 남는 규약)다.
+이 sweep 중 실제로 한 agent 프롬프트가 순차 호출 강제의 근거로 AP9를 인용했다.
+게다가 원래 AC8 판별 질의(`N ≥ 5|N≥5`)가 `N`-접두만 찾아 이 bare `≥5`를 놓쳤다.
+
+### Fixed
+- `docs/philosophy/devbrew-harness-philosophy.md:96` (AP9): `Subagent spray — 선언
+  없는 fan-out ≥5.` → `Subagent spray — 선언 없는 fan-out. 규모 자체가 아니라
+  선언 없음이 anti-pattern이다 (P22).` — CLAUDE.md:68의 새 정의를 그대로 미러링,
+  이웃 AP 엔트리(AP2/AP5/AP16)와 같은 한 줄 스텁 스타일 유지.
+- `tests/test_governance_no_capability_caps.sh` AC8a: 임계 탐지 정규식을
+  `N ≥ 5|N≥5`에서 `(≥|>=)[[:space:]]*5`로 넓혀 `N`-접두 없는 bare 임계
+  형태(philosophy가 실제로 썼던 형태)도 잡는다. 오탐 점검: CLAUDE.md의
+  `<PLUGIN>=1` 킬스위치 placeholder(비교연산자 뒤 숫자가 1이라 애초에 후보 밖),
+  philosophy의 "re-review cap 5"·"Phase 5"·"5-ritual gate"(비교연산자 없이 숫자만)
+  — 넷 다 새 패턴에 매칭되지 않음을 실측 확인.
+- 문서 전체 스캔에서 발견된 다른 bare-numeral: `re-review cap 5`(P18/`reviewing-spec`
+  SKILL.md 참조, line 56)는 stagnation-cap이지 이 sweep이 다루는 fan-out/능력
+  상한이 아니라 편집하지 않았다 — coordinator 확인 대상으로 별도 보고.
+
 ## [2.14.10] — 2026-08-03
 
 harness-capability-suppression-sweep Task 11(S4) — 규약 정렬. 앞선 태스크들은
