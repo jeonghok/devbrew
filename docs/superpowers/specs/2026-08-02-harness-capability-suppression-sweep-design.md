@@ -25,6 +25,8 @@ devbrew의 모든 컨텍스트 표면에서 하니스가 모델(Claude·codex)�
 - [11. 이 사이클에서 제외 — 별건 목록](#11-이-사이클에서-제외--별건-목록)
 - [Handoff Context](#handoff-context)
 - [12. Metadata](#12-metadata)
+  - [12.1 Load-bearing allowlist — AC13 잔여 매칭 등재](#121-load-bearing-allowlist--ac13-잔여-매칭-등재-2026-08-03-task-13-step-1)
+  - [12.2 문서 메타데이터](#122-문서-메타데이터)
 
 ---
 
@@ -547,6 +549,142 @@ devbrew 전 표면에서 하니스가 모델 능력을 깎는 지점을 제거�
 
 ## 12. Metadata
 
+### 12.1 Load-bearing allowlist — AC13 잔여 매칭 등재 (2026-08-03, Task 13 Step 1)
+
+§2의 판별 질의를 전수 재실행한 결과다. **goal별 실제 처리 결과**는 아래와 같다 — "0건"과
+"후보가 나왔으나 기각"은 다른 상태이고, 뭉개면 이 절이 스스로 지적하는 오라클 결함을 반복한다
+(리뷰 라운드 4 block 지적).
+
+| goal | 후보 | 처리 |
+|---|---|---|
+| 1 리터럴 model 핀 | **0건** | 등재 없음 |
+| 2 codex 추론 상한 | `scripts/` 범위 **0건**. 경로 밖에 1건(`tests/spike/`) | 등재 없음 — 경로 밖 1건은 **제거**했다. 전역 재측정 **0건** |
+| 3 조사 도구 결핍 | 1건 (`security-reviewer`) | **LB-4로 등재** (사용자가 미추가 선택, §6 S2) |
+| 4 상한 산문 | 9건 | **등재 6위치** — LB-1(3)·LB-2(1)·LB-3(2). **미등재 3건** — 픽스처 2 + 자기선언 휴리스틱 1. 합 9. 별도로 **경로 밖 1건**(`commands/:124`)을 리뷰어가 찾았고 **근거 부재로 미해결** 처리 |
+| 5 규약 숫자 임계 | 계획서 regex **0건**. 확장 질의로 4건 | **전부 기각** — 아래 미등재 표에 사유 |
+| AC7a `web_budget` | **0건** | 등재 없음 |
+
+AC13의 5필드를 모두 채운다. **초판(같은 날 앞선 라운드)은 성격이 다른 위치를 한 클래스로 묶어
+mis-registration을 감췄다** — Claude·codex 두 리뷰어가 독립적으로 같은 지적을 냈고, 아래는 그
+지적에 따라 클래스를 분리한 판본이다. 근거는 재서술이 아니라 **인용 가능한 테스트·사고 기록**으로
+댄다.
+
+**LB-1 — 재시도·재dispatch 종료 bound**
+
+| 필드 | 내용 |
+|---|---|
+| `위치` | `quality-gates/skills/quality-pipeline/SKILL.md:259`(`max_review_iterations = 5`) · `spec-distill/skills/reviewing-brief/SKILL.md:374`·`:387`(재dispatch 상한 2 / critic 총 3회) |
+| `막는 실패` | 제거하면 **수렴하지 않는 리뷰 fix-loop가 조용히 통과한다** — 리뷰어가 매 라운드 새 finding을 내고 그 수정이 새 회귀를 만드는 사이클이 사용자 개입 없이 반복된다. 두 위치 모두 *리뷰어 산출 → 저자 수정 → 재리뷰* 루프를 묶는다 |
+| `근거` | 가설이 아니라 관측이다: plugin-audit 사이클 2에서 codex residual이 **5 → 6으로 발산**해 루프를 의도 정지시킨 기록(커밋 `87c6b06`·`d23b886`, `project_plugin_audit_plugin` 메모리가 독립 서술) · 같은 리포가 "수정이 새 회귀를 만든다"를 3사이클 연속 실증 |
+| `대안 검토` | 발산 감지(연속 라운드 finding 수 비감소)로 대체 가능하지만 그것은 **더 무거운** 결정론이다(라운드별 상태 누적 + 비교 로직). 숫자 bound는 같은 실패를 한 줄로 막는다 — P8이 요구하는 방향은 가벼운 쪽이다 |
+| `재검토 조건` | **관측 주체와 기록 위치를 명시한다**: `reviewing-brief`/`quality-pipeline` 실행이 남기는 issue 원장(`issue_ledger.json`의 `raised_count`·`resolved`)에서, **cap 도달 없이 자연 수렴한 라운드가 연속 2회** 기록되면 재검토한다. 또는 escalation이 사용자에게 도달하지 않는 경로가 발견되면 즉시 |
+
+> **이것은 능력 상한이 아니라 종료 bound다.** §5.1 판별식에 대해 능력 상한의 답은 *"없음"* 이고
+> 종료 bound의 답은 *"무한 루프"* 다. AP9의 이웃인 **Unbounded autonomy가 max-iter·repeat
+> 감지·kill switch를 *요구*** 하므로, 이 셋을 지우는 것은 sweep이 아니라 규약 위반이다.
+
+**LB-2 — 사용자 재확인 상한** (LB-1과 분리 — 실패 서사가 다르다)
+
+| 필드 | 내용 |
+|---|---|
+| `위치` | `spec-distill/skills/conducting-interview/SKILL.md:432`(`confirm_repost_count` 2회까지) — **이 한 곳뿐이다** |
+| `막는 실패` | 제거하면 **확정-수정 왕복이 끝나지 않는다** — 사용자가 "확정 목록 수정"을 고를 때마다 같은 목록이 다시 제시되고, 상한이 없으면 인터뷰가 종료 조건에 영영 닿지 못한다. LB-1과 달리 리뷰어·finding·회귀와 무관하고, 루프의 상대가 **리뷰어가 아니라 사용자**다 |
+| `근거` | 이 위치 전용 테스트가 스스로 성격을 라벨링한다: `plugins/spec-distill/tests/test_conducting_interview_stage.sh:72` — *"AC2: 재제시 상한 + 초과 시 강등 + 고정 advisory 문자열 **(Unbounded-autonomy 가드)**"*. 상한 초과 시 침묵하지 않고 **강등 + advisory**로 사용자에게 도달한다 |
+| `대안 검토` | 반복 감지(같은 목록 재제시 여부 비교)로 대체 가능하나 목록 동일성 판정 로직이 필요해 더 무겁다. 그리고 이 상한은 **막는 것이 아니라 강등**이다 — 초과 시 진행이 끊기지 않고 경로가 바뀐다(P17: 사용자가 여전히 결정권을 쥔다) |
+| `재검토 조건` | 이 advisory가 실제 세션에서 발화한 기록이 원장에 남고, 그 뒤 사용자가 상한 없이도 스스로 종료했음이 연속 2회 관측되면. 또는 강등 경로가 사용자에게 보이지 않는 사례가 발견되면 즉시 |
+
+> **초판(같은 날 앞선 라운드)은 여기에 `project-init/commands/project-init.md:124`를
+> 함께 넣었다가 제거했다.** 인용한 테스트가 spec-distill 위치만 검증하는데 두 위치를 묶어,
+> **LB-1에서 고친 것과 똑같은 grouping mis-registration을 새 항목에서 재생산**한 것이다
+> (codex 재리뷰 적발). project-init에는 이 상한을 검증하는 테스트가 **존재하지 않는다**
+> (플러그인 테스트가 `test_branch_strategy_rebase_clause.sh` 하나뿐). 근거가 없으므로
+> 등재하지 않고 아래 "미처리 잔여"로 내린다 — 없는 근거를 만들어 붙이면 allowlist 자체가
+> AC13이 막으려던 우회 장치가 된다.
+
+**LB-3 — 멱등성 불변식** (코드 레벨)
+
+| 필드 | 내용 |
+|---|---|
+| `위치` | `spec-distill/scripts/approve_handoff.sh:12` · `spec-distill/skills/reviewing-spec/SKILL.md:196`(재호출은 키를 최대 1회 추가) |
+| `막는 실패` | 제거하면 `suppressed_paths`에 **중복 키가 쌓여** 재호출 횟수만큼 상태가 커진다. set-membership 계약이 깨지면 suppress 판정이 경로별 1회가 아니라 누적 횟수에 의존하게 된다 |
+| `근거` | 재서술이 아니라 실행되는 테스트다: `plugins/spec-distill/tests/test_approve_handoff.sh:53`·`:61` — *"Case 3 (AC12 idempotency): idempotent re-call → **exactly 1 suppressed entry**"*. 이 assert가 실패하면 계약이 깨진 것이 기계적으로 드러난다 |
+| `대안 검토` | 더 가벼운 수단이 없다 — 이것은 상한이 아니라 **연산의 정의**이고, 지우면 능력이 늘지 않고 동작이 틀려진다. 제거 방향 자체가 성립하지 않는 유일한 항목이다 |
+| `재검토 조건` | `suppressed_paths`가 set이 아닌 자료구조(예: 순서 있는 이력)로 재설계되면. 그때 이 문장은 거짓이 되므로 삭제가 아니라 **정정** 대상이다 |
+
+**LB-4 — `security-reviewer` 웹 도구 미부여** (goal 3, §6 S2에서 사용자가 미추가 선택)
+
+| 필드 | 내용 |
+|---|---|
+| `위치` | `plugins/quality-gates/agents/security-reviewer.md` frontmatter(`tools: Read, Grep, Glob`) |
+| `막는 실패` | 부여하면 **전 소스를 읽는 에이전트에 네트워크 egress가 생긴다.** 읽은 것을 밖으로 보낼 수 있는 채널이고, 그것이 exfiltration의 정의다 |
+| `근거` | P21 · 이 sweep 전체에서 **억제를 유지하는 쪽이 load-bearing 근거를 실제로 댈 수 있는 유일한 항목**으로 확인됐다(§10) · `test_security_reviewer_persona.sh`가 양방향 락으로 집행하고 mutation(`WebSearch` 추가 → RED)으로 이빨을 증명했다 |
+| `대안 검토` | CVE 조회 필요는 실재한다. 그러나 **한계를 명시하고 수동 검증으로 분리**하는 편이 egress보다 싸다 — `check_brief.py`의 `evidence: S<N>` 앵커가 쓴 처리를 S2에서 그대로 채택했다 |
+| `재검토 조건` | egress 없이 읽기 전용 CVE 조회를 제공하는 로컬 수단(오프라인 DB·MCP 읽기 리소스)이 생기면 |
+
+**등재하지 않은 잔여 매칭과 그 이유**
+
+| 매칭 | 판정 |
+|---|---|
+| `plugin-audit/scripts/tests/fixtures/ac6_codex_side.json:228`·`:248` | **테스트 픽스처에 기록된 codex 출력 텍스트**. 정책이 아니라 데이터다. 설계 §2 goal 4 질의가 `plugins/*/scripts/`를 포함해 `scripts/tests/` 하위를 끌어온 결과 |
+| `CLAUDE.md:48` · `docs/plugin-authoring.md:17` | **질의 위양성**. `DEVBREW_DISABLE_<PLUGIN>=1`의 `>`+`=1`이 `(≥\|>=)[0-9]` 패턴에 걸렸다. kill switch는 숫자 임계가 아니며, C-제약이 존속을 명시 요구한다 |
+| `docs/philosophy/…:20` · `:67` | `:20`은 *"개별 임계치·예산·상한은 재평가 대상"* — **이 sweep 자신의 근거 문장**이다. `:67`은 Law 2 집행으로 §3 Non-goal |
+| `spec-distill/skills/conducting-interview/SKILL.md:120` (probe당 teach-beat 최대 1회) | **결정론 제약이 아니라 원문이 스스로 선언한 휴리스틱**이라 등재 대상이 아니다. 같은 문서 `:126-129`가 *"발화 시점은 모델 판단 적응 행동이다(C12 — 결정론 게이트로 기계화하지 않는다; 위 신호는 결정 규칙이 아니라 **휴리스틱 가이드**)"* 라고 명시한다. 이 sweep이 제거하는 것은 **하니스가 강제하는 결정론**인데, 자기 자신을 비결정론이라 선언한 문장은 그 대상이 아니다. 초판이 이것을 코드 레벨 멱등성(LB-3)과 같은 급으로 묶은 것이 mis-registration이었다 (리뷰 라운드 4 high 지적) |
+
+**미처리 잔여 — 후속 사이클 필요 (등재도 제거도 아님)**
+
+정직하게 세 번째 범주를 둔다 — 등재도 제거도 아닌 것을 "0건"에 넣으면 거짓이 된다.
+
+| 위치 | 내용 | 왜 질의가 못 봤나 | 처리 |
+|---|---|---|---|
+| `quality-gates/tests/spike/test_codex_json_extraction.sh:33` | 리터럴 `-c 'model_reasoning_effort="medium"'` | goal 2가 `plugins/*/scripts/`만 스캔 — `tests/spike/`는 범위 밖 | **제거 완료** ↓ |
+| `project-init/commands/project-init.md:124` | 재질문 최대 3회 후 loud abort | goal 4가 `agents/`·`scripts/`·`skills/`만 스캔 — `commands/`가 목록에 없다 | **미해결** ↓ |
+
+**spike 핀 — 제거했다.** 초판은 이것을 *"판단이 필요하다"* 로 남겼는데, codex 재리뷰가 그것을
+**AC13("전부 변경되거나 등재")의 우회**라고 정확히 판정했다. 재현성을 근거로 핀을 유지한다는
+논리도 성립하지 않는다 — 이 spike가 굽는 fixture는 이미 `thread_id`·토큰 수가 매번 달라
+강도를 고정해도 재현되지 않는다. 보안 플래그(`-s read-only`·`-C`·`--json`·`< /dev/null`)는
+그대로 두고 `-c` 줄만 제거했다.
+
+> **락도 함께 고쳤다 (Law 3 compounding).** `test_codex_runner_no_effort_pin.sh`가 러너 **두 개를
+> 열거**했기에 이 핀이 통째로 살아남았다. 코드만 고치면 같은 클래스가 다시 샌다 — 락에
+> **플러그인 전수 스캔**을 추가했고, 핀 제거 *전에* 그 assert가 해당 파일을 지목하며 RED임을
+> 확인한 뒤 제거해 GREEN으로 만들었다. 열거가 공간·시간에 fail-open이라는 것은 이 리포가
+> `tools:` allowlist vs denylist에 이미 쓴 논리다.
+
+**project-init 재질문 상한 — 미해결.** 이 상한을 검증하는 테스트가 **존재하지 않아**(플러그인
+테스트가 `test_branch_strategy_rebase_clause.sh` 하나뿐) AC13의 `근거` 필드를 채울 수 없다.
+구조적으로는 AP16 종료 bound로 보이지만 *그렇게 보인다*는 것은 AC13이 명시적으로 거절하는
+근거다. 후속 사이클이 (i) 이 상한 전용 락을 쓰고 등재하거나 (ii) 근거가 없다면 상한을 제거해야
+한다. **이 sweep은 판정하지 않는다** — project-init의 동작 변경은 이 sweep의 태스크 목록 밖이다.
+
+**리포 전역 재측정 (열거 없는 질의).** codex가 *"디렉토리 열거에 의존하는 질의는 AC13의 완료
+오라클이 될 수 없다"* 고 지적해, `plugins/` 전체를 대상으로 다시 쟀다:
+
+| 전역 질의 | 결과 |
+|---|---|
+| `^model:` 중 non-inherit | **0건** |
+| `-c … model_reasoning_effort` 실행 인자 | **0건** (spike 제거 후) |
+| dispatch-time tier override (`"model": "sonnet"` 류) | **0건** — 유일 매칭은 정정 완료된 `experiment-model-override.md` 산문 |
+
+즉 열거 구멍이 실제로 감춘 것은 **spike 핀 1건**이었고 그것은 제거됐다. §2 질의를 열거에서
+전수로 재작성하는 것 자체는 후속 사이클 항목이지만, **이번 sweep의 완료 주장은 열거가 아니라
+위 전역 측정에 근거한다**.
+
+> **질의 자체의 결함 3건 (기록).** 이 sweep의 판별식을 완료 오라클 자신에게 적용한 결과다.
+> ① 계획 문서 Task 13 Step 1의 goal 4 질의가 설계 §2:79보다 **좁았다** — 대체항
+> `only\b.*categories`와 경로 `plugins/*/scripts/` 누락. 설계 원본으로 재실행해 위 표를 얻었다
+> (`only\b.*categories`는 0건 — AC16 범주 개방 유지 확인). ② goal 2의 경로가 `scripts/`뿐이라
+> `tests/spike/`의 리터럴 상한을 놓쳤다. ③ goal 4의 경로 목록에 `commands/`가 없어
+> project-init의 재질문 상한을 놓쳤다. **①은 내가 자백했고 ②③은 리뷰어가 찾았다** — 자기 결함을
+> 한 건 자백한 것이 나머지를 찾았다는 증거가 되지 않는다는 실례다.
+>
+> **근본 원인은 공통이다**: §2의 질의들이 `plugins/` 전체가 아니라 **디렉토리를 열거**한다.
+> 열거는 공간에 fail-open이고(빠뜨린 디렉토리는 영원히 안 보인다), 새 컴포넌트 타입이 생기면
+> 시간에도 fail-open이다 — `tools:` allowlist vs denylist에 대해 이 리포가 이미 쓴 논리와 같다.
+> 후속 사이클은 질의를 `plugins/` 루트 스캔 + 제외 목록으로 뒤집는 것을 검토해야 한다.
+
+### 12.2 문서 메타데이터
+
 - **작성일** 2026-08-02
 - **브랜치** `fix/harness-capability-suppression-sweep`
 - **baseline** `e45619b`
@@ -554,3 +692,12 @@ devbrew 전 표면에서 하니스가 모델 능력을 깎는 지점을 제거�
 - **census 산출** 13 에이전트 / 110 findings + 14 / 2,077,370 subagent tokens / 41분
 - **관련 원칙** P8 (Determinism Economy) · P17 (User Sovereignty) · P21 (Security & Supply Chain)
 - **선행 기록** `docs/audits/2026-07-27-spec-distill-zero-tool-probe.md` (`tools: []` 격리 실측)
+- **메모리 변경 (2026-08-03, git 밖 — 이 기록이 유일한 감사 흔적)**
+  - `feedback_respect_upstream_model_hardcoding.md` — 범위를 "타 플러그인 자신의 하드코딩된
+    model 존중"으로 명시하고, `model: inherit`을 sonnet으로 downgrade-override하라는
+    권장 줄을 삭제
+  - `project_spec_distill_interview_coverage_driven.md` — "implementer=sonnet 명시
+    override" 운영 기록에 2026-08-03 정정 주석을 붙여 그 패턴이 이후 금지됐음을 명시
+    (기록 자체는 보존)
+  - `MEMORY.md` — 위 두 항목의 hook 한 줄 동기화 + `project_harness_suppression_sweep.md`
+    항목을 "census 완료·구현 대기"에서 진행 상태로 갱신

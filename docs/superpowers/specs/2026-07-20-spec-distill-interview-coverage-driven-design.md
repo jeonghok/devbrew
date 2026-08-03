@@ -98,6 +98,18 @@ locked_decisions:
 - **NG5**: web budget cap(sweep 4 / session 8) 상향 — 외부 탐색 적극화는 라운드-비종속 재배치로 달성하지 cap 완화로 하지 않는다.
 - **NG6**: `check_brief.py`가 커버리지의 *의미적* 정합(floor가 진짜로 닫혔나)을 판정하는 것 — 게이트는 form·존재만 본다(C2). 의미는 orchestrator + 독립 adversary가 담보.
 
+> **사후 정정 (2026-08-03, 하니스 능력 억제 제거 sweep)**: NG5가 지킨 web budget 상한
+> (sweep 4회 / session 8회)은 이후 완전히 제거됐다 — `web_budget.py` 자체가 삭제되고
+> kill switch만 소비자별로 이식됐다(`conducting-interview`=호출 단위,
+> `reviewing-brief`=dispatch 단위, HIST-07). "외부 탐색 적극화는 cap 완화가 아니라
+> 라운드-비종속 재배치로 달성한다"는 이 non-goal의 근거는, 세션 모델의 실제 역량과
+> 무관하게 탐색 깊이를 고정하는 하니스 억제로 재평가됐다. probe count와 web budget은
+> 이 문서 C1에서도 서로 분리된 개념이었고(probe = 사용자 질문/답 교환, web search는
+> probe 아님), 이번 정정은 web budget에만 적용된다 — G3/C10의 probe 백스톱은
+> Unbounded-autonomy 방지 bound로서 유효하다. 상세는
+> `docs/superpowers/specs/2026-08-02-harness-capability-suppression-sweep-design.md`.
+> 이 문서의 나머지 판단(커버리지 원장 구조·G1-G5·C1-C10 등)은 유효하다.
+
 ## Constraints
 
 - **C1**: Unbounded-autonomy 금지 — `probe_count` soft cap 도달 & floor 미충족 시 사용자-override escalation을 발화해야 한다. cap은 `probe_budget.py`가 기계적으로 계산·집행한다(C10) — 프로즈 self-tracking 금지. 세 선택의 종료 의미론: **(계속)** `probe_budget.py raise-cap`이 `probe_cap_override`를 base cap(12)만큼 올려 effective_cap = base + override로 상향(state persist) 후 진행; **(박제 후 종료)** 미충족 floor 행을 `status: closed` + evidence `사용자-승인 박제(@probe N) — §Open Questions 참조`로 기록하고 그 내용을 §Open Questions로 이동 → AC2 게이트 통과(floor closed)하되 박제 표식이 원장에 가시적(C2가 인정한 orchestrator-writes-closed의 명시적·사용자승인 사례, silent bypass 아님); **(abort)** brief 미작성, state 보존.
