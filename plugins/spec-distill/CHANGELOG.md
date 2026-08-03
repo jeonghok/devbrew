@@ -12,13 +12,37 @@ v0.14.0–v0.18.0 에 쌓인 방어층 4개를 원인과 함께 걷어냈다. �
   `scripts/arm_ledger.py` 의 `should_arm()` 한 곳에만 존재하고 훅은 그것만 부른다.
   두 조건이 서로 다른 시간축을 덮는다 — 원장 단독이면 세션마다 한 번씩 다시 리뷰되고,
   git 단독이면 커밋 전 fix 루프에서 계속 재arm 된다.
-- **원장 기록의 주체가 "완료된 리뷰" 로 확정됐다.** validator·Stop·skill 진입은 쓰지
+- **원장 기록자가 둘로 확정됐다** — verdict 가 나온 리뷰(완료) 와 G6 상한(3회)에 닿은
+  Stop 훅(포기). validator·skill 진입, 그리고 **상한 미달의 정상 dispatch** 는 쓰지
   않는다. 그 셋 중 어디에 써도 "리뷰를 받지 않았는데 표시된" 창이 생기고, 삭제된
   락이 TTL 로 얻던 자기치유를 잃는다. verdict 시점 기록은 TTL 을 새로 만들지 않고
   같은 자기치유를 얻는다 — **표시되지 않은 문서는 다음 arming 편집에서 다시 dispatch 되기 때문**.
-- **리뷰 진행 중 오발 방지가 락에서 pending strip 으로 바뀌었다.** dispatch 의 연료는
-  `pending_review` 이므로 `reviewing-spec` 진입 시 연료를 없애면 락이 필요 없다.
-  하나의 불변식에 두 표현을 두면 두 표현이 어긋나는 순간이 곧 버그다.
+  두 기록자의 결론은 같다("더 이상 dispatch 안 함"), 그리고 어느 쪽도 문서를 쓴 턴이 아니다.
+- **리뷰 진행 중 오발 방지가 락에서 pending strip + 원장 게이트로 바뀌었다.** dispatch 의
+  연료는 `pending_review` 이므로 `reviewing-spec` 진입 시 연료를 없애면 락이 필요 없다.
+  다만 진입 strip 하나만으로는 부족하다 — skill 이 Step 1(strip-pending)과 Step 3
+  (mark-reviewed)을 분리된 두 bash 블록으로 실행하므로, Step 1 이 빠지면 pending 이
+  살아남고 실제 리뷰는 30초 TTL 을 넘겨 다음 Stop 이 이미 리뷰된 문서에 다시 block 을
+  낸다. 그래서 **Stop·UserPromptSubmit 두 소비자가 emit 전에 `armed_paths` 를 조회**한다
+  (Stop 은 남은 stale pending 도 함께 정리하고 결과를 보고한다; `armed_paths` 는 건드리지
+  않으므로 상한 미달 무-기록 성질은 유지). 조회 실패는 dispatch 쪽 fail-open.
+- **`is_born` 의 cwd 의존을 제거했다.** 전에는 raw_path 를 cwd 상대 git pathspec 으로
+  넘겨, 하위 디렉토리에서 부르면 **커밋된 문서가 not-born** 으로 떨어졌다 (v0.14.0 에
+  출하됐던 버그와 같은 모양이며 그 락은 승계 없이 삭제돼 있었다). 이제 **상대경로만**
+  `:(top,literal)`+canonical_key 로 리포 루트에 고정하고, **절대경로는 접지 않는다** —
+  접으면 다른 체크아웃의 문서를 이 리포 파일로 오판한다(아래 Fixed 참조).
+- **제어문자가 든 경로는 원장에 들어가지 못한다 (Security).** 상태 파일은 0-indent 블록으로
+  파싱되는 마크다운이라, 개행이 든 `tool_input.file_path` 가 그대로 보간되면 `armed_paths:`
+  를 위조해 **다른 문서**의 리뷰를 영구 억제할 수 있었다(T16 mutation 으로 실증 — 가드를
+  빼면 위조가 성공한다). 차단은 **writer**(`write_state`)에 둔다 — reader 마다 거르면 새
+  reader 가 생길 때마다 두더지잡기가 된다. `canonical_key` 도 방어적으로 함께 거부한다.
+- **`_read_body` 가 부재(`""`)와 판독 실패(`None`)를 구분한다.** 빈 body 로의 degrade 는
+  읽기 술어(`is_armed`·`skip_reason`)에는 옳지만(미기록 → arm, 안전한 방향),
+  read-modify-write 인 `mark_reviewed`·`strip_pending_file` 에서는 판독 불가 원장을
+  통째로 덮어써 다른 문서의 `armed_paths` 와 살아있는 `pending_review` 를 함께 지웠다.
+  이제 두 쓰기 경로는 보존하고 멈춘다(P14). 훅 두 곳의 `except OSError` 도
+  `(OSError, UnicodeDecodeError)` 로 넓혔다 — `UnicodeDecodeError` 는 `ValueError`
+  하위라 좁은 절이 판독 불가 원장에서 훅을 죽여 dispatch 를 통째로 없애고 있었다.
 - **PostToolUse arm-skip advisory 가 사유를 세 가지로 구분**한다 — 세션 내 리뷰 완료 /
   git 이 아는 문서 / G6 상한 도달. 앞의 둘과 셋째는 사용자가 취해야 할 행동이 다르다.
 
@@ -29,14 +53,91 @@ v0.14.0–v0.18.0 에 쌓인 방어층 4개를 원인과 함께 걷어냈다. �
   경계가 세션당인 이유: 그 상태는 세션 스코프이고, 문서 생애 상한으로 만들려면
   세션 밖에 살아남는 저장소가 필요한데 그것은 NG4 가 배제한다. 세션을 넘겨도 멈추게
   하는 진짜 수단은 문서를 커밋하는 것이고 approve 시점 `check-born` advisory 가 그것을 촉구한다.
-- 회귀 락 T1–T12 (`tests/test_arm_once.sh`, `tests/test_arm_ledger_timing.sh`) —
+- 회귀 락 T1–T19 (`tests/test_arm_once.sh` T1–T3·T13–T19, `tests/test_stale_terms.sh`
+  V9·V10 = T4·T5, `tests/test_arm_ledger_timing.sh` T6–T12) + `tests/test_arm_ledger.py`
+  유닛 · `tests/arm_test_helpers.sh` 공유 하니스 —
   전부 mutation 으로 이빨을 증명했다. T7·T8 은 서로 반대 방향이라 함께 있어야 이빨이
-  생기고, T10 은 `arm_ledger` CLI 의미가 아니라 **Stop 훅의 원장 무-기록**을 잰다.
+  생기고, T10 은 `arm_ledger` CLI 의미가 아니라 **상한 미달 dispatch 단독에서의 Stop 훅
+  원장 무-기록**을 잰다(상한에 닿는 dispatch 는 반대로 기록한다 — 그 구분이 T10 의 요지).
+- 승계 락 S5–S8 (`tests/test_reviewing_spec_state_keying.sh`) — 삭제된 AC8-c·AC11-a·
+  AC11-b·AC8-a/b 가 잠그던 불변식의 승계처. 세 섹션 윈도우는 종료 앵커의 존재를 먼저
+  확인한다: `sed` 의 범위 주소는 종료 주소가 매칭되지 않으면 EOF 까지 출력하므로,
+  그 확인이 없으면 무관한 라벨 rename 한 번에 "공존" 락이 조용히 file-wide 존재
+  확인으로 바뀐다(측정: 12줄 → 130줄, 스위트는 GREEN).
+- T17 — 세 훅의 UTF-8 stdio 고정 회귀 락. **트리거는 `LC_ALL=C` 가 아니다**: macOS
+  CPython 은 C 로케일에서도 stdio 를 UTF-8 로 강제해, 로케일 축으로는 핀을 통째로
+  제거해도 차이가 없다(측정 8회). 실제로 갈리는 축은 `PYTHONIOENCODING` 이며 T17 은
+  그쪽을 잰다.
+- `tests/test_arm_ledger.py` 유닛 4종 추가 — `armed_paths` 위조(splitlines 경계),
+  교차-체크아웃 `is_born`, `PATH_PREFIX`↔`PREFIX` 계약, `strip_pending_file` 의
+  판독불가 보존(모듈이 "유일한 비대칭 방어" 라 부르는 쌍의 나머지 절반).
+
+### Fixed
+- `is_born()` 이 다른 체크아웃의 문서를 이 리포의 동명 파일로 판정하던 결함. pathspec 을
+  `:/{canonical_key}` 로 접으면 **어느 체크아웃이었는지가 사라진다** — 접힌 키가 이 리포
+  index 에 있으면 born=True 가 되고 `should_arm` 이 False 로 떨어져 그 문서의 Law 1
+  게이트가 조용히 꺼진다. 현실적 트리거는 이 프로젝트 자신의 레이아웃이었다(cwd = main
+  repo, 편집 대상 = `.claude/worktrees/<name>/docs/superpowers/specs/…`). 이제 절대경로는
+  접지 않고 git 이 소속 리포를 판정하게 두며(리포 밖이면 128 → loud → arm), 상대경로만
+  `:(top,literal)` 로 리포 루트에 고정한다. `--` 는 옵션 파싱만 멈출 뿐 wildmatch 를 끄지
+  않으므로 `literal` 매직이 함께 필요하다 — 그전엔 파일명 속 `*` 하나로 존재한 적 없는
+  문서가 born 이 됐다.
+- pending 기록에 실패한 편집에도 "Reviewer will be dispatched at turn end" advisory 가
+  나가던 결함. `write_state` 가 실패 **사유**를 반환하고 호출부가 그것을 소비해
+  `emit_arm_skip_advisory` 로 진실을 보고한 뒤 성공 advisory 앞에서 종료한다. 기록이
+  안 됐는데 리뷰를 약속하면 모델은 오지 않을 리뷰를 기다린다(under-review 방향).
+- writer 와 `canonical_key` 가 서로 다른 문자 집합을 거부하던 결함. 차집합(탭·NBSP·ZWSP 등)
+  에 속하는 파일명은 pending 은 쓰이는데 원장엔 기록될 수 없어 `dispatch_attempts` 가
+  오르지 않았고, G6 상한(3)이 **구조적으로 무력화**돼 편집마다 영구 재발동했다. 이제
+  writer 가 `canonical_key` 를 술어로 쓴다(판정 지점 1곳).
+- Stop 훅 원장 게이트에서 `return 0` 이 `try` 안에 있어, veto 확정 **이후** sweep 이
+  던진 예외가 dispatch 경로로 흘러 이미 기록된 문서를 다시 dispatch 하던 결함. 판정과
+  부작용의 `try` 를 분리했고, sweep 실패 시 문구도 사실에 맞췄다(조회는 성공했다).
+- validator 의 stdin `except` 가 `OSError` 까지 삼키면서 arm 지점에서 rc 0 + 무출력이
+  되던 결함. 형제 두 훅은 같은 릴리스에서 advisory 를 받았고 이 파일만 빠져 있었다.
+- **arm 은 됐는데 기록이 안 된 모든 분기가 성공 advisory 로 새던 결함.** pending 이
+  없으면 Stop 훅이 볼 것이 없어 리뷰는 영영 발동하지 않는데, `write_state` 실패·세션 id
+  미해석·`SKIP_AUTOREVIEW=1` 세 경로가 그대로 "Reviewer will be dispatched at turn end"
+  로 흘렀다. 이제 각 경로가 사유 sentinel 과 함께 arm-skip advisory 를 내고 종료한다
+  (T18·T19 가 stdout 을 두 축으로 잰다 — arm-skip 이 **있고** 성공 문구가 **없다**).
+- **`unkeyable()` 의 예외 폭·검사 범위 정렬.** `ImportError` 만 잡아 `arm_ledger` 의
+  `SyntaxError`(머지 충돌 마커 등)가 arm 게이트에서 degrade 된 뒤 writer 에서 다시 터져
+  훅이 rc≠0 + 무-stdout 으로 죽었다(HEAD 에서는 정상 arm 되던 입력). 또 fallback 이
+  경로 **전체**를 검사해 `canonical_key`(PREFIX 이후만 검사)와 어긋났고, 그 방향이
+  fail-**closed** 였다. 둘 다 맞췄다.
+- **인코딩 불가 상태 값이 훅을 죽이던 결함.** `os.getcwd()` 의 surrogateescape 문자열은
+  줄 수 검사를 통과하고 `write_text` 에서 `UnicodeEncodeError` 를 던지는데, 그건
+  `ValueError` 하위라 호출부의 `except (PermissionError, OSError)` 를 그대로 통과했다.
+  선제 인코딩 검사 + `UnicodeError` 절.
+- **`skip_reason` 이 "스코프 밖"과 "키 불가"를 뭉개던 결함.** 파일명의 보이지 않는 문자
+  하나로 자동 리뷰를 잃은 문서가 "스코프 밖 경로"로 보고돼 원인도 조치도 알 수 없었다.
+- **`bounded_window` 의 순서 역전 구멍.** 종료 앵커의 *존재*만 확인하면, 앵커가 시작보다
+  앞에 있을 때 범위가 그대로 EOF 까지 흐른다(실측 12줄 → 129줄, GREEN). 이제 출력의
+  마지막 줄이 종료 앵커인지 — 즉 범위가 **거기서 끝났는지** — 를 잰다. 같은 파일의 S1 이
+  `pipefail` 아래에서 `grep -q` 로 파이프하던 것도 herestring 으로 바꿨다(SIGPIPE 141 이
+  매치 성공을 FAIL 로 뒤집는다).
+- **T17 의 거짓 진단.** `'제어문자'` 를 앵커로 쓰면 인코딩 주장이 어느 가드가 처리했는지에
+  묶여, 다른 가드를 지웠을 때 "stdio 고정 없음" 이라고 잘못 보고했다. 두 가드에 공통인
+  문구로 옮겨 두 성질을 분리했다.
+
+### Security
+- `canonical_key` 가 `str.splitlines()` 경계를 명시적으로 거부한다. 원장 reader
+  (`armed_keys`·`attempts`)는 `splitlines()` 로 줄을 나누는데 그건 `\n` 뿐 아니라
+  VT·FF·FS·GS·RS·NEL·U+2028·U+2029 에서도 쪼갠다. 반면 `ARMED_RE` 의 `[^\n]+` 는 그것들을
+  전부 통과시키므로, U+2028 이 든 키는 **물리적으로 한 줄**로 기록되고 **두 개의 키**로
+  읽혀 다른 문서의 리뷰를 영구 억제할 수 있었다(유닛으로 실증). `isprintable()` 이 부수적
+  으로 같은 문자를 막고 있었으나 선언이 아니었고, 실제로 리뷰에서 "그 절을 좁히자"는
+  제안이 나왔다 — 그 mutation 은 이제 RED 다.
+- `write_state` 가 완성된 pending 블록의 줄 수를 reader 와 **같은 함수**로 검사한다.
+  `path` 외에 `mode`·`worktree_path`(=`os.getcwd()`, POSIX 디렉토리명에 개행 허용) 도
+  같은 보간 지점이라, 값마다 술어를 늘리는 대신 블록 전체를 한 번 센다.
 
 ### Removed
 - `scripts/review_lock.py`(240) · `scripts/cancel_review.py`(99) ·
   `scripts/approve_handoff.sh`(98) · `scripts/suppress_state.py`(242) — 합계 679 줄이
-  사라지고 `scripts/arm_ledger.py`(369줄) 한 파일이 그 자리를 대신한다.
+  사라지고 `scripts/arm_ledger.py` 한 파일이 그 자리를 대신한다(순감소 ~240줄).
+  <!-- 대체 파일의 절대 줄수는 적지 않는다: 같은 릴리스 안에서 이 파일을 고칠 때마다
+       숫자가 낡고, 실제로 리뷰에서 369→410 불일치로 적발됐다. 삭제분 679 는 확정값. -->
 - `/spec-distill:cancel-review` 커맨드. 네 용도 중 (a) approve 후 재arm 억제와
   (b) 고착 pending 정리는 **대상이 소멸**했고, (c) 미리 옵트아웃은 **인정된 손실**이며
   (남는 비용은 미커밋인 채 넘긴 세션당 dispatch 1회, `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1`

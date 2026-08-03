@@ -23,7 +23,7 @@ cost_class: medium
    STATE="$ROOT/$harness_sid/state.local.md"   # 훅이 읽는 바로 그 파일
    ```
 
-   이 `$STATE` 에서 `pending_review:`(→ `spec_path`·`mode`)를 읽는다. PostToolUse `spec-write-validator.py` 가 `pending_review:` 를 **항상 harness-sid 디렉토리**에 기록하므로, **read==write 디렉토리 불변식**(스킬의 pending/spec READ 와 `strip-pending`·`mark-reviewed` WRITE 가 같은 `$STATE` 를 가리킴)이 성립해야 락이 훅에 보인다. block 이 없으면 manual override(loud advisory). v0.12.0부터 **design mode 전용**: 11-section/locked_decisions schema 검사는 적용 안 함(brainstorming 자유 형식). 본문의 placeholder/ambiguity/scope-creep/approaches-comparison/isolation/testing/handoff_incomplete만 spec-reviewer 에게 요청.
+   이 `$STATE` 에서 `pending_review:`(→ `spec_path`·`mode`)를 읽는다. PostToolUse `spec-write-validator.py` 가 `pending_review:` 를 **항상 harness-sid 디렉토리**에 기록하므로, **read==write 디렉토리 불변식**(스킬의 pending/spec READ 와 `strip-pending`·`mark-reviewed` WRITE 가 같은 `$STATE` 를 가리킴)이 성립해야 원장(`armed_paths`)과 pending 이 훅이 읽는 바로 그 파일에 기록된다 — 어긋나면 arm-once 게이트가 훅과 다른 파일을 키잉해 통째로 무의미해진다. block 이 없으면 manual override(loud advisory). v0.12.0부터 **design mode 전용**: 11-section/locked_decisions schema 검사는 적용 안 함(brainstorming 자유 형식). 본문의 placeholder/ambiguity/scope-creep/approaches-comparison/isolation/testing/handoff_incomplete만 spec-reviewer 에게 요청.
 
    **불변식 (hook-facing 상태 vs continuity):** hook-facing 상태(`pending_review`·`armed_paths`·`dispatch_attempts`)의 read/write 는 harness sid(`$STATE`); `rereview_count`/`issue_history` continuity 는 이 fix 가 건드리지 않고 harness-sid 로 collapse 하지 않는다.
 

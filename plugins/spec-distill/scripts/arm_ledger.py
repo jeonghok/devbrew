@@ -59,7 +59,32 @@ def canonical_key(raw_path: str) -> str | None:
     idx = raw_path.find(PREFIX)
     if idx < 0:
         return None
-    return raw_path[idx:]
+    key = raw_path[idx:]
+    # 제어문자가 든 경로는 키가 될 수 없다. 상태 파일은 0-indent 블록으로 파싱되는
+    # 마크다운이라, 개행이 든 경로가 보간되면 `armed_paths:` 블록을 위조해 **다른**
+    # 문서의 리뷰를 영구 억제할 수 있다. 스코프 밖(None)으로 떨어뜨리는 것이 안전한
+    # 방향 — arm 억제가 아니라 arm 유지 쪽이다.
+    # **위조 판정은 reader 와 같은 함수로 한다.** `armed_keys`·`attempts` 는
+    # `splitlines()` 로 줄을 나누는데, 그건 `\n` 뿐 아니라 universal-newline 전체
+    # (VT U+000B · FF U+000C · FS/GS/RS U+001C-1E · NEL U+0085 · LS U+2028 · PS U+2029)
+    # 에서 쪼갠다. 반면 `ARMED_RE` 의 `[^\n]+` 는 그것들을 전부 통과시킨다 — 그래서
+    # U+2028 이 든 키는 **물리적으로 한 줄**로 기록되고 **두 개의 키**로 읽혀 다른
+    # 문서의 리뷰를 영구 억제한다. `\n\r` 만 세는 것으로는 부족하다.
+    #
+    # 아래 `isprintable()` 도 같은 문자들을 (Cc/Zl/Zp 라서) 막으므로 이 줄은 **행동상
+    # 잉여**다 — 지워도 동작이 바뀌지 않는다. 남겨 두는 이유는 방어가 아니라 **선언**:
+    # `isprintable()` 이 무엇을 지키고 있는지가 이름만 봐서는 보이지 않아, 리뷰에서
+    # 실제로 "과하니 `\n\r\x00` 로 좁히자"는 제안이 나왔다. 그 좁히기는 T16 이 막는
+    # 위조를 되연다.
+    #
+    # 착각 금지: 이 줄이 그 좁히기를 **막지는 못한다**. `isprintable()` 만 지우고 이 줄을
+    # 남기면 `\x1b` 같은 문자가 키로 통과한다(측정 확인). 그 조합을 잡는 것은 이 줄이
+    # 아니라 유닛 테스트 쪽 책임이다.
+    if len(key.splitlines()) != 1:
+        return None
+    if any(c in key for c in "\n\r\t\x00") or not key.isprintable():
+        return None
+    return key
 
 
 def state_file_for(sid: str) -> Path:
@@ -112,18 +137,27 @@ def attempts(body: str) -> dict[str, int]:
     return out
 
 
-def _read_body(state_file: Path) -> str:
-    """원장 read. 실패는 빈 body로 degrade — 판정은 arm 쪽으로 fail-open (§8)."""
+def _read_body(state_file: Path) -> str | None:
+    """원장 read. 부재는 `""`, **판독 실패는 `None`** — 둘은 같은 뜻이 아니다.
+
+    이 구분이 이 모듈의 유일한 비대칭 방어다. 빈 body 로의 degrade 는 *읽기* 술어
+    (`is_armed`·`skip_reason`)에는 옳다 — 미기록으로 읽혀 arm 쪽, 안전한 방향이다.
+    그러나 같은 값을 read-modify-write 인 `mark_reviewed` 가 "새 세션" 으로 읽으면
+    파일 전체를 덮어써 다른 문서의 `armed_paths` 와 살아있는 `pending_review` 를
+    함께 지운다 — 이 릴리스가 없애려는 재발동 그 자체다. 그래서 읽기 쪽은 호출부에서
+    명시적으로 `or ""` 로 degrade 하고(방향이 코드에 보이게), 쓰기 쪽은 `None` 에서
+    멈춘다. 판독 불가 파일은 보존한다 (CLAUDE.md: 실패 시 디버깅을 위해 보존).
+    """
     if not state_file.exists():
         return ""
     try:
         return state_file.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
         print(
-            f"[spec-distill] arm_ledger: 원장 read 실패 — 미기록으로 간주(arm): {exc}",
+            f"[spec-distill] arm_ledger: 원장 read 실패: {exc}",
             file=sys.stderr,
         )
-        return ""
+        return None
 
 
 def _compose(body: str, keys: list[str], att: dict[str, int]) -> str:
@@ -144,7 +178,8 @@ def is_armed(state_file: Path, raw_path: str) -> bool:
     key = canonical_key(raw_path)
     if key is None:
         return False
-    return key in armed_keys(_read_body(state_file))
+    # 읽기 술어 — 판독 실패는 "미기록"으로 degrade 해 arm 쪽(안전한 방향)으로 떨어진다.
+    return key in armed_keys(_read_body(state_file) or "")
 
 
 def is_born(raw_path: str) -> bool:
@@ -154,9 +189,32 @@ def is_born(raw_path: str) -> bool:
     """
     if not raw_path:
         return False
+    # 고쳐야 했던 버그는 **상대경로**에만 있었다: repo-root 상대 경로를 하위 디렉토리에서
+    # 넘기면 git 이 cwd 상대로 해석해, 커밋된 문서가 not-born 으로 떨어진다(v0.14.0 과
+    # 같은 모양). 그래서 상대경로만 `:(top,...)` 로 리포 루트에 고정한다.
+    #
+    # **절대경로는 접지 않는다.** canonical_key 는 PREFIX 이후만 남기므로, 접어 버리면
+    # 다른 체크아웃(특히 `<main_repo>/.claude/worktrees/<name>/` 아래)의 문서가 이 리포의
+    # 동명 파일로 판정돼 born=True 가 되고, `should_arm` 이 False 가 되어 그 문서의 Law 1
+    # 게이트가 조용히 꺼진다 — 측정으로 재현했다(cwd=main repo, 워크트리 문서 → rc 0).
+    # 절대경로의 소속 리포는 git 이 스스로 정확히 판정한다(리포 밖이면 128 → loud → arm).
+    # 그 판정을 빼앗은 것이 결함의 원인이었으므로, 답은 containment 검사를 **더하는** 게
+    # 아니라 접기를 **하지 않는** 것이다. 문자열 접두사 비교는 여기서 특히 틀린다 —
+    # 워크트리가 main repo 경로 **안쪽**에 있어 "같은 리포"로 오판한다.
+    #
+    # 양쪽 다 `literal` 매직을 붙인다. `--` 는 옵션 파싱만 멈출 뿐 wildmatch 를 끄지
+    # 않아서, 파일명 속 `*` 하나가 무관한 tracked 파일에 매칭돼 존재한 적 없는 문서를
+    # born 으로 만든다(측정: `:/…/*-design.md` → rc 0, `:(top,literal)…` → rc 1).
+    key = canonical_key(raw_path)
+    if os.path.isabs(raw_path):
+        pathspec = f":(literal){raw_path}"
+    elif key is not None:
+        pathspec = f":(top,literal){key}"
+    else:
+        pathspec = f":(literal){raw_path}"
     try:
         cp = subprocess.run(
-            ["git", "ls-files", "--error-unmatch", "--", raw_path],
+            ["git", "ls-files", "--error-unmatch", "--", pathspec],
             capture_output=True, text=True, check=False, timeout=GIT_TIMEOUT_SEC,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -191,8 +249,14 @@ def skip_reason(state_file: Path, raw_path: str) -> str:
     """
     key = canonical_key(raw_path)
     if key is None:
-        return "out-of-scope"
-    body = _read_body(state_file)
+        # `canonical_key` 의 None 은 **두 가지 다른 사실**을 뜻한다: 진짜 스코프 밖,
+        # 그리고 스코프 안인데 키가 될 수 없음(제어문자·NBSP 등). 둘을 뭉개면 파일명의
+        # 보이지 않는 문자 하나 때문에 자동 리뷰를 잃은 문서가 "스코프 밖 경로"로
+        # 보고돼, 사용자는 원인도 조치도 알 수 없다. `unkeyable()` 의 docstring 이
+        # 이 둘은 뭉개지지 않는다고 주장하는데, 뭉개지던 자리가 바로 여기였다.
+        return "out-of-scope" if PREFIX not in raw_path else "unkeyable-path"
+    # 읽기 전용 — 판독 실패는 빈 body 로 degrade (arm 쪽).
+    body = _read_body(state_file) or ""
     if key in armed_keys(body):
         # mark-reviewed는 완료 시 attempts 항목을 지운다 → 남아 있으면 G6 상한 도달.
         return "capped" if key in attempts(body) else "reviewed"
@@ -251,6 +315,14 @@ def mark_reviewed(state_file: Path, raw_path: str) -> bool:
     if key is None:
         return False
     body = _read_body(state_file)
+    if body is None:
+        # 판독 불가 — 덮어쓰면 다른 문서의 원장·pending 이 함께 사라진다. 보존하고 멈춘다.
+        print(
+            "[spec-distill] arm_ledger: 원장 판독 불가 — 파일 보존, 리뷰 완료 미기록"
+            "(같은 문서가 다시 dispatch될 수 있다).",
+            file=sys.stderr,
+        )
+        return False
     if not body:
         body = f"---\nsession_id: {state_file.parent.name}\n---\n\n"
     keys = armed_keys(body)
@@ -282,6 +354,14 @@ def strip_pending_file(state_file: Path, raw_path: str) -> bool:
     if key is None or not state_file.exists():
         return False
     body = _read_body(state_file)
+    if body is None:
+        # mark_reviewed 와 같은 이유 — 이것도 read-modify-write 다. 보존하고 멈춘다.
+        print(
+            "[spec-distill] arm_ledger: 원장 판독 불가 — 파일 보존, pending strip 안 함"
+            "(리뷰 중 재dispatch 가능).",
+            file=sys.stderr,
+        )
+        return False
     pend = pending_path(body)
     if pend is None or canonical_key(pend) != key:
         return False

@@ -161,12 +161,18 @@ fi
 # load-bearing 한 명령 줄을 지워도, 다른 섹션으로 옮겨도 GREEN 이라 이 층이 주장하는
 # **공존(co-location)** 을 전혀 재지 못한다. 명령형(`arm_ledger.py" mark-reviewed`)은
 # 그 줄에만 있으므로 body-unique 하다.
+# 네 번째 conjunct — **규칙 문장 자체**를 고정한다. 앞의 세 개는 두 *토큰* 의 공존만
+# 재므로, 근거 산문을 남긴 채 명령형 리드인("예외 — …호출하지 않는다")만 지우면 GREEN
+# 이었다(실측 확인). 그리고 규칙을 무르게 하는 현실적 변경은 정확히 그 모양이다 —
+# 설명은 남기고 명령만 지운다. 이 문장이 없으면 아무도 리뷰하지 않은 both-dead 라운드가
+# "리뷰됨"으로 원장에 박혀 그 문서는 영영 다시 arm 되지 않는다.
 win="$(awk '/리뷰 완료 기록/{f=1} /^## /{f=0} f' "$SKILL")"
 if [[ -n "$win" ]] \
   && grep -qF 'arm_ledger.py" mark-reviewed' <<<"$win" \
   && grep -q 'claude_verdict_unrecoverable' <<<"$win" \
-  && grep -q 'codex_degraded' <<<"$win"; then
-  note PASS "T12b: SKILL Step 3의 mark-reviewed 지시가 both-dead 배제 조건과 같은 블록"
+  && grep -q 'codex_degraded' <<<"$win" \
+  && grep -qF '호출하지 않는다' <<<"$win"; then
+  note PASS "T12b: SKILL Step 3의 mark-reviewed 지시가 both-dead 배제 조건·금지 명령과 같은 블록"
 else
   note FAIL "T12b 실패: window=$(wc -l <<<"$win")줄"
 fi

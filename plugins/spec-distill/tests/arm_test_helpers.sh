@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # arm-once 테스트 공유 하니스 (v0.25.0).
-# test_arm_once.sh(T1–T3)와 test_arm_ledger_timing.sh(T6–T12)가 source한다.
+# test_arm_once.sh(T1–T3·T13–T19)와 test_arm_ledger_timing.sh(T6–T12)가 source한다.
 # **source 전용** — 이 파일 자체는 테스트가 아니다(이름에 test_ 접두어가 없는 이유).
 #
 # 계약: source하는 쪽이 `set -u -o pipefail`을 먼저 켜고, arm_work_init로 작업 리포를
@@ -18,6 +18,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
 VALIDATOR="$SD/hooks/spec-write-validator.py"
 DISPATCH="$SD/hooks/review-dispatch.py"
+REMINDER="$SD/hooks/pending-review-reminder.py"
 LEDGER="$SD/scripts/arm_ledger.py"
 MERGE="$SD/scripts/merge_review.py"
 SKILL="$SD/skills/reviewing-spec/SKILL.md"
@@ -69,6 +70,24 @@ run_stop() {  # $1=sid
   ( cd "$WORK" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$1" \
       DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0 \
       bash -c "echo '{}' | python3 '$DISPATCH'" 2>/dev/null )
+}
+# stdout+stderr 합본 — "emit 없음" assert 의 **생존 제어**용. stdout 만 재면 훅이
+# 크래시해도 빈 문자열이라 통과한다(무이빨 no-emit assert). advisory 를 함께 재면
+# 훅이 살아서 그 분기를 탔음이 증명된다.
+run_stop_all() {  # $1=sid
+  ( cd "$WORK" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$1" \
+      DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0 \
+      bash -c "echo '{}' | python3 '$DISPATCH'" 2>&1 )
+}
+run_reminder() {  # $1=sid — stdout만
+  ( cd "$WORK" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$1" \
+      DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0 \
+      bash -c "echo '{}' | python3 '$REMINDER'" 2>/dev/null )
+}
+run_reminder_all() {  # $1=sid — stdout+stderr 합본
+  ( cd "$WORK" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$1" \
+      DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0 \
+      bash -c "echo '{}' | python3 '$REMINDER'" 2>&1 )
 }
 run_ledger() {  # arm_ledger CLI — cwd가 WORK여야 state_root·git이 이 리포를 본다
   ( cd "$WORK" && python3 "$LEDGER" "$@" )

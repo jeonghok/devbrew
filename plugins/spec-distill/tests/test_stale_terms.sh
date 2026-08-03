@@ -136,9 +136,48 @@ removed_terms=(
   'cancel-review'
   'approve_handoff'
   'DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC'
+  # 되살아나면 안 되는 marker 하니스 계열(전 test_handoff_compact_chain.sh 가 잠그던
+  # 토큰). 현재 잔존 0건이며, 이 항목들은 *부재*를 잠근다 — 사건 기록이 아니다.
+  'FIRE_COUNT'
+  'compact-induction'
+  'compact-detect'
 )
+
+# 개념 별칭 — 식별자만 grep 하면 **같은 것을 다른 이름으로 부른 참조**가 살아남는다.
+# 근거는 실적이다: 식별자 'review_lock' 만 열거했을 때 살아남았던 생존자 두 건이
+#   hooks/state_path.py — "keys the review lock to the SAME state file" (공백 표기)
+#   skills/reviewing-spec/SKILL.md — "락이 훅에 보인다" (한국어)
+# 였고, 영어 식별자 grep 은 어느 쪽에도 닿지 못했다. 세 번째 항목 'suppressed path' 는
+# 위 두 건 같은 실적이 없는 **예방적 별칭**이다 — 같은 문단이 근거를 대는 척하면 안 되므로
+# 여기서 구분해 적는다.
+#
+# 이 그룹은 **README.md 를 제외한** production 만 훑는다.
+#
+# 이유: 위 헤더가 선언한 "살아있는 주장만" 기준을 이 항목들이 지키지 못한다.
+# 'review lock'·'suppressed path' 는 삭제를 정직하게 서술하는 문장에도 그대로 들어간다
+# ("the review lock added in v0.18.0 was removed in v0.25.0"). 그리고 이 플러그인이
+# 자기 삭제 연혁을 적는 곳이 정확히 README.md 다(README:50-62 가 이미 그 문체다).
+# 측정으로 확인됐다 — 현실적 릴리스 노트 문장을 README 에 붙이면 이 항목들이 발화한다.
+# 락이 정직한 문서 작성에 RED 를 내면 사람들은 락을 무시하게 된다.
+#
+# 커버리지는 줄지 않는다: 이 별칭들이 잡아낸 **실제 생존자 두 건**은 README 가 아니라
+# hooks/state_path.py 와 skills/reviewing-spec/SKILL.md 였다. README 만 면제하면
+# 위양성 표면은 사라지고 실적은 그대로 남는다.
+alias_terms=(
+  'review lock'
+  'suppressed path'
+  '락이 훅에'
+)
+alias_files=()
+for f in "${prod_files[@]}"; do
+  [[ "$(basename "$f")" == "README.md" ]] || alias_files+=("$f")
+done
+
+# `-i` 를 붙인다. 기존 `-InIF` 는 `-I -n -I -F` 로 대문자 I 가 두 번 들어간 것이고
+# `-i` 는 없었다 — 즉 대소문자를 구분했다. 되살아난 개념이 가장 먼저 자리잡는 곳은
+# `### Review Lock` 같은 헤딩인데 그게 통째로 빠져나갔다.
 for term in "${removed_terms[@]}"; do
-  scan -InIF -- "$term" "${prod_files[@]}"
+  scan -inIF -- "$term" "${prod_files[@]}"
   if [[ $SCAN_RC -ge 2 ]]; then
     note FAIL "V9/T4: '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
     printf '%s\n' "$SCAN_OUT"
@@ -146,6 +185,17 @@ for term in "${removed_terms[@]}"; do
     note FAIL "V9/T4: '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
   else
     note PASS "V9/T4: '$term' 잔존 0건 (production)"
+  fi
+done
+for term in "${alias_terms[@]}"; do
+  scan -inIF -- "$term" "${alias_files[@]}"
+  if [[ $SCAN_RC -ge 2 ]]; then
+    note FAIL "V9/T4: 별칭 '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
+    printf '%s\n' "$SCAN_OUT"
+  elif [[ $SCAN_RC -eq 0 ]]; then
+    note FAIL "V9/T4: 별칭 '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
+  else
+    note PASS "V9/T4: 별칭 '$term' 잔존 0건 (README 제외 production)"
   fi
 done
 
@@ -164,6 +214,10 @@ removed_files=(
   'tests/test_approve_handoff.sh'
   'tests/test_handoff_compact_chain.sh'
   'tests/test_handoff_spec_path_validation.sh'
+  # 전 test_handoff_compact_chain.sh 가 이 두 훅의 부재를 잠그고 있었다 — 그 락이
+  # 승계 없이 삭제돼, 되살아나도 아무것도 잡지 못하는 상태였다.
+  'hooks/compact-induction.py'
+  'hooks/compact-detect.py'
 )
 for rf in "${removed_files[@]}"; do
   [[ ! -e "$SD/$rf" ]] \

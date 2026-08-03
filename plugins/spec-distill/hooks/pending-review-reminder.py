@@ -20,6 +20,17 @@ import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+# 표준 스트림을 UTF-8 로 고정한다 (v0.25.0). `read_text(encoding="utf-8")` 와 달리
+# stdin 디코딩은 **프로세스 locale** 을 따르므로, LC_ALL=C 환경에서 훅 payload 의
+# 한국어(UserPromptSubmit 의 user prompt, PostToolUse 의 문서 내용)가
+# UnicodeDecodeError 로 훅을 죽인다 — 이 플러그인이 [0.24.4] 에서 이미 겪은 실패다.
+# except 절을 늘려 열거하는 대신 클래스 자체를 없앤다 (check_verbatim_coverage.py 와 동일 패턴).
+for _s in (sys.stdin, sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+    except (AttributeError, OSError):
+        pass
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 SCRIPTS_DIR = SCRIPT_DIR.parent / "scripts"
@@ -78,7 +89,8 @@ def main() -> int:
     # Read stdin (UserPromptSubmit payload) for session_id resolution
     try:
         payload = json.load(sys.stdin)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        # review-dispatch.py 와 동일 — 형제 소비자 정렬.
         payload = {}
     except OSError as exc:
         print(f"[spec-distill] stdin read error: {exc}", file=sys.stderr)
@@ -91,8 +103,22 @@ def main() -> int:
         return 0
     try:
         body = state_file.read_text(encoding="utf-8")
-    except OSError as e:
+    except (OSError, UnicodeDecodeError) as e:
+        # review-dispatch.py 와 같은 이유 — UnicodeDecodeError 는 ValueError 하위다.
+        # 이 훅은 L4b backstop 이라, 좁게 잡으면 Stop 과 이 훅이 같은 입력에 함께 죽는다.
+        # 그리고 같은 이유로 조용히 넘어가서도 안 된다 — backstop 이 primary 와 똑같이
+        # 소리 없이 실패하면 이중화의 의미가 없다. additionalContext 로 모델에 알린다.
         print(f"[spec-distill] reminder state read failed (non-fatal): {e}", file=sys.stderr)
+        print(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": (
+                    f"[spec-distill] arm-once:reminder-unreadable — state.local.md 판독 불가로 "
+                    f"자동 리뷰 알림이 중단됐다 "
+                    f"({state_file}). 파일을 복구하거나 reviewing-spec 을 직접 호출하라."
+                ),
+            },
+        }), flush=True)
         return 0
     m = PENDING_RE.search(body)
     if not m:
@@ -110,6 +136,31 @@ def main() -> int:
     spec_path = m.group("path").strip()
     mode = m.group("mode").strip()
     wt = (m.group("wt") or "").strip()
+    # G1 — review-dispatch 와 같은 게이트. 원장이 완료라고 말하는 문서는 stale pending 이
+    # 남아 있어도 nag 하지 않는다. 두 소비자가 pending 만 보고 각자 판단하면 한쪽만 고친
+    # 수정이 다른 쪽에 남는다(이 리포가 반복해서 겪은 실패 모드).
+    # 여기서는 strip 하지 않는다 — 이 훅은 조언자이지 상태 소유자가 아니다.
+    # Stop 훅이 정리를 맡고, 이 훅은 조용해지기만 한다.
+    try:
+        import arm_ledger  # pyright: ignore[reportMissingImports]  # SCRIPTS_DIR already on sys.path
+        # 이미 손에 든 `body` 로 판정한다 — `is_armed()` 는 파일을 다시 읽는데,
+        # 그 두 번째 read 가 실패하면 False 로 degrade 해 게이트를 통과시키고,
+        # 훅은 이어서 **첫 번째 스냅샷**(`body`)으로 rewrite_state 를 돌려
+        # 그 사이 바뀐 파일을 옛 내용으로 덮는다(TOCTOU). 순수 함수로 읽으면
+        # 창 자체가 없다.
+        _key = arm_ledger.canonical_key(spec_path)
+        if _key is not None and _key in arm_ledger.armed_keys(body):
+            print(
+                f"[spec-distill] reminder: '{spec_path}'는 원장에 기록된 문서 — "
+                "nag 생략 (arm-once).",
+                file=sys.stderr,
+            )
+            return 0
+    except Exception as exc:  # noqa: BLE001 — loud degradation
+        print(
+            f"[spec-distill] reminder 원장 조회 실패 (non-fatal, nag 계속): {exc}",
+            file=sys.stderr,
+        )
     parts = [
         "REMINDER (UserPromptSubmit): pending_review still active — reviewing-spec skill 호출 필요.",
         f"spec path: {spec_path}.",
