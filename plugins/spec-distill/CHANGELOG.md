@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.24.15] — 2026-08-04
+
+### Fixed
+
+- `README.md:74`·`:110` — Law 2 선언이 실제 `tools:` allowlist보다 **좁게** 적혀
+  있었다. `spec-reviewer`와 `coverage-mapper`가 이 sweep에서 `WebSearch`/`WebFetch`를
+  받았는데 README는 옛 목록을 유지해 **부여된 egress를 문서가 은폐**했다
+  (`/qg branch` 라운드 1, security-reviewer + code-reviewer 독립 적발).
+  `tests/test_readme_sync.sh:52`는 agent *이름*만 grep해 이 drift를 못 본다.
+  - **미해결로 남긴 것**: `coverage-mapper`의 본문은 웹 조사를 요구하지 않는데도
+    egress를 갖는다(설계 goal-3의 자기 기준 미충족). adversarial은 SUGGESTION으로
+    강등했고 — 설계 AC3가 의도적으로 부여했으므로 exfiltration 판정은 성립하지
+    않는다 — 되돌리려면 frontmatter·AC3·frontmatter 락 2개를 **한 커밋에 함께**
+    고쳐야 한다. 이번 라운드 범위 밖.
+
+### Changed
+
+- `tests/test_web_kill_switch.sh` — 소비자 목록을 열거에서 **도출**로, 앵커를
+  선언에서 **소비**로 (0.24.14 항목 참조).
+
 ## [0.24.14] — 2026-08-04
 
 ### Fixed

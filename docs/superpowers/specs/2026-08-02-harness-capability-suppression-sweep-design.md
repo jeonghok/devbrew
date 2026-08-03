@@ -26,6 +26,7 @@ devbrew의 모든 컨텍스트 표면에서 하니스가 모델(Claude·codex)�
 - [Handoff Context](#handoff-context)
 - [12. Metadata](#12-metadata)
   - [12.1 Load-bearing allowlist — AC13 잔여 매칭 등재](#121-load-bearing-allowlist--ac13-잔여-매칭-등재-2026-08-03-task-13-step-1)
+  - [12.1b AC11 dispatch 실측 기록](#121b-ac11-dispatch-실측-기록-2026-08-04)
   - [12.2 문서 메타데이터](#122-문서-메타데이터)
 
 ---
@@ -682,6 +683,36 @@ mis-registration을 감췄다** — Claude·codex 두 리뷰어가 독립적으�
 > 열거는 공간에 fail-open이고(빠뜨린 디렉토리는 영원히 안 보인다), 새 컴포넌트 타입이 생기면
 > 시간에도 fail-open이다 — `tools:` allowlist vs denylist에 대해 이 리포가 이미 쓴 논리와 같다.
 > 후속 사이클은 질의를 `plugins/` 루트 스캔 + 제외 목록으로 뒤집는 것을 검토해야 한다.
+
+### 12.1b AC11 dispatch 실측 기록 (2026-08-04)
+
+`§9.2`가 요구하는 실측을 수행하고 그 결과를 여기에 남긴다. **이 절이 없으면 AC11은
+검증됐다고 주장만 하고 근거가 리포에 없는 상태였다** — 실측 로그는 git-ignored인
+SDD 원장(`.superpowers/sdd/…/progress.md`)에만 있었고, 그것은 PR에 실려 나가지
+않는다(2026-08-04 `/qg branch` 라운드 1, codex 적발).
+
+**측정 방법.** 세션 재시작으로는 잴 수 없다 — agent 정의는 워크트리가 아니라 **설치된
+마켓플레이스 캐시**에서 resolve된다. `§9.2`가 괄호로 적어둔 headless 경로가 실제 경로다:
+
+```
+claude -p --plugin-dir <worktree>/plugins/<plugin>  …
+```
+
+**같은 시각 before/after 대조군** (부모 세션은 양쪽 다 opus):
+
+| 측정 대상 | 캐시 `spec-distill@0.24.4` (before) | 워크트리 `@0.24.13` (after) |
+|---|---|---|
+| `spec-reviewer` subagent의 `"model"` | `claude-sonnet-5` (핀 생존 — 부모가 opus인데 하향) | `claude-opus-5` (상속) |
+| 같은 subagent의 `WebSearch` 호출 | 0회 (도구 부재) | **1회 실호출** |
+
+즉 (a) `inherit`이 세션 모델을 실제로 상속하고, (b) `WebSearch` 부여가 프롬프트
+수사가 아니라 실제 도구 호출로 이어짐이 **한 쌍의 관측으로** 확인된다. 리터럴
+모델 id를 기대값으로 박지 않는다(`§9.2`) — 확인하는 것은 부모와 subagent의 `"model"`
+값이 **같은지**이다.
+
+**한계 (정직하게).** 이 측정은 `spec-reviewer` 한 경로다. AC1의 나머지 16개 agent는
+frontmatter 전수 확인(`test_agent_model_inherit_sweep.sh`)으로만 보증된다 — 구조적
+보증이지 dispatch 실측이 아니다.
 
 ### 12.2 문서 메타데이터
 
