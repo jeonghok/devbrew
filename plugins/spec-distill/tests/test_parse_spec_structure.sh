@@ -90,6 +90,24 @@ rc=$?
   && note PASS "~escape prefix excludes from scan" \
   || note FAIL "escape syntax failed (rc=$rc out=$out)"
 
+# T6-4 (단어경계, 완화 방향): 하이픈 복합어·접두 결합 안의 부분문자열은 hit되지 않는다.
+tmp_wb="$(mktemp)"
+printf '# t\n\nmerge with fast-forward; the loop is inefficient by design.\n' > "$tmp_wb"
+out=$(python3 "$SCRIPT" ambiguity "$tmp_wb" "$BL" 2>&1)
+echo "$out" | grep -q '"hits": \[\]' \
+  && note PASS "T6-4: 하이픈 복합어·접두 결합에서 오탐 없음" \
+  || note FAIL "T6-4: 정상 기술 용어에서 발화 (out=$out)"
+
+# T6-5 (반대 방향, 필수): 완화가 검사를 통째로 죽이지 않았다.
+# 이 assert가 없으면 blacklist 매칭을 전부 제거해도 T6-4가 GREEN이다.
+tmp_wp="$(mktemp)"
+printf '# t\n\nthe result must be fast and the API robust.\n' > "$tmp_wp"
+out=$(python3 "$SCRIPT" ambiguity "$tmp_wp" "$BL" 2>&1)
+{ echo "$out" | grep -q '"phrase": "fast"' && echo "$out" | grep -q '"phrase": "robust"'; } \
+  && note PASS "T6-5: 온전한 blacklist 단어는 계속 hit (검사가 살아 있다)" \
+  || note FAIL "T6-5: 완화가 검사를 죽였다 (out=$out)"
+rm -f "$tmp_wb" "$tmp_wp"
+
 echo ""
 echo "=== placeholders subcommand ==="
 

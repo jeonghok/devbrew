@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.24.13] — 2026-08-03
+
+### Fixed
+- `scripts/parse_spec_structure.py`의 `scan_ambiguity()`가 blacklist 문구를
+  `re.escape(phrase)` bare substring으로 찾아 하이픈 복합어·접두 결합 안에서도
+  발화했다 (`fast-forward`의 `fast`, `inefficient`의 `efficient` 등) —
+  ambiguity 없는 정상 기술 문서의 write를 Law 1 게이트가 거짓으로 막는
+  harness-capability-suppression-sweep S3f. **이 문서를 쓰는 동안 실제로 이
+  검사가 write를 세 번 exit 2로 막았다.** 단순 `\b` 감싸기는 이 버그를
+  고치지 못한다 — 하이픈은 `\w`가 아니라서 `\bfast\b`도 `fast-forward` 안의
+  `fast`에 그대로 매치한다. 경계 판정을 `(?<![\w-])phrase(?![\w-])`로 교체해
+  하이픈을 경계 문자 집합에 포함시켰다 — `~phrase` opt-out(문구 직전이 `~`가
+  아닌지 별도 확인)은 `~`가 `\w`도 `-`도 아니므로 그대로 동작한다.
+
 ## [0.24.12] — 2026-08-03
 
 ### Removed
