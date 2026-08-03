@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.24.11] — 2026-08-03
+
+### Fixed
+- `build_spec_codex_prompt.py`의 `PROMPT_TEMPLATE`에서 프롬프트 서두(:29-31)와
+  `other` 항목(:44)은 0.24.10에서 "여섯 개는 시작 어휘, 닫힌 목록 아니다"로
+  열었지만, 같은 템플릿의 JSON 출력 계약(`"category": "placeholder | ... |
+  testing"`, :59)은 여전히 6개로 닫혀 있었다 — prose는 열렸는데 contract는
+  안 열린 자기모순. 구조화 출력을 쓰는 모델은 prose와 schema가 충돌하면
+  schema를 따른다: 여섯 이름 어디에도 안 맞는 진짜 결함을 발견한 리뷰어는
+  prose로는 "`other`를 자유롭게 쓰라"는 지시를, contract로는 "`other`는 허용
+  값이 아니다"는 지시를 동시에 받는다 — 이 태스크가 없애려던 바로 그 drop이
+  한 레이어 아래로 옮겨갔을 뿐이었다. `:59`의 pipe-list에 기존 6개 순서를
+  그대로 두고 `| other`를 추가.
+  (참고: 같은 파일 module docstring `:5`의 "same 6 judgment categories the
+  Claude spec-reviewer uses"는 검증 결과 그대로 두는 것이 맞다 — Claude
+  spec-reviewer(`agents/spec-reviewer.md:121,149,155`)는 여전히 정확히 6개
+  닫힌 taxonomy를 쓰고, 이 문장은 codex 프롬프트가 그 6개와 "동일한 6개"를
+  기준으로 시작한다는 서술이지 codex 쪽 categoy가 6개로 닫혀 있다는 주장이
+  아니라서 열린 `other`와 모순되지 않는다. codex 프롬프트 밖의 순수 문서라
+  codex가 실제로 읽는 계약에도 영향 없다.)
+
+### Added
+- `test_build_spec_codex_prompt.sh`에 AC16b 락 추가 — JSON 출력 계약의
+  `"category":` 힌트 줄에 `other`가 없으면 RED. 기존 AC16(prose `other` 존재)
+  과 독립: prose만 보는 전-출력 grep이었다면 `other`가 이미 흔한 단어라(prose
+  bullet 자신, ":33"의 "or other unfinished text") schema가 닫힌 채로도
+  통과했을 것 — `"category":` 줄에 앵커링해 계약 표면만 정확히 겨냥.
+
 ## [0.24.10] — 2026-08-03
 
 ### Changed

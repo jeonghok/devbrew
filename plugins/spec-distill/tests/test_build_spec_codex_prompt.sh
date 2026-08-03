@@ -53,4 +53,19 @@ echo "$OUT" | grep -qE '^- other:' \
   && note PASS "AC16: other 범주가 프롬프트에 실린다" \
   || note FAIL "AC16: other 범주 부재"
 
+# AC16b (fix round 1) — prose alone is not enough. The JSON output-format
+# block's `"category":` schema hint is the OUTPUT CONTRACT: when prose and a
+# schema disagree, a model writing structured output follows the schema. If
+# the hint still enumerates only the six names, a reviewer is told in prose
+# to use `other` freely and told by the contract that `other` is not a
+# permitted value — the exact drop this task exists to prevent, just moved
+# one layer down. Anchored on the `"category":` line specifically (occurs
+# exactly once in the rendered output — verified) rather than a whole-output
+# grep for the bare word `other`, which is common in prose (line 44's bullet
+# itself, "or other unfinished text" at line 33) and would pass on the prose
+# alone even if the contract still enumerates six.
+echo "$OUT" | grep -qE '"category":[^"]*"[^"]*\bother\b[^"]*"' \
+  && note PASS "AC16b: category 스키마 힌트(contract)에 other 포함" \
+  || note FAIL "AC16b: category 스키마 힌트가 여전히 6개로 닫혀 있다 — prose와 contract가 모순"
+
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"; [[ $fail -eq 0 ]]

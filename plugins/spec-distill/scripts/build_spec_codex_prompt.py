@@ -56,7 +56,7 @@ Output your findings in a fenced JSON code block:
 {
   "findings": [
     {
-      "category": "placeholder | ambiguity | scope_creep | approaches_comparison | isolation | testing",
+      "category": "placeholder | ambiguity | scope_creep | approaches_comparison | isolation | testing | other",
       "target_section": "<markdown anchor of the offending section, e.g. #2-goals>",
       "severity": "block | high | medium",
       "confidence": <integer 1-10>,
