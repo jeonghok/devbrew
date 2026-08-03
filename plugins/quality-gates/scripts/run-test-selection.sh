@@ -36,11 +36,17 @@ cargo_target_dir_for() { printf '%s/target\n' "$1"; }
 # 양측이 같은 unit 목록을 돌므로 **두 번** 실행된다. 실측으로 재현된 경로이며, 설계
 # §5.9 의 "임의 명령을 추측해 실행하지 않는다" 를 정면으로 깬다.
 #
-# **잎(leaf)까지 해소해야 한다.** `dirname` 만 `pwd -P` 로 해소하면 디렉토리 심볼릭
-# 링크는 걸리지만 **잎 심볼릭 링크**(`tests/evil.sh -> ../../outside/evil.sh`)는 그대로
-# 통과한다 — `-x`/`-e` 는 링크를 따라가므로 assign 이 그것을 주장하고 run 이 트리 밖
-# 스크립트를 실행한다. 실측으로 shell·pytest 양쪽에서 재현됐다(라운드 2 NEW-2).
-resolve_leaf_dir() {   # resolve_leaf_dir <abs-path> → 최종 대상의 디렉토리 (pwd -P)
+# **검사하는 축을 정확히 적는다** (이 주석은 두 번 실제보다 넓게 주장했고, 두 번 다 그
+# 틈으로 탈출이 났다 — 라운드 2 NEW-2, 라운드 3 F1):
+#
+#   1. 렉시컬 — 절대경로, `..` 성분.
+#   2. 경로의 **디렉토리 성분** — `pwd -P` 가 중간 심볼릭 링크를 전부 해소한다.
+#   3. **잎이 심볼릭 링크일 때** 그 체인의 최종 대상 — 대상이 디렉토리면 대상 자신을,
+#      파일이면 그 dirname 을 정규화한다.
+#
+# 여기서 판정하지 **않는** 것: 대상이 트리 안이지만 워크트리 루트/디렉토리인 경우.
+# 그것은 담김 위반이 아니라 입도 위반이며 `exists_unit` 의 `-f` 가 막는다.
+resolve_leaf_dir() {   # resolve_leaf_dir <abs-path> → 최종 대상의 정규화 위치 (pwd -P)
   # 체인을 직접 따라간다 — `readlink -f`/`realpath` 는 macOS 구버전에 없거나 다르게
   # 동작한다. 홉 상한은 순환 링크 방어이고, 상한 초과는 fail-closed(거부)다.
   local p=$1 hops=0 t
@@ -53,7 +59,16 @@ resolve_leaf_dir() {   # resolve_leaf_dir <abs-path> → 최종 대상의 디렉
     hops=$((hops + 1))
   done
   [[ -L "$p" ]] && return 1
-  (cd "$(dirname "$p")" 2>/dev/null && pwd -P) || return 1
+  # **대상이 디렉토리면 대상 자신을 정규화한다.** dirname 만 정규화하면 `..` 로 끝나는
+  # 대상(`-> ../..`)이 새어나간다: 그 dirname 은 트리 **안**으로 정규화되는데 대상 자신은
+  # 트리 밖이다. 실측 — `tests/evil.py -> ../..` 가 담김 검사를 통과했고 pytest 가 워크트리
+  # **밖에서** 32개 테스트를 돌렸다(라운드 3 F1). 파일 대상은 basename 이 경로를 이동시킬
+  # 수 없으므로 dirname 정규화로 충분하다.
+  if [[ -d "$p" ]]; then
+    (cd "$p" 2>/dev/null && pwd -P) || return 1
+  else
+    (cd "$(dirname "$p")" 2>/dev/null && pwd -P) || return 1
+  fi
 }
 
 unit_within_worktree() {   # unit_within_worktree <worktree> <unit>
@@ -526,7 +541,15 @@ $f"
         # `-e "$w/$1"` 을 만족하지만 이 워크트리 밖이고, 그대로 러너에 넘어가면
         # pytest/jest 가 워크트리 밖 코드를 실행한다 (shell 과 같은 클래스).
         # 워크트리 밖 unit 은 정의상 "이 트리에 없다" = `absent` 다.
-        file)    unit_within_worktree "$w" "$1" && [[ -e "$w/$1" ]] ;;
+        #
+        # `-e` 가 아니라 **`-f`**(일반 파일)인 이유: `granularity: file` 의 unit 은 설계
+        # §5.4 표상 "테스트 파일 경로"다. 디렉토리가 file unit 으로 들어오면 러너가 그
+        # 디렉토리 **전체**를 돌고 그 결과가 unit 하나의 `pass` 로 보고된다 — 귀속이
+        # 파괴되는데 행은 초록이다. 트리 **안**을 가리키는 `tests/link.py -> ..` 는 담김
+        # 검사를 정당하게 통과하므로(실제로 트리 안이다) 이 축은 여기서만 막을 수 있다.
+        # `-f` 는 심볼릭 링크를 따라가므로 정당한 파일 링크는 그대로 통과한다.
+        # go 의 `package` 입도는 아래 `-d` 를 그대로 쓴다 — 루트 패키지 `.` 이 정당하다.
+        file)    unit_within_worktree "$w" "$1" && [[ -f "$w/$1" ]] ;;
         package) unit_within_worktree "$w" "$1" && [[ -d "$w/$1" ]] ;;
         bulk)    [[ "$1" == "BULK" ]] ;;
       esac

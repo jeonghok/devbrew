@@ -331,6 +331,16 @@ case_unit_outside_worktree_is_refused() {
     fail "잎 심볼릭 링크로 탈출 (out='$out')"; rm -f "$root/ESCAPED"
   fi
 
+  # 축 D — 대상이 **워크트리 루트 자신**(`-> ..`). 담김은 정당하게 통과한다(진짜로 트리
+  # 안이다). 그래서 이 축은 담김이 아니라 `granularity: file` 의 `-f` 검사가 막는다:
+  # 디렉토리를 file unit 으로 받으면 러너가 트리 **전체**를 돌고 그 결과가 unit 하나의
+  # `pass` 로 보고된다 — 탈출은 아니지만 귀속이 파괴되고 행은 초록이다.
+  ln -s .. "$w/tests/rootlink.sh"
+  out=$(bash "$RTS" run "$w" shell per-unit tests/rootlink.sh 2>/dev/null)
+  [[ "$out" == "tests/rootlink.sh${TAB}absent${TAB}-" ]] \
+    && pass "축 D: 루트를 가리키는 잎 링크는 file unit 이 아님 → absent (전-트리 실행 없음)" \
+    || fail "루트 링크가 file unit 으로 통과 (out='$out')"
+
   # 정당한 트리-안 unit 은 여전히 돈다 — 담김 검사가 대상을 통째로 죽이지 않았는가
   out=$(bash "$RTS" run "$w" shell per-unit tests/ok.sh 2>/dev/null)
   [[ "$out" == "tests/ok.sh${TAB}pass${TAB}0" ]] \
@@ -369,6 +379,47 @@ case_leaf_symlink_escape_via_pytest() {
   rm -rf "$root"
 }
 
+# 라운드 3 F1 — 대상이 **`..` 로 끝나는** 잎 링크. 잎 해소가 `dirname(최종 대상)` 만
+# 정규화하면 이 모양이 새어나간다: `-> ../..` 의 dirname 은 트리 **안**으로 정규화되는데
+# 대상 자신은 트리 밖이다. 실측으로 pytest 가 워크트리 **밖에서** 32개 테스트를 돌렸고
+# 행은 `pass 0` 이었다.
+#
+# **이 축은 `package` 입도로만 잴 수 있다.** `..` 로 끝나는 대상은 언제나 디렉토리이고,
+# `file` 입도에서는 `exists_unit` 의 `-f` 가 그것을 먼저 `absent` 로 만들어 담김 검사가
+# 무엇을 하든 결과가 같아진다 — 실제로 file 입도로 짠 첫 arm 은 담김 수정을 되돌려도
+# GREEN 이었다(계측기가 고장 나 있던 경우). go 는 `-d` 를 쓰므로 디렉토리 unit 이
+# 정당하고, 따라서 담김 검사가 유일한 방어선이다.
+#
+# `go` 스텁으로 관측한다 — 실물 toolchain 없이도(그리고 있어도) 같은 결과가 나와야 한다.
+case_package_unit_updot_symlink_escape() {
+  local root w bindir out rc
+  root=$(mktemp -d); w="$root/wt"
+  mkdir -p "$w/sub" "$root/sibling"
+  printf 'module x\n' > "$w/go.mod"
+  # **링크 깊이가 계측의 일부다.** 대상은 `dirname(대상)` 이 정확히 `$w` 로 정규화되도록
+  # 놓아야 옛(dirname-only) 코드가 그것을 "안"으로 판정한다 — 즉 링크는 `$w` 의 한 단계
+  # 아래에 있어야 한다. `$w/escape -> ../..` 처럼 얕게 놓으면 dirname 도 트리 밖이라
+  # **옛 코드조차 거부**하고, 그러면 이 arm 은 수정을 되돌려도 GREEN 이다(실측으로
+  # 그렇게 만들었다가 잡았다 — 계측기가 고장 난 케이스).
+  ln -s ../.. "$w/sub/escape"    # → $root (트리 밖). dirname(대상) = $w (트리 안).
+  bindir=$(mktemp -d)
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$bindir/go"; chmod +x "$bindir/go"
+
+  out=$(PATH="$bindir:$PATH" bash "$RTS" run "$w" go per-unit sub/escape 2>/dev/null); rc=$?
+  if [[ "$out" == "sub/escape${TAB}absent${TAB}-" ]]; then
+    pass "package unit: '..' 종단 잎 링크가 러너에 전달되지 않음 (대상 자신을 정규화)"
+  else
+    fail "'..' 종단 링크가 package unit 으로 러너에 전달됨 (rc=$rc out='$out')"
+  fi
+
+  # 정당한 트리-안 패키지는 그대로 돈다 — 과잉 차단 방지
+  mkdir -p "$w/pkg"; : > "$w/pkg/a_test.go"
+  out=$(PATH="$bindir:$PATH" bash "$RTS" run "$w" go per-unit pkg 2>/dev/null)
+  [[ "$out" == "pkg${TAB}pass${TAB}0" ]] \
+    && pass "트리 안 정당한 package unit 은 그대로 실행" || fail "package 과잉 차단 (out='$out')"
+  rm -rf "$root" "$bindir"
+}
+
 # 최종 whole-branch 리뷰 C2 백스톱 — 실행 **도중** 도구가 없어 나온 127 을 `error` 로
 # 두면 §5.5 가 fail 축으로 접어 양측 fail → PRE_EXISTING → attribution closed →
 # 테스트 0개 PASS 로 간다. 127 은 미실행 축(`unrun`)이다. 가용성 프로브는 실행
@@ -398,6 +449,7 @@ for c in case_assign_go_package case_assign_unclaimed case_assign_bulk_conflict 
          case_run_bulk_partial_absent case_run_bulk_refused_does_not_corrupt_sibling \
          case_run_bulk_unit_path_with_space \
          case_unit_outside_worktree_is_refused case_leaf_symlink_escape_via_pytest \
+         case_package_unit_updot_symlink_escape \
          case_run_exit_127_is_unrun; do
   echo "== $c"; $c
 done
