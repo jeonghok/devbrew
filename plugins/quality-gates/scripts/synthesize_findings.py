@@ -91,9 +91,17 @@ def promote_new_findings(raw_new, existing):
     이기고(신규를 버리고 loud 기록), 신규끼리 충돌하면 `-2`, `-3` … 를 붙여
     결정론적으로 분리한다.
 
-    한계(범위 밖): dedup()의 (file, line, severity) 그룹핑은 바꾸지 않으므로,
-    같은 좌표·같은 severity의 신규 두 건은 렌더 단계에서 여전히 한 행으로 합쳐진다.
-    그 병합 동작 자체는 별건(설계 §11 CHECKS-07)이다.
+    승격된 항목에는 `promoted: True`를 찍는다. dedup()은 이 표식을 보고 해당
+    항목을 그룹핑에서 **제외**한다 — 승격 이전에는 (file, line, severity) 충돌이
+    언제나 "두 리뷰어가 같은 것을 봤다"라 병합이 옳았지만, 승격이 생기면서 충돌이
+    "같은 줄의 *다른* 결함"일 수 있게 됐기 때문이다. 병합되면 발견 하나가 조용히
+    사라지고, 더 나쁘게는 살아남은 행의 `sources`에 adversarial이 붙어 **하지 않은
+    주장을 보증한 것처럼** 렌더된다(2026-08-03 재현, `test_…_promoted_findings.sh`
+    케이스 5·6). 실패 방향을 소실이 아니라 중복 쪽으로 돌리는 최소 봉쇄다.
+
+    범위 밖(설계 §11 CHECKS-07): dedup() 자체의 키 설계와 `sources`가 "같은 좌표에
+    보고한 agent"인지 "이 발견에 동의한 agent"인지의 의미론은 여전히 미해결이다.
+    이 봉쇄는 승격 경로만 그 미해결에서 떼어낸다.
     """
     promoted, dropped = [], 0
     seen = {finding_id(f) for f in existing if isinstance(f, dict)}
@@ -111,6 +119,7 @@ def promote_new_findings(raw_new, existing):
             continue
         f = dict(item)
         f["agent"] = "adversarial"
+        f["promoted"] = True
         f["line"] = f.get("line") or 0
         f.setdefault("confidence", NEW_FINDING_DEFAULT_CONFIDENCE)
         fid = finding_id(f)
@@ -152,8 +161,18 @@ def apply_verdicts(findings, verdicts):
 
 
 def dedup(findings):
+    """(file, line, severity)가 같은 발견을 한 행으로 합치고 `sources`를 모은다.
+
+    **승격된 발견(`promoted: True`)은 그룹핑에서 제외한다** — 근거는
+    promote_new_findings()의 docstring. 요약하면: 승격 이전에는 좌표 충돌이 항상
+    "두 리뷰어가 같은 것을 봤다"였지만 이제는 "같은 줄의 다른 결함"일 수 있고,
+    합치면 발견이 조용히 사라지는 데다 `sources`가 허위 보증을 만든다.
+    """
+    passthrough = [f for f in findings if f.get("promoted")]
     by_key = defaultdict(list)
     for f in findings:
+        if f.get("promoted"):
+            continue
         key = (f.get("file"), f.get("line"), f.get("severity"))
         by_key[key].append(f)
     deduped = []
@@ -162,7 +181,7 @@ def dedup(findings):
         merged = dict(group[0])
         merged["sources"] = sorted({g.get("agent", "?") for g in group})
         deduped.append(merged)
-    return deduped
+    return deduped + passthrough
 
 
 def suppress(findings):

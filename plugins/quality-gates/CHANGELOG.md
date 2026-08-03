@@ -3,6 +3,93 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.14] — 2026-08-03
+
+**락이 열거였기 때문에 S1이 미완이었다.** `tests/spike/test_codex_json_extraction.sh:33`에
+리터럴 `-c 'model_reasoning_effort="medium"'`이 그대로 살아 있었다. goal 2 판별 질의가
+`plugins/*/scripts/`만 스캔하고, 회귀 락 `test_codex_runner_no_effort_pin.sh`도 러너
+**두 개를 열거**했기 때문에 양쪽 다 이 파일을 구조적으로 볼 수 없었다.
+
+**열거는 공간에도 시간에도 fail-open이다** — 목록에 없는 파일은 영원히 안 보이고, 내일
+추가될 호출부는 오늘 열거할 수 없다. 이 리포가 `tools:` allowlist vs denylist에 대해 이미
+쓴 논리와 같은 실패이며, 이번엔 그것이 **회귀 락 자신**에게 일어났다.
+
+### Fixed
+
+- `tests/spike/test_codex_json_extraction.sh` — `-c 'model_reasoning_effort="medium"'` 제거.
+  보안 플래그(`-s read-only`·`-C`·`--json`·`< /dev/null`)는 무변경. 재현성을 근거로 핀을
+  유지한다는 논리는 성립하지 않는다 — 이 spike가 굽는 fixture는 이미 `thread_id`·토큰 수가
+  매번 달라 강도를 고정해도 재현되지 않는다.
+
+### Changed
+
+- `tests/test_codex_runner_no_effort_pin.sh` — 러너 2개 열거에 **플러그인 전수 스캔 assert**
+  추가(`-c` 인자 줄 앵커라 락 자신의 grep 패턴 문자열은 잡지 않는다). **핀 제거 *전에*
+  이 assert가 해당 파일을 지목하며 RED임을 확인한 뒤 제거해 GREEN**으로 만들었다 —
+  락이 이빨을 갖는다는 증거다. 버그가 리뷰를 탈출했으므로 잡았어야 할 락 파일을 함께
+  고친다(Law 3 compounding).
+
+## [2.14.13] — 2026-08-03
+
+**codex 별-모델 co-review가 2단계 리뷰를 통과한 실코드 결함을 적발했고, 재현이 그
+주장보다 더 나쁜 것을 보여줬다.** Task 9(S3e)가 adversarial에 신규 발견 능력을 주면서,
+`dedup()`의 `(file, line, severity)` 그룹핑에 **새로운 의미**가 생겼다 — 승격 이전에는
+좌표 충돌이 언제나 *"두 리뷰어가 같은 것을 봤다"* 라 병합이 옳았지만, 이제는 *"같은 줄의
+**다른** 결함"* 일 수 있다.
+
+재현:
+
+```
+입력 2건 → 출력 1건
+  살아남음: missing null check on user lookup      (security-reviewer, conf 8)
+  sources : ['adversarial', 'security-reviewer']
+  소실    : SQL injection via unparameterised query (adversarial, conf 7)
+```
+
+소실만이 아니다 — 살아남은 행이 `sources`에 adversarial을 달아 **adversarial이 하지 않은
+주장을 보증한 것처럼** 렌더된다. 허위 귀속이 소실보다 나쁘다.
+
+Task 9 구현자가 이 한계를 docstring에 기록해 뒀으나(`promote_new_findings` 한계 절),
+적힌 것은 *신규끼리* 충돌뿐이었고 **신규 × 기존 충돌이 만드는 허위 귀속은 빠져 있었다** —
+"알려진 한계"가 실제 위험의 절반만 덮고 있었고, §11 CHECKS-07의 defer 판정도 그 절반만
+보고 내려진 것이다.
+
+### Fixed
+
+- `scripts/synthesize_findings.py` — **최소 봉쇄**: `promote_new_findings()`가 승격 항목에
+  `promoted: True`를 찍고, `dedup()`이 그 표식을 가진 항목을 그룹핑에서 제외한다. 실패
+  방향을 **소실이 아니라 중복** 쪽으로 돌린다(안전한 쪽). 리뷰어 간 병합은 **무변경** —
+  dedup 키 설계와 `sources` 의미론("좌표에 보고한 agent" vs "이 발견에 동의한 agent")은
+  여전히 미해결이며 CHECKS-07로 남는다. 이 수정은 승격 경로만 그 미해결에서 떼어낸다.
+
+### Added
+
+- `tests/test_synthesize_promoted_findings.sh` 케이스 5·6·7 — 5: 같은 좌표의 기존+승격이
+  **둘 다 렌더**(소실 금지). 6: 기존 행의 Source에 adversarial **참칭 금지**(허위 귀속
+  금지, 5와 독립 — "둘 다 렌더하되 sources를 합치는" 잘못된 수정은 6만 잡는다).
+  7: **리뷰어 간 병합 보존**(양의 짝 — 없으면 `dedup`을 통째로 제거해도 5·6이 통과한다).
+  작성 중 계측기 결함 1건을 밟았다: 표 행 카운트가 'Suggested fixes' 절까지 세어 병합이
+  정상인데도 RED였다 — 카운트를 표 행으로 스코프해 해소.
+
+## [2.14.12] — 2026-08-03
+
+Task 13(최종 검증)의 **개념어 스윕**이 식별자 grep 전수가 놓친 잔존을 하나 찾았다:
+`scripts/experiment-model-override.md`의 "Implication for SKILL.md dispatch" 절이
+`model: inherit` 에이전트를 Task 도구 `model: "sonnet"`으로 override하라고 **여전히
+권장**하고 있었다 — 이 sweep이 제거한 바로 그 처방이다. goal 1의 `^model:` 질의는
+frontmatter만 앵커하므로 **산문 권고인 이것을 구조적으로 볼 수 없었다.**
+
+확인 결과 살아있는 dispatch-time override는 production에 0건이고(이 문서 자신의 2줄이
+전부), 이 문서는 리포 어디서도 참조되지 않는 고아 기록이다. 따라서 실제 억제가 아니라
+**억제를 지시하는 과거 기록**이며, 설계 goal 6의 처방대로 삭제가 아니라 정정을 append했다.
+
+### Changed
+
+- `scripts/experiment-model-override.md` — 날짜 붙은 사후 정정 블록 추가. **측정 결과
+  (override가 실제로 동작함)는 유효로 보존**하고, 그 결과를 sonnet 고정에 쓰라는 권고만
+  폐기로 표시. 상류 플러그인의 자체 하드코딩 핀을 존중한다는 판단은 유효로 명시(범위 구분).
+  현재 지위(고아 기록·모델 세대 교체·probe 방법은 재사용 가능)를 기록.
+
 ## [2.14.11] — 2026-08-03
 
 Task 11(S4) fix round 1 — coordinator 재검사가 실제 잔여를 찾았다: philosophy
