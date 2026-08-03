@@ -159,6 +159,72 @@ case_skill_bulk_disclosure() {
   else fail "bulk 공시 누락 (R2=$(count_in "$w2" '커버리지 미보장(러너가 선택을 무시함)') R8=$(count_in "$w8" '커버리지 미보장(러너가 선택을 무시함)'))"; fi
 }
 
+# ── fix round 1 이 닫은 세 개의 fail-open 을 지키는 락 ────────────────────────
+# 이 셋은 전부 **산문만** 고친 것이라 리뷰 시점에 회귀 커버리지가 0이었다. 셋 다
+# "지워도 스위트가 초록"이면 다음 편집에서 조용히 사라진다 — C1 의 역사가 그 증거다.
+
+# I1 회귀 락: 실패한 대조/집계는 degraded 로 가고 PASS 에 닿지 못한다.
+# 오류 행의 두 결론(`degraded` 기록 · PASS 불가)을 **같은 줄에서** 잰다 — 따로 세면
+# 표를 쪼개 한쪽만 남겨도 통과한다(값의 부재를 음성 결과로 읽는 바로 그 실패).
+case_skill_r6_error_never_passes() {
+  local w; w=$(section_window '**Step R6' '**Step R7')
+  [[ -n "$w" ]] || { fail "R6 윈도우가 비어 있음 (앵커 미스 — 아래 락이 공허해진다)"; return; }
+  local bad=0
+  [[ $(count_in "$w" '**R6 exit-code routing') -ge 1 ]] \
+    || { echo "    누락: R6 exit-code 라우팅 절"; bad=1; }
+  [[ $(count_in "$w" '어댑터별 호출과 `--aggregate` 호출 **양쪽**') -ge 1 ]] \
+    || { echo "    누락: 두 호출(어댑터별·집계) 모두 커버한다는 명시"; bad=1; }
+  printf '%s\n' "$w" | grep -F '그 외 non-zero' | grep -F '**`degraded`** 로 적은 뒤' \
+    | grep -qF 'verdict 를 PASS 로 올리지 않는다' \
+    || { echo "    누락: 오류 행이 같은 줄에서 degraded + PASS 불가로 라우팅"; bad=1; }
+  [[ $bad -eq 0 ]] && pass "R6: 실패한 대조/집계 → degraded, PASS 불가" \
+                   || fail "R6 exit-code 라우팅 락 실패"
+}
+
+# I2 회귀 락: NEEDS_RESOLUTION 재시도가 R5b·R6 를 다시 돌고 옛 HEAD 행을 버린다.
+# 순서까지 잰다 — 새 트리를 만들어 놓고 옛 head 행으로 대조하면 고쳐진 코드에 FAIL 이
+# 서거나(거짓 FAIL) 옛 green 이 재시도가 만든 회귀를 가린다.
+case_skill_retry_reruns_r5b_r6() {
+  local w; w=$(section_window '- **Yes, retry**' '- **Skip with evidence**')
+  [[ -n "$w" ]] || { fail "재시도 윈도우가 비어 있음 (앵커 미스)"; return; }
+  local bad=0
+  [[ $(count_in "$w" '재시도는 R5b·R6 도 다시 돈다') -ge 1 ]] \
+    || { echo "    누락: 재시도가 R5b·R6 를 다시 돈다는 규칙"; bad=1; }
+  [[ $(count_in "$w" '이전 HEAD 행은 **버린다**') -ge 1 ]] \
+    || { echo "    누락: 옛 head_rows_file 폐기"; bad=1; }
+  # 순서: 같은 줄 안의 문자 offset 으로 잰다 (존재만 보면 R6 → R5b 로 뒤집어도 통과).
+  printf '%s\n' "$w" | awk '
+    index($0, "재시도는 R5b·R6 도 다시 돈다") { p = $0 }
+    END {
+      if (p == "") exit 1
+      a = index(p, "R5b(새"); b = index(p, "→ R6("); c = index(p, "→ R7 → R8")
+      exit !(a > 0 && b > a && c > b)
+    }' || { echo "    누락/역전: R5b → R6 → R7 → R8 순서"; bad=1; }
+  [[ $bad -eq 0 ]] && pass "재시도가 R5b → R6 → R7 → R8 를 다시 돌고 옛 HEAD 행을 버린다" \
+                   || fail "재시도 순서 락 실패"
+}
+
+# I3 회귀 락: fallback working-tree guard 의 **실행 가능한** 두 명세.
+# 한 번 압축돼 사라진 적이 있다(브리프 전사). read-only fallback 에서 verifier 가
+# 사용자의 진짜 트리를 건드렸는지 알려주는 유일한 신호이므로, 레시피(무엇을 재나)와
+# 비교 술어(무엇을 변경으로 치나) 둘 다 없으면 경고가 조용히 안 뜬다.
+case_skill_fallback_treehash_guard() {
+  local w1 w7 bad=0
+  w1=$(section_window '**Step R5a¹' '**Step R5a²')
+  w7=$(section_window '**Step R7' '**Step R8')
+  [[ -n "$w1" && -n "$w7" ]] || { fail "R5a¹/R7 윈도우가 비어 있음 (앵커 미스)"; return; }
+  [[ $(count_in "$w1" 'GIT_INDEX_FILE=<tmp>') -ge 1 ]] \
+    || { echo "    누락: fallback_pre tree-hash 레시피(GIT_INDEX_FILE)"; bad=1; }
+  [[ $(count_in "$w1" 'write-tree') -ge 1 ]] \
+    || { echo "    누락: write-tree"; bad=1; }
+  [[ $(count_in "$w7" 'same recipe as `fallback_pre`') -ge 1 ]] \
+    || { echo "    누락: fallback_post 가 같은 레시피라는 명시"; bad=1; }
+  [[ $(count_in "$w7" 'that is not in `fallback_pre`, **or** a differing tree-hash') -ge 1 ]] \
+    || { echo "    누락: 변경 판정 술어(porcelain 신규 항목 or tree-hash 상이)"; bad=1; }
+  [[ $bad -eq 0 ]] && pass "fallback tree-hash guard: 레시피 + 비교 술어 양쪽 생존" \
+                   || fail "fallback tree-hash guard 락 실패"
+}
+
 # AC47: 기준선 트리에서 detect를 **재실행**한다 (HEAD 집합 재사용 금지)
 case_skill_both_side_detect() {
   local w; w=$(section_window '**Step R4' '**Step R5a')
@@ -172,7 +238,9 @@ for c in case_unclaimed_row_is_produced case_runner_absent_is_distinguishable \
          case_skill_precedence_total_order case_skill_rerun_exactly_once \
          case_skill_two_stage case_skill_plan_prose_six_fields \
          case_skill_cost_signal_categorical case_skill_gap_gate_zero_click \
-         case_skill_bulk_disclosure case_skill_both_side_detect; do
+         case_skill_bulk_disclosure case_skill_both_side_detect \
+         case_skill_r6_error_never_passes case_skill_retry_reruns_r5b_r6 \
+         case_skill_fallback_treehash_guard; do
   echo "== $c"; $c
 done
 echo "── runtime verdict precedence: $PASS passed, $FAIL failed"
