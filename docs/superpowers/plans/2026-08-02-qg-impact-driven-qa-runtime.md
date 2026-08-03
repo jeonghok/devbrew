@@ -3750,10 +3750,16 @@ Expected: 새 블록은 PASS. **기존 락(`:205` `Step R0`, `:303` `Step R-init
 
 | 위치 | 편집 |
 |---|---|
-| `:205-207` | `first_line 'Step R0'` → `first_line 'Step R5a¹'`, 주석의 "R0 must capture snapshot_digest in the R0 section" → "R5a¹ …" |
-| `:300-306` | `first_line 'Step R-init'` → `first_line 'Step R5a⁰'`, 관련 assert 메시지 3개도 라벨 갱신 |
+| `:205-207` | `first_line 'Step R0'` → `first_line '^[*][*]Step R5a¹'`, 주석의 "R0 must capture snapshot_digest in the R0 section" → "R5a¹ …" |
+| `:300-306` | `first_line 'Step R-init'` → `first_line '^[*][*]Step R5a⁰'`, 관련 assert 메시지 3개도 라벨 갱신 |
 | `:406-417` | 이 블록은 Step 1에서 추가한 **transparency 앵커 이전** 블록이 대체한다. 통째로 삭제 (중복 검사 금지 — 두 곳이 다른 문구를 잠그면 drift 한다) |
-| `:450` | `first_line 'Step R6'` → `first_line 'Step R8'` |
+| `:450` | `first_line 'Step R6'` → `first_line '^[*][*]Step R8'` |
+
+> **표의 새 패턴이 전부 `'^[*][*]…'` 인 것은 실수가 아니다.** 맨 라벨(`'Step R5a⁰'`)로
+> 바꾸면 `:174` 의 산문 cross-reference 가 먼저 잡혀 **락이 헤딩이 아니라 참조를 검사**한다
+> (실측: 맨 라벨 = 174, 실제 헤딩 = 810). `\*\*` 형태는 `awk -v` 가 백슬래시를 떼어내
+> `illegal primary` 로 매치 0건이 되므로 쓰지 않는다. Step 4.5 의 표적 삭제 mutation 이
+> 이 둘 중 하나라도 틀렸을 때 GREEN 으로 남는 것을 잡아낸다.
 
 - [ ] **Step 4: 전체 통과 확인**
 
