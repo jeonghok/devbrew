@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.24.14] — 2026-08-04
+
+### Fixed
+
+- **`run_spec_codex_reviewer.sh` — 완료 전 중단이 조용히 지나가던 경로**
+  (`/qg branch` 라운드 1, silent-failure-hunter). `set -u` 위반(예:
+  `CLAUDE_PLUGIN_ROOT` 미설정)으로 abort하면 EXIT trap을 지나며 산출물이
+  만들어지지 않았고, 더 나쁘게는 **이전 run이 남긴 파일이 살아남아 이번 라운드의
+  리뷰 결과로 재사용**됐다.
+  - 보고된 fix(`rc=$?` 보존)는 **이 플랫폼에서 동작하지 않는다**: bash 3.2.57은
+    `set -u` abort 시 트랩 핸들러에 `$?`를 **0으로** 넘긴다(최소 재현 확인).
+    게다가 이 스크립트의 계약은 "항상 exit 0 + 항상 YAML"이라 비-0 강제는 계약
+    위반이다. 그래서 종료 코드가 아니라 **산출물**로 판정한다 — 시작 시 truncate로
+    stale을 제거하고, 트랩에서 비어 있으면 `codex_failed: true` degrade를 채운다.
+  - trap arm은 한 줄로 유지했다: C7 순서 락(AC6)이 `trap.*rm -rf.*SCRATCH.*EXIT`를
+    한 줄 정규식으로 앵커하므로, 여러 줄로 펼치면 그 락이 trap을 못 보고 guard
+    순서 검사가 통째로 무력화된다.
+
+### Added
+
+- `tests/test_run_spec_codex_reviewer.sh` — ABORT 케이스 2종(중단 시 degrade YAML
+  실재 / 이전 run의 stale 산출물 미재사용). 종료 코드가 아니라 산출물을 잰다.
+
 ## [0.24.13] — 2026-08-03
 
 ### Fixed

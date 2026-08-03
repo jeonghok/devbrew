@@ -126,8 +126,20 @@ else
   OVERRIDE_REASON=""
 fi
 
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/codex_findings_to_yaml.py" \
+# 종단 추출은 이 스크립트에서 유일하게 가드 없던 단계였다. codex_findings_to_yaml.py는
+# 정상적으로는 findings 또는 codex_failed를 담아 exit 0 하지만, 처리되지 않은 crash
+# (python3 부재, plugin-root 문제)는 `> "$OUTPUT_PATH"` 리다이렉트가 이미 파일을
+# 비운 뒤에 일어난다 → 0바이트 산출물. 소비자에게 그것은 "codex가 성공했고 발견이
+# 없다"로 읽힌다 — 리뷰어 하나가 조용히 사라지는 것이다. 형제 두 러너
+# (run_artifact_codex_reviewer.sh, run_spec_codex_reviewer.sh)는 이 가드를 이미
+# 갖고 있었고 주석으로 같은 실패를 지목하고 있었다; 여기에만 백포트되지 않았다.
+# `-s` 검사가 별도로 필요한 이유: exit 0 + 빈 출력이 가능하다(파이프 실패, 부분 쓰기).
+if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/codex_findings_to_yaml.py" \
     --stderr-file "$STDERR_FILE" \
     --meta-override-exit-code "$EXIT_CODE" \
     --meta-override-reason "$OVERRIDE_REASON" \
-    < "$STDOUT_FILE" > "$OUTPUT_PATH"
+    < "$STDOUT_FILE" > "$OUTPUT_PATH" || [[ ! -s "$OUTPUT_PATH" ]]; then
+  echo "[quality-gates] codex 추출 실패 — 빈 산출물 대신 codex_failed를 기록한다 (리뷰어 1명 손실, degrade)" >&2
+  printf 'agent: codex-reviewer\nfindings: []\nmeta:\n  codex_failed: true\n  exit_code: %s\n  reason: extract_failed\n' \
+    "$EXIT_CODE" > "$OUTPUT_PATH"
+fi

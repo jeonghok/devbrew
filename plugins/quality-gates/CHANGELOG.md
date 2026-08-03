@@ -3,6 +3,24 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.16] — 2026-08-04
+
+### Fixed
+
+- **`run_codex_reviewer.sh` — 종단 추출이 실패하면 리뷰어가 조용히 사라지던 경로**
+  (`/qg branch` 라운드 1, silent-failure-hunter). `> "$OUTPUT_PATH"` 리다이렉트는
+  python3가 crash하기 *전에* 파일을 비우므로 0바이트 산출물이 남고, 소비자에게
+  그것은 "codex 성공, 발견 0"으로 읽힌다. 형제 두 러너는 이 가드를 이미 갖고
+  있었고 주석으로 같은 실패를 지목하고 있었다 — 여기에만 백포트되지 않았다.
+  exit≠0과 빈 파일을 **둘 다** 검사한다(exit 0 + 빈 출력이 가능하다).
+
+### Added
+
+- `tests/test_codex_runner_degrade_contract.sh` — **행동** 락. 스텁 plugin-root와
+  스텁 codex로 추출 실패를 실제로 일으켜 산출물이 0바이트가 아니고 `codex_failed`가
+  찍히는지 잰다. grep 락이 아닌 이유: 가드 문자열을 남긴 채 무력화하는 변형에
+  grep은 GREEN을 낸다.
+
 ## [2.14.15] — 2026-08-04
 
 ### Fixed
