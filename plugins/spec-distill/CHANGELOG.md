@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.24.8] — 2026-08-03
+
+### Changed
+- `steelman-builder` · `blind-spot-prober`의 "Required research" 절에서 `1–2회`
+  검색 횟수 상한과 `**순차 호출**(병렬·투기적 금지, C5/AP9)` 문구를 삭제. 두 에이전트는
+  인터뷰 턴이 놓친 근거를 찾는 게 존재 이유인데, 호출 수 상한과 직렬화 강제 둘 다
+  아무것도 보호하지 않으면서 조사 폭을 하니스가 대신 정하는 것이었다. 이제
+  "필요한 만큼 찾는다"(steelman-builder) / 횟수·병렬 제약 없이 수집(blind-spot-prober).
+  `blind-spot-prober.md`의 "web 부재 시 SKILL이 inline premortem으로 강등(C5)" 절은
+  상한이 아니라 graceful degradation이므로 그대로 둔다.
+
+### Added
+- `test_steelman_builder_scope.sh` · `test_blind_spot_prober_frontmatter.sh`에 E10
+  락 신설(`test_brief_agents.sh:194`의 단일 호출 상한 부재 락을 숫자 범위·병렬 금지
+  패턴으로 확장) — 단일 호출 상한 표현(`최대 N회`/`N회까지`/`N–N회`/`N-N회`/
+  `max_x = N`) 또는 병렬·투기적 금지 문구가 재삽입되면 RED.
+
 ## [0.24.7] — 2026-08-03
 
 ### Changed

@@ -37,8 +37,7 @@ failure mode(unknown-unknown)를 웹 근거와 함께 표면화합니다. 당신
 
 ## Required research (출력 전)
 
-1. 이 문제 유형의 알려진 실패 사례·안티패턴을 1–2회 web 검색(WebSearch/WebFetch)으로
-   수집. **순차 호출**(병렬·투기적 금지, C5/AP9).
+1. 이 문제 유형의 알려진 실패 사례·안티패턴을 web 검색(WebSearch/WebFetch)으로 수집.
 2. (가능하면) codebase grep로 현재 전제와 충돌하는 기존 제약 확인.
 
 ## Output 형식 (이 형식을 정확히 준수 — conducting-interview가 §Blind Spots & Premortem에 기록)
