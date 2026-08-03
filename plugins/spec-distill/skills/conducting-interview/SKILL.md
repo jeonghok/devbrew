@@ -49,8 +49,6 @@ orchestration:                       # C11/C8 across-resumption 상태 (orchestr
 probe_count: 0                       # C10 probe 백스톱 카운터 (probe 제기 *후* +1)
 probe_cap_override: 0                # C1 '계속'이 base cap(12)만큼 raise
 non_user_streak: <int>
-web_sweep_count: 0                   # 현재 sweep 내 web 검색 호출 수 (AP9, ≤4). sweep 종료 시 0으로 reset.
-web_search_count: 0                  # 세션 누적 web 검색 호출 수 (AP16, ≤8 soft cap).
 rereview_count: 0
 trivia_escape_armed: false
 issue_history: []                    # 각 항목: {id, raised_count, dismissed_by_user, accepted_by_user, reconsensus_count, resolved, escalated}
@@ -186,8 +184,8 @@ if python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" check "$STATE"; then
   # gate 통과 → (b)/(d) 질문을 실제로 제기하고 답을 받는다
   # <질문 제기 + 답 수신>
   # 2) 질문을 제기한 *후에만* increment (phantom 증가 없음 — C10 원자성)
-  #    increment는 fail-closed(exit 1: 카운터 부재/malformed/state unwritable)다. web_budget(아래 270)과
-  #    대칭으로 그 exit를 반드시 확인한다 — 무시하면 카운터가 전진하지 않아 check가 영원히 통과하고
+  #    increment는 fail-closed(exit 1: 카운터 부재/malformed/state unwritable)다. 그 exit를
+  #    반드시 확인한다 — 무시하면 카운터가 전진하지 않아 check가 영원히 통과하고
   #    백스톱이 조용히 무력화된다(fail-open, Unbounded-autonomy Forbidden Pattern).
   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" increment "$STATE" || {
     echo "[spec-distill] probe_count increment 실패 — 백스톱 무력화 위험(카운터 부재/malformed/state unwritable). 자동 진행 중단, 상태 재영속화(마이그레이션 persist) 또는 세션 확인 후 재시도." >&2
@@ -213,7 +211,7 @@ fi
 `increment`는 질문 제기 후에만 호출돼 phantom 증가가 없다(gate에서 막힌 probe는 카운트 안 됨).
 `increment`는 gate하지 않는다 — gating은 오직 `check`(C10 원자성). 단 `increment`의 exit는
 반드시 확인한다: fail-closed(exit 1) 시 카운터가 디스크에 전진하지 못한 것이므로 자동으로 다음
-probe를 제기하지 말고 fail-closed로 처리한다(위 `|| {…}` 가드, web_budget과 대칭). 이 exit를
+probe를 제기하지 말고 fail-closed로 처리한다(위 `|| {…}` 가드). 이 exit를
 버리면 백스톱이 조용히 무력화된다.
 
 kill switch: `DEVBREW_SPEC_DISTILL_PROBE_CAP=N` 으로 base cap override.
@@ -277,27 +275,23 @@ brief 작성(+ optional brainstorming invoke)은 다음 5 의례를 **모두 통
 | R4 | **시행착오 기록** | steelman switch된 방향 **또는** 사용자가 명시적으로 폐기한 방향이 *이유와 함께* 기록. 0건이면 `- 기각 — N/A — 전부 first-time defend+lock` 한 줄 명시(빈 섹션 금지). | payload §5의 **`기각` 항목** |
 | R5 | **Open Questions 박제** | 미해결 명시("유추 금지"). | payload §3 Open Questions |
 
-### R2 — 웹 Landscape (bounded)
+### R2 — 웹 Landscape
 
-토픽이 잡히면(round 1–2) landscape sweep **1회**를 수행합니다. 각 web 검색 *전에* `increment`로
-state의 `web_sweep_count`/`web_search_count`를 +1 하고(PN1 Bash write — `increment`가 read-modify-write를
-직접 수행, 인라인 주석 보존) budget을 확인합니다. `check`가 아니라 `increment`여야 카운터가 실제로
-전진합니다(미전진 시 budget이 영원히 0 — AP9/AP16 무력화). exit ≠ 0 이면 그 호출이 cap을 넘는다는 뜻:
+토픽이 잡히면(round 1–2) landscape sweep을 수행합니다. 각 web 검색 *직전에* kill switch를
+확인합니다(세션 시작 시 캐시하지 않고 매 호출 직전 재평가):
 
 ```bash
-ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" state-root)"
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" increment "$ROOT/<session-id>/state.local.md" || {
-  echo "[spec-distill] web budget 초과 — landscape 중단, 강제 (b) 사용자 질문" ; }
+if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
+  echo "[spec-distill] web 비활성 — landscape 생략, codebase 근거만 사용"
+else
+  # <web 검색 수행>
+  :
+fi
 ```
 
-- budget 초과(sweep>4 또는 session>8) → advisory + **강제 (b) 사용자 질문**(AP16).
 - 모든 외부 주장은 **출처 URL 필수** — payload §4 External Landscape에 `[취함|피함|중립]` + 이유와 함께.
 - **kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`** 또는 web 도구 부재 → landscape를 **loud하게
   생략**하고 계속(crash 금지, graceful degradation): `[spec-distill] web 비활성 — landscape 생략, codebase 근거만 사용`.
-- sweep 종료 시 `reset-sweep`로 `web_sweep_count`를 0으로 reset(session 카운터는 유지):
-  ```bash
-  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/web_budget.py" reset-sweep "$ROOT/<session-id>/state.local.md"
-  ```
 
 ### R3 — Steelman 의심 게이트 (P17)
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.24.12] — 2026-08-03
+
+### Removed
+- `scripts/web_budget.py` + `tests/test_web_sweep_bound.sh` + 관련 픽스처 4개
+  (`state-web-within.md`·`state-web-over-sweep.md`·`state-web-over-session.md`·
+  `state-web-commented-overcap.md`) — web landscape 조사의 per-sweep(≤4)/
+  per-session(≤8) 상한 enforcer를 제거 (harness-capability-suppression-sweep
+  S3d, Task 8). **내부 스크립트라 one-minor deprecation window 대상이 아니다** —
+  유일한 소비자가 이 플러그인 안의 두 곳(`conducting-interview` R2,
+  `reviewing-brief` 1-a)뿐이라 외부 breaking-change 표면이 없다.
+- state schema(`conducting-interview`)와 `templates/interview-audit-template.md`의
+  `web_sweep_count`/`web_search_count` 카운터 — 상한 게이트가 사라져 죽은 상태였다
+  (`probe_count`는 유지 — 그 상한은 살아 있다).
+
+### Security
+- `DEVBREW_SPEC_DISTILL_DISABLE_WEB` kill switch를 `web_budget.py` 삭제와 함께
+  잃지 않도록 두 소비자에 각각 인라인으로 이식 — `conducting-interview` R2와
+  `reviewing-brief` 1-a가 `run_brief_codex_reviewer.sh:96-99`와 동일한 계약으로
+  독립 확인한다(정확히 문자열 `"1"`만 참, 미설정 시 웹 활성, 매 웹 작업 직전 평가,
+  소비자별 소유·공유 헬퍼 없음).
+
 ## [0.24.11] — 2026-08-03
 
 ### Fixed
