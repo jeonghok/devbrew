@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.24.10] — 2026-08-03
+
+### Changed
+- `build_spec_codex_prompt.py`의 `PROMPT_TEMPLATE`에서 "Review the document
+  below for these SIX judgment categories only:" 를 "이 여섯 개는 하류 merge가
+  가장 자주 기대하는 시작 어휘일 뿐, 닫힌 목록이 아니다"로 교체하고 여섯 항목
+  뒤에 `other` 탈출구를 추가 — codex co-reviewer에게 "여섯 개뿐"이라고 지시하면
+  그 어느 이름에도 안 맞는 진짜 결함은 merge/dedup 로직이 보기도 전에 프롬프트
+  단에서 버려진다. 하류 파서는 바꾸지 않는다: `merge_review.py:86`은
+  `str(it.get("category", ""))`로 자유 문자열을 통과시키고, `:319`/`:326`은
+  `compute_issue_id.compute(category, target_section)`으로 해시 입력에만 쓴다.
+  `codex_findings_to_yaml.py`·`compute_issue_id.py` 어디에도 6개 화이트리스트
+  필터가 없다(실측 확인) — 따라서 파서 변경 없이 프롬프트만 여는 것이 정확하다.
+
+### Added
+- `test_build_spec_codex_prompt.sh`에 AC16 락 신설 — 닫힌-6개 문구 재삽입 시
+  RED, `other` 항목 삭제 시 RED (프롬프트 레이어).
+- `test_merge_review.py`에 `test_unknown_category_survives_merge` 신설 —
+  codex YAML에 `category: other`인 finding을 넣고 실제 merge를 돌려 그 항목이
+  `codex_findings` 표시 블록에 살아 있고, 6개 카테고리와 같은 해시 경로로
+  issue_id를 받고, severity가 여전히 verdict를 escalate함을 확인한다
+  (파이프라인 레이어 — 프롬프트 락과 분리: 프롬프트가 `other`를 광고해도
+  미래에 파서가 화이트리스트 필터를 넣으면 조용히 drop될 수 있는 경로를
+  독립적으로 잠근다).
+
 ## [0.24.9] — 2026-08-03
 
 ### Changed

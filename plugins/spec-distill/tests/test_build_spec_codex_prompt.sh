@@ -42,4 +42,15 @@ python3 "$BUILD" '# inline content ## 2. Goals not a path' >/dev/null 2>&1 \
 echo "$OUT" | grep -q 'handoff_incomplete' \
   && note FAIL "handoff_incomplete wrongly in codex scope" || note PASS "handoff_incomplete excluded"
 
+# AC16 (Task 7) — the six categories are a starting vocabulary, not a closed
+# list: a real defect that fits none of the six names must have somewhere to
+# go (the `other` escape hatch), or it is discarded before merge/dedup ever
+# sees it.
+echo "$OUT" | grep -qF 'SIX judgment categories only' \
+  && note FAIL "AC16: 범주가 6개로 닫혀 있다 — 리스트에 없는 진짜 결함이 버려진다" \
+  || note PASS "AC16: 범주 폐쇄 문구 없음"
+echo "$OUT" | grep -qE '^- other:' \
+  && note PASS "AC16: other 범주가 프롬프트에 실린다" \
+  || note FAIL "AC16: other 범주 부재"
+
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"; [[ $fail -eq 0 ]]
