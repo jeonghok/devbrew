@@ -530,7 +530,7 @@ case "${1:-}" in
     git worktree prune >/dev/null 2>&1 || true
     if [[ -e "$baseline_wt" ]]; then
       if ! git worktree remove "$baseline_wt" >/dev/null 2>&1; then
-        [[ -e "$baseline_wt" ]] && die "refuse to clobber existing path: $baseline_wt (has uncommitted work, or is not a registered worktree). \`/qg branch <name>\` in the same session can own this exact path — remove it yourself, or rerun in a new session."
+        [[ -e "$baseline_wt" ]] && die "refuse to clobber existing path: $baseline_wt — git declined a non-forced removal, so it holds uncommitted or untracked content (or the path is not a registered worktree). Likely causes: \`/qg branch <name>\` in this same session owns this exact path, or a prior run left non-ignored test output behind. Inspect it, then remove it yourself (\`git worktree remove --force\`) or rerun in a new session."
       fi
       git worktree prune >/dev/null 2>&1 || true
     fi

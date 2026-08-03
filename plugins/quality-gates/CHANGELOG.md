@@ -65,10 +65,23 @@
   **한 패키지 집합을 공유**하게 만들었다(§5.4 가 옵션 ②를 기각한 바로 그 오염). 이제
   설치처와 실행처가 `python_env_of` 한 곳에서 갈라지고, `requirements.txt` 는
   트리-로컬 `.venv` 를 쓴다.
+- **어댑터가 트리 안에 만드는 환경 디렉토리(`.venv`·`node_modules`)가 그 레포의
+  `.gitignore` 로 덮이지 않을 때의 처리** — 그대로 설치하면 cargo target 과 같은
+  terminal FAIL 이고, 조용히 설치를 건너뛰면 준비 안 된 실행이 양측에서 똑같이 실패해
+  `PRE_EXISTING → closed` = **테스트 0개 PASS** 가 된다. 둘 다 아니라 **어댑터를 못
+  쓴다고 선언**한다: exit 3 + 전 unit `unrun` → `verification: degraded` → PASS 불가
+  (§5.10 row 3). ignore 질의는 **후행 슬래시**로 한다 — `.venv/` 같은 디렉토리 전용
+  패턴은 아직 존재하지 않는 경로에 `check-ignore .venv` 로는 매치되지 않고, 프로덕션은
+  언제나 부재 상태에서 질의한다(기준선 워크트리는 갓 만들어지고 `create-sandbox` 는
+  git-ignored 파일을 제외한다).
 - **`run`/`assign` 의 셸-스코프 검사가 담김이 아니라 부분문자열 검사였던 것** —
   `../<other>/tests/evil.sh` 가 `*/tests/*.sh` 글롭과 실행비트를 둘 다 만족해
   워크트리 **밖** 스크립트가 (양측에서 각각) 실행됐다. 설계 §5.9 의 "임의 명령을
-  추측해 실행하지 않는다" 위반.
+  추측해 실행하지 않는다" 위반. 담김 검사는 `..`·절대경로(렉시컬)에 더해 경로의
+  디렉토리 성분과 **잎(leaf) 심볼릭 링크를 모두** 해소한다 — 잎을 빼면
+  `tests/evil.sh -> ../../outside/evil.sh` 가 그대로 통과하고 `-x`/`-e` 가 링크를
+  따라가 실행된다(shell·pytest 양쪽에서 실측). 판정은 러너별 분기가 아니라 `assign`
+  루프 머리에서 한 번에 한다.
 - **락파일 없는 npm 레포에서 `npm install` 이 `package-lock.json` 을 만들던 것** —
   cargo target 과 같은 terminal-FAIL 클래스. `--no-package-lock` 추가.
 - **`create-baseline` 이 사용자의 워크트리를 파괴할 수 있던 것** — `create` 의
