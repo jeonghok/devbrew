@@ -3,6 +3,24 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.18] — 2026-08-05
+
+### Security
+
+- **`-s read-only` 샌드박스 락이 주석에 만족되던 결함 봉쇄** (mutation `m12`로 3명이 독립 확인). 판정이 원본 파일 grep이었고 세 러너 전부 헤더 주석에 `codex exec -s read-only`를 설명으로 적어놨으므로, **실제 invocation의 플래그를 삭제해도 영구 GREEN**이었다 — 그 상태에서 codex는 사용자 워킹트리에 샌드박스 없이 붙는다. 같은 파일 61행(상한 스캔)은 이미 주석을 걷어내고 있었고 보안 플래그 판정만 원본으로 되돌아간 비대칭이었다. 백스톱도 없었다(`test_sandbox_enforced.sh`는 존재하지 않는 파일을 겨냥, `test_codex_reviewer_frontmatter.sh`는 같은 주석에 만족). → invocation 블록만 잘라내 주석 제거 후 판정. `-C`/`--json`도 동일 처리.
+- **스캔 코퍼스를 `plugins/*/{scripts,tests}` → `plugins/*/` 전체로.** 두 디렉토리만 볼 때 `skills/`·`hooks/`에 심은 상한 핀이 통과했는데(mutation m13·m14 생존) PASS 문구는 "리포 전역"이라 주장했다 — 스캔 범위보다 넓은 주장은 거짓이다.
+
+### Fixed
+
+- **`run_codex_reviewer.sh`의 stale 재사용.** 쌍둥이 `run_spec_codex_reviewer.sh`가 받은 truncate+EXIT-trap degrade가 백포트되지 않아, SIGTERM/`set -u` abort/OOM/Bash-tool timeout 어느 경로로 죽어도 **이전 iteration의 YAML이 남았고** 오케스트레이터가 그것을 이번 라운드의 codex 판정으로 읽었다(exit 143 재현). stale이 clean이면 진짜 결함이 clean 인증을 받는다. `OUTPUT_PATH` 누락 검증도 추가(쌍둥이와 대칭).
+- **drop 공지의 소비자 부재.** `render()`가 내는 `dropped as malformed` 공지를 SKILL step 4.5가 읽지 않아, **생산자만 고치고 소비자를 안 고친 반쪽 수정**이었다 — 버려진 CRITICAL 위에 게이트가 `clean`을 찍었다. step 4.5에 override 절 추가(Runtime gate의 `indeterminate ≠ clean`과 대칭).
+- **degrade-contract 케이스 3의 무이빨 assert.** `[ -s err.txt ]`였는데 이 러너는 모든 분기에서 stderr에 한 줄을 쓰므로 반증 불가능했다 — degrade echo를 통째로 지워도 GREEN. degrade 고유 문구 grep으로 교체.
+
+### Added
+
+- `test_skill_drop_notice_consumed.sh` — **생산자와 소비자를 한 락에서 함께** 잰다(문구 동일성까지). 스크립트만 재는 락은 이 seam을 볼 수 없다.
+- degrade-contract 케이스 5·6·7 (stale 재사용, 중단 표시, `OUTPUT_PATH` 누락).
+
 ## [2.14.17] — 2026-08-05
 
 ### Fixed

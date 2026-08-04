@@ -35,6 +35,33 @@ DIFF_PATH="${1:-}"
 PROJECT_DIR="${2:-}"
 OUTPUT_PATH="${3:-}"
 
+if [[ -z "$OUTPUT_PATH" ]]; then
+  echo "[quality-gates] usage: run_codex_reviewer.sh <diff> <project_dir> <output>" >&2
+  exit 2
+fi
+
+# ── stale 재사용 봉쇄 + 완료 전 중단 표시 ────────────────────────────────────
+# 쌍둥이 `run_spec_codex_reviewer.sh`(spec-distill 0.24.14)가 받은 봉쇄를 여기에도
+# 넣는다. 백포트가 빠져 있던 동안 이 러너는 SIGTERM/`set -u` abort/OOM/Bash-tool
+# timeout 어느 경로로 죽어도 **이전 iteration의 YAML을 그대로 남겼고**, 오케스트레이터는
+# 그것을 이번 라운드의 codex 판정으로 읽었다 (2026-08-05 재현, exit 143). stale이
+# clean이었으면 진짜 결함이 clean 인증을 받고, 발견을 담고 있었으면 사용자가 이미
+# 고친 결함을 다시 쫓는다. 둘 다 조용하다.
+#
+# **종료 코드로 재지 않는다**: 이 스크립트의 계약은 "항상 exit 0 + 항상 YAML"이고,
+# 게다가 bash 3.2.57은 `set -u` abort 시 EXIT 트랩에 `$?`를 0으로 넘긴다. 신호는
+# 산출물뿐이다. 그래서 시작 시 truncate하고, 비어 있으면 degrade로 채운다.
+: > "$OUTPUT_PATH"
+_degrade_if_empty() {
+  [[ -s "$OUTPUT_PATH" ]] && return 0
+  { echo 'agent: codex-reviewer'; echo 'findings: []'; echo 'meta:'
+    echo '  codex_failed: true'; echo '  reason: aborted_before_completion'; } \
+    > "$OUTPUT_PATH" 2>/dev/null \
+    || echo "[quality-gates] degrade YAML 기록마저 실패 — 호출자가 읽을 산출물이 없다" >&2
+  echo "[quality-gates] codex 리뷰가 완료 전에 중단됨 — degrade YAML 기록(stale 재사용 방지)" >&2
+}
+trap '_degrade_if_empty' EXIT
+
 if [[ -z "$PROJECT_DIR" ]]; then
   echo '{"codex_failed": true, "reason": "missing_project_dir"}' > "$OUTPUT_PATH"
   exit 0

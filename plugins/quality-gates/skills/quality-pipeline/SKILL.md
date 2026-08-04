@@ -406,6 +406,24 @@ Agent({
      Loop](#dispatch-loop) step 4 (which short-circuits the Runtime gate for the
      review-only path, else runs it).
 
+   **Dropped-finding override (applies to BOTH clean sub-cases, before the floor).**
+   If the captured stdout contains a line matching `dropped as malformed`, you MUST
+   surface that line verbatim **in addition to** the empty-state line, and you MUST
+   NOT print a bare `clean` verdict. Print instead:
+   `## Review gate iter N: not clean — <D> finding(s) dropped as malformed (unjudged).`
+   (`<D>` = the count from that line.) Then continue to step 5's decision tool as if
+   findings remained.
+
+   Why this clause exists: the synthesizer emits that notice — whose own text reads
+   `**이 실행은 clean이 아니다**` — precisely because a malformed finding may have
+   carried a real CRITICAL that was never judged. Before this clause, step 4.5 keyed
+   only on the counts line and the `No high-confidence findings…` line, so the notice
+   was produced by the script and then discarded by its only consumer: the gate
+   printed `clean` over dropped CRITICAL claims (2026-08-05 `/qg` 라운드 2 적발 —
+   생산자만 고치고 소비자를 안 고친 반쪽 수정). A finding that was thrown away is not
+   a finding that was cleared. This mirrors the Runtime gate's `indeterminate ≠ clean`
+   rule at [Step R4](#runtime-gate).
+
    **Honest-verdict floor (deterministic — both clean sub-cases).** The floor keys
    on two deterministic inputs — `$resolved_scope_file_count` (the step-1 count above)
    and the cached `$changes_exist` (emitted by `check-review-scope.sh`, independent of

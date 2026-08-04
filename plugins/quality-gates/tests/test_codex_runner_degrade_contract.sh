@@ -44,10 +44,14 @@ if grep -q 'codex_failed: *true' "$out" 2>/dev/null; then
 else
   no "2 — 실패가 codex_failed로 표시된다"; sed 's/^/      /' "$out" 2>/dev/null
 fi
-if [ -s "$tmp/err.txt" ]; then
-  ok "3 — degrade가 stderr에 loud하게 남는다"
+# stderr가 **비어있지 않다**로는 아무것도 재지 못한다: 이 러너는 모든 분기에서
+# `[quality-gates] codex spec context: …` 한 줄을 stderr에 쓰므로 `[ -s err.txt ]`는
+# 반증 불가능한 assert였고, degrade echo를 통째로 지워도 GREEN이었다
+# (2026-08-05 /qg 라운드 2, mutation 확인). degrade **고유** 문구를 찾는다.
+if grep -q '추출 실패' "$tmp/err.txt" 2>/dev/null; then
+  ok "3 — degrade가 stderr에 loud하게 남는다 (degrade 고유 문구)"
 else
-  no "3 — degrade가 stderr에 loud하게 남는다"
+  no "3 — degrade가 stderr에 loud하게 남는다 (degrade 고유 문구)"; sed 's/^/      /' "$tmp/err.txt" 2>/dev/null
 fi
 
 # ── 두 번째 실패 형태: 추출기가 exit 0 하면서 아무것도 쓰지 않는 경우 ──────────
@@ -63,6 +67,49 @@ if [ -s "$out2" ] && grep -q 'codex_failed: *true' "$out2" 2>/dev/null; then
   ok "4 — 추출기가 exit 0 + 빈 출력이어도 codex_failed로 표시된다"
 else
   no "4 — 추출기가 exit 0 + 빈 출력이어도 codex_failed로 표시된다 (size=$(wc -c < "$out2" 2>/dev/null || echo MISSING))"
+fi
+
+# ── 5/6: 완료 전 중단 — stale 재사용 봉쇄 ────────────────────────────────────
+# 쌍둥이 `run_spec_codex_reviewer.sh`가 spec-distill 0.24.14에서 받은 봉쇄가 이
+# 러너에는 백포트되지 않아, SIGTERM/`set -u` abort/OOM/Bash-tool timeout 어느
+# 경로로 죽어도 **이전 iteration의 YAML이 그대로 남았다**. 오케스트레이터는 그것을
+# 이번 라운드의 codex 판정으로 읽는다 — stale이 clean이면 진짜 결함이 clean 인증을
+# 받고, 발견을 담고 있으면 이미 고친 결함을 다시 쫓는다 (2026-08-05 /qg 라운드 2).
+#
+# 트리거는 `CLAUDE_PLUGIN_ROOT` 미설정(`set -u` 위반) — 실제로 밟은 조건이다.
+# **종료 코드로 재지 않는다**: 계약이 "항상 산출물"이고, bash 3.2.57은 `set -u`
+# abort 시 EXIT 트랩에 `$?`를 0으로 넘긴다. 신호는 산출물뿐이다.
+stale="$tmp/stale.yaml"
+cat > "$stale" <<'Y'
+findings:
+  - {file: OLD_RUN.py, line: 1, severity: CRITICAL, summary: "STALE_FROM_PREVIOUS_RUN", confidence: 9, agent: codex-reviewer}
+meta:
+  codex_failed: false
+Y
+( unset CLAUDE_PLUGIN_ROOT
+  PATH="$tmp/bin:$PATH" bash "$QG/scripts/run_codex_reviewer.sh" "$tmp/tiny.diff" "$ROOT" "$stale" ) >/dev/null 2>&1
+if grep -q 'STALE_FROM_PREVIOUS_RUN' "$stale" 2>/dev/null; then
+  no "5 — 이전 run의 stale 산출물이 이번 결과로 재사용된다"
+else
+  ok "5 — 중단 시 stale 산출물이 재사용되지 않는다"
+fi
+if [ -s "$stale" ] && grep -q 'codex_failed: *true' "$stale" 2>/dev/null; then
+  ok "6 — 완료 전 중단이 codex_failed로 표시된다 (부재도, 성공도 아님)"
+else
+  no "6 — 완료 전 중단이 codex_failed로 표시된다 (size=$(wc -c < "$stale" 2>/dev/null || echo MISSING))"
+fi
+
+# ── 7: OUTPUT_PATH 누락이 조용히 지나가지 않는다 ─────────────────────────────
+# 쌍둥이는 usage + exit 2인데 이 러너는 검증이 없어, `$3`가 비면 모든
+# `> "$OUTPUT_PATH"`가 실패하고 아무것도 쓰지 않은 채 죽었다 — 헤더가 약속한
+# "항상 산출물" 계약을 자기가 깬다.
+usage_out="$(PATH="$tmp/bin:$PATH" CLAUDE_PLUGIN_ROOT="$tmp/root" \
+  bash "$QG/scripts/run_codex_reviewer.sh" "$tmp/tiny.diff" "$ROOT" 2>&1)"
+usage_rc=$?
+if [ "$usage_rc" -ne 0 ] && printf '%s' "$usage_out" | grep -q 'usage'; then
+  ok "7 — OUTPUT_PATH 누락 시 usage + 비-0 종료 (조용한 실패 아님)"
+else
+  no "7 — OUTPUT_PATH 누락 시 usage + 비-0 종료 (rc=$usage_rc out=$usage_out)"
 fi
 
 echo ""

@@ -37,8 +37,13 @@ FLAG='(^|[[:space:]]|\()(-c|--config)([[:space:]]|=)'
 # 명령 위치 = 줄머리이거나 공백 뒤 — 따옴표 바로 뒤(문자열 리터럴 내부)는 아니다.
 INVOKE='(^|[[:space:]])codex[[:space:]]+exec[[:space:]]'
 
+# 코퍼스는 **플러그인 전체**다. `scripts`+`tests` 두 디렉토리만 볼 때
+# `skills/`·`hooks/`·`agents/`에 심은 핀은 통과했고(mutation m13·m14 생존), 그런데도
+# 아래 PASS 문구는 "리포 전역"이라고 주장했다 — 스캔 범위보다 넓은 주장은 거짓이다.
+# `plugin-audit/skills/auditing-plugins/SKILL.md`가 실제로 codex를 호출하는데
+# 커버리지가 0이었던 것이 그 실증 (2026-08-05 /qg 라운드 2).
 scan_roots=()
-for d in "$REPO"/plugins/*/scripts "$REPO"/plugins/*/tests; do
+for d in "$REPO"/plugins/*/; do
   [[ -d "$d" ]] && scan_roots+=("$d")
 done
 
@@ -70,27 +75,59 @@ fi
 # ── 보안 플래그 존속 (C1 유지선) — codex 호출부 **전부**에 대해 ─────────────
 # 여기도 두 러너 열거였다: spike의 `-s read-only`는 커버리지 0이었다.
 # 상한만 지우고 샌드박스까지 지우면 이 sweep이 보안 컨트롤을 걷어낸 것이 된다.
+#
+# **주석에 만족되면 안 된다** (2026-08-05 /qg 라운드 2, mutation m12로 3명이 독립
+# 확인). 예전 판정은 원본 파일에 대한 `grep -q -- '-s read-only'` 였다. 세 러너 전부
+# 헤더 주석에 `codex exec -s read-only` 를 설명으로 적어놨으므로 **실제 invocation의
+# 플래그를 삭제해도 영구 GREEN**이었다 — 그 상태에서 codex는 사용자의 워킹트리에
+# 샌드박스 없이 붙는다. 위 61행(상한 스캔)은 이미 주석을 걷어내고 있었는데,
+# 정작 보안 플래그 판정만 원본으로 되돌아갔다. 같은 파일 안의 비대칭이었다.
+# 백스톱도 없었다: `test_sandbox_enforced.sh`는 이제 존재하지 않는
+# `agents/codex-reviewer.md`를 겨냥하고, `test_codex_reviewer_frontmatter.sh`는
+# 같은 주석에 만족된다(둘 다 base에서도 red).
+#
+# 이제 **invocation 블록만 잘라내서**(줄 끝 `\` 연속을 따라가며) 주석 제거 후 판정한다.
+# $1=file — 호출의 연속 줄(줄 끝 `\`)만 잘라내고 줄머리 주석을 걷어서 출력.
+# 주의: 이 함수 정의 줄에 인라인 주석으로 호출 문자열을 적으면 안 된다. 주석 제거가
+# `^\s*#` 앵커라 **인라인 주석은 걷히지 않고**, 이 파일이 스스로 스캔 대상이 되어
+# 자기를 위반으로 신고한다 (2026-08-05에 실제로 밟았다 — 내가 고치던 결함과 같은 종류).
+_invocation_block() {
+  awk '/(^|[[:space:]])codex[[:space:]]+exec([[:space:]]|$)/{inv=1}
+       inv{print; if ($0 !~ /\\[[:space:]]*$/) inv=0}' "$1" \
+    | grep -vE '^[[:space:]]*#'
+}
 missing_sandbox=""
+sandbox_seen=0
 if [[ "${#scan_roots[@]}" -gt 0 ]]; then
-  missing_sandbox="$(grep -rlE "$INVOKE" "${scan_roots[@]}" 2>/dev/null \
-    | while IFS= read -r f; do
-        grep -vE '^[[:space:]]*#' "$f" | grep -qE "$INVOKE" || continue
-        grep -qE '(^|[[:space:]])-s[[:space:]]+read-only' "$f" || echo "$f"
-      done)"
+  while IFS= read -r f; do
+    [[ -n "$f" ]] || continue
+    grep -vE '^[[:space:]]*#' "$f" | grep -qE "$INVOKE" || continue
+    sandbox_seen=$((sandbox_seen+1))
+    _invocation_block "$f" | grep -qE '(^|[[:space:]])-s[[:space:]]+read-only' \
+      || missing_sandbox="$missing_sandbox $f"
+  done < <(grep -rlE "$INVOKE" "${scan_roots[@]}" 2>/dev/null)
 fi
-if [[ -z "$missing_sandbox" ]]; then
-  note PASS "codex 호출부 전부가 -s read-only 샌드박스를 유지한다"
+# 스캔이 실제로 호출부를 봤는가 — 없으면 "위반 0"과 "아무것도 안 봄"이 구별되지 않는다.
+if [[ "$sandbox_seen" -ge 3 ]]; then
+  note PASS "샌드박스 스캔이 실제 codex 호출부 ${sandbox_seen}곳을 열었다 (vacuous 아님)"
 else
-  note FAIL "샌드박스 없는 codex 호출부 → $(echo "$missing_sandbox" | tr '\n' ' ')"
+  note FAIL "샌드박스 스캔이 본 호출부가 ${sandbox_seen}곳뿐 — 경로가 깨졌다(아래 판정 무의미)"
+fi
+if [[ -z "${missing_sandbox// /}" ]]; then
+  note PASS "codex invocation 전부가 -s read-only 샌드박스를 유지한다 (주석 제외 후 판정)"
+else
+  note FAIL "샌드박스 없는 codex invocation →$missing_sandbox"
 fi
 
+# `-C`/`--json`도 같은 이유로 invocation 블록에서 잰다 — 주석에 이름만 있어도 통과하면
+# 파싱 계약과 작업디렉토리 핀 역시 조용히 사라질 수 있다.
 for r in run_codex_reviewer run_artifact_codex_reviewer; do
   RUN="$ROOT/scripts/$r.sh"
   if [[ ! -f "$RUN" ]]; then note FAIL "$r.sh 부재"; continue; fi
-  grep -qE '(^|[[:space:]])-C ' "$RUN" \
-    && note PASS "$r: -C 작업디렉토리 핀 존속" || note FAIL "$r: -C 사라짐"
-  grep -qE '(^|[[:space:]])--json' "$RUN" \
-    && note PASS "$r: --json 파싱 계약 존속" || note FAIL "$r: --json 사라짐"
+  _invocation_block "$RUN" | grep -qE '(^|[[:space:]])-C[[:space:]]' \
+    && note PASS "$r: -C 작업디렉토리 핀 존속 (invocation)" || note FAIL "$r: -C 사라짐"
+  _invocation_block "$RUN" | grep -qE '(^|[[:space:]])--json' \
+    && note PASS "$r: --json 파싱 계약 존속 (invocation)" || note FAIL "$r: --json 사라짐"
 done
 
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
