@@ -232,9 +232,27 @@ probe_count` 기록. 재dispatch는 `probe_count - coverage_mapper_last_probe >=
 지속돼도 최소 3 probe 간격 — 레벨-트리거 무한 재dispatch 방지). `coverage_mapper_last_probe == null`이면
 첫 dispatch 허용.
 
+**Web kill switch (dispatch 직전 확인 — 이 블록에 종속)**: `coverage-mapper`는
+`WebSearch`/`WebFetch`를 보유한다. kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`이면
+dispatch 프롬프트에 `web_disabled: true`를 실어 **codebase 근거만으로 차원을 제안**하게 하고,
+loud advisory를 남긴다: `[spec-distill] web 비활성 — coverage-mapper가 codebase 근거만 사용`.
+이 확인은 R2의 landscape 확인과 **별개로** 여기 있어야 한다 — kill switch는 보안 컨트롤이고,
+egress를 가진 dispatch가 하나라도 게이트 밖에 있으면 스위치는 꺼졌다고 *믿게만* 만든다.
+`coverage-mapper`는 `tools:`에 `Bash`가 없어 스스로 확인할 수 없다(Law 2) — orchestrator가
+유일한 집행 지점이다.
+
+```bash
+if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
+  web_disabled=true
+  echo "[spec-distill] web 비활성 — coverage-mapper가 codebase 근거만 사용" >&2
+else
+  web_disabled=false
+fi
+```
+
 ```
 Agent({ description: "Map coverage dimensions", subagent_type: "spec-distill:coverage-mapper",
-        prompt: "열린/닫힌 차원 요약: <...>. focused_dimension: <...>, no_progress_streak: <N>. 이 주제가 요구하는 derived 차원과 neglect를 제안." })
+        prompt: "열린/닫힌 차원 요약: <...>. focused_dimension: <...>, no_progress_streak: <N>. web_disabled: <true|false — true면 WebSearch/WebFetch 사용 금지, codebase 근거만>. 이 주제가 요구하는 derived 차원과 neglect를 제안." })
 ```
 
 출력(`derived_dimensions[] + neglect_flag`)은 **advisory** — orchestrator가 원장에 admit할지 판정한다.

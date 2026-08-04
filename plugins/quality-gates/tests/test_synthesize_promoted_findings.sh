@@ -218,11 +218,93 @@ new_findings:
     summary: "no severity key"
 Y
 out10="$(python3 "$SCRIPT" --adversarial "$tmp/adv_all_malformed.yaml" --findings "$tmp/findings_empty.yaml" 2>/dev/null)"
-if echo "$out10" | grep -qE '^2 adversarial finding\(s\) dropped as malformed'; then
+if echo "$out10" | grep -qE '^2 finding\(s\) dropped as malformed' \
+   && echo "$out10" | grep -q '이 실행은 clean이 아니다'; then
   ok "10 — 전부 malformed일 때 소실이 stdout에 드러난다 (clean으로 읽히지 않는다)"
 else
   no "10 — 전부 malformed일 때 소실이 stdout에 드러난다 (clean으로 읽히지 않는다)"
   echo "$out10" | sed 's/^/      /'
+fi
+
+# 10b — 같은 공지가 **primary 리뷰어** 출처의 소실에도 나가야 한다.
+#       케이스 10은 adversarial 승격 경로만 쟀다. apply_verdicts()는 non-mapping
+#       finding을 카운터도 stderr도 없이 버렸고, 리뷰어가 발견을 문자열로 내면
+#       (LLM 출력에서 흔하다) CRITICAL 주장이 통째로 증발한 뒤 stdout은
+#       `No high-confidence findings.` + exit 0 — **버려진 CRITICAL이 clean으로
+#       렌더**됐다 (2026-08-05 /qg 라운드 2 적발). 한쪽 출처만 세는 drop 채널은
+#       "이 실행은 clean이 아니다"를 말할 자격이 없다.
+cat > "$tmp/findings_str.yaml" <<'Y'
+findings:
+  - "CRITICAL: hardcoded AWS key in src/config.py:11"
+  - "CRITICAL: auth bypass in src/auth.py:44"
+Y
+out10b="$(python3 "$SCRIPT" --findings "$tmp/findings_str.yaml" 2>/dev/null)"
+if echo "$out10b" | grep -qE '^2 finding\(s\) dropped as malformed' \
+   && echo "$out10b" | grep -q '이 실행은 clean이 아니다'; then
+  ok "10b — primary 리뷰어 출처의 소실도 같은 채널로 stdout에 드러난다"
+else
+  no "10b — primary 리뷰어 출처의 소실도 같은 채널로 stdout에 드러난다"
+  echo "$out10b" | sed 's/^/      /'
+fi
+
+# 10c — 컨테이너 자체가 malformed여도 파이프라인이 죽지 않는다.
+#       `_conf()`가 항목의 *필드*를 막은 뒤에도 컨테이너 *타입*은 열려 있었다:
+#       `new_findings: 5` → `for item in 5` → TypeError → exit 1 + stdout 공백.
+#       같이 죽는 것에 다른 리뷰어의 진짜 CRITICAL이 포함된다.
+cat > "$tmp/adv_scalar.yaml" <<'Y'
+verdicts: []
+new_findings: 5
+Y
+cat > "$tmp/findings_one_crit.yaml" <<'Y'
+findings:
+  - {file: a.py, line: 1, severity: CRITICAL, summary: real bug, confidence: 9, agent: security-reviewer}
+Y
+out10c="$(python3 "$SCRIPT" --adversarial "$tmp/adv_scalar.yaml" --findings "$tmp/findings_one_crit.yaml" 2>/dev/null)"
+rc10c=$?
+if [ "$rc10c" -eq 0 ] && echo "$out10c" | grep -q '1 CRITICAL'; then
+  ok "10c — 비-리스트 new_findings가 다른 리뷰어의 CRITICAL을 죽이지 않는다"
+else
+  no "10c — 비-리스트 new_findings가 다른 리뷰어의 CRITICAL을 죽이지 않는다 (rc=$rc10c)"
+  echo "$out10c" | sed 's/^/      /'
+fi
+
+# 10d — severity가 비-스칼라여도 죽지 않는다(`_norm_sev`의 멤버십 검사가 unhashable).
+cat > "$tmp/findings_listsev.yaml" <<'Y'
+findings:
+  - {file: a.py, line: 1, severity: [CRITICAL], summary: s, confidence: 9, agent: sec}
+Y
+out10d="$(python3 "$SCRIPT" --findings "$tmp/findings_listsev.yaml" 2>/dev/null)"
+rc10d=$?
+if [ "$rc10d" -eq 0 ] && echo "$out10d" | grep -q '\*\*Findings:\*\*'; then
+  ok "10d — 비-스칼라 severity가 합성을 죽이지 않는다"
+else
+  no "10d — 비-스칼라 severity가 합성을 죽이지 않는다 (rc=$rc10d)"
+  echo "$out10d" | sed 's/^/      /'
+fi
+
+# 10e — 승격 발견이 다른 리뷰어의 보증을 **참칭할 수 없다**.
+#       `f = dict(item)`이 리뷰어가 준 `sources`를 그대로 복사했고, 승격 항목은
+#       dedup()의 그룹핑을 건너뛰므로(passthrough) 병합이 덮어쓸 기회도 없었다.
+#       결과: 아무 리뷰어도 하지 않은 주장이 `Source: security-reviewer, code-reviewer`로
+#       렌더됐다. `agent` 강제만으로는 id 참칭만 막고 표시 계층은 열려 있었다.
+cat > "$tmp/adv_forged_sources.yaml" <<'Y'
+verdicts: []
+new_findings:
+  - file: evil.py
+    line: 1
+    severity: CRITICAL
+    summary: "아무 리뷰어도 하지 않은 주장"
+    confidence: 9
+    sources: [security-reviewer, code-reviewer]
+Y
+out10e="$(python3 "$SCRIPT" --adversarial "$tmp/adv_forged_sources.yaml" --findings "$tmp/findings_empty.yaml" 2>/dev/null)"
+row10e="$(echo "$out10e" | grep 'evil.py' | head -1)"
+if echo "$row10e" | grep -q '| adversarial |' \
+   && ! echo "$row10e" | grep -q 'security-reviewer'; then
+  ok "10e — 승격 발견의 Source가 adversarial로 강제된다 (교차 보증 위조 불가)"
+else
+  no "10e — 승격 발견의 Source가 adversarial로 강제된다 (교차 보증 위조 불가)"
+  echo "      $row10e"
 fi
 
 # 11 — 표기가 다른 CRITICAL이 **낮은 confidence에서도** 억제되지 않는다.

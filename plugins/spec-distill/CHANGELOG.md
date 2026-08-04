@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.24.16] — 2026-08-05
+
+### Security
+
+- **web kill switch가 egress를 가진 dispatch 두 곳을 덮지 못하던 공백 봉쇄** (`/qg branch` 라운드 2, codex·silent-failure-hunter 적발). 0.24.15가 `coverage-mapper`에 `WebSearch`/`WebFetch`를, `spec-reviewer`에 `WebSearch`를 **새로 부여**했는데 `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`은 둘 다 막지 못했다:
+  - `reviewing-spec/SKILL.md` — 스위치 참조 **0건**인 채로 `spec-reviewer`를 dispatch.
+  - `conducting-interview/SKILL.md` — `coverage-mapper` dispatch에 게이트 없음(형제 3경로는 전부 보유).
+  두 agent 모두 `tools:`에 `Bash`가 없어 스스로 스위치를 읽을 수 없다(Law 2) — orchestrator가 유일한 집행 지점이다. **안 죽이는 kill switch는 없는 것보다 나쁘다**: 사용자가 egress가 꺼졌다고 *믿고* 행동한다.
+
+### Fixed
+
+- **`test_web_kill_switch.sh`의 앵커를 피검자 손에서 회수** (adversarial `meta_note`가 명명한 *verifier-steerable anchor*). 판정이 `grep -q "spec-distill:$a"`였으므로, 접두사 없이 `subagent_type: "spec-reviewer"`로 쓴 저자는 **자기 skill을 감사 대상에서 스스로 제외**했다 — 검사받는 파일이 자기가 검사받을지를 결정하는 구조. reviewing-spec이 정확히 그렇게 누락돼 있었다. → 접두사를 선택적(`(spec-distill:)?`)으로.
+- **파일 전역 존재 검사를 dispatch 지점별 지배 관계로 교체.** "이 파일 어딘가에 확인이 있다"는 명제는 dispatch가 열 개여도 가드가 하나면 참이다. 이제 각 dispatch 줄마다 위 40줄 안에 확인이 있어야 한다.
+
 ## [0.24.15] — 2026-08-04
 
 ### Fixed

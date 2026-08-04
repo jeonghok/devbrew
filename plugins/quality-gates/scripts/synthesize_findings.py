@@ -53,15 +53,37 @@ def load_yaml_doc(path):
         return None
 
 
+def _as_list(value, what):
+    """Return `value` if it is a list, else [] with a loud stderr line.
+
+    `or []` only rescues *falsy* values — `new_findings: 5` and
+    `verdicts: {a: 1}` sail through it and reach a `for` loop, where a scalar
+    raises `TypeError: 'int' object is not iterable` and kills the whole
+    synthesis: exit 1, **stdout completely empty**, every other reviewer's real
+    CRITICAL destroyed along with it (2026-08-05 재현).
+
+    이것이 ingestion 한 곳에서 타입을 확정하는 이유다. 소비 지점마다 가드를
+    덧대면 malformed가 한 겹씩 새고(`_conf`의 docstring과 같은 논거), 실제로
+    `confidence`를 막은 뒤 컨테이너 타입이 그대로 열려 있었다.
+    """
+    if isinstance(value, list):
+        return value
+    if value:                                    # falsy는 정상적인 "없음"이다
+        print(f"[synthesize_findings] {what} is {type(value).__name__}, "
+              "expected list — 무시하고 계속한다(해당 입력은 심사되지 않았다)",
+              file=sys.stderr)
+    return []
+
+
 def extract_verdicts(doc):
     if isinstance(doc, dict):
-        return doc.get("verdicts") or []
-    return doc or []
+        return _as_list(doc.get("verdicts"), "verdicts")
+    return _as_list(doc, "adversarial document")
 
 
 def extract_new_findings(doc):
     if isinstance(doc, dict):
-        return doc.get("new_findings") or []
+        return _as_list(doc.get("new_findings"), "new_findings")
     return []
 
 
@@ -144,6 +166,14 @@ def promote_new_findings(raw_new, existing):
                   f"missing {', '.join(missing)}", file=sys.stderr)
             continue
         f = dict(item)
+        # `sources`는 리뷰어가 준 값을 절대 믿지 않는다. render()가 Source 컬럼에
+        # 그대로 찍는 유일한 키인데, 승격 항목은 dedup()의 그룹핑을 건너뛰므로
+        # (`promoted: True` → passthrough) 병합이 이 값을 덮어쓸 기회조차 없다.
+        # adversarial 출력에 `sources: [security-reviewer, code-reviewer]`가 실리면
+        # **아무 리뷰어도 하지 않은 주장이 교차 보증을 받은 것처럼 렌더된다**
+        # (2026-08-05 재현). `agent`만 강제하고 이 채널을 열어두면 id 참칭은 막고
+        # 표시 계층의 참칭은 그대로 남는다 — 후자가 사용자에게 더 직접적이다.
+        f.pop("sources", None)
         f["agent"] = "adversarial"
         f["promoted"] = True
         f["line"] = f.get("line") or 0
@@ -164,10 +194,26 @@ def promote_new_findings(raw_new, existing):
 
 
 def apply_verdicts(findings, verdicts):
+    """Apply adversarial verdicts. Returns (out, dropped_malformed).
+
+    `dropped`를 세는 이유: 예전에는 non-mapping finding을 맨 `continue`로 버렸다 —
+    카운터도, stderr도, stdout 공지도 없이. 리뷰어가 발견을 문자열로 내면
+    (`- "CRITICAL: hardcoded key in config.py:11"`) 주장이 통째로 증발하고
+    stdout은 `No high-confidence findings.`, exit 0이었다. 즉 **버려진 CRITICAL이
+    clean으로 렌더**됐다 (2026-08-05 재현).
+
+    같은 결함을 adversarial 승격 경로에서는 이미 막아놨었다. 이 함수만 계측
+    밖이었다 — 한쪽 출처만 세는 drop 채널은 반쪽짜리 정직성이다.
+    """
     by_id = {v.get("finding_id"): v for v in verdicts if isinstance(v, dict)}
     out = []
+    dropped = 0
     for f in findings:
         if not isinstance(f, dict):
+            dropped += 1
+            print("[synthesize_findings] dropped malformed finding "
+                  f"({type(f).__name__}, expected mapping): {str(f)[:80]!r}",
+                  file=sys.stderr)
             continue
         v = by_id.get(finding_id(f))
         if v is None:
@@ -183,7 +229,7 @@ def apply_verdicts(findings, verdicts):
             if "adjusted_confidence" in v:
                 f["confidence"] = v["adjusted_confidence"]
         out.append(f)
-    return out
+    return out, dropped
 
 
 def dedup(findings):
@@ -268,13 +314,16 @@ def _norm_sev(f):
     sev = f.get("severity", "SUGGESTION")
     if isinstance(sev, str) and sev.strip().upper() in SEV_ORDER:
         return sev.strip().upper()
-    if sev not in SEV_ORDER:
-        print(
-            f"[synthesize_findings] unknown severity {sev!r}; treating as SUGGESTION",
-            file=sys.stderr,
-        )
-        return "SUGGESTION"
-    return sev
+    # 가드는 **총(total)** 이어야 한다. 예전에는 여기서 `if sev not in SEV_ORDER`로
+    # 떨어졌고, `severity: [CRITICAL]` 같은 비-해시가능 값이 오면 멤버십 검사 자체가
+    # `TypeError: unhashable type: 'list'`를 던졌다 — exit 1, stdout 공백, 다른
+    # 리뷰어의 진짜 CRITICAL 동반 소실 (2026-08-05 재현). `_norm_sev`는 dedup·
+    # suppress·sort·render 네 곳에서 불리므로 폭발 반경이 파이프라인 전체다.
+    print(
+        f"[synthesize_findings] unknown severity {sev!r}; treating as SUGGESTION",
+        file=sys.stderr,
+    )
+    return "SUGGESTION"
 
 
 def render(findings, suppressed_count, dropped_malformed=0):
@@ -293,8 +342,8 @@ def render(findings, suppressed_count, dropped_malformed=0):
         ]
         if dropped_malformed > 0:
             out.append(
-                f"{dropped_malformed} adversarial finding(s) dropped as "
-                "malformed (missing file/severity/summary) — see stderr. "
+                f"{dropped_malformed} finding(s) dropped as "
+                "malformed (not a mapping, or missing file/severity/summary) — see stderr. "
                 "**이 실행은 clean이 아니다**: 버려진 주장은 심사되지 않았다."
             )
         return "\n".join(out) + "\n"
@@ -313,7 +362,13 @@ def render(findings, suppressed_count, dropped_malformed=0):
             conf_cell = f"{conf}"
         path_line = _cell(f"{f.get('file')}:{f.get('line')}")
         summary = _cell(f.get("summary", ""))
-        source = _cell(", ".join(f.get("sources", [f.get("agent", "?")])))
+        # `sources`는 리뷰어 YAML에서 온다 — 리스트라는 보장도, 원소가 문자열이라는
+        # 보장도 없다. 맨 `", ".join(...)`은 `sources: [1, 2]` 하나에
+        # `TypeError: sequence item 0: expected str` 로 렌더 전체를 죽였다.
+        srcs = f.get("sources") or [f.get("agent", "?")]
+        if not isinstance(srcs, (list, tuple)):
+            srcs = [srcs]
+        source = _cell(", ".join(str(s) for s in srcs))
         rows.append(f"| {sev} | {path_line} | {conf_cell} | {summary} | {source} |")
 
     counts_line = (
@@ -337,7 +392,7 @@ def render(findings, suppressed_count, dropped_malformed=0):
         )
     if dropped_malformed > 0:
         out.append(
-            f"{dropped_malformed} adversarial finding(s) dropped as malformed "
+            f"{dropped_malformed} finding(s) dropped as malformed "
             "(missing file/severity/summary) — see stderr."
         )
     out.append("")
@@ -358,8 +413,11 @@ def main():
     verdicts = extract_verdicts(doc)
     raw = load_yaml(args.findings) if args.findings else []
 
-    findings = apply_verdicts(raw, verdicts)
-    promoted, dropped_malformed = promote_new_findings(extract_new_findings(doc), findings)
+    findings, dropped_primary = apply_verdicts(raw, verdicts)
+    promoted, dropped_promoted = promote_new_findings(extract_new_findings(doc), findings)
+    # 두 출처의 소실을 **한 채널로** 합친다. 한쪽만 세면 stdout 공지가 반쪽이 되고,
+    # 반쪽짜리 공지는 "이 실행은 clean이 아니다"를 말할 자격이 없다.
+    dropped_malformed = dropped_primary + dropped_promoted
     findings = findings + promoted          # 기존 뒤에 append — 기존 표 순서를 흔들지 않는다
     findings = dedup(findings)
     kept, suppressed = suppress(findings)

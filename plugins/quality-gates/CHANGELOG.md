@@ -3,6 +3,24 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.17] — 2026-08-05
+
+### Fixed
+
+- **malformed 입력이 리뷰 전체를 죽이거나 clean으로 위조하던 경로 4종** (`/qg branch` 라운드 2, codex·security-reviewer·code-reviewer·silent-failure-hunter 적발). 2.14.15가 `confidence` 축만 막았고 나머지가 한 겹씩 새고 있었다:
+  - `new_findings`가 비-리스트(예: `5`)면 `for` 루프에서 `TypeError` → exit 1 + stdout 공백. **다른 리뷰어의 진짜 CRITICAL이 함께 소실**. → `_as_list()`로 ingestion 한 곳에서 타입 확정.
+  - `severity`가 비-스칼라(예: `[CRITICAL]`)면 `_norm_sev`의 멤버십 검사가 `unhashable type` → 같은 폭발 반경(이 함수는 dedup·suppress·sort·render 네 곳에서 불린다). → 가드를 총(total)으로 전환.
+  - `sources`가 비-문자열이면 `", ".join(...)`에서 `TypeError` → 렌더 사망. → `str()` 강제 + 비-시퀀스 wrap.
+  - `apply_verdicts()`가 non-mapping finding을 **카운터도 stderr도 stdout 공지도 없이** 버렸다. 리뷰어가 발견을 문자열로 내면 CRITICAL 주장이 증발하고 stdout은 `No high-confidence findings.` + exit 0 — **버려진 CRITICAL이 clean으로 렌더**. → `(out, dropped)` 반환으로 승격 경로와 **같은 drop 채널**에 합산.
+
+### Security
+
+- **승격 발견의 교차 보증 위조 봉쇄.** `promote_new_findings()`가 `f = dict(item)`으로 리뷰어가 준 `sources`를 그대로 복사했고, 승격 항목은 `dedup()` 그룹핑을 건너뛰므로(passthrough) 병합이 덮어쓸 기회조차 없었다. 결과: adversarial 출력에 `sources: [security-reviewer, code-reviewer]`를 실으면 **아무 리뷰어도 하지 않은 주장이 교차 보증을 받은 것처럼** 렌더됐다. `agent` 강제는 id 참칭만 막고 표시 계층은 열려 있었다. → `f.pop("sources", None)`.
+
+### Added
+
+- 회귀 락 5종 (`test_synthesize_promoted_findings.sh` 10b·10c·10d·10e + 10 확장): primary 출처 소실 공지, 비-리스트 컨테이너, 비-스칼라 severity, `sources` 위조. 전부 행동 기반(문자열 grep 아님).
+
 ## [2.14.16] — 2026-08-04
 
 ### Fixed

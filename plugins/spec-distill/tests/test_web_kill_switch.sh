@@ -46,17 +46,55 @@ else
 fi
 
 # (b) 웹 도구 agent를 dispatch하는 skill
+#
+# 앵커를 **피검자 손에서 뺏는다** (2026-08-05 /qg 라운드 2, adversarial meta_note):
+#   예전 판정은 `grep -q "spec-distill:$a"` 였다. 그러면 접두사 없이
+#   `subagent_type: "spec-reviewer"` 로 쓴 저자는 **자기 skill을 감사 대상에서
+#   스스로 빼낸다** — 검사받는 파일이 자기가 검사받을지를 결정하는 구조다.
+#   실제로 reviewing-spec이 그렇게 통째로 누락됐고, 그 사이 이 브랜치가
+#   spec-reviewer에 WebSearch를 부여했다. 도구 권한은 Law 2로 나눠도 **감사 범위**가
+#   피검자에게 있으면 소용없다. 그래서 접두사를 선택적으로 만든다.
+#
+# 그리고 존재 검사를 **지배 관계**로 바꾼다:
+#   예전엔 "이 파일 어딘가에 CHECK가 있다"였다. 그 명제는 dispatch가 열 개여도
+#   가드가 하나면 참이다 — conducting-interview가 정확히 그 상태였다(R2 블록 하나가
+#   coverage-mapper dispatch까지 '덮는' 것처럼 보였다). 이제 각 dispatch 지점마다
+#   그 **위쪽 WINDOW줄 안에** 스위치 확인이 있어야 한다.
+GUARD_WINDOW=40
 for sk in "$SD"/skills/*/SKILL.md; do
   [[ -f "$sk" ]] || continue
-  dispatches=0
-  for a in $web_agents; do
-    grep -q "spec-distill:$a" "$sk" && dispatches=1
-  done
-  [[ "$dispatches" -eq 1 ]] || continue
   name="$(basename "$(dirname "$sk")")"
+
+  # 이 skill이 dispatch하는 web agent의 줄번호를 전부 모은다(접두사 선택적).
+  dispatch_lines=""
+  for a in $web_agents; do
+    ls="$(grep -nE "subagent_type:[[:space:]]*\"(spec-distill:)?${a}\"" "$sk" | cut -d: -f1 || true)"
+    [[ -n "$ls" ]] && dispatch_lines="$dispatch_lines $ls"
+  done
+  [[ -n "${dispatch_lines// /}" ]] || continue
+
+  # 스위치가 확인되는 줄번호(그 형태가 무엇이든 — bash 블록이든 산문이든).
+  guard_lines="$(grep -n 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' "$sk" | cut -d: -f1 || true)"
+
+  unguarded=""
+  for d in $dispatch_lines; do
+    nearest=-1
+    for g in $guard_lines; do
+      [[ "$g" -le "$d" && "$g" -gt "$nearest" ]] && nearest="$g"
+    done
+    if [[ "$nearest" -lt 0 || $((d - nearest)) -gt "$GUARD_WINDOW" ]]; then
+      unguarded="$unguarded $d"
+    fi
+  done
+  if [[ -z "${unguarded// /}" ]]; then
+    note PASS "$name: web agent dispatch $(echo $dispatch_lines | wc -w | tr -d ' ')곳 전부가 스위치 확인 아래에 있다"
+  else
+    note FAIL "$name: 스위치 확인 없는 web agent dispatch — 줄$unguarded (위 ${GUARD_WINDOW}줄 내 확인 부재)"
+  fi
+
   grep -qE "$CHECK" "$sk" \
-    && note PASS "$name: 웹 agent를 dispatch하며 kill switch를 확인한다" \
-    || note FAIL "$name: 웹 agent를 dispatch하면서 kill switch 확인이 없다"
+    && note PASS "$name: 실행 가능한 스위치 확인 블록 실재" \
+    || note FAIL "$name: 스위치 확인이 실행 가능한 형태가 아니다(산문만으로는 집행되지 않는다)"
   grep -qE 'DEVBREW_SPEC_DISTILL_DISABLE_WEB.*(true|yes|-n |!= *"")' "$sk" \
     && note FAIL "$name: 느슨한 참 판정 — 계약은 정확히 \"1\"이다" \
     || note PASS "$name: 참 판정이 \"1\" 한정"
