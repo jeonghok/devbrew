@@ -94,7 +94,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 - **P2 (Ambiguity Gate)** — 구조적 (필수 11 섹션) default, numerical 거부 (philosophy P2).
 - **P5 (Spec as artifact)** — `docs/superpowers/specs/...spec.md` named, versioned (frontmatter `version: 1.0.0`).
-- **P12 (Trivia escape)** — `/interview` first-step rule (typo / 주석-only / formatting / 단일 rename / <10 토큰 + 단일 action).
+- **P12 (Trivia escape)** — `/interview` first-step rule (typo / 주석-only / formatting / rename / <10 토큰 + 단일 action). 파일 수는 자격 기준이 아니다.
 - **P14 (State preservation)** — `.claude/spec-distill/<session-id>/state.local.md` (실패/abort 시 보존).
 - **P17 (User sovereignty)** — `needs_interview` user confirm gate, [5] Human Review, all kill switches, **`/spec-distill:cancel-review [path] | --reset <path>` per-doc 취소·재활성화 게이트 (v0.14.0)**.
 - **P18 (Stagnation detection)** — issue `raised_count ≥ 3 unresolved` 시 P18 stagnation 명시 + forced [5] escalate.

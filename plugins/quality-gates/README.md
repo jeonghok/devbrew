@@ -11,7 +11,7 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 2 (Writer ≠ Reviewer)** — 순수 read-only reviewer agent(`security-reviewer`/`adversarial`/`test-scope-validator`)가 `tools: Read, Grep, Glob` fail-closed allowlist 선언 (frontmatter scoping으로 물리적 격리 — write/exec/delegation 도구는 목록에 없어 물리적으로 부재; 이름 기반 denylist는 시간에 대해 fail-open이라 대체됨). `runtime-verifier`(sandbox-executor)는 예외로 Write를 갖되 git-diff mutation 가드로 Law 2 self-approval을 구조적으로 차단 — 아래 v2.2.0 bullet 참조.
 - **Law 3 (Compounding)** — scout `rationale` 필드가 매 iteration마다 state 파일에 로깅; reviewer-persona 편집이 학습된 교훈을 인코딩하는 substrate.
 - **Law 3 (Compounding) — cross-plugin reader contract** — Runtime gate의 test-scope-validator(`scripts/discover-plan.sh`)가 sister-plugin (`superpowers:writing-plans`)의 출력 경로 `docs/superpowers/plans/`를 1순위 source로 명시 consume; convention drift가 silent breakage가 되지 않도록 README "Plan Discovery Sources" 섹션이 reader/writer 약속을 문서화.
-- **P12 anti-corollary (former AP5, trivia ceremony) 회피** — `check-trivia.sh`가 단일 파일·≤3줄 whitespace/rename을 파이프라인 전체 skip. *현재 coverage는 whitespace + rename에 국한. P12 canonical 자격(typo/comment-only/single-file formatting)을 완전히 충족하기 위한 확장은 deferred 항목 — Tier 2 spec은 아카이브됨: `git show pre-slim-archive-2026-07-09:docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md`.*
+- **P12 anti-corollary (former AP5, trivia ceremony) 회피** — `check-trivia.sh`가 단일 파일·≤3줄 whitespace/rename을 파이프라인 전체 skip. *현재 coverage는 whitespace + rename에 국한. P12 canonical 자격(typo/comment-only/formatting — 파일 수 무관)을 완전히 충족하기 위한 확장은 deferred 항목 — Tier 2 spec은 아카이브됨: `git show pre-slim-archive-2026-07-09:docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md`.*
 - **P22 anti-corollary (former AP9, over-dispatching / subagent spray) 회피** — Review gate는 fan-out consent 게이트를 fire하지 않고(documented-not-implemented였음), transparency 라인 + 선언된 max fan-out(Phase 1 병렬 ≤ 8, 총/iteration ≤ 10) + authoring-time hard-review로 subagent spray를 억제.
 - **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — Review gate 내부 fix-loop이 `max_review_iterations=5` + repeat-detection (no-progress check) + kill switch로 묶임.
 - **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (`*.local.md` gitignore 패턴으로 자동 제외; TTL sweep + SessionEnd hook으로 폴더 GC).
@@ -198,7 +198,7 @@ codex(B) + 설치된 것으로 계속(loud log). floor·codex는 이 degrade의 
 **Fan-out:** Review gate는 fan-out consent 게이트를 fire하지 **않는다**(과거
 dispatch-수 기반 consent 게이트 주장은 documented-not-implemented였음). P22
 anti-corollary(subagent spray) instantiation은 **transparency 라인(매 iter 선택/제외 가시화)
-+ 선언된 max fan-out + authoring-time hard-review(CLAUDE.md fan-out ≥5)** 기반으로 억제한다.
++ 선언된 max fan-out** 기반으로 억제한다 (리포 전역 `fan-out ≥5` 하드 게이트는 억제 sweep에서 제거됐다 — 없는 백스톱을 근거로 들지 않는다).
 재계산 max fan-out: **Phase 1 병렬 ≤ 8**(security-reviewer + codex + Tier C 최대 6),
 **총/iteration ≤ 10**(+ adversarial + synthesizer; code-simplifier Phase 3 없음).
 

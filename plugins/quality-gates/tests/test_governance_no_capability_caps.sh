@@ -22,6 +22,32 @@ CLAUDE_MD="CLAUDE.md"
 PHIL="docs/philosophy/devbrew-harness-philosophy.md"
 AUTHORING="docs/plugin-authoring.md"
 
+# 규약 문서 집합은 **도출**한다 — 세 변수 하드코딩은 네 번째 문서가 생기는 순간
+# fail-open이다(mutation m07: 같은 한글 cap 문장을 plugin-authoring.md에 옮기자 통과).
+GOV_DOCS=("$CLAUDE_MD")
+while IFS= read -r f; do [[ -n "$f" ]] && GOV_DOCS+=("$f"); done \
+  < <(ls docs/philosophy/*.md docs/plugin-authoring.md 2>/dev/null)
+if [[ "${#GOV_DOCS[@]}" -ge 3 ]]; then
+  pass "코퍼스 도출: 규약 문서 ${#GOV_DOCS[@]}개 (하드코딩 아님)"
+else
+  fail "코퍼스 도출 실패 — 규약 문서를 ${#GOV_DOCS[@]}개만 찾았다 (아래 판정 무의미)"
+fi
+
+# **인용부까지 본다** (2026-08-05 /qg 라운드 2, adversarial N2가 지목한 구조적 근본):
+# sweep의 완료 oracle이 정의 지점(`CLAUDE.md`·`docs/philosophy/`)만 스캔하고
+# `plugins/`를 보지 않았다. 그래서 규칙을 정의부에서 지우고 "완료"를 선언했는데
+# **인용부 6곳이 그 규칙을 현존 백스톱으로 계속 인용**하고 있었다 — 삭제 전보다 나쁘다
+# (삭제 전엔 최소한 참이었다). 규칙의 제거는 정의부만 봐서는 인증할 수 없다.
+# CHANGELOG·tests·fixtures는 이력/코퍼스이므로 제외한다(과거 기록은 고쳐 쓰지 않는다).
+CITE_FILES=()
+while IFS= read -r f; do [[ -n "$f" ]] && CITE_FILES+=("$f"); done < <(
+  find plugins -name '*.md' -not -path '*/tests/*' -not -name 'CHANGELOG.md' 2>/dev/null)
+if [[ "${#CITE_FILES[@]}" -ge 20 ]]; then
+  pass "인용부 코퍼스 실재: plugins/ 산문 ${#CITE_FILES[@]}개 파일"
+else
+  fail "인용부 코퍼스가 ${#CITE_FILES[@]}개뿐 — 경로가 깨졌다 (아래 인용 판정 무의미)"
+fi
+
 # --- AC8a: 숫자 임계 · 기본값 편향 · wall-clock 부재, 승인 게이트는 존속 ---
 # N-접두 형태("N ≥ 5"/"N≥5")만 찾으면 맹점이 생긴다 — philosophy AP9 스텁은 접두
 # 없이 bare "≥5"로 같은 임계를 적었었고, 원래 sweep의 판별 질의(N-접두 전용)가
@@ -30,8 +56,8 @@ AUTHORING="docs/plugin-authoring.md"
 # 오탐 점검(둘 다 무매치 확인됨): CLAUDE.md의 `<PLUGIN>=1` 킬스위치 placeholder
 # ("PLUGIN>" 다음 "=1" — 5가 아니라 1이라 애초에 후보 밖), philosophy의
 # "re-review cap 5"·"Phase 5"·"5-ritual gate"(비교 연산자 없이 숫자만 등장).
-if grep -qE '(≥|>=)[[:space:]]*5' "$CLAUDE_MD" "$PHIL"; then
-  fail "AC8a: fan-out 하드 게이트 임계(≥5, N-접두 여부 무관)가 CLAUDE.md/philosophy에 잔존한다"
+if grep -qE '(≥|>=)[[:space:]]*5' "${GOV_DOCS[@]}"; then
+  fail "AC8a: fan-out 하드 게이트 임계(≥5, N-접두 여부 무관)가 규약 문서에 잔존한다"
 else
   pass "AC8a: fan-out 하드 게이트 임계(≥5, N-접두 여부 무관) 없음"
 fi
@@ -41,26 +67,59 @@ fi
 # 리터럴 값을 쫓는 대신 **개념**을 잠근다: fan-out을 숫자 임계에 묶는 문장 자체.
 # 오탐 점검: 두 파일의 현재 fan-out 언급(CLAUDE.md:68, philosophy:63·96)에는
 # 임계 숫자가 없다 — philosophy:63의 'fan-out N'은 *선언* 요구이지 임계가 아니다.
-if grep -hE 'fan-out|팬아웃' "$CLAUDE_MD" "$PHIL" \
-     | grep -E '[0-9]' \
-     | grep -qE '이상|초과|넘으|부터|≥|>=|이면'; then
-  fail "AC8a: fan-out을 숫자 임계에 묶는 문장이 잔존한다 (값·표기를 바꿔도 같은 억제다)"
+# 개념·표기·언어 세 축을 모두 접는다. 2026-08-05 mutation이 8종 중 2종만 잡힘을
+# 실측했다 — 통과한 것들: 한글 수사("다섯을 넘으면" — 아라비아 숫자 없음),
+# 개념 별칭("동시 subagent 수가 5 이상", "병렬 agent 3개를 초과"), 영어
+# ("when fan-out exceeds 4"), 어미("팬아웃은 4개까지만 허용").
+# 열거는 언제나 fail-open이므로 완전할 수 없지만, **값 하나만 바꾸면 통과**하던
+# 상태에서 **개념을 다른 이름으로 부르고 다른 언어로 써야 통과**하는 상태로 올린다.
+CAP_SUBJECT='fan-out|팬아웃|subagent[[:space:]]*(수|개수|count)|동시[[:space:]]*(실행|dispatch)|병렬[[:space:]]*(agent|에이전트)|parallel[[:space:]]+agents?|concurrent[[:space:]]+subagents?'
+CAP_QUANT='[0-9]|하나|둘|셋|넷|다섯|여섯|일곱|여덟|아홉|열|한[[:space:]]*개|두[[:space:]]*개|세[[:space:]]*개|네[[:space:]]*개|다섯[[:space:]]*개'
+CAP_COMPARE='이상|초과|넘으|넘는|부터|까지만|이하|미만|≥|>=|이면|exceeds?|more[[:space:]]+than|at[[:space:]]+most|no[[:space:]]+more[[:space:]]+than|maximum|max[[:space:]]+of|limit'
+if grep -hE "$CAP_SUBJECT" "${GOV_DOCS[@]}" \
+     | grep -E "$CAP_QUANT" \
+     | grep -qE "$CAP_COMPARE"; then
+  fail "AC8a: fan-out(및 개념 별칭)을 수량 임계에 묶는 문장이 잔존한다 — 값·표기·언어를 바꿔도 같은 억제다"
 else
-  pass "AC8a: fan-out을 숫자 임계에 묶는 문장 없음 (개념 단위 잠금)"
+  pass "AC8a: fan-out 개념을 수량 임계에 묶는 문장 없음 (별칭·한글수사·영어 포함)"
 fi
 
 # 두 particle 변형(를/가) 모두 커버 — CLAUDE.md는 "single-agent를 default로",
 # philosophy AP9 앵커는 "single-agent가 default다"로 다르게 적혀 있었다.
-if grep -qE 'single-agent(를|가) default' "$CLAUDE_MD" "$PHIL"; then
+if grep -qE 'single-agent(를|가) default' "${GOV_DOCS[@]}"; then
   fail "AC8a: 'single-agent ... default' 기본값 편향 문구가 잔존한다"
 else
   pass "AC8a: 기본값-편향(single-agent default) 문구 없음"
 fi
 
-if grep -qE 'wall-clock' "$CLAUDE_MD"; then
-  fail "AC8a: CLAUDE.md에 wall-clock budget 문구가 잔존한다 (spec-distill v0.17.0이 이미 폐기한 것을 규약이 요구 중)"
+# wall-clock은 CLAUDE.md만 봤다 — philosophy에 같은 요구를 다시 쓰면 통과했다
+# (mutation m08 생존). 규약 문서 전체로 넓힌다.
+if grep -qE 'wall-clock' "${GOV_DOCS[@]}"; then
+  fail "AC8a: 규약 문서에 wall-clock budget 문구가 잔존한다 (spec-distill v0.17.0이 이미 폐기한 것을 규약이 요구 중)"
 else
-  pass "AC8a: CLAUDE.md에 wall-clock 문구 없음"
+  pass "AC8a: 규약 문서에 wall-clock 문구 없음"
+fi
+
+# ── AC8e: 삭제된 규칙을 **현존 백스톱으로 인용**하는 곳이 없다 ────────────────
+# 규칙을 정의부에서 지우고 완료를 선언해도, 그 규칙이 인용부에서 계속 논거로
+# 쓰이면 제거는 완료된 것이 아니다 — 오히려 삭제 전보다 나쁘다(삭제 전엔 참이었다).
+# 실제로 `fan-out ≥5` 게이트 인용 4곳과 `single-file` trivia 제약 집행 2곳이
+# sweep "완료" 이후에도 살아 있었고, 그중 둘은 *존재하지 않는 백스톱을 근거로
+# 억제한다*고 주장했다 (2026-08-05 /qg 라운드 2).
+#
+# 식별자 grep으로는 못 찾는다: `AP9` 로 검색하면 `agents/` 에서 0건이 나오는데
+# 그 줄은 `devbrew N≥5 게이트` 라고 적혀 있다. **개념 별칭으로** 훑는다.
+# 자기 자신(이 락)과 이력(CHANGELOG)·테스트는 코퍼스에서 제외돼 있다.
+cite_hits=""
+if [[ "${#CITE_FILES[@]}" -gt 0 ]]; then
+  cite_hits="$(grep -nE '(fan-out|팬아웃|N)[[:space:]]*(≥|>=)[[:space:]]*5|N≥5|single-file formatting|단일 파일 formatting|단일 파일 내 단일' "${CITE_FILES[@]}" 2>/dev/null \
+    | grep -vE '제거|removed|no longer exists|더는|파일 수와 무관|파일 수는' || true)"
+fi
+if [[ -z "$cite_hits" ]]; then
+  pass "AC8e: plugins/ 산문에 삭제된 규칙의 현존-백스톱 인용 없음"
+else
+  fail "AC8e: 삭제된 규칙을 현존 백스톱으로 인용하는 곳이 남았다"
+  printf '      %s\n' $(printf '%s\n' "$cite_hits" | cut -d: -f1 | sort -u)
 fi
 
 # cost_class: high 승인 게이트는 양방향으로 존속을 증명한다.

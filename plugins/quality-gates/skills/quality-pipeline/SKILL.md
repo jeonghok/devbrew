@@ -365,8 +365,8 @@ Agent({
 
    Floor and codex are **not** affected by this degrade. There is **no fan-out consent
    gate** (lightness) — fan-out is bounded by the rubric's natural signal-binding, the
-   transparency line above, the recomputed max fan-out declared in the README, and the
-   authoring-time hard-review (CLAUDE.md fan-out ≥5 gate).
+   transparency line above, and the recomputed max fan-out declared in the README.
+   (A repo-wide `fan-out ≥5` hard-review gate was **removed** from CLAUDE.md and the philosophy doc by the harness-capability-suppression sweep — it is no longer a backstop and must not be cited as one.)
 4. Dispatch `quality-gates:synthesizer` (or local synthesize_findings.py)
    to consolidate findings. **Capture the script's complete stdout** — the
    synthesized Markdown block (counts line + findings table + suggested-fixes

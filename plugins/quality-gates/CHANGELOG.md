@@ -3,6 +3,22 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.19] — 2026-08-05
+
+### Fixed
+
+- **삭제된 `fan-out ≥5` 게이트를 현존 백스톱으로 인용하던 4곳 정리.** `skills/quality-pipeline/SKILL.md`와 `README.md`는 "fan-out 동의 게이트가 **없는**" 근거로 세 백스톱을 들었는데 그중 하나가 공집합이었다 — 없는 것을 근거로 억제한다는 주장이다. `skills/critiquing-artifacts/SKILL.md`는 그 임계를 *직렬 dispatch의 설계 근거*로 인용했다(sweep이 없애려던 실패 모드 그 자체).
+- **`single-file` trivia 제약을 P12와 정합화.** philosophy P12는 `파일 수와 무관하게`로 완화됐는데, P12가 자기 집행 지점으로 **지목한 두 파일**(`CLAUDE.md` Trivia escape, `spec-distill/commands/interview.md`)은 그대로였다 — 원칙만 바뀌고 집행은 하나도 안 바뀐 상태였다.
+
+### Added
+
+- **AC8e — 인용부 스캔.** sweep의 완료 oracle이 정의 지점(`CLAUDE.md`·`docs/philosophy/`)만 보고 `plugins/`를 보지 않은 것이 위 두 결함의 **공통 구조적 원인**이다(adversarial 지목). 규칙 제거는 정의부만 봐서 인증할 수 없다. 식별자 grep으론 못 찾는다 — `AP9`로 검색하면 `agents/`에서 0건인데 그 줄은 `devbrew N≥5 게이트`라고 적혀 있다. **개념 별칭으로** 훑는다.
+
+### Changed
+
+- **AC8a를 개념·표기·언어 세 축으로 확장.** mutation 실측에서 cap 재도입 8종 중 2종만 잡혔다 — 한글 수사(`다섯을 넘으면`), 개념 별칭(`동시 subagent 수`·`병렬 agent`), 영어(`when fan-out exceeds 4`), 어미(`4개까지만`)가 전부 통과했다. 열거는 완전할 수 없지만, **값 하나만 바꾸면 통과**하던 상태에서 **개념을 다른 이름·다른 언어로 써야 통과**하는 상태로 올린다.
+- **규약 문서 집합을 도출로, wall-clock 검사를 전체 문서로.** 세 변수 하드코딩은 네 번째 문서에 fail-open이었고(m07), wall-clock은 `CLAUDE.md`만 봐서 philosophy에 다시 쓰면 통과했다(m08).
+
 ## [2.14.18] — 2026-08-05
 
 ### Security

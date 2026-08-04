@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.24.17] — 2026-08-05
+
+### Fixed
+
+- **`agents/blind-spot-prober.md`의 고아 인용 제거.** `fan-out 1`을 정당화하며 `devbrew N≥5 게이트 미해당`을 근거로 들었는데 그 게이트는 이 sweep이 삭제했다. persona 산문은 이 리포에서 보안-민감 코드로 취급된다.
+- **`commands/interview.md` trivia 목록을 philosophy P12와 정합화.** P12가 `파일 수와 무관하게`로 완화됐는데도 이 파일 — **P12가 자기 집행 지점으로 지목한 곳** — 은 `단일 파일 formatting`·`단일 파일 내 단일 식별자 rename`을 그대로 요구했다. 판정 기준을 파일 수에서 "한 문장으로 설명 가능한가"로 되돌린다.
+- `README.md`의 P12 자격 서술도 같이 정합화.
+
 ## [0.24.16] — 2026-08-05
 
 ### Security
