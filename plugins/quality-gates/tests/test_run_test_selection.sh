@@ -123,6 +123,29 @@ case_assign_unittest_still_claims_real_files() {
   rmw
 }
 
+# /qg iter-3 CRITICAL — 게이트는 ∃ 가 아니라 ∀ 여야 한다.
+# 앞 술어는 "discover 가 수집할 것이 하나라도 있는가" 를 물었다. 실측된 두 탈출은
+# 그 질문에 **yes** 라고 답하면서도 discover 가 파일의 나머지를 통째로 놓친다:
+#   (a) mixed — 진짜 TestCase 하나 + 모듈-레벨 bare def test_ → claim → `pass 0`,
+#       같은 파일에 pytest 는 2 failed.
+#   (b) docstring 예제 안의 들여쓴 `class T(unittest.TestCase):` → 앵커 정규식이
+#       매치한다. 그 파일의 실제 테스트는 bare def 다.
+# (b) 는 앞 커밋의 주석이 "docstring 은 만족시킬 수 없다" 고 단언한 케이스다 — 거짓.
+case_assign_unittest_forall_not_exists() {
+  mkw; mkdir -p "$W/tests"
+  printf 'import unittest\n\nclass T(unittest.TestCase):\n    def test_ok(self):\n        pass\n\ndef test_bare():\n    assert False\n' \
+    > "$W/tests/test_mixed.py"
+  printf '"""Example:\n\n    class TestWidget(unittest.TestCase):\n        def test_x(self): ...\n"""\n\ndef test_bare():\n    assert False\n' \
+    > "$W/tests/test_doc.py"
+  local out; out=$(printf 'tests/test_mixed.py\ntests/test_doc.py\n' \
+                   | bash "$RTS" assign "$W" | sort | tr '\n' ';')
+  local want="tests/test_doc.py${TAB}unclaimed${TAB}file;tests/test_mixed.py${TAB}unclaimed${TAB}file;"
+  if [[ "$out" == "$want" ]]; then
+    pass "unittest: mixed·docstring-예제 둘 다 unclaimed (∃ 가 아니라 ∀)"
+  else fail "∀-조건 (got: $out)"; fi
+  rmw
+}
+
 # G2 — 판정가능성 게이트의 **`unittest` 한정**이 잠겨 있지 않았다. `run-test-
 # selection.sh` 의 `[[ "$claimed" == "unittest" ]] &&` 를 지우면 전 스위트가 GREEN
 # 이었는데, 그 결과는 **pytest 레포에서 bare `def test_` 파일이 전부 unclaimed** 가
@@ -541,7 +564,8 @@ case_run_exit_127_is_unrun() {
 
 for c in case_assign_go_package case_assign_unclaimed case_assign_unittest_skips_unjudgeable_file \
          case_assign_unittest_substring_escapes case_assign_unittest_still_claims_real_files \
-         case_assign_judge_gate_is_unittest_only case_assign_bulk_conflict \
+         case_assign_judge_gate_is_unittest_only case_assign_unittest_forall_not_exists \
+         case_assign_bulk_conflict \
          case_assign_residual_no_absorber case_assign_shell_scope_excludes_non_test \
          case_assign_shell_scope_includes_nested case_assign_dedup_claimed_file \
          case_assign_dedup_unclaimed case_assign_dedup_is_literal_not_regex \

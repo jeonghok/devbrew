@@ -564,12 +564,18 @@ class TestAggregate(unittest.TestCase):
             )
         self.assertEqual(r.returncode, 2)
 
-    # 리뷰 Finding 2 — `--expected-adapters 0`에 입력 파일 0개는 legal한 경계로
-    # 명시 취급한다(설계·brief 둘 다 이 경계를 언급하지 않는다). exit 0, 빈
-    # `adapters: []`, `per_adapter: {}`(bare `per_adapter:`는 YAML null이 됨 —
-    # `attributions: []`와 같은 함정, 위 `_aggregate`의 주석 참고) — 이 선택을
-    # 의도된 것으로 기록해 우연이 아니게 한다.
-    def test_zero_adapters_is_a_legal_empty_result(self):
+    # `--expected-adapters 0` + 입력 0개는 **legal 하지만 인증은 아니다.**
+    #
+    # 이 케이스는 원래 `attribution_status: closed` 를 단언했다 — "이 선택을 의도된
+    # 것으로 기록해 우연이 아니게 한다" 는 주석과 함께. /qg iter-3 에서 리뷰어 둘이
+    # 독립적으로 그 단언이 **fail-open 을 계약으로 못 박고 있었다**고 보고했다:
+    # `closed` + 3플래그 전부 false 는 R8 PASS 행의 결정론 조건을 **전부** 충족하므로,
+    # 8종 어댑터를 하나도 지원하지 않는 레포(Ruby/Java 등)가 테스트를 한 개도 돌리지
+    # 않고 PASS 를 받는다. 그것을 막던 유일한 것은 SKILL.md 의 한국어 문장이었다.
+    #
+    # 형상(exit 0 · `adapters: []` · `per_adapter: {}` — bare `per_adapter:` 는 YAML
+    # null 이 되는 함정)은 그대로 유지한다. 바뀌는 것은 **인증 여부 하나**다.
+    def test_zero_adapters_is_legal_but_not_certified(self):
         rc, out, err = run_aggregate([], expected_adapters=0)
         self.assertEqual(rc, 0, err)
         self.assertIn("adapters: []", out)
@@ -577,7 +583,27 @@ class TestAggregate(unittest.TestCase):
         self.assertNotIn("per_adapter:\n", out)
         for key in ("confirmed_product_defect", "silent_drop", "baseline_unrunnable"):
             self.assertEqual(flag_of(out, key), "false", key)
-        self.assertEqual(flag_of(out, "attribution_status"), "closed")
+        self.assertEqual(flag_of(out, "attribution_status"), "degraded", out)
+
+    # 양의 짝 — 어댑터가 하나라도 있으면 같은 all-green 입력이 `closed` 다.
+    # 없으면 위 assert 는 "언제나 degraded" 로 통과한다.
+    def test_nonzero_adapters_all_green_still_certifies(self):
+        rc, out, err = run_aggregate(
+            [("pytest", False, False, False, "closed")], expected_adapters=1
+        )
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(flag_of(out, "attribution_status"), "closed", out)
+
+    # per-adapter 축의 같은 규칙 — 빈 `--expected` 는 판정 0건이므로 인증 불가.
+    def test_empty_expected_is_not_certified(self):
+        rc, out, _ = run_diff([], [], [])
+        self.assertEqual(rc, 0)
+        self.assertIn("attributions: []", out)
+        self.assertEqual(flag_of(out, "attribution_status"), "degraded", out)
+        # 양의 짝 — unit 이 하나라도 있고 초록이면 closed.
+        rc2, out2, _ = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")])
+        self.assertEqual(rc2, 0)
+        self.assertEqual(flag_of(out2, "attribution_status"), "closed", out2)
 
 
 def write_real_adapter_yaml(d, runner, expected, baseline, head, granularity="file"):

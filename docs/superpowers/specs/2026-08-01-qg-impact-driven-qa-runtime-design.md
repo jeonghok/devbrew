@@ -33,6 +33,7 @@ Runtime 게이트가 *"전체 앱을 무조건 돌린다"* 를 버리고 **이�
   - [6.3 리뷰 라운드 3에서 추가된 AC (AC45–AC51)](#63-리뷰-라운드-3에서-추가된-ac-ac45ac51)
   - [6.4 리뷰 라운드 4에서 추가된 AC (AC52–AC57)](#64-리뷰-라운드-4에서-추가된-ac-ac52ac57)
   - [6.5 `/qg` iter-1 리뷰에서 추가된 AC (AC58–AC59)](#65-qg-iter-1-리뷰에서-추가된-ac-ac58ac59)
+  - [6.6 `/qg` iter-2 리뷰에서 추가된 AC (AC60–AC63)](#66-qg-iter-2-리뷰에서-추가된-ac-ac60ac63)
 - [7. Files to Modify](#7-files-to-modify)
 - [8. Verification Plan](#8-verification-plan)
   - [8.1 자동 테스트](#81-자동-테스트)
@@ -249,7 +250,9 @@ R3      갭 게이트 ── 생략이 있을 때만 AskUserQuestion   ← B3
 
 R4      기준선 측 — 전 단계 오케스트레이터 소유 (verifier 미개입)
           ① baseline-cache.sh get   (키 = merge_base × runner × unit)      [신규]
-          ② 미적중분만: qg-worktree.sh create-baseline <merge_base> <sid>  [서브커맨드 추가]
+          ② 항상(캐시 적중 무관): qg-worktree.sh create-baseline <merge_base> <sid>
+             + 그 트리에서 detect 재실행 → baseline_detected (AC60)
+             ※ '미적중분이 있을 때만' 이던 옛 조건이 §5.4 의 fail-open 이었다
              (기준선에서 red 였던 유닛은 get 이 적중으로 내주지 않으므로 **언제나**
               미적중분에 포함된다 — 재검증에 별도 스텝이 필요 없다)
              → **기준선 트리에서 detect 재실행** (HEAD 집합 재사용 금지)

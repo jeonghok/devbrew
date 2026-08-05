@@ -191,9 +191,12 @@ def per_adapter(args: argparse.Namespace) -> int:
     # `error` = 러너가 0/1/127 이 아닌 코드로 끝났다 = *판정하지 못했다*. 어느
     # 읽기로도 "영향분을 확인했다"가 참이 되지 않는다. 그런데 `error` 는 fail 축으로
     # 접히므로 양측 `error` 는 `(F,F)=PRE_EXISTING` → DEFECTS 밖 → `closed` →
-    # **테스트를 하나도 판정하지 않고 PASS** 였다. 실측 트리거: pytest exit 5(수집
-    # 0개)·2(import 실패)·4(잘못된 ini 옵션), jest/vitest "No tests found",
-    # 전제조건 없는 shell 하니스.
+    # **테스트를 하나도 판정하지 않고 PASS** 였다. **실측 트리거는 pytest·cargo 뿐이다**:
+    # pytest exit 5(수집 0개)·2(import 실패)·4(잘못된 ini 옵션), cargo 컴파일 에러(101).
+    # 이 자리에 jest/vitest "No tests found" 와 "전제조건 없는 shell 하니스" 를 함께
+    # 적었던 앞 문장은 **거짓이었다** (/qg iter-3 실측): vitest 는 매치 파일 0개도
+    # 테스트 0개인 파일도 exit 1 이고 jest 도 같으며, 전제조건 없는 shell 하니스도
+    # exit 1 이다. exit 1 은 `fail` 이라 이 규칙에 **닿지 않는다**.
     #
     # 종료코드를 러너별로 열거해 `unrun` 으로 보내는 수정은 iter-2 에서 **더 나쁜
     # 결함**을 만들었다 — pytest exit 2 는 환경이 아니라 *제품 파손*이라, `unrun`
@@ -203,11 +206,20 @@ def per_adapter(args: argparse.Namespace) -> int:
     # 비대칭 `(P,error)` 는 그대로 `NEW_REGRESSION`(확증 결함)이고, 대칭
     # `(error,error)` 는 결함이 아니라 **degrade** 다. 두 방향이 동시에 표현된다.
     #
-    # 잔여(정직하게 기록): 러너가 판정 실패를 **exit 1** 로 내면(go 컴파일 에러가
-    # 실측 exit 1 — 테스트 실패와 같은 코드다) 여기에 닿지 않는다. 출력 파서 없이는
-    # 구분 불가이고, 러너별 파서는 설계가 금지한다.
+    # **잔여 (열려 있음 — 이 규칙이 닫는 것보다 크다).** 판정 실패를 **exit 1** 로 내는
+    # 러너는 여기에 닿지 않는다. 실측 인스턴스: go 컴파일 에러 · vitest/jest 의 "No test
+    # files found" 와 테스트 0개인 파일 · 전제조건 없는 shell 하니스. 전부 테스트 실패와
+    # 같은 코드라 종료 코드만으로 구분 불가이고, 러너별 출력 파서는 §5.9 가 금지한다.
+    # 즉 이 수정은 pytest·cargo 축만 닫는다.
+    # **아무것도 판정하지 않았으면 인증하지 않는다 (/qg iter-3 CRITICAL, 2명 독립).**
+    # 빈 `--expected` 는 attributions 를 비우고 모든 카운트를 0 으로 만들어 아래 어떤
+    # 항목도 참이 되지 않는다 → `closed` + 3플래그 전부 false → R8 의 PASS 행이 결정론
+    # 조건을 **전부** 충족한다. 그것을 막던 유일한 것은 SKILL.md 의 한국어 문장이고,
+    # 그 동작을 통째로 지워도 문장의 grep 락은 GREEN 이다. 판정 0건은 결함이 아니지만
+    # **인증도 아니다**.
     degraded = (
-        counts["baseline_unrunnable"] > 0
+        not expected
+        or counts["baseline_unrunnable"] > 0
         or counts["silent_drop"] > 0
         or error_axis_seen
         or (args.granularity == "bulk" and counts["pre_existing"] > 0)
@@ -322,6 +334,12 @@ def _aggregate(args: argparse.Namespace) -> int:
     # 8-어댑터 표에서만 오는 값이라 `]`/`,`/`{`/`}` 같이 이 파일의 손-롤 flow
     # 문법을 깨는 문자가 들어올 경로가 없다. 자유 입력(unit 이름 등)은 yaml_str로
     # 이스케이프한다 — 이 둘을 섞으면 안 된다.
+    # per_adapter() 의 `not expected` 와 같은 이유 — 어댑터 0개 집계는 "결함 없음"이
+    # 아니라 "아무것도 대조하지 않았음"이다. `--expected-adapters 0` + YAML 0개는 위
+    # 개수 대조를 통과하므로, 여기서 막지 않으면 `closed` 로 나간다.
+    if not adapters:
+        degraded = True
+
     out = [f"adapters: [{', '.join(adapters)}]", "verdict_input:"]
     for key in ("confirmed_product_defect", "silent_drop", "baseline_unrunnable"):
         out.append(f"  {key}: {'true' if combined[key] else 'false'}")

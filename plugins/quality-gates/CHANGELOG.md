@@ -22,7 +22,7 @@
   `resolve-baseline.sh` 가 소유하고, Review·Runtime 양쪽이 함께 쓴다.
 
 ### Added
-- `scripts/resolve-baseline.sh` — `base`/`base_ref`/`merge_base`/`degraded` 4키.
+- `scripts/resolve-baseline.sh` — `base`/`base_ref`/`merge_base`/`degraded`/`same_as_head`/`ahead` 6키 (AC62).
 - `scripts/run-test-selection.sh` — 러너 어댑터 8종(pytest·unittest·shell·jest·vitest·
   go·cargo·make·npm-script)의 유일 소유자. `detect`(감지, **집합** 반환) /
   `assign`(파일→unit 배정) / `run`(총 함수 결정론 실행).

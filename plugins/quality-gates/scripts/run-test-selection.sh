@@ -239,14 +239,31 @@ has_pytest_config() {
 #
 # 두 가지만 신호로 받는다 — 둘 다 `discover` 의 수집 규칙 그대로다:
 #   · `class X(...TestCase...)` — 선언 위치(줄 시작 + `class` + 식별자 + `(`)까지
-#     요구하므로 import·주석·docstring 이 만족시킬 수 없다. 괄호 안 어디든 허용해
+#     요구하므로 import 와 `#` 주석은 만족시킬 수 없다. **docstring 안의 들여쓴 예제
+#     코드는 만족시킨다** — `^[[:space:]]*` 가 들여쓰기를 허용하므로 문법적으로
+#     구분 불가다(/qg iter-3 실측; 이 자리에 "docstring 도 못 만족시킨다" 고 적었던
+#     앞 문장은 거짓이었다). 아래 ∀-조건이 그 케이스를 잡는다. 괄호 안 어디든 허용해
 #     `unittest.TestCase` · `TestCase` · `BaseTestCase` · 다중상속을 전부 받는다
 #     (`from django.test import TestCase` 처럼 unittest 를 직접 import 하지 않는
 #     형태도 여기로 들어온다).
 #   · `def load_tests(` — 클래스 없이 스위트를 만드는 정식 프로토콜.
 # 미매치 → claim 안 함 → `unclaimed` → `verification: degraded` → PASS 불가.
+#
+# **∃ 가 아니라 ∀ 다 (/qg iter-3 CRITICAL).** "discover 가 수집할 것이 하나라도 있는가"
+# 는 틀린 질문이다 — 필요한 것은 "discover 가 **놓치는 것이 없는가**" 다. 실측된 세 탈출:
+#   (a) mixed — 진짜 TestCase 하나 + 모듈-레벨 bare `def test_` 들 → claim → `pass 0`,
+#       같은 파일에 pytest 는 `2 failed`.
+#   (b) docstring 예제 안의 `    class TestWidget(unittest.TestCase):` → claim → `pass 0`.
+#   (c) TestCase 하위클래스인데 `test_` 메서드가 없음 → `Ran 0 tests` → exit 0 → `pass`.
+# 그래서 양성 신호에 **모듈-레벨 bare `def test_` 부재** 라는 음성 조건을 AND 한다.
+# (a)·(b) 가 그 한 줄로 함께 닫힌다 — (b) 는 docstring 을 파싱해서가 아니라, docstring
+# 예제를 담은 파일이 실제로는 pytest 스타일이라 bare def 를 갖기 때문이다.
+# (c) 는 별도 축이라 아직 열려 있다 — 명시하고 닫지 않는다.
 unittest_can_judge() {   # unittest_can_judge <worktree> <relpath> → 0 = 판정 가능
   local f="$1/$2"
+  # 음성 조건 먼저: 모듈-레벨(들여쓰기 0) bare `def test_` 가 있으면 unittest 는 그것을
+  # 수집하지 못하므로 이 파일을 판정할 수 없다 — 양성 신호가 있어도 그렇다.
+  grep -qE '^def[[:space:]]+test' "$f" 2>/dev/null && return 1
   grep -qE '^[[:space:]]*class[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\([^)]*TestCase' "$f" 2>/dev/null && return 0
   grep -qE '^[[:space:]]*def[[:space:]]+load_tests[[:space:]]*\(' "$f" 2>/dev/null && return 0
   return 1

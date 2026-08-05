@@ -658,11 +658,21 @@ loud advisory 를 내고 **verdict 를 PASS 로 올리지 않는다**:
 
 > `> [quality-gates] baseline 확정 불가 (<사유>) — 차등 귀속 없이 진행, verdict 는 PASS 불가`
 
-`same_as_head: yes` 는 기준선 트리가 리뷰 대상 코드 **자체**라는 뜻이고, 그러면 모든
-진짜 회귀가 `(fail,fail)=PRE_EXISTING` 으로 접힌다. 이 상태는 정상(`main` 위 미커밋
-작업)으로도 변조(base 후보 ref 는 공유 common gitdir 에 있고 `run` 이 돌리는 저장소
-코드가 `git update-ref` 를 할 수 있다)로도 생기며, **둘을 구분할 방법이 없으므로 둘 다
-차등 증거 없음으로 처리한다**. Review 게이트의 changes-exist floor 는 이 키를 읽지
+`same_as_head: yes` 는 merge_base 가 HEAD 커밋과 같다는 뜻이다. 이 상태는 정상(`main`
+위 미커밋 작업)으로도 변조(base 후보 ref 는 공유 common gitdir 에 있고 `run` 이 돌리는
+저장소 코드가 `git update-ref` 를 할 수 있다)로도 생기고, **이 스크립트는 둘을 구분하지
+못한다**. 구분하는 것은 워킹 트리다:
+
+| `same_as_head` | 워킹 트리 | 차등 증거 | 조치 |
+|---|---|---|---|
+| yes | dirty | **성립** (기준선=커밋, HEAD=워킹 트리) | 정상 진행 |
+| yes | clean | **불가** (두 트리가 같은 바이트) | R4 스킵 + PASS 불가 |
+| no | — | 성립 | 정상 진행 |
+
+깨끗한 트리에서 `same_as_head: yes` 면 모든 진짜 회귀가 `(fail,fail)=PRE_EXISTING` 으로
+접히므로 PASS 로 올리지 않는다. **알려진 미해소:** 이 규칙을 읽는 스크립트는 없다 —
+오케스트레이터 산문이다. 부분 변조(base 를 브랜치 중간 커밋으로 이동)는 이 표의 어느
+행에도 걸리지 않는다. Review 게이트의 changes-exist floor 는 이 키를 읽지
 않는다 — 거기서는 `worktree_dirty` 가 변경을 잡으므로 정상 케이스가 죽지 않는다.
 
 `degraded: no` 일 때는 baseline 한 줄을 그대로 출력한다 — `ahead` 는 **부분 변조
@@ -767,8 +777,16 @@ R2 의 5번이 곧 생략 목록이다. **생략 목록이 비어 있으면 `Ask
 
 **Step R4 — 기준선 측 (오케스트레이터 단독 — verifier 미개입).**
 
-R-init 이 `degraded: yes` **또는** `same_as_head: yes` 를 냈으면 이 스텝 전체를
-건너뛰고 R8 에서 `BASELINE_UNRUNNABLE` 로 처리한다. 그때 R6 에 넘길
+R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 에서
+`BASELINE_UNRUNNABLE` 로 처리한다.
+
+**`same_as_head: yes` 만으로는 건너뛰지 않는다 (/qg iter-3 정정).** 앞 버전은 그렇게
+지시했고 그것이 **측정 가능한 회귀를 비차단으로 내렸다**: `main` 위 미커밋 작업에서
+기준선 트리는 merge_base **커밋**이고 HEAD 측은 **워킹 트리**를 담은 샌드박스라 차등이
+정확히 성립하는데, 스킵하면 `NEW_REGRESSION`/defect=true/FAIL 이
+`BASELINE_UNRUNNABLE`/defect=false/SKIP 으로 바뀐다(실측). 차등 증거가 실제로 불가능한
+것은 **`same_as_head: yes` 이고 워킹 트리가 깨끗할 때**뿐이다 — 그때만 두 트리가 같은
+바이트다. 판별자는 `check-review-scope.sh` 의 `worktree_dirty` 다. 그때 R6 에 넘길
 `baseline_detected` 는 `NONE` 이다 (기준선 트리를 만들지 않았으므로 관측이 없다).
 건너뛸 때 기준선 행 파일은 **비우지 않고** 선택한 unit 마다 `<unit>\tunrun\t-` 로
 채운다 — 빈 파일을 R6 에 넘기면 행 부재가 `SILENT_DROP` 으로 라벨된다. 둘 다 PASS 는
@@ -814,10 +832,12 @@ R-init 이 `degraded: yes` **또는** `same_as_head: yes` 를 냈으면 이 스�
 `unrun` 인 이 줄을 세지 않았다 — 결함 축이 아니라 **인증 축**이라 `fail` 전용
 재검증이 닿지 않는다.
 
-이 규칙에는 R6 에 **집행자가 있다**: `diff-test-results.py --baseline-detected` 는
-필수 인자이고, 값을 정직하게 만드는 경로는 이 트리에서 `detect` 를 돌리는 것뿐이다.
-캐시 행은 ③의 실행 비용만 낮출 수 있고 `attribution_status: closed` 의 유일 근거가
-될 수 없다.
+이 규칙의 집행자는 **부분적이다 — 과장하지 않는다.** `diff-test-results.py
+--baseline-detected` 는 필수 인자라 "값을 못 구한 호출자"가 조용히 통과하는 경로는
+없앤다. 하지만 그 인자는 **문자열이 도착했다는 것만** 강제한다 — 값이 실제 기준선
+트리의 `detect` 에서 왔는지는 검사하지 않으며, `"$runner"` 를 그대로 넘기면 항상
+grounded 가 된다(/qg iter-3 실측, mutation GREEN). 즉 캐시가 ②를 억제하던 경로는
+닫히지만, **정직한 값을 넘기는 것 자체는 여전히 오케스트레이터의 의무**다.
 
 그 트리에서 **`detect` 를 다시 실행한다 — HEAD 의 어댑터 집합을 재사용하지 않는다.**
 diff 가 테스트 인프라 자체를 바꾸는 경우(unittest→pytest 마이그레이션, `package.json`
