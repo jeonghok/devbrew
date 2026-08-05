@@ -535,6 +535,14 @@ $f"
       emit_all_unrun "$@"; exit 3
     fi
 
+    has_go_tests() {   # has_go_tests <abs-dir> → 0 = *_test.go 가 하나라도 있다
+      # nullglob 에 의존하지 않는다: 매치가 없으면 glob 이 리터럴로 남고 `-f` 가 거짓이라
+      # 그대로 1 로 떨어진다. 셸 옵션 상태와 무관하게 같은 답을 낸다.
+      local d=$1 g
+      for g in "$d"/*_test.go; do [[ -f "$g" ]] && return 0; done
+      return 1
+    }
+
     exists_unit() {
       case "$gran" in
         # 담김 검사가 존재 검사와 **함께** 있어야 한다. `../other/test_x.py` 는
@@ -548,9 +556,17 @@ $f"
         # 파괴되는데 행은 초록이다. 트리 **안**을 가리키는 `tests/link.py -> ..` 는 담김
         # 검사를 정당하게 통과하므로(실제로 트리 안이다) 이 축은 여기서만 막을 수 있다.
         # `-f` 는 심볼릭 링크를 따라가므로 정당한 파일 링크는 그대로 통과한다.
-        # go 의 `package` 입도는 아래 `-d` 를 그대로 쓴다 — 루트 패키지 `.` 이 정당하다.
+        #
+        # `package`(go 전용, granularity_of:177)는 `-d` **에 더해** 그 디렉토리에
+        # `*_test.go` 가 하나라도 있을 것을 요구한다. `-d` 만 보면 테스트가 없는 패키지가
+        # 존재로 판정되고 `go test ./pkg` 가 "no test files" 로 **exit 0** 을 내 `pass`
+        # 행이 선다 — 아무것도 판정하지 않았는데 초록이다.
+        # 이 경로는 실제로 도달한다: assign 은 `*_test.go` 만 claim 하지만(:373) 그
+        # 패키지 unit 이 **기준선 트리**에서 실행될 때, 그 테스트 파일이 이번 diff 가
+        # 추가한 것이면 merge_base 에는 없다. `absent` 로 떨어뜨리는 것이 정확하다 —
+        # (A,F)=NEW_TEST_RED / (A,P)=NEW_TEST_GREEN 로 제대로 라벨된다.
         file)    unit_within_worktree "$w" "$1" && [[ -f "$w/$1" ]] ;;
-        package) unit_within_worktree "$w" "$1" && [[ -d "$w/$1" ]] ;;
+        package) unit_within_worktree "$w" "$1" && [[ -d "$w/$1" ]] && has_go_tests "$w/$1" ;;
         bulk)    [[ "$1" == "BULK" ]] ;;
       esac
     }
@@ -583,10 +599,35 @@ $f"
     # 실행 *직전*만 보므로, 실행 *도중* 사라지거나 러너가 부르는 하위 도구가 없는 경우는
     # 여기서 백스톱한다. `unrun` 은 미실행 축이라 SILENT_DROP/BASELINE_UNRUNNABLE 로 가고
     # 캐시에도 기록되지 않는다 (AC40) — 복구 가능한 환경 실패를 영구화하지 않는다.
-    status_of_exit() { case "$1" in 0) echo pass ;; 1) echo fail ;; 127) echo unrun ;; *) echo error ;; esac; }
+    # **판정하지 않은 실행은 pass 도 fail 도 아니다.** 예전에는 127 하나만 예외였는데,
+    # 위 주석이 이름 붙인 실패 클래스("error 로 두면 fail 축으로 접혀 양측 PRE_EXISTING
+    # → PASS")의 원소는 127 말고도 많다. /qg iter-1 에서 126·137 이 실측 재현됐다.
+    # 여기 있는 코드는 전부 "러너가 테스트를 하나도 판정하지 못했다" 를 뜻한다.
+    did_not_run_code() {   # did_not_run_code <runner> <exit> → 0 = 판정 안 함
+      case "$2" in
+        # 러너 무관 — 프로세스가 판정을 끝내지 못했다.
+        #   126 실행 불가(퍼미션·셔뱅) · 127 명령 없음 · 124 GNU timeout
+        #   137 SIGKILL(OOM 킬러) · 143 SIGTERM
+        126|127|124|137|143) return 0 ;;
+      esac
+      case "$1" in
+        # pytest 종료 코드(이 환경에서 실측): 0=pass 1=fail 2=중단 3=내부오류
+        # 4=사용오류(잘못된 ini 옵션·없는 파일) 5=수집 0개. 2~5 는 전부 미판정이다.
+        # 특히 5 는 "고른 파일에 테스트가 하나도 없다" 라 가장 조용한 초록을 만든다.
+        pytest) case "$2" in 2|3|4|5) return 0 ;; esac ;;
+      esac
+      return 1
+    }
+    # cargo 의 101(테스트 실패)·make 의 2 등 러너 고유 실패 코드는 위 표에 **없다** —
+    # 그것들은 판정을 했고 실패한 것이므로 아래 `*) error` 로 남는다(기존 동작 유지).
+    status_of_exit() {
+      if did_not_run_code "$runner" "$1"; then echo unrun; return; fi
+      case "$1" in 0) echo pass ;; 1) echo fail ;; *) echo error ;; esac
+    }
 
     run_units() {   # run_units <unit>... → 러너의 종료 코드
       local rc=0 u d b dotted
+      local -a go_args
       case "$runner" in
         # `"${PY_ARGV[@]}"` = py_argv 가 python_env_of 에서 파생한 인터프리터 —
         # setup_cmd 가 준비한 **바로 그 환경**이다. 여기서 앰비언트 `python3` 를 쓰면
@@ -619,7 +660,24 @@ $u"
         vitest)
           ( cd "$w" && npx --no-install vitest run "$@" ) >&2 || rc=$? ;;
         go)
-          ( cd "$w" && go test "$@" ) >&2 || rc=$? ;;
+          # 모듈 모드에서 `.` 이나 `/` 로 시작하지 않는 패턴은 **import 경로**로 해석된다.
+          # 그래서 `go test pkg/name` 은 module-local 패키지를 못 찾고
+          # "package pkg/name is not in std" 로 **exit 1** 을 낸다 (실측). exit 1 은
+          # `error` 도 아닌 `fail` 로 매핑되므로 가용성 프로브가 지키는 `unrun` 축에
+          # 닿지도 못하고, 양측이 같은 행을 내 `PRE_EXISTING` → 테스트 0개로 PASS 가 된다.
+          # 루트 unit `.` 은 이미 디렉토리 패턴이라 그대로 둔다.
+          #
+          # 접두를 assign 이 아니라 **여기서** 붙이는 이유: unit 문자열은 baseline 캐시의
+          # 키이자 `--expected` 의 원소다. assign 에서 붙이면 키가 `./` 로 오염돼
+          # repo-상대 평문이라는 계약이 깨진다 (AC52 — 어댑터 표의 유일 소유자는 이 파일).
+          go_args=()
+          for u in "$@"; do
+            case "$u" in
+              .|./*) go_args+=("$u") ;;
+              *)     go_args+=("./$u") ;;
+            esac
+          done
+          ( cd "$w" && go test "${go_args[@]}" ) >&2 || rc=$? ;;
         cargo)
           # 빌드 산출물은 트리별 독립 (AC50). 다운로드 캐시(CARGO_HOME/registry)는
           # 내용주소라 공유해도 두 트리가 같은 바이트를 본다 — 기본 위치 그대로 둔다.

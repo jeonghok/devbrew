@@ -504,7 +504,101 @@ case_run_cargo_uses_cargo_target_dir_helper() {
   rm -rf "$w" "$bindir"
 }
 
+# ── /qg iter-1: go 어댑터가 "테스트 0개인데 초록" 으로 접히던 두 축 ────────────────
+# 축 ①(codex conf 10, 실행 검증자가 실물 go1.23.4 로 재현): 모듈 모드에서 `.`/`/` 로
+# 시작하지 않는 패턴은 **import 경로**다. `go test pkg/a` → "package pkg/a is not in std"
+# → exit 1 → `fail`(error 도 아니라 가용성 프로브의 `unrun` 축에 닿지 못한다) → 양측
+# 동일 → PRE_EXISTING → 테스트 0개로 PASS. 접두는 `run` 에서만 붙인다 — unit 문자열은
+# 캐시 키이자 `--expected` 의 원소라 repo-상대 평문이어야 한다.
+case_go_run_prefixes_package_with_dotslash() {
+  local w b observed
+  w=$(mktemp -d) || exit 1; b=$(mktemp -d) || exit 1
+  printf 'module example.com/m\n' > "$w/go.mod"
+  mkdir -p "$w/pkg/a"; : > "$w/pkg/a/a_test.go"
+  record_stub "$b/go" go "$w/.observed"
+  PATH="$b:$PATH" bash "$RTS" run "$w" go per-unit pkg/a >/dev/null 2>&1
+  observed=$(cat "$w/.observed" 2>/dev/null || echo "<관측 안 됨>")
+  printf '%s\n' "$observed" | grep -qx 'go test ./pkg/a' \
+    && pass "go run: package unit 에 ./ 접두 (import 경로 오해석 차단)" \
+    || fail "go run 이 import 경로로 넘김 (관측: $observed)"
+  rm -rf "$w" "$b"
+}
+
+# 루트 패키지 `.` 은 **이미** 디렉토리 패턴이다. `./.` 로 이중 접두하면 안 된다 —
+# 접두 로직을 "무조건 붙이기" 로 단순화하는 회귀를 이 케이스가 잡는다.
+case_go_run_root_package_unchanged() {
+  local w b observed
+  w=$(mktemp -d) || exit 1; b=$(mktemp -d) || exit 1
+  printf 'module example.com/m\n' > "$w/go.mod"; : > "$w/m_test.go"
+  record_stub "$b/go" go "$w/.observed"
+  PATH="$b:$PATH" bash "$RTS" run "$w" go per-unit . >/dev/null 2>&1
+  observed=$(cat "$w/.observed" 2>/dev/null || echo "<관측 안 됨>")
+  printf '%s\n' "$observed" | grep -qx 'go test \.' \
+    && pass "go run: 루트 unit '.' 은 그대로 (이중 접두 없음)" \
+    || fail "루트 unit 이 변형됨 (관측: $observed)"
+  rm -rf "$w" "$b"
+}
+
+# 축 ②(adversarial 이 형제 위치로 지목): `exists_unit` 의 package 분기가 `-d` 만 보면
+# `*_test.go` 없는 디렉토리가 "존재" 로 판정되고 `go test ./pkg` 가 "no test files" 로
+# **exit 0** 을 내 `pass` 행이 선다 — 판정한 것이 없는데 초록이다. 실제 도달 경로:
+# assign 은 `*_test.go` 만 claim 하지만, 그 unit 이 **기준선 트리**에서 돌 때 해당 테스트가
+# 이번 diff 가 추가한 것이면 merge_base 에는 없다.
+#
+# 한 번의 호출에 양성(pkg/a, 테스트 있음)과 음성(pkg/b, 테스트 없음)을 함께 넣는다 —
+# 양의 짝이 없으면 "전부 absent" 로 만드는 mutation 이 GREEN 이 된다.
+case_go_package_without_tests_is_absent() {
+  local w b out
+  w=$(mktemp -d) || exit 1; b=$(mktemp -d) || exit 1
+  printf 'module example.com/m\n' > "$w/go.mod"
+  mkdir -p "$w/pkg/a" "$w/pkg/b"
+  : > "$w/pkg/a/a_test.go"          # 테스트 있음 → 실행 대상
+  : > "$w/pkg/b/b.go"               # 소스만 있고 테스트 없음 → absent 여야 한다
+  record_stub "$b/go" go "$w/.observed"
+  out=$(PATH="$b:$PATH" bash "$RTS" run "$w" go per-unit pkg/a pkg/b 2>/dev/null | tr '\n' ';')
+  if [[ "$out" == "pkg/a${TAB}pass${TAB}0;pkg/b${TAB}absent${TAB}-;" ]]; then
+    pass "go: 테스트 없는 패키지는 absent · 있는 패키지는 실행(양의 짝)"
+  else
+    fail "go 패키지 존재 판정 (got: $out)"
+  fi
+  rm -rf "$w" "$b"
+}
+
+# /qg iter-1 CRITICAL conf 10 (silent-failure-hunter, 126·137 실측 재현):
+# status_of_exit 가 127 하나만 `unrun` 으로 보내고 나머지를 `error` 로 접었다. `error` 는
+# fail 축이라 양측 동일하면 PRE_EXISTING → 테스트 0개로 PASS 다 — 코드 주석이 그 실패
+# 클래스를 정확히 이름 붙여 놓고 원소를 하나만 열거하고 있었다.
+#
+# 한 케이스에서 매핑 전체를 훑는다. 양의 짝(0→pass, 1→fail)과 "판정했지만 러너 고유
+# 코드"(101→error)가 함께 있어야 한다 — 없으면 "전부 unrun" 으로 만드는 mutation 이
+# GREEN 이 된다.
+exit_stub() {   # exit_stub <path> <code> — --version 프로브는 통과시키고 실행만 <code>
+  { printf '#!/usr/bin/env bash\n'
+    printf 'case "$*" in *--version*) exit 0 ;; esac\n'
+    printf 'exit %s\n' "$2"
+  } > "$1"
+  chmod +x "$1"
+}
+case_pytest_nonjudging_exit_codes_are_unrun() {
+  local w b out code want ok=1
+  w=$(mktemp -d) || exit 1; b=$(mktemp -d) || exit 1
+  : > "$w/pytest.ini"; mkdir -p "$w/tests"; : > "$w/tests/test_a.py"
+  for pair in 0:pass 1:fail 2:unrun 3:unrun 4:unrun 5:unrun \
+              124:unrun 126:unrun 127:unrun 137:unrun 143:unrun 101:error; do
+    code="${pair%%:*}"; want="${pair#*:}"
+    exit_stub "$b/python3" "$code"
+    out=$(PATH="$b:$PATH" bash "$RTS" run "$w" pytest per-unit tests/test_a.py 2>/dev/null)
+    if [[ "$out" != "tests/test_a.py${TAB}${want}${TAB}${code}" ]]; then
+      fail "pytest exit ${code} → ${want} (got: '$out')"; ok=0
+    fi
+  done
+  [[ "$ok" == "1" ]] && pass "종료코드→상태 매핑 12종 (미판정=unrun · 0/1 양의 짝 · 101=error)"
+  rm -rf "$w" "$b"
+}
+
 for c in case_pytest case_unittest case_pytest_declared_without_config case_shell case_jest case_vitest case_go case_cargo \
+         case_go_run_prefixes_package_with_dotslash case_go_run_root_package_unchanged \
+         case_go_package_without_tests_is_absent case_pytest_nonjudging_exit_codes_are_unrun \
          case_make case_npmscript case_zero_adapters case_polyglot \
          case_conflict_python case_conflict_js_ambiguous case_conflict_js_resolved \
          case_no_reimpl_in_skill case_no_ambient_pytest_probe \
