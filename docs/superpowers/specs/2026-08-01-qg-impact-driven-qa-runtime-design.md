@@ -337,7 +337,19 @@ merge_base: <full sha>
 
 `merge_base` 전체 sha를 **본문에도** 적는다 — 파일명은 short sha라 충돌 가능성이 0이 아니고, 본문 sha가 요청한 merge_base와 다르면 미적중으로 떨어뜨린다. 캐시 키의 세 요소(merge_base × runner × unit)가 전부 파일 안에 있으므로 조회는 순수 문자열 매칭이다.
 
-**`unrun`은 캐시에 넣지 않는다.** 실행하지 못했다는 사실은 환경 상태(설치 실패·네트워크)에 달렸고 merge_base의 함수가 아니므로, 캐시하면 다음 실행에서 복구 가능한 실패가 영구화된다. `absent`는 캐시한다 — merge_base 트리의 함수라 안정적이다.
+**`unrun`·`error`는 캐시에 넣지 않는다.** 실행하지 못했다는 사실은 환경 상태(설치 실패·네트워크·OOM·timeout·권한)에 달렸고 merge_base의 함수가 아니므로, 캐시하면 다음 실행에서 복구 가능한 실패가 영구화된다. `absent`는 캐시한다 — merge_base 트리의 함수라 안정적이다.
+
+**`fail`은 저장하되 적중으로 서빙하지 않는다 — 항상 재검증한다** (v3.0.0, /qg iter-1 리뷰 반영). 캐시 파일은 `.claude/quality-gates/baseline-cache/` 에 살고 `runtime-verifier`는 무제한 `Bash`로 그 형제 디렉토리에 쓰라고 지시받는다. 더구나 `run`은 저장소가 통제하는 코드(`bash tests/*.sh`·npm lifecycle·`make`·`build.rs`)를 호스트 사용자 권한으로 돌리므로, **적대적 subagent 없이도** 리뷰 대상 저장소의 평범한 테스트 하나가 `git merge-base`로 경로를 계산해 쓸 수 있다. 심어지거나 낡은 `fail`은 `(F,F)=PRE_EXISTING`으로 진짜 회귀를 숨기고, 전량 적중이면 §5.2 R4②의 기준선 워크트리 자체가 만들어지지 않아 기준선 테스트가 하나도 돌지 않는다.
+
+봉인(digest-seal, §6.1 스냅샷 선례)을 쓰지 않는 이유: 캐시는 **실행 사이에 살아남는 것이 존재 이유**(merge_base당 1회 상각)라 세션 컨텍스트에 든 오케스트레이터 비밀로 봉인할 수 없고, 파일에 둔 비밀은 verifier의 `Bash`가 읽는다. 대신 **오류 방향의 비대칭**을 쓴다:
+
+| 잘못된 캐시 값 | 귀속 결과 | 방향 |
+|---|---|---|
+| `fail` (실제는 pass) | `PRE_EXISTING` — 결함 밖 | **회귀가 숨는다 (fail-open)** |
+| `pass` (실제는 fail) | `NEW_REGRESSION` | 결함으로 뜬다 (fail-closed) |
+| `absent` (실제는 pass/fail) | `NEW_TEST_GREEN`/`NEW_TEST_RED` | 결함으로 뜨거나 무해 |
+
+따라서 `fail`만 재검증하면 비밀 없이 충분하다. 같은 규칙이 **flaky 기준선 red의 영구 동결**도 함께 닫는다 — 한 번 빨갛게 나온 unit이 브랜치 수명 내내 `PRE_EXISTING`을 찍어내던 경로가 사라진다. 상각은 `pass`·`absent`(대부분)에 대해 그대로 유지된다.
 
 **소유 컴포넌트 — `scripts/baseline-cache.sh` (신규).** 캐시의 조회·검증·부분적중·갱신·동시성을 **한 스크립트가 전부** 갖는다. §5.1의 3분업 어디에도 안 들어가는 로직을 남기지 않기 위한 것이며, 오케스트레이터는 이 두 서브커맨드만 호출한다:
 

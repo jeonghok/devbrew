@@ -18,14 +18,30 @@ seed() {   # seed <sha> <runner> — a=pass, b=fail
   printf 'a.py\tpass\t0\nb.py\tfail\t1\n' | bash "$BC" put "$ROOT" "$1" "$2"
 }
 
-# T6 + M7 + AC8: merge_base가 바뀌면 미적중
+# v3.0.0 이후 `get` 은 **적중 집합에서 `fail` 을 뺀다**(재검증 — 심어지거나 낡은 fail 만
+# 결함을 숨길 수 있고, pass/absent 의 오류 방향은 fail-closed 다). 그래서 put 이 무엇을
+# **저장**했는지는 get 으로 관측할 수 없다 — 두 필터가 서로를 가린다(error 케이스에서
+# 실측한 그 모양). 저장 의미론(병합·보존·덮어쓰기)을 재는 케이스는 파일을 직접 본다.
+body_of() { sed -n '4,$p' "$ROOT/${1:0:12}.md"; }   # body_of <sha> → runner\tunit\tstatus\texit
+row_of()  {   # row_of <sha> <runner> <unit> → "status/exit" (없으면 빈 문자열)
+  body_of "$1" | awk -F'\t' -v r="$2" -v u="$3" '$1==r && $2==u { print $3"/"$4 }'
+}
+rows_of() {   # rows_of <sha> <runner> → "unit=status;..." (정렬)
+  body_of "$1" | awk -F'\t' -v r="$2" '$1==r { print $2"="$3 }' | sort | tr '\n' ';'
+}
+
+# T6 + M7 + AC8: merge_base가 바뀌면 미적중.
+# seed 는 a.py=pass, b.py=fail 을 넣지만 적중은 a.py 하나다 — v3.0.0 부터 `fail` 은
+# 적중 집합에서 빠진다(재검증, case_get_full_hit 참조). 이 케이스가 재는 것은 **키**이고,
+# 1 대 0 의 대비는 그대로다: get 이 아무것도 안 내주는 mutation 은 hit=0 으로,
+# merge_base 를 무시하는 mutation 은 miss=1 로 각각 빨개진다.
 case_key_includes_merge_base() {
   mkroot; seed "$SHA_A" pytest
   local hit miss
   hit=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py b.py | wc -l | tr -d ' ')
   miss=$(bash "$BC" get "$ROOT" "$SHA_B" pytest a.py b.py 2>/dev/null | wc -l | tr -d ' ')
-  if [[ "$hit" == "2" && "$miss" == "0" ]]; then
-    pass "같은 merge_base 적중 2 / 다른 merge_base 적중 0"
+  if [[ "$hit" == "1" && "$miss" == "0" ]]; then
+    pass "같은 merge_base 적중 1(pass 만) / 다른 merge_base 적중 0"
   else fail "merge_base 키 (hit=$hit miss=$miss)"; fi
   rmroot
 }
@@ -38,12 +54,22 @@ case_key_includes_runner() {
   rmroot
 }
 
-# T23-a: 전량 적중 — 값까지 정확히
+# T23-a: 적중은 값까지 보존 — 단 `fail` 은 적중 집합에서 빠진다(재검증).
+# /qg iter-1 CRITICAL: 캐시는 verifier 가 쓸 수 있는 경로에 있고 봉인이 없다. 심어진
+# `fail` 행은 (F,F)=PRE_EXISTING 으로 진짜 회귀를 숨기고, 전량 적중이면 기준선 워크트리
+# 자체가 만들어지지 않아 기준선 테스트가 **하나도 돌지 않는다**. 봉인 대신 방향
+# 비대칭을 쓴다 — pass/absent 는 틀려도 결함으로 뜨지만(fail-closed) fail 은 숨긴다.
 case_get_full_hit() {
   mkroot; seed "$SHA_A" pytest
   local out; out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py b.py | tr '\n' ';')
-  [[ "$out" == "a.py${TAB}pass${TAB}0;b.py${TAB}fail${TAB}1;" ]] \
-    && pass "전량 적중 → 값 보존" || fail "전량 적중 (got: $out)"
+  [[ "$out" == "a.py${TAB}pass${TAB}0;" ]] \
+    && pass "pass 는 값까지 보존해 적중 · fail 은 미적중(재검증)" \
+    || fail "적중 집합 (got: $out)"
+  # 양의 짝: 저장 자체는 되어야 한다. 이게 없으면 "put 이 fail 을 아예 안 쓰는"
+  # mutation 과 구분되지 않는다.
+  [[ "$(row_of "$SHA_A" pytest b.py)" == "fail/1" ]] \
+    && pass "fail 은 파일에 저장은 됨(적중에서만 제외)" \
+    || fail "fail 저장 (row: '$(row_of "$SHA_A" pytest b.py)')"
   rmroot
 }
 
@@ -140,6 +166,35 @@ case_error_not_cached_pass_still_cached() {
   rmroot
 }
 
+# /qg iter-1 CRITICAL conf 8 (security-reviewer 제기, 실행 검증자가 손으로 행을 심어 재현).
+#
+# 캐시는 `.claude/quality-gates/baseline-cache/<mb[0:12]>.md` 에 살고, runtime-verifier 는
+# 무제한 Bash 를 들고 **그 형제 디렉토리에 쓰라고 명시적으로 지시**받는다. 게다가 `run` 은
+# 저장소가 통제하는 코드(`bash tests/*.sh` · npm lifecycle · `make` · build.rs)를 호스트
+# 사용자 권한으로 돌리므로 **적대적 subagent 조차 필요 없다** — 리뷰 대상 저장소의 평범한
+# 테스트 하나가 `git merge-base` 한 번으로 경로를 계산해 쓸 수 있다.
+#
+# 사슬: 심어진 fail → 전량 적중 → SKILL.md R4② 가 "미적중분이 있을 때만" 기준선
+# 워크트리를 만들므로 **기준선 테스트가 하나도 안 돈다** → (F,F)=PRE_EXISTING → DEFECTS
+# 밖 → confirmed_product_defect:false → PASS.
+#
+# 봉인(digest)이 아니라 재검증인 이유: 캐시는 실행 사이에 살아남는 것이 존재 이유라
+# 세션 컨텍스트의 비밀로 봉인할 수 없고, 파일에 둔 비밀은 verifier 의 Bash 가 읽는다.
+# 방향 비대칭은 비밀을 요구하지 않는다.
+case_planted_fail_is_not_served_as_hit() {
+  mkroot
+  printf '%s\nmerge_base: %s\n---\npytest\tv.py\tfail\t1\npytest\tw.py\tpass\t0\n' \
+    '<!-- qg-baseline-cache:v1 -->' "$SHA_A" > "$ROOT/${SHA_A:0:12}.md"
+  local out rc
+  out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest v.py w.py | tr '\n' ';'); rc=$?
+  # 양의 짝(w.py=pass 적중)이 필수다 — 없으면 "get 이 아무것도 안 내주는" mutation 이
+  # 이 케이스를 GREEN 으로 통과한다.
+  if [[ "$rc" == "0" && "$out" == "w.py${TAB}pass${TAB}0;" ]]; then
+    pass "심어진/낡은 fail 은 적중 아님(기준선 재실행 강제) · pass 는 적중(양의 짝)"
+  else fail "심어진 fail 재검증 (rc=$rc out='$out')"; fi
+  rmroot
+}
+
 # 이 수정 **이전** 버전이 남긴 캐시에는 error 행이 이미 얼어 있고, 그것이 이 결함의
 # 실제 피해다. put 만 고치면 기존 오염은 그대로 서빙되므로 get 도 미적중으로 떨어뜨려
 # 스스로 낫게 한다. 단 read_valid_body 는 error 를 여전히 **유효 토큰**으로 봐야 한다 —
@@ -180,14 +235,15 @@ case_put_merge_preserves_other_runner() {
   mkroot; seed "$SHA_A" pytest
   printf 'z.sh\tpass\t0\n' | bash "$BC" put "$ROOT" "$SHA_A" shell
   local n1 n2
-  n1=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py b.py | wc -l | tr -d ' ')
-  n2=$(bash "$BC" get "$ROOT" "$SHA_A" shell z.sh | wc -l | tr -d ' ')
+  # 저장 의미론은 파일로 잰다 — get 은 fail 을 서빙하지 않으므로 보존 여부를 못 본다.
+  n1=$(printf '%s' "$(rows_of "$SHA_A" pytest)" | tr ';' '\n' | grep -c . || true)
+  n2=$(printf '%s' "$(rows_of "$SHA_A" shell)"  | tr ';' '\n' | grep -c . || true)
   [[ "$n1" == "2" && "$n2" == "1" ]] \
     && pass "다른 runner put이 기존 행을 보존" || fail "병합 (pytest=$n1 shell=$n2)"
   printf 'a.py\tfail\t1\n' | bash "$BC" put "$ROOT" "$SHA_A" pytest
-  local out; out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py)
-  [[ "$out" == "a.py${TAB}fail${TAB}1" ]] \
-    && pass "같은 키 재기록 → 새 값이 이김" || fail "키 충돌 (got: $out)"
+  [[ "$(row_of "$SHA_A" pytest a.py)" == "fail/1" ]] \
+    && pass "같은 키 재기록 → 새 값이 이김" \
+    || fail "키 충돌 (row: '$(row_of "$SHA_A" pytest a.py)')"
   rmroot
 }
 
@@ -206,10 +262,11 @@ case_put_partial_preserves_uninvolved_units_same_runner() {
   # A later run at the same merge_base only re-runs (and puts) c.py for pytest —
   # a.py/b.py are untouched cache hits, not part of this put's payload.
   printf 'c.py\tpass\t0\n' | bash "$BC" put "$ROOT" "$SHA_A" pytest
-  local out; out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py b.py c.py | tr '\n' ';')
-  [[ "$out" == "a.py${TAB}pass${TAB}0;b.py${TAB}fail${TAB}1;c.py${TAB}pass${TAB}0;" ]] \
+  # 보존은 **저장** 속성이므로 파일로 잰다 (get 은 b.py=fail 을 서빙하지 않는다).
+  local got; got=$(rows_of "$SHA_A" pytest)
+  [[ "$got" == "a.py=pass;b.py=fail;c.py=pass;" ]] \
     && pass "부분 payload put이 같은 runner의 미포함 unit을 보존" \
-    || fail "부분 payload put이 미포함 unit을 지움 (got: $out)"
+    || fail "부분 payload put이 미포함 unit을 지움 (rows: $got)"
   rmroot
 }
 
@@ -223,10 +280,11 @@ case_put_partial_preserves_uninvolved_units_same_runner() {
 case_put_partial_overwrites_matching_unit_preserves_others() {
   mkroot; seed "$SHA_A" pytest   # a.py=pass/0, b.py=fail/1
   printf 'a.py\tfail\t9\n' | bash "$BC" put "$ROOT" "$SHA_A" pytest
-  local out; out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py b.py | tr '\n' ';')
-  [[ "$out" == "a.py${TAB}fail${TAB}9;b.py${TAB}fail${TAB}1;" ]] \
+  # 둘 다 fail 이라 get 으로는 아무것도 안 보인다 — 파일에서 status/exit 를 함께 잰다.
+  local ra rb; ra=$(row_of "$SHA_A" pytest a.py); rb=$(row_of "$SHA_A" pytest b.py)
+  [[ "$ra" == "fail/9" && "$rb" == "fail/1" ]] \
     && pass "충돌 키는 새 값이 이기고 미포함 키는 보존 (동시 성립)" \
-    || fail "충돌+보존 동시성 (got: $out)"
+    || fail "충돌+보존 동시성 (a.py='$ra' b.py='$rb')"
   rmroot
 }
 
@@ -243,25 +301,26 @@ case_put_partial_overwrites_matching_unit_preserves_others() {
 # (no tabs / wrong field count). Revert the trailing `:` guard and this goes RED.
 case_put_empty_payload_normalizes_to_empty_exits_zero() {
   mkroot; seed "$SHA_A" pytest   # a.py=pass/0, b.py=fail/1
-  local rc out expect="a.py${TAB}pass${TAB}0;b.py${TAB}fail${TAB}1;"
+  # 보존은 **저장** 속성이라 파일로 잰다 (get 은 b.py=fail 을 서빙하지 않는다).
+  local rc rows expect="a.py=pass;b.py=fail;"
 
   printf '' | bash "$BC" put "$ROOT" "$SHA_A" pytest 2>/dev/null; rc=$?
-  out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py b.py | tr '\n' ';')
-  if [[ $rc -eq 0 && "$out" == "$expect" ]]; then
+  rows=$(rows_of "$SHA_A" pytest)
+  if [[ $rc -eq 0 && "$rows" == "$expect" ]]; then
     pass "빈 stdin put → exit 0 + 기존 행 보존"
-  else fail "빈 stdin put (rc=$rc out='$out')"; fi
+  else fail "빈 stdin put (rc=$rc rows='$rows')"; fi
 
   printf 'c.py\tunrun\t-\n' | bash "$BC" put "$ROOT" "$SHA_A" pytest 2>/dev/null; rc=$?
-  out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py b.py | tr '\n' ';')
-  if [[ $rc -eq 0 && "$out" == "$expect" ]]; then
+  rows=$(rows_of "$SHA_A" pytest)
+  if [[ $rc -eq 0 && "$rows" == "$expect" ]]; then
     pass "전량 unrun payload → exit 0 + 기존 행 보존"
-  else fail "전량 unrun payload (rc=$rc out='$out')"; fi
+  else fail "전량 unrun payload (rc=$rc rows='$rows')"; fi
 
   printf 'z.py\tbogus\t0\nnotabs\n' | bash "$BC" put "$ROOT" "$SHA_A" pytest 2>/dev/null; rc=$?
-  out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest a.py b.py | tr '\n' ';')
-  if [[ $rc -eq 0 && "$out" == "$expect" ]]; then
+  rows=$(rows_of "$SHA_A" pytest)
+  if [[ $rc -eq 0 && "$rows" == "$expect" ]]; then
     pass "전량 malformed payload → exit 0 + 기존 행 보존"
-  else fail "전량 malformed payload (rc=$rc out='$out')"; fi
+  else fail "전량 malformed payload (rc=$rc rows='$rows')"; fi
 
   rmroot
 }
@@ -304,6 +363,7 @@ for c in case_key_includes_merge_base case_key_includes_runner case_get_full_hit
          case_get_merge_base_mismatch case_put_atomic \
          case_unrun_not_cached_absent_cached \
          case_error_not_cached_pass_still_cached case_get_skips_legacy_error_row \
+         case_planted_fail_is_not_served_as_hit \
          case_bulk_key_isolation \
          case_put_merge_preserves_other_runner \
          case_put_partial_preserves_uninvolved_units_same_runner \
