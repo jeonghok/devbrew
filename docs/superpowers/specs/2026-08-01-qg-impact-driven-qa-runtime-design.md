@@ -32,6 +32,7 @@ Runtime 게이트가 *"전체 앱을 무조건 돌린다"* 를 버리고 **이�
   - [6.2 리뷰 라운드 2에서 추가된 AC (AC38–AC44)](#62-리뷰-라운드-2에서-추가된-ac-ac38ac44)
   - [6.3 리뷰 라운드 3에서 추가된 AC (AC45–AC51)](#63-리뷰-라운드-3에서-추가된-ac-ac45ac51)
   - [6.4 리뷰 라운드 4에서 추가된 AC (AC52–AC57)](#64-리뷰-라운드-4에서-추가된-ac-ac52ac57)
+  - [6.5 `/qg` iter-1 리뷰에서 추가된 AC (AC58–AC59)](#65-qg-iter-1-리뷰에서-추가된-ac-ac58ac59)
 - [7. Files to Modify](#7-files-to-modify)
 - [8. Verification Plan](#8-verification-plan)
   - [8.1 자동 테스트](#81-자동-테스트)
@@ -249,6 +250,8 @@ R3      갭 게이트 ── 생략이 있을 때만 AskUserQuestion   ← B3
 R4      기준선 측 — 전 단계 오케스트레이터 소유 (verifier 미개입)
           ① baseline-cache.sh get   (키 = merge_base × runner × unit)      [신규]
           ② 미적중분만: qg-worktree.sh create-baseline <merge_base> <sid>  [서브커맨드 추가]
+             (기준선에서 red 였던 유닛은 get 이 적중으로 내주지 않으므로 **언제나**
+              미적중분에 포함된다 — 재검증에 별도 스텝이 필요 없다)
              → **기준선 트리에서 detect 재실행** (HEAD 집합 재사용 금지)
              → 어댑터마다 run-test-selection.sh run … (setup_cmd 포함)     [신규]
           ③ baseline-cache.sh put · 워크트리 폐기
@@ -323,7 +326,7 @@ R9      샌드박스 폐기 (기존 remove)
 **캐시 키 = `(merge_base sha, runner, unit)`.** 전부 결정론적·내용주소. `unit`의 의미는 어댑터의 `granularity`가 정한다(아래 계약 참조).
 
 - **무효화 로직이 없다.** rebase나 main 머지로 merge_base가 바뀌면 키 자체가 바뀐다. 구조적으로 stale이 불가능하다.
-- **기준선 실행은 `/qg` 호출당이 아니라 merge_base당 1회.** 브랜치 수명 동안 `/qg`를 8번 돌리면 설치+실행 비용은 1번.
+- **기준선 실행은 `/qg` 호출당이 아니라 merge_base당 1회 — 단 `pass`·`absent` 유닛에 한한다.** 브랜치 수명 동안 `/qg`를 8번 돌리면 그 유닛들의 설치+실행 비용은 1번이다. **기준선에서 red 였던 유닛은 매번 재실행된다**(아래 재검증 규칙) — 그 비용은 상각되지 않는다. devbrew 자신처럼 stale red를 다수 보유한 레포에서는 이 예외가 눈에 띄게 나타난다.
 - 저장 위치: `.claude/quality-gates/baseline-cache/<merge_base_short>.md` — 마크다운 state (JSON 아님, CLAUDE.md 런타임 상태 규약). **세션 스코프가 아니다** — 세션을 넘어 살아남는 것이 목적이므로 `<sid>/` 형제로 둔다. GC 충돌은 §5.11이 닫는다.
 
 파일 형식 (한 줄 = 한 결과. 파싱 실패 시 미적중 취급):
@@ -341,7 +344,7 @@ merge_base: <full sha>
 
 **`fail`은 저장하되 적중으로 서빙하지 않는다 — 항상 재검증한다** (v3.0.0, /qg iter-1 리뷰 반영). 캐시 파일은 `.claude/quality-gates/baseline-cache/` 에 살고 `runtime-verifier`는 무제한 `Bash`로 그 형제 디렉토리에 쓰라고 지시받는다. 더구나 `run`은 저장소가 통제하는 코드(`bash tests/*.sh`·npm lifecycle·`make`·`build.rs`)를 호스트 사용자 권한으로 돌리므로, **적대적 subagent 없이도** 리뷰 대상 저장소의 평범한 테스트 하나가 `git merge-base`로 경로를 계산해 쓸 수 있다. 심어지거나 낡은 `fail`은 `(F,F)=PRE_EXISTING`으로 진짜 회귀를 숨기고, 전량 적중이면 §5.2 R4②의 기준선 워크트리 자체가 만들어지지 않아 기준선 테스트가 하나도 돌지 않는다.
 
-봉인(digest-seal, §6.1 스냅샷 선례)을 쓰지 않는 이유: 캐시는 **실행 사이에 살아남는 것이 존재 이유**(merge_base당 1회 상각)라 세션 컨텍스트에 든 오케스트레이터 비밀로 봉인할 수 없고, 파일에 둔 비밀은 verifier의 `Bash`가 읽는다. 대신 **오류 방향의 비대칭**을 쓴다:
+봉인(digest-seal — `plugins/quality-gates/scripts/qg-worktree.sh:201,262-272` 의 create-sandbox 스냅샷 선례. 이 문서의 §6.1이 아니다)을 쓰지 않는 이유: 캐시는 **실행 사이에 살아남는 것이 존재 이유**(merge_base당 1회 상각)라 세션 컨텍스트에 든 오케스트레이터 비밀로 봉인할 수 없고, 파일에 둔 비밀은 verifier의 `Bash`가 읽는다. 대신 **오류 방향의 비대칭**을 쓴다:
 
 | 잘못된 캐시 값 | 귀속 결과 | 방향 |
 |---|---|---|
@@ -357,6 +360,10 @@ merge_base: <full sha>
 usage: baseline-cache.sh get <cache-root> <merge_base> <runner> <unit>...
   stdout: 적중한 항목만 한 줄씩 `<unit>\t<status>\t<exit-code>`
           (미적중 unit은 출력하지 않는다 → 호출자가 입력 목록과 차집합해 미적중분을 얻는다)
+          **`fail`·`error`·`unrun` 상태 행은 적중으로 emit하지 않는다** — 저장돼 있어도
+          미적중으로 떨어져 호출자의 차집합에 들어가고 R4②에서 재실행된다. 이것이 위
+          "fail은 항상 재검증" 불변식의 **집행 지점**이다: 산문이 아니라 이 계약이 그것을
+          보장하므로, 호출자가 규칙을 잊어도 재검증이 빠지지 않는다.
   exit:   0 = 정상(0건 적중 포함) · 4 = 캐시 손상(전량 미적중으로 취급, loud)
 
 usage: baseline-cache.sh put <cache-root> <merge_base> <runner> < results.tsv
@@ -366,7 +373,7 @@ usage: baseline-cache.sh put <cache-root> <merge_base> <runner> < results.tsv
 
 | 항목 | 규칙 |
 |---|---|
-| **부분 적중** | 정상 경로다. `get`이 적중분만 emit하고, 호출자가 미적중분만 R4②로 보낸다. 부분적중 병합은 "적중 줄 ∪ 새 실행 줄"이며 **키 충돌 시 새 실행이 이긴다** (같은 merge_base면 내용도 같아야 하므로 충돌 자체가 이상 신호 — `put`이 loud advisory를 낸다). |
+| **부분 적중** | 정상 경로다. `get`이 적중분만 emit하고, 호출자가 미적중분만 R4②로 보낸다. `fail` 유닛은 정의상 항상 미적중분에 포함되므로 별도 분기가 필요 없다 — 재검증은 **자동**이다. 부분적중 병합은 "적중 줄 ∪ 새 실행 줄"이며 **키 충돌 시 새 실행이 이긴다** (같은 merge_base면 내용도 같아야 하므로 충돌 자체가 이상 신호 — `put`이 loud advisory를 낸다). |
 | **원자적 쓰기** | `put`은 같은 디렉토리의 임시 파일에 전량을 쓴 뒤 `mv`로 rename한다. 부분 기록된 파일이 관측되지 않는다. |
 | **동시성** | 락을 쓰지 않는다. 키가 내용주소(merge_base sha)라 **동시 실행이 쓰는 내용이 동일**하므로 rename의 last-write-wins가 안전하다. 이것이 시간주소 캐시 대비 이 설계의 부수 이득이다. |
 | **손상 처리** | 헤더 마커 불일치 · `merge_base` 줄 불일치 · 파싱 실패 → exit 4 + 전량 미적중. **부분 파싱해서 일부만 신뢰하지 않는다** (반쯤 신뢰한 캐시가 조용히 틀린 귀속을 만든다). |
@@ -640,7 +647,7 @@ evidence-log 안에 산다. spec-distill 커버리지 원장과 같은 줄 모�
 1. **무엇이 바뀌었나** — 사람 말로 (파일 나열이 아니라 "무엇을 하는 코드가")
 2. **어떤 행동에 닿나** — 행동/경로 이름
 3. **무엇을 돌리나 + 선택 비율** — `영향 테스트 12개 선택 (레포 전체 47개 중)`
-4. **비용 신호** — 기준선 캐시 적중 여부 · 설치 필요 여부 · **비용 등급 3단계**(`즉시`= 캐시 전량 적중·설치 불필요 / `수 분`= 기준선 실행 필요·설치 불필요 / `설치 포함`= deps 설치 필요). **숫자 시간 추정은 쓰지 않는다** — 추정기가 없으므로 지어낸 숫자가 되고, 라운드 4에서 "대략 시간"의 출처·단위·허용오차가 미정의라고 지적됐다
+4. **비용 신호** — 기준선 캐시 적중 여부 · 설치 필요 여부 · **비용 등급 3단계**(`즉시`= 캐시 전량 적중(정의상 `pass`·`absent`만 적중이므로 기준선 red 유닛이 하나라도 선택되면 이 등급이 아니다)·설치 불필요 / `수 분`= 기준선 실행 필요·설치 불필요 / `설치 포함`= deps 설치 필요). **숫자 시간 추정은 쓰지 않는다** — 추정기가 없으므로 지어낸 숫자가 되고, 라운드 4에서 "대략 시간"의 출처·단위·허용오차가 미정의라고 지적됐다
 5. **무엇을 안 돌리나** — 미선택분 · 자동화 불가 플로우 · blocked 표면
 6. **CI와 다르면 그 차이** (B7)
 
@@ -810,9 +817,9 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 > **번호를 재사용하지 않고 뒤에 붙인다.** 라운드 1에서 발견된 결함 중 하나가 *"§6 중간에 AC를 삽입하면서 §3의 역참조 두 개가 +4 오프셋으로 stale해진 것"* 이었다. 같은 클래스를 재생산하지 않기 위해 신규 AC는 항상 append-only다.
 
 - **AC31** (호출 주체 — §5.1 불변식 ②) — `SKILL.md`의 `run-test-selection.sh` 호출이 `runtime-verifier` dispatch **블록 밖**에 있고, *"이 호출 결과가 authoritative"* 취지의 문장이 그 호출 근처에 존재한다. verifier 페르소나에는 *"테스트 결과 self-report는 판정에 쓰이지 않는다"* 가 명시된다.
-- **AC32** (캐시 조회) — `baseline-cache.sh get`이 **적중분만** emit한다(미적중 unit은 무출력). 헤더 마커·`merge_base` 줄 불일치·파싱 실패 시 **exit 4 + 전량 미적중**이며, 부분 파싱된 일부를 적중으로 내지 않는다.
+- **AC32** (캐시 조회) — `baseline-cache.sh get`이 **적중분만** emit한다(미적중 unit은 무출력). 적중 집합은 `pass`·`absent` 두 상태로 한정되며 `fail`·`error`·`unrun` 행은 저장 여부와 무관하게 미적중으로 떨어진다(AC58·AC59). 헤더 마커·`merge_base` 줄 불일치·파싱 실패 시 **exit 4 + 전량 미적중**이며, 부분 파싱된 일부를 적중으로 내지 않는다.
 - **AC33** (캐시 기록) — `baseline-cache.sh put`이 임시 파일에 전량을 쓴 뒤 `mv` rename한다. 중단 시 부분 기록된 캐시 파일이 남지 않는다.
-- **AC34** (러너 어댑터) — `run-test-selection.sh`가 받는 `<runner>`가 §5.9의 **8개 닫힌 집합**에 속한다. 어느 어댑터도 감지되지 않으면 **exit 3**이며, 감지되지 않은 러너에 대해 명령을 추측해 실행하는 코드 경로가 없다.
+- **AC34** (러너 어댑터) — `run-test-selection.sh`가 받는 `<runner>`가 §5.9의 **8개 닫힌 집합**에 속한다. 감지되지 않은 러너에 대해 명령을 추측해 실행하는 코드 경로가 없다. **`detect`의 0-어댑터는 빈 stdout + exit 0이다**(§5.9·AC56·T34·T54와 일치; 실측 확인). `exit 3`은 `run`이 요청받은 어댑터를 이 트리에서 쓸 수 없을 때만 쓴다 — 옛 문구는 두 서브커맨드의 계약을 뒤섞어 문서 안에서 자기모순이었다(codex 독립 지적).
 - **AC35** (verdict 우선순위) — 확증 제품결함과 `SILENT_DROP`(또는 floor degraded)이 **동시 성립**하는 입력에서 verdict가 `FAIL`이고, degrade 사실이 원장/보고서에 **함께** 기록된다.
 - **AC36** (`error` 매핑) — `error` 상태는 `fail`로 접히고 귀속 라벨에 `(error)`가 병기된다. 스크립트 **exit 3**은 `error`가 아니라 미실행 축(`BASELINE_UNRUNNABLE`/`SILENT_DROP`)으로 간다.
 - **AC37** (분모 M) — 계획 산문의 분모 M이 `compute-test-scope-candidates.sh --total`의 출력이며, 모델이 산출한 값이 아니다.
@@ -845,6 +852,13 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 - **AC55** (집계 소유자) — `diff-test-results.py --aggregate`가 N개 어댑터 YAML을 `verdict_input`으로 합친다. 입력 개수가 `--expected-adapters`와 다르면 **exit 4**이며, 남은 것만 낙관적으로 합치지 않는다. 오케스트레이터가 N개 YAML을 읽고 최악값을 고르는 경로가 없다.
 - **AC56** (0-어댑터 계약 단일화) — `detect`는 감지 0개에서 **빈 stdout + exit 0**, `run`은 어댑터 사용 불가에서 **exit 3 + 전 unit `unrun`**. production 파일(`scripts/`·`skills/`·`agents/`)에 `runner: none` 문자열이 없다.
 - **AC57** (비용 신호 형식) — 계획 산문의 비용 신호가 `즉시`/`수 분`/`설치 포함` 3단계 범주값이며, 숫자 시간 추정을 포함하지 않는다.
+
+### 6.5 `/qg` iter-1 리뷰에서 추가된 AC (AC58–AC59)
+
+번호는 append-only(§6.1 preamble 승계). 두 규칙 모두 §5.4 amendment가 도입했고, 이 문서 자신이 요구하는 "AC 추가 시 대응 T/V 없이 머지하지 않는다"를 만족시키기 위해 T56·T57·M27·M28과 함께 들어온다.
+
+- **AC58** (환경-유래 상태 미캐시) — `baseline-cache.sh put`이 `unrun`과 **`error`** 를 캐시에 기록하지 않는다. 기록 가능한 상태는 `pass`·`fail`·`absent` 셋이다. 근거는 AC40과 동일하다: 두 상태 모두 환경(설치 실패·네트워크·OOM·timeout·권한)에 달렸고 merge_base의 함수가 아니므로, 캐시하면 복구 가능한 실패가 영구화된다.
+- **AC59** (`fail` 강제 재검증) — `baseline-cache.sh get`의 **적중 집합이 `pass`·`absent` 두 상태로 한정된다.** `fail`은 파일에 저장되지만 적중으로 emit되지 않으므로 호출자의 미적중분에 들어가 R4②에서 재실행된다. 이 규칙이 (a) 봉인 없는 캐시에 심어진 `fail`이 회귀를 `PRE_EXISTING`으로 숨기는 경로와 (b) flaky 기준선 red의 영구 동결을 **하나의 변경으로** 닫는다. 이전 버전이 남긴 캐시의 `error`·`fail` 행도 같은 필터에 걸려 스스로 낫는다.
 
 ---
 
@@ -928,7 +942,7 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 | T22 | `SKILL.md`에서 `run-test-selection.sh` 호출이 verifier dispatch 블록 밖 + authoritative 문장 존재 + verifier 페르소나에 self-report 배제 문구 | AC31 |
 | T23 | `baseline-cache.sh get` — 전량 적중 / 부분 적중(적중분만 출력) / 헤더 손상(exit 4 + 무출력) / `merge_base` 불일치(무출력) 4 픽스처 | AC32 |
 | T24 | `baseline-cache.sh put` — 임시파일+rename 사용 확인, 중단 시 부분 파일 부재 | AC33 |
-| T25 | 러너 어댑터 — 8개 각각 감지 픽스처 + 미감지 레포에서 exit 3 + **추측 명령 실행 0회** | AC34 |
+| T25 | 러너 어댑터 — 8개 각각 감지 픽스처 + 미감지 레포에서 `detect`가 빈 stdout + exit 0 + **추측 명령 실행 0회**. `run`의 미가용 어댑터 exit 3은 T54가 잰다 | AC34 |
 | T26 | 확증 회귀 + `SILENT_DROP` 동시 입력 → verdict `FAIL` 이며 degrade가 원장에 함께 기록 | AC35 |
 | T27 | `error` 입력 → `fail`로 접힘 + 라벨 `(error)` 병기 / exit 3 입력 → 미실행 축 | AC36 |
 | T28 | 계획 산문 6필드 존재 + 선택 비율이 `N개 선택 (전체 M개 중)` 포맷 | AC19 |
@@ -959,6 +973,8 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 | T53 | `--aggregate` — 어댑터 A 회귀 + B green → `confirmed_product_defect: true` / 입력 YAML 개수 부족 → exit 4 | AC55 |
 | T54 | `detect` 감지 0개 → 빈 stdout + exit 0 / `run` 어댑터 사용 불가 → exit 3 + 전 unit `unrun`. **금지 문자열 스코프 = `scripts/`+`skills/`+`agents/` 의 production 파일만** (design doc·테스트 자신은 그 문자열을 *금지 서술*로 담으므로 제외 — 스코프를 안 좁히면 락이 자기 자신을 잡는다) | AC56 |
 | T55 | 계획 산문 비용 신호가 3단계 범주값 중 하나 · 숫자 시간 문자열 0회 | AC57 |
+| T56 | `put` 후 **캐시 파일 본문을 직접 검사** — `error` 행 부재 · `pass` 행 존재(양의 짝). get 을 통해 재면 get 의 필터가 put 의 필터를 가려 mutation 이 GREEN 이 된다(실측) | AC58 |
+| T57 | 손으로 심은 `fail` 행이 적중으로 나오지 않고, **같은 파일의 `pass` 행은 정상 적중** + `exit 0`(옛 캐시는 손상이 아니다). 양의 짝이 없으면 "get 이 아무것도 안 내주는" mutation 이 통과한다 | AC59 |
 
 **AC ↔ 검증 완전성.** **AC1–AC57 전부**가 위 T 또는 §8.3의 V에 대응한다. 자동 테스트가 없는 것은 **AC20 하나**이며 `V4`(대화형 게이트 미발화)가 담당한다 — `AskUserQuestion` 발화 여부는 대화형이라 자동화하지 않는다. 이 매핑 자체를 구현 시 표로 유지하고, **AC 추가 시 대응 T/V 없이 머지하지 않는다.** (라운드 3에서 이 선언문이 AC38–AC44를 반영하지 않은 채 stale했다 — 선언문도 갱신 대상이다.)
 
@@ -996,6 +1012,8 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 | **M24** | `unclaimed`를 `gap: closed`로 되돌려 PASS 허용 | T51 — **라운드 4 block 그 자체**. `verdict != PASS`가 아니라 `== SKIP_WITH_EVIDENCE` 정확 일치로 써야 FAIL로 새는 것도 잡힌다 |
 | **M25** | `--aggregate`가 입력 개수 불일치에서 남은 것만 합침 | T53 — 결과가 그럴듯해서 **개수 대조**로만 잡힌다 |
 | **M26** | `assign`을 건너뛰고 오케스트레이터가 unit을 직접 만듦 | T50 — 동종(file-granularity) 레포에서는 결과가 같아 **go 픽스처**로만 잡힌다 |
+| **M27** | `put`의 허용 상태 집합에 `error`를 되돌림 | T56 — 관측을 캐시 파일로 해야 잡힌다. get 출력으로 재면 get 필터가 가려 GREEN |
+| **M28** | `get`의 적중 필터에 `fail`을 되돌림 | T57 |
 
 > **M6·M8·M12가 이 계획의 취약 지점이다.** 셋 다 "결과가 같아 보이는" mutation이라 결과값만 보는 assert로는 GREEN이 나온다 — M6은 **호출 카운터**(+ 유한 종료 stub), M8은 **body-unique + 섹션 윈도우**, M12는 **호출 위치**가 필요하다. 구현 시 이 셋을 **먼저** 쓴다.
 >
@@ -1006,7 +1024,7 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 | id | 시나리오 | 왜 수동인가 |
 |---|---|---|
 | **V1** | devbrew 자신에 `/qg runtime` self-dogfood — **실측상 `unittest`(50개) + `shell`(130개) 두 어댑터가 감지되어 둘 다 실행되는지**, 그리고 어느 쪽도 조용히 누락되지 않는지 | 실제 폴리글랏 레포의 전체 파이프라인 동작은 픽스처로 근사만 가능(T42가 감지·실행 계약은 이미 커버) |
-| **V2** | 기준선 캐시 적중 — 같은 브랜치에서 `/qg runtime` 2회, 두 번째가 기준선을 안 돌리는지 | 캐시 수명이 세션을 넘음 |
+| **V2** | 기준선 캐시 적중 — 같은 브랜치에서 `/qg runtime` 2회. 두 번째 실행에서 **`pass`·`absent` 유닛은 기준선을 안 돌리고, 기준선 red 유닛만 재검증되는지**. 전량 스킵을 기대하면 안 된다 — stale red 를 건드리는 diff 에서는 부분 재실행이 정상이다 | 캐시 수명이 세션을 넘음 |
 | **V3** | stale red 위에서의 첫 실행 — devbrew의 알려진 pre-existing red가 `PRE_EXISTING`으로 찍히고 FAIL을 안 만드는지 | 실제 red 목록이 환경 의존 |
 | **V4** | 갭 게이트 zero-click — 생략 0인 diff에서 질문이 안 뜨는지 | AskUserQuestion 발화는 대화형 |
 | **V5** | 갭 게이트 발화 — 자동화 불가 플로우가 있는 diff에서 질문이 뜨고 redirect가 되는지 | 위와 동일 |
