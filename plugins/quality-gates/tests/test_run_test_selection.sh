@@ -29,14 +29,43 @@ case_assign_go_package() {
   rmw
 }
 
+# v3.0.0 (/qg iter-1): unittest 어댑터는 **판정할 수 있는 파일만** claim 한다.
+# 빈 파일이나 모듈-레벨 bare `def test_` 만 있는 파일은 `unittest discover` 가 0개를
+# 수집하고 exit 0 을 내므로 claim 하면 "테스트 0개인데 pass" 가 된다. 아래 케이스들은
+# **어댑터 소유권**을 재는 것이지 판정 가능성을 재는 것이 아니므로, 픽스처를 진짜
+# TestCase 로 둬서 원래 의도(주장됨 vs 미주장 대비)를 유지한다.
+mk_unittest_file() {   # mk_unittest_file <abs-path>
+  printf 'import unittest\nclass T(unittest.TestCase):\n    def test_ok(self):\n        pass\n' > "$1"
+}
+
 # T43 + AC46: 어느 어댑터도 주장하지 않는 unit → unclaimed (조용한 누락 0)
 case_assign_unclaimed() {
-  mkw; mkdir -p "$W/tests"; : > "$W/tests/test_a.py"     # unittest만 감지됨
+  mkw; mkdir -p "$W/tests"; mk_unittest_file "$W/tests/test_a.py"   # unittest만 감지됨
   local out; out=$(printf 'tests/test_a.py\nspec/foo_spec.rb\n' \
                    | bash "$RTS" assign "$W" | sort | tr '\n' ';')
   if [[ "$out" == "spec/foo_spec.rb${TAB}unclaimed${TAB}file;tests/test_a.py${TAB}unittest${TAB}file;" ]]; then
     pass "미주장 파일 → unclaimed 행"
   else fail "unclaimed (got: $out)"; fi
+  rmw
+}
+
+# /qg iter-1 CRITICAL conf 9 (silent-failure-hunter 가 실행으로 재현).
+# `unittest discover -p test_x.py` 는 모듈-레벨 bare `def test_…` 를 **0개 수집**하고
+# exit 0 을 낸다(실측) — 아무것도 판정하지 않았는데 `pass` 행이 서고, 양측 동일하면
+# STILL_GREEN → 테스트 0개로 PASS 다. 종료 코드로는 구분할 수 없으므로(0개 수집도 0)
+# **선택 시점에** 거른다. 못 고른 파일은 unclaimed → verification degraded → PASS 불가.
+#
+# 양의 짝이 필수다: 판정 가능한 파일은 여전히 claim 돼야 한다. 없으면 "unittest 를 아예
+# claim 하지 않는" mutation 이 GREEN 이 된다.
+case_assign_unittest_skips_unjudgeable_file() {
+  mkw; mkdir -p "$W/tests"
+  printf 'def test_bare():\n    assert False\n' > "$W/tests/test_pytest_style.py"
+  mk_unittest_file "$W/tests/test_unittest_style.py"
+  local out; out=$(printf 'tests/test_pytest_style.py\ntests/test_unittest_style.py\n' \
+                   | bash "$RTS" assign "$W" | sort | tr '\n' ';')
+  if [[ "$out" == "tests/test_pytest_style.py${TAB}unclaimed${TAB}file;tests/test_unittest_style.py${TAB}unittest${TAB}file;" ]]; then
+    pass "unittest: bare def test_ 는 unclaimed(→degraded) · TestCase 는 claim(양의 짝)"
+  else fail "unittest 판정가능성 게이트 (got: $out)"; fi
   rmw
 }
 
@@ -56,7 +85,7 @@ case_assign_bulk_conflict() {
 
 # 잔여 흡수자가 없으면(bulk 어댑터 미감지) 잔여는 unclaimed다 — 조용히 버리지 않는다.
 case_assign_residual_no_absorber() {
-  mkw; mkdir -p "$W/tests"; : > "$W/tests/test_a.py"
+  mkw; mkdir -p "$W/tests"; mk_unittest_file "$W/tests/test_a.py"
   local out; out=$(printf 'src/main.rs\n' | bash "$RTS" assign "$W")
   [[ "$out" == "src/main.rs${TAB}unclaimed${TAB}file" ]] \
     && pass "흡수자 없음 → 잔여는 unclaimed" || fail "잔여 (got: $out)"
@@ -97,7 +126,7 @@ case_assign_dedup_claimed_file() {
 
 # 중복 stdin 입력 (unclaimed) → 한 unit 행으로 수렴한다.
 case_assign_dedup_unclaimed() {
-  mkw; mkdir -p "$W/tests"; : > "$W/tests/test_a.py"   # unittest만 감지 — .rb는 미주장
+  mkw; mkdir -p "$W/tests"; mk_unittest_file "$W/tests/test_a.py"   # unittest만 감지 — .rb는 미주장
   local out; out=$(printf 'spec/foo_spec.rb\nspec/foo_spec.rb\n' | bash "$RTS" assign "$W")
   [[ "$out" == "spec/foo_spec.rb${TAB}unclaimed${TAB}file" ]] \
     && pass "중복 stdin (unclaimed) → unit 행 1개" || fail "중복 unclaimed (got: $out)"
@@ -439,7 +468,7 @@ case_run_exit_127_is_unrun() {
   rmw
 }
 
-for c in case_assign_go_package case_assign_unclaimed case_assign_bulk_conflict \
+for c in case_assign_go_package case_assign_unclaimed case_assign_unittest_skips_unjudgeable_file case_assign_bulk_conflict \
          case_assign_residual_no_absorber case_assign_shell_scope_excludes_non_test \
          case_assign_shell_scope_includes_nested case_assign_dedup_claimed_file \
          case_assign_dedup_unclaimed case_assign_dedup_is_literal_not_regex \

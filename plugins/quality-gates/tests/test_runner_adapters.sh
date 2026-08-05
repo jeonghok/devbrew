@@ -596,9 +596,24 @@ case_pytest_nonjudging_exit_codes_are_unrun() {
   rm -rf "$w" "$b"
 }
 
+# go 는 1 = 테스트 실패, 2 = 빌드/vet 실패다. 2 를 error 로 두면 양측 동일 시
+# PRE_EXISTING → 컴파일도 안 되는 트리가 "기존 실패" 로 통과한다.
+case_go_build_failure_is_unrun() {
+  local w b out ok=1
+  w=$(mktemp -d) || exit 1; b=$(mktemp -d) || exit 1
+  printf 'module example.com/m\n' > "$w/go.mod"; mkdir -p "$w/pkg/a"; : > "$w/pkg/a/a_test.go"
+  for pair in 0:pass 1:fail 2:unrun; do
+    exit_stub "$b/go" "${pair%%:*}"
+    out=$(PATH="$b:$PATH" bash "$RTS" run "$w" go per-unit pkg/a 2>/dev/null)
+    [[ "$out" == "pkg/a${TAB}${pair#*:}${TAB}${pair%%:*}" ]] || { fail "go exit ${pair%%:*} → ${pair#*:} (got: '$out')"; ok=0; }
+  done
+  [[ "$ok" == "1" ]] && pass "go: 2=빌드실패는 unrun · 0/1 은 양의 짝"
+  rm -rf "$w" "$b"
+}
+
 for c in case_pytest case_unittest case_pytest_declared_without_config case_shell case_jest case_vitest case_go case_cargo \
          case_go_run_prefixes_package_with_dotslash case_go_run_root_package_unchanged \
-         case_go_package_without_tests_is_absent case_pytest_nonjudging_exit_codes_are_unrun \
+         case_go_package_without_tests_is_absent case_pytest_nonjudging_exit_codes_are_unrun case_go_build_failure_is_unrun \
          case_make case_npmscript case_zero_adapters case_polyglot \
          case_conflict_python case_conflict_js_ambiguous case_conflict_js_resolved \
          case_no_reimpl_in_skill case_no_ambient_pytest_probe \

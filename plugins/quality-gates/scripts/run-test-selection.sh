@@ -211,6 +211,25 @@ has_pytest_config() {
 # 이 **레포**가 pytest 를 쓰는가 — 이 **머신**에 pytest 가 깔렸는가가 아니다.
 # 앰비언트 인터프리터 probe(호출부 python3 로 pytest 모듈 가용성을 직접 찔러보는 방식)는
 # 두 질문을 뭉개서 같은 레포가 머신마다 다르게 감지되게 만든다. 선언은 레포 안에 있다.
+# unittest 어댑터가 이 파일을 **판정할 수 있는가**.
+#
+# 모듈-레벨 bare `def test_…` 만 있는 pytest 스타일 파일은 `unittest discover` 가 0개를
+# 수집하고 **exit 0** 을 낸다 — 아무것도 판정하지 않았는데 `pass` 행이 서고, 양측 동일
+# 하면 STILL_GREEN → 테스트 0개로 PASS 다. 위 repo_declares_pytest 주석이 이 실패를
+# 정확히 이름 붙였지만 적용된 수정은 **감지**만 넓혔고 어댑터는 그대로였다. 그래서
+# "pytest 를 어디에도 선언하지 않은 레포" 라는 잔여 경로가 남아 있었다.
+#
+# 종료 코드로는 구분할 수 없으므로(실측: 0개 수집도 exit 0) **선택 시점에** 거른다 —
+# 설계의 "exit code 만 읽는다, 러너별 출력 파서 없이" 규약을 지키는 유일한 지점이다.
+# 오분류 방향도 옳다: 못 고르면 `unclaimed` → SKILL.md 가 verification 을 degraded 로
+# 보내 PASS 가 불가능해진다. 조용한 초록보다 시끄러운 degrade 가 낫다.
+#
+# `TestCase` 도 신호로 받는다 — `from django.test import TestCase` 처럼 unittest 를
+# 직접 import 하지 않지만 discover 가 정상 수집하는 형태가 있다.
+unittest_can_judge() {   # unittest_can_judge <worktree> <relpath> → 0 = 판정 가능
+  grep -qE '(unittest|TestCase)' "$1/$2" 2>/dev/null
+}
+
 repo_declares_pytest() {
   local w=$1
   # conftest.py 는 pytest 전용 파일이다 — 설정 섹션 없는 pytest 레포의 주된 신호.
@@ -374,6 +393,12 @@ $f"
       esac
       if [[ -z "$claimed" && -n "$py" ]]; then
         case "$f" in test_*.py|*/test_*.py|*_test.py) claimed="$py" ;; esac
+        # unittest 는 **판정할 수 없는 파일을 claim 하지 않는다** (unittest_can_judge).
+        # pytest 어댑터에는 적용하지 않는다 — pytest 는 bare `def test_` 를 정상 수집하고,
+        # 수집 0개일 때 exit 5 를 내므로 did_not_run_code 표가 이미 잡는다.
+        if [[ "$claimed" == "unittest" ]] && ! unittest_can_judge "$w" "$f"; then
+          claimed=""
+        fi
       fi
       if [[ -z "$claimed" ]] && has_adapter shell; then
         # detect 의 has_exec_shell_tests 와 **같은 스코프**여야 한다 (설계 §5.9:
@@ -615,6 +640,9 @@ $f"
         # 4=사용오류(잘못된 ini 옵션·없는 파일) 5=수집 0개. 2~5 는 전부 미판정이다.
         # 특히 5 는 "고른 파일에 테스트가 하나도 없다" 라 가장 조용한 초록을 만든다.
         pytest) case "$2" in 2|3|4|5) return 0 ;; esac ;;
+        # go: 1 = 테스트 실패, **2 = 빌드/vet 실패**(컴파일 자체가 안 됨 → 테스트가 하나도
+        # 돌지 않았다). adversarial 이 C2 의 형제 위치로 지목한 축이다.
+        go)     case "$2" in 2) return 0 ;; esac ;;
       esac
       return 1
     }
