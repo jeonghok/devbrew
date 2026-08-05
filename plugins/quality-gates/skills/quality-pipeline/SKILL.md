@@ -850,8 +850,13 @@ a disposable git-worktree:
   certification). BEFORE the R5a³ dispatch, capture `fallback_pre` = `git -C
   "$project_dir" status --porcelain --untracked-files=all` plus a tracked content
   tree-hash baseline (`GIT_INDEX_FILE=<tmp> git -C "$project_dir" add -A -- . && git
-  write-tree`). Print: `> [quality-gates] runtime sandbox disabled — read-only
-  smoke mode on the real tree; verdict capped at SKIP_WITH_EVIDENCE
+  write-tree`). **R5b 는 폴백에서 실행하지 않는다** (거기 근거 참조) — 오케스트레이터는
+  실제 트리에서 `setup_cmd` 도 테스트 명령도 돌리지 않는다. verifier 는 여전히 Write 를
+  들고 실제 트리에 붙으므로 "read-only" 라고 단정하지 않는다; 그것이 R7 폴백 신호와
+  verdict cap 이 존재하는 이유다. Print: `> [quality-gates] runtime sandbox disabled —
+  smoke mode on the real tree (qg runs no installer and no test command there; R5b
+  skipped, HEAD units recorded unrun). Verifier still holds write access — see the R7
+  working-tree warning. Verdict capped at SKIP_WITH_EVIDENCE
   (DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1).`
 - Any other non-zero → surface stderr verbatim and mark the Runtime gate failed.
 
@@ -885,7 +890,24 @@ Agent({
 
 **Step R5b — HEAD 측 테스트 실행 (verifier 턴 *종료 후*, 오케스트레이터가 직접).**
 
-verifier 의 dispatch 가 **끝난 뒤**, 어댑터마다:
+**폴백(샌드박스 비활성)에서는 이 스텝을 실행하지 않는다.** `sandbox_dir` 가 UNSET 이면
+`run-test-selection.sh run` 을 **호출하지 말고** 선택한 unit 마다 `<unit>\tunrun\t-` 로
+HEAD 행 파일을 채운 뒤 R6 으로 간다. 이유 둘:
+
+1. 폴백의 `runtime_project_dir` 는 **사용자의 실제 워킹 트리**다 (R0 Exit 3). 이 호출은
+   어댑터의 `setup_cmd` 를 그 트리에서 실행한다 — `npm ci` 는 `node_modules` 를 통째로
+   지우고 다시 깔고, `uv sync --frozen` 은 lock 에 없는 패키지를 prune 하고,
+   `python3 -m venv .venv` 는 기존 `.venv` 를 덮어쓴다 — 이어서 테스트 명령 자체
+   (`npm test`·`make test`·`bash tests/*.sh`)도 같은 트리에서 돈다. **R7 의 폴백 안전
+   신호는 이것을 구조적으로 보고할 수 없다**: `--porcelain` 은 git-ignored 를 보지 않고,
+   `setup_env_dir_of` 가 보장하는 변경 대상이 정확히 `.venv`/`node_modules` 다. 즉
+   "설치는 안 한다" 고 출력한 직후 동의 없이 트리를 바꾸는 경로이며, 가드가 눈감는 것이
+   아니라 **설계상 볼 수 없는** 종류다.
+2. 잃는 것이 없다. 폴백 verdict 는 R0 에서 이미 SKIP_WITH_EVIDENCE 로 cap 되어 PASS 가
+   불가능하고, HEAD 축 `unrun` 은 `(P,U)`/`(F,U)`/`(A,U) → SILENT_DROP` 으로 라우팅돼
+   `silent_drop: true` 를 세운다 — 귀속이 조용히 틀리는 게 아니라 degrade 로 드러난다.
+
+verifier 의 dispatch 가 **끝난 뒤**, 어댑터마다 (샌드박스가 있을 때만):
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" run \

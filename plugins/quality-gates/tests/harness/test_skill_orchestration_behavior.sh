@@ -614,6 +614,10 @@ fi
 # ── T22 / AC31 / M12: 호출 주체 — run-test-selection.sh 가 verifier dispatch 블록 밖 ──
 echo "== 호출 주체 불변식"
 r5b=$(first_line '^[*][*]Step R5b')   # 헤딩 앵커 — cross-reference latch 방지
+# 형제 창(R5a⁰..R8)들과 달리 여기엔 존재 가드가 없었다. `$r5b` 가 0 이면 아래 창 조건
+# `n < $r5b` 가 산술 컨텍스트에서 0 과 비교돼 **항상 거짓** → in_block 이 0 으로 남아
+# 락 전체가 vacuous PASS 가 된다. 헤딩 리네임 한 번으로 무력화되는 구멍이라 막는다.
+assert_line "Step R5b 헤딩 존재 (창 붕괴 방지)" "$r5b"
 in_block=0
 while IFS= read -r ln; do
   n="${ln%%:*}"
@@ -629,6 +633,42 @@ if grep -qF '이 호출 결과가 authoritative' "$SKILL_MD"; then
   echo "PASS: authoritative 문장 존재"
 else
   echo "FAIL: authoritative 문장 부재"; fail=$((fail + 1))
+fi
+
+# ── 폴백에서 R5b 미실행 (실제 워킹 트리 보호) ──────────────────────────────
+# 고친 결함: 폴백은 `runtime_project_dir = project_dir`(사용자의 실제 repo)로 두는데
+# R5b 만 샌드박스 가용성 조건이 없어서, `npm ci`/`uv sync --frozen`/`venv+pip` 가 사용자
+# 트리에서 돌았다. R7 폴백 신호는 `--porcelain` 기반이라 git-ignored 인 `.venv`/
+# `node_modules` 를 **구조적으로** 볼 수 없어 경고조차 못 냈다.
+#
+# 락을 창(R5b..R6)으로 좁히는 이유: `sandbox_dir` 은 파일 전체에 8회(R0·R4 등) 나오므로
+# 전체 파일 grep 은 R5b 본문에서 게이트를 통째로 지워도 통과한다. 창 안에서는 이 게이트가
+# 유일한 출처다(실측: 창 내 `sandbox_dir` 1회, `SILENT_DROP` 1회).
+echo "== 폴백 R5b 미실행"
+r6_marker=$(first_line '^[*][*]Step R6')
+assert_line "Step R6 헤딩 존재 (창 상한)" "$r6_marker"
+if [[ "$r5b" -gt 0 && "$r6_marker" -gt 0 ]] && \
+   awk -v s="$r5b" -v e="$r6_marker" '
+     NR>s && NR<e {
+       if (index($0,"sandbox_dir")) cond=1
+       if (index($0,"unrun"))       rec=1
+       if (index($0,"SILENT_DROP")) route=1
+     }
+     END { exit !(cond && rec && route) }' "$SKILL_MD"; then
+  echo "PASS: R5b 가 폴백 게이트(sandbox_dir)+unrun 기록+SILENT_DROP 라우팅을 모두 명시 (창 $r5b..$r6_marker)"
+else
+  echo "FAIL: R5b 폴백 게이트 불완전 — 창 $r5b..$r6_marker 안에 sandbox_dir/unrun/SILENT_DROP 셋이 함께 있어야 함"
+  fail=$((fail + 1))
+fi
+
+# 거짓이던 배너 문구의 재도입 방지. 이 문구는 R5b 가 실제 트리에서 설치·테스트를 돌리는
+# 동안 "read-only" 라고 주장해 사용자를 오도했다 — 되돌아오면 즉시 빨개져야 한다.
+stale_readonly=$(grep -cF 'read-only smoke mode on the real tree' "$SKILL_MD" || true)
+if [[ "$stale_readonly" -eq 0 ]]; then
+  echo "PASS: 거짓 배너 'read-only smoke mode on the real tree' 0회"
+else
+  echo "FAIL: 거짓 배너 재도입 ${stale_readonly}회 — 폴백은 read-only 가 아니다(verifier 가 Write 보유)"
+  fail=$((fail + 1))
 fi
 
 if [[ "$fail" -eq 0 ]]; then
