@@ -793,7 +793,32 @@ R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 �
 정확히 성립하는데, 스킵하면 `NEW_REGRESSION`/defect=true/FAIL 이
 `BASELINE_UNRUNNABLE`/defect=false/SKIP 으로 바뀐다(실측). 차등 증거가 실제로 불가능한
 것은 **`same_as_head: yes` 이고 워킹 트리가 깨끗할 때**뿐이다 — 그때만 두 트리가 같은
-바이트다. 판별자는 `check-review-scope.sh` 의 `worktree_dirty` 다. 그때 R6 에 넘길
+바이트다. 판별자는 `check-review-scope.sh` 의 `worktree_dirty` 다.
+
+**판별자를 여기서 직접 구한다 (/qg iter-5 정정).** 앞 버전은 Review 게이트 Step 1b 가
+캐시해 둔 값을 가정했는데, **Step 1b 는 Review 게이트 iteration N=1 에서만 돈다.**
+`/qg runtime` 은 Dispatch Loop 를 우회하므로 그 경로에서 이 판별자는 **미정의**였고,
+빈 문자열은 `!= yes` 라 "clean" 으로 읽혀 위 회귀가 다른 문으로 돌아온다. 값이 아직
+없으면 여기서 직접 부른다 (이미 allowed-tools 에 있다):
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh"
+```
+
+`worktree_dirty` 와 **`degraded` 를 함께** 읽는다. `degraded: yes` 면 그 스크립트는
+`worktree_dirty: no` 를 단정값으로 내지만 **그것은 관측이 아니라 자리표시자**다 —
+`degraded: yes` 는 **"모름"** 이므로 **dirty 로 취급해 R4 를 실행한다**(fail-closed:
+차등을 못 하는 쪽이 아니라 하는 쪽으로 기운다. 스킵의 피해는 진짜 FAIL 의 SKIP 강등이고,
+불필요한 실행의 피해는 시간뿐이다).
+
+| `same_as_head` | `check-review-scope` | 조치 |
+|---|---|---|
+| yes | `degraded: no` · `worktree_dirty: yes` | R4 실행 |
+| yes | `degraded: no` · `worktree_dirty: no` | R4 스킵 + PASS 불가 |
+| yes | `degraded: yes` | **모름 → dirty 취급 → R4 실행** |
+| no | — | R4 실행 |
+
+그때 R6 에 넘길
 `baseline_detected` 는 `NONE` 이다 (기준선 트리를 만들지 않았으므로 관측이 없다).
 건너뛸 때 기준선 행 파일은 **비우지 않고** 선택한 unit 마다 `<unit>\tunrun\t-` 로
 채운다 — 빈 파일을 R6 에 넘기면 행 부재가 `SILENT_DROP` 으로 라벨된다. 둘 다 PASS 는
@@ -1015,7 +1040,9 @@ verifier 가 디버깅 중 테스트를 돌리는 것 자체를 막지는 않지
 입력**이라야 두 스크립트가 같은 정규화 버그로 같은 unit 을 대칭 누락할 때 잡힌다.
 
 `--baseline-detected` 는 R4② 의 기준선 트리 `detect` 가 낸 러너 집합이다 (감지 0개면
-`NONE`; R-init 이 `degraded`/`same_as_head` 로 R4 를 통째로 건너뛴 경우도 `NONE`).
+`NONE`; R-init 이 `degraded: yes` 이거나 `same_as_head: yes` **이면서 워킹 트리가
+clean** 이어서 R4 를 건너뛴 경우도 `NONE` — `same_as_head` **단독**은 스킵 사유가
+아니다, R4 의 정정을 볼 것).
 **필수 인자다** — 생략하면 exit 2 로 죽는다. 선택 인자로 두고 부재를 "전부 감지됨"
 으로 읽으면, 값을 못 구한 호출자(= 기준선 트리를 안 만든 호출자)가 정확히 이 검사가
 막으려던 경로로 통과한다. `--runner` 가 이 집합에 없으면 그 어댑터의 모든 unit 은

@@ -47,6 +47,85 @@ case_runner_absent_is_distinguishable() {
   rm -rf "$w"
 }
 
+# T66 — R-init 판별자 표에 락 (/qg iter-5, TA4).
+#
+# 배경: iter-4(8432aec)가 R-init 도입 문장의 포괄 형태(`same_as_head` **단독**으로 PASS
+# 차단)를 표에 맞춰 좁혔는데 **락을 안 붙였다.** 그래서 되돌려도 스위트 전체가 GREEN
+# 이었고, 실제로 같은 문서 안에 안 좁혀진 인용이 두 개(`:1018`·CHANGELOG) 살아남은 채
+# 스위트는 full-green 이었다. 그것이 이 락의 존재 이유다.
+#
+# 잠그는 대상은 **도입 문장이 아니라 표의 행**이다 — 도입 문장은 산문이라 다시 넓어져도
+# 표만 보면 안 보이지만, 행은 판별의 실체다. needle 은 **body-unique** 로 고른다:
+# 표 안에서만 나오는 `| yes | dirty |` 형태를 쓰지 않으면(예: '워킹 트리' 같은 산문어)
+# 본문을 지우고 산문만 남겨도 GREEN 이 된다(헤딩-satisfiable 함정, 이 리포 기학습).
+case_rinit_discriminator_table() {
+  local w; w=$(section_window '**Step R-init' '**Step R1a')
+  local ok=1
+
+  # 양① — clean 행: 차등 불가 → 스킵 + PASS 불가
+  printf '%s\n' "$w" | grep -qE '^\|[[:space:]]*yes[[:space:]]*\|[[:space:]]*clean[[:space:]]*\|.*PASS 불가' \
+    || { ok=0; echo "    (miss) yes|clean 행 + 'PASS 불가'"; }
+  # 양② — dirty 행: 차등 성립 → 정상 진행
+  printf '%s\n' "$w" | grep -qE '^\|[[:space:]]*yes[[:space:]]*\|[[:space:]]*dirty[[:space:]]*\|.*정상 진행' \
+    || { ok=0; echo "    (miss) yes|dirty 행 + '정상 진행'"; }
+  # 음 — 포괄 형태의 재도입 봉쇄. 이 문자열이 다시 나타나면 규칙이 재광역화된 것이다.
+  if printf '%s\n' "$w" | grep -qF '또는 `same_as_head: yes` 면'; then
+    ok=0; echo "    (regress) 포괄 형태가 R-init 창에 재등장"
+  fi
+
+  [[ $ok -eq 1 ]] && pass "R-init 판별자 표: clean→PASS불가 · dirty→정상진행 · 포괄형태 0회" \
+    || fail "R-init 판별자 표 락"
+}
+
+# T67 — R4 가 판별자를 **자기 스텝 안에서** 구한다 (/qg iter-5, SF3).
+#
+# Step 1b(`check-review-scope.sh` 의 유일한 기존 호출)는 Review 게이트 iteration N=1
+# 전용이라 `/qg runtime` 경로에서는 돌지 않는다. R4 가 그 캐시값을 가정하면 그 경로에서
+# 판별자가 미정의가 되고, 빈 문자열은 `!= yes` 라 'clean' 으로 읽혀 진짜 FAIL 이 SKIP 으로
+# 강등된다. 그래서 R4 창 안에 호출 지시와 degraded 취급 규칙이 **함께** 있어야 한다.
+case_r4_resolves_discriminator_itself() {
+  local w; w=$(section_window '**Step R4' '**Step R5a')
+  local ok=1
+  count_in "$w" 'scripts/check-review-scope.sh' | grep -qE '^[1-9]' \
+    || { ok=0; echo "    (miss) R4 창 안에 check-review-scope.sh 호출"; }
+  # degraded 를 dirty 로 접는 fail-closed 규칙 (모름 → 실행)
+  printf '%s\n' "$w" | grep -qE '^\|[[:space:]]*yes[[:space:]]*\|.*degraded: yes.*\|.*R4 실행' \
+    || { ok=0; echo "    (miss) degraded: yes → R4 실행 행"; }
+  [[ $ok -eq 1 ]] && pass "R4 가 판별자를 자기 스텝에서 구하고 degraded 를 dirty 로 접는다" \
+    || fail "R4 판별자 자립 락"
+}
+
+# T68 — 좁힌 규칙의 **원래 형태가 문서 어디에도 인용 가능한 채로 남지 않는다** (∀).
+#
+# ∃-검사("어딘가에 좁힌 형태가 있다")로는 이 결함이 반복 통과한다 — 실제로 3회 반복됐다
+# (design.md §6.6 → SKILL.md:656 → SKILL.md:1018). 그래서 ∀ 로 뒤집는다:
+# `same_as_head` 를 R4 스킵/PASS 차단 사유로 **언급하는 모든 줄**은 같은 줄 안에
+# 한정어(clean/깨끗/worktree_dirty/단독은 아니)를 동반해야 한다.
+case_same_as_head_never_unqualified() {
+  local bad=0 line
+  while IFS= read -r line; do
+    case "$line" in
+      *same_as_head*) : ;;
+      *) continue ;;
+    esac
+    # 스킵/PASS-차단 문맥이 아닌 줄(키 정의·계약 설명 등)은 대상 아님
+    case "$line" in
+      *건너뛴*|*건너뛰지*|*스킵*|*PASS*|*차등*) : ;;
+      *) continue ;;
+    esac
+    # 한정어는 **개념**이지 특정 토큰이 아니다 — "이 줄은 same_as_head 를 *충분조건*으로
+    # 주장하지 않는다" 를 만족시키는 형태를 전부 센다. 워킹 트리를 둘째 축으로 선언하는
+    # 표 헤더도, 충분성을 부정하는 정정문("만으로는 … 않는다")도 한정된 진술이다.
+    # (개념이 아니라 토큰만 열거하면 같은 것을 다른 이름으로 부른 줄이 위양성으로 잡힌다.)
+    case "$line" in
+      *clean*|*깨끗*|*worktree_dirty*|*dirty*|*단독*|*"워킹 트리"*|*만으로*) : ;;
+      *) bad=$((bad+1)); echo "    (unqualified) ${line:0:96}" ;;
+    esac
+  done < "$SKILL"
+  [[ $bad -eq 0 ]] && pass "same_as_head 를 스킵/PASS 사유로 쓰는 모든 줄이 한정어 동반 (∀)" \
+    || fail "한정어 없는 same_as_head 진술 ${bad}줄"
+}
+
 # ── (ii) SKILL.md 산문 락 (섹션 윈도우 + body-unique) ─────────────────────────
 
 # T51 + AC53: unclaimed → verification degraded → PASS 불가가 verdict 절에 있다.
@@ -240,7 +319,9 @@ for c in case_unclaimed_row_is_produced case_runner_absent_is_distinguishable \
          case_skill_cost_signal_categorical case_skill_gap_gate_zero_click \
          case_skill_bulk_disclosure case_skill_both_side_detect \
          case_skill_r6_error_never_passes case_skill_retry_reruns_r5b_r6 \
-         case_skill_fallback_treehash_guard; do
+         case_skill_fallback_treehash_guard \
+         case_rinit_discriminator_table case_r4_resolves_discriminator_itself \
+         case_same_as_head_never_unqualified; do
   echo "== $c"; $c
 done
 echo "── runtime verdict precedence: $PASS passed, $FAIL failed"

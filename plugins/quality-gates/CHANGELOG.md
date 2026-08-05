@@ -63,7 +63,9 @@
   저장소 코드가 호스트 권한으로 `git update-ref` 를 할 수 있다. base 를 HEAD 로 옮기면
   기준선 트리가 리뷰 대상 코드 자체가 된다. `resolve-baseline.sh` 가 이제
   `same_as_head` 와 `ahead` 를 6키 계약으로 emit 하고, Runtime 게이트가
-  `same_as_head: yes` 를 차등 증거 불가로 읽어 PASS 를 막는다. **스크립트는 판정하지
+  `same_as_head: yes` **이면서 워킹 트리가 clean** 일 때를 차등 증거 불가로 읽어 PASS 를
+  막는다 (`same_as_head` **단독**은 아니다 — 아래 Fixed 의 `/qg iter-4`·`iter-5` 항목이
+  정본이다. 단독 차단은 실측으로 진짜 FAIL 을 SKIP 으로 강등시켰다). **스크립트는 판정하지
   않는다** — `merge_base == HEAD` 는 정상(`main` 위 미커밋 작업)으로도 생기고 구분할
   방법이 없기 때문이다. Review 게이트의 changes-exist floor 는 이 키를 읽지 않아
   정상 케이스가 죽지 않는다(v2.6.0 이 닫은 false-clean 재발 방지).
