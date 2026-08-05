@@ -136,6 +136,19 @@
 - **`runtime-verifier` Hard Rule 1 의 `installing deps` 무한정 허용** — 두 줄 아래
   Rule 3 의 한정(`not test-runner deps`)과 모순됐다. 이 산문은 §11⑬ 이 verifier-생성
   환경 비대칭에 대해 가진 유일한 통제다.
+- **주장만 있고 검증이 없던 두 규칙에 락을 붙였다** (설계 리뷰 라운드 6·7 이월분).
+  둘 다 구현은 이미 옳았고 **검증만 비어 있었다** — 그 상태로는 다음 회귀가 조용히
+  통과한다. (1) `SILENT_DROP` → `attribution_status: degraded` 를 재는 T/M 이 없었다
+  (기존 T11·T45 는 `silent_drop` **플래그**만 쟀고, 플래그가 서는 것과 인증이 막히는
+  것은 다른 사실이다 — R8 PASS 행은 `closed` 를 요구하므로 플래그만 서고 status 가
+  `closed` 로 남으면 영향분이 HEAD 에서 사라진 채 PASS 가 난다). 두 모양(head-only
+  소실·양측 대칭 누락) + **양의 짝**(드롭 없으면 `closed`)으로 잠갔다 — 양의 짝이
+  없으면 "언제나 degraded" mutation 이 통과한다. (2) AC62 정정의 판별자
+  `same_as_head` × `worktree_dirty` 를 재는 케이스가 없었다. **한계를 명시한다:**
+  이 규칙을 읽는 스크립트는 아직 없으므로(§6.7 AC62 정정 (a)) 이것은 *집행* 락이
+  아니라 *판별자의 두 입력이 같은 `same_as_head: yes` 상태에서 서로 다른 값을 실제로
+  낸다*는 락이다. mutation 8/8 RED, 계측기 검증 포함(각 mutation 이 기존 케이스가
+  아니라 **새 케이스를** 죽이는지 확인 — N6 은 12 passed/1 failed 로 새 케이스만).
 
 ## [2.14.3] — 2026-07-29
 

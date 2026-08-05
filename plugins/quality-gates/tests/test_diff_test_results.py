@@ -133,6 +133,35 @@ class TestAttribution(unittest.TestCase):
         self.assertEqual(verdict_of(out, "b"), "SILENT_DROP")
         self.assertEqual(flag_of(out, "silent_drop"), "true")
 
+    # T65 — SILENT_DROP 은 **인증을 막는다** (U1, 라운드 6·7 spec review 이월).
+    #
+    # `silent_drop` 플래그가 서는 것과 `attribution_status` 가 `degraded` 로 내려가는
+    # 것은 **다른 사실**이다. 앞의 둘(T11·T45)은 플래그만 쟀고, 어떤 T/M 도 드롭이
+    # 실제로 인증을 막는지 재지 않았다 — R8 PASS 행은 `attribution_status: closed`
+    # 를 요구하므로, 플래그만 서고 status 가 `closed` 로 남으면 **영향분으로 고른
+    # 것이 HEAD 에서 사라졌는데도 PASS** 가 나온다. 그 경로를 여기서 잠근다.
+    #
+    # 두 모양 다 확인한다 — head 에서만 빠진 경우와 양측 대칭 누락. 앞의 것만 잠그면
+    # 대조 기반 계산으로 되돌리는 회귀(M22 축)가 통과한다.
+    def test_silent_drop_blocks_certification(self):
+        for label, expected, baseline, head in (
+            ("head 에서만 소실", ["a"], [("a", "pass", "0")], [("a", "unrun", "-")]),
+            ("양측 대칭 누락", ["a", "b"], [("a", "pass", "0")], [("a", "pass", "0")]),
+        ):
+            with self.subTest(label):
+                rc, out, _ = run_diff(expected, baseline, head)
+                self.assertEqual(rc, 0)
+                self.assertEqual(flag_of(out, "silent_drop"), "true", out)
+                self.assertEqual(flag_of(out, "attribution_status"), "degraded", out)
+
+    # 양의 짝 — 드롭이 없으면 `closed` 여야 한다. 이게 없으면 "언제나 degraded"
+    # 로 만드는 mutation 이 위 assert 를 통과한다 (음의 락엔 양의 짝이 필요하다).
+    def test_no_silent_drop_still_certifies(self):
+        rc, out, _ = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")])
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "silent_drop"), "false", out)
+        self.assertEqual(flag_of(out, "attribution_status"), "closed", out)
+
     # T45(2) — 중복 unit 행은 exit 4 (AC48). 조용한 last-wins는 입력 순서 의존.
     def test_duplicate_unit_row_is_exit_4(self):
         rc, out, _ = run_diff(

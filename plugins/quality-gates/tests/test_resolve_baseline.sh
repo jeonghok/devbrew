@@ -156,6 +156,40 @@ case_degraded_emits_all_keys() {
   cleanup
 }
 
+# T60(b) — AC62 정정(c)의 **판별자가 실제로 판별하는가** (라운드 7 spec review).
+#
+# AC62 초안은 `same_as_head: yes` **단독**으로 R4 를 스킵했고, 그것이 `main` 위
+# 미커밋 작업에서 진짜 `NEW_REGRESSION`/FAIL 을 `BASELINE_UNRUNNABLE`/SKIP 으로
+# 떨어뜨리는 것이 실측됐다. 정정된 판별자는 `same_as_head` × `worktree_dirty` 다.
+#
+# 이 케이스가 재는 것은 **판별자의 두 입력이 같은 상태(`same_as_head: yes`)에서
+# 서로 다른 값을 실제로 낸다**는 것 — 즉 규칙이 결정 가능하다는 것. `worktree_dirty`
+# 를 상수로 만드는 회귀(항상 yes / 항상 no)는 두 절 중 하나에서 RED 가 된다.
+#
+# **한계를 정직하게 적는다:** 이 규칙을 읽는 스크립트는 아직 없다(§6.7 AC62 정정
+# (a)). 그래서 이것은 *규칙의 집행* 락이 아니라 *규칙이 필요로 하는 입력이 존재하고
+# 구별력을 갖는다*는 락이다. 집행자가 생기기 전까지 그 이상은 잴 수 없다.
+case_same_as_head_x_worktree_dirty() {
+  mk_repo
+  git checkout -q main
+
+  # (1) 더러운 워킹트리 — 차등이 **가능한** 상태 (진행해야 함)
+  echo dirty >> a.txt
+  local rb_d sc_d; rb_d=$(bash "$RESOLVE"); sc_d=$(bash "$REVIEW_SCOPE")
+
+  # (2) 같은 커밋, 깨끗한 워킹트리 — 차등이 **불가능한** 상태 (PASS 불가)
+  git checkout -q -- a.txt
+  local rb_c sc_c; rb_c=$(bash "$RESOLVE"); sc_c=$(bash "$REVIEW_SCOPE")
+
+  if [[ "$(field same_as_head "$rb_d")" == "yes" \
+     && "$(field same_as_head "$rb_c")" == "yes" \
+     && "$(field worktree_dirty "$sc_d")" == "yes" \
+     && "$(field worktree_dirty "$sc_c")" == "no" ]]; then
+    pass "same_as_head:yes 고정, worktree_dirty 가 dirty/clean 을 구별 → 판별자 결정 가능"
+  else fail "판별자 구별력 (dirty: rb=$rb_d sc=$sc_d | clean: rb=$rb_c sc=$sc_c)"; fi
+  cleanup
+}
+
 # T29: --total이 리포 전체 테스트 파일 수를 emit
 case_total() {
   mk_repo
@@ -170,6 +204,7 @@ case_total() {
 
 for c in case_normal case_detached case_shallow case_no_base \
          case_same_as_head case_same_as_head_does_not_kill_review_floor \
+         case_same_as_head_x_worktree_dirty \
          case_degraded_emits_all_keys \
          case_no_hardcoded_main case_review_scope_contract case_total; do
   echo "== $c"; $c
