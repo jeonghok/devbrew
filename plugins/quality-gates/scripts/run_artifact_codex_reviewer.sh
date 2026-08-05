@@ -32,11 +32,13 @@ if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_artifact_codex_prompt.py" "$AR
   exit 0
 fi
 
+# 추론 강도는 핀하지 않는다 — 사용자 codex 설정이 지배한다. 하니스가 medium을 박으면
+# high/xhigh 사용자가 조용히 하향되고, 그 하향이 별-모델 적발력을 정확히 깎는다.
+# 샌드박스(-s read-only)·작업디렉토리 핀(-C)·파싱 계약(--json)은 load-bearing이라 유지.
 EXIT_CODE=0
 codex exec "$(cat "$PROMPT")" \
     -C "$PROJECT_DIR" \
     -s read-only \
-    -c 'model_reasoning_effort="medium"' \
     --json \
     < /dev/null \
     > "$JSONL" \

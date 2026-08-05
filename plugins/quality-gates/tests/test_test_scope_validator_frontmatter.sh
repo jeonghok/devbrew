@@ -53,9 +53,12 @@ echo "== Frontmatter declarations =="
 echo "$FM" | grep -qE '^name:[[:space:]]*test-scope-validator$' \
   && { PASS=$((PASS + 1)); note "PASS: name=test-scope-validator"; } \
   || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: name field"; }
-echo "$FM" | grep -qE '^model:[[:space:]]*sonnet$' \
-  && { PASS=$((PASS + 1)); note "PASS: model=sonnet"; } \
-  || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: model field"; }
+echo "$FM" | grep -qE '^model:[[:space:]]*inherit$' \
+  && { PASS=$((PASS + 1)); note "PASS: model=inherit"; } \
+  || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: model field (inherit 아님)"; }
+echo "$FM" | grep -qE '^model:[[:space:]]*(opus|sonnet|haiku)$' \
+  && { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: 고정 티어 핀 잔존"; } \
+  || { PASS=$((PASS + 1)); note "PASS: 고정 티어 핀 없음"; }
 echo "$FM" | grep -qE '^cost_class:[[:space:]]*low$' \
   && { PASS=$((PASS + 1)); note "PASS: cost_class=low"; } \
   || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: cost_class field"; }
@@ -81,6 +84,23 @@ assert_body_grep 'outdated-suspicion' "body mentions outdated-suspicion"
 assert_body_grep 'cherry-pick-suspicion' "body mentions cherry-pick-suspicion"
 assert_body_grep 'unclear' "body mentions unclear"
 assert_body_grep 'test_scope_verdicts' "body mentions output key"
+
+echo "== 자기모순 방지 (Hard Rule 4 vs Inputs PRIMARY axis) =="
+# Hard Rule의 허용 컨텍스트 열거가 Inputs의 PRIMARY axis(spec_path)를 포함해야 한다.
+# 라인번호가 아니라 문자열로 앵커한다(앞선 편집에 취약하지 않게).
+rule4="$(grep -F 'Do not fetch context outside' "$AGENT")"
+grep -q 'spec' <<<"$rule4" \
+  && { PASS=$((PASS + 1)); note "PASS: Hard Rule 허용 컨텍스트에 spec 포함"; } \
+  || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: Hard Rule이 spec을 배제 — Inputs의 PRIMARY axis와 자기모순"; }
+# assert 2는 `## Inputs` 섹션 윈도우로 스코프한다 — Hard Rule 4 자체도 이 fix로
+# "PRIMARY reference axis" 문구를(agent에게 왜 spec을 읽어도 되는지 설명하려고) 포함하게
+# 되었으므로, 전체 파일 grep은 header-satisfiable(Inputs 절의 선언을 지워도 Hard Rule 4의
+# 사본이 살아남아 GREEN으로 남는 함정)이다. 특정 다음 heading 이름이 아니라 다음 `## `
+# 아무 heading에서나 종료해 섹션 윈도우가 향후 편집에도 생존하게 한다.
+inputs_block="$(awk '/^## Inputs/{f=1;print;next} /^## /{f=0} f' "$AGENT")"
+grep -q 'PRIMARY reference axis' <<<"$inputs_block" \
+  && { PASS=$((PASS + 1)); note "PASS: spec이 PRIMARY axis로 선언됨 (Inputs 절)"; } \
+  || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: PRIMARY axis 선언 소실 (Inputs 절)"; }
 
 echo ""
 echo "Results: $PASS passed, $FAIL failed"

@@ -3,6 +3,403 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.20] — 2026-08-05
+
+### Fixed
+
+- **`synthesize_findings.py` — 라운드 2가 세운 방어의 이음매 세 곳.** 라운드 3 `/qg branch`가
+  7 리뷰어 + adversarial로 적발. 셋 다 같은 병이다: 가드를 **값 수준과 항목 수준**에만 놓고
+  **컨테이너 수준과 정체성 필드**에는 놓지 않았다.
+  - `dedup()`의 그룹핑 키 `(file, line, severity)` 중 라운드 2가 `severity`만 `_norm_sev`로
+    총함수화하고 형제 둘을 raw로 남겼다. `file: [a.py]` 하나면 defaultdict 조회가
+    `TypeError: unhashable type: 'list'` → exit 1 + **stdout 공백**, 다른 리뷰어의 진짜
+    CRITICAL까지 함께 소실. 승격 경로(`sort_findings`의 raw 비교)에도 같은 크래시가 있었고
+    그쪽은 confidence 동률까지 필요했지만 dedup의 해시는 **조건 없이** 터진다.
+    → `_norm_file`/`_norm_line`/`_normalize_identity`를 **수집 지점 한 곳**에 두고 primary·
+    승격 두 경로가 모두 통과하게 했다.
+  - `_as_list()`가 컨테이너를 통째로 버리면서 **소실 건수를 세지 않았다**. `new_findings:`를
+    매핑으로 쓰면 승격 CRITICAL 전부가 사라지는데 `dropped_malformed`는 0으로 남아
+    stdout 공지가 안 나가고, 그 공지에 keying하는 SKILL의 Dropped-finding override도
+    발화하지 못했다 — **버려진 CRITICAL이 다시 clean으로 렌더**. → `(list, dropped)` 반환으로
+    바꾸고 컨테이너 3출처(`findings`/`verdicts`/`new_findings`)를 모두 한 채널에 합산.
+  - `load_yaml()`이 `_as_list` 초크포인트를 **우회**했다 — 자기 docstring이 "ingestion 한
+    곳에서 타입을 확정한다"고 주장하는데 정작 주 수집 경로가 그 한 곳을 안 지났다.
+    `findings: "CRITICAL: ..."` 스칼라가 **글자 단위로** 순회돼 문자당 드롭 1건(39건)으로
+    보고됐다. → 세 반환 지점을 `_as_list`로 통일.
+- **drop 공지 문구 정확화** — 컨테이너 타입 소실은 "missing file/severity/summary"가 아니다.
+  두 렌더 분기 모두 `not a mapping, wrong container type, or missing …`로 정렬.
+
+### Added
+
+- `tests/test_synthesize_promoted_findings.sh` 케이스 12–15 — 비-해시가능 `file`이 리뷰를
+  죽이지 않을 것 · 컨테이너 소실 **건수**가 drop 공지에 실릴 것(2건이면 2) · 스칼라
+  `findings:`가 글자 수가 아니라 1건일 것 · `verdicts:` 컨테이너 소실도 같은 채널일 것.
+  **모두 `Total:`/exit 블록 앞에** 삽입했다(라운드 2에 뒤에 붙여 집계에서 빠진 전례).
+
+## [2.14.19] — 2026-08-05
+
+### Fixed
+
+- **삭제된 `fan-out ≥5` 게이트를 현존 백스톱으로 인용하던 4곳 정리.** `skills/quality-pipeline/SKILL.md`와 `README.md`는 "fan-out 동의 게이트가 **없는**" 근거로 세 백스톱을 들었는데 그중 하나가 공집합이었다 — 없는 것을 근거로 억제한다는 주장이다. `skills/critiquing-artifacts/SKILL.md`는 그 임계를 *직렬 dispatch의 설계 근거*로 인용했다(sweep이 없애려던 실패 모드 그 자체).
+- **`single-file` trivia 제약을 P12와 정합화.** philosophy P12는 `파일 수와 무관하게`로 완화됐는데, P12가 자기 집행 지점으로 **지목한 두 파일**(`CLAUDE.md` Trivia escape, `spec-distill/commands/interview.md`)은 그대로였다 — 원칙만 바뀌고 집행은 하나도 안 바뀐 상태였다.
+
+### Added
+
+- **AC8e — 인용부 스캔.** sweep의 완료 oracle이 정의 지점(`CLAUDE.md`·`docs/philosophy/`)만 보고 `plugins/`를 보지 않은 것이 위 두 결함의 **공통 구조적 원인**이다(adversarial 지목). 규칙 제거는 정의부만 봐서 인증할 수 없다. 식별자 grep으론 못 찾는다 — `AP9`로 검색하면 `agents/`에서 0건인데 그 줄은 `devbrew N≥5 게이트`라고 적혀 있다. **개념 별칭으로** 훑는다.
+
+### Changed
+
+- **AC8a를 개념·표기·언어 세 축으로 확장.** mutation 실측에서 cap 재도입 8종 중 2종만 잡혔다 — 한글 수사(`다섯을 넘으면`), 개념 별칭(`동시 subagent 수`·`병렬 agent`), 영어(`when fan-out exceeds 4`), 어미(`4개까지만`)가 전부 통과했다. 열거는 완전할 수 없지만, **값 하나만 바꾸면 통과**하던 상태에서 **개념을 다른 이름·다른 언어로 써야 통과**하는 상태로 올린다.
+- **규약 문서 집합을 도출로, wall-clock 검사를 전체 문서로.** 세 변수 하드코딩은 네 번째 문서에 fail-open이었고(m07), wall-clock은 `CLAUDE.md`만 봐서 philosophy에 다시 쓰면 통과했다(m08).
+
+## [2.14.18] — 2026-08-05
+
+### Security
+
+- **`-s read-only` 샌드박스 락이 주석에 만족되던 결함 봉쇄** (mutation `m12`로 3명이 독립 확인). 판정이 원본 파일 grep이었고 세 러너 전부 헤더 주석에 `codex exec -s read-only`를 설명으로 적어놨으므로, **실제 invocation의 플래그를 삭제해도 영구 GREEN**이었다 — 그 상태에서 codex는 사용자 워킹트리에 샌드박스 없이 붙는다. 같은 파일 61행(상한 스캔)은 이미 주석을 걷어내고 있었고 보안 플래그 판정만 원본으로 되돌아간 비대칭이었다. 백스톱도 없었다(`test_sandbox_enforced.sh`는 존재하지 않는 파일을 겨냥, `test_codex_reviewer_frontmatter.sh`는 같은 주석에 만족). → invocation 블록만 잘라내 주석 제거 후 판정. `-C`/`--json`도 동일 처리.
+- **스캔 코퍼스를 `plugins/*/{scripts,tests}` → `plugins/*/` 전체로.** 두 디렉토리만 볼 때 `skills/`·`hooks/`에 심은 상한 핀이 통과했는데(mutation m13·m14 생존) PASS 문구는 "리포 전역"이라 주장했다 — 스캔 범위보다 넓은 주장은 거짓이다.
+
+### Fixed
+
+- **`run_codex_reviewer.sh`의 stale 재사용.** 쌍둥이 `run_spec_codex_reviewer.sh`가 받은 truncate+EXIT-trap degrade가 백포트되지 않아, SIGTERM/`set -u` abort/OOM/Bash-tool timeout 어느 경로로 죽어도 **이전 iteration의 YAML이 남았고** 오케스트레이터가 그것을 이번 라운드의 codex 판정으로 읽었다(exit 143 재현). stale이 clean이면 진짜 결함이 clean 인증을 받는다. `OUTPUT_PATH` 누락 검증도 추가(쌍둥이와 대칭).
+- **drop 공지의 소비자 부재.** `render()`가 내는 `dropped as malformed` 공지를 SKILL step 4.5가 읽지 않아, **생산자만 고치고 소비자를 안 고친 반쪽 수정**이었다 — 버려진 CRITICAL 위에 게이트가 `clean`을 찍었다. step 4.5에 override 절 추가(Runtime gate의 `indeterminate ≠ clean`과 대칭).
+- **degrade-contract 케이스 3의 무이빨 assert.** `[ -s err.txt ]`였는데 이 러너는 모든 분기에서 stderr에 한 줄을 쓰므로 반증 불가능했다 — degrade echo를 통째로 지워도 GREEN. degrade 고유 문구 grep으로 교체.
+
+### Added
+
+- `test_skill_drop_notice_consumed.sh` — **생산자와 소비자를 한 락에서 함께** 잰다(문구 동일성까지). 스크립트만 재는 락은 이 seam을 볼 수 없다.
+- degrade-contract 케이스 5·6·7 (stale 재사용, 중단 표시, `OUTPUT_PATH` 누락).
+
+## [2.14.17] — 2026-08-05
+
+### Fixed
+
+- **malformed 입력이 리뷰 전체를 죽이거나 clean으로 위조하던 경로 4종** (`/qg branch` 라운드 2, codex·security-reviewer·code-reviewer·silent-failure-hunter 적발). 2.14.15가 `confidence` 축만 막았고 나머지가 한 겹씩 새고 있었다:
+  - `new_findings`가 비-리스트(예: `5`)면 `for` 루프에서 `TypeError` → exit 1 + stdout 공백. **다른 리뷰어의 진짜 CRITICAL이 함께 소실**. → `_as_list()`로 ingestion 한 곳에서 타입 확정.
+  - `severity`가 비-스칼라(예: `[CRITICAL]`)면 `_norm_sev`의 멤버십 검사가 `unhashable type` → 같은 폭발 반경(이 함수는 dedup·suppress·sort·render 네 곳에서 불린다). → 가드를 총(total)으로 전환.
+  - `sources`가 비-문자열이면 `", ".join(...)`에서 `TypeError` → 렌더 사망. → `str()` 강제 + 비-시퀀스 wrap.
+  - `apply_verdicts()`가 non-mapping finding을 **카운터도 stderr도 stdout 공지도 없이** 버렸다. 리뷰어가 발견을 문자열로 내면 CRITICAL 주장이 증발하고 stdout은 `No high-confidence findings.` + exit 0 — **버려진 CRITICAL이 clean으로 렌더**. → `(out, dropped)` 반환으로 승격 경로와 **같은 drop 채널**에 합산.
+
+### Security
+
+- **승격 발견의 교차 보증 위조 봉쇄.** `promote_new_findings()`가 `f = dict(item)`으로 리뷰어가 준 `sources`를 그대로 복사했고, 승격 항목은 `dedup()` 그룹핑을 건너뛰므로(passthrough) 병합이 덮어쓸 기회조차 없었다. 결과: adversarial 출력에 `sources: [security-reviewer, code-reviewer]`를 실으면 **아무 리뷰어도 하지 않은 주장이 교차 보증을 받은 것처럼** 렌더됐다. `agent` 강제는 id 참칭만 막고 표시 계층은 열려 있었다. → `f.pop("sources", None)`.
+
+### Added
+
+- 회귀 락 5종 (`test_synthesize_promoted_findings.sh` 10b·10c·10d·10e + 10 확장): primary 출처 소실 공지, 비-리스트 컨테이너, 비-스칼라 severity, `sources` 위조. 전부 행동 기반(문자열 grep 아님).
+
+## [2.14.16] — 2026-08-04
+
+### Fixed
+
+- **`run_codex_reviewer.sh` — 종단 추출이 실패하면 리뷰어가 조용히 사라지던 경로**
+  (`/qg branch` 라운드 1, silent-failure-hunter). `> "$OUTPUT_PATH"` 리다이렉트는
+  python3가 crash하기 *전에* 파일을 비우므로 0바이트 산출물이 남고, 소비자에게
+  그것은 "codex 성공, 발견 0"으로 읽힌다. 형제 두 러너는 이 가드를 이미 갖고
+  있었고 주석으로 같은 실패를 지목하고 있었다 — 여기에만 백포트되지 않았다.
+  exit≠0과 빈 파일을 **둘 다** 검사한다(exit 0 + 빈 출력이 가능하다).
+
+### Added
+
+- `tests/test_codex_runner_degrade_contract.sh` — **행동** 락. 스텁 plugin-root와
+  스텁 codex로 추출 실패를 실제로 일으켜 산출물이 0바이트가 아니고 `codex_failed`가
+  찍히는지 잰다. grep 락이 아닌 이유: 가드 문자열을 남긴 채 무력화하는 변형에
+  grep은 GREEN을 낸다.
+
+## [2.14.15] — 2026-08-04
+
+### Fixed
+
+- **`synthesize_findings.py` — malformed 입력 하나가 리뷰 전체의 진실성을 무너뜨리던
+  경로 3종 봉쇄** (`/qg branch` self-dogfood 라운드 1, silent-failure-hunter +
+  comment-analyzer 적발).
+  - **거짓 clean 판정**: 승격 발견이 전부 malformed면 `kept=0`이 되어 `render()`가
+    표-없는 분기에서 먼저 return했고, drop 공지는 그 아래 표-있는 경로에만 있어
+    **도달 불가**였다. SKILL은 stdout만 읽으므로 counts=0을 보고
+    `## Review gate: clean`을 찍었다 — 버려진 CRITICAL 주장이 깨끗함으로 렌더됐다.
+    이제 empty 분기도 소실 건수를 stdout에 낸다.
+  - **비수치 `confidence` 하나가 합성 전체를 죽임**: `confidence: high`나 YAML null이
+    `ValueError`/`TypeError`를 던져 exit 1 + **stdout 완전 공백**. 같이 죽는 것에
+    다른 리뷰어의 진짜 CRITICAL이 포함된다. `_conf()` 한 곳으로 강제 — 소비자별
+    가드는 새 소비자에서 다시 터진다(이 수정을 처음 넣을 때 소비자 세 곳만 세고
+    `sort_findings`를 놓쳐 그대로 재현됐다. 최종 확인은 열거가 아니라
+    `int(f.get("confidence"` 잔존 0건 전수 확인).
+  - **severity 표기 차이가 CRITICAL을 강등**: 멤버십 검사가 정확 일치라
+    `severity: Critical`이 SUGGESTION으로 렌더됐고, 경계 판정에 쓰이는 counts line이
+    이미 틀린 뒤였다. `_norm_sev()`가 대소문자를 접고, `suppress()`·`dedup()`·
+    `sort_findings()`가 raw 대신 같은 정규화를 쓴다(예전엔 `render()`만 정규화해
+    억제 판정과 표시 판정이 갈렸다).
+
+### Added
+
+- `tests/test_synthesize_promoted_findings.sh` 케이스 8·9·10 — 위 세 계약의 회귀 락.
+  이빨 증명은 **삭제한 바이트를 되돌리는 mutation이 아니라** *다른* 소비자에서의
+  회귀(`sort_findings`만 raw로 되돌리기 등)로 한다 — 라운드 1이 적발한 가장 큰
+  구조적 결함이 "락과 mutation을 같은 전제로 써서 서로 합격 도장을 찍어준 것"이었다.
+
+## [2.14.14] — 2026-08-03
+
+**락이 열거였기 때문에 S1이 미완이었다.** `tests/spike/test_codex_json_extraction.sh:33`에
+리터럴 `-c 'model_reasoning_effort="medium"'`이 그대로 살아 있었다. goal 2 판별 질의가
+`plugins/*/scripts/`만 스캔하고, 회귀 락 `test_codex_runner_no_effort_pin.sh`도 러너
+**두 개를 열거**했기 때문에 양쪽 다 이 파일을 구조적으로 볼 수 없었다.
+
+**열거는 공간에도 시간에도 fail-open이다** — 목록에 없는 파일은 영원히 안 보이고, 내일
+추가될 호출부는 오늘 열거할 수 없다. 이 리포가 `tools:` allowlist vs denylist에 대해 이미
+쓴 논리와 같은 실패이며, 이번엔 그것이 **회귀 락 자신**에게 일어났다.
+
+### Fixed
+
+- `tests/spike/test_codex_json_extraction.sh` — `-c 'model_reasoning_effort="medium"'` 제거.
+  보안 플래그(`-s read-only`·`-C`·`--json`·`< /dev/null`)는 무변경. 재현성을 근거로 핀을
+  유지한다는 논리는 성립하지 않는다 — 이 spike가 굽는 fixture는 이미 `thread_id`·토큰 수가
+  매번 달라 강도를 고정해도 재현되지 않는다.
+
+### Changed
+
+- `tests/test_codex_runner_no_effort_pin.sh` — 러너 2개 열거에 **플러그인 전수 스캔 assert**
+  추가(`-c` 인자 줄 앵커라 락 자신의 grep 패턴 문자열은 잡지 않는다). **핀 제거 *전에*
+  이 assert가 해당 파일을 지목하며 RED임을 확인한 뒤 제거해 GREEN**으로 만들었다 —
+  락이 이빨을 갖는다는 증거다. 버그가 리뷰를 탈출했으므로 잡았어야 할 락 파일을 함께
+  고친다(Law 3 compounding).
+
+## [2.14.13] — 2026-08-03
+
+**codex 별-모델 co-review가 2단계 리뷰를 통과한 실코드 결함을 적발했고, 재현이 그
+주장보다 더 나쁜 것을 보여줬다.** Task 9(S3e)가 adversarial에 신규 발견 능력을 주면서,
+`dedup()`의 `(file, line, severity)` 그룹핑에 **새로운 의미**가 생겼다 — 승격 이전에는
+좌표 충돌이 언제나 *"두 리뷰어가 같은 것을 봤다"* 라 병합이 옳았지만, 이제는 *"같은 줄의
+**다른** 결함"* 일 수 있다.
+
+재현:
+
+```
+입력 2건 → 출력 1건
+  살아남음: missing null check on user lookup      (security-reviewer, conf 8)
+  sources : ['adversarial', 'security-reviewer']
+  소실    : SQL injection via unparameterised query (adversarial, conf 7)
+```
+
+소실만이 아니다 — 살아남은 행이 `sources`에 adversarial을 달아 **adversarial이 하지 않은
+주장을 보증한 것처럼** 렌더된다. 허위 귀속이 소실보다 나쁘다.
+
+Task 9 구현자가 이 한계를 docstring에 기록해 뒀으나(`promote_new_findings` 한계 절),
+적힌 것은 *신규끼리* 충돌뿐이었고 **신규 × 기존 충돌이 만드는 허위 귀속은 빠져 있었다** —
+"알려진 한계"가 실제 위험의 절반만 덮고 있었고, §11 CHECKS-07의 defer 판정도 그 절반만
+보고 내려진 것이다.
+
+### Fixed
+
+- `scripts/synthesize_findings.py` — **최소 봉쇄**: `promote_new_findings()`가 승격 항목에
+  `promoted: True`를 찍고, `dedup()`이 그 표식을 가진 항목을 그룹핑에서 제외한다. 실패
+  방향을 **소실이 아니라 중복** 쪽으로 돌린다(안전한 쪽). 리뷰어 간 병합은 **무변경** —
+  dedup 키 설계와 `sources` 의미론("좌표에 보고한 agent" vs "이 발견에 동의한 agent")은
+  여전히 미해결이며 CHECKS-07로 남는다. 이 수정은 승격 경로만 그 미해결에서 떼어낸다.
+
+### Added
+
+- `tests/test_synthesize_promoted_findings.sh` 케이스 5·6·7 — 5: 같은 좌표의 기존+승격이
+  **둘 다 렌더**(소실 금지). 6: 기존 행의 Source에 adversarial **참칭 금지**(허위 귀속
+  금지, 5와 독립 — "둘 다 렌더하되 sources를 합치는" 잘못된 수정은 6만 잡는다).
+  7: **리뷰어 간 병합 보존**(양의 짝 — 없으면 `dedup`을 통째로 제거해도 5·6이 통과한다).
+  작성 중 계측기 결함 1건을 밟았다: 표 행 카운트가 'Suggested fixes' 절까지 세어 병합이
+  정상인데도 RED였다 — 카운트를 표 행으로 스코프해 해소.
+
+## [2.14.12] — 2026-08-03
+
+Task 13(최종 검증)의 **개념어 스윕**이 식별자 grep 전수가 놓친 잔존을 하나 찾았다:
+`scripts/experiment-model-override.md`의 "Implication for SKILL.md dispatch" 절이
+`model: inherit` 에이전트를 Task 도구 `model: "sonnet"`으로 override하라고 **여전히
+권장**하고 있었다 — 이 sweep이 제거한 바로 그 처방이다. goal 1의 `^model:` 질의는
+frontmatter만 앵커하므로 **산문 권고인 이것을 구조적으로 볼 수 없었다.**
+
+확인 결과 살아있는 dispatch-time override는 production에 0건이고(이 문서 자신의 2줄이
+전부), 이 문서는 리포 어디서도 참조되지 않는 고아 기록이다. 따라서 실제 억제가 아니라
+**억제를 지시하는 과거 기록**이며, 설계 goal 6의 처방대로 삭제가 아니라 정정을 append했다.
+
+### Changed
+
+- `scripts/experiment-model-override.md` — 날짜 붙은 사후 정정 블록 추가. **측정 결과
+  (override가 실제로 동작함)는 유효로 보존**하고, 그 결과를 sonnet 고정에 쓰라는 권고만
+  폐기로 표시. 상류 플러그인의 자체 하드코딩 핀을 존중한다는 판단은 유효로 명시(범위 구분).
+  현재 지위(고아 기록·모델 세대 교체·probe 방법은 재사용 가능)를 기록.
+
+## [2.14.11] — 2026-08-03
+
+Task 11(S4) fix round 1 — coordinator 재검사가 실제 잔여를 찾았다: philosophy
+문서의 AP9 스텁(`docs/philosophy/devbrew-harness-philosophy.md:96`)이 CLAUDE.md의
+새 Forbidden Patterns 정의("규모가 아니라 선언 없음이 anti-pattern")와 어긋난 채
+`선언 없는 fan-out ≥5.`로 숫자 임계를 그대로 들고 있었다 — 이 sweep이 통째로
+막으려던 바로 그 실패 모드(agent 프롬프트가 인용할 수 있는 근거로 남는 규약)다.
+이 sweep 중 실제로 한 agent 프롬프트가 순차 호출 강제의 근거로 AP9를 인용했다.
+게다가 원래 AC8 판별 질의(`N ≥ 5|N≥5`)가 `N`-접두만 찾아 이 bare `≥5`를 놓쳤다.
+
+### Fixed
+- `docs/philosophy/devbrew-harness-philosophy.md:96` (AP9): `Subagent spray — 선언
+  없는 fan-out ≥5.` → `Subagent spray — 선언 없는 fan-out. 규모 자체가 아니라
+  선언 없음이 anti-pattern이다 (P22).` — CLAUDE.md:68의 새 정의를 그대로 미러링,
+  이웃 AP 엔트리(AP2/AP5/AP16)와 같은 한 줄 스텁 스타일 유지.
+- `tests/test_governance_no_capability_caps.sh` AC8a: 임계 탐지 정규식을
+  `N ≥ 5|N≥5`에서 `(≥|>=)[[:space:]]*5`로 넓혀 `N`-접두 없는 bare 임계
+  형태(philosophy가 실제로 썼던 형태)도 잡는다. 오탐 점검: CLAUDE.md의
+  `<PLUGIN>=1` 킬스위치 placeholder(비교연산자 뒤 숫자가 1이라 애초에 후보 밖),
+  philosophy의 "re-review cap 5"·"Phase 5"·"5-ritual gate"(비교연산자 없이 숫자만)
+  — 넷 다 새 패턴에 매칭되지 않음을 실측 확인.
+- 문서 전체 스캔에서 발견된 다른 bare-numeral: `re-review cap 5`(P18/`reviewing-spec`
+  SKILL.md 참조, line 56)는 stagnation-cap이지 이 sweep이 다루는 fan-out/능력
+  상한이 아니라 편집하지 않았다 — coordinator 확인 대상으로 별도 보고.
+
+## [2.14.10] — 2026-08-03
+
+harness-capability-suppression-sweep Task 11(S4) — 규약 정렬. 앞선 태스크들은
+코드·프롬프트에서 능력 억제를 제거했지만, 그 억제를 정당화하던 규약(`CLAUDE.md`·철학
+문서)이 그대로면 다음 저자가 같은 억제를 "규약을 따른 것"이라며 재도입한다 — 이
+sweep의 실제 사례로, 한 agent 프롬프트가 순차 호출 강제를 정당화하며 철학 문서의
+`AP9`를 근거로 인용했다.
+
+### Changed
+- `CLAUDE.md`: `cost_class` 불릿에서 "Fan-out factor N ≥ 5는 hard review 게이트"
+  삭제(`cost_class: high` 승인 게이트 문장은 유지 — 비용 동의는 P17 load-bearing).
+  Forbidden Patterns의 "Subagent spray"를 "선언 없는 fan-out. 비용과 fan-out을
+  선언하지 않고 대규모로 퍼뜨리는 것이 anti-pattern이다(규모 자체가 아니라 선언
+  없음이)"로 재정의 — 숫자 임계 대신 선언 여부를 기준으로. "Unbounded autonomy"에서
+  `wall-clock budget` 삭제(spec-distill v0.17.0이 이미 폐기한 것을 규약이 요구하던
+  상태).
+- `docs/philosophy/devbrew-harness-philosophy.md`: `:20` "모델 성능이 향상돼도 이
+  메커니즘은 불변이다"를 "Three Laws의 집행 자체는 모델 성능과 무관하게 불변이다.
+  다만 개별 임계치·예산·상한은 재평가 대상이다(P8)"로 완화 — 원문 그대로면 이
+  sweep 자체가 규칙 위반으로 읽힌다. P12 trivia escape에서 `single-file` 제약
+  제거(오타 3곳·symbol rename 같은 multi-file trivia diff가 더는 게이트에 걸리지
+  않는다). P22에서 "N≥5는 hard gate이며," 삭제(나머지 cost_class 승인 게이트 문장은
+  유지). AP9 앵커에서 "single-agent가 default다 (P22)." 삭제.
+- `docs/plugin-authoring.md`: agent `model:`은 `inherit`이어야 한다는 규약 신설 —
+  리터럴 티어(`opus`/`sonnet`/`haiku`) 핀이 하니스의 모델 선택 덮어쓰기(P8 위반)로
+  이어지는 것을 신규 플러그인 저자에게 차단.
+- `README.md:161`: `opus 빌더가 저술한` → `빌더가 저술한` — Task 1(모델-핀 제거)이
+  이월한 리터럴 티어 산문 잔존, Task 1 브리프의 gap으로 확인됨.
+
+### Added
+- `tests/test_governance_no_capability_caps.sh` — AC8a–AC8d 락. `CLAUDE.md`·philosophy·
+  `docs/plugin-authoring.md`에서 능력 상한 규약(N≥5 하드 게이트·기본값 편향·wall-clock·
+  single-file trivia 제약)의 부재와 `cost_class: high` 승인 게이트의 존속을 함께
+  검증한다. P12 단언은 섹션 윈도우(다음 `##`/`###` 헤딩 전까지)로 스코프 — 전역
+  grep은 문서 다른 절의 우연한 "single-file" 언급에도 만족될 수 있다.
+
+## [2.14.9] — 2026-08-03
+
+harness-capability-suppression-sweep Task 9(S3e) — adversarial 신규 발견 승격.
+쓰기 쪽(persona)만 고치면 동작하지 않는다: `apply_verdicts()`는 `by_id`를 만든 뒤
+**원본 findings만 순회**하므로, 매칭되는 `finding_id`가 없는 verdict — 정의상 신규
+발견 — 는 출력 경로가 아예 없었다. 이번 변경은 쓰기·읽기 양쪽을 함께 배선한다.
+
+### Added
+- `synthesize_findings.py`: `load_yaml_doc`(원본 문서 보존 — 기존 `load_yaml`은
+  `{verdicts: [...]}`을 리스트로 flatten해 형제 키를 버림) + `extract_verdicts` /
+  `extract_new_findings` + `promote_new_findings`. `file`/`severity`/`summary` 필수,
+  `line`은 옵션. 출처는 `agent`에 강제로 쓴다(`source`가 아니다 — `dedup()`은 `agent`만
+  모아 `sources`를 만들고 `render()`는 `sources`/`agent`만 읽는다). id는 verdict가 준
+  값을 믿지 않고 기존 `finding_id()`로 합성 — 신규 발견이 다른 agent의 id를 참칭할 수
+  없다. id 충돌 시 `-2`/`-3` 접미사로 결정론적으로 분리. `confidence` 기본값 5 —
+  `suppress()`의 confidence<=4 바닥보다 위라 표에 실리고, `render()`의 caveat 임계<=6
+  이하라 `*`(미검증 — 어떤 리뷰어의 판정도 통과하지 않은, adversarial 자신의 주장)로
+  표시된다.
+- `main()`: promoted findings를 기존 findings 뒤에 append(기존 표 순서 불변)한 뒤
+  `dedup()`. malformed `new_findings` 항목은 조용히 버리지 않고 stderr에 기록 +
+  카운트해 `render()`의 counts 줄 아래 한 줄로 노출한다. **exit code는 바꾸지 않는다**
+  — 리뷰어 출력 불량으로 파이프라인을 죽이면 그 자체가 새 fail-closed 억제다.
+- `agents/adversarial.md`: 신규 발견 금지 선언 네 곳(description / 모델-티어 정당화 /
+  "NOT responsible for" / Forbidden 절)을 모두 해소하고 `## Reporting an issue the
+  reviewers missed` 절을 신설(`new_findings:` 스키마). `meta_note:`는 그대로 존치 —
+  비구조화 관찰(부재 컨트롤, 눈여겨볼 패턴)용으로 `new_findings:`(구조화된 결함
+  보고)와 역할이 다르다.
+- `test_synthesize_promoted_findings.sh` — 신규, persona 미참조(fixture YAML을
+  synthesizer에 직접 주입). 4 assert: 신규 발견 행 실재 / Source 컬럼이 `adversarial`
+  (필드명 오타면 여기서 `?`로 잡힘) / `*` caveat 부착 / summary 누락 항목은 stderr에
+  기록되고 드롭되며 exit code는 0.
+- `test_adversarial_persona.sh` AC14a 락 — 금지 선언 부재(`assert_absent`) +
+  `new_findings:` 스키마 실재 + `meta_note` 채널 존치.
+
+### Fixed
+- `adversarial.md:12`의 역할 정당화가 "the Phase 1/2 reviewers run on cheaper
+  models"를 근거로 들었으나, 이 브랜치에서는 전 리뷰어가 `model: inherit`이라
+  이미 거짓이었다. 모델-티어 논증을 지우고 "Phase 1/2는 패턴매치로 raw finding만
+  내고 synthesizer는 무판단 결정론 스크립트"라는 참인 서술로 교체했다(README의
+  기존 서술과 동일 형태).
+
+## [2.14.8] — 2026-08-03
+
+### Fixed
+- `test_test_scope_validator_frontmatter.sh`의 자기모순 방지 락 중 두 번째 assert가
+  header-satisfiable이었다: v2.14.7의 Hard Rule 4 교체 문구 자체가 (agent에게 왜 spec을
+  읽어도 되는지 설명하려고) "PRIMARY reference axis" 문구를 포함하게 되었는데, assert는
+  전체 파일을 grep했다. 그 결과 이 락이 보호해야 할 실제 회귀 — Inputs 절의
+  `spec_path: ... PRIMARY reference axis` 선언 삭제 — 를 지워도 Hard Rule 4의 사본이
+  살아남아 GREEN으로 남았다. assert를 `## Inputs` 섹션 윈도우로 스코프해 그 섹션 안에서만
+  문구 존재를 확인하도록 좁혔다. 다음 `## ` heading 어디서나 종료하도록 만들어(특정 heading
+  이름에 앵커하지 않음) 향후 섹션 추가/재배열에도 창이 생존한다. Hard Rule 4의 설명 문구는
+  그대로 둔다 — agent에게 왜 이제 spec을 읽어도 되는지 알려주는 것이 fix의 취지이고, 중복은
+  스코프 안 된 assert에만 문제였다.
+
+## [2.14.7] — 2026-08-03
+
+### Fixed
+- `test-scope-validator`의 Hard Rule 4가 허용 컨텍스트를 "candidate files + plan + diff"로
+  열거해 `spec`을 누락시키는 동안, 같은 파일의 Inputs 절은 `spec_path`를 "PRIMARY reference
+  axis"로 선언하고 있었다 — 에이전트가 자신의 1차 근거를 읽지 못하도록 금지당한 채 그것을
+  1차 근거로 쓰라는 지시를 동시에 받는 자기모순. Hard Rule 4를 "candidate files + spec + plan
+  + diff"로 넓히고, spec_path를 `Read` 도구로 읽으라고 명시했다. `curl`/`WebFetch`/MCP 금지
+  문구는 그대로 — 이미 프롬프트에 제공된 컨텍스트의 열람 범위를 넓힌 것이지 네트워크 접근을
+  새로 연 것이 아니다. `tools:`는 변경하지 않는다(`Read, Grep, Glob` 그대로) — 이미 가진
+  `Read` 도구로 이미 받은 파일을 읽도록 허용하는 것뿐, 새 capability는 없다.
+
+### Added
+- `test_test_scope_validator_frontmatter.sh`에 자기모순 방지 양방향 락 — Hard Rule의 허용
+  컨텍스트 열거가 `spec`을 포함함과, Inputs의 `PRIMARY reference axis` 선언이 여전히 존재함을
+  각각 assert. 앞의 것만 두면 PRIMARY 선언을 지워 자기모순을 "해소"해도 GREEN이 되므로 두
+  assert가 함께 필요하다. 문자열 앵커(`grep -F 'Do not fetch context outside'`)로 라인번호
+  drift에 취약하지 않게 했다.
+
+## [2.14.6] — 2026-08-03
+
+### Changed
+- `security-reviewer` persona의 dependency-manifest 문구에 "no web tools 는 명시된 한계"를
+  기록. 이 리뷰어는 diff의 전 소스를 읽으므로 `WebSearch`/`WebFetch` 부여는 exfiltration
+  채널(P21)이 되어 **`tools:`는 바꾸지 않는다** — 이 sweep의 다른 모든 항목과 반대 방향으로,
+  억제를 유지하는 것이 옳은 유일한 지점이다. CVE 판정 불가를 갭이 아니라 설계로 명시하고,
+  판정은 이 게이트 밖 별도 경로에 위임한다고 못 박았다.
+
+### Added
+- `test_security_reviewer_persona.sh`에 AC4 양방향 억제-보존 락 — `tools:` 가 정확히
+  `Read, Grep, Glob`이고 `WebSearch`/`WebFetch`가 부재함을 assert. 다음 sweep이 "일관성"을
+  이유로 무심코 웹 도구를 추가하지 못하게 막는다.
+
+## [2.14.5] — 2026-08-03
+
+### Changed
+- `run_codex_reviewer.sh` · `run_artifact_codex_reviewer.sh`(qg) /
+  `run_spec_codex_reviewer.sh`(spec-distill)에서 `-c 'model_reasoning_effort="medium"'`
+  실행 인자 삭제. 하니스가 medium을 박으면 high/xhigh로 설정한 사용자가 조용히 하향되고,
+  그 하향은 codex co-review의 유일한 존재 이유(별-모델 적발력)를 정확히 깎는다.
+  `run_brief_codex_reviewer.sh`가 이미 쓰던 계약을 전파한 것이다.
+  **load-bearing 플래그는 그대로다** — `-s read-only`(샌드박스) · `-C`(작업디렉토리 핀) ·
+  `--json`(파싱 계약) · `< /dev/null`(stdin detach).
+
+### Added
+- codex 러너 상한 부재 락(양방향) — 상한 재삽입과 샌드박스 제거 **둘 다** RED.
+  한 방향만 재면 "상한만 사라졌다"를 증명하지 못한다.
+
+## [2.14.4] — 2026-08-03
+
+### Changed
+- `adversarial` · `pr-understanding-builder` · `test-scope-validator`의 `model:` 리터럴 핀
+  (`opus`/`opus`/`sonnet`)을 `model: inherit`으로 교체. 하니스가 세션의 모델 선택을 덮어쓰지
+  않는다 — 리터럴 핀은 세션이 더 강한 모델을 쓸 때 조용히 하향시키고(`test-scope-validator`는
+  opus-4.8 세션에서 sonnet-5로 실행된 관측 2회), 더 약한 모델을 쓸 때 사용자 동의 없이 비용을
+  올린다. `plugin-audit` 3개 에이전트가 이미 쓰던 reference 패턴을 전파한 것이다.
+- 모델 락 4개를 **양방향**으로 교체 — `inherit` 실재(positive) + 고정 티어 부재(negative).
+  한쪽만으로는 반대 방향 mutation(`model:` 줄 삭제 / 핀 재도입)이 통과한다.
+- README·`publishing-pr-understanding` SKILL의 모델 서술 5곳 동기화.
+
 ## [2.14.3] — 2026-07-29
 
 ### Fixed

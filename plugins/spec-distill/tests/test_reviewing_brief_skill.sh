@@ -202,17 +202,15 @@ grep -qF 'retried' "$SKILL" \
 grep -qE '상한 2 초과.*record|record.*상한 2 초과|재리뷰 상한 2 초과' "$SKILL" \
   && note PASS "T22: 재리뷰 상한 초과 escalate 행도 record 규정" || note FAIL "T22: escalate 행 record 누락"
 
-# --- T21 / AC24 : 웹 예산 (dispatch 단위) -----------------------------------
-grep -qE '^[[:space:]]*python3 "\$PR/scripts/web_budget\.py" (check|increment) ' "$SKILL" \
-  && note PASS "T21: web_budget.py check/increment 실행 라인 실재 (줄-시작 앵커)" || note FAIL "T21: web_budget.py 호출 라인 부재 (산문 참조만으로는 예산이 집계되지 않는다)"
-grep -qE 'dispatch (전|이전).*check|check.*dispatch (전|이전)' "$SKILL" \
-  && note PASS "T21: dispatch 전 check 서술" || note FAIL "T21: dispatch 전 check 서술 부재"
-grep -qE 'dispatch (후|이후).*increment|increment.*1회' "$SKILL" \
-  && note PASS "T21: dispatch 후 increment 1회 서술" || note FAIL "T21: dispatch 후 increment 서술 부재"
-grep -qF 'dispatch 단위' "$SKILL" \
-  && note PASS "T21: 계측 단위가 dispatch임을 명시" || note FAIL "T21: 계측 단위 명시 부재 (호출 단위 오독)"
-grep -qE 'Bash.*(없|부재)' "$SKILL" \
-  && note PASS "T21: 리뷰어에 Bash 부재 → orchestrator 책임 명시" || note FAIL "T21: Bash 부재 근거 서술 없음"
+# --- T21 / AC24 : 웹 상한 게이트 부재 + kill switch 실재 (v0.24.12에서 상한 제거) ---
+# 이전 버전은 `web_budget.py check/increment` 호출 라인 실재를 요구했다. 그 상한이
+# 없어졌으므로 락의 방향을 뒤집는다 — 상한 게이트가 **다시 생기면** RED.
+grep -qE 'web_budget' "$SKILL" \
+  && note FAIL "T21: web_budget 상한 게이트 재도입 — 조사 폭을 다시 묶는다" \
+  || note PASS "T21: 상한 게이트 부재"
+grep -qE '^[[:space:]]*if \[\[ "\$\{DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0\}" == "1" \]\]' "$SKILL" \
+  && note PASS "T21: kill switch 인라인 체크 실재 (줄-시작 앵커)" \
+  || note FAIL "T21: kill switch 소실 — 보안 컨트롤이 상한과 함께 사라졌다"
 
 # --- T25 / AC7b : finding 임의 기각 금지 -----------------------------------
 grep -qE '임의(로)? 기각(하지|할 수) (못|없)' "$SKILL" \

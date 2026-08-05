@@ -11,7 +11,7 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 2 (Writer ≠ Reviewer)** — 순수 read-only reviewer agent(`security-reviewer`/`adversarial`/`test-scope-validator`)가 `tools: Read, Grep, Glob` fail-closed allowlist 선언 (frontmatter scoping으로 물리적 격리 — write/exec/delegation 도구는 목록에 없어 물리적으로 부재; 이름 기반 denylist는 시간에 대해 fail-open이라 대체됨). `runtime-verifier`(sandbox-executor)는 예외로 Write를 갖되 git-diff mutation 가드로 Law 2 self-approval을 구조적으로 차단 — 아래 v2.2.0 bullet 참조.
 - **Law 3 (Compounding)** — scout `rationale` 필드가 매 iteration마다 state 파일에 로깅; reviewer-persona 편집이 학습된 교훈을 인코딩하는 substrate.
 - **Law 3 (Compounding) — cross-plugin reader contract** — Runtime gate의 test-scope-validator(`scripts/discover-plan.sh`)가 sister-plugin (`superpowers:writing-plans`)의 출력 경로 `docs/superpowers/plans/`를 1순위 source로 명시 consume; convention drift가 silent breakage가 되지 않도록 README "Plan Discovery Sources" 섹션이 reader/writer 약속을 문서화.
-- **P12 anti-corollary (former AP5, trivia ceremony) 회피** — `check-trivia.sh`가 단일 파일·≤3줄 whitespace/rename을 파이프라인 전체 skip. *현재 coverage는 whitespace + rename에 국한. P12 canonical 자격(typo/comment-only/single-file formatting)을 완전히 충족하기 위한 확장은 deferred 항목 — Tier 2 spec은 아카이브됨: `git show pre-slim-archive-2026-07-09:docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md`.*
+- **P12 anti-corollary (former AP5, trivia ceremony) 회피** — `check-trivia.sh`가 단일 파일·≤3줄 whitespace/rename을 파이프라인 전체 skip. *현재 coverage는 whitespace + rename에 국한. P12 canonical 자격(typo/comment-only/formatting — 파일 수 무관)을 완전히 충족하기 위한 확장은 deferred 항목 — Tier 2 spec은 아카이브됨: `git show pre-slim-archive-2026-07-09:docs/superpowers/specs/2026-05-17-qg-tier2-3-improvements-design.md`.*
 - **P22 anti-corollary (former AP9, over-dispatching / subagent spray) 회피** — Review gate는 fan-out consent 게이트를 fire하지 않고(documented-not-implemented였음), transparency 라인 + 선언된 max fan-out(Phase 1 병렬 ≤ 8, 총/iteration ≤ 10) + authoring-time hard-review로 subagent spray를 억제.
 - **P18 anti-corollary (former AP16, unbounded autonomy) 회피** — Review gate 내부 fix-loop이 `max_review_iterations=5` + repeat-detection (no-progress check) + kill switch로 묶임.
 - **P5 (Filesystem as Memory) + P14 (State Survives Compaction)** — `.claude/quality-gates/<session-id>/` 하위 per-session markdown state (`*.local.md` gitignore 패턴으로 자동 제외; TTL sweep + SessionEnd hook으로 폴더 GC).
@@ -63,7 +63,7 @@ quality-gates/
 │   ├── synthesizer.md           # Review gate Phase 1.6 — finding dedupe/rank
 │   ├── codex-reviewer.md        # Review gate Phase 1 — external OpenAI reviewer (Layer 2/3 isolation)
 │   ├── security-reviewer.md     # Review gate Phase 1 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_DISABLE_QG_SECURITY_REVIEWER=1`
-│   └── pr-understanding-builder.md  # publish 생성기 — model: opus, tools: Read 1개 (inert·미호출; fail-closed; 쓰기·실행·네트워크·위임 0; 유일 입력 = inlined blob)
+│   └── pr-understanding-builder.md  # publish 생성기 — model: inherit, tools: Read 1개 (inert·미호출; fail-closed; 쓰기·실행·네트워크·위임 0; 유일 입력 = inlined blob)
 ├── commands/
 │   ├── qg.md               # /qg slash command (--reset, --paths, branch flag 포함)
 │   ├── qg-publish.md       # /qg-publish slash command ([--dry-run]; publish skill로 얇은 dispatch)
@@ -136,11 +136,11 @@ The optional `codex-reviewer` agent has `cost_class: variable` — as a Tier B *
 
 ### PR-understanding publish cost (`/qg-publish`, separate from the two gates)
 
-`publishing-pr-understanding` skill은 `cost_class: variable` (context 크기·tier에 따라 다름). 저술을 맡는 `pr-understanding-builder`는 매 tier `model: opus`로 고정 — Deep tier만 실행 전 upfront cost 고지(AskUserQuestion)를 하며, 작은 diff는 비용이 자연히 bounded되고 `/qg-publish`는 명시적 실행이 곧 비용 수용이며, `/qg` 완료 시의 command-layer opt-in offer로도 이어질 수 있으나 자동 실행이 아니다(offer + 자체 consent = 2 touchpoint). Review/Runtime 두 게이트의 비용 표(위)와는 **완전히 별도** — publish는 게이트가 아니므로 depth 기반 자동 트리거가 없다.
+`publishing-pr-understanding` skill은 `cost_class: variable` (context 크기·tier에 따라 다름). 저술을 맡는 `pr-understanding-builder`는 `model: inherit` — 세션이 쓰는 티어를 그대로 받는다(하니스가 티어를 덮어쓰지 않는다). Deep tier만 실행 전 upfront cost 고지(AskUserQuestion)를 하며, 작은 diff는 비용이 자연히 bounded되고 `/qg-publish`는 명시적 실행이 곧 비용 수용이며, `/qg` 완료 시의 command-layer opt-in offer로도 이어질 수 있으나 자동 실행이 아니다(offer + 자체 consent = 2 touchpoint). Review/Runtime 두 게이트의 비용 표(위)와는 **완전히 별도** — publish는 게이트가 아니므로 depth 기반 자동 트리거가 없다.
 
 ### Adversarial reviewer model
 
-`adversarial` agent uses `model: opus`. It is the **Opus-critic over the Sonnet Phase 1 workers** (cf. Anthropic multi-agent patterns: spend capability at the judgment bottleneck): the Phase 1/2 reviewers run on cheaper models and the synthesizer after it is a deterministic script, so adversarial is the *single model-based judgment gate* in the Review gate — every finding the user sees passed through its verdict. Its persona runs a per-finding 3-gate verification (real? / introduced-by-this-diff? / handled-elsewhere?) plus a severity realist check, which is reasoning-heavy enough to warrant opus. A prior cost pass (T2-8) drifted the frontmatter/README toward sonnet while the SKILL dispatch still pinned opus; the three sites are now reconciled to opus and locked by `tests/test_adversarial_model_consistency.sh`. Runs ~once per Review gate fix-loop iteration (≤5×). `adversarial`/`scout`/`synthesizer`는 infrastructure dispatch(사용자-가시 비용 아님)이며, 위 재계산 max fan-out 선언에서 floor/codex/Tier C와 구분해 계산한다. To reduce its cost, lower the *number* of Review gate iterations or the diff scope — not this model.
+`adversarial` agent uses `model: inherit`. It is the **single model-based judgment gate** in the Review gate: the Phase 1/2 reviewers emit findings and the synthesizer after it is a deterministic script, so every finding the user sees passed through its verdict. Its persona runs a per-finding 3-gate verification (real? / introduced-by-this-diff? / handled-elsewhere?) plus a severity realist check. Because it is the judgment bottleneck it must run at **the session's own tier** — pinning a literal tier here silently downgrades the bottleneck whenever the session runs something stronger, and silently raises cost whenever it runs something cheaper. Both directions overwrite the user's model choice, which the harness does not do. Locked bidirectionally by `tests/test_adversarial_model_consistency.sh` (inherit present AND no fixed tier). Runs ~once per Review gate fix-loop iteration (≤5×). To reduce its cost, lower the *number* of Review gate iterations or the diff scope.
 
 ## 게이트
 
@@ -158,7 +158,7 @@ The optional `codex-reviewer` agent has `cost_class: variable` — as a Tier B *
 격리된 **consent-gated opt-in 표면**이지, `/qg`의 Review/Runtime gate에 자동으로 연결되지
 않는다. 정직 문구: 이 표면은 **deterministic envelope + model-authored content** —
 gh I/O·secret-scan·marker-scoped idempotent upsert는 결정론 스크립트가 통제하고, 사람이
-읽는 실제 산출물 텍스트는 opus 빌더가 저술한 model-authored content다. 게시는 매 실행
+읽는 실제 산출물 텍스트는 빌더가 저술한 model-authored content다. 게시는 매 실행
 사람이 preview를 읽고 AskUserQuestion으로 명시 동의한 뒤에만 일어난다. `/qg` 완료 시
 command-layer opt-in offer로 이어질 수 있으나 **자동 실행은 아니다** — offer(1차)와
 publish의 informed-consent(2차) 둘 다 사람의 명시 동의가 필요하다(2 touchpoint).
@@ -173,7 +173,7 @@ publish의 informed-consent(2차) 둘 다 사람의 명시 동의가 필요하�
 ```
 Tier A — Floor (비-trivia면 항상, 스코프 무관; 모델이 못 뺌)
   ├── quality-gates:security-reviewer   (Phase 1)   tools: Read, Grep, Glob (#104 락)
-  └── quality-gates:adversarial          (Phase 1.5, opus)  tools: Read, Grep, Glob (#104 락)
+  └── quality-gates:adversarial          (Phase 1.5, inherit)  tools: Read, Grep, Glob (#104 락)
 Tier B — codex (availability-floor: detect_codex 참이면 무조건, 스코프 무관)
   └── codex-reviewer (별도 프로세스/모델 패밀리, OS read-only 샌드박스)
 Tier C — Dynamic (모델이 스코프로 선택, advisory 외부 에이전트; 최대 6 후보)
@@ -198,7 +198,7 @@ codex(B) + 설치된 것으로 계속(loud log). floor·codex는 이 degrade의 
 **Fan-out:** Review gate는 fan-out consent 게이트를 fire하지 **않는다**(과거
 dispatch-수 기반 consent 게이트 주장은 documented-not-implemented였음). P22
 anti-corollary(subagent spray) instantiation은 **transparency 라인(매 iter 선택/제외 가시화)
-+ 선언된 max fan-out + authoring-time hard-review(CLAUDE.md fan-out ≥5)** 기반으로 억제한다.
++ 선언된 max fan-out** 기반으로 억제한다 (리포 전역 `fan-out ≥5` 하드 게이트는 억제 sweep에서 제거됐다 — 없는 백스톱을 근거로 들지 않는다).
 재계산 max fan-out: **Phase 1 병렬 ≤ 8**(security-reviewer + codex + Tier C 최대 6),
 **총/iteration ≤ 10**(+ adversarial + synthesizer; code-simplifier Phase 3 없음).
 

@@ -11,12 +11,18 @@ note() { if [ "$1" = "PASS" ]; then pass=$((pass+1)); echo "  ✓ $2"; else fail
 test -f "$AGENT" || { note FAIL "agent 파일 부재: $AGENT"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1; }
 FM="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$AGENT")"
 
+# 모델 티어 양방향 락 — 하니스가 세션 모델을 덮어쓰지 않는다(리터럴 핀 = 조용한 하향).
+grep -qE '^model: inherit$' <<<"$FM" \
+  && note PASS "model: inherit (세션 티어 상속)" || note FAIL "model이 inherit이 아님"
+grep -qE '^model: (opus|sonnet|haiku)$' <<<"$FM" \
+  && note FAIL "고정 티어 핀 잔존" || note PASS "고정 티어 핀 없음"
+
 grep -qE '^name: coverage-mapper$' <<<"$FM" \
   && note PASS "name: coverage-mapper (재명명)" || note FAIL "name이 coverage-mapper 아님"
 
-grep -qE '^tools: Read, Grep, Glob$' <<<"$FM" \
-  && note PASS "tools: Read, Grep, Glob (predecessor 에이전트 승계)" \
-  || note FAIL "tools: 가 승계 목록과 다름"
+grep -qE '^tools: Read, Grep, Glob, WebSearch, WebFetch$' <<<"$FM" \
+  && note PASS "tools: Read, Grep, Glob, WebSearch, WebFetch (조사 도구 결핍 해소)" \
+  || note FAIL "tools: 가 조사 도구 결핍 해소 목록과 다름"
 
 grep -qE '^(allowedTools|disallowedTools):' <<<"$FM" \
   && note FAIL "죽은 allowedTools / denylist 잔존" \
@@ -30,6 +36,13 @@ for t in Write Edit MultiEdit NotebookEdit Bash Agent Monitor; do
 done
 grep -qE '^tools:.*mcp__' <<<"$FM" \
   && note FAIL "tools: 에 MCP grant" || note PASS "tools: 에 MCP 없음"
+
+# WebSearch/WebFetch 는 유지되어야 한다 — 조용한 열화 방지 (spec §12).
+for tool in WebSearch WebFetch; do
+  grep -qE "^tools:.*${tool}" <<<"$FM" \
+    && note PASS "tools: 에 $tool 유지" \
+    || note FAIL "tools: 에서 $tool 이 사라졌다 — 외부 근거 확인 불가"
+done
 
 # AC7: 재목적화 Output 스키마 키 (advisory 제안자)
 grep -q 'derived_dimensions' "$AGENT" \

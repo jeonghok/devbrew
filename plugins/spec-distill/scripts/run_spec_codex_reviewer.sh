@@ -48,7 +48,34 @@ SCRATCH="$(mktemp -d -t sd-codex-rev-XXXXXX)" || {
   echo '  reason: scratch_dir_uncreatable' >> "$OUTPUT_PATH"
   exit 0
 }
-trap 'rm -rf "$SCRATCH"' EXIT
+# 치명적 abort(예: `set -u` 위반)가 EXIT trap을 지나면서 조용해지는 문제.
+#
+# 이 스크립트의 계약은 **항상 exit 0 + 항상 YAML 기록**이므로, 강제로 비-0을
+# 내보내는 것은 고치는 게 아니라 계약을 깨는 것이다. 그리고 종료 코드로 판정할
+# 수도 없다: bash 3.2.57은 `set -u` abort 시 트랩 핸들러에 **`$?`를 0으로** 넘긴다
+# (2026-08-04 최소 재현 확인) — `rc=$?`를 보존해도 abort와 정상 종료가 구별되지
+# 않는다. 종료 코드가 아니라 **산출물**로 판정한다.
+#
+# 실제 피해는 두 가지이고 둘 다 여기서 막는다:
+#   (1) YAML 부재 — 호출자가 읽을 것이 없다.
+#   (2) 이전 run이 남긴 stale 파일을 이번 결과로 재사용 — 더 나쁘다. 조용히
+#       틀린 리뷰 결과를 이번 라운드의 판정으로 쓰게 된다.
+# 그래서 시작 시 truncate하고(=stale 제거), 트랩에서 비어 있으면 degrade를 채운다.
+# 비어 있지 않으면 손대지 않는다 — 위쪽 정상 degrade 경로들의 YAML을 덮지 않기 위함.
+[[ -n "$OUTPUT_PATH" ]] && : > "$OUTPUT_PATH"
+_degrade_if_empty() {
+  [[ -n "$OUTPUT_PATH" && ! -s "$OUTPUT_PATH" ]] || return 0
+  { echo 'findings: []'
+    echo 'meta:'
+    echo '  codex_failed: true'
+    echo '  reason: aborted_before_completion'; } > "$OUTPUT_PATH" 2>/dev/null || true
+  echo "[spec-distill] codex 리뷰가 완료 전에 중단됨 — degrade YAML 기록(stale 재사용 방지)" >&2
+}
+# trap은 한 줄로 유지한다: C7 순서 락(test_run_spec_codex_reviewer.sh AC6)이
+# `trap.*rm -rf.*SCRATCH.*EXIT`를 한 줄 정규식으로 앵커한다. 여러 줄로 펼치면
+# 그 락이 trap을 **못 보고** guard 순서 검사가 통째로 무력화된다 — 락을 약화시키지
+# 않으려면 로직을 함수로 빼고 arm 줄은 그대로 둔다.
+trap 'rm -rf "$SCRATCH"; _degrade_if_empty' EXIT
 PROMPT_FILE="$SCRATCH/prompt.md"
 STDOUT_FILE="$SCRATCH/codex.jsonl"
 STDERR_FILE="$SCRATCH/codex.stderr"
@@ -65,11 +92,13 @@ fi
 # Canonical codex invocation (load-bearing flags preserved):
 #   -s read-only  : Layer 3 sandbox (writes blocked)   | --json : JSONL stream
 #   -C            : working-dir pin                     | </dev/null : stdin detach
+# 추론 강도는 핀하지 않는다 — 사용자 codex 설정이 지배한다. 하니스가 medium을 박으면
+# high/xhigh 사용자가 조용히 하향되고, 그 하향이 이 co-reviewer의 존재 이유(별-모델
+# 적발력)를 정확히 깎는다.
 EXIT_CODE=0
 codex exec "$(cat "$PROMPT_FILE")" \
     -C "$PROJECT_DIR" \
     -s read-only \
-    -c 'model_reasoning_effort="medium"' \
     --json \
     < /dev/null \
     > "$STDOUT_FILE" \

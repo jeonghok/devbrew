@@ -40,11 +40,29 @@ python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" st
 dispatch 의 연료는 `pending_review` 다. 진입 시점에 연료를 없애면 subagent(async) 경계에서 발생하는 메인 `Stop` 이 진행 중인 리뷰를 재강제(중복/절단)할 수 없다 — v0.18.0 이 상태로 표현하던 불변식을 한 줄이 대체한다. 다른 문서의 pending 은 건드리지 않는다(같은-키만 strip). **여기서 원장(`armed_paths`)은 쓰지 않는다** — 진입은 리뷰의 *시작*일 뿐 완료가 아니다(§5.2).
 
 2. **Dispatch spec-reviewer agent**:
+
+   **Web kill switch (dispatch 직전 확인)**: `spec-reviewer`는 `WebSearch`/`WebFetch`를
+   보유한다(v0.24.15에서 `WebSearch` 부여). `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`이면
+   프롬프트에 `web_disabled: true`를 실어 **리포 근거만으로 리뷰**하게 하고 loud advisory를
+   남긴다: `[spec-distill] web 비활성 — spec-reviewer가 리포 근거만 사용 (외부 사실 확인 없음)`.
+   `spec-reviewer`는 `tools:`에 `Bash`가 없어 스스로 스위치를 읽을 수 없다(Law 2) —
+   orchestrator가 유일한 집행 지점이다. 스위치는 보안 컨트롤이므로, egress를 가진
+   dispatch가 하나라도 게이트 밖에 있으면 스위치는 꺼졌다고 *믿게만* 만든다.
+
+   ```bash
+   if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
+     web_disabled=true
+     echo "[spec-distill] web 비활성 — spec-reviewer가 리포 근거만 사용 (외부 사실 확인 없음)" >&2
+   else
+     web_disabled=false
+   fi
+   ```
+
    ```
    Agent({
      description: "Spec adversarial review",
-     subagent_type: "spec-reviewer",
-     prompt: "Review spec.md at <path>. Previous issue history: <list>"
+     subagent_type: "spec-distill:spec-reviewer",
+     prompt: "Review spec.md at <path>. Previous issue history: <list>. web_disabled: <true|false — true면 WebSearch/WebFetch 사용 금지, 리포 근거만>"
    })
    ```
 

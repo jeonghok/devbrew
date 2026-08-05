@@ -58,8 +58,9 @@ orchestrator도 아니라 사용자의 것입니다. verdict 필드는 **없습�
 발견이 없으면 `- id: none` 한 줄과 그렇게 판단한 근거를 남기세요 — 빈 출력은 *"안 찾았다"*와
 *"찾았지만 없었다"*를 구분하지 못합니다.
 
-## 웹 예산
+## 웹 kill switch
 
-orchestrator가 dispatch **전에** 세션 웹 예산을 확인합니다. 예산이 소진된 경우 프롬프트에
-*"웹 없이 repo+payload 근거로"* 조건이 실려 옵니다 — 그때만 웹을 쓰지 마세요. 당신은
-`Bash`가 없어 예산을 직접 확인할 수 없고(Law 2), 확인은 orchestrator의 책임입니다.
+orchestrator가 dispatch **전에** kill switch(`DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`)를 확인합니다.
+활성 상태면 프롬프트에 *"웹 없이 repo+payload 근거로"* 조건이 실려 옵니다 — 그때만 웹을 쓰지
+마세요. 당신은 `Bash`가 없어 스위치를 직접 확인할 수 없고(Law 2), 확인은 orchestrator의
+책임입니다. 웹 호출 횟수에 상한은 없습니다.

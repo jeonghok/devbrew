@@ -27,10 +27,12 @@ for i in 1 2 3; do
   STDOUT_FILE="$OUT_DIR/run-$i.jsonl"
   STDERR_FILE="$OUT_DIR/run-$i.stderr"
 
+  # 추론 강도는 핀하지 않는다 — 사용자 codex 설정이 지배한다(S1). 재현성 근거로
+  # 핀을 유지할 수 없다: 이 spike가 굽는 fixture는 이미 thread_id·토큰 수가 매번
+  # 다르므로 강도를 고정해도 재현되지 않는다. 보안 플래그는 그대로 둔다.
   "$TIMEOUT_CMD" 600 codex exec "$PROMPT" \
     -C "$REPO_ROOT" \
     -s read-only \
-    -c 'model_reasoning_effort="medium"' \
     --json \
     < /dev/null > "$STDOUT_FILE" 2>"$STDERR_FILE"
 

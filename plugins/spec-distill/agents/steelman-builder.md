@@ -1,6 +1,6 @@
 ---
 name: steelman-builder
-model: sonnet
+model: inherit
 cost_class: variable
 color: red
 tools: Read, Grep, Glob, WebSearch, WebFetch
@@ -37,8 +37,8 @@ skeptic입니다. 당신은 방향을 *결정*하지 않습니다 — 사용자�
 
 ## Required research (출력 전)
 
-1. 대안 방향을 1–2회 web 검색(WebSearch/WebFetch)으로 근거 수집 — prior-art, 벤치마크,
-   실패 사례. **순차 호출**(병렬·투기적 금지, C5/AP9).
+1. 대안 방향의 근거를 web 검색(WebSearch/WebFetch)으로 수집 — prior-art, 벤치마크,
+   실패 사례. 필요한 만큼 찾는다.
 2. (가능하면) codebase grep로 기존 제약과의 정합 확인.
 
 ## Output 형식 (이 형식을 정확히 준수 — conducting-interview가 verbatim 사용)

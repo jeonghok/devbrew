@@ -365,8 +365,8 @@ Agent({
 
    Floor and codex are **not** affected by this degrade. There is **no fan-out consent
    gate** (lightness) — fan-out is bounded by the rubric's natural signal-binding, the
-   transparency line above, the recomputed max fan-out declared in the README, and the
-   authoring-time hard-review (CLAUDE.md fan-out ≥5 gate).
+   transparency line above, and the recomputed max fan-out declared in the README.
+   (A repo-wide `fan-out ≥5` hard-review gate was **removed** from CLAUDE.md and the philosophy doc by the harness-capability-suppression sweep — it is no longer a backstop and must not be cited as one.)
 4. Dispatch `quality-gates:synthesizer` (or local synthesize_findings.py)
    to consolidate findings. **Capture the script's complete stdout** — the
    synthesized Markdown block (counts line + findings table + suggested-fixes
@@ -405,6 +405,24 @@ Agent({
      apply the SAME **Honest-verdict floor** below, then exit the loop → [Dispatch
      Loop](#dispatch-loop) step 4 (which short-circuits the Runtime gate for the
      review-only path, else runs it).
+
+   **Dropped-finding override (applies to BOTH clean sub-cases, before the floor).**
+   If the captured stdout contains a line matching `dropped as malformed`, you MUST
+   surface that line verbatim **in addition to** the empty-state line, and you MUST
+   NOT print a bare `clean` verdict. Print instead:
+   `## Review gate iter N: not clean — <D> finding(s) dropped as malformed (unjudged).`
+   (`<D>` = the count from that line.) Then continue to step 5's decision tool as if
+   findings remained.
+
+   Why this clause exists: the synthesizer emits that notice — whose own text reads
+   `**이 실행은 clean이 아니다**` — precisely because a malformed finding may have
+   carried a real CRITICAL that was never judged. Before this clause, step 4.5 keyed
+   only on the counts line and the `No high-confidence findings…` line, so the notice
+   was produced by the script and then discarded by its only consumer: the gate
+   printed `clean` over dropped CRITICAL claims (2026-08-05 `/qg` 라운드 2 적발 —
+   생산자만 고치고 소비자를 안 고친 반쪽 수정). A finding that was thrown away is not
+   a finding that was cleared. This mirrors the Runtime gate's `indeterminate ≠ clean`
+   rule at [Step R4](#runtime-gate).
 
    **Honest-verdict floor (deterministic — both clean sub-cases).** The floor keys
    on two deterministic inputs — `$resolved_scope_file_count` (the step-1 count above)

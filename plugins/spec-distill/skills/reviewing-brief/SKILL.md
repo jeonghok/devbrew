@@ -168,37 +168,22 @@ python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE"; rc=$?
 python3 "$PR/scripts/brief_review_state.py" set-stage "$STATE" direction
 ```
 
-### 1-a. 웹 예산 확인 (dispatch 전 check)
+### 1-a. kill switch 확인 (dispatch 직전)
 
 ```bash
-python3 "$PR/scripts/web_budget.py" check --prospective "$STATE"; web_rc=$?
+if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
+  web_disabled=1
+else
+  web_disabled=0
+fi
 ```
 
-`--prospective`가 load-bearing입니다. 맨 `check`는 `> CAP`만 거부하므로 `session == 8`(인터뷰 리서치가 세션 상한을 이미 다 쓴 상태)에서 **통과**하고, 그대로 dispatch한 뒤 아래 increment가 9를 만듭니다 — 상한을 한 번 넘긴 dispatch입니다. `--prospective`는 `count + 1`로 평가해 *"지금 하려는 이 호출이 예산에 들어가는가"* 를 답합니다.
+`brief-direction-reviewer`는 `tools:`에 `Bash`가 **없습니다**(Law 2) — 자기 kill switch를 확인할 경로가 없으므로 판정은 **orchestrator 책임**입니다. 리뷰어에게 `Bash`를 주는 것은 Law 2 위반이므로 대안이 아닙니다.
 
-`brief-direction-reviewer`는 `tools:`에 `Bash`가 **없습니다**(Law 2) — 자기 예산을 확인할 경로가 없으므로 판정은 **orchestrator 책임**입니다. 리뷰어에게 `Bash`를 주는 것은 Law 2 위반이므로 대안이 아닙니다.
+- `web_disabled == 0` → 평소대로 dispatch.
+- `web_disabled == 1` → dispatch 프롬프트에 *"웹 없이 repo + payload 근거로 답하라"* 조건을 실어 dispatch하고 record(`component: direction_reviewer`, `affected_axis: direction`, `verification_status: degraded`, reason=*"web kill switch 활성 — repo 근거만"*). **codex #1의 웹은 자기 실행(`run_brief_codex_reviewer.sh:96-99`)에서 같은 스위치를 독립 확인합니다** — 외부 근거가 완전히 죽지 않습니다(이중화).
 
-- `web_rc == 0` → 평소대로 dispatch.
-- `web_rc != 0`이고 JSON `reason`이 `sweep`/`session` 초과(진짜 소진) → dispatch 프롬프트에 *"웹 없이 repo + payload 근거로 답하라"* 조건을 실어 dispatch하고 record(`component: direction_reviewer`, `affected_axis: direction`, `verification_status: degraded`, reason=*"웹 예산 소진 — repo 근거만"*). **codex #1의 웹은 이 카운터 밖이라 살아 있습니다** — 외부 근거가 완전히 죽지 않습니다(이중화).
-- `web_rc != 0`인데 `reason`이 `sweep`/`session` 초과가 **아님**(state unreadable·counter malformed 등 `check`/`increment` 자체의 실패) → 예산 소진으로 오독하지 않습니다(indeterminate ≠ 소진 확정). 같은 안전한 동작(웹 없이 dispatch)을 취하되 record의 reason은 실제 원인을 그대로 남깁니다: `verification_status: degraded`, reason=*"웹 예산 확인 불가 — <script가 낸 실제 reason>"*.
-- `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` → 양쪽 웹 없이 + record.
-
-dispatch 후 1회 increment:
-
-```bash
-python3 "$PR/scripts/web_budget.py" increment "$STATE"; inc_rc=$?
-```
-
-`check`와 마찬가지로 종료 코드를 **그 자리에서** 잡습니다 — 파이프를 걸면 `$?`가 파이프 마지막 명령의 것이 되어 실패한 increment가 성공으로 읽힙니다(위 §진입 첫 액션과 같은 이유).
-
-**`inc_rc != 0`은 "카운터가 오르지 않았다"는 뜻이 아닙니다.** `increment`는 bump-then-check라, 예산 경계에서는 카운터를 **올린 다음** 그 결과가 상한을 넘었다고 1을 냅니다 — 기록은 성공했습니다. 그래서 1-a와 **같은 방식으로 JSON `reason`을 보고 갈라야** 합니다:
-
-- `reason`이 `sweep`/`session` 초과 → increment는 **성공**했습니다(카운터가 올랐습니다). 방금 dispatch가 예산의 마지막이었다는 신호일 뿐이므로 *"increment 실패"* record를 남기지 않습니다. 남기면 사실이 아닌 degrade가 Step B 질문에 렌더됩니다.
-- 그 밖의 `reason`(`state unreadable` · `state unwritable` · `increment failed: … counter line absent`) → 카운터가 **오르지 않았습니다.** 이후 예산이 과소 계상되므로 record(`component: direction_reviewer`, `affected_axis: direction`, `verification_status: degraded`, reason=*"웹 예산 increment 실패 — \<script가 낸 실제 reason\>"*)를 남깁니다.
-
-예산 판정 자체는 계속 위의 `check --prospective` 결과를 따릅니다.
-
-> ⚠️ **계측은 dispatch 단위입니다.** 리뷰어 turn *내부*의 개별 `WebSearch`/`WebFetch` 호출 수는 리뷰어도(`Bash` 없음) orchestrator도(subagent 내부 도구 호출을 볼 수 없음) 셀 수 없습니다. 그래서 `SESSION_CAP = 8`은 이 컴포넌트에 대해 *"검색 8회"* 가 아니라 **dispatch 8회**입니다. 프롬프트로 검색 횟수를 묶는 것은 E10 위반이므로 대안이 아닙니다.
+이 축의 web 호출에는 사전 예산 상한이 없습니다(v0.24.12 — S3d, harness-capability-suppression-sweep). 프롬프트로 검색 횟수를 묶는 것은 E10 위반이므로 대안이 아닙니다.
 
 ### 1-b. direction-reviewer dispatch (경로 전달 — 이 축은 근거 폭이 본질)
 
@@ -209,7 +194,7 @@ Agent({
   prompt: `Review the interview brief at <PAYLOAD_PATH> for directional soundness.
 Read the repository and search the web. Answer both axis-(b) questions with evidence.
 Every finding must carry exactly one question for the user to decide.
-<웹 예산 소진 시: "Do not use the web this run — answer from the repository and the brief alone.">`
+<kill switch 활성 시: "Do not use the web this run — answer from the repository and the brief alone.">`
 })
 ```
 

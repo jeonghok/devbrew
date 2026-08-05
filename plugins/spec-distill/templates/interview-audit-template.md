@@ -26,8 +26,6 @@ source: spec-distill conducting-interview v0.23.0
 ## 2. Budget
 
 - probe_count: <n> / cap <n>
-- web_sweep_count: <n> / 4
-- web_search_count: <n> / 8
 
 ## 3. Steelman 원문
 

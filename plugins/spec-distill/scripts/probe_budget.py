@@ -2,8 +2,7 @@
 """spec-distill — interview probe budget backstop (C1, C10, AC4, AC12).
 
 커버리지-구동 인터뷰의 Unbounded-autonomy 가드. floor가 미충족이면 종료가 막히므로
-probe가 무한히 돌 수 있다 — 이를 web_budget.py와 같은 방식으로 기계적으로 bound한다
-(프로즈 self-tracking 아님).
+probe가 무한히 돌 수 있다 — 이를 기계적으로 bound한다(프로즈 self-tracking 아님).
 
 "probe" = 사용자와의 (b)/(d)-path 질문-답변 교환 1회. probe_count는 probe를 *제기한 뒤*
 +1 된다(제기 전 gate에서 막힌 probe는 phantom 증가하면 안 됨). check가 유일한 *gate*이며,
