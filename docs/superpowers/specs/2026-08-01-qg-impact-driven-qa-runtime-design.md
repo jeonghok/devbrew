@@ -34,6 +34,7 @@ Runtime 게이트가 *"전체 앱을 무조건 돌린다"* 를 버리고 **이�
   - [6.4 리뷰 라운드 4에서 추가된 AC (AC52–AC57)](#64-리뷰-라운드-4에서-추가된-ac-ac52ac57)
   - [6.5 `/qg` iter-1 리뷰에서 추가된 AC (AC58–AC59)](#65-qg-iter-1-리뷰에서-추가된-ac-ac58ac59)
   - [6.6 `/qg` iter-2 리뷰에서 추가된 AC (AC60–AC63)](#66-qg-iter-2-리뷰에서-추가된-ac-ac60ac63)
+  - [6.7 `/qg` iter-3 정정 (AC64 + AC61–AC63 수정)](#67-qg-iter-3)
 - [7. Files to Modify](#7-files-to-modify)
 - [8. Verification Plan](#8-verification-plan)
   - [8.1 자동 테스트](#81-자동-테스트)
@@ -889,6 +890,19 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 - **AC63** (unittest 판정가능성 술어) — `unittest_can_judge`가 **선언 위치에 앵커된** 두 신호만 받는다: 줄 시작의 `class <ident>(…TestCase…)` 또는 `def load_tests(`. 앵커 없는 파일-전체 부분문자열(`grep -qE '(unittest|TestCase)'`)은 `from unittest.mock import patch`·`# run with pytest, not unittest`·`class TestCaseHelpers:`를 전부 통과시켰고, 실측으로 claim → `discover` 0개 수집 → **exit 0 → `pass`**가 재현됐다(같은 파일을 pytest 로 돌리면 `1 failed`). 미매치는 `unclaimed` → `verification: degraded`(AC53)로 fail-closed 다. 이 게이트는 **`unittest` 어댑터에만** 적용된다 — pytest 는 bare `def test_`를 정상 수집하므로, 한정을 빼면 평범한 pytest 레포가 구조적으로 인증 불가가 된다.
 
 ---
+
+### 6.7 `/qg` iter-3 정정 (AC64 + AC61–AC63 수정)
+
+iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자체의 결함 7건**을 올렸다. 그중 둘은 코드 주석이 *실측 사실*로 단언한 내용이 실제로는 거짓이었던 것이다. append-only 로 정정을 기록한다.
+
+- **AC64** (판정 0건은 인증이 아니다) — `diff-test-results.py` 가 **아무 unit 도 대조하지 않은 실행**을 `attribution_status: closed` 로 내보내지 않는다. per-adapter 는 `--expected` 가 비면, aggregate 는 어댑터가 0개면 `degraded` 다. 빈 `--expected` 는 attributions 를 비우고 모든 카운트를 0 으로 만들어 기존 degrade 조건 **전부**를 비껴갔고, 결과는 `closed` + `verdict_input` 3플래그 전부 false — R8 PASS 행의 결정론 조건을 **완전히** 충족한다. 이를 막던 유일한 것은 SKILL.md 의 한국어 문장(`영향분 0개 → SKIP_WITH_EVIDENCE`)이었고, 그 동작을 통째로 지워도 그 문장의 grep 락은 GREEN 이다(실측). 8종 어댑터 미지원 레포(Ruby/Java 등)가 테스트를 한 개도 돌리지 않고 PASS 를 받는 경로였다. 리뷰어 2명이 독립 보고. **주의:** `test_zero_adapters_is_a_legal_empty_result` 가 이 fail-open 을 *계약으로* 못 박고 있었다 — 테스트가 취약점을 단언한 경우이므로 케이스 이름과 함께 정정했다.
+- **AC61 정정** (트리거 열거가 거짓이었다) — 근거 주석과 CHANGELOG 가 `error` 트리거로 열거한 **jest/vitest "No tests found"** 와 **전제조건 없는 shell 하니스**는 실측 결과 **exit 1** 이라 `fail` 로 접히고 이 규칙에 **닿지 않는다**. 실제 트리거는 pytest(2·4·5)와 cargo(101) 뿐이다. 잔여는 "go 컴파일 에러" 가 아니라 **exit 1 전체**다 — 이 수정이 닫는 범위보다 크다. 규칙 자체는 유효하나 **범위 주장이 과장돼 있었다**.
+- **AC62 정정** (집행자 주장 철회 + 판별자 교체) — (a) `same_as_head` 를 **읽는 스크립트가 하나도 없다**(grep 확인). 실제 git 으로 `update-ref main→HEAD` + 정직한 `detect` + 진짜 회귀 → `PRE_EXISTING` → `closed` 가 재현됐다. (b) SKILL.md 의 *"이 규칙에는 R6 에 집행자가 있다"* 는 **거짓**이다 — `--baseline-detected` 는 *문자열이 도착했음*만 강제하고, `"$runner"` 를 그대로 넘기면 항상 grounded 다(mutation GREEN). 주장을 철회하고 부분 집행자로 다시 적었다. (c) `same_as_head: yes` 만으로 R4 를 스킵하던 규칙은 **양성 케이스에 해로웠다**: `main` 위 미커밋 작업에서 측정된 `NEW_REGRESSION`/FAIL 이 `BASELINE_UNRUNNABLE`/SKIP 으로 내려갔다. 차등이 실제로 불가능한 것은 `same_as_head: yes` **이고 워킹 트리가 깨끗할 때**뿐이므로 판별자를 `worktree_dirty` 로 좁혔다.
+- **AC63 정정** (∃ → ∀) — 술어가 *"discover 가 수집할 것이 하나라도 있는가"* 를 물었는데 필요한 것은 *"discover 가 놓치는 것이 없는가"* 였다. 실측 탈출 셋: mixed 파일(진짜 TestCase + 모듈-레벨 bare `def test_`) → `pass 0` 인데 pytest 는 2 failed · **docstring 예제 안의 들여쓴 `class T(unittest.TestCase):`** → 매치(같은 함수의 주석이 "docstring 은 만족시킬 수 없다" 고 단언했다 — 거짓) · `test_` 메서드 없는 TestCase 하위클래스 → `Ran 0 tests` → exit 0. 앞의 둘을 **모듈-레벨 bare `def test_` 부재** 라는 음성 조건 AND 로 함께 닫았다. 셋째는 별도 축이라 **열려 있다**.
+
+**검증:** T62(∀-조건 2축) · T63(vacuity 양방향 + 양의 짝) · M17–M22(vacuity 3축 + ∀-조건 3축, 극성 포함) 전부 RED.
+
+**닫지 않은 것 (iter-3 잔여 21건 — 이 브랜치는 병합 불가).** 귀속 입력 파일 4종의 custody 부재(S1) · 부분 merge_base 변조(S3) · bulk 흡수자가 `unclaimed` 행 삭제(F5) · `resolve-baseline.sh` 부재 시 조용한 false-clean(F6) · `$baseline_rows_file` 조립 규칙 부재(C3) · `$adapter_count` 미정의(C4) · R7 이 R5b 뒤라 게이트 자기 부작용이 거짓 terminal FAIL(S4) · `dir_is_ignored` 신뢰모델 불일치(S5) · `*.spec.*` 글롭(S6) · aggregate 의 flag/count 미대조(X1) · 후보에 staged/untracked 누락(X3) · 캐시 락(X4) · SKILL.md 산문 락 10종의 부정문 취약 · AC60 값 provenance 미잠금 · 종료코드 열거 락 · AC63 경계 미잠금.
 
 ## 7. Files to Modify
 
