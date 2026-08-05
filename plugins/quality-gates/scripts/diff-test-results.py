@@ -217,12 +217,34 @@ def per_adapter(args: argparse.Namespace) -> int:
     # 조건을 **전부** 충족한다. 그것을 막던 유일한 것은 SKILL.md 의 한국어 문장이고,
     # 그 동작을 통째로 지워도 문장의 grep 락은 GREEN 이다. 판정 0건은 결함이 아니지만
     # **인증도 아니다**.
+    # 도말(smear) — 실행이 배치였는데 어댑터의 unit 입도는 그보다 잘다면, `run` 은
+    # **한 번의 종료 코드를 전 unit 에 그대로 찍는다**(run-test-selection.sh:796-802).
+    # 그 상태로 양측이 red 면 실제로는 회귀인 unit 까지 `(F,F)=PRE_EXISTING` 으로
+    # 접혀 `closed` → PASS 가 된다. 설계의 2단 구조(bulk red → 실패분만 per-unit
+    # 재실행)가 이것을 막게 돼 있으나 그건 산문이고, 산문을 지워도 막히지 않았다.
+    #
+    # bulk 가 **green** 인 경우는 도말이 아니다 — 배치 green 은 전 unit 이 통과했다는
+    # 뜻이라 각 행이 정직하다. 그래서 조건은 red 가 실제로 섞인 `pre_existing > 0` 이다.
+    # **`pre_existing > 0` 단독으로 넓히지 않는다**: stale red 하나 있는 레포마다 모든
+    # 배치 실행이 degrade 돼 PASS 가 구조적으로 도달 불가가 된다(iter-2·iter-3 을 물었던
+    # 과잉강화 형태).
+    #
+    # 잔여(명시): `new_regression > 0` 도 도말 아래선 spurious 일 수 있다(head 배치가
+    # red 면 실제로 통과한 unit 도 fail 로 찍힌다). 그 방향은 **거짓 red** 라 인증을
+    # 막는 쪽이므로 여기서 degrade 로 올리지 않는다 — 귀속의 정확도 문제이지 인증
+    # 우회가 아니다.
+    smeared = (
+        args.mode == "bulk"
+        and args.granularity != "bulk"
+        and counts["pre_existing"] > 0
+    )
     degraded = (
         not expected
         or counts["baseline_unrunnable"] > 0
         or counts["silent_drop"] > 0
         or error_axis_seen
         or (args.granularity == "bulk" and counts["pre_existing"] > 0)
+        or smeared
     )
 
     out = [f"runner: {args.runner}"]
@@ -365,6 +387,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--baseline")
     p.add_argument("--head")
     p.add_argument("--granularity", choices=["file", "package", "bulk"])
+    # 실행 **mode** 는 어댑터 **granularity** 와 다른 축이다. granularity 는 어댑터가
+    # 무엇을 unit 으로 보는가이고(`detect` 출처), mode 는 이번 실행이 그 unit 들을
+    # 한 번에 돌렸는가다(`run` 의 인자). 둘을 같은 것으로 읽으면 아래 도말 degrade 가
+    # granularity:file 어댑터에 **증명 가능하게 발화하지 않는다** (/qg iter-5 SF1).
+    p.add_argument("--mode", choices=["bulk", "per-unit"])
     p.add_argument("--runner")
     p.add_argument("--baseline-detected")
     p.add_argument("--aggregate", action="store_true")
@@ -382,7 +409,7 @@ def main() -> int:
     # 안 만든 호출자)가 정확히 이 검사가 막으려던 경로로 통과한다.
     missing = [
         f"--{n.replace('_', '-')}"
-        for n in ("expected", "baseline", "head", "granularity", "runner",
+        for n in ("expected", "baseline", "head", "granularity", "mode", "runner",
                   "baseline_detected")
         if getattr(args, n) is None
     ]

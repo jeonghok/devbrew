@@ -1032,12 +1032,21 @@ verifier 가 디버깅 중 테스트를 돌리는 것 자체를 막지는 않지
 "${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py" \
   --expected "$expected_units_file" \
   --baseline "$baseline_rows_file" --head "$head_rows_file" \
-  --granularity "$granularity" --runner "$runner" \
+  --granularity "$granularity" --mode "$run_mode" --runner "$runner" \
   --baseline-detected "$baseline_detected" > "$per_adapter_yaml"
 ```
 
 `--expected` 는 R1b 가 고른 unit 목록이다 — **두 산출물의 상호 대조가 아니라 독립
 입력**이라야 두 스크립트가 같은 정규화 버그로 같은 unit 을 대칭 누락할 때 잡힌다.
+
+`--mode` 는 R4/R5b 가 `run` 에 넘긴 **실행 mode 그 자체**(`bulk` 또는 `per-unit`)다.
+어댑터의 `--granularity` 와 **다른 축**이며 둘을 같은 것으로 쓰면 안 된다. 배치로 돌면
+`run` 이 **한 종료 코드를 전 unit 에 찍으므로**(도말), 입도가 그보다 잔 어댑터에서는
+양측 red 가 전부 `PRE_EXISTING` 으로 접혀 `closed` → PASS 가 된다 — 실제로는 그중
+어느 것이 회귀인지 **판정되지 않은** 상태다. 스크립트가 `mode: bulk` + `granularity !=
+bulk` + `pre_existing > 0` 을 `degraded` 로 내린다. **필수 인자다** — 생략하면 exit 2.
+양측에서 mode 가 달랐다면(한쪽만 2단 재실행) 그 어댑터는 `per-unit` 로 넘기지 말고
+**두 호출 중 배치였던 쪽을 기준으로 `bulk`** 를 넘긴다 (도말이 섞였으면 섞인 것이다).
 
 `--baseline-detected` 는 R4② 의 기준선 트리 `detect` 가 낸 러너 집합이다 (감지 0개면
 `NONE`; R-init 이 `degraded: yes` 이거나 `same_as_head: yes` **이면서 워킹 트리가

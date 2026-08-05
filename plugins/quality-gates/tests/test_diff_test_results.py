@@ -27,7 +27,7 @@ _UNSET = object()
 
 
 def run_diff(expected, baseline, head, granularity="file", runner="pytest",
-             baseline_detected=_UNSET):
+             baseline_detected=_UNSET, mode: "str | None" = "per-unit"):
     """expected: [unit], baseline/head: [(unit, status, code)] → (rc, stdout, stderr)
 
     `baseline_detected` 기본값은 **`runner` 자신** — 기준선 트리에서 그 어댑터가
@@ -48,6 +48,8 @@ def run_diff(expected, baseline, head, granularity="file", runner="pytest",
                 "--baseline", str(p / "b.tsv"),
                 "--head", str(p / "h.tsv"),
                 "--granularity", granularity, "--runner", runner]
+        if mode is not None:
+            argv += ["--mode", mode]
         if baseline_detected is not None:
             argv += ["--baseline-detected", baseline_detected]
         r = subprocess.run(argv, capture_output=True, text=True)
@@ -161,6 +163,63 @@ class TestAttribution(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(flag_of(out, "silent_drop"), "false", out)
         self.assertEqual(flag_of(out, "attribution_status"), "closed", out)
+
+    # T69 — 도말(smear)은 인증을 막는다 (/qg iter-5 SF1, CRITICAL).
+    #
+    # 실행이 배치(`--mode bulk`)인데 어댑터 입도가 그보다 잘면(`--granularity file`),
+    # `run` 은 한 종료 코드를 전 unit 에 찍는다. 양측 red 면 실제 회귀까지
+    # `(F,F)=PRE_EXISTING` 으로 접혀 `closed` → PASS 가 됐다. devbrew 자신(shell 130
+    # unit + stale red)에선 이게 엣지가 아니라 first-run 기대 상태다.
+    #
+    # 픽스처는 silent-failure-hunter 가 실측한 것과 같은 모양: 3 unit 전부 양측 fail —
+    # 그중 하나는 진짜 pre-existing, 하나는 실제로는 green, 하나는 실제로는 회귀.
+    # 대조 단계는 그 셋을 구별할 수 없다. 구별할 수 없다는 사실 자체가 인증 불가 사유다.
+    def test_bulk_smear_blocks_certification(self):
+        rows_b = [("a", "fail", "1"), ("b", "fail", "1"), ("c", "fail", "1")]
+        rows_h = [("a", "fail", "1"), ("b", "fail", "1"), ("c", "fail", "1")]
+        rc, out, _ = run_diff(["a", "b", "c"], rows_b, rows_h,
+                              granularity="file", runner="shell",
+                              baseline_detected="shell", mode="bulk")
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "attribution_status"), "degraded", out)
+
+    # 양의 짝 ①: 같은 픽스처를 per-unit 으로 돌면 상태가 정직하므로 인증된다.
+    # 이게 없으면 "mode 를 아예 안 본다 / 언제나 degraded" mutation 이 통과한다.
+    def test_per_unit_same_rows_still_certifies(self):
+        rows = [("a", "fail", "1"), ("b", "fail", "1")]
+        rc, out, _ = run_diff(["a", "b"], rows, rows,
+                              granularity="file", runner="shell",
+                              baseline_detected="shell", mode="per-unit")
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "attribution_status"), "closed", out)
+
+    # 양의 짝 ②: 배치 green 은 도말이 아니다 — 배치 green = 전 unit 통과라 각 행이
+    # 정직하다. 여기까지 degrade 하면 stale red 없는 레포에서도 PASS 가 사라진다.
+    def test_bulk_green_is_not_smear(self):
+        rows = [("a", "pass", "0"), ("b", "pass", "0")]
+        rc, out, _ = run_diff(["a", "b"], rows, rows,
+                              granularity="file", runner="shell",
+                              baseline_detected="shell", mode="bulk")
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "attribution_status"), "closed", out)
+
+    # 진짜 bulk 어댑터(granularity == mode == bulk)는 기존 절이 이미 담당한다 —
+    # 새 절이 그 경로를 이중으로 잡아 의미를 바꾸지 않는지 확인한다.
+    def test_true_bulk_adapter_still_degrades_via_existing_clause(self):
+        rows = [("BULK", "fail", "101")]
+        rc, out, _ = run_diff(["BULK"], rows, rows,
+                              granularity="bulk", runner="cargo",
+                              baseline_detected="cargo", mode="bulk")
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "attribution_status"), "degraded", out)
+
+    # `--mode` 는 필수다. 선택 인자로 두고 부재를 per-unit 으로 읽으면, 값을 안 넘긴
+    # 호출자(= 배치로 돌린 호출자)가 정확히 이 검사가 막으려던 경로로 통과한다.
+    def test_mode_is_required(self):
+        rc, _, err = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")],
+                              mode=None)
+        self.assertEqual(rc, 2)
+        self.assertIn("--mode", err)
 
     # T45(2) — 중복 unit 행은 exit 4 (AC48). 조용한 last-wins는 입력 순서 의존.
     def test_duplicate_unit_row_is_exit_4(self):
@@ -307,7 +366,7 @@ class TestAttribution(unittest.TestCase):
                  "--expected", str(p / "e.txt"),
                  "--baseline", str(p / "missing.tsv"),
                  "--head", str(p / "h.tsv"),
-                 "--granularity", "file", "--runner", "pytest",
+                 "--granularity", "file", "--mode", "per-unit", "--runner", "pytest",
                  "--baseline-detected", "pytest"],
                 capture_output=True, text=True,
             )
@@ -382,7 +441,7 @@ class TestAttribution(unittest.TestCase):
                  "--expected", str(p / "e.txt"),
                  "--baseline", str(p / "b.tsv"),
                  "--head", str(p / "missing.tsv"),
-                 "--granularity", "file", "--runner", "pytest",
+                 "--granularity", "file", "--mode", "per-unit", "--runner", "pytest",
                  "--baseline-detected", "pytest"],
                 capture_output=True, text=True,
             )
@@ -399,7 +458,7 @@ class TestAttribution(unittest.TestCase):
                  "--expected", str(p / "missing.txt"),
                  "--baseline", str(p / "b.tsv"),
                  "--head", str(p / "h.tsv"),
-                 "--granularity", "file", "--runner", "pytest",
+                 "--granularity", "file", "--mode", "per-unit", "--runner", "pytest",
                  "--baseline-detected", "pytest"],
                 capture_output=True, text=True,
             )
