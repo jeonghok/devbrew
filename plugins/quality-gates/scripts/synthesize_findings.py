@@ -23,18 +23,25 @@ SEV_ORDER = {"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 2}
 
 
 def load_yaml(path):
+    """Return `(list, dropped)` — 이 경로도 `_as_list` 초크포인트를 통과한다.
+
+    예전에는 여기서만 `or []`로 끝나서 `findings: "CRITICAL: ..."` 같은 스칼라가
+    그대로 반환되고 apply_verdicts가 **글자 단위로** 순회했다(문자 하나당 드롭 1건).
+    `_as_list`의 docstring이 "ingestion 한 곳에서 타입을 확정한다"고 주장하는데
+    정작 주 수집 경로가 그 한 곳을 우회하고 있었다.
+    """
     if not path:
-        return []
+        return [], 0
     try:
         with open(path) as f:
             data = yaml.safe_load(f) or []
     except FileNotFoundError:
-        return []
+        return [], 0
     if isinstance(data, dict) and "verdicts" in data:
-        return data["verdicts"] or []
+        return _as_list(data.get("verdicts"), "verdicts")
     if isinstance(data, dict) and "findings" in data:
-        return data["findings"] or []
-    return data or []
+        return _as_list(data.get("findings"), "findings")
+    return _as_list(data, "findings document")
 
 
 def load_yaml_doc(path):
@@ -54,7 +61,7 @@ def load_yaml_doc(path):
 
 
 def _as_list(value, what):
-    """Return `value` if it is a list, else [] with a loud stderr line.
+    """Return `(list, dropped)` — `value` if it is a list, else `([], n)`.
 
     `or []` only rescues *falsy* values — `new_findings: 5` and
     `verdicts: {a: 1}` sail through it and reach a `for` loop, where a scalar
@@ -65,14 +72,24 @@ def _as_list(value, what):
     이것이 ingestion 한 곳에서 타입을 확정하는 이유다. 소비 지점마다 가드를
     덧대면 malformed가 한 겹씩 새고(`_conf`의 docstring과 같은 논거), 실제로
     `confidence`를 막은 뒤 컨테이너 타입이 그대로 열려 있었다.
+
+    소실 **건수**까지 돌려주는 것이 이 함수의 절반이다. stderr만 찍고 0을
+    돌려주면 `dropped_malformed`가 0으로 남고, 그 값을 읽는 render()의 공지가
+    나가지 않으며, 그 공지에 keying하는 SKILL의 Dropped-finding override도
+    발화하지 못한다 — 버려진 CRITICAL이 **다시 clean으로 렌더된다**. 라운드 2가
+    이 함수를 만들면서 회계를 빼먹어 정확히 그 구멍이 남았다 (2026-08-05 재현).
     """
     if isinstance(value, list):
-        return value
-    if value:                                    # falsy는 정상적인 "없음"이다
-        print(f"[synthesize_findings] {what} is {type(value).__name__}, "
-              "expected list — 무시하고 계속한다(해당 입력은 심사되지 않았다)",
-              file=sys.stderr)
-    return []
+        return value, 0
+    if not value:                                # falsy는 정상적인 "없음"이다
+        return [], 0
+    # 매핑이면 항목 수가 곧 소실 건수다(`new_findings: {a: {...}, b: {...}}` = 2건).
+    # 스칼라는 주장 하나로 센다 — 문자열의 len()은 글자 수라 의미가 없다.
+    lost = len(value) if isinstance(value, dict) else 1
+    print(f"[synthesize_findings] {what} is {type(value).__name__}, "
+          f"expected list — {lost}건 무시하고 계속한다"
+          "(해당 입력은 심사되지 않았다)", file=sys.stderr)
+    return [], lost
 
 
 def extract_verdicts(doc):
@@ -84,7 +101,50 @@ def extract_verdicts(doc):
 def extract_new_findings(doc):
     if isinstance(doc, dict):
         return _as_list(doc.get("new_findings"), "new_findings")
-    return []
+    return [], 0
+
+
+def _norm_file(f):
+    """`file`을 해시 가능한 문자열로 확정한다.
+
+    dedup()의 그룹핑 키가 `(file, line, severity)` 튜플인데, 라운드 2는 그중
+    `severity`만 `_norm_sev`로 총함수화하고 나머지 둘을 raw로 남겼다. `file: [a.py]`
+    하나면 defaultdict 조회가 `TypeError: unhashable type: 'list'`를 던지고
+    exit 1 + stdout 공백 — 다른 리뷰어의 진짜 CRITICAL까지 함께 소실된다
+    (2026-08-05 재현). 같은 튜플의 형제 원소를 놓친 것이 결함의 전부였다.
+    """
+    v = f.get("file", "")
+    if isinstance(v, str):
+        return v
+    if isinstance(v, (list, tuple)):
+        return ", ".join(str(x) for x in v)
+    return str(v)
+
+
+def _norm_line(f):
+    """`line`을 int로 확정한다 — 표시와 정렬 tiebreak에만 쓰이므로 실패는 0."""
+    v = f.get("line", 0)
+    if isinstance(v, bool):                      # bool은 int의 하위형이다
+        return 0
+    if isinstance(v, int):
+        return v
+    try:
+        return int(str(v).strip())
+    except (TypeError, ValueError):
+        return 0
+
+
+def _normalize_identity(f):
+    """수집 지점에서 스칼라 정체성 필드를 확정한다(소비 지점마다 가드 금지).
+
+    `_conf`/`_norm_sev`가 값 수준에서, `_as_list`가 컨테이너 수준에서 하는 일을
+    정체성 필드에 대해 한다. 소비 지점(dedup 키·sort tiebreak·finding_id·render)
+    마다 가드를 덧대면 malformed가 한 겹씩 새고, 라운드 2가 정확히 그렇게 새어서
+    `severity`만 막고 `file`/`line`은 열어뒀다.
+    """
+    f["file"] = _norm_file(f)
+    f["line"] = _norm_line(f)
+    return f
 
 
 def finding_id(f):
@@ -176,7 +236,9 @@ def promote_new_findings(raw_new, existing):
         f.pop("sources", None)
         f["agent"] = "adversarial"
         f["promoted"] = True
-        f["line"] = f.get("line") or 0
+        # 승격 경로도 같은 초크포인트를 쓴다 — `file: [a.py]`가 truthy라 필수-키
+        # 검사를 통과한 뒤 sort_findings의 raw 비교에서 TypeError를 냈다.
+        _normalize_identity(f)
         f.setdefault("confidence", NEW_FINDING_DEFAULT_CONFIDENCE)
         fid = finding_id(f)
         if fid in seen:
@@ -215,6 +277,9 @@ def apply_verdicts(findings, verdicts):
                   f"({type(f).__name__}, expected mapping): {str(f)[:80]!r}",
                   file=sys.stderr)
             continue
+        # 수집 지점 정규화 — dedup 키(해시)·sort tiebreak(비교)·finding_id가 모두
+        # 이 값을 raw로 만지므로, 여기서 확정하지 않으면 하류 어디서든 터진다.
+        f = _normalize_identity(dict(f))
         v = by_id.get(finding_id(f))
         if v is None:
             out.append(f)
@@ -343,7 +408,8 @@ def render(findings, suppressed_count, dropped_malformed=0):
         if dropped_malformed > 0:
             out.append(
                 f"{dropped_malformed} finding(s) dropped as "
-                "malformed (not a mapping, or missing file/severity/summary) — see stderr. "
+                "malformed (not a mapping, wrong container type, or missing "
+                "file/severity/summary) — see stderr. "
                 "**이 실행은 clean이 아니다**: 버려진 주장은 심사되지 않았다."
             )
         return "\n".join(out) + "\n"
@@ -393,7 +459,8 @@ def render(findings, suppressed_count, dropped_malformed=0):
     if dropped_malformed > 0:
         out.append(
             f"{dropped_malformed} finding(s) dropped as malformed "
-            "(missing file/severity/summary) — see stderr."
+            "(not a mapping, wrong container type, or missing "
+            "file/severity/summary) — see stderr."
         )
     out.append("")
     out.append("**Suggested fixes:**")
@@ -410,14 +477,19 @@ def main():
     args = ap.parse_args()
 
     doc = load_yaml_doc(args.adversarial) if args.adversarial else None
-    verdicts = extract_verdicts(doc)
-    raw = load_yaml(args.findings) if args.findings else []
+    verdicts, dropped_verdicts = extract_verdicts(doc)
+    raw, dropped_raw = load_yaml(args.findings) if args.findings else ([], 0)
 
     findings, dropped_primary = apply_verdicts(raw, verdicts)
-    promoted, dropped_promoted = promote_new_findings(extract_new_findings(doc), findings)
-    # 두 출처의 소실을 **한 채널로** 합친다. 한쪽만 세면 stdout 공지가 반쪽이 되고,
-    # 반쪽짜리 공지는 "이 실행은 clean이 아니다"를 말할 자격이 없다.
-    dropped_malformed = dropped_primary + dropped_promoted
+    new_raw, dropped_newlist = extract_new_findings(doc)
+    promoted, dropped_promoted = promote_new_findings(new_raw, findings)
+    # 모든 출처의 소실을 **한 채널로** 합친다. 하나라도 빠지면 stdout 공지가
+    # 반쪽이 되고, 반쪽짜리 공지는 "이 실행은 clean이 아니다"를 말할 자격이 없다.
+    # 컨테이너 수준(dropped_raw / dropped_verdicts / dropped_newlist)과 항목
+    # 수준(dropped_primary / dropped_promoted)이 **둘 다** 여기 들어와야 한다 —
+    # 라운드 2는 항목 수준만 세어서 컨테이너 소실이 0으로 보고됐다.
+    dropped_malformed = (dropped_raw + dropped_verdicts + dropped_newlist
+                         + dropped_primary + dropped_promoted)
     findings = findings + promoted          # 기존 뒤에 append — 기존 표 순서를 흔들지 않는다
     findings = dedup(findings)
     kept, suppressed = suppress(findings)

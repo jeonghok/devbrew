@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.24.18] — 2026-08-05
+
+### Fixed
+
+- **`parse_spec_structure.py` ambiguity 게이트 검출력 회귀 (Law 1).** 라운드 3 `/qg`가 적발.
+  Task 10이 하이픈 복합어 오탐(`fast-forward`)을 막으려고 경계를
+  `(?<![\w-])…(?![\w-])`로 잡았는데, **뒤쪽까지 단어문자를 막아** blacklist 어간의 접미
+  굴절형이 전부 통과하게 됐다 — `seamlessly`·`efficiently`·`Robustness`·`faster`가 모두
+  게이트를 빠져나갔다. 선언된 동기는 하이픈뿐이었고 T6-4/T6-5는 이 방향을 측정하지 않는다.
+  → 경계를 **비대칭**으로 정정: `(?<![\w-])…(?!-)`. 앞은 단어·하이픈 금지(→ `breakfast`,
+  `inefficient` 오탐 계속 차단), 뒤는 **하이픈만** 금지(→ 굴절형 복구). 오탐 1종을 막으려다
+  미탐 다수를 만든 교환을 되돌린다.
+
+### Added
+
+- `tests/test_parse_spec_structure.sh` T6-6 — 접미 굴절형(`-ly`/`-ness`/`-er`)이 계속 hit되는지
+  측정. T6-4(오탐 없음)와 T6-5(어간 그대로는 hit)만으로는 이 방향이 비어 있어서, 경계를 양쪽
+  다 막아도 둘 다 GREEN이었다.
+
 ## [0.24.17] — 2026-08-05
 
 ### Fixed

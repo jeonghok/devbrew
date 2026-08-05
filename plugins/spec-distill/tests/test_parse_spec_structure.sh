@@ -106,7 +106,23 @@ out=$(python3 "$SCRIPT" ambiguity "$tmp_wp" "$BL" 2>&1)
 { echo "$out" | grep -q '"phrase": "fast"' && echo "$out" | grep -q '"phrase": "robust"'; } \
   && note PASS "T6-5: 온전한 blacklist 단어는 계속 hit (검사가 살아 있다)" \
   || note FAIL "T6-5: 완화가 검사를 죽였다 (out=$out)"
-rm -f "$tmp_wb" "$tmp_wp"
+
+# T6-6 (굴절형, 필수): 완화가 **접미 굴절형까지** 죽이지 않았다.
+# T6-4/T6-5만으로는 이 방향이 측정되지 않는다 — 둘 다 blacklist 어간이 *단어
+# 그대로* 등장하는 경우만 본다. 경계를 양쪽 다 `(?![\w-])`로 잡으면 T6-4·T6-5는
+# GREEN인 채 `efficiently`/`seamlessly`/`Robustness`/`faster`가 전부 통과해
+# Law 1 게이트의 검출력이 조용히 무너진다(2026-08-05 라운드 3 실측).
+# 경계는 비대칭이어야 한다: 앞은 단어·하이픈 금지, 뒤는 **하이픈만** 금지.
+tmp_infl="$(mktemp)"
+printf '# t\n\nIt is seamlessly integrated, runs efficiently, and Robustness is faster.\n' > "$tmp_infl"
+out=$(python3 "$SCRIPT" ambiguity "$tmp_infl" "$BL" 2>&1)
+{ echo "$out" | grep -q '"phrase": "seamless"' \
+  && echo "$out" | grep -q '"phrase": "efficient"' \
+  && echo "$out" | grep -q '"phrase": "robust"' \
+  && echo "$out" | grep -q '"phrase": "fast"'; } \
+  && note PASS "T6-6: 접미 굴절형(-ly/-ness/-er)도 계속 hit" \
+  || note FAIL "T6-6: 굴절형 검출이 죽었다 — 경계가 뒤쪽 단어문자까지 막고 있다 (out=$out)"
+rm -f "$tmp_wb" "$tmp_wp" "$tmp_infl"
 
 echo ""
 echo "=== placeholders subcommand ==="

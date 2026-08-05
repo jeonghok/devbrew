@@ -329,6 +329,88 @@ else
   no "11 — 표기가 다른 CRITICAL이 낮은 confidence에서도 억제되지 않는다"
 fi
 
+# --- 12 — dedup()의 그룹핑 키가 비-해시가능 `file`에 죽지 않는다 (라운드 3) ---
+# 라운드 2가 키 튜플 `(file, line, severity)` 중 severity만 총함수화하고 형제 둘을
+# raw로 남겼다. `file: [a.py]` 하나로 defaultdict 조회가 TypeError를 던져
+# exit 1 + stdout 공백 — **다른 리뷰어의 진짜 CRITICAL까지 함께** 소실됐다.
+cat > "$tmp/f_unhashable.yaml" <<'Y'
+findings:
+  - agent: security-reviewer
+    file: [a.py]
+    line: 1
+    severity: CRITICAL
+    summary: "list-valued file"
+    confidence: 9
+  - agent: code-reviewer
+    file: real.py
+    line: 2
+    severity: CRITICAL
+    summary: "GENUINE-CRIT-MUST-SURVIVE"
+    confidence: 9
+Y
+out12="$(python3 "$SCRIPT" --findings "$tmp/f_unhashable.yaml" 2>/dev/null)"; rc12=$?
+if [ "$rc12" -eq 0 ] && printf '%s' "$out12" | grep -q 'GENUINE-CRIT-MUST-SURVIVE' \
+   && printf '%s' "$out12" | grep -q '2 CRITICAL'; then
+  ok "12 — 비-해시가능 file이 리뷰 전체를 죽이지 않고 두 발견 모두 살아남는다"
+else
+  no "12 — 비-해시가능 file이 리뷰 전체를 죽이지 않고 두 발견 모두 살아남는다 (rc=$rc12)"
+fi
+
+# --- 13 — 컨테이너 수준 소실도 drop 채널로 **집계**된다 (라운드 3) ---
+# `_as_list`가 stderr만 찍고 0을 돌려주면 stdout 공지가 안 나가고, 그 공지에
+# keying하는 SKILL의 Dropped-finding override가 발화하지 못한다 → 버려진
+# CRITICAL이 clean으로 렌더. 건수까지 맞아야 한다(2건이면 2로 보고).
+cat > "$tmp/f_one.yaml" <<'Y'
+findings:
+  - agent: security-reviewer
+    file: ok.py
+    line: 1
+    severity: IMPORTANT
+    summary: "정상"
+    confidence: 9
+Y
+cat > "$tmp/adv_container.yaml" <<'Y'
+verdicts: []
+new_findings:
+  first:
+    file: x.py
+    severity: CRITICAL
+    summary: "승격돼야 할 CRITICAL 1"
+  second:
+    file: y.py
+    severity: CRITICAL
+    summary: "승격돼야 할 CRITICAL 2"
+Y
+out13="$(python3 "$SCRIPT" --findings "$tmp/f_one.yaml" --adversarial "$tmp/adv_container.yaml" 2>/dev/null)"
+if printf '%s' "$out13" | grep -qE '^2 finding\(s\) dropped as malformed'; then
+  ok "13 — new_findings가 매핑이면 소실 2건이 drop 공지에 집계된다"
+else
+  no "13 — new_findings가 매핑이면 소실 2건이 drop 공지에 집계된다"
+fi
+
+# --- 14 — 스칼라 `findings:`가 글자 단위로 순회되지 않는다 (라운드 3) ---
+# load_yaml이 `_as_list` 초크포인트를 우회해서, 문자열 하나가 문자당 드롭 1건으로
+# 보고됐다(39건). 주장 하나는 1건이다.
+printf 'findings: "CRITICAL: hardcoded key in config.py:11"\n' > "$tmp/f_scalar.yaml"
+out14="$(python3 "$SCRIPT" --findings "$tmp/f_scalar.yaml" 2>/dev/null)"
+if printf '%s' "$out14" | grep -qE '^1 finding\(s\) dropped as malformed'; then
+  ok "14 — 스칼라 findings는 1건 소실로 집계된다(글자 수 아님)"
+else
+  no "14 — 스칼라 findings는 1건 소실로 집계된다(글자 수 아님)"
+fi
+
+# --- 15 — verdicts 컨테이너 소실도 같은 채널로 집계된다 (라운드 3) ---
+cat > "$tmp/adv_badverdicts.yaml" <<'Y'
+verdicts:
+  a: {finding_id: x, verdict: reject}
+Y
+out15="$(python3 "$SCRIPT" --findings "$tmp/f_one.yaml" --adversarial "$tmp/adv_badverdicts.yaml" 2>/dev/null)"
+if printf '%s' "$out15" | grep -qE '^1 finding\(s\) dropped as malformed'; then
+  ok "15 — verdicts가 매핑이면 소실이 drop 공지에 집계된다"
+else
+  no "15 — verdicts가 매핑이면 소실이 drop 공지에 집계된다"
+fi
+
 echo ""
 echo "Total: $((PASS+FAIL)), PASS=$PASS, FAIL=$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

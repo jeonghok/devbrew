@@ -3,6 +3,39 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.14.20] — 2026-08-05
+
+### Fixed
+
+- **`synthesize_findings.py` — 라운드 2가 세운 방어의 이음매 세 곳.** 라운드 3 `/qg branch`가
+  7 리뷰어 + adversarial로 적발. 셋 다 같은 병이다: 가드를 **값 수준과 항목 수준**에만 놓고
+  **컨테이너 수준과 정체성 필드**에는 놓지 않았다.
+  - `dedup()`의 그룹핑 키 `(file, line, severity)` 중 라운드 2가 `severity`만 `_norm_sev`로
+    총함수화하고 형제 둘을 raw로 남겼다. `file: [a.py]` 하나면 defaultdict 조회가
+    `TypeError: unhashable type: 'list'` → exit 1 + **stdout 공백**, 다른 리뷰어의 진짜
+    CRITICAL까지 함께 소실. 승격 경로(`sort_findings`의 raw 비교)에도 같은 크래시가 있었고
+    그쪽은 confidence 동률까지 필요했지만 dedup의 해시는 **조건 없이** 터진다.
+    → `_norm_file`/`_norm_line`/`_normalize_identity`를 **수집 지점 한 곳**에 두고 primary·
+    승격 두 경로가 모두 통과하게 했다.
+  - `_as_list()`가 컨테이너를 통째로 버리면서 **소실 건수를 세지 않았다**. `new_findings:`를
+    매핑으로 쓰면 승격 CRITICAL 전부가 사라지는데 `dropped_malformed`는 0으로 남아
+    stdout 공지가 안 나가고, 그 공지에 keying하는 SKILL의 Dropped-finding override도
+    발화하지 못했다 — **버려진 CRITICAL이 다시 clean으로 렌더**. → `(list, dropped)` 반환으로
+    바꾸고 컨테이너 3출처(`findings`/`verdicts`/`new_findings`)를 모두 한 채널에 합산.
+  - `load_yaml()`이 `_as_list` 초크포인트를 **우회**했다 — 자기 docstring이 "ingestion 한
+    곳에서 타입을 확정한다"고 주장하는데 정작 주 수집 경로가 그 한 곳을 안 지났다.
+    `findings: "CRITICAL: ..."` 스칼라가 **글자 단위로** 순회돼 문자당 드롭 1건(39건)으로
+    보고됐다. → 세 반환 지점을 `_as_list`로 통일.
+- **drop 공지 문구 정확화** — 컨테이너 타입 소실은 "missing file/severity/summary"가 아니다.
+  두 렌더 분기 모두 `not a mapping, wrong container type, or missing …`로 정렬.
+
+### Added
+
+- `tests/test_synthesize_promoted_findings.sh` 케이스 12–15 — 비-해시가능 `file`이 리뷰를
+  죽이지 않을 것 · 컨테이너 소실 **건수**가 drop 공지에 실릴 것(2건이면 2) · 스칼라
+  `findings:`가 글자 수가 아니라 1건일 것 · `verdicts:` 컨테이너 소실도 같은 채널일 것.
+  **모두 `Total:`/exit 블록 앞에** 삽입했다(라운드 2에 뒤에 붙여 집계에서 빠진 전례).
+
 ## [2.14.19] — 2026-08-05
 
 ### Fixed

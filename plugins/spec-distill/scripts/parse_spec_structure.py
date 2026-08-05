@@ -164,7 +164,7 @@ def scan_ambiguity(text: str, patterns: list[str]) -> list[dict]:
     hits: list[dict] = []
     for lineno, line in enumerate(text.split("\n"), start=1):
         for phrase in patterns:
-            bounded = rf"(?<![\w-]){re.escape(phrase)}(?![\w-])"
+            bounded = rf"(?<![\w-]){re.escape(phrase)}(?!-)"
             for m in re.finditer(bounded, line, flags=re.IGNORECASE):
                 start = m.start()
                 if start > 0 and line[start - 1] == "~":
