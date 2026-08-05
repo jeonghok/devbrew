@@ -342,17 +342,26 @@ merge_base: <full sha>
 
 **`unrun`·`error`는 캐시에 넣지 않는다.** 실행하지 못했다는 사실은 환경 상태(설치 실패·네트워크·OOM·timeout·권한)에 달렸고 merge_base의 함수가 아니므로, 캐시하면 다음 실행에서 복구 가능한 실패가 영구화된다. `absent`는 캐시한다 — merge_base 트리의 함수라 안정적이다.
 
-**`fail`은 저장하되 적중으로 서빙하지 않는다 — 항상 재검증한다** (v3.0.0, /qg iter-1 리뷰 반영). 캐시 파일은 `.claude/quality-gates/baseline-cache/` 에 살고 `runtime-verifier`는 무제한 `Bash`로 그 형제 디렉토리에 쓰라고 지시받는다. 더구나 `run`은 저장소가 통제하는 코드(`bash tests/*.sh`·npm lifecycle·`make`·`build.rs`)를 호스트 사용자 권한으로 돌리므로, **적대적 subagent 없이도** 리뷰 대상 저장소의 평범한 테스트 하나가 `git merge-base`로 경로를 계산해 쓸 수 있다. 심어지거나 낡은 `fail`은 `(F,F)=PRE_EXISTING`으로 진짜 회귀를 숨기고, 전량 적중이면 §5.2 R4②의 기준선 워크트리 자체가 만들어지지 않아 기준선 테스트가 하나도 돌지 않는다.
+**`fail`은 저장하되 적중으로 서빙하지 않는다 — 항상 재검증한다** (v3.0.0, /qg iter-1 리뷰 반영). 캐시 파일은 `.claude/quality-gates/baseline-cache/` 에 살고 `runtime-verifier`는 무제한 `Bash`로 그 형제 디렉토리에 쓰라고 지시받는다. 더구나 `run`은 저장소가 통제하는 코드(`bash tests/*.sh`·npm lifecycle·`make`·`build.rs`)를 호스트 사용자 권한으로 돌리므로, **적대적 subagent 없이도** 리뷰 대상 저장소의 평범한 테스트 하나가 `git merge-base`로 경로를 계산해 쓸 수 있다. 심어지거나 낡은 `fail`은 `(F,F)=PRE_EXISTING`으로 진짜 회귀를 숨긴다. (전량 적중이 §5.2 R4②의 기준선 워크트리 생성 자체를 억제하던 두 번째 경로는 **AC60이 별도로 닫았다** — 아래 표의 마지막 줄. 그 경로는 `fail` 재검증만으로는 닫히지 않는다.)
 
 봉인(digest-seal — `plugins/quality-gates/scripts/qg-worktree.sh:201,262-272` 의 create-sandbox 스냅샷 선례. 이 문서의 §6.1이 아니다)을 쓰지 않는 이유: 캐시는 **실행 사이에 살아남는 것이 존재 이유**(merge_base당 1회 상각)라 세션 컨텍스트에 든 오케스트레이터 비밀로 봉인할 수 없고, 파일에 둔 비밀은 verifier의 `Bash`가 읽는다. 대신 **오류 방향의 비대칭**을 쓴다:
 
-| 잘못된 캐시 값 | 귀속 결과 | 방향 |
-|---|---|---|
-| `fail` (실제는 pass) | `PRE_EXISTING` — 결함 밖 | **회귀가 숨는다 (fail-open)** |
-| `pass` (실제는 fail) | `NEW_REGRESSION` | 결함으로 뜬다 (fail-closed) |
-| `absent` (실제는 pass/fail) | `NEW_TEST_GREEN`/`NEW_TEST_RED` | 결함으로 뜨거나 무해 |
+| 잘못된 캐시 값 | 실제값 | 귀속 결과 | 방향 |
+|---|---|---|---|
+| `fail` | pass | `PRE_EXISTING` — 결함 밖 | **회귀가 숨는다 (fail-open)** |
+| `pass` | fail | `NEW_REGRESSION` | 결함으로 뜬다 (fail-closed) |
+| `absent` | pass/fail | `NEW_TEST_GREEN`/`NEW_TEST_RED` | 결함으로 뜨거나 무해 |
+| `pass`/`absent` | **`unrun`** | `STILL_GREEN`/`NEW_TEST_*` → `closed` | **인증이 새어 나간다 (fail-open)** — 아래 |
 
-따라서 `fail`만 재검증하면 비밀 없이 충분하다. 같은 규칙이 **flaky 기준선 red의 영구 동결**도 함께 닫는다 — 한 번 빨갛게 나온 unit이 브랜치 수명 내내 `PRE_EXISTING`을 찍어내던 경로가 사라진다. 상각은 `pass`·`absent`(대부분)에 대해 그대로 유지된다.
+**표의 마지막 줄이 iter-2 에서 추가됐다 (`/qg` security-reviewer, CRITICAL).** 앞의 세 줄은 실제값을 pass 또는 fail 로만 놓고 6조합을 셌다 — spec-reviewer 가 "전수 케이스 분석"으로 exhaustive 를 독립 확인했지만 그 리뷰도 **같은 전제를 공유**했다. 다른 렌즈(보안)를 가진 리뷰어만 이 줄을 봤다.
+
+실제값이 `unrun` 인 줄은 정직한 캐시가 만들 수 없다(`put` 이 `unrun` 을 쓰지 않는다 — AC58). **그러나 심어진 것은 만든다.** 사슬: 선택된 전 unit 에 `pass` 를 심으면 → 전량 적중 → "미적중분이 있을 때만" 이던 R4②가 **기준선 워크트리를 아예 만들지 않음** → merge_base 에 어댑터가 없어 원래 전량 `unrun` → `BASELINE_UNRUNNABLE` → `degraded` → PASS 불가였던 실행이 `STILL_GREEN` → `closed` → **PASS**.
+
+> **이 줄은 결함 축이 아니라 인증 축이다.** 그래서 `fail` 전용 재검증이 닿지 않는다 — 위 세 줄의 논증은 여전히 옳지만 *충분하지 않다*. **"따라서 `fail` 만 재검증하면 비밀 없이 충분하다"는 쓰인 그대로 거짓이었다.**
+
+닫는 방법은 캐시 안이 아니라 밖에 있다 (**AC60**): R4②의 기준선 워크트리 생성과 `detect` 를 **캐시 적중 여부와 무관하게 항상** 수행하고, 그 `detect` 결과를 `diff-test-results.py --baseline-detected`(필수 인자)로 넘긴다. 러너가 그 집합에 없으면 캐시가 무엇을 내줬든 기준선 축이 `unrun` 으로 강등된다. 즉 **캐시 행은 실행 비용만 낮출 수 있고 `attribution_status: closed` 의 유일 근거가 될 수 없다.** 상각되는 것은 테스트 *실행*이지 기준선 *관측*이 아니다.
+
+`fail` 재검증은 그대로 유지된다 — 같은 규칙이 **flaky 기준선 red의 영구 동결**도 함께 닫는다(한 번 빨갛게 나온 unit이 브랜치 수명 내내 `PRE_EXISTING`을 찍어내던 경로가 사라진다). 상각은 `pass`·`absent`(대부분)에 대해 그대로 유지된다.
 
 **소유 컴포넌트 — `scripts/baseline-cache.sh` (신규).** 캐시의 조회·검증·부분적중·갱신·동시성을 **한 스크립트가 전부** 갖는다. §5.1의 3분업 어디에도 안 들어가는 로직을 남기지 않기 위한 것이며, 오케스트레이터는 이 두 서브커맨드만 호출한다:
 
@@ -572,6 +581,11 @@ exit: 0 · 4 = 입력 YAML 개수 != --expected-adapters (낙관적 누락 방�
 **`granularity`가 표를 바꾸지는 않는다 — 원장 상태를 바꾼다 (라운드 2 Finding A).** `diff-test-results.py`는 `--granularity file|package|bulk`를 **명시적 인자로** 받는다(어댑터 표를 재구현하지 않는다). 8종 귀속 표는 granularity와 무관하게 **총 함수로 그대로** 적용되고 — `BULK` unit의 fail/fail도 `PRE_EXISTING`이다 — 대신 다음 한 줄이 얹힌다:
 
 > `granularity == bulk` 이고 어떤 unit이 `PRE_EXISTING`이면, 그 실행의 **`attribution` 원장 차원을 `degraded`로** 표시한다. 그 안에 새 회귀가 숨었는지 구분할 수 없기 때문이다.
+
+**같은 층에서 두 줄이 더 얹힌다 (iter-2, AC61).** 원장 층은 카테고리를 바꾸지 않고 인증만 막을 수 있는 자리라, 이 라운드의 두 fail-open 이 여기로 들어온다:
+
+> · 어느 축에든 `error` 상태가 닿았으면 `attribution` 원장 차원은 `degraded` 다. `error` = 러너가 0/1/127 이 아닌 코드로 끝났다 = **판정하지 못했다**. 그런데 `error` 는 fail 축으로 접히므로 양측 `error` 는 `(F,F)=PRE_EXISTING` → DEFECTS 밖 → `closed` → **테스트를 하나도 판정하지 않고 PASS** 였다. 축을 옮기지 않고 원장에서 막는 이유: 비대칭 `(P,error)` 는 확증 회귀로 남아야 하고, iter-2 에서 이 방향을 `unrun` 축으로 옮긴 수정이 "이 diff 가 import 를 깼다"를 terminal FAIL 에서 비차단으로 내렸다(실측).
+> · `SILENT_DROP` 이 하나라도 있으면 `attribution` 원장 차원은 `degraded` 다. §5.10 이 이미 verdict 를 `SKIP_WITH_EVIDENCE` 로 cap 하지만, 원장에 `closed` 라고 적히면 **영구 기록이 "attribution 정상 종료" 라고 말한다** — 100% 가 drop 된 실행에서도. verdict 층과 원장 층이 같은 사실에 대해 다른 말을 하면 안 된다.
 
 즉 **귀속 카테고리(§5.5)와 원장 상태(§5.6)와 verdict(§5.7)는 서로 다른 층**이고, bulk-only의 모호성은 카테고리 층이 아니라 원장 층에서 표현된다. 이렇게 하면 AC11의 *"8종 전부"* 가 granularity와 무관하게 참이 되고, §5.9의 bulk 표와 이 표가 서로 다른 답을 주는 모순이 사라진다.
 
@@ -860,6 +874,17 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 - **AC58** (환경-유래 상태 미캐시) — `baseline-cache.sh put`이 `unrun`과 **`error`** 를 캐시에 기록하지 않는다. 기록 가능한 상태는 `pass`·`fail`·`absent` 셋이다. 근거는 AC40과 동일하다: 두 상태 모두 환경(설치 실패·네트워크·OOM·timeout·권한)에 달렸고 merge_base의 함수가 아니므로, 캐시하면 복구 가능한 실패가 영구화된다.
 - **AC59** (`fail` 강제 재검증) — `baseline-cache.sh get`의 **적중 집합이 `pass`·`absent` 두 상태로 한정된다.** `fail`은 파일에 저장되지만 적중으로 emit되지 않으므로 호출자의 미적중분에 들어가 R4②에서 재실행된다. 이 규칙이 (a) 봉인 없는 캐시에 심어진 `fail`이 회귀를 `PRE_EXISTING`으로 숨기는 경로와 (b) flaky 기준선 red의 영구 동결을 **하나의 변경으로** 닫는다. 이전 버전이 남긴 캐시의 `error`·`fail` 행도 같은 필터에 걸려 스스로 낫는다.
 
+### 6.6 `/qg` iter-2 리뷰에서 추가된 AC (AC60–AC63)
+
+번호는 append-only(§6.1 preamble 승계). 네 규칙 모두 iter-2 의 CRITICAL 4건에 대응하고, T58–T61 · M29–M32 와 함께 들어온다.
+
+**공통 근거 — 이 라운드의 결함은 전부 한 모양이다.** §5.4 의 비대칭 표(AC59)와 §5.9 의 "판정할 수 있는 파일만 claim", R4② 의 "두 집합이 다르면 한쪽에만 있는 어댑터의 unit 은 반대편에서 `unrun` 이 된다" — 셋 다 **산문으로만 존재했고 집행자가 없었다.** 아래 AC 는 각 규칙에 결정론 소유자를 하나씩 붙인다.
+
+- **AC60** (기준선 관측 접지) — `diff-test-results.py`의 per-adapter 모드가 **`--baseline-detected`를 필수 인자로** 받는다(생략 시 exit 2, 빈 값은 exit 4, 감지 0개는 리터럴 `NONE`). `--runner`가 이 집합의 **원소가 아니면**(부분문자열 아님) 그 어댑터의 모든 unit 은 기준선 축이 `unrun` 으로 강등돼 `BASELINE_UNRUNNABLE` → `degraded` → PASS 불가가 된다. **캐시 행이 무엇을 내줬든 무관하다.** 이 인자를 정직하게 만드는 경로는 merge_base 워크트리에서 `detect`를 돌리는 것뿐이므로, 심어진 캐시가 전량 적중을 만들어 R4②를 억제하던 경로가 사라진다 — §5.4 의 비대칭 표는 실제값이 pass/fail 인 줄만 셌기 때문에 **실제값이 `unrun`인 줄**을 놓쳤고, 그 줄은 결함 축이 아니라 **인증 축**이라 `fail` 전용 재검증(AC59)이 닿지 않는다. 짝으로 R4②의 기준선 워크트리 생성은 **캐시 적중 여부와 무관하게 항상** 수행된다(상각 대상은 테스트 *실행*이지 기준선 *관측*이 아니다).
+- **AC61** (판정 못 한 실행은 인증하지 않는다) — `diff-test-results.py`가 어느 축에든 `error` 상태가 닿은 어댑터를 `attribution_status: closed`로 내보내지 않는다. `error`는 fail 축으로 접히므로 **양측 `error`가 `(F,F)=PRE_EXISTING` → DEFECTS 밖 → `closed` → 테스트를 하나도 판정하지 않고 PASS**였다. 축은 그대로 두고 **인증만** 막는 이유: 비대칭 `(P,error)`는 확증 회귀로 남아야 하고(iter-2 에서 이 방향을 `unrun`으로 옮긴 수정이 "이 diff 가 import 를 깼다"를 terminal FAIL 에서 비차단으로 내렸다 — 실측), 라벨을 바꾸면 8종 카테고리 계약(AC11)이 깨진다. **종료 코드를 러너별로 열거하지 않는다** — 열거는 공간·시간 양쪽으로 fail-open 이고, 같은 코드가 러너마다 다른 의미를 갖는다. *잔여(명시)*: 러너가 판정 실패를 **exit 1**로 내면(go 컴파일 에러가 실측 exit 1) 이 규칙에 닿지 않는다. 출력 파서 없이는 테스트 실패와 구분 불가이며, 러너별 파서는 §5.9가 금지한다.
+- **AC62** (기준선 ref 사실 공개) — `resolve-baseline.sh`가 `same_as_head`(yes|no|-)와 `ahead`(커밋 수|-)를 **6키 계약의 일부로** emit 한다(degrade 경로 포함 — 키 누락은 소비자의 빈-문자열 조회를 fail-open 으로 만든다). Runtime 게이트는 `degraded: yes` **또는** `same_as_head: yes`를 차등 증거 불가로 읽어 PASS 를 막는다. **이 스크립트는 판정하지 않는다** — `merge_base == HEAD`는 정상(`main` 위 미커밋 작업)으로도 변조(base 후보 ref 는 전부 공유 common gitdir 에 있고 `run`이 실행하는 저장소 코드가 `git update-ref`를 할 수 있다)로도 생기며 구분할 방법이 없기 때문이다. Review 게이트의 changes-exist floor 는 이 키를 **읽지 않는다**(거기서는 `worktree_dirty`가 변경을 잡으므로 정상 케이스를 죽이면 v2.6.0 이 닫은 false-clean 이 돌아온다). *잔여(명시)*: base 를 HEAD 가 아니라 브랜치 **중간 커밋**으로 옮기는 부분 변조는 `same_as_head: no`이고 기준선 트리도 만들어진다 — 신뢰 채널이 없어 결정론으로 닫을 수 없고, `ahead` 공개가 사람에게 보이는 유일한 신호다.
+- **AC63** (unittest 판정가능성 술어) — `unittest_can_judge`가 **선언 위치에 앵커된** 두 신호만 받는다: 줄 시작의 `class <ident>(…TestCase…)` 또는 `def load_tests(`. 앵커 없는 파일-전체 부분문자열(`grep -qE '(unittest|TestCase)'`)은 `from unittest.mock import patch`·`# run with pytest, not unittest`·`class TestCaseHelpers:`를 전부 통과시켰고, 실측으로 claim → `discover` 0개 수집 → **exit 0 → `pass`**가 재현됐다(같은 파일을 pytest 로 돌리면 `1 failed`). 미매치는 `unclaimed` → `verification: degraded`(AC53)로 fail-closed 다. 이 게이트는 **`unittest` 어댑터에만** 적용된다 — pytest 는 bare `def test_`를 정상 수집하므로, 한정을 빼면 평범한 pytest 레포가 구조적으로 인증 불가가 된다.
+
 ---
 
 ## 7. Files to Modify
@@ -975,8 +1000,12 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 | T55 | 계획 산문 비용 신호가 3단계 범주값 중 하나 · 숫자 시간 문자열 0회 | AC57 |
 | T56 | `put` 후 **캐시 파일 본문을 직접 검사** — `error` 행 부재 · `pass` 행 존재(양의 짝). get 을 통해 재면 get 의 필터가 put 의 필터를 가려 mutation 이 GREEN 이 된다(실측) | AC58 |
 | T57 | 손으로 심은 `fail` 행이 적중으로 나오지 않고, **같은 파일의 `pass` 행은 정상 적중** + `exit 0`(옛 캐시는 손상이 아니다). 양의 짝이 없으면 "get 이 아무것도 안 내주는" mutation 이 통과한다 | AC59 |
+| T58 | `--baseline-detected` — (a) 러너가 집합 밖이면 **양측 `pass` 인데도** `BASELINE_UNRUNNABLE`/`degraded` (심어진 캐시의 정확한 공격 형상) · (b) 같은 입력이 grounded 면 `STILL_GREEN`/`closed`(양의 짝) · (c) 플래그 생략 → exit 2 · (d) 빈 값 → exit 4 · (e) `NONE` → 아무도 grounded 아님 · (f) 멤버십이 **원소**이지 부분문자열이 아님 | AC60 |
+| T59 | `error` 가 baseline·head·양측 어디에 있어도 `attribution_status: degraded` · **`error` 없는 같은 형상은 `closed`**(양의 짝 — 없으면 "항상 degraded" mutation 이 통과) · `(pass, error)` 는 여전히 `NEW_REGRESSION` + `confirmed_product_defect: true`(과잉 강화 방지) | AC61 |
+| T60 | `resolve-baseline.sh` — (a) feature 브랜치 → `same_as_head: no`/`ahead: 1` · (b) `git update-ref refs/heads/main HEAD` 후 → `same_as_head: yes`(`degraded` 는 여전히 no — 별개 키) · (c) degrade 경로도 6키 전부 · (d) **`main` 위 미커밋 변경에서 `check-review-scope.sh` 가 `changes_exist: yes`/`degraded: no` 유지**(floor 보존 락) | AC62 |
+| T61 | `assign` — (a) `from unittest.mock import patch`·`# … not unittest` 주석·`class TestCaseHelpers:` 3축 전부 `unclaimed` · (b) django 상속·다중 상속·`load_tests` 3형태는 여전히 `unittest` claim(양의 짝) · (c) **pytest 감지 레포의 bare `def test_` 는 `pytest` 로 claim**(게이트가 unittest 한정임을 잠금) | AC63 |
 
-**AC ↔ 검증 완전성.** **AC1–AC59 전부**가 위 T 또는 §8.3의 V에 대응한다. 자동 테스트가 없는 것은 **AC20 하나**이며 `V4`(대화형 게이트 미발화)가 담당한다 — `AskUserQuestion` 발화 여부는 대화형이라 자동화하지 않는다. 이 매핑 자체를 구현 시 표로 유지하고, **AC 추가 시 대응 T/V 없이 머지하지 않는다.** (라운드 3에서 이 선언문이 AC38–AC44를 반영하지 않은 채 stale했다 — 선언문도 갱신 대상이다.)
+**AC ↔ 검증 완전성.** **AC1–AC63 전부**가 위 T 또는 §8.3의 V에 대응한다. 자동 테스트가 없는 것은 **AC20 하나**이며 `V4`(대화형 게이트 미발화)가 담당한다 — `AskUserQuestion` 발화 여부는 대화형이라 자동화하지 않는다. 이 매핑 자체를 구현 시 표로 유지하고, **AC 추가 시 대응 T/V 없이 머지하지 않는다.** (라운드 3에서 이 선언문이 AC38–AC44를 반영하지 않은 채 stale했다 — 선언문도 갱신 대상이다.)
 
 > **T20의 형태 주의** — 버전을 `"version": "3.0.0"` 리터럴로 핀하면 doc-only bump마다 stale-red가 된다. major 불변식만 검사하고 patch digit은 unpin한다.
 
@@ -997,6 +1026,10 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 | **M9** | `resolve-baseline.sh`의 shallow 감지 제거 | T2 |
 | **M10** | `run-test-selection.sh`가 exit 3과 테스트 실패를 뭉침 | T7·T27 |
 | **M11** | 영향분 0개일 때 `SKIP_WITH_EVIDENCE` 대신 `PASS`를 냄 | T31 — **LD5 백스톱의 "누락 방향" 절반을 지키는 유일한 mutation** |
+| **M29** | `--baseline-detected` 를 선택 인자로 되돌림 / grounded 를 상수 참으로 / 축 강등(`b_axis = "U"`) 삭제 / **극성 반전**(`if not runner_grounded` → `if runner_grounded`) / 멤버십을 부분문자열로 | T58 (5축 각각) |
+| **M30** | degraded 식에서 `error_axis_seen` 삭제 / **역방향** `error_axis_seen` 을 항상 참으로(과잉 강화) / 빈 `--baseline-detected` 허용 | T59·T58 — 양방향이라야 "언제나 degraded" 가 막힌다 |
+| **M31** | `same_as_head` **극성 반전**(`==` → `!=`) / 상수 `no` / degrade 경로 키 삭제 / `ahead` 상수 / **`check-review-scope.sh` 가 `same_as_head` 를 읽어 degrade** | T60 (마지막 것이 floor 보존 락의 이빨) |
+| **M32** | `unittest_can_judge` 를 옛 부분문자열 술어로 복원 / 항상 판정 불가로(양의 짝 파괴) / `[[ "$claimed" == "unittest" ]] &&` 한정 삭제 | T61 (3축 각각) |
 | **M12** | `run-test-selection.sh` 호출을 verifier dispatch 블록 **안**으로 옮김 | T22 — 불변식 ② 무력화. 결과값이 같아 보이므로 **위치**를 검사해야 잡힌다 |
 | **M13** | `baseline-cache.sh get`이 손상 파일을 부분 파싱해 일부를 적중으로 냄 | T23 |
 | **M14** | 미감지 러너에서 exit 3 대신 `npm test`를 추측 실행 | T25 |

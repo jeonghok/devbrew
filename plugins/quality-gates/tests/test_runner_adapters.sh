@@ -264,7 +264,7 @@ case_missing_toolchain_blocks_pass() {
   printf 'pkg\n' > "$w/expected.txt"; printf '%s\n' "$out" > "$w/side.tsv"
   yaml=$(python3 "$PLUGIN_ROOT/scripts/diff-test-results.py" \
            --expected "$w/expected.txt" --baseline "$w/side.tsv" --head "$w/side.tsv" \
-           --granularity package --runner go 2>&1)
+           --granularity package --runner go --baseline-detected go 2>&1)
   if printf '%s\n' "$yaml" | grep -q 'baseline_unrunnable: true' \
      && printf '%s\n' "$yaml" | grep -q 'attribution_status: degraded'; then
     pass "toolchain 부재가 PASS 를 막는다 (baseline_unrunnable + attribution degraded)"
@@ -417,7 +417,8 @@ case_env_dir_gate_uses_directory_pattern() {
                             || fail "거부했어야 할 트리에서 uv 가 호출됨 ($(cat "$t/.observed"))"
   printf 'tests/test_a.py\n' > "$t/expected.txt"; printf '%s\n' "$out" > "$t/side.tsv"
   yaml=$(python3 "$PLUGIN_ROOT/scripts/diff-test-results.py" --expected "$t/expected.txt" \
-           --baseline "$t/side.tsv" --head "$t/side.tsv" --granularity file --runner pytest 2>&1)
+           --baseline "$t/side.tsv" --head "$t/side.tsv" --granularity file --runner pytest \
+           --baseline-detected pytest 2>&1)
   printf '%s\n' "$yaml" | grep -q 'baseline_unrunnable: true' \
     && pass "그 degrade 가 PASS 를 막는다 (baseline_unrunnable)" || fail "PASS 가 가능:
 $yaml"
@@ -612,7 +613,7 @@ case_asymmetric_product_breakage_is_a_defect() {
     printf '%s\n' "$out" > "$d/head.tsv"
     out=$(python3 "$PLUGIN_ROOT/scripts/diff-test-results.py" \
             --expected "$d/expected.txt" --baseline "$d/base.tsv" --head "$d/head.tsv" \
-            --granularity file --runner pytest 2>/dev/null \
+            --granularity file --runner pytest --baseline-detected pytest 2>/dev/null \
           | awk '$1=="confirmed_product_defect:"{print $2}')
     if [[ "$out" != "true" ]]; then
       fail "기준선 pass · HEAD exit ${code} → confirmed_product_defect=${out} (true 여야 함)"; ok=0

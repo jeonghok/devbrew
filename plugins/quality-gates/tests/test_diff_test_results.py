@@ -23,8 +23,19 @@ def load_module():
     return mod
 
 
-def run_diff(expected, baseline, head, granularity="file", runner="pytest"):
-    """expected: [unit], baseline/head: [(unit, status, code)] → (rc, stdout, stderr)"""
+_UNSET = object()
+
+
+def run_diff(expected, baseline, head, granularity="file", runner="pytest",
+             baseline_detected=_UNSET):
+    """expected: [unit], baseline/head: [(unit, status, code)] → (rc, stdout, stderr)
+
+    `baseline_detected` 기본값은 **`runner` 자신** — 기준선 트리에서 그 어댑터가
+    감지된 정상 상태다. 기존 케이스의 의미가 바뀌지 않는다. `None` 을 넘기면
+    플래그 자체를 생략한다 (필수 인자 검사용).
+    """
+    if baseline_detected is _UNSET:
+        baseline_detected = runner
     with tempfile.TemporaryDirectory() as d:
         p = Path(d)
         (p / "e.txt").write_text("\n".join(expected) + "\n", encoding="utf-8")
@@ -32,14 +43,14 @@ def run_diff(expected, baseline, head, granularity="file", runner="pytest"):
             (p / name).write_text(
                 "".join(f"{u}\t{s}\t{c}\n" for u, s, c in rows), encoding="utf-8"
             )
-        r = subprocess.run(
-            [sys.executable, str(SCRIPT),
-             "--expected", str(p / "e.txt"),
-             "--baseline", str(p / "b.tsv"),
-             "--head", str(p / "h.tsv"),
-             "--granularity", granularity, "--runner", runner],
-            capture_output=True, text=True,
-        )
+        argv = [sys.executable, str(SCRIPT),
+                "--expected", str(p / "e.txt"),
+                "--baseline", str(p / "b.tsv"),
+                "--head", str(p / "h.tsv"),
+                "--granularity", granularity, "--runner", runner]
+        if baseline_detected is not None:
+            argv += ["--baseline-detected", baseline_detected]
+        r = subprocess.run(argv, capture_output=True, text=True)
     return r.returncode, r.stdout, r.stderr
 
 
@@ -137,6 +148,96 @@ class TestAttribution(unittest.TestCase):
         self.assertEqual(verdict_of(out, "a"), "NEW_REGRESSION")
         self.assertIn("(error)", out)
 
+    # ── /qg iter-2 CRITICAL — 판정 못 한 실행은 인증하지 않는다 ────────────────
+    #
+    # `error` 는 fail 축으로 접히므로 **양측** error 는 `(F,F)=PRE_EXISTING` 이었고,
+    # PRE_EXISTING 은 DEFECTS 밖이라 `closed` → R8 의 PASS 행을 그대로 충족했다.
+    # 즉 pytest 가 수집 0개(exit 5)로 끝났거나 import 가 깨졌거나(exit 2) 잘못된 ini
+    # 옵션(exit 4)이면 **테스트를 하나도 판정하지 않고 PASS** 였다.
+    #
+    # 이 락은 라벨(PRE_EXISTING)이 아니라 **인증 여부**를 잰다 — 라벨을 바꾸는 수정은
+    # 8종 카테고리 계약(AC11)을 깨고, iter-2 에서 실제로 그 방향의 수정이 더 나쁜
+    # 결함을 만들었다.
+    def test_error_on_either_axis_blocks_certification(self):
+        for label, b, h in (
+            ("symmetric", ("a", "error", "5"), ("a", "error", "5")),
+            ("baseline",  ("a", "error", "5"), ("a", "pass",  "0")),
+            ("head",      ("a", "pass",  "0"), ("a", "error", "5")),
+        ):
+            with self.subTest(label):
+                rc, out, _ = run_diff(["a"], [b], [h])
+                self.assertEqual(rc, 0)
+                self.assertEqual(flag_of(out, "attribution_status"), "degraded",
+                                 f"{label}: {out}")
+        # 양성 짝 — error 가 없으면 같은 형상이 closed 다. 이것이 없으면 위 assert 는
+        # "언제나 degraded" 로 통과한다 (부재 락에는 소비-위치 양성 짝이 필요하다).
+        rc, out, _ = run_diff(["a"], [("a", "fail", "1")], [("a", "fail", "1")])
+        self.assertEqual(flag_of(out, "attribution_status"), "closed", out)
+
+    # 위 강화가 **비대칭 방향을 죽이지 않았음**을 잠근다. iter-2 에서 내가 낸 회귀가
+    # 정확히 이 방향이었다 — "이 diff 가 import 를 깼다"를 비차단으로 내려보냈다.
+    # degrade 는 인증을 막을 뿐 확증 결함을 결함이 아닌 것으로 만들지 않는다.
+    def test_error_degrade_does_not_swallow_the_regression(self):
+        rc, out, _ = run_diff(["a"], [("a", "pass", "0")], [("a", "error", "2")])
+        self.assertEqual(rc, 0)
+        self.assertEqual(verdict_of(out, "a"), "NEW_REGRESSION")
+        self.assertEqual(flag_of(out, "confirmed_product_defect"), "true", out)
+
+    # ── /qg iter-2 CRITICAL — 기준선 행은 그 어댑터가 merge_base 에 실재할 때만 증거 ──
+    #
+    # 심어진 캐시 `pass` 로 R4① 이 전량 적중이 되면 조건부 R4②가 기준선 워크트리를
+    # 만들지 않는다. merge_base 에 어댑터가 없어 원래 전량 `unrun` →
+    # BASELINE_UNRUNNABLE → PASS 불가였던 실행이 STILL_GREEN → closed → PASS 가 된다.
+    # §5.4 의 비대칭 표는 실제값이 pass/fail 인 줄만 셌기 때문에 이 줄을 놓쳤다 —
+    # 결함 축이 아니라 **인증 축**이라 `fail` 전용 재검증이 닿지 않는다.
+    def test_ungrounded_runner_forces_baseline_axis_unrun(self):
+        # 정확히 그 공격 형상: 양측 pass (심어진 기준선 + 진짜 HEAD green).
+        rc, out, _ = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")],
+                              runner="pytest", baseline_detected="go")
+        self.assertEqual(rc, 0)
+        self.assertEqual(verdict_of(out, "a"), "BASELINE_UNRUNNABLE", out)
+        self.assertEqual(flag_of(out, "baseline_unrunnable"), "true")
+        self.assertEqual(flag_of(out, "attribution_status"), "degraded")
+        self.assertIn("어댑터 pytest 없음", out)
+        # 양성 짝 — 같은 입력이 grounded 면 STILL_GREEN/closed 다.
+        rc2, out2, _ = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")],
+                                runner="pytest", baseline_detected="pytest")
+        self.assertEqual(rc2, 0)
+        self.assertEqual(verdict_of(out2, "a"), "STILL_GREEN", out2)
+        self.assertEqual(flag_of(out2, "attribution_status"), "closed")
+
+    # 러너 이름은 **부분문자열이 아니라 원소**로 대조한다. `pytest` 가 감지되지
+    # 않았는데 `pytest-asyncio` 같은 이름이 집합에 있다고 grounded 가 되면 안 된다.
+    def test_grounding_is_set_membership_not_substring(self):
+        rc, out, _ = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")],
+                              runner="test", baseline_detected="pytest vitest")
+        self.assertEqual(rc, 0)
+        self.assertEqual(verdict_of(out, "a"), "BASELINE_UNRUNNABLE", out)
+
+    # `NONE` 센티널 = 기준선 트리에서 감지 0개 (또는 R-init 이 degraded/same_as_head
+    # 로 R4 를 통째로 건너뜀). 어떤 러너도 grounded 가 아니다.
+    def test_none_sentinel_grounds_nothing(self):
+        rc, out, _ = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")],
+                              baseline_detected="NONE")
+        self.assertEqual(rc, 0)
+        self.assertEqual(verdict_of(out, "a"), "BASELINE_UNRUNNABLE", out)
+
+    # **이 플래그의 이빨은 필수성에 있다.** 선택 인자로 두고 부재를 "전부 감지됨"
+    # 으로 읽으면, 값을 못 구한 호출자(= 기준선 트리를 안 만든 호출자)가 정확히 이
+    # 검사가 막으려던 경로로 통과한다.
+    def test_baseline_detected_is_required(self):
+        rc, out, err = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")],
+                                baseline_detected=None)
+        self.assertEqual(rc, 2, out)
+        self.assertIn("--baseline-detected", err)
+
+    # 빈 문자열도 통과시키지 않는다 — "감지 0개"는 `NONE` 으로 **명시**해야 한다.
+    def test_empty_baseline_detected_is_exit_4(self):
+        rc, out, _ = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")],
+                              baseline_detected="   ")
+        self.assertEqual(rc, 4)
+        self.assertEqual(out.strip(), "")
+
     # T13 + AC16 — degrade 경로의 라벨에는 `_SUSPECT` 접미사가 붙는다
     def test_degrade_labels_carry_suspect_suffix(self):
         rc, out, _ = run_diff(["a"], [("a", "unrun", "-")], [("a", "fail", "1")])
@@ -177,7 +278,8 @@ class TestAttribution(unittest.TestCase):
                  "--expected", str(p / "e.txt"),
                  "--baseline", str(p / "missing.tsv"),
                  "--head", str(p / "h.tsv"),
-                 "--granularity", "file", "--runner", "pytest"],
+                 "--granularity", "file", "--runner", "pytest",
+                 "--baseline-detected", "pytest"],
                 capture_output=True, text=True,
             )
         self.assertEqual(r.returncode, 4)
@@ -251,7 +353,8 @@ class TestAttribution(unittest.TestCase):
                  "--expected", str(p / "e.txt"),
                  "--baseline", str(p / "b.tsv"),
                  "--head", str(p / "missing.tsv"),
-                 "--granularity", "file", "--runner", "pytest"],
+                 "--granularity", "file", "--runner", "pytest",
+                 "--baseline-detected", "pytest"],
                 capture_output=True, text=True,
             )
         self.assertEqual(r.returncode, 4)
@@ -267,7 +370,8 @@ class TestAttribution(unittest.TestCase):
                  "--expected", str(p / "missing.txt"),
                  "--baseline", str(p / "b.tsv"),
                  "--head", str(p / "h.tsv"),
-                 "--granularity", "file", "--runner", "pytest"],
+                 "--granularity", "file", "--runner", "pytest",
+                 "--baseline-detected", "pytest"],
                 capture_output=True, text=True,
             )
         self.assertEqual(r.returncode, 4)

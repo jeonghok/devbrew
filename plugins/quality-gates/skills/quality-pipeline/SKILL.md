@@ -652,10 +652,24 @@ If `effective_skip_runtime` was set, skip this entire section.
 "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-baseline.sh"
 ```
 
-4키(`base` / `base_ref` / `merge_base` / `degraded`)를 캡처한다. `degraded: yes` 면
-차등 실행이 불가능하므로 loud advisory 를 내고 **verdict 를 PASS 로 올리지 않는다**:
+6키(`base` / `base_ref` / `merge_base` / `degraded` / `same_as_head` / `ahead`)를
+캡처한다. **`degraded: yes` 또는 `same_as_head: yes` 면** 차등 실행이 불가능하므로
+loud advisory 를 내고 **verdict 를 PASS 로 올리지 않는다**:
 
 > `> [quality-gates] baseline 확정 불가 (<사유>) — 차등 귀속 없이 진행, verdict 는 PASS 불가`
+
+`same_as_head: yes` 는 기준선 트리가 리뷰 대상 코드 **자체**라는 뜻이고, 그러면 모든
+진짜 회귀가 `(fail,fail)=PRE_EXISTING` 으로 접힌다. 이 상태는 정상(`main` 위 미커밋
+작업)으로도 변조(base 후보 ref 는 공유 common gitdir 에 있고 `run` 이 돌리는 저장소
+코드가 `git update-ref` 를 할 수 있다)로도 생기며, **둘을 구분할 방법이 없으므로 둘 다
+차등 증거 없음으로 처리한다**. Review 게이트의 changes-exist floor 는 이 키를 읽지
+않는다 — 거기서는 `worktree_dirty` 가 변경을 잡으므로 정상 케이스가 죽지 않는다.
+
+`degraded: no` 일 때는 baseline 한 줄을 그대로 출력한다 — `ahead` 는 **부분 변조
+disclosure** 다 (base 를 HEAD 가 아니라 브랜치 중간 커밋으로 옮기면 `same_as_head` 는
+no 이고 기준선 트리도 만들어진다; 그 창을 닫는 결정론 수단은 없다):
+
+> `> [quality-gates] baseline: <base> @ <merge_base 앞 12자> (<ahead>커밋 앞섬)`
 
 **Step R1a — 러너 어댑터 감지 (HEAD 트리).**
 
@@ -753,7 +767,9 @@ R2 의 5번이 곧 생략 목록이다. **생략 목록이 비어 있으면 `Ask
 
 **Step R4 — 기준선 측 (오케스트레이터 단독 — verifier 미개입).**
 
-`degraded: yes` 면 이 스텝 전체를 건너뛰고 R8 에서 `BASELINE_UNRUNNABLE` 로 처리한다.
+R-init 이 `degraded: yes` **또는** `same_as_head: yes` 를 냈으면 이 스텝 전체를
+건너뛰고 R8 에서 `BASELINE_UNRUNNABLE` 로 처리한다. 그때 R6 에 넘길
+`baseline_detected` 는 `NONE` 이다 (기준선 트리를 만들지 않았으므로 관측이 없다).
 건너뛸 때 기준선 행 파일은 **비우지 않고** 선택한 unit 마다 `<unit>\tunrun\t-` 로
 채운다 — 빈 파일을 R6 에 넘기면 행 부재가 `SILENT_DROP` 으로 라벨된다. 둘 다 PASS 는
 아니지만 보고되는 사유가 달라진다(기준선을 못 돌린 것 vs 고른 것이 사라진 것).
@@ -783,11 +799,25 @@ R2 의 5번이 곧 생략 목록이다. **생략 목록이 비어 있으면 `Ask
 기준선에서 빨갰던 unit 은 매번 미적중분에 들어가 ②에서 다시 돈다 — 상각은 `pass`·
 `absent` 에 대해 그대로 유지된다(대부분).
 
-② 미적중분이 있을 때만 기준선 워크트리를 만든다:
+② **기준선 워크트리는 캐시 적중 여부와 무관하게 항상 만든다** (전량 적중이어도):
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-baseline "$merge_base" "<session-id>"
 ```
+
+**"미적중분이 있을 때만" 이었던 조건을 제거한 것이 이 스텝의 핵심이다.** 캐시는
+`.claude/quality-gates/` 아래 있고 세션보다 오래 살며 verifier 의 Bash 와 `run` 이
+실행하는 저장소 코드가 닿는다. 선택된 전 unit 에 `pass` 를 심으면 ①이 전량 적중이
+되고, 조건부 ②는 **기준선 트리를 아예 만들지 않는다** — merge_base 에 그 어댑터가
+없어서 원래 전량 `unrun` → `BASELINE_UNRUNNABLE` → PASS 불가였던 실행이
+`STILL_GREEN` → `closed` → **PASS** 가 된다. §5.4 의 비대칭 논증은 실제값이
+`unrun` 인 이 줄을 세지 않았다 — 결함 축이 아니라 **인증 축**이라 `fail` 전용
+재검증이 닿지 않는다.
+
+이 규칙에는 R6 에 **집행자가 있다**: `diff-test-results.py --baseline-detected` 는
+필수 인자이고, 값을 정직하게 만드는 경로는 이 트리에서 `detect` 를 돌리는 것뿐이다.
+캐시 행은 ③의 실행 비용만 낮출 수 있고 `attribution_status: closed` 의 유일 근거가
+될 수 없다.
 
 그 트리에서 **`detect` 를 다시 실행한다 — HEAD 의 어댑터 집합을 재사용하지 않는다.**
 diff 가 테스트 인프라 자체를 바꾸는 경우(unittest→pytest 마이그레이션, `package.json`
@@ -796,7 +826,11 @@ diff 가 테스트 인프라 자체를 바꾸는 경우(unittest→pytest 마이
 있는 어댑터의 unit 은 반대편에서 `unrun` 이 되어 귀속이 degrade 되고, 그 사실을 R2
 산문과 `gap` 에 명시한다.
 
-그다음 어댑터마다:
+이 `detect` 의 러너 이름 집합을 **`baseline_detected` 로 캡처해 R6 의 매 어댑터
+호출에 그대로 넘긴다** (감지 0개면 리터럴 `NONE`). 위 문단의 규칙을 실제로 집행하는
+것은 이 값이다 — 문장이 아니라.
+
+그다음 어댑터마다 (미적중분이 있을 때만 — 트리는 이미 만들어져 있다):
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" run \
@@ -804,6 +838,8 @@ diff 가 테스트 인프라 자체를 바꾸는 경우(unittest→pytest 마이
 ```
 
 bulk 가 red 면 실패한 unit 에 대해서만 `per-unit` 으로 재실행한다 (2단 구조).
+미적중분이 비어 있으면 이 호출은 생략한다 — **트리 생성과 `detect` 는 생략하지
+않는다.** 상각되는 것은 테스트 *실행*이지 기준선 *관측*이 아니다.
 
 ③ 결과를 캐시에 기록하고 기준선 워크트리를 폐기한다:
 
@@ -944,11 +980,20 @@ verifier 가 디버깅 중 테스트를 돌리는 것 자체를 막지는 않지
 "${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py" \
   --expected "$expected_units_file" \
   --baseline "$baseline_rows_file" --head "$head_rows_file" \
-  --granularity "$granularity" --runner "$runner" > "$per_adapter_yaml"
+  --granularity "$granularity" --runner "$runner" \
+  --baseline-detected "$baseline_detected" > "$per_adapter_yaml"
 ```
 
 `--expected` 는 R1b 가 고른 unit 목록이다 — **두 산출물의 상호 대조가 아니라 독립
 입력**이라야 두 스크립트가 같은 정규화 버그로 같은 unit 을 대칭 누락할 때 잡힌다.
+
+`--baseline-detected` 는 R4② 의 기준선 트리 `detect` 가 낸 러너 집합이다 (감지 0개면
+`NONE`; R-init 이 `degraded`/`same_as_head` 로 R4 를 통째로 건너뛴 경우도 `NONE`).
+**필수 인자다** — 생략하면 exit 2 로 죽는다. 선택 인자로 두고 부재를 "전부 감지됨"
+으로 읽으면, 값을 못 구한 호출자(= 기준선 트리를 안 만든 호출자)가 정확히 이 검사가
+막으려던 경로로 통과한다. `--runner` 가 이 집합에 없으면 그 어댑터의 모든 unit 은
+기준선 축이 `unrun` 으로 내려가 `BASELINE_UNRUNNABLE` → `degraded` → PASS 불가가
+된다. 캐시가 무엇을 내줬든 상관없다.
 
 **flaky — 재실행은 정확히 1회다 — green 이 나올 때까지가 아니다.** `NEW_REGRESSION`
 후보만 HEAD 에서 1회 재실행한다. 또 fail 이면 확증 `NEW_REGRESSION`, pass 면 `FLAKY`

@@ -37,6 +37,44 @@
 - `SKILL.md` 의 `regardless of Review scope` 리터럴과 그것이 서술하던 동작.
 
 ### Fixed
+- **심어진 캐시가 기준선 관측 자체를 억제하던 fail-open** (`/qg` iter-2, AC60) —
+  R4② 가 "미적중분이 있을 때만" 기준선 워크트리를 만들었기 때문에, 선택된 전 unit 에
+  `pass` 를 심어 전량 적중을 만들면 **기준선 트리가 아예 생기지 않았다**. merge_base 에
+  어댑터가 없어 원래 `BASELINE_UNRUNNABLE` → PASS 불가였던 실행이 `STILL_GREEN` →
+  `closed` → PASS 가 됐다. §5.4 의 비대칭 표가 이것을 놓친 이유는 표가 **실제값을
+  pass/fail 로만 놓고** 6조합을 셌기 때문이다 — 실제값이 `unrun` 인 줄은 결함 축이
+  아니라 **인증 축**이라 `fail` 전용 재검증이 닿지 않는다. 이제 워크트리 생성과
+  `detect` 는 캐시 적중과 무관하게 항상 수행되고, 그 결과가
+  `diff-test-results.py --baseline-detected`(**필수** 인자)로 넘어간다. 러너가 그
+  집합에 없으면 캐시가 무엇을 내줬든 기준선 축이 `unrun` 으로 강등된다.
+- **판정하지 못한 실행이 인증을 통과하던 fail-open** (`/qg` iter-2, AC61) —
+  `error` 는 fail 축으로 접히므로 **양측 `error` 가 `(F,F)=PRE_EXISTING` → `closed`**
+  였다. pytest 수집 0개(exit 5)·import 실패(exit 2)·잘못된 ini 옵션(exit 4),
+  jest/vitest "No tests found" 가 전부 여기로 떨어져 **테스트를 하나도 판정하지 않고
+  PASS** 가 나왔다. 종료 코드를 러너별로 열거해 `unrun` 으로 보내는 앞선 수정은 더 나쁜
+  결함을 만들었다(pytest exit 2 는 환경이 아니라 제품 파손이라, "이 diff 가 import 를
+  깼다"가 terminal FAIL 에서 비차단으로 내려갔다 — 실측). 이제 **축을 옮기지 않고
+  원장에서 인증만 막는다**: `error` 가 어느 축에든 닿으면 `attribution_status:
+  degraded`. 비대칭 `(pass, error)` 는 그대로 `NEW_REGRESSION` 이다.
+  같은 줄에서 `SILENT_DROP` 도 `degraded` 로 보낸다 — verdict 는 이미 cap 됐지만
+  원장이 "attribution 정상 종료" 라고 적히던 것을 바로잡는다.
+- **`merge_base` ref 변조가 모든 회귀를 `PRE_EXISTING` 으로 접던 경로** (`/qg` iter-2,
+  AC62) — base 후보 ref 는 전부 **공유 common gitdir** 에 있고, `run` 이 실행하는
+  저장소 코드가 호스트 권한으로 `git update-ref` 를 할 수 있다. base 를 HEAD 로 옮기면
+  기준선 트리가 리뷰 대상 코드 자체가 된다. `resolve-baseline.sh` 가 이제
+  `same_as_head` 와 `ahead` 를 6키 계약으로 emit 하고, Runtime 게이트가
+  `same_as_head: yes` 를 차등 증거 불가로 읽어 PASS 를 막는다. **스크립트는 판정하지
+  않는다** — `merge_base == HEAD` 는 정상(`main` 위 미커밋 작업)으로도 생기고 구분할
+  방법이 없기 때문이다. Review 게이트의 changes-exist floor 는 이 키를 읽지 않아
+  정상 케이스가 죽지 않는다(v2.6.0 이 닫은 false-clean 재발 방지).
+- **`unittest_can_judge` 의 앵커 없는 부분문자열** (`/qg` iter-2, AC63) —
+  `grep -qE '(unittest|TestCase)'` 가 파일 전체를 봤기 때문에
+  `from unittest.mock import patch` 하나로 pytest 스타일 파일이 claim 됐고,
+  `unittest discover` 가 0개를 수집한 뒤 **exit 0 → `pass`** 를 냈다(실측; 같은 파일을
+  pytest 로 돌리면 `1 failed`). 게이트가 막으려던 바로 그 파일이 게이트를 통과했다.
+  이제 **선언 위치에 앵커된** 두 신호만 받는다 — `class X(…TestCase…)` 와
+  `def load_tests(`. 이 게이트는 `unittest` 어댑터에만 적용된다(한정을 빼면 평범한
+  pytest 레포가 구조적으로 인증 불가가 된다).
 - **`qg-gc.py` 가 살아있는 `worktrees/` 를 삭제할 수 있던 결함** — `SESSION_PATTERN`
   (charset)이 형제 디렉토리 `worktrees`(9자)·`baseline-cache`(14자)도 매치했다.
   `worktrees/` 엔 직접 파일이 없어 폴더 mtime 으로 TTL 이 계산되고, 24시간 넘게 새

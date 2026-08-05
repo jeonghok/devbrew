@@ -224,10 +224,32 @@ has_pytest_config() {
 # 오분류 방향도 옳다: 못 고르면 `unclaimed` → SKILL.md 가 verification 을 degraded 로
 # 보내 PASS 가 불가능해진다. 조용한 초록보다 시끄러운 degrade 가 낫다.
 #
-# `TestCase` 도 신호로 받는다 — `from django.test import TestCase` 처럼 unittest 를
-# 직접 import 하지 않지만 discover 가 정상 수집하는 형태가 있다.
+# **무엇이 신호인가는 `discover` 가 실제로 수집하는 것으로 정해진다 — 파일 어딘가에
+# 그 단어가 나오는지가 아니다.** 앞선 버전은 `grep -qE '(unittest|TestCase)'` 로
+# 파일 전체를 부분문자열 검색했고, 그래서 주석·docstring·import 가 전부 신호가 됐다:
+#
+#   from unittest.mock import patch   ← pytest 스타일 파일의 지배적 첫 줄
+#   # run with pytest, not unittest
+#   class TestCaseHelpers:            ← TestCase 를 상속하지 않는 헬퍼
+#
+# 실측: `from unittest.mock import patch` + 모듈-레벨 bare `def test_bare()` 파일은
+# claim 되고 → `discover` 0개 수집 → **exit 0 → `pass`**. 같은 파일을 pytest 로
+# 돌리면 `1 failed`. 양측 동일하면 STILL_GREEN → closed → **실패하는 테스트를
+# impact set 에 둔 채 PASS**. 리뷰어 4명이 독립적으로 같은 결론에 도달했다.
+#
+# 두 가지만 신호로 받는다 — 둘 다 `discover` 의 수집 규칙 그대로다:
+#   · `class X(...TestCase...)` — 선언 위치(줄 시작 + `class` + 식별자 + `(`)까지
+#     요구하므로 import·주석·docstring 이 만족시킬 수 없다. 괄호 안 어디든 허용해
+#     `unittest.TestCase` · `TestCase` · `BaseTestCase` · 다중상속을 전부 받는다
+#     (`from django.test import TestCase` 처럼 unittest 를 직접 import 하지 않는
+#     형태도 여기로 들어온다).
+#   · `def load_tests(` — 클래스 없이 스위트를 만드는 정식 프로토콜.
+# 미매치 → claim 안 함 → `unclaimed` → `verification: degraded` → PASS 불가.
 unittest_can_judge() {   # unittest_can_judge <worktree> <relpath> → 0 = 판정 가능
-  grep -qE '(unittest|TestCase)' "$1/$2" 2>/dev/null
+  local f="$1/$2"
+  grep -qE '^[[:space:]]*class[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\([^)]*TestCase' "$f" 2>/dev/null && return 0
+  grep -qE '^[[:space:]]*def[[:space:]]+load_tests[[:space:]]*\(' "$f" 2>/dev/null && return 0
+  return 1
 }
 
 repo_declares_pytest() {

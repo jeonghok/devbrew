@@ -69,6 +69,77 @@ case_assign_unittest_skips_unjudgeable_file() {
   rmw
 }
 
+# ── /qg iter-2 CRITICAL (리뷰어 4명이 독립적으로 같은 결론) ────────────────────
+#
+# 위 게이트의 술어가 `grep -qE '(unittest|TestCase)'` — **앵커 없는 파일 전체
+# 부분문자열** 이었다. 그래서 pytest 스타일 파일의 지배적 첫 줄
+# `from unittest.mock import patch` 가 게이트를 통과시켰고, 실측으로 claim →
+# `discover` 0개 수집 → **exit 0 → `pass`** 가 재현됐다(같은 파일을 pytest 로
+# 돌리면 `1 failed`). 게이트가 있는데 그 게이트가 막으려던 바로 그 파일이 통과했다.
+#
+# 세 축을 각각 잰다 — import · 주석 · 상속하지 않는 헬퍼 클래스. 하나만 재면
+# 나머지 두 축이 열린 술어(예: import 만 제외하는 특례)가 GREEN 을 받는다.
+case_assign_unittest_substring_escapes() {
+  mkw; mkdir -p "$W/tests"
+  printf 'from unittest.mock import patch\n\ndef test_bare():\n    assert False\n' \
+    > "$W/tests/test_mockimport.py"
+  printf '# run with pytest, not unittest\ndef test_bare():\n    assert False\n' \
+    > "$W/tests/test_comment.py"
+  printf 'class TestCaseHelpers:\n    pass\n\ndef test_bare():\n    assert False\n' \
+    > "$W/tests/test_helper.py"
+  local out; out=$(printf 'tests/test_mockimport.py\ntests/test_comment.py\ntests/test_helper.py\n' \
+                   | bash "$RTS" assign "$W" | sort | tr '\n' ';')
+  local want="tests/test_comment.py${TAB}unclaimed${TAB}file;"
+  want+="tests/test_helper.py${TAB}unclaimed${TAB}file;"
+  want+="tests/test_mockimport.py${TAB}unclaimed${TAB}file;"
+  if [[ "$out" == "$want" ]]; then
+    pass "unittest: mock-import·주석·비상속 헬퍼 3축 전부 unclaimed (부분문자열 탈출 봉쇄)"
+  else fail "부분문자열 탈출 (got: $out)"; fi
+  rmw
+}
+
+# 좁힌 술어가 **정상 unittest 파일을 죽이지 않았음**을 잠근다. 이 짝이 없으면
+# "아무것도 claim 하지 않는" mutation 이 위 케이스만으로 GREEN 이 된다.
+# 세 형태 전부 `discover` 가 정상 수집하는 것들이다.
+case_assign_unittest_still_claims_real_files() {
+  mkw; mkdir -p "$W/tests"
+  # unittest 를 직접 import 하지 않는 상속 (django 스타일)
+  printf 'from django.test import TestCase\n\nclass T(TestCase):\n    def test_ok(self):\n        pass\n' \
+    > "$W/tests/test_django.py"
+  # 다중 상속 + 정규화된 base
+  printf 'import unittest\n\nclass T(Mixin, unittest.TestCase):\n    def test_ok(self):\n        pass\n' \
+    > "$W/tests/test_multi.py"
+  # 클래스 없이 스위트를 만드는 정식 프로토콜
+  printf 'def load_tests(loader, tests, pattern):\n    return tests\n' \
+    > "$W/tests/test_loadtests.py"
+  local out; out=$(printf 'tests/test_django.py\ntests/test_multi.py\ntests/test_loadtests.py\n' \
+                   | bash "$RTS" assign "$W" | sort | tr '\n' ';')
+  local want="tests/test_django.py${TAB}unittest${TAB}file;"
+  want+="tests/test_loadtests.py${TAB}unittest${TAB}file;"
+  want+="tests/test_multi.py${TAB}unittest${TAB}file;"
+  if [[ "$out" == "$want" ]]; then
+    pass "unittest: django 상속·다중 상속·load_tests 는 여전히 claim (양의 짝)"
+  else fail "정상 unittest 파일 claim (got: $out)"; fi
+  rmw
+}
+
+# G2 — 판정가능성 게이트의 **`unittest` 한정**이 잠겨 있지 않았다. `run-test-
+# selection.sh` 의 `[[ "$claimed" == "unittest" ]] &&` 를 지우면 전 스위트가 GREEN
+# 이었는데, 그 결과는 **pytest 레포에서 bare `def test_` 파일이 전부 unclaimed** 가
+# 되는 것이다 — pytest 는 그 형태를 정상 수집하는데도. AC53 에 따라 unclaimed 하나면
+# `verification: degraded` → PASS 불가이므로 **평범한 pytest 레포가 구조적으로
+# 인증 불가**가 된다. 픽스처 조합(pytest 감지 + bare-def 파일)이 없어서 뚫려 있었다.
+case_assign_judge_gate_is_unittest_only() {
+  mkw; mkdir -p "$W/tests"
+  : > "$W/pytest.ini"                       # → pytest 어댑터로 감지
+  printf 'def test_bare():\n    assert False\n' > "$W/tests/test_bare.py"
+  local out; out=$(printf 'tests/test_bare.py\n' | bash "$RTS" assign "$W" | tr '\n' ';')
+  if [[ "$out" == "tests/test_bare.py${TAB}pytest${TAB}file;" ]]; then
+    pass "pytest 레포의 bare def test_ 는 claim 된다 (게이트는 unittest 한정)"
+  else fail "판정가능성 게이트 스코프 (got: $out)"; fi
+  rmw
+}
+
 # T52 + AC54: bulk 어댑터 복수 감지 → 첫 하나만 흡수, 나머지는 stderr `미실행 러너`
 case_assign_bulk_conflict() {
   mkw
@@ -468,7 +539,9 @@ case_run_exit_127_is_unrun() {
   rmw
 }
 
-for c in case_assign_go_package case_assign_unclaimed case_assign_unittest_skips_unjudgeable_file case_assign_bulk_conflict \
+for c in case_assign_go_package case_assign_unclaimed case_assign_unittest_skips_unjudgeable_file \
+         case_assign_unittest_substring_escapes case_assign_unittest_still_claims_real_files \
+         case_assign_judge_gate_is_unittest_only case_assign_bulk_conflict \
          case_assign_residual_no_absorber case_assign_shell_scope_excludes_non_test \
          case_assign_shell_scope_includes_nested case_assign_dedup_claimed_file \
          case_assign_dedup_unclaimed case_assign_dedup_is_literal_not_regex \

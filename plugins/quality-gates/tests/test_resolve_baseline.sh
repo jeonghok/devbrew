@@ -98,6 +98,64 @@ case_review_scope_contract() {
   cleanup
 }
 
+# ── /qg iter-2 CRITICAL — merge_base ref 변조 ─────────────────────────────────
+#
+# base 후보 ref 는 전부 **공유 common gitdir** 에 있고, `run` 이 실행하는 저장소
+# 코드가 호스트 권한으로 `git update-ref` 를 할 수 있다. base 를 HEAD 로 옮기면
+# 기준선 트리가 리뷰 대상 코드 자체가 되어 모든 진짜 회귀가 (fail,fail)=PRE_EXISTING
+# 으로 접힌다. 이 스크립트는 **판정하지 않고 사실만** 낸다 — 정상(main 위 미커밋
+# 작업)과 변조를 구분할 방법이 없기 때문이다. 소비자가 자기 축에서 결정한다.
+case_same_as_head() {
+  mk_repo
+  # (1) feature 브랜치 정상 — base 가 뒤에 있다.
+  local out; out=$(bash "$RESOLVE")
+  if [[ "$(field same_as_head "$out")" == "no" && "$(field ahead "$out")" == "1" ]]; then
+    pass "feature 1커밋 앞섬 → same_as_head:no, ahead:1"
+  else fail "feature 정상 (got: $out)"; fi
+
+  # (2) **변조** — refs/heads/main 을 HEAD 로 옮긴다. update-ref 한 번이면 된다.
+  git update-ref refs/heads/main "$(git rev-parse HEAD)"
+  out=$(bash "$RESOLVE")
+  if [[ "$(field same_as_head "$out")" == "yes" && "$(field ahead "$out")" == "0" \
+     && "$(field degraded "$out")" == "no" ]]; then
+    pass "base ref 변조로 merge_base==HEAD → same_as_head:yes (degraded 와 별개 키)"
+  else fail "변조 감지 (got: $out)"; fi
+  cleanup
+}
+
+# 위 키가 **Review 게이트의 changes-exist floor 를 끄지 않는다.** merge_base==HEAD
+# 는 `main` 위에서 커밋 없이 워킹트리만 고친 정상 상태로도 생긴다 — 거기서 degrade
+# 하면 floor 가 통째로 꺼져 false-clean 이 돌아온다(v2.6.0 이 닫은 그 결함).
+# 그래서 check-review-scope.sh 는 이 키를 읽지 않는다.
+case_same_as_head_does_not_kill_review_floor() {
+  mk_repo
+  git checkout -q main
+  echo dirty >> a.txt          # 커밋 없이 워킹트리만 변경 = merge_base == HEAD
+  local rb; rb=$(bash "$RESOLVE")
+  local out rc; out=$(bash "$REVIEW_SCOPE"); rc=$?
+  if [[ "$(field same_as_head "$rb")" == "yes" \
+     && $rc -eq 0 \
+     && "$(field changes_exist "$out")" == "yes" \
+     && "$(field degraded "$out")" == "no" ]]; then
+    pass "main 위 미커밋 변경 → same_as_head:yes 인데 floor 는 changes_exist:yes/degraded:no"
+  else fail "review floor 보존 (rb: $rb | scope: $out rc=$rc)"; fi
+  cleanup
+}
+
+# degrade 경로도 6키를 전부 낸다 — 키를 빠뜨리면 소비자의 `field` 조회가 빈 문자열을
+# 받고, 빈 문자열은 `!= yes` 라 **fail-open** 으로 읽힌다.
+case_degraded_emits_all_keys() {
+  mk_repo
+  git checkout -q --detach HEAD
+  local out; out=$(bash "$RESOLVE")
+  local keys; keys=$(printf '%s\n' "$out" | awk -F: '{print $1}' | tr '\n' ',')
+  if [[ "$keys" == "base,base_ref,merge_base,degraded,same_as_head,ahead," \
+     && "$(field same_as_head "$out")" == "-" && "$(field ahead "$out")" == "-" ]]; then
+    pass "degraded 경로도 6키 전부 (same_as_head:- ahead:-)"
+  else fail "degraded 키 (got keys=$keys out=$out)"; fi
+  cleanup
+}
+
 # T29: --total이 리포 전체 테스트 파일 수를 emit
 case_total() {
   mk_repo
@@ -111,6 +169,8 @@ case_total() {
 }
 
 for c in case_normal case_detached case_shallow case_no_base \
+         case_same_as_head case_same_as_head_does_not_kill_review_floor \
+         case_degraded_emits_all_keys \
          case_no_hardcoded_main case_review_scope_contract case_total; do
   echo "== $c"; $c
 done
