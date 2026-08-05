@@ -624,30 +624,48 @@ $f"
     # 실행 *직전*만 보므로, 실행 *도중* 사라지거나 러너가 부르는 하위 도구가 없는 경우는
     # 여기서 백스톱한다. `unrun` 은 미실행 축이라 SILENT_DROP/BASELINE_UNRUNNABLE 로 가고
     # 캐시에도 기록되지 않는다 (AC40) — 복구 가능한 환경 실패를 영구화하지 않는다.
-    # **판정하지 않은 실행은 pass 도 fail 도 아니다.** 예전에는 127 하나만 예외였는데,
-    # 위 주석이 이름 붙인 실패 클래스("error 로 두면 fail 축으로 접혀 양측 PRE_EXISTING
-    # → PASS")의 원소는 127 말고도 많다. /qg iter-1 에서 126·137 이 실측 재현됐다.
-    # 여기 있는 코드는 전부 "러너가 테스트를 하나도 판정하지 못했다" 를 뜻한다.
+    # ── /qg iter-2: 이 표의 확장을 **되돌렸다**. 127 하나만 남는다. ──────────────
+    #
+    # iter-1 은 "미판정 실행이 pass/fail 로 보고된다"(양측 동일 → PRE_EXISTING → 테스트
+    # 0개 PASS)를 CRITICAL 로 올렸고, 나는 126·124·137·143 과 pytest 2|3|4|5, go 2 를
+    # 여기 추가했다. iter-2 가 그 수정이 **더 나쁜 결함을 만들었다**는 것을 실행으로
+    # 재현했다:
+    #
+    #   pytest exit 2 는 **수집/import 에러**다. 아래 diff-test-results.py 의 주석이
+    #   정확히 반대를 말한다 — "수집 에러·import 실패는 **실제 결함**이지 실행 불능이
+    #   아니다 (이번 변경이 import 를 깼다면 그것은 회귀다)". 실측:
+    #
+    #     기준선 pass · HEAD exit 2      수정 전 → NEW_REGRESSION · defect=true  · FAIL
+    #                                    수정 후 → SILENT_DROP    · defect=false · SKIP
+    #
+    #   즉 "이 diff 가 import 를 깼다" 가 terminal FAIL 에서 **비차단**으로 내려갔다.
+    #   같은 형태가 124(diff 가 만든 무한루프)·137(diff 가 만든 OOM)·pytest 5(diff 가
+    #   테스트 파일을 비움)·go 2 에 전부 적용된다 — 전부 **환경이 아니라 제품 파손**이다.
+    #   내가 단 락은 **대칭** 케이스(양측 exit 2)만 재고 `(pass, exit-2)` 비대칭은 한 번도
+    #   재지 않았다. 비대칭이 이 게이트의 존재 이유인데.
+    #
+    # 부수 효과 하나 더: `fail` 과 `unrun` 이 **다른 축**에 놓이면서 bulk 모드의
+    # last-writer-wins `rc` 스미어가 verdict 를 결정하게 됐다 — 모델이 unit 을 나열한
+    # **순서**가 FAIL 대 SKIP 을 갈랐다(실측, 인자 순서만 반전). 127 만 남기면 그 창이
+    # 원래 크기로 돌아간다(0 이 되지는 않는다 — 127 대 1 은 이 변경 이전부터 있었다).
+    #
+    # **제대로 된 수정은 여기가 아니라 diff-test-results.py 의 AXIS/ATTR 에 있다.**
+    # `unrun` 을 environment(복구 가능) 대 did-not-judge-product(제품 파손)로 쪼개
+    # `(P,U_product)`·`(A,U_product)` 는 DEFECTS 로, `(U,U)` 는 BASELINE_UNRUNNABLE 로
+    # 보내야 두 방향이 동시에 표현된다. status_of_exit 한쪽만 고쳐서는 불가능하다.
+    # 그때까지 iter-1 의 대칭 false-PASS 는 **알려진 미해소**로 남는다 — 조용한 회귀
+    # 은폐보다 시끄러운 오탐이 낫다는 판단이 아니라, 두 결함 중 **덜 위험한 쪽**을 남긴
+    # 것이다(대칭 false-PASS 는 양측이 똑같이 깨진 경우뿐이고, 비대칭 회귀 은폐는
+    # 정상 기준선에서 diff 가 깬 경우 전부다).
     did_not_run_code() {   # did_not_run_code <runner> <exit> → 0 = 판정 안 함
       case "$2" in
-        # 러너 무관 — 프로세스가 판정을 끝내지 못했다.
-        #   126 실행 불가(퍼미션·셔뱅) · 127 명령 없음 · 124 GNU timeout
-        #   137 SIGKILL(OOM 킬러) · 143 SIGTERM
-        126|127|124|137|143) return 0 ;;
-      esac
-      case "$1" in
-        # pytest 종료 코드(이 환경에서 실측): 0=pass 1=fail 2=중단 3=내부오류
-        # 4=사용오류(잘못된 ini 옵션·없는 파일) 5=수집 0개. 2~5 는 전부 미판정이다.
-        # 특히 5 는 "고른 파일에 테스트가 하나도 없다" 라 가장 조용한 초록을 만든다.
-        pytest) case "$2" in 2|3|4|5) return 0 ;; esac ;;
-        # go: 1 = 테스트 실패, **2 = 빌드/vet 실패**(컴파일 자체가 안 됨 → 테스트가 하나도
-        # 돌지 않았다). adversarial 이 C2 의 형제 위치로 지목한 축이다.
-        go)     case "$2" in 2) return 0 ;; esac ;;
+        # 127 = command not found. 실행 *직전* 프로브(runner_available)가 놓친 것을
+        # 백스톱한다 — 러너가 부르는 하위 도구가 없는 경우 등. 이것만 남기는 이유는
+        # 위 블록 참조: 나머지 코드는 제품 파손과 구분되지 않는다.
+        127) return 0 ;;
       esac
       return 1
     }
-    # cargo 의 101(테스트 실패)·make 의 2 등 러너 고유 실패 코드는 위 표에 **없다** —
-    # 그것들은 판정을 했고 실패한 것이므로 아래 `*) error` 로 남는다(기존 동작 유지).
     status_of_exit() {
       if did_not_run_code "$runner" "$1"; then echo unrun; return; fi
       case "$1" in 0) echo pass ;; 1) echo fail ;; *) echo error ;; esac

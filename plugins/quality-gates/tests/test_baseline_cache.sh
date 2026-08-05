@@ -185,8 +185,12 @@ case_planted_fail_is_not_served_as_hit() {
   mkroot
   printf '%s\nmerge_base: %s\n---\npytest\tv.py\tfail\t1\npytest\tw.py\tpass\t0\n' \
     '<!-- qg-baseline-cache:v1 -->' "$SHA_A" > "$ROOT/${SHA_A:0:12}.md"
-  local out rc
-  out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest v.py w.py | tr '\n' ';'); rc=$?
+  # `rc` 를 **파이프 없이** 잡는다. `... | tr ...` 뒤의 `$?` 는 `tr` 의 상태(항상 0)라
+  # 종료코드 검사가 죽은 assertion 이 된다 — /qg iter-2 G4 실측: get 의 성공 경로 `exit 0`
+  # 을 `exit 4` 로 바꿔도 stdout 이 동일해 전 스위트가 GREEN 이었다.
+  local raw out rc
+  raw=$(bash "$BC" get "$ROOT" "$SHA_A" pytest v.py w.py); rc=$?
+  out=$(printf '%s\n' "$raw" | tr '\n' ';')
   # 양의 짝(w.py=pass 적중)이 필수다 — 없으면 "get 이 아무것도 안 내주는" mutation 이
   # 이 케이스를 GREEN 으로 통과한다.
   if [[ "$rc" == "0" && "$out" == "w.py${TAB}pass${TAB}0;" ]]; then
@@ -204,8 +208,10 @@ case_get_skips_legacy_error_row() {
   mkroot
   printf '%s\nmerge_base: %s\n---\npytest\te.py\terror\t126\npytest\tp.py\tpass\t0\n' \
     '<!-- qg-baseline-cache:v1 -->' "$SHA_A" > "$ROOT/${SHA_A:0:12}.md"
-  local out rc
-  out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest e.py p.py | tr '\n' ';'); rc=$?
+  # 파이프 없이 rc 를 잡는다 (위 케이스의 G4 주석 참조).
+  local raw out rc
+  raw=$(bash "$BC" get "$ROOT" "$SHA_A" pytest e.py p.py); rc=$?
+  out=$(printf '%s\n' "$raw" | tr '\n' ';')
   if [[ "$rc" == "0" && "$out" == "p.py${TAB}pass${TAB}0;" ]]; then
     pass "레거시 error 행 미적중(재계산) · 같은 파일 pass 행 적중 · exit 0(손상 아님)"
   else fail "레거시 error 행 (rc=$rc out='$out')"; fi

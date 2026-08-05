@@ -727,17 +727,35 @@ fi
 echo "== 폴백 R5b 미실행"
 r6_marker=$(first_line '^[*][*]Step R6')
 assert_line "Step R6 헤딩 존재 (창 상한)" "$r6_marker"
-if [[ "$r5b" -gt 0 && "$r6_marker" -gt 0 ]] && \
-   awk -v s="$r5b" -v e="$r6_marker" '
-     NR>s && NR<e {
-       if (index($0,"sandbox_dir")) cond=1
-       if (index($0,"unrun"))       rec=1
-       if (index($0,"SILENT_DROP")) route=1
-     }
-     END { exit !(cond && rec && route) }' "$SKILL_MD"; then
-  echo "PASS: R5b 가 폴백 게이트(sandbox_dir)+unrun 기록+SILENT_DROP 라우팅을 모두 명시 (창 $r5b..$r6_marker)"
+
+# ── /qg iter-2 G1·G5: 이 락은 **극성**과 **지시 vs 산문**을 구분하지 못했다 ──────────
+# 이전 형태는 창 안에 `sandbox_dir`·`unrun`·`SILENT_DROP` 이 **각각 어딘가에** 있는지만
+# 봤다(독립 존재 검사 3개를 AND). 실측된 두 구멍:
+#
+#   G1 (criticality 9) — `sandbox_dir 가 UNSET 이면` → `SET 이면` 한 단어 반전이 GREEN.
+#      뒤집힌 지시는 샌드박스가 **있을 때** R5b 를 건너뛰고 UNSET 일 때 실행한다 — 즉
+#      정확히 사용자의 실제 워킹 트리에서 `npm ci`/`uv sync`/`venv` 를 돌린다. 워킹 트리
+#      파괴를 막으려고 쓴 락이 술어 반전을 살아남으면 아무것도 지키지 않는다.
+#   G5 (6) — `unrun` 이 창 안에 2회 나온다: 실제 지시(`<unit>\tunrun\t-`)와 **근거 산문**
+#      ("HEAD 축 `unrun` 은 … SILENT_DROP 으로 라우팅돼"). 지시를 지우고 산문만 남기면 GREEN.
+#
+# 그래서 (a) 조건과 극성을 **같은 줄에서** 요구하고, (b) 반대 극성이 0회임을 요구하고,
+# (c) `unrun` 은 산문에 없는 **지시 고유 형태**(`unrun\t-`)로 잰다.
+polarity_ok=0; polarity_bad=0; rec_ok=0; route_ok=0
+while IFS= read -r line; do
+  case "$line" in
+    *sandbox_dir*UNSET*) polarity_ok=1 ;;
+    *sandbox_dir*SET*)   polarity_bad=$((polarity_bad + 1)) ;;   # UNSET 은 위에서 이미 소비됨
+  esac
+  case "$line" in *'unrun\t-'*)   rec_ok=1 ;; esac
+  case "$line" in *SILENT_DROP*) route_ok=1 ;; esac
+done < <(awk -v s="$r5b" -v e="$r6_marker" 'NR>s && NR<e' "$SKILL_MD")
+
+if [[ "$r5b" -gt 0 && "$r6_marker" -gt 0 && "$polarity_ok" -eq 1 && "$polarity_bad" -eq 0 \
+      && "$rec_ok" -eq 1 && "$route_ok" -eq 1 ]]; then
+  echo "PASS: R5b 폴백 게이트 — sandbox_dir+UNSET 동일 줄 · 반대 극성 0회 · unrun 지시형 · SILENT_DROP (창 $r5b..$r6_marker)"
 else
-  echo "FAIL: R5b 폴백 게이트 불완전 — 창 $r5b..$r6_marker 안에 sandbox_dir/unrun/SILENT_DROP 셋이 함께 있어야 함"
+  echo "FAIL: R5b 폴백 게이트 (polarity_ok=$polarity_ok polarity_bad=$polarity_bad rec=$rec_ok route=$route_ok 창 $r5b..$r6_marker)"
   fail=$((fail + 1))
 fi
 

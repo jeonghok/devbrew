@@ -564,14 +564,14 @@ case_go_package_without_tests_is_absent() {
   rm -rf "$w" "$b"
 }
 
-# /qg iter-1 CRITICAL conf 10 (silent-failure-hunter, 126·137 실측 재현):
-# status_of_exit 가 127 하나만 `unrun` 으로 보내고 나머지를 `error` 로 접었다. `error` 는
-# fail 축이라 양측 동일하면 PRE_EXISTING → 테스트 0개로 PASS 다 — 코드 주석이 그 실패
-# 클래스를 정확히 이름 붙여 놓고 원소를 하나만 열거하고 있었다.
+# ── /qg iter-2: 종료코드 표 확장을 되돌린 뒤의 락 ────────────────────────────
+# iter-1 은 "미판정 실행이 pass/fail 로 보고" 를 CRITICAL 로 올렸고 표를 넓혔다.
+# iter-2 가 그 수정이 **더 나쁜 결함**을 만들었음을 실행으로 재현했다 — pytest exit 2 는
+# 수집/import 에러(제품 파손)인데 unrun 으로 보내면 `(pass, 2)` 비대칭이
+# NEW_REGRESSION(defect=true, FAIL) 에서 SILENT_DROP(defect=false, SKIP) 으로 내려간다.
 #
-# 한 케이스에서 매핑 전체를 훑는다. 양의 짝(0→pass, 1→fail)과 "판정했지만 러너 고유
-# 코드"(101→error)가 함께 있어야 한다 — 없으면 "전부 unrun" 으로 만드는 mutation 이
-# GREEN 이 된다.
+# 그래서 표는 127 하나로 되돌렸고, **여기서 잠그는 것은 매핑이 아니라 그 비대칭 속성**이다.
+# 매핑만 잠그면 다음 사람이 "미판정 코드를 더 넣자" 는 같은 유혹에 같은 방식으로 빠진다.
 exit_stub() {   # exit_stub <path> <code> — --version 프로브는 통과시키고 실행만 <code>
   { printf '#!/usr/bin/env bash\n'
     printf 'case "$*" in *--version*) exit 0 ;; esac\n'
@@ -579,12 +579,13 @@ exit_stub() {   # exit_stub <path> <code> — --version 프로브는 통과시�
   } > "$1"
   chmod +x "$1"
 }
-case_pytest_nonjudging_exit_codes_are_unrun() {
+
+case_exit_code_mapping() {
   local w b out code want ok=1
   w=$(mktemp -d) || exit 1; b=$(mktemp -d) || exit 1
   : > "$w/pytest.ini"; mkdir -p "$w/tests"; : > "$w/tests/test_a.py"
-  for pair in 0:pass 1:fail 2:unrun 3:unrun 4:unrun 5:unrun \
-              124:unrun 126:unrun 127:unrun 137:unrun 143:unrun 101:error; do
+  # 127 만 unrun. 나머지는 0=pass · 1=fail · 그 외 error (이 변경 이전 동작).
+  for pair in 0:pass 1:fail 2:error 4:error 5:error 124:error 126:error 137:error 127:unrun 101:error; do
     code="${pair%%:*}"; want="${pair#*:}"
     exit_stub "$b/python3" "$code"
     out=$(PATH="$b:$PATH" bash "$RTS" run "$w" pytest per-unit tests/test_a.py 2>/dev/null)
@@ -592,28 +593,38 @@ case_pytest_nonjudging_exit_codes_are_unrun() {
       fail "pytest exit ${code} → ${want} (got: '$out')"; ok=0
     fi
   done
-  [[ "$ok" == "1" ]] && pass "종료코드→상태 매핑 12종 (미판정=unrun · 0/1 양의 짝 · 101=error)"
+  [[ "$ok" == "1" ]] && pass "종료코드→상태 매핑 10종 (127 만 unrun · 0/1 양의 짝 · 나머지 error)"
   rm -rf "$w" "$b"
 }
 
-# go 는 1 = 테스트 실패, 2 = 빌드/vet 실패다. 2 를 error 로 두면 양측 동일 시
-# PRE_EXISTING → 컴파일도 안 되는 트리가 "기존 실패" 로 통과한다.
-case_go_build_failure_is_unrun() {
-  local w b out ok=1
-  w=$(mktemp -d) || exit 1; b=$(mktemp -d) || exit 1
-  printf 'module example.com/m\n' > "$w/go.mod"; mkdir -p "$w/pkg/a"; : > "$w/pkg/a/a_test.go"
-  for pair in 0:pass 1:fail 2:unrun; do
-    exit_stub "$b/go" "${pair%%:*}"
-    out=$(PATH="$b:$PATH" bash "$RTS" run "$w" go per-unit pkg/a 2>/dev/null)
-    [[ "$out" == "pkg/a${TAB}${pair#*:}${TAB}${pair%%:*}" ]] || { fail "go exit ${pair%%:*} → ${pair#*:} (got: '$out')"; ok=0; }
+# ★ 이 케이스가 진짜 락이다 — 매핑이 아니라 **비대칭 귀속**을 잰다.
+# 기준선 green · HEAD 가 제품 파손으로 죽음 → 반드시 확증 제품결함이어야 한다.
+# 어떤 미판정-코드 확장이든 이 속성을 깨면 여기서 빨개진다.
+case_asymmetric_product_breakage_is_a_defect() {
+  local w b d out code ok=1
+  w=$(mktemp -d) || exit 1; b=$(mktemp -d) || exit 1; d=$(mktemp -d) || exit 1
+  : > "$w/pytest.ini"; mkdir -p "$w/tests"; : > "$w/tests/test_a.py"
+  printf 'tests/test_a.py\n' > "$d/expected.txt"
+  printf 'tests/test_a.py\tpass\t0\n'  > "$d/base.tsv"
+  for code in 2 4 5 124 126 137; do
+    exit_stub "$b/python3" "$code"
+    out=$(PATH="$b:$PATH" bash "$RTS" run "$w" pytest per-unit tests/test_a.py 2>/dev/null)
+    printf '%s\n' "$out" > "$d/head.tsv"
+    out=$(python3 "$PLUGIN_ROOT/scripts/diff-test-results.py" \
+            --expected "$d/expected.txt" --baseline "$d/base.tsv" --head "$d/head.tsv" \
+            --granularity file --runner pytest 2>/dev/null \
+          | awk '$1=="confirmed_product_defect:"{print $2}')
+    if [[ "$out" != "true" ]]; then
+      fail "기준선 pass · HEAD exit ${code} → confirmed_product_defect=${out} (true 여야 함)"; ok=0
+    fi
   done
-  [[ "$ok" == "1" ]] && pass "go: 2=빌드실패는 unrun · 0/1 은 양의 짝"
-  rm -rf "$w" "$b"
+  [[ "$ok" == "1" ]] && pass "비대칭 제품 파손 6종이 전부 확증 제품결함 (회귀 재발 방지)"
+  rm -rf "$w" "$b" "$d"
 }
 
 for c in case_pytest case_unittest case_pytest_declared_without_config case_shell case_jest case_vitest case_go case_cargo \
          case_go_run_prefixes_package_with_dotslash case_go_run_root_package_unchanged \
-         case_go_package_without_tests_is_absent case_pytest_nonjudging_exit_codes_are_unrun case_go_build_failure_is_unrun \
+         case_go_package_without_tests_is_absent case_exit_code_mapping case_asymmetric_product_breakage_is_a_defect \
          case_make case_npmscript case_zero_adapters case_polyglot \
          case_conflict_python case_conflict_js_ambiguous case_conflict_js_resolved \
          case_no_reimpl_in_skill case_no_ambient_pytest_probe \
