@@ -87,6 +87,20 @@ class TestAttribution(unittest.TestCase):
         self.assertEqual(verdict_of(out, "a"), "PRE_EXISTING")
         self.assertEqual(flag_of(out, "confirmed_product_defect"), "false")
 
+    # /qg iter-1 (pr-test-analyzer, mutation 으로 실측) — DEFECTS 는 두 원소인데
+    # NEW_TEST_RED 쪽 플래그만 어디에서도 잠겨 있지 않았다.
+    # `DEFECTS = {"NEW_REGRESSION", "NEW_TEST_RED"}` → `{"NEW_REGRESSION"}` 로 줄여도
+    # 스위트 전체가 GREEN 이었다. 기존 커버리지는 라벨(:71)·NEW_REGRESSION 의 양성
+    # (:494)·PRE_EXISTING 의 음성(위 test_pre_existing_is_not_a_defect)뿐이라
+    # NEW_TEST_RED 의 **플래그** 축이 비어 있었다.
+    # NEW_TEST_RED = "이번 diff 가 추가한 테스트가 HEAD 에서 실패" 이므로, 빠지면
+    # confirmed_product_defect 가 false 가 되고 R8 의 PASS 행이 그대로 충족된다.
+    def test_new_test_red_is_a_defect(self):
+        rc, out, _ = run_diff(["a"], [("a", "absent", "-")], [("a", "fail", "1")])
+        self.assertEqual(rc, 0)
+        self.assertEqual(verdict_of(out, "a"), "NEW_TEST_RED")
+        self.assertEqual(flag_of(out, "confirmed_product_defect"), "true")
+
     # T11 — SILENT_DROP 감지 (AC14)
     def test_silent_drop_flag(self):
         rc, out, _ = run_diff(["a"], [("a", "pass", "0")], [("a", "unrun", "-")])

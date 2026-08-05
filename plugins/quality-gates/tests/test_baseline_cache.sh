@@ -111,6 +111,50 @@ case_unrun_not_cached_absent_cached() {
   rmroot
 }
 
+# /qg iter-1 (codex + silent-failure-hunter 가 각각 독립 실측): `error` 도 캐시하면
+# 안 된다. `unrun` 을 뺀 근거("환경 상태에 달렸고 merge_base 의 함수가 아니다")가
+# error 에 문자 그대로 적용된다 — OOM(137)·timeout(124)·권한(126)이 전부 error 버킷에
+# 떨어지는데, 캐시 키에 TTL 도 환경 지문도 없어 한 번 얼면 그 unit 들의 진짜 HEAD
+# 회귀를 브랜치 수명 내내 PRE_EXISTING 으로 가린다.
+#
+# 양의 짝(pass 는 여전히 캐시)이 함께 있어야 한다. 없으면 "아무것도 캐시하지 않는"
+# mutation 이 GREEN 이 된다 — 이 리포가 이미 값을 치른 실패 모양.
+#
+# **관측을 get 이 아니라 캐시 파일로 하는 이유(실측):** get 도 error 행을 거르므로,
+# get 출력으로 재면 put 이 error 를 쓰도록 되돌린 mutation 이 GREEN 이 된다 — 두 필터가
+# 서로를 가린다. 이 케이스가 재려는 것은 **put 의 이빨**이므로 put 의 산출물을 직접 본다.
+# (get 쪽 이빨은 아래 case_get_skips_legacy_error_row 가 따로 잰다.)
+case_error_not_cached_pass_still_cached() {
+  mkroot
+  printf 'e.py\terror\t126\np.py\tpass\t0\n' | bash "$BC" put "$ROOT" "$SHA_A" pytest
+  local f="$ROOT/${SHA_A:0:12}.md" body
+  body=$(sed -n '4,$p' "$f")
+  local has_err has_pass
+  has_err=$(printf '%s\n' "$body" | grep -c "${TAB}error${TAB}" || true)
+  has_pass=$(printf '%s\n' "$body" | grep -c "^pytest${TAB}p\.py${TAB}pass${TAB}0$" || true)
+  if [[ "$has_err" == "0" && "$has_pass" == "1" ]]; then
+    pass "put: error 행 미기록 · pass 행 기록(양의 짝) — 캐시 파일 직접 검사"
+  else fail "put error 미캐시 (error행=$has_err pass행=$has_pass body='$body')"; fi
+  rmroot
+}
+
+# 이 수정 **이전** 버전이 남긴 캐시에는 error 행이 이미 얼어 있고, 그것이 이 결함의
+# 실제 피해다. put 만 고치면 기존 오염은 그대로 서빙되므로 get 도 미적중으로 떨어뜨려
+# 스스로 낫게 한다. 단 read_valid_body 는 error 를 여전히 **유효 토큰**으로 봐야 한다 —
+# 옛 캐시는 손상이 아니므로 파일 전체가 exit 4 로 버려지면 안 된다. 그래서 같은 파일의
+# pass 행은 정상 적중해야 하고 종료코드는 0 이어야 한다.
+case_get_skips_legacy_error_row() {
+  mkroot
+  printf '%s\nmerge_base: %s\n---\npytest\te.py\terror\t126\npytest\tp.py\tpass\t0\n' \
+    '<!-- qg-baseline-cache:v1 -->' "$SHA_A" > "$ROOT/${SHA_A:0:12}.md"
+  local out rc
+  out=$(bash "$BC" get "$ROOT" "$SHA_A" pytest e.py p.py | tr '\n' ';'); rc=$?
+  if [[ "$rc" == "0" && "$out" == "p.py${TAB}pass${TAB}0;" ]]; then
+    pass "레거시 error 행 미적중(재계산) · 같은 파일 pass 행 적중 · exit 0(손상 아님)"
+  else fail "레거시 error 행 (rc=$rc out='$out')"; fi
+  rmroot
+}
+
 # T38 + M18 + AC42: `BULK` 키는 granularity=bulk에서만 생긴다.
 # file-granularity의 bulk-green은 호출자가 unit별 pass 행으로 분해해 put하므로
 # 캐시에 BULK 키가 남으면 안 된다. 캐시는 받은 것을 그대로 저장하되,
@@ -256,7 +300,9 @@ case_put_creates_nonexistent_cache_root() {
 for c in case_key_includes_merge_base case_key_includes_runner case_get_full_hit \
          case_get_partial_hit case_get_corrupt_header case_get_corrupt_body \
          case_get_merge_base_mismatch case_put_atomic \
-         case_unrun_not_cached_absent_cached case_bulk_key_isolation \
+         case_unrun_not_cached_absent_cached \
+         case_error_not_cached_pass_still_cached case_get_skips_legacy_error_row \
+         case_bulk_key_isolation \
          case_put_merge_preserves_other_runner \
          case_put_partial_preserves_uninvolved_units_same_runner \
          case_put_partial_overwrites_matching_unit_preserves_others \

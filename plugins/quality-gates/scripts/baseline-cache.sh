@@ -60,9 +60,14 @@ case "${1:-}" in
       fi
       exit 0
     }
+    # `error`·`unrun` 행은 **적중으로 치지 않는다**. put 이 더 이상 쓰지 않지만, 이
+    # 수정 이전 버전이 남긴 캐시가 사용자 디스크에 이미 있고 그 안의 얼어붙은
+    # 환경-유래 실패가 바로 이 결함의 피해다. 미적중으로 떨어뜨리면 호출자가 기준선을
+    # 재실행해 스스로 낫는다. read_valid_body 는 이 토큰들을 여전히 **유효**로 보므로
+    # (옛 캐시 = 손상 아님) 파일 전체가 exit 4 로 버려지지는 않는다 — 그 행만 미적중.
     for u in "$@"; do
       printf '%s\n' "$body" | awk -F'\t' -v r="$runner" -v u="$u" \
-        '$1 == r && $2 == u { printf "%s\t%s\t%s\n", $2, $3, $4; exit }'
+        '$1 == r && $2 == u && $3 ~ /^(pass|fail|absent)$/ { printf "%s\t%s\t%s\n", $2, $3, $4; exit }'
     done
     exit 0
     ;;
@@ -72,12 +77,23 @@ case "${1:-}" in
     mkdir -p "$root" 2>/dev/null || { echo "baseline-cache: mkdir 실패: $root" >&2; exit 4; }
     f=$(cache_file "$root" "$mb")
 
-    # stdin 정규화. `unrun`은 환경 상태에 달렸고 merge_base의 함수가 아니므로
-    # 캐시하지 않는다 — 캐시하면 복구 가능한 실패가 영구화된다.
+    # stdin 정규화. **캐시 가능한 상태는 `pass`·`fail`·`absent` 셋뿐이다** —
+    # merge_base 트리의 함수라서 안정적이다.
+    #
+    # `unrun`·`error` 는 둘 다 환경 상태(설치 실패·네트워크·OOM·timeout·권한)에 달렸고
+    # merge_base 의 함수가 아니다. 캐시하면 **복구 가능한 실패가 영구화된다**: 키가
+    # (merge_base, runner, unit) 이고 TTL 도 환경 지문도 없으므로, 한 번 나쁜 기준선
+    # 실행이 그 unit 들의 이후 HEAD 회귀를 브랜치 수명 내내 `PRE_EXISTING` 으로 가린다
+    # (기준선에서 이미 red 인 것은 재실행 대상이 아니다 — R5b 재시도 규칙).
+    # `error` 제외는 /qg iter-1 에서 codex 와 silent-failure-hunter 가 각각 실측해
+    # 올린 것이다. 원래 주석이 `unrun` 을 뺀 근거가 `error` 에 **문자 그대로** 적용된다.
+    #
+    # 필터를 한 줄로 합친 이유: 예전에는 `$2 == "unrun" { next }` 와 허용집합 regex 가
+    # 겹쳐 unrun 을 이중으로 막았고, 그래서 앞 줄을 지우는 mutation 이 GREEN 이었다
+    # (pr-test-analyzer 가 자기 계측기 고장으로 보고). 관문이 하나면 그 착시가 없다.
     fresh=$(awk -F'\t' -v r="$runner" '
       NF != 3 { next }
-      $2 == "unrun" { next }
-      $2 !~ /^(pass|fail|error|absent)$/ { next }
+      $2 !~ /^(pass|fail|absent)$/ { next }
       { printf "%s\t%s\t%s\t%s\n", r, $1, $2, $3 }
     ')
 
