@@ -880,6 +880,12 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 
 ### 6.6 `/qg` iter-2 리뷰에서 추가된 AC (AC60–AC63)
 
+> ⚠️ **AC61·AC62·AC63 은 §6.7 이 정정했다 — 아래 정의문만 읽고 구현하지 말 것.**
+> append-only 관례상 원문을 지우지 않지만, 세 항목은 이후 실측으로 **반증되거나 유해함이 드러난** 서술을 포함한다. 유효한 것은 §6.7 의 정정본이다:
+> · **AC61** — 아래가 열거한 `error` 트리거 중 jest/vitest·shell 은 거짓(실측 exit 1). 잔여는 go 가 아니라 **exit 1 전체**다.
+> · **AC62** — `same_as_head: yes` **단독**으로 R4 를 스킵하는 규칙은 양성 케이스에 **해로운 것으로 측정됐다**(진짜 FAIL → SKIP). 판별자는 `same_as_head` × `worktree_dirty` 다. 또한 "R6 에 집행자가 있다" 는 거짓이다.
+> · **AC63** — 아래 술어는 ∃ 조건이고 **실측으로 뚫렸다**(mixed 파일·docstring 예제). 유효한 것은 모듈-레벨 bare `def test_` 부재를 AND 한 ∀ 조건이다.
+
 번호는 append-only(§6.1 preamble 승계). 네 규칙 모두 iter-2 의 CRITICAL 4건에 대응하고, T58–T61 · M29–M32 와 함께 들어온다.
 
 **공통 근거 — 이 라운드의 결함은 전부 한 모양이다.** §5.4 의 비대칭 표(AC59)와 §5.9 의 "판정할 수 있는 파일만 claim", R4② 의 "두 집합이 다르면 한쪽에만 있는 어댑터의 unit 은 반대편에서 `unrun` 이 된다" — 셋 다 **산문으로만 존재했고 집행자가 없었다.** 아래 AC 는 각 규칙에 결정론 소유자를 하나씩 붙인다.
@@ -900,7 +906,7 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 - **AC62 정정** (집행자 주장 철회 + 판별자 교체) — (a) `same_as_head` 를 **읽는 스크립트가 하나도 없다**(grep 확인). 실제 git 으로 `update-ref main→HEAD` + 정직한 `detect` + 진짜 회귀 → `PRE_EXISTING` → `closed` 가 재현됐다. (b) SKILL.md 의 *"이 규칙에는 R6 에 집행자가 있다"* 는 **거짓**이다 — `--baseline-detected` 는 *문자열이 도착했음*만 강제하고, `"$runner"` 를 그대로 넘기면 항상 grounded 다(mutation GREEN). 주장을 철회하고 부분 집행자로 다시 적었다. (c) `same_as_head: yes` 만으로 R4 를 스킵하던 규칙은 **양성 케이스에 해로웠다**: `main` 위 미커밋 작업에서 측정된 `NEW_REGRESSION`/FAIL 이 `BASELINE_UNRUNNABLE`/SKIP 으로 내려갔다. 차등이 실제로 불가능한 것은 `same_as_head: yes` **이고 워킹 트리가 깨끗할 때**뿐이므로 판별자를 `worktree_dirty` 로 좁혔다.
 - **AC63 정정** (∃ → ∀) — 술어가 *"discover 가 수집할 것이 하나라도 있는가"* 를 물었는데 필요한 것은 *"discover 가 놓치는 것이 없는가"* 였다. 실측 탈출 셋: mixed 파일(진짜 TestCase + 모듈-레벨 bare `def test_`) → `pass 0` 인데 pytest 는 2 failed · **docstring 예제 안의 들여쓴 `class T(unittest.TestCase):`** → 매치(같은 함수의 주석이 "docstring 은 만족시킬 수 없다" 고 단언했다 — 거짓) · `test_` 메서드 없는 TestCase 하위클래스 → `Ran 0 tests` → exit 0. 앞의 둘을 **모듈-레벨 bare `def test_` 부재** 라는 음성 조건 AND 로 함께 닫았다. 셋째는 별도 축이라 **열려 있다**.
 
-**검증:** T62(∀-조건 2축) · T63(vacuity 양방향 + 양의 짝) · M17–M22(vacuity 3축 + ∀-조건 3축, 극성 포함) 전부 RED.
+**검증:** T62 · T63 · M33 (아래 §8.1/§8.2 표에 실제로 들어간 항목). — 앞 버전은 이 자리에 **§8 어디에도 없는 `T62`/`T63`과, 이미 다른 mutation 에 배정된 `M17`–`M22`**(M17=`setup_cmd` 비대칭, M18=bulk-green 추가 캐싱, M19=`gap:closed` PASS 허용, M20=단일 어댑터 반환, M21=HEAD 어댑터 집합 재사용, M22=`SILENT_DROP` 상호대조)를 근거로 적었다 — **실재하지 않는 커버리지를 있는 것처럼 보이게 하는 거짓 안심 신호**였고, 이 문서가 경계하라고 적은 패턴의 검증-계획 버전이다 (/qg iter-3 spec review, block).
 
 **닫지 않은 것 (iter-3 잔여 21건 — 이 브랜치는 병합 불가).** 귀속 입력 파일 4종의 custody 부재(S1) · 부분 merge_base 변조(S3) · bulk 흡수자가 `unclaimed` 행 삭제(F5) · `resolve-baseline.sh` 부재 시 조용한 false-clean(F6) · `$baseline_rows_file` 조립 규칙 부재(C3) · `$adapter_count` 미정의(C4) · R7 이 R5b 뒤라 게이트 자기 부작용이 거짓 terminal FAIL(S4) · `dir_is_ignored` 신뢰모델 불일치(S5) · `*.spec.*` 글롭(S6) · aggregate 의 flag/count 미대조(X1) · 후보에 staged/untracked 누락(X3) · 캐시 락(X4) · SKILL.md 산문 락 10종의 부정문 취약 · AC60 값 provenance 미잠금 · 종료코드 열거 락 · AC63 경계 미잠금.
 
@@ -1021,8 +1027,11 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | T59 | `error` 가 baseline·head·양측 어디에 있어도 `attribution_status: degraded` · **`error` 없는 같은 형상은 `closed`**(양의 짝 — 없으면 "항상 degraded" mutation 이 통과) · `(pass, error)` 는 여전히 `NEW_REGRESSION` + `confirmed_product_defect: true`(과잉 강화 방지) | AC61 |
 | T60 | `resolve-baseline.sh` — (a) feature 브랜치 → `same_as_head: no`/`ahead: 1` · (b) `git update-ref refs/heads/main HEAD` 후 → `same_as_head: yes`(`degraded` 는 여전히 no — 별개 키) · (c) degrade 경로도 6키 전부 · (d) **`main` 위 미커밋 변경에서 `check-review-scope.sh` 가 `changes_exist: yes`/`degraded: no` 유지**(floor 보존 락) | AC62 |
 | T61 | `assign` — (a) `from unittest.mock import patch`·`# … not unittest` 주석·`class TestCaseHelpers:` 3축 전부 `unclaimed` · (b) django 상속·다중 상속·`load_tests` 3형태는 여전히 `unittest` claim(양의 짝) · (c) **pytest 감지 레포의 bare `def test_` 는 `pytest` 로 claim**(게이트가 unittest 한정임을 잠금) | AC63 |
+| T62 | `assign` ∀-조건 — (a) mixed 파일(진짜 `TestCase` + 모듈-레벨 bare `def test_`) · (b) docstring 예제 안 들여쓴 `class T(unittest.TestCase):` — 둘 다 `unclaimed` (앞 술어는 둘 다 claim 하고 `pass 0` 을 냈다, 실측) | AC63′ (§6.7) |
+| T63 | vacuity — (a) 빈 `--expected` → `degraded` · (b) `--expected-adapters 0` + YAML 0개 → `degraded` · (c) **양의 짝**: unit 1개 green → `closed`, 어댑터 1개 all-green → `closed` (양의 짝 없으면 "언제나 degraded" mutation 이 통과) | AC64 |
+| T64 | 정정의 완전성 — §6.6 의 AC61·AC62·AC63 정의문에 §6.7 전방 포인터가 존재하고, §8.1 완전성 선언문이 최신 AC 번호를 담는다 (삭제된 규칙이 인용 가능한 형태로 살아남으면 삭제 전보다 나쁘다) | AC61′·AC62′·AC63′ |
 
-**AC ↔ 검증 완전성.** **AC1–AC63 전부**가 위 T 또는 §8.3의 V에 대응한다. 자동 테스트가 없는 것은 **AC20 하나**이며 `V4`(대화형 게이트 미발화)가 담당한다 — `AskUserQuestion` 발화 여부는 대화형이라 자동화하지 않는다. 이 매핑 자체를 구현 시 표로 유지하고, **AC 추가 시 대응 T/V 없이 머지하지 않는다.** (라운드 3에서 이 선언문이 AC38–AC44를 반영하지 않은 채 stale했다 — 선언문도 갱신 대상이다.)
+**AC ↔ 검증 완전성.** **AC1–AC64 전부**가 위 T 또는 §8.3의 V에 대응한다. 자동 테스트가 없는 것은 **AC20 하나**이며 `V4`(대화형 게이트 미발화)가 담당한다 — `AskUserQuestion` 발화 여부는 대화형이라 자동화하지 않는다. 이 매핑 자체를 구현 시 표로 유지하고, **AC 추가 시 대응 T/V 없이 머지하지 않는다.** (라운드 3에서 이 선언문이 AC38–AC44를 반영하지 않은 채 stale했다 — 선언문도 갱신 대상이다.)
 
 > **T20의 형태 주의** — 버전을 `"version": "3.0.0"` 리터럴로 핀하면 doc-only bump마다 stale-red가 된다. major 불변식만 검사하고 patch digit은 unpin한다.
 
@@ -1047,6 +1056,7 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | **M30** | degraded 식에서 `error_axis_seen` 삭제 / **역방향** `error_axis_seen` 을 항상 참으로(과잉 강화) / 빈 `--baseline-detected` 허용 | T59·T58 — 양방향이라야 "언제나 degraded" 가 막힌다 |
 | **M31** | `same_as_head` **극성 반전**(`==` → `!=`) / 상수 `no` / degrade 경로 키 삭제 / `ahead` 상수 / **`check-review-scope.sh` 가 `same_as_head` 를 읽어 degrade** | T60 (마지막 것이 floor 보존 락의 이빨) |
 | **M32** | `unittest_can_judge` 를 옛 부분문자열 술어로 복원 / 항상 판정 불가로(양의 짝 파괴) / `[[ "$claimed" == "unittest" ]] &&` 한정 삭제 | T61 (3축 각각) |
+| **M33** | vacuity 3축(`not expected` 삭제 / **극성 반전** `not expected`→`expected` / aggregate `if not adapters` 삭제) + ∀-조건 3축(음성 조건 삭제 / **극성 반전** `return 1`→`return 0` / `^def`→`^[[:space:]]*def` 로 완화) | T63·T62 (6/6 RED 실측) |
 | **M12** | `run-test-selection.sh` 호출을 verifier dispatch 블록 **안**으로 옮김 | T22 — 불변식 ② 무력화. 결과값이 같아 보이므로 **위치**를 검사해야 잡힌다 |
 | **M13** | `baseline-cache.sh get`이 손상 파일을 부분 파싱해 일부를 적중으로 냄 | T23 |
 | **M14** | 미감지 러너에서 exit 3 대신 `npm test`를 추측 실행 | T25 |
