@@ -69,43 +69,13 @@ new_ts=$(grep -E '^last_dispatched_at:' "$SDIR/state.local.md" | awk '{print $2}
   && note PASS "AC4b (T-4): last_dispatched_at updated after emit (anti-spam guard live)" \
   || note FAIL "AC4b failed — last_dispatched_at unchanged after emit: '$new_ts' vs OLD='$OLD'"
 
-# --- review lock 게이트 (AC5) 헬퍼: pending + review_in_progress 엔트리 동시 기록 ---
-write_state_with_lock() {
-  local last_dispatched="$1"; local lock_since="$2"
-  cat > "$SDIR/state.local.md" <<EOF
----
-session_id: $SID
----
-
-pending_review:
-  path: /docs/superpowers/specs/x-design.md
-  mode: design
-  worktree_path: /Users/foo/.claude/worktrees/wt
-  triggered_at: 2026-05-17T00:00:00Z
-
-last_dispatched_at: $last_dispatched
-
-review_in_progress:
-  - path: docs/superpowers/specs/x-design.md
-    since: $lock_since
-EOF
-}
-
-# AC5a: 같은 문서 락 신선 → TTL 만료여도 재-emit 안 함(mid-review 재-nag 방지).
-OLD5=$(python3 -c 'from datetime import datetime,timezone,timedelta; print((datetime.now(timezone.utc)-timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ"))')
-NOW5=$(python3 -c 'from datetime import datetime,timezone; print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))')
-write_state_with_lock "$OLD5" "$NOW5"
-out=$(run_hook)
-[[ -z "$out" ]] \
-  && note PASS "AC5a: fresh same-doc lock → reminder 재-emit 안 함(TTL 만료여도)" \
-  || note FAIL "AC5a unexpected output: '$out'"
-
-# AC5b: 락 엔트리 stale → 정상 재-emit(fail-safe = 강제).
-write_state_with_lock "$OLD5" "2020-01-01T00:00:00Z"
-out=$(run_hook)
-echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("reviewing-spec")' >/dev/null \
-  && note PASS "AC5b: stale lock → reminder 재-emit(fail-safe)" \
-  || note FAIL "AC5b failed. out='$out'"
+# v0.25.0: reminder는 재-nag일 뿐 리뷰의 완료가 아니다 — 원장(armed_paths)을 쓰지 않는다.
+OLD6=$(python3 -c 'from datetime import datetime,timezone,timedelta; print((datetime.now(timezone.utc)-timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ"))')
+write_state "$OLD6"
+run_hook >/dev/null
+! grep -q '^armed_paths:' "$SDIR/state.local.md" \
+  && note PASS "reminder는 armed_paths를 기록하지 않는다 (재-nag ≠ 리뷰 완료)" \
+  || note FAIL "reminder가 원장을 기록했다: $(cat "$SDIR/state.local.md")"
 
 # AC8: kill switch via DEVBREW_SKIP_HOOKS
 out=$(run_hook "DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit")
