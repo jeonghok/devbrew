@@ -653,8 +653,9 @@ If `effective_skip_runtime` was set, skip this entire section.
 ```
 
 6키(`base` / `base_ref` / `merge_base` / `degraded` / `same_as_head` / `ahead`)를
-캡처한다. **`degraded: yes` 또는 `same_as_head: yes` 면** 차등 실행이 불가능하므로
-loud advisory 를 내고 **verdict 를 PASS 로 올리지 않는다**:
+캡처한다. 차등 실행이 불가능한 조건은 **정확히 둘**이다 — `degraded: yes`, 또는
+`same_as_head: yes` **이면서 워킹 트리가 clean** 일 때(아래 표가 정본). 둘 중
+하나에 해당하면 loud advisory 를 내고 **verdict 를 PASS 로 올리지 않는다**:
 
 > `> [quality-gates] baseline 확정 불가 (<사유>) — 차등 귀속 없이 진행, verdict 는 PASS 불가`
 
@@ -670,7 +671,13 @@ loud advisory 를 내고 **verdict 를 PASS 로 올리지 않는다**:
 | no | — | 성립 | 정상 진행 |
 
 깨끗한 트리에서 `same_as_head: yes` 면 모든 진짜 회귀가 `(fail,fail)=PRE_EXISTING` 으로
-접히므로 PASS 로 올리지 않는다. **알려진 미해소:** 이 규칙을 읽는 스크립트는 없다 —
+접히므로 PASS 로 올리지 않는다. **더러운 트리는 반대다 — 정상 진행이며 PASS 가능하다.**
+`same_as_head: yes` **단독**으로 막던 앞 버전은 실측으로 해로웠다: `main` 위 미커밋
+작업에서 측정된 `NEW_REGRESSION`/FAIL 이 `BASELINE_UNRUNNABLE`/SKIP 으로 내려갔다.
+위 도입 문장이 그 포괄 형태로 남아 있어 이 표와 **정면으로 모순**됐고(codex `/qg`
+iter-4, IMPORTANT), 도입부만 읽는 구현자는 제거된 동작을 되살리게 된다 — 좁힌 규칙의
+원래 형태가 인용 가능한 채로 남으면 좁히지 않은 것과 같다. 도입 문장을 표에 맞췄다.
+**알려진 미해소:** 이 규칙을 읽는 스크립트는 없다 —
 오케스트레이터 산문이다. 부분 변조(base 를 브랜치 중간 커밋으로 이동)는 이 표의 어느
 행에도 걸리지 않는다. Review 게이트의 changes-exist floor 는 이 키를 읽지
 않는다 — 거기서는 `worktree_dirty` 가 변경을 잡으므로 정상 케이스가 죽지 않는다.

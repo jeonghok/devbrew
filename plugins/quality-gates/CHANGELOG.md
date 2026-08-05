@@ -136,6 +136,15 @@
 - **`runtime-verifier` Hard Rule 1 의 `installing deps` 무한정 허용** — 두 줄 아래
   Rule 3 의 한정(`not test-runner deps`)과 모순됐다. 이 산문은 §11⑬ 이 verifier-생성
   환경 비대칭에 대해 가진 유일한 통제다.
+- **R-init 의 `same_as_head` 규칙이 자기 표와 정면 모순이었다** (`/qg` iter-4, codex
+  단독 IMPORTANT). 도입 문장은 `degraded: yes` **또는** `same_as_head: yes` 면 PASS
+  불가라는 **포괄** 형태로 남아 있었는데, 세 줄 아래 표는 `same_as_head: yes` + dirty
+  를 정상 진행으로 규정한다. `same_as_head` 단독 차단은 실측으로 **해로웠다**(`main`
+  위 미커밋 작업의 진짜 `NEW_REGRESSION`/FAIL 이 `BASELINE_UNRUNNABLE`/SKIP 으로
+  내려갔다) — 그래서 판별자를 `worktree_dirty` 로 좁혔는데, **좁히기 전 형태를 도입부에
+  그대로 남겼다.** 도입부만 읽는 구현자는 제거된 동작을 되살린다. 좁힌 규칙의 원래
+  형태가 인용 가능한 채로 남으면 좁히지 않은 것과 같다 — design.md §6.6 에서 같은
+  실패를 고치면서 SKILL.md 의 같은 인스턴스는 놓쳤다.
 - **주장만 있고 검증이 없던 두 규칙에 락을 붙였다** (설계 리뷰 라운드 6·7 이월분).
   둘 다 구현은 이미 옳았고 **검증만 비어 있었다** — 그 상태로는 다음 회귀가 조용히
   통과한다. (1) `SILENT_DROP` → `attribution_status: degraded` 를 재는 T/M 이 없었다
