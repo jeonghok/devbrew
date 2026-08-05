@@ -552,6 +552,86 @@ for lg in "${legacy_logic[@]}"; do
 done
 [[ $missing_logic -eq 0 ]] && echo "PASS: 기존 로직 8종 전부 새 자리에 존재" || fail=$((fail + 1))
 
+# ── /qg iter-1 (pr-test-analyzer, mutation 실측): 신규 스크립트 **배선** 락 ──────
+# 실측된 구멍: SKILL.md 에서 다섯 신규 스크립트의 호출 지점 10곳을 **전부 삭제**해도
+# bash 스위트 ~110개(기존 red 6 제외) 중 RED 가 **하나도 없었다**. 이 브랜치의 산출물
+# 전체가 그 배선인데 그것을 재는 락이 없었다.
+#
+# 있던 것: (a) 음의 락 — R5a³..R5b 창 안에 run-test-selection.sh 가 0회(어디에도 0회면
+# 만족), (b) 파일이 디스크에 존재하고 -x 인지(test_impact_runtime_docs.sh). 둘 다
+# "누가 부르는가" 를 재지 않는다. 위 legacy_logic 양의 목록에는 **기존 8종만** 있었다.
+#
+# 두 가지를 함께 지킨다:
+#  1) 전체-파일 grep 금지. 아키텍처 산문(:642)과 R5b 폴백 문단(:894)에도 스크립트
+#     이름이 나오므로 whole-file grep 은 호출을 다 지워도 통과한다 — 이 리포의 문서화된
+#     grep-matches-a-comment 함정. **소유 스텝의 창** 안에서만 센다.
+#  2) needle 에 `scripts/` 접두와 **서브커맨드**를 같은 줄에서 요구한다. 접두는 호출을
+#     산문에서 가르고(실측: run-test-selection.sh 7회 중 `scripts/` 동반은 5회),
+#     서브커맨드는 "R1a 가 detect 대신 assign 을 부른다" 같은 뒤바뀜까지 잡는다.
+#     index() 리터럴 매칭이라 regex 이스케이프 사고가 없다.
+echo "== 신규 스크립트 배선 (소유 스텝 창)"
+assert_call_in_window() {   # <label> <literal-needle> <start-regex> <end-regex>
+  local label="$1" needle="$2" s_pat="$3" e_pat="$4" s e
+  s=$(first_line "$s_pat"); e=$(first_line "$e_pat")
+  if [[ "$s" -le 0 || "$e" -le 0 || "$s" -ge "$e" ]]; then
+    echo "FAIL: $label — 창 앵커 붕괴 (start=$s end=$e; 헤딩 리네임?)"
+    fail=$((fail + 1)); return
+  fi
+  if awk -v s="$s" -v e="$e" -v n="$needle" \
+       'NR>s && NR<e && index($0,n) { f=1 } END { exit !f }' "$SKILL_MD"; then
+    echo "PASS: $label (창 $s..$e)"
+  else
+    echo "FAIL: $label — 창 $s..$e 안에 '$needle' 호출 없음"
+    fail=$((fail + 1))
+  fi
+}
+
+assert_call_in_window "R-init 이 resolve-baseline.sh 호출" \
+  'scripts/resolve-baseline.sh'            '^[*][*]Step R-init' '^[*][*]Step R1a'
+assert_call_in_window "R1a 가 run-test-selection.sh detect 호출" \
+  'scripts/run-test-selection.sh" detect'  '^[*][*]Step R1a'    '^[*][*]Step R1b'
+assert_call_in_window "R1b 가 run-test-selection.sh assign 호출" \
+  'scripts/run-test-selection.sh" assign'  '^[*][*]Step R1b'    '^[*][*]Step R2'
+assert_call_in_window "R4 가 baseline-cache.sh get 호출" \
+  'scripts/baseline-cache.sh" get'         '^[*][*]Step R4'     '^[*][*]Step R5a⁰'
+assert_call_in_window "R4 가 baseline-cache.sh put 호출" \
+  'scripts/baseline-cache.sh" put'         '^[*][*]Step R4'     '^[*][*]Step R5a⁰'
+assert_call_in_window "R4 가 run-test-selection.sh run 호출 (기준선 측)" \
+  'scripts/run-test-selection.sh" run'     '^[*][*]Step R4'     '^[*][*]Step R5a⁰'
+assert_call_in_window "R5b 가 run-test-selection.sh run 호출 (HEAD 측)" \
+  'scripts/run-test-selection.sh" run'     '^[*][*]Step R5b'    '^[*][*]Step R6'
+# R6 은 호출이 **둘**이다 — 어댑터별 대조 1회 + `--aggregate` 1회. "창 안에 1개 이상"
+# 으로 재면 둘 중 하나를 지워도 나머지가 만족시킨다(실측: 대조 호출만 지운 mutation 이
+# GREEN 이었다). 개수와 `--aggregate` 를 따로 잠근다.
+assert_call_count_in_window() {   # <label> <literal-needle> <min> <start-regex> <end-regex>
+  local label="$1" needle="$2" min="$3" s_pat="$4" e_pat="$5" s e n
+  s=$(first_line "$s_pat"); e=$(first_line "$e_pat")
+  if [[ "$s" -le 0 || "$e" -le 0 || "$s" -ge "$e" ]]; then
+    echo "FAIL: $label — 창 앵커 붕괴 (start=$s end=$e; 헤딩 리네임?)"
+    fail=$((fail + 1)); return
+  fi
+  # 줄 단위 index() 로 센다 — 리터럴 매칭이라 regex 이스케이프 사고가 없고, 각 호출은
+  # 자기 줄에 있으므로 "매치된 줄 수 = 호출 수" 가 성립한다. (gsub 은 정규식이라
+  # needle 의 `.` 이 임의 문자로 새므로 쓰지 않는다.)
+  n=$(awk -v s="$s" -v e="$e" -v nd="$needle" \
+        'NR>s && NR<e && index($0,nd) { c++ } END { print c+0 }' "$SKILL_MD")
+  if [[ "$n" -ge "$min" ]]; then
+    # `${n}` 중괄호 필수 — `$n회` 로 쓰면 macOS bash 3.2 가 한글 `회` 의 선두 바이트를
+    # 변수명에 포함시켜 `set -u` 아래서 "n?: unbound variable" 로 죽는다 (실측).
+    echo "PASS: $label (${n}회 ≥ $min, 창 $s..$e)"
+  else
+    echo "FAIL: $label — 창 $s..$e 안에 '$needle' 이 ${n}회 (최소 $min 필요)"
+    fail=$((fail + 1))
+  fi
+}
+
+assert_call_count_in_window "R6 의 diff-test-results.py 호출 2곳(대조+집계) 유지" \
+  'scripts/diff-test-results.py' 2         '^[*][*]Step R6'     '^[*][*]Step R7'
+assert_call_in_window "R6 이 diff-test-results.py --aggregate 호출 (집계)" \
+  'scripts/diff-test-results.py" --aggregate' '^[*][*]Step R6'  '^[*][*]Step R7'
+assert_call_in_window "R8 이 check_qa_ledger.py 호출" \
+  'scripts/check_qa_ledger.py'             '^[*][*]Step R8'     '^[*][*]Step R9'
+
 # 새 라벨 5종이 실제로 존재하고 순서가 맞다
 # 라벨은 **줄머리 볼드 헤딩**으로만 앵커한다. 맨 라벨로 찾으면 본문 cross-reference 가
 # 먼저 잡힌다 — 실측: `first_line 'Step R5a⁰'` = **174**(다른 섹션의 참조), 실제 헤딩은

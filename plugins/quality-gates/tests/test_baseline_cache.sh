@@ -97,7 +97,9 @@ case_put_atomic() {
     pass "put이 tmp + mv rename 사용"
   else fail "원자적 쓰기 코드 부재"; fi
   local strays; strays=$(find "$ROOT" -name '*.tmp*' | wc -l | tr -d ' ')
-  [[ "$strays" == "0" ]] && pass "put 후 임시파일 잔존 0" || fail "임시파일 $strays개 잔존"
+  # `${strays}` 중괄호 필수 — `$strays개` 는 macOS bash 3.2 가 한글 `개` 의 선두 바이트를
+  # 변수명에 포함시켜 이 분기가 실제로 발동하는 순간 unbound variable 로 죽는다.
+  [[ "$strays" == "0" ]] && pass "put 후 임시파일 잔존 0" || fail "임시파일 ${strays}개 잔존"
   rmroot
 }
 
