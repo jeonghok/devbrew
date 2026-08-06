@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test_runner_adapters.sh — run-test-selection.sh detect의 어댑터 8종 (design §5.9).
+# test_runner_adapters.sh — run-test-selection.sh detect의 러너 어댑터 9종 (design §5.9).
 # AC34 AC38 AC45 AC56(detect) · T25 T34 T42 · M14 M20
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,7 +29,58 @@ runners() { bash "$RTS" detect "$1" | awk '$1 == "runner:" { print $2 }'; }
 gran_of() { bash "$RTS" detect "$1" | awk -v r="$2" '
   $1=="runner:"{cur=$2} $1=="granularity:" && cur==r {print $2}'; }
 
-# T34/T25: 8 어댑터 각각 감지
+# /qg iter-5 C6 — **문서의 어댑터 개수 주장이 닫힌 집합에서 파생된다.**
+#
+# 배경: 6곳이 "어댑터 8종"이라 적고 있었는데 실제 닫힌 집합은 **9종**이었다
+# (`npm-script` 가 늘어난 뒤 아무도 세지 않았다). CHANGELOG 는 같은 줄에서 **이름을
+# 9개 나열하면서 8종이라고** 적었다 — 사람도 리뷰어도 그 줄을 여러 번 읽고 지나갔다.
+# 숫자를 손으로 고치기만 하면 다음 어댑터에서 똑같이 어긋난다. 그래서 개수를
+# **`granularity_of` 의 닫힌 집합에서 파생**하고 문서 주장과 대조한다.
+#
+# 코퍼스는 **플러그인 디렉토리로 한정한다.** `docs/superpowers/specs/…-design.md` 는
+# 이 플러그인의 파일이 아니라 리포 문서이고, 플러그인 테스트가 리포 문서를 읽기
+# 시작하면 레이어가 깨져 문서 편집마다 stale-red 가 난다.
+case_adapter_count_derives_from_closed_set() {
+  # 닫힌 집합 = granularity_of 의 case arm 들 (`*` 제외). 어댑터 표의 유일 소유자.
+  local names n
+  names=$(sed -n '/^granularity_of() {/,/^}/p' "$RTS" \
+          | grep -oE '^[[:space:]]+[a-z|*-]+\)' | tr -d ' )' | tr '|' '\n' | grep -vx '\*')
+  n=$(printf '%s\n' "$names" | grep -c .)
+  if [[ "$n" -lt 2 ]]; then
+    fail "닫힌 집합 파싱 실패 (n=$n) — 아래 대조가 공허해진다"; return
+  fi
+
+  # 파서가 엉뚱한 토큰을 셌는지 교차 확인한다 (계측기 검증). `run` 은 **실재하는 빈
+  # 트리**에서 미지 러너면 exit 2(사용 오류), 알려졌지만 미감지면 exit 3 을 낸다 —
+  # 존재하지 않는 경로를 주면 러너와 무관하게 항상 exit 2 라 아무것도 구별하지 못한다.
+  local nm probe_dir; probe_dir=$(mktemp -d) || exit 1
+  for nm in $names; do
+    bash "$RTS" run "$probe_dir" "$nm" per-unit X >/dev/null 2>&1
+    if [[ $? -eq 2 ]]; then
+      rm -rf "$probe_dir"; fail "닫힌 집합 파싱 오염: '$nm' 은 러너 이름이 아니다"; return
+    fi
+  done
+  rm -rf "$probe_dir"
+
+  # 플러그인 안의 모든 `러너 어댑터 N종` 주장이 n 과 같아야 한다 (∀).
+  local bad=0 found=0 hit
+  while IFS= read -r hit; do
+    found=$((found + 1))
+    local claimed; claimed=$(sed -E 's/.*러너 어댑터 ([0-9]+)종.*/\1/' <<<"$hit")
+    [[ "$claimed" == "$n" ]] || { bad=1; echo "    (불일치 ${claimed}≠${n}) ${hit:0:110}"; }
+  done < <(grep -rn "러너 어댑터 [0-9]*종" "$PLUGIN_ROOT" 2>/dev/null)
+
+  # 양의 짝 — 주장이 하나도 없으면 ∀ 는 공허하게 참이다. 코퍼스를 봤다는 증거.
+  if [[ $found -eq 0 ]]; then
+    fail "플러그인 안에 어댑터 개수 주장이 0건 — ∀ 가 공허하게 통과할 뻔했다"
+  elif [[ $bad -eq 0 ]]; then
+    pass "어댑터 개수 주장 ${found}곳이 닫힌 집합(${n}종)과 일치 (∀ + 코퍼스 실재)"
+  else
+    fail "어댑터 개수 주장이 닫힌 집합(${n}종)과 불일치"
+  fi
+}
+
+# T34/T25: 러너 어댑터 9종 각각 감지
 case_pytest()   { mkw; : > "$W/pytest.ini"; mkdir -p "$W/tests"; : > "$W/tests/test_a.py"
   [[ "$(runners "$W")" == "pytest" ]] && pass "pytest.ini → pytest" || fail "pytest ($(runners "$W"))"; rmw; }
 case_unittest() { mkw; mkdir -p "$W/tests"; : > "$W/tests/test_a.py"
@@ -634,7 +685,8 @@ for c in case_pytest case_unittest case_pytest_declared_without_config case_shel
          case_cargo_artifacts_are_gitignored case_missing_toolchain_blocks_pass \
          case_pytest_plugin_only_declaration case_python_setup_and_run_share_env \
          case_requirements_env_is_sandbox_local case_npm_install_writes_no_lockfile \
-         case_env_dir_gate_uses_directory_pattern; do
+         case_env_dir_gate_uses_directory_pattern \
+         case_adapter_count_derives_from_closed_set; do
   echo "== $c"; $c
 done
 echo "── runner adapters: $PASS passed, $FAIL failed"

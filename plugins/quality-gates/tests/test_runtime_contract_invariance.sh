@@ -165,11 +165,26 @@ print(sum(len(v) for v in d.get('hooks', {}).values()))
   agents=$(ls "$PLUGIN_ROOT/agents" | wc -l | tr -d ' ')
   [[ "$hooks" == "4" ]]  && pass "hooks.json 항목 4개 불변" || fail "hooks 항목 수 $hooks (기대 4)"
   [[ "$agents" == "7" ]] && pass "agents/ 파일 7개 불변"    || fail "agents 파일 수 $agents (기대 7)"
-  # verdict 토큰은 4종 밖으로 늘지 않는다
-  if grep -qE '\bPARTIAL\b|\bINCONCLUSIVE\b|\bDEGRADED_VERDICT\b' "$SKILL"; then
+  # verdict 토큰은 4종 밖으로 늘지 않는다.
+  #
+  # **부재를 통과로 읽지 않는다 (/qg iter-5 C3).** 앞 버전은 `if grep -qE … "$SKILL"`
+  # 하나였다. `$SKILL` 이 없으면 grep 은 **exit 2**(파일 오류)를 내고, `if` 는 그것을
+  # 그냥 "매치 없음"과 같은 non-zero 로 읽어 `else` 로 떨어져 *"verdict 토큰 4종 불변"*
+  # 을 PASS 로 찍었다 — 파일을 지워도, 이름을 바꿔도, 경로를 오타내도 GREEN 이다.
+  # 음의 락은 빈 코퍼스 위에서 항상 참이므로 **코퍼스를 봤다는 positive** 가 필요하다.
+  if [[ ! -f "$SKILL" ]]; then
+    fail "SKILL.md 부재 ($SKILL) — verdict 토큰 락이 공허하게 통과할 뻔했다"
+  elif grep -qE '\bPARTIAL\b|\bINCONCLUSIVE\b|\bDEGRADED_VERDICT\b' "$SKILL"; then
     fail "SKILL.md에 신규 verdict 토큰 등장"
   else
-    pass "verdict 토큰 4종 불변"
+    # 양의 짝 — 4종이 실제로 그 파일에 있는가. 없으면 "토큰을 전부 지운" mutation 이
+    # 음의 락만으로는 통과한다 (금지 토큰이 없는 것은 맞으므로).
+    local missing="" t
+    for t in PASS FAIL SKIP_WITH_EVIDENCE NEEDS_RESOLUTION; do
+      grep -qF "$t" "$SKILL" || missing="$missing $t"
+    done
+    [[ -z "$missing" ]] && pass "verdict 토큰 4종 불변 (금지 토큰 0 + 4종 실재)" \
+      || fail "verdict 4종 중 누락:$missing"
   fi
 }
 

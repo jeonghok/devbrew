@@ -658,7 +658,7 @@ class TestAggregate(unittest.TestCase):
     # 것으로 기록해 우연이 아니게 한다" 는 주석과 함께. /qg iter-3 에서 리뷰어 둘이
     # 독립적으로 그 단언이 **fail-open 을 계약으로 못 박고 있었다**고 보고했다:
     # `closed` + 3플래그 전부 false 는 R8 PASS 행의 결정론 조건을 **전부** 충족하므로,
-    # 8종 어댑터를 하나도 지원하지 않는 레포(Ruby/Java 등)가 테스트를 한 개도 돌리지
+    # 러너 어댑터 9종을 하나도 지원하지 않는 레포(Ruby/Java 등)가 테스트를 한 개도 돌리지
     # 않고 PASS 를 받는다. 그것을 막던 유일한 것은 SKILL.md 의 한국어 문장이었다.
     #
     # 형상(exit 0 · `adapters: []` · `per_adapter: {}` — bare `per_adapter:` 는 YAML

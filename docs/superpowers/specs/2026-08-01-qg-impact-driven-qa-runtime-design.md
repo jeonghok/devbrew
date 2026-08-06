@@ -79,7 +79,7 @@ Runtime 게이트가 *"전체 앱을 무조건 돌린다"* 를 버리고 **이�
 - `CHANGELOG.md`·README 항목 **문구**.
 - 계획 산문의 **어투**(필수 필드는 §5.8이 lock).
 
-**더 이상 defer하지 않는 것** (§4 위험 논의 + 리뷰 라운드 1에서 이 문서로 끌어올림): **기준선 deps 전략**(§5.4 — 옵션 ② 기각이 판정 정확성을 직접 결정) · **러너별 지원 등급과 degrade 조건**(§5.9 — verdict를 직접 결정) · **`qg-gc.py` 수정 방식**(§5.11 — denylist는 시간에 fail-open) · **`run-test-selection.sh`의 호출 주체**(§5.1 불변식 ② — LD5 독립성이 여기 걸림) · **러너 어댑터 8종의 닫힌 집합과 미지원 처리**(§5.9 — 추측 실행 금지가 안전 계약) · **baseline 캐시의 부분적중·원자성·손상 처리 소유자**(§5.4 — 반쯤 신뢰한 캐시가 조용히 틀린 귀속을 만든다) · **verdict 동시-성립 우선순위**(§5.7).
+**더 이상 defer하지 않는 것** (§4 위험 논의 + 리뷰 라운드 1에서 이 문서로 끌어올림): **기준선 deps 전략**(§5.4 — 옵션 ② 기각이 판정 정확성을 직접 결정) · **러너별 지원 등급과 degrade 조건**(§5.9 — verdict를 직접 결정) · **`qg-gc.py` 수정 방식**(§5.11 — denylist는 시간에 fail-open) · **`run-test-selection.sh`의 호출 주체**(§5.1 불변식 ② — LD5 독립성이 여기 걸림) · **러너 어댑터 9종의 닫힌 집합과 미지원 처리**(§5.9 — 추측 실행 금지가 안전 계약) · **baseline 캐시의 부분적중·원자성·손상 처리 소유자**(§5.4 — 반쯤 신뢰한 캐시가 조용히 틀린 귀속을 만든다) · **verdict 동시-성립 우선순위**(§5.7).
 
 ---
 
@@ -474,7 +474,7 @@ exit: 0 · 2 = 사용 오류
 | `*.test.ts`를 jest·vitest가 함께 주장 | `package.json`의 `test` 스크립트가 호출하는 쪽. **판별 불가면 둘 다 버리고 `npm-script`(bulk)로 폴백** — 잘못된 러너로 돌리느니 그 프로젝트가 정의한 명령을 쓴다 |
 | bulk 어댑터가 복수 감지 (cargo·make·npm-script) | 잔여 흡수는 **표 순서상 첫 하나만**. 나머지는 감지됐어도 **실행하지 않고** `gap`에 `미실행 러너`로 열거 — 같은 스위트를 두 번 돌리지 않는다 |
 
-**`unclaimed`는 `gap`이 아니라 `verification: degraded`다 (라운드 4 block).** 초안은 `unclaimed`를 `gap`에 열거하고 끝냈는데, `gap: closed`는 §5.10에서 **PASS를 막지 않는 경로**다. 그런데 `unclaimed` unit은 정의상 R1b가 **영향분으로 판정한** 것이고, 실행 수단이 없다는 것은 §5.10 자신의 *"영향분을 못 돌림"* 정의를 만족한다. 초안대로면 8종 어댑터 미지원 레포(Ruby/Java 등)에서 **테스트가 한 개도 안 돌고도 PASS**가 가능하다 — 라운드 3에서 detect 레이어에 잠근 누락 방향 실패가 배정 레이어로 한 칸 내려와 재발한 것이다.
+**`unclaimed`는 `gap`이 아니라 `verification: degraded`다 (라운드 4 block).** 초안은 `unclaimed`를 `gap`에 열거하고 끝냈는데, `gap: closed`는 §5.10에서 **PASS를 막지 않는 경로**다. 그런데 `unclaimed` unit은 정의상 R1b가 **영향분으로 판정한** 것이고, 실행 수단이 없다는 것은 §5.10 자신의 *"영향분을 못 돌림"* 정의를 만족한다. 초안대로면 러너 어댑터 9종 미지원 레포(Ruby/Java 등)에서 **테스트가 한 개도 안 돌고도 PASS**가 가능하다 — 라운드 3에서 detect 레이어에 잠근 누락 방향 실패가 배정 레이어로 한 칸 내려와 재발한 것이다.
 
 > **규칙:** `unclaimed`가 하나라도 있으면 `verification` 차원은 `degraded`이고 **PASS 불가**(≤`SKIP_WITH_EVIDENCE`)다. 목록은 `gap`에도 열거하되, 열거가 인증을 대신하지 않는다.
 
@@ -867,7 +867,7 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 ### 6.4 리뷰 라운드 4에서 추가된 AC (AC52–AC57)
 
 - **AC52** (배정 소유자) — `run-test-selection.sh assign`이 후보 **파일 경로**를 받아 `<unit>\t<runner|unclaimed>\t<granularity>`를 emit한다. 파일→패키지 축약이 이 스크립트 안에서 일어나며, 오케스트레이터가 unit 변환을 수행하는 경로가 없다.
-- **AC53** (`unclaimed` → PASS 불가 — block 해소) — `unclaimed` unit이 하나라도 있으면 `verification: degraded`이고 verdict가 `PASS`가 **아니다**. 8종 미지원 레포에서 아무 테스트도 안 돈 채 `PASS`가 나오는 경로가 없다.
+- **AC53** (`unclaimed` → PASS 불가 — block 해소) — `unclaimed` unit이 하나라도 있으면 `verification: degraded`이고 verdict가 `PASS`가 **아니다**. 러너 어댑터 9종 미지원 레포에서 아무 테스트도 안 돈 채 `PASS`가 나오는 경로가 없다.
 - **AC54** (충돌 규칙) — pytest/unittest · jest/vitest · 복수 bulk 어댑터 각각에 결정론적 소유권 규칙이 있고, 모든 unit이 정확히 하나의 어댑터 또는 `unclaimed`에 배정된다. 같은 스위트를 두 bulk 어댑터가 중복 실행하는 경로가 없다.
 - **AC55** (집계 소유자) — `diff-test-results.py --aggregate`가 N개 어댑터 YAML을 `verdict_input`으로 합친다. 입력 개수가 `--expected-adapters`와 다르면 **exit 4**이며, 남은 것만 낙관적으로 합치지 않는다. 오케스트레이터가 N개 YAML을 읽고 최악값을 고르는 경로가 없다.
 - **AC56** (0-어댑터 계약 단일화) — `detect`는 감지 0개에서 **빈 stdout + exit 0**, `run`은 어댑터 사용 불가에서 **exit 3 + 전 unit `unrun`**. production 파일(`scripts/`·`skills/`·`agents/`)에 `runner: none` 문자열이 없다.
@@ -905,7 +905,7 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 
 iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자체의 결함 7건**을 올렸다. 그중 둘은 코드 주석이 *실측 사실*로 단언한 내용이 실제로는 거짓이었던 것이다. append-only 로 정정을 기록한다.
 
-- **AC64** (판정 0건은 인증이 아니다) — `diff-test-results.py` 가 **아무 unit 도 대조하지 않은 실행**을 `attribution_status: closed` 로 내보내지 않는다. per-adapter 는 `--expected` 가 비면, aggregate 는 어댑터가 0개면 `degraded` 다. 빈 `--expected` 는 attributions 를 비우고 모든 카운트를 0 으로 만들어 기존 degrade 조건 **전부**를 비껴갔고, 결과는 `closed` + `verdict_input` 3플래그 전부 false — R8 PASS 행의 결정론 조건을 **완전히** 충족한다. 이를 막던 유일한 것은 SKILL.md 의 한국어 문장(`영향분 0개 → SKIP_WITH_EVIDENCE`)이었고, 그 동작을 통째로 지워도 그 문장의 grep 락은 GREEN 이다(실측). 8종 어댑터 미지원 레포(Ruby/Java 등)가 테스트를 한 개도 돌리지 않고 PASS 를 받는 경로였다. 리뷰어 2명이 독립 보고. **주의:** `test_zero_adapters_is_a_legal_empty_result` 가 이 fail-open 을 *계약으로* 못 박고 있었다 — 테스트가 취약점을 단언한 경우이므로 케이스 이름과 함께 정정했다.
+- **AC64** (판정 0건은 인증이 아니다) — `diff-test-results.py` 가 **아무 unit 도 대조하지 않은 실행**을 `attribution_status: closed` 로 내보내지 않는다. per-adapter 는 `--expected` 가 비면, aggregate 는 어댑터가 0개면 `degraded` 다. 빈 `--expected` 는 attributions 를 비우고 모든 카운트를 0 으로 만들어 기존 degrade 조건 **전부**를 비껴갔고, 결과는 `closed` + `verdict_input` 3플래그 전부 false — R8 PASS 행의 결정론 조건을 **완전히** 충족한다. 이를 막던 유일한 것은 SKILL.md 의 한국어 문장(`영향분 0개 → SKIP_WITH_EVIDENCE`)이었고, 그 동작을 통째로 지워도 그 문장의 grep 락은 GREEN 이다(실측). 러너 어댑터 9종 미지원 레포(Ruby/Java 등)가 테스트를 한 개도 돌리지 않고 PASS 를 받는 경로였다. 리뷰어 2명이 독립 보고. **주의:** `test_zero_adapters_is_a_legal_empty_result` 가 이 fail-open 을 *계약으로* 못 박고 있었다 — 테스트가 취약점을 단언한 경우이므로 케이스 이름과 함께 정정했다.
 - **AC61 정정** (트리거 열거가 거짓이었다) — 근거 주석과 CHANGELOG 가 `error` 트리거로 열거한 **jest/vitest "No tests found"** 와 **전제조건 없는 shell 하니스**는 실측 결과 **exit 1** 이라 `fail` 로 접히고 이 규칙에 **닿지 않는다**. 실제 트리거는 pytest(2·4·5)와 cargo(101) 뿐이다. 잔여는 "go 컴파일 에러" 가 아니라 **exit 1 전체**다 — 이 수정이 닫는 범위보다 크다. 규칙 자체는 유효하나 **범위 주장이 과장돼 있었다**.
 - **AC62 정정** (집행자 주장 철회 + 판별자 교체) — (a) `same_as_head` 를 **읽는 스크립트가 하나도 없다**(grep 확인). 실제 git 으로 `update-ref main→HEAD` + 정직한 `detect` + 진짜 회귀 → `PRE_EXISTING` → `closed` 가 재현됐다. (b) SKILL.md 의 *"이 규칙에는 R6 에 집행자가 있다"* 는 **거짓**이다 — `--baseline-detected` 는 *문자열이 도착했음*만 강제하고, `"$runner"` 를 그대로 넘기면 항상 grounded 다(mutation GREEN). 주장을 철회하고 부분 집행자로 다시 적었다. (c) `same_as_head: yes` 만으로 R4 를 스킵하던 규칙은 **양성 케이스에 해로웠다**: `main` 위 미커밋 작업에서 측정된 `NEW_REGRESSION`/FAIL 이 `BASELINE_UNRUNNABLE`/SKIP 으로 내려갔다. 차등이 실제로 불가능한 것은 `same_as_head: yes` **이고 워킹 트리가 깨끗할 때**뿐이므로 판별자를 `worktree_dirty` 로 좁혔다.
 - **AC63 정정** (∃ → ∀) — 술어가 *"discover 가 수집할 것이 하나라도 있는가"* 를 물었는데 필요한 것은 *"discover 가 놓치는 것이 없는가"* 였다. 실측 탈출 셋: mixed 파일(진짜 TestCase + 모듈-레벨 bare `def test_`) → `pass 0` 인데 pytest 는 2 failed · **docstring 예제 안의 들여쓴 `class T(unittest.TestCase):`** → 매치(같은 함수의 주석이 "docstring 은 만족시킬 수 없다" 고 단언했다 — 거짓) · `test_` 메서드 없는 TestCase 하위클래스 → `Ran 0 tests` → exit 0. 앞의 둘을 **모듈-레벨 bare `def test_` 부재** 라는 음성 조건 AND 로 함께 닫았다. 셋째는 별도 축이라 **열려 있다**.
@@ -923,7 +923,7 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | 경로 | 무엇 |
 |---|---|
 | `scripts/resolve-baseline.sh` | base/base_ref/merge_base/degraded 공유 resolution (OQ5) |
-| `scripts/run-test-selection.sh` | `detect`(러너·입도·setup 감지) + `run`(결정론 실행, unit당 1행 총 함수). 러너 어댑터 8종 단독 소유 |
+| `scripts/run-test-selection.sh` | `detect`(러너·입도·setup 감지) + `run`(결정론 실행, unit당 1행 총 함수). 러너 어댑터 9종 단독 소유 |
 | `scripts/baseline-cache.sh` | 기준선 결과 캐시 get/put — 부분적중·원자적 쓰기·손상 처리 소유 |
 | `scripts/diff-test-results.py` | 기준선×HEAD 짝짓기 → 귀속 8종 + SILENT_DROP |
 | `scripts/check_qa_ledger.py` | floor 5차원 구조 게이트 (Law 1) |
@@ -946,7 +946,7 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 
 ```
 1) resolve-baseline.sh          ← 독립. 소비자(check-review-scope · compute-test-scope)와 함께
-2) run-test-selection.sh        ← 독립(어댑터 8종 + detect/run). 5-상태값 계약을 여기서 확정
+2) run-test-selection.sh        ← 독립(러너 어댑터 9종 + detect/run). 5-상태값 계약을 여기서 확정
 3) baseline-cache.sh            ← 2의 상태값 계약에 의존
 4) diff-test-results.py         ← 2·3 둘 다에 의존
 5) check_qa_ledger.py           ← 독립(원장 형식만). 1~4와 병행 가능
@@ -1005,7 +1005,7 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | T31 | **영향분 0개 → `SKIP_WITH_EVIDENCE`** + gap 차원에 "기존 테스트 없음" 기록 + verdict ≠ PASS | AC15(빈 스코프 분기) |
 | T32 | `check-allowed-tools-order.sh` 통과 (신규 5종 등재) | AC3 |
 | T33 | `README.md` — Principles Instantiated 3줄 + 컴포넌트 트리 신규 5종 등재 | AC30 |
-| T34 | `detect` — 8 어댑터 각각 3줄 emit · **감지 0개면 빈 stdout + exit 0** · **SKILL 쪽 감지-표 재구현 0회**(어댑터 표의 감지 조건 문자열이 SKILL.md에 없음) | AC38 |
+| T34 | `detect` — 러너 어댑터 9종 각각 3줄 emit · **감지 0개면 빈 stdout + exit 0** · **SKILL 쪽 감지-표 재구현 0회**(어댑터 표의 감지 조건 문자열이 SKILL.md에 없음) | AC38 |
 | T35 | `run`이 입력 unit 수 == 출력 행 수 (정상·exit 3·일부 absent 3 픽스처) + 행 누락 입력에서 `SILENT_DROP` | AC39 |
 | T36 | 상태 5종 각각 1 픽스처 + `unrun`은 `put` 후 캐시에 부재 / `absent`는 존재 | AC40 |
 | T37 | `setup_cmd`가 기준선·HEAD 호출에서 **동일 문자열**로 실행됨(호출 로그 대조) + verifier 페르소나에 deps-설치 배제 문구 | AC41 |
@@ -1160,7 +1160,7 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 
    **측정 경로 정정 (라운드 2 Finding C).** 초안은 *"첫 dogfood(V1)에서 실측"* 이라 썼지만 **V1은 이것을 측정할 수 없다** — V1은 devbrew 자신을 대상으로 하고 devbrew에는 Makefile 기반 테스트도 npm-script 테스트도 없다. 측정은 **T41**(픽스처 기반: `Makefile`/`package.json` 스텁 레포에서 `run` 실행 후 비-ignored 신규 파일 발생 여부)이 담당한다. 실측 결과가 "흔함"이면 guard 예외 목록이 아니라 **어댑터별 작업 디렉토리 격리**로 푼다 — guard를 느슨하게 하는 방향은 금지다(Law 2 표면).
 10. **baseline 캐시는 GC되지 않는다.** merge_base마다 파일이 하나씩 쌓이고 정리는 `/cancel-qg --all`에 위임했다. 장수 브랜치·잦은 rebase 환경에서 파일 수가 늘어나는데, 각 파일이 수 KB라 실질 부담은 아니지만 **자동 정리 경로가 없다**는 사실은 남는다.
-11. **러너 어댑터 8종은 초기 집합이며 커버리지 주장이 아니다.** Java/Gradle·Ruby/RSpec·PHP/PHPUnit·.NET 등은 감지 0개로 떨어져 그 레포에서는 이 게이트가 floor를 제공하지 못한다. 확장은 case 절 추가지만, **미지원 레포에서 이 게이트가 무엇을 못 하는지가 사용자에게 보여야** 한다(§5.10의 loud 경로).
+11. **러너 어댑터 9종은 초기 집합이며 커버리지 주장이 아니다.** Java/Gradle·Ruby/RSpec·PHP/PHPUnit·.NET 등은 감지 0개로 떨어져 그 레포에서는 이 게이트가 floor를 제공하지 못한다. 확장은 case 절 추가지만, **미지원 레포에서 이 게이트가 무엇을 못 하는지가 사용자에게 보여야** 한다(§5.10의 loud 경로).
 12. **bulk 어댑터는 커버리지를 보장하지 못한다.** `cargo test`가 `--workspace` 없이 sibling crate를 건너뛰는 식의 함정이 발동하면 영향분이 조용히 미실행되는데 exit 0 + green이라 신호가 없다. 명령 내부를 통제하지 않으므로 **검증 불가**이며, 대응은 봉쇄가 아니라 **공시**다(AC49). 즉 cargo/make/npm-script 레포에서 이 게이트의 주장은 "영향분을 확인했다"가 아니라 "러너 전체를 돌렸다"로 약해진다.
 13. **verifier의 부팅용 setup이 만드는 환경 비대칭은 기계로 안 잡힌다.** AC41은 `setup_cmd` 채널만 결정론적으로 맞춘다. R5a에서 verifier가 앱 부팅을 위해 설치한 것이 우연히 테스트 결과에 영향을 주면, 그것은 git-외부 상태라 mutation-guard가 못 보고 `gap` 기재는 verifier 자기보고에 의존한다 — 불변식 ②가 *결과값*에서 없앤 self-report 신뢰가 *실행 환경* 축에는 남아 있다. 완화: R5b는 R5a와 같은 샌드박스에서 돌므로 비대칭이 발생하면 **양측 차등에 나타난다**(기준선에는 그 setup이 없으므로) — 즉 조용한 오귀속이 아니라 시끄러운 불일치로 드러날 가능성이 높다. 그래도 보장은 아니다.
 

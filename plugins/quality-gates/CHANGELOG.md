@@ -23,7 +23,7 @@
 
 ### Added
 - `scripts/resolve-baseline.sh` — `base`/`base_ref`/`merge_base`/`degraded`/`same_as_head`/`ahead` 6키 (AC62).
-- `scripts/run-test-selection.sh` — 러너 어댑터 8종(pytest·unittest·shell·jest·vitest·
+- `scripts/run-test-selection.sh` — 러너 어댑터 9종(pytest·unittest·shell·jest·vitest·
   go·cargo·make·npm-script)의 유일 소유자. `detect`(감지, **집합** 반환) /
   `assign`(파일→unit 배정) / `probe`(실행 가능성, 테스트 미실행) /
   `run`(총 함수 결정론 실행).
@@ -184,6 +184,23 @@
   아니라 캐시를 없애는 것이다. mutation 16/16 RED(스크립트 7 + SKILL.md 9). *잔여(명시)*:
   값의 provenance 는 여전히 검사되지 않는다 — `"$runner"` 를 그대로 넘기면 항상
   grounded 다. 정직한 값을 넘기는 것은 오케스트레이터의 의무로 남는다.
+- **이빨 없는 락 2건과 개수 드리프트 1건** (`/qg` iter-5 C3·C4·C6 — 전부 락 자신의 결함).
+  (1) `test_runtime_contract_invariance.sh` 의 verdict-토큰 락이 `if grep -qE … "$SKILL"`
+  하나였다. 파일이 없으면 grep 은 **exit 2**(파일 오류)를 내는데 `if` 가 그것을 "매치
+  없음"과 같은 non-zero 로 읽어 `else` 로 떨어져 *"verdict 토큰 4종 불변"* 을 PASS 로
+  찍었다 — **SKILL.md 를 통째로 지워도 GREEN.** 부재 검사 + 4종 실재(양의 짝)를 붙였다.
+  (2) `test_runtime_verifier_frontmatter.sh` 의 `--- body contract ---` assert 들이
+  파일 **전체**를 grep 했고, 이 파일의 `description:` frontmatter 가 길어서
+  `sandbox`(10회)·`product`(5회)·`SKIP_WITH_EVIDENCE`·`NEEDS_RESOLUTION` 을 스스로
+  만족시켰다. 이름이 "body contract" 인 assert 가 **본문을 하나도 안 읽고** 통과했고,
+  실제로 Hard Rule `Fabricate a green by patching product source` 를 지워도 21/21
+  GREEN 이었다. persona 는 보안-민감 코드인데(CLAUDE.md) 그 규칙의 삭제를 락이 못
+  잡았다. 본문만 읽는 `assert_body_grep` + 두 Hard Rule 의 body-unique 앵커로 교체.
+  (3) 6곳이 *"러너 어댑터 8종"* 이라 적었는데 닫힌 집합은 **9종**이다 — CHANGELOG 는
+  같은 줄에서 **이름을 9개 나열하며 8종이라고** 적었다. 숫자만 고치면 다음 어댑터에서
+  똑같이 어긋나므로, 개수를 `granularity_of` 의 닫힌 집합에서 **파생**해 플러그인 안의
+  모든 `러너 어댑터 N종` 주장과 대조하는 락을 붙였다(∀ + 코퍼스 실재 + 파서 계측기
+  검증). mutation 13/13 RED.
 
 ## [2.14.3] — 2026-07-29
 

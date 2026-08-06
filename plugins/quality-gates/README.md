@@ -50,7 +50,7 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **Law 1/2/3 + P8/P18 (산출물 비평 루프, v2.11.0)** — `/qg critique`가 비-코드 산출물에 대해 inherit-tier `artifact-critic`+`artifact-adversarial`(+조건부 codex)의 read-only 비평 → 오케스트레이터 수정 → 라운드별 커밋 루프를 돈다. Law 1=E3 upfront 동의 게이트; Law 2=read-only 리뷰어(`tools:` allowlist)+매 라운드 독립 critic 게이트; Law 3=라운드별 커밋 감사추적; P18=max-rounds+stagnation predicate+kill switch(`DEVBREW_QG_DISABLE_CRITIQUE`); P8=NL 라우팅 모델-소유, 결정론은 `critique <path>`+§10 스키마. 별도 skill `critiquing-artifacts`로 위임(코드 2게이트 파이프라인 무변경).
 - **LD3 (floor 는 실행이다) — 영향분 테스트의 실제 실행** (v3.0.0) — Runtime 게이트의 floor
   가 "전체 앱 부팅"이 아니라 *"레포에 이미 있는 테스트 중 영향분을 실제로 돌리는 것"*이다.
-  `run-test-selection.sh` 가 어댑터 8종을 **집합으로** 감지해 전부 실행한다 — 폴리글랏
+  `run-test-selection.sh` 가 러너 어댑터 9종을 **집합으로** 감지해 전부 실행한다 — 폴리글랏
   레포에서 우선순위 밖 러너를 버리면 floor 가 의미를 잃는다(이 리포 실측: `.sh` 130개 /
   `.py` 50개). 부팅·플로우는 floor 가 아니라 그 위의 상황별 층이다.
 - **LD5 (결정론은 모델 주장과 독립인 백스톱) — 호출 주체 분리 (Law 2)** (v3.0.0) — 영향 스코프
@@ -101,7 +101,7 @@ quality-gates/
 │   ├── detect-runtime.sh                     # Runtime gate 런타임 surface 탐지 (manifest 산출)
 │   ├── compute-test-scope-candidates.sh      # Runtime gate Step 2.5 — 후보 test 파일 산출 (Python/JS/TS heuristic)
 │   ├── resolve-baseline.sh                   # 공유 baseline resolution (base/base_ref/merge_base/degraded/same_as_head/ahead)
-│   ├── run-test-selection.sh                 # Runtime floor — 러너 어댑터 8종 detect/assign/run (유일 소유자)
+│   ├── run-test-selection.sh                 # Runtime floor — 러너 어댑터 9종 detect/assign/probe/run (유일 소유자)
 │   ├── baseline-cache.sh                     # (merge_base, runner, unit) 내용주소 기준선 캐시 get/put
 │   ├── diff-test-results.py                  # 기준선×HEAD 귀속 8종 + 어댑터 간 --aggregate
 │   ├── check_qa_ledger.py                    # LD7 floor 5차원 원장 구조 게이트 (Law 1)

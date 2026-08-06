@@ -716,7 +716,7 @@ $f"
     refused_units=""
     is_refused() { printf '%s\n' "$refused_units" | grep -qxF "$1"; }
 
-    # exit code만 읽는다 — 러너별 출력 파서 없이 8종 전부에 같은 코드가 적용된다.
+    # exit code만 읽는다 — 러너별 출력 파서 없이 러너 어댑터 9종 전부에 같은 코드가 적용된다.
     # 0=pass, 1=fail, 그 외=error. error는 §5.5에서 fail 축으로 접히므로 error/fail
     # 사이의 오분류는 귀속을 바꾸지 않는다 (라벨의 `(error)` 병기만 달라진다).
     #
