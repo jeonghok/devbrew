@@ -639,12 +639,29 @@ case_probe_and_run_share_the_gauntlet() {
   _mk_runner_missing() { printf 'module x\n' > "$1/go.mod"
                          mkdir -p "$1/pkg"; : > "$1/pkg/x_test.go"; }
 
-  local row builder runner want bare
+  # /qg iter-6 E4: `setup_failed` 는 `adapter_usable` 의 **네 번째** 미가용 사유인데
+  # 두 호출부(probe·run) 어디에도 테스트가 없었다 — 실패 분기를 통째로 삭제해도 세
+  # 스위트가 전부 GREEN 이었다(실측). 결과: stale lockfile 로 setup 이 실패해도 어댑터가
+  # 가용 선언되어 준비 안 된 실행이 돌고, 그 실행이 양측에서 exit 1 이면 `PRE_EXISTING`
+  # → `closed` → PASS 다. 게이트가 잡으려던 setup 실패를 통해 도달하는 경로였다.
+  #
+  # 머신 독립적으로 재려고 bare PATH 를 쓴다: `uv`·`poetry`·`npm` 은 `/usr/bin`·`/bin`
+  # 에 없으므로 setup 이 확실히 실패한다. 관문 순서상 setup 은 runner_available **앞**
+  # 이므로 이 픽스처는 `runner_missing` 이 아니라 `setup_failed` 로 떨어져야 한다 —
+  # 그 순서 자체가 계약이다(uv/venv setup 이 러너를 설치하므로).
+  _mk_setup_failed() { ( cd "$1" && git init -q . )
+                       printf '.venv/\n' > "$1/.gitignore"
+                       : > "$1/uv.lock"
+                       printf '[tool.pytest.ini_options]\n' > "$1/pyproject.toml"
+                       mkdir -p "$1/tests"; printf 'def test_a():\n    assert 1\n' > "$1/tests/test_a.py"; }
+
+  local row builder runner want bare want_reason
   for row in "not_detected:_mk_not_detected:pytest:no:0" \
              "env_dir_not_ignored:_mk_env_not_ignored:pytest:no:0" \
+             "setup_failed:_mk_setup_failed:pytest:no:1" \
              "runner_missing:_mk_runner_missing:go:no:1" \
              "usable:_mk_usable:shell:yes:0"; do
-    IFS=: read -r _ builder runner want bare <<< "$row"
+    IFS=: read -r want_reason builder runner want bare <<< "$row"
     w=$(mktemp -d) || exit 1
     "$builder" "$w"
     local p_out p_rc r_rc
@@ -660,12 +677,17 @@ case_probe_and_run_share_the_gauntlet() {
     [[ "$p_usable" == "$want" ]] || { bad=1; detail="$detail [$row probe=$p_usable]"; }
     if [[ "$want" == "no" ]]; then
       [[ $p_rc -eq 3 && $r_rc -eq 3 ]] || { bad=1; detail="$detail [$row rc p=$p_rc r=$r_rc]"; }
+      # **사유까지 잰다.** usable/rc 만 보면 네 사유가 서로를 대신해 줄 수 있고, 그러면
+      # 어느 한 사유의 분기를 지워도 다른 사유가 같은 답을 내 GREEN 이 된다 (E4 가 정확히
+      # 그 모양이었다). 사유 문자열을 요구하면 각 분기가 자기 자신으로만 만족된다.
+      printf '%s\n' "$p_out" | grep -qx "reason: $want_reason" \
+        || { bad=1; detail="$detail [$row reason=$(printf '%s' "$p_out" | grep '^reason:' | head -1)]"; }
     else
       [[ $p_rc -eq 0 && $r_rc -ne 3 ]] || { bad=1; detail="$detail [$row rc p=$p_rc r=$r_rc]"; }
     fi
     rm -rf "$w"
   done
-  [[ $bad -eq 0 ]] && pass "probe ↔ run: 미가용 3사유 + 가용 1건 전부에서 답이 일치 (∀)" \
+  [[ $bad -eq 0 ]] && pass "probe ↔ run: 미가용 **4사유**(사유 문자열까지) + 가용 1건 전부에서 답이 일치 (∀)" \
                    || fail "관문 drift:$detail"
 }
 

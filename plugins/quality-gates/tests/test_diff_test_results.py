@@ -72,6 +72,71 @@ def flag_of(out, key):
     return None
 
 
+class TestAttrTableTotality(unittest.TestCase):
+    """/qg iter-6 E2 — ATTR 16셀 **전수**.
+
+    T9 는 8개 *카테고리* 를 하나씩 덮었지 표의 16개 *셀* 을 덮지 않았다. 실측:
+    `(P,A)`·`(F,A)`·`(A,A)`·`(U,U)`·`(F,U)`·`(A,U)`·`(U,A)` 7셀은 값을 바꿔도
+    `test_diff_test_results.py` 가 전부 통과했고, **7개 전부가 `degraded` → `closed`
+    방향으로 뒤집혔다.** 특히 `(U,U)` 는 어느 트리도 어댑터를 못 돌린 경우인데
+    `STILL_GREEN` 으로 바꾸면 `closed` → R8 PASS 적격이 된다.
+
+    살아 있는 입력이다: `run` 은 어댑터가 그 트리에서 미가용이면 **모든 unit 을
+    `unrun`** 으로 내고(:671 부근), 폴백에서는 양축이 함께 `unrun` 으로 채워진다.
+
+    기대값을 **여기에 독립 사본으로** 선언한다 — 소스에서 읽어 오면 표를 고칠 때
+    테스트도 같이 따라가 아무것도 잠그지 못한다.
+    """
+
+    STATUS = {"P": "pass", "F": "fail", "A": "absent", "U": "unrun"}
+    EXPECTED = {
+        ("P", "P"): "STILL_GREEN",         ("P", "F"): "NEW_REGRESSION",
+        ("P", "A"): "SILENT_DROP",         ("P", "U"): "SILENT_DROP",
+        ("F", "P"): "FIXED",               ("F", "F"): "PRE_EXISTING",
+        ("F", "A"): "SILENT_DROP",         ("F", "U"): "SILENT_DROP",
+        ("A", "P"): "NEW_TEST_GREEN",      ("A", "F"): "NEW_TEST_RED",
+        ("A", "A"): "SILENT_DROP",         ("A", "U"): "SILENT_DROP",
+        ("U", "P"): "BASELINE_UNRUNNABLE", ("U", "F"): "BASELINE_UNRUNNABLE",
+        ("U", "A"): "BASELINE_UNRUNNABLE", ("U", "U"): "BASELINE_UNRUNNABLE",
+    }
+
+    def test_all_sixteen_cells(self):
+        self.assertEqual(len(self.EXPECTED), 16, "표가 16셀이 아니면 전수가 아니다")
+        for (b_ax, h_ax), want in sorted(self.EXPECTED.items()):
+            with self.subTest(cell=f"({b_ax},{h_ax})"):
+                rows_b = [("u", self.STATUS[b_ax], "0")]
+                rows_h = [("u", self.STATUS[h_ax], "0")]
+                rc, out, err = run_diff(["u"], rows_b, rows_h,
+                                        granularity="file", runner="shell",
+                                        baseline_detected="shell", mode="per-unit")
+                self.assertEqual(rc, 0, f"({b_ax},{h_ax}) rc={rc} {err}")
+                self.assertEqual(verdict_of(out, "u"), want,
+                                 f"({b_ax},{h_ax}) → 기대 {want}\n{out}")
+
+    def test_error_shares_the_fail_axis_on_both_sides(self):
+        """AXIS 는 `error` 를 `fail` 과 같은 축(F)에 둔다 — 양쪽에서 그런지 잰다.
+
+        한쪽만 재면 축 매핑을 한쪽만 바꾼 mutation 이 통과한다.
+        """
+        for side in ("baseline", "head"):
+            with self.subTest(side=side):
+                b = [("u", "error" if side == "baseline" else "pass", "2")]
+                h = [("u", "error" if side == "head" else "pass", "2")]
+                rc, out, _ = run_diff(["u"], b, h, granularity="file", runner="shell",
+                                      baseline_detected="shell", mode="per-unit")
+                self.assertEqual(rc, 0)
+                want = "FIXED" if side == "baseline" else "NEW_REGRESSION"
+                self.assertEqual(verdict_of(out, "u"), want, out)
+
+    def test_categories_are_a_closed_set_of_eight(self):
+        """표의 치역이 8종을 벗어나지 않는다 — 새 카테고리가 조용히 늘면 R8 표가 못 읽는다."""
+        self.assertEqual(
+            sorted(set(self.EXPECTED.values())),
+            ["BASELINE_UNRUNNABLE", "FIXED", "NEW_REGRESSION", "NEW_TEST_GREEN",
+             "NEW_TEST_RED", "PRE_EXISTING", "SILENT_DROP", "STILL_GREEN"],
+        )
+
+
 class TestAttribution(unittest.TestCase):
     # T9 — 귀속 8종 각각 1 픽스처 (AC11)
     def test_eight_categories(self):

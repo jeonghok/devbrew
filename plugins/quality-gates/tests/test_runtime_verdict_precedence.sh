@@ -180,8 +180,23 @@ case_skill_rerun_exactly_once() {
 # T8 + AC10: bulk green이면 per-unit 재실행을 하지 않는다 (2단 구조)
 case_skill_two_stage() {
   local w; w=$(section_window '**Step R5b' '**Step R6')
+  local missing=""
+  # green 방향(재실행 안 함) — 비용 절약 규칙.
   [[ $(count_in "$w" 'bulk 가 green 이면 per-unit 재실행을 하지 않는다') -ge 1 ]] \
-    && pass "2단 구조(bulk green → per-unit 0회) 명시" || fail "2단 구조 문장 부재"
+    || missing="$missing green방향"
+  # /qg iter-6 (adversarial N2): **red 방향이 무잠금이었다.** green 절반만 잠그면
+  # "실패한 unit 을 per-unit 으로 재실행한다" 를 지워도 스위트가 못 본다. 그런데 그
+  # 문장이 사라지면 기준선 green + HEAD bulk red 인 shell/unittest 실행에서 **무고한
+  # unit 전부가 (P,F)=NEW_REGRESSION → confirmed_product_defect: true → terminal FAIL**
+  # 이 되고, terminal FAIL 은 어떤 degrade 로도 내려가지 않는다. 즉 거짓 *terminal*
+  # FAIL 이 산문 한 단계 누락 거리에 있었다. 두 방향을 함께 요구한다.
+  # red 방향은 **HEAD 측(R5b)** 창에서 잰다 — 거짓 terminal FAIL 이 나는 쪽이 여기다.
+  # (R4 도 같은 규칙을 자기 문구로 갖고 있지만, 기준선 축이 red 인 경우는 degrade 로
+  # 흡수되므로 그쪽이 빠져도 인증이 늘지 않는다.)
+  [[ $(count_in "$w" 'red 일 때만 실패한 unit 에 대해 `per-unit` 으로 재실행한다') -ge 1 ]] \
+    || missing="$missing red방향"
+  [[ -z "$missing" ]] && pass "2단 구조 **양방향** 명시 (green→재실행 0회 / red→실패분만 per-unit)" \
+                      || fail "2단 구조 문장 부재:$missing"
 }
 
 # T28 + AC19: 계획 산문 6필드가 R2 절에 열거된다
@@ -388,11 +403,24 @@ case_pass_row_reads_all_three_flags() {
   local row; row=$(grep -F '| `PASS` |' "$SKILL")
   if [[ -z "$row" ]]; then fail "R8 PASS 행을 못 찾음 (앵커 소실)"; return; fi
   local missing="" k
-  for k in confirmed_product_defect silent_drop baseline_unrunnable forced_downgrade; do
+  # /qg iter-6 E3: 앞선 판본은 **정확히 이 4토큰만** 열거하고 멈췄다. 그래서 PASS 행에서
+  # `floor 5차원 전부 closed` 절을 **통째로 지워도** 스위트 전체가 GREEN 이었다(실측:
+  # bash 스위트 baseline · harness GREEN · 이 파일 27/27 GREEN). 이 케이스 자신의 근거가
+  # *"막는 것이 표가 아니면 표를 읽는 소비자는 통과시킨다"* 인데, 같은 논증이 그것이
+  # 세는 걸 잊은 절에 그대로 적용된다. AC15·AC17·AC44·AC53 이 전부 이 표를 경유한다.
+  for k in 'floor 5차원 전부' confirmed_product_defect silent_drop baseline_unrunnable forced_downgrade; do
     printf '%s\n' "$row" | grep -qF "$k" || missing="$missing $k"
   done
-  [[ -z "$missing" ]] && pass "R8 PASS 행이 verdict_input 3플래그 + forced_downgrade 전부 요구" \
-    || fail "PASS 행 누락:$missing"
+  # SKIP 행의 floor disjunct 도 같은 축이다 — PASS 를 막는 절만 지키고 그것이 어디로
+  # 라우팅되는지를 안 지키면, `degraded` 가 아무 verdict 로도 안 가는 표가 만들어진다.
+  local skip_row; skip_row=$(grep -F '| `SKIP_WITH_EVIDENCE` |' "$SKILL")
+  if [[ -z "$skip_row" ]]; then
+    missing="$missing SKIP행-앵커소실"
+  else
+    printf '%s\n' "$skip_row" | grep -qF '어느 floor 차원이' || missing="$missing SKIP행-floor-disjunct"
+  fi
+  [[ -z "$missing" ]] && pass "R8 PASS 행이 floor 절 + verdict_input 3플래그 + forced_downgrade 를, SKIP 행이 floor disjunct 를 요구" \
+    || fail "R8 판정표 누락:$missing"
 }
 
 # T77 — `FLAKY` 는 **귀속 카테고리가 아니다** (/qg iter-5 SF2).
