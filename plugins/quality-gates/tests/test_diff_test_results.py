@@ -72,6 +72,54 @@ def flag_of(out, key):
     return None
 
 
+class TestRequiredArgsTotality(unittest.TestCase):
+    """/qg iter-6 E9 — 필수 인자 목록의 **완전성(∀)**.
+
+    앞선 판본은 `--mode` 와 `--baseline-detected` 두 이름의 *존재(∃)* 만 증명했다.
+    나머지 5개(`expected`/`baseline`/`head`/`granularity`/`runner`)를 목록에서 빼도
+    스위트가 GREEN 이었고, 그중 4개는 exit 2(사용 오류)가 아니라 **uncaught
+    TypeError → rc=1** 로 죽었다 — `read_text_or_fail4` 의 docstring 이 계약 위반
+    ("미분류 크래시")이라 선언한 바로 그 모양이다.
+
+    목록을 **여기에 독립 사본으로** 선언하고, 각 인자를 하나씩 빼면 반드시 rc=2 +
+    그 인자 이름이 stderr 에 나오는지 잰다. 소스에서 읽어 오면 목록을 줄일 때
+    테스트도 같이 줄어 아무것도 잠그지 못한다.
+    """
+
+    REQUIRED = ["expected", "baseline", "head", "granularity", "mode", "runner",
+                "baseline-detected"]
+
+    def _run_without(self, omit):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d)
+            (p / "e.txt").write_text("u\n", encoding="utf-8")
+            for name in ("b.tsv", "h.tsv"):
+                (p / name).write_text("u\tpass\t0\n", encoding="utf-8")
+            full = {
+                "expected": str(p / "e.txt"), "baseline": str(p / "b.tsv"),
+                "head": str(p / "h.tsv"), "granularity": "file", "mode": "per-unit",
+                "runner": "shell", "baseline-detected": "shell",
+            }
+            argv = []
+            for k, v in full.items():
+                if k == omit:
+                    continue
+                argv += [f"--{k}", v]
+            r = subprocess.run([sys.executable, str(SCRIPT), *argv],
+                               capture_output=True, text=True)
+            return r.returncode, r.stderr
+
+    def test_every_required_arg_is_enforced(self):
+        # 양의 짝: 전부 넘기면 정상 종료여야 한다. 없으면 "언제나 rc=2" 가 통과한다.
+        rc, err = self._run_without(omit=None)
+        self.assertEqual(rc, 0, f"전 인자 제공 시 rc={rc} {err}")
+        for name in self.REQUIRED:
+            with self.subTest(omitted=name):
+                rc, err = self._run_without(omit=name)
+                self.assertEqual(rc, 2, f"--{name} 누락인데 rc={rc} (미분류 크래시?)\n{err}")
+                self.assertIn(f"--{name}", err)
+
+
 class TestAttrTableTotality(unittest.TestCase):
     """/qg iter-6 E2 — ATTR 16셀 **전수**.
 

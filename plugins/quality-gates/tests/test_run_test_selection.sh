@@ -317,6 +317,57 @@ case_run_bulk_green() {
   rmw
 }
 
+# T85 (/qg iter-6 E1): **red bulk 실행을 만드는 픽스처가 스위트 어디에도 없었다.**
+# 두 스위트의 모든 bulk 케이스가 exit-0 러너(`tests/ok.sh`·`@true` Makefile·
+# `"test":"true"`)를 썼고, `mk_shell_repo` 의 실패 파일 `bad.sh` 는 유일하게 그것을 쓸
+# 수 있었던 bulk 케이스 직전에 `rm` 됐다. 그래서 bulk 행 emit 이 **green 방향으로만**
+# assert 됐고, "언제나 `pass 0` 을 찍는" mutation 이 세 스위트를 전부 통과했다(실측).
+#
+# 그 실패 모드가 이 브랜치 명제의 정확한 역이다: 진짜 실패하는 배치 실행이 양측에서
+# `pass` 를 보고하면 `(P,P)=STILL_GREEN` → `closed` → PASS 다.
+#
+# 양의 짝은 바로 위 `case_run_bulk_green` 이 이미 담당한다(전 unit `pass 0`). 여기서는
+# **red 방향과 도말의 관측 가능한 서명**을 함께 잰다.
+case_run_bulk_red_stamps_every_unit() {
+  mk_shell_repo
+  cp "$W/tests/ok.sh" "$W/tests/ok2.sh"
+  local out fails distinct
+  # 배치 안에 실패가 하나라도 있으면 그 종료 코드가 전 unit 에 찍힌다.
+  out=$(bash "$RTS" run "$W" shell bulk tests/ok.sh tests/ok2.sh tests/bad.sh 2>/dev/null)
+  fails=$(printf '%s\n' "$out" | grep -c "${TAB}fail${TAB}")
+  # 도말의 서명: present unit 전부가 같은 (status, exit) 쌍 — diff-test-results.py 의
+  # 관측 기반 degrade 가 정확히 이 모양을 본다.
+  distinct=$(printf '%s\n' "$out" | awk -F'\t' 'NF==3 {print $2"\t"$3}' | sort -u | grep -c .)
+  if [[ "$fails" == "3" && "$distinct" == "1" ]]; then
+    pass "bulk red → 전 unit 에 실패 코드가 찍힌다(도말 서명 = 쌍 1종)"
+  else
+    fail "bulk red (fails=$fails distinct=$distinct out='$out')"
+  fi
+  rmw
+}
+
+# T86 (/qg iter-6 E1 연장): bulk red 가 **하류에서 degrade 로 읽히는지** 까지 잰다.
+# 위 케이스는 `run` 의 출력 모양만 본다 — 그것이 판정으로 이어지는지는 별개 축이고,
+# 그 축이 비어 있으면 "행은 맞는데 아무도 안 읽는" 상태를 못 잡는다.
+case_run_bulk_red_reaches_degrade() {
+  mk_shell_repo
+  cp "$W/tests/ok.sh" "$W/tests/ok2.sh"
+  local d; d=$(mktemp -d) || exit 1
+  bash "$RTS" run "$W" shell bulk tests/ok.sh tests/ok2.sh tests/bad.sh 2>/dev/null > "$d/rows.tsv"
+  cp "$d/rows.tsv" "$d/base.tsv"          # 양측 동일 red = PRE_EXISTING 으로 접히는 모양
+  printf 'tests/ok.sh\ntests/ok2.sh\ntests/bad.sh\n' > "$d/expected.txt"
+  local st
+  st=$(python3 "$PLUGIN_ROOT/scripts/diff-test-results.py" \
+         --expected "$d/expected.txt" --baseline "$d/base.tsv" --head "$d/rows.tsv" \
+         --runner shell --granularity file --mode per-unit --baseline-detected shell \
+       | awk '$1 == "attribution_status:" { print $2 }')
+  rm -rf "$d"
+  [[ "$st" == "degraded" ]] \
+    && pass "bulk red 도말이 하류에서 degraded 로 읽힌다 (mode 를 per-unit 이라 선언해도)" \
+    || fail "bulk red 하류 degrade (attribution_status=$st)"
+  rmw
+}
+
 # 실행 지점의 방어: assign 을 우회해 임의 경로를 넘겨도 shell 어댑터는 그것을 실행하지
 # 않는다. 설계 §5.9 "임의 명령을 추측해 실행하지 않는다".
 case_run_shell_refuses_out_of_scope_unit() {
@@ -800,7 +851,8 @@ for c in case_assign_go_package case_assign_unclaimed case_assign_unittest_skips
          case_assign_last_candidate_without_trailing_newline \
          case_assign_unittest_refuses_async_bare_test \
          case_detect_malformed_package_json_is_loud \
-         case_detect_js_ambiguity_is_loud; do
+         case_detect_js_ambiguity_is_loud \
+         case_run_bulk_red_stamps_every_unit case_run_bulk_red_reaches_degrade; do
   echo "== $c"; $c
 done
 echo "── run-test-selection: $PASS passed, $FAIL failed"

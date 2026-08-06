@@ -129,7 +129,8 @@ Runtime은 그 전환을 아직 받지 않았다. 이 문서가 같은 모양을
 - **버그 수정 루프** — gstack Phase 8 fix loop. Runtime은 판정하고, 수정은 사용자 또는 Review 게이트 Retry 경로.
 - **레포 CI의 test-selection 대체** — 신호로 읽고 차이를 설명하되 대체하지 않는다 (OQ4).
 - **Review 게이트 스코프와의 강제 동기화** — 두 스코프는 다를 수 있고, 다르면 설명만 한다.
-- **`detect-runtime.sh` / `create-sandbox` / `mutation-guard` 계약 변경** — LD5 "배관은 기존 고정 계약이 기본값". 바이트 무변경 (AC21, AC22).
+- **`create-sandbox` / `mutation-guard` 계약 변경** — LD5 "배관은 기존 고정 계약이 기본값". 두 서브커맨드 본문은 바이트 무변경 (AC22, 실측 -0줄).
+  `detect-runtime.sh` 는 **여기서 빠진다** — C2 수정이 테스트 러너를 `runnable_surfaces` 에서 분리하며 실제로 55줄을 바꿨다. 원래 AC21 은 이 파일도 바이트 무변경이라 적었고 그 주장이 구현과 어긋난 채 남아 있었다 (`/qg` iter-6 E7 → **AC21′** 참조).
 - **`/qg runtime` 단일게이트 동작 변경** — 기존 non-goal 승계 (AC23).
 - **부팅/플로우 층의 차등화** — 차등 실행은 **테스트 러너 표면에만** 적용한다. 브라우저 플로우를 기준선에서도 돌리는 것은 비용·비결정성 모두에서 감당 불가 (§11 ⑤).
 - **의존 그래프 기반 영향 판정** — `compute-test-scope-candidates.sh`의 이름 매칭 휴리스틱을 보조 입력으로 쓰되, import 그래프 분석기를 새로 만들지 않는다 (§11 ④).
@@ -708,7 +709,7 @@ evidence-log 안에 산다. spec-distill 커버리지 원장과 같은 줄 모�
 
 | | 무엇을 정하나 | 소유 |
 |---|---|---|
-| `detect-runtime.sh` 매니페스트 | 상황별 층의 **부팅 표면**(`runnable_surfaces`·`approved_surfaces`) | 기존 계약, 바이트 무변경 (AC21) |
+| `detect-runtime.sh` 매니페스트 | 상황별 층의 **부팅 표면**(`runnable_surfaces`·`approved_surfaces`) | C2 로 55줄 변경 — 테스트 러너를 `test_runners` 로 분리(AC21′). SHA 핀 + T9 의 5축 ∀ 가 계약을 잠근다 |
 | `run-test-selection.sh detect` | floor의 **테스트 러너 식별**(`runner`/`granularity`/`setup_cmd`) | 이 설계의 신규 |
 
 매니페스트의 `test_runners` 필드는 **이 설계의 실행 경로에서 소비되지 않는다** — 부팅 표면 목록만 쓴다. 두 집합이 다른 것은 결함이 아니라 두 축이 다르기 때문이며(§5.3의 용어 경계 참조), 이 사실을 계획 산문에 노출할 필요는 없다. 다만 매니페스트가 **스코프 보조 입력이 아니라는 것**은 §5.3에 못박혀 있다.
@@ -815,7 +816,22 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 
 **기존 계약 보존**
 
-- **AC21** — `scripts/detect-runtime.sh`가 **바이트 무변경**이다.
+- **AC21** — ~~`scripts/detect-runtime.sh`가 **바이트 무변경**이다.~~
+  **AC21′ 정정 (`/qg` iter-6 E7 — 이 AC 는 구현과 어긋난 채로 남아 있었다).**
+  이 브랜치는 C2 수정으로 `detect-runtime.sh` 를 **55줄 바꿨다** — 테스트 러너를
+  `runnable_surfaces` 에서 분리해, verifier 가 같은 스위트를 두 번째로 돌리거나 러너 deps 를
+  HEAD 샌드박스에만 설치하는 경로(§5.1 불변식 ②·AC41 충돌)를 없앴다. 즉 변경은 **blast
+  radius 를 줄이는 방향**이고 판단 자체는 옳지만, AC 원장이 이 브랜치의 머지 oracle 인데
+  **거짓을 인증하고 있었다.** 다른 모든 정정은 append-only 개정을 받았고 이것만 못 받은 채
+  `test_runtime_contract_invariance.sh` 의 핀 SHA 를 bump 하는 것으로 대체됐다 — 핀은
+  *변경이 있었음*을 기록할 뿐 *그 변경이 허가됐음*을 기록하지 못한다.
+  **새 계약:** `detect-runtime.sh` 는 바이트 무변경이 **아니다.** 대신 (a) SHA 핀으로 무단
+  변경을 막고, (b) `runnable_surfaces` 는 **프로세스를 띄우는 표면만** 담으며 테스트 러너는
+  `test_runners` 로 분리된다(T9 가 5축 ∀ 로 잠근다), (c) 남는 표면은 전부
+  `requires_decision: true` 다. **AC22 는 이 정정의 대상이 아니며 실측으로 성립한다** —
+  `qg-worktree.sh` 는 이 브랜치에서 +44/**-0** 즉 순수 추가(`create-baseline` 새 case 절)이고
+  `create-sandbox`·`mutation-guard` 본문은 한 줄도 바뀌지 않았다. 두 AC 를 한 문장에 묶어
+  적었던 것(§3 Non-goals)이 "둘 다 깨졌다" 는 오독을 부를 수 있어 거기도 분리했다.
 - **AC22** — `qg-worktree.sh`의 `create-sandbox` · `mutation-guard` 본문이 **바이트 무변경**이다 (`create-baseline` 추가는 새 case 절).
 - **AC23** — `/qg runtime` 단일게이트 경로가 보존된다 (Step R-init의 zero-click 폴백 포함).
 - **AC24** — `hooks/hooks.json` 항목 수가 **불변**이고 신규 훅 파일이 **0개**다.
@@ -1042,7 +1058,28 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | T73 | R4②-a 스텝 4축 — 섹션 윈도우 안에 (a) `probe` 호출 코드 블록 · (b) `usable: yes` 를 **본** 러너만 넣는다는 소비 규칙 · (c) 부재≠통과(fail-closed) 방향 · (d) 무조건성 선언. needle 로 `usable: yes` 자체를 쓰면 출처 진술이 그것을 만족시켜 소비 규칙을 통째로 지워도 GREEN 이다(실측) | AC60′ |
 | T74 | **출처 ∀** — `baseline_detected` 와 백틱 `` `detect` `` 를 함께 담은 **모든** 줄이 `probe` 를 말하거나 부정/불충분을 표시한다 + **양의 짝**: 올바른 출처 진술이 실재한다(부정 락만 있으면 통째 삭제도 통과) | AC60′ |
 
-**AC ↔ 검증 완전성.** **AC1–AC64 전부**가 위 T 또는 §8.3의 V에 대응한다. 자동 테스트가 없는 것은 **AC20**(`V4` — `AskUserQuestion` 발화 여부는 대화형이라 자동화하지 않는다)과 **AC61′·AC62′·AC63′ 의 *정정 완전성* 축**(`V9` — 이 문서 자신에 대한 검사라 플러그인 테스트가 담당할 수 없다. 앞 버전은 이것을 `T64` 라는 **구현되지 않은 자동 테스트**로 적어 이 선언문을 거짓으로 만들었다 — /qg iter-5 TA1) 둘이다. 이 매핑 자체를 구현 시 표로 유지하고, **AC 추가 시 대응 T/V 없이 머지하지 않는다.** (라운드 3에서 이 선언문이 AC38–AC44를 반영하지 않은 채 stale했다 — 선언문도 갱신 대상이다.)
+| T66 | R-init 판별자 표가 락돼 있다 (/qg iter-5 TA4) | AC59′ |
+| T67 | R4 가 판별자를 **자기 스텝 안에서** 구한다 — 상류 값을 물려받지 않는다 (/qg iter-5 SF3) | AC59′ |
+| T68 | 좁힌 규칙의 **원래(넓은) 형태가 문서 어디에도 인용 가능한 채로 남지 않는다** (∀) | AC59′ |
+| T69 | 도말(smear)이 인증을 막는다 (/qg iter-5 SF1) | AC60′ |
+| T75 | `--granularity` 의 provenance — 소유자에게 물어 대조, 불일치는 exit 4 (/qg iter-5 C5) | AC60′ |
+| T76 | R8 PASS 행이 **floor 절 + `verdict_input` 3플래그 + `forced_downgrade`** 를, SKIP 행이 floor disjunct 를 요구 (/qg iter-5 SF5 · floor 축은 iter-6 E3 에서 추가 — 그 전에는 절을 통째로 지워도 GREEN) | AC15 AC17 AC44 AC53 |
+| T77 | `FLAKY` 는 귀속 카테고리가 **아니다** — 원장 note 다 (/qg iter-5 SF2) | AC11 |
+| T78 | 폴백에서 R4 를 건너뛴다 (/qg iter-5 SR4) | AC59′ |
+| T79 | `assign` 이 **후행 개행 없는 stdin 의 마지막 후보**를 버리지 않는다 — 개행 유무 두 입력이 같은 unit 집합 (/qg iter-6 C6) | AC46 AC53 |
+| T80 | `unittest` 가 모듈-레벨 `async def test_` 를 담은 파일을 claim 하지 않는다 · **양의 짝**: async 없는 동종 파일은 claim 유지 (/qg iter-6 E12 — AC63′ escape (a) 재개방) | AC63′ |
+| T81 | 파손된 `package.json` 이 "JS 어댑터 없음" 과 **구분 가능**하다(fail-closed 유지 + 원인 loud) · **양의 짝**: 정상 파일엔 무경고 (/qg iter-6 C4) | AC45 |
+| T82 | jest·vitest 판별 불가 시 bulk 강등이 **loud** 하다 · **양의 짝**: 판별 가능하면 무경고 + file 귀속 (/qg iter-6 C3) | AC54 |
+| T83 | `plugins/quality-gates/tests/` 하위 `.sh` 전부가 **인덱스 모드** `100755` (∀ + 코퍼스 실재) — 아니면 셸 어댑터가 claim 못 해 self-dogfood 가 구조적으로 인증 불가 (/qg iter-6 D6) | AC53 |
+| T84 | poetry 의 in-project venv 를 **단정하지 않고 물어본다**(env·`poetry.toml` 두 축에서 `.venv` 요구) · **양의 짝**: 끄면 요구하지 않는다 (/qg iter-6 C2(b)) | AC41 |
+| T85 | **bulk red** 실행이 전 unit 에 실패 코드를 찍는다(도말 서명 = `(status,exit)` 쌍 1종) — 이전엔 red bulk 픽스처가 스위트에 하나도 없어 "항상 `pass 0`" mutation 이 통과했다 (/qg iter-6 E1) | AC12 AC43 AC49 |
+| T86 | 그 도말이 **하류에서 `degraded` 로 읽힌다** — `--mode per-unit` 이라 선언해도 (/qg iter-6 E1 + C1) | AC60′ |
+
+**AC ↔ 검증 완전성.** **AC1–AC64 전부**가 위 T 또는 §8.3의 V에 대응한다.
+**역방향도 이제 등재한다 (/qg iter-6 E6):** 앞 버전은 AC→T 방향만 단속했고 T→표 방향은
+무단속이라 **테스트가 인용하는 T-id 16개가 이 표에 없었다**(T66–T69 · T75–T78 · T79–T86).
+실제 커버리지는 있었고 미래 리뷰어가 읽는 문서에서만 보이지 않았다 — 그 자체가 이 문서가
+스스로에게 부과한 규칙의 위반이다. 자동 테스트가 없는 것은 **AC20**(`V4` — `AskUserQuestion` 발화 여부는 대화형이라 자동화하지 않는다)과 **AC61′·AC62′·AC63′ 의 *정정 완전성* 축**(`V9` — 이 문서 자신에 대한 검사라 플러그인 테스트가 담당할 수 없다. 앞 버전은 이것을 `T64` 라는 **구현되지 않은 자동 테스트**로 적어 이 선언문을 거짓으로 만들었다 — /qg iter-5 TA1) 둘이다. 이 매핑 자체를 구현 시 표로 유지하고, **AC 추가 시 대응 T/V 없이 머지하지 않는다.** (라운드 3에서 이 선언문이 AC38–AC44를 반영하지 않은 채 stale했다 — 선언문도 갱신 대상이다.)
 
 > **T20의 형태 주의** — 버전을 `"version": "3.0.0"` 리터럴로 핀하면 doc-only bump마다 stale-red가 된다. major 불변식만 검사하고 patch digit은 unpin한다.
 
@@ -1166,6 +1203,23 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 
    **완화 주장 약화 (라운드 7, codex 단독 high).** 위 "시끄럽게 드러난다"는 완화는 **차등이 신호로 읽힌다는 전제**에 기대는데, 그 전제가 스스로를 약화시킨다 — R5a의 setup이 만든 차이는 `NEW_REGRESSION`과 **구별 불가능한 모양**으로 나타난다. 즉 이 완화는 오귀속을 *조용한 것에서 시끄러운 것으로* 바꿀 뿐, **어느 쪽이 원인인지는 여전히 verifier 자기보고로만 갈린다.** codex의 표현대로: 권위 있는 테스트가 도는 바로 그 HEAD 샌드박스를 verifier가 비구조적으로 변형할 수 있는 한, 이 설계가 파는 "같은 선택을 두 번 돌려 짝짓는다"는 **두 축이 같은 환경이라는 전제 위에서만 성립**한다. 제대로 된 해소는 부팅과 테스트 실행의 환경 분리, 또는 양축에 동일 재생되는 결정론적 setup 매니페스트다 — 둘 다 이번 범위 밖이므로 **갭이 아니라 잔여 결함으로 등재**한다.
 14. **§5.3의 "빈 스코프 fail-safe"에는 집행자가 없다.** (라운드 6·7 spec review, U2 — **이월 2라운드째**.) 그 규칙은 §5.3에서 스스로 *"결정론 코드 없이 프로즈로"* 라고 선언하는데, 그 자인이 **어느 갭 목록에도 등재되지 않아** 왔다 — §11에도 §6.7의 16항목에도 없었다. 스스로 인정한 갭이 갭 목록에 없으면 다음 독자에게는 **존재하지 않는 갭**이다. 이제 등재한다. 실효 범위: 후보 목록이 비었을 때 "그 자체를 `gap` 차원에 기록하고 폭을 넓힌다"를 강제하는 것은 이 산문 한 줄뿐이고, 모델이 그것을 건너뛰어도 **막는 코드가 없다.** AC64가 *판정 0건 → `degraded`* 를 결정론으로 닫았으므로 최악(테스트 0건 실행 + PASS)은 봉쇄돼 있으나, *스코프는 비었는데 다른 어댑터가 green이라 인증되는* 중간 경로는 열려 있다. 등급: **잔여 결함**(이 설계가 답한다고 주장하는 범위 안).
+15. **T37은 아무것도 재지 않는다 (동어반복).** (`/qg` iter-6 E8. §12가 T37/T46을 "전부
+    §11/§6.7 잔여로 이월"이라 적었으나 **두 id 어느 쪽도 어느 목록에도 등재된 적이 없다** —
+    §6.7이 처벌한 바로 그 클래스(등록 없는 등록 주장)를 이 문서가 스스로 저질렀다. 이제
+    실제로 등재한다.) `case_setup_cmd_identical_both_sides`는 구조적으로 동일한 두 트리를
+    만들고 `detect`가 양쪽에 같은 `setup_cmd`를 반환하는지 본다. `detect`는 트리 내용의
+    **결정론적 순수함수**라 동일 입력 두 호출이 불일치할 수 없다 — 이 assert는 실패할 수
+    없다. M17의 실제 표적(HEAD 측에서만 다른 `setup_cmd`)은 `detect` 안이 아니라
+    **오케스트레이터의 두 invocation** 에 산다. 속성 자체는 구조적으로 성립하므로(양측이
+    setup 실행을 소유한 같은 `run`을 부른다) 살아 있는 구멍은 아니고 등급은 **갭** — 다만
+    *잠겨 있다고 믿고 있던 것이 잠겨 있지 않다*가 위험이다. 해소: 같은 파일이 이미 쓰는
+    PATH-스텁 로깅으로 실제 invocation을 재거나, 재지 못함을 인정하고 삭제.
+16. **T46은 bulk 커버리지 공시를 *존재*로만 잰다.** (`/qg` iter-6 — 위 이월 주장의 나머지
+    절반.) AC49의 요구는 "커버리지 미보장이 공시된다"인데 그 문구가 **어떤 조건에서**
+    나오는지는 잠겨 있지 않다. 실제 bulk 실행과 공시를 짝짓는 검사가 없으므로 공시가
+    상수처럼 늘 붙어도, 반대로 조건이 좁아져도 표면상 통과한다. 등급: **갭**.
+    (`/qg` iter-6의 T85/T86이 bulk **red** 경로를 처음으로 실행 커버했으므로 — 그전에는
+    red bulk 픽스처가 스위트에 하나도 없었다 — 여기에 이어 붙일 자리가 생겼다.)
 
 ---
 
@@ -1187,8 +1241,9 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | 신규 verdict 토큰 | **0** |
 | 리뷰 라운드 5 | **집계가 이 표에 기록되지 않았다.** 라운드 5는 실행됐으나 그 시점에 이 표가 갱신되지 않았고, 원장·아티팩트 어느 쪽에서도 건수를 복원할 수 없다. 추정치를 적는 대신 **누락 사실 자체를 기록한다** — 이 표는 라운드 4 이후 3라운드 동안 stale했고, 그 자체가 라운드 7 block(F1)의 일부다 |
 | 리뷰 라운드 6 | Claude 9건(**block 4**·high 3·medium 2) + codex 5건(block 2·high 2·medium 1) → combined `needs_revise`, stagnation 없음. **block 4건이 전부 저자(메인 에이전트)가 바로 앞 커밋에서 만든 결함**이었다. 최악: §6.7의 `**검증:**` 줄이 §8 표에 **없는** `T62`/`T63`과 **이미 다른 mutation에 배정된** `M17`–`M22`를 근거로 인용 — 임시 mutation 하니스의 로컬 ID를 문서 좌표계로 옮기며 충돌을 확인하지 않았다. **문서가 자기 커버리지에 대해 거짓말을 한 것.** 나머지 셋: AC64를 대응 T/M 없이 추가 + 완전성 선언문 `AC1–AC63` 방치(라운드 3에서 이미 겪은 stale 선언문의 재발) · §6.7이 AC61–AC63을 정정했는데 §6.6 원문에 전방 포인터가 없어 **§6.6만 읽는 구현자가 실측으로 반증된 술어를 재구현**하게 됨. 수정 `85103d6` |
-| 리뷰 라운드 7 | Claude 12건(**block 1**·high 4·medium 7) + codex 4건(**block 2**·high 1·medium 1) → combined `needs_revise`, stagnation 없음. **라운드 6의 block 4건은 held**(재제기 0, 독립 확인). 신규 block = **이 표 자신**(F1: 아래 "다음 단계"가 미착수를 암시하는데 `plugin.json`은 이미 `3.0.0`이고 구현·CHANGELOG·신규 스크립트 5종이 전부 존재 — 문서가 계획서인 척하는 완료된 일의 기록). codex 단독 신규 high = **R5a의 boot setup이 나중에 권위 있는 테스트를 돌릴 바로 그 HEAD 샌드박스를 변형** → 두 축이 같은 환경이라는 이 설계의 전제를 직접 겨눔(§11 ⑬에 등급 하향 없이 반영). 라운드 6 이월 5건(U1–U5)은 **하나도 닫히지 않았다.** `rereview_count 7 ≥ cap 5` → Human Gate forced escalate → 사용자 결정: **문서 정직화만 하고 design 리뷰 루프 종료.** 이 라운드에서 닫은 것 = F1(이 표) · U4(§11 등급 어휘 고정) · U2(§11 ⑭ 등재) · §6.7 "21건" 수 정합 · T60 판별자 픽스처 · U1 `SILENT_DROP` degrade assert. **닫지 않은 것 = codex block 2건(21항목 미완 · 귀속 입력 소유·provenance) · U3(원장↔기계출력 대조) · U5(GC scope-creep) · T37/T46 커버리지 갭** — 전부 §11/§6.7 잔여로 이월 |
+| 리뷰 라운드 7 | Claude 12건(**block 1**·high 4·medium 7) + codex 4건(**block 2**·high 1·medium 1) → combined `needs_revise`, stagnation 없음. **라운드 6의 block 4건은 held**(재제기 0, 독립 확인). 신규 block = **이 표 자신**(F1: 아래 "다음 단계"가 미착수를 암시하는데 `plugin.json`은 이미 `3.0.0`이고 구현·CHANGELOG·신규 스크립트 5종이 전부 존재 — 문서가 계획서인 척하는 완료된 일의 기록). codex 단독 신규 high = **R5a의 boot setup이 나중에 권위 있는 테스트를 돌릴 바로 그 HEAD 샌드박스를 변형** → 두 축이 같은 환경이라는 이 설계의 전제를 직접 겨눔(§11 ⑬에 등급 하향 없이 반영). 라운드 6 이월 5건(U1–U5)은 **하나도 닫히지 않았다.** `rereview_count 7 ≥ cap 5` → Human Gate forced escalate → 사용자 결정: **문서 정직화만 하고 design 리뷰 루프 종료.** 이 라운드에서 닫은 것 = F1(이 표) · U4(§11 등급 어휘 고정) · U2(§11 ⑭ 등재) · §6.7 "21건" 수 정합 · T60 판별자 픽스처 · U1 `SILENT_DROP` degrade assert. **닫지 않은 것 = codex block 2건(21항목 미완 · 귀속 입력 소유·provenance) · U3(원장↔기계출력 대조) · U5(GC scope-creep) · T37/T46 커버리지 갭** — 전부 §11/§6.7 잔여로 이월. **(정정 — `/qg` iter-6 E6: 이 "이월" 주장은 작성 시점에 거짓이었다. `T37`·`T46` 은 §11 에도 §6.7 에도 등재된 적이 없었고, 그것은 §6.7 이 직접 처벌한 클래스 — *등록 없는 등록 주장* — 이다. 이제 §11 ⑮·⑯ 으로 실제 등재했다.)** |
 | 선행 레퍼런스 (통독) | `gstack/qa/SKILL.md` (1685줄) · `compound-engineering-plugin/skills/ce-test-browser/` (SKILL + references 2) · `oh-my-codex/skills/ultraqa/SKILL.md` + 자매 2 · `ECC/.agents/skills/e2e-testing/` · `ECC/agents/e2e-runner.md` · `gbrain/skills/testing/` · `gbrain/skills/smoke-test/` |
 | **문서 상태** | **기록 + 갭 원장 — 계획서가 아니다.** 이 설계는 **이미 구현됐다**(`plugin.json` `3.0.0`, CHANGELOG `[3.0.0]`, 신규 스크립트 5종 + 수정 7종 전부 브랜치에 존재). `writing-plans`는 이 문서에 대해 **실행되지 않으며 실행될 필요도 없다.** 앞으로 이 문서의 역할은 ① 무엇을 왜 이렇게 지었나의 기록, ② §11·§6.7의 **미해결 잔여 원장**이다 |
 | `/qg` iter-5 수정 라운드 | iter-5 리뷰의 **CRITICAL 1(SR1) + code-reviewer 5(C2–C6) + SF2·SF5·SR4·TA1** 를 처리했다. 굵직한 둘: **SR1** — iter-2 의 AC60 이 닫았다고 주장한 사슬이 한 칸 옆으로 살아 있었다(`detect` 는 선언만 보고, 캐시 전량 적중이면 실행 관문이 한 번도 안 돈다) → `probe` 서브커맨드로 근거를 실행 기반으로 이전. **C2** — 매니페스트가 테스트 러너를 verifier 에게 부팅 표면으로 넘겨 §5.1 불변식 ②와 충돌(스위트 2회 실행 + HEAD 전용 deps 설치로 AC41 파괴) → `runnable_surfaces` = 부팅 표면 전용. **나머지 셋은 락 자신의 결함**이었다: verdict-토큰 락이 SKILL.md 부재를 통과로 읽음(grep exit 2) · body-contract assert 가 frontmatter 로 만족돼 보안 Hard Rule 삭제를 못 잡음 · 어댑터 개수 6곳이 9종을 8종이라 적음. mutation 합계 **56 RED**. ★이 라운드에서 **내 mutation·needle 이 5번 고장**났다(파일 목록 누락 1 · body-unique 아닌 needle 3 · `source` 가 `exit 0` 을 만나 assert 가 한 줄도 실행되지 않음 1) — 매번 락이 아니라 계측기가 문제였다. ★T9 의 ∀ 가 러너 5축 중 **3축을 아예 지나가지 않았다**(픽스처에 그 레포 형태가 없었다): **∀ 의 범위는 코퍼스가 정하지 술어가 정하지 않는다.** |
-| 다음 단계 | **`/qg branch` 재실행** → 이번 라운드 수정의 재검증 → 그다음에야 병합 판단. **이 브랜치는 여전히 병합 불가** — §11 잔여 결함 + §6.7 잔여 + codex block 2건(21항목 미완 · 귀속 입력 provenance)이 열려 있다 |
+| `/qg` iter-6 수정 라운드 | 리뷰어 5명(security-reviewer · **codex** · silent-failure-hunter · code-reviewer · **pr-test-analyzer**) + adversarial. **42건 판정.** adversarial 이 해소한 핵심 충돌: `code-reviewer` 의 *"fail-open 없음 · Critical 없음"* 은 **자기 findings 에 대해서는 옳지만 브랜치 전체 속성으로 일반화한 것이 틀렸다** — 인자-provenance·R5b/R7 순서·테스트-이빨 세 축을 아예 안 봤고, **안 본 축에 finding 이 없는 것은 부재의 증거가 아니다**. 그리고 A/B/C 의 CRITICAL 중 **8건은 이 문서의 §6.7/§11 잔여 원장에 이미 등재**돼 있었다(리뷰어들이 원장을 독립 재발견 — 원장이 정직하다는 증거). **미등록 CRITICAL 은 정확히 1건: `--mode` provenance.** 형제 `--granularity` 가 iter-5 C5 로 그 처방을 받았는데 이 인자만 못 받았고, adversarial 이 C5(도말)와의 **합성 경로**까지 찾아냈다. 닫은 것: `--mode` 데이터 대조 · `async def test_` 프로덕션 버그(AC63′ escape (a) 재개방) · `assign` 후행개행 무음 소실 · 실행비트 4개(**self-dogfood 가 구조적으로 인증 불가였다**) · 무음 degrade 2종 · 옵션 주입 · 분모⊉분자 · `resolve-baseline` fail-open · poetry env-dir 단정 · 폴백 라우팅 산문과 **그 틀린 주장을 방어하던 락** · 이빨 없던 락 7종(음의 락 3 · R8 floor 절 · `setup_failed` · 2단 재실행 red 방향 · ATTR 7셀 · 필수 인자 ∀ · red bulk 픽스처 부재) · 원장 정합(§8.1 T-id 16개 미등재 · §12 의 등록 없는 등록 주장 · **AC21′**). 교훈: **정정 노트가 옛 값을 인용하면 그 인용이 스캔 코퍼스에 들어가 자기 자신을 위반으로 만든다**(이번에 두 번 물렸다) |
+| 다음 단계 | **`/qg branch` 재실행** → iter-6 수정의 재검증 → 그다음에야 병합 판단. **이 브랜치는 여전히 병합 불가** — §11 잔여 결함(⑬ R5b/R7 환경 분리 포함) + §6.7 잔여 + codex block 2건(21항목 미완 · 귀속 입력 provenance)이 열려 있다. iter-6 에서 **의도적으로 열어 둔 것**: B1(bulk 흡수자가 미지원 후보를 삼킴 — §6.7 F5, 공시는 돼 있음) · A1/C2(R5b 가 verifier 샌드박스에서 도는 순서 문제 — §11 ⑬, 두 번째 일회용 워크트리가 정답이나 오케스트레이션 계약 변경이라 별도 라운드) · C5(shell/unittest per-unit 행 emit — `--mode` 의미와 상호작용해 함께 설계해야 함) |
