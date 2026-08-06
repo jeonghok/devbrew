@@ -669,6 +669,95 @@ case_probe_and_run_share_the_gauntlet() {
                    || fail "관문 drift:$detail"
 }
 
+# ── /qg iter-6 회귀 락 ───────────────────────────────────────────────────────
+
+# T79 (/qg iter-6 C6): `while IFS= read -r f` 는 **후행 개행 없는 stdin 의 마지막
+# 후보를 조용히 버린다**. 이 축이 특히 위험한 이유는 떨어진 unit 이 `unclaimed` 로도
+# `--expected` 로도 안 잡혀 `SILENT_DROP` 백스톱이 닿지 않기 때문이다.
+#
+# **양방향으로 잰다** — 개행이 있을 때와 없을 때가 *같은* 답을 내야 한다. 없는 쪽만
+# 재면 "assign 이 아무것도 안 내는" mutation 도 통과한다.
+case_assign_last_candidate_without_trailing_newline() {
+  mkw; mkdir -p "$W/tests"
+  mk_unittest_file "$W/tests/test_a.py"; mk_unittest_file "$W/tests/test_b.py"
+  local expect="tests/test_a.py${TAB}unittest${TAB}file;tests/test_b.py${TAB}unittest${TAB}file;"
+  local with_nl without_nl
+  with_nl=$(printf 'tests/test_a.py\ntests/test_b.py\n' | bash "$RTS" assign "$W" | sort | tr '\n' ';')
+  without_nl=$(printf 'tests/test_a.py\ntests/test_b.py' | bash "$RTS" assign "$W" | sort | tr '\n' ';')
+  if [[ "$with_nl" == "$expect" && "$without_nl" == "$expect" ]]; then
+    pass "assign: 후행 개행 유무와 무관하게 같은 unit 집합 (마지막 후보 무음 소실 0)"
+  else fail "trailing-newline drop (with: $with_nl / without: $without_nl)"; fi
+  rmw
+}
+
+# T80 (/qg iter-6 E12 — 프로덕션 버그): `unittest_can_judge` 의 음성 조건이 `^def` 만
+# 봐서 `async def test_` 를 놓쳤다. 같은 파일에 진짜 TestCase 가 하나라도 있으면 파일이
+# claim 되고 `discover` 가 TestCase 만 수집해 exit 0 → `pass` 를 내며, async 테스트는
+# **한 번도 판정되지 않는다.** AC63' 이 닫혔다고 인증한 escape (a) 가 재개방돼 있었다.
+#
+# 양의 짝 필수: async 줄만 없는 같은 모양의 파일은 **여전히 claim** 돼야 한다.
+# 없으면 "unittest 를 아예 claim 하지 않는" mutation 이 GREEN 이 된다.
+case_assign_unittest_refuses_async_bare_test() {
+  mkw; mkdir -p "$W/tests"
+  printf 'import unittest\nclass T(unittest.TestCase):\n    def test_ok(self):\n        pass\n\nasync def test_bare():\n    pass\n' \
+    > "$W/tests/test_async.py"
+  mk_unittest_file "$W/tests/test_plain.py"
+  local out; out=$(printf 'tests/test_async.py\ntests/test_plain.py\n' \
+                   | bash "$RTS" assign "$W" | sort | tr '\n' ';')
+  if [[ "$out" == "tests/test_async.py${TAB}unclaimed${TAB}file;tests/test_plain.py${TAB}unittest${TAB}file;" ]]; then
+    pass "unittest: 모듈-레벨 async def test_ → 판정 불가 → unclaimed (동종 파일은 claim 유지)"
+  else fail "async bare test (got: $out)"; fi
+  rmw
+}
+
+# T81 (/qg iter-6 C4): 파손된 package.json 이 "JS 어댑터 없음" 과 **완전히 구분
+# 불가**였다 (detect rc=0, stdout 정상, stderr 0바이트). 판정은 fail-closed 로 두되
+# 원인이 보여야 한다 (CLAUDE.md loud degradation).
+#
+# 음의 락 단독으로는 부족하다 — 정상 package.json 에서 그 줄이 **나오지 않음**도 함께
+# 재야 "언제나 경고를 찍는" mutation 이 통과하지 않는다.
+case_detect_malformed_package_json_is_loud() {
+  mkw; printf 'module x\n' > "$W/go.mod"
+  printf '{ this is not json\n' > "$W/package.json"
+  local err out ok=1
+  err=$(bash "$RTS" detect "$W" 2>&1 >/dev/null)
+  out=$(bash "$RTS" detect "$W" 2>/dev/null)
+  case "$err" in *"package.json 이 있으나 파싱에 실패"*) ;; *) ok=0 ;; esac
+  case "$out" in *jest*|*vitest*|*npm-script*) ok=0 ;; esac   # fail-closed 유지
+  printf '{"scripts":{"test":"true"}}\n' > "$W/package.json"  # 양의 짝: 정상 파일
+  local err2; err2=$(bash "$RTS" detect "$W" 2>&1 >/dev/null)
+  case "$err2" in *"파싱에 실패"*) ok=0 ;; esac
+  [[ $ok -eq 1 ]] && pass "파손된 package.json: fail-closed 유지 + 원인 loud (정상 파일엔 무경고)" \
+                  || fail "malformed package.json (err:$err / out:$out / err2:$err2)"
+  rmw
+}
+
+# T82 (/qg iter-6 C3): jest·vitest 공존 + `scripts.test` 가 어느 쪽도 호출하지 않으면
+# `granularity: file`(unit 별 정확한 귀속) → `bulk`(커버리지 미보장) 로 **capability 가
+# 강등**되는데 stderr 가 0바이트였다. 형제 degrade(`미실행 러너`)는 loud 한데 이 분기만
+# 빠져 있었고, 하류 공시는 bulk 라는 *사실*만 노출하고 사용자가 한 줄로 고칠 수 있는
+# *원인*은 어디에도 안 떴다.
+#
+# 양의 짝: `scripts.test` 가 러너를 명시하면 경고가 없고 정밀 귀속이 복구돼야 한다.
+case_detect_js_ambiguity_is_loud() {
+  mkw
+  printf '{"devDependencies":{"jest":"1","vitest":"1"},"scripts":{"test":"echo hi"}}\n' > "$W/package.json"
+  local err out ok=1
+  err=$(bash "$RTS" detect "$W" 2>&1 >/dev/null)
+  out=$(bash "$RTS" detect "$W" 2>/dev/null)
+  case "$err" in *"jest 와 vitest 가 함께 선언됐고"*) ;; *) ok=0 ;; esac
+  case "$out" in *"runner: npm-script"*) ;; *) ok=0 ;; esac
+  printf '{"devDependencies":{"jest":"1","vitest":"1"},"scripts":{"test":"vitest run"}}\n' > "$W/package.json"
+  local err2 out2
+  err2=$(bash "$RTS" detect "$W" 2>&1 >/dev/null)
+  out2=$(bash "$RTS" detect "$W" 2>/dev/null)
+  case "$err2" in *"jest 와 vitest 가 함께 선언됐고"*) ok=0 ;; esac
+  case "$out2" in *"runner: vitest"*) ;; *) ok=0 ;; esac
+  [[ $ok -eq 1 ]] && pass "jest·vitest 판별불가: bulk 강등이 loud (판별 가능하면 무경고 + file 귀속 복구)" \
+                  || fail "js ambiguity loudness (err:$err / out:$out / err2:$err2 / out2:$out2)"
+  rmw
+}
+
 for c in case_assign_go_package case_assign_unclaimed case_assign_unittest_skips_unjudgeable_file \
          case_assign_unittest_substring_escapes case_assign_unittest_still_claims_real_files \
          case_assign_judge_gate_is_unittest_only case_assign_unittest_forall_not_exists \
@@ -685,7 +774,11 @@ for c in case_assign_go_package case_assign_unclaimed case_assign_unittest_skips
          case_package_unit_updot_symlink_escape \
          case_run_exit_127_is_unrun \
          case_probe_declaration_is_not_execution case_probe_runs_no_tests \
-         case_probe_and_run_share_the_gauntlet; do
+         case_probe_and_run_share_the_gauntlet \
+         case_assign_last_candidate_without_trailing_newline \
+         case_assign_unittest_refuses_async_bare_test \
+         case_detect_malformed_package_json_is_loud \
+         case_detect_js_ambiguity_is_loud; do
   echo "== $c"; $c
 done
 echo "── run-test-selection: $PASS passed, $FAIL failed"

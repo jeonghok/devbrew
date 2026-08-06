@@ -38,6 +38,37 @@
 - `SKILL.md` 의 `regardless of Review scope` 리터럴과 그것이 서술하던 동작.
 
 ### Fixed
+- **`unittest` 판정가능성 술어가 `async def test_` 를 놓치던 프로덕션 버그**
+  (`/qg` iter-6 E12) — 음성 조건이 `^def[[:space:]]+test` 였다. 같은 파일에 진짜
+  `TestCase` 가 하나라도 있으면 파일이 claim 되고 `discover` 가 `TestCase` 만 수집해
+  exit 0 → `pass` 를 내며, **async 테스트는 한 번도 판정되지 않는다.** AC63′ 이 닫혔다고
+  인증한 escape (a) 가 토큰 하나로 재개방돼 있었다. `^(async[[:space:]]+)?def` 로 교정.
+- **`assign` 이 후행 개행 없는 stdin 의 마지막 후보를 조용히 버리던 무음 소실**
+  (`/qg` iter-6 C6) — `while IFS= read -r f` 에 `|| [[ -n "$f" ]]` 가 없었다. 이 축이
+  특히 위험한 이유는 떨어진 unit 이 `unclaimed` 로도 `--expected` 로도 안 잡혀
+  **`SILENT_DROP` 백스톱이 닿지 않기** 때문이다 — 애초에 존재한 적 없는 것처럼 사라진다.
+- **신규 셸 테스트 4개가 실행비트 없이 커밋돼 self-dogfood 가 구조적으로 불가능하던 것**
+  (`/qg` iter-6 D6) — 셸 어댑터는 `-x` 를 요구하므로 그 파일들이 `unclaimed` 로 떨어지고,
+  `unclaimed` 하나면 `verification: degraded` → **PASS 불가**다. 즉 이 플러그인이 만든
+  게이트로 이 레포를 검증하면 절대 인증이 나올 수 없었다. `plugins/quality-gates/tests/`
+  하위 `.sh` 95개 전부를 `100755` 로 맞추고, **인덱스 모드**를 재는 ∀ 락을 추가했다
+  (워킹트리 `-x` 는 chmod 한 머신에서만 참이라 락이 될 수 없다).
+- **capability 강등 2종이 무음이던 것** (`/qg` iter-6 C3·C4) — ① jest·vitest 공존 +
+  `scripts.test` 가 어느 쪽도 호출하지 않으면 `granularity: file` → `bulk` 로 강등되는데
+  stderr 가 0바이트였다(형제 degrade 는 loud). ② 파손된 `package.json` 이 "JS 어댑터 없음"
+  과 **완전히 구분 불가**였다. 판정은 둘 다 fail-closed 로 두고 원인만 loud 하게 노출한다.
+  ②는 `pkg_field` 안이 아니라 `detect_set` 에서 판정한다 — `pkg_field` 호출부 4곳이 전부
+  stderr 를 막아 함수 안의 로그는 한 글자도 밖으로 나오지 않기 때문이다.
+- **`-` 로 시작하는 경로가 옵션으로 파싱되던 크래시 클래스** (`/qg` iter-6 D7) —
+  `grep -qxF`·`dirname`·`basename` 에 `--` 가 없어 중복 제거 가드가 죽고 같은 unit 행이
+  두 번 emit 되어 `diff-test-results.py` 가 계약 위반으로 exit 4 를 냈다. fail-closed
+  방향이지만 정당한 실행이 죽는다.
+- **음의 락 3종이 존재하지 않는 코퍼스에 대해 통과하던 것** (`/qg` iter-6 E5) —
+  맨 `grep -q` 는 파일 부재 시 exit 2 → 거짓 분기 → PASS 다(실측: 경로를 `/nonexistent`
+  로 돌려도 셋 다 통과). 특히 `case_no_ambient_pytest_probe` 는 앵커가 리터럴
+  `import pytest` 였는데 그건 **앰비언트 프로브의 모양이 아니라서**, 케이스 이름 그대로의
+  재도입(`command -v pytest`)을 해도 GREEN 이었다. 계약을 구조에서 다시 도출해
+  **선언 측 5개 함수 전부(∀)에 프로브 부재 + 실행 측엔 존재(양의 짝)** 로 바꿨다.
 - **심어진 캐시가 기준선 관측 자체를 억제하던 fail-open** (`/qg` iter-2, AC60) —
   R4② 가 "미적중분이 있을 때만" 기준선 워크트리를 만들었기 때문에, 선택된 전 unit 에
   `pass` 를 심어 전량 적중을 만들면 **기준선 트리가 아예 생기지 않았다**. merge_base 에
@@ -50,9 +81,12 @@
   집합에 없으면 캐시가 무엇을 내줬든 기준선 축이 `unrun` 으로 강등된다.
 - **판정하지 못한 실행이 인증을 통과하던 fail-open** (`/qg` iter-2, AC61) —
   `error` 는 fail 축으로 접히므로 **양측 `error` 가 `(F,F)=PRE_EXISTING` → `closed`**
-  였다. pytest 수집 0개(exit 5)·import 실패(exit 2)·잘못된 ini 옵션(exit 4),
-  jest/vitest "No tests found" 가 전부 여기로 떨어져 **테스트를 하나도 판정하지 않고
-  PASS** 가 나왔다. 종료 코드를 러너별로 열거해 `unrun` 으로 보내는 앞선 수정은 더 나쁜
+  였다. pytest 수집 0개(exit 5)·import 실패(exit 2)·잘못된 ini 옵션(exit 4)과
+  cargo 컴파일 실패(exit 101)가 여기로 떨어져 **테스트를 하나도 판정하지 않고
+  PASS** 가 나왔다. (앞선 판본은 여기에 jest/vitest "No tests found" 도 열거했으나
+  그것은 **거짓이었다** — 실측상 둘은 exit 1 을 내므로 `fail` 축이고 이 규칙에 닿지
+  않는다. 코드와 설계 doc 은 정정됐는데 이 항목만 남아 수정 범위를 과장하고 있었다;
+  `/qg` iter-6 D5.) 종료 코드를 러너별로 열거해 `unrun` 으로 보내는 앞선 수정은 더 나쁜
   결함을 만들었다(pytest exit 2 는 환경이 아니라 제품 파손이라, "이 diff 가 import 를
   깼다"가 terminal FAIL 에서 비차단으로 내려갔다 — 실측). 이제 **축을 옮기지 않고
   원장에서 인증만 막는다**: `error` 가 어느 축에든 닿으면 `attribution_status:

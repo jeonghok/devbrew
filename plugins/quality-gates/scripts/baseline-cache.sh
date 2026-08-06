@@ -125,7 +125,7 @@ case "${1:-}" in
         [[ -z "$orunner" ]] && continue
         if [[ "$orunner" != "$runner" ]]; then
           printf '%s\t%s\t%s\t%s\n' "$orunner" "$ounit" "$ostatus" "$oexit"
-        elif ! printf '%s\n' "$fresh_units" | grep -qxF "$ounit"; then
+        elif ! printf '%s\n' "$fresh_units" | grep -qxF -- "$ounit"; then
           printf '%s\t%s\t%s\t%s\n' "$orunner" "$ounit" "$ostatus" "$oexit"
         fi
       done)

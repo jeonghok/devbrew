@@ -93,7 +93,7 @@ unit_within_worktree() {   # unit_within_worktree <worktree> <unit>
   # case_assign_bulk_conflict·case_assign_spec_any_extension 가 즉시 RED 였다).
   # 위의 렉시컬 검사(절대경로·`..` 성분)가 이미 끝났고, 존재하지 않는 경로는 하류의
   # `-e`/`-x` 검사에서 `absent`/미주장으로 걸러지므로 여기서 통과시켜도 실행되지 않는다.
-  d=$(cd "$w/$(dirname "$u")" 2>/dev/null && pwd -P) || return 0
+  d=$(cd "$w/$(dirname -- "$u")" 2>/dev/null && pwd -P) || return 0
   case "$d" in
     "$root"|"$root"/*) ;;
     *) return 1 ;;
@@ -205,6 +205,22 @@ print(cur if isinstance(cur, str) else "1")
 PY
 }
 
+# package.json 이 **있는데 파싱에 실패**했는가.
+#
+# 왜 `pkg_field` 안이 아니라 별도 함수인가: `pkg_field` 는 "필드 없음"·"파일 없음"·
+# "파일 파손"·"python3 부재" 를 전부 exit 1 로 뭉개는데, 그 **호출부 4곳이 전부
+# stderr 를 막는다** (`>/dev/null 2>&1`, `2>/dev/null`). 그래서 `pkg_field` 에 로그를
+# 넣어도 밖으로 한 글자도 나오지 않는다 — 이빨 없는 수정이 된다. 원인 판정은 stderr 가
+# 살아 있는 `detect_set` 에서 한 번만 하고 거기서 loud 하게 알린다 (/qg iter-6 C4).
+# 판정 자체는 바꾸지 않는다 — 파손된 package.json 은 여전히 "JS 어댑터 없음" 으로
+# fail-closed 하고, 다만 그 둘이 **구분 가능**해진다.
+pkg_json_malformed() {   # pkg_json_malformed <worktree> → 0 = 있는데 파싱 실패
+  [[ -f "$1/package.json" ]] || return 1
+  python3 -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' \
+    "$1/package.json" >/dev/null 2>&1 && return 1
+  return 0
+}
+
 has_pytest_config() {
   local w=$1
   [[ -f "$w/pytest.ini" ]] && return 0
@@ -269,7 +285,12 @@ unittest_can_judge() {   # unittest_can_judge <worktree> <relpath> → 0 = 판�
   local f="$1/$2"
   # 음성 조건 먼저: 모듈-레벨(들여쓰기 0) bare `def test_` 가 있으면 unittest 는 그것을
   # 수집하지 못하므로 이 파일을 판정할 수 없다 — 양성 신호가 있어도 그렇다.
-  grep -qE '^def[[:space:]]+test' "$f" 2>/dev/null && return 1
+  # `async def test_` 도 같은 축이다. 앞선 판본은 `^def` 로만 봐서 async 를 놓쳤고,
+  # 그러면 같은 파일에 진짜 TestCase 가 하나라도 있을 때 파일이 claim 되어
+  # `discover` 가 TestCase 만 수집하고 exit 0 → `pass` 를 내며 async 테스트는
+  # **한 번도 판정되지 않는다** (/qg iter-6 실측). escape (a) 가 토큰 하나로 재개방돼
+  # 있었다.
+  grep -qE '^(async[[:space:]]+)?def[[:space:]]+test' "$f" 2>/dev/null && return 1
   grep -qE '^[[:space:]]*class[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\([^)]*TestCase' "$f" 2>/dev/null && return 0
   grep -qE '^[[:space:]]*def[[:space:]]+load_tests[[:space:]]*\(' "$f" 2>/dev/null && return 0
   return 1
@@ -352,6 +373,11 @@ detect_set() {
   # 판별 불가면 **둘 다 버리고** npm-script로 폴백 — 잘못된 러너로 돌리느니
   # 그 프로젝트가 정의한 명령을 쓴다 (AC54).
   local has_jest=0 has_vitest=0 js_pick="" test_script=""
+  # 파손된 package.json 은 아래 전부를 조용히 "없음" 으로 만든다. 판정은 그대로 두되
+  # (fail-closed) 원인을 밝힌다 — 여기가 stderr 가 살아 있는 유일한 지점이다.
+  if pkg_json_malformed "$w"; then
+    echo "run-test-selection: package.json 이 있으나 파싱에 실패했습니다 — JS 어댑터(jest·vitest·npm-script) 감지를 건너뜁니다 (in $w). 이것은 'JS 어댑터 없음' 과 다른 사건입니다." >&2
+  fi
   pkg_field "$w" devDependencies.jest   >/dev/null 2>&1 && has_jest=1
   pkg_field "$w" devDependencies.vitest >/dev/null 2>&1 && has_vitest=1
   if [[ $has_jest -eq 1 && $has_vitest -eq 1 ]]; then
@@ -359,7 +385,12 @@ detect_set() {
     case "$test_script" in
       *vitest*) js_pick=vitest ;;
       *jest*)   js_pick=jest ;;
-      *)        js_pick="" ;;
+      # 판별 불가. 이것은 **capability 강등**이다 — `granularity: file`(unit 별 정확한
+      # 귀속) 을 포기하고 `bulk`(커버리지 미보장) 로 내려간다. 형제 degrade
+      # (`미실행 러너`, 아래 assign) 는 loud 한데 이 분기만 stderr 0바이트였다
+      # (/qg iter-6 C3). CLAUDE.md 는 loud degradation 을 요구한다.
+      *)        js_pick=""
+                echo "run-test-selection: jest 와 vitest 가 함께 선언됐고 scripts.test 가 어느 쪽도 호출하지 않습니다 — 파일 단위 귀속을 포기하고 npm-script(bulk)로 폴백합니다. scripts.test 가 러너를 명시하면 정밀 귀속이 복구됩니다 (in $w)." >&2 ;;
     esac
   elif [[ $has_jest   -eq 1 ]]; then js_pick=jest
   elif [[ $has_vitest -eq 1 ]]; then js_pick=vitest
@@ -520,7 +551,14 @@ case "${1:-}" in
     residual=0
     seen_pkgs=""
     seen_files=""
-    while IFS= read -r f; do
+    # `|| [[ -n "$f" ]]` 가 없으면 **후행 개행 없는 stdin 의 마지막 후보를 조용히
+    # 버린다** (/qg iter-6 C6 실측: `printf 'a\nb'` → `a` 만, exit 0, stderr 0바이트).
+    # 이 축이 특히 위험한 이유는 떨어진 unit 이 `unclaimed` 로도 `--expected` 로도
+    # 안 잡혀 `SILENT_DROP` 백스톱이 닿지 않기 때문이다 — 애초에 존재한 적 없는 것처럼
+    # 사라진다. 정본 호출(SKILL R2 의 `printf '%s\n'`)은 개행으로 끝나지만, 그건
+    # 호출부 관례일 뿐 이 스크립트의 계약이 아니다. `assign` 은 stdin 을 읽는 유일한
+    # 서브커맨드다 (`run` 은 unit 을 argv 로 받는다).
+    while IFS= read -r f || [[ -n "$f" ]]; do
       [[ -z "$f" ]] && continue
       # 워크트리 밖 경로는 **어떤 어댑터의 소유도 아니다** — 이 트리의 unit 이 아니기
       # 때문이다. 러너별 분기 안이 아니라 여기서 한 번에 거른다: 원래 결함은 shell 글롭이
@@ -528,7 +566,7 @@ case "${1:-}" in
       # bulk 흡수자에게 넘기지도 않는다 — 흡수는 그 사실을 감춘다. `unclaimed` 로
       # 표면화해 `verification: degraded` → PASS 불가로 보낸다 (AC53).
       if ! unit_within_worktree "$w" "$f"; then
-        if ! printf '%s\n' "$seen_files" | grep -qxF "$f"; then
+        if ! printf '%s\n' "$seen_files" | grep -qxF -- "$f"; then
           printf '%s\tunclaimed\tfile\n' "$f"
           seen_files="$seen_files
 $f"
@@ -571,8 +609,8 @@ $f"
         if [[ "$claimed_gran" == "package" ]]; then
           # 파일 → 패키지 디렉토리 축약은 **여기서** 일어난다. 오케스트레이터가
           # 이 변환을 수행하는 경로는 없다 (AC52) — 배정 입력은 언제나 파일 경로다.
-          pkg=$(dirname "$f")
-          if ! printf '%s\n' "$seen_pkgs" | grep -qxF "$pkg"; then
+          pkg=$(dirname -- "$f")
+          if ! printf '%s\n' "$seen_pkgs" | grep -qxF -- "$pkg"; then
             printf '%s\t%s\tpackage\n' "$pkg" "$claimed"
             seen_pkgs="$seen_pkgs
 $pkg"
@@ -581,7 +619,7 @@ $pkg"
           # file 축약도 package 와 같은 규칙: 중복 stdin 입력은 한 unit 행으로
           # 수렴한다 — diff-test-results.py 는 중복 unit 행을 exit 4(사용 오류)로
           # 본다, 정당한 실행이 입력 중복만으로 죽어서는 안 된다.
-          if ! printf '%s\n' "$seen_files" | grep -qxF "$f"; then
+          if ! printf '%s\n' "$seen_files" | grep -qxF -- "$f"; then
             printf '%s\t%s\tfile\n' "$f" "$claimed"
             seen_files="$seen_files
 $f"
@@ -593,7 +631,7 @@ $f"
         # 실행 수단이 없다. 조용히 버리지 않고 unclaimed로 표면화한다 —
         # 소비자(SKILL)가 이것을 `verification: degraded`로 라우팅한다 (AC53).
         # 여기도 같은 중복-수렴 규칙이 적용된다 (위 file 분기와 동일 사유).
-        if ! printf '%s\n' "$seen_files" | grep -qxF "$f"; then
+        if ! printf '%s\n' "$seen_files" | grep -qxF -- "$f"; then
           printf '%s\tunclaimed\tfile\n' "$f"
           seen_files="$seen_files
 $f"
@@ -728,7 +766,7 @@ $f"
       esac
     }
     refused_units=""
-    is_refused() { printf '%s\n' "$refused_units" | grep -qxF "$1"; }
+    is_refused() { printf '%s\n' "$refused_units" | grep -qxF -- "$1"; }
 
     # exit code만 읽는다 — 러너별 출력 파서 없이 러너 어댑터 9종 전부에 같은 코드가 적용된다.
     # 0=pass, 1=fail, 그 외=error. error는 §5.5에서 fail 축으로 접히므로 error/fail
@@ -798,7 +836,7 @@ $f"
           ( cd "$w" && PYTHONDONTWRITEBYTECODE=1 "${PY_ARGV[@]}" -m pytest -p no:cacheprovider -q "$@" ) >&2 || rc=$? ;;
         unittest)
           for u in "$@"; do
-            d=$(dirname "$u"); b=$(basename "$u")
+            d=$(dirname -- "$u"); b=$(basename -- "$u")
             if [[ "$d" == "." || -f "$w/$d/__init__.py" ]]; then
               dotted="${u%.py}"; dotted=$(printf '%s' "$dotted" | tr '/' '.')
               ( cd "$w" && PYTHONDONTWRITEBYTECODE=1 "${PY_ARGV[@]}" -m unittest "$dotted" ) >&2 || rc=$?

@@ -14,6 +14,16 @@ pass() { PASS=$((PASS + 1)); echo "  → PASS: $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $1"; }
 # setup_cmd_of <worktree> — detect 출력에서 setup_cmd 값만 뽑는다
 setup_cmd_of_tree() { bash "$RTS" detect "$1" | awk '$1 == "setup_cmd:" { $1=""; sub(/^ /,""); print }'; }
+# fn_body <file> <function-name> — 셸 함수 하나의 본문만 뽑는다.
+# 파일 전체를 grep 하면 "선언(detect)" 과 "실행(run/probe)" 이 한 코퍼스로 뭉개져,
+# 실행 측의 정당한 가용성 프로브가 선언 측 금지 규칙을 만족시켜 버린다 (/qg iter-6 E5).
+fn_body() {
+  awk -v fn="$2" '
+    $0 ~ "^" fn "\\(\\) \\{" { inside = 1 }
+    inside { print }
+    inside && /^\}/ && $0 !~ "^" fn { inside = 0 }
+  ' "$1"
+}
 # 인자를 기록하고 성공하는 스텁 실행파일 — 실물 toolchain 없이 실행 argv 를 관측한다
 record_stub() {   # record_stub <path> <label> <observed-file>
   { printf '#!/usr/bin/env bash\n'
@@ -160,21 +170,84 @@ case_conflict_js_resolved() {
 # T34 후반 + AC38: SKILL.md에 어댑터 감지 조건 재구현이 없다
 # (body-unique한 감지 조건 문자열들이 SKILL.md에 등장하면 표를 복제한 것)
 case_no_reimpl_in_skill() {
+  # 코퍼스 실재 확인이 먼저다 (/qg iter-6 E5): 맨 `grep -q` 는 파일이 없으면 exit 2 →
+  # 거짓 분기 → PASS 를 찍는다. 실측으로 `$SKILL` 을 /nonexistent 로 돌려도 통과했다.
+  if [[ ! -s "$SKILL" ]]; then
+    fail "SKILL.md 를 읽지 못했다 ($SKILL) — 아래 부재 검사가 공허해진다"; return
+  fi
+  if ! grep -qF 'quality-gates' "$SKILL"; then
+    fail "SKILL.md 를 읽었으나 내용이 예상과 다르다 — 코퍼스 오조준"; return
+  fi
   local bad=0 s
   for s in 'devDependencies' 'pytest.ini' 'Cargo.toml' 'go.mod'; do
     if grep -qF "$s" "$SKILL"; then echo "    SKILL.md가 감지 조건 '$s'를 담고 있음"; bad=1; fi
   done
-  [[ $bad -eq 0 ]] && pass "SKILL.md에 어댑터 감지 표 재구현 0회" || fail "SKILL.md 감지 표 재구현"
+  [[ $bad -eq 0 ]] && pass "SKILL.md에 어댑터 감지 표 재구현 0회 (코퍼스 실재 확인됨)" \
+                   || fail "SKILL.md 감지 표 재구현"
 }
 
 # 컨트롤러 룰링 회귀 락: pytest 감지는 **레포 선언**만 본다. 앰비언트 인터프리터 프로브가
 # 다시 들어오면 같은 레포가 머신마다 다르게 감지되고, 설정 없는 pytest 레포가 unittest 로
 # 새어 bare 함수 테스트가 조용히 0개 실행된다.
+#
+# /qg iter-6 E5 — 앞선 판본은 앵커가 리터럴 `import pytest` 였다. 그건 **앰비언트 프로브의
+# 모양이 아니다.** 실측으로 `repo_declares_pytest` 를 진짜 프로브(`python3 -m pytest
+# --version`)로 바꿔도 이 케이스는 GREEN 이었다 — 케이스 이름 그대로의 재도입을 놓쳤다.
+#
+# 계약을 구조에서 다시 도출한다: 가용성 프로브(`command -v`, `--version`)는 **실행 시점
+# 관문(`runner_available`)에만** 허용되고 **선언 측 함수 어디에도** 있으면 안 된다.
+# 그래서 ∀(선언 측 5개 함수 전부) + ∃(실행 측엔 실제로 있다 = 추출기가 작동하고 실행
+# 측 능력이 삭제되지 않았다는 양의 짝) 두 축으로 잰다.
 case_no_ambient_pytest_probe() {
-  if grep -q 'import pytest' "$RTS"; then
-    fail "앰비언트 pytest 프로브 재도입됨 (레포 선언 기반이어야 함)"
+  local declare_fns="has_pytest_config repo_declares_pytest has_python_tests has_exec_shell_tests detect_set"
+  local fn body bad=0 scanned=0
+
+  # 양의 짝 먼저: 실행 측에는 프로브가 **있어야** 한다. 없으면 추출기가 고장났거나
+  # 관문이 통째로 사라진 것이고, 그러면 아래 ∀ 는 공허하게 참이 된다.
+  local exec_body; exec_body=$(fn_body "$RTS" runner_available)
+  if ! grep -q 'command -v' <<<"$exec_body" || ! grep -q -- '--version' <<<"$exec_body"; then
+    fail "runner_available 에 가용성 프로브가 없다 — 추출기 고장이거나 실행 관문 소실"; return
+  fi
+
+  for fn in $declare_fns; do
+    body=$(fn_body "$RTS" "$fn")
+    if [[ -z "$body" ]]; then
+      fail "선언 측 함수 '$fn' 본문 추출 실패 — ∀ 가 공허해진다"; return
+    fi
+    scanned=$((scanned + 1))
+    if grep -qE 'command -v|--version' <<<"$body"; then
+      echo "    선언 측 '$fn' 이 앰비언트 가용성 프로브를 담고 있음"; bad=1
+    fi
+  done
+
+  [[ $bad -eq 0 ]] && pass "선언 측 ${scanned}개 함수 전부 앰비언트 프로브 0회 (실행 측엔 존재 — ∀ + 양의 짝)" \
+                   || fail "앰비언트 프로브가 선언 측에 재도입됨 (레포 선언 기반이어야 함)"
+}
+
+# T83 (/qg iter-6 D6): 이 브랜치가 추가한 셸 테스트 4개가 `100644` 로 커밋돼 있었다.
+# 셸 어댑터는 `-x` 를 요구하므로(detect 의 has_exec_shell_tests, assign 의 shell 분기)
+# 그 파일들은 `unclaimed` 로 떨어지고, `unclaimed` 하나면 `verification: degraded` →
+# **PASS 불가**다. 즉 이 브랜치가 만든 게이트로 이 레포를 self-dogfood 하면 구조적으로
+# 인증이 안 됐다.
+#
+# **인덱스 모드를 잰다** — 워킹트리의 `-x` 는 `chmod` 한 사람 머신에서만 참이고, 다른
+# 체크아웃에 실려 가는 것은 `git ls-files -s` 의 모드다. (실측: chmod 직후 워킹트리
+# assign 은 이미 shell 로 주장했지만 인덱스는 여전히 100644 였다.)
+#
+# 양의 짝 필수: 열거가 0건이어도 "비실행 0건" 은 공허하게 참이다.
+case_qg_test_scripts_are_executable() {
+  local listing total nonexec
+  listing=$(git -C "$PLUGIN_ROOT" ls-files -s -- 'tests/' 2>/dev/null | grep '\.sh$')
+  total=$(printf '%s\n' "$listing" | grep -c . )
+  if [[ "$total" -lt 10 ]]; then
+    fail "tests/ 하위 .sh 열거가 ${total}건 — 코퍼스를 못 읽었다, ∀ 가 공허해진다"; return
+  fi
+  nonexec=$(printf '%s\n' "$listing" | awk '$1 != "100755" { print $4 }')
+  if [[ -n "$nonexec" ]]; then
+    printf '    비실행 커밋 모드: %s\n' $nonexec
+    fail "셸 어댑터가 claim 할 수 없는 테스트 스크립트 존재 → unclaimed → PASS 불가"
   else
-    pass "앰비언트 pytest 프로브 0회 — 감지는 레포 선언만 본다"
+    pass "quality-gates/tests 하위 .sh ${total}개 전부 실행 가능(인덱스 모드) — self-dogfood 가능"
   fi
 }
 
@@ -204,11 +277,14 @@ case_build_output_not_shared() {
   if [[ -n "$ta" && -n "$tb" && "$ta" != "$tb" && "$ta" == "$a"* && "$tb" == "$b"* ]]; then
     pass "CARGO_TARGET_DIR가 트리별 독립 ('$ta' != '$tb')"
   else fail "CARGO_TARGET_DIR 공유 위험 (a='$ta' b='$tb')"; fi
-  # node_modules / .venv를 트리 밖으로 내보내는 코드 경로가 없어야 한다
-  if grep -qE 'NODE_PATH=|VIRTUAL_ENV=|--prefix[[:space:]]' "$RTS"; then
+  # node_modules / .venv를 트리 밖으로 내보내는 코드 경로가 없어야 한다.
+  # 코퍼스 실재 확인 선행 (/qg iter-6 E5) — 맨 grep 은 파일 부재 시 exit 2 로 PASS 를 찍는다.
+  if [[ ! -s "$RTS" ]] || ! grep -q 'CARGO_TARGET_DIR' "$RTS"; then
+    fail "run-test-selection.sh 를 읽지 못했다 — 아래 부재 검사가 공허해진다"
+  elif grep -qE 'NODE_PATH=|VIRTUAL_ENV=|--prefix[[:space:]]' "$RTS"; then
     fail "트리 밖 deps 경로 지정 코드 존재"
   else
-    pass "node_modules/.venv 트리 밖 지정 0회"
+    pass "node_modules/.venv 트리 밖 지정 0회 (코퍼스 실재 확인됨)"
   fi
   rm -rf "$a" "$b"
 }
@@ -692,7 +768,8 @@ for c in case_pytest case_unittest case_pytest_declared_without_config case_shel
          case_pytest_plugin_only_declaration case_python_setup_and_run_share_env \
          case_requirements_env_is_sandbox_local case_npm_install_writes_no_lockfile \
          case_env_dir_gate_uses_directory_pattern \
-         case_adapter_count_derives_from_closed_set; do
+         case_adapter_count_derives_from_closed_set \
+         case_qg_test_scripts_are_executable; do
   echo "== $c"; $c
 done
 echo "── runner adapters: $PASS passed, $FAIL failed"
