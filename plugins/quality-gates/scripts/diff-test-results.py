@@ -286,10 +286,42 @@ def per_adapter(args: argparse.Namespace) -> int:
     # red 면 실제로 통과한 unit 도 fail 로 찍힌다). 그 방향은 **거짓 red** 라 인증을
     # 막는 쪽이므로 여기서 degrade 로 올리지 않는다 — 귀속의 정확도 문제이지 인증
     # 우회가 아니다.
+    # **`--mode` 는 판정을 가르는 자유 변수였다** (/qg iter-6: silent-failure-hunter
+    # CRITICAL + adversarial 이 찾은 합성 경로). 형제 `--granularity` 는 정확히 이
+    # 결함으로 소유자 대조 검사(`verify_granularity`)를 받았는데 `--mode` 는 못 받았고,
+    # §6.7·§11 어느 잔여 목록에도 없었다. 실측: 동일 입력에 `--mode per-unit` 만
+    # 넘기면 `degraded` → `closed` 로 뒤집혀 3플래그 전부 false = R8 PASS 행 전체가
+    # 성립했다. 오케스트레이터의 장부 실수 하나면 회귀가 인증을 통과한다.
+    #
+    # 왜 `--granularity` 처럼 소유자에게 묻지 않는가: mode 는 러너의 정적 속성이 아니라
+    # **이번 실행의 속성**이라 `run-test-selection.sh` 가 사후에 재계산해 줄 수 없다.
+    # 대신 **데이터에 묻는다.** 도말은 관측 가능한 서명을 남긴다 — `run` 이 한 번의 종료
+    # 코드를 전 unit 에 그대로 찍으므로(run-test-selection.sh 의 bulk emit), present
+    # unit 이 2개 이상인데 `(status, exit)` 쌍이 단 하나가 된다.
+    #
+    # 그래서 mode 는 **선언(`args.mode`)과 관측(서명) 중 하나라도** bulk 를 가리키면
+    # bulk 로 읽는다. 오케스트레이터가 `per-unit` 이라 말해도 데이터가 도말이면 degrade 가
+    # 발화한다 — 토큰 하나로 인증을 사는 경로가 사라진다.
+    #
+    # 위양성 방향은 **degrade 쪽이라 안전하다.** 게다가 `pre_existing > 0` 과 겹쳐야
+    # 하므로 그 상황은 "고른 테스트가 전부 양측에서 같은 코드로 실패" 인데, 그때 어느
+    # unit 이 회귀인지는 실제로 구분 불가다 — degrade 가 정직한 답이다. 전 unit 이 같은
+    # `pass` 인 정상 실행은 `pre_existing == 0` 이라 이 가지에 닿지 않는다.
+    # `absent`/`unrun` 제외는 **방어적일 뿐 검증 불가**다 — 정직하게 적어 둔다.
+    # head 축에 그 상태가 하나라도 있으면 그 행은 ATTR 상 `SILENT_DROP` 또는
+    # `BASELINE_UNRUNNABLE` 로 떨어져 **독립적으로** degrade 를 세운다(실측). 그래서 이
+    # 제외를 지워도 `attribution_status` 는 바뀌지 않고, 효과 0인 락을 붙이는 대신
+    # 여기에 이유를 남긴다: 서명은 *관측된 실행*에 대해서만 의미가 있고, 비-관측 행을
+    # 섞으면 집합 크기가 늘어 도말을 **감출** 수 있다 (fail-closed 방향으로 남긴다).
+    head_present = [
+        head[u] for u in expected
+        if u in head and head[u][0] not in ("absent", "unrun")
+    ]
+    smear_signature = len(head_present) > 1 and len(set(head_present)) == 1
     smeared = (
-        args.mode == "bulk"
-        and args.granularity != "bulk"
+        args.granularity != "bulk"
         and counts["pre_existing"] > 0
+        and (args.mode == "bulk" or smear_signature)
     )
     degraded = (
         not expected
@@ -405,8 +437,8 @@ def _aggregate(args: argparse.Namespace) -> int:
 
     # runner 이름은 여기서도, per_adapter()의 `runner: {args.runner}`에서도
     # yaml_str()로 따옴표 처리하지 않는다 — parse_adapter_yaml()의 `^runner: (\S+)$`
-    # 가 공백 없는 토큰만 받아들이고, runner는 자유 입력이 아니라 §5.9의 닫힌
-    # 8-어댑터 표에서만 오는 값이라 `]`/`,`/`{`/`}` 같이 이 파일의 손-롤 flow
+    # 가 공백 없는 토큰만 받아들이고, runner는 자유 입력이 아니라 §5.9의 러너 어댑터
+    # 9종 표에서만 오는 값이라 `]`/`,`/`{`/`}` 같이 이 파일의 손-롤 flow
     # 문법을 깨는 문자가 들어올 경로가 없다. 자유 입력(unit 이름 등)은 yaml_str로
     # 이스케이프한다 — 이 둘을 섞으면 안 된다.
     # per_adapter() 의 `not expected` 와 같은 이유 — 어댑터 0개 집계는 "결함 없음"이

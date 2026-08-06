@@ -78,13 +78,24 @@ case_adapter_count_derives_from_closed_set() {
   done
   rm -rf "$probe_dir"
 
-  # 플러그인 안의 모든 `러너 어댑터 N종` 주장이 n 과 같아야 한다 (∀).
+  # 플러그인 안의 모든 어댑터-개수 주장이 n 과 같아야 한다 (∀).
+  #
+  # /qg iter-6 D8: 앞선 판본은 `러너 어댑터 N종` **한 표기만** 스캔했다. 그래서
+  # `diff-test-results.py` 가 같은 것을 `<숫자>-어댑터 표` 라고 부른 자리가 코퍼스
+  # 밖에 있었고, 이 락이 닫으려던 바로 그 별칭 사각지대로 드리프트가 살아남았다.
+  # 같은 개념의 다른 표기를 함께 센다 — 식별자가 아니라 **개념**으로 스캔한다.
+  #
+  # 패턴을 넓힐 때 두 번 물렸다(둘 다 실측): ① 이 주석이 옛 값을 인용하면 그 인용이
+  # 코퍼스에 들어가 자기 자신을 위반으로 만든다 — 그래서 여기에는 숫자를 쓰지 않는다.
+  # ② `<숫자>-어댑터` 만으로는 시나리오 이름(`0-어댑터 (rc=…)`)까지 잡는다 — 그래서
+  # 뒤에 `표` 를 요구해 **개수 주장**만 남긴다.
   local bad=0 found=0 hit
   while IFS= read -r hit; do
     found=$((found + 1))
-    local claimed; claimed=$(sed -E 's/.*러너 어댑터 ([0-9]+)종.*/\1/' <<<"$hit")
+    local claimed
+    claimed=$(sed -E 's/.*(러너 어댑터 |러너 )?([0-9]+)(종|-어댑터 표).*/\2/' <<<"$hit")
     [[ "$claimed" == "$n" ]] || { bad=1; echo "    (불일치 ${claimed}≠${n}) ${hit:0:110}"; }
-  done < <(grep -rn "러너 어댑터 [0-9]*종" "$PLUGIN_ROOT" 2>/dev/null)
+  done < <(grep -rnE "러너 어댑터 [0-9]+종|[0-9]+-어댑터 표|러너 [0-9]+종" "$PLUGIN_ROOT" 2>/dev/null)
 
   # 양의 짝 — 주장이 하나도 없으면 ∀ 는 공허하게 참이다. 코퍼스를 봤다는 증거.
   if [[ $found -eq 0 ]]; then
@@ -222,6 +233,38 @@ case_no_ambient_pytest_probe() {
 
   [[ $bad -eq 0 ]] && pass "선언 측 ${scanned}개 함수 전부 앰비언트 프로브 0회 (실행 측엔 존재 — ∀ + 양의 짝)" \
                    || fail "앰비언트 프로브가 선언 측에 재도입됨 (레포 선언 기반이어야 함)"
+}
+
+# T84 (/qg iter-6 C2(b)): poetry 가 env-dir 열거에서 통째로 빠져 있었다. 근거는
+# "poetry 의 기본 venv 는 트리 밖" 이라는 **평서문 단정**이었는데, 그건 레포의 속성이
+# 아니라 **머신 상태**다 — `virtualenvs.in-project` 는 레포 `poetry.toml` 로도 사용자
+# 전역 config 로도 환경변수로도 켜진다. 켜져 있으면 `.venv` 가 트리 안에 생기고,
+# 그 레포가 `.venv` 를 gitignore 하지 않으면 R7 이 전량을 `disallowed_new_files` 로
+# 잡아 **거짓 terminal FAIL**(어떤 degrade 로도 안 내려감)을 낸다.
+#
+# 양의 짝이 이 케이스의 핵심이다: in-project 를 **끄면** 그 요구가 사라져야 한다.
+# 없으면 "poetry 면 언제나 .venv" 라는 과잉 mutation 이 통과한다.
+# (poetry 설치 여부에 의존하지 않도록 환경변수 축으로 잰다.)
+case_poetry_in_project_env_dir() {
+  mkw
+  ( cd "$W" && git init -q . )
+  : > "$W/poetry.lock"; mkdir -p "$W/tests"
+  printf 'import unittest\nclass T(unittest.TestCase):\n    def test_a(self): pass\n' > "$W/tests/test_a.py"
+
+  local on off toml ok=1
+  on=$(POETRY_VIRTUALENVS_IN_PROJECT=true  bash "$RTS" probe "$W" unittest 2>&1)
+  off=$(POETRY_VIRTUALENVS_IN_PROJECT=false bash "$RTS" probe "$W" unittest 2>&1)
+  printf '[virtualenvs]\nin-project = true\n' > "$W/poetry.toml"
+  toml=$(POETRY_VIRTUALENVS_IN_PROJECT= bash "$RTS" probe "$W" unittest 2>&1)
+
+  case "$on"   in *env_dir_not_ignored*) ;; *) ok=0; echo "    env=true 인데 게이트 미발화" ;; esac
+  case "$toml" in *env_dir_not_ignored*) ;; *) ok=0; echo "    poetry.toml in-project 인데 게이트 미발화" ;; esac
+  # 양의 짝 — 끄면 이 사유로는 막지 않는다
+  case "$off"  in *env_dir_not_ignored*) ok=0; echo "    env=false 인데도 .venv 를 요구함(과잉)" ;; esac
+
+  [[ $ok -eq 1 ]] && pass "poetry: in-project 가 켜진 축(env·poetry.toml)에서만 .venv 를 env-dir 로 요구 (양의 짝 포함)" \
+                  || fail "poetry in-project env-dir (on='${on:0:60}' off='${off:0:60}' toml='${toml:0:60}')"
+  rmw
 }
 
 # T83 (/qg iter-6 D6): 이 브랜치가 추가한 셸 테스트 4개가 `100644` 로 커밋돼 있었다.
@@ -769,7 +812,7 @@ for c in case_pytest case_unittest case_pytest_declared_without_config case_shel
          case_requirements_env_is_sandbox_local case_npm_install_writes_no_lockfile \
          case_env_dir_gate_uses_directory_pattern \
          case_adapter_count_derives_from_closed_set \
-         case_qg_test_scripts_are_executable; do
+         case_qg_test_scripts_are_executable case_poetry_in_project_env_dir; do
   echo "== $c"; $c
 done
 echo "── runner adapters: $PASS passed, $FAIL failed"

@@ -183,11 +183,66 @@ class TestAttribution(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(flag_of(out, "attribution_status"), "degraded", out)
 
-    # 양의 짝 ①: 같은 픽스처를 per-unit 으로 돌면 상태가 정직하므로 인증된다.
+    # 양의 짝 ①: per-unit 으로 돌면 상태가 정직하므로 인증된다.
     # 이게 없으면 "mode 를 아예 안 본다 / 언제나 degraded" mutation 이 통과한다.
-    def test_per_unit_same_rows_still_certifies(self):
+    #
+    # /qg iter-6: 픽스처가 원래 `a·b 둘 다 fail 1` 이었는데, 그건 **도말과 데이터상
+    # 구분 불가한 모양**이라 아래 `case_declared_per_unit_cannot_buy_certification`
+    # 이 닫는 경로와 정면으로 충돌했다. 락의 *의도*(mode 를 실제로 읽는가)는 서명이
+    # 없는 픽스처로도 그대로 성립하므로 행을 서로 다르게 둔다 — 여전히 bulk↔per-unit
+    # 양방향을 구별한다.
+    def test_per_unit_distinct_rows_certifies(self):
+        rows = [("a", "fail", "1"), ("b", "pass", "0")]
+        rc, out, _ = run_diff(["a", "b"], rows, rows,
+                              granularity="file", runner="shell",
+                              baseline_detected="shell", mode="per-unit")
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "attribution_status"), "closed", out)
+
+    # 같은 픽스처를 bulk 로 선언하면 degrade — 위 케이스와 짝을 이뤄 `--mode` 가
+    # 실제로 읽히고 있음을 양방향으로 증명한다.
+    def test_declared_bulk_on_distinct_rows_degrades(self):
+        rows = [("a", "fail", "1"), ("b", "pass", "0")]
+        rc, out, _ = run_diff(["a", "b"], rows, rows,
+                              granularity="file", runner="shell",
+                              baseline_detected="shell", mode="bulk")
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "attribution_status"), "degraded", out)
+
+    # /qg iter-6 CRITICAL (C1 + adversarial 합성 N1): **선언된 `--mode` 로 인증을
+    # 살 수 없다.** 이전에는 동일 입력에 `per-unit` 만 넘기면 `degraded` → `closed` 로
+    # 뒤집혀 3플래그 전부 false = R8 PASS 행 전체가 성립했다(실측). 이제 데이터가
+    # 도말 서명(present unit ≥2 인데 (status, exit) 쌍이 하나)을 보이면 선언과 무관하게
+    # degrade 한다 — 진짜 per-unit 과 도말을 데이터로는 구분할 수 없기 때문이고,
+    # 구분할 수 없다는 사실 자체가 인증 불가 사유다.
+    #
+    # 트레이드오프(명시): "고른 unit 전부가 양측에서 같은 코드로 red" 인 정상 per-unit
+    # 실행도 degrade 된다. 방향이 안전(SKIP_WITH_EVIDENCE, terminal FAIL 아님)하고,
+    # 그 상황에서 어느 unit 이 회귀인지는 실제로 구분 불가다.
+    def test_declared_per_unit_cannot_buy_certification(self):
         rows = [("a", "fail", "1"), ("b", "fail", "1")]
         rc, out, _ = run_diff(["a", "b"], rows, rows,
+                              granularity="file", runner="shell",
+                              baseline_detected="shell", mode="per-unit")
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "attribution_status"), "degraded", out)
+
+    # 위 규칙이 **정상 green 실행을 잡아먹지 않는지** — 전 unit 이 같은 `pass 0` 이어도
+    # `pre_existing == 0` 이라 이 가지에 닿지 않는다. 없으면 "언제나 degraded" 로
+    # 과잉강화한 mutation 이 통과한다.
+    def test_uniform_green_rows_still_certify(self):
+        rows = [("a", "pass", "0"), ("b", "pass", "0")]
+        rc, out, _ = run_diff(["a", "b"], rows, rows,
+                              granularity="file", runner="shell",
+                              baseline_detected="shell", mode="per-unit")
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "attribution_status"), "closed", out)
+
+    # 단일 unit 은 도말이 성립하지 않는다(찍을 다른 unit 이 없다) — 서명 조건의
+    # `len > 1` 이 지워지면 이 케이스가 죽는다.
+    def test_single_unit_is_not_a_smear(self):
+        rows = [("a", "fail", "1")]
+        rc, out, _ = run_diff(["a"], rows, rows,
                               granularity="file", runner="shell",
                               baseline_detected="shell", mode="per-unit")
         self.assertEqual(rc, 0)

@@ -760,21 +760,28 @@ assert_line "Step R6 헤딩 존재 (창 상한)" "$r6_marker"
 #
 # 그래서 (a) 조건과 극성을 **같은 줄에서** 요구하고, (b) 반대 극성이 0회임을 요구하고,
 # (c) `unrun` 은 산문에 없는 **지시 고유 형태**(`unrun\t-`)로 잰다.
-polarity_ok=0; polarity_bad=0; rec_ok=0; route_ok=0
+polarity_ok=0; polarity_bad=0; rec_ok=0; route_ok=0; route_stale=0
 while IFS= read -r line; do
   case "$line" in
     *sandbox_dir*UNSET*) polarity_ok=1 ;;
     *sandbox_dir*SET*)   polarity_bad=$((polarity_bad + 1)) ;;   # UNSET 은 위에서 이미 소비됨
   esac
   case "$line" in *'unrun\t-'*)   rec_ok=1 ;; esac
-  case "$line" in *SILENT_DROP*) route_ok=1 ;; esac
+  # /qg iter-6 D3: 이 락은 원래 리터럴 `SILENT_DROP` 을 요구했다. 그런데 SR4 이후
+  # 폴백에서는 **R4 도 건너뛰어 기준선 축까지 전량 `unrun`** 이므로 쌍은 항상
+  # `(U,U) → BASELINE_UNRUNNABLE` 이다 — 즉 락이 **도달 불가능한(=틀린) 사실을
+  # 방어**하고 있었고, 산문을 옳게 고치면 스위트가 red 가 되는 상태였다.
+  # 락을 지우면 G5 보호가 사라지므로, 정정된 라우팅 주장으로 **재조준**한다.
+  case "$line" in *BASELINE_UNRUNNABLE*) route_ok=1 ;; esac
+  # 그리고 옛 주장이 되돌아오는 것도 막는다 — 삭제된 규칙이 거짓 인용으로 남지 않도록.
+  case "$line" in *'(P,U)'*SILENT_DROP*|*SILENT_DROP*'(P,U)'*) route_stale=1 ;; esac
 done < <(awk -v s="$r5b" -v e="$r6_marker" 'NR>s && NR<e' "$SKILL_MD")
 
 if [[ "$r5b" -gt 0 && "$r6_marker" -gt 0 && "$polarity_ok" -eq 1 && "$polarity_bad" -eq 0 \
-      && "$rec_ok" -eq 1 && "$route_ok" -eq 1 ]]; then
-  echo "PASS: R5b 폴백 게이트 — sandbox_dir+UNSET 동일 줄 · 반대 극성 0회 · unrun 지시형 · SILENT_DROP (창 $r5b..$r6_marker)"
+      && "$rec_ok" -eq 1 && "$route_ok" -eq 1 && "$route_stale" -eq 0 ]]; then
+  echo "PASS: R5b 폴백 게이트 — sandbox_dir+UNSET 동일 줄 · 반대 극성 0회 · unrun 지시형 · (U,U)→BASELINE_UNRUNNABLE · 옛 주장 0회 (창 $r5b..$r6_marker)"
 else
-  echo "FAIL: R5b 폴백 게이트 (polarity_ok=$polarity_ok polarity_bad=$polarity_bad rec=$rec_ok route=$route_ok 창 $r5b..$r6_marker)"
+  echo "FAIL: R5b 폴백 게이트 (polarity_ok=$polarity_ok polarity_bad=$polarity_bad rec=$rec_ok route=$route_ok stale=$route_stale 창 $r5b..$r6_marker)"
   fail=$((fail + 1))
 fi
 

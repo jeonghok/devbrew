@@ -131,15 +131,49 @@ dir_is_ignored() {   # dir_is_ignored <worktree> <dir-name>
   git -C "$1" check-ignore -q "$2/" 2>/dev/null
 }
 
+# poetry 가 이 트리 **안에** venv 를 만드는가.
+#
+# /qg iter-6 C2(b): 앞선 판본은 "poetry 의 기본 venv 는 트리 밖" 을 **평서문으로
+# 단정**하고 poetry 를 env-dir 열거에서 통째로 뺐다. 그건 레포의 속성이 아니라
+# **머신 상태**다 — `virtualenvs.in-project` 는 레포의 `poetry.toml` 로도, 사용자
+# **전역 config** 로도, 환경변수로도 켜진다. 전역으로 켠 경우엔 레포 안에 신호가 아예
+# 없어 파일 기반 감지로는 못 잡는다. 같은 파일의 `repo_declares_pytest` 주석이
+# "이 *레포*가 무엇을 선언했는가 — 이 *머신*에 무엇이 깔렸는가가 아니다" 로 정확히 이
+# 혼동을 경계하는데, 여기서 그 경계가 반대 방향으로 무너져 있었다.
+#
+# **모르면 트리 안으로 읽는다(보수적).** 틀렸을 때의 대가가 비대칭이기 때문이다:
+# 트리 안으로 잘못 읽으면 `.venv` 가 gitignore 됐는지 한 번 더 보는 것뿐이고(안 됐으면
+# `env_dir_not_ignored` 로 **깨끗한 degrade**), 트리 밖으로 잘못 읽으면 R7 이 `.venv`
+# 전량을 `disallowed_new_files` 로 잡아 **거짓 terminal FAIL** — 어떤 degrade 로도
+# 내려가지 않는 판정 — 이 난다.
+poetry_in_project() {   # poetry_in_project <worktree> → 0 = venv 가 트리 안에 생긴다
+  local w=$1
+  case "${POETRY_VIRTUALENVS_IN_PROJECT:-}" in
+    1|true|True|TRUE)    return 0 ;;
+    0|false|False|FALSE) return 1 ;;
+  esac
+  if [[ -f "$w/poetry.toml" ]] \
+     && grep -qE '^[[:space:]]*in-project[[:space:]]*=[[:space:]]*true' "$w/poetry.toml" 2>/dev/null; then
+    return 0
+  fi
+  if command -v poetry >/dev/null 2>&1; then
+    [[ "$( (cd "$w" && poetry config virtualenvs.in-project 2>/dev/null) )" == "true" ]]
+    return
+  fi
+  return 0   # 판단 불가 → 보수적으로 "트리 안"
+}
+
 # 어댑터의 setup 이 이 트리 **안에** 만드는 환경 디렉토리 (없으면 빈 문자열).
 # 이것이 그 레포의 .gitignore 로 덮이지 않으면 R7 mutation-guard 가 전량을
 # `disallowed_new_files` 로 잡아 terminal FAIL 을 낸다 — cargo target 과 같은 클래스다.
-# poetry 의 기본 venv 는 트리 밖(`~/.cache/pypoetry/virtualenvs/<name>-<경로해시>`)이라
-# 트리별로 이미 분리되고 트리 안에 아무것도 남기지 않는다 — 그래서 빈 문자열이다.
 setup_env_dir_of() {   # setup_env_dir_of <worktree> <runner>
   case "$2" in
     pytest|unittest)
-      case "$(python_env_of "$1")" in uv|venv) echo .venv ;; *) echo "" ;; esac ;;
+      case "$(python_env_of "$1")" in
+        uv|venv) echo .venv ;;
+        poetry)  poetry_in_project "$1" && echo .venv || echo "" ;;
+        *)       echo "" ;;
+      esac ;;
     jest|vitest|npm-script) echo node_modules ;;
     *) echo "" ;;
   esac

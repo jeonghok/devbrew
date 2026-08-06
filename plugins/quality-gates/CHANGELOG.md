@@ -38,6 +38,46 @@
 - `SKILL.md` 의 `regardless of Review scope` 리터럴과 그것이 서술하던 동작.
 
 ### Fixed
+- **`--mode` 가 판정을 가르는 자유 변수였던 fail-open** (`/qg` iter-6 CRITICAL —
+  silent-failure-hunter 단독 적발, adversarial 이 합성 경로까지 확장) — 도말 degrade 가
+  `args.mode == "bulk"` 하나에 걸려 있었고 그 값의 유일한 출처는 오케스트레이터의
+  기억이었다. 실측: 동일 입력에 `--mode per-unit` 만 넘기면 `degraded` → `closed` 로
+  뒤집혀 3플래그 전부 false = R8 PASS 행 전체가 성립했다. 형제 `--granularity` 는
+  정확히 이 결함(iter-5 C5)으로 소유자 대조 검사를 받았는데 이 인자만 못 받았고,
+  §6.7·§11 어느 잔여 목록에도 없었다. mode 는 러너의 정적 속성이 아니라 *이번 실행*의
+  속성이라 소유자가 사후 재계산을 못 하므로, 스크립트가 **데이터에 묻는다**: present
+  unit ≥2 인데 `(status, exit)` 쌍이 하나면 도말의 서명이고, 선언이 `per-unit` 이어도
+  degrade 한다. 트레이드오프(명시): "고른 unit 전부가 양측에서 같은 코드로 red" 인 정상
+  per-unit 실행도 degrade 된다 — 방향이 안전하고(SKIP_WITH_EVIDENCE) 그 상황에서 어느
+  unit 이 회귀인지는 실제로 구분 불가다.
+- **`--total` 분모가 분자보다 작아질 수 있던 것** (`/qg` iter-6 D1) — `TESTRE` 에
+  `test_*.py` 가 없는데 후보 매퍼는 명시적으로 `find -name "test_${base}.py"` 를 한다.
+  실측 N=1 / M=0. SKILL 이 비율 부풀리기를 막으려고 분모를 이 스크립트에서 강제로
+  가져오는데 그 보증이 무너져 있었다.
+- **`resolve-baseline.sh` 부재·실패가 조용한 빈 후보 목록이 되던 fail-open**
+  (`/qg` iter-6 E10 ≡ §6.7 F6) — `|| true` 가 소유자 실패를 빈 문자열로 바꿔
+  `REVIEW_RANGE=""` 로 떨어뜨렸다. 형제 `check-review-scope.sh` 는 같은 자리에서
+  `|| emit_degraded` 로 fail-closed 다. 이제 원인을 loud 하게 알린다.
+- **poetry 가 env-dir 열거에서 빠져 거짓 terminal FAIL 을 낼 수 있던 것**
+  (`/qg` iter-6 C2(b)) — 근거가 "poetry 의 기본 venv 는 트리 밖" 이라는 **평서문 단정**
+  이었는데, 그건 레포의 속성이 아니라 **머신 상태**다(`virtualenvs.in-project` 는 레포
+  `poetry.toml`·사용자 전역 config·환경변수 어디로든 켜진다). 켜져 있고 `.venv` 가
+  gitignore 되지 않으면 R7 이 전량을 `disallowed_new_files` 로 잡아 어떤 degrade 로도
+  내려가지 않는 FAIL 을 낸다. 이제 단정하지 않고 세 축을 **물어본다**; 판단 불가는
+  보수적으로 "트리 안" 으로 읽는다(오판 대가가 비대칭이라 — 깨끗한 degrade 대 거짓 FAIL).
+- **폴백 라우팅 주장이 도달 불가였고 회귀 락이 그 틀린 주장을 방어하던 것**
+  (`/qg` iter-6 D3) — SR4 이후 폴백에서는 R4 도 건너뛰어 기준선 축까지 전량 `unrun`
+  이므로 쌍은 항상 `(U,U) → BASELINE_UNRUNNABLE` 인데, 산문은 비대칭 쌍을 주장하고
+  harness 락은 그 리터럴을 요구했다 — **산문을 옳게 고치면 스위트가 red 가 되는** 상태.
+  락을 지우면 G5 보호가 사라지므로 정정된 주장으로 **재조준**하고, 옛 주장의 재도입도
+  함께 막는다.
+- **`degraded` skip 경로가 `unrun` 채움 지시를 빠뜨려 사유를 오보고하던 것**
+  (`/qg` iter-6 D2) — 형제 skip 둘은 지시를 갖고 있었다. 빈 파일을 넘기면 약속한
+  `BASELINE_UNRUNNABLE` 대신 `SILENT_DROP`("고른 것이 사라졌다")이 보고된다.
+- **`probe` 의 setup 이 "전부 idempotent" 라던 거짓 근거** (`/qg` iter-6 A5) —
+  `npm ci` 는 `node_modules` 를 통째로 지우고 다시 만들며, npm/pnpm/yarn 설치는 레포가
+  작성한 라이프사이클 스크립트를 호스트 전권으로 실행한다. 무조건 도는 판단은 유지하되
+  (게이트는 어차피 같은 트리에서 레포 명령을 돌리므로 새 능력이 아니다) 근거를 정정했다.
 - **`unittest` 판정가능성 술어가 `async def test_` 를 놓치던 프로덕션 버그**
   (`/qg` iter-6 E12) — 음성 조건이 `^def[[:space:]]+test` 였다. 같은 파일에 진짜
   `TestCase` 가 하나라도 있으면 파일이 claim 되고 `discover` 가 `TestCase` 만 수집해

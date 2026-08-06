@@ -184,9 +184,16 @@ get_surface_block() {
 echo "== Test 8: blast-radius process-start =="
 OUT=$(run_detector "web-compose")
 dev_block=$(get_surface_block "$OUT" "name: dev")
-test_block=$(get_surface_block "$OUT" "name: test")
 assert_contains "$dev_block" "requires_decision: true" "T8: npm:dev requires_decision"
-assert_not_contains "$test_block" "requires_decision" "T8: npm:test stays automatic"
+# /qg iter-6 D4 ≡ E13-Q1 (리뷰어 2명 독립 확인): 여기 있던
+#   test_block=$(get_surface_block "$OUT" "name: test")
+#   assert_not_contains "$test_block" "requires_decision" "T8: npm:test stays automatic"
+# 두 줄을 삭제했다. 이 브랜치의 C2 변경이 `name: test` 를 runnable_surfaces 에서 아예
+# 빼므로(detect-runtime.sh 의 `test` → `continue`) `test_block` 은 **항상 길이 0** 이고,
+# 빈 haystack 에 대한 assert_not_contains 는 절대 실패할 수 없다 — 삭제된 계약에
+# PASS 를 찍는 공허한 assert 였다. 게다가 그 라벨("npm:test stays automatic")은 아래
+# T9/T10 이 **존재하면 안 된다**고 못 박은 동작을 주장한다. T3·T9·T10·T12 는 새 계약으로
+# 재작성됐는데 T8 만 남아 있었다. 러너가 표면이 아님은 T9 가 5축 ∀ 로 잰다.
 
 # docker-compose keeps its existing requires_decision
 dc_block=$(get_surface_block "$OUT" "kind: docker-compose")

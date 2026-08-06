@@ -785,7 +785,12 @@ R2 의 5번이 곧 생략 목록이다. **생략 목록이 비어 있으면 `Ask
 **Step R4 — 기준선 측 (오케스트레이터 단독 — verifier 미개입).**
 
 R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 에서
-`BASELINE_UNRUNNABLE` 로 처리한다.
+`BASELINE_UNRUNNABLE` 로 처리한다. **이때도 기준선 행 파일은 선택한 unit 마다
+`<unit>\tunrun\t-` 로 채우고 `baseline_detected` 는 `NONE` 이다** — 형제 skip 경로 둘과
+같은 규칙이다. 빈 파일을 넘기면 행 부재가 `SILENT_DROP` 으로 라벨돼 "기준선을 못
+돌렸다"가 "고른 것이 사라졌다"로 잘못 보고된다(/qg iter-6 D2 실측: 빈 파일 →
+`SILENT_DROP`, `unrun` 으로 채움 → `BASELINE_UNRUNNABLE`). 즉 바로 윗 문장이 약속한
+`BASELINE_UNRUNNABLE` 은 채워야만 실제로 나온다 — 이 지시가 빠져 있었다.
 
 **폴백(샌드박스 비활성)에서도 이 스텝 전체를 건너뛴다 (/qg iter-5 SR4).**
 `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1` 이면 R5a¹ 이 폴백으로 가고 **R5b 가 아예 돌지
@@ -919,8 +924,21 @@ diff 가 테스트 인프라 자체를 바꾸는 경우(unittest→pytest 마이
 
 **조건을 붙이지 않는다.** "미적중분이 없을 때만 probe" 로 최적화하고 싶겠지만, 이
 파일의 기록상 `~일 때만` 조건은 매번 구멍이 됐다(②의 "미적중분이 있을 때만" 이 바로
-SR1 의 조상이다). `run` 이 관문을 다시 도는 중복은 `setup_cmd` 재실행 비용뿐이고,
-그 명령들은 전부 idempotent 하다(`uv sync --frozen`·`npm ci`·`poetry install`).
+SR1 의 조상이다). `run` 이 관문을 다시 도는 중복은 `setup_cmd` 재실행 비용뿐이다.
+
+**그 비용은 idempotent 가 아니다 — 정직하게 적는다 (/qg iter-6 A5).** 앞선 판본은
+`uv sync --frozen`·`npm ci`·`poetry install` 이 "전부 idempotent" 라고 적었는데
+사실이 아니다: `npm ci` 는 `node_modules` 를 통째로 지우고 다시 만들며, npm/pnpm/yarn
+설치는 레포가 작성한 `preinstall`/`postinstall`/`prepare` 라이프사이클 스크립트를
+**호스트 전권으로 실행**한다. 즉 이 스텝은 "테스트를 안 돌리는 값싼 가용성 확인" 이
+아니라 리뷰 대상 브랜치의 코드를 실행하는 지점이다.
+
+그럼에도 `probe` 를 무조건 도는 판단은 유지한다 — 게이트는 어차피 같은 트리에서
+`npm test`/`make test`/`bash tests/*.sh` 를 레포 권한으로 돌리므로 설치 라이프사이클이
+**새 능력을 추가하지 않는다**. 바뀌는 것은 근거뿐이다: "싸고 무해해서" 가 아니라
+"이미 같은 신뢰 경계 안이고, 관문을 건너뛰면 SR1 이 되돌아오기 때문에" 돈다.
+(`--ignore-scripts` 로 좁히는 선택지는 `probe` 와 `run` 의 관문을 발산시켜 T72 의
+관문-동일성 계약을 깨므로 택하지 않는다.)
 
 **읽는 방법은 stdout 의 양성 확인이다.** `usable: yes` 를 **본** 러너만
 `baseline_detected` 에 넣는다. `usable: no`·비정상 종료·빈 출력·스크립트 부재는
@@ -1052,8 +1070,13 @@ HEAD 행 파일을 채운 뒤 R6 으로 간다. 이유 둘:
    "설치는 안 한다" 고 출력한 직후 동의 없이 트리를 바꾸는 경로이며, 가드가 눈감는 것이
    아니라 **설계상 볼 수 없는** 종류다.
 2. 잃는 것이 없다. 폴백 verdict 는 R5a¹ 에서 이미 SKIP_WITH_EVIDENCE 로 cap 되어 PASS 가
-   불가능하고, HEAD 축 `unrun` 은 `(P,U)`/`(F,U)`/`(A,U) → SILENT_DROP` 으로 라우팅돼
-   `silent_drop: true` 를 세운다 — 귀속이 조용히 틀리는 게 아니라 degrade 로 드러난다.
+   불가능하고, 귀속은 `(U,U) → BASELINE_UNRUNNABLE` 로 라우팅돼
+   `baseline_unrunnable: true` 를 세운다 — 귀속이 조용히 틀리는 게 아니라 degrade 로
+   드러난다. (/qg iter-6 D3 정정: 앞선 판본은 기준선 축이 관측값을 갖는다고 전제한
+   비대칭 쌍으로 라우팅을 서술했는데, SR4 이후 **R4 도 폴백에서 건너뛰어 기준선 축까지
+   전량 `unrun`** 이므로 그런 쌍은 이 모드에서 도달 불가다. 회귀 락도 함께 옮겼다 —
+   락이 그 도달 불가능한 주장을 방어하고 있어서 산문만 고치면 스위트가 red 가 됐다.
+   옛 주장의 재도입은 락이 별도로 막는다.)
 
 verifier 의 dispatch 가 **끝난 뒤**, 어댑터마다 (샌드박스가 있을 때만):
 
@@ -1105,6 +1128,16 @@ verifier 가 디버깅 중 테스트를 돌리는 것 자체를 막지는 않지
 bulk` + `pre_existing > 0` 을 `degraded` 로 내린다. **필수 인자다** — 생략하면 exit 2.
 양측에서 mode 가 달랐다면(한쪽만 2단 재실행) 그 어댑터는 `per-unit` 로 넘기지 말고
 **두 호출 중 배치였던 쪽을 기준으로 `bulk`** 를 넘긴다 (도말이 섞였으면 섞인 것이다).
+
+**이 값으로 인증을 살 수는 없다 (/qg iter-6).** 앞선 판본에서 `--mode` 는 **판정을
+가르는 자유 변수**였다 — 동일 입력에 `per-unit` 만 넘기면 `degraded` 가 `closed` 로
+뒤집혀 R8 PASS 행의 결정론 조건이 전부 충족됐다(실측). 형제 `--granularity` 는 정확히
+이 결함으로 소유자 대조 검사를 받았는데 이 인자만 못 받았다. mode 는 러너의 정적
+속성이 아니라 *이번 실행*의 속성이라 소유자가 사후에 재계산해 줄 수 없으므로,
+스크립트가 대신 **데이터에 묻는다**: present unit 이 2개 이상인데 `(status, exit)`
+쌍이 단 하나면 그것이 도말의 서명이고, 선언이 `per-unit` 이어도 `degraded` 로 간다.
+그러니 여기서 mode 를 "고르는" 것이 아니라 **실제로 무엇을 실행했는지 그대로 적는다** —
+틀리게 적어도 인증이 늘지 않고, 진실과 어긋나면 원장이 그렇게 말한다.
 
 `--baseline-detected` 는 R4②-a 의 `probe` 가 기준선 트리에서 **`usable: yes`** 를 낸
 러너 집합이다 — `detect` 가 낸 집합이 **아니다** (/qg iter-5 SR1: `detect` 는 선언만
