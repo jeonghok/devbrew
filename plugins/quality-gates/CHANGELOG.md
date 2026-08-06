@@ -196,11 +196,34 @@
   실제로 Hard Rule `Fabricate a green by patching product source` 를 지워도 21/21
   GREEN 이었다. persona 는 보안-민감 코드인데(CLAUDE.md) 그 규칙의 삭제를 락이 못
   잡았다. 본문만 읽는 `assert_body_grep` + 두 Hard Rule 의 body-unique 앵커로 교체.
-  (3) 6곳이 *"러너 어댑터 8종"* 이라 적었는데 닫힌 집합은 **9종**이다 — CHANGELOG 는
+  (3) 6곳이 어댑터를 *8종*이라 적었는데 닫힌 집합은 **9종**이다 — CHANGELOG 는
   같은 줄에서 **이름을 9개 나열하며 8종이라고** 적었다. 숫자만 고치면 다음 어댑터에서
   똑같이 어긋나므로, 개수를 `granularity_of` 의 닫힌 집합에서 **파생**해 플러그인 안의
   모든 `러너 어댑터 N종` 주장과 대조하는 락을 붙였다(∀ + 코퍼스 실재 + 파서 계측기
   검증). mutation 13/13 RED.
+- **매니페스트가 테스트 러너를 verifier 에게 부팅 표면으로 넘기던 것** (`/qg` iter-5
+  C2 — v3.0.0 아키텍처의 미완 부분). `detect-runtime.sh` 의 `runnable_surfaces` 가
+  `pytest`·`cargo-test`·`go-test`·npm `test`·make `test` 를 표면으로 실었고,
+  `runtime-verifier` 의 Step 2 가 *"test runners run directly"* 로 그것들을 돌렸다.
+  그런데 v3.0.0 의 §5.1 불변식 ②는 **테스트 실행을 오케스트레이터가 verifier 턴
+  *밖에서*** 수행한다고 못 박는다. 결과: (a) 같은 스위트가 두 번 돌고, (b) verifier 가
+  테스트 러너 deps 를 **HEAD 샌드박스에만** 설치해 기준선 트리와 비교가 성립하지
+  않으며(AC41 이 `setup_cmd` 채널에서 맞춰 놓은 대칭을 다른 문으로 깬다), (c) §11⑬
+  (verifier 의 부팅 setup 이 권위 있는 테스트가 도는 바로 그 샌드박스를 변형)이
+  증폭된다. `runnable_surfaces` 는 이제 **부팅 표면만** 담고 러너는 `test_runners:`
+  로만 보고된다 — 부팅할 것이 없는 라이브러리 레포는 표면 0개가 되고 verifier 의
+  degenerate `SKIP_WITH_EVIDENCE` 경로로 빠진다(floor 는 그대로 돈다).
+  부수 효과로 **남은 모든 표면이 `requires_decision: true`** 가 된다 — 자동 표면이
+  하나도 없으므로 "zero-click" 은 이제 *부팅할 것이 없었다* 는 뜻이다.
+  `detect-runtime.sh` 의 SHA 핀은 갱신했고 갱신 근거를 테스트 파일에 남겼다 — 이 핀은
+  blast radius 가 **커지는** 것을 막는 장치이고 이번 변경은 반대 방향이다.
+  mutation 11/11 RED. 첫 판에서 러너 5축 중 **3축(cargo·go·make)이 GREEN** 이었다 —
+  `fixtures/gate3` 에 그 레포 형태가 없어 ∀ 가 그 축을 아예 지나가지 않았다. ∀ 의
+  범위는 코퍼스가 정하지 술어가 정하지 않는다. T9 가 5축 픽스처를 직접 만든다.
+  `test_detect_runtime.sh` T12 는 `source` 로 술어를 불렀는데 `detect-runtime.sh` 의
+  마지막 줄이 `exit 0` 이라 **세 assert 가 전부 스크립트 자신의 종료 코드를 재고**
+  있었다(호출 셸이 거기서 끝나 assert 가 한 줄도 실행되지 않았다). 함수 본문만 떼어
+  실행하고, 추출 실패를 먼저 잡는 계측기 확인을 앞에 두었다.
 
 ## [2.14.3] — 2026-07-29
 

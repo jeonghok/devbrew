@@ -124,7 +124,13 @@ case_remove_namespace_guard() {
 # T16 + AC21: detect-runtime.sh 바이트 무변경 (sha 핀)
 # 값은 최초 구현 시 `shasum -a 256` 결과로 채운다. 이 파일을 고치려면 sha도 함께
 # 고쳐야 하므로, "무심코 건드림"은 통과할 수 없다.
-DETECT_RUNTIME_SHA256="12d230b248e85ed15e0a910a1979b21c6e0bedb902ea0fd45f2833ae90e97033"
+DETECT_RUNTIME_SHA256="2f70d7660bd4fa30ad873c9c178e54631e8be1c936b7527a284e6f754c63e040"
+# **핀 갱신 이력 (/qg iter-5 C2).** 이 핀의 목적은 blast radius 가 **커지는** 것을
+# 막는 것이다(AC22 "no new surfaces"). 이번 갱신은 반대 방향이다 — `runnable_surfaces`
+# 에서 테스트 러너 kind(pytest·cargo-test·go-test·npm `test`·make `test`)를 **제거**해
+# 표면이 줄었다. 러너를 표면으로 넘기면 verifier 가 같은 스위트를 두 번째로 돌리고,
+# 테스트 러너 deps 를 HEAD 샌드박스에만 설치해 기준선과 비교가 불가능해진다(AC41).
+# 표면이 늘어나는 방향의 갱신은 이 주석만으로는 정당화되지 않는다.
 case_detect_runtime_frozen() {
   local got; got=$(shasum -a 256 "$PLUGIN_ROOT/scripts/detect-runtime.sh" | awk '{print $1}')
   [[ "$got" == "$DETECT_RUNTIME_SHA256" ]] \

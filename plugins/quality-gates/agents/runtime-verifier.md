@@ -84,7 +84,7 @@ For each surface in `runnable_surfaces`:
 
 - If it carries `requires_decision: true` and is NOT in `approved_surfaces` → record `needs-decision`, do not run.
 - If it requires prod config/endpoints → record `blocked-for-safety`, do not run.
-- Otherwise boot it (test runners run directly; process-start surfaces with `run_in_background`).
+- Otherwise boot it with `run_in_background`. **`runnable_surfaces` never contains test runners** — running the suite is the orchestrator's job, outside your turn (v3.0.0). If you find yourself about to invoke `pytest` / `cargo test` / `go test` / `npm test` / `make test`, stop: that is not your surface, and installing its deps here would make the HEAD sandbox incomparable to the baseline tree.
   - **docker-compose:** boot with `docker compose up -d` (NOT backgrounded with `&`), then health-probe each `app_url_candidates` URL via `curl -s -o /dev/null -w "%{http_code}"` before driving flows.
 
 Then derive flows. **Assertion-basis fallback chain (log which mode, loudly):**

@@ -40,6 +40,12 @@ gran_of() { bash "$RTS" detect "$1" | awk -v r="$2" '
 # 코퍼스는 **플러그인 디렉토리로 한정한다.** `docs/superpowers/specs/…-design.md` 는
 # 이 플러그인의 파일이 아니라 리포 문서이고, 플러그인 테스트가 리포 문서를 읽기
 # 시작하면 레이어가 깨져 문서 편집마다 stale-red 가 난다.
+#
+# **`러너 어댑터 N종` 은 살아 있는 주장 전용 문구다.** 옛 값을 인용하는 역사 서술
+# (CHANGELOG 의 "무엇이 틀렸었나")은 이 문구를 쓰지 않는다 — 락은 인용과 주장을
+# 구별하지 못하고, 구별하려 들면 술어가 인용부호 모양에 의존하게 된다. 실제로 이
+# 락은 도입 직후 자기 CHANGELOG 엔트리의 인용을 잡았고, 그때 고친 것은 락이 아니라
+# 인용 쪽 문구다.
 case_adapter_count_derives_from_closed_set() {
   # 닫힌 집합 = granularity_of 의 case arm 들 (`*` 제외). 어댑터 표의 유일 소유자.
   local names n
