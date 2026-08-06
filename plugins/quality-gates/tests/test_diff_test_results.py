@@ -297,10 +297,65 @@ class TestAttribution(unittest.TestCase):
     # 러너 이름은 **부분문자열이 아니라 원소**로 대조한다. `pytest` 가 감지되지
     # 않았는데 `pytest-asyncio` 같은 이름이 집합에 있다고 grounded 가 되면 안 된다.
     def test_grounding_is_set_membership_not_substring(self):
+        # 러너 이름은 **실재하는 것**이어야 한다 — v3.0.0 부터 `--runner` 는
+        # `--granularity` 와의 정합을 어댑터 표 소유자에게 확인받으므로(C5) 합성
+        # 이름(`"test"`)은 exit 4 로 먼저 죽어 이 축을 재지 못한다. `go` 는
+        # `google` 의 부분문자열이라 같은 축을 실재 러너로 잰다.
         rc, out, _ = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")],
-                              runner="test", baseline_detected="pytest vitest")
+                              runner="go", granularity="package",
+                              baseline_detected="google mongo")
         self.assertEqual(rc, 0)
         self.assertEqual(verdict_of(out, "a"), "BASELINE_UNRUNNABLE", out)
+        # 양의 짝 — 같은 러너가 **원소로** 들어 있으면 grounded 다 (없으면 "언제나
+        # 미-grounded" mutation 이 통과한다).
+        rc, out, _ = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")],
+                              runner="go", granularity="package",
+                              baseline_detected="google go mongo")
+        self.assertEqual(rc, 0)
+        self.assertEqual(verdict_of(out, "a"), "STILL_GREEN", out)
+
+    # ── T75 (/qg iter-5 C5): `--granularity` 의 provenance ──────────────────
+    #
+    # 두 인자는 **같은 어댑터의 두 얼굴**인데 아무도 대조하지 않았다. 어긋난 쌍
+    # `--runner cargo --granularity file` 은 도말 degrade 의 `granularity == "bulk"`
+    # 절을 발화시키지 않아, 양측 red 인 bulk 실행이 `PRE_EXISTING` → `closed` →
+    # **PASS 적격**이 된다. 값의 provenance 를 안 보는 필수 인자는 필수인 척하는
+    # 자유 변수다.
+    def test_granularity_must_match_runner(self):
+        rc, out, err = run_diff(["BULK"], [("BULK", "fail", "1")],
+                                [("BULK", "fail", "1")],
+                                granularity="file", runner="cargo",
+                                mode="bulk", baseline_detected="cargo")
+        self.assertEqual(rc, 4, out + err)
+        self.assertIn("불일치", err)
+
+    # 양의 짝 ① — 맞는 쌍은 그대로 통과한다. 없으면 "언제나 exit 4" mutation 이
+    # 통과하고 스크립트가 통째로 죽어도 이 테스트만 GREEN 이다.
+    def test_matching_granularity_still_runs(self):
+        rc, out, _ = run_diff(["BULK"], [("BULK", "pass", "0")],
+                              [("BULK", "pass", "0")],
+                              granularity="bulk", runner="cargo",
+                              mode="bulk", baseline_detected="cargo")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(verdict_of(out, "BULK"), "STILL_GREEN", out)
+
+    # 양의 짝 ② — 어긋난 쌍이 **막지 않았다면** 실제로 인증이 났을 것임을 보인다.
+    # 이것이 없으면 T75 는 "어떤 exit 4"만 재고, 그 exit 4 가 무엇을 구했는지는
+    # 아무도 모른다.
+    def test_mismatched_pair_would_have_certified(self):
+        rc, out, _ = run_diff(["BULK"], [("BULK", "fail", "1")],
+                              [("BULK", "fail", "1")],
+                              granularity="bulk", runner="cargo",
+                              mode="bulk", baseline_detected="cargo")
+        self.assertEqual(rc, 0, out)
+        # 올바른 쌍에서는 bulk × pre_existing 이 degrade 를 만든다.
+        self.assertIn("attribution_status: degraded", out)
+
+    # 미지 러너는 "확인할 수 없었다" 이지 "확인됐다" 가 아니다 — exit 4.
+    def test_unknown_runner_is_fail_closed(self):
+        rc, out, err = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")],
+                                runner="rspec", baseline_detected="rspec")
+        self.assertEqual(rc, 4, out + err)
 
     # `NONE` 센티널 = 기준선 트리에서 감지 0개 (또는 R-init 이 degraded/same_as_head
     # 로 R4 를 통째로 건너뜀). 어떤 러너도 grounded 가 아니다.

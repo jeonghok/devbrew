@@ -224,6 +224,18 @@
   마지막 줄이 `exit 0` 이라 **세 assert 가 전부 스크립트 자신의 종료 코드를 재고**
   있었다(호출 셸이 거기서 끝나 assert 가 한 줄도 실행되지 않았다). 함수 본문만 떼어
   실행하고, 추출 실패를 먼저 잡는 계측기 확인을 앞에 두었다.
+- **`--granularity` 의 provenance 부재** (`/qg` iter-5 C5). `diff-test-results.py` 는
+  `--runner` 와 `--granularity` 를 **각각** 필수 인자로 받는데 둘이 같은 어댑터를
+  가리키는지 **아무도 대조하지 않았다.** `--runner cargo --granularity file` 로
+  부르면 도말 degrade 의 `granularity == "bulk"` 절이 발화하지 않아, 양측 red 인
+  bulk 실행이 `PRE_EXISTING` → `closed` → **PASS 적격**이 된다. 값의 provenance 를
+  안 보는 필수 인자는 필수인 척하는 자유 변수다. `run-test-selection.sh` 에 순수 함수
+  `granularity <runner>` 서브커맨드를 열고, 파이썬이 **표를 복제하지 않고** 소유자에게
+  물어 대조한다(AC38/AC52 유지 — 파이썬은 판단하지 않고 확인만 한다). 불일치·미지
+  러너·소유자 부재는 전부 exit 4. mutation 8/8 중 7 RED — 남은 1건은 소유자 거부
+  분기를 지우는 것인데, 거부 시 stdout 이 비어 불일치 검사가 어차피 exit 4 를 내므로
+  **구멍이 아니라 중복**이다(코드에 그렇게 적었다. 이빨을 못 보이는 락을 만드는 대신
+  사실을 적는다).
 
 ## [2.14.3] — 2026-07-29
 

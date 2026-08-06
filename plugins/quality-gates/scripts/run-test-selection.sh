@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # run-test-selection.sh — 결정론 테스트 러너 어댑터 표면 (design 2026-08-01 §5.4/§5.9).
 #
-#   detect <worktree-abs>                          → 어댑터 집합 (3줄 × N, 빈 줄 구분)
-#   assign <worktree-abs>   < candidate-files      → <unit>\t<runner|unclaimed>\t<granularity>
+#   detect      <worktree-abs>                     → 어댑터 집합 (3줄 × N, 빈 줄 구분)
+#   assign      <worktree-abs> < candidate-files   → <unit>\t<runner|unclaimed>\t<granularity>
+#   granularity <runner>                           → file|package|bulk (순수 함수)
 #   probe  <worktree-abs> <runner>                 → runner/usable[/reason] (테스트 미실행)
 #   run    <worktree-abs> <runner> <mode> <unit>…  → <unit>\t<status>\t<exit-code>  (총 함수)
 #
@@ -604,6 +605,19 @@ $f"
     for r in $unused_bulk; do
       echo "run-test-selection: 미실행 러너: $r (bulk 잔여는 $absorber 가 흡수)" >&2
     done
+    exit 0
+    ;;
+  granularity)
+    # 러너 이름 → 입도. **순수 함수다** — 워크트리도, 파일시스템 접근도 필요 없다.
+    # 존재 이유(/qg iter-5 C5): `diff-test-results.py` 는 `--granularity` 를 명시적
+    # 인자로 받는데(라운드 2 결정: 파이썬이 어댑터 표를 재구현하지 않는다) 그 값이
+    # `--runner` 와 **일치하는지 아무도 검사하지 않았다.** `--runner cargo
+    # --granularity file` 로 부르면 bulk 도말 degrade(`granularity == "bulk" and
+    # pre_existing > 0`)가 발화하지 않아, 양측 red 인 bulk 실행이 `PRE_EXISTING` →
+    # `closed` → PASS 적격이 된다. 파이썬이 표를 복제하지 않으면서 검증할 수 있도록
+    # **소유자가 답을 내주는 창구**를 연다.
+    [[ $# -eq 2 ]] || die "usage: granularity <runner>"
+    granularity_of "$2"
     exit 0
     ;;
   cargo-target-dir)

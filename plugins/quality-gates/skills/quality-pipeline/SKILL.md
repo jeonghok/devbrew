@@ -1072,6 +1072,19 @@ verifier 가 디버깅 중 테스트를 돌리는 것 자체를 막지는 않지
 `--expected` 는 R1b 가 고른 unit 목록이다 — **두 산출물의 상호 대조가 아니라 독립
 입력**이라야 두 스크립트가 같은 정규화 버그로 같은 unit 을 대칭 누락할 때 잡힌다.
 
+`--granularity` 는 손으로 고르지 않는다 — **`--runner` 가 결정하며 스크립트가 어댑터
+표 소유자에게 물어 대조한다** (/qg iter-5 C5). 어긋난 쌍(예: `--runner cargo
+--granularity file`)은 아래 도말 degrade 의 `granularity == "bulk"` 절을 발화시키지
+않아 양측 red 인 bulk 실행을 `PRE_EXISTING` → `closed` → **PASS 적격**으로 만들었다.
+확인이 필요하면 소유자에게 직접 물으면 된다 (순수 함수, 트리 불필요):
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" granularity "$runner"
+```
+
+불일치·미지 러너·소유자 부재는 전부 **exit 4** 다 — "확인할 수 없었다"를 "확인됐다"로
+읽는 경로가 없다.
+
 `--mode` 는 R4/R5b 가 `run` 에 넘긴 **실행 mode 그 자체**(`bulk` 또는 `per-unit`)다.
 어댑터의 `--granularity` 와 **다른 축**이며 둘을 같은 것으로 쓰면 안 된다. 배치로 돌면
 `run` 이 **한 종료 코드를 전 unit 에 찍으므로**(도말), 입도가 그보다 잔 어댑터에서는

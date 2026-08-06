@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import NoReturn
@@ -117,7 +118,49 @@ def parse_detected(raw: str) -> set[str]:
     return set(tokens)
 
 
+def verify_granularity(runner: str, claimed: str) -> None:
+    """`--granularity` 가 `--runner` 의 실제 입도인지 **소유자에게 물어** 확인한다.
+
+    이 검사가 없으면 두 인자가 자유롭게 어긋난다 (/qg iter-5 C5). `--runner cargo
+    --granularity file` 로 부르면 아래 도말 degrade 의 `granularity == "bulk"` 절이
+    발화하지 않아, 양측 red 인 bulk 실행이 `PRE_EXISTING` → `closed` → **PASS 적격**
+    이 된다. 값의 provenance 를 검사하지 않는 필수 인자는 필수인 척하는 자유 변수다.
+
+    표를 **여기서 재구현하지 않는다** (AC38/AC52: 어댑터 표의 유일 소유자는
+    `run-test-selection.sh`). 소유자의 `granularity` 서브커맨드에 물어 대조만 한다 —
+    파이썬은 판단하지 않고 확인만 한다.
+
+    소유자를 못 부르는 경우(스크립트 부재·실행 불가·미지 러너)는 **exit 4** 다.
+    "확인할 수 없었다"를 "확인됐다"로 읽으면 이 검사가 존재하지 않는 것과 같다.
+    """
+    owner = Path(__file__).resolve().parent / "run-test-selection.sh"
+    try:
+        proc = subprocess.run(
+            ["bash", str(owner), "granularity", runner],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        fail4(f"granularity 소유자를 부를 수 없음 ({owner}): {exc}")
+    # 이 분기는 **진단 개선이지 독립 안전장치가 아니다.** 소유자가 거부하면 stdout 이
+    # 비고, 아래 `actual != claimed` 가 어차피 exit 4 를 낸다 — 이 블록을 지우는
+    # mutation 이 GREEN 인 이유이며, 그것은 락의 구멍이 아니라 사실이다. 남겨 두는
+    # 값어치는 "미지 러너 rspec" 과 "cargo 인데 file 이라 주장" 을 사람이 구별할 수
+    # 있는 메시지뿐이다. 안전 방향은 어느 쪽이든 fail-closed 다.
+    if proc.returncode != 0:
+        fail4(
+            f"granularity 소유자가 '{runner}' 를 거부 (exit {proc.returncode}): "
+            f"{proc.stderr.strip()}"
+        )
+    actual = proc.stdout.strip()
+    if actual != claimed:
+        fail4(
+            f"--granularity '{claimed}' 가 --runner '{runner}' 의 실제 입도 "
+            f"'{actual}' 와 불일치 (어긋난 쌍은 도말 degrade 를 무력화한다)"
+        )
+
+
 def per_adapter(args: argparse.Namespace) -> int:
+    verify_granularity(args.runner, args.granularity)
     expected = [
         ln.strip()
         for ln in read_text_or_fail4(args.expected, "expected").splitlines()
