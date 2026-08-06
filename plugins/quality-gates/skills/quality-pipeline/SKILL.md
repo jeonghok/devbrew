@@ -41,7 +41,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v2.7.0)
+# Quality Gates — In-Turn Orchestrator (v3.0.0)
 
 You are running the **full quality-gates pipeline** in a single assistant
 turn. You dispatch up to two gates serially in order (Runtime gate only when selected). At decision points
@@ -787,6 +787,18 @@ R2 의 5번이 곧 생략 목록이다. **생략 목록이 비어 있으면 `Ask
 R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 에서
 `BASELINE_UNRUNNABLE` 로 처리한다.
 
+**폴백(샌드박스 비활성)에서도 이 스텝 전체를 건너뛴다 (/qg iter-5 SR4).**
+`DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1` 이면 R5a¹ 이 폴백으로 가고 **R5b 가 아예 돌지
+않는다** — HEAD 축이 전량 `unrun` 이라는 뜻이다. 그러면 R4 가 만든 기준선 행은 어떤
+값이든 `(P,U)`/`(F,U)`/`(A,U) → SILENT_DROP` 또는 `(U,*) → BASELINE_UNRUNNABLE` 로만
+짝지어진다. 어느 쪽도 새 정보가 아니고 verdict 는 이미 SKIP_WITH_EVIDENCE 로 cap 돼
+있다 — 즉 **기준선 워크트리 생성과 전체 기준선 스위트 실행을 대가로 아무것도 얻지
+못한다.** 판별자는 R5b 가 쓰는 것과 같은 사실(샌드박스 비활성)이며, R4 는 R5a¹ 보다
+먼저라 `sandbox_dir` 을 아직 못 보므로 **그 원인인 kill switch 를 직접 읽는다.**
+건너뛸 때 기준선 행 파일은 선택한 unit 마다 `<unit>\tunrun\t-` 로 채우고
+`baseline_detected` 는 `NONE` 이다 — 빈 파일을 넘기면 행 부재가 `SILENT_DROP` 으로
+라벨돼 "기준선을 못 돌렸다"가 "고른 것이 사라졌다"로 잘못 보고된다.
+
 **`same_as_head: yes` 만으로는 건너뛰지 않는다 (/qg iter-3 정정).** 앞 버전은 그렇게
 지시했고 그것이 **측정 가능한 회귀를 비차단으로 내렸다**: `main` 위 미커밋 작업에서
 기준선 트리는 merge_base **커밋**이고 HEAD 측은 **워킹 트리**를 담은 샌드박스라 차등이
@@ -1030,7 +1042,7 @@ Agent({
 `run-test-selection.sh run` 을 **호출하지 말고** 선택한 unit 마다 `<unit>\tunrun\t-` 로
 HEAD 행 파일을 채운 뒤 R6 으로 간다. 이유 둘:
 
-1. 폴백의 `runtime_project_dir` 는 **사용자의 실제 워킹 트리**다 (R0 Exit 3). 이 호출은
+1. 폴백의 `runtime_project_dir` 는 **사용자의 실제 워킹 트리**다 (R5a¹ Exit 3). 이 호출은
    어댑터의 `setup_cmd` 를 그 트리에서 실행한다 — `npm ci` 는 `node_modules` 를 통째로
    지우고 다시 깔고, `uv sync --frozen` 은 lock 에 없는 패키지를 prune 하고,
    `python3 -m venv .venv` 는 기존 `.venv` 를 덮어쓴다 — 이어서 테스트 명령 자체
@@ -1039,7 +1051,7 @@ HEAD 행 파일을 채운 뒤 R6 으로 간다. 이유 둘:
    `setup_env_dir_of` 가 보장하는 변경 대상이 정확히 `.venv`/`node_modules` 다. 즉
    "설치는 안 한다" 고 출력한 직후 동의 없이 트리를 바꾸는 경로이며, 가드가 눈감는 것이
    아니라 **설계상 볼 수 없는** 종류다.
-2. 잃는 것이 없다. 폴백 verdict 는 R0 에서 이미 SKIP_WITH_EVIDENCE 로 cap 되어 PASS 가
+2. 잃는 것이 없다. 폴백 verdict 는 R5a¹ 에서 이미 SKIP_WITH_EVIDENCE 로 cap 되어 PASS 가
    불가능하고, HEAD 축 `unrun` 은 `(P,U)`/`(F,U)`/`(A,U) → SILENT_DROP` 으로 라우팅돼
    `silent_drop: true` 를 세운다 — 귀속이 조용히 틀리는 게 아니라 degrade 로 드러난다.
 
@@ -1107,8 +1119,14 @@ bulk` + `pre_existing > 0` 을 `degraded` 로 내린다. **필수 인자다** �
 된다. 캐시가 무엇을 내줬든 상관없다.
 
 **flaky — 재실행은 정확히 1회다 — green 이 나올 때까지가 아니다.** `NEW_REGRESSION`
-후보만 HEAD 에서 1회 재실행한다. 또 fail 이면 확증 `NEW_REGRESSION`, pass 면 `FLAKY`
-로 기록하고 게이트를 FAIL 시키지 않되 **보고서에 올린다**. 기준선에서 이미 red 인 것은
+후보만 HEAD 에서 1회 재실행한다. 또 fail 이면 확증 `NEW_REGRESSION`, pass 면
+**귀속 카테고리가 아니라 원장 note 로** 기록한다 — `attribution` 차원에
+`derived: flaky <unit> (기준선 pass · HEAD 1회 fail → 재실행 pass)` 한 줄을 남기고
+보고서에 올리되 게이트를 FAIL 시키지 않는다. `FLAKY` 를 **토큰처럼** 적었던 앞 문장은
+어디에서도 산출되지 않는 유령이었다 (/qg iter-5 SF2): `CATEGORIES` 8종에 없고
+`diff-test-results.py` 가 그 문자열을 내지 않으므로, 그것을 찾는 소비자는 영원히
+못 찾는다. 8종 카테고리 계약(AC11)은 닫힌 집합이라 여기에 9번째를 더할 수 없다 —
+그래서 카테고리가 아니라 note 다. 기준선에서 이미 red 인 것은
 재실행 대상이 아니다(이미 `PRE_EXISTING`). 재실행 후에는 갱신된 `--head` 로
 `diff-test-results.py` 를 다시 호출하고, **그 마지막 호출의 결과가 authoritative** 다.
 여기서 위험은 false green 이 아니라 false red 이고, **무한 재실행이 바로 false green
@@ -1130,7 +1148,7 @@ bulk` + `pre_existing > 0` 을 `degraded` 로 내린다. **필수 인자다** �
 어댑터별 호출과 `--aggregate` 호출 **양쪽** — 에서 stdout 과 **exit code 를 함께**
 잡는다. R7 표와 같은 이유의 오케스트레이션 층 규칙이다: 판정 입력을 *만드는* 단계가
 죽었는데 그 죽음이 조용하면, 캡처되지 않은 `verdict_input` 이 "결함 보고 없음"으로
-읽혀 R8 의 PASS 행(`confirmed_product_defect: false` **and** `silent_drop: false`)을
+읽혀 R8 의 PASS 행(`verdict_input` 3플래그 전부 false)을
 그대로 만족시킨다. 값의 부재는 음성 결과가 아니다.
 
 | 대조 결과 | R6 라우팅 |
@@ -1231,7 +1249,7 @@ verdict 결정:
 
 | verdict | 조건 |
 |---|---|
-| `PASS` | floor 5차원 전부 `closed` **and** `confirmed_product_defect: false` **and** `silent_drop: false` **and** `forced_downgrade: no` **and** 상황별 층 통과 |
+| `PASS` | floor 5차원 전부 `closed` **and** `confirmed_product_defect: false` **and** `silent_drop: false` **and** `baseline_unrunnable: false` **and** `forced_downgrade: no` **and** 상황별 층 통과 |
 | `FAIL` | `confirmed_product_defect: true` **or** `forced_downgrade: yes` **or** 상황별 층(부팅/플로우) 실패 |
 | `SKIP_WITH_EVIDENCE` | 영향분 0개 → `SKIP_WITH_EVIDENCE` **or** `baseline_unrunnable: true` **or** `silent_drop: true` **or** 어느 floor 차원이 `degraded` |
 | `NEEDS_RESOLUTION` | setup-fixable 잔존 — **기존 무변경** |

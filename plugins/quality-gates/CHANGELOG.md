@@ -236,6 +236,30 @@
   분기를 지우는 것인데, 거부 시 stdout 이 비어 불일치 검사가 어차피 exit 4 를 내므로
   **구멍이 아니라 중복**이다(코드에 그렇게 적었다. 이빨을 못 보이는 락을 만드는 대신
   사실을 적는다).
+- **iter-5 잔여 정리 6건** (`/qg` iter-5 SF2·SF5·SR4 + 사용 문구 3건).
+  - **SF5**: R8 의 PASS 행이 `verdict_input` **3플래그 중 둘만** 요구했다
+    (`baseline_unrunnable` 누락). 다른 문장이 막고 있었지만 **막는 것이 표가 아니면
+    표를 읽는 소비자는 통과시킨다.** 한 단어를 넣어 대칭을 맞췄다.
+  - **SF2**: 재실행 후 green 인 unit 을 `FLAKY` 로 "기록한다"고 적었는데 그 토큰은
+    `CATEGORIES` 8종에 없고 어떤 스크립트도 내지 않는 **유령**이었다 — 그것을 찾는
+    소비자는 영원히 못 찾는다. 8종은 닫힌 집합(AC11)이라 9번째를 더할 수 없으므로
+    카테고리가 아니라 **원장 note**(`derived: flaky …`)로 기록 위치를 지정했다.
+  - **SR4**: 폴백(`DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`)에서 R5b 가 아예 안 도는데
+    R4 는 그대로 **기준선 워크트리를 만들고 전체 기준선 스위트를 돌렸다.** HEAD 축이
+    전량 `unrun` 이라 그 행들은 `SILENT_DROP`/`BASELINE_UNRUNNABLE` 로만 짝지어지고
+    verdict 는 이미 SKIP_WITH_EVIDENCE 로 cap 돼 있다 — 비용만 쓰고 아무것도 얻지
+    못한다. R4 도 같은 사실로 건너뛴다(R4 는 R5a¹ 보다 먼저라 `sandbox_dir` 을 못
+    보므로 그 원인인 kill switch 를 직접 읽는다).
+  - `run-test-selection.sh` 의 미지-서브커맨드 메시지가 `detect|assign|run` 만
+    나열해 `granularity`·`probe`·`cargo-target-dir` 을 빠뜨렸다.
+  - `compute-test-scope-candidates.sh` 헤더가 *"(no env vars)"* 옆에서 **존재하는
+    `--total` 인자를 숨기고**, 이 SKILL 에 없는 *"Review gate Step 0"* 을 인용했다.
+  - SKILL.md 제목이 **`(v2.7.0)`** 이었다 — 플러그인은 3.0.0 이다. 이것을 지키던
+    락이 리터럴 `v2.7.0` 을 핀하고 있어서, **핀이 통과하는 한 제목이 몇 세대
+    뒤처져도 아무도 몰랐다.** 핀을 `plugin.json` 의 **major 와의 정합**으로 바꿨다
+    (minor/patch 는 unpin — doc-only bump 마다 stale-red 가 되는 형태를 피한다).
+  락 T76·T77·T78 + 버전 major 정합. mutation 10건 중 9 RED — 남은 1건은 문장의
+  결론만 뒤집고 grep 앵커는 남기는 형태로, grep 락이 구조적으로 못 잡는 종류다.
 
 ## [2.14.3] — 2026-07-29
 

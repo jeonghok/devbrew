@@ -890,6 +890,6 @@ $u"
     exit 0
     ;;
   *)
-    die "unknown subcommand: ${1:-} (expected detect|assign|run)"
+    die "unknown subcommand: ${1:-} (expected detect|assign|granularity|probe|run|cargo-target-dir)"
     ;;
 esac

@@ -153,8 +153,27 @@ assert_line "runtime sandbox kill switch present" "$(first_line 'DEVBREW_QG_DISA
 # spec_acceptance_criteria threaded to the verifier.
 assert_line "spec_acceptance_criteria threaded" "$(first_line 'spec_acceptance_criteria')"
 
-# Version bumped to 2.7.0 (title + final summary).
-assert_line "v2.7.0 in SKILL" "$(first_line 'v2.7.0|2\.7\.0')"
+# SKILL 제목의 버전이 **shipped major 와 일치**한다.
+#
+# 앞 버전은 리터럴 `v2.7.0` 을 핀했다. 그 형태는 두 방향으로 고장 난다: doc-only
+# bump 마다 stale-red 가 되고, 반대로 **핀이 통과하는 한 제목이 몇 세대 뒤처져도
+# 아무도 모른다** — 실제로 플러그인이 3.0.0 인데 제목은 2.7.0 이었고 스위트는
+# full-green 이었다. major 만 재고 minor/patch 는 풀어 둔다: major 는 계약이고
+# minor/patch 는 그렇지 않다 (버전 리터럴 핀 ↔ bump 규칙 충돌).
+PLUGIN_JSON="$(cd -- "$SCRIPT_DIR/../.." && pwd)/.claude-plugin/plugin.json"
+if [ ! -f "$PLUGIN_JSON" ]; then
+  echo "FAIL: plugin.json 부재 ($PLUGIN_JSON) — 아래 major 대조가 공허하다"
+  fail=1
+else
+  SHIPPED_MAJOR="$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([0-9][0-9]*\)\..*/\1/p' "$PLUGIN_JSON" | head -1)"
+  if [ -z "$SHIPPED_MAJOR" ]; then
+    echo "FAIL: plugin.json 에서 major 를 못 읽음 — 아래 major 대조가 공허하다"
+    fail=1
+  else
+    assert_line "SKILL 제목 major == plugin.json major (v${SHIPPED_MAJOR})" \
+      "$(first_line "^# Quality Gates .*\\(v${SHIPPED_MAJOR}\\.[0-9]+\\.[0-9]+\\)")"
+  fi
+fi
 
 # --- v2.2.0 mutation-guard hardening protocol-shape ---
 

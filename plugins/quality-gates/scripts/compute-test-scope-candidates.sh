@@ -2,13 +2,20 @@
 # compute-test-scope-candidates.sh — emit a newline-separated, de-duplicated,
 # sorted list of test-file paths that are in-scope for the current diff.
 #
+# Usage:
+#   compute-test-scope-candidates.sh            → in-scope test-file candidates
+#   compute-test-scope-candidates.sh --total    → repo-wide test-file COUNT (분모 M, AC37)
+#
 # Inputs:
 #   $PWD            — must be a git working tree
-#   (no env vars)   — review range is computed identically to SKILL.md Review gate Step 0
+#   (no env vars)   — the review range is derived here, from git alone. The Review
+#                     gate's own scope resolution (SKILL.md "Review gate" step 1) is
+#                     model-owned and may differ; this script does not read it.
 #
 # Output (stdout):
-#   Zero or more lines, one path per line. Paths are repo-relative.
-#   Empty stdout means "no candidates" (skill should silently skip Step 2.5).
+#   Default: zero or more lines, one path per line. Paths are repo-relative.
+#            Empty stdout means "no candidates" (skill should silently skip Step 2.5).
+#   --total: a single integer line.
 #
 # Exit: 0 on success (including empty result), non-zero only on hard errors
 # (e.g., not a git repo). Skill must fail-open (treat non-zero as empty).

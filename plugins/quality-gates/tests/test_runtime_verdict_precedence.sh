@@ -378,6 +378,68 @@ case_baseline_detected_source_is_probe_forall() {
   fi
 }
 
+# T76 — R8 PASS 행이 `verdict_input` **3플래그 전부**를 요구한다 (/qg iter-5 SF5).
+#
+# `diff-test-results.py` 는 세 키를 낸다(confirmed_product_defect · silent_drop ·
+# baseline_unrunnable). PASS 행은 그중 **둘만** 요구했다. 세 번째를 안 읽으면
+# 기준선을 한 축도 관측 못 한 실행이 PASS 행의 결정론 조건을 충족한다 — 다른 문장이
+# 그것을 막고 있었지만, **막는 것이 표가 아니면 표를 읽는 소비자는 통과시킨다.**
+case_pass_row_reads_all_three_flags() {
+  local row; row=$(grep -F '| `PASS` |' "$SKILL")
+  if [[ -z "$row" ]]; then fail "R8 PASS 행을 못 찾음 (앵커 소실)"; return; fi
+  local missing="" k
+  for k in confirmed_product_defect silent_drop baseline_unrunnable forced_downgrade; do
+    printf '%s\n' "$row" | grep -qF "$k" || missing="$missing $k"
+  done
+  [[ -z "$missing" ]] && pass "R8 PASS 행이 verdict_input 3플래그 + forced_downgrade 전부 요구" \
+    || fail "PASS 행 누락:$missing"
+}
+
+# T77 — `FLAKY` 는 **귀속 카테고리가 아니다** (/qg iter-5 SF2).
+#
+# 앞 문장은 재실행 후 green 인 unit 을 `FLAKY` 로 "기록한다"고 적었다. 그 토큰은
+# `CATEGORIES` 8종에 없고 `diff-test-results.py` 가 어디서도 내지 않는다 — 그것을
+# 찾는 소비자는 영원히 못 찾는다. 8종은 닫힌 집합(AC11)이라 9번째를 더할 수도 없다.
+# 두 방향으로 잠근다: 산출물에 없음 + SKILL 이 기록 위치를 실제로 지정함.
+case_flaky_is_a_note_not_a_category() {
+  local py="$PLUGIN_ROOT/scripts/diff-test-results.py"
+  if grep -qF 'FLAKY' "$py"; then
+    fail "diff-test-results.py 가 FLAKY 를 언급 — 카테고리 계약(8종)과 충돌"
+  else
+    pass "산출 스크립트에 FLAKY 0회 (8종 닫힌 집합 유지)"
+  fi
+  # 양의 짝 — 재실행 규칙이 **기록 위치를 지정**해야 한다. 지정 없이 토큰만 지우면
+  # flaky 관측이 아무 데도 안 남는다.
+  grep -qF 'derived: flaky' "$SKILL" \
+    && pass "SKILL 이 flaky 를 원장 note(derived:)로 기록하도록 지시" \
+    || fail "flaky 기록 위치 미지정 — 관측이 사라진다"
+}
+
+# T78 — 폴백에서 R4 를 건너뛴다 (/qg iter-5 SR4).
+#
+# `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1` 이면 R5b 가 아예 안 돌아 HEAD 축이 전량
+# `unrun` 이다. 그러면 R4 의 기준선 행은 SILENT_DROP/BASELINE_UNRUNNABLE 로만
+# 짝지어지고 verdict 는 이미 SKIP_WITH_EVIDENCE 로 cap 돼 있다 — 기준선 워크트리
+# 생성 + 전체 스위트 실행을 대가로 **아무것도 얻지 못한다.**
+case_r4_skipped_in_fallback() {
+  local win; win=$(section_window '**Step R4 — 기준선 측' '① 캐시 조회')
+  if [[ -z "$win" ]]; then fail "R4 섹션 윈도우가 비었다 (앵커 소실)"; return; fi
+  # needle 은 **body-unique** 여야 한다. `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX`(3회)와
+  # `unrun\t-`(3회)는 같은 창의 *다른* 스킵 규칙(same_as_head × clean)에도 있어서,
+  # 그것으로 재면 이 SR4 문단을 통째로 지워도 GREEN 이다(실측 — N6·N7 mutation).
+  # 이 문단에만 있는 문구로 세 축을 각각 잰다.
+  local bad=0
+  [[ $(count_in "$win" 'R5b 가 아예 돌지') -ge 1 ]] \
+    || { bad=1; echo "    (누락) 폴백에서 R5b 가 안 돈다는 근거"; }
+  [[ $(count_in "$win" '대가로 아무것도 얻지') -ge 1 ]] \
+    || { bad=1; echo "    (누락) 비용 대비 무소득 판단 (규칙의 존재 이유)"; }
+  # 건너뛸 때의 행 채우기 — 빈 파일을 넘기면 SILENT_DROP 으로 오라벨된다.
+  [[ $(count_in "$win" '고른 것이 사라졌다"로 잘못 보고된다') -ge 1 ]] \
+    || { bad=1; echo "    (누락) 스킵 시 unrun 행 채우기 (빈 파일 금지)"; }
+  [[ $bad -eq 0 ]] && pass "R4: 폴백 스킵 판별자 + unrun 행 채우기" \
+    || fail "R4 폴백 스킵 규칙 결손"
+}
+
 for c in case_unclaimed_row_is_produced case_runner_absent_is_distinguishable \
          case_skill_unclaimed_blocks_pass case_skill_runner_absent_blocks_pass \
          case_skill_zero_impact_is_skip \
@@ -389,7 +451,9 @@ for c in case_unclaimed_row_is_produced case_runner_absent_is_distinguishable \
          case_skill_fallback_treehash_guard \
          case_rinit_discriminator_table case_r4_resolves_discriminator_itself \
          case_same_as_head_never_unqualified \
-         case_r4_probe_step_is_locked case_baseline_detected_source_is_probe_forall; do
+         case_r4_probe_step_is_locked case_baseline_detected_source_is_probe_forall \
+         case_pass_row_reads_all_three_flags case_flaky_is_a_note_not_a_category \
+         case_r4_skipped_in_fallback; do
   echo "== $c"; $c
 done
 echo "── runtime verdict precedence: $PASS passed, $FAIL failed"
