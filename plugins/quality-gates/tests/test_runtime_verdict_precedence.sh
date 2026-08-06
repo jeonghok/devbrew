@@ -311,6 +311,73 @@ case_skill_both_side_detect() {
     && pass "기준선 트리 재감지 명시" || fail "양측 재감지 문장 부재"
 }
 
+# T73 — R4②-a 의 `probe` 스텝에 락 (/qg iter-5 CRITICAL SR1).
+#
+# 배경: 캐시가 전량 적중이면 R4 의 `run` 이 호출되지 않아 실행-시점 관문이 한 번도
+# 돌지 않는다. 그때 `baseline_detected` 의 근거는 `detect`(선언)뿐이고, 심어지거나
+# 낡은 `pass` 가 원래 `unrun` → BASELINE_UNRUNNABLE → degraded → PASS 불가였을
+# 실행을 STILL_GREEN → closed → **PASS** 로 바꾼다.
+#
+# 세 축을 각각 잰다 — **호출**(코드 블록) · **소비 규칙**(usable: yes 만 넣는다) ·
+# **무조건성**. 셋 중 하나만 재면 나머지가 조용히 빠져도 GREEN 이다. 특히 무조건성:
+# 이 파일의 기록상 `~일 때만` 조건이 SR1 의 직접 원인이었으므로(②의 "미적중분이
+# 있을 때만"), 같은 최적화가 probe 에 붙는 것을 명시적으로 막는 문장을 잠근다.
+case_r4_probe_step_is_locked() {
+  local win; win=$(section_window '②-a **감지된 러너마다' '그다음 어댑터마다')
+  if [[ -z "$win" ]]; then fail "R4②-a 섹션 윈도우가 비었다 (앵커 소실)"; return; fi
+  local bad=0
+  # ① 실제 호출 — 산문이 아니라 실행 가능한 커맨드가 있어야 한다.
+  [[ $(count_in "$win" 'run-test-selection.sh" probe "$baseline_wt" "$runner"') -ge 1 ]] \
+    || { bad=1; echo "    (누락) probe 호출 코드 블록"; }
+  # ② 소비 규칙 — `usable: yes` 를 **본** 러너만 들어가고, 부재는 통과가 아니다.
+  #    needle 로 `usable: yes` 자체를 쓰면 안 된다: 그 토큰은 같은 윈도우의 출처
+  #    진술에도 있어서 소비 규칙 문단을 통째로 지워도 GREEN 이었다(실측 — N2 mutation).
+  #    body-unique 인 두 문구로 **소비 방향과 fail-closed 방향을 각각** 잰다.
+  [[ $(count_in "$win" '를 **본** 러너만') -ge 1 ]] \
+    || { bad=1; echo "    (누락) usable:yes 를 본 러너만 넣는다는 소비 규칙"; }
+  [[ $(count_in "$win" '부재를 통과로 읽는 경로가 없다') -ge 1 ]] \
+    || { bad=1; echo "    (누락) 부재≠통과 (fail-closed) 방향"; }
+  # ③ 무조건성 — body-unique 문구. '캐시 적중 여부와 무관하게 항상'은 ② 헤더에도
+  #    있으므로 그것으로 재면 ②-a 를 통째로 지워도 통과한다(헤더-satisfiable 함정).
+  [[ $(count_in "$win" '조건을 붙이지 않는다') -ge 1 ]] \
+    || { bad=1; echo "    (누락) probe 무조건성 선언"; }
+  [[ $bad -eq 0 ]] && pass "R4②-a: probe 호출 · 소비 규칙 2방향 · 무조건성 (4축)" \
+    || fail "R4②-a probe 스텝 결손"
+}
+
+# T74 — **`baseline_detected` 의 출처를 `detect` 로 되돌리는 진술이 없다 (∀).**
+#
+# ∃-검사("어딘가에 probe 라고 적혀 있다")로는 부족하다는 것이 이 브랜치에서 세 번
+# 실증됐다 — 좁힌 규칙의 원래 형태가 다른 문장에 인용 가능한 채로 남으면 좁히지
+# 않은 것과 같다. 그래서 파일의 **모든** 줄을 본다.
+#
+# 한정어는 **개념**이지 특정 토큰이 아니다(T68 의 교훈: 토큰만 열거하면 같은 것을
+# 다른 이름으로 부른 줄이 위양성이 된다). `detect` 를 언급하면서 출처를 잘못 지정하지
+# **않는** 형태는 셋이다 — (a) 진짜 출처인 `probe` 를 함께 말한다, (b) 부정한다
+# (`아니`), (c) 불충분하다고 말한다(`뿐`·`부족`·`못`).
+case_baseline_detected_source_is_probe_forall() {
+  local bad=0 line
+  while IFS= read -r line; do
+    # 대상: `baseline_detected` 를 다루면서 서브커맨드 `detect` 를 함께 말하는 줄.
+    # 백틱을 포함해 매칭한다 — 백틱 없이 'detect' 를 찾으면 `baseline_detected` 의
+    # 부분문자열이 스스로 매치해 모든 줄이 대상이 된다(계측기 고장).
+    case "$line" in *baseline_detected*|*baseline-detected*) : ;; *) continue ;; esac
+    case "$line" in *'`detect`'*) : ;; *) continue ;; esac
+    case "$line" in
+      *probe*|*아니*|*뿐*|*부족*|*못*) : ;;
+      *) bad=$((bad+1)); echo "    (출처 오지정) ${line:0:96}" ;;
+    esac
+  done < "$SKILL"
+  # 양의 짝 — 부정 락은 통째로 지워도 통과한다. 올바른 출처 진술이 실재하는지도 잰다.
+  local positive=0
+  grep -qF 'probe` 가 기준선 트리에서 **`usable: yes`**' "$SKILL" && positive=1
+  if [[ $bad -eq 0 && $positive -eq 1 ]]; then
+    pass "baseline_detected 출처 = probe (∀ 위반 0 + 양의 짝 실재)"
+  else
+    fail "출처 진술: 위반 ${bad}줄 · 양의 짝 ${positive}"
+  fi
+}
+
 for c in case_unclaimed_row_is_produced case_runner_absent_is_distinguishable \
          case_skill_unclaimed_blocks_pass case_skill_runner_absent_blocks_pass \
          case_skill_zero_impact_is_skip \
@@ -321,7 +388,8 @@ for c in case_unclaimed_row_is_produced case_runner_absent_is_distinguishable \
          case_skill_r6_error_never_passes case_skill_retry_reruns_r5b_r6 \
          case_skill_fallback_treehash_guard \
          case_rinit_discriminator_table case_r4_resolves_discriminator_itself \
-         case_same_as_head_never_unqualified; do
+         case_same_as_head_never_unqualified \
+         case_r4_probe_step_is_locked case_baseline_detected_source_is_probe_forall; do
   echo "== $c"; $c
 done
 echo "── runtime verdict precedence: $PASS passed, $FAIL failed"

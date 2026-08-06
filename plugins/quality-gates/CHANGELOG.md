@@ -25,7 +25,8 @@
 - `scripts/resolve-baseline.sh` — `base`/`base_ref`/`merge_base`/`degraded`/`same_as_head`/`ahead` 6키 (AC62).
 - `scripts/run-test-selection.sh` — 러너 어댑터 8종(pytest·unittest·shell·jest·vitest·
   go·cargo·make·npm-script)의 유일 소유자. `detect`(감지, **집합** 반환) /
-  `assign`(파일→unit 배정) / `run`(총 함수 결정론 실행).
+  `assign`(파일→unit 배정) / `probe`(실행 가능성, 테스트 미실행) /
+  `run`(총 함수 결정론 실행).
 - `scripts/baseline-cache.sh` — `(merge_base, runner, unit)` 내용주소 캐시. 기준선 실행이
   `/qg` 호출당이 아니라 merge_base 당 1회가 된다.
 - `scripts/diff-test-results.py` — 귀속 8종 + 어댑터 간 `--aggregate`.
@@ -160,6 +161,29 @@
   아니라 *판별자의 두 입력이 같은 `same_as_head: yes` 상태에서 서로 다른 값을 실제로
   낸다*는 락이다. mutation 8/8 RED, 계측기 검증 포함(각 mutation 이 기존 케이스가
   아니라 **새 케이스를** 죽이는지 확인 — N6 은 12 passed/1 failed 로 새 케이스만).
+- **캐시 전량 적중이 기준선 *관측*을 통째로 건너뛰던 fail-open** (`/qg` iter-5 CRITICAL,
+  SR1). 앞선 iter-2 수정(AC60)은 기준선 워크트리 생성과 `detect` 를 캐시 적중과 무관하게
+  항상 수행하도록 바꾸고 그 결과를 `--baseline-detected` 로 넘겼다. 그 수정의 전제 —
+  *"이 인자를 정직하게 만드는 경로는 merge_base 워크트리에서 `detect` 를 돌리는 것뿐"* —
+  이 **틀렸다.** `detect` 는 *이 트리가 무엇을 선언했는가*(`go.mod` 가 있다·
+  `pyproject.toml` 에 pytest 설정이 있다)만 본다. 실행 가능성을 재는 네 단계 관문
+  (detect 멤버십 → 환경 디렉토리 gitignore → `setup_cmd` → 러너 바이너리)은 `run`
+  안에만 있었고, **전량 적중이면 `run` 이 호출되지 않아 관문이 한 번도 돌지 않는다.**
+  즉 선언은 있고 toolchain 이 없는 트리에서 정직한 결과가 전량 `unrun` →
+  `BASELINE_UNRUNNABLE` → `degraded` → PASS 불가였을 실행이, 심어지거나 낡은 `pass` 한
+  파일로 `STILL_GREEN` → `closed` → **PASS** 가 됐다 — AC60 이 닫았다고 주장한 사슬이
+  **한 칸 옆으로 옮겨간 채 살아 있었다.**
+  관문을 `run` 의 case arm 밖 공유 함수(`adapter_usable`)로 꺼내고, 그 위에
+  **`probe` 서브커맨드**를 얹었다: 같은 관문을 통과시키되 테스트는 하나도 돌리지 않고
+  `usable: yes|no` + `reason:` 를 낸다. `--baseline-detected` 의 출처는 이제 `detect` 의
+  집합이 아니라 **`probe` 가 `usable: yes` 를 낸 러너의 집합**이며(R4②-a, 캐시 적중
+  여부와 무관하게 항상), 소비는 **stdout 의 양성 확인**이라 비정상 종료·빈 출력·스크립트
+  부재가 전부 "yes 아님" 으로 떨어진다(fail-closed).
+  **캐시의 존재 이유는 유지된다** — 상각되는 것은 테스트 *실행*이고 `probe` 가 되살리는
+  것은 *관측*이다. 전량 적중을 이유로 기준선 스위트를 다시 돌리는 것은 이 결함의 해법이
+  아니라 캐시를 없애는 것이다. mutation 16/16 RED(스크립트 7 + SKILL.md 9). *잔여(명시)*:
+  값의 provenance 는 여전히 검사되지 않는다 — `"$runner"` 를 그대로 넘기면 항상
+  grounded 다. 정직한 값을 넘기는 것은 오케스트레이터의 의무로 남는다.
 
 ## [2.14.3] — 2026-07-29
 

@@ -141,10 +141,20 @@ def per_adapter(args: argparse.Namespace) -> int:
     # `unrun` 인 줄이 없었다. 그 줄은 결함 축이 아니라 **인증 축**이라 `fail` 전용
     # 재검증이 닿지 않는다.
     #
-    # 그래서 판정을 캐시가 아니라 **기준선 트리의 관측**에 묶는다. 이 값을 정직하게
-    # 만드는 경로는 merge_base 워크트리에서 `detect` 를 돌리는 것뿐이므로, 전량
-    # 적중이 ②를 억제하는 경로 자체가 사라진다 — 캐시 행은 비용만 낮출 수 있고
+    # 그래서 판정을 캐시가 아니라 **기준선 트리의 관측**에 묶는다. 전량 적중이 ②를
+    # 억제하는 경로 자체가 사라진다 — 캐시 행은 비용만 낮출 수 있고
     # `attribution_status: closed` 의 유일 근거가 될 수 없다.
+    #
+    # **이 값의 출처는 `detect` 가 아니라 `probe` 다 (/qg iter-5 SR1).** 앞 버전은
+    # "이 값을 정직하게 만드는 경로는 merge_base 워크트리에서 `detect` 를 돌리는
+    # 것뿐" 이라고 적었고 그것이 틀렸다: `detect` 는 *이 트리가 무엇을 선언했는가* 만
+    # 보므로, 선언은 있고 toolchain 이 없는 트리에서도 러너 이름을 내준다. 전량
+    # 적중이면 `run` 이 호출되지 않아 실행-시점 관문(환경 디렉토리 gitignore ·
+    # `setup_cmd` · 러너 바이너리)이 한 번도 돌지 않고, 그러면 원래 전량 `unrun` →
+    # BASELINE_UNRUNNABLE → degraded → PASS 불가였을 실행이 다시 STILL_GREEN →
+    # closed → PASS 가 된다 — 지금 이 주석이 닫았다고 주장한 바로 그 사슬이 한 칸
+    # 옆으로 옮겨간 것이다. `run-test-selection.sh probe` 가 테스트를 하나도 돌리지
+    # 않고 그 관문만 통과시켜 값을 실행 기반으로 되돌린다.
     #
     # 같은 검사가 SKILL.md R4② 산문("두 집합이 다르면 한쪽에만 있는 어댑터의 unit 은
     # 반대편에서 `unrun` 이 되어 귀속이 degrade 된다")에 **처음으로 집행자를** 준다.
@@ -393,6 +403,9 @@ def build_parser() -> argparse.ArgumentParser:
     # granularity:file 어댑터에 **증명 가능하게 발화하지 않는다** (/qg iter-5 SF1).
     p.add_argument("--mode", choices=["bulk", "per-unit"])
     p.add_argument("--runner")
+    # 값의 출처는 `run-test-selection.sh probe` 가 기준선 트리에서 `usable: yes` 를 낸
+    # 러너 집합이다 — `detect` 의 집합이 **아니다**. `detect` 는 선언만 보므로 캐시
+    # 전량 적중일 때 "그 트리에서 실제로 돌 수 있었다"를 재지 못한다 (/qg iter-5 SR1).
     p.add_argument("--baseline-detected")
     p.add_argument("--aggregate", action="store_true")
     p.add_argument("--expected-adapters", type=int)

@@ -867,7 +867,7 @@ R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 �
 이 규칙의 집행자는 **부분적이다 — 과장하지 않는다.** `diff-test-results.py
 --baseline-detected` 는 필수 인자라 "값을 못 구한 호출자"가 조용히 통과하는 경로는
 없앤다. 하지만 그 인자는 **문자열이 도착했다는 것만** 강제한다 — 값이 실제 기준선
-트리의 `detect` 에서 왔는지는 검사하지 않으며, `"$runner"` 를 그대로 넘기면 항상
+트리의 관측에서 왔는지는 검사하지 않으며, `"$runner"` 를 그대로 넘기면 항상
 grounded 가 된다(/qg iter-3 실측, mutation GREEN). 즉 캐시가 ②를 억제하던 경로는
 닫히지만, **정직한 값을 넘기는 것 자체는 여전히 오케스트레이터의 의무**다.
 
@@ -878,11 +878,44 @@ diff 가 테스트 인프라 자체를 바꾸는 경우(unittest→pytest 마이
 있는 어댑터의 unit 은 반대편에서 `unrun` 이 되어 귀속이 degrade 되고, 그 사실을 R2
 산문과 `gap` 에 명시한다.
 
-이 `detect` 의 러너 이름 집합을 **`baseline_detected` 로 캡처해 R6 의 매 어댑터
-호출에 그대로 넘긴다** (감지 0개면 리터럴 `NONE`). 위 문단의 규칙을 실제로 집행하는
-것은 이 값이다 — 문장이 아니라.
+②-a **감지된 러너마다 `probe` 를 돌린다 — 캐시 적중 여부와 무관하게 항상**
+(/qg iter-5 CRITICAL SR1):
 
-그다음 어댑터마다 (미적중분이 있을 때만 — 트리는 이미 만들어져 있다):
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" probe "$baseline_wt" "$runner"
+```
+
+`baseline_detected` 는 `detect` 의 집합이 아니라 **이 `probe` 가 `usable: yes` 를 낸
+러너의 집합**이다 (0개면 리터럴 `NONE`). `detect` 는 *이 트리가 무엇을 선언했는가*
+를 답하고 `probe` 는 *지금 이 트리에서 실제로 돌 수 있는가* 를 답한다 — 위 문단의
+규칙을 집행하려면 필요한 것은 두 번째다.
+
+**왜 `detect` 로는 부족한가.** `run` 안에는 네 단계 관문이 있다(detect 멤버십 →
+환경 디렉토리 gitignore → `setup_cmd` → 러너 바이너리 가용성). 그런데 캐시가 전량
+적중이면 아래 ③의 `run` 이 **호출되지 않아** 그 관문이 한 번도 돌지 않는다. 그러면
+`baseline_detected` 의 유일한 근거가 `detect` 뿐인데, `detect` 가 보는 것은 그 트리의
+**선언**이다 (어떤 파일이 무엇을 선언하는지는 `run-test-selection.sh` 가 단독 소유하며
+여기서 되풀이하지 않는다 — AC38/AC52). 선언은 되어 있고 도구가 설치되지 않은 머신에서
+정직한 결과는 전량 `unrun` → `BASELINE_UNRUNNABLE` →
+`degraded` → **PASS 불가**인데, 심어지거나 낡은 `pass` 한 파일이 그 실행을
+`STILL_GREEN` → `closed` → **PASS** 로 바꾼다. `probe` 는 테스트를 하나도 돌리지
+않고 그 관문만 통과시켜 근거를 실행 기반으로 되돌린다.
+
+**캐시의 존재 이유는 그대로다.** 상각되는 것은 **테스트 실행**이고 `probe` 가
+되살리는 것은 **관측**이다. 전량 적중을 이유로 기준선 스위트를 다시 돌리는 것은
+이 결함의 해법이 **아니다** — 그것은 캐시를 없애는 것이다.
+
+**조건을 붙이지 않는다.** "미적중분이 없을 때만 probe" 로 최적화하고 싶겠지만, 이
+파일의 기록상 `~일 때만` 조건은 매번 구멍이 됐다(②의 "미적중분이 있을 때만" 이 바로
+SR1 의 조상이다). `run` 이 관문을 다시 도는 중복은 `setup_cmd` 재실행 비용뿐이고,
+그 명령들은 전부 idempotent 하다(`uv sync --frozen`·`npm ci`·`poetry install`).
+
+**읽는 방법은 stdout 의 양성 확인이다.** `usable: yes` 를 **본** 러너만
+`baseline_detected` 에 넣는다. `usable: no`·비정상 종료·빈 출력·스크립트 부재는
+전부 "yes 아님" 으로 떨어진다 — 부재를 통과로 읽는 경로가 없다(fail-closed).
+
+그다음 어댑터마다 (미적중분이 있을 때만 — 트리는 이미 만들어져 있고 ②-a 의
+`probe` 도 이미 돌았다):
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" run \
@@ -1048,10 +1081,12 @@ bulk` + `pre_existing > 0` 을 `degraded` 로 내린다. **필수 인자다** �
 양측에서 mode 가 달랐다면(한쪽만 2단 재실행) 그 어댑터는 `per-unit` 로 넘기지 말고
 **두 호출 중 배치였던 쪽을 기준으로 `bulk`** 를 넘긴다 (도말이 섞였으면 섞인 것이다).
 
-`--baseline-detected` 는 R4② 의 기준선 트리 `detect` 가 낸 러너 집합이다 (감지 0개면
-`NONE`; R-init 이 `degraded: yes` 이거나 `same_as_head: yes` **이면서 워킹 트리가
-clean** 이어서 R4 를 건너뛴 경우도 `NONE` — `same_as_head` **단독**은 스킵 사유가
-아니다, R4 의 정정을 볼 것).
+`--baseline-detected` 는 R4②-a 의 `probe` 가 기준선 트리에서 **`usable: yes`** 를 낸
+러너 집합이다 — `detect` 가 낸 집합이 **아니다** (/qg iter-5 SR1: `detect` 는 선언만
+보고, 캐시 전량 적중이면 실행 관문이 한 번도 돌지 않는다. R4②-a 를 볼 것).
+`usable: yes` 가 0개면 `NONE`; R-init 이 `degraded: yes` 이거나 `same_as_head: yes`
+**이면서 워킹 트리가 clean** 이어서 R4 를 건너뛴 경우도 `NONE` — `same_as_head`
+**단독**은 스킵 사유가 아니다, R4 의 정정을 볼 것.
 **필수 인자다** — 생략하면 exit 2 로 죽는다. 선택 인자로 두고 부재를 "전부 감지됨"
 으로 읽으면, 값을 못 구한 호출자(= 기준선 트리를 안 만든 호출자)가 정확히 이 검사가
 막으려던 경로로 통과한다. `--runner` 가 이 집합에 없으면 그 어댑터의 모든 unit 은

@@ -3,12 +3,17 @@
 #
 #   detect <worktree-abs>                          → 어댑터 집합 (3줄 × N, 빈 줄 구분)
 #   assign <worktree-abs>   < candidate-files      → <unit>\t<runner|unclaimed>\t<granularity>
+#   probe  <worktree-abs> <runner>                 → runner/usable[/reason] (테스트 미실행)
 #   run    <worktree-abs> <runner> <mode> <unit>…  → <unit>\t<status>\t<exit-code>  (총 함수)
 #
 # 이 스크립트는 어댑터 표의 **유일 소유자**다. 오케스트레이터가 감지 조건이나
 # unit 변환을 재구현하는 경로는 없다 (AC38 / AC52).
 #
-# Exit: 0 = 정상 · 2 = 사용 오류 · 3 = 어댑터 사용 불가(run 전용, 전 unit `unrun` 동반)
+# `detect` 는 **선언**을, `probe` 는 **실행 가능성**을 답한다. 두 질문이 다르다는 것이
+# SR1 의 내용이다 — 선언만으로 인증하면 캐시 전량 적중이 기준선 관측을 통째로 지운다.
+#
+# Exit: 0 = 정상 · 2 = 사용 오류 · 3 = 어댑터 사용 불가
+#       (`run` 은 전 unit `unrun` 동반, `probe` 는 `usable: no` + `reason:` 동반)
 set -u
 
 die() { echo "run-test-selection: $*" >&2; exit 2; }
@@ -371,6 +376,110 @@ detect_set() {
   for r in $out; do echo "$r"; done
 }
 
+# ── 실행-시점 가용성 관문 (`run` 과 `probe` 의 **유일 소유자**) ───────────────────
+#
+# `detect_set` 이 답하는 것은 *이 레포가 무엇을 선언했는가* 다 (go.mod 가 있다,
+# Cargo.toml 이 있다). 그 계약은 옳고 그대로 둔다 — 앰비언트 인터프리터로 감지하면
+# 같은 레포가 머신마다 다르게 감지된다 (case_no_ambient_pytest_probe 가 잠근 계약).
+#
+# 하지만 **선언 ≠ 설치**다. Go 를 선언했는데 toolchain 이 없는 머신에서는 `go test`
+# 가 exit 127 을 내고, status_of_exit 가 그것을 `error` 로, §5.5 가 `error` 를 fail
+# 축으로 접어 양측 fail → `PRE_EXISTING` → `attribution_status: closed` +
+# verdict_input 3키 전부 false → SKILL.md 의 **PASS 행이 테스트 0개로 충족**된다
+# (실측). 설계 §5.10 row 3 · AC34 · AC44 가 약속한 것의 정반대다.
+#
+# 네 단계는 **순서가 계약이다**:
+#   1. detect 멤버십 — 이 트리가 그 어댑터를 선언했는가.
+#   2. `dir_is_ignored` — setup 이 만들 환경 디렉토리를 이 레포가 무시하는가.
+#      **setup 실행 *전*이어야 한다.** 뒤로 옮기면 무시되지 않는 디렉토리에 이미
+#      설치한 뒤라 R7 mutation-guard 가 그 전량을 `disallowed_new_files` 로 잡는다.
+#   3. setup_cmd 실행 — 기준선·HEAD 양측에서 **같은 명령**이 돈다 (AC41).
+#   4. `runner_available` — **setup 뒤여야 한다.** uv/poetry/venv setup 이 바로 그
+#      러너를 설치하기 때문이다. 앞으로 옮기면 정상 레포가 전부 미가용으로 떨어진다.
+#
+# 이 함수를 `run` 의 case arm 밖으로 꺼낸 이유(/qg iter-5 CRITICAL SR1): 캐시가 전량
+# 적중이면 R4② 는 `run` 을 호출하지 않고, 그러면 이 관문이 **한 번도 돌지 않는다**.
+# 그때 `baseline_detected` 의 유일한 근거는 `detect` 뿐인데 그것은 선언 기반이라
+# "기준선 트리에서 실제로 돌 수 있었다"를 재지 않는다 — 심어진 `pass` 한 파일이
+# 원래 `unrun` → `BASELINE_UNRUNNABLE` → degraded → PASS 불가였을 실행을
+# `STILL_GREEN` → closed → **PASS** 로 바꾼다. `probe` 서브커맨드가 테스트를 하나도
+# 돌리지 않고 이 관문만 통과시켜 그 근거를 실행 기반으로 되돌린다. 캐시가 상각하는
+# 것은 **테스트 실행**이지 **관측**이 아니다 — 그래서 캐시의 존재 이유는 남는다.
+runner_available() {   # runner_available <worktree> <runner> → 0 = 이 트리에서 지금 실행 가능
+  local w=$1
+  case "$2" in
+    shell)       command -v bash  >/dev/null 2>&1 ;;
+    go)          command -v go    >/dev/null 2>&1 ;;
+    cargo)       command -v cargo >/dev/null 2>&1 ;;
+    make)        command -v make  >/dev/null 2>&1 ;;
+    npm-script)  command -v npm   >/dev/null 2>&1 ;;
+    jest|vitest) command -v npx >/dev/null 2>&1 \
+                   && ( cd "$w" && npx --no-install "$2" --version ) >/dev/null 2>&1 ;;
+    # `-m pytest --version` 은 실행에 쓰는 것과 **같은 호출 형태**를 찌른다.
+    pytest)      ( cd "$w" && "${PY_ARGV[@]}" -m pytest --version ) >/dev/null 2>&1 ;;
+    # unittest 는 표준 라이브러리다 — 실질 질문은 인터프리터가 뜨는가이다.
+    unittest)    ( cd "$w" && "${PY_ARGV[@]}" -c '' ) >/dev/null 2>&1 ;;
+    *)           return 1 ;;
+  esac
+}
+
+# adapter_usable <worktree> <runner> → 0 = 지금 이 트리에서 실행 가능
+#   1 = 불가 (진단은 stderr, 기계가 읽을 사유 토큰은 전역 `USABLE_REASON`)
+# 부작용: `PY_ARGV` 를 이 트리에 맞게 설정한다. 행은 **하나도** 출력하지 않는다 —
+# `run` 은 `unrun` 행을, `probe` 는 `usable:` 을 각자 낸다.
+adapter_usable() {
+  local w=$1 runner=$2 scmd env_dir
+  USABLE_REASON=""
+
+  # -qxF: runner 는 CLI 인자다 — -qx 로 매칭하면 PATTERN(BRE)로 해석되어 "pyt.st" 같은
+  # 입력이 "pytest" 를 정규식으로 오매치한다 (Task 3 리뷰에서 같은 등급의 결함이 assign
+  # 의 dedup에서 실제로 재현됐다).
+  if ! detect_set "$w" | grep -qxF "$runner"; then
+    echo "run-test-selection: 어댑터 사용 불가: $runner (in $w)" >&2
+    USABLE_REASON=not_detected; return 1
+  fi
+
+  # setup_cmd — 어댑터 소유. gran이 이미 같은 닫힌 러너 집합에서 성공했으므로
+  # setup_cmd_of가 같은 이름으로 die 할 일은 없다.
+  scmd=$(setup_cmd_of "$w" "$runner")
+
+  # setup 이 이 트리 안에 만드는 환경 디렉토리(`.venv`·`node_modules`)를 그 레포가
+  # gitignore 하지 않으면, 그대로 두면 R7 mutation-guard 가 그 전량을
+  # `disallowed_new_files` 로 잡아 **어떤 것으로도 downgrade 되지 않는 terminal FAIL**
+  # 을 낸다 (cargo target 과 같은 클래스).
+  #
+  # 그렇다고 setup 을 **조용히 건너뛰면 안 된다.** 준비 안 된 실행은 양측에서 똑같이
+  # 실패하고, `error` 는 §5.5 에서 fail 축으로 접혀 `PRE_EXISTING → closed` 가 되며
+  # 그것이 정확히 SKILL.md 의 PASS 행이다 — 테스트 0개로 PASS. C2 를 다른 문으로
+  # 되살리는 경로이므로 명시적으로 막는다.
+  #
+  # 남는 정직한 선택지는 하나뿐이다: **이 어댑터는 이 트리에서 못 쓴다**고 선언한다.
+  # exit 3 + 전 unit `unrun` → `verification: degraded` → PASS 불가 (§5.10 row 3).
+  if [[ "$scmd" != "-" ]]; then
+    env_dir=$(setup_env_dir_of "$w" "$runner")
+    if [[ -n "$env_dir" ]] && ! dir_is_ignored "$w" "$env_dir"; then
+      echo "run-test-selection: 어댑터 사용 불가: $runner — setup 이 만드는 '$env_dir/' 를 이 레포가 gitignore 하지 않습니다 (in $w). 설치하면 mutation-guard 가 terminal FAIL 을 내고, 설치를 건너뛰면 준비 안 된 실행이 PRE_EXISTING 으로 접혀 조용히 PASS 가 됩니다 — 미실행으로 degrade 합니다." >&2
+      USABLE_REASON=env_dir_not_ignored; return 1
+    fi
+  fi
+
+  if [[ "$scmd" != "-" ]]; then
+    # 순서 주의: >&2 로 fd1 을 먼저 고정한 뒤 2>&1 은 no-op dup — 단순화 금지
+    if ! ( cd "$w" && sh -c "$scmd" ) >&2 2>&1; then
+      echo "run-test-selection: setup 실패: $scmd" >&2
+      USABLE_REASON=setup_failed; return 1
+    fi
+  fi
+
+  PY_ARGV=(python3)
+  py_argv "$w"
+  if ! runner_available "$w" "$runner"; then
+    echo "run-test-selection: 러너 실행 불가: $runner — 도구가 이 머신에 없습니다 (in $w)" >&2
+    USABLE_REASON=runner_missing; return 1
+  fi
+  return 0
+}
+
 case "${1:-}" in
   detect)
     [[ $# -eq 2 ]] || die "usage: detect <worktree-abs>"
@@ -504,6 +613,29 @@ $f"
     cargo_target_dir_for "$2"
     exit 0
     ;;
+  probe)
+    # 테스트를 **하나도** 돌리지 않고 `run` 과 **같은** 가용성 관문만 통과시킨다.
+    # 존재 이유는 R4② 다: 캐시가 전량 적중이면 `run` 이 호출되지 않아 관문이 한 번도
+    # 돌지 않고, 그러면 `baseline_detected` 의 근거가 `detect`(선언) 뿐이 된다.
+    # 이 서브커맨드가 그 근거를 실행 기반으로 되돌린다 (/qg iter-5 SR1).
+    #
+    # **계약은 stdout 의 양성 확인이다** — 호출자는 `usable: yes` 를 본 러너만
+    # `--baseline-detected` 에 넣는다. exit code 도 같은 답을 내지만(0/3), 크래시·
+    # usage 오류·빈 출력은 전부 "yes 아님" 으로 떨어져 fail-closed 다. 부재를 통과로
+    # 읽는 경로가 없다.
+    [[ $# -eq 3 ]] || die "usage: probe <worktree-abs> <runner>"
+    w=$2; runner=$3
+    [[ -d "$w" ]] || die "not a directory: $w"
+    granularity_of "$runner" >/dev/null   # 미지 러너면 여기서 die (exit 2)
+    echo "runner: $runner"
+    if adapter_usable "$w" "$runner"; then
+      echo "usable: yes"
+      exit 0
+    fi
+    echo "usable: no"
+    echo "reason: $USABLE_REASON"
+    exit 3
+    ;;
   run)
     [[ $# -ge 4 ]] || die "usage: run <worktree-abs> <runner> <mode> <unit>..."
     w=$2; runner=$3; mode=$4; shift 4
@@ -516,88 +648,18 @@ $f"
 
     emit_all_unrun() { local u; for u in "$@"; do printf '%s\tunrun\t-\n' "$u"; done; }
 
-    # 어댑터가 **이 트리에서** 쓸 수 있는가. HEAD 감지 결과를 기준선에 재사용하지
-    # 않는다 — 인프라를 바꾸는 diff에서 spurious error가 회귀를 PRE_EXISTING으로
-    # 은폐할 수 있다 (AC47). 재감지 비용보다 오귀속 비용이 크다.
-    # -qxF: runner 는 CLI 인자다 — -qx 로 매칭하면 PATTERN(BRE)로 해석되어 "pyt.st" 같은
-    # 입력이 "pytest" 를 정규식으로 오매치한다 (Task 3 리뷰에서 같은 등급의 결함이 assign
-    # 의 dedup에서 실제로 재현됐다).
-    if ! detect_set "$w" | grep -qxF "$runner"; then
-      echo "run-test-selection: 어댑터 사용 불가: $runner (in $w)" >&2
+    # 어댑터가 **이 트리에서** 쓸 수 있는가 — 관문의 소유자는 `adapter_usable` 이다
+    # (위 정의). HEAD 감지 결과를 기준선에 재사용하지 않는다 — 인프라를 바꾸는 diff에서
+    # spurious error가 회귀를 PRE_EXISTING으로 은폐할 수 있다 (AC47). 재감지 비용보다
+    # 오귀속 비용이 크다. `probe` 서브커맨드가 **같은** 함수를 호출하므로, 캐시 전량
+    # 적중으로 이 `run` 이 생략돼도 관문 자체는 생략되지 않는다 (SR1).
+    if ! adapter_usable "$w" "$runner"; then
       emit_all_unrun "$@"; exit 3
     fi
-
-    # setup_cmd — 어댑터 소유. 기준선·HEAD 양측에서 **같은 명령**이 돈다 (AC41).
-    # 문자열은 위 닫힌 표에서만 오므로 외부 입력이 아니다. gran이 이미 같은 닫힌
-    # 러너 집합에서 성공했으므로 setup_cmd_of가 같은 이름으로 die 할 일은 없다.
-    scmd=$(setup_cmd_of "$w" "$runner")
-
-    # setup 이 이 트리 안에 만드는 환경 디렉토리(`.venv`·`node_modules`)를 그 레포가
-    # gitignore 하지 않으면, 그대로 두면 R7 mutation-guard 가 그 전량을
-    # `disallowed_new_files` 로 잡아 **어떤 것으로도 downgrade 되지 않는 terminal FAIL**
-    # 을 낸다 (cargo target 과 같은 클래스).
-    #
-    # 그렇다고 setup 을 **조용히 건너뛰면 안 된다.** 준비 안 된 실행은 양측에서 똑같이
-    # 실패하고, `error` 는 §5.5 에서 fail 축으로 접혀 `PRE_EXISTING → closed` 가 되며
-    # 그것이 정확히 SKILL.md 의 PASS 행이다 — 테스트 0개로 PASS. C2 를 다른 문으로
-    # 되살리는 경로이므로 명시적으로 막는다.
-    #
-    # 남는 정직한 선택지는 하나뿐이다: **이 어댑터는 이 트리에서 못 쓴다**고 선언한다.
-    # exit 3 + 전 unit `unrun` → `verification: degraded` → PASS 불가 (§5.10 row 3).
-    if [[ "$scmd" != "-" ]]; then
-      env_dir=$(setup_env_dir_of "$w" "$runner")
-      if [[ -n "$env_dir" ]] && ! dir_is_ignored "$w" "$env_dir"; then
-        echo "run-test-selection: 어댑터 사용 불가: $runner — setup 이 만드는 '$env_dir/' 를 이 레포가 gitignore 하지 않습니다 (in $w). 설치하면 mutation-guard 가 terminal FAIL 을 내고, 설치를 건너뛰면 준비 안 된 실행이 PRE_EXISTING 으로 접혀 조용히 PASS 가 됩니다 — 미실행으로 degrade 합니다." >&2
-        emit_all_unrun "$@"; exit 3
-      fi
-    fi
-
-    if [[ "$scmd" != "-" ]]; then
-      # 순서 주의: >&2 로 fd1 을 먼저 고정한 뒤 2>&1 은 no-op dup — 단순화 금지
-      if ! ( cd "$w" && sh -c "$scmd" ) >&2 2>&1; then
-        echo "run-test-selection: setup 실패: $scmd" >&2
-        emit_all_unrun "$@"; exit 3
-      fi
-    fi
-
-    # ── 실행-시점 가용성 프로브 ───────────────────────────────────────────────
-    # detect_set 이 답하는 것은 *이 레포가 무엇을 선언했는가* 다 (go.mod 가 있다,
-    # Cargo.toml 이 있다). 그 계약은 옳고 그대로 둔다 — 앰비언트 인터프리터로 감지하면
-    # 같은 레포가 머신마다 다르게 감지된다 (case_no_ambient_pytest_probe 가 잠근 계약).
-    #
-    # 하지만 **선언 ≠ 설치**다. Go 를 선언했는데 toolchain 이 없는 머신에서는 `go test`
-    # 가 exit 127 을 내고, status_of_exit 가 그것을 `error` 로, §5.5 가 `error` 를 fail
-    # 축으로 접어 양측 fail → `PRE_EXISTING` → `attribution_status: closed` +
-    # verdict_input 3키 전부 false → SKILL.md 의 **PASS 행이 테스트 0개로 충족**된다
-    # (실측). 설계 §5.10 row 3 · AC34 · AC44 가 약속한 것의 정반대이며, shipped 코드에서
-    # exit 3 은 러너 이름이 detect_set 에 없을 때만 도달 가능했다 — 즉 exit 3 이
-    # 명세된 바로 그 상황(도구 부재)에서 사실상 절대 발동하지 않았다.
-    #
-    # 그래서 실행 **직전에** 도구 가용성을 따로 찌른다. setup_cmd 뒤에 두는 것이 중요하다
-    # — uv/poetry/venv setup 이 바로 그 러너를 설치하기 때문이다. 부재면 이미 존재하는
-    # exit 3 경로(emit_all_unrun + exit 3)로 보낸다: 하류 전체가 이미 올바르게 처리한다.
-    runner_available() {   # runner_available <runner> → 0 = 이 트리에서 지금 실행 가능
-      case "$1" in
-        shell)       command -v bash  >/dev/null 2>&1 ;;
-        go)          command -v go    >/dev/null 2>&1 ;;
-        cargo)       command -v cargo >/dev/null 2>&1 ;;
-        make)        command -v make  >/dev/null 2>&1 ;;
-        npm-script)  command -v npm   >/dev/null 2>&1 ;;
-        jest|vitest) command -v npx >/dev/null 2>&1 \
-                       && ( cd "$w" && npx --no-install "$1" --version ) >/dev/null 2>&1 ;;
-        # `-m pytest --version` 은 실행에 쓰는 것과 **같은 호출 형태**를 찌른다.
-        pytest)      ( cd "$w" && "${PY_ARGV[@]}" -m pytest --version ) >/dev/null 2>&1 ;;
-        # unittest 는 표준 라이브러리다 — 실질 질문은 인터프리터가 뜨는가이다.
-        unittest)    ( cd "$w" && "${PY_ARGV[@]}" -c '' ) >/dev/null 2>&1 ;;
-        *)           return 1 ;;
-      esac
-    }
+    # adapter_usable 이 이미 설정했지만 이 arm 의 실행부가 PY_ARGV 에 직접 의존하므로
+    # 그 의존을 여기서 명시한다 (py_argv 는 락파일만 보므로 setup 전후로 같은 값이다).
     PY_ARGV=(python3)
     py_argv "$w"
-    if ! runner_available "$runner"; then
-      echo "run-test-selection: 러너 실행 불가: $runner — 도구가 이 머신에 없습니다 (in $w)" >&2
-      emit_all_unrun "$@"; exit 3
-    fi
 
     has_go_tests() {   # has_go_tests <abs-dir> → 0 = *_test.go 가 하나라도 있다
       # nullglob 에 의존하지 않는다: 매치가 없으면 glob 이 리터럴로 남고 `-f` 가 거짓이라

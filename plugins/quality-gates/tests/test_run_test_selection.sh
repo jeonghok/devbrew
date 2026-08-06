@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# test_run_test_selection.sh — assign/run 서브커맨드 (design §5.4).
-# AC9 AC39 AC40 AC46 AC52 AC54 AC56(run) · T7 T35 T36a T43 T50 T52 T54(run) · M10 M16 M26
+# test_run_test_selection.sh — assign/probe/run 서브커맨드 (design §5.4).
+# AC9 AC39 AC40 AC46 AC52 AC54 AC56(run) · T7 T35 T36a T43 T50 T52 T54(run)
+# · T70 T71 T72(probe — SR1) · M10 M16 M26
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -562,6 +563,112 @@ case_run_exit_127_is_unrun() {
   rmw
 }
 
+# ── probe (/qg iter-5 CRITICAL SR1) ─────────────────────────────────────────
+#
+# 캐시가 전량 적중이면 R4② 는 `run` 을 호출하지 않고, 그러면 `run` 안의 실행-시점
+# 관문이 한 번도 돌지 않는다. 그때 `baseline_detected` 의 유일한 근거는 `detect` 인데
+# 그것은 **선언**만 본다 — 심어지거나 낡은 `pass` 한 파일이 원래 전량 `unrun` →
+# BASELINE_UNRUNNABLE → degraded → PASS 불가였을 실행을 STILL_GREEN → closed →
+# **PASS** 로 바꾼다. `probe` 는 테스트를 하나도 돌리지 않고 그 관문만 통과시킨다.
+
+# T70: **`detect` 와 `probe` 는 서로 다른 질문에 답한다** — 선언 vs 실행 가능성.
+# 두 답이 갈릴 수 있어야 SR1 이 닫힌다. `probe` 를 `detect` 의 별칭으로 재구현하면
+# 이 케이스가 죽는다. 양의 짝(같은 트리에서 usable: yes)이 붙어 있어 "항상 no" 도
+# 통과하지 못한다.
+case_probe_declaration_is_not_execution() {
+  mkw; ( cd "$W" && git init -q . )
+  printf 'module x\n' > "$W/go.mod"; mkdir -p "$W/pkg"; : > "$W/pkg/x_test.go"
+  mkdir -p "$W/tests"; printf '#!/usr/bin/env bash\nexit 0\n' > "$W/tests/t.sh"; chmod +x "$W/tests/t.sh"
+
+  # go 는 **선언**돼 있다 — detect 가 이름을 낸다.
+  bash "$RTS" detect "$W" 2>/dev/null | grep -q '^runner: go$' \
+    && pass "detect: 선언된 go 를 낸다" || fail "detect 가 go 를 안 냄"
+
+  # 같은 트리, toolchain 없는 PATH → probe 는 못 쓴다고 답한다.
+  local out rc
+  out=$(PATH=/usr/bin:/bin bash "$RTS" probe "$W" go 2>/dev/null); rc=$?
+  if [[ $rc -eq 3 ]] && printf '%s\n' "$out" | grep -qx 'usable: no' \
+     && printf '%s\n' "$out" | grep -qx 'reason: runner_missing'; then
+    pass "probe: 선언됐지만 실행 불가 → usable: no / runner_missing / rc=3"
+  else fail "probe 미가용 (rc=$rc out='${out//$'\n'/|}')"; fi
+
+  # 양의 짝 — 실제로 돌릴 수 있는 어댑터는 yes 여야 한다 ("항상 no" 봉쇄).
+  out=$(bash "$RTS" probe "$W" shell 2>/dev/null); rc=$?
+  if [[ $rc -eq 0 ]] && printf '%s\n' "$out" | grep -qx 'usable: yes'; then
+    pass "probe: 실행 가능한 어댑터 → usable: yes / rc=0 (양의 짝)"
+  else fail "probe 가용 (rc=$rc out='${out//$'\n'/|}')"; fi
+  rmw
+}
+
+# T71: **`probe` 는 테스트를 하나도 돌리지 않는다.** 이것이 캐시의 존재 이유를 지킨다 —
+# "전량 적중이어도 기준선 스위트를 다시 돌린다" 는 수정은 캐시를 없애는 것이다.
+# 센티널 파일로 측정한다: probe 후 부재, run 후 존재.
+case_probe_runs_no_tests() {
+  mkw; mkdir -p "$W/tests"
+  printf '#!/usr/bin/env bash\ntouch "$(dirname "$0")/../RAN"\nexit 0\n' > "$W/tests/t.sh"
+  chmod +x "$W/tests/t.sh"
+
+  bash "$RTS" probe "$W" shell >/dev/null 2>&1
+  [[ ! -e "$W/RAN" ]] && pass "probe: 테스트 미실행 (센티널 부재)" \
+                      || fail "probe 가 테스트를 실행했다"
+
+  # 음의 짝 — 센티널이 애초에 만들어질 수 있는 픽스처인지 확인한다. 이것이 없으면
+  # "테스트가 원래 아무것도 안 쓴다" 는 계측기 고장이 GREEN 으로 보인다.
+  bash "$RTS" run "$W" shell per-unit tests/t.sh >/dev/null 2>&1
+  [[ -e "$W/RAN" ]] && pass "run: 같은 픽스처가 센티널을 만든다 (계측기 확인)" \
+                    || fail "계측기 고장 — run 도 센티널을 안 만듦"
+  rmw
+}
+
+# T72: **`probe` 와 `run` 은 같은 관문을 쓴다** — 한쪽만 고치는 drift 를 막는다.
+# 미가용 세 사유 + 가용 한 건 전부에서 두 서브커맨드의 답이 일치해야 한다(∀, 존재 아님).
+# 관문을 `probe` 안에 다시 구현하거나 `run` 에서 한 단계를 빼면 어느 행이든 갈린다.
+case_probe_and_run_share_the_gauntlet() {
+  local w bad=0 detail=""
+  # (사유, 픽스처 빌더, 러너, 기대 usable)
+  _mk_not_detected()  { printf 'module x\n' > "$1/go.mod"; }              # pytest 미선언
+  _mk_env_not_ignored() { ( cd "$1" && git init -q . )
+                          printf '[tool.pytest.ini_options]\n' > "$1/pyproject.toml"
+                          printf 'pytest\n' > "$1/requirements.txt"
+                          mkdir -p "$1/tests"; printf 'def test_a():\n    assert 1\n' > "$1/tests/test_a.py"; }
+  _mk_usable()        { mkdir -p "$1/tests"
+                        printf '#!/usr/bin/env bash\nexit 0\n' > "$1/tests/t.sh"; chmod +x "$1/tests/t.sh"; }
+
+  # go 픽스처는 선언은 되지만 toolchain 없는 PATH 로 재면 실행 불가다 — SR1 이
+  # 정확히 이 축(선언 O / 실행 X)이므로 관문 일치도 이 축에서 재야 한다.
+  _mk_runner_missing() { printf 'module x\n' > "$1/go.mod"
+                         mkdir -p "$1/pkg"; : > "$1/pkg/x_test.go"; }
+
+  local row builder runner want bare
+  for row in "not_detected:_mk_not_detected:pytest:no:0" \
+             "env_dir_not_ignored:_mk_env_not_ignored:pytest:no:0" \
+             "runner_missing:_mk_runner_missing:go:no:1" \
+             "usable:_mk_usable:shell:yes:0"; do
+    IFS=: read -r _ builder runner want bare <<< "$row"
+    w=$(mktemp -d) || exit 1
+    "$builder" "$w"
+    local p_out p_rc r_rc
+    if [[ "$bare" == "1" ]]; then
+      p_out=$(PATH=/usr/bin:/bin bash "$RTS" probe "$w" "$runner" 2>/dev/null); p_rc=$?
+      PATH=/usr/bin:/bin bash "$RTS" run "$w" "$runner" per-unit DUMMY >/dev/null 2>&1; r_rc=$?
+    else
+      p_out=$(bash "$RTS" probe "$w" "$runner" 2>/dev/null); p_rc=$?
+      bash "$RTS" run "$w" "$runner" per-unit DUMMY >/dev/null 2>&1; r_rc=$?
+    fi
+    local p_usable="no"; printf '%s\n' "$p_out" | grep -qx 'usable: yes' && p_usable=yes
+    # probe 의 답 == 기대 · run 의 exit3 여부 == probe 의 답 (양방향 일치)
+    [[ "$p_usable" == "$want" ]] || { bad=1; detail="$detail [$row probe=$p_usable]"; }
+    if [[ "$want" == "no" ]]; then
+      [[ $p_rc -eq 3 && $r_rc -eq 3 ]] || { bad=1; detail="$detail [$row rc p=$p_rc r=$r_rc]"; }
+    else
+      [[ $p_rc -eq 0 && $r_rc -ne 3 ]] || { bad=1; detail="$detail [$row rc p=$p_rc r=$r_rc]"; }
+    fi
+    rm -rf "$w"
+  done
+  [[ $bad -eq 0 ]] && pass "probe ↔ run: 미가용 3사유 + 가용 1건 전부에서 답이 일치 (∀)" \
+                   || fail "관문 drift:$detail"
+}
+
 for c in case_assign_go_package case_assign_unclaimed case_assign_unittest_skips_unjudgeable_file \
          case_assign_unittest_substring_escapes case_assign_unittest_still_claims_real_files \
          case_assign_judge_gate_is_unittest_only case_assign_unittest_forall_not_exists \
@@ -576,7 +683,9 @@ for c in case_assign_go_package case_assign_unclaimed case_assign_unittest_skips
          case_run_bulk_unit_path_with_space \
          case_unit_outside_worktree_is_refused case_leaf_symlink_escape_via_pytest \
          case_package_unit_updot_symlink_escape \
-         case_run_exit_127_is_unrun; do
+         case_run_exit_127_is_unrun \
+         case_probe_declaration_is_not_execution case_probe_runs_no_tests \
+         case_probe_and_run_share_the_gauntlet; do
   echo "== $c"; $c
 done
 echo "── run-test-selection: $PASS passed, $FAIL failed"
