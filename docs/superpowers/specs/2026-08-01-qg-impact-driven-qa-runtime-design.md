@@ -1035,7 +1035,6 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | T61 | `assign` — (a) `from unittest.mock import patch`·`# … not unittest` 주석·`class TestCaseHelpers:` 3축 전부 `unclaimed` · (b) django 상속·다중 상속·`load_tests` 3형태는 여전히 `unittest` claim(양의 짝) · (c) **pytest 감지 레포의 bare `def test_` 는 `pytest` 로 claim**(게이트가 unittest 한정임을 잠금) | AC63 |
 | T62 | `assign` ∀-조건 — (a) mixed 파일(진짜 `TestCase` + 모듈-레벨 bare `def test_`) · (b) docstring 예제 안 들여쓴 `class T(unittest.TestCase):` — 둘 다 `unclaimed` (앞 술어는 둘 다 claim 하고 `pass 0` 을 냈다, 실측) | AC63′ (§6.7) |
 | T63 | vacuity — (a) 빈 `--expected` → `degraded` · (b) `--expected-adapters 0` + YAML 0개 → `degraded` · (c) **양의 짝**: unit 1개 green → `closed`, 어댑터 1개 all-green → `closed` (양의 짝 없으면 "언제나 degraded" mutation 이 통과) | AC64 |
-| T64 | 정정의 완전성 — §6.6 의 AC61·AC62·AC63 정의문에 §6.7 전방 포인터가 존재하고, §8.1 완전성 선언문이 최신 AC 번호를 담는다 (삭제된 규칙이 인용 가능한 형태로 살아남으면 삭제 전보다 나쁘다) | AC61′·AC62′·AC63′ |
 | T65 | `SILENT_DROP` 이 **단독으로** 인증을 막는다 — (a) `silent_drop > 0` 이면 다른 항목이 전부 정상이어도 `degraded` · (b) 같은 형상에서 drop 만 없애면 `closed`(양의 짝) | AC64′ (§6.7) |
 | T70 | **선언 ≠ 실행** — 같은 트리에서 `detect` 는 `go` 를 내주고 `probe` 는 toolchain 없는 PATH 에서 `usable: no`/`reason: runner_missing`/exit 3 을 낸다 · **양의 짝**: 실행 가능한 어댑터는 `usable: yes`/exit 0 (없으면 "항상 no" mutation 이 통과) | AC60′ |
 | T71 | `probe` 는 **테스트를 하나도 돌리지 않는다** — 센티널을 쓰는 shell unit 에서 `probe` 후 센티널 부재 · **계측기 확인**: 같은 픽스처에 `run` 을 돌리면 센티널이 생긴다 (없으면 "테스트가 원래 아무것도 안 쓴다" 는 고장이 GREEN 으로 보인다) | AC60′ |
@@ -1043,7 +1042,7 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | T73 | R4②-a 스텝 4축 — 섹션 윈도우 안에 (a) `probe` 호출 코드 블록 · (b) `usable: yes` 를 **본** 러너만 넣는다는 소비 규칙 · (c) 부재≠통과(fail-closed) 방향 · (d) 무조건성 선언. needle 로 `usable: yes` 자체를 쓰면 출처 진술이 그것을 만족시켜 소비 규칙을 통째로 지워도 GREEN 이다(실측) | AC60′ |
 | T74 | **출처 ∀** — `baseline_detected` 와 백틱 `` `detect` `` 를 함께 담은 **모든** 줄이 `probe` 를 말하거나 부정/불충분을 표시한다 + **양의 짝**: 올바른 출처 진술이 실재한다(부정 락만 있으면 통째 삭제도 통과) | AC60′ |
 
-**AC ↔ 검증 완전성.** **AC1–AC64 전부**가 위 T 또는 §8.3의 V에 대응한다. 자동 테스트가 없는 것은 **AC20 하나**이며 `V4`(대화형 게이트 미발화)가 담당한다 — `AskUserQuestion` 발화 여부는 대화형이라 자동화하지 않는다. 이 매핑 자체를 구현 시 표로 유지하고, **AC 추가 시 대응 T/V 없이 머지하지 않는다.** (라운드 3에서 이 선언문이 AC38–AC44를 반영하지 않은 채 stale했다 — 선언문도 갱신 대상이다.)
+**AC ↔ 검증 완전성.** **AC1–AC64 전부**가 위 T 또는 §8.3의 V에 대응한다. 자동 테스트가 없는 것은 **AC20**(`V4` — `AskUserQuestion` 발화 여부는 대화형이라 자동화하지 않는다)과 **AC61′·AC62′·AC63′ 의 *정정 완전성* 축**(`V9` — 이 문서 자신에 대한 검사라 플러그인 테스트가 담당할 수 없다. 앞 버전은 이것을 `T64` 라는 **구현되지 않은 자동 테스트**로 적어 이 선언문을 거짓으로 만들었다 — /qg iter-5 TA1) 둘이다. 이 매핑 자체를 구현 시 표로 유지하고, **AC 추가 시 대응 T/V 없이 머지하지 않는다.** (라운드 3에서 이 선언문이 AC38–AC44를 반영하지 않은 채 stale했다 — 선언문도 갱신 대상이다.)
 
 > **T20의 형태 주의** — 버전을 `"version": "3.0.0"` 리터럴로 핀하면 doc-only bump마다 stale-red가 된다. major 불변식만 검사하고 patch digit은 unpin한다.
 
@@ -1105,6 +1104,7 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | **V6** | Node 레포에서 기준선 deps 설치 — 실제 비용과 실패율 (§11 ②의 미실측 항목) | 외부 레지스트리 의존 |
 | **V7** | `worktrees` 생존 — 실제 `/qg branch` 워크트리를 만들고 TTL 초과 후 GC를 돌려 생존 확인 | 실제 worktree + 시계 조작 |
 | **V8** | 계획 산문의 가독성 — LD4 "전문용어 나열은 산출물 실패" 판정 | 사람만 판정 가능 |
+| **V9** | **정정의 완전성** — §6.6 의 AC61·AC62·AC63 정의문에 §6.7 전방 포인터가 있고, §8.1 완전성 선언문이 최신 AC 번호를 담는지 (삭제된 규칙이 인용 가능한 형태로 살아남으면 삭제 전보다 나쁘다) | **이 문서에 대한 검사이지 플러그인에 대한 검사가 아니다.** 앞 버전은 이것을 §8.1 에 `T64` 로 적었지만 **어떤 테스트도 구현하지 않았다** — 자동 T 를 자칭한 수동 항목이라 §8.1 의 완전성 선언문을 거짓으로 만들었다(/qg iter-5 TA1). 플러그인 테스트가 리포 문서를 읽게 만드는 것은 레이어 위반이고 문서 편집마다 stale-red 를 낸다 |
 
 ---
 
@@ -1190,4 +1190,5 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | 리뷰 라운드 7 | Claude 12건(**block 1**·high 4·medium 7) + codex 4건(**block 2**·high 1·medium 1) → combined `needs_revise`, stagnation 없음. **라운드 6의 block 4건은 held**(재제기 0, 독립 확인). 신규 block = **이 표 자신**(F1: 아래 "다음 단계"가 미착수를 암시하는데 `plugin.json`은 이미 `3.0.0`이고 구현·CHANGELOG·신규 스크립트 5종이 전부 존재 — 문서가 계획서인 척하는 완료된 일의 기록). codex 단독 신규 high = **R5a의 boot setup이 나중에 권위 있는 테스트를 돌릴 바로 그 HEAD 샌드박스를 변형** → 두 축이 같은 환경이라는 이 설계의 전제를 직접 겨눔(§11 ⑬에 등급 하향 없이 반영). 라운드 6 이월 5건(U1–U5)은 **하나도 닫히지 않았다.** `rereview_count 7 ≥ cap 5` → Human Gate forced escalate → 사용자 결정: **문서 정직화만 하고 design 리뷰 루프 종료.** 이 라운드에서 닫은 것 = F1(이 표) · U4(§11 등급 어휘 고정) · U2(§11 ⑭ 등재) · §6.7 "21건" 수 정합 · T60 판별자 픽스처 · U1 `SILENT_DROP` degrade assert. **닫지 않은 것 = codex block 2건(21항목 미완 · 귀속 입력 소유·provenance) · U3(원장↔기계출력 대조) · U5(GC scope-creep) · T37/T46 커버리지 갭** — 전부 §11/§6.7 잔여로 이월 |
 | 선행 레퍼런스 (통독) | `gstack/qa/SKILL.md` (1685줄) · `compound-engineering-plugin/skills/ce-test-browser/` (SKILL + references 2) · `oh-my-codex/skills/ultraqa/SKILL.md` + 자매 2 · `ECC/.agents/skills/e2e-testing/` · `ECC/agents/e2e-runner.md` · `gbrain/skills/testing/` · `gbrain/skills/smoke-test/` |
 | **문서 상태** | **기록 + 갭 원장 — 계획서가 아니다.** 이 설계는 **이미 구현됐다**(`plugin.json` `3.0.0`, CHANGELOG `[3.0.0]`, 신규 스크립트 5종 + 수정 7종 전부 브랜치에 존재). `writing-plans`는 이 문서에 대해 **실행되지 않으며 실행될 필요도 없다.** 앞으로 이 문서의 역할은 ① 무엇을 왜 이렇게 지었나의 기록, ② §11·§6.7의 **미해결 잔여 원장**이다 |
-| 다음 단계 | **`/qg` 재실행(iter-2 재리뷰 미완)** → 잔여 결함 처리 → 그다음에야 병합 판단. **이 브랜치는 현재 병합 불가** — §11 잔여 결함 + §6.7 16항목이 열려 있다 |
+| `/qg` iter-5 수정 라운드 | iter-5 리뷰의 **CRITICAL 1(SR1) + code-reviewer 5(C2–C6) + SF2·SF5·SR4·TA1** 를 처리했다. 굵직한 둘: **SR1** — iter-2 의 AC60 이 닫았다고 주장한 사슬이 한 칸 옆으로 살아 있었다(`detect` 는 선언만 보고, 캐시 전량 적중이면 실행 관문이 한 번도 안 돈다) → `probe` 서브커맨드로 근거를 실행 기반으로 이전. **C2** — 매니페스트가 테스트 러너를 verifier 에게 부팅 표면으로 넘겨 §5.1 불변식 ②와 충돌(스위트 2회 실행 + HEAD 전용 deps 설치로 AC41 파괴) → `runnable_surfaces` = 부팅 표면 전용. **나머지 셋은 락 자신의 결함**이었다: verdict-토큰 락이 SKILL.md 부재를 통과로 읽음(grep exit 2) · body-contract assert 가 frontmatter 로 만족돼 보안 Hard Rule 삭제를 못 잡음 · 어댑터 개수 6곳이 9종을 8종이라 적음. mutation 합계 **56 RED**. ★이 라운드에서 **내 mutation·needle 이 5번 고장**났다(파일 목록 누락 1 · body-unique 아닌 needle 3 · `source` 가 `exit 0` 을 만나 assert 가 한 줄도 실행되지 않음 1) — 매번 락이 아니라 계측기가 문제였다. ★T9 의 ∀ 가 러너 5축 중 **3축을 아예 지나가지 않았다**(픽스처에 그 레포 형태가 없었다): **∀ 의 범위는 코퍼스가 정하지 술어가 정하지 않는다.** |
+| 다음 단계 | **`/qg branch` 재실행** → 이번 라운드 수정의 재검증 → 그다음에야 병합 판단. **이 브랜치는 여전히 병합 불가** — §11 잔여 결함 + §6.7 잔여 + codex block 2건(21항목 미완 · 귀속 입력 provenance)이 열려 있다 |
