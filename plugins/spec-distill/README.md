@@ -141,6 +141,26 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 ## Kill switches
 
+### 먼저 — 원하는 범위를 고르십시오
+
+아래 env var 들은 **전부 세션 스코프이고 전부 재시작이 필요합니다.** "이번 리뷰 한 번만
+멈추고 싶다" 에 이것들을 쓰는 것은 압정에 망치입니다. 실제 사다리는 이렇습니다:
+
+| 원하는 범위 | 방법 | 재시작 |
+|---|---|---|
+| **이번 dispatch 한 번만** | 그냥 이번 턴에 리뷰를 건너뛰면 된다 — mandate 는 **단발성**이다. dispatch 시점에 `pending_review` 가 이미 소진되므로(`review-dispatch.py` `rewrite_state()`), Stop 훅도 UserPromptSubmit 백스톱도 다시 조르지 않는다 | 불필요 |
+| **이 문서 영구히** | 그 문서를 **커밋**한다. `should_arm()` 이 git-unknown 을 요구하므로 git 이 아는 문서는 다시 arm 되지 않는다 | 불필요 |
+| 모든 문서, 자동 리뷰만 | `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (Layer 1 구조 검증은 유지) | 필요 |
+| 훅 하나 | `DEVBREW_SKIP_HOOKS=spec-distill:Stop` | 필요 |
+| 플러그인 전체 | `DEVBREW_DISABLE_SPEC_DISTILL=1` | 필요 |
+
+상위 두 행은 env var 가 아니라 **arm-once(v0.25.0) 설계에서 따라 나오는 성질**입니다.
+재발동은 그 문서를 다시 편집할 때만 일어나고, 그마저 세션당·문서당 3회(G6)가 상한입니다.
+Stop 훅의 mandate 자체가 이 수명을 밝히므로(`review-dispatch.py`), 이 표는 그 문장의
+참조본이지 유일한 전달 경로가 아닙니다.
+
+### 스위치 목록
+
 - `DEVBREW_DISABLE_SPEC_DISTILL=1` — plugin 전체 abort, state 보존.
 - `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1` (v0.20.0, v0.24.0 확대) — codex 병렬 co-review만 skip. Claude 리뷰는 정상 동작, combined = Claude verdict + loud degrade advisory. 전역 `DEVBREW_DISABLE_SPEC_DISTILL`과 독립. **적용 범위는 두 경로 전부**: (a) design-doc 리뷰(`reviewing-spec`), (b) brief 리뷰(`reviewing-brief`)의 **호출 지점 3곳** — 1-c 방향성 축 · 2-b 충실도 축 · 2-c 충실도 재실행. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`로 옮기고 세 지점이 같은 `$codex_avail`로 묶이며, 러너(`run_brief_codex_reviewer.sh`)는 이 변수를 보지 않는다. 한 지점이라도 게이트 밖이면 opt-out이 무시된 채 지출이 나가고 `affected_axis: all` degradation record가 거짓이 된다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` — UserPromptSubmit hook만 skip.

@@ -24,6 +24,12 @@ from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 HOOKS_DIR = REPO_ROOT / "plugins" / "spec-distill" / "hooks"
+SCRIPTS_DIR = REPO_ROOT / "plugins" / "spec-distill" / "scripts"
+
+# 상한 값은 리터럴로 핀하지 않는다 — DISPATCH_ATTEMPT_CAP 이 바뀌면 테스트가
+# 제품과 함께 움직여야지, stale red 로 남아 bump 규칙과 싸우면 안 된다.
+sys.path.insert(0, str(SCRIPTS_DIR))
+import arm_ledger  # noqa: E402  # pyright: ignore[reportMissingImports]
 
 
 def _make_temp_repo() -> Path:
@@ -304,6 +310,95 @@ class TestReviewDispatchSchema(HookOutputSchemaTestBase):
             self.assertNotIn(rel_a, state_body, msg="stale docA 블록이 남아있으면 안 됨")
         finally:
             shutil.rmtree(repo, ignore_errors=True)
+
+
+class TestReviewDispatchMandateScope(HookOutputSchemaTestBase):
+    """mandate 가 자기 **수명**을 밝히는가, 그리고 두 수명 문장이 상호배타인가.
+
+    수명이 적혀 있지 않았을 때 "이번 리뷰만 멈춰달라"는 요청에 세션 전체를 끄는
+    환경변수가 답으로 나왔다 — 읽는 쪽이 수명을 모르면 영구로 가정하고 최대 화력을
+    고른다. 아래 세 테스트는 **양방향**이라 함께 있어야 이빨이 생긴다: 하나는 문장의
+    존재를, 둘은 두 문장이 서로의 분기로 새지 않음을 잰다. 한쪽만 두면 두 문장을
+    모두 내보내는 mutation(같은 숨결로 모순되는 두 수명을 주장)이 GREEN 이 된다.
+    """
+
+    # 본문 고유(body-unique) 조각만 쓴다. 헤더·주석에도 있는 문구로 assert 하면
+    # 정작 emit 되는 문장을 지워도 통과한다.
+    SCOPE_PHRASE = "이번 dispatch 1회에만 유효"
+    REARM_PHRASE = "커밋하면(git-tracked)"
+    CAP_PHRASE = "자동 dispatch를 중단한다"
+
+    IN_SCOPE_DOC = "docs/superpowers/specs/2026-08-06-scope-design.md"
+
+    def _dispatch(self, session_id: str, *, spec_path: str, attempts: int | None = None):
+        """Stop 훅을 한 번 돌리고 payload 를 돌려준다. attempts 는 사전 시도 횟수."""
+        state_file = _write_pending_review_state(
+            self.repo, session_id, spec_path=spec_path, mode="design",
+        )
+        if attempts is not None:
+            state_file.write_text(
+                state_file.read_text(encoding="utf-8")
+                + f"\ndispatch_attempts:\n  {spec_path}: {attempts}\n",
+                encoding="utf-8",
+            )
+        result = _run_hook(
+            "review-dispatch.py", cwd=self.repo,
+            env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": session_id},
+        )
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertTrue(result.stdout.strip(), msg=f"stdout empty; stderr: {result.stderr}")
+        return json.loads(result.stdout)
+
+    def test_normal_dispatch_states_mandate_lifetime(self):
+        """정상 dispatch 는 mandate 의 수명과 재발동 조건을 함께 밝힌다."""
+        reason = self._dispatch(
+            "test-scope-normal", spec_path=self.IN_SCOPE_DOC,
+        ).get("reason", "")
+        self.assertIn(
+            self.SCOPE_PHRASE, reason,
+            msg=(
+                "mandate 가 수명을 안 밝히면 '이번 리뷰만 멈추는 법'을 묻는 쪽이 "
+                f"세션 전체 kill switch 를 고른다 — reason: {reason!r}"
+            ),
+        )
+        self.assertIn(
+            self.REARM_PHRASE, reason,
+            msg=f"재발동 종료 조건(커밋)이 빠졌다 — reason: {reason!r}",
+        )
+
+    def test_normal_dispatch_does_not_claim_dispatch_stopped(self):
+        """상한 문구가 정상 dispatch 로 새면 안 된다 (상호배타 ←)."""
+        reason = self._dispatch(
+            "test-scope-normal-2", spec_path=self.IN_SCOPE_DOC,
+        ).get("reason", "")
+        self.assertNotIn(
+            self.CAP_PHRASE, reason,
+            msg=f"아직 상한이 아닌데 중단을 주장한다 — reason: {reason!r}",
+        )
+
+    def test_cap_reaching_dispatch_omits_rearm_promise(self):
+        """상한에 닿은 dispatch 에서는 '재편집하면 재발동' 이 거짓이다 (상호배타 →).
+
+        그 문서는 이 세션에서 이미 중단됐다. 두 문장을 함께 내면 훅이 같은 숨결로
+        서로 모순되는 두 수명을 주장한다.
+        """
+        payload = self._dispatch(
+            "test-scope-cap", spec_path=self.IN_SCOPE_DOC,
+            attempts=arm_ledger.DISPATCH_ATTEMPT_CAP - 1,
+        )
+        reason = payload.get("reason", "")
+        self.assertIn(
+            self.CAP_PHRASE, reason,
+            msg=f"상한 도달을 알리지 않는다 — reason: {reason!r}",
+        )
+        self.assertNotIn(
+            self.SCOPE_PHRASE, reason,
+            msg=f"중단된 문서에 '1회 유효'를 함께 주장한다 — reason: {reason!r}",
+        )
+        self.assertNotIn(
+            self.REARM_PHRASE, reason,
+            msg=f"중단된 문서에 재발동을 약속한다 — reason: {reason!r}",
+        )
 
 
 class TestReviewDispatchOrdering(unittest.TestCase):
