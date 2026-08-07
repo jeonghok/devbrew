@@ -10,6 +10,13 @@
 #                                -> echoes absolute worktree path; detached at merge_base,
 #                                   NO working-tree overlay (baseline must not inherit
 #                                   HEAD's uncommitted changes)
+#   create-head <sealed-sha> <session-id>
+#                                -> echoes absolute worktree path; detached at commit B
+#                                   (the seal create-sandbox emitted). Pristine HEAD tree
+#                                   for the authoritative test axis — deliberately NOT the
+#                                   verifier's sandbox, so the verifier's boot setup cannot
+#                                   reach the axis (§11 ⑬) and the gate's own test output
+#                                   cannot reach mutation-guard's tree (§6.7 S4).
 #   create-sandbox <session-id> -> echoes 3 lines: sandbox abs path, baseline SHA,
 #                                  snapshot digest (disposable worktree mirroring the
 #                                  working tree, git-ignored files excluded; sealed as
@@ -41,6 +48,52 @@ cmd_sanitize() {
   [[ "$sanitized" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid chars: $name"
   (( ${#sanitized} <= 64 )) || die "exceeds 64 chars: $name"
   printf '%s' "$sanitized"
+}
+
+# 주어진 커밋에 detached 된 일회용 워크트리를 플러그인 네임스페이스 안에 만든다.
+# 두 소비자가 공유한다: `create-baseline`(기준선 축 = merge_base) 과
+# `create-head`(HEAD 축 = create-sandbox 가 봉인한 커밋 B).
+#
+# `create-sandbox` 와 달리 **working-tree 오버레이를 하지 않는다** — 두 축 모두 커밋
+# 상태 그대로여야 차등의 의미가 산다. 기준선이 HEAD 의 미커밋 변경을 물면 차등이
+# 사라지고, HEAD 축이 verifier 가 부팅용으로 만든 상태를 물면 두 축이 같은 환경이라는
+# 전제가 무너진다(§11 ⑬).
+make_detached_worktree() {   # <sha> <session-id> <prefix> → 워크트리 절대경로 emit
+  local sha="$1" sid="$2" prefix="$3"
+  local sid_short main_root parent wt
+  git rev-parse --verify --quiet "$sha^{commit}" >/dev/null 2>&1 \
+    || die "not a commit: $sha"
+  sid_short="${sid:0:8}"
+  [[ -n "$sid_short" ]] || die "empty session-id"
+  main_root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not a git repo"
+  main_root=$(cd "$main_root" && pwd -P) || die "cd failed: $main_root"
+  parent="$main_root/.claude/quality-gates/worktrees"
+  mkdir -p "$parent" || die "cannot create $parent"
+  wt="$parent/${prefix}-${sid_short}"
+
+  # Idempotent: 이전 실행의 트리가 남아 있으면 갈아엎는다.
+  #
+  # 경로 충돌 가드. `create` 는 `${sanitized}-${sid_short}` 를 쓰므로 같은 세션의
+  # `/qg branch base`(또는 `head`)가 **바로 이 경로**를 만든다. 무조건 `--force` 로
+  # 갈아엎으면 사용자의 미커밋 작업이 되돌릴 수 없이 사라진다.
+  #
+  # 판별자로 "HEAD 가 심볼릭 ref 인가"(=브랜치 워크트리)는 쓸 수 없다 — `create` 도
+  # `git worktree add --detach` 라서 둘 다 detached 다 (실측). 대신 **non-force**
+  # `git worktree remove` 를 먼저 시도한다: git 자신이 "수정된 파일이나 추적되지 않은
+  # 파일이 있으면 거부" 를 정의하고 있고, 그 거부가 곧 "여기 잃을 것이 있다" 는
+  # 신호다. git-ignored 파일만 있는 트리는 정상 제거된다(실측) — 우리가 만든 트리
+  # (빌드 산출물은 전부 ignored, C1 참조)는 언제나 이 경로로 지워지므로 정상 동작에는
+  # 영향이 없다. 거부되면 조용히 파괴하지 않고 죽는다.
+  git worktree prune >/dev/null 2>&1 || true
+  if [[ -e "$wt" ]]; then
+    if ! git worktree remove "$wt" >/dev/null 2>&1; then
+      [[ -e "$wt" ]] && die "refuse to clobber existing path: $wt — git declined a non-forced removal, so it holds uncommitted or untracked content (or the path is not a registered worktree). Likely causes: \`/qg branch ${prefix}\` in this same session owns this exact path, or a prior run left non-ignored test output behind. Inspect it, then remove it yourself (\`git worktree remove --force\`) or rerun in a new session."
+    fi
+    git worktree prune >/dev/null 2>&1 || true
+  fi
+  git worktree add --detach "$wt" "$sha" >/dev/null 2>&1 \
+    || die "git worktree add failed (${prefix}: $wt)"
+  printf '%s\n' "$wt"
 }
 
 case "${1:-}" in
@@ -499,44 +552,19 @@ case "${1:-}" in
     echo "forced_downgrade: $forced"
     ;;
   create-baseline)
-    # merge_base 상태의 detached 워크트리. create-sandbox와 달리 **working-tree
-    # 오버레이를 하지 않는다** — 기준선이 HEAD의 미커밋 변경을 물면 차등의 의미가
-    # 사라진다. 같은 worktrees/ 네임스페이스에 만들어 remove 가드를 그대로 받는다.
+    # 기준선 축(merge_base). 같은 worktrees/ 네임스페이스에 만들어 remove 가드를
+    # 그대로 받는다. 본문은 `make_detached_worktree` 가 `create-head` 와 공유한다.
     [[ $# -eq 3 ]] || die "usage: create-baseline <merge-base-sha> <session-id>"
-    sha="$2"; sid="$3"
-    git rev-parse --verify --quiet "$sha^{commit}" >/dev/null 2>&1 \
-      || die "not a commit: $sha"
-    sid_short="${sid:0:8}"
-    [[ -n "$sid_short" ]] || die "empty session-id"
-    main_root=$(git rev-parse --show-toplevel 2>/dev/null) || die "not a git repo"
-    main_root=$(cd "$main_root" && pwd -P) || die "cd failed: $main_root"
-    parent="$main_root/.claude/quality-gates/worktrees"
-    mkdir -p "$parent" || die "cannot create $parent"
-    baseline_wt="$parent/base-${sid_short}"
-
-    # Idempotent: 이전 실행의 기준선 트리가 남아 있으면 갈아엎는다.
-    #
-    # 경로 충돌 가드. `create` 는 `${sanitized}-${sid_short}` 를 쓰므로 같은 세션의
-    # `/qg branch base` 가 **바로 이 경로**를 만든다. 무조건 `--force` 로 갈아엎으면
-    # 사용자의 미커밋 작업이 되돌릴 수 없이 사라진다.
-    #
-    # 판별자로 "HEAD 가 심볼릭 ref 인가"(=브랜치 워크트리)는 쓸 수 없다 — `create` 도
-    # `git worktree add --detach` 라서 둘 다 detached 다 (실측). 대신 **non-force**
-    # `git worktree remove` 를 먼저 시도한다: git 자신이 "수정된 파일이나 추적되지 않은
-    # 파일이 있으면 거부" 를 정의하고 있고, 그 거부가 곧 "여기 잃을 것이 있다" 는
-    # 신호다. git-ignored 파일만 있는 트리는 정상 제거된다(실측) — 우리가 만든 기준선
-    # 트리(빌드 산출물은 전부 ignored, C1 참조)는 언제나 이 경로로 지워지므로 정상
-    # 동작에는 영향이 없다. 거부되면 조용히 파괴하지 않고 죽는다.
-    git worktree prune >/dev/null 2>&1 || true
-    if [[ -e "$baseline_wt" ]]; then
-      if ! git worktree remove "$baseline_wt" >/dev/null 2>&1; then
-        [[ -e "$baseline_wt" ]] && die "refuse to clobber existing path: $baseline_wt — git declined a non-forced removal, so it holds uncommitted or untracked content (or the path is not a registered worktree). Likely causes: \`/qg branch <name>\` in this same session owns this exact path, or a prior run left non-ignored test output behind. Inspect it, then remove it yourself (\`git worktree remove --force\`) or rerun in a new session."
-      fi
-      git worktree prune >/dev/null 2>&1 || true
-    fi
-    git worktree add --detach "$baseline_wt" "$sha" >/dev/null 2>&1 \
-      || die "git worktree add failed (baseline: $baseline_wt)"
-    printf '%s\n' "$baseline_wt"
+    make_detached_worktree "$2" "$3" base
+    ;;
+  create-head)
+    # HEAD 축(create-sandbox 가 봉인한 커밋 B). **verifier 샌드박스와 별개 트리**다 —
+    # 권위 있는 HEAD 테스트가 verifier 의 부팅 setup 이 만든 상태 위에서 돌면 두 축이
+    # 같은 환경이라는 이 설계의 전제가 무너지고(§11 ⑬), 테스트 산출물이
+    # mutation-guard 의 검사 대상 트리에 떨어져 거짓 terminal FAIL 을 낸다(§6.7 S4).
+    # 두 결함 모두 이 분리로 닫힌다.
+    [[ $# -eq 3 ]] || die "usage: create-head <sealed-sha> <session-id>"
+    make_detached_worktree "$2" "$3" head
     ;;
   remove)
     [[ $# -eq 2 ]] || die "usage: remove <abs-path>"

@@ -196,8 +196,70 @@ print(sum(len(v) for v in d.get('hooks', {}).values()))
   fi
 }
 
+# T88 + §11 ⑬ / §6.7 S4: HEAD 축 트리는 기준선 트리와 **동시에 공존하는** 별개 트리다.
+#
+# 이 케이스가 잠그는 세 축과 **각 축을 실제로 잡는 assert** (mutation 으로 실측 —
+# 주장이 아니라 측정이다):
+#
+#  1) 경로 구별 — 두 축이 같은 경로 prefix 를 쓰면 한 실행 안에서 두 축이 하나로
+#     붕괴하는데, 각 호출은 **여전히 정상 경로를 emit 하고 rc 0 을 낸다.** detached
+#     인가 · 네임스페이스 안인가 같은 호출 단위 검사는 전부 통과한다. 잡는 것은
+#     "두 축이 서로 다른 경로" assert.
+#  2) 생성이 형제를 파괴하지 않음 — prefix 가 달라도 네임스페이스를 통째로 정리하고
+#     시작하면 두 번째 생성이 첫 번째 트리를 지운다. 경로는 여전히 구별되므로 (1) 은
+#     통과한다. 잡는 것은 공존 assert.
+#  3) 각 트리가 자기 커밋 — 공존하고 경로가 달라도 둘 다 같은 커밋을 가리키면 차등이
+#     0 이다. 잡는 것은 두 내용 assert.
+case_head_and_baseline_coexist() {
+  REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
+  git init -q; git config user.email t@t.test; git config user.name tester
+  git checkout -q -b main
+  echo v1 > a.txt; git add a.txt; git commit -qm v1
+  local base_sha; base_sha=$(git rev-parse HEAD)
+  git checkout -q -b feature
+  echo v2 > a.txt; git commit -qam v2
+  local head_sha; head_sha=$(git rev-parse HEAD)
+
+  local b h
+  if ! b=$(bash "$WT" create-baseline "$base_sha" "sess1234"); then
+    fail "create-baseline 실패"; cd / && rm -rf "$REPO"; return
+  fi
+  if ! h=$(bash "$WT" create-head "$head_sha" "sess1234"); then
+    fail "create-head 실패"; cd / && rm -rf "$REPO"; return
+  fi
+
+  [[ "$b" != "$h" ]] && pass "두 축이 서로 다른 경로" || fail "두 축이 같은 경로: $b"
+  case "$h" in
+    */.claude/quality-gates/worktrees/*) pass "HEAD 축도 worktrees/ 네임스페이스 안" ;;
+    *) fail "네임스페이스 밖: $h" ;;
+  esac
+
+  local b_here=no h_here=no
+  [[ -d "$b" ]] && b_here=yes
+  [[ -d "$h" ]] && h_here=yes
+  [[ "$b_here" == yes && "$h_here" == yes ]] \
+    && pass "기준선·HEAD 두 트리가 동시에 존재 (한쪽이 다른 쪽을 갈아엎지 않음)" \
+    || fail "공존 실패 (기준선=$b_here HEAD=$h_here) — 두 축이 한 트리로 붕괴"
+
+  # 내용 축 — 공존해도 같은 커밋이면 차등이 0 이다.
+  [[ -f "$b/a.txt" && "$(cat "$b/a.txt")" == "v1" ]] \
+    && pass "기준선 트리 내용 == merge_base" || fail "기준선 내용 오염"
+  [[ -f "$h/a.txt" && "$(cat "$h/a.txt")" == "v2" ]] \
+    && pass "HEAD 축 트리 내용 == 봉인 커밋 B" || fail "HEAD 축 내용 오염"
+
+  ( cd "$h" && ! git symbolic-ref --quiet HEAD >/dev/null 2>&1 ) \
+    && pass "HEAD 축 워크트리는 detached" || fail "HEAD 축 detached 아님"
+
+  # remove 네임스페이스 가드가 HEAD 축에도 적용된다 (일회용이므로 지워질 수 있어야 함)
+  bash "$WT" remove "$h" >/dev/null 2>&1
+  [[ ! -d "$h" ]] && pass "HEAD 축 트리 remove 적용됨" || fail "HEAD 축 remove 실패"
+  bash "$WT" remove "$b" >/dev/null 2>&1
+  cd / && rm -rf "$REPO"
+}
+
 for c in case_create_baseline case_create_baseline_refuses_colliding_user_worktree \
          case_create_baseline_is_still_idempotent \
+         case_head_and_baseline_coexist \
          case_remove_namespace_guard case_detect_runtime_frozen \
          case_sandbox_guard_frozen case_no_new_surfaces; do
   echo "== $c"; $c

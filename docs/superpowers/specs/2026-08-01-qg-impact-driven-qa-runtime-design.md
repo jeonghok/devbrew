@@ -267,10 +267,13 @@ R5a     HEAD 측 — verifier 턴 (판단이 필요한 것만)
           **테스트 실행도, 테스트 러너용 deps 설치도 여기 없다.**
 
 R5b     HEAD 측 — verifier 턴 *종료 후*, 오케스트레이터가 직접
-          run-test-selection.sh run <sandbox> <runner> …
+          qg-worktree.sh create-head <B> → **HEAD 축 전용 일회용 워크트리**
+          run-test-selection.sh run <head-tree> <runner> …
           ← 불변식 ②. verifier의 evidence-log 테스트 결과는 advisory,
             이 호출 결과가 authoritative.
           ← setup_cmd를 R4와 **동일하게** 실행 (양측 준비 동등성)
+          ← **verifier 샌드박스가 아니다** (§11 ⑬). 양축 모두 오케스트레이터가
+            만든 커밋 detached 트리 — 대칭이 구조적이다.
 
 R6      대조 ── diff-test-results.py (어댑터마다)      [신규]  ← OQ1 + LD5 백스톱
           --expected 는 R1b의 unit 목록 (생산자 산출물이 아닌 독립 입력)
@@ -303,9 +306,20 @@ R9      샌드박스 폐기 (기존 remove)
 
 **R4가 R5a/R5b보다 먼저인 이유** — 기준선 실행이 HEAD 샌드박스와 **다른 트리에서, verifier 개입 없이** 끝나야 한다. 같은 트리에서 코드를 되감았다 복원하면 mutation-guard의 의미가 흐려지고, verifier가 기준선을 조작해 진짜 회귀를 `PRE_EXISTING`으로 위장할 수 있는 경로가 생긴다 (누락 방향).
 
-**R5b가 R5a *뒤*인 이유** — deps 설치·`.env` 같은 setup은 판단이 필요해 verifier의 몫이고, 테스트는 그 setup이 끝난 트리에서 돌아야 한다. 순서를 뒤집으면 setup 전 상태를 재는 셈이다. 그러나 **같은 턴 안에서 섞으면 안 된다** — 불변식 ②.
+**R5b가 R5a *뒤*인 이유 (근거 교체 — 옛 근거는 §11 ⑬을 낳은 바로 그 전제였다).** 앞 판본은 *"deps 설치·`.env` 같은 setup은 verifier의 몫이고, 테스트는 그 setup이 끝난 트리에서 돌아야 한다"* 로 적었다. 그 문장이 R5b를 verifier 샌드박스에 묶어 두 축의 환경을 비대칭으로 만들었고, 그것이 §11 ⑬이다. **이제 R5b는 `create-head`가 봉인 커밋 `B`에 만든 자기 트리에서 돈다** — verifier의 setup이 닿지 않는다.
 
-**테스트 실행이 남기는 아티팩트 (`.pytest_cache`/`__pycache__`/`.tox` 등)와 mutation-guard의 충돌.** R7의 guard는 Layer 1에서 `add -A`를 `-f` 없이 돌리므로 **baseline `.gitignore`에 등재된 아티팩트는 무해**하다. 등재되지 않은 레포에서는 `disallowed_new_files`로 잡혀 `forced_downgrade: yes` → 거짓 FAIL이 된다. 이 위험은 원래도 존재했지만(verifier가 Bash로 테스트를 돌릴 수 있었으므로) **이 설계는 테스트 실행을 floor로 만들어 상시화한다.** 대응은 §5.9의 러너 어댑터가 소유한다 — 각 어댑터가 아티팩트 억제 인자(예: pytest `-p no:cacheprovider`, `PYTHONDONTWRITEBYTECODE=1`)를 선언하고, 억제가 불가능한 러너는 §11 ⑨에 잔여 갭으로 기록한다.
+두 종류의 setup을 구별하지 못한 것이 옛 근거의 오류였다:
+
+- **테스트 러너용 setup** (`uv sync`·`npm ci`·venv) — 어댑터가 선언하고 `run-test-selection.sh`가 **양축에서 동일하게** 실행한다. 이것이 양측 준비 동등성의 실체다.
+- **앱 부팅용 setup** (`.env`·DB·외부 서비스) — 판단이 필요해 verifier의 몫이고, **부팅/플로우 층에만** 필요하다. 테스트 러너 표면은 이것을 요구하지 않는다.
+
+**치르는 대가 (숨기지 않는다).** 테스트가 진짜로 부팅 setup을 요구하는 레포에서는 HEAD 축이 pristine 트리에서 실패한다. 그러나 그것은 **손실이 아니라 정직화**다 — 기준선 축(R4)은 원래부터 verifier setup 없는 merge_base 트리였으므로, 예전 배치는 *HEAD에만 `.env`가 있는* 비대칭을 만들어 거짓 `NEW_REGRESSION`(또는 반대 방향의 거짓 `STILL_GREEN`)을 생산했다. 이제 양축이 같은 이유로 함께 실패해 `PRE_EXISTING` 또는 degrade로 라우팅된다 — 조용한 오귀속이 아니라 **판정 불가의 공시**다.
+
+순서 자체는 유지한다. 다만 그 근거는 이제 "setup이 끝나야 해서"가 아니라 **불변식 ②(verifier 턴 안에서 섞지 않는다)와 재시도 계약(재시도는 새 `B`를 만들고 R5b가 그것을 다시 읽어야 한다)** 뿐이다.
+
+**테스트 실행이 남기는 아티팩트 (`.pytest_cache`/`__pycache__`/`.tox` 등)와 mutation-guard의 충돌 — 트리 분리로 닫혔다.** R7의 guard는 `sandbox_dir`만 검사하는데, R5b가 자기 트리(`create-head`)로 옮겨간 뒤로 **게이트가 만드는 테스트 아티팩트는 그 트리에 닿지 않는다.** 예전에는 HEAD 측 테스트가 샌드박스 안에서 돌아, 대상 레포의 `.gitignore`가 아티팩트를 덮지 않으면 `disallowed_new_files`로 잡혀 `forced_downgrade: yes` → **게이트가 자기 부작용에 거짓 FAIL**을 냈다. `make`·`npm-script`는 내부 명령을 우리가 모르므로 억제할 수단조차 없었다(옛 §11 ⑨).
+
+이 해소는 **guard를 느슨하게 하는 방향이 아니다** — 검사 대상에서 게이트 자신을 뺐을 뿐, verifier가 만드는 변경에 대한 guard의 권한은 그대로다(Law 2 표면 무변경). §5.9의 어댑터별 아티팩트 억제 인자(pytest `-p no:cacheprovider`, `PYTHONDONTWRITEBYTECODE=1` 등)는 유지한다 — 일회용 트리라도 깨끗한 편이 낫고, 억제 불가 러너가 더 이상 **거짓 FAIL을 낳지 않는다**는 것이 달라진 점이다.
 
 ### 5.3 영향 판정 — 모델 소유 + 보조 입력 4종 등급
 
@@ -832,7 +846,8 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
   `qg-worktree.sh` 는 이 브랜치에서 +44/**-0** 즉 순수 추가(`create-baseline` 새 case 절)이고
   `create-sandbox`·`mutation-guard` 본문은 한 줄도 바뀌지 않았다. 두 AC 를 한 문장에 묶어
   적었던 것(§3 Non-goals)이 "둘 다 깨졌다" 는 오독을 부를 수 있어 거기도 분리했다.
-- **AC22** — `qg-worktree.sh`의 `create-sandbox` · `mutation-guard` 본문이 **바이트 무변경**이다 (`create-baseline` 추가는 새 case 절).
+- **AC22** — `qg-worktree.sh`의 `create-sandbox` · `mutation-guard` 본문이 **바이트 무변경**이다. 다른 case 절은 이 AC의 대상이 아니다: `create-baseline`·`create-head`는 두 축 트리를 만드는 공유 헬퍼(`make_detached_worktree`)를 부르는 얇은 절이며, `create-baseline`의 **동작**은 기존 행위 테스트(경로 emit · merge_base 내용 · detached · 충돌 거부 · idempotent)로 잠겨 있다. T17은 두 절의 case 본문만 잘라 해시하므로 이 리팩터에 영향을 받지 않는다.
+- **AC65** — HEAD 축 테스트는 **verifier 샌드박스가 아닌 자기 트리**에서 돈다. `qg-worktree.sh create-head <B> <sid>`가 봉인 커밋에 detached된 일회용 워크트리를 기준선 트리와 **다른 경로**에 만들고(동시 공존), R5b의 `run` 호출이 그 트리를 받는다. 재시도 경로는 refresh된 `baseline_sha`로 이를 다시 만든다. (§11 ⑬·⑨ 해소. 검증: T88 + 오케스트레이션 창 락 4종.)
 - **AC23** — `/qg runtime` 단일게이트 경로가 보존된다 (Step R-init의 zero-click 폴백 포함).
 - **AC24** — `hooks/hooks.json` 항목 수가 **불변**이고 신규 훅 파일이 **0개**다.
 - **AC25** — `agents/` 디렉토리의 파일 수가 **불변**이다 (신규 에이전트 0).
@@ -932,6 +947,8 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 
 귀속 입력 파일 4종의 custody 부재(S1) · 부분 merge_base 변조(S3) · bulk 흡수자가 `unclaimed` 행 삭제(F5) · `resolve-baseline.sh` 부재 시 조용한 false-clean(F6) · `$baseline_rows_file` 조립 규칙 부재(C3) · `$adapter_count` 미정의(C4) · R7 이 R5b 뒤라 게이트 자기 부작용이 거짓 terminal FAIL(S4) · `dir_is_ignored` 신뢰모델 불일치(S5) · `*.spec.*` 글롭(S6) · aggregate 의 flag/count 미대조(X1) · 후보에 staged/untracked 누락(X3) · 캐시 락(X4) · SKILL.md 산문 락 10종의 부정문 취약 · AC60 값 provenance 미잠금 · 종료코드 열거 락 · AC63 경계 미잠금.
 
+**이후 닫힌 것 (열거는 append-only 기록이므로 지우지 않고 여기 표시한다).** 위 16 항목 중 **S4 는 `/qg` iter-7 에서 닫혔다** — R5b 가 verifier 샌드박스를 떠나 `create-head` 의 자기 트리로 옮겨가면서, R7 의 guard 가 검사하는 트리에 게이트 자신의 테스트 아티팩트가 더 이상 떨어지지 않는다. **순서(R7 이 R5b 뒤)를 바꿔 닫은 것이 아니라 두 단계가 서로 다른 트리를 보게 해서 닫았다** — 순서는 그대로다. 상세와 검증은 §11 ⑬. 따라서 열거는 여전히 16 항목이고 **열려 있는 것은 15 항목**이다. 이 문단이 세는 규칙의 일부이므로, 이후 항목이 닫힐 때마다 여기 함께 적는다.
+
 ## 7. Files to Modify
 
 ### 신규 (5 + 테스트)
@@ -952,7 +969,7 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | `agents/runtime-verifier.md` | 페르소나 개정 — "전체 앱 부팅+AC 단언" → "setup·부팅·플로우만". **테스트 실행 결과 self-report가 판정에 쓰이지 않음을 명시**(AC31). 매니페스트 verbatim 소비 유지, 스코프 판정은 여전히 비-책임 |
 | `scripts/compute-test-scope-candidates.sh` | `main` 하드코딩 → `resolve-baseline.sh` 소비 (C2 수정) · `--total` 모드 추가 (AC37) |
 | `scripts/check-review-scope.sh` | baseline resolution을 `resolve-baseline.sh`로 위임 (출력 계약 불변 — AC6) |
-| `scripts/qg-worktree.sh` | `create-baseline` case 절 추가 (기존 절 무변경 — AC22) |
+| `scripts/qg-worktree.sh` | `create-baseline` + `create-head` case 절 추가 · 두 절이 공유하는 `make_detached_worktree` 헬퍼 (`create-sandbox`/`mutation-guard` 본문 무변경 — AC22) |
 | `scripts/qg-gc.py` | 내용 기반 세션 식별 (§5.11) |
 | `scripts/check-allowed-tools-order.sh` | 신규 5종 순서 등재 (C5) |
 
@@ -1028,7 +1045,7 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | T38 | `granularity=file`에서 bulk-green → unit별 `pass` 캐시 · `BULK` 키 부재 / `granularity=bulk`에서만 `BULK` 키 생성 | AC42 |
 | T39 | `diff-test-results.py --granularity bulk` + fail/fail → 귀속 `PRE_EXISTING` **이면서** `attribution: degraded` | AC43 |
 | T40 | 영향분 러너 부재 → verdict ≠ PASS + `verification: degraded` / 무관 표면 러너 부재 → PASS 가능 + `gap: closed` (두 픽스처) | AC44 |
-| T41 | **아티팩트 유출** — `make`/`npm-script` 스텁 레포에서 `run` 실행 후 비-ignored 신규 파일이 생기는지 실측 (§11 ⑨의 측정 경로) | §11 ⑨ |
+| T41 | **아티팩트 유출** — `make`/`npm-script` 스텁 레포에서 `run` 실행 후 비-ignored 신규 파일이 생기는지 실측. **iter-7 이후 역할이 바뀌었다**: 이 유출은 더 이상 거짓 FAIL 을 낳지 않는다(R5b 가 guard 검사 대상 밖 트리에서 돌기 때문 — §11 ⑬). 이제 재는 것은 *일회용 트리의 청결도*이지 봉쇄의 유무가 아니다 | §11 ⑨(해소) |
 | T42 | `detect` 다중 반환 — `test_*.py` + 실행비트 `tests/*.sh` 공존 픽스처에서 어댑터 **2개** 반환 · 둘 다 `run` 호출됨 (호출 로그) | AC45 |
 | T43 | 어느 패턴에도 안 걸리는 unit → `unclaimed`로 `gap`에 열거 (조용한 누락 0) | AC46 |
 | T44 | 기준선 트리에서 `detect` 재실행 · HEAD와 집합이 다른 픽스처(한쪽만 pytest)에서 해당 unit 귀속 `degraded` | AC47 |
@@ -1073,6 +1090,9 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | T84 | poetry 의 in-project venv 를 **단정하지 않고 물어본다**(env·`poetry.toml` 두 축에서 `.venv` 요구) · **양의 짝**: 끄면 요구하지 않는다 (/qg iter-6 C2(b)) | AC41 |
 | T85 | **bulk red** 실행이 전 unit 에 실패 코드를 찍는다(도말 서명 = `(status,exit)` 쌍 1종) — 이전엔 red bulk 픽스처가 스위트에 하나도 없어 "항상 `pass 0`" mutation 이 통과했다 (/qg iter-6 E1) | AC12 AC43 AC49 |
 | T86 | 그 도말이 **하류에서 `degraded` 로 읽힌다** — `--mode per-unit` 이라 선언해도 (/qg iter-6 E1 + C1) | AC60′ |
+| T87 | `async def` 의 **형제 토큰** — pytest 스타일 bare 클래스(`class TestBare:`, `TestCase` 미상속)가 있는 파일을 `unittest` 가 claim 하지 않는다 · **양의 짝 2종**(bare 없는 동종 파일은 claim 유지 · `TestCase` 상속본은 claim). (/qg iter-6 iteration 2 I4 — **이 행 자체가 iter-7 등재분**: 테스트는 iter-6 에 들어갔는데 §8.1 행이 없어 §6.7 이 처벌하는 *등록 없는 등록* 상태로 한 라운드를 넘겼다) | AC63 정정 (§6.7) |
+| T88 | **두 축 트리의 분리** — `create-baseline`(merge_base)과 `create-head`(봉인 커밋 `B`)가 서로 다른 경로에 **동시 공존**하고 각자 자기 커밋 내용을 갖는다 · detached · 네임스페이스 · remove 적용. mutation 3축 RED(경로 붕괴 · 형제 파괴 · 커밋 동일화) | AC65 |
+| T89 | **HEAD 축이 도는 트리** (오케스트레이션 창 락 4종) — R5b 창 안에서 ① `create-head` 배선 ② `run` 호출 인자가 **전부**(∀) HEAD 축 트리 ③ `create-head` 인자가 봉인 커밋 ④ 재시도 문단이 refresh 후 재호출을 지시. `$runtime_project_dir` 0회 방식은 쓰지 않는다 — 그 변수는 폴백 문단에서 정당하게 등장하므로 **거꾸로 된 이빨**이 된다. mutation 5축 RED | AC65 |
 
 **AC ↔ 검증 완전성.** **AC1–AC64 전부**가 위 T 또는 §8.3의 V에 대응한다.
 **역방향도 이제 등재한다 (/qg iter-6 E6):** 앞 버전은 AC→T 방향만 단속했고 T→표 방향은
@@ -1194,6 +1214,8 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 9. **아티팩트 억제가 불가능한 러너가 있다.** `make`·`npm-script`는 내부 명령을 우리가 모르므로 `.pytest_cache` 같은 산출물을 억제할 수단이 없다. 대상 레포의 `.gitignore`가 그것을 덮지 않으면 mutation-guard가 `disallowed_new_files`로 잡아 **거짓 FAIL**을 낸다.
    **등급 정정 (라운드 7 spec review, U4).** 이 항목은 §6.7의 **S4와 같은 메커니즘**이다 — 게이트 자신의 부작용이 mutation-guard에 잡혀 거짓 terminal FAIL을 낸다. §6.7은 이것을 merge-blocking 잔여로, 이 절은 "측정 대기 중인 완화 가능 갭"으로 적어 **같은 사실에 두 등급을 부여했다**(Claude·codex 독립 지적). 위 어휘 규칙에 따라 **잔여 결함(병합 차단)이 이긴다.** T41은 *빈도*를 재는 장치이지 이 실패를 막는 장치가 아니다 — 빈도 측정과 봉쇄를 같은 칸에 적은 것이 등급 혼선의 출처였다.
 
+   **✅ 해소됨 (`/qg` iter-7 — ⑬과 같은 수정 하나로).** R5b가 `create-head`가 만든 **자기 트리**로 옮겨가면서 게이트의 테스트 아티팩트는 더 이상 `sandbox_dir`에 떨어지지 않는다. mutation-guard는 그 트리를 보지 않으므로 **억제 불가능한 러너가 있어도 거짓 FAIL이 생기지 않는다.** 봉쇄 지점이 "모든 러너의 아티팩트를 억제한다"(불가능)에서 "검사 대상 트리에서 게이트 자신을 뺀다"(구조적)로 옮겨간 것이다. guard의 권한은 verifier 변경에 대해 그대로다 — Law 2 표면 무변경. 검증: T88 · 오케스트레이션 창 락(R5b의 `run` 인자 ∀). **T41은 유효한 채로 남는다** — 이제 그것이 재는 것은 거짓 FAIL의 빈도가 아니라 일회용 트리의 청결도이며, 그 사실을 §8.1에 적었다.
+
    **측정 경로 정정 (라운드 2 Finding C).** 초안은 *"첫 dogfood(V1)에서 실측"* 이라 썼지만 **V1은 이것을 측정할 수 없다** — V1은 devbrew 자신을 대상으로 하고 devbrew에는 Makefile 기반 테스트도 npm-script 테스트도 없다. 측정은 **T41**(픽스처 기반: `Makefile`/`package.json` 스텁 레포에서 `run` 실행 후 비-ignored 신규 파일 발생 여부)이 담당한다. 실측 결과가 "흔함"이면 guard 예외 목록이 아니라 **어댑터별 작업 디렉토리 격리**로 푼다 — guard를 느슨하게 하는 방향은 금지다(Law 2 표면).
 10. **baseline 캐시는 GC되지 않는다.** merge_base마다 파일이 하나씩 쌓이고 정리는 `/cancel-qg --all`에 위임했다. 장수 브랜치·잦은 rebase 환경에서 파일 수가 늘어나는데, 각 파일이 수 KB라 실질 부담은 아니지만 **자동 정리 경로가 없다**는 사실은 남는다.
 11. **러너 어댑터 9종은 초기 집합이며 커버리지 주장이 아니다.** Java/Gradle·Ruby/RSpec·PHP/PHPUnit·.NET 등은 감지 0개로 떨어져 그 레포에서는 이 게이트가 floor를 제공하지 못한다. 확장은 case 절 추가지만, **미지원 레포에서 이 게이트가 무엇을 못 하는지가 사용자에게 보여야** 한다(§5.10의 loud 경로).
@@ -1201,6 +1223,14 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 13. **verifier의 부팅용 setup이 만드는 환경 비대칭은 기계로 안 잡힌다.** AC41은 `setup_cmd` 채널만 결정론적으로 맞춘다. R5a에서 verifier가 앱 부팅을 위해 설치한 것이 우연히 테스트 결과에 영향을 주면, 그것은 git-외부 상태라 mutation-guard가 못 보고 `gap` 기재는 verifier 자기보고에 의존한다 — 불변식 ②가 *결과값*에서 없앤 self-report 신뢰가 *실행 환경* 축에는 남아 있다. 완화: R5b는 R5a와 같은 샌드박스에서 돌므로 비대칭이 발생하면 **양측 차등에 나타난다**(기준선에는 그 setup이 없으므로) — 즉 조용한 오귀속이 아니라 시끄러운 불일치로 드러날 가능성이 높다. 그래도 보장은 아니다.
 
    **완화 주장 약화 (라운드 7, codex 단독 high).** 위 "시끄럽게 드러난다"는 완화는 **차등이 신호로 읽힌다는 전제**에 기대는데, 그 전제가 스스로를 약화시킨다 — R5a의 setup이 만든 차이는 `NEW_REGRESSION`과 **구별 불가능한 모양**으로 나타난다. 즉 이 완화는 오귀속을 *조용한 것에서 시끄러운 것으로* 바꿀 뿐, **어느 쪽이 원인인지는 여전히 verifier 자기보고로만 갈린다.** codex의 표현대로: 권위 있는 테스트가 도는 바로 그 HEAD 샌드박스를 verifier가 비구조적으로 변형할 수 있는 한, 이 설계가 파는 "같은 선택을 두 번 돌려 짝짓는다"는 **두 축이 같은 환경이라는 전제 위에서만 성립**한다. 제대로 된 해소는 부팅과 테스트 실행의 환경 분리, 또는 양축에 동일 재생되는 결정론적 setup 매니페스트다 — 둘 다 이번 범위 밖이므로 **갭이 아니라 잔여 결함으로 등재**한다.
+
+   **✅ 해소됨 (`/qg` iter-7 — codex가 지정한 두 정답 중 첫째, "부팅과 테스트 실행의 환경 분리").** `qg-worktree.sh create-head <B>`가 봉인 커밋에 detached된 **두 번째 일회용 워크트리**를 만들고 R5b가 거기서 돈다. 이제 양축이 대칭이다 — 기준선은 `create-baseline`이 merge_base에, HEAD는 `create-head`가 `B`에 만든 커밋 detached 트리이고, **두 트리에서 실행되는 것은 어댑터의 `setup_cmd`뿐**이다. verifier의 부팅 setup은 어느 축에도 닿지 않으므로 "두 축이 같은 환경"이 전제가 아니라 **구조**가 됐고, 완화가 기대던 자기보고 의존이 사라졌다.
+
+   **함께 닫힌 것:** ⑨(= §6.7 S4) — R7의 guard가 검사하는 트리에서 게이트 자신의 테스트 실행이 빠졌다. 한 수정이 두 항목을 닫는 이유는 둘이 *같은 뿌리*(권위 있는 HEAD 축이 감시 대상 트리 안에서 돈다)였기 때문이다.
+
+   **새로 연 것과 그 봉쇄:** 재시도(NEEDS_RESOLUTION → retry)는 **새 `B`**를 만든다. R5b가 refresh된 `baseline_sha`로 `create-head`를 다시 부르지 않으면 HEAD 축이 *고쳐지기 전 코드*에 붙는데, 트리도 행도 정상이라 **어떤 degrade 신호도 서지 않는다.** SKILL.md 재시도 문단에 명시했고 오케스트레이션 락이 그 지시의 존재를 잠근다.
+
+   **치르는 대가:** 테스트가 진짜로 부팅 setup을 요구하는 레포에서 HEAD 축이 pristine 트리에서 실패한다. §5.2의 "치르는 대가" 문단에 근거를 적었다 — 요약하면 **손실이 아니라 정직화**다(기준선 축은 원래부터 verifier setup이 없었으므로 옛 배치는 거짓 차등을 생산하고 있었다). 검증: T88 · 오케스트레이션 창 락 4종(배선 · `run` 인자 ∀ · `create-head` 인자 · 재시도 지시), mutation 5축 RED.
 14. **§5.3의 "빈 스코프 fail-safe"에는 집행자가 없다.** (라운드 6·7 spec review, U2 — **이월 2라운드째**.) 그 규칙은 §5.3에서 스스로 *"결정론 코드 없이 프로즈로"* 라고 선언하는데, 그 자인이 **어느 갭 목록에도 등재되지 않아** 왔다 — §11에도 §6.7의 16항목에도 없었다. 스스로 인정한 갭이 갭 목록에 없으면 다음 독자에게는 **존재하지 않는 갭**이다. 이제 등재한다. 실효 범위: 후보 목록이 비었을 때 "그 자체를 `gap` 차원에 기록하고 폭을 넓힌다"를 강제하는 것은 이 산문 한 줄뿐이고, 모델이 그것을 건너뛰어도 **막는 코드가 없다.** AC64가 *판정 0건 → `degraded`* 를 결정론으로 닫았으므로 최악(테스트 0건 실행 + PASS)은 봉쇄돼 있으나, *스코프는 비었는데 다른 어댑터가 green이라 인증되는* 중간 경로는 열려 있다. 등급: **잔여 결함**(이 설계가 답한다고 주장하는 범위 안).
 15. **T37은 아무것도 재지 않는다 (동어반복).** (`/qg` iter-6 E8. §12가 T37/T46을 "전부
     §11/§6.7 잔여로 이월"이라 적었으나 **두 id 어느 쪽도 어느 목록에도 등재된 적이 없다** —
@@ -1264,4 +1294,5 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | **문서 상태** | **기록 + 갭 원장 — 계획서가 아니다.** 이 설계는 **이미 구현됐다**(`plugin.json` `3.0.0`, CHANGELOG `[3.0.0]`, 신규 스크립트 5종 + 수정 7종 전부 브랜치에 존재). `writing-plans`는 이 문서에 대해 **실행되지 않으며 실행될 필요도 없다.** 앞으로 이 문서의 역할은 ① 무엇을 왜 이렇게 지었나의 기록, ② §11·§6.7의 **미해결 잔여 원장**이다 |
 | `/qg` iter-5 수정 라운드 | iter-5 리뷰의 **CRITICAL 1(SR1) + code-reviewer 5(C2–C6) + SF2·SF5·SR4·TA1** 를 처리했다. 굵직한 둘: **SR1** — iter-2 의 AC60 이 닫았다고 주장한 사슬이 한 칸 옆으로 살아 있었다(`detect` 는 선언만 보고, 캐시 전량 적중이면 실행 관문이 한 번도 안 돈다) → `probe` 서브커맨드로 근거를 실행 기반으로 이전. **C2** — 매니페스트가 테스트 러너를 verifier 에게 부팅 표면으로 넘겨 §5.1 불변식 ②와 충돌(스위트 2회 실행 + HEAD 전용 deps 설치로 AC41 파괴) → `runnable_surfaces` = 부팅 표면 전용. **나머지 셋은 락 자신의 결함**이었다: verdict-토큰 락이 SKILL.md 부재를 통과로 읽음(grep exit 2) · body-contract assert 가 frontmatter 로 만족돼 보안 Hard Rule 삭제를 못 잡음 · 어댑터 개수 6곳이 9종을 8종이라 적음. mutation 합계 **56 RED**. ★이 라운드에서 **내 mutation·needle 이 5번 고장**났다(파일 목록 누락 1 · body-unique 아닌 needle 3 · `source` 가 `exit 0` 을 만나 assert 가 한 줄도 실행되지 않음 1) — 매번 락이 아니라 계측기가 문제였다. ★T9 의 ∀ 가 러너 5축 중 **3축을 아예 지나가지 않았다**(픽스처에 그 레포 형태가 없었다): **∀ 의 범위는 코퍼스가 정하지 술어가 정하지 않는다.** |
 | `/qg` iter-6 수정 라운드 | 리뷰어 5명(security-reviewer · **codex** · silent-failure-hunter · code-reviewer · **pr-test-analyzer**) + adversarial. **42건 판정.** adversarial 이 해소한 핵심 충돌: `code-reviewer` 의 *"fail-open 없음 · Critical 없음"* 은 **자기 findings 에 대해서는 옳지만 브랜치 전체 속성으로 일반화한 것이 틀렸다** — 인자-provenance·R5b/R7 순서·테스트-이빨 세 축을 아예 안 봤고, **안 본 축에 finding 이 없는 것은 부재의 증거가 아니다**. 그리고 A/B/C 의 CRITICAL 중 **8건은 이 문서의 §6.7/§11 잔여 원장에 이미 등재**돼 있었다(리뷰어들이 원장을 독립 재발견 — 원장이 정직하다는 증거). **미등록 CRITICAL 은 정확히 1건: `--mode` provenance.** 형제 `--granularity` 가 iter-5 C5 로 그 처방을 받았는데 이 인자만 못 받았고, adversarial 이 C5(도말)와의 **합성 경로**까지 찾아냈다. 닫은 것: `--mode` 데이터 대조 · `async def test_` 프로덕션 버그(AC63′ escape (a) 재개방) · `assign` 후행개행 무음 소실 · 실행비트 4개(**self-dogfood 가 구조적으로 인증 불가였다**) · 무음 degrade 2종 · 옵션 주입 · 분모⊉분자 · `resolve-baseline` fail-open · poetry env-dir 단정 · 폴백 라우팅 산문과 **그 틀린 주장을 방어하던 락** · 이빨 없던 락 7종(음의 락 3 · R8 floor 절 · `setup_failed` · 2단 재실행 red 방향 · ATTR 7셀 · 필수 인자 ∀ · red bulk 픽스처 부재) · 원장 정합(§8.1 T-id 16개 미등재 · §12 의 등록 없는 등록 주장 · **AC21′**). 교훈: **정정 노트가 옛 값을 인용하면 그 인용이 스캔 코퍼스에 들어가 자기 자신을 위반으로 만든다**(이번에 두 번 물렸다) |
-| 다음 단계 | **`/qg branch` 재실행** → iter-6 수정의 재검증 → 그다음에야 병합 판단. **이 브랜치는 여전히 병합 불가** — §11 잔여 결함(⑬ R5b/R7 환경 분리 포함) + §6.7 잔여 + codex block 2건(21항목 미완 · 귀속 입력 provenance)이 열려 있다. iter-6 에서 **의도적으로 열어 둔 것**: B1(bulk 흡수자가 미지원 후보를 삼킴 — §6.7 F5, 공시는 돼 있음) · A1/C2(R5b 가 verifier 샌드박스에서 도는 순서 문제 — §11 ⑬, 두 번째 일회용 워크트리가 정답이나 오케스트레이션 계약 변경이라 별도 라운드) · C5(shell/unittest per-unit 행 emit — `--mode` 의미와 상호작용해 함께 설계해야 함) |
+| `/qg` iter-7 구조 라운드 | **§11 ⑬ 해소 — 두 번째 일회용 워크트리.** codex 가 라운드 7 에서 지정한 두 정답 중 첫째(*부팅과 테스트 실행의 환경 분리*)를 실행했다: `qg-worktree.sh create-head <B>` 가 봉인 커밋에 detached 된 HEAD 축 전용 트리를 만들고 R5b 가 거기서 돈다. **⑨(= §6.7 S4)가 같은 수정으로 함께 닫혔다** — 두 항목이 *권위 있는 HEAD 축이 감시 대상 트리 안에서 돈다* 는 한 뿌리였다. 부수로 잡힌 것: (a) §5.2 의 *"테스트는 setup 이 끝난 트리에서 돌아야 한다"* 는 근거가 **바로 ⑬ 을 낳은 전제**여서 교체 — 러너용 setup 과 부팅용 setup 을 구별하지 못한 것이 오류였다, (b) 재시도가 **새 `B`** 를 만드는데 옛 sha 로 트리를 만들면 *고쳐지기 전 코드*를 HEAD 로 재는 새 fail-open — 지시와 락으로 봉쇄, (c) `mutation-guard` 3-arg 락의 앵커가 *이름 첫 등장*이라 내 산문에 latch — `scripts/` 접두를 요구하는 호출-줄 앵커로 교정(반대 방향이 더 나빴다: 호출에서 인자를 지워도 산문이 만족시켰다), (d) 재시도 순서 락이 `R5b(새` 로 **괄호 안 낱말까지** 핀해 사실 갱신을 RED 로 만들던 것 — 락이 문서에 거짓을 요구하는 형태라 구조 앵커(`R5b(`)로 교정, (e) **T87 미등재** 적발 — iter-6 이 만든 테스트가 §8.1 행 없이 한 라운드를 넘겼다(§6.7 이 처벌하는 *등록 없는 등록*). 신규 검증: T88 · T89 · AC65, mutation 8축 RED(계측기 3회 고장 후 재설계 — 도달불가·앵커 잔존·heredoc 이스케이프). 스위트: bash 81 green / 알려진 6 red · python 128 OK. **이 라운드는 아직 `/qg` 재검증을 받지 않았다.** |
+| 다음 단계 | **`/qg branch` 재실행** → iter-6·iter-7 수정의 재검증 → 그다음에야 병합 판단. **이 브랜치는 여전히 병합 불가.** 남은 잔여: §11 **⑭**(§5.3 빈 스코프 무집행) · §11 **⑰**(실행 mode provenance) · §6.7 **15 항목**(S4 는 iter-7 에 닫힘) · codex block 2건(21항목 미완 · 귀속 입력 provenance) · **U3**(원장↔기계출력 대조)·**U5**(GC scope-creep) — 이 둘은 §12 의 한 문장 밖 어디에도 등재된 적이 없고 iter-6 이 그 미등재를 공시만 했다 · 수동 V-행 · Runtime 게이트 실측(설치 캐시에 v3.0.0 스크립트가 없어 `claude -p --plugin-dir` 별도 세션 필요). **여전히 의도적으로 열어 둔 것**: B1(bulk 흡수자가 미지원 후보를 삼킴 — §6.7 F5, 공시 완료) · C5(shell/unittest per-unit 행 emit — `--mode` 의미와 상호작용해 함께 설계해야 함). A1/C2 는 이 라운드에 닫혔다. |

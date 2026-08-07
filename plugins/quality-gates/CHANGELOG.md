@@ -32,12 +32,45 @@
 - `scripts/diff-test-results.py` — 귀속 8종 + 어댑터 간 `--aggregate`.
 - `scripts/check_qa_ledger.py` — floor 5차원(changed/behavior/verification/attribution/gap)
   구조 게이트.
-- `qg-worktree.sh create-baseline` · `compute-test-scope-candidates.sh --total`.
+- `qg-worktree.sh create-baseline` · `qg-worktree.sh create-head` · `compute-test-scope-candidates.sh --total`. 두 `create-*` 절은 공유 헬퍼
+  `make_detached_worktree` 를 부른다 (`create-sandbox`/`mutation-guard` 본문 무변경 — AC22).
 
 ### Removed
 - `SKILL.md` 의 `regardless of Review scope` 리터럴과 그것이 서술하던 동작.
 
 ### Fixed
+- **HEAD 축 테스트가 verifier 샌드박스에서 돌던 구조 결함** (`/qg` iter-7 — §11 ⑬,
+  라운드 7 codex 단독 high 로 제기돼 *잔여 결함(병합 차단)* 으로 등재돼 있던 항목).
+  이 게이트가 파는 것은 *"같은 선택을 두 번 돌려 짝짓는다"* 이고 그것은 **두 축이 같은
+  환경**일 때만 성립하는데, R5b 가 verifier 가 부팅용으로 변형한 바로 그 트리에서
+  권위 있는 HEAD 테스트를 돌리고 있었다. 그 비대칭은 `NEW_REGRESSION` 과 **구별 불가능한
+  모양**으로 나타나 어느 쪽이 원인인지가 verifier 자기보고로만 갈렸다 — 불변식 ②가
+  *결과값*에서 없앤 self-report 신뢰가 *실행 환경* 축에 남아 있었다.
+  **해소:** `qg-worktree.sh create-head <B>` 가 봉인 커밋에 detached 된 **두 번째 일회용
+  워크트리**를 만들고 R5b 가 거기서 돈다. 이제 양축 모두 오케스트레이터가 만든 커밋
+  detached 트리이고 두 트리에서 실행되는 것은 어댑터의 `setup_cmd` 뿐이다 — 대칭이
+  전제가 아니라 **구조**다.
+- **게이트 자신의 테스트 아티팩트가 만들던 거짓 terminal FAIL** (§11 ⑨ = §6.7 S4 —
+  위와 **같은 수정 하나로** 닫혔다). R7 의 `mutation-guard` 는 `sandbox_dir` 를 검사하는데,
+  예전에는 HEAD 측 테스트가 그 트리에서 돌아 `.pytest_cache` 류가 거기 떨어졌고 대상
+  레포의 `.gitignore` 가 덮지 않으면 `disallowed_new_files` 로 잡혔다. `make`·`npm-script`
+  는 내부 명령을 몰라 억제할 수단조차 없었다. 이제 그 산출물은 HEAD 축 트리에 떨어지고
+  가드는 그 트리를 보지 않는다 — **가드를 느슨하게 한 것이 아니라 검사 대상에서 게이트
+  자신을 뺀 것**이라 Law 2 표면은 그대로다.
+- **재시도가 옛 봉인 커밋에 붙던 새 fail-open** (위 수정이 연 것을 같은 라운드에 봉쇄).
+  `create-sandbox` 는 호출마다 새 커밋 `B` 를 내므로, 재시도 후 refresh 된
+  `baseline_sha` 로 `create-head` 를 다시 부르지 않으면 HEAD 축이 **고쳐지기 전 코드**에
+  붙는다 — 트리도 행도 정상이라 어떤 degrade 신호도 서지 않는 조용한 실패였다.
+- **`mutation-guard` 3-arg 락의 앵커가 산문에 latch** — 앵커가 *이름의 첫 등장* 이라 R7
+  호출보다 앞선 설명 문단을 집었다. 반대 방향이 더 나빴다: **호출에서 인자를 지워도 산문에
+  그 낱말이 있으면 GREEN.** `scripts/` 접두를 같은 줄에서 요구하는 호출-줄 앵커로 교정.
+- **재시도 순서 락이 괄호 안 낱말까지 핀** — `R5b(새` 로 잡고 있어, 그 괄호 설명이
+  사실에 맞게 갱신되자 순서가 멀쩡한데도 RED 가 났다. 락이 구현보다 강해 **문서를 거짓으로
+  되돌리라고 요구하는** 형태였다. 순서절을 고르는 최소 구조(`R5b(`)로 교정 — 역전·앞항
+  삭제·뒷항 삭제 3축 mutation RED 유지.
+- **미등재 테스트 id `T87`** — iter-6 이 만든 테스트가 §8.1 행 없이 한 라운드를 넘겼다.
+  §6.7 이 처벌하는 *등록 없는 등록* 의 반대 방향(존재하는데 원장에 없음)이며, 원장을
+  세는 독자에게는 커버리지가 실제보다 적어 보인다. T88·T89 와 함께 등재.
 - **`--mode` 가 판정을 가르는 자유 변수였던 fail-open** (`/qg` iter-6 CRITICAL —
   silent-failure-hunter 단독 적발, adversarial 이 합성 경로까지 확장) — 도말 degrade 가
   `args.mode == "bulk"` 하나에 걸려 있었고 그 값의 유일한 출처는 오케스트레이터의

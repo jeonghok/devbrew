@@ -645,6 +645,12 @@ If `effective_skip_runtime` was set, skip this entire section.
 > verifier 의 evidence-log 에 적힌 테스트 결과는 advisory 이며, 이 스크립트의
 > 오케스트레이터 호출 결과가 authoritative 다 — 둘이 다르면 후자를 쓴다. (R7 의
 > mutation-guard 가 verifier 의 `writes:` self-report 를 대하는 방식과 같은 패턴.)
+>
+> **두 호출은 각자의 트리에서 돈다 — 어느 쪽도 verifier 의 샌드박스가 아니다.**
+> 기준선 측은 `create-baseline` 이 merge_base 에, HEAD 측은 `create-head` 가 봉인
+> 커밋 `B` 에 detached 로 만든 일회용 트리다. *누가 부르는가* 만 나누고 *어디서
+> 도는가* 를 나누지 않으면 self-report 신뢰가 결과값 축에서 실행 환경 축으로 옮겨갈
+> 뿐이다 (§11 ⑬). 두 축 모두에서 실행되는 것은 어댑터의 `setup_cmd` 뿐이다.
 
 **Step R-init — baseline 확정.**
 
@@ -806,8 +812,8 @@ R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 �
 
 **`same_as_head: yes` 만으로는 건너뛰지 않는다 (/qg iter-3 정정).** 앞 버전은 그렇게
 지시했고 그것이 **측정 가능한 회귀를 비차단으로 내렸다**: `main` 위 미커밋 작업에서
-기준선 트리는 merge_base **커밋**이고 HEAD 측은 **워킹 트리**를 담은 샌드박스라 차등이
-정확히 성립하는데, 스킵하면 `NEW_REGRESSION`/defect=true/FAIL 이
+기준선 트리는 merge_base **커밋**이고 HEAD 측은 **워킹 트리를 봉인한 커밋 `B`** 라
+차등이 정확히 성립하는데, 스킵하면 `NEW_REGRESSION`/defect=true/FAIL 이
 `BASELINE_UNRUNNABLE`/defect=false/SKIP 으로 바뀐다(실측). 차등 증거가 실제로 불가능한
 것은 **`same_as_head: yes` 이고 워킹 트리가 깨끗할 때**뿐이다 — 그때만 두 트리가 같은
 바이트다. 판별자는 `check-review-scope.sh` 의 `worktree_dirty` 다.
@@ -1078,11 +1084,39 @@ HEAD 행 파일을 채운 뒤 R6 으로 간다. 이유 둘:
    락이 그 도달 불가능한 주장을 방어하고 있어서 산문만 고치면 스위트가 red 가 됐다.
    옛 주장의 재도입은 락이 별도로 막는다.)
 
-verifier 의 dispatch 가 **끝난 뒤**, 어댑터마다 (샌드박스가 있을 때만):
+verifier 의 dispatch 가 **끝난 뒤**, 먼저 **HEAD 축 전용 트리**를 만든다 (한 번, 어댑터
+공통). 인자는 R5a¹ 이 잡아 둔 `baseline_sha` — `create-sandbox` 가 리뷰 대상 코드를
+봉인한 커밋 `B` 다:
+
+```bash
+head_tree_dir=$("${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-head \
+  "$baseline_sha" "<session-id>")
+```
+
+**이 트리는 verifier 의 샌드박스가 아니다 — `$runtime_project_dir` 을 여기 넘기지
+않는다.** 두 결함이 이 분리 하나로 닫힌다:
+
+1. **두 축이 같은 환경이라는 전제 (§11 ⑬).** 이 설계가 파는 것은 *"같은 선택을 두 번
+   돌려 짝짓는다"* 인데, HEAD 축이 verifier 가 부팅용으로 설치·수정한 상태 위에서 돌면
+   기준선 축(merge_base 의 **깨끗한 커밋 트리**)과 환경이 다르다. 그 비대칭은
+   `NEW_REGRESSION` 과 **구별 불가능한 모양**으로 나타나고, 어느 쪽이 원인인지는
+   verifier 자기보고로만 갈렸다 — 불변식 ②가 *결과값*에서 없앤 self-report 신뢰가
+   *실행 환경* 축에 남아 있었다. 이제 양축 모두 오케스트레이터가 만든 커밋 detached
+   트리이고, 각 트리에서 도는 것은 어댑터의 `setup_cmd` 뿐이다. **대칭이 구조적이다.**
+2. **게이트 자신의 부작용이 만드는 거짓 terminal FAIL (§6.7 S4 · §11 ⑨).** R7 의
+   mutation-guard 는 `sandbox_dir` 를 검사한다. 예전에는 HEAD 측 테스트가 바로 그
+   트리에서 돌아 `.pytest_cache` 같은 산출물이 거기 떨어졌고, 대상 레포의 `.gitignore`
+   가 그것을 덮지 않으면 `disallowed_new_files` 로 잡혀 **게이트가 자기 부작용에 FAIL 을
+   냈다.** `make`·`npm-script` 는 내부 명령을 우리가 모르므로 억제할 수단도 없었다.
+   이제 그 산출물은 `head_tree_dir` 에 떨어지고 가드는 그 트리를 보지 않는다 — R7 은
+   **verifier 의 변경만** 본다. 가드를 느슨하게 하는 방향이 아니라 검사 대상에서
+   게이트 자신을 뺀 것이므로 Law 2 표면은 그대로다.
+
+그다음 어댑터마다 (샌드박스가 있을 때만):
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" run \
-  "$runtime_project_dir" "$runner" bulk "${units[@]}"
+  "$head_tree_dir" "$runner" bulk "${units[@]}"
 ```
 
 **bulk 가 green 이면 per-unit 재실행을 하지 않는다** — 집합 전체가 통과했으므로 귀속할
@@ -1093,6 +1127,15 @@ verifier 의 dispatch 가 **끝난 뒤**, 어댑터마다 (샌드박스가 있�
 verifier 가 디버깅 중 테스트를 돌리는 것 자체를 막지는 않지만(Bash 를 갖고 있고 setup
 확인에 필요하다), **그 결과가 판정에 들어가는 경로**를 막는다. verifier 의 evidence-log
 테스트 결과는 advisory 이고 이 호출 결과가 authoritative 다.
+
+모든 어댑터가 끝나면 HEAD 축 트리를 폐기한다 (R4③ 이 기준선 트리를 폐기하는 것과
+대칭 — 두 트리 다 일회용이고 수명은 자기 축의 실행 동안뿐이다):
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "$head_tree_dir"
+```
+
+행은 이미 `$head_rows_file` 에 있으므로 R6 은 이 트리를 필요로 하지 않는다.
 
 **Step R6 — 대조 (결정론).** 어댑터마다 한 번씩:
 
@@ -1397,7 +1440,9 @@ AskUserQuestion({
 Branch:
 - **Yes, retry** → increment resolution counter; if exceeds env limit, fall through to Skip with evidence. Otherwise re-create the sandbox (Step R5a¹) and re-capture the new output's `sandbox_dir` (line 1), `baseline_sha` (line 2), and `snapshot_digest` (line 3) with the same three successive `IFS= read -r` + digest-strip idiom as R5a¹ — refreshing **all three** orchestrator variables. create-sandbox emits a NEW commit `B` AND a NEW snapshot (hence a new digest) each call, so reusing the old `baseline_sha` makes the guard `guard_fail "bad baseline sha"` and reusing the old `snapshot_digest` makes it `guard_fail "snapshot integrity check failed"` — both false FAILs. The new snapshot is auto-recorded in the new gitdir; the stale sandbox + its old snapshot are force-removed by R5a¹'s idempotent cleanup. Then re-dispatch runtime-verifier with the refreshed `sandbox_dir` and re-run the remaining steps in the order given in the next paragraph — R7 is called as 3-arg with the refreshed `snapshot_digest`, NOT directly after the dispatch. (Fix the parse order: capturing the digest as line 2 swaps `baseline_sha`/`snapshot_digest` and fails-closed every run.)
 
-  **재시도는 R5b·R6 도 다시 돈다 — verifier 재-dispatch 만으로 끝나지 않는다.** 재시도가 만드는 것은 **새 트리**이고, 이전 `head_rows_file` 은 이미 폐기된 트리에서 나온 행이다. 그것을 그대로 R6 에 넘기면 `.env` 하나 고쳐 초록이 된 트리에서 옛 red 로 `confirmed_product_defect: true` 가 서서 **고쳐진 코드에 FAIL** 이 나고, 반대 방향은 더 나쁘다 — 옛 green 행이 재시도가 새로 만든 회귀를 가린다. 재-dispatch 뒤 순서는 **R5b(새 `runtime_project_dir` 로 HEAD 측 재실행) → R6(대조 + 집계 재호출) → R7 → R8** 이고, 이전 HEAD 행은 **버린다**(덮어쓰지 말고 새로 만든다 — 부분 덮어쓰기는 두 트리의 행을 한 파일에 섞는다). 기준선 측 R4 는 다시 돌리지 않는다: `merge_base` 가 그대로라 캐시 키가 같고, 기준선은 재시도로 바뀌지 않는다.
+  **재시도는 R5b·R6 도 다시 돈다 — verifier 재-dispatch 만으로 끝나지 않는다.** 재시도가 만드는 것은 **새 트리**이고, 이전 `head_rows_file` 은 이미 폐기된 트리에서 나온 행이다. 그것을 그대로 R6 에 넘기면 `.env` 하나 고쳐 초록이 된 트리에서 옛 red 로 `confirmed_product_defect: true` 가 서서 **고쳐진 코드에 FAIL** 이 나고, 반대 방향은 더 나쁘다 — 옛 green 행이 재시도가 새로 만든 회귀를 가린다. 재-dispatch 뒤 순서는 **R5b(HEAD 축 재실행) → R6(대조 + 집계 재호출) → R7 → R8** 이고, 이전 HEAD 행은 **버린다**(덮어쓰지 말고 새로 만든다 — 부분 덮어쓰기는 두 트리의 행을 한 파일에 섞는다). 기준선 측 R4 는 다시 돌리지 않는다: `merge_base` 가 그대로라 캐시 키가 같고, 기준선은 재시도로 바뀌지 않는다.
+
+  **재시도의 R5b 는 `create-head` 를 refresh 된 `baseline_sha` 로 다시 호출한다.** create-sandbox 는 호출마다 **새 커밋 `B`** 를 낸다 — 위에서 `baseline_sha` 를 재포착하는 이유가 그것이다. 그 재포착된 값을 `create-head` 에 넘기지 않고 옛 `baseline_sha` 를 재사용하면, HEAD 축 트리가 **재시도가 고치기 전 코드**에 붙는다. 그러면 R7 의 mutation-guard 는 새 트리를 보고 통과시키는데 R6 이 대조하는 행은 옛 코드에서 나온 것이라, 실패가 verdict 층이 아니라 **귀속 층에서 조용히** 일어난다 — 트리가 존재하고 행이 나오므로 어떤 degrade 신호도 서지 않는다. `create-head` 는 같은 경로에 idempotent 하므로 refresh 된 값으로 그냥 다시 부르면 되고, 이전 HEAD 축 트리는 그 호출이 정리한다.
 - **Skip with evidence** → record SKIP_WITH_EVIDENCE and continue.
 - **Stop** → final summary aborted at the Runtime gate.
 

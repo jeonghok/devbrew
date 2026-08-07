@@ -131,7 +131,15 @@ assert_line "create-sandbox invoked" "$sandbox_line"
 assert_order "create-sandbox precedes runtime-verifier dispatch" "$sandbox_line" "$runtime_line"
 
 # mutation-guard must be invoked AFTER the runtime-verifier dispatch.
-guard_line=$(first_line_after 'mutation-guard' "$runtime_line")
+#
+# 앵커는 **호출 줄**이어야 한다 — 이름 첫 등장이 아니다. 앞 버전은
+# `first_line_after 'mutation-guard'` 였는데, 그 이름은 산문에서도 불린다(R5b 가 왜
+# 자기 트리에서 도는지를 설명하는 §11 ⑬/S4 문단이 R7 호출보다 **앞선다**). 그러면
+# `$guard_line` 이 산문 줄을 가리키고, 아래 3-arg 검사는 실제 호출이 멀쩡한데도 FAIL 을
+# 낸다 — 반대 방향(호출에서 인자를 지워도 산문에 `snapshot_digest` 가 있으면 GREEN)이
+# 더 나쁘다. 이 파일이 :588 에서 스스로 적어 둔 grep-매치-주석 함정의 같은 사례다.
+# 실행 줄만 고르도록 `scripts/` 접두를 같은 줄에서 요구한다.
+guard_line=$(first_line_after 'scripts/qg-worktree\.sh" mutation-guard' "$runtime_line")
 assert_line "mutation-guard invoked after runtime dispatch" "$guard_line"
 
 # forced_downgrade must be referenced (verdict gating on the guard result).
@@ -619,6 +627,66 @@ assert_call_in_window "R4 가 run-test-selection.sh run 호출 (기준선 측)" 
   'scripts/run-test-selection.sh" run'     '^[*][*]Step R4'     '^[*][*]Step R5a⁰'
 assert_call_in_window "R5b 가 run-test-selection.sh run 호출 (HEAD 측)" \
   'scripts/run-test-selection.sh" run'     '^[*][*]Step R5b'    '^[*][*]Step R6'
+assert_call_in_window "R5b 가 qg-worktree.sh create-head 호출 (HEAD 축 전용 트리)" \
+  'scripts/qg-worktree.sh" create-head'    '^[*][*]Step R5b'    '^[*][*]Step R6'
+
+# ── T89 · AC65 · §11 ⑬ / §6.7 S4 — HEAD 축이 도는 트리 ────────────────────
+# 이 브랜치가 파는 것은 *"같은 선택을 두 번 돌려 짝짓는다"* 이고, 그것은 **두 축이 같은
+# 종류의 환경**일 때만 성립한다. R5b 가 verifier 샌드박스(`$runtime_project_dir`)에서
+# 돌면 (a) HEAD 축만 verifier 의 부팅 setup 을 물어 비대칭이 `NEW_REGRESSION` 과
+# 구별 불가능한 모양으로 새고, (b) 게이트 자신의 테스트 산출물이 R7 mutation-guard 의
+# 검사 대상 트리에 떨어져 거짓 terminal FAIL 을 낸다.
+#
+# **왜 창 안 `$runtime_project_dir` 0회 로 재지 않는가.** 그 변수는 R5b 창 안에서
+# *정당하게* 등장한다 — 폴백 문단이 "폴백의 `runtime_project_dir` 는 사용자의 실제
+# 워킹 트리다" 라고 설명하는 자리다. 0회 락은 지금 당장 RED 이고, 그 문단을 지우면
+# GREEN 이 되는 **거꾸로 된 이빨**을 갖는다.
+#
+# 대신 **호출의 인자 자리**를 잰다: 창 안 모든 `run` 호출 줄의 **다음 줄**(인자 줄)이
+# HEAD 축 트리 변수를 받아야 한다 (∀). 되돌리는 mutation 은 정확히 그 자리에
+# `$runtime_project_dir` 을 되놓는 것이므로 이 assert 가 유일하게 그것을 본다.
+# ∃ 짝을 함께 둔다 — 호출이 0개면 ∀ 는 공허하게 참이다.
+echo "== R5b 의 HEAD 축 트리 인자"
+r5b_s=$(first_line '^[*][*]Step R5b'); r5b_e=$(first_line '^[*][*]Step R6')
+if [[ "$r5b_s" -le 0 || "$r5b_e" -le 0 || "$r5b_s" -ge "$r5b_e" ]]; then
+  echo "FAIL: R5b 인자 락 — 창 앵커 붕괴 (start=$r5b_s end=$r5b_e)"
+  fail=$((fail + 1))
+else
+  # sites = 창 안 `run` 호출 줄 수 · good = 다음 줄이 head_tree_dir 인 것 · bad = 그 밖
+  read -r sites good < <(awk -v s="$r5b_s" -v e="$r5b_e" '
+    NR>s && NR<e && index($0,"scripts/run-test-selection.sh\" run") { want=NR+1; sites++ }
+    want && NR==want { if (index($0,"$head_tree_dir")) good++; want=0 }
+    END { print sites+0, good+0 }
+  ' "$SKILL_MD")
+  if [[ "$sites" -ge 1 && "$good" -eq "$sites" ]]; then
+    echo "PASS: R5b 의 run 호출 ${sites}곳 전부가 HEAD 축 트리(\$head_tree_dir)를 받음 (창 $r5b_s..$r5b_e)"
+  else
+    echo "FAIL: R5b 의 run 호출 인자 (호출 ${sites}곳 중 head_tree_dir 수신 ${good}곳) — 샌드박스로 되돌아갔는가?"
+    fail=$((fail + 1))
+  fi
+fi
+
+# create-head 의 인자는 **봉인 커밋 B** 여야 한다. 여기에 `$merge_base` 를 넘기면 HEAD
+# 축이 기준선과 같은 커밋에 붙어 차등이 구조적으로 0 이 되는데, 트리는 정상 생성되고
+# 행도 정상으로 나오므로 **어떤 degrade 신호도 서지 않는다** — 위 배선 assert 는 통과한다.
+if awk -v s="$r5b_s" -v e="$r5b_e" '
+     NR>s && NR<e && index($0,"scripts/qg-worktree.sh\" create-head") { want=NR+1 }
+     want && NR==want && index($0,"$baseline_sha") { f=1 }
+     END { exit !f }' "$SKILL_MD"; then
+  echo "PASS: create-head 가 봉인 커밋(\$baseline_sha)을 받음"
+else
+  echo "FAIL: create-head 인자가 \$baseline_sha 가 아님 (창 $r5b_s..$r5b_e)"
+  fail=$((fail + 1))
+fi
+
+# 재시도 경로: 새 샌드박스는 **새 B** 를 낸다. refresh 된 값으로 create-head 를 다시
+# 부르지 않으면 HEAD 축이 고쳐지기 전 코드에 붙는데, 트리·행 모두 정상이라 조용하다.
+if grep -q 'create-head' <<<"$(awk '/재시도의 R5b/,/^$/' "$SKILL_MD")"; then
+  echo "PASS: 재시도 문단이 create-head 재호출을 지시"
+else
+  echo "FAIL: 재시도 문단에 create-head 재호출 지시 없음 (옛 B 에 붙는 조용한 실패)"
+  fail=$((fail + 1))
+fi
 # R6 은 호출이 **둘**이다 — 어댑터별 대조 1회 + `--aggregate` 1회. "창 안에 1개 이상"
 # 으로 재면 둘 중 하나를 지워도 나머지가 만족시킨다(실측: 대조 호출만 지운 mutation 이
 # GREEN 이었다). 개수와 `--aggregate` 를 따로 잠근다.
