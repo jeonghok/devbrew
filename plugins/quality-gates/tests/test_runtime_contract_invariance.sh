@@ -220,7 +220,13 @@ case_head_and_baseline_coexist() {
   echo v2 > a.txt; git commit -qam v2
   local head_sha; head_sha=$(git rev-parse HEAD)
 
-  local b h
+  # HEAD 축은 create-sandbox 가 봉인한 커밋 B 에만 붙는다 — 샌드박스를 먼저 만들고
+  # 그 출력 2행(= B)을 쓴다. 픽스처가 이 순서를 지켜야 하는 것 자체가 계약이다.
+  local sb b h
+  if ! sb=$(bash "$WT" create-sandbox "sess1234"); then
+    fail "create-sandbox 실패"; cd / && rm -rf "$REPO"; return
+  fi
+  head_sha=$(printf '%s\n' "$sb" | sed -n 2p)
   if ! b=$(bash "$WT" create-baseline "$base_sha" "sess1234"); then
     fail "create-baseline 실패"; cd / && rm -rf "$REPO"; return
   fi
@@ -257,9 +263,74 @@ case_head_and_baseline_coexist() {
   cd / && rm -rf "$REPO"
 }
 
+# T92 + AC65′ (§11 ⑬ 후속, /qg iter-7 security-reviewer CRITICAL):
+# create-head 의 sha 는 **선언된 자유 변수가 아니다** — 이 세션 샌드박스의 봉인 커밋과
+# 대조되고 다르면 죽는다.
+#
+# 왜 이것이 없으면 위험한가. 바로 위 형제 `create-baseline "$merge_base" <sid>` 와 인자
+# 모양이 같아서, `$merge_base` 를 넘기는 실수 하나로 HEAD 축이 기준선의 바이트 복사본이
+# 된다. 그러면 전 unit 이 `(P,P) → STILL_GREEN → closed` 로 접혀 **degrade 신호 하나 없이
+# PASS** 가 난다 — R7 은 자기 baseline_sha 로 샌드박스만 보므로 HEAD 트리가 어느 커밋에서
+# 왔는지 알지 못한다. 형제 잔여(`--baseline-detected` 등)는 최소한 부재가 fail-closed 인데
+# 이 축은 **오값**이라 그조차 아니었다.
+#
+# 세 축 + 양의 짝. 음만 재면 "언제나 거부" 로 만드는 변경이 통과한다.
+#
+# **효과 없는 변이 하나를 정직하게 기록한다.** 엄격 동일(`==`)을 접두 매치로 느슨하게
+# 하는 mutation 은 이 케이스에서 GREEN 이다 — 그리고 그것은 락의 구멍이 아니라 **도달
+# 가능한 입력에서 동작이 같기 때문**이다: `merge_base` 와 브랜치 tip 은 봉인 커밋과
+# 다른 40자라 접두로도 실패하고, 빈 인자는 `make_detached_worktree` 의
+# `rev-parse --verify` 가 fail-closed 로 잡는다. 여기에 억지 assert 를 붙이면 재는 것이
+# 없는 락이 하나 늘 뿐이므로 붙이지 않는다.
+case_create_head_asserts_sealed_commit() {
+  REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
+  git init -q; git config user.email t@t.test; git config user.name tester
+  git checkout -q -b main; echo v1 > a.txt; git add a.txt; git commit -qm v1
+  local mb; mb=$(git rev-parse HEAD)
+  git checkout -q -b feature; echo v2 > a.txt; git commit -qam v2
+  local tip; tip=$(git rev-parse HEAD)
+
+  # 음 ①: 샌드박스가 없으면 붙을 봉인 커밋이 없다 → 거부
+  if bash "$WT" create-head "$tip" "sess7777" >/dev/null 2>&1; then
+    fail "샌드박스 없이 create-head 가 통과함"
+  else
+    pass "샌드박스 부재 → create-head 거부"
+  fi
+
+  local sb sealed
+  if ! sb=$(bash "$WT" create-sandbox "sess7777"); then
+    fail "create-sandbox 실패"; cd / && rm -rf "$REPO"; return
+  fi
+  sealed=$(printf '%s\n' "$sb" | sed -n 2p)
+
+  # 양의 짝: 봉인 커밋은 받아들인다 (음만 재면 "언제나 거부" 가 통과한다)
+  if bash "$WT" create-head "$sealed" "sess7777" >/dev/null 2>&1; then
+    pass "봉인 커밋 B → create-head 수락 (양의 짝)"
+    bash "$WT" remove "$(pwd)/.claude/quality-gates/worktrees/head-sess7777" >/dev/null 2>&1
+  else
+    fail "봉인 커밋인데 create-head 가 거부함"
+  fi
+
+  # 음 ②: merge_base — 형제 호출과 인자 모양이 같아 가장 현실적인 오값
+  if bash "$WT" create-head "$mb" "sess7777" >/dev/null 2>&1; then
+    fail "merge_base 가 통과함 — HEAD 축이 기준선 복사본이 되어 degrade 없이 PASS"
+  else
+    pass "merge_base → create-head 거부 (차등 구조적 0 봉쇄)"
+  fi
+
+  # 음 ③: 봉인 전 브랜치 tip — 재시도가 새 B 를 만든 뒤 옛 값을 재사용하는 축
+  if bash "$WT" create-head "$tip" "sess7777" >/dev/null 2>&1; then
+    fail "봉인 아닌 커밋(브랜치 tip)이 통과함 — 재시도 stale 축이 열려 있다"
+  else
+    pass "비-봉인 커밋 → create-head 거부 (재시도 stale 봉쇄)"
+  fi
+
+  cd / && rm -rf "$REPO"
+}
+
 for c in case_create_baseline case_create_baseline_refuses_colliding_user_worktree \
          case_create_baseline_is_still_idempotent \
-         case_head_and_baseline_coexist \
+         case_head_and_baseline_coexist case_create_head_asserts_sealed_commit \
          case_remove_namespace_guard case_detect_runtime_frozen \
          case_sandbox_guard_frozen case_no_new_surfaces; do
   echo "== $c"; $c

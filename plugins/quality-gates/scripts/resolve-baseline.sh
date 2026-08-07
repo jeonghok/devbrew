@@ -55,7 +55,15 @@ git symbolic-ref --quiet HEAD        >/dev/null 2>&1 || emit_degraded
 [[ "$(git rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]] && emit_degraded
 
 base=""; base_ref=""
-if ref=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null); then
+# /qg iter-7 (M6): `symbolic-ref` 는 **대상의 존재를 검증하지 않는다.** master→main
+# rename 뒤 흔히 남는 dangling `origin/HEAD` 가 여기서 성공해 `base_ref=origin/master`
+# 를 세우고, 아래 `merge-base` 가 실패해 `degraded: yes` 가 난다 — `origin/main` 이
+# 멀쩡한데도 fallback 체인 전체가 도달 불가가 된다. 방향은 fail-closed 지만, 이것이
+# 하류 소비자가 삼키던 `degraded: yes` 의 최대 공급원이었다. 가리키는 ref 가 실제로
+# 있을 때만 받아들인다.
+if ref=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null) \
+   && [ -n "$ref" ] \
+   && git rev-parse --verify --quiet "refs/remotes/$ref" >/dev/null 2>&1; then
   base="${ref#origin/}"; base_ref="$ref"
 elif git rev-parse --verify --quiet refs/remotes/origin/main   >/dev/null 2>&1; then
   base="main";   base_ref="origin/main"

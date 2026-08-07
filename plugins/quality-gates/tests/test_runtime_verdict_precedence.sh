@@ -440,10 +440,29 @@ case_pass_row_reads_all_three_flags() {
 # 두 방향으로 잠근다: 산출물에 없음 + SKILL 이 기록 위치를 실제로 지정함.
 case_flaky_is_a_note_not_a_category() {
   local py="$PLUGIN_ROOT/scripts/diff-test-results.py"
-  if grep -qF 'FLAKY' "$py"; then
-    fail "diff-test-results.py 가 FLAKY 를 언급 — 카테고리 계약(8종)과 충돌"
+  # **코퍼스를 봤다는 positive 가 먼저다 (/qg iter-7, PT5).** 앞 버전은 곧장
+  # `if grep -qF 'FLAKY' "$py"` 였는데, `$py` 가 없으면 grep 은 **exit 2**(파일 오류)를
+  # 내고 `if` 는 그것을 "매치 없음"과 같은 non-zero 로 읽어 else 로 떨어져 PASS 를
+  # 찍었다 — **파일을 통째로 지워도 GREEN**(실측). 이 케이스가 스스로 "두 방향으로
+  # 잠근다"고 적은 둘째 방향은 `$SKILL` 을 읽으므로 이 음의 락의 코퍼스를 덮지 못한다.
+  # 음의 락은 빈 코퍼스 위에서 언제나 참이다.
+  local missing_cat="" c
+  if [[ ! -f "$py" ]]; then
+    fail "diff-test-results.py 부재 ($py) — FLAKY 음의 락이 공허하게 통과할 뻔했다"
   else
-    pass "산출 스크립트에 FLAKY 0회 (8종 닫힌 집합 유지)"
+    # 8종 닫힌 집합이 실제로 그 파일에 있는가. 이것이 "코퍼스를 읽었다"의 증거이자,
+    # 카테고리를 전부 지우는 mutation 을 음의 락 단독이 놓치는 것을 막는 짝이다.
+    for c in NEW_REGRESSION NEW_TEST_RED PRE_EXISTING STILL_GREEN \
+             SILENT_DROP BASELINE_UNRUNNABLE; do
+      grep -qF "$c" "$py" || missing_cat="$missing_cat $c"
+    done
+    if [[ -n "$missing_cat" ]]; then
+      fail "산출 스크립트에서 카테고리 누락:$missing_cat (코퍼스가 기대와 다르다)"
+    elif grep -qF 'FLAKY' "$py"; then
+      fail "diff-test-results.py 가 FLAKY 를 언급 — 카테고리 계약(8종)과 충돌"
+    else
+      pass "산출 스크립트에 FLAKY 0회 + 카테고리 실재 (코퍼스 확인된 음의 락)"
+    fi
   fi
   # 양의 짝 — 재실행 규칙이 **기록 위치를 지정**해야 한다. 지정 없이 토큰만 지우면
   # flaky 관측이 아무 데도 안 남는다.

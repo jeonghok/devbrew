@@ -632,61 +632,119 @@ assert_call_in_window "R5b 가 qg-worktree.sh create-head 호출 (HEAD 축 전�
 
 # ── T89 · AC65 · §11 ⑬ / §6.7 S4 — HEAD 축이 도는 트리 ────────────────────
 # 이 브랜치가 파는 것은 *"같은 선택을 두 번 돌려 짝짓는다"* 이고, 그것은 **두 축이 같은
-# 종류의 환경**일 때만 성립한다. R5b 가 verifier 샌드박스(`$runtime_project_dir`)에서
+# 종류의 환경**일 때만 성립한다. HEAD 축이 verifier 샌드박스(`$runtime_project_dir`)에서
 # 돌면 (a) HEAD 축만 verifier 의 부팅 setup 을 물어 비대칭이 `NEW_REGRESSION` 과
 # 구별 불가능한 모양으로 새고, (b) 게이트 자신의 테스트 산출물이 R7 mutation-guard 의
 # 검사 대상 트리에 떨어져 거짓 terminal FAIL 을 낸다.
 #
-# **왜 창 안 `$runtime_project_dir` 0회 로 재지 않는가.** 그 변수는 R5b 창 안에서
+# **창은 R5b..R7 이다 — R6 을 포함해야 한다 (/qg iter-7, 리뷰어 2명).** 앞 버전은
+# R5b..R6 이었는데, R6 의 flaky 재실행도 `run` 호출이고 **그것이 authoritative** 다.
+# 창 밖이라 구조적으로 감사되지 않았고, 실제로 그 라운드의 CRITICAL 이 정확히 거기서
+# 났다 — 락이 자기가 지키려던 결함을 볼 수 없는 자리에 서 있었다.
+#
+# **왜 창 안 `$runtime_project_dir` 0회 로 재지 않는가.** 그 변수는 이 창 안에서
 # *정당하게* 등장한다 — 폴백 문단이 "폴백의 `runtime_project_dir` 는 사용자의 실제
 # 워킹 트리다" 라고 설명하는 자리다. 0회 락은 지금 당장 RED 이고, 그 문단을 지우면
-# GREEN 이 되는 **거꾸로 된 이빨**을 갖는다.
-#
-# 대신 **호출의 인자 자리**를 잰다: 창 안 모든 `run` 호출 줄의 **다음 줄**(인자 줄)이
-# HEAD 축 트리 변수를 받아야 한다 (∀). 되돌리는 mutation 은 정확히 그 자리에
-# `$runtime_project_dir` 을 되놓는 것이므로 이 assert 가 유일하게 그것을 본다.
-# ∃ 짝을 함께 둔다 — 호출이 0개면 ∀ 는 공허하게 참이다.
-echo "== R5b 의 HEAD 축 트리 인자"
-r5b_s=$(first_line '^[*][*]Step R5b'); r5b_e=$(first_line '^[*][*]Step R6')
-if [[ "$r5b_s" -le 0 || "$r5b_e" -le 0 || "$r5b_s" -ge "$r5b_e" ]]; then
-  echo "FAIL: R5b 인자 락 — 창 앵커 붕괴 (start=$r5b_s end=$r5b_e)"
+# GREEN 이 되는 **거꾸로 된 이빨**을 갖는다. 대신 **호출의 인자 자리**를 ∀ 로 잰다.
+echo "== R5b·R6 의 HEAD 축 트리 인자"
+r5b_s=$(first_line '^[*][*]Step R5b'); r7_s=$(first_line '^[*][*]Step R7')
+r6_s=$(first_line '^[*][*]Step R6')
+if [[ "$r5b_s" -le 0 || "$r6_s" -le 0 || "$r7_s" -le 0 || "$r5b_s" -ge "$r6_s" || "$r6_s" -ge "$r7_s" ]]; then
+  echo "FAIL: HEAD 축 인자 락 — 창 앵커 붕괴 (R5b=$r5b_s R6=$r6_s R7=$r7_s)"
   fail=$((fail + 1))
 else
-  # sites = 창 안 `run` 호출 줄 수 · good = 다음 줄이 head_tree_dir 인 것 · bad = 그 밖
-  read -r sites good < <(awk -v s="$r5b_s" -v e="$r5b_e" '
+  # sites = 창 안 `run` 호출 줄 수 · good = 다음 줄이 head_tree_dir 인 것
+  read -r sites good < <(awk -v s="$r5b_s" -v e="$r7_s" '
     NR>s && NR<e && index($0,"scripts/run-test-selection.sh\" run") { want=NR+1; sites++ }
     want && NR==want { if (index($0,"$head_tree_dir")) good++; want=0 }
     END { print sites+0, good+0 }
   ' "$SKILL_MD")
-  if [[ "$sites" -ge 1 && "$good" -eq "$sites" ]]; then
-    echo "PASS: R5b 의 run 호출 ${sites}곳 전부가 HEAD 축 트리(\$head_tree_dir)를 받음 (창 $r5b_s..$r5b_e)"
+  # ∃ 짝: 호출이 0개면 ∀ 는 공허하게 참이다. 그리고 **2개 이상**이어야 한다 — R5b 의
+  # 본 실행과 R6 의 flaky 재실행. 하나만 요구하면 R6 의 재실행을 통째로 지워도 통과한다.
+  if [[ "$sites" -ge 2 && "$good" -eq "$sites" ]]; then
+    echo "PASS: R5b·R6 의 run 호출 ${sites}곳 전부가 HEAD 축 트리(\$head_tree_dir)를 받음 (창 $r5b_s..$r7_s)"
   else
-    echo "FAIL: R5b 의 run 호출 인자 (호출 ${sites}곳 중 head_tree_dir 수신 ${good}곳) — 샌드박스로 되돌아갔는가?"
+    echo "FAIL: HEAD 축 인자 (호출 ${sites}곳(≥2 필요) 중 head_tree_dir 수신 ${good}곳) — 샌드박스로 되돌아갔거나 flaky 재실행이 사라졌는가?"
     fail=$((fail + 1))
   fi
 fi
 
-# create-head 의 인자는 **봉인 커밋 B** 여야 한다. 여기에 `$merge_base` 를 넘기면 HEAD
-# 축이 기준선과 같은 커밋에 붙어 차등이 구조적으로 0 이 되는데, 트리는 정상 생성되고
-# 행도 정상으로 나오므로 **어떤 degrade 신호도 서지 않는다** — 위 배선 assert 는 통과한다.
-if awk -v s="$r5b_s" -v e="$r5b_e" '
-     NR>s && NR<e && index($0,"scripts/qg-worktree.sh\" create-head") { want=NR+1 }
-     want && NR==want && index($0,"$baseline_sha") { f=1 }
-     END { exit !f }' "$SKILL_MD"; then
-  echo "PASS: create-head 가 봉인 커밋(\$baseline_sha)을 받음"
+# create-head 의 인자는 **봉인 커밋 B** 여야 한다. `$merge_base` 를 넘기면 HEAD 축이
+# 기준선과 같은 커밋에 붙어 차등이 구조적으로 0 이 되는데, 트리는 정상 생성되고 행도
+# 정상으로 나오므로 **어떤 degrade 신호도 서지 않는다**.
+#
+# **∀ 다 (/qg iter-7, pr-test-analyzer).** 앞 버전은 ∃ 여서 — 맞는 호출 하나만 있으면
+# `f=1` — 뒤에 `$merge_base` 를 받는 **두 번째** `create-head` 를 덧붙이는 mutation 이
+# 통과했다(마지막 대입이 이긴다). 형제 `run` 인자 락은 처음부터 ∀ 였는데 이 락만
+# ∃ 였다: 같은 파일 안에서 관례가 갈린 것이 구멍이었다.
+read -r ch_sites ch_good < <(awk -v s="$r5b_s" -v e="$r7_s" '
+  NR>s && NR<e && index($0,"scripts/qg-worktree.sh\" create-head") { want=NR+1; sites++
+    if (index($0,"$baseline_sha")) { good++; want=0 } }
+  want && NR==want { if (index($0,"$baseline_sha")) good++; want=0 }
+  END { print sites+0, good+0 }
+' "$SKILL_MD")
+if [[ "$ch_sites" -ge 1 && "$ch_good" -eq "$ch_sites" ]]; then
+  echo "PASS: create-head 호출 ${ch_sites}곳 전부가 봉인 커밋(\$baseline_sha)을 받음"
 else
-  echo "FAIL: create-head 인자가 \$baseline_sha 가 아님 (창 $r5b_s..$r5b_e)"
+  echo "FAIL: create-head 인자 (호출 ${ch_sites}곳 중 baseline_sha 수신 ${ch_good}곳)"
   fail=$((fail + 1))
 fi
 
-# 재시도 경로: 새 샌드박스는 **새 B** 를 낸다. refresh 된 값으로 create-head 를 다시
-# 부르지 않으면 HEAD 축이 고쳐지기 전 코드에 붙는데, 트리·행 모두 정상이라 조용하다.
-if grep -q 'create-head' <<<"$(awk '/재시도의 R5b/,/^$/' "$SKILL_MD")"; then
-  echo "PASS: 재시도 문단이 create-head 재호출을 지시"
+# HEAD 축 트리 폐기는 **R6 뒤**여야 한다 — R6 의 flaky 재실행이 그 트리를 쓴다.
+# R5b 창 안에 `remove "$head_tree_dir"` 가 있으면 그 재실행이 불가능해진다(iter-7 CRITICAL).
+rm_in_r5b=$(awk -v s="$r5b_s" -v e="$r6_s" \
+  'NR>s && NR<e && index($0,"remove \"$head_tree_dir\"") { c++ } END { print c+0 }' "$SKILL_MD")
+rm_in_r6=$(awk -v s="$r6_s" -v e="$r7_s" \
+  'NR>s && NR<e && index($0,"remove \"$head_tree_dir\"") { c++ } END { print c+0 }' "$SKILL_MD")
+if [[ "$rm_in_r5b" -eq 0 && "$rm_in_r6" -ge 1 ]]; then
+  echo "PASS: HEAD 축 트리 폐기가 R6 뒤 (R5b 창 ${rm_in_r5b}회 · R6 창 ${rm_in_r6}회)"
 else
-  echo "FAIL: 재시도 문단에 create-head 재호출 지시 없음 (옛 B 에 붙는 조용한 실패)"
+  echo "FAIL: HEAD 축 트리 폐기 위치 (R5b 창 ${rm_in_r5b}회(0 이어야) · R6 창 ${rm_in_r6}회(≥1 이어야)) — flaky 재실행이 지워진 트리를 쓴다"
   fail=$((fail + 1))
 fi
+
+# R5b 실패 라우팅 — R6/R7 과 같은 규율. `create-head`/`run` 이 죽었을 때 무엇을 할지
+# 정의돼 있어야 하고, **폴백 대상 두 변수를 금지**해야 한다.
+r5b_route=1
+r5b_body=$(awk -v s="$r5b_s" -v e="$r6_s" 'NR>s && NR<e' "$SKILL_MD")
+if [[ -z "$r5b_body" ]]; then
+  echo "FAIL: R5b 창이 비었다 — 아래 검사가 공허하게 통과할 뻔했다"
+  fail=$((fail + 1)); r5b_route=0
+fi
+if [[ $r5b_route -eq 1 ]]; then
+  grep -q 'create-head' <<<"$r5b_body" || r5b_route=0
+  grep -q 'unrun' <<<"$r5b_body"       || r5b_route=0
+  # 폴백 금지가 명문화됐는가 — 관측 실패 시 두 대체 트리로 새지 말라는 지시
+  grep -q '폴백하지 않는다' <<<"$r5b_body" || r5b_route=0
+  if [[ $r5b_route -eq 1 ]]; then
+    echo "PASS: R5b 실패 라우팅 (create-head 실패 → unrun + degraded · 폴백 금지 명문화)"
+  else
+    echo "FAIL: R5b 실패 라우팅 없음 — 관측 실패가 음성 결과로 읽힌다"
+    fail=$((fail + 1))
+  fi
+fi
+
+# 재시도 경로: 새 샌드박스는 **새 B** 를 낸다. refresh 된 값으로 create-head 를 다시
+# 부르지 않으면 HEAD 축이 고쳐지기 전 코드에 붙는다.
+#
+# **방향을 잰다, 토큰이 아니라 (/qg iter-7, pr-test-analyzer).** 앞 버전은 그 문단에
+# `create-head` 라는 토큰이 있는지만 봤는데 문단이 그 토큰을 여러 번 쓰므로, 지시문을
+# *"기존 head_tree_dir 을 그대로 재사용한다"* 로 **반전**해도 통과했다 — 삭제는 잡히고
+# 반전은 안 잡히는 락이었다. 이제 재호출 지시(양)와 재사용 지시(음)를 함께 본다.
+retry_para=$(awk '/재시도의 R5b/,/^$/' "$SKILL_MD")
+if [[ -z "$retry_para" ]]; then
+  echo "FAIL: 재시도 문단 앵커 소실 (빈 코퍼스 위에서는 아래 검사가 공허하다)"
+  fail=$((fail + 1))
+elif ! grep -q 'refresh 된 `baseline_sha` 로 다시 부른다' <<<"$retry_para"; then
+  echo "FAIL: 재시도 문단에 'refresh 된 baseline_sha 로 재호출' 지시 없음"
+  fail=$((fail + 1))
+elif grep -qE '그대로 재사용|재사용한다|그대로 쓴다' <<<"$retry_para"; then
+  echo "FAIL: 재시도 문단이 옛 트리 재사용을 지시 — 고쳐지기 전 코드를 HEAD 로 잰다"
+  fail=$((fail + 1))
+else
+  echo "PASS: 재시도 문단이 refresh 재호출을 지시하고 재사용 지시가 0회"
+fi
+
 # R6 은 호출이 **둘**이다 — 어댑터별 대조 1회 + `--aggregate` 1회. "창 안에 1개 이상"
 # 으로 재면 둘 중 하나를 지워도 나머지가 만족시킨다(실측: 대조 호출만 지운 mutation 이
 # GREEN 이었다). 개수와 `--aggregate` 를 따로 잠근다.
@@ -741,9 +799,18 @@ else
     want && index($0,"> \"$aggregate_yaml\"") { f=1 }
     END { exit !f }' "$SKILL_MD" \
     || { echo "    R6 이 집계 stdout 을 \$aggregate_yaml 로 남기지 않음"; chain_ok=0; }
-  # ② R8 의 게이트 호출이 그 파일을 --aggregate 로 넘긴다 (호출 줄 또는 이어지는 줄)
+  # ② R8 의 게이트 호출이 **그 파일을** --aggregate 로 넘긴다 (호출 줄 또는 이어지는 줄).
+  #
+  # 두 분기 모두 리터럴 `"$aggregate_yaml"` 을 요구한다 (/qg iter-7, 리뷰어 2명).
+  # 앞 버전은 같은-줄 분기가 **토큰 `--aggregate` 만** 요구해서, 호출을 한 줄로 접고
+  # `--aggregate "$per_adapter_yaml"` 을 넘기는 mutation 이 통과했다. 그리고 그것은
+  # 이론이 아니라 실제 fail-open 이다: `per_adapter()` 도 `attribution_status:` 를 내므로
+  # 게이트가 **깨끗하게 파싱해** 어댑터의 `closed` 를 원장의 `closed` 와 대조하고 통과한다
+  # — 전사 게이트가 막으려던 바로 그 형태다. 현재 SKILL 이 2줄이라 GREEN 이었던 것이지
+  # 락의 이빨 때문이 아니었다.
   awk -v s="$r8_s" -v e="$r9_s" '
-    NR>s && NR<e && index($0,"scripts/check_qa_ledger.py") { want=NR+1; if (index($0,"--aggregate")) f=1 }
+    NR>s && NR<e && index($0,"scripts/check_qa_ledger.py") { want=NR+1
+      if (index($0,"--aggregate \"$aggregate_yaml\"")) { f=1; want=0 } }
     want && NR==want { if (index($0,"--aggregate \"$aggregate_yaml\"")) f=1; want=0 }
     END { exit !f }' "$SKILL_MD" \
     || { echo "    R8 의 check_qa_ledger 호출이 --aggregate \$aggregate_yaml 을 넘기지 않음"; chain_ok=0; }

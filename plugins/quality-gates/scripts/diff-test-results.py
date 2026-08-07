@@ -65,6 +65,12 @@ def read_text_or_fail4(path: str, label: str) -> str:
         return Path(path).read_text(encoding="utf-8")
     except OSError as exc:
         fail4(f"{label} 파일을 읽을 수 없음: {path} ({exc})")
+    except UnicodeDecodeError as exc:
+        # UnicodeDecodeError 는 ValueError 의 하위이지 OSError 가 아니다 — 위 절만
+        # 두면 비-UTF-8 입력이 raw traceback + exit 1 로 이 docstring 이 금지한
+        # 0/2/4 계약을 그대로 탈출한다. 형제 `check_qa_ledger.py` 는 이 절을 갖고
+        # 있는데 여기만 없었다 (/qg iter-7, M2).
+        fail4(f"{label} 파일이 UTF-8 이 아님: {path} ({exc})")
 
 
 def read_results(path: str, label: str) -> dict[str, tuple[str, str]]:

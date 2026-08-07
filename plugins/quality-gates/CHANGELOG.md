@@ -40,6 +40,48 @@
 - `SKILL.md` 의 `regardless of Review scope` 리터럴과 그것이 서술하던 동작.
 
 ### Fixed
+- **`create-head` 도입이 낳은 3 CRITICAL** (`/qg branch` iter-7 Review 게이트 — 리뷰어
+  5 + adversarial 이 29건 판정, 그중 다수가 iter-7 의 두 커밋 산물). 구조 방향은 맞았지만
+  계약이 불완전했다:
+  - **(a) R6 의 flaky 재실행이 쓸 트리를 R5b 가 먼저 지웠다** (리뷰어 4명 독립 수렴).
+    `NEW_REGRESSION` 후보를 HEAD 에서 1회 재실행하고 그 결과를 authoritative 로 선언하는데
+    트리가 없었다. 도달 가능한 결말 넷 중 둘이 fail-open — 그중 하나가 **이 커밋이 닫았다고
+    선언한 §11 ⑬ 을 flaky 경로로 되여는 것**이었다. 트리 수명을 R6 끝으로 옮기고 재실행에
+    `$head_tree_dir` 를 리터럴로 명시했다.
+  - **(b) `create-head` 가 sha 를 무검증으로 받았다.** 형제 `create-baseline "$merge_base"`
+    와 인자 모양이 같아 오값 하나로 HEAD 축이 기준선의 바이트 복사본이 되고, 전 unit 이
+    `(P,P) → STILL_GREEN → closed` 로 접혀 **degrade 신호 없이 PASS** 가 났다. 이제 이 세션
+    샌드박스의 봉인 커밋과 **대조**하고 다르면 die 한다. *도출*이 아니라 *대조* 인 이유:
+    verifier 는 그 샌드박스에서 Write·Bash 를 쥐고 `B` 위에 커밋할 수 있어 도출은 신뢰
+    앵커를 피검자에게 넘긴다. 대조는 **거부만 하고 선택은 못 한다.**
+  - **(c) R5b 에만 실패 라우팅이 없었다** (R6·R7 에는 있다). 관측 실패가 "고른 것이
+    사라졌다" 로 오보됐고, verifier 가 `head-<sid8>` 경로를 선점해 그 실패를 결정론적으로
+    유발할 수 있었다. AC67 로 표를 추가하고 두 폴백 트리를 명시 금지했다.
+- **iter-7 이 추가한 락 3개가 전부 뚫려 있었다.** ∃(두 번째 `create-head` 호출을 덧붙이면
+  통과) · 토큰 grep(재시도 지시문을 반전해도 통과) · 비대칭 needle(R8 호출을 한 줄로 접고
+  `$per_adapter_yaml` 을 넘기면 통과 — per-adapter YAML 도 `attribution_status` 를 내므로
+  **깨끗하게 파싱돼** 전사 게이트가 막으려던 fail-open 그 자체가 된다). 셋 다 내 mutation 이
+  **'삭제' 축만 흔들었기 때문**이고, 리뷰어는 추가·반전·형태변경으로 통과시켰다. 파일의
+  기존 관례(∀ over call-site)로 변환하고 ∀ 창을 R5b..**R7** 로 넓혔다 — 앞 창(R5b..R6)은
+  **자기가 지키려던 결함을 볼 수 없는 자리**였다.
+- **상류 degrade 가 한 소비자에서만 무성이던 것** (F11 + H4 + M6, 한 뿌리).
+  `compute-test-scope-candidates.sh` 의 1차 데이터 취득 줄에 `|| true` 가 남아 있었다 —
+  주석은 iter-6 E10 (§6.7 F6) 으로 닫혔다고 적었는데 **형제 호출에서만** 고쳐졌다. 또
+  `resolve-baseline.sh` 는 언제나 exit 0 이라 loud 분기가 '스크립트 부재' 에만 발화하고,
+  훨씬 흔한 `degraded: yes` 는 else 없이 통과해 브랜치 전체가 후보 0건이 됐다. 둘 다 loud
+  fail 로 바꿨고, `resolve-baseline.sh` 는 `symbolic-ref` 대상의 실존을 확인하게 했다
+  (dangling `origin/HEAD` — master→main rename 잔재 — 가 fallback 체인을 도달 불가로 만들던
+  것이 그 `degraded: yes` 의 최대 공급원이었다).
+- **비-ASCII 경로가 분자·분모에서 동시에 탈락**하던 것 — `core.quotePath` 기본 true.
+  Korean-primary 레포에서 변경된 한글 테스트 파일이 `--expected` 에도 못 들어가 백스톱조차
+  닿지 않았다. 양쪽 호출에 `-c core.quotePath=false`.
+- **`find` 가 플러그인 자신의 워크트리 네임스페이스로 하강**해 `N > M` 역전을 만들던 것 —
+  prune 추가. 이번 `create-head` 가 그 디렉토리의 세 번째 상주자였다.
+- **`diff-test-results.py` 의 `except OSError` 가 `UnicodeDecodeError` 를 못 잡던 것** —
+  형제 `check_qa_ledger.py` 에는 같은 라운드에 넣고 여기엔 안 넣었다.
+- **축마다 `run` 이 2회인데 mode 토큰이 1개**이던 계약 공백 — `--mode` 축 분리가 축 *사이*
+  의 접기는 없앴지만 축 *안* 의 2단계(bulk → per-unit 승격)에 답이 없었다. `per-unit` 이라
+  적으면 도말 degrade 가 꺼진다. **"하나라도 bulk 였으면 bulk"** 를 두 2단계 지점에 명시.
 - **원장 전사가 대조되지 않던 fail-open** (`/qg` iter-7 — 라운드 6·7 의 U3. 그 id 는
   §12 의 한 문장 밖 **어디에도 등재된 적이 없었다** — 이 라운드에 §11 ⑱ 로 실제 등재하고
   같은 라운드에 닫았다). R8 은 R6 이 낸 `attribution_status` 를 `floor:attribution` 의

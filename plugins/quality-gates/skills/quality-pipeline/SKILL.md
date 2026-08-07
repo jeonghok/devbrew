@@ -959,6 +959,8 @@ SR1 의 조상이다). `run` 이 관문을 다시 도는 중복은 `setup_cmd` �
 ```
 
 bulk 가 red 면 실패한 unit 에 대해서만 `per-unit` 으로 재실행한다 (2단 구조).
+
+> **이 축의 mode 토큰은 보수적으로 접는다 (/qg iter-7, security-reviewer).** 이 2단계 구조 때문에 한 축이 `bulk` 와 `per-unit` 을 **둘 다** 실행할 수 있는데 `--baseline-mode`/`--head-mode` 는 값이 하나다. 규칙: **이 축의 호출 중 하나라도 `bulk` 였으면 `bulk` 로 적는다.** `per-unit` 은 그 축의 모든 행이 per-unit 호출에서 나왔을 때만이다. 판단이 아니라 기계적 규칙인 이유는 반대 선택이 곧 fail-open 이기 때문이다 — `per-unit` 이라 적으면 도말 degrade 조건(`둘 중 하나라도 bulk`)이 꺼지고, 부분 승격이 남긴 `(F,F)` 행들이 `PRE_EXISTING` 으로 접혀 진짜 회귀를 가린다. 특히 기준선 축은 언제나 `bulk` 로 시작하므로 이 축의 답은 사실상 항상 `bulk` 다.
 미적중분이 비어 있으면 이 호출은 생략한다 — **트리 생성과 `detect` 는 생략하지
 않는다.** 상각되는 것은 테스트 *실행*이지 기준선 *관측*이 아니다.
 
@@ -1123,19 +1125,40 @@ head_tree_dir=$("${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-head \
 것이 없다. red 일 때만 실패한 unit 에 대해 `per-unit` 으로 재실행한다. 흔한 경우 2회,
 비싼 경우에만 정밀해진다.
 
+> **이 축의 mode 토큰은 보수적으로 접는다 (/qg iter-7, security-reviewer).** 이 2단계 구조 때문에 한 축이 `bulk` 와 `per-unit` 을 **둘 다** 실행할 수 있는데 `--baseline-mode`/`--head-mode` 는 값이 하나다. 규칙: **이 축의 호출 중 하나라도 `bulk` 였으면 `bulk` 로 적는다.** `per-unit` 은 그 축의 모든 행이 per-unit 호출에서 나왔을 때만이다. 판단이 아니라 기계적 규칙인 이유는 반대 선택이 곧 fail-open 이기 때문이다 — `per-unit` 이라 적으면 도말 degrade 조건(`둘 중 하나라도 bulk`)이 꺼지고, 부분 승격이 남긴 `(F,F)` 행들이 `PRE_EXISTING` 으로 접혀 진짜 회귀를 가린다. 특히 기준선 축은 언제나 `bulk` 로 시작하므로 이 축의 답은 사실상 항상 `bulk` 다.
+
 이 호출은 R5a³ 의 `Agent({…})` 블록 **밖**에 있어야 한다 — 위 호출 주체 불변식.
 verifier 가 디버깅 중 테스트를 돌리는 것 자체를 막지는 않지만(Bash 를 갖고 있고 setup
 확인에 필요하다), **그 결과가 판정에 들어가는 경로**를 막는다. verifier 의 evidence-log
 테스트 결과는 advisory 이고 이 호출 결과가 authoritative 다.
 
-모든 어댑터가 끝나면 HEAD 축 트리를 폐기한다 (R4③ 이 기준선 트리를 폐기하는 것과
-대칭 — 두 트리 다 일회용이고 수명은 자기 축의 실행 동안뿐이다):
+**HEAD 축 트리는 여기서 폐기하지 않는다 — R6 끝까지 살려 둔다.** R6 의 flaky 규칙이
+`NEW_REGRESSION` 후보를 **`$head_tree_dir` 에서 1회 재실행**하고 그 결과를
+authoritative 로 선언하기 때문이다. (/qg iter-7 리뷰 — 리뷰어 4명 독립 수렴한
+CRITICAL. 앞선 판본은 여기서 트리를 지우면서 *"R6 은 이 트리를 필요로 하지 않는다"* 고
+적었는데 **다음 스텝이 그 문장을 반증한다.** 그때 도달 가능한 결말 넷 중 둘이
+fail-open 이었다: 살아 있는 유일한 HEAD 측 트리인 verifier 샌드박스에서 재실행하면 이
+브랜치가 닫았다고 선언한 §11 ⑬ 이 그 자리에서 되열리고 — 게다가 그 재실행이
+authoritative 라 verifier 가 만든 상태에서 난 green 이 회귀를 강등한다 — 산출물이 R7 의
+검사 대상 트리에 떨어져 §6.7 S4 의 거짓 terminal FAIL 까지 함께 살아난다.)
 
-```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "$head_tree_dir"
-```
+**Step R5b 실패 라우팅 (R6·R7 표와 같은 규율 — 관측 없음은 음성 결과가 아니다).**
 
-행은 이미 `$head_rows_file` 에 있으므로 R6 은 이 트리를 필요로 하지 않는다.
+| R5b 결과 | 라우팅 |
+|---|---|
+| `create-head` 가 non-zero | **HEAD 축을 관측하지 못했다.** stderr 를 verbatim 노출하고, 선택한 unit 마다 `<unit>\tunrun\t-` 로 HEAD 행을 채운 뒤 `verification` 을 **`degraded`** 로 두고 R6 으로 간다. `$runtime_project_dir` 로도 `$project_dir` 로도 **폴백하지 않는다** — 전자는 §11 ⑬ 을, 후자는 이 스텝의 폴백 규칙을 위반한다. |
+| `run` 이 non-zero (러너 부재 exit 3 제외 — 그것은 정상 신호다) | 같은 처리. 그 어댑터의 unit 을 `unrun` 으로 채우고 `verification: degraded`. |
+| 위 둘 다 아님 | 정상 — R6 으로 간다. |
+
+이 표가 없던 판본에서는 `create-head` 가 죽으면 `head_tree_dir` 이 빈 문자열이 되고
+`run ""` 가 exit 2 + 빈 stdout 을 내, 행 부재가 **"고른 것이 사라졌다" 쪽 카테고리로**
+라벨됐다 — 방향은 fail-closed 지만 **사용자에게 가는 사유가 틀렸다** ("HEAD 워크트리를
+만들지 못했다" 가 진실이다). 그 카테고리 이름을 여기 리터럴로 적지 않는 이유는 이
+창에 그 토큰이 0회여야 한다는 별도의 회귀 락이 있기 때문이다 — 정정 노트가 옛 값을
+인용하면 그 인용 자체가 락 위반이 된다. 또 verifier 는
+`evidence_dir` 로 메인 레포 경로와 세션 id 를 받고 Bash 를 쥐므로 자기 턴에
+`head-<sid8>` 경로를 미리 심어 이 실패를 **결정론적으로 유발**할 수 있다. 그 경우에도
+위 표가 있으면 결과는 "검증 못 함" 으로 정직하게 보고되고 PASS 는 불가하다.
 
 **Step R6 — 대조 (결정론).** 어댑터마다 한 번씩:
 
@@ -1206,7 +1229,18 @@ verifier 가 디버깅 중 테스트를 돌리는 것 자체를 막지는 않지
 된다. 캐시가 무엇을 내줬든 상관없다.
 
 **flaky — 재실행은 정확히 1회다 — green 이 나올 때까지가 아니다.** `NEW_REGRESSION`
-후보만 HEAD 에서 1회 재실행한다. 또 fail 이면 확증 `NEW_REGRESSION`, pass 면
+후보만 **`$head_tree_dir` 에서** 1회 재실행한다:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" run \
+  "$head_tree_dir" "$runner" per-unit "${flaky_candidates[@]}"
+```
+
+**어느 트리인지가 이 문장의 load-bearing 부분이다.** "HEAD 에서" 라고만 적었던 앞
+판본은 R5b 가 그 트리를 이미 지운 뒤였고, 살아 있던 유일한 HEAD 측 트리가 verifier
+샌드박스였다 — 거기서 재실행하면 §11 ⑬ 이 되열리는데 그 결과가 **authoritative** 로
+선언돼 있어 verifier 가 만든 상태의 green 이 진짜 회귀를 강등한다. `$runtime_project_dir`
+도 `$project_dir` 도 이 자리에 오면 안 된다. 또 fail 이면 확증 `NEW_REGRESSION`, pass 면
 **귀속 카테고리가 아니라 원장 note 로** 기록한다 — `attribution` 차원에
 `derived: flaky <unit> (기준선 pass · HEAD 1회 fail → 재실행 pass)` 한 줄을 남기고
 보고서에 올리되 게이트를 FAIL 시키지 않는다. `FLAKY` 를 **토큰처럼** 적었던 앞 문장은
@@ -1225,6 +1259,18 @@ verifier 가 디버깅 중 테스트를 돌리는 것 자체를 막지는 않지
 "${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py" --aggregate \
   --expected-adapters "$adapter_count" "${per_adapter_yamls[@]}" > "$aggregate_yaml"
 ```
+
+집계까지 끝나면 **이제** HEAD 축 트리를 폐기한다 (R4③ 이 기준선 트리를 폐기하는 것과
+대칭 — 두 트리 다 일회용이지만 HEAD 축의 수명은 **자기 축의 실행 + flaky 재실행 + 대조**
+까지다):
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "$head_tree_dir"
+```
+
+R7 은 `sandbox_dir` 만 검사하므로 이 트리가 R6 까지 살아 있어도 가드에 닿지 않는다 —
+§6.7 S4 의 봉쇄는 *수명*이 아니라 *다른 트리*라는 사실이 만든다. 다만 수명이 R6 까지
+늘어난 만큼 §11 ⑳ 의 누수 창도 그만큼 넓어진다(같은 라운드에 ⑳ 에 반영했다).
 
 **stdout 을 `$aggregate_yaml` 파일로 남긴다** — 값을 눈으로만 읽고 버리면 R8 의 전사
 대조(`check_qa_ledger.py --aggregate`)가 대조할 원본이 없다. 이 파일이 R8 까지 살아야
@@ -1460,7 +1506,7 @@ Branch:
 
   **재시도는 R5b·R6 도 다시 돈다 — verifier 재-dispatch 만으로 끝나지 않는다.** 재시도가 만드는 것은 **새 트리**이고, 이전 `head_rows_file` 은 이미 폐기된 트리에서 나온 행이다. 그것을 그대로 R6 에 넘기면 `.env` 하나 고쳐 초록이 된 트리에서 옛 red 로 `confirmed_product_defect: true` 가 서서 **고쳐진 코드에 FAIL** 이 나고, 반대 방향은 더 나쁘다 — 옛 green 행이 재시도가 새로 만든 회귀를 가린다. 재-dispatch 뒤 순서는 **R5b(HEAD 축 재실행) → R6(대조 + 집계 재호출) → R7 → R8** 이고, 이전 HEAD 행은 **버린다**(덮어쓰지 말고 새로 만든다 — 부분 덮어쓰기는 두 트리의 행을 한 파일에 섞는다). 기준선 측 R4 는 다시 돌리지 않는다: `merge_base` 가 그대로라 캐시 키가 같고, 기준선은 재시도로 바뀌지 않는다.
 
-  **재시도의 R5b 는 `create-head` 를 refresh 된 `baseline_sha` 로 다시 호출한다.** create-sandbox 는 호출마다 **새 커밋 `B`** 를 낸다 — 위에서 `baseline_sha` 를 재포착하는 이유가 그것이다. 그 재포착된 값을 `create-head` 에 넘기지 않고 옛 `baseline_sha` 를 재사용하면, HEAD 축 트리가 **재시도가 고치기 전 코드**에 붙는다. 그러면 R7 의 mutation-guard 는 새 트리를 보고 통과시키는데 R6 이 대조하는 행은 옛 코드에서 나온 것이라, 실패가 verdict 층이 아니라 **귀속 층에서 조용히** 일어난다 — 트리가 존재하고 행이 나오므로 어떤 degrade 신호도 서지 않는다. `create-head` 는 같은 경로에 idempotent 하므로 refresh 된 값으로 그냥 다시 부르면 되고, 이전 HEAD 축 트리는 그 호출이 정리한다.
+  **재시도의 R5b 는 `create-head` 를 refresh 된 `baseline_sha` 로 다시 호출한다.** create-sandbox 는 호출마다 **새 커밋 `B`** 를 낸다 — 위에서 `baseline_sha` 를 재포착하는 이유가 그것이다. 그 재포착된 값을 `create-head` 에 넘기지 않고 옛 `baseline_sha` 를 재사용하면, HEAD 축 트리가 **재시도가 고치기 전 코드**에 붙는다. 그러면 R7 의 mutation-guard 는 새 트리를 보고 통과시키는데 R6 이 대조하는 행은 옛 코드에서 나온 것이라, 실패가 verdict 층이 아니라 **귀속 층에서 조용히** 일어난다 — 트리가 존재하고 행이 나오므로 어떤 degrade 신호도 서지 않는다. `create-head` 는 refresh 된 `baseline_sha` 로 다시 부른다 — 그리고 **틀린 값을 넘기면 이제 죽는다**: `create-head` 는 넘어온 sha 가 이 세션 샌드박스의 봉인 커밋과 같은지 대조하고 다르면 die 한다(옛 `B` 도 `merge_base` 도 거부). **다만 '이전 트리는 그 호출이 정리한다'는 보장이 아니다.** `make_detached_worktree` 는 **non-force** `git worktree remove` 만 시도하고, 거부되면 조용히 파괴하는 대신 die 한다 — 그런데 누수된 HEAD 축 트리의 내용물은 정의상 테스트 산출물이고, §11 ⑨ 가 적었듯 `make`·`npm-script` 계열은 그것을 억제할 수단이 없어 **비-ignored 로 남을 수 있다.** 그 경우가 정확히 non-force 가 거부하는 경우이므로 재사용이 아니라 loud die 가 나고, 그 세션에서는 HEAD 축을 다시 만들 수 없다(경로가 `<prefix>-<sid8>` 로 고정이므로). die 메시지가 안내하는 수동 제거 또는 새 세션이 유일한 복구다 — §11 ⑳ 에 등급과 함께 등재했다.
 - **Skip with evidence** → record SKIP_WITH_EVIDENCE and continue.
 - **Stop** → final summary aborted at the Runtime gate.
 

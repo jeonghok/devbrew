@@ -49,6 +49,14 @@ if [ -z "$(git diff --name-only 2>/dev/null)" ]; then
   RB_MERGE_BASE=$(printf '%s\n' "$RB_OUT" | awk '$1 == "merge_base:" { print $2 }')
   if [ "$RB_DEGRADED" = "no" ] && [ -n "$RB_MERGE_BASE" ] && [ "$RB_MERGE_BASE" != "-" ]; then
     REVIEW_RANGE="$RB_MERGE_BASE..HEAD"
+  else
+    # /qg iter-7 (H4): 위 `if !` 분기는 **스크립트 부재에만** 발화한다 —
+    # `resolve-baseline.sh` 는 자기 :37 에 적힌 대로 **언제나 exit 0** 이고 실패를
+    # `degraded: yes` 로 표현하기 때문이다. 그래서 훨씬 흔한 경우(정상 실행 +
+    # degraded)가 else 없이 조용히 통과해, 이 블록의 전제(워킹트리가 깨끗함) 아래
+    # `REVIEW_RANGE=""` 가 되어 **브랜치 전체가 후보 0건**이 됐다. 두 원인이 바이트
+    # 동일한 출력을 내는데 하나만 loud 였다. 이제 둘 다 loud 다.
+    echo "compute-test-scope-candidates: baseline 미확정 (degraded='${RB_DEGRADED:-?}' merge_base='${RB_MERGE_BASE:-?}') — 브랜치 범위를 쓰지 못해 워킹트리 diff 만 봅니다. 워킹트리가 깨끗하면 후보는 0건이 되며, 그것은 '영향이 없다'가 아니라 '범위를 확정하지 못했다'입니다" >&2
   fi
 fi
 
@@ -64,12 +72,26 @@ TESTRE='(test|spec)\.[jt]sx?$|_test\.py$|(^|/)test_[^/]*\.py$|\.test\.|\.spec\.|
 # 후보 산출과 **같은 TESTRE**를 전 트리에 적용한다. 분모가 모델 자기보고이면
 # 과선택이 심해질수록 분모도 같이 부풀려 비율이 정상으로 보인다.
 if [ "${1:-}" = "--total" ]; then
-  git ls-files | grep -cE "$TESTRE" || true
+  # M8: quotePath 기본 true 는 비-ASCII 경로를 인용·8진 이스케이프해 TESTRE 를
+  # 못 만족시킨다 — 분자(위 git diff)와 **같은 설정**이어야 N>M 이 안 생긴다.
+  git -c core.quotePath=false ls-files | grep -cE "$TESTRE" || true
   exit 0
 fi
 
+# 1차 데이터 취득. **`|| true` 를 쓰지 않는다 (/qg iter-7, F11).** 앞 버전은 위 :38-43
+# 주석이 그 패턴을 iter-6 E10 (§6.7 F6) 으로 닫았다고 적어 놓고 **형제 호출에서만**
+# 고쳤고, 정작 후보 전량이 나오는 이 줄에는 그대로 남아 있었다. loose object 손상·부분
+# 클론·중단된 fetch 로 git 이 exit 128 을 내면 stdout 은 비고 exit 0 이 되어,
+# `resolve-baseline.sh` 가 `degraded: no` 를 낸 그대로 **"건강한 baseline + 영향 테스트
+# 0건" = "이 diff 는 테스트를 건드리지 않는다"** 가 된다.
+# `core.quotePath=false` 는 M8 — 기본값 true 는 비-ASCII 경로를 8진 이스케이프해서
+# 분자·분모 양쪽에서 동시에 탈락시킨다(Korean-primary 레포에 현실적인 입력이다).
 # shellcheck disable=SC2086  # REVIEW_RANGE intentionally word-splits
-CHANGED_ALL=$(git diff $REVIEW_RANGE --name-only 2>/dev/null || true)
+if ! CHANGED_ALL=$(git -c core.quotePath=false diff $REVIEW_RANGE --name-only 2>&1); then
+  echo "compute-test-scope-candidates: git diff 실패 (range='${REVIEW_RANGE:-워킹트리}') — 후보를 산출할 수 없습니다. 아래는 git 의 출력입니다:" >&2
+  printf '%s\n' "$CHANGED_ALL" >&2
+  exit 4
+fi
 
 # Split changed files into src vs test.
 CHANGED_SRC=$(echo "$CHANGED_ALL" | grep -vE "$TESTRE" || true)
@@ -84,19 +106,19 @@ while IFS= read -r src; do
       base=$(basename -- "$src" .py)
       while IFS= read -r found; do
         [ -n "$found" ] && MAPPED="${MAPPED}${found}"$'\n'
-      done < <(find . -type f \( -name "test_${base}.py" -o -name "${base}_test.py" \) 2>/dev/null | sed 's|^\./||')
+      done < <(find . -path ./.claude/quality-gates/worktrees -prune -o -type f \( -name "test_${base}.py" -o -name "${base}_test.py" \) -print 2>/dev/null | sed 's|^\./||')
       ;;
     *.ts|*.tsx|*.js|*.jsx)
       base=$(basename -- "$src")
       base="${base%.*}"
       while IFS= read -r found; do
         [ -n "$found" ] && MAPPED="${MAPPED}${found}"$'\n'
-      done < <(find . -type f \( \
+      done < <(find . -path ./.claude/quality-gates/worktrees -prune -o -type f \( \
           -name "${base}.test.ts"   -o -name "${base}.test.tsx" \
        -o -name "${base}.test.js"   -o -name "${base}.test.jsx" \
        -o -name "${base}.spec.ts"   -o -name "${base}.spec.tsx" \
        -o -name "${base}.spec.js"   -o -name "${base}.spec.jsx" \
-        \) 2>/dev/null | sed 's|^\./||')
+        \) -print 2>/dev/null | sed 's|^\./||')
       ;;
     # Other languages: no heuristic; only CHANGED_TESTS counts (handled below).
   esac
