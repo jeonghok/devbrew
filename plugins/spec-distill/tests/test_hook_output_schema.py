@@ -325,8 +325,12 @@ class TestReviewDispatchMandateScope(HookOutputSchemaTestBase):
     # 본문 고유(body-unique) 조각만 쓴다. 헤더·주석에도 있는 문구로 assert 하면
     # 정작 emit 되는 문장을 지워도 통과한다.
     SCOPE_PHRASE = "이번 dispatch 1회에만 유효"
-    REARM_PHRASE = "다시 편집할 때"
     CAP_PHRASE = "자동 dispatch를 중단한다"
+
+    # mandate 가 **정확히 이 문장으로 끝나야** 한다. 금지어 blacklist 로는 부족하다 —
+    # 다른 표현("커밋 이후에는 자동 리뷰가 붙지 않는다")을 새로 지어 붙이면 금지어가
+    # 없어 통과한다. 종결 일치로 두면 어떤 표현이든 **덧붙이는 순간** RED 다.
+    EXPECTED_TAIL = "이 mandate는 이번 dispatch 1회에만 유효하다."
 
     IN_SCOPE_DOC = "docs/superpowers/specs/2026-08-06-scope-design.md"
 
@@ -350,7 +354,7 @@ class TestReviewDispatchMandateScope(HookOutputSchemaTestBase):
         return json.loads(result.stdout)
 
     def test_normal_dispatch_states_mandate_lifetime(self):
-        """정상 dispatch 는 mandate 의 수명과 재발동 조건을 함께 밝힌다."""
+        """정상 dispatch 는 mandate 의 수명을 밝히고, **거기서 멈춘다**."""
         reason = self._dispatch(
             "test-scope-normal", spec_path=self.IN_SCOPE_DOC,
         ).get("reason", "")
@@ -361,9 +365,15 @@ class TestReviewDispatchMandateScope(HookOutputSchemaTestBase):
                 f"세션 전체 kill switch 를 고른다 — reason: {reason!r}"
             ),
         )
-        self.assertIn(
-            self.REARM_PHRASE, reason,
-            msg=f"재발동 종료 조건(커밋)이 빠졌다 — reason: {reason!r}",
+        # 재발동 조건을 덧붙이려는 모든 시도를 여기서 막는다. 두 번 시도했고 두 번 다
+        # 거짓이었다(커밋 단정 → git fail-open / 재편집 단정 → mark_reviewed 경로).
+        self.assertTrue(
+            reason.rstrip().endswith(self.EXPECTED_TAIL),
+            msg=(
+                "mandate 가 수명 문장 뒤에 무언가를 더 주장한다. 재발동은 "
+                "(원장 ∧ git ∧ 상한)의 함수이고 셋 다 emit 시점에 확정되지 않으므로 "
+                f"어떤 단정도 언젠가 거짓이 된다 — reason: {reason!r}"
+            ),
         )
 
     def test_normal_dispatch_does_not_claim_dispatch_stopped(self):
@@ -394,10 +404,6 @@ class TestReviewDispatchMandateScope(HookOutputSchemaTestBase):
         self.assertNotIn(
             self.SCOPE_PHRASE, reason,
             msg=f"중단된 문서에 '1회 유효'를 함께 주장한다 — reason: {reason!r}",
-        )
-        self.assertNotIn(
-            self.REARM_PHRASE, reason,
-            msg=f"중단된 문서에 재발동을 약속한다 — reason: {reason!r}",
         )
 
 
@@ -472,38 +478,50 @@ class TestMandateClaimsAreTrue(HookOutputSchemaTestBase):
             ),
         )
 
-    def test_claim_reedit_rearms_holds(self):
-        """주장 2: "재발동은 이 문서를 다시 편집할 때 일어난다"."""
+    def _mark_reviewed(self, sid: str, abs_path: Path):
+        return subprocess.run(
+            ["python3", str(SCRIPTS_DIR / "arm_ledger.py"), "mark-reviewed",
+             sid, str(abs_path)],
+            cwd=self.repo, text=True, capture_output=True, timeout=30,
+            env={"HOME": os.environ.get("HOME", "/tmp"), "PATH": os.environ["PATH"]},
+        )
+
+    def test_unreviewed_doc_rearms_on_reedit(self):
+        """미리뷰·미커밋 문서는 재편집 시 재발동한다 (Law 1 게이트 생존)."""
         sid = "test-claim-reedit"
         self._run_validator(sid, self._write_doc())
         self._run_stop(sid)  # dispatch → pending 소진
         self.assertFalse(
             self._is_armed(sid), msg="전제 실패: dispatch 후에도 pending 이 남았다")
 
-        # 미리뷰·미커밋 문서를 다시 편집하면 재발동해야 한다.
         self._run_validator(sid, self._write_doc(extra="\n<!-- edit 2 -->\n"))
         self.assertTrue(
             self._is_armed(sid),
-            msg="재편집했는데 재발동하지 않는다 — 주장 2 가 거짓이거나 게이트가 꺼졌다",
+            msg="미리뷰 문서를 재편집했는데 재발동하지 않는다 — 게이트가 조용히 꺼졌다",
         )
 
-    def test_mandate_makes_no_unconditional_commit_promise(self):
-        """`is_born()` 은 git 판정 실패를 arm 쪽으로 fail-open 한다.
+    def test_reviewed_doc_does_NOT_rearm_on_reedit(self):
+        """**리뷰를 마친** 문서는 재편집해도 재발동하지 않는다.
 
-        따라서 "커밋하면 arm 되지 않는다" 류의 **무조건** 단정은 mandate 에 있어서는
-        안 된다. 초판이 그 단정을 담았다가 이 검증에 걸렸다.
+        이 쌍(위 테스트와 함께)이 "재발동은 재편집할 때 일어난다" 류의 **무조건**
+        단정이 왜 불가능한지를 보인다 — 같은 행동(재편집)이 원장 상태에 따라 정반대
+        결과를 낸다. 초판 mandate 가 그 단정을 담았다가 여기 걸렸다.
         """
-        sid = "test-claim-nopromise"
-        self._run_validator(sid, self._write_doc())
-        reason = json.loads(self._run_stop(sid).stdout).get("reason", "")
-        for banned in ("커밋하면", "git-tracked"):
-            self.assertNotIn(
-                banned, reason,
-                msg=(
-                    f"mandate 가 커밋에 대해 무조건 단정한다('{banned}') — is_born() "
-                    f"fail-open 경로에서 거짓이 된다: {reason!r}"
-                ),
-            )
+        sid = "test-claim-reviewed"
+        doc = self._write_doc()
+        self._run_validator(sid, doc)
+        self._run_stop(sid)
+        r = self._mark_reviewed(sid, doc)
+        self.assertEqual(r.returncode, 0, msg=f"전제 실패: mark-reviewed rc={r.returncode} {r.stderr}")
+
+        self._run_validator(sid, self._write_doc(extra="\n<!-- edit 2 -->\n"))
+        self.assertFalse(
+            self._is_armed(sid),
+            msg=(
+                "리뷰를 마친 문서가 재편집만으로 다시 arm 됐다 — arm-once 가 깨졌거나, "
+                "mandate 에 '재편집하면 재발동' 을 다시 적어도 된다는 뜻이 아니다"
+            ),
+        )
 
 
 class TestReviewDispatchOrdering(unittest.TestCase):

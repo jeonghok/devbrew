@@ -288,16 +288,16 @@ def main() -> int:
             "직접 호출하라."
         )
     else:
-        # 두 절 모두 **무조건 참**인 것만 남긴다. 이전 판본은 "커밋하면 더 이상
-        # arm되지 않는다"까지 단정했는데, `is_born()` 이 git 판정 실패를 전부 arm
-        # 쪽으로 fail-open 하므로(`git ls-files` timeout·rc 128 등) 커밋된 문서도
-        # arm 될 수 있다 — 훅이 거짓을 주장하고 있었다. 커밋 권고는 approve 시점
-        # `check-born` advisory 가 이미 담당하며, 거기서는 실제 git 판정 결과를
-        # 손에 쥐고 말하므로 거짓이 될 수 없다.
-        msg_lines.append(
-            "이 mandate는 이번 dispatch 1회에만 유효하다. "
-            "재발동은 이 문서를 다시 편집할 때 일어난다."
-        )
+        # **재발동 조건은 적지 않는다.** 두 번 시도했고 두 번 다 거짓이었다:
+        #   (1) "커밋하면 arm되지 않는다" — is_born() 이 git 판정 실패를 arm 쪽으로
+        #       fail-open 하므로 커밋된 문서도 arm 될 수 있다.
+        #   (2) "재편집하면 재발동한다"  — verdict 후 mark_reviewed 가 armed_paths 에
+        #       기록하므로 **정상 경로**에서는 재편집해도 재발동하지 않는다.
+        # 재발동은 (원장 ∧ git ∧ 상한) 세 입력의 함수이고 셋 다 emit 시점에 확정되지
+        # 않는다. 훅이 모르는 것을 단정하면 그 문장은 언젠가 거짓이 된다.
+        # 남기는 것은 emit 시점에 **이미 일어난 사실** 하나뿐이다 — rewrite_state 가
+        # 위에서 pending 을 소진했으므로 이 강제는 이번 턴을 넘기지 않는다.
+        msg_lines.append("이 mandate는 이번 dispatch 1회에만 유효하다.")
     msg = " ".join(msg_lines)
     # AC7.1: rewrite BEFORE emit. AC7.2: rewrite-fail → no emit (block storm guard).
     try:
