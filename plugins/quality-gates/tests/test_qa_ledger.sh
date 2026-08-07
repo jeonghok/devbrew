@@ -29,13 +29,27 @@ write_aggregate() {   # write_aggregate <file> [attribution_status]
     "${2:-closed}" > "$1"
 }
 
+# 배정 TSV 를 쓴다 — `--assign-rows` 가 필수가 된 뒤로 모든 호출에 하나가 필요하다.
+# $2 는 unclaimed 행 수(기본 0). claim 된 행은 항상 하나 넣는다: 빈 파일은 "배정 0건"
+# 이라는 **다른 축**(§11 ⑭)이라 기본 픽스처로 쓰면 케이스가 그 축에 얹힌다.
+write_assign_rows() {   # write_assign_rows <file> [unclaimed-count]
+  local f=$1 n=${2:-0} i
+  printf 'tests/test_a.py\tunittest\tfile\n' > "$f"
+  for ((i = 1; i <= n; i++)); do
+    printf 'spec/foo_%d_spec.rb\tunclaimed\tfile\n' "$i" >> "$f"
+  done
+}
+
 # 기본 러너. 기존 케이스들의 원장은 `floor:attribution` 을 `closed` 로 쓰므로 집계도
 # `closed` 로 맞춘다 — 전사 대조를 *통과*시켜 두어야, 그 케이스들이 재려던 축(누락·
 # 문법·모순)이 계속 그 축에서 판정된다. 안 맞추면 전부 exit 2 로 죽어 **음성 케이스가
-# 엉뚱한 이유로 통과**하는 위양성이 된다.
+# 엉뚱한 이유로 통과**하는 위양성이 된다. `--assign-rows` 도 같은 이유로 unclaimed
+# 0건을 기본으로 쓴다 — 원장의 `verification` 이 `closed` 이므로 집행이 발화하면 안 된다.
 run_ledger() {
   write_aggregate "$TMP/agg.yaml"
-  python3 "$LEDGER" --aggregate "$TMP/agg.yaml" "$1" >/dev/null 2>&1
+  write_assign_rows "$TMP/assign.tsv"
+  python3 "$LEDGER" --aggregate "$TMP/agg.yaml" --assign-rows "$TMP/assign.tsv" "$1" \
+    >/dev/null 2>&1
 }
 
 # T14: 완전한 원장 → 0
@@ -146,9 +160,13 @@ case_stdin_utf8_locale_independent() {
   # 깨지는 같은 결함이 재입장한다. ASCII 전용 픽스처는 그 축을 지나가지 않는다.
   printf '# 어댑터 집계 (한글 주석 — 로케일 독립 read 검사용)\nadapters: [pytest]\nattribution_status: closed\n' \
     > "$TMP/agg_ko.yaml"
+  # 배정 TSV 도 같은 이유로 한글을 담는다 — `--assign-rows` 는 **세 번째 read 경로**이고,
+  # 여기서 encoding 을 빠뜨리면 non-UTF-8 로케일에서만 깨지는 같은 결함이 재입장한다.
+  printf '테스트/한글_test.py\tunittest\tfile\n' > "$TMP/assign_ko.tsv"
   if PYTHONIOENCODING=ascii LC_ALL=C python3 "$LEDGER" \
-       --aggregate "$TMP/agg_ko.yaml" < "$TMP/l.md" >/dev/null 2>&1; then
-    pass "stdin·집계 두 read 경로: ascii 로케일에서도 exit 0 (UTF-8 명시)"
+       --aggregate "$TMP/agg_ko.yaml" --assign-rows "$TMP/assign_ko.tsv" \
+       < "$TMP/l.md" >/dev/null 2>&1; then
+    pass "stdin·집계·배정 세 read 경로: ascii 로케일에서도 exit 0 (UTF-8 명시)"
   else
     fail "read 경로가 로케일 의존 디코딩으로 깨짐 (I1)"
   fi
@@ -186,22 +204,25 @@ case_derived_named_bad_status() {
 case_transcription_matches_machine() {
   setup
   local ok=1
+  # 이 케이스가 재는 축은 **전사**뿐이다 — 배정은 unclaimed 0건으로 고정해 ㉓ 집행이
+  # 발화하지 않게 둔다. 안 그러면 두 축이 섞여 어느 쪽이 red 를 냈는지 못 가른다.
+  write_assign_rows "$TMP/as.tsv"
   # 양의 짝 ①: closed/closed → 통과 (대조가 코퍼스를 읽고 같다고 판정한다)
   write_ledger "$TMP/l.md"; write_aggregate "$TMP/a.yaml" closed
-  python3 "$LEDGER" --aggregate "$TMP/a.yaml" "$TMP/l.md" >/dev/null 2>&1 \
-    || { echo "    일치(closed/closed)가 red"; ok=0; }
+  python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as.tsv" "$TMP/l.md" \
+    >/dev/null 2>&1 || { echo "    일치(closed/closed)가 red"; ok=0; }
   # 양의 짝 ②: degraded/degraded → 통과. `degraded` 는 1급 상태이지 실패가 아니다.
   grep -vF 'floor:attribution' "$TMP/l.md" > "$TMP/ld.md"
   printf -- '- floor:attribution — degraded — 귀속 불가 1건\n' >> "$TMP/ld.md"
   write_aggregate "$TMP/ad.yaml" degraded
-  python3 "$LEDGER" --aggregate "$TMP/ad.yaml" "$TMP/ld.md" >/dev/null 2>&1 \
-    || { echo "    일치(degraded/degraded)가 red"; ok=0; }
+  python3 "$LEDGER" --aggregate "$TMP/ad.yaml" --assign-rows "$TMP/as.tsv" "$TMP/ld.md" \
+    >/dev/null 2>&1 || { echo "    일치(degraded/degraded)가 red"; ok=0; }
   # 음 ①: 위험 방향 — 기계는 degraded 인데 원장은 closed (PASS 로 새는 방향)
-  python3 "$LEDGER" --aggregate "$TMP/ad.yaml" "$TMP/l.md" >/dev/null 2>&1 \
-    && { echo "    기계 degraded → 원장 closed 가 통과함 (PASS 유출)"; ok=0; }
+  python3 "$LEDGER" --aggregate "$TMP/ad.yaml" --assign-rows "$TMP/as.tsv" "$TMP/l.md" \
+    >/dev/null 2>&1 && { echo "    기계 degraded → 원장 closed 가 통과함 (PASS 유출)"; ok=0; }
   # 음 ②: 반대 방향도 잡는다 — 한 방향만 잡으면 '언제나 closed 를 기대' 로 퇴화한다
-  python3 "$LEDGER" --aggregate "$TMP/a.yaml" "$TMP/ld.md" >/dev/null 2>&1 \
-    && { echo "    기계 closed → 원장 degraded 가 통과함"; ok=0; }
+  python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as.tsv" "$TMP/ld.md" \
+    >/dev/null 2>&1 && { echo "    기계 closed → 원장 degraded 가 통과함"; ok=0; }
   [[ $ok -eq 1 ]] && pass "전사 대조 — 양방향 불일치 red · 양의 짝 2종 green" \
                   || fail "전사 대조 이빨 없음"
   cleanup
@@ -211,22 +232,75 @@ case_transcription_matches_machine() {
 case_aggregate_is_mandatory_and_fail_closed() {
   setup
   write_ledger "$TMP/l.md"
+  write_assign_rows "$TMP/as.tsv"
   local ok=1
-  python3 "$LEDGER" "$TMP/l.md" >/dev/null 2>&1 \
+  python3 "$LEDGER" --assign-rows "$TMP/as.tsv" "$TMP/l.md" >/dev/null 2>&1 \
     && { echo "    --aggregate 없이 통과함 (조용한 면제)"; ok=0; }
-  python3 "$LEDGER" --aggregate "$TMP/nope.yaml" "$TMP/l.md" >/dev/null 2>&1 \
-    && { echo "    집계 파일 부재인데 통과함"; ok=0; }
+  python3 "$LEDGER" --aggregate "$TMP/nope.yaml" --assign-rows "$TMP/as.tsv" "$TMP/l.md" \
+    >/dev/null 2>&1 && { echo "    집계 파일 부재인데 통과함"; ok=0; }
   printf 'adapters: [pytest]\n' > "$TMP/a0.yaml"
-  python3 "$LEDGER" --aggregate "$TMP/a0.yaml" "$TMP/l.md" >/dev/null 2>&1 \
-    && { echo "    attribution_status 0개인데 통과함"; ok=0; }
+  python3 "$LEDGER" --aggregate "$TMP/a0.yaml" --assign-rows "$TMP/as.tsv" "$TMP/l.md" \
+    >/dev/null 2>&1 && { echo "    attribution_status 0개인데 통과함"; ok=0; }
   # 2개 이상도 거부한다 — 첫 매치만 보면 원하는 값을 앞에 덧붙여 대조를 우회할 수 있다.
   # 원장은 이 케이스가 만든 `$TMP/l.md` 를 쓴다. 다른 케이스의 파일을 참조하면
   # `cleanup` 뒤라 **파일 부재로 non-zero** 가 나서 이 assert 가 엉뚱한 이유로 통과한다.
   printf 'attribution_status: closed\nattribution_status: degraded\n' > "$TMP/a2.yaml"
-  python3 "$LEDGER" --aggregate "$TMP/a2.yaml" "$TMP/l.md" >/dev/null 2>&1 \
-    && { echo "    attribution_status 2개인데 통과함"; ok=0; }
+  python3 "$LEDGER" --aggregate "$TMP/a2.yaml" --assign-rows "$TMP/as.tsv" "$TMP/l.md" \
+    >/dev/null 2>&1 && { echo "    attribution_status 2개인데 통과함"; ok=0; }
   [[ $ok -eq 1 ]] && pass "대조 입력 부재·불량 4종 → 전부 non-zero (fail-closed)" \
                   || fail "대조 입력 fail-open"
+  cleanup
+}
+
+# T93 + AC68 (§11 ㉓): `unclaimed` → `verification: degraded` 를 기계가 집행한다.
+#
+# 닫는 fail-open: `assign` 의 구조적 거부 3곳이 낳는 `unclaimed` unit 은 어느 어댑터의
+# 목록에도 없어 `--expected` 에 안 들어가므로 `SILENT_DROP` 백스톱조차 닿지 않는다.
+# 그 상태로 5차원 `closed` 를 적으면 **한 번도 안 돈 unit 을 두고 PASS** 가 된다.
+#
+# 이빨 설계 — 위험 방향(음) + 양의 짝 2종 + fail-closed 1종. 양의 짝이 없으면
+# "언제나 red" 로 만드는 변경이, 0건 짝이 없으면 "언제나 degraded 요구" 가 통과한다.
+case_unclaimed_forces_degraded() {
+  setup
+  local ok=1
+  write_ledger "$TMP/l.md"                       # verification = closed
+  grep -vF 'floor:verification' "$TMP/l.md" > "$TMP/ldeg.md"
+  printf -- '- floor:verification — degraded — unclaimed 2건, 실행 수단 없음\n' >> "$TMP/ldeg.md"
+  write_aggregate "$TMP/a.yaml" closed
+  write_assign_rows "$TMP/as0.tsv" 0
+  write_assign_rows "$TMP/as2.tsv" 2
+
+  # 음: unclaimed 2건 + verification closed → non-zero (이것이 닫는 유출 경로)
+  python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as2.tsv" "$TMP/l.md" \
+    >/dev/null 2>&1 && { echo "    unclaimed 2건인데 verification closed 가 통과함"; ok=0; }
+  # 양 ①: unclaimed 2건 + verification degraded → 통과 (규칙을 지킨 원장은 green)
+  python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as2.tsv" "$TMP/ldeg.md" \
+    >/dev/null 2>&1 || { echo "    unclaimed 2건 + degraded 가 red"; ok=0; }
+  # 양 ②: unclaimed 0건 + verification closed → 통과 (과차단 방지 — 이게 정상 실행이다)
+  python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as0.tsv" "$TMP/l.md" \
+    >/dev/null 2>&1 || { echo "    unclaimed 0건인데 closed 가 red (과차단)"; ok=0; }
+  # fail-closed: 셀 수 없는 입력을 "0건" 으로 접지 않는다 (3필드 위반 → 사용 오류)
+  printf 'tests/test_a.py\tunittest\n' > "$TMP/asbad.tsv"
+  python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/asbad.tsv" "$TMP/l.md" \
+    >/dev/null 2>&1 && { echo "    문법 위반 배정 행이 통과함 (셀 수 없는데 0건 취급)"; ok=0; }
+  [[ $ok -eq 1 ]] && pass "unclaimed 집행 — 유출 방향 red · 양의 짝 2종 green · 불량 입력 fail-closed" \
+                  || fail "unclaimed 집행 이빨 없음"
+  cleanup
+}
+
+# `--assign-rows` 자체가 조용히 면제되면 위 집행은 존재하지 않는 것과 같다.
+case_assign_rows_is_mandatory_and_fail_closed() {
+  setup
+  write_ledger "$TMP/l.md"; write_aggregate "$TMP/a.yaml" closed
+  local ok=1
+  python3 "$LEDGER" --aggregate "$TMP/a.yaml" "$TMP/l.md" >/dev/null 2>&1 \
+    && { echo "    --assign-rows 없이 통과함 (조용한 면제)"; ok=0; }
+  python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/nope.tsv" "$TMP/l.md" \
+    >/dev/null 2>&1 && { echo "    배정 파일 부재인데 통과함"; ok=0; }
+  python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows >/dev/null 2>&1 \
+    && { echo "    --assign-rows 값 없이 통과함"; ok=0; }
+  [[ $ok -eq 1 ]] && pass "--assign-rows 부재·파일부재·값부재 → 전부 non-zero (fail-closed)" \
+                  || fail "--assign-rows fail-open"
   cleanup
 }
 
@@ -236,7 +310,9 @@ for c in case_complete case_each_missing_dimension case_degraded_is_valid \
          case_c1_no_false_contradiction case_stdin_utf8_locale_independent \
          case_duplicate_floor_dimension case_derived_named_bad_status \
          case_transcription_matches_machine \
-         case_aggregate_is_mandatory_and_fail_closed; do
+         case_aggregate_is_mandatory_and_fail_closed \
+         case_unclaimed_forces_degraded \
+         case_assign_rows_is_mandatory_and_fail_closed; do
   echo "== $c"; $c
 done
 echo "── qa ledger: $PASS passed, $FAIL failed"

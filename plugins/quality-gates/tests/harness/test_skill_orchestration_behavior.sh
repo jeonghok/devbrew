@@ -822,6 +822,59 @@ else
   fi
 fi
 
+# ── T94 · AC68 · §11 ㉓ — `unclaimed` 집행이 R1b→R8 로 배선돼 있는가 ─────────────
+# 위 집계 사슬과 같은 모양의 사슬이다: R1b 가 `assign` stdout 을 파일로 남기지 않으면
+# R8 이 넘길 것이 없고, R8 이 `--assign-rows` 를 넘기지 않으면 그 파일이 아무 데도
+# 안 쓰인다. 그리고 그 배선이 없으면 *"`unclaimed` 하나면 `verification: degraded`"* 는
+# 다시 **읽는 기계가 없는 산문**으로 돌아간다 — 이 항목이 등재된 바로 그 상태다.
+#
+# **형태 축 (/qg iter-7 교훈).** R8 assert 는 줄 offset 이 아니라 **호출 블록 전체**를
+# 본다: 시작 줄부터 후행 `\` 가 끊길 때까지 이어 붙인 뒤 그 안에서 리터럴을 찾는다.
+# 형제 락(위 T91)은 `NR+1` 만 보므로 인자를 3번째 줄로 옮기는 형태 변경에 뚫린다 —
+# 두 락은 서로 다른 축을 덮고, 하나를 통과시키는 mutation 이 다른 하나에 걸린다.
+echo "== R1b→R8 unclaimed 집행 사슬"
+rinit_s=$(first_line '^[*][*]Step R-init'); r1b_s=$(first_line '^[*][*]Step R1b')
+r2_s=$(first_line '^[*][*]Step R2')
+if [[ "$rinit_s" -le 0 || "$r1b_s" -le 0 || "$r2_s" -le 0 || "$r8_s" -le 0 || "$r9_s" -le 0 ]]; then
+  echo "FAIL: unclaimed 사슬 락 — 창 앵커 붕괴 (R-init=$rinit_s R1b=$r1b_s R2=$r2_s R8=$r8_s R9=$r9_s)"
+  fail=$((fail + 1))
+else
+  uc_ok=1
+  # ⓪ `$assign_rows_file` 이 **쓰이기 전에** 정의된다 (R-init 창 안, R1b 앞).
+  #    미정의 변수는 빈 문자열로 풀려 `> ""` 가 되고, 그 실패는 조용하다.
+  awk -v s="$rinit_s" -v e="$r1b_s" '
+    NR>s && NR<e && index($0,"assign_rows_file=\"") { f=1 }
+    END { exit !f }' "$SKILL_MD" \
+    || { echo "    R-init 이 \$assign_rows_file 을 정의하지 않음 (R1b 사용 전)"; uc_ok=0; }
+  # ① R1b 의 `assign` 호출이 stdout 을 그 파일로 남긴다
+  awk -v s="$r1b_s" -v e="$r2_s" '
+    NR>s && NR<e && index($0,"run-test-selection.sh\" assign") { want=1 }
+    want && index($0,"> \"$assign_rows_file\"") { f=1 }
+    END { exit !f }' "$SKILL_MD" \
+    || { echo "    R1b 이 assign stdout 을 \$assign_rows_file 로 남기지 않음"; uc_ok=0; }
+  # ② R8 의 게이트 호출 **블록 전체**가 두 대조 인자를 함께 넘긴다.
+  #    ∃ 가 아니라 **∀** 다 — 맞는 호출 뒤에 인자 빠진 두 번째 호출을 덧붙이는 mutation 이
+  #    ∃ 판을 통과했다(실측). 산문을 읽는 소비자는 마지막 호출을 쓴다.
+  awk -v s="$r8_s" -v e="$r9_s" '
+    NR>s && NR<e {
+      if (!inblk && index($0,"scripts/check_qa_ledger.py")) { inblk=1; blk=$0 }
+      else if (inblk) { blk = blk "\n" $0 }
+      if (inblk && $0 !~ /\\$/) {
+        inblk=0; n++
+        if (!(index(blk,"--aggregate \"$aggregate_yaml\"") \
+              && index(blk,"--assign-rows \"$assign_rows_file\""))) bad++
+      }
+    }
+    END { exit !(n > 0 && bad == 0) }' "$SKILL_MD" \
+    || { echo "    R8 의 check_qa_ledger 호출 블록 중 두 대조 인자를 함께 안 넘기는 것이 있음"; uc_ok=0; }
+  if [[ $uc_ok -eq 1 ]]; then
+    echo "PASS: R-init 이 정의하고 R1b 이 남기고 R8 이 --assign-rows 로 집행에 넘김"
+  else
+    echo "FAIL: R1b→R8 unclaimed 집행 사슬 (집행자가 셀 원본에 닿지 못한다)"
+    fail=$((fail + 1))
+  fi
+fi
+
 # 새 라벨 5종이 실제로 존재하고 순서가 맞다
 # 라벨은 **줄머리 볼드 헤딩**으로만 앵커한다. 맨 라벨로 찾으면 본문 cross-reference 가
 # 먼저 잡힌다 — 실측: `first_line 'Step R5a⁰'` = **174**(다른 섹션의 참조), 실제 헤딩은

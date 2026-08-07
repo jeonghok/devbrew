@@ -30,6 +30,8 @@ EXPECTED_ORDER=(
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check_qa_ledger.py:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py:*)'
+  # 이 목록의 유일한 비-플러그인 명령 — R-init 의 중간 파일 디렉토리 (AC69).
+  'Bash(mktemp:*)'
   # Group 4 — Meta
   'Agent'
   'AskUserQuestion'

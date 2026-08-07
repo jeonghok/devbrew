@@ -65,6 +65,12 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
   (의미 판정 없음) — Law 1 의 구조적 게이트가 하는 일은 silent skip 을 불가능하게 만드는
   것뿐이다. `degraded` 는 실패가 아니라 1급 상태다: "확증 못 했다"를 정직하게 쓸 자리가
   있어야 "확인했다"로 반올림되지 않는다. 점수형·테스트종류 메뉴는 두지 않는다.
+  여기에 **대조 두 개**가 얹힌다(둘 다 의미 판정이 아니라 두 값의 일치·개수 검사이며
+  둘 다 필수 인자다 — 선택이면 안 넘긴 호출자가 조용히 면제받는다): `--aggregate` 는 R6
+  집계의 `attribution_status` 와 원장의 `floor:attribution` 을, `--assign-rows` 는 배정
+  TSV 의 `unclaimed` 행 수와 `floor:verification` 을 본다. 둘 다 **개수가 아니라 경로**를
+  받는다 — 모델이 옮겨 적는 숫자를 받으면 대조가 대조하려던 전사 구멍을 그 인자가 다시
+  연다. regression: `tests/test_qa_ledger.sh`, `tests/harness/test_skill_orchestration_behavior.sh`.
 
 ## 구조
 

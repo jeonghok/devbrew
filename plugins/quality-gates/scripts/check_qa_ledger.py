@@ -12,9 +12,25 @@ floor 5키 존재 + status ∈ {closed, degraded} + evidence 절 비어있지 �
 **두 필드의 일치**를 보는 구조 검사다. `--aggregate` 는 필수다: 선택 인자면 넘기지
 않은 호출자가 조용히 검사를 면제받는다.
 
-usage: check_qa_ledger.py --aggregate <aggregate-yaml> [<evidence-log-path>]
+두 번째 대조는 `unclaimed` 다 (§11 ㉓ = `/qg` iter-7). `run-test-selection.sh assign`
+의 구조적 거부 3곳(워크트리 밖 unit · `unittest_can_judge` 실패 · 실행 수단 없음)이
+`unclaimed` 행을 낳고, SKILL 은 *"`unclaimed` 가 하나라도 있으면 `verification:
+degraded`"* 라고 지시하는데 그 문장을 읽는 기계가 없었다 — `unclaimed` unit 은 어느
+어댑터의 unit 목록에도 없어 `--expected` 에도 안 들어가므로 `SILENT_DROP` 백스톱조차
+닿지 않는다. 그래서 **한 번도 안 돈 unit 을 두고 floor 5차원 전부 `closed` → PASS** 가
+성립했다.
+
+**인자가 개수가 아니라 경로인 이유.** 원 처방은 `--unclaimed-count <N>` 이었다. 그대로
+두면 그 N 은 *모델이 옮겨 적은 숫자*가 되고, 그것은 §11 ⑱ 이 방금 닫은 전사 구멍을
+같은 이음매에 다시 뚫는 것이다 — `0` 을 적으면 검사가 사라진다. 그래서 `--aggregate`
+와 **같은 모양**으로 받는다: 결정론 스크립트가 낸 파일 경로를 받아 이 게이트가 직접
+센다. 남는 축(그 파일이 정말 이번 실행의 `assign` 출력인지 = custody)은 `--aggregate`
+와 동일하게 열려 있다 (§6.7 S1) — 새 갭이 아니라 공유된 기등재 갭이다.
+
+usage: check_qa_ledger.py --aggregate <aggregate-yaml> --assign-rows <assign-tsv>
+                          [<evidence-log-path>]
        (evidence-log 인자가 없으면 stdin)
-exit:  0 통과 · 1 구조/전사 위반 · 2 사용 오류(집계 읽기·파싱 실패 포함)
+exit:  0 통과 · 1 구조/전사 위반 · 2 사용 오류(집계·배정행 읽기·파싱 실패 포함)
 """
 from __future__ import annotations
 
@@ -62,7 +78,40 @@ def read_aggregate_attribution(path: str) -> tuple[str | None, str | None]:
     return hits[0], None
 
 
-def check(text: str, expected_attribution: str | None = None) -> list[str]:
+def read_unclaimed_count(path: str) -> tuple[int | None, str | None]:
+    """배정 TSV → (unclaimed 행 수, 오류 메시지). 둘 중 하나만 non-None.
+
+    행 문법은 `assign` 의 계약 그대로 `<unit>\\t<adapter>\\t<granularity>` 3필드다.
+    3필드가 아닌 비어있지 않은 줄은 **세지 못한 것**이므로 0 으로 접지 않고 사용
+    오류로 올린다 — 셀 수 없는 입력에서 "unclaimed 0건" 을 만들어 내는 것이 바로
+    이 인자가 닫으려는 fail-open 이다.
+    """
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, f"배정 TSV 읽기 실패: {exc}"
+    except UnicodeDecodeError as exc:
+        return None, f"배정 TSV 가 UTF-8 이 아닙니다: {exc}"
+    count = 0
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        fields = line.split("\t")
+        if len(fields) != 3:
+            return None, (
+                f"배정 TSV {lineno}행이 3필드가 아닙니다 "
+                f"(`<unit>\\t<adapter>\\t<granularity>`): {path}"
+            )
+        if fields[1] == "unclaimed":
+            count += 1
+    return count, None
+
+
+def check(
+    text: str,
+    expected_attribution: str | None = None,
+    unclaimed_count: int = 0,
+) -> list[str]:
     errors: list[str] = []
     seen: dict[str, str] = {}
 
@@ -96,6 +145,18 @@ def check(text: str, expected_attribution: str | None = None) -> list[str]:
                 f"floor:attribution 의 status '{got}' 가 R6 집계의 "
                 f"attribution_status '{expected_attribution}' 와 다릅니다 — "
                 f"집계값을 원장에 옮길 때 바뀌었습니다 (전사 대조 실패)"
+            )
+
+    # `unclaimed` 집행 (§11 ㉓). SKILL 산문의 *"`unclaimed` 가 하나라도 있으면
+    # `verification: degraded`"* 를 여기서 기계가 집행한다. 전사 대조와 같은 규율로
+    # **`verification` 이 정상 status 일 때만** 본다 — 누락/어휘밖은 위에서 이미 야단쳤다.
+    if unclaimed_count > 0 and seen.get("verification") in STATUSES:
+        if seen["verification"] != "degraded":
+            errors.append(
+                f"배정에 `unclaimed` unit 이 {unclaimed_count}건 있는데 "
+                f"floor:verification 이 '{seen['verification']}' 입니다 — "
+                f"실행 수단이 없는 영향분이 남아 있으므로 `degraded` 여야 합니다 "
+                f"(열거는 인증을 대신하지 않는다)"
             )
 
     derived_lines = [ln for ln in text.splitlines() if DERIVED_ANY_RE.match(ln)]
@@ -132,34 +193,42 @@ def check(text: str, expected_attribution: str | None = None) -> list[str]:
     return errors
 
 
-USAGE = "usage: check_qa_ledger.py --aggregate <aggregate-yaml> [<evidence-log-path>]"
+USAGE = (
+    "usage: check_qa_ledger.py --aggregate <aggregate-yaml> "
+    "--assign-rows <assign-tsv> [<evidence-log-path>]"
+)
 
 
 def main() -> int:
     args = sys.argv[1:]
 
-    # `--aggregate` 는 **필수**다. 선택 인자면 넘기지 않은 호출자가 조용히 전사 대조를
-    # 면제받고, 그것이 바로 이 인자가 닫으려는 fail-open 의 모양이다 (AC60 선례).
-    agg_path: str | None = None
+    # 둘 다 **필수**다. 선택 인자면 넘기지 않은 호출자가 조용히 대조를 면제받고,
+    # 그것이 바로 이 인자들이 닫으려는 fail-open 의 모양이다 (AC60 선례).
+    opt_paths: dict[str, str] = {}
     rest: list[str] = []
     i = 0
     while i < len(args):
-        if args[i] == "--aggregate":
+        if args[i] in ("--aggregate", "--assign-rows"):
             if i + 1 >= len(args):
-                print(f"check_qa_ledger: --aggregate 에 값이 없습니다\n{USAGE}", file=sys.stderr)
+                print(f"check_qa_ledger: {args[i]} 에 값이 없습니다\n{USAGE}", file=sys.stderr)
                 return 2
-            agg_path = args[i + 1]
+            opt_paths[args[i]] = args[i + 1]
             i += 2
             continue
         rest.append(args[i])
         i += 1
 
-    if agg_path is None:
-        print(f"check_qa_ledger: --aggregate 는 필수입니다\n{USAGE}", file=sys.stderr)
-        return 2
-    expected_attribution, agg_err = read_aggregate_attribution(agg_path)
+    for flag in ("--aggregate", "--assign-rows"):
+        if flag not in opt_paths:
+            print(f"check_qa_ledger: {flag} 는 필수입니다\n{USAGE}", file=sys.stderr)
+            return 2
+    expected_attribution, agg_err = read_aggregate_attribution(opt_paths["--aggregate"])
     if agg_err is not None:
         print(f"check_qa_ledger: {agg_err}", file=sys.stderr)
+        return 2
+    unclaimed_count, assign_err = read_unclaimed_count(opt_paths["--assign-rows"])
+    if assign_err is not None:
+        print(f"check_qa_ledger: {assign_err}", file=sys.stderr)
         return 2
 
     args = rest
@@ -179,7 +248,8 @@ def main() -> int:
             print(f"check_qa_ledger: stdin이 UTF-8이 아닙니다: {exc}", file=sys.stderr)
             return 2
 
-    errors = check(text, expected_attribution)
+    # 여기 도달했으면 read_unclaimed_count 는 오류 없이 개수를 냈다 (둘 중 하나만 non-None).
+    errors = check(text, expected_attribution, unclaimed_count if unclaimed_count else 0)
     if errors:
         for e in errors:
             print(f"check_qa_ledger: {e}", file=sys.stderr)

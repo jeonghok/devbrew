@@ -30,6 +30,11 @@ allowed-tools:
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check_qa_ledger.py:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py:*)
+  # 이 목록의 **유일한 비-플러그인 명령**. R-init 이 오케스트레이터 소유 중간 파일 6종의
+  # 집을 만든다 (AC69). 레포 안에 두면 `create-sandbox` 가 커밋 `B` 로 봉인하므로
+  # (`ls-files --others --exclude-standard` 로 미추적·비-ignore 파일을 샌드박스로 복사한다)
+  # 반드시 트리 밖이어야 하고, 그러려면 이 한 명령이 필요하다.
+  - Bash(mktemp:*)
   # Group 4 — Meta (orchestration primitives)
   - Agent
   - AskUserQuestion
@@ -652,7 +657,41 @@ If `effective_skip_runtime` was set, skip this entire section.
 > 도는가* 를 나누지 않으면 self-report 신뢰가 결과값 축에서 실행 환경 축으로 옮겨갈
 > 뿐이다 (§11 ⑬). 두 축 모두에서 실행되는 것은 어댑터의 `setup_cmd` 뿐이다.
 
-**Step R-init — baseline 확정.**
+**Step R-init — 중간 파일 위치 + baseline 확정.**
+
+먼저 이 실행이 쓸 **오케스트레이터 소유 중간 파일**의 집이 될 디렉토리를 하나 만든다:
+
+```bash
+qg_run_tmp=$(mktemp -d) || { echo "[quality-gates] 중간 파일 디렉토리 생성 실패" >&2; exit 1; }
+assign_rows_file="$qg_run_tmp/assign-rows.tsv"   # 실행당 1개 (R1b)
+aggregate_yaml="$qg_run_tmp/aggregate.yaml"      # 실행당 1개 (R6 집계)
+```
+
+나머지 넷은 **어댑터마다 하나씩**이다 (R4·R5b·R6 이 어댑터 루프 안에서 재바인딩한다).
+같은 디렉토리 안에서 러너 이름으로 가른다 — 한 이름을 재사용하면 폴리글랏 레포에서
+어댑터 A 의 행이 어댑터 B 의 대조에 들어간다:
+
+```bash
+expected_units_file="$qg_run_tmp/expected-$runner.txt"
+baseline_rows_file="$qg_run_tmp/baseline-$runner.tsv"
+head_rows_file="$qg_run_tmp/head-$runner.tsv"
+per_adapter_yaml="$qg_run_tmp/per-adapter-$runner.yaml"
+```
+
+여섯 이름 전부 **당신이 소유하고 당신만 쓴다.** 두 가지가 이 위치를 강제한다:
+
+- **`$project_dir` 안이면 안 된다.** R5a¹ 의 `create-sandbox` 는 워킹 트리를 커밋 `B`
+  로 봉인하므로, 레포가 `.claude/` 를 ignore 하지 않으면 여기 쓴 중간 파일이 **기준선
+  커밋 안으로 들어간다**. mutation-guard 의 `disallowed_new_files` 도 같은 축이다.
+- **`$evidence_dir` 안이면 안 된다.** 그 디렉토리는 R5a³ 에서 verifier 에게 넘어간다 —
+  거기 두면 피검자가 대조 원본을 쓰게 되고, `--aggregate`·`--assign-rows` 대조는
+  자기 자신을 대조하는 것이 된다.
+
+**닫히지 않은 이웃 (과장하지 않는다).** 이것은 *위치*를 정할 뿐 **custody 를 증명하지
+않는다** — 이 경로에 놓인 파일이 정말 이번 실행의 스크립트 출력인지는 여전히 아무도
+검사하지 않는다 (§6.7 S1 과 같은 축, 열려 있음). 디렉토리는 지우지 않는다: 실패한
+실행의 중간 파일이 디버깅에 쓰이고(`CLAUDE.md` 의 "실패 시 보존"), 정리는 `TMPDIR`
+수명에 위임한다.
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-baseline.sh"
@@ -750,12 +789,15 @@ Agent({
 
 ```bash
 printf '%s\n' "${candidate_files[@]}" \
-  | "${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" assign "$project_dir"
+  | "${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" assign "$project_dir" \
+    > "$assign_rows_file"
 ```
 
-`<unit>\t<runner|unclaimed>\t<granularity>` 행을 캡처한다. stderr 의 `미실행 러너:`
-줄도 함께 잡아 `gap` 차원에 열거한다. **`unclaimed` 행이 하나라도 있으면** 그 목록을
-R8 의 `verification` 차원으로 가져간다 (`gap` 이 아니다 — 이유는 R8).
+`<unit>\t<runner|unclaimed>\t<granularity>` 행을 캡처한다 — **stdout 은 반드시
+`$assign_rows_file` 로 간다.** 이 파일이 R8 의 `--assign-rows` 원본이고, 화면으로만
+읽고 넘어가면 그 대조가 원본을 잃는다. stderr 의 `미실행 러너:` 줄도 함께 잡아 `gap`
+차원에 열거한다. **`unclaimed` 행이 하나라도 있으면** 그 목록을 R8 의 `verification`
+차원으로 가져간다 (`gap` 이 아니다 — 이유는 R8).
 
 **Step R2 — 계획 산문 + 비용 신호.**
 
@@ -1416,7 +1458,9 @@ R6 이 낸 `attribution_status` 를 그대로 `floor:attribution` 의 status 로
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/check_qa_ledger.py" \
-  --aggregate "$aggregate_yaml" "$evidence_dir/runtime-evidence.md"
+  --aggregate "$aggregate_yaml" \
+  --assign-rows "$assign_rows_file" \
+  "$evidence_dir/runtime-evidence.md"
 ```
 
 non-zero 면 stderr 를 verbatim 으로 노출하고 **verdict 를 PASS 로 올리지 않는다**.
@@ -1429,10 +1473,25 @@ non-zero 면 stderr 를 verbatim 으로 노출하고 **verdict 를 PASS 로 올�
 `--baseline-detected` 와 같다: 선택이면 넘기지 않은 호출자가 조용히 면제받고, 그
 면제가 이 인자가 닫으려는 fail-open 의 모양 그 자체다.
 
-**닫히지 않은 이웃 (과장하지 않는다).** 이 대조는 *전사* 축만 닫는다. `$aggregate_yaml`
-이 정말 그 실행의 `--aggregate` 출력인지(custody)는 여전히 검사하지 않는다 — §6.7 S1
-과 같은 축이며 열려 있다. 또 `verdict_input` 3플래그는 원장에 실리지 않으므로 이
-경로로는 대조할 대상이 없다.
+**`--assign-rows` 도 필수이고, 바로 위 인용 블록의 `unclaimed` 규칙을 집행한다 (§11 ㉓).**
+그 규칙은 지금까지 **읽는 기계가 없는 산문 한 문장**이었다 — `assign` 의 구조적 거부
+3곳(워크트리 밖 unit · `unittest_can_judge` 실패 · 실행 수단 없음)이 전부 이 문장에
+종착했고, `unclaimed` unit 은 어느 어댑터의 unit 목록에도 없어 `--expected` 에도 안
+들어가므로 `SILENT_DROP` 백스톱마저 닿지 않았다. 즉 **한 번도 안 돈 unit 을 두고 3플래그
+false + 5차원 `closed` → PASS** 가 성립했다. 이제 게이트가 `$assign_rows_file` 에서
+직접 세고, 1건 이상인데 `floor:verification` 이 `degraded` 가 아니면 non-zero 를 낸다.
+
+**개수가 아니라 경로를 넘기는 이유.** 처방의 원래 형태는 `--unclaimed-count <N>` 이었다.
+그대로 두면 N 은 *당신이 옮겨 적는 숫자*가 되고, 그것은 바로 위 `--aggregate` 가 방금
+닫은 전사 구멍을 같은 이음매에 다시 뚫는 것이다 — `0` 하나로 검사가 사라진다. 그래서
+`--aggregate` 와 같은 모양(경로를 받아 스크립트가 판정)을 쓴다.
+
+**닫히지 않은 이웃 (과장하지 않는다).** 이 두 대조는 *전사* 축만 닫는다. `$aggregate_yaml`
+과 `$assign_rows_file` 이 정말 그 실행의 스크립트 출력인지(custody)는 여전히 검사하지
+않는다 — §6.7 S1 과 같은 축이며 열려 있다. 또 `verdict_input` 3플래그는 원장에 실리지
+않으므로 이 경로로는 대조할 대상이 없다. 그리고 **배정 행이 0개인 경우(빈 스코프)는
+이 인자가 판정하지 않는다** — `unclaimed` 0건과 구분이 안 되므로 여기서 닫히는 것처럼
+쓰면 거짓이다. 그 축은 §11 ⑭ 이며 열려 있다.
 
 verdict 결정:
 

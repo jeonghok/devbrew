@@ -32,7 +32,18 @@
 - `scripts/diff-test-results.py` — 귀속 8종 + 어댑터 간 `--aggregate`.
 - `scripts/check_qa_ledger.py` — floor 5차원(changed/behavior/verification/attribution/gap)
   구조 게이트 + **전사 대조**(`--aggregate`, 필수): R6 집계의 `attribution_status` 와
-  원장의 `floor:attribution` 이 다르면 non-zero.
+  원장의 `floor:attribution` 이 다르면 non-zero. 여기에 **`unclaimed` 집행**
+  (`--assign-rows`, 필수)이 얹힌다: 배정 TSV 에 `unclaimed` 행이 1건 이상인데
+  `floor:verification` 이 `degraded` 가 아니면 non-zero. **개수가 아니라 경로를 받는다** —
+  개수는 모델이 옮겨 적는 값이라 `--aggregate` 가 방금 닫은 전사 구멍을 같은 이음매에
+  다시 뚫는다(`0` 하나로 검사 소멸).
+- **오케스트레이터 소유 중간 파일 6종의 위치가 R-init 에서 정의된다.** `mktemp -d` 실행-스코프
+  디렉토리 하나에 살며 `$project_dir` 도 `$evidence_dir` 도 아니어야 한다 — 전자는
+  `create-sandbox` 가 `ls-files --others --exclude-standard` 로 미추적·비-ignore 파일을
+  샌드박스로 복사해 커밋 `B` 로 봉인하기 때문이고(건너뛰는 것은
+  `.claude/quality-gates/worktrees/*` 뿐), 후자는 R5a³ 에서 verifier 에게 넘어가기 때문이다.
+  어댑터별 4종은 러너 이름으로 가른다. 이에 따라 SKILL `allowed-tools` 에 **유일한
+  비-플러그인 명령** `Bash(mktemp:*)` 이 등재됐다(개수·순서 린터도 함께 갱신).
 - `qg-worktree.sh create-baseline` · `qg-worktree.sh create-head` · `compute-test-scope-candidates.sh --total`. 두 `create-*` 절은 공유 헬퍼
   `make_detached_worktree` 를 부른다 (`create-sandbox`/`mutation-guard` 본문 무변경 — AC22).
 
@@ -40,6 +51,16 @@
 - `SKILL.md` 의 `regardless of Review scope` 리터럴과 그것이 서술하던 동작.
 
 ### Fixed
+- **`unclaimed → verification: degraded` 에 기계 집행자가 없었다** (design §11 ㉓).
+  `run-test-selection.sh assign` 의 구조적 거부 3곳(워크트리 밖 unit ·
+  `unittest_can_judge` 실패 · 실행 수단 없음)이 전부 SKILL 산문 한 문장에 종착했고,
+  `unclaimed` unit 은 어느 어댑터의 목록에도 없어 `--expected` 에 안 들어가므로
+  `SILENT_DROP` 백스톱조차 닿지 않았다 — 즉 **한 번도 안 돈 unit 을 두고 3플래그 false +
+  5차원 `closed` → PASS** 가 성립했다. R1b 가 `assign` stdout 을 `$assign_rows_file` 로
+  남기고 R8 이 그것을 `--assign-rows` 로 넘긴다. 회귀 락은 R1b→R8 사슬을 **∀** 로 잠근다 —
+  맞는 호출 뒤에 인자 빠진 두 번째 호출을 덧붙이는 mutation 이 ∃ 판을 통과했다(실측).
+  **빈 스코프(배정 0행)는 이 인자가 판정하지 않는다** — `unclaimed` 0건과 구분되지 않으며,
+  그 축은 design §11 ⑭ 로 열려 있다.
 - **iteration 2 — 내 iter-7 수정에서 나온 5건** (codex + security-reviewer 재리뷰).
   두 리뷰어가 CRITICAL 3건이 실제로 닫혔음을 확인한 뒤 찾은 것들이다:
   - **flaky 재실행 결과의 캡처·병합 규칙이 없었다** — *"마지막 호출의 결과가
