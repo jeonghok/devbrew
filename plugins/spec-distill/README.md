@@ -141,22 +141,30 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 ## Kill switches
 
-### 먼저 — 원하는 범위를 고르십시오
+### 먼저 — 무엇이 리뷰의 범위를 정하는가
 
-아래 env var 들은 **전부 세션 스코프이고 전부 재시작이 필요합니다.** "이번 리뷰 한 번만
-멈추고 싶다" 에 이것들을 쓰는 것은 압정에 망치입니다. 실제 사다리는 이렇습니다:
+아래 env var 들은 **전부 세션 스코프이고 전부 재시작이 필요합니다.** "이번 리뷰 한 번만"
+같은 좁은 범위에 이것들을 쓰는 것은 압정에 망치입니다. 다만 상위 두 행은 **스위치가
+아니라 arm-once(v0.25.0) 설계에서 따라 나오는 성질**이므로, "끄는 방법" 이 아니라
+"범위가 어떻게 정해지는가" 로 읽으십시오.
 
-| 원하는 범위 | 방법 | 재시작 |
+| 범위 | 그 범위를 만드는 것 | 재시작 |
 |---|---|---|
-| **이번 dispatch 한 번만** | 그냥 이번 턴에 리뷰를 건너뛰면 된다 — mandate 는 **단발성**이다. dispatch 시점에 `pending_review` 가 이미 소진되므로(`review-dispatch.py` `rewrite_state()`), Stop 훅도 UserPromptSubmit 백스톱도 다시 조르지 않는다 | 불필요 |
-| **이 문서 영구히** | 그 문서를 **커밋**한다. `should_arm()` 이 git-unknown 을 요구하므로 git 이 아는 문서는 다시 arm 되지 않는다 | 불필요 |
+| **이번 dispatch 1회** | mandate 의 **수명 자체가 1회**다 — `rewrite_state()` 가 emit 전에 `pending_review` 를 소진하므로 이 강제는 이번 턴을 넘기지 않는다 | 불필요 |
+| **그 문서의 재발동** | 재발동은 그 문서를 **다시 편집**할 때 일어난다. `should_arm()` 이 git-unknown 을 요구하므로 **커밋된 문서는 원칙적으로 다시 arm 되지 않는다** — 단 `is_born()` 은 git 판정 실패(`ls-files` timeout·rc 128 등)를 전부 arm 쪽으로 fail-open 하므로 이는 보장이 아니다 | 불필요 |
 | 모든 문서, 자동 리뷰만 | `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (Layer 1 구조 검증은 유지) | 필요 |
 | 훅 하나 | `DEVBREW_SKIP_HOOKS=spec-distill:Stop` | 필요 |
 | 플러그인 전체 | `DEVBREW_DISABLE_SPEC_DISTILL=1` | 필요 |
 
-상위 두 행은 env var 가 아니라 **arm-once(v0.25.0) 설계에서 따라 나오는 성질**입니다.
-재발동은 그 문서를 다시 편집할 때만 일어나고, 그마저 세션당·문서당 3회(G6)가 상한입니다.
-Stop 훅의 mandate 자체가 이 수명을 밝히므로(`review-dispatch.py`), 이 표는 그 문장의
+**커밋은 이미 걸린 dispatch 를 취소하지 않습니다.** Stop 훅은 pending 을 찾은 뒤
+`armed_paths` 만 조회하고 git 추적 여부를 재검사하지 않으므로, pending 이 생긴 뒤 같은
+턴에 커밋해도 그 dispatch 는 그대로 실행됩니다. 커밋이 막는 것은 **앞으로의 arm** 뿐입니다.
+
+원장(`armed_paths`)은 **세션 스코프**입니다. 리뷰를 마쳐도 문서를 커밋하지 않으면 다음
+세션에서 한 번 더 arm 됩니다 — 세션을 넘겨 멈추게 하는 수단은 커밋이고, approve 시점
+`check-born` advisory 가 그것을 촉구합니다. 재발동은 세션당·문서당 3회(G6)가 상한입니다.
+
+Stop 훅의 mandate 가 자기 수명을 스스로 밝히므로(`review-dispatch.py`), 이 표는 그 문장의
 참조본이지 유일한 전달 경로가 아닙니다.
 
 ### 스위치 목록

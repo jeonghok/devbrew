@@ -325,7 +325,7 @@ class TestReviewDispatchMandateScope(HookOutputSchemaTestBase):
     # 본문 고유(body-unique) 조각만 쓴다. 헤더·주석에도 있는 문구로 assert 하면
     # 정작 emit 되는 문장을 지워도 통과한다.
     SCOPE_PHRASE = "이번 dispatch 1회에만 유효"
-    REARM_PHRASE = "커밋하면(git-tracked)"
+    REARM_PHRASE = "다시 편집할 때"
     CAP_PHRASE = "자동 dispatch를 중단한다"
 
     IN_SCOPE_DOC = "docs/superpowers/specs/2026-08-06-scope-design.md"
@@ -399,6 +399,111 @@ class TestReviewDispatchMandateScope(HookOutputSchemaTestBase):
             self.REARM_PHRASE, reason,
             msg=f"중단된 문서에 재발동을 약속한다 — reason: {reason!r}",
         )
+
+
+class TestMandateClaimsAreTrue(HookOutputSchemaTestBase):
+    """mandate 가 **주장하는 내용이 사실인지**를 실제 훅을 태워 검증한다.
+
+    형제 클래스 `TestReviewDispatchMandateScope` 는 문장이 `reason` 채널에 실리는지를
+    잰다 — 그것만으로는 문장이 **거짓이어도** GREEN 이다. 실제로 이 PR 의 초판은
+    "커밋하면 더 이상 arm 되지 않는다"를 무조건 단정했는데 `is_born()` 의 git fail-open
+    경로에서 거짓이었고, 문구 락 3종은 전부 통과했다. 그래서 남긴 두 주장 각각에
+    **동작 검증**을 붙인다. 주장을 줄이면 이 클래스도 함께 줄어야 한다.
+    """
+
+    DESIGN_BODY = (
+        "# Test Design\n\nContext / Why\n\nGoals\n\nNon-goals\n\n"
+        "Constraints\n\nAcceptance Criteria\n\nFiles\n\nVerification Plan\n\n"
+        "Rejected Alternatives\n\nMetadata\n"
+    )
+    REL = Path("docs") / "superpowers" / "specs" / "2026-08-08-claims-design.md"
+
+    def _write_doc(self, extra: str = "") -> Path:
+        abs_path = self.repo / self.REL
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        abs_path.write_text(self.DESIGN_BODY + extra, encoding="utf-8")
+        return abs_path
+
+    def _run_validator(self, sid: str, abs_path: Path):
+        return _run_hook(
+            "spec-write-validator.py", cwd=self.repo,
+            stdin_payload={
+                "session_id": sid, "hook_event_name": "PostToolUse",
+                "tool_name": "Write", "tool_input": {"file_path": str(abs_path)},
+                "cwd": str(self.repo),
+            },
+            env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": sid},
+        )
+
+    def _run_stop(self, sid: str):
+        # TTL 가드를 **끈다**. 이 클래스가 재려는 것은 "pending 소진(단발성)" 이지
+        # "30초 redispatch TTL" 이 아니다. 기본 TTL 로 두면 두 번째 Stop 은 밀리초
+        # 안에 실행되어 TTL 이 먼저 침묵시키고, 그러면 pending 을 아예 소진하지 않게
+        # 망가뜨려도 락이 GREEN 이 된다 — 실제로 mutation N1 이 그렇게 통과했다.
+        # TTL=0 이면 침묵을 설명할 수 있는 것은 pending 소진뿐이다.
+        return _run_hook(
+            "review-dispatch.py", cwd=self.repo,
+            env_extra={
+                "DEVBREW_SPEC_DISTILL_SESSION_ID": sid,
+                "DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC": "0",
+            },
+        )
+
+    def _is_armed(self, sid: str) -> bool:
+        f = self.repo / ".claude" / "spec-distill" / sid / "state.local.md"
+        return f.exists() and "pending_review:" in f.read_text(encoding="utf-8")
+
+    def test_claim_single_shot_holds(self):
+        """주장 1: "이 mandate는 이번 dispatch 1회에만 유효하다"."""
+        sid = "test-claim-single"
+        self._run_validator(sid, self._write_doc())
+        self.assertTrue(self._is_armed(sid), msg="전제 실패: 첫 write 가 arm 하지 않았다")
+
+        first = self._run_stop(sid)
+        self.assertIn("block", first.stdout, msg=f"첫 Stop 이 강제하지 않음: {first.stdout!r}")
+
+        # 재편집 없이 두 번째 Stop — 주장대로면 아무것도 나오면 안 된다.
+        second = self._run_stop(sid)
+        self.assertEqual(
+            second.stdout.strip(), "",
+            msg=(
+                "재편집이 없었는데 두 번째 Stop 이 다시 강제한다 — mandate 는 1회가 "
+                f"아니다: {second.stdout!r}"
+            ),
+        )
+
+    def test_claim_reedit_rearms_holds(self):
+        """주장 2: "재발동은 이 문서를 다시 편집할 때 일어난다"."""
+        sid = "test-claim-reedit"
+        self._run_validator(sid, self._write_doc())
+        self._run_stop(sid)  # dispatch → pending 소진
+        self.assertFalse(
+            self._is_armed(sid), msg="전제 실패: dispatch 후에도 pending 이 남았다")
+
+        # 미리뷰·미커밋 문서를 다시 편집하면 재발동해야 한다.
+        self._run_validator(sid, self._write_doc(extra="\n<!-- edit 2 -->\n"))
+        self.assertTrue(
+            self._is_armed(sid),
+            msg="재편집했는데 재발동하지 않는다 — 주장 2 가 거짓이거나 게이트가 꺼졌다",
+        )
+
+    def test_mandate_makes_no_unconditional_commit_promise(self):
+        """`is_born()` 은 git 판정 실패를 arm 쪽으로 fail-open 한다.
+
+        따라서 "커밋하면 arm 되지 않는다" 류의 **무조건** 단정은 mandate 에 있어서는
+        안 된다. 초판이 그 단정을 담았다가 이 검증에 걸렸다.
+        """
+        sid = "test-claim-nopromise"
+        self._run_validator(sid, self._write_doc())
+        reason = json.loads(self._run_stop(sid).stdout).get("reason", "")
+        for banned in ("커밋하면", "git-tracked"):
+            self.assertNotIn(
+                banned, reason,
+                msg=(
+                    f"mandate 가 커밋에 대해 무조건 단정한다('{banned}') — is_born() "
+                    f"fail-open 경로에서 거짓이 된다: {reason!r}"
+                ),
+            )
 
 
 class TestReviewDispatchOrdering(unittest.TestCase):
