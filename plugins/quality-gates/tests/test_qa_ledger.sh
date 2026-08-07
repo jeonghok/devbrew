@@ -288,6 +288,46 @@ case_unclaimed_forces_degraded() {
   cleanup
 }
 
+# T95 (iter-8 리뷰 #4): 종료 코드가 **인자 모양(2)** 과 **내용(4)** 을 구분한다.
+#
+# 이 리포의 형제 스크립트가 확립한 규약이다(AC60: "생략 시 exit 2, 빈 값은 exit 4").
+# 앞 버전은 둘 다 2 였고, 그러면 "부르는 법을 틀렸다" 와 "읽었는데 믿을 수 없다" 가
+# 같은 신호가 된다. 소비자는 어느 쪽이든 PASS 불가로 라우팅하므로 **동작이 아니라
+# 진단**을 재는 락이며, 그래서 non-zero 가 아니라 **정확한 코드**를 단언해야 이빨이 있다.
+rc_of() { "$@" >/dev/null 2>&1; echo $?; }
+case_exit_code_shape_vs_content() {
+  setup
+  local ok=1
+  write_ledger "$TMP/l.md"; write_aggregate "$TMP/a.yaml" closed; write_assign_rows "$TMP/as.tsv"
+  # 인자 모양 → 2
+  [[ "$(rc_of python3 "$LEDGER" --assign-rows "$TMP/as.tsv" "$TMP/l.md")" == 2 ]] \
+    || { echo "    --aggregate 누락이 2 가 아님"; ok=0; }
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows)" == 2 ]] \
+    || { echo "    --assign-rows 값 부재가 2 가 아님"; ok=0; }
+  # 내용 → 4
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/nope.yaml" --assign-rows "$TMP/as.tsv" "$TMP/l.md")" == 4 ]] \
+    || { echo "    집계 파일 부재가 4 가 아님"; ok=0; }
+  printf 'adapters: [pytest]\n' > "$TMP/a0.yaml"
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a0.yaml" --assign-rows "$TMP/as.tsv" "$TMP/l.md")" == 4 ]] \
+    || { echo "    attribution_status 0개가 4 가 아님"; ok=0; }
+  printf 'tests/test_a.py\tunittest\n' > "$TMP/asbad.tsv"
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/asbad.tsv" "$TMP/l.md")" == 4 ]] \
+    || { echo "    배정 3필드 위반이 4 가 아님"; ok=0; }
+  # 원장 자신의 read 경로도 같은 축 — 비-UTF-8 은 트레이스백이 아니라 4 다.
+  printf '\xff\xfe not utf-8\n' > "$TMP/bad.md"
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as.tsv" "$TMP/bad.md")" == 4 ]] \
+    || { echo "    비-UTF-8 원장이 4 가 아님 (UnicodeDecodeError ⊄ OSError 회귀)"; ok=0; }
+  # 양의 짝: 구조 위반은 여전히 1 이고, 정상은 0 이다 (전부 non-zero 로 접히지 않았다)
+  write_ledger "$TMP/miss.md" gap
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as.tsv" "$TMP/miss.md")" == 1 ]] \
+    || { echo "    구조 위반이 1 이 아님"; ok=0; }
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as.tsv" "$TMP/l.md")" == 0 ]] \
+    || { echo "    정상 입력이 0 이 아님"; ok=0; }
+  [[ $ok -eq 1 ]] && pass "종료 코드 4갈래 — 모양 2 · 내용 4 · 구조 1 · 통과 0" \
+                  || fail "종료 코드가 축을 구분하지 못함"
+  cleanup
+}
+
 # `--assign-rows` 자체가 조용히 면제되면 위 집행은 존재하지 않는 것과 같다.
 case_assign_rows_is_mandatory_and_fail_closed() {
   setup
@@ -312,7 +352,8 @@ for c in case_complete case_each_missing_dimension case_degraded_is_valid \
          case_transcription_matches_machine \
          case_aggregate_is_mandatory_and_fail_closed \
          case_unclaimed_forces_degraded \
-         case_assign_rows_is_mandatory_and_fail_closed; do
+         case_assign_rows_is_mandatory_and_fail_closed \
+         case_exit_code_shape_vs_content; do
   echo "== $c"; $c
 done
 echo "── qa ledger: $PASS passed, $FAIL failed"

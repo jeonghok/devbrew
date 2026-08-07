@@ -30,7 +30,14 @@ degraded`"* 라고 지시하는데 그 문장을 읽는 기계가 없었다 — 
 usage: check_qa_ledger.py --aggregate <aggregate-yaml> --assign-rows <assign-tsv>
                           [<evidence-log-path>]
        (evidence-log 인자가 없으면 stdin)
-exit:  0 통과 · 1 구조/전사 위반 · 2 사용 오류(집계·배정행 읽기·파싱 실패 포함)
+exit:  0 통과 · 1 구조/전사 위반 · 2 **인자 모양** 오류 · 4 **내용** 읽기·파싱 실패
+
+`2` 와 `4` 의 경계는 이 리포의 형제 스크립트와 같다 (AC60: *"생략 시 exit 2, 빈 값은
+exit 4"*). 인자가 없거나 값이 안 붙은 것은 **호출자의 실수**(2)이고, 파일을 못 읽거나
+내용이 계약을 어긴 것은 **판정 불가**(4)다. 둘을 한 코드로 접으면 "부르는 법을 틀렸다"와
+"읽었는데 믿을 수 없다"가 구분되지 않는다. 소비자(SKILL R8)는 어느 쪽이든 non-zero 를
+PASS 불가로 라우팅하므로 안전 방향은 같지만, **코드가 서로 다른 사실을 말해야** 다음
+독자가 오독하지 않는다.
 """
 from __future__ import annotations
 
@@ -222,14 +229,15 @@ def main() -> int:
         if flag not in opt_paths:
             print(f"check_qa_ledger: {flag} 는 필수입니다\n{USAGE}", file=sys.stderr)
             return 2
+    # 여기부터는 **내용** 축이다 — 읽기·파싱 실패는 4 (위 인자 모양 오류 2 와 구분).
     expected_attribution, agg_err = read_aggregate_attribution(opt_paths["--aggregate"])
     if agg_err is not None:
         print(f"check_qa_ledger: {agg_err}", file=sys.stderr)
-        return 2
+        return 4
     unclaimed_count, assign_err = read_unclaimed_count(opt_paths["--assign-rows"])
     if assign_err is not None:
         print(f"check_qa_ledger: {assign_err}", file=sys.stderr)
-        return 2
+        return 4
 
     args = rest
     if len(args) > 1:
@@ -240,13 +248,19 @@ def main() -> int:
             text = Path(args[0]).read_text(encoding="utf-8")
         except OSError as exc:
             print(f"check_qa_ledger: 읽기 실패: {exc}", file=sys.stderr)
-            return 2
+            return 4
+        except UnicodeDecodeError as exc:
+            # `UnicodeDecodeError` 는 `OSError` 의 하위가 아니다 — 형제 두 read 경로에서
+            # 이미 한 번씩 고친 것과 **같은 버그**가 여기만 남아 있었다(비-UTF-8 원장 →
+            # 트레이스백). 세 read 경로가 이제 같은 모양이다.
+            print(f"check_qa_ledger: 원장이 UTF-8 이 아닙니다: {exc}", file=sys.stderr)
+            return 4
     else:
         try:
             text = sys.stdin.buffer.read().decode("utf-8")
         except UnicodeDecodeError as exc:
             print(f"check_qa_ledger: stdin이 UTF-8이 아닙니다: {exc}", file=sys.stderr)
-            return 2
+            return 4
 
     # 여기 도달했으면 read_unclaimed_count 는 오류 없이 개수를 냈다 (둘 중 하나만 non-None).
     errors = check(text, expected_attribution, unclaimed_count if unclaimed_count else 0)

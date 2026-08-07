@@ -797,7 +797,7 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 
 - **AC1** — `skills/quality-pipeline/SKILL.md`에 리터럴 `regardless of Review scope`가 **0회** 등장한다.
 - **AC2** — 새 transparency 앵커 문구가 `SKILL.md`에 **정확히 1회** 등장하고, `test_skill_orchestration_behavior.sh`가 존재+유일성을 검사한다 (락 이전, 삭제 아님).
-- **AC3** — `scripts/check-allowed-tools-order.sh`가 신규 스크립트 5종을 포함한 순서로 갱신되고 통과한다.
+- **AC3** — `scripts/check-allowed-tools-order.sh`가 신규 스크립트 5종 **+ 비-플러그인 명령 `Bash(mktemp:*)` 1종**(AC69)을 포함한 순서로 갱신되고 통과한다. 이 린터는 개수·순서 **정확** 일치이므로 SKILL 과 canonical 배열 양쪽을 잠근다 — 한쪽만 고치면 red 다.
 
 **baseline 공유 모듈 (OQ5)**
 
@@ -850,7 +850,8 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
 - **AC65** — HEAD 축 테스트는 **verifier 샌드박스가 아닌 자기 트리**에서 돈다. `create-head` 는 넘어온 sha 를 **이 세션 샌드박스의 봉인 커밋과 대조**하고 다르면 die 한다(merge_base·stale 값 거부). 트리 수명은 **R6 끝**까지다 — R6 의 flaky 재실행이 그 트리를 쓴다. `qg-worktree.sh create-head <B> <sid>`가 봉인 커밋에 detached된 일회용 워크트리를 기준선 트리와 **다른 경로**에 만들고(동시 공존), R5b의 `run` 호출이 그 트리를 받는다. 재시도 경로는 refresh된 `baseline_sha`로 이를 다시 만든다. (§11 ⑬·⑨ 해소. 검증: T88 + 오케스트레이션 창 락 4종.)
 - **AC67** — R5b 는 R6·R7 과 같은 모양의 **실패 라우팅 표**를 갖는다. `create-head`/`run` 이 non-zero 면 그 축을 전량 `unrun` 으로 기록하고 `verification: degraded` 로 두며, `$runtime_project_dir`·`$project_dir` 로 **폴백하지 않는다**. (§11 ⑬ (c). 검증: 오케스트레이션 락.)
 - **AC68** — R8 의 원장 게이트가 **`unclaimed` → `verification: degraded` 를 집행**한다. `check_qa_ledger.py --assign-rows <배정 TSV>` 는 필수 인자이며, `unclaimed` 행이 1건 이상인데 `floor:verification` 이 `degraded` 가 아니면 non-zero. 파일이 없거나 3필드 문법을 어긴 행이 있으면 통과가 아니다(fail-closed — 셀 수 없는 입력을 0건으로 접지 않는다). R1b 는 `assign` stdout 을 `$assign_rows_file` 로 남긴다. **인자를 개수(`--unclaimed-count N`)가 아니라 경로로 받는 이유**: 개수는 모델이 옮겨 적는 값이라 AC66 이 방금 닫은 전사 구멍을 같은 이음매에 다시 뚫는다 — `0` 하나로 검사가 사라진다. (§11 ㉓ 해소. 검증: T93 · T94.)
-- **AC69** — 오케스트레이터 소유 중간 파일 6종의 **위치가 R-init 에서 정의**된다. `mktemp -d` 로 만든 실행-스코프 디렉토리 하나에 살며, `$project_dir` 안도 `$evidence_dir` 안도 아니어야 한다. 앞의 금지는 실측이다: `create-sandbox` 는 `ls-files --others --exclude-standard` 로 **미추적·비-ignore 파일을 샌드박스로 복사한 뒤 커밋 `B` 로 봉인**하고 `.claude/quality-gates/worktrees/*` 만 건너뛴다 — 레포가 `.claude/` 를 ignore 하지 않으면 중간 파일이 기준선 커밋 안으로 들어간다. 뒤의 금지는 `$evidence_dir` 이 R5a³ 에서 verifier 에게 넘어가기 때문이다(피검자가 대조 원본을 쓰면 대조가 자기 자신을 대조한다). 어댑터별 4종은 러너 이름으로 가른다. 이 요구가 SKILL `allowed-tools` 에 **유일한 비-플러그인 명령** `Bash(mktemp:*)` 을 추가시키며, 그 목록은 개수·순서 정확 린터(`check-allowed-tools-order.sh`)가 양쪽에서 잠근다. **custody 는 여전히 열려 있다**(§6.7 S1) — 이 AC 는 위치만 정한다. (§11 ㉕ 해소. 검증: T94 ⓪ + 린터.)
+- **AC68′** (종료 코드 축 분리 — iter-8 리뷰) — `check_qa_ledger.py` 의 종료 코드가 **인자 모양(2)** 과 **내용(4)** 을 구분한다. 형제 스크립트의 규약과 같다(AC60: *"생략 시 exit 2, 빈 값은 exit 4"*). 앞 버전은 둘 다 2 라 *"부르는 법을 틀렸다"* 와 *"읽었는데 믿을 수 없다"* 가 같은 신호였다. 소비자(R8)는 어느 쪽이든 non-zero → PASS 불가로 라우팅하므로 **동작이 아니라 진단**을 고치는 것이다. 함께: 원장 파일 read 경로에 `UnicodeDecodeError` 핸들러가 없어 비-UTF-8 원장이 트레이스백이었다 — 형제 두 경로에서 이미 고친 **같은 버그의 세 번째 인스턴스**. (검증: T95.)
+- **AC69** — 오케스트레이터 소유 중간 파일 6종의 **위치가 R-init 에서 정의**된다. `mktemp -d` 로 만든 실행-스코프 디렉토리 하나에 살며, `$project_dir` 안도 `$evidence_dir` 안도 아니어야 한다. 앞의 금지는 실측이다: `create-sandbox` 는 `ls-files --others --exclude-standard` 로 **미추적·비-ignore 파일을 샌드박스로 복사한 뒤 커밋 `B` 로 봉인**하고 `.claude/quality-gates/worktrees/*` 만 건너뛴다 — 레포가 `.claude/` 를 ignore 하지 않으면 중간 파일이 기준선 커밋 안으로 들어간다. 뒤의 금지는 `$evidence_dir` 이 R5a³ 에서 verifier 에게 넘어가기 때문이다(피검자가 대조 원본을 쓰면 대조가 자기 자신을 대조한다). 어댑터별 4종은 러너 이름으로 가른다. 이 요구가 SKILL `allowed-tools` 에 **유일한 비-플러그인 명령** `Bash(mktemp:*)` 을 추가시키며, 그 목록은 개수·순서 정확 린터(`check-allowed-tools-order.sh`)가 양쪽에서 잠근다. **custody 는 여전히 열려 있다**(§6.7 S1) — 이 AC 는 위치만 정한다. (§11 ㉕ 해소. 검증: **T96** + T94 ⓪ + 린터. 앞 버전은 T94 ⓪ 만 인용했는데 그것은 6종 중 하나의 *정의 순서*만 재고 (a)·(b)·(c) 어느 것도 재지 않았다 — iter-8 리뷰 high.)
 - **AC66** — R8 의 원장 게이트가 **기계 집계값과 원장 전사값을 대조**한다. `check_qa_ledger.py --aggregate <집계 YAML>` 는 필수 인자이며, 집계의 `attribution_status` 와 `floor:attribution` 의 status 가 다르면 non-zero. 집계 파일이 없거나 `attribution_status` 줄이 정확히 1개가 아니면 통과가 아니다(fail-closed). R6 은 집계 stdout 을 `$aggregate_yaml` 로 남긴다. (§11 ⑱ 해소. 검증: T90 · T91.)
 - **AC23** — `/qg runtime` 단일게이트 경로가 보존된다 (Step R-init의 zero-click 폴백 포함).
 - **AC24** — `hooks/hooks.json` 항목 수가 **불변**이고 신규 훅 파일이 **0개**다.
@@ -1040,7 +1041,7 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | T29 | 분모 M이 `compute-test-scope-candidates.sh --total` 출력과 일치 | AC37 |
 | T30 | `/qg runtime` 단일게이트 경로 — R-init zero-click 폴백 포함 보존 | AC23 |
 | T31 | **영향분 0개 → `SKIP_WITH_EVIDENCE`** + gap 차원에 "기존 테스트 없음" 기록 + verdict ≠ PASS | AC15(빈 스코프 분기) |
-| T32 | `check-allowed-tools-order.sh` 통과 (신규 5종 등재) | AC3 |
+| T32 | `check-allowed-tools-order.sh` 통과 — 신규 5종 **+ `Bash(mktemp:*)`** 등재. 개수·순서 정확 일치라 SKILL 만 고치거나 canonical 배열만 고치면 red (mutation 2축 RED) | AC3 |
 | T33 | `README.md` — Principles Instantiated 3줄 + 컴포넌트 트리 신규 5종 등재 | AC30 |
 | T34 | `detect` — 러너 어댑터 9종 각각 3줄 emit · **감지 0개면 빈 stdout + exit 0** · **SKILL 쪽 감지-표 재구현 0회**(어댑터 표의 감지 조건 문자열이 SKILL.md에 없음) | AC38 |
 | T35 | `run`이 입력 unit 수 == 출력 행 수 (정상·exit 3·일부 absent 3 픽스처) + 행 누락 입력에서 `SILENT_DROP` | AC39 |
@@ -1101,9 +1102,21 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | T91 | **R6→R8 집계 전달 사슬** — R6 이 집계 stdout 을 `$aggregate_yaml` 로 남기고 R8 이 그것을 `--aggregate` 로 넘긴다. 두 지점을 함께 잠근다 — 하나만 잠그면 다른 하나를 지워 사슬을 끊을 수 있다 | AC66 |
 | T93 | **`unclaimed` 집행** — unclaimed ≥1 + `verification: closed` 는 red(유출 방향) · **양의 짝 2종**(unclaimed ≥1 + `degraded` 는 green · unclaimed 0 + `closed` 도 green — 과차단 방지) · 3필드 위반 배정 행은 exit 2(fail-closed) · `--assign-rows` 부재·파일부재·값부재 전부 non-zero. mutation 6축 RED(삭제 · 술어반전 · 발화조건확대 · 인자를선택으로 · 후속재대입 · 파싱 fail-open) | AC68 |
 | T94 | **R1b→R8 `unclaimed` 집행 사슬** — ⓪ `$assign_rows_file` 이 R-init 창에서 **사용 전에** 정의된다 ① R1b 가 `assign` stdout 을 그 파일로 남긴다 ② R8 의 게이트 호출 **블록 전체**가 두 대조 인자를 함께 넘긴다(∀ — 맞는 호출 뒤에 인자 빠진 두 번째 호출을 덧붙이는 ∃-탈출이 실측으로 통과했다). 블록은 후행 `\` 를 따라 잇는다 — 형제 락 T91 은 `NR+1` 만 봐서 **인자를 3번째 줄로 옮기는 형태 변경에 뚫린다**; 두 락이 서로 다른 축을 덮는다. mutation 6축 RED + **위양성 대조 1축 GREEN**(둘 다 유지한 채 한 줄로 접기 = 정당한 형태) | AC68 · AC69 |
+| T89′ | **R5b 실패 라우팅** (오케스트레이션 창 락) — R5b 창 본문이 `create-head` · `unrun` · `폴백하지 않는다` 셋을 함께 담는다. **iter-7 이 AC67 을 대응 행 없이 추가**해 한 라운드를 넘겼고 iter-8 리뷰가 적발했다 — 테스트는 처음부터 있었고 표에만 없었다(§6.7 이 처벌하는 *등록 없는 등록*의 정확한 형태) | AC67 |
+| T95 | **종료 코드가 축을 구분한다** — 인자 모양(`--aggregate` 누락 · `--assign-rows` 값 부재) → **2**, 내용(파일 부재 · `attribution_status` 0개 · 배정 3필드 위반 · 비-UTF-8 원장) → **4**, 구조 위반 → 1, 통과 → 0. **non-zero 가 아니라 정확한 코드**를 단언한다 — 동작이 아니라 진단을 재는 락이라 non-zero 로는 이빨이 없다. mutation 3축 RED(내용→2 되돌림 · 모양→4 · `UnicodeDecodeError ⊄ OSError` 가드 제거) | AC68′ |
+| T96 | **중간 파일 custody** — ① 뿌리가 `mktemp -d` ② 그 뿌리가 `$project_dir`·`$evidence_dir` 파생이 **아니다**(음의 짝) ③ 여섯 이름이 **전부**(∀) 그 뿌리 파생. 창은 R-init..R1a — R1b 까지 열면 R1b 의 *사용*이 정의로 오인돼 ③ 이 vacuous 해진다. mutation 5축 RED(mktemp 제거 · 뿌리를 project_dir 로 · 뿌리를 evidence_dir 로 · 여섯 중 하나만 탈출 · 정의 블록을 창 밖으로) | AC69 |
 | T92 | **create-head 의 봉인 대조** — 샌드박스 부재·`merge_base`·비-봉인 커밋 3종을 거부하고 봉인 커밋 `B` 는 수락(양의 짝). 엄격 동일→접두 매치 변이는 **도달 가능한 입력에서 동작이 같아** GREEN 이며 그 사실을 케이스 주석에 적었다(억지 assert 를 만들지 않는다) | AC65 |
 
-**AC ↔ 검증 완전성.** **AC1–AC64 전부**가 위 T 또는 §8.3의 V에 대응한다.
+**AC ↔ 검증 완전성.** **AC1–AC69 전부**가 위 T 또는 §8.3의 V에 대응한다.
+**이 선언문은 이번이 세 번째 stale 이다** (iter-8 spec review, high). 라운드 3 은
+AC38–AC44 를, iter-6 은 `AC1–AC63` 방치를 같은 자리에서 겪었고, 이번엔 AC65–AC69 가
+표에 실재하는데 선언문이 AC64 에서 멈춰 있었다. **같은 실패가 세 번 나면 그것은 사람이
+기억할 일이 아니라 기계가 셀 일이다** — 프로즈 범위 표기를 유지하되, 구현 시
+`§6 의 AC id 집합 ⊆ §8.1∪§8.3 의 인용 집합` 을 세는 검사를 두는 것이 이 반복의 근본
+해소다(이 문서 자신에 대한 검사이므로 `V10` 축, 플러그인 테스트 아님).
+**AC67 은 stale 선언보다 나빴다** — 표에 행 자체가 없었다(미등록). iter-7 이 AC 를
+추가하면서 대응 T 행을 안 만든 것이고, 바로 아래 *"AC 추가 시 대응 T/V 없이 머지하지
+않는다"* 를 스스로 어긴 것이다. T89′ 로 등재했다.
 **역방향도 이제 등재한다 (/qg iter-6 E6):** 앞 버전은 AC→T 방향만 단속했고 T→표 방향은
 무단속이라 **테스트가 인용하는 T-id 16개가 이 표에 없었다**(T66–T69 · T75–T78 · T79–T86).
 실제 커버리지는 있었고 미래 리뷰어가 읽는 문서에서만 보이지 않았다 — 그 자체가 이 문서가
@@ -1434,6 +1447,24 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
     비용도 있다 — 스위트 실행마다 codex 호출 1회. **이 브랜치 diff 밖**이며(merge_base 에
     이미 존재) 이 설계의 범위도 아니다. 등급: **선행 갭** — 병합을 막지 않는다. 닫을 때의
     모양: 갱신을 `--freeze` 같은 명시 플래그 뒤로 옮기고 기본 실행은 읽기 전용으로 둔다.
+28. **"영향분"의 적절성 기준이 없어, 비어 있지 않기만 하면 임의의 집합도 자동 AC 를
+    전부 충족한다.** (iter-8 codex, **block**.) 기존 세 항목 **어느 것도 이 주장을 담고
+    있지 않다** — ⑭ 는 *빈* 스코프, ③ 은 *과*선택(OQ3), ④ 는 의존그래프 부재다. codex 가
+    가리키는 것은 셋 **사이에 난 구멍**이다: 후보가 1건이라도 있으면 `--expected` 가
+    비지 않아 AC64 를 지나가고, 그 1건이 green 이면 5차원 `closed` + 3플래그 false 로
+    PASS 행이 선다. 즉 *"영향분을 골랐다"* 와 *"영향분을 옳게 골랐다"* 사이에 기계가
+    없다. §5.3 이 스코프를 모델 소유로 둔 것은 의도된 설계(P8)이므로 **닫는 방법은
+    모델을 묶는 것이 아니다** — codex 처방은 대표 변경 유형별 fixture corpus 와 기대
+    선택 결과를 두어 *선택기 자체를 회귀 테스트*하는 것이다. 그것은 이 브랜치 범위 밖의
+    새 검증 층이다. 등급: **잔여 결함**(이 설계가 답한다고 주장하는 범위 안 — §5.3 이
+    "영향 판정"을 자기 산출물로 선언한다).
+29. **AC31·AC49 의 *"…취지의 문장/문구"* 가 합격 텍스트를 정하지 않는다.** (iter-8
+    codex, medium.) 두 AC 는 특정 *의미*를 요구하는데 무엇이 그 의미를 만족하는지는
+    구현자와 테스트 작성자가 각자 정한다 — 실제로 iter-5 가 AC31 락을 고친 이유가
+    *"body-contract assert 가 frontmatter 로 만족됐다"* 였고, 그것이 바로 이 모호성의
+    발현이다. §11 ㉖(이빨 갭)은 이 축을 담고 있지 않다. 닫는 모양: 각 AC 에 canonical
+    anchor 문자열을 지정하거나 구조화 필드로 바꾼다. 등급: **갭**(현재 락이 우연히
+    맞는 문자열을 잡고 있어 프로덕션은 옳다).
 
 ---
 
@@ -1465,4 +1496,5 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | `/qg branch` iter-7 Review 게이트 | 리뷰어 5(security-reviewer · pr-review-toolkit:code-reviewer · silent-failure-hunter · pr-test-analyzer · **codex**) + adversarial. **29건 판정 — 3 CRITICAL / 19 IMPORTANT / 8 SUGGESTION.** 이 라운드의 핵심 사실: **CRITICAL 과 IMPORTANT 의 다수가 iter-7 의 내 두 커밋에서 나왔다.** `create-head` 도입이 (a) R6 flaky 재실행이 쓸 트리를 먼저 지웠고(리뷰어 4명 독립 수렴), (b) sha 를 무검증으로 받아 **degrade 신호 없는 silent PASS** 를 열었고, (c) R5b 에만 실패 라우팅이 없었다. 게다가 **그 수정을 지키려고 내가 단 락 3개가 전부 뚫려 있었다** — ∃·토큰 grep·비대칭 needle. ★ **내 mutation 이 '삭제' 축만 흔들었기 때문**이고 리뷰어는 추가·반전·형태변경으로 통과시켰다. **adversarial 이 잘못된 수정 4건을 막았다**: `env_dir_not_ignored` 게이트 제거(살아있는 근거가 있어 순감) · `create-head` 를 샌드박스 HEAD 에서 *도출*(신뢰 앵커를 피검자에게 넘김) · 도말 규칙 코드 조이기(§11 ⑫ 정면 위반) · `--force` 전환(F12 를 격상). 또 **5명 전원이 안 본 축**을 하나 찾았다(§11 ㉔ `.git/info/exclude` 영구 소실). 이번에 닫은 것: F1(트리 수명 + ∀ 창 R7 확장) · F3(봉인 대조) · F2/AC67(R5b 라우팅) · F4(mode 보수적 fold) · F6·§11 ⑳ 정정 · F11·H4(상류 degrade loud) · M6·M8·M9·M2 · PT2·PT3·PT4·PT5 락. mutation 이번 라운드 합계 **19축 RED**(계측기 4회 고장 후 재설계 — 도달불가 · 앵커 잔존 · heredoc 이스케이프 · zsh 무분할). 스위트 bash 81 green / 알려진 6 red · python 128 OK. |
 | `/qg` iter-7 iteration 2 (수정분 재리뷰) | codex + security-reviewer 재dispatch. **security-reviewer 가 iteration 1 의 CRITICAL 3건이 실제로 닫혔음을 추적으로 확인** — 특히 `create-head` 의 대조가 *거부 전용* 임을 verifier 의 다섯 선택지(B 위 커밋 · `reset --hard` · 샌드박스 삭제 · 평범한 디렉토리로 교체 · `head-<sid8>` 선점)를 하나씩 밟아 검증했고, 두 경로 도출이 같은 idiom 이라 심볼릭 링크에서도 어긋나지 않음을 확인했다. **그리고 내 수정에서 새 결함 5건을 찾았다**: ① flaky 재실행 결과의 **캡처·병합 규칙이 없어** *"마지막 호출이 authoritative"* 가 닿을 데가 없었다 · ② R5b 라우팅이 실패 후에도 진행하는데 폐기가 **무조건**이라 `remove ""` 가 죽어 **이미 확정된 degrade 가 R7·R8 에 도달하기 전에 파이프라인이 끊긴다** · ③ `2>&1` 캡처가 성공 경로의 git 경고를 **파일명 스트림에 섞는다**(codex·security 독립 수렴) · ④ ★**내 `exit 4` 를 같은 파일 세 줄 위 헤더가 무력화**하고 있었다 — *"Skill must fail-open (treat non-zero as empty)"* 가 그 스크립트의 유일한 reader-facing 계약이라, `|| true` 를 걷어낸 수정이 **문서에 의해 그대로 F11 로 되읽히는** 상태였다. **코드를 고치고 계약을 안 고치면 고친 것이 아니다.** · ⑤ 폐기가 R6 의 정상 종료 경로에만 있어 exit-4 라우팅에서 트리가 새고, 그 트리의 산출물 때문에 다음 `create-head` 가 die 해 **세션이 영영 PASS 에 도달 못 하게** 된다. 다섯 건 전부 수정. |
 | iter-8 — `unclaimed` 집행 + 중간 파일 위치 | **㉓·㉕ 해소, ㉔ 판정.** ㉓: SKILL 산문의 *"`unclaimed` 하나면 `verification: degraded`"* 를 **읽는 기계가 0개**였다 → `check_qa_ledger.py --assign-rows`(필수)가 배정 TSV 에서 직접 센다. ★**처방을 문자 그대로 쓰지 않았다** — 원 처방 `--unclaimed-count <N>` 은 N 이 *모델이 옮겨 적는 숫자*라 ⑱ 이 방금 닫은 전사 구멍을 **같은 이음매에 다시 뚫는다**(`0` 하나로 검사 소멸). 처방이 인용한 *"`--aggregate` 와 같은 모양"* 의 실체는 **경로를 받아 스크립트가 직접 세는 것**이었고 그 모양을 따랐다. ㉕: 그 대조가 파일을 요구하는데 SKILL 은 중간 파일 6종의 위치를 말한 적이 없었다 → R-init 이 `mktemp -d` 로 정의하고 `$project_dir`(봉인 대상) · `$evidence_dir`(피검자 소유) 두 금지를 명시. ㉔: **선행 결함으로 판정** — merge_base 에 `.qgbak` 18곳이 이미 있고 이 브랜치의 `qg-worktree.sh` diff(3 hunk +102줄)는 전부 그 블록 밖 → 병합 차단 목록에서 제외, 별도 이슈. 신규 검증: AC68 · AC69 · T93 · T94. **mutation 12축 RED + 위양성 대조 1축 GREEN.** ★그중 하나가 **∃-탈출로 생존**했다(맞는 호출 뒤에 인자 빠진 두 번째 호출) — 지난 라운드가 남긴 *"추가 축"* 교훈이 **내가 그 라운드에 새로 단 락에서 그대로 재현**된 것이라, ∀ 로 고치고 전량 재측정했다. ★부수: `mktemp` 를 쓰는 지시를 써 놓고 보니 `allowed-tools` 는 **개수·순서 정확 린터가 지키는 fail-closed 목록**이고 거기 없었다 — 계약을 쓰면서 그 계약을 집행하는 표면을 안 본 것이다(iteration 2 의 ④ 와 같은 모양). 등재했다. 스위트: bash 81 green / 알려진 6 red · python 128 OK (baseline 과 동일 — 새 테스트 *파일* 이 아니라 기존 파일에 케이스를 더했다). |
-| 다음 단계 | **`/qg branch` 재실행(iter-8 리뷰)** — iter-7·iter-8 수정분은 아직 재검증을 안 받았고, 직전 다섯 라운드가 모두 그 자리에서 새 CRITICAL 을 냈다. **이 브랜치는 여전히 병합 불가.** 남은 잔여(병합 차단): §11 **⑭**(빈 스코프 무집행 — B1 선결) · **⑰**(mode provenance) · **㉑**(bulk green 이 0건 인증 — 설계 결정 필요) · **㉒**(도말 인자 순서) · §6.7 **15 항목**. 열린 갭: §11 **⑲**(GC scope-creep) · **⑳**(트리 누수, 수명 연장으로 창 확대) · **㉖**(이빨 갭 6종 + 원장 table→test). 브랜치 밖으로 분리: **㉔**(`.git/info/exclude` 영구 소실 — 선행, v2.2.0). 그 밖: 수동 V-행 · Runtime 게이트 실측(`claude -p --plugin-dir` 별도 세션). **의도적으로 열어 둔 것**: B1(§6.7 F5) · C5. A1/C2 · U3 · ㉓ · ㉕ 는 닫혔다. |
+| iter-8 spec review (Claude + codex) | **양쪽 독립 `needs_revise` — 8건**(Claude 4: high 2·medium 2 / codex 4: block 1·medium 3), stagnation 없음. **Claude 4건이 전부 내가 iter-7·iter-8 에 만든 것**이다: ① §8.1 완전성 선언문이 `AC1–AC64` 에서 멈춤 — **세 번째 재발**(라운드 3, iter-6 에 이어) · ② AC69 가 주장하는 (a)한 디렉토리 (b)`$project_dir` 밖 (c)`$evidence_dir` 밖 **셋 다 미검증**(T94 ⓪ 은 6종 중 1종의 정의 순서만 잼) · ③ §12 가 새로 등재한 ㉗ 을 안 적음 · ④ T93 의 `exit 2` 가 문서 규약(2=모양, 4=내용)과 어긋남. **내가 기계로 확인하니 ①·④ 둘 다 리뷰어 말보다 나빴다**: ① 은 stale 선언에 더해 **AC67 이 §8.1 에 행 자체가 없었고**(미등록 — 이 문서가 §6.7 에서 처벌하는 클래스), ④ 는 규약을 맞추다 보니 원장 read 경로에 `UnicodeDecodeError` 핸들러가 없어 비-UTF-8 원장이 **트레이스백**이었다(형제 두 경로에서 이미 고친 같은 버그의 세 번째 인스턴스). codex 4건 중 3건은 기등재 갭(⑧·⑲·③④⑭ 분산)의 독립 재발견이고, **신규 2건을 ㉘·㉙ 로 등재**했다 — ㉘(block)이 특히 중요하다: ⑭·③·④ **어느 것도** *"비어 있지 않기만 하면 임의의 집합도 자동 AC 를 충족한다"* 를 담고 있지 않았다(세 갭 사이의 구멍). 수정: 위 4건 + AC67 등재 + AC3/T32 갱신, 신규 T89′·T95·T96, **mutation 8축 RED**(뿌리를 `$project_dir`/`$evidence_dir` 로 옮기기 · 여섯 중 하나만 탈출 · 정의를 창 밖으로 · mktemp 제거 · 내용→2 되돌림 · 모양→4 · UnicodeDecodeError 가드 제거). 스위트: bash **80 green / 알려진 6 red**(86 파일 — spike 1종은 ㉗ 사유로 제외) · python 128 OK. 사용자 결정으로 **reviewing-spec 재진입은 하지 않는다.** |
+| 다음 단계 | **`/qg branch` 재실행(iter-8 코드 리뷰)** — iter-7·iter-8 수정분은 아직 `/qg` 재검증을 안 받았고, 직전 다섯 라운드가 모두 그 자리에서 새 CRITICAL 을 냈다. **이 브랜치는 여전히 병합 불가.** 남은 잔여(병합 차단): §11 **⑭**(빈 스코프 무집행 — B1 선결) · **⑰**(mode provenance) · **㉑**(bulk green 이 0건 인증 — 설계 결정 필요) · **㉒**(도말 인자 순서) · **㉘**(영향분 적절성 기준 부재 — codex block; 닫으려면 선택기 회귀 fixture 층이 필요해 이 브랜치 범위 밖) · §6.7 **15 항목**. 열린 갭: §11 **⑲**(GC scope-creep) · **⑳**(트리 누수, 수명 연장으로 창 확대) · **㉖**(이빨 갭 6종 + 원장 table→test) · **㉙**(AC31·AC49 의 "취지" 문구). 브랜치 밖으로 분리(선행, 병합 비차단): **㉔**(`.git/info/exclude` 영구 소실 — v2.2.0) · **㉗**(spike 테스트가 live codex 호출 + 추적 픽스처 덮어쓰기). 그 밖: 수동 V-행 · Runtime 게이트 실측(`claude -p --plugin-dir` 별도 세션) · **V10**(§6 AC id 집합 ⊆ §8 인용 집합을 세는 검사 — 같은 stale 이 세 번 났으므로 사람이 기억할 일이 아니다). **의도적으로 열어 둔 것**: B1(§6.7 F5) · C5. A1/C2 · U3 · ㉓ · ㉕ 는 닫혔다. |

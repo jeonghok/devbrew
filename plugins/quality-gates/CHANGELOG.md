@@ -51,6 +51,15 @@
 - `SKILL.md` 의 `regardless of Review scope` 리터럴과 그것이 서술하던 동작.
 
 ### Fixed
+- **`check_qa_ledger.py` 의 종료 코드가 인자 모양과 내용을 구분하지 않았다** (design AC68′).
+  형제 스크립트는 *"생략 시 exit 2, 빈 값은 exit 4"* 로 두 축을 가르는데 이 스크립트만
+  전부 2 였다 — *"부르는 법을 틀렸다"* 와 *"읽었는데 믿을 수 없다"* 가 같은 신호였다.
+  이제 모양=2 · 내용=4 · 구조 위반=1 · 통과=0 이다. 소비자는 어느 쪽이든 non-zero 를
+  PASS 불가로 라우팅하므로 **동작이 아니라 진단**의 수정이다.
+- **비-UTF-8 원장 파일이 트레이스백이었다.** `UnicodeDecodeError` 는 `OSError` 의 하위가
+  아닌데 원장 read 경로만 `OSError` 하나로 막고 있었다 — 형제 두 read 경로(`--aggregate`,
+  `--assign-rows`)에서 이미 고친 **같은 버그의 세 번째 인스턴스**. 세 경로가 이제 같은
+  모양이다.
 - **`unclaimed → verification: degraded` 에 기계 집행자가 없었다** (design §11 ㉓).
   `run-test-selection.sh assign` 의 구조적 거부 3곳(워크트리 밖 unit ·
   `unittest_can_judge` 실패 · 실행 수단 없음)이 전부 SKILL 산문 한 문장에 종착했고,

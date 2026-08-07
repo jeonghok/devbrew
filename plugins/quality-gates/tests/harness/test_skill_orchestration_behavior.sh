@@ -875,6 +875,51 @@ else
   fi
 fi
 
+# ── T96 · AC69 — 중간 파일 6종이 정말 트리 밖 한 디렉토리에 사는가 ────────────────
+# 앞 블록의 ⓪ 은 **하나**의 파일이 사용 전에 정의된다는 *시간 순서*만 봤다. AC69 가
+# 주장하는 것은 세 가지다: (a) 6종이 한 실행-스코프 디렉토리에 산다 · (b) `$project_dir`
+# 밖 · (c) `$evidence_dir` 밖. ⓪ 은 셋 중 어느 것도 재지 않는다 (iter-8 spec review #2:
+# "AC 가 주장하는 것과 실제로 검증되는 것이 다르다").
+#
+# (b)/(c) 는 **뿌리에서** 잰다 — 6종이 전부 `$qg_run_tmp` 파생이고 `$qg_run_tmp` 자신이
+# `mktemp -d` 에서 오면, 트리 안으로 옮기는 유일한 방법은 그 뿌리를 바꾸는 것이고 그것을
+# 음의 assert 가 잡는다. 각 파일마다 경로 문자열을 검사하는 것보다 좁고 강하다.
+echo "== R-init 중간 파일 custody"
+# 창은 R-init..R1a 다 — R1b 까지 열면 R1b 본문의 `$assign_rows_file` 사용이 정의로
+# 오인돼 ③ 이 vacuous 해진다 (정의는 R-init 안에만 있어야 한다).
+r1a_s_probe=$(first_line '^[*][*]Step R1a')
+if [[ "$rinit_s" -le 0 || "$r1a_s_probe" -le 0 ]]; then
+  echo "FAIL: 중간 파일 락 — 창 앵커 붕괴 (R-init=$rinit_s R1a=$r1a_s_probe)"
+  fail=$((fail + 1))
+else
+  loc_ok=1
+  # ① 뿌리가 mktemp -d 다
+  awk -v s="$rinit_s" -v e="$r1a_s_probe" '
+    NR>s && NR<e && index($0,"qg_run_tmp=$(mktemp -d)") { f=1 }
+    END { exit !f }' "$SKILL_MD" \
+    || { echo "    R-init 이 \$qg_run_tmp 를 mktemp -d 로 만들지 않음"; loc_ok=0; }
+  # ② 그 뿌리가 검사 대상 트리 안을 가리키지 않는다 (음의 짝 — 뿌리를 옮기는 변경을 잡는다)
+  awk -v s="$rinit_s" -v e="$r1a_s_probe" '
+    NR>s && NR<e && index($0,"qg_run_tmp=") \
+      && (index($0,"project_dir") || index($0,"evidence_dir")) { bad=1 }
+    END { exit bad }' "$SKILL_MD" \
+    || { echo "    \$qg_run_tmp 가 \$project_dir/\$evidence_dir 파생으로 정의됨 (봉인·피검자 소유 영역)"; loc_ok=0; }
+  # ③ 여섯 이름이 **전부**(∀) 그 뿌리 파생이다 — 하나라도 빠지면 그 파일만 조용히 딴 데 산다
+  for v in assign_rows_file aggregate_yaml expected_units_file \
+           baseline_rows_file head_rows_file per_adapter_yaml; do
+    awk -v s="$rinit_s" -v e="$r1a_s_probe" -v n="$v" '
+      NR>s && NR<e && index($0, n "=\"$qg_run_tmp/") { f=1 }
+      END { exit !f }' "$SKILL_MD" \
+      || { echo "    \$$v 이 \$qg_run_tmp 파생으로 정의되지 않음"; loc_ok=0; }
+  done
+  if [[ $loc_ok -eq 1 ]]; then
+    echo "PASS: 중간 파일 6종이 전부 mktemp -d 뿌리 파생 · 뿌리가 트리 밖 (AC69)"
+  else
+    echo "FAIL: 중간 파일 custody (AC69 가 주장하는 위치가 지켜지지 않는다)"
+    fail=$((fail + 1))
+  fi
+fi
+
 # 새 라벨 5종이 실제로 존재하고 순서가 맞다
 # 라벨은 **줄머리 볼드 헤딩**으로만 앵커한다. 맨 라벨로 찾으면 본문 cross-reference 가
 # 먼저 잡힌다 — 실측: `first_line 'Step R5a⁰'` = **174**(다른 섹션의 참조), 실제 헤딩은
