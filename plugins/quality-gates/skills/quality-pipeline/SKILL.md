@@ -659,39 +659,69 @@ If `effective_skip_runtime` was set, skip this entire section.
 
 **Step R-init — 중간 파일 위치 + baseline 확정.**
 
-먼저 이 실행이 쓸 **오케스트레이터 소유 중간 파일**의 집이 될 디렉토리를 하나 만든다:
+먼저 이 실행이 쓸 **오케스트레이터 소유 중간 파일**의 집이 될 디렉토리를 하나 만든다.
+`mktemp -d` 는 **`TMPDIR` 을 존중**하므로 "트리 밖" 이 저절로 성립하지 않는다 — 담김을
+직접 확인하고, 안이면 **멈춘다**:
 
 ```bash
-qg_run_tmp=$(mktemp -d) || { echo "[quality-gates] 중간 파일 디렉토리 생성 실패" >&2; exit 1; }
+qg_run_tmp=$(mktemp -d) \
+  || { echo "[quality-gates] 중간 파일 디렉토리 생성 실패 — verdict 는 PASS 불가. 경로를 즉흥으로 정하지 말 것." >&2; exit 1; }
+case "$(cd "$qg_run_tmp" && pwd -P)/" in
+  "$(cd "$project_dir" && pwd -P)"/*)
+    echo "[quality-gates] TMPDIR 이 검사 대상 트리 안입니다 ($qg_run_tmp) — 중간 파일이 커밋 B 로 봉인되거나 피검자에게 노출됩니다. TMPDIR 을 트리 밖으로 두고 다시 실행하십시오. verdict 는 PASS 불가." >&2
+    exit 1 ;;
+esac
+echo "> [quality-gates] 중간 파일: $qg_run_tmp (실패 시 보존, 자동 삭제하지 않음)"
 assign_rows_file="$qg_run_tmp/assign-rows.tsv"   # 실행당 1개 (R1b)
 aggregate_yaml="$qg_run_tmp/aggregate.yaml"      # 실행당 1개 (R6 집계)
 ```
 
-나머지 넷은 **어댑터마다 하나씩**이다 (R4·R5b·R6 이 어댑터 루프 안에서 재바인딩한다).
-같은 디렉토리 안에서 러너 이름으로 가른다 — 한 이름을 재사용하면 폴리글랏 레포에서
-어댑터 A 의 행이 어댑터 B 의 대조에 들어간다:
+**이 가드가 AC69 의 유일한 실질 집행자다.** 텍스트 락은 `qg_run_tmp=` 줄만 볼 수 있어
+`tmproot="$project_dir/.qg"` 같은 **한 단계 간접**이나 `TMPDIR=` 대입을 원리적으로 못
+본다. `pwd -P` 를 양쪽에 쓰는 것은 symlink 로 담김을 우회하는 것을 막기 위해서다
+(`run-test-selection.sh` 의 `unit_within_worktree` 와 같은 idiom).
+
+**`$evidence_dir` 은 별도 금지가 아니다** — `"$project_dir/.claude/quality-gates/<sid>/"`
+이므로 `$project_dir` 담김의 부분집합이다. 앞 버전은 이것을 독립된 두 금지로 적었다.
+
+나머지 넷은 **어댑터마다 하나씩**이다. 앞 버전은 이 자리에서 `$runner` 를 전개했는데
+**R-init 시점에 `$runner` 는 바인딩되어 있지 않고** 이후 어디서도 재바인딩되지 않아
+(SKILL 전체에 `runner=` 대입 0건) 네 경로가 `expected-.txt` 하나로 붕괴했다 — 바로
+아래 문장이 막겠다고 선언한 그 상황이다. **함수로 바꿔 호출 시점에 바인딩한다:**
 
 ```bash
-expected_units_file="$qg_run_tmp/expected-$runner.txt"
-baseline_rows_file="$qg_run_tmp/baseline-$runner.tsv"
-head_rows_file="$qg_run_tmp/head-$runner.tsv"
-per_adapter_yaml="$qg_run_tmp/per-adapter-$runner.yaml"
+qg_paths_for() {   # <runner> — R4·R5b·R6 의 어댑터 루프 머리에서 매번 부른다
+  expected_units_file="$qg_run_tmp/expected-$1.txt"
+  baseline_rows_file="$qg_run_tmp/baseline-$1.tsv"
+  head_rows_file="$qg_run_tmp/head-$1.tsv"
+  per_adapter_yaml="$qg_run_tmp/per-adapter-$1.yaml"
+}
 ```
 
-여섯 이름 전부 **당신이 소유하고 당신만 쓴다.** 두 가지가 이 위치를 강제한다:
+러너 이름으로 가르는 이유: 한 이름을 재사용하면 폴리글랏 레포에서 **어댑터 A 의 행이
+어댑터 B 의 대조에 들어간다.** R4 는 마지막 어댑터의 행만 남기고, R6 의
+`--expected-adapters N` 은 서로 다른 YAML N 개 대신 **같은 파일 N 개**를 받는다.
 
-- **`$project_dir` 안이면 안 된다.** R5a¹ 의 `create-sandbox` 는 워킹 트리를 커밋 `B`
-  로 봉인하므로, 레포가 `.claude/` 를 ignore 하지 않으면 여기 쓴 중간 파일이 **기준선
-  커밋 안으로 들어간다**. mutation-guard 의 `disallowed_new_files` 도 같은 축이다.
-- **`$evidence_dir` 안이면 안 된다.** 그 디렉토리는 R5a³ 에서 verifier 에게 넘어간다 —
-  거기 두면 피검자가 대조 원본을 쓰게 되고, `--aggregate`·`--assign-rows` 대조는
-  자기 자신을 대조하는 것이 된다.
+`$qg_run_tmp` 와 여섯 이름은 **오케스트레이터 변수로 붙잡아 스텝 사이로 들고 간다**
+(R5a¹ 의 `sandbox_dir`/`baseline_sha`/`snapshot_digest` 와 같은 규율). 스텝마다
+`mktemp -d` 를 다시 부르지 않는다 — 새 디렉토리는 빈 디렉토리이고, 빈 배정 파일은
+이 문서가 방금 닫은 fail-open 의 입력이다.
 
-**닫히지 않은 이웃 (과장하지 않는다).** 이것은 *위치*를 정할 뿐 **custody 를 증명하지
-않는다** — 이 경로에 놓인 파일이 정말 이번 실행의 스크립트 출력인지는 여전히 아무도
-검사하지 않는다 (§6.7 S1 과 같은 축, 열려 있음). 디렉토리는 지우지 않는다: 실패한
-실행의 중간 파일이 디버깅에 쓰이고(`CLAUDE.md` 의 "실패 시 보존"), 정리는 `TMPDIR`
-수명에 위임한다.
+**닫히지 않은 이웃 (과장하지 않는다).** 위치를 정하고 담김을 집행할 뿐 **custody 를
+증명하지 않는다.** 이 파일들은 `runtime-verifier` 의 쓰기 범위 안에 있다 — 그 agent 는
+무제한 `Bash` 를 같은 OS 사용자로 갖고, 파일명은 이 문서에 리터럴로 적혀 있으며,
+`mktemp -d` 의 0700 은 **같은 UID 에 대해 경계가 아니다**. 앞 버전이 여기 적었던
+*"여섯 이름 전부 당신이 소유하고 당신만 쓴다"* 는 **존재하지 않는 경계의 서술**이었다.
+노출 창은 파일마다 다르고, `$baseline_rows_file` 이 가장 나쁘다 — R4(verifier 턴 **앞**)
+가 쓰고 R6(턴 **뒤**)이 읽으며, 행을 `pass`→`fail` 로 뒤집으면 모든 `NEW_REGRESSION` 이
+`PRE_EXISTING` → `closed` → **degrade 신호 없는 PASS** 가 된다. §5.4/AC59 의 방어는
+*캐시*를 지키지 조립된 행 파일을 지키지 않는다. 이 축은 §6.7 S1(잔여 결함)이며 **열려
+있다** — 닫는 모양은 `snapshot_digest` 선례(오케스트레이터가 봉인을 쥔다)이고, **여섯
+전부에 걸거나 하나도 안 걸어야 한다**(하나만 봉인하면 나머지에 대한 공시가 안심시키는
+방향으로 거짓이 된다).
+
+디렉토리는 지우지 않는다: 실패한 실행의 중간 파일이 디버깅에 쓰이고(`CLAUDE.md` 의
+"실패 시 보존"), 위 `echo` 가 그 경로를 사용자에게 알린다. 정리는 `TMPDIR` 수명에 위임.
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-baseline.sh"
@@ -788,16 +818,49 @@ Agent({
 여기서 손으로 하지 않는다:
 
 ```bash
+set -o pipefail
 printf '%s\n' "${candidate_files[@]}" \
   | "${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" assign "$project_dir" \
-    > "$assign_rows_file"
+    > "$assign_rows_file.part" \
+  && mv -f "$assign_rows_file.part" "$assign_rows_file"
+assign_rc=$?
 ```
 
-`<unit>\t<runner|unclaimed>\t<granularity>` 행을 캡처한다 — **stdout 은 반드시
-`$assign_rows_file` 로 간다.** 이 파일이 R8 의 `--assign-rows` 원본이고, 화면으로만
-읽고 넘어가면 그 대조가 원본을 잃는다. stderr 의 `미실행 러너:` 줄도 함께 잡아 `gap`
-차원에 열거한다. **`unclaimed` 행이 하나라도 있으면** 그 목록을 R8 의 `verification`
-차원으로 가져간다 (`gap` 이 아니다 — 이유는 R8).
+**`.part` → `mv` 는 장식이 아니라 이 스텝의 fail-closed 축이다.** 앞 버전은 최종 경로로
+직접 리다이렉트했는데, 셸은 **명령이 돌기 전에** 대상을 만들고 절단한다. 그래서 인자
+검증에서 즉사한 `assign`(`die` → 0바이트) 도, 루프 중간에 죽은 `assign`(문법적으로
+완전한 **접두 행**) 도 R8 에게는 *"`unclaimed` 0건"* 과 **바이트 단위로 구분되지
+않았다.** 형제 `--aggregate` 는 같은 입력에 `exit 4` 를 내는데 이쪽만 `exit 0` 이었다.
+이제 실패한 실행은 최종 경로에 **파일을 남기지 않고**, R8 의 `--assign-rows` 가 부재로
+`exit 4`(내용 축) 를 낸다. `pipefail` 이 없으면 `$?` 는 `mv` 만 보고 생산자 실패를 가린다.
+
+**`assign` 실패 라우팅 (R6·R7 표와 같은 규율 — 관측 없음은 음성 결과가 아니다).**
+이 스텝은 이 SKILL 에서 **유일하게 라우팅이 없던** 결정론 호출이었다. 바로 위
+`compute-test-scope-candidates.sh` 문단이 이름 붙인 결함 — *"범위를 확정하지 못했다"* 를
+*"이 diff 는 테스트를 건드리지 않는다"* 로 읽는 것 — 이 30줄 아래에서 *"배정하지 못했다"*
+를 *"`unclaimed` 0건"* 으로 읽는 형태로 재현됐다.
+
+| `assign_rc` / 파일 상태 | 조치 |
+|---|---|
+| `0` + `$assign_rows_file` 존재 | 정상 진행 (행 0개도 정상 — 아래) |
+| non-zero, **또는 최종 경로에 파일 부재** | stderr 를 verbatim 으로 노출하고 `verification` 을 **`degraded`** 로 두며 **verdict 를 PASS 로 올리지 않는다.** 빈 결과를 *"배정할 것이 없었다"* 로 읽지 않는다 |
+
+**행 0개는 실패가 아니다.** `assign` 이 정상 종료하고 행이 0개인 것은 *후보가 비었다* 는
+뜻이고, 그것은 이 인자가 판정하는 축이 **아니다**(§11 ⑭, 열려 있음). 위 표가 가르는 것은
+*"생산자가 완주했는가"* 이지 *"결과가 비었는가"* 가 아니다 — 둘을 같은 신호로 접는 것이
+앞 버전의 결함이었고, 반대로 0행을 오류로 만드는 수정은 ⑭ 를 **부수효과로 닫아** 정당한
+빈 스코프에서 PASS 를 구조적으로 불가능하게 만든다.
+
+**남는 틈 (과장하지 않는다).** `assign` 이 `exit 0` 을 내면서 stdout 이 잘린 경우(예:
+ENOSPC — 그 스크립트는 `printf` 실패를 종료코드로 올리지 않는다)는 이 배선이 잡지
+못한다. 닫는 모양은 생산자가 **행수 포함 완료 선언**을 마지막 줄로 내고 소비자가 그것을
+요구하는 것이며, 이 라운드의 범위 밖이다(§11 에 등재).
+
+그다음 **그 파일을 읽어** unit 목록을 얻는다 — 리다이렉트가 화면 출력을 없앴으므로
+R2 의 5번 필드와 R8 의 `verification` 차원이 쓸 목록은 파일에서 온다.
+`<unit>\t<runner|unclaimed>\t<granularity>` 3필드다. stderr 의 `미실행 러너:` 줄도 함께
+잡아 `gap` 차원에 열거한다. **`unclaimed` 행이 하나라도 있으면** 그 목록을 R8 의
+`verification` 차원으로 가져간다 (`gap` 이 아니다 — 이유는 R8).
 
 **Step R2 — 계획 산문 + 비용 신호.**
 

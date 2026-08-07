@@ -99,8 +99,11 @@ def read_unclaimed_count(path: str) -> tuple[int | None, str | None]:
         return None, f"배정 TSV 읽기 실패: {exc}"
     except UnicodeDecodeError as exc:
         return None, f"배정 TSV 가 UTF-8 이 아닙니다: {exc}"
+    # `splitlines()` 는 `\x0b\x0c\x1c-\x1e\x85\u2028\u2029` 까지 쪼개 **생산자보다 넓은**
+    # 줄 모델을 갖는다 — docstring 이 "행 문법은 `assign` 의 계약 그대로" 라고 주장하는 한
+    # 소비자의 줄 모델도 생산자와 같아야 한다. `assign` 은 `\n` 으로만 쓴다.
     count = 0
-    for lineno, line in enumerate(text.splitlines(), start=1):
+    for lineno, line in enumerate(text.split("\n"), start=1):
         if not line.strip():
             continue
         fields = line.split("\t")
@@ -108,6 +111,14 @@ def read_unclaimed_count(path: str) -> tuple[int | None, str | None]:
             return None, (
                 f"배정 TSV {lineno}행이 3필드가 아닙니다 "
                 f"(`<unit>\\t<adapter>\\t<granularity>`): {path}"
+            )
+        # `granularity` 는 이 설계가 고정한 **닫힌 집합**이라 여기서 검사해도 소유권을
+        # 침범하지 않는다. 반대로 `fields[1]`(러너 이름)을 어휘로 검사하면
+        # `run-test-selection.sh` 의 어댑터 표를 밖에서 재구현하는 것이라 AC38·AC52 위반이다.
+        if fields[2] not in ("file", "package", "bulk"):
+            return None, (
+                f"배정 TSV {lineno}행의 granularity '{fields[2]}' 가 "
+                f"{{file, package, bulk}} 밖입니다: {path}"
             )
         if fields[1] == "unclaimed":
             count += 1
@@ -219,6 +230,15 @@ def main() -> int:
             if i + 1 >= len(args):
                 print(f"check_qa_ledger: {args[i]} 에 값이 없습니다\n{USAGE}", file=sys.stderr)
                 return 2
+            if args[i] in opt_paths:
+                # dict 는 마지막 값이 조용히 이긴다 — `--assign-rows A --assign-rows /dev/null`
+                # 이면 집행이 완전히 꺼진 채 exit 0 이다. 인자 **모양** 오류이므로 2.
+                print(
+                    f"check_qa_ledger: {args[i]} 가 두 번 넘어왔습니다 "
+                    f"(마지막 값이 조용히 이깁니다)\n{USAGE}",
+                    file=sys.stderr,
+                )
+                return 2
             opt_paths[args[i]] = args[i + 1]
             i += 2
             continue
@@ -262,8 +282,11 @@ def main() -> int:
             print(f"check_qa_ledger: stdin이 UTF-8이 아닙니다: {exc}", file=sys.stderr)
             return 4
 
-    # 여기 도달했으면 read_unclaimed_count 는 오류 없이 개수를 냈다 (둘 중 하나만 non-None).
-    errors = check(text, expected_attribution, unclaimed_count if unclaimed_count else 0)
+    # 여기 도달했으면 read_unclaimed_count 는 오류 없이 개수를 냈다 (assign_err 분기가 위에서
+    # 이미 4 를 냈다). 앞 버전은 `if unclaimed_count else 0` 으로 감쌌는데, 그것은 도달 불가한
+    # None 을 **fail-open 방향**(집행 소멸)으로 흡수하는 죽은 방어였다 — 이 파일이 스스로
+    # 금지한 패턴이다. 형제 `expected_attribution` 은 같은 자리에서 그대로 넘긴다.
+    errors = check(text, expected_attribution, unclaimed_count)
     if errors:
         for e in errors:
             print(f"check_qa_ledger: {e}", file=sys.stderr)

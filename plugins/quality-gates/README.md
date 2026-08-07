@@ -70,7 +70,11 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
   집계의 `attribution_status` 와 원장의 `floor:attribution` 을, `--assign-rows` 는 배정
   TSV 의 `unclaimed` 행 수와 `floor:verification` 을 본다. 둘 다 **개수가 아니라 경로**를
   받는다 — 모델이 옮겨 적는 숫자를 받으면 대조가 대조하려던 전사 구멍을 그 인자가 다시
-  연다. regression: `tests/test_qa_ledger.sh`, `tests/harness/test_skill_orchestration_behavior.sh`.
+  연다. **`--assign-rows` 집행의 사정거리:** `assign` 은 bulk 흡수자(cargo·make·npm-script)가
+  감지되면 미claim 파일을 `unclaimed` 행이 아니라 `BULK` 한 행으로 접으므로, 이 집행은
+  **흡수자가 없는 레포에서만 발화한다.** 그 축의 공시는 `커버리지 미보장` 배너이지 이
+  집행이 아니다(설계 §6.7 F5 — 의도적으로 열어 둔 항목). regression:
+  `tests/test_qa_ledger.sh`, `tests/harness/test_skill_orchestration_behavior.sh`.
 
 ## 구조
 

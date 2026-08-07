@@ -344,6 +344,117 @@ case_assign_rows_is_mandatory_and_fail_closed() {
   cleanup
 }
 
+# T95′ (iter-8 `/qg` 리뷰): 파서 축 4종 — 전부 실측 생존 mutant 를 닫는다.
+case_parser_axes() {
+  setup
+  local ok=1
+  write_ledger "$TMP/l.md"; write_aggregate "$TMP/a.yaml" closed; write_assign_rows "$TMP/as.tsv"
+  # (SR3) 같은 플래그 반복 → dict 가 마지막 값을 조용히 취해 집행이 꺼진 채 exit 0 이었다.
+  printf '' > "$TMP/empty.tsv"
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" \
+        --assign-rows "$TMP/as.tsv" --assign-rows "$TMP/empty.tsv" "$TMP/l.md")" == 2 ]] \
+    || { echo "    --assign-rows 중복이 2 가 아님 (마지막 값이 조용히 이긴다)"; ok=0; }
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --aggregate "$TMP/a.yaml" \
+        --assign-rows "$TMP/as.tsv" "$TMP/l.md")" == 2 ]] \
+    || { echo "    --aggregate 중복이 2 가 아님"; ok=0; }
+  # (G4) **4필드** 행 — unit 경로에 탭이 들면 unclaimed 가 fields[1] 밖으로 밀려난다.
+  #      `!= 3` 을 `< 3` 으로 완화하면 그 행이 조용히 미집계되어 rc 4 → rc 0 (진짜 PASS 유출).
+  # ★ fields[2] 가 **정상 granularity** 여야 이 축이 격리된다. `unclaimed` 을 3번째에 두면
+  #   granularity 검사가 먼저 잡아 `< 3` mutant 가 생존한다(실측: 이 케이스가 엉뚱한 이유로
+  #   통과했다) — 두 검사가 같은 입력을 덮으면 뒤엣것의 이빨을 앞엣것이 가린다.
+  printf 'spec/a\tb\tfile\tunclaimed\n' > "$TMP/as4.tsv"
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as4.tsv" "$TMP/l.md")" == 4 ]] \
+    || { echo "    4필드 행(granularity 는 정상)이 4 가 아님 — 길이 축이 격리되지 않았다"; ok=0; }
+  # 현실적 형태(unit 경로에 탭) 도 함께 — 이쪽은 granularity 검사가 잡는다(이중 방어).
+  printf 'spec/a\tb\tunclaimed\tfile\n' > "$TMP/as4b.tsv"
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as4b.tsv" "$TMP/l.md")" == 4 ]] \
+    || { echo "    unit 경로 탭 형태가 4 가 아님"; ok=0; }
+  # (CX4) granularity 는 닫힌 집합 — 러너 이름은 소유자 것이라 검사하지 않는다.
+  printf 'tests/a.py\tunittest\tbogus\n' > "$TMP/asg.tsv"
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/asg.tsv" "$TMP/l.md")" == 4 ]] \
+    || { echo "    granularity 어휘 밖이 4 가 아님"; ok=0; }
+  # 양의 짝: 세 granularity 전부 정상 통과해야 한다 (과차단 방지)
+  printf 'tests/a.py\tunittest\tfile\npkg\tgo\tpackage\nBULK\tcargo\tbulk\n' > "$TMP/asok.tsv"
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/asok.tsv" "$TMP/l.md")" == 0 ]] \
+    || { echo "    정상 3종 granularity 가 red (과차단)"; ok=0; }
+  [[ $ok -eq 1 ]] && pass "파서 축 — 중복 플래그 2 · 4필드 4 · granularity 어휘 4 · 정상 3종 0" \
+                  || fail "파서 축 이빨 없음"
+  cleanup
+}
+
+# T95″ (iter-8 `/qg` 리뷰 G5·G6): 미커버였던 반환 지점 3개 + 세 read 경로의 **음의** 짝.
+case_exit_code_remaining_paths() {
+  setup
+  local ok=1
+  write_ledger "$TMP/l.md"; write_aggregate "$TMP/a.yaml" closed; write_assign_rows "$TMP/as.tsv"
+  # positional 초과 → 인자 모양 2
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as.tsv" "$TMP/l.md" "$TMP/l.md")" == 2 ]] \
+    || { echo "    positional 초과가 2 가 아님"; ok=0; }
+  # 원장 파일 부재(OSError) → 내용 4
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as.tsv" "$TMP/nope.md")" == 4 ]] \
+    || { echo "    원장 파일 부재가 4 가 아님"; ok=0; }
+  # stdin 비-UTF-8 → 내용 4
+  printf '\xff\xfe x\n' > "$TMP/badstdin"
+  if python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as.tsv" < "$TMP/badstdin" \
+       >/dev/null 2>&1; then echo "    비-UTF-8 stdin 이 통과"; ok=0
+  else [[ $? -eq 4 ]] || { echo "    비-UTF-8 stdin 이 4 가 아님"; ok=0; }; fi
+  # 형제 두 read 경로의 음의 짝 — `UnicodeDecodeError ⊄ OSError` 핸들러를 지우면
+  # 트레이스백이 exit 1 을 내고, 1 은 이 스크립트의 어휘에서 "구조 위반" 이다(오진).
+  printf '\xff\xfe not utf-8\n' > "$TMP/agg_bad.yaml"
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/agg_bad.yaml" --assign-rows "$TMP/as.tsv" "$TMP/l.md")" == 4 ]] \
+    || { echo "    비-UTF-8 집계가 4 가 아님 (핸들러 회귀)"; ok=0; }
+  printf '\xff\xfe not utf-8\n' > "$TMP/as_bad.tsv"
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as_bad.tsv" "$TMP/l.md")" == 4 ]] \
+    || { echo "    비-UTF-8 배정이 4 가 아님 (핸들러 회귀)"; ok=0; }
+  [[ $ok -eq 1 ]] && pass "잔여 반환 지점 3개 + 세 read 경로 음의 짝 전부 정확한 코드" \
+                  || fail "반환 지점 커버리지 갭"
+  cleanup
+}
+
+# §11 ⑭ 경계 핀 (iter-8 `/qg` 리뷰 Q5): **행 0개는 오류가 아니다.**
+# 이 케이스가 없으면 "0행 거부" 수정이 스위트를 통과하며 ⑭ 를 조용히 닫는다 —
+# 정당한 빈 스코프에서 PASS 가 구조적으로 불가능해진다. 양의 방향으로 못 박는다.
+case_zero_rows_is_not_an_error() {
+  setup
+  local ok=1
+  write_ledger "$TMP/l.md"; write_aggregate "$TMP/a.yaml" closed
+  : > "$TMP/as0.tsv"
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as0.tsv" "$TMP/l.md")" == 0 ]] \
+    || { echo "    0행 배정이 red — §11 ⑭(빈 스코프)를 이 인자가 닫아 버렸다"; ok=0; }
+  printf '\n\n   \n' > "$TMP/asblank.tsv"
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/asblank.tsv" "$TMP/l.md")" == 0 ]] \
+    || { echo "    공백만 있는 배정이 red"; ok=0; }
+  [[ $ok -eq 1 ]] && pass "행 0개·공백만 → exit 0 (§11 ⑭ 는 이 인자의 축이 아니다)" \
+                  || fail "빈 스코프 축이 침범됨"
+  cleanup
+}
+
+# T97 (iter-8 `/qg` 리뷰 H7): **생산자-소비자 계약**을 처음으로 잠근다.
+# 지금까지 픽스처는 포맷을 손으로 다시 써서 *픽스처 작성자의 이해*를 검증했다. `unclaimed`
+# 토큰이나 필드 순서가 한쪽에서만 바뀌면 개수는 조용히 0 이 되고 모든 락이 GREEN 을 유지한다
+# (드리프트 방향이 fail-open). 실물 `assign` stdout 을 그대로 소비자에 먹인다.
+case_producer_consumer_contract() {
+  setup
+  local ok=1 sel="$PLUGIN_ROOT/scripts/run-test-selection.sh"
+  mkdir -p "$TMP/wt/tests" "$TMP/other/tests"
+  # 워크트리 **밖** 경로는 어떤 어댑터의 소유도 아니다 → 결정론적으로 unclaimed 행이 나온다.
+  printf '../other/tests/evil.sh\n' | bash "$sel" assign "$TMP/wt" > "$TMP/real.tsv" 2>/dev/null
+  grep -q 'unclaimed' "$TMP/real.tsv" \
+    || { echo "    실물 assign 이 unclaimed 행을 내지 않음 (픽스처 전제 붕괴)"; ok=0; }
+  write_ledger "$TMP/l.md"; write_aggregate "$TMP/a.yaml" closed
+  # 원장은 verification=closed → 집행이 발화해야 한다 (exit 1)
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/real.tsv" "$TMP/l.md")" == 1 ]] \
+    || { echo "    실물 assign 출력에 집행이 발화하지 않음 (생산자-소비자 계약 드리프트)"; ok=0; }
+  # 양의 짝: 같은 실물 출력 + degraded 원장 → 통과
+  grep -vF 'floor:verification' "$TMP/l.md" > "$TMP/ld.md"
+  printf -- '- floor:verification — degraded — unclaimed 1건, 실행 수단 없음\n' >> "$TMP/ld.md"
+  [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/real.tsv" "$TMP/ld.md")" == 0 ]] \
+    || { echo "    실물 출력 + degraded 가 red"; ok=0; }
+  [[ $ok -eq 1 ]] && pass "실물 assign stdout → 소비자: 집행 발화(1) · degraded 원장 통과(0)" \
+                  || fail "생산자-소비자 계약 미잠금"
+  cleanup
+}
+
 for c in case_complete case_each_missing_dimension case_degraded_is_valid \
          case_unknown_status case_empty_evidence case_derived_reason_required \
          case_derived_named case_heading_does_not_satisfy \
@@ -353,7 +464,9 @@ for c in case_complete case_each_missing_dimension case_degraded_is_valid \
          case_aggregate_is_mandatory_and_fail_closed \
          case_unclaimed_forces_degraded \
          case_assign_rows_is_mandatory_and_fail_closed \
-         case_exit_code_shape_vs_content; do
+         case_exit_code_shape_vs_content case_parser_axes \
+         case_exit_code_remaining_paths case_zero_rows_is_not_an_error \
+         case_producer_consumer_contract; do
   echo "== $c"; $c
 done
 echo "── qa ledger: $PASS passed, $FAIL failed"
