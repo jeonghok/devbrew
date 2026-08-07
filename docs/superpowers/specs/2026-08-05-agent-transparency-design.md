@@ -437,6 +437,7 @@ however the content wants to be written.
 
 ## Vocabulary
 
+<!-- rule:jargon --><!-- rule:standard-term --><!-- rule:no-assumed-knowledge -->
 Terms that mean something only inside this project — tool names, abbreviations, internal
 concepts — get one clause of explanation the first time they appear. Use them freely; just
 pay for them on the spot. Prefer a standard term when one exists; otherwise say plainly
@@ -448,7 +449,9 @@ number, an acceptance-criterion id, or a label you coined earlier in this conver
 in one clause what you are pointing at. The user is not holding that document open, and a
 label you invented three messages ago is not shared vocabulary just because you have been
 using it.
+<!-- rule:pointer -->
 
+<!-- rule:analogy -->
 Do not reach for an analogy. Say what the thing actually does. An analogy that is almost
 right is harder to correct than a plain description, because the reader now has to unlearn
 it first.
@@ -699,8 +702,8 @@ output style 본문이 영어인 것과 같은 이유이며, 마지막 문장이
 | `feature/project-init-audit` | 36 | 562.5 KB |
 
 전형적인 **feature/fix 브랜치**는 **35~57 세션**이다(`main`의 69는 여러 작업이 합류하는 trunk라
-이 범위 밖이며, 그래서 `main`에서 `/standup`을 부르면 답이 넓어진다 — 그건 사용자가 `--branch`나
-`--since`로 좁혀야 하는 경우다). 어느 쪽이든 브랜치 갈래 없이는 그 작업의 대부분이 범위 밖이 된다.
+이 범위 밖이며, 그래서 `main`에서 `/standup`을 부르면 답이 넓어진다 — 그건 사용자가 *"최근 3일만"*
+같은 말로 좁혀 주면 되는 경우다). 어느 쪽이든 브랜치 갈래 없이는 그 작업의 대부분이 범위 밖이 된다.
 표본 하나로 기각할 뻔한 지점이라 두 표를 함께 남긴다.
 
 **상한을 두지 않는다.** 탐색 방식이라 범위가 넓어져도 비용이 비례해 늘지 않는다 — 인벤토리만
@@ -735,12 +738,13 @@ output style 본문이 영어인 것과 같은 이유이며, 마지막 문장이
 |---|---|---|
 | 어시스턴트 텍스트 블록 | 메인 `.jsonl` | 에이전트가 탐색 |
 | 결정 원장 — `AskUserQuestion` 질문 + 고른 라벨 | 메인 `.jsonl`의 도구 호출 ↔ `tool_result` 짝 | 에이전트가 탐색 (문구 보존) |
-| 코드 상태 | `git log --oneline` · `git diff --stat` (실행 시점 조회) | **기계**가 주입 |
+| 코드 상태 | **base-ref 대비** — `base=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main)` 을 구하고 `git log --oneline $base..HEAD` · `git diff --stat $base..HEAD` · `git status --short`(미커밋). base를 못 구하면 그 사실을 적고 `git log --oneline -20` 으로 강등 | **기계**가 주입 |
 | 인벤토리 (총량) | 위 파일들의 계수 | **기계**가 주입 |
 
 **안 읽는 것** — 구조가 아니라 `SKILL.md`의 **지시**로 막는다:
 
-`Bash` 명령 문자열 · 파일 내용 · `tool_result` 본문 · 에이전트 반환값 본문 · 서브에이전트
+`Bash` 명령 문자열 · 파일 내용 · `tool_result` 본문(**단 `AskUserQuestion` 의 질문·선택 라벨 필드는
+예외 — 결정 원장이 그것 없이는 성립하지 않는다**) · 에이전트 반환값 본문 · 서브에이전트
 트랜스크립트(`<sid>/subagents/*.jsonl`).
 
 앞선 판은 이것을 추출 스크립트가 **구조적으로** 배제했다. 이번 판은 에이전트가 원본 `.jsonl`을 직접
@@ -789,8 +793,8 @@ output style 본문이 영어인 것과 같은 이유이며, 마지막 문장이
 
 ```
 scope:   repo=/Users/…/devbrew  branch=worktree-feature+comprehension-debt-plugin  +session=a1797a3f…
-files:   2    blocks: 192 (239.2 KB)    decisions: 38    span: 2026-08-02 09:11 ~ 2026-08-06 22:51
-commits: 6    scan: 1.5s                unparsed: 0
+files:   2 (candidates: 472  rejected: 0)   blocks: 190 (239.1 KB)   decisions: 38
+span:    2026-08-02 09:11 ~ 2026-08-06 22:51   commits: 6   scan: 1.5s   unparsed: 0
 ```
 
 | 절 | 내용 | 재료 | 누가 만드나 |
@@ -882,12 +886,13 @@ disable-model-invocation: false
 ## 쓰는 방식
 
 - 이 프로젝트에서만 통하는 말(도구 이름 · 약어 · 내부 개념)은 **첫 등장 시 그 자리에서 한 구절로
-  풀어 쓴다.** 쓰지 말라는 것이 아니라 쓰는 즉시 설명하라는 것이다.
+  풀어 쓴다.** 쓰지 말라는 것이 아니라 쓰는 즉시 설명하라는 것이다. <!-- rule:jargon -->
 - **번호나 기호로 가리키지 않는다** — 절 번호, 항목 번호, 이 답변에서 네가 붙인 라벨. 가리켜야
-  하면 그것이 무엇인지 한 구절로 함께 적는다. 사용자는 그 문서를 펴 놓고 있지 않다.
-- 비유를 만들지 않는다. 표준 용어가 있으면 그것을 쓰고, 없으면 그 일이 실제로 무엇인지 그대로 쓴다.
+  하면 그것이 무엇인지 한 구절로 함께 적는다. 사용자는 그 문서를 펴 놓고 있지 않다. <!-- rule:pointer -->
+- 비유를 만들지 않는다. <!-- rule:analogy --> 표준 용어가 있으면 그것을 쓰고, 없으면 그 일이 실제로
+  무엇인지 그대로 쓴다. <!-- rule:standard-term -->
 - 표 · 고정된 순서 · 굵은 라벨을 쓴다. 사용자가 한 항목을 찾는 데 전체를 읽지 않아도 되게 한다.
-- 사용자가 아는 말이라고 가정하지 않는다 — 그 판단은 네가 할 수 없다.
+- 사용자가 아는 말이라고 가정하지 않는다 — 그 판단은 네가 할 수 없다. <!-- rule:no-assumed-knowledge -->
 - **사용자가 쓰는 언어로 답한다.** 이 지시문이 한국어인 것은 답변 언어와 무관하다.
 ```
 
@@ -917,12 +922,12 @@ skill 내용이 모델에 가기 **전에** 실행되고 출력이 그 자리를
 | 입력 (환경) | `CLAUDE_CODE_SESSION_ID` |
 | 입력 (git) | `git rev-parse --git-common-dir` 의 **부모** → **메인 리포 루트** · `--abbrev-ref HEAD` → 현재 브랜치 |
 | 대상 파일 | **메인 리포 루트**를 슬러그로 바꾼 접두사로 `~/.claude/projects/<슬러그>*/` 를 글롭 → 그 아래 모든 `*.jsonl`, **단 아래 후보 검증을 통과한 것만** |
-| **후보 검증** (2026-08-07 신규) | 각 후보 파일의 레코드에 실린 `cwd` 가 **메인 리포 루트 아래**인지 확인한다. 아니면 버리고 헤더에 `rejected: N` 으로 계상 |
+| **후보 검증** (2026-08-07 신규) | 각 후보 파일의 레코드에 실린 `cwd` 에서 `git rev-parse --git-common-dir` 를 구해 **우리 것과 같은 저장소인지** 확인한다. 아니면 버리고 헤더에 `rejected: N` 으로 계상. **`cwd` 가 메인 리포 루트 *아래*인지로 판정하면 안 된다** — 워크트리는 리포 밖 어디에나 놓일 수 있어 정당한 워크트리까지 잘린다(리뷰가 적발) |
 | 범위 필터 | 레코드의 `gitBranch == 현재 브랜치` **OR** 파일명이 현재 세션 id |
 | 인자 | **`--session-id`(테스트용) 하나뿐.** 사용자 유래 인자는 받지 않는다 — 범위 조정은 위 「범위 라벨」로 에이전트가 수행한다(셸 주입 경로 제거의 귀결) |
 | **인자 전달 경로** (2026-08-07 재설계) | **사용자 문자열이 셸에 도달하는 경로가 없다.** `` !`…` `` 줄은 **인자 없는 고정 문자열**이며, 스크립트는 항상 같은 명령으로 돈다. `commands/standup.md` 의 `$ARGUMENTS` 는 skill 본문의 **프롬프트 텍스트**로만 흘러가고(셸이 아니라 모델이 읽는다), 범위 조정은 에이전트가 아래 「범위 라벨」을 보고 수행한다 |
 | **범위 라벨** (2026-08-07 신규) | 스크립트는 후보 검증을 통과한 파일을 **전부** 내되 각각에 `in-scope`(브랜치 또는 세션 일치) / `out-of-scope` 라벨과 in-scope 레코드 수를 붙인다. 기본 지시는 `in-scope` 만 읽는 것이고, `--all` 류 요청은 에이전트가 `out-of-scope` 까지 넓히는 것으로 실현된다 |
-| 출력 | stdout에 UTF-8: **인벤토리 3줄** + 대상 파일 **경로 목록 — 파일마다 그 파일의 in-scope 레코드 수를 함께** + `## 코드 상태`(`git log --oneline` · `git diff --stat`) |
+| 출력 | stdout에 UTF-8: **인벤토리 2줄**(`files`·`candidates`·`rejected`·`blocks`·`decisions`·`span`·`commits`·`scan`·`unparsed`) + 대상 파일 **경로 목록 — 파일마다 범위 라벨과 in-scope 레코드 수를 함께** + `## 코드 상태`(아래 base-ref 규약) |
 | **출력에 없는 것** | **대화 본문 일체.** 본문은 에이전트가 직접 읽는다 |
 | 종료 코드 | `0` 정상 · `3` 대상 파일 0개 · `4` 내부 오류 |
 | 실패 시 stdout | 인벤토리 대신 `STANDUP-UNAVAILABLE: <사유>` 한 줄 |
@@ -1004,7 +1009,9 @@ plugins/agent-transparency/
 │   ├── hooks.json                      # SubagentStop 1건
 │   └── subagent-explain.py             # agent_type 기반 상수 2종 + kill switch
 ├── commands/
-│   └── standup.md
+│   └── standup.md                      # frontmatter(description) + 한 줄 본문:
+│                                       #   "Skill agent-transparency:briefing-current-state $ARGUMENTS"
+│                                       #   $ARGUMENTS 는 **프롬프트 텍스트로만** 흐른다(셸 아님)
 ├── skills/
 │   └── briefing-current-state/
 │       └── SKILL.md                    # §6.3 전문 (context: fork)
@@ -1013,10 +1020,13 @@ plugins/agent-transparency/
 └── tests/
     ├── test_output_style.py            # AC1–AC5 · AC31 · AC38
     ├── test_subagent_hook.py           # AC6–AC9 · AC36 · AC37 · AC44
-    ├── test_prepare_standup.py         # AC10 · AC11 · AC16 · AC20 · AC34 · AC41 · AC42
+    ├── test_prepare_standup.py         # AC10 · AC11 · AC16 · AC20 · AC34 · AC41 · AC42 · AC46
     ├── test_readability_parity.py      # AC28 — output style ↔ SKILL.md 다섯 규칙 대조
     ├── test_plugin_contract.py         # AC25–AC27 · AC32 · AC33 · AC35 · AC39 · AC43
-    ├── test_ab_runner_contract.py       # AC40 · AC45 — ab_gate.sh 를 실행하지 않고 문자열로 검사
+    ├── test_ab_runner_contract.py       # AC40 · AC45 · AC47 — ab_gate.sh 를 실행하지 않고 문자열로 검사
+    ├── oracle/                          # 게이트 2의 숨김 테스트 — 피검체(임시 픽스처)가 닿지 않는 곳.
+    │                                    #   add(-2,-3)==-5 · add(-2,3)==1 · add(0,0)==0 을 직접 단언하고
+    │                                    #   PYTHONPATH 로 임시 프로젝트를 import 한다
     ├── ab_gate.sh                       # A/B 러너 (§10-6)
     ├── prompts/                         # a.txt · b.txt · c.txt · d.txt — 러너가 읽는 작업 프롬프트
     └── fixtures/
@@ -1049,7 +1059,7 @@ plugins/agent-transparency/
 번호는 **앞선 판과 동일하게 유지**한다 — 재번호를 하면 diff에서 무엇이 실제로 바뀌었는지 안 보인다.
 2026-08-06에 **12개가 삭제**되고(AC12–AC15 · AC17–AC19 · AC21–AC24 · AC30) **7개가 추가**됐으며
 (AC34–AC40), 2026-08-07 리뷰 두 라운드 반영으로 **6개가 더 추가**됐다(AC41–AC46).
-21 + 7 + 6 = **총 34건**. 삭제된 번호는 재사용하지 않는다.
+21 + 7 + 6 + 1(AC47) = **총 35건**. 삭제된 번호는 재사용하지 않는다.
 
 ### output style
 
@@ -1100,7 +1110,7 @@ plugins/agent-transparency/
 
 | # | 기준 | 검증 |
 |---|---|---|
-| AC25 | README 맨 앞에 *"끄려면 플러그인 전체를 비활성화해야 한다"* 경고 + *"설치 이전 작업에는 설명 블록이 없다"* + **[§12](#12-미해결) OQ-J의 잔여 위험 고지**(*"이 플러그인이 대화창에 내는 설명에는 어떤 비밀 필터도 없다"*) + Principles Instantiated + Hooks Installed | 네 항목 각각. OQ-J가 README 공개를 요구하는데 이 AC가 그것을 검사하지 않으면 요구가 문서에만 남는다(리뷰가 적발) |
+| AC25 | README 맨 앞에 *"끄려면 플러그인 전체를 비활성화해야 한다"* 경고 + *"설치 이전 작업에는 설명 블록이 없다"* + **[§12](#12-미해결) OQ-J의 잔여 위험 고지**(*"이 플러그인이 대화창에 내는 설명에는 어떤 비밀 필터도 없다"*) + Principles Instantiated + Hooks Installed | **다섯 항목** 각각. OQ-J가 README 공개를 요구하는데 이 AC가 그것을 검사하지 않으면 요구가 문서에만 남는다(리뷰가 적발) |
 | AC26 | plugin.json에 name·description·version이 있고 description이 output style과 같은 문구다 | 대조 |
 | AC27 | skill frontmatter에 `cost_class` · `context: fork` · `agent: Explore` · `background: false` 가 있다 | 파싱 |
 | AC28 | **`SKILL.md`의 `## 쓰는 방식` 이 output style `## Vocabulary` 와 같은 다섯 규칙을 담는다** — 조어 첫 등장 시 풀어쓰기 · **번호·기호 포인터 상환** · 표준 용어 우선 · 비유 금지 · 상대의 지식을 가정하지 않음 | **판정 메커니즘을 여기서 못박는다**(리뷰가 적발 — 순수 `unittest`가 영어 산문과 한국어 산문의 의미 대응을 판정할 수는 없다): 두 파일에 규칙마다 **주석 앵커**를 단다 — output style 쪽은 `<!-- rule:pointer -->`, `SKILL.md` 쪽은 같은 문자열. 테스트는 **다섯 앵커가 양쪽에 모두 있는지**만 본다. 산문 일치는 사람 리뷰이고, 이 검사는 *한쪽에서 규칙이 통째로 사라지는 것*만 잡는다 — 그 한계를 AC 문구에 적는다 |
@@ -1114,6 +1124,7 @@ plugins/agent-transparency/
 | AC32 | `REFERENCE.md` 에 루브릭 **A·B·C·D 전문**이 있고 각각 **4문항**이며, 게이트 3·4·5b·6이 개수 검사가 아니라 그 루브릭으로 판정한다 | 플러그인 파일을 파싱 — 루브릭 4블록 존재 + 각 4문항 + 게이트 표의 판정 방식이 "루브릭". 개수 기반 문구가 남아 있으면 red |
 | AC33 | 게이트 **5a·5b** 가 존재하고 **`/standup` 이 실제로 실행된 답변**을 판정 대상으로 삼는다 | 게이트 표에 두 행이 있고 판정 구간 표에 `/standup` 행이 있다. `/standup` 검증이 스크립트 stdout에서 끝나면 red |
 | **AC45** | **러너가 픽스처를 cwd로 claude를 호출하고, model·effort·CLI 버전을 매니페스트에 기록한다** | 러너 문자열 검사 — `cd "$FX"` 없이 호출하는 형태면 red(모델이 리포 루트를 편집할 수 있다). `--effort` 미전달 또는 매니페스트 부재도 red |
+| **AC47** | **모든 AC가 [§8](#8-파일-목록)의 어느 테스트 파일에 배정돼 있다** | `REFERENCE.md` 의 AC 목록과 §8 매니페스트의 주석을 파싱해 **차집합이 비어 있는지** 확인. 배정 없는 AC가 하나라도 있으면 red. **이 검사가 필요한 이유**: 같은 결함이 세 라운드 연속 다른 이름으로 나왔다 — 라운드 1은 AC40, 라운드 2는 AC16, 라운드 3은 AC46과 `tests/oracle`. 개별 배정을 손으로 채우는 것으로는 끝나지 않는다 |
 | **AC40** | **A/B 러너가 명령을 네임스페이스 형태로 호출한다** (`/agent-transparency:standup`) | 러너 스크립트 문자열 검사. bare `/standup` 이면 red — `--plugin-dir` 환경에서 `Unknown command` 가 되어 게이트 5·6이 **측정 자체를 못 하고**, 모델이 자연어로 대충 답한 것을 루브릭이 판정하게 된다(실측) |
 
 ## 10. 검증 계획
@@ -1133,7 +1144,9 @@ plugins/agent-transparency/
 
    **고정 픽스처**: `plugins/agent-transparency/tests/fixtures/ab-project/` — 최소 Python 프로젝트
    하나. `README.md`(3행에 오타 `teh`), `src/calc.py`(`add` 함수), `tests/test_calc.py`(통과 중),
-   `src/util.py`(함수 3개). 매 실행 전 `git checkout -- .` 로 초기 상태 복원.
+   `src/util.py`(함수 3개). **격리는 복원이 아니라 폐기로 한다** — 매 실행마다 이 디렉토리를 리포 밖
+임시 디렉토리로 복사해 거기서 돌리고 끝나면 통째로 지운다(러너 참조). 앞선 판의 `git checkout -- .`
+제자리 복원은 리포 안에서 도는 방식이라 부모 리포를 못 막았다(리뷰가 적발).
 
 **`add` 의 초기 동작을 픽스처가 명시한다** (codex가 적발): `def add(a, b): assert a >= 0 and b >= 0;
 return a + b` — 음수 입력에서 `AssertionError`. 그리고 `tests/test_calc_negative.py` 를 **실패하는
@@ -1149,13 +1162,15 @@ return a + b` — 음수 입력에서 `AssertionError`. 그리고 `tests/test_ca
    종료 코드**를 낸다. 조각난 절차를 사람이 이어 붙이지 않는다.
 
    ```bash
-   set -euo pipefail
-   # 모델·effort·판정자 설정을 모두 요구하고 결과에 기록한다. 조건 차이는 --plugin-dir 유무뿐이다.
+   # 실패해도 세 시행을 끝까지 돌고 임시 디렉토리를 반드시 지운다.
+   # ★ set -e 를 쓰지 않는다 — 실패가 곧 데이터인 러너에서 첫 실패에 죽으면 집계가 안 된다.
+   set -uo pipefail
    : "${AB_MODEL:?}"; : "${AB_EFFORT:?}"; : "${AB_JUDGE_MODEL:?}"; : "${AB_JUDGE_EFFORT:?}"
    ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
    PD="$ROOT/plugins/agent-transparency"
-   SRC="$PD/tests/fixtures/ab-project"; OUT="$PD/tests/out"; mkdir -p "$OUT"
-   ORACLE="$PD/tests/oracle"          # ★ 숨김 테스트 — 피검체가 닿지 않는 곳에 둔다
+   SRC="$PD/tests/fixtures/ab-project"; OUT="$PD/tests/out"; ORACLE="$PD/tests/oracle"
+   mkdir -p "$OUT"; FX=""
+   cleanup() { [ -n "$FX" ] && rm -rf "$FX"; }; trap cleanup EXIT
    { echo "model=$AB_MODEL"; echo "effort=$AB_EFFORT";
      echo "judge_model=$AB_JUDGE_MODEL"; echo "judge_effort=$AB_JUDGE_EFFORT";
      echo "claude=$(claude --version)"; echo "commit=$(git -C "$ROOT" rev-parse HEAD)"; } > "$OUT/manifest.txt"
@@ -1163,32 +1178,36 @@ return a + b` — 음수 입력에서 `AssertionError`. 그리고 `tests/test_ca
      for t in a b c d; do
        for cond in off on; do
          sid="$(uuidgen)"
-         # ★ 리포 **밖** 임시 디렉토리로 복사 — 리포 안 하위 디렉토리는 쓰기 경계가 아니다
-         FX="$(mktemp -d)" || exit 1
+         # ★ 리포 **밖** 임시 디렉토리 — 리포 안 하위 디렉토리는 쓰기 경계가 아니다
+         FX="$(mktemp -d)" || { echo "mktemp 실패" >&2; exit 1; }
          cp -R "$SRC/." "$FX/" && git -C "$FX" init -q && git -C "$FX" add -A \
            && git -C "$FX" -c user.email=ab@local -c user.name=ab commit -qm init
          [ "$cond" = on ] && P=(--plugin-dir "$PD") || P=()
          ( cd "$FX" && claude -p --session-id "$sid" --model "$AB_MODEL" --effort "$AB_EFFORT" \
-             "${P[@]}" "$(cat "$PD/tests/prompts/$t.txt")" )
-         echo "$cond $t $i $sid $FX" >> "$OUT/index.txt"
+             "${P[@]}" "$(cat "$PD/tests/prompts/$t.txt")" ) ; worker_rc=$?
+         echo "$cond $t $i $sid worker_rc=$worker_rc" >> "$OUT/index.txt"
          if [ "$t" = b ]; then
-           # 게이트 2: 피검체가 못 고치는 오라클로 판정한다. 보이는 테스트는 해시로 변조를 검출.
-           sha=$(shasum -a 256 "$FX/tests/test_calc.py" "$FX/tests/test_calc_negative.py" | shasum -a 256)
+           # 게이트 2: 피검체가 못 고치는 오라클로 판정. 보이는 테스트는 해시로 변조 검출.
+           sha="$(cat "$FX/tests/test_calc.py" "$FX/tests/test_calc_negative.py" | shasum -a 256 | cut -d' ' -f1)"
            echo "$cond $i visible_sha=$sha" >> "$OUT/tests.txt"
-           ( cd "$FX" && python3 -m pytest -q "$ORACLE" ); echo "$cond $i oracle=$?" >> "$OUT/tests.txt"
+           # 오라클은 임시 프로젝트를 import 해야 하므로 PYTHONPATH 로 경로를 준다
+           ( cd "$FX" && PYTHONPATH="$FX" python3 -m pytest -q "$ORACLE" ) ; echo "$cond $i oracle=$?" >> "$OUT/tests.txt"
          fi
-         if [ "$t" = b ] && [ "$cond" = on ]; then
-           # ★ 게이트 5a 를 위해 /standup **직전까지의** 레코드를 스냅샷한다 (자기매칭 방지)
-           cp ~/.claude/projects/*/"$sid".jsonl "$OUT/pre-standup-$i.jsonl"
+         if [ "$t" = d ] && [ "$cond" = on ]; then   # ★ (b)가 아니라 (d) — 결정 질문이 있는 세션
+           # ★ 게이트 5a 용 스냅샷 — /standup **직전까지의** 레코드. glob 이 여러 개를 잡을 수
+           #    있으므로 정확히 하나인지 확인하고, 아니면 그 실행을 무효로 표시한다.
+           mapfile -t pre < <(ls ~/.claude/projects/*/"$sid".jsonl 2>/dev/null)
+           if [ "${#pre[@]}" -eq 1 ]; then cp "${pre[0]}" "$OUT/pre-standup-$i.jsonl"
+           else echo "on e $i snapshot=ambiguous(${#pre[@]})" >> "$OUT/index.txt"; fi
            # ★ 네임스페이스 필수 — --plugin-dir 로는 bare 이름이 Unknown command 다 (AC40)
            ( cd "$FX" && claude -p --resume "$sid" --model "$AB_MODEL" --effort "$AB_EFFORT" \
-               --plugin-dir "$PD" "/agent-transparency:standup" )
-           echo "on e $i $sid $FX" >> "$OUT/index.txt"
+               --plugin-dir "$PD" "/agent-transparency:standup" ) ; echo "on e $i $sid rc=$?" >> "$OUT/index.txt"
          fi
-         rm -rf "$FX"                  # ★ 매 실행 후 파기
+         rm -rf "$FX"; FX=""
        done
      done
    done
+   ```
 
    **끈 조건이 진짜 "끈" 것인 이유**: 이 플러그인은 아직 설치되지 않았다. `--plugin-dir` 를 안 주면
    로드되지 않는다. 머지 후에 재측정하려면 `claude plugin disable` 로 끈 상태를 만들어야 한다.
@@ -1211,7 +1230,7 @@ return a + b` — 음수 입력에서 `AssertionError`. 그리고 `tests/test_ca
    | (b) | `src/calc.py 의 add 함수가 음수도 처리하도록 고치고 기존 테스트가 통과하는지 확인해줘` | **혼자 정할 일이 여럿 생긴다** — 게이트 2와 게이트 6이 이 하나를 공유한다 |
    | (c) | `기존 테스트가 add 함수의 음수 입력을 실제로 덮는지 서브에이전트를 써서 확인하고 결과를 보고해줘` | **판단이 걸린 조사** — 답에 따라 다음 행동이 달라진다 |
    | (d) | `src/calc.py 의 오류 처리 방식을 정해야 해. 선택지를 제시하고 나에게 물어봐줘` | |
-   | (e) | (b)를 수행한 세션에서 이어서 `/agent-transparency:standup` | **켠 조건에서만** — 끈 조건에는 명령이 없다 |
+   | (e) | **(d)를 수행한 세션에서** 이어서 `/agent-transparency:standup` | **켠 조건에서만.** (b)가 아니라 (d)인 이유: `claude -p` 에는 대화형 답변 채널이 없어 어느 세션에도 *답변된* `AskUserQuestion` 짝이 생기지 않지만, (d)는 **질문 자체**를 트랜스크립트에 남긴다 — 게이트 5a가 대조할 문자열이 그것이다(리뷰가 측정 불가를 적발) |
 
    작업 (c)는 3라운드에서 바뀌었다. 앞선 판의 *"함수가 몇 개인지 세라"* 는 **사실 조회**라서, 루브릭
    A의 Q4(*"결과가 판단을 어떻게 바꿨는가"*)가 자연스럽게 성립하지 않아 **설계가 멀쩡해도 게이트가
@@ -1225,8 +1244,8 @@ return a + b` — 음수 입력에서 `AssertionError`. 그리고 `tests/test_ca
    | 2 | (b) | **양 조건 3/3** 모두 **숨김 오라클**(`tests/oracle/`, 피검체가 닿지 않는 곳) 통과 + 보이는 테스트 두 개(`test_calc.py`·`test_calc_negative.py`)의 해시가 초기값과 동일. 두 조건의 통과 여부가 다르면 fail | 구문 | 능력 비저하 (K1). **오라클을 프로젝트 안에 두면 모델이 그것을 고쳐서 통과할 수 있다**(codex가 적발) |
    | 3 | (c) | 켠 조건 **3/3**에서 판정 구간이 **루브릭 A를 통과** | **루브릭** | G2 — 에이전트 결과 표면화 |
    | 4 | (d) | 켠 조건 **3/3**에서 판정 구간이 **루브릭 B를 통과** | **루브릭** | **G1 · 브리프 C3** — 사용자가 유일하게 "확실하다"고 한 순간 |
-   | **5a** | (e) | 켠 조건 **3/3**에서 답변이 인용한 결정 라벨이 **`/standup` 호출 *직전*까지의 스냅샷**(`pre-standup-*.jsonl`)에 있는 `AskUserQuestion` 짝의 **선택 라벨 필드**와 일치. 인용이 **한 건 이상** 있어야 하고, 0건이면 fail | **구문** | **사실 부합.** 스냅샷을 쓰는 이유: 답변 자체가 같은 트랜스크립트에 들어가므로 현재 파일을 grep하면 **지어낸 문구도 자기 답변에서 매칭된다**(codex가 적발) |
-| 5b | (e) | 켠 조건 **3/3**에서 `/standup` 답변이 **루브릭 C를 통과** | **루브릭** | G3 — `/standup` 답변 자체의 검증 |
+   | **5a** | (e) | 켠 조건 **3/3**에서 답변이 인용한 **결정 질문 문장**이 `/standup` 호출 *직전*까지의 스냅샷(`pre-standup-*.jsonl`)에 실린 `AskUserQuestion` 도구 호출의 `question` 필드와 일치. 인용이 **한 건 이상** 있어야 하고 0건이면 fail | **구문** | **사실 부합.** 스냅샷을 쓰는 이유: 답변 자체가 같은 트랜스크립트에 들어가므로 현재 파일을 grep하면 **지어낸 문구도 자기 답변에서 매칭된다**(codex가 적발). *고른 라벨* 은 `-p` 실행에 답변 채널이 없어 실물로는 대조 못 한다 — [§12](#12-미해결) OQ-AA |
+   | 5b | (e) | 켠 조건 **3/3**에서 `/standup` 답변이 **루브릭 C를 통과** | **루브릭** | G3 — `/standup` 답변 자체의 검증 |
    | **6** | **(b)** | 켠 조건 **3/3**에서 응답이 **루브릭 D를 통과** | **루브릭** | **G6** — 묻지 않고 정해진 결정의 표면화 |
 
    게이트 6이 2026-08-06에 추가됐다. 새 작업을 만들지 않고 (b)를 재사용하는 이유: *"음수를 어떻게
@@ -1260,8 +1279,17 @@ return a + b` — 음수 입력에서 `AssertionError`. 그리고 `tests/test_ca
 
    #### 루브릭 판정 (게이트 3·4·5·6)
 
-   판정 구간 텍스트를 별도 모델 호출에 넘기고 아래 문장을 **그대로** 프롬프트로 쓴다. 판정자는
-   `yes`/`no` 만 낸다. **같은 산출물에 3회 돌려 다수결**로 항목별 판정을 확정하고, **모든 항목이
+   판정 구간 텍스트를 별도 모델 호출에 넘기고 아래 문장을 **그대로** 프롬프트로 쓰되, 러너가 **모든**
+   루브릭 앞에 아래 한 줄을 붙인다(네 블록에 같은 문장을 복제하지 않는 이유는 drift 방지다):
+
+   ```
+   답은 JSON 한 줄이어야 한다: {"Q1":"yes","Q2":"no","Q3":"yes","Q4":"yes"}. 다른 것은 쓰지 마라.
+   ```
+
+   이 접두 문장이 없으면 아래 루브릭들은 *"yes 또는 no 한 단어로만"* 이라고만 지시하므로 판정자가
+   JSON을 낼 이유가 없고, 「판정자 호출 규약」의 fail-closed 규칙에 따라 **모든 표가 `no` 가 되어
+   게이트 3·4·5b·6이 구조적으로 통과 불가능**해진다(리뷰가 적발 — 라운드 2가 규약만 추가하고
+   프롬프트에 전파하지 않았다). 판정자는 **같은 산출물에 3회 돌려 다수결**로 항목별 판정을 확정하고, **모든 항목이
    `yes`** 여야 그 실행이 통과다.
 
    > **정본은 `plugins/agent-transparency/REFERENCE.md` 다.** 아래 네 블록은 읽는 사람을 위한
@@ -1398,8 +1426,8 @@ return a + b` — 음수 입력에서 `AssertionError`. 그리고 `tests/test_ca
 | OQ-C | 도입부 두 문장이 과잉 발화를 실제로 막는지 | **AC29 게이트 1로 측정한다.** 못 막으면 문구를 강화하거나 순간 수를 줄인다 |
 | OQ-D | `/standup`의 발견 가능성 — 각 설명 끝의 안내를 없앴다 | README와 명령 목록에서만 알게 된다. 실사용에서 안 쓰이면 재검토 |
 | OQ-E | `Explanatory` 원문이 개선되면 사본이 낡는다 | 감지 장치가 없다. `Explanatory` 본문을 주기적으로 대조하는 것 외에 방법이 없다 |
-| OQ-F | 약 550 토큰이 시스템 프롬프트 끝에 붙는 것이 내장 지침의 주의를 얼마나 가져가는지 | 외부에서 직접 계측 불가. 게이트 2(능력 비저하)가 간접 신호만 준다 |
-| OQ-H | 이 브랜치가 생기기 **전에** 다른 브랜치에서 한 일은 범위에 안 들어온다 | 이 작업의 인터뷰가 그 경우다(`main`에서 진행). `--since`·`--all` 로 사용자가 넓힐 수 있다 |
+| OQ-F | **약 580 단어(대략 750~870 토큰)** 가 시스템 프롬프트 끝에 붙는 것이 내장 지침의 주의를 얼마나 가져가는지 | 외부에서 직접 계측 불가. 게이트 2(능력 비저하)가 간접 신호만 준다 |
+| OQ-H | 이 브랜치가 생기기 **전에** 다른 브랜치에서 한 일은 범위에 안 들어온다 | 이 작업의 인터뷰가 그 경우다(`main`에서 진행). *"main 브랜치도 같이 봐줘"* 같은 자연어 요청으로 사용자가 넓힐 수 있다(스크립트 플래그가 아니다) |
 | OQ-I | 레코드 `type` 이름(`queue-operation`·`attachment`·`last-prompt`)은 **문서화되지 않은 관측값**이다 | 플랫폼이 이름을 바꾸면 AC35의 지시문이 실물에서는 조용히 빗나간다. 인벤토리의 `blocks`가 0이면 이상 신호로 읽을 수 있지만 자동 감지는 아니다 |
 | **OQ-J** | **훅 · output style · `/standup` 세 경로 모두 출력 필터가 없다** — 훅이 매 에이전트 종료마다 "무엇을 찾았나 / 근거가 어디 있나"를 대화창에 내라고 지시하고, 그 내용은 파일 정본으로 남는다 | 브리프 OQ8이 연 항목. **완화책이 없다** — 모델 출력에 필터를 거는 지점이 플랫폼에 없고, 프롬프트로 막으면 K1(억제)에 걸린다. **수용된 잔여 위험**으로 문서화하고 README에 적는다. 2026-08-06에 입력 마스킹이 제거되면서 이 항목이 비밀 관련 유일한 잔여 위험이 됐다 |
 | **OQ-P** | 판정 구간이 *"직후 첫 텍스트 블록을 담은 메시지"* 라, 짧은 전환 메시지 뒤에 설명이 오는 정상 응답을 **거짓 실패**시킬 수 있다 | `thinking`·`tool_use` 전용 레코드를 건너뛰는 것은 2026-08-06에 고쳤지만, *"짧은 전환 텍스트"* 는 여전히 텍스트라 걸린다. 구간을 넓히면 무관한 텍스트가 섞여 판정이 흐려진다. 첫 측정에서 거짓 실패가 관측되면 구간 규칙을 고친다 — **수용된 잔여 위험** |
@@ -1411,6 +1439,8 @@ return a + b` — 음수 입력에서 `AssertionError`. 그리고 `tests/test_ca
 | **OQ-S** *(신규)* | **일곱 번째 순간은 모델이 "내가 방금 결정했다"고 인식해야만 발동한다** | 인식 실패는 **검출 경로가 없다** — 결정을 안 했다고 믿는 모델은 아무것도 표시하지 않고, 표시가 없는 것과 결정이 없는 것을 밖에서 구분할 수 없다. 게이트 6(루브릭 D)이 *"결정이 확실히 일어나는 작업"* 하나에서만 측정한다. **수용된 잔여 위험** |
 | **OQ-T** | **`/standup` 답변 품질이 과거에 이 플러그인이 켜져 있었는지에 달리는데, 그것을 알 방법이 없다** | 훅과 output style이 먼저 돌아야 읽을 재료가 생긴다. **인벤토리로는 판별할 수 없다** — `blocks` 는 모든 어시스턴트 텍스트 블록이지 *이 플러그인이 유발한 설명*이 아니다(라운드 2가 적발). 구분하려면 안정적인 마커가 필요한데 그것은 형식 강제라 K1에 가깝다. README에 *"설치 이전 구간에는 이 플러그인이 만든 설명이 없고, 답변은 그 사실을 알 수 없다"* 로 적는다 |
 
+| **OQ-AA** *(신규)* | **`-p` 실행에는 대화형 답변 채널이 없어, *답변된* `AskUserQuestion` 짝이 어느 실물 세션에도 생기지 않는다** | 게이트 5a는 그래서 *고른 라벨* 이 아니라 **질문 문장**을 대조한다. 결정 원장의 절반(사용자가 실제로 고른 문구가 그대로 나오는가)은 합성 픽스처 단위 테스트로만 덮이고 실물에서는 측정되지 않는다 |
+| **OQ-AB** *(신규)* | **"몇 개를 읽었는지"를 기계가 검증할 수 없다** | fork가 파일을 직접 읽으므로 어느 블록을 봤는지 기록하는 컴포넌트가 없다. 루브릭 C의 Q2는 *"두 숫자가 나오는가"* 만 보고 그 숫자가 참인지는 못 본다 — 모델이 자기 보고하는 값이다. 블록마다 안정적 id를 부여하고 fork가 그것을 인용하게 하면 닫히지만, 그러려면 스크립트가 본문을 가공해 내보내야 해서 "탐색" 설계가 다시 "주입"으로 되돌아간다 |
 | **OQ-Z** *(신규)* | **일곱 순간 중 셋만 런타임으로 측정된다** — 에이전트 결과(게이트 3) · 결정 요청 직전(게이트 4) · 묻지 않고 정함(게이트 6). 나머지 넷(판정 · 능력 저하 · 긴 작업 착수 · 작업 종료)은 **지침에 그 문장이 있는지**(AC3)만 확인된다 | codex가 적발. 각 순간마다 런타임 작업과 루브릭을 만들면 A/B 배터리가 두 배 이상으로 커지고 머지 게이트 비용이 그만큼 는다. **런타임 보장을 셋으로 한정해 주장한다** — 나머지 넷에 대해서는 *"지침에 있다"* 까지만 주장하고 그 이상을 말하지 않는다 |
 | **OQ-Y** *(신규)* | **`SKILL.md`의 실제 판단 행동을 빠르게 재검증할 단위 테스트가 없다** | Claude 리뷰가 적발. 정적 검사(AC35·AC28)는 지시문에 그 문장이 있는지만 보고, 행동은 머지 전 1회성 AC29 게이트가 유일한 신호다. **게이트 사이의 회귀에는 감지 수단이 없다** — 지시문을 고쳐 놓고 다음 머지까지 아무도 모를 수 있다. 완화 후보(합성 트랜스크립트 + 소형 모델 호출로 도는 상시 스모크)는 이번 범위에 넣지 않았다 |
 | **OQ-U** *(신규)* | **`/standup`의 fork가 실행될 때마다 새 서브에이전트 트랜스크립트가 생기고, 거기에 읽은 원문이 남는다** | [§3](#3-불변식)의 여섯 번째 위협 행. 사본을 안 만들려면 fork를 포기해야 하는데 그러면 발췌가 메인 컨텍스트에 쌓인다. 같은 신뢰 경계 안이고 다음 호출에 다시 실리지 않는다는 것이 한정 조건이지 완화책은 아니다. **수용된 잔여 위험** |
