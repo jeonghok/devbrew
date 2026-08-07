@@ -262,8 +262,27 @@ case_poetry_in_project_env_dir() {
   # 양의 짝 — 끄면 이 사유로는 막지 않는다
   case "$off"  in *env_dir_not_ignored*) ok=0; echo "    env=false 인데도 .venv 를 요구함(과잉)" ;; esac
 
-  [[ $ok -eq 1 ]] && pass "poetry: in-project 가 켜진 축(env·poetry.toml)에서만 .venv 를 env-dir 로 요구 (양의 짝 포함)" \
-                  || fail "poetry in-project env-dir (on='${on:0:60}' off='${off:0:60}' toml='${toml:0:60}')"
+  # /qg iter-6 iteration 2 (I2, 리뷰어 3명 독립 지적): **질의 실패는 "트리 밖" 이 아니다.**
+  # 앞선 판본은 `command -v poetry` 가 참인 순간 `true` 가 아닌 모든 결과(비0 exit · 빈
+  # 출력 · poetry 가 unset 에 내는 `null`)를 "트리 밖" 으로 읽어, 보수적 기본값이 poetry
+  # *부재* 축에만 붙어 있었다. 그 방향의 대가가 거짓 terminal FAIL 이라 비대칭이다.
+  # 실패하는 poetry 스텁으로 그 축을 잰다.
+  rm -f "$W/poetry.toml"
+  local stub; stub=$(mktemp -d) || exit 1
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$stub/poetry"; chmod +x "$stub/poetry"
+  local failing
+  failing=$(PATH="$stub:$PATH" POETRY_VIRTUALENVS_IN_PROJECT= bash "$RTS" probe "$W" unittest 2>&1)
+  case "$failing" in *env_dir_not_ignored*) ;; *) ok=0; echo "    poetry 질의 실패인데 보수적으로 읽지 않음" ;; esac
+  # 같은 스텁이 명시적으로 false 를 내면 요구하지 않아야 한다 (양의 짝 — 스텁이 무조건
+  # 게이트를 켜는 게 아님을 증명)
+  printf '#!/usr/bin/env bash\necho false\n' > "$stub/poetry"; chmod +x "$stub/poetry"
+  local explicit_false
+  explicit_false=$(PATH="$stub:$PATH" POETRY_VIRTUALENVS_IN_PROJECT= bash "$RTS" probe "$W" unittest 2>&1)
+  case "$explicit_false" in *env_dir_not_ignored*) ok=0; echo "    poetry 가 false 를 냈는데도 .venv 요구(과잉)" ;; esac
+  rm -rf "$stub"
+
+  [[ $ok -eq 1 ]] && pass "poetry: in-project 를 세 축(env·poetry.toml·질의)에서 판정하고 **질의 실패는 보수적** (양의 짝 2종)" \
+                  || fail "poetry in-project env-dir (on='${on:0:50}' off='${off:0:50}' toml='${toml:0:50}' fail='${failing:0:50}')"
   rmw
 }
 
@@ -440,7 +459,7 @@ case_missing_toolchain_blocks_pass() {
   printf 'pkg\n' > "$w/expected.txt"; printf '%s\n' "$out" > "$w/side.tsv"
   yaml=$(python3 "$PLUGIN_ROOT/scripts/diff-test-results.py" \
            --expected "$w/expected.txt" --baseline "$w/side.tsv" --head "$w/side.tsv" \
-           --granularity package --mode bulk --runner go --baseline-detected go 2>&1)
+           --granularity package --baseline-mode bulk --head-mode bulk --runner go --baseline-detected go 2>&1)
   if printf '%s\n' "$yaml" | grep -q 'baseline_unrunnable: true' \
      && printf '%s\n' "$yaml" | grep -q 'attribution_status: degraded'; then
     pass "toolchain 부재가 PASS 를 막는다 (baseline_unrunnable + attribution degraded)"
@@ -593,7 +612,7 @@ case_env_dir_gate_uses_directory_pattern() {
                             || fail "거부했어야 할 트리에서 uv 가 호출됨 ($(cat "$t/.observed"))"
   printf 'tests/test_a.py\n' > "$t/expected.txt"; printf '%s\n' "$out" > "$t/side.tsv"
   yaml=$(python3 "$PLUGIN_ROOT/scripts/diff-test-results.py" --expected "$t/expected.txt" \
-           --baseline "$t/side.tsv" --head "$t/side.tsv" --granularity file --mode per-unit --runner pytest \
+           --baseline "$t/side.tsv" --head "$t/side.tsv" --granularity file --baseline-mode per-unit --head-mode per-unit --runner pytest \
            --baseline-detected pytest 2>&1)
   printf '%s\n' "$yaml" | grep -q 'baseline_unrunnable: true' \
     && pass "그 degrade 가 PASS 를 막는다 (baseline_unrunnable)" || fail "PASS 가 가능:
@@ -789,7 +808,7 @@ case_asymmetric_product_breakage_is_a_defect() {
     printf '%s\n' "$out" > "$d/head.tsv"
     out=$(python3 "$PLUGIN_ROOT/scripts/diff-test-results.py" \
             --expected "$d/expected.txt" --baseline "$d/base.tsv" --head "$d/head.tsv" \
-            --granularity file --mode per-unit --runner pytest --baseline-detected pytest 2>/dev/null \
+            --granularity file --baseline-mode per-unit --head-mode per-unit --runner pytest --baseline-detected pytest 2>/dev/null \
           | awk '$1=="confirmed_product_defect:"{print $2}')
     if [[ "$out" != "true" ]]; then
       fail "기준선 pass · HEAD exit ${code} → confirmed_product_defect=${out} (true 여야 함)"; ok=0

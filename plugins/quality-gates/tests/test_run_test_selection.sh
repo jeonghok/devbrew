@@ -349,6 +349,13 @@ case_run_bulk_red_stamps_every_unit() {
 # T86 (/qg iter-6 E1 연장): bulk red 가 **하류에서 degrade 로 읽히는지** 까지 잰다.
 # 위 케이스는 `run` 의 출력 모양만 본다 — 그것이 판정으로 이어지는지는 별개 축이고,
 # 그 축이 비어 있으면 "행은 맞는데 아무도 안 읽는" 상태를 못 잡는다.
+#
+# **이 케이스가 재지 *않는* 것 (정직하게 적는다):** 선언을 틀리게 해도 잡히는지는 재지
+# 않는다. iteration 2 에서 데이터 서명으로 그것을 추론하려던 시도를 **철회**했기
+# 때문이다 — 서명이 위험한 축(baseline)을 못 봤고, 정직한 per-unit 실행 중 "고른 unit
+# 전부 양측 red" 를 degrade 시켜 이 설계가 통과시키기로 결정한 케이스를 되돌렸다.
+# mode provenance 미검증은 **§11 ⑰ 의 등록된 잔여**이지 이 테스트가 닫을 수 있는 것이
+# 아니다. 그래서 여기서는 **실행한 그대로**(`--baseline-mode bulk`) 선언한다.
 case_run_bulk_red_reaches_degrade() {
   mk_shell_repo
   cp "$W/tests/ok.sh" "$W/tests/ok2.sh"
@@ -359,7 +366,7 @@ case_run_bulk_red_reaches_degrade() {
   local st
   st=$(python3 "$PLUGIN_ROOT/scripts/diff-test-results.py" \
          --expected "$d/expected.txt" --baseline "$d/base.tsv" --head "$d/rows.tsv" \
-         --runner shell --granularity file --mode per-unit --baseline-detected shell \
+         --runner shell --granularity file --baseline-mode bulk --head-mode bulk --baseline-detected shell \
        | awk '$1 == "attribution_status:" { print $2 }')
   rm -rf "$d"
   [[ "$st" == "degraded" ]] \
@@ -783,6 +790,33 @@ case_assign_unittest_refuses_async_bare_test() {
   rmw
 }
 
+# T87 (/qg iter-6 iteration 2, I4): `async def` 의 **형제 토큰** — pytest 스타일 bare
+# 클래스(`class TestBare:`, `TestCase` 미상속). `discover` 는 `TestCase` 하위클래스만
+# 수집하므로, 같은 파일에 진짜 `TestCase` 가 있으면 파일이 claim 되고 bare 클래스의
+# 테스트는 **한 번도 판정되지 않은 채** exit 0 → `pass` 가 된다. E12 가 닫은 것과 완전히
+# 같은 사슬이고, iteration 1 커밋이 "escape (a) 를 닫았다" 고 선언했으나 그때는 아직
+# 참이 아니었다.
+#
+# 양의 짝 2종: (a) bare 가 없는 동종 파일은 claim 유지 · (b) `TestCase` 를 상속한
+# `class Test…` 는 정상이므로 claim 되어야 한다 — 없으면 "이름이 Test 로 시작하면
+# 전부 거부" 라는 과잉 mutation 이 통과한다.
+case_assign_unittest_refuses_bare_pytest_class() {
+  mkw; mkdir -p "$W/tests"
+  printf 'import unittest\nclass TReal(unittest.TestCase):\n    def test_ok(self): pass\n\nclass TestBare:\n    def test_never(self):\n        assert False\n' \
+    > "$W/tests/test_bare.py"
+  mk_unittest_file "$W/tests/test_plain.py"
+  # Test 로 시작하지만 TestCase 를 상속한 정상 파일
+  printf 'import unittest\nclass TestOk(unittest.TestCase):\n    def test_ok(self): pass\n' \
+    > "$W/tests/test_named.py"
+  local out; out=$(printf 'tests/test_bare.py\ntests/test_plain.py\ntests/test_named.py\n' \
+                   | bash "$RTS" assign "$W" | sort | tr '\n' ';')
+  local want="tests/test_bare.py${TAB}unclaimed${TAB}file;tests/test_named.py${TAB}unittest${TAB}file;tests/test_plain.py${TAB}unittest${TAB}file;"
+  if [[ "$out" == "$want" ]]; then
+    pass "unittest: bare pytest 클래스 → unclaimed (TestCase 상속 Test* 클래스는 claim 유지)"
+  else fail "bare pytest class (got: $out)"; fi
+  rmw
+}
+
 # T81 (/qg iter-6 C4): 파손된 package.json 이 "JS 어댑터 없음" 과 **완전히 구분
 # 불가**였다 (detect rc=0, stdout 정상, stderr 0바이트). 판정은 fail-closed 로 두되
 # 원인이 보여야 한다 (CLAUDE.md loud degradation).
@@ -852,7 +886,8 @@ for c in case_assign_go_package case_assign_unclaimed case_assign_unittest_skips
          case_assign_unittest_refuses_async_bare_test \
          case_detect_malformed_package_json_is_loud \
          case_detect_js_ambiguity_is_loud \
-         case_run_bulk_red_stamps_every_unit case_run_bulk_red_reaches_degrade; do
+         case_run_bulk_red_stamps_every_unit case_run_bulk_red_reaches_degrade \
+         case_assign_unittest_refuses_bare_pytest_class; do
   echo "== $c"; $c
 done
 echo "── run-test-selection: $PASS passed, $FAIL failed"

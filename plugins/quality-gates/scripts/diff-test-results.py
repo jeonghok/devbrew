@@ -299,29 +299,35 @@ def per_adapter(args: argparse.Namespace) -> int:
     # 코드를 전 unit 에 그대로 찍으므로(run-test-selection.sh 의 bulk emit), present
     # unit 이 2개 이상인데 `(status, exit)` 쌍이 단 하나가 된다.
     #
-    # 그래서 mode 는 **선언(`args.mode`)과 관측(서명) 중 하나라도** bulk 를 가리키면
-    # bulk 로 읽는다. 오케스트레이터가 `per-unit` 이라 말해도 데이터가 도말이면 degrade 가
-    # 발화한다 — 토큰 하나로 인증을 사는 경로가 사라진다.
+    # **데이터 서명으로 추론하려던 시도는 철회한다 (/qg iter-6 iteration 2).**
+    # 리뷰어 3명(codex · security-reviewer · code-reviewer)이 독립 수렴해 두 가지를
+    # 보였다:
+    #   (a) 서명이 **head 축만** 봤는데 회귀를 숨기는 축은 **baseline** 이다. `(F,F)` 를
+    #       만들려면 baseline 이 fail 로 도말돼야 하고, head 도말은 `(P,F)` 즉 fail-closed
+    #       쪽으로만 기운다. 서명이 **위험하지 않은 축**을 재고 있었다. R4 는 기준선을
+    #       언제나 `run … bulk` 로 돌리므로 baseline 도말은 예외가 아니라 기본 경로다.
+    #   (b) 위양성 근거로 적었던 "그때 어느 unit 이 회귀인지 구분 불가" 가 **거짓**이다.
+    #       정직한 per-unit 실행은 unit 마다 독립 관측이라 데이터는 구분 가능하다 —
+    #       구분 못 하는 것은 서명이다. 그리고 아래 `DEFECTS` 주석이 밝히듯 이 리포는
+    #       "stale red 가 첫 실행부터 게이트를 막으면 이 설계는 쓸 수 없다" 를 이유로
+    #       그 케이스를 **통과시키기로 이미 결정**했다. 서명은 그 결정을 되돌린다.
+    # 즉 그 수정은 위험한 축을 열어 둔 채 위양성만 추가한 **순감**이었다.
     #
-    # 위양성 방향은 **degrade 쪽이라 안전하다.** 게다가 `pre_existing > 0` 과 겹쳐야
-    # 하므로 그 상황은 "고른 테스트가 전부 양측에서 같은 코드로 실패" 인데, 그때 어느
-    # unit 이 회귀인지는 실제로 구분 불가다 — degrade 가 정직한 답이다. 전 unit 이 같은
-    # `pass` 인 정상 실행은 `pre_existing == 0` 이라 이 가지에 닿지 않는다.
-    # `absent`/`unrun` 제외는 **방어적일 뿐 검증 불가**다 — 정직하게 적어 둔다.
-    # head 축에 그 상태가 하나라도 있으면 그 행은 ATTR 상 `SILENT_DROP` 또는
-    # `BASELINE_UNRUNNABLE` 로 떨어져 **독립적으로** degrade 를 세운다(실측). 그래서 이
-    # 제외를 지워도 `attribution_status` 는 바뀌지 않고, 효과 0인 락을 붙이는 대신
-    # 여기에 이유를 남긴다: 서명은 *관측된 실행*에 대해서만 의미가 있고, 비-관측 행을
-    # 섞으면 집합 크기가 늘어 도말을 **감출** 수 있다 (fail-closed 방향으로 남긴다).
-    head_present = [
-        head[u] for u in expected
-        if u in head and head[u][0] not in ("absent", "unrun")
-    ]
-    smear_signature = len(head_present) > 1 and len(set(head_present)) == 1
+    # **대신 선언을 축별로 쪼갠다.** 실제 위험 경로는 SKILL 자신이 문서화한 규칙이다:
+    # *"양측에서 mode 가 달랐다면 … 배치였던 쪽을 기준으로 `bulk` 를 넘긴다"* — 두 개의
+    # 독립 `run` 호출을 **토큰 하나로 접는** 손실 변환이고, 그 접는 행위의 유일한 집행자가
+    # 그 토큰 자신이었다. `--baseline-mode` / `--head-mode` 로 각 호출이 자기 mode 를
+    # 자기 자리에 적으면 그 접기가 사라진다. 어느 쪽이든 bulk 면 도말 가능성이 있으므로
+    # degrade 다 — 원래 의미 그대로이고 위양성은 늘지 않는다.
+    #
+    # **provenance 는 여전히 미검증이다 — 정직하게 §11 ⑰ 에 등재했다.** 값이 실제 실행에서
+    # 왔는지는 검사하지 않는다(형제 `--baseline-detected` 와 같은 등급의 잔여). 이것을
+    # 닫으려면 `run` 이 자기 실행을 증거 파일로 남기고 이 스크립트가 그것을 읽어야 하는데,
+    # 기준선이 **캐시 적중**으로 올 때는 그 실행이 아예 없어 계약이 성립하지 않는다.
     smeared = (
         args.granularity != "bulk"
         and counts["pre_existing"] > 0
-        and (args.mode == "bulk" or smear_signature)
+        and (args.baseline_mode == "bulk" or args.head_mode == "bulk")
     )
     degraded = (
         not expected
@@ -476,7 +482,10 @@ def build_parser() -> argparse.ArgumentParser:
     # 무엇을 unit 으로 보는가이고(`detect` 출처), mode 는 이번 실행이 그 unit 들을
     # 한 번에 돌렸는가다(`run` 의 인자). 둘을 같은 것으로 읽으면 아래 도말 degrade 가
     # granularity:file 어댑터에 **증명 가능하게 발화하지 않는다** (/qg iter-5 SF1).
-    p.add_argument("--mode", choices=["bulk", "per-unit"])
+    # 축별 선언 (/qg iter-6 iteration 2). 하나로 접힌 `--mode` 는 두 독립 `run` 호출을
+    # 손실 변환하고 그 접기의 집행자가 토큰 자신이었다 — 축을 쪼개면 그 경로가 없어진다.
+    p.add_argument("--baseline-mode", choices=["bulk", "per-unit"])
+    p.add_argument("--head-mode", choices=["bulk", "per-unit"])
     p.add_argument("--runner")
     # 값의 출처는 `run-test-selection.sh probe` 가 기준선 트리에서 `usable: yes` 를 낸
     # 러너 집합이다 — `detect` 의 집합이 **아니다**. `detect` 는 선언만 보므로 캐시
@@ -497,7 +506,8 @@ def main() -> int:
     # 안 만든 호출자)가 정확히 이 검사가 막으려던 경로로 통과한다.
     missing = [
         f"--{n.replace('_', '-')}"
-        for n in ("expected", "baseline", "head", "granularity", "mode", "runner",
+        for n in ("expected", "baseline", "head", "granularity",
+                  "baseline_mode", "head_mode", "runner",
                   "baseline_detected")
         if getattr(args, n) is None
     ]

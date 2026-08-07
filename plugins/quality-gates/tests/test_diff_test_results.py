@@ -27,7 +27,8 @@ _UNSET = object()
 
 
 def run_diff(expected, baseline, head, granularity="file", runner="pytest",
-             baseline_detected=_UNSET, mode: "str | None" = "per-unit"):
+             baseline_detected=_UNSET, mode: "str | None" = "per-unit",
+             baseline_mode=_UNSET, head_mode=_UNSET):
     """expected: [unit], baseline/head: [(unit, status, code)] → (rc, stdout, stderr)
 
     `baseline_detected` 기본값은 **`runner` 자신** — 기준선 트리에서 그 어댑터가
@@ -48,8 +49,15 @@ def run_diff(expected, baseline, head, granularity="file", runner="pytest",
                 "--baseline", str(p / "b.tsv"),
                 "--head", str(p / "h.tsv"),
                 "--granularity", granularity, "--runner", runner]
-        if mode is not None:
-            argv += ["--mode", mode]
+        # `mode` 는 **양축 동시 지정 편의값**이다 (/qg iter-6 iteration 2 에서 CLI 가
+        # `--baseline-mode`/`--head-mode` 로 쪼개졌다). 비대칭을 재려면 두 인자를
+        # 명시적으로 넘긴다 — 그 축이 스위트에 없던 것이 C1 을 놓친 근본 원인이었다.
+        b_mode = baseline_mode if baseline_mode is not _UNSET else mode
+        h_mode = head_mode if head_mode is not _UNSET else mode
+        if b_mode is not None:
+            argv += ["--baseline-mode", b_mode]
+        if h_mode is not None:
+            argv += ["--head-mode", h_mode]
         if baseline_detected is not None:
             argv += ["--baseline-detected", baseline_detected]
         r = subprocess.run(argv, capture_output=True, text=True)
@@ -86,8 +94,8 @@ class TestRequiredArgsTotality(unittest.TestCase):
     테스트도 같이 줄어 아무것도 잠그지 못한다.
     """
 
-    REQUIRED = ["expected", "baseline", "head", "granularity", "mode", "runner",
-                "baseline-detected"]
+    REQUIRED = ["expected", "baseline", "head", "granularity",
+                "baseline-mode", "head-mode", "runner", "baseline-detected"]
 
     def _run_without(self, omit):
         with tempfile.TemporaryDirectory() as d:
@@ -97,7 +105,8 @@ class TestRequiredArgsTotality(unittest.TestCase):
                 (p / name).write_text("u\tpass\t0\n", encoding="utf-8")
             full = {
                 "expected": str(p / "e.txt"), "baseline": str(p / "b.tsv"),
-                "head": str(p / "h.tsv"), "granularity": "file", "mode": "per-unit",
+                "head": str(p / "h.tsv"), "granularity": "file",
+                "baseline-mode": "per-unit", "head-mode": "per-unit",
                 "runner": "shell", "baseline-detected": "shell",
             }
             argv = []
@@ -322,23 +331,54 @@ class TestAttribution(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(flag_of(out, "attribution_status"), "degraded", out)
 
-    # /qg iter-6 CRITICAL (C1 + adversarial 합성 N1): **선언된 `--mode` 로 인증을
-    # 살 수 없다.** 이전에는 동일 입력에 `per-unit` 만 넘기면 `degraded` → `closed` 로
-    # 뒤집혀 3플래그 전부 false = R8 PASS 행 전체가 성립했다(실측). 이제 데이터가
-    # 도말 서명(present unit ≥2 인데 (status, exit) 쌍이 하나)을 보이면 선언과 무관하게
-    # degrade 한다 — 진짜 per-unit 과 도말을 데이터로는 구분할 수 없기 때문이고,
-    # 구분할 수 없다는 사실 자체가 인증 불가 사유다.
+    # /qg iter-6 iteration 2 (C1 — 리뷰어 3명 독립 수렴): **비대칭 축.**
     #
-    # 트레이드오프(명시): "고른 unit 전부가 양측에서 같은 코드로 red" 인 정상 per-unit
-    # 실행도 degrade 된다. 방향이 안전(SKIP_WITH_EVIDENCE, terminal FAIL 아님)하고,
-    # 그 상황에서 어느 unit 이 회귀인지는 실제로 구분 불가다.
-    def test_declared_per_unit_cannot_buy_certification(self):
+    # 회귀를 숨기는 방향은 **baseline** 이다 — `(F,F)=PRE_EXISTING` 을 만들려면 기준선이
+    # fail 로 도말돼야 하고, head 도말은 `(P,F)=NEW_REGRESSION` 즉 fail-closed 쪽으로만
+    # 기운다. 그리고 R4 는 기준선을 **언제나 `run … bulk`** 로 돌리므로 이 조합은 예외가
+    # 아니라 기본 경로다. 앞선 판본은 이 축을 한 토큰으로 접었고(SKILL: "배치였던 쪽을
+    # 기준으로 bulk 를 넘긴다"), 접기의 유일한 집행자가 그 토큰 자신이었다.
+    #
+    # 이제 축을 쪼개 각 `run` 호출이 자기 mode 를 자기 자리에 적는다. 어느 쪽이든 bulk 면
+    # 도말 가능성이 있으므로 degrade 다.
+    def test_baseline_bulk_degrades_even_when_head_is_per_unit(self):
+        # 진실: a 가 실제로 회귀. 기준선이 bulk 라 t3 의 red 가 a·b 에도 찍혔다.
+        base = [("a", "fail", "1"), ("b", "fail", "1"), ("c", "fail", "1")]
+        head = [("a", "fail", "1"), ("b", "pass", "0"), ("c", "fail", "1")]
+        rc, out, _ = run_diff(["a", "b", "c"], base, head,
+                              granularity="file", runner="shell",
+                              baseline_detected="shell",
+                              baseline_mode="bulk", head_mode="per-unit")
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "attribution_status"), "degraded", out)
+
+    def test_head_bulk_degrades_even_when_baseline_is_per_unit(self):
+        """반대 축도 잰다 — 한쪽만 보면 축 하나를 지운 mutation 이 통과한다."""
+        base = [("a", "fail", "1"), ("b", "pass", "0")]
+        head = [("a", "fail", "1"), ("b", "fail", "1")]
+        rc, out, _ = run_diff(["a", "b"], base, head,
+                              granularity="file", runner="shell",
+                              baseline_detected="shell",
+                              baseline_mode="per-unit", head_mode="bulk")
+        self.assertEqual(rc, 0)
+        self.assertEqual(flag_of(out, "attribution_status"), "degraded", out)
+
+    # **양의 짝 — 그리고 이 리포가 의도적으로 내린 결정의 회귀 락.**
+    #
+    # 양측 정직한 per-unit 이면, 고른 unit 이 **전부 양측에서 같은 코드로 red** 여도
+    # 인증된다. 앞선 판본은 데이터 서명으로 여기를 degrade 시켰는데, 그 근거로 적은
+    # "어느 unit 이 회귀인지 구분 불가" 가 **거짓**이었다 — 정직한 per-unit 실행은 unit
+    # 마다 독립 관측이라 데이터는 구분 가능하다(구분 못 한 것은 서명이다). 게다가
+    # `DEFECTS` 주석이 밝히듯 이 설계는 *"stale red 가 첫 실행부터 게이트를 막으면 쓸 수
+    # 없다"* 를 이유로 이 케이스를 통과시키기로 **이미 결정**했다. devbrew 자신의 알려진
+    # red 6종이 영향 스코프에 둘만 들어와도 PASS 가 구조적으로 불가능해진다.
+    def test_uniform_red_per_unit_on_both_sides_still_certifies(self):
         rows = [("a", "fail", "1"), ("b", "fail", "1")]
         rc, out, _ = run_diff(["a", "b"], rows, rows,
                               granularity="file", runner="shell",
                               baseline_detected="shell", mode="per-unit")
         self.assertEqual(rc, 0)
-        self.assertEqual(flag_of(out, "attribution_status"), "degraded", out)
+        self.assertEqual(flag_of(out, "attribution_status"), "closed", out)
 
     # 위 규칙이 **정상 green 실행을 잡아먹지 않는지** — 전 unit 이 같은 `pass 0` 이어도
     # `pre_existing == 0` 이라 이 가지에 닿지 않는다. 없으면 "언제나 degraded" 로
@@ -384,10 +424,26 @@ class TestAttribution(unittest.TestCase):
     # `--mode` 는 필수다. 선택 인자로 두고 부재를 per-unit 으로 읽으면, 값을 안 넘긴
     # 호출자(= 배치로 돌린 호출자)가 정확히 이 검사가 막으려던 경로로 통과한다.
     def test_mode_is_required(self):
+        """양축 mode 는 각각 필수다 (/qg iter-6 iteration 2 에서 CLI 가 쪼개졌다).
+
+        선택 인자로 두고 부재를 per-unit 으로 읽으면, 값을 안 넘긴 호출자
+        (= 배치로 돌린 호출자)가 정확히 이 검사가 막으려던 경로로 통과한다.
+        **한 축만 빠뜨리는 것도 잡아야** 한다 — 두 호출이 독립이라 한쪽만 아는
+        상태가 실재하기 때문이다.
+        """
         rc, _, err = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")],
                               mode=None)
         self.assertEqual(rc, 2)
-        self.assertIn("--mode", err)
+        self.assertIn("--baseline-mode", err)
+        self.assertIn("--head-mode", err)
+        rc, _, err = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")],
+                              baseline_mode=None)
+        self.assertEqual(rc, 2, err)
+        self.assertIn("--baseline-mode", err)
+        rc, _, err = run_diff(["a"], [("a", "pass", "0")], [("a", "pass", "0")],
+                              head_mode=None)
+        self.assertEqual(rc, 2, err)
+        self.assertIn("--head-mode", err)
 
     # T45(2) — 중복 unit 행은 exit 4 (AC48). 조용한 last-wins는 입력 순서 의존.
     def test_duplicate_unit_row_is_exit_4(self):
@@ -589,7 +645,8 @@ class TestAttribution(unittest.TestCase):
                  "--expected", str(p / "e.txt"),
                  "--baseline", str(p / "missing.tsv"),
                  "--head", str(p / "h.tsv"),
-                 "--granularity", "file", "--mode", "per-unit", "--runner", "pytest",
+                 "--granularity", "file", "--baseline-mode", "per-unit",
+                 "--head-mode", "per-unit", "--runner", "pytest",
                  "--baseline-detected", "pytest"],
                 capture_output=True, text=True,
             )
@@ -664,7 +721,8 @@ class TestAttribution(unittest.TestCase):
                  "--expected", str(p / "e.txt"),
                  "--baseline", str(p / "b.tsv"),
                  "--head", str(p / "missing.tsv"),
-                 "--granularity", "file", "--mode", "per-unit", "--runner", "pytest",
+                 "--granularity", "file", "--baseline-mode", "per-unit",
+                 "--head-mode", "per-unit", "--runner", "pytest",
                  "--baseline-detected", "pytest"],
                 capture_output=True, text=True,
             )
@@ -681,7 +739,8 @@ class TestAttribution(unittest.TestCase):
                  "--expected", str(p / "missing.txt"),
                  "--baseline", str(p / "b.tsv"),
                  "--head", str(p / "h.tsv"),
-                 "--granularity", "file", "--mode", "per-unit", "--runner", "pytest",
+                 "--granularity", "file", "--baseline-mode", "per-unit",
+                 "--head-mode", "per-unit", "--runner", "pytest",
                  "--baseline-detected", "pytest"],
                 capture_output=True, text=True,
             )

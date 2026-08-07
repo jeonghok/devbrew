@@ -1100,7 +1100,8 @@ verifier 가 디버깅 중 테스트를 돌리는 것 자체를 막지는 않지
 "${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py" \
   --expected "$expected_units_file" \
   --baseline "$baseline_rows_file" --head "$head_rows_file" \
-  --granularity "$granularity" --mode "$run_mode" --runner "$runner" \
+  --granularity "$granularity" --runner "$runner" \
+  --baseline-mode "$baseline_run_mode" --head-mode "$head_run_mode" \
   --baseline-detected "$baseline_detected" > "$per_adapter_yaml"
 ```
 
@@ -1120,24 +1121,34 @@ verifier 가 디버깅 중 테스트를 돌리는 것 자체를 막지는 않지
 불일치·미지 러너·소유자 부재는 전부 **exit 4** 다 — "확인할 수 없었다"를 "확인됐다"로
 읽는 경로가 없다.
 
-`--mode` 는 R4/R5b 가 `run` 에 넘긴 **실행 mode 그 자체**(`bulk` 또는 `per-unit`)다.
-어댑터의 `--granularity` 와 **다른 축**이며 둘을 같은 것으로 쓰면 안 된다. 배치로 돌면
-`run` 이 **한 종료 코드를 전 unit 에 찍으므로**(도말), 입도가 그보다 잔 어댑터에서는
-양측 red 가 전부 `PRE_EXISTING` 으로 접혀 `closed` → PASS 가 된다 — 실제로는 그중
-어느 것이 회귀인지 **판정되지 않은** 상태다. 스크립트가 `mode: bulk` + `granularity !=
-bulk` + `pre_existing > 0` 을 `degraded` 로 내린다. **필수 인자다** — 생략하면 exit 2.
-양측에서 mode 가 달랐다면(한쪽만 2단 재실행) 그 어댑터는 `per-unit` 로 넘기지 말고
-**두 호출 중 배치였던 쪽을 기준으로 `bulk`** 를 넘긴다 (도말이 섞였으면 섞인 것이다).
+`--baseline-mode` / `--head-mode` 는 R4 와 R5b 가 **각각** `run` 에 넘긴 실행 mode 다
+(`bulk` 또는 `per-unit`). 어댑터의 `--granularity` 와 **다른 축**이며 둘을 같은 것으로
+쓰면 안 된다. 배치로 돌면 `run` 이 **한 종료 코드를 전 unit 에 찍으므로**(도말), 입도가
+그보다 잔 어댑터에서는 양측 red 가 전부 `PRE_EXISTING` 으로 접혀 `closed` → PASS 가
+된다 — 실제로는 그중 어느 것이 회귀인지 **판정되지 않은** 상태다. 스크립트는
+`granularity != bulk` + `pre_existing > 0` + **둘 중 하나라도 `bulk`** 를 `degraded` 로
+내린다. **둘 다 필수 인자다** — 하나라도 생략하면 exit 2.
 
-**이 값으로 인증을 살 수는 없다 (/qg iter-6).** 앞선 판본에서 `--mode` 는 **판정을
-가르는 자유 변수**였다 — 동일 입력에 `per-unit` 만 넘기면 `degraded` 가 `closed` 로
-뒤집혀 R8 PASS 행의 결정론 조건이 전부 충족됐다(실측). 형제 `--granularity` 는 정확히
-이 결함으로 소유자 대조 검사를 받았는데 이 인자만 못 받았다. mode 는 러너의 정적
-속성이 아니라 *이번 실행*의 속성이라 소유자가 사후에 재계산해 줄 수 없으므로,
-스크립트가 대신 **데이터에 묻는다**: present unit 이 2개 이상인데 `(status, exit)`
-쌍이 단 하나면 그것이 도말의 서명이고, 선언이 `per-unit` 이어도 `degraded` 로 간다.
-그러니 여기서 mode 를 "고르는" 것이 아니라 **실제로 무엇을 실행했는지 그대로 적는다** —
-틀리게 적어도 인증이 늘지 않고, 진실과 어긋나면 원장이 그렇게 말한다.
+**축을 접지 않는다 (/qg iter-6 iteration 2 — 리뷰어 3명 독립 수렴).** 앞선 판본은 이
+자리에 인자가 하나(`--mode`)뿐이었고, 양측 mode 가 다를 때 *"배치였던 쪽을 기준으로
+`bulk` 를 넘긴다"* 는 규칙으로 **두 독립 호출을 한 토큰에 접었다.** 그 접기의 유일한
+집행자가 그 토큰 자신이었으므로, `per-unit` 이라 적는 것만으로 `degraded` 가 `closed` 로
+뒤집혔다 — R8 PASS 행의 결정론 조건이 전부 충족된다(실측). 특히 위험한 조합이
+**기준선 bulk × HEAD per-unit** 인데, R4 는 기준선을 언제나 `run … bulk` 로 돌리므로
+그게 예외가 아니라 **기본 경로**다. 축을 쪼개면 각 호출이 자기 mode 를 자기 자리에
+적으므로 접기가 사라진다.
+
+**한 번 시도했다가 철회한 것:** 데이터에서 도말을 추론하는 것(present unit ≥2 인데
+`(status, exit)` 쌍이 1종). (a) 그 서명이 **head 축만** 봐서 위험한 축을 못 봤고,
+(b) 정직한 per-unit 실행이 "고른 unit 전부 양측 red" 일 때를 degrade 시켜, 이 설계가
+*"stale red 가 첫 실행부터 게이트를 막으면 쓸 수 없다"* 를 이유로 통과시키기로 한
+결정을 되돌렸다. 순감이라 철회했다.
+
+**남은 것(정직한 잔여 — §11 ⑰):** 이 값들의 **provenance 는 여전히 검증되지 않는다.**
+형제 `--baseline-detected` 와 같은 등급이다. 닫으려면 `run` 이 자기 실행을 증거 파일로
+남기고 이 스크립트가 그것을 읽어야 하는데, **기준선이 캐시 적중으로 올 때는 그 실행이
+아예 없어** 계약이 성립하지 않는다. 그러니 여기서 mode 를 "고르지" 말고 **각 호출이
+실제로 무엇이었는지 그대로 적어라** — 틀리게 적으면 원장이 조용히 틀린다.
 
 `--baseline-detected` 는 R4②-a 의 `probe` 가 기준선 트리에서 **`usable: yes`** 를 낸
 러너 집합이다 — `detect` 가 낸 집합이 **아니다** (/qg iter-5 SR1: `detect` 는 선언만

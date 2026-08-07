@@ -121,7 +121,9 @@ case_remove_namespace_guard() {
   cd / && rm -rf "$REPO"
 }
 
-# T16 + AC21: detect-runtime.sh 바이트 무변경 (sha 핀)
+# T16 + AC21′: detect-runtime.sh 가 **핀된 sha 와 동일**하다.
+# (바이트 *무변경* 이 아니다 — /qg iter-6 E7: C2 가 55줄 바꿨고 핀은 그에 맞춰 갱신됐다.
+#  핀은 '변경이 있었음' 이 아니라 '무단 변경이 없었음' 을 잰다.) (sha 핀)
 # 값은 최초 구현 시 `shasum -a 256` 결과로 채운다. 이 파일을 고치려면 sha도 함께
 # 고쳐야 하므로, "무심코 건드림"은 통과할 수 없다.
 DETECT_RUNTIME_SHA256="2f70d7660bd4fa30ad873c9c178e54631e8be1c936b7527a284e6f754c63e040"
@@ -134,7 +136,7 @@ DETECT_RUNTIME_SHA256="2f70d7660bd4fa30ad873c9c178e54631e8be1c936b7527a284e6f754
 case_detect_runtime_frozen() {
   local got; got=$(shasum -a 256 "$PLUGIN_ROOT/scripts/detect-runtime.sh" | awk '{print $1}')
   [[ "$got" == "$DETECT_RUNTIME_SHA256" ]] \
-    && pass "detect-runtime.sh 바이트 무변경" \
+    && pass "detect-runtime.sh 가 핀된 sha 와 동일 (무단 변경 0)" \
     || fail "detect-runtime.sh 변경됨 (got $got, pinned $DETECT_RUNTIME_SHA256)"
 }
 

@@ -81,13 +81,13 @@ while IFS= read -r src; do
   [ -z "$src" ] && continue
   case "$src" in
     *.py)
-      base=$(basename "$src" .py)
+      base=$(basename -- "$src" .py)
       while IFS= read -r found; do
         [ -n "$found" ] && MAPPED="${MAPPED}${found}"$'\n'
       done < <(find . -type f \( -name "test_${base}.py" -o -name "${base}_test.py" \) 2>/dev/null | sed 's|^\./||')
       ;;
     *.ts|*.tsx|*.js|*.jsx)
-      base=$(basename "$src")
+      base=$(basename -- "$src")
       base="${base%.*}"
       while IFS= read -r found; do
         [ -n "$found" ] && MAPPED="${MAPPED}${found}"$'\n'

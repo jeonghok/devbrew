@@ -772,9 +772,13 @@ while IFS= read -r line; do
   # `(U,U) → BASELINE_UNRUNNABLE` 이다 — 즉 락이 **도달 불가능한(=틀린) 사실을
   # 방어**하고 있었고, 산문을 옳게 고치면 스위트가 red 가 되는 상태였다.
   # 락을 지우면 G5 보호가 사라지므로, 정정된 라우팅 주장으로 **재조준**한다.
-  case "$line" in *BASELINE_UNRUNNABLE*) route_ok=1 ;; esac
-  # 그리고 옛 주장이 되돌아오는 것도 막는다 — 삭제된 규칙이 거짓 인용으로 남지 않도록.
-  case "$line" in *'(P,U)'*SILENT_DROP*|*SILENT_DROP*'(P,U)'*) route_stale=1 ;; esac
+  case "$line" in *'(U,U)'*BASELINE_UNRUNNABLE*) route_ok=1 ;; esac
+  # 옛 주장의 재도입 차단. /qg iter-6 iteration 2 (I1): 앞선 판본은 `(P,U)` **한 표기만**
+  # 핀했는데, 같은 문서 R4 절(:798)이 같은 규칙을 `(F,U)`/`(A,U)` 로도 적고 있어 그 표기로
+  # 되살리면 통과했다(mutation 실측 GREEN). 드리프트 소스가 문서 안에 있는데 락이 한 셀만
+  # 봤다 — 내 mutation 이 락의 전제를 공유한 전형. 창 안에서 `SILENT_DROP` 자체를 금지한다:
+  # 정정된 산문은 이 창에서 그 토큰을 쓰지 않는다.
+  case "$line" in *SILENT_DROP*) route_stale=1 ;; esac
 done < <(awk -v s="$r5b" -v e="$r6_marker" 'NR>s && NR<e' "$SKILL_MD")
 
 if [[ "$r5b" -gt 0 && "$r6_marker" -gt 0 && "$polarity_ok" -eq 1 && "$polarity_bad" -eq 0 \

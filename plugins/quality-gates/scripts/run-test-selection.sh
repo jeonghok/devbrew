@@ -156,11 +156,21 @@ poetry_in_project() {   # poetry_in_project <worktree> → 0 = venv 가 트리 �
      && grep -qE '^[[:space:]]*in-project[[:space:]]*=[[:space:]]*true' "$w/poetry.toml" 2>/dev/null; then
     return 0
   fi
+  # /qg iter-6 iteration 2 (리뷰어 3명 독립 지적): 앞선 판본은 `command -v poetry` 가
+  # 참인 순간 **`true` 가 아닌 모든 결과**(비0 exit · 빈 출력 · poetry 가 unset 에 내는
+  # `null`)를 "트리 밖" 으로 읽었다 — 즉 보수적 기본값이 *poetry 부재 축에만* 붙어 있었고,
+  # 질의 실패는 비싼 쪽(거짓 terminal FAIL)으로 떨어졌다. 헤더 주석이 선언한 비대칭과
+  # 정면으로 모순. **명시 토큰만 신뢰하고 나머지는 전부 보수적으로 읽는다.**
   if command -v poetry >/dev/null 2>&1; then
-    [[ "$( (cd "$w" && poetry config virtualenvs.in-project 2>/dev/null) )" == "true" ]]
-    return
+    local cfg
+    cfg=$( (cd "$w" && poetry config virtualenvs.in-project 2>/dev/null) ) || cfg=""
+    case "$cfg" in
+      true)  return 0 ;;
+      false) return 1 ;;
+      *)     return 0 ;;   # null·빈 출력·질의 실패 → 판단 불가 → 보수적
+    esac
   fi
-  return 0   # 판단 불가 → 보수적으로 "트리 안"
+  return 0   # poetry 부재 → 판단 불가 → 보수적으로 "트리 안"
 }
 
 # 어댑터의 setup 이 이 트리 **안에** 만드는 환경 디렉토리 (없으면 빈 문자열).
@@ -250,8 +260,16 @@ PY
 # fail-closed 하고, 다만 그 둘이 **구분 가능**해진다.
 pkg_json_malformed() {   # pkg_json_malformed <worktree> → 0 = 있는데 파싱 실패
   [[ -f "$1/package.json" ]] || return 1
+  # /qg iter-6 iteration 2: 앞선 판본은 probe 가 비0이면 무조건 "파손" 이라 보고했다 —
+  # **python3 가 없을 때도** 그랬다. 그러면 파서 없는 호스트의 모든 레포가 "네 package.json
+  # 이 파싱 실패했다" 는 말을 듣는다. 관측하지 않은 원인을 단언하는 것은 이 수정이
+  # 없애려던 바로 그 실패 모드다. 원인을 분리해 호출부가 정확한 문장을 쓰게 한다.
+  if ! command -v python3 >/dev/null 2>&1; then
+    PKG_JSON_REASON=no_parser; return 1
+  fi
   python3 -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' \
     "$1/package.json" >/dev/null 2>&1 && return 1
+  PKG_JSON_REASON=parse_error
   return 0
 }
 
@@ -325,6 +343,15 @@ unittest_can_judge() {   # unittest_can_judge <worktree> <relpath> → 0 = 판�
   # **한 번도 판정되지 않는다** (/qg iter-6 실측). escape (a) 가 토큰 하나로 재개방돼
   # 있었다.
   grep -qE '^(async[[:space:]]+)?def[[:space:]]+test' "$f" 2>/dev/null && return 1
+  # /qg iter-6 iteration 2 (I4): 형제 토큰이 하나 더 있었다 — **pytest 스타일 bare
+  # 클래스**(`class TestBare:` — `TestCase` 를 상속하지 않음). `discover` 는
+  # `TestCase` 하위클래스만 수집하므로 같은 파일에 진짜 `TestCase` 가 있으면 파일이
+  # claim 되고, bare 클래스의 테스트는 **한 번도 판정되지 않은 채** exit 0 → `pass` 가
+  # 된다 — `async def` 와 완전히 같은 사슬이다. 모듈-레벨 `class Test…` 줄 중
+  # `TestCase` 를 말하지 않는 것이 하나라도 있으면 이 파일은 판정 불가다.
+  if grep -E '^class[[:space:]]+Test' "$f" 2>/dev/null | grep -qvF 'TestCase'; then
+    return 1
+  fi
   grep -qE '^[[:space:]]*class[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*\([^)]*TestCase' "$f" 2>/dev/null && return 0
   grep -qE '^[[:space:]]*def[[:space:]]+load_tests[[:space:]]*\(' "$f" 2>/dev/null && return 0
   return 1
@@ -409,8 +436,11 @@ detect_set() {
   local has_jest=0 has_vitest=0 js_pick="" test_script=""
   # 파손된 package.json 은 아래 전부를 조용히 "없음" 으로 만든다. 판정은 그대로 두되
   # (fail-closed) 원인을 밝힌다 — 여기가 stderr 가 살아 있는 유일한 지점이다.
+  PKG_JSON_REASON=""
   if pkg_json_malformed "$w"; then
     echo "run-test-selection: package.json 이 있으나 파싱에 실패했습니다 — JS 어댑터(jest·vitest·npm-script) 감지를 건너뜁니다 (in $w). 이것은 'JS 어댑터 없음' 과 다른 사건입니다." >&2
+  elif [[ "$PKG_JSON_REASON" == "no_parser" ]]; then
+    echo "run-test-selection: python3 가 없어 package.json 을 읽지 못했습니다 — JS 어댑터 감지를 건너뜁니다 (in $w). 파일이 파손됐다는 뜻은 아닙니다." >&2
   fi
   pkg_field "$w" devDependencies.jest   >/dev/null 2>&1 && has_jest=1
   pkg_field "$w" devDependencies.vitest >/dev/null 2>&1 && has_vitest=1
@@ -500,7 +530,7 @@ adapter_usable() {
   # -qxF: runner 는 CLI 인자다 — -qx 로 매칭하면 PATTERN(BRE)로 해석되어 "pyt.st" 같은
   # 입력이 "pytest" 를 정규식으로 오매치한다 (Task 3 리뷰에서 같은 등급의 결함이 assign
   # 의 dedup에서 실제로 재현됐다).
-  if ! detect_set "$w" | grep -qxF "$runner"; then
+  if ! detect_set "$w" | grep -qxF -- "$runner"; then
     echo "run-test-selection: 어댑터 사용 불가: $runner (in $w)" >&2
     USABLE_REASON=not_detected; return 1
   fi
@@ -569,7 +599,7 @@ case "${1:-}" in
     w=$2
     [[ -d "$w" ]] || die "not a directory: $w"
     adapters=$(detect_set "$w")
-    has_adapter() { printf '%s\n' "$adapters" | grep -qxF "$1"; }
+    has_adapter() { printf '%s\n' "$adapters" | grep -qxF -- "$1"; }
 
     # bulk 잔여 흡수자 = 표 순서상 첫 bulk 어댑터. 나머지는 감지됐어도 실행하지 않는다
     # — 같은 스위트를 두 번 돌리지 않기 위해서다 (AC54). 버리는 대신 loud하게 알린다.
