@@ -1223,8 +1223,12 @@ verifier 가 디버깅 중 테스트를 돌리는 것 자체를 막지는 않지
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py" --aggregate \
-  --expected-adapters "$adapter_count" "${per_adapter_yamls[@]}"
+  --expected-adapters "$adapter_count" "${per_adapter_yamls[@]}" > "$aggregate_yaml"
 ```
+
+**stdout 을 `$aggregate_yaml` 파일로 남긴다** — 값을 눈으로만 읽고 버리면 R8 의 전사
+대조(`check_qa_ledger.py --aggregate`)가 대조할 원본이 없다. 이 파일이 R8 까지 살아야
+한다.
 
 `verdict_input`(`confirmed_product_defect` / `silent_drop` / `baseline_unrunnable`)과
 `attribution_status` 를 캡처한다. 이 집계를 손으로 하지 않는다 — N 개 YAML 을 읽고
@@ -1327,10 +1331,24 @@ R6 이 낸 `attribution_status` 를 그대로 `floor:attribution` 의 status 로
 구조 게이트를 돌린다:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/check_qa_ledger.py" "$evidence_dir/runtime-evidence.md"
+"${CLAUDE_PLUGIN_ROOT}/scripts/check_qa_ledger.py" \
+  --aggregate "$aggregate_yaml" "$evidence_dir/runtime-evidence.md"
 ```
 
 non-zero 면 stderr 를 verbatim 으로 노출하고 **verdict 를 PASS 로 올리지 않는다**.
+
+**`--aggregate` 는 필수이고, 이 게이트가 여기서 하는 일은 위 전사의 대조다 (§11 ⑱).**
+바로 앞 문단이 *"R6 이 낸 `attribution_status` 를 그대로 옮긴다"* 고 지시하는데, 옮겨
+적은 값이 기계값과 같은지는 지금까지 아무도 보지 않았다 — `degraded` 를 `closed` 로
+옮기면 floor 5차원 전부 `closed` 가 되어 **PASS 행을 그대로 만족시킨다.** 이제 게이트가
+두 값을 대조하고 다르면 non-zero 를 낸다. 인자를 선택으로 두지 않는 이유는 형제
+`--baseline-detected` 와 같다: 선택이면 넘기지 않은 호출자가 조용히 면제받고, 그
+면제가 이 인자가 닫으려는 fail-open 의 모양 그 자체다.
+
+**닫히지 않은 이웃 (과장하지 않는다).** 이 대조는 *전사* 축만 닫는다. `$aggregate_yaml`
+이 정말 그 실행의 `--aggregate` 출력인지(custody)는 여전히 검사하지 않는다 — §6.7 S1
+과 같은 축이며 열려 있다. 또 `verdict_input` 3플래그는 원장에 실리지 않으므로 이
+경로로는 대조할 대상이 없다.
 
 verdict 결정:
 

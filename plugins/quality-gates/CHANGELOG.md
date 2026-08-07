@@ -31,7 +31,8 @@
   `/qg` 호출당이 아니라 merge_base 당 1회가 된다.
 - `scripts/diff-test-results.py` — 귀속 8종 + 어댑터 간 `--aggregate`.
 - `scripts/check_qa_ledger.py` — floor 5차원(changed/behavior/verification/attribution/gap)
-  구조 게이트.
+  구조 게이트 + **전사 대조**(`--aggregate`, 필수): R6 집계의 `attribution_status` 와
+  원장의 `floor:attribution` 이 다르면 non-zero.
 - `qg-worktree.sh create-baseline` · `qg-worktree.sh create-head` · `compute-test-scope-candidates.sh --total`. 두 `create-*` 절은 공유 헬퍼
   `make_detached_worktree` 를 부른다 (`create-sandbox`/`mutation-guard` 본문 무변경 — AC22).
 
@@ -39,6 +40,24 @@
 - `SKILL.md` 의 `regardless of Review scope` 리터럴과 그것이 서술하던 동작.
 
 ### Fixed
+- **원장 전사가 대조되지 않던 fail-open** (`/qg` iter-7 — 라운드 6·7 의 U3. 그 id 는
+  §12 의 한 문장 밖 **어디에도 등재된 적이 없었다** — 이 라운드에 §11 ⑱ 로 실제 등재하고
+  같은 라운드에 닫았다). R8 은 R6 이 낸 `attribution_status` 를 `floor:attribution` 의
+  status 로 **모델이 옮겨 적게** 하는데, 옮겨 적은 값이 기계값과 같은지는 아무도 보지
+  않았다. `degraded` 를 `closed` 로 옮기면 floor 5차원이 전부 `closed` 가 되어 **PASS 행을
+  그대로 만족시킨다** — 불변식 ②가 결과값 축에서 없앤 "모델 요약이 판정을 결정" 이
+  *전사* 축으로 재입장한 자리다.
+  **해소:** `check_qa_ledger.py --aggregate <집계 YAML>` (필수 인자)가 두 값을 대조하고
+  다르면 non-zero. 집계 파일 부재·`attribution_status` 줄이 정확히 1개가 아님도 통과가
+  아니다(fail-closed — 첫 매치만 보면 원하는 값을 앞에 덧붙여 우회할 수 있다). R6 은 집계
+  stdout 을 `$aggregate_yaml` 로 남기고 R8 이 넘긴다. 인자를 선택으로 두지 않은 이유는
+  형제 `--baseline-detected` 와 같다: 선택이면 넘기지 않은 호출자가 조용히 면제받는다.
+  이 대조는 **전사 축만** 닫는다 — custody(넘긴 파일이 정말 그 실행의 출력인가)는 §6.7 S1
+  로 열려 있다.
+- **새 필수 인자가 기존 음성 테스트를 엉뚱한 이유로 통과시킬 뻔한 것** (같은 라운드에
+  자체 적발). `--aggregate` 가 필수가 되자 기존 케이스가 전부 exit 2 로 죽는데, 그 케이스
+  다수가 *non-zero 를 기대*하는 음성 테스트라 **재려던 축(누락·문법·모순)이 판정되지 않은
+  채 GREEN** 이 된다. 러너가 일치하는 집계를 함께 쓰도록 고쳐 각 축을 제자리로 되돌렸다.
 - **HEAD 축 테스트가 verifier 샌드박스에서 돌던 구조 결함** (`/qg` iter-7 — §11 ⑬,
   라운드 7 codex 단독 high 로 제기돼 *잔여 결함(병합 차단)* 으로 등재돼 있던 항목).
   이 게이트가 파는 것은 *"같은 선택을 두 번 돌려 짝짓는다"* 이고 그것은 **두 축이 같은

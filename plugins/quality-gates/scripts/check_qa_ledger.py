@@ -5,8 +5,16 @@ floor 5키 존재 + status ∈ {closed, degraded} + evidence 절 비어있지 �
 + `derived:` 줄 존재. **의미 판정은 하지 않는다** — "이 evidence가 충분한가"는
 사람과 모델의 몫이고, 이 게이트가 하는 일은 silent skip을 불가능하게 만드는 것뿐이다.
 
-usage: check_qa_ledger.py <evidence-log-path>   (인자 없으면 stdin)
-exit:  0 통과 · 1 구조 위반 · 2 사용 오류
+여기에 **전사 대조**가 하나 얹힌다 (§11 ⑱ = 라운드 6·7 의 U3). R8 은 R6 이 낸
+`attribution_status` 를 `floor:attribution` 의 status 로 *모델이 옮겨 적게* 하는데,
+옮겨 적은 값이 기계가 낸 값과 같은지는 아무도 보지 않았다 — `degraded` 를 `closed` 로
+잘못(또는 편하게) 옮기면 그대로 PASS 행을 만족시킨다. 이것도 의미 판정이 아니라
+**두 필드의 일치**를 보는 구조 검사다. `--aggregate` 는 필수다: 선택 인자면 넘기지
+않은 호출자가 조용히 검사를 면제받는다.
+
+usage: check_qa_ledger.py --aggregate <aggregate-yaml> [<evidence-log-path>]
+       (evidence-log 인자가 없으면 stdin)
+exit:  0 통과 · 1 구조/전사 위반 · 2 사용 오류(집계 읽기·파싱 실패 포함)
 """
 from __future__ import annotations
 
@@ -16,6 +24,10 @@ from pathlib import Path
 
 FLOOR_DIMS = ["changed", "behavior", "verification", "attribution", "gap"]
 STATUSES = ("closed", "degraded")
+
+# 집계 YAML 의 `attribution_status`. **정확히 한 번**을 요구한다 — 첫 매치만 보면
+# 줄을 덧붙여 원하는 값을 앞에 놓는 것으로 대조를 우회할 수 있다.
+AGG_ATTR_RE = re.compile(r"^attribution_status: (closed|degraded)$", re.MULTILINE)
 
 # 줄 시작 `- floor:<dim>` + em-dash 구분 status + **비어있지 않은** evidence.
 # 헤딩(`## floor:gap`)이나 산문 언급은 이 문법을 만족할 수 없다 — 이것이 M8의 이빨이다.
@@ -32,7 +44,25 @@ DERIVED_NAMED_RE = re.compile(
 DERIVED_NONE_ANY_RE = re.compile(r"^-\s+derived:\s*없음(?=\s|$)")
 
 
-def check(text: str) -> list[str]:
+def read_aggregate_attribution(path: str) -> tuple[str | None, str | None]:
+    """집계 YAML → (attribution_status, 오류 메시지). 둘 중 하나만 non-None."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, f"집계 YAML 읽기 실패: {exc}"
+    except UnicodeDecodeError as exc:
+        # UnicodeDecodeError 는 OSError 의 하위가 아니다 — 따로 잡지 않으면 트레이스백.
+        return None, f"집계 YAML 이 UTF-8 이 아닙니다: {exc}"
+    hits = AGG_ATTR_RE.findall(text)
+    if len(hits) != 1:
+        return None, (
+            f"집계 YAML 의 `attribution_status` 줄이 {len(hits)}개입니다 (정확히 1개여야 함): "
+            f"{path}"
+        )
+    return hits[0], None
+
+
+def check(text: str, expected_attribution: str | None = None) -> list[str]:
     errors: list[str] = []
     seen: dict[str, str] = {}
 
@@ -54,6 +84,18 @@ def check(text: str) -> list[str]:
             errors.append(
                 f"floor 차원 '{dim}' 누락 — "
                 f"`- floor:{dim} — closed|degraded — <evidence>` 줄이 필요합니다"
+            )
+
+    # 전사 대조 (§11 ⑱). `attribution` 줄이 아예 없거나 status 가 어휘 밖이면 위에서 이미
+    # 오류가 났으므로 여기서는 **둘 다 정상일 때의 불일치**만 본다 — 같은 사실로 두 번
+    # 야단치지 않는다.
+    if expected_attribution is not None and seen.get("attribution") in STATUSES:
+        got = seen["attribution"]
+        if got != expected_attribution:
+            errors.append(
+                f"floor:attribution 의 status '{got}' 가 R6 집계의 "
+                f"attribution_status '{expected_attribution}' 와 다릅니다 — "
+                f"집계값을 원장에 옮길 때 바뀌었습니다 (전사 대조 실패)"
             )
 
     derived_lines = [ln for ln in text.splitlines() if DERIVED_ANY_RE.match(ln)]
@@ -90,10 +132,39 @@ def check(text: str) -> list[str]:
     return errors
 
 
+USAGE = "usage: check_qa_ledger.py --aggregate <aggregate-yaml> [<evidence-log-path>]"
+
+
 def main() -> int:
     args = sys.argv[1:]
+
+    # `--aggregate` 는 **필수**다. 선택 인자면 넘기지 않은 호출자가 조용히 전사 대조를
+    # 면제받고, 그것이 바로 이 인자가 닫으려는 fail-open 의 모양이다 (AC60 선례).
+    agg_path: str | None = None
+    rest: list[str] = []
+    i = 0
+    while i < len(args):
+        if args[i] == "--aggregate":
+            if i + 1 >= len(args):
+                print(f"check_qa_ledger: --aggregate 에 값이 없습니다\n{USAGE}", file=sys.stderr)
+                return 2
+            agg_path = args[i + 1]
+            i += 2
+            continue
+        rest.append(args[i])
+        i += 1
+
+    if agg_path is None:
+        print(f"check_qa_ledger: --aggregate 는 필수입니다\n{USAGE}", file=sys.stderr)
+        return 2
+    expected_attribution, agg_err = read_aggregate_attribution(agg_path)
+    if agg_err is not None:
+        print(f"check_qa_ledger: {agg_err}", file=sys.stderr)
+        return 2
+
+    args = rest
     if len(args) > 1:
-        print("usage: check_qa_ledger.py [<evidence-log-path>]", file=sys.stderr)
+        print(USAGE, file=sys.stderr)
         return 2
     if args:
         try:
@@ -108,7 +179,7 @@ def main() -> int:
             print(f"check_qa_ledger: stdin이 UTF-8이 아닙니다: {exc}", file=sys.stderr)
             return 2
 
-    errors = check(text)
+    errors = check(text, expected_attribution)
     if errors:
         for e in errors:
             print(f"check_qa_ledger: {e}", file=sys.stderr)

@@ -848,6 +848,7 @@ SESSION_MARKERS = {"pipeline.md", "files.md", "publish-eligible.md", "runtime-ev
   적었던 것(§3 Non-goals)이 "둘 다 깨졌다" 는 오독을 부를 수 있어 거기도 분리했다.
 - **AC22** — `qg-worktree.sh`의 `create-sandbox` · `mutation-guard` 본문이 **바이트 무변경**이다. 다른 case 절은 이 AC의 대상이 아니다: `create-baseline`·`create-head`는 두 축 트리를 만드는 공유 헬퍼(`make_detached_worktree`)를 부르는 얇은 절이며, `create-baseline`의 **동작**은 기존 행위 테스트(경로 emit · merge_base 내용 · detached · 충돌 거부 · idempotent)로 잠겨 있다. T17은 두 절의 case 본문만 잘라 해시하므로 이 리팩터에 영향을 받지 않는다.
 - **AC65** — HEAD 축 테스트는 **verifier 샌드박스가 아닌 자기 트리**에서 돈다. `qg-worktree.sh create-head <B> <sid>`가 봉인 커밋에 detached된 일회용 워크트리를 기준선 트리와 **다른 경로**에 만들고(동시 공존), R5b의 `run` 호출이 그 트리를 받는다. 재시도 경로는 refresh된 `baseline_sha`로 이를 다시 만든다. (§11 ⑬·⑨ 해소. 검증: T88 + 오케스트레이션 창 락 4종.)
+- **AC66** — R8 의 원장 게이트가 **기계 집계값과 원장 전사값을 대조**한다. `check_qa_ledger.py --aggregate <집계 YAML>` 는 필수 인자이며, 집계의 `attribution_status` 와 `floor:attribution` 의 status 가 다르면 non-zero. 집계 파일이 없거나 `attribution_status` 줄이 정확히 1개가 아니면 통과가 아니다(fail-closed). R6 은 집계 stdout 을 `$aggregate_yaml` 로 남긴다. (§11 ⑱ 해소. 검증: T90 · T91.)
 - **AC23** — `/qg runtime` 단일게이트 경로가 보존된다 (Step R-init의 zero-click 폴백 포함).
 - **AC24** — `hooks/hooks.json` 항목 수가 **불변**이고 신규 훅 파일이 **0개**다.
 - **AC25** — `agents/` 디렉토리의 파일 수가 **불변**이다 (신규 에이전트 0).
@@ -1093,6 +1094,8 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | T87 | `async def` 의 **형제 토큰** — pytest 스타일 bare 클래스(`class TestBare:`, `TestCase` 미상속)가 있는 파일을 `unittest` 가 claim 하지 않는다 · **양의 짝 2종**(bare 없는 동종 파일은 claim 유지 · `TestCase` 상속본은 claim). (/qg iter-6 iteration 2 I4 — **이 행 자체가 iter-7 등재분**: 테스트는 iter-6 에 들어갔는데 §8.1 행이 없어 §6.7 이 처벌하는 *등록 없는 등록* 상태로 한 라운드를 넘겼다) | AC63 정정 (§6.7) |
 | T88 | **두 축 트리의 분리** — `create-baseline`(merge_base)과 `create-head`(봉인 커밋 `B`)가 서로 다른 경로에 **동시 공존**하고 각자 자기 커밋 내용을 갖는다 · detached · 네임스페이스 · remove 적용. mutation 3축 RED(경로 붕괴 · 형제 파괴 · 커밋 동일화) | AC65 |
 | T89 | **HEAD 축이 도는 트리** (오케스트레이션 창 락 4종) — R5b 창 안에서 ① `create-head` 배선 ② `run` 호출 인자가 **전부**(∀) HEAD 축 트리 ③ `create-head` 인자가 봉인 커밋 ④ 재시도 문단이 refresh 후 재호출을 지시. `$runtime_project_dir` 0회 방식은 쓰지 않는다 — 그 변수는 폴백 문단에서 정당하게 등장하므로 **거꾸로 된 이빨**이 된다. mutation 5축 RED | AC65 |
+| T90 | **전사 대조** — 집계 `attribution_status` 와 `floor:attribution` 불일치가 **양방향** 으로 red · **양의 짝 2종**(closed/closed · degraded/degraded 는 green — degraded 는 1급 상태이지 실패가 아니다) · 대조 입력 부재·불량 4종(인자 누락 · 파일 부재 · 0개 · 2개) 전부 non-zero | AC66 |
+| T91 | **R6→R8 집계 전달 사슬** — R6 이 집계 stdout 을 `$aggregate_yaml` 로 남기고 R8 이 그것을 `--aggregate` 로 넘긴다. 두 지점을 함께 잠근다 — 하나만 잠그면 다른 하나를 지워 사슬을 끊을 수 있다 | AC66 |
 
 **AC ↔ 검증 완전성.** **AC1–AC64 전부**가 위 T 또는 §8.3의 V에 대응한다.
 **역방향도 이제 등재한다 (/qg iter-6 E6):** 앞 버전은 AC→T 방향만 단속했고 T→표 방향은
@@ -1269,6 +1272,47 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
     된다). 장애물은 **기준선이 캐시 적중으로 올 때 그 실행이 아예 없다**는 것이다. 캐시
     항목에 mode 를 함께 저장하는 설계가 필요하고 이번 범위 밖이다. 등급: **잔여 결함**.
 
+18. **✅ 해소됨 — 기계 집계값과 원장 전사값이 대조되지 않았다.** (라운드 6·7 의 **U3**.
+    §12 가 "이월" 이라 적었으나 **어느 목록에도 등재된 적이 없었다** — iter-6 이 그
+    미등재 자체를 공시만 했고, 이제 실제로 등재하며 같은 라운드에 닫는다.)
+    R8 은 R6 이 낸 `attribution_status` 를 `floor:attribution` 의 status 로 **모델이
+    옮겨 적게** 하는데, 옮겨 적은 값이 기계값과 같은지는 아무도 보지 않았다.
+    `degraded` 를 `closed` 로 옮기면 floor 5차원이 전부 `closed` 가 되어 **PASS 행을
+    그대로 만족시킨다** — 불변식 ②가 결과값 축에서 없앤 "모델 요약이 판정을 결정" 이
+    *전사* 축으로 재입장한 자리다.
+    **해소:** `check_qa_ledger.py --aggregate <집계 YAML>`(필수 인자)가 두 값을 대조하고
+    다르면 non-zero. 의미 판정이 아니라 **두 필드의 일치**를 보는 구조 검사이므로 이
+    스크립트의 기존 계약("의미 판정은 하지 않는다")을 넘지 않는다. R6 은 집계 stdout 을
+    `$aggregate_yaml` 로 남기고 R8 이 그것을 넘긴다 — 두 지점을 함께 잠근다(하나만
+    잠그면 다른 하나를 지워 사슬을 끊을 수 있다). 검증: T90(양방향 불일치 red + 양의 짝
+    2종) · T91(R6→R8 전달 사슬), mutation 5축 RED.
+    **닫지 못한 이웃 (과장하지 않는다):** 이 대조는 *전사* 축만 닫는다. 넘긴 파일이 정말
+    그 실행의 집계 출력인지(**custody**)는 여전히 검사하지 않으며 §6.7 S1 과 같은 축으로
+    열려 있다. `verdict_input` 3플래그는 원장에 실리지 않아 이 경로로 대조할 대상이 없다.
+19. **`qg-gc.py` 수정이 이 브랜치의 범위를 넘는다.** (라운드 7 codex, **U5** — U3 와
+    같은 상태였다: §12 의 한 문장 밖 어디에도 없었다. 이제 등재한다.)
+    §5.11 이 고치는 것(`SESSION_PATTERN` 이 `worktrees`·`baseline-cache` 형제 디렉토리를
+    매치해 살아 있는 트리를 지운다)은 **이 기능이 만든 결함이 아니라 기존 결함**이고,
+    이 브랜치는 그것을 함께 고친다. 그 자체가 나쁜 것은 아니지만 — 신규 `baseline-cache`
+    가 그 버그의 사정권에 들어가므로 **이 기능이 실제로 그것을 건드린다** — 무관한 수정이
+    기능 PR 에 얹히면 리뷰 표면이 커지고 되돌리기 단위가 뭉친다.
+    **정직한 상태 표기:** codex 의 원문 표현은 어느 원장에도 남지 않았고 위 서술은 §5.11
+    과 라운드 7 기록에서 **재구성한 것**이다 — 인용이 아니다. 등급은 **갭**(병합을 막지
+    않는다): 결함이 아니라 *범위 결정*이며, 결정은 둘 중 하나다 — (a) 별도 PR 로 분리,
+    (b) 유지하되 "신규 캐시가 이 버그의 사정권에 들어가므로 이 기능의 일부" 라는 근거를
+    §5.11 에 명시. **이 라운드에서 (b) 쪽 근거가 하나 더 생겼다**: ⑬ 이 만든 `head-*`
+    워크트리도 같은 `worktrees/` 디렉토리에 살아 GC 버그의 사정권이다.
+20. **일회용 트리의 누수 지점이 하나에서 둘로 늘었다.** (`/qg` iter-7 — ⑬ 수정의
+    부작용이며, 숨기지 않고 등재한다.) `create-baseline` 이 만든 `base-*` 는 R4③ 이,
+    `create-head` 가 만든 `head-*` 는 R5b 끝이 지운다. 두 경우 모두 **그 사이에서 실행이
+    죽으면 트리가 남는다** — `cancel-qg-core.sh` 의 정리는 `pipeline.md` 의
+    `worktree_path`(= `/qg branch <name>` 트리)만 보고 이 둘을 열거하지 않는다.
+    완화: 두 서브커맨드 모두 **경로가 `<prefix>-<sid8>` 로 고정**돼 있어 다음 실행이
+    idempotent 하게 갈아엎고, 사용자의 미커밋 작업이 그 경로에 있으면 non-force
+    `git worktree remove` 가 거부해 파괴하지 않는다. 즉 누수는 **디스크 점유**이지 데이터
+    손실이 아니다. 등급: **갭**. 제대로 닫으려면 정리 경로가 네임스페이스를 열거해야 하고,
+    그것은 §11 ⑩(baseline 캐시 GC 없음)과 같은 자리에서 함께 설계할 일이다.
+
 ---
 
 ## 12. Metadata
@@ -1295,4 +1339,5 @@ iter-3 리뷰(리뷰어 5종 + adversarial 15 CONFIRMED)가 **iter-2 수정 자�
 | `/qg` iter-5 수정 라운드 | iter-5 리뷰의 **CRITICAL 1(SR1) + code-reviewer 5(C2–C6) + SF2·SF5·SR4·TA1** 를 처리했다. 굵직한 둘: **SR1** — iter-2 의 AC60 이 닫았다고 주장한 사슬이 한 칸 옆으로 살아 있었다(`detect` 는 선언만 보고, 캐시 전량 적중이면 실행 관문이 한 번도 안 돈다) → `probe` 서브커맨드로 근거를 실행 기반으로 이전. **C2** — 매니페스트가 테스트 러너를 verifier 에게 부팅 표면으로 넘겨 §5.1 불변식 ②와 충돌(스위트 2회 실행 + HEAD 전용 deps 설치로 AC41 파괴) → `runnable_surfaces` = 부팅 표면 전용. **나머지 셋은 락 자신의 결함**이었다: verdict-토큰 락이 SKILL.md 부재를 통과로 읽음(grep exit 2) · body-contract assert 가 frontmatter 로 만족돼 보안 Hard Rule 삭제를 못 잡음 · 어댑터 개수 6곳이 9종을 8종이라 적음. mutation 합계 **56 RED**. ★이 라운드에서 **내 mutation·needle 이 5번 고장**났다(파일 목록 누락 1 · body-unique 아닌 needle 3 · `source` 가 `exit 0` 을 만나 assert 가 한 줄도 실행되지 않음 1) — 매번 락이 아니라 계측기가 문제였다. ★T9 의 ∀ 가 러너 5축 중 **3축을 아예 지나가지 않았다**(픽스처에 그 레포 형태가 없었다): **∀ 의 범위는 코퍼스가 정하지 술어가 정하지 않는다.** |
 | `/qg` iter-6 수정 라운드 | 리뷰어 5명(security-reviewer · **codex** · silent-failure-hunter · code-reviewer · **pr-test-analyzer**) + adversarial. **42건 판정.** adversarial 이 해소한 핵심 충돌: `code-reviewer` 의 *"fail-open 없음 · Critical 없음"* 은 **자기 findings 에 대해서는 옳지만 브랜치 전체 속성으로 일반화한 것이 틀렸다** — 인자-provenance·R5b/R7 순서·테스트-이빨 세 축을 아예 안 봤고, **안 본 축에 finding 이 없는 것은 부재의 증거가 아니다**. 그리고 A/B/C 의 CRITICAL 중 **8건은 이 문서의 §6.7/§11 잔여 원장에 이미 등재**돼 있었다(리뷰어들이 원장을 독립 재발견 — 원장이 정직하다는 증거). **미등록 CRITICAL 은 정확히 1건: `--mode` provenance.** 형제 `--granularity` 가 iter-5 C5 로 그 처방을 받았는데 이 인자만 못 받았고, adversarial 이 C5(도말)와의 **합성 경로**까지 찾아냈다. 닫은 것: `--mode` 데이터 대조 · `async def test_` 프로덕션 버그(AC63′ escape (a) 재개방) · `assign` 후행개행 무음 소실 · 실행비트 4개(**self-dogfood 가 구조적으로 인증 불가였다**) · 무음 degrade 2종 · 옵션 주입 · 분모⊉분자 · `resolve-baseline` fail-open · poetry env-dir 단정 · 폴백 라우팅 산문과 **그 틀린 주장을 방어하던 락** · 이빨 없던 락 7종(음의 락 3 · R8 floor 절 · `setup_failed` · 2단 재실행 red 방향 · ATTR 7셀 · 필수 인자 ∀ · red bulk 픽스처 부재) · 원장 정합(§8.1 T-id 16개 미등재 · §12 의 등록 없는 등록 주장 · **AC21′**). 교훈: **정정 노트가 옛 값을 인용하면 그 인용이 스캔 코퍼스에 들어가 자기 자신을 위반으로 만든다**(이번에 두 번 물렸다) |
 | `/qg` iter-7 구조 라운드 | **§11 ⑬ 해소 — 두 번째 일회용 워크트리.** codex 가 라운드 7 에서 지정한 두 정답 중 첫째(*부팅과 테스트 실행의 환경 분리*)를 실행했다: `qg-worktree.sh create-head <B>` 가 봉인 커밋에 detached 된 HEAD 축 전용 트리를 만들고 R5b 가 거기서 돈다. **⑨(= §6.7 S4)가 같은 수정으로 함께 닫혔다** — 두 항목이 *권위 있는 HEAD 축이 감시 대상 트리 안에서 돈다* 는 한 뿌리였다. 부수로 잡힌 것: (a) §5.2 의 *"테스트는 setup 이 끝난 트리에서 돌아야 한다"* 는 근거가 **바로 ⑬ 을 낳은 전제**여서 교체 — 러너용 setup 과 부팅용 setup 을 구별하지 못한 것이 오류였다, (b) 재시도가 **새 `B`** 를 만드는데 옛 sha 로 트리를 만들면 *고쳐지기 전 코드*를 HEAD 로 재는 새 fail-open — 지시와 락으로 봉쇄, (c) `mutation-guard` 3-arg 락의 앵커가 *이름 첫 등장*이라 내 산문에 latch — `scripts/` 접두를 요구하는 호출-줄 앵커로 교정(반대 방향이 더 나빴다: 호출에서 인자를 지워도 산문이 만족시켰다), (d) 재시도 순서 락이 `R5b(새` 로 **괄호 안 낱말까지** 핀해 사실 갱신을 RED 로 만들던 것 — 락이 문서에 거짓을 요구하는 형태라 구조 앵커(`R5b(`)로 교정, (e) **T87 미등재** 적발 — iter-6 이 만든 테스트가 §8.1 행 없이 한 라운드를 넘겼다(§6.7 이 처벌하는 *등록 없는 등록*). 신규 검증: T88 · T89 · AC65, mutation 8축 RED(계측기 3회 고장 후 재설계 — 도달불가·앵커 잔존·heredoc 이스케이프). 스위트: bash 81 green / 알려진 6 red · python 128 OK. **이 라운드는 아직 `/qg` 재검증을 받지 않았다.** |
-| 다음 단계 | **`/qg branch` 재실행** → iter-6·iter-7 수정의 재검증 → 그다음에야 병합 판단. **이 브랜치는 여전히 병합 불가.** 남은 잔여: §11 **⑭**(§5.3 빈 스코프 무집행) · §11 **⑰**(실행 mode provenance) · §6.7 **15 항목**(S4 는 iter-7 에 닫힘) · codex block 2건(21항목 미완 · 귀속 입력 provenance) · **U3**(원장↔기계출력 대조)·**U5**(GC scope-creep) — 이 둘은 §12 의 한 문장 밖 어디에도 등재된 적이 없고 iter-6 이 그 미등재를 공시만 했다 · 수동 V-행 · Runtime 게이트 실측(설치 캐시에 v3.0.0 스크립트가 없어 `claude -p --plugin-dir` 별도 세션 필요). **여전히 의도적으로 열어 둔 것**: B1(bulk 흡수자가 미지원 후보를 삼킴 — §6.7 F5, 공시 완료) · C5(shell/unittest per-unit 행 emit — `--mode` 의미와 상호작용해 함께 설계해야 함). A1/C2 는 이 라운드에 닫혔다. |
+| `/qg` iter-7 (2) — 전사 대조 | **U3 해소 + U3·U5 실등재.** 라운드 6·7 이 "이월" 이라 적어 온 U3(원장↔기계출력 대조)·U5(GC scope-creep)는 **어느 목록에도 등재된 적이 없었다** — iter-6 이 그 미등재를 공시만 했다. 둘 다 §11 에 실제로 등재했고, U3 는 같은 라운드에 닫았다: R8 이 R6 의 `attribution_status` 를 *모델이 옮겨 적는* 자리에 집행자가 없어 `degraded`→`closed` 전사가 그대로 PASS 행을 만족시켰다 → `check_qa_ledger.py --aggregate`(필수)가 두 값을 대조. **의미 판정이 아니라 두 필드의 일치**라 이 스크립트의 기존 계약을 넘지 않는다. 함께 등재한 것: §11 ⑳ — ⑬ 수정이 일회용 트리 누수 지점을 하나에서 둘로 늘렸다(디스크 점유이지 데이터 손실 아님, 갭). 부수로 잡힌 것: 새 필수 인자가 기존 음성 테스트들을 **엉뚱한 이유로 통과**시킬 뻔했다(전부 exit 2 로 죽어 재려던 축이 판정되지 않음) → 러너에 일치 집계를 심어 각 축을 제자리로 되돌림 · 내 새 케이스가 다른 케이스의 파일을 참조해 파일 부재로 통과할 뻔한 것 1건 · 새로 생긴 두 번째 read 경로에 로케일 독립 픽스처(한글) 추가. 신규 검증: AC66 · T90 · T91, mutation 5축 RED(계측기 2회 고장 — derived 블록 동반 삭제 · zsh 무분할). |
+| 다음 단계 | **`/qg branch` 재실행** → iter-6·iter-7 수정의 재검증 → 그다음에야 병합 판단. **이 브랜치는 여전히 병합 불가.** 남은 잔여(병합 차단): §11 **⑭**(§5.3 빈 스코프 무집행 — 제대로 닫으려면 `unclaimed` 신호가 필요한데 그것을 삼키는 것이 아래 B1 이라 **B1 이 선결**이다) · §11 **⑰**(실행 mode provenance) · §6.7 **15 항목**(S4 는 iter-7 에 닫힘). 열린 갭(병합 차단 아님): §11 **⑲**(GC scope-creep — 범위 결정 필요) · §11 **⑳**(일회용 트리 누수 2곳). codex block 2건 중 **귀속 입력 provenance 는 전사 축만 iter-7 에 닫혔고 custody 축(§6.7 S1)은 열려 있다**; 21항목 미완은 §6.7 의 세는 규칙 정합으로 대체됐다. 그 밖: 수동 V-행 · Runtime 게이트 실측(설치 캐시에 v3.0.0 스크립트가 없어 `claude -p --plugin-dir` 별도 세션 필요). **여전히 의도적으로 열어 둔 것**: B1(bulk 흡수자가 미지원 후보를 삼킴 — §6.7 F5, 공시 완료) · C5(shell/unittest per-unit 행 emit). A1/C2 는 iter-7 에 닫혔다. |

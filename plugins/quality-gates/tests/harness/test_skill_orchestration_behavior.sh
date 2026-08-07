@@ -719,6 +719,42 @@ assert_call_in_window "R6 이 diff-test-results.py --aggregate 호출 (집계)" 
 assert_call_in_window "R8 이 check_qa_ledger.py 호출" \
   'scripts/check_qa_ledger.py'             '^[*][*]Step R8'     '^[*][*]Step R9'
 
+# ── T91 · AC66 · §11 ⑱(U3) — 기계 집계값이 원장 대조까지 살아서 도달하는가 ────
+# 두 지점이 함께 있어야 대조가 성립한다. 하나만 잠그면 다른 하나를 지워 사슬을 끊을 수
+# 있다: R6 이 집계를 파일로 남기지 않으면 R8 이 넘길 것이 없고, R8 이 `--aggregate` 를
+# 넘기지 않으면 R6 이 남긴 파일이 아무 데도 안 쓰인다.
+#
+# 스크립트가 인자를 필수로 만들어 두었으므로 배선이 끊기면 런타임에 exit 2 로 죽는다
+# (fail-closed). 그래도 여기서 잠그는 이유는 **조용한 죽음이 아니라 조용한 미배선**을
+# 막기 위해서다 — 산문만 남고 호출이 사라지면 아무도 그 게이트를 부르지 않는다.
+echo "== R6→R8 집계 전달 사슬"
+r6_s=$(first_line '^[*][*]Step R6'); r8_s=$(first_line '^[*][*]Step R8')
+r7_s=$(first_line '^[*][*]Step R7'); r9_s=$(first_line '^[*][*]Step R9')
+if [[ "$r6_s" -le 0 || "$r7_s" -le 0 || "$r8_s" -le 0 || "$r9_s" -le 0 ]]; then
+  echo "FAIL: 집계 사슬 락 — 창 앵커 붕괴 (R6=$r6_s R7=$r7_s R8=$r8_s R9=$r9_s)"
+  fail=$((fail + 1))
+else
+  chain_ok=1
+  # ① R6 의 `--aggregate` 호출이 stdout 을 파일로 남긴다
+  awk -v s="$r6_s" -v e="$r7_s" '
+    NR>s && NR<e && index($0,"diff-test-results.py\" --aggregate") { want=1 }
+    want && index($0,"> \"$aggregate_yaml\"") { f=1 }
+    END { exit !f }' "$SKILL_MD" \
+    || { echo "    R6 이 집계 stdout 을 \$aggregate_yaml 로 남기지 않음"; chain_ok=0; }
+  # ② R8 의 게이트 호출이 그 파일을 --aggregate 로 넘긴다 (호출 줄 또는 이어지는 줄)
+  awk -v s="$r8_s" -v e="$r9_s" '
+    NR>s && NR<e && index($0,"scripts/check_qa_ledger.py") { want=NR+1; if (index($0,"--aggregate")) f=1 }
+    want && NR==want { if (index($0,"--aggregate \"$aggregate_yaml\"")) f=1; want=0 }
+    END { exit !f }' "$SKILL_MD" \
+    || { echo "    R8 의 check_qa_ledger 호출이 --aggregate \$aggregate_yaml 을 넘기지 않음"; chain_ok=0; }
+  if [[ $chain_ok -eq 1 ]]; then
+    echo "PASS: R6 이 집계를 파일로 남기고 R8 이 그것을 --aggregate 로 대조에 넘김"
+  else
+    echo "FAIL: R6→R8 집계 전달 사슬 (전사 대조가 대조할 원본에 닿지 못한다)"
+    fail=$((fail + 1))
+  fi
+fi
+
 # 새 라벨 5종이 실제로 존재하고 순서가 맞다
 # 라벨은 **줄머리 볼드 헤딩**으로만 앵커한다. 맨 라벨로 찾으면 본문 cross-reference 가
 # 먼저 잡힌다 — 실측: `first_line 'Step R5a⁰'` = **174**(다른 섹션의 참조), 실제 헤딩은
