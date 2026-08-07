@@ -40,6 +40,27 @@
 - `SKILL.md` 의 `regardless of Review scope` 리터럴과 그것이 서술하던 동작.
 
 ### Fixed
+- **iteration 2 — 내 iter-7 수정에서 나온 5건** (codex + security-reviewer 재리뷰).
+  두 리뷰어가 CRITICAL 3건이 실제로 닫혔음을 확인한 뒤 찾은 것들이다:
+  - **flaky 재실행 결과의 캡처·병합 규칙이 없었다** — *"마지막 호출의 결과가
+    authoritative"* 라고 적어 놓고 그 결과를 `$head_rows_file` 에 반영하는 방법을 말하지
+    않아, 대조가 여전히 원래의 실패 행을 읽었다. 임시 TSV → 실패 시 원행 유지 + degraded
+    → 성공 시 해당 unit 만 **교체**(추가는 중복 unit 으로 exit 4) → 원자적 배치 순서를 명시.
+  - **폐기가 무조건이라 degrade 결과를 삼켰다** — 새 R5b 라우팅은 `create-head` 실패 후에도
+    진행하는데 `head_tree_dir` 이 빈 문자열이라 `remove ""` 가 죽었고, **이미 확정된
+    degrade 가 R7·R8 에 도달하기 전에 파이프라인이 끊겼다.** 조건부로 바꿨다.
+  - **`2>&1` 캡처가 git 경고를 파일명 스트림에 섞었다** (두 리뷰어 독립 수렴). 성공 경로의
+    rename-limit warning 등이 `(^|/)tests?/` 에 매치하면 그대로 후보가 되고, 형제 `--total`
+    은 stderr 를 안 잡으므로 **분자가 분모를 넘는다**. stderr 를 별도 파일로 분리.
+  - **★ `exit 4` 를 같은 파일의 헤더가 무력화하고 있었다** — 세 줄 위 *"Exit: … Skill must
+    fail-open (treat non-zero as empty)"* 가 이 스크립트의 **유일한 reader-facing 계약**
+    이라, `|| true` 를 걷어낸 수정이 문서에 의해 그대로 §6.7 F6 으로 되읽히는 상태였다.
+    헤더를 종료 코드 표로 다시 쓰고 SKILL 호출 지점에 라우팅 문단을 붙였다.
+    **코드를 고치고 계약을 안 고치면 고친 것이 아니다.**
+  - **폐기가 R6 의 정상 종료 경로에만 있었다** — exit-4 라우팅으로 R8 에 빠지면 트리가 새고,
+    그 트리의 테스트 산출물 때문에 다음 `create-head` 의 non-force 제거가 거부돼 die 하며,
+    같은 세션의 모든 후속 실행이 `verification: degraded` 가 된다(**PASS 에 영영 도달 못 하는
+    세션**). 모든 종료 경로에서 폐기하도록 명시.
 - **`create-head` 도입이 낳은 3 CRITICAL** (`/qg branch` iter-7 Review 게이트 — 리뷰어
   5 + adversarial 이 29건 판정, 그중 다수가 iter-7 의 두 커밋 산물). 구조 방향은 맞았지만
   계약이 불완전했다:

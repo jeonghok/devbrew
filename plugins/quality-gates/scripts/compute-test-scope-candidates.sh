@@ -17,8 +17,18 @@
 #            Empty stdout means "no candidates" (skill should silently skip Step 2.5).
 #   --total: a single integer line.
 #
-# Exit: 0 on success (including empty result), non-zero only on hard errors
-# (e.g., not a git repo). Skill must fail-open (treat non-zero as empty).
+# Exit: 0 = success (including a genuinely empty result — no candidates)
+#       1 = not a git repository
+#       4 = **the review range could not be diffed.** This is NOT "no candidates".
+#           빈 stdout 을 "이 diff 는 테스트를 건드리지 않는다" 로 읽으면 안 된다 —
+#           호출자는 이것을 `gap`/`verification: degraded` 사유로 기록해야 한다.
+#
+# **fail-open 지시 철회 (/qg iter-7 iteration 2, security-reviewer).** 앞 판본은
+# *"Skill must fail-open (treat non-zero as empty)"* 라고 적었다. 그 한 줄이 이
+# 스크립트의 **유일한 reader-facing 계약**이었으므로, 같은 라운드에 `|| true` 를 걷어내고
+# exit 4 를 도입한 수정을 **문서가 그대로 무력화**하고 있었다 — 시끄러운 실패를 조용한
+# "후보 없음" 으로 되읽으라는 지시였고, 그것이 정확히 그 수정이 닫으려던 F11 이다.
+# 코드를 고치고 계약을 안 고치면 고친 것이 아니다.
 #
 # Read-only. Never creates/modifies/deletes files.
 
@@ -87,11 +97,21 @@ fi
 # `core.quotePath=false` 는 M8 — 기본값 true 는 비-ASCII 경로를 8진 이스케이프해서
 # 분자·분모 양쪽에서 동시에 탈락시킨다(Korean-primary 레포에 현실적인 입력이다).
 # shellcheck disable=SC2086  # REVIEW_RANGE intentionally word-splits
-if ! CHANGED_ALL=$(git -c core.quotePath=false diff $REVIEW_RANGE --name-only 2>&1); then
-  echo "compute-test-scope-candidates: git diff 실패 (range='${REVIEW_RANGE:-워킹트리}') — 후보를 산출할 수 없습니다. 아래는 git 의 출력입니다:" >&2
-  printf '%s\n' "$CHANGED_ALL" >&2
+# stderr 를 stdout 으로 접지 **않는다** — 접으면 성공 실행에서 git 이 내는 advice·warning
+# 이 파일명 스트림에 섞여 존재하지 않는 "변경된 소스" 가 후보로 들어간다. 진단은 stderr
+# 로 흘려보내고(사용자가 그대로 본다) 여기서는 **종료 상태만** 본다.
+CTS_ERR=$(mktemp) || { echo "compute-test-scope-candidates: mktemp 실패" >&2; exit 4; }
+if ! CHANGED_ALL=$(git -c core.quotePath=false diff $REVIEW_RANGE --name-only 2>"$CTS_ERR"); then
+  echo "compute-test-scope-candidates: git diff 실패 (range='${REVIEW_RANGE:-워킹트리}') — 후보를 산출할 수 없습니다. 아래는 git 의 stderr 입니다:" >&2
+  cat "$CTS_ERR" >&2
+  rm -f "$CTS_ERR"
   exit 4
 fi
+if [ -s "$CTS_ERR" ]; then
+  echo "compute-test-scope-candidates: git 경고 (후보 목록에는 포함되지 않음):" >&2
+  cat "$CTS_ERR" >&2
+fi
+rm -f "$CTS_ERR"
 
 # Split changed files into src vs test.
 CHANGED_SRC=$(echo "$CHANGED_ALL" | grep -vE "$TESTRE" || true)

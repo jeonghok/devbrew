@@ -713,6 +713,14 @@ no 이고 기준선 트리도 만들어진다; 그 창을 닫는 결정론 수�
 | 스코프 보조 입력 | 무엇 | 신뢰 등급 |
 |---|---|---|
 | `compute-test-scope-candidates.sh` 후보 목록 | diff 의 src → 이름 매칭 test 파일 | **구조적** — 있으면 강한 신호, 없다고 없는 것은 아님 |
+
+> **`compute-test-scope-candidates.sh` 의 종료 코드 라우팅 (/qg iter-7 iteration 2).**
+> `0` = 성공(빈 출력은 *진짜로 후보가 없다*) · `1` = git 레포 아님 · **`4` = 리뷰 범위를
+> diff 하지 못했다.** `4` 를 빈 출력과 같이 다루면 안 된다 — 그 경우 stderr 를 verbatim
+> 노출하고 **`gap` 차원에 사유를 기록**하며, 그 사실이 `verification` 판정에 들어간다.
+> "범위를 확정하지 못했다" 를 "이 diff 는 테스트를 건드리지 않는다" 로 읽는 것이 §6.7 F6
+> 이 이름 붙인 결함이고, 스크립트 헤더가 예전에 *fail-open* 을 지시하고 있어 코드 수정만
+> 으로는 닫히지 않았다(같은 라운드에 헤더도 함께 고쳤다).
 | git diff + commit message + PR description | 무엇이 바뀌었고 무엇을 **의도**했나 | **구조적** |
 | 레포 CI 설정의 test-selection | CI 가 무엇을 고르는가 | **참고** — 대체 금지, 차이는 R2 산문에 한 줄 |
 | `test-scope-validator` 분류 | `outdated-suspicion`/`cherry-pick-suspicion` | **부정 신호** — 그렇게 찍힌 테스트는 커버리지로 세지 않음 |
@@ -1236,6 +1244,18 @@ authoritative 라 verifier 가 만든 상태에서 난 green 이 회귀를 강�
   "$head_tree_dir" "$runner" per-unit "${flaky_candidates[@]}"
 ```
 
+**재실행 결과를 `$head_rows_file` 에 반영하는 것까지가 이 규칙이다 (/qg iter-7 iteration 2,
+codex).** 그러지 않으면 *"마지막 호출의 결과가 authoritative"* 라는 바로 아래 문장이
+닿을 데가 없다 — 대조는 여전히 **원래의 실패 행**을 읽는다. 순서:
+
+1. 재실행 stdout 을 **임시 TSV** 로 받는다 (기존 행 파일을 직접 덮어쓰지 않는다).
+2. `run` 이 non-zero 면(러너 부재 exit 3 제외) 그 재실행은 **관측 실패**다 — 위 R5b
+   라우팅과 같이 `verification: degraded` 로 두고 **원래 행을 유지**한다. 재실행이
+   죽은 것을 "재실행 결과 없음 = green" 으로 읽지 않는다.
+3. 성공하면 재실행한 unit 의 행만 **교체**한다(추가가 아니다 — 같은 unit 이 두 행이면
+   `diff-test-results.py` 가 중복 unit 으로 exit 4 를 낸다).
+4. 교체된 파일을 원자적으로 배치한 뒤에야 `diff-test-results.py` 를 다시 부른다.
+
 **어느 트리인지가 이 문장의 load-bearing 부분이다.** "HEAD 에서" 라고만 적었던 앞
 판본은 R5b 가 그 트리를 이미 지운 뒤였고, 살아 있던 유일한 HEAD 측 트리가 verifier
 샌드박스였다 — 거기서 재실행하면 §11 ⑬ 이 되열리는데 그 결과가 **authoritative** 로
@@ -1265,8 +1285,26 @@ authoritative 라 verifier 가 만든 상태에서 난 green 이 회귀를 강�
 까지다):
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "$head_tree_dir"
+[[ -n "${head_tree_dir:-}" && -d "$head_tree_dir" ]] \
+  && "${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "$head_tree_dir"
 ```
+
+**조건부인 이유 (/qg iter-7 iteration 2, codex).** R5b 라우팅은 `create-head` 실패 후에도
+`unrun` + `degraded` 로 **계속 진행**하도록 지시한다. 그 경로에서 `head_tree_dir` 은 빈
+문자열이므로 무조건 `remove` 를 부르면 그 호출이 죽고, **이미 확정된 degrade 결과가
+R7·R8 에 도달하기 전에 파이프라인이 끊긴다** — 정리 실패가 판정을 삼키는 형태다.
+정리는 판정 경로가 아니므로 여기서 조용히 건너뛰는 것이 옳다(트리가 없으면 지울 것도
+없다). 트리는 있는데 `remove` 가 실패하는 경우는 §11 ⑳ 의 누수이고, 그 사실은 stderr 로
+드러나되 verdict 를 바꾸지 않는다.
+
+**이 폐기는 R6 의 *모든* 종료 경로에서 실행한다 — 정상 종료만이 아니다
+(/qg iter-7 iteration 2, security-reviewer).** 아래 R6 exit-code 라우팅이
+`diff-test-results.py` 의 exit 4·키 판독 실패를 *"stderr 노출 + attribution degraded →
+R8"* 로 보내는데, 그 경로가 폐기를 건너뛰면 `head-<sid8>` 이 남는다. 그리고 그 트리의
+내용물은 테스트 산출물이라 다음 `create-head` 의 **non-force** 제거가 거부돼 die 하고,
+같은 세션의 재시도와 이후 실행이 전부 `verification: degraded` 로 떨어진다 — **PASS 에
+영영 도달할 수 없는 세션**이 된다. 방향은 fail-closed 라 우회는 아니지만 가용성 결함이다.
+degrade 로 빠지는 경로에서도 폐기를 먼저 수행한 뒤 R8 로 간다.
 
 R7 은 `sandbox_dir` 만 검사하므로 이 트리가 R6 까지 살아 있어도 가드에 닿지 않는다 —
 §6.7 S4 의 봉쇄는 *수명*이 아니라 *다른 트리*라는 사실이 만든다. 다만 수명이 R6 까지
