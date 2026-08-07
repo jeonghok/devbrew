@@ -270,12 +270,34 @@ def main() -> int:
     msg_lines.append(
         "호출 skill의 terminal handoff(writing-plans 등)는 review pass 이후로 보류."
     )
+    # 범위(scope)는 알리되 면제(permission)는 알리지 않는다. 이 mandate 가 언제까지
+    # 유효한지 적지 않았더니, "이번 리뷰만 멈춰달라"는 요청에 세션 전체를 끄는
+    # 환경변수(DEVBREW_DISABLE_SPEC_DISTILL 등)가 답으로 나왔다 — 수명을 모르면
+    # 영구로 가정하고 최대 화력을 고르기 때문이다. 그래서 **수명 사실만** 적는다:
+    # "건너뛰어도 된다" 나 "무시하면 재발동하지 않는다" 같은 집행 공백은 적지 않는다.
+    # 그것은 모델이 스스로 리뷰를 면제할 근거가 되어 Law 2 를 뚫는다. 반대로 수명
+    # 사실은 "지금 안 하면 사라진다" 는 즉시 이행 압력이라 mandate 를 강화한다.
+    #
+    # 두 문장은 상호배타다. 상한에 닿은 dispatch 에서는 "재편집하면 재발동" 이
+    # **거짓**이 된다 — 그 문서는 이 세션에서 이미 중단됐다. 함께 내면 훅이 같은
+    # 숨결로 서로 모순되는 두 수명을 주장한다.
     if cap and attempt_n >= cap:
         msg_lines.append(
             f"[spec-distill] '{spec_path}' 리뷰가 {cap}회 시도됐으나 verdict 없이 "
             "끝났다 — 자동 dispatch를 중단한다. 리뷰가 필요하면 reviewing-spec을 "
             "직접 호출하라."
         )
+    else:
+        # **재발동 조건은 적지 않는다.** 두 번 시도했고 두 번 다 거짓이었다:
+        #   (1) "커밋하면 arm되지 않는다" — is_born() 이 git 판정 실패를 arm 쪽으로
+        #       fail-open 하므로 커밋된 문서도 arm 될 수 있다.
+        #   (2) "재편집하면 재발동한다"  — verdict 후 mark_reviewed 가 armed_paths 에
+        #       기록하므로 **정상 경로**에서는 재편집해도 재발동하지 않는다.
+        # 재발동은 (원장 ∧ git ∧ 상한) 세 입력의 함수이고 셋 다 emit 시점에 확정되지
+        # 않는다. 훅이 모르는 것을 단정하면 그 문장은 언젠가 거짓이 된다.
+        # 남기는 것은 emit 시점에 **이미 일어난 사실** 하나뿐이다 — rewrite_state 가
+        # 위에서 pending 을 소진했으므로 이 강제는 이번 턴을 넘기지 않는다.
+        msg_lines.append("이 mandate는 이번 dispatch 1회에만 유효하다.")
     msg = " ".join(msg_lines)
     # AC7.1: rewrite BEFORE emit. AC7.2: rewrite-fail → no emit (block storm guard).
     try:

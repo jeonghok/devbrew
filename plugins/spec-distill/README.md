@@ -141,6 +141,39 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 ## Kill switches
 
+### 먼저 — 무엇이 리뷰의 범위를 정하는가
+
+아래 env var 들은 **전부 세션 스코프이고 전부 재시작이 필요합니다.** "이번 리뷰 한 번만"
+같은 좁은 범위에 이것들을 쓰는 것은 압정에 망치입니다. 다만 상위 두 행은 **스위치가
+아니라 arm-once(v0.25.0) 설계에서 따라 나오는 성질**이므로, "끄는 방법" 이 아니라
+"범위가 어떻게 정해지는가" 로 읽으십시오.
+
+| 범위 | 그 범위를 만드는 것 | 재시작 |
+|---|---|---|
+| **이번 dispatch 1회** | mandate 의 **수명 자체가 1회**다 — `rewrite_state()` 가 emit 전에 `pending_review` 를 소진하므로 이 강제는 이번 턴을 넘기지 않는다 | 불필요 |
+| **그 문서의 재발동** | 재발동은 그 문서를 **다시 편집**할 때 일어난다. `should_arm()` 이 git-unknown 을 요구하므로 **커밋된 문서는 원칙적으로 다시 arm 되지 않는다** — 단 `is_born()` 은 git 판정 실패(`ls-files` timeout·rc 128 등)를 전부 arm 쪽으로 fail-open 하므로 이는 보장이 아니다 | 불필요 |
+| 모든 문서, 자동 리뷰만 | `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (Layer 1 구조 검증은 유지) | 필요 |
+| 훅 하나 | `DEVBREW_SKIP_HOOKS=spec-distill:Stop` | 필요 |
+| 플러그인 전체 | `DEVBREW_DISABLE_SPEC_DISTILL=1` | 필요 |
+
+**커밋은 이미 걸린 dispatch 를 취소하지 않습니다.** Stop 훅은 pending 을 찾은 뒤
+`armed_paths` 만 조회하고 git 추적 여부를 재검사하지 않으므로, pending 이 생긴 뒤 같은
+턴에 커밋해도 그 dispatch 는 그대로 실행됩니다. 커밋이 영향을 주는 것은 **앞으로의
+arm** 뿐이고, 그마저 위 표의 fail-open 단서가 붙습니다.
+
+원장(`armed_paths`)은 **세션 스코프**입니다. 리뷰를 마쳐도 문서를 커밋하지 않으면 다음
+세션에서 한 번 더 arm 됩니다 — 세션을 넘겨 억제하는 통상적 수단은 커밋이며, approve 시점
+`check-born` advisory 가 그것을 촉구합니다. 다만 `check-born` 은 `is_born()` 위에 서 있어
+**판정 실패와 untracked 를 구별하지 않습니다** — git 호출이 실패하면 커밋된 문서를
+"아직 git 에 없다" 로 보고합니다. 재발동은 세션당·문서당 3회(G6)가 상한입니다.
+
+**Stop 훅의 mandate 는 수명 한 문장만 말하고 재발동 조건은 말하지 않습니다.** 재발동은
+(원장 ∧ git ∧ 상한) 세 입력의 함수인데 셋 다 emit 시점에 확정되지 않아, 어떤 단정도
+언젠가 거짓이 되기 때문입니다(실제로 두 판본이 그렇게 걸렸습니다 — CHANGELOG 0.25.2
+리뷰 라운드 참조). 이 표가 그 조건을 설명하는 유일한 자리입니다.
+
+### 스위치 목록
+
 - `DEVBREW_DISABLE_SPEC_DISTILL=1` — plugin 전체 abort, state 보존.
 - `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1` (v0.20.0, v0.24.0 확대) — codex 병렬 co-review만 skip. Claude 리뷰는 정상 동작, combined = Claude verdict + loud degrade advisory. 전역 `DEVBREW_DISABLE_SPEC_DISTILL`과 독립. **적용 범위는 두 경로 전부**: (a) design-doc 리뷰(`reviewing-spec`), (b) brief 리뷰(`reviewing-brief`)의 **호출 지점 3곳** — 1-c 방향성 축 · 2-b 충실도 축 · 2-c 충실도 재실행. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`로 옮기고 세 지점이 같은 `$codex_avail`로 묶이며, 러너(`run_brief_codex_reviewer.sh`)는 이 변수를 보지 않는다. 한 지점이라도 게이트 밖이면 opt-out이 무시된 채 지출이 나가고 `affected_axis: all` degradation record가 거짓이 된다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` — UserPromptSubmit hook만 skip.
