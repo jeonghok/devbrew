@@ -193,7 +193,7 @@ degrade"*는 crash 회피가 아니라 **P11 이 집행되지 않았다는 사�
    exit_nonzero` 로 추출기에 전달하고 추출기는 `codex_failed: true` 를 낸다.
    **현행 동작과의 차이**: `run_codex_reviewer.sh:150-172` 는 비영점 exit 에서도 추출기를 계속
    돌린다. 그 자체는 유지한다 — 추출기가 override 를 받아 `codex_failed` 를 세우므로 **판정
-   결과는 규칙 1 과 같다**. 바꾸는 것은 없고, 이 문서가 그 동등성을 명시할 뿐이다(AC17 이 잰다).
+   결과는 규칙 1 과 같다**. 바꾸는 것은 없고, 이 문서가 그 동등성을 명시할 뿐이다(AC18 이 잰다).
 2. **산출물 파일의 존재와 크기** — 부재 · 0바이트 → `codex_failed: true`. 러너는 시작 시
    truncate 하고 EXIT 트랩에서 비어 있으면 degrade 를 채운다(현행 규약 유지).
 3. **파싱 결과의 양성 성공 표식** — `meta.codex_failed: false` 가 **있어야** 정상이다.
@@ -205,6 +205,20 @@ degrade"*는 crash 회피가 아니라 **P11 이 집행되지 않았다는 사�
 넘기고(`-` 를 argv 에 명시), 프롬프트 바이트가 argv 에 **등장하지 않으며**, `-s read-only` ·
 `-C <dir>` · `--json` 을 argv 에 갖는다.
 
+**상태 표현의 truth table** (round-3 리뷰 적발 — 같은 사실이 세 이름으로 흩어져 있는데 변환
+계약이 없었다). 층마다 표현이 다른 것은 **유지**하되(각 층의 기성 계약이므로) 대응을 못 박는다:
+
+| 상태 | 추출기 출력(층 ④) | plugin-audit meta(층 ⑤) | 뜻 |
+|---|---|---|---|
+| **미실행** | 산출물 없음 (호출자가 게이트에서 막음) | `codex.ran: false` · `codex.failed: false` | detect 가 false — kill switch · 미설치 · 버전 |
+| **실행-실패** | `meta.codex_failed: true` + `meta.reason` | `codex.ran: true` · `codex.failed: true` | 돌았으나 결과를 신뢰할 수 없음 |
+| **실행-성공** | `meta.codex_failed: false` | `codex.ran: true` · `codex.failed: false` | 결과 사용 가능 |
+
+- `codex_failed` 를 **최상위**로 내는 유일한 예외는 `extract_codex_artifact_yaml.py:67-68` 이다
+  (기성 shape, 이 사이클에서 바꾸지 않는다). 새 코드는 **`meta:` 하위**에 둔다.
+- `codex_audit_to_json.py`(1단계 ②)는 추출기 shape 으로 내고, SKILL 이 그것을 위 표대로
+  `codex.ran`/`codex.failed` 로 옮긴다. **AC5 가 세 상태 각각을 실측한다.**
+
 ### 4.2 codex CLI 버전 바닥
 
 이 설계는 `codex-cli 0.145.0` 실측에 의존하는데, stdin prompt(`-`)는 **`rust-v0.118.0` 에서
@@ -213,7 +227,7 @@ degrade"*는 crash 회피가 아니라 **P11 이 집행되지 않았다는 사�
 - `detect_codex.sh` 는 이미 `codex --version` 을 파싱한다. **`0.118.0` 미만을 degrade** 시키고
   `skip_reason: version_below_floor` 를 낸다.
 - **가시성**: `version_below_floor` 는 **visible** 이다(사용자가 조치할 수 있는 사유이므로
-  `version known-bad` 와 같은 부류). §5.2③(c)의 표와 AC12 의 정규식 목록에 포함된다.
+  `version known-bad` 와 같은 부류). §5.2③(c)의 표와 AC13 의 정규식 목록에 포함된다.
 - **판독 실패 경로**: `detect_codex.sh:50` 의 `|| echo unknown` 은 현재 버전을 못 읽어도
   `codex_available: true` 로 통과한다 — §4 의 `indeterminate ≠ clean` 위반이다.
   **`unknown` 은 바닥 미달과 같이 취급**한다(`skip_reason: version_unreadable`, visible).
@@ -251,11 +265,35 @@ codex 를 한 번 더 실행**해야 하고(현재는 `--version` 만), 그 실�
 
 **후보 발견은 여전히 정적 스캔이다** — 무엇을 실행할지는 알아야 하기 때문이다. 그러나 그 스캔의
 역할이 바뀐다: **판정이 아니라 후보 수집**이다. 스캔이 놓친 호출부는 *"잘못된 통과"*가 아니라
-*"검사되지 않음"*이고, 그 구분이 결정적이다. 놓침을 줄이기 위해 **다른 축의 교차 검사**를 둔다:
+*"검사되지 않음"*이고, 그 구분이 결정적이다.
 
-- 후보 스캔이 찾은 집합과 실제로 실행된 집합이 **동일**해야 한다(조용한 누락 금지).
-- `detect_codex.sh` 를 가진 **모든 플러그인**에서 후보가 최소 1건 나와야 한다 — 다른 축에서
-  도출한 하한이라, 스캔이 통째로 눈머는 경우를 잡는다.
+**★ 교차 검사는 서로 독립인 두 축에서 도출해야 한다.** round-3 리뷰(codex, block)가 초안의
+교차 검사가 **순환적**임을 적발했다 — *"후보 집합 == 실행 집합"* 은 둘 다 같은 스캔에서 나오므로
+스캐너가 러너 하나를 놓치면 **양쪽에서 함께 사라져 GREEN 이 된다**. *"플러그인당 최소 1건"* 하한도
+러너가 여럿인 플러그인(quality-gates 는 러너 2 + spike)에서는 하나를 놓쳐도 만족된다.
+
+두 축을 **서로 다른 신호**에서 뽑는다:
+
+| 축 | 신호 | 도출 방법 |
+|---|---|---|
+| **A — 피호출자 측** | 파일이 codex 를 부른다 | `plugins/**` 에서 `codex` + `exec` 인접 출현 스캔 |
+| **B — 호출자 측** | SKILL 이 그 파일을 부른다 | 각 SKILL 의 `allowed-tools` 항목과 실행 가능한 bash 블록에서 `scripts/*.sh` 경로 추출 |
+
+**A ≠ B 이면 RED**, 방향과 무관하게. A 에만 있으면 *"아무도 안 부르는 codex 호출부"*이고,
+B 에만 있으면 *"부르는데 codex 를 안 쓰거나 스캔이 놓쳤다"*이다. 둘 다 조사 대상이다.
+한 축이 눈멀어도 다른 축이 남으므로 **같은 누락이 두 곳에서 동시에 일어나야만** 통과한다.
+
+**게이트 연결은 argv 관측으로 증명되지 않는다**(round-3 리뷰 적발). 실행 관측은 러너 *안*의
+argv·stdin 만 보므로, **호출자 책임인 detect·kill switch 가 러너 앞에 실제로 연결됐는지**는
+말해주지 않는다. kill switch 는 P21 보안 컨트롤이므로 이 공백을 남기면 *"껐다고 믿게만"* 만든다.
+그래서 **진입점 실행 관측**을 따로 둔다:
+
+- **리터럴 bash 게이트**(spec-distill `reviewing-spec:77` · `reviewing-brief:216`)는 그 블록을
+  실제로 실행해 시나리오별로 **mock 호출 횟수**를 센다: 가용 → 1회, kill switch → **0회**,
+  미설치 → 0회 + 배너, 버전 바닥 미달 → 0회 + 배너.
+- **산문 게이트**(quality-gates `quality-pipeline` · `critiquing-artifacts`)는 모델이 실행하므로
+  기계적으로 검증할 수 없다. **알려진 한계로 기록한다**(§10) — 이 사이클은 그것을 리터럴 bash 로
+  바꾸지 않으며, 그 전환은 별건이다. 커버리지를 주장하지 않는 것이 이 문서의 규약이다.
 
 **마크다운 산문 호출부는 이 메커니즘 밖이다**(실행할 수 없으므로). 1단계가 plugin-audit 의
 산문을 스크립트로 승격해 **범위 안에 남는 산문 호출부를 0 으로 만든다.** 그것이 이 사각의
@@ -284,11 +322,26 @@ stdin 규약 · **층 ④ 추출기**. 그리고 그 형태 때문에 sweep 의 
 
 #### ② 층 ④ 추출기 신설
 
-`scripts/codex_audit_to_json.py` — codex JSONL 을 `assemble-audit-data.py:162,167` 이 요구하는
-`--codex-side` shape(`{findings, d_verdicts, oq_answers, new_open_questions}`)으로 바꾼다.
+`scripts/codex_audit_to_json.py` — codex JSONL 을 plugin-audit 이 소비하는 shape 으로 바꾼다.
 형제 추출기들의 기성 규약을 따른다: 마지막 `agent_message` 채택 · **마지막 fenced block 채택**
-(중간 메시지 오채택 방지) · degrade 시 `codex_failed` + `reason` 방출 · `--stderr-file` ·
-`--meta-override-exit-code` · `--meta-override-reason`.
+(중간 메시지 오채택 방지) · degrade 시 `meta.codex_failed` + `meta.reason` 방출 ·
+`--stderr-file` · `--meta-override-exit-code` · `--meta-override-reason`.
+
+**★ 소비자가 둘이다** — 초안은 이것을 하나로 뭉갰다(round-3 리뷰 적발, 실측 확인):
+
+| codex 결과의 키 | 실제 소비자 | 근거 |
+|---|---|---|
+| `findings` (CX-*) | **`audit-workflow.js`** 의 `_args.codexFindings` | `:27` 수신 → `:572-580` refuter 검증 → `:582` `findings` 에 병합 → `:598` dedup |
+| `d_verdicts` · `oq_answers` · `new_open_questions` | **`assemble-audit-data.py --codex-side`** | `:57-63` 이 이 셋만 읽어 `source: "codex"` 를 붙여 병합 |
+
+`assemble()` 의 `findings` 는 `wf["findings"]` 에서만 온다(`:49`) — **`codex_side["findings"]` 를
+읽는 코드는 없다.** 즉 codex findings 는 workflow 경로로 이미 들어와 있으므로 그 키를
+`--codex-side` 로 또 넘기는 것은 무의미하다. `auditing-plugins/SKILL.md:97-98` 이 네 키를 한
+문장으로 묶어 *"post-1 에서 `--codex-side` 로 넘긴다"* 라고 적은 것이 오해의 출처다 —
+**같은 커밋에서 그 문장을 두 경로로 쪼갠다.**
+
+따라서 이 추출기는 codex 결과 전체를 내고, SKILL 이 `findings` 는 workflow 로,
+나머지 셋은 `--codex-side` 로 라우팅한다. **AC2 가 그 분기를 실측한다.**
 
 이 파일이 **§11 선행 조건 (b)** — plugin-audit 출력 shape 확정 — 을 충족시킨다.
 
@@ -311,6 +364,19 @@ stdin 규약 · **층 ④ 추출기**. 그리고 그 형태 때문에 sweep 의 
 `assemble-audit-data.py` 의 `_sanitize_finding`(`:11-31`)이 `findings` 에만 걸려
 `d_verdicts`·`oq_answers`·`new_open_questions` 는 정규화 없이 통과한다(`:50-63`) — malformed
 입력에 `AttributeError`/`TypeError`/`KeyError` 로 죽는다. 같은 관문을 셋에 확대한다.
+
+**"degrade" 의 의미를 못 박는다**(round-3 리뷰 적발 — 전체 거부 / 항목 삭제 / 기본값 대체 중
+무엇인지 미정이었다). **항목별 삭제 + 손실 보고**를 채택한다:
+
+- 각 컬렉션의 원소는 **dict 여야 하고 `id` 가 비어 있지 않은 문자열**이어야 한다. 위반 원소는
+  **버리고**, 유효한 형제는 **보존한다**.
+- 버린 개수와 사유를 `meta.codex.dropped` 에 남기고 렌더러가 그것을 배너로 낸다 —
+  조용히 버리지 않는다(§4 loud logging).
+- 컬렉션 자체가 list 가 아니면 그 컬렉션만 **빈 list 로 강등**하고 같은 자리에 사유를 남긴다.
+  전체 입력을 거부하지 않는다 — 한 컬렉션의 오류가 나머지 감사 결과를 통째로 버리게 하면
+  손실이 더 크다.
+- **부분 파싱의 일반형**(finding 단위 재검증 · `droppedFindings`)은 §11 소관이다. 여기서는
+  이 세 컬렉션에 대한 위 규칙만 확정한다.
 
 ### 5.2 2단계 — 결함
 
@@ -399,7 +465,7 @@ alternation 이므로 하나로 충족). `test_codex_reviewer_frontmatter.sh` �
 
 **(d) `test_codex_backward_compat.sh` 는 직접 조치하지 않는다.** 파생 실패이며 (b)·(c)로
 4건 → 2건으로 개선된다. **그러나 이 테스트 자체는 여전히 RED 다** — 남는 2건이 `:81` 의
-제외 목록에 없기 때문이다. AC16 이 그 산술을 반영한다.
+제외 목록에 없기 때문이다. AC17 이 그 산술을 반영한다.
 
 #### ④ 거짓 주장이 참이 됐음을 확인
 
@@ -448,7 +514,7 @@ prior-art 를 요구한다.
 `DEVBREW_SPEC_DISTILL_DISABLE_WEB` 확인을 요구한다 — 웹을 명시하는 순간
 `run_spec_codex_reviewer.sh` 가 그 집합에 들어오는데 확인 코드가 없어 **현재 GREEN 인 테스트가
 RED 가 된다**. 러너에 kill switch 확인을 함께 넣는다. qg·plugin-audit 의 웹 kill switch 변수명도
-이때 선언한다(`DEVBREW_DISABLE_QG_WEB` · `DEVBREW_DISABLE_PLUGIN_AUDIT_WEB`) — AC22 가 그 검사를
+이때 선언한다(`DEVBREW_DISABLE_QG_WEB` · `DEVBREW_DISABLE_PLUGIN_AUDIT_WEB`) — AC23 가 그 검사를
 플러그인 횡단으로 도출로 바꾸는 순간 필요해진다.
 
 `allowed_domains` 로 도메인을 제한하지 않는다 — prior-art 검색은 어느 도메인이 중요할지 미리
@@ -468,7 +534,7 @@ RED 가 된다**. 러너에 kill switch 확인을 함께 넣는다. qg·plugin-a
 **quality-gates 코드리뷰 경로의 배너**: `synthesize_findings.py`(502줄)에 `meta`·`codex` 언급이
 0건이라 결정론 소비자가 없다. 그 경로는 러너가 쓴 YAML 을 SKILL 오케스트레이터가 직접 읽으므로
 **배너를 SKILL 레이어에 건다** — `quality-pipeline/SKILL.md` 가 §4.1 규칙 2·3(파일 부재/0바이트,
-양성 표식 부재)을 읽어 배너를 내도록 명시하고, AC23 이 그것을 잰다.
+양성 표식 부재)을 읽어 배너를 내도록 명시하고, AC24 이 그것을 잰다.
 
 #### ④ 열거를 도출로
 
@@ -479,10 +545,22 @@ RED 가 된다**. 러너에 kill switch 확인을 함께 넣는다. qg·plugin-a
 | `test_web_kill_switch.sh:11` | spec-distill 1개 플러그인 |
 | `test_codex_backward_compat.sh:81` | 제외 목록 7개 이름 |
 
-`test_web_kill_switch.sh` 의 도출 패턴을 전파한다. **`:81` 을 도출로 바꿀 때 codex 무관 stale
-red 2건의 소멸 조건을 함께 적는다** — 그 둘이 고쳐지면 제외에서 빠져야 하므로, 제외 사유를
-*"codex 무관 pre-existing"* 으로 적고 **그 둘이 GREEN 이 되면 제외 목록이 비도록** 도출한다.
-그래야 AC6 에서 없앤 blessed red 가 여기서 재생산되지 않는다(round-2 리뷰 적발).
+`test_web_kill_switch.sh` 의 도출 패턴을 전파한다.
+
+**`:81` 의 제외 목록은 순수 도출로 바꾸지 않는다**(round-3 리뷰 적발). *"지금 실패 중인 것을
+자동 제외"* 로 만들면 **앞으로 생길 무관 회귀까지 조용히 축복**한다 — 제외의 근거가
+*"검토했고 이 사이클 밖"* 이 아니라 *"오늘 빨갛다"* 가 되기 때문이다.
+
+대신 **fingerprint baseline** 을 쓴다:
+
+- 제외 항목은 `<테스트 파일명> <실패 출력의 sha256>` 쌍으로 고정한다. 검토된 두 건
+  (`test_consent_marker_write_failure.sh` · `test_security_reviewer_kill_switch.sh`)만 등재한다.
+- **알려지지 않은 실패는 항상 RED** 다 — 목록에 없거나 fingerprint 가 달라지면 제외되지 않는다.
+  같은 파일이 *다른 이유로* 실패하기 시작하면 fingerprint 가 바뀌어 잡힌다.
+- **GREEN 이 된 항목은 목록에서 제거해야 한다** — 그러지 않으면 stale 등재가 남으므로,
+  목록의 각 항목이 실제로 실패 중인지 확인하고 아니면 RED 를 낸다(양방향).
+
+이것이 AC6 에서 없앤 blessed red 가 여기서 재생산되는 것을 막는다.
 
 #### ⑤ 복사본 나머지 두 종
 
@@ -491,7 +569,7 @@ mock 6그룹은 갈라짐 행동 락으로 덮는다. `test_detect_codex.sh` 두
 
 ## 6. Acceptance Criteria
 
-> **번호 규약** — `AC1`~`AC25` 는 **이 문서 소유**다. 기존 테스트 파일이 자기 안에서 쓰는 AC 이름
+> **번호 규약** — `AC1`~`AC26` 는 **이 문서 소유**다. 기존 테스트 파일이 자기 안에서 쓰는 AC 이름
 > (예: `test_skill_codex_skip_prose.sh` 의 `AC19`)은 **별개 네임스페이스**이며, 인용할 때는 항상
 > 소유 파일명을 함께 적는다.
 
@@ -499,18 +577,25 @@ mock 6그룹은 갈라짐 행동 락으로 덮는다. `test_detect_codex.sh` 두
 
 - **AC1** `plugin-audit/scripts/run_audit_codex_reviewer.sh` 가 존재하고, §4.3 실행 관측에서
   `-` · `-s read-only` · `-C <dir>` · `--json` 을 argv 에 갖고 프롬프트를 stdin 으로 넘긴다.
-- **AC2** `plugin-audit/scripts/codex_audit_to_json.py` 가 codex JSONL 을 `--codex-side` shape
-  으로 변환하고, 마지막 `agent_message` + 마지막 fenced block 을 취하며, degrade 시
-  `codex_failed` + `reason` 을 낸다.
+- **AC2** `plugin-audit/scripts/codex_audit_to_json.py` 가 codex JSONL 을 변환하고, 마지막
+  `agent_message` + 마지막 fenced block 을 취하며, degrade 시 `meta.codex_failed` +
+  `meta.reason` 을 낸다. **그리고 SKILL 이 결과를 두 경로로 라우팅한다** — `findings` 는
+  `audit-workflow.js` 의 `codexFindings` 로, `d_verdicts`·`oq_answers`·`new_open_questions` 는
+  `assemble-audit-data.py --codex-side` 로. `SKILL.md:97-98` 의 네 키를 한 문장으로 묶은 서술이
+  같은 커밋에서 두 경로로 쪼개진다.
 - **AC3** plugin-audit 이 detect 게이트를 거치고 `DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX` 를
   존중한다. 러너는 그 변수를 읽지 않는다(게이트는 호출자 책임).
 - **AC4** 새 러너 파일에서 `build_codex_prompt|build_artifact_codex_prompt|
   build_spec_codex_prompt|build_brief_codex_prompt` 매칭이 **0건**이다(blind 보존).
-- **AC5** plugin-audit meta 가 `codex.ran` 과 `codex.failed` 를 함께 갖고 §4.1 세 상태를 구분한다.
-  `validate-audit-data.py` 의 B7 이 `ran == true AND failed == false` 로 좁혀져 "실행-실패"에
-  거짓 RED 를 내지 않는다. 렌더러가 세 상태에 서로 다른 문구를 낸다.
+- **AC5** plugin-audit meta 가 `codex.ran` 과 `codex.failed` 를 함께 갖고 §4.1 truth table 의
+  세 상태를 구분한다 — **세 상태 각각을 실제로 만들어 관측한다**(게이트 차단 / 러너 실패 /
+  정상). `validate-audit-data.py` 의 B7 이 `ran == true AND failed == false` 로 좁혀져
+  "실행-실패"에 거짓 RED 를 내지 않는다. 렌더러가 세 상태에 서로 다른 문구를 낸다.
 - **AC6** `assemble-audit-data.py` 의 ingestion 관문이 `findings` 외에 `d_verdicts` ·
-  `oq_answers` · `new_open_questions` 에도 걸린다. malformed 입력에 예외로 죽지 않는다.
+  `oq_answers` · `new_open_questions` 에도 걸린다. §5.1⑤ 규칙대로 **위반 원소만 버리고 유효한
+  형제는 보존**하며, 버린 개수·사유가 `meta.codex.dropped` 를 거쳐 배너로 나온다. 컬렉션 자체가
+  list 가 아니면 그 컬렉션만 빈 list 로 강등하고 전체 입력을 거부하지 않는다. 어느 경우에도
+  예외로 죽지 않는다.
 - **AC7** 1단계 종료 시 §4.3 후보 스캔의 **산문 호출부가 0** 이다(범위 안 기준).
 
 ### 2단계 — 결함
@@ -523,38 +608,62 @@ mock 6그룹은 갈라짐 행동 락으로 덮는다. `test_detect_codex.sh` 두
   kill switch 변수명만 다른 상태에서는 GREEN 이다.
 - **AC11** §4.3 실행 관측이 **모든 후보 러너**에 대해 §4.1 stdin 규약을 확인한다 —
   argv 에 프롬프트 바이트 부재 · stdin 에 프롬프트 바이트 존재 · `-`·`-s read-only`·`-C`·`--json`
-  존재. 후보 집합과 실행 집합이 동일하고, `detect_codex.sh` 를 가진 모든 플러그인에서 후보가
-  최소 1건 나온다.
-- **AC12** `quality-pipeline/SKILL.md` 에 `Codex skip 안내` 섹션이 있고 visible **6종**
+  존재. **커버리지는 서로 독립인 두 축(§4.3 A·B)의 일치로 잰다** — 한쪽에만 있는 파일이 있으면
+  RED. 러너가 여럿인 플러그인에서 **하나만** 누락시키는 mutation 에 RED 가 된다.
+- **AC12** 리터럴 bash 게이트를 가진 진입점에서 **mock 호출 횟수**가 시나리오별로 맞는다 —
+  가용 1회 · kill switch **0회** · 미설치 0회+배너 · 버전 바닥 미달 0회+배너.
+  산문 게이트(quality-gates ×2)는 기계 검증 대상이 아니며 §10 에 알려진 한계로 기록된다.
+- **AC13** `quality-pipeline/SKILL.md` 에 `Codex skip 안내` 섹션이 있고 visible **6종**
   (`Codex CLI not installed` · `auth missing` · `no .*timeout` · `version known-bad` ·
   `version_below_floor` · `version_unreadable`)이 각각 최소 1회 매칭되며,
   `kill_switch`·`inside_codex_sandbox` 를 언급하는 줄에 `[quality-gates]` 접두사나
   `Codex skipped` 문구가 **같은 줄에 없다**.
-- **AC13** `quality-pipeline/SKILL.md` 에 `DEVBREW_DISABLE_QG_CODEX` 가 등장한다.
-- **AC14** 세 detect 사본이 §4.2 의 바닥(`0.118.0` 미만 → `version_below_floor`)과 판독 실패
+- **AC14** `quality-pipeline/SKILL.md` 에 `DEVBREW_DISABLE_QG_CODEX` 가 등장한다.
+- **AC15** 세 detect 사본이 §4.2 의 바닥(`0.118.0` 미만 → `version_below_floor`)과 판독 실패
   (`unknown` → `version_unreadable`)를 갖고, 갈라짐 락이 그 축을 **공통으로** 판정한다.
-- **AC15** `test_codex_runner_no_effort_pin.sh:43-44` 주석이 참이 됐음을 확인한다 —
+- **AC16** `test_codex_runner_no_effort_pin.sh:43-44` 주석이 참이 됐음을 확인한다 —
   plugin-audit 커버리지가 0 이 아니고, 주석이 그 근거(1단계 러너)를 적는다.
-- **AC16** 2단계 종료 시 bash 스위트 RED 는 baseline 6건에서 **3건**으로 줄어든다 —
+- **AC17** 2단계 종료 시 bash 스위트 RED 는 baseline 6건에서 **3건**으로 줄어든다 —
   codex 무관 2건 + 그 둘 때문에 계속 실패하는 `test_codex_backward_compat.sh` 1건.
-- **AC17** §4.1 규칙 1 의 동등성이 확인된다 — `codex exec` 가 비영점 exit 을 낸 실행에서
+- **AC18** §4.1 규칙 1 의 동등성이 확인된다 — `codex exec` 가 비영점 exit 을 낸 실행에서
   최종 산출물이 `codex_failed: true` 다(추출기를 계속 돌리는 현행 흐름에서도).
-- **AC18** V2(§8.3)가 통과했고 그 증거물이 `docs/audits/2026-08-XX-codex-stdin-v2/` 에
-  보존됐다 — 러너별 실행 로그 + 산출물 YAML. **이 AC 없이는 2단계를 닫지 않는다.**
+- **AC19** V2(§8.3)가 통과했고 그 증거물이 `docs/audits/<실행일 YYYY-MM-DD>-codex-stdin-v2/` 에
+  §8.3 의 증거물 정책대로 보존됐다 — manifest(대상 커밋 SHA · 러너별 sha256 · `codex --version` ·
+  실행 명령 · 판정) + 관측 argv(프롬프트 바이트 제외) + stdin 바이트수·sha256 + 산출물의
+  `meta:` 블록 + stderr. **원시 프롬프트와 JSONL 전문은 보존하지 않는다**(P21).
+  manifest 의 러너 해시가 현재 소스와 다르면 그 증거는 stale 이다.
+  **이 AC 없이는 2단계를 닫지 않는다.**
 
 ### 3단계 — 나머지 통일
 
-- **AC19** codex 프롬프트 4종 전부에 untrusted-data 절이 있다. 판정은 소스 주석이 아니라
+- **AC20** codex 프롬프트 4종 전부에 untrusted-data 절이 있다. 판정은 소스 주석이 아니라
   **각 빌더를 실행해 방출된 프롬프트 문자열**에서 한다.
-- **AC20** codex 호출부 6곳 전부에서 웹이 명시된다(미지정 0건). `test_web_kill_switch.sh` 가
+- **AC21** codex 호출부 6곳 각각이 **아래 표의 값과 일치**한다 — 존재만 확인하지 않는다
+  (round-3 리뷰 적발: 전부 `disabled` 로 둬도 통과하는 AC 였다). `test_web_kill_switch.sh` 가
   같은 커밋에서 갱신되어 GREEN 을 유지한다.
-- **AC21** `codex_degraded` 가 `codex_failed` 에서 파생됨이 **한 곳에서만** 정의된다.
-- **AC22** §5.3④ 표의 검사 4종이 대상을 도출한다. 새 러너를 추가하는 mutation 에 자동 포함되고,
-  `test_codex_backward_compat.sh:81` 의 제외는 codex 무관 red 가 GREEN 이 되면 **비도록** 도출된다.
-- **AC23** quality-gates 코드리뷰 경로에서 §4.1 규칙 2·3(파일 부재/0바이트, 양성 표식 부재)이
+
+  | 호출부 | `tools.web_search` | `web_search` 모드 | 웹 kill switch |
+  |---|---|---|---|
+  | `run_codex_reviewer.sh` (코드 diff) | `false` | `disabled` | 해당 없음(이미 OFF) |
+  | `run_artifact_codex_reviewer.sh` (산출물) | `false` | `disabled` | 해당 없음 |
+  | `run_spec_codex_reviewer.sh` (design doc) | `true` | V1 분기표 | `DEVBREW_SPEC_DISTILL_DISABLE_WEB` |
+  | `run_brief_codex_reviewer.sh` (brief) | `true` | V1 분기표 | `DEVBREW_SPEC_DISTILL_DISABLE_WEB` |
+  | `run_audit_codex_reviewer.sh` (감사) | `true` | V1 분기표 | `DEVBREW_DISABLE_PLUGIN_AUDIT_WEB` |
+  | `spike/test_codex_json_extraction.sh` | `false` | `disabled` | 해당 없음 — 수동 spike |
+
+  **spike 를 OFF 로 두는 이유**: JSONL shape 을 재는 것이 목적이라 외부 검색이 결과를
+  비결정적으로 만든다. **plugin-audit 을 ON 으로 두는 이유**: 감사 preamble 이 외부 근거를
+  요구하고, 그 경로는 이미 P21 preamble 을 가진 유일한 경로다.
+- **AC22** `codex_degraded` 가 `codex_failed` 에서 파생됨이 **한 곳에서만** 정의된다.
+- **AC23** §5.3④ 표의 검사 4종이 대상을 도출한다. 새 러너를 추가하는 mutation 에 자동 포함된다.
+  `test_codex_backward_compat.sh:81` 의 제외는 **순수 도출이 아니라 fingerprint baseline** 이다 —
+  `<파일명> <실패 출력 sha256>` 쌍으로 검토된 2건만 등재하고, **목록에 없거나 fingerprint 가
+  달라진 실패는 항상 RED**, **등재됐는데 GREEN 이 된 항목도 RED**(stale 등재 방지). 새 무관
+  회귀를 조용히 축복하지 않는다.
+- **AC24** quality-gates 코드리뷰 경로에서 §4.1 규칙 2·3(파일 부재/0바이트, 양성 표식 부재)이
   배너로 사용자에게 닿는다 — SKILL 레이어가 그 판정을 수행한다.
-- **AC24** `test_detect_codex.sh` 두 벌이 각각 14 케이스 합집합을 갖는다.
-- **AC25** mock 6그룹이 갈라짐 행동 락의 대상이다.
+- **AC25** `test_detect_codex.sh` 두 벌이 각각 14 케이스 합집합을 갖는다.
+- **AC26** mock 6그룹이 갈라짐 행동 락의 대상이다.
 
 ## 7. Files to Modify
 
@@ -615,7 +724,7 @@ mock 6그룹은 갈라짐 행동 락으로 덮는다. `test_detect_codex.sh` 두
 
 **커밋 유효성**: 각 커밋은 이 baseline 을 유지하거나 개선해야 한다. **기존 GREEN 테스트를 RED 로
 만드는 변경은 그 테스트 갱신을 같은 커밋에 넣는다** — 알려진 사례 둘: AC5 의 B7(1단계),
-AC20 의 `test_web_kill_switch.sh`(3단계).
+AC21 의 `test_web_kill_switch.sh`(3단계).
 
 python 스위트는 별도로 캡처한다. spec-distill 의 python 테스트는 `-m unittest` 로만 돌고
 **repo root 에서** 실행해야 경로가 맞는다.
@@ -626,7 +735,7 @@ python 스위트는 별도로 캡처한다. spec-distill 의 python 테스트는
 |---|---|---|
 | 갈라짐 락(AC10) | qg 사본에서 CR-2 검증 블록만 삭제 | RED |
 | 갈라짐 락(AC10) | sd 사본의 kill switch 변수명만 변경 | GREEN(의도된 차이) |
-| 갈라짐 락(AC14) | 한 사본의 버전 바닥만 삭제 | RED |
+| 갈라짐 락(AC15) | 한 사본의 버전 바닥만 삭제 | RED |
 | 계약 관측(AC11) | 한 러너를 `codex exec "$(cat …)"` 로 되돌림 | RED (argv 에 프롬프트 바이트 출현) |
 | 계약 관측(AC11) | **변수 경유로 우회** — `P="$(cat f)"` … `codex exec "$P"` | RED (관측은 형태에 무관) |
 | 계약 관측(AC11) | **간접 바이너리로 우회** — `CODEX=codex; "$CODEX" exec …` | RED (같은 이유) |
@@ -636,11 +745,11 @@ python 스위트는 별도로 캡처한다. spec-distill 의 python 테스트는
 | 후보 교차검사(AC11) | 후보 스캔이 한 러너를 놓치도록 정규식 훼손 | RED (후보≠실행 집합, 또는 플러그인 하한 미달) |
 | B7 좁히기(AC5) | B7 을 `ran == true` 로 되돌리고 실행-실패 상태 투입 | RED |
 | 관문 확대(AC6) | `d_verdicts` 에 비-dict 원소 투입 | 예외 아닌 degrade |
-| skip 안내(AC12) | visible 사유 1개 삭제 | RED |
-| skip 안내(AC12) | silent 사유를 `[quality-gates]` 접두사 줄에 언급 | RED |
-| 주입 방어(AC19) | 한 빌더의 절을 소스 주석으로만 남기고 방출 프롬프트에서 제거 | RED |
-| 웹 명시(AC20) | 한 호출부의 웹 인자 삭제 | RED |
-| 도출 락(AC22) | 새 러너 추가 후 락 파일 무변경 | 새 러너가 자동 검사 대상 |
+| skip 안내(AC13) | visible 사유 1개 삭제 | RED |
+| skip 안내(AC13) | silent 사유를 `[quality-gates]` 접두사 줄에 언급 | RED |
+| 주입 방어(AC20) | 한 빌더의 절을 소스 주석으로만 남기고 방출 프롬프트에서 제거 | RED |
+| 웹 명시(AC21) | 한 호출부의 웹 인자 삭제 | RED |
+| 도출 락(AC23) | 새 러너 추가 후 락 파일 무변경 | 새 러너가 자동 검사 대상 |
 | blind 락(AC4) | 새 러너에서 qg 빌더를 호출 | RED |
 
 **계측기 자체를 의심한다**: mutation 이 도달 불가한 위치에 착지하거나 전제를 붕괴시키면
@@ -650,14 +759,28 @@ GREEN 이 난다. **그리고 mutation 이 신규 락이 아니라 기존 락에
 
 ### 8.3 실행 검증 (네트워크 필요)
 
-- **V1 — 웹 모드.** `-c 'tools.web_search=true'` 만으로 외부 검색이 되는지 — `--json` 출력에
-  `web_search` item 이 뜨는지 1회 실측. **3단계 §5.3② 를 게이트한다.**
+- **V1 — 웹 모드.** **`web_search` item 의 출현 여부는 판별에 쓸 수 없다**(round-3 리뷰 적발) —
+  그 item 은 cached 인덱스 조회에서도 나타나므로 모드 승격을 증명하지 못한다. 대신 **cached 가
+  가질 수 없는 사실**을 묻는다: 프롬프트에 *"방금 만든 nonce 문자열이 포함된 URL 을 열어
+  그 문자열을 그대로 답하라"* 를 넣고, 그 URL 을 실행 직전에 공개 위치(예: 이 리포의
+  최신 커밋을 가리키는 GitHub raw 링크)에 만든다. **답이 nonce 를 담으면 live, 못 담으면
+  cached** 다. `tools.web_search=true` 단독 · `+ web_search="live"` 두 조건으로 각 1회.
+  **3단계 §5.3② 를 게이트하고**, 판정과 증거물을 남긴다.
 - **V2 — stdin 전환 실동작.** 전환된 5개 호출부가 각각 최소 1회 실제 codex 로 실행되어 정상
-  산출물을 내는지. **2단계를 게이트한다(AC18).** 증거물(러너별 로그 + 산출물 YAML)을
-  `docs/audits/2026-08-XX-codex-stdin-v2/` 에 보존해 사후 검증 가능하게 한다.
+  산출물을 내는지. **2단계를 게이트한다(AC19).**
+  **증거물 정책**(round-3 리뷰 적발 — 출처·민감정보·보존 규칙이 없었다):
+  - 경로는 `docs/audits/<실행일 YYYY-MM-DD>-codex-stdin-v2/` — `<실행일>` 은 V2 를 실제로
+    수행한 날짜로 치환한다.
+  - **manifest 를 함께 남긴다**: 대상 커밋 SHA · 러너 파일별 `sha256` · `codex --version` ·
+    실행 명령 · 판정. 나중에 이 manifest 의 러너 해시가 현재 소스와 다르면 그 증거는
+    **stale 로 간주**한다(오래된 로그 재사용 방지).
+  - **원시 프롬프트와 JSONL 전문은 보존하지 않는다.** 프롬프트에서 파생된 코드 조각과 모델
+    출력이 리포에 영구 보존되는 것을 막는다(P21). 남기는 것은 관측된 argv(프롬프트 바이트를
+    제외한 플래그만) · stdin **바이트 수와 sha256** · 산출물 YAML 의 `meta:` 블록 ·
+    러너 stderr 다. 본문이 필요하면 해시로 대조한다.
 - **V3 — degrade 실동작.** kill switch · 미설치(PATH 조작) · auth 실패(mock) · 버전 바닥 미달 ·
   버전 판독 불가 각 경로를 실제로 태워 배너가 사용자에게 보이는지. **문구 grep 만으로는
-  충족되지 않는다** — AC12 의 grep 은 필요조건이고 이 실행이 충분조건이다.
+  충족되지 않는다** — AC13 의 grep 은 필요조건이고 이 실행이 충분조건이다.
 - **V4 — plugin-audit 러너.** 새 러너 + 추출기가 detect 게이트 · kill switch · 세 상태 표현 ·
   `--codex-side` shape 변환을 실제로 수행하는지. **1단계를 게이트한다.**
 
@@ -740,13 +863,32 @@ GREEN 이 난다. **그리고 mutation 이 신규 락이 아니라 기존 락에
     만료 장치·순서 AC·mutation 2행을 파생시켰고, (ii) 정적 문법(§4.3 초안)이 열거 불가·앵커
     스티어링·구현 이중화를 파생시켰다. **이 판은 그 둘을 구조적으로 제거했다** — 단계 순서를
     바꿔 carve-out 을 없애고(사용자 승인), 계약 판정을 실행 관측으로 옮겼다(사용자 승인, §9 R10).
+  - **round 3**(대상 `16933a3`): **Claude 축 사망**(API 세션 한도) — `claude_verdict: null` ·
+    `claude_verdict_unrecoverable: true` 로 병합이 codex 단독 verdict 를 냈고
+    `round_level: inconclusive`(축 하나가 죽은 라운드를 수렴으로 오독하지 않는다).
+    codex 9건(12 → 14 → **9**), 원장 42건(20 → 36 → 42, 증가폭 +16 → +6).
+    **per-issue stagnation 발화**(한 항목 3회 제기) → 라우팅 표가 사람에게 강제 escalate.
+    사용자가 *"필수 8건 고치고 1단계 구현 시작"* 을 선택했고 이 판이 그 반영본이다.
+    반영 항목: `--codex-side` 두 경로 분리(사실 오류) · V1 판별 불가(사실 오류) ·
+    순환 교차검사(block) · 상태 truth table · malformed degrade 의미 · AC21 웹 값 표 ·
+    fingerprint baseline · 게이트 관측 AC 신설 · V2 증거물 정책.
   - **기각한 지적 1건**(round 1, codex): *"`AC42` 가 두 토큰 모두를 요구"* → 실제 검사는
     `grep -q 'DEVBREW_DISABLE_QG_CODEX\|codex_available'`(`test_codex_reviewer_frontmatter.sh:12`)
     의 **alternation** 이므로 하나로 충족 — 실행으로 확인. round-2 리뷰가 이 반증을 옳다고 확인했다.
 - **round-3 이후의 정지 조건**(사용자 합의): 이후 리뷰 지적 중 **(a) 사실이 틀린 주장,
   (b) 실행을 깨뜨리는 것, (c) 사용자를 해치는 것** 셋만 고치고, 문체·완결성 지적은 이 문서에
   알려진 한계로 기록한 뒤 구현에 착수한다. 근거: 하니스를 다듬는 동안 대상은 0건 개선된다.
-- **미확인으로 남는 것**: `tools.web_search=true` 단독이 모드를 승격시키는지(V1) ·
+- **알려진 한계**(커버리지를 주장하지 않는 항목 — 정지 조건에 따라 이 사이클에서 고치지 않는다):
+  1. **산문 게이트는 기계 검증 불가.** quality-gates 의 두 게이트(`quality-pipeline` ·
+     `critiquing-artifacts`)는 모델이 산문 지시를 읽어 detect 를 돌리므로, §4.3 의 진입점
+     관측(AC12)이 덮지 못한다. spec-distill 의 두 게이트는 리터럴 bash 라 덮인다.
+     **그래서 qg 의 `DEVBREW_DISABLE_QG_CODEX` 는 모델이 게이트를 건너뛰면 우회된다** —
+     이 사이클은 그것을 리터럴 bash 로 바꾸지 않으며, 그 전환은 별건이다.
+  2. **`extract_codex_artifact_yaml.py` 의 최상위 `codex_failed` shape 은 유지된다**(§4.1) —
+     기성 계약이라 이 사이클에서 `meta:` 하위로 옮기지 않는다. 새 코드만 새 규약을 따른다.
+  3. **`--json` 이벤트 관용은 §11 소관이다.** 이 사이클의 추출기들은 여전히 `agent_message` 외
+     전부 버리며(안전하나) 모르는 타입을 로깅하지 않는다.
+- **미확인으로 남는 것**: `tools.web_search=true` 단독이 모드를 승격시키는지(V1 이 nonce 로 답한다) ·
   `--json` 이벤트 스키마의 명시적 stability 정책(리포에서 확인 불가) · 대용량 piped diff 에
   대한 제3자 벤치마크(없음).
 
