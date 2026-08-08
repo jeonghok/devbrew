@@ -277,5 +277,54 @@ def section_of(text: str, heading: str) -> str:
     return rest if end < 0 else rest[:end]
 
 
+class TestSkillBodyProbe(unittest.TestCase):
+    """AC35⑥ — SKILL.md 본문이 fork 에 도달하는지의 관측 기록.
+
+    OQ-AE 에는 fail-closed 락이 있는데 이쪽에 없던 비대칭을 리뷰가 적발했다.
+    """
+
+    def setUp(self) -> None:
+        self.lines = [ln.strip() for ln in
+                      read("tests/probe/skill_body.txt").splitlines() if ln.strip()]
+
+    def test_four_line_format(self) -> None:
+        self.assertGreaterEqual(len(self.lines), 4)
+        self.assertIn("claude", self.lines[1])
+        self.assertRegex(self.lines[3], r"\d+\.\d+\.\d+")
+
+    def test_first_line_is_not_body_unreachable(self) -> None:
+        """첫 줄이 '본문 미도달' 이면 red — 그러면 규칙을 한 곳에 둔 결정이
+        **규칙을 아무 데도 두지 않은 것**이 되고, 인벤토리 전달 경로도 무너진다."""
+        self.assertNotIn("본문 미도달", self.lines[0])
+
+    def test_records_both_observations(self) -> None:
+        """관측은 두 값이다 — ⓐ 본문 텍스트 도달 ⓑ 주입 결과 도달."""
+        self.assertIn("본문", self.lines[0])
+        self.assertIn("주입", self.lines[0])
+
+
+class TestCommandNameProbe(unittest.TestCase):
+    """AC39 — 명령 이름이 내장 command 와 겹치지 않는다.
+
+    바이너리 문자열 추출만으로는 **번들 prompt 계열 명령을 못 본다**
+    (실측: 존재하는 `/review`·`/pr-comments` 가 그 방식으로 0회로 나왔다).
+    그래서 실물 probe 기록이 유일한 검증 수단이다.
+    """
+
+    def setUp(self) -> None:
+        self.lines = [ln.strip() for ln in
+                      read("tests/probe/command_name.txt").splitlines() if ln.strip()]
+
+    def test_four_line_format(self) -> None:
+        self.assertGreaterEqual(len(self.lines), 4)
+
+    def test_bare_name_is_unknown_without_the_plugin(self) -> None:
+        self.assertIn("Unknown command", self.lines[0])
+        self.assertIn("standup", self.lines[0])
+
+    def test_command_file_uses_that_name(self) -> None:
+        self.assertTrue((PLUGIN_DIR / "commands" / "standup.md").is_file())
+
+
 if __name__ == "__main__":
     unittest.main()

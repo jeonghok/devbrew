@@ -1,0 +1,4 @@
+agent-transparency:transcript-reader
+claude -p --plugin-dir <플러그인 사본> "/agent-transparency:standup" (SubagentStop 로깅 훅 병설)
+{"agent_type": "agent-transparency:transcript-reader"}
+2.1.225 (Claude Code)

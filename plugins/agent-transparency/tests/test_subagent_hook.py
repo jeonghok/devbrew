@@ -305,5 +305,36 @@ class TestDedicatedAgent(unittest.TestCase):
         self.assertFalse(self.tools_of(mutated) <= self.ALLOWED)
 
 
+class TestAgentTypeProbe(unittest.TestCase):
+    """AC48④ — probe 파일이 계약 형식대로 있고 첫 줄이 **훅 상수**와 일치한다.
+
+    비교 대상은 agent frontmatter 의 `name:`(bare `transcript-reader`)이 아니다 —
+    둘의 표기가 다르므로 술어를 여기서 못박는다.
+
+    **왜 필요한가**: `agent_type` 은 문서화되지 않은 플랫폼 동작이라 드리프트할
+    수 있다. ①②③만 있으면 합성 문자열 검사라 플랫폼이 라벨을 바꿔도 green 인
+    채로 §6.2 의 자기모순이 되살아난다. ④가 그 드리프트를 red 로 바꾸는
+    유일한 지점이다.
+    """
+
+    PROBE = PLUGIN_DIR / "tests" / "probe" / "agent_type.txt"
+
+    def setUp(self) -> None:
+        self.lines = [ln.strip() for ln in
+                      self.PROBE.read_text(encoding="utf-8").splitlines() if ln.strip()]
+
+    def test_four_lines(self) -> None:
+        """뒤 세 줄이 없으면 red — 관측값만 있으면 재현할 수 없다."""
+        self.assertGreaterEqual(len(self.lines), 4)
+
+    def test_first_line_matches_hook_constant(self) -> None:
+        self.assertEqual(self.lines[0], load_hook().SELF_AGENT_TYPE)
+
+    def test_records_probe_command_and_raw_output_and_version(self) -> None:
+        self.assertIn("claude", self.lines[1])
+        self.assertTrue(self.lines[2])
+        self.assertRegex(self.lines[3], r"\d+\.\d+\.\d+")
+
+
 if __name__ == "__main__":
     unittest.main()
