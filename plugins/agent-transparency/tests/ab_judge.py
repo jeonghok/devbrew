@@ -1,0 +1,380 @@
+#!/usr/bin/env python3
+"""A/B 판정 단계 — 러너가 만든 out/<RUN>/ 산출물을 읽어 게이트 7개를 판정한다.
+
+**실행하지 않는다.** 워커를 부르지 않고 산출물만 읽는다. 판정자 호출만이
+외부 모델을 부르는 지점이다.
+
+Usage:
+    python3 ab_judge.py <out/RUN 디렉토리>
+Exit:
+    0 = 일곱 게이트 모두 통과 · 1 = 하나 이상 실패(어느 게이트가 왜인지 출력)
+"""
+from __future__ import annotations
+
+import glob
+import json
+import os
+import re
+import subprocess
+import sys
+
+QUESTIONS = ("Q1", "Q2", "Q3", "Q4")
+PLUGIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def expected_runs():
+    """분모를 **먼저** 고정한다. 3/3 의 분모는 언제나 3이다."""
+    runs = [(cond, task, i)
+            for i in (1, 2, 3) for task in ("a", "b", "c", "d") for cond in ("off", "on")]
+    runs += [("on", "e", i) for i in (1, 2, 3)]
+    return runs
+
+
+def parse_index(text):
+    """`<cond> <task> <i> <sid> worker_rc=<n>` 및 플래그 줄.
+
+    `snapshot=ambiguous(N)` 줄은 예외적으로 **4 토큰**이다 (`<cond> <task>
+    <i> snapshot=ambiguous(N)` — sid 자리가 아예 없다). 그 외 모든 형태는
+    5 토큰이다 (sid 또는 `-` 자리표시자를 담는다). 최소폭 검사(`< 4`)를
+    써야 이 더 짧은 형태가 버려지지 않는다 — `!= 5` 였다면 실제 러너가
+    내는 ambiguous 줄이 통째로 무시됐을 것이다.
+    """
+    parsed = {}
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        cond, task = parts[0], parts[1]
+        try:
+            index = int(parts[2])
+        except ValueError:
+            continue
+        entry = {"sid": None, "worker_rc": None, "flag": None}
+        for token in parts[3:]:
+            if token.startswith("worker_rc="):
+                try:
+                    entry["worker_rc"] = int(token.split("=", 1)[1])
+                except ValueError:
+                    entry["worker_rc"] = None
+            elif "=" in token:
+                entry["flag"] = token
+            elif token != "-":
+                entry["sid"] = token
+        prior = parsed.get((cond, task, index))
+        if prior and prior.get("flag") and entry["flag"] is None:
+            entry["flag"] = prior["flag"]
+        parsed[(cond, task, index)] = entry
+    return parsed
+
+
+def is_failed(parsed, key):
+    """대응 줄이 없거나 · worker_rc 가 0 이 아니거나 · 필드 자체가 없으면 fail."""
+    entry = parsed.get(key)
+    if entry is None:
+        return True
+    # `flag` 는 None 일 수 있다 — `.get("flag", "")` 는 **키가 있고 값이 None** 인
+    # 경우 None 을 그대로 돌려주므로 `or ""` 가 필요하다.
+    flag = entry.get("flag") or ""
+    if flag in ("setup=failed", "setup=skipped"):
+        return True
+    if flag.startswith("snapshot=ambiguous"):
+        return True
+    return entry.get("worker_rc") != 0
+
+
+def transcript_for(sid):
+    """정확히 1개가 아니면 그 실행은 모든 게이트 fail 이다.
+
+    한 세션이 두 슬러그 디렉토리에 걸리는 상황이 실측으로 확인됐으므로,
+    규칙이 없으면 어느 파일에서 구간을 잘랐는지가 미정으로 남는다.
+    """
+    hits = glob.glob(os.path.expanduser("~/.claude/projects/*/%s.jsonl" % sid))
+    return hits[0] if len(hits) == 1 else None
+
+
+def read_records(path):
+    records = []
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                records.append(json.loads(line))
+            except ValueError:
+                pass
+    return records
+
+
+def _items(record):
+    message = record.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    return content if isinstance(content, list) else []
+
+
+def _text_of(record):
+    if record.get("type") != "assistant":
+        return ""
+    parts = [i.get("text") or "" for i in _items(record)
+             if isinstance(i, dict) and i.get("type") == "text"]
+    return "\n".join(p for p in parts if p.strip())
+
+
+def text_blocks(records):
+    return [{"index": n, "text": _text_of(r)}
+            for n, r in enumerate(records) if _text_of(r).strip()]
+
+
+def span_after_tool(records, tool_name):
+    """게이트 3 — 도구 결과 레코드 직후 첫 **텍스트 블록을 담은** 어시스턴트 메시지.
+
+    어시스턴트 레코드는 text·thinking·tool_use 중 하나만 담는 경우가 많다 —
+    "결과 직후 다음 레코드"는 3분의 2 확률로 텍스트 없는 레코드에 착지하므로
+    텍스트를 담을 때까지 건너뛴다.
+    """
+    call_ids = set()
+    for record in records:
+        for item in _items(record):
+            if isinstance(item, dict) and item.get("type") == "tool_use" \
+                    and item.get("name") == tool_name:
+                call_ids.add(item.get("id"))
+    for n, record in enumerate(records):
+        got_result = any(isinstance(i, dict) and i.get("type") == "tool_result"
+                         and i.get("tool_use_id") in call_ids for i in _items(record))
+        if not got_result:
+            continue
+        for later in records[n + 1:]:
+            if _text_of(later).strip():
+                return _text_of(later)
+    return ""
+
+
+def span_before_ask(records):
+    """게이트 4 — AskUserQuestion 호출을 담은 메시지에서 그 호출보다 **앞의**
+    텍스트 블록들 + 바로 직전의 텍스트 블록을 담은 어시스턴트 메시지."""
+    for n, record in enumerate(records):
+        items = _items(record)
+        position = None
+        for pos, item in enumerate(items):
+            if isinstance(item, dict) and item.get("type") == "tool_use" \
+                    and item.get("name") == "AskUserQuestion":
+                position = pos
+                break
+        if position is None:
+            continue
+        head = "\n".join(i.get("text") or "" for i in items[:position]
+                         if isinstance(i, dict) and i.get("type") == "text")
+        previous = ""
+        for earlier in reversed(records[:n]):
+            if _text_of(earlier).strip():
+                previous = _text_of(earlier)
+                break
+        return "\n".join(x for x in (previous, head) if x.strip())
+    return ""
+
+
+def span_after_command(records, needle):
+    """게이트 5a·5b — 명령 호출 직후 첫 텍스트 블록을 담은 어시스턴트 메시지."""
+    for n, record in enumerate(records):
+        blob = json.dumps(record, ensure_ascii=False)
+        if needle not in blob:
+            continue
+        for later in records[n + 1:]:
+            if _text_of(later).strip():
+                return _text_of(later)
+    return ""
+
+
+def span_all_text(records):
+    """게이트 6 — 모든 텍스트 블록을 시간순으로 이은 것.
+
+    결정이 어느 시점에 일어날지 미리 알 수 없다.
+    """
+    return "\n\n".join(b["text"] for b in text_blocks(records))
+
+
+def _section(text, heading):
+    """`## <heading>` 부터 다음 `## ` 까지 (레벨-2 헤딩 경계).
+
+    `tests/test_ab_runner_contract.py` 의 동명 헬퍼와 같은 규약이다.
+    REFERENCE.md 의 루브릭 절은 `###` 이 아니라 `##` — 셋이 아니라 정확히
+    둘인 해시 뒤에 이름이 곧바로 오는 형태가 절 경계다(§ "판정 구간 표"
+    윗절 "파싱 계약" 참고).
+    """
+    marker = "## " + heading
+    start = text.index(marker)
+    rest = text[start + 3:]
+    end = rest.find("\n## ")
+    return rest if end < 0 else rest[:end]
+
+
+def load_rubric(reference_text, letter):
+    """접두 JSON 지시 한 줄 + `## 루브릭 <letter>` 절 본문.
+
+    접두 문장은 네 루브릭 절의 부모가 **아니라 형제** 절(`## 루브릭`)에만
+    있다 — 상속을 가정하면 조용히 비게 되어 판정자가 JSON 을 낼 이유가
+    없어지고, fail-closed 규칙에 따라 모든 표가 `no` 가 되어 게이트
+    3·4·5b·6 이 구조적으로 통과 불가능해진다. 접두 문장은 REFERENCE.md 의
+    코드펜스에서 직접 읽는다 — 여기 사본을 박으면 정본이 둘이 된다.
+    """
+    prefix_section = _section(reference_text, "루브릭")
+    fences = re.findall(r"```\n(.*?)```", prefix_section, re.S)
+    if not fences:
+        raise SystemExit("공유 판정 접두 지시문(`## 루브릭` 절)을 찾지 못했다")
+    prefix = fences[0].strip()
+
+    rubric_section = _section(reference_text, "루브릭 %s" % letter)
+    # 첫 줄은 헤딩 텍스트("루브릭 A — ...")다 — 본문에서 제외한다.
+    _, _, remainder = rubric_section.partition("\n")
+    body = remainder.strip()
+    if not re.search(r"(?m)^Q1\.", body):
+        raise SystemExit("루브릭 %s 의 문항 블록을 찾지 못했다" % letter)
+    return prefix + "\n" + body
+
+
+def parse_vote(raw):
+    """엄격 JSON 한 줄. 어긋나면 **그 표 전체를 no** 로 계산한다."""
+    fallback = dict((q, "no") for q in QUESTIONS)
+    text = (raw or "").strip()
+    if not text:
+        return fallback
+    seen = []
+
+    def hook(pairs):
+        seen.extend(k for k, _ in pairs)
+        return dict(pairs)
+
+    try:
+        data = json.loads(text, object_pairs_hook=hook)
+    except ValueError:
+        return fallback
+    if not isinstance(data, dict):
+        return fallback
+    if len(seen) != len(set(seen)):          # 중복 키
+        return fallback
+    if set(data) != set(QUESTIONS):          # 누락 · 추가
+        return fallback
+    if any(data[q] not in ("yes", "no") for q in QUESTIONS):
+        return fallback
+    return dict((q, data[q]) for q in QUESTIONS)
+
+
+def tally(votes):
+    """문항별 다수결(2/3) 후 **모든 문항이 yes** 여야 통과."""
+    if not votes:
+        return False
+    for question in QUESTIONS:
+        yes = len([v for v in votes if v.get(question) == "yes"])
+        if yes * 2 <= len(votes):
+            return False
+    return True
+
+
+def ask_judge(rubric, block, model, effort):
+    prompt = "%s\n\n%s" % (rubric, block)
+    try:
+        proc = subprocess.run(
+            ["claude", "-p", "--model", model, "--effort", effort, prompt],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    except OSError:
+        return dict((q, "no") for q in QUESTIONS)
+    return parse_vote(proc.stdout.decode("utf-8", "replace"))
+
+
+def judge_span(rubric, block, model, effort):
+    if not block.strip():
+        return False                          # 구간이 비면 fail — 설명이 없었다는 뜻이다
+    return tally([ask_judge(rubric, block, model, effort) for _ in range(3)])
+
+
+def main(argv):
+    if len(argv) != 2:
+        raise SystemExit("usage: ab_judge.py <out/RUN>")
+    out = argv[1]
+    manifest = dict(
+        line.split("=", 1) for line in
+        open(os.path.join(out, "manifest.txt"), encoding="utf-8").read().splitlines()
+        if "=" in line)
+    model, effort = manifest["judge_model"], manifest["judge_effort"]
+    reference = open(os.path.join(PLUGIN_DIR, "REFERENCE.md"), encoding="utf-8").read()
+    rubrics = dict((letter, load_rubric(reference, letter)) for letter in "ABCD")
+
+    index_path = os.path.join(out, "index.txt")
+    parsed = parse_index(open(index_path, encoding="utf-8").read()
+                         if os.path.exists(index_path) else "")
+    tests_text = ""
+    tests_path = os.path.join(out, "tests.txt")
+    if os.path.exists(tests_path):
+        tests_text = open(tests_path, encoding="utf-8").read()
+
+    results, reasons = {}, []
+
+    def note(gate, ok, why):
+        results[gate] = results.get(gate, True) and ok
+        if not ok:
+            reasons.append("게이트 %s: %s" % (gate, why))
+
+    for cond, task, i in expected_runs():
+        key = (cond, task, i)
+        failed = is_failed(parsed, key)
+        sid = (parsed.get(key) or {}).get("sid")
+        path = transcript_for(sid) if (sid and not failed) else None
+        if sid and not failed and path is None:
+            failed = True
+            reasons.append("lookup=ambiguous: %s" % (key,))
+        records = read_records(path) if path else []
+
+        if task == "a" and cond == "on":
+            rows = len(re.findall(r"(?m)^\|", span_all_text(records)))
+            note(1, (not failed) and rows == 0,
+                 "%s — 최종 응답 부재 또는 표 행 %d개" % (key, rows))
+        if task == "b":
+            visible = "%s %d visible=0" % (cond, i) in tests_text
+            oracle = "%s %d oracle=0" % (cond, i) in tests_text
+            intact = "%s %d hash=ok" % (cond, i) in tests_text
+            note(2, (not failed) and visible and oracle and intact,
+                 "%s — visible=%s oracle=%s hash=%s" % (key, visible, oracle, intact))
+        if task == "c" and cond == "on":
+            note(3, (not failed) and judge_span(
+                rubrics["A"], span_after_tool(records, "Agent"), model, effort), str(key))
+        if task == "d" and cond == "on":
+            note(4, (not failed) and judge_span(
+                rubrics["B"], span_before_ask(records), model, effort), str(key))
+        if task == "b" and cond == "on":
+            note(6, (not failed) and judge_span(
+                rubrics["D"], span_all_text(records), model, effort), str(key))
+        if task == "e":
+            answer = span_after_command(records, "agent-transparency:standup")
+            snapshot = os.path.join(out, "pre-standup-%d.jsonl" % i)
+            questions = []
+            if os.path.exists(snapshot):
+                for record in read_records(snapshot):
+                    for item in _items(record):
+                        if isinstance(item, dict) and item.get("type") == "tool_use" \
+                                and item.get("name") == "AskUserQuestion":
+                            for q in (item.get("input") or {}).get("questions") or []:
+                                if isinstance(q, dict) and q.get("question"):
+                                    questions.append(q["question"])
+            quoted = [q for q in questions if q and q in answer]
+            note("5a", (not failed) and len(quoted) >= 1,
+                 "%s — 인용된 결정 질문 %d건" % (key, len(quoted)))
+            inventory = ""
+            for record in records:
+                blob = json.dumps(record, ensure_ascii=False)
+                if "scope:   repo=" in blob:
+                    inventory = blob
+                    break
+            two_blocks = "<인벤토리>\n%s\n\n<응답>\n%s" % (inventory, answer)
+            note("5b", (not failed) and judge_span(rubrics["C"], two_blocks, model, effort),
+                 str(key))
+
+    for gate in (1, 2, 3, 4, "5a", "5b", 6):
+        results.setdefault(gate, False)
+        print("gate %s: %s" % (gate, "PASS" if results[gate] else "FAIL"))
+    for reason in reasons:
+        print("  - %s" % reason)
+    return 0 if all(results.values()) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

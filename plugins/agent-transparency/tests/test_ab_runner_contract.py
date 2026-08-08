@@ -264,5 +264,126 @@ class TestPluginStateGuard(unittest.TestCase):
             self.run_guard('[{"id": "agent-transparency@d", "enabled": "true"}]'), 0)
 
 
+JUDGE = PLUGIN_DIR / "tests" / "ab_judge.py"
+
+
+def load_judge():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("ab_judge", JUDGE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestDenominator(unittest.TestCase):
+    """판정 단계 1 — **3/3 의 분모는 언제나 3이다.**
+
+    셋업 실패로 실행이 통째로 건너뛰어지면 존재하는 것만 훑는 판정이 2/2 를
+    3/3 처럼 읽는다.
+    """
+
+    def setUp(self) -> None:
+        self.judge = load_judge()
+
+    def test_expected_runs_is_twentyseven(self) -> None:
+        runs = self.judge.expected_runs()
+        self.assertEqual(len(runs), 27)
+        self.assertIn(("on", "e", 3), runs)
+        self.assertNotIn(("off", "e", 1), runs)
+
+    def test_missing_combination_counts_as_fail(self) -> None:
+        parsed = self.judge.parse_index("on a 1 sid-1 worker_rc=0\n")
+        self.assertTrue(self.judge.is_failed(parsed, ("on", "a", 2)))
+
+    def test_nonzero_worker_rc_counts_as_fail(self) -> None:
+        parsed = self.judge.parse_index("on a 1 sid-1 worker_rc=2\n")
+        self.assertTrue(self.judge.is_failed(parsed, ("on", "a", 1)))
+
+    def test_setup_failed_line_has_no_worker_rc_and_fails(self) -> None:
+        """`worker_rc=` 필드 자체가 없는 줄도 fail 이다."""
+        parsed = self.judge.parse_index("on d 1 sid-1 setup=failed\n")
+        self.assertTrue(self.judge.is_failed(parsed, ("on", "d", 1)))
+
+    def test_snapshot_ambiguous_counts_as_fail(self) -> None:
+        parsed = self.judge.parse_index("on e 1 snapshot=ambiguous(2)\n")
+        self.assertTrue(self.judge.is_failed(parsed, ("on", "e", 1)))
+
+
+class TestVoteParsing(unittest.TestCase):
+    """판정자 호출 규약 — 관대하게 읽으면 판정자가 형식을 어길수록 통과하기 쉬워진다."""
+
+    def setUp(self) -> None:
+        self.judge = load_judge()
+
+    def test_well_formed_vote(self) -> None:
+        parsed = self.judge.parse_vote('{"Q1":"yes","Q2":"yes","Q3":"no","Q4":"yes"}')
+        self.assertEqual(parsed, {"Q1": "yes", "Q2": "yes", "Q3": "no", "Q4": "yes"})
+
+    def test_malformed_inputs_all_become_no(self) -> None:
+        for raw in ('not json',
+                    '{"Q1":"yes","Q2":"yes","Q3":"yes"}',            # 문항 누락
+                    '{"Q1":"yes","Q2":"yes","Q3":"yes","Q4":"yes","Q5":"yes"}',  # 추가 키
+                    '{"Q1":"maybe","Q2":"yes","Q3":"yes","Q4":"yes"}',           # 값 위반
+                    '{"Q1":"yes","Q1":"no","Q2":"yes","Q3":"yes","Q4":"yes"}',   # 중복 키
+                    'yes yes yes yes',
+                    ''):
+            parsed = self.judge.parse_vote(raw)
+            self.assertEqual(set(parsed.values()), {"no"}, raw)
+
+    def test_tally_requires_all_questions_yes(self) -> None:
+        yes = {"Q1": "yes", "Q2": "yes", "Q3": "yes", "Q4": "yes"}
+        mixed = {"Q1": "yes", "Q2": "no", "Q3": "yes", "Q4": "yes"}
+        self.assertTrue(self.judge.tally([yes, yes, mixed]))    # Q2 는 2/3 yes
+        self.assertFalse(self.judge.tally([yes, mixed, mixed]))  # Q2 가 2/3 no
+
+
+class TestSpanCutting(unittest.TestCase):
+    """판정 구간 — "텍스트 블록을 담은"이 load-bearing 이다.
+
+    어시스턴트 레코드는 text·thinking·tool_use 중 하나만 담는 경우가 많아
+    순진한 정의는 3분의 2 확률로 텍스트 없는 레코드에 착지한다.
+    """
+
+    def setUp(self) -> None:
+        self.judge = load_judge()
+
+    @staticmethod
+    def records():
+        def assistant(items, **kw):
+            base = {"type": "assistant", "message": {"content": items}}
+            base.update(kw)
+            return base
+        return [
+            assistant([{"type": "text", "text": "before"}]),
+            assistant([{"type": "tool_use", "name": "Agent", "id": "a1"}]),
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "a1", "content": "…"}]}},
+            assistant([{"type": "thinking", "thinking": "…"}]),      # 건너뛴다
+            assistant([{"type": "tool_use", "name": "Read", "id": "r1"}]),  # 건너뛴다
+            assistant([{"type": "text", "text": "이 에이전트가 X를 찾았다"}]),
+        ]
+
+    def test_gate3_skips_text_less_records(self) -> None:
+        span = self.judge.span_after_tool(self.records(), "Agent")
+        self.assertEqual(span, "이 에이전트가 X를 찾았다")
+
+    def test_empty_span_is_a_failure_not_a_pass(self) -> None:
+        self.assertEqual(self.judge.span_after_tool([], "Agent"), "")
+
+
+class TestRubricLoading(unittest.TestCase):
+    """루브릭은 REFERENCE.md 에서 읽는다 — 코드에 사본을 박으면 정본이 둘이 된다."""
+
+    def setUp(self) -> None:
+        self.judge = load_judge()
+        self.reference = REFERENCE.read_text(encoding="utf-8")
+
+    def test_prefix_line_is_prepended_to_every_rubric(self) -> None:
+        for letter in "ABCD":
+            block = self.judge.load_rubric(self.reference, letter)
+            self.assertIn('{"Q1":"yes"', block.splitlines()[0])
+            self.assertEqual(len(re.findall(r"(?m)^Q[1-4]\.", block)), 4, letter)
+
+
 if __name__ == "__main__":
     unittest.main()
