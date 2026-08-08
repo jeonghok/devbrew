@@ -111,6 +111,33 @@ class TestSkillFrontmatter(unittest.TestCase):
         self.assertEqual(self.meta.get("background"), "false")
 
 
+SKILL_FRAGMENTS = {
+    "①-세-레코드-타입": ['type=="user"', 'type=="queue-operation"',
+                          'attachment.type=="queued_command"'],
+    "②-last-prompt-제외": ['type=="last-prompt"'],
+    "③-텍스트-없는-레코드-건너뛰기": ["텍스트 없는 레코드를 건너뛴다"],
+    "④-읽지-않는-것": ["`Bash` 명령 문자열", "파일 내용", "`tool_result` 본문",
+                        "에이전트 반환값 본문", "subagents/*.jsonl"],
+    "⑤-표본-하한": ["가장 최근 블록", "모든 `AskUserQuestion` 호출과 그 짝",
+                    "하한이지 상한이 아니다"],
+}
+
+
+def check_skill_facts(text: str) -> list[str]:
+    """AC35①–⑤ — 다섯 그룹의 프래그먼트가 전부 실제로 있는지.
+
+    순수 함수 — 실물 SKILL.md 와 mutation 문자열 양쪽에 같은 함수를 돌려 mutation 이
+    실제로 문제를 내는지 확인한다. `assertNotIn(x, text.replace(x, ""))` 는
+    `str.replace` 정의상 항상 참이라 쓰지 않는다.
+    """
+    bad = []
+    for name, fragments in SKILL_FRAGMENTS.items():
+        for fragment in fragments:
+            if fragment not in text:
+                bad.append("%s: %s" % (name, fragment))
+    return bad
+
+
 class TestSkillTranscriptFacts(unittest.TestCase):
     """AC35①–⑤ — 세 트랜스크립트 사실 · 「읽지 않는 것」 · 표본 하한.
 
@@ -119,34 +146,57 @@ class TestSkillTranscriptFacts(unittest.TestCase):
     검사 대상이 지시문으로 옮겨갔다.
     """
 
-    FRAGMENTS = {
-        "①-세-레코드-타입": ['type=="user"', 'type=="queue-operation"',
-                              'attachment.type=="queued_command"'],
-        "②-last-prompt-제외": ['type=="last-prompt"'],
-        "③-텍스트-없는-레코드-건너뛰기": ["텍스트 없는 레코드를 건너뛴다"],
-        "④-읽지-않는-것": ["`Bash` 명령 문자열", "파일 내용", "`tool_result` 본문",
-                            "에이전트 반환값 본문", "subagents/*.jsonl"],
-        "⑤-표본-하한": ["가장 최근 블록", "모든 `AskUserQuestion` 호출과 그 짝",
-                        "하한이지 상한이 아니다"],
-    }
+    FRAGMENTS = SKILL_FRAGMENTS  # 하위 호환 — 이름으로 그룹을 찾는 다른 코드가 쓴다
 
     def setUp(self) -> None:
         self.text = read(SKILL_REL)
 
     def test_all_fragments_present(self) -> None:
-        for name, fragments in self.FRAGMENTS.items():
-            for fragment in fragments:
-                self.assertIn(fragment, self.text, "%s: %s" % (name, fragment))
-
-    def test_mutation_each_fragment_removal_is_detected(self) -> None:
-        """하나를 지우면 red — 항목별로 확인한다."""
-        for name, fragments in self.FRAGMENTS.items():
-            mutated = self.text.replace(fragments[0], "")
-            self.assertNotIn(fragments[0], mutated, name)
+        self.assertEqual(check_skill_facts(self.text), [])
 
     def test_ask_user_question_exception_is_scoped(self) -> None:
         """예외는 AskUserQuestion 하나뿐이고 다른 tool_result 는 계속 배제된다."""
         self.assertIn("다른 어떤 도구의 `tool_result` 도 계속 전부 배제한다", self.text)
+
+
+class TestSkillFactsMutation(unittest.TestCase):
+    """checker 를 mutation 문자열에 돌려 실제로 red 가 나는지 확인한다.
+
+    삭제 축(다섯 그룹 각각) + 재서술 축 — 표본 하한 조항을 정반대 취지로
+    바꿔도 잡혀야 한다.
+    """
+
+    def setUp(self) -> None:
+        self.text = read(SKILL_REL)
+
+    def test_mutation_each_group_first_fragment_deletion_is_detected(self) -> None:
+        """삭제 축 — 다섯 그룹 각각의 대표 프래그먼트를 지우면 그때마다 red."""
+        for name, fragments in SKILL_FRAGMENTS.items():
+            mutated = self.text.replace(fragments[0], "")
+            self.assertNotEqual(check_skill_facts(mutated), [], name)
+
+    def test_mutation_lower_bound_reworded_to_upper_bound(self) -> None:
+        """재서술 축 — ⑤ "하한이지 상한이 아니다"를 정반대 취지로 바꿔도 red."""
+        mutated = self.text.replace(
+            "하한이지 상한이 아니다", "상한이지 하한이 아니다")
+        self.assertNotEqual(check_skill_facts(mutated), [])
+
+    def test_real_skill_has_no_problems(self) -> None:
+        """대조군 — 실물 SKILL.md 는 checker 를 통과해야 mutation 결과와 대비가 선다."""
+        self.assertEqual(check_skill_facts(self.text), [])
+
+
+def check_quote_preservation(text: str) -> list[str]:
+    """AC16① — 문구 보존 요구와 `(미답)` 표기가 둘 다 있는지.
+
+    순수 함수 — `check_skill_facts`/`check_readme_items` 와 같은 패턴.
+    """
+    bad = []
+    if "한 글자도 바꾸지 않는다" not in text:
+        bad.append("문구 보존 요구 없음")
+    if "(미답)" not in text:
+        bad.append("(미답) 표기 없음")
+    return bad
 
 
 class TestQuotePreservation(unittest.TestCase):
@@ -165,9 +215,31 @@ class TestQuotePreservation(unittest.TestCase):
     def test_unanswered_marker(self) -> None:
         self.assertIn("(미답)", self.text)
 
-    def test_mutation_either_side_removed(self) -> None:
+    def test_all_elements_present_via_checker(self) -> None:
+        self.assertEqual(check_quote_preservation(self.text), [])
+
+
+class TestQuotePreservationMutation(unittest.TestCase):
+    """checker 를 mutation 문자열에 돌린다 — 삭제 축 + 재서술 축."""
+
+    def setUp(self) -> None:
+        self.text = read(SKILL_REL)
+
+    def test_mutation_each_element_deletion_is_detected(self) -> None:
+        """삭제 축 — 두 요소를 각각 지우면 그때마다 red."""
         for fragment in ("한 글자도 바꾸지 않는다", "(미답)"):
-            self.assertNotIn(fragment, self.text.replace(fragment, ""))
+            mutated = self.text.replace(fragment, "")
+            self.assertNotEqual(check_quote_preservation(mutated), [], fragment)
+
+    def test_mutation_verbatim_reworded_to_permits_editing(self) -> None:
+        """재서술 축 — "한 글자도 바꾸지 않는다"를 편집을 허용하는 문장으로 바꿔도 red."""
+        mutated = self.text.replace(
+            "한 글자도 바꾸지 않는다", "필요하면 자연스럽게 다듬어도 된다")
+        self.assertNotEqual(check_quote_preservation(mutated), [])
+
+    def test_real_skill_has_no_problems(self) -> None:
+        """대조군 — 실물 SKILL.md 는 checker 를 통과한다."""
+        self.assertEqual(check_quote_preservation(self.text), [])
 
 
 class TestNoShellInjectionPath(unittest.TestCase):
