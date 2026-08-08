@@ -384,6 +384,22 @@ class TestRubricLoading(unittest.TestCase):
             self.assertIn('{"Q1":"yes"', block.splitlines()[0])
             self.assertEqual(len(re.findall(r"(?m)^Q[1-4]\.", block)), 4, letter)
 
+    def test_prompt_excludes_document_internal_commentary(self) -> None:
+        """루브릭 C 리뷰에서 실측 — 절 전체를 본문으로 삼으면 사람용 산문
+        (markdown 링크·"여기서는 반복하지 않는다" 같은 문서-내부 주석)이
+        판정자 프롬프트에 새어 들어간다. 펜스가 그 경계를 강제하는지 고정한다.
+
+        누군가 나중에 주석을 다시 펜스 **안**으로 옮기면 이 테스트가 RED 여야
+        한다 — 문서 본문에 이 주석이 있는지가 아니라 **조립된 프롬프트에**
+        섞였는지를 재는 것이 이 락의 이빨이다.
+        """
+        for letter in "ABCD":
+            block = self.judge.load_rubric(self.reference, letter)
+            self.assertNotIn("](#", block, letter)               # markdown 링크 문법
+            self.assertNotIn("두 블록", block, letter)             # 루브릭 C 산문 특유 문구
+            self.assertNotIn("여기서는 반복하지 않는다", block, letter)  # 사람 독자 대상 문구
+            self.assertNotIn("판정자에게 그대로 보내는 블록은", block, letter)  # 경계 안내문 자체
+
 
 if __name__ == "__main__":
     unittest.main()

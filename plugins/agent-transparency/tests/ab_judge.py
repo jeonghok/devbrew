@@ -209,13 +209,21 @@ def _section(text, heading):
 
 
 def load_rubric(reference_text, letter):
-    """접두 JSON 지시 한 줄 + `## 루브릭 <letter>` 절 본문.
+    """접두 JSON 지시 한 줄 + `## 루브릭 <letter>` 절의 **펜스 안** 본문만.
 
     접두 문장은 네 루브릭 절의 부모가 **아니라 형제** 절(`## 루브릭`)에만
     있다 — 상속을 가정하면 조용히 비게 되어 판정자가 JSON 을 낼 이유가
     없어지고, fail-closed 규칙에 따라 모든 표가 `no` 가 되어 게이트
     3·4·5b·6 이 구조적으로 통과 불가능해진다. 접두 문장은 REFERENCE.md 의
     코드펜스에서 직접 읽는다 — 여기 사본을 박으면 정본이 둘이 된다.
+
+    각 루브릭 절 안에는 **사람용 산문**(왜 이 루브릭이 이렇게 생겼는지 설명)과
+    **판정자용 블록**(그대로 프롬프트에 들어가는 지시문 + Q1–Q4)이 섞여 있을
+    수 있다 — 절 전체를 본문으로 삼으면 그 산문(markdown 링크·"여기서는
+    반복하지 않는다" 같은, 문서를 읽는 사람에게만 말이 되는 문장)이 판정자
+    프롬프트에 새어 들어간다(루브릭 C 실측). 펜스(```)로 감싼 부분만 판정자용
+    블록이라는 계약을 여기서 강제한다 — 펜스가 없으면 그 경계가 없다는
+    뜻이므로 조용히 절 전체로 돌아가지 않고 **크게 실패한다**.
     """
     prefix_section = _section(reference_text, "루브릭")
     fences = re.findall(r"```\n(.*?)```", prefix_section, re.S)
@@ -224,11 +232,16 @@ def load_rubric(reference_text, letter):
     prefix = fences[0].strip()
 
     rubric_section = _section(reference_text, "루브릭 %s" % letter)
-    # 첫 줄은 헤딩 텍스트("루브릭 A — ...")다 — 본문에서 제외한다.
-    _, _, remainder = rubric_section.partition("\n")
-    body = remainder.strip()
-    if not re.search(r"(?m)^Q1\.", body):
-        raise SystemExit("루브릭 %s 의 문항 블록을 찾지 못했다" % letter)
+    fences = re.findall(r"```\n(.*?)```", rubric_section, re.S)
+    body = ""
+    for fence in fences:
+        if re.search(r"(?m)^Q1\.", fence):
+            body = fence.strip()
+            break
+    if not body:
+        raise SystemExit(
+            "루브릭 %s 에 판정자용 펜스(```)가 없다 — 산문과 판정자 "
+            "블록의 경계가 없으면 문서-내부 주석이 프롬프트로 샌다" % letter)
     return prefix + "\n" + body
 
 
