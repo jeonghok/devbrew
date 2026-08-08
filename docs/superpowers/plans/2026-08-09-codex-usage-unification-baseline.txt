@@ -1,0 +1,23 @@
+# codex 소비 사슬 통일 — baseline
+# 측정: c3aeacc / 2026-08-09
+# 명령: for t in plugins/*/tests/test_*.sh; do bash "$t" >/dev/null 2>&1 || echo "$t"; done
+
+RED plugins/quality-gates/tests/test_codex_backward_compat.sh
+RED plugins/quality-gates/tests/test_codex_reviewer_frontmatter.sh
+RED plugins/quality-gates/tests/test_consent_marker_write_failure.sh
+RED plugins/quality-gates/tests/test_sandbox_enforced.sh
+RED plugins/quality-gates/tests/test_security_reviewer_kill_switch.sh
+RED plugins/quality-gates/tests/test_skill_codex_skip_prose.sh
+
+TOTAL 133
+RED 6
+
+# python (repo root, -m unittest)
+# spec-distill: 이 디렉토리엔 __init__.py 가 없어 -t 를 start dir 과 같게 둔다
+Ran 198 tests in 14.270s
+
+OK (skipped=1)
+# plugin-audit
+Ran 189 tests in 9.526s
+
+OK
