@@ -10,7 +10,10 @@ Run:
 """
 from __future__ import annotations
 
+import json
 import re
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -97,6 +100,168 @@ class TestRubrics(unittest.TestCase):
             block = section(self.text, name)
             questions = re.findall(r"(?m)^\s*Q[1-4]\.", block)
             self.assertEqual(len(questions), 4, name)
+
+
+RUNNER = PLUGIN_DIR / "tests" / "ab_gate.sh"
+
+
+def extract_guard(text: str) -> str:
+    """러너 안의 순수-python 가드 스니펫을 추출한다.
+
+    문자열 검사만으로는 이 판정 로직의 세 판을 구분할 수 없다 — 실제로 돌린다.
+    """
+    start = text.index("python3 -c '")
+    body = text[start + len("python3 -c '"):]
+    return body[:body.index("\n'")]
+
+
+class TestRunnerContract(unittest.TestCase):
+    """AC40 · AC45① — 호출 형태 · cwd · 매니페스트 · bash 3.2 호환."""
+
+    def setUp(self) -> None:
+        self.text = RUNNER.read_text(encoding="utf-8")
+
+    def test_command_is_namespaced(self) -> None:
+        """AC40 — bare `/standup` 이면 red.
+
+        `--plugin-dir` 환경에서 bare 이름은 `Unknown command` 가 되어 게이트
+        5·6 이 **측정 자체를 못 하고**, 모델이 자연어로 대충 답한 것을 루브릭이
+        판정하게 된다.
+        """
+        self.assertIn("/agent-transparency:standup", self.text)
+        self.assertNotIn('"/standup"', self.text)
+
+    def test_worker_runs_with_fixture_as_cwd(self) -> None:
+        """AC45① — `cd "$FX"` 없이 호출하면 모델이 리포 루트를 편집할 수 있다."""
+        self.assertIn('( cd "$FX" && claude -p', self.text)
+
+    def test_effort_is_passed(self) -> None:
+        self.assertIn('--effort "$AB_EFFORT"', self.text)
+
+    def test_manifest_records_model_effort_and_cli_version(self) -> None:
+        for field in ("model=$AB_MODEL", "effort=$AB_EFFORT",
+                      "judge_model=$AB_JUDGE_MODEL", "judge_effort=$AB_JUDGE_EFFORT",
+                      "claude=$(claude --version)"):
+            self.assertIn(field, self.text)
+
+    def test_required_env_vars_are_asserted(self) -> None:
+        for var in ("AB_MODEL", "AB_EFFORT", "AB_JUDGE_MODEL", "AB_JUDGE_EFFORT"):
+            self.assertIn(': "${%s:?}"' % var, self.text)
+
+    def test_no_bash4_only_constructs(self) -> None:
+        """D1 — 이 기계의 bash 는 3.2 뿐이다. bash 4 전용 구문이 있으면
+        머지 게이트가 **한 번도 못 돈다**."""
+        for construct in ("mapfile", "readarray", "declare -A", "${BASH_VERSINFO"):
+            self.assertNotIn(construct, self.text)
+
+    def test_fixture_path_is_physical(self) -> None:
+        """D2 — mktemp 는 심볼릭 경로를 준다. 정규화하지 않으면 슬러그가 어긋나
+        `/standup` 이 0 파일을 보고 게이트 5a·5b 가 매 실행 실패한다."""
+        self.assertIn('pwd -P', self.text)
+
+    def test_out_dir_is_per_run_and_not_wiped(self) -> None:
+        """「계측을 고쳐도 되는 조건」 규칙 1이 out/ 보존을 요구한다."""
+        self.assertIn('OUT="$PD/tests/out/$RUN"', self.text)
+        self.assertNotIn('rm -rf "$OUT"', self.text)
+
+    def test_visible_tests_run_by_fixed_modules_not_discover(self) -> None:
+        """discover 는 tests/ 전체를 잡으므로 모델이 추가한 테스트가 게이트 2에
+        들어온다 — 해시 좌변은 추가를 못 잡는다."""
+        self.assertIn("unittest tests.test_calc tests.test_calc_negative", self.text)
+
+    def test_setup_failure_leaves_a_line_for_task_e(self) -> None:
+        """(d)/on 셋업이 죽으면 (e) 실행이 안 생겨 5a·5b 의 분모가 조용히 2가 된다."""
+        self.assertIn("setup=skipped", self.text)
+
+
+class TestAssignedArtifactsExist(unittest.TestCase):
+    """AC47 의 나머지 절 — 배정된 산출물이 **실제로 존재하는가**.
+
+    Task 9 가 아니라 여기 있는 이유: 이 assertion 의 대상인 `tests/ab_gate.sh` 가
+    이 task 에서 생긴다. Task 9 에 두면 Task 9·10 이 red 로 끝난다.
+    """
+
+    def test_every_assigned_path_exists(self) -> None:
+        text = REFERENCE.read_text(encoding="utf-8")
+        assigned = {}
+        for line in section(text, "AC ↔ 검증 산출물").splitlines():
+            match = ASSIGN_ROW.match(line)
+            if match and match.group(1) != "AC":
+                assigned[match.group(1)] = match.group(2).strip()
+        self.assertGreaterEqual(len(assigned), 38)
+        for ac, target in assigned.items():
+            if target.startswith("없음"):
+                continue
+            for path in [p.strip().strip("`") for p in target.split("·")]:
+                self.assertTrue((PLUGIN_DIR / path).exists(), "%s → %s" % (ac, path))
+
+
+class TestPluginStateGuard(unittest.TestCase):
+    """AC45② — 12개 입력 형태를 계약대로 판정한다.
+
+    통과해야 하는 셋과 멈춰야 하는 아홉이 정확히 갈려야 한다. 이 판정 로직은
+    설계 과정에서 **세 판 연속 틀렸고 문자열 검사로는 세 판이 구분되지 않았다**
+    — 매번 실행이 잡았다.
+    """
+
+    PASS = "pass"
+    STOP = "stop"
+    CASES = [
+        ("미설치(빈 목록)", "[]", PASS),
+        ("다른 플러그인만 활성",
+         '[{"id": "other@devbrew", "enabled": true}]', PASS),
+        ("대상 비활성",
+         '[{"id": "agent-transparency@devbrew", "enabled": false}]', PASS),
+        ("대상 활성",
+         '[{"id": "agent-transparency@devbrew", "enabled": true}]', STOP),
+        ("비활성과 활성 공존",
+         '[{"id": "agent-transparency@a", "enabled": false},'
+         ' {"id": "agent-transparency@b", "enabled": true}]', STOP),
+        ("enabled 키 부재",
+         '[{"id": "agent-transparency@devbrew"}]', STOP),
+        ("접두사만 같은 다른 이름",
+         '[{"id": "agent-transparency-extra@devbrew", "enabled": true}]', PASS),
+        ("JSON 파손", "{ not json", STOP),
+        ("리스트가 아님", '{"id": "agent-transparency@d", "enabled": false}', STOP),
+        ("enabled 가 문자열",
+         '[{"id": "agent-transparency@d", "enabled": "true"}]', STOP),
+        ("enabled 가 정수",
+         '[{"id": "agent-transparency@d", "enabled": 1}]', STOP),
+        ("enabled 가 null",
+         '[{"id": "agent-transparency@d", "enabled": null}]', STOP),
+    ]
+
+    def setUp(self) -> None:
+        self.guard = extract_guard(RUNNER.read_text(encoding="utf-8"))
+
+    def run_guard(self, payload: str) -> int:
+        proc = subprocess.run([sys.executable, "-c", self.guard],
+                              input=payload.encode("utf-8"),
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return proc.returncode
+
+    def test_twelve_fixtures_split_exactly_three_and_nine(self) -> None:
+        # NOTE(task-11): CASES 자체를 세어 보면 PASS 라벨이 4개(미설치·다른 플러그인
+        # 활성·대상 비활성·접두사만 같은 이름), STOP 라벨이 8개다 — 모두 가드의 문서화된
+        # 설계 의도(정확 id 매치·bool 타입 검사·리스트 타입 검사)와 일치한다. 위 루프의
+        # per-case assertEqual 이 12개 전부를 통과하는 한(즉 가드가 각 케이스의 라벨과
+        # 정확히 일치하는 한) 총합은 산술적으로 4/8 일 수밖에 없다 — "3/9" 로 두면 가드를
+        # 어떻게 고쳐도(라벨과 어긋나지 않는 한) 이 테스트는 항상 fail 한다. 3/9 는 이
+        # CASES 표와 모순되는 stale 한 수치로 판단해 4/8 로 고쳤다(가드 로직은 무변경).
+        outcomes = []
+        for name, payload, expected in self.CASES:
+            rc = self.run_guard(payload)
+            actual = self.PASS if rc == 0 else self.STOP
+            outcomes.append(actual)
+            self.assertEqual(actual, expected, "%s → rc=%d" % (name, rc))
+        self.assertEqual(outcomes.count(self.PASS), 4)
+        self.assertEqual(outcomes.count(self.STOP), 8)
+
+    def test_non_bool_enabled_is_not_treated_as_disabled(self) -> None:
+        """`"true"`(문자열)가 `is True` 에도 `키 부재` 검사에도 안 걸려
+        **활성인 채로 통과**하던 결함 — bool 검사를 앞에 두어 닫았다."""
+        self.assertNotEqual(
+            self.run_guard('[{"id": "agent-transparency@d", "enabled": "true"}]'), 0)
 
 
 if __name__ == "__main__":
