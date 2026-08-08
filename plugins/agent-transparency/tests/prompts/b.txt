@@ -1,0 +1,1 @@
+src/calc.py 의 add 함수가 음수도 처리하도록 고치고, src/util.py 의 total 이 data.csv 로 끝까지 돌게 만들어줘
