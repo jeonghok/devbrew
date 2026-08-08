@@ -24,6 +24,12 @@ from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 HOOKS_DIR = REPO_ROOT / "plugins" / "spec-distill" / "hooks"
+SCRIPTS_DIR = REPO_ROOT / "plugins" / "spec-distill" / "scripts"
+
+# 상한 값은 리터럴로 핀하지 않는다 — DISPATCH_ATTEMPT_CAP 이 바뀌면 테스트가
+# 제품과 함께 움직여야지, stale red 로 남아 bump 규칙과 싸우면 안 된다.
+sys.path.insert(0, str(SCRIPTS_DIR))
+import arm_ledger  # noqa: E402  # pyright: ignore[reportMissingImports]
 
 
 def _make_temp_repo() -> Path:
@@ -304,6 +310,218 @@ class TestReviewDispatchSchema(HookOutputSchemaTestBase):
             self.assertNotIn(rel_a, state_body, msg="stale docA 블록이 남아있으면 안 됨")
         finally:
             shutil.rmtree(repo, ignore_errors=True)
+
+
+class TestReviewDispatchMandateScope(HookOutputSchemaTestBase):
+    """mandate 가 자기 **수명**을 밝히는가, 그리고 두 수명 문장이 상호배타인가.
+
+    수명이 적혀 있지 않았을 때 "이번 리뷰만 멈춰달라"는 요청에 세션 전체를 끄는
+    환경변수가 답으로 나왔다 — 읽는 쪽이 수명을 모르면 영구로 가정하고 최대 화력을
+    고른다. 아래 세 테스트는 **양방향**이라 함께 있어야 이빨이 생긴다: 하나는 문장의
+    존재를, 둘은 두 문장이 서로의 분기로 새지 않음을 잰다. 한쪽만 두면 두 문장을
+    모두 내보내는 mutation(같은 숨결로 모순되는 두 수명을 주장)이 GREEN 이 된다.
+    """
+
+    # 본문 고유(body-unique) 조각만 쓴다. 헤더·주석에도 있는 문구로 assert 하면
+    # 정작 emit 되는 문장을 지워도 통과한다.
+    SCOPE_PHRASE = "이번 dispatch 1회에만 유효"
+    CAP_PHRASE = "자동 dispatch를 중단한다"
+
+    # mandate 가 **정확히 이 문장으로 끝나야** 한다. 금지어 blacklist 로는 부족하다 —
+    # 다른 표현("커밋 이후에는 자동 리뷰가 붙지 않는다")을 새로 지어 붙이면 금지어가
+    # 없어 통과한다. 종결 일치로 두면 어떤 표현이든 **덧붙이는 순간** RED 다.
+    EXPECTED_TAIL = "이 mandate는 이번 dispatch 1회에만 유효하다."
+
+    IN_SCOPE_DOC = "docs/superpowers/specs/2026-08-06-scope-design.md"
+
+    def _dispatch(self, session_id: str, *, spec_path: str, attempts: int | None = None):
+        """Stop 훅을 한 번 돌리고 payload 를 돌려준다. attempts 는 사전 시도 횟수."""
+        state_file = _write_pending_review_state(
+            self.repo, session_id, spec_path=spec_path, mode="design",
+        )
+        if attempts is not None:
+            state_file.write_text(
+                state_file.read_text(encoding="utf-8")
+                + f"\ndispatch_attempts:\n  {spec_path}: {attempts}\n",
+                encoding="utf-8",
+            )
+        result = _run_hook(
+            "review-dispatch.py", cwd=self.repo,
+            env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": session_id},
+        )
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertTrue(result.stdout.strip(), msg=f"stdout empty; stderr: {result.stderr}")
+        return json.loads(result.stdout)
+
+    def test_normal_dispatch_states_mandate_lifetime(self):
+        """정상 dispatch 는 mandate 의 수명을 밝히고, **거기서 멈춘다**."""
+        reason = self._dispatch(
+            "test-scope-normal", spec_path=self.IN_SCOPE_DOC,
+        ).get("reason", "")
+        self.assertIn(
+            self.SCOPE_PHRASE, reason,
+            msg=(
+                "mandate 가 수명을 안 밝히면 '이번 리뷰만 멈추는 법'을 묻는 쪽이 "
+                f"세션 전체 kill switch 를 고른다 — reason: {reason!r}"
+            ),
+        )
+        # 재발동 조건을 덧붙이려는 모든 시도를 여기서 막는다. 두 번 시도했고 두 번 다
+        # 거짓이었다(커밋 단정 → git fail-open / 재편집 단정 → mark_reviewed 경로).
+        self.assertTrue(
+            reason.rstrip().endswith(self.EXPECTED_TAIL),
+            msg=(
+                "mandate 가 수명 문장 뒤에 무언가를 더 주장한다. 재발동은 "
+                "(원장 ∧ git ∧ 상한)의 함수이고 셋 다 emit 시점에 확정되지 않으므로 "
+                f"어떤 단정도 언젠가 거짓이 된다 — reason: {reason!r}"
+            ),
+        )
+
+    def test_normal_dispatch_does_not_claim_dispatch_stopped(self):
+        """상한 문구가 정상 dispatch 로 새면 안 된다 (상호배타 ←)."""
+        reason = self._dispatch(
+            "test-scope-normal-2", spec_path=self.IN_SCOPE_DOC,
+        ).get("reason", "")
+        self.assertNotIn(
+            self.CAP_PHRASE, reason,
+            msg=f"아직 상한이 아닌데 중단을 주장한다 — reason: {reason!r}",
+        )
+
+    def test_cap_reaching_dispatch_omits_rearm_promise(self):
+        """상한에 닿은 dispatch 에서는 '재편집하면 재발동' 이 거짓이다 (상호배타 →).
+
+        그 문서는 이 세션에서 이미 중단됐다. 두 문장을 함께 내면 훅이 같은 숨결로
+        서로 모순되는 두 수명을 주장한다.
+        """
+        payload = self._dispatch(
+            "test-scope-cap", spec_path=self.IN_SCOPE_DOC,
+            attempts=arm_ledger.DISPATCH_ATTEMPT_CAP - 1,
+        )
+        reason = payload.get("reason", "")
+        self.assertIn(
+            self.CAP_PHRASE, reason,
+            msg=f"상한 도달을 알리지 않는다 — reason: {reason!r}",
+        )
+        self.assertNotIn(
+            self.SCOPE_PHRASE, reason,
+            msg=f"중단된 문서에 '1회 유효'를 함께 주장한다 — reason: {reason!r}",
+        )
+
+
+class TestMandateClaimsAreTrue(HookOutputSchemaTestBase):
+    """mandate 가 **주장하는 내용이 사실인지**를 실제 훅을 태워 검증한다.
+
+    형제 클래스 `TestReviewDispatchMandateScope` 는 문장이 `reason` 채널에 실리는지를
+    잰다 — 그것만으로는 문장이 **거짓이어도** GREEN 이다. 실제로 이 PR 의 초판은
+    "커밋하면 더 이상 arm 되지 않는다"를 무조건 단정했는데 `is_born()` 의 git fail-open
+    경로에서 거짓이었고, 문구 락 3종은 전부 통과했다. 그래서 남긴 두 주장 각각에
+    **동작 검증**을 붙인다. 주장을 줄이면 이 클래스도 함께 줄어야 한다.
+    """
+
+    DESIGN_BODY = (
+        "# Test Design\n\nContext / Why\n\nGoals\n\nNon-goals\n\n"
+        "Constraints\n\nAcceptance Criteria\n\nFiles\n\nVerification Plan\n\n"
+        "Rejected Alternatives\n\nMetadata\n"
+    )
+    REL = Path("docs") / "superpowers" / "specs" / "2026-08-08-claims-design.md"
+
+    def _write_doc(self, extra: str = "") -> Path:
+        abs_path = self.repo / self.REL
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        abs_path.write_text(self.DESIGN_BODY + extra, encoding="utf-8")
+        return abs_path
+
+    def _run_validator(self, sid: str, abs_path: Path):
+        return _run_hook(
+            "spec-write-validator.py", cwd=self.repo,
+            stdin_payload={
+                "session_id": sid, "hook_event_name": "PostToolUse",
+                "tool_name": "Write", "tool_input": {"file_path": str(abs_path)},
+                "cwd": str(self.repo),
+            },
+            env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": sid},
+        )
+
+    def _run_stop(self, sid: str):
+        # TTL 가드를 **끈다**. 이 클래스가 재려는 것은 "pending 소진(단발성)" 이지
+        # "30초 redispatch TTL" 이 아니다. 기본 TTL 로 두면 두 번째 Stop 은 밀리초
+        # 안에 실행되어 TTL 이 먼저 침묵시키고, 그러면 pending 을 아예 소진하지 않게
+        # 망가뜨려도 락이 GREEN 이 된다 — 실제로 mutation N1 이 그렇게 통과했다.
+        # TTL=0 이면 침묵을 설명할 수 있는 것은 pending 소진뿐이다.
+        return _run_hook(
+            "review-dispatch.py", cwd=self.repo,
+            env_extra={
+                "DEVBREW_SPEC_DISTILL_SESSION_ID": sid,
+                "DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC": "0",
+            },
+        )
+
+    def _is_armed(self, sid: str) -> bool:
+        f = self.repo / ".claude" / "spec-distill" / sid / "state.local.md"
+        return f.exists() and "pending_review:" in f.read_text(encoding="utf-8")
+
+    def test_claim_single_shot_holds(self):
+        """주장 1: "이 mandate는 이번 dispatch 1회에만 유효하다"."""
+        sid = "test-claim-single"
+        self._run_validator(sid, self._write_doc())
+        self.assertTrue(self._is_armed(sid), msg="전제 실패: 첫 write 가 arm 하지 않았다")
+
+        first = self._run_stop(sid)
+        self.assertIn("block", first.stdout, msg=f"첫 Stop 이 강제하지 않음: {first.stdout!r}")
+
+        # 재편집 없이 두 번째 Stop — 주장대로면 아무것도 나오면 안 된다.
+        second = self._run_stop(sid)
+        self.assertEqual(
+            second.stdout.strip(), "",
+            msg=(
+                "재편집이 없었는데 두 번째 Stop 이 다시 강제한다 — mandate 는 1회가 "
+                f"아니다: {second.stdout!r}"
+            ),
+        )
+
+    def _mark_reviewed(self, sid: str, abs_path: Path):
+        return subprocess.run(
+            ["python3", str(SCRIPTS_DIR / "arm_ledger.py"), "mark-reviewed",
+             sid, str(abs_path)],
+            cwd=self.repo, text=True, capture_output=True, timeout=30,
+            env={"HOME": os.environ.get("HOME", "/tmp"), "PATH": os.environ["PATH"]},
+        )
+
+    def test_unreviewed_doc_rearms_on_reedit(self):
+        """미리뷰·미커밋 문서는 재편집 시 재발동한다 (Law 1 게이트 생존)."""
+        sid = "test-claim-reedit"
+        self._run_validator(sid, self._write_doc())
+        self._run_stop(sid)  # dispatch → pending 소진
+        self.assertFalse(
+            self._is_armed(sid), msg="전제 실패: dispatch 후에도 pending 이 남았다")
+
+        self._run_validator(sid, self._write_doc(extra="\n<!-- edit 2 -->\n"))
+        self.assertTrue(
+            self._is_armed(sid),
+            msg="미리뷰 문서를 재편집했는데 재발동하지 않는다 — 게이트가 조용히 꺼졌다",
+        )
+
+    def test_reviewed_doc_does_NOT_rearm_on_reedit(self):
+        """**리뷰를 마친** 문서는 재편집해도 재발동하지 않는다.
+
+        이 쌍(위 테스트와 함께)이 "재발동은 재편집할 때 일어난다" 류의 **무조건**
+        단정이 왜 불가능한지를 보인다 — 같은 행동(재편집)이 원장 상태에 따라 정반대
+        결과를 낸다. 초판 mandate 가 그 단정을 담았다가 여기 걸렸다.
+        """
+        sid = "test-claim-reviewed"
+        doc = self._write_doc()
+        self._run_validator(sid, doc)
+        self._run_stop(sid)
+        r = self._mark_reviewed(sid, doc)
+        self.assertEqual(r.returncode, 0, msg=f"전제 실패: mark-reviewed rc={r.returncode} {r.stderr}")
+
+        self._run_validator(sid, self._write_doc(extra="\n<!-- edit 2 -->\n"))
+        self.assertFalse(
+            self._is_armed(sid),
+            msg=(
+                "리뷰를 마친 문서가 재편집만으로 다시 arm 됐다 — arm-once 가 깨졌거나, "
+                "mandate 에 '재편집하면 재발동' 을 다시 적어도 된다는 뜻이 아니다"
+            ),
+        )
 
 
 class TestReviewDispatchOrdering(unittest.TestCase):
