@@ -26,13 +26,43 @@ candidates="$(codex_candidates)"
 n_cand=0
 [ -n "$candidates" ] && n_cand="$(printf '%s\n' "$candidates" | wc -l | tr -d ' ')"
 
+# obs_invoke의 case 표 — "무엇이 후보로 존재해야 하는가"의 유일한 권한 있는
+# 목록. 여기서 다시 나열하지 않고 obs_known_candidates()로 그 표에서 도출한다
+# (devbrew 열거 금지 제약 — 목록이 둘이면 갈라지는 순간 이 검사가 무의미해진다).
+known="$(obs_known_candidates)"
+n_known=0
+[ -n "$known" ] && n_known="$(printf '%s\n' "$known" | wc -l | tr -d ' ')"
+
 # positive: 스캔이 실제로 코퍼스를 봤는가. 이것이 없으면 "위반 0"과 "아무것도 안 봄"이
-# 구별되지 않는다 (test_codex_runner_no_effort_pin.sh:50-60과 같은 형태).
-if [ "$n_cand" -ge 5 ]; then
-  ok "후보 스캔 실재: codex 호출부 ${n_cand}곳"
+# 구별되지 않는다 (test_codex_runner_no_effort_pin.sh:50-60과 같은 형태). 문턱은
+# obs_invoke 표에서 도출한 n_known을 쓴다 — 하드코딩 상수를 표와 별도로 유지하지
+# 않는다(표가 자라면 이 문턱도 같은 커밋 안에서 자동으로 따라간다).
+if [ "$n_known" -ge 1 ] && [ "$n_cand" -ge "$n_known" ]; then
+  ok "후보 스캔 실재: codex 호출부 ${n_cand}곳 (obs_invoke 표 ${n_known}곳)"
 else
-  no "후보가 ${n_cand}곳뿐 — 계측기 붕괴. 아래 판정은 무의미하다"
+  no "후보가 ${n_cand}곳뿐(표는 ${n_known}곳) — 계측기 붕괴. 아래 판정은 무의미하다"
 fi
+
+# 커버리지 ratchet — 양방향의 나머지 절반. obs_invoke의 `*)` fail-closed(표에
+# 없는 이름이 스캔에 나타나면 return 90 → 호출자가 RED)는 이미 한쪽 방향을
+# 막는다. 이 루프는 반대 방향을 막는다: 표에는 있는 이름이 스캔 결과에서
+# 조용히 빠지는 것. 개수 문턱만으로는 "A가 빠지고 B가 채워져 수가 유지되는"
+# 치환을 못 잡는다 — 개수가 아니라 집합의 부분관계를 재야 한다.
+scanned_names=""
+if [ -n "$candidates" ]; then
+  scanned_names="$(printf '%s\n' "$candidates" | xargs -n1 basename 2>/dev/null | sort -u)"
+fi
+missing_known=0
+while IFS= read -r k; do
+  [ -n "$k" ] || continue
+  if ! printf '%s\n' "$scanned_names" | grep -qxF "$k"; then
+    missing_known=$((missing_known + 1))
+    no "obs_invoke 표의 '$k'가 스캔 결과에 없다 — 후보가 조용히 빠졌다(치환 포함)"
+  fi
+done <<EOF_KNOWN
+$known
+EOF_KNOWN
+[ "$missing_known" -eq 0 ] && ok "obs_invoke 표의 알려진 후보 ${n_known}곳이 스캔 결과에서 전부 발견됨"
 
 # ── 후보마다 실행 관측 ───────────────────────────────────────────────────────
 observed_total=0
