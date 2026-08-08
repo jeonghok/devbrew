@@ -326,5 +326,41 @@ class TestCommandNameProbe(unittest.TestCase):
         self.assertTrue((PLUGIN_DIR / "commands" / "standup.md").is_file())
 
 
+class TestReadme(unittest.TestCase):
+    """AC25 — README 맨 앞의 **다섯 항목**.
+
+    OQ-J 가 README 공개를 요구하는데 이 AC 가 그것을 검사하지 않으면 요구가
+    문서에만 남는다.
+    """
+
+    ITEMS = {
+        "force-for-plugin 경고": "끄려면 플러그인 전체를 비활성화",
+        "설치 이전 구간": "설치 이전 작업에는 이 플러그인이 만든 설명이 없",
+        "OQ-J 잔여 위험": "어떤 비밀 필터도 없",
+        "Principles Instantiated": "## Principles Instantiated",
+        "Hooks Installed": "## Hooks Installed",
+    }
+
+    def setUp(self) -> None:
+        self.text = read("README.md")
+
+    def test_all_five_items_present(self) -> None:
+        for name, fragment in self.ITEMS.items():
+            self.assertIn(fragment, self.text, name)
+
+    def test_warning_is_near_the_top(self) -> None:
+        head = "\n".join(self.text.splitlines()[:25])
+        self.assertIn("끄려면 플러그인 전체를 비활성화", head)
+
+    def test_mutation_each_item_removal_is_detected(self) -> None:
+        for name, fragment in self.ITEMS.items():
+            self.assertNotIn(fragment, self.text.replace(fragment, ""), name)
+
+    def test_post_merge_checklist_is_operationalised(self) -> None:
+        """D11 — OQ-R 의 '머지 후 수동 확인' 이 수행 가능한 형태여야 한다."""
+        self.assertIn("## 머지 후 수동 확인", self.text)
+        self.assertIn("- [ ]", self.text.split("## 머지 후 수동 확인", 1)[1])
+
+
 if __name__ == "__main__":
     unittest.main()

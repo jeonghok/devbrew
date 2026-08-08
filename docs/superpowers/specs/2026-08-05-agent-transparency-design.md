@@ -1861,7 +1861,7 @@ if any(i["enabled"] for i in hit):
 |---|---|
 | 플러그인 | `plugins/agent-transparency/` (신규) |
 | 버전 | `0.1.0` |
-| 브랜치 | `feature/comprehension-debt-plugin` |
+| 브랜치 | `worktree-feature+comprehension-debt-plugin` |
 | 문제공간 입력 | `docs/superpowers/interview/2026-08-02-comprehension-debt-plugin-interview.md` |
 | 의존 | 없음 |
 | 신규 훅 | `SubagentStop` 1건 |

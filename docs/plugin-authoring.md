@@ -32,4 +32,12 @@ plugins/<your-plugin>/
 
 `plugin-dev`가 주는 것은 **문법**이다. devbrew **정책**(위 트리의 주석 + [Plugin Shape](../CLAUDE.md#plugin-shape))은 이 문서가 유일한 소스이며 충돌 시 우선한다. `plugin-dev`의 `/create-plugin`은 자체 Discovery/Design phase를 갖는 end-to-end 워크플로우 — devbrew에서는 설계를 brainstorming과 spec-distill이 담당하므로 skill을 지식으로만 쓴다.
 
+**output style 컴포넌트** — devbrew 첫 사례는 [`plugins/agent-transparency/`](../plugins/agent-transparency/). `output-styles/<name>.md` 한 파일이며 frontmatter 네 필드가 전부다:
+
+- `name` · `description` — `description` 은 `plugin.json` 과 같은 문구로 두는 것이 관행(중복 서술이 갈리는 것을 막는다).
+- **`keep-coding-instructions: true` — 빠뜨리면 안 된다.** 기본값이 `false`라 생략하면 Claude Code 내장 소프트웨어 엔지니어링 지침이 **통째로 사라진다**. 그것이 devbrew 가 금지하는 능력 억제다.
+- `force-for-plugin: true` — 설치하면 자동 적용되고 사용자의 `outputStyle` 설정을 **덮어쓴다**. 대가: 스타일만 따로 끄는 길이 없고(플러그인 `settings.json`은 `agent`·`subagentStatusLine` 키만 지원), 여러 플러그인이 켜면 **먼저 로드된 것이 이긴다**. README 맨 앞에 경고를 둘 것.
+
+**output style 은 subagent 에 닿지 않는다.** 메인 대화의 시스템 프롬프트만 바꾸므로, subagent 나 `context: fork` skill 이 따라야 할 규칙은 그쪽 파일에 **따로** 두고 파리티 테스트로 묶어야 한다(사본이 셋이 되면 파리티가 못 보는 자리가 생긴다).
+
 **Merge 전:** [Plugin Shape](../CLAUDE.md#plugin-shape)의 모든 bullet 만족 + 시작 버전 `0.1.0`.
