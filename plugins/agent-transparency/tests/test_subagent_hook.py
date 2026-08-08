@@ -180,16 +180,9 @@ class TestNoWrites(unittest.TestCase):
 
     @staticmethod
     def tree_hash(root: Path) -> str:
-        """Hash all files except Python caches and Library/Caches (system-generated, not hook-written)."""
         digest = hashlib.sha256()
         for path in sorted(root.rglob("*")):
-            rel = path.relative_to(root)
-            # Skip system Python bytecode caches and macOS Library/Caches (not written by hook)
-            if any(part in ("__pycache__", "Library") for part in rel.parts):
-                continue
-            if rel.suffix == ".pyc":
-                continue
-            digest.update(str(rel).encode("utf-8"))
+            digest.update(str(path.relative_to(root)).encode("utf-8"))
             if path.is_file():
                 digest.update(path.read_bytes())
         return digest.hexdigest()
