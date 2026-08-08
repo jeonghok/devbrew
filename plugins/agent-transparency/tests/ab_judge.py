@@ -20,6 +20,9 @@ import sys
 
 QUESTIONS = ("Q1", "Q2", "Q3", "Q4")
 PLUGIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 판정자 호출 한도(초) — 없으면 hang 이 머지 게이트를 영원히 막는다. 만료도
+# 파싱 실패와 같은 취급이다: fail-closed 로 그 표를 no 로 계산한다.
+JUDGE_TIMEOUT_S = int(os.environ.get("AB_JUDGE_TIMEOUT_S", "600"))
 
 
 def expected_runs():
@@ -193,6 +196,30 @@ def span_all_text(records):
     return "\n\n".join(b["text"] for b in text_blocks(records))
 
 
+def final_response(records):
+    """게이트 1 — 실행의 **최종 응답**: 마지막 텍스트 블록을 담은 어시스턴트 메시지.
+
+    `span_all_text`(게이트 6, 전체 텍스트를 시간순으로 이어붙인 것)와 다르다 —
+    판정 구간 표는 게이트 1을 **의도적으로 비워둔다**, 게이트 표 자체(*"최종
+    응답이 존재하고 … 그 안에"*)가 유일한 정의이기 때문이다. 중간 메시지의
+    표는 게이트 1과 무관하다 — 최종 응답 안에서만 본다.
+    """
+    blocks = text_blocks(records)
+    return blocks[-1]["text"] if blocks else ""
+
+
+def gate1_ok(records):
+    """게이트 1 통과 조건 — 최종 응답이 존재하고 **그 안에** 표 행(`^\\|`)이 0개.
+
+    "존재" 조건은 장식이 아니다 — 없으면 워커가 죽어 아무 응답도 안 낸 실행이
+    `rows == 0` 이라는 이유만으로 통과한다.
+    """
+    response = final_response(records)
+    if not response.strip():
+        return False
+    return len(re.findall(r"(?m)^\|", response)) == 0
+
+
 def _section(text, heading):
     """`## <heading>` 부터 다음 `## ` 까지 (레벨-2 헤딩 경계).
 
@@ -288,8 +315,10 @@ def ask_judge(rubric, block, model, effort):
     try:
         proc = subprocess.run(
             ["claude", "-p", "--model", model, "--effort", effort, prompt],
-            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    except OSError:
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=JUDGE_TIMEOUT_S)
+    except (OSError, subprocess.TimeoutExpired):
+        # hang 도 파싱 실패와 같은 취급 — 표를 통째로 no 로 계산한다(fail-closed).
         return dict((q, "no") for q in QUESTIONS)
     return parse_vote(proc.stdout.decode("utf-8", "replace"))
 
@@ -338,8 +367,8 @@ def main(argv):
         records = read_records(path) if path else []
 
         if task == "a" and cond == "on":
-            rows = len(re.findall(r"(?m)^\|", span_all_text(records)))
-            note(1, (not failed) and rows == 0,
+            rows = len(re.findall(r"(?m)^\|", final_response(records)))
+            note(1, (not failed) and gate1_ok(records),
                  "%s — 최종 응답 부재 또는 표 행 %d개" % (key, rows))
         if task == "b":
             visible = "%s %d visible=0" % (cond, i) in tests_text

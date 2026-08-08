@@ -37,6 +37,22 @@ def check_four_elements(text: str) -> list[str]:
     return bad
 
 
+def _contains_key(value, key):
+    """`key` 가 `value` 안 **어느 깊이에도** 없는지 재귀로 확인한다.
+
+    M7 — 최상위 키만 보면(`key in json.loads(out)`) `hookSpecificOutput` 안에
+    중첩된 `decision` 을 놓친다(실측: `additionalContext` 옆에
+    `"decision": "block"` 을 심어도 얕은 검사로는 안 걸린다).
+    """
+    if isinstance(value, dict):
+        if key in value:
+            return True
+        return any(_contains_key(v, key) for v in value.values())
+    if isinstance(value, list):
+        return any(_contains_key(v, key) for v in value)
+    return False
+
+
 def load_hook():
     """하이픈이 든 파일명이라 일반 import 가 안 된다 — 경로로 로드한다."""
     spec = importlib.util.spec_from_file_location("subagent_explain", HOOK)
@@ -98,14 +114,19 @@ class TestConstantBranches(unittest.TestCase):
         self.assertTrue(data["hookSpecificOutput"]["additionalContext"].strip())
 
     def test_no_decision_key_ever(self) -> None:
-        """AC9 — 어떤 경우에도 decision 키가 없다(불변식)."""
+        """AC9 — 어떤 경우에도 decision 키가 없다(불변식) — **어느 깊이에도**.
+
+        M7 — `assertNotIn("decision", json.loads(out))` 는 최상위 키만 본다.
+        `hookSpecificOutput` 안에 중첩된 `decision` 은 얕은 검사를 통과한다
+        (실측). `_contains_key` 로 전체 구조를 재귀 탐색한다.
+        """
         for payload in ({"agent_type": "Explore"},
                         {"agent_type": "workflow-subagent"},
                         {}, b"not json at all"):
             rc, out, _ = run_hook(payload)
             self.assertEqual(rc, 0)
             if out.strip():
-                self.assertNotIn("decision", json.loads(out))
+                self.assertFalse(_contains_key(json.loads(out), "decision"))
 
     def test_agent_type_appears_verbatim(self) -> None:
         """AC36 — agent_type 값이 additionalContext 에 그대로."""
@@ -156,6 +177,33 @@ class TestConstantBranches(unittest.TestCase):
         mutated = module.BASE_CONTEXT.replace(
             "how it changed your judgment", "how it affected things")
         self.assertNotEqual(check_four_elements(mutated), [])
+
+
+class TestContainsKeyRecursion(unittest.TestCase):
+    """M7 — `_contains_key` 자체를 mutation 형태 페이로드로 눌러본다.
+
+    얕은 `"decision" in obj` 였다면 통과(오탐)했을 케이스가 여기서 잡혀야
+    이 헬퍼가 최상위 검사보다 실제로 이빨이 있다는 증거다.
+    """
+
+    def test_top_level_key_is_caught(self) -> None:
+        self.assertTrue(_contains_key({"decision": "block"}, "decision"))
+
+    def test_nested_key_is_caught(self) -> None:
+        """얕은 최상위 검사라면 이 케이스를 놓친다 — `hookSpecificOutput` 안."""
+        payload = {"hookSpecificOutput": {"hookEventName": "SubagentStop",
+                                          "additionalContext": "x",
+                                          "decision": "block"}}
+        self.assertTrue(_contains_key(payload, "decision"))
+
+    def test_key_inside_a_list_is_caught(self) -> None:
+        payload = {"hookSpecificOutput": [{"decision": "block"}]}
+        self.assertTrue(_contains_key(payload, "decision"))
+
+    def test_absent_key_is_not_a_false_positive(self) -> None:
+        payload = {"hookSpecificOutput": {"hookEventName": "SubagentStop",
+                                          "additionalContext": "x"}}
+        self.assertFalse(_contains_key(payload, "decision"))
 
 
 class TestSelfForkBranch(unittest.TestCase):

@@ -453,6 +453,71 @@ class TestRender(unittest.TestCase):
         self.assertEqual(len(listed_lines), 20)
         self.assertIn("listed: 20", out)
 
+    def test_listed_counts_in_scope_plus_shown_out_of_scope(self) -> None:
+        """I2 — `listed` = in-scope 전체 + out-of-scope 중 보인 것(캡 안).
+
+        in-scope 가 0인 픽스처로는 이 덧셈이 실제로 검증되지 않는다 —
+        `listed = len(shown)` 로 그 항을 통째로 빼도 같은 값이 나와 통과해버린다
+        (실측: 187행). 최소 하나는 in-scope 로 둬 그 항이 실제로 더해지는지 잰다.
+        """
+        write_jsonl(self.pdir / "mine-a.jsonl",
+                    [assistant_text("m", gitBranch="work", cwd=str(self.box.main))])
+        write_jsonl(self.pdir / "mine-b.jsonl",
+                    [assistant_text("m", gitBranch="work", cwd=str(self.box.main))])
+        for i in range(23):
+            write_jsonl(self.pdir / ("other%02d.jsonl" % i),
+                        [assistant_text("x", gitBranch="other", cwd=str(self.box.main),
+                                        timestamp="2026-08-%02dT10:00:00.000Z" % (i + 1))])
+        out = self.render()
+        # in-scope 2 + out-of-scope 캡(20) = 22. 캡(len(shown))만으로는 20이 나온다 —
+        # 두 수가 다르므로 in-scope 항이 실제로 더해졌는지가 이 assert 로 갈린다.
+        self.assertIn("listed: 22", out)
+
+    def test_directory_rollup_body_lines_carry_each_directorys_own_count_and_span(self) -> None:
+        """I2 — 폴딩된 각 디렉토리가 헤더가 아니라 **본문 줄**에 자기 개수·기간으로 나온다.
+
+        디렉토리를 하나만 쓰면 헤더 문구("… 뺀 나머지 N개")가 우연히 본문 줄과 같은
+        숫자를 담아 헤더만으로도 통과해버린다(실측: `for directory in sorted(rollup):`
+        의 몸통을 `pass` 로 통째로 바꿔도 187행 전부 green). 최소 두 디렉토리로 갈라
+        본문 줄이 실제로 그 디렉토리 고유의 개수·기간을 담는지 잰다.
+        """
+        main_dir = self.box.project_dir(self.box.main)
+        wt_dir = self.box.project_dir(self.box.worktree)
+        # 20개는 최근 날짜 — 캡 안에 들어 "보임" 처리된다(폴딩 대상이 아니다).
+        for i in range(20):
+            write_jsonl(main_dir / ("shown%02d.jsonl" % i),
+                        [assistant_text("x", gitBranch="other", cwd=str(self.box.main),
+                                        timestamp="2026-08-%02dT10:00:00.000Z" % (i + 1))])
+        # 폴딩 대상 — main_dir 2개 + wt_dir 1개. 더 오래된 날짜라 캡 밖으로 밀린다.
+        write_jsonl(main_dir / "old-a.jsonl",
+                    [assistant_text("x", gitBranch="other", cwd=str(self.box.main),
+                                    timestamp="2026-07-01T10:00:00.000Z")])
+        write_jsonl(main_dir / "old-b.jsonl",
+                    [assistant_text("x", gitBranch="other", cwd=str(self.box.main),
+                                    timestamp="2026-07-02T10:00:00.000Z")])
+        write_jsonl(wt_dir / "old-c.jsonl",
+                    [assistant_text("x", gitBranch="other", cwd=str(self.box.worktree),
+                                    timestamp="2026-07-03T10:00:00.000Z")])
+        out = self.render()
+        rollup = out.split("out-of-scope 디렉토리 집계")[1]
+        body_lines = [ln for ln in rollup.splitlines() if ln.startswith("  ")]
+
+        def line_for(directory):
+            # 디렉토리 경로 뒤에 다른 워크트리 경로가 접두사로 겹칠 수 있으므로
+            # ("…/devbrew" 는 "…/devbrew/.claude/worktrees/wt" 의 접두사다)
+            # 부분 포함이 아니라 "그 줄의 디렉토리 필드가 정확히 이것"으로 잰다.
+            return [ln for ln in body_lines
+                    if ln.split("   ", 1)[0].strip() == str(directory)]
+
+        main_lines = line_for(main_dir)
+        wt_lines = line_for(wt_dir)
+        self.assertEqual(len(main_lines), 1, body_lines)
+        self.assertEqual(len(wt_lines), 1, body_lines)
+        self.assertIn("2개", main_lines[0])
+        self.assertIn("1개", wt_lines[0])
+        self.assertIn("2026-07-01", main_lines[0])
+        self.assertIn("2026-07-03", wt_lines[0])
+
     def test_directory_rollup_line_present_when_truncated(self) -> None:
         for i in range(25):
             write_jsonl(self.pdir / ("f%02d.jsonl" % i),

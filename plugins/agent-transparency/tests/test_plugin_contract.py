@@ -7,6 +7,7 @@ Run:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import unittest
@@ -120,11 +121,15 @@ SKILL_FRAGMENTS = {
                         "에이전트 반환값 본문", "subagents/*.jsonl"],
     "⑤-표본-하한": ["가장 최근 블록", "모든 `AskUserQuestion` 호출과 그 짝",
                     "하한이지 상한이 아니다"],
+    # I4 — spec §7 "1-0 하한 미달" 행(답변 첫 줄에 하한 미달 사실과 빠진 항목을
+    # 함께 적으라는 요구)을 지시문에 심은 자리. AC35 공식 ①–⑥ 번호와는 별도
+    # 그룹이다(⑥은 skill_body probe 전용) — 실물 존재만 여기서 락 건다.
+    "하한-미달-첫줄-보고": ["1-0 하한에 못 미치면", "하한 미달 사실과 어느 파일·어느 질문인지"],
 }
 
 
 def check_skill_facts(text: str) -> list[str]:
-    """AC35①–⑤ — 다섯 그룹의 프래그먼트가 전부 실제로 있는지.
+    """AC35①–⑤ + I4 하한-미달 보고 — 여섯 그룹의 프래그먼트가 전부 실제로 있는지.
 
     순수 함수 — 실물 SKILL.md 와 mutation 문자열 양쪽에 같은 함수를 돌려 mutation 이
     실제로 문제를 내는지 확인한다. `assertNotIn(x, text.replace(x, ""))` 는
@@ -260,10 +265,24 @@ class TestNoShellInjectionPath(unittest.TestCase):
         self.assertNotIn('add_argument("scope"', script)
 
     def test_shell_metacharacter_payload_has_no_effect(self) -> None:
-        """통합 검사 — 메타문자를 인자로 넣어도 부수효과가 없다."""
+        """통합 검사 — 메타문자를 인자로 넣어도 부수효과가 없다.
+
+        I3: cwd 가 git 리포가 아니면 스크립트는 `repo_root` 가드에서 **3으로
+        즉시 반환**하고 `current_branch`·`collect`·렌더러를 전혀 거치지 않는다
+        — 그러면 이 테스트는 가드 **이전**만 재는 것이 된다(실측: 가드 이후에
+        `subprocess.run(..., shell=True)` 를 심어도 이 테스트가 통과했다).
+        최소 커밋 하나가 있는 진짜 git 리포를 cwd 로 줘서 가드를 통과시킨다.
+        """
         import tempfile as _tf
         with _tf.TemporaryDirectory() as tmp:
-            canary = Path(tmp) / "pwn"
+            tmp_path = Path(tmp)
+            git_env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t.t",
+                           GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t.t")
+            subprocess.run(["git", "init", "-q"], cwd=tmp, check=True, env=git_env)
+            (tmp_path / "seed.txt").write_text("seed\n", encoding="utf-8")
+            subprocess.run(["git", "add", "-A"], cwd=tmp, check=True, env=git_env)
+            subprocess.run(["git", "commit", "-qm", "seed"], cwd=tmp, check=True, env=git_env)
+            canary = tmp_path / "pwn"
             proc = subprocess.run(
                 [sys.executable, str(PLUGIN_DIR / "scripts" / "prepare_standup.py"),
                  "--session-id", "; touch %s" % canary],

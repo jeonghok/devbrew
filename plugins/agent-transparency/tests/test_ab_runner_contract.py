@@ -16,6 +16,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PLUGIN_DIR = REPO_ROOT / "plugins" / "agent-transparency"
@@ -199,9 +200,10 @@ class TestAssignedArtifactsExist(unittest.TestCase):
 class TestPluginStateGuard(unittest.TestCase):
     """AC45② — 12개 입력 형태를 계약대로 판정한다.
 
-    통과해야 하는 셋과 멈춰야 하는 아홉이 정확히 갈려야 한다. 이 판정 로직은
-    설계 과정에서 **세 판 연속 틀렸고 문자열 검사로는 세 판이 구분되지 않았다**
-    — 매번 실행이 잡았다.
+    통과해야 하는 넷과 멈춰야 하는 여덟이 정확히 갈려야 한다(아래 CASES 표
+    라벨 집계와 일치 — M1: "셋과 아홉"은 CASES 표와 모순되는 stale 한 수치였다).
+    이 판정 로직은 설계 과정에서 **세 판 연속 틀렸고 문자열 검사로는 세 판이
+    구분되지 않았다** — 매번 실행이 잡았다.
     """
 
     PASS = "pass"
@@ -240,14 +242,15 @@ class TestPluginStateGuard(unittest.TestCase):
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return proc.returncode
 
-    def test_twelve_fixtures_split_exactly_three_and_nine(self) -> None:
-        # NOTE(task-11): CASES 자체를 세어 보면 PASS 라벨이 4개(미설치·다른 플러그인
+    def test_twelve_fixtures_split_exactly_four_and_eight(self) -> None:
+        # M1: CASES 자체를 세어 보면 PASS 라벨이 4개(미설치·다른 플러그인
         # 활성·대상 비활성·접두사만 같은 이름), STOP 라벨이 8개다 — 모두 가드의 문서화된
         # 설계 의도(정확 id 매치·bool 타입 검사·리스트 타입 검사)와 일치한다. 위 루프의
         # per-case assertEqual 이 12개 전부를 통과하는 한(즉 가드가 각 케이스의 라벨과
         # 정확히 일치하는 한) 총합은 산술적으로 4/8 일 수밖에 없다 — "3/9" 로 두면 가드를
         # 어떻게 고쳐도(라벨과 어긋나지 않는 한) 이 테스트는 항상 fail 한다. 3/9 는 이
-        # CASES 표와 모순되는 stale 한 수치로 판단해 4/8 로 고쳤다(가드 로직은 무변경).
+        # CASES 표(와 스펙 §9 AC45, docs/superpowers/specs/2026-08-05-agent-transparency-design.md)
+        # 와 모순되는 stale 한 수치였다 — 메서드 이름·spec 서술 둘 다 4/8 로 고쳤다(가드 로직은 무변경).
         outcomes = []
         for name, payload, expected in self.CASES:
             rc = self.run_guard(payload)
@@ -337,6 +340,33 @@ class TestVoteParsing(unittest.TestCase):
         self.assertFalse(self.judge.tally([yes, mixed, mixed]))  # Q2 가 2/3 no
 
 
+class TestAskJudgeTimeout(unittest.TestCase):
+    """M8 — 판정자 호출(`claude -p`)이 hang 하면 머지 게이트가 영원히 막힌다.
+
+    timeout 만료는 파싱 실패와 같은 취급이어야 한다 — fail-closed 로 그 표를
+    전부 `no` 로 계산한다(다른 오류 경로와 일관).
+    """
+
+    def setUp(self) -> None:
+        self.judge = load_judge()
+
+    def test_run_is_called_with_a_bounded_timeout(self) -> None:
+        with mock.patch.object(self.judge.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess(
+                args=["claude"], returncode=0,
+                stdout=b'{"Q1":"yes","Q2":"yes","Q3":"yes","Q4":"yes"}')
+            self.judge.ask_judge("rubric", "block", "model", "low")
+        self.assertIn("timeout", run.call_args.kwargs)
+        self.assertGreater(run.call_args.kwargs["timeout"], 0)
+
+    def test_timeout_expiry_counts_as_no_vote(self) -> None:
+        with mock.patch.object(
+                self.judge.subprocess, "run",
+                side_effect=self.judge.subprocess.TimeoutExpired(cmd=["claude"], timeout=1)):
+            vote = self.judge.ask_judge("rubric", "block", "model", "low")
+        self.assertEqual(set(vote.values()), {"no"})
+
+
 class TestSpanCutting(unittest.TestCase):
     """판정 구간 — "텍스트 블록을 담은"이 load-bearing 이다.
 
@@ -369,6 +399,46 @@ class TestSpanCutting(unittest.TestCase):
 
     def test_empty_span_is_a_failure_not_a_pass(self) -> None:
         self.assertEqual(self.judge.span_after_tool([], "Agent"), "")
+
+
+class TestGate1Span(unittest.TestCase):
+    """I1 — 게이트 1은 게이트 6의 전체-텍스트 구간(`span_all_text`)이 아니라
+    **최종 응답만** 본다. 게이트 표(*"최종 응답이 존재하고 … 그 안에"*)와
+    REFERENCE.md 판정 구간 표(게이트 1이 의도적으로 빠져 있다 — 게이트 표
+    자체가 유일한 정의)가 그 근거다.
+    """
+
+    def setUp(self) -> None:
+        self.judge = load_judge()
+
+    @staticmethod
+    def assistant(items):
+        return {"type": "assistant", "message": {"content": items}}
+
+    def test_intermediate_table_does_not_fail_gate1(self) -> None:
+        """중간 메시지에 표가 있어도 최종 응답에 없으면 게이트 1은 통과다."""
+        records = [
+            self.assistant([{"type": "text",
+                             "text": "중간 결과\n| a | b |\n|---|---|"}]),
+            self.assistant([{"type": "text", "text": "최종 응답 — 표 없음"}]),
+        ]
+        self.assertEqual(
+            self.judge.final_response(records), "최종 응답 — 표 없음")
+        self.assertTrue(self.judge.gate1_ok(records))
+
+    def test_final_response_table_fails_gate1(self) -> None:
+        """역방향 — 최종 응답 자체에 표가 있으면 fail 이어야 한다."""
+        records = [
+            self.assistant([{"type": "text", "text": "중간 설명, 표 없음"}]),
+            self.assistant([{"type": "text",
+                             "text": "결과\n| a | b |\n|---|---|"}]),
+        ]
+        self.assertFalse(self.judge.gate1_ok(records))
+
+    def test_no_final_response_fails_gate1(self) -> None:
+        """최종 응답 자체가 없으면(텍스트 블록 0개) fail — "부재" 조건."""
+        self.assertEqual(self.judge.final_response([]), "")
+        self.assertFalse(self.judge.gate1_ok([]))
 
 
 class TestRubricLoading(unittest.TestCase):
