@@ -246,5 +246,158 @@ class TestNonRecursiveGlob(unittest.TestCase):
         self.assertEqual([Path(p).name for p in found], ["sess.jsonl"])
 
 
+def tool_use(name, tool_id, **kw):
+    return rec(type="assistant",
+               message={"role": "assistant",
+                        "content": [{"type": "tool_use", "id": tool_id,
+                                     "name": name, "input": {}}]},
+               **kw)
+
+
+def tool_result(tool_id, **kw):
+    return rec(type="user",
+               message={"role": "user",
+                        "content": [{"type": "tool_result", "tool_use_id": tool_id,
+                                     "content": "ok"}]},
+               **kw)
+
+
+class TestScopeUnion(unittest.TestCase):
+    """AC11 — gitBranch 일치 **OR** 파일명이 세션 id. 합집합이다."""
+
+    def setUp(self) -> None:
+        self.box = Sandbox()
+        os.environ["HOME"] = str(self.box.home)
+        self.module = load_script()
+        self.addCleanup(self.box.close)
+
+    def test_branch_only_and_session_only_both_included(self) -> None:
+        pdir = self.box.project_dir(self.box.main)
+        # 브랜치만 맞는 파일
+        write_jsonl(pdir / "branch-file.jsonl",
+                    [assistant_text("b", gitBranch="work", cwd=str(self.box.main))])
+        # 세션만 맞는 파일 — gitBranch 는 다른 값
+        write_jsonl(pdir / "SID-1234.jsonl",
+                    [assistant_text("s", gitBranch="other", cwd=str(self.box.main))])
+        data = self.module.collect(str(self.box.main), "work", "SID-1234")
+        names = sorted(Path(e["path"]).name for e in data["entries"]
+                       if e["label"] == "in-scope")
+        self.assertEqual(names, ["SID-1234.jsonl", "branch-file.jsonl"])
+
+    def test_out_of_scope_file_is_labelled_not_dropped(self) -> None:
+        pdir = self.box.project_dir(self.box.main)
+        write_jsonl(pdir / "elsewhere.jsonl",
+                    [assistant_text("x", gitBranch="other", cwd=str(self.box.main))])
+        data = self.module.collect(str(self.box.main), "work", "SID-1234")
+        labels = [e["label"] for e in data["entries"]]
+        self.assertEqual(labels, ["out-of-scope"])
+
+
+class TestInventoryPredicates(unittest.TestCase):
+    """AC34 — 술어를 값으로 못박는다. scan 은 형식만 검증 대상이다."""
+
+    def setUp(self) -> None:
+        self.box = Sandbox()
+        os.environ["HOME"] = str(self.box.home)
+        self.module = load_script()
+        self.pdir = self.box.project_dir(self.box.main)
+        self.addCleanup(self.box.close)
+
+    def test_known_fixture_yields_exact_numbers(self) -> None:
+        cwd = str(self.box.main)
+        records = [
+            assistant_text("가나다", gitBranch="work", cwd=cwd,          # 9 bytes UTF-8
+                           timestamp="2026-08-02T09:11:00.000Z"),
+            assistant_text("", gitBranch="work", cwd=cwd),                # 빈 블록 — 안 센다
+            assistant_text("abc", gitBranch="work", cwd=cwd,              # 3 bytes
+                           timestamp="2026-08-06T22:51:00.000Z"),
+            rec(type="assistant", gitBranch="work", cwd=cwd,              # thinking 전용
+                message={"role": "assistant",
+                         "content": [{"type": "thinking", "thinking": "…"}]}),
+            tool_use("AskUserQuestion", "t1", gitBranch="work", cwd=cwd),
+            tool_result("t1", gitBranch="work", cwd=cwd),
+            tool_use("AskUserQuestion", "t2", gitBranch="work", cwd=cwd), # 짝 없음
+            tool_use("Read", "t3", gitBranch="work", cwd=cwd),            # 다른 도구
+        ]
+        write_jsonl(self.pdir / "s.jsonl", records)
+        with (self.pdir / "s.jsonl").open("a", encoding="utf-8") as fh:
+            fh.write("{ not json\n")                                      # unparsed 1
+
+        data = self.module.collect(cwd, "work", "s")
+        self.assertEqual(data["files"], 1)
+        self.assertEqual(data["candidates"], 1)
+        self.assertEqual(sum(data["rejected"].values()), 0)
+        self.assertEqual(data["blocks"], 2)
+        self.assertEqual(data["bytes"], 12)          # '가나다'(9) + 'abc'(3)
+        self.assertEqual(data["decisions"], 2)
+        self.assertEqual(data["unpaired"], 1)
+        self.assertEqual(data["unparsed"], 1)
+        self.assertEqual(data["span_min"], "2026-08-02 09:11")
+        self.assertEqual(data["span_max"], "2026-08-06 22:51")
+
+    def test_blocks_counts_blocks_not_records(self) -> None:
+        """한 레코드에 text 블록이 둘이면 2다. 레코드 수로 세면 red."""
+        write_jsonl(self.pdir / "s.jsonl", [
+            rec(type="assistant", gitBranch="work", cwd=str(self.box.main),
+                message={"role": "assistant",
+                         "content": [{"type": "text", "text": "one"},
+                                     {"type": "text", "text": "two"}]}),
+        ])
+        data = self.module.collect(str(self.box.main), "work", None)
+        self.assertEqual(data["blocks"], 2)
+
+    def test_bytes_is_utf8_length_not_record_length(self) -> None:
+        """레코드 직렬화 길이가 아니라 text 문자열의 UTF-8 인코딩 길이 합이다."""
+        write_jsonl(self.pdir / "s.jsonl", [
+            assistant_text("한글", gitBranch="work", cwd=str(self.box.main)),
+        ])
+        data = self.module.collect(str(self.box.main), "work", None)
+        self.assertEqual(data["bytes"], 6)
+
+    def test_rejected_breakdown_by_reason(self) -> None:
+        other = self.box.root / "devbrew-experiments"
+        make_repo(other, branch="main")
+        odir = self.box.project_dir(other)
+        write_jsonl(odir / "x.jsonl", [assistant_text("x", gitBranch="main", cwd=str(other))])
+        write_jsonl(odir / "y.jsonl",
+                    [assistant_text("y", gitBranch="main",
+                                    cwd=str(self.box.root / "vanished"))])
+        write_jsonl(odir / "z.jsonl", [assistant_text("z", gitBranch="main")])
+        data = self.module.collect(str(self.box.main), "work", None)
+        self.assertEqual(data["rejected"]["other-repo"], 1)
+        self.assertEqual(data["rejected"]["cwd-gone"], 1)
+        self.assertEqual(data["rejected"]["cwd-missing"], 1)
+        self.assertEqual(data["candidates"], 0)
+
+
+class TestPerFileInScopeCount(unittest.TestCase):
+    """AC42 — 파일마다 **그 파일의 in-scope 레코드 수**를 낸다.
+
+    한 세션이 여러 브랜치에 걸치면(이 리포에서 실제로 일어난다) 파일을 통째로
+    세는 순간 인벤토리 숫자와 에이전트가 본 것이 어긋난다.
+    """
+
+    def setUp(self) -> None:
+        self.box = Sandbox()
+        os.environ["HOME"] = str(self.box.home)
+        self.module = load_script()
+        self.addCleanup(self.box.close)
+
+    def test_mixed_branch_file_reports_in_scope_count(self) -> None:
+        pdir = self.box.project_dir(self.box.main)
+        cwd = str(self.box.main)
+        write_jsonl(pdir / "mixed.jsonl", [
+            assistant_text("a", gitBranch="work", cwd=cwd),
+            assistant_text("b", gitBranch="work", cwd=cwd),
+            assistant_text("c", gitBranch="main", cwd=cwd),
+            assistant_text("d", gitBranch="main", cwd=cwd),
+            assistant_text("e", gitBranch="main", cwd=cwd),
+        ])
+        data = self.module.collect(cwd, "work", None)
+        entry = data["entries"][0]
+        self.assertEqual(entry["in_scope"], 2)
+        self.assertEqual(entry["total"], 5)
+
+
 if __name__ == "__main__":
     unittest.main()

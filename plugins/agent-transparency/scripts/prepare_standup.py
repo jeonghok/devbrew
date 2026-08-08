@@ -118,3 +118,114 @@ def classify(records, our_common_dir, cache):
     # 하나도 남아 있지 않으면 삭제·이동된 워크트리다 — 남의 리포와 합산하면
     # 정당한 과거 세션이 조용히 사라진다.
     return False, ("other-repo" if any_present else "cwd-gone")
+
+
+def _fmt_stamp(value):
+    """ISO8601 UTC 를 그대로 자른다. 시간대 변환을 하지 않는다 — 원문의 그 지점을
+    찾아가는 것이 목적이라 기록된 값과 같아야 한다."""
+    if not isinstance(value, str) or len(value) < 16:
+        return None
+    return value[:16].replace("T", " ")
+
+
+def in_scope(path, records, branch, session_id):
+    """범위 = 레코드의 gitBranch 일치 **OR** 파일명이 현재 세션 id (합집합).
+
+    둘 다 단독으로는 샌다 — 브랜치만 보면 워크트리 이동 전 기록이 빠지고,
+    세션만 보면 어제 한 것이 빠진다.
+    """
+    stem = os.path.basename(path)
+    if stem.endswith(".jsonl"):
+        stem = stem[: -len(".jsonl")]
+    if session_id and stem == session_id:
+        return list(records)
+    return [r for r in records if r.get("gitBranch") == branch]
+
+
+def count(records):
+    """AC34 의 술어. blocks 는 **레코드가 아니라 블록**을 센다."""
+    blocks = nbytes = decisions = 0
+    calls, results, stamps = set(), set(), []
+    for record in records:
+        stamp = _fmt_stamp(record.get("timestamp"))
+        if stamp:
+            stamps.append(stamp)
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, list):
+            continue
+        is_assistant = record.get("type") == "assistant"
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            kind = item.get("type")
+            if is_assistant and kind == "text":
+                text = item.get("text") or ""
+                if text.strip():
+                    blocks += 1
+                    nbytes += len(text.encode("utf-8"))
+            elif kind == "tool_use" and item.get("name") == "AskUserQuestion":
+                decisions += 1
+                calls.add(item.get("id"))
+            elif kind == "tool_result":
+                results.add(item.get("tool_use_id"))
+    return {
+        "blocks": blocks,
+        "bytes": nbytes,
+        "decisions": decisions,
+        # 짝이 없는 호출도 센다(비대화형 실행에는 답변 채널이 없어 실제로 생긴다).
+        "unpaired": len([c for c in calls if c not in results]),
+        "span_min": min(stamps) if stamps else None,
+        "span_max": max(stamps) if stamps else None,
+    }
+
+
+def collect(root, branch, session_id):
+    """인벤토리 원자료. 렌더는 하지 않는다."""
+    started = time.time()
+    ours = git_common_dir(root)
+    cache = {}
+    rejected = dict((reason, 0) for reason in REJECT_REASONS)
+    entries, unparsed, candidates = [], 0, 0
+    totals = {"blocks": 0, "bytes": 0, "decisions": 0, "unpaired": 0}
+    stamps = []
+
+    for path in candidate_paths(root):
+        records, bad = read_records(path)
+        accepted, reason = classify(records, ours, cache)
+        if not accepted:
+            rejected[reason] = rejected.get(reason, 0) + 1
+            continue
+        candidates += 1
+        unparsed += bad
+        mine = in_scope(path, records, branch, session_id)
+        stats = count(mine)
+        whole = count(records)
+        for key in totals:
+            totals[key] += stats[key]
+        for value in (stats["span_min"], stats["span_max"]):
+            if value:
+                stamps.append(value)
+        entries.append({
+            "path": path,
+            "in_scope": len(mine),
+            "total": len(records),
+            # in-scope 블록은 in-scope 기간, out-of-scope 블록은 파일 전체 기간을 보여준다.
+            "span_min": stats["span_min"] if mine else whole["span_min"],
+            "span_max": stats["span_max"] if mine else whole["span_max"],
+            "label": "in-scope" if mine else "out-of-scope",
+        })
+
+    data = dict(totals)
+    data.update({
+        "files": len([e for e in entries if e["label"] == "in-scope"]),
+        "candidates": candidates,
+        "rejected": rejected,
+        "entries": entries,
+        "unparsed": unparsed,
+        "span_min": min(stamps) if stamps else None,
+        "span_max": max(stamps) if stamps else None,
+        "scan": time.time() - started,
+        "git_calls": len(cache),
+    })
+    return data
