@@ -22,6 +22,21 @@ PLUGIN_DIR = REPO_ROOT / "plugins" / "agent-transparency"
 HOOK = PLUGIN_DIR / "hooks" / "subagent-explain.py"
 
 
+def check_four_elements(text: str) -> list[str]:
+    """AC44 — 네 요소 (who ran / what they found / where the evidence is / how it changed your judgment)."""
+    bad = []
+    elements = [
+        ("who ran", "agent 실행자 언급 없음"),
+        ("what they found", "발견 내용 언급 없음"),
+        ("where the evidence is", "증거 위치 언급 없음"),
+        ("how it changed your judgment", "판정 변화 언급 없음"),
+    ]
+    for phrase, problem in elements:
+        if phrase not in text:
+            bad.append(problem)
+    return bad
+
+
 def load_hook():
     """하이픈이 든 파일명이라 일반 import 가 안 된다 — 경로로 로드한다."""
     spec = importlib.util.spec_from_file_location("subagent_explain", HOOK)
@@ -35,6 +50,7 @@ def run_hook(payload, env=None, cwd=None):
     merged = dict(os.environ)
     merged.pop("DEVBREW_DISABLE_AGENT_TRANSPARENCY", None)
     merged.pop("DEVBREW_SKIP_HOOKS", None)
+    merged["PYTHONDONTWRITEBYTECODE"] = "1"  # Prevent stdlib bytecode caching in temp $HOME
     merged.update(env or {})
     proc = subprocess.run(
         [sys.executable, str(HOOK)],
@@ -94,6 +110,7 @@ class TestConstantBranches(unittest.TestCase):
     def test_agent_type_appears_verbatim(self) -> None:
         """AC36 — agent_type 값이 additionalContext 에 그대로."""
         rc, out, _ = run_hook({"agent_type": "code-reviewer"})
+        self.assertEqual(rc, 0)
         self.assertIn("code-reviewer",
                       json.loads(out)["hookSpecificOutput"]["additionalContext"])
 
@@ -125,15 +142,20 @@ class TestConstantBranches(unittest.TestCase):
     def test_four_elements_present(self) -> None:
         """AC44 — 훅 상수가 네 요소를 모두 담는다."""
         module = load_hook()
-        for element in ("who ran", "what they found",
-                        "where the evidence is", "how it changed your judgment"):
-            self.assertIn(element, module.BASE_CONTEXT)
+        self.assertEqual(check_four_elements(module.BASE_CONTEXT), [])
 
-    def test_four_elements_mutation(self) -> None:
-        """AC44 mutation — 요소 하나가 조용히 사라지면 red."""
+    def test_four_elements_deletion_mutation(self) -> None:
+        """AC44 mutation — 요소를 지우면 검사기가 적발한다."""
         module = load_hook()
         mutated = module.BASE_CONTEXT.replace(" / how it changed your judgment", "")
-        self.assertNotIn("how it changed your judgment", mutated)
+        self.assertNotEqual(check_four_elements(mutated), [])
+
+    def test_four_elements_renaming_mutation(self) -> None:
+        """AC44 mutation — 요소를 다른 표기로 바꾸면 검사기가 적발한다."""
+        module = load_hook()
+        mutated = module.BASE_CONTEXT.replace(
+            "how it changed your judgment", "how it affected things")
+        self.assertNotEqual(check_four_elements(mutated), [])
 
 
 class TestSelfForkBranch(unittest.TestCase):
@@ -158,9 +180,16 @@ class TestNoWrites(unittest.TestCase):
 
     @staticmethod
     def tree_hash(root: Path) -> str:
+        """Hash all files except Python caches and Library/Caches (system-generated, not hook-written)."""
         digest = hashlib.sha256()
         for path in sorted(root.rglob("*")):
-            digest.update(str(path.relative_to(root)).encode("utf-8"))
+            rel = path.relative_to(root)
+            # Skip system Python bytecode caches and macOS Library/Caches (not written by hook)
+            if any(part in ("__pycache__", "Library") for part in rel.parts):
+                continue
+            if rel.suffix == ".pyc":
+                continue
+            digest.update(str(rel).encode("utf-8"))
             if path.is_file():
                 digest.update(path.read_bytes())
         return digest.hexdigest()
