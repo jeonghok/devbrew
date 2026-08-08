@@ -1,0 +1,16 @@
+{
+  "description": "agent-transparency — SubagentStop 훅 1건. 에이전트 종료 직후 설명 자리를 만든다(검사·차단 없음).",
+  "hooks": {
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/subagent-explain.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
