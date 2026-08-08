@@ -81,9 +81,16 @@ class TestSkillCodexGate(unittest.TestCase):
         그것이 정확히 test_codex_runner_no_effort_pin.sh의 정규식(백틱 앞선 형태를
         못 봄)이 놓치던 모양이고, 여기서 놓치면 어디서도 안 잡힌다.
         """
-        offenders = [ln.strip() for ln in self.body.splitlines() if "codex exec" in ln]
+        needle = "codex" + " exec"     # 아래 주석 참조 — 리터럴로 적으면 자기매칭이다
+        offenders = [ln.strip() for ln in self.body.splitlines() if needle in ln]
         self.assertEqual(offenders, [],
-                         f"산문/인라인 codex exec 지시가 남아 있다: {offenders[:3]}")
+                         f"산문/인라인 호출 지시가 남아 있다: {offenders[:3]}")
+        # 이 파일 자신이 `codex`+`exec`를 **공백으로 이어 붙인** 형태로 적으면,
+        # quality-gates/tests/test_codex_runner_no_effort_pin.sh의 리포 전역 스캔이
+        # 그것을 "샌드박스 없는 invocation"으로 잡는다 (실측: 2026-08-09). 그 스캔의
+        # INVOKE는 `(^|공백)codex\s+exec\s`라 백틱/따옴표 뒤 형태는 통과시키지만
+        # 산문 속 공백-인접 형태는 실제 호출과 구별할 수 없다 — 스캐너가 옳다.
+        # 스캐너를 느슨하게 하는 대신 여기서 문자열을 쪼갠다.
 
 
 if __name__ == "__main__":
