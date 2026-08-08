@@ -400,10 +400,18 @@ case_exit_code_remaining_paths() {
   else [[ $? -eq 4 ]] || { echo "    비-UTF-8 stdin 이 4 가 아님"; ok=0; }; fi
   # 형제 두 read 경로의 음의 짝 — `UnicodeDecodeError ⊄ OSError` 핸들러를 지우면
   # 트레이스백이 exit 1 을 내고, 1 은 이 스크립트의 어휘에서 "구조 위반" 이다(오진).
-  printf '\xff\xfe not utf-8\n' > "$TMP/agg_bad.yaml"
+  # ★ 나쁜 바이트를 **그 밖의 모든 것이 정상인 필드 안에** 넣는다. 앞 버전은 파일 전체를
+  #   `\xff\xfe not utf-8` 로 채웠는데, 그러면 핸들러를 지우고 `errors="replace"` 로 바꿔도
+  #   두 픽스처가 **다른 이유로** 4 를 냈다 — 대체문자 텍스트에는 `attribution_status` 줄이
+  #   0개이고(→4) 필드가 3개가 아니다(→4). 즉 하류 검사가 시험 대상을 가려 **스위트가
+  #   25/25 GREEN 을 유지한 채** 디코드 실패 자체를 삭제할 수 있었다(실측). 내가 4필드
+  #   픽스처에서 방금 고친 masking 과 같은 모양이 옆줄에서 재발한 것이다.
+  #   지금 형태는 관대한 디코딩에서 행이 **살아남아** 축을 격리한다: 핸들러 있으면 둘 다 4,
+  #   핸들러 우회하면 배정=1(집행 발화)·집계=0 이라 이 assert 가 RED 가 된다.
+  printf 'attribution_status: closed\n#\xff\n' > "$TMP/agg_bad.yaml"
   [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/agg_bad.yaml" --assign-rows "$TMP/as.tsv" "$TMP/l.md")" == 4 ]] \
     || { echo "    비-UTF-8 집계가 4 가 아님 (핸들러 회귀)"; ok=0; }
-  printf '\xff\xfe not utf-8\n' > "$TMP/as_bad.tsv"
+  printf 'spec/\xff\tunclaimed\tfile\n' > "$TMP/as_bad.tsv"
   [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as_bad.tsv" "$TMP/l.md")" == 4 ]] \
     || { echo "    비-UTF-8 배정이 4 가 아님 (핸들러 회귀)"; ok=0; }
   [[ $ok -eq 1 ]] && pass "잔여 반환 지점 3개 + 세 read 경로 음의 짝 전부 정확한 코드" \
@@ -414,17 +422,33 @@ case_exit_code_remaining_paths() {
 # §11 ⑭ 경계 핀 (iter-8 `/qg` 리뷰 Q5): **행 0개는 오류가 아니다.**
 # 이 케이스가 없으면 "0행 거부" 수정이 스위트를 통과하며 ⑭ 를 조용히 닫는다 —
 # 정당한 빈 스코프에서 PASS 가 구조적으로 불가능해진다. 양의 방향으로 못 박는다.
+#
+# ★ **바이트 모양이 아니라 생산자 출력으로 못 박는다.** 앞 버전은 `: > file`(빈 파일)과
+#   공백만 있는 파일이라는 *바이트 모양* 두 개를 고정했다. 그러면 §11 ㉛ 이 문서화한 종결
+#   모양(생산자가 행수 포함 완료 선언을 마지막 줄로 낸다)을 **랜딩할 수 없다** — 빈 파일에는
+#   terminator 를 붙일 수 없으므로 이 케이스가 구조적으로 RED 가 되고, 그때 가장 싸 보이는
+#   수리는 케이스 삭제이며 그것이 ⑭ 를 다시 연다. 실물 생산자에서 뽑으면 assert 는 생산자에
+#   결합되고 기대값(`0`)은 독립 리터럴로 남아, ㉛ 이후에도 같은 mutant 가 그대로 죽는다.
 case_zero_rows_is_not_an_error() {
   setup
-  local ok=1
+  local ok=1 sel="$PLUGIN_ROOT/scripts/run-test-selection.sh"
+  mkdir -p "$TMP/wt/tests" "$TMP/other/tests"
   write_ledger "$TMP/l.md"; write_aggregate "$TMP/a.yaml" closed
-  : > "$TMP/as0.tsv"
+  # 전제 가드 — **같은 호출 모양**이 비지 않은 입력에서는 행을 낸다. 이것이 없으면 아래
+  # 두 팔은 "죽어서 아무것도 못 낸 생산자" 로도 만족된다(시체를 시험한다).
+  printf '../other/tests/evil.sh\n' | bash "$sel" assign "$TMP/wt" > "$TMP/one.tsv" 2>/dev/null
+  [[ -s "$TMP/one.tsv" ]] \
+    || { echo "    같은 호출 모양이 비지 않은 입력에도 행 0개 (픽스처 전제 붕괴)"; ok=0; }
+  # 팔 A — 빈 후보 목록을 실물 생산자에 통과시킨 출력
+  : | bash "$sel" assign "$TMP/wt" > "$TMP/as0.tsv" 2>/dev/null
   [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as0.tsv" "$TMP/l.md")" == 0 ]] \
     || { echo "    0행 배정이 red — §11 ⑭(빈 스코프)를 이 인자가 닫아 버렸다"; ok=0; }
-  printf '\n\n   \n' > "$TMP/asblank.tsv"
+  # 팔 B — 같은 출력 + 앞뒤 빈 줄. `check_qa_ledger.py` 의 빈 줄 skip 을 잰다.
+  #        (T97 은 *후행* 개행만 덮는다 — `"a\tb\tc\n".split("\n")` 의 마지막 `""`.)
+  { printf '\n'; cat "$TMP/as0.tsv"; printf '\n   \n'; } > "$TMP/asblank.tsv"
   [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/asblank.tsv" "$TMP/l.md")" == 0 ]] \
-    || { echo "    공백만 있는 배정이 red"; ok=0; }
-  [[ $ok -eq 1 ]] && pass "행 0개·공백만 → exit 0 (§11 ⑭ 는 이 인자의 축이 아니다)" \
+    || { echo "    빈 줄이 섞인 배정이 red (빈 줄 skip 회귀)"; ok=0; }
+  [[ $ok -eq 1 ]] && pass "실물 생산자의 0행 출력·빈 줄 혼입 → exit 0 (§11 ⑭ 는 이 인자의 축이 아니다)" \
                   || fail "빈 스코프 축이 침범됨"
   cleanup
 }
@@ -445,6 +469,10 @@ case_producer_consumer_contract() {
   # 원장은 verification=closed → 집행이 발화해야 한다 (exit 1)
   [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/real.tsv" "$TMP/l.md")" == 1 ]] \
     || { echo "    실물 assign 출력에 집행이 발화하지 않음 (생산자-소비자 계약 드리프트)"; ok=0; }
+  # exit 1 은 "구조 위반" 전반의 코드라 *어떤* 오류인지는 못 가른다. stderr 로 축을 고정한다.
+  python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/real.tsv" "$TMP/l.md" 2>&1 \
+    | grep -q 'unclaimed' \
+    || { echo "    exit 1 이 unclaimed 집행이 아닌 다른 구조 위반에서 왔다"; ok=0; }
   # 양의 짝: 같은 실물 출력 + degraded 원장 → 통과
   grep -vF 'floor:verification' "$TMP/l.md" > "$TMP/ld.md"
   printf -- '- floor:verification — degraded — unclaimed 1건, 실행 수단 없음\n' >> "$TMP/ld.md"

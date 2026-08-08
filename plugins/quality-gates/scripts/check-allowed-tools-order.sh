@@ -30,7 +30,9 @@ EXPECTED_ORDER=(
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check_qa_ledger.py:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py:*)'
-  # 이 목록의 유일한 비-플러그인 명령 — R-init 의 중간 파일 디렉토리 (AC69).
+  # 비-플러그인 명령 중 **항목을 가진 유일한 것** — R-init 의 중간 파일 디렉토리 (AC69).
+  # SKILL 의 fenced 블록은 `pwd`·`printf`·`cd`·`mv` 도 실행하며 그것들은 항목이 없다.
+  # 맨 셸 유틸리티가 항목을 필요로 하는지는 미측정이다 (§11 등재).
   'Bash(mktemp:*)'
   # Group 4 — Meta
   'Agent'

@@ -845,29 +845,53 @@ if [[ "$rinit_s" -le 0 || "$r1a_s" -le 0 || "$r1b_s" -le 0 || "$r2_s" -le 0 \
   fail=$((fail + 1))
 else
   uc_ok=1
-  # ① R1b 의 `assign` 호출은 **∀ · fenced**: 코드 블록 안의 모든 assign 호출이 자기
-  #    파이프라인 안에서 **원자적 쓰기 3종**을 갖는다 — `.part` 로 리다이렉트 · 성공 시에만
-  #    최종 경로로 `mv` · `pipefail`. 최종 경로로 직접 리다이렉트하면 셸이 **명령 실행 전에**
-  #    대상을 절단하므로, 죽은 생산자의 0바이트 파일이 "unclaimed 0건" 과 구분되지 않는다
-  #    (실측: 그 입력에 게이트가 exit 0). 그래서 락이 재는 것은 "파일로 간다" 가 아니라
+  # ① R1b 의 `assign` 호출은 **∀ · fenced · 주석 제거**: 코드 블록 안의 모든 assign 호출이
+  #    자기 파이프라인 안에서 **원자적 쓰기 3종**을 갖는다 — `.part` 로 리다이렉트 ·
+  #    **`&&` 로 연결된** `mv` · 자기 줄 하나로 선 `pipefail`. 최종 경로로 직접
+  #    리다이렉트하면 셸이 **명령 실행 전에** 대상을 절단하므로, 죽은 생산자의 0바이트
+  #    파일이 "unclaimed 0건" 과 구분되지 않는다 (실측: 그 입력에 게이트가 exit 0).
+  #    그래서 락이 재는 것은 "파일로 간다" 가 아니라
   #    **"실패한 실행이 최종 경로에 파일을 남기지 않는다"** 이다.
+  #
+  #    **iteration 2 에서 이 assert 가 셋 다 뚫렸다 (전부 실측 생존):**
+  #    · fence 는 경계를 닫은 게 아니라 **옮겼다** — 산문 대신 **셸 주석**이 리터럴을
+  #      실어 나른다. 리다이렉트를 최종 경로로 되돌리고 `&& true   # 앞 버전: …` 로
+  #      옛 리터럴을 주석에 남기면 GREEN. 그래서 누적 전에 주석을 잘라낸다.
+  #    · `mv` 의 **존재**만 재고 **조건**을 재지 않았다. `&&` → `;` 로 바꾸면 죽은
+  #      생산자의 0바이트 `.part` 가 최종 경로로 승격되고 `assign_rc` 는 `mv` 의 0 이
+  #      되어 라우팅 표의 두 팔(non-zero · 파일 부재)이 **둘 다** 깨끗하게 읽힌다.
+  #      `.part`+`mv` 는 `&&` 없이는 `.part` 가 아예 없느니만 못하다.
+  #    · `pipefail` 이 substring 이라 주석 처리해도 통과했다. 이제 줄 전체로 앵커한다.
   awk -v s="$r1b_s" -v e="$r2_s" '
     NR>s && NR<e {
       if ($0 ~ /^```/) { fence = !fence; next }
       if (!fence) next
-      if (index($0,"set -o pipefail")) pf=1
-      if (!inblk && index($0,"run-test-selection.sh\" assign")) { inblk=1; blk=$0 }
-      else if (inblk) { blk = blk "\n" $0 }
-      if (inblk && $0 !~ /\\$/) {
+      line = $0; sub(/[[:space:]]*#.*$/, "", line)
+      if (line ~ /^[[:space:]]*set -o pipefail[[:space:]]*$/) pf=1
+      if (!inblk && index(line,"run-test-selection.sh\" assign")) { inblk=1; blk=line }
+      else if (inblk) { blk = blk "\n" line }
+      if (inblk && line !~ /\\$/) {
         inblk=0; n++
         if (!index(blk,"> \"$assign_rows_file.part\"")) bad++
-        else if (!index(blk,"mv -f \"$assign_rows_file.part\" \"$assign_rows_file\"")) bad++
+        else if (!index(blk,"&& mv -f \"$assign_rows_file.part\" \"$assign_rows_file\"")) bad++
       }
     }
     END { exit !(n > 0 && bad == 0 && pf) }' "$SKILL_MD" \
     || { echo "    R1b 의 assign 호출이 원자적 쓰기(.part → mv, pipefail)를 갖지 않음(또는 코드가 아닌 산문)"; uc_ok=0; }
-  # ② R8 의 게이트 호출 **블록 전체**가 두 대조 인자를 **각각 정확히 1회** 넘긴다.
-  #    fenced 안만 본다 — 산문의 경로 언급이 블록 시작으로 세어지면 위양성이 된다.
+  # ② R8 의 게이트 호출 **블록 전체**가 두 대조 인자를 **각각 정확히 1회** 넘기고,
+  #    그 종료코드를 **삼키지 않는다**. fenced 안만 본다 — 산문의 경로 언급이 블록
+  #    시작으로 세어지면 위양성이 된다.
+  #    ★ **맨-플래그 카운트(`--assign-rows ` 자체를 1회로)가 이 assert 의 이빨이다.**
+  #      iteration 2 실측에서 ① 은 주석 공격에 뚫렸고 ② 는 살아남았는데, 차이는 정확히
+  #      이 세 번째 검사였다 — 주석이 실어 나른 플래그가 개수를 2로 만들어 죽는다.
+  #      같은 커밋에서 한쪽에만 넣은 idiom 이었다. ① 에도 주석 제거로 대응했다.
+  #    ★ **`|` 0건**은 *집행자의 답을 버리는* 축이다(LT6/N1 실측: `|| true` 를 붙여도
+  #      GREEN 이었다). 게이트를 옳은 입력에 배선해 놓고 종료코드를 버리면 §11 ㉓ 이 한
+  #      스텝 하류에서 재현된다. `|| true`·`|| :` 를 **열거하지 않고** `|` 자체를 금지하는
+  #      이유: 삼키는 idiom 은 열거가 안 되지만 파이프·OR-리스트는 `|` 없이 못 쓴다.
+  #      알려진 위양성 하나를 **의도적으로 받는다** — `check_qa_ledger.py` 는 positional
+  #      생략 시 stdin 을 읽으므로 언젠가 `cat … | check_qa_ledger.py …` 로 바꾸면 RED 다.
+  #      그건 fail-closed seam 의 올바른 동작이다(조용한 변경 대신 의도적 락 편집 강제).
   awk -v s="$r8_s" -v e="$r9_s" '
     function count(hay, needle,   c, i, n2) {
       c = 0; n2 = length(needle)
@@ -877,17 +901,35 @@ else
     NR>s && NR<e {
       if ($0 ~ /^```/) { fence = !fence; next }
       if (!fence) next
-      if (!inblk && index($0,"scripts/check_qa_ledger.py")) { inblk=1; blk=$0 }
-      else if (inblk) { blk = blk "\n" $0 }
-      if (inblk && $0 !~ /\\$/) {
+      line = $0; sub(/[[:space:]]*#.*$/, "", line)
+      if (!inblk && index(line,"scripts/check_qa_ledger.py")) { inblk=1; blk=line }
+      else if (inblk) { blk = blk "\n" line }
+      if (inblk && line !~ /\\$/) {
         inblk=0; n++
         if (count(blk,"--aggregate \"$aggregate_yaml\"") != 1) bad++
         else if (count(blk,"--assign-rows \"$assign_rows_file\"") != 1) bad++
         else if (count(blk,"--aggregate ") != 1 || count(blk,"--assign-rows ") != 1) bad++
+        else if (index(blk,"|") != 0) bad++
       }
     }
     END { exit !(n > 0 && bad == 0) }' "$SKILL_MD" \
-    || { echo "    R8 의 check_qa_ledger 호출 블록이 두 대조 인자를 각각 정확히 1회 넘기지 않음"; uc_ok=0; }
+    || { echo "    R8 의 check_qa_ledger 호출 블록이 두 대조 인자를 각각 정확히 1회 넘기지 않거나, 종료코드를 삼킨다"; uc_ok=0; }
+  # ③ 게이트의 **라우팅 문장**이 존재하고 극성이 뒤집히지 않았다 (양 + 음, LT6/N5 실측).
+  #    ②(`|` 0건)는 코드가 종료코드를 *삼키는* 형태만 본다. 그 문장을 지우고 "결과를
+  #    참고한다" 로 바꾸면 코드는 그대로인 채 집행이 권고가 된다 — 그것도 GREEN 이었다.
+  #    **이 락의 사정거리를 정직하게 적는다: 문장의 *존재와 극성*을 지키지 *준수*를 재지
+  #    않는다.** 준수는 어떤 정적 검사로도 못 잰다. 그렇다고 0을 택하면 삭제·반전이라는
+  #    잴 수 있는 축까지 버리는 것이고, 이 브랜치는 "내 mutation 이 삭제 축만 흔들었다"로
+  #    이미 한 번 물렸다. 형제 락(R5b 라우팅·재시도 방향)이 같은 양+음 모양을 쓴다.
+  #    앵커는 **같은 줄 공기(co-occurrence)** 다 — `PASS 로 올리지 않는다` 단독은 이 창에서
+  #    body-unique 가 아니라(`unclaimed` 인용 블록에도 있다) 문장을 지워도 GREEN 이 된다.
+  awk -v s="$r8_s" -v e="$r9_s" '
+    NR>s && NR<e {
+      if (index($0,"non-zero 면") && index($0,"PASS 로 올리지 않는다")) pos=1
+      if ($0 ~ /참고한다|권고|advisory/) neg++
+    }
+    END { exit !(pos && neg == 0) }' "$SKILL_MD" \
+    || { echo "    R8 게이트의 'non-zero → PASS 불가' 라우팅 문장이 없거나 권고로 약화됨"; uc_ok=0; }
   if [[ $uc_ok -eq 1 ]]; then
     echo "PASS: R1b 가 남기고 R8 이 --assign-rows 로 집행에 넘김 (∀ · fenced · 정확히 1회)"
   else
@@ -918,56 +960,144 @@ if [[ "$rinit_s" -le 0 || "$r1a_s" -le 0 || "$rt_end" -le 0 ]]; then
   fail=$((fail + 1))
 else
   loc_ok=1
-  # ① R-init 창의 `qg_run_tmp=` 대입은 **정확히 1개**이고 RHS 가 `$(mktemp -d)` 다.
+  # ① **Runtime 절 전체**의 `qg_run_tmp=` 대입은 **정확히 1개**이고 RHS 가 `$(mktemp -d)` 다.
   #    개수를 세는 것이 재대입 축을 닫는다 (∃ 는 앞의 맞는 것으로 만족한다).
+  #    창을 R-init..R1a 로 좁혔던 앞 버전은 **R1a 이후의 재-루팅을 못 봤다**(실측 생존:
+  #    Step R4 의 코드 블록에 `qg_run_tmp="$project_dir/.qg"` 를 넣으면 네 sub-assert 가
+  #    전부 GREEN — ③b 는 여섯 이름이 여전히 `$qg_run_tmp/` 파생이라 통과하고, 그 뿌리가
+  #    이제 봉인 트리 안이다). ③b 를 절 전체로 넓히면서 ① 을 안 넓힌 **비대칭 자체가
+  #    구멍**이었다. 런타임 가드는 도움이 안 된다 — 그것은 R-init 에서 원래 mktemp
+  #    디렉토리를 상대로 이미 돌았다.
+  #    ★ **극성이 둘이라 assert 도 둘이다.** ① 은 요구(뿌리가 `$(mktemp -d)` 로 *코드에*
+  #      존재)와 금지(두 번째 대입이 *어디에도* 없음)의 결합이다. 한 덩어리로 두면 둘 중
+  #      하나가 반드시 틀린 창을 쓴다 — 요구를 산문까지 세면 문서가 뿌리를 *말하기만* 해도
+  #      통과하고(④ 가 뚫렸던 클래스), 금지를 코드로 좁히면 산문 재대입이 빠져나간다.
+  # ①-req R-init 창의 **fenced 코드**에 RHS 가 `$(mktemp -d)` 인 대입이 ≥1건.
   awk -v s="$rinit_s" -v e="$r1a_s" '
-    NR>s && NR<e && $0 ~ /^[[:space:]]*qg_run_tmp=/ {
-      n++
-      if ($0 !~ /^[[:space:]]*qg_run_tmp=\$\(mktemp -d\)/) bad++
+    NR>s && NR<e {
+      if ($0 ~ /^```/) { fence = !fence; next }
+      if (!fence) next
+      if ($0 ~ /^[[:space:]]*qg_run_tmp=\$\(mktemp -d\)/) ok=1
     }
-    END { exit !(n == 1 && bad == 0) }' "$SKILL_MD" \
-    || { echo "    R-init 의 qg_run_tmp 대입이 정확히 1개의 \$(mktemp -d) 가 아님(재대입/재-루팅)"; loc_ok=0; }
+    END { exit !ok }' "$SKILL_MD" \
+    || { echo "    R-init 의 fenced 코드에 qg_run_tmp=\$(mktemp -d) 가 없음(산문만으로는 뿌리가 서지 않는다)"; loc_ok=0; }
+  # ①-proh Runtime 절 전체(**산문 포함**)에 `qg_run_tmp=` 대입은 통틀어 1건.
+  #        줄머리 앵커라 `:679` 같은 backtick 인용은 세지 않는다 — 그리고 정말로 대입
+  #        지시처럼 읽히는 산문 줄이라면 RED 가 맞다(소비자가 산문도 실행하는 모델이다).
+  awk -v s="$rinit_s" -v e="$rt_end" '
+    NR>s && NR<e && $0 ~ /^[[:space:]]*qg_run_tmp=/ { n++ }
+    END { exit !(n == 1) }' "$SKILL_MD" \
+    || { echo "    Runtime 절의 qg_run_tmp 대입이 정확히 1건이 아님(R1a 뒤 재-루팅 포함)"; loc_ok=0; }
   # ② Runtime 절 전체에 `TMPDIR=` 대입이 **0건**. `qg_run_tmp=` 를 키로 하는 어떤 규칙도
   #    이 축을 볼 수 없다 — mktemp 는 TMPDIR 을 존중하므로 이것이 실제 위치를 정한다.
   awk -v s="$rinit_s" -v e="$rt_end" '
     NR>s && NR<e && $0 ~ /(^|[[:space:];])TMPDIR=/ { bad=1 }
     END { exit bad }' "$SKILL_MD" \
     || { echo "    Runtime 절에 TMPDIR= 대입이 있음 — mktemp 의 실제 위치를 트리 안으로 옮길 수 있다"; loc_ok=0; }
-  # ③a **도출된 ∀** — R-init 의 fenced 블록 안 *모든* 대입이 `"$qg_run_tmp/` 파생이다
-  #     (뿌리 자신은 예외). 이름을 열거하면 **일곱 번째 파일**을 트리 안에 추가해도 안
-  #     보인다(실측 생존) — 열거는 시간에 fail-open 이라는 이 리포 자신의 교리가, 그
-  #     교리를 지키려는 락 안에서 재현된 것이다. 대상 집합을 문서에서 뽑는다.
+  # ③a **값 기반 금지** — Runtime 절 전체에서(산문 포함) 중간 파일의 뿌리를 `$qg_run_tmp`
+  #     **밖**으로 잡는 대입을 금지한다.
+  #
+  #     앞 버전은 "R-init 의 fenced 대입은 전부 `$qg_run_tmp/` 파생" 이라는 **도출된 ∀**
+  #     였다. 그것이 이름 열거를 대체했지만 **문법 열거로 재현**했을 뿐이었다 — 대입을
+  #     `^[[:space:]]*[a-z_][a-z0-9_]*=` 하나로만 인식해서 `export …` · 대문자 이름 ·
+  #     줄 중간 대입 · **창 밖(뒤 스텝) 정의**가 전부 빠져나갔다(4종 실측 생존).
+  #     정규식을 넓히는 것은 **세 번째 열거**가 된다: 셸 대입 문법은 무한해서(`declare`·
+  #     `local`·`read -r`·배열·`printf -v`·간접 확장) 내가 쓰는 어떤 목록도 시간에
+  #     fail-open 이고, 실제보다 강해 보이기만 한다. 그래서 **질문을 문법에서 값으로
+  #     바꾼다** — 어떤 문법으로 쓰든 뿌리가 트리 안이면 걸린다.
+  #
+  #     이것이 닫는 것: 일곱 번째 파일을 `$project_dir`/`$evidence_dir`/`$sandbox_dir`/
+  #     `$PWD` 아래에 잡는 모든 형태(`export`·대문자·줄 중간·뒤 스텝) + 두 번째 `mktemp`
+  #     뿌리. 닫지 못하는 것: **새 변수를 경유한 한 단계 간접** — 그것은 ④ 의 런타임
+  #     가드만 볼 수 있고, 그래서 ④ 가 ③a 보다 중요하다.
+  #
+  #     술어를 **주체(대입 이름·문법)에서 목적지(경로 뿌리)로 뒤집는다**: fenced 줄이
+  #     `=` 를 담고 동시에 트리 안 뿌리를 담으면 걸린다. 대입 이름에도 문법에도 앵커하지
+  #     않으므로 `export`·대문자·줄 중간·뒤 스텝 네 mutant 가 **한 술어로** 죽는다.
+  #
+  #     **fenced 를 유지해야 한다** — 산문 :680 이 금지 대상을 *예시로 인용*하고(`한 단계
+  #     간접`의 설명) 산문 :1155 가 `evidence_dir` 파생을 적법하게 적는다. 둘 다 코드가
+  #     아니다. (실측 census: 이 창의 fenced 줄 중 `"$project_dir/` 계열을 담은 것은
+  #     `:1526` 하나이고 `=` 가 없어 술어에 안 걸린다 — pristine GREEN.)
+  #
+  #     **닫히지 않는 것을 성과로 팔지 않는다**: `printf -v name "%s/.qg" "$project_dir"`
+  #     나 `read -r name <<< …` 는 `=` 없이 같은 일을 한다. 이 술어는 무한 열거(대입 문법)
+  #     를 훨씬 작고 부자연스러운 열거(`=` 없는 경로 구성 idiom)로 바꿀 뿐이고,
+  #     **한 단계 간접은 여전히 ④ 의 런타임 가드만 본다.**
+  awk -v s="$rinit_s" -v e="$rt_end" '
+    NR>s && NR<e {
+      if ($0 ~ /^```/) { fence = !fence; next }
+      if (!fence) next
+      if ($0 !~ /=/) next
+      if ($0 ~ /"\$project_dir\// || $0 ~ /"\$evidence_dir\// \
+          || $0 ~ /"\$sandbox_dir\// || $0 ~ /"\$PWD\//) bad=1
+    }
+    END { exit bad }' "$SKILL_MD" \
+    || { echo "    Runtime 절 코드에 중간 파일 뿌리를 트리 안(\$project_dir·\$evidence_dir·\$sandbox_dir·\$PWD)으로 잡는 줄이 있음"; loc_ok=0; }
+  # ③b **파일 이름 ∀** — 여섯 역할 *파일 이름*의 **모든** 출현이 `$qg_run_tmp/` 바로
+  #    뒤에 온다. 창은 Runtime 절 전체.
+  #
+  #    **왜 변수 대입이 아니라 파일 이름인가.** 앞 버전은 `<이름>=` 대입을 셌고, 그래서
+  #    *메커니즘*에 묶여 있었다 — 경로를 변수에 바인딩하는 판본만 잴 수 있고, 사용 지점에
+  #    인라인하는 판본은 대입 0건이라 `c > 0` 에서 **락이 올바른 수정을 막는다**. 그 함정은
+  #    이 파일이 이미 한 번 밟았다(창을 좁혀 4줄 RED). 파일 이름에 대한 ∀ 는 바인딩이든
+  #    인라인이든 산문이든 동일하게 성립하므로 메커니즘 변경에 중립이다.
+  #
+  #    **그리고 이것이 러너 판별 축을 처음으로 잰다.** 앞 버전은 접두사만 봐서
+  #    `expected_units_file="$qg_run_tmp/expected.txt"` — 즉 `-$runner` 판별자를 떨어뜨려
+  #    **어댑터별 4종이 한 이름으로 붕괴하는** 원래 결함(CHANGELOG "4종이 한 이름으로
+  #    붕괴했다")을 그대로 통과시켰다. 스위트 전체에 이 축의 락이 0건이었다.
+  #
+  #    극성: 금지 절반(`c == g`, 모든 출현이 파생)은 **산문까지** 덮고, 요구 절반
+  #    (`f > 0`, 적어도 한 번은 코드)은 **fenced 안만** 본다. 요구까지 산문을 세면
+  #    문서가 파일을 *말하기만* 해도 통과한다 — ④ 가 뚫렸던 바로 그 클래스다.
+  #
+  #    맨 접두사(`expected-`·`baseline-`·`head-`·`assign-rows`)는 쓰지 않는다:
+  #    `--expected-adapters` · `baseline-cache` · `--head-mode` · `--assign-rows` 플래그와
+  #    충돌해 위양성이 된다(실측). 전체 파일 이름으로 앵커한다.
+  for tok in 'assign-rows.tsv' 'aggregate.yaml' 'expected-$runner.txt' \
+             'baseline-$runner.tsv' 'head-$runner.tsv' 'per-adapter-$runner.yaml'; do
+    awk -v s="$rinit_s" -v e="$rt_end" -v t="$tok" '
+      function count(hay, needle,   c2, i, n2) {
+        c2 = 0; n2 = length(needle)
+        while ((i = index(hay, needle)) > 0) { c2++; hay = substr(hay, i + n2) }
+        return c2
+      }
+      NR>s && NR<e {
+        if ($0 ~ /^```/) { fence = !fence; next }
+        c += count($0, t)
+        g += count($0, "$qg_run_tmp/" t)
+        if (fence) f += count($0, "$qg_run_tmp/" t)
+      }
+      END { exit !(c > 0 && c == g && f > 0) }' "$SKILL_MD" \
+      || { echo "    파일 이름 '$tok' 의 출현 중 \$qg_run_tmp/ 파생이 아닌 것이 있음(또는 코드 출현 0건)"; loc_ok=0; }
+  done
+  # ④ 런타임 containment 가드 — 텍스트가 못 보는 간접·TMPDIR 축의 유일한 집행자.
+  #    `$evidence_dir ⊂ $project_dir` 이므로 `$project_dir` 담김 하나로 둘 다 잡힌다.
+  #    **fenced + 주석 제거.** ④ 는 "가드가 코드로 존재한다"는 *요구*이므로 창이
+  #    코드여야 한다 — 앞 버전은 unfenced `index()` 세 개였고, `case … esac` 를 통째로
+  #    지운 뒤 산문 한 줄("양쪽에 `pwd -P` 를 쓰는 것은 symlink 우회를 막기 위해서다")만
+  #    남겨도 GREEN 이었다(실측). **이 커밋이 산문-vs-코드 클래스의 답으로 추가한 assert
+  #    자신이 그 클래스의 가장 순수한 사례였다.** 극성 규칙: 요구는 코드 안에 있어야
+  #    하고(fence), 금지는 산문까지 덮어야 한다(no fence) — sub-assert 마다 따로 판단한다.
+  #    ★ **해소(resolve)와 대조(compare)를 따로 잰다.** `head`·`pat` 만 재면 두 `pwd -P`
+  #      해소 줄은 남기고 `case … esac` **대조만** 지운 mutant 가 통과한다(실측 생존) —
+  #      그러면 경로를 정규화해 놓고 아무것도 비교하지 않는 가드가 남는다. `cmp` 가 그
+  #      축이다: fenced 코드에 `project_dir` 과 glob 접미(`/*`)가 같은 줄에 있어야 한다
+  #      (`case` 든 `[[ == ]]` 든 담김 비교는 이 모양을 피할 수 없다).
+  #    ★ 정직한 한계: `PASS 불가` 는 이 창의 fenced 코드에 이미 여러 번 나오므로(mktemp
+  #      실패 메시지 등) **이빨이 없다**. 실제 집행은 `head`·`pat`·`cmp` 세 probe 가 한다.
   awk -v s="$rinit_s" -v e="$r1a_s" '
     NR>s && NR<e {
       if ($0 ~ /^```/) { fence = !fence; next }
       if (!fence) next
-      if ($0 !~ /^[[:space:]]*[a-z_][a-z0-9_]*=/) next
-      if ($0 ~ /^[[:space:]]*qg_run_tmp=/) next
-      c++
-      if ($0 !~ /^[[:space:]]*[a-z_][a-z0-9_]*="\$qg_run_tmp\//) bad++
+      line = $0; sub(/[[:space:]]*#.*$/, "", line)
+      if (index(line,"qg_run_tmp") && index(line,"pwd -P")) head=1
+      if (index(line,"project_dir") && index(line,"pwd -P")) pat=1
+      if (index(line,"project_dir") && index(line,"/*")) cmp=1
+      if (index(line,"PASS 불가")) r=1
     }
-    END { exit !(c > 0 && bad == 0) }' "$SKILL_MD" \
-    || { echo "    R-init 의 대입 중 \$qg_run_tmp 파생이 아닌 것이 있음(열거 밖 신규 파일 포함)"; loc_ok=0; }
-  # ③b 여섯 역할 이름의 **모든** 대입(∀)이 `"$qg_run_tmp/` 로 시작하고, 각 이름 ≥1건.
-  #    창은 **Runtime 절 전체**다 — R-init..R1a 로 좁히면 어댑터별 4종을 `$runner` 가 실제로
-  #    바인딩되는 루프로 옮기는 올바른 수정을 락이 막는다(실측: 4줄 RED).
-  for v in assign_rows_file aggregate_yaml expected_units_file \
-           baseline_rows_file head_rows_file per_adapter_yaml; do
-    awk -v s="$rinit_s" -v e="$rt_end" -v n="$v" '
-      NR>s && NR<e && $0 ~ ("^[[:space:]]*" n "=") {
-        c++
-        if (index($0, n "=\"$qg_run_tmp/") == 0) bad++
-      }
-      END { exit !(c > 0 && bad == 0) }' "$SKILL_MD" \
-      || { echo "    \$$v 의 대입 중 \$qg_run_tmp 파생이 아닌 것이 있음(또는 대입 0건)"; loc_ok=0; }
-  done
-  # ④ 런타임 containment 가드 — 텍스트가 못 보는 간접·TMPDIR 축의 유일한 집행자.
-  #    `$evidence_dir ⊂ $project_dir` 이므로 `$project_dir` 담김 하나로 둘 다 잡힌다.
-  awk -v s="$rinit_s" -v e="$r1a_s" '
-    NR>s && NR<e && index($0,"qg_run_tmp") && index($0,"pwd -P") { head=1 }
-    NR>s && NR<e && index($0,"project_dir") && index($0,"pwd -P") { pat=1 }
-    NR>s && NR<e && index($0,"PASS 불가") { r=1 }
-    END { exit !(head && pat && r) }' "$SKILL_MD" \
+    END { exit !(head && pat && cmp && r) }' "$SKILL_MD" \
     || { echo "    R-init 에 \$project_dir 담김 런타임 가드(pwd -P 양쪽 + PASS 불가 라우팅)가 없음"; loc_ok=0; }
   if [[ $loc_ok -eq 1 ]]; then
     echo "PASS: 뿌리 1개·TMPDIR 0건·여섯 이름 ∀·런타임 담김 가드 (AC69)"

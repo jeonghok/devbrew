@@ -30,10 +30,17 @@ allowed-tools:
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check_qa_ledger.py:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py:*)
-  # 이 목록의 **유일한 비-플러그인 명령**. R-init 이 오케스트레이터 소유 중간 파일 6종의
-  # 집을 만든다 (AC69). 레포 안에 두면 `create-sandbox` 가 커밋 `B` 로 봉인하므로
+  # 비-플러그인 명령 중 **항목을 가진 유일한 것**. R-init 이 오케스트레이터 소유 중간 파일
+  # 6종의 집을 만든다 (AC69). 레포 안에 두면 `create-sandbox` 가 커밋 `B` 로 봉인하므로
   # (`ls-files --others --exclude-standard` 로 미추적·비-ignore 파일을 샌드박스로 복사한다)
   # 반드시 트리 밖이어야 하고, 그러려면 이 한 명령이 필요하다.
+  #
+  # **"목록에 없는 셸 명령이 하나도 없다"는 뜻이 아니다 (정정).** 이 SKILL 의 fenced 블록은
+  # `pwd`(Step P0, 모든 `/qg` 실행) · `printf` · `cd` · `mv` 도 실행한다. 그중 어느 것도
+  # 항목이 없고, 그런데도 `pwd` 는 여러 릴리스에 걸쳐 permission stop 없이 돌아왔다 —
+  # 즉 **fenced 블록의 맨 셸 유틸리티가 항목을 필요로 하는지 자체가 미측정**이다. 항목을
+  # 늘리지 않는 이유: 실측되지 않은 위험을 대가로 `Bash(mv:*)` 같은 넓은 grant 를 사는 것은
+  # 도구 표면 양보다. 이 열린 사실은 §11 에 등재했고, 판정은 예정된 Runtime 실측이 낸다.
   - Bash(mktemp:*)
   # Group 4 — Meta (orchestration primitives)
   - Agent
@@ -664,10 +671,16 @@ If `effective_skip_runtime` was set, skip this entire section.
 직접 확인하고, 안이면 **멈춘다**:
 
 ```bash
+[[ -n "$project_dir" ]] \
+  || { echo "[quality-gates] \$project_dir 가 비어 있습니다 — 담김을 판정할 수 없습니다. verdict 는 PASS 불가." >&2; exit 1; }
 qg_run_tmp=$(mktemp -d) \
   || { echo "[quality-gates] 중간 파일 디렉토리 생성 실패 — verdict 는 PASS 불가. 경로를 즉흥으로 정하지 말 것." >&2; exit 1; }
-case "$(cd "$qg_run_tmp" && pwd -P)/" in
-  "$(cd "$project_dir" && pwd -P)"/*)
+qg_run_tmp_p=$(cd "$qg_run_tmp" 2>/dev/null && pwd -P) \
+  || { echo "[quality-gates] 중간 파일 디렉토리 해소 실패 ($qg_run_tmp) — verdict 는 PASS 불가." >&2; exit 1; }
+project_dir_p=$(cd "$project_dir" 2>/dev/null && pwd -P) \
+  || { echo "[quality-gates] \$project_dir 해소 실패 — 담김을 판정할 수 없습니다. verdict 는 PASS 불가." >&2; exit 1; }
+case "$qg_run_tmp_p/" in
+  "$project_dir_p"/*)
     echo "[quality-gates] TMPDIR 이 검사 대상 트리 안입니다 ($qg_run_tmp) — 중간 파일이 커밋 B 로 봉인되거나 피검자에게 노출됩니다. TMPDIR 을 트리 밖으로 두고 다시 실행하십시오. verdict 는 PASS 불가." >&2
     exit 1 ;;
 esac
@@ -676,49 +689,94 @@ assign_rows_file="$qg_run_tmp/assign-rows.tsv"   # 실행당 1개 (R1b)
 aggregate_yaml="$qg_run_tmp/aggregate.yaml"      # 실행당 1개 (R6 집계)
 ```
 
-**이 가드가 AC69 의 유일한 실질 집행자다.** 텍스트 락은 `qg_run_tmp=` 줄만 볼 수 있어
-`tmproot="$project_dir/.qg"` 같은 **한 단계 간접**이나 `TMPDIR=` 대입을 원리적으로 못
-본다. `pwd -P` 를 양쪽에 쓰는 것은 symlink 로 담김을 우회하는 것을 막기 위해서다
-(`run-test-selection.sh` 의 `unit_within_worktree` 와 같은 idiom).
+**이 가드가 AC69 의 유일한 실질 집행자다.** 텍스트 락은 대입 줄만 볼 수 있어, 뿌리를 다른
+변수로 한 단계 우회하거나 `TMPDIR` 을 환경에서 넘기는 축을 원리적으로 못 본다. `pwd -P` 를
+양쪽에 쓰는 것은 symlink 로 담김을 우회하는 것을 막기 위해서다 (`run-test-selection.sh` 의
+`unit_within_worktree` 와 같은 idiom).
+
+**빈 `$project_dir` 검사가 맨 앞에 있는 것이 이 가드의 이빨이다.** 이 블록은 **새 셸에
+붙여넣는 템플릿**이고(`Bash` 도구는 호출마다 새 셸이라 변수가 살아남지 않는다), `$project_dir`
+은 살아 있는 셸 변수가 아니라 오케스트레이터가 **리터럴로 치환해야 하는 자리**다. 즉 빈 값·
+미치환은 예외가 아니라 **기본 실패 모드**다. 그리고 bash 의 `cd ""` 는 **0 을 반환하고 cwd 를
+바꾸지 않으므로**, 검사 없이 `$(cd "$project_dir" && pwd -P)` 를 쓰면 패턴이 조용히 `$PWD/*`
+가 되어 가드가 *다른 질문*("cwd 아래인가")에 답한다 — cwd 가 우연히 트리 안이면 맞고 아니면
+공허하게 통과한다. 그래서 `-n` 검사가 **먼저**여야 하고(`|| ` 분기는 `cd ""` 성공 때문에
+발화하지 않는다), 두 해소는 각각 fail-closed 여야 한다. 앞 버전은 인용한 idiom 에서 바로 그
+실패 분기(`|| return 1`)를 빠뜨린 복사본이었다.
 
 **`$evidence_dir` 은 별도 금지가 아니다** — `"$project_dir/.claude/quality-gates/<sid>/"`
 이므로 `$project_dir` 담김의 부분집합이다. 앞 버전은 이것을 독립된 두 금지로 적었다.
+**그 포함 관계가 이 가드의 전제다** — `$evidence_dir` 이 R5a³ 에서 피검자에게 넘어가는 것이
+두 번째 금지의 원래 사유였고(설계 §11 ㉕ 이 소유), 그것이 트리 밖으로 옮겨지면 여기에
+두 번째 담김 검사를 복구해야 한다.
 
-나머지 넷은 **어댑터마다 하나씩**이다. 앞 버전은 이 자리에서 `$runner` 를 전개했는데
-**R-init 시점에 `$runner` 는 바인딩되어 있지 않고** 이후 어디서도 재바인딩되지 않아
-(SKILL 전체에 `runner=` 대입 0건) 네 경로가 `expected-.txt` 하나로 붕괴했다 — 바로
-아래 문장이 막겠다고 선언한 그 상황이다. **함수로 바꿔 호출 시점에 바인딩한다:**
+나머지 넷은 **어댑터마다 하나씩**이고, **변수에 바인딩하지 않는다 — 쓰는 자리에서 경로를
+그대로 적는다.** 이름 규칙 하나로 끝난다:
 
-```bash
-qg_paths_for() {   # <runner> — R4·R5b·R6 의 어댑터 루프 머리에서 매번 부른다
-  expected_units_file="$qg_run_tmp/expected-$1.txt"
-  baseline_rows_file="$qg_run_tmp/baseline-$1.tsv"
-  head_rows_file="$qg_run_tmp/head-$1.tsv"
-  per_adapter_yaml="$qg_run_tmp/per-adapter-$1.yaml"
-}
-```
+> `$qg_run_tmp/<역할>-$runner.<확장자>` — 역할은 `expected`(.txt) · `baseline`(.tsv) ·
+> `head`(.tsv) · `per-adapter`(.yaml). `$runner` 는 **그 호출이 도는 어댑터**이며,
+> 네 파일은 전부 R4·R5b·R6 의 **어댑터 루프 안에서만** 쓰이므로 그 자리에서 값이 정해진다.
+
+**앞의 두 판본이 모두 틀렸고, 둘째는 첫째보다 나을 것이 없었다.** 처음에는 이 자리에서
+`$runner` 를 전개했는데 R-init 시점에 `$runner` 가 바인딩되어 있지 않아 네 경로가
+`expected-.txt` 하나로 붕괴했다. 그것을 셸 함수(`qg_paths_for`)로 바꿨지만 **함수는 여기서
+원리적으로 작동할 수 없다**: `Bash` 도구는 호출마다 새 셸이라 함수 정의가 다음 호출까지
+살아남지 않고, R-init 과 소비자(R4·R5b·R6) 사이에는 Agent dispatch(R5a³)와
+`AskUserQuestion`(R3)까지 끼어 있다. 게다가 그 판본은 **어디서도 호출되지 않았다** — 정의
+1건, 호출 0건. 스텝 사이로 바인딩을 들고 갈 수 있는 것은 셸 상태가 아니라 **오케스트레이터
+컨텍스트**뿐이고(바로 아래 문단), 함수는 그렇게 들고 갈 수 없는 **유일한** 형태다.
+그래서 정의 지점 자체를 없앤다 — **정의가 없으면 "정의를 부르는 것을 잊는" 실패 클래스도
+없다.** 이 세 판본은 같은 실수의 세 얼굴이다: 매번 *정의*를 고치고 *배선*을 안 고쳤다.
 
 러너 이름으로 가르는 이유: 한 이름을 재사용하면 폴리글랏 레포에서 **어댑터 A 의 행이
 어댑터 B 의 대조에 들어간다.** R4 는 마지막 어댑터의 행만 남기고, R6 의
 `--expected-adapters N` 은 서로 다른 YAML N 개 대신 **같은 파일 N 개**를 받는다.
 
-`$qg_run_tmp` 와 여섯 이름은 **오케스트레이터 변수로 붙잡아 스텝 사이로 들고 간다**
-(R5a¹ 의 `sandbox_dir`/`baseline_sha`/`snapshot_digest` 와 같은 규율). 스텝마다
-`mktemp -d` 를 다시 부르지 않는다 — 새 디렉토리는 빈 디렉토리이고, 빈 배정 파일은
-이 문서가 방금 닫은 fail-open 의 입력이다.
+`$qg_run_tmp` 와 실행-스코프 두 이름(`$assign_rows_file` · `$aggregate_yaml`)은
+**오케스트레이터 변수로 붙잡아 스텝 사이로 들고 간다** (R5a¹ 의
+`sandbox_dir`/`baseline_sha`/`snapshot_digest` 와 같은 규율). 스텝마다 `mktemp -d` 를 다시
+부르지 않는다 — 새 디렉토리는 빈 디렉토리이고, 빈 배정 파일은 이 문서가 방금 닫은
+fail-open 의 입력이다.
 
 **닫히지 않은 이웃 (과장하지 않는다).** 위치를 정하고 담김을 집행할 뿐 **custody 를
 증명하지 않는다.** 이 파일들은 `runtime-verifier` 의 쓰기 범위 안에 있다 — 그 agent 는
 무제한 `Bash` 를 같은 OS 사용자로 갖고, 파일명은 이 문서에 리터럴로 적혀 있으며,
 `mktemp -d` 의 0700 은 **같은 UID 에 대해 경계가 아니다**. 앞 버전이 여기 적었던
 *"여섯 이름 전부 당신이 소유하고 당신만 쓴다"* 는 **존재하지 않는 경계의 서술**이었다.
-노출 창은 파일마다 다르고, `$baseline_rows_file` 이 가장 나쁘다 — R4(verifier 턴 **앞**)
-가 쓰고 R6(턴 **뒤**)이 읽으며, 행을 `pass`→`fail` 로 뒤집으면 모든 `NEW_REGRESSION` 이
-`PRE_EXISTING` → `closed` → **degrade 신호 없는 PASS** 가 된다. §5.4/AC59 의 방어는
-*캐시*를 지키지 조립된 행 파일을 지키지 않는다. 이 축은 §6.7 S1(잔여 결함)이며 **열려
-있다** — 닫는 모양은 `snapshot_digest` 선례(오케스트레이터가 봉인을 쥔다)이고, **여섯
-전부에 걸거나 하나도 안 걸어야 한다**(하나만 봉인하면 나머지에 대한 공시가 안심시키는
-방향으로 거짓이 된다).
+
+**시계를 바로잡는다 — 창의 단위는 "verifier 턴"이 아니다.** 앞 버전은 노출 창을 R5a³
+verifier 턴 앞/뒤로 쟀는데, 피검자가 통제하는 코드는 그 턴 말고도 **호스트 권한으로 세 번
+더** 실행된다: R4 의 `setup_cmd`/`run`, R5b 의 `setup_cmd`/`run`, 그리고 R6 의 flaky
+재실행. 올바른 단위는 **"저장소가 통제하는 코드가 호스트 사용자로 실행되는 임의의 지점"**
+이다. 그 시계로 여섯을 전부 분류하면:
+
+| | 파일 | 기록 → 소비 사이에 피검자 코드가 도는가 |
+|---|---|---|
+| **창 있음** | `$qg_run_tmp/assign-rows.tsv` | R1b 기록 → R8 소비. 창은 **R4 에서 열린다**(verifier 턴 뒤가 아니라 앞) |
+| | `$qg_run_tmp/expected-$runner.txt` | R1b 가 고른 unit 목록 → R6 소비. **`SILENT_DROP` 백스톱의 원본**이고, 재시도 경로(R5b→R6→R7→R8, R4·R1b 재실행 안 함)에서 **두 번의 verifier 턴을 건넌다** |
+| | `$qg_run_tmp/baseline-$runner.tsv` | R4 기록 → R6 소비. **가장 나쁘다** |
+| | `$qg_run_tmp/head-$runner.tsv` | R5b 기록 → R6 소비. 그 사이 R6 의 flaky 재실행이 `$head_tree_dir` 에서 저장소 코드를 돌리고 **같은 파일에 행을 다시 쓴다** |
+| | `$qg_run_tmp/per-adapter-$runner.yaml` | R6 어댑터별 기록 → R6 말미 `--aggregate` 소비. 사이에 같은 flaky 재실행 |
+| **창 없음** | `$qg_run_tmp/aggregate.yaml` | R6 말미 기록 → R7·R8 소비. R7 은 순수 git 이다 |
+
+기준선 행 파일이 가장 나쁜 이유: 행을 `pass`→`fail` 로 뒤집으면 모든
+`NEW_REGRESSION` 이 `PRE_EXISTING` → `closed` → **degrade 신호 없는 PASS** 가 된다.
+§5.4/AC59 의 방어는 *캐시*를 지키지 조립된 행 파일을 지키지 않는다.
+
+**그리고 배정 행 파일의 집행은 *부재*에 실려 있다.** 바로 아래 R1b 의 원자적 쓰기는
+"생산자가 죽으면 최종 경로에 파일이 없다 → R8 이 exit 4" 로 신호를 만드는데, **부재는
+피검자가 지울 수 있는 성질이 아니라 채울 수 있는 성질이다** — 빈 파일을 그 경로에 심으면
+`--assign-rows` 는 잘 형성된 0행 TSV 를 읽고 `unclaimed=0`, exit 0 이 된다. 기계 백스톱만
+무력해지고 1차 라우팅(`assign_rc` 는 오케스트레이터 턴 값이라 피검자가 못 만진다)은 남으므로
+**세 조건이 겹쳐야** 성립하지만, 이 문단이 그 사실을 적지 않으면 공시가 안심시키는 방향으로
+거짓이 된다.
+
+이 축은 §6.7 S1(잔여 결함)이며 **열려 있다** — 닫는 모양은 `snapshot_digest` 선례
+(오케스트레이터가 봉인을 쥔다)이거나 §11 ㉛ 의 생산자-발행 terminator 이고, **여섯 전부에
+걸거나 하나도 안 걸어야 한다**(하나만 봉인하면 나머지에 대한 공시가 안심시키는 방향으로
+거짓이 된다). **행 수를 모델이 전사해 두 번째 인자로 넘기는 모양은 안 된다** — 오케스트레이터가
+행 수를 배울 곳이 그 파일뿐이라 대조 양쪽이 같은 의심 산출물에서 나오고, 이 라운드가 일부러
+닫은 전사 seam 을 다시 연다.
 
 디렉토리는 지우지 않는다: 실패한 실행의 중간 파일이 디버깅에 쓰이고(`CLAUDE.md` 의
 "실패 시 보존"), 위 `echo` 가 그 경로를 사용자에게 알린다. 정리는 `TMPDIR` 수명에 위임.
@@ -832,7 +890,23 @@ assign_rc=$?
 완전한 **접두 행**) 도 R8 에게는 *"`unclaimed` 0건"* 과 **바이트 단위로 구분되지
 않았다.** 형제 `--aggregate` 는 같은 입력에 `exit 4` 를 내는데 이쪽만 `exit 0` 이었다.
 이제 실패한 실행은 최종 경로에 **파일을 남기지 않고**, R8 의 `--assign-rows` 가 부재로
-`exit 4`(내용 축) 를 낸다. `pipefail` 이 없으면 `$?` 는 `mv` 만 보고 생산자 실패를 가린다.
+`exit 4`(내용 축) 를 낸다.
+
+`pipefail` 이 하는 일은 **왼쪽(`printf`)의 실패까지 파이프라인 상태로 올리는 것**이다.
+오른쪽(`assign`)의 실패는 pipefail 없이도 잡힌다 — 파이프라인의 상태는 원래 **마지막
+명령**의 상태이고 `assign` 이 마지막이라, 죽은 생산자는 `&&` 를 단락시켜 `mv` 를 아예
+실행하지 않는다. 두 축을 한 규칙으로 덮어야 `&&` 앞의 **어느 단계**가 죽어도 최종 경로에
+파일이 남지 않는다. (앞 버전은 여기 *"`pipefail` 이 없으면 `$?` 는 `mv` 만 본다"* 고 적었는데
+그것은 사실이 아니다 — 코드는 맞고 근거만 틀렸다. 근거가 틀린 채로 load-bearing 한 줄에
+붙어 있으면 다음 편집자가 그 줄을 지운다.)
+
+**형제 두 리다이렉트가 `.part`→`mv` 를 안 쓰는 것은 누락이 아니다.** R6 의
+`> "$qg_run_tmp/per-adapter-$runner.yaml"` 과 `> "$aggregate_yaml"` 은 최종 경로로 바로
+쓴다. 안전한 이유는 **소비자가 요구하는 것이 양성 토큰**이기 때문이다 — `check_qa_ledger.py`
+는 `attribution_status:` 줄이 **정확히 1개**일 것을 요구하므로 잘린 파일은 `exit 4` 가 된다.
+반면 `--assign-rows` 의 소비자에게는 **비어 있음이 적법한 답**이라 절단과 구분되지 않는다.
+그 비대칭이 이 원칙을 어디에 적용할지를 가른다 — 형제 둘을 "고치"거나, 반대로 이 원칙이
+채택되지 않았다고 결론짓지 말 것.
 
 **`assign` 실패 라우팅 (R6·R7 표와 같은 규율 — 관측 없음은 음성 결과가 아니다).**
 이 스텝은 이 SKILL 에서 **유일하게 라우팅이 없던** 결정론 호출이었다. 바로 위
@@ -988,8 +1062,15 @@ R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 �
 ② **기준선 워크트리는 캐시 적중 여부와 무관하게 항상 만든다** (전량 적중이어도):
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-baseline "$merge_base" "<session-id>"
+baseline_wt=$("${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-baseline \
+  "$merge_base" "<session-id>")
 ```
+
+**stdout 을 잡아야 한다 — 이 스텝의 나머지가 `$baseline_wt` 를 쓴다.** `create-baseline` 은
+형제 `create-head` 와 본문(`make_detached_worktree`)을 공유하고 만든 트리 경로를 stdout 으로
+낸다. 앞 버전은 그 출력을 **버리면서** 아래 `probe`·`run`·`remove` 에 `$baseline_wt` 를
+넘겼다 — 즉 어디서도 바인딩되지 않는 이름이었다(HEAD 축은 같은 자리에서 제대로 잡는다).
+이것은 R-init 이 방금 없앤 것과 **같은 클래스의 네 번째 사례**다: 정의 없이 사용하는 경로.
 
 **"미적중분이 있을 때만" 이었던 조건을 제거한 것이 이 스텝의 핵심이다.** 캐시는
 `.claude/quality-gates/` 아래 있고 세션보다 오래 살며 verifier 의 Bash 와 `run` 이
@@ -1082,8 +1163,12 @@ bulk 가 red 면 실패한 unit 에 대해서만 `per-unit` 으로 재실행한�
 ```bash
 printf '%s\n' "${rows[@]}" | "${CLAUDE_PLUGIN_ROOT}/scripts/baseline-cache.sh" put \
   ".claude/quality-gates/baseline-cache" "$merge_base" "$runner"
-"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "$baseline_wt"
+[[ -n "${baseline_wt:-}" && -d "$baseline_wt" ]] \
+  && "${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "$baseline_wt"
 ```
+
+폐기가 조건부인 이유는 HEAD 축과 같다 — `create-baseline` 이 죽으면 `$baseline_wt` 는 빈
+문자열이고, `remove ""` 는 담김 가드에 걸려 die 한다(파괴적이지는 않지만 스텝을 죽인다).
 
 `granularity ∈ {file, package}` 에서 bulk-green 이 나오면 **unit 별 `pass` 행으로
 분해해** 기록한다 — 집합 전체가 통과했으므로 각 unit 이 통과했다. `BULK` 키는
@@ -1277,12 +1362,17 @@ authoritative 라 verifier 가 만든 상태에서 난 green 이 회귀를 강�
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py" \
-  --expected "$expected_units_file" \
-  --baseline "$baseline_rows_file" --head "$head_rows_file" \
+  --expected "$qg_run_tmp/expected-$runner.txt" \
+  --baseline "$qg_run_tmp/baseline-$runner.tsv" \
+  --head "$qg_run_tmp/head-$runner.tsv" \
   --granularity "$granularity" --runner "$runner" \
   --baseline-mode "$baseline_run_mode" --head-mode "$head_run_mode" \
-  --baseline-detected "$baseline_detected" > "$per_adapter_yaml"
+  --baseline-detected "$baseline_detected" > "$qg_run_tmp/per-adapter-$runner.yaml"
 ```
+
+**네 경로를 변수가 아니라 리터럴로 적는 이유는 R-init 에 있다** — 어댑터별 파일은 정의
+지점을 갖지 않고 쓰는 자리에서 `$qg_run_tmp/<역할>-$runner.<확장자>` 로 전개한다. 여기
+`$runner` 는 이 루프가 도는 어댑터이므로 값이 이 자리에서 정해진다.
 
 `--expected` 는 R1b 가 고른 unit 목록이다 — **두 산출물의 상호 대조가 아니라 독립
 입력**이라야 두 스크립트가 같은 정규화 버그로 같은 unit 을 대칭 누락할 때 잡힌다.
