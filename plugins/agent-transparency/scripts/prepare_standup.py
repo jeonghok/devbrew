@@ -229,3 +229,141 @@ def collect(root, branch, session_id):
         "git_calls": len(cache),
     })
     return data
+
+
+def _kb(nbytes):
+    return "%.1f KB" % (nbytes / 1024.0)
+
+
+def _span(low, high):
+    if not low or not high:
+        return "(기간 없음)"
+    return "%s ~ %s" % (low, high)
+
+
+def render_inventory(root, branch, session_id, data):
+    """scope 줄 + 인벤토리 2줄 + 파일 목록 세 블록.
+
+    `scope:` 줄은 장식이 아니다 — SKILL.md 가 범위 대조에도(branch·+session)
+    가용성 센티널에도(그 줄이 없으면 답하지 않는다) 쓴다.
+    """
+    in_scope_entries = [e for e in data["entries"] if e["label"] == "in-scope"]
+    others = sorted([e for e in data["entries"] if e["label"] == "out-of-scope"],
+                    key=lambda e: (e["span_max"] or "", e["path"]), reverse=True)
+    shown, folded = others[:OUT_OF_SCOPE_LIST_CAP], others[OUT_OF_SCOPE_LIST_CAP:]
+    listed = len(in_scope_entries) + len(shown)
+
+    rejected_total = sum(data["rejected"].values())
+    breakdown = ", ".join("%s: %d" % (r, data["rejected"].get(r, 0))
+                          for r in REJECT_REASONS)
+    lines = [
+        "scope:   repo=%s  branch=%s  +session=%s" % (root, branch, session_id or "-"),
+        "files:   %d (candidates: %d  rejected: %d (%s)  listed: %d)   "
+        "blocks: %d (%s)   decisions: %d (unpaired: %d)"
+        % (data["files"], data["candidates"], rejected_total, breakdown, listed,
+           data["blocks"], _kb(data["bytes"]), data["decisions"], data["unpaired"]),
+        "span:    %s   commits: %d   scan: %.1fs   unparsed: %d"
+        % (_span(data["span_min"], data["span_max"]), data.get("commits", 0),
+           data["scan"], data["unparsed"]),
+        "",
+        # 세 라벨은 **비어 있어도** 낸다 — 데이터에 따라 계약이 갈리면 안 된다.
+        "in-scope — %d개 전량:" % len(in_scope_entries),
+    ]
+    for entry in in_scope_entries:
+        lines.append("  %s   %d건  %s"
+                     % (entry["path"], entry["in_scope"],
+                        _span(entry["span_min"], entry["span_max"])))
+    lines.append("out-of-scope — %d개 중 최근 %d개:" % (len(others), len(shown)))
+    for entry in shown:
+        lines.append("  %s   [%d건]  %s"
+                     % (entry["path"], entry["total"],
+                        _span(entry["span_min"], entry["span_max"])))
+
+    rollup = {}
+    for entry in folded:
+        directory = os.path.dirname(entry["path"])
+        bucket = rollup.setdefault(directory, {"n": 0, "low": None, "high": None})
+        bucket["n"] += 1
+        for key, value in (("low", entry["span_min"]), ("high", entry["span_max"])):
+            if value and (bucket[key] is None
+                          or (value < bucket[key] if key == "low" else value > bucket[key])):
+                bucket[key] = value
+    lines.append("out-of-scope 디렉토리 집계 — %d개 (위 %d개를 뺀 나머지 %d개):"
+                 % (len(rollup), len(shown), len(folded)))
+    for directory in sorted(rollup):
+        bucket = rollup[directory]
+        lines.append("  %s   %d개  %s"
+                     % (directory, bucket["n"],
+                        _span((bucket["low"] or "")[:10], (bucket["high"] or "")[:10])))
+    return "\n".join(lines)
+
+
+def base_ref(cwd):
+    """origin/main 우선, 없으면 main. 둘 다 실패면 None."""
+    for ref in ("origin/main", "main"):
+        rc, out = _run(["git", "merge-base", "HEAD", ref], cwd=cwd)
+        if rc == 0 and out:
+            return out
+    return None
+
+
+def render_code_state(cwd):
+    """한 재료가 죽어도 나머지는 산다. 빈 절을 조용히 두지 않는다."""
+    lines = ["## 코드 상태", ""]
+    base = base_ref(cwd)
+    if base:
+        commands = [
+            ["git", "log", "--oneline", "%s..HEAD" % base],
+            ["git", "diff", "--stat", "%s..HEAD" % base],
+        ]
+    else:
+        lines.append("(base-ref 를 구하지 못해 최근 20개 커밋으로 강등)")
+        commands = [["git", "log", "--oneline", "-20"]]
+    commands += [["git", "status", "--short"],
+                 ["git", "diff", "--stat"],
+                 ["git", "diff", "--cached", "--stat"]]
+    for command in commands:
+        rc, out = _run(command, cwd=cwd)
+        label = " ".join(command)
+        if rc != 0:
+            lines.append("(git 조회 실패: %s, %d)" % (label, rc))
+            continue
+        lines.append("$ %s" % label)
+        lines.append(out if out else "(없음)")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(add_help=False)
+    # 사용자 유래 인자는 받지 않는다 — 범위 조정은 「범위 라벨」로 에이전트가 수행한다.
+    parser.add_argument("--session-id", default=os.environ.get("CLAUDE_CODE_SESSION_ID"))
+    args = parser.parse_args(argv)
+    try:
+        cwd = os.getcwd()
+        root = repo_root(cwd)
+        if not root:
+            sys.stdout.write("STANDUP-UNAVAILABLE: not a git repository (%s)\n" % cwd)
+            return 3
+        branch = current_branch(cwd) or "(unknown)"
+        data = collect(root, branch, args.session_id)
+        if not data["entries"]:
+            sys.stdout.write(
+                "STANDUP-UNAVAILABLE: session file not found "
+                "(~/.claude/projects/%s*/*.jsonl)\n" % slug(root))
+            return 3
+        rc, out = _run(["git", "log", "--oneline",
+                        "%s..HEAD" % (base_ref(cwd) or "HEAD")], cwd=cwd)
+        data["commits"] = len([ln for ln in out.splitlines() if ln.strip()]) if rc == 0 else 0
+        sys.stdout.write(render_inventory(root, branch, args.session_id, data))
+        sys.stdout.write("\n\n")
+        sys.stdout.write(render_code_state(cwd))
+        sys.stdout.write("\n")
+        return 0
+    except Exception as exc:
+        sys.stdout.write("STANDUP-UNAVAILABLE: internal error (%s)\n" % exc)
+        return 4
+
+
+if __name__ == "__main__":
+    sys.exit(main())

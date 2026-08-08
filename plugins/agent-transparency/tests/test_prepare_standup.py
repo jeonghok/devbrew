@@ -399,5 +399,150 @@ class TestPerFileInScopeCount(unittest.TestCase):
         self.assertEqual(entry["total"], 5)
 
 
+class TestRender(unittest.TestCase):
+    """AC46 — scope 줄 + 세 블록 + listed. 라벨·수·기간이 계약대로."""
+
+    def setUp(self) -> None:
+        self.box = Sandbox()
+        os.environ["HOME"] = str(self.box.home)
+        self.module = load_script()
+        self.pdir = self.box.project_dir(self.box.main)
+        self.addCleanup(self.box.close)
+
+    def render(self, session_id=None):
+        data = self.module.collect(str(self.box.main), "work", session_id)
+        return self.module.render_inventory(str(self.box.main), "work", session_id, data)
+
+    def test_scope_line_has_three_fields(self) -> None:
+        write_jsonl(self.pdir / "s.jsonl",
+                    [assistant_text("a", gitBranch="work", cwd=str(self.box.main))])
+        first = self.render().splitlines()[0]
+        self.assertTrue(first.startswith("scope:"))
+        for field in ("repo=", "branch=", "+session="):
+            self.assertIn(field, first)
+
+    def test_three_block_labels_always_present(self) -> None:
+        """빈 블록도 라벨을 낸다 — 데이터에 따라 계약이 갈리면 안 된다."""
+        write_jsonl(self.pdir / "s.jsonl",
+                    [assistant_text("a", gitBranch="work", cwd=str(self.box.main))])
+        out = self.render()
+        self.assertIn("in-scope — ", out)
+        self.assertIn("out-of-scope — ", out)
+        self.assertIn("out-of-scope 디렉토리 집계 — ", out)
+
+    def test_in_scope_lines_carry_count_and_span(self) -> None:
+        write_jsonl(self.pdir / "mixed.jsonl", [
+            assistant_text("a", gitBranch="work", cwd=str(self.box.main),
+                           timestamp="2026-08-02T09:11:00.000Z"),
+            assistant_text("b", gitBranch="main", cwd=str(self.box.main),
+                           timestamp="2026-08-06T22:51:00.000Z"),
+        ])
+        line = [ln for ln in self.render().splitlines() if "mixed.jsonl" in ln][0]
+        self.assertIn("1건", line)              # 전체 2가 아니라 in-scope 1
+        self.assertIn("2026-08-02 09:11", line)
+
+    def test_out_of_scope_capped_at_twenty_and_listed_reflects_it(self) -> None:
+        """후보 25개 → out-of-scope 줄 20개 + listed 가 잘림을 반영."""
+        for i in range(25):
+            write_jsonl(self.pdir / ("f%02d.jsonl" % i),
+                        [assistant_text("x", gitBranch="other", cwd=str(self.box.main),
+                                        timestamp="2026-08-%02dT10:00:00.000Z" % (i + 1))])
+        out = self.render()
+        listed_lines = [ln for ln in out.splitlines() if ln.startswith("  ") and ".jsonl" in ln]
+        self.assertEqual(len(listed_lines), 20)
+        self.assertIn("listed: 20", out)
+
+    def test_directory_rollup_line_present_when_truncated(self) -> None:
+        for i in range(25):
+            write_jsonl(self.pdir / ("f%02d.jsonl" % i),
+                        [assistant_text("x", gitBranch="other", cwd=str(self.box.main))])
+        out = self.render()
+        rollup = out.split("out-of-scope 디렉토리 집계")[1]
+        self.assertIn("5개", rollup)            # 25 - 20 = 5
+
+    def test_rejected_breakdown_is_always_rendered(self) -> None:
+        write_jsonl(self.pdir / "s.jsonl",
+                    [assistant_text("a", gitBranch="work", cwd=str(self.box.main))])
+        out = self.render()
+        for reason in ("other-repo:", "cwd-gone:", "cwd-missing:"):
+            self.assertIn(reason, out)
+
+    def test_no_conversation_body_in_output(self) -> None:
+        """출력에 없는 것 — 대화 본문 일체."""
+        write_jsonl(self.pdir / "s.jsonl", [
+            assistant_text("비밀문장-DO-NOT-LEAK", gitBranch="work",
+                           cwd=str(self.box.main)),
+        ])
+        self.assertNotIn("비밀문장-DO-NOT-LEAK", self.render())
+
+    def test_scan_format_only(self) -> None:
+        """scan 은 정확값이 아니라 형식만 검증 대상이다 — 음수 아닌 수 + `s`."""
+        write_jsonl(self.pdir / "s.jsonl",
+                    [assistant_text("a", gitBranch="work", cwd=str(self.box.main))])
+        value = self.render().split("scan:")[1].split()[0]
+        self.assertTrue(value.endswith("s"), value)
+        self.assertGreaterEqual(float(value[:-1]), 0.0)
+
+
+class TestCodeState(unittest.TestCase):
+    """AC20 — 코드 상태는 트랜스크립트가 아니라 git 에서 온다(양방향)."""
+
+    def setUp(self) -> None:
+        self.box = Sandbox()
+        self.module = load_script()
+        self.addCleanup(self.box.close)
+
+    def test_positive_git_present(self) -> None:
+        """D8 양의 짝 — git 이 있으면 실제 log/diff 결과가 들어간다."""
+        (self.box.main / "new.txt").write_text("x\n", encoding="utf-8")
+        git("add", "-A", cwd=self.box.main)
+        git("commit", "-qm", "add new.txt", cwd=self.box.main)
+        block = self.module.render_code_state(str(self.box.main))
+        self.assertIn("## 코드 상태", block)
+        self.assertIn("add new.txt", block)
+        self.assertNotIn("git 조회 실패", block)
+
+    def test_negative_git_absent(self) -> None:
+        """git 없는 픽스처 — 그 자리에 한 줄이 들어가고 인벤토리는 정상."""
+        plain = self.box.root / "not-a-repo"
+        plain.mkdir()
+        block = self.module.render_code_state(str(plain))
+        self.assertIn("## 코드 상태", block)
+        self.assertIn("git 조회 실패", block)
+
+
+class TestExitCodes(unittest.TestCase):
+    """종료 코드 0 / 3 / 4 + 실패 시 STANDUP-UNAVAILABLE 한 줄."""
+
+    def setUp(self) -> None:
+        self.box = Sandbox()
+        self.addCleanup(self.box.close)
+
+    def run_script(self, cwd, session_id="none", env=None):
+        merged = dict(os.environ)
+        merged["HOME"] = str(self.box.home)
+        merged.update(env or {})
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPT), "--session-id", session_id],
+            cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=merged)
+        return proc.returncode, proc.stdout.decode("utf-8")
+
+    def test_no_target_files_exits_three(self) -> None:
+        rc, out = self.run_script(self.box.main)
+        self.assertEqual(rc, 3)
+        self.assertTrue(out.startswith("STANDUP-UNAVAILABLE: session file not found"))
+        self.assertIn("~/.claude/projects", out)
+
+    def test_normal_run_exits_zero(self) -> None:
+        module = load_script()
+        pdir = self.box.projects / module.slug(str(self.box.main))
+        pdir.mkdir(parents=True, exist_ok=True)
+        write_jsonl(pdir / "s.jsonl",
+                    [assistant_text("a", gitBranch="work", cwd=str(self.box.main))])
+        rc, out = self.run_script(self.box.main)
+        self.assertEqual(rc, 0)
+        self.assertTrue(out.startswith("scope:"))
+
+
 if __name__ == "__main__":
     unittest.main()
