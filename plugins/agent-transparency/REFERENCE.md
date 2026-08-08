@@ -77,7 +77,7 @@
 | AC26 | `tests/test_plugin_contract.py` |
 | AC27 | `tests/test_plugin_contract.py` |
 | AC28 | `tests/test_readability_parity.py` |
-| AC29 | `tests/ab_gate.sh` · `tests/oracle/` |
+| AC29 | `tests/ab_gate.sh` · `tests/oracle/` · `tests/ab_judge.py` |
 | AC31 | `tests/test_output_style.py` |
 | AC32 | `tests/test_ab_runner_contract.py` · `tests/test_plugin_contract.py` |
 | AC33 | `tests/test_plugin_contract.py` |
