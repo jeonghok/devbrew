@@ -31,8 +31,11 @@ EXPECTED_ORDER=(
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py:*)'
   # 비-플러그인 명령 중 **항목을 가진 유일한 것** — R-init 의 중간 파일 디렉토리 (AC69).
-  # SKILL 의 fenced 블록은 `pwd`·`printf`·`cd`·`mv` 도 실행하며 그것들은 항목이 없다.
-  # 맨 셸 유틸리티가 항목을 필요로 하는지는 미측정이다 (§11 등재).
+  # SKILL 의 fenced 블록은 항목 없는 맨 셸 유틸리티도 여럿 실행하며(개수는 여기 적지
+  # 않는다 — 복제된 census 는 편집마다 어긋난다, §11 ㉜·㊱), 그것들이 항목을 필요로
+  # 하는지는 미측정이다. 이 배열은 **항목만** 잠근다: 이 주석의 주장을 잠그는 것은
+  # 아무것도 없고, 같은 문장이 SKILL frontmatter·CHANGELOG·설계 §11 에도 복제돼 있다
+  # (그 생성기 자체가 §11 ㊱ 로 등재됨).
   'Bash(mktemp:*)'
   # Group 4 — Meta
   'Agent'

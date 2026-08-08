@@ -1501,9 +1501,13 @@ AC38–AC44 를, iter-6 은 `AC1–AC63` 방치를 같은 자리에서 겪었고
 ㉜ **`allowed-tools` 가 fenced 블록의 맨 셸 유틸리티를 덮는지 미측정** (iter-8 리뷰
     iteration 2, adversarial 단독). SKILL frontmatter 는 `Bash(mktemp:*)` 을 *"이 목록의
     유일한 비-플러그인 명령"* 이라 적었고 같은 문장이 린터 배열·CHANGELOG·§11 ㉕ 에 복제돼
-    있었다. **그 주장은 거짓이다** — 실측 census: 이 SKILL 의 fenced 블록은 `pwd` 3 ·
-    `printf` 3 · `echo` 3 · `exit` 2 · `cd` 2 · `set` 1 · `mv` 1 · `mktemp` 1 · `case` 1 을
-    실행하며 `mktemp` 외에는 항목이 없다. **다만 그 falsifier 는 이 브랜치보다 오래됐다**:
+    있었다. **그 주장은 거짓이다** — `mktemp` 외에도 항목 없는 셸 유틸리티가 여럿 fenced
+    블록에서 돌고(`pwd`·`printf`·`echo`·`exit`·`cd`·`set`·`mv`·`case`·`[[`, iteration 3
+    에서 `git` 추가), 그중 어느 것도 항목을 갖지 않는다. **개수를 여기 적지 않는다** —
+    앞 버전은 개수 census 를 리터럴로 적었다가 **같은 커밋의 R-init 편집이 두 개를 바로
+    어긋나게 만들었다**(iteration 3, F12). 정정 노트에 리터럴을 넣으면 그 노트가 다음
+    편집의 스캔 코퍼스로 다시 들어온다. 개수가 필요하면 예정된 실측이 낸다.
+    **다만 그 falsifier 는 이 브랜치보다 오래됐다**:
     `project_dir=$(pwd)` 는 merge-base(e45619b) 의 Step P0 에 이미 있었고 — 즉 *모든*
     `/qg` 실행 경로 — 여러 릴리스에 걸쳐 permission stop 없이 돌아왔다. 그것은 "확증
     실패" 가 아니라 **높은 노출에서의 미발생 증거**이므로, 리뷰가 처음 제기한 운영 위험
@@ -1530,8 +1534,63 @@ AC38–AC44 를, iter-6 은 `AC1–AC63` 방치를 같은 자리에서 겪었고
 ㉞ **T96 ② 의 `TMPDIR=` 스캔은 환경에서 오는 `TMPDIR` 을 못 본다** (iteration 2, LT11
     잔여). 실측: `export "TMPDIR=$project_dir/.qg"` — 토큰 앞 따옴표 — 는 스캔에 안 보인다.
     그리고 `TMPDIR` 은 대개 이 문서의 대입이 아니라 **호출 환경**에서 도착하므로 SKILL.md
-    에 대한 어떤 텍스트 스캔도 이 축의 집행자가 될 수 없다. ② 는 **advisory** 로 격하하고
-    집행은 ④ 가 한다(런타임에 실제 값을 보는 유일한 지점). 등급: **갭**(④ 가 커버).
+    에 대한 어떤 텍스트 스캔도 이 축의 집행자가 될 수 없다. 집행은 ④ 가 한다(런타임에
+    실제 값을 보는 유일한 지점).
+    **정정 (iteration 3, F17): ② 를 실제로 격하하지 않았고, 격하하지 않는다.** 앞 문단은
+    *"② 는 advisory 로 격하하고"* 라고 적었는데 코드는 그대로 hard-fail(`loc_ok=0`)이었다 —
+    문서가 코드보다 앞서 나간 drift 다. 그리고 격하는 **해로운 방향**이다: 같은 라운드가
+    ④ 의 이빨 없음을 실측했으므로(F4), ② 를 죽이면 이 축에 서 있는 마지막 assert 가
+    사라진다. ② 는 fail-closed 이고 오늘 비용이 0 이다(이 문서에 `TMPDIR=` 대입이 없어
+    발화하지 않는다). 문서를 코드에 맞춘다. 등급: **갭**(④ 가 커버, ② 가 부분 백스톱).
+
+㉟ **`mutation-guard` 가 프로그램을 지명하는 git config 키를 스냅샷도 비교도 안 한다**
+    (iteration 3, F15 — security-reviewer 제기, adversarial 이 CR 의 "R7 은 순수 git 이라
+    안전" 인증을 기각하며 확정). 스냅샷은 7필드(`qg-worktree.sh:240-248`), Layer 2 비교는
+    5필드(`:498-506`)뿐이라 `core.fsmonitor`·`core.hooksPath`·`alias.*`·`diff.external`·
+    `core.pager` 가 어느 쪽에도 없다. 샌드박스는 **linked worktree** 라 그 안에서 도는
+    `git config` 는 사용자의 실제 저장소가 공유하는 `.git/config` 에 쓰고(스크립트가
+    `:198-199` 에서 자기 자신에 대해 그 부작용을 문서화한다), R7 자신의 `git add -A`
+    (`:381`·`:452`)가 인덱스를 갱신하며 그 fsmonitor 프로그램을 호출한다. **즉 창은 한
+    YAML 의 custody 보다 크다 — 가드 자신의 측정 안에서 피검자 코드가 돈다.** 닫는 모양은
+    스냅샷을 프로그램-지명 키까지 넓히거나 가드의 모든 git 호출을
+    `-c core.fsmonitor=false -c core.hooksPath=/dev/null` 로 고정하는 것이다. 이 브랜치가
+    건드리지 않는 파일이라 여기서 고치지 않는다. 등급: **결함**(열림).
+
+㊱ **`Bash(mktemp:*)` 주장이 네 파일에 복제돼 있고 그것을 맞추는 락이 없다** (iteration 3,
+    adversarial 이 리뷰어 5명이 놓친 축으로 지목). 같은 문장이 SKILL frontmatter 주석 ·
+    `check-allowed-tools-order.sh` 주석 · `CHANGELOG.md` · 이 §11 ㉜ 에 각각 적혀 있고,
+    린터는 **배열만** 잠그지 주석을 잠그지 않는다. F12(§11 의 census 가 같은 커밋에서
+    stale) 와 F14(열거 개수 불일치)는 **그 한 문장이 한 커밋 안에서 갈라진 두 사례**이며,
+    개별 수정은 매 라운드 재발한다. 이 플러그인에는 이미 같은 문제를 푸는 패턴이 있다 —
+    `readme-reconcile` 계열의 복제-주장 정합 assert. 등급: **갭**(생성기; 개별 증상은
+    닫았다).
+
+㊲ **iteration 3 이 측정하고 닫지 않은 락 갭** — 다음 라운드가 재발견이 아니라 여기서
+    시작하도록 mutant 를 이름으로 남긴다. 전부 `$CLAUDE_JOB_DIR/tmp/mut3.py` 로 재생 가능.
+    - **S7 (F22)** — `: ; qg_run_tmp="$project_dir"/.qg` 처럼 **줄 중간** 재-루트는
+      ①-proh 의 줄머리 앵커와 ③a 의 따옴표 리터럴을 **둘 다** 비껴간다. 여섯 이름은 여전히
+      `$qg_run_tmp/` 파생이라 ③b·③c 도 GREEN. 보는 것은 ④ 뿐. 정규식을 넓히는 수정은
+      세 번째 열거이므로 채택하지 않는다(㉝ 과 같은 근거).
+    - **U2–U5 (F22)** — `"$project_dir"/` · `${project_dir}/` · 따옴표 없는
+      `$project_dir/` · `printf -v` 는 ③a 의 네 리터럴을 비껴간다. 같은 이유로 안 넓힌다.
+    - **Q5 (F4)** — 두 `cd … && pwd -P` 해소에서 `|| { … exit 1; }` 를 떼는 mutant 는
+      ④ 의 `res` probe 를 여전히 만족한다. `-n` 두 검사는 iteration 3 에서 probe 를
+      얻었지만(`np`·`ns`) 해소 분기의 fail-closed 성은 아직 미측정.
+    - **P3 (F19)** — 라우팅 문장을 그대로 두고 *뒤에* "다만 이것은 판단 재료일 뿐" 을
+      덧붙여 집행을 문서 수준에서 권고로 만드는 것은 **어떤 정적 검사로도 못 잡는다**
+      (금지어를 하나도 안 쓴다). 락 주석에 한계로 명시했다.
+    - **③a·③b 의 위양성 (F25)** — 정당한 `--path="$project_dir/src"` 는 ③a 를,
+      `${qg_run_tmp}/…` 중괄호 표기와 역할 일관 rename 은 ③b 를 RED 로 만든다. ③b 는
+      **완화하지 않는다** — `-$runner` 붕괴를 덮는 스위트 유일의 락이고, rename 이 의도적
+      락 편집을 강제하는 것이 fail-closed seam 의 올바른 동작이다(② 의 알려진 위양성과
+      같은 취급). 등급: **갭**.
+
+㊳ **`$baseline_wt` 바인딩에 회귀 락이 없다** (iteration 3, F16 — 실측: 바인딩을 diff 이전
+    형태로 되돌려도 스위트 전체 GREEN). 형제 `head_tree_dir` 에는 사용 지점 assert 가 있고
+    (`test_runtime_verdict_precedence.sh:354`) 바인딩 assert 는 양쪽 다 없다. 같은 클래스의
+    이름이 fenced 코드에 십여 개 더 있으나(`runner` 12/0, `merge_base` 3/0 등) 대부분은
+    **오케스트레이터가 리터럴로 치환하는 정당한 자리**라 전부 잠그는 것은 열거다. 좁은
+    수정은 `$baseline_wt` 바인딩 하나에 대한 assert. 등급: **갭**.
 
 ---
 

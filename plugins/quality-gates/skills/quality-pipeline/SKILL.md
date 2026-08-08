@@ -36,11 +36,15 @@ allowed-tools:
   # 반드시 트리 밖이어야 하고, 그러려면 이 한 명령이 필요하다.
   #
   # **"목록에 없는 셸 명령이 하나도 없다"는 뜻이 아니다 (정정).** 이 SKILL 의 fenced 블록은
-  # `pwd`(Step P0, 모든 `/qg` 실행) · `printf` · `cd` · `mv` 도 실행한다. 그중 어느 것도
-  # 항목이 없고, 그런데도 `pwd` 는 여러 릴리스에 걸쳐 permission stop 없이 돌아왔다 —
-  # 즉 **fenced 블록의 맨 셸 유틸리티가 항목을 필요로 하는지 자체가 미측정**이다. 항목을
-  # 늘리지 않는 이유: 실측되지 않은 위험을 대가로 `Bash(mv:*)` 같은 넓은 grant 를 사는 것은
-  # 도구 표면 양보다. 이 열린 사실은 §11 에 등재했고, 판정은 예정된 Runtime 실측이 낸다.
+  # 항목 없는 맨 셸 유틸리티를 여럿 실행한다 — `pwd`(Step P0, 모든 `/qg` 실행) · `printf` ·
+  # `echo` · `exit` · `cd` · `set` · `mv` · `case` · `[[` · `git`(R-init 담김 가드). 그런데도
+  # `pwd` 는 여러 릴리스에 걸쳐 permission stop 없이 돌아왔다 — 즉 **fenced 블록의 맨 셸
+  # 유틸리티가 항목을 필요로 하는지 자체가 미측정**이다. 여기에 **개수를 적지 않는다**:
+  # 앞 판본은 넷을 세어 적었고 같은 커밋의 R-init 편집이 그 census 를 바로 어긋나게 만들었다
+  # (§11 ㉜ · F12). 항목을 늘리지 않는 이유: 실측되지 않은 위험을 대가로 `Bash(mv:*)` 같은
+  # 넓은 grant 를 사는 것은 도구 표면 양보다. 판정은 예정된 Runtime 실측이 낸다 — 그 관측은
+  # `pwd` 처럼 **대입 안의 명령 치환**인 모양과 `[[ … ]] && <script>` 처럼 **맨 빌트인이 선두**
+  # 인 모양을 함께 봐야 한다(후자는 릴리스 증거가 아예 없다).
   - Bash(mktemp:*)
   # Group 4 — Meta (orchestration primitives)
   - Agent
@@ -677,10 +681,14 @@ qg_run_tmp=$(mktemp -d) \
   || { echo "[quality-gates] 중간 파일 디렉토리 생성 실패 — verdict 는 PASS 불가. 경로를 즉흥으로 정하지 말 것." >&2; exit 1; }
 qg_run_tmp_p=$(cd "$qg_run_tmp" 2>/dev/null && pwd -P) \
   || { echo "[quality-gates] 중간 파일 디렉토리 해소 실패 ($qg_run_tmp) — verdict 는 PASS 불가." >&2; exit 1; }
-project_dir_p=$(cd "$project_dir" 2>/dev/null && pwd -P) \
-  || { echo "[quality-gates] \$project_dir 해소 실패 — 담김을 판정할 수 없습니다. verdict 는 PASS 불가." >&2; exit 1; }
+sealed_root=$(git -C "$project_dir" rev-parse --show-toplevel 2>/dev/null) \
+  || { echo "[quality-gates] \$project_dir 의 저장소 최상위를 구하지 못했습니다 — 봉인 범위를 알 수 없습니다. verdict 는 PASS 불가." >&2; exit 1; }
+[[ -n "$sealed_root" ]] \
+  || { echo "[quality-gates] 저장소 최상위가 빈 값입니다 — 봉인 범위를 알 수 없습니다. verdict 는 PASS 불가." >&2; exit 1; }
+sealed_root_p=$(cd "$sealed_root" 2>/dev/null && pwd -P) \
+  || { echo "[quality-gates] 저장소 최상위 해소 실패 ($sealed_root) — verdict 는 PASS 불가." >&2; exit 1; }
 case "$qg_run_tmp_p/" in
-  "$project_dir_p"/*)
+  "$sealed_root_p"/*)
     echo "[quality-gates] TMPDIR 이 검사 대상 트리 안입니다 ($qg_run_tmp) — 중간 파일이 커밋 B 로 봉인되거나 피검자에게 노출됩니다. TMPDIR 을 트리 밖으로 두고 다시 실행하십시오. verdict 는 PASS 불가." >&2
     exit 1 ;;
 esac
@@ -693,6 +701,28 @@ aggregate_yaml="$qg_run_tmp/aggregate.yaml"      # 실행당 1개 (R6 집계)
 변수로 한 단계 우회하거나 `TMPDIR` 을 환경에서 넘기는 축을 원리적으로 못 본다. `pwd -P` 를
 양쪽에 쓰는 것은 symlink 로 담김을 우회하는 것을 막기 위해서다 (`run-test-selection.sh` 의
 `unit_within_worktree` 와 같은 idiom).
+
+**기준은 `$project_dir` 이 아니라 저장소 최상위다 (/qg iter-8 iteration 3, F10).** 앞
+버전은 `$project_dir` 과 비교했는데, 그 값은 Step P0 의 `pwd` 이고(`--show-toplevel` 이
+아니다) **봉인하는 쪽은 그것을 쓰지 않는다** — `create-sandbox` 는
+`main_root=$(git rev-parse --show-toplevel)` 를 독립적으로 구해
+(`qg-worktree.sh:148-150`) 거기서 `ls-files --others --exclude-standard` 로 열거해
+샌드박스로 복사한다(`:170-171`). 즉 가드가 재는 집합은 `$project_dir` 이고 실제로 커밋
+`B` 로 봉인되는 집합은 `$main_root ⊇ $project_dir` 이었다. 서브디렉토리에서 `/qg` 를
+부르고 `TMPDIR` 이 레포 루트 쪽에 있으면 `mktemp -d` 는 `$project_dir` **밖** ·
+`$main_root` **안**에 떨어져 `case` arm 이 매치하지 않고, 가드는 통과하며, 파일은
+봉인된다 — 이 가드의 산문이 막는다고 선언한 바로 그 결말이다. `$project_dir` 은 여전히
+**어느 저장소인지**를 정하는 입력이고(`git -C "$project_dir"`), 담김 판정의 기준은
+봉인하는 쪽과 같은 트리다.
+
+**이 블록에 `git` 이 새로 들어왔다.** `allowed-tools` 에 항목이 없는 맨 셸 명령이 하나
+늘었고(`pwd`·`printf`·`echo`·`cd`·`mv` 와 같은 부류), 그 부류가 항목을 필요로 하는지는
+여전히 **미측정**이다(§11 ㉜). 항목을 늘리지 않는 판단은 그대로다 — 예정된 Runtime 실측이
+이제 이 명령까지 함께 관측한다.
+
+**빈 `$sealed_root` 검사가 따로 있는 이유는 `$project_dir` 의 것과 같다.** `rev-parse` 가
+0 을 내면서 빈 문자열을 낼 경로가 있으면 이어지는 `cd ""` 가 0 을 반환해 패턴이 조용히
+`$PWD/*` 가 된다 — 아래 문단이 `$project_dir` 에 대해 적은 실패 모드와 같은 것이다.
 
 **빈 `$project_dir` 검사가 맨 앞에 있는 것이 이 가드의 이빨이다.** 이 블록은 **새 셸에
 붙여넣는 템플릿**이고(`Bash` 도구는 호출마다 새 셸이라 변수가 살아남지 않는다), `$project_dir`
@@ -752,12 +782,12 @@ verifier 턴 앞/뒤로 쟀는데, 피검자가 통제하는 코드는 그 턴 �
 
 | | 파일 | 기록 → 소비 사이에 피검자 코드가 도는가 |
 |---|---|---|
-| **창 있음** | `$qg_run_tmp/assign-rows.tsv` | R1b 기록 → R8 소비. 창은 **R4 에서 열린다**(verifier 턴 뒤가 아니라 앞) |
-| | `$qg_run_tmp/expected-$runner.txt` | R1b 가 고른 unit 목록 → R6 소비. **`SILENT_DROP` 백스톱의 원본**이고, 재시도 경로(R5b→R6→R7→R8, R4·R1b 재실행 안 함)에서 **두 번의 verifier 턴을 건넌다** |
-| | `$qg_run_tmp/baseline-$runner.tsv` | R4 기록 → R6 소비. **가장 나쁘다** |
+| **창 있음** | `$qg_run_tmp/assign-rows.tsv` | R1b 기록 → R8 소비. 창은 **R4 에서 열린다**(verifier 턴 뒤가 아니라 앞). 재시도는 R1b 를 다시 돌리지 않으므로 **두 번의 verifier 턴을 건넌다** |
+| | `$qg_run_tmp/expected-$runner.txt` | R5b 어댑터 루프 기록 → R6 소비. **`SILENT_DROP` 백스톱의 원본** |
+| | `$qg_run_tmp/baseline-$runner.tsv` | R4 기록 → R6 소비. **가장 나쁘다.** 재시도는 R4 를 다시 돌리지 않으므로 이것도 **두 번의 verifier 턴을 건넌다** |
 | | `$qg_run_tmp/head-$runner.tsv` | R5b 기록 → R6 소비. 그 사이 R6 의 flaky 재실행이 `$head_tree_dir` 에서 저장소 코드를 돌리고 **같은 파일에 행을 다시 쓴다** |
 | | `$qg_run_tmp/per-adapter-$runner.yaml` | R6 어댑터별 기록 → R6 말미 `--aggregate` 소비. 사이에 같은 flaky 재실행 |
-| **창 없음** | `$qg_run_tmp/aggregate.yaml` | R6 말미 기록 → R7·R8 소비. R7 은 순수 git 이다 |
+| **창 없음 (조건부)** | `$qg_run_tmp/aggregate.yaml` | R6 말미 기록 → **R8 소비** (R7 은 이것을 읽지 않는다 — `mutation-guard` 자신의 YAML 만 읽는다). 사이에 도는 것은 R7 의 git 뿐이다 |
 
 기준선 행 파일이 가장 나쁜 이유: 행을 `pass`→`fail` 로 뒤집으면 모든
 `NEW_REGRESSION` 이 `PRE_EXISTING` → `closed` → **degrade 신호 없는 PASS** 가 된다.
@@ -766,10 +796,27 @@ verifier 턴 앞/뒤로 쟀는데, 피검자가 통제하는 코드는 그 턴 �
 **그리고 배정 행 파일의 집행은 *부재*에 실려 있다.** 바로 아래 R1b 의 원자적 쓰기는
 "생산자가 죽으면 최종 경로에 파일이 없다 → R8 이 exit 4" 로 신호를 만드는데, **부재는
 피검자가 지울 수 있는 성질이 아니라 채울 수 있는 성질이다** — 빈 파일을 그 경로에 심으면
-`--assign-rows` 는 잘 형성된 0행 TSV 를 읽고 `unclaimed=0`, exit 0 이 된다. 기계 백스톱만
-무력해지고 1차 라우팅(`assign_rc` 는 오케스트레이터 턴 값이라 피검자가 못 만진다)은 남으므로
-**세 조건이 겹쳐야** 성립하지만, 이 문단이 그 사실을 적지 않으면 공시가 안심시키는 방향으로
-거짓이 된다.
+`--assign-rows` 는 잘 형성된 0행 TSV 를 읽고 `unclaimed=0`, exit 0 이 된다.
+
+**필요한 것은 한 동작뿐이다 — 앞 버전이 "세 조건이 겹쳐야" 라고 적은 것은 안심시키는
+방향으로 거짓이었다 (/qg iter-8 iteration 3, F9).** 그 문장은 `assign_rc` 가
+오케스트레이터 턴 값이라는 사실에 기대는데, 이 시나리오에서 `assign_rc=0` 은 **정상값**
+이고 파일도 **정상적으로 존재**한다. 즉 1차 라우팅은 arm 1("정상 진행")으로 제대로
+발화하며 아무것도 제약하지 않는다. `assign` 이 실패할 필요도, 우연이 겹칠 필요도 없다 —
+이미 있는 파일을 0바이트로 자르는 것 하나로 §11 ㉓ 집행이 발화하지 않고
+`floor:verification` 이 `closed` 로 남는다.
+
+**`$qg_run_tmp/aggregate.yaml` 의 "창 없음" 은 조건부다 (/qg iter-8 iteration 3, F15).** *"R7 은 순수
+git 이다"* 는 *"피검자가 통제하는 코드가 안 돈다"* 와 **같은 술어가 아니다.** git 은
+저장소 config 가 이름 지은 프로그램을 실행하고, 샌드박스는 linked worktree 이므로
+`git -C <sandbox> config core.fsmonitor …` 는 **공유 `.git/config`** 에 쓴다
+(`qg-worktree.sh:198-199` 가 자기 자신에 대해 그 부작용을 문서화한다). 그리고
+`mutation-guard` 의 스냅샷은 7필드(`:240-248`), Layer 2 비교는 5필드(`:498-506`)뿐이라
+`core.fsmonitor`·`core.hooksPath`·`alias.*`·`diff.external`·`core.pager` 는 **스냅샷도
+비교도 안 된다.** R7 자신의 `git add -A`(`:381`·`:452`)가 인덱스를 갱신하며 그 fsmonitor
+프로그램을 호출한다. 즉 이 창은 "한 YAML 의 custody" 보다 크다 — **가드 자신의 측정
+안에서 피검자 코드가 돈다.** 이 갭은 이 브랜치가 건드리지 않는 파일에 있으므로 여기서
+고치지 않고 §11 에 등재한다. 이 표에서 고친 것은 소비자 목록과 근거뿐이다.
 
 이 축은 §6.7 S1(잔여 결함)이며 **열려 있다** — 닫는 모양은 `snapshot_digest` 선례
 (오케스트레이터가 봉인을 쥔다)이거나 §11 ㉛ 의 생산자-발행 terminator 이고, **여섯 전부에
@@ -902,8 +949,18 @@ assign_rc=$?
 
 **형제 두 리다이렉트가 `.part`→`mv` 를 안 쓰는 것은 누락이 아니다.** R6 의
 `> "$qg_run_tmp/per-adapter-$runner.yaml"` 과 `> "$aggregate_yaml"` 은 최종 경로로 바로
-쓴다. 안전한 이유는 **소비자가 요구하는 것이 양성 토큰**이기 때문이다 — `check_qa_ledger.py`
-는 `attribution_status:` 줄이 **정확히 1개**일 것을 요구하므로 잘린 파일은 `exit 4` 가 된다.
+쓴다. 안전한 이유는 **소비자가 요구하는 것이 양성 토큰**이기 때문이고, 소비자는 둘이
+다르다 (/qg iter-8 iteration 3, F18): per-adapter 파일은 `diff-test-results.py` 의
+`parse_adapter_yaml` 이 읽고, `$aggregate_yaml` 은 `check_qa_ledger.py` 가 읽는다. 앞
+버전은 둘 다 후자가 읽는다고 적었다.
+
+절단에 대한 주장도 정확히 적는다: **verdict 입력을 잃는 절단은 `exit 4` 가 된다.**
+`_aggregate()` 는 `attribution_status:` 를 세 `verdict_input` 키 **뒤에**, `per_adapter:`
+블록 **앞에** 낸다. 그래서 판정에 쓰이는 키를 잃는 절단은 `attribution_status:` 도 함께
+잃고 `check_qa_ledger.py` 의 "정확히 1개" 검사가 `exit 4` 를 낸다. 조용히 사라질 수 있는
+것은 **진단용 `per_adapter` 꼬리뿐**이며 그 값들은 아래에서 판정 입력이 아니라고 명시된다.
+앞 버전의 *"잘린 파일은 exit 4 가 된다"* 는 보편 주장이라 이 꼬리에 대해 거짓이었다.
+
 반면 `--assign-rows` 의 소비자에게는 **비어 있음이 적법한 답**이라 절단과 구분되지 않는다.
 그 비대칭이 이 원칙을 어디에 적용할지를 가른다 — 형제 둘을 "고치"거나, 반대로 이 원칙이
 채택되지 않았다고 결론짓지 말 것.
@@ -978,7 +1035,7 @@ R2 의 5번이 곧 생략 목록이다. **생략 목록이 비어 있으면 `Ask
 **Step R4 — 기준선 측 (오케스트레이터 단독 — verifier 미개입).**
 
 R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 에서
-`BASELINE_UNRUNNABLE` 로 처리한다. **이때도 기준선 행 파일은 선택한 unit 마다
+`BASELINE_UNRUNNABLE` 로 처리한다. **이때도 `$qg_run_tmp/baseline-$runner.tsv` 는 선택한 unit 마다
 `<unit>\tunrun\t-` 로 채우고 `baseline_detected` 는 `NONE` 이다** — 형제 skip 경로 둘과
 같은 규칙이다. 빈 파일을 넘기면 행 부재가 `SILENT_DROP` 으로 라벨돼 "기준선을 못
 돌렸다"가 "고른 것이 사라졌다"로 잘못 보고된다(/qg iter-6 D2 실측: 빈 파일 →
@@ -993,7 +1050,7 @@ R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 �
 있다 — 즉 **기준선 워크트리 생성과 전체 기준선 스위트 실행을 대가로 아무것도 얻지
 못한다.** 판별자는 R5b 가 쓰는 것과 같은 사실(샌드박스 비활성)이며, R4 는 R5a¹ 보다
 먼저라 `sandbox_dir` 을 아직 못 보므로 **그 원인인 kill switch 를 직접 읽는다.**
-건너뛸 때 기준선 행 파일은 선택한 unit 마다 `<unit>\tunrun\t-` 로 채우고
+건너뛸 때 `$qg_run_tmp/baseline-$runner.tsv` 는 선택한 unit 마다 `<unit>\tunrun\t-` 로 채우고
 `baseline_detected` 는 `NONE` 이다 — 빈 파일을 넘기면 행 부재가 `SILENT_DROP` 으로
 라벨돼 "기준선을 못 돌렸다"가 "고른 것이 사라졌다"로 잘못 보고된다.
 
@@ -1030,7 +1087,7 @@ R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 �
 
 그때 R6 에 넘길
 `baseline_detected` 는 `NONE` 이다 (기준선 트리를 만들지 않았으므로 관측이 없다).
-건너뛸 때 기준선 행 파일은 **비우지 않고** 선택한 unit 마다 `<unit>\tunrun\t-` 로
+건너뛸 때 `$qg_run_tmp/baseline-$runner.tsv` 는 **비우지 않고** 선택한 unit 마다 `<unit>\tunrun\t-` 로
 채운다 — 빈 파일을 R6 에 넘기면 행 부재가 `SILENT_DROP` 으로 라벨된다. 둘 다 PASS 는
 아니지만 보고되는 사유가 달라진다(기준선을 못 돌린 것 vs 고른 것이 사라진 것).
 
@@ -1063,8 +1120,28 @@ R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 �
 
 ```bash
 baseline_wt=$("${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-baseline \
-  "$merge_base" "<session-id>")
+  "$merge_base" "<session-id>") || baseline_wt=""
 ```
+
+**Step R4 ② 실패 라우팅 (형제 R5b 표와 같은 규율 — 관측 없음은 음성 결과가 아니다,
+/qg iter-8 iteration 3, F7).** `make_detached_worktree` 의 `die` 는 전부 `printf` **앞**
+에서 나므로 실패하면 `$baseline_wt` 는 **빈 문자열**이다. 실패 집합은 "not a commit" ·
+"not a git repo" · "cannot create \<parent\>" · "git worktree add failed" · 그리고
+`qg-worktree.sh:88-91` 의 **"refuse to clobber existing path"**(앞선 실행이 남긴
+`base-<sid8>` 이 있을 때) 다섯이다.
+
+| `create-baseline` 결과 | 조치 |
+|---|---|
+| exit 0 + `$baseline_wt` 가 존재하는 디렉토리 | ②-a 로 진행 |
+| non-zero **또는 `$baseline_wt` 가 빈 값/디렉토리 아님** | stderr 를 verbatim 으로 노출 · 선택한 unit 마다 `<unit>\tunrun\t-` 를 `$qg_run_tmp/baseline-$runner.tsv` 에 채움 · `baseline_detected=NONE` · `verification` 을 **`degraded`** · **verdict 를 PASS 로 올리지 않는다.** `probe`·`run`·캐시 기록은 건너뛴다 |
+
+**행 파일을 채우는 것이 이 표의 요점이다.** 방향은 이 표가 없어도 fail-closed 지만
+(`probe ""` 는 `usable: yes` 를 못 내고 `run ""` 은 행을 0개 낸다), **보고되는 사유가
+틀린다** — 행 부재는 R6 에서 `SILENT_DROP`("고른 것이 사라졌다")으로 라벨되지
+`BASELINE_UNRUNNABLE`("기준선을 못 돌렸다")이 아니다. 위의 세 스킵 경로가 전부 같은
+채우기를 지시하는 이유가 그것이고, 이 경로에만 지시가 없었다. 그리고 지시가 없는 자리에서
+모델이 `--baseline-detected` 에 `"$runner"` 를 즉흥으로 넘기면 그 값은 **근거 있는 관측**
+으로 읽힌다(아래 문단이 이미 기록한 fail-open).
 
 **stdout 을 잡아야 한다 — 이 스텝의 나머지가 `$baseline_wt` 를 쓴다.** `create-baseline` 은
 형제 `create-head` 와 본문(`make_detached_worktree`)을 공유하고 만든 트리 경로를 stdout 으로
@@ -1158,17 +1235,43 @@ bulk 가 red 면 실패한 unit 에 대해서만 `per-unit` 으로 재실행한�
 미적중분이 비어 있으면 이 호출은 생략한다 — **트리 생성과 `detect` 는 생략하지
 않는다.** 상각되는 것은 테스트 *실행*이지 기준선 *관측*이 아니다.
 
-③ 결과를 캐시에 기록하고 기준선 워크트리를 폐기한다:
+③ 결과를 **R6 이 읽을 파일에 쓰고**, 캐시에 기록하고, 기준선 워크트리를 폐기한다:
 
 ```bash
+printf '%s\n' "${rows[@]}" > "$qg_run_tmp/baseline-$runner.tsv"
 printf '%s\n' "${rows[@]}" | "${CLAUDE_PLUGIN_ROOT}/scripts/baseline-cache.sh" put \
   ".claude/quality-gates/baseline-cache" "$merge_base" "$runner"
-[[ -n "${baseline_wt:-}" && -d "$baseline_wt" ]] \
-  && "${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "$baseline_wt"
+if [[ -n "${baseline_wt:-}" && -d "$baseline_wt" ]]; then
+  "${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "$baseline_wt"
+fi
 ```
+
+**`${rows[@]}` 가 무엇인지 여기서 못 박는다 (/qg iter-8 iteration 3, F1).** 이 어댑터에
+대해 **선택한 unit 마다 정확히 한 행**이고, 출처는 ①의 캐시 적중분 ∪ ②의 `run` 출력이다.
+2단 구조에서 **per-unit 재실행 행이 그 unit 의 bulk 행을 대체한다** — 둘 다 남기면 안
+된다. `diff-test-results.py:88-90` 이 중복 unit 행에 `exit 4` 를 내며 조용한 last-wins 를
+명시적으로 거부하므로, 두 단계를 이어붙이는 것은 조용한 오류가 아니라 **확정적인
+`exit 4`** 다.
+
+**앞 버전에는 이 첫 줄이 없었다 — 그리고 그것이 이 브랜치의 다섯 리비전 전부에서
+그랬다.** R6 은 `--baseline "$qg_run_tmp/baseline-$runner.tsv"` 를 읽는데 그 경로에 쓰는
+스텝이 **하나도 없었다**(HEAD 축·`expected` 도 같았다). 세 라운드에 걸친 앞선 "수정"은
+전부 이 파일들의 *이름을 어떻게 짓는가*를 고쳤고(R-init 전개 → 셸 함수 → 인라인),
+*누가 쓰는가*는 한 번도 건드리지 않았다. 정직한 실행은 `read_text_or_fail4` → `exit 4`
+로 떨어져 귀속이 degrade 되고, 모델이 대신 화면 출력을 손으로 옮겨 적으면 아래
+`--expected` 가 주장하는 독립성이 사라진다.
 
 폐기가 조건부인 이유는 HEAD 축과 같다 — `create-baseline` 이 죽으면 `$baseline_wt` 는 빈
 문자열이고, `remove ""` 는 담김 가드에 걸려 die 한다(파괴적이지는 않지만 스텝을 죽인다).
+`&&` 가 아니라 `if` 인 이유: `[[ … ]] && cmd` 는 조건이 거짓일 때 **AND-리스트 전체가
+1 을 반환**하고 이 복합문이 블록의 마지막 명령이라, 지울 트리가 없는 정상 경로에서
+성공한 스텝이 실패로 읽힌다 (/qg iter-8 iteration 3, F8c).
+
+**폐기는 R4 의 모든 종료 경로에서 실행한다** — ③ 은 happy path 에서만 도달하므로 `probe`
+비정상 종료·`run` 비정상 종료·캐시 `exit 4` 로 빠지는 경로에도 같은 조건부 폐기를 둔다.
+남기면 다음 `create-baseline` 이 `qg-worktree.sh:88-91` 의 "refuse to clobber existing
+path" 에 걸려 **그 세션은 영영 PASS 에 도달하지 못한다** — R6 이 `head-<sid8>` 에 대해
+이미 이름 붙이고 닫은 실패이고(`:1495-1502`), 기준선 축에는 그 규칙이 없었다.
 
 `granularity ∈ {file, package}` 에서 bulk-green 이 나오면 **unit 별 `pass` 행으로
 분해해** 기록한다 — 집합 전체가 통과했으므로 각 unit 이 통과했다. `BULK` 키는
@@ -1264,7 +1367,7 @@ Agent({
 
 **폴백(샌드박스 비활성)에서는 이 스텝을 실행하지 않는다.** `sandbox_dir` 가 UNSET 이면
 `run-test-selection.sh run` 을 **호출하지 말고** 선택한 unit 마다 `<unit>\tunrun\t-` 로
-HEAD 행 파일을 채운 뒤 R6 으로 간다. 이유 둘:
+`$qg_run_tmp/head-$runner.tsv` 를 채운 뒤 R6 으로 간다. 이유 둘:
 
 1. 폴백의 `runtime_project_dir` 는 **사용자의 실제 워킹 트리**다 (R5a¹ Exit 3). 이 호출은
    어댑터의 `setup_cmd` 를 그 트리에서 실행한다 — `npm ci` 는 `node_modules` 를 통째로
@@ -1322,6 +1425,25 @@ head_tree_dir=$("${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-head \
 **bulk 가 green 이면 per-unit 재실행을 하지 않는다** — 집합 전체가 통과했으므로 귀속할
 것이 없다. red 일 때만 실패한 unit 에 대해 `per-unit` 으로 재실행한다. 흔한 경우 2회,
 비싼 경우에만 정밀해진다.
+
+어댑터의 실행이 끝나면 **R6 이 읽을 두 파일을 쓴다** (/qg iter-8 iteration 3, F1):
+
+```bash
+printf '%s\n' "${units[@]}" > "$qg_run_tmp/expected-$runner.txt"
+printf '%s\n' "${head_rows[@]}" > "$qg_run_tmp/head-$runner.tsv"
+```
+
+`${head_rows[@]}` 는 기준선 축의 `${rows[@]}` 와 같은 규율이다 — 이 어댑터에 대해
+**선택한 unit 마다 정확히 한 행**, per-unit 재실행 행이 그 unit 의 bulk 행을 대체하며,
+두 단계를 이어붙이면 `diff-test-results.py:88-90` 이 중복 unit 으로 `exit 4` 를 낸다.
+`${units[@]}` 는 이 어댑터에 배정된 unit 목록 그대로이고, `$qg_run_tmp/expected-$runner.txt` 는 그것을
+**R6 에 독립 입력으로** 넘기기 위한 파일이다 — 아래 `--expected` 문단이 기대는 독립성이
+바로 이 파일에서 온다.
+
+**폴백(샌드박스 비활성)에서도 이 두 파일은 쓴다.** 위에서 `run` 을 호출하지 않는
+대신 선택한 unit 마다 `<unit>\tunrun\t-` 를 `$qg_run_tmp/head-$runner.tsv` 에 채우고
+`$qg_run_tmp/expected-$runner.txt` 는 그대로 쓴다. 파일 자체가 없으면 R6 은 `exit 4` 로 떨어져
+`BASELINE_UNRUNNABLE` 대신 대조 실패를 보고한다 — 사유가 바뀐다.
 
 > **이 축의 mode 토큰은 보수적으로 접는다 (/qg iter-7, security-reviewer).** 이 2단계 구조 때문에 한 축이 `bulk` 와 `per-unit` 을 **둘 다** 실행할 수 있는데 `--baseline-mode`/`--head-mode` 는 값이 하나다. 규칙: **이 축의 호출 중 하나라도 `bulk` 였으면 `bulk` 로 적는다.** `per-unit` 은 그 축의 모든 행이 per-unit 호출에서 나왔을 때만이다. 판단이 아니라 기계적 규칙인 이유는 반대 선택이 곧 fail-open 이기 때문이다 — `per-unit` 이라 적으면 도말 degrade 조건(`둘 중 하나라도 bulk`)이 꺼지고, 부분 승격이 남긴 `(F,F)` 행들이 `PRE_EXISTING` 으로 접혀 진짜 회귀를 가린다. 특히 기준선 축은 언제나 `bulk` 로 시작하므로 이 축의 답은 사실상 항상 `bulk` 다.
 
@@ -1439,7 +1561,7 @@ authoritative 라 verifier 가 만든 상태에서 난 green 이 회귀를 강�
   "$head_tree_dir" "$runner" per-unit "${flaky_candidates[@]}"
 ```
 
-**재실행 결과를 `$head_rows_file` 에 반영하는 것까지가 이 규칙이다 (/qg iter-7 iteration 2,
+**재실행 결과를 `$qg_run_tmp/head-$runner.tsv` 에 반영하는 것까지가 이 규칙이다 (/qg iter-7 iteration 2,
 codex).** 그러지 않으면 *"마지막 호출의 결과가 authoritative"* 라는 바로 아래 문장이
 닿을 데가 없다 — 대조는 여전히 **원래의 실패 행**을 읽는다. 순서:
 
@@ -1472,16 +1594,25 @@ codex).** 그러지 않으면 *"마지막 호출의 결과가 authoritative"* �
 
 ```bash
 "${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py" --aggregate \
-  --expected-adapters "$adapter_count" "${per_adapter_yamls[@]}" > "$aggregate_yaml"
+  --expected-adapters "$adapter_count" "$qg_run_tmp"/per-adapter-*.yaml > "$aggregate_yaml"
 ```
+
+**glob 이지 모델이 만든 배열이 아니다 (/qg iter-8 iteration 3, F11).** 앞 버전은
+`"${per_adapter_yamls[@]}"` 를 넘겼는데 그 이름은 **이 문서 어디에서도 대입되지 않는다** —
+feature 커밋 이래 사용 1건·대입 0건이었다. 배열을 되살리면 `--expected-adapters` 의 개수
+대조가 *"생산된 YAML 개수 vs 기대 개수"* 가 아니라 *"모델이 적은 목록의 길이 vs 기대
+개수"* 가 되어 대조 양쪽이 같은 출처에서 나온다. `$qg_run_tmp` 는 실행마다 새로 만들어져
+stale 파일을 주울 수 없으므로, glob 은 **실제 생산물**을 세게 만들어 그 개수 대조에
+비로소 이빨을 준다.
 
 집계까지 끝나면 **이제** HEAD 축 트리를 폐기한다 (R4③ 이 기준선 트리를 폐기하는 것과
 대칭 — 두 트리 다 일회용이지만 HEAD 축의 수명은 **자기 축의 실행 + flaky 재실행 + 대조**
 까지다):
 
 ```bash
-[[ -n "${head_tree_dir:-}" && -d "$head_tree_dir" ]] \
-  && "${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "$head_tree_dir"
+if [[ -n "${head_tree_dir:-}" && -d "$head_tree_dir" ]]; then
+  "${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "$head_tree_dir"
+fi
 ```
 
 **조건부인 이유 (/qg iter-7 iteration 2, codex).** R5b 라우팅은 `create-head` 실패 후에도
@@ -1754,7 +1885,7 @@ AskUserQuestion({
 Branch:
 - **Yes, retry** → increment resolution counter; if exceeds env limit, fall through to Skip with evidence. Otherwise re-create the sandbox (Step R5a¹) and re-capture the new output's `sandbox_dir` (line 1), `baseline_sha` (line 2), and `snapshot_digest` (line 3) with the same three successive `IFS= read -r` + digest-strip idiom as R5a¹ — refreshing **all three** orchestrator variables. create-sandbox emits a NEW commit `B` AND a NEW snapshot (hence a new digest) each call, so reusing the old `baseline_sha` makes the guard `guard_fail "bad baseline sha"` and reusing the old `snapshot_digest` makes it `guard_fail "snapshot integrity check failed"` — both false FAILs. The new snapshot is auto-recorded in the new gitdir; the stale sandbox + its old snapshot are force-removed by R5a¹'s idempotent cleanup. Then re-dispatch runtime-verifier with the refreshed `sandbox_dir` and re-run the remaining steps in the order given in the next paragraph — R7 is called as 3-arg with the refreshed `snapshot_digest`, NOT directly after the dispatch. (Fix the parse order: capturing the digest as line 2 swaps `baseline_sha`/`snapshot_digest` and fails-closed every run.)
 
-  **재시도는 R5b·R6 도 다시 돈다 — verifier 재-dispatch 만으로 끝나지 않는다.** 재시도가 만드는 것은 **새 트리**이고, 이전 `head_rows_file` 은 이미 폐기된 트리에서 나온 행이다. 그것을 그대로 R6 에 넘기면 `.env` 하나 고쳐 초록이 된 트리에서 옛 red 로 `confirmed_product_defect: true` 가 서서 **고쳐진 코드에 FAIL** 이 나고, 반대 방향은 더 나쁘다 — 옛 green 행이 재시도가 새로 만든 회귀를 가린다. 재-dispatch 뒤 순서는 **R5b(HEAD 축 재실행) → R6(대조 + 집계 재호출) → R7 → R8** 이고, 이전 HEAD 행은 **버린다**(덮어쓰지 말고 새로 만든다 — 부분 덮어쓰기는 두 트리의 행을 한 파일에 섞는다). 기준선 측 R4 는 다시 돌리지 않는다: `merge_base` 가 그대로라 캐시 키가 같고, 기준선은 재시도로 바뀌지 않는다.
+  **재시도는 R5b·R6 도 다시 돈다 — verifier 재-dispatch 만으로 끝나지 않는다.** 재시도가 만드는 것은 **새 트리**이고, 이전 `$qg_run_tmp/head-$runner.tsv` 는 이미 폐기된 트리에서 나온 행이다. 그것을 그대로 R6 에 넘기면 `.env` 하나 고쳐 초록이 된 트리에서 옛 red 로 `confirmed_product_defect: true` 가 서서 **고쳐진 코드에 FAIL** 이 나고, 반대 방향은 더 나쁘다 — 옛 green 행이 재시도가 새로 만든 회귀를 가린다. 재-dispatch 뒤 순서는 **R5b(HEAD 축 재실행) → R6(대조 + 집계 재호출) → R7 → R8** 이고, 이전 HEAD 행은 **버린다**(덮어쓰지 말고 새로 만든다 — 부분 덮어쓰기는 두 트리의 행을 한 파일에 섞는다). 기준선 측 R4 는 다시 돌리지 않는다: `merge_base` 가 그대로라 캐시 키가 같고, 기준선은 재시도로 바뀌지 않는다.
 
   **재시도의 R5b 는 `create-head` 를 refresh 된 `baseline_sha` 로 다시 호출한다.** create-sandbox 는 호출마다 **새 커밋 `B`** 를 낸다 — 위에서 `baseline_sha` 를 재포착하는 이유가 그것이다. 그 재포착된 값을 `create-head` 에 넘기지 않고 옛 `baseline_sha` 를 재사용하면, HEAD 축 트리가 **재시도가 고치기 전 코드**에 붙는다. 그러면 R7 의 mutation-guard 는 새 트리를 보고 통과시키는데 R6 이 대조하는 행은 옛 코드에서 나온 것이라, 실패가 verdict 층이 아니라 **귀속 층에서 조용히** 일어난다 — 트리가 존재하고 행이 나오므로 어떤 degrade 신호도 서지 않는다. `create-head` 는 refresh 된 `baseline_sha` 로 다시 부른다 — 그리고 **틀린 값을 넘기면 이제 죽는다**: `create-head` 는 넘어온 sha 가 이 세션 샌드박스의 봉인 커밋과 같은지 대조하고 다르면 die 한다(옛 `B` 도 `merge_base` 도 거부). **다만 '이전 트리는 그 호출이 정리한다'는 보장이 아니다.** `make_detached_worktree` 는 **non-force** `git worktree remove` 만 시도하고, 거부되면 조용히 파괴하는 대신 die 한다 — 그런데 누수된 HEAD 축 트리의 내용물은 정의상 테스트 산출물이고, §11 ⑨ 가 적었듯 `make`·`npm-script` 계열은 그것을 억제할 수단이 없어 **비-ignored 로 남을 수 있다.** 그 경우가 정확히 non-force 가 거부하는 경우이므로 재사용이 아니라 loud die 가 나고, 그 세션에서는 HEAD 축을 다시 만들 수 없다(경로가 `<prefix>-<sid8>` 로 고정이므로). die 메시지가 안내하는 수동 제거 또는 새 세션이 유일한 복구다 — §11 ⑳ 에 등급과 함께 등재했다.
 - **Skip with evidence** → record SKIP_WITH_EVIDENCE and continue.

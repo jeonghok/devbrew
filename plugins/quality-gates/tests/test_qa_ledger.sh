@@ -427,20 +427,39 @@ case_exit_code_remaining_paths() {
 #   공백만 있는 파일이라는 *바이트 모양* 두 개를 고정했다. 그러면 §11 ㉛ 이 문서화한 종결
 #   모양(생산자가 행수 포함 완료 선언을 마지막 줄로 낸다)을 **랜딩할 수 없다** — 빈 파일에는
 #   terminator 를 붙일 수 없으므로 이 케이스가 구조적으로 RED 가 되고, 그때 가장 싸 보이는
-#   수리는 케이스 삭제이며 그것이 ⑭ 를 다시 연다. 실물 생산자에서 뽑으면 assert 는 생산자에
-#   결합되고 기대값(`0`)은 독립 리터럴로 남아, ㉛ 이후에도 같은 mutant 가 그대로 죽는다.
+#   수리는 케이스 삭제이며 그것이 ⑭ 를 다시 연다. 실물 생산자에 결합하면 assert 가 생산자
+#   변경에 반응하고 기대값(`0`)은 독립 리터럴로 남는다.
+#
+# ★ **㉛ 랜딩 근거는 거짓이었다 (/qg iter-8 iteration 3, F23 — 실측).** 앞 버전은 "실물
+#   생산자에서 뽑으면 ㉛ 이후에도 같은 mutant 가 그대로 죽는다" 고 적었는데, 생산자가
+#   `# assign-complete rows=0` 같은 완료 선언을 마지막 줄로 내게 하면 팔 A 의 파일은
+#   비지 않게 되고 그 한 줄은 3필드가 아니므로 `check_qa_ledger.py` 가 `exit 4` 를 낸다 —
+#   **바이트 픽스처와 똑같이 RED 다.** 랜딩 가능성은 *소비자*가 terminator 를 배우는가에
+#   달렸지 픽스처 바이트의 출처에 달려 있지 않다. 재작성이 산 것은 생산자 결합(T97 이
+#   실증한다)이고, 광고한 것은 그것이 아니었다.
+#
+# ★ **전제 가드는 팔 A 와 *같은 입력*을 시험해야 한다 (/qg iter-8 iteration 3, F20).**
+#   앞 버전은 **비지 않은** stdin 으로 전제를 확인하고 팔 A 는 **빈** stdin 을 넘겼다.
+#   그러면 "빈 입력에서만 죽는 생산자" 는 전제 가드를 통과하고 팔 A 는 0바이트를 얻어
+#   `0` 을 만족한다 — 시체를 시험하지 않겠다는 가드가 정확히 그 시체를 통과시킨다.
+#   이제 팔 A 자신의 종료코드를 잡아 `0` 을 요구한다(실측: 빈 stdin 에서 `assign` 은
+#   rc 0 · 0바이트라 위양성 없음). 비지 않은 입력 확인은 *다른 축*(생산자가 애초에 행을
+#   낼 줄 아는가)이므로 남겨 둔다.
 case_zero_rows_is_not_an_error() {
   setup
-  local ok=1 sel="$PLUGIN_ROOT/scripts/run-test-selection.sh"
+  local ok=1 sel="$PLUGIN_ROOT/scripts/run-test-selection.sh" a0rc=0
   mkdir -p "$TMP/wt/tests" "$TMP/other/tests"
   write_ledger "$TMP/l.md"; write_aggregate "$TMP/a.yaml" closed
-  # 전제 가드 — **같은 호출 모양**이 비지 않은 입력에서는 행을 낸다. 이것이 없으면 아래
-  # 두 팔은 "죽어서 아무것도 못 낸 생산자" 로도 만족된다(시체를 시험한다).
+  # 전제 가드 ① — 같은 호출 모양이 비지 않은 입력에서는 행을 낸다.
   printf '../other/tests/evil.sh\n' | bash "$sel" assign "$TMP/wt" > "$TMP/one.tsv" 2>/dev/null
   [[ -s "$TMP/one.tsv" ]] \
     || { echo "    같은 호출 모양이 비지 않은 입력에도 행 0개 (픽스처 전제 붕괴)"; ok=0; }
   # 팔 A — 빈 후보 목록을 실물 생산자에 통과시킨 출력
-  : | bash "$sel" assign "$TMP/wt" > "$TMP/as0.tsv" 2>/dev/null
+  : | bash "$sel" assign "$TMP/wt" > "$TMP/as0.tsv" 2>/dev/null || a0rc=$?
+  # 전제 가드 ② — 그 호출이 **완주**했다. 0바이트가 "빈 결과" 인지 "죽은 생산자" 인지
+  #               가르는 것은 이 종료코드뿐이다.
+  [[ "$a0rc" == 0 ]] \
+    || { echo "    빈 입력에서 생산자가 rc=$a0rc 로 죽음 — 팔 A 가 시체를 시험하고 있다"; ok=0; }
   [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as0.tsv" "$TMP/l.md")" == 0 ]] \
     || { echo "    0행 배정이 red — §11 ⑭(빈 스코프)를 이 인자가 닫아 버렸다"; ok=0; }
   # 팔 B — 같은 출력 + 앞뒤 빈 줄. `check_qa_ledger.py` 의 빈 줄 skip 을 잰다.
@@ -462,6 +481,16 @@ case_producer_consumer_contract() {
   local ok=1 sel="$PLUGIN_ROOT/scripts/run-test-selection.sh"
   mkdir -p "$TMP/wt/tests" "$TMP/other/tests"
   # 워크트리 **밖** 경로는 어떤 어댑터의 소유도 아니다 → 결정론적으로 unclaimed 행이 나온다.
+  #
+  # ★ **흡수자가 있는 트리로 잰다 (/qg iter-8 iteration 3, F24).** README 는 담김 거부가
+  #   bulk 흡수자 분기보다 **앞선다**고 주장하고, "흡수자가 있는 레포에서 이 검사가 죽은
+  #   무게라고 결론짓지 말 것 — 가장 위험한 클래스가 바로 그 축" 이라고 적는다. 그런데
+  #   스위트의 담김 픽스처는 전부 흡수자가 없는 셸 어댑터 트리였다. 그러면 거부를 흡수
+  #   분기 **뒤로** 옮기는 편집이 스위트를 통째로 초록으로 통과하고 그 README 주장만
+  #   조용히 거짓이 된다(안심시키는 방향). `Cargo.toml` + `Makefile` 로 bulk 흡수자를
+  #   세워 그 주장이 실제로 측정되게 한다.
+  : > "$TMP/wt/Cargo.toml"
+  : > "$TMP/wt/Makefile"
   printf '../other/tests/evil.sh\n' | bash "$sel" assign "$TMP/wt" > "$TMP/real.tsv" 2>/dev/null
   grep -q 'unclaimed' "$TMP/real.tsv" \
     || { echo "    실물 assign 이 unclaimed 행을 내지 않음 (픽스처 전제 붕괴)"; ok=0; }

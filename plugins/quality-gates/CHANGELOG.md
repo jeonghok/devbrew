@@ -54,6 +54,49 @@
 - `SKILL.md` 의 `regardless of Review scope` 리터럴과 그것이 서술하던 동작.
 
 ### Fixed
+- **R6 이 읽는 어댑터별 파일 세 개를 아무 스텝도 쓰지 않았다** (design F1 · §11 ㉗ 계열,
+  `/qg` iter-8 iteration 3 — 리뷰어 4명 독립 수렴). `--expected` · `--baseline` · `--head` 가
+  받는 `$qg_run_tmp/{expected,baseline,head}-$runner.*` 는 **이 브랜치의 다섯 리비전 전부**에서
+  소비자만 있고 생산자가 없었다. 정직한 실행은 `read_text_or_fail4` → `exit 4` 로 떨어져 귀속이
+  degrade 되고, 모델이 대신 화면 출력을 전사하면 `--expected` 가 주장하는 독립성이 사라진다
+  (한 전사자에서 나온 세 입력은 대칭 누락을 서로 가린다). 앞선 세 라운드의 "수정" 은 전부 이
+  파일들의 *이름 짓는 법*(R-init 전개 → 셸 함수 → 인라인)을 고쳤고 *누가 쓰는가* 는 한 번도
+  건드리지 않았다. 이제 R4 ③ 과 R5b 어댑터 루프 끝에서 실제로 쓴다. 회귀 락은 **③c
+  (생산자 ∧ 소비자)** — ③b 는 이름이 어디를 가리키는지만 재므로 이 결함을 원리적으로 볼 수
+  없었다(실측: 생산자 세 줄을 각각 지운 mutant 가 ③b 만으로는 셋 다 GREEN).
+- **담김 가드가 봉인되는 트리보다 작은 집합을 쟀다** (design F10 · §11 ㉞ 인접). R-init 은
+  `$project_dir`(Step P0 의 `pwd`)과 비교했는데 `create-sandbox` 는
+  `git rev-parse --show-toplevel` 로 독립적으로 구한 `$main_root` 에서 열거해 봉인한다
+  (`qg-worktree.sh:148-150`, `:170-171`). 서브디렉토리에서 `/qg` 를 부르고 `TMPDIR` 이 레포
+  루트 쪽에 있으면 중간 파일이 `$project_dir` 밖 · `$main_root` 안에 떨어져 **가드는 통과하고
+  파일은 커밋 `B` 로 봉인된다** — 가드의 산문이 막는다고 선언한 바로 그 결말이다. 이제
+  `$sealed_root` 를 봉인하는 쪽과 같은 방법으로 구해 그것과 비교한다.
+- **`per_adapter_yamls` 가 대입 없이 소비되고 있었다** (design F11). feature 커밋 이래 사용
+  1건 · 대입 0건. 되살리는 대신 `--aggregate` 가 `"$qg_run_tmp"/per-adapter-*.yaml` glob 을
+  받는다 — `--expected-adapters` 의 개수 대조가 *모델이 적은 목록의 길이* 가 아니라 **실제
+  생산물**을 세게 되어 비로소 이빨을 갖는다.
+- **`create-baseline` 에 종료 라우팅이 없었다** (design F7 — codex · security-reviewer ·
+  silent-failure-hunter 가 서로 다른 모델 계열에서 수렴). 형제 `create-head` 는 같은 실패
+  집합에 대해 표를 갖는다. 방향은 표 없이도 fail-closed 지만 **보고되는 사유가 틀렸다** — 행
+  부재가 `SILENT_DROP`("고른 것이 사라졌다") 으로 라벨돼 `BASELINE_UNRUNNABLE`("기준선을 못
+  돌렸다") 을 가린다. 형제와 같은 모양의 표를 붙였다.
+- **정리 복합문이 정상 경로에서 1 을 반환했다** (design F8c). `[[ … ]] && remove` 는 조건이
+  거짓일 때 AND-리스트 전체가 1 이고, 그것이 블록의 마지막 명령이라 **지울 트리가 없는 정상
+  경로에서 성공한 스텝이 실패로 읽혔다.** 두 축 모두 `if … then … fi` 로 바꿨고, 기준선 축에도
+  HEAD 축이 이미 갖고 있던 **"모든 종료 경로에서 폐기"** 규칙을 붙였다(안 붙이면 `base-<sid8>`
+  가 남아 다음 `create-baseline` 이 clobber 거부에 걸려 그 세션이 영영 PASS 에 못 간다).
+- **배정 파일 공시가 안심시키는 방향으로 거짓이었다** (design F9). 앞 판본은 부재-기반 집행을
+  깨는 데 "세 조건이 겹쳐야" 한다고 적었는데, 실측하면 **이미 있는 파일을 0바이트로 자르는 한
+  동작**이면 된다 — `assign_rc=0` 도 파일 존재도 그 시나리오에서 **정상값**이라 1차 라우팅은
+  제대로 발화하고 아무것도 제약하지 않는다.
+- **락 다섯 개가 모양만 재고 동작을 안 쟀다** (design F4 · F5 · F6 · F19 · F21). 리뷰어들이
+  넣은 mutant 중 `case` arm 뒤집기 · `exit 1` → `:` · 담김 arm no-op · `case` 삭제 후 decoy ·
+  `set -o pipefail` 을 다른 fenced 블록/파이프라인 뒤로 이동 · 리다이렉트와 `&& mv` 사이
+  `; true` · 최종 경로 직접 리다이렉트 + decoy `.part` · 게이트 뒤 `; true` / `if ! …; then :; fi`
+  / `2>/dev/null` — **전부 GREEN 이었다.** 열거를 늘리는 대신 구조 술어로 바꿨다: 담김 arm
+  **안**의 `exit`, 파이프라인과 **같은 블록의 선행** `pipefail`, 블록 안 `;`·`|`·`2>` 0건과
+  단순-명령 선두, 라우팅 문장 **자기 줄** 스코프 부정 스캔. 25/25 mutant 가 기대대로 움직인다
+  (`$CLAUDE_JOB_DIR/tmp/mut3.py`).
 - **`assign` 실패가 "`unclaimed` 0건" 으로 세탁됐다** (design AC70 · §11 ㉛). R1b 가 최종 경로로
   직접 리다이렉트했는데 셸은 **명령이 돌기 전에** 대상을 만들고 절단한다 — 인자 검증에서 즉사한
   `assign`(0바이트)도, 루프 중간에 죽은 `assign`(문법적으로 완전한 **접두 행**)도 게이트에게는
