@@ -122,6 +122,31 @@ class TestRootResolution(unittest.TestCase):
         self.assertEqual(self.module.git_common_dir(str(self.box.main)),
                          self.module.git_common_dir(str(self.box.worktree)))
 
+    def test_common_dir_matches_through_symlink(self) -> None:
+        """`realpath` 정규화가 없으면 심볼릭 링크 경유 호출이 원본과 다른 문자열로 나온다.
+
+        `os.path.join(cwd, out)` 만으로는 링크 경로 문자열이 그대로 살아남아
+        원본 경로로 얻은 값과 문자열 비교가 깨진다.
+        """
+        link = self.box.root / "link-to-repo"
+        os.symlink(self.box.main, link)
+        self.assertEqual(self.module.git_common_dir(str(link)),
+                         self.module.git_common_dir(str(self.box.main)))
+
+    def test_common_dir_matches_from_unresolved_temp_path(self) -> None:
+        """`realpath` 정규화가 없으면 미해석 tempdir 과 그 realpath 가 다른 문자열로 나온다.
+
+        macOS 에서 raw tempdir 은 `/var/...` 로, realpath 는 `/private/var/...` 로
+        시작한다. Sandbox.root 는 `.resolve()` 로 이 간극을 생성자에서 미리
+        없애므로, 이 테스트는 Sandbox 밖에서 별도 repo 를 직접 만들어 그 간극을
+        재현한다.
+        """
+        raw = tempfile.mkdtemp(prefix="at-standup-raw-")
+        self.addCleanup(shutil.rmtree, raw, ignore_errors=True)
+        make_repo(Path(raw))
+        self.assertEqual(self.module.git_common_dir(raw),
+                         self.module.git_common_dir(os.path.realpath(raw)))
+
     def test_root_from_worktree_is_main_repo(self) -> None:
         self.assertEqual(self.module.repo_root(str(self.box.worktree)),
                          str(self.box.main))
@@ -129,8 +154,11 @@ class TestRootResolution(unittest.TestCase):
     def test_prefix_catches_main_and_sibling_worktree(self) -> None:
         """워크트리 안에서 실행해도 메인 리포와 형제 워크트리 디렉토리가 **둘 다** 잡힌다.
 
-        `--show-toplevel` 기반 구현은 워크트리 경로가 더 길어 접두사 방향이
-        반대라 1개만 잡고, 파일이 0개가 아니므로 정상처럼 답한다.
+        `repo_root()` 를 거쳐야 한다 — root 를 `self.box.main` 으로 직접 넘기면
+        `--show-toplevel` 기반 구현이 저지르는 실패 모드(워크트리 경로가 더
+        길어 접두사 방향이 반대라 1개만 잡히는데도 0개가 아니라 정상처럼
+        답하는 것)를 가린다. 프로덕션과 같은 경로 —
+        `repo_root(worktree)` → `candidate_paths` — 로 라우팅해야 이를 잡는다.
         """
         main_dir = self.box.project_dir(self.box.main)
         wt_dir = self.box.project_dir(self.box.worktree)
@@ -138,7 +166,8 @@ class TestRootResolution(unittest.TestCase):
         write_jsonl(wt_dir / "bbb.jsonl", [assistant_text("w", gitBranch="wt-branch")])
         os.environ["HOME"] = str(self.box.home)
         module = load_script()  # HOME 반영을 위해 재로드
-        found = module.candidate_paths(str(self.box.main))
+        root = module.repo_root(str(self.box.worktree))
+        found = module.candidate_paths(root)
         self.assertEqual(len(found), 2, found)
 
 
