@@ -307,30 +307,47 @@ def base_ref(cwd):
     return None
 
 
+def commit_lines(cwd):
+    """base..HEAD 커밋 로그. base 가 없으면 최근 20개로 강등. (base, command, rc, out).
+
+    `render_code_state()` 와 `main()` 이 이 하나로 범위 결정과 실제 git 호출을
+    공유한다 — 각자 재구현하면 드리프트한다. 실사례: `main()` 은 한때
+    `base_ref(cwd) or "HEAD"` 로 대입해 base 가 없을 때
+    `git log --oneline HEAD..HEAD`(늘 빈 범위)가 됐는데, `render_code_state()`
+    는 같은 조건에서 `-20` 으로 정확히 강등했다 — 그 결과 `commits: 0` 이
+    바로 아래 `## 코드 상태` 커밋 목록과 모순되는 버그였다.
+    """
+    base = base_ref(cwd)
+    command = (["git", "log", "--oneline", "%s..HEAD" % base] if base
+              else ["git", "log", "--oneline", "-20"])
+    rc, out = _run(command, cwd=cwd)
+    return base, command, rc, out
+
+
 def render_code_state(cwd):
     """한 재료가 죽어도 나머지는 산다. 빈 절을 조용히 두지 않는다."""
     lines = ["## 코드 상태", ""]
-    base = base_ref(cwd)
-    if base:
-        commands = [
-            ["git", "log", "--oneline", "%s..HEAD" % base],
-            ["git", "diff", "--stat", "%s..HEAD" % base],
-        ]
-    else:
+    base, log_command, log_rc, log_out = commit_lines(cwd)
+    if not base:
         lines.append("(base-ref 를 구하지 못해 최근 20개 커밋으로 강등)")
-        commands = [["git", "log", "--oneline", "-20"]]
-    commands += [["git", "status", "--short"],
+    remaining = [["git", "diff", "--stat", "%s..HEAD" % base]] if base else []
+    remaining += [["git", "status", "--short"],
                  ["git", "diff", "--stat"],
                  ["git", "diff", "--cached", "--stat"]]
-    for command in commands:
-        rc, out = _run(command, cwd=cwd)
+
+    def emit(command, rc, out):
         label = " ".join(command)
         if rc != 0:
             lines.append("(git 조회 실패: %s, %d)" % (label, rc))
-            continue
+            return
         lines.append("$ %s" % label)
         lines.append(out if out else "(없음)")
         lines.append("")
+
+    emit(log_command, log_rc, log_out)
+    for command in remaining:
+        rc, out = _run(command, cwd=cwd)
+        emit(command, rc, out)
     return "\n".join(lines)
 
 
@@ -352,16 +369,32 @@ def main(argv=None):
                 "STANDUP-UNAVAILABLE: session file not found "
                 "(~/.claude/projects/%s*/*.jsonl)\n" % slug(root))
             return 3
-        rc, out = _run(["git", "log", "--oneline",
-                        "%s..HEAD" % (base_ref(cwd) or "HEAD")], cwd=cwd)
-        data["commits"] = len([ln for ln in out.splitlines() if ln.strip()]) if rc == 0 else 0
+        _, _, commits_rc, commits_out = commit_lines(cwd)
+        data["commits"] = (len([ln for ln in commits_out.splitlines() if ln.strip()])
+                           if commits_rc == 0 else 0)
         sys.stdout.write(render_inventory(root, branch, args.session_id, data))
         sys.stdout.write("\n\n")
         sys.stdout.write(render_code_state(cwd))
         sys.stdout.write("\n")
         return 0
     except Exception as exc:
-        sys.stdout.write("STANDUP-UNAVAILABLE: internal error (%s)\n" % exc)
+        # 실패 계약은 "STANDUP-UNAVAILABLE 한 줄, 절대 죽지 않는다" — 그 계약을
+        # 지키는 코드 자체가 죽으면 안 된다. 메시지를 UTF-8 로 왕복시켜
+        # 인코딩 불가 문자(예: 홑 서로게이트)를 무해화하고, 그 write 자체도
+        # 감싼다 — 무해화가 놓친 두 번째 실패도 새어나가지 못하게.
+        # (subagent-explain.py 의 _degraded() 와 같은 모양.)
+        try:
+            try:
+                message = str(exc)
+            except Exception:
+                message = repr(exc)
+            safe = message.encode("utf-8", "replace").decode("utf-8")
+            sys.stdout.write("STANDUP-UNAVAILABLE: internal error (%s)\n" % safe)
+        except Exception:
+            try:
+                sys.stdout.write("STANDUP-UNAVAILABLE: internal error\n")
+            except Exception:
+                pass
         return 4
 
 

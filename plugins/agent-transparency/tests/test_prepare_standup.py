@@ -10,6 +10,7 @@ Run:
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import os
 import shutil
@@ -542,6 +543,113 @@ class TestExitCodes(unittest.TestCase):
         rc, out = self.run_script(self.box.main)
         self.assertEqual(rc, 0)
         self.assertTrue(out.startswith("scope:"))
+
+    def test_not_a_git_repo_exits_three(self) -> None:
+        """Finding 4 — main() 의 `repo_root(cwd) is None` 갈래는 새 코드인데 테스트가 없었다."""
+        plain = self.box.root / "not-a-repo"
+        plain.mkdir()
+        rc, out = self.run_script(plain)
+        self.assertEqual(rc, 3)
+        lines = out.splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertTrue(lines[0].startswith("STANDUP-UNAVAILABLE:"))
+        self.assertNotIn("scope:", out)
+
+    def test_commits_agrees_with_code_state_with_base_ref(self) -> None:
+        """Finding 1 회귀 락 — base-ref 있음. `commits:` 가 base..HEAD 커밋 수와 일치하고
+        `## 코드 상태` 블록이 정말 그 base..HEAD 범위를 보여준다.
+
+        Sandbox 자체는 건드리지 않는다 — main 브랜치는 이 테스트 안에서만 만든다.
+        """
+        module = load_script()
+        # main 을 현재 HEAD(= "seed" 커밋)에 만들어 두고, 체크아웃은 그대로 "work" 에
+        # 둔 채 그 위에 커밋 두 개를 더 쌓는다 — merge-base(HEAD, main) == seed.
+        git("branch", "main", cwd=self.box.main)
+        (self.box.main / "a.txt").write_text("a\n", encoding="utf-8")
+        git("add", "-A", cwd=self.box.main)
+        git("commit", "-qm", "add a.txt", cwd=self.box.main)
+        (self.box.main / "b.txt").write_text("b\n", encoding="utf-8")
+        git("add", "-A", cwd=self.box.main)
+        git("commit", "-qm", "add b.txt", cwd=self.box.main)
+
+        pdir = self.box.projects / module.slug(str(self.box.main))
+        pdir.mkdir(parents=True, exist_ok=True)
+        write_jsonl(pdir / "s.jsonl",
+                    [assistant_text("a", gitBranch="work", cwd=str(self.box.main))])
+        rc, out = self.run_script(self.box.main)
+        self.assertEqual(rc, 0)
+
+        commits = int(out.split("commits:")[1].split()[0])
+        self.assertEqual(commits, 2)
+        # base..HEAD 범위 — seed 는 base 자신이라 빠지고, 두 새 커밋만 나온다.
+        self.assertIn("add a.txt", out)
+        self.assertIn("add b.txt", out)
+        log_block = out.split("$ git log --oneline")[1].split("\n\n")[0]
+        self.assertNotIn("seed", log_block)
+        self.assertNotIn("-20", out.split("$ git log --oneline")[1].split("\n")[0])
+
+    def test_commits_agrees_with_code_state_without_base_ref(self) -> None:
+        """Finding 1 회귀 락 — base-ref 없음(-20 강등). 원래 버그가 정확히 이 조건에서
+        났다: `commits:` 는 늘 0 인데 바로 아래 블록엔 실제 커밋이 나열됐다.
+
+        Sandbox 는 "main"/"origin/main" 을 만들지 않으므로 별도 설정 없이 이 조건이다.
+        """
+        module = load_script()
+        (self.box.main / "a.txt").write_text("a\n", encoding="utf-8")
+        git("add", "-A", cwd=self.box.main)
+        git("commit", "-qm", "add a.txt", cwd=self.box.main)
+
+        pdir = self.box.projects / module.slug(str(self.box.main))
+        pdir.mkdir(parents=True, exist_ok=True)
+        write_jsonl(pdir / "s.jsonl",
+                    [assistant_text("a", gitBranch="work", cwd=str(self.box.main))])
+        rc, out = self.run_script(self.box.main)
+        self.assertEqual(rc, 0)
+
+        commits = int(out.split("commits:")[1].split()[0])
+        self.assertGreater(commits, 0)          # 버그였다면 여기서 0 이 나왔다
+        self.assertEqual(commits, 2)             # seed + add a.txt
+        self.assertIn("seed", out)
+        self.assertIn("add a.txt", out)
+        self.assertIn("(base-ref 를 구하지 못해 최근 20개 커밋으로 강등)", out)
+
+    def test_exit_four_handler_survives_unprintable_message(self) -> None:
+        """Finding 2 회귀 락 — 예외 메시지에 홑 서로게이트가 있어도 실패 경로가 죽지 않는다.
+
+        `UnicodeEncodeError` 자체의 `str()` 은 escape 되어 ASCII-safe 하다(Task 7
+        원 리포트의 rc=4 재현이 이 경로를 뚫지 못했던 이유). 여기서는 단일-인자
+        `Exception.__str__()` 이 인자를 그대로 돌려주는 성질을 이용해, 원문 홑
+        서로게이트를 **그대로** 담은 예외를 직접 구성한다. 서브프로세스로는 그런
+        예외를 결정론적으로 주입할 방법이 없어(환경변수/인자 경계에서 인코딩이
+        먼저 걸린다) 여기서는 실제 stdout 과 같은 규율(UTF-8, strict)의 스트림에
+        in-process 로 강제 write 시켜 같은 실패 조건을 재현한다.
+        """
+        module = load_script()
+        original_collect = module.collect
+
+        def boom(*_args, **_kwargs):
+            raise RuntimeError("\udc80 내부 오류")
+
+        module.collect = boom
+        self.addCleanup(setattr, module, "collect", original_collect)
+
+        buf = io.BytesIO()
+        fake_stdout = io.TextIOWrapper(buf, encoding="utf-8", errors="strict")
+        original_stdout = module.sys.stdout
+        prev_cwd = os.getcwd()
+        os.chdir(str(self.box.main))
+        module.sys.stdout = fake_stdout
+        try:
+            rc = module.main(["--session-id", "none"])
+            fake_stdout.flush()
+        finally:
+            module.sys.stdout = original_stdout
+            os.chdir(prev_cwd)
+
+        out = buf.getvalue().decode("utf-8")
+        self.assertEqual(rc, 4)
+        self.assertEqual(out.count("\n"), 1)
+        self.assertTrue(out.startswith("STANDUP-UNAVAILABLE: internal error"))
 
 
 if __name__ == "__main__":
