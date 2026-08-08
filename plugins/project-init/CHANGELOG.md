@@ -5,6 +5,30 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [1.7.3] — 2026-08-03
+
+harness-capability-suppression-sweep Task 11(S4) — 규약 정렬. `templates/github-flow/`와
+`templates/git-flow/`의 branch-strategy 템플릿이 "기존 feature 브랜치는 `git merge
+origin/main`(또는 `origin/develop`)으로 sync, `git rebase`는 절대 안 됨"이라는
+무조건 금지 조항을 신규 프로젝트에 심고 있었다 — rebase가 정말 unsafe한 것은
+이미 push돼 다른 사람이 받아간 공유 브랜치뿐인데, 아직 공유되지 않은 로컬 정리까지
+막는 과잉 규약이었다.
+
+### Changed
+- `templates/github-flow/branch-strategy.md`, `templates/git-flow/branch-strategy.md`:
+  무조건 rebase 금지 조항을 "공유된 브랜치는 rebase하지 않는다"로 재정식화 — rebase가
+  commit SHA를 rewrite하므로 이미 push돼 공유된 브랜치에서 unsafe하다는 근거는 유지하되,
+  아직 공유되지 않은 로컬 브랜치 정리는 각자 판단으로 남긴다. 두 템플릿 모두 동일하게
+  변경(한쪽만 고치면 다른 variant에서 억제가 산다).
+- 리포 루트 `docs/git-workflow/branch-strategy.md`는 **변경하지 않았다** — 이 문서는
+  사용자 본인이 명시한 선호이며 이 sweep의 스코프 밖(C3).
+
+### Added
+- `tests/` 디렉토리 신설(이 플러그인 최초의 테스트). `test_branch_strategy_rebase_clause.sh`
+  — AC8e 락, 양방향: 템플릿 2개 모두에서 무조건 금지 조항 부재 + 완화된 조항 실재를
+  확인하고, 동시에 리포 루트 문서에는 원문 금지 조항이 **그대로 남아 있어야** PASS —
+  템플릿만 확인하면 리포 루트를 "정합"이라는 명분으로 함께 덮어써도 못 잡기 때문.
+
 ## [1.7.2] — 2026-07-09
 
 (v1.7.1은 marketplace description 압축에 따른 doc-only patch bump — 동작 변경 없음.)

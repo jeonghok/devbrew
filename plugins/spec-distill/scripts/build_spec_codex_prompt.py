@@ -26,7 +26,9 @@ PROMPT_TEMPLATE = """You are an independent design-doc reviewer. You are reviewi
 brainstorming design document (not code). Do NOT modify any files; you are in a
 read-only sandbox.
 
-Review the document below for these SIX judgment categories only:
+Review the document below. These six judgment categories are the ones the
+downstream merge expects most often — they are a starting vocabulary, not a
+closed list:
 
 - placeholder: "TBD", "TODO", "FIXME", "fill in later", or other unfinished text.
 - ambiguity: unmeasurable phrasing ("robust", "works correctly", "fast",
@@ -39,6 +41,10 @@ Review the document below for these SIX judgment categories only:
   testing or change isolation is impossible.
 - testing: no Verification Plan, or only "manual check" — no automated
   verification procedure.
+- other: anything real that none of the six names. Use this freely — a genuine
+  problem must never be dropped because no listed category fits it. When you use
+  `other`, make the `summary` self-explanatory: it is the only place a reader
+  learns what kind of issue this is.
 
 <design_doc>
 {{DESIGN_DOC}}
@@ -50,7 +56,7 @@ Output your findings in a fenced JSON code block:
 {
   "findings": [
     {
-      "category": "placeholder | ambiguity | scope_creep | approaches_comparison | isolation | testing",
+      "category": "placeholder | ambiguity | scope_creep | approaches_comparison | isolation | testing | other",
       "target_section": "<markdown anchor of the offending section, e.g. #2-goals>",
       "severity": "block | high | medium",
       "confidence": <integer 1-10>,

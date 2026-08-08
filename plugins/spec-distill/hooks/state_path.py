@@ -85,9 +85,11 @@ def main(argv: list[str]) -> int:
         return 0
     if sub == "session-id":
         # env-only resolve (no hook payload on the CLI path); mirrors what the
-        # Stop/UserPromptSubmit/PostToolUse hooks resolve so the skill keys the
-        # review lock to the SAME state file the hooks read. Unresolved → exit 1
-        # with NO stdout (caller treats empty as "skip lock, keep enforcement").
+        # Stop/UserPromptSubmit/PostToolUse hooks resolve so the skill keys
+        # `strip-pending` / `mark-reviewed` to the SAME state file the hooks read
+        # (v0.25.0 arm ledger — the review-in-progress lock this comment used to
+        # name was deleted). Unresolved → exit 1 with NO stdout (caller treats
+        # empty as "skip the ledger write, keep enforcement").
         sid = resolve_session_id(None)
         if sid is None:
             return 1

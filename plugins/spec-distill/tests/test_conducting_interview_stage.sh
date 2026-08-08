@@ -20,12 +20,7 @@ has 'R5.*Open Question|R5.*OQ' "R5 Open-Questions ritual"
 has 'check_brief\.py gate' "termination gate calls check_brief.py gate"
 has '차단|block|종료.*금지|finalize.*안' "gate is blocking on failure"
 
-has 'web_budget\.py' "web bound calls web_budget.py"
-has 'web_budget\.py"? increment' "F2: web call increments counters before checking"
-has 'web_budget\.py"? reset-sweep' "F2: sweep boundary calls reset-sweep"
 has 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' "web kill switch documented (AC8)"
-has 'web_sweep_count' "PN3: web_sweep_count counter in state"
-has 'web_search_count' "PN3: web_search_count counter in state"
 has 'steelman.*생략|web 비활성.*steelman' "F8: R3 web-absent loud degradation (AC8 symmetry)"
 
 has 'steelman-builder' "steelman-builder dispatch"
@@ -271,6 +266,15 @@ grep -qE '§[68] OQ' <<<"$r3_block" \
 [[ "$(grep -c '§3 OQ' <<<"$r3_block")" -ge 2 ]] \
   && note PASS "R3: §3 OQ reference present (x2)" \
   || note FAIL "R3: §3 OQ reference present (x2)"
+
+# E10 (오케스트레이터 미러) — R3 dispatch 지시에 병렬·투기적 금지 문구 부재.
+# steelman-builder.md 에이전트 persona에서 삭제한 것과 같은 억제가 이 SKILL의 dispatch
+# 지시문에도 있었다(C5/AP9 인용 둘 다 근거 없음 — fix round 1). 전-파일 grep은 잘못이다:
+# :122 'teach-beat 최대 1회'와 :438 '2회까지'가 이 SKILL에 legitimately 남아있으므로
+# "$r3_block"(위에서 정의한 R3 섹션 윈도우)으로 스코프한다.
+grep -qE '병렬.{0,8}금지|투기적.{0,8}금지' <<<"$r3_block" \
+  && note FAIL "E10: R3 dispatch에 병렬·투기적 금지 문구 잔존 (scoped to R3)" \
+  || note PASS "E10: R3 dispatch에 병렬 금지 문구 없음 (scoped to R3)"
 
 # C45 interview_round>=2 트리거가 제거됐는지 (AC7)
 grep -q 'interview_round >= 2\|interview_round>=2' "$SKILL" \

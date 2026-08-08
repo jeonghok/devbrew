@@ -1,9 +1,9 @@
 ---
 name: coverage-mapper
-model: sonnet
+model: inherit
 cost_class: low
 color: blue
-tools: Read, Grep, Glob
+tools: Read, Grep, Glob, WebSearch, WebFetch
 description: >
   Use this agent during a spec-distill coverage-driven interview to propose
   topic-derived coverage dimensions (this topic needs dimension X because …) and

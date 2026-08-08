@@ -1,5 +1,491 @@
 # Changelog
 
+## [0.25.2] — 2026-08-06
+
+### Fixed
+
+- **Stop 훅의 mandate 가 자기 수명을 밝히지 않아, "이번 리뷰만 멈춰달라"는 요청이
+  세션 전체 kill switch 로 응답되던 것.** 실사용에서 적발됐다 — 사용자가 훅을 이번
+  한 번만 멈추려 했는데 `DEVBREW_DISABLE_SPEC_DISTILL=1` + 재시작이 답으로 나왔다.
+  스위치가 없어서가 아니다. 훅 4개 전부 `main()` 첫 문장에서 kill switch 를 존중하고
+  스위치는 3단(전역·훅단위·`SKIP_AUTOREVIEW`)으로 이미 있었다. **없던 것은 범위
+  정보다** — `reason` 이 "MANDATORY: reviewing-spec 호출"만 말하고 그 강제가 언제까지
+  유효한지 적지 않으니, 읽는 쪽이 영구로 가정하고 최대 화력을 골랐다. 게다가 항상
+  로드되는 리포 `CLAUDE.md` 의 kill switch 조항은 **보안 요구사항**("모든 훅은 꺼질 수
+  있어야 한다")이라 scoping 질문에 재사용되면 all-or-nothing 만 가르친다.
+  → `reason` 에 수명 한 문장 추가: *"이 mandate는 이번 dispatch 1회에만 유효하다.
+  재발동은 이 문서를 다시 편집할 때 일어난다."* 두 절 **모두 무조건 참**인 것만 남겼다
+  (아래 리뷰 라운드 참조).
+  **범위는 알리되 면제는 알리지 않는다** — "건너뛰어도 된다"·"무시하면 재발동하지
+  않는다" 같은 집행 공백은 적지 않는다. 그것은 모델이 스스로 리뷰를 면제할 근거가 되어
+  Law 2 를 뚫는다. 수명 사실은 반대로 "지금 안 하면 사라진다"는 즉시 이행 압력이다.
+- **두 수명 문장의 상호배타.** G6 상한에 닿은 dispatch 에서는 "재편집하면 재발동" 이
+  **거짓**이다 — 그 문서는 이 세션에서 이미 중단됐다. 상한 문구와 수명 문구를 `if/else`
+  로 갈라 어느 분기에서도 훅이 같은 숨결로 모순되는 두 수명을 주장하지 않게 했다.
+
+### Changed
+
+- `README.md` Kill switches 섹션 맨 앞에 **범위 사다리 표**. 기존 목록이 전부 세션
+  스코프·재시작 필요라, "이번 한 번만" 에 해당하는 두 행(단발성 / 문서 커밋)이 어디에도
+  없었다. 두 행은 env var 가 아니라 arm-once(v0.25.0) 설계에서 따라 나오는 성질이다.
+  이 표는 mandate 문장의 **참조본**이지 유일한 전달 경로가 아니다 — 찾아보지 않는 문서는
+  이 실패를 못 막는다는 것이 이번 건의 요지다.
+- `systemMessage`(사용자향)는 **무변경**. 같은 사건에 사용자와 Claude 가 서로 다른
+  강도의 신호를 받으면(사용자 화면 "1회" vs Claude "MANDATORY") 두 참여자가 다른
+  구속력을 믿은 채 대화하게 된다 — 지금보다 나쁘다.
+
+### Added
+
+- `tests/test_hook_output_schema.py` `TestReviewDispatchMandateScope` 3종 — 존재
+  1 + 상호배타 2(양방향). **mutation 3축 전부 RED 로 이빨 증명**: M1 문장 삭제 →
+  RED, M2 `else`→`if True`(상한에서 두 문장 동시 방출) → RED, M3 문자열은 파일에
+  남기되 `msg_lines` 에 안 싣기 → RED. **M3 가 요점이다** — grep 기반 락이었다면
+  GREEN 이었을 mutation 에서 RED 가 나므로 이 락은 문자열의 존재가 아니라 그것이
+  `reason` 채널에 실리는지를 잰다. 단방향으로 두면 두 문장을 모두 내보내는 mutation 이
+  통과하므로 상호배타 두 방향은 함께 있어야 한다.
+
+### 리뷰 라운드 (codex 독립 감사, 머지 전)
+
+별-모델 독립 리뷰가 **작성자가 놓친 4건**을 적발했고 전부 이 릴리스에서 수정했다.
+
+- **[C1] README 사다리가 모델에게 skip 을 지시하고 있었다.** 첫 판본의 "이번 dispatch
+  한 번만" 행이 *"그냥 이번 턴에 리뷰를 건너뛰면 된다"* 였다 — `reason` 에는 면제 문구를
+  넣지 않으려고 신중히 썼으면서, **같은 PR 의 README 가 그 절제를 무효화**했다. writer
+  턴이 자기 리뷰를 skip 할 근거가 되므로 Law 2 위반이다. 표를 *"어떻게 건너뛰나"* 에서
+  *"무엇이 범위를 정하나"* 로 재구성했다(열 제목 `방법` → `그 범위를 만드는 것`).
+  이 PR 의 e2e 가 이미 신호를 줬으나(README 만 있는 arm 에서 3/3 이 "그냥 건너뛰면
+  됩니다") 작성자는 그것을 *"README 도 효과 있다"* 로만 읽고 반대 해석을 놓쳤다.
+- **[C2] mandate 가 fail-open 경로에서 거짓을 주장했다.** *"커밋하면 더 이상 arm 되지
+  않는다"* 는 무조건 단정이었는데, `is_born()` 은 git 판정 실패(`ls-files` timeout·rc 128)를
+  **전부 arm 쪽으로 fail-open** 한다 — 커밋된 문서도 arm 될 수 있다. `arm_ledger` import
+  실패 시 `cap=0` 이 되어 같은 `else` 로 떨어지는 경로도 같은 거짓을 낸다. 커밋 절을
+  mandate 에서 **제거**했다. 커밋 권고는 approve 시점 `check-born` advisory 가 이미
+  담당하며, 거기서는 실제 git 판정 결과를 손에 쥐고 말하므로 거짓이 될 수 없다.
+- **[C3] "커밋하면 영구히" 가 이미 걸린 dispatch 도 멈추는 것처럼 읽혔다.** Stop 은 pending 을
+  찾은 뒤 `armed_paths` 만 조회하고 git 추적 여부를 재검사하지 않으므로, pending 생성 후
+  같은 턴에 커밋해도 그 dispatch 는 실행된다. README 에 명시했다.
+- **[C4] 락이 문구의 존재만 재고 진위는 재지 않았다.** C2 의 거짓 단정이 있어도 문구 락
+  3종은 전부 GREEN 이었다. `TestMandateClaimsAreTrue` 3종 추가 — validator·Stop·상태
+  파일을 실제로 태워 남은 두 주장 각각을 검증하고, 무조건 커밋 단정의 재도입을 금지한다.
+
+**mutation 6축 전부 RED.** 문구 락 3(M1 삭제 / M2 `else`→`if True` / M3 문자열은 파일에
+남기고 채널만 끊기) + 진위 락 3(N1 pending 소진 제거 / N2 `should_arm` 상시 False /
+N3 커밋 단정 재도입). 그 과정에서 **계측기 결함 2건**을 잡았다:
+
+- 진위 락 초판은 N1 에서 GREEN 이었다 — 두 번째 Stop 의 침묵을 만든 것이 pending
+  소진이 아니라 **30초 redispatch TTL 가드**였다. 락이 엉뚱한 메커니즘을 재고 있었다.
+  `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0` 으로 TTL 을 끄자 침묵을 설명할 수 있는
+  것이 pending 소진뿐이 되어 RED 로 전환됐다.
+- M2 mutation 앵커 `"    else:\n"` 가 파일에서 유일하지 않아 **첫 else 에 착지**해
+  대상 분기를 건드리지 못한 채 GREEN 이 났다. 앵커를 본문 고유 문자열로 좁혀 해결.
+
+## [0.25.1] — 2026-08-05
+
+### Fixed
+
+- **`parse_spec_structure.py` ambiguity 게이트 검출력 회귀 (Law 1).** 라운드 3 `/qg`가 적발.
+  Task 10이 하이픈 복합어 오탐(`fast-forward`)을 막으려고 경계를
+  `(?<![\w-])…(?![\w-])`로 잡았는데, **뒤쪽까지 단어문자를 막아** blacklist 어간의 접미
+  굴절형이 전부 통과하게 됐다 — `seamlessly`·`efficiently`·`Robustness`·`faster`가 모두
+  게이트를 빠져나갔다. 선언된 동기는 하이픈뿐이었고 T6-4/T6-5는 이 방향을 측정하지 않는다.
+  → 경계를 **비대칭**으로 정정: `(?<![\w-])…(?!-)`. 앞은 단어·하이픈 금지(→ `breakfast`,
+  `inefficient` 오탐 계속 차단), 뒤는 **하이픈만** 금지(→ 굴절형 복구). 오탐 1종을 막으려다
+  미탐 다수를 만든 교환을 되돌린다.
+
+### Added
+
+- `tests/test_parse_spec_structure.sh` T6-6 — 접미 굴절형(`-ly`/`-ness`/`-er`)이 계속 hit되는지
+  측정. T6-4(오탐 없음)와 T6-5(어간 그대로는 hit)만으로는 이 방향이 비어 있어서, 경계를 양쪽
+  다 막아도 둘 다 GREEN이었다.
+
+## [0.25.0] — 2026-08-02
+
+design doc auto-review 를 **문서가 처음 생길 때 한 번만** 발동시키고, 그 재발동을 막으려
+v0.14.0–v0.18.0 에 쌓인 방어층 4개를 원인과 함께 걷어냈다. 교훈 한 줄: **원인을 지우면
+그 원인을 막던 방어층도 같이 지워진다** — 셋 다 사용자 기능이 아니라 훅이 자기가 만든
+문제를 자기가 막는 내부 하니스였다.
+
+### Changed
+- **arm 조건이 `(세션 원장에 없음) AND (git 이 모르는 문서)` 로 바뀌었다.** 판정은
+  `scripts/arm_ledger.py` 의 `should_arm()` 한 곳에만 존재하고 훅은 그것만 부른다.
+  두 조건이 서로 다른 시간축을 덮는다 — 원장 단독이면 세션마다 한 번씩 다시 리뷰되고,
+  git 단독이면 커밋 전 fix 루프에서 계속 재arm 된다.
+- **원장 기록자가 둘로 확정됐다** — verdict 가 나온 리뷰(완료) 와 G6 상한(3회)에 닿은
+  Stop 훅(포기). validator·skill 진입, 그리고 **상한 미달의 정상 dispatch** 는 쓰지
+  않는다. 그 셋 중 어디에 써도 "리뷰를 받지 않았는데 표시된" 창이 생기고, 삭제된
+  락이 TTL 로 얻던 자기치유를 잃는다. verdict 시점 기록은 TTL 을 새로 만들지 않고
+  같은 자기치유를 얻는다 — **표시되지 않은 문서는 다음 arming 편집에서 다시 dispatch 되기 때문**.
+  두 기록자의 결론은 같다("더 이상 dispatch 안 함"), 그리고 어느 쪽도 문서를 쓴 턴이 아니다.
+- **리뷰 진행 중 오발 방지가 락에서 pending strip + 원장 게이트로 바뀌었다.** dispatch 의
+  연료는 `pending_review` 이므로 `reviewing-spec` 진입 시 연료를 없애면 락이 필요 없다.
+  다만 진입 strip 하나만으로는 부족하다 — skill 이 Step 1(strip-pending)과 Step 3
+  (mark-reviewed)을 분리된 두 bash 블록으로 실행하므로, Step 1 이 빠지면 pending 이
+  살아남고 실제 리뷰는 30초 TTL 을 넘겨 다음 Stop 이 이미 리뷰된 문서에 다시 block 을
+  낸다. 그래서 **Stop·UserPromptSubmit 두 소비자가 emit 전에 `armed_paths` 를 조회**한다
+  (Stop 은 남은 stale pending 도 함께 정리하고 결과를 보고한다; `armed_paths` 는 건드리지
+  않으므로 상한 미달 무-기록 성질은 유지). 조회 실패는 dispatch 쪽 fail-open.
+- **`is_born` 의 cwd 의존을 제거했다.** 전에는 raw_path 를 cwd 상대 git pathspec 으로
+  넘겨, 하위 디렉토리에서 부르면 **커밋된 문서가 not-born** 으로 떨어졌다 (v0.14.0 에
+  출하됐던 버그와 같은 모양이며 그 락은 승계 없이 삭제돼 있었다). 이제 **상대경로만**
+  `:(top,literal)`+canonical_key 로 리포 루트에 고정하고, **절대경로는 접지 않는다** —
+  접으면 다른 체크아웃의 문서를 이 리포 파일로 오판한다(아래 Fixed 참조).
+- **제어문자가 든 경로는 원장에 들어가지 못한다 (Security).** 상태 파일은 0-indent 블록으로
+  파싱되는 마크다운이라, 개행이 든 `tool_input.file_path` 가 그대로 보간되면 `armed_paths:`
+  를 위조해 **다른 문서**의 리뷰를 영구 억제할 수 있었다(T16 mutation 으로 실증 — 가드를
+  빼면 위조가 성공한다). 차단은 **writer**(`write_state`)에 둔다 — reader 마다 거르면 새
+  reader 가 생길 때마다 두더지잡기가 된다. `canonical_key` 도 방어적으로 함께 거부한다.
+- **`_read_body` 가 부재(`""`)와 판독 실패(`None`)를 구분한다.** 빈 body 로의 degrade 는
+  읽기 술어(`is_armed`·`skip_reason`)에는 옳지만(미기록 → arm, 안전한 방향),
+  read-modify-write 인 `mark_reviewed`·`strip_pending_file` 에서는 판독 불가 원장을
+  통째로 덮어써 다른 문서의 `armed_paths` 와 살아있는 `pending_review` 를 함께 지웠다.
+  이제 두 쓰기 경로는 보존하고 멈춘다(P14). 훅 두 곳의 `except OSError` 도
+  `(OSError, UnicodeDecodeError)` 로 넓혔다 — `UnicodeDecodeError` 는 `ValueError`
+  하위라 좁은 절이 판독 불가 원장에서 훅을 죽여 dispatch 를 통째로 없애고 있었다.
+- **PostToolUse arm-skip advisory 가 사유를 세 가지로 구분**한다 — 세션 내 리뷰 완료 /
+  git 이 아는 문서 / G6 상한 도달. 앞의 둘과 셋째는 사용자가 취해야 할 행동이 다르다.
+
+### Added
+- **G6 재시도 상한 (세션당·문서당 3회).** verdict 없이 끝난 dispatch 의 재시도는
+  의도된 동작이지만 무한하면 Forbidden Pattern(*Unbounded autonomy*)이다.
+  `dispatch_attempts` 가 3 에 닿는 dispatch 가 마지막이고, 그 emit 이 상한을 알린다.
+  경계가 세션당인 이유: 그 상태는 세션 스코프이고, 문서 생애 상한으로 만들려면
+  세션 밖에 살아남는 저장소가 필요한데 그것은 NG4 가 배제한다. 세션을 넘겨도 멈추게
+  하는 진짜 수단은 문서를 커밋하는 것이고 approve 시점 `check-born` advisory 가 그것을 촉구한다.
+- 회귀 락 T1–T19 (`tests/test_arm_once.sh` T1–T3·T13–T19, `tests/test_stale_terms.sh`
+  V9·V10 = T4·T5, `tests/test_arm_ledger_timing.sh` T6–T12) + `tests/test_arm_ledger.py`
+  유닛 · `tests/arm_test_helpers.sh` 공유 하니스 —
+  전부 mutation 으로 이빨을 증명했다. T7·T8 은 서로 반대 방향이라 함께 있어야 이빨이
+  생기고, T10 은 `arm_ledger` CLI 의미가 아니라 **상한 미달 dispatch 단독에서의 Stop 훅
+  원장 무-기록**을 잰다(상한에 닿는 dispatch 는 반대로 기록한다 — 그 구분이 T10 의 요지).
+- 승계 락 S5–S8 (`tests/test_reviewing_spec_state_keying.sh`) — 삭제된 AC8-c·AC11-a·
+  AC11-b·AC8-a/b 가 잠그던 불변식의 승계처. 세 섹션 윈도우는 종료 앵커의 존재를 먼저
+  확인한다: `sed` 의 범위 주소는 종료 주소가 매칭되지 않으면 EOF 까지 출력하므로,
+  그 확인이 없으면 무관한 라벨 rename 한 번에 "공존" 락이 조용히 file-wide 존재
+  확인으로 바뀐다(측정: 12줄 → 130줄, 스위트는 GREEN).
+- T17 — 세 훅의 UTF-8 stdio 고정 회귀 락. **트리거는 `LC_ALL=C` 가 아니다**: macOS
+  CPython 은 C 로케일에서도 stdio 를 UTF-8 로 강제해, 로케일 축으로는 핀을 통째로
+  제거해도 차이가 없다(측정 8회). 실제로 갈리는 축은 `PYTHONIOENCODING` 이며 T17 은
+  그쪽을 잰다.
+- `tests/test_arm_ledger.py` 유닛 4종 추가 — `armed_paths` 위조(splitlines 경계),
+  교차-체크아웃 `is_born`, `PATH_PREFIX`↔`PREFIX` 계약, `strip_pending_file` 의
+  판독불가 보존(모듈이 "유일한 비대칭 방어" 라 부르는 쌍의 나머지 절반).
+
+### Fixed
+- `is_born()` 이 다른 체크아웃의 문서를 이 리포의 동명 파일로 판정하던 결함. pathspec 을
+  `:/{canonical_key}` 로 접으면 **어느 체크아웃이었는지가 사라진다** — 접힌 키가 이 리포
+  index 에 있으면 born=True 가 되고 `should_arm` 이 False 로 떨어져 그 문서의 Law 1
+  게이트가 조용히 꺼진다. 현실적 트리거는 이 프로젝트 자신의 레이아웃이었다(cwd = main
+  repo, 편집 대상 = `.claude/worktrees/<name>/docs/superpowers/specs/…`). 이제 절대경로는
+  접지 않고 git 이 소속 리포를 판정하게 두며(리포 밖이면 128 → loud → arm), 상대경로만
+  `:(top,literal)` 로 리포 루트에 고정한다. `--` 는 옵션 파싱만 멈출 뿐 wildmatch 를 끄지
+  않으므로 `literal` 매직이 함께 필요하다 — 그전엔 파일명 속 `*` 하나로 존재한 적 없는
+  문서가 born 이 됐다.
+- pending 기록에 실패한 편집에도 "Reviewer will be dispatched at turn end" advisory 가
+  나가던 결함. `write_state` 가 실패 **사유**를 반환하고 호출부가 그것을 소비해
+  `emit_arm_skip_advisory` 로 진실을 보고한 뒤 성공 advisory 앞에서 종료한다. 기록이
+  안 됐는데 리뷰를 약속하면 모델은 오지 않을 리뷰를 기다린다(under-review 방향).
+- writer 와 `canonical_key` 가 서로 다른 문자 집합을 거부하던 결함. 차집합(탭·NBSP·ZWSP 등)
+  에 속하는 파일명은 pending 은 쓰이는데 원장엔 기록될 수 없어 `dispatch_attempts` 가
+  오르지 않았고, G6 상한(3)이 **구조적으로 무력화**돼 편집마다 영구 재발동했다. 이제
+  writer 가 `canonical_key` 를 술어로 쓴다(판정 지점 1곳).
+- Stop 훅 원장 게이트에서 `return 0` 이 `try` 안에 있어, veto 확정 **이후** sweep 이
+  던진 예외가 dispatch 경로로 흘러 이미 기록된 문서를 다시 dispatch 하던 결함. 판정과
+  부작용의 `try` 를 분리했고, sweep 실패 시 문구도 사실에 맞췄다(조회는 성공했다).
+- validator 의 stdin `except` 가 `OSError` 까지 삼키면서 arm 지점에서 rc 0 + 무출력이
+  되던 결함. 형제 두 훅은 같은 릴리스에서 advisory 를 받았고 이 파일만 빠져 있었다.
+- **arm 은 됐는데 기록이 안 된 모든 분기가 성공 advisory 로 새던 결함.** pending 이
+  없으면 Stop 훅이 볼 것이 없어 리뷰는 영영 발동하지 않는데, `write_state` 실패·세션 id
+  미해석·`SKIP_AUTOREVIEW=1` 세 경로가 그대로 "Reviewer will be dispatched at turn end"
+  로 흘렀다. 이제 각 경로가 사유 sentinel 과 함께 arm-skip advisory 를 내고 종료한다
+  (T18·T19 가 stdout 을 두 축으로 잰다 — arm-skip 이 **있고** 성공 문구가 **없다**).
+- **`unkeyable()` 의 예외 폭·검사 범위 정렬.** `ImportError` 만 잡아 `arm_ledger` 의
+  `SyntaxError`(머지 충돌 마커 등)가 arm 게이트에서 degrade 된 뒤 writer 에서 다시 터져
+  훅이 rc≠0 + 무-stdout 으로 죽었다(HEAD 에서는 정상 arm 되던 입력). 또 fallback 이
+  경로 **전체**를 검사해 `canonical_key`(PREFIX 이후만 검사)와 어긋났고, 그 방향이
+  fail-**closed** 였다. 둘 다 맞췄다.
+- **인코딩 불가 상태 값이 훅을 죽이던 결함.** `os.getcwd()` 의 surrogateescape 문자열은
+  줄 수 검사를 통과하고 `write_text` 에서 `UnicodeEncodeError` 를 던지는데, 그건
+  `ValueError` 하위라 호출부의 `except (PermissionError, OSError)` 를 그대로 통과했다.
+  선제 인코딩 검사 + `UnicodeError` 절.
+- **`skip_reason` 이 "스코프 밖"과 "키 불가"를 뭉개던 결함.** 파일명의 보이지 않는 문자
+  하나로 자동 리뷰를 잃은 문서가 "스코프 밖 경로"로 보고돼 원인도 조치도 알 수 없었다.
+- **`bounded_window` 의 순서 역전 구멍.** 종료 앵커의 *존재*만 확인하면, 앵커가 시작보다
+  앞에 있을 때 범위가 그대로 EOF 까지 흐른다(실측 12줄 → 129줄, GREEN). 이제 출력의
+  마지막 줄이 종료 앵커인지 — 즉 범위가 **거기서 끝났는지** — 를 잰다. 같은 파일의 S1 이
+  `pipefail` 아래에서 `grep -q` 로 파이프하던 것도 herestring 으로 바꿨다(SIGPIPE 141 이
+  매치 성공을 FAIL 로 뒤집는다).
+- **T17 의 거짓 진단.** `'제어문자'` 를 앵커로 쓰면 인코딩 주장이 어느 가드가 처리했는지에
+  묶여, 다른 가드를 지웠을 때 "stdio 고정 없음" 이라고 잘못 보고했다. 두 가드에 공통인
+  문구로 옮겨 두 성질을 분리했다.
+
+### Security
+- `canonical_key` 가 `str.splitlines()` 경계를 명시적으로 거부한다. 원장 reader
+  (`armed_keys`·`attempts`)는 `splitlines()` 로 줄을 나누는데 그건 `\n` 뿐 아니라
+  VT·FF·FS·GS·RS·NEL·U+2028·U+2029 에서도 쪼갠다. 반면 `ARMED_RE` 의 `[^\n]+` 는 그것들을
+  전부 통과시키므로, U+2028 이 든 키는 **물리적으로 한 줄**로 기록되고 **두 개의 키**로
+  읽혀 다른 문서의 리뷰를 영구 억제할 수 있었다(유닛으로 실증). `isprintable()` 이 부수적
+  으로 같은 문자를 막고 있었으나 선언이 아니었고, 실제로 리뷰에서 "그 절을 좁히자"는
+  제안이 나왔다 — 그 mutation 은 이제 RED 다.
+- `write_state` 가 완성된 pending 블록의 줄 수를 reader 와 **같은 함수**로 검사한다.
+  `path` 외에 `mode`·`worktree_path`(=`os.getcwd()`, POSIX 디렉토리명에 개행 허용) 도
+  같은 보간 지점이라, 값마다 술어를 늘리는 대신 블록 전체를 한 번 센다.
+
+### Removed
+- `scripts/review_lock.py`(240) · `scripts/cancel_review.py`(99) ·
+  `scripts/approve_handoff.sh`(98) · `scripts/suppress_state.py`(242) — 합계 679 줄이
+  사라지고 `scripts/arm_ledger.py` 한 파일이 그 자리를 대신한다(순감소 ~240줄).
+  <!-- 대체 파일의 절대 줄수는 적지 않는다: 같은 릴리스 안에서 이 파일을 고칠 때마다
+       숫자가 낡고, 실제로 리뷰에서 369→410 불일치로 적발됐다. 삭제분 679 는 확정값. -->
+- `/spec-distill:cancel-review` 커맨드. 네 용도 중 (a) approve 후 재arm 억제와
+  (b) 고착 pending 정리는 **대상이 소멸**했고, (c) 미리 옵트아웃은 **인정된 손실**이며
+  (남는 비용은 미커밋인 채 넘긴 세션당 dispatch 1회, `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1`
+  로 0 이 된다), (d) `harness_sid` 미해석 시 수동 억제는 대체 안내로 지정했다
+  (그 지시는 원래도 부정확했다 — sid 가 없으면 그 커맨드도 상태를 못 썼다).
+- 환경변수 `DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC` (락 소멸).
+- 전용 테스트 7종 중 **6종 삭제 + 1종은 개명·축소 승계**(`tests/test_reviewing_spec_lock.sh`
+  → `tests/test_reviewing_spec_state_keying.sh`, Task 7 — 삭제가 아니다). 삭제된 6종 중
+  두 handoff 테스트(`test_handoff_compact_chain.sh`·`test_handoff_spec_path_validation.sh`)가
+  잠그던 dangling-경로 무-abort 불변식은 T11 이 승계.
+
+### Fixed
+- `tests/test_stale_terms.sh` 의 production 파일 필터가 앵커 없는 `*/.claude/*` 라,
+  하니스 워크트리(`<repo>/.claude/worktrees/`) 안에서 production 47 개를 전부 삼켰다.
+  락은 empty-guard 로 FAIL 했지만(fail-closed 설계가 제 역할을 했다) **워크트리에서는
+  실행 자체가 불가능**했다. `$SD` 기준으로 앵커했다.
+## [0.24.17] — 2026-08-05
+
+### Fixed
+
+- **`agents/blind-spot-prober.md`의 고아 인용 제거.** `fan-out 1`을 정당화하며 `devbrew N≥5 게이트 미해당`을 근거로 들었는데 그 게이트는 이 sweep이 삭제했다. persona 산문은 이 리포에서 보안-민감 코드로 취급된다.
+- **`commands/interview.md` trivia 목록을 philosophy P12와 정합화.** P12가 `파일 수와 무관하게`로 완화됐는데도 이 파일 — **P12가 자기 집행 지점으로 지목한 곳** — 은 `단일 파일 formatting`·`단일 파일 내 단일 식별자 rename`을 그대로 요구했다. 판정 기준을 파일 수에서 "한 문장으로 설명 가능한가"로 되돌린다.
+- `README.md`의 P12 자격 서술도 같이 정합화.
+
+## [0.24.16] — 2026-08-05
+
+### Security
+
+- **web kill switch가 egress를 가진 dispatch 두 곳을 덮지 못하던 공백 봉쇄** (`/qg branch` 라운드 2, codex·silent-failure-hunter 적발). 0.24.15가 `coverage-mapper`에 `WebSearch`/`WebFetch`를, `spec-reviewer`에 `WebSearch`를 **새로 부여**했는데 `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`은 둘 다 막지 못했다:
+  - `reviewing-spec/SKILL.md` — 스위치 참조 **0건**인 채로 `spec-reviewer`를 dispatch.
+  - `conducting-interview/SKILL.md` — `coverage-mapper` dispatch에 게이트 없음(형제 3경로는 전부 보유).
+  두 agent 모두 `tools:`에 `Bash`가 없어 스스로 스위치를 읽을 수 없다(Law 2) — orchestrator가 유일한 집행 지점이다. **안 죽이는 kill switch는 없는 것보다 나쁘다**: 사용자가 egress가 꺼졌다고 *믿고* 행동한다.
+
+### Fixed
+
+- **`test_web_kill_switch.sh`의 앵커를 피검자 손에서 회수** (adversarial `meta_note`가 명명한 *verifier-steerable anchor*). 판정이 `grep -q "spec-distill:$a"`였으므로, 접두사 없이 `subagent_type: "spec-reviewer"`로 쓴 저자는 **자기 skill을 감사 대상에서 스스로 제외**했다 — 검사받는 파일이 자기가 검사받을지를 결정하는 구조. reviewing-spec이 정확히 그렇게 누락돼 있었다. → 접두사를 선택적(`(spec-distill:)?`)으로.
+- **파일 전역 존재 검사를 dispatch 지점별 지배 관계로 교체.** "이 파일 어딘가에 확인이 있다"는 명제는 dispatch가 열 개여도 가드가 하나면 참이다. 이제 각 dispatch 줄마다 위 40줄 안에 확인이 있어야 한다.
+
+## [0.24.15] — 2026-08-04
+
+### Fixed
+
+- `README.md:74`·`:110` — Law 2 선언이 실제 `tools:` allowlist보다 **좁게** 적혀
+  있었다. `spec-reviewer`와 `coverage-mapper`가 이 sweep에서 `WebSearch`/`WebFetch`를
+  받았는데 README는 옛 목록을 유지해 **부여된 egress를 문서가 은폐**했다
+  (`/qg branch` 라운드 1, security-reviewer + code-reviewer 독립 적발).
+  `tests/test_readme_sync.sh:52`는 agent *이름*만 grep해 이 drift를 못 본다.
+  - **미해결로 남긴 것**: `coverage-mapper`의 본문은 웹 조사를 요구하지 않는데도
+    egress를 갖는다(설계 goal-3의 자기 기준 미충족). adversarial은 SUGGESTION으로
+    강등했고 — 설계 AC3가 의도적으로 부여했으므로 exfiltration 판정은 성립하지
+    않는다 — 되돌리려면 frontmatter·AC3·frontmatter 락 2개를 **한 커밋에 함께**
+    고쳐야 한다. 이번 라운드 범위 밖.
+
+### Changed
+
+- `tests/test_web_kill_switch.sh` — 소비자 목록을 열거에서 **도출**로, 앵커를
+  선언에서 **소비**로 (0.24.14 항목 참조).
+
+## [0.24.14] — 2026-08-04
+
+### Fixed
+
+- **`run_spec_codex_reviewer.sh` — 완료 전 중단이 조용히 지나가던 경로**
+  (`/qg branch` 라운드 1, silent-failure-hunter). `set -u` 위반(예:
+  `CLAUDE_PLUGIN_ROOT` 미설정)으로 abort하면 EXIT trap을 지나며 산출물이
+  만들어지지 않았고, 더 나쁘게는 **이전 run이 남긴 파일이 살아남아 이번 라운드의
+  리뷰 결과로 재사용**됐다.
+  - 보고된 fix(`rc=$?` 보존)는 **이 플랫폼에서 동작하지 않는다**: bash 3.2.57은
+    `set -u` abort 시 트랩 핸들러에 `$?`를 **0으로** 넘긴다(최소 재현 확인).
+    게다가 이 스크립트의 계약은 "항상 exit 0 + 항상 YAML"이라 비-0 강제는 계약
+    위반이다. 그래서 종료 코드가 아니라 **산출물**로 판정한다 — 시작 시 truncate로
+    stale을 제거하고, 트랩에서 비어 있으면 `codex_failed: true` degrade를 채운다.
+  - trap arm은 한 줄로 유지했다: C7 순서 락(AC6)이 `trap.*rm -rf.*SCRATCH.*EXIT`를
+    한 줄 정규식으로 앵커하므로, 여러 줄로 펼치면 그 락이 trap을 못 보고 guard
+    순서 검사가 통째로 무력화된다.
+
+### Added
+
+- `tests/test_run_spec_codex_reviewer.sh` — ABORT 케이스 2종(중단 시 degrade YAML
+  실재 / 이전 run의 stale 산출물 미재사용). 종료 코드가 아니라 산출물을 잰다.
+
+## [0.24.13] — 2026-08-03
+
+### Fixed
+- `scripts/parse_spec_structure.py`의 `scan_ambiguity()`가 blacklist 문구를
+  `re.escape(phrase)` bare substring으로 찾아 하이픈 복합어·접두 결합 안에서도
+  발화했다 (`fast-forward`의 `fast`, `inefficient`의 `efficient` 등) —
+  ambiguity 없는 정상 기술 문서의 write를 Law 1 게이트가 거짓으로 막는
+  harness-capability-suppression-sweep S3f. **이 문서를 쓰는 동안 실제로 이
+  검사가 write를 세 번 exit 2로 막았다.** 단순 `\b` 감싸기는 이 버그를
+  고치지 못한다 — 하이픈은 `\w`가 아니라서 `\bfast\b`도 `fast-forward` 안의
+  `fast`에 그대로 매치한다. 경계 판정을 `(?<![\w-])phrase(?![\w-])`로 교체해
+  하이픈을 경계 문자 집합에 포함시켰다 — `~phrase` opt-out(문구 직전이 `~`가
+  아닌지 별도 확인)은 `~`가 `\w`도 `-`도 아니므로 그대로 동작한다.
+
+## [0.24.12] — 2026-08-03
+
+### Removed
+- `scripts/web_budget.py` + `tests/test_web_sweep_bound.sh` + 관련 픽스처 4개
+  (`state-web-within.md`·`state-web-over-sweep.md`·`state-web-over-session.md`·
+  `state-web-commented-overcap.md`) — web landscape 조사의 per-sweep(≤4)/
+  per-session(≤8) 상한 enforcer를 제거 (harness-capability-suppression-sweep
+  S3d, Task 8). **내부 스크립트라 one-minor deprecation window 대상이 아니다** —
+  유일한 소비자가 이 플러그인 안의 두 곳(`conducting-interview` R2,
+  `reviewing-brief` 1-a)뿐이라 외부 breaking-change 표면이 없다.
+- state schema(`conducting-interview`)와 `templates/interview-audit-template.md`의
+  `web_sweep_count`/`web_search_count` 카운터 — 상한 게이트가 사라져 죽은 상태였다
+  (`probe_count`는 유지 — 그 상한은 살아 있다).
+
+### Security
+- `DEVBREW_SPEC_DISTILL_DISABLE_WEB` kill switch를 `web_budget.py` 삭제와 함께
+  잃지 않도록 두 소비자에 각각 인라인으로 이식 — `conducting-interview` R2와
+  `reviewing-brief` 1-a가 `run_brief_codex_reviewer.sh:96-99`와 동일한 계약으로
+  독립 확인한다(정확히 문자열 `"1"`만 참, 미설정 시 웹 활성, 매 웹 작업 직전 평가,
+  소비자별 소유·공유 헬퍼 없음).
+
+## [0.24.11] — 2026-08-03
+
+### Fixed
+- `build_spec_codex_prompt.py`의 `PROMPT_TEMPLATE`에서 프롬프트 서두(:29-31)와
+  `other` 항목(:44)은 0.24.10에서 "여섯 개는 시작 어휘, 닫힌 목록 아니다"로
+  열었지만, 같은 템플릿의 JSON 출력 계약(`"category": "placeholder | ... |
+  testing"`, :59)은 여전히 6개로 닫혀 있었다 — prose는 열렸는데 contract는
+  안 열린 자기모순. 구조화 출력을 쓰는 모델은 prose와 schema가 충돌하면
+  schema를 따른다: 여섯 이름 어디에도 안 맞는 진짜 결함을 발견한 리뷰어는
+  prose로는 "`other`를 자유롭게 쓰라"는 지시를, contract로는 "`other`는 허용
+  값이 아니다"는 지시를 동시에 받는다 — 이 태스크가 없애려던 바로 그 drop이
+  한 레이어 아래로 옮겨갔을 뿐이었다. `:59`의 pipe-list에 기존 6개 순서를
+  그대로 두고 `| other`를 추가.
+  (참고: 같은 파일 module docstring `:5`의 "same 6 judgment categories the
+  Claude spec-reviewer uses"는 검증 결과 그대로 두는 것이 맞다 — Claude
+  spec-reviewer(`agents/spec-reviewer.md:121,149,155`)는 여전히 정확히 6개
+  닫힌 taxonomy를 쓰고, 이 문장은 codex 프롬프트가 그 6개와 "동일한 6개"를
+  기준으로 시작한다는 서술이지 codex 쪽 categoy가 6개로 닫혀 있다는 주장이
+  아니라서 열린 `other`와 모순되지 않는다. codex 프롬프트 밖의 순수 문서라
+  codex가 실제로 읽는 계약에도 영향 없다.)
+
+### Added
+- `test_build_spec_codex_prompt.sh`에 AC16b 락 추가 — JSON 출력 계약의
+  `"category":` 힌트 줄에 `other`가 없으면 RED. 기존 AC16(prose `other` 존재)
+  과 독립: prose만 보는 전-출력 grep이었다면 `other`가 이미 흔한 단어라(prose
+  bullet 자신, ":33"의 "or other unfinished text") schema가 닫힌 채로도
+  통과했을 것 — `"category":` 줄에 앵커링해 계약 표면만 정확히 겨냥.
+
+## [0.24.10] — 2026-08-03
+
+### Changed
+- `build_spec_codex_prompt.py`의 `PROMPT_TEMPLATE`에서 "Review the document
+  below for these SIX judgment categories only:" 를 "이 여섯 개는 하류 merge가
+  가장 자주 기대하는 시작 어휘일 뿐, 닫힌 목록이 아니다"로 교체하고 여섯 항목
+  뒤에 `other` 탈출구를 추가 — codex co-reviewer에게 "여섯 개뿐"이라고 지시하면
+  그 어느 이름에도 안 맞는 진짜 결함은 merge/dedup 로직이 보기도 전에 프롬프트
+  단에서 버려진다. 하류 파서는 바꾸지 않는다: `merge_review.py:86`은
+  `str(it.get("category", ""))`로 자유 문자열을 통과시키고, `:319`/`:326`은
+  `compute_issue_id.compute(category, target_section)`으로 해시 입력에만 쓴다.
+  `codex_findings_to_yaml.py`·`compute_issue_id.py` 어디에도 6개 화이트리스트
+  필터가 없다(실측 확인) — 따라서 파서 변경 없이 프롬프트만 여는 것이 정확하다.
+
+### Added
+- `test_build_spec_codex_prompt.sh`에 AC16 락 신설 — 닫힌-6개 문구 재삽입 시
+  RED, `other` 항목 삭제 시 RED (프롬프트 레이어).
+- `test_merge_review.py`에 `test_unknown_category_survives_merge` 신설 —
+  codex YAML에 `category: other`인 finding을 넣고 실제 merge를 돌려 그 항목이
+  `codex_findings` 표시 블록에 살아 있고, 6개 카테고리와 같은 해시 경로로
+  issue_id를 받고, severity가 여전히 verdict를 escalate함을 확인한다
+  (파이프라인 레이어 — 프롬프트 락과 분리: 프롬프트가 `other`를 광고해도
+  미래에 파서가 화이트리스트 필터를 넣으면 조용히 drop될 수 있는 경로를
+  독립적으로 잠근다).
+
+## [0.24.9] — 2026-08-03
+
+### Changed
+- `conducting-interview` SKILL.md의 R3 steelman dispatch 지시(`:306`)에서
+  `**순차** dispatch(병렬·투기적 금지 — C5)` 문구를 삭제 — 0.24.8에서 `steelman-builder`
+  에이전트 persona에서 지운 것과 같은 억제가 오케스트레이터 쪽 dispatch 지시문에도
+  거울처럼 남아 있었다(0.24.8의 브리프 file list 누락, 이번 sweep의 repo-wide 판별
+  질의가 적발). 인용된 두 근거 다 성립하지 않는다: `C5`는 web 부재 시 graceful
+  degradation을 가리키지 dispatch 순서와 무관하고(design.md:107), `AP9`의 병렬 fan-out
+  게이트는 N≥5부터인데(philosophy.md:95-96) R3는 의심 트리거당 steelman 1회로 fan-out=1
+  이라 그 문턱에 닿지 않는다. `투기적 금지`는 R3의 numbered step이 의심 트리거가 이미
+  발화한 뒤에만 도달하므로 애초에 발생 불가능한 경로를 금지하는 무의미한 문구였다.
+  `:311`의 "한 방향당 steelman 1회(재steelman 금지 — AP16 harassment 방지)" load-bearing
+  bound는 그대로 둔다.
+
+### Added
+- `test_conducting_interview_stage.sh`에 R3-스코프 E10 락 신설 — 기존 `r3_block`
+  awk 윈도우(`### R3 — Steelman` ~ 다음 `### `/`## ` 헤딩)를 재사용해 병렬·투기적 금지
+  문구 재삽입 시 RED. 전-파일 grep이 아니라 R3 윈도우로 스코프한 이유: 같은 SKILL에
+  `:122`의 `teach-beat 최대 1회`, `:438`의 `2회까지`가 legitimately 남아있다.
+
+## [0.24.8] — 2026-08-03
+
+### Changed
+- `steelman-builder` · `blind-spot-prober`의 "Required research" 절에서 `1–2회`
+  검색 횟수 상한과 `**순차 호출**(병렬·투기적 금지, C5/AP9)` 문구를 삭제. 두 에이전트는
+  인터뷰 턴이 놓친 근거를 찾는 게 존재 이유인데, 호출 수 상한과 직렬화 강제 둘 다
+  아무것도 보호하지 않으면서 조사 폭을 하니스가 대신 정하는 것이었다. 이제
+  "필요한 만큼 찾는다"(steelman-builder) / 횟수·병렬 제약 없이 수집(blind-spot-prober).
+  `blind-spot-prober.md`의 "web 부재 시 SKILL이 inline premortem으로 강등(C5)" 절은
+  상한이 아니라 graceful degradation이므로 그대로 둔다.
+
+### Added
+- `test_steelman_builder_scope.sh` · `test_blind_spot_prober_frontmatter.sh`에 E10
+  락 신설(`test_brief_agents.sh:194`의 단일 호출 상한 부재 락을 숫자 범위·병렬 금지
+  패턴으로 확장) — 단일 호출 상한 표현(`최대 N회`/`N회까지`/`N–N회`/`N-N회`/
+  `max_x = N`) 또는 병렬·투기적 금지 문구가 재삽입되면 RED.
+
+## [0.24.7] — 2026-08-03
+
+### Changed
+- `spec-reviewer`의 `tools:`에 `WebSearch` 추가 — 기존 `Read, Grep, Glob, WebFetch`는
+  URL은 열 수 있는데 찾을 수는 없는 비대칭이었다(순수 억제, 아무것도 보호하지 않음).
+  이제 `Read, Grep, Glob, WebSearch, WebFetch`.
+- `coverage-mapper`의 `tools:`에 `WebSearch, WebFetch` 추가 — 주제가 요구하는 커버리지
+  차원을 제안하는 역할인데 웹 도구가 아예 없었다. 이제 `Read, Grep, Glob, WebSearch, WebFetch`.
+
+### Added
+- `test_spec_reviewer_frontmatter.sh` · `test_coverage_mapper_frontmatter.sh`에
+  조용한-열화 방지 락 신설 — `tools:`에서 `WebSearch`/`WebFetch`가 사라지면 RED.
+  Law 2 `for t in Write Edit MultiEdit NotebookEdit Bash Agent Monitor` 루프와 `mcp__`
+  assert는 그대로 두었다 — 두 도구 추가가 그 루프를 통과하는지 GREEN으로 확인.
+
+## [0.24.6] — 2026-08-03
+
+### Changed
+- `run_codex_reviewer.sh` · `run_artifact_codex_reviewer.sh`(qg) /
+  `run_spec_codex_reviewer.sh`(spec-distill)에서 `-c 'model_reasoning_effort="medium"'`
+  실행 인자 삭제. 하니스가 medium을 박으면 high/xhigh로 설정한 사용자가 조용히 하향되고,
+  그 하향은 codex co-review의 유일한 존재 이유(별-모델 적발력)를 정확히 깎는다.
+  `run_brief_codex_reviewer.sh`가 이미 쓰던 계약을 전파한 것이다.
+  **load-bearing 플래그는 그대로다** — `-s read-only`(샌드박스) · `-C`(작업디렉토리 핀) ·
+  `--json`(파싱 계약) · `< /dev/null`(stdin detach).
+
+### Added
+- codex 러너 상한 부재 락(양방향) — 상한 재삽입과 샌드박스 제거 **둘 다** RED.
+  한 방향만 재면 "상한만 사라졌다"를 증명하지 못한다.
+
+## [0.24.5] — 2026-08-03
+
+### Changed
+- `spec-reviewer` · `coverage-mapper` · `blind-spot-prober` · `steelman-builder`의
+  `model: sonnet` 리터럴 핀을 `model: inherit`으로 교체. **실측된 활성 손실이다** —
+  지난 일주일 spec-review 6회가 전부 opus-5 세션에서 sonnet-5로 실행됐다(리뷰어가
+  writer보다 약한 상태가 매 dispatch 재현). steelman-builder 1회도 같은 패턴.
+
+### Added
+- 네 에이전트 frontmatter 테스트에 **양방향 모델 락 신설** — 이전에는 `model:`에 대한
+  assert가 아예 없어서 `haiku`로 강등해도 스위트가 GREEN이었다(신설 전 mutation으로 확인).
+  positive(`inherit` 실재) + negative(고정 티어 부재) 둘 다 둔다.
+
 ## [0.24.4] — 2026-07-29
 
 v0.24.3의 **자기 수정을 독립 리뷰**한 결과(리뷰어 5 + codex). 그 라운드가 만든 신규 결함과

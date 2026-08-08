@@ -16,8 +16,12 @@ test -f "$AGENT" || { echo "FAIL: agent file missing at $AGENT"; exit 1; }
 fm() { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$AGENT"; }
 FM="$(fm)"
 
-grep -qE '^model:[[:space:]]*opus[[:space:]]*$' <<<"$FM" \
-  && pass "model: opus pinned" || fail "model: opus not pinned"
+grep -qE '^model:[[:space:]]*inherit[[:space:]]*$' <<<"$FM" \
+  && pass "model: inherit (세션 티어 — 하니스 하향/상향 없음)" \
+  || fail "model: inherit 아님"
+grep -qE '^model:[[:space:]]*(opus|sonnet|haiku)[[:space:]]*$' <<<"$FM" \
+  && fail "고정 티어 핀 잔존 — 세션 모델을 덮어쓴다" \
+  || pass "고정 티어 핀 없음"
 
 # AC5 (v2.11.0): 단일 무해 항목 allowlist. denylist 시대 종료.
 # 왜 바뀌었나: `allowedTools`는 공식 subagent 필드가 아니라 조용히 무시됐고, 실효 표면은

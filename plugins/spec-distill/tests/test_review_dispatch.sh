@@ -124,8 +124,8 @@ rc=$?
   && note PASS "AC15 (T-1): kill switch :review-dispatch alias suppresses emit" \
   || note FAIL "AC15 failed (rc=$rc out=$out)"
 
-# Case 16 (AC3/AC3b): pending이 suppressed면 dispatch 안 함 + strip +
-# last_dispatched_at 불변 (suppress는 dispatch가 아니므로 TTL 시계를 시작 안 함).
+# Case 16: dispatch 1회차 — attempts=1 기록, armed_paths는 **안 씀** (T10 계열).
+# 완료 기록은 verdict 시점 mark-reviewed의 몫이다(§5.2).
 setup_state "test-016" "---
 session_id: test-016
 ---
@@ -134,115 +134,59 @@ pending_review:
   path: docs/superpowers/specs/2026-01-01-x-design.md
   mode: design
   triggered_at: 2026-05-16T10:00:00Z
-
-last_dispatched_at: 2020-01-01T00:00:00Z
-
-suppressed_paths:
-  - docs/superpowers/specs/2026-01-01-x-design.md
 "
 out=$(run_hook "test-016")
 rc=$?
 sf16="$WORK/.claude/spec-distill/test-016/state.local.md"
-[[ $rc -eq 0 ]] && [[ -z "$out" ]] \
-  && ! grep -q '^pending_review:' "$sf16" \
-  && grep -q '^suppressed_paths:' "$sf16" \
-  && grep -q '^last_dispatched_at: 2020-01-01T00:00:00Z$' "$sf16" \
-  && note PASS "AC3/AC3b: suppressed pending → no dispatch + strip + last_dispatched_at 불변" \
-  || note FAIL "AC3/AC3b failed (rc=$rc out='$out')"
+[[ $rc -eq 0 ]] \
+  && echo "$out" | jq -e '.decision == "block"' >/dev/null \
+  && ! grep -q '^armed_paths:' "$sf16" \
+  && grep -q '^  docs/superpowers/specs/2026-01-01-x-design.md: 1$' "$sf16" \
+  && note PASS "§5.2: dispatch 1회차 → attempts=1, armed_paths 미기록" \
+  || note FAIL "dispatch 1회차 실패 (rc=$rc out='$out' state=$(cat "$sf16"))"
 
-# Case 17 (AC5): suppressed_paths에 다른 키만 있으면 in-scope pending은 정상 dispatch.
+# Case 17: G6 상한 — attempts가 이미 2면 이번 dispatch가 3회차. emit에 상한 advisory가
+# 붙고 armed_paths에 키가 생긴다. "4회차가 억제된다"가 아니라 3회차가 마지막 자동
+# dispatch이고 그 emit이 상한을 알리는 vehicle이다(§5.2 상태기계).
 setup_state "test-017" "---
 session_id: test-017
 ---
 
 pending_review:
-  path: docs/superpowers/specs/2026-01-01-y-design.md
+  path: docs/superpowers/specs/2026-01-01-cap-design.md
   mode: design
   triggered_at: 2026-05-16T10:00:00Z
 
-suppressed_paths:
-  - docs/superpowers/specs/2026-01-01-other-design.md
+dispatch_attempts:
+  docs/superpowers/specs/2026-01-01-cap-design.md: 2
 "
 out=$(run_hook "test-017")
 rc=$?
 sf17="$WORK/.claude/spec-distill/test-017/state.local.md"
 [[ $rc -eq 0 ]] \
   && echo "$out" | jq -e '.decision == "block"' >/dev/null \
-  && ! grep -q '^pending_review:' "$sf17" \
-  && grep -q '^last_dispatched_at:' "$sf17" \
-  && note PASS "AC5: non-suppressed in-scope pending → 정상 dispatch (회귀)" \
-  || note FAIL "AC5 failed (rc=$rc out='$out')"
+  && echo "$out" | jq -e '.reason | contains("3회 시도")' >/dev/null \
+  && grep -q '^  - docs/superpowers/specs/2026-01-01-cap-design.md$' "$sf17" \
+  && grep -q '^  docs/superpowers/specs/2026-01-01-cap-design.md: 3$' "$sf17" \
+  && note PASS "G6: 3회차 emit에 상한 advisory + armed_paths 기록" \
+  || note FAIL "G6 상한 실패 (rc=$rc out='$out' state=$(cat "$sf17"))"
 
-
-# Case 18 (AC3): 같은 문서 락 엔트리 신선 + pending → no-op + pending 보존.
-NOW18=$(python3 -c 'from datetime import datetime,timezone; print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))')
+# Case 18: 스코프 밖 pending(정규화 키 없음)은 attempts를 추적하지 않고도 정상 dispatch.
 setup_state "test-018" "---
 session_id: test-018
 ---
 
 pending_review:
-  path: docs/superpowers/specs/2026-07-01-lk-design.md
-  mode: design
+  path: /tmp/out-of-scope-spec.md
+  mode: spec
   triggered_at: 2026-05-16T10:00:00Z
-
-review_in_progress:
-  - path: docs/superpowers/specs/2026-07-01-lk-design.md
-    since: $NOW18
 "
 out=$(run_hook "test-018")
-rc=$?
 sf18="$WORK/.claude/spec-distill/test-018/state.local.md"
-[[ $rc -eq 0 ]] && [[ -z "$out" ]] \
-  && grep -q '^pending_review:' "$sf18" \
-  && note PASS "AC3: fresh same-doc lock → no-op + pending 보존" \
-  || note FAIL "AC3 failed (rc=$rc out='$out')"
-
-# Case 19 (AC16): 다른 문서만 락 엔트리 신선, 이 문서 pending → 정상 dispatch(억제 안 됨).
-NOW19=$(python3 -c 'from datetime import datetime,timezone; print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))')
-setup_state "test-019" "---
-session_id: test-019
----
-
-pending_review:
-  path: docs/superpowers/specs/2026-07-01-thisdoc-design.md
-  mode: design
-  triggered_at: 2026-05-16T10:00:00Z
-
-review_in_progress:
-  - path: docs/superpowers/specs/2026-07-01-otherdoc-design.md
-    since: $NOW19
-"
-out=$(run_hook "test-019")
-rc=$?
-sf19="$WORK/.claude/spec-distill/test-019/state.local.md"
-[[ $rc -eq 0 ]] \
-  && echo "$out" | jq -e '.decision == "block"' >/dev/null \
-  && ! grep -q '^pending_review:' "$sf19" \
-  && note PASS "AC16: 다른 문서 락 신선 → 이 문서 정상 dispatch(비억제)" \
-  || note FAIL "AC16 failed (rc=$rc out='$out')"
-
-# Case 20 (AC4): 같은 문서 락 엔트리 stale(과거) + pending → dispatch + strip(fail-safe).
-setup_state "test-020" "---
-session_id: test-020
----
-
-pending_review:
-  path: docs/superpowers/specs/2026-07-01-stale-design.md
-  mode: design
-  triggered_at: 2026-05-16T10:00:00Z
-
-review_in_progress:
-  - path: docs/superpowers/specs/2026-07-01-stale-design.md
-    since: 2020-01-01T00:00:00Z
-"
-out=$(run_hook "test-020")
-rc=$?
-sf20="$WORK/.claude/spec-distill/test-020/state.local.md"
-[[ $rc -eq 0 ]] \
-  && echo "$out" | jq -e '.decision == "block"' >/dev/null \
-  && ! grep -q '^pending_review:' "$sf20" \
-  && note PASS "AC4: stale 락 → dispatch + strip(fail-safe = 강제)" \
-  || note FAIL "AC4 failed (rc=$rc out='$out')"
+echo "$out" | jq -e '.decision == "block"' >/dev/null \
+  && ! grep -q '^dispatch_attempts:' "$sf18" \
+  && note PASS "스코프 밖 pending → 정상 dispatch, attempts 미추적" \
+  || note FAIL "out-of-scope dispatch 실패 (out='$out')"
 
 echo ""
 echo "summary: $pass passed, $fail failed"

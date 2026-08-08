@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
-# Drift guard — adversarial reviewer model must be consistently `opus` across
-# all three declaration sites. adversarial is the Opus-critic over Sonnet
-# Phase 1 workers (cf. Anthropic multi-agent patterns): it is the single
-# model-based judgment bottleneck in Gate 2 (synthesizer is a deterministic
-# script). Distinguishing "reviewer verified vs. pattern-matched" against the
-# diff is reasoning-heavy, so capability is spent at this consolidation point.
+# Drift guard — adversarial 리뷰어의 모델 선언이 세 곳에서 일관되게 `inherit`인지
+# 확인한다. adversarial은 Gate 2의 단일 model-based 판정 병목이다(synthesizer는
+# 결정론 스크립트). 그래서 **세션이 쓰는 것과 같은 티어**로 돌아야 한다 — 하니스가
+# 여기서 티어를 리터럴로 박으면, 세션이 더 강한 모델을 쓰고 있을 때 판정 병목만
+# 조용히 약해진다. 반대로 세션보다 강한 티어를 박으면 비용이 사용자 동의 없이 는다.
+# 어느 방향이든 하니스가 사용자의 모델 선택을 덮어쓰는 것이므로 `inherit`이 정답이다.
 #
-# This is a deliberate quality choice, NOT a cost leak. A prior cost pass
-# (T2-8) drifted frontmatter/README toward sonnet while the SKILL dispatch
-# still pinned opus, leaving the three sites contradicting each other. This
-# test locks them consistent so any future single-site edit fails CI.
+# 이전 버전은 이 자리에서 `opus` 핀을 옹호했다. 그 논증은 "Phase 1 워커가 sonnet"
+# 이라는 전제에 기대는데, 워커들도 이 sweep에서 `inherit`이 되어 전제가 사라졌다.
 #
-# Single source of truth: agents/adversarial.md frontmatter (`model: opus`).
-# The SKILL dispatch must NOT pin a model override — it relies on frontmatter,
-# matching the convention of the other frontmatter-pinned qg agents
-# (plan-verifier, runtime-verifier, test-scope-validator).
+# 양방향 락이다 — positive(`inherit` 실재) + negative(고정 티어 부재). 하나만 두면
+# 반대 방향 mutation(`model:` 줄 통째 삭제 / 핀 재도입)이 조용히 통과한다.
+#
+# Single source of truth: agents/adversarial.md frontmatter (`model: inherit`).
+# SKILL dispatch는 model override를 pin하지 않는다 — frontmatter에 의존한다.
 
 set -u
 
@@ -50,9 +49,9 @@ assert_not_grep() {
   fi
 }
 
-# 1. Frontmatter is the single source of truth — must be opus.
-assert_grep "$AGENT" '^model: opus$' "adversarial.md frontmatter is model: opus"
-assert_not_grep "$AGENT" '^model: sonnet$' "adversarial.md frontmatter is not sonnet"
+# 1. Frontmatter is the single source of truth — must be inherit (양방향).
+assert_grep "$AGENT" '^model: inherit$' "adversarial.md frontmatter is model: inherit"
+assert_not_grep "$AGENT" '^model: (opus|sonnet|haiku)$' "adversarial.md frontmatter pins no fixed tier"
 
 # 2. SKILL dispatch must rely on frontmatter (no model= override pinned anywhere
 #    near the adversarial reference). v1.32.0 SKILL groups Gate 2 reviewers as
@@ -76,11 +75,11 @@ else
   fi
 fi
 
-# 3. README must describe adversarial as opus, consistently in both the model
+# 3. README must describe adversarial as inherit, consistently in both the model
 #    note and the Gate 2 phase diagram.
-assert_grep "$README" 'quality-gates:adversarial[[:space:]]+\(Phase 1\.5, opus\)' "README phase diagram tags Adversarial as opus"
-assert_grep "$README" '`adversarial` agent uses `model: opus`' "README model note states opus"
-assert_not_grep "$README" '`adversarial` agent uses `model: sonnet`' "README model note does not state sonnet"
+assert_grep "$README" 'quality-gates:adversarial[[:space:]]+\(Phase 1\.5, inherit\)' "README phase diagram tags Adversarial as inherit"
+assert_grep "$README" '`adversarial` agent uses `model: inherit`' "README model note states inherit"
+assert_not_grep "$README" '`adversarial` agent uses `model: (opus|sonnet|haiku)`' "README model note pins no fixed tier"
 
 echo ""
 echo "Tests passed: $PASS, failed: $FAIL"

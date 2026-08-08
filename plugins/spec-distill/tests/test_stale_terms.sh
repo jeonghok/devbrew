@@ -18,7 +18,9 @@
 #       (4) .claude/ — 플러그인 디렉토리 아래 .claude/는 **툴링이 쓰는 세션 상태**이지 플러그인이
 #           출하하는 artifact가 아니다(quality-gates 세션 파일 등, git-untracked). 아무도 작성하지
 #           않은 일시 파일이 락을 빨갛게 만들 수 있으면 사람들이 락을 무시하도록 훈련된다.
-#           .claude-plugin/은 production이라 제외되지 않는다 — 패턴이 '*/.claude/*'라 안 걸린다.
+#           패턴은 **$SD 기준으로 앵커**한다('*/.claude/*'는 앵커가 없어, 하니스 워크트리가
+#           <repo>/.claude/worktrees/<name>/ 아래 사는 순간 production 전량을 삼켰다 — 락이
+#           워크트리에서 실행 불가였다). .claude-plugin/은 이름이 달라 여전히 제외되지 않는다.
 #       테스트의 토큰 참조는 제거를 강제하는 enforcement 층이지 stale 참조가 아니다.
 set -u -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -45,7 +47,7 @@ prod_files=()
 while IFS= read -r f; do prod_files+=("$f"); done < <(
   find "$SD" -type f \
     -not -path '*/tests/*' -not -name 'CHANGELOG.md' \
-    -not -path '*/.claude/*' \
+    -not -path "$SD/.claude/*" \
     -not -path '*/.pytest_cache/*' -not -path '*/__pycache__/*' -not -path '*/.git/*'
 )
 # macOS bash 3.2: 빈 배열에 "${arr[@]}" 확장은 set -u 하에서 crash — 명시 guard(빈 집합=find 깨짐=FAIL).
@@ -117,6 +119,129 @@ for term in "${authority_terms[@]}"; do
     note PASS "V8/AC13: '$term' 잔존 0건 (production)"
   fi
 done
+
+# --- V9 (v0.25.0 / T4): arm-once 삭제 스윕 완결 락 ---
+# 스코프 = prod_files 그대로(README.md 포함, tests/·CHANGELOG.md 제외).
+# 식별자만이 아니라 **같은 것을 다른 이름으로 부른 참조**까지 열거한다 — 식별자만
+# grep하면 개념 별칭으로 살아남은 참조를 놓친다.
+# CHANGELOG.md 제외는 released 기록이라 유효하다(이 삭제를 서술하는 [0.25.0] 엔트리가
+# 이 리터럴들을 인용해야 한다). tests/ 제외는 이 파일 자신이 토큰을 *집행*하는 층이기
+# 때문이다 — 배열 리터럴이 매치를 자기 자신에게서 찾으면 락이 영구 RED가 된다.
+removed_terms=(
+  'review_lock'
+  'review_in_progress'
+  'suppress_state'
+  'suppressed_paths'
+  'cancel_review'
+  'cancel-review'
+  'approve_handoff'
+  'DEVBREW_SPEC_DISTILL_REVIEW_LOCK_TTL_SEC'
+  # 되살아나면 안 되는 marker 하니스 계열(전 test_handoff_compact_chain.sh 가 잠그던
+  # 토큰). 현재 잔존 0건이며, 이 항목들은 *부재*를 잠근다 — 사건 기록이 아니다.
+  'FIRE_COUNT'
+  'compact-induction'
+  'compact-detect'
+)
+
+# 개념 별칭 — 식별자만 grep 하면 **같은 것을 다른 이름으로 부른 참조**가 살아남는다.
+# 근거는 실적이다: 식별자 'review_lock' 만 열거했을 때 살아남았던 생존자 두 건이
+#   hooks/state_path.py — "keys the review lock to the SAME state file" (공백 표기)
+#   skills/reviewing-spec/SKILL.md — "락이 훅에 보인다" (한국어)
+# 였고, 영어 식별자 grep 은 어느 쪽에도 닿지 못했다. 세 번째 항목 'suppressed path' 는
+# 위 두 건 같은 실적이 없는 **예방적 별칭**이다 — 같은 문단이 근거를 대는 척하면 안 되므로
+# 여기서 구분해 적는다.
+#
+# 이 그룹은 **README.md 를 제외한** production 만 훑는다.
+#
+# 이유: 위 헤더가 선언한 "살아있는 주장만" 기준을 이 항목들이 지키지 못한다.
+# 'review lock'·'suppressed path' 는 삭제를 정직하게 서술하는 문장에도 그대로 들어간다
+# ("the review lock added in v0.18.0 was removed in v0.25.0"). 그리고 이 플러그인이
+# 자기 삭제 연혁을 적는 곳이 정확히 README.md 다(README:50-62 가 이미 그 문체다).
+# 측정으로 확인됐다 — 현실적 릴리스 노트 문장을 README 에 붙이면 이 항목들이 발화한다.
+# 락이 정직한 문서 작성에 RED 를 내면 사람들은 락을 무시하게 된다.
+#
+# 커버리지는 줄지 않는다: 이 별칭들이 잡아낸 **실제 생존자 두 건**은 README 가 아니라
+# hooks/state_path.py 와 skills/reviewing-spec/SKILL.md 였다. README 만 면제하면
+# 위양성 표면은 사라지고 실적은 그대로 남는다.
+alias_terms=(
+  'review lock'
+  'suppressed path'
+  '락이 훅에'
+)
+alias_files=()
+for f in "${prod_files[@]}"; do
+  [[ "$(basename "$f")" == "README.md" ]] || alias_files+=("$f")
+done
+
+# `-i` 를 붙인다. 기존 `-InIF` 는 `-I -n -I -F` 로 대문자 I 가 두 번 들어간 것이고
+# `-i` 는 없었다 — 즉 대소문자를 구분했다. 되살아난 개념이 가장 먼저 자리잡는 곳은
+# `### Review Lock` 같은 헤딩인데 그게 통째로 빠져나갔다.
+for term in "${removed_terms[@]}"; do
+  scan -inIF -- "$term" "${prod_files[@]}"
+  if [[ $SCAN_RC -ge 2 ]]; then
+    note FAIL "V9/T4: '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
+    printf '%s\n' "$SCAN_OUT"
+  elif [[ $SCAN_RC -eq 0 ]]; then
+    note FAIL "V9/T4: '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
+  else
+    note PASS "V9/T4: '$term' 잔존 0건 (production)"
+  fi
+done
+for term in "${alias_terms[@]}"; do
+  scan -inIF -- "$term" "${alias_files[@]}"
+  if [[ $SCAN_RC -ge 2 ]]; then
+    note FAIL "V9/T4: 별칭 '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
+    printf '%s\n' "$SCAN_OUT"
+  elif [[ $SCAN_RC -eq 0 ]]; then
+    note FAIL "V9/T4: 별칭 '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
+  else
+    note PASS "V9/T4: 별칭 '$term' 잔존 0건 (README 제외 production)"
+  fi
+done
+
+# --- V10 (v0.25.0 / T5): 삭제 대상 파일 부재 ---
+# 파일이 되살아나면 무참조 상태로 조용히 눌러앉는다 — 참조 스윕(V9)만으로는 못 잡는다.
+removed_files=(
+  'scripts/review_lock.py'
+  'scripts/cancel_review.py'
+  'scripts/approve_handoff.sh'
+  'scripts/suppress_state.py'
+  'commands/cancel-review.md'
+  'tests/test_review_lock.py'
+  'tests/test_review_lock_session_id.sh'
+  'tests/test_reviewing_spec_lock.sh'   # Task 7 에서 test_reviewing_spec_state_keying.sh 로 개명
+  'tests/test_cancel_review.py'
+  'tests/test_approve_handoff.sh'
+  'tests/test_handoff_compact_chain.sh'
+  'tests/test_handoff_spec_path_validation.sh'
+  # 전 test_handoff_compact_chain.sh 가 이 두 훅의 부재를 잠그고 있었다 — 그 락이
+  # 승계 없이 삭제돼, 되살아나도 아무것도 잡지 못하는 상태였다.
+  'hooks/compact-induction.py'
+  'hooks/compact-detect.py'
+)
+for rf in "${removed_files[@]}"; do
+  [[ ! -e "$SD/$rf" ]] \
+    && note PASS "V10/T5: '$rf' 부재" \
+    || note FAIL "V10/T5: '$rf' 가 되살아났다"
+done
+
+# --- V11 (v0.25.0): 대체 surface 가 실재한다 (음의 락만 두면 전부 지워도 통과) ---
+# 두 conjunct는 "대체 machinery가 진짜로 있다"는 하나의 주장을 나눠 진다 — 어느 한쪽만으로는
+# 부족하다. (1) 파일 존재만 보면 빈 파일도 통과하므로 arm_ledger.py가 should_arm을 **정의**
+# 하는지(`^def should_arm(`)까지 확인한다. (2) 'should_arm'이라는 bare 토큰 존재만 grep하면
+# 세 가지 거짓양성을 놓친다 — 주석(`# should_arm 대신 항상 arm`), neutered 호출(반환값을
+# 버리는 `arm_ledger.should_arm(...)` 단독 문장), 스텁화된 정의(`should_arm` 이 항상 True를
+# 반환). 앞의 둘은 호출부가 **소비 위치**(`if (not )?arm_ledger\.should_arm\(`)에 있는지로
+# 잡는다 — 반환값이 실제로 control flow를 가른다는 증거. 스텁화는 이 락의 범위 밖이다(함수
+# 본문 의미는 grep으로 못 잡는다 — T-lock류의 한계와 같은 이유).
+scan -InE -- '^def should_arm\(' "$SD/scripts/arm_ledger.py"
+[[ $SCAN_RC -eq 0 ]] \
+  && note PASS "V11: arm_ledger.py 가 should_arm 을 정의한다" \
+  || note FAIL "V11: arm_ledger.py 에 should_arm 정의가 없다 (파일 부재 포함 — 대체 machinery 없음)"
+scan -InE -- 'if (not )?arm_ledger\.should_arm\(' "$SD/hooks/spec-write-validator.py"
+[[ $SCAN_RC -eq 0 ]] \
+  && note PASS "V11: validator 가 should_arm 을 소비 위치(if)에서 부른다" \
+  || note FAIL "V11: validator 의 should_arm 호출이 소비 위치에 없다 (주석/neutered 호출 의심 — 게이트 증발)"
 
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [[ $fail -eq 0 ]]

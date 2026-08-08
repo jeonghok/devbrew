@@ -125,8 +125,7 @@ upfront 게이트가 지출-전 명시 승인이다.
 ## 루프 (라운드 N = 1..effective_max_rounds)
 
 라운드당 디스패치 ≤3(critic + 조건부 codex + adversarial), 최대 동시 실행 2(critic ∥ codex;
-adversarial는 병합 후 순차) — 어느 쪽이든 Fan-out factor N≥5 hard gate 미해당. 누적(3×N)은
-순차 실행이라 subagent spray 아님.
+adversarial는 병합 후 순차). 누적(3×N)은 순차 실행이라 subagent spray 아님.
 
 **1. critic** — `artifact-critic` 디스패치(read-only). 프롬프트에 frozen `project_dir` +
    E2c가 인가한 `canonical` 경로(raw `<path>` 아님 — symlink escape 봉쇄) 스레딩. 출력

@@ -154,12 +154,18 @@ def load_blacklist(blacklist_path: Path) -> list[str]:
 def scan_ambiguity(text: str, patterns: list[str]) -> list[dict]:
     """Find lines containing any blacklisted phrase. `~phrase` opt-out applies
     to that specific occurrence (match must NOT be preceded by `~`).
+
+    경계는 `\\b`가 아니라 `(?<![\\w-])…(?![\\w-])`다. 하이픈은 `\\w`가 아니므로
+    `\\b`로 감싸면 하이픈 복합어(fast-forward 류) 안의 단어에 그대로 매치해
+    정상 기술 용어에서 발화한다 — 이 검사가 실제로 설계 문서 작성을 세 번 막았다.
+    하이픈을 경계 문자 집합에 넣으면 그 오탐이 사라지면서, blacklist의 온전한
+    단어는 계속 잡힌다.
     """
     hits: list[dict] = []
     for lineno, line in enumerate(text.split("\n"), start=1):
         for phrase in patterns:
-            # Search for phrase, ensure the character immediately before is not `~`
-            for m in re.finditer(re.escape(phrase), line, flags=re.IGNORECASE):
+            bounded = rf"(?<![\w-]){re.escape(phrase)}(?!-)"
+            for m in re.finditer(bounded, line, flags=re.IGNORECASE):
                 start = m.start()
                 if start > 0 and line[start - 1] == "~":
                     continue

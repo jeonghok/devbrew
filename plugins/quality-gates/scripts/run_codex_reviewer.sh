@@ -35,6 +35,33 @@ DIFF_PATH="${1:-}"
 PROJECT_DIR="${2:-}"
 OUTPUT_PATH="${3:-}"
 
+if [[ -z "$OUTPUT_PATH" ]]; then
+  echo "[quality-gates] usage: run_codex_reviewer.sh <diff> <project_dir> <output>" >&2
+  exit 2
+fi
+
+# ── stale 재사용 봉쇄 + 완료 전 중단 표시 ────────────────────────────────────
+# 쌍둥이 `run_spec_codex_reviewer.sh`(spec-distill 0.24.14)가 받은 봉쇄를 여기에도
+# 넣는다. 백포트가 빠져 있던 동안 이 러너는 SIGTERM/`set -u` abort/OOM/Bash-tool
+# timeout 어느 경로로 죽어도 **이전 iteration의 YAML을 그대로 남겼고**, 오케스트레이터는
+# 그것을 이번 라운드의 codex 판정으로 읽었다 (2026-08-05 재현, exit 143). stale이
+# clean이었으면 진짜 결함이 clean 인증을 받고, 발견을 담고 있었으면 사용자가 이미
+# 고친 결함을 다시 쫓는다. 둘 다 조용하다.
+#
+# **종료 코드로 재지 않는다**: 이 스크립트의 계약은 "항상 exit 0 + 항상 YAML"이고,
+# 게다가 bash 3.2.57은 `set -u` abort 시 EXIT 트랩에 `$?`를 0으로 넘긴다. 신호는
+# 산출물뿐이다. 그래서 시작 시 truncate하고, 비어 있으면 degrade로 채운다.
+: > "$OUTPUT_PATH"
+_degrade_if_empty() {
+  [[ -s "$OUTPUT_PATH" ]] && return 0
+  { echo 'agent: codex-reviewer'; echo 'findings: []'; echo 'meta:'
+    echo '  codex_failed: true'; echo '  reason: aborted_before_completion'; } \
+    > "$OUTPUT_PATH" 2>/dev/null \
+    || echo "[quality-gates] degrade YAML 기록마저 실패 — 호출자가 읽을 산출물이 없다" >&2
+  echo "[quality-gates] codex 리뷰가 완료 전에 중단됨 — degrade YAML 기록(stale 재사용 방지)" >&2
+}
+trap '_degrade_if_empty' EXIT
+
 if [[ -z "$PROJECT_DIR" ]]; then
   echo '{"codex_failed": true, "reason": "missing_project_dir"}' > "$OUTPUT_PATH"
   exit 0
@@ -101,6 +128,13 @@ fi
 #   -C "$PROJECT_DIR": working directory pin (single pipeline coordinate)
 #   --json           : JSONL stream output
 #   < /dev/null      : detach stdin (prevents stdin deadlock on some codex versions)
+#
+# 추론 강도(`model_reasoning_effort`)는 핀하지 않는다 — 사용자 codex 설정이 지배한다.
+# 하니스가 "medium"을 박으면 high/xhigh로 설정한 사용자가 조용히 하향되고, 그 하향은
+# 이 co-reviewer의 유일한 존재 이유(별-모델 적발력)를 정확히 깎는다. 바닥값이
+# 필요하다는 판단이 서면 그때 명시적으로 문서화해서 넣는다.
+# (`run_brief_codex_reviewer.sh`가 이미 쓰던 계약을 전파한 것이다.)
+#
 # Direct codex invocation — no per-call timeout (hang risk accepted; backstops:
 # Bash tool timeout, DEVBREW_DISABLE_QG_CODEX=1, /cancel-qg). Layer 3 sandbox
 # (-s read-only) preserved. `|| EXIT_CODE=$?` keeps capture safe under set -e.
@@ -108,7 +142,6 @@ EXIT_CODE=0
 codex exec "$(cat "$PROMPT_FILE")" \
     -C "$PROJECT_DIR" \
     -s read-only \
-    -c 'model_reasoning_effort="medium"' \
     --json \
     < /dev/null \
     > "$STDOUT_FILE" \
@@ -120,8 +153,20 @@ else
   OVERRIDE_REASON=""
 fi
 
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/codex_findings_to_yaml.py" \
+# 종단 추출은 이 스크립트에서 유일하게 가드 없던 단계였다. codex_findings_to_yaml.py는
+# 정상적으로는 findings 또는 codex_failed를 담아 exit 0 하지만, 처리되지 않은 crash
+# (python3 부재, plugin-root 문제)는 `> "$OUTPUT_PATH"` 리다이렉트가 이미 파일을
+# 비운 뒤에 일어난다 → 0바이트 산출물. 소비자에게 그것은 "codex가 성공했고 발견이
+# 없다"로 읽힌다 — 리뷰어 하나가 조용히 사라지는 것이다. 형제 두 러너
+# (run_artifact_codex_reviewer.sh, run_spec_codex_reviewer.sh)는 이 가드를 이미
+# 갖고 있었고 주석으로 같은 실패를 지목하고 있었다; 여기에만 백포트되지 않았다.
+# `-s` 검사가 별도로 필요한 이유: exit 0 + 빈 출력이 가능하다(파이프 실패, 부분 쓰기).
+if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/codex_findings_to_yaml.py" \
     --stderr-file "$STDERR_FILE" \
     --meta-override-exit-code "$EXIT_CODE" \
     --meta-override-reason "$OVERRIDE_REASON" \
-    < "$STDOUT_FILE" > "$OUTPUT_PATH"
+    < "$STDOUT_FILE" > "$OUTPUT_PATH" || [[ ! -s "$OUTPUT_PATH" ]]; then
+  echo "[quality-gates] codex 추출 실패 — 빈 산출물 대신 codex_failed를 기록한다 (리뷰어 1명 손실, degrade)" >&2
+  printf 'agent: codex-reviewer\nfindings: []\nmeta:\n  codex_failed: true\n  exit_code: %s\n  reason: extract_failed\n' \
+    "$EXIT_CODE" > "$OUTPUT_PATH"
+fi
