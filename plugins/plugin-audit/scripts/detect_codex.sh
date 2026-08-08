@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # detect_codex.sh — emit YAML manifest describing Codex CLI availability.
-# Spec AC1. Read-only, exit 0 always (graceful degradation).
+# quality-gates 사본과 **kill switch 변수명 한 줄만** 다르다 (plugin-audit 네임스페이스).
+# 그 동일성은 test_codex_copies_agree.sh(Task 10)가 행동으로 잰다 — diff가 아니라
+# 같은 입력에 같은 출력을 내는가로. Read-only, exit 0 always (graceful degradation).
 
 set -u
 
@@ -10,7 +12,7 @@ emit_skip() {
 }
 
 # 1. Kill switch (highest priority — explicit user opt-out)
-if [[ "${DEVBREW_DISABLE_QG_CODEX:-0}" == "1" ]]; then
+if [[ "${DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX:-0}" == "1" ]]; then
   emit_skip 'kill_switch'
   exit 0
 fi
