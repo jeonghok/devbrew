@@ -240,5 +240,70 @@ class TestHooksJson(unittest.TestCase):
         self.assertIn("subagent-explain.py", entries[0]["hooks"][0]["command"])
 
 
+class TestDedicatedAgent(unittest.TestCase):
+    """AC48①② — 전용 agent 존재 + fail-closed tools allowlist.
+
+    ②는 **곱**이다: (a) `tools:` 가 키로 존재하고 비어 있지 않으며
+    (b) 그 집합이 {Read, Glob, Grep} 의 **부분집합**이다. (a) 가 load-bearing —
+    부분집합만 요구하면 키가 없거나 빈 값일 때 공집합이라 공허하게 참이 되는데,
+    플랫폼 의미는 정반대(미선언 = 전 도구 허용)다.
+
+    **부재 열거가 아니라 지배관계로 판정한다.** 금지 도구를 열거하는 검사는
+    내일 추가될 쓰기 도구를 오늘 담을 수 없어 시간축으로 fail-open 이고,
+    그것이 devbrew 가 `disallowedTools` 단독을 기각한 바로 그 근거다.
+    """
+
+    ALLOWED = {"Read", "Glob", "Grep"}
+    AGENT = PLUGIN_DIR / "agents" / "transcript-reader.md"
+
+    @staticmethod
+    def tools_of(text: str):
+        """선언된 tools 집합. 키가 없으면 None(= 미선언)."""
+        body = text.split("---", 2)[1]
+        for line in body.splitlines():
+            if line.startswith("tools:"):
+                raw = line.split(":", 1)[1].strip()
+                return {t.strip() for t in raw.split(",") if t.strip()}
+        return None
+
+    def setUp(self) -> None:
+        self.text = self.AGENT.read_text(encoding="utf-8")
+
+    def test_agent_file_exists_with_name(self) -> None:
+        self.assertTrue(self.AGENT.is_file())
+        self.assertIn("name: transcript-reader", self.text)
+
+    def test_tools_key_exists_and_is_non_empty(self) -> None:
+        tools = self.tools_of(self.text)
+        self.assertIsNotNone(tools, "tools: 키 자체가 없다 — 플랫폼 의미는 전 도구 허용")
+        self.assertTrue(tools, "tools: 가 비어 있다 — 공집합은 공허하게 부분집합이다")
+
+    def test_tools_are_dominated_by_allowlist(self) -> None:
+        self.assertTrue(self.tools_of(self.text) <= self.ALLOWED)
+
+    def test_glob_is_a_required_member(self) -> None:
+        """OQ-AD 의 잔여위험 논증이 Glob 보유를 전제한다."""
+        self.assertIn("Glob", self.tools_of(self.text))
+
+    def test_disallowed_tools_alone_is_red(self) -> None:
+        self.assertNotIn("disallowedTools", self.text)
+
+    def test_mutation_tools_line_removed(self) -> None:
+        """`tools:` 줄 삭제 mutation 에서 red."""
+        mutated = "\n".join(ln for ln in self.text.splitlines()
+                            if not ln.startswith("tools:"))
+        self.assertIsNone(self.tools_of(mutated))
+
+    def test_mutation_tools_line_emptied(self) -> None:
+        mutated = self.text.replace("tools: Read, Glob, Grep", "tools:")
+        self.assertEqual(self.tools_of(mutated), set())
+
+    def test_mutation_write_tool_added(self) -> None:
+        """추가 축 — 쓰기 도구가 들어오면 지배관계가 깨진다."""
+        mutated = self.text.replace("tools: Read, Glob, Grep",
+                                    "tools: Read, Glob, Grep, Write")
+        self.assertFalse(self.tools_of(mutated) <= self.ALLOWED)
+
+
 if __name__ == "__main__":
     unittest.main()
