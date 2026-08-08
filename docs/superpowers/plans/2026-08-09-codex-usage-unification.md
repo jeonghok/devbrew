@@ -103,7 +103,7 @@ for t in plugins/*/tests/test_*.sh; do bash "$t" >/dev/null 2>&1 || echo "$t"; d
 - **`tests/spike/test_codex_json_extraction.sh` 는 성공 시 리포에 fixture 를 쓴다**(`:73-76`, `fixtures/codex_jsonl_sample.json`). mock 아래에서 그냥 돌리면 실제 fixture 를 mock 출력으로 덮어쓴다 — Task 8 이 이것을 scratch 사본 실행으로 봉쇄한다.
 - **`~/Downloads` 아래라 TCC 권한 회수가 일어나면** `stat` 은 되는데 `open` 이 실패해 테스트가 대량 실패한다 — 회귀로 오인하지 말 것.
 - **spec-distill 의 Stop 훅이 모든 `*-design.md` write 에 리뷰를 강제한다.** 이 계획은 `-design.md` 를 쓰지 않으므로 해당 없음.
-- **V1~V4 는 실제 codex 호출이라 사용자 과금이다.** 각 1회로 설계돼 있다. **사용자 승인 없이 돌리지 말 것.**
+- **V1~V4 는 실제 codex 호출이라 사용자 과금이다.** 각 1회로 설계돼 있다. **사전 승인이 이미 있다** — 2026-08-09 사용자 지시: *"실제 코덱스 호출은 마음대로 해도 돼 이 플랜 작업하는데 이후에도"*. **수명:** 이 계획의 전 태스크 + 이후 devbrew 작업까지, 사용자가 철회할 때까지. 따라서 V1·V2·V4 착수 전 `AskUserQuestion` 승인 게이트를 **띄우지 않는다**. **면제되지 않는 것:** 호출 횟수는 설계된 최소치(V4 = 1회, V2 = 5~6회, V1 = 2회)를 지키고, 실행 후 **몇 회를 태웠는지 보고**한다 — 사라진 것은 승인 게이트이지 비용 가시성이 아니다.
 
 ---
 
@@ -231,7 +231,7 @@ Expected: `TOTAL 133` · `RED 6` · RED 목록이 Global Constraints 의 표와 
 {
   echo
   echo "# python (repo root, -m unittest)"
-  python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
+  python3 -m unittest discover -s plugins/spec-distill/tests -t plugins/spec-distill/tests 2>&1 | tail -3
   echo "# plugin-audit"
   python3 -m unittest discover -s plugins/plugin-audit/scripts/tests -t . 2>&1 | tail -3
 } >> docs/superpowers/plans/2026-08-09-codex-usage-unification-baseline.txt
@@ -1915,11 +1915,11 @@ v0.2.0 → v0.3.0."
 - Consumes: T2~T6 전부.
 - Produces: 1단계 종료 판정. **이 검증 없이 2단계로 넘어가지 않는다.**
 
-> ⚠ **이 태스크는 실제 codex 를 호출한다 — 사용자 과금이다.** 착수 전 사용자에게 알리고 승인을 받는다. 1회로 설계돼 있다.
+> ⚠ **이 태스크는 실제 codex 를 호출한다 — 사용자 과금이다.** 1회로 설계돼 있다. **사전 승인 있음**(2026-08-09 상시 승인 — Global Constraints 참조): 게이트 없이 진행하되 실행 후 호출 횟수를 보고한다.
 
-- [ ] **Step 1: 사용자 승인을 받는다**
+- [ ] **Step 1: 호출 예산을 확인한다 (게이트 아님)**
 
-`AskUserQuestion` 으로 확인한다: *"1단계 완료. V4(plugin-audit 러너 실동작, codex 1회 호출, 과금)를 지금 돌릴까요?"* — 승인 없으면 여기서 멈추고 보고한다.
+이 태스크가 태울 실제 codex 호출은 **1회** — Step 3 의 (3) 실행-성공 경로뿐이다. (1) kill switch 와 (2) 실행-실패는 codex 에 도달하지 않는다. 1회를 넘겨야 한다면 그것은 설계 이탈이므로 멈추고 보고한다.
 
 - [ ] **Step 2: 축 질문 파일을 만든다**
 
@@ -2427,7 +2427,7 @@ git commit -m "test(codex): 실행 관측 하니스 — argv/stdin 캡처 mock (
 
 ```bash
 grep -rn 'PROMPT_FILE\|prompt.md' plugins/*/tests/*.sh plugins/*/tests/*.py 2>/dev/null | grep -i 'sha\|byte\|len(' || echo "(프롬프트 바이트를 고정하는 테스트 없음 — 전환 안전)"
-python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
+python3 -m unittest discover -s plugins/spec-distill/tests -t plugins/spec-distill/tests 2>&1 | tail -3
 ```
 
 Expected: 프롬프트 바이트 고정 테스트 없음. 있으면 **그 테스트 갱신을 같은 커밋에** 넣는다.
@@ -3165,7 +3165,7 @@ Expected: `Fail: 0`. 출력에 다음이 보여야 한다:
 
 ```bash
 bash plugins/spec-distill/tests/test_web_kill_switch.sh
-python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
+python3 -m unittest discover -s plugins/spec-distill/tests -t plugins/spec-distill/tests 2>&1 | tail -3
 ```
 
 Expected: `test_web_kill_switch.sh` 의 `reviewing-spec: 실행 가능한 스위치 확인 블록 실재` 같은 assert 가 여전히 통과한다. **RED 가 나면 그 assert 를 읽고** — 이 편집이 `DEVBREW_SPEC_DISTILL_DISABLE_WEB` 확인 블록을 건드리지 않았는지 확인한다 (건드리면 안 된다; 그것은 Step 2 의 web 게이트이고 이 블록은 codex 게이트다).
@@ -3706,7 +3706,7 @@ bash plugins/quality-gates/tests/test_codex_backward_compat.sh 2>&1 | tail -12  
 - [ ] **Step 4: python 스위트 회귀 확인**
 
 ```bash
-python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
+python3 -m unittest discover -s plugins/spec-distill/tests -t plugins/spec-distill/tests 2>&1 | tail -3
 for f in plugins/plugin-audit/scripts/tests/test_*.py; do python3 "$f" >/dev/null 2>&1 || echo "RED $f"; done
 ```
 
@@ -3812,13 +3812,13 @@ qg 2.14.20 → 2.15.0 · spec-distill 0.25.2 → 0.26.0 (AC16 · AC17 · AC18)."
 - Create: `docs/audits/<실행일 YYYY-MM-DD>-codex-stdin-v2/manifest.md`
 - Create: `docs/audits/<실행일>-codex-stdin-v2/observed.md`
 
-> ⚠ **실제 codex 호출 — 사용자 과금.** 전환된 호출부마다 1회, 총 5~6회. 착수 전 승인을 받는다.
+> ⚠ **실제 codex 호출 — 사용자 과금.** 전환된 호출부마다 1회, 총 5~6회. **사전 승인 있음**(2026-08-09 상시 승인 — Global Constraints 참조).
 >
 > **이 AC 없이는 2단계를 닫지 않는다.**
 
-- [ ] **Step 1: 사용자 승인을 받는다**
+- [ ] **Step 1: 호출 예산을 확인한다 (게이트 아님)**
 
-`AskUserQuestion`: *"2단계 완료(RED 6→3). V2(stdin 전환 실동작, codex 5~6회 호출, 과금)를 지금 돌릴까요?"*
+예산은 **5~6회** — 전환된 호출부당 정확히 1회다. 초과하면 설계 이탈이므로 멈추고 보고한다.
 
 - [ ] **Step 2: 전환된 호출부를 각각 1회씩 실제로 태운다**
 
@@ -4098,7 +4098,7 @@ Do NOT modify any files; you are in a read-only sandbox.
 bash plugins/quality-gates/tests/test_codex_prompt_untrusted_clause.sh
 python3 plugins/plugin-audit/scripts/tests/test_untrusted_data_clause.py
 bash plugins/quality-gates/tests/test_build_codex_prompt.sh
-python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
+python3 -m unittest discover -s plugins/spec-distill/tests -t plugins/spec-distill/tests 2>&1 | tail -3
 ```
 
 Expected: 전부 PASS. `test_build_codex_prompt.sh` 가 프롬프트 내용을 고정하고 있으면 그 갱신을 **같은 커밋에** 넣는다.
@@ -4148,7 +4148,7 @@ artifact-critic.md:57-62)에는 있었다. 가장 첨예한 것은 brief다 — 
 **Files:**
 - Create: `docs/audits/<실행일 YYYY-MM-DD>-codex-web-mode-v1/manifest.md`
 
-> ⚠ **실제 codex 호출 2회 — 사용자 과금.** Task 18 이 이 결과에 의존하므로 먼저 돌린다.
+> ⚠ **실제 codex 호출 2회 — 사용자 과금.** **사전 승인 있음**(2026-08-09 상시 승인 — Global Constraints 참조). Task 18 이 이 결과에 의존하므로 먼저 돌린다.
 
 **설계 배경:** 설정 키가 **둘**임이 실측으로 확인됐다 (`--strict-config` + 대조군 — 거짓 키는 `unknown configuration field` 로 거부된다).
 
@@ -4662,7 +4662,7 @@ codex_degraded_from = _mr.codex_degraded_from
 
 ```bash
 python3 plugins/spec-distill/tests/test_degrade_alias_single_definition.py
-python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
+python3 -m unittest discover -s plugins/spec-distill/tests -t plugins/spec-distill/tests 2>&1 | tail -3
 ```
 
 Expected: PASS + 회귀 없음. `merge_review` / `merge_brief_review` 의 기존 테스트가 특히 중요하다.
@@ -5353,7 +5353,7 @@ Expected: 6종 전부 `문서에 있음`.
   echo "RED $red"
   echo
   echo "# python"
-  python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
+  python3 -m unittest discover -s plugins/spec-distill/tests -t plugins/spec-distill/tests 2>&1 | tail -3
   for f in plugins/plugin-audit/scripts/tests/test_*.py; do python3 "$f" >/dev/null 2>&1 || echo "RED $f"; done
 } >> docs/superpowers/plans/2026-08-09-codex-usage-unification-baseline.txt
 tail -25 docs/superpowers/plans/2026-08-09-codex-usage-unification-baseline.txt
