@@ -45,7 +45,7 @@
 
 | 훅 | 왜 skill 이 아닌가 |
 |---|---|
-| `SubagentStop` → `hooks/subagent-explain.py` | 에이전트 종료는 **모델이 알아서 반응할 수 없는 순간**이다. 이 이벤트만이 그 시점에 컨텍스트를 주입할 수 있고(다른 후보 이벤트는 전부 주입 불가), skill 은 모델이 부를 때만 돈다 |
+| `SubagentStop` → `hooks/subagent-explain.py` | 에이전트 종료는 **모델이 알아서 반응할 수 없는 순간**이다. 후보 이벤트 중 이 시점에 **쓸 만하게** 컨텍스트를 주입할 수 있는 것은 `SubagentStop` 뿐이다 — 나머지는 아예 못 하거나(`PreToolUse`·`TaskCreated`·해당 이벤트 자체가 없음) 부분적이고(`PostToolUseFailure`), 되는 것(`Stop`)은 턴이 안 끝나는 루프 위험 때문에 이 설계가 쓰지 않는다. skill 은 모델이 부를 때만 돈다 |
 
 kill switch: `DEVBREW_DISABLE_AGENT_TRANSPARENCY=1` ·
 `DEVBREW_SKIP_HOOKS=agent-transparency:subagent-explain` — **훅에만 적용된다.**

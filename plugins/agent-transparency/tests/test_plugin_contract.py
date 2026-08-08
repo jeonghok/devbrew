@@ -326,6 +326,30 @@ class TestCommandNameProbe(unittest.TestCase):
         self.assertTrue((PLUGIN_DIR / "commands" / "standup.md").is_file())
 
 
+README_ITEMS = {
+    "force-for-plugin 경고": "끄려면 플러그인 전체를 비활성화",
+    "설치 이전 구간": "설치 이전 작업에는 이 플러그인이 만든 설명이 없",
+    "OQ-J 잔여 위험": "어떤 비밀 필터도 없",
+    "Principles Instantiated": "## Principles Instantiated",
+    "Hooks Installed": "## Hooks Installed",
+}
+
+
+def check_readme_items(text: str) -> list[str]:
+    """AC25 — README 맨 앞의 다섯 항목이 실제로 그 문구를 담고 있는지.
+
+    순수 함수 — 실물 파일과 mutation 문자열 양쪽에 같은 함수를 돌려 mutation 이
+    실제로 문제를 내는지 확인한다. `assertNotIn(fragment, text.replace(fragment, ""))`
+    패턴은 `str.replace` 의 정의상 항상 참이라 아무것도 재지 않는다 — 그 패턴은
+    쓰지 않는다(`tests/test_output_style.py` 의 checker-함수 패턴을 따른다).
+    """
+    bad = []
+    for name, fragment in README_ITEMS.items():
+        if fragment not in text:
+            bad.append("항목 없음: %s" % name)
+    return bad
+
+
 class TestReadme(unittest.TestCase):
     """AC25 — README 맨 앞의 **다섯 항목**.
 
@@ -333,33 +357,63 @@ class TestReadme(unittest.TestCase):
     문서에만 남는다.
     """
 
-    ITEMS = {
-        "force-for-plugin 경고": "끄려면 플러그인 전체를 비활성화",
-        "설치 이전 구간": "설치 이전 작업에는 이 플러그인이 만든 설명이 없",
-        "OQ-J 잔여 위험": "어떤 비밀 필터도 없",
-        "Principles Instantiated": "## Principles Instantiated",
-        "Hooks Installed": "## Hooks Installed",
-    }
-
     def setUp(self) -> None:
         self.text = read("README.md")
 
     def test_all_five_items_present(self) -> None:
-        for name, fragment in self.ITEMS.items():
-            self.assertIn(fragment, self.text, name)
+        self.assertEqual(check_readme_items(self.text), [])
 
     def test_warning_is_near_the_top(self) -> None:
         head = "\n".join(self.text.splitlines()[:25])
         self.assertIn("끄려면 플러그인 전체를 비활성화", head)
 
-    def test_mutation_each_item_removal_is_detected(self) -> None:
-        for name, fragment in self.ITEMS.items():
-            self.assertNotIn(fragment, self.text.replace(fragment, ""), name)
-
     def test_post_merge_checklist_is_operationalised(self) -> None:
         """D11 — OQ-R 의 '머지 후 수동 확인' 이 수행 가능한 형태여야 한다."""
         self.assertIn("## 머지 후 수동 확인", self.text)
         self.assertIn("- [ ]", self.text.split("## 머지 후 수동 확인", 1)[1])
+
+
+class TestReadmeMutation(unittest.TestCase):
+    """checker 를 mutation 문자열에 돌려 실제로 red 가 나는지 확인한다.
+
+    삭제 축 + 재서술(reword) 축 둘 다 흔든다 — 문구를 지우는 것과, 문구를
+    반대 취지의 다른 문장으로 바꾸는 것은 다른 실패 모드다(리뷰가 원래 mutation
+    테스트의 무이빨을 적발하며 이 구분을 요구했다).
+    """
+
+    def setUp(self) -> None:
+        self.text = read("README.md")
+
+    def test_mutation_each_item_deletion_is_detected(self) -> None:
+        """삭제 축 — 다섯 항목을 각각 지우면 그때마다 red."""
+        for name, fragment in README_ITEMS.items():
+            mutated = self.text.replace(fragment, "")
+            self.assertNotEqual(check_readme_items(mutated), [], name)
+
+    def test_mutation_secret_filter_reworded_to_reassurance(self) -> None:
+        """재서술 축 — OQ-J 경고를 안심시키는 문장으로 바꿔치기해도 red.
+
+        `str.replace` 로 지우는 게 아니라, 경고 문장 전체를 취지가 반대인
+        문장으로 교체한다 — "필터가 없다"가 "필터가 있어 안전하다"가 되면
+        `check_readme_items` 가 원래 문구의 부재를 잡아야 한다.
+        """
+        mutated = self.text.replace(
+            "**이 플러그인이 대화창에 내는 설명에는 어떤 비밀 필터도 없다.**",
+            "**이 플러그인이 대화창에 내는 설명은 비밀이 섞이지 않도록 안전하게 걸러진다.**",
+        )
+        self.assertNotEqual(check_readme_items(mutated), [])
+
+    def test_mutation_installation_gap_reworded_to_reassurance(self) -> None:
+        """재서술 축 (둘째 항목) — 설치 이전 구간 경고를 안심시키는 문장으로 바꿔도 red."""
+        mutated = self.text.replace(
+            "**설치 이전 작업에는 이 플러그인이 만든 설명이 없다.**",
+            "**설치 이전 작업도 이 플러그인이 자동으로 소급 정리해 준다.**",
+        )
+        self.assertNotEqual(check_readme_items(mutated), [])
+
+    def test_real_readme_has_no_problems(self) -> None:
+        """대조군 — 실물 README 는 checker 를 통과해야 mutation 결과와 대비가 선다."""
+        self.assertEqual(check_readme_items(self.text), [])
 
 
 if __name__ == "__main__":
