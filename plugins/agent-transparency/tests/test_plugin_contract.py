@@ -38,6 +38,21 @@ class TestManifest(unittest.TestCase):
         for part in parts:
             self.assertTrue(part.isdigit(), self.manifest["version"])
 
+    def test_description_matches_output_style(self) -> None:
+        """AC26 — plugin.json 의 description 이 output style frontmatter 와 같은 문구.
+
+        output style 의 description 은 YAML 접힘(두 줄)이라 편다 — 이어지는 줄은
+        들여쓰기로만 식별한다(다음 키는 열 0에서 시작한다).
+        """
+        body = read("output-styles/agent-transparency.md").split("---", 2)[1]
+        head, tail = body.split("description:", 1)[1].split("\n", 1)
+        folded = [head.strip()]
+        for line in tail.splitlines():
+            if not line.startswith("  "):
+                break
+            folded.append(line.strip())
+        self.assertEqual(self.manifest["description"], " ".join(folded))
+
 
 class TestMarketplaceEntry(unittest.TestCase):
     """D12 — marketplace 에 등록되지 않으면 설치가 안 된다."""
