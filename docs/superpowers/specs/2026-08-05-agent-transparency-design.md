@@ -1490,10 +1490,13 @@ if not isinstance(items, list):
     print("plugin list --json 이 리스트가 아니다 — 측정 중단", file=sys.stderr); sys.exit(1)
 hit = [i for i in items if isinstance(i, dict)
        and str(i.get("id", "")).split("@")[0] == "agent-transparency"]
-if any(i.get("enabled") is True for i in hit):
+# `enabled` 는 **bool 이어야 한다**. 타입 검사를 먼저 하지 않으면 "true" 같은 비-bool 값이
+# `is True` 에도 `"enabled" not in i` 에도 안 걸려 **활성인 채로 통과**한다(실행으로 적발).
+bad = [i for i in hit if not isinstance(i.get("enabled"), bool)]
+if bad:
+    print("plugin list 항목의 enabled 가 bool 이 아니다 — 측정 중단", file=sys.stderr); sys.exit(1)
+if any(i["enabled"] for i in hit):
     print("설치된 agent-transparency 가 활성 — claude plugin disable 후 재실행", file=sys.stderr); sys.exit(1)
-if any("enabled" not in i for i in hit):
-    print("plugin list 항목에 enabled 키가 없다 — 측정 중단", file=sys.stderr); sys.exit(1)
 ' || exit 1
    # 매치 0건(미설치)은 머지 전 정상 경로이므로 통과한다.
    FX=""; cleanup() { [ -n "$FX" ] && rm -rf "$FX"; }; trap cleanup EXIT
@@ -1561,6 +1564,14 @@ if any("enabled" not in i for i in hit):
    `--json` 의 `{"id", "enabled"}` 로만 판정한다 — 이 한 번의 측정이 라운드 3의 부분문자열 매치와
    라운드 4의 줄 단위 상태 매치를 **둘 다 반증했다.** 문서를 네 라운드 다듬는 동안 두 판정 로직이
    연달아 틀렸고, 고친 것은 리뷰가 아니라 실행이다.
+
+   **그래서 세 번째 판정 로직은 쓰자마자 돌려 봤고, 거기서 또 하나가 나왔다**: `enabled` 의 타입을
+   검사하지 않으면 `"true"`(문자열)가 `is True` 에도 `키 부재` 검사에도 안 걸려 **활성인 채로
+   통과**한다. bool 검사를 앞에 두어 닫았다. 위 코드는 **아래 12개 픽스처로 실행 검증**했다 —
+   미설치(빈 목록) · 다른 플러그인만 활성 · 대상 비활성 · 대상 활성 · 비활성과 활성이 함께 존재 ·
+   `enabled` 키 부재 · 접두사만 같은 다른 이름(`agent-transparency-extra`) · JSON 파손 · 리스트가
+   아님 · `enabled` 가 문자열 · 정수 · `null`. **이 픽스처 목록을 `test_ab_runner_contract.py` 의
+   계약 테스트로 옮긴다** — 문자열 검사만으로는 이 세 판의 차이를 구분할 수 없다.
 
    **판정 단계** (러너가 이어서 수행):
 
