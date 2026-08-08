@@ -256,9 +256,18 @@ class TestReferenceIsNormative(unittest.TestCase):
         self.assertIn("| 5b ", self.text)
         self.assertIn("/standup", section_of(self.text, "판정 구간 표"))
 
-    def test_standup_verdict_is_not_script_stdout(self) -> None:
-        """`/standup` 검증이 스크립트 stdout 에서 끝나면 red."""
-        self.assertIn("실제로 실행된 답변", self.text)
+    def test_standup_verdict_target_is_defined_at_gate_definition(self) -> None:
+        """AC33 — 게이트 5a·5b 가 판정하는 것은 준비 스크립트의 stdout 이 아니라
+        실제로 실행된 `/standup` 응답이라는 주장은 루브릭 프롬프트 안에만 있으면
+        미래 편집자가 장식으로 보고 잘라낼 수 있다 — 게이트가 정의되는 판정
+        구간 표 절 안에, 문서 전체 아무 데나가 아니라 **여기에** 있어야 한다.
+        """
+        span_section = section_of(self.text, "판정 구간 표")
+        self.assertIn("5a", span_section)
+        self.assertIn("5b", span_section)
+        self.assertIn("스크립트", span_section)
+        self.assertIn("stdout", span_section)
+        self.assertIn("실행", span_section)
 
 
 def section_of(text: str, heading: str) -> str:
