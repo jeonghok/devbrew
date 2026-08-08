@@ -231,5 +231,42 @@ class TestCommandFile(unittest.TestCase):
                 self.assertNotIn("bash", line.lower())
 
 
+class TestReferenceIsNormative(unittest.TestCase):
+    """AC32 우변 · AC33 — 게이트 표의 판정 방식과 5a·5b 의 판정 대상."""
+
+    def setUp(self) -> None:
+        self.text = read("REFERENCE.md")
+
+    def test_gate_table_declares_rubric_for_3_4_5b_6(self) -> None:
+        rows = [ln for ln in self.text.splitlines() if ln.startswith("| ")]
+        for gate in ("| 3 ", "| 4 ", "| 5b ", "| 6 "):
+            row = [ln for ln in rows if ln.startswith(gate)]
+            self.assertTrue(row, gate)
+            self.assertIn("루브릭", row[0])
+
+    def test_no_count_based_gate_wording_remains(self) -> None:
+        """개수 기반 문구가 남아 있으면 red — 굵은 문구 넷을 세는 검사는
+        무관한 굵은 문구 넷으로도 통과한다."""
+        for banned in ("굵은 라벨 개수", "라벨 4개 이상", "볼드 개수"):
+            self.assertNotIn(banned, self.text)
+
+    def test_gate_5a_and_5b_exist(self) -> None:
+        """AC33 — 두 행이 있고 판정 구간 표에 `/standup` 행이 있다."""
+        self.assertIn("| 5a ", self.text)
+        self.assertIn("| 5b ", self.text)
+        self.assertIn("/standup", section_of(self.text, "판정 구간 표"))
+
+    def test_standup_verdict_is_not_script_stdout(self) -> None:
+        """`/standup` 검증이 스크립트 stdout 에서 끝나면 red."""
+        self.assertIn("실제로 실행된 답변", self.text)
+
+
+def section_of(text: str, heading: str) -> str:
+    start = text.index("## " + heading)
+    rest = text[start + 3:]
+    end = rest.find("\n## ")
+    return rest if end < 0 else rest[:end]
+
+
 if __name__ == "__main__":
     unittest.main()
