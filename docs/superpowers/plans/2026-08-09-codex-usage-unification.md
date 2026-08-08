@@ -184,7 +184,7 @@ for t in plugins/*/tests/test_*.sh; do bash "$t" >/dev/null 2>&1 || echo "$t"; d
 **Interfaces:**
 - Produces: `baseline.txt` — 이후 모든 태스크가 "RED 수가 늘지 않았다" 를 대조하는 원장.
 
-- [ ] **Step 1: 브랜치 확인**
+- [x] **Step 1: 브랜치 확인**
 
 ```bash
 git branch --show-current   # → feature/codex-usage-unification
@@ -192,7 +192,7 @@ git log --oneline -1        # → bd076fc docs(codex): round-4 ...
 git status --porcelain      # 3개 untracked interview 파일만 (다른 세션 소유 — 건드리지 말 것)
 ```
 
-- [ ] **Step 2: main 을 머지한다 (rebase 아님)**
+- [x] **Step 2: main 을 머지한다 (rebase 아님)**
 
 ```bash
 git fetch origin
@@ -201,7 +201,7 @@ git merge --no-edit main
 
 main 이 가져오는 것은 spec-distill v0.25.2(`review-dispatch.py` + `test_hook_output_schema.py`)뿐이고 이 계획이 건드리는 파일과 겹치지 않는다. 충돌이 나면 멈추고 보고할 것 — 예상 밖이다.
 
-- [ ] **Step 3: baseline 을 측정해 파일로 남긴다**
+- [x] **Step 3: baseline 을 측정해 파일로 남긴다**
 
 ```bash
 {
@@ -225,7 +225,7 @@ Expected: `TOTAL 133` · `RED 6` · RED 목록이 Global Constraints 의 표와 
 
 일치하지 않으면 **멈춘다.** 다른 수가 나왔다는 것은 (a) 머지가 뭔가를 깼거나 (b) TCC 권한 회수(`~/Downloads` 함정)다. `ls plugins/quality-gates/scripts/ >/dev/null` 이 실패하면 (b) 다.
 
-- [ ] **Step 4: python 스위트 baseline 도 같은 파일에 덧붙인다**
+- [x] **Step 4: python 스위트 baseline 도 같은 파일에 덧붙인다**
 
 ```bash
 {
@@ -239,7 +239,7 @@ Expected: `TOTAL 133` · `RED 6` · RED 목록이 Global Constraints 의 표와 
 
 Expected: 두 스위트의 `OK` 또는 `FAILED (failures=N)` 요약이 기록된다. **여기서 나오는 pre-existing red 는 고치지 않는다** — 기록만 한다.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add docs/superpowers/plans/2026-08-09-codex-usage-unification-baseline.txt
@@ -273,7 +273,7 @@ git commit -m "chore(codex): 구현 착수 baseline 기록 — bash 133/6 RED
 - Produces: `plugins/plugin-audit/scripts/detect_codex.sh` — `DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX` 를 kill switch 로 쓴다. Task 5 의 SKILL 게이트가 이것을 호출한다.
 - Consumes: 없음 (첫 코드 태스크).
 
-- [ ] **Step 1: 실패하는 테스트를 먼저 쓴다 — qg detect 에 두 케이스 추가**
+- [x] **Step 1: 실패하는 테스트를 먼저 쓴다 — qg detect 에 두 케이스 추가**
 
 `plugins/quality-gates/tests/test_detect_codex.sh` 의 `# AC7 — codex --version timeout 5s wrap` 주석 **바로 앞**에 삽입:
 
@@ -319,7 +319,7 @@ else
 fi
 ```
 
-- [ ] **Step 2: 두 mock 을 만든다**
+- [x] **Step 2: 두 mock 을 만든다**
 
 ```bash
 mkdir -p plugins/quality-gates/tests/mocks/below-floor \
@@ -351,7 +351,7 @@ cp plugins/quality-gates/tests/mocks/unreadable-version/codex plugins/spec-disti
 chmod +x plugins/{quality-gates,spec-distill}/tests/mocks/{below-floor,unreadable-version}/codex
 ```
 
-- [ ] **Step 3: 테스트를 돌려 실패를 확인한다**
+- [x] **Step 3: 테스트를 돌려 실패를 확인한다**
 
 ```bash
 bash plugins/quality-gates/tests/test_detect_codex.sh
@@ -359,7 +359,7 @@ bash plugins/quality-gates/tests/test_detect_codex.sh
 
 Expected: FAIL — `version below floor` 와 `version unreadable` 두 개가 실패한다 (현재 detect 는 `codex_available: true` 를 낸다). Case 9~12 는 통과한다.
 
-- [ ] **Step 4: qg detect 사본의 버전 절을 교체한다**
+- [x] **Step 4: qg detect 사본의 버전 절을 교체한다**
 
 `plugins/quality-gates/scripts/detect_codex.sh:49-56` 전체(`# 6. Version check ...` 부터 known-bad `fi` 까지)를 아래로 교체:
 
@@ -411,7 +411,7 @@ if _ver_lt "$CODEX_SEMVER" "$CODEX_VERSION_FLOOR"; then
 fi
 ```
 
-- [ ] **Step 5: qg 테스트가 통과하는지 확인한다**
+- [x] **Step 5: qg 테스트가 통과하는지 확인한다**
 
 ```bash
 bash plugins/quality-gates/tests/test_detect_codex.sh
@@ -419,7 +419,7 @@ bash plugins/quality-gates/tests/test_detect_codex.sh
 
 Expected: PASS, `Total: 13 | Pass: 13 | Fail: 0` 근처 (기존 9 + 신규 4·합집합 포함). 정확한 수는 기존 assert 수에 따라 달라지므로 **Fail: 0** 만 요구한다.
 
-- [ ] **Step 6: sd 사본에 같은 블록을 이식하고, sd 테스트에도 대응 케이스를 넣는다**
+- [x] **Step 6: sd 사본에 같은 블록을 이식하고, sd 테스트에도 대응 케이스를 넣는다**
 
 `plugins/spec-distill/scripts/detect_codex.sh` 의 버전 절을 Step 4 와 **바이트 동일**하게 교체한다 (주석 포함 — Task 10 의 갈라짐 락이 kill switch 축만 파라미터로 빼고 나머지는 공통으로 판정한다).
 
@@ -450,7 +450,7 @@ bash plugins/spec-distill/tests/test_detect_codex.sh
 
 Expected: `Fail: 0`, 총 14 asserts (설계 §5.3⑤ 의 12 + 2).
 
-- [ ] **Step 7: plugin-audit 3번째 사본을 만든다**
+- [x] **Step 7: plugin-audit 3번째 사본을 만든다**
 
 ```bash
 sed 's/DEVBREW_DISABLE_QG_CODEX/DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX/' \
@@ -478,7 +478,7 @@ diff <(sed 's/DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX/DEVBREW_DISABLE_QG_CODEX/' plug
 
 Expected: 헤더 주석 3줄만 다르다.
 
-- [ ] **Step 8: plugin-audit detect 테스트를 쓴다**
+- [x] **Step 8: plugin-audit detect 테스트를 쓴다**
 
 Create `plugins/plugin-audit/scripts/tests/test_detect_codex.py`:
 
@@ -583,7 +583,7 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 9: 세 detect 테스트를 전부 돌린다**
+- [x] **Step 9: 세 detect 테스트를 전부 돌린다**
 
 ```bash
 bash plugins/quality-gates/tests/test_detect_codex.sh && \
@@ -594,7 +594,7 @@ python3 -m unittest plugins.plugin-audit.scripts.tests.test_detect_codex 2>/dev/
 
 Expected: 셋 다 PASS. (plugin-audit 의 디렉토리 이름에 하이픈이 있어 모듈 경로로는 import 되지 않는다 — 직접 실행이 정본이다.)
 
-- [ ] **Step 10: mutation 으로 이빨을 확인한다**
+- [x] **Step 10: mutation 으로 이빨을 확인한다**
 
 ```bash
 # m1: 바닥 값만 지운다 → 바닥 미달이 통과해야 RED가 나야 한다
@@ -617,7 +617,7 @@ Expected: **세 mutation 모두 비-0**. 하나라도 0 이면 그 축에 이빨
 
 `.bak` 잔존물이 없는지 확인: `git status --porcelain | grep '\.bak$'` → 빈 출력.
 
-- [ ] **Step 11: 커밋**
+- [x] **Step 11: 커밋**
 
 ```bash
 git add plugins/quality-gates/scripts/detect_codex.sh \
@@ -650,7 +650,7 @@ exit 0이라 도달하지 않았고, 그 상태로 codex_available: true가 나�
 - Produces: `run_audit_codex_reviewer.sh <axis_question_file> <project_dir> <output_json_path>` — 항상 exit 0, 항상 `<output_json_path>` 를 쓴다. 실패 시 `{"findings": [], "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "meta": {"codex_failed": true, "reason": "<reason>"}}`.
 - Produces: **stdin 규약을 처음부터 지킨다** — `codex exec -` + `< "$PROMPT_FILE"`. 2단계의 전환 대상이 아니다.
 
-- [ ] **Step 1: 실패하는 테스트를 먼저 쓴다**
+- [x] **Step 1: 실패하는 테스트를 먼저 쓴다**
 
 Create `plugins/plugin-audit/scripts/tests/test_run_audit_codex_reviewer.py`:
 
@@ -778,7 +778,7 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 ```bash
 python3 plugins/plugin-audit/scripts/tests/test_run_audit_codex_reviewer.py
@@ -786,7 +786,7 @@ python3 plugins/plugin-audit/scripts/tests/test_run_audit_codex_reviewer.py
 
 Expected: 전부 ERROR/FAIL — `RUNNER` 파일이 없다.
 
-- [ ] **Step 3: 러너를 쓴다**
+- [x] **Step 3: 러너를 쓴다**
 
 Create `plugins/plugin-audit/scripts/run_audit_codex_reviewer.sh`:
 
@@ -895,7 +895,7 @@ exit 0
 chmod +x plugins/plugin-audit/scripts/run_audit_codex_reviewer.sh
 ```
 
-- [ ] **Step 4: 테스트를 돌린다**
+- [x] **Step 4: 테스트를 돌린다**
 
 ```bash
 python3 plugins/plugin-audit/scripts/tests/test_run_audit_codex_reviewer.py
@@ -903,7 +903,7 @@ python3 plugins/plugin-audit/scripts/tests/test_run_audit_codex_reviewer.py
 
 Expected: **PASS 전부.** `test_always_writes_output_even_when_extractor_missing` 은 `codex_audit_to_json.py` 가 아직 없으므로 `extract_failed` degrade 경로로 통과한다 — 그것이 계약이다.
 
-- [ ] **Step 5: AC7 — 후보 스캔이 이 러너를 찾는지 확인한다 (착수 전 FALSE → 착수 후 TRUE)**
+- [x] **Step 5: AC7 — 후보 스캔이 이 러너를 찾는지 확인한다 (착수 전 FALSE → 착수 후 TRUE)**
 
 ```bash
 INVOKE='(^|[[:space:]])codex[[:space:]]+exec[[:space:]]'
@@ -926,7 +926,7 @@ done | sort
 
 Expected: **6줄** — 4 러너 + spike + 신규 감사 러너. (착수 전 5줄.)
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add plugins/plugin-audit/scripts/run_audit_codex_reviewer.sh \
@@ -953,7 +953,7 @@ git commit -m "feat(plugin-audit): codex 감사 러너 신설 — 산문 호출�
 - Produces: stdout 에 JSON — `{"findings": [...], "d_verdicts": [...], "oq_answers": [...], "new_open_questions": [...], "meta": {"codex_failed": bool, ...}}`. **`codex_failed` 는 `meta:` 하위에 둔다** (최상위로 내는 것은 `extract_codex_artifact_yaml.py` 의 기성 예외 하나뿐이다).
 - Produces: Task 5 의 SKILL 이 `findings` 는 `audit-workflow.js` 로, 나머지 셋은 `assemble-audit-data.py --codex-side` 로 라우팅한다.
 
-- [ ] **Step 1: 실패하는 테스트를 먼저 쓴다**
+- [x] **Step 1: 실패하는 테스트를 먼저 쓴다**
 
 Create `plugins/plugin-audit/scripts/tests/test_codex_audit_to_json.py`:
 
@@ -1089,7 +1089,7 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 ```bash
 python3 plugins/plugin-audit/scripts/tests/test_codex_audit_to_json.py
@@ -1097,7 +1097,7 @@ python3 plugins/plugin-audit/scripts/tests/test_codex_audit_to_json.py
 
 Expected: 전부 실패 — 스크립트가 없다.
 
-- [ ] **Step 3: 추출기를 쓴다**
+- [x] **Step 3: 추출기를 쓴다**
 
 Create `plugins/plugin-audit/scripts/codex_audit_to_json.py`:
 
@@ -1296,7 +1296,7 @@ if __name__ == "__main__":
 chmod +x plugins/plugin-audit/scripts/codex_audit_to_json.py
 ```
 
-- [ ] **Step 4: 테스트를 돌린다**
+- [x] **Step 4: 테스트를 돌린다**
 
 ```bash
 python3 plugins/plugin-audit/scripts/tests/test_codex_audit_to_json.py
@@ -1305,7 +1305,7 @@ python3 plugins/plugin-audit/scripts/tests/test_run_audit_codex_reviewer.py
 
 Expected: 둘 다 PASS. 러너 테스트의 `test_always_writes_output_even_when_extractor_missing` 은 이제 추출기가 있으므로 정상 경로로 통과한다.
 
-- [ ] **Step 5: mutation 으로 이빨을 확인한다**
+- [x] **Step 5: mutation 으로 이빨을 확인한다**
 
 ```bash
 # m4: 스키마 검증을 성공 마커 뒤로 옮긴다 (qg 사본이 실제로 갖고 있는 결함 모양)
@@ -1329,7 +1329,7 @@ mv plugins/plugin-audit/scripts/codex_audit_to_json.py.bak plugins/plugin-audit/
 
 Expected: 둘 다 비-0. `git status --porcelain | grep '\.bak$'` → 빈 출력.
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add plugins/plugin-audit/scripts/codex_audit_to_json.py \
@@ -1355,7 +1355,7 @@ agent_message · 마지막 fence · 성공 마커 전 스키마 검증)을 따�
 - Produces: **`<!-- codex-gate:begin runner=<basename> -->` … `<!-- codex-gate:end -->` 마커 규약.** Task 11 의 `test_codex_gate_observation.sh` 가 이 마커로 블록을 잘라내 실행한다. 마커를 지우면 그 SKILL 이 관측 집합에서 빠지는데, Task 11 의 ratchet 이 **러너 쪽에서** 그것을 잡는다(런너는 있는데 게이트가 없다 → RED).
 - Produces: 게이트 블록이 요구하는 변수 = `CLAUDE_PLUGIN_ROOT` · `AXIS_FILE` · `CODEX_JSON`.
 
-- [ ] **Step 1: 실패하는 테스트를 먼저 쓴다**
+- [x] **Step 1: 실패하는 테스트를 먼저 쓴다**
 
 Create `plugins/plugin-audit/scripts/tests/test_skill_codex_gate.py`:
 
@@ -1447,7 +1447,7 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 ```bash
 python3 plugins/plugin-audit/scripts/tests/test_skill_codex_gate.py
@@ -1455,7 +1455,7 @@ python3 plugins/plugin-audit/scripts/tests/test_skill_codex_gate.py
 
 Expected: `test_gate_marker_pair_exists` 등 대부분 FAIL — 마커도 fence 도 없다.
 
-- [ ] **Step 3: SKILL.md 의 codex 절을 교체한다**
+- [x] **Step 3: SKILL.md 의 codex 절을 교체한다**
 
 `plugins/plugin-audit/skills/auditing-plugins/SKILL.md:92-98` 의 `3. **codex blind co-audit**:` 항목 전체를 아래로 교체:
 
@@ -1505,7 +1505,7 @@ fi
    기록한다(§4.1 truth table). 러너가 돌았으나 실패하면 `ran = true` · `failed = true`다.
 ````
 
-- [ ] **Step 4: post-1 의 `--codex-side` 줄에 라우팅 단서를 남긴다**
+- [x] **Step 4: post-1 의 `--codex-side` 줄에 라우팅 단서를 남긴다**
 
 `SKILL.md:124` 의 `assemble-audit-data.py --workflow-return <wf.json> --codex-side <codex.json> --meta <meta.json>` 줄 **바로 다음**에 한 줄 추가:
 
@@ -1515,7 +1515,7 @@ fi
    경로로 들어와 있어 여기서 무시된다(중복 병합 아님).
 ```
 
-- [ ] **Step 5: 테스트를 돌린다**
+- [x] **Step 5: 테스트를 돌린다**
 
 ```bash
 python3 plugins/plugin-audit/scripts/tests/test_skill_codex_gate.py
@@ -1524,7 +1524,7 @@ python3 plugins/plugin-audit/scripts/tests/test_skill_orchestration.py
 
 Expected: 둘 다 PASS. `test_skill_orchestration.py` 는 기존 락이므로 **회귀가 없어야 한다** — RED 가 나면 SKILL 편집이 다른 계약을 건드린 것이니 그 assert 를 읽고 복구한다.
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add plugins/plugin-audit/skills/auditing-plugins/SKILL.md \
@@ -1559,7 +1559,7 @@ findings는 wf에서만 오고 codex_side['findings']를 읽는 코드는 없다
 
 > **왜 한 커밋인가:** `codex.failed` 를 추가하는 순간 `validate-audit-data.py` 의 B7(`codex.ran is True` 이면 codex-source D/OQ 판정을 강제)이 "실행-실패" 상태에 **거짓 RED** 를 낸다 — `ran=true` 인데 판정이 없기 때문이다. 락 반전과 대상 변경이 같은 커밋에 있어야 baseline 조건이 성립한다.
 
-- [ ] **Step 1: 실패하는 테스트를 먼저 쓴다 — assemble 관문**
+- [x] **Step 1: 실패하는 테스트를 먼저 쓴다 — assemble 관문**
 
 `plugins/plugin-audit/scripts/tests/test_assemble_audit_data.py` 끝에 클래스를 추가:
 
@@ -1623,7 +1623,7 @@ class TestCodexSideIngestionGate(unittest.TestCase):
                          "정상 입력에 손실 보고가 붙으면 배너가 상시 켜진다")
 ```
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 ```bash
 python3 plugins/plugin-audit/scripts/tests/test_assemble_audit_data.py
@@ -1631,7 +1631,7 @@ python3 plugins/plugin-audit/scripts/tests/test_assemble_audit_data.py
 
 Expected: `TestCodexSideIngestionGate` 의 5개가 전부 FAIL/ERROR.
 
-- [ ] **Step 3: `assemble-audit-data.py` 에 컬렉션 관문을 넣는다**
+- [x] **Step 3: `assemble-audit-data.py` 에 컬렉션 관문을 넣는다**
 
 `_sanitize_finding` 정의 **다음**에 삽입:
 
@@ -1705,7 +1705,7 @@ def _sanitize_collection(raw, kind, dropped):
     out_meta["codex"] = codex_meta
 ```
 
-- [ ] **Step 4: 테스트 통과 확인**
+- [x] **Step 4: 테스트 통과 확인**
 
 ```bash
 python3 plugins/plugin-audit/scripts/tests/test_assemble_audit_data.py
@@ -1713,7 +1713,7 @@ python3 plugins/plugin-audit/scripts/tests/test_assemble_audit_data.py
 
 Expected: PASS 전부.
 
-- [ ] **Step 5: B7 을 좁힌다 — 실패하는 테스트 먼저**
+- [x] **Step 5: B7 을 좁힌다 — 실패하는 테스트 먼저**
 
 `plugins/plugin-audit/scripts/tests/test_validate_audit_data.py` 끝에 추가:
 
@@ -1762,7 +1762,7 @@ class TestB7NarrowedToRanAndNotFailed(unittest.TestCase):
 
 > **주의:** `validate-audit-data.py` 의 함수 이름이 `validate` 가 아니면 위 `mod.validate(data)` 를 실제 이름으로 바꾼다. 착수 시 `grep -n '^def ' plugins/plugin-audit/scripts/validate-audit-data.py` 로 확인할 것.
 
-- [ ] **Step 6: B7 조건을 좁힌다**
+- [x] **Step 6: B7 조건을 좁힌다**
 
 `plugins/plugin-audit/scripts/validate-audit-data.py:66` 을 교체:
 
@@ -1775,7 +1775,7 @@ class TestB7NarrowedToRanAndNotFailed(unittest.TestCase):
     if _cx.get("ran") is True and _cx.get("failed") is not True:
 ```
 
-- [ ] **Step 7: 렌더러가 세 상태를 구분하게 한다 — 테스트 먼저**
+- [x] **Step 7: 렌더러가 세 상태를 구분하게 한다 — 테스트 먼저**
 
 `plugins/plugin-audit/scripts/tests/test_render_audit_report.py` 끝에 추가:
 
@@ -1819,7 +1819,7 @@ class TestCodexThreeStateBanner(unittest.TestCase):
 
 > **주의:** 렌더 함수 이름이 `render` 가 아니면 실제 이름으로 바꾼다 (`grep -n '^def ' plugins/plugin-audit/scripts/render-audit-report.py`).
 
-- [ ] **Step 8: 렌더러를 고친다**
+- [x] **Step 8: 렌더러를 고친다**
 
 `plugins/plugin-audit/scripts/render-audit-report.py:57-58` 을 교체:
 
@@ -1837,7 +1837,7 @@ class TestCodexThreeStateBanner(unittest.TestCase):
                        f"{d.get('reason')} (조용히 버리지 않는다)")
 ```
 
-- [ ] **Step 9: plugin-audit 전체 테스트 + 버전 bump**
+- [x] **Step 9: plugin-audit 전체 테스트 + 버전 bump**
 
 ```bash
 python3 -m unittest discover -s plugins/plugin-audit/scripts/tests -t . -p 'test_*.py' 2>&1 | tail -5
@@ -1861,7 +1861,7 @@ print(d["version"])
 PY
 ```
 
-- [ ] **Step 10: mutation 으로 이빨을 확인한다**
+- [x] **Step 10: mutation 으로 이빨을 확인한다**
 
 ```bash
 # m6: B7을 ran == true로 되돌린다 → 실행-실패에 거짓 RED가 나야 한다
@@ -1884,7 +1884,7 @@ mv plugins/plugin-audit/scripts/assemble-audit-data.py.bak plugins/plugin-audit/
 
 Expected: 둘 다 비-0.
 
-- [ ] **Step 11: 커밋**
+- [x] **Step 11: 커밋**
 
 ```bash
 git add plugins/plugin-audit/scripts/assemble-audit-data.py \
@@ -1919,11 +1919,11 @@ v0.2.0 → v0.3.0."
 
 > ⚠ **이 태스크는 실제 codex 를 호출한다 — 사용자 과금이다.** 1회로 설계돼 있다. **사전 승인 있음**(2026-08-09 상시 승인 — Global Constraints 참조): 게이트 없이 진행하되 실행 후 호출 횟수를 보고한다.
 
-- [ ] **Step 1: 호출 예산을 확인한다 (게이트 아님)**
+- [x] **Step 1: 호출 예산을 확인한다 (게이트 아님)**
 
 이 태스크가 태울 실제 codex 호출은 **1회** — Step 3 의 (3) 실행-성공 경로뿐이다. (1) kill switch 와 (2) 실행-실패는 codex 에 도달하지 않는다. 1회를 넘겨야 한다면 그것은 설계 이탈이므로 멈추고 보고한다.
 
-- [ ] **Step 2: 축 질문 파일을 만든다**
+- [x] **Step 2: 축 질문 파일을 만든다**
 
 ```bash
 mkdir -p "$(mktemp -d -t v4-XXXXXX)" && V4="$_"
@@ -1940,7 +1940,7 @@ EOF
 echo "$V4"
 ```
 
-- [ ] **Step 3: 세 상태를 각각 실측한다 (AC5 가 요구하는 세 상태)**
+- [x] **Step 3: 세 상태를 각각 실측한다 (AC5 가 요구하는 세 상태)**
 
 ```bash
 export CLAUDE_PLUGIN_ROOT="$PWD/plugins/plugin-audit"
@@ -1965,7 +1965,7 @@ python3 -c "import json,sys; d=json.load(open('$V4/out-ok.json')); print('meta:'
 
 Expected: (3) 이 `rc=0` · `meta.codex_failed: false` · 네 키가 전부 존재 · `findings` 는 리스트.
 
-- [ ] **Step 4: `--codex-side` shape 변환이 실제로 소비되는지 확인한다**
+- [x] **Step 4: `--codex-side` shape 변환이 실제로 소비되는지 확인한다**
 
 ```bash
 python3 - "$V4/out-ok.json" <<'PY'
@@ -1991,7 +1991,7 @@ PY
 
 Expected: `assemble rc: 0` · `meta.codex` 에 `ran`/`failed` 둘 다 존재 · validate 가 B7 거짓 RED 를 내지 않는다.
 
-- [ ] **Step 5: 증거물을 남긴다 (P21 — 원시 프롬프트·JSONL 전문 보존 금지)**
+- [x] **Step 5: 증거물을 남긴다 (P21 — 원시 프롬프트·JSONL 전문 보존 금지)**
 
 ```bash
 D="docs/audits/$(date +%Y-%m-%d)-codex-audit-runner-v4"
@@ -2030,7 +2030,7 @@ mkdir -p "$D"
 rm -rf "$V4"
 ```
 
-- [ ] **Step 6: 1단계 전체 baseline 을 재측정한다**
+- [x] **Step 6: 1단계 전체 baseline 을 재측정한다**
 
 ```bash
 red=0; for t in plugins/*/tests/test_*.sh; do bash "$t" >/dev/null 2>&1 || { red=$((red+1)); echo "RED $t"; }; done; echo "RED=$red"
@@ -2038,7 +2038,7 @@ red=0; for t in plugins/*/tests/test_*.sh; do bash "$t" >/dev/null 2>&1 || { red
 
 Expected: **`RED=6`** — baseline 과 동일. 1단계는 qg 의 빨간 테스트를 고치지 않는다(2단계 소관).
 
-- [ ] **Step 7: 커밋**
+- [x] **Step 7: 커밋**
 
 ```bash
 git add docs/audits/
