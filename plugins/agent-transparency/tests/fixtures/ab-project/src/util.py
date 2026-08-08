@@ -17,7 +17,7 @@ def _cell(value):
 
 
 def total(path):
-    """data.csv の各行に든 두 값을 add 로 누적한다."""
+    """data.csv 의 각 행에 든 두 값을 add 로 누적한다."""
     running = 0
     with open(path, newline="", encoding="utf-8") as fh:
         for row in csv.reader(fh):
