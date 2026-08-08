@@ -25,8 +25,29 @@ from pathlib import Path
 ROOT = Path(".claude/quality-gates")
 LOCK_NAME = ".gc.lock"
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
+# 이름의 charset만으로는 세션 폴더와 형제 디렉토리를 구분할 수 없다 —
+# `worktrees`(9자)·`baseline-cache`(14자)가 위 패턴을 만족한다. 내용으로 식별한다.
+#
+# denylist({"worktrees", "baseline-cache"} 제외)를 쓰지 않는 이유: 공간에는 맞지만
+# **시간에 fail-open**이다. 내일 추가될 형제 디렉토리를 오늘 열거할 수 없다.
+# 마커 기반은 반대로 시간에 fail-closed다 — 새 형제 디렉토리는 자동으로 안전하다.
+# 오판 방향도 옳다: 안 지우는 누수(빈 디렉토리 0바이트)가 살아있는 것을 지우는
+# 것보다 안전하다.
+# `pipeline.md`·`files.md`·`publish-eligible.md`는 SKILL.md가 실제로 쓰는 이름이다.
+# `runtime-evidence.md`는 Runtime gate의 evidence-log 이름 —
+# agents/runtime-verifier.md:98 및 scripts/detect-runtime.sh:286 이
+# `.claude/quality-gates/<sid>/runtime-evidence.md`에 직접 쓴다(실재 확인됨).
+# 목록에서 빠진 마커의 오판 방향은 "안 지움"(누수)이라 안전하다 — 반대 방향이 아니다.
+SESSION_MARKERS = ("pipeline.md", "files.md", "publish-eligible.md", "runtime-evidence.md")
 GRACE_NS = 60 * 1_000_000_000
 DOUBLE_STAT_DELAY_S = 0.05
+
+
+def _is_session_folder(folder: Path) -> bool:
+    try:
+        return any((folder / name).is_file() for name in SESSION_MARKERS)
+    except OSError:
+        return False
 
 
 def _disabled() -> bool:
@@ -115,6 +136,10 @@ def gc(self_session_id: str | None = None) -> int:
                 if not child.is_dir():
                     continue
                 if not SESSION_PATTERN.match(child.name):
+                    continue
+                # 이름 + 내용 **둘 다** 만족해야 sweep — 두 조건의 교집합이
+                # 단독보다 좁다. 패턴을 지우지 않고 함께 유지하는 이유가 이것이다.
+                if not _is_session_folder(child):
                     continue
                 if self_session_id and child.name == self_session_id:
                     continue

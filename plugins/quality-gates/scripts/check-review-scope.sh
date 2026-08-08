@@ -28,41 +28,17 @@ emit_degraded() {
   exit 0
 }
 
-# --- git sanity (fail-open on anything uncertain — C2) ---
-git rev-parse --is-inside-work-tree >/dev/null 2>&1 || emit_degraded
-git rev-parse --verify --quiet HEAD >/dev/null 2>&1 || emit_degraded
-# detached HEAD → no branch context to compare → degraded.
-git symbolic-ref --quiet HEAD >/dev/null 2>&1 || emit_degraded
-# shallow clone → truncated history → merge-base may resolve to a grafted
-# boundary commit (wrong count) instead of failing → degraded regardless (AC4;
-# the SKILL degraded advisory lists shallow as a trigger, so the script must
-# actually emit it). `--is-shallow-repository` (git ≥ 2.15) prints true|false;
-# on older git it prints nothing → no false-degrade.
-[[ "$(git rev-parse --is-shallow-repository 2>/dev/null)" == "true" ]] && emit_degraded
-
-# --- base resolution. `base` is the human-readable DISPLAY short-name; `base_ref`
-#     is the git-usable ref KNOWN to exist (may be a remote-tracking ref). Kept
-#     separate so a remote-only default branch (origin/main with no local main —
-#     fresh clone / CI checkout / worktree) does NOT make `git merge-base` fail and
-#     fall open to degraded (F2 fix, preserved from v2.6.0). ---
-base=""
-base_ref=""
-if ref=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null); then
-  base="${ref#origin/}"; base_ref="$ref"
-elif git rev-parse --verify --quiet refs/remotes/origin/main >/dev/null 2>&1; then
-  base="main"; base_ref="origin/main"
-elif git rev-parse --verify --quiet refs/remotes/origin/master >/dev/null 2>&1; then
-  base="master"; base_ref="origin/master"
-elif git rev-parse --verify --quiet refs/heads/main >/dev/null 2>&1; then
-  base="main"; base_ref="main"
-elif git rev-parse --verify --quiet refs/heads/master >/dev/null 2>&1; then
-  base="master"; base_ref="master"
-else
-  emit_degraded
-fi
-
-merge_base=$(git merge-base "$base_ref" HEAD 2>/dev/null) || emit_degraded
-[[ -n "$merge_base" ]] || emit_degraded
+# --- baseline resolution은 resolve-baseline.sh가 단독 소유 (design §5.2 R-init).
+#     git sanity(비-git/HEAD 부재/detached/shallow) + base 후보 순서 + merge-base가
+#     전부 그 스크립트 안에 있고, 이 스크립트는 4키를 읽어 fail-open 판정만 승계한다.
+#     여기서 로직을 복제하면 두 소비자가 서로 다른 baseline을 보게 된다 (C2 재발). ---
+_rb_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+_rb_out=$("$_rb_dir/resolve-baseline.sh" 2>/dev/null) || emit_degraded
+_rb_field() { printf '%s\n' "$_rb_out" | awk -v k="$1:" '$1 == k { print $2 }'; }
+[[ "$(_rb_field degraded)" == "no" ]] || emit_degraded
+base=$(_rb_field base)
+merge_base=$(_rb_field merge_base)
+[[ -n "$base" && -n "$merge_base" && "$merge_base" != "-" ]] || emit_degraded
 
 # branch_ahead_count is a CHANGED-FILE count (NOT a commit count): the number of
 # files differing between merge_base and HEAD. The SKILL's branch-mode

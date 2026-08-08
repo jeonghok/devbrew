@@ -25,17 +25,25 @@
 #
 # Per-kind schema for runnable_surfaces (kind-tagged sum type):
 #   docker-compose   — {kind, path, requires_decision}
-#   npm-script       — {kind, name ∈ {dev,start,serve,test}, command, requires_decision?}
-#   pytest           — {kind, command}
-#   cargo-test       — {kind, command}
+#   npm-script       — {kind, name ∈ {dev,start,serve}, command, requires_decision?}
 #   cargo-run        — {kind, command, requires_decision}  (only when Cargo.toml has [[bin]])
-#   go-test          — {kind, command}
 #   go-run           — {kind, command, requires_decision}  (only when main.go found)
-#   makefile         — {kind, target ∈ {run,serve,test}, command, requires_decision?}
+#   makefile         — {kind, target ∈ {run,serve}, command, requires_decision?}
+#
+# **runnable_surfaces holds BOOT surfaces only — never test runners** (v3.0.0,
+# /qg iter-5 C2). Test runners are reported in `test_runners:` (informational for
+# the manifest reader) and executed by the ORCHESTRATOR via run-test-selection.sh,
+# outside the verifier's turn (§5.1 invariant ②). Listing them here handed them to
+# the verifier as bootable surfaces, which (a) ran the same suite twice, (b) let the
+# verifier install test-runner deps into the HEAD sandbox ONLY — the baseline tree
+# never sees them, so the two axes stop being comparable (AC41), and (c) widened
+# §11⑬: the boot setup mutates the very sandbox where the authoritative tests run.
+# A repo with nothing to boot now yields an empty runnable_surfaces, and the
+# verifier's degenerate SKIP_WITH_EVIDENCE path handles it — the floor still runs.
 #
 # Blast-radius rule: process-start kinds (dev/start/serve/run) and any
 # surface whose command body matches a network/deploy/destructive signal carry
-# requires_decision: true. Test-runner kinds are automatic (no requires_decision).
+# requires_decision: true.
 #
 # Exit codes: 0 = ok (parse manifest), non-zero = invariant violation
 # (skill should fail-open: treat as empty manifest).
@@ -111,18 +119,17 @@ fi
 if [[ -f package.json ]]; then
   for script in dev start serve test; do
     if grep -qE "\"$script\"[[:space:]]*:" package.json 2>/dev/null; then
-      rd="false"
-      case "$script" in
-        dev|start|serve) rd="true" ;;
-      esac
+      # `test` is a RUNNER, not a boot surface — register it and move on (C2).
+      if [[ "$script" == "test" ]]; then
+        add_test_runner "npm"
+        continue
+      fi
+      rd="true"   # dev|start|serve are all process-start
       script_line=$(grep -E "\"$script\"[[:space:]]*:" package.json 2>/dev/null | head -1)
       has_danger_signal "$script_line" && rd="true"
       block="$(printf '  - kind: npm-script\n    name: %s\n    command: npm run %s' "$script" "$script")"
       [[ "$rd" == "true" ]] && block="$block$(printf '\n    requires_decision: true')"
       SURFACES+=("$block")
-      if [[ "$script" == "test" ]]; then
-        add_test_runner "npm"
-      fi
     fi
   done
 fi
@@ -131,15 +138,13 @@ fi
 if [[ -f pyproject.toml ]] || [[ -f pytest.ini ]] || [[ -f setup.cfg ]]; then
   if [[ -d tests ]] || [[ -d test ]] || \
      find . -maxdepth 2 \( -name "test_*.py" -o -name "*_test.py" \) 2>/dev/null | head -1 | grep -q .; then
-    SURFACES+=("$(printf '  - kind: pytest\n    command: pytest')")
-    add_test_runner "pytest"
+    add_test_runner "pytest"   # 러너이지 부팅 표면이 아니다 (C2)
   fi
 fi
 
 # cargo (test automatic + run gated)
 if [[ -f Cargo.toml ]]; then
-  SURFACES+=("$(printf '  - kind: cargo-test\n    command: cargo test')")
-  add_test_runner "cargo"
+  add_test_runner "cargo"   # 러너이지 부팅 표면이 아니다 (C2)
   if grep -q '\[\[bin\]\]' Cargo.toml 2>/dev/null; then
     SURFACES+=("$(printf '  - kind: cargo-run\n    command: cargo run\n    requires_decision: true')")
   fi
@@ -147,8 +152,7 @@ fi
 
 # go (test automatic + run gated)
 if [[ -f go.mod ]]; then
-  SURFACES+=("$(printf '  - kind: go-test\n    command: go test ./...')")
-  add_test_runner "go"
+  add_test_runner "go"   # 러너이지 부팅 표면이 아니다 (C2)
   if find . -maxdepth 2 -name 'main.go' 2>/dev/null | head -1 | grep -q .; then
     SURFACES+=("$(printf '  - kind: go-run\n    command: go run ./...\n    requires_decision: true')")
   fi
@@ -158,10 +162,12 @@ fi
 if [[ -f Makefile ]]; then
   for target in run serve test; do
     if grep -qE "^${target}:" Makefile 2>/dev/null; then
-      rd="false"
-      case "$target" in
-        run|serve) rd="true" ;;
-      esac
+      # `test` is a RUNNER, not a boot surface — register it and move on (C2).
+      if [[ "$target" == "test" ]]; then
+        add_test_runner "make"
+        continue
+      fi
+      rd="true"   # run|serve are process-start
       # Scan the target's recipe block for danger signals.
       recipe=$(awk -v t="^${target}:" '
         $0 ~ t { inblk=1; next }
@@ -172,9 +178,6 @@ if [[ -f Makefile ]]; then
       block="$(printf '  - kind: makefile\n    target: %s\n    command: make %s' "$target" "$target")"
       [[ "$rd" == "true" ]] && block="$block$(printf '\n    requires_decision: true')"
       SURFACES+=("$block")
-      if [[ "$target" == "test" ]]; then
-        add_test_runner "make"
-      fi
     fi
   done
 fi
