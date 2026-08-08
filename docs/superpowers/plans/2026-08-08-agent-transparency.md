@@ -2461,13 +2461,10 @@ class TestCoverageLedger(unittest.TestCase):
         self.assertEqual(set(self.assigned) - self.listed, set(),
                          "배정에 있는데 목록에 없다")
 
-    def test_assigned_artifacts_exist(self) -> None:
-        """검증 산출물 = tests/*.py **와** tests/ab_gate.sh · tests/oracle/."""
-        for ac, target in self.assigned.items():
-            if target.startswith("없음"):
-                continue
-            for path in [p.strip().strip("`") for p in target.split("·")]:
-                self.assertTrue((PLUGIN_DIR / path).exists(), "%s → %s" % (ac, path))
+    # NOTE: 배정된 **산출물이 실제로 존재하는지**를 보는 assertion 은 Task 11 에서
+    # 더한다. 여기서 더하면 `tests/ab_gate.sh` · `tests/oracle/` 가 아직 없어
+    # Task 9·10 이 red 로 끝나고, "각 task 는 독립적으로 테스트 가능한 산출물로
+    # 끝난다" 는 규칙이 깨진다. 배정표의 **좌변 집합**은 여기서 이미 잠긴다.
 
     def test_unassigned_fragments_cite_a_real_oq(self) -> None:
         """`없음` 이 만능 탈출구가 되면 이 AC 자체가 새 fail-open 이 된다."""
@@ -2792,7 +2789,7 @@ Run:
 python3 -m unittest plugins/agent-transparency/tests/test_ab_runner_contract.py -v
 python3 -m unittest plugins/agent-transparency/tests/test_plugin_contract.py -v
 ```
-Expected: `TestCoverageLedger` 는 **아직 FAIL** — `tests/ab_gate.sh` · `tests/oracle/` 가 없다(`test_assigned_artifacts_exist`). 나머지는 PASS. 이 실패는 Task 10·11 이 닫는다. `TestRubrics` 는 PASS 여야 한다.
+Expected: 둘 다 PASS. **배정된 산출물의 실재 확인은 Task 11 이 더한다** — 여기서 더하면 아직 없는 `tests/ab_gate.sh` 때문에 Task 9·10 이 red 로 끝난다.
 
 - [ ] **Step 5: 커밋**
 
@@ -3090,6 +3087,28 @@ class TestRunnerContract(unittest.TestCase):
     def test_setup_failure_leaves_a_line_for_task_e(self) -> None:
         """(d)/on 셋업이 죽으면 (e) 실행이 안 생겨 5a·5b 의 분모가 조용히 2가 된다."""
         self.assertIn("setup=skipped", self.text)
+
+
+class TestAssignedArtifactsExist(unittest.TestCase):
+    """AC47 의 나머지 절 — 배정된 산출물이 **실제로 존재하는가**.
+
+    Task 9 가 아니라 여기 있는 이유: 이 assertion 의 대상인 `tests/ab_gate.sh` 가
+    이 task 에서 생긴다. Task 9 에 두면 Task 9·10 이 red 로 끝난다.
+    """
+
+    def test_every_assigned_path_exists(self) -> None:
+        text = REFERENCE.read_text(encoding="utf-8")
+        assigned = {}
+        for line in section(text, "AC ↔ 검증 산출물").splitlines():
+            match = ASSIGN_ROW.match(line)
+            if match and match.group(1) != "AC":
+                assigned[match.group(1)] = match.group(2).strip()
+        self.assertGreaterEqual(len(assigned), 38)
+        for ac, target in assigned.items():
+            if target.startswith("없음"):
+                continue
+            for path in [p.strip().strip("`") for p in target.split("·")]:
+                self.assertTrue((PLUGIN_DIR / path).exists(), "%s → %s" % (ac, path))
 
 
 class TestPluginStateGuard(unittest.TestCase):
