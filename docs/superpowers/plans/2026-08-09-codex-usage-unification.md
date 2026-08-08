@@ -1841,7 +1841,9 @@ class TestCodexThreeStateBanner(unittest.TestCase):
 
 ```bash
 python3 -m unittest discover -s plugins/plugin-audit/scripts/tests -t . -p 'test_*.py' 2>&1 | tail -5
-node --test plugins/plugin-audit/scripts/tests/ 2>&1 | tail -5
+# 디렉토리를 넘기면 node 25가 그것을 모듈로 해석해 MODULE_NOT_FOUND로 죽는다
+# (테스트 실패가 아니라 명령 오류다 — 회귀로 오인하지 말 것). 파일 glob으로 넘긴다.
+node --test plugins/plugin-audit/scripts/tests/*.mjs 2>&1 | tail -5
 ```
 
 Expected: python OK, node 통과. 실패가 있으면 Task 1 의 baseline 원장과 대조해 **신규인지 pre-existing 인지** 먼저 구분한다.
