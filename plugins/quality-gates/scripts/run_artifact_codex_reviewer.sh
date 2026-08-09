@@ -16,6 +16,25 @@ emit_fail() { # <reason>
   { printf 'codex_failed: true\n'; printf 'reason: %s\n' "$1"; } > "${OUT:-/dev/stdout}"
 }
 
+# ── stale 재사용 봉쇄 (Task 20b) ─────────────────────────────────────────────
+# 형제 러너(run_codex_reviewer.sh)가 가진 계약이 이 러너에는 백포트되지 않았다.
+# 아래의 명시적 emit_fail 분기들은 각자 자기 실패를 정확히 기록하지만, 그 분기
+# *자체*에 도달하지 못하고 죽는 경로(예: `CLAUDE_PLUGIN_ROOT` 미설정으로 인한
+# `set -u` abort — 30번째 줄의 가드 없는 참조)는 아무것도 잡지 못했다. 그 경로에서는
+# 이전 라운드의 YAML이 **양성 `codex_failed: false` 표식과 함께 그대로** 남아
+# 이번 라운드의 clean 판정으로 읽혔다(2026-08-09/10 컨트롤러 재현, exit 1 —
+# indeterminate ≠ clean 위반. 부재가 아니라 stale이 이번 결과로 제시되는 형태).
+# 종료 코드로 판정하지 않는다: 이 스크립트의 계약은 "항상 exit 0 + 항상 YAML"이고,
+# bash 3.2.57은 `set -u` abort 시 EXIT 트랩에 `$?`를 0으로 넘긴다. 신호는
+# 산출물뿐이다. 그래서 시작 시 truncate하고, 비어 있으면 degrade로 채운다.
+[ -n "$OUT" ] && : > "$OUT"
+_degrade_if_empty() {
+  [ -n "$OUT" ] && [ ! -s "$OUT" ] || return 0
+  emit_fail "aborted_before_completion"
+  echo "[quality-gates] codex 아티팩트 리뷰가 완료 전에 중단됨 — degrade 기록(stale 재사용 방지)" >&2
+}
+trap '_degrade_if_empty' EXIT
+
 if [ -z "$PROJECT_DIR" ] || [ -z "$OUT" ]; then
   emit_fail "missing_args"
   exit 0
