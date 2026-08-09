@@ -388,6 +388,28 @@ detect를 돌린다 — 리터럴 bash 게이트로의 전환은 이 사이클 �
 | `kill_switch` | 사용자가 직접 껐다. 자기가 한 일을 다시 알릴 필요가 없다 |
 | `inside_codex_sandbox` | 이미 codex 안이다. 재귀 방지이지 결손이 아니다 |
 
+#### codex 결과 판정 (러너가 돌고 난 뒤)
+
+`run_codex_reviewer.sh` 가 exit 0 을 내는 것은 **계약이지 성공 신호가 아니다.**
+산출물 YAML 을 읽어 아래 순서로 판정하고, 앞 단계에서 결론이 나면 뒤를 보지 않는다.
+
+1. **산출물 파일이 없거나 0바이트** → codex 결과 없음. 배너를 낸다.
+   0바이트는 소비자에게 *"codex 성공, 발견 없음"* 으로 읽힌다 — 리뷰어 하나가
+   조용히 사라지는 상태다.
+2. **`meta.codex_failed: true`** → 돌았으나 결과를 신뢰할 수 없다. `meta.reason` 을
+   배너에 함께 싣는다 (`exit_nonzero` · `schema_mismatch` · `malformed_json` ·
+   `missing_result` · `auth_error_in_stderr` · `extract_failed` 등).
+3. **`meta.codex_failed: false` 가 있어야** 정상이다. 그 키가 **부재하거나 판독
+   불가**면 degrade 다 — `findings: []` 만 보고 clean 으로 읽지 않는다
+   (`indeterminate ≠ clean`).
+
+배너 문구:
+
+> `[quality-gates] codex 리뷰 결과 사용 불가 (<reason>) — 이 리뷰에는 모델 다양성이 없었다 (degraded).`
+
+**스트림 이벤트는 판정 입력이 아니다.** `--json` 의 `error` 이벤트는 **재시도로 성공한
+run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 로깅 대상이다.
+
    **Tier C — Dynamic specialists (모델이 diff 스코프로 선택; 외부 advisory agent).**
    Choose zero or more from the menu in [Reviewer composition (scope-driven)](#reviewer-composition-scope-driven)
    by matching the diff to the rubric + scope-signal palette there.
