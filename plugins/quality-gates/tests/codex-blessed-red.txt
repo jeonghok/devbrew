@@ -1,0 +1,13 @@
+# 검토를 마친 red. <파일명> <정규화된 실패 출력 sha256>
+#
+# 양방향이다: 미등재·해시 불일치 실패는 RED, 등재됐는데 GREEN이 된 항목도 RED.
+# 목록은 줄어들기만 한다 — 새 red를 여기 넣는 것은 검토를 마쳤다는 선언이다.
+#
+# 정규화: <REPO>/<TMP> 경로 치환 + 숫자 → N + 실패 줄(FAIL|✗)만.
+# 이유: 등재 대상 하나의 출력이 quality-pipeline/SKILL.md의 grep 카운트를 담아,
+#       그 파일을 고칠 때마다 원시 해시가 바뀐다. 어떤 assert가 실패하는지(문구)는
+#       남으므로 같은 파일이 **다른 이유로** 실패하기 시작하면 해시가 바뀐다.
+#
+# 이 둘은 codex와 무관한 pre-existing red다 (설계 §8.1 범위 밖 — 고치지 말 것).
+test_consent_marker_write_failure.sh a4dcb98abf9ed6a570d9b47bb94f5e950709f167959920ba90df40cddf5dfb8e
+test_security_reviewer_kill_switch.sh cb1e4d2ada409046bd6e928c04c1dfe102cd4d0f9f9111a4ac0336c681702ba8

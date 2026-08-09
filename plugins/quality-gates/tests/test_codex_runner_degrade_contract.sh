@@ -8,6 +8,30 @@
 # 봉쇄하는 실패: `> "$OUTPUT_PATH"`는 python3가 crash하기 *전에* 이미 파일을 비운다.
 # 가드가 없으면 0바이트 산출물이 남고, 소비자에게 그것은 "codex 성공, 발견 없음"
 # 으로 읽힌다 — 리뷰어 하나가 조용히 사라진다(2026-08-04 /qg 라운드 1 적발).
+#
+# ★ 러너 목록은 **도출**한다(태스크 20, AC23) — 아래 "0 — 러너 도출" 참고.
+#   하드코딩된 run_codex_reviewer.sh 하나로는 형제 러너(run_artifact_/run_spec_/
+#   run_brief_/run_audit_codex_reviewer.sh)에 같은 degrade 계약이 있는지 아무것도
+#   재지 못했다 — 실제로 이 계약은 러너마다 따로 백포트됐고, 백포트를 잊은
+#   러너가 조용히 남을 수 있다.
+#
+# ★ 범위 판단 — 아래 1~7번 행동 검사는 **run_codex_reviewer.sh 전용으로 남긴다.**
+#   좁힌 이유는 "확장이 커서"가 아니라, 확장을 시도해 실측한 결과 5개 러너 중
+#   최소 2개가 이미 이 계약을 어기고 있었기 때문이다(2026-08-09 사전 조사,
+#   태스크 20 범위 밖 발견 — 여기서 고치지 않는다):
+#     - run_artifact_codex_reviewer.sh: 시작 시 truncate + EXIT 트랩이 없다.
+#       `CLAUDE_PLUGIN_ROOT` 미설정(`set -u` abort)으로 중단시키면 이전 run의
+#       stale YAML이 **그대로** 남는다(체크 5의 대응 검사가 이 러너에서는 RED).
+#     - run_brief_codex_reviewer.sh: 종단 추출이 python3 종료 코드만 보고
+#       `[ ! -s "$OUTPUT_PATH" ]`를 확인하지 않는다. 추출기가 exit 0 + 빈 출력을
+#       내면(이 헤더가 경고하는 바로 그 실패 형태) 0바이트 산출물이 그대로
+#       남는다(체크 4의 대응 검사가 이 러너에서는 RED).
+#   이 두 결함은 태스크 20의 파일 스코프(테스트 3개, 러너 스크립트 제외)
+#   밖이라 여기서 fix하지 않는다 — 새 테스트를 커밋해 즉시 RED로 만들면
+#   "이 태스크의 산출물은 GREEN"이라는 계약과 충돌하고, 프로덕션 코드를
+#   조용히 고치면 커밋 스코프(3개 파일)를 벗어난다. 검사 0(러너 도출 +
+#   vacuity floor)만 전 러너에 적용하고, 나머지 행동 검사 1~7은 좁게 남긴다 —
+#   조용히 좁히지 않고 이 주석으로 남긴다.
 set -u -o pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 QG="$ROOT/plugins/quality-gates"
@@ -110,6 +134,22 @@ if [ "$usage_rc" -ne 0 ] && printf '%s' "$usage_out" | grep -q 'usage'; then
   ok "7 — OUTPUT_PATH 누락 시 usage + 비-0 종료 (조용한 실패 아님)"
 else
   no "7 — OUTPUT_PATH 누락 시 usage + 비-0 종료 (rc=$usage_rc out=$usage_out)"
+fi
+
+# ── 0: 러너 목록을 도출한다 (태스크 20, AC23) ────────────────────────────────
+# 위 1~7번은 run_codex_reviewer.sh 하드코딩 1개만 잰다. 이 검사는 그것으로
+# "다른 4개 러너에도 같은 계약이 있는가"를 재지 못한다는 사실 자체를 vacuity로
+# 봉쇄한다 — 후보 수집기(codex_observation.sh)가 실제로 5개 이상을 찾아내는지
+# 만 확인한다(파일 상단 범위 판단 참고 — 5개 각각에 1~7을 반복하지는 않는다).
+OBS_REPO="$ROOT"
+. "$ROOT/plugins/quality-gates/tests/lib/codex_observation.sh"
+runners="$(codex_candidates | grep '/scripts/run_.*codex.*\.sh$' || true)"
+runner_n="$(printf '%s\n' "$runners" | grep -c . || true)"
+if [ "$runner_n" -ge 5 ]; then
+  ok "0 — 러너 도출 ${runner_n}개 (vacuous 아님)"
+else
+  no "0 — 러너가 ${runner_n}개뿐 — 도출 기준이 깨졌다"
+  printf '%s\n' "$runners" | sed 's/^/      /'
 fi
 
 echo ""
