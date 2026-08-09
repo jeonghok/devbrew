@@ -6,12 +6,18 @@ set -euo pipefail
 SKILL="plugins/quality-gates/skills/quality-pipeline/SKILL.md"
 fail=0
 
-# AC19 — 4 visible reasons each appear at least once
+# AC19 — visible 사유는 각각 최소 1회 등장한다.
+# 4종 → 6종: §4.2가 detect에 추가한 version_below_floor · version_unreadable은
+# 사용자가 조치할 수 있는 사유이므로(설치 버전을 올리면 된다) visible이다 —
+# `version known-bad`와 같은 부류다. silent 2종(kill_switch · inside_codex_sandbox)은
+# 사용자 조치 대상이 아니라 아래 AC20이 별도로 다룬다.
 visible_patterns=(
   "Codex CLI not installed"
   "auth missing"
   "no .*timeout"
   "version known-bad"
+  "version_below_floor"
+  "version_unreadable"
 )
 for p in "${visible_patterns[@]}"; do
   if grep -Eq "$p" "$SKILL"; then
