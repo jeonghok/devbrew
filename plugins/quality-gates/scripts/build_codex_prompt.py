@@ -30,6 +30,12 @@ from __future__ import annotations
 import pathlib
 import sys
 
+# stdout 인코딩은 프로세스 locale/PYTHONIOENCODING을 따른다(read_text의 명시적
+# encoding="utf-8"과 달리) — 고정하지 않으면 ascii 계열 인코딩에서 한국어 절이
+# UnicodeEncodeError로 프로세스를 죽인다. 관용구는
+# plugins/spec-distill/hooks/review-dispatch.py:46.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 PROMPT_TEMPLATE = """You are a code reviewer. Review the diff for bugs, silent failures,
 security issues, missing error handling, and design problems. Do not
 modify any files; you are in a read-only sandbox.
