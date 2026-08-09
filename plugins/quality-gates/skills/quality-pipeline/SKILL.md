@@ -344,6 +344,17 @@ Agent({
    var directly). If codex is unavailable, continue without it — scope does not change
    this.
 
+   **Capture the runner's exit code.** `run_codex_reviewer.sh` normally exits 0 and
+   always writes YAML to the output path you gave it — with one exception: if it
+   cannot write that path at all (unwritable directory/permissions/RO mount), it
+   exits **3** instead, having already printed a loud diagnostic to stderr. On
+   `rc == 3`, delete the output file before reading anything from it
+   (`rm -f <output_path>`) — otherwise a prior iteration's YAML (which may carry a
+   false-positive `codex_failed: false`) sits untouched and is read as this
+   iteration's codex verdict. This mirrors `run_brief_codex_reviewer.sh`'s identical
+   exit-3 contract, whose caller (`spec-distill`'s `reviewing-brief` SKILL) already
+   implements the same `if rc == 3: rm -f` pattern.
+
 #### Codex skip 안내
 
 `detect_codex.sh`가 false를 내면 그 사유를 사용자에게 보인다. codex는 부가 기능이

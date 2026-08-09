@@ -86,7 +86,12 @@ DETECT_OUT="$(bash "$SD/scripts/detect_codex.sh")"
 codex_avail="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^codex_available: //p')"
 skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
 if [[ "$codex_avail" == "true" ]]; then
-  bash "$SD/scripts/run_spec_codex_reviewer.sh" "$spec_path" "$(pwd)" "$CODEX_YAML"
+  bash "$SD/scripts/run_spec_codex_reviewer.sh" "$spec_path" "$(pwd)" "$CODEX_YAML"; runner_rc=$?
+  # 러너는 fail-closed 산출물을 **쓰지 못하면** exit 3으로 죽는다(쓰기 불가·디렉토리
+  # 부재). 그 경우 직전 라운드 YAML이 그대로 남아 이번 라운드 판정으로 읽히므로,
+  # 잔존물을 제거하고 degraded로 기록한다 — 부재는 아래 merge_review.py의
+  # 양성-마커 규칙이 degraded로 잡는다(reviewing-brief SKILL과 동일 패턴).
+  if [[ "$runner_rc" -eq 3 ]]; then rm -f "$CODEX_YAML"; fi
 else
   echo "[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — Claude-only, 이 리뷰에는 모델 다양성이 없었다 (degraded)." >&2
 fi

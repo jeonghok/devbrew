@@ -5,6 +5,16 @@
 # writes a `codex_failed: true` degrade meta to OUT (graceful, C7). No writes to
 # the working tree (Layer-3 read-only sandbox).
 #
+# Contract (리뷰 라운드 2, A1): exit 0 on success and on every failure above —
+# with ONE exception. If OUT itself cannot be written (missing directory,
+# permissions, RO mount), no degrade meta is possible either; the script prints
+# a loud stderr diagnostic and exits **3** instead. On rc == 3 the CALLER MUST
+# delete OUT before reading it — a prior round's stale YAML (possibly carrying
+# a false-positive `codex_failed: false`) would otherwise sit untouched and be
+# read as this round's codex verdict. Same contract as
+# `run_brief_codex_reviewer.sh`; critiquing-artifacts/SKILL.md now documents
+# the caller-side rc==3 → rm -f obligation for this runner.
+#
 # Usage: run_artifact_codex_reviewer.sh <artifact_path> <project_dir> <output_yaml_path>
 set -u
 
@@ -39,10 +49,10 @@ case "$ARTIFACT" in /*) ;; *) ARTIFACT="$PWD/$ARTIFACT" ;; esac
 # `set -u` abort)는 아무것도 잡지 못했다. 그 경로에서는 이전 라운드의 YAML이
 # **양성 `codex_failed: false` 표식과 함께 그대로** 남아 이번 라운드의 clean
 # 판정으로 읽혔다(indeterminate ≠ clean 위반. 부재가 아니라 stale이 이번 결과로
-# 제시되는 형태). 종료 코드로 판정하지 않는다: 이 스크립트의 계약은 "항상
-# exit 0 + 항상 YAML"이고, bash 3.2.57은 `set -u` abort 시 EXIT 트랩에 `$?`를
-# 0으로 넘긴다. 신호는 산출물뿐이다. 그래서 시작 시 truncate하고, 비어 있으면
-# degrade로 채운다.
+# 제시되는 형태). 종료 코드로 판정하지 않는다: 이 스크립트의 계약은 (헤더의
+# exit 3 예외를 뺀 나머지 모든 경로에서) "항상 exit 0 + 항상 YAML"이고, bash
+# 3.2.57은 `set -u` abort 시 EXIT 트랩에 `$?`를 0으로 넘긴다. 신호는 산출물뿐이다.
+# 그래서 시작 시 truncate하고, 비어 있으면 degrade로 채운다.
 #
 # **R2 (리뷰 라운드 1)**: truncate 자체가 실패할 수 있다(산출물 경로가 읽기전용
 # 등) — 이전 코드(`[ -n "$OUT" ] && : > "$OUT"`)는 그 실패를 확인하지 않았다.

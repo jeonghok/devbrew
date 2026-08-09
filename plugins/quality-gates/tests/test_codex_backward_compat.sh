@@ -97,7 +97,8 @@ fi
 CODEX_TOUCHING_TESTS="test_detect_codex.sh test_findings_parser.sh test_sandbox_enforced.sh test_failure_injection.sh test_scout_codex_integration.sh test_cost_consent.sh"
 
 # ── 제외 목록 크기 핀 (라운드 1 리뷰 L2, L1과 공유) ──────────────────────────
-# 아래 커버리지 래칫은 "entry가 몰래 늘어나거나 정당성을 잃어도"라고 주장했지만,
+# 아래 제외 목록 알람(당시 이름 "커버리지 래칫")은 "entry가 몰래 늘어나거나 정당성을
+# 잃어도"라고 주장했지만,
 # `grep -qil 'codex'`는 어디든(주석 포함) "codex"를 언급하기만 하면 통과하므로
 # 실제로는 후자(정당성 상실)만 잡았다 — 이 열거와 무관한 Law 2 보안 락에
 # "codex model-diversity가 단독 적발" 같은 서술 한 줄만 있어도 조용히 들어온다
@@ -123,7 +124,12 @@ is_excluded() {   # $1 = 테스트 파일 경로
   return 1
 }
 
-# ── 커버리지 래칫 (컨트롤러 R7 두 번째 축) ────────────────────────────────────
+# ── 제외 목록 알람 (컨트롤러 R7 두 번째 축) ────────────────────────────────────
+# 리뷰 라운드 2(B2): "래칫"은 과대주장이었다 — `-eq`는 양방향이라 변화를
+# **알아채기만** 하지 **막지는** 못한다(진짜 래칫이라면 목록이 줄어드는 방향만
+# 허용하고 늘어나는 방향은 구조적으로 봉쇄해야 한다). 아래 EXCLUDED_TESTS_PIN을
+# 매 커밋 의식적으로 bump하면 36-vs-7 구멍이 entry 하나씩 다시 열릴 수 있다는
+# 사실은 그대로 남는다 — 정직한 이름은 "알람"이다.
 # CODEX_TOUCHING_TESTS는 정적 열거이지 도출이 아니다(위 편차 기록 참고) — 그래서
 # "목록은 줄어들기만 한다"는 doctrine을 강제할 별도 장치가 필요하다. 여기서는
 # 열거의 **각 항목**이 여전히 정당한지(실제로 codex를 언급하는지)만 사후 검증한다.
@@ -143,7 +149,7 @@ done
 excluded_word_count=$(wc -w <<< "$CODEX_TOUCHING_TESTS")
 excluded_actual_count=$((excluded_word_count + 1))
 if [[ -z "${unjustified// /}" && "$excluded_actual_count" -eq "$EXCLUDED_TESTS_PIN" ]]; then
-  echo "  PASS: 제외 목록 항목이 전부 여전히 codex를 언급한다 + 크기(${excluded_actual_count})가 핀과 일치한다 (커버리지 래칫)"
+  echo "  PASS: 제외 목록 항목이 전부 여전히 codex를 언급한다 + 크기(${excluded_actual_count})가 핀과 일치한다 (제외 목록 알람)"
   pass=$((pass + 1))
 else
   [[ -n "${unjustified// /}" ]] && echo "  FAIL: 더 이상 제외될 이유가 없는 항목 →$unjustified (목록에서 제거할 것)"
@@ -164,12 +170,12 @@ fi
 # L3 (라운드 1 리뷰): 빈 문자열의 sha256 — grep이 FAIL/✗ 줄을 하나도 못 찾으면
 # 지문이 여기로 무너진다. 이 값과 일치하는 지문은 절대 유효한 원장 값으로
 # 받아들이지 않는다(아래) — 서로 다른 실패 이유가 전부 이 값 하나로 뭉개지면
-# ":138-139"의 계약("같은 파일이 다른 이유로 실패하면 해시가 바뀐다")이 이
+# ":162-163"의 계약("같은 파일이 다른 이유로 실패하면 해시가 바뀐다")이 이
 # absorbing state 안에서는 거짓이 되기 때문이다.
 EMPTY_DIGEST_SHA256='e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
 LEDGER="$SCRIPT_DIR/codex-blessed-red.txt"
 fingerprint() {   # $1 = 테스트 경로 → 정규화된 실패 지문
-  # L3: 아래 실행 루프(:166-167 부근)는 확장자로 python3/bash를 가르는데 이
+  # L3: 아래 실행 루프(:205-208 부근)는 확장자로 python3/bash를 가르는데 이
   # 함수는 늘 bash로 돌렸다 — .py 테스트를 bash로 실행하면 대개 FAIL/✗ 패턴을
   # 하나도 못 내(python 문법 에러는 다른 형태로 stderr에 남는다) 빈 입력이
   # EMPTY_DIGEST_SHA256로 뭉개진다(실측: test_qg_gc.py). 이 디렉터리의 105개

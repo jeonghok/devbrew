@@ -26,6 +26,18 @@
 #     exit_code: int
 #     reason: str
 #
+# Contract (리뷰 라운드 2, A1): exit 0 on both success and failure, always
+# writing YAML to <output_yaml_path> — with ONE exception. If that path itself
+# cannot be written (missing directory, permissions, RO mount), no YAML is
+# possible at all; the script prints a loud stderr diagnostic and exits **3**
+# instead. On rc == 3 the CALLER MUST delete <output_yaml_path> before reading
+# it — a prior round's stale YAML (which may carry a false-positive
+# `codex_failed: false`) would otherwise sit untouched and be read as this
+# round's codex verdict. Same contract as `run_brief_codex_reviewer.sh`, whose
+# caller (spec-distill's reviewing-brief SKILL) already implements the
+# rc==3 → rm -f pattern; quality-pipeline/SKILL.md now documents the same for
+# this runner.
+#
 # Sandbox guarantees: codex exec -s read-only (Layer 3) — codex subprocess
 # cannot write to the working tree even though the script invokes it.
 
@@ -60,9 +72,10 @@ fi
 # clean이었으면 진짜 결함이 clean 인증을 받고, 발견을 담고 있었으면 사용자가 이미
 # 고친 결함을 다시 쫓는다. 둘 다 조용하다.
 #
-# **종료 코드로 재지 않는다**: 이 스크립트의 계약은 "항상 exit 0 + 항상 YAML"이고,
-# 게다가 bash 3.2.57은 `set -u` abort 시 EXIT 트랩에 `$?`를 0으로 넘긴다. 신호는
-# 산출물뿐이다. 그래서 시작 시 truncate하고, 비어 있으면 degrade로 채운다.
+# **종료 코드로 재지 않는다**: 이 스크립트의 계약은 (헤더의 exit 3 예외를 뺀 나머지
+# 모든 경로에서) "항상 exit 0 + 항상 YAML"이고, 게다가 bash 3.2.57은 `set -u` abort
+# 시 EXIT 트랩에 `$?`를 0으로 넘긴다. 신호는 산출물뿐이다. 그래서 시작 시 truncate하고,
+# 비어 있으면 degrade로 채운다.
 #
 # **R2 (리뷰 라운드 1)**: truncate 자체가 실패할 수 있다(산출물 경로가 읽기전용
 # 등). 이전 코드(`: > "$OUTPUT_PATH"`, 가드 없음)는 이 실패를 확인하지 않았다 —

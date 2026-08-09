@@ -8,7 +8,15 @@
 #
 # Usage:  run_spec_codex_reviewer.sh <doc_path> <project_dir> <output_yaml_path>
 #
-# Emits YAML (codex_findings_to_yaml.py schema) to <output_yaml_path>.
+# Emits YAML (codex_findings_to_yaml.py schema) to <output_yaml_path> on
+# success and on every failure above — with ONE exception (리뷰 라운드 2, A3):
+# if <output_yaml_path> itself cannot be written (missing directory,
+# permissions, RO mount), no YAML is possible; the script prints a loud
+# stderr diagnostic and exits **3** instead. On rc == 3 the CALLER MUST
+# delete <output_yaml_path> before reading it — a prior round's stale YAML
+# would otherwise sit untouched and be read as this round's codex verdict.
+# Same contract as `run_brief_codex_reviewer.sh`; reviewing-spec/SKILL.md now
+# documents the caller-side rc==3 → rm -f obligation for this runner.
 # Sandbox: codex exec -s read-only (Layer 3) — codex cannot write the tree.
 
 set -euo pipefail
@@ -50,8 +58,9 @@ SCRATCH="$(mktemp -d -t sd-codex-rev-XXXXXX)" || {
 }
 # 치명적 abort(예: `set -u` 위반)가 EXIT trap을 지나면서 조용해지는 문제.
 #
-# 이 스크립트의 계약은 **항상 exit 0 + 항상 YAML 기록**이므로, 강제로 비-0을
-# 내보내는 것은 고치는 게 아니라 계약을 깨는 것이다. 그리고 종료 코드로 판정할
+# 이 스크립트의 계약은 (헤더의 exit 3 예외를 뺀 나머지 모든 경로에서) **항상
+# exit 0 + 항상 YAML 기록**이므로, 강제로 비-0을 내보내는 것은 고치는 게 아니라
+# 계약을 깨는 것이다. 그리고 종료 코드로 판정할
 # 수도 없다: bash 3.2.57은 `set -u` abort 시 트랩 핸들러에 **`$?`를 0으로** 넘긴다
 # (2026-08-04 최소 재현 확인) — `rc=$?`를 보존해도 abort와 정상 종료가 구별되지
 # 않는다. 종료 코드가 아니라 **산출물**로 판정한다.
@@ -62,7 +71,22 @@ SCRATCH="$(mktemp -d -t sd-codex-rev-XXXXXX)" || {
 #       틀린 리뷰 결과를 이번 라운드의 판정으로 쓰게 된다.
 # 그래서 시작 시 truncate하고(=stale 제거), 트랩에서 비어 있으면 degrade를 채운다.
 # 비어 있지 않으면 손대지 않는다 — 위쪽 정상 degrade 경로들의 YAML을 덮지 않기 위함.
-[[ -n "$OUTPUT_PATH" ]] && : > "$OUTPUT_PATH"
+#
+# **A3 (리뷰 라운드 2)**: truncate 자체가 실패할 수 있다(산출물 경로가 읽기전용
+# 등) — 이전 코드(`[[ -n "$OUTPUT_PATH" ]] && : > "$OUTPUT_PATH"`)는 이 실패를
+# 확인하지 않았다. 이 스크립트는 `set -euo pipefail`이라 truncate 실패가 (아래
+# `trap ... EXIT` 무장) *전에* 스크립트를 즉사시켰다(컨트롤러 재현: 읽기전용 기존
+# 산출물 → rc=1, tagged stderr 없이 bash의 raw "Permission denied"만, stale
+# 불변 — 형제 두 곳(run_codex_reviewer.sh·run_artifact_codex_reviewer.sh)에서
+# 리뷰 라운드 1로 적발된 것과 동일한 결함이 여기도 있었고, tagged stderr조차
+# 없었던 만큼 형태는 더 나빴다). 형제 `run_audit_codex_reviewer.sh`의 형태를
+# 그대로 쓴다: truncate조차 못 하면 degrade도 쓸 수 없다는 뜻이므로 loud
+# stderr + exit 3으로 죽는다. 호출자는 rc==3을 보면 OUTPUT_PATH를 지워야
+# 한다(위 계약 문단과 동형; reviewing-spec SKILL이 이 의무를 구현한다).
+: > "$OUTPUT_PATH" 2>/dev/null || {
+  echo "[spec-distill] 산출물 경로에 쓸 수 없다: $OUTPUT_PATH" >&2
+  exit 3
+}
 _degrade_if_empty() {
   [[ -n "$OUTPUT_PATH" && ! -s "$OUTPUT_PATH" ]] || return 0
   { echo 'findings: []'
