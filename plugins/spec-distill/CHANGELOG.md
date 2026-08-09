@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.26.0] — 2026-08-09
+
+### Fixed
+
+- **`reviewing-spec` 의 codex 게이트가 산문이었다.** `:81` 이 "codex_avail=true일 때만"
+  이라고 문장으로 적고 `:82-85` bash fence 는 무조건 실행됐다 — 그 파일에 `codex_avail`
+  을 검사하는 `if` 가 없었다. kill switch 는 P21 보안 컨트롤이라 그 상태는 "껐다고
+  믿게만" 만든다. `reviewing-brief` 와 동형인 리터럴 게이트로 전환.
+- **`codex_findings_to_yaml.py` 헤더의 거짓 주장** — "ONLY adaptation … the emit keyset"
+  은 사실이 아니었다(CR-2 검증이 이 사본에만 있었다). 동일성은 이제 주석이 아니라
+  `quality-gates/tests/test_codex_copies_agree.sh` 가 보증한다.
+
+### Changed
+
+- 러너 2종이 프롬프트를 **stdin** 으로 넘긴다 (`codex exec -`).
+- `detect_codex.sh` 가 `0.118.0` 버전 바닥과 semver 판독 실패를 낸다.
+- `tests/test_detect_codex.sh` 가 14-케이스 합집합.
+
 ## [0.25.2] — 2026-08-06
 
 ### Fixed

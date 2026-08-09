@@ -3,6 +3,39 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [2.15.0] — 2026-08-09
+
+### Added
+
+- **실행 관측 기반 codex 계약 검증** (`tests/test_codex_invocation_contract.sh` ·
+  `tests/lib/codex_observation.sh` · `tests/mocks/capture-codex/`). argv·stdin 을 캡처하는
+  mock `codex` 를 PATH 앞에 얹고 러너를 실제로 태워 판정한다. 셸이 그 호출을 어떻게
+  썼는지(다중행 · 변수 경유 · 간접 바이너리)에 무관하고, 주석은 실행되지 않으므로
+  주석 만족 문제도 발생하지 않는다.
+- **게이트 관측** (`tests/test_codex_gate_observation.sh`). 마킹된 게이트 3곳을 4개
+  시나리오로 실행해 codex 호출 횟수를 센다 — kill switch → 0회가 P21 집행의 증거다.
+- **사본 갈라짐 행동 락** (`tests/test_codex_copies_agree.sh`).
+- `quality-pipeline/SKILL.md` 에 `Codex skip 안내` 섹션 — visible 6종 · silent 2종.
+
+### Fixed
+
+- **`codex_findings_to_yaml.py` 의 fail-open.** `{"findings": {}}` 에 `codex_failed: false`
+  를 내고 있었다 — 실행되지 못한 검사가 통과한 검사로 기록되는 경로. spec-distill 사본이
+  2026-07-29 에 받은 CR-2 검증을 이식하고, 같은 커밋에 갈라짐 락을 넣었다.
+- **프롬프트가 argv 로 나가던 것을 stdin 으로.** ARG_MAX 1,048,576 에 실제 merge diff 가
+  863,340(82%)까지 닿았고 상한이 없었다. 러너가 항상 exit 0 을 내므로 실패가 조용했다.
+- **`test_sandbox_enforced.sh` 영구 RED.** 삭제된 `agents/codex-reviewer.md` 를 겨냥하고
+  있었고, 형제 테스트와 동시에 통과할 수 없었다.
+- **`test_codex_reviewer_frontmatter.sh` 의 주석-만족 assert.** `-s read-only` grep 이
+  헤더 주석에 만족돼 실제 플래그를 삭제해도 GREEN 이었다.
+- **`DEVBREW_DISABLE_QG_CODEX` 가 SKILL 에서 사라져 발견 불가**였던 것.
+
+### Changed
+
+- `detect_codex.sh` 가 semver 파싱 성공 여부로 판정한다 (`|| echo unknown` 은 도달하지
+  않는 코드였다). `0.118.0` 미만은 `version_below_floor`, 파싱 실패는 `version_unreadable`.
+- `tests/lib/extract_codex_invocations.py` 가 판정기가 아니라 **후보 수집기**다.
+
 ## [2.14.20] — 2026-08-05
 
 ### Fixed

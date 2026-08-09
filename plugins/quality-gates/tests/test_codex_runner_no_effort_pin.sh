@@ -40,8 +40,14 @@ INVOKE='(^|[[:space:]])codex[[:space:]]+exec[[:space:]]'
 # 코퍼스는 **플러그인 전체**다. `scripts`+`tests` 두 디렉토리만 볼 때
 # `skills/`·`hooks/`·`agents/`에 심은 핀은 통과했고(mutation m13·m14 생존), 그런데도
 # 아래 PASS 문구는 "리포 전역"이라고 주장했다 — 스캔 범위보다 넓은 주장은 거짓이다.
-# `plugin-audit/skills/auditing-plugins/SKILL.md`가 실제로 codex를 호출하는데
-# 커버리지가 0이었던 것이 그 실증 (2026-08-05 /qg 라운드 2).
+#
+# 범위를 넓힌 뒤에도 plugin-audit 커버리지는 **0이었다**: 그 호출부가 산문이었고
+# 마크다운 인라인 코드는 `codex` 앞에 백틱이 오므로 아래 INVOKE 정규식이 못 봤다.
+# 정규식을 백틱까지 넓히는 것은 해법이 아니다(:37이 의도적으로 배제한 문자열 리터럴이
+# 오탐으로 들어온다). 근본 해법은 **산문을 스크립트로 바꾸는 것**이었고, 그것을
+# `plugin-audit/scripts/run_audit_codex_reviewer.sh`가 했다 — 이 주석이 참이 된
+# 근거가 그 파일이다. 스캔이 여전히 못 보는 형태(마크다운 인라인 · 바이너리 간접)는
+# 열린 갭이며 판정은 `test_codex_invocation_contract.sh`의 실행 관측이 한다.
 scan_roots=()
 for d in "$REPO"/plugins/*/; do
   [[ -d "$d" ]] && scan_roots+=("$d")
