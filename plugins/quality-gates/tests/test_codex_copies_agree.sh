@@ -52,14 +52,47 @@ for s in "$samples_dir"/*.jsonl; do
       echo "      qg: $(printf '%s' "$a" | tr '\n' ' ')"
       echo "      sd: $(printf '%s' "$b" | tr '\n' ' ')"
     fi
-    # positive: verdict()가 이번 표본에서 실제로 뭔가를 뽑아냈는가. 앵커가 깨져
-    # 아무것도 매칭하지 않으면 a·b가 둘 다 빈 문자열이 되어 위 비교가 "차이
+    # positive(존재): verdict()가 이번 표본에서 실제로 뭔가를 뽑아냈는가. 앵커가
+    # 깨져 아무것도 매칭하지 않으면 a·b가 둘 다 빈 문자열이 되어 위 비교가 "차이
     # 없음"으로 늘 통과한다(vacuous) — 모든 표본은 codex_failed 키를 반드시
     # 내므로 그 존재를 여기서 강제한다.
     case "$a" in
       *codex_failed:*) ok "층④ $name (override='${ov:-none}'): 계측기가 codex_failed 를 추출했다" ;;
       *) no "층④ $name (override='${ov:-none}'): 계측기가 아무것도 추출하지 못했다 — 위 비교가 vacuous하다" ;;
     esac
+    # positive(값 고정): "존재"만으로는 부족하다 — verdict()가 입력과 무관하게
+    # 고정 문자열(예: 항상 `codex_failed: true`)을 내도록 망가지면 위 두 체크를
+    # 모두 속인다(양쪽이 같은 상수라 등가 비교 통과, 상수가 `codex_failed:`를
+    # 포함하니 존재 체크도 통과). 알려진-상이(known-distinct) 두 표본의 실제
+    # 판정값을 여기서 못박는다: override 없는 01-clean은 정상 라운드라
+    # `codex_failed: false`, 02-container-violation은 컨테이너 위반이라
+    # `codex_failed: true`다 — 상수 추출기는 둘 중 하나에서 반드시 틀린다.
+    # 표본에 따라 verdict가 여러 줄일 수 있어 부분문자열 포함으로 재고, 두
+    # 사본 emit keyset 차이(category/target_section)는 meta 판정 밖이라 무관하다.
+    if [ -z "$ov" ]; then
+      case "$name" in
+        01-clean.jsonl)
+          case "$a" in
+            *'codex_failed: false'*) ok "층④ 값 고정 $name (qg): codex_failed: false 확인(상수 추출기 아님)" ;;
+            *) no "층④ 값 고정 $name (qg): codex_failed: false 가 없다 — 상수 추출기 의심" ;;
+          esac
+          case "$b" in
+            *'codex_failed: false'*) ok "층④ 값 고정 $name (sd): codex_failed: false 확인(상수 추출기 아님)" ;;
+            *) no "층④ 값 고정 $name (sd): codex_failed: false 가 없다 — 상수 추출기 의심" ;;
+          esac
+          ;;
+        02-container-violation.jsonl)
+          case "$a" in
+            *'codex_failed: true'*) ok "층④ 값 고정 $name (qg): codex_failed: true 확인(상수 추출기 아님)" ;;
+            *) no "층④ 값 고정 $name (qg): codex_failed: true 가 없다 — 상수 추출기 의심" ;;
+          esac
+          case "$b" in
+            *'codex_failed: true'*) ok "층④ 값 고정 $name (sd): codex_failed: true 확인(상수 추출기 아님)" ;;
+            *) no "층④ 값 고정 $name (sd): codex_failed: true 가 없다 — 상수 추출기 의심" ;;
+          esac
+          ;;
+      esac
+    fi
   done
 done
 # positive: 표본을 실제로 돌렸는가. 없으면 "차이 0"과 "아무것도 안 봄"이 구별되지 않는다.
