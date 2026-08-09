@@ -209,6 +209,7 @@ Every finding must carry exactly one question for the user to decide.
 
 ### 1-c. codex #1 (방향성 축)
 
+<!-- codex-gate:begin runner=run_brief_codex_reviewer.sh -->
 ```bash
 # 두 필드를 한 번에 포착한다. `codex_available`만 뽑고 `skip_reason`을 버리면 아래
 # advisory 템플릿의 `(reason: <skip_reason>)`을 렌더할 값이 없다(사용자는 이유 없는
@@ -226,6 +227,7 @@ else
   : # skip + record(component: codex, affected_axis: all, verification_status: skipped)
 fi
 ```
+<!-- codex-gate:end -->
 
 codex 부재 시 loud advisory:
 
