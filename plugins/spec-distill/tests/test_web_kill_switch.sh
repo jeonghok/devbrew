@@ -133,10 +133,12 @@ else
   # 있지 않는다).
   #
   # floor는 단순 개수(`-lt 1`)가 아니라 **AC21 표 자체에서 도출한 부분집합
-  # 검사**다(Suggestion, Fix round 2). 개수 문턱만으로는 변수 간접 호출
-  # (`CODEX_BIN=codex; "$CODEX_BIN" exec`)처럼 codex_candidates()의 정규식이
-  # 못 잡는 새 호출부가 생겨 6→5로 줄어도 여전히 통과한다(재현: 실제로 GREEN
-  # 이었다) — 이름 단위 부재만 그것을 잡는다. `known_posture_names()`는
+  # 검사**다(Suggestion, Fix round 2). 개수 문턱만으로는 **기존** 호출부가
+  # 모양을 바꿔 스캔에서 빠지는 것을 못 잡는다 — 새 호출부가 생기는 게 아니라
+  # 표에 이미 있는 여섯 곳 중 하나가 변수 간접 호출(`CODEX_BIN=codex;
+  # "$CODEX_BIN" exec`)처럼 codex_candidates()의 정규식이 못 잡는 형태로
+  # 바뀌면 코퍼스가 6→5로 줄어드는데, 개수 문턱은 5도 통과시킨다(재현: 실제로
+  # GREEN이었다) — 이름 단위 부재만 그것을 잡는다. `known_posture_names()`는
   # `expected_posture()` 자신에서 라벨을 뽑는다(둘째 목록을 안 만든다 —
   # obs_known_candidates()와 같은 원리).
   # `declare -f`는 `case` 본문을 **라벨 줄과 body 줄을 분리해** 재포맷한다

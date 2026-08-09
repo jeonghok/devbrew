@@ -31,15 +31,32 @@ codex_candidates() {
 # ── (2) 관측 환경 ────────────────────────────────────────────────────────────
 # $1 = scratch 디렉토리. OBS_SENTINEL / OBS_MOCKBIN을 세팅한다.
 #
-# **fail-closed (Important 3, test_web_kill_switch.sh Fix round 2).** cp/chmod가
-# 실패해도 예전엔 조용히 진행했다 — OBS_MOCKBIN이 codex 없는 디렉토리를 가리키면
-# `PATH="$OBS_MOCKBIN:$PATH"`의 탐색이 그 디렉토리를 그냥 지나쳐 이 머신에 실재하는
-# real codex(예: /opt/homebrew/bin/codex)로 조용히 폴백한다 — 관측이 아니라 실제
-# 과금 호출이 나간다. 호출자(4개 소비자)가 obs_setup의 반환값을 확인하지 않을 수도
-# 있으므로, 여기서 loud하게 return 1하는 것과 **별개로** obs_invoke() 자신도 실행
-# 직전에 한 번 더 확인한다(아래) — 방어선을 실행 지점에 둔다.
+# **fail-closed (Important 3, Fix round 2).** cp/chmod가 실패해도 예전엔 조용히
+# 진행했다 — OBS_MOCKBIN이 codex 없는 디렉토리를 가리키면 `PATH="$OBS_MOCKBIN:$PATH"`
+# 의 탐색이 그 디렉토리를 그냥 지나쳐 이 머신에 실재하는 real codex(예:
+# /opt/homebrew/bin/codex)로 조용히 폴백한다 — 관측이 아니라 실제 과금 호출이
+# 나간다. 호출자(4개 소비자)가 obs_setup의 반환값을 확인하지 않을 수도 있으므로,
+# 여기서 loud하게 return 1하는 것과 **별개로** obs_invoke() 자신도 실행 직전에
+# 한 번 더 확인한다(아래) — 방어선을 실행 지점에 둔다. 안전은 그 obs_invoke
+# 가드가 담당하고, 여기 return 1은 어디까지나 진단용이다.
+#
+# **두 변수를 먼저 세팅한다 (Fix round 3, Important 1).** 두 실패 분기(cp 실패 ·
+# 최종 실행권한 확인 실패)가 서로 다른 사후상태를 남기면 — 한쪽은 두 변수가
+# unset인 채로 return하면 `set -u` 소비자(예: test_codex_gate_observation.sh가
+# $OBS_MOCKBIN으로 자기 PATH를 짓는 지점)가 "unbound variable"로 죽어, 원래
+# 냈어야 할 깨끗한 진단("전제 실패 — PATH에서 codex가 mock으로 해석되지 않는다")
+# 보다 못한 진단을 낸다(실측: 13pass/6fail 깨끗한 메시지 → 7pass/12fail
+# unbound-variable). 안전은 바뀌지 않는다 — obs_invoke가 실행 직전에 독립적으로
+# 재확인하므로 값이 아직 유효하지 않아도 real codex로 새지 않는다. 이건 실패
+# 시에도 **일관된 사후상태**를 보장해 진단 legibility만 고치는 것이다.
 obs_setup() {
   OBS_SCRATCH="$1"
+  OBS_MOCKBIN="$OBS_SCRATCH/bin"
+  # sentinel은 **입력 파일**에 심는다. 빌더가 그것을 프롬프트에 치환하므로,
+  # sentinel이 stdin에 있으면 프롬프트가 stdin으로 갔다는 뜻이고 argv에 있으면
+  # argv로 샜다는 뜻이다. 프롬프트 전문 대조보다 강하다 — `$(cat f)`가 후행 개행을
+  # 삭제해도 sentinel은 온전하다.
+  OBS_SENTINEL='CODEX_OBS_SENTINEL_7f3a9c2b'
   mkdir -p "$OBS_SCRATCH/bin"
   cp "$OBS_REPO/plugins/quality-gates/tests/mocks/capture-codex/codex" "$OBS_SCRATCH/bin/codex" || {
     echo "obs_setup: mock codex 복사 실패 — 계속하면 PATH가 real codex로 조용히 폴백한다" >&2
@@ -48,16 +65,10 @@ obs_setup() {
   chmod +x "$OBS_SCRATCH/bin/codex"
   # timeout/gtimeout이 없으면 detect가 timeout_binary_missing으로 막고 spike는 죽는다.
   cp "$OBS_REPO/plugins/quality-gates/tests/mocks/bin-stubs/"* "$OBS_SCRATCH/bin/" 2>/dev/null || true
-  OBS_MOCKBIN="$OBS_SCRATCH/bin"
   [ -x "$OBS_MOCKBIN/codex" ] || {
     echo "obs_setup: mock codex가 최종적으로 실행 가능한 상태가 아니다($OBS_MOCKBIN/codex) — real codex 폴백 위험" >&2
     return 1
   }
-  # sentinel은 **입력 파일**에 심는다. 빌더가 그것을 프롬프트에 치환하므로,
-  # sentinel이 stdin에 있으면 프롬프트가 stdin으로 갔다는 뜻이고 argv에 있으면
-  # argv로 샜다는 뜻이다. 프롬프트 전문 대조보다 강하다 — `$(cat f)`가 후행 개행을
-  # 삭제해도 sentinel은 온전하다.
-  OBS_SENTINEL='CODEX_OBS_SENTINEL_7f3a9c2b'
 }
 
 # $1 = 후보 파일 경로, $2 = capture 디렉토리. 성공하면 0.
