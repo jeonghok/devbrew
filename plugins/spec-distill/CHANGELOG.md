@@ -1,6 +1,19 @@
 # Changelog
 
-## [0.26.0] — 2026-08-09
+## [0.26.0] — 2026-08-10
+
+### Added
+
+- `build_spec_codex_prompt.py`·`build_brief_codex_prompt.py` 에 untrusted-data(P21) 절 +
+  무조건 blanket 문장 + 무조건 action 금지 문장(codex 프롬프트 빌더 4종 공통, 나머지
+  둘은 quality-gates 쪽). brief 경로가 가장 첨예하다 — Claude critic 은 가려진 사본을
+  받는데 codex 는 원본 payload 를 받고, `merge_brief_review.py` 가 그 §6 을
+  "비신뢰 verbatim" 이라 명시한다.
+- `run_spec_codex_reviewer.sh` 에 웹 검색 + `DEVBREW_SPEC_DISTILL_DISABLE_WEB` 확인.
+- `run_brief_codex_reviewer.sh` 에 degrade 계약(시작 시 truncate + 완료 전 중단 시
+  degrade YAML) 백포트 — 형제 러너와 동형.
+- `rc == 3`(fail-closed 산출물을 못 쓰면 죽는 러너) 소비자 의무를
+  `reviewing-spec`·`reviewing-brief` SKILL 에 명문화.
 
 ### Fixed
 
@@ -10,13 +23,18 @@
   믿게만" 만든다. `reviewing-brief` 와 동형인 리터럴 게이트로 전환.
 - **`codex_findings_to_yaml.py` 헤더의 거짓 주장** — "ONLY adaptation … the emit keyset"
   은 사실이 아니었다(CR-2 검증이 이 사본에만 있었다). 동일성은 이제 주석이 아니라
-  `quality-gates/tests/test_codex_copies_agree.sh` 가 보증한다.
+  `quality-gates/tests/test_codex_copies_agree.sh` 가 보증한다(mock 자산 사본 8그룹도
+  같은 락에 편입).
 
 ### Changed
 
 - 러너 2종이 프롬프트를 **stdin** 으로 넘긴다 (`codex exec -`).
 - `detect_codex.sh` 가 `0.118.0` 버전 바닥과 semver 판독 실패를 낸다.
 - `tests/test_detect_codex.sh` 가 14-케이스 합집합.
+- `codex_degraded` 의 정의가 **한 곳**(`merge_review.codex_degraded_from`)에만 있다.
+  두 병합기가 각자 인라인 계산하고 있었다.
+- `tests/test_web_kill_switch.sh` 의 소비자 도출이 **플러그인 횡단**이고 술어가
+  **값을 인식**한다 — 웹을 *끄는* 호출부에 죽은 스위치를 요구하지 않는다.
 
 ## [0.25.2] — 2026-08-06
 

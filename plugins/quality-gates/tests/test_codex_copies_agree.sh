@@ -139,5 +139,62 @@ for i in 0 1 2; do
   done
 done
 
+# ── mock 자산 사본 ──────────────────────────────────────────────────────────
+# 바이트 diff로 재지 않는다 — 헤더 주석 한 줄 차이에 영구 RED가 나고, 그것을
+# 예외로 빼는 순간 실제 행동 차이도 함께 빠진다. **같은 인자에 같은 출력을
+# 내는가**를 잰다.
+#
+# 대상은 **두 플러그인에 같은 이름으로 있는 것**의 교집합이다(`comm -12`) —
+# 한쪽 고유 mock(qg의 capture-codex·mock-codex-hang.sh·
+# mock-codex-no-agent-message.sh·mock-codex-valid-json-no-fence.sh, sd의
+# mock-codex-valid-json.sh)은 이름 열거가 아니라 교집합 자체가 대상에서 뺀다 —
+# 대조하지 않고, 그 결과 RED도 나지 않는다.
+#
+# bin-stubs는 `shift; exec "$@"` 스텁이다 — 여기서 태우는 인자는 실행마다 1개뿐이라
+# shift 후 "$@"가 비고 exec는 무동작이지만(실측 확인됨), 인자 목록이 늘어나는
+# 미래 편집에 대비해 PATH를 시스템 디렉토리로 좁혀 실제 codex 바이너리에 닿을
+# 경로를 없앤다 — 이 테스트가 진짜 codex를 호출하는 일은 없어야 한다.
+mock_groups="$(comm -12 \
+  <(ls "$QG/tests/mocks" 2>/dev/null | sort) \
+  <(ls "$SD/tests/mocks" 2>/dev/null | sort))"
+n_groups="$(printf '%s\n' "$mock_groups" | grep -c . || true)"
+# 바닥은 실측값(8)이다 — brief 초안의 `-ge 4`는 통과하되 헐거워 그룹 하나가
+# 조용히 사라져도(8→7) 못 잡는다. 실측치를 바닥으로 두면 축소는 반드시 RED,
+# 확장(그룹이 늘어나는 것)은 여전히 자유롭다.
+if [ "$n_groups" -ge 8 ]; then
+  ok "mock 교집합 ${n_groups}그룹 도출 (vacuous 아님, 실측 바닥 8 유지)"
+else
+  no "mock 교집합이 ${n_groups}그룹뿐 — 도출이 실측 바닥(8) 밑으로 줄었다"
+fi
+
+while IFS= read -r g; do
+  [ -n "$g" ] || continue
+  a="$QG/tests/mocks/$g"; b="$SD/tests/mocks/$g"
+  if [ -d "$a" ] && [ -d "$b" ]; then
+    # 디렉토리형 mock: 안의 실행 파일을 같은 인자로 태워 출력을 대조한다.
+    for exe in "$a"/*; do
+      [ -f "$exe" ] || continue
+      name="$(basename "$exe")"
+      [ -f "$b/$name" ] || { no "mock $g/$name: sd 쪽에 없다"; continue; }
+      for arg in --version "exec"; do
+        oa="$(PATH="/usr/bin:/bin" bash "$exe" "$arg" 2>&1; echo "rc=$?")"
+        ob="$(PATH="/usr/bin:/bin" bash "$b/$name" "$arg" 2>&1; echo "rc=$?")"
+        [ "$oa" = "$ob" ] \
+          && ok "mock $g/$name ($arg): 두 사본이 같은 행동" \
+          || { no "mock $g/$name ($arg): 행동이 갈라졌다"; echo "      qg: $oa"; echo "      sd: $ob"; }
+      done
+    done
+  elif [ -f "$a" ] && [ -f "$b" ]; then
+    # 파일형 mock (mock-codex-*.sh): stdin을 주고 출력을 대조한다.
+    oa="$(printf 'x\n' | PATH="/usr/bin:/bin" bash "$a" 2>&1; echo "rc=$?")"
+    ob="$(printf 'x\n' | PATH="/usr/bin:/bin" bash "$b" 2>&1; echo "rc=$?")"
+    [ "$oa" = "$ob" ] \
+      && ok "mock $g: 두 사본이 같은 행동" \
+      || { no "mock $g: 행동이 갈라졌다"; echo "      qg: $oa"; echo "      sd: $ob"; }
+  fi
+done <<EOF
+$mock_groups
+EOF
+
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [ "$fail" -eq 0 ]
