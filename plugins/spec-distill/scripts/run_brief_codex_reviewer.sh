@@ -102,6 +102,7 @@ command -v codex >/dev/null 2>&1 || emit_fallback codex_not_installed
 WEB_ARGS=(-c 'tools.web_search=true' -c 'web_search="live"')
 if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
   WEB_ARGS=(-c 'tools.web_search=false' -c 'web_search="disabled"')
+  echo "[spec-distill] web 비활성 — codex brief co-reviewer가 리포+payload 근거만 사용 (외부 사실 확인 없음)" >&2
 fi
 
 EXIT_CODE=0

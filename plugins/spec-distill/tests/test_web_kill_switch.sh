@@ -40,130 +40,152 @@ else
   note FAIL "도출: 웹 도구 보유 agent를 하나도 못 찾았다 — 도출 기준이 깨졌다(아래 결과 무의미)"
 fi
 
-# (a) codex 웹 검색을 **켜는** 스크립트. 플러그인 횡단으로 도출한다.
+# (a)+(a-값) codex 웹 posture — **실행 관측**으로 판정한다 (설계 §4.3, AC11과 동형).
 #
-# 두 가지를 고친다:
-#   1. 코퍼스가 `$SD/scripts/*.sh` 한 플러그인이었다 — quality-gates·plugin-audit에
-#      새 호출부를 만들면 아무 락도 보지 못했다. 열거는 공간에도 시간에도 fail-open이다.
-#   2. 술어가 **값을 보지 않았다**. `tools.web_search=false`를 명시하는 순간 웹을 *끄는*
-#      호출부가 도출 집합에 들어와 kill switch 확인을 요구받았고, 그것은 죽은 스위치를
-#      만들라는 요구다. 이제 **켜는** 것만 요구한다.
+# 정적 grep 판정은 Fix round 1(codex 독립 리뷰, 2026-08-09)에서 무이빨로 확인됐다:
+#   - kill switch **헤더**(`if [[ ... ]]`)의 존재만 쟀지 **분기 바디**는 안 쟀다 —
+#     분기 안에서 web을 그대로 켜 둬도 헤더 grep은 만족된다. 스위치가 "껐다"고
+#     loud하게 stderr에 적으면서 실제로는 계속 검색하는 상태가 GREEN이었다(Critical 1).
+#   - `web_search` 모드(`live`/`disabled`) — 이 태스크 전체의 존재 이유인 그 키 —
+#     는 애초에 한 번도 값으로 검사되지 않았다. 그 플래그를 통째로 지워도
+#     27/27이었다(Critical 2).
+#   - 그 이전 라운드의 자체 수정(`web_true_in_code()`, 주석 줄만 제외)도 무이빨
+#     이었다: trailing 주석은 안 걸러졌고, posture-명시 체크는 그 헬퍼를 아예
+#     쓰지 않았다(Important 4).
+# 공통 근본원인: grep은 주석·heredoc·죽은 분기·설명 문구로 항상 만족시킬 수 있다.
+# 소스를 읽는 대신 **mock codex를 PATH 앞에 놓고 각 러너를 실제로 실행**해 관측된
+# argv로 판정한다 — `plugins/quality-gates/tests/lib/codex_observation.sh`
+# (`test_codex_invocation_contract.sh`가 AC11을 재는 것과 동형, DRY). 관측된 argv는
+# 주석·heredoc·죽은 분기로 만족될 수 없다: 실행되지 않으면 애초에 mock에 도달하지
+# 않는다.
 #
-# kill switch 변수명은 플러그인마다 다르므로 그 축은 파라미터다.
-WEB_ON='tools\.web_search[[:space:]]*=[[:space:]]*.?true'
-# 주석 줄(선행 공백 후 `#`)은 실행되지 않는다 — 값 판정은 실행되는 코드에서만 해야
-# 한다. 이 함수 없이 파일 전체를 grep하면, "`tools.web_search=true` 단독은 codex
-# 기본 모드..." 같은 **설명 주석**이 실제 코드를 `false`로 되돌려도 매치를 만족시켜
-# 값 검사가 무이빨이 된다 — 이 파일 자신의 초안이 바로 그 실패를 냈다(m27 회귀,
-# 2026-08-09 mutation 확인: run_spec_codex_reviewer.sh의 두 분기를 전부 `false`로
-# 바꿨는데도 자신의 설명 주석이 "실제 ON 일치"를 GREEN으로 냈다).
-web_true_in_code() {  # <file> -> exit 0 if 주석이 아닌 실행 코드가 tools.web_search=true를 설정
-  grep -vE '^[[:space:]]*#' "$1" 2>/dev/null | grep -qE "$WEB_ON"
-}
-declare -a WEB_ROOTS=("$REPO_ROOT/plugins/spec-distill" "$REPO_ROOT/plugins/quality-gates" "$REPO_ROOT/plugins/plugin-audit")
-switch_for() {
-  case "$1" in
-    */spec-distill/*) echo 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' ;;
-    */quality-gates/*) echo 'DEVBREW_DISABLE_QG_WEB' ;;
-    */plugin-audit/*) echo 'DEVBREW_DISABLE_PLUGIN_AUDIT_WEB' ;;
-    *) echo '' ;;
-  esac
-}
+# 여섯 호출부 전부를 평시(kill switch 미설정) 1회 실행해 AC21 표의 두 열
+# (`tools.web_search`·`web_search` 모드)을 양방향 대조하고, 웹 ON 세 곳은
+# **kill switch를 세팅한 채 두 번째로 실행**해 분기가 실제로 두 값을 OFF로
+# 뒤집는지 관측한다 — 헤더가 아니라 effect를 잰다(Critical 1을 직접 겨냥).
+#
+# OBS_REPO는 **소싱 전에** 명시적으로 세팅한다. codex_observation.sh 자신의
+# fallback(`${OBS_REPO:-$(dirname BASH_SOURCE[0])/../../..}`)은 이 파일 위치
+# 기준 3단 `..`만 올라가 `plugins/`에서 멈춘다 — sibling
+# test_codex_invocation_contract.sh가 이 결함을 겪지 않는 이유는 그 fallback을
+# 태우지 않고 항상 미리 세팅해서 넘기기 때문이다(같은 패턴을 따른다).
+OBS_REPO="$REPO_ROOT"
+. "$REPO_ROOT/plugins/quality-gates/tests/lib/codex_observation.sh"
 
-web_on_scripts=""
-for r in "${WEB_ROOTS[@]}"; do
-  for cand in "$r"/scripts/*.sh; do
-    [ -f "$cand" ] || continue
-    web_true_in_code "$cand" && web_on_scripts="$web_on_scripts
-$cand"
-  done
-done
-web_on_scripts="$(printf '%s\n' "$web_on_scripts" | grep -v '^$' || true)"
-
-if [[ -z "$web_on_scripts" ]]; then
-  note FAIL "도출: codex 웹을 켜는 스크립트를 하나도 못 찾았다 — 도출 기준이 깨졌다"
+SCRATCH="$(mktemp -d -t sd-web-obs-XXXXXX)" || SCRATCH=""
+if [[ -z "$SCRATCH" || ! -d "$SCRATCH" ]]; then
+  note FAIL "관측 scratch 디렉토리 생성 실패 — 아래 AC21 실행-관측 판정은 전부 건너뛴다"
 else
-  note PASS "도출: 웹을 켜는 스크립트 $(printf '%s\n' "$web_on_scripts" | wc -l | tr -d ' ')개 (플러그인 횡단)"
-  while IFS= read -r f; do
-    [ -n "$f" ] || continue
-    sw="$(switch_for "$f")"
-    if [[ -z "$sw" ]]; then
-      note FAIL "$(basename "$f"): 어느 플러그인인지 판정 불가 — kill switch 변수를 특정할 수 없다"
-      continue
-    fi
-    grep -qE "^[[:space:]]*if \[\[ \"\\\$\{$sw:-0\}\" == \"1\" \]\]" "$f" \
-      && note PASS "$(basename "$f"): $sw 확인 실재" \
-      || note FAIL "$(basename "$f"): 웹을 켜면서 $sw 를 확인하지 않는다"
-  done <<EOF
-$web_on_scripts
-EOF
-fi
+  trap 'rm -rf "$SCRATCH"' EXIT
+  obs_setup "$SCRATCH"
 
-# 웹을 **끄는** 호출부에는 스위치를 요구하지 않는다 — 죽은 스위치를 만들지 않기 위해서다.
-# 대신 posture가 **명시**돼 있는지는 확인한다: 미지정은 codex 기본값(cached)에 맡기는
-# 것이라 "이 호출부는 웹을 쓰지 않는다"가 어디에도 적혀 있지 않게 된다.
-codex_runners="$(grep -rlE '(^|[[:space:]])codex[[:space:]]+exec[[:space:]]' \
-                 "$REPO_ROOT"/plugins/*/scripts/*.sh "$REPO_ROOT"/plugins/*/tests/spike/*.sh 2>/dev/null || true)"
-missing_posture=""
-while IFS= read -r f; do
-  [ -n "$f" ] || continue
-  grep -qE 'tools\.web_search' "$f" || missing_posture="$missing_posture $(basename "$f")"
-done <<EOF
-$codex_runners
-EOF
-if [[ -z "${missing_posture// /}" ]]; then
-  note PASS "codex 호출부 전부가 웹 posture를 명시한다 (미지정 = 기본값 cached에 맡김 방지)"
-else
-  note FAIL "웹 posture 미명시 →$missing_posture"
-fi
+  # 어느 호출부가 웹 ON이어야 하는지는 코드에서 도출할 수 없는 의미론적 판단이라
+  # 표가 불가피하다(AC21). 표에 없는 호출부가 나타나면 RED — 표가 조용히 낡는
+  # 것을 막는다.
+  expected_posture() {  # <basename> -> on|off|"" (표에 없음)
+    case "$1" in
+      run_codex_reviewer.sh) echo off ;;
+      run_artifact_codex_reviewer.sh) echo off ;;
+      run_spec_codex_reviewer.sh) echo on ;;
+      run_brief_codex_reviewer.sh) echo on ;;
+      run_audit_codex_reviewer.sh) echo on ;;
+      test_codex_json_extraction.sh) echo off ;;
+      *) echo '' ;;
+    esac
+  }
+  # ON 사이트에만 의미가 있다. qg 두 곳은 현재 OFF라 이 표에 미도달이지만, ON
+  # 전환 시 쓸 이름을 미리 등록해둔다(지금 죽은 스위치를 만들지는 않는다).
+  kill_switch_for() {  # <basename> -> switch var name
+    case "$1" in
+      run_spec_codex_reviewer.sh|run_brief_codex_reviewer.sh) echo 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' ;;
+      run_audit_codex_reviewer.sh) echo 'DEVBREW_DISABLE_PLUGIN_AUDIT_WEB' ;;
+      run_codex_reviewer.sh|run_artifact_codex_reviewer.sh) echo 'DEVBREW_DISABLE_QG_WEB' ;;
+      *) echo '' ;;
+    esac
+  }
 
-# ── (a-값) AC21 표 — 호출부별 기대 posture를 양방향으로 대조한다 ────────────
-# 위 web_on_scripts 도출은 **존재**만 잰다 — `tools.web_search`를 true→false로
-# 값만 바꾸면 도출 집합에서 조용히 빠져나가고, kill switch 확인 요구도 함께
-# 빠진다(웹 ON이어야 할 호출부를 끄는 회귀가 무이빨로 통과한다). 어느 호출부가
-# 웹 ON이어야 하는지는 코드에서 도출할 수 없는 의미론적 판단이라 표가 불가피하다
-# (AC21) — 그래서 표의 기대값과 실제 값을 **양방향**으로 대조한다:
-#   - ON이어야 하는데 실제로 아니면 RED
-#   - OFF여야 하는데 실제로 켜져 있으면 RED (반대 방향도 문다)
-#   - 표에 없는 codex 호출부가 나타나면 RED (표가 조용히 낡는 것을 막는다)
-expected_posture() {  # <basename> -> on|off|"" (표에 없음)
-  case "$1" in
-    run_codex_reviewer.sh) echo off ;;
-    run_artifact_codex_reviewer.sh) echo off ;;
-    run_spec_codex_reviewer.sh) echo on ;;
-    run_brief_codex_reviewer.sh) echo on ;;
-    run_audit_codex_reviewer.sh) echo on ;;
-    test_codex_json_extraction.sh) echo off ;;
-    *) echo '' ;;
-  esac
-}
+  # 관측된 argv에서 `-c 'KEY=VAL'`의 VAL 토큰과 정확히 일치하는 줄이 있는가.
+  # argv는 NUL 구분으로 캡처되므로(`obs_argv`) 주석·설명 문구는 애초에 여기
+  # 나타날 수 없다 — 실행되지 않은 텍스트는 mock에 도달하지 않는다.
+  argv_has() { obs_argv "$1" | grep -qxF -- "$2"; }
 
-while IFS= read -r f; do
-  [ -n "$f" ] || continue
-  bn="$(basename "$f")"
-  exp="$(expected_posture "$bn")"
-  if [[ -z "$exp" ]]; then
-    note FAIL "$bn: AC21 표에 없는 codex 호출부 — 표가 낡았다(expected_posture()에 추가하라)"
-    continue
-  fi
-  is_on=0
-  web_true_in_code "$f" && is_on=1
-  if [[ "$exp" == on ]]; then
-    if [[ "$is_on" -eq 1 ]]; then
-      note PASS "$bn: AC21 표=ON, 실제 ON 일치"
+  # 두 열(`tools.web_search`·`web_search` 모드)을 **양방향**으로 잰다: 기대값
+  # 부재 → RED, 반대값 존재 → RED. 평시 판정과 kill-switch effect 판정 둘 다
+  # 이 하나의 함수를 공유한다 — kill 상태는 그냥 expect=off로 같은 잣대를 쓴다.
+  check_posture() {  # <call-dir> <label> <expect: on|off>
+    local d="$1" label="$2" expect="$3" want_web want_mode avoid_web avoid_mode ok=1
+    if [[ "$expect" == on ]]; then
+      want_web='tools.web_search=true'; want_mode='web_search="live"'
+      avoid_web='tools.web_search=false'; avoid_mode='web_search="disabled"'
     else
-      note FAIL "$bn: AC21 표=ON인데 tools.web_search=true 실재가 없다"
+      want_web='tools.web_search=false'; want_mode='web_search="disabled"'
+      avoid_web='tools.web_search=true'; avoid_mode='web_search="live"'
     fi
+    argv_has "$d" "$want_web"   || { note FAIL "$label: 관측된 argv에 '$want_web' 부재"; ok=0; }
+    argv_has "$d" "$want_mode"  || { note FAIL "$label: 관측된 argv에 '$want_mode' 부재"; ok=0; }
+    argv_has "$d" "$avoid_web"  && { note FAIL "$label: 관측된 argv에 '$avoid_web' 존재(반대 방향 위반)"; ok=0; }
+    argv_has "$d" "$avoid_mode" && { note FAIL "$label: 관측된 argv에 '$avoid_mode' 존재(반대 방향 위반)"; ok=0; }
+    [[ "$ok" -eq 1 ]] && note PASS "$label: tools.web_search·web_search 모드 둘 다 기대값과 일치"
+  }
+
+  # 코퍼스: codex_observation.sh의 codex_candidates() — plugins/ 전체를 비주석
+  # 실행줄 기준으로 스캔한다(AC11과 동일 앵커, DRY — 이 파일이 따로 glob을 들고
+  # 있지 않는다). vacuity 바닥: 형제 test_codex_invocation_contract.sh:53-59와
+  # 같은 형태 — 빈 집합이면 FAIL하고 아래 판정은 건너뛴다(Important 3 — 이
+  # 바닥이 없던 예전 버전은 코퍼스 glob이 깨지자 21/21 거짓 GREEN을 냈다).
+  candidates="$(codex_candidates)"
+  n_cand=0
+  [ -n "$candidates" ] && n_cand="$(printf '%s\n' "$candidates" | wc -l | tr -d ' ')"
+  if [ "$n_cand" -lt 1 ]; then
+    note FAIL "도출: codex 호출부를 하나도 못 찾았다 — 도출 기준이 깨졌다(아래 AC21 실행-관측 판정은 건너뛴다)"
   else
-    if [[ "$is_on" -eq 0 ]]; then
-      note PASS "$bn: AC21 표=OFF, 실제 OFF 일치"
-    else
-      note FAIL "$bn: AC21 표=OFF인데 tools.web_search=true 가 있다(웹이 켜졌다)"
-    fi
+    note PASS "도출: codex 호출부 ${n_cand}곳 (실행 관측 대상, AC21)"
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      bn="$(basename "$f")"
+      exp="$(expected_posture "$bn")"
+      if [[ -z "$exp" ]]; then
+        note FAIL "$bn: AC21 표에 없는 codex 호출부 — 표가 낡았다(expected_posture()에 추가하라)"
+        continue
+      fi
+
+      cap_normal="$SCRATCH/ac21-normal-$bn"
+      mkdir -p "$cap_normal"
+      if ! obs_invoke "$f" "$cap_normal"; then
+        note FAIL "$bn: 후보인데 실행할 방법이 없다 (obs_invoke 인자 표에 부재)"
+        continue
+      fi
+      if [[ "$(obs_call_count "$cap_normal")" -lt 1 ]]; then
+        note FAIL "$bn: 실행했으나 codex 호출이 관측되지 않았다 (calls=0) — 값 판정을 건너뛴다"
+        continue
+      fi
+      check_posture "$cap_normal/call-0" "$bn (평시)" "$exp"
+
+      if [[ "$exp" == on ]]; then
+        sw="$(kill_switch_for "$bn")"
+        if [[ -z "$sw" ]]; then
+          note FAIL "$bn: ON인데 kill switch 변수를 특정할 수 없다(kill_switch_for에 등록하라)"
+          continue
+        fi
+        cap_killed="$SCRATCH/ac21-killed-$bn"
+        mkdir -p "$cap_killed"
+        export "$sw=1"
+        obs_invoke "$f" "$cap_killed" || true
+        unset "$sw"
+        if [[ "$(obs_call_count "$cap_killed")" -lt 1 ]]; then
+          note FAIL "$bn: $sw=1로 실행했으나 codex 호출이 관측되지 않았다"
+        else
+          # 분기 바디가 실제로 값을 뒤집는지를 잰다 — 헤더의 존재가 아니라
+          # effect다(Critical 1). 분기가 no-op이면(스위치가 아무 일도 안 하면)
+          # 여기서 tools.web_search=true / web_search="live"가 그대로 관측된다.
+          check_posture "$cap_killed/call-0" "$bn ($sw=1)" "off"
+        fi
+      fi
+    done <<EOF_CAND
+$candidates
+EOF_CAND
   fi
-done <<EOF
-$codex_runners
-EOF
+fi
 
 # (b) 웹 도구 agent를 dispatch하는 skill
 #

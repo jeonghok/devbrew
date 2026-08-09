@@ -181,7 +181,7 @@ fi
 `brief-direction-reviewer`는 `tools:`에 `Bash`가 **없습니다**(Law 2) — 자기 kill switch를 확인할 경로가 없으므로 판정은 **orchestrator 책임**입니다. 리뷰어에게 `Bash`를 주는 것은 Law 2 위반이므로 대안이 아닙니다.
 
 - `web_disabled == 0` → 평소대로 dispatch.
-- `web_disabled == 1` → dispatch 프롬프트에 *"웹 없이 repo + payload 근거로 답하라"* 조건을 실어 dispatch하고 record(`component: direction_reviewer`, `affected_axis: direction`, `verification_status: degraded`, reason=*"web kill switch 활성 — repo 근거만"*). **codex #1의 웹은 자기 실행(`run_brief_codex_reviewer.sh:96-99`)에서 같은 스위치를 독립 확인합니다** — 외부 근거가 완전히 죽지 않습니다(이중화).
+- `web_disabled == 1` → dispatch 프롬프트에 *"웹 없이 repo + payload 근거로 답하라"* 조건을 실어 dispatch하고 record(`component: direction_reviewer`, `affected_axis: direction`, `verification_status: degraded`, reason=*"web kill switch 활성 — repo 근거만"*). **codex #1의 웹은 자기 실행(`run_brief_codex_reviewer.sh:102-106`)에서 같은 스위치를 독립 확인합니다** — 외부 근거가 완전히 죽지 않습니다(이중화).
 
 이 축의 web 호출에는 사전 예산 상한이 없습니다(v0.24.12 — S3d, harness-capability-suppression-sweep). 프롬프트로 검색 횟수를 묶는 것은 E10 위반이므로 대안이 아닙니다.
 
