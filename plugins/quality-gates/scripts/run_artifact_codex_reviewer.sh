@@ -35,10 +35,17 @@ fi
 # 추론 강도는 핀하지 않는다 — 사용자 codex 설정이 지배한다. 하니스가 medium을 박으면
 # high/xhigh 사용자가 조용히 하향되고, 그 하향이 별-모델 적발력을 정확히 깎는다.
 # 샌드박스(-s read-only)·작업디렉토리 핀(-C)·파싱 계약(--json)은 load-bearing이라 유지.
+#
+# 웹 posture를 **명시한다.** 미지정은 codex 기본값(`web_search = "cached"`)에 맡기는
+# 것이라 "이 호출부는 웹을 쓰지 않는다"가 어디에도 적혀 있지 않게 된다. 산출물 비평은
+# 외부 근거가 필요 없고, 외부 조회가 결과를 비결정적으로 만든다. kill switch가 없는
+# 이유: 이미 OFF라 끌 것이 없다(죽은 스위치를 만들지 않는다, AC21).
 EXIT_CODE=0
 codex exec - \
     -C "$PROJECT_DIR" \
     -s read-only \
+    -c 'tools.web_search=false' \
+    -c 'web_search="disabled"' \
     --json \
     < "$PROMPT" \
     > "$JSONL" \

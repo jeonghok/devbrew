@@ -93,9 +93,15 @@ command -v codex >/dev/null 2>&1 || emit_fallback codex_not_installed
 # 웹 검색: 사용자 kill switch(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1)만 끈다. 그 밖에는
 # 명시적으로 켠다 — `--search`는 TUI 전용이고 `codex exec` 경로는 이 config다.
 # 검색 *횟수* 상한은 두지 않는다 (E10: 단일 exec은 이미 턴으로 경계가 있다).
-WEB_ARGS=(-c 'tools.web_search=true')
+#
+# `web_search="live"`: `tools.web_search=true` 단독은 codex 기본 모드(`cached`) —
+# V1 probe(2026-08-09, 3번째 호출·컨트롤러 승인) 실측: 도구만 켜면 실제 존재하는
+# llvm/llvm-project 커밋을 돌려주지만 12일 지연된 인덱스였다(진짜 검색이지만
+# stale). `live`를 추가하자 같은 조회가 독립 측정한 timestamp와 일치하는 오늘
+# HEAD를 돌려줬다. 이 checklist는 현재 prior-art 대조를 요구하므로 `live`가 필수다.
+WEB_ARGS=(-c 'tools.web_search=true' -c 'web_search="live"')
 if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
-  WEB_ARGS=(-c 'tools.web_search=false')
+  WEB_ARGS=(-c 'tools.web_search=false' -c 'web_search="disabled"')
 fi
 
 EXIT_CODE=0

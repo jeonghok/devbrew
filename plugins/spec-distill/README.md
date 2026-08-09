@@ -187,7 +187,10 @@ arm** 뿐이고, 그마저 위 표의 fail-open 단서가 붙습니다.
 - `DEVBREW_SPEC_DISTILL_TTL_HOURS=<int>` (v0.6.0) — TTL-GC orphan 정리 임계값 (default 24h). 짧게 설정 시 자주 정리, in-flight 작업 risk 증가.
 - `DEVBREW_SPEC_DISTILL_GC_VERBOSE=1` (v0.6.0) — TTL-GC가 cleanup 발생 시 stdout summary 출력. CI/디버깅용.
 - `DEVBREW_SPEC_DISTILL_SKIP_HANDOFF_CHECK=1` (v0.9.0) — `handoff_incomplete` 카테고리만 우회. 다른 검사 (`missing_section` 등)는 정상 동작. loud warning stderr 출력. /compact 이후 정보 손실 risk 명시.
-- `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` (v0.12.0) — interview 웹 리서치 비활성화. landscape를 loud log와 함께 생략, crash 없음 (graceful degradation, AC8).
+- `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` (v0.12.0, AC21로 범위 확대) — 이 kill switch 하나가
+  **세 소비자**의 웹 접근을 끈다: interview 웹 리서치(landscape, v0.12.0), codex design-doc
+  co-reviewer(`run_spec_codex_reviewer.sh`), codex brief co-reviewer(`run_brief_codex_reviewer.sh`,
+  둘 다 AC21). 어느 쪽이든 loud log와 함께 생략, crash 없음 (graceful degradation, AC8).
 - `DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW=1` (v0.24.0) — brief 리뷰 파이프라인 전체 skip.
   `component: pipeline` degradation record + loud advisory를 남기고 Step B로 직행한다(조용한
   생략이 아니다). 충실도·방향성·냉독 전부 미검증 상태가 게이트 질문에 표시된다.

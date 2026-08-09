@@ -140,10 +140,17 @@ fi
 # Direct codex invocation — no per-call timeout (hang risk accepted; backstops:
 # Bash tool timeout, DEVBREW_DISABLE_QG_CODEX=1, /cancel-qg). Layer 3 sandbox
 # (-s read-only) preserved. `|| EXIT_CODE=$?` keeps capture safe under set -e.
+#
+# 웹 posture를 **명시한다.** 미지정은 codex 기본값(`web_search = "cached"`)에 맡기는
+# 것이라 "이 호출부는 웹을 쓰지 않는다"가 어디에도 적혀 있지 않게 된다. 코드 diff
+# 리뷰는 외부 근거가 필요 없고, 외부 조회가 결과를 비결정적으로 만든다. kill switch가
+# 없는 이유: 이미 OFF라 끌 것이 없다(죽은 스위치를 만들지 않는다, AC21).
 EXIT_CODE=0
 codex exec - \
     -C "$PROJECT_DIR" \
     -s read-only \
+    -c 'tools.web_search=false' \
+    -c 'web_search="disabled"' \
     --json \
     < "$PROMPT_FILE" \
     > "$STDOUT_FILE" \

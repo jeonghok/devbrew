@@ -95,10 +95,26 @@ fi
 # 추론 강도는 핀하지 않는다 — 사용자 codex 설정이 지배한다. 하니스가 medium을 박으면
 # high/xhigh 사용자가 조용히 하향되고, 그 하향이 이 co-reviewer의 존재 이유(별-모델
 # 적발력)를 정확히 깎는다.
+#
+# 웹 검색: 사용자 kill switch(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1)만 끈다. 그 밖에는
+# 명시적으로 켠다 — design doc 리뷰는 외부 prior-art 대조가 판정의 일부다.
+# `web_search="live"`: `tools.web_search=true` 단독은 codex 기본 모드(`cached`) —
+# 최대 12일 지연된 인덱스를 되돌려주면서도 검색에 성공한 것처럼 보인다(V1 probe
+# 실측, 2026-08-09). `live`로 승격해야 실제 현재 웹에 닿는다.
+# `allowed_domains`로 좁히지 않는다: 어느 도메인이 중요할지 미리 알 수 없고, 좁히면
+# 조사 능력을 깎는다(하니스는 능력을 억제하지 않는다).
+# 검색 *횟수* 상한은 두지 않는다 — 단일 exec은 이미 턴으로 경계가 있다.
+WEB_ARGS=(-c 'tools.web_search=true' -c 'web_search="live"')
+if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
+  WEB_ARGS=(-c 'tools.web_search=false' -c 'web_search="disabled"')
+  echo "[spec-distill] web 비활성 — codex co-reviewer가 리포 근거만 사용 (외부 사실 확인 없음)" >&2
+fi
+
 EXIT_CODE=0
 codex exec - \
     -C "$PROJECT_DIR" \
     -s read-only \
+    "${WEB_ARGS[@]}" \
     --json \
     < "$PROMPT_FILE" \
     > "$STDOUT_FILE" \
