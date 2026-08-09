@@ -95,6 +95,24 @@ fi
 # 이라는 우연에 기대면 파일명이 바뀌거나 codex 언급이 사라질 때 198초 × 무한
 # 재귀가 부활한다. is_excluded의 SELF 검사가 반드시 첫 줄이어야 하는 이유.
 CODEX_TOUCHING_TESTS="test_detect_codex.sh test_findings_parser.sh test_sandbox_enforced.sh test_failure_injection.sh test_scout_codex_integration.sh test_cost_consent.sh"
+
+# ── 제외 목록 크기 핀 (라운드 1 리뷰 L2, L1과 공유) ──────────────────────────
+# 아래 커버리지 래칫은 "entry가 몰래 늘어나거나 정당성을 잃어도"라고 주장했지만,
+# `grep -qil 'codex'`는 어디든(주석 포함) "codex"를 언급하기만 하면 통과하므로
+# 실제로는 후자(정당성 상실)만 잡았다 — 이 열거와 무관한 Law 2 보안 락에
+# "codex model-diversity가 단독 적발" 같은 서술 한 줄만 있어도 조용히 들어온다
+# (컨트롤러 재현: test_agent_tools_lock.sh를 이 목록에 추가 → 메타 테스트
+# rc 1→0. R7이 닫은 36-vs-7 구멍이 entry 하나씩 다시 열릴 수 있다는 뜻이다).
+# 이유는 "무엇이 여전히 정당한가"만 재고 "집합이 몰래 자랐는가"는 아무도 안
+# 쟀기 때문 — **크기**를 리터럴로 핀해서 막는다.
+#
+# 이 핀은 existing_run 바닥(L1, 아래)도 공유한다: existing_run의 기대값은
+# "전체 후보 수 − 이 핀"으로 도출되므로, 제외 목록이 몰래 자라거나 줄면(핀은
+# 그대로 두고) 두 검사 모두 같이 RED가 된다 — 완전히 독립은 아니다: 목록을
+# 정말로 늘리면서 이 핀도 같은 커밋에서 의식적으로 고치면 둘 다 조용히
+# 통과한다. 그 "의식적 갱신 강제"가 정확히 래칫이 원하는 동작이다.
+EXCLUDED_TESTS_PIN=7   # CODEX_TOUCHING_TESTS 6개 + self(이 파일) 1개 — 2026-08-10 확정치
+
 SELF="$(basename "${BASH_SOURCE[0]}")"
 is_excluded() {   # $1 = 테스트 파일 경로
   local b; b="$(basename "$1")"
@@ -120,11 +138,17 @@ for b in $CODEX_TOUCHING_TESTS; do
   [ -f "$f" ] || continue
   grep -qil 'codex' "$f" || unjustified="$unjustified $b"
 done
-if [[ -z "${unjustified// /}" ]]; then
-  echo "  PASS: 제외 목록 항목이 전부 여전히 codex를 언급한다 (커버리지 래칫)"
+# L2: 개별 정당성(위)만으로는 목록이 "몰래 늘어나는" 것을 못 잡는다 — 크기를
+# 위에서 핀한 EXCLUDED_TESTS_PIN과 비교한다(단어 수 + self 1).
+excluded_word_count=$(wc -w <<< "$CODEX_TOUCHING_TESTS")
+excluded_actual_count=$((excluded_word_count + 1))
+if [[ -z "${unjustified// /}" && "$excluded_actual_count" -eq "$EXCLUDED_TESTS_PIN" ]]; then
+  echo "  PASS: 제외 목록 항목이 전부 여전히 codex를 언급한다 + 크기(${excluded_actual_count})가 핀과 일치한다 (커버리지 래칫)"
   pass=$((pass + 1))
 else
-  echo "  FAIL: 더 이상 제외될 이유가 없는 항목 →$unjustified (목록에서 제거할 것)"
+  [[ -n "${unjustified// /}" ]] && echo "  FAIL: 더 이상 제외될 이유가 없는 항목 →$unjustified (목록에서 제거할 것)"
+  [[ "$excluded_actual_count" -ne "$EXCLUDED_TESTS_PIN" ]] && \
+    echo "  FAIL: 제외 목록 크기가 ${excluded_actual_count}개 — 핀(${EXCLUDED_TESTS_PIN})과 어긋난다. CODEX_TOUCHING_TESTS를 의식적으로 바꿨다면 이 커밋에서 EXCLUDED_TESTS_PIN도 같이 갱신할 것 (L2)"
   fail=$((fail + 1))
 fi
 
@@ -137,9 +161,25 @@ fi
 # 편집하는 quality-pipeline/SKILL.md의 grep 카운트를 담아, 그 파일을 고칠
 # 때마다 원시 해시가 stale이 된다. 어떤 assert가 실패하는지(문구)는 남으므로
 # 같은 파일이 **다른 이유로** 실패하기 시작하면 해시가 바뀐다.
+# L3 (라운드 1 리뷰): 빈 문자열의 sha256 — grep이 FAIL/✗ 줄을 하나도 못 찾으면
+# 지문이 여기로 무너진다. 이 값과 일치하는 지문은 절대 유효한 원장 값으로
+# 받아들이지 않는다(아래) — 서로 다른 실패 이유가 전부 이 값 하나로 뭉개지면
+# ":138-139"의 계약("같은 파일이 다른 이유로 실패하면 해시가 바뀐다")이 이
+# absorbing state 안에서는 거짓이 되기 때문이다.
+EMPTY_DIGEST_SHA256='e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
 LEDGER="$SCRIPT_DIR/codex-blessed-red.txt"
 fingerprint() {   # $1 = 테스트 경로 → 정규화된 실패 지문
-  { bash "$1" 2>&1 || true; } \
+  # L3: 아래 실행 루프(:166-167 부근)는 확장자로 python3/bash를 가르는데 이
+  # 함수는 늘 bash로 돌렸다 — .py 테스트를 bash로 실행하면 대개 FAIL/✗ 패턴을
+  # 하나도 못 내(python 문법 에러는 다른 형태로 stderr에 남는다) 빈 입력이
+  # EMPTY_DIGEST_SHA256로 뭉개진다(실측: test_qg_gc.py). 이 디렉터리의 105개
+  # 중 17개가 .py다. 루프와 같은 디스패치로 맞춘다.
+  local runner
+  case "$1" in
+    *.py) runner="python3" ;;
+    *)    runner="bash" ;;
+  esac
+  { "$runner" "$1" 2>&1 || true; } \
     | grep -E 'FAIL|✗' \
     | sed -e "s|$PLUGIN_ROOT|<REPO>|g" \
           -e 's|/[Vv]ar/folders/[^ ]*|<TMP>|g' \
@@ -176,17 +216,43 @@ for t in "$PLUGIN_ROOT"/tests/test_*.sh "$PLUGIN_ROOT"/tests/test_*.py; do
     else
       actual="$(fingerprint "$t")"
       seen_in_ledger="$seen_in_ledger $b"
-      [[ "$actual" == "$listed" ]] || unexpected="$unexpected $b(해시불일치:$actual)"
+      # L3: 빈-지문은 유효한 원장 값으로 절대 받아들이지 않는다 — actual이
+      # EMPTY_DIGEST_SHA256이면 listed와 우연히 같더라도(오늘은 아니다) 매치로
+      # 치지 않는다. dispatch가 다시 고장 나 모든 .py가 이 값으로 뭉개져도
+      # "일치"라고 조용히 통과하는 사고를 막는다.
+      if [[ "$actual" == "$EMPTY_DIGEST_SHA256" ]]; then
+        unexpected="$unexpected $b(빈지문:FAIL/✗ 줄을 하나도 못 찾음 — fingerprint dispatch 확인)"
+      elif [[ "$actual" != "$listed" ]]; then
+        unexpected="$unexpected $b(해시불일치:$actual)"
+      fi
     fi
   fi
 done
 
-if [[ -z "${unexpected// /}" && -z "${stale_ledger// /}" ]]; then
+# L1 (라운드 1 리뷰): existing_run은 지금까지 초기화·증가·출력만 됐지 assert된
+# 적이 없었다 — PLUGIN_ROOT 도출이 깨지거나 glob이 변형돼 이 루프가 0개를 돌아도
+# unexpected/stale_ledger가 둘 다 빈 문자열이라 곧장 PASS("0개 중 예상 밖 실패
+# 0")가 나가고 exit 0이었다. 이 파일의 헤드라인 산출물(98개, 회귀 0)이 나쁜
+# 날엔 텅 빈 채로 통과했다는 뜻이다.
+#
+# 매직넘버 대신, 위 for 루프가 쓴 것과 **다른 방식**(find)으로 후보 총수를 독립
+# 재도출해 기대값을 derive한다 — 같은 glob 문자열을 복붙하면 그 glob 자체가
+# 변형될 때("the glob shifts") 두 값이 같이 변해 드리프트를 못 잡는다. 제외
+# 개수는 위에서 핀한 EXCLUDED_TESTS_PIN을 그대로 쓴다(L2와 공유 — 제외 목록이
+# 몰래 자라거나 줄면 여기도 같이 반응한다).
+total_candidates="$(find "$PLUGIN_ROOT/tests" -maxdepth 1 \( -name 'test_*.sh' -o -name 'test_*.py' \) | wc -l | tr -d ' ')"
+expected_existing_run=$((total_candidates - EXCLUDED_TESTS_PIN))
+run_floor_ok=1
+[[ "$existing_run" -eq "$expected_existing_run" && "$existing_run" -gt 0 ]] || run_floor_ok=0
+
+if [[ -z "${unexpected// /}" && -z "${stale_ledger// /}" && "$run_floor_ok" -eq 1 ]]; then
   echo "  PASS: ${existing_run}개 중 예상 밖 실패 0 · stale 등재 0 (등재된 red:${seen_in_ledger:- 없음})"
   pass=$((pass + 1))
 else
   [[ -n "${unexpected// /}" ]] && echo "  FAIL: 예상 밖 실패 →$unexpected"
   [[ -n "${stale_ledger// /}" ]] && echo "  FAIL: stale 등재 (GREEN인데 원장에 있다) →$stale_ledger"
+  [[ "$run_floor_ok" -eq 0 ]] && \
+    echo "  FAIL: existing_run=${existing_run}, 기대값=${expected_existing_run}(find 도출 후보 ${total_candidates} − 핀 ${EXCLUDED_TESTS_PIN}) — PLUGIN_ROOT 도출이 깨졌거나 glob이 변형됐다 (L1)"
   fail=$((fail + 1))
 fi
 
