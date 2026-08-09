@@ -127,7 +127,9 @@ fi
 #   -s read-only     : Layer 3 sandbox (file-system writes blocked)
 #   -C "$PROJECT_DIR": working directory pin (single pipeline coordinate)
 #   --json           : JSONL stream output
-#   < /dev/null      : detach stdin (prevents stdin deadlock on some codex versions)
+#   -                : 프롬프트를 stdin으로 받는다 (argv 경유는 ARG_MAX 절벽)
+#   < "$PROMPT_FILE" : 그 stdin. `< /dev/null`을 남기면 교착이 아니라
+#                      "No prompt provided via stdin." + exit 1이 된다.
 #
 # 추론 강도(`model_reasoning_effort`)는 핀하지 않는다 — 사용자 codex 설정이 지배한다.
 # 하니스가 "medium"을 박으면 high/xhigh로 설정한 사용자가 조용히 하향되고, 그 하향은
@@ -139,11 +141,11 @@ fi
 # Bash tool timeout, DEVBREW_DISABLE_QG_CODEX=1, /cancel-qg). Layer 3 sandbox
 # (-s read-only) preserved. `|| EXIT_CODE=$?` keeps capture safe under set -e.
 EXIT_CODE=0
-codex exec "$(cat "$PROMPT_FILE")" \
+codex exec - \
     -C "$PROJECT_DIR" \
     -s read-only \
     --json \
-    < /dev/null \
+    < "$PROMPT_FILE" \
     > "$STDOUT_FILE" \
     2>"$STDERR_FILE" || EXIT_CODE=$?
 

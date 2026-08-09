@@ -14,7 +14,6 @@ trap 'rm -rf "$OUT_DIR"' EXIT
 
 [[ -f "$PROMPT_FILE" ]] || { echo "Missing $PROMPT_FILE" >&2; exit 1; }
 
-PROMPT="$(cat "$PROMPT_FILE")"
 TIMEOUT_CMD="$(command -v gtimeout || command -v timeout)"
 [[ -n "$TIMEOUT_CMD" ]] || { echo "Need gtimeout or timeout" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "Need python3 for JSONL parsing" >&2; exit 1; }
@@ -30,11 +29,11 @@ for i in 1 2 3; do
   # 추론 강도는 핀하지 않는다 — 사용자 codex 설정이 지배한다(S1). 재현성 근거로
   # 핀을 유지할 수 없다: 이 spike가 굽는 fixture는 이미 thread_id·토큰 수가 매번
   # 다르므로 강도를 고정해도 재현되지 않는다. 보안 플래그는 그대로 둔다.
-  "$TIMEOUT_CMD" 600 codex exec "$PROMPT" \
+  "$TIMEOUT_CMD" 600 codex exec - \
     -C "$REPO_ROOT" \
     -s read-only \
     --json \
-    < /dev/null > "$STDOUT_FILE" 2>"$STDERR_FILE"
+    < "$PROMPT_FILE" > "$STDOUT_FILE" 2>"$STDERR_FILE"
 
   echo "  exit: $?"
   echo "  stdout lines: $(wc -l < "$STDOUT_FILE")"

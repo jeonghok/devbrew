@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # run_artifact_codex_reviewer.sh — independent codex artifact-review subprocess.
-# Mirrors run_codex_reviewer.sh: build prompt (file-path only) -> codex exec
-# -s read-only --json < /dev/null -> extract fenced findings YAML. Any failure
+# Mirrors run_codex_reviewer.sh: build prompt (file-path only) -> codex exec -
+# -s read-only --json < "$PROMPT" (stdin) -> extract fenced findings YAML. Any failure
 # writes a `codex_failed: true` degrade meta to OUT (graceful, C7). No writes to
 # the working tree (Layer-3 read-only sandbox).
 #
@@ -36,11 +36,11 @@ fi
 # high/xhigh 사용자가 조용히 하향되고, 그 하향이 별-모델 적발력을 정확히 깎는다.
 # 샌드박스(-s read-only)·작업디렉토리 핀(-C)·파싱 계약(--json)은 load-bearing이라 유지.
 EXIT_CODE=0
-codex exec "$(cat "$PROMPT")" \
+codex exec - \
     -C "$PROJECT_DIR" \
     -s read-only \
     --json \
-    < /dev/null \
+    < "$PROMPT" \
     > "$JSONL" \
     2>"$ERR" || EXIT_CODE=$?
 

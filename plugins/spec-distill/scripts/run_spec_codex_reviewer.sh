@@ -91,16 +91,16 @@ fi
 
 # Canonical codex invocation (load-bearing flags preserved):
 #   -s read-only  : Layer 3 sandbox (writes blocked)   | --json : JSONL stream
-#   -C            : working-dir pin                     | </dev/null : stdin detach
+#   -C            : working-dir pin | - + < "$PROMPT_FILE" : 프롬프트를 stdin으로
 # 추론 강도는 핀하지 않는다 — 사용자 codex 설정이 지배한다. 하니스가 medium을 박으면
 # high/xhigh 사용자가 조용히 하향되고, 그 하향이 이 co-reviewer의 존재 이유(별-모델
 # 적발력)를 정확히 깎는다.
 EXIT_CODE=0
-codex exec "$(cat "$PROMPT_FILE")" \
+codex exec - \
     -C "$PROJECT_DIR" \
     -s read-only \
     --json \
-    < /dev/null \
+    < "$PROMPT_FILE" \
     > "$STDOUT_FILE" \
     2>"$STDERR_FILE" || EXIT_CODE=$?
 

@@ -99,12 +99,12 @@ if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
 fi
 
 EXIT_CODE=0
-codex exec "$(cat "$PROMPT_FILE")" \
+codex exec - \
     -C "$PROJECT_DIR" \
     -s read-only \
     "${WEB_ARGS[@]}" \
     --json \
-    < /dev/null \
+    < "$PROMPT_FILE" \
     > "$STDOUT_FILE" \
     2>"$STDERR_FILE" || EXIT_CODE=$?
 
