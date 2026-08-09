@@ -131,8 +131,21 @@ while IFS= read -r cand; do
   # 이미 리터럴을 요구하지만, 호출자가 값을 넘길 수 있는 형태인지도 본다.
   # 파일 전체가 아니라 실제 호출 논리줄(codex_invoke_line)에서만 본다 —
   # 이유는 위 함수 정의 옆 주석 참고.
+  #
+  # 세 갈래로 나눈다 — **indeterminate ≠ clean**. `codex_invoke_line`이 빈
+  # 문자열을 내면(향후 후보가 backslash 연속줄이 아닌 형태 — heredoc, 배열
+  # 경유 인자, 함수 래핑 — 로 codex를 부르게 되면 실제로 일어난다) 아래
+  # grep은 매치 없이 비-0을 내고, 두 갈래짜리 if였다면 그게 조용히 else(=
+  # "리터럴, 안전")로 떨어졌다 — "못 봤다"가 "안전하다"로 흡수되는 것. 이
+  # 정적 검사는 인자화 위협의 **유일한 방어선**이다: 위 argv 관측은 이걸 못
+  # 잡는다 — `-s "${QG_SANDBOX:-read-only}"`처럼 기본값 있는 변수는
+  # `QG_SANDBOX`가 unset인 테스트 환경에서 실제 argv가 `-s read-only`로
+  # resolve돼 리터럴과 구별 안 간다. 그러니 이 한 줄이 조용히 매치 실패하면
+  # 백스톱이 없다.
   inv_line="$(codex_invoke_line "$cand")"
-  if printf '%s\n' "$inv_line" | grep -nE '(-s|--sandbox)[[:space:]]+"?\$' >/dev/null 2>&1; then
+  if [ -z "$inv_line" ]; then
+    no "$name: codex_invoke_line이 호출 논리줄을 찾지 못했다 — 인자화 여부를 판정할 수 없다 (indeterminate, clean 아님)"
+  elif printf '%s\n' "$inv_line" | grep -nE '(-s|--sandbox)[[:space:]]+"?\$' >/dev/null 2>&1; then
     no "$name: 샌드박스 값이 변수다 — 호출자가 완화할 수 있다"
   else
     ok "$name: 샌드박스 값이 리터럴 (호출자 인자화 불가)"
