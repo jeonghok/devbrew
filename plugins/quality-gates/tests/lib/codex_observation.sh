@@ -30,14 +30,29 @@ codex_candidates() {
 
 # ── (2) 관측 환경 ────────────────────────────────────────────────────────────
 # $1 = scratch 디렉토리. OBS_SENTINEL / OBS_MOCKBIN을 세팅한다.
+#
+# **fail-closed (Important 3, test_web_kill_switch.sh Fix round 2).** cp/chmod가
+# 실패해도 예전엔 조용히 진행했다 — OBS_MOCKBIN이 codex 없는 디렉토리를 가리키면
+# `PATH="$OBS_MOCKBIN:$PATH"`의 탐색이 그 디렉토리를 그냥 지나쳐 이 머신에 실재하는
+# real codex(예: /opt/homebrew/bin/codex)로 조용히 폴백한다 — 관측이 아니라 실제
+# 과금 호출이 나간다. 호출자(4개 소비자)가 obs_setup의 반환값을 확인하지 않을 수도
+# 있으므로, 여기서 loud하게 return 1하는 것과 **별개로** obs_invoke() 자신도 실행
+# 직전에 한 번 더 확인한다(아래) — 방어선을 실행 지점에 둔다.
 obs_setup() {
   OBS_SCRATCH="$1"
   mkdir -p "$OBS_SCRATCH/bin"
-  cp "$OBS_REPO/plugins/quality-gates/tests/mocks/capture-codex/codex" "$OBS_SCRATCH/bin/codex"
+  cp "$OBS_REPO/plugins/quality-gates/tests/mocks/capture-codex/codex" "$OBS_SCRATCH/bin/codex" || {
+    echo "obs_setup: mock codex 복사 실패 — 계속하면 PATH가 real codex로 조용히 폴백한다" >&2
+    return 1
+  }
   chmod +x "$OBS_SCRATCH/bin/codex"
   # timeout/gtimeout이 없으면 detect가 timeout_binary_missing으로 막고 spike는 죽는다.
   cp "$OBS_REPO/plugins/quality-gates/tests/mocks/bin-stubs/"* "$OBS_SCRATCH/bin/" 2>/dev/null || true
   OBS_MOCKBIN="$OBS_SCRATCH/bin"
+  [ -x "$OBS_MOCKBIN/codex" ] || {
+    echo "obs_setup: mock codex가 최종적으로 실행 가능한 상태가 아니다($OBS_MOCKBIN/codex) — real codex 폴백 위험" >&2
+    return 1
+  }
   # sentinel은 **입력 파일**에 심는다. 빌더가 그것을 프롬프트에 치환하므로,
   # sentinel이 stdin에 있으면 프롬프트가 stdin으로 갔다는 뜻이고 argv에 있으면
   # argv로 샜다는 뜻이다. 프롬프트 전문 대조보다 강하다 — `$(cat f)`가 후행 개행을
@@ -50,6 +65,13 @@ obs_setup() {
 # 방향이 반대다 — 잊으면 조용히 skip되는 게 아니라 검사가 깨진다.
 obs_invoke() {
   local cand="$1" capture="$2"
+  # obs_setup이 loud하게 실패해도(위) 호출자가 그 반환값을 확인하지 않을 수 있다.
+  # 여기서 실행 직전에 한 번 더 막는다 — 이 확인이 없으면 mock이 없는 PATH가
+  # 조용히 real codex로 폴백해 실제 과금 호출이 나간다(Important 3, Fix round 2).
+  if [ ! -x "${OBS_MOCKBIN:-}/codex" ]; then
+    echo "obs_invoke: mock codex가 없다(OBS_MOCKBIN=${OBS_MOCKBIN:-<unset>}) — real codex 폴백을 막기 위해 호출을 거부한다" >&2
+    return 96
+  fi
   local base; base="$(basename "$cand")"
   local work; work="$(mktemp -d "$OBS_SCRATCH/work-XXXXXX")"
   local input="$work/input.md" out="$work/out.yaml"

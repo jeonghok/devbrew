@@ -130,16 +130,65 @@ else
 
   # 코퍼스: codex_observation.sh의 codex_candidates() — plugins/ 전체를 비주석
   # 실행줄 기준으로 스캔한다(AC11과 동일 앵커, DRY — 이 파일이 따로 glob을 들고
-  # 있지 않는다). vacuity 바닥: 형제 test_codex_invocation_contract.sh:53-59와
-  # 같은 형태 — 빈 집합이면 FAIL하고 아래 판정은 건너뛴다(Important 3 — 이
-  # 바닥이 없던 예전 버전은 코퍼스 glob이 깨지자 21/21 거짓 GREEN을 냈다).
+  # 있지 않는다).
+  #
+  # floor는 단순 개수(`-lt 1`)가 아니라 **AC21 표 자체에서 도출한 부분집합
+  # 검사**다(Suggestion, Fix round 2). 개수 문턱만으로는 변수 간접 호출
+  # (`CODEX_BIN=codex; "$CODEX_BIN" exec`)처럼 codex_candidates()의 정규식이
+  # 못 잡는 새 호출부가 생겨 6→5로 줄어도 여전히 통과한다(재현: 실제로 GREEN
+  # 이었다) — 이름 단위 부재만 그것을 잡는다. `known_posture_names()`는
+  # `expected_posture()` 자신에서 라벨을 뽑는다(둘째 목록을 안 만든다 —
+  # obs_known_candidates()와 같은 원리).
+  # `declare -f`는 `case` 본문을 **라벨 줄과 body 줄을 분리해** 재포맷한다
+  # (label 다음 줄이 `echo on/off`, 그다음 `;;`) — 한 줄 `label) echo X ;;`가
+  # 아니다. obs_known_candidates()(:117-165, codex_observation.sh)와 같은
+  # awk 스캔으로 라벨만 뽑는다(실측 확인, sed 한 줄로는 매치가 하나도 안 됨).
+  known_posture_names() {
+    local src label_lines label
+    src="$(declare -f expected_posture)"
+    label_lines="$(printf '%s\n' "$src" | awk '
+      /case "\$1" in/ { incase=1; expect=1; next }
+      incase && /^[[:space:]]*esac/ { incase=0; next }
+      incase && expect { print; expect=0; next }
+      incase && /^[[:space:]]*;;[[:space:]]*$/ { expect=1 }
+    ')"
+    while IFS= read -r label; do
+      [ -n "$label" ] || continue
+      label="$(printf '%s' "$label" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/\)$//')"
+      [ "$label" = "*" ] && continue
+      printf '%s\n' "$label" | tr '|' '\n'
+    done <<EOF_LBL
+$label_lines
+EOF_LBL
+  }
+
   candidates="$(codex_candidates)"
   n_cand=0
   [ -n "$candidates" ] && n_cand="$(printf '%s\n' "$candidates" | wc -l | tr -d ' ')"
-  if [ "$n_cand" -lt 1 ]; then
+  known_names="$(known_posture_names)"
+  n_known=0
+  [ -n "$known_names" ] && n_known="$(printf '%s\n' "$known_names" | wc -l | tr -d ' ')"
+
+  if [ "$n_known" -lt 1 ]; then
+    note FAIL "expected_posture 표에서 이름을 하나도 추출하지 못했다 — 추출기가 표 문법과 어긋났다(아래 AC21 판정은 건너뛴다)"
+  elif [ "$n_cand" -lt 1 ]; then
     note FAIL "도출: codex 호출부를 하나도 못 찾았다 — 도출 기준이 깨졌다(아래 AC21 실행-관측 판정은 건너뛴다)"
   else
     note PASS "도출: codex 호출부 ${n_cand}곳 (실행 관측 대상, AC21)"
+
+    scanned_names="$(printf '%s\n' "$candidates" | xargs -n1 basename 2>/dev/null | sort -u)"
+    missing=0
+    while IFS= read -r k; do
+      [ -n "$k" ] || continue
+      if ! printf '%s\n' "$scanned_names" | grep -qxF "$k"; then
+        missing=$((missing + 1))
+        note FAIL "AC21 표의 '$k'가 codex_candidates() 스캔 결과에 없다 — 코퍼스 도출이 놓쳤다(변수 간접 호출 등)"
+      fi
+    done <<EOF_KNOWN
+$known_names
+EOF_KNOWN
+    [ "$missing" -eq 0 ] && note PASS "AC21 표의 알려진 호출부 ${n_known}곳이 스캔 결과에서 전부 발견됨"
+
     while IFS= read -r f; do
       [ -n "$f" ] || continue
       bn="$(basename "$f")"
@@ -152,14 +201,23 @@ else
       cap_normal="$SCRATCH/ac21-normal-$bn"
       mkdir -p "$cap_normal"
       if ! obs_invoke "$f" "$cap_normal"; then
-        note FAIL "$bn: 후보인데 실행할 방법이 없다 (obs_invoke 인자 표에 부재)"
+        note FAIL "$bn: 후보인데 실행할 방법이 없다 (obs_invoke 인자 표에 부재이거나 mock 준비 실패)"
         continue
       fi
-      if [[ "$(obs_call_count "$cap_normal")" -lt 1 ]]; then
+      n_calls="$(obs_call_count "$cap_normal")"
+      if [[ "$n_calls" -lt 1 ]]; then
         note FAIL "$bn: 실행했으나 codex 호출이 관측되지 않았다 (calls=0) — 값 판정을 건너뛴다"
         continue
       fi
-      check_posture "$cap_normal/call-0" "$bn (평시)" "$exp"
+      # 관측된 **모든** 호출을 잰다(call-0만이 아니다) — 코퍼스 안에 이미
+      # 다중-호출 사이트가 있다(spike가 for i in 1 2 3로 3회 호출). 두 번째
+      # 호출에서 값이 갈라져도(예: 1번은 off로 위장, 2번은 실제 on) call-0만
+      # 보면 못 잡는다(Important 1, Fix round 2). bash 3.2는 nullglob이 없어
+      # `[ -d "$d" ] || continue`로 가드한다(codex_observation.sh:182와 동형).
+      for d in "$cap_normal"/call-*; do
+        [ -d "$d" ] || continue
+        check_posture "$d" "$bn (평시, $(basename "$d"))" "$exp"
+      done
 
       if [[ "$exp" == on ]]; then
         sw="$(kill_switch_for "$bn")"
@@ -167,18 +225,45 @@ else
           note FAIL "$bn: ON인데 kill switch 변수를 특정할 수 없다(kill_switch_for에 등록하라)"
           continue
         fi
+
         cap_killed="$SCRATCH/ac21-killed-$bn"
         mkdir -p "$cap_killed"
         export "$sw=1"
         obs_invoke "$f" "$cap_killed" || true
         unset "$sw"
-        if [[ "$(obs_call_count "$cap_killed")" -lt 1 ]]; then
+        n_killed="$(obs_call_count "$cap_killed")"
+        if [[ "$n_killed" -lt 1 ]]; then
           note FAIL "$bn: $sw=1로 실행했으나 codex 호출이 관측되지 않았다"
         else
-          # 분기 바디가 실제로 값을 뒤집는지를 잰다 — 헤더의 존재가 아니라
-          # effect다(Critical 1). 분기가 no-op이면(스위치가 아무 일도 안 하면)
-          # 여기서 tools.web_search=true / web_search="live"가 그대로 관측된다.
-          check_posture "$cap_killed/call-0" "$bn ($sw=1)" "off"
+          for d in "$cap_killed"/call-*; do
+            [ -d "$d" ] || continue
+            # 분기 바디가 실제로 값을 뒤집는지를 잰다 — 헤더의 존재가 아니라
+            # effect다(Critical 1, Fix round 1). 분기가 no-op이면 여기서
+            # tools.web_search=true / web_search="live"가 그대로 관측된다.
+            check_posture "$d" "$bn ($sw=1, $(basename "$d"))" "off"
+          done
+        fi
+
+        # 엄격성 계약(Important 2, Fix round 2): `:15`·설계 §6 S3d — 정확히
+        # 문자열 "1"만 참, 그 밖은 전부 웹이 켜진 채로 남아야 한다. `yes`는
+        # truthy해 보이지만 리터럴 "1"이 아니다 — 러너의 술어가
+        # `[[ -n "${SW:-}" ]]`처럼 느슨해지면(리터럴 "1" 비교가 아니게 되면)
+        # 이 실행에서 값이 off로 뒤집혀 잡힌다. `DEVBREW_SPEC_DISTILL_DISABLE_WEB=false`
+        # 처럼 "끄지 마라"는 의도로 값을 채운 사용자가 조용히 웹을 잃는 사고를
+        # 겨냥한다.
+        cap_strict="$SCRATCH/ac21-strict-$bn"
+        mkdir -p "$cap_strict"
+        export "$sw=yes"
+        obs_invoke "$f" "$cap_strict" || true
+        unset "$sw"
+        n_strict="$(obs_call_count "$cap_strict")"
+        if [[ "$n_strict" -lt 1 ]]; then
+          note FAIL "$bn: $sw=yes로 실행했으나 codex 호출이 관측되지 않았다"
+        else
+          for d in "$cap_strict"/call-*; do
+            [ -d "$d" ] || continue
+            check_posture "$d" "$bn ($sw=yes, 엄격성 계약)" "on"
+          done
         fi
       fi
     done <<EOF_CAND
