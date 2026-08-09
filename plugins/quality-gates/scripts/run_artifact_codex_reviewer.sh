@@ -111,8 +111,9 @@ if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/extract_codex_artifact_yaml.py" \
     --meta-override-exit-code "$EXIT_CODE" \
     --meta-override-reason "$REASON" \
     < "$JSONL" > "$OUT" || [ ! -s "$OUT" ]; then
-  # F-D: the terminal extract was the one step not guarded like the prompt build
-  # (line 30). extract_codex_artifact_yaml.py normally exits 0 with either findings
+  # F-D: the terminal extract was the one step not guarded like the
+  # `build_artifact_codex_prompt.py` prompt build above.
+  # extract_codex_artifact_yaml.py normally exits 0 with either findings
   # or `codex_failed: true`, but an UNHANDLED crash (python3 unavailable, plugin-root
   # issue) truncates OUT to empty via `> "$OUT"`, which the SKILL would read as
   # codex-succeeded-with-no-findings -> a silently dropped reviewer (no C7 degrade,
