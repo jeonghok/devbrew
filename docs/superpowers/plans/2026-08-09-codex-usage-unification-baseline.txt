@@ -21,3 +21,15 @@ OK (skipped=1)
 Ran 189 tests in 9.526s
 
 OK
+
+# ── 최종 (3단계 종료) ────────────────────────────────────────────────
+# 측정: d8b2277 / 2026-08-10
+RED plugins/quality-gates/tests/test_consent_marker_write_failure.sh
+RED plugins/quality-gates/tests/test_security_reviewer_kill_switch.sh
+TOTAL 139
+RED 2
+
+# python
+Ran 202 tests in 13.758s
+
+OK (skipped=1)
