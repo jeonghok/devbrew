@@ -106,12 +106,66 @@ obs_invoke() {
 # 둘이 갈라지는 순간 커버리지 검사 자체가 무의미해진다(devbrew 열거 금지 제약).
 # 그래서 나열하지 않고 `declare -f`로 obs_invoke의 소스를 되읽어 case 라벨을
 # 뽑는다 — 표가 바뀌면(러너 추가·개명) 이 함수도 같은 커밋 안에서 자동으로
-# 따라간다. `*)`(fail-closed 캐치올)는 패턴이 `[A-Za-z0-9_.]+\)`라 애초에
-# 매치되지 않는다 — 별도 제외 처리가 필요 없다.
+# 따라간다.
+#
+# **핵심 불변식: 이 함수는 조용히 덜 걷을 수 없다.** 라벨 한 줄이 구체 파일명
+# 으로 분해 안 되면(compound `a|b)`는 분해해서 지원하지만, glob·따옴표·변수
+# 경유·기타 미상 형태는 분해 불가) 더 적은 집합을 반환하는 대신 비-0으로
+# 실패한다 — 호출자가 그 실패를 명시적으로 RED로 만들어야 한다(아래
+# test_codex_invocation_contract.sh 참고). 라벨 추출 자체는 나열이 아니라
+# case 문법의 구조적 불변식에 의존한다: `case ... in` 직후 첫 줄과 각 `;;`
+# 종료 다음 첫 줄은 문법상 항상 다음 arm의 패턴이다(바디가 거기 올 수 없다).
+# `esac`가 뒤에 명령이 더 있으면 `esac;`로 세미콜론이 붙어 나오는 것도 흡수한다.
 obs_known_candidates() {
-  declare -f obs_invoke | grep -E '^[[:space:]]*[A-Za-z0-9_.]+\)[[:space:]]*$' \
-    | sed -E 's/^[[:space:]]*//; s/\)[[:space:]]*$//' \
-    | sort -u
+  local src label_lines label alt names="" bad=0
+
+  src="$(declare -f obs_invoke)"
+
+  label_lines="$(printf '%s\n' "$src" | awk '
+    /case "\$base" in/ { incase=1; expect=1; next }
+    incase && /^[[:space:]]*esac;?[[:space:]]*$/ { incase=0; next }
+    incase && expect { print; expect=0; next }
+    incase && /^[[:space:]]*;;[[:space:]]*$/ { expect=1 }
+  ')"
+
+  if [ -z "$label_lines" ]; then
+    echo "obs_known_candidates: case 표에서 라벨 줄을 하나도 못 찾았다 — 추출기가 case 문법과 어긋났다" >&2
+    return 91
+  fi
+
+  while IFS= read -r label; do
+    [ -n "$label" ] || continue
+    label="$(printf '%s' "$label" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/\)$//')"
+
+    # `*` — 의도된 fail-closed 캐치올(obs_invoke의 표에 없는 후보를 막는 방향).
+    # 정규식이 우연히 못 맞혀서 빠지는 게 아니라, 여기서 이름으로 콕 집어 제외한다.
+    [ "$label" = "*" ] && continue
+
+    # compound 라벨(`a.sh|b.sh)`)은 지원한다 — `|`로 나눠 각 alternative를
+    # 구체 파일명 문자셋([A-Za-z0-9_.-])인지 검사한다. 하나라도 그 문자셋을
+    # 벗어나면(글롭 메타문자·따옴표·`$`변수·공백 등) 이 라벨 전체를 미상 형태로
+    # 보고 시끄럽게 실패한다 — 그 alternative만 조용히 빼고 나머지로 계속하지 않는다.
+    while IFS= read -r alt; do
+      alt="$(printf '%s' "$alt" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+      case "$alt" in
+        ''|*[!A-Za-z0-9_.-]*)
+          echo "obs_known_candidates: 라벨 '$alt'를 구체 파일명으로 분해할 수 없다(글롭·따옴표·변수 경유·기타 미상 형태) — 원본 라벨: '$label'" >&2
+          bad=1
+          ;;
+        *)
+          names="$names
+$alt"
+          ;;
+      esac
+    done <<EOF_ALT
+$(printf '%s' "$label" | tr '|' '\n')
+EOF_ALT
+  done <<EOF_LABELS
+$label_lines
+EOF_LABELS
+
+  [ "$bad" -eq 0 ] || return 92
+  printf '%s\n' "$names" | grep -v '^$' | sort -u
 }
 
 # ── (3) 캡처 판독 ────────────────────────────────────────────────────────────

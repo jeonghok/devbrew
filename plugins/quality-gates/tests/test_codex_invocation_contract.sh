@@ -29,40 +29,59 @@ n_cand=0
 # obs_invoke의 case 표 — "무엇이 후보로 존재해야 하는가"의 유일한 권한 있는
 # 목록. 여기서 다시 나열하지 않고 obs_known_candidates()로 그 표에서 도출한다
 # (devbrew 열거 금지 제약 — 목록이 둘이면 갈라지는 순간 이 검사가 무의미해진다).
-known="$(obs_known_candidates)"
+# obs_known_candidates()는 라벨을 구체 파일명으로 분해 못 하면(compound는 지원
+# 하지만 glob·따옴표·변수 경유 등은 아니다) **더 적은 집합을 조용히 내는 대신
+# 비-0으로 실패한다** — 종료 코드를 여기서 직접 재서 그 실패를 명시적으로
+# RED로 만든다. `known=""`만 보면 "파싱 실패로 0개"와 "정상인데 0개"가 구별
+# 되지 않는다 — 정확히 이 태스크가 막으려는 vacuity이므로 문자열이 아니라
+# 종료 코드로 판정한다.
+known="$(obs_known_candidates)"; known_rc=$?
 n_known=0
-[ -n "$known" ] && n_known="$(printf '%s\n' "$known" | wc -l | tr -d ' ')"
+if [ "$known_rc" -ne 0 ]; then
+  no "obs_known_candidates 파싱 실패(exit=${known_rc}) — case 표에 구체 파일명으로 분해 못 한 라벨이 있다. 아래 커버리지 판정은 건너뛴다"
+  known=""
+else
+  [ -n "$known" ] && n_known="$(printf '%s\n' "$known" | wc -l | tr -d ' ')"
+fi
 
 # positive: 스캔이 실제로 코퍼스를 봤는가. 이것이 없으면 "위반 0"과 "아무것도 안 봄"이
 # 구별되지 않는다 (test_codex_runner_no_effort_pin.sh:50-60과 같은 형태). 문턱은
 # obs_invoke 표에서 도출한 n_known을 쓴다 — 하드코딩 상수를 표와 별도로 유지하지
-# 않는다(표가 자라면 이 문턱도 같은 커밋 안에서 자동으로 따라간다).
-if [ "$n_known" -ge 1 ] && [ "$n_cand" -ge "$n_known" ]; then
-  ok "후보 스캔 실재: codex 호출부 ${n_cand}곳 (obs_invoke 표 ${n_known}곳)"
-else
-  no "후보가 ${n_cand}곳뿐(표는 ${n_known}곳) — 계측기 붕괴. 아래 판정은 무의미하다"
+# 않는다(표가 자라면 이 문턱도 같은 커밋 안에서 자동으로 따라간다). 파싱 자체가
+# 실패했으면(known_rc != 0) 이 문턱도 건너뛴다 — 위의 파싱-실패 no 하나로 충분하고,
+# "표는 0곳"이라는 오해 소지 있는 두 번째 메시지를 안 낸다.
+if [ "$known_rc" -eq 0 ]; then
+  if [ "$n_known" -ge 1 ] && [ "$n_cand" -ge "$n_known" ]; then
+    ok "후보 스캔 실재: codex 호출부 ${n_cand}곳 (obs_invoke 표 ${n_known}곳)"
+  else
+    no "후보가 ${n_cand}곳뿐(표는 ${n_known}곳) — 계측기 붕괴. 아래 판정은 무의미하다"
+  fi
 fi
 
 # 커버리지 ratchet — 양방향의 나머지 절반. obs_invoke의 `*)` fail-closed(표에
 # 없는 이름이 스캔에 나타나면 return 90 → 호출자가 RED)는 이미 한쪽 방향을
 # 막는다. 이 루프는 반대 방향을 막는다: 표에는 있는 이름이 스캔 결과에서
 # 조용히 빠지는 것. 개수 문턱만으로는 "A가 빠지고 B가 채워져 수가 유지되는"
-# 치환을 못 잡는다 — 개수가 아니라 집합의 부분관계를 재야 한다.
+# 치환을 못 잡는다 — 개수가 아니라 집합의 부분관계를 재야 한다. known_rc가
+# 실패했으면(파싱 자체가 무너짐) 여기서 아무 판정도 안 낸다 — 빈 known으로
+# 돌리면 "missing 0건 → 전부 발견됨"이라는 거짓 ok가 나간다.
 scanned_names=""
 if [ -n "$candidates" ]; then
   scanned_names="$(printf '%s\n' "$candidates" | xargs -n1 basename 2>/dev/null | sort -u)"
 fi
-missing_known=0
-while IFS= read -r k; do
-  [ -n "$k" ] || continue
-  if ! printf '%s\n' "$scanned_names" | grep -qxF "$k"; then
-    missing_known=$((missing_known + 1))
-    no "obs_invoke 표의 '$k'가 스캔 결과에 없다 — 후보가 조용히 빠졌다(치환 포함)"
-  fi
-done <<EOF_KNOWN
+if [ "$known_rc" -eq 0 ]; then
+  missing_known=0
+  while IFS= read -r k; do
+    [ -n "$k" ] || continue
+    if ! printf '%s\n' "$scanned_names" | grep -qxF "$k"; then
+      missing_known=$((missing_known + 1))
+      no "obs_invoke 표의 '$k'가 스캔 결과에 없다 — 후보가 조용히 빠졌다(치환 포함)"
+    fi
+  done <<EOF_KNOWN
 $known
 EOF_KNOWN
-[ "$missing_known" -eq 0 ] && ok "obs_invoke 표의 알려진 후보 ${n_known}곳이 스캔 결과에서 전부 발견됨"
+  [ "$missing_known" -eq 0 ] && ok "obs_invoke 표의 알려진 후보 ${n_known}곳이 스캔 결과에서 전부 발견됨"
+fi
 
 # ── 후보마다 실행 관측 ───────────────────────────────────────────────────────
 observed_total=0
