@@ -64,15 +64,25 @@ else
   no "findings 0건을 clean으로 읽지 말라는 명시가 없다"
 fi
 
-# 배너 문구가 P11 결손을 말하는가 ('codex 없음'이 아니라) — Codex skip 안내 섹션
-# 전체 스코프(Task 12 산출물).
-if echo "$SKIP_WINDOW" | grep -q '모델 다양성'; then
-  ok "배너가 '모델 다양성 없음'을 말한다 (P11 미집행)"
+# 배너 문구가 P11 결손을 말하는가 ('codex 없음'이 아니라) — AC24의 실제 산출물은
+# RESULT_WINDOW 안의 새 배너이므로 거기에 스코프한다. SKIP_WINDOW(Task 12가 넣은
+# 기존 '미실행' 배너)로 스코프하면 이 태스크가 자기 배너 줄을 통째로 지워도
+# SKIP_WINDOW 쪽 '모델 다양성' 문구(다른 배너) 때문에 계속 통과한다 — 리뷰에서
+# 실측된 함정. AC24가 실제로 낸 배너 문구 안에서만 재야 이빨이 산다.
+if [ -n "$RESULT_WINDOW" ] && echo "$RESULT_WINDOW" | grep -q '모델 다양성'; then
+  ok "새 배너가 '모델 다양성 없음'을 말한다 (P11 미집행)"
 else
-  no "배너가 'codex 없음'에 머문다 — P11이 집행되지 않았다는 사실이 안 보인다"
+  no "새 배너가 'codex 없음'에 머물거나 아예 없다 — P11이 집행되지 않았다는 사실이 안 보인다"
 fi
 
 # 산문 게이트는 이 사이클 범위 밖이며, 그 사실이 문서에 적혀 있어야 한다.
+# 의도적으로 SKIP_WINDOW에만 스코프한다 — 파일 전체가 아니다. 이 문구
+# ('산문 게이트' / '범위 밖')는 문서 전체를 통틀어 Codex skip 안내 섹션
+# (Task 12 산출물, detect_codex.sh 자체가 아직 리터럴 bash 게이트가 아니라는
+# 고지) 안에만 존재한다 — `grep -nE '산문 게이트|범위 밖' SKILL.md`가 정확히
+# 1건을 낸다(재확인하려면 위 grep을 그대로 다시 돌려보라). RESULT_WINDOW(codex가
+# 이미 돈 *뒤*의 결과 판정)는 이 주장과 무관한 다른 관심사라 반복할 이유가 없다.
+# 이 문구가 나중에 RESULT_WINDOW 쪽으로 옮겨가면 이 grep도 같이 옮겨야 한다.
 if echo "$SKIP_WINDOW" | grep -qE '산문 게이트|범위 밖'; then
   ok "산문 게이트의 미해결 상태가 문서에 남아 있다 (조용한 갭 아님)"
 else
