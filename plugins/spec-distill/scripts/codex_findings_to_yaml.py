@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """codex_findings_to_yaml.py — Convert Codex JSONL stream to finding YAML.
 
-Vendored from quality-gates (spec-distill design §6 #4). ONLY adaptation vs qg:
-the emit keyset adds `category` and `target_section` (design-doc review vocab).
+Vendored from quality-gates (spec-distill design §6 #4). 의도된 차이는 emit keyset
+하나다 — `category`와 `target_section`(design-doc 리뷰 어휘). "ONLY adaptation"이라는
+옛 주장은 거짓이었다: 2026-07-29 CR-2 스키마 검증이 이 사본에만 들어가 2026-05-14
+이후의 qg 사본과 **판정이 갈라져 있었다**. 두 사본의 행동 동일성은
+`quality-gates/tests/test_codex_copies_agree.sh`가 잰다 — 주석이 아니라 테스트가
+그것을 보증한다.
 Three-stage fallback (fenced JSON → raw JSON → empty+reason), auth-in-stderr
 detection, and last-fenced-block anti-injection are preserved verbatim.
 
