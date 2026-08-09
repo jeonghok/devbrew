@@ -70,14 +70,44 @@ while IFS= read -r cand; do
   fi
 done < <(codex_candidates)
 
+# ── PATH 전제 검증 ────────────────────────────────────────────────────────────
+# "미설치이길 바란다"가 아니라 "그 PATH에서 codex가 실제로 무엇으로 해석되는지
+# 확인했다"여야 한다. 이 머신은 시스템에 진짜 codex가 설치돼 있다(/opt/homebrew/bin
+# 등). `PATH="$mock:$PATH"`처럼 mock을 앞에 붙이고 원래 $PATH를 뒤에 이어붙이면,
+# "미설치"를 흉내내려 mock에서 codex만 뺀 시나리오도 뒤의 진짜 $PATH로 새서 실제
+# codex를 찾는다 — 러너가 그 실제 codex를 부르고, 관측 장치(CODEX_CAPTURE_DIR)는
+# 외부 프로세스를 모르므로 캡처가 0건이다. "부재를 검출했다"와 "호출을 못 봤다"가
+# 우연히 같은 값(0)이 되어 구별 불가능해지고, 테스트가 돌 때마다 의도치 않은 실제
+# 외부 프로세스가 실행된다. 그래서 각 시나리오는 PATH를 **진짜 $PATH를 이어붙이지
+# 않고 명시적으로만** 구성하고(리포 선례: test_codex_copies_agree.sh의 probe_out()),
+# 게이트를 부르기 **전에** 그 PATH에서 `codex`가 무엇으로 해석되는지 확인한다.
+# 기대와 다르면 그 시나리오를 RED로 만들고 — 전제가 깨진 채로 실행을 강행하면
+# 어느 codex든 실제로 실행될 수 있으므로 — 게이트 자체를 부르지 않는다.
+codex_premise_ok() {   # $1=PATH 문자열, $2=기대 디렉토리("" 면 "해석되면 안 됨")
+  local test_path="$1" expect_dir="$2" resolved
+  resolved="$(PATH="$test_path" command -v codex 2>/dev/null || true)"
+  if [ -z "$expect_dir" ]; then
+    [ -z "$resolved" ]
+  else
+    case "$resolved" in "$expect_dir"/*) return 0 ;; *) return 1 ;; esac
+  fi
+}
+codex_resolved_desc() {   # 진단용 — 위와 같은 PATH에서 실제 해석 경로(또는 부재)
+  PATH="$1" command -v codex 2>/dev/null || echo "<해석 안 됨>"
+}
+
 # ── 마킹된 게이트를 4개 시나리오로 실행한다 ──────────────────────────────────
 # 블록이 요구하는 변수는 하니스가 전부 공급한다 — 어느 이름을 쓰는지는 블록 자유다.
-run_gate() {   # $1=SKILL, $2=runner basename, $3=시나리오, $4=capture, $5..=env KEY=VAL
-  local sk="$1" runner="$2" scen="$3" cap="$4"; shift 4
+run_gate() {   # $1=SKILL, $2=runner basename, $3=capture, $4=gate_path(전제 검증 통과), $5..=env KEY=VAL
+  local sk="$1" runner="$2" cap="$3" gate_path="$4"; shift 4
   local plugin_root; plugin_root="$(cd "$(dirname "$sk")/../.." && pwd)"
   local w; w="$(mktemp -d "$SCRATCH/gate-XXXXXX")"
+  # 러너 basename은 파일명 문자셋([A-Za-z0-9_.-]+)만 허용되지만(수집 단계),
+  # `.`은 awk ERE에서 임의의 한 글자다 — 이스케이프 없이 그대로 넣으면 접두부가
+  # 비슷한 러너가 나중에 추가될 때 다른 블록을 잘못 자를 수 있다.
+  local runner_re; runner_re="$(printf '%s' "$runner" | sed 's/\./\\./g')"
   # 마커 사이의 bash fence 하나를 잘라낸다.
-  awk -v r="$runner" '
+  awk -v r="$runner_re" '
     $0 ~ ("codex-gate:begin[[:space:]]+runner=" r) {ing=1; next}
     /codex-gate:end/ {ing=0}
     ing && /^```bash$/ {inb=1; next}
@@ -88,7 +118,7 @@ run_gate() {   # $1=SKILL, $2=runner basename, $3=시나리오, $4=capture, $5..
   printf '%s\n%s\n' "$OBS_SENTINEL" "관측 입력" > "$w/input.md"
   mkdir -p "$cap"
   ( cd "$ROOT"
-    env "$@" PATH="$OBS_MOCKBIN:$PATH" CODEX_CAPTURE_DIR="$cap" \
+    env "$@" PATH="$gate_path" CODEX_CAPTURE_DIR="$cap" \
         CLAUDE_PLUGIN_ROOT="$plugin_root" PR="$plugin_root" PA="$plugin_root" SD="$plugin_root" \
         AXIS_FILE="$w/input.md" PAYLOAD="$w/input.md" spec_path="$w/input.md" \
         CODEX_JSON="$w/out.json" CODEX_YAML="$w/out.yaml" CODEX_DIR_YAML="$w/out.yaml" \
@@ -96,7 +126,25 @@ run_gate() {   # $1=SKILL, $2=runner basename, $3=시나리오, $4=capture, $5..
         bash "$w/gate.sh" ) >/dev/null 2>&1 || true
   obs_call_count "$cap"
 }
+
+# 전제를 검증하고, 통과하면 게이트를 실행해 호출 수를 낸다. 실패하면 게이트를
+# **부르지 않고** 실패로 보고한다("PREMISE_FAIL:<해석된 경로>"를 emit) — 전제가
+# 깨진 채로 실행을 강행하지 않는다(안전 + 의미: 무엇을 셌는지 모르는 카운트는
+# 카운트가 아니다).
+run_scenario() {   # $1=SKILL $2=runner $3=capture $4=gate_path $5=기대디렉토리("" 이면 부재) $6..=env
+  local sk="$1" runner="$2" cap="$3" gate_path="$4" expect_dir="$5"; shift 5
+  if ! codex_premise_ok "$gate_path" "$expect_dir"; then
+    printf 'PREMISE_FAIL:%s\n' "$(codex_resolved_desc "$gate_path")"
+    return
+  fi
+  run_gate "$sk" "$runner" "$cap" "$gate_path" "$@"
+}
+
 mkdir -p "$SCRATCH/home"
+# bash/awk/sed/grep/python3/mktemp 등 게이트·러너가 쓰는 coreutils가 여기 있다
+# (리포 선례: test_codex_copies_agree.sh의 probe_out()과 동일 계열). homebrew 등
+# 사용자 설치 경로는 명시적으로 제외한다 — 그게 이 라운드가 막는 leak 경로다.
+BASE_SUFFIX="/usr/bin:/bin"
 
 for i in "${!GATED_RUNNER[@]}"; do
   r="${GATED_RUNNER[$i]}"; sk="${GATED_SKILL[$i]}"
@@ -109,28 +157,43 @@ for i in "${!GATED_RUNNER[@]}"; do
     *) no "$label: 알 수 없는 플러그인 $plugin — kill switch 변수를 특정할 수 없다"; continue ;;
   esac
 
-  n="$(run_gate "$sk" "$r" available "$SCRATCH/g-$label-avail" "IGNORE=1")"
-  [ "$n" = "1" ] && ok "$label: 가용 → codex 1회" || no "$label: 가용 → codex ${n}회 (기대 1)"
+  n="$(run_scenario "$sk" "$r" "$SCRATCH/g-$label-avail" "$OBS_MOCKBIN:$BASE_SUFFIX" "$OBS_MOCKBIN" "IGNORE=1")"
+  case "$n" in
+    1) ok "$label: 가용 → codex 1회" ;;
+    PREMISE_FAIL:*) no "$label: 가용 전제 실패 — PATH에서 codex가 mock으로 해석되지 않는다 (실제: ${n#PREMISE_FAIL:})" ;;
+    *) no "$label: 가용 → codex ${n}회 (기대 1)" ;;
+  esac
 
-  n="$(run_gate "$sk" "$r" killswitch "$SCRATCH/g-$label-kill" "$sw=1")"
-  [ "$n" = "0" ] && ok "$label: kill switch → codex 0회 (P21 집행 확인)" \
-                 || no "$label: kill switch → codex ${n}회 — 스위치가 우회된다"
+  n="$(run_scenario "$sk" "$r" "$SCRATCH/g-$label-kill" "$OBS_MOCKBIN:$BASE_SUFFIX" "$OBS_MOCKBIN" "$sw=1")"
+  case "$n" in
+    0) ok "$label: kill switch → codex 0회 (P21 집행 확인)" ;;
+    PREMISE_FAIL:*) no "$label: kill switch 전제 실패 — PATH에서 codex가 mock으로 해석되지 않는다 (실제: ${n#PREMISE_FAIL:})" ;;
+    *) no "$label: kill switch → codex ${n}회 — 스위치가 우회된다" ;;
+  esac
 
-  # 미설치: mock을 PATH에서 뺀다. OBS_MOCKBIN을 비워 detect가 not_installed를 내게 한다.
-  saved="$OBS_MOCKBIN"; OBS_MOCKBIN="$SCRATCH/empty-bin"; mkdir -p "$OBS_MOCKBIN"
-  cp "$ROOT/plugins/quality-gates/tests/mocks/bin-stubs/"* "$OBS_MOCKBIN/" 2>/dev/null || true
-  n="$(run_gate "$sk" "$r" notinstalled "$SCRATCH/g-$label-noinst" "IGNORE=1")"
-  OBS_MOCKBIN="$saved"
-  [ "$n" = "0" ] && ok "$label: 미설치 → codex 0회" || no "$label: 미설치 → codex ${n}회"
+  # 미설치: mock 디렉토리에 codex를 두지 않는다(bin-stubs의 gtimeout/timeout만).
+  # PATH는 이 디렉토리 + $BASE_SUFFIX로 **명시적으로만** 구성한다 — 진짜 $PATH를
+  # 이어붙이지 않는다. 그래야 위 전제 검증이 실제로 뭔가를 막는다는 것이 의미 있다.
+  NOTINST_BIN="$SCRATCH/notinst-$label-bin"; mkdir -p "$NOTINST_BIN"
+  cp "$ROOT/plugins/quality-gates/tests/mocks/bin-stubs/"* "$NOTINST_BIN/" 2>/dev/null || true
+  n="$(run_scenario "$sk" "$r" "$SCRATCH/g-$label-noinst" "$NOTINST_BIN:$BASE_SUFFIX" "" "IGNORE=1")"
+  case "$n" in
+    0) ok "$label: 미설치 → codex 0회" ;;
+    PREMISE_FAIL:*) no "$label: 미설치 전제 실패 — PATH에서 codex가 여전히 해석된다 (실제: ${n#PREMISE_FAIL:}) — 전제 누출" ;;
+    *) no "$label: 미설치 → codex ${n}회" ;;
+  esac
 
   # 버전 바닥 미달
-  saved="$OBS_MOCKBIN"; OBS_MOCKBIN="$SCRATCH/floor-bin"; mkdir -p "$OBS_MOCKBIN"
-  cp "$ROOT/plugins/quality-gates/tests/mocks/below-floor/codex" "$OBS_MOCKBIN/codex"
-  cp "$ROOT/plugins/quality-gates/tests/mocks/bin-stubs/"* "$OBS_MOCKBIN/" 2>/dev/null || true
-  chmod +x "$OBS_MOCKBIN/codex"
-  n="$(run_gate "$sk" "$r" belowfloor "$SCRATCH/g-$label-floor" "IGNORE=1")"
-  OBS_MOCKBIN="$saved"
-  [ "$n" = "0" ] && ok "$label: 버전 바닥 미달 → codex 0회" || no "$label: 바닥 미달 → codex ${n}회"
+  FLOOR_BIN="$SCRATCH/floor-$label-bin"; mkdir -p "$FLOOR_BIN"
+  cp "$ROOT/plugins/quality-gates/tests/mocks/below-floor/codex" "$FLOOR_BIN/codex"
+  cp "$ROOT/plugins/quality-gates/tests/mocks/bin-stubs/"* "$FLOOR_BIN/" 2>/dev/null || true
+  chmod +x "$FLOOR_BIN/codex"
+  n="$(run_scenario "$sk" "$r" "$SCRATCH/g-$label-floor" "$FLOOR_BIN:$BASE_SUFFIX" "$FLOOR_BIN" "IGNORE=1")"
+  case "$n" in
+    0) ok "$label: 버전 바닥 미달 → codex 0회" ;;
+    PREMISE_FAIL:*) no "$label: 버전 바닥 전제 실패 — PATH에서 codex가 mock으로 해석되지 않는다 (실제: ${n#PREMISE_FAIL:})" ;;
+    *) no "$label: 바닥 미달 → codex ${n}회" ;;
+  esac
 done
 
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
