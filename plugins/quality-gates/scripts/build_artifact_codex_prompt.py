@@ -14,9 +14,14 @@ import sys
 
 # stdout 인코딩은 프로세스 locale/PYTHONIOENCODING을 따른다(read_text의 명시적
 # encoding="utf-8"과 달리) — 고정하지 않으면 템플릿의 em dash·한국어가 ascii 계열
-# 인코딩에서 UnicodeEncodeError로 프로세스를 죽인다. 관용구는
-# plugins/spec-distill/hooks/review-dispatch.py:46.
-sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+# 인코딩에서 UnicodeEncodeError로 프로세스를 죽인다. reconfigure는 TextIOWrapper에만
+# 있고 sys.stdout을 채울 수 있는 모든 객체에 있지는 않으므로 형제 관용구
+# (plugins/spec-distill/hooks/review-dispatch.py:46,
+# plugins/spec-distill/scripts/check_verbatim_coverage.py:335-338)와 같이 guard한다.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+except (AttributeError, OSError):
+    pass
 
 PROMPT_TEMPLATE = """You are an artifact critic. Review the NON-CODE artifact below for
 logical gaps, unstated assumptions, incompleteness, unsupported claims,
