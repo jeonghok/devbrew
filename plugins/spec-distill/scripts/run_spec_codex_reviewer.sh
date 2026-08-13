@@ -36,26 +36,40 @@ fi
 [[ "$OUTPUT_PATH" = /* ]] || OUTPUT_PATH="$PWD/$OUTPUT_PATH"
 [[ "$DOC_PATH" = /* ]] || DOC_PATH="$PWD/$DOC_PATH"
 
-if [[ -z "$PROJECT_DIR" ]]; then
-  echo 'findings: []' > "$OUTPUT_PATH"
-  echo 'meta:' >> "$OUTPUT_PATH"; echo '  codex_failed: true' >> "$OUTPUT_PATH"
-  echo '  reason: missing_project_dir' >> "$OUTPUT_PATH"
-  exit 0
-fi
-cd "$PROJECT_DIR" || {
-  echo 'findings: []' > "$OUTPUT_PATH"
-  echo 'meta:' >> "$OUTPUT_PATH"; echo '  codex_failed: true' >> "$OUTPUT_PATH"
-  echo '  reason: project_dir_unreachable' >> "$OUTPUT_PATH"
-  exit 0
+# ── B3 (/qg 2026-08-13 whole-branch 리뷰): seed 를 절대화 **직후**로 끌어올린다 ──
+# 아래 세 분기(missing_project_dir · project_dir_unreachable · scratch_dir_uncreatable)
+# 는 예전에 guarded truncate 보다 **앞**에서 `>` 로 직접 썼다. `set -euo pipefail`
+# 아래에서 OUTPUT_PATH 가 쓰기 불가면 그 리다이렉트가 실패하며 스크립트는 **exit 1**
+# 로 죽고(EXIT 트랩도 아직 미무장), 계약과 호출자는 rc==3 에서만 stale 을 지운다.
+# 결과: 이전 라운드의 YAML 이 양성 `codex_failed: false` 를 단 채 이번 라운드의
+# 판정으로 읽힌다 — indeterminate ≠ clean 위반.
+#
+# 교훈은 위치다. 가드는 "내가 문제를 떠올린 지점"이 아니라 **자원을 처음 만지는
+# 지점**에 있어야 한다. 형제 `run_brief_codex_reviewer.sh:39-63` 의 seed 형태를
+# 그대로 쓴다(세 번째 철자를 발명하지 않는다).
+: > "$OUTPUT_PATH" 2>/dev/null || {
+  echo "[spec-distill] 산출물 경로에 쓸 수 없다: $OUTPUT_PATH" >&2
+  exit 3
 }
 
-# C7: guard scratch-dir assignment BEFORE any trap arms (cd "" repo-delete footgun).
-SCRATCH="$(mktemp -d -t sd-codex-rev-XXXXXX)" || {
-  echo 'findings: []' > "$OUTPUT_PATH"
-  echo 'meta:' >> "$OUTPUT_PATH"; echo '  codex_failed: true' >> "$OUTPUT_PATH"
-  echo '  reason: scratch_dir_uncreatable' >> "$OUTPUT_PATH"
-  exit 0
+write_failclosed() {                   # $1 = reason — 리다이렉트 실패를 삼키지 않는다
+  { echo 'findings: []'
+    echo 'meta:'
+    echo '  codex_failed: true'
+    echo "  reason: $1"; } > "$OUTPUT_PATH" || {
+    echo "[spec-distill] fail-closed YAML 기록 실패: $OUTPUT_PATH ($1)" >&2
+    return 1
+  }
 }
+emit_fallback() { write_failclosed "$1" || exit 3; exit 0; }
+
+if [[ -z "$PROJECT_DIR" ]]; then
+  emit_fallback missing_project_dir
+fi
+cd "$PROJECT_DIR" || emit_fallback project_dir_unreachable
+
+# C7: guard scratch-dir assignment BEFORE any trap arms (cd "" repo-delete footgun).
+SCRATCH="$(mktemp -d -t sd-codex-rev-XXXXXX)" || emit_fallback scratch_dir_uncreatable
 # 치명적 abort(예: `set -u` 위반)가 EXIT trap을 지나면서 조용해지는 문제.
 #
 # 이 스크립트의 계약은 (헤더의 exit 3 예외를 뺀 나머지 모든 경로에서) **항상
@@ -83,10 +97,9 @@ SCRATCH="$(mktemp -d -t sd-codex-rev-XXXXXX)" || {
 # 그대로 쓴다: truncate조차 못 하면 degrade도 쓸 수 없다는 뜻이므로 loud
 # stderr + exit 3으로 죽는다. 호출자는 rc==3을 보면 OUTPUT_PATH를 지워야
 # 한다(위 계약 문단과 동형; reviewing-spec SKILL이 이 의무를 구현한다).
-: > "$OUTPUT_PATH" 2>/dev/null || {
-  echo "[spec-distill] 산출물 경로에 쓸 수 없다: $OUTPUT_PATH" >&2
-  exit 3
-}
+# (seed 는 위 B3 블록으로 올라갔다 — 여기서 다시 truncate 하지 않는다. 이 지점에
+# 도달했다는 것은 seed 가 이미 성공했다는 뜻이고, 재truncate 는 그 사이 분기가 쓴
+# 진짜 reason 을 지울 위험만 만든다.)
 _degrade_if_empty() {
   [[ -n "$OUTPUT_PATH" && ! -s "$OUTPUT_PATH" ]] || return 0
   { echo 'findings: []'

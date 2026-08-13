@@ -22,14 +22,26 @@ ARTIFACT="${1:-}"
 PROJECT_DIR="${2:-}"
 OUT="${3:-}"
 
-emit_fail() { # <reason>
-  { printf 'codex_failed: true\n'; printf 'reason: %s\n' "$1"; } > "${OUT:-/dev/stdout}"
-}
-
-if [ -z "$PROJECT_DIR" ] || [ -z "$OUT" ]; then
-  emit_fail "missing_args"
-  exit 0
+# ── B2 (/qg 2026-08-13 whole-branch 리뷰): 인자 검사를 두 축으로 가른다 ─────────
+# 이전 코드는 PROJECT_DIR·OUT 을 한 조건으로 묶고 `emit_fail` 이 `${OUT:-/dev/stdout}`
+# 로 썼다. 그 분기는 아래 guarded truncate 보다 **앞**이라 exit 3 계약 밖이었고,
+# `set -u` 만 걸린 이 스크립트에서는 리다이렉트 실패가 종료 상태조차 바꾸지 않아
+# **exit 0 + 이전 라운드 YAML 잔존**이 됐다 — `codex_failed: false` 를 단 stale 이
+# 이번 라운드의 clean 판정으로 읽힌다(indeterminate ≠ clean 위반).
+#
+# 두 축은 성질이 다르다. OUT 이 없으면 degrade 를 쓸 곳 **자체가 없으므로** 형제
+# 러너처럼 usage(exit 2)로 죽고, PROJECT_DIR 부재는 seed 뒤로 내린다(아래).
+if [ -z "$OUT" ]; then
+  echo "[quality-gates] usage: run_artifact_codex_reviewer.sh <artifact> <project_dir> <output>" >&2
+  exit 2
 fi
+
+emit_fail() { # <reason> — 리다이렉트 실패를 삼키지 않는다 (형제 write_failclosed 와 동형)
+  { printf 'codex_failed: true\n'; printf 'reason: %s\n' "$1"; } > "$OUT" || {
+    echo "[quality-gates] fail-closed 기록 실패: $OUT ($1)" >&2
+    return 1
+  }
+}
 
 # ── R1 (Task 20b 리뷰 라운드 1): 절대화는 cd 전에 ────────────────────────────
 # 상대 경로를 호출 cwd 기준으로 절대화한다 — 아래 `cd "$PROJECT_DIR"` 이후에는
@@ -73,9 +85,16 @@ _degrade_if_empty() {
 }
 trap '_degrade_if_empty' EXIT
 
-cd "$PROJECT_DIR" 2>/dev/null || { emit_fail "project_dir_unreachable"; exit 0; }
+# B2: PROJECT_DIR 판정은 위 seed(guarded truncate) **뒤**다 — 이 지점부터는 어떤
+# 조기 종료도 fail-closed 산출물을 남기고, 쓰기 실패는 exit 3 으로 올라간다.
+if [ -z "$PROJECT_DIR" ]; then
+  emit_fail "missing_args" || exit 3
+  exit 0
+fi
 
-SCRATCH="$(mktemp -d -t qg-art-codex-XXXXXX)" || { emit_fail "scratch_uncreatable"; exit 0; }
+cd "$PROJECT_DIR" 2>/dev/null || { emit_fail "project_dir_unreachable" || exit 3; exit 0; }
+
+SCRATCH="$(mktemp -d -t qg-art-codex-XXXXXX)" || { emit_fail "scratch_uncreatable" || exit 3; exit 0; }
 PROMPT="$SCRATCH/prompt.md"
 JSONL="$SCRATCH/codex.jsonl"
 ERR="$SCRATCH/codex.stderr"
