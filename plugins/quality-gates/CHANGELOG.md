@@ -58,6 +58,23 @@
   헤더 주석에 만족돼 실제 플래그를 삭제해도 GREEN 이었다.
 - **`DEVBREW_DISABLE_QG_CODEX` 가 SKILL 에서 사라져 발견 불가**였던 것.
 
+*아래는 이 브랜치 자신에 대한 `/qg` whole-branch 리뷰(2026-08-13)가 적발해 같은 PR 에서
+닫은 것들 — 전문은 `docs/audits/2026-08-13-codex-unification-branch-review.md`.*
+
+- **`run_artifact_codex_reviewer.sh` 의 guard 위치.** 인자 검사 분기가 guarded truncate
+  보다 앞이었고 `emit_fail` 은 `${OUT:-/dev/stdout}` 에 쓰며 실패를 확인하지 않았다.
+  `set -u` 만 걸려 있어 리다이렉트 실패가 종료 상태도 안 바꿔 exit 0 + 이전 라운드
+  YAML 잔존이 됐다. 가드는 "문제를 떠올린 지점"이 아니라 **자원을 처음 만지는 지점**에
+  있어야 한다.
+- **`tests/lib/codex_observation.sh` 가 `100644` 로 커밋**돼 있었다. 어댑터의 claim
+  글롭은 `case` 문의 `*/tests/*.sh` 이고 `case` 의 `*` 는 `/` 를 넘으므로 이 파일도
+  후보로 집힌다 — 실행비트가 없어 `unclaimed` → `verification: degraded` → PASS 불가.
+- **`test_codex_gate_observation.sh` 의 `버전 바닥 미달` 시나리오가 죽은 계측기**였다.
+  그 PATH 에 캡처 mock 이 없어 호출 0회가 "게이트가 막았다"와 "게이트가 발화했는데
+  실행된 바이너리가 캡처를 안 한다"를 구별하지 못했다. qg 전용
+  `mocks/below-floor-capturing/codex` 로 계측기를 살렸다(공유 자산은 불변).
+- `run_gate` 가 게이트 stderr 를 `/dev/null` 로 버리던 것을 `$cap.stderr` 로 보존.
+
 ### Changed
 
 - `detect_codex.sh` 가 semver 파싱 성공 여부로 판정한다 (`|| echo unknown` 은 도달하지

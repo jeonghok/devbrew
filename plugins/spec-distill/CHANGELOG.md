@@ -2,6 +2,20 @@
 
 ## [0.26.0] — 2026-08-10
 
+### Fixed
+
+- **`run_spec_codex_reviewer.sh` 의 guard 위치** (`/qg` whole-branch 리뷰 2026-08-13).
+  세 조기 분기(`missing_project_dir`·`project_dir_unreachable`·`scratch_dir_uncreatable`)
+  가 guarded truncate 보다 **앞**에서 `>` 로 산출물에 직접 썼다. `set -euo pipefail`
+  에서 산출물 경로가 쓰기 불가면 그 리다이렉트가 실패해 스크립트가 **exit 1** 로 죽는데
+  (EXIT 트랩도 아직 미무장), 계약과 호출 SKILL 은 `rc == 3` 에서만 stale 을 지운다 —
+  이전 라운드의 YAML 이 양성 `codex_failed: false` 를 단 채 이번 라운드의 판정으로
+  읽혔다(indeterminate ≠ clean 위반). 형제 `run_brief_codex_reviewer.sh` 의 seed 형태
+  (절대화 직후 fail-closed 선-기록 + `write_failclosed`/`emit_fallback`)를 그대로
+  채용했다. 실측: 쓰기 불가 산출물 → rc=3 + stale 바이트 무변경, 정상 degrade →
+  rc=0 + `codex_failed: true`. 전문은
+  `docs/audits/2026-08-13-codex-unification-branch-review.md`.
+
 ### Added
 
 - `build_spec_codex_prompt.py`·`build_brief_codex_prompt.py` 에 untrusted-data(P21) 절 +

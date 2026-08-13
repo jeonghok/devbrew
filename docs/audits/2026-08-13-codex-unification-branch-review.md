@@ -15,6 +15,7 @@
 - [§5 수정 순서 제약](#5-수정-순서-제약)
 - [§6 이빨이 확인된 것 (재검증 불필요)](#6-이빨이-확인된-것-재검증-불필요)
 - [§7 이 리뷰 자신의 한계](#7-이-리뷰-자신의-한계)
+- [§8 같은 PR 에서 닫은 것 (2026-08-13 후속)](#8-같은-pr-에서-닫은-것-2026-08-13-후속)
 
 ---
 
@@ -216,3 +217,33 @@ mutation으로 직접 RED를 본 것들. 다음 세션이 다시 의심할 필�
   형제 규약의 미집행, 그리고 assertion이 있어야 할 자리의 진단 출력.
 - **SUGGESTION 32건은 개별 재현하지 않았다.** IMPORTANT 17건과 §4의 기각 4건은
   adversarial이 파일을 열어 확인했다.
+
+---
+
+## §8 같은 PR 에서 닫은 것 (2026-08-13 후속)
+
+리뷰 직후 사용자 지시로 **머지 + shipped 결함 6건**을 이 브랜치에서 닫았다.
+나머지는 열려 있고, 아래 "남은 것" 이 정본이다.
+
+| ID | 커밋 | 어떻게 닫았나 |
+|---|---|---|
+| **L1** | `9cf091f` | `git merge origin/main`. 충돌 2건을 qg **3.1.0** 으로 재산정(`2.15.0` 을 고르면 3.0.0 → 2.15.0 퇴행). `quality-pipeline/SKILL.md` auto-merge 는 손으로 검증 — main 의 영향-구동 Runtime 절과 이 브랜치의 degrade 배너 절이 공존하고, AC24 섹션 창도 머지 전후 동일(SKIP 31 / RESULT 20) |
+| **B2·B3** | `782ffb6` | seed 를 **자원 최초 접촉 지점**으로. 형제 `run_brief_codex_reviewer.sh:39-63` 형태 채용. 실측 양방향: 쓰기 불가 → rc=3 + stale 무변경 / 정상 degrade → rc=0 + `codex_failed: true` + stale 제거 |
+| **E5·E2** | `241ab9c` | E5 = 조립기가 `meta.codex_failed` 를 실제로 읽는다(기계 기록이 손-meta 를 이긴다). E2 = 키 부재·명시적 null 을 `schema_mismatch` + `missing_keys` 로. 옛 동작을 못 박던 테스트가 **결함을 인코딩**하고 있어 계약을 바꾸고 **양의 짝**을 추가 |
+| **I1·C1** | `08b4f3d` | I1 = PATH prepend → **교체** + premise check(실측 대조: prepend 시 `/opt/homebrew/bin/codex`, 교체 시 `NONE`). C1 = qg 전용 `mocks/below-floor-capturing/codex` 로 계측기 소생(실측: 옛 mock 0건 기록 / 새 mock 1건, probe 는 미기록). 공유 자산 불변 |
+
+**머지가 드러낸 별건 회귀 1건** — `141ccef`. main v3.0.0 의 `test_runner_adapters.sh` T83
+이 `tests/` 하위 모든 `.sh` 의 인덱스 모드 100755 를 요구하는데 이 브랜치가 추가한
+`tests/lib/codex_observation.sh` 만 100644 였다. 락이 과대범위가 아니다 — 어댑터 claim
+글롭이 `case` 문의 `*/tests/*.sh` 이고 `case` 의 `*` 는 `/` 를 넘는다(실측). 리뷰어
+다섯 중 누구도 볼 수 없던 결함이다 — **아무도 main 이 움직인 트리를 보고 있지 않았다.**
+
+**후속에서 새로 관측한 것 (미수정, backlog):** `reviewing-brief` 게이트 블록은 skip
+경로에서 `SKIPPED (reason: …)` 배너를 **emit 하지 않는다** — 주석만 그 템플릿을
+언급하고 형제 둘은 실제로 낸다. C1 의 배너-assertion 경로를 막은 것이 이것이다.
+
+**남은 것:** IMPORTANT 11건(A1·A2·B1·B4·B5·D1·F1·F2·F4·F5 + 위 배너 갭) + SUGGESTION 32건.
+착수 전 §5 의 순서 제약과 grep 함정 문단을 먼저 읽을 것.
+
+**후속 스위트:** shell 148 / RED 2(둘 다 origin/main 워크트리에서도 RED 확인) ·
+python plugin-audit 249 OK · spec-distill 202 OK(skip 1).
