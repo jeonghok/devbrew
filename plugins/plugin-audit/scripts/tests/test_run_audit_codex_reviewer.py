@@ -44,12 +44,32 @@ class TestRunAuditCodexReviewer(unittest.TestCase):
     def tearDown(self):
         self.td.cleanup()
 
+    def _assert_codex_resolves_to_mock(self, env):
+        """계측기 사전 확인 — `codex_observation.sh` 의 `codex_premise_ok` 와 같은 규율.
+
+        방향이 fail-closed 인 것만으로는 부족하다. 계측기가 죽었는데 시나리오가
+        '통과'로 읽히는 것을 막아야 한다."""
+        which = subprocess.run(["bash", "-c", "command -v codex || true"],
+                               capture_output=True, text=True, env=env).stdout.strip()
+        expected = str(self.tmp / "bin" / "codex")
+        self.assertEqual(
+            which, expected,
+            f"codex 가 mock 으로 해석되지 않는다 (got: {which!r}) — 실제 과금 "
+            "바이너리로 흘러갈 수 있으므로 이 시나리오를 실행하지 않는다")
+
     def _run(self, env_extra=None):
         env = dict(os.environ)
-        env["PATH"] = f"{self.tmp / 'bin'}:{env['PATH']}"
+        # ── I1 (/qg 2026-08-13 whole-branch 리뷰): PATH 는 **교체**한다 ──────────────
+        # 이전 코드는 상속 PATH **앞에** mock 을 붙였다(prepend). mock 설정이 어떤
+        # 이유로든 실패하면 해석이 뒤로 흘러 실제 과금 바이너리(/opt/homebrew/bin/codex)
+        # 에 도달한다 — 리포 전체를 `-C` 대상으로, `web_search=live` 로. 그 상태에서도
+        # 테스트는 초록이었다(실측: 실물 4회 도달). 형제 `test_detect_codex.py:21-22`
+        # 는 이미 교체를 쓴다. 여기만 갈라져 있었다.
+        env["PATH"] = os.pathsep.join([str(self.tmp / "bin"), "/usr/bin", "/bin"])
         env["CODEX_CAPTURE_DIR"] = str(self.capture)
         env["CLAUDE_PLUGIN_ROOT"] = str(ROOT)
         env.update(env_extra or {})
+        self._assert_codex_resolves_to_mock(env)
         return subprocess.run(["bash", str(RUNNER), str(self.axis), str(ROOT.parent.parent),
                                str(self.out)],
                               capture_output=True, text=True, env=env)

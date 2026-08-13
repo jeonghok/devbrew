@@ -123,7 +123,7 @@ run_gate() {   # $1=SKILL, $2=runner basename, $3=capture, $4=gate_path(전제 �
         AXIS_FILE="$w/input.md" PAYLOAD="$w/input.md" spec_path="$w/input.md" \
         CODEX_JSON="$w/out.json" CODEX_YAML="$w/out.yaml" CODEX_DIR_YAML="$w/out.yaml" \
         HOME="$SCRATCH/home" CODEX_API_KEY=t \
-        bash "$w/gate.sh" ) >/dev/null 2>&1 || true
+        bash "$w/gate.sh" ) >/dev/null 2>"$cap.stderr" || true
   obs_call_count "$cap"
 }
 
@@ -183,9 +183,14 @@ for i in "${!GATED_RUNNER[@]}"; do
     *) no "$label: 미설치 → codex ${n}회" ;;
   esac
 
-  # 버전 바닥 미달
+  # 버전 바닥 미달 — **계측 가능한** below-floor mock 을 쓴다 (C1, /qg 2026-08-13).
+  # 예전에는 `mocks/below-floor/codex` 를 썼는데 그 mock 은 CODEX_CAPTURE_DIR 에
+  # 아무것도 쓰지 않는다. 그래서 아래 `0` 기대값은 "게이트가 막았다" 와 "게이트가
+  # 발화했는데 실행된 바이너리가 캡처를 안 한다" 를 구별하지 못했다 — 죽은 계측기의
+  # 값과 기대값이 같았다. 캡처하는 쌍둥이를 쓰면 발화 시 call-0 이 남아 `0` 이
+  # 비로소 무언가를 주장한다. (공유 자산을 고치지 않는 이유는 그 mock 헤더 참조.)
   FLOOR_BIN="$SCRATCH/floor-$label-bin"; mkdir -p "$FLOOR_BIN"
-  cp "$ROOT/plugins/quality-gates/tests/mocks/below-floor/codex" "$FLOOR_BIN/codex"
+  cp "$ROOT/plugins/quality-gates/tests/mocks/below-floor-capturing/codex" "$FLOOR_BIN/codex"
   cp "$ROOT/plugins/quality-gates/tests/mocks/bin-stubs/"* "$FLOOR_BIN/" 2>/dev/null || true
   chmod +x "$FLOOR_BIN/codex"
   n="$(run_scenario "$sk" "$r" "$SCRATCH/g-$label-floor" "$FLOOR_BIN:$BASE_SUFFIX" "$FLOOR_BIN" "IGNORE=1")"
