@@ -31,6 +31,42 @@ def _sanitize_finding(f):
     return g
 
 
+def _sanitize_collection(raw, kind, dropped):
+    """codex side-channel 컬렉션의 ingestion 관문.
+
+    `_sanitize_finding`이 `findings`에만 걸려 있어 d_verdicts·oq_answers·
+    new_open_questions는 정규화 없이 downstream으로 갔고, malformed 입력에
+    AttributeError/TypeError/KeyError로 죽었다. 같은 관문을 셋에 확대한다.
+
+    degrade의 의미 = **항목별 삭제 + 손실 보고**:
+      - 원소는 dict여야 하고 `id`가 비어 있지 않은 문자열이어야 한다
+      - 위반 원소는 버리고 **유효한 형제는 보존한다**
+      - 버린 개수·사유는 `dropped`에 쌓여 meta.codex.dropped → 배너로 나간다
+      - 컬렉션 자체가 list가 아니면 그 컬렉션만 빈 list로 강등한다. 전체 입력을
+        거부하지 않는다 — 한 컬렉션의 오류가 나머지 감사 결과를 통째로 버리면
+        손실이 더 크다.
+    """
+    if not isinstance(raw, list):
+        dropped.append({"collection": kind, "count": 1, "reason": "not_a_list",
+                        "detail": type(raw).__name__})
+        return []
+    out, bad = [], 0
+    for x in raw:
+        if not isinstance(x, dict):
+            bad += 1
+            continue
+        xid = x.get("id")
+        if not isinstance(xid, str) or not xid.strip():
+            bad += 1
+            continue
+        out.append(x)
+    if bad:
+        dropped.append({"collection": kind, "count": bad,
+                        "reason": "malformed_element",
+                        "detail": "dict + 비어있지 않은 문자열 id 를 요구한다"})
+    return out
+
+
 def ev_keys(f):
     # 대표(첫) evidence만 — cross_model_confirmed는 "같은 file:line을 독립적으로
     # 지목"(§9.2)한다는 뜻이고, 이는 finding의 주 근거(evidence[0])를 가리킨다.
@@ -54,12 +90,16 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
     for v in d_verdicts + oq_answers + noq:
         v.setdefault("source", "claude")
 
-    # (2) codex side-channel merge (blind-symmetry §9.3)
-    for v in codex_side.get("d_verdicts", []):
+    # (2) codex side-channel merge (blind-symmetry §9.3) — ingestion 관문 통과 후.
+    codex_dropped = []
+    for v in _sanitize_collection(codex_side.get("d_verdicts", []),
+                                  "d_verdicts", codex_dropped):
         d_verdicts.append({**v, "source": "codex"})
-    for v in codex_side.get("oq_answers", []):
+    for v in _sanitize_collection(codex_side.get("oq_answers", []),
+                                  "oq_answers", codex_dropped):
         oq_answers.append({**v, "source": "codex"})
-    for v in codex_side.get("new_open_questions", []):
+    for v in _sanitize_collection(codex_side.get("new_open_questions", []),
+                                  "new_open_questions", codex_dropped):
         noq.append({**v, "source": "codex"})
 
     # (3) unverified backfill (dead/incomplete axis — assigned에 있으나 *Claude* 판정 부재).
@@ -124,6 +164,33 @@ def assemble(wf, codex_side, meta, assigned, repo_root, do_grounding):
         for gev in f.get("degraded_events", []):
             degraded.append(_grounding_degraded_note(gev))
     out_meta = {k: meta[k] for k in ("date", "fanout_declared", "consent", "codex", "target", "seed_provided") if k in meta}
+    # §4.1 truth table의 층⑤ 표현. `ran`/`failed` 쌍이 세 상태를 구분한다:
+    #   미실행: ran=false, failed=false  |  실행-실패: ran=true, failed=true
+    #   실행-성공: ran=true, failed=false
+    # `failed` 부재는 "미검증"이 아니라 기존 데이터의 기본값 false로 읽는다 — 그러나
+    # validate의 B7은 부재를 fail-closed로 취급한다(validate-audit-data.py의 B7 주석 참조).
+    codex_meta = dict(out_meta.get("codex") or {})
+    codex_meta.setdefault("ran", False)
+    # ── E5 (/qg 2026-08-13 whole-branch 리뷰): 산출자는 있고 소비자가 없었다 ──────
+    # `codex_audit_to_json.py` 는 실패를 `meta.codex_failed`/`meta.reason` 으로
+    # 성실히 기록하지만, 이 조립기는 그 값을 **한 번도 읽지 않고** 곧바로
+    # `setdefault("failed", False)` 로 넘어갔다. 즉 러너가 실패로 기록한 run 도
+    # 모델이 손으로 meta.json 에 옮겨 적지 않는 한 `failed: false` 로 보고됐다 —
+    # 기본값이 clean 인 fail-open. 이제 codex 산출물에서 직접 읽고, 기계 기록이
+    # 손으로 쓴 meta.json 을 이긴다(setdefault 가 아니라 대입).
+    cx_meta = codex_side.get("meta") if isinstance(codex_side, dict) else None
+    if isinstance(cx_meta, dict) and "codex_failed" in cx_meta:
+        codex_meta["failed"] = bool(cx_meta["codex_failed"])
+        cx_reason = cx_meta.get("reason")
+        if cx_reason:
+            codex_meta.setdefault("reason", cx_reason)
+    else:
+        # codex 산출물에 표식이 없다 = 이번 라운드에 codex 가 돌지 않았다는 뜻이며,
+        # 그 경우는 위 `ran` 이 False 로 남아 truth table 의 '미실행' 칸에 든다.
+        codex_meta.setdefault("failed", False)
+    if codex_dropped:
+        codex_meta["dropped"] = codex_dropped     # 조용히 버리지 않는다 (loud logging)
+    out_meta["codex"] = codex_meta
     out_meta["assigned_d"] = assigned.get("assigned_d", [])
     out_meta["assigned_oq"] = assigned.get("assigned_oq", [])
     return {"meta": out_meta, "findings": findings, "d_verdicts": d_verdicts,

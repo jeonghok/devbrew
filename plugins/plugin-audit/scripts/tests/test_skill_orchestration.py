@@ -19,7 +19,13 @@ INVARIANTS = [
     "assemble-audit-data.py",                              # post-1 조립
     "check-grounding.py",                                  # A
     "render-audit-report.py", "validate-audit-data.py",   # post-1
-    "codex exec -s read-only",                             # blind codex (P11)
+    # blind codex (P11). 2026-08-09 codex 통일 1단계에서 산문 `codex exec -s read-only`를
+    # 리터럴 게이트로 바꿨다. `-s read-only`의 집행 지점은 이제 러너
+    # (`scripts/run_audit_codex_reviewer.sh`)이고, 그 축은 문서 문자열이 아니라 **실행 관측**으로
+    # 잰다 — `test_run_audit_codex_reviewer.py::test_argv_carries_contract_flags_and_dash`가
+    # 실제 호출의 argv에서 `-s` 다음 값이 `read-only`임을 확인한다(문자열 grep보다 강하다).
+    # 여기서 pin하는 것은 "SKILL이 그 러너를 게이트 안에서 부른다"는 사실이다.
+    "codex-gate:begin runner=run_audit_codex_reviewer.sh",
     "자기서술은 감사 material이지 verdict 프레임이 아니다",   # AC-8b redaction (C17)
     "캐시 갱신 + 세션 재시작",                               # GC8
     # H (/qg 2026-07-20 round-2): step-1 --out은 step-6이 검증하는 canonical 경로에 pin돼야 한다

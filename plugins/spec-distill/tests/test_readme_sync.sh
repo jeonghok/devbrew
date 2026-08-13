@@ -6,9 +6,13 @@
 # 아니다. 어느 spec의 AC도 아닌 devbrew repo 컨벤션("플러그인 건드리는 PR마다 version bump
 # + CHANGELOG entry")을 집행하는 순수 회귀 락이라 AC 라벨을 붙이지 않는다(붙이면 다른 spec의
 # 같은 번호 AC와 충돌 — 아래 참고). (3) README-sync 키워드 스윕도 같은 이유로 AC 라벨 없음.
-# plugin.json version은 0.23.x로 assert(patch digit는 의도적으로 unpin) — devbrew의
-# "플러그인 건드리는 모든 PR은 patch-bump" 규칙 때문에 리터럴 0.23.0 pin은 다음 doc-only
-# bump마다 stale-red. minor(0.23)는 v0.23.0 feature가 여전히 shipped임을 뜻하는 invariant라 pin 유지.
+# plugin.json version은 0.26 이상 floor로 assert(patch digit는 의도적으로 unpin) — devbrew의
+# "플러그인 건드리는 모든 PR은 patch-bump" 규칙 때문에 리터럴 patch pin은 다음 doc-only
+# bump마다 stale-red. 정확한-minor pin(예: `0\.25\.[0-9]+`)도 같은 병이다 — "이 버전 이후
+# shipped" 의도를 "정확히 이 minor"로 좁혀 다음 minor bump마다 stale-red가 된다(Task 14 실증).
+# floor로 전환: v0.23.0 feature가 여전히 shipped임을 뜻하는 invariant는 이제 "0.26 이상"으로
+# 표현되고, 미래 minor bump마다 pin이 위로만 ratchet된다(qg 쪽 test_qg_publish_docs.sh·
+# test_artifact_metadata.sh와 동형 관용구).
 # CHANGELOG [0.20.0]/[0.22.0]/[0.23.0] 엔트리는 append-only 기록이라 리터럴 pin이 correct —
 # 버전 bump마다 최신 엔트리 pin을 **추가**하고 과거 pin은 절대 빼지 않는다(누산). 뺀 순간
 # 그 히스토리 엔트리가 삭제돼도 이 스위트가 조용히 통과해 append-only 보장이 깨진다.
@@ -31,9 +35,9 @@ CHANGELOG="$REPO_ROOT/plugins/spec-distill/CHANGELOG.md"
 pass=0; fail=0
 note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
 
-grep -qE '"version": "0\.25\.[0-9]+"' "$PLUGIN_JSON" \
-  && note PASS "T20: plugin.json version 0.25.x" \
-  || note FAIL "T20: plugin.json이 0.25.x가 아님"
+grep -qE '"version": "0\.(2[6-9]|[3-9][0-9])\.[0-9]+"' "$PLUGIN_JSON" \
+  && note PASS "T20: plugin.json version >= 0.26.x" \
+  || note FAIL "T20: plugin.json이 0.26 floor 미만"
 grep -qE '^## \[0\.23\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
   && note PASS "T20: CHANGELOG [0.23.0] 엔트리 + ISO 날짜" \
   || note FAIL "T20: CHANGELOG [0.23.0] 누락/비-ISO"

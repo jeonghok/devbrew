@@ -26,6 +26,18 @@
 #     exit_code: int
 #     reason: str
 #
+# Contract (리뷰 라운드 2, A1): exit 0 on both success and failure, always
+# writing YAML to <output_yaml_path> — with ONE exception. If that path itself
+# cannot be written (missing directory, permissions, RO mount), no YAML is
+# possible at all; the script prints a loud stderr diagnostic and exits **3**
+# instead. On rc == 3 the CALLER MUST delete <output_yaml_path> before reading
+# it — a prior round's stale YAML (which may carry a false-positive
+# `codex_failed: false`) would otherwise sit untouched and be read as this
+# round's codex verdict. Same contract as `run_brief_codex_reviewer.sh`, whose
+# caller (spec-distill's reviewing-brief SKILL) already implements the
+# rc==3 → rm -f pattern; quality-pipeline/SKILL.md now documents the same for
+# this runner.
+#
 # Sandbox guarantees: codex exec -s read-only (Layer 3) — codex subprocess
 # cannot write to the working tree even though the script invokes it.
 
@@ -40,7 +52,19 @@ if [[ -z "$OUTPUT_PATH" ]]; then
   exit 2
 fi
 
-# ── stale 재사용 봉쇄 + 완료 전 중단 표시 ────────────────────────────────────
+# ── R1 (Task 20b 리뷰 라운드 1): 절대화는 cd 전에 ────────────────────────────
+# 상대 경로를 호출 cwd 기준으로 절대화한다 — 아래 `cd "$PROJECT_DIR"` 이후에는
+# project_dir 기준으로 조용히 재해석된다. 이 줄이 없으면 truncate가 cd *이전*
+# cwd로 OUTPUT_PATH를 열고, cd *이후*에 발동하는 EXIT 트랩의 `-s` 검사는 같은
+# 상대경로를 cd *이후* cwd로 다시 해석해 **서로 다른 파일**을 본다 — 가드가
+# 호출자가 읽는 파일이 아닌 엉뚱한 곳을 지켜 사실상 아무것도 지키지 못한다
+# (형제 `run_artifact_codex_reviewer.sh`에서 리뷰 R1으로 적발된 것과 같은 결함이
+# 여기도 있었다 — sweep). 형제 러너 3곳(run_brief_/run_spec_/run_audit_codex_reviewer.sh)
+# 전부 cd 전에 이 절대화를 한다.
+[[ "$OUTPUT_PATH" = /* ]] || OUTPUT_PATH="$PWD/$OUTPUT_PATH"
+[[ "$DIFF_PATH" = /* ]] || DIFF_PATH="$PWD/$DIFF_PATH"
+
+# ── stale 재사용 봉쇄 + 완료 전 중단 표시 (리뷰 R2로 강화) ───────────────────
 # 쌍둥이 `run_spec_codex_reviewer.sh`(spec-distill 0.24.14)가 받은 봉쇄를 여기에도
 # 넣는다. 백포트가 빠져 있던 동안 이 러너는 SIGTERM/`set -u` abort/OOM/Bash-tool
 # timeout 어느 경로로 죽어도 **이전 iteration의 YAML을 그대로 남겼고**, 오케스트레이터는
@@ -48,10 +72,23 @@ fi
 # clean이었으면 진짜 결함이 clean 인증을 받고, 발견을 담고 있었으면 사용자가 이미
 # 고친 결함을 다시 쫓는다. 둘 다 조용하다.
 #
-# **종료 코드로 재지 않는다**: 이 스크립트의 계약은 "항상 exit 0 + 항상 YAML"이고,
-# 게다가 bash 3.2.57은 `set -u` abort 시 EXIT 트랩에 `$?`를 0으로 넘긴다. 신호는
-# 산출물뿐이다. 그래서 시작 시 truncate하고, 비어 있으면 degrade로 채운다.
-: > "$OUTPUT_PATH"
+# **종료 코드로 재지 않는다**: 이 스크립트의 계약은 (헤더의 exit 3 예외를 뺀 나머지
+# 모든 경로에서) "항상 exit 0 + 항상 YAML"이고, 게다가 bash 3.2.57은 `set -u` abort
+# 시 EXIT 트랩에 `$?`를 0으로 넘긴다. 신호는 산출물뿐이다. 그래서 시작 시 truncate하고,
+# 비어 있으면 degrade로 채운다.
+#
+# **R2 (리뷰 라운드 1)**: truncate 자체가 실패할 수 있다(산출물 경로가 읽기전용
+# 등). 이전 코드(`: > "$OUTPUT_PATH"`, 가드 없음)는 이 실패를 확인하지 않았다 —
+# 이 스크립트는 `set -euo pipefail`이라 truncate 실패가 트랩 무장 *전에* 스크립트를
+# 즉사시켰고(컨트롤러 재현: 읽기전용 기존 산출물 → 트랩 설치 전 rc=1로 사망), 트랩이
+# 아예 못 뜨니 이전 라운드의 stale YAML이 그대로 남는다 — 형제 `run_artifact_codex_reviewer.sh`
+# 에서 리뷰 R2로 적발된 것과 동일한 결함이 여기도 있었다(controller ask: "run_codex_reviewer.sh
+# needs the same treatment"). 형제 `run_audit_codex_reviewer.sh`의 형태를 쓴다: truncate조차
+# 못 하면 degrade도 쓸 수 없다는 뜻이므로 loud stderr + exit 3으로 죽는다.
+: > "$OUTPUT_PATH" 2>/dev/null || {
+  echo "[quality-gates] 산출물 경로에 쓸 수 없다: $OUTPUT_PATH" >&2
+  exit 3
+}
 _degrade_if_empty() {
   [[ -s "$OUTPUT_PATH" ]] && return 0
   { echo 'agent: codex-reviewer'; echo 'findings: []'; echo 'meta:'
@@ -127,7 +164,9 @@ fi
 #   -s read-only     : Layer 3 sandbox (file-system writes blocked)
 #   -C "$PROJECT_DIR": working directory pin (single pipeline coordinate)
 #   --json           : JSONL stream output
-#   < /dev/null      : detach stdin (prevents stdin deadlock on some codex versions)
+#   -                : 프롬프트를 stdin으로 받는다 (argv 경유는 ARG_MAX 절벽)
+#   < "$PROMPT_FILE" : 그 stdin. `< /dev/null`을 남기면 교착이 아니라
+#                      "No prompt provided via stdin." + exit 1이 된다.
 #
 # 추론 강도(`model_reasoning_effort`)는 핀하지 않는다 — 사용자 codex 설정이 지배한다.
 # 하니스가 "medium"을 박으면 high/xhigh로 설정한 사용자가 조용히 하향되고, 그 하향은
@@ -138,12 +177,19 @@ fi
 # Direct codex invocation — no per-call timeout (hang risk accepted; backstops:
 # Bash tool timeout, DEVBREW_DISABLE_QG_CODEX=1, /cancel-qg). Layer 3 sandbox
 # (-s read-only) preserved. `|| EXIT_CODE=$?` keeps capture safe under set -e.
+#
+# 웹 posture를 **명시한다.** 미지정은 codex 기본값(`web_search = "cached"`)에 맡기는
+# 것이라 "이 호출부는 웹을 쓰지 않는다"가 어디에도 적혀 있지 않게 된다. 코드 diff
+# 리뷰는 외부 근거가 필요 없고, 외부 조회가 결과를 비결정적으로 만든다. kill switch가
+# 없는 이유: 이미 OFF라 끌 것이 없다(죽은 스위치를 만들지 않는다, AC21).
 EXIT_CODE=0
-codex exec "$(cat "$PROMPT_FILE")" \
+codex exec - \
     -C "$PROJECT_DIR" \
     -s read-only \
+    -c 'tools.web_search=false' \
+    -c 'web_search="disabled"' \
     --json \
-    < /dev/null \
+    < "$PROMPT_FILE" \
     > "$STDOUT_FILE" \
     2>"$STDERR_FILE" || EXIT_CODE=$?
 

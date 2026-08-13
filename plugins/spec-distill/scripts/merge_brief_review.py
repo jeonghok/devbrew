@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     # 같은 producer(codex_findings_to_yaml.py)의 스키마를 이미 fail-closed로 다루는
     # 검증된 파서를 재사용한다. 복제하면 한쪽만 고치는 drift가 생긴다(E11).
-    from merge_review import derive_codex_verdict, parse_codex_yaml
+    from merge_review import codex_degraded_from, derive_codex_verdict, parse_codex_yaml
     _REUSE_OK = True
 except Exception:  # noqa: BLE001 — import 실패는 codex 축 degrade로 흡수
     _REUSE_OK = False
@@ -302,7 +302,12 @@ def main() -> int:
         "codex_verdict": codex_verdict,
         "critic_verdict_unrecoverable": critic_verdict is None,
         "codex_isolated": False,          # AC8 — 항상. verdict 입력이 아니다.
-        "codex_degraded": bool(codex_failed),
+        # 정본은 codex_degraded_from(merge_review.py, AC22) — 인라인 재계산 금지.
+        # _REUSE_OK가 False면 정본 함수 자체가 없다(import 실패, :258에서 codex_failed는
+        # 이미 True로 강제됨) — 그 경우 정본을 호출해도 결과는 항상 True이므로, 호출 대신
+        # 그 결과를 리터럴로 적는다. 이것은 두 번째 계산이 아니라 정본이 낼 값을 그대로
+        # 적은 것이다 — 정본이 로드되지 않았을 때 "degraded"는 계산할 대상이 아니라 사실이다.
+        "codex_degraded": codex_degraded_from(codex_available=True, codex_failed=codex_failed) if _REUSE_OK else True,
         "fidelity_findings": findings,
         "advisory": advisory,
     }))

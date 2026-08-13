@@ -203,6 +203,22 @@ def derive_codex_verdict(findings: list[dict]) -> str:
     return "approved"
 
 
+def codex_degraded_from(codex_available: bool, codex_failed: bool = False) -> bool:
+    """`codex_degraded`의 **정본 정의**. codex 축이 판정에 기여하지 못한 상태.
+
+    `codex_failed`(층④ 산출물의 표식)와 `codex_degraded`(병합기의 표식)는 같은 술어의
+    두 이름이다 — merge_review.py:441 → :504가 항등이었다. 두 병합기가 각자 인라인으로
+    계산하고 있었고(`not codex_avail` vs `bool(codex_failed)`), 그러면 한쪽의 의미가
+    바뀔 때 다른 쪽이 조용히 갈라진다. 이 사이클이 층④에서 고친 병과 같은 모양이라
+    같은 처방을 쓴다: 정의는 한 곳.
+
+    - codex가 애초에 안 돌았으면(`codex_available=False`) degraded.
+    - 돌았으나 산출물이 실패를 표시하면(`codex_failed=True`) degraded.
+    - 둘 다 아니면 정상.
+    """
+    return (not codex_available) or bool(codex_failed)
+
+
 # display keys surfaced for codex_findings (transient current-round display
 # block — see build_codex_findings_display docstring).
 CODEX_DISPLAY_KEYS = ("category", "target_section", "severity", "summary")
@@ -501,7 +517,7 @@ def main() -> int:
         "combined_verdict": combined,
         "claude_verdict": claude_verdict,
         "codex_verdict": codex_verdict,
-        "codex_degraded": not codex_avail,
+        "codex_degraded": codex_degraded_from(codex_avail),
         "claude_degraded": claude_degraded,
         "claude_verdict_unrecoverable": claude_unrecoverable,
         "stagnation": stagnation,

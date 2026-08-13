@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# 판독 불가 — semver triple이 없다. 빈 출력도 같은 부류이지만, 여기서는
+# "값은 있는데 파싱이 안 되는" 쪽을 재현한다(빈 출력은 timeout 실패로도 나므로).
+case "${1:-}" in
+  --version) echo "codex-cli (dev build)" ;;
+  *) echo "mock-codex-unreadable: unexpected arg $*" >&2; exit 2 ;;
+esac

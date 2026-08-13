@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# 바닥(0.118.0) 미만 — stdin prompt(`codex exec -`)를 지원하지 않는 버전.
+case "${1:-}" in
+  --version) echo "codex-cli 0.117.0" ;;
+  *) echo "mock-codex-below-floor: unexpected arg $*" >&2; exit 2 ;;
+esac

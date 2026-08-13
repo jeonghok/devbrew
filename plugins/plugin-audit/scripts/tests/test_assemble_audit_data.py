@@ -199,5 +199,64 @@ class TestAssemble(unittest.TestCase):
         self.assertIsInstance(n[0].get("axis"), int, "axis가 정수로 강제돼야 (validate isinstance int 요건)")
 
 
+class TestCodexSideIngestionGate(unittest.TestCase):
+    """관문이 `findings`에만 걸려 있었다. d_verdicts·oq_answers·new_open_questions는
+    정규화 없이 통과해 malformed 입력에 AttributeError/TypeError/KeyError로 죽었다.
+
+    degrade의 의미를 못 박는다: **항목별 삭제 + 손실 보고**. 전체 거부가 아니다 —
+    한 컬렉션의 오류가 나머지 감사 결과를 통째로 버리게 하면 손실이 더 크다.
+    """
+
+    def _assemble(self, codex_side):
+        import importlib.util
+        from pathlib import Path
+        p = Path(__file__).resolve().parents[1] / "assemble-audit-data.py"
+        spec = importlib.util.spec_from_file_location("asm", p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        wf = {"findings": [], "d_verdicts": [], "oq_answers": [],
+              "new_open_questions": [], "axis_failures": []}
+        meta = {"date": "2026-08-09", "target": "t",
+                "codex": {"ran": True, "failed": False}}
+        assigned = {"assigned_d": [], "assigned_oq": []}
+        return mod.assemble(wf, codex_side, meta, assigned, Path("."), False)
+
+    def test_non_dict_element_dropped_valid_sibling_kept(self):
+        out = self._assemble({"d_verdicts": [{"id": "D1", "verdict": "confirmed"},
+                                             "쓰레기", 42]})
+        ids = [v["id"] for v in out["d_verdicts"]]
+        self.assertEqual(ids, ["D1"], "유효한 형제는 보존해야 한다")
+        self.assertEqual(out["meta"]["codex"]["dropped"][0]["collection"], "d_verdicts")
+        self.assertEqual(out["meta"]["codex"]["dropped"][0]["count"], 2)
+
+    def test_element_without_id_is_dropped(self):
+        out = self._assemble({"oq_answers": [{"answer": "a"}, {"id": "", "answer": "b"},
+                                             {"id": "OQ1", "answer": "c"}]})
+        self.assertEqual([v["id"] for v in out["oq_answers"]], ["OQ1"])
+        self.assertTrue(out["meta"]["codex"]["dropped"])
+
+    def test_non_list_collection_degrades_to_empty_not_total_reject(self):
+        out = self._assemble({"new_open_questions": {"id": "NOQ1"},
+                              "d_verdicts": [{"id": "D1", "verdict": "confirmed"}]})
+        self.assertEqual(out["new_open_questions"], [])
+        self.assertEqual([v["id"] for v in out["d_verdicts"]], ["D1"],
+                         "한 컬렉션의 오류가 나머지를 버리게 하면 안 된다")
+        reasons = [d["reason"] for d in out["meta"]["codex"]["dropped"]]
+        self.assertIn("not_a_list", reasons)
+
+    def test_malformed_input_never_raises(self):
+        for bad in ({"d_verdicts": "문자열"}, {"oq_answers": [None]},
+                    {"new_open_questions": [[]]}, {"d_verdicts": [{"id": 3}]}):
+            try:
+                self._assemble(bad)
+            except Exception as e:                       # noqa: BLE001
+                self.fail(f"{bad} 에서 예외: {type(e).__name__}: {e}")
+
+    def test_clean_input_leaves_no_dropped_key(self):
+        out = self._assemble({"d_verdicts": [{"id": "D1", "verdict": "confirmed"}]})
+        self.assertNotIn("dropped", out["meta"]["codex"],
+                         "정상 입력에 손실 보고가 붙으면 배너가 상시 켜진다")
+
+
 if __name__ == "__main__":
     unittest.main()

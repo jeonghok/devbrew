@@ -1,5 +1,55 @@
 # Changelog
 
+## [0.26.0] — 2026-08-10
+
+### Fixed
+
+- **`run_spec_codex_reviewer.sh` 의 guard 위치** (`/qg` whole-branch 리뷰 2026-08-13).
+  세 조기 분기(`missing_project_dir`·`project_dir_unreachable`·`scratch_dir_uncreatable`)
+  가 guarded truncate 보다 **앞**에서 `>` 로 산출물에 직접 썼다. `set -euo pipefail`
+  에서 산출물 경로가 쓰기 불가면 그 리다이렉트가 실패해 스크립트가 **exit 1** 로 죽는데
+  (EXIT 트랩도 아직 미무장), 계약과 호출 SKILL 은 `rc == 3` 에서만 stale 을 지운다 —
+  이전 라운드의 YAML 이 양성 `codex_failed: false` 를 단 채 이번 라운드의 판정으로
+  읽혔다(indeterminate ≠ clean 위반). 형제 `run_brief_codex_reviewer.sh` 의 seed 형태
+  (절대화 직후 fail-closed 선-기록 + `write_failclosed`/`emit_fallback`)를 그대로
+  채용했다. 실측: 쓰기 불가 산출물 → rc=3 + stale 바이트 무변경, 정상 degrade →
+  rc=0 + `codex_failed: true`. 전문은
+  `docs/audits/2026-08-13-codex-unification-branch-review.md`.
+
+### Added
+
+- `build_spec_codex_prompt.py`·`build_brief_codex_prompt.py` 에 untrusted-data(P21) 절 +
+  무조건 blanket 문장 + 무조건 action 금지 문장(codex 프롬프트 빌더 4종 공통, 나머지
+  둘은 quality-gates 쪽). brief 경로가 가장 첨예하다 — Claude critic 은 가려진 사본을
+  받는데 codex 는 원본 payload 를 받고, `merge_brief_review.py` 가 그 §6 을
+  "비신뢰 verbatim" 이라 명시한다.
+- `run_spec_codex_reviewer.sh` 에 웹 검색 + `DEVBREW_SPEC_DISTILL_DISABLE_WEB` 확인.
+- `run_brief_codex_reviewer.sh` 에 degrade 계약(시작 시 truncate + 완료 전 중단 시
+  degrade YAML) 백포트 — 형제 러너와 동형.
+- `rc == 3`(fail-closed 산출물을 못 쓰면 죽는 러너) 소비자 의무를
+  `reviewing-spec`·`reviewing-brief` SKILL 에 명문화.
+
+### Fixed
+
+- **`reviewing-spec` 의 codex 게이트가 산문이었다.** `:81` 이 "codex_avail=true일 때만"
+  이라고 문장으로 적고 `:82-85` bash fence 는 무조건 실행됐다 — 그 파일에 `codex_avail`
+  을 검사하는 `if` 가 없었다. kill switch 는 P21 보안 컨트롤이라 그 상태는 "껐다고
+  믿게만" 만든다. `reviewing-brief` 와 동형인 리터럴 게이트로 전환.
+- **`codex_findings_to_yaml.py` 헤더의 거짓 주장** — "ONLY adaptation … the emit keyset"
+  은 사실이 아니었다(CR-2 검증이 이 사본에만 있었다). 동일성은 이제 주석이 아니라
+  `quality-gates/tests/test_codex_copies_agree.sh` 가 보증한다(mock 자산 사본 8그룹도
+  같은 락에 편입).
+
+### Changed
+
+- 러너 2종이 프롬프트를 **stdin** 으로 넘긴다 (`codex exec -`).
+- `detect_codex.sh` 가 `0.118.0` 버전 바닥과 semver 판독 실패를 낸다.
+- `tests/test_detect_codex.sh` 가 14-케이스 합집합.
+- `codex_degraded` 의 정의가 **한 곳**(`merge_review.codex_degraded_from`)에만 있다.
+  두 병합기가 각자 인라인 계산하고 있었다.
+- `tests/test_web_kill_switch.sh` 의 소비자 도출이 **플러그인 횡단**이고 술어가
+  **값을 인식**한다 — 웹을 *끄는* 호출부에 죽은 스위치를 요구하지 않는다.
+
 ## [0.25.2] — 2026-08-06
 
 ### Fixed

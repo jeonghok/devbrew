@@ -365,6 +365,72 @@ Agent({
    var directly). If codex is unavailable, continue without it — scope does not change
    this.
 
+   **Capture the runner's exit code.** `run_codex_reviewer.sh` normally exits 0 and
+   always writes YAML to the output path you gave it — with one exception: if it
+   cannot write that path at all (unwritable directory/permissions/RO mount), it
+   exits **3** instead, having already printed a loud diagnostic to stderr. On
+   `rc == 3`, delete the output file before reading anything from it
+   (`rm -f <output_path>`) — otherwise a prior iteration's YAML (which may carry a
+   false-positive `codex_failed: false`) sits untouched and is read as this
+   iteration's codex verdict. This mirrors `run_brief_codex_reviewer.sh`'s identical
+   exit-3 contract, whose caller (`spec-distill`'s `reviewing-brief` SKILL) already
+   implements the same `if rc == 3: rm -f` pattern.
+
+#### Codex skip 안내
+
+`detect_codex.sh`가 false를 내면 그 사유를 사용자에게 보인다. codex는 부가 기능이
+아니라 **P11(cross-model adversarial)을 코드로 집행하는 구조 메커니즘**이다 — 철학이
+집행 파일로 `run_codex_reviewer.sh`를 명시한다. 그러므로 배너는 "codex 없음"이 아니라
+**"이 리뷰에는 모델 다양성이 없었다"**를 말해야 한다.
+
+kill switch는 `DEVBREW_DISABLE_QG_CODEX=1`이다. 이 게이트는 현재 **산문**이며 모델이
+detect를 돌린다 — 리터럴 bash 게이트로의 전환은 이 사이클 범위 밖이고,
+`test_codex_gate_observation.sh`의 UNGATED 원장에 사유와 함께 등재돼 있다.
+
+**visible (사용자가 조치할 수 있다 — 배너로 보인다):**
+
+| skip_reason | 사용자에게 보이는 문구 |
+|---|---|
+| `not_installed` | Codex CLI not installed — `npm i -g @openai/codex` |
+| `auth_missing` | codex auth missing — `codex login` 또는 `CODEX_API_KEY` |
+| `timeout_binary_missing` | no `timeout`/`gtimeout` on PATH — `brew install coreutils` |
+| `known_bad_version` | version known-bad (0.120.0/1/2 stdin deadlock) — 업그레이드 필요 |
+| `version_below_floor` | version_below_floor — stdin prompt(`codex exec -`)는 0.118.0 이상이 필요하다 |
+| `version_unreadable` | version_unreadable — `codex --version`에서 semver를 읽지 못했다 |
+
+배너 문구:
+
+> `[quality-gates] codex 리뷰 미실행 (<사유>) — 이 리뷰에는 모델 다양성이 없었다 (degraded).`
+
+**silent (사용자 조치 대상이 아니다 — 배너를 내지 않는다):**
+
+| skip_reason | 왜 조용한가 |
+|---|---|
+| `kill_switch` | 사용자가 직접 껐다. 자기가 한 일을 다시 알릴 필요가 없다 |
+| `inside_codex_sandbox` | 이미 codex 안이다. 재귀 방지이지 결손이 아니다 |
+
+#### codex 결과 판정 (러너가 돌고 난 뒤)
+
+`run_codex_reviewer.sh` 가 exit 0 을 내는 것은 **계약이지 성공 신호가 아니다.**
+산출물 YAML 을 읽어 아래 순서로 판정하고, 앞 단계에서 결론이 나면 뒤를 보지 않는다.
+
+1. **산출물 파일이 없거나 0바이트** → codex 결과 없음. 배너를 낸다.
+   0바이트는 소비자에게 *"codex 성공, 발견 없음"* 으로 읽힌다 — 리뷰어 하나가
+   조용히 사라지는 상태다.
+2. **`meta.codex_failed: true`** → 돌았으나 결과를 신뢰할 수 없다. `meta.reason` 을
+   배너에 함께 싣는다 (`exit_nonzero` · `schema_mismatch` · `malformed_json` ·
+   `missing_result` · `auth_error_in_stderr` · `extract_failed` 등).
+3. **`meta.codex_failed: false` 가 있어야** 정상이다. 그 키가 **부재하거나 판독
+   불가**면 degrade 다 — `findings: []` 만 보고 clean 으로 읽지 않는다
+   (`indeterminate ≠ clean`).
+
+배너 문구:
+
+> `[quality-gates] codex 리뷰 결과 사용 불가 (<reason>) — 이 리뷰에는 모델 다양성이 없었다 (degraded).`
+
+**스트림 이벤트는 판정 입력이 아니다.** `--json` 의 `error` 이벤트는 **재시도로 성공한
+run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 로깅 대상이다.
+
    **Tier C — Dynamic specialists (모델이 diff 스코프로 선택; 외부 advisory agent).**
    Choose zero or more from the menu in [Reviewer composition (scope-driven)](#reviewer-composition-scope-driven)
    by matching the diff to the rubric + scope-signal palette there.

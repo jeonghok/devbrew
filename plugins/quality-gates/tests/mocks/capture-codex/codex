@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# 캡처 mock — argv와 stdin을 기록하고 최소 유효 JSONL을 낸다. **판정하지 않는다.**
+#
+# 설계 §4.3: 계약을 정적으로 읽지 않고 실행해서 관측한다. 이 mock이 관측 장치다.
+# 셸이 호출을 어떻게 썼는지(다중행·변수 경유·간접 바이너리)에 무관하고, 주석은
+# 애초에 실행되지 않으므로 주석 만족 문제도 발생하지 않는다.
+set -u
+
+if [ -z "${CODEX_CAPTURE_DIR:-}" ]; then
+  echo "capture-codex: CODEX_CAPTURE_DIR unset — 하니스가 잘못 세팅됐다" >&2
+  exit 97
+fi
+
+# `--version`은 detect_codex.sh가 부르는 probe다. 바닥(0.118.0)을 넘는 값으로 답해
+# detect를 통과시키고, **호출로 기록하지 않는다** — 게이트 관측에서 detect probe가
+# 러너 호출로 오계수되면 시나리오별 기대 횟수가 전부 어긋난다.
+# `$1`로만 판정한다: `$@` 전체를 훑으면 (전환 전) argv에 실린 프롬프트가 우연히
+# `--version`을 포함할 때 캡처가 통째로 사라진다.
+if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.145.0"
+  exit 0
+fi
+
+mkdir -p "$CODEX_CAPTURE_DIR"
+n=0
+while [ -e "$CODEX_CAPTURE_DIR/call-$n" ]; do n=$((n + 1)); done
+d="$CODEX_CAPTURE_DIR/call-$n"
+mkdir -p "$d"
+
+# argv 전체를 NUL 구분으로. 공백·개행이 든 인자도 원형 그대로 보존된다.
+for a in "$@"; do printf '%s\0' "$a"; done > "$d/argv"
+# stdin 전체를 그대로. `< /dev/null`이면 0바이트가 되고, 그것이 위반의 신호다.
+cat > "$d/stdin"
+printf 'cwd=%s\n' "$PWD" > "$d/meta"
+
+# 최소한의 유효 JSONL. 추출기가 무엇이든(json fence / yaml fence) degrade로 떨어지는
+# 것은 무방하다 — 이 관측은 argv·stdin만 판정한다.
+printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"```json\n{\"findings\": []}\n```"}}'
+exit 0
