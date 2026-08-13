@@ -3,7 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [2.15.0] — 2026-08-10
+## [3.1.0] — 2026-08-13
+
+> 이 절은 `2.15.0` 으로 작성됐다가 머지 시점에 `3.1.0` 으로 재산정됐다 — 브랜치가 분기한
+> 뒤 main 에 `3.0.0`(영향-구동 Runtime)이 들어와 원래 번호가 **퇴행**이었기 때문이다.
+> bump 규칙은 "PR 마다 올린다"이지만, 그 규칙은 분기 이후 base 가 움직이지 않는다는 것을
+> 암묵 전제한다 — 움직였으면 새 base 에서 다시 센다.
 
 ### Added
 
@@ -65,6 +70,596 @@
   glob 가 자기를 재실행해 198초 × 무한 재귀다.
 - `test_codex_runner_degrade_contract.sh` 의 러너 목록이 도출이다.
 
+## [3.0.0] — 2026-08-09
+
+### Changed
+- **Runtime 게이트가 "전체 앱을 무조건 돌린다"를 버리고 영향-구동 차등 실행으로 바뀌었다.**
+  `SKILL.md` 의 *"Runtime runs the whole app regardless of Review scope."* 리터럴이
+  사라지고 그 자리에 *"이번 변경의 영향분만 기준선 대비로 돌린다"* 가 들어간다. 모델이
+  무엇을 돌릴지 한 번 고르고, 그 선택을 결정론이 merge_base 기준선과 HEAD 양쪽에서 두 번
+  실행해 짝짓는다 — 귀속(이 fail 은 내 탓인가)과 백스톱(결과가 조용히 비었나)이 같은
+  메커니즘에 얹힌다.
+- **`runtime-verifier` 는 floor 가 아니라 floor 위의 상황별 층을 담당한다.** setup·부팅·
+  플로우만 맡고, 테스트 실행 결과는 판정에 들어가지 않는다 — 오케스트레이터가 verifier 턴
+  *밖에서* `run-test-selection.sh` 를 직접 호출한 결과가 authoritative 다. verifier 가 자기
+  결과를 self-report 하면 오케스트레이터가 받는 것이 raw 출력이 아니라 모델의 요약이 되고,
+  결정론 백스톱이 모델 주장과 독립이라는 전제가 무너진다.
+- **baseline resolution 이 공유 모듈로 추출됐다.** `check-review-scope.sh` 의 하드닝된
+  resolution(origin/HEAD→main→master→local · merge-base · shallow/detached 감지)을
+  `resolve-baseline.sh` 가 소유하고, Review·Runtime 양쪽이 함께 쓴다.
+
+### Added
+- `scripts/resolve-baseline.sh` — `base`/`base_ref`/`merge_base`/`degraded`/`same_as_head`/`ahead` 6키 (AC62).
+- `scripts/run-test-selection.sh` — 러너 어댑터 9종(pytest·unittest·shell·jest·vitest·
+  go·cargo·make·npm-script)의 유일 소유자. `detect`(감지, **집합** 반환) /
+  `assign`(파일→unit 배정) / `probe`(실행 가능성, 테스트 미실행) /
+  `run`(총 함수 결정론 실행).
+- `scripts/baseline-cache.sh` — `(merge_base, runner, unit)` 내용주소 캐시. 기준선 실행이
+  `/qg` 호출당이 아니라 merge_base 당 1회가 된다.
+- `scripts/diff-test-results.py` — 귀속 8종 + 어댑터 간 `--aggregate`.
+- `scripts/check_qa_ledger.py` — floor 5차원(changed/behavior/verification/attribution/gap)
+  구조 게이트 + **전사 대조**(`--aggregate`, 필수): R6 집계의 `attribution_status` 와
+  원장의 `floor:attribution` 이 다르면 non-zero. 여기에 **`unclaimed` 집행**
+  (`--assign-rows`, 필수)이 얹힌다: 배정 TSV 에 `unclaimed` 행이 1건 이상인데
+  `floor:verification` 이 `degraded` 가 아니면 non-zero. **개수가 아니라 경로를 받는다** —
+  개수는 모델이 옮겨 적는 값이라 `--aggregate` 가 방금 닫은 전사 구멍을 같은 이음매에
+  다시 뚫는다(`0` 하나로 검사 소멸).
+- **오케스트레이터 소유 중간 파일 6종의 위치가 R-init 에서 정의된다.** `mktemp -d` 실행-스코프
+  디렉토리 하나에 살며 `$project_dir` 도 `$evidence_dir` 도 아니어야 한다 — 전자는
+  `create-sandbox` 가 `ls-files --others --exclude-standard` 로 미추적·비-ignore 파일을
+  샌드박스로 복사해 커밋 `B` 로 봉인하기 때문이고(건너뛰는 것은
+  `.claude/quality-gates/worktrees/*` 뿐), 후자는 R5a³ 에서 verifier 에게 넘어가기 때문이다.
+  어댑터별 4종은 러너 이름으로 가르고, **변수에 바인딩하지 않고 쓰는 자리에서
+  `$qg_run_tmp/<역할>-$runner.<확장자>` 로 전개한다** — 정의 지점이 없으면 "정의를 부르는
+  것을 잊는" 실패 클래스도 없다. 이에 따라 SKILL `allowed-tools` 에 `Bash(mktemp:*)` 이
+  등재됐다(개수·순서 린터도 함께 갱신) — 비-플러그인 명령 중 **항목을 가진 유일한 것**이지
+  목록 밖 셸 명령이 없다는 뜻은 아니다(`pwd`·`printf`·`cd`·`mv` 가 항목 없이 돈다, §11 ㉜).
+- `qg-worktree.sh create-baseline` · `qg-worktree.sh create-head` · `compute-test-scope-candidates.sh --total`. 두 `create-*` 절은 공유 헬퍼
+  `make_detached_worktree` 를 부른다 (`create-sandbox`/`mutation-guard` 본문 무변경 — AC22).
+
+### Removed
+- `SKILL.md` 의 `regardless of Review scope` 리터럴과 그것이 서술하던 동작.
+
+### Fixed
+- **R6 이 읽는 어댑터별 파일 세 개를 아무 스텝도 쓰지 않았다** (design F1 · §11 ㉗ 계열,
+  `/qg` iter-8 iteration 3 — 리뷰어 4명 독립 수렴). `--expected` · `--baseline` · `--head` 가
+  받는 `$qg_run_tmp/{expected,baseline,head}-$runner.*` 는 **이 브랜치의 다섯 리비전 전부**에서
+  소비자만 있고 생산자가 없었다. 정직한 실행은 `read_text_or_fail4` → `exit 4` 로 떨어져 귀속이
+  degrade 되고, 모델이 대신 화면 출력을 전사하면 `--expected` 가 주장하는 독립성이 사라진다
+  (한 전사자에서 나온 세 입력은 대칭 누락을 서로 가린다). 앞선 세 라운드의 "수정" 은 전부 이
+  파일들의 *이름 짓는 법*(R-init 전개 → 셸 함수 → 인라인)을 고쳤고 *누가 쓰는가* 는 한 번도
+  건드리지 않았다. 이제 R4 ③ 과 R5b 어댑터 루프 끝에서 실제로 쓴다. 회귀 락은 **③c
+  (생산자 ∧ 소비자)** — ③b 는 이름이 어디를 가리키는지만 재므로 이 결함을 원리적으로 볼 수
+  없었다(실측: 생산자 세 줄을 각각 지운 mutant 가 ③b 만으로는 셋 다 GREEN).
+- **담김 가드가 봉인되는 트리보다 작은 집합을 쟀다** (design F10 · §11 ㉞ 인접). R-init 은
+  `$project_dir`(Step P0 의 `pwd`)과 비교했는데 `create-sandbox` 는
+  `git rev-parse --show-toplevel` 로 독립적으로 구한 `$main_root` 에서 열거해 봉인한다
+  (`qg-worktree.sh:148-150`, `:170-171`). 서브디렉토리에서 `/qg` 를 부르고 `TMPDIR` 이 레포
+  루트 쪽에 있으면 중간 파일이 `$project_dir` 밖 · `$main_root` 안에 떨어져 **가드는 통과하고
+  파일은 커밋 `B` 로 봉인된다** — 가드의 산문이 막는다고 선언한 바로 그 결말이다. 이제
+  `$sealed_root` 를 봉인하는 쪽과 같은 방법으로 구해 그것과 비교한다.
+- **`per_adapter_yamls` 가 대입 없이 소비되고 있었다** (design F11). feature 커밋 이래 사용
+  1건 · 대입 0건. 되살리는 대신 `--aggregate` 가 `"$qg_run_tmp"/per-adapter-*.yaml` glob 을
+  받는다 — `--expected-adapters` 의 개수 대조가 *모델이 적은 목록의 길이* 가 아니라 **실제
+  생산물**을 세게 되어 비로소 이빨을 갖는다.
+- **`create-baseline` 에 종료 라우팅이 없었다** (design F7 — codex · security-reviewer ·
+  silent-failure-hunter 가 서로 다른 모델 계열에서 수렴). 형제 `create-head` 는 같은 실패
+  집합에 대해 표를 갖는다. 방향은 표 없이도 fail-closed 지만 **보고되는 사유가 틀렸다** — 행
+  부재가 `SILENT_DROP`("고른 것이 사라졌다") 으로 라벨돼 `BASELINE_UNRUNNABLE`("기준선을 못
+  돌렸다") 을 가린다. 형제와 같은 모양의 표를 붙였다.
+- **정리 복합문이 정상 경로에서 1 을 반환했다** (design F8c). `[[ … ]] && remove` 는 조건이
+  거짓일 때 AND-리스트 전체가 1 이고, 그것이 블록의 마지막 명령이라 **지울 트리가 없는 정상
+  경로에서 성공한 스텝이 실패로 읽혔다.** 두 축 모두 `if … then … fi` 로 바꿨고, 기준선 축에도
+  HEAD 축이 이미 갖고 있던 **"모든 종료 경로에서 폐기"** 규칙을 붙였다(안 붙이면 `base-<sid8>`
+  가 남아 다음 `create-baseline` 이 clobber 거부에 걸려 그 세션이 영영 PASS 에 못 간다).
+- **배정 파일 공시가 안심시키는 방향으로 거짓이었다** (design F9). 앞 판본은 부재-기반 집행을
+  깨는 데 "세 조건이 겹쳐야" 한다고 적었는데, 실측하면 **이미 있는 파일을 0바이트로 자르는 한
+  동작**이면 된다 — `assign_rc=0` 도 파일 존재도 그 시나리오에서 **정상값**이라 1차 라우팅은
+  제대로 발화하고 아무것도 제약하지 않는다.
+- **락 다섯 개가 모양만 재고 동작을 안 쟀다** (design F4 · F5 · F6 · F19 · F21). 리뷰어들이
+  넣은 mutant 중 `case` arm 뒤집기 · `exit 1` → `:` · 담김 arm no-op · `case` 삭제 후 decoy ·
+  `set -o pipefail` 을 다른 fenced 블록/파이프라인 뒤로 이동 · 리다이렉트와 `&& mv` 사이
+  `; true` · 최종 경로 직접 리다이렉트 + decoy `.part` · 게이트 뒤 `; true` / `if ! …; then :; fi`
+  / `2>/dev/null` — **전부 GREEN 이었다.** 열거를 늘리는 대신 구조 술어로 바꿨다: 담김 arm
+  **안**의 `exit`, 파이프라인과 **같은 블록의 선행** `pipefail`, 블록 안 `;`·`|`·`2>` 0건과
+  단순-명령 선두, 라우팅 문장 **자기 줄** 스코프 부정 스캔. 25/25 mutant 가 기대대로 움직인다
+  (`$CLAUDE_JOB_DIR/tmp/mut3.py`).
+- **`assign` 실패가 "`unclaimed` 0건" 으로 세탁됐다** (design AC70 · §11 ㉛). R1b 가 최종 경로로
+  직접 리다이렉트했는데 셸은 **명령이 돌기 전에** 대상을 만들고 절단한다 — 인자 검증에서 즉사한
+  `assign`(0바이트)도, 루프 중간에 죽은 `assign`(문법적으로 완전한 **접두 행**)도 게이트에게는
+  정상 결과와 **바이트 단위로 구분되지 않았다.** 형제 `--aggregate` 는 같은 입력에 `exit 4` 를
+  내는데 이쪽만 `exit 0` 이었다. 이제 `.part` 로 받아 **성공했을 때만** `mv` 하고 `pipefail` 을
+  켠다 — 실패한 실행은 최종 경로에 파일을 남기지 않고 `--assign-rows` 가 부재로 `exit 4` 다.
+  R1b 는 이 SKILL 에서 **유일하게 실패 라우팅이 없던** 결정론 호출이었고, R6·R7 과 같은 모양의
+  표를 갖는다. **행 0개는 실패가 아니다** — 그것은 §11 ⑭ 의 축이며 이 인자가 판정하지 않는다.
+- **어댑터별 중간 파일 4종이 한 이름으로 붕괴했다.** R-init 이 `$runner` 를 전개했는데 그 시점에
+  바인딩되어 있지 않고 SKILL 전체에 `runner=` 대입이 0건이라, `expected-.txt` 하나로 무너져
+  **어댑터 A 의 행이 어댑터 B 의 대조에 들어갔다**(바로 옆 문장이 막겠다고 선언한 상황).
+  중간에 셸 함수(`qg_paths_for`)를 거쳤으나 그것도 틀렸다 — **`Bash` 도구는 호출마다 새 셸**이고
+  R-init 과 소비자(R4·R5b·R6) 사이에 Agent dispatch 와 `AskUserQuestion` 이 끼어 있어 함수 정의가
+  소비자에 도달할 수 없으며, 실제로 그 판본은 **정의 1건·호출 0건**이었다. 최종형은 **정의 지점
+  자체를 없애는 것**이다: 사용 지점에서 `$qg_run_tmp/<역할>-$runner.<확장자>` 로 전개한다.
+  정의가 없으면 "정의를 부르는 것을 잊는" 실패 클래스도 없다.
+- **`$baseline_wt` 이 사용 3건·대입 0건이었다** (같은 클래스의 네 번째 사례). R4 가
+  `create-baseline` 의 stdout 을 **버리면서** `probe`·`run`·`remove` 에 그 이름을 넘겼다 —
+  형제 `create-head` 는 같은 자리에서 이미 잡고 있었다. stdout 을 잡고, 폐기는 HEAD 축과 같은
+  `-n`/`-d` 조건부로 바꿨다.
+- **`mktemp -d` 가 `TMPDIR` 을 존중하므로 "트리 밖" 이 보장되지 않았다** (AC69). R-init 에
+  `pwd -P` 를 양쪽에 쓰는 런타임 `case` 담김 가드를 넣고 담김이면 `verdict 는 PASS 불가` 로
+  멈춘다. 텍스트 락은 대입 줄만 볼 수 있어 한 단계 간접이나 환경에서 오는 `TMPDIR` 을
+  **원리적으로 못 본다** — 가드가 유일한 실질 집행자다. `$evidence_dir` 은 `$project_dir` 의
+  부분집합이라 금지는 둘이 아니라 하나이며, **그 포함 관계가 이 가드의 전제다**.
+  가드는 빈 `$project_dir` 검사를 **맨 앞에** 둔다: 이 블록은 새 셸에 붙여넣는 템플릿이라
+  `$project_dir` 은 오케스트레이터가 리터럴로 치환해야 하는 자리이고, bash 의 `cd ""` 는
+  **0 을 반환하고 cwd 를 바꾸지 않으므로** 검사가 없으면 가드가 조용히 *"cwd 아래인가"* 라는
+  다른 질문에 답한다(인용한 `unit_within_worktree` idiom 의 `|| return 1` 을 빠뜨린 복사본이었다).
+- **파서 축 4종** — 같은 플래그 **반복**이 dict 의 last-wins 로 집행을 통째로 껐다(→ exit 2) ·
+  `len(fields) != 3` 이 **>3 방향으로 미검사**여서 unit 경로의 탭 하나가 `unclaimed` 를
+  `fields[1]` 밖으로 밀어내 **진짜 PASS 유출**을 만들었다 · `granularity` 는 이 설계가 고정한
+  **닫힌 집합**이라 검사한다(러너 이름은 소유자 것이라 검사하지 않는다 — AC38·AC52) ·
+  `splitlines()` 가 생산자보다 넓은 줄 모델이라 `split("\n")` 으로 좁혔다.
+- **회귀 락 3종이 실측으로 뚫려 있었다** — raw `index()` 라 **산문**이 코드 assert 를 만족했고,
+  양의 sub-assert 가 ∃ 라 뒤에 틀린 호출을 덧붙이면 통과했으며, 음의 assert 가 같은-줄 조건 +
+  하드코딩 열거라 한 단계 간접과 일곱 번째 파일을 못 봤다. **∀ · fenced 블록 인식 · 열거→도출**
+  세 축으로 재작성했다.
+- **그 재작성이 다시 뚫렸다 — 16 mutant 중 11 생존** (재검증 라운드). 진단: **fence 인식이
+  경계를 닫은 게 아니라 옮겼다** — Markdown 산문에 대한 `index()` 가 셸 **주석**에 대한
+  `index()` 가 됐을 뿐이다. 그리고 fencing 을 **반대 극성**에 적용했다: *요구*는 코드 안에
+  있어야 하는데 산문까지 보고 있었고(가드를 통째로 지우고 산문 한 줄만 남겨도 GREEN),
+  *금지*는 산문까지 덮어야 하는데 코드로 좁혀져 있었다. 재작성 2차:
+  · T94 ① 주석 제거 · `mv` 의 **`&&` 연결**까지 요구(존재만 재면 `;` 로 바꿔 0바이트 세탁이
+    그대로 재개방된다) · `pipefail` 줄 전체 앵커
+  · T94 ② 블록 안 `|` **0건**(종료코드 삼킴 금지 — 열거 대신 닫힌 술어)
+  · **T94 ③ 신규** 게이트 라우팅 문장의 양+음 락. 앵커는 **같은 줄 공기**다 —
+    `PASS 로 올리지 않는다` 단독은 이 창에서 body-unique 가 아니라 문장을 지워도 통과한다.
+    사정거리를 명시한다: 문장의 *존재와 극성*을 지키지 *준수*를 재지 않는다.
+  · T96 ① **요구/금지 분리**(req=fenced R-init, proh=Runtime 절 전체 1건 — 창을 R1a 까지로
+    좁혔던 앞 버전은 R1a **뒤**의 재-루팅을 못 봤고, 그 비대칭 자체가 구멍이었다)
+  · T96 ③a **문법 열거 → 목적지 값 금지**(`export`·대문자·줄 중간·뒤 스텝 네 mutant 를 한
+    술어로. 정규식을 넓히는 것은 세 번째 열거가 된다)
+  · T96 ③b **변수 대입 → 파일 이름 ∀**(메커니즘 중립. 부수로 **러너 판별 축을 처음으로
+    잰다** — `-$runner` 를 떨어뜨려 4종이 한 이름으로 붕괴하는 원래 결함에 스위트 전체에서
+    락이 0건이었다)
+  · T96 ④ fence + 주석 제거 + **대조 probe**(해소만 재면 `pwd -P` 두 줄은 남기고 `case` 만
+    지운 mutant 가 통과한다 — 경로를 정규화해 놓고 아무것도 비교하지 않는 가드가 남는다)
+- **`check_qa_ledger.py` 의 종료 코드가 인자 모양과 내용을 구분하지 않았다** (design AC68′).
+  형제 스크립트는 *"생략 시 exit 2, 빈 값은 exit 4"* 로 두 축을 가르는데 이 스크립트만
+  전부 2 였다 — *"부르는 법을 틀렸다"* 와 *"읽었는데 믿을 수 없다"* 가 같은 신호였다.
+  이제 모양=2 · 내용=4 · 구조 위반=1 · 통과=0 이다. 소비자는 어느 쪽이든 non-zero 를
+  PASS 불가로 라우팅하므로 **동작이 아니라 진단**의 수정이다.
+- **비-UTF-8 원장 파일이 트레이스백이었다.** `UnicodeDecodeError` 는 `OSError` 의 하위가
+  아닌데 원장 read 경로만 `OSError` 하나로 막고 있었다 — 형제 두 read 경로(`--aggregate`,
+  `--assign-rows`)에서 이미 고친 **같은 버그의 세 번째 인스턴스**. 세 경로가 이제 같은
+  모양이다.
+- **`unclaimed → verification: degraded` 에 기계 집행자가 없었다** (design §11 ㉓).
+  `run-test-selection.sh assign` 의 구조적 거부 3곳(워크트리 밖 unit ·
+  `unittest_can_judge` 실패 · 실행 수단 없음)이 전부 SKILL 산문 한 문장에 종착했고,
+  `unclaimed` unit 은 어느 어댑터의 목록에도 없어 `--expected` 에 안 들어가므로
+  `SILENT_DROP` 백스톱조차 닿지 않았다 — 즉 **한 번도 안 돈 unit 을 두고 3플래그 false +
+  5차원 `closed` → PASS** 가 성립했다. R1b 가 `assign` stdout 을 `$assign_rows_file` 로
+  남기고 R8 이 그것을 `--assign-rows` 로 넘긴다. 회귀 락은 R1b→R8 사슬을 **∀** 로 잠근다 —
+  맞는 호출 뒤에 인자 빠진 두 번째 호출을 덧붙이는 mutation 이 ∃ 판을 통과했다(실측).
+  **빈 스코프(배정 0행)는 이 인자가 판정하지 않는다** — `unclaimed` 0건과 구분되지 않으며,
+  그 축은 design §11 ⑭ 로 열려 있다.
+- **iteration 2 — 내 iter-7 수정에서 나온 5건** (codex + security-reviewer 재리뷰).
+  두 리뷰어가 CRITICAL 3건이 실제로 닫혔음을 확인한 뒤 찾은 것들이다:
+  - **flaky 재실행 결과의 캡처·병합 규칙이 없었다** — *"마지막 호출의 결과가
+    authoritative"* 라고 적어 놓고 그 결과를 `$head_rows_file` 에 반영하는 방법을 말하지
+    않아, 대조가 여전히 원래의 실패 행을 읽었다. 임시 TSV → 실패 시 원행 유지 + degraded
+    → 성공 시 해당 unit 만 **교체**(추가는 중복 unit 으로 exit 4) → 원자적 배치 순서를 명시.
+  - **폐기가 무조건이라 degrade 결과를 삼켰다** — 새 R5b 라우팅은 `create-head` 실패 후에도
+    진행하는데 `head_tree_dir` 이 빈 문자열이라 `remove ""` 가 죽었고, **이미 확정된
+    degrade 가 R7·R8 에 도달하기 전에 파이프라인이 끊겼다.** 조건부로 바꿨다.
+  - **`2>&1` 캡처가 git 경고를 파일명 스트림에 섞었다** (두 리뷰어 독립 수렴). 성공 경로의
+    rename-limit warning 등이 `(^|/)tests?/` 에 매치하면 그대로 후보가 되고, 형제 `--total`
+    은 stderr 를 안 잡으므로 **분자가 분모를 넘는다**. stderr 를 별도 파일로 분리.
+  - **★ `exit 4` 를 같은 파일의 헤더가 무력화하고 있었다** — 세 줄 위 *"Exit: … Skill must
+    fail-open (treat non-zero as empty)"* 가 이 스크립트의 **유일한 reader-facing 계약**
+    이라, `|| true` 를 걷어낸 수정이 문서에 의해 그대로 §6.7 F6 으로 되읽히는 상태였다.
+    헤더를 종료 코드 표로 다시 쓰고 SKILL 호출 지점에 라우팅 문단을 붙였다.
+    **코드를 고치고 계약을 안 고치면 고친 것이 아니다.**
+  - **폐기가 R6 의 정상 종료 경로에만 있었다** — exit-4 라우팅으로 R8 에 빠지면 트리가 새고,
+    그 트리의 테스트 산출물 때문에 다음 `create-head` 의 non-force 제거가 거부돼 die 하며,
+    같은 세션의 모든 후속 실행이 `verification: degraded` 가 된다(**PASS 에 영영 도달 못 하는
+    세션**). 모든 종료 경로에서 폐기하도록 명시.
+- **`create-head` 도입이 낳은 3 CRITICAL** (`/qg branch` iter-7 Review 게이트 — 리뷰어
+  5 + adversarial 이 29건 판정, 그중 다수가 iter-7 의 두 커밋 산물). 구조 방향은 맞았지만
+  계약이 불완전했다:
+  - **(a) R6 의 flaky 재실행이 쓸 트리를 R5b 가 먼저 지웠다** (리뷰어 4명 독립 수렴).
+    `NEW_REGRESSION` 후보를 HEAD 에서 1회 재실행하고 그 결과를 authoritative 로 선언하는데
+    트리가 없었다. 도달 가능한 결말 넷 중 둘이 fail-open — 그중 하나가 **이 커밋이 닫았다고
+    선언한 §11 ⑬ 을 flaky 경로로 되여는 것**이었다. 트리 수명을 R6 끝으로 옮기고 재실행에
+    `$head_tree_dir` 를 리터럴로 명시했다.
+  - **(b) `create-head` 가 sha 를 무검증으로 받았다.** 형제 `create-baseline "$merge_base"`
+    와 인자 모양이 같아 오값 하나로 HEAD 축이 기준선의 바이트 복사본이 되고, 전 unit 이
+    `(P,P) → STILL_GREEN → closed` 로 접혀 **degrade 신호 없이 PASS** 가 났다. 이제 이 세션
+    샌드박스의 봉인 커밋과 **대조**하고 다르면 die 한다. *도출*이 아니라 *대조* 인 이유:
+    verifier 는 그 샌드박스에서 Write·Bash 를 쥐고 `B` 위에 커밋할 수 있어 도출은 신뢰
+    앵커를 피검자에게 넘긴다. 대조는 **거부만 하고 선택은 못 한다.**
+  - **(c) R5b 에만 실패 라우팅이 없었다** (R6·R7 에는 있다). 관측 실패가 "고른 것이
+    사라졌다" 로 오보됐고, verifier 가 `head-<sid8>` 경로를 선점해 그 실패를 결정론적으로
+    유발할 수 있었다. AC67 로 표를 추가하고 두 폴백 트리를 명시 금지했다.
+- **iter-7 이 추가한 락 3개가 전부 뚫려 있었다.** ∃(두 번째 `create-head` 호출을 덧붙이면
+  통과) · 토큰 grep(재시도 지시문을 반전해도 통과) · 비대칭 needle(R8 호출을 한 줄로 접고
+  `$per_adapter_yaml` 을 넘기면 통과 — per-adapter YAML 도 `attribution_status` 를 내므로
+  **깨끗하게 파싱돼** 전사 게이트가 막으려던 fail-open 그 자체가 된다). 셋 다 내 mutation 이
+  **'삭제' 축만 흔들었기 때문**이고, 리뷰어는 추가·반전·형태변경으로 통과시켰다. 파일의
+  기존 관례(∀ over call-site)로 변환하고 ∀ 창을 R5b..**R7** 로 넓혔다 — 앞 창(R5b..R6)은
+  **자기가 지키려던 결함을 볼 수 없는 자리**였다.
+- **상류 degrade 가 한 소비자에서만 무성이던 것** (F11 + H4 + M6, 한 뿌리).
+  `compute-test-scope-candidates.sh` 의 1차 데이터 취득 줄에 `|| true` 가 남아 있었다 —
+  주석은 iter-6 E10 (§6.7 F6) 으로 닫혔다고 적었는데 **형제 호출에서만** 고쳐졌다. 또
+  `resolve-baseline.sh` 는 언제나 exit 0 이라 loud 분기가 '스크립트 부재' 에만 발화하고,
+  훨씬 흔한 `degraded: yes` 는 else 없이 통과해 브랜치 전체가 후보 0건이 됐다. 둘 다 loud
+  fail 로 바꿨고, `resolve-baseline.sh` 는 `symbolic-ref` 대상의 실존을 확인하게 했다
+  (dangling `origin/HEAD` — master→main rename 잔재 — 가 fallback 체인을 도달 불가로 만들던
+  것이 그 `degraded: yes` 의 최대 공급원이었다).
+- **비-ASCII 경로가 분자·분모에서 동시에 탈락**하던 것 — `core.quotePath` 기본 true.
+  Korean-primary 레포에서 변경된 한글 테스트 파일이 `--expected` 에도 못 들어가 백스톱조차
+  닿지 않았다. 양쪽 호출에 `-c core.quotePath=false`.
+- **`find` 가 플러그인 자신의 워크트리 네임스페이스로 하강**해 `N > M` 역전을 만들던 것 —
+  prune 추가. 이번 `create-head` 가 그 디렉토리의 세 번째 상주자였다.
+- **`diff-test-results.py` 의 `except OSError` 가 `UnicodeDecodeError` 를 못 잡던 것** —
+  형제 `check_qa_ledger.py` 에는 같은 라운드에 넣고 여기엔 안 넣었다.
+- **축마다 `run` 이 2회인데 mode 토큰이 1개**이던 계약 공백 — `--mode` 축 분리가 축 *사이*
+  의 접기는 없앴지만 축 *안* 의 2단계(bulk → per-unit 승격)에 답이 없었다. `per-unit` 이라
+  적으면 도말 degrade 가 꺼진다. **"하나라도 bulk 였으면 bulk"** 를 두 2단계 지점에 명시.
+- **원장 전사가 대조되지 않던 fail-open** (`/qg` iter-7 — 라운드 6·7 의 U3. 그 id 는
+  §12 의 한 문장 밖 **어디에도 등재된 적이 없었다** — 이 라운드에 §11 ⑱ 로 실제 등재하고
+  같은 라운드에 닫았다). R8 은 R6 이 낸 `attribution_status` 를 `floor:attribution` 의
+  status 로 **모델이 옮겨 적게** 하는데, 옮겨 적은 값이 기계값과 같은지는 아무도 보지
+  않았다. `degraded` 를 `closed` 로 옮기면 floor 5차원이 전부 `closed` 가 되어 **PASS 행을
+  그대로 만족시킨다** — 불변식 ②가 결과값 축에서 없앤 "모델 요약이 판정을 결정" 이
+  *전사* 축으로 재입장한 자리다.
+  **해소:** `check_qa_ledger.py --aggregate <집계 YAML>` (필수 인자)가 두 값을 대조하고
+  다르면 non-zero. 집계 파일 부재·`attribution_status` 줄이 정확히 1개가 아님도 통과가
+  아니다(fail-closed — 첫 매치만 보면 원하는 값을 앞에 덧붙여 우회할 수 있다). R6 은 집계
+  stdout 을 `$aggregate_yaml` 로 남기고 R8 이 넘긴다. 인자를 선택으로 두지 않은 이유는
+  형제 `--baseline-detected` 와 같다: 선택이면 넘기지 않은 호출자가 조용히 면제받는다.
+  이 대조는 **전사 축만** 닫는다 — custody(넘긴 파일이 정말 그 실행의 출력인가)는 §6.7 S1
+  로 열려 있다.
+- **새 필수 인자가 기존 음성 테스트를 엉뚱한 이유로 통과시킬 뻔한 것** (같은 라운드에
+  자체 적발). `--aggregate` 가 필수가 되자 기존 케이스가 전부 exit 2 로 죽는데, 그 케이스
+  다수가 *non-zero 를 기대*하는 음성 테스트라 **재려던 축(누락·문법·모순)이 판정되지 않은
+  채 GREEN** 이 된다. 러너가 일치하는 집계를 함께 쓰도록 고쳐 각 축을 제자리로 되돌렸다.
+- **HEAD 축 테스트가 verifier 샌드박스에서 돌던 구조 결함** (`/qg` iter-7 — §11 ⑬,
+  라운드 7 codex 단독 high 로 제기돼 *잔여 결함(병합 차단)* 으로 등재돼 있던 항목).
+  이 게이트가 파는 것은 *"같은 선택을 두 번 돌려 짝짓는다"* 이고 그것은 **두 축이 같은
+  환경**일 때만 성립하는데, R5b 가 verifier 가 부팅용으로 변형한 바로 그 트리에서
+  권위 있는 HEAD 테스트를 돌리고 있었다. 그 비대칭은 `NEW_REGRESSION` 과 **구별 불가능한
+  모양**으로 나타나 어느 쪽이 원인인지가 verifier 자기보고로만 갈렸다 — 불변식 ②가
+  *결과값*에서 없앤 self-report 신뢰가 *실행 환경* 축에 남아 있었다.
+  **해소:** `qg-worktree.sh create-head <B>` 가 봉인 커밋에 detached 된 **두 번째 일회용
+  워크트리**를 만들고 R5b 가 거기서 돈다. 이제 양축 모두 오케스트레이터가 만든 커밋
+  detached 트리이고 두 트리에서 실행되는 것은 어댑터의 `setup_cmd` 뿐이다 — 대칭이
+  전제가 아니라 **구조**다.
+- **게이트 자신의 테스트 아티팩트가 만들던 거짓 terminal FAIL** (§11 ⑨ = §6.7 S4 —
+  위와 **같은 수정 하나로** 닫혔다). R7 의 `mutation-guard` 는 `sandbox_dir` 를 검사하는데,
+  예전에는 HEAD 측 테스트가 그 트리에서 돌아 `.pytest_cache` 류가 거기 떨어졌고 대상
+  레포의 `.gitignore` 가 덮지 않으면 `disallowed_new_files` 로 잡혔다. `make`·`npm-script`
+  는 내부 명령을 몰라 억제할 수단조차 없었다. 이제 그 산출물은 HEAD 축 트리에 떨어지고
+  가드는 그 트리를 보지 않는다 — **가드를 느슨하게 한 것이 아니라 검사 대상에서 게이트
+  자신을 뺀 것**이라 Law 2 표면은 그대로다.
+- **재시도가 옛 봉인 커밋에 붙던 새 fail-open** (위 수정이 연 것을 같은 라운드에 봉쇄).
+  `create-sandbox` 는 호출마다 새 커밋 `B` 를 내므로, 재시도 후 refresh 된
+  `baseline_sha` 로 `create-head` 를 다시 부르지 않으면 HEAD 축이 **고쳐지기 전 코드**에
+  붙는다 — 트리도 행도 정상이라 어떤 degrade 신호도 서지 않는 조용한 실패였다.
+- **`mutation-guard` 3-arg 락의 앵커가 산문에 latch** — 앵커가 *이름의 첫 등장* 이라 R7
+  호출보다 앞선 설명 문단을 집었다. 반대 방향이 더 나빴다: **호출에서 인자를 지워도 산문에
+  그 낱말이 있으면 GREEN.** `scripts/` 접두를 같은 줄에서 요구하는 호출-줄 앵커로 교정.
+- **재시도 순서 락이 괄호 안 낱말까지 핀** — `R5b(새` 로 잡고 있어, 그 괄호 설명이
+  사실에 맞게 갱신되자 순서가 멀쩡한데도 RED 가 났다. 락이 구현보다 강해 **문서를 거짓으로
+  되돌리라고 요구하는** 형태였다. 순서절을 고르는 최소 구조(`R5b(`)로 교정 — 역전·앞항
+  삭제·뒷항 삭제 3축 mutation RED 유지.
+- **미등재 테스트 id `T87`** — iter-6 이 만든 테스트가 §8.1 행 없이 한 라운드를 넘겼다.
+  §6.7 이 처벌하는 *등록 없는 등록* 의 반대 방향(존재하는데 원장에 없음)이며, 원장을
+  세는 독자에게는 커버리지가 실제보다 적어 보인다. T88·T89 와 함께 등재.
+- **`--mode` 가 판정을 가르는 자유 변수였던 fail-open** (`/qg` iter-6 CRITICAL —
+  silent-failure-hunter 단독 적발, adversarial 이 합성 경로까지 확장) — 도말 degrade 가
+  `args.mode == "bulk"` 하나에 걸려 있었고 그 값의 유일한 출처는 오케스트레이터의
+  기억이었다. 실측: 동일 입력에 `--mode per-unit` 만 넘기면 `degraded` → `closed` 로
+  뒤집혀 3플래그 전부 false = R8 PASS 행 전체가 성립했다. 형제 `--granularity` 는
+  정확히 이 결함(iter-5 C5)으로 소유자 대조 검사를 받았는데 이 인자만 못 받았고,
+  §6.7·§11 어느 잔여 목록에도 없었다.
+  **수정: 인자를 축별로 쪼갰다** — `--mode` → `--baseline-mode` + `--head-mode`(둘 다
+  필수). 실제 위험 경로는 SKILL 자신이 문서화한 규칙, *"양측에서 mode 가 달랐다면 배치였던
+  쪽을 기준으로 `bulk` 를 넘긴다"* 였다: 두 독립 `run` 호출을 **한 토큰에 접는** 손실
+  변환이고 그 접기의 유일한 집행자가 그 토큰 자신이었다. 특히 위험한 조합(기준선 bulk ×
+  HEAD per-unit)은 R4 가 기준선을 언제나 `run … bulk` 로 돌리므로 예외가 아니라 **기본
+  경로**였다. 축을 쪼개면 각 호출이 자기 mode 를 자기 자리에 적어 접기가 사라진다.
+  **한 번 시도했다가 철회한 것(정직하게 기록):** 데이터에서 도말을 추론하는 서명
+  (present unit ≥2 인데 `(status, exit)` 쌍이 1종). iteration 2 리뷰에서 리뷰어 3명이
+  독립 수렴해 (a) 그 서명이 **head 축만** 봐서 회귀를 숨기는 축(baseline)을 못 봤고,
+  (b) 정직한 per-unit 실행이 "고른 unit 전부 양측 red" 일 때를 degrade 시켜 이 설계가
+  *"stale red 가 첫 실행부터 게이트를 막으면 쓸 수 없다"* 를 이유로 통과시키기로 한 결정을
+  되돌린다는 것을 보였다 — 위험한 축은 열린 채 위양성만 추가한 **순감**이라 철회했다.
+  **남은 잔여(§11 ⑰):** 두 값의 provenance 는 여전히 미검증이다(형제
+  `--baseline-detected` 와 같은 등급). 닫으려면 `run` 이 증거를 남겨야 하는데 기준선이
+  **캐시 적중**으로 올 때는 그 실행이 아예 없다.
+- **`--total` 분모가 분자보다 작아질 수 있던 것** (`/qg` iter-6 D1) — `TESTRE` 에
+  `test_*.py` 가 없는데 후보 매퍼는 명시적으로 `find -name "test_${base}.py"` 를 한다.
+  실측 N=1 / M=0. SKILL 이 비율 부풀리기를 막으려고 분모를 이 스크립트에서 강제로
+  가져오는데 그 보증이 무너져 있었다.
+- **`resolve-baseline.sh` 부재·실패가 조용한 빈 후보 목록이 되던 fail-open**
+  (`/qg` iter-6 E10 ≡ §6.7 F6) — `|| true` 가 소유자 실패를 빈 문자열로 바꿔
+  `REVIEW_RANGE=""` 로 떨어뜨렸다. 형제 `check-review-scope.sh` 는 같은 자리에서
+  `|| emit_degraded` 로 fail-closed 다. 이제 원인을 loud 하게 알린다.
+- **poetry 가 env-dir 열거에서 빠져 거짓 terminal FAIL 을 낼 수 있던 것**
+  (`/qg` iter-6 C2(b)) — 근거가 "poetry 의 기본 venv 는 트리 밖" 이라는 **평서문 단정**
+  이었는데, 그건 레포의 속성이 아니라 **머신 상태**다(`virtualenvs.in-project` 는 레포
+  `poetry.toml`·사용자 전역 config·환경변수 어디로든 켜진다). 켜져 있고 `.venv` 가
+  gitignore 되지 않으면 R7 이 전량을 `disallowed_new_files` 로 잡아 어떤 degrade 로도
+  내려가지 않는 FAIL 을 낸다. 이제 단정하지 않고 세 축을 **물어본다**; 판단 불가는
+  보수적으로 "트리 안" 으로 읽는다(오판 대가가 비대칭이라 — 깨끗한 degrade 대 거짓 FAIL).
+- **폴백 라우팅 주장이 도달 불가였고 회귀 락이 그 틀린 주장을 방어하던 것**
+  (`/qg` iter-6 D3) — SR4 이후 폴백에서는 R4 도 건너뛰어 기준선 축까지 전량 `unrun`
+  이므로 쌍은 항상 `(U,U) → BASELINE_UNRUNNABLE` 인데, 산문은 비대칭 쌍을 주장하고
+  harness 락은 그 리터럴을 요구했다 — **산문을 옳게 고치면 스위트가 red 가 되는** 상태.
+  락을 지우면 G5 보호가 사라지므로 정정된 주장으로 **재조준**하고, 옛 주장의 재도입도
+  함께 막는다.
+- **`degraded` skip 경로가 `unrun` 채움 지시를 빠뜨려 사유를 오보고하던 것**
+  (`/qg` iter-6 D2) — 형제 skip 둘은 지시를 갖고 있었다. 빈 파일을 넘기면 약속한
+  `BASELINE_UNRUNNABLE` 대신 `SILENT_DROP`("고른 것이 사라졌다")이 보고된다.
+- **`probe` 의 setup 이 "전부 idempotent" 라던 거짓 근거** (`/qg` iter-6 A5) —
+  `npm ci` 는 `node_modules` 를 통째로 지우고 다시 만들며, npm/pnpm/yarn 설치는 레포가
+  작성한 라이프사이클 스크립트를 호스트 전권으로 실행한다. 무조건 도는 판단은 유지하되
+  (게이트는 어차피 같은 트리에서 레포 명령을 돌리므로 새 능력이 아니다) 근거를 정정했다.
+- **`unittest` 판정가능성 술어가 `async def test_` 를 놓치던 프로덕션 버그**
+  (`/qg` iter-6 E12) — 음성 조건이 `^def[[:space:]]+test` 였다. 같은 파일에 진짜
+  `TestCase` 가 하나라도 있으면 파일이 claim 되고 `discover` 가 `TestCase` 만 수집해
+  exit 0 → `pass` 를 내며, **async 테스트는 한 번도 판정되지 않는다.** AC63′ 이 닫혔다고
+  인증한 escape (a) 가 토큰 하나로 재개방돼 있었다. `^(async[[:space:]]+)?def` 로 교정.
+- **`assign` 이 후행 개행 없는 stdin 의 마지막 후보를 조용히 버리던 무음 소실**
+  (`/qg` iter-6 C6) — `while IFS= read -r f` 에 `|| [[ -n "$f" ]]` 가 없었다. 이 축이
+  특히 위험한 이유는 떨어진 unit 이 `unclaimed` 로도 `--expected` 로도 안 잡혀
+  **`SILENT_DROP` 백스톱이 닿지 않기** 때문이다 — 애초에 존재한 적 없는 것처럼 사라진다.
+- **신규 셸 테스트 4개가 실행비트 없이 커밋돼 self-dogfood 가 구조적으로 불가능하던 것**
+  (`/qg` iter-6 D6) — 셸 어댑터는 `-x` 를 요구하므로 그 파일들이 `unclaimed` 로 떨어지고,
+  `unclaimed` 하나면 `verification: degraded` → **PASS 불가**다. 즉 이 플러그인이 만든
+  게이트로 이 레포를 검증하면 절대 인증이 나올 수 없었다. `plugins/quality-gates/tests/`
+  하위 `.sh` 95개 전부를 `100755` 로 맞추고, **인덱스 모드**를 재는 ∀ 락을 추가했다
+  (워킹트리 `-x` 는 chmod 한 머신에서만 참이라 락이 될 수 없다).
+- **capability 강등 2종이 무음이던 것** (`/qg` iter-6 C3·C4) — ① jest·vitest 공존 +
+  `scripts.test` 가 어느 쪽도 호출하지 않으면 `granularity: file` → `bulk` 로 강등되는데
+  stderr 가 0바이트였다(형제 degrade 는 loud). ② 파손된 `package.json` 이 "JS 어댑터 없음"
+  과 **완전히 구분 불가**였다. 판정은 둘 다 fail-closed 로 두고 원인만 loud 하게 노출한다.
+  ②는 `pkg_field` 안이 아니라 `detect_set` 에서 판정한다 — `pkg_field` 호출부 4곳이 전부
+  stderr 를 막아 함수 안의 로그는 한 글자도 밖으로 나오지 않기 때문이다.
+- **`-` 로 시작하는 경로가 옵션으로 파싱되던 크래시 클래스** (`/qg` iter-6 D7) —
+  `grep -qxF`·`dirname`·`basename` 에 `--` 가 없어 중복 제거 가드가 죽고 같은 unit 행이
+  두 번 emit 되어 `diff-test-results.py` 가 계약 위반으로 exit 4 를 냈다. fail-closed
+  방향이지만 정당한 실행이 죽는다.
+- **음의 락 3종이 존재하지 않는 코퍼스에 대해 통과하던 것** (`/qg` iter-6 E5) —
+  맨 `grep -q` 는 파일 부재 시 exit 2 → 거짓 분기 → PASS 다(실측: 경로를 `/nonexistent`
+  로 돌려도 셋 다 통과). 특히 `case_no_ambient_pytest_probe` 는 앵커가 리터럴
+  `import pytest` 였는데 그건 **앰비언트 프로브의 모양이 아니라서**, 케이스 이름 그대로의
+  재도입(`command -v pytest`)을 해도 GREEN 이었다. 계약을 구조에서 다시 도출해
+  **선언 측 5개 함수 전부(∀)에 프로브 부재 + 실행 측엔 존재(양의 짝)** 로 바꿨다.
+- **심어진 캐시가 기준선 관측 자체를 억제하던 fail-open** (`/qg` iter-2, AC60) —
+  R4② 가 "미적중분이 있을 때만" 기준선 워크트리를 만들었기 때문에, 선택된 전 unit 에
+  `pass` 를 심어 전량 적중을 만들면 **기준선 트리가 아예 생기지 않았다**. merge_base 에
+  어댑터가 없어 원래 `BASELINE_UNRUNNABLE` → PASS 불가였던 실행이 `STILL_GREEN` →
+  `closed` → PASS 가 됐다. §5.4 의 비대칭 표가 이것을 놓친 이유는 표가 **실제값을
+  pass/fail 로만 놓고** 6조합을 셌기 때문이다 — 실제값이 `unrun` 인 줄은 결함 축이
+  아니라 **인증 축**이라 `fail` 전용 재검증이 닿지 않는다. 이제 워크트리 생성과
+  `detect` 는 캐시 적중과 무관하게 항상 수행되고, 그 결과가
+  `diff-test-results.py --baseline-detected`(**필수** 인자)로 넘어간다. 러너가 그
+  집합에 없으면 캐시가 무엇을 내줬든 기준선 축이 `unrun` 으로 강등된다.
+- **판정하지 못한 실행이 인증을 통과하던 fail-open** (`/qg` iter-2, AC61) —
+  `error` 는 fail 축으로 접히므로 **양측 `error` 가 `(F,F)=PRE_EXISTING` → `closed`**
+  였다. pytest 수집 0개(exit 5)·import 실패(exit 2)·잘못된 ini 옵션(exit 4)과
+  cargo 컴파일 실패(exit 101)가 여기로 떨어져 **테스트를 하나도 판정하지 않고
+  PASS** 가 나왔다. (앞선 판본은 여기에 jest/vitest "No tests found" 도 열거했으나
+  그것은 **거짓이었다** — 실측상 둘은 exit 1 을 내므로 `fail` 축이고 이 규칙에 닿지
+  않는다. 코드와 설계 doc 은 정정됐는데 이 항목만 남아 수정 범위를 과장하고 있었다;
+  `/qg` iter-6 D5.) 종료 코드를 러너별로 열거해 `unrun` 으로 보내는 앞선 수정은 더 나쁜
+  결함을 만들었다(pytest exit 2 는 환경이 아니라 제품 파손이라, "이 diff 가 import 를
+  깼다"가 terminal FAIL 에서 비차단으로 내려갔다 — 실측). 이제 **축을 옮기지 않고
+  원장에서 인증만 막는다**: `error` 가 어느 축에든 닿으면 `attribution_status:
+  degraded`. 비대칭 `(pass, error)` 는 그대로 `NEW_REGRESSION` 이다.
+  같은 줄에서 `SILENT_DROP` 도 `degraded` 로 보낸다 — verdict 는 이미 cap 됐지만
+  원장이 "attribution 정상 종료" 라고 적히던 것을 바로잡는다.
+- **`merge_base` ref 변조가 모든 회귀를 `PRE_EXISTING` 으로 접던 경로** (`/qg` iter-2,
+  AC62) — base 후보 ref 는 전부 **공유 common gitdir** 에 있고, `run` 이 실행하는
+  저장소 코드가 호스트 권한으로 `git update-ref` 를 할 수 있다. base 를 HEAD 로 옮기면
+  기준선 트리가 리뷰 대상 코드 자체가 된다. `resolve-baseline.sh` 가 이제
+  `same_as_head` 와 `ahead` 를 6키 계약으로 emit 하고, Runtime 게이트가
+  `same_as_head: yes` **이면서 워킹 트리가 clean** 일 때를 차등 증거 불가로 읽어 PASS 를
+  막는다 (`same_as_head` **단독**은 아니다 — 아래 Fixed 의 `/qg iter-4`·`iter-5` 항목이
+  정본이다. 단독 차단은 실측으로 진짜 FAIL 을 SKIP 으로 강등시켰다). **스크립트는 판정하지
+  않는다** — `merge_base == HEAD` 는 정상(`main` 위 미커밋 작업)으로도 생기고 구분할
+  방법이 없기 때문이다. Review 게이트의 changes-exist floor 는 이 키를 읽지 않아
+  정상 케이스가 죽지 않는다(v2.6.0 이 닫은 false-clean 재발 방지).
+- **`unittest_can_judge` 의 앵커 없는 부분문자열** (`/qg` iter-2, AC63) —
+  `grep -qE '(unittest|TestCase)'` 가 파일 전체를 봤기 때문에
+  `from unittest.mock import patch` 하나로 pytest 스타일 파일이 claim 됐고,
+  `unittest discover` 가 0개를 수집한 뒤 **exit 0 → `pass`** 를 냈다(실측; 같은 파일을
+  pytest 로 돌리면 `1 failed`). 게이트가 막으려던 바로 그 파일이 게이트를 통과했다.
+  이제 **선언 위치에 앵커된** 두 신호만 받는다 — `class X(…TestCase…)` 와
+  `def load_tests(`. 이 게이트는 `unittest` 어댑터에만 적용된다(한정을 빼면 평범한
+  pytest 레포가 구조적으로 인증 불가가 된다).
+- **`qg-gc.py` 가 살아있는 `worktrees/` 를 삭제할 수 있던 결함** — `SESSION_PATTERN`
+  (charset)이 형제 디렉토리 `worktrees`(9자)·`baseline-cache`(14자)도 매치했다.
+  `worktrees/` 엔 직접 파일이 없어 폴더 mtime 으로 TTL 이 계산되고, 24시간 넘게 새
+  worktree 가 추가되지 않으면 **안에 살아있는 worktree 를 안고** rmtree 됐다. 이제 알려진
+  세션 마커 파일을 가진 디렉토리만 sweep 한다. denylist 를 쓰지 않은 이유는 공간에는 맞지만
+  **시간에 fail-open** 이기 때문이다 — 내일 추가될 형제 디렉토리를 오늘 열거할 수 없다.
+- **`compute-test-scope-candidates.sh` 의 `main` 하드코딩 + merge-base 부재** — Review
+  게이트가 이미 고친 버그 클래스가 Runtime 쪽에 남아 있었다.
+- **cargo 어댑터가 모든 Rust 레포에서 terminal false FAIL 을 보장하던 것** —
+  `CARGO_TARGET_DIR` 가 qg 가 발명한 이름(`.qg-cargo-target`)이라 어떤 레포의
+  `.gitignore` 도 그것을 덮지 않았고, 빌드 산출물 전량이 `disallowed_new_files` →
+  `forced_downgrade: yes` → **어떤 것으로도 downgrade 되지 않는 FAIL** 이 됐다
+  (실측 68 파일). 이제 `<트리>/target` 을 쓴다 — cargo 의 기본값이 이미 트리-로컬이라
+  AC50 의 트리별 독립은 유지되고, `cargo new` 가 쓰는 `/target` 이 그것을 덮는다.
+- **도구 부재가 `PRE_EXISTING` 으로 채점되어 테스트 0개로 PASS 가 나던 것** — 감지는
+  레포 선언(`go.mod` 존재)을 보는데(그것이 옳다) 실행 실패는 exit 127 → `error` →
+  fail 축 → 양측 fail → `PRE_EXISTING` → `attribution_status: closed` 였다. `run` 이
+  실행 **직전** 도구 가용성을 따로 찌르고 부재 시 exit 3(전 unit `unrun`)로 가며,
+  exit 127 도 `error` 가 아니라 `unrun` 으로 접힌다 (설계 §5.10 row 3 · AC34 · AC44).
+- **pytest 선언 감지가 `pytest-cov`/`pytest-mock` 만 선언한 레포를 놓치던 것** — 그런
+  레포가 unittest 로 새면 모듈-레벨 bare `def test_…` 가 0개 수집 + exit 0 으로 조용히
+  통과한다(초록 exit 이라 degrade 신호가 없다).
+- **Python setup 이 run 이 쓰지 않는 환경에 설치하던 것 + 한 분기의 샌드박스 탈출** —
+  `uv sync`/`poetry install` 로 준비해놓고 앰비언트 `python3 -m pytest` 로 실행했고,
+  `requirements.txt` 분기는 사용자의 system/user site-packages 를 바꿔 기준선과 HEAD 가
+  **한 패키지 집합을 공유**하게 만들었다(§5.4 가 옵션 ②를 기각한 바로 그 오염). 이제
+  설치처와 실행처가 `python_env_of` 한 곳에서 갈라지고, `requirements.txt` 는
+  트리-로컬 `.venv` 를 쓴다.
+- **어댑터가 트리 안에 만드는 환경 디렉토리(`.venv`·`node_modules`)가 그 레포의
+  `.gitignore` 로 덮이지 않을 때의 처리** — 그대로 설치하면 cargo target 과 같은
+  terminal FAIL 이고, 조용히 설치를 건너뛰면 준비 안 된 실행이 양측에서 똑같이 실패해
+  `PRE_EXISTING → closed` = **테스트 0개 PASS** 가 된다. 둘 다 아니라 **어댑터를 못
+  쓴다고 선언**한다: exit 3 + 전 unit `unrun` → `verification: degraded` → PASS 불가
+  (§5.10 row 3). ignore 질의는 **후행 슬래시**로 한다 — `.venv/` 같은 디렉토리 전용
+  패턴은 아직 존재하지 않는 경로에 `check-ignore .venv` 로는 매치되지 않고, 프로덕션은
+  언제나 부재 상태에서 질의한다(기준선 워크트리는 갓 만들어지고 `create-sandbox` 는
+  git-ignored 파일을 제외한다).
+- **`run`/`assign` 의 셸-스코프 검사가 담김이 아니라 부분문자열 검사였던 것** —
+  `../<other>/tests/evil.sh` 가 `*/tests/*.sh` 글롭과 실행비트를 둘 다 만족해
+  워크트리 **밖** 스크립트가 (양측에서 각각) 실행됐다. 설계 §5.9 의 "임의 명령을
+  추측해 실행하지 않는다" 위반. 담김 검사는 세 축을 본다: 렉시컬(절대경로·`..`
+  성분), 경로의 **디렉토리 성분**(`pwd -P`), 그리고 잎이 심볼릭 링크일 때 그 체인의
+  **최종 대상** — 대상이 디렉토리면 대상 자신을, 파일이면 그 dirname 을 정규화한다.
+  잎을 빼면 `tests/evil.sh -> ../../outside/evil.sh` 가 통과하고, 대상 자신을 정규화
+  하지 않으면 `-> ../..` 처럼 `..` 로 끝나는 대상이 통과한다(둘 다 shell·pytest 에서
+  실측). 판정은 러너별 분기가 아니라 `assign` 루프 머리에서 한 번에 한다.
+- **`granularity: file` 의 unit 이 디렉토리여도 실행되던 것** — 러너가 그 디렉토리
+  **전체**를 돌고 결과가 unit 하나의 `pass` 로 보고돼 귀속이 파괴되는데 행은 초록이다
+  (`tests/link.py -> ..` 처럼 트리 안을 가리키는 링크는 담김 검사를 정당하게 통과하므로
+  이 축은 여기서만 막을 수 있다). 존재 검사를 `-e` → `-f` 로 좁혔다. go 의 `package`
+  입도는 루트 패키지 `.` 이 정당하므로 `-d` 를 그대로 쓴다.
+- **락파일 없는 npm 레포에서 `npm install` 이 `package-lock.json` 을 만들던 것** —
+  cargo target 과 같은 terminal-FAIL 클래스. `--no-package-lock` 추가.
+- **`create-baseline` 이 사용자의 워크트리를 파괴할 수 있던 것** — `create` 의
+  `${sanitized}-${sid_short}` 와 `base-${sid_short}` 가 같은 세션의 `/qg branch base`
+  에서 **같은 경로**가 되고, idempotent 정리의 `--force` 가 미커밋 작업을 되돌릴 수 없이
+  지웠다. 이제 non-force `git worktree remove` 를 먼저 시도하고 git 이 거부하면 죽는다
+  (git-ignored 산출물만 있는 정상 기준선 트리는 그대로 제거된다).
+- **`runtime-verifier` Hard Rule 1 의 `installing deps` 무한정 허용** — 두 줄 아래
+  Rule 3 의 한정(`not test-runner deps`)과 모순됐다. 이 산문은 §11⑬ 이 verifier-생성
+  환경 비대칭에 대해 가진 유일한 통제다.
+- **R-init 의 `same_as_head` 규칙이 자기 표와 정면 모순이었다** (`/qg` iter-4, codex
+  단독 IMPORTANT). 도입 문장은 `degraded: yes` **또는** `same_as_head: yes` 면 PASS
+  불가라는 **포괄** 형태로 남아 있었는데, 세 줄 아래 표는 `same_as_head: yes` + dirty
+  를 정상 진행으로 규정한다. `same_as_head` 단독 차단은 실측으로 **해로웠다**(`main`
+  위 미커밋 작업의 진짜 `NEW_REGRESSION`/FAIL 이 `BASELINE_UNRUNNABLE`/SKIP 으로
+  내려갔다) — 그래서 판별자를 `worktree_dirty` 로 좁혔는데, **좁히기 전 형태를 도입부에
+  그대로 남겼다.** 도입부만 읽는 구현자는 제거된 동작을 되살린다. 좁힌 규칙의 원래
+  형태가 인용 가능한 채로 남으면 좁히지 않은 것과 같다 — design.md §6.6 에서 같은
+  실패를 고치면서 SKILL.md 의 같은 인스턴스는 놓쳤다.
+- **주장만 있고 검증이 없던 두 규칙에 락을 붙였다** (설계 리뷰 라운드 6·7 이월분).
+  둘 다 구현은 이미 옳았고 **검증만 비어 있었다** — 그 상태로는 다음 회귀가 조용히
+  통과한다. (1) `SILENT_DROP` → `attribution_status: degraded` 를 재는 T/M 이 없었다
+  (기존 T11·T45 는 `silent_drop` **플래그**만 쟀고, 플래그가 서는 것과 인증이 막히는
+  것은 다른 사실이다 — R8 PASS 행은 `closed` 를 요구하므로 플래그만 서고 status 가
+  `closed` 로 남으면 영향분이 HEAD 에서 사라진 채 PASS 가 난다). 두 모양(head-only
+  소실·양측 대칭 누락) + **양의 짝**(드롭 없으면 `closed`)으로 잠갔다 — 양의 짝이
+  없으면 "언제나 degraded" mutation 이 통과한다. (2) AC62 정정의 판별자
+  `same_as_head` × `worktree_dirty` 를 재는 케이스가 없었다. **한계를 명시한다:**
+  이 규칙을 읽는 스크립트는 아직 없으므로(§6.7 AC62 정정 (a)) 이것은 *집행* 락이
+  아니라 *판별자의 두 입력이 같은 `same_as_head: yes` 상태에서 서로 다른 값을 실제로
+  낸다*는 락이다. mutation 8/8 RED, 계측기 검증 포함(각 mutation 이 기존 케이스가
+  아니라 **새 케이스를** 죽이는지 확인 — N6 은 12 passed/1 failed 로 새 케이스만).
+- **캐시 전량 적중이 기준선 *관측*을 통째로 건너뛰던 fail-open** (`/qg` iter-5 CRITICAL,
+  SR1). 앞선 iter-2 수정(AC60)은 기준선 워크트리 생성과 `detect` 를 캐시 적중과 무관하게
+  항상 수행하도록 바꾸고 그 결과를 `--baseline-detected` 로 넘겼다. 그 수정의 전제 —
+  *"이 인자를 정직하게 만드는 경로는 merge_base 워크트리에서 `detect` 를 돌리는 것뿐"* —
+  이 **틀렸다.** `detect` 는 *이 트리가 무엇을 선언했는가*(`go.mod` 가 있다·
+  `pyproject.toml` 에 pytest 설정이 있다)만 본다. 실행 가능성을 재는 네 단계 관문
+  (detect 멤버십 → 환경 디렉토리 gitignore → `setup_cmd` → 러너 바이너리)은 `run`
+  안에만 있었고, **전량 적중이면 `run` 이 호출되지 않아 관문이 한 번도 돌지 않는다.**
+  즉 선언은 있고 toolchain 이 없는 트리에서 정직한 결과가 전량 `unrun` →
+  `BASELINE_UNRUNNABLE` → `degraded` → PASS 불가였을 실행이, 심어지거나 낡은 `pass` 한
+  파일로 `STILL_GREEN` → `closed` → **PASS** 가 됐다 — AC60 이 닫았다고 주장한 사슬이
+  **한 칸 옆으로 옮겨간 채 살아 있었다.**
+  관문을 `run` 의 case arm 밖 공유 함수(`adapter_usable`)로 꺼내고, 그 위에
+  **`probe` 서브커맨드**를 얹었다: 같은 관문을 통과시키되 테스트는 하나도 돌리지 않고
+  `usable: yes|no` + `reason:` 를 낸다. `--baseline-detected` 의 출처는 이제 `detect` 의
+  집합이 아니라 **`probe` 가 `usable: yes` 를 낸 러너의 집합**이며(R4②-a, 캐시 적중
+  여부와 무관하게 항상), 소비는 **stdout 의 양성 확인**이라 비정상 종료·빈 출력·스크립트
+  부재가 전부 "yes 아님" 으로 떨어진다(fail-closed).
+  **캐시의 존재 이유는 유지된다** — 상각되는 것은 테스트 *실행*이고 `probe` 가 되살리는
+  것은 *관측*이다. 전량 적중을 이유로 기준선 스위트를 다시 돌리는 것은 이 결함의 해법이
+  아니라 캐시를 없애는 것이다. mutation 16/16 RED(스크립트 7 + SKILL.md 9). *잔여(명시)*:
+  값의 provenance 는 여전히 검사되지 않는다 — `"$runner"` 를 그대로 넘기면 항상
+  grounded 다. 정직한 값을 넘기는 것은 오케스트레이터의 의무로 남는다.
+- **이빨 없는 락 2건과 개수 드리프트 1건** (`/qg` iter-5 C3·C4·C6 — 전부 락 자신의 결함).
+  (1) `test_runtime_contract_invariance.sh` 의 verdict-토큰 락이 `if grep -qE … "$SKILL"`
+  하나였다. 파일이 없으면 grep 은 **exit 2**(파일 오류)를 내는데 `if` 가 그것을 "매치
+  없음"과 같은 non-zero 로 읽어 `else` 로 떨어져 *"verdict 토큰 4종 불변"* 을 PASS 로
+  찍었다 — **SKILL.md 를 통째로 지워도 GREEN.** 부재 검사 + 4종 실재(양의 짝)를 붙였다.
+  (2) `test_runtime_verifier_frontmatter.sh` 의 `--- body contract ---` assert 들이
+  파일 **전체**를 grep 했고, 이 파일의 `description:` frontmatter 가 길어서
+  `sandbox`(10회)·`product`(5회)·`SKIP_WITH_EVIDENCE`·`NEEDS_RESOLUTION` 을 스스로
+  만족시켰다. 이름이 "body contract" 인 assert 가 **본문을 하나도 안 읽고** 통과했고,
+  실제로 Hard Rule `Fabricate a green by patching product source` 를 지워도 21/21
+  GREEN 이었다. persona 는 보안-민감 코드인데(CLAUDE.md) 그 규칙의 삭제를 락이 못
+  잡았다. 본문만 읽는 `assert_body_grep` + 두 Hard Rule 의 body-unique 앵커로 교체.
+  (3) 6곳이 어댑터를 *8종*이라 적었는데 닫힌 집합은 **9종**이다 — CHANGELOG 는
+  같은 줄에서 **이름을 9개 나열하며 8종이라고** 적었다. 숫자만 고치면 다음 어댑터에서
+  똑같이 어긋나므로, 개수를 `granularity_of` 의 닫힌 집합에서 **파생**해 플러그인 안의
+  모든 `러너 어댑터 N종` 주장과 대조하는 락을 붙였다(∀ + 코퍼스 실재 + 파서 계측기
+  검증). mutation 13/13 RED.
+- **매니페스트가 테스트 러너를 verifier 에게 부팅 표면으로 넘기던 것** (`/qg` iter-5
+  C2 — v3.0.0 아키텍처의 미완 부분). `detect-runtime.sh` 의 `runnable_surfaces` 가
+  `pytest`·`cargo-test`·`go-test`·npm `test`·make `test` 를 표면으로 실었고,
+  `runtime-verifier` 의 Step 2 가 *"test runners run directly"* 로 그것들을 돌렸다.
+  그런데 v3.0.0 의 §5.1 불변식 ②는 **테스트 실행을 오케스트레이터가 verifier 턴
+  *밖에서*** 수행한다고 못 박는다. 결과: (a) 같은 스위트가 두 번 돌고, (b) verifier 가
+  테스트 러너 deps 를 **HEAD 샌드박스에만** 설치해 기준선 트리와 비교가 성립하지
+  않으며(AC41 이 `setup_cmd` 채널에서 맞춰 놓은 대칭을 다른 문으로 깬다), (c) §11⑬
+  (verifier 의 부팅 setup 이 권위 있는 테스트가 도는 바로 그 샌드박스를 변형)이
+  증폭된다. `runnable_surfaces` 는 이제 **부팅 표면만** 담고 러너는 `test_runners:`
+  로만 보고된다 — 부팅할 것이 없는 라이브러리 레포는 표면 0개가 되고 verifier 의
+  degenerate `SKIP_WITH_EVIDENCE` 경로로 빠진다(floor 는 그대로 돈다).
+  부수 효과로 **남은 모든 표면이 `requires_decision: true`** 가 된다 — 자동 표면이
+  하나도 없으므로 "zero-click" 은 이제 *부팅할 것이 없었다* 는 뜻이다.
+  `detect-runtime.sh` 의 SHA 핀은 갱신했고 갱신 근거를 테스트 파일에 남겼다 — 이 핀은
+  blast radius 가 **커지는** 것을 막는 장치이고 이번 변경은 반대 방향이다.
+  mutation 11/11 RED. 첫 판에서 러너 5축 중 **3축(cargo·go·make)이 GREEN** 이었다 —
+  `fixtures/gate3` 에 그 레포 형태가 없어 ∀ 가 그 축을 아예 지나가지 않았다. ∀ 의
+  범위는 코퍼스가 정하지 술어가 정하지 않는다. T9 가 5축 픽스처를 직접 만든다.
+  `test_detect_runtime.sh` T12 는 `source` 로 술어를 불렀는데 `detect-runtime.sh` 의
+  마지막 줄이 `exit 0` 이라 **세 assert 가 전부 스크립트 자신의 종료 코드를 재고**
+  있었다(호출 셸이 거기서 끝나 assert 가 한 줄도 실행되지 않았다). 함수 본문만 떼어
+  실행하고, 추출 실패를 먼저 잡는 계측기 확인을 앞에 두었다.
+- **`--granularity` 의 provenance 부재** (`/qg` iter-5 C5). `diff-test-results.py` 는
+  `--runner` 와 `--granularity` 를 **각각** 필수 인자로 받는데 둘이 같은 어댑터를
+  가리키는지 **아무도 대조하지 않았다.** `--runner cargo --granularity file` 로
+  부르면 도말 degrade 의 `granularity == "bulk"` 절이 발화하지 않아, 양측 red 인
+  bulk 실행이 `PRE_EXISTING` → `closed` → **PASS 적격**이 된다. 값의 provenance 를
+  안 보는 필수 인자는 필수인 척하는 자유 변수다. `run-test-selection.sh` 에 순수 함수
+  `granularity <runner>` 서브커맨드를 열고, 파이썬이 **표를 복제하지 않고** 소유자에게
+  물어 대조한다(AC38/AC52 유지 — 파이썬은 판단하지 않고 확인만 한다). 불일치·미지
+  러너·소유자 부재는 전부 exit 4. mutation 8/8 중 7 RED — 남은 1건은 소유자 거부
+  분기를 지우는 것인데, 거부 시 stdout 이 비어 불일치 검사가 어차피 exit 4 를 내므로
+  **구멍이 아니라 중복**이다(코드에 그렇게 적었다. 이빨을 못 보이는 락을 만드는 대신
+  사실을 적는다).
+- **iter-5 잔여 정리 6건** (`/qg` iter-5 SF2·SF5·SR4 + 사용 문구 3건).
+  - **SF5**: R8 의 PASS 행이 `verdict_input` **3플래그 중 둘만** 요구했다
+    (`baseline_unrunnable` 누락). 다른 문장이 막고 있었지만 **막는 것이 표가 아니면
+    표를 읽는 소비자는 통과시킨다.** 한 단어를 넣어 대칭을 맞췄다.
+  - **SF2**: 재실행 후 green 인 unit 을 `FLAKY` 로 "기록한다"고 적었는데 그 토큰은
+    `CATEGORIES` 8종에 없고 어떤 스크립트도 내지 않는 **유령**이었다 — 그것을 찾는
+    소비자는 영원히 못 찾는다. 8종은 닫힌 집합(AC11)이라 9번째를 더할 수 없으므로
+    카테고리가 아니라 **원장 note**(`derived: flaky …`)로 기록 위치를 지정했다.
+  - **SR4**: 폴백(`DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`)에서 R5b 가 아예 안 도는데
+    R4 는 그대로 **기준선 워크트리를 만들고 전체 기준선 스위트를 돌렸다.** HEAD 축이
+    전량 `unrun` 이라 그 행들은 `SILENT_DROP`/`BASELINE_UNRUNNABLE` 로만 짝지어지고
+    verdict 는 이미 SKIP_WITH_EVIDENCE 로 cap 돼 있다 — 비용만 쓰고 아무것도 얻지
+    못한다. R4 도 같은 사실로 건너뛴다(R4 는 R5a¹ 보다 먼저라 `sandbox_dir` 을 못
+    보므로 그 원인인 kill switch 를 직접 읽는다).
+  - `run-test-selection.sh` 의 미지-서브커맨드 메시지가 `detect|assign|run` 만
+    나열해 `granularity`·`probe`·`cargo-target-dir` 을 빠뜨렸다.
+  - `compute-test-scope-candidates.sh` 헤더가 *"(no env vars)"* 옆에서 **존재하는
+    `--total` 인자를 숨기고**, 이 SKILL 에 없는 *"Review gate Step 0"* 을 인용했다.
+  - SKILL.md 제목이 **`(v2.7.0)`** 이었다 — 플러그인은 3.0.0 이다. 이것을 지키던
+    락이 리터럴 `v2.7.0` 을 핀하고 있어서, **핀이 통과하는 한 제목이 몇 세대
+    뒤처져도 아무도 몰랐다.** 핀을 `plugin.json` 의 **major 와의 정합**으로 바꿨다
+    (minor/patch 는 unpin — doc-only bump 마다 stale-red 가 되는 형태를 피한다).
+  락 T76·T77·T78 + 버전 major 정합. mutation 10건 중 9 RED — 남은 1건은 문장의
+  결론만 뒤집고 grep 앵커는 남기는 형태로, grep 락이 구조적으로 못 잡는 종류다.
 ## [2.14.20] — 2026-08-05
 
 ### Fixed

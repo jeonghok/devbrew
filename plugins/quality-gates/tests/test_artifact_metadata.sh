@@ -6,7 +6,10 @@ PASS=0; FAIL=0
 ok() { PASS=$((PASS+1)); echo "  PASS: $1"; }
 no() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
 
-grep -qE '"version":[[:space:]]*"2\.(1[1-9]|[2-9][0-9])\.[0-9]+"' "$ROOT/.claude-plugin/plugin.json" && ok "plugin.json >=2.11 minor (critique 기능 shipped)" || no "plugin.json below 2.11 (critique metadata reverted?)"
+# floor는 minor(>=2.11) invariant다 — 리터럴 major "2" 로 짠 원래 regex는 v3.0.0
+# major bump(비관련 기능인 Runtime 게이트 재설계)에서 stale-red 됐다. major 도
+# unpin — 2.11+든 3.x+ 든 critique 기능이 shipped 라는 사실은 안 바뀐다.
+grep -qE '"version":[[:space:]]*"([3-9]|[1-9][0-9]+)\.[0-9]+\.[0-9]+"|"version":[[:space:]]*"2\.(1[1-9]|[2-9][0-9])\.[0-9]+"' "$ROOT/.claude-plugin/plugin.json" && ok "plugin.json >=2.11 minor (critique 기능 shipped)" || no "plugin.json below 2.11 (critique metadata reverted?)"
 grep -qE '^## \[2\.11\.0\]' "$ROOT/CHANGELOG.md" && ok "CHANGELOG [2.11.0]" || no "CHANGELOG missing [2.11.0]"
 grep -qF 'critiquing-artifacts' "$ROOT/CHANGELOG.md" && ok "CHANGELOG mentions new skill" || no "CHANGELOG omits skill"
 # README principles: the mode instantiates Law 1/2/3 for artifact critique

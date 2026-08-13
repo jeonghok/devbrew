@@ -110,6 +110,71 @@ class TestQgGc(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
         self.assertFalse(old.exists(), msg="invalid TTL should fall back to 24h")
 
+    # T49 — **실패 재현**. 이 테스트는 수정 *전에* 빨개져야 한다:
+    # TTL 초과 + 직접 파일 없는 `worktrees` 디렉토리가 현재 코드에서 삭제된다.
+    #
+    # 브리프 원안은 `worktrees/`에 직접 파일을 두지 않고 os.utime()으로 그
+    # 디렉토리 자신의 mtime만 backdating했다. 그러나 os.utime()은 atime/mtime만
+    # 되돌릴 뿐 ctime은 항상 "지금"으로 갱신된다 — `_within_grace`는 직접 파일이
+    # 없는 폴더에서 ctime 신선도로 "방금 생성됨"을 판정하므로, 원안 그대로는
+    # grace-period 가드가 60초 이내의 신선한 ctime을 보고 **결함과 무관하게**
+    # 폴더를 보호해 버린다(수정 전/후 모두 GREEN — 실측: 수정 전 코드로 실행해도
+    # `wt.exists()`가 True). 이빨 없는 락이 되므로, `worktrees/`에 직접 마커
+    # 파일을 하나 두어 `_within_grace`의 has_files 체크를 정상적으로 지나가게
+    # 하고 `_folder_mtime_ns`가 그 파일의 (backdate 가능한) mtime을 쓰도록
+    # 바꿨다. "직접 파일이 없는 폴더" 자체보다 "패턴만으로 세션 폴더가 아닌 형제
+    # 디렉토리가 지워진다"는 결함의 본질은 그대로 보존한다.
+    def test_worktrees_dir_survives_gc(self):
+        root = Path(self.tmp)
+        wt_parent = root / ".claude" / "quality-gates" / "worktrees"
+        wt = wt_parent / "rt-abc12345"
+        wt.mkdir(parents=True)
+        (wt / "live.txt").write_text("살아있는 워크트리", encoding="utf-8")
+        marker = wt_parent / ".worktrees-index"
+        marker.write_text("rt-abc12345\n", encoding="utf-8")
+        old = time.time() - 48 * 3600
+        os.utime(marker, (old, old))
+        os.utime(wt_parent, (old, old))
+        run_gc(self.tmp)
+        self.assertTrue(
+            wt.exists(),
+            "TTL 초과 worktrees/ 가 GC됨 — 안에 살아있는 워크트리가 있는데도",
+        )
+
+    # AC27(2) — baseline-cache/ 도 세션 폴더가 아니다
+    def test_baseline_cache_dir_survives_gc(self):
+        root = Path(self.tmp)
+        cache = root / ".claude" / "quality-gates" / "baseline-cache"
+        cache.mkdir(parents=True)
+        f = cache / "abc123def456.md"
+        f.write_text("<!-- qg-baseline-cache:v1 -->\n", encoding="utf-8")
+        old = time.time() - 48 * 3600
+        os.utime(f, (old, old))
+        os.utime(cache, (old, old))
+        run_gc(self.tmp)
+        self.assertTrue(f.exists(), "TTL 초과 baseline-cache/ 가 GC됨")
+
+    # T19 후반 + M2 — 반대 방향: 진짜 세션 폴더는 **여전히** 삭제된다.
+    # 이 assert가 없으면 "아무것도 안 지우게" 만든 mutation이 GREEN이 된다.
+    def test_real_session_folder_still_collected(self):
+        folder = make_session_dir(Path(self.tmp), "sess" + "a" * 8,
+                                  mtime_offset_seconds=-48 * 3600)
+        run_gc(self.tmp)
+        self.assertFalse(folder.exists(), "TTL 초과 세션 폴더가 수집되지 않음")
+
+    # AC28 — 마커 파일이 `files.md` 하나뿐인 세션 폴더도 수집된다
+    def test_session_identified_by_files_md(self):
+        root = Path(self.tmp)
+        folder = root / ".claude" / "quality-gates" / ("sess" + "b" * 8)
+        folder.mkdir(parents=True)
+        f = folder / "files.md"
+        f.write_text("- a.py\n", encoding="utf-8")
+        old = time.time() - 48 * 3600
+        os.utime(f, (old, old))
+        os.utime(folder, (old, old))
+        run_gc(self.tmp)
+        self.assertFalse(folder.exists(), "files.md 만 있는 세션 폴더가 수집되지 않음")
+
 
 if __name__ == "__main__":
     unittest.main()

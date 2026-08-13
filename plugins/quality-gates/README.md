@@ -48,6 +48,36 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **P18 (Bounded idempotency)** (v2.9.0) — `comment-upsert.py`가 인증 `user.id` 스코프 내에서 버전-패밀리 마커(`<!-- pr-understanding:v1 -->`, 첫 줄 anchored 매칭이 optional `tier=N` 접미사를 허용 — 빌더는 `tier=N`을 emit하지만 tier는 변경 파일 수에 따라 드리프트하므로 매칭은 tier를 무시해 멱등이 깨지지 않게 함)로 기존 코멘트를 조회해 0개→POST, 1개→PATCH, ≥2개(비정상)→REFUSE — 모호성 앞에서 임의로 고르지 않고 결정론적으로 멈추고 사용자 확인을 요구한다.
 - **pwn-request Law-2형 물리 분리 — 생성 ≠ 게시** (v2.9.0 → v2.12.0에서 **처음으로 사실이 됨**) — `pr-understanding-builder` 에이전트는 `tools:`에 무해한 항목 **하나만** 선언한다 (fail-closed allowlist — 쓰기·실행·네트워크·위임 도구 0개, 유일 항목 = inert `Read`(생성기가 미호출), 유일 입력 = inlined `build-pr-context.sh` blob). `gh`/네트워크는 오직 `publishing-pr-understanding` skill(오케스트레이터)만 보유한다. ⚠️ **v2.9.0~v2.10.x에서 이 주장은 거짓이었다**: 당시 격리는 존재하지 않는 필드 + 11개 이름 denylist였고, denylist에 `mcp__*`가 없어 tavily 웹검색·chrome-devtools 브라우저 제어가 **열려 있었다**. 이름 기반 denylist는 원리적으로 닫을 수 없다 — `Monitor`가 이름 없는 셸(`command`)과 이름 없는 egress(`ws`)를 준다. allowlist만이 열거되지 않은 것과 **미래에 추가될 것**을 자동 차단한다.
 - **Law 1/2/3 + P8/P18 (산출물 비평 루프, v2.11.0)** — `/qg critique`가 비-코드 산출물에 대해 inherit-tier `artifact-critic`+`artifact-adversarial`(+조건부 codex)의 read-only 비평 → 오케스트레이터 수정 → 라운드별 커밋 루프를 돈다. Law 1=E3 upfront 동의 게이트; Law 2=read-only 리뷰어(`tools:` allowlist)+매 라운드 독립 critic 게이트; Law 3=라운드별 커밋 감사추적; P18=max-rounds+stagnation predicate+kill switch(`DEVBREW_QG_DISABLE_CRITIQUE`); P8=NL 라우팅 모델-소유, 결정론은 `critique <path>`+§10 스키마. 별도 skill `critiquing-artifacts`로 위임(코드 2게이트 파이프라인 무변경).
+- **LD3 (floor 는 실행이다) — 영향분 테스트의 실제 실행** (v3.0.0) — Runtime 게이트의 floor
+  가 "전체 앱 부팅"이 아니라 *"레포에 이미 있는 테스트 중 영향분을 실제로 돌리는 것"*이다.
+  `run-test-selection.sh` 가 러너 어댑터 9종을 **집합으로** 감지해 전부 실행한다 — 폴리글랏
+  레포에서 우선순위 밖 러너를 버리면 floor 가 의미를 잃는다(이 리포 실측: `.sh` 130개 /
+  `.py` 50개). 부팅·플로우는 floor 가 아니라 그 위의 상황별 층이다.
+- **LD5 (결정론은 모델 주장과 독립인 백스톱) — 호출 주체 분리 (Law 2)** (v3.0.0) — 영향 스코프
+  판정은 모델이 하되, `run-test-selection.sh` 는 기준선 측·HEAD 측 **둘 다 오케스트레이터가
+  직접** 호출한다. verifier 가 테스트 결과를 self-report 하면 오케스트레이터가 받는 것이 raw
+  출력이 아니라 모델의 요약이 되어 백스톱이 백스톱이 아니게 된다. `diff-test-results.py` 의
+  `--expected` 도 같은 이유로 **독립 입력**이다 — 두 생산자의 상호 대조로 계산하면 대칭
+  누락을 아무도 못 잡는다. regression: `tests/harness/test_skill_orchestration_behavior.sh`
+  (호출 위치), `tests/test_diff_test_results.py` (대칭 누락).
+- **LD7 (질문형 루브릭) — floor 5차원 원장** (v3.0.0) — `changed`/`behavior`/`verification`/
+  `attribution`/`gap` 다섯 **질문**과 의무 `derived`. `check_qa_ledger.py` 는 **구조만** 본다
+  (의미 판정 없음) — Law 1 의 구조적 게이트가 하는 일은 silent skip 을 불가능하게 만드는
+  것뿐이다. `degraded` 는 실패가 아니라 1급 상태다: "확증 못 했다"를 정직하게 쓸 자리가
+  있어야 "확인했다"로 반올림되지 않는다. 점수형·테스트종류 메뉴는 두지 않는다.
+  여기에 **대조 두 개**가 얹힌다(둘 다 의미 판정이 아니라 두 값의 일치·개수 검사이며
+  둘 다 필수 인자다 — 선택이면 안 넘긴 호출자가 조용히 면제받는다): `--aggregate` 는 R6
+  집계의 `attribution_status` 와 원장의 `floor:attribution` 을, `--assign-rows` 는 배정
+  TSV 의 `unclaimed` 행 수와 `floor:verification` 을 본다. 둘 다 **개수가 아니라 경로**를
+  받는다 — 모델이 옮겨 적는 숫자를 받으면 대조가 대조하려던 전사 구멍을 그 인자가 다시
+  연다. **`--assign-rows` 집행의 사정거리:** bulk 흡수자(cargo·make·npm-script)가 감지되면
+  **어댑터가 주장하지 않은 파일**은 `unclaimed` 대신 `BULK` 한 행으로 접히므로, *그 축*의
+  공시는 `커버리지 미보장` 배너이지 이 집행이 아니다(설계 §6.7 F5 — 의도적으로 열어 둔
+  항목). **담김 위반(워크트리 밖 unit)은 흡수자 유무와 무관하게 `unclaimed` 로 남는다** —
+  그 거절은 흡수 분기보다 **앞서** 일어난다(`run-test-selection.sh` 의 `assign` 루프:
+  `unit_within_worktree` 실패 → `unclaimed` 출력 → `continue`). 흡수자가 있는 레포에서
+  이 검사가 죽은 무게라고 결론짓지 말 것 — 가장 위험한 클래스가 바로 그 축이다. regression:
+  `tests/test_qa_ledger.sh`, `tests/harness/test_skill_orchestration_behavior.sh`.
 
 ## 구조
 
@@ -83,6 +113,11 @@ quality-gates/
 │   ├── discover-spec.sh                      # Spec 파일 우선순위 탐색 (test-scope-validator + codex; AC-섹션 적격성)
 │   ├── detect-runtime.sh                     # Runtime gate 런타임 surface 탐지 (manifest 산출)
 │   ├── compute-test-scope-candidates.sh      # Runtime gate Step 2.5 — 후보 test 파일 산출 (Python/JS/TS heuristic)
+│   ├── resolve-baseline.sh                   # 공유 baseline resolution (base/base_ref/merge_base/degraded/same_as_head/ahead)
+│   ├── run-test-selection.sh                 # Runtime floor — 러너 어댑터 9종 detect/assign/probe/run (유일 소유자)
+│   ├── baseline-cache.sh                     # (merge_base, runner, unit) 내용주소 기준선 캐시 get/put
+│   ├── diff-test-results.py                  # 기준선×HEAD 귀속 8종 + 어댑터 간 --aggregate
+│   ├── check_qa_ledger.py                    # LD7 floor 5차원 원장 구조 게이트 (Law 1)
 │   ├── detect_codex.sh                       # Codex CLI 7-case probe (version/auth/sandbox/kill-switch/timeout)
 │   ├── build_codex_prompt.py                 # Review gate Phase 1 codex-reviewer용 prompt builder
 │   ├── codex_findings_to_yaml.py             # Codex JSONL stream → 표준 finding YAML (auth/schema/stderr 처리)
@@ -149,9 +184,9 @@ The optional `codex-reviewer` agent has `cost_class: variable` — as a Tier B *
 | 게이트 | 주체 | 목적 | 위임 대상 |
 |------|-----|------|---------|
 | Review gate | quality-pipeline skill (inline) | scout 주도 orchestration: depth-aware dispatch + Phase 1.5 adversarial + Phase 1.6 synthesizer | pr-review-toolkit, feature-dev, superpowers (review agent들) |
-| Runtime gate | runtime-verifier agent | 앱 시작, 콘솔 에러 확인, 스크린샷 | chrome-devtools-mcp 또는 playwright |
+| Runtime gate | quality-pipeline skill (floor) + runtime-verifier agent (상황별 층) | **영향-구동 차등 실행 (v3.0.0):** floor는 이번 변경의 영향분 테스트를 merge_base 기준선과 HEAD 양쪽에서 오케스트레이터가 직접 실행·귀속하는 것; 그 위의 상황별 층(앱 부팅, 콘솔 에러 확인, 스크린샷, spec AC 플로우)만 runtime-verifier에 위임 | 러너 어댑터: `run-test-selection.sh`(오케스트레이터 소유, 위임 없음). 상황별 층: chrome-devtools-mcp 또는 playwright |
 
-**아키텍처 메모 — 왜 Review gate는 agent가 없는가**: Claude Code는 skill만 (agent가 아닌) `Agent()`의 `subagent_type`을 사용 가능. Review gate는 여러 Phase로 review agent를 dispatch해야 하므로 orchestration 로직이 `skills/quality-pipeline/SKILL.md`에 직접 있습니다. Runtime gate는 leaf agent (sub-agent dispatch 안 함).
+**아키텍처 메모 — 왜 Review gate는 agent가 없는가**: Claude Code는 skill만 (agent가 아닌) `Agent()`의 `subagent_type`을 사용 가능. Review gate는 여러 Phase로 review agent를 dispatch해야 하므로 orchestration 로직이 `skills/quality-pipeline/SKILL.md`에 직접 있습니다. Runtime gate는 leaf agent (sub-agent dispatch 안 함) — 단, v3.0.0부터 floor(테스트 실행) 자체는 agent 밖, 오케스트레이터가 `run-test-selection.sh`를 직접 호출해서 돈다. runtime-verifier가 자기 턴 안에서 테스트를 돌려 결과를 self-report하는 경로는 금지된다 — 그러면 결정론 백스톱이 모델 주장과 독립이라는 전제(LD5)가 무너진다.
 
 **`/qg-publish` (PR-understanding generate/publish)는 세 번째 게이트가 아니다.** (v2.9.0)
 `gh`는 위 두 게이트 어디에도 없다 — publish는 별도 skill(`publishing-pr-understanding`)에
@@ -376,6 +411,10 @@ plan과 달리 **legacy-global 소스는 없습니다** — spec은 프로젝트
 - `DEVBREW_QG_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
 - `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS`: 3 (`0..10`, Runtime gate NEEDS_RESOLUTION mid-run 루프 cap)
 - `DEVBREW_QG_KEEP_WORKTREE=1`: `/qg branch` worktree cleanup 비활성화 (디버깅용 보존)
+
+**`.claude/quality-gates/baseline-cache/`** (v3.0.0) — `(merge_base, runner, unit)` 내용주소
+기준선 테스트 결과 캐시. `qg-gc.py`의 TTL sweep 대상이 **아니다**(design §11 ⑩) — merge_base
+마다 파일이 하나씩 쌓이고 자동 정리 경로가 없다. 정리는 `/cancel-qg --all`에 위임한다.
 
 ### Kill switches (보안 컨트롤)
 
