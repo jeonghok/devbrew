@@ -48,12 +48,39 @@ class TestCodexAuditToJson(unittest.TestCase):
         self.assertIs(d["meta"]["codex_failed"], False,
                       "정상 실행은 양성 성공 표식을 가져야 한다")
 
-    def test_missing_collections_default_to_empty_lists(self):
+    def test_missing_collections_are_schema_mismatch_not_clean(self):
+        """E2 (/qg 2026-08-13): 키 부재는 `[]` 기본값이 아니라 schema_mismatch 다.
+
+        이 테스트는 원래 `codex_failed: False` 를 못 박고 있었다 — 즉 **결함을
+        인코딩하고 있었다**. 이 추출기가 동봉하는 preamble 은 "어떤 키도 생략하지
+        말라"를 계약하고, 형제 `codex_findings_to_yaml.py` 는 같은 페이로드를
+        거부한다. 부재를 조용히 빈 리스트로 만들면 `{}` 응답이 **clean 감사**로
+        기록된다 — 이 브랜치의 중심 불변식(indeterminate ≠ clean) 정면 위반.
+
+        컨테이너는 여전히 `[]` 로 정규화한다(소비자가 키 존재를 기대한다).
+        바뀌는 것은 **표식**이다: 읽지 못한 라운드는 clean 이 아니다.
+        """
         _, out, _ = run(event(fenced({"findings": []})))
         d = json.loads(out)
         for k in KEYS:
-            self.assertEqual(d[k], [], f"{k}가 빈 리스트로 기본값을 가져야 한다")
-        self.assertIs(d["meta"]["codex_failed"], False)
+            self.assertEqual(d[k], [], f"{k}는 소비자를 위해 빈 리스트로 정규화된다")
+        self.assertIs(d["meta"]["codex_failed"], True,
+                      "키 3개가 빠졌는데 clean 으로 기록되면 안 된다")
+        self.assertEqual(d["meta"]["reason"], "schema_mismatch")
+        for k in ("d_verdicts", "oq_answers", "new_open_questions"):
+            self.assertIn(k, d["meta"]["missing_keys"],
+                          f"어느 키가 빠졌는지 {k} 가 사유에 드러나야 한다")
+
+    def test_all_collections_present_is_clean(self):
+        """위 테스트의 양의 짝 — 네 키가 다 있으면 정상 성공 표식이 나온다.
+
+        이것이 없으면 `validate_collections` 가 무조건 True 를 내도록 망가져도
+        위 테스트만으로는 초록이다(부재 락은 통째 고장에 눈이 먼다)."""
+        _, out, _ = run(event(fenced({k: [] for k in KEYS})))
+        d = json.loads(out)
+        self.assertIs(d["meta"]["codex_failed"], False,
+                      "네 키가 모두 있는 정상 라운드는 clean 이어야 한다")
+        self.assertNotIn("missing_keys", d["meta"])
 
     def test_last_fenced_block_wins(self):
         """주입 방어: 감사 대상 파일이 앞선 fence를 심어도 마지막이 이긴다."""

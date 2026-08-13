@@ -80,15 +80,24 @@ def validate_collections(payload: dict) -> tuple[dict[str, list], dict[str, Any]
 
     필드 단위 완전성까지 올리지 않는 이유는 형제 추출기와 같다: 서술 필드 하나가 빠진
     정상 라운드를 degrade로 올리면 진짜 발견이 소실된다.
+
+    E2 (/qg 2026-08-13 whole-branch 리뷰): **키 존재**는 컨테이너 타입과 같은 층이다.
+    이전 코드는 `payload.get(key, [])` + `raw is None` 으로 키 부재와 명시적 null 을
+    조용히 `[]` 로 만들고 `codex_failed: False` 를 찍었다 — 즉 `{}` 페이로드가 clean
+    감사로 기록됐다. 이 프롬프트가 동봉하는 preamble 은 "어떤 키도 생략하지 말라"를
+    계약하고(codex-prompt-preamble.md), 형제 `codex_findings_to_yaml.py:181,219` 는
+    같은 입력을 malformed_json/schema_mismatch 로 거부한다. 원소 단위 관용은 그대로.
     """
     out: dict[str, list] = {}
+    missing_keys: list[str] = []
     bad_container: list[str] = []
     bad_elements: dict[str, list[str]] = {}
     for key in COLLECTIONS:
-        raw = payload.get(key, [])
-        if raw is None:
+        if key not in payload or payload[key] is None:
+            missing_keys.append(key)
             out[key] = []
             continue
+        raw = payload[key]
         if not isinstance(raw, list):
             # dict / str / int — 계약된 컨테이너가 아니다. 읽을 것이 없다.
             bad_container.append(f"{key}:{type(raw).__name__}")
@@ -100,9 +109,11 @@ def validate_collections(payload: dict) -> tuple[dict[str, list], dict[str, Any]
             bad_elements[key] = bad
 
     meta: dict[str, Any] = {}
-    if bad_container or bad_elements:
+    if missing_keys or bad_container or bad_elements:
         meta["codex_failed"] = True
         meta["reason"] = "schema_mismatch"
+        if missing_keys:
+            meta["missing_keys"] = ",".join(sorted(missing_keys))
         if bad_container:
             meta["bad_containers"] = ",".join(bad_container)
             # 형제 추출기와 같은 이름으로 findings 컨테이너 타입을 별도로 노출한다.
