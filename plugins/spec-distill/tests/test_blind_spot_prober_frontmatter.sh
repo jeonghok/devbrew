@@ -9,6 +9,12 @@ note() { if [ "$1" = "PASS" ]; then pass=$((pass+1)); echo "  ✓ $2"; else fail
 test -f "$AGENT" || { note FAIL "agent 파일 부재: $AGENT"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1; }
 FM="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$AGENT")"
 
+# 모델 티어 양방향 락 — 하니스가 세션 모델을 덮어쓰지 않는다(리터럴 핀 = 조용한 하향).
+grep -qE '^model: inherit$' <<<"$FM" \
+  && note PASS "model: inherit (세션 티어 상속)" || note FAIL "model이 inherit이 아님"
+grep -qE '^model: (opus|sonnet|haiku)$' <<<"$FM" \
+  && note FAIL "고정 티어 핀 잔존" || note PASS "고정 티어 핀 없음"
+
 grep -qE '^name: blind-spot-prober$' <<<"$FM" \
   && note PASS "name: blind-spot-prober" || note FAIL "name이 blind-spot-prober 아님"
 
@@ -32,6 +38,20 @@ grep -q 'hidden_assumptions' "$AGENT" \
   && note PASS "Output: hidden_assumptions 키 존재" || note FAIL "hidden_assumptions 키 부재"
 grep -q 'failure_modes' "$AGENT" \
   && note PASS "Output: failure_modes 키 존재" || note FAIL "failure_modes 키 부재"
+
+# E10 — 단일 호출 상한 표현 + 탐색 폭 좁힘 문구 부재.
+# 하니스가 프롬프트로 검색 횟수를 묶으면 조사가 본질인 역할의 능력을 직접 깎는다.
+# 패턴은 test_brief_agents.sh:194의 E10 락을 확장한 것이다(숫자 범위·병렬 금지 추가).
+if grep -qE '최대 [0-9]+회|[0-9]+회까지|[0-9]–[0-9]회|[0-9]-[0-9]회|max_[a-z_]+ *= *[0-9]' "$AGENT"; then
+  note FAIL "E10: 단일 호출 상한 표현 잔존"
+else
+  note PASS "E10: 상한 표현 없음"
+fi
+if grep -qE '병렬.{0,8}금지|투기적.{0,8}금지' "$AGENT"; then
+  note FAIL "E10: 병렬·투기적 호출 금지 문구 잔존 (탐색 폭 좁힘)"
+else
+  note PASS "E10: 병렬 금지 문구 없음"
+fi
 
 echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
 [ "$fail" -eq 0 ]

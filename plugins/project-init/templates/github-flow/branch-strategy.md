@@ -60,4 +60,4 @@ git merge origin/main
 - "X 작업 시작해" 요청 시 — 먼저 적절히 명명된 브랜치 생성
 - `main`에 있고 변경하려 할 때 — STOP, 브랜치 먼저 생성
 - 기존 feature 브랜치로 전환 시 — main에서 sync 필요한지 확인
-- **ALWAYS** 기존 feature 브랜치는 `git merge origin/main`으로 sync, `git rebase`는 절대 안 됨. rebase는 commit SHA를 rewrite — push된 브랜치에 unsafe.
+- **공유된 브랜치는 rebase하지 않는다.** 기존 feature 브랜치는 `git merge origin/main`으로 sync한다. rebase는 commit SHA를 rewrite하므로, 이미 push돼 다른 사람이 받아간 브랜치에서는 unsafe하다. 아직 공유되지 않은 로컬 브랜치를 정리하는 것은 각자의 판단이다.

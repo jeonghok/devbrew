@@ -7,7 +7,8 @@ PROBE="$PLUGIN_ROOT/scripts/detect_codex.sh"
 MOCKS="$SCRIPT_DIR/mocks"
 TMP="$(mktemp -d -t sd-detect-codex-test-XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
-chmod +x "$MOCKS"/bin-stubs/* "$MOCKS"/safe-v1/* "$MOCKS"/bad-version/* 2>/dev/null || true
+chmod +x "$MOCKS"/bin-stubs/* "$MOCKS"/safe-v1/* "$MOCKS"/bad-version/* \
+         "$MOCKS"/below-floor/* "$MOCKS"/unreadable-version/* 2>/dev/null || true
 
 pass=0; fail=0
 ag() { local d="$1" o="$2" p="$3"; if echo "$o" | grep -q "$p"; then echo "  PASS: $d"; pass=$((pass+1)); else echo "  FAIL: $d (want: $p)"; echo "$o" | sed 's/^/    /'; fail=$((fail+1)); fi; }
@@ -28,6 +29,16 @@ ag "auth_missing" "$(PATH="$MOCKS/safe-v1:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_
 ag "known_bad_version" "$(PATH="$MOCKS/bad-version:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=t bash "$PROBE")" 'skip_reason: known_bad_version'
 # Case 7: timeout bin missing
 ag "timeout_binary_missing" "$(PATH="$MOCKS/safe-v1:/usr/bin:/bin" CODEX_API_KEY=t bash "$PROBE")" 'skip_reason: timeout_binary_missing'
+
+# Case 8/9: 버전 바닥·판독 불가 (합집합 — AC25)
+ag "version_below_floor" "$(PATH="$MOCKS/below-floor:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=t bash "$PROBE")" 'skip_reason: version_below_floor'
+ag "version_unreadable" "$(PATH="$MOCKS/unreadable-version:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=t bash "$PROBE")" 'skip_reason: version_unreadable'
+# Case 10: AC7 timeout 5 wrap (qg 사본에만 있던 검사 — 합집합)
+if grep -qE '\$TIMEOUT_BIN"?[[:space:]]+5[[:space:]]+codex[[:space:]]+--version' "$PROBE"; then
+  echo "  PASS: codex --version이 timeout 5로 감싸져 있다"; pass=$((pass+1))
+else
+  echo "  FAIL: codex --version이 timeout 5로 감싸져 있지 않다"; fail=$((fail+1))
+fi
 
 # AC1 regression: qg var DEVBREW_DISABLE_QG_CODEX must NOT affect this script.
 ag "qg var inert" "$(PATH="$MOCKS/safe-v1:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=t DEVBREW_DISABLE_QG_CODEX=1 bash "$PROBE")" 'codex_available: true'

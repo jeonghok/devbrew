@@ -345,5 +345,47 @@ class TestArtifacts(unittest.TestCase):
         self.assertEqual(rc, 0, err)
 
 
+class TestB7NarrowedToRanAndNotFailed(unittest.TestCase):
+    """B7은 `codex.ran is True`이면 codex-source D/OQ 판정을 강제했다. '실행-실패'
+    상태는 ran=true인데 판정이 없으므로 **거짓 RED**가 났다. 조건을
+    `ran == true AND failed == false`로 좁힌다.
+
+    `failed` 키 부재는 fail-closed로 둔다 — 기존 데이터는 실행-성공을 뜻하므로
+    B7이 그대로 걸려야 한다.
+    """
+
+    def _errs(self, codex_meta, d_verdicts):
+        import importlib.util
+        from pathlib import Path
+        p = Path(__file__).resolve().parents[1] / "validate-audit-data.py"
+        spec = importlib.util.spec_from_file_location("val", p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        data = {"meta": {"codex": codex_meta, "assigned_d": ["D1"], "assigned_oq": []},
+                "findings": [], "d_verdicts": d_verdicts, "oq_answers": [],
+                "new_open_questions": [], "degraded": [], "axis_failures": []}
+        return [e for e in mod.validate_data(data) if "B7" in e]
+
+    def test_run_failed_does_not_raise_false_b7(self):
+        errs = self._errs({"ran": True, "failed": True},
+                          [{"id": "D1", "verdict": "confirmed", "source": "claude"}])
+        self.assertEqual(errs, [], "실행-실패 상태에 B7 거짓 RED가 나면 안 된다")
+
+    def test_run_success_without_codex_verdict_still_raises_b7(self):
+        errs = self._errs({"ran": True, "failed": False},
+                          [{"id": "D1", "verdict": "confirmed", "source": "claude"}])
+        self.assertTrue(errs, "실행-성공인데 codex 판정이 없으면 B7이 잡아야 한다")
+
+    def test_failed_key_absent_is_fail_closed(self):
+        errs = self._errs({"ran": True},
+                          [{"id": "D1", "verdict": "confirmed", "source": "claude"}])
+        self.assertTrue(errs, "failed 부재는 실행-성공으로 읽어 B7을 유지한다")
+
+    def test_not_run_does_not_raise_b7(self):
+        errs = self._errs({"ran": False, "failed": False},
+                          [{"id": "D1", "verdict": "confirmed", "source": "claude"}])
+        self.assertEqual(errs, [])
+
+
 if __name__ == "__main__":
     unittest.main()

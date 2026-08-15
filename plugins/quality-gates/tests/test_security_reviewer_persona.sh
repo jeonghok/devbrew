@@ -61,6 +61,14 @@ assert_absent "disallowedTools 없음 (allowlist 가 컨트롤)" '^disallowedToo
 assert_absent "쓰기·실행·위임 도구가 tools: 에 없음" \
   '^tools:.*(Write|Edit|MultiEdit|NotebookEdit|Bash|Agent|Monitor|mcp__)'
 
+# AC4 — 억제 유지 락 (suppression-preserving): 이 sweep의 다른 모든 락과 반대 방향.
+# 이 리뷰어는 diff의 전 소스를 읽으므로 네트워크 egress는 exfiltration 채널(P21) —
+# 다음 sweep이 "일관성"을 이유로 웹 도구를 추가하지 못하게 못 박는다.
+check "frontmatter tools: Read, Grep, Glob (웹 도구 미부여 — P21 exfiltration)" \
+  "grep -c '^tools: Read, Grep, Glob$' '$PERSONA'" 1
+assert_absent "웹 도구 없음 (전 소스를 읽는 리뷰어의 egress는 exfiltration 채널)" \
+  '^tools:.*(WebSearch|WebFetch)'
+
 # Canonical schema keys present in persona body
 check "schema key agent: security-reviewer" \
   "grep -c 'agent: security-reviewer' '$PERSONA'" 1

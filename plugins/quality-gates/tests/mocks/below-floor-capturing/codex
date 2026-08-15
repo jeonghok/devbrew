@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# 바닥(0.118.0) 미만 + **호출 기록**. `below-floor/codex`의 계측 가능한 쌍둥이.
+#
+# 왜 별도 자산인가 (C1, /qg 2026-08-13 whole-branch 리뷰):
+# `test_codex_gate_observation.sh`의 `버전 바닥 미달` 시나리오는 codex 호출이 0회임을
+# 주장하는데, 그 시나리오의 PATH에는 캡처 mock이 **없었다**. 그래서 `obs_call_count`는
+# 게이트가 막았을 때도 0, 게이트가 발화해 비캡처 바이너리를 실행했을 때도 0을 읽었다 —
+# 기대값이 죽은 계측기의 값과 구별 불가였다(실측: 게이트를 완화해도 19/19 GREEN인 채
+# 실제 `codex exec ... web_search="live"`가 나갔다).
+#
+# `below-floor/codex` 자체에 캡처를 넣지 않는 이유: 그 자산은 플러그인 간 행동 대조
+# (`test_codex_copies_agree.sh`)의 대상이고, `CODEX_CAPTURE_DIR`를 세팅하지 않는 detect
+# 스위트 3곳이 직접 호출한다 — `exit 97` 계열을 넣으면 그쪽이 깨진다. 그래서 이 파일은
+# **quality-gates 전용**이다(spec-distill에 사본을 두지 않으므로 `comm -12` 교집합 밖).
+set -u
+
+# `--version`은 detect_codex.sh의 probe다. 바닥 미만 값으로 답하고 **기록하지 않는다**
+# — probe를 러너 호출로 오계수하면 시나리오 기대치가 전부 어긋난다(capture-codex와
+# 같은 규율, `$1`로만 판정).
+if [ "${1:-}" = "--version" ]; then
+  echo "codex-cli 0.117.0"
+  exit 0
+fi
+
+# 여기 도달했다 = 게이트가 버전 바닥을 집행하지 못하고 러너를 발화시켰다는 뜻이다.
+# 기록을 남겨 그 사실이 관측되게 한다. CODEX_CAPTURE_DIR가 없으면 조용히 넘어간다 —
+# 이 mock은 판정하지 않고, 기록할 곳이 없다고 detect 경로를 죽이지 않는다.
+if [ -n "${CODEX_CAPTURE_DIR:-}" ]; then
+  mkdir -p "$CODEX_CAPTURE_DIR"
+  n=0
+  while [ -e "$CODEX_CAPTURE_DIR/call-$n" ]; do n=$((n + 1)); done
+  d="$CODEX_CAPTURE_DIR/call-$n"
+  mkdir -p "$d"
+  for a in "$@"; do printf '%s\0' "$a"; done > "$d/argv"
+  cat > "$d/stdin"
+  printf 'cwd=%s\n' "$PWD" > "$d/meta"
+fi
+
+echo "mock-codex-below-floor-capturing: unexpected arg $*" >&2
+exit 2

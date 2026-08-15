@@ -125,8 +125,7 @@ upfront 게이트가 지출-전 명시 승인이다.
 ## 루프 (라운드 N = 1..effective_max_rounds)
 
 라운드당 디스패치 ≤3(critic + 조건부 codex + adversarial), 최대 동시 실행 2(critic ∥ codex;
-adversarial는 병합 후 순차) — 어느 쪽이든 Fan-out factor N≥5 hard gate 미해당. 누적(3×N)은
-순차 실행이라 subagent spray 아님.
+adversarial는 병합 후 순차). 누적(3×N)은 순차 실행이라 subagent spray 아님.
 
 **1. critic** — `artifact-critic` 디스패치(read-only). 프롬프트에 frozen `project_dir` +
    E2c가 인가한 `canonical` 경로(raw `<path>` 아님 — symlink escape 봉쇄) 스레딩. 출력
@@ -143,6 +142,14 @@ Agent({
 **2. codex co-reviewer (조건부)** — `detect_codex.sh`로 가용성 확인:
 - `codex_available: true` → `run_artifact_codex_reviewer.sh <canonical> <project_dir> <codex.yaml>`
   (E2c가 인가한 canonical — codex 프롬프트에 산출물이 임베드되므로 escape symlink는 read 前 거부됨).
+  - **rc를 잡는다.** 러너는 평소 exit 0 + 항상 codex.yaml을 쓰지만, 산출물 경로
+    자체를 쓸 수 없으면(디렉토리 부재·권한·RO 마운트) loud stderr를 낸 뒤 **exit 3**
+    으로 죽는다. `rc == 3`이면 codex.yaml을 읽기 **전에** 지운다(`rm -f codex.yaml`)
+    — 지우지 않으면 직전 라운드의 YAML(양성 `codex_failed: false`를 담고 있을 수
+    있다)이 그대로 남아 이번 라운드의 codex 판정으로 읽힌다. 형제
+    `run_brief_codex_reviewer.sh`와 동일한 exit-3 계약이고, 그 호출자
+    (`spec-distill`의 `reviewing-brief` SKILL)가 이미 같은 `rc==3 → rm -f` 패턴을
+    구현하고 있다.
   - 출력이 `codex_failed: true`면 **가용 판정 후 런타임 실패**: `> [quality-gates] codex 가용 판정 후 런타임 실패(<reason>) — degraded, inherit-tier 단독.` (crash 아님, C7) codex.yaml은 병합에서 제외.
 - `codex_available: false` → **미가용**: `> [quality-gates] codex 미가용(<skip_reason>) — inherit-tier 단독 비평.` (위 런타임-실패 문구와 **구분**된 별도 라인.)
 

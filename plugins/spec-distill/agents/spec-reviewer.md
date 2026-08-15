@@ -1,9 +1,9 @@
 ---
 name: spec-reviewer
-model: sonnet
+model: inherit
 cost_class: medium
 color: orange
-tools: Read, Grep, Glob, WebFetch
+tools: Read, Grep, Glob, WebSearch, WebFetch
 description: >
   Use this agent to adversarially review a brainstorming design doc
   (docs/superpowers/specs/...-design.md) in the spec-distill flow. Hunts for

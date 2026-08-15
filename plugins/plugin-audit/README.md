@@ -17,6 +17,11 @@
 `cost_class: high` — dispatch 전 `AskUserQuestion` 지출 동의 게이트를 통과해야 한다.
 Kill switch: `DEVBREW_DISABLE_PLUGIN_AUDIT=1`.
 
+`DEVBREW_DISABLE_PLUGIN_AUDIT_WEB=1` — codex 감사 co-reviewer의 웹 검색만 비활성화한다
+(AC21). 감사 preamble이 외부 prior-art 근거를 요구해 기본은 ON(`web_search="live"`)이지만,
+꺼지면 codex가 리포 근거만으로 감사하고 그 사실을 stderr에 loud하게 남긴다 — crash 없음
+(graceful degradation).
+
 ## Prerequisites (cross-plugin 의존)
 
 - **plugin-dev (official, optional)** — 구조 hard-check tier(E)가 `validate-agent.sh`·

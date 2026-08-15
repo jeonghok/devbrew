@@ -63,8 +63,12 @@ def validate_data(data: dict) -> list:
         if not any(x.get("id") == oid and x.get("source") == "claude" for x in data.get("oq_answers", [])):
             errs.append(f"배정 OQ {oid}의 claude 답변 부재 (dead-axis masking — LD4)")
 
-    # codex 병합 (B7): codex.ran이면 codex source 판정이 D·OQ에 있어야
-    if meta.get("codex", {}).get("ran") is True:
+    # codex 병합 (B7): codex가 **성공적으로 돌았으면** codex source 판정이 D·OQ에 있어야.
+    # `ran == true` 단독이던 조건을 `ran && !failed`로 좁힌다 — "실행-실패"(ran=true,
+    # failed=true)는 결과를 신뢰할 수 없는 상태이므로 판정 부재가 정상이고, 옛 조건은
+    # 거기에 거짓 RED를 냈다. `failed` 키 부재는 실행-성공으로 읽어 fail-closed를 지킨다.
+    _cx = meta.get("codex", {})
+    if _cx.get("ran") is True and _cx.get("failed") is not True:
         for did in assigned_d:
             if not any(x.get("id") == did and x.get("source") == "codex" for x in data.get("d_verdicts", [])):
                 errs.append(f"codex.ran=true인데 {did}의 codex 판정 없음 (B7 — LD4 참칭)")

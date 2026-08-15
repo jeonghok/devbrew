@@ -54,8 +54,17 @@ def render(data: dict) -> str | None:
     banners = []
     if axis_failures:
         banners.append(f"⚠ **{6 - len(axis_failures)}/6 축 완주** — {len(axis_failures)}개 축 감사 실패")
-    if not meta.get("codex", {}).get("ran"):
+    # §4.1 truth table 세 상태. 옛 코드는 `not ran`만 보아 "돌았으나 실패"를
+    # "미실행"과 같은 배너로 뭉갰다 — 사용자가 조치할 대상이 다르다(설치 vs 재실행).
+    _cx = meta.get("codex", {})
+    if not _cx.get("ran"):
         banners.append("⚠ **codex 독립 감사 미실행** — LD4 모델 다양성 결손")
+    elif _cx.get("failed"):
+        banners.append("⚠ **codex 독립 감사 실행-실패** — 돌았으나 결과를 신뢰할 수 없다 "
+                       "(LD4 모델 다양성 결손, degraded)")
+    for d in (_cx.get("dropped") or []):
+        banners.append(f"⚠ **codex {d.get('collection')} {d.get('count')}건 폐기** — "
+                       f"{d.get('reason')} (조용히 버리지 않는다)")
     if degraded:
         banners.append(f"⚠ **degraded {len(degraded)}건** — 아래 결손 목록 참조")
     if not findings:

@@ -40,11 +40,29 @@ python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" st
 dispatch 의 연료는 `pending_review` 다. 진입 시점에 연료를 없애면 subagent(async) 경계에서 발생하는 메인 `Stop` 이 진행 중인 리뷰를 재강제(중복/절단)할 수 없다 — v0.18.0 이 상태로 표현하던 불변식을 한 줄이 대체한다. 다른 문서의 pending 은 건드리지 않는다(같은-키만 strip). **여기서 원장(`armed_paths`)은 쓰지 않는다** — 진입은 리뷰의 *시작*일 뿐 완료가 아니다(§5.2).
 
 2. **Dispatch spec-reviewer agent**:
+
+   **Web kill switch (dispatch 직전 확인)**: `spec-reviewer`는 `WebSearch`/`WebFetch`를
+   보유한다(v0.24.15에서 `WebSearch` 부여). `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`이면
+   프롬프트에 `web_disabled: true`를 실어 **리포 근거만으로 리뷰**하게 하고 loud advisory를
+   남긴다: `[spec-distill] web 비활성 — spec-reviewer가 리포 근거만 사용 (외부 사실 확인 없음)`.
+   `spec-reviewer`는 `tools:`에 `Bash`가 없어 스스로 스위치를 읽을 수 없다(Law 2) —
+   orchestrator가 유일한 집행 지점이다. 스위치는 보안 컨트롤이므로, egress를 가진
+   dispatch가 하나라도 게이트 밖에 있으면 스위치는 꺼졌다고 *믿게만* 만든다.
+
+   ```bash
+   if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
+     web_disabled=true
+     echo "[spec-distill] web 비활성 — spec-reviewer가 리포 근거만 사용 (외부 사실 확인 없음)" >&2
+   else
+     web_disabled=false
+   fi
+   ```
+
    ```
    Agent({
      description: "Spec adversarial review",
-     subagent_type: "spec-reviewer",
-     prompt: "Review spec.md at <path>. Previous issue history: <list>"
+     subagent_type: "spec-distill:spec-reviewer",
+     prompt: "Review spec.md at <path>. Previous issue history: <list>. web_disabled: <true|false — true면 WebSearch/WebFetch 사용 금지, 리포 근거만>"
    })
    ```
 
@@ -54,21 +72,39 @@ dispatch 의 연료는 `pending_review` 다. 진입 시점에 연료를 없애�
 
 1. **⟦review-claude⟧ verbatim 저장 (C8)**: Step 2에서 받은 spec-reviewer의 **raw 출력을 요약·바꿔쓰기 없이 그대로(verbatim)** scratch 파일 `$CLAUDE_OUT`에 저장한다. 파싱은 merge_review가 그 파일에서 수행하므로, orchestrating 세션이 여기서 category/target_section을 전사(轉寫)하면 안 된다([fc2ef911] 재도입 금지).
 
-2. **⟦detect⟧**:
-   ```bash
-   codex_avail="$(bash "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/detect_codex.sh" | sed -n 's/^codex_available: //p')"
-   ```
-   `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1`이면 `codex_available: false` + `skip_reason: kill_switch` — codex만 skip, Claude 리뷰는 이미 정상 수행됨.
+2. **⟦detect⟧ + ⟦review-codex⟧ — 하나의 리터럴 게이트**:
 
-3. **⟦review-codex⟧** (`codex_avail=true`일 때만):
-   ```bash
-   bash "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/run_spec_codex_reviewer.sh" \
-     "$spec_path" "$(pwd)" "$CODEX_YAML"
-   ```
-   `codex_avail=false`면 이 스텝을 skip하고 loud degrade advisory를 낸다:
-   > `[spec-distill v0.20.0] codex co-review SKIPPED (reason: <skip_reason>) — Claude-only, model diversity 없음 (degraded).`
+   조건을 **산문으로 적지 않는다.** 이전 판은 `codex_avail=true일 때만`이라고 문장으로
+   적고 bash fence는 무조건 실행되게 두었다 — 그 파일에 `codex_avail`을 검사하는 `if`가
+   없었다. kill switch는 P21 보안 컨트롤이라 그 상태는 "껐다고 믿게만" 만든다.
+   `reviewing-brief`의 게이트와 동형으로 맞춘다.
 
-4. **⟦merge⟧ (barrier)** — 두 리뷰가 모두 끝난 뒤 결정론 병합:
+<!-- codex-gate:begin runner=run_spec_codex_reviewer.sh -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+DETECT_OUT="$(bash "$SD/scripts/detect_codex.sh")"
+codex_avail="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^codex_available: //p')"
+skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
+if [[ "$codex_avail" == "true" ]]; then
+  bash "$SD/scripts/run_spec_codex_reviewer.sh" "$spec_path" "$(pwd)" "$CODEX_YAML"; runner_rc=$?
+  # 러너는 fail-closed 산출물을 **쓰지 못하면** exit 3으로 죽는다(쓰기 불가·디렉토리
+  # 부재). 그 경우 직전 라운드 YAML이 그대로 남아 이번 라운드 판정으로 읽히므로,
+  # 잔존물을 제거하고 degraded로 기록한다 — 부재는 아래 merge_review.py의
+  # 양성-마커 규칙이 degraded로 잡는다(reviewing-brief SKILL과 동일 패턴).
+  if [[ "$runner_rc" -eq 3 ]]; then rm -f "$CODEX_YAML"; fi
+else
+  echo "[spec-distill] codex co-review SKIPPED (reason: ${skip_reason:-unknown}) — Claude-only, 이 리뷰에는 모델 다양성이 없었다 (degraded)." >&2
+fi
+```
+<!-- codex-gate:end -->
+
+   `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1`이면 `detect_codex.sh`가
+   `codex_available: false` + `skip_reason: kill_switch`를 내므로 codex만 skip되고
+   **Claude 리뷰(Step 2)는 이미 정상 수행됐다** — codex kill switch가 Claude 리뷰를
+   막지 않는다(AC15). `codex_avail=false`인 경우의 advisory는 위 블록이 stderr로 내며,
+   사용자에게 그대로 노출한다.
+
+3. **⟦merge⟧ (barrier)** — 두 리뷰가 모두 끝난 뒤 결정론 병합:
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/merge_review.py" \
      --claude-output "$CLAUDE_OUT" \
@@ -79,7 +115,7 @@ dispatch 의 연료는 `pending_review` 다. 진입 시점에 연료를 없애�
 
    merge_review stdout(`combined_verdict` / `claude_verdict` / `codex_verdict` / `stagnation` / `codex_degraded` / `claude_degraded` / `claude_verdict_unrecoverable` / `codex_findings` / `advisory`)을 파싱한다. `advisory:` 항목은 사용자에게 **그대로 표시**(degrade 인지 + codex overturn 인지 — combined_verdict가 claude_verdict를 뒤집었을 때 merge_review가 내는 advisory도 여기 포함). `--codex-yaml`이 없거나 codex가 실패했으면 merge_review가 `codex_degraded: true`로 처리한다.
 
-5. **blind-across-rounds (AC12, NG6)**: 각 리뷰어에게는 **same-origin history만** 전달한다 — Step 2의 spec-reviewer 프롬프트에는 codex 과거 findings를 넣지 않는다(두 리뷰 pass는 상호 blind). 통합 판정은 merge_review(orchestrator-side)만 수행한다.
+4. **blind-across-rounds (AC12, NG6)**: 각 리뷰어에게는 **same-origin history만** 전달한다 — Step 2의 spec-reviewer 프롬프트에는 codex 과거 findings를 넣지 않는다(두 리뷰 pass는 상호 blind). 통합 판정은 merge_review(orchestrator-side)만 수행한다.
 
 3. **Parse merge_review output** — `combined_verdict`, `claude_verdict`, `codex_verdict`, `stagnation.per_issue`, `stagnation.round_level`, degrade flags, `codex_findings`, advisory. (Claude raw 출력 중 Status/Recommendations **prose**만 사람 표시용으로 사용 — verdict는 merge_review의 `combined_verdict`에서 온다. `Stagnation_signal`은 이 display-only 범위 밖이다: 아래 Re-review cap 항목 2 / "Stagnation detection" 절의 **보조 OR-trigger**로 계속 escalate 판정에 투입된다 — display-only 취급하지 말 것.)
 

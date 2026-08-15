@@ -69,7 +69,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 - **Law 1 (Clarity Before Code)** — Plugin의 raison d'être. 인터뷰 → brief → design doc → reviewer → human gate. "spec 이전엔 코딩 안 한다" 강제. (`locked_decisions`는 design doc의 표식이 아니라 그 반대다 — `hooks/spec-write-validator.py`가 frontmatter에 이 키를 가진 파일을 **spec** 모드로 분류하고, `-design.md`를 포함한 나머지는 design 모드다.)
 - **Law 1 (Clarity) — 문제공간 게이트 (v0.12.0)** — interview의 5 통과 의례(R1–R5)가 `check_brief.py`로 기계 검증되는 구조 게이트. 약한 방향(무인용 landscape·un-challenged 의심·빈 시행착오)은 brief 종료를 차단.
-- **Law 2 (Writer/Reviewer 분리)** — `tools:` allowlist frontmatter로 spec-reviewer(`Read, Grep, Glob, WebFetch`) + coverage-mapper(`Read, Grep, Glob`) + blind-spot-prober(`Read, Grep, Glob, WebSearch, WebFetch`) agent의 *물리적* 분리. 프롬프트가 아닌 frontmatter scoping이며, **allowlist라 열거되지 않은 쓰기·실행·위임 도구가 자동 차단**된다(denylist는 시간에 대해 fail-open이라 v0.21.0에서 폐기).
+- **Law 2 (Writer/Reviewer 분리)** — `tools:` allowlist frontmatter로 spec-reviewer(`Read, Grep, Glob, WebSearch, WebFetch`) + coverage-mapper(`Read, Grep, Glob, WebSearch, WebFetch`) + blind-spot-prober(`Read, Grep, Glob, WebSearch, WebFetch`) agent의 *물리적* 분리. 프롬프트가 아닌 frontmatter scoping이며, **allowlist라 열거되지 않은 쓰기·실행·위임 도구가 자동 차단**된다(denylist는 시간에 대해 fail-open이라 v0.21.0에서 폐기).
 - **Law 2 강화 (v0.3.0)** — Writer/Reviewer 분리를 turn-boundary 결정론으로 끌어올림. PostToolUse가 spec/design write를 감지해 *해당 turn 안* structural gate를 차단(exit 2)하고, Stop hook이 *다음 turn 첫 액션*으로 reviewer dispatch를 systemMessage 주입으로 강제. file-based ledger (`state.local.md` `pending_review:` block)가 trans-hook coordination을 LLM 의지에서 분리.
 - **Law 2 (Writer/Reviewer Never Share a Pass) — infrastructure operability**: spec-reviewer agent의 writer/reviewer 물리 분리가 의미를 가지려면 reviewer dispatch가 Claude context에 *실제로* 도달해야 한다. v0.5.0의 dual-target output fix가 이 baseline을 보장. dispatch가 silent하게 lost되면 reviewer persona 분리 자체가 무의미.
 - **Law 3 (Compounding)** — spec.md 파일 자체가 named, versioned, diff-able artifact (P5). state.local.md 보존 (실패 시) → 디버깅 + future session 추적.
@@ -92,7 +92,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 - **P2 (Ambiguity Gate)** — 구조적 (필수 11 섹션) default, numerical 거부 (philosophy P2).
 - **P5 (Spec as artifact)** — `docs/superpowers/specs/...spec.md` named, versioned (frontmatter `version: 1.0.0`).
-- **P12 (Trivia escape)** — `/interview` first-step rule (typo / 주석-only / formatting / 단일 rename / <10 토큰 + 단일 action).
+- **P12 (Trivia escape)** — `/interview` first-step rule (typo / 주석-only / formatting / rename / <10 토큰 + 단일 action). 파일 수는 자격 기준이 아니다.
 - **P14 (State preservation)** — `.claude/spec-distill/<session-id>/state.local.md` (실패/abort 시 보존).
 - **P17 (User sovereignty)** — `needs_interview` user confirm gate, [5] Human Review, all kill switches.
 - **P18 (Stagnation detection)** — issue `raised_count ≥ 3 unresolved` 시 P18 stagnation 명시 + forced [5] escalate.
@@ -105,7 +105,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - **C43** 4-path Socratic routing (factual auto-confirm / judgment→user / ambiguity→sub-agent / ontological→5-type).
 - **C44** Dialectic Rhythm Guard (env: `DEVBREW_RHYTHM_GUARD_THRESHOLD`, default 3).
 - **C10** `probe_budget.py` 백스톱 — Unbounded-autonomy 가드(effective_cap = base 12 + override, `DEVBREW_SPEC_DISTILL_PROBE_CAP`).
-- **C11** coverage-mapper agent (`tools: Read, Grep, Glob` — advisory 주제-도출 차원 제안자) + **blind-spot-prober** agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — 적대적 premortem, fan-out 1).
+- **C11** coverage-mapper agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — advisory 주제-도출 차원 제안자) + **blind-spot-prober** agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — 적대적 premortem, fan-out 1).
 - **C51** 5-type ontology (ESSENCE / ROOT_CAUSE / PREREQUISITES / HIDDEN_ASSUMPTIONS / EXISTING_CONTEXT).
 
 ### Anti-pattern 회피
@@ -141,6 +141,39 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 ## Kill switches
 
+### 먼저 — 무엇이 리뷰의 범위를 정하는가
+
+아래 env var 들은 **전부 세션 스코프이고 전부 재시작이 필요합니다.** "이번 리뷰 한 번만"
+같은 좁은 범위에 이것들을 쓰는 것은 압정에 망치입니다. 다만 상위 두 행은 **스위치가
+아니라 arm-once(v0.25.0) 설계에서 따라 나오는 성질**이므로, "끄는 방법" 이 아니라
+"범위가 어떻게 정해지는가" 로 읽으십시오.
+
+| 범위 | 그 범위를 만드는 것 | 재시작 |
+|---|---|---|
+| **이번 dispatch 1회** | mandate 의 **수명 자체가 1회**다 — `rewrite_state()` 가 emit 전에 `pending_review` 를 소진하므로 이 강제는 이번 턴을 넘기지 않는다 | 불필요 |
+| **그 문서의 재발동** | 재발동은 그 문서를 **다시 편집**할 때 일어난다. `should_arm()` 이 git-unknown 을 요구하므로 **커밋된 문서는 원칙적으로 다시 arm 되지 않는다** — 단 `is_born()` 은 git 판정 실패(`ls-files` timeout·rc 128 등)를 전부 arm 쪽으로 fail-open 하므로 이는 보장이 아니다 | 불필요 |
+| 모든 문서, 자동 리뷰만 | `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (Layer 1 구조 검증은 유지) | 필요 |
+| 훅 하나 | `DEVBREW_SKIP_HOOKS=spec-distill:Stop` | 필요 |
+| 플러그인 전체 | `DEVBREW_DISABLE_SPEC_DISTILL=1` | 필요 |
+
+**커밋은 이미 걸린 dispatch 를 취소하지 않습니다.** Stop 훅은 pending 을 찾은 뒤
+`armed_paths` 만 조회하고 git 추적 여부를 재검사하지 않으므로, pending 이 생긴 뒤 같은
+턴에 커밋해도 그 dispatch 는 그대로 실행됩니다. 커밋이 영향을 주는 것은 **앞으로의
+arm** 뿐이고, 그마저 위 표의 fail-open 단서가 붙습니다.
+
+원장(`armed_paths`)은 **세션 스코프**입니다. 리뷰를 마쳐도 문서를 커밋하지 않으면 다음
+세션에서 한 번 더 arm 됩니다 — 세션을 넘겨 억제하는 통상적 수단은 커밋이며, approve 시점
+`check-born` advisory 가 그것을 촉구합니다. 다만 `check-born` 은 `is_born()` 위에 서 있어
+**판정 실패와 untracked 를 구별하지 않습니다** — git 호출이 실패하면 커밋된 문서를
+"아직 git 에 없다" 로 보고합니다. 재발동은 세션당·문서당 3회(G6)가 상한입니다.
+
+**Stop 훅의 mandate 는 수명 한 문장만 말하고 재발동 조건은 말하지 않습니다.** 재발동은
+(원장 ∧ git ∧ 상한) 세 입력의 함수인데 셋 다 emit 시점에 확정되지 않아, 어떤 단정도
+언젠가 거짓이 되기 때문입니다(실제로 두 판본이 그렇게 걸렸습니다 — CHANGELOG 0.25.2
+리뷰 라운드 참조). 이 표가 그 조건을 설명하는 유일한 자리입니다.
+
+### 스위치 목록
+
 - `DEVBREW_DISABLE_SPEC_DISTILL=1` — plugin 전체 abort, state 보존.
 - `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1` (v0.20.0, v0.24.0 확대) — codex 병렬 co-review만 skip. Claude 리뷰는 정상 동작, combined = Claude verdict + loud degrade advisory. 전역 `DEVBREW_DISABLE_SPEC_DISTILL`과 독립. **적용 범위는 두 경로 전부**: (a) design-doc 리뷰(`reviewing-spec`), (b) brief 리뷰(`reviewing-brief`)의 **호출 지점 3곳** — 1-c 방향성 축 · 2-b 충실도 축 · 2-c 충실도 재실행. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`로 옮기고 세 지점이 같은 `$codex_avail`로 묶이며, 러너(`run_brief_codex_reviewer.sh`)는 이 변수를 보지 않는다. 한 지점이라도 게이트 밖이면 opt-out이 무시된 채 지출이 나가고 `affected_axis: all` degradation record가 거짓이 된다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` — UserPromptSubmit hook만 skip.
@@ -154,7 +187,10 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - `DEVBREW_SPEC_DISTILL_TTL_HOURS=<int>` (v0.6.0) — TTL-GC orphan 정리 임계값 (default 24h). 짧게 설정 시 자주 정리, in-flight 작업 risk 증가.
 - `DEVBREW_SPEC_DISTILL_GC_VERBOSE=1` (v0.6.0) — TTL-GC가 cleanup 발생 시 stdout summary 출력. CI/디버깅용.
 - `DEVBREW_SPEC_DISTILL_SKIP_HANDOFF_CHECK=1` (v0.9.0) — `handoff_incomplete` 카테고리만 우회. 다른 검사 (`missing_section` 등)는 정상 동작. loud warning stderr 출력. /compact 이후 정보 손실 risk 명시.
-- `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` (v0.12.0) — interview 웹 리서치 비활성화. landscape를 loud log와 함께 생략, crash 없음 (graceful degradation, AC8).
+- `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` (v0.12.0, AC21로 범위 확대) — 이 kill switch 하나가
+  **세 소비자**의 웹 접근을 끈다: interview 웹 리서치(landscape, v0.12.0), codex design-doc
+  co-reviewer(`run_spec_codex_reviewer.sh`), codex brief co-reviewer(`run_brief_codex_reviewer.sh`,
+  둘 다 AC21). 어느 쪽이든 loud log와 함께 생략, crash 없음 (graceful degradation, AC8).
 - `DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW=1` (v0.24.0) — brief 리뷰 파이프라인 전체 skip.
   `component: pipeline` degradation record + loud advisory를 남기고 Step B로 직행한다(조용한
   생략이 아니다). 충실도·방향성·냉독 전부 미검증 상태가 게이트 질문에 표시된다.

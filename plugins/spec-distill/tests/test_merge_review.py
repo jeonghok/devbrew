@@ -419,6 +419,33 @@ class TestMergeCore(unittest.TestCase):
         _, y, raw, _ = run_merge(claude_output("approved", []), codex_yaml(failed=True, reason="exit_nonzero"))
         self.assertIn("codex_findings: []", raw)
 
+    # Task 7 (S3c): build_spec_codex_prompt.py's PROMPT_TEMPLATE opened the
+    # six named judgment categories into a starting vocabulary (an `other`
+    # escape hatch), so codex is now told a real defect that fits none of the
+    # six names must still be reported. This is a pipeline-layer lock, not a
+    # prompt-layer one (that's AC16 in test_build_spec_codex_prompt.sh) —
+    # the prompt can advertise `other` freely while a future parser/ledger
+    # change starts silently dropping unknown categories; only running the
+    # value through the real merge proves it survives end to end: it must
+    # reach the human-visible codex_findings display block, get a real
+    # issue_id through the SAME hash-input path the six named categories use
+    # (no special-cased no-op), and still be able to escalate the verdict.
+    def test_unknown_category_survives_merge(self):
+        cod = codex_yaml([{"category": "other", "target_section": "#9-open-questions",
+                            "severity": "high", "summary": "no listed category fits this"}])
+        _, y, raw, hist = run_merge(claude_output("approved", []), cod)
+        # reaches the display channel (the only content channel for codex issues).
+        self.assertIn("codex_findings:", raw)
+        cf_block = raw[raw.index("codex_findings:"):raw.index("advisory:")]
+        self.assertIn("other", cf_block)
+        self.assertIn("no listed category fits this", cf_block)
+        # gets a real issue_id in the ledger via the shared hash-input path.
+        other_id = cid("other", "#9-open-questions")
+        self.assertTrue(any(r["id"] == other_id for r in hist["issue_history"]))
+        # an unknown category is not silently treated as advisory-only —
+        # severity still drives the verdict.
+        self.assertEqual(y["combined_verdict"], "needs_revise")
+
 
 class TestMergeLedger(unittest.TestCase):
     def _issue(self, cat, sec, sev="high"):

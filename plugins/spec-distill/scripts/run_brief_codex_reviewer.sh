@@ -73,7 +73,22 @@ cd "$PROJECT_DIR" || emit_fallback project_dir_unreachable
 
 # C7: trap 무장 *전에* scratch 대입을 가드한다 (빈 문자열 → `rm -rf ""` footgun).
 SCRATCH="$(mktemp -d -t sd-brief-codex-XXXXXX)" || emit_fallback scratch_dir_uncreatable
-trap 'rm -rf "$SCRATCH"' EXIT
+
+# ── 종단 빈-출력 backstop (Task 20b) ─────────────────────────────────────────
+# seed_failclosed()(위)가 진입 시 stale은 이미 치우지만, 아래 종단 추출
+# (codex_findings_to_yaml.py) 호출의 `> "$OUTPUT_PATH"` 리다이렉트가 python3
+# 실행 전에 그 seed까지 다시 비운다. 추출기가 exit 0인데 stdout에 아무것도
+# 안 쓰면(부분 실행·침묵 crash) 그 실패를 잡는 `if !`가 발동하지 않아
+# emit_fallback도 못 타고 0바이트 산출물이 그대로 남는다 — EXIT 트랩은 있었으나
+# 이 형태를 잡는 가드가 없었다(2026-08-09/10 컨트롤러 확인). 형제 러너들의
+# `_degrade_if_empty`와 동일한 최종 backstop을 여기 둔다 — write_failclosed를
+# 재사용해 소비자 스키마(중첩 meta:)를 그대로 지킨다.
+_degrade_if_empty() {
+  [[ -n "$OUTPUT_PATH" && ! -s "$OUTPUT_PATH" ]] || return 0
+  write_failclosed "aborted_before_completion" || true
+  echo "[spec-distill] codex 리뷰가 완료 전에 중단됨 — degrade YAML 기록(stale 재사용 방지)" >&2
+}
+trap 'rm -rf "$SCRATCH"; _degrade_if_empty' EXIT
 PROMPT_FILE="$SCRATCH/prompt.md"
 STDOUT_FILE="$SCRATCH/codex.jsonl"
 STDERR_FILE="$SCRATCH/codex.stderr"
@@ -93,18 +108,25 @@ command -v codex >/dev/null 2>&1 || emit_fallback codex_not_installed
 # 웹 검색: 사용자 kill switch(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1)만 끈다. 그 밖에는
 # 명시적으로 켠다 — `--search`는 TUI 전용이고 `codex exec` 경로는 이 config다.
 # 검색 *횟수* 상한은 두지 않는다 (E10: 단일 exec은 이미 턴으로 경계가 있다).
-WEB_ARGS=(-c 'tools.web_search=true')
+#
+# `web_search="live"`: `tools.web_search=true` 단독은 codex 기본 모드(`cached`) —
+# V1 probe(2026-08-09, 3번째 호출·컨트롤러 승인) 실측: 도구만 켜면 실제 존재하는
+# llvm/llvm-project 커밋을 돌려주지만 12일 지연된 인덱스였다(진짜 검색이지만
+# stale). `live`를 추가하자 같은 조회가 독립 측정한 timestamp와 일치하는 오늘
+# HEAD를 돌려줬다. 이 checklist는 현재 prior-art 대조를 요구하므로 `live`가 필수다.
+WEB_ARGS=(-c 'tools.web_search=true' -c 'web_search="live"')
 if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
-  WEB_ARGS=(-c 'tools.web_search=false')
+  WEB_ARGS=(-c 'tools.web_search=false' -c 'web_search="disabled"')
+  echo "[spec-distill] web 비활성 — codex brief co-reviewer가 리포+payload 근거만 사용 (외부 사실 확인 없음)" >&2
 fi
 
 EXIT_CODE=0
-codex exec "$(cat "$PROMPT_FILE")" \
+codex exec - \
     -C "$PROJECT_DIR" \
     -s read-only \
     "${WEB_ARGS[@]}" \
     --json \
-    < /dev/null \
+    < "$PROMPT_FILE" \
     > "$STDOUT_FILE" \
     2>"$STDERR_FILE" || EXIT_CODE=$?
 

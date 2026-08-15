@@ -5,12 +5,21 @@ Pulls the last non-empty agent-message text from the codex --json stream,
 extracts a fenced ```yaml block, validates it has a `findings:` list, and emits:
     agent: codex-reviewer
     findings: [...]
+    meta:
+      codex_failed: false
 On any failure (nonzero codex exit, no message, no fence, unparseable, wrong
-shape) emits a degrade meta:
+shape) emits a degrade meta instead:
     codex_failed: true
     reason: <str>
 so the SKILL can loud-degrade instead of crashing (C7). Mirrors the exit/reason
 override contract of codex_findings_to_yaml.py.
+
+Task 15b (결함 A): the success path previously emitted no `meta:` block at all —
+"findings: [], codex ran cleanly" and "findings: [], something broke silently"
+were indistinguishable to the consumer (indeterminate ≠ clean, global constraint).
+The positive `codex_failed: false` marker closes that hole; it mirrors the
+sibling extractor's fenced-JSON shape (`codex_findings_to_yaml.py`), which has
+carried this marker on its success path since CR-2.
 """
 import argparse
 import json
@@ -96,8 +105,12 @@ def main():
     for f in findings:
         if isinstance(f, dict):
             f["agent"] = "codex-reviewer"
-    sys.stdout.write(yaml.safe_dump({"agent": "codex-reviewer", "findings": findings},
-                                    allow_unicode=True, sort_keys=False))
+    # 결함 A 수정: 성공 경로가 양성 표식(codex_failed: false)을 낸다. degrade()의
+    # `codex_failed: true`만 있고 짝이 없으면 "발견 0건"과 "조용히 깨짐"이
+    # 소비자 쪽에서 구별되지 않는다 (indeterminate ≠ clean, task-15b-brief.md).
+    sys.stdout.write(yaml.safe_dump(
+        {"agent": "codex-reviewer", "findings": findings, "meta": {"codex_failed": False}},
+        allow_unicode=True, sort_keys=False))
     return 0
 
 

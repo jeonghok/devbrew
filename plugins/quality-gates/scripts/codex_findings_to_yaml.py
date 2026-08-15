@@ -197,11 +197,46 @@ def main() -> int:
         return 0
 
     raw_findings = parsed.get("findings", [])
-    findings = raw_findings if isinstance(raw_findings, list) else []
-    meta = {"codex_failed": False}
-    if raw_findings is not None and not isinstance(raw_findings, list):
+
+    # --- CR-2: 스키마 검증은 성공 마커를 찍기 **전에** 한다 -------------------
+    # 이전 구현은 non-list `findings`를 조용히 `[]`로 강등하면서 `codex_failed:
+    # false`를 함께 찍었다. 소비자는 그 마커를 성공으로 읽으므로, 스키마가 깨진
+    # codex 실행이 **findings 0건 + degradation record 0건**으로 흡수됐다 —
+    # 실행되지 못한 검사를 통과한 검사로 기록하는 경로다(indeterminate ≠ clean).
+    # 실측: `{"findings": {}}` → `findings: []` / `codex_failed: false` /
+    # `reason: schema_mismatch`. 그리고 이 러너는 자기가 선언한 계약을 어겼다
+    # (`tests/test_codex_runner_degrade_contract.sh:43`).
+    #
+    # 검증 범위는 **구조**다(컨테이너 타입 + 원소 타입). 필드 단위 완전성까지
+    # 올리지 않는 이유: 서술 필드 하나가 빠진 정상 라운드를 degrade로 올리면 진짜
+    # findings가 소실된다. 레포 자신의 valid 픽스처도 confidence/summary/
+    # proposed_fix 없이 통과한다.
+    #
+    # spec-distill 사본과 **행동이 같아야 한다** — test_codex_copies_agree.sh가
+    # 그것을 잰다. 이 결함이 정확히 그 락의 부재로 생겼다(Law 3).
+    schema_mismatch = False
+    findings: list[dict] = []
+    if not isinstance(raw_findings, list):
+        # dict / str / int / null — 계약된 컨테이너가 아니다. 읽을 findings가 없다.
+        schema_mismatch = True
+        meta_type = type(raw_findings).__name__
+        bad_elements: list[str] = []
+    else:
+        meta_type = "list"
+        findings = [f for f in raw_findings if isinstance(f, dict)]
+        # non-dict 원소는 렌더 불가다: str이면 `if k in f`가 부분문자열 검사가 되어
+        # 키 없는 빈 finding을 내고, int면 TypeError로 변환기가 죽는다(실측).
+        bad_elements = sorted({type(f).__name__
+                               for f in raw_findings if not isinstance(f, dict)})
+        if bad_elements:
+            schema_mismatch = True
+
+    meta: dict[str, object] = {"codex_failed": schema_mismatch}
+    if schema_mismatch:
         meta["reason"] = "schema_mismatch"
-        meta["raw_findings_type"] = type(raw_findings).__name__
+        meta["raw_findings_type"] = meta_type
+        if bad_elements:
+            meta["bad_element_types"] = ",".join(bad_elements)
     sys.stdout.write(yaml_emit(findings, apply_overrides(meta)))
     return 0
 

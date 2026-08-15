@@ -8,6 +8,20 @@
 
 **Tech Stack:** Python 3 표준 라이브러리(`re`/`json`/`pathlib`, unittest), Bash 테스트 하니스, Markdown(SKILL 프로즈·agent frontmatter·brief 템플릿). 신규 런타임 의존성 없음 — `web_budget.py`/`check_brief.py` 기존 패턴 재사용.
 
+> **사후 정정 (2026-08-03, 하니스 능력 억제 제거 sweep)**: 이 계획의 agent frontmatter
+> 스니펫이 박아넣은 `coverage-mapper`(당시 초안 :479 부근)와 `blind-spot-prober`(당시
+> 초안 :630 부근)의 `model: sonnet` 핀은 이후 제거됐다. 실측 결과 그 핀이 opus-5
+> 세션에서 sonnet-5 리뷰어를 만들어, 리뷰어가 writer보다 약한 상태를 매 dispatch
+> 재현했다(HIST-05·HIST-06). 같은 `blind-spot-prober`의 Required research 절이 web
+> 검색을 "1–2회·순차 호출(병렬·투기적 금지, C5/AP9)"로 못 박은 상한(당시 초안 :667-668
+> 부근, HIST-04)도 함께 제거됐다 — C5는 web-부재 시 graceful degradation 조항이지
+> dispatch 순서 제약이 아니었고, AP9(fan-out ≥5 게이트)는 fan-out=1인 이 agent에는
+> 애초에 적용되지 않는 인용이었다. 현재 규약은 두 agent 모두 `model: inherit` + 검색
+> 횟수 무상한(kill switch만 유지)이다 — `plugins/spec-distill/agents/coverage-mapper.md`·
+> `blind-spot-prober.md` 및
+> `docs/superpowers/specs/2026-08-02-harness-capability-suppression-sweep-design.md`.
+> 이 문서의 나머지 판단(커버리지 원장 구조·probe 백스톱 C10 등)은 유효하다.
+
 ## Global Constraints
 
 이 절의 값은 spec에서 verbatim 복사한 프로젝트-전역 요구다. 모든 task의 요구에 암묵 포함된다.

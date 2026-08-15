@@ -249,5 +249,49 @@ class TestRender(unittest.TestCase):
                       "meta.target이 리포트 첫 줄(title)에 반영돼야 — project-init 하드코딩 잔존 시 실패")
 
 
+class TestCodexThreeStateBanner(unittest.TestCase):
+    def _render(self, codex_meta, dropped=None):
+        import importlib.util
+        from pathlib import Path
+        p = Path(__file__).resolve().parents[1] / "render-audit-report.py"
+        spec = importlib.util.spec_from_file_location("rnd", p)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        meta = {"date": "2026-08-09", "target": "t", "codex": dict(codex_meta)}
+        if dropped:
+            meta["codex"]["dropped"] = dropped
+        data = {"meta": meta, "findings": [], "d_verdicts": [], "oq_answers": [],
+                "new_open_questions": [], "degraded": [], "axis_failures": []}
+        return mod.render(data) or ""
+
+    def test_not_run_says_not_run(self):
+        out = self._render({"ran": False, "failed": False})
+        self.assertIn("codex 독립 감사 미실행", out)
+
+    def test_ran_but_failed_says_failed_not_missing(self):
+        out = self._render({"ran": True, "failed": True})
+        # body-unique 문구로 잰다. `"실패"` 두 글자만 보면 상시 뜨는
+        # `⚠ **발견 0건** — … *감사 실패*인지 …` 배너가 assert를 만족시켜, 실행-실패
+        # 배너를 통째로 지워도 GREEN이다(mutation m8로 실측).
+        self.assertIn("codex 독립 감사 실행-실패", out,
+                      "'돌았으나 실패' 배너 부재 — 미실행과 구분되지 않는다")
+        self.assertNotIn("미실행", out,
+                         "'돌았으나 실패'를 '미실행'으로 적으면 두 상태가 뭉개진다")
+
+    def test_success_has_no_codex_banner(self):
+        out = self._render({"ran": True, "failed": False})
+        self.assertNotIn("codex 독립 감사", out)
+
+    def test_dropped_items_surface_as_banner(self):
+        out = self._render({"ran": True, "failed": False},
+                           dropped=[{"collection": "d_verdicts", "count": 2,
+                                     "reason": "malformed_element"}])
+        # `assertIn("2", out)`은 meta.date의 `2026-08-09`가 만족시킨다 — 배너를 지워도
+        # GREEN이다. 컬렉션·개수·사유가 **한 줄에** 함께 나오는지로 잰다.
+        self.assertIn("codex d_verdicts 2건 폐기", out,
+                      "폐기 손실 보고가 배너로 안 나온다 — 조용히 버리는 것과 같다")
+        self.assertIn("malformed_element", out, "폐기 사유가 배너에 없다")
+
+
 if __name__ == "__main__":
     unittest.main()

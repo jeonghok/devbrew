@@ -16,9 +16,13 @@ pass=0; fail=0
 note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
 section() { awk -v pat="$1" '$0 ~ pat {inw=1; next} inw && /^## / {exit} inw' "$2"; }
 
-# --- T15 / AC19 : 메타데이터 (minor만 pin, patch unpin) ---------------------
-grep -qE '"version": "0\.25\.[0-9]+"' "$PJ" \
-  && note PASS "T15: plugin.json 0.25.x" || note FAIL "T15: plugin.json이 0.25.x가 아님"
+# --- T15 / AC19 : 메타데이터 (minor floor, patch unpin) ---------------------
+# 정확한-minor pin(`0\.25\.[0-9]+`)은 "이 버전 이후 shipping" 의도를 표현하지 못하고
+# "정확히 이 minor"만 표현한다 — 다음 minor bump마다 stale-red가 된다(Task 14 실증,
+# qg 쪽 floor 관용구 test_qg_publish_docs.sh·test_artifact_metadata.sh와 동형화).
+# floor로 전환: 0.26 이상이면 통과, 그 아래면 실패.
+grep -qE '"version": "0\.(2[6-9]|[3-9][0-9])\.[0-9]+"' "$PJ" \
+  && note PASS "T15: plugin.json >= 0.26.x" || note FAIL "T15: plugin.json이 0.26 floor 미만"
 grep -qE '^## \[0\.24\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CL" \
   && note PASS "T15: CHANGELOG [0.24.0] + ISO 날짜" || note FAIL "T15: CHANGELOG [0.24.0] 누락/비-ISO"
 # append-only 누산 — 과거 엔트리 pin은 절대 빼지 않는다.

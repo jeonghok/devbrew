@@ -272,6 +272,20 @@ tools: Read, Bash, Grep, Glob, Write, Edit, MultiEdit,
 
 > **`spec-reviewer` 행이 이 설계의 방법론을 정당화한다.** persona 독해로 만든 초고 표는 이 agent에게 *한 번도 안 쓰는 Grep/Glob을 주고 실제로 쓰는 WebFetch를 뺏었다.* census가 없었으면 **§12가 이름 붙인 "조용한 열화"를 이 PR이 직접 저질렀을 것이다.**
 
+> **사후 정정 (2026-08-03, 하니스 능력 억제 제거 sweep)**: 이 §6이 census 근거로 확정한
+> 도구 표면 중 `spec-reviewer`(당시 `WebSearch` 미부여 — census 관측 0회로 판단)와
+> `breadth-keeper`(현 `coverage-mapper`, 당시 web 도구 전무 — 호출 자체가 미측정이라
+> 보수적 최소로 정함)는 이후 `WebSearch`/`WebFetch`를 부여받았다. census 관측 0회를
+> "이 업무엔 불필요"로 읽은 판단이, 실제로는 리뷰·커버리지-제안 업무의 web-grounding
+> 필요를 과소측정한 것으로 드러났다(HIST-01·HIST-03,
+> `docs/audits/2026-08-02-harness-capability-suppression-census.md`). 반면
+> `security-reviewer`(web 미부여, HIST-02)는 재검토 후에도 **그대로 유지**됐다 — 전
+> 소스를 읽는 리뷰어의 외부 egress는 P21 exfiltration 리스크라는 근거가, 이 sweep
+> 전체에서 억제를 유지하는 쪽이 load-bearing 근거를 실제로 댈 수 있는 유일한 항목으로
+> 확인됐다. 상세는
+> `docs/superpowers/specs/2026-08-02-harness-capability-suppression-sweep-design.md`.
+> 이 문서의 나머지 판단(Law 2 물리 분리·census 방법론·mutation-guard 등)은 유효하다.
+
 ---
 
 ## 7. 결함을 지키는 집행 메커니즘 뒤집기

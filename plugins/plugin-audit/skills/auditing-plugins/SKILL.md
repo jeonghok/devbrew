@@ -89,13 +89,49 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
    주입하는 프롬프트도 그 자기서술을 "이 플러그인은 X를 잘한다" 같은 **신뢰된 preamble**로 앞세워
    주입하지 않는다 — auditor·refuter·codex 모두 그것을 다른 소스 파일과 동등한 *데이터*로 읽어, 코드가
    실제로 하는 일과 대조하게만 한다. preamble 취급하면 대상의 자기평가가 감사 결론을 앵커링한다.
-3. **codex blind co-audit**: `codex exec -s read-only`(qg의 `run_codex_reviewer.sh`가 쓰는 것과 같은
-   sandbox flag, 다른 모델 패밀리 — P11). 프롬프트 맨 앞에 `codex-prompt-preamble.md`(untrusted-data,
-   C절)를 그대로 주입한 뒤 축 질문을 이어 붙인다. **`run_codex_reviewer.sh`를 재사용하지 않는다** —
-   그 스크립트는 diff-shaped이고 최신 spec의 AC를 자동 주입해서 blind(모델이 답을 미리 못 본 상태)를
-   깬다([[reference_codex_reviewer_spec_ac_injection]]). `CLAUDE_PLUGIN_ROOT` 환경변수 설정이 필요하다
-   (codex 프로세스가 이걸로 preamble 파일을 찾는다). codex 결과 = `{findings(CX-*), d_verdicts,
-   oq_answers, new_open_questions}` — post-1에서 `--codex-side`로 넘긴다.
+3. **codex blind co-audit** (P11 — 다른 모델 패밀리가 같은 대상을 독립 감사한다).
+   **`run_codex_reviewer.sh`를 재사용하지 않는다** — 그 스크립트는 diff-shaped이고 최신 spec의
+   AC를 자동 주입해서 blind(모델이 답을 미리 못 본 상태)를 깬다
+   ([[reference_codex_reviewer_spec_ac_injection]]). plugin-audit 전용 러너
+   `run_audit_codex_reviewer.sh`가 자기 `codex-prompt-preamble.md`(untrusted-data, P21)를
+   프롬프트 맨 앞에 싣고 축 질문을 이어 붙인다.
+
+   축마다 축 질문을 파일(`$AXIS_FILE`)로 쓰고 아래 게이트를 **그대로** 실행한다. kill switch는
+   `DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX=1`이며 `detect_codex.sh`가 그것을 읽는다 — 러너는 읽지
+   않는다(게이트는 호출자 책임).
+
+<!-- codex-gate:begin runner=run_audit_codex_reviewer.sh -->
+```bash
+# 이 블록은 **산문이 아니라 리터럴 bash**다. kill switch는 P21 보안 컨트롤이고, 게이트가
+# 산문이면 모델이 건너뛰어도 아무 검사에 걸리지 않는다 — "껐다고 믿게만" 만드는 상태다.
+# quality-gates/tests/test_codex_gate_observation.sh가 이 블록을 마커로 잘라내
+# 4개 시나리오(가용·kill switch·미설치·버전 바닥 미달)로 실행하고 codex 호출 횟수를 센다.
+PA="${CLAUDE_PLUGIN_ROOT:-./plugins/plugin-audit}"
+DETECT_OUT="$(bash "$PA/scripts/detect_codex.sh")"
+codex_avail="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^codex_available: //p')"
+skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
+if [[ "$codex_avail" == "true" ]]; then
+  bash "$PA/scripts/run_audit_codex_reviewer.sh" "$AXIS_FILE" "$(pwd)" "$CODEX_JSON"
+else
+  echo "[plugin-audit] codex blind co-audit SKIPPED (reason: ${skip_reason:-unknown}) — 이 감사에는 모델 다양성이 없었다 (degraded)." >&2
+fi
+```
+<!-- codex-gate:end -->
+
+   **결과는 두 경로로 갈라진다.** `codex_audit_to_json.py`가 낸 JSON의 키마다 소비자가 다르다:
+
+   | 키 | 소비자 | 어떻게 |
+   |---|---|---|
+   | `findings` (CX-*) | `audit-workflow.js` | 아래 Workflow 호출의 `codexFindings` 인자로 넘긴다 (`:27` 수신 → `:572-580` refuter 검증 → `:582` 병합 → `:598` dedup) |
+   | `d_verdicts` · `oq_answers` · `new_open_questions` | `assemble-audit-data.py` | post-1에서 `--codex-side <codex.json>`으로 넘긴다 (`:57-63`) |
+
+   `assemble()`의 `findings`는 `wf["findings"]`에서만 온다(`:49`) — **`codex_side["findings"]`를
+   읽는 코드는 없다.** codex findings는 workflow 경로로 이미 들어와 있으므로 그 키를
+   `--codex-side`로 또 넘겨도 무시된다. 넷을 한 문장으로 묶어 적으면 "post-1에서 다 넘긴다"로
+   읽혀 findings 경로가 통째로 사라진 것처럼 오해된다 — 그래서 표로 쪼갠다.
+
+   `codex_avail`이 false면 위 배너를 사용자에게 그대로 노출하고 `meta.codex.ran = false`로
+   기록한다(§4.1 truth table). 러너가 돌았으나 실패하면 `ran = true` · `failed = true`다.
 
 ## Workflow
 
@@ -125,6 +161,9 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    --assigned <assigned.json> --repo-root . --out docs/audits/<date>-<target>-audit-data.json` (내부에서
    `check-grounding.py`를 동적 import해 재읽기 — A grounding: 인용 실재 검증, null-degrade/폐기/line-교정.
    별도 CLI 호출이 아니다).
+   `<codex.json>`은 `codex_audit_to_json.py`의 출력을 그대로 쓴다. assemble은 그중
+   `d_verdicts`·`oq_answers`·`new_open_questions` 셋만 읽는다 — `findings`는 이미 workflow
+   경로로 들어와 있어 여기서 무시된다(중복 병합 아님).
 3. `validate-audit-data.py --data <data.json>` → RED면 abort(완결성·consent·codex-merge·NOQ·gate-E).
 4. `render-audit-report.py <data.json> --out docs/audits/<date>-<target>-audit.md --readme docs/audits/README.md`.
    6축 전멸(exit 1) → 리포트 없음(AC-4).
