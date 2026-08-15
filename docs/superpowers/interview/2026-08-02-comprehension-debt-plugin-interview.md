@@ -164,6 +164,17 @@ user_sourced_items:
 > 이 brief는 단독 완결 산출물이다. superpowers가 있으면 §7대로 brainstorming 해답공간으로
 > 넘어가고, 없으면 이 brief 자체가 다음 단계의 입력이다. 텔레메트리는 `audit_file`에 있다.
 
+## 목차
+
+- [0. 한눈에](#0-한눈에)
+- [1. Goal · Non-goal](#1-goal--non-goal)
+- [2. 제약](#2-제약)
+- [3. Open Questions](#3-open-questions)
+- [4. External Landscape](#4-external-landscape)
+- [5. 기각 · Blind Spots](#5-기각--blind-spots)
+- [6. 사용자 원문](#6-사용자-원문)
+- [7. Next Action](#7-next-action)
+
 ## 0. 한눈에
 
 **무엇** — 이해부채(comprehension debt)를 관리하는 플러그인을 만든다. `project-init`의 확장 형태이며,

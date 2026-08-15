@@ -52,7 +52,11 @@ base_sha="$(cat "$SRC/tests/test_calc.py" "$SRC/tests/test_calc_negative.py" | s
 { echo "model=$AB_MODEL"; echo "effort=$AB_EFFORT";
   echo "judge_model=$AB_JUDGE_MODEL"; echo "judge_effort=$AB_JUDGE_EFFORT";
   echo "base_sha=$base_sha"; echo "run=$RUN"; echo "plugins=plugins.txt";
-  echo "claude=$(claude --version)"; echo "commit=$(git -C "$ROOT" rev-parse HEAD)"; } > "$OUT/manifest.txt"
+  echo "claude=$(claude --version 2>/dev/null || echo '(구하지 못함)')";
+  echo "commit=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo '(구하지 못함)')"; } > "$OUT/manifest.txt"
+# ★ 매니페스트는 "이 측정이 무엇에서 나왔나" 의 유일한 기록이다. 값을 못 구했을 때
+#    빈 문자열을 박으면 나중에 그 실행이 **어떤 버전에서 돌았는지 모른다**는 사실
+#    자체가 사라진다 — 빈 값과 "안 적힌 값" 이 구분되지 않는다(리뷰가 적발).
 for i in 1 2 3; do
   for t in a b c d; do
     for cond in off on; do

@@ -20,6 +20,27 @@
 
 **Spec:** [`docs/superpowers/specs/2026-08-05-agent-transparency-design.md`](../specs/2026-08-05-agent-transparency-design.md) — 아래에서 **spec** 이라고만 쓴다. 인수 조건 38건의 정본은 그 문서 §9.
 
+## 목차
+
+- [Global Constraints](#global-constraints)
+- [Spec 대비 의도적 차이 12건](#spec-대비-의도적-차이-12건)
+- [File Structure](#file-structure)
+- [Task 1: 플러그인 골격 · 매니페스트 · marketplace 등록](#task-1-플러그인-골격--매니페스트--marketplace-등록)
+- [Task 2: output style 본체 (AC1–AC5 · AC26 파리티 · AC31 · AC38)](#task-2-output-style-본체-ac1–ac5--ac26-파리티--ac31--ac38)
+- [Task 3: SubagentStop 훅 (AC6–AC9 · AC36 · AC37 · AC44 · AC50)](#task-3-subagentstop-훅-ac6–ac9--ac36--ac37--ac44--ac50)
+- [Task 4: 전용 read-only agent (AC48①②)](#task-4-전용-read-only-agent-ac48①②)
+- [Task 5: `prepare_standup.py` — 리포 루트 해석 · 후보 수집 · 후보 검증 (AC10 · AC41 · AC49)](#task-5-prepare_standuppy--리포-루트-해석--후보-수집--후보-검증-ac10--ac41--ac49)
+- [Task 6: `prepare_standup.py` — 범위 판정 · 인벤토리 계수 (AC11 · AC34 · AC42)](#task-6-prepare_standuppy--범위-판정--인벤토리-계수-ac11--ac34--ac42)
+- [Task 7: `prepare_standup.py` — 출력 렌더 · git 블록 · 실패 경로 (AC46 · AC20)](#task-7-prepare_standuppy--출력-렌더--git-블록--실패-경로-ac46--ac20)
+- [Task 8: `/standup` skill · command · 가독성 파리티 (AC16① · AC27 · AC28 · AC35①–⑤ · AC43 · AC51)](#task-8-standup-skill--command--가독성-파리티-ac16①--ac27--ac28--ac35①–⑤--ac43--ac51)
+- [Task 9: `REFERENCE.md` 정본 (AC32 · AC33 · AC47)](#task-9-referencemd-정본-ac32--ac33--ac47)
+- [Task 10: A/B 고정 픽스처 · 숨김 오라클 · 작업 프롬프트](#task-10-ab-고정-픽스처--숨김-오라클--작업-프롬프트)
+- [Task 11: `ab_gate.sh` 실행 러너 (AC40 · AC45)](#task-11-ab_gatesh-실행-러너-ac40--ac45)
+- [Task 12: `ab_judge.py` 판정 단계 (D4 — §0 의 "러너 전체 고정"을 참으로 만든다)](#task-12-ab_judgepy-판정-단계-d4--0-의-러너-전체-고정을-참으로-만든다)
+- [Task 13: probe 실행 3종 · 락 (AC48④ · AC35⑥ · AC39)](#task-13-probe-실행-3종--락-ac48④--ac35⑥--ac39)
+- [Task 14: README · 문서 · 마감 (AC25 · D10 · D11)](#task-14-readme--문서--마감-ac25--d10--d11)
+- [머지 게이트 (AC29) — 별도 실행](#머지-게이트-ac29--별도-실행)
+
 ## Global Constraints
 
 이 절의 모든 항목은 **모든 task 의 요구사항에 암묵적으로 포함된다.**
@@ -3165,7 +3186,7 @@ class TestPluginStateGuard(unittest.TestCase):
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return proc.returncode
 
-    def test_twelve_fixtures_split_exactly_three_and_nine(self) -> None:
+    def test_twelve_fixtures_split_exactly_four_and_eight(self) -> None:
         outcomes = []
         for name, payload, expected in self.CASES:
             rc = self.run_guard(payload)
@@ -3305,7 +3326,7 @@ Expected: `문법 OK`. **`bash -n` 은 bash 3.2 로 파싱한다** — 여기서
 - [ ] **Step 5: 테스트가 통과하는지 확인한다**
 
 Run: `python3 -m unittest plugins/agent-transparency/tests/test_ab_runner_contract.py -v`
-Expected: `TestRunnerContract` 10 tests PASS · `TestPluginStateGuard` 2 tests PASS. **`test_twelve_fixtures_split_exactly_three_and_nine` 가 3/9 로 갈리지 않으면 가드를 고친다** — 이 판정은 실행으로만 구분된다.
+Expected: `TestRunnerContract` 10 tests PASS · `TestPluginStateGuard` 2 tests PASS. **`test_twelve_fixtures_split_exactly_four_and_eight` 가 4/8 로 갈리지 않으면 가드를 고친다** — 이 판정은 실행으로만 구분된다.
 
 - [ ] **Step 6: 커밋**
 

@@ -186,10 +186,24 @@ class TestRunnerContract(unittest.TestCase):
         self.assertIn('--effort "$AB_EFFORT"', self.code)
 
     def test_manifest_records_model_effort_and_cli_version(self) -> None:
+        """다섯 필드가 매니페스트에 실린다.
+
+        CLI 버전은 **접두사로** 잰다 — 값을 못 구했을 때의 대체 문구까지 리터럴로
+        박으면, 그 대체 경로를 더하는 것만으로 락이 red 가 된다(실제로 그랬다).
+        재는 것은 *"이 필드를 기록한다"* 이지 그 표현식의 전문이 아니다.
+        """
         for field in ("model=$AB_MODEL", "effort=$AB_EFFORT",
                       "judge_model=$AB_JUDGE_MODEL", "judge_effort=$AB_JUDGE_EFFORT",
-                      "claude=$(claude --version)"):
+                      "claude=$(claude --version"):
             self.assertIn(field, self.code)
+
+    def test_manifest_records_a_placeholder_when_a_value_is_missing(self) -> None:
+        """매니페스트는 *"이 측정이 무엇에서 나왔나"* 의 유일한 기록이다.
+
+        빈 문자열을 박으면 **어떤 버전에서 돌았는지 모른다**는 사실 자체가
+        사라진다 — 빈 값과 "안 적힌 값" 이 구분되지 않는다.
+        """
+        self.assertIn("(구하지 못함)", self.code)
 
     def test_required_env_vars_are_asserted(self) -> None:
         for var in ("AB_MODEL", "AB_EFFORT", "AB_JUDGE_MODEL", "AB_JUDGE_EFFORT"):
@@ -661,6 +675,74 @@ class TestJudgeFailClosedGuards(unittest.TestCase):
         marked["_error"] = "rc=1"
         self.assertTrue(self.judge.tally([good, good, good]))
         self.assertTrue(self.judge.tally([marked, marked, marked]))
+
+
+class TestJudgePromptBoundary(unittest.TestCase):
+    """판정 대상은 **데이터**다 — 피검자가 자기 응답으로 채점자에게 말할 수 없어야 한다.
+
+    `block` 은 피측정 모델의 verbatim 출력이다. 구분자 없이 루브릭 뒤에 이어
+    붙이면 게이트가 자기 채점자를 설득당할 수 있다(리뷰가 적발). 경계는 강제가
+    아니라 선언이며, 그 선언이 사라지는 것을 red 로 만든다.
+    """
+
+    def setUp(self) -> None:
+        self.judge = load_judge()
+
+    def test_block_is_wrapped_in_data_delimiters(self) -> None:
+        prompt = self.judge.build_judge_prompt("RUBRIC", "SUBJECT-OUTPUT")
+        self.assertIn(self.judge.JUDGE_DATA_OPEN, prompt)
+        self.assertIn(self.judge.JUDGE_DATA_CLOSE, prompt)
+        opened = prompt.index(self.judge.JUDGE_DATA_OPEN)
+        closed = prompt.index(self.judge.JUDGE_DATA_CLOSE)
+        body = prompt.index("SUBJECT-OUTPUT")
+        self.assertLess(opened, body, "블록이 여는 경계 앞에 있다")
+        self.assertLess(body, closed, "블록이 닫는 경계 뒤에 있다")
+
+    def test_rubric_stays_outside_the_data_block(self) -> None:
+        """루브릭 자체가 경계 안에 들어가면 판정자가 그것도 데이터로 읽는다."""
+        prompt = self.judge.build_judge_prompt("RUBRIC", "SUBJECT-OUTPUT")
+        self.assertLess(prompt.index("RUBRIC"),
+                        prompt.index(self.judge.JUDGE_DATA_OPEN))
+
+    def test_ask_judge_sends_the_wrapped_prompt(self) -> None:
+        """조립 함수만 고치고 호출부가 옛 형태를 쓰면 경계가 무의미해진다."""
+        with mock.patch.object(self.judge.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess(
+                args=["claude"], returncode=0,
+                stdout=b'{"Q1":"yes","Q2":"yes","Q3":"yes","Q4":"yes"}')
+            self.judge.ask_judge("RUBRIC", "SUBJECT-OUTPUT", "m", "low")
+        sent = run.call_args.args[0][-1]
+        self.assertIn(self.judge.JUDGE_DATA_OPEN, sent)
+
+
+class TestVoteIsOneLine(unittest.TestCase):
+    """*"JSON 한 줄"* 계약을 실제로 강제하는가.
+
+    관대하게 읽을수록 판정자가 형식을 어길수록 통과하기 쉬워진다.
+    """
+
+    def setUp(self) -> None:
+        self.judge = load_judge()
+
+    def test_single_line_is_accepted(self) -> None:
+        """양의 짝 — 정상 형태는 통과해야 한다."""
+        vote = self.judge.parse_vote('{"Q1":"yes","Q2":"yes","Q3":"yes","Q4":"yes"}')
+        self.assertEqual(set(vote[q] for q in self.judge.QUESTIONS), {"yes"})
+
+    def test_pretty_printed_json_is_rejected(self) -> None:
+        """여러 줄 JSON 은 계약 위반이므로 fail-closed."""
+        raw = '{\n  "Q1": "yes",\n  "Q2": "yes",\n  "Q3": "yes",\n  "Q4": "yes"\n}'
+        vote = self.judge.parse_vote(raw)
+        self.assertEqual(set(vote[q] for q in self.judge.QUESTIONS), {"no"})
+
+    def test_trailing_newline_alone_is_still_accepted(self) -> None:
+        """양의 짝 — 후행 개행 하나로 정상 판정을 떨어뜨리면 과잉이다.
+
+        adversarial 이 F78(개행 거부)을 *"그대로 쓰지 말라"* 로 판정한 이유가
+        이것이다 — 계측 딸꾹질을 피검자 실패로 바꾸면 안 된다.
+        """
+        vote = self.judge.parse_vote('{"Q1":"yes","Q2":"yes","Q3":"yes","Q4":"yes"}\n')
+        self.assertEqual(set(vote[q] for q in self.judge.QUESTIONS), {"yes"})
 
 
 class TestSpanCutting(unittest.TestCase):

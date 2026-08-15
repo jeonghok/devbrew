@@ -1226,12 +1226,13 @@ plugins/agent-transparency/
 │   └── briefing-current-state/
 │       └── SKILL.md                    # §6.2 전문 (context: fork)
 ├── scripts/
-│   └── prepare_standup.py              # 범위 결정 + 인벤토리 + git. 402줄
+│   └── prepare_standup.py              # 범위 결정 + 인벤토리 + git
 └── tests/
     ├── test_output_style.py            # AC1–AC5 · AC31 · AC38
     ├── test_prepare_standup.py         # AC10 · AC11 · AC20 · AC34 · AC41 · AC42 · AC46 · AC49
     ├── test_readability_parity.py      # AC28 — output style ↔ SKILL.md 다섯 규칙 대조
-    ├── test_plugin_contract.py         # AC16 · AC25–AC27 · AC32 · AC33 · AC35 · AC39 · AC43
+    ├── test_plugin_contract.py         # AC16① · AC25–AC27 · AC32 · AC33 · AC35 · AC39 ·
+    │                                    #   AC43 · AC48①② · AC51
     ├── probe/                           # 실물 실행에서 잰 값(각 네 줄: 관측값 · probe 명령 ·
     │                                    #   원출력 · claude --version) —
     │                                    #   skill_body.txt (AC35⑥) · command_name.txt (AC39)
