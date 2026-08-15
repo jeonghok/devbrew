@@ -245,6 +245,43 @@ class TestCandidateValidation(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.module.classify([rec(cwd=str(self.box.root / "vanished"))], None, {})
 
+    def test_foreign_records_are_not_counted_in_an_accepted_file(self) -> None:
+        """I4 — 한 cwd 가 맞아 파일이 채택되면 **그 파일의 모든 레코드**가 셈에 든다.
+
+        집합 술어는 의도된 것이다(한 세션이 메인 리포 → 워크트리로 이동하는 실제
+        상황). 그런데 같은 파일에 **다른 리포에서 같은 브랜치 이름**으로 남긴
+        레코드가 있으면 그것까지 우리 인벤토리에 실려, 남의 리포 기록이 이
+        답변에 노출된다.
+
+        해석 **불가능한** cwd 는 빼지 않는다 — 삭제된 우리 워크트리와 구분할
+        근거가 없다. 빼는 것은 *다른 common-dir 로 확실히 해석되는* 레코드뿐이다.
+        """
+        other = self.box.root / "someone-elses-repo"
+        make_repo(other, branch="work")
+        records = [
+            assistant_text("우리 것", gitBranch="work", cwd=str(self.box.main)),
+            assistant_text("남의 것", gitBranch="work", cwd=str(other)),
+        ]
+        mine = self.module.in_scope("/tmp/x.jsonl", records, "work", None,
+                                    self.ours, {})
+        texts = [r["message"]["content"][0]["text"] for r in mine]
+        self.assertEqual(texts, ["우리 것"])
+
+    def test_unresolvable_cwd_records_are_kept(self) -> None:
+        """양의 짝 — 삭제된 워크트리의 레코드는 남는다.
+
+        이것이 없으면 위 락은 *"cwd 가 우리와 정확히 같은 레코드만 남긴다"* 는
+        과잉 구현으로도 통과하고, 정당한 과거 기록이 조용히 사라진다.
+        """
+        records = [
+            assistant_text("사라진 워크트리", gitBranch="work",
+                           cwd=str(self.box.root / "vanished")),
+            assistant_text("cwd 없음", gitBranch="work"),
+        ]
+        mine = self.module.in_scope("/tmp/x.jsonl", records, "work", None,
+                                    self.ours, {})
+        self.assertEqual(len(mine), 2)
+
     def test_resolved_ours_still_rejects_unresolvable_candidate(self) -> None:
         """양의 짝 — 우리 쪽이 해결됐을 때 해석 불가 후보는 조용히 거절된다.
 
@@ -669,6 +706,99 @@ class TestExitCodes(unittest.TestCase):
         self.assertTrue(lines[0].startswith("STANDUP-UNAVAILABLE:"), out)
         self.assertNotIn("session file not found", out)
         self.assertNotIn("scope:", out)
+
+    def test_all_rejected_is_not_reported_as_file_not_found(self) -> None:
+        """I1 — 후보를 **찾았는데 전부 거절**한 것과 후보가 **없는** 것은 다른 사건이다.
+
+        같은 메시지로 내면 사용자는 원인을 파일 부재에서 찾고, 진짜 원인(전부 남의
+        리포였다 / 전부 사라진 cwd 였다)과 그 내역이 통째로 사라진다. 거절 내역은
+        정상 경로에서만 렌더되므로 이 경로에서 안 내면 어디에도 안 나온다.
+        """
+        module = load_script()
+        other = self.box.root / "someone-elses-repo"
+        make_repo(other, branch="main")
+        pdir = self.box.projects / module.slug(str(self.box.main))
+        pdir.mkdir(parents=True, exist_ok=True)
+        write_jsonl(pdir / "x.jsonl",
+                    [assistant_text("남의 작업", gitBranch="work", cwd=str(other))])
+
+        rc, out = self.run_script(self.box.main)
+        self.assertEqual(rc, 3, out)
+        self.assertNotIn("session file not found", out)
+        self.assertIn("other-repo", out)
+
+    def test_no_candidate_files_still_says_file_not_found(self) -> None:
+        """양의 짝 — 진짜로 후보가 0 개인 경우는 원래 메시지를 유지해야 한다.
+
+        이것이 없으면 위 락은 두 메시지를 하나로 합쳐 버리는 구현으로도 통과한다.
+        """
+        rc, out = self.run_script(self.box.main)
+        self.assertEqual(rc, 3, out)
+        self.assertIn("session file not found", out)
+
+    def test_failed_git_log_is_not_rendered_as_zero_commits(self) -> None:
+        """I2 — *"셀 수 없었다"* 를 *"0 개다"* 로 렌더하지 않는다.
+
+        **`PATH` 를 비우는 방식은 이 경로를 안 탄다** — `git` 이 통째로 사라지면
+        `repo_root` 가 먼저 실패해 `commits:` 줄 자체가 안 나오고, 락은 통과하되
+        재려던 곳을 한 번도 밟지 않는다. `commit_lines` 만 실패시켜야 한다.
+        """
+        module = load_script()
+        pdir = self.box.projects / module.slug(str(self.box.main))
+        pdir.mkdir(parents=True, exist_ok=True)
+        write_jsonl(pdir / "s.jsonl",
+                    [assistant_text("a", gitBranch="work", cwd=str(self.box.main))])
+
+        original = module.commit_lines
+        module.commit_lines = lambda cwd: (None, ["git", "log"], 128, "")
+        self.addCleanup(setattr, module, "commit_lines", original)
+
+        buf = io.StringIO()
+        original_stdout = module.sys.stdout
+        prev_cwd = os.getcwd()
+        os.chdir(str(self.box.main))
+        module.sys.stdout = buf
+        try:
+            rc = module.main(["--session-id", "none"])
+        finally:
+            module.sys.stdout = original_stdout
+            os.chdir(prev_cwd)
+        out = buf.getvalue()
+        self.assertEqual(rc, 0, out)
+        self.assertIn("commits:", out)
+        self.assertNotIn("commits: 0", out)
+
+    def test_real_git_log_still_renders_a_number(self) -> None:
+        """양의 짝 — 정상 경로에서는 여전히 수가 나온다.
+
+        없으면 위 락은 `commits:` 를 통째로 지운 구현으로도 통과한다.
+        """
+        module = load_script()
+        pdir = self.box.projects / module.slug(str(self.box.main))
+        pdir.mkdir(parents=True, exist_ok=True)
+        write_jsonl(pdir / "s.jsonl",
+                    [assistant_text("a", gitBranch="work", cwd=str(self.box.main))])
+        rc, out = self.run_script(self.box.main)
+        self.assertEqual(rc, 0, out)
+        self.assertRegex(out, r"commits: \d+")
+
+    def test_unparsed_counts_corruption_in_rejected_files_too(self) -> None:
+        """I3 — 통째로 깨진 파일은 분류도 안 되고 거절되며, 그 손상이 사라진다.
+
+        `unparsed` 는 이 리포트의 **유일한** 손상 신호다. 거절된 파일의 깨진 줄을
+        빼면 완전히 깨진 트랜스크립트가 `unparsed: 0` 으로 보고된다 — 손상이
+        없다는 뜻과 구분되지 않는다.
+        """
+        module = load_script()
+        pdir = self.box.projects / module.slug(str(self.box.main))
+        pdir.mkdir(parents=True, exist_ok=True)
+        # 정상 파일 하나(정상 경로 유지) + 통째로 깨진 파일 하나(cwd 없음 → 거절)
+        write_jsonl(pdir / "ok.jsonl",
+                    [assistant_text("a", gitBranch="work", cwd=str(self.box.main))])
+        (pdir / "broken.jsonl").write_text("{not json\n{also not\n", encoding="utf-8")
+        rc, out = self.run_script(self.box.main)
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("unparsed: 0", out)
 
     def test_not_a_git_repo_exits_three(self) -> None:
         """Finding 4 — main() 의 `repo_root(cwd) is None` 갈래는 새 코드인데 테스트가 없었다."""

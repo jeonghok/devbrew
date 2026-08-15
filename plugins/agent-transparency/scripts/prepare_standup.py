@@ -137,18 +137,46 @@ def _fmt_stamp(value):
     return value[:16].replace("T", " ")
 
 
-def in_scope(path, records, branch, session_id):
+def _record_is_foreign(record, our_common_dir, cache):
+    """레코드의 `cwd` 가 **다른 리포로 확실히 해석되는가.**
+
+    술어가 이 방향인 것이 요점이다. *"우리 것인가"* 로 물으면 해석 불가능한 cwd
+    (삭제된 워크트리)가 남의 것으로 분류되어 정당한 과거 기록이 조용히 사라진다.
+    빼는 것은 **다른 common-dir 로 해석되는 레코드뿐**이고, 모르는 것은 남긴다 —
+    파일은 이미 후보 검증을 통과했다.
+    """
+    value = record.get("cwd")
+    if not isinstance(value, str) or not value:
+        return False
+    if value not in cache:
+        cache[value] = git_common_dir(value) if os.path.isdir(value) else None
+    resolved = cache[value]
+    return resolved is not None and resolved != our_common_dir
+
+
+def in_scope(path, records, branch, session_id, our_common_dir=None, cache=None):
     """범위 = 레코드의 gitBranch 일치 **OR** 파일명이 현재 세션 id (합집합).
 
     둘 다 단독으로는 샌다 — 브랜치만 보면 워크트리 이동 전 기록이 빠지고,
     세션만 보면 어제 한 것이 빠진다.
+
+    그 위에 **레코드 단위 리포 필터**가 한 겹 더 붙는다. 파일 채택은 집합 술어라
+    cwd 하나만 맞아도 파일 전체가 들어오는데(한 세션이 메인 리포 → 워크트리로
+    이동하는 실제 상황), 같은 파일에 **다른 리포에서 같은 브랜치 이름**으로 남긴
+    레코드가 있으면 그것까지 인벤토리에 실려 남의 리포 기록이 답변에 노출된다.
+    `our_common_dir` 가 주어지면 그런 레코드만 뺀다(`_record_is_foreign`).
     """
     stem = os.path.basename(path)
     if stem.endswith(".jsonl"):
         stem = stem[: -len(".jsonl")]
     if session_id and stem == session_id:
-        return list(records)
-    return [r for r in records if r.get("gitBranch") == branch]
+        picked = list(records)
+    else:
+        picked = [r for r in records if r.get("gitBranch") == branch]
+    if our_common_dir is None:
+        return picked
+    cache = {} if cache is None else cache
+    return [r for r in picked if not _record_is_foreign(r, our_common_dir, cache)]
 
 
 def count(records):
@@ -208,15 +236,20 @@ def collect(root, branch, session_id):
     totals = {"blocks": 0, "bytes": 0, "decisions": 0, "unpaired": 0}
     stamps = []
 
+    discovered = 0
     for path in candidate_paths(root):
+        discovered += 1
         records, bad = read_records(path)
+        # ★ 거절 **전에** 센다. 통째로 깨진 파일은 레코드가 없어 분류도 못 되고
+        #   거절되는데, 그 손상을 여기서 빼면 완전히 깨진 트랜스크립트가
+        #   `unparsed: 0` 으로 보고된다 — 이것이 이 리포트의 유일한 손상 신호다.
+        unparsed += bad
         accepted, reason = classify(records, ours, cache)
         if not accepted:
             rejected[reason] = rejected.get(reason, 0) + 1
             continue
         candidates += 1
-        unparsed += bad
-        mine = in_scope(path, records, branch, session_id)
+        mine = in_scope(path, records, branch, session_id, ours, cache)
         stats = count(mine)
         whole = count(records)
         for key in totals:
@@ -238,6 +271,7 @@ def collect(root, branch, session_id):
     data.update({
         "files": len([e for e in entries if e["label"] == "in-scope"]),
         "candidates": candidates,
+        "discovered": discovered,
         "rejected": rejected,
         "entries": entries,
         "unparsed": unparsed,
@@ -251,6 +285,11 @@ def collect(root, branch, session_id):
 
 def _kb(nbytes):
     return "%.1f KB" % (nbytes / 1024.0)
+
+
+def _commits(value):
+    """`None` = 세지 못했다. 0 으로 렌더하면 "커밋이 없다" 는 사실 주장이 된다."""
+    return "(구하지 못함)" if value is None else "%d" % value
 
 
 def _span(low, high):
@@ -280,8 +319,8 @@ def render_inventory(root, branch, session_id, data):
         "blocks: %d (%s)   decisions: %d (unpaired: %d)"
         % (data["files"], data["candidates"], rejected_total, breakdown, listed,
            data["blocks"], _kb(data["bytes"]), data["decisions"], data["unpaired"]),
-        "span:    %s   commits: %d   scan: %.1fs   unparsed: %d"
-        % (_span(data["span_min"], data["span_max"]), data.get("commits", 0),
+        "span:    %s   commits: %s   scan: %.1fs   unparsed: %d"
+        % (_span(data["span_min"], data["span_max"]), _commits(data.get("commits")),
            data["scan"], data["unparsed"]),
         "",
         # 세 라벨은 **비어 있어도** 낸다 — 데이터에 따라 계약이 갈리면 안 된다.
@@ -389,13 +428,26 @@ def main(argv=None):
                 "STANDUP-UNAVAILABLE: repository could not be resolved (%s)\n" % root)
             return 3
         if not data["entries"]:
-            sys.stdout.write(
-                "STANDUP-UNAVAILABLE: session file not found "
-                "(~/.claude/projects/%s*/*.jsonl)\n" % slug(root))
+            # 후보를 **찾았는데 전부 거절**한 것과 후보가 **없는** 것은 다른
+            # 사건이다. 같은 문구로 내면 사용자는 원인을 파일 부재에서 찾고,
+            # 거절 내역은 정상 경로에서만 렌더되므로 여기서 안 내면 어디에도
+            # 안 나온다.
+            if data["discovered"]:
+                breakdown = ", ".join(
+                    "%s: %d" % (r, data["rejected"].get(r, 0)) for r in REJECT_REASONS)
+                sys.stdout.write(
+                    "STANDUP-UNAVAILABLE: all %d candidate file(s) rejected (%s)\n"
+                    % (data["discovered"], breakdown))
+            else:
+                sys.stdout.write(
+                    "STANDUP-UNAVAILABLE: session file not found "
+                    "(~/.claude/projects/%s*/*.jsonl)\n" % slug(root))
             return 3
         _, _, commits_rc, commits_out = commit_lines(cwd)
+        # ★ 실패를 0 으로 렌더하지 않는다 — "셀 수 없었다" 와 "0 개다" 는 다르다.
+        #   None 이면 렌더가 `(구하지 못함)` 을 낸다.
         data["commits"] = (len([ln for ln in commits_out.splitlines() if ln.strip()])
-                           if commits_rc == 0 else 0)
+                           if commits_rc == 0 else None)
         sys.stdout.write(render_inventory(root, branch, args.session_id, data))
         sys.stdout.write("\n\n")
         sys.stdout.write(render_code_state(cwd))
