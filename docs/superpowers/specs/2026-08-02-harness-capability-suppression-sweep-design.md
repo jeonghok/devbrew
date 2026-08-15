@@ -719,7 +719,7 @@ frontmatter 전수 확인(`test_agent_model_inherit_sweep.sh`)으로만 보증�
 - **작성일** 2026-08-02
 - **브랜치** `fix/harness-capability-suppression-sweep`
 - **baseline** `e45619b`
-- **근거 문서** `docs/handoffs/2026-07-26-harness-capability-suppression-sweep.md`
+- **근거 문서** 착수 핸드오프 (제거됨 — sweep 완료로 회수. 결과는 PR #112 / merge `a4e7fa2`, 2026-08-05)
 - **census 산출** 13 에이전트 / 110 findings + 14 / 2,077,370 subagent tokens / 41분
 - **관련 원칙** P8 (Determinism Economy) · P17 (User Sovereignty) · P21 (Security & Supply Chain)
 - **선행 기록** `docs/audits/2026-07-27-spec-distill-zero-tool-probe.md` (`tools: []` 격리 실측)

@@ -57,7 +57,7 @@ interview brief에 Law 2 분리 리뷰를 붙인다. 축은 둘(충실도·방�
 - `web_budget.py`의 `SESSION_CAP = 8`. 인터뷰 종료 시점이면 R2 landscape sweep이 이미 상당량을 소비했을 수 있다. **codex의 웹 사용은 이 카운터 밖이다.**
 - `superpowers:brainstorming`은 spec-distill을 모르고 brief frontmatter를 읽지 않는다 — 전달은 순수 프로즈 경로이며 계약 전달 채널은 orchestrator의 호출 프롬프트뿐이다(Spec A §5.1).
 - 리포 이력: **별-모델 codex가 same-family opus 다단계 리뷰가 통과시킨 fail-open을 반복 적발**했다(qg v2.13.0 C5, spec-distill v0.20.0/v0.22.0 등). 모델 다양성은 장식이 아니라 유일한 backstop이다.
-- `docs/handoffs/2026-07-26-harness-capability-suppression-sweep.md` — E10을 리포 전역에 집행하는 별 작업. 이 spec과 독립이고 서로 블록하지 않는다.
+- **하니스 능력 억제 sweep** (착수 핸드오프 문서는 제거됨 — PR #112 / merge `a4e7fa2`로 완료) — E10을 리포 전역에 집행하는 별 작업. 이 spec과 독립이고 서로 블록하지 않는다.
 
 **Deferred to plan** — **판정에 영향을 주지 않는 것만.** round-3 codex가 적발한 대로, 판정을 결정하는 것을 구현 재량으로 넘기면 판정 계약이 미완성이다. 그래서 아래로 좁힌다:
 
@@ -110,7 +110,7 @@ interview brief에 Law 2 분리 리뷰를 붙인다. 축은 둘(충실도·방�
 - **기존 brief 3건 리뷰** — 파이프라인은 방금 쓴 brief에만 돈다. 과거 brief를 리뷰에 넣는 경로를 만들지 않는다(게이트의 선례와 동일).
 - **`check_brief.py`의 state 의존 추가** — "brief 파일만 읽는다" 불변식 유지(AC16).
 - **훅 표면 확장** — `spec-write-validator.py`의 `PATH_PREFIX`를 interview 디렉토리로 넓히지 않는다.
-- **리포 전역 억제 제거** — E10의 전역 집행은 `docs/handoffs/2026-07-26-...-sweep.md`의 몫. 이 spec은 **자기 신규 컴포넌트에만** 선제 적용한다(`model: inherit` 등).
+- **리포 전역 억제 제거** — E10의 전역 집행은 별 작업(하니스 능력 억제 sweep, PR #112 / merge `a4e7fa2`)의 몫. 이 spec은 **자기 신규 컴포넌트에만** 선제 적용한다(`model: inherit` 등).
 
 ---
 
@@ -701,7 +701,7 @@ in-flight migration: 키 부재 → in-memory default(`direction`, `0`, `[]`) + 
 | **§6 자유 수정** | 재구성 대 재구성의 순환 검증이 성립하고, critic 지적을 원문 수정으로 무력화하는 laundering이 열린다 (Blind Spots가 경고한 실패 양식) |
 | **정정 이벤트 스키마를 지금 신설** | 스키마·게이트·테스트가 이미 큰 스코프에 또 붙는다. Spec A의 defer를 유지하고 §11에 갭으로 명시 |
 | **`model:`을 리터럴로 핀 (기존 4 에이전트 관행 답습)** | 세션이 더 강한 모델일 때 downgrade가 되고, 리포가 반복 실증한 *"모델 강도·다양성이 fail-open 적발의 유일 backstop"* 과 정면으로 어긋난다. `plugin-audit`(가장 최근 플러그인)은 이미 전부 `inherit` — 신규 컴포넌트는 그 패턴을 따른다 |
-| **기존 4 에이전트의 `model: sonnet` 핀을 이 spec에서 함께 제거** | 이 spec의 스코프가 아니고 별 작업(`docs/handoffs/2026-07-26-...-sweep.md`)이 전수 조사와 함께 다룬다. 여기서 부분 제거하면 sweep의 열거가 어긋난다 |
+| **기존 4 에이전트의 `model: sonnet` 핀을 이 spec에서 함께 제거** | 이 spec의 스코프가 아니고 별 작업(하니스 능력 억제 sweep, PR #112 / merge `a4e7fa2`)이 전수 조사와 함께 다룬다. 여기서 부분 제거하면 sweep의 열거가 어긋난다 |
 | **`check_verbatim_coverage.py`의 exit code를 하나로 (초안)** | *"위반 발견"* 과 *"검사 불가"* 를 같은 non-zero로 내면 호출자가 구분할 수 없다 — 합쳐서 차단하면 state 부재가 정상 brief를 막고, 합쳐서 degrade하면 실제 누락이 통과한다. `1`/`3`으로 분리 (**self-review가 적발**) |
 | **AC14(§6 append-only)를 기계 집행으로 서술 (초안)** | L2 포함 검사는 orchestrator가 §6과 state `text`를 **함께** 고치면 통과한다 — 양쪽 다 orchestrator가 쓰고 state는 git-ignored라 이력 대조도 없다. *"기계적으로 봉쇄"* 는 사실과 다른 확정 진술이었다. 주장을 *부분 집행* 으로 낮추고 §6.1·§11에 한계 명시 + V5 배정 (**self-review가 적발** — Spec A round-5가 `evidence` 서술에서 기각한 것과 같은 클래스) |
 | **`prompts/` 신규 디렉토리 (초안)** | `docs/plugin-authoring.md`의 canonical 트리에 없다(정의된 것은 `commands/`·`skills/`·`agents/`·`hooks/`·`scripts/`·`templates/` 여섯). 데이터 파일 선례는 `scripts/ambiguity-blacklist.txt` → 체크리스트를 `scripts/`로. 새 디렉토리로 트리를 넓히는 것은 이 spec의 스코프가 아니다 (**self-review가 적발**) |
@@ -779,7 +779,7 @@ in-flight migration: 키 부재 → in-memory default(`direction`, `0`, `[]`) + 
 - **입력 brief**: `docs/superpowers/interview/2026-07-25-spec-distill-brief-handoff-redesign-interview.md` (+ `.audit.md`)
 - **선행 spec**: `docs/superpowers/specs/2026-07-25-spec-distill-brief-format-producer-design.md` (Spec A, v0.23.0, merge 5b0caff) — 이 문서가 그 §11이 예고한 후속이다
 - **대상 플러그인**: `plugins/spec-distill` — `v0.23.0` → `v0.24.0`
-- **병행 작업(독립)**: `docs/handoffs/2026-07-26-harness-capability-suppression-sweep.md` — E10의 리포 전역 집행. 이 spec은 자기 신규 컴포넌트에만 선제 적용
+- **병행 작업(독립)**: 하니스 능력 억제 sweep (착수 핸드오프 문서는 제거됨 — PR #112 / merge `a4e7fa2`로 완료) — E10의 리포 전역 집행. 이 spec은 자기 신규 컴포넌트에만 선제 적용
 - **철학 근거**:
   - **Law 1** — 구조 게이트(`check_brief.py`)는 그대로, 그 위에 Law 2 분리 리뷰가 얹힌다. NG3 교정이 이 변화의 기록
   - **Law 2** — 3중: (a) `tools:` allowlist 물리 분리, (b) **입력 격리**(payload inline·경로 미제공), (c) **수정 후 fresh critic 재리뷰 1회 필수** — writer가 자기 수정을 승인하는 경로 차단

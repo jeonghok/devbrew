@@ -1,7 +1,7 @@
 # 하니스 능력 억제 전수 census — 실측 기록
 
 - **일자**: 2026-08-02 · **baseline**: `e45619b`
-- **근거 핸드오프**: `docs/handoffs/2026-07-26-harness-capability-suppression-sweep.md`
+- **근거 핸드오프**: 착수 핸드오프 문서 (제거됨 — sweep 완료로 회수. 결과는 PR #112 / merge `a4e7fa2`, 2026-08-05)
 - **설계**: `docs/superpowers/specs/2026-08-02-harness-capability-suppression-sweep-design.md`
 - **방법**: 읽기전용 10축 병렬 조사(`plugin-audit:plugin-auditor` — `Glob, Grep, Read, WebSearch,
   WebFetch`만 보유, `Bash`·`Write` 물리적 부재) → 3슬라이스 **양방향** 반증(`plugin-audit:audit-refuter`).
