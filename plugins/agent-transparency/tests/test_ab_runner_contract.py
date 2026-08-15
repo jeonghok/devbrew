@@ -446,8 +446,60 @@ class TestDenominator(unittest.TestCase):
         self.assertTrue(self.judge.is_failed(parsed, ("on", "d", 1)))
 
     def test_snapshot_ambiguous_counts_as_fail(self) -> None:
+        """한 줄짜리 — 이 형태만으로는 규칙을 재지 못한다(아래 두 줄 테스트 참조)."""
         parsed = self.judge.parse_index("on e 1 snapshot=ambiguous(2)\n")
         self.assertTrue(self.judge.is_failed(parsed, ("on", "e", 1)))
+
+    def test_single_line_fixture_would_fail_even_without_the_rule(self) -> None:
+        """계측기 확인 — 위 테스트가 **왜** 규칙을 재지 못하는지 고정한다.
+
+        `worker_rc` 가 없는 줄은 `is_failed` 의 마지막 갈래(`worker_rc != 0`)
+        만으로 이미 fail 이다. 그래서 위 테스트는 `snapshot=ambiguous` 갈래를
+        통째로 지워도 통과한다 — 규칙이 아니라 **필드 부재**를 재고 있었다.
+        """
+        parsed = self.judge.parse_index("on e 1 snapshot=whatever(2)\n")
+        self.assertTrue(self.judge.is_failed(parsed, ("on", "e", 1)),
+                        "worker_rc 부재만으로 이미 fail 이어야 한다")
+
+    def test_ambiguous_flag_survives_a_later_successful_line(self) -> None:
+        """실제 러너가 내는 **두 줄** 형태. 캐리오버가 없으면 여기서 통과가 난다.
+
+        러너는 스냅샷이 모호하면 먼저 `snapshot=ambiguous(N)` 줄을 쓰고, 그
+        다음에 (e) 실행 결과 줄(`<sid> worker_rc=0`)을 **같은 키로** 덧쓴다.
+        `parse_index` 가 앞 줄의 flag 를 물려주지 않으면 마지막 항목은
+        `flag=None · worker_rc=0` 이 되어 **모호한 실행이 판정 대상이 된다** —
+        5a·5b 가 근거 없는 스냅샷 위에서 돈다.
+        """
+        text = ("on e 1 snapshot=ambiguous(2)\n"
+                "on e 1 abc-123 worker_rc=0\n")
+        parsed = self.judge.parse_index(text)
+        entry = parsed[("on", "e", 1)]
+        self.assertEqual(entry["worker_rc"], 0, "뒷줄이 반영돼야 한다")
+        self.assertEqual(entry["sid"], "abc-123")
+        self.assertTrue(entry["flag"].startswith("snapshot=ambiguous"),
+                        "앞줄의 flag 가 물려져야 한다: %r" % (entry,))
+        self.assertTrue(self.judge.is_failed(parsed, ("on", "e", 1)))
+
+    def test_clean_run_is_not_failed(self) -> None:
+        """양의 짝 — 정상 (e) 실행은 통과해야 한다.
+
+        러너는 모호하지 않은 실행에는 **한 줄만** 쓴다(모호할 때만 앞줄이 는다).
+        이 짝이 없으면 위 락은 *"fail 을 더 자주 내는"* 구현으로도 통과하고,
+        정상 실행이 전부 fail 로 세어져 분모가 조용히 0 이 된다.
+        """
+        parsed = self.judge.parse_index("on e 2 abc-456 worker_rc=0\n")
+        self.assertFalse(self.judge.is_failed(parsed, ("on", "e", 2)))
+
+    def test_carry_over_does_not_invent_a_flag(self) -> None:
+        """캐리오버가 **없던 flag 를 만들어내지는** 않는다.
+
+        앞줄에 flag 가 없으면 뒷줄도 flag 가 없어야 한다 — 물려주기를 무조건
+        수행하는 구현은 여기서 잡힌다.
+        """
+        parsed = self.judge.parse_index("on e 3 - worker_rc=0\n"
+                                        "on e 3 abc-789 worker_rc=0\n")
+        self.assertIsNone(parsed[("on", "e", 3)]["flag"])
+        self.assertFalse(self.judge.is_failed(parsed, ("on", "e", 3)))
 
 
 class TestVoteParsing(unittest.TestCase):
