@@ -138,11 +138,31 @@ def extract_guard(text: str) -> str:
     return body[:body.index("\n'")]
 
 
+def code_only(text: str) -> str:
+    """주석 전용 줄을 걷어낸 셸 본문.
+
+    `ab_gate.sh` 는 결정 근거를 `# ★ …` 주석으로 길게 적어 두는 파일이고, 그
+    주석들이 **검사 대상 문자열을 그대로 인용**한다. 전문에 대고 `assertIn` 을
+    하면 호출을 주석으로 옮겨 놓아도 전부 green 이다 — 락이 지키는 것이 "이
+    문자열이 파일 어딘가에 있다"까지로 줄어든다.
+
+    인라인 주석(`cmd  # 설명`)은 걷어내지 않는다 — `#` 가 문자열 안에 오는
+    경우와 구분하려면 셸 파서가 필요하고, 이 락이 막으려는 것은 **실행되지 않는
+    줄로의 이동**이라 줄 단위 판정으로 충분하다.
+    """
+    return "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+
+
 class TestRunnerContract(unittest.TestCase):
-    """AC40 · AC45① — 호출 형태 · cwd · 매니페스트 · bash 3.2 호환."""
+    """AC40 · AC45① — 호출 형태 · cwd · 매니페스트 · bash 3.2 호환.
+
+    **검사는 `self.code`(주석 제거본)에 대고 한다.** `self.text` 는 부정 검사
+    (있으면 red)에만 쓴다 — 그쪽은 주석에 있어도 잡아야 안전한 방향이다.
+    """
 
     def setUp(self) -> None:
         self.text = RUNNER.read_text(encoding="utf-8")
+        self.code = code_only(self.text)
 
     def test_command_is_namespaced(self) -> None:
         """AC40 — bare `/standup` 이면 red.
@@ -151,25 +171,25 @@ class TestRunnerContract(unittest.TestCase):
         5·6 이 **측정 자체를 못 하고**, 모델이 자연어로 대충 답한 것을 루브릭이
         판정하게 된다.
         """
-        self.assertIn("/agent-transparency:standup", self.text)
+        self.assertIn("/agent-transparency:standup", self.code)
         self.assertNotIn('"/standup"', self.text)
 
     def test_worker_runs_with_fixture_as_cwd(self) -> None:
         """AC45① — `cd "$FX"` 없이 호출하면 모델이 리포 루트를 편집할 수 있다."""
-        self.assertIn('( cd "$FX" && claude -p', self.text)
+        self.assertIn('( cd "$FX" && claude -p', self.code)
 
     def test_effort_is_passed(self) -> None:
-        self.assertIn('--effort "$AB_EFFORT"', self.text)
+        self.assertIn('--effort "$AB_EFFORT"', self.code)
 
     def test_manifest_records_model_effort_and_cli_version(self) -> None:
         for field in ("model=$AB_MODEL", "effort=$AB_EFFORT",
                       "judge_model=$AB_JUDGE_MODEL", "judge_effort=$AB_JUDGE_EFFORT",
                       "claude=$(claude --version)"):
-            self.assertIn(field, self.text)
+            self.assertIn(field, self.code)
 
     def test_required_env_vars_are_asserted(self) -> None:
         for var in ("AB_MODEL", "AB_EFFORT", "AB_JUDGE_MODEL", "AB_JUDGE_EFFORT"):
-            self.assertIn(': "${%s:?}"' % var, self.text)
+            self.assertIn(': "${%s:?}"' % var, self.code)
 
     def test_no_bash4_only_constructs(self) -> None:
         """D1 — 이 기계의 bash 는 3.2 뿐이다. bash 4 전용 구문이 있으면
@@ -180,21 +200,38 @@ class TestRunnerContract(unittest.TestCase):
     def test_fixture_path_is_physical(self) -> None:
         """D2 — mktemp 는 심볼릭 경로를 준다. 정규화하지 않으면 슬러그가 어긋나
         `/standup` 이 0 파일을 보고 게이트 5a·5b 가 매 실행 실패한다."""
-        self.assertIn('pwd -P', self.text)
+        self.assertIn('pwd -P', self.code)
 
     def test_out_dir_is_per_run_and_not_wiped(self) -> None:
         """「계측을 고쳐도 되는 조건」 규칙 1이 out/ 보존을 요구한다."""
-        self.assertIn('OUT="$PD/tests/out/$RUN"', self.text)
+        self.assertIn('OUT="$PD/tests/out/$RUN"', self.code)
         self.assertNotIn('rm -rf "$OUT"', self.text)
 
     def test_visible_tests_run_by_fixed_modules_not_discover(self) -> None:
         """discover 는 tests/ 전체를 잡으므로 모델이 추가한 테스트가 게이트 2에
         들어온다 — 해시 좌변은 추가를 못 잡는다."""
-        self.assertIn("unittest tests.test_calc tests.test_calc_negative", self.text)
+        self.assertIn("unittest tests.test_calc tests.test_calc_negative", self.code)
 
     def test_setup_failure_leaves_a_line_for_task_e(self) -> None:
         """(d)/on 셋업이 죽으면 (e) 실행이 안 생겨 5a·5b 의 분모가 조용히 2가 된다."""
-        self.assertIn("setup=skipped", self.text)
+        self.assertIn("setup=skipped", self.code)
+
+    def test_locks_do_not_accept_a_commented_out_invocation(self) -> None:
+        """계측기 확인 — 위 긍정 검사들이 **주석으로의 이동**을 실제로 잡는가.
+
+        되돌리기 축이 아니라 **위치 축**으로 흔든다. 내가 지운 바이트를 되살리는
+        mutation 은 `git revert` 만 잡고 만점을 낸다. 여기서는 실행 줄을 주석으로
+        바꾼 뒤 같은 문자열이 파일에 **그대로 남아 있는** 상태를 만든다 — 전문에
+        대고 재는 구현은 여기서 green 이다.
+        """
+        anchors = ('( cd "$FX" && claude -p', '/agent-transparency:standup',
+                   '--effort "$AB_EFFORT"', 'pwd -P')
+        commented = "\n".join(
+            ("# " + ln) if any(a in ln for a in anchors) else ln
+            for ln in self.text.splitlines())
+        for anchor in anchors:
+            self.assertIn(anchor, commented, "mutation 이 문자열을 지웠다 — 위치 축이 아니다")
+            self.assertNotIn(anchor, code_only(commented), anchor)
 
 
 class TestAssignedArtifactsExist(unittest.TestCase):
@@ -219,6 +256,49 @@ class TestAssignedArtifactsExist(unittest.TestCase):
                 continue
             for path in [p.strip().strip("`") for p in target.split("·")]:
                 self.assertTrue((PLUGIN_DIR / path).exists(), "%s → %s" % (ac, path))
+
+    def test_every_assigned_artifact_mentions_its_ac(self) -> None:
+        """우변이 좌변을 **실제로 다루는지**까지 본다.
+
+        경로 존재만 재면 배정표는 *"이 AC 는 어딘가의 실재하는 파일이 맡는다"*
+        까지만 말한다 — 아무 테스트 파일 이름이나 적어도 green 이고, AC 를 다른
+        파일로 옮기면서 배정을 안 고쳐도 green 이다(리뷰가 적발). 산출물이 자기
+        docstring 이나 테스트에 그 AC 번호를 적게 해서 **오배정을 red 로** 만든다.
+
+        조각 id(`AC16①`)는 정확히, 번호만 있는 것은 **숫자 경계**로 찾는다 —
+        경계가 없으면 `AC4` 가 `AC41` 에 매치돼 검사가 조용히 헐거워진다.
+        """
+        text = REFERENCE.read_text(encoding="utf-8")
+        assigned = {}
+        for line in section(text, "AC ↔ 검증 산출물").splitlines():
+            match = ASSIGN_ROW.match(line)
+            if match and match.group(1) != "AC":
+                assigned[match.group(1)] = match.group(2).strip()
+        self.assertGreaterEqual(len(assigned), 25)
+        for ac, target in assigned.items():
+            if target.startswith("없음"):
+                continue
+            base = re.match(r"AC\d+", ac).group(0)
+            for path in [p.strip().strip("`") for p in target.split("·")]:
+                node = PLUGIN_DIR / path
+                if node.is_dir():
+                    body = "\n".join(f.read_text(encoding="utf-8", errors="replace")
+                                     for f in sorted(node.rglob("*.py")))
+                else:
+                    body = node.read_text(encoding="utf-8", errors="replace")
+                found = ac in body or re.search(
+                    r"(?<![A-Za-z0-9])%s(?![0-9])" % base, body) is not None
+                self.assertTrue(found, "%s 를 %s 가 언급하지 않는다" % (ac, path))
+
+    def test_mention_check_uses_a_digit_boundary(self) -> None:
+        """계측기 확인 — 경계 없는 검사와 구분되는가.
+
+        `AC4` 를 `AC41` 만 든 본문에서 찾으면 안 된다. 이 assert 가 없으면 위
+        검사를 `base in body` 로 헐겁게 써도 통과한다.
+        """
+        body = "이 파일은 AC41 과 AC42 를 다룬다"
+        self.assertIsNone(re.search(r"(?<![A-Za-z0-9])AC4(?![0-9])", body))
+        self.assertIsNotNone(re.search(r"(?<![A-Za-z0-9])AC41(?![0-9])", body))
 
 
 class TestPluginStateGuard(unittest.TestCase):

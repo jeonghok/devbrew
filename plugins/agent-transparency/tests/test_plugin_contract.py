@@ -105,7 +105,13 @@ class TestSkillFrontmatter(unittest.TestCase):
         self.assertEqual(self.meta.get("context"), "fork")
 
     def test_agent_points_at_dedicated_reader(self) -> None:
-        """`Explore` 면 red — 훅이 자기 fork 를 구분할 수 없게 된다."""
+        """`Explore` 면 red — **AC48②의 `tools:` allowlist 가 적용되지 않아** fork 가
+        기본 도구 표면으로 돌아간다(Law 2).
+
+        2026-08-13 근거 교체: 앞선 판은 *"훅이 자기 fork 를 구분할 수 없게 된다"* 로
+        적었는데 그것은 훅에 종속된 이유라 훅과 함께 죽는다. 도구 경계 쪽이
+        원래부터 강한 근거였고 훅 없이도 산다.
+        """
         self.assertEqual(self.meta.get("agent"), "agent-transparency:transcript-reader")
 
     def test_background_is_false(self) -> None:
@@ -151,8 +157,6 @@ class TestSkillTranscriptFacts(unittest.TestCase):
     검사 대상이 지시문으로 옮겨갔다.
     """
 
-    FRAGMENTS = SKILL_FRAGMENTS  # 하위 호환 — 이름으로 그룹을 찾는 다른 코드가 쓴다
-
     def setUp(self) -> None:
         self.text = read(SKILL_REL)
 
@@ -167,7 +171,7 @@ class TestSkillTranscriptFacts(unittest.TestCase):
 class TestSkillFactsMutation(unittest.TestCase):
     """checker 를 mutation 문자열에 돌려 실제로 red 가 나는지 확인한다.
 
-    삭제 축(다섯 그룹 각각) + 재서술 축 — 표본 하한 조항을 정반대 취지로
+    삭제 축(여섯 그룹 각각) + 재서술 축 — 표본 하한 조항을 정반대 취지로
     바꿔도 잡혀야 한다.
     """
 
@@ -175,7 +179,7 @@ class TestSkillFactsMutation(unittest.TestCase):
         self.text = read(SKILL_REL)
 
     def test_mutation_each_group_first_fragment_deletion_is_detected(self) -> None:
-        """삭제 축 — 다섯 그룹 각각의 대표 프래그먼트를 지우면 그때마다 red."""
+        """삭제 축 — **여섯** 그룹 각각의 대표 프래그먼트를 지우면 그때마다 red."""
         for name, fragments in SKILL_FRAGMENTS.items():
             mutated = self.text.replace(fragments[0], "")
             self.assertNotEqual(check_skill_facts(mutated), [], name)
@@ -423,6 +427,12 @@ README_ITEMS = {
     "OQ-J 잔여 위험": "어떤 비밀 필터도 없",
     "Principles Instantiated": "## Principles Instantiated",
 }
+# 헤딩만 재면 절 **본문**을 통째로 지워도 green 이다(리뷰가 적발). 항목별로
+# 본문에만 있는 문구를 함께 요구한다 — 헤딩 문자열과 겹치지 않는 것으로 고른다.
+README_SECTION_BODIES = {
+    "Principles Instantiated": ("## Principles Instantiated",
+                                ["Law 1", "Law 2", "Law 3", "cost_class"]),
+}
 # 2026-08-13: 다섯째 항목 "Hooks Installed" 가 빠졌다. 훅이 0 개이므로 devbrew 규약의
 # 그 절은 대상 없음이다 — 면제가 아니라 부재이며, 훅을 다시 두는 개정은 이 항목을
 # 되살려야 한다(TestNoHooksRemain 이 그 편집을 red 로 만든다).
@@ -440,6 +450,15 @@ def check_readme_items(text: str) -> list[str]:
     for name, fragment in README_ITEMS.items():
         if fragment not in text:
             bad.append("항목 없음: %s" % name)
+    for name, (heading, required) in README_SECTION_BODIES.items():
+        if heading not in text:
+            continue                       # 위 루프가 이미 보고했다
+        start = text.index(heading) + len(heading)
+        nxt = text.find("\n## ", start)
+        body = text[start:] if nxt < 0 else text[start:nxt]
+        for token in required:
+            if token not in body:
+                bad.append("본문 누락: %s → %s" % (name, token))
     return bad
 
 
@@ -502,6 +521,18 @@ class TestReadmeMutation(unittest.TestCase):
             "**설치 이전 작업에는 이 플러그인이 만든 설명이 없다.**",
             "**설치 이전 작업도 이 플러그인이 자동으로 소급 정리해 준다.**",
         )
+        self.assertNotEqual(check_readme_items(mutated), [])
+
+    def test_section_body_deletion_is_detected(self) -> None:
+        """헤딩은 남기고 **본문만** 지운다 — 헤딩으로 재는 구현은 여기서 green.
+
+        절을 통째로 지우는 mutation 은 헤딩까지 함께 없애므로 이 축을 못 잰다.
+        """
+        heading = "## Principles Instantiated"
+        start = self.text.index(heading) + len(heading)
+        nxt = self.text.find("\n## ", start)
+        mutated = self.text[:start] + ("\n\n" + self.text[nxt:] if nxt > 0 else "\n")
+        self.assertIn(heading, mutated, "mutation 이 헤딩까지 지웠다 — 본문 축이 아니다")
         self.assertNotEqual(check_readme_items(mutated), [])
 
     def test_real_readme_has_no_problems(self) -> None:

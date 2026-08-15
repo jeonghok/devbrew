@@ -26,6 +26,26 @@ MOMENT_KEYS = [
     "starting a long task",
     "the work ends",
 ]
+# 각 순간이 **담아야 하는 항목**. 행 이름만 잠그면 표는 7행을 유지한 채 내용이
+# 통째로 빠질 수 있다 — 이 표의 값은 이름이 아니라 항목에 있다(리뷰가 적발).
+# 「묻지 않고 정했을 때」 행은 AC38 이 세 항목을 따로 잠그므로 여기서는
+# 나머지 여섯 행을 덮는다. 문구는 output style 본문에서 **verbatim** 이다.
+MOMENT_ITEMS = {
+    "ask the user to decide": [
+        "what you are asking", "why these options",
+        "what you discarded and why", "your recommendation and its basis"],
+    "another agent's result comes back": [
+        "who", "what they found", "where the evidence is",
+        "how it changed your judgment"],
+    "verdict or conclusion lands": [
+        "the verdict", "its basis", "what was examined", "what was not examined"],
+    "something you needed was unavailable": [
+        "what was missing", "what that makes weaker in the result"],
+    "starting a long task": [
+        "the steps", "how many", "what it will produce"],
+    "the work ends": [
+        "what changed", "what remains", "what is next"],
+}
 BOUNDARY_KEYS = ["long task", "verdict", "The work ends", "Unavailable",
                  "settled something without asking"]
 RULE_ANCHORS = ["<!-- rule:jargon -->", "<!-- rule:standard-term -->",
@@ -57,7 +77,14 @@ def check_explanatory(text: str) -> list[str]:
 
 
 def check_moments(text: str) -> list[str]:
-    """AC3 — Moments 표가 7행이고 각 행이 「일곱 순간의 출처」와 1:1."""
+    """AC3 — Moments 표가 7행이고, 각 행이 이름 **과 필수 항목**을 함께 담는다.
+
+    앞선 판은 행 **이름**과 행 수만 봤다. 그러면 표는 7행을 유지한 채 오른쪽
+    열이 통째로 비어도 green 이다 — 이 표의 값은 이름이 아니라 항목에 있고,
+    항목을 빼는 것이 정확히 이 플러그인이 막으려는 실패다(리뷰가 적발).
+    항목은 **그 행 안에서** 찾는다. 표 전체에 대고 찾으면 다른 행의 항목이
+    빠진 행을 대신 만족시킨다.
+    """
     rows = [ln for ln in text.splitlines()
             if ln.startswith("|") and "---" not in ln
             and not ln.startswith("| Moment")]
@@ -68,6 +95,11 @@ def check_moments(text: str) -> list[str]:
     for key in MOMENT_KEYS:
         if key not in body:
             bad.append("순간 누락: %s" % key)
+            continue
+        row = next((r for r in rows if key in r), "")
+        for item in MOMENT_ITEMS.get(key, []):
+            if item not in row:
+                bad.append("항목 누락: %s → %s" % (key, item))
     return bad
 
 
@@ -175,6 +207,46 @@ class TestMutation(unittest.TestCase):
         mutated = self.text.replace(
             "| When the work ends |",
             "| When you feel like it | anything |\n| When the work ends |")
+        self.assertNotEqual(check_moments(mutated), [])
+
+    @staticmethod
+    def _rewrite_row(text, key, transform):
+        """`key` 를 담은 행 하나만 바꾼다. 나머지는 그대로."""
+        out = []
+        for line in text.splitlines():
+            out.append(transform(line) if line.startswith("|") and key in line else line)
+        return "\n".join(out)
+
+    def test_moment_item_removed_from_each_row(self) -> None:
+        """행 수·이름은 그대로 두고 **항목만** 지운다 — 앞선 판이 못 잡던 축.
+
+        여섯 행 각각을 따로 흔든다. 한 행만 흔들면 나머지 다섯의 항목 락이
+        도달 불가여도 통과한다. 항목 일부는 본문에서 `**볼드**` 라 행 안에서
+        항목 문자열만 지운다 — 구분자까지 맞추려 들면 mutation 이 아무것도
+        안 바꾸고 조용히 통과한다(첫 판이 실제로 그랬다).
+        """
+        for key, items in MOMENT_ITEMS.items():
+            for item in items:
+                mutated = self._rewrite_row(
+                    self.text, key, lambda ln: ln.replace(item, "", 1))
+                self.assertNotEqual(mutated, self.text,
+                                    "mutation 이 아무것도 안 바꿨다: %s" % item)
+                self.assertNotEqual(check_moments(mutated), [],
+                                    "%s 의 %s 가 사라져도 green" % (key, item))
+
+    def test_moment_item_moved_to_another_row(self) -> None:
+        """항목을 **다른 행으로 옮기는** 축 — 표 전체에 대고 재는 구현은 여기서 green.
+
+        삭제 축만 흔들면 *"표 어딘가에 그 문구가 있다"* 로 재는 구현과
+        구분되지 않는다.
+        """
+        item = "what was not examined"
+        mutated = self._rewrite_row(self.text, "verdict or conclusion lands",
+                                    lambda ln: ln.replace(item, "", 1))
+        mutated = self._rewrite_row(
+            mutated, "the work ends",
+            lambda ln: ln.rstrip().rstrip("|").rstrip() + " / " + item + " |")
+        self.assertIn(item, mutated, "mutation 이 문구를 지웠다 — 이동 축이 아니다")
         self.assertNotEqual(check_moments(mutated), [])
 
     def test_boundary_term_removed(self) -> None:
