@@ -1106,7 +1106,7 @@ command, or fetching anything over the network — you do not have the tools to.
 
 #### 준비 스크립트 입출력 계약
 
-`scripts/prepare_standup.py` — **402줄**(M4: 앞선 판이 "약 40줄"로 적었던 것은 초기 견적이었다 —
+`scripts/prepare_standup.py` — 초안의 "약 40줄" 견적을 크게 넘는다(M4 —
 후보 검증·집계·렌더 세 블록이 실측으로 늘었다). 앞선 판의 `extract_recap.py`에서 선별 · 마스킹 · 접기 ·
 머리자르기 로직이 전부 사라지고 범위 결정 · 계수 · git 조회만 남는다.
 

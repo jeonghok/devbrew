@@ -93,10 +93,8 @@ class TestCoverageLedger(unittest.TestCase):
         self.assertEqual(set(self.assigned) - self.listed, set(),
                          "배정에 있는데 목록에 없다")
 
-    # NOTE: 배정된 **산출물이 실제로 존재하는지**를 보는 assertion 은 Task 11 에서
-    # 더한다. 여기서 더하면 `tests/ab_gate.sh` · `tests/oracle/` 가 아직 없어
-    # Task 9·10 이 red 로 끝나고, "각 task 는 독립적으로 테스트 가능한 산출물로
-    # 끝난다" 는 규칙이 깨진다. 배정표의 **좌변 집합**은 여기서 이미 잠긴다.
+    # 배정된 **산출물이 실제로 존재하는지**와 **그 산출물이 그 AC 를 실제로 다루는지**는
+    # `TestAssignedArtifactsExist` 가 본다. 여기서는 배정표의 **좌변 집합**만 잠근다.
 
     def test_unassigned_fragments_cite_a_real_oq(self) -> None:
         """`없음` 이 만능 탈출구가 되면 이 AC 자체가 새 fail-open 이 된다."""
@@ -399,8 +397,8 @@ class TestPluginStateGuard(unittest.TestCase):
         # 활성·대상 비활성·접두사만 같은 이름), STOP 라벨이 8개다 — 모두 가드의 문서화된
         # 설계 의도(정확 id 매치·bool 타입 검사·리스트 타입 검사)와 일치한다. 위 루프의
         # per-case assertEqual 이 12개 전부를 통과하는 한(즉 가드가 각 케이스의 라벨과
-        # 정확히 일치하는 한) 총합은 산술적으로 4/8 일 수밖에 없다 — "3/9" 로 두면 가드를
-        # 어떻게 고쳐도(라벨과 어긋나지 않는 한) 이 테스트는 항상 fail 한다. 3/9 는 이
+        # 정확히 일치하는 한) 총합은 산술적으로 4/8 일 수밖에 없다 — 옛 값으로 두면 가드를
+        # 어떻게 고쳐도(라벨과 어긋나지 않는 한) 이 테스트는 항상 fail 한다. 그 옛 값은 이
         # CASES 표(와 스펙 §9 AC45, docs/superpowers/specs/2026-08-05-agent-transparency-design.md)
         # 와 모순되는 stale 한 수치였다 — 메서드 이름·spec 서술 둘 다 4/8 로 고쳤다(가드 로직은 무변경).
         outcomes = []
