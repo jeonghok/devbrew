@@ -1,5 +1,15 @@
 # agent-transparency 구현 계획
 
+> ## ⚠️ 이 계획은 실행 완료됐고, 그 산출물 중 **부품 2(`SubagentStop` 훅)는 2026-08-13에 제거됐다**
+>
+> 이 문서는 **무엇을 했는지의 기록**이지 지금 따라야 할 지시가 아니다. 훅 관련 task 를 그대로
+> 실행하면 **제거된 부품을 다시 만든다.** 라이브 probe 가 그 훅의 `additionalContext` 는 메인
+> 대화가 아니라 **방금 끝난 subagent** 로 배달되고 그 subagent 를 계속 돌게 만든다는 것을 보였다.
+>
+> 아래 본문에서 무효인 것: 「세 부품」 구조 · `hooks/` 관련 task 전부 · AC6 · AC7 · AC8 · AC9 ·
+> AC36 · AC37 · AC44 · AC50 · AC48③④ · `tests/test_subagent_hook.py` · `tests/probe/agent_type.txt`.
+> 근거 전량과 되살리려는 경우의 절차는 **spec §11** 에 있다.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** devbrew의 다섯 번째 플러그인 `agent-transparency` 를 만든다 — output style · `SubagentStop` 훅 · `/standup` 세 부품으로 이해부채(사람이 이해한 것과 실제로 일어난 것의 격차)를 줄인다.
