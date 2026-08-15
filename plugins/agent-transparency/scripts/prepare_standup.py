@@ -99,7 +99,16 @@ def classify(records, our_common_dir, cache):
     걸치는 실제 상황(메인 리포 → 워크트리 이동)을 못 다룬다.
 
     **경로 포함 관계로 판정하지 않는다** — 워크트리는 리포 밖 어디에나 놓인다.
+
+    `our_common_dir` 가 `None` 이면 **거절이 아니라 예외다.** 우리 쪽과 후보 쪽이
+    같은 `None` 을 "판정 불가" 센티널로 쓰므로 `None == None` 이 참이 되어,
+    해석 불가능한 남의 트랜스크립트가 **전부** 채택된다 — 전 범위 상실이 다른
+    프로젝트에 대한 건강한 standup 으로 렌더된다. 판정 불가는 일치가 아니다.
+    `collect` 가 먼저 막으므로 이 경로는 실행되지 않아야 하며, 실행된다면 그
+    가드가 사라졌다는 뜻이라 조용히 거절하지 않고 올린다.
     """
+    if our_common_dir is None:
+        raise ValueError("our_common_dir 가 미해결 — 후보 검증을 수행할 수 없다")
     seen = []
     for record in records:
         value = record.get("cwd")
@@ -181,9 +190,18 @@ def count(records):
 
 
 def collect(root, branch, session_id):
-    """인벤토리 원자료. 렌더는 하지 않는다."""
+    """인벤토리 원자료. 렌더는 하지 않는다.
+
+    우리 리포의 git-common-dir 를 못 구하면 **`None` 을 돌려준다** — 그 상태로는
+    어떤 후보도 우리 것인지 판정할 수 없고(`classify` 의 센티널 주석 참조),
+    부분 답변은 다른 프로젝트의 답변이 된다. bare 리포가 실물 진입로다:
+    `git rev-parse --git-common-dir` 가 `.` 을 주어 `repo_root` 가 부모로
+    올라가고, 그 부모는 리포가 아니다.
+    """
     started = time.time()
     ours = git_common_dir(root)
+    if ours is None:
+        return None
     cache = {}
     rejected = dict((reason, 0) for reason in REJECT_REASONS)
     entries, unparsed, candidates = [], 0, 0
@@ -364,6 +382,12 @@ def main(argv=None):
             return 3
         branch = current_branch(cwd) or "(unknown)"
         data = collect(root, branch, args.session_id)
+        if data is None:
+            # 파일 부재로 강등하면 사용자는 원인을 파일 쪽에서 찾는다. 원인은
+            # 리포 미해결이고, 그 상태에서 낸 답은 남의 프로젝트 답일 수 있다.
+            sys.stdout.write(
+                "STANDUP-UNAVAILABLE: repository could not be resolved (%s)\n" % root)
+            return 3
         if not data["entries"]:
             sys.stdout.write(
                 "STANDUP-UNAVAILABLE: session file not found "
@@ -382,7 +406,8 @@ def main(argv=None):
         # 지키는 코드 자체가 죽으면 안 된다. 메시지를 UTF-8 로 왕복시켜
         # 인코딩 불가 문자(예: 홑 서로게이트)를 무해화하고, 그 write 자체도
         # 감싼다 — 무해화가 놓친 두 번째 실패도 새어나가지 못하게.
-        # (subagent-explain.py 의 _degraded() 와 같은 모양.)
+        # (2026-08-13 이전에는 훅의 _degraded() 가 같은 모양을 공유했다. 훅이
+        #  제거되어 이 파일이 그 양식의 유일한 보유자다.)
         try:
             try:
                 message = str(exc)

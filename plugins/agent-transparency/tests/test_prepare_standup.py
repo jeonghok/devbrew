@@ -228,6 +228,34 @@ class TestCandidateValidation(unittest.TestCase):
         self.module.classify(records, self.ours, cache)
         self.assertEqual(len(cache), 1)
 
+    def test_unresolved_ours_is_refused_not_matched(self) -> None:
+        """센티널 충돌 — 우리 리포와 후보가 **같은 `None`** 을 "판정 불가" 로 쓴다.
+
+        `None == None` 이 참이므로, 우리 쪽이 미해결이면 해석 불가능한 남의
+        트랜스크립트가 **전부** 채택된다(전 범위 상실이 건강한 standup 으로
+        렌더된다). 판정 불가는 일치가 아니므로 함수가 거절해야 한다.
+        """
+        plain = self.box.root / "not-a-repo"
+        plain.mkdir()
+        with self.assertRaises(ValueError):
+            self.module.classify([rec(cwd=str(plain))], None, {})
+
+    def test_unresolved_ours_refused_even_for_vanished_cwd(self) -> None:
+        """사라진 cwd 도 `None` 을 캐시하므로 같은 충돌 경로다 — 두 입력 축을 모두 흔든다."""
+        with self.assertRaises(ValueError):
+            self.module.classify([rec(cwd=str(self.box.root / "vanished"))], None, {})
+
+    def test_resolved_ours_still_rejects_unresolvable_candidate(self) -> None:
+        """양의 짝 — 우리 쪽이 해결됐을 때 해석 불가 후보는 조용히 거절된다.
+
+        위 두 락만 두면 `classify` 가 무조건 raise 해도 통과한다.
+        """
+        plain = self.box.root / "not-a-repo-2"
+        plain.mkdir()
+        ok, reason = self.module.classify([rec(cwd=str(plain))], self.ours, {})
+        self.assertFalse(ok)
+        self.assertEqual(reason, "other-repo")
+
 
 class TestNonRecursiveGlob(unittest.TestCase):
     """AC49 — `<sid>/subagents/*.jsonl` 은 구조적으로 제외된다."""
@@ -608,6 +636,39 @@ class TestExitCodes(unittest.TestCase):
         rc, out = self.run_script(self.box.main)
         self.assertEqual(rc, 0)
         self.assertTrue(out.startswith("scope:"))
+
+    def test_bare_repo_reports_unresolved_repo_not_missing_files(self) -> None:
+        """센티널 충돌의 실물 진입로 — bare 리포에서 우리 쪽이 미해결이 된다.
+
+        `git rev-parse --git-common-dir` 가 bare 에서 `.` 을 주므로 `repo_root`
+        는 **부모**로 올라가고, 그 부모는 리포가 아니라 `git_common_dir` 가
+        `None` 이다. 그 상태로 스캔하면 남의 트랜스크립트가 전부 채택된다.
+
+        메시지도 함께 잠근다 — *"session file not found"* 로 강등하면 사용자는
+        원인을 파일 부재로 읽고 진짜 원인(리포 미해결)을 영영 못 본다.
+        """
+        bare = self.box.root / "b.git"
+        subprocess.run(["git", "init", "--bare", "-q", str(bare)], check=True)
+        # 남의 트랜스크립트를 부모 슬러그 아래 심어 둔다 — 충돌이 살아 있으면
+        # 이것이 채택되어 rc 0 과 정상 `scope:` 줄이 나온다.
+        #
+        # cwd 는 **해석 불가**여야 한다. 살아 있는 남의 git 리포를 쓰면
+        # `git_common_dir` 가 실제 경로를 주어 `None` 과 비교되지 않고, 충돌
+        # 경로를 한 번도 안 탄 채 이 락이 다른 이유로 red 가 된다.
+        module = load_script()
+        pdir = self.box.projects / module.slug(str(self.box.root))
+        pdir.mkdir(parents=True, exist_ok=True)
+        write_jsonl(pdir / "x.jsonl",
+                    [assistant_text("남의 작업", gitBranch="main",
+                                    cwd=str(self.box.root / "long-gone-clone"))])
+
+        rc, out = self.run_script(bare)
+        self.assertEqual(rc, 3, out)
+        lines = out.splitlines()
+        self.assertEqual(len(lines), 1, out)
+        self.assertTrue(lines[0].startswith("STANDUP-UNAVAILABLE:"), out)
+        self.assertNotIn("session file not found", out)
+        self.assertNotIn("scope:", out)
 
     def test_not_a_git_repo_exits_three(self) -> None:
         """Finding 4 — main() 의 `repo_root(cwd) is None` 갈래는 새 코드인데 테스트가 없었다."""
