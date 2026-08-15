@@ -10,10 +10,14 @@ Run:
 """
 from __future__ import annotations
 
+import io
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -464,11 +468,117 @@ class TestAskJudgeTimeout(unittest.TestCase):
         self.assertGreater(run.call_args.kwargs["timeout"], 0)
 
     def test_timeout_expiry_counts_as_no_vote(self) -> None:
+        """표는 전부 `no`, 그리고 **왜** no 인지 `_error` 로 남는다.
+
+        `set(vote.values()) == {"no"}` 로 재던 앞선 판은 사유 표시를 더하는
+        순간 red 가 된다 — 판정 키와 메타를 섞어 재고 있었다. 판정 키만 본다.
+        """
         with mock.patch.object(
                 self.judge.subprocess, "run",
                 side_effect=self.judge.subprocess.TimeoutExpired(cmd=["claude"], timeout=1)):
             vote = self.judge.ask_judge("rubric", "block", "model", "low")
-        self.assertEqual(set(vote.values()), {"no"})
+        self.assertEqual(set(vote[q] for q in self.judge.QUESTIONS), {"no"})
+        self.assertEqual(vote.get("_error"), "TimeoutExpired")
+
+
+class TestJudgeFailClosedGuards(unittest.TestCase):
+    """REFERENCE.md 가 불변식으로 이름 붙인 fail-closed 가드 둘 + 판정자 미실행 구분.
+
+    셋 다 테스트가 없었다(리뷰가 적발). 이름만 불변식이고 회귀하면 아무도 모른다.
+    """
+
+    def setUp(self) -> None:
+        self.judge = load_judge()
+
+    def test_empty_span_is_a_fail_without_calling_the_judge(self) -> None:
+        """가드 1 — 구간이 비면 판정자를 부르지 않고 fail."""
+        with mock.patch.object(self.judge, "ask_judge") as ask:
+            self.assertFalse(self.judge.judge_span("rubric", "   \n ", "m", "low"))
+        ask.assert_not_called()
+
+    def test_no_votes_is_a_fail(self) -> None:
+        """가드 2 — 표가 하나도 없으면 fail. 빈 표는 `all()` 로 공허하게 참이 된다."""
+        self.assertFalse(self.judge.tally([]))
+
+    def test_wrapped_empty_span_is_still_a_fail(self) -> None:
+        """게이트 5b 는 구간을 **라벨로 감싼 뒤** 넘긴다.
+
+        감싼 문자열은 라벨 때문에 절대 비지 않아, 가드 1 이 그 게이트에서는
+        영영 발동하지 못한다 — 인벤토리도 응답도 없는 실행이 판정자에게
+        라벨만 주고 그 답을 판정으로 삼는다.
+        """
+        self.assertFalse(self.judge.wrap_two_blocks("", ""))
+        self.assertFalse(self.judge.wrap_two_blocks("인벤토리만", ""))
+        self.assertFalse(self.judge.wrap_two_blocks("", "응답만"))
+        self.assertTrue(self.judge.wrap_two_blocks("인벤토리", "응답"))
+
+    def test_judge_failure_is_distinguishable_from_a_no_vote(self) -> None:
+        """비-0 종료는 *"판정자가 안 돌았다"* 이지 *"루브릭에 떨어졌다"* 가 아니다.
+
+        둘 다 fail-closed 인 것은 맞지만, 같은 표로 보고하면 CLI 부재·인증
+        오류·rate limit 을 산출물 결함으로 읽게 된다.
+        """
+        with mock.patch.object(self.judge.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess(
+                args=["claude"], returncode=1, stdout=b"")
+            vote = self.judge.ask_judge("rubric", "block", "model", "low")
+        self.assertEqual(set(v for k, v in vote.items()
+                             if k in self.judge.QUESTIONS), {"no"})
+        self.assertTrue(vote.get("_error"), vote)
+
+    def test_successful_judge_carries_no_error_marker(self) -> None:
+        """양의 짝 — 정상 판정에는 마커가 없어야 두 사건이 구분된다."""
+        with mock.patch.object(self.judge.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess(
+                args=["claude"], returncode=0,
+                stdout=b'{"Q1":"yes","Q2":"yes","Q3":"yes","Q4":"yes"}')
+            vote = self.judge.ask_judge("rubric", "block", "model", "low")
+        self.assertNotIn("_error", vote)
+
+    def test_judge_failure_is_announced_on_stderr(self) -> None:
+        """설계 §7 — 강등이 사람에게 안 닿으면 그것은 강등이 아니라 통과다.
+
+        디스크 보존만으로는 실행 중에 안 보인다.
+        """
+        buf = io.StringIO()
+        with mock.patch.object(self.judge.subprocess, "run") as run, \
+                mock.patch.object(self.judge.sys, "stderr", buf):
+            run.return_value = subprocess.CompletedProcess(
+                args=["claude"], returncode=7, stdout=b"")
+            self.judge.ask_judge("rubric", "block", "model", "low")
+        self.assertIn("rc=7", buf.getvalue())
+
+    def test_preserve_writes_span_and_votes(self) -> None:
+        """실패한 원자료 보존 — fail 뒤에 무엇을 보고 판정했는지 되짚을 수 있어야 한다."""
+        box = tempfile.mkdtemp(prefix="at-judge-")
+        self.addCleanup(shutil.rmtree, box, True)
+        with mock.patch.object(self.judge, "ask_judge") as ask:
+            ask.return_value = dict((q, "no") for q in self.judge.QUESTIONS)
+            verdict = self.judge.judge_span("rubric", "판정 대상 구간", "m", "low",
+                                            box, "5b-1")
+        self.assertFalse(verdict)
+        written = os.listdir(box)
+        self.assertEqual(written, ["5b-1.txt"], written)
+        with open(os.path.join(box, "5b-1.txt"), encoding="utf-8") as fh:
+            body = fh.read()
+        self.assertIn("판정 대상 구간", body)
+        self.assertIn('"Q1": "no"', body)
+
+    def test_preserve_failure_does_not_break_judging(self) -> None:
+        """보존이 실패해도 판정은 산다 — 계측이 대상을 막으면 안 된다."""
+        with mock.patch.object(self.judge, "ask_judge") as ask:
+            ask.return_value = dict((q, "yes") for q in self.judge.QUESTIONS)
+            verdict = self.judge.judge_span("rubric", "구간", "m", "low",
+                                            "/dev/null/not-a-dir", "x")
+        self.assertTrue(verdict)
+
+    def test_error_marker_does_not_leak_into_the_tally(self) -> None:
+        """`_error` 키가 `tally` 의 질문 순회에 끼어들면 안 된다."""
+        good = dict((q, "yes") for q in self.judge.QUESTIONS)
+        marked = dict(good)
+        marked["_error"] = "rc=1"
+        self.assertTrue(self.judge.tally([good, good, good]))
+        self.assertTrue(self.judge.tally([marked, marked, marked]))
 
 
 class TestSpanCutting(unittest.TestCase):

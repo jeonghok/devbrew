@@ -310,6 +310,22 @@ def tally(votes):
     return True
 
 
+def _all_no(error):
+    """fail-closed 표 + **왜 no 인지**의 표시.
+
+    `_error` 는 판정 키가 아니라 메타다 — `tally` 는 `QUESTIONS` 만 순회하므로
+    집계에 끼어들지 않는다. 이 마커가 없으면 *"판정자가 안 돌았다"* 와
+    *"산출물이 루브릭에 떨어졌다"* 가 같은 표로 보고되어, CLI 부재·인증 오류·
+    rate limit 이 산출물 결함으로 읽힌다.
+    """
+    vote = dict((q, "no") for q in QUESTIONS)
+    vote["_error"] = error
+    # 강등이 사람에게 안 닿으면 그것은 강등이 아니라 통과다(설계 §7). 디스크에만
+    # 남기면 실행 중에는 안 보이고, 게이트가 왜 떨어졌는지 사후에야 알게 된다.
+    sys.stderr.write("[ab_judge] 판정자 호출 실패 — 표를 no 로 계산한다 (%s)\n" % error)
+    return vote
+
+
 def ask_judge(rubric, block, model, effort):
     prompt = "%s\n\n%s" % (rubric, block)
     try:
@@ -317,16 +333,56 @@ def ask_judge(rubric, block, model, effort):
             ["claude", "-p", "--model", model, "--effort", effort, prompt],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             timeout=JUDGE_TIMEOUT_S)
-    except (OSError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired) as exc:
         # hang 도 파싱 실패와 같은 취급 — 표를 통째로 no 로 계산한다(fail-closed).
-        return dict((q, "no") for q in QUESTIONS)
+        return _all_no(type(exc).__name__)
+    if proc.returncode != 0:
+        return _all_no("rc=%d" % proc.returncode)
     return parse_vote(proc.stdout.decode("utf-8", "replace"))
 
 
-def judge_span(rubric, block, model, effort):
+def wrap_two_blocks(inventory, answer):
+    """게이트 5b 의 두-블록 구간. **어느 한쪽이라도 비면 빈 문자열**을 돌려준다.
+
+    라벨을 먼저 붙이면 감싼 문자열이 절대 비지 않아 `judge_span` 의 빈-구간
+    가드가 이 게이트에서는 영영 발동하지 못한다 — 인벤토리도 응답도 없는 실행이
+    판정자에게 라벨만 주고 그 답이 판정이 된다(리뷰가 적발). 인벤토리가 없으면
+    루브릭 C 의 Q2(*"총수 대비 몇 개를 읽었나"*)를 **근거 없이** 묻게 되는데,
+    그것이 REFERENCE.md 가 일어나면 안 된다고 적은 바로 그 조건이다.
+    """
+    if not (inventory or "").strip() or not (answer or "").strip():
+        return ""
+    return "<인벤토리>\n%s\n\n<응답>\n%s" % (inventory, answer)
+
+
+def judge_span(rubric, block, model, effort, artifacts=None, label=""):
     if not block.strip():
         return False                          # 구간이 비면 fail — 설명이 없었다는 뜻이다
-    return tally([ask_judge(rubric, block, model, effort) for _ in range(3)])
+    votes = [ask_judge(rubric, block, model, effort) for _ in range(3)]
+    verdict = tally(votes)
+    _preserve(artifacts, label, block, votes, verdict)
+    return verdict
+
+
+def _preserve(artifacts, label, block, votes, verdict):
+    """판정 구간과 표를 디스크에 남긴다.
+
+    REFERENCE.md 가 실패한 원자료 보존을 요구하는데 앞선 판은 구간도 표도
+    버렸다 — fail 이 난 뒤 무엇을 보고 판정했는지 되짚을 방법이 없었다(리뷰가
+    적발). 보존 실패가 판정을 막으면 안 되므로 조용히 넘어가되, 그때는
+    판정 결과 자체는 이미 반환값으로 살아 있다.
+    """
+    if not artifacts:
+        return
+    try:
+        os.makedirs(artifacts, exist_ok=True)
+        safe = re.sub(r"[^A-Za-z0-9_.-]", "_", label) or "span"
+        with open(os.path.join(artifacts, "%s.txt" % safe), "w",
+                  encoding="utf-8") as fh:
+            fh.write("verdict=%s\n\n--- 판정 구간 ---\n%s\n\n--- 표 ---\n%s\n"
+                     % (verdict, block, json.dumps(votes, ensure_ascii=False, indent=2)))
+    except OSError:
+        pass
 
 
 def main(argv):
@@ -349,6 +405,7 @@ def main(argv):
     if os.path.exists(tests_path):
         tests_text = open(tests_path, encoding="utf-8").read()
 
+    artifacts = os.path.join(out, "judge")
     results, reasons = {}, []
 
     def note(gate, ok, why):
@@ -378,13 +435,16 @@ def main(argv):
                  "%s — visible=%s oracle=%s hash=%s" % (key, visible, oracle, intact))
         if task == "c" and cond == "on":
             note(3, (not failed) and judge_span(
-                rubrics["A"], span_after_tool(records, "Agent"), model, effort), str(key))
+                rubrics["A"], span_after_tool(records, "Agent"), model, effort,
+                artifacts, "3-%s" % i), str(key))
         if task == "d" and cond == "on":
             note(4, (not failed) and judge_span(
-                rubrics["B"], span_before_ask(records), model, effort), str(key))
+                rubrics["B"], span_before_ask(records), model, effort,
+                artifacts, "4-%s" % i), str(key))
         if task == "b" and cond == "on":
             note(6, (not failed) and judge_span(
-                rubrics["D"], span_all_text(records), model, effort), str(key))
+                rubrics["D"], span_all_text(records), model, effort,
+                artifacts, "6-%s-%s" % (cond, i)), str(key))
         if task == "e":
             answer = span_after_command(records, "agent-transparency:standup")
             snapshot = os.path.join(out, "pre-standup-%d.jsonl" % i)
@@ -406,9 +466,12 @@ def main(argv):
                 if "scope:   repo=" in blob:
                     inventory = blob
                     break
-            two_blocks = "<인벤토리>\n%s\n\n<응답>\n%s" % (inventory, answer)
-            note("5b", (not failed) and judge_span(rubrics["C"], two_blocks, model, effort),
-                 str(key))
+            two_blocks = wrap_two_blocks(inventory, answer)
+            note("5b", (not failed) and judge_span(
+                     rubrics["C"], two_blocks, model, effort, artifacts, "5b-%s" % i),
+                 "%s — 인벤토리 %s · 응답 %s"
+                 % (key, "있음" if inventory.strip() else "**없음**",
+                    "있음" if answer.strip() else "**없음**"))
 
     for gate in (1, 2, 3, 4, "5a", "5b", 6):
         results.setdefault(gate, False)
