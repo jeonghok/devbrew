@@ -13,10 +13,6 @@
 - AC3
 - AC4
 - AC5
-- AC6
-- AC7
-- AC8
-- AC9
 - AC10
 - AC11
 - AC16①
@@ -32,24 +28,24 @@
 - AC33
 - AC34
 - AC35
-- AC36
-- AC37
 - AC38
 - AC39
 - AC40
 - AC41
 - AC42
 - AC43
-- AC44
 - AC45
 - AC46
 - AC47
 - AC48
 - AC49
-- AC50
 - AC51
 
 > AC12–AC15 · AC17–AC19 · AC21–AC24 · AC30 은 삭제됐고 번호를 재사용하지 않는다.
+> **AC6 · AC7 · AC8 · AC9 · AC36 · AC37 · AC44 · AC50 은 2026-08-13 에 삭제됐다** —
+> 여덟 개 전부 `SubagentStop` 훅의 stdout 을 재던 것이고, 그 stdout 이 메인 대화에
+> 배달된 적이 없다는 것이 라이브 probe 로 드러나 훅 자체가 제거됐다(설계 문서 §11).
+> AC48 은 살아남되 ③④(훅 갈래 · `probe/agent_type.txt` 락)가 빠져 ①② 만 남는다.
 > AC51 은 구현 계획에서 신설됐다(`commands/standup.md` 본문 검증).
 
 ## AC ↔ 검증 산출물
@@ -64,10 +60,6 @@
 | AC3 | `tests/test_output_style.py` |
 | AC4 | `tests/test_output_style.py` |
 | AC5 | `tests/test_output_style.py` |
-| AC6 | `tests/test_subagent_hook.py` |
-| AC7 | `tests/test_subagent_hook.py` |
-| AC8 | `tests/test_subagent_hook.py` |
-| AC9 | `tests/test_subagent_hook.py` |
 | AC10 | `tests/test_prepare_standup.py` |
 | AC11 | `tests/test_prepare_standup.py` |
 | AC16① | `tests/test_plugin_contract.py` |
@@ -83,27 +75,24 @@
 | AC33 | `tests/test_plugin_contract.py` |
 | AC34 | `tests/test_prepare_standup.py` |
 | AC35 | `tests/test_plugin_contract.py` |
-| AC36 | `tests/test_subagent_hook.py` |
-| AC37 | `tests/test_subagent_hook.py` |
 | AC38 | `tests/test_output_style.py` |
 | AC39 | `tests/test_plugin_contract.py` |
 | AC40 | `tests/test_ab_runner_contract.py` |
 | AC41 | `tests/test_prepare_standup.py` |
 | AC42 | `tests/test_prepare_standup.py` |
 | AC43 | `tests/test_plugin_contract.py` |
-| AC44 | `tests/test_subagent_hook.py` |
 | AC45 | `tests/test_ab_runner_contract.py` |
 | AC46 | `tests/test_prepare_standup.py` |
 | AC47 | `tests/test_ab_runner_contract.py` |
-| AC48 | `tests/test_subagent_hook.py` |
+| AC48 | `tests/test_plugin_contract.py` |
 | AC49 | `tests/test_prepare_standup.py` |
-| AC50 | `tests/test_subagent_hook.py` |
 | AC51 | `tests/test_plugin_contract.py` |
 
 ## 미해결(OQ) 식별자 목록
 
 AC47 의 센티널이 이 목록을 확인한다. 각 항목의 서술은 설계 문서 §12 에 있고,
 그 정합은 **사람 리뷰**이며 AC47 의 범위 밖이다.
+**OQ-X · OQ-AE 는 2026-08-13 에 삭제됐다** — 둘 다 `SubagentStop` 훅 전용 항목이었다.
 
 - OQ-A — 트랜스크립트 형식이 문서화돼 있지 않다
 - OQ-B — `force-for-plugin` 충돌 시 먼저 로드된 것이 이긴다
@@ -113,7 +102,7 @@ AC47 의 센티널이 이 목록을 확인한다. 각 항목의 서술은 설계
 - OQ-F — 약 950 단어가 내장 지침의 주의를 얼마나 가져가는지
 - OQ-H — 이 브랜치가 생기기 전에 다른 브랜치에서 한 일
 - OQ-I — 레코드 `type` 이름이 문서화되지 않은 관측값이다
-- OQ-J — 세 경로 모두 출력 필터가 없다 (수용된 잔여 위험)
+- OQ-J — 두 경로 모두 출력 필터가 없다 (수용된 잔여 위험)
 - OQ-L — 루브릭 판정에 모델이 들어온다
 - OQ-M — 재귀 경계: subagent 내부 순간은 이번 범위 밖
 - OQ-N — 진행 중·방향 전환 검출 경로가 없다
@@ -125,22 +114,23 @@ AC47 의 센티널이 이 목록을 확인한다. 각 항목의 서술은 설계
 - OQ-U — fork 가 실행될 때마다 새 서브에이전트 트랜스크립트가 생긴다
 - OQ-V — 트랜스크립트 스키마의 *부분* drift 는 감지되지 않는다
 - OQ-W — 지시문 언어가 응답 언어를 오염시킬 수 있다
-- OQ-X — AC37 은 묶기 *문구*만 검사한다
 - OQ-Y — `SKILL.md` 의 판단 행동을 재검증할 상시 단위 테스트가 없다
 - OQ-Z — 일곱 순간 중 셋만 런타임으로 측정된다
 - OQ-AA — `-p` 실행에 답변 채널이 없어 *답변된* `AskUserQuestion` 짝이 안 생긴다
 - OQ-AB — "몇 개를 읽었는지"를 기계가 검증할 수 없다
 - OQ-AD — 나열 상한 밖 파일은 개별 경로가 주입되지 않는다 (도달 불가는 아니다)
-- OQ-AE — 플랫폼이 `agent_type` 라벨 형태를 바꾸면
 - OQ-AF — 플랫폼이 프롬프트 구성 방식을 바꿔 `SKILL.md` 본문이 fork 에 안 닿게 되면
 
-## kill switch 와 강등의 경계
+## kill switch 와 강등의 경계 — 2026-08-13 이후
 
-§7 의 *"모든 강등은 출력에 남는다"* 와 AC6 의 *"kill switch 가 set 이면 stdout 을
-비운다"* 는 충돌하지 않는다 — **kill switch 는 사용자가 요청한 비활성화이지
-강등이 아니다.** 강등은 *하려던 일이 부분적으로만 됐을 때* 발생하고, 그때는
-`systemMessage` 채널로 대화창에 닿는다. 사용자가 끈 것을 다시 알리는 출력은
-알림이 아니라 소음이다.
+**이 플러그인에는 kill switch 가 없다.** 훅이 0 개이고 output style 에는 환경변수가
+개입할 지점이 없다(플랫폼이 플러그인 디렉토리에서 직접 읽는다). 끄는 방법은
+`claude plugin disable` 하나뿐이며 그러면 `/standup` 도 함께 꺼진다. devbrew 규약의
+kill switch 요구(K8)는 **대상 없음**이지 면제가 아니다 — 훅을 하나라도 다시 두는
+개정은 그 요구가 즉시 되살아난다.
+
+그래서 **모든 강등은 `/standup` 의 stdout 한 줄로 사용자에게 닿는다.** 훅 예외가
+`stderr` 로만 끝나 *"정의상 통과"* 였던 문제(리뷰가 적발)는 그 경로와 함께 사라졌다.
 
 ## 루브릭
 

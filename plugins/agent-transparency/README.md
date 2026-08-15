@@ -15,7 +15,7 @@
    없다. 그리고 **답변은 그 사실을 알 수 없다** — 인벤토리의 `blocks` 는 모든
    어시스턴트 텍스트 블록이지 *이 플러그인이 유발한 설명* 이 아니다(OQ-T).
 3. **이 플러그인이 대화창에 내는 설명에는 어떤 비밀 필터도 없다.** 훅 · output
-   style · `/standup` 세 경로 모두 그렇다. 모델 출력에 필터를 거는 지점이
+   style 과 `/standup` 두 경로 모두 그렇다. 모델 출력에 필터를 거는 지점이
    플랫폼에 없고, 프롬프트로 막으면 능력 억제가 된다. **수용된 잔여 위험**이며
    그 계산은 설계 문서 §3 에 있다(OQ-J).
 
@@ -24,10 +24,10 @@
 | 부품 | 하는 일 |
 |---|---|
 | `output-styles/agent-transparency.md` | 일곱 순간에 무엇을 담아야 하는지 규정 + 내장 `Explanatory` 흡수 |
-| `hooks/subagent-explain.py` | 에이전트가 끝난 직후 설명 자리를 만든다 (검사·차단 없음) |
 | `/standup` | 쌓인 설명 + git 으로 *"지금 어떤 상태인가"* 에 답한다 |
 
-**상태 파일을 만들지 않는다.** 훅은 상수를 출력하고 준비 스크립트는 읽기만 한다.
+**상태 파일도 훅도 만들지 않는다.** 준비 스크립트는 읽기만 하고, 사용자가 `/standup` 을
+칠 때만 돈다. 모델의 턴에 끼어드는 지점이 하나도 없다.
 
 ## 사용법
 
@@ -41,14 +41,20 @@
 만든다. 이 agent 는 `tools: Read, Glob, Grep` fail-closed allowlist 를 선언한다 —
 파일을 쓰거나 명령을 실행하거나 네트워크에 닿을 수 없다.
 
-## Hooks Installed
+## 훅을 두지 않는다 (2026-08-13)
 
-| 훅 | 왜 skill 이 아닌가 |
-|---|---|
-| `SubagentStop` → `hooks/subagent-explain.py` | 에이전트 종료는 **모델이 알아서 반응할 수 없는 순간**이다. 후보 이벤트 중 이 시점에 **쓸 만하게** 컨텍스트를 주입할 수 있는 것은 `SubagentStop` 뿐이다 — 나머지는 아예 못 하거나(`PreToolUse`·`TaskCreated`·해당 이벤트 자체가 없음) 부분적이고(`PostToolUseFailure`), 되는 것(`Stop`)은 턴이 안 끝나는 루프 위험 때문에 이 설계가 쓰지 않는다. skill 은 모델이 부를 때만 돈다 |
+앞선 판에는 `SubagentStop` 훅이 있었다. 라이브 probe 가 그 훅의 `additionalContext` 는
+메인 대화가 아니라 **방금 끝난 subagent** 로 배달되고, 그 subagent 를 **종료시키지 않고
+계속 돌게** 만든다는 것을 보였다 — 에이전트 하나에 훅이 3회 발화했고 플랫폼 상한
+(`CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`, 기본 8)에 걸리면 사용자에게 오류 배너가 뜬다.
 
-kill switch: `DEVBREW_DISABLE_AGENT_TRANSPARENCY=1` ·
-`DEVBREW_SKIP_HOOKS=agent-transparency:subagent-explain` — **훅에만 적용된다.**
+메인 대화에 배달되는 이벤트(`PostToolUse` matcher `Agent` · `PostToolBatch`)는 실재하지만
+쓰지 않는다. 근거 전량 — 배달지 지도 · 루프 관측 · 왜 옮기지 않는가 · 되살리려면 무엇을
+해야 하는가 — 는 설계 문서 §11 에 있다.
+
+**따라서 kill switch 가 없다.** 걸 지점이 없기 때문이다: 훅이 0 개이고 output style 에는
+환경변수가 개입할 수 없다(플랫폼이 플러그인 디렉토리에서 직접 읽는다). 끄는 방법은
+`claude plugin disable agent-transparency` 하나뿐이며 그러면 `/standup` 도 함께 꺼진다.
 
 ## Principles Instantiated
 
@@ -82,5 +88,11 @@ OQ-T(설치 이전 구간) · OQ-AB(읽은 수를 기계가 검증 못 함) · O
 
 - [ ] 플러그인을 설치한 뒤 `/standup` 을 **bare 이름으로** 불러 응답이 오는가
 - [ ] 그 응답 첫 줄에 `blocks: N 중 M 개를 읽었다` 형태의 수가 나오는가
-- [ ] `SubagentStop` 훅이 `/standup` 의 fork 에 대해 설명 자리를 **안 만드는가**
-      (만들면 `agent_type` 이 드리프트한 것 — `tests/probe/agent_type.txt` 재측정)
+- [ ] 에이전트가 돌아온 직후 응답에 **누가 / 무엇을 찾았나 / 근거 위치 / 판단 변화**
+      네 항목이 실제로 나오는가 — 이 순간의 런타임 신호는 A/B 게이트 3 하나뿐이고,
+      설치 환경에서는 그것도 안 돌기 때문이다
+
+> 세 번째 항목이 2026-08-13 에 **양의 방향으로 바뀌었다.** 앞선 판은 *"훅이 `/standup`
+> fork 에 설명 자리를 **안** 만드는가"* 라는 **부정** 항목만 두었다 — 훅이 잘못 발동하는
+> 경우는 잡고, 설명이 **아예 안 나오는** 경우는 아무도 안 봤다. 훅이 메인 대화에 배달된
+> 적이 없다는 사실을 이 체크리스트가 잡을 수 있었는데, 있어야 할 항목이 없어서 놓쳤다.

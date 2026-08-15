@@ -57,9 +57,31 @@ class TestCoverageLedger(unittest.TestCase):
                      section(self.text, "미해결(OQ) 식별자 목록").splitlines()) if m}
 
     def test_lists_are_non_trivial(self) -> None:
-        """계측기 자체가 고장 나면 빈 집합끼리 같아서 통과한다 — 먼저 막는다."""
-        self.assertGreaterEqual(len(self.listed), 38)
+        """계측기 자체가 고장 나면 빈 집합끼리 같아서 통과한다 — 먼저 막는다.
+
+        **하한은 개수 단언이 아니다.** 파싱이 죽으면 집합이 0 이나 한 자리로
+        떨어지므로 그것만 잡으면 충분하고, 실제 개수에 붙여 두면 AC 를 더하거나
+        지울 때마다 이 줄을 고쳐야 하는 churn 이 된다(2026-08-13 훅 제거로 AC 8 개가
+        빠지면서 실제로 red 가 났다). AC 를 **잃어버리는** 사고는 이 하한이 아니라
+        아래 대칭차 검사가 잡는다 — 목록과 배정표는 서로의 증인이다.
+        """
+        self.assertGreaterEqual(len(self.listed), 25)
         self.assertGreaterEqual(len(self.oqs), 20)
+
+    def test_floor_would_catch_a_dead_parser(self) -> None:
+        """계측기 확인 — 하한이 실제로 파싱 실패를 구분하는가.
+
+        하한을 내리는 편집은 락을 조용히 0 으로 만들기 쉬운 자리라 그 축을 고정한다.
+        **헤딩이 사라지는 축은 여기서 재지 않는다** — `section()` 이 `ValueError` 를
+        올려 red 가 되므로 하한이 필요 없다. 조용히 비는 축은 **행 형식이 바뀌어
+        행 정규식이 하나도 안 맞는 경우**이고, 그것이 이 하한이 실제로 지키는 것이다.
+        """
+        renumbered = self.text.replace("\n- AC", "\n* AC")
+        dead = {m.group(1) for m in
+                (AC_ROW.match(ln) for ln in
+                 section(renumbered, "AC 번호 목록").splitlines()) if m}
+        self.assertEqual(dead, set(), "행 형식을 바꿨는데 여전히 파싱된다 — 계측기 고장")
+        self.assertLess(len(dead), 25)
 
     def test_symmetric_difference_is_empty(self) -> None:
         self.assertEqual(self.listed - set(self.assigned), set(),
@@ -189,7 +211,9 @@ class TestAssignedArtifactsExist(unittest.TestCase):
             match = ASSIGN_ROW.match(line)
             if match and match.group(1) != "AC":
                 assigned[match.group(1)] = match.group(2).strip()
-        self.assertGreaterEqual(len(assigned), 38)
+        # 하한의 목적은 개수 단언이 아니라 파서 사망 감지다 — 위
+        # TestCoverageLedger.test_lists_are_non_trivial 의 주석 참조.
+        self.assertGreaterEqual(len(assigned), 25)
         for ac, target in assigned.items():
             if target.startswith("없음"):
                 continue

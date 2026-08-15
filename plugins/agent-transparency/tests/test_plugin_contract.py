@@ -422,8 +422,10 @@ README_ITEMS = {
     "설치 이전 구간": "설치 이전 작업에는 이 플러그인이 만든 설명이 없",
     "OQ-J 잔여 위험": "어떤 비밀 필터도 없",
     "Principles Instantiated": "## Principles Instantiated",
-    "Hooks Installed": "## Hooks Installed",
 }
+# 2026-08-13: 다섯째 항목 "Hooks Installed" 가 빠졌다. 훅이 0 개이므로 devbrew 규약의
+# 그 절은 대상 없음이다 — 면제가 아니라 부재이며, 훅을 다시 두는 개정은 이 항목을
+# 되살려야 한다(TestNoHooksRemain 이 그 편집을 red 로 만든다).
 
 
 def check_readme_items(text: str) -> list[str]:
@@ -505,6 +507,122 @@ class TestReadmeMutation(unittest.TestCase):
     def test_real_readme_has_no_problems(self) -> None:
         """대조군 — 실물 README 는 checker 를 통과해야 mutation 결과와 대비가 선다."""
         self.assertEqual(check_readme_items(self.text), [])
+
+
+class TestDedicatedAgent(unittest.TestCase):
+    """AC48①② — 전용 agent 존재 + fail-closed tools allowlist.
+
+    2026-08-13 에 `test_subagent_hook.py` 에서 이리로 옮겨 왔다. 그 파일은 훅과 함께
+    삭제됐지만 **이 계약은 훅에 의존하지 않는다** — 앞선 판은 전용 agent 를 *훅이 자기
+    fork 를 구분하기 위해* 두었고 도구 경계는 부수 효과였는데, 훅이 사라지면서 도구
+    경계가 유일한 이유가 됐다(Law 2). 원래부터 그쪽이 강한 근거였다.
+
+    ②는 **곱**이다: (a) `tools:` 가 키로 존재하고 비어 있지 않으며
+    (b) 그 집합이 {Read, Glob, Grep} 의 **부분집합**이다. (a) 가 load-bearing —
+    부분집합만 요구하면 키가 없거나 빈 값일 때 공집합이라 공허하게 참이 되는데,
+    플랫폼 의미는 정반대(미선언 = 전 도구 허용)다.
+
+    **부재 열거가 아니라 지배관계로 판정한다.** 금지 도구를 열거하는 검사는
+    내일 추가될 쓰기 도구를 오늘 담을 수 없어 시간축으로 fail-open 이고,
+    그것이 devbrew 가 `disallowedTools` 단독을 기각한 바로 그 근거다.
+    """
+
+    ALLOWED = {"Read", "Glob", "Grep"}
+    AGENT = PLUGIN_DIR / "agents" / "transcript-reader.md"
+
+    @staticmethod
+    def tools_of(text: str):
+        """선언된 tools 집합. 키가 없으면 None(= 미선언)."""
+        body = text.split("---", 2)[1]
+        for line in body.splitlines():
+            if line.startswith("tools:"):
+                raw = line.split(":", 1)[1].strip()
+                return {t.strip() for t in raw.split(",") if t.strip()}
+        return None
+
+    def setUp(self) -> None:
+        self.text = self.AGENT.read_text(encoding="utf-8")
+
+    def test_agent_file_exists_with_name(self) -> None:
+        self.assertTrue(self.AGENT.is_file())
+        self.assertIn("name: transcript-reader", self.text)
+
+    def test_tools_key_exists_and_is_non_empty(self) -> None:
+        tools = self.tools_of(self.text)
+        self.assertIsNotNone(tools, "tools: 키 자체가 없다 — 플랫폼 의미는 전 도구 허용")
+        self.assertTrue(tools, "tools: 가 비어 있다 — 공집합은 공허하게 부분집합이다")
+
+    def test_tools_are_dominated_by_allowlist(self) -> None:
+        self.assertTrue(self.tools_of(self.text) <= self.ALLOWED)
+
+    def test_glob_is_a_required_member(self) -> None:
+        """OQ-AD 의 잔여위험 논증이 Glob 보유를 전제한다."""
+        self.assertIn("Glob", self.tools_of(self.text))
+
+    def test_disallowed_tools_alone_is_red(self) -> None:
+        self.assertNotIn("disallowedTools", self.text)
+
+    def test_mutation_tools_line_removed(self) -> None:
+        """`tools:` 줄 삭제 mutation 에서 red."""
+        mutated = "\n".join(ln for ln in self.text.splitlines()
+                            if not ln.startswith("tools:"))
+        self.assertIsNone(self.tools_of(mutated))
+
+    def test_mutation_tools_line_emptied(self) -> None:
+        mutated = self.text.replace("tools: Read, Glob, Grep", "tools:")
+        self.assertEqual(self.tools_of(mutated), set())
+
+    def test_mutation_write_tool_added(self) -> None:
+        """추가 축 — 쓰기 도구가 들어오면 지배관계가 깨진다."""
+        mutated = self.text.replace("tools: Read, Glob, Grep",
+                                    "tools: Read, Glob, Grep, Write")
+        self.assertFalse(self.tools_of(mutated) <= self.ALLOWED)
+
+
+class TestNoHooksRemain(unittest.TestCase):
+    """훅 제거의 회귀 락 (2026-08-13, 설계 §11).
+
+    실측이 `SubagentStop` 의 `additionalContext` 는 메인 대화가 아니라 **방금 끝난
+    subagent** 로 배달되고 그 subagent 를 계속 돌게 만든다는 것을 보였다. 훅을 다시
+    두려는 편집은 설계 §11 의 「되살리려면」 절차를 먼저 거쳐야 하며, 이 락이 그
+    우회를 red 로 만든다.
+
+    **디렉토리 부재만 재지 않는다** — 부재 락은 다른 이름의 훅 파일을 못 잡는다.
+    `plugin.json` 이 훅을 선언하지 않는 것과, 플러그인 트리 어디에도 훅 이벤트 이름을
+    키로 쓴 JSON 이 없는 것을 함께 본다.
+    """
+
+    HOOK_EVENTS = ("SubagentStop", "SubagentStart", "PostToolBatch",
+                   "PostToolUse", "PreToolUse", "Stop")
+
+    def test_no_hooks_directory(self) -> None:
+        self.assertFalse((PLUGIN_DIR / "hooks").exists())
+
+    def test_manifest_declares_no_hooks(self) -> None:
+        manifest = json.loads(read(".claude-plugin/plugin.json"))
+        self.assertNotIn("hooks", manifest)
+
+    def test_no_hook_event_key_anywhere_in_plugin(self) -> None:
+        """이름을 바꿔 되살리는 경로까지 덮는다 — `tests/` 는 제외(이 락 자신이 산다)."""
+        offenders = []
+        for path in PLUGIN_DIR.rglob("*.json"):
+            if "tests" in path.parts:
+                continue
+            text = path.read_text(encoding="utf-8")
+            for event in self.HOOK_EVENTS:
+                if '"%s"' % event in text:
+                    offenders.append("%s: %s" % (path.name, event))
+        self.assertEqual(offenders, [])
+
+    def test_lock_would_catch_a_reintroduced_hook(self) -> None:
+        """계측기 확인 — 위 검사가 실제로 훅 선언을 구분하는가.
+
+        되돌리기 mutation 이 아니라 **새 파일을 상상한 형태**로 흔든다. 이 assert 가
+        없으면 위 세 검사는 '아무것도 없어서' 통과하는 것과 구분되지 않는다.
+        """
+        fake = '{"hooks": {"SubagentStop": [{"hooks": []}]}}'
+        hit = [e for e in self.HOOK_EVENTS if '"%s"' % e in fake]
+        self.assertEqual(hit, ["SubagentStop"])
 
 
 if __name__ == "__main__":
