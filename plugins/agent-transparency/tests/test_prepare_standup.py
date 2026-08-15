@@ -9,6 +9,7 @@ Run:
 """
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import io
 import json
@@ -283,13 +284,35 @@ class TestCandidateValidation(unittest.TestCase):
         self.assertEqual(len(mine), 2)
 
     def test_resolved_ours_still_rejects_unresolvable_candidate(self) -> None:
-        """양의 짝 — 우리 쪽이 해결됐을 때 해석 불가 후보는 조용히 거절된다.
+        """양의 짝 — 우리 쪽이 해결됐을 때 해석 불가 후보는 **거절된다.**
 
         위 두 락만 두면 `classify` 가 무조건 raise 해도 통과한다.
+
+        사유는 `other-repo` 가 **아니다.** 앞선 판은 여기서 `other-repo` 를 못박아
+        결함을 계약으로 굳히고 있었다 — 디렉토리는 있는데 git-common-dir 를 못
+        구한 것은 *"다른 리포다"* 가 아니라 *"판정하지 못했다"* 이고, `main()` 은
+        그 카운트를 *"all N candidate file(s) rejected (other-repo: N)"* 로 렌더한다.
+        git 호출 만료 하나가 **사용자 파일에 대한 거짓 사실 주장**이 되던 자리다
+        (리뷰가 H1 로 적발). **거절 자체는 그대로다** — 해소 불가 후보를 받아들이면
+        남의 리포 기록이 답변에 들어온다. 바뀐 것은 사유의 이름뿐이다.
         """
         plain = self.box.root / "not-a-repo-2"
         plain.mkdir()
         ok, reason = self.module.classify([rec(cwd=str(plain))], self.ours, {})
+        self.assertFalse(ok)
+        self.assertEqual(reason, "unresolved")
+        self.assertIn(reason, self.module.REJECT_REASONS,
+                      "사유가 REJECT_REASONS 에 없으면 강등 내역에 한 줄도 안 나온다")
+
+    def test_a_genuinely_foreign_repo_is_still_called_other_repo(self) -> None:
+        """반대 축 — 진짜 남의 리포는 여전히 `other-repo` 여야 한다.
+
+        위 락만 두면 *"전부 unresolved"* 인 구현으로도 통과하고, 그러면 진짜 남의
+        리포가 판정 실패로 렌더되어 같은 거짓 서술이 방향만 바뀐다.
+        """
+        other = self.box.root / "genuinely-other"
+        make_repo(other, branch="work")
+        ok, reason = self.module.classify([rec(cwd=str(other))], self.ours, {})
         self.assertFalse(ok)
         self.assertEqual(reason, "other-repo")
 
@@ -307,6 +330,14 @@ class TestScriptRobustness(unittest.TestCase):
 
         응답 없는 마운트가 하나만 있어도 `/standup` 이 영원히 걸린다 — 이
         플러그인의 불변식(*"어떤 작업도 늦추지 않는다"*)과 정면으로 충돌한다.
+
+        `self.module.subprocess` 는 **전역 `subprocess` 모듈 그 자체**라 `.run` 을
+        갈아 끼우는 순간 프로세스 전역이 오염된다 — 복원이 `try/finally` 인 이유다.
+        `addCleanup(setattr, self.module, "subprocess", self.module.subprocess)` 를
+        함께 두던 앞선 판은 인자가 **즉시 평가**되어 같은 객체를 자기 자신에
+        재대입하는 no-op 이었다(리뷰가 G2 로 적발). 실제로 복원한 것은 아래
+        `finally` 뿐이었고, 그 줄은 *"복원한다"* 는 인상만 주었다. 올바른 형태는
+        바로 아래 테스트의 `addCleanup(setattr, self.module.subprocess, "run", …)` 다.
         """
         seen = {}
         original = self.module.subprocess.run
@@ -316,8 +347,6 @@ class TestScriptRobustness(unittest.TestCase):
             return original(cmd, **kwargs)
 
         self.module.subprocess.run = spy
-        self.addCleanup(setattr, self.module, "subprocess",
-                        self.module.subprocess)
         try:
             self.module._run(["git", "--version"])
         finally:
@@ -354,9 +383,15 @@ class TestScriptRobustness(unittest.TestCase):
                              "master 리포에서 base-ref 를 구하지 못했다")
 
     def test_base_ref_still_works_without_a_remote(self) -> None:
-        """양의 짝 — 리모트가 없어도 기존 경로(main)가 살아 있어야 한다."""
-        self.assertIsNotNone(self.module.base_ref(str(self.box.main))
-                             or True)   # main 브랜치명이 work 라 None 일 수 있다
+        """양의 짝 — 리모트가 없어도 기존 경로(main)가 살아 있어야 한다.
+
+        앞선 판은 여기 `assertIsNotNone(base_ref(self.box.main) or True)` 를 함께
+        두었는데 `X or True` 는 결코 `None` 이 될 수 없어 **어떤 구현으로도 실패
+        불가**였다(리뷰어 3명이 독립 수렴). 딸린 주석이 저자가 알면서 무력화했음을
+        보여준다 — 그 픽스처의 브랜치명이 `work` 라 `None` 이 정상이었기 때문이다.
+        정상 결과를 단언으로 감싸면 죽은 줄이 남을 뿐이므로 지웠다. 실제로 재는
+        것은 아래 `main` 브랜치 리포다.
+        """
         plain = self.box.root / "main-repo"
         make_repo(plain, branch="main")
         self.assertIsNotNone(self.module.base_ref(str(plain)))
@@ -449,7 +484,7 @@ class TestDegradationCarriesAReason(unittest.TestCase):
                 self.assertLess(len(line), 260, line)
 
 
-
+class TestSubagentExclusion(unittest.TestCase):
     """AC49 — `<sid>/subagents/*.jsonl` 은 구조적으로 제외된다."""
 
     def setUp(self) -> None:
@@ -633,6 +668,31 @@ class TestRender(unittest.TestCase):
     def render(self, session_id=None):
         data = self.module.collect(str(self.box.main), "work", session_id)
         return self.module.render_inventory(str(self.box.main), "work", session_id, data)
+
+    def test_rendered_scope_line_carries_the_judge_marker(self) -> None:
+        """A/B 게이트 5b 는 이 줄을 **리터럴 접두**로 찾는다 — 두 변을 묶는다.
+
+        표지의 값은 `ab_judge.INVENTORY_MARKER` 하나가 소유한다 — 여기에 리터럴로
+        옮겨 적으면 그것이 세 번째 사본이 되어 이 테스트가 닫으려는 결합을 다시
+        연다. 렌더가 그 바이트를 내지 않으면 게이트 5b 의 `inventory` 가 영구히 빈
+        문자열이 되어 **영원히 FAIL 하면서 사유를 "인벤토리 없음" 이라 말한다** —
+        포맷 드리프트가 산출물 결함으로 읽힌다(2026-08-15 리뷰가 적발).
+
+        위 `test_scope_line_has_three_fields` 는 `startswith("scope:")` 와 필드
+        **존재**만 보므로 공백 축을 재지 않는다. 이 테스트가 그 축이다. 정본은
+        렌더이고 상수가 따라가야 한다 — 그래서 여기서 실제 렌더 출력을 잰다.
+        """
+        import importlib.util
+        judge_path = Path(__file__).resolve().parent / "ab_judge.py"
+        spec = importlib.util.spec_from_file_location("ab_judge_for_marker", judge_path)
+        judge = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(judge)
+
+        write_jsonl(self.pdir / "s.jsonl",
+                    [assistant_text("a", gitBranch="work", cwd=str(self.box.main))])
+        rendered = self.render()
+        self.assertIn(judge.INVENTORY_MARKER, rendered,
+                      "렌더가 게이트 5b 의 표지를 더 이상 내지 않는다")
 
     def test_scope_line_has_three_fields(self) -> None:
         write_jsonl(self.pdir / "s.jsonl",
@@ -943,6 +1003,11 @@ class TestExitCodes(unittest.TestCase):
         `unparsed` 는 이 리포트의 **유일한** 손상 신호다. 거절된 파일의 깨진 줄을
         빼면 완전히 깨진 트랜스크립트가 `unparsed: 0` 으로 보고된다 — 손상이
         없다는 뜻과 구분되지 않는다.
+
+        `assertNotIn("unparsed: 0", out)` **하나만** 두면 음의 락이라, 포맷
+        문자열에서 `unparsed: %d` 를 인자와 함께 지워 필드를 통째로 없애도 통과한다
+        (리뷰가 F9 로 적발). 필드가 **존재하고 수를 담는지**를 함께 잰다 — 형제
+        필드 `commits` 에는 그 양의 짝이 이미 있었다.
         """
         module = load_script()
         pdir = self.box.projects / module.slug(str(self.box.main))
@@ -953,7 +1018,8 @@ class TestExitCodes(unittest.TestCase):
         (pdir / "broken.jsonl").write_text("{not json\n{also not\n", encoding="utf-8")
         rc, out = self.run_script(self.box.main)
         self.assertEqual(rc, 0, out)
-        self.assertNotIn("unparsed: 0", out)
+        self.assertRegex(out, r"unparsed: \d+")     # 필드가 존재하고 수를 담는다
+        self.assertNotIn("unparsed: 0", out)        # 그 수가 손상을 반영한다
 
     def test_not_a_git_repo_exits_three(self) -> None:
         """Finding 4 — main() 의 `repo_root(cwd) is None` 갈래는 새 코드인데 테스트가 없었다."""
@@ -1051,7 +1117,11 @@ class TestExitCodes(unittest.TestCase):
         os.chdir(str(self.box.main))
         module.sys.stdout = fake_stdout
         try:
-            rc = module.main(["--session-id", "none"])
+            # stderr 를 삼킨다 — 실패 경로는 이제 traceback 을 거기 낸다(H6).
+            # 안 삼키면 스위트가 매번 traceback 을 찍어, 사람이 **진짜** 실패를
+            # 잡음으로 읽는 훈련을 하게 된다.
+            with contextlib.redirect_stderr(io.StringIO()):
+                rc = module.main(["--session-id", "none"])
             fake_stdout.flush()
         finally:
             module.sys.stdout = original_stdout
@@ -1061,6 +1131,140 @@ class TestExitCodes(unittest.TestCase):
         self.assertEqual(rc, 4)
         self.assertEqual(out.count("\n"), 1)
         self.assertTrue(out.startswith("STANDUP-UNAVAILABLE: internal error"))
+
+
+class TestInternalErrorIsDiagnosable(unittest.TestCase):
+    """H6 — 스크립트 버그가 사용자에게 **데이터 문제**로 렌더되면 안 된다.
+
+    `str(exc)` 만 내면 `KeyError('blocks')` 가 `internal error ('blocks')` 가 되고,
+    `scope:` 줄이 없으니 SKILL.md 규칙 7 이 에이전트에게 *"기록을 가져오지 못했다"*
+    를 보고하게 한다 — 사용자는 원인을 자기 트랜스크립트에서 찾는다.
+    """
+
+    def setUp(self) -> None:
+        self.box = Sandbox()
+        self.module = load_script()
+        self.addCleanup(self.box.close)
+
+    def blow_up(self, exc):
+        def boom(*_args, **_kwargs):
+            raise exc
+        self.module.collect = boom
+        out, err = io.StringIO(), io.StringIO()
+        prev_cwd = os.getcwd()
+        os.chdir(str(self.box.main))
+        original_stdout = self.module.sys.stdout
+        self.module.sys.stdout = out
+        try:
+            with contextlib.redirect_stderr(err):
+                rc = self.module.main(["--session-id", "none"])
+        finally:
+            self.module.sys.stdout = original_stdout
+            os.chdir(prev_cwd)
+        return rc, out.getvalue(), err.getvalue()
+
+    def test_the_exception_type_reaches_stdout(self) -> None:
+        rc, out, _ = self.blow_up(KeyError("blocks"))
+        self.assertEqual(rc, 4)
+        self.assertIn("KeyError", out)
+        self.assertEqual(out.count("\n"), 1, "stdout 한 줄 계약: %r" % out)
+
+    def test_the_traceback_goes_to_stderr_not_stdout(self) -> None:
+        """fork 답변은 stdout 만 읽는다 — traceback 이 거기 섞이면 계약이 깨진다."""
+        _, out, err = self.blow_up(KeyError("blocks"))
+        self.assertIn("Traceback", err)
+        self.assertIn("prepare_standup.py", err)
+        self.assertNotIn("Traceback", out)
+
+
+class TestPairingAcrossBranches(unittest.TestCase):
+    """H5 — 답변된 결정이 `(미답)` 으로 렌더되던 자리.
+
+    한 세션이 메인 리포 → 워크트리로 이동하면 `AskUserQuestion` 호출과 그
+    `tool_result` 가 브랜치 전환을 사이에 두고 갈린다. 짝짓기를 브랜치 필터
+    **안에서** 하면 그 짝이 깨져 `unpaired` 가 부풀고, SKILL.md 규칙 4-1 이
+    사용자가 **고른** 질문에 `(미답)` 을 찍는다.
+    """
+
+    def setUp(self) -> None:
+        self.module = load_script()
+        self.call = rec(type="assistant", gitBranch="work", message={"content": [
+            {"type": "tool_use", "name": "AskUserQuestion", "id": "q1",
+             "input": {"questions": [{"question": "무엇으로 할까?"}]}}]})
+        self.answer = rec(type="user", gitBranch="other", message={"content": [
+            {"type": "tool_result", "tool_use_id": "q1", "content": "골랐다"}]})
+
+    def test_the_fixture_actually_separates_the_two_readings(self) -> None:
+        """계측기 확인 — 필터 안에서만 보면 짝이 실제로 깨지는가.
+
+        깨지지 않는 픽스처면 아래 락은 어떤 구현으로도 통과한다.
+        """
+        self.assertEqual(self.module.count([self.call])["unpaired"], 1)
+
+    def test_an_answer_outside_the_branch_filter_still_pairs(self) -> None:
+        stats = self.module.count([self.call],
+                                  results_from=[self.call, self.answer])
+        self.assertEqual(stats["unpaired"], 0)
+        self.assertEqual(stats["decisions"], 1, "계수는 여전히 범위 안에서만 한다")
+
+    def test_a_genuinely_unanswered_call_is_still_unpaired(self) -> None:
+        """양의 짝 — 짝짓기를 넓혔다고 **진짜 미답**이 사라지면 안 된다.
+
+        비대화형 실행에는 답변 채널이 없어 그런 질문이 실제로 생기고, 그것을
+        고른 것처럼 제시하면 안 된다(SKILL.md 규칙 4-1).
+        """
+        stats = self.module.count([self.call], results_from=[self.call])
+        self.assertEqual(stats["unpaired"], 1)
+
+
+class TestWorktreeDiscovery(unittest.TestCase):
+    """H3 — 워크트리는 리포 경로 **밖**에 놓일 수 있다.
+
+    같은 파일의 `classify` 는 그 전제 때문에 path-containment 판정을 **명시적으로
+    기각**해 놓고, 후보 수집은 리포 경로의 slug 접두 하나로만 하고 있었다 —
+    밖에 만든 워크트리에서는 `/standup` 이 **현재 세션조차** 못 찾는다.
+    """
+
+    def setUp(self) -> None:
+        self.box = Sandbox()
+        self.module = load_script()
+        self.addCleanup(self.box.close)
+        self.outside = self.box.root / "outside-worktree"
+        git("worktree", "add", "-q", "-b", "outside", str(self.outside),
+            cwd=self.box.main)
+
+    def seed(self, path: Path, name: str) -> str:
+        target = self.box.project_dir(path)
+        write_jsonl(target / name,
+                    [assistant_text("x", gitBranch="work", cwd=str(path))])
+        return str(target / name)
+
+    def test_the_fixture_is_actually_outside_the_repo_prefix(self) -> None:
+        """계측기 확인 — 밖의 워크트리 slug 이 리포 slug 접두로 시작하면
+        앞선 판도 통과하므로 이 클래스가 아무것도 재지 못한다."""
+        self.assertFalse(
+            self.module.slug(str(self.outside)).startswith(
+                self.module.slug(str(self.box.main))),
+            "픽스처가 리포 경로 안에 있다 — 축이 아니다")
+
+    def test_a_worktree_outside_the_repo_path_is_discovered(self) -> None:
+        wanted = self.seed(self.outside, "s.jsonl")
+        self.assertIn(wanted, self.module.candidate_paths(str(self.box.main)))
+
+    def test_the_main_repo_is_still_discovered(self) -> None:
+        """양의 짝 — 워크트리 열거가 메인 리포를 밀어내면 안 된다."""
+        wanted = self.seed(self.box.main, "m.jsonl")
+        self.assertIn(wanted, self.module.candidate_paths(str(self.box.main)))
+
+    def test_a_failed_worktree_listing_degrades_to_the_repo_alone(self) -> None:
+        """강등 — `git worktree list` 가 죽어도 메인 리포는 남는다.
+
+        누락된 능력이 crash 가 아니라 축소로 나타나야 한다.
+        """
+        wanted = self.seed(self.box.main, "m.jsonl")
+        self.module.worktree_paths = lambda cwd: []
+        found = self.module.candidate_paths(str(self.box.main))
+        self.assertIn(wanted, found)
 
 
 if __name__ == "__main__":

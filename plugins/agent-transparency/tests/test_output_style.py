@@ -104,12 +104,19 @@ def check_moments(text: str) -> list[str]:
 
 
 def check_boundaries(text: str) -> list[str]:
-    """AC4 — Trigger boundaries 문단 + 5개 용어 + settled 의 제외절."""
+    """AC4 — Trigger boundaries 문단 + 5개 용어 + settled 의 제외절.
+
+    **창의 끝은 문단 구분(빈 줄)이다 — 피검 파일의 산문이 아니다.** 앞선 판은
+    `"\\n\\nExample,"` 을 종결자로 썼는데 그 문장은 피검 파일 자신이 쥐고 있다:
+    *"For example,"* 로 리워딩하면 `find` 가 `-1` 을 돌려주고 창이 **파일 끝까지**
+    벌어져, 아래 제외절의 위치 축이 조용히 죽는다(리뷰가 G7 로 적발). 앵커를
+    피검자가 통제하는 문자열에 걸면 피검자가 자기를 감사에서 빼낼 수 있다.
+    """
     bad = []
     start = text.find("**Trigger boundaries.**")
     if start < 0:
         return ["Trigger boundaries 문단 없음"]
-    end = text.find("\n\nExample,", start)
+    end = text.find("\n\n", start)
     para = text[start:end if end > 0 else len(text)]
     for key in BOUNDARY_KEYS:
         if key not in para:
@@ -259,6 +266,26 @@ class TestMutation(unittest.TestCase):
         mutated = self.text.replace(clause, "")
         mutated = mutated.rstrip() + "\n\n" + clause + "\n"
         self.assertNotEqual(check_boundaries(mutated), [])
+
+    def test_the_window_survives_rewording_of_the_following_prose(self) -> None:
+        """G7 — 창 종결자가 **피검 파일이 통제하는 산문**이면 안 된다.
+
+        앞선 판은 문단 뒤에 오는 `"Example,"` 로 창을 닫았다. 파일이 그 문장을
+        *"For example,"* 로 바꾸면 창이 파일 끝까지 벌어져, 바로 위 테스트가 재는
+        **위치 축이 조용히 사라진다** — 리워딩하는 사람은 자기가 감사를 껐다는
+        것을 모른다. 두 축을 함께 흔든다: 산문을 리워딩한 **뒤에도** 제외절 이동이
+        여전히 red 여야 한다.
+        """
+        reworded = self.text.replace("\n\nExample, just before",
+                                     "\n\nFor example, just before")
+        self.assertNotIn("\n\nExample,", reworded,
+                         "mutation 이 안 먹었다 — 계측기 고장")
+        self.assertEqual(check_boundaries(reworded), [],
+                         "리워딩만으로 실물이 red 가 되면 과잉이다")
+        clause = "Formatting, naming, and the order of independent steps are not that."
+        moved = reworded.replace(clause, "").rstrip() + "\n\n" + clause + "\n"
+        self.assertNotEqual(check_boundaries(moved), [],
+                            "산문 리워딩 하나로 위치 축이 죽었다")
 
     def test_format_scope_removed(self) -> None:
         mutated = self.text.replace("**When you explain at the moments above**, use",

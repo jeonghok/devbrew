@@ -23,6 +23,15 @@ PLUGIN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # 판정자 호출 한도(초) — 없으면 hang 이 머지 게이트를 영원히 막는다. 만료도
 # 파싱 실패와 같은 취급이다: fail-closed 로 그 표를 no 로 계산한다.
 JUDGE_TIMEOUT_S = int(os.environ.get("AB_JUDGE_TIMEOUT_S", "600"))
+# 게이트 5b 가 트랜스크립트에서 인벤토리 레코드를 찾는 표지.
+# **`scripts/prepare_standup.py` 의 `render_inventory` 가 내는 첫 줄의 접두다** —
+# 공백 세 칸까지 포함해 그쪽 포맷과 바이트로 일치해야 한다. 두 변을 묶는 것이
+# 없던 동안, 렌더 포맷의 공백 하나만 바뀌어도 `inventory` 가 영구히 빈 문자열이
+# 되고 게이트 5b 는 영원히 FAIL 하면서 사유를 *"인벤토리 없음"* 이라 말한다 —
+# 포맷 드리프트가 산출물 결함으로 읽힌다(2026-08-15 리뷰가 적발).
+# 이 상수를 이름으로 올려 두어야 그 결합을 테스트가 붙잡을 수 있다:
+# `test_prepare_standup.TestRender.test_rendered_scope_line_carries_the_judge_marker`.
+INVENTORY_MARKER = "scope:   repo="
 
 
 def expected_runs():
@@ -64,10 +73,21 @@ def parse_index(text):
             elif token != "-":
                 entry["sid"] = token
         prior = parsed.get((cond, task, index))
-        if prior and prior.get("flag") and entry["flag"] is None:
-            entry["flag"] = prior["flag"]
+        if prior:
+            if prior.get("flag") and entry["flag"] is None:
+                entry["flag"] = prior["flag"]
+            if prior.get("worker_rc") is not None and entry["worker_rc"] is not None:
+                # 러너는 키당 `worker_rc` 줄을 **정확히 한 번** 쓴다(모호 스냅샷일
+                # 때만 앞에 `worker_rc` 없는 플래그 줄이 는다). 두 번째가 있다는
+                # 것은 원장에 줄이 덧붙여졌거나 러너가 깨진 것이다 — 뒷줄이 앞줄을
+                # 조용히 덮으면 **실패한 실행이 통과로 뒤집힌다**(2026-08-15 리뷰).
+                # 어느 쪽이든 판정 근거가 못 되므로 그 키를 fail 로 표시한다.
+                entry["flag"] = LEDGER_DUPLICATE
         parsed[(cond, task, index)] = entry
     return parsed
+
+
+LEDGER_DUPLICATE = "ledger=duplicate"
 
 
 def is_failed(parsed, key):
@@ -78,11 +98,53 @@ def is_failed(parsed, key):
     # `flag` 는 None 일 수 있다 — `.get("flag", "")` 는 **키가 있고 값이 None** 인
     # 경우 None 을 그대로 돌려주므로 `or ""` 가 필요하다.
     flag = entry.get("flag") or ""
-    if flag in ("setup=failed", "setup=skipped"):
+    if flag in ("setup=failed", "setup=skipped", LEDGER_DUPLICATE):
         return True
     if flag.startswith("snapshot=ambiguous"):
         return True
     return entry.get("worker_rc") != 0
+
+
+def parse_tests(text):
+    """게이트 2 원장 — `<cond> <i> <field>=<값>` 을 **키당 한 번만** 읽는다.
+
+    앞선 판은 `"on 1 visible=0" in tests_text` 로 **부분 문자열 포함**을 봤다.
+    포함 검사는 *"이 문자열이 파일 어딘가에 있다"* 까지만 말하므로, 진짜 결과가
+    `visible=1` 이어도 아래에 `visible=0` 한 줄을 덧붙이면 통과가 된다 — 세 다리
+    전부가 그렇게 뒤집혔고, 그때 원장은 `--plugin-dir` 로 피검체에게 통째로 건네진
+    트리 안에 있었다(2026-08-15 리뷰가 재현).
+
+    러너는 각 `(cond, i, field)` 를 정확히 한 번 쓴다. 두 번 나오면 값이 같든
+    다르든 **충돌**이다 — 덧붙임이거나 러너 버그이고, 어느 쪽도 통과로 읽으면
+    안 된다. `(값 사전, 충돌 키 집합)` 을 돌려준다.
+    """
+    values, conflicts = {}, set()
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) != 3 or "=" not in parts[2]:
+            continue
+        try:
+            index = int(parts[1])
+        except ValueError:
+            continue
+        field, value = parts[2].split("=", 1)
+        key = (parts[0], index, field)
+        if key in values:
+            conflicts.add(key)
+        values[key] = value
+    return values, conflicts
+
+
+def leg_ok(values, conflicts, cond, index, field, want):
+    """게이트 2 의 한 다리. 충돌이면 `None` — *"통과가 아니다"* 와 구별된다.
+
+    `False` 와 `None` 을 섞으면 사유가 *"오라클이 떨어졌다"* 로 보고되어, 원장이
+    위조됐다는 사실이 산출물 결함으로 읽힌다.
+    """
+    key = (cond, index, field)
+    if key in conflicts:
+        return None
+    return values.get(key) == want
 
 
 def transcript_for(sid):
@@ -96,7 +158,14 @@ def transcript_for(sid):
 
 
 def read_records(path):
-    records = []
+    """손상 줄은 **세어서 알린다** — 조용히 버리면 판정이 부분 기록 위에서 돈다.
+
+    형제인 `scripts/prepare_standup.py` 의 같은 이름 함수는 같은 형식에 대해
+    정반대 결정을 내린다 — 손상 줄을 세어 `unparsed:` 로 내고 그것을 *"유일한
+    손상 신호"* 라 부른다. 여기서만 조용히 버리면 트랜스크립트가 잘렸는지 아무도
+    모르는 채 게이트가 판정된다(리뷰가 I2 로 적발).
+    """
+    records, broken = [], 0
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
             line = line.strip()
@@ -105,7 +174,11 @@ def read_records(path):
             try:
                 records.append(json.loads(line))
             except ValueError:
-                pass
+                broken += 1
+    if broken:
+        sys.stderr.write(
+            "[ab_judge] %s: 파싱 불가 %d 줄 — 판정이 부분 기록 위에서 돈다\n"
+            % (os.path.basename(path), broken))
     return records
 
 
@@ -273,20 +346,20 @@ def load_rubric(reference_text, letter):
     return prefix + "\n" + body
 
 
-def parse_vote(raw):
-    """엄격 JSON **한 줄**. 어긋나면 그 표 전체를 `no` 로 계산한다.
+def vote_or_reason(raw):
+    """`(표, 실패 사유 또는 None)` — 사유가 있어야 두 사건이 구분된다.
 
-    "한 줄" 을 실제로 강제한다 — 앞선 판은 `json.loads` 에 통째로 넘겨
-    pretty-print 된 여러 줄 JSON 도 받아들였고, 그러면 문서가 약속한
-    fail-closed 규약이 이름만 남는다(리뷰가 적발). 관대하게 읽을수록
-    판정자가 형식을 어길수록 통과하기 쉬워진다.
+    *"판정자가 형식을 어겼다"* 와 *"산출물이 루브릭에 떨어졌다"* 는 둘 다 표가
+    전부 `no` 다. 사유를 안 내면 호출부가 그 둘을 구분할 방법이 없어, 판정자
+    쪽 고장이 산출물 결함으로 보고된다(리뷰가 I1 로 적발 — `rc=0` 인데 stdout 이
+    비거나 파싱 불가인 경로에는 마커도 stderr 도 없었다).
     """
     fallback = dict((q, "no") for q in QUESTIONS)
     text = (raw or "").strip()
     if not text:
-        return fallback
+        return fallback, "empty-stdout"
     if "\n" in text or "\r" in text:
-        return fallback
+        return fallback, "multi-line"
     seen = []
 
     def hook(pairs):
@@ -296,16 +369,27 @@ def parse_vote(raw):
     try:
         data = json.loads(text, object_pairs_hook=hook)
     except ValueError:
-        return fallback
+        return fallback, "not-json"
     if not isinstance(data, dict):
-        return fallback
+        return fallback, "not-an-object"
     if len(seen) != len(set(seen)):          # 중복 키
-        return fallback
+        return fallback, "duplicate-key"
     if set(data) != set(QUESTIONS):          # 누락 · 추가
-        return fallback
+        return fallback, "wrong-key-set"
     if any(data[q] not in ("yes", "no") for q in QUESTIONS):
-        return fallback
-    return dict((q, data[q]) for q in QUESTIONS)
+        return fallback, "bad-value"
+    return dict((q, data[q]) for q in QUESTIONS), None
+
+
+def parse_vote(raw):
+    """엄격 JSON **한 줄**. 어긋나면 그 표 전체를 `no` 로 계산한다.
+
+    "한 줄" 을 실제로 강제한다 — 앞선 판은 `json.loads` 에 통째로 넘겨
+    pretty-print 된 여러 줄 JSON 도 받아들였고, 그러면 문서가 약속한
+    fail-closed 규약이 이름만 남는다(리뷰가 적발). 관대하게 읽을수록
+    판정자가 형식을 어길수록 통과하기 쉬워진다.
+    """
+    return vote_or_reason(raw)[0]
 
 
 def tally(votes):
@@ -331,7 +415,8 @@ def _all_no(error):
     vote["_error"] = error
     # 강등이 사람에게 안 닿으면 그것은 강등이 아니라 통과다(설계 §7). 디스크에만
     # 남기면 실행 중에는 안 보이고, 게이트가 왜 떨어졌는지 사후에야 알게 된다.
-    sys.stderr.write("[ab_judge] 판정자 호출 실패 — 표를 no 로 계산한다 (%s)\n" % error)
+    sys.stderr.write("[ab_judge] 판정자 표를 얻지 못했다 — 표를 no 로 계산한다 (%s)\n"
+                     % error)
     return vote
 
 
@@ -362,7 +447,34 @@ def ask_judge(rubric, block, model, effort):
         return _all_no(type(exc).__name__)
     if proc.returncode != 0:
         return _all_no("rc=%d" % proc.returncode)
-    return parse_vote(proc.stdout.decode("utf-8", "replace"))
+    vote, reason = vote_or_reason(proc.stdout.decode("utf-8", "replace"))
+    if reason:
+        # `rc=0` 인데 표를 못 읽었다 — 판정자가 형식을 어긴 것이지 산출물이 루브릭에
+        # 떨어진 것이 아니다. 표시 없이 no 로 넘기면 그 둘이 같은 표로 보고된다.
+        return _all_no("unparsable:%s" % reason)
+    return vote
+
+
+def find_inventory(records):
+    """게이트 5b 의 인벤토리 레코드 — **피검체 자신의 말은 제외한다.**
+
+    앞선 판은 표지를 담은 *아무* 레코드나 인벤토리로 삼았다. 준비 스크립트가
+    강등해 헤더를 못 냈을 때, 표지를 흉내 낸 **모델 자신의 답변 레코드**가 유일한
+    매치가 되어 피검체가 자기 증거를 제조한다 — 게다가 그 매치 때문에
+    `wrap_two_blocks` 의 「인벤토리 없음」 가드가 발동하지 못한다(리뷰가 B2 로
+    적발). 루브릭 C 의 Q2(*"총수 대비 몇 개를 읽었나"*)가 피검체가 지어낸 총수
+    위에서 채점된다.
+
+    인벤토리는 스킬 본문의 `` !`python3 …` `` 확장으로 들어오므로 어시스턴트
+    레코드가 아니다 — 그 경계가 여기서 강제된다.
+    """
+    for record in records:
+        if record.get("type") == "assistant":
+            continue
+        blob = json.dumps(record, ensure_ascii=False)
+        if INVENTORY_MARKER in blob:
+            return blob
+    return ""
 
 
 def wrap_two_blocks(inventory, answer):
@@ -381,7 +493,12 @@ def wrap_two_blocks(inventory, answer):
 
 def judge_span(rubric, block, model, effort, artifacts=None, label=""):
     if not block.strip():
-        return False                          # 구간이 비면 fail — 설명이 없었다는 뜻이다
+        # 구간이 비면 fail — 설명이 없었다는 뜻이다. **그래도 보존한다**: 앞선 판은
+        # 여기서 곧장 반환해, REFERENCE.md 가 *"흔한 경우"* 라 이름 붙인 이 실패가
+        # 아무 아티팩트도 안 남기는 **유일한** 실패가 됐다(리뷰가 I4 로 적발).
+        # 무엇을 보고 떨어뜨렸는지 되짚을 수 없으면 계측을 고칠 근거가 없다.
+        _preserve(artifacts, label, block, [], False)
+        return False
     votes = [ask_judge(rubric, block, model, effort) for _ in range(3)]
     verdict = tally(votes)
     _preserve(artifacts, label, block, votes, verdict)
@@ -409,25 +526,33 @@ def _preserve(artifacts, label, block, votes, verdict):
         pass
 
 
+def _read_text(path):
+    """`open(...).read()` 를 쓰지 않는다 — 핸들을 안 닫으면 `ResourceWarning` 이
+    스위트 출력을 덮어 **진짜 경고를 못 보게** 한다(`main()` 에 커버리지가 생기면서
+    드러났다)."""
+    with open(path, "r", encoding="utf-8") as fh:
+        return fh.read()
+
+
 def main(argv):
     if len(argv) != 2:
         raise SystemExit("usage: ab_judge.py <out/RUN>")
     out = argv[1]
     manifest = dict(
         line.split("=", 1) for line in
-        open(os.path.join(out, "manifest.txt"), encoding="utf-8").read().splitlines()
+        _read_text(os.path.join(out, "manifest.txt")).splitlines()
         if "=" in line)
     model, effort = manifest["judge_model"], manifest["judge_effort"]
-    reference = open(os.path.join(PLUGIN_DIR, "REFERENCE.md"), encoding="utf-8").read()
+    reference = _read_text(os.path.join(PLUGIN_DIR, "REFERENCE.md"))
     rubrics = dict((letter, load_rubric(reference, letter)) for letter in "ABCD")
 
     index_path = os.path.join(out, "index.txt")
-    parsed = parse_index(open(index_path, encoding="utf-8").read()
-                         if os.path.exists(index_path) else "")
+    parsed = parse_index(_read_text(index_path) if os.path.exists(index_path) else "")
     tests_text = ""
     tests_path = os.path.join(out, "tests.txt")
     if os.path.exists(tests_path):
-        tests_text = open(tests_path, encoding="utf-8").read()
+        tests_text = _read_text(tests_path)
+    tests_values, tests_conflicts = parse_tests(tests_text)
 
     artifacts = os.path.join(out, "judge")
     results, reasons = {}, []
@@ -452,11 +577,15 @@ def main(argv):
             note(1, (not failed) and gate1_ok(records),
                  "%s — 최종 응답 부재 또는 표 행 %d개" % (key, rows))
         if task == "b":
-            visible = "%s %d visible=0" % (cond, i) in tests_text
-            oracle = "%s %d oracle=0" % (cond, i) in tests_text
-            intact = "%s %d hash=ok" % (cond, i) in tests_text
-            note(2, (not failed) and visible and oracle and intact,
-                 "%s — visible=%s oracle=%s hash=%s" % (key, visible, oracle, intact))
+            visible = leg_ok(tests_values, tests_conflicts, cond, i, "visible", "0")
+            oracle = leg_ok(tests_values, tests_conflicts, cond, i, "oracle", "0")
+            intact = leg_ok(tests_values, tests_conflicts, cond, i, "hash", "ok")
+            forged = None in (visible, oracle, intact)
+            note(2, (not failed) and (not forged)
+                 and bool(visible) and bool(oracle) and bool(intact),
+                 "%s — visible=%s oracle=%s hash=%s%s"
+                 % (key, visible, oracle, intact,
+                    " · 원장에 중복 키(덧붙임 의심)" if forged else ""))
         if task == "c" and cond == "on":
             note(3, (not failed) and judge_span(
                 rubrics["A"], span_after_tool(records, "Agent"), model, effort,
@@ -496,12 +625,7 @@ def main(argv):
             else:
                 why = "%s — 결정 질문 %d건 중 인용 %d건" % (key, len(questions), len(quoted))
             note("5a", (not failed) and len(quoted) >= 1, why)
-            inventory = ""
-            for record in records:
-                blob = json.dumps(record, ensure_ascii=False)
-                if "scope:   repo=" in blob:
-                    inventory = blob
-                    break
+            inventory = find_inventory(records)
             two_blocks = wrap_two_blocks(inventory, answer)
             note("5b", (not failed) and judge_span(
                      rubrics["C"], two_blocks, model, effort, artifacts, "5b-%s" % i),

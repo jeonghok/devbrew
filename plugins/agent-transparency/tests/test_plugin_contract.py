@@ -6,6 +6,7 @@ Run:
 """
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -20,6 +21,128 @@ PLUGIN_DIR = REPO_ROOT / "plugins" / "agent-transparency"
 
 def read(rel: str) -> str:
     return (PLUGIN_DIR / rel).read_text(encoding="utf-8")
+
+
+TEST_MODULES = sorted((PLUGIN_DIR / "tests").glob("test_*.py"))
+
+
+def check_main_guard_last(text: str, label: str) -> list[str]:
+    """`if __name__ == "__main__":` 가 **마지막 최상위 문**인가.
+
+    순수 함수 — 실물과 mutation 문자열 양쪽에 같은 함수를 돌린다. 가드가 아예
+    없는 모듈은 검사 대상이 아니다(빈 리스트).
+    """
+    body = ast.parse(text).body
+    for i, node in enumerate(body):
+        if isinstance(node, ast.If) and "__main__" in ast.dump(node.test):
+            if i != len(body) - 1:
+                return ["%s: __main__ 가드 뒤에 최상위 문 %d개 — 직접 실행 시 그만큼 사라진다"
+                        % (label, len(body) - 1 - i)]
+    return []
+
+
+class TestMainGuardIsLast(unittest.TestCase):
+    """`unittest.main()` **아래**에 정의된 테스트는 직접 실행 시 통째로 사라진다.
+
+    `unittest.main()` 이 `sys.exit()` 를 부르므로 그 아래는 파싱조차 되지 않는다.
+    실측(2026-08-15): 두 파일에서 10개가 **exit 0 · 무경고**로 증발했고 그중에
+    신뢰 경계(P21) 락과 오라클 신호 락이 있었다. `-m unittest` 와 `discover` 는
+    모듈을 import 하므로 초록이라, CI 가 없는 이 리포에서 사람이 `python3 <file>`
+    로 돌리는 습관과 정확히 어긋난다 — 조용한 쪽이 사람이 쓰는 쪽이다.
+
+    **이 클래스는 파일 앞쪽에 있어야 한다.** 뒤쪽에 두면 가드가 다시 중간으로
+    옮겨질 때 이 락 자신이 함께 사라져 재발을 못 잡는다.
+    """
+
+    def test_every_test_module_has_its_guard_last(self) -> None:
+        self.assertGreaterEqual(
+            len(TEST_MODULES), 5,
+            "코퍼스를 못 읽었다 — 통과가 '문제 없음' 을 뜻하지 않는다")
+        bad: list[str] = []
+        for path in TEST_MODULES:
+            bad += check_main_guard_last(path.read_text(encoding="utf-8"), path.name)
+        self.assertEqual(bad, [])
+
+    def test_a_statement_after_the_guard_is_detected(self) -> None:
+        """계측기 확인 — 가드 뒤에 클래스를 하나 붙이면 red 가 나야 한다.
+
+        checker 를 **실물 파일**에 돌려 초록임을 먼저 확인하고 같은 checker 를
+        mutation 에 돌린다. 로컬 리터럴에 술어를 재구현하면 프로덕션 술어가
+        느슨해져도 이 검사가 못 잡는다(리뷰가 R4 로 이름 붙인 실패 모드).
+        """
+        text = read("tests/test_plugin_contract.py")
+        self.assertEqual(check_main_guard_last(text, "real"), [])
+        mutated = text + "\n\n\nclass TestGhost(unittest.TestCase):\n    pass\n"
+        self.assertNotEqual(check_main_guard_last(mutated, "mutated"), [])
+
+
+def check_class_body_shape(text: str, label: str) -> list[str]:
+    """클래스 본문의 구조 결함 두 종 — **떠 있는 문자열** · **메서드 중복 정의**.
+
+    순수 함수 — 실물과 mutation 문자열 양쪽에 같은 함수를 돌린다.
+
+    실측(2026-08-15): `class TestSubagentExclusion(unittest.TestCase):` 줄이
+    통째로 사라져 그 docstring 이 맨몸 표현식이 되고, 아래 멤버가 **앞 클래스로
+    재부모화**되면서 `setUp` 이 조용히 override 됐다. 스위트는 210 green 이었고
+    skip 도 0 이라 **테스트 개수로도 드러나지 않는다** — AST 로만 보인다.
+    """
+    bad: list[str] = []
+    for node in ast.walk(ast.parse(text)):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        for i, stmt in enumerate(node.body):
+            if i == 0:
+                continue                        # docstring 자리
+            if (isinstance(stmt, ast.Expr)
+                    and isinstance(stmt.value, ast.Constant)
+                    and isinstance(stmt.value.value, str)):
+                bad.append("%s:%d %s — 클래스 본문에 떠 있는 문자열"
+                           " (class 줄이 지워졌을 때의 모양이다)"
+                           % (label, stmt.lineno, node.name))
+        seen: dict[str, int] = {}
+        for stmt in node.body:
+            if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if stmt.name in seen:
+                    bad.append("%s:%d %s.%s — 중복 정의 (앞의 %d행이 조용히 죽는다)"
+                               % (label, stmt.lineno, node.name, stmt.name,
+                                  seen[stmt.name]))
+                seen[stmt.name] = stmt.lineno
+    return bad
+
+
+class TestClassBodiesAreWellFormed(unittest.TestCase):
+    """지워진 `class` 줄은 **개수로도 skip 으로도** 드러나지 않는다.
+
+    D1 의 재발 방지. 이 락이 재는 두 축은 그 사고의 원인과 증상이다 — 떠 있는
+    문자열(원인: class 줄 소실)과 메서드 중복 정의(증상: 재부모화된 `setUp` 이
+    앞 클래스의 것을 덮음).
+    """
+
+    def test_every_test_module_is_well_formed(self) -> None:
+        self.assertGreaterEqual(
+            len(TEST_MODULES), 5,
+            "코퍼스를 못 읽었다 — 통과가 '문제 없음' 을 뜻하지 않는다")
+        bad: list[str] = []
+        for path in TEST_MODULES:
+            bad += check_class_body_shape(path.read_text(encoding="utf-8"), path.name)
+        self.assertEqual(bad, [])
+
+    def test_a_deleted_class_line_is_detected(self) -> None:
+        """계측기 확인 — D1 을 그대로 재현한다(실물에서 `class` 줄 하나 삭제)."""
+        text = read("tests/test_prepare_standup.py")
+        self.assertEqual(check_class_body_shape(text, "real"), [])
+        victim = "class TestSubagentExclusion(unittest.TestCase):\n"
+        self.assertIn(victim, text, "재현 앵커가 사라졌다 — mutation 이 착지하지 않는다")
+        mutated = text.replace(victim, "")
+        self.assertNotEqual(check_class_body_shape(mutated, "mutated"), [])
+
+    def test_a_duplicated_method_is_detected(self) -> None:
+        """중복 정의 축 — 떠 있는 문자열 없이 메서드만 겹쳐도 잡아야 한다."""
+        mutated = ("import unittest\n\n\n"
+                   "class T(unittest.TestCase):\n"
+                   "    def setUp(self): pass\n"
+                   "    def setUp(self): pass\n")
+        self.assertNotEqual(check_class_body_shape(mutated, "dup"), [])
 
 
 class TestManifest(unittest.TestCase):
@@ -61,20 +184,79 @@ class TestManifest(unittest.TestCase):
 class TestMarketplaceEntry(unittest.TestCase):
     """D12 — marketplace 에 등록되지 않으면 설치가 안 된다."""
 
-    def test_entry_exists_and_points_at_plugin(self) -> None:
+    def setUp(self) -> None:
         market = json.loads(
             (REPO_ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8")
         )
-        hits = [p for p in market["plugins"] if p.get("name") == "agent-transparency"]
-        self.assertEqual(len(hits), 1)
-        self.assertEqual(hits[0]["source"], "./plugins/agent-transparency")
+        self.hits = [p for p in market["plugins"] if p.get("name") == "agent-transparency"]
+
+    def test_entry_exists_and_points_at_plugin(self) -> None:
+        self.assertEqual(len(self.hits), 1)
+        self.assertEqual(self.hits[0]["source"], "./plugins/agent-transparency")
+
+    def test_description_matches_the_manifest(self) -> None:
+        """marketplace 설명은 `plugin.json` 의 **세 번째 사본**이다.
+
+        AC26 이 `plugin.json` ↔ output style frontmatter 를 이미 묶는데 marketplace
+        만 풀려 있었다. 실측(2026-08-15): 이 항목이 훅 제거 뒤에도 *"an output style,
+        a SubagentStop hook, and /standup"* 을 광고했고 **리뷰어 5명이 독립 적발**
+        했다 — 사용자가 설치 **전**에 읽는 유일한 문장이라 가장 먼저 틀리면 안 되는
+        자리인데, 여기만 잠기지 않았다.
+
+        `test_no_hook_event_key_anywhere_in_plugin` 이 못 본 이유도 구조적이다 —
+        그 락은 `PLUGIN_DIR.rglob` 이라 **리포 루트 파일을 창 안에 담지 못한다**.
+        문장 하나를 고치는 대신 두 사본의 동일성을 잠가 이 클래스를 닫는다.
+        """
+        self.assertEqual(len(self.hits), 1)
+        manifest = json.loads(read(".claude-plugin/plugin.json"))
+        self.assertEqual(self.hits[0]["description"], manifest["description"])
+
+
+def gitignore_rules(text: str) -> list[str]:
+    """주석과 빈 줄을 걷어낸 **실효 규칙 목록**.
+
+    순수 함수 — 실물과 mutation 문자열에 같은 함수를 돌린다.
+
+    **이빨은 목록에 대한 정확한 줄 일치에 있다.** 앞선 판은 전문에 `assertIn` 하는
+    substring 검사여서, 규칙을 `# tests/out/` 로 주석 처리해도 문자열이 남아
+    통과했다 — git 은 무시를 멈추는데 락은 초록이었다(리뷰가 F1 로 적발).
+    주석 걸러내기는 gitignore 파서로서 옳은 동작일 뿐 **이 락의 이빨이 아니다**:
+    지워도 `"# tests/out/" != "tests/out/"` 라 정확 일치가 같은 결과를 낸다
+    (mutation 으로 확인 — 필터를 없애도 두 테스트 다 GREEN). 없는 보호를 락으로
+    위장하지 않으려고 여기 적어 둔다.
+    """
+    return [ln.strip() for ln in text.splitlines()
+            if ln.strip() and not ln.lstrip().startswith("#")]
 
 
 class TestGitignore(unittest.TestCase):
-    """§8 — tests/out/ 은 커밋되지 않는다(러너 산출물에 실제 트랜스크립트 사본이 있다)."""
+    """러너 산출물은 커밋되지 않는다 — `pre-standup-*.jsonl` 이 실제 트랜스크립트 사본이다.
 
-    def test_out_dir_ignored(self) -> None:
-        self.assertIn("tests/out/", read(".gitignore"))
+    v0.2.0 부터 산출물은 플러그인 트리 **밖**(`~/.claude/agent-transparency-ab/`)으로
+    나가므로, 이 규칙은 **옛 실행이 남긴 트리**를 덮는 잔여 안전망이다. 규칙을
+    지우면 그 트리가 untracked 로 떠올라 `git add -A` 한 번에 커밋된다.
+    새 위치가 트리 밖이라는 것 자체는
+    `test_ab_runner_contract.test_out_dir_is_outside_the_tree_handed_to_the_subject`
+    가 잠근다.
+    """
+
+    def test_legacy_out_dir_is_ignored(self) -> None:
+        self.assertIn("tests/out/", gitignore_rules(read(".gitignore")))
+
+    def test_a_disabled_rule_does_not_count(self) -> None:
+        """계측기 확인 — 규칙 **무력화**가 red 를 내는가.
+
+        되돌리기 축이 아니라 무력화 축으로 흔든다: 문자열은 파일에 그대로 남고
+        git 만 무시를 멈추는 상태를 만든다. 두 판정 방식의 차이가 이 테스트 **안에서**
+        나란히 보이므로 외부 mutation 이 필요 없다 — 같은 문자열이 전문에는 있고
+        규칙 목록에는 없다.
+        """
+        text = read(".gitignore")
+        self.assertIn("tests/out/", gitignore_rules(text))
+        disabled = text.replace("tests/out/", "# tests/out/")
+        self.assertIn("tests/out/", disabled,
+                      "전문 substring 으로 읽으면 여기서 통과였다 — 그 차이가 이 락의 이빨이다")
+        self.assertNotIn("tests/out/", gitignore_rules(disabled))
 
 
 SKILL_REL = "skills/briefing-current-state/SKILL.md"
@@ -119,33 +301,61 @@ class TestSkillFrontmatter(unittest.TestCase):
         self.assertEqual(self.meta.get("background"), "false")
 
 
+DO = "할 일"
+READ = "무엇을 읽고 무엇을 읽지 않나"
+
+# 그룹 → (그 규칙이 살아야 하는 **절**, 프래그먼트들)
 SKILL_FRAGMENTS = {
-    "①-세-레코드-타입": ['type=="user"', 'type=="queue-operation"',
-                          'attachment.type=="queued_command"'],
-    "②-last-prompt-제외": ['type=="last-prompt"'],
-    "③-텍스트-없는-레코드-건너뛰기": ["텍스트 없는 레코드를 건너뛴다"],
-    "④-읽지-않는-것": ["`Bash` 명령 문자열", "파일 내용", "`tool_result` 본문",
-                        "에이전트 반환값 본문", "subagents/*.jsonl"],
-    "⑤-표본-하한": ["가장 최근 블록", "모든 `AskUserQuestion` 호출과 그 짝",
-                    "하한이지 상한이 아니다"],
+    "①-세-레코드-타입": (READ, ['type=="user"', 'type=="queue-operation"',
+                                  'attachment.type=="queued_command"']),
+    "②-last-prompt-제외": (READ, ['type=="last-prompt"']),
+    "③-텍스트-없는-레코드-건너뛰기": (READ, ["텍스트 없는 레코드를 건너뛴다"]),
+    "④-읽지-않는-것": (READ, ["`Bash` 명령 문자열", "파일 내용", "`tool_result` 본문",
+                                "에이전트 반환값 본문", "subagents/*.jsonl"]),
+    "⑤-표본-하한": (DO, ["가장 최근 블록", "모든 `AskUserQuestion` 호출과 그 짝",
+                          "하한이지 상한이 아니다"]),
     # I4 — spec §7 "1-0 하한 미달" 행(답변 첫 줄에 하한 미달 사실과 빠진 항목을
     # 함께 적으라는 요구)을 지시문에 심은 자리. AC35 공식 ①–⑥ 번호와는 별도
     # 그룹이다(⑥은 skill_body probe 전용) — 실물 존재만 여기서 락 건다.
-    "하한-미달-첫줄-보고": ["1-0 하한에 못 미치면", "하한 미달 사실과 어느 파일·어느 질문인지"],
+    "하한-미달-첫줄-보고": (DO, ["1-0 하한에 못 미치면",
+                                  "하한 미달 사실과 어느 파일·어느 질문인지"]),
 }
+
+HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+
+
+def skill_section(text: str, heading: str) -> str:
+    """`## <heading>` 부터 다음 `## ` 까지 — **HTML 주석은 걷어낸다.**
+
+    이 두 가지가 F5 의 이빨이다. 파일 전문을 스캔하면 규칙 **본문을 지우고**
+    조각들을 `<!-- 폐기된 규칙 -->` 주석 안에 인용해 두는 것만으로 GREEN 이다
+    (리뷰가 적발). 규칙이 없으면 에이전트가 블록 하나만 읽고 *"192개 중 1개를
+    읽었다"* 고 적어도 계약을 만족한다 — SKILL.md 자신이 그렇게 적어 두었다.
+    """
+    marker = "## " + heading
+    start = text.find(marker)
+    if start < 0:
+        return ""
+    rest = text[start + len(marker):]
+    end = rest.find("\n## ")
+    return HTML_COMMENT.sub("", rest if end < 0 else rest[:end])
 
 
 def check_skill_facts(text: str) -> list[str]:
-    """AC35①–⑤ + I4 하한-미달 보고 — 여섯 그룹의 프래그먼트가 전부 실제로 있는지.
+    """AC35①–⑤ + I4 하한-미달 보고 — 여섯 그룹의 프래그먼트가 **자기 절 안에** 있는지.
 
     순수 함수 — 실물 SKILL.md 와 mutation 문자열 양쪽에 같은 함수를 돌려 mutation 이
     실제로 문제를 내는지 확인한다. `assertNotIn(x, text.replace(x, ""))` 는
     `str.replace` 정의상 항상 참이라 쓰지 않는다.
     """
     bad = []
-    for name, fragments in SKILL_FRAGMENTS.items():
+    for name, (heading, fragments) in SKILL_FRAGMENTS.items():
+        window = skill_section(text, heading)
+        if not window.strip():
+            bad.append("%s: 절 「%s」 가 비었거나 없다" % (name, heading))
+            continue
         for fragment in fragments:
-            if fragment not in text:
+            if fragment not in window:
                 bad.append("%s: %s" % (name, fragment))
     return bad
 
@@ -178,6 +388,38 @@ class TestSkillFactsMutation(unittest.TestCase):
 
     def setUp(self) -> None:
         self.text = read(SKILL_REL)
+
+    def test_fragments_quoted_in_a_comment_do_not_count(self) -> None:
+        """F5 — 규칙 **본문을 지우고** 조각을 주석에 인용해 두는 축.
+
+        전문 substring 으로 읽으면 여기서 GREEN 이다: 문자열은 파일에 그대로
+        남아 있고 지시문만 사라진다. 그러면 에이전트가 블록 하나만 읽고
+        *"192개 중 1개를 읽었다"* 고 적어도 계약을 만족한다.
+        """
+        victim = "하한이지 상한이 아니다"
+        self.assertIn(victim, self.text)
+        # 주석을 **같은 절 안에** 둔다. 파일 끝에 붙이면 절 윈도우 하나만으로 걸려
+        # 주석-제거 축이 아예 안 태워진다 — 그러면 이 테스트는 `HTML_COMMENT` 를
+        # 지워도 GREEN 이고, 재는 것이 두 축인 줄 알았는데 하나였다(실측).
+        gutted = self.text.replace(victim, "").replace(
+            "## " + DO, "## %s\n\n<!-- 폐기된 규칙: %s -->" % (DO, victim), 1)
+        self.assertIn(victim, gutted, "mutation 이 문자열을 지웠다 — 축이 아니다")
+        raw_window = gutted.split("## " + DO, 1)[1].split("\n## ", 1)[0]
+        self.assertIn(victim, raw_window,
+                      "조각이 **그 절 안에** 남아 있어야 주석-제거 축이 태워진다")
+        self.assertNotEqual(check_skill_facts(gutted), [])
+
+    def test_a_fragment_moved_to_another_section_does_not_count(self) -> None:
+        """절 윈도우 축 — 조각이 파일에 남아 있어도 **다른 절**에 있으면 red.
+
+        규칙은 그것을 따를 자리에 있어야 한다. 「할 일」로 옮겨진 트랜스크립트
+        사실은 「무엇을 읽고 무엇을 읽지 않나」를 읽는 에이전트에게 닿지 않는다.
+        """
+        victim = "텍스트 없는 레코드를 건너뛴다"
+        moved = self.text.replace(victim, "")
+        moved = moved.replace("## 할 일", "## 할 일\n\n%s\n" % victim, 1)
+        self.assertIn(victim, moved, "mutation 이 문자열을 지웠다 — 축이 아니다")
+        self.assertNotEqual(check_skill_facts(moved), [])
 
     def test_mutation_each_group_first_fragment_deletion_is_detected(self) -> None:
         """삭제 축 — **여섯** 그룹 각각의 대표 프래그먼트를 지우면 그때마다 red."""
@@ -477,7 +719,7 @@ README_SECTION_BODIES = {
 
 
 def check_readme_items(text: str) -> list[str]:
-    """AC25 — README 맨 앞의 다섯 항목이 실제로 그 문구를 담고 있는지.
+    """AC25 — README 맨 앞의 **네 항목**이 실제로 그 문구를 담고 있는지.
 
     순수 함수 — 실물 파일과 mutation 문자열 양쪽에 같은 함수를 돌려 mutation 이
     실제로 문제를 내는지 확인한다. `assertNotIn(fragment, text.replace(fragment, ""))`
@@ -501,16 +743,22 @@ def check_readme_items(text: str) -> list[str]:
 
 
 class TestReadme(unittest.TestCase):
-    """AC25 — README 맨 앞의 **다섯 항목**.
+    """AC25 — README 맨 앞의 필수 항목.
 
     OQ-J 가 README 공개를 요구하는데 이 AC 가 그것을 검사하지 않으면 요구가
     문서에만 남는다.
+
+    **개수를 이름·산문에 박지 않는다.** 2026-08-13 훅 제거로 다섯째 항목
+    "Hooks Installed" 가 대상 없음이 됐는데 `README_ITEMS` 만 넷으로 줄고
+    docstring 과 메서드 이름은 다섯으로 남았다 — 테스트 **이름**이 계약을 잘못
+    말하면 다음 편집자가 훅 없는 플러그인에 훅 문서를 다시 요구하게 된다.
+    항목의 정본은 `README_ITEMS` 하나다.
     """
 
     def setUp(self) -> None:
         self.text = read("README.md")
 
-    def test_all_five_items_present(self) -> None:
+    def test_all_required_items_present(self) -> None:
         self.assertEqual(check_readme_items(self.text), [])
 
     def test_warning_is_near_the_top(self) -> None:
@@ -535,7 +783,7 @@ class TestReadmeMutation(unittest.TestCase):
         self.text = read("README.md")
 
     def test_mutation_each_item_deletion_is_detected(self) -> None:
-        """삭제 축 — 다섯 항목을 각각 지우면 그때마다 red."""
+        """삭제 축 — `README_ITEMS` 의 항목을 각각 지우면 그때마다 red."""
         for name, fragment in README_ITEMS.items():
             mutated = self.text.replace(fragment, "")
             self.assertNotEqual(check_readme_items(mutated), [], name)
@@ -694,10 +942,6 @@ class TestNoHooksRemain(unittest.TestCase):
         self.assertEqual(hit, ["SubagentStop"])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 SHIPPED_PROMPTS = (
     "skills/briefing-current-state/SKILL.md",
     "agents/transcript-reader.md",
@@ -797,3 +1041,7 @@ class TestAgentTrustBoundary(unittest.TestCase):
         권한 축소가 아니다.
         """
         self.assertIn("tools: Read, Glob, Grep", self.text)
+
+
+if __name__ == "__main__":
+    unittest.main()

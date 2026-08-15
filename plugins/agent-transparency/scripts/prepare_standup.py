@@ -14,10 +14,11 @@ import re
 import subprocess
 import sys
 import time
+import traceback
 
 SLUG_RE = re.compile(r"[/.+]")
 OUT_OF_SCOPE_LIST_CAP = 20
-REJECT_REASONS = ("other-repo", "cwd-gone", "cwd-missing", "unreadable")
+REJECT_REASONS = ("other-repo", "unresolved", "cwd-gone", "cwd-missing", "unreadable")
 # 마지막 git 호출의 stderr. 강등 문구가 사유를 함께 말하기 위한 것이며,
 # 상태 파일이 아니다(프로세스 수명 안에서만 산다).
 _LAST_STDERR = {"text": ""}
@@ -80,17 +81,44 @@ def slug(path):
     return SLUG_RE.sub("-", path)
 
 
+def worktree_paths(cwd):
+    """등록된 워크트리 경로 전부. 실패하면 빈 목록.
+
+    강등돼도 호출자가 리포 루트를 항상 후보에 넣으므로 메인 리포는 남는다 —
+    워크트리만 조용히 빠진다.
+    """
+    rc, out = _run(["git", "worktree", "list", "--porcelain"], cwd=cwd)
+    if rc != 0 or not out:
+        return []
+    found = []
+    for line in out.splitlines():
+        if line.startswith("worktree "):
+            path = line[len("worktree "):].strip()
+            if path:
+                found.append(os.path.realpath(path))
+    return found
+
+
 def candidate_paths(root):
-    """접두사 글롭. 디렉토리 **바로 아래**만 본다 — `*/subagents/*.jsonl` 은
-    이 패턴에 걸리지 않으므로 인벤토리 분모에 들어오지 않는다(AC49).
+    """접두사 글롭 — **메인 리포와 등록된 워크트리 각각**에 대해. 디렉토리 바로
+    아래만 본다 — `*/subagents/*.jsonl` 은 이 패턴에 걸리지 않으므로 인벤토리
+    분모에 들어오지 않는다(AC49).
 
     접두사를 쓰는 이유: 디렉토리 이름이 작업 경로에서 만들어지고 문서화되지
     않았다. 정확한 이름을 재현하는 대신 접두사로 시작하는 디렉토리를 전부
-    대상으로 삼으면 워크트리가 몇 개든 함께 잡힌다.
+    대상으로 삼으면 그 경로 **아래의** 하위 디렉토리에서 시작한 세션도 함께 잡힌다.
+
+    **접두사 하나로는 부족하다.** 앞선 판은 메인 리포 경로의 slug 접두만 썼는데,
+    워크트리는 리포 경로 **밖**에 놓일 수 있고(같은 파일 `classify` 가 명시적으로
+    전제하는 바로 그 상황) 그러면 slug 이 그 접두로 시작하지 않아 `/standup` 이
+    **현재 세션조차 못 찾는다**(리뷰가 H3 로 적발). 그 전제 때문에 형제 술어에서는
+    path-containment 를 기각해 놓고, 후보 수집은 path-containment 로 하고 있었다.
     """
-    pattern = os.path.join(os.path.expanduser("~/.claude/projects"),
-                           slug(root) + "*", "*.jsonl")
-    return sorted(glob.glob(pattern))
+    projects = os.path.expanduser("~/.claude/projects")
+    found = set()
+    for base in [os.path.realpath(root)] + worktree_paths(root):
+        found.update(glob.glob(os.path.join(projects, slug(base) + "*", "*.jsonl")))
+    return sorted(found)
 
 
 def read_records(path):
@@ -141,17 +169,34 @@ def classify(records, our_common_dir, cache):
             seen.append(value)
     if not seen:
         return False, "cwd-missing"
-    any_present = False
+    other_repo = unresolved = False
     for cwd in seen:
         if cwd not in cache:
             cache[cwd] = git_common_dir(cwd) if os.path.isdir(cwd) else None
         if cache[cwd] == our_common_dir:
             return True, ""
         if os.path.isdir(cwd):
-            any_present = True
+            # ★ 디렉토리는 있는데 `None` 이면 **다른 리포가 아니라 판정 실패**다 —
+            #   git 호출 만료(rc 124)·`OSError`(rc 127)·권한 오류가 전부 여기로 온다.
+            #   그것을 `other-repo` 로 세면 `main()` 이 *"all N candidate file(s)
+            #   rejected (other-repo: N)"* 로 렌더해, **사용자 파일에 대한 거짓 사실
+            #   주장**이 된다 — git 호출 하나가 만료된 것뿐인데(리뷰가 H1 로 적발,
+            #   같은 레코드·같은 리포에서 만료만으로 (True,'') → (False,'other-repo')
+            #   가 나는 것을 실측).
+            #   거절은 그대로 유지한다: 해소 불가 후보를 받아들이면 남의 리포
+            #   트랜스크립트가 답변에 들어오고 그것이 `in_scope` 가 금지하는 바다.
+            #   바뀌는 것은 **사유의 이름**이지 판정이 아니다.
+            if cache[cwd] is None:
+                unresolved = True
+            else:
+                other_repo = True
+    if other_repo:
+        return False, "other-repo"
+    if unresolved:
+        return False, "unresolved"
     # 하나도 남아 있지 않으면 삭제·이동된 워크트리다 — 남의 리포와 합산하면
     # 정당한 과거 세션이 조용히 사라진다.
-    return False, ("other-repo" if any_present else "cwd-gone")
+    return False, "cwd-gone"
 
 
 def _fmt_stamp(value):
@@ -204,10 +249,34 @@ def in_scope(path, records, branch, session_id, our_common_dir=None, cache=None)
     return [r for r in picked if not _record_is_foreign(r, our_common_dir, cache)]
 
 
-def count(records):
-    """AC34 의 술어. blocks 는 **레코드가 아니라 블록**을 센다."""
+def _result_ids(records):
+    """`tool_result` 의 `tool_use_id` 집합."""
+    ids = set()
+    for record in records:
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, list):
+            continue
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "tool_result":
+                rid = item.get("tool_use_id")
+                if isinstance(rid, str):
+                    ids.add(rid)
+    return ids
+
+
+def count(records, results_from=None):
+    """AC34 의 술어. blocks 는 **레코드가 아니라 블록**을 센다.
+
+    `results_from` — 짝짓기에 쓸 결과 레코드 집합. 기본은 `records` 자신이다.
+    브랜치로 걸러낸 부분집합을 세면서 짝짓기까지 **그 안에서만** 하면, 질문과 답이
+    브랜치 전환을 사이에 두고 갈렸을 때 **답변된 결정이 `unpaired` 로 보고**되고
+    SKILL.md 규칙 4-1 이 그것에 `(미답)` 을 찍는다 — 사용자가 고른 것이 안 고른
+    것으로 렌더된다(리뷰가 H5 로 적발: 필터가 있으면 unpaired 1, 없으면 0).
+    """
     blocks = nbytes = decisions = 0
-    calls, results, stamps = set(), set(), []
+    calls, stamps = set(), []
+    results = _result_ids(records if results_from is None else results_from)
     for record in records:
         stamp = _fmt_stamp(record.get("timestamp"))
         if stamp:
@@ -233,10 +302,6 @@ def count(records):
                 #   `unpaired: 0` 으로 정상 보고된다(리뷰가 적발).
                 calls.add(item.get("id") if isinstance(item.get("id"), str)
                           else ("_unkeyed-call-%d" % decisions))
-            elif kind == "tool_result":
-                rid = item.get("tool_use_id")
-                if isinstance(rid, str):
-                    results.add(rid)
     return {
         "blocks": blocks,
         "bytes": nbytes,
@@ -284,7 +349,8 @@ def collect(root, branch, session_id):
             continue
         candidates += 1
         mine = in_scope(path, records, branch, session_id, ours, cache)
-        stats = count(mine)
+        # ★ 짝짓기는 **파일 전체**에서 한다 — 위 `count` docstring 참고.
+        stats = count(mine, results_from=records)
         whole = count(records)
         for key in totals:
             totals[key] += stats[key]
@@ -522,15 +588,24 @@ def main(argv=None):
         # 지키는 코드 자체가 죽으면 안 된다. 메시지를 UTF-8 로 왕복시켜
         # 인코딩 불가 문자(예: 홑 서로게이트)를 무해화하고, 그 write 자체도
         # 감싼다 — 무해화가 놓친 두 번째 실패도 새어나가지 못하게.
-        # (2026-08-13 이전에는 훅의 _degraded() 가 같은 모양을 공유했다. 훅이
-        #  제거되어 이 파일이 그 양식의 유일한 보유자다.)
         try:
             try:
-                message = str(exc)
+                message = "%s: %s" % (type(exc).__name__, exc)
             except Exception:
                 message = repr(exc)
             safe = message.encode("utf-8", "replace").decode("utf-8")
             sys.stdout.write("STANDUP-UNAVAILABLE: internal error (%s)\n" % safe)
+            # ★ 예외 **종류**와 traceback 이 없으면 스크립트 버그가 사용자에게
+            #   데이터 문제로 렌더된다. `KeyError('blocks')` 가 `internal error
+            #   ('blocks')` 로 나오고, `scope:` 줄이 없으니 SKILL.md 규칙 7 이
+            #   에이전트에게 *"기록을 가져오지 못했다"* 를 보고하게 한다 —
+            #   사용자는 원인을 자기 트랜스크립트에서 찾는다(리뷰가 H6 로 적발).
+            #   stdout 한 줄 계약은 유지한다: traceback 은 stderr 로 간다(fork
+            #   답변을 오염시키지 않는다).
+            try:
+                traceback.print_exc(file=sys.stderr)
+            except Exception:
+                pass
         except Exception:
             try:
                 sys.stdout.write("STANDUP-UNAVAILABLE: internal error\n")
