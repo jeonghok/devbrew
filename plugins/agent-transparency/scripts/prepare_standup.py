@@ -17,16 +17,36 @@ import time
 
 SLUG_RE = re.compile(r"[/.+]")
 OUT_OF_SCOPE_LIST_CAP = 20
-REJECT_REASONS = ("other-repo", "cwd-gone", "cwd-missing")
+REJECT_REASONS = ("other-repo", "cwd-gone", "cwd-missing", "unreadable")
+# 마지막 git 호출의 stderr. 강등 문구가 사유를 함께 말하기 위한 것이며,
+# 상태 파일이 아니다(프로세스 수명 안에서만 산다).
+_LAST_STDERR = {"text": ""}
+
+
+GIT_TIMEOUT_S = 20
 
 
 def _run(cmd, cwd=None):
-    """(rc, stdout). 실패해도 예외를 올리지 않는다."""
+    """(rc, stdout). 실패해도 예외를 올리지 않는다.
+
+    **상한이 있어야 한다.** `classify` 는 트랜스크립트에 적힌 **임의의 과거 cwd**
+    에서 git 을 부르는데, 그중 하나가 응답 없는 마운트면 `/standup` 이 영원히
+    걸린다 — 이 플러그인의 불변식(*"어떤 작업도 늦추지 않는다"*)과 정면으로
+    충돌한다. 만료는 다른 실패와 같은 모양(비-0 rc)으로 돌려준다.
+
+    stderr 는 버리지 않고 모아 `_LAST_STDERR` 에 남긴다 — 강등 문구가 *"실패했다"*
+    까지만 말하고 **왜** 는 못 말하던 것을 메운다.
+    """
     try:
         proc = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE,
-                              stderr=subprocess.DEVNULL)
-    except OSError:
+                              stderr=subprocess.PIPE, timeout=GIT_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        _LAST_STDERR["text"] = "%d초 안에 끝나지 않음" % GIT_TIMEOUT_S
+        return 124, ""
+    except OSError as exc:
+        _LAST_STDERR["text"] = str(exc)
         return 127, ""
+    _LAST_STDERR["text"] = proc.stderr.decode("utf-8", "replace").strip()
     return proc.returncode, proc.stdout.decode("utf-8", "replace").strip()
 
 
@@ -74,7 +94,12 @@ def candidate_paths(root):
 
 
 def read_records(path):
-    """(레코드 목록, 파싱 실패 줄 수). 파일을 **한 번만** 읽는다."""
+    """(레코드 목록, 파싱 실패 줄 수, 읽었는가). 파일을 **한 번만** 읽는다.
+
+    셋째 값이 load-bearing 이다. 앞선 판은 `OSError` 에 `([], 0)` 을 돌려줬는데,
+    호출자는 그것을 *"cwd 레코드가 없는 파일"* 로 읽어 `cwd-missing` 으로 셌다 —
+    권한 문제·깨진 심볼릭 링크가 트랜스크립트 형식 문제로 보고됐다(리뷰가 적발).
+    """
     records, unparsed = [], 0
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as fh:
@@ -87,8 +112,8 @@ def read_records(path):
                 except ValueError:
                     unparsed += 1
     except OSError:
-        return [], 0
-    return records, unparsed
+        return [], 0, False
+    return records, unparsed, True
 
 
 def classify(records, our_common_dir, cache):
@@ -203,9 +228,15 @@ def count(records):
                     nbytes += len(text.encode("utf-8"))
             elif kind == "tool_use" and item.get("name") == "AskUserQuestion":
                 decisions += 1
-                calls.add(item.get("id"))
+                # ★ id 없는 호출을 `None` 키로 넣으면, 역시 id 없는 결과가
+                #   같은 키로 들어와 서로를 상쇄한다 — 둘 다 비정상인데
+                #   `unpaired: 0` 으로 정상 보고된다(리뷰가 적발).
+                calls.add(item.get("id") if isinstance(item.get("id"), str)
+                          else ("_unkeyed-call-%d" % decisions))
             elif kind == "tool_result":
-                results.add(item.get("tool_use_id"))
+                rid = item.get("tool_use_id")
+                if isinstance(rid, str):
+                    results.add(rid)
     return {
         "blocks": blocks,
         "bytes": nbytes,
@@ -239,11 +270,14 @@ def collect(root, branch, session_id):
     discovered = 0
     for path in candidate_paths(root):
         discovered += 1
-        records, bad = read_records(path)
+        records, bad, readable = read_records(path)
         # ★ 거절 **전에** 센다. 통째로 깨진 파일은 레코드가 없어 분류도 못 되고
         #   거절되는데, 그 손상을 여기서 빼면 완전히 깨진 트랜스크립트가
         #   `unparsed: 0` 으로 보고된다 — 이것이 이 리포트의 유일한 손상 신호다.
         unparsed += bad
+        if not readable:
+            rejected["unreadable"] = rejected.get("unreadable", 0) + 1
+            continue
         accepted, reason = classify(records, ours, cache)
         if not accepted:
             rejected[reason] = rejected.get(reason, 0) + 1
@@ -355,9 +389,31 @@ def render_inventory(root, branch, session_id, data):
     return "\n".join(lines)
 
 
+def default_branch_ref(cwd):
+    """리포가 스스로 말하는 기본 브랜치(`origin/HEAD`). 못 구하면 None."""
+    rc, out = _run(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+                   cwd=cwd)
+    return out if rc == 0 and out else None
+
+
 def base_ref(cwd):
-    """origin/main 우선, 없으면 main. 둘 다 실패면 None."""
-    for ref in ("origin/main", "main"):
+    """base 커밋. **리포에 먼저 물어보고**, 안 되면 흔한 이름으로 되돌아간다.
+
+    `main` 만 시도하면 `master`·`develop`·`trunk` 리포는 base 를 영영 못 구해
+    `## 코드 상태` 가 **매번** "최근 20개로 강등" 된다(리뷰가 적발). 리모트가
+    없는 리포에는 물어볼 곳이 없어 리터럴 목록이 남는다 — 그 경우 `develop`
+    같은 이름은 여전히 강등되며, 그것이 이 함수의 남은 한계다.
+    """
+    candidates = []
+    head = default_branch_ref(cwd)
+    if head:
+        candidates.append(head)
+        if "/" in head:
+            candidates.append(head.split("/", 1)[1])
+    for ref in ("origin/main", "main", "origin/master", "master"):
+        if ref not in candidates:
+            candidates.append(ref)
+    for ref in candidates:
         rc, out = _run(["git", "merge-base", "HEAD", ref], cwd=cwd)
         if rc == 0 and out:
             return out
@@ -385,6 +441,9 @@ def render_code_state(cwd):
     """한 재료가 죽어도 나머지는 산다. 빈 절을 조용히 두지 않는다."""
     lines = ["## 코드 상태", ""]
     base, log_command, log_rc, log_out = commit_lines(cwd)
+    # ★ 직후에 스냅샷한다 — `_LAST_STDERR` 는 **마지막** git 호출의 것이라
+    #   사이에 다른 `_run` 이 끼면 엉뚱한 사유가 붙는다.
+    log_why = _LAST_STDERR["text"]
     if not base:
         lines.append("(base-ref 를 구하지 못해 최근 20개 커밋으로 강등)")
     remaining = [["git", "diff", "--stat", "%s..HEAD" % base]] if base else []
@@ -392,19 +451,24 @@ def render_code_state(cwd):
                  ["git", "diff", "--stat"],
                  ["git", "diff", "--cached", "--stat"]]
 
-    def emit(command, rc, out):
+    def emit(command, rc, out, why=""):
         label = " ".join(command)
         if rc != 0:
-            lines.append("(git 조회 실패: %s, %d)" % (label, rc))
+            # 사유를 함께 낸다 — *"실패했다"* 만 말하고 **왜** 를 못 말하면
+            # 사용자가 다음에 할 수 있는 일이 없다. 한 줄로 자른다(§7 은
+            # 이 자리를 **한 줄** 로 규정한다).
+            detail = (why or "").splitlines()
+            lines.append("(git 조회 실패: %s, %d%s)"
+                         % (label, rc, " — " + detail[0][:120] if detail else ""))
             return
         lines.append("$ %s" % label)
         lines.append(out if out else "(없음)")
         lines.append("")
 
-    emit(log_command, log_rc, log_out)
+    emit(log_command, log_rc, log_out, log_why)
     for command in remaining:
         rc, out = _run(command, cwd=cwd)
-        emit(command, rc, out)
+        emit(command, rc, out, _LAST_STDERR["text"])
     return "\n".join(lines)
 
 

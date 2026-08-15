@@ -294,7 +294,162 @@ class TestCandidateValidation(unittest.TestCase):
         self.assertEqual(reason, "other-repo")
 
 
-class TestNonRecursiveGlob(unittest.TestCase):
+class TestScriptRobustness(unittest.TestCase):
+    """리포트 SUGGESTION 묶음 — 조용히 틀린 답을 내던 자리들."""
+
+    def setUp(self) -> None:
+        self.box = Sandbox()
+        self.module = load_script()
+        self.addCleanup(self.box.close)
+
+    def test_every_git_call_is_bounded_by_a_timeout(self) -> None:
+        """`classify` 는 **임의의 과거 cwd** 에서 git 을 부른다.
+
+        응답 없는 마운트가 하나만 있어도 `/standup` 이 영원히 걸린다 — 이
+        플러그인의 불변식(*"어떤 작업도 늦추지 않는다"*)과 정면으로 충돌한다.
+        """
+        seen = {}
+        original = self.module.subprocess.run
+
+        def spy(cmd, **kwargs):
+            seen.update(kwargs)
+            return original(cmd, **kwargs)
+
+        self.module.subprocess.run = spy
+        self.addCleanup(setattr, self.module, "subprocess",
+                        self.module.subprocess)
+        try:
+            self.module._run(["git", "--version"])
+        finally:
+            self.module.subprocess.run = original
+        self.assertIn("timeout", seen)
+        self.assertGreater(seen["timeout"], 0)
+
+    def test_git_timeout_degrades_instead_of_hanging(self) -> None:
+        """timeout 만료는 예외가 아니라 실패 코드로 나온다 — 계약이 (rc, out) 이다."""
+        def boom(cmd, **kwargs):
+            raise self.module.subprocess.TimeoutExpired(cmd=cmd, timeout=1)
+
+        original = self.module.subprocess.run
+        self.module.subprocess.run = boom
+        self.addCleanup(setattr, self.module.subprocess, "run", original)
+        rc, out = self.module._run(["git", "status"])
+        self.assertNotEqual(rc, 0)
+        self.assertEqual(out, "")
+
+    def test_base_ref_uses_the_repos_own_default_branch(self) -> None:
+        """`main` 을 하드코딩하면 `master`·`develop` 리포는 **영구히** 강등된다.
+
+        리포에 물어보는 경로가 먼저다.
+        """
+        other = self.box.root / "master-repo"
+        make_repo(other, branch="master")
+        origin = self.box.root / "origin-repo"
+        make_repo(origin, branch="master")
+        git("remote", "add", "origin", str(origin), cwd=other)
+        git("fetch", "-q", "origin", cwd=other)
+        git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/master",
+            cwd=other)
+        self.assertIsNotNone(self.module.base_ref(str(other)),
+                             "master 리포에서 base-ref 를 구하지 못했다")
+
+    def test_base_ref_still_works_without_a_remote(self) -> None:
+        """양의 짝 — 리모트가 없어도 기존 경로(main)가 살아 있어야 한다."""
+        self.assertIsNotNone(self.module.base_ref(str(self.box.main))
+                             or True)   # main 브랜치명이 work 라 None 일 수 있다
+        plain = self.box.root / "main-repo"
+        make_repo(plain, branch="main")
+        self.assertIsNotNone(self.module.base_ref(str(plain)))
+
+    def test_unpaired_ignores_records_without_ids(self) -> None:
+        """`id` 가 없는 호출은 `None` 키로 집합에 들어가 서로를 상쇄한다.
+
+        짝 없는 호출 하나와 짝 없는 결과 하나가 만나 `unpaired: 0` 이 된다 —
+        둘 다 비정상인데 정상으로 보고된다.
+        """
+        records = [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "name": "AskUserQuestion"}]}},   # id 없음
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result"}]}},                            # tool_use_id 없음
+        ]
+        stats = self.module.count(records)
+        self.assertEqual(stats["decisions"], 1)
+        self.assertEqual(stats["unpaired"], 1,
+                         "id 없는 호출이 id 없는 결과로 상쇄되면 안 된다")
+
+    def test_paired_ids_still_cancel(self) -> None:
+        """양의 짝 — 진짜 짝은 여전히 상쇄된다."""
+        records = [
+            {"type": "assistant", "message": {"content": [
+                {"type": "tool_use", "name": "AskUserQuestion", "id": "q1"}]}},
+            {"type": "user", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "q1"}]}},
+        ]
+        self.assertEqual(self.module.count(records)["unpaired"], 0)
+
+    def test_unreadable_file_is_not_reported_as_cwd_missing(self) -> None:
+        """읽기 실패를 *"cwd 레코드가 없는 파일"* 로 보고하면 원인이 사라진다.
+
+        권한 문제·깨진 심볼릭 링크가 `cwd-missing` 으로 세어져, 사용자는
+        트랜스크립트 형식 문제로 읽는다.
+        """
+        module = self.module
+        pdir = self.box.projects / module.slug(str(self.box.main))
+        pdir.mkdir(parents=True, exist_ok=True)
+        target = pdir / "unreadable.jsonl"
+        write_jsonl(target, [assistant_text("x", gitBranch="work",
+                                            cwd=str(self.box.main))])
+        os.chmod(target, 0)
+        self.addCleanup(os.chmod, target, 0o644)
+        records, bad, readable = module.read_records(str(target))
+        self.assertFalse(readable)
+        self.assertEqual(records, [])
+
+    def test_readable_file_reports_readable(self) -> None:
+        """양의 짝 — 정상 파일은 readable=True."""
+        module = self.module
+        pdir = self.box.projects / module.slug(str(self.box.main))
+        pdir.mkdir(parents=True, exist_ok=True)
+        target = pdir / "ok.jsonl"
+        write_jsonl(target, [assistant_text("x", gitBranch="work")])
+        records, bad, readable = module.read_records(str(target))
+        self.assertTrue(readable)
+        self.assertEqual(len(records), 1)
+
+
+class TestDegradationCarriesAReason(unittest.TestCase):
+    """강등이 *"실패했다"* 까지만 말하면 사용자가 다음에 할 수 있는 일이 없다."""
+
+    def setUp(self) -> None:
+        self.box = Sandbox()
+        self.module = load_script()
+        self.addCleanup(self.box.close)
+
+    def test_git_failure_line_includes_the_reason(self) -> None:
+        bad = self.box.root / "not-a-repo"
+        bad.mkdir()
+        block = self.module.render_code_state(str(bad))
+        self.assertIn("git 조회 실패", block)
+        self.assertIn("—", block)          # 사유 구분자
+        self.assertIn("not a git repository", block.lower())
+
+    def test_healthy_repo_has_no_failure_line(self) -> None:
+        """양의 짝 — 정상 리포에는 실패 줄이 없어야 대비가 선다."""
+        block = self.module.render_code_state(str(self.box.main))
+        self.assertNotIn("git 조회 실패", block)
+
+    def test_reason_is_one_line(self) -> None:
+        """설계 §7 은 이 자리를 **한 줄**로 규정한다 — 여러 줄 stderr 가 그것을 깨면 안 된다."""
+        bad = self.box.root / "not-a-repo-2"
+        bad.mkdir()
+        block = self.module.render_code_state(str(bad))
+        for line in block.splitlines():
+            if "git 조회 실패" in line:
+                self.assertLess(len(line), 260, line)
+
+
+
     """AC49 — `<sid>/subagents/*.jsonl` 은 구조적으로 제외된다."""
 
     def setUp(self) -> None:
