@@ -1,0 +1,4 @@
+standup: Unknown command (플러그인 미로드 상태 bare 호출)
+claude -p "/standup" (플러그인 없이)
+Unknown command: /standup
+2.1.225 (Claude Code)

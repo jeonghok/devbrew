@@ -1,0 +1,618 @@
+#!/usr/bin/env python3
+"""/standup 의 인벤토리 · 코드 상태 준비 스크립트.
+
+**판단은 하지 않는다.** 범위 결정 · 계수 · git 조회만 한다. 대화 본문은 출력에
+넣지 않는다 — 본문은 fork 안의 에이전트가 직접 읽는다.
+"""
+from __future__ import annotations
+
+import argparse
+import glob
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import traceback
+
+SLUG_RE = re.compile(r"[/.+]")
+OUT_OF_SCOPE_LIST_CAP = 20
+REJECT_REASONS = ("other-repo", "unresolved", "cwd-gone", "cwd-missing", "unreadable")
+# 마지막 git 호출의 stderr. 강등 문구가 사유를 함께 말하기 위한 것이며,
+# 상태 파일이 아니다(프로세스 수명 안에서만 산다).
+_LAST_STDERR = {"text": ""}
+
+
+GIT_TIMEOUT_S = 20
+
+
+def _run(cmd, cwd=None):
+    """(rc, stdout). 실패해도 예외를 올리지 않는다.
+
+    **상한이 있어야 한다.** `classify` 는 트랜스크립트에 적힌 **임의의 과거 cwd**
+    에서 git 을 부르는데, 그중 하나가 응답 없는 마운트면 `/standup` 이 영원히
+    걸린다 — 이 플러그인의 불변식(*"어떤 작업도 늦추지 않는다"*)과 정면으로
+    충돌한다. 만료는 다른 실패와 같은 모양(비-0 rc)으로 돌려준다.
+
+    stderr 는 버리지 않고 모아 `_LAST_STDERR` 에 남긴다 — 강등 문구가 *"실패했다"*
+    까지만 말하고 **왜** 는 못 말하던 것을 메운다.
+    """
+    try:
+        proc = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=GIT_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        _LAST_STDERR["text"] = "%d초 안에 끝나지 않음" % GIT_TIMEOUT_S
+        return 124, ""
+    except OSError as exc:
+        _LAST_STDERR["text"] = str(exc)
+        return 127, ""
+    _LAST_STDERR["text"] = proc.stderr.decode("utf-8", "replace").strip()
+    return proc.returncode, proc.stdout.decode("utf-8", "replace").strip()
+
+
+def git_common_dir(cwd):
+    """정규화된 절대 git-common-dir. 실패면 None.
+
+    `git rev-parse --git-common-dir` 는 **메인 리포에서 상대 경로('.git')** 를
+    돌려주고 워크트리에서는 절대 경로를 돌려준다(실측). 두 호출의 결과를
+    문자열로 비교하려면 cwd 기준으로 절대화한 뒤 realpath 로 심볼릭 링크까지
+    풀어야 한다 — 이 정규화가 없으면 후보 검증이 전부 other-repo 로 떨어진다.
+    """
+    rc, out = _run(["git", "rev-parse", "--git-common-dir"], cwd=cwd)
+    if rc != 0 or not out:
+        return None
+    return os.path.realpath(os.path.join(cwd, out))
+
+
+def repo_root(cwd):
+    """메인 리포 루트 = git-common-dir 의 부모."""
+    common = git_common_dir(cwd)
+    return os.path.dirname(common) if common else None
+
+
+def current_branch(cwd):
+    rc, out = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
+    return out if rc == 0 and out else None
+
+
+def slug(path):
+    """작업 경로 → 프로젝트 디렉토리 이름. 규칙은 문서화돼 있지 않아 실측이다."""
+    return SLUG_RE.sub("-", path)
+
+
+def worktree_paths(cwd):
+    """등록된 워크트리 경로 전부. 실패하면 빈 목록.
+
+    강등돼도 호출자가 리포 루트를 항상 후보에 넣으므로 메인 리포는 남는다 —
+    워크트리만 조용히 빠진다.
+    """
+    rc, out = _run(["git", "worktree", "list", "--porcelain"], cwd=cwd)
+    if rc != 0 or not out:
+        return []
+    found = []
+    for line in out.splitlines():
+        if line.startswith("worktree "):
+            path = line[len("worktree "):].strip()
+            if path:
+                found.append(os.path.realpath(path))
+    return found
+
+
+def candidate_paths(root):
+    """접두사 글롭 — **메인 리포와 등록된 워크트리 각각**에 대해. 디렉토리 바로
+    아래만 본다 — `*/subagents/*.jsonl` 은 이 패턴에 걸리지 않으므로 인벤토리
+    분모에 들어오지 않는다(AC49).
+
+    접두사를 쓰는 이유: 디렉토리 이름이 작업 경로에서 만들어지고 문서화되지
+    않았다. 정확한 이름을 재현하는 대신 접두사로 시작하는 디렉토리를 전부
+    대상으로 삼으면 그 경로 **아래의** 하위 디렉토리에서 시작한 세션도 함께 잡힌다.
+
+    **접두사 하나로는 부족하다.** 앞선 판은 메인 리포 경로의 slug 접두만 썼는데,
+    워크트리는 리포 경로 **밖**에 놓일 수 있고(같은 파일 `classify` 가 명시적으로
+    전제하는 바로 그 상황) 그러면 slug 이 그 접두로 시작하지 않아 `/standup` 이
+    **현재 세션조차 못 찾는다**(리뷰가 H3 로 적발). 그 전제 때문에 형제 술어에서는
+    path-containment 를 기각해 놓고, 후보 수집은 path-containment 로 하고 있었다.
+    """
+    projects = os.path.expanduser("~/.claude/projects")
+    found = set()
+    for base in [os.path.realpath(root)] + worktree_paths(root):
+        found.update(glob.glob(os.path.join(projects, slug(base) + "*", "*.jsonl")))
+    return sorted(found)
+
+
+def read_records(path):
+    """(레코드 목록, 파싱 실패 줄 수, 읽었는가). 파일을 **한 번만** 읽는다.
+
+    셋째 값이 load-bearing 이다. 앞선 판은 `OSError` 에 `([], 0)` 을 돌려줬는데,
+    호출자는 그것을 *"cwd 레코드가 없는 파일"* 로 읽어 `cwd-missing` 으로 셌다 —
+    권한 문제·깨진 심볼릭 링크가 트랜스크립트 형식 문제로 보고됐다(리뷰가 적발).
+    """
+    records, unparsed = [], 0
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    records.append(json.loads(line))
+                except ValueError:
+                    unparsed += 1
+    except OSError:
+        return [], 0, False
+    return records, unparsed, True
+
+
+def classify(records, our_common_dir, cache):
+    """후보 검증 — (채택, 사유).
+
+    파일에 등장하는 **cwd 값 전체 집합** 중 **하나라도** 우리와 같은
+    git-common-dir 를 주면 채택한다. 단수 술어를 쓰면 한 세션이 두 cwd 에
+    걸치는 실제 상황(메인 리포 → 워크트리 이동)을 못 다룬다.
+
+    **경로 포함 관계로 판정하지 않는다** — 워크트리는 리포 밖 어디에나 놓인다.
+
+    `our_common_dir` 가 `None` 이면 **거절이 아니라 예외다.** 우리 쪽과 후보 쪽이
+    같은 `None` 을 "판정 불가" 센티널로 쓰므로 `None == None` 이 참이 되어,
+    해석 불가능한 남의 트랜스크립트가 **전부** 채택된다 — 전 범위 상실이 다른
+    프로젝트에 대한 건강한 standup 으로 렌더된다. 판정 불가는 일치가 아니다.
+    `collect` 가 먼저 막으므로 이 경로는 실행되지 않아야 하며, 실행된다면 그
+    가드가 사라졌다는 뜻이라 조용히 거절하지 않고 올린다.
+    """
+    if our_common_dir is None:
+        raise ValueError("our_common_dir 가 미해결 — 후보 검증을 수행할 수 없다")
+    seen = []
+    for record in records:
+        value = record.get("cwd")
+        if isinstance(value, str) and value and value not in seen:
+            seen.append(value)
+    if not seen:
+        return False, "cwd-missing"
+    other_repo = unresolved = False
+    for cwd in seen:
+        if cwd not in cache:
+            cache[cwd] = git_common_dir(cwd) if os.path.isdir(cwd) else None
+        if cache[cwd] == our_common_dir:
+            return True, ""
+        if os.path.isdir(cwd):
+            # ★ 디렉토리는 있는데 `None` 이면 **다른 리포가 아니라 판정 실패**다 —
+            #   git 호출 만료(rc 124)·`OSError`(rc 127)·권한 오류가 전부 여기로 온다.
+            #   그것을 `other-repo` 로 세면 `main()` 이 *"all N candidate file(s)
+            #   rejected (other-repo: N)"* 로 렌더해, **사용자 파일에 대한 거짓 사실
+            #   주장**이 된다 — git 호출 하나가 만료된 것뿐인데(리뷰가 H1 로 적발,
+            #   같은 레코드·같은 리포에서 만료만으로 (True,'') → (False,'other-repo')
+            #   가 나는 것을 실측).
+            #   거절은 그대로 유지한다: 해소 불가 후보를 받아들이면 남의 리포
+            #   트랜스크립트가 답변에 들어오고 그것이 `in_scope` 가 금지하는 바다.
+            #   바뀌는 것은 **사유의 이름**이지 판정이 아니다.
+            if cache[cwd] is None:
+                unresolved = True
+            else:
+                other_repo = True
+    if other_repo:
+        return False, "other-repo"
+    if unresolved:
+        return False, "unresolved"
+    # 하나도 남아 있지 않으면 삭제·이동된 워크트리다 — 남의 리포와 합산하면
+    # 정당한 과거 세션이 조용히 사라진다.
+    return False, "cwd-gone"
+
+
+def _fmt_stamp(value):
+    """ISO8601 UTC 를 그대로 자른다. 시간대 변환을 하지 않는다 — 원문의 그 지점을
+    찾아가는 것이 목적이라 기록된 값과 같아야 한다."""
+    if not isinstance(value, str) or len(value) < 16:
+        return None
+    return value[:16].replace("T", " ")
+
+
+def _record_is_foreign(record, our_common_dir, cache):
+    """레코드의 `cwd` 가 **다른 리포로 확실히 해석되는가.**
+
+    술어가 이 방향인 것이 요점이다. *"우리 것인가"* 로 물으면 해석 불가능한 cwd
+    (삭제된 워크트리)가 남의 것으로 분류되어 정당한 과거 기록이 조용히 사라진다.
+    빼는 것은 **다른 common-dir 로 해석되는 레코드뿐**이고, 모르는 것은 남긴다 —
+    파일은 이미 후보 검증을 통과했다.
+    """
+    value = record.get("cwd")
+    if not isinstance(value, str) or not value:
+        return False
+    if value not in cache:
+        cache[value] = git_common_dir(value) if os.path.isdir(value) else None
+    resolved = cache[value]
+    return resolved is not None and resolved != our_common_dir
+
+
+def in_scope(path, records, branch, session_id, our_common_dir=None, cache=None):
+    """범위 = 레코드의 gitBranch 일치 **OR** 파일명이 현재 세션 id (합집합).
+
+    둘 다 단독으로는 샌다 — 브랜치만 보면 워크트리 이동 전 기록이 빠지고,
+    세션만 보면 어제 한 것이 빠진다.
+
+    그 위에 **레코드 단위 리포 필터**가 한 겹 더 붙는다. 파일 채택은 집합 술어라
+    cwd 하나만 맞아도 파일 전체가 들어오는데(한 세션이 메인 리포 → 워크트리로
+    이동하는 실제 상황), 같은 파일에 **다른 리포에서 같은 브랜치 이름**으로 남긴
+    레코드가 있으면 그것까지 인벤토리에 실려 남의 리포 기록이 답변에 노출된다.
+    `our_common_dir` 가 주어지면 그런 레코드만 뺀다(`_record_is_foreign`).
+    """
+    stem = os.path.basename(path)
+    if stem.endswith(".jsonl"):
+        stem = stem[: -len(".jsonl")]
+    if session_id and stem == session_id:
+        picked = list(records)
+    else:
+        picked = [r for r in records if r.get("gitBranch") == branch]
+    if our_common_dir is None:
+        return picked
+    cache = {} if cache is None else cache
+    return [r for r in picked if not _record_is_foreign(r, our_common_dir, cache)]
+
+
+def _result_ids(records):
+    """`tool_result` 의 `tool_use_id` 집합."""
+    ids = set()
+    for record in records:
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, list):
+            continue
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "tool_result":
+                rid = item.get("tool_use_id")
+                if isinstance(rid, str):
+                    ids.add(rid)
+    return ids
+
+
+def count(records, results_from=None):
+    """AC34 의 술어. blocks 는 **레코드가 아니라 블록**을 센다.
+
+    `results_from` — 짝짓기에 쓸 결과 레코드 집합. 기본은 `records` 자신이다.
+    브랜치로 걸러낸 부분집합을 세면서 짝짓기까지 **그 안에서만** 하면, 질문과 답이
+    브랜치 전환을 사이에 두고 갈렸을 때 **답변된 결정이 `unpaired` 로 보고**되고
+    SKILL.md 규칙 4-1 이 그것에 `(미답)` 을 찍는다 — 사용자가 고른 것이 안 고른
+    것으로 렌더된다(리뷰가 H5 로 적발: 필터가 있으면 unpaired 1, 없으면 0).
+    """
+    blocks = nbytes = decisions = 0
+    calls, stamps = set(), []
+    results = _result_ids(records if results_from is None else results_from)
+    for record in records:
+        stamp = _fmt_stamp(record.get("timestamp"))
+        if stamp:
+            stamps.append(stamp)
+        message = record.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, list):
+            continue
+        is_assistant = record.get("type") == "assistant"
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            kind = item.get("type")
+            if is_assistant and kind == "text":
+                text = item.get("text") or ""
+                if text.strip():
+                    blocks += 1
+                    nbytes += len(text.encode("utf-8"))
+            elif kind == "tool_use" and item.get("name") == "AskUserQuestion":
+                decisions += 1
+                # ★ id 없는 호출을 `None` 키로 넣으면, 역시 id 없는 결과가
+                #   같은 키로 들어와 서로를 상쇄한다 — 둘 다 비정상인데
+                #   `unpaired: 0` 으로 정상 보고된다(리뷰가 적발).
+                calls.add(item.get("id") if isinstance(item.get("id"), str)
+                          else ("_unkeyed-call-%d" % decisions))
+    return {
+        "blocks": blocks,
+        "bytes": nbytes,
+        "decisions": decisions,
+        # 짝이 없는 호출도 센다(비대화형 실행에는 답변 채널이 없어 실제로 생긴다).
+        "unpaired": len([c for c in calls if c not in results]),
+        "span_min": min(stamps) if stamps else None,
+        "span_max": max(stamps) if stamps else None,
+    }
+
+
+def collect(root, branch, session_id):
+    """인벤토리 원자료. 렌더는 하지 않는다.
+
+    우리 리포의 git-common-dir 를 못 구하면 **`None` 을 돌려준다** — 그 상태로는
+    어떤 후보도 우리 것인지 판정할 수 없고(`classify` 의 센티널 주석 참조),
+    부분 답변은 다른 프로젝트의 답변이 된다. bare 리포가 실물 진입로다:
+    `git rev-parse --git-common-dir` 가 `.` 을 주어 `repo_root` 가 부모로
+    올라가고, 그 부모는 리포가 아니다.
+    """
+    started = time.time()
+    ours = git_common_dir(root)
+    if ours is None:
+        return None
+    cache = {}
+    rejected = dict((reason, 0) for reason in REJECT_REASONS)
+    entries, unparsed, candidates = [], 0, 0
+    totals = {"blocks": 0, "bytes": 0, "decisions": 0, "unpaired": 0}
+    stamps = []
+
+    discovered = 0
+    for path in candidate_paths(root):
+        discovered += 1
+        records, bad, readable = read_records(path)
+        # ★ 거절 **전에** 센다. 통째로 깨진 파일은 레코드가 없어 분류도 못 되고
+        #   거절되는데, 그 손상을 여기서 빼면 완전히 깨진 트랜스크립트가
+        #   `unparsed: 0` 으로 보고된다 — 이것이 이 리포트의 유일한 손상 신호다.
+        unparsed += bad
+        if not readable:
+            rejected["unreadable"] = rejected.get("unreadable", 0) + 1
+            continue
+        accepted, reason = classify(records, ours, cache)
+        if not accepted:
+            rejected[reason] = rejected.get(reason, 0) + 1
+            continue
+        candidates += 1
+        mine = in_scope(path, records, branch, session_id, ours, cache)
+        # ★ 짝짓기는 **파일 전체**에서 한다 — 위 `count` docstring 참고.
+        stats = count(mine, results_from=records)
+        whole = count(records)
+        for key in totals:
+            totals[key] += stats[key]
+        for value in (stats["span_min"], stats["span_max"]):
+            if value:
+                stamps.append(value)
+        entries.append({
+            "path": path,
+            "in_scope": len(mine),
+            "total": len(records),
+            # in-scope 블록은 in-scope 기간, out-of-scope 블록은 파일 전체 기간을 보여준다.
+            "span_min": stats["span_min"] if mine else whole["span_min"],
+            "span_max": stats["span_max"] if mine else whole["span_max"],
+            "label": "in-scope" if mine else "out-of-scope",
+        })
+
+    data = dict(totals)
+    data.update({
+        "files": len([e for e in entries if e["label"] == "in-scope"]),
+        "candidates": candidates,
+        "discovered": discovered,
+        "rejected": rejected,
+        "entries": entries,
+        "unparsed": unparsed,
+        "span_min": min(stamps) if stamps else None,
+        "span_max": max(stamps) if stamps else None,
+        "scan": time.time() - started,
+        "git_calls": len(cache),
+    })
+    return data
+
+
+def _kb(nbytes):
+    return "%.1f KB" % (nbytes / 1024.0)
+
+
+def _commits(value):
+    """`None` = 세지 못했다. 0 으로 렌더하면 "커밋이 없다" 는 사실 주장이 된다."""
+    return "(구하지 못함)" if value is None else "%d" % value
+
+
+def _span(low, high):
+    if not low or not high:
+        return "(기간 없음)"
+    return "%s ~ %s" % (low, high)
+
+
+def render_inventory(root, branch, session_id, data):
+    """scope 줄 + 인벤토리 2줄 + 파일 목록 세 블록.
+
+    `scope:` 줄은 장식이 아니다 — SKILL.md 가 범위 대조에도(branch·+session)
+    가용성 센티널에도(그 줄이 없으면 답하지 않는다) 쓴다.
+    """
+    in_scope_entries = [e for e in data["entries"] if e["label"] == "in-scope"]
+    others = sorted([e for e in data["entries"] if e["label"] == "out-of-scope"],
+                    key=lambda e: (e["span_max"] or "", e["path"]), reverse=True)
+    shown, folded = others[:OUT_OF_SCOPE_LIST_CAP], others[OUT_OF_SCOPE_LIST_CAP:]
+    listed = len(in_scope_entries) + len(shown)
+
+    rejected_total = sum(data["rejected"].values())
+    breakdown = ", ".join("%s: %d" % (r, data["rejected"].get(r, 0))
+                          for r in REJECT_REASONS)
+    lines = [
+        "scope:   repo=%s  branch=%s  +session=%s" % (root, branch, session_id or "-"),
+        "files:   %d (candidates: %d  rejected: %d (%s)  listed: %d)   "
+        "blocks: %d (%s)   decisions: %d (unpaired: %d)"
+        % (data["files"], data["candidates"], rejected_total, breakdown, listed,
+           data["blocks"], _kb(data["bytes"]), data["decisions"], data["unpaired"]),
+        "span:    %s   commits: %s   scan: %.1fs   unparsed: %d"
+        % (_span(data["span_min"], data["span_max"]), _commits(data.get("commits")),
+           data["scan"], data["unparsed"]),
+        "",
+        # 세 라벨은 **비어 있어도** 낸다 — 데이터에 따라 계약이 갈리면 안 된다.
+        "in-scope — %d개 전량:" % len(in_scope_entries),
+    ]
+    for entry in in_scope_entries:
+        lines.append("  %s   %d건  %s"
+                     % (entry["path"], entry["in_scope"],
+                        _span(entry["span_min"], entry["span_max"])))
+    lines.append("out-of-scope — %d개 중 최근 %d개:" % (len(others), len(shown)))
+    for entry in shown:
+        lines.append("  %s   [%d건]  %s"
+                     % (entry["path"], entry["total"],
+                        _span(entry["span_min"], entry["span_max"])))
+
+    rollup = {}
+    for entry in folded:
+        directory = os.path.dirname(entry["path"])
+        bucket = rollup.setdefault(directory, {"n": 0, "low": None, "high": None})
+        bucket["n"] += 1
+        for key, value in (("low", entry["span_min"]), ("high", entry["span_max"])):
+            if value and (bucket[key] is None
+                          or (value < bucket[key] if key == "low" else value > bucket[key])):
+                bucket[key] = value
+    lines.append("out-of-scope 디렉토리 집계 — %d개 (위 %d개를 뺀 나머지 %d개):"
+                 % (len(rollup), len(shown), len(folded)))
+    for directory in sorted(rollup):
+        bucket = rollup[directory]
+        lines.append("  %s   %d개  %s"
+                     % (directory, bucket["n"],
+                        _span((bucket["low"] or "")[:10], (bucket["high"] or "")[:10])))
+    return "\n".join(lines)
+
+
+def default_branch_ref(cwd):
+    """리포가 스스로 말하는 기본 브랜치(`origin/HEAD`). 못 구하면 None."""
+    rc, out = _run(["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+                   cwd=cwd)
+    return out if rc == 0 and out else None
+
+
+def base_ref(cwd):
+    """base 커밋. **리포에 먼저 물어보고**, 안 되면 흔한 이름으로 되돌아간다.
+
+    `main` 만 시도하면 `master`·`develop`·`trunk` 리포는 base 를 영영 못 구해
+    `## 코드 상태` 가 **매번** "최근 20개로 강등" 된다(리뷰가 적발). 리모트가
+    없는 리포에는 물어볼 곳이 없어 리터럴 목록이 남는다 — 그 경우 `develop`
+    같은 이름은 여전히 강등되며, 그것이 이 함수의 남은 한계다.
+    """
+    candidates = []
+    head = default_branch_ref(cwd)
+    if head:
+        candidates.append(head)
+        if "/" in head:
+            candidates.append(head.split("/", 1)[1])
+    for ref in ("origin/main", "main", "origin/master", "master"):
+        if ref not in candidates:
+            candidates.append(ref)
+    for ref in candidates:
+        rc, out = _run(["git", "merge-base", "HEAD", ref], cwd=cwd)
+        if rc == 0 and out:
+            return out
+    return None
+
+
+def commit_lines(cwd):
+    """base..HEAD 커밋 로그. base 가 없으면 최근 20개로 강등. (base, command, rc, out).
+
+    `render_code_state()` 와 `main()` 이 이 하나로 범위 결정과 실제 git 호출을
+    공유한다 — 각자 재구현하면 드리프트한다. 실사례: `main()` 은 한때
+    `base_ref(cwd) or "HEAD"` 로 대입해 base 가 없을 때
+    `git log --oneline HEAD..HEAD`(늘 빈 범위)가 됐는데, `render_code_state()`
+    는 같은 조건에서 `-20` 으로 정확히 강등했다 — 그 결과 `commits: 0` 이
+    바로 아래 `## 코드 상태` 커밋 목록과 모순되는 버그였다.
+    """
+    base = base_ref(cwd)
+    command = (["git", "log", "--oneline", "%s..HEAD" % base] if base
+              else ["git", "log", "--oneline", "-20"])
+    rc, out = _run(command, cwd=cwd)
+    return base, command, rc, out
+
+
+def render_code_state(cwd):
+    """한 재료가 죽어도 나머지는 산다. 빈 절을 조용히 두지 않는다."""
+    lines = ["## 코드 상태", ""]
+    base, log_command, log_rc, log_out = commit_lines(cwd)
+    # ★ 직후에 스냅샷한다 — `_LAST_STDERR` 는 **마지막** git 호출의 것이라
+    #   사이에 다른 `_run` 이 끼면 엉뚱한 사유가 붙는다.
+    log_why = _LAST_STDERR["text"]
+    if not base:
+        lines.append("(base-ref 를 구하지 못해 최근 20개 커밋으로 강등)")
+    remaining = [["git", "diff", "--stat", "%s..HEAD" % base]] if base else []
+    remaining += [["git", "status", "--short"],
+                 ["git", "diff", "--stat"],
+                 ["git", "diff", "--cached", "--stat"]]
+
+    def emit(command, rc, out, why=""):
+        label = " ".join(command)
+        if rc != 0:
+            # 사유를 함께 낸다 — *"실패했다"* 만 말하고 **왜** 를 못 말하면
+            # 사용자가 다음에 할 수 있는 일이 없다. 한 줄로 자른다(§7 은
+            # 이 자리를 **한 줄** 로 규정한다).
+            detail = (why or "").splitlines()
+            lines.append("(git 조회 실패: %s, %d%s)"
+                         % (label, rc, " — " + detail[0][:120] if detail else ""))
+            return
+        lines.append("$ %s" % label)
+        lines.append(out if out else "(없음)")
+        lines.append("")
+
+    emit(log_command, log_rc, log_out, log_why)
+    for command in remaining:
+        rc, out = _run(command, cwd=cwd)
+        emit(command, rc, out, _LAST_STDERR["text"])
+    return "\n".join(lines)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(add_help=False)
+    # 사용자 유래 인자는 받지 않는다 — 범위 조정은 「범위 라벨」로 에이전트가 수행한다.
+    parser.add_argument("--session-id", default=os.environ.get("CLAUDE_CODE_SESSION_ID"))
+    args = parser.parse_args(argv)
+    try:
+        cwd = os.getcwd()
+        root = repo_root(cwd)
+        if not root:
+            sys.stdout.write("STANDUP-UNAVAILABLE: not a git repository (%s)\n" % cwd)
+            return 3
+        branch = current_branch(cwd) or "(unknown)"
+        data = collect(root, branch, args.session_id)
+        if data is None:
+            # 파일 부재로 강등하면 사용자는 원인을 파일 쪽에서 찾는다. 원인은
+            # 리포 미해결이고, 그 상태에서 낸 답은 남의 프로젝트 답일 수 있다.
+            sys.stdout.write(
+                "STANDUP-UNAVAILABLE: repository could not be resolved (%s)\n" % root)
+            return 3
+        if not data["entries"]:
+            # 후보를 **찾았는데 전부 거절**한 것과 후보가 **없는** 것은 다른
+            # 사건이다. 같은 문구로 내면 사용자는 원인을 파일 부재에서 찾고,
+            # 거절 내역은 정상 경로에서만 렌더되므로 여기서 안 내면 어디에도
+            # 안 나온다.
+            if data["discovered"]:
+                breakdown = ", ".join(
+                    "%s: %d" % (r, data["rejected"].get(r, 0)) for r in REJECT_REASONS)
+                sys.stdout.write(
+                    "STANDUP-UNAVAILABLE: all %d candidate file(s) rejected (%s)\n"
+                    % (data["discovered"], breakdown))
+            else:
+                sys.stdout.write(
+                    "STANDUP-UNAVAILABLE: session file not found "
+                    "(~/.claude/projects/%s*/*.jsonl)\n" % slug(root))
+            return 3
+        _, _, commits_rc, commits_out = commit_lines(cwd)
+        # ★ 실패를 0 으로 렌더하지 않는다 — "셀 수 없었다" 와 "0 개다" 는 다르다.
+        #   None 이면 렌더가 `(구하지 못함)` 을 낸다.
+        data["commits"] = (len([ln for ln in commits_out.splitlines() if ln.strip()])
+                           if commits_rc == 0 else None)
+        sys.stdout.write(render_inventory(root, branch, args.session_id, data))
+        sys.stdout.write("\n\n")
+        sys.stdout.write(render_code_state(cwd))
+        sys.stdout.write("\n")
+        return 0
+    except Exception as exc:
+        # 실패 계약은 "STANDUP-UNAVAILABLE 한 줄, 절대 죽지 않는다" — 그 계약을
+        # 지키는 코드 자체가 죽으면 안 된다. 메시지를 UTF-8 로 왕복시켜
+        # 인코딩 불가 문자(예: 홑 서로게이트)를 무해화하고, 그 write 자체도
+        # 감싼다 — 무해화가 놓친 두 번째 실패도 새어나가지 못하게.
+        try:
+            try:
+                message = "%s: %s" % (type(exc).__name__, exc)
+            except Exception:
+                message = repr(exc)
+            safe = message.encode("utf-8", "replace").decode("utf-8")
+            sys.stdout.write("STANDUP-UNAVAILABLE: internal error (%s)\n" % safe)
+            # ★ 예외 **종류**와 traceback 이 없으면 스크립트 버그가 사용자에게
+            #   데이터 문제로 렌더된다. `KeyError('blocks')` 가 `internal error
+            #   ('blocks')` 로 나오고, `scope:` 줄이 없으니 SKILL.md 규칙 7 이
+            #   에이전트에게 *"기록을 가져오지 못했다"* 를 보고하게 한다 —
+            #   사용자는 원인을 자기 트랜스크립트에서 찾는다(리뷰가 H6 로 적발).
+            #   stdout 한 줄 계약은 유지한다: traceback 은 stderr 로 간다(fork
+            #   답변을 오염시키지 않는다).
+            try:
+                traceback.print_exc(file=sys.stderr)
+            except Exception:
+                pass
+        except Exception:
+            try:
+                sys.stdout.write("STANDUP-UNAVAILABLE: internal error\n")
+            except Exception:
+                pass
+        return 4
+
+
+if __name__ == "__main__":
+    sys.exit(main())

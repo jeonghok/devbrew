@@ -29,6 +29,12 @@
       "description": "Read-only, evidence-based multi-agent audit of an arbitrary devbrew plugin.",
       "source": "./plugins/plugin-audit",
       "category": "development"
+    },
+    {
+      "name": "agent-transparency",
+      "description": "Reduces comprehension debt — surfaces what delegated agents did and what your judgment rests on, at decision and verdict points",
+      "source": "./plugins/agent-transparency",
+      "category": "development"
     }
   ]
 }

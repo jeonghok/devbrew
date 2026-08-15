@@ -1,0 +1,1 @@
+README.md 3번째 줄의 오타 'teh' 를 'the' 로 고쳐줘
