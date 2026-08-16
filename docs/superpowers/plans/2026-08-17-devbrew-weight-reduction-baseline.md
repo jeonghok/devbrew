@@ -16,20 +16,32 @@
 | `plugins/quality-gates/tests/test_consent_marker_write_failure.sh` | 1 | `FAIL: AC11: # QG-CONSENT-MARKER-WRITE block not found in SKILL.md` |
 | `plugins/quality-gates/tests/test_security_reviewer_kill_switch.sh` | 1 | `FAIL: kill switch env var present (got 0, expected >= 1)` (+ `FAIL: disable log message present (got 0, expected >= 1)`; 3건 중 1건만 PASS) |
 
-## 파이썬 (`python3 -m unittest discover` per 테스트 디렉토리)
+## 파이썬 (`python3 -m unittest discover -s "$d" -t "$d"` per 테스트 디렉토리)
 
-`find . -name __pycache__ -type d -prune -exec rm -rf {} +` + `PYTHONDONTWRITEBYTECODE=1` 적용 후 `plugins/*/tests`, `plugins/*/scripts/tests`, `plugins/*/hooks/tests` 6개 디렉토리에 대해 `python3 -m unittest discover -s "$d" -t .` 실행 (python3 = 3.9.6).
+`find . -name __pycache__ -type d -prune -exec rm -rf {} +` + `PYTHONDONTWRITEBYTECODE=1` 적용 후 `plugins/*/tests`, `plugins/*/scripts/tests`, `plugins/*/hooks/tests` 6개 디렉토리에 대해 `python3 -m unittest discover -s "$d" -t "$d"` 실행 (python3 = 3.9.6). **`-t`를 레포 루트(`.`)가 아니라 디렉토리 자신으로 맞춘다** — 이유는 아래 "측정 노트" 참조.
 
-| 디렉토리 | rc | Ran | 비고 |
+| 디렉토리 | rc | Ran | 결과 |
 |---|---|---|---|
-| `plugins/agent-transparency/tests` | 1 | 0 | `ImportError: Start directory is not importable` — 디렉토리에 `__init__.py` 없음. `test_*.py` 5개가 존재하지만 이 정확한 호출(`-t .`)로는 하나도 실행되지 않는다 |
-| `plugins/project-init/tests` | 1 | 0 | 동일 ImportError. 이 디렉토리는 최상위에 `test_*.py`가 0개(셸 테스트만 있음)라 이 경로 자체가 애초에 파이썬 테스트를 담고 있지 않음 |
-| `plugins/quality-gates/tests` | 1 | 0 | 동일 ImportError. `test_*.py` 18개가 존재하지만 실행되지 않음 |
-| `plugins/spec-distill/tests` | 1 | 0 | 동일 ImportError. `test_*.py` 10개가 존재하지만 실행되지 않음 |
-| `plugins/plugin-audit/scripts/tests` | 0 | 249 | GREEN — `tests/__init__.py` 존재 |
-| `plugins/project-init/hooks/tests` | 0 | 95 | GREEN — `tests/__init__.py` 존재 |
+| `plugins/agent-transparency/tests` | 0 | 283 | GREEN — OK |
+| `plugins/project-init/tests` | 0 | 0 | GREEN — OK (이 디렉토리엔 `test_*.py`가 0개, 파이썬 테스트 자체가 없음 — 셸 전용) |
+| `plugins/quality-gates/tests` | 0 | 128 | GREEN — OK |
+| `plugins/spec-distill/tests` | 0 | 202 | GREEN — OK (skipped=1) |
+| `plugins/plugin-audit/scripts/tests` | 0 | 249 | GREEN — OK |
+| `plugins/project-init/hooks/tests` | 0 | 95 | GREEN — OK |
 
-**근본 원인**: `python3 -m unittest discover -s <dir> -t .`는 `start_dir`이 `top_level_dir`(레포 루트)에서 내려오는 파이썬 패키지로 import 가능해야 하는데, RED인 4개 디렉토리는 자기 자신에 `__init__.py`가 없다(`plugins/`도 없음). GREEN인 2개는 `tests/__init__.py`가 있어 이 조건을 만족한다. 이것은 코드 결함이 아니라 **이 정확한 호출 방식과 디렉토리 구조의 불일치**이며, 4개 디렉토리의 파이썬 테스트(합계 33개 `test_*.py` 파일, `project-init/tests`는 0개)는 이 방식으로는 구조적으로 한 번도 실행되지 않는다. 브리프의 정확한 커맨드를 그대로 실행한 결과이므로 그대로 기록한다 — 이 사이클에서 고치지 않는다.
+실행 6개 디렉토리 전부 GREEN, 합계 **957개** 테스트가 실제로 실행됨(283+0+128+202+249+95). 이 회차엔 기록할 선재 RED가 없다 — 아래 "측정 노트"가 설명하듯, 최초 측정에서 RED로 보였던 4개 디렉토리는 실제로는 테스트가 전혀 실행되지 않았던 것이었다.
+
+### 측정 노트 — `-t .` 형태는 이 레포에서 구조적으로 불가능하다 (Task 30 근거, 삭제하지 않음)
+
+브리프 Step 3 원문의 커맨드는 `python3 -m unittest discover -s "$d" -t .`였다. 이 형태는 이 레포 구조에서 **어떤 플러그인 디렉토리에도 성립할 수 없다** — `-t .`는 레포 루트를 import root로 삼으므로 `$d`가 거기서 내려오는 import 가능한 파이썬 패키지 경로여야 하는데, 대상 플러그인 이름(`spec-distill`, `quality-gates`, `plugin-audit`, `project-init`, `agent-transparency`) 전부 하이픈을 포함하고 **하이픈은 파이썬 식별자에 쓸 수 없다**. `__init__.py` 존재 여부와 무관하게 항상 `ImportError: Start directory is not importable`로 실패한다.
+
+실측 비교(spec-distill 예):
+```
+-s plugins/spec-distill/tests -t .                          -> ImportError: Start directory is not importable
+-s plugins/spec-distill/tests -t plugins/spec-distill/tests -> Ran 202 tests in 8.8s, OK (skipped=1)
+```
+
+Task 1 최초 실행(브리프 원문 그대로)에서 `agent-transparency`·`project-init`·`quality-gates`·`spec-distill` 4개 디렉토리는 "선재 RED"로 잘못 분류됐다 — 실제로는 **측정 자체가 불가능했던 것**이고 그 뒤에 613개(283+128+202)의 실제 테스트가 가려져 있었다. `-t .`로 몇 번을 다시 재보아도 항상 이 ImportError만 재현되므로, **이 형태의 커맨드는 회귀 판정에 쓸 수 없다**. 이 사실 자체는 지우지 않고 보존한다 — Task 30("python 테스트 실행 통일")이 레포 전역 파이썬 테스트 실행 방식을 하나로 정할 때, 하이픈 플러그인명 때문에 `-t .`가 원천 불가하다는 이 근거를 입력으로 쓴다.
 
 ## 실행비트 없는 셸 테스트 (선택 불가 — Task 4 대상)
 
@@ -66,3 +78,6 @@
 
 이후 모든 PR에서 "새 RED"는 **이 목록에 없는 RED**를 뜻한다. 선재 RED를 이 사이클에서
 고치지 않는다 — 범위 밖이고, 고치면 그 자체가 회귀 판정을 흐린다.
+
+- 셸의 새-RED 점검은 §셸 표를 기준으로 삼는다.
+- **파이썬의 새-RED 점검은 반드시 `PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$d" -t "$d"`(디렉토리마다 `-t`를 그 디렉토리 자신으로 맞춘 형태)로 재실행해서 §파이썬 표와 비교한다.** `-t .` 형태는 "측정 노트"가 설명하듯 이 레포에서 모든 플러그인에 대해 항상 실패하므로(하이픈 플러그인명), 어떤 후속 태스크도 이 형태를 회귀 판정에 재도입해서는 안 된다 — 재도입하면 4개 디렉토리 613개 테스트가 다시 "측정 불가"로 가려지고 그것이 다시 "선재 RED"로 오분류된다.
