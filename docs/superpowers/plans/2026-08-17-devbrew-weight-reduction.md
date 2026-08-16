@@ -297,14 +297,18 @@ wc -l "$SCRATCH"/census-*.md
 
 분류 규칙 — **진짜 사본과 부분 사본을 가르는 질문은 하나다**: *"차이를 파일 밖으로 빼면 남는 본문이 바이트 동일이 되는가?"*
 
-| 분류 | 판정 | 조치의 **종류** | 그 종류를 실행하는 태스크 |
-|---|---|---|---|
-| **진짜 사본** | 차이를 인자·설정으로 빼면 파일 전체가 동일해질 수 있다 | `shared/` 정본 + 심볼릭 링크(기본) 또는 `copy-of`(잔여) | 대상에 따라 다르다 — 15(`detect_codex.sh`) · 17(`codex_findings_to_yaml.py` · `codex_jsonl.py`) · 19(kill switch 12정의) |
-| **부분 사본** | 각자 고유 본문이 남아 전체 동일화 불가 | 공통 조각만 추출 | 20(codex 러너) · 21(cleanup·GC) · 22(같은 플러그인 안의 제품 코드) · 13·14(리포 전용 셸 테스트) |
-| **템플릿-인스턴스** | 한쪽에 `{{...}}` 치환 표식 또는 생성 산출물 | 재적용 + 동일성 검사 | — |
-| **우연** | 같은 이름·구조지만 책임이 다름 | 조치 없음 (이유 한 줄) | — |
+| 분류 | 판정 | 조치의 **종류** |
+|---|---|---|
+| **진짜 사본** | 차이를 인자·설정으로 빼면 파일 전체가 동일해질 수 있다 | `shared/` 정본 + 심볼릭 링크(기본) 또는 `copy-of`(잔여) |
+| **부분 사본** | 각자 고유 본문이 남아 전체 동일화 불가 | 공통 조각만 추출 |
+| **템플릿-인스턴스** | 한쪽에 `{{...}}` 치환 표식 또는 생성 산출물 | 재적용 + 동일성 검사 |
+| **우연** | 같은 이름·구조지만 책임이 다름 | 조치 없음 (이유 한 줄) |
 
-> **오른쪽 두 열은 다른 것이다 — 이 구분이 없어서 원장이 틀렸다** (2026-08-17). census 최초 판은 오른쪽 열의 태스크 목록을 **분류가 같다는 이유만으로** 각 행에 그대로 복사했다. 그 결과 `assert_absent`(persona 테스트)가 "Task 15·17·18·19"를, spec-distill 훅 쌍이 "Task 20·21"을 가리키게 됐는데 **그 태스크들의 Files 는 해당 파일을 담은 적이 없다.** 조치란은 **종류**가 아니라 **그 파일을 Files 에 담고 그 조각을 스텝에서 지정하는 태스크**를 적는 자리다. 어느 태스크도 그렇지 않으면 그 행은 **미배정**이고, 태스크를 만들거나 확장하거나 — census §미배정의 3요건을 만족할 때만 — 명시 유예한다.
+> **이 표에는 "태스크" 열이 없다 — 의도적으로 없앴다** (2026-08-17). 원래 여기 `분류 → 태스크 목록` 칸이 있었고(`진짜 사본 → Task 15·17·18·19`, `부분 사본 → Task 20·21`), census 는 각 행의 분류를 정한 뒤 **그 칸을 그대로 복사**했다. 그래서 `assert_absent`(persona 테스트)가 "Task 15·17·18·19"를, spec-distill 훅 쌍이 "Task 20·21"을 가리켰는데 **그 태스크들의 Files 는 해당 파일을 담은 적이 없다.** 100행 중 47행이 그렇게 배정된 것처럼 보였고, 그중 둘은 Task 35의 락을 첫 실행에서 RED 로 만들 참이었다.
+>
+> **분류로부터 태스크를 도출할 수 없다.** 같은 "부분 사본"이라도 codex 러너는 Task 20, GC 는 21, 같은 플러그인 안의 제품 코드는 22, 리포 전용 셸 테스트는 13·14 다 — **파일이 어디 있느냐가 정하지 분류가 정하지 않는다.** 태스크 목록은 각 태스크의 Files 블록에 있고, 그것이 유일한 사본이다.
+>
+> **그러므로 조치란은 행마다 그 행 자신의 파일에서 쓴다**: 그 파일을 Files 에 담고 그 조각을 **스텝 본문에서** 지정하는 태스크를 찾아 적는다. 어느 태스크도 그렇지 않으면 그 행은 **미배정**이고 — 태스크를 만들거나 확장하거나, census §미배정의 3요건을 만족할 때만 명시 유예한다.
 
 **plan 작성 시점에 이미 확정한 분류** 〔실측〕 — 원장의 seed로 그대로 쓴다:
 
@@ -331,6 +335,14 @@ wc -l "$SCRATCH"/census-*.md
 
 - [ ] **Step 4: 원장 문서 작성 + 커밋**
 
+> **조치란은 분류에서 도출하지 않는다 — 행마다 그 행 자신의 파일에서 쓴다.** Step 3의 표에 "태스크" 열이 없는 이유이고(위 주석), 2026-08-17 재검토가 100행 중 47행에서 잡은 결함의 형태다: 분류가 같다는 이유로 태스크 목록을 복사하면 조치란이 **비어 있지 않으면서 틀린다** — 그리고 "미배정 0" 검사는 비어 있지 않은 것만 본다.
+>
+> 각 행의 조치란을 쓰는 절차는 셋이다. **하나라도 건너뛰면 그 행은 배정된 것처럼 보이기만 한다.**
+>
+> 1. **그 행이 이름을 대는 것의 정의 지점을 뜬다** — 위치란을 믿지 않는다. `grep -rn 'def <fn>(\|^<fn>()' plugins/` 로 직접 확인한다. (재검토에서 #116의 위치란이 `qg-gc.py↔spec-distill-gc.py` 였는데 실제 정의는 두 **테스트** 파일에 있었고, 틀린 위치 위에 얹힌 조치가 covered 로 통과해 있었다.)
+> 2. **그 파일들을 Files 블록에 담은 태스크를 찾는다.** 없으면 미배정이다.
+> 3. **그 태스크의 스텝 본문이 이 조각을 지정하는지 읽는다.** Files 에 있는데 스텝이 다른 조각만 지정하면 절반만 덮인 것이다 — 실행자는 스텝대로 하고 완료를 선언한다.
+
 `docs/superpowers/plans/2026-08-17-devbrew-weight-reduction-census.md`:
 
 ```markdown
@@ -341,13 +353,48 @@ wc -l "$SCRATCH"/census-*.md
 제외: */fixtures/* · */mocks/* · */harness/* · CHANGELOG.md
 
 ## 분류표
-| # | 후보 | 축 | 분류 | 조치 (태스크) | 근거 |
-|---|---|---|---|---|---|
+| # | 후보 | 축 | 분류 | 위치 (실측 — grep 으로 뜬 정의 지점) | 조치 (태스크 + 스텝) | 근거 |
+|---|---|---|---|---|---|---|
 ...
 
 ## 미배정
 (진짜 사본·부분 사본 중 조치가 배정되지 않은 것. **완료 조건은 0.**)
+세는 법을 여기 한 번만 정의한다 — 모집단 / 배정 / 명시 유예 / 미배정, 그리고 한 행을 두 번 세지
+않는 규칙. 다른 문서는 이 정의를 인용만 하고 수를 다시 적지 않는다.
+유예를 쓰려면 3요건: §12.4 락 위반 아님 실측 · 사유가 구조적 사실 · 그 행에 실측치 기재.
 ```
+
+- [ ] **Step 4b: 원장을 스스로 검사한다 — "비어 있지 않다"로는 부족하다**
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+CENSUS=docs/superpowers/plans/2026-08-17-devbrew-weight-reduction-census.md
+
+# ① 조치란이 비었거나 "조치 없음" 인 진짜/부분 사본 행 → 0 (필요조건)
+# ② 배정 + 명시 유예 = 진짜/부분 사본 행 수 (한 행을 두 번 세지 않았는가)
+python3 - "$CENSUS" <<'PY'
+import sys, re, pathlib, collections
+rows = []
+for line in pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").split("\n"):
+    m = re.match(r'^\| (\d+) \|', line)
+    if not m: continue
+    c = [x.strip() for x in line.rstrip().strip("|").split("|")]
+    cls = next((x for x in c if "사본" in x or x in ("우연",)), "")
+    rows.append((int(c[0]), cls, c))
+tgt = [r for r in rows if "진짜 사본" in r[1] or "부분 사본" in r[1]]
+print("모집단", len(tgt))
+PY
+
+# ③ **위치란이 사실인가** — 함수 이름은 1열에 기계적으로 있으므로 전수로 뜰 수 있다.
+#    출력 경로가 그 행의 위치란과 다르면 그 행의 조치는 재검토 대상이다.
+grep -oE '^\| [0-9]+ \| `[A-Za-z_][A-Za-z0-9_]*`' "$CENSUS" | sed 's/.*`\(.*\)`/\1/' | sort -u \
+  | while IFS= read -r fn; do
+      hits=$(grep -rln "def ${fn}(\|^${fn}()" plugins/ 2>/dev/null | grep -v Binary | tr '\n' ' ')
+      printf '%-32s %s\n' "$fn" "${hits:-(정의 없음 — 위치란 재확인)}"
+    done
+```
+
+Expected: ① 0건 · ② 배정+유예 = 모집단 · ③ 각 행의 위치란과 일치. **③이 불일치를 내면 그 행의 조치부터 다시 본다** — 위치가 틀리면 그 위에 얹힌 조치도 틀리다.
 
 ```bash
 git add docs/superpowers/plans/2026-08-17-devbrew-weight-reduction-census.md
@@ -2042,6 +2089,8 @@ Expected: Task 1 기준선과 같은 결과 + `Total:` 줄의 개수가 이관 �
 
 이 축이 가장 조용하게 실패한다. 이관 후 **모든 `field` 호출의 첫 인자가 리터럴 키인지** 확인한다.
 
+> **⚠ 렌더링 주의 — 아래 블록의 코드 펜스가 닫혀 있지 않다** (`ee1d95f` 부터 있던 것, 2026-08-17 재검토 기록). 다음 ```` ```bash ```` 이 열린 뒤 닫는 ```` ``` ```` 없이 산문과 두 번째 ```` ```bash ```` 이 이어져, 뷰어에 따라 **"음의 짝이 필요하다" 문단과 그 아래 양성 확인 `grep -rcE` 까지 한 덩어리 bash 블록 안에 들어가 보인다.** 실행에는 영향이 없다 — 명령을 한 줄씩 복사해 돌리면 그대로 동작한다. **산문이 코드처럼 보여도 그것을 셸에 붙여넣지 말 것.** 펜스 구조 자체는 이 라운드 범위 밖이라 손대지 않았다.
+
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 echo "=== 첫 인자가 변수인 field 호출 (순서 뒤집기 누락 의심) ==="
@@ -2577,10 +2626,12 @@ while IFS= read -r canonical; do
     no "symlink-∀: 정본 $canonical 자신이 copy-of 마커를 갖는다 (순환)"
   fi
 
+  n_this=0
   while IFS= read -r plugin; do
     [ -n "$plugin" ] || continue
     dep="plugins/$plugin/scripts/$base"
     n_expected=$((n_expected+1))
+    n_this=$((n_this+1))
     if [ ! -e "$dep" ] && [ ! -L "$dep" ]; then
       no "symlink-∀: $dep 가 없다 (missing) — $canonical 을 참조하는 $plugin 에 배포 지점이 없다"
       continue
@@ -2604,13 +2655,25 @@ while IFS= read -r canonical; do
   done <<PLUGINS
 $expected_plugins
 PLUGINS
+
+  # 양성(vacuous 아님) — **정본마다** 판정한다. 합산만 하면 한 정본의 도출이 0건이어도
+  # 다른 정본의 건강한 수에 가려 이 정본의 배포 지점이 **하나도 검사되지 않은 채**
+  # "vacuous 아님"과 GREEN 이 찍힌다(2026-08-17 재검토가 실측으로 확인한 구멍).
+  # 이 목록은 자라도록 설계돼 있으므로(위 SYMLINK_CANONICALS 주석), 다음 저자가
+  # `scripts/<basename>` 로 **exec 되지 않고 import 되는** 정본을 더하면 정확히
+  # 그 상태가 된다 — 참조 도출은 exec 관례 문자열을 찾기 때문이다.
+  if [ "$n_this" -ge 1 ]; then
+    ok "symlink-∀: $canonical — 배포 지점 ${n_this}건 도출·검사"
+  else
+    no "symlink-∀: $canonical 의 배포 지점이 **0건 도출**됐다 — 이 정본은 아무것도 검사되지 않았다. 참조 도출(scripts/${base})이 이 정본에 안 맞거나(예: import 로만 소비되는 모듈) 참조원이 사라졌다"
+  fi
 done <<CANON
 $SYMLINK_CANONICALS
 CANON
 
-# 양성(vacuous 아님): 참조 도출이 실제로 배포 지점을 찾아냈는가.
+# 전체 합 — 위 정본별 검사의 백스톱. 목록 자체가 비면 정본별 루프가 아예 안 돈다.
 if [ "$n_expected" -ge 1 ]; then
-  ok "symlink-∀: 파생된 배포 지점 ${n_expected}건 검사 (vacuous 아님)"
+  ok "symlink-∀: 파생된 배포 지점 총 ${n_expected}건 검사 (vacuous 아님)"
 else
   no "symlink-∀: 파생된 배포 지점이 0건 — 참조 도출이 깨졌거나 SYMLINK_CANONICALS 가 비었다"
 fi
@@ -2751,6 +2814,7 @@ Expected: PASS · `git ls-files -s`가 mode `100755`
 | B | 링크를 지우고 **같은 경로에, 관측 가능한 계약을 보존하는 내용**(`codex_available: false` + `skip_reason: killswitch_config_missing`)의 독립 파일을 만든다 | **RED — regular-file** | **Critical 수정** — 페이로드가 축 3(fail-closed 검사)을 우연히 통과하도록 만들어도 축 1a가 "링크가 아니다"로 직접 잡는다 |
 | C | 링크를 **실재하는 다른 정본**(`codex_findings_to_yaml.py`)으로 재지정한다 | **RED — wrong-target: mismatch** | 대상이 존재해도 기대 정본과 다르면 걸린다 |
 | D | 링크가 **존재하지 않는 경로**를 가리키게 한다 | **RED — wrong-target: dangling** | missing·regular-file과 메시지로 구별되는 세 번째 실패 유형 |
+| **F** | `SYMLINK_CANONICALS` 에 **참조 도출이 0건을 내는 정본**을 한 줄 더한다(예: `shared/codex/codex_jsonl.py` — `from codex_jsonl import` 로만 소비돼 `scripts/codex_jsonl.py` 문자열이 리포에 없다). 다른 정본 둘은 **건드리지 않는다** | **RED — "배포 지점이 0건 도출"** | **정본별 vacuous 가드.** 합산 가드만 있으면 건강한 정본들의 수에 가려 GREEN 이 나오고, 그 정본의 배포 지점은 하나도 검사되지 않는다 |
 
 **변이 B의 페이로드는 반드시 관측 가능한 계약을 보존해야 한다 — 나중에 "단순화"해서 되돌리지 않는다.** `echo "MUTATED"` 같은 임의 텍스트를 쓰면 축 3(형제 설정 없이 실행했을 때 `codex_available: false`를 내는지 보는 fail-closed 검사)이 그 텍스트가 기대 패턴과 안 맞아 **우연히** RED를 내고, 축 1a는 조용히 통과한다 — 2026-08-17 라운드 1 코드 리뷰가 정확히 이 사고로 잡힌 결함이었다(위 기록 참조). 페이로드가 실제 재분열이 낼 법한 출력을 흉내 내야만, RED가 "정말 심볼릭 링크 축이 반응했다"는 증거가 된다. 변이 B는 위치 개념이 없다(맨 앞·중간·맨 끝) — 심볼릭 링크는 파일 전체가 하나의 단위이므로 "본문 한 줄"이 성립하지 않는다.
 
@@ -2787,7 +2851,31 @@ rm -f "$V"; ln -s "$V_TARGET" "$V"
 
 printf '무변이(링크 축) →\n'; report
 git diff --stat "$V"   # 최종 상태가 원래 링크와 같은지 — diff 가 없어야 한다
+
+# 변이 F — 정본별 vacuous 가드. 배포 지점을 흔드는 게 아니라 **정본 목록**을 흔든다.
+# 참조 도출이 0건을 내는 정본을 더한다: codex_jsonl.py 는 `from codex_jsonl import` 로만
+# 소비돼 리포에 `scripts/codex_jsonl.py` 문자열이 없다(Task 17 Step 4b 가 이 이유로
+# 심볼릭 링크 대신 copy-of 를 골랐다). 다른 두 정본은 건드리지 않으므로, 합산 가드만
+# 있으면 그것들의 건강한 수에 가려 GREEN 이 난다.
+LOCK="shared/tests/test_copy_of_contract.sh"
+cp "$LOCK" /tmp/lock_mutF.bak
+python3 - <<'PY'
+import pathlib
+p = pathlib.Path("shared/tests/test_copy_of_contract.sh"); t = p.read_text(encoding="utf-8")
+old = 'shared/codex/codex_findings_to_yaml.py"'
+assert old in t, "계측기 고장 — SYMLINK_CANONICALS 대입을 못 찾았다"
+p.write_text(t.replace(old, 'shared/codex/codex_findings_to_yaml.py\nshared/codex/codex_jsonl.py"', 1), encoding="utf-8")
+PY
+git diff --stat "$LOCK"   # 계측기 확인 — 실제로 바뀌었는가
+printf 'mutation F (도출 0건 정본 추가) → '
+bash "$LOCK" 2>&1 | grep -E '배포 지점이 \*\*0건 도출\*\*|배포 지점이 .*0건 도출' \
+  && echo "RED ✓ (정본별 가드가 반응)" \
+  || echo "GREEN ❌ (합산 가드에 가려 이 정본이 통째로 안 검사된다)"
+cp /tmp/lock_mutF.bak "$LOCK"; rm -f /tmp/lock_mutF.bak
+git diff --stat "$LOCK"   # 빈 출력이어야 한다 — 원상 복구 확인
 ```
+
+> **변이 F 는 이 사이클이 실제로 마주친 상황이다.** Task 17 Step 4b 가 `shared/codex/codex_jsonl.py` 를 만들 때 심볼릭 링크로 배포하려다, 참조 도출이 이 정본에 대해 0건을 낸다는 것을 발견하고 `copy-of` 로 우회했다. 우회는 그 태스크의 선택일 뿐 **가드의 구멍은 그대로였다** — `SYMLINK_CANONICALS` 는 자라도록 설계돼 있고(위 목록 주석), 다음 저자가 import 로만 소비되는 정본을 더하면 조용히 같은 상태가 된다. 변이 F 가 그 자리를 지킨다.
 
 **MARKER_RE 카나리아 mutation** (Important 1 — 축 1b 가 자기 것으로 vacuous 방지를 하는지):
 
@@ -3026,7 +3114,9 @@ cd /Users/jeonghokim/Downloads/devbrew
   > plugins/plugin-audit/scripts/codex_jsonl.py
 ```
 
-> **왜 여기는 심볼릭 링크가 아닌가** (Task 15·17의 기본 방식과 다른 이유). Task 16의 축 1a(심볼릭 링크 무결성)는 배포 지점 집합을 **참조원에서 도출**한다 — 정본 basename 을 `scripts/<basename>` 형태로 참조하는 파일을 찾는 방식이다. `codex_jsonl` 은 `from codex_jsonl import ...` 로만 불리므로 그 문자열이 리포 어디에도 없고, 링크로 두면 그 정본의 기대 배포 지점이 **0건**으로 도출된다. 축 1a의 vacuous 가드는 `n_expected` 를 정본 전체에 걸쳐 합산하므로(정본별이 아니라) 다른 정본들이 만든 수에 가려 **조용히 아무것도 검사하지 않는다.** 마커 축(1b)은 도출이 아니라 마커 스캔이라 이 문제가 없다.
+> **왜 여기는 심볼릭 링크가 아닌가** (Task 15·17의 기본 방식과 다른 이유). Task 16의 축 1a(심볼릭 링크 무결성)는 배포 지점 집합을 **참조원에서 도출**한다 — 정본 basename 을 `scripts/<basename>` 형태로 참조하는 파일을 찾는 방식이다. `codex_jsonl` 은 `from codex_jsonl import ...` 로만 불리므로 그 문자열이 리포 어디에도 없고, 링크로 두면 그 정본의 기대 배포 지점이 **0건**으로 도출된다. 마커 축(1b)은 도출이 아니라 마커 스캔이라 이 문제가 없다 — 그래서 여기는 `copy-of` 다.
+>
+> **이 발견은 Task 16에 반영돼 있다.** 원래 축 1a 의 vacuous 가드는 `n_expected` 를 정본 전체에 걸쳐 **합산**해 한 번만 판정했으므로, 도출 0건인 정본이 섞이면 다른 정본들의 건강한 수에 가려 그 정본이 **통째로 검사되지 않은 채** "vacuous 아님"·GREEN 이 찍혔다. Task 16 은 이제 **정본별로** `n_this` 를 세어 0이면 `no` 를 내고, **변이 F** 가 그 이빨을 증명한다. 이 태스크의 우회는 그 가드가 고쳐졌는지와 **무관하게** 유효하다(도출이 0건인 것은 여전히 사실이므로 링크로 두면 RED 가 된다) — 우회와 가드 수정은 서로를 대체하지 않는다.
 
 그리고 `codex_audit_to_json.py` 에서 자체 정의를 지우고:
 
@@ -3332,7 +3422,7 @@ for p in project-init spec-distill quality-gates; do
 done
 ```
 
-> **사본이 3개다** (2·3 이 아니라). `_disabled` 7곳 중 5곳이 quality-gates 이므로 그 플러그인도 배포 사본을 갖는다. 아래 Step 6의 `copy-of: 물리 사본 N건 스캔` 기대값이 **2가 아니라 3**이고, Task 20(+3) · Task 21(+2)의 누적 기대값도 그만큼 올라간다.
+> **사본이 3개다** (2·3 이 아니라). `_disabled` 7곳 중 5곳이 quality-gates 이므로 그 플러그인도 배포 사본을 갖는다. 아래 Step 6의 `copy-of: 물리 사본 N건 스캔` 기대값이 **2가 아니라 3**이다. 누적 수열은 Task 17 Step 4b(+1) → 이 태스크(+3) → Task 20(+3) → Task 21(+2) = **9** 이고, 각 태스크가 자기 자리에서 그 값을 적는다.
 
 > 파이썬 파일에 shebang이 없으면 마커가 **첫 줄**이다. 모듈 docstring이 그 다음 줄에 와도 여전히 첫 *문*이므로 `__doc__`이 산다. Task 17 Step 3의 검사를 여기도 돌린다.
 
@@ -3498,14 +3588,66 @@ _degrade_if_empty() {
 
 - [ ] **Step 3b: `write_failclosed` · `emit_fallback` — census #24·#125·#126**
 
-〔2026-08-17 실측〕 두 함수는 spec-distill 러너 **둘에만** 있다(`run_brief_codex_reviewer.sh` · `run_spec_codex_reviewer.sh`). 크기가 대칭이 아니다:
+〔2026-08-17 실측, 네 본문 전부 판독〕 두 함수는 spec-distill 러너 **둘에만** 있다(`run_brief_codex_reviewer.sh:39` · `run_spec_codex_reviewer.sh:55`).
 
 | 함수 | `run_brief_…` | `run_spec_…` | 판단 |
 |---|---|---|---|
-| `write_failclosed` | 11줄 | 9줄 | **정본화한다** — 같은 책임(fail-closed 산출물 쓰기), 차이는 인자로 뺄 수 있다 |
-| `emit_fallback` | 4줄 | **47줄** | **정본화하지 않는다** — 47줄 쪽은 spec 리뷰 전용 fallback 본문을 통째로 담고 있어 "차이를 인자로 빼면 동일해지는가"에 **아니오**다(§3의 진짜/부분 사본 판정 질문). 짧은 쪽이 긴 쪽을 부르게 만드는 것은 통합이 아니라 결합이다 |
+| `write_failclosed` | 11줄 | 9줄 | **정본화한다.** 줄 수 차이는 **포매팅뿐이다** — `{` 뒤 개행이 있고 없고다. 출력 4줄·에러 메시지·`return 1`·전역 `$OUTPUT_PATH` 참조까지 전부 같다. 인자로 뺄 "의도된 차이"가 **없다** |
+| `emit_fallback` | 4줄 | **47줄** | **정본화하지 않는다** — 47줄 쪽은 spec 리뷰 전용 fallback 본문을 통째로 담아 §3의 판정 질문("차이를 파일 밖으로 빼면 바이트 동일이 되는가")에 **아니오**다. 짧은 쪽이 긴 쪽을 부르게 만드는 것은 통합이 아니라 결합이다 |
 
-`write_failclosed` 만 `shared/codex/runner_common.sh` 로 올린다. `emit_fallback` 은 **부분 사본으로 남기고**, 그 잔여는 Task 35의 20줄 검사가 지킨다 — 실측상 이 쌍의 최장 공유 구간은 20줄 미만이라 오늘 위반이 아니다(Task 35 Step 2의 집합 A에 이 쌍이 없다). 이 판단을 census #126의 조치란에도 같은 문장으로 적는다.
+`emit_fallback` 은 **부분 사본으로 남기고** 잔여는 Task 35의 20줄 검사가 지킨다 — 실측상 이 쌍은 집합 A(오늘의 위반 전량)에 없으므로 20줄 임계 아래다. 이 판단을 census #126의 조치란에도 같은 문장으로 적는다.
+
+**정본 — `shared/codex/runner_common.sh` 의 `_degrade_if_empty` 아래에 이어 쓴다:**
+
+```bash
+# write_failclosed <output_path> <reason>
+# fail-closed 산출물을 **무조건** 쓴다(_degrade_if_empty 는 산출물이 비었을 때만 쓴다 —
+# 그 차이 때문에 두 함수는 합쳐지지 않는다).
+#
+# 이관 전 두 러너는 이것을 `write_failclosed <reason>` 한 인자로 부르고 경로는 **전역
+# `$OUTPUT_PATH`** 에서 읽었다. 정본은 경로를 인자로 받는다 — 바로 위 `_degrade_if_empty`
+# 와 같은 자리에 같은 뜻의 인자를 두기 위해서다(공유 파일이 호출자의 전역을 읽으면
+# 그 전역 이름이 조용한 계약이 된다).
+#
+# **인자가 하나 늘어나므로 호출부를 하나라도 빠뜨리면 안 된다.** 빠뜨린 호출
+# `write_failclosed "runner_incomplete"` 는 out="runner_incomplete" · reason="" 가 되어
+# **엉뚱한 파일 이름으로 쓰기를 시도**한다. 아래 빈-인자 가드가 그것을 조용히 통과시키지
+# 않고 RED 로 만든다 — `field` 인자 순서와 같은 부류의 실패원이라 가드를 뺄 수 없다.
+write_failclosed() {
+  local out="${1:-}" reason="${2:-}"
+  if [ -z "$out" ] || [ -z "$reason" ]; then
+    echo "write_failclosed: <output_path> <reason> 두 인자가 필요하다 (out='$out' reason='$reason')" >&2
+    return 1
+  fi
+  {
+    echo 'findings: []'
+    echo 'meta:'
+    echo '  codex_failed: true'
+    echo "  reason: $reason"
+  } > "$out" || {
+    echo "[spec-distill] fail-closed YAML 기록 실패: $out ($reason)" >&2
+    return 1
+  }
+}
+```
+
+**고쳐야 하는 호출부 — 전량 열거** 〔실측〕:
+
+| 파일:줄 | 이관 전 | 이관 후 |
+|---|---|---|
+| `run_brief_codex_reviewer.sh:52` | `write_failclosed "$1" \|\| exit 3` | `write_failclosed "$OUTPUT_PATH" "$1" \|\| exit 3` |
+| `run_brief_codex_reviewer.sh:62` | `seed_failclosed() { write_failclosed "runner_incomplete" \|\| exit 3; }` | `... write_failclosed "$OUTPUT_PATH" "runner_incomplete" ...` |
+| `run_brief_codex_reviewer.sh:88` | `write_failclosed "aborted_before_completion" \|\| true` | `write_failclosed "$OUTPUT_PATH" "aborted_before_completion" \|\| true` |
+| `run_spec_codex_reviewer.sh:64` | `emit_fallback() { write_failclosed "$1" \|\| exit 3; exit 0; }` | `... write_failclosed "$OUTPUT_PATH" "$1" ...` |
+
+줄 번호는 이관 시점에 밀릴 수 있으므로 **번호가 아니라 도출로 확인한다**:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+grep -rn 'write_failclosed' plugins/*/scripts/*.sh | grep -v 'write_failclosed()'
+```
+
+Expected: 4건 전부 첫 인자가 `"$OUTPUT_PATH"` 다.
 
 - [ ] **Step 4: 다섯 러너에서 자체 정의를 지우고 source 한다**
 
@@ -3527,6 +3669,21 @@ done
 ```bash
 # shellcheck source=/dev/null
 . "$(dirname -- "${BASH_SOURCE[0]}")/runner_common.sh"
+```
+
+**두 spec-distill 러너에서는 `write_failclosed()` 정의 블록도 함께 지운다**(Step 3b) — 그 파일들은 `source` 줄 하나로 두 함수를 다 받는다. **지우기와 호출부 고치기는 같은 파일 안에서 함께 한다**: 정의만 지우고 호출부를 그대로 두면 `command not found` 로 러너가 죽고, 호출부만 고치고 정의를 남기면 **지역 정의가 source 한 정본을 덮어써 통합이 없던 일이 된다**(조용한 쪽이다 — 러너는 정상 동작한다).
+
+지우기 누락을 기계적으로 확인한다:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+echo "=== 러너에 남은 지역 정의 (기대: 없음) ==="
+grep -rn '^_degrade_if_empty()\|^write_failclosed()' plugins/*/scripts/run_*codex*.sh
+echo "=== (위가 비어야 한다 — 정의는 shared/codex/runner_common.sh 한 곳) ==="
+echo "=== 양성: 정본에 두 정의가 실제로 있는가 (여기가 비면 위 검사가 vacuous) ==="
+grep -c '^_degrade_if_empty()\|^write_failclosed()' shared/codex/runner_common.sh
+echo "=== 인자 하나로 부르는 write_failclosed 잔존 (기대: 없음) ==="
+grep -rnE 'write_failclosed +"[^"]*" *(\||$|;)' plugins/*/scripts/*.sh | grep -v '\$OUTPUT_PATH'
 ```
 
 - [ ] **Step 5: 검증 — 다섯 러너가 같은 스키마를 내는가**
@@ -3551,8 +3708,34 @@ done
 diff "$T/out1.yaml" "$T/out2.yaml" && echo "스키마 동일 ✓"
 # 빈 경로 → exit 3
 _degrade_if_empty "" "x" 0; echo "빈 경로 rc=$? (기대: 3)"
+
+# write_failclosed (Step 3b) — 같은 방식으로 직접 태운다.
+w="$T/fc.yaml"
+write_failclosed "$w" "probe_reason"; echo "write_failclosed rc=$? (기대: 0)"
+cat "$w"
+# 두 인자 가드 — 이관 전 형태(인자 하나)로 부르면 **조용히 통과하면 안 된다**
+write_failclosed "runner_incomplete"; echo "인자 1개 rc=$? (기대: 1 — 빈 reason 가드)"
+[ -e runner_incomplete ] && echo "❌ 엉뚱한 파일이 생겼다: runner_incomplete" && rm -f runner_incomplete
+write_failclosed "" "x"; echo "빈 경로 rc=$? (기대: 1)"
 rm -rf "$T"
 ```
+
+**두 spec-distill 러너를 실제로 태워 fail-closed 경로가 살아 있는지 본다** — 위 검사는 정본 함수만 태우므로 러너의 배선(정의 삭제 + 호출부 인자)이 깨져도 통과한다:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+for f in plugins/spec-distill/scripts/run_brief_codex_reviewer.sh \
+         plugins/spec-distill/scripts/run_spec_codex_reviewer.sh; do
+  echo "=== $f"; bash -n "$f" || echo "❌ 문법 오류"
+  # 정의가 지워지고 source 로 대체됐는지 (배선 확인)
+  grep -c 'runner_common.sh' "$f"
+done
+bash plugins/spec-distill/tests/test_run_spec_codex_reviewer.sh 2>&1 | tail -3
+```
+
+Expected: 문법 오류 0 · 두 러너 모두 `runner_common.sh` 를 1회 이상 source · 스위트 새 RED 0.
+
+> **`run_brief_codex_reviewer.sh` 에는 전용 스위트가 없다** 〔실측: `plugins/spec-distill/tests/` 에 `test_run_spec_codex_reviewer.sh` 하나뿐〕. 그래서 그 러너의 `write_failclosed` 배선은 **위 `bash -n` + `grep -c` + 정본 직접 태우기 셋으로만** 덮인다 — 이관 후 그 파일의 fail-closed 경로를 실제로 실행하는 테스트는 이 사이클에 없다. 배선을 눈으로 한 번 더 읽는다.
 
 - [ ] **Step 6: 기존 러너 락 + `copy-of` 락**
 
@@ -3560,8 +3743,8 @@ rm -rf "$T"
 > 이 태스크가 `shared/codex/runner_common.sh`를 5개 러너에 `copy-of` 사본으로 배포한다.
 > Task 16의 축 1b(마커 기반 바이트-동일성)는 실측·mutation으로 검증됐지만, **이 특정
 > 배포(5건)가 그 축의 스캔에 실제로 걸리는지는 이 태스크 실행 시점에 확인된 적이 없다.**
-> 아래 실행 시 `copy-of: 물리 사본 N건 스캔`의 N이 이전 태스크(Task 19의 **3건** —
-> project-init · spec-distill · quality-gates) + **이번 3건**만큼 늘었는지 직접 확인한다.
+> 아래 실행 시 `copy-of: 물리 사본 N건 스캔`의 N이 **4에서 7로** 늘었는지 직접 확인한다 —
+> 이전 누적 4(Task 17 Step 4b의 1 + Task 19의 3) + **이번 3건**이다.
 > (러너는 5개지만 `runner_common.sh` 사본은 **플러그인당 하나**라 3개다 — Step 4의
 > `for p in quality-gates spec-distill plugin-audit` 가 도는 횟수다. 5로 세면 N 이
 > 기대보다 2 적게 나와 정상을 결함으로 오독한다.)
@@ -3580,7 +3763,7 @@ bash shared/tests/test_copy_of_contract.sh | tail -6
 
 ```bash
 git add shared/codex/runner_common.sh plugins/*/scripts/
-git commit -m "refactor(codex): 러너 공통 조각 추출 + _degrade_if_empty 스키마 4종을 1종으로"
+git commit -m "refactor(codex): 러너 공통 조각 추출 — _degrade_if_empty 스키마 4종을 1종으로 + write_failclosed 정본화"
 ```
 
 ---
@@ -3654,8 +3837,8 @@ done
 > **미검증 — 실행자가 확인할 것** (2026-08-17 라운드 1 코드 리뷰, Task 19·20과 같은 종류의 gap):
 > `gc_common.py` ×2가 이 태스크에서 `copy-of` 사본으로 배포된다. Task 16의 축 1b는
 > 실측·mutation으로 검증됐지만, 이 배포가 그 스캔에 실제로 걸리는지는 확인된 적이
-> 없다 — 아래 실행에서 `물리 사본 N건` 이 이전 태스크들(Task 19의 **3** + Task 20의 **3**) +
-> 이번 2건만큼 늘었는지 직접 확인한다. 누적 기대값 **8**.
+> 없다 — 아래 실행에서 `물리 사본 N건` 이 **7에서 9로** 늘었는지 직접 확인한다 —
+> 이전 누적 7(Task 17 Step 4b 1 + Task 19 3 + Task 20 3) + **이번 2건**이다. 최종 **9**.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
@@ -5519,7 +5702,7 @@ Expected: PASS · mode `100755`
 > - **전혀 모르는 쌍이 찍힌다** → PR3b–PR5 사이에 새로 유입된 중복이다. **이쪽이 오늘 가장 있음직한 경우다**: PR3b 가 120개 셸 테스트에 같은 `source` 머리를, PR3c 가 여러 훅에 같은 `sys.path.insert` + import 머리를 넣는다 — 그 이관이 **없던 20줄 동일 구간을 만들 수 있다.** 아래 문단대로 §6 등급으로 분류해 처리한다. **이것이 이 락의 본래 목적이다.**
 > - **`0파일만 스캔` 이 뜬다** → 위반 문제가 아니라 코퍼스 도출이 깨진 것이다. Step 1 주석의 파이프/히어닥 항목을 먼저 본다.
 >
-> **명시적으로 유예된 것 중 이 락이 잡는 것은 없다** 〔실측〕. census 재검토가 41행을 사유와 함께 유예했는데(census §미배정 참조), 그 41행의 파일 쌍은 **위 집합 A 6쌍 어디에도 없다** — 집합 A 가 이 트리의 위반 전량이므로, 유예된 쌍은 정의상 20줄 임계 아래다. 유예가 이 락을 RED 로 만들 일은 없다.
+> **명시적으로 유예된 것 중 이 락이 잡는 것은 없다** 〔실측〕. census 재검토가 일부 행을 사유와 함께 유예했는데(수와 정의는 census §미배정에 **한 번만** 적는다 — 여기서 다시 세지 않는다), 그 유예 행들의 파일 쌍은 **위 집합 A 6쌍 어디에도 없다** — 집합 A 가 이 트리의 위반 전량이므로, 유예된 쌍은 정의상 20줄 임계 아래다. 유예가 이 락을 RED 로 만들 일은 없다.
 >
 > **PR6 착수 전 확인 (이 항목은 2026-08-17 census 조치 재검토로 닫혔다)**: 이전 판본은 여기서 *"이 쌍을 §6 등급으로 분류해 담당 태스크를 하나 만들거나 명시적으로 유예했음을 여기 적는다 — 둘 다 안 하고 Step 2에 들어가면 실행자는 자기가 만들지 않은 RED를 만나 락 자체를 의심하게 된다"* 고 적어 두고 **둘 다 하지 않은 채로 남아 있었다.** 지금은 두 쌍 모두 담당 스텝(Task 22 Step 2b · Task 14 Step 4b)이 있고, 각 스텝이 자기 자리에서 "<20줄"을 실측한다. **PR6 착수 전에 그 두 스텝의 체크박스가 켜져 있는지만 확인하면 된다.** 여전히 RED 를 만나면 그것은 미해결 작업의 신호이지 락의 결함이 아니다 — **임계를 올려 통과시키지 않는다.**
 
@@ -5814,9 +5997,44 @@ python3 "$SCRATCH/census.py" > "$SCRATCH/census-after.md"
 python3 "$SCRATCH/funcs.py"  > "$SCRATCH/funcs-after.md"
 ```
 
-**모집단은 PR1 SHA로 고정돼 있다.** `git ls-tree -r --name-only <PR1 SHA>`의 목록에 §3 분류를 적용하고, "진짜 사본"·"부분 사본" 중 조치가 배정되지 않은 항목을 센다.
+**모집단은 PR1 SHA로 고정돼 있다.** `git ls-tree -r --name-only <PR1 SHA>`의 목록에 §3 분류를 적용하고, "진짜 사본"·"부분 사본" 중 **배정도 명시 유예도 아닌** 항목을 센다.
 
-Expected: **0**
+**세는 대상이 둘이다 — "조치가 배정되지 않은 것"만 세면 이 검사가 틀린 값을 낸다.** 재검토(2026-08-17)가 조치란을 두 상태로 나눴다:
+
+| 상태 | 무엇 | 이 검사에서 |
+|---|---|---|
+| **배정** | 조치란이 그 행의 파일을 Files 에 담고 그 조각을 스텝에서 지정하는 태스크를 적었다 | 통과 |
+| **명시 유예** | 조치란이 유예 묶음을 적었고 census §미배정의 **3요건**(§12.4 락 위반 아님 실측 · 사유가 구조적 사실 · 그 행에 실측치 기재)을 만족한다 | 통과 |
+| **미배정** | 위 둘 중 어느 것도 아니다 — 비었거나, "조치 없음"이거나, **적힌 태스크가 그 파일을 담지 않는다** | **여기를 센다** |
+
+세 번째 줄의 마지막 조건이 핵심이다. "비어 있지 않다"만 재던 이전 판이 100행 중 **47행**을 통과시켰고, 그중 둘이 Task 35의 락을 첫 실행에서 RED 로 만들 참이었다.
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+CENSUS=docs/superpowers/plans/2026-08-17-devbrew-weight-reduction-census.md
+# 배정 + 명시 유예 = 진짜/부분 사본 행 수 인가 (한 행을 두 번 세지 않았는가).
+# 수 자체의 정의는 census §미배정에 한 번만 있다 — 여기서 상수로 다시 적지 않는다.
+python3 - "$CENSUS" <<'PY'
+import sys, re, pathlib
+a = d = bad = tgt = 0
+for line in pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").split("\n"):
+    m = re.match(r'^\| (\d+) \|', line)
+    if not m: continue
+    c = [x.strip() for x in line.rstrip().strip("|").split("|")]
+    cls, act = (c[2], c[3]) if len(c) == 5 else (c[5], c[6])
+    if "진짜 사본" not in cls and "부분 사본" not in cls: continue
+    tgt += 1
+    if not act or "조치 없음" in act: bad += 1
+    elif act.startswith("**유예"): d += 1
+    else: a += 1
+print(f"모집단 {tgt} = 배정 {a} + 명시 유예 {d} + 미배정 {bad}")
+print("OK" if bad == 0 and a + d == tgt else "❌ 미배정이 남았거나 합이 안 맞는다")
+PY
+```
+
+Expected: 미배정 **0** · 배정 + 유예 = 모집단.
+
+**이 검사는 필요조건일 뿐이다.** 조치란이 가리키는 태스크가 그 행의 일을 실제로 하는지는 스크립트가 못 본다 — census §미배정의 기계적 확인 ③(함수 이름으로 정의 지점을 떠서 위치란과 대조)을 여기서도 돌리고, 불일치가 나온 행은 조치를 다시 읽는다.
 
 **해소 — census.py·funcs.py(부록 A.1·A.2)가 A.4 `knee.py`와 같은 심볼릭 링크 문제를
 갖는가** (2026-08-17 라운드 1 코드 리뷰의 미결 항목 하나): 두 스크립트 전문을 읽었다.
@@ -5886,7 +6104,7 @@ Expected: 새 RED **0**
 | `# guards:` 양방향 커버리지 | (장치 없음) | … | 전량 |
 | `/plugin-audit` 셸 테스트 | null | … | 대상 플러그인 전량 |
 | `/plugin-audit project-init` 수집 수 | 0 | … | 실제 테스트 수 |
-| 갈라진 사본 (미배정) | … | … | **0** — 유예는 미배정이 아니다. 단 **유예로 세려면 census §미배정의 유예 규칙 3요건**(§12.4 위반 아님 실측 · 사유가 구조적 사실 · 행에 실측치 기재)**을 만족해야 한다.** 2026-08-17 재검토 기준 배정 58 · 명시 유예 42 |
+| 갈라진 사본 (미배정) | … | … | **0** — **배정도 명시 유예도 아닌** 행 수를 센다. 유예는 census §미배정의 3요건(§12.4 위반 아님 실측 · 사유가 구조적 사실 · 행에 실측치 기재)을 만족한 것만. **배정·유예의 수는 census §미배정에 한 번만 있다 — 여기 옮겨 적지 않는다**(옮겨 적었더니 세 문서가 41·42·43으로 갈렸다) |
 | 20줄 동일 블록 (copy-of 미설명) | … | … | **0** |
 | `marketplace.json` drift | … | 0 | 0 |
 | 환경변수 어순 패턴 | 4 | 1 | 1 |
@@ -6424,7 +6642,7 @@ else:
 | `test_guards_coverage_bidirectional.sh` | Task 6 | **Task 16 Step 5 · Task 35 Step 4** — 대상 락이 생긴 뒤라야 실제 판정이 난다. Task 6 시점의 PASS는 vacuous이며 그 사실을 그 태스크가 명시한다 |
 | `test_assert_behavior.sh` | Task 13 | Task 13 Step 5 (5종) |
 | `test_severity_mapping.py` | Task 28 | Task 28 Step 3 (구현 전 RED) |
-| `test_copy_of_contract.sh` | Task 16 | Task 16 Step 3 — **심볼릭 링크 축(도미넌스) 4종**(A missing · B regular-file, 계약-보존 페이로드 · C wrong-target: mismatch · D wrong-target: dangling — 전부 위치 개념 없음, 배포 지점 전체가 단위) + **`MARKER_RE` 카나리아 1종**(E — 축 1b 자기 vacuous 방지, 정규식 대입 줄 하나만 변형) + **`copy-of` 물리 사본 축 3종**(변이 1은 3위치, 스캐치 픽스처로 증명 — Task 16 시점엔 리포에 실제 물리 사본이 없다, B.1의 미결 5 참조 — **Task 17 Step 4b**가 첫 실사용, Task 19가 그다음) — 2026-08-17 라운드 1 코드 리뷰가 원래의 ∃-기반 심볼릭 링크 축(3종, "경로만 바꾸면 GREEN" 포함)을 이 도미넌스 체크로 다시 쓰게 했다(Critical) |
+| `test_copy_of_contract.sh` | Task 16 | Task 16 Step 3 — **심볼릭 링크 축(도미넌스) 5종**(A missing · B regular-file, 계약-보존 페이로드 · C wrong-target: mismatch · D wrong-target: dangling · **F 정본별 vacuous 가드** — 도출 0건 정본을 목록에 더해도 합산 수에 가리지 않는지, 2026-08-17 census 재검토가 실측으로 연 구멍 — 전부 위치 개념 없음, 배포 지점 전체가 단위) + **`MARKER_RE` 카나리아 1종**(E — 축 1b 자기 vacuous 방지, 정규식 대입 줄 하나만 변형) + **`copy-of` 물리 사본 축 3종**(변이 1은 3위치, 스캐치 픽스처로 증명 — Task 16 시점엔 리포에 실제 물리 사본이 없다, B.1의 미결 5 참조 — **Task 17 Step 4b**가 첫 실사용, Task 19가 그다음) — 2026-08-17 라운드 1 코드 리뷰가 원래의 ∃-기반 심볼릭 링크 축(3종, "경로만 바꾸면 GREEN" 포함)을 이 도미넌스 체크로 다시 쓰게 했다(Critical) |
 | `test_no_new_duplication.sh` | Task 35 | Task 35 Step 3 (6종, 변이 1·2는 3위치) — **심볼릭 링크 예외**(변이 3 GREEN · 변이 4 — 링크를 깨되 내용은 유지해 예외가 "링크임"에 반응하는지 증명, RED) + **마커 예외**(변이 6a·6b — 2026-08-17 라운드 3 코드 리뷰가 이 축은 그때까지 mutation-proof가 전혀 없었음을 지적; Task 16과 같은 스캐치 픽스처 패턴으로 GREEN→RED 증명. 설계 당시 실제 마커 쌍이 없었고 — 첫 실사용은 Task 17 Step 4b, B.1의 미결 5 참조 — PR6 시점엔 있지만 크기 통제를 위해 픽스처를 유지한다) |
 
 **Task 6의 락은 자기 도입 시점에 이빨을 증명할 수 없다** — 재는 대상(`--emit-scanned`를 가진 락)이 아직 없기 때문이다. 이것을 숨기지 않고 그 태스크의 Step 2와 이 표에 적었다.
