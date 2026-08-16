@@ -383,6 +383,13 @@ for line in pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").split("\n"):
     rows.append((int(c[0]), cls, c))
 tgt = [r for r in rows if "진짜 사본" in r[1] or "부분 사본" in r[1]]
 print("모집단", len(tgt))
+
+# ① 조치란이 비었거나 "조치 없음" 인 행 — **주석이 아니라 코드로 센다.**
+#    (Expected 가 "① 0건"을 약속하는데 출력이 없으면, 사람이 0을 봤다고 믿을 뿐이다.)
+def act_of(c):
+    return c[3] if len(c) == 5 else (c[6] if len(c) >= 7 else "")
+missing = [n for n, cls, c in tgt if not act_of(c).strip() or "조치 없음" in act_of(c)]
+print("조치란 비었거나 '조치 없음' 인 행:", missing or "없음")
 PY
 
 # ③ **위치란이 사실인가** — 함수 이름·언어는 1열에 기계적으로 있으므로 전수로 뜰 수 있다.
@@ -2054,7 +2061,22 @@ awk -F'\t' '{s+=$1} END {print "총 assertion 호출:", s}' "$SCRATCH/assert-cou
 | +`ag`·`agf`·`ng`·`check`·`assert_absent`·`assert_not_grep`·`assert_not_contains`·`assert_body_grep` | **120** | 11 — 그중 둘이 `test_adversarial_persona.sh`·`test_security_reviewer_persona.sh`(census #137·#150, Task 35의 20줄 검사가 실제로 잡는 쌍) |
 | +**`bad`**·**`expect`** (census 위치란 재도출이 드러냄) | **122** | 2 — `test_agent_tools_lock_mutation.sh` · `test_review_floor_lock.sh` (census #105) |
 
-> **왜 `verdict`·`restore`·`run_case`·`has`·`mkrepo` 는 더하지 않는가** 〔실측: 각 정의의 **본문**이 `PASS=$((` / `FAIL=$((` 를 건드리는지 전수 판독〕. `verdict`(#107)·`restore`(#108)는 **어느 사이트도** 카운터를 안 올린다 — 출력 추출기·설정 복원이라 §9의 판정 헬퍼가 아니다. `run_case`(#43)·`has`(#61)·`mkrepo`(#106)는 **사이트마다 갈린다**(일부만 카운터를 올린다) — 이름만 같고 책임이 다르다는 census의 "우연" 판정과 일치하며, 이런 이름을 목록에 넣으면 **정본에 대응이 없는 헬퍼를 정의한 파일이 Step 3의 대상으로 들어와** 지울 것과 바꿔 넣을 것이 없는 상태가 된다. `bad`·`expect`는 반대로 **모든 사이트가** 카운터를 올린다.
+> **왜 `verdict`·`restore`·`mkrepo`·`run_case`·`has` 는 더하지 않는가** 〔실측: 각 정의의 **본문**이 `PASS=$((` / `FAIL=$((` / 소문자 `fail=$((` 를 건드리는지 전수 판독〕
+>
+> | 이름 | 카운터 올리는 사이트 | 성격 | 제외 사유 |
+> |---|---|---|---|
+> | `verdict`(#107) | **0-of-2** | 출력 추출기 | 어느 사이트도 판정하지 않는다 — §9 범위 밖 |
+> | `restore`(#108) | **0-of-2** | 설정 복원 | 위와 같음 |
+> | `mkrepo`(#106) | **0-of-2** | **픽스처 빌더** | 위와 같고, §9가 이름과 범주로 명시 제외한 바로 그것이다 |
+> | `run_case`(#43) | 4-of-5 (`test_pr_detect.sh` 만 비판정) | 혼합 | 사이트마다 책임이 갈린다 = census "우연" 판정과 일치 |
+> | `has`(#61) | 1-of-3 | 혼합 | 위와 같음 |
+> | `bad`(#104) · `expect`(#105) | **2-of-2 · 2-of-2** | 판정 헬퍼 | **더한다** |
+>
+> 혼합 이름을 목록에 넣으면 **정본에 대응이 없는 헬퍼를 정의한 파일이 Step 3의 대상으로 들어와** 지울 것과 바꿔 넣을 것이 없는 상태가 된다.
+>
+> **판정 여부가 유일한 기준은 아니다** — `field`(#40)는 실측 **0-of-6**(값 추출기라 카운터를 안 올린다)인데도 목록에 있다. `shared/tests/assert.sh` 가 `field`/`field_line` 을 **정본으로 소유**하기 때문이다(Task 13 Interfaces). 기준은 "**정본에 갈 자리가 있는가**"이고, 카운터 프로브는 assertion 계열에 대한 1차 증거일 뿐이다.
+>
+> > **정정(2026-08-17 fix round 3) — 이 표의 앞선 판이 틀렸다.** `mkrepo` 를 "사이트마다 갈린다"로 적었는데 실측은 **0-of-2** 다. 원인은 결론이 아니라 **계측기**였다: 본문 추출기가 끝을 `^}`(줄 맨 앞 중괄호)로 찾았는데 `mkrepo` 는 `… ) ; echo "$d"; }` 로 **줄 끝에서 닫힌다.** 그래서 추출이 EOF 까지 넘쳐 `test_artifact_branch_guard.sh:17` 의 **최상위** `PASS=$((PASS+1))` 을 함수 본문으로 읽었다. 중괄호 깊이로 세도록 고치고 전 후보를 재판독했다 — 그 과정에서 `run_case` 도 3-of-5 가 아니라 **4-of-5**(`test_read_frontmatter.sh` 가 소문자 `fail=$((`)임이 드러났다. 처분은 셋 다 그대로다(혼합·제외).
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
@@ -2764,7 +2786,9 @@ EOF
 if [ "$n_copies" -ge 1 ]; then
   ok "copy-of: 물리 사본 ${n_copies}건 스캔"
 else
-  ok "copy-of: 물리 사본 0건 — 이 태스크 시점엔 정상(첫 실사용은 Task 17 Step 4b, 그다음 Task 19)"
+  # B.4 5b 아래(15 → 17 → 16)에서는 Task 17 Step 4b 가 이미 사본 하나를 만들었으므로
+  # **0건은 정상이 아니다** — Step 4b 미실행 신호다. 이 가지는 그 사실을 알린다.
+  no "copy-of: 물리 사본 0건 — B.4 5b 순서라면 Task 17 Step 4b 의 codex_jsonl.py 사본이 있어야 한다"
 fi
 
 # ── 축 2: 형제 설정이 배포에 실린다 ───────────────────────────────────────
@@ -3035,6 +3059,22 @@ git add shared/tests/test_copy_of_contract.sh
 git commit -m "test(shared): 동일성 락 — 심볼릭 링크 도미넌스 체크 + copy-of 잔여 + 형제 설정 fail-closed"
 ```
 
+- [ ] **Step 7: Task 17이 이 락을 못 불러 미뤄 둔 두 단언을 여기서 갚는다** (B.4 5b)
+
+**이 스텝이 이 태스크의 완료 조건이다 — 빠뜨리면 그 두 단언은 이 사이클에 한 번도 안 돈다.** 5b 가 정한 순서(15 → 17 → 16)에서 Task 17은 이 파일보다 앞서므로 자기 검증 두 줄을 돌리지 못하고 넘어왔다. 락이 방금 생겼으니 지금 돌린다:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+# ① Task 17 Step 4c 가 미룬 것 — Step 4b 가 만든 codex_jsonl.py copy-of 사본의 단언
+bash shared/tests/test_copy_of_contract.sh | tail -4
+# ② Task 17 Step 5 가 미룬 것
+bash shared/tests/test_copy_of_contract.sh | tail -3
+```
+
+Expected: **`copy-of: 물리 사본 1건`**(Task 17 Step 4b 의 `plugins/plugin-audit/scripts/codex_jsonl.py` 하나) · 전항목 GREEN.
+
+**`0건`이 나오면 Task 17 Step 4b 가 실행되지 않았다는 뜻이다** — 사본을 안 만들었거나 마커가 깨졌다. 이 태스크의 결함이 아니라 앞 태스크의 미실행이므로 Task 17로 돌아간다. 〔이 기대값이 Task 19의 "1에서 4로" 수열의 출발점이다 — 여기가 1이 아니면 그 뒤 셋이 전부 어긋난다.〕
+
 ---
 
 ### Task 17: `codex_findings_to_yaml.py` 통합
@@ -3185,9 +3225,17 @@ import sys
 sys.path.insert(0, 'plugins/plugin-audit/scripts')
 from codex_jsonl import extract_last_agent_message
 print(extract_last_agent_message(sys.stdin.read()))"
-bash shared/tests/test_copy_of_contract.sh | tail -4
+bash shared/tests/test_copy_of_contract.sh | tail -4   # ← Task 16 이후로 미룬다 (아래 주석)
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/tests -t . 2>&1 | tail -3
 ```
+
+> **⚠ 이 줄은 B.4 5b 아래에서 아직 못 돈다 — 건너뛰고 Task 16 직후에 돌아온다.**
+> `shared/tests/test_copy_of_contract.sh` 는 **Task 16이 만든다**(Task 16 Files). 5b 가 정한
+> 실행 순서 **15 → 17 → 16** 에서 이 태스크는 그 파일보다 앞서므로 여기서는
+> `No such file or directory` 가 난다 — **락의 결함도 이 태스크의 결함도 아니다.**
+> 아래 두 곳이 그 대상이고 **Task 16 Step 6 의 완료 조건이 둘 다 이름으로 받는다**:
+> Step 4c(`물리 사본 1건` — Step 4b 가 만든 `codex_jsonl.py` 사본의 copy-of 단언) · Step 5.
+
 
 Expected: 두 출력이 `('HELLO', True)` 로 같다 · `물리 사본 1건` · plugin-audit 스위트 새 RED 0. 〔테스트 디렉토리 경로는 Task 12가 `scripts/tests/` → `tests/` 로 옮긴 뒤 기준이다.〕
 
@@ -3196,7 +3244,7 @@ Expected: 두 출력이 `('HELLO', True)` 로 같다 · `물리 사본 1건` · 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
-bash shared/tests/test_copy_of_contract.sh | tail -3
+bash shared/tests/test_copy_of_contract.sh | tail -3   # ← Task 16 이후로 미룬다 (Step 4c 주석과 같은 이유)
 bash plugins/quality-gates/tests/test_codex_copies_agree.sh | tail -3
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
 echo "--- design keyset 이 실제로 나오는가 ---"
@@ -5718,7 +5766,7 @@ Expected: PASS · mode `100755`
 > **그 두 쌍에는 그 뒤 담당 스텝이 생겼다** (2026-08-17 census 조치 재검토):
 >
 > - **행 5 (훅 8블록) → Task 22 Step 2b** — 원래 Task 22 의 Files 에 "spec-distill 훅 두 개가 공유하는 블록"이 한 줄로 있었고 Step 1 이 그 블록을 실제로 재기까지 했지만, **Step 2 의 서술은 `discover_common.sh` 쪽만 구체적으로 지정했다** — 훅 쪽 추출을 손대지 않고도 Task 22 를 "끝냈다"고 말할 수 있는 서술이었다. Step 2b 가 `plugins/spec-distill/scripts/hook_common.py` 로 27줄 공유 구간을 빼내고, 그 스텝의 마지막 검사가 **최장 공유 구간 < 20줄**을 직접 잰다. (census 행 149 는 이 파일들을 "Task 20·21"로 적고 있었다 — 그 두 태스크의 Files 는 이 훅들을 담은 적이 없다. census 조치란도 고쳤다.)
-> - **행 6 (persona 테스트 7블록) → Task 14 Step 4b** — 원래 **어느 태스크에도 배정돼 있지 않았다**: census 행 150 은 "공통 조각만 추출 (Task 20·21)", 행 137 은 `assert_absent` 를 "Task 15·17·18·19" 로 보냈지만 그 다섯 태스크의 Files 중 **어느 것도 이 두 파일을 건드리지 않았다**. 근본 원인은 Task 14 Step 2 의 도출 grep 이 `note|ok|no|pass|fail|assert_eq|assert_contains|assert_grep|field` 만 봐서 `check()`·`assert_absent()` 만 정의하는 이 두 파일을 **놓친 것**이었다(실측: 넓힌 목록이 11 파일을 더 잡고 그중 둘이 이 쌍이다). Step 4b 가 공유 26줄(전부 스캐폴딩 — assertion 0줄)을 `shared/tests/assert.sh` 로 보내고 같은 방식으로 <20줄을 잰다.
+> - **행 6 (persona 테스트 7블록) → Task 14 Step 4b** — 원래 **어느 태스크에도 배정돼 있지 않았다**: census 행 150 은 "공통 조각만 추출 (Task 20·21)", 행 137 은 `assert_absent` 를 "Task 15·17·18·19" 로 보냈지만 그 다섯 태스크의 Files 중 **어느 것도 이 두 파일을 건드리지 않았다**. 근본 원인은 Task 14 Step 2 의 도출 grep 이 `note|ok|no|pass|fail|assert_eq|assert_contains|assert_grep|field` 만 봐서 `check()`·`assert_absent()` 만 정의하는 이 두 파일을 **놓친 것**이었다(실측: **그 8개 이름을 더했을 때** 11 파일이 들어왔고 그중 둘이 이 쌍이다 — 그 뒤 `bad`·`expect` 가 2를 더해 **좁은 목록 대비 총 델타는 13**이다. Step 2 의 음의 짝이 재는 값은 13 쪽이니 그 수를 그대로 옮겨 쓰지 말 것). Step 4b 가 공유 26줄(전부 스캐폴딩 — assertion 0줄)을 `shared/tests/assert.sh` 로 보내고 같은 방식으로 <20줄을 잰다.
 >
 > **그러므로 집합 B 는 이제 비어 있어야 한다 — 단, 그 두 스텝이 실제로 실행됐을 때만.** 두 스텝 모두 자기 자리에서 "<20줄"을 재므로, PR3b·PR3c 게이트를 통과했다면 여기 도착할 때 집합 B 는 ∅ 다. **재측정하지 않고 믿지 않는다** — 아래 Step 2 의 실행이 곧 그 확인이다.
 >
@@ -6047,24 +6095,33 @@ cd /Users/jeonghokim/Downloads/devbrew
 CENSUS=docs/superpowers/plans/2026-08-17-devbrew-weight-reduction-census.md
 python3 - "$CENSUS" <<'PY'
 import sys, re, pathlib
-# 모집단은 census §미배정의 "세는 법" 표가 고정한 값이다. **여기에 앵커를 건다** —
-# 앵커가 없으면 파싱이 행을 잃어도 남은 행끼리 합이 맞아 OK 가 찍힌다(아래 주석).
-EXPECTED_POP = 100          # census §미배정: 진짜 사본 + 부분 사본
+# 기대값은 census §미배정의 "세는 법" 표에서 **읽어 온다** — 여기 상수로 다시 적지 않는다.
+# (I6: 수는 한 곳에만 산다. 두 곳에 적으면 한 곳만 고쳐져 갈린다.)
+# **모집단만이 아니라 배정·유예까지 앵커한다**: 모집단만 대조하면 한 행이 배정↔유예
+# 사이로 옮겨가도 합이 맞아 OK 가 찍힌다 — 실측으로 재현된 형태다(아래 주석).
 text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+
+def pinned(label):
+    """세는 법 표의 `| **<label>** | … | **<n>** |` 에서 n 을 읽는다."""
+    m = re.search(r'^\|\s*\*\*' + re.escape(label) + r'\*\*\s*\|[^|]*\|\s*\*\*(\d+)\*\*\s*\|',
+                  text, re.MULTILINE)
+    if not m:
+        sys.exit(f"❌ 세는 법 표에서 '{label}' 을 못 읽었다 — 표가 바뀌었으면 이 검사부터 고친다")
+    return int(m.group(1))
+
+EXPECTED = {k: pinned(k) for k in ("모집단", "배정", "명시 유예", "미배정")}
 
 # ── 파서 신뢰성 선검사 ────────────────────────────────────────────────────
 # 셀 안의 이스케이프된 파이프(`\|`)는 마크다운에서는 리터럴 문자지만 `split("|")` 에는
 # **열 하나로 보인다.** 그 행은 열이 하나 밀려 분류 열을 엉뚱한 인덱스에서 읽고,
 # 결과적으로 **모집단에서 조용히 빠진다** — 그리고 남은 행끼리는 여전히 합이 맞아
 # "OK" 가 찍힌다. 이 원장에는 이미 그런 셀이 있다(#50 의 `... \| python3 HOOK`).
-# 지금은 그 파이프가 파서가 보는 인덱스보다 뒤에 있어 무해할 뿐, 고정된 것이 아니다.
 # 그래서 **셀을 세기 전에 이스케이프를 제거**하고, 그래도 남는 위험은 앵커가 받는다.
 rows = []
 for line in text.split("\n"):
     if not re.match(r'^\| (\d+) \|', line): continue
-    # `\|` 를 파이프 아닌 자리표시자로 치환해 열 분해에서 빼고, 분해 뒤 되돌린다.
-    safe = line.rstrip().replace("\\|", "\x00")
-    cells = [x.strip().replace("\x00", "\\|") for x in safe.strip("|").split("|")]
+    safe = line.rstrip().replace(r"\|", "\x00")
+    cells = [x.strip().replace("\x00", r"\|") for x in safe.strip("|").split("|")]
     rows.append(cells)
 
 a = d = bad = tgt = 0
@@ -6084,12 +6141,14 @@ for c in rows:
 
 print(f"행 모양 분포: {shape}")
 print(f"모집단 {tgt} = 배정 {a} + 명시 유예 {d} + 미배정 {bad}")
+print(f"census 세는 법 고정값: {EXPECTED}")
 ok = True
-if tgt != EXPECTED_POP:
-    print(f"❌ 모집단이 {tgt} 다 — 고정값 {EXPECTED_POP} 과 다르다. **행을 잃었거나 census 가 바뀌었다.**")
-    print("   합이 맞아도 이것부터 본다: 잃은 행끼리는 합이 맞는다.")
-    ok = False
-if bad: print(f"❌ 미배정 {bad}건"); ok = False
+for label, got in (("모집단", tgt), ("배정", a), ("명시 유예", d), ("미배정", bad)):
+    if got != EXPECTED[label]:
+        print(f"❌ {label}: 실측 {got} ≠ 고정값 {EXPECTED[label]}")
+        ok = False
+if not ok:
+    print("   합이 맞아도 이것부터 본다 — 행을 잃었거나, 행이 배정↔유예 사이로 옮겨갔다.")
 if a + d != tgt: print("❌ 배정+유예가 모집단과 다르다 — 한 행을 두 번 셌거나 못 셌다"); ok = False
 print("OK" if ok else "FAIL")
 PY
@@ -6097,7 +6156,7 @@ PY
 
 Expected: `행 모양 분포: {5: 31, 8: 119}` · 모집단 **100** · 미배정 **0** · 배정 + 유예 = 100 · `OK`.
 
-> **앵커가 왜 필요한가** (2026-08-17 fix round 2, mutation 으로 확인). 앵커 없는 판본은 부분 사본 행 하나의 분류 앞 열에 `\|` 를 넣자 그 행을 파싱에서 잃고 `모집단 99 = 배정 54 + 명시 유예 45 + 미배정 0` 뒤에 **`OK`** 를 찍었다. 이 원장이 닫으려던 결함(검사가 자기가 잰다고 주장하는 것을 안 재면서 통과)과 **같은 모양**이다. 위 판본은 이스케이프를 먼저 제거하고, 모양이 5·8이 아닌 행을 이름으로 신고하고, 모집단을 고정값과 대조한다.
+> **앵커가 왜 필요한가** (2026-08-17 fix round 2·3, mutation 으로 확인). 앵커 없는 판본은 **행을 잃고도 남은 행끼리 합이 맞아 `OK` 를 찍었다** — 부분 사본 행 하나의 열을 밀면 그 행이 모집단에서 조용히 빠지는데, 빠진 뒤의 배정·유예·미배정이 서로 일관되기 때문이다. 모집단만 앵커한 판본에는 **한 겹 아래의 같은 모양**이 남아 있었다: 행이 배정↔유예 **사이로 옮겨가면** 모집단은 그대로라 통과한다. 그래서 지금은 넷(모집단·배정·명시 유예·미배정)을 **전부** census 세는 법 표에서 읽어 대조한다. **여기에 그때의 수치를 인용하지 않는다** — 인용하면 수가 두 곳에 살게 되어 이 검사가 지키려는 불변식(I6)을 설명문이 깨뜨린다. 재현하려면 위 명령을 그대로 돌리고 census 행 하나를 흔들어 보면 된다.
 
 **이 검사는 필요조건일 뿐이다.** 조치란이 가리키는 태스크가 그 행의 일을 실제로 하는지는 스크립트가 못 본다 — census §미배정의 기계적 확인 ③(함수 이름으로 정의 지점을 떠서 위치란과 대조)을 여기서도 돌리고, 불일치가 나온 행은 조치를 다시 읽는다.
 
@@ -6696,7 +6755,7 @@ else:
 3. **Task 2(census SHA 고정)가 PR2보다 앞서야 한다.** 뒤면 아카이브 이동이 모집단을 줄여 "미배정 0"이 조치 아닌 이동으로 달성된다.
 4. **PR3a → 3b → 3c 순서를 바꾸지 않는다.** 옮기기 → 계측기 → 피검체. 순서가 섞이면 RED 귀속이 불가능하다.
 5. **Task 15가 Task 16보다 앞선다** — 락을 먼저 달면 도입 즉시 RED다(C17: 사본 제거 우선).
-5b. **Task 17도 Task 16보다 앞선다** (2026-08-17 fix round 2 발견). 5번과 **같은 이유인데 빠져 있었다**: Task 16의 `SYMLINK_CANONICALS` 는 정본 둘을 담는데 `shared/codex/detect_codex.sh` 는 Task 15의, **`shared/codex/codex_findings_to_yaml.py` 는 Task 17의 산출물**이다. 번호 순서(16 → 17)대로 돌면 Task 16 Step 2의 락 첫 실행에서 두 번째 정본이 없어 `no "정본 … 자체가 없다"` 로 RED 가 난다 — C17이 금지하는 "락을 먼저 달기"의 두 번째 인스턴스다. **실행 순서: 15 → 17 → 16 → 18 → 19 → …** Task 17 Step 5의 `bash shared/tests/test_copy_of_contract.sh` 한 줄만 그 순서에서 아직 없는 파일을 부르므로, **Task 16 완료 직후에 되돌아와 돌린다**(그 스텝의 나머지 검증은 Task 17 시점에 그대로 유효하다).
+5b. **Task 17도 Task 16보다 앞선다** (2026-08-17 fix round 2 발견). 5번과 **같은 이유인데 빠져 있었다**: Task 16의 `SYMLINK_CANONICALS` 는 정본 둘을 담는데 `shared/codex/detect_codex.sh` 는 Task 15의, **`shared/codex/codex_findings_to_yaml.py` 는 Task 17의 산출물**이다. 번호 순서(16 → 17)대로 돌면 Task 16 Step 2의 락 첫 실행에서 두 번째 정본이 없어 `no "정본 … 자체가 없다"` 로 RED 가 난다 — C17이 금지하는 "락을 먼저 달기"의 두 번째 인스턴스다. **실행 순서: 15 → 17 → 16 → 18 → 19 → …** 그 순서에서 Task 17은 아직 없는 락을 **두 곳**에서 부른다 — **Step 4c**(`| tail -4`, Expected 에 `물리 사본 1건` 이 걸려 있다 — Step 4b 가 만든 `codex_jsonl.py` 사본의 copy-of 단언) **와 Step 5**(`| tail -3`). **둘 다 Task 16 Step 7이 이름으로 받아 갚는다**(그 스텝이 Task 16의 완료 조건이다). 두 스텝의 나머지 검증은 Task 17 시점에 그대로 유효하다. **이 사실은 부록이 아니라 그 두 호출부 옆에도 적혀 있다** — 실행자는 부록을 읽고 있지 않고, 첫 판본은 Step 5만 세어 Step 4c 를 놓쳤다. 형제 규칙 5(Task 15)는 영향받지 않는다: Task 15는 Files 의 `Test:` 줄에서 락을 **선언만** 하고 실행하지 않는다(실측 — Task 15 본문에 실행 줄이 없다).
 6. **Task 34가 Task 35보다 앞선다** — 무릎을 모르고 임계를 박을 수 없다.
 7. **Task 25(env rename)가 Task 26(좀비 제거)보다 앞선다** — rename 전 이름으로 좀비를 판정하면 옛 이름 전부가 좀비로 보인다.
 
