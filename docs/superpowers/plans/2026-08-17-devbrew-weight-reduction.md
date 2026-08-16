@@ -123,7 +123,7 @@ Conventional Commits (`<type>(<scope>): <description>`). 브랜치는 `main`에�
 | **3c** | 15–24 | 동일성 락(`shared/tests/test_copy_of_contract.sh` — 심볼릭 링크 무결성 + `copy-of` 잔여 + 형제 설정 fail-closed)이 실행비트와 함께 `/qg`에서 **실제로 실행됐고** GREEN이며, mutation 전종이 기대대로 RED/GREEN (Task 16 참조 — `detect_codex.sh`·`codex_findings_to_yaml.py`는 심볼릭 링크로 전환됐다, 설계 §16.1. `read_preamble.sh`(Task 18)는 이 사이클에도 여전히 `copy-of` 물리 사본이다) |
 | **4** | 25–30 | 규약 각 축의 distinct 값이 1이고, severity 매핑 락이 GREEN |
 | **5** | 31–33 | 분할 전후 앵커 전수 대조 결과 소실 0 |
-| **6** | 34–36 | 20줄 검사가 실행됐고 mutation 5종이 기대대로이며, §14 완료 측정표 after 값이 전부 채워졌다 |
+| **6** | 34–36 | 20줄 검사가 실행됐고 mutation 6종이 기대대로이며, §14 완료 측정표 after 값이 전부 채워졌다 |
 
 ---
 
@@ -4808,7 +4808,7 @@ git commit -m "docs(plan): 20줄 무릎 재측정 — PR2~PR5 이후 코퍼스"
 
 ---
 
-### Task 35: 20줄 블록 락 + mutation 5종
+### Task 35: 20줄 블록 락 + mutation 6종
 
 **Files:**
 - Create: `shared/tests/test_no_new_duplication.sh` (실행비트 필수)
@@ -4882,7 +4882,19 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   exit 0
 fi
 
-OUT="$(printf '%s\n' "$CORPUS" | python3 - "$WINDOW" "$MIN_CHARS" <<'PY'
+# 2026-08-17 라운드 3 코드 리뷰가 실측으로 잡은 결함: `printf ... | python3 - <<'PY'`
+# 처럼 파이프와 히어닥을 같은 stdin에 동시에 걸면 **파이프가 이긴다** — python3 이
+# 히어닥의 실제 스크립트 본문이 아니라 파이프로 들어온 $CORPUS(파일 경로 목록)를
+# "실행할 코드"로 읽으려다 즉시 `NameError`로 죽는다. 그 결과 `OUT`이 항상 빈
+# 문자열이 되어 `scanned`가 항상 0 — "코퍼스 도출이 깨졌다"는 vacuous 가드는 뜨지만
+# **실제 블록 스캔 로직 자체가 한 번도 실행되지 않는다.** 셸 파이프가 히어닥을
+# 조용히 무력화하는 조합이라 겉으로는 "그럴듯한 실패 메시지"만 남고 진짜 원인이
+# 안 보인다. 고침: 코퍼스를 파이프가 아니라 **임시 파일**로 넘긴다 — stdin은
+# 히어닥(파이썬 스크립트 본문) 전용으로 남긴다.
+CORPUS_FILE="$(mktemp -t nnd-corpus-XXXXXX)" || exit 1
+trap 'rm -f "$CORPUS_FILE"' EXIT
+printf '%s\n' "$CORPUS" > "$CORPUS_FILE"
+OUT="$(python3 - "$WINDOW" "$MIN_CHARS" "$CORPUS_FILE" <<'PY'
 import hashlib, os, pathlib, re, sys, collections
 
 WINDOW   = int(sys.argv[1])
@@ -4891,7 +4903,8 @@ MARKER = re.compile(r'^\s*(#|//|<!--)\s*copy-of:\s*(\S+)')
 HEAD_WINDOW = 20
 ROOT = pathlib.Path.cwd()   # 셸이 이미 ROOT 로 cd 했다
 
-files = [l.strip() for l in sys.stdin if l.strip()]
+with open(sys.argv[3], encoding="utf-8") as fh:
+    files = [l.strip() for l in fh if l.strip()]
 
 def symlink_target_of(p):
     """p 가 심볼릭 링크면 그 대상을 리포 루트 기준 상대 경로로. 아니면 None.
@@ -5006,7 +5019,7 @@ Expected: PASS · mode `100755`
 
 **RED가 나오면 그것은 락의 결함이 아니라 남은 중복이다.** 위반 쌍을 §6의 등급으로 분류해 처리한다 — 진짜 사본이면 `shared/`로, 부분 사본이면 추가 추출. **락의 임계를 올려서 통과시키지 않는다.**
 
-- [ ] **Step 3: mutation 5종 + 심볼릭 링크 예외 자체의 mutation (설계 §12.4·§12.5)**
+- [ ] **Step 3: mutation 6종 — 심볼릭 링크 예외 + 마커 예외 각각의 이빨 증명 (설계 §12.4·§12.5)**
 
 | # | 변이 | 기대 | 무엇을 증명하나 |
 |---|---|---|---|
@@ -5015,10 +5028,13 @@ Expected: PASS · mode `100755`
 | 3 | **같은 정본을 가리키는 심볼릭 링크 쌍을 그대로 둔다**(실제 대상: `detect_codex.sh` 3링크, Task 15) | **GREEN** | 면제 술어 ② — 심볼릭 링크 경로 |
 | 4 | 그 쌍 중 하나를 **독립 파일로 깬다**(내용은 그대로 두고 링크성만 제거) | **RED** | 면제가 "링크라는 사실"에 실제로 의존 — 내용이 같아도 링크가 아니면 설명 안 된 중복이다 |
 | 5 | **무관한 두 파일에 같은 정본을 가리키는 `copy-of` *마커* 줄을 새로 붙여 20줄 검사를 회피한다** | **`copy-of` 락이 RED** | 회피 경로 봉쇄(마커 축) — **심볼릭 링크 축에는 이 공격이 성립하지 않는다**: 진짜 OS 심볼릭 링크는 가리키는 대상의 내용을 "주장"할 수 없다(대상이 곧 자기 내용이다). 거짓을 말할 수 있는 것은 텍스트 마커뿐이다 |
+| 6 | **마커 예외 자체의 이빨** — 스캐치 픽스처 쌍(정본 + `copy-of` 마커를 가진 사본, 둘 다 ≥20줄·≥200자 진짜 중복 블록)을 그대로 둔다(GREEN 기대) → 그다음 사본에서 `copy-of` 줄만 지운다(RED 기대) | **GREEN → RED** | 2026-08-17 라운드 3 코드 리뷰: 변이 3·4는 **심볼릭 링크 쌍만** 태웠다 — 마커 기반 면제(`canonical_of()`의 마커 폴백 경로, `:4890-4899`)는 이번까지 mutation-proof가 전혀 없었다. Task 19 이전엔 실제 마커 쌍이 없으므로(B.1의 미결 5 참조) Task 16의 물리 사본 축과 같은 패턴(스캐치 픽스처)을 쓴다 |
 
 **변이 1·2는 맨 앞·중간·맨 끝 세 위치에서 각각 수행한다.**
 
 **이 예외(심볼릭 링크 스킵)는 그 자체로 이빨을 증명해야 한다**(설계 §12.4의 요구) — 변이 4가 그 증명이다: 링크가 깨지면 **내용은 바뀌지 않았는데도** RED가 나와야 한다. 그러지 않으면 예외가 "내용이 같으면 무조건 통과"로 새어 진짜 새 중복(예: 4)도 놓친다.
+
+**마커 예외도 같은 기준으로 이빨을 증명해야 한다**(변이 6) — 마커가 있으면 GREEN, 마커를 지우면(내용은 그대로) RED. **픽스처는 관측 가능한 크기 조건을 진짜로 만족해야 한다** — WINDOW(20줄)·MIN_CHARS(200자)를 넘지 못하면 애초에 블록 스캐너가 두 파일을 후보로도 보지 않으므로, 면제 술어가 아니라 크기 미달 때문에 통과한 것과 구별이 안 된다. 아래 스텝은 그래서 픽스처 생성 직후 `--emit-scanned`로 두 경로가 실제 코퍼스에 들었는지(즉 `fixtures/`·`mocks/`·`harness/` 제외 규칙에 안 걸렸는지) 먼저 확인한다.
 
 **변이는 맨 앞·중간·맨 끝 세 위치에서 각각 수행한다.**
 
@@ -5093,11 +5109,55 @@ printf 'mutation 5 (회피 시도) — copy-of 락 → '
 bash shared/tests/test_copy_of_contract.sh >/dev/null 2>&1 && echo "GREEN ❌ (회피가 통했다)" || echo "RED ✓ (회피 봉쇄)"
 cp /tmp/D.bak "$D"; cp /tmp/E.bak "$E"; rm -f /tmp/D.bak /tmp/E.bak
 
+# 변이 6 — 마커 예외 자체의 이빨. Task 16의 물리 사본 mutation과 같은 패턴을 쓴다:
+# 실제 파일을 잠깐 만들어 git add로 스캔 코퍼스에 넣고, 검사한 뒤, 커밋 없이 되돌린다.
+# 정본은 shared/ 아래, 사본은 plugins/*/scripts/ 아래(실제 배포 모양과 같다).
+CANON=shared/_dup_mutation_fixture_canonical.sh
+COPY=plugins/quality-gates/scripts/_dup_mutation_fixture_copy.sh
+BLOCK="$(python3 -c "
+print('\n'.join('# dup-fixture boilerplate line %02d with enough characters to clear the min-chars floor' % i for i in range(20)))")"
+printf '#!/usr/bin/env bash\n%s\n' "$BLOCK" > "$CANON"
+{ echo "#!/usr/bin/env bash"; echo "# copy-of: $CANON"; printf '%s\n' "$BLOCK"; } > "$COPY"
+chmod +x "$CANON" "$COPY"
+git add "$CANON" "$COPY"
+
+# 크기 조건을 진짜로 만족하는지 먼저 확인 — 아니면 면제가 아니라 크기 미달로
+# 통과한 것과 구별이 안 된다. 두 경로가 실제로 스캔 코퍼스에 들었는지도 함께 본다.
+echo "--- 픽스처가 코퍼스에 들었는가 ---"
+bash shared/tests/test_no_new_duplication.sh --emit-scanned | grep -F -e "$CANON" -e "$COPY" \
+  || echo "❌ 픽스처가 코퍼스 밖이다 — fixtures/mocks/harness 제외 규칙에 걸렸을 수 있다. 여기서 멈추고 경로를 고친다"
+
+printf 'mutation 6a (마커 쌍 그대로) → '
+if bash shared/tests/test_no_new_duplication.sh 2>&1 | grep -q "_dup_mutation_fixture"; then
+  echo "RED ❌ (면제가 안 걸렸다)"
+else
+  echo "GREEN ✓ (면제 술어 — 마커 경로)"
+fi
+
+# 변이 6b — 사본에서 copy-of 줄만 지운다. 내용은 그대로(여전히 ≥20줄·≥200자 중복)다.
+python3 - "$COPY" <<'PY'
+import sys, pathlib
+p = pathlib.Path(sys.argv[1])
+ls = [l for l in p.read_text(encoding="utf-8").split("\n") if not l.startswith("# copy-of:")]
+p.write_text("\n".join(ls), encoding="utf-8")
+PY
+printf 'mutation 6b (copy-of 줄 제거, 내용은 동일) → '
+bash shared/tests/test_no_new_duplication.sh 2>&1 | grep -E "^  NO: 20줄 검사:.*_dup_mutation_fixture" \
+  && echo "  ↑ RED ✓ (어느 축이 걸렸는지는 위 줄 자체가 20줄 검사임을 이미 명시한다)" \
+  || echo "RED ❌ — 반응 없음(면제가 마커에 안 기댄다 — 결함)"
+
+# 픽스처 정리 — 커밋에 남기지 않는다
+git reset -- "$CANON" "$COPY" >/dev/null 2>&1 || true
+rm -f "$CANON" "$COPY"
+git status --short -- "$CANON" "$COPY"   # 아무 출력도 없어야 한다
+
 printf '무변이 → '
 bash shared/tests/test_no_new_duplication.sh >/dev/null 2>&1 && echo "GREEN ✓" || echo "RED ❌ (항상-RED)"
 ```
 
 > **변이 5가 드러내는 의존**: 면제 술어는 *마커의 존재*만 보고 실제 동일성은 `copy-of` 락의 GREEN에 기댄다. 즉 **20줄 검사의 이빨은 `copy-of` 락이 살아 있을 때만 유효하다.** 두 락의 실행 조건이 미래에 갈리면 이 의존이 조용히 깨지므로, 둘을 같은 `# guards:`로 두고 같은 지점에서 함께 돌린다.
+
+Expected: 변이 1(3위치)·5(20줄 검사 축) → RED, 변이 2 → GREEN, 변이 3 → GREEN, 변이 4 → RED, 변이 5(copy-of 락) → RED, **변이 6a → GREEN(마커 예외 held) · 변이 6b → RED(마커 제거 즉시 반응)**. 마지막 픽스처 정리 후 `git status --short`가 빈 출력. 무변이 → GREEN.
 
 - [ ] **Step 4: 두 락이 같은 지점에서 함께 도는지 확인**
 
@@ -5135,7 +5195,7 @@ Expected: **두 파일 모두** 실행 목록에 나온다. 후보에만 있고 
 
 ```bash
 git add shared/tests/test_no_new_duplication.sh
-git commit -m "test(shared): 20줄 블록 검사 — 새 중복 유입 방지 + 심볼릭 링크 예외(mutation 증명 포함)"
+git commit -m "test(shared): 20줄 블록 검사 — 새 중복 유입 방지 + 심볼릭 링크·마커 예외 각각의 mutation 증명"
 ```
 
 ---
@@ -5349,7 +5409,7 @@ git commit -m "docs(plan): 완료 측정 after 값 + 최종 대조"
 rm -f .git/devbrew-weight-scratch
 ```
 
-**PR6 게이트**: mutation 5종이 기대대로 · 두 락이 `/qg`에서 **실제로 실행** · §14 표의 after 값 전부 채워짐 · 미배정 0 · 새 RED 0.
+**PR6 게이트**: mutation 6종이 기대대로 · 두 락이 `/qg`에서 **실제로 실행** · §14 표의 after 값 전부 채워짐 · 미배정 0 · 새 RED 0.
 
 ---
 
@@ -5861,7 +5921,7 @@ else:
 | `test_assert_behavior.sh` | Task 13 | Task 13 Step 5 (5종) |
 | `test_severity_mapping.py` | Task 28 | Task 28 Step 3 (구현 전 RED) |
 | `test_copy_of_contract.sh` | Task 16 | Task 16 Step 3 — **심볼릭 링크 축(도미넌스) 4종**(A missing · B regular-file, 계약-보존 페이로드 · C wrong-target: mismatch · D wrong-target: dangling — 전부 위치 개념 없음, 배포 지점 전체가 단위) + **`MARKER_RE` 카나리아 1종**(E — 축 1b 자기 vacuous 방지, 정규식 대입 줄 하나만 변형) + **`copy-of` 물리 사본 축 3종**(변이 1은 3위치, 스캐치 픽스처로 증명 — Task 16 시점엔 리포에 실제 물리 사본이 없다, B.1의 미결 5 참조 — Task 19가 첫 실사용) — 2026-08-17 라운드 1 코드 리뷰가 원래의 ∃-기반 심볼릭 링크 축(3종, "경로만 바꾸면 GREEN" 포함)을 이 도미넌스 체크로 다시 쓰게 했다(Critical) |
-| `test_no_new_duplication.sh` | Task 35 | Task 35 Step 3 (5종, 변이 1·2는 3위치) + **심볼릭 링크 예외 자체의 mutation**(변이 4 — 링크를 깨되 내용은 유지해 예외가 "링크임"에 반응하는지 증명) |
+| `test_no_new_duplication.sh` | Task 35 | Task 35 Step 3 (6종, 변이 1·2는 3위치) — **심볼릭 링크 예외**(변이 3 GREEN · 변이 4 — 링크를 깨되 내용은 유지해 예외가 "링크임"에 반응하는지 증명, RED) + **마커 예외**(변이 6a·6b — 2026-08-17 라운드 3 코드 리뷰가 이 축은 그때까지 mutation-proof가 전혀 없었음을 지적; Task 16과 같은 스캐치 픽스처 패턴으로 GREEN→RED 증명. Task 19 이전이라 실제 마커 쌍이 없다, B.1의 미결 5 참조) |
 
 **Task 6의 락은 자기 도입 시점에 이빨을 증명할 수 없다** — 재는 대상(`--emit-scanned`를 가진 락)이 아직 없기 때문이다. 이것을 숨기지 않고 그 태스크의 Step 2와 이 표에 적었다.
 
