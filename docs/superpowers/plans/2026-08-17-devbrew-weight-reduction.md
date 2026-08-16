@@ -72,6 +72,11 @@ Conventional Commits (`<type>(<scope>): <description>`). 브랜치는 `main`에�
 |---|---|
 | `shared/codex/detect_codex.sh` | codex 가용성 판정 정본 (3개 상대 심볼릭 링크가 가리킴 — 2026-08-17 실측으로 물리 사본에서 전환, 설계 §16.1) |
 | `shared/codex/codex_findings_to_yaml.py` | codex JSONL → finding YAML 정본 (2개 상대 심볼릭 링크가 가리킴 — 같은 전환) |
+| `shared/codex/codex_jsonl.py` | codex JSONL 이벤트 파서 정본 — `extract_last_agent_message` (3사본, census #58. Task 17 Step 4b) |
+| `plugins/plugin-audit/scripts/codex_jsonl.py` | 위의 `copy-of` 물리 사본 (심볼릭 링크가 아닌 이유는 Task 17 Step 4b) |
+| `plugins/spec-distill/scripts/hook_common.py` | spec-distill 훅 두 개 + `arm_ledger.py` 의 공유 조각 (census #149·#121·#122·#45. Task 22 Step 2b·2c) |
+| `plugins/quality-gates/scripts/state_path.py` | quality-gates 내부 state root 해석 정본 (census #88. Task 21 Step 2b) |
+| `plugins/quality-gates/scripts/kill_switch_active.py` | kill switch 판정 `copy-of` 사본 — `_disabled` 5곳이 quality-gates 다 (census #37. Task 19) |
 | `shared/codex/runner_common.sh` | `_degrade_if_empty` 등 러너 공통 조각 (5러너) |
 | `shared/codex/prompt-preamble.md` | P21 untrusted-data 3문장 정본 (5빌더) |
 | `shared/killswitch/kill_switch_active.py` | kill switch 판정 정본 (5정의) |
@@ -119,7 +124,7 @@ Conventional Commits (`<type>(<scope>): <description>`). 브랜치는 `main`에�
 | **1** | 1–7 | 기준선 RED 집합이 문서화됐고, 각 확장자(`.sh`/`.py`/`.md`)의 파일을 바꿨을 때 그것을 지키는 락이 후보에 든다 |
 | **2** | 8–10 | 완료 산출물이 `docs/archive/` 아래에 있고, `validate-audit-data.py`와 살아 있는 게이트 둘이 GREEN |
 | **3a** | 11–12 | `shared/`가 있고, 테스트 디렉토리 종류가 3→1이며, 기준선 대비 새 RED 0 |
-| **3b** | 13–14 | 판정 헬퍼가 `shared/tests/assert.sh` 하나이고, 파일별 assertion 수가 어디서도 안 줄었고, 실패 시 종료 행동이 보존됐다 |
+| **3b** | 13–14 | 판정 헬퍼가 `shared/tests/assert.sh` 하나이고, 파일별 assertion 수가 어디서도 안 줄었고, 실패 시 종료 행동이 보존됐고, **persona 테스트 쌍의 최장 공유 구간이 20줄 미만이다**(설계 §6.1③ — Task 35가 잡는 쌍) |
 | **3c** | 15–24 | 동일성 락(`shared/tests/test_copy_of_contract.sh` — 심볼릭 링크 무결성 + `copy-of` 잔여 + 형제 설정 fail-closed)이 실행비트와 함께 `/qg`에서 **실제로 실행됐고** GREEN이며, mutation 전종이 기대대로 RED/GREEN (Task 16 참조 — `detect_codex.sh`·`codex_findings_to_yaml.py`는 심볼릭 링크로 전환됐다, 설계 §16.1. `read_preamble.sh`(Task 18)는 이 사이클에도 여전히 `copy-of` 물리 사본이다) |
 | **4** | 25–30 | 규약 각 축의 distinct 값이 1이고, severity 매핑 락이 GREEN |
 | **5** | 31–33 | 분할 전후 앵커 전수 대조 결과 소실 0 |
@@ -292,12 +297,14 @@ wc -l "$SCRATCH"/census-*.md
 
 분류 규칙 — **진짜 사본과 부분 사본을 가르는 질문은 하나다**: *"차이를 파일 밖으로 빼면 남는 본문이 바이트 동일이 되는가?"*
 
-| 분류 | 판정 | 조치 |
-|---|---|---|
-| **진짜 사본** | 차이를 인자·설정으로 빼면 파일 전체가 동일해질 수 있다 | `shared/` 정본 + `copy-of` 사본 (Task 15·17·18·19) |
-| **부분 사본** | 각자 고유 본문이 남아 전체 동일화 불가 | 공통 조각만 추출 (Task 20·21) |
-| **템플릿-인스턴스** | 한쪽에 `{{...}}` 치환 표식 또는 생성 산출물 | 재적용 + 동일성 검사 |
-| **우연** | 같은 이름·구조지만 책임이 다름 | 조치 없음 (이유 한 줄) |
+| 분류 | 판정 | 조치의 **종류** | 그 종류를 실행하는 태스크 |
+|---|---|---|---|
+| **진짜 사본** | 차이를 인자·설정으로 빼면 파일 전체가 동일해질 수 있다 | `shared/` 정본 + 심볼릭 링크(기본) 또는 `copy-of`(잔여) | 대상에 따라 다르다 — 15(`detect_codex.sh`) · 17(`codex_findings_to_yaml.py` · `codex_jsonl.py`) · 19(kill switch 12정의) |
+| **부분 사본** | 각자 고유 본문이 남아 전체 동일화 불가 | 공통 조각만 추출 | 20(codex 러너) · 21(cleanup·GC) · 22(같은 플러그인 안의 제품 코드) · 13·14(리포 전용 셸 테스트) |
+| **템플릿-인스턴스** | 한쪽에 `{{...}}` 치환 표식 또는 생성 산출물 | 재적용 + 동일성 검사 | — |
+| **우연** | 같은 이름·구조지만 책임이 다름 | 조치 없음 (이유 한 줄) | — |
+
+> **오른쪽 두 열은 다른 것이다 — 이 구분이 없어서 원장이 틀렸다** (2026-08-17). census 최초 판은 오른쪽 열의 태스크 목록을 **분류가 같다는 이유만으로** 각 행에 그대로 복사했다. 그 결과 `assert_absent`(persona 테스트)가 "Task 15·17·18·19"를, spec-distill 훅 쌍이 "Task 20·21"을 가리키게 됐는데 **그 태스크들의 Files 는 해당 파일을 담은 적이 없다.** 조치란은 **종류**가 아니라 **그 파일을 Files 에 담고 그 조각을 스텝에서 지정하는 태스크**를 적는 자리다. 어느 태스크도 그렇지 않으면 그 행은 **미배정**이고, 태스크를 만들거나 확장하거나 — census §미배정의 3요건을 만족할 때만 — 명시 유예한다.
 
 **plan 작성 시점에 이미 확정한 분류** 〔실측〕 — 원장의 seed로 그대로 쓴다:
 
@@ -1611,7 +1618,20 @@ git commit -m "refactor(project-init,plugin-audit): 테스트 위치를 plugins/
 - Create: `shared/tests/test_assert_behavior.sh` (헬퍼 자신의 종료 행동 락)
 
 **Interfaces:**
-- Produces: `note` · `ok` · `no` · `pass_count`/`fail_count` · `assert_eq` · `assert_contains` · `assert_grep` · `field` · `finish`. Task 14가 각 테스트를 여기로 이관한다.
+- Produces: `note` · `ok` · `no` · `pass_count`/`fail_count` · `assert_eq` · `assert_contains` · `assert_not_contains` · `assert_grep` · **`assert_not_grep`** · **`assert_file_grep`** · **`assert_file_absent`** · **`assert_count_ge`** · `field` · `field_line` · `finish`. Task 14가 각 테스트를 여기로 이관한다.
+
+> **굵은 넷은 2026-08-17 재배정이 더한 것이다** (census 조치 재검토). census가 판정 헬퍼로 분류한 이름 중 `ag`(#46) · `agf`(#111) · `ng`(#63) · `check`(#39) · `assert_not_grep`(#102) · `assert_body_grep`(#119) · `assert_absent`(#137)이 **아래 정본 어디에도 대응이 없었다** — 이관하려 해도 갈 자리가 없어 그 행들의 조치가 실행 불가였다. 대응은 이렇게 잡는다 〔각 본문 실측〕:
+>
+> | 이관 전 이름 | 어디 | 정본 |
+> |---|---|---|
+> | `ag <ERE> <msg>` (고정 파일 대상) | qg artifact frontmatter 2 · critique 2 · sd `test_detect_codex.sh` | `assert_file_grep <file> <ERE> <msg>` |
+> | `agf <고정문자열> <msg>` | qg critique 2 | `assert_contains "$(cat <file>)" <needle> <msg>` (기존 헬퍼 — 새 이름 불필요) |
+> | `ng <ERE> <msg>` | qg artifact frontmatter 2 · critique 1 | `assert_file_absent <file> <ERE> <msg>` |
+> | `assert_not_grep <file> <ERE> <msg>` | qg 2 | `assert_file_absent` (같은 것) |
+> | `assert_absent <name> <ERE>` | qg persona 2 | `assert_file_absent` (같은 것) |
+> | `assert_body_grep <ERE> <msg>` (변수 대상) | qg 2 | `assert_grep "$BODY" <ERE> <msg>` (기존 헬퍼) |
+> | `check <name> <cmd> <expected>` | qg 6 | `assert_count_ge <cmd> <expected> <msg>` |
+> | (없음 — 텍스트 대상 부정 정규식) | — | `assert_not_grep <text> <ERE> <msg>` (`assert_grep`의 짝) |
 
 **실측된 문제** 〔plan 작성 시점〕:
 
@@ -1655,6 +1675,10 @@ t_ok() { pass=$((pass+1)); echo "  ✓ $1"; }
 t_no() { fail=$((fail+1)); echo "  ✗ $1"; }
 TMP="$(mktemp -d -t assert-behav-XXXXXX)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
+# 파일 대상 헬퍼의 픽스처. `absent-file` 은 **만들지 않는다** — 부재 시 fail-closed 인지가
+# 아래 probe 목록의 마지막 항목이고, 그 이빨은 이관 전 test_adversarial_model_consistency.sh:39
+# 의 주석이 실측으로 기록한 것이다("없는 파일에 grep 하면 부재 검사가 vacuous 하게 통과한다").
+printf 'NEEDLE here\n' > "$TMP/present.txt"
 
 # 실패를 유발한 뒤 SENTINEL 을 찍는다. SENTINEL 이 보이면 "계속 진행", 안 보이면 "즉시 종료".
 probe() {   # $1 = 헬퍼 호출 한 줄
@@ -1674,6 +1698,10 @@ PROBE
 for call in 'assert_eq "a" "b" "의도적 실패"' \
             'assert_contains "haystack" "없는것" "의도적 실패"' \
             'assert_grep "text" "없는패턴" "의도적 실패"' \
+            'assert_not_grep "text" "te.t" "의도적 실패"' \
+            'assert_count_ge "echo 1" 5 "의도적 실패"' \
+            'assert_file_absent "'"$TMP"'/present.txt" "NEEDLE" "의도적 실패"' \
+            'assert_file_grep "'"$TMP"'/absent-file" "x" "의도적 실패"' \
             'no "의도적 실패"'; do
   out="$(probe "$call")"
   case "$out" in
@@ -1779,6 +1807,46 @@ assert_grep() {      # assert_grep <text> <ERE> <msg>
   else no "$3"; printf '      pattern:  %s\n      text:     %s\n' "$2" "$(printf '%s' "$1" | head -c 400)"; fi
 }
 
+assert_not_grep() {  # assert_not_grep <text> <ERE> <msg>   — assert_grep 의 짝
+  if printf '%s\n' "$1" | grep -qE -- "$2"; then
+    no "$3"; printf '      금지 패턴: %s\n' "$2"
+  else ok "$3"; fi
+}
+
+# ── 파일 대상 변형 ─────────────────────────────────────────────────────────
+# **파일 부재는 fail-closed 다 — no() 로 센다.**
+# 이관 전 `assert_not_grep`(quality-gates/tests/test_adversarial_model_consistency.sh:39)
+# 의 주석이 실측으로 남긴 결함이다: *"A missing file must FAIL, not vacuously PASS
+# (Gate 2 adversarial confirmed this gap): grep on a nonexistent file exits non-zero,
+# which would otherwise route to the PASS branch."* 이 이빨을 이관하면서 잃으면 C10 위반이다.
+# `"$(cat <file>)"` 로 텍스트 변형에 넘기는 우회는 쓰지 않는다 — 그 형태가 정확히 위 결함이다.
+assert_file_grep() {    # assert_file_grep <file> <ERE> <msg>
+  if [ ! -f "$1" ]; then no "$3 (파일 없음: $1)"; return; fi
+  if grep -qE -- "$2" "$1"; then ok "$3"
+  else no "$3"; printf '      pattern:  %s\n      file:     %s\n' "$2" "$1"; fi
+}
+
+assert_file_absent() {  # assert_file_absent <file> <ERE> <msg>
+  if [ ! -f "$1" ]; then no "$3 (파일 없음: $1)"; return; fi
+  if grep -qE -- "$2" "$1"; then no "$3 (금지 패턴이 있다: $2)"
+  else ok "$3"; fi
+}
+
+# 개수 판정 — 이관 전 `check <name> <cmd> <expected>` 계열(qg 6파일, persona 쌍 포함)의 정본.
+# **인자 순서가 뒤집힌다**: 이관 전은 msg 가 **첫** 인자였고 여기서는 **마지막**이다
+# (assert_eq·assert_contains·assert_grep 와 같은 자리). `field` 와 같은 종류의 조용한
+# 실패원이므로 이관 시 호출부를 하나도 빠뜨리면 안 된다 — Task 14 Step 4 가 기계적으로 찾는다.
+# 개수가 아닌 출력(빈 문자열·에러 텍스트)은 통과가 아니라 실패다: 이관 전 `check` 는
+# `[ "$actual" -ge "$expected" ]` 에서 bash 산술 에러를 내고 `set +e` 아래서 실패로 떨어졌는데,
+# 그 경로는 메시지가 없어 원인이 안 보였다.
+assert_count_ge() {     # assert_count_ge <cmd> <expected> <msg>
+  local actual
+  actual="$(eval "$1" 2>/dev/null || true)"
+  case "$actual" in ''|*[!0-9]*) no "$3 (개수가 아니다: '$actual')"; return ;; esac
+  if [ "$actual" -ge "$2" ]; then ok "$3 (got $actual, expected >= $2)"
+  else no "$3 (got $actual, expected >= $2)"; fi
+}
+
 # field <key> <text> → 그 키의 **값만**. `key: value` 형식 YAML-ish 출력 파싱용.
 # awk 로 첫 콜론까지를 키로 보고 나머지를 값으로 낸다. 값에 공백이 있어도 보존한다
 # (기존 `awk '{print $2}'` 변형들은 첫 토큰만 냈다 — 값에 공백이 있으면 잘렸다).
@@ -1826,11 +1894,12 @@ Expected: PASS 전항목
 | 3 | `field`의 인자 순서를 `k=$2` / `"$1"`로 **뒤집는다** | RED (순서 락) |
 | 4 | `no()`의 `printf`를 지워 실패를 조용히 만든다 | RED |
 | 5 | 아무것도 안 바꾼다 | GREEN (항상-RED 검사가 아님을 증명) |
+| 6 | `assert_file_grep`의 **파일 부재 가드를 무판정 `return`으로** 바꾼다 (없는 파일이 조용히 통과) | RED (vacuous 통과 감지 — 이 헬퍼가 흡수한 `assert_not_grep`·`assert_absent`의 이빨) |
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 cp shared/tests/assert.sh /tmp/assert.bak
-for m in 1 2 3 4; do
+for m in 1 2 3 4 6; do
   cp /tmp/assert.bak shared/tests/assert.sh
   case $m in
     1) python3 - <<'PY'
@@ -1851,6 +1920,14 @@ PY
     4) python3 - <<'PY'
 import pathlib,re; p=pathlib.Path("shared/tests/assert.sh"); t=p.read_text(encoding="utf-8")
 p.write_text(t.replace("no()   { _ASSERT_FAIL=$((_ASSERT_FAIL+1)); printf '  ✗ %s\\n' \"$*\"; }","no()   { _ASSERT_FAIL=$((_ASSERT_FAIL+1)); }",1),encoding="utf-8")
+PY
+       ;;
+    6) python3 - <<'PY'
+import pathlib; p=pathlib.Path("shared/tests/assert.sh"); t=p.read_text(encoding="utf-8")
+old='assert_file_grep() {    # assert_file_grep <file> <ERE> <msg>\n  if [ ! -f "$1" ]; then no "$3 (파일 없음: $1)"; return; fi'
+new='assert_file_grep() {    # assert_file_grep <file> <ERE> <msg>\n  if [ ! -f "$1" ]; then return; fi'
+assert old in t, "계측기 고장 — 치환 대상이 없다"
+p.write_text(t.replace(old,new,1),encoding="utf-8")
 PY
        ;;
   esac
@@ -1877,7 +1954,8 @@ git commit -m "feat(shared): 판정 헬퍼 정본 + 종료 행동 락"
 ### Task 14: 헬퍼 이관 — C10 두 축 검증
 
 **Files:**
-- Modify: 자체 판정 헬퍼를 정의하는 셸 테스트 전부 (Step 1이 도출)
+- Modify: 자체 판정 헬퍼를 정의하는 셸 테스트 전부 — **이름 불문** (Step 2가 도출; 〔실측〕 120 파일)
+- Modify(명시): `plugins/quality-gates/tests/test_adversarial_persona.sh` · `test_security_reviewer_persona.sh` — 설계 §6.1③의 "persona 테스트 쌍". Step 2의 좁은 도출이 놓쳤고 Task 35의 20줄 검사가 실제로 잡는 유일한 테스트 쌍이라 **Files에 이름으로 올린다**(Step 4b)
 - Delete: `plugins/quality-gates/tests/lib/` 중 `shared/tests/assert.sh`로 흡수된 것
 
 **C10 검증은 두 축이다** (설계 §9.2):
@@ -1892,10 +1970,16 @@ git commit -m "feat(shared): 판정 헬퍼 정본 + 종료 행동 락"
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 SCRATCH="$(cat .git/devbrew-weight-scratch)"
+# 이관 전·후가 **같은 패턴**이어야 한다. 이관은 이름을 바꾸므로(pass→ok · check→assert_count_ge ·
+# ag→assert_file_grep · ng/assert_absent/assert_not_grep→assert_file_absent · assert_body_grep→assert_grep)
+# 옛 이름과 새 이름을 **둘 다** 세는 합집합이 아니면 "감소"가 이관 자체 때문에 뜬다.
+# 〔이 패턴을 Step 5 가 그대로 다시 쓴다 — 두 곳이 갈리면 대조가 사과-오렌지가 된다.〕
+CALLS='ok|no|pass|fail|check|ag|agf|ng|assert_eq|assert_contains|assert_not_contains|assert_grep|assert_not_grep|assert_body_grep|assert_absent|assert_file_grep|assert_file_absent|assert_count_ge'
+printf '%s\n' "$CALLS" > "$SCRATCH/assert-call-pattern.txt"
 : > "$SCRATCH/assert-count-before.txt"
 for f in $(git ls-files 'plugins/*' 'shared/*' | grep -E '(^|/)tests?/.*\.sh$' | grep -vE '/(fixtures|mocks|harness)/'); do
-  n=$(grep -cE '^\s*(ok|no|pass|fail|assert_eq|assert_contains|assert_not_contains|assert_grep)\b' "$f" 2>/dev/null || echo 0)
-  printf '%s\t%s\n' "$n" "$f" >> "$SCRATCH/assert-count-before.txt"
+  n=$(grep -cE "^[[:space:]]*(${CALLS})[[:space:]]" "$f" 2>/dev/null | head -1)
+  printf '%s\t%s\n' "${n:-0}" "$f" >> "$SCRATCH/assert-count-before.txt"
 done
 awk -F'\t' '{s+=$1} END {print "총 assertion 호출:", s}' "$SCRATCH/assert-count-before.txt"
 ```
@@ -1904,12 +1988,27 @@ awk -F'\t' '{s+=$1} END {print "총 assertion 호출:", s}' "$SCRATCH/assert-cou
 
 - [ ] **Step 2: 자체 헬퍼를 정의하는 파일을 도출한다**
 
+**이름 목록은 census 축 3이 판정 헬퍼로 분류한 전량이다** — 좁은 목록을 쓰면 그 행들의 조치가 조용히 실행되지 않는다. 〔2026-08-17 실측〕 좁은 목록(`note|ok|no|pass|fail|assert_eq|assert_contains|assert_grep|field`)은 109 파일을 냈고, `ag`·`agf`·`ng`·`check`·`assert_absent`·`assert_not_grep`·`assert_not_contains`·`assert_body_grep` 를 더하면 **11 파일이 추가로 들어온다** — 그중 둘이 `test_adversarial_persona.sh`·`test_security_reviewer_persona.sh`(census #137·#150, Task 35의 20줄 검사가 실제로 잡는 쌍)다.
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+HELPERS='note|ok|no|pass|fail|check|ag|agf|ng|field|assert_eq|assert_contains|assert_not_contains|assert_grep|assert_not_grep|assert_body_grep|assert_absent'
+git ls-files 'plugins/*' | grep -E '(^|/)tests?/.*\.sh$' | grep -vE '/(fixtures|mocks|harness)/' \
+  | while IFS= read -r f; do
+      grep -qE "^[[:space:]]*(${HELPERS})\(\)" "$f" && echo "$f"
+    done | tee /tmp/t14-targets.txt | wc -l
+```
+
+**음의 짝 — 넓힌 목록이 실제로 더 잡았는가.** 넓혔는데 수가 그대로면 `HELPERS` 가 셸에 안 먹은 것이다(따옴표·`|` 이스케이프).
+
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 git ls-files 'plugins/*' | grep -E '(^|/)tests?/.*\.sh$' | grep -vE '/(fixtures|mocks|harness)/' \
   | while IFS= read -r f; do
-      grep -qE '^\s*(note|ok|no|pass|fail|assert_eq|assert_contains|assert_grep|field)\(\)' "$f" && echo "$f"
-    done
+      grep -qE '^[[:space:]]*(note|ok|no|pass|fail|assert_eq|assert_contains|assert_grep|field)\(\)' "$f" && echo "$f"
+    done | sort > /tmp/t14-narrow.txt
+echo "=== 넓힌 목록에만 있는 파일 (기대: 11건, persona 2건 포함) ==="
+comm -23 <(sort /tmp/t14-targets.txt) /tmp/t14-narrow.txt
 ```
 
 - [ ] **Step 3: 파일 하나씩 이관한다 — 일괄 치환하지 않는다**
@@ -1924,8 +2023,14 @@ git ls-files 'plugins/*' | grep -E '(^|/)tests?/.*\.sh$' | grep -vE '/(fixtures|
 
 2. **`field` 호출부의 인자 순서를 확인한다.** 이관 전 형태가 `field "$out" "key"`(text 먼저)면 `field "key" "$out"`으로 뒤집는다. 뒤집기를 빠뜨리면 빈 문자열끼리 비교해 **조용히 통과**한다.
 3. `test_qg_mutation_guard.sh:23`처럼 **줄 전체**를 쓰던 곳은 `field_line`으로 바꾼다.
-4. 파일 끝의 자체 집계·종료 줄(`echo "Total: ..."; [ "$fail" -eq 0 ]`)을 `finish`로 바꾼다.
-5. **그 파일 하나를 즉시 돌린다.**
+4. **파일 대상·개수 판정 변형을 Task 13 Interfaces 의 대응표대로 바꾼다** 〔census #39·#46·#63·#102·#111·#119·#137 — 좁은 도출이 놓쳤던 11 파일이 전부 여기 걸린다〕:
+   - `ag '<ERE>' "<msg>"` → `assert_file_grep "$A" '<ERE>' "<msg>"` (파일 변수는 그 파일의 기존 상단 변수 — qg artifact frontmatter 쌍은 `$A`, persona 쌍은 `$PERSONA`, `test_qg_critique_routing.sh`는 `$Q`)
+   - `ng` · `assert_not_grep` · `assert_absent` → `assert_file_absent "<file>" '<ERE>' "<msg>"`
+   - `agf '<고정문자열>' "<msg>"` → `assert_contains "$(cat "$Q")" '<고정문자열>' "<msg>"` (`grep -qF` 였으므로 정규식이 아니다 — `assert_file_grep` 으로 옮기면 메타문자가 패턴으로 해석돼 **의미가 바뀐다**)
+   - `assert_body_grep '<ERE>' "<msg>"` → `assert_grep "$BODY" '<ERE>' "<msg>"`
+   - `check "<msg>" '<cmd>' <N>` → `assert_count_ge '<cmd>' <N> "<msg>"` — **인자 순서가 바뀐다**(msg 가 첫째→마지막). `field` 와 같은 종류의 조용한 실패원이다.
+5. 파일 끝의 자체 집계·종료 줄(`echo "Total: ..."; [ "$fail" -eq 0 ]`)을 `finish`로 바꾼다.
+6. **그 파일 하나를 즉시 돌린다.**
 
 ```bash
 bash <그 파일> ; echo "rc=$?"
@@ -1942,7 +2047,15 @@ cd /Users/jeonghokim/Downloads/devbrew
 echo "=== 첫 인자가 변수인 field 호출 (순서 뒤집기 누락 의심) ==="
 grep -rnE '\bfield(_line)? +"\$' plugins/*/tests/*.sh shared/tests/*.sh 2>/dev/null
 echo "=== (위 출력이 비어야 한다 — 첫 인자는 리터럴 키여야 한다) ==="
-```
+
+echo "=== 마지막 인자가 숫자가 아닌 assert_count_ge 호출 (msg/N 순서 뒤집기 누락 의심) ==="
+grep -rnE '\bassert_count_ge .*[^0-9[:space:]]$' plugins/*/tests/*.sh shared/tests/*.sh 2>/dev/null
+echo "=== (위 출력이 비어야 한다 — 마지막은 msg, 그 앞이 기대 개수다) ==="
+
+echo "=== 이관 전 이름이 정의로 남아 있는가 (지우기 누락) ==="
+grep -rnE '^[[:space:]]*(check|ag|agf|ng|assert_absent|assert_not_grep|assert_body_grep|pass|fail)\(\)' \
+  plugins/*/tests/*.sh 2>/dev/null
+echo "=== (위 출력이 비어야 한다) ==="
 
 **음의 짝이 필요하다.** "출력이 비었다"는 grep이 코퍼스를 실제로 봤다는 증거가 아니다:
 
@@ -1953,15 +2066,74 @@ grep -rcE '\bfield(_line)? ' plugins/*/tests/*.sh shared/tests/*.sh 2>/dev/null 
 
 Expected: 비어 있지 않은 파일 목록이 나온다. 여기가 비면 위 검사가 vacuous하다.
 
+- [ ] **Step 4b: persona 테스트 쌍 — Task 35의 20줄 검사가 실제로 잡는 쌍을 여기서 없앤다**
+
+> **이 스텝이 없으면 PR6가 자기가 만들지 않은 RED를 만난다.** 〔2026-08-17 실측, Task 35 Step 1의 스캐너를 그대로 돌림〕 `plugins/quality-gates/tests/test_adversarial_persona.sh` ↔ `test_security_reviewer_persona.sh` 는 **20줄 창 7개**를 공유하고, 그 공유 구간은 **연속 26줄(공백 제외) 하나**다. 그 26줄의 내용은 존재 가드 3줄 + `set +e` + `pass=0; fail=0` + `check()` 11줄 + `assert_absent()` 9줄이며 — **assertion 은 한 줄도 들어 있지 않다.** 즉 이 중복 제거는 스캐폴딩 이관이지 persona 검사의 완화가 아니다(`CLAUDE.md`의 "persona 파일은 보안-민감" 조항은 `plugins/quality-gates/agents/*.md` 를 가리키며, 이 두 파일은 그 persona 를 **검사하는** 테스트다 — 검사 자체는 한 줄도 줄지 않는다).
+>
+> 설계 §6.1③이 "리포에서만 도는 것(판정 헬퍼, frontmatter 검사군, **persona 테스트 쌍**)은 `shared/tests/`를 직접 source한다"고 지목한 셋 중 뒤 둘이 plan 태스크에 반영돼 있지 않았다 — 2026-08-17 census 조치 재검토가 그 누락을 여기로 되돌린다(census #22·#23·#25·#137·#150).
+
+1. 두 파일이 Step 2의 도출 목록에 들어 있는지 먼저 확인한다(좁은 패턴은 이 둘을 놓쳤다):
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+grep -c 'persona' /tmp/t14-targets.txt   # 기대: 2
+```
+
+2. 두 파일에서 공유 26줄을 지우고 정본을 source 한다. `check`·`assert_absent` 는 Step 3의 4번 대응표대로 바꾼다. 존재 가드는 남기되 `no` + `finish` 로 바꾼다 — `exit 1` 을 그대로 두면 이 파일만 계약이 다른 채로 남는다.
+
+```bash
+# 두 파일 공통으로 들어가는 머리 (PERSONA 경로는 파일마다 다르다)
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+[ -f "$PERSONA" ] || { no "persona 파일 부재: $PERSONA"; finish; exit; }
+```
+
+3. **공유 구간이 실제로 임계 아래로 내려갔는지 잰다.** "고쳤다"가 아니라 "재서 20줄 미만"이 완료 조건이다 — Task 35의 창(20줄)·정규화(공백줄 제거)와 같은 규칙을 쓴다:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+python3 - <<'PY'
+import pathlib, difflib
+pairs = [
+  ("plugins/quality-gates/tests/test_adversarial_persona.sh",
+   "plugins/quality-gates/tests/test_security_reviewer_persona.sh"),
+  ("plugins/quality-gates/tests/test_artifact_adversarial_frontmatter.sh",
+   "plugins/quality-gates/tests/test_artifact_critic_frontmatter.sh"),
+  ("plugins/spec-distill/tests/test_coverage_mapper_frontmatter.sh",
+   "plugins/spec-distill/tests/test_spec_reviewer_frontmatter.sh"),
+]
+for a, b in pairs:
+    la = [l for l in pathlib.Path(a).read_text(encoding="utf-8").split("\n") if l.strip()]
+    lb = [l for l in pathlib.Path(b).read_text(encoding="utf-8").split("\n") if l.strip()]
+    run = max((k.size for k in difflib.SequenceMatcher(None, la, lb).get_matching_blocks()), default=0)
+    print(f"{'OK ' if run < 20 else '❌ '} 최장 공유 {run:3d}줄  {a.split('/')[-1]} ↔ {b.split('/')[-1]}")
+PY
+```
+
+Expected: 세 쌍 모두 `OK` (20줄 미만). 〔2026-08-17 이관 **전** 실측: persona 쌍 **26줄(=창 7개, 유일한 위반)** · qg artifact frontmatter 쌍 **4줄** · sd frontmatter 쌍 **17줄**〕 — 뒤 두 쌍은 이관 전에도 임계 아래라 이 검사가 **항상-OK 가 아님을 보이는 것은 persona 쌍뿐이다**. persona 쌍이 여전히 20 이상이면 Task 35 Step 2가 그 쌍으로 RED가 된다.
+
+4. 두 파일을 돌려 판정 수가 이관 전과 같은지 본다:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+for f in plugins/quality-gates/tests/test_adversarial_persona.sh \
+         plugins/quality-gates/tests/test_security_reviewer_persona.sh; do
+  echo "=== $f"; bash "$f" | tail -3
+done
+```
+
+Expected: 두 파일 모두 이관 전과 같은 판정 수, Fail 0.
+
 - [ ] **Step 5: 두 축 검증**
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 SCRATCH="$(cat .git/devbrew-weight-scratch)"
-# 축 1 — 수
+# 축 1 — 수. **Step 1 이 저장한 바로 그 패턴을 읽어 쓴다** — 여기서 목록을 다시 타이핑하면
+# 두 집계가 서로 다른 것을 세고, 이관이 만든 이름 변경이 "감소"로 위장된다.
+CALLS="$(cat "$SCRATCH/assert-call-pattern.txt")"
 : > "$SCRATCH/assert-count-after.txt"
 for f in $(git ls-files 'plugins/*' 'shared/*' | grep -E '(^|/)tests?/.*\.sh$' | grep -vE '/(fixtures|mocks|harness)/'); do
-  n=$(grep -cE '^\s*(ok|no|assert_eq|assert_contains|assert_not_contains|assert_grep)\b' "$f" 2>/dev/null | head -1)
+  n=$(grep -cE "^[[:space:]]*(${CALLS})[[:space:]]" "$f" 2>/dev/null | head -1)
   printf '%s\t%s\n' "${n:-0}" "$f" >> "$SCRATCH/assert-count-after.txt"
 done
 echo "=== 파일별 감소 (완료 조건: 0건) ==="
@@ -2003,7 +2175,7 @@ git add -A
 git commit -m "refactor(tests): 판정 헬퍼를 shared/tests/assert.sh 하나로 — field 인자 순서 통일 포함"
 ```
 
-**PR3b 게이트**: 파일별 assertion 감소 0 · 행동 락 GREEN · 새 RED 0.
+**PR3b 게이트**: 파일별 assertion 감소 0 · 행동 락 GREEN · 새 RED 0 · **persona 쌍의 최장 공유 구간 < 20줄**(Step 4b — Task 35 Step 2가 이 쌍으로 RED가 되지 않기 위한 선행 조건).
 
 ---
 
@@ -2289,7 +2461,7 @@ git commit -m "refactor(codex): detect_codex.sh 3사본을 shared/ 정본 + 심�
 
 1. **심볼릭 링크 무결성** — 배포 지점이 여전히 링크인가(재분열 = 링크가 독립 파일로 바뀜) · 그 링크가 존재하는 대상을 가리키는가 · 그 대상이 기대한 정본과 일치하는가. **이것이 이제 이 락의 핵심 축이다** — §12.1의 "링크 무결성" 계약을 직접 검사한다.
 2. **형제 설정(`codex-killswitch.conf`) 3요건** — Task 15의 요구를 그대로 계승한다: 배포에 실린다(git tracked) · 설정 부재 시 fail-closed(`CLAUDE.md:48`의 보안 컨트롤). **이 축은 심볼릭 링크 채택과 무관하게 원래 이유 그대로 필요하다** — 세 플러그인이 여전히 서로 다른 kill switch 변수를 가지므로.
-3. **`copy-of` 물리 사본 지원은 남긴다** — 이 사이클엔 Task 19(`kill_switch_active.py`)가 이 마커 방식의 **첫 실제(픽스처 아닌) 사용자**다(Task 18의 `read_preamble.sh`는 §12.2 요구를 확정하지만 배포 스텝을 실제로 쓰지 않는다 — Task 18 절 하단의 기록 참조). 링크를 못 쓰는 잔여를 위해 마커 파싱 축의 코드는 지우지 않는다(C10과 같은 정신 — 대상을 잃은 축만 걷어낸다).
+3. **`copy-of` 물리 사본 지원은 남긴다** — 이 사이클엔 **Task 17 Step 4b**(`codex_jsonl.py`)가 이 마커 방식의 **첫 실제(픽스처 아닌) 사용자**이고 Task 19(`kill_switch_active.py` ×3)가 그다음이다(2026-08-17 census 조치 재검토 이전에는 이 자리에 Task 19만 적혀 있었다. Task 18의 `read_preamble.sh`는 §12.2 요구를 확정하지만 배포 스텝을 실제로 쓰지 않는다 — Task 18 절 하단의 기록 참조). 링크를 못 쓰는 잔여를 위해 마커 파싱 축의 코드는 지우지 않는다(C10과 같은 정신 — 대상을 잃은 축만 걷어낸다).
 
 **바이트-동일성 mutation은 이 파일에 없다.** 그 자리를 "링크가 여전히 링크인가"가 대신한다. 아래 Step 3에서 두 종류의 mutation을 각각 증명한다.
 
@@ -2750,7 +2922,10 @@ git commit -m "test(shared): 동일성 락 — 심볼릭 링크 도미넌스 체
 
 **Files:**
 - Create: `shared/codex/codex_findings_to_yaml.py`
+- **Create: `shared/codex/codex_jsonl.py`** (codex JSONL 이벤트 파서 정본 — census #58, Step 4b)
+- **Create: `plugins/plugin-audit/scripts/codex_jsonl.py`** (`copy-of` 물리 사본)
 - Modify: `plugins/{quality-gates,spec-distill}/scripts/codex_findings_to_yaml.py` → **정본을 가리키는 상대 심볼릭 링크** (물리 사본이 아니다)
+- **Modify: `plugins/plugin-audit/scripts/codex_audit_to_json.py`** (자체 `extract_last_agent_message` 제거 → import, census #58)
 - Modify: 호출자 (emit keyset을 인자로 넘긴다)
 
 **차이는 하나다** 〔실측〕 — emit keyset. spec-distill 사본이 `category`·`target_section`을 더한다(design-doc 리뷰 어휘). 나머지 140줄 diff는 전부 주석·포매팅이다.
@@ -2833,6 +3008,66 @@ grep -rn 'codex_findings_to_yaml.py' plugins/*/scripts/*.sh plugins/*/skills/*/S
 
 spec-distill 쪽 호출에 `--emit-keys design`을 붙인다. quality-gates 쪽은 기본값이므로 무변경.
 
+- [ ] **Step 4b: 세 번째 사본 — `plugin-audit/scripts/codex_audit_to_json.py` (census #58·#62)**
+
+census §discrepancy 가 이것을 *"권고"* 로만 적어 두었는데(*"착수 시 이 세 함수를 함께 검토할 것을 권고"*), 권고는 조치가 아니다 — 2026-08-17 재검토가 이것을 **이 태스크의 스텝으로** 승격한다.
+
+〔실측, 세 본문 전부 판독〕 `extract_last_agent_message` 가 3파일에 있고(pa 30줄 · qg 37줄 · sd 22줄) **같은 알고리즘**이다: JSONL 을 줄 단위로 순회해 codex 0.130+ 의 `item.completed` 와 legacy `agent_message` 두 이벤트 shape 을 파싱하고 마지막 `agent_message` 텍스트와 `any_parsed` 를 낸다. Step 3의 심볼릭 링크가 qg·sd 두 벌을 하나로 만들지만 **pa 것은 남는다** — codex 가 이벤트 shape 을 또 바꾸면 고칠 자리가 두 곳이다. 이 축(JSONL 이벤트 파서)은 이 사이클이 닫는 codex 통일 네 축(detect · findings · 러너 · 프리앰블) 중 어디에도 안 들어간다.
+
+`shared/codex/codex_jsonl.py` 를 만들어 `extract_last_agent_message` 를 옮기고, 정본 `shared/codex/codex_findings_to_yaml.py` 가 그것을 import 한다.
+
+> **심볼릭 링크된 스크립트도 이 import 가 된다 — 실측했다.** `python3 <symlink>` 의 `sys.path[0]` 은 링크가 아니라 **대상 디렉토리로 해석된다**(macOS python 3.9.6 확인). 즉 `plugins/{qg,sd}/scripts/codex_findings_to_yaml.py`(심볼릭 링크)를 태워도 `sys.path[0]` 이 `shared/codex/` 라 sibling `codex_jsonl.py` 가 그대로 잡힌다 — 두 플러그인에 사본을 둘 필요가 **없다**. 〔이 사실을 확인하지 않고 "링크 쪽 디렉토리가 잡힌다"고 가정하면 필요 없는 사본 2개를 배포하게 된다.〕
+
+`codex_audit_to_json.py` 는 **심볼릭 링크가 아니라 실제 파일**이므로 자기 `sys.path[0]`(= `plugins/plugin-audit/scripts/`)에서 모듈을 찾는다. 그 자리에 `copy-of` **물리 사본**을 둔다 — Task 19·20·21과 같은 방식이다:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+{ echo "# copy-of: shared/codex/codex_jsonl.py"; cat shared/codex/codex_jsonl.py; } \
+  > plugins/plugin-audit/scripts/codex_jsonl.py
+```
+
+> **왜 여기는 심볼릭 링크가 아닌가** (Task 15·17의 기본 방식과 다른 이유). Task 16의 축 1a(심볼릭 링크 무결성)는 배포 지점 집합을 **참조원에서 도출**한다 — 정본 basename 을 `scripts/<basename>` 형태로 참조하는 파일을 찾는 방식이다. `codex_jsonl` 은 `from codex_jsonl import ...` 로만 불리므로 그 문자열이 리포 어디에도 없고, 링크로 두면 그 정본의 기대 배포 지점이 **0건**으로 도출된다. 축 1a의 vacuous 가드는 `n_expected` 를 정본 전체에 걸쳐 합산하므로(정본별이 아니라) 다른 정본들이 만든 수에 가려 **조용히 아무것도 검사하지 않는다.** 마커 축(1b)은 도출이 아니라 마커 스캔이라 이 문제가 없다.
+
+그리고 `codex_audit_to_json.py` 에서 자체 정의를 지우고:
+
+```python
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from codex_jsonl import extract_last_agent_message  # noqa: E402
+```
+
+**pa 판에만 있던 `candidate.strip()` 공백 가드는 정본에 남긴다** — 없애면 pa 쪽이 지금 걸러내던 공백-only 메시지를 통과시킨다(기능 축소 = C10 방향의 회귀).
+
+`apply_overrides`(census #62)는 pa 에서 `main()` **안의 중첩 함수**다(`codex_audit_to_json.py:155`). 시그니처는 같지만 소비하는 meta 키가 달라 여기서는 **옮기지 않는다** — census #62 조치란에 그 이유를 적는다.
+
+> **이 스텝이 이 사이클의 `copy-of` 마커 방식 첫 실제 사용자다** — 기존 서술은 Task 19를 첫 사용자로 적었는데(Task 16 rationale 3번 · 부록 B.1 미결 5), 실행 순서가 17 → 19 이므로 이 스텝이 앞선다. 누적 물리 사본 기대값: **Task 17(+1) = 1 → Task 19(+3) = 4 → Task 20(+3) = 7 → Task 21(+2) = 9.** 각 태스크의 `물리 사본 N건` 문단을 이 수열로 읽는다.
+
+- [ ] **Step 4c: 검증 — 세 파일이 같은 파서를 쓰는가**
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
+export PYTHONDONTWRITEBYTECODE=1
+echo "=== 남은 extract_last_agent_message 정의 (기대: shared/codex/codex_jsonl.py 와 그 copy-of 사본뿐) ==="
+grep -rn 'def extract_last_agent_message' shared/ plugins/ | grep '\.py'
+echo "=== 같은 입력에 세 소비 경로가 같은 텍스트를 뽑는가 ==="
+EV='{"type":"item.completed","item":{"type":"agent_message","text":"HELLO"}}'
+printf '%s\n' "$EV" | python3 -c "
+import sys, pathlib
+sys.path.insert(0, 'shared/codex')
+from codex_jsonl import extract_last_agent_message
+print(extract_last_agent_message(sys.stdin.read()))"
+printf '%s\n' "$EV" | python3 -c "
+import sys
+sys.path.insert(0, 'plugins/plugin-audit/scripts')
+from codex_jsonl import extract_last_agent_message
+print(extract_last_agent_message(sys.stdin.read()))"
+bash shared/tests/test_copy_of_contract.sh | tail -4
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/tests -t . 2>&1 | tail -3
+```
+
+Expected: 두 출력이 `('HELLO', True)` 로 같다 · `물리 사본 1건` · plugin-audit 스위트 새 RED 0. 〔테스트 디렉토리 경로는 Task 12가 `scripts/tests/` → `tests/` 로 옮긴 뒤 기준이다.〕
+
 - [ ] **Step 5: 검증**
 
 ```bash
@@ -2851,8 +3086,11 @@ Expected: `category:`와 `target_section:`이 나온다. 안 나오면 인자가
 - [ ] **Step 6: 커밋**
 
 ```bash
-git add shared/codex/codex_findings_to_yaml.py plugins/*/scripts/codex_findings_to_yaml.py plugins/*/scripts/run_*codex*.sh
-git commit -m "refactor(codex): codex_findings_to_yaml.py 2사본을 심볼릭 링크로 통합 — emit keyset 을 인자로"
+git add shared/codex/codex_findings_to_yaml.py shared/codex/codex_jsonl.py \
+        plugins/*/scripts/codex_findings_to_yaml.py plugins/*/scripts/run_*codex*.sh \
+        plugins/plugin-audit/scripts/codex_jsonl.py plugins/plugin-audit/scripts/codex_audit_to_json.py
+git commit -m "refactor(codex): codex_findings_to_yaml.py 2사본을 심볼릭 링크로 통합 — emit keyset 을 인자로 + JSONL 파서 3사본 정본화"
+git ls-files shared/codex/codex_jsonl.py plugins/plugin-audit/scripts/codex_jsonl.py
 ```
 
 ---
@@ -3007,32 +3245,56 @@ git commit -m "refactor(codex): P21 프리앰블 3문장을 shared 정본으로 
 
 **Files:**
 - Create: `shared/killswitch/kill_switch_active.py`
-- Modify: 5개 정의 지점 → 사본 또는 import
+- Modify: **12개** 정의 지점 → 사본 또는 import (`kill_switch_active` 5 + **`_disabled` 7**)
+- Create: `plugins/quality-gates/scripts/kill_switch_active.py` (`copy-of` 사본 — `_disabled` 7곳 중 5곳이 quality-gates 다)
 
-**실측된 정의 위치** 〔5곳, 본문 전부 다름〕:
+**실측된 정의 위치** 〔12곳, 본문 전부 다름 — 2026-08-17 재확인〕:
 
 ```
-plugins/project-init/hooks/docs-lint.py
-plugins/project-init/hooks/post-tool-use.py
-plugins/spec-distill/hooks/review-dispatch.py
-plugins/spec-distill/hooks/pending-review-reminder.py
-plugins/spec-distill/hooks/spec-write-validator.py
+# 이름이 kill_switch_active 인 것 (5)
+plugins/project-init/hooks/docs-lint.py:31
+plugins/project-init/hooks/post-tool-use.py:178
+plugins/spec-distill/hooks/review-dispatch.py:68
+plugins/spec-distill/hooks/pending-review-reminder.py:52
+plugins/spec-distill/hooks/spec-write-validator.py:60
+
+# 같은 책임을 _disabled 라는 다른 이름으로 하는 것 (7) — census #37
+plugins/quality-gates/hooks/session-start-advisor.py:63
+plugins/quality-gates/hooks/post-tool-use.py:20
+plugins/quality-gates/hooks/post-tool-use-session-tracker.py:22
+plugins/quality-gates/hooks/session-end-cleanup.py:20
+plugins/quality-gates/scripts/qg-gc.py:53                  # 훅이 아니라 스크립트
+plugins/spec-distill/hooks/session-end-cleanup.py:26
+plugins/spec-distill/scripts/spec-distill-gc.py:36         # 훅이 아니라 스크립트
 ```
+
+> **`_disabled` 7곳이 왜 이 태스크로 들어왔나** (2026-08-17 census 조치 재검토). census #37이 이 7곳을 "shared/ 정본 + copy-of (Task 15·17·18·19)"로 적었는데, **네 태스크의 Files 중 어느 것도 이 7 파일을 담고 있지 않았다** — 조치가 있는 것처럼 보이는데 실행하는 태스크가 없었다. 이름이 다르다는 이유로 census 스크립트도 `kill_switch_active`와 이 둘을 잇지 못했다(이름 기반 그룹핑의 구조적 사각지대). 여기가 맞는 자리다: **같은 책임의 다른 이름**이고, kill switch 는 보안 컨트롤이다(`CLAUDE.md:48`).
+>
+> **드리프트는 가설이 아니라 실측이다**: `plugins/quality-gates/hooks/post-tool-use.py:20`은 `DEVBREW_SKIP_HOOKS`를 콤마 분리 **전체 토큰**으로 대조하는데(주석이 접두 오매칭 사고를 명시한다), `plugins/spec-distill/scripts/spec-distill-gc.py:36`은 **한 줄짜리로 `DEVBREW_DISABLE_SPEC_DISTILL` 만 본다** — `DEVBREW_SKIP_HOOKS` 를 아예 읽지 않는다. 사용자가 껐다고 믿는 스위치가 어떤 지점에서는 무반응이다.
+>
+> **두 스크립트(`qg-gc.py`·`spec-distill-gc.py`)는 훅이 아니다.** 통일하면 `DEVBREW_SKIP_HOOKS=<plugin>:<script-name>` 으로도 꺼진다 — 지금보다 **더 잘 꺼지는** 방향이며, 이것이 §6.2가 정한 "둘 다 받는 쪽으로 통일"의 방향이다. kill switch 는 opt-out 컨트롤이라 더 잘 꺼지는 것은 회귀가 아니다. 반대 방향(덜 꺼짐)만 회귀다.
+>
+> **Task 21과 파일이 겹친다** — `session-end-cleanup.py` ×2 · `qg-gc.py` · `spec-distill-gc.py` 넷은 Task 21도 고친다. **번호 순서대로 19 → 21** 로 돈다. Task 21의 `gc_common.py` 추출은 이 태스크가 남긴 `from kill_switch_active import kill_switch_active` 줄을 **그대로 둔다**(정본이 둘이 되면 안 된다).
 
 **kill switch는 보안 컨트롤이다**(`CLAUDE.md:48`). 같은 이름의 판정 함수가 5가지 다른 뜻을 갖는 것은 *"한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는"* 결함이다.
 
 **§6.2가 지정한 통일 방향**: kill switch 토큰 별칭 수 불일치 — spec-distill 훅은 이벤트명·훅명 둘 다 받고 project-init은 훅명만 받는다 → **둘 다 받는 쪽으로 통일**한다.
 
-- [ ] **Step 1: 5개 본문을 나란히 놓고 계약을 확정한다**
+- [ ] **Step 1: 12개 본문을 나란히 놓고 계약을 확정한다**
+
+목록은 **열거가 아니라 도출**한다 — 새 정의가 생기면 자동으로 대상이 된다.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
-for f in plugins/project-init/hooks/docs-lint.py plugins/project-init/hooks/post-tool-use.py \
-         plugins/spec-distill/hooks/review-dispatch.py plugins/spec-distill/hooks/pending-review-reminder.py \
-         plugins/spec-distill/hooks/spec-write-validator.py; do
-  echo "=== $f"; grep -n -A18 'def kill_switch_active' "$f"
-done
+grep -rn 'def kill_switch_active\|def _disabled' plugins/ | grep '\.py' | tee /tmp/t19-sites.txt
+echo "=== 정의 지점 수 (기대: 12 — kill_switch_active 5 + _disabled 7) ==="
+wc -l < /tmp/t19-sites.txt
+while IFS=: read -r f _ _; do
+  echo "=== $f"; grep -n -A18 'def kill_switch_active\|def _disabled' "$f"
+done < /tmp/t19-sites.txt
 ```
+
+**두 이름을 하나로 합칠 때 `_disabled` 쪽 호출부가 인자를 안 받는다** — `_disabled()` 는 무인자이고 정본은 `(plugin, hook, event="")` 를 받는다. 호출부를 고치지 않으면 `TypeError` 로 훅이 죽거나(다행) 기본값이 먹어 **엉뚱한 스위치를 본다**(위험). Step 4가 이것을 다룬다.
 
 계약(다섯의 **합집합** — 어느 쪽에서도 기능이 줄지 않는다):
 
@@ -3062,7 +3324,7 @@ def kill_switch_active(plugin: str, hook: str, event: str = "") -> bool:
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
-for p in project-init spec-distill; do
+for p in project-init spec-distill quality-gates; do
   {
     echo "# copy-of: shared/killswitch/kill_switch_active.py"
     cat shared/killswitch/kill_switch_active.py
@@ -3070,9 +3332,11 @@ for p in project-init spec-distill; do
 done
 ```
 
+> **사본이 3개다** (2·3 이 아니라). `_disabled` 7곳 중 5곳이 quality-gates 이므로 그 플러그인도 배포 사본을 갖는다. 아래 Step 6의 `copy-of: 물리 사본 N건 스캔` 기대값이 **2가 아니라 3**이고, Task 20(+3) · Task 21(+2)의 누적 기대값도 그만큼 올라간다.
+
 > 파이썬 파일에 shebang이 없으면 마커가 **첫 줄**이다. 모듈 docstring이 그 다음 줄에 와도 여전히 첫 *문*이므로 `__doc__`이 산다. Task 17 Step 3의 검사를 여기도 돌린다.
 
-- [ ] **Step 4: 5개 훅에서 자체 정의를 지우고 import로 바꾼다**
+- [ ] **Step 4: 12개 지점에서 자체 정의를 지우고 import로 바꾼다**
 
 ```python
 import sys, pathlib
@@ -3082,46 +3346,71 @@ from kill_switch_active import kill_switch_active  # noqa: E402
 
 **호출부의 인자를 확인한다** — 기존 시그니처가 `(hook)` 하나만 받았다면 `(plugin, hook)`으로 늘어난다. 빠뜨리면 `TypeError`가 나거나(다행) 위치 인자가 밀려 **엉뚱한 스위치를 본다**(위험).
 
+**`_disabled` 쪽은 이름과 인자가 **둘 다** 바뀐다** — `if _disabled(): return 0` → `if kill_switch_active("quality-gates", "post-tool-use"): return 0`. 호출부가 남아 있는지 기계적으로 확인한다:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+echo "=== 남은 _disabled 정의·호출 (기대: 없음) ==="
+grep -rn '_disabled' plugins/ | grep '\.py'
+echo "=== 인자 없이 부르는 kill_switch_active (기대: 없음 — 정본은 (plugin, hook) 을 받는다) ==="
+grep -rn 'kill_switch_active()' plugins/ | grep '\.py'
+echo "=== 양성 확인: 인자 있는 호출이 실제로 존재하는가 (여기가 비면 위 두 검사가 vacuous) ==="
+grep -rc 'kill_switch_active(' plugins/ | grep -v ':0$'
+```
+
+두 스크립트(`qg-gc.py`·`spec-distill-gc.py`)의 hook 인자는 **스크립트 이름**을 쓴다 — `kill_switch_active("quality-gates", "qg-gc")` · `kill_switch_active("spec-distill", "spec-distill-gc")`. 훅이 아니지만 `DEVBREW_SKIP_HOOKS` 토큰으로 지목할 이름이 있어야 사용자가 그 하나만 끌 수 있다.
+
 - [ ] **Step 5: kill switch가 실제로 먹는지 태운다**
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
 export PYTHONDONTWRITEBYTECODE=1
-for pair in "project-init:docs-lint" "project-init:post-tool-use" \
-            "spec-distill:review-dispatch" "spec-distill:pending-review-reminder" \
-            "spec-distill:spec-write-validator"; do
-  p="${pair%%:*}"; h="${pair##*:}"
+for pair in "project-init:hooks:docs-lint" "project-init:hooks:post-tool-use" \
+            "spec-distill:hooks:review-dispatch" "spec-distill:hooks:pending-review-reminder" \
+            "spec-distill:hooks:spec-write-validator" \
+            "quality-gates:hooks:session-start-advisor" "quality-gates:hooks:post-tool-use" \
+            "quality-gates:hooks:post-tool-use-session-tracker" "quality-gates:hooks:session-end-cleanup" \
+            "spec-distill:hooks:session-end-cleanup" \
+            "quality-gates:scripts:qg-gc" "spec-distill:scripts:spec-distill-gc"; do
+  p="${pair%%:*}"; rest="${pair#*:}"; d="${rest%%:*}"; h="${rest##*:}"
   P_UP="$(printf '%s' "$p" | tr 'a-z-' 'A-Z_')"
-  echo "=== $p / $h"
+  echo "=== $p / $d / $h"
   # 전역 스위치
-  echo '{}' | env "DEVBREW_DISABLE_${P_UP}=1" python3 "plugins/$p/hooks/$h.py" 2>&1 | head -2
-  # 훅명 별칭
-  echo '{}' | env "DEVBREW_SKIP_HOOKS=$p:$h" python3 "plugins/$p/hooks/$h.py" 2>&1 | head -2
+  echo '{}' | env "DEVBREW_DISABLE_${P_UP}=1" python3 "plugins/$p/$d/$h.py" 2>&1 | head -2
+  # 훅명(스크립트명) 별칭
+  echo '{}' | env "DEVBREW_SKIP_HOOKS=$p:$h" python3 "plugins/$p/$d/$h.py" 2>&1 | head -2
 done
 bash plugins/spec-distill/tests/test_kill_switches_v060.sh 2>&1 | tail -3
+find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/quality-gates/tests -t . 2>&1 | tail -3
 ```
 
-Expected: 두 스위치 모두에서 훅이 no-op. **하나라도 반응하지 않으면 보안 컨트롤 회귀다** — 그 자리에서 멈춘다.
+Expected: **12지점 × 두 스위치 전부**에서 no-op. **하나라도 반응하지 않으면 보안 컨트롤 회귀다** — 그 자리에서 멈춘다.
+
+〔이관 **전** 실측 기준선 — 이 스텝은 RED 를 갖고 시작한다〕 `grep -c DEVBREW_SKIP_HOOKS` 로 확인한 결과 **`qg-gc.py` 와 `spec-distill-gc.py` 둘 다 그 문자열을 아예 갖고 있지 않다** — 두 스크립트 모두 `DEVBREW_SKIP_HOOKS` 를 읽지 않는다. 위 루프의 마지막 두 쌍은 이관 전에 훅명 별칭 줄이 no-op 이 **아니고**, 그것이 이 태스크가 닫는 결함이다. 이관 후 GREEN 이 되는 것이 정상이다. **이관 전에 12지점이 전부 GREEN 으로 보이면 위 프로브가 아무것도 안 재고 있다는 뜻이다** — 그때는 프로브(표준입력 payload·출력 해석)를 먼저 의심한다.
 
 - [ ] **Step 6: `copy-of` 락 + 커밋**
 
 > **미검증 — 실행자가 확인할 것** (2026-08-17 라운드 1 코드 리뷰): 이 태스크가 만드는
-> `kill_switch_active.py` ×2 배포는 이 사이클의 `copy-of` 마커 방식 **첫 실사용**이다
-> (Task 16 rationale·부록 B.1 참조). Task 16의 축 1b(마커 기반 바이트-동일성 검사)
+> `kill_switch_active.py` **×3** 배포는 이 사이클의 `copy-of` 마커 방식 **두 번째** 실사용이다
+> — 첫 실사용은 **Task 17 Step 4b**(`codex_jsonl.py` ×1)이며, Task 16 rationale 3번과
+> 부록 B.1 미결 5가 "첫 사용자 = Task 19"라고 적은 것은 그 스텝이 2026-08-17 census 조치
+> 재검토로 추가되기 전의 서술이다. Task 16의 축 1b(마커 기반 바이트-동일성 검사)
 > 자체는 실측·mutation으로 검증됐지만, **이 배포가 그 축의 vacuous-check 개정
 > 이후에도 여전히 스캔에 걸리는지는 이 태스크 실행 시점에 실제로 확인된 적이 없다**
 > — 아래 `bash shared/tests/test_copy_of_contract.sh` 실행 시 `copy-of: 물리 사본
-> N건 스캔`(N≥1, 이 태스크가 최초로 2를 만든다)이 뜨는지, `git ls-files -s`가
-> 두 파일 모두 마커 헤더를 포함해 정본과 바이트가 같다고 보는지 **직접 눈으로
-> 확인한다.** 조용히 통과만 하고 넘어가지 않는다.
+> N건 스캔`이 **1(Task 17 Step 4b)에서 4로** 늘었는지 — 이 태스크가 3을 더한다
+> (project-init · spec-distill · quality-gates) —, `git ls-files -s`가 **세 파일** 모두 마커 헤더를 포함해
+> 정본과 바이트가 같다고 보는지 **직접 눈으로 확인한다.** 조용히 통과만 하고 넘어가지 않는다.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 bash shared/tests/test_copy_of_contract.sh | tail -6
-git add shared/killswitch/ plugins/*/scripts/kill_switch_active.py plugins/*/hooks/
+git add shared/killswitch/ plugins/*/scripts/kill_switch_active.py plugins/*/hooks/ \
+        plugins/quality-gates/scripts/qg-gc.py plugins/spec-distill/scripts/spec-distill-gc.py
 git rm -f shared/killswitch/.gitkeep 2>/dev/null || true
-git commit -m "refactor(killswitch): kill_switch_active 5정의를 shared 정본으로 — 별칭 둘 다 수용"
+git commit -m "refactor(killswitch): kill_switch_active·_disabled 12정의를 shared 정본으로 — 별칭 둘 다 수용"
 ```
 
 ---
@@ -3141,7 +3430,9 @@ git commit -m "refactor(killswitch): kill_switch_active 5정의를 shared 정본
 | `run_codex_reviewer.sh:92`의 가드에 `-n` 검사 누락 — `OUTPUT_PATH`가 빈 문자열이면 **빈 경로에 쓰기 시도** | 나머지 사본과 같이 `-n` 검사를 넣는다 | 다섯 중 하나만 빠져 있다 |
 | `_degrade_if_empty`의 출력 스키마가 **4종** (JSON / 평면 YAML / `agent:` 포함 중첩 / `agent:` 없는 중첩) | **중첩 YAML + `findings: []` + `meta:`로 통일** | 소비자(`merge_review.py`·`synthesize_findings.py`)가 그 형태를 기대한다 |
 
-- [ ] **Step 1: 다섯 `_degrade_if_empty` 본문을 나란히 놓는다**
+**이 태스크가 다루는 함수는 `_degrade_if_empty` 하나가 아니다** (2026-08-17 census 조치 재검토). census #24(파일쌍 `run_brief_codex_reviewer.sh` ↔ `run_spec_codex_reviewer.sh`, 74.0%)의 근거는 *"`write_failclosed`·`emit_fallback` 함수가 두 파일에 그대로 복제"*라고 적고 있고 #125·#126이 그 둘을 따로 세는데, **이 태스크의 Step 3은 `_degrade_if_empty` 만 정본으로 만들었다** — 세 행 모두 "Task 20·21"을 가리키면서 실제 추출 대상에서 빠져 있었다. 아래 Step 3b가 채운다.
+
+- [ ] **Step 1: 다섯 러너의 공통 함수 본문을 나란히 놓는다**
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
@@ -3151,6 +3442,7 @@ for f in plugins/plugin-audit/scripts/run_audit_codex_reviewer.sh \
          plugins/spec-distill/scripts/run_spec_codex_reviewer.sh \
          plugins/spec-distill/scripts/run_brief_codex_reviewer.sh; do
   echo "=== $f"; grep -n -A20 '_degrade_if_empty()' "$f"
+  grep -n -A12 '^write_failclosed()\|^emit_fallback()' "$f"
 done
 ```
 
@@ -3203,6 +3495,17 @@ _degrade_if_empty() {
   return 0
 }
 ```
+
+- [ ] **Step 3b: `write_failclosed` · `emit_fallback` — census #24·#125·#126**
+
+〔2026-08-17 실측〕 두 함수는 spec-distill 러너 **둘에만** 있다(`run_brief_codex_reviewer.sh` · `run_spec_codex_reviewer.sh`). 크기가 대칭이 아니다:
+
+| 함수 | `run_brief_…` | `run_spec_…` | 판단 |
+|---|---|---|---|
+| `write_failclosed` | 11줄 | 9줄 | **정본화한다** — 같은 책임(fail-closed 산출물 쓰기), 차이는 인자로 뺄 수 있다 |
+| `emit_fallback` | 4줄 | **47줄** | **정본화하지 않는다** — 47줄 쪽은 spec 리뷰 전용 fallback 본문을 통째로 담고 있어 "차이를 인자로 빼면 동일해지는가"에 **아니오**다(§3의 진짜/부분 사본 판정 질문). 짧은 쪽이 긴 쪽을 부르게 만드는 것은 통합이 아니라 결합이다 |
+
+`write_failclosed` 만 `shared/codex/runner_common.sh` 로 올린다. `emit_fallback` 은 **부분 사본으로 남기고**, 그 잔여는 Task 35의 20줄 검사가 지킨다 — 실측상 이 쌍의 최장 공유 구간은 20줄 미만이라 오늘 위반이 아니다(Task 35 Step 2의 집합 A에 이 쌍이 없다). 이 판단을 census #126의 조치란에도 같은 문장으로 적는다.
 
 - [ ] **Step 4: 다섯 러너에서 자체 정의를 지우고 source 한다**
 
@@ -3257,8 +3560,11 @@ rm -rf "$T"
 > 이 태스크가 `shared/codex/runner_common.sh`를 5개 러너에 `copy-of` 사본으로 배포한다.
 > Task 16의 축 1b(마커 기반 바이트-동일성)는 실측·mutation으로 검증됐지만, **이 특정
 > 배포(5건)가 그 축의 스캔에 실제로 걸리는지는 이 태스크 실행 시점에 확인된 적이 없다.**
-> 아래 실행 시 `copy-of: 물리 사본 N건 스캔`의 N이 이전 태스크(Task 19의 2건) +
-> 이번 5건만큼 늘었는지 직접 확인한다.
+> 아래 실행 시 `copy-of: 물리 사본 N건 스캔`의 N이 이전 태스크(Task 19의 **3건** —
+> project-init · spec-distill · quality-gates) + **이번 3건**만큼 늘었는지 직접 확인한다.
+> (러너는 5개지만 `runner_common.sh` 사본은 **플러그인당 하나**라 3개다 — Step 4의
+> `for p in quality-gates spec-distill plugin-audit` 가 도는 횟수다. 5로 세면 N 이
+> 기대보다 2 적게 나와 정상을 결함으로 오독한다.)
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
@@ -3283,7 +3589,9 @@ git commit -m "refactor(codex): 러너 공통 조각 추출 + _degrade_if_empty 
 
 **Files:**
 - Create: `shared/gc/gc_common.py`
+- Create: `plugins/quality-gates/scripts/state_path.py` (quality-gates **내부**의 state root 해석 정본 — census #88)
 - Modify: `plugins/{quality-gates,spec-distill}/hooks/session-end-cleanup.py`
+- **Modify: `plugins/quality-gates/hooks/session-start-advisor.py`** (`_state_root` 두 번째 정의 — census #88)
 - Modify: `plugins/quality-gates/scripts/qg-gc.py` · `plugins/spec-distill/scripts/spec-distill-gc.py`
 
 **§3 분류: 부분 사본.** `session-end-cleanup.py` 두 벌은 각자 자기 kill switch 토큰과 `sys.path.insert` + `from state_path import`를 본문에 갖고, **qg는 worktree 정리까지 한다.** GC 두 벌은 state root 해석 방식이 다르다.
@@ -3311,6 +3619,24 @@ TTL 계산 · 세션 디렉토리 나이 판정 · 안전 삭제(경로 검증 �
 # 파이썬에서도 같은 부류의 사고를 막기 위해 root 밖 경로를 거부한다.
 ```
 
+- [ ] **Step 2b: quality-gates 안의 `_state_root` 두 벌 — census #88**
+
+〔2026-08-17 실측, 두 본문 전부 판독〕 `plugins/quality-gates/hooks/session-end-cleanup.py:28` 과 `session-start-advisor.py:71` 의 `_state_root(hook_input)` 는 **11줄이 같고 다른 것은 경고 메시지 안의 훅 이름 문자열 하나뿐**이다(`"session-end-cleanup payload missing 'cwd'"` vs `"session-start-advisor payload missing 'cwd'"`). 차이를 인자로 빼면 동일해진다.
+
+**이것은 `gc_common.py` 로 가지 않는다.** 위 Step 2가 "state root 해석은 담지 않는다 — 그것이 두 **플러그인**에서 다른 부분"이라고 못박은 것은 quality-gates ↔ spec-distill 사이의 차이다. #88은 **quality-gates 안의** 중복이라 §6.1③(같은 플러그인 → 파일 하나를 import 하면 소멸)이 적용되고, 플러그인 경계를 넘는 차이는 그대로 보존된다.
+
+`plugins/quality-gates/scripts/state_path.py` 를 만들고(spec-distill 이 이미 쓰는 이름·자리와 같은 모양 — Task 23이 그쪽을 `hooks/`에서 `scripts/`로 옮긴 뒤의 배치와 일치한다) 두 훅이 import 한다:
+
+```python
+import sys, pathlib
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
+from state_path import state_root  # noqa: E402
+```
+
+`state_root(hook_input, hook_name)` — 두 번째 인자가 경고 메시지에 들어간다. **훅 이름을 빼먹으면 경고가 어느 훅에서 났는지 사라진다**(지금 두 메시지가 이름으로 구별되는 유일한 근거다).
+
+> Task 27(PR4, `.claude/` state 배치 통일)이 이 경로 규칙을 다시 만진다 — 그때 고칠 자리가 **한 곳**이 되는 것이 이 스텝의 부수 효과다.
+
 - [ ] **Step 3: 배포 사본 + 배선**
 
 ```bash
@@ -3328,8 +3654,8 @@ done
 > **미검증 — 실행자가 확인할 것** (2026-08-17 라운드 1 코드 리뷰, Task 19·20과 같은 종류의 gap):
 > `gc_common.py` ×2가 이 태스크에서 `copy-of` 사본으로 배포된다. Task 16의 축 1b는
 > 실측·mutation으로 검증됐지만, 이 배포가 그 스캔에 실제로 걸리는지는 확인된 적이
-> 없다 — 아래 실행에서 `물리 사본 N건` 이 이전 태스크들(Task 19의 2 + Task 20의 5) +
-> 이번 2건만큼 늘었는지 직접 확인한다.
+> 없다 — 아래 실행에서 `물리 사본 N건` 이 이전 태스크들(Task 19의 **3** + Task 20의 **3**) +
+> 이번 2건만큼 늘었는지 직접 확인한다. 누적 기대값 **8**.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
@@ -3340,14 +3666,28 @@ python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
 bash shared/tests/test_copy_of_contract.sh | tail -6
 ```
 
-Expected: 기준선 대비 새 RED 0. 특히 `test_qg_gc.py` · `test_gc.py` · `test_session_end_cleanup.py` ×2.
+Expected: 기준선 대비 새 RED 0. 특히 `test_qg_gc.py` · `test_gc.py` · `test_session_end_cleanup.py` ×2 · `test_session_start_advisor` 계열.
+
+**세 훅이 실제로 돌아야 한다** — import 배선이 깨져도 unittest 는 훅을 직접 태우지 않는 한 GREEN 일 수 있다:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+for h in session-end-cleanup session-start-advisor; do
+  echo "=== quality-gates/$h"; echo '{"cwd":"'"$PWD"'"}' | python3 "plugins/quality-gates/hooks/$h.py"; echo "rc=$?"
+done
+echo '{"cwd":"'"$PWD"'"}' | python3 plugins/spec-distill/hooks/session-end-cleanup.py; echo "rc=$?"
+echo "=== 남은 _state_root 정의 (기대: 없음) ==="
+grep -rn 'def _state_root' plugins/quality-gates/ | grep '\.py'
+```
 
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add shared/gc/ plugins/*/scripts/gc_common.py plugins/*/hooks/ plugins/*/scripts/*gc*.py
+git add shared/gc/ plugins/*/scripts/gc_common.py plugins/*/hooks/ plugins/*/scripts/*gc*.py \
+        plugins/quality-gates/scripts/state_path.py
 git rm -f shared/gc/.gitkeep 2>/dev/null || true
-git commit -m "refactor(gc): session-end-cleanup·GC 공통 조각 추출"
+git commit -m "refactor(gc): session-end-cleanup·GC 공통 조각 추출 + qg state root 해석 단일화"
+git ls-files plugins/quality-gates/scripts/state_path.py   # 비면 .gitignore 에 걸린 것이다
 ```
 
 ---
@@ -3357,9 +3697,14 @@ git commit -m "refactor(gc): session-end-cleanup·GC 공통 조각 추출"
 **Files:**
 - Modify: `plugins/quality-gates/scripts/discover-plan.sh` · `discover-spec.sh`
 - Create: `plugins/quality-gates/scripts/discover_common.sh`
-- Modify: spec-distill 훅 두 개가 공유하는 블록
+- **Create: `plugins/spec-distill/scripts/hook_common.py`**
+- **Modify: `plugins/spec-distill/hooks/review-dispatch.py` · `plugins/spec-distill/hooks/pending-review-reminder.py`** — 두 훅이 공유하는 블록 (census #149·#121·#122). 이름으로 올린다
+- **Modify: `plugins/spec-distill/scripts/arm_ledger.py`** — `state_file_for` 두 번째 정의 (census #122)
+- **Modify: `plugins/spec-distill/scripts/merge_review.py` · `merge_brief_review.py` · `brief_review_state.py`** — `_yaml_scalar` ×3 (census #45의 spec-distill 부분)
 
 **§6.1③**: 같은 플러그인 안의 쌍은 파일 하나를 source 하면 **중복 자체가 소멸**한다 — `copy-of`도 20줄 검사도 필요 없다.
+
+> **2026-08-17 census 조치 재검토가 이 태스크에 되돌린 것.** 원래 Files 에 "spec-distill 훅 두 개가 공유하는 블록"이 한 줄로 있었고 Step 1 이 그 블록을 재기까지 했지만, **Step 2 이후의 서술은 `discover_common.sh` 쪽만 지정했다** — 훅 쪽을 손대지 않고도 이 태스크를 "끝냈다"고 말할 수 있는 서술이었고, 그러면 Task 35 Step 2 가 그 쌍으로 RED 가 된다(실측: 20줄 창 **8개**). 아래 **Step 2b** 가 그 절반을 채운다. census 쪽에서는 행 149 가 이 두 훅을 "Task 20·21"로 적고 있었는데 그 두 태스크의 Files 는 이 파일들을 담은 적이 없다 — census 조치란도 같이 고쳤다.
 
 - [ ] **Step 1: 공통 구간을 잰다**
 
@@ -3384,6 +3729,56 @@ PY
 
 > **PR2가 이미 이 둘의 오선택을 고쳤다** — 완료 산출물이 `docs/archive/` 아래로 나가 후보 집합에서 자동으로 빠졌다(설계 §4.3). 이 태스크는 **중복만** 없앤다. 술어(`- [ ]` 체크박스)는 건드리지 않는다.
 
+- [ ] **Step 2b: spec-distill 훅 두 개 — `hook_common.py` 추출**
+
+**〔2026-08-17 실측〕 공유 구간의 정체.** Step 1 이 찍는 것을 미리 적어 둔다 — 이 태스크가 무엇을 옮겨야 하는지가 여기서 정해지기 때문이다. 두 훅의 공백-제외 본문에서 가장 긴 공유 구간은 **연속 27줄**이고, 20줄 창으로 세면 **8개**다(= Task 35 Step 2가 이 쌍에 대해 찍는 수와 같다). 그 27줄의 구성:
+
+| 조각 | 줄 | census |
+|---|---|---|
+| 표준 스트림 UTF-8 고정 프리앰블 (주석 5줄 포함) | 10 | #149 |
+| `SCRIPT_DIR` · `sys.path.insert` ×2 · `SCRIPTS_DIR` · `from state_path import` | 5 | #149 |
+| `GC_SCRIPT = ...` | 1 | #149 |
+| `PENDING_RE` · `LAST_DISPATCHED_RE` | 7 | #149 |
+| `kill_switch_active()` 머리 4줄 | 4 | #37·#42 → **Task 19가 먼저 가져간다** |
+
+그 밖에 창 밖 공유 구간이 둘 더 있다: GC fire-and-forget `subprocess.run` 블록 **15줄**, `parse_iso` (10 vs 7줄, census #121). `state_file_for`(#122)는 `arm_ledger.py`와의 쌍이다.
+
+> **Task 19 다음에 돈다.** Task 19가 두 훅의 `kill_switch_active`를 import 로 바꾸면 위 27줄이 23줄로 줄지만 **여전히 20 이상이라 위반은 남는다** — Task 19만으로는 이 쌍이 해소되지 않는다. 또 Task 19가 두 훅에 같은 `sys.path.insert` + `from kill_switch_active import ...` 3줄을 **똑같이** 넣으므로, 그 3줄까지 `hook_common.py` 쪽으로 흡수하지 않으면 공유 구간이 다시 길어진다.
+
+`plugins/spec-distill/scripts/hook_common.py` — 두 훅과 `arm_ledger.py`가 공유하는 조각. 배포 사본(`copy-of`)이 아니다: 같은 플러그인 안이라 파일 하나를 import 하면 중복이 소멸한다(§6.1③).
+
+```python
+"""spec-distill 훅이 공유하는 조각. **사본이 아니다** — 같은 플러그인 안이므로
+import 하나로 중복이 소멸한다(설계 §6.1③). 배포 경로는 훅과 같은 플러그인 트리라
+`${CLAUDE_PLUGIN_ROOT}/scripts/` 로 함께 실린다.
+
+이름이 hook_common 인데 `arm_ledger.py`(scripts/)도 `state_file_for` 를 쓴다 —
+그 함수가 훅이 쓰는 상태 파일의 경로 해석이고, 두 번째 정의가 있다는 사실 자체가
+`arm_ledger.py:91` 의 docstring("저장소 위치 변경 시 이 한 곳만 갱신")을 거짓으로
+만들고 있었다(census #122).
+"""
+```
+
+담는 것: `configure_utf8_streams()` · `PENDING_RE` · `LAST_DISPATCHED_RE` · `GC_SCRIPT` · `fire_and_forget_gc()` · `parse_iso()` · `state_file_for()`.
+
+**담지 않는 것**: `kill_switch_active`(Task 19의 `shared/killswitch/` 정본에서 온다 — 여기로 다시 복사하면 정본이 둘이 된다) · `resolve_session_id`/`state_root`(`state_path.py` 소유, Task 23이 옮긴다).
+
+`parse_iso` 는 두 본문이 10줄/7줄로 다르다 — **긴 쪽(review-dispatch.py)을 정본으로 삼는다.** 짧은 쪽이 처리하지 못하는 입력이 있으면 그것이 사일런트 오판이 되고, 반대 방향(관대→엄격)은 훅이 조용히 no-op 하는 fail-open 을 만든다.
+
+- [ ] **Step 2c: `_yaml_scalar` ×3 — 실측된 drift 를 한 곳으로**
+
+〔실측, 세 본문 전부 판독〕 spec-distill 안에 `_yaml_scalar` 가 셋이고 **셋 다 다르다**:
+
+| 파일 | 빈 문자열 가드 | escape 문자 집합 | float |
+|---|---|---|---|
+| `merge_review.py:253` | **없다** | `:#"'\n` | 있다 |
+| `merge_brief_review.py:174` | 있다 | `:#"'\n` | 있다 |
+| `brief_review_state.py:55` | 있다 | `:#"'\n[]{}` | **없다** |
+
+`merge_review.py` 에 빈 문자열 가드가 없는 것은 조용한 결함이다 — 빈 값이 따옴표 없이 나가면 YAML 이 그것을 `null` 로 읽는다. **셋의 합집합**(빈 문자열 가드 + `[]{}` 포함 escape 집합 + float)으로 `hook_common.py` 에 하나를 두고 셋이 import 한다. 합집합이 안전한 방향인 이유: 더 많이 인용하는 것은 파싱 결과를 바꾸지 않고, 덜 인용하는 것만 바꾼다.
+
+> qg·spec-distill 의 `codex_findings_to_yaml.py` 안에 있는 `_yaml_scalar` 두 벌은 **Task 17이 심볼릭 링크로 하나로 만든다** — 여기서 건드리지 않는다(census #45는 이 두 태스크에 걸쳐 있다).
+
 - [ ] **Step 3: 검증**
 
 ```bash
@@ -3394,11 +3789,39 @@ find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
 ```
 
+**훅 두 개가 실제로 돌아야 한다.** import 배선이 깨져도 위 unittest 는 훅을 직접 태우지 않는 한 GREEN 일 수 있다:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+for h in review-dispatch pending-review-reminder; do
+  echo "=== $h"; echo '{}' | python3 "plugins/spec-distill/hooks/$h.py"; echo "rc=$?"
+done
+bash plugins/spec-distill/tests/test_review_dispatch.sh 2>&1 | tail -3
+bash plugins/spec-distill/tests/test_reminder_hook.sh 2>&1 | tail -3
+```
+
+**공유 구간이 임계 아래로 내려갔는지 잰다** — Task 35의 창(20줄)·정규화(공백줄 제거)와 같은 규칙이다. "고쳤다"가 아니라 "재서 20 미만"이 완료 조건이다:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+python3 - <<'PY'
+import pathlib, difflib
+a = [l for l in pathlib.Path("plugins/spec-distill/hooks/review-dispatch.py").read_text(encoding="utf-8").split("\n") if l.strip()]
+b = [l for l in pathlib.Path("plugins/spec-distill/hooks/pending-review-reminder.py").read_text(encoding="utf-8").split("\n") if l.strip()]
+run = max((k.size for k in difflib.SequenceMatcher(None, a, b).get_matching_blocks()), default=0)
+print(f"{'OK' if run < 20 else '❌'} 훅 쌍 최장 공유 {run}줄 (이관 전 실측: 27 → 창 8개)")
+PY
+```
+
+Expected: `OK` · 20줄 미만.
+
 - [ ] **Step 4: 커밋**
 
 ```bash
-git add plugins/quality-gates/scripts/ plugins/spec-distill/hooks/
-git commit -m "refactor: 같은 플러그인 안의 중복을 source 로 소멸"
+cd /Users/jeonghokim/Downloads/devbrew
+git add plugins/quality-gates/scripts/ plugins/spec-distill/hooks/ plugins/spec-distill/scripts/
+git commit -m "refactor: 같은 플러그인 안의 중복을 source·import 로 소멸"
+git ls-files plugins/spec-distill/scripts/hook_common.py   # 비면 .gitignore 에 걸린 것이다
 ```
 
 ---
@@ -5056,10 +5479,15 @@ Expected: PASS · mode `100755`
 > | 2 | `plugin-audit`/`scripts/detect_codex.sh` ↔ `spec-distill`/… | **39** | **Task 15** (PR3c) |
 > | 3 | `quality-gates`/`scripts/detect_codex.sh` ↔ `spec-distill`/… | **39** | **Task 15** (PR3c) |
 > | 4 | `quality-gates`/`scripts/codex_findings_to_yaml.py` ↔ `spec-distill`/… | **17** | **Task 17** (PR3c) |
-> | 5 | `spec-distill/hooks/pending-review-reminder.py` ↔ `review-dispatch.py` | **8** | **Task 22** (PR3c) — 단 아래 단서 참조 |
-> | 6 | `quality-gates/tests/test_adversarial_persona.sh` ↔ `test_security_reviewer_persona.sh` | **7** | ❌ **없음** |
+> | 5 | `spec-distill/hooks/pending-review-reminder.py` ↔ `review-dispatch.py` | **8** | **Task 22 Step 2b** (PR3c) |
+> | 6 | `quality-gates/tests/test_adversarial_persona.sh` ↔ `test_security_reviewer_persona.sh` | **7** | **Task 14 Step 4b** (PR3b) |
 >
-> 오늘 이 6쌍이 면제되지 않는 이유는 단순하다: Task 15·17이 아직 실행되지 않아 그 파일들이 여전히 **마커도 심볼릭 링크도 없는 평범한 사본**이기 때문이다.
+> **이 6쌍이 오늘 위반인 이유는 둘로 갈린다 — 같은 이유가 아니다.**
+>
+> - **행 1–4 (codex 사본 4쌍)** — 면제 술어가 마커·심볼릭 링크의 *존재*를 보는데, Task 15·17이 아직 실행되지 않아 그 파일들이 여전히 **마커도 심볼릭 링크도 없는 평범한 사본**이다. 즉 **내용은 그대로 두고 링크로 바꾸기만 하면 사라진다** — 아래 집합 B 측정이 그것을 실측으로 보였다.
+> - **행 5–6 (훅 쌍 · persona 쌍)** — 이쪽은 **애초에 심볼릭 링크 대상이 아니다.** 두 훅은 각자 고유 로직을 가진 서로 다른 훅이고(부분 사본), 두 persona 테스트는 각자 다른 persona 파일을 검사한다. 링크로 바꿀 수 있는 "같은 파일"이 아니므로 **Task 15·17이 둘 다 끝나도 그대로 위반으로 남는다.** 이 둘은 면제가 아니라 **실제 추출**로만 사라진다 — 공유 구간을 제3의 파일로 빼내 양쪽이 그것을 import/source 하는 것이다. 그것을 하는 스텝이 각각 Task 22 Step 2b(훅) · Task 14 Step 4b(persona)이며, **두 스텝 모두 2026-08-17 census 조치 재검토가 추가한 것이다** — 그 전에는 어느 태스크도 이 두 쌍을 Files 에 담고 있지 않았다.
+>
+> 〔이 구분이 왜 필요한가: 앞 판본은 6쌍 전부에 대해 "Task 15·17이 아직 실행되지 않아서"라고 한 문장으로 적었다. 행 1–4에는 맞지만 행 5–6에는 **틀리다** — 바로 두 문단 아래의 집합 B 측정이 같은 문서 안에서 그것을 반증하고 있었다.〕
 >
 > **집합 B — Step 2를 실제로 실행하는 시점에도 남는 쌍.** 이것이 이 Step 의 실행자에게 필요한 집합이다. Task 15·17·22는 전부 **PR3c(태스크 15–24)** 이고 이 태스크는 **PR6(태스크 34–36)** 이므로 전부 앞선다. 행 1–4가 정말 사라지는지는 추정하지 않고 실측했다 — 샌드박스 사본에서 `detect_codex.sh` ×3 과 `codex_findings_to_yaml.py` ×2 를 `shared/codex/` 정본을 가리키는 심볼릭 링크로 바꾸고 **같은 스캐너를 다시** 돌렸다:
 >
@@ -5069,10 +5497,14 @@ Expected: PASS · mode `100755`
 > VIOLATION 8 plugins/spec-distill/hooks/pending-review-reminder.py plugins/spec-distill/hooks/review-dispatch.py
 > ```
 >
-> 행 1–4는 **전부 면제로 사라진다**(링크끼리는 면제 술어 ②, 링크↔정본은 ①). 남는 것은 **행 5·6 두 쌍**이다.
+> 행 1–4는 **전부 면제로 사라진다**(링크끼리는 면제 술어 ②, 링크↔정본은 ①). 이 측정이 남긴 것은 **행 5·6 두 쌍**이었다 — 이 측정은 **심볼릭 링크 전환만** 시뮬레이션했고 다른 태스크는 아무것도 적용하지 않았기 때문이다.
 >
-> - **행 5 (훅 8블록)** — Task 22 의 Files 에 "spec-distill 훅 두 개가 공유하는 블록"이 있고 Step 1 이 그 블록을 실제로 잰다. 다만 **Step 2 의 서술은 `discover_common.sh` 쪽만 구체적으로 지정한다** — 훅 쪽 추출을 손대지 않고도 Task 22 를 "끝냈다"고 말할 수 있는 서술이다. 그러면 이 쌍은 PR6 까지 살아남는다. (census 행 149 는 이것을 "Task 20·21"로 적었는데, 실제로 이 파일들을 Files 에 올린 태스크는 Task 22 뿐이다 — census 쪽 오귀속.)
-> - **행 6 (persona 테스트 7블록)** — ❌ **어느 태스크에도 배정돼 있지 않다.** census 행 150 은 "공통 조각만 추출 (Task 20·21)", 행 137 은 `assert_absent` 를 "진짜 사본 → Task 15·17·18·19" 로 보내지만, 그 다섯 태스크의 Files 중 **어느 것도 이 두 파일을 건드리지 않는다**(15=`detect_codex.sh`, 17=`codex_findings_to_yaml.py`, 18=`read_preamble.sh`, 19=`kill_switch_active.py`, 20=codex 러너 5종, 21=`session-end-cleanup.py`/GC). plan 전문에서 `test_adversarial_persona`·`test_security_reviewer_persona`·`assert_absent` 는 **0회** 등장한다. 두 파일은 `plugins/quality-gates/tests/` 아래라 `fixtures|mocks|harness` 제외 규칙에도 안 걸려 코퍼스에 그대로 들어온다. **이 재배정은 이 태스크의 일이 아니다 — 별도로 해결돼야 하고, 이 글을 쓰는 시점에 해결돼 있지 않다.**
+> **그 두 쌍에는 그 뒤 담당 스텝이 생겼다** (2026-08-17 census 조치 재검토):
+>
+> - **행 5 (훅 8블록) → Task 22 Step 2b** — 원래 Task 22 의 Files 에 "spec-distill 훅 두 개가 공유하는 블록"이 한 줄로 있었고 Step 1 이 그 블록을 실제로 재기까지 했지만, **Step 2 의 서술은 `discover_common.sh` 쪽만 구체적으로 지정했다** — 훅 쪽 추출을 손대지 않고도 Task 22 를 "끝냈다"고 말할 수 있는 서술이었다. Step 2b 가 `plugins/spec-distill/scripts/hook_common.py` 로 27줄 공유 구간을 빼내고, 그 스텝의 마지막 검사가 **최장 공유 구간 < 20줄**을 직접 잰다. (census 행 149 는 이 파일들을 "Task 20·21"로 적고 있었다 — 그 두 태스크의 Files 는 이 훅들을 담은 적이 없다. census 조치란도 고쳤다.)
+> - **행 6 (persona 테스트 7블록) → Task 14 Step 4b** — 원래 **어느 태스크에도 배정돼 있지 않았다**: census 행 150 은 "공통 조각만 추출 (Task 20·21)", 행 137 은 `assert_absent` 를 "Task 15·17·18·19" 로 보냈지만 그 다섯 태스크의 Files 중 **어느 것도 이 두 파일을 건드리지 않았다**. 근본 원인은 Task 14 Step 2 의 도출 grep 이 `note|ok|no|pass|fail|assert_eq|assert_contains|assert_grep|field` 만 봐서 `check()`·`assert_absent()` 만 정의하는 이 두 파일을 **놓친 것**이었다(실측: 넓힌 목록이 11 파일을 더 잡고 그중 둘이 이 쌍이다). Step 4b 가 공유 26줄(전부 스캐폴딩 — assertion 0줄)을 `shared/tests/assert.sh` 로 보내고 같은 방식으로 <20줄을 잰다.
+>
+> **그러므로 집합 B 는 이제 비어 있어야 한다 — 단, 그 두 스텝이 실제로 실행됐을 때만.** 두 스텝 모두 자기 자리에서 "<20줄"을 재므로, PR3b·PR3c 게이트를 통과했다면 여기 도착할 때 집합 B 는 ∅ 다. **재측정하지 않고 믿지 않는다** — 아래 Step 2 의 실행이 곧 그 확인이다.
 >
 > **그래서 Step 2 를 돌리면 무엇이 찍히는가.** 위 `Expected: PASS` 는 **행 5·6 이 해소된 뒤에만** 성립한다. 해소되지 않은 채로 들어가면 `SCANNED` 는 정상(수백 파일, vacuous 가드 통과)인데 아래 형태의 `NO:` 줄이 **쌍마다 하나씩** 찍히고 스크립트는 FAIL 한다:
 >
@@ -5081,12 +5513,15 @@ Expected: PASS · mode `100755`
 > ```
 >
 > **다르게 나오면 어떻게 하는가** — 판단 기준은 "RED 냐"가 아니라 **"어느 쌍이냐"** 다.
-> - **행 5·6 만 찍힌다** → 예상된 상태다. 락은 정상 동작 중이고, 남은 것은 그 쌍들의 미해결 작업이다. **락을 끄거나 임계를 올리지 않는다.**
+> - **행 5 가 찍힌다** → **Task 22 Step 2b 가 실행되지 않았다.** 그 스텝의 마지막 검사(훅 쌍 최장 공유 구간 < 20줄)를 돌려 보면 즉시 드러난다. 여기서 고치지 말고 그 스텝으로 돌아간다 — 여기서 고치면 PR6 커밋에 PR3c 의 작업이 섞인다.
+> - **행 6 이 찍힌다** → **Task 14 Step 4b 가 실행되지 않았다.** 같은 방식으로 그 스텝으로 돌아간다. (PR3b 게이트가 이 조건을 명시하므로, 여기까지 왔다면 그 게이트도 함께 통과되지 않은 것이다.)
 > - **행 1–4 가 찍힌다** → 락의 결함이 아니라 **Task 15/17 의 심볼릭 링크 전환이 실제로는 안 됐다**는 신호다. `git ls-files -s` 로 mode `120000` 을 확인한다(동일성 락 쪽에서도 잡혀야 한다).
-> - **전혀 모르는 쌍이 찍힌다** → PR3c–PR5 사이에 새로 유입된 중복이다. 바로 아래 문단대로 §6 등급으로 분류해 처리한다. **이것이 이 락의 본래 목적이다.**
+> - **전혀 모르는 쌍이 찍힌다** → PR3b–PR5 사이에 새로 유입된 중복이다. **이쪽이 오늘 가장 있음직한 경우다**: PR3b 가 120개 셸 테스트에 같은 `source` 머리를, PR3c 가 여러 훅에 같은 `sys.path.insert` + import 머리를 넣는다 — 그 이관이 **없던 20줄 동일 구간을 만들 수 있다.** 아래 문단대로 §6 등급으로 분류해 처리한다. **이것이 이 락의 본래 목적이다.**
 > - **`0파일만 스캔` 이 뜬다** → 위반 문제가 아니라 코퍼스 도출이 깨진 것이다. Step 1 주석의 파이프/히어닥 항목을 먼저 본다.
 >
-> **PR6 착수 전에 할 일**: 이 쌍을 §6 등급으로 분류해 담당 태스크를 하나 만들거나(공통 하네스를 `shared/tests/`로 추출), 명시적으로 유예했음을 여기 적는다. **둘 다 안 하고 Step 2에 들어가면 실행자는 자기가 만들지 않은 RED를 만나 락 자체를 의심하게 된다** — 위 문단이 금지하는 "임계를 올려 통과시키기"가 바로 그때 매력적으로 보인다.
+> **명시적으로 유예된 것 중 이 락이 잡는 것은 없다** 〔실측〕. census 재검토가 41행을 사유와 함께 유예했는데(census §미배정 참조), 그 41행의 파일 쌍은 **위 집합 A 6쌍 어디에도 없다** — 집합 A 가 이 트리의 위반 전량이므로, 유예된 쌍은 정의상 20줄 임계 아래다. 유예가 이 락을 RED 로 만들 일은 없다.
+>
+> **PR6 착수 전 확인 (이 항목은 2026-08-17 census 조치 재검토로 닫혔다)**: 이전 판본은 여기서 *"이 쌍을 §6 등급으로 분류해 담당 태스크를 하나 만들거나 명시적으로 유예했음을 여기 적는다 — 둘 다 안 하고 Step 2에 들어가면 실행자는 자기가 만들지 않은 RED를 만나 락 자체를 의심하게 된다"* 고 적어 두고 **둘 다 하지 않은 채로 남아 있었다.** 지금은 두 쌍 모두 담당 스텝(Task 22 Step 2b · Task 14 Step 4b)이 있고, 각 스텝이 자기 자리에서 "<20줄"을 실측한다. **PR6 착수 전에 그 두 스텝의 체크박스가 켜져 있는지만 확인하면 된다.** 여전히 RED 를 만나면 그것은 미해결 작업의 신호이지 락의 결함이 아니다 — **임계를 올려 통과시키지 않는다.**
 
 - [ ] **Step 3: mutation 6종 — 심볼릭 링크 예외 + 마커 예외 각각의 이빨 증명 (설계 §12.4·§12.5)**
 
@@ -5097,7 +5532,7 @@ Expected: PASS · mode `100755`
 | 3 | **같은 정본을 가리키는 심볼릭 링크 쌍을 그대로 둔다**(실제 대상: `detect_codex.sh` 3링크, Task 15) | **GREEN** | 면제 술어 ② — 심볼릭 링크 경로 |
 | 4 | 그 쌍 중 하나를 **독립 파일로 깬다**(내용은 그대로 두고 링크성만 제거) | **RED** | 면제가 "링크라는 사실"에 실제로 의존 — 내용이 같아도 링크가 아니면 설명 안 된 중복이다 |
 | 5 | **무관한 두 파일에 같은 정본을 가리키는 `copy-of` *마커* 줄을 새로 붙여 20줄 검사를 회피한다** | **`copy-of` 락이 RED** | 회피 경로 봉쇄(마커 축) — **심볼릭 링크 축에는 이 공격이 성립하지 않는다**: 진짜 OS 심볼릭 링크는 가리키는 대상의 내용을 "주장"할 수 없다(대상이 곧 자기 내용이다). 거짓을 말할 수 있는 것은 텍스트 마커뿐이다 |
-| 6 | **마커 예외 자체의 이빨** — 스캐치 픽스처 쌍(정본 + `copy-of` 마커를 가진 사본, 둘 다 ≥20줄·≥200자 진짜 중복 블록)을 그대로 둔다(GREEN 기대) → 그다음 사본에서 `copy-of` 줄만 지운다(RED 기대) | **GREEN → RED** | 2026-08-17 라운드 3 코드 리뷰: 변이 3·4는 **심볼릭 링크 쌍만** 태웠다 — 마커 기반 면제(위 Step 1 스크립트의 `canonical_of()` 안, `symlink_target_of()`가 `None`을 준 뒤 `MARKER.match(line)`으로 떨어지는 폴백 분기)는 이번까지 mutation-proof가 전혀 없었다. Task 19 이전엔 실제 마커 쌍이 없으므로(B.1의 미결 5 참조) Task 16의 물리 사본 축과 같은 패턴(스캐치 픽스처)을 쓴다 |
+| 6 | **마커 예외 자체의 이빨** — 스캐치 픽스처 쌍(정본 + `copy-of` 마커를 가진 사본, 둘 다 ≥20줄·≥200자 진짜 중복 블록)을 그대로 둔다(GREEN 기대) → 그다음 사본에서 `copy-of` 줄만 지운다(RED 기대) | **GREEN → RED** | 2026-08-17 라운드 3 코드 리뷰: 변이 3·4는 **심볼릭 링크 쌍만** 태웠다 — 마커 기반 면제(위 Step 1 스크립트의 `canonical_of()` 안, `symlink_target_of()`가 `None`을 준 뒤 `MARKER.match(line)`으로 떨어지는 폴백 분기)는 이번까지 mutation-proof가 전혀 없었다. 이 mutation 을 설계할 당시엔 리포에 실제 마커 쌍이 없었으므로(첫 실사용은 Task 17 Step 4b — B.1의 미결 5 참조) Task 16의 물리 사본 축과 같은 패턴(스캐치 픽스처)을 쓴다. **PR6 시점엔 실제 마커 쌍이 9건 있지만 픽스처를 계속 쓴다** — 픽스처는 크기 조건을 통제할 수 있고, 실제 사본에 의존하면 그 사본이 사라질 때 mutation 이 조용히 vacuous 해진다 |
 
 **변이 1·2만 맨 앞·중간·맨 끝 세 위치에서 각각 수행한다.** 변이 3·4(심볼릭 링크)·5(마커 삽입)·6a·6b(픽스처 쌍)는 **위치 개념이 없다** — 흔드는 대상이 "본문 한 줄"이 아니라 링크성·마커·파일 쌍 전체이기 때문이다(Task 16의 변이 B와 같은 이유). 아래 스크립트도 `for pos in head mid tail` 루프를 변이 1·2에만 두른다.
 
@@ -5451,7 +5886,7 @@ Expected: 새 RED **0**
 | `# guards:` 양방향 커버리지 | (장치 없음) | … | 전량 |
 | `/plugin-audit` 셸 테스트 | null | … | 대상 플러그인 전량 |
 | `/plugin-audit project-init` 수집 수 | 0 | … | 실제 테스트 수 |
-| 갈라진 사본 (미배정) | … | … | **0** |
+| 갈라진 사본 (미배정) | … | … | **0** — 유예는 미배정이 아니다. 단 **유예로 세려면 census §미배정의 유예 규칙 3요건**(§12.4 위반 아님 실측 · 사유가 구조적 사실 · 행에 실측치 기재)**을 만족해야 한다.** 2026-08-17 재검토 기준 배정 58 · 명시 유예 42 |
 | 20줄 동일 블록 (copy-of 미설명) | … | … | **0** |
 | `marketplace.json` drift | … | 0 | 0 |
 | 환경변수 어순 패턴 | 4 | 1 | 1 |
@@ -5478,7 +5913,7 @@ git commit -m "docs(plan): 완료 측정 after 값 + 최종 대조"
 rm -f .git/devbrew-weight-scratch
 ```
 
-**PR6 게이트**: mutation 6종이 기대대로 · 두 락이 `/qg`에서 **실제로 실행** · §14 표의 after 값 전부 채워짐 · 미배정 0 · 새 RED 0.
+**PR6 게이트**: mutation 6종이 기대대로 · 두 락이 `/qg`에서 **실제로 실행** · §14 표의 after 값 전부 채워짐 · **미배정 0(유예는 census §미배정의 3요건을 만족한 것만)** · 새 RED 0.
 
 ---
 
@@ -5923,7 +6358,7 @@ else:
 | §4 작업 A 아카이브 | 8 · 9 · 10 |
 | §5 작업 B 영향 매핑 | 5 · 6 · 7 (+ 4 = plan 이 추가한 실행비트 수리) |
 | §5.4 기준선 캡처 | 1 |
-| §6 작업 C 사본 통합 (①②③④) | 15 · 17 · 18 · 19 (①) · 20 · 21 (②) · 22 (③) · 24 (④) |
+| §6 작업 C 사본 통합 (①②③④) | 15 · 17 (①) · 18 · 20 · 21 (②) · 19 (① — `kill_switch_active` 5 + `_disabled` 7) · 22 (③ — 같은 플러그인 안의 **제품** 코드) · **13 · 14** (③ — "리포에서만 도는 것": 판정 헬퍼 · frontmatter 검사군 · **persona 테스트 쌍**) · 24 (④) |
 | §6.2 결함 4건 | 20 (`-n` 검사 · `_degrade_if_empty` 스키마) · 19 (kill switch 별칭) · 24 (`marketplace.json`) |
 | §6.4 기존 락 관계 | 15 Step 6·8 |
 | §7 작업 D 규약 | 25 · 26 · 27 · 28 · 29 · 30 |
@@ -5947,7 +6382,7 @@ else:
 | 2 | `parents[N]` 재앵커 대상 | **도출 방법 확정** (3축 grep). 목록은 실행 시점 | Task 12 Step 2 |
 | 3 | PR1 범위 | **실행 시점** — 기준선 캡처 결과에 따름 | Task 1 |
 | 4 | `# guards:` 없는 셸 테스트 기본 동작 | **확정** — 현행 유지(`CHANGED_TESTS` 만). 순수 추가라 회귀 없음 | Task 5 |
-| 5 | `copy-of` 마커 정규식·문법 | **확정** — 4요구 전부. **2026-08-17 실측 이후**: `detect_codex.sh`·`codex_findings_to_yaml.py`는 심볼릭 링크로 전환돼 마커가 없다(설계 §16.1). **2026-08-17 라운드 1 코드 리뷰가 정정**: 4요구가 실제 배포 파일에 처음 적용되는 사례는 Task 18이 아니라 **Task 19**다 — Task 18의 `read_preamble.sh`는 요구를 확정할 뿐 배포 스텝을 실제로 쓰지 않는다(Task 18 절 하단 기록) | ~~Task 15 Step 5~~ → ~~Task 18 Step 3~~ → **Task 19 Step 3** |
+| 5 | `copy-of` 마커 정규식·문법 | **확정** — 4요구 전부. **2026-08-17 실측 이후**: `detect_codex.sh`·`codex_findings_to_yaml.py`는 심볼릭 링크로 전환돼 마커가 없다(설계 §16.1). **2026-08-17 라운드 1 코드 리뷰가 정정**: 4요구가 실제 배포 파일에 처음 적용되는 사례는 Task 18이 아니다 — Task 18의 `read_preamble.sh`는 요구를 확정할 뿐 배포 스텝을 실제로 쓰지 않는다(Task 18 절 하단 기록). **2026-08-17 census 조치 재검토가 다시 정정**: 첫 적용은 Task 19가 아니라 **Task 17 Step 4b**(`codex_jsonl.py` ×1)이고 Task 19(×3)가 그다음이다 | ~~Task 15 Step 5~~ → ~~Task 18 Step 3~~ → ~~Task 19 Step 3~~ → **Task 17 Step 4b** |
 | 6 | 완료 측정 실측값 | **실행 시점**. before 값은 plan 작성 시점 실측으로 박음 | Task 36 |
 
 ## B.2 설계 서술 정정 2건
@@ -5989,8 +6424,8 @@ else:
 | `test_guards_coverage_bidirectional.sh` | Task 6 | **Task 16 Step 5 · Task 35 Step 4** — 대상 락이 생긴 뒤라야 실제 판정이 난다. Task 6 시점의 PASS는 vacuous이며 그 사실을 그 태스크가 명시한다 |
 | `test_assert_behavior.sh` | Task 13 | Task 13 Step 5 (5종) |
 | `test_severity_mapping.py` | Task 28 | Task 28 Step 3 (구현 전 RED) |
-| `test_copy_of_contract.sh` | Task 16 | Task 16 Step 3 — **심볼릭 링크 축(도미넌스) 4종**(A missing · B regular-file, 계약-보존 페이로드 · C wrong-target: mismatch · D wrong-target: dangling — 전부 위치 개념 없음, 배포 지점 전체가 단위) + **`MARKER_RE` 카나리아 1종**(E — 축 1b 자기 vacuous 방지, 정규식 대입 줄 하나만 변형) + **`copy-of` 물리 사본 축 3종**(변이 1은 3위치, 스캐치 픽스처로 증명 — Task 16 시점엔 리포에 실제 물리 사본이 없다, B.1의 미결 5 참조 — Task 19가 첫 실사용) — 2026-08-17 라운드 1 코드 리뷰가 원래의 ∃-기반 심볼릭 링크 축(3종, "경로만 바꾸면 GREEN" 포함)을 이 도미넌스 체크로 다시 쓰게 했다(Critical) |
-| `test_no_new_duplication.sh` | Task 35 | Task 35 Step 3 (6종, 변이 1·2는 3위치) — **심볼릭 링크 예외**(변이 3 GREEN · 변이 4 — 링크를 깨되 내용은 유지해 예외가 "링크임"에 반응하는지 증명, RED) + **마커 예외**(변이 6a·6b — 2026-08-17 라운드 3 코드 리뷰가 이 축은 그때까지 mutation-proof가 전혀 없었음을 지적; Task 16과 같은 스캐치 픽스처 패턴으로 GREEN→RED 증명. Task 19 이전이라 실제 마커 쌍이 없다, B.1의 미결 5 참조) |
+| `test_copy_of_contract.sh` | Task 16 | Task 16 Step 3 — **심볼릭 링크 축(도미넌스) 4종**(A missing · B regular-file, 계약-보존 페이로드 · C wrong-target: mismatch · D wrong-target: dangling — 전부 위치 개념 없음, 배포 지점 전체가 단위) + **`MARKER_RE` 카나리아 1종**(E — 축 1b 자기 vacuous 방지, 정규식 대입 줄 하나만 변형) + **`copy-of` 물리 사본 축 3종**(변이 1은 3위치, 스캐치 픽스처로 증명 — Task 16 시점엔 리포에 실제 물리 사본이 없다, B.1의 미결 5 참조 — **Task 17 Step 4b**가 첫 실사용, Task 19가 그다음) — 2026-08-17 라운드 1 코드 리뷰가 원래의 ∃-기반 심볼릭 링크 축(3종, "경로만 바꾸면 GREEN" 포함)을 이 도미넌스 체크로 다시 쓰게 했다(Critical) |
+| `test_no_new_duplication.sh` | Task 35 | Task 35 Step 3 (6종, 변이 1·2는 3위치) — **심볼릭 링크 예외**(변이 3 GREEN · 변이 4 — 링크를 깨되 내용은 유지해 예외가 "링크임"에 반응하는지 증명, RED) + **마커 예외**(변이 6a·6b — 2026-08-17 라운드 3 코드 리뷰가 이 축은 그때까지 mutation-proof가 전혀 없었음을 지적; Task 16과 같은 스캐치 픽스처 패턴으로 GREEN→RED 증명. 설계 당시 실제 마커 쌍이 없었고 — 첫 실사용은 Task 17 Step 4b, B.1의 미결 5 참조 — PR6 시점엔 있지만 크기 통제를 위해 픽스처를 유지한다) |
 
 **Task 6의 락은 자기 도입 시점에 이빨을 증명할 수 없다** — 재는 대상(`--emit-scanned`를 가진 락)이 아직 없기 때문이다. 이것을 숨기지 않고 그 태스크의 Step 2와 이 표에 적었다.
 
