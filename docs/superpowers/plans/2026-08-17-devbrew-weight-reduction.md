@@ -378,7 +378,11 @@ rows = []
 for line in pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").split("\n"):
     m = re.match(r'^\| (\d+) \|', line)
     if not m: continue
-    c = [x.strip() for x in line.rstrip().strip("|").split("|")]
+    # 이스케이프된 `\|` 는 마크다운에서 리터럴이지만 split("|") 에는 열로 보인다 —
+    # 자리표시자로 빼고 분해 뒤 되돌린다. **하드닝을 Task 36 과 같이 맞춘 것이다**:
+    # 맨 파서로는 이 원장의 #50 이 9열, #107 이 13열로 갈라져 그 행들이 조용히 빠진다.
+    safe = line.rstrip().replace(r"\|", "\x00")
+    c = [x.strip().replace("\x00", r"\|") for x in safe.strip("|").split("|")]
     cls = next((x for x in c if "사본" in x or x in ("우연",)), "")
     rows.append((int(c[0]), cls, c))
 tgt = [r for r in rows if "진짜 사본" in r[1] or "부분 사본" in r[1]]
@@ -2061,22 +2065,22 @@ awk -F'\t' '{s+=$1} END {print "총 assertion 호출:", s}' "$SCRATCH/assert-cou
 | +`ag`·`agf`·`ng`·`check`·`assert_absent`·`assert_not_grep`·`assert_not_contains`·`assert_body_grep` | **120** | 11 — 그중 둘이 `test_adversarial_persona.sh`·`test_security_reviewer_persona.sh`(census #137·#150, Task 35의 20줄 검사가 실제로 잡는 쌍) |
 | +**`bad`**·**`expect`** (census 위치란 재도출이 드러냄) | **122** | 2 — `test_agent_tools_lock_mutation.sh` · `test_review_floor_lock.sh` (census #105) |
 
-> **왜 `verdict`·`restore`·`mkrepo`·`run_case`·`has` 는 더하지 않는가** 〔실측: 각 정의의 **본문**이 `PASS=$((` / `FAIL=$((` / 소문자 `fail=$((` 를 건드리는지 전수 판독〕
+> **왜 `verdict`·`restore`·`mkrepo`·`run_case`·`has` 는 더하지 않는가** 〔실측: 각 정의의 본문이 판정을 하는지 — **직접**(`PASS=$((`/`FAIL=$((`/소문자 `fail=$((`) **또는 위임**(같은 파일의 판정 함수 호출) — 을 전수 판독〕
 >
-> | 이름 | 카운터 올리는 사이트 | 성격 | 제외 사유 |
+> | 이름 | 판정 사이트 | 성격 | 제외/포함 사유 |
 > |---|---|---|---|
-> | `verdict`(#107) | **0-of-2** | 출력 추출기 | 어느 사이트도 판정하지 않는다 — §9 범위 밖 |
+> | `verdict`(#107) | **0-of-2** | 출력 추출기 | 정본에 갈 자리가 없다 |
 > | `restore`(#108) | **0-of-2** | 설정 복원 | 위와 같음 |
-> | `mkrepo`(#106) | **0-of-2** | **픽스처 빌더** | 위와 같고, §9가 이름과 범주로 명시 제외한 바로 그것이다 |
-> | `run_case`(#43) | 4-of-5 (`test_pr_detect.sh` 만 비판정) | 혼합 | 사이트마다 책임이 갈린다 = census "우연" 판정과 일치 |
-> | `has`(#61) | 1-of-3 | 혼합 | 위와 같음 |
-> | `bad`(#104) · `expect`(#105) | **2-of-2 · 2-of-2** | 판정 헬퍼 | **더한다** |
+> | `mkrepo`(#106) | **0-of-2** | 픽스처 빌더 | 위와 같고, §9가 이름과 범주로 명시 제외 |
+> | `run_case`(#43) | 4-of-5 | 케이스 러너 | **정본에 갈 자리가 없다** — 판정을 하지만 그 판정이 `assert_*` 로 환원되지 않는다(픽스처 준비 + 실행 + 비교가 한 몸) |
+> | `has`(#61) | **2-of-3** (1은 `note` **위임**) | 파일/문자열 술어 | 위와 같음. 사이트마다 술어 대상이 다르다(파일 vs 변수) |
+> | `bad`(#104) · `expect`(#105) | **2-of-2 · 2-of-2** | 판정 헬퍼 | **포함** — `no` · `assert_eq` 로 그대로 환원된다 |
 >
-> 혼합 이름을 목록에 넣으면 **정본에 대응이 없는 헬퍼를 정의한 파일이 Step 3의 대상으로 들어와** 지울 것과 바꿔 넣을 것이 없는 상태가 된다.
+> **기준은 "카운터를 올리는가"가 아니라 "정본에 갈 자리가 있는가"다.** 카운터 프로브는 1차 증거일 뿐이다. 양쪽으로 확인된다: `field`(#40)는 실측 **0-of-6**(값 추출기)인데 `assert.sh` 가 `field`/`field_line` 을 정본으로 소유하므로 **포함**이고, 반대로 포함 목록 자체가 카운터 기준으로는 혼합이다 — `note` 46-of-55 · `ok` 17-of-19 · `fail` 34-of-36 · `check` 5-of-6. **혼합성은 판별자가 될 수 없다.** 제외 이름을 목록에 넣으면 정본에 대응이 없는 헬퍼를 정의한 파일이 Step 3의 대상으로 들어와 지울 것과 바꿔 넣을 것이 없어진다.
 >
-> **판정 여부가 유일한 기준은 아니다** — `field`(#40)는 실측 **0-of-6**(값 추출기라 카운터를 안 올린다)인데도 목록에 있다. `shared/tests/assert.sh` 가 `field`/`field_line` 을 **정본으로 소유**하기 때문이다(Task 13 Interfaces). 기준은 "**정본에 갈 자리가 있는가**"이고, 카운터 프로브는 assertion 계열에 대한 1차 증거일 뿐이다.
->
-> > **정정(2026-08-17 fix round 3) — 이 표의 앞선 판이 틀렸다.** `mkrepo` 를 "사이트마다 갈린다"로 적었는데 실측은 **0-of-2** 다. 원인은 결론이 아니라 **계측기**였다: 본문 추출기가 끝을 `^}`(줄 맨 앞 중괄호)로 찾았는데 `mkrepo` 는 `… ) ; echo "$d"; }` 로 **줄 끝에서 닫힌다.** 그래서 추출이 EOF 까지 넘쳐 `test_artifact_branch_guard.sh:17` 의 **최상위** `PASS=$((PASS+1))` 을 함수 본문으로 읽었다. 중괄호 깊이로 세도록 고치고 전 후보를 재판독했다 — 그 과정에서 `run_case` 도 3-of-5 가 아니라 **4-of-5**(`test_read_frontmatter.sh` 가 소문자 `fail=$((`)임이 드러났다. 처분은 셋 다 그대로다(혼합·제외).
+> > **계측기 정정 이력 — 세 번 고쳤다.** 이 표의 수치는 판독기를 세 번 고친 뒤의 값이다. ⓐ round 3: 함수 끝을 `^}`(줄 맨 앞 중괄호)로 찾아 `… ; }` 로 닫히는 함수에서 EOF 까지 넘쳤다(`mkrepo` 를 1-of-2 로 오독) → 중괄호 깊이로 교체. ⓑ round 4: `#` 를 무조건 주석으로 잘라 **따옴표 안 `#`**(`'^#{1,3} '`)에서 중괄호 균형이 깨져 또 넘쳤다(`window`·`fence` 를 판정으로 오독) → **따옴표 상태를 추적하는 스캐너**로 교체. ⓒ round 4: 술어가 **직접 카운터만** 봐서 `note PASS "$2"` 같은 **위임**을 못 봤다 → 같은 파일 안에서 고정점 전파. 그 위에 한 번 더: 위임 전파가 함수의 **첫 줄을 통째로** 자기 정의로 보고 버려서 **한 줄 함수의 본문이 통째로 사라졌다** → 헤더(`name() {`)만 벗기도록 수정.
+> >
+> > **v3(따옴표 인식 + 위임 고정점)으로 축 3 셸 함수 53개를 전수 재판독한 결과 값이 바뀐 이름은 둘뿐이다**: `run_hook`(#50) 0-of-4 → **1-of-4**(`test_reminder_hook.sh` 가 위임), `has`(#61) 1-of-3 → **2-of-3**. **`0-of-N` 결론은 32개 이름 전부 그대로다** — `verdict`·`restore`·`mkrepo` 포함. 둘 다 여전히 혼합이므로 **처분은 하나도 바뀌지 않는다**(측정으로 확인한 것이지 기대한 것이 아니다).
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
@@ -2960,7 +2964,7 @@ bash "$LOCK" 2>&1 | grep -E '^  NO: copy-of.*카나리아' || echo "  (카나리
 cp /tmp/lock_round1_fix.bak "$LOCK"; rm -f /tmp/lock_round1_fix.bak
 ```
 
-**`copy-of` 물리 사본 축**: 이 시점에 리포에 실제 물리 `copy-of` 후보가 아직 없다(Task 19가 이 태스크보다 뒤에 온다, B.4). 그래서 **일회용 스캐치 픽스처**로 마커-파싱 코드 자체의 이빨을 증명한다 — 실제 파일을 잠깐 만들어 `git add`로 스캔 코퍼스(`git ls-files`)에 넣고, mutation을 태운 뒤, 커밋 없이 되돌린다.
+**`copy-of` 물리 사본 축**: 이 시점의 리포에는 실제 물리 `copy-of` 사본이 **정확히 하나** 있다 — Task 17 Step 4b 의 `plugins/plugin-audit/scripts/codex_jsonl.py` 다(B.4 5b 가 17 → 16 을 강제하므로 이미 존재한다). **그래도 스캐치 픽스처를 쓴다**, 이유가 "없어서"에서 "통제할 수 없어서"로 바뀌었을 뿐이다: mutation 은 마커를 지우고 본문을 흔들어야 하는데 **실제 사본을 대상으로 하면 앞 태스크의 산출물을 훼손**하고, 복원 실패가 조용한 손상으로 남는다. 픽스처는 크기·마커·내용을 전부 통제할 수 있고 지워도 잃을 것이 없다. 〔**정정(fix round 4)**: 이전 판이 *"실제 물리 copy-of 후보가 아직 없다(Task 19가 이 태스크보다 뒤에 온다)"* 라고 적었는데 **두 번 틀렸다** — 첫 실사용은 Task 19가 아니라 Task 17 Step 4b 이고(round 1), 5b 아래에서 Task 17은 이 태스크보다 **앞선다**(round 2).〕 그래서 **일회용 스캐치 픽스처**로 마커-파싱 코드 자체의 이빨을 증명한다 — 실제 파일을 잠깐 만들어 `git add`로 스캔 코퍼스(`git ls-files`)에 넣고, mutation을 태운 뒤, 커밋 없이 되돌린다.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
@@ -2973,7 +2977,10 @@ FIX="plugins/quality-gates/scripts/_copyof_mutation_fixture.sh"
 chmod +x "$FIX"
 git add "$FIX"
 printf '픽스처 생성 직후(무변이) → '
-bash shared/tests/test_copy_of_contract.sh >/dev/null 2>&1 && echo "GREEN ✓" || echo "RED ❌ (픽스처 자체가 안 맞는다 — 먼저 고친다)"
+bash shared/tests/test_copy_of_contract.sh >/dev/null 2>&1 && echo "GREEN ✓" \
+  || { echo "RED ❌ — **원인을 먼저 가른다**: 아래 출력이 픽스처(_copyof_mutation_fixture)를 가리키면"; \
+       echo "   픽스처 문제이고, plugin-audit/scripts/codex_jsonl.py 를 가리키면 **Task 17 산출물의 진짜 결함**이다."; \
+       bash shared/tests/test_copy_of_contract.sh 2>&1 | grep "^  NO:"; }
 
 # 변이 1 — 본문 한 줄을 바꾼다 (맨 앞·중간·맨 끝)
 NL="$(wc -l < "$FIX" | tr -d ' ')"
@@ -3061,6 +3068,8 @@ git commit -m "test(shared): 동일성 락 — 심볼릭 링크 도미넌스 체
 
 - [ ] **Step 7: Task 17이 이 락을 못 불러 미뤄 둔 두 단언을 여기서 갚는다** (B.4 5b)
 
+> **Step 6(커밋) 뒤에 두는 것은 의도다.** 이 스텝이 검사하는 대상은 **Task 17의 산출물**(`codex_jsonl.py` 사본)이지 이 태스크가 만든 락 파일이 아니다 — 락은 Step 2~5 에서 자기 이빨을 이미 증명했고 Step 6 은 그것을 커밋한다. 여기서 RED 가 나오면 되돌릴 대상은 이 커밋이 아니라 **Task 17** 이므로, 락을 인질로 잡을 이유가 없다. 다만 **이 스텝은 커밋 뒤에 있어도 완료 조건이다** — 통과하지 못한 채 Task 18 로 넘어가면 그 두 단언은 이 사이클에 영영 안 돈다.
+
 **이 스텝이 이 태스크의 완료 조건이다 — 빠뜨리면 그 두 단언은 이 사이클에 한 번도 안 돈다.** 5b 가 정한 순서(15 → 17 → 16)에서 Task 17은 이 파일보다 앞서므로 자기 검증 두 줄을 돌리지 못하고 넘어왔다. 락이 방금 생겼으니 지금 돌린다:
 
 ```bash
@@ -3074,6 +3083,27 @@ bash shared/tests/test_copy_of_contract.sh | tail -3
 Expected: **`copy-of: 물리 사본 1건`**(Task 17 Step 4b 의 `plugins/plugin-audit/scripts/codex_jsonl.py` 하나) · 전항목 GREEN.
 
 **`0건`이 나오면 Task 17 Step 4b 가 실행되지 않았다는 뜻이다** — 사본을 안 만들었거나 마커가 깨졌다. 이 태스크의 결함이 아니라 앞 태스크의 미실행이므로 Task 17로 돌아간다. 〔이 기대값이 Task 19의 "1에서 4로" 수열의 출발점이다 — 여기가 1이 아니면 그 뒤 셋이 전부 어긋난다.〕
+
+**세 자리가 어긋나지 않는지 여기서 검사한다.** 이 스텝(권위 있는 자리) · Task 17의 두 호출부 주석 · B.4 5b — 셋은 서로를 이름으로 가리키는데, **가리키는 이름이 틀려도 아무것도 안 깨진다.** 실제로 첫 판본에서 호출부 주석이 이 스텝을 `Step 6`(커밋 스텝)으로 잘못 가리켰고 아무 검사도 반응하지 않았다:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+PLAN=docs/superpowers/plans/2026-08-17-devbrew-weight-reduction.md
+echo "=== 세 자리가 모두 'Task 16 Step 7' 을 가리키는가 (기대: 3 이상) ==="
+grep -c 'Task 16 Step 7' "$PLAN"
+echo "=== 그 스텝이 실재하는가 (기대: 1) ==="
+grep -c '^- \[ \] \*\*Step 7: Task 17이 이 락을' "$PLAN"
+echo "=== 이 스텝이 두 호출부를 다 담는가 (기대: Step 4c 와 Step 5 둘 다) ==="
+sed -n '/^- \[ \] \*\*Step 7: Task 17이 이 락을/,/^---$/p' "$PLAN" | grep -c 'Step 4c'
+sed -n '/^- \[ \] \*\*Step 7: Task 17이 이 락을/,/^---$/p' "$PLAN" | grep -c 'Step 5'
+echo "=== 죽은 참조: 커밋 스텝을 완료 조건으로 가리키는 문장이 남았는가 (기대: 0) ==="
+# 패턴 안의 `[6]` 은 문자 클래스다 — **이 줄 자신이 자기 패턴에 매치되지 않게** 하려는 것이다.
+# 그냥 'Step 6 의 완료 조건' 이라 쓰면 이 검사 줄이 코퍼스에서 자기를 세어 항상 1 이 나온다
+# (감사 대상이 앵커를 쥐는 형태 — 실제로 이 검사의 첫 판본이 그렇게 1 을 냈다).
+grep -cE 'Task 16 Step [6] 의 완료 조건' "$PLAN"
+```
+
+Expected: 첫 넷이 전부 1 이상, 마지막이 **0**. 하나라도 어긋나면 세 자리 중 하나가 드리프트한 것이다 — **문서를 고치기 전에 어느 쪽이 참인지부터 정한다.**
 
 ---
 
@@ -3233,8 +3263,13 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/t
 > `shared/tests/test_copy_of_contract.sh` 는 **Task 16이 만든다**(Task 16 Files). 5b 가 정한
 > 실행 순서 **15 → 17 → 16** 에서 이 태스크는 그 파일보다 앞서므로 여기서는
 > `No such file or directory` 가 난다 — **락의 결함도 이 태스크의 결함도 아니다.**
-> 아래 두 곳이 그 대상이고 **Task 16 Step 6 의 완료 조건이 둘 다 이름으로 받는다**:
-> Step 4c(`물리 사본 1건` — Step 4b 가 만든 `codex_jsonl.py` 사본의 copy-of 단언) · Step 5.
+> **권위 있는 자리는 하나다: `Task 16 Step 7`.** 거기가 이 두 줄을 실제로 갚는 스텝이고, 그 스텝이
+> Task 16의 완료 조건이다. 여기와 B.4 5b 는 그 이름을 **가리키기만** 한다 — 대상은
+> Step 4c(`물리 사본 1건` — Step 4b 가 만든 `codex_jsonl.py` 사본의 copy-of 단언)와 Step 5 둘이다.
+>
+> **드리프트 방지**: 이 구조가 참이려면 `Task 16 Step 7` 이 존재하고 그 본문이 두 줄을 다 담아야 한다.
+> Task 16 Step 7 자신이 그것을 **자기 자리에서 검사한다**(그 스텝의 마지막 블록) — 세 자리가 서로를
+> 가리키기만 하고 아무도 확인하지 않는 구조가 이 노트의 첫 판본을 **`Step 6`(커밋 스텝)으로 잘못 가리키게** 했다.
 
 
 Expected: 두 출력이 `('HELLO', True)` 로 같다 · `물리 사본 1건` · plugin-audit 스위트 새 RED 0. 〔테스트 디렉토리 경로는 Task 12가 `scripts/tests/` → `tests/` 로 옮긴 뒤 기준이다.〕
@@ -5796,7 +5831,7 @@ Expected: PASS · mode `100755`
 | 3 | **같은 정본을 가리키는 심볼릭 링크 쌍을 그대로 둔다**(실제 대상: `detect_codex.sh` 3링크, Task 15) | **GREEN** | 면제 술어 ② — 심볼릭 링크 경로 |
 | 4 | 그 쌍 중 하나를 **독립 파일로 깬다**(내용은 그대로 두고 링크성만 제거) | **RED** | 면제가 "링크라는 사실"에 실제로 의존 — 내용이 같아도 링크가 아니면 설명 안 된 중복이다 |
 | 5 | **무관한 두 파일에 같은 정본을 가리키는 `copy-of` *마커* 줄을 새로 붙여 20줄 검사를 회피한다** | **`copy-of` 락이 RED** | 회피 경로 봉쇄(마커 축) — **심볼릭 링크 축에는 이 공격이 성립하지 않는다**: 진짜 OS 심볼릭 링크는 가리키는 대상의 내용을 "주장"할 수 없다(대상이 곧 자기 내용이다). 거짓을 말할 수 있는 것은 텍스트 마커뿐이다 |
-| 6 | **마커 예외 자체의 이빨** — 스캐치 픽스처 쌍(정본 + `copy-of` 마커를 가진 사본, 둘 다 ≥20줄·≥200자 진짜 중복 블록)을 그대로 둔다(GREEN 기대) → 그다음 사본에서 `copy-of` 줄만 지운다(RED 기대) | **GREEN → RED** | 2026-08-17 라운드 3 코드 리뷰: 변이 3·4는 **심볼릭 링크 쌍만** 태웠다 — 마커 기반 면제(위 Step 1 스크립트의 `canonical_of()` 안, `symlink_target_of()`가 `None`을 준 뒤 `MARKER.match(line)`으로 떨어지는 폴백 분기)는 이번까지 mutation-proof가 전혀 없었다. 이 mutation 을 설계할 당시엔 리포에 실제 마커 쌍이 없었으므로(첫 실사용은 Task 17 Step 4b — B.1의 미결 5 참조) Task 16의 물리 사본 축과 같은 패턴(스캐치 픽스처)을 쓴다. **PR6 시점엔 실제 마커 쌍이 9건 있지만 픽스처를 계속 쓴다** — 픽스처는 크기 조건을 통제할 수 있고, 실제 사본에 의존하면 그 사본이 사라질 때 mutation 이 조용히 vacuous 해진다 |
+| 6 | **마커 예외 자체의 이빨** — 스캐치 픽스처 쌍(정본 + `copy-of` 마커를 가진 사본, 둘 다 ≥20줄·≥200자 진짜 중복 블록)을 그대로 둔다(GREEN 기대) → 그다음 사본에서 `copy-of` 줄만 지운다(RED 기대) | **GREEN → RED** | 2026-08-17 라운드 3 코드 리뷰: 변이 3·4는 **심볼릭 링크 쌍만** 태웠다 — 마커 기반 면제(위 Step 1 스크립트의 `canonical_of()` 안, `symlink_target_of()`가 `None`을 준 뒤 `MARKER.match(line)`으로 떨어지는 폴백 분기)는 이번까지 mutation-proof가 전혀 없었다. 이 mutation 을 설계할 당시엔 리포에 실제 마커 쌍이 없었으므로(첫 실사용은 Task 17 Step 4b — B.1의 미결 5 참조) Task 16의 물리 사본 축과 같은 패턴(스캐치 픽스처)을 쓴다. **Task 16 시점에 이미 사본 1건(Task 17 Step 4b), PR6 시점엔 9건이 있지만 픽스처를 계속 쓴다** — 픽스처는 크기·마커를 통제할 수 있고, 실제 사본을 흔들면 앞 태스크의 산출물을 훼손한다. 또 실제 사본에 의존하면 그 사본이 사라질 때 mutation 이 조용히 vacuous 해진다 |
 
 **변이 1·2만 맨 앞·중간·맨 끝 세 위치에서 각각 수행한다.** 변이 3·4(심볼릭 링크)·5(마커 삽입)·6a·6b(픽스처 쌍)는 **위치 개념이 없다** — 흔드는 대상이 "본문 한 줄"이 아니라 링크성·마커·파일 쌍 전체이기 때문이다(Task 16의 변이 B와 같은 이유). 아래 스크립트도 `for pos in head mid tail` 루프를 변이 1·2에만 두른다.
 
@@ -6151,6 +6186,9 @@ if not ok:
     print("   합이 맞아도 이것부터 본다 — 행을 잃었거나, 행이 배정↔유예 사이로 옮겨갔다.")
 if a + d != tgt: print("❌ 배정+유예가 모집단과 다르다 — 한 행을 두 번 셌거나 못 셌다"); ok = False
 print("OK" if ok else "FAIL")
+# **종료코드로도 낸다.** 위 `FAIL` 은 사람이 읽는 줄일 뿐이라, `$?` 를 보는 래퍼(러너·CI·
+# `&&` 체인)에는 통과로 보인다 — 표 없음 경로는 이미 rc=1 로 끝나는데 여기만 rc=0 이었다.
+sys.exit(0 if ok else 1)
 PY
 ```
 
@@ -6767,8 +6805,8 @@ else:
 | `test_guards_coverage_bidirectional.sh` | Task 6 | **Task 16 Step 5 · Task 35 Step 4** — 대상 락이 생긴 뒤라야 실제 판정이 난다. Task 6 시점의 PASS는 vacuous이며 그 사실을 그 태스크가 명시한다 |
 | `test_assert_behavior.sh` | Task 13 | Task 13 Step 5 (5종) |
 | `test_severity_mapping.py` | Task 28 | Task 28 Step 3 (구현 전 RED) |
-| `test_copy_of_contract.sh` | Task 16 | Task 16 Step 3 — **심볼릭 링크 축(도미넌스) 5종**(A missing · B regular-file, 계약-보존 페이로드 · C wrong-target: mismatch · D wrong-target: dangling · **F 정본별 vacuous 가드** — 도출 0건 정본을 목록에 더해도 합산 수에 가리지 않는지, 2026-08-17 census 재검토가 실측으로 연 구멍 — 전부 위치 개념 없음, 배포 지점 전체가 단위) + **`MARKER_RE` 카나리아 1종**(E — 축 1b 자기 vacuous 방지, 정규식 대입 줄 하나만 변형) + **`copy-of` 물리 사본 축 3종**(변이 1은 3위치, 스캐치 픽스처로 증명 — Task 16 시점엔 리포에 실제 물리 사본이 없다, B.1의 미결 5 참조 — **Task 17 Step 4b**가 첫 실사용, Task 19가 그다음) — 2026-08-17 라운드 1 코드 리뷰가 원래의 ∃-기반 심볼릭 링크 축(3종, "경로만 바꾸면 GREEN" 포함)을 이 도미넌스 체크로 다시 쓰게 했다(Critical) |
-| `test_no_new_duplication.sh` | Task 35 | Task 35 Step 3 (6종, 변이 1·2는 3위치) — **심볼릭 링크 예외**(변이 3 GREEN · 변이 4 — 링크를 깨되 내용은 유지해 예외가 "링크임"에 반응하는지 증명, RED) + **마커 예외**(변이 6a·6b — 2026-08-17 라운드 3 코드 리뷰가 이 축은 그때까지 mutation-proof가 전혀 없었음을 지적; Task 16과 같은 스캐치 픽스처 패턴으로 GREEN→RED 증명. 설계 당시 실제 마커 쌍이 없었고 — 첫 실사용은 Task 17 Step 4b, B.1의 미결 5 참조 — PR6 시점엔 있지만 크기 통제를 위해 픽스처를 유지한다) |
+| `test_copy_of_contract.sh` | Task 16 | Task 16 Step 3 — **심볼릭 링크 축(도미넌스) 5종**(A missing · B regular-file, 계약-보존 페이로드 · C wrong-target: mismatch · D wrong-target: dangling · **F 정본별 vacuous 가드** — 도출 0건 정본을 목록에 더해도 합산 수에 가리지 않는지, 2026-08-17 census 재검토가 실측으로 연 구멍 — 전부 위치 개념 없음, 배포 지점 전체가 단위) + **`MARKER_RE` 카나리아 1종**(E — 축 1b 자기 vacuous 방지, 정규식 대입 줄 하나만 변형) + **`copy-of` 물리 사본 축 3종**(변이 1은 3위치, 스캐치 픽스처로 증명 — 첫 실사용이 **Task 17 Step 4b** 이고 B.4 5b 아래에서 그것이 Task 16보다 앞서므로 **Task 16 시점에 이미 사본 1건이 있다**; 픽스처를 쓰는 이유는 부재가 아니라 크기·마커 통제와 앞 태스크 산출물 비훼손이다. B.1의 미결 5 참조) — 2026-08-17 라운드 1 코드 리뷰가 원래의 ∃-기반 심볼릭 링크 축(3종, "경로만 바꾸면 GREEN" 포함)을 이 도미넌스 체크로 다시 쓰게 했다(Critical) |
+| `test_no_new_duplication.sh` | Task 35 | Task 35 Step 3 (6종, 변이 1·2는 3위치) — **심볼릭 링크 예외**(변이 3 GREEN · 변이 4 — 링크를 깨되 내용은 유지해 예외가 "링크임"에 반응하는지 증명, RED) + **마커 예외**(변이 6a·6b — 2026-08-17 라운드 3 코드 리뷰가 이 축은 그때까지 mutation-proof가 전혀 없었음을 지적; Task 16과 같은 스캐치 픽스처 패턴으로 GREEN→RED 증명. 설계 당시 실제 마커 쌍이 없었다 — 첫 실사용은 Task 17 Step 4b 이고 B.4 5b 아래에서 그것이 Task 16보다 앞서므로 **Task 16 시점엔 이미 사본 1건이 있다**(B.1의 미결 5 참조). 픽스처를 계속 쓰는 이유는 부재가 아니라 **크기·마커 통제와 앞 태스크 산출물 비훼손**이다) |
 
 **Task 6의 락은 자기 도입 시점에 이빨을 증명할 수 없다** — 재는 대상(`--emit-scanned`를 가진 락)이 아직 없기 때문이다. 이것을 숨기지 않고 그 태스크의 Step 2와 이 표에 적었다.
 
