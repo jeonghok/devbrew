@@ -5036,15 +5036,55 @@ Expected: PASS · mode `100755`
 
 **RED가 나오면 그것은 락의 결함이 아니라 남은 중복이다.** 위반 쌍을 §6의 등급으로 분류해 처리한다 — 진짜 사본이면 `shared/`로, 부분 사본이면 추가 추출. **락의 임계를 올려서 통과시키지 않는다.**
 
-> **⚠ "도입 즉시 GREEN"은 오늘 기준으로 성립하지 않는다 — 2026-08-17 라운드 4 실측.** 락과 같은 알고리즘(창 20줄 · 최소 200자 · 공백줄 제거)을 현재 `main` 트리에 그대로 돌려 확인한 **기존 위반 3건**이다. 이 태스크가 PR6(마지막)에 오므로 앞선 태스크들이 닫아 주어야 하며, **닫히지 않은 채로 오면 Step 2는 처음 도는 순간 RED다.**
+> **⚠ 위 `Expected: PASS`가 언제 성립하는지 — 두 집합을 구분해서 읽어야 한다 (2026-08-17 라운드 5 실측).**
 >
-> | 위반 쌍 | 실측 공유 블록 | 처리 태스크 | 상태 |
+> **재현 방법**: 위 Step 1 스크립트의 `<<'PY'` … `PY` 사이 파이썬 본문을 **문서에서 그대로 복사**해 `scan.py` 로 저장한 뒤, 리포 루트에서 돌린다.
+>
+> ```bash
+> cd /Users/jeonghokim/Downloads/devbrew
+> git ls-files -- 'plugins/*' 'shared/*' | grep -vE '/(fixtures|mocks|harness)/' > /tmp/corpus.txt
+> python3 /tmp/scan.py 20 200 /tmp/corpus.txt
+> ```
+>
+> **파이썬 본문을 재타이핑하지 않는다.** 근사 스크립트를 손으로 다시 짜면 숫자가 조용히 달라진다 — 실제로 이 라운드에서 **공백줄 제거(`if l.strip()`)를 빠뜨린 재타이핑 스크립트가 7을 9로 잘못 셌다.** 창 20줄·최소 200자·공백줄 제거 셋 중 하나만 어긋나도 아래 표의 값이 재현되지 않는다. (Task 35 완료 후에는 `bash shared/tests/test_no_new_duplication.sh` 로 바로 같은 판정을 볼 수 있다 — 그 파일을 만드는 것이 이 태스크이므로 그 전에는 위 방법을 쓴다.)
+>
+> **집합 A — 오늘 이 트리에서 실제로 위반하는 쌍.** 위 명령의 전체 출력(`SCANNED 396` · `WINDOWS 55349`)이 **6쌍**을 낸다. 파일 *묶음*이 아니라 **쌍**을 세는 것에 주의한다 — `detect_codex.sh` 는 3개 플러그인에 있으므로 혼자 3쌍이다.
+>
+> | # | 위반 쌍 | 실측 공유 블록 | 이것을 해소하는 태스크 |
 > |---|---|---|---|
-> | `shared/codex/codex_findings_to_yaml.py` 사본들 | — | **Task 17** | 배정됨 (심볼릭 링크 전환) |
-> | `plugins/spec-distill/hooks/pending-review-reminder.py` ↔ `review-dispatch.py` | **8** | **Task 22** ("spec-distill 훅 두 개가 공유하는 블록") | 배정됨. 단 census 행 149는 이것을 "Task 20·21"로 적었다 — **census 쪽 오귀속**이고, 실제로 이 파일들을 건드리는 태스크는 Task 22뿐이다 |
-> | `plugins/quality-gates/tests/test_adversarial_persona.sh` ↔ `test_security_reviewer_persona.sh` | **7** | **없음** | ❌ **미배정 — 이것이 Step 2를 RED로 만든다** |
+> | 1 | `plugin-audit`/`scripts/detect_codex.sh` ↔ `quality-gates`/… | **59** | **Task 15** (PR3c) |
+> | 2 | `plugin-audit`/`scripts/detect_codex.sh` ↔ `spec-distill`/… | **39** | **Task 15** (PR3c) |
+> | 3 | `quality-gates`/`scripts/detect_codex.sh` ↔ `spec-distill`/… | **39** | **Task 15** (PR3c) |
+> | 4 | `quality-gates`/`scripts/codex_findings_to_yaml.py` ↔ `spec-distill`/… | **17** | **Task 17** (PR3c) |
+> | 5 | `spec-distill/hooks/pending-review-reminder.py` ↔ `review-dispatch.py` | **8** | **Task 22** (PR3c) — 단 아래 단서 참조 |
+> | 6 | `quality-gates/tests/test_adversarial_persona.sh` ↔ `test_security_reviewer_persona.sh` | **7** | ❌ **없음** |
 >
-> **미배정 건의 근거**: census 행 150은 이 쌍을 "공통 조각만 추출 (Task 20·21)"로 배정하지만, Task 20의 Files는 codex 러너 5종이고 Task 21의 Files는 `session-end-cleanup.py`/GC다 — **어느 쪽도 이 두 파일을 건드리지 않는다.** 같은 쌍의 `assert_absent`를 "진짜 사본 → Task 15·17·18·19"로 보낸 census 행 137도 마찬가지다(Task 15=`detect_codex.sh`, 17=`codex_findings_to_yaml.py`, 18=`read_preamble.sh`, 19=`kill_switch_active.py`). plan 전문에서 `test_adversarial_persona`·`test_security_reviewer_persona`·`assert_absent` 는 **0회** 등장한다. 두 파일은 `plugins/quality-gates/tests/` 아래라 `fixtures|mocks|harness` 제외 규칙에도 안 걸려 코퍼스에 그대로 들어온다.
+> 오늘 이 6쌍이 면제되지 않는 이유는 단순하다: Task 15·17이 아직 실행되지 않아 그 파일들이 여전히 **마커도 심볼릭 링크도 없는 평범한 사본**이기 때문이다.
+>
+> **집합 B — Step 2를 실제로 실행하는 시점에도 남는 쌍.** 이것이 이 Step 의 실행자에게 필요한 집합이다. Task 15·17·22는 전부 **PR3c(태스크 15–24)** 이고 이 태스크는 **PR6(태스크 34–36)** 이므로 전부 앞선다. 행 1–4가 정말 사라지는지는 추정하지 않고 실측했다 — 샌드박스 사본에서 `detect_codex.sh` ×3 과 `codex_findings_to_yaml.py` ×2 를 `shared/codex/` 정본을 가리키는 심볼릭 링크로 바꾸고 **같은 스캐너를 다시** 돌렸다:
+>
+> ```
+> SCANNED 398 · WINDOWS 55632
+> VIOLATION 7 plugins/quality-gates/tests/test_adversarial_persona.sh plugins/quality-gates/tests/test_security_reviewer_persona.sh
+> VIOLATION 8 plugins/spec-distill/hooks/pending-review-reminder.py plugins/spec-distill/hooks/review-dispatch.py
+> ```
+>
+> 행 1–4는 **전부 면제로 사라진다**(링크끼리는 면제 술어 ②, 링크↔정본은 ①). 남는 것은 **행 5·6 두 쌍**이다.
+>
+> - **행 5 (훅 8블록)** — Task 22 의 Files 에 "spec-distill 훅 두 개가 공유하는 블록"이 있고 Step 1 이 그 블록을 실제로 잰다. 다만 **Step 2 의 서술은 `discover_common.sh` 쪽만 구체적으로 지정한다** — 훅 쪽 추출을 손대지 않고도 Task 22 를 "끝냈다"고 말할 수 있는 서술이다. 그러면 이 쌍은 PR6 까지 살아남는다. (census 행 149 는 이것을 "Task 20·21"로 적었는데, 실제로 이 파일들을 Files 에 올린 태스크는 Task 22 뿐이다 — census 쪽 오귀속.)
+> - **행 6 (persona 테스트 7블록)** — ❌ **어느 태스크에도 배정돼 있지 않다.** census 행 150 은 "공통 조각만 추출 (Task 20·21)", 행 137 은 `assert_absent` 를 "진짜 사본 → Task 15·17·18·19" 로 보내지만, 그 다섯 태스크의 Files 중 **어느 것도 이 두 파일을 건드리지 않는다**(15=`detect_codex.sh`, 17=`codex_findings_to_yaml.py`, 18=`read_preamble.sh`, 19=`kill_switch_active.py`, 20=codex 러너 5종, 21=`session-end-cleanup.py`/GC). plan 전문에서 `test_adversarial_persona`·`test_security_reviewer_persona`·`assert_absent` 는 **0회** 등장한다. 두 파일은 `plugins/quality-gates/tests/` 아래라 `fixtures|mocks|harness` 제외 규칙에도 안 걸려 코퍼스에 그대로 들어온다. **이 재배정은 이 태스크의 일이 아니다 — 별도로 해결돼야 하고, 이 글을 쓰는 시점에 해결돼 있지 않다.**
+>
+> **그래서 Step 2 를 돌리면 무엇이 찍히는가.** 위 `Expected: PASS` 는 **행 5·6 이 해소된 뒤에만** 성립한다. 해소되지 않은 채로 들어가면 `SCANNED` 는 정상(수백 파일, vacuous 가드 통과)인데 아래 형태의 `NO:` 줄이 **쌍마다 하나씩** 찍히고 스크립트는 FAIL 한다:
+>
+> ```
+> NO: 20줄 검사: plugins/quality-gates/tests/test_adversarial_persona.sh ↔ plugins/quality-gates/tests/test_security_reviewer_persona.sh 가 7개 블록을 공유하는데 copy-of 로 설명되지 않는다
+> ```
+>
+> **다르게 나오면 어떻게 하는가** — 판단 기준은 "RED 냐"가 아니라 **"어느 쌍이냐"** 다.
+> - **행 5·6 만 찍힌다** → 예상된 상태다. 락은 정상 동작 중이고, 남은 것은 그 쌍들의 미해결 작업이다. **락을 끄거나 임계를 올리지 않는다.**
+> - **행 1–4 가 찍힌다** → 락의 결함이 아니라 **Task 15/17 의 심볼릭 링크 전환이 실제로는 안 됐다**는 신호다. `git ls-files -s` 로 mode `120000` 을 확인한다(동일성 락 쪽에서도 잡혀야 한다).
+> - **전혀 모르는 쌍이 찍힌다** → PR3c–PR5 사이에 새로 유입된 중복이다. 바로 아래 문단대로 §6 등급으로 분류해 처리한다. **이것이 이 락의 본래 목적이다.**
+> - **`0파일만 스캔` 이 뜬다** → 위반 문제가 아니라 코퍼스 도출이 깨진 것이다. Step 1 주석의 파이프/히어닥 항목을 먼저 본다.
 >
 > **PR6 착수 전에 할 일**: 이 쌍을 §6 등급으로 분류해 담당 태스크를 하나 만들거나(공통 하네스를 `shared/tests/`로 추출), 명시적으로 유예했음을 여기 적는다. **둘 다 안 하고 Step 2에 들어가면 실행자는 자기가 만들지 않은 RED를 만나 락 자체를 의심하게 된다** — 위 문단이 금지하는 "임계를 올려 통과시키기"가 바로 그때 매력적으로 보인다.
 
