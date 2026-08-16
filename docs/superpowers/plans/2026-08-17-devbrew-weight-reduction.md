@@ -4,7 +4,7 @@
 
 **Goal:** devbrew 5플러그인 리포의 무게를 세 축(정본 트리 줄 수 · 모델이 읽는 줄 수 · 규약 가짓수)에서 줄이고, 통합한 것이 다시 갈라지지 않도록 락 둘을 남긴다.
 
-**Architecture:** 완료 산출물을 `docs/archive/`로 **이동**하고(삭제 아님), 조건부로만 필요한 SKILL 섹션을 `references/`로 **분리**하고, 같은 책임의 사본을 리포 루트 `shared/`의 정본 + 바이트 동일 사본 + `copy-of` 마커로 **통합**한다. 배포되는 것(`plugins/*/{scripts,hooks,skills,agents}`)은 `${CLAUDE_PLUGIN_ROOT}`에서 `shared/`에 도달할 수 없으므로 사본을 두고, 리포에서만 도는 것(`tests/`)은 `shared/`를 직접 쓴다. 재분열은 `copy-of` 동일성 락이, 새 중복 유입은 20줄 블록 검사가 막는다.
+**Architecture:** 완료 산출물을 `docs/archive/`로 **이동**하고(삭제 아님), 조건부로만 필요한 SKILL 섹션을 `references/`로 **분리**하고, 같은 책임의 사본을 리포 루트 `shared/`의 정본으로 **통합**한다. 완전 동일 파일은 정본을 가리키는 **상대 심볼릭 링크**로(기본 방식 — 2026-08-17 실측 확정, 설계 §16.1: `--plugin-dir`도 실제 설치 캐시도 이 리포에서 심볼릭 링크를 실사용 가능하게 전달한다), 링크를 못 쓰는 잔여만 **바이트 동일 사본 + `copy-of` 마커**로 배포한다. 배포되는 것(`plugins/*/{scripts,hooks,skills,agents}`)은 런타임(`${CLAUDE_PLUGIN_ROOT}`)에서 `shared/`에 도달할 수 없지만, 심볼릭 링크는 **설치 시점**에 역참조돼 이 제약을 우회한다 — 리포에서만 도는 것(`tests/`)은 `shared/`를 직접 쓴다. 재분열은 동일성 락(심볼릭 링크 무결성 + `copy-of` 잔여)이, 새 중복 유입은 20줄 블록 검사가 막는다.
 
 **Tech Stack:** bash (셸 테스트 + 선택기 스크립트) · python3 stdlib (훅 · 도구 스크립트 · `unittest`) · git · Claude Code 플러그인 하니스(skills / agents / commands / hooks)
 
@@ -70,8 +70,8 @@ Conventional Commits (`<type>(<scope>): <description>`). 브랜치는 `main`에�
 
 | 경로 | 책임 |
 |---|---|
-| `shared/codex/detect_codex.sh` | codex 가용성 판정 정본 (3사본이 가리킴) |
-| `shared/codex/codex_findings_to_yaml.py` | codex JSONL → finding YAML 정본 (2사본) |
+| `shared/codex/detect_codex.sh` | codex 가용성 판정 정본 (3개 상대 심볼릭 링크가 가리킴 — 2026-08-17 실측으로 물리 사본에서 전환, 설계 §16.1) |
+| `shared/codex/codex_findings_to_yaml.py` | codex JSONL → finding YAML 정본 (2개 상대 심볼릭 링크가 가리킴 — 같은 전환) |
 | `shared/codex/runner_common.sh` | `_degrade_if_empty` 등 러너 공통 조각 (5러너) |
 | `shared/codex/prompt-preamble.md` | P21 untrusted-data 3문장 정본 (5빌더) |
 | `shared/killswitch/kill_switch_active.py` | kill switch 판정 정본 (5정의) |
@@ -120,7 +120,7 @@ Conventional Commits (`<type>(<scope>): <description>`). 브랜치는 `main`에�
 | **2** | 8–10 | 완료 산출물이 `docs/archive/` 아래에 있고, `validate-audit-data.py`와 살아 있는 게이트 둘이 GREEN |
 | **3a** | 11–12 | `shared/`가 있고, 테스트 디렉토리 종류가 3→1이며, 기준선 대비 새 RED 0 |
 | **3b** | 13–14 | 판정 헬퍼가 `shared/tests/assert.sh` 하나이고, 파일별 assertion 수가 어디서도 안 줄었고, 실패 시 종료 행동이 보존됐다 |
-| **3c** | 15–24 | `copy-of` 락이 실행비트와 함께 `/qg`에서 **실제로 실행됐고** GREEN이며, mutation 3종이 기대대로 RED/GREEN |
+| **3c** | 15–24 | 동일성 락(`shared/tests/test_copy_of_contract.sh` — 심볼릭 링크 무결성 + `copy-of` 잔여 + 형제 설정 fail-closed)이 실행비트와 함께 `/qg`에서 **실제로 실행됐고** GREEN이며, mutation 전종이 기대대로 RED/GREEN (Task 16 참조 — `detect_codex.sh`·`codex_findings_to_yaml.py`는 심볼릭 링크로 전환됐다, 설계 §16.1. `read_preamble.sh`(Task 18)는 이 사이클에도 여전히 `copy-of` 물리 사본이다) |
 | **4** | 25–30 | 규약 각 축의 distinct 값이 1이고, severity 매핑 락이 GREEN |
 | **5** | 31–33 | 분할 전후 앵커 전수 대조 결과 소실 0 |
 | **6** | 34–36 | 20줄 검사가 실행됐고 mutation 5종이 기대대로이며, §14 완료 측정표 after 값이 전부 채워졌다 |
@@ -1410,19 +1410,16 @@ mkdir -p shared/codex shared/killswitch shared/gc shared/tests
 
 | 무엇이 쓰나 | 방식 |
 |---|---|
-| **배포되는 것** (`plugins/*/{scripts,hooks,skills,agents}`) | `shared/`의 정본을 **바이트 동일 사본**으로 갖고 파일 머리에 `copy-of:` 마커를 단다. 런타임에 `${CLAUDE_PLUGIN_ROOT}`에서 `shared/`에 도달할 수 없기 때문이다 |
-| **리포에서만 도는 것** (`plugins/*/tests/`) | `shared/`의 파일을 **직접 source**한다. 사본이 필요 없다 |
+| **배포되는 것** (`plugins/*/{scripts,hooks,skills,agents}`) | 완전 동일 파일은 `shared/`의 정본을 가리키는 **상대 심볼릭 링크**(기본 — 2026-08-17 실측, `docs/superpowers/specs/2026-08-16-devbrew-weight-reduction-design.md` §16.1). 런타임(`${CLAUDE_PLUGIN_ROOT}`)에서는 `shared/`에 도달할 수 없지만, **설치 시점**에 링크가 실제 내용으로 역참조된다. 링크를 못 쓰는 잔여만 **바이트 동일 사본 + `copy-of:` 마커** |
+| **리포에서만 도는 것** (`plugins/*/tests/`) | `shared/`의 파일을 **직접 source**한다. 사본도 링크도 필요 없다 |
 
-경계의 기준은 "리포를 떠나는가"가 아니라 **"`${CLAUDE_PLUGIN_ROOT}`에서 도달 가능한가"** 이다.
+경계의 기준은 "리포를 떠나는가"가 아니라 **"`${CLAUDE_PLUGIN_ROOT}`에서 도달 가능한가"** 이다. 심볼릭 링크는 이 경계 자체를 바꾸지 않는다 — 넘는 시점을 런타임에서 설치 시점으로 옮길 뿐이다.
 
-## 사본이 정본과 같다는 보장
+## 정본과 배포 지점이 같다는 보장
 
-`shared/tests/test_copy_of_contract.sh` — `copy-of:` 줄이 있는 파일은 그 줄이 가리키는 파일과
-**그 줄만 제외하고 바이트가 같아야 한다.** 사본이 정본과 바이트가 같으므로, **사본을 검증하는
-테스트가 곧 정본을 검증한다.**
+`shared/tests/test_copy_of_contract.sh` — 두 계약을 검사한다: **심볼릭 링크**는 링크여야 하고 존재하는 대상을 가리켜야 하고 그 대상이 `shared/` 아래여야 한다(내용이 갈라질 수 없으므로 바이트 비교가 필요 없다). **`copy-of:` 잔여**는 그 줄이 가리키는 파일과 그 줄만 제외하고 바이트가 같아야 한다.
 
-`shared/tests/test_no_new_duplication.sh` — 20줄 이상 완전히 같은 블록이 2개 이상 파일에 있는데
-그 파일들이 `copy-of`로 설명되지 않으면 RED.
+`shared/tests/test_no_new_duplication.sh` — 20줄 이상 완전히 같은 블록이 2개 이상 파일에 있는데 그 파일들이 심볼릭 링크나 `copy-of`로 설명되지 않으면 RED.
 
 두 락 모두 `/qg` Runtime gate에서만 돈다 (실행 지점을 새로 만들지 않는다 — 설계 C16).
 
@@ -2018,16 +2015,19 @@ git commit -m "refactor(tests): 판정 헬퍼를 shared/tests/assert.sh 하나�
 
 ---
 
-### Task 15: `detect_codex.sh` 통합 — 형제 설정 파일 + fail-closed
+### Task 15: `detect_codex.sh` 통합 — 형제 설정 파일 + fail-closed + 심볼릭 링크
 
 **Files:**
 - Create: `shared/codex/detect_codex.sh`
 - Create: `plugins/{quality-gates,spec-distill,plugin-audit}/scripts/codex-killswitch.conf`
-- Modify: `plugins/{quality-gates,spec-distill,plugin-audit}/scripts/detect_codex.sh` → 바이트 동일 사본
-- Test: `shared/tests/test_copy_of_contract.sh` (Task 16에서 작성 — 이 태스크의 fail-closed 검사도 **같은 파일에** 들어간다)
+- Modify: `plugins/{quality-gates,spec-distill,plugin-audit}/scripts/detect_codex.sh` → **정본을 가리키는 상대 심볼릭 링크** (물리 사본이 아니다 — 아래)
+- Modify: 세 플러그인의 `detect_codex.sh` 호출부 (SKILL.md bash fence) — **loud-failure 수정** (아래)
+- Test: `shared/tests/test_copy_of_contract.sh` (Task 16에서 작성 — 이 태스크의 fail-closed 검사와 심볼릭 링크 무결성 검사가 **같은 파일에** 들어간다)
 
 **Interfaces:**
-- Produces: `copy-of:` 마커 규약 (Task 16이 락을 건다) · `codex-killswitch.conf` 형식
+- Produces: 심볼릭 링크 3개 (`shared/codex/detect_codex.sh`를 가리킴, Task 16이 무결성 락을 건다) · `codex-killswitch.conf` 형식
+
+**2026-08-17 실측으로 바뀐 것 (설계 §16.1)**: 이 태스크는 원래 세 사본을 바이트 동일 물리 파일 + `copy-of` 마커로 만들 계획이었다. 실측이 설계의 심볼릭 링크 기각을 뒤집었다 — `--plugin-dir`도 실제 설치 캐시(`claude plugin install`)도 이 리포에서 심볼릭 링크를 실사용 가능하게 전달한다. 그래서 세 배포 지점은 **바이트 동일 사본이 아니라 정본을 가리키는 상대 심볼릭 링크**다. `codex-killswitch.conf` 형제 설정 파일 방식은 **바뀌지 않는다** — 심볼릭 링크로 바뀌어도 세 플러그인이 각자 다른 kill switch 변수를 가져야 한다는 사실은 그대로이므로, 아래 이유는 여전히 유효하다.
 
 **왜 인자가 아니라 형제 설정 파일인가** (설계 §6.1① · §6.4):
 
@@ -2103,15 +2103,17 @@ Expected: `git ls-files`가 **3개**를 낸다.
 # detect_codex.sh — emit YAML manifest describing Codex CLI availability.
 # Spec AC1. Read-only, exit 0 always (graceful degradation).
 #
-# 세 플러그인(quality-gates · spec-distill · plugin-audit)이 **바이트 동일 사본**으로
-# 갖는다. 유일하게 달라야 하는 값(kill switch 변수명)은 형제 파일
-# `codex-killswitch.conf` 로 나가 있다 — 인자가 아니라 파일인 이유는 그 conf 파일의
-# 주석과 설계 §6.4 에 있다(기존 행동 등가 락이 사본들을 **인자 없이** 태운다).
+# 이 파일이 정본이다. 세 플러그인(quality-gates · spec-distill · plugin-audit)의
+# scripts/detect_codex.sh 는 이 파일을 가리키는 **상대 심볼릭 링크**다(물리 사본이
+# 아니다 — 2026-08-17 실측, 설계 §16.1). 유일하게 달라야 하는 값(kill switch 변수명)은
+# 형제 파일 `codex-killswitch.conf` 로 나가 있다 — 인자가 아니라 파일인 이유는 그 conf
+# 파일의 주석과 설계 §6.4 에 있다(기존 행동 등가 락이 세 배포 지점을 **인자 없이** 태운다).
 #
 # 행동 등가는 `quality-gates/tests/test_codex_copies_agree.sh` 가 재고,
-# 바이트 동일성은 `shared/tests/test_copy_of_contract.sh` 가 잰다 — 두 락이 각자
-# 다른 것을 잰다(설계 §6.4). 앞의 락 헤더가 *"왜 파일 diff 가 아닌가: 두 사본은
-# 의도된 차이를 갖는다"* 라고 적어 둔 그 전제는 이 통합이 없앴다.
+# 배포 지점이 이 정본을 가리키는지는 `shared/tests/test_copy_of_contract.sh` 가
+# 잰다 — 두 락이 각자 다른 것을 잰다(설계 §6.4). 앞의 락 헤더가 *"왜 파일 diff 가
+# 아닌가: 두 사본은 의도된 차이를 갖는다"* 라고 적어 둔 그 전제는 이 통합이 없앴다.
+# (바이트 동일성은 이제 "측정할" 대상이 아니다 — 심볼릭 링크라 애초에 갈라질 수 없다.)
 
 set -u
 
@@ -2155,34 +2157,41 @@ bash -n shared/codex/detect_codex.sh && echo "문법 OK"
 
 > `${!VAR}`는 bash **간접 확장**이다 — `VAR`의 값을 이름으로 하는 변수를 읽는다. `sh`에는 없으므로 shebang이 `bash`여야 한다(이미 그렇다). 셸 이식성 함정 전반은 Task 5 Step 3의 zsh 경고를 함께 본다.
 
-- [ ] **Step 5: 세 사본을 정본의 바이트 동일 사본 + `copy-of` 마커로 교체**
+- [ ] **Step 5: 세 사본을 정본을 가리키는 상대 심볼릭 링크로 교체**
 
-**마커 규격** (설계 §12.2의 요구 4개를 이 plan이 확정한다):
+**마커 규격은 이 태스크에 해당 없음.** 설계 §12.2의 `copy-of:` 마커 요구 4개는 **물리 사본
+잔여**(예: Task 18의 `read_preamble.sh`)에만 적용된다(설계 §16.1 이후). 심볼릭 링크는 파일
+자체가 정본이므로 마커가 필요 없다 — 그 4요구의 실제 확정은 Task 18 Step 3에서 이뤄진다.
 
-| 요구 | 확정 |
-|---|---|
-| 파일 종류별 주석 문법 | `.sh`/`.py` → `# copy-of: <path>` · `.js`/`.mjs` → `// copy-of: <path>` · `.md` → `<!-- copy-of: <path> -->` |
-| 위치는 파일 머리 | 언어가 강제하는 전치 요소(shebang · 인코딩 선언 · `from __future__` · 모듈 docstring)보다 **뒤**, 그 외 코드보다 **앞**. 판정 창은 **파일 머리 20줄** |
-| `grep`/`sed`로 파싱 가능 | 정규식 `^[[:space:]]*(#\|//\|<!--)[[:space:]]*copy-of:[[:space:]]*([^[:space:]]+)` — 명명 그룹 등 언어 전용 문법을 쓰지 않는다 |
-| `.md` 정본에서 본문으로 새지 않음 | HTML 주석 + **그 파일을 읽는 빌더가 마커 줄을 제거한 뒤 프롬프트에 넣는다** (Task 18) |
+**경로 깊이 확인** — `plugins/<name>/scripts/detect_codex.sh`에서 `shared/codex/detect_codex.sh`까지: `scripts/` → `plugins/<name>/` → `plugins/` → 리포 루트, 세 단계. 상대 경로는 `../../../shared/codex/detect_codex.sh`.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 for p in quality-gates spec-distill plugin-audit; do
-  {
-    head -1 shared/codex/detect_codex.sh                    # shebang
-    echo "# copy-of: shared/codex/detect_codex.sh"
-    tail -n +2 shared/codex/detect_codex.sh
-  } > "plugins/$p/scripts/detect_codex.sh"
-  chmod +x "plugins/$p/scripts/detect_codex.sh"
+  rm -f "plugins/$p/scripts/detect_codex.sh"
+  ln -s ../../../shared/codex/detect_codex.sh "plugins/$p/scripts/detect_codex.sh"
 done
-# 마커 줄만 빼면 정본과 바이트 동일한가
+chmod +x shared/codex/detect_codex.sh
+# 링크인가 · 대상이 존재하는가 · 실행 시 정본과 같은 내용을 내는가
 for p in quality-gates spec-distill plugin-audit; do
+  f="plugins/$p/scripts/detect_codex.sh"
   printf '%-14s ' "$p"
-  grep -v '^# copy-of: ' "plugins/$p/scripts/detect_codex.sh" | diff -q - shared/codex/detect_codex.sh \
-    && echo "바이트 동일 ✓"
+  if [ -L "$f" ] && [ -e "$f" ]; then
+    tgt="$(readlink "$f")"
+    printf '심볼릭 링크 ✓ → %s ' "$tgt"
+    diff -q <(bash "$f" 2>&1 || true) <(bash shared/codex/detect_codex.sh 2>&1 || true) >/dev/null \
+      && echo "실행 결과 동일 ✓" || echo "❌ 실행 결과가 갈린다"
+  else
+    echo "❌ 링크가 아니거나 대상이 없다"
+  fi
 done
+git add plugins/*/scripts/detect_codex.sh shared/codex/detect_codex.sh
+git ls-files -s plugins/*/scripts/detect_codex.sh   # mode 120000 이어야 한다
 ```
+
+Expected: 셋 다 `심볼릭 링크 ✓` · `실행 결과 동일 ✓` · `git ls-files -s`의 모드가 `120000`.
+`100644`/`100755`면 심볼릭 링크가 아니라 일반 파일로 커밋됐다는 뜻이다(예: `cp -L`을 실수로
+썼을 때).
 
 - [ ] **Step 6: 기존 락이 GREEN인지 **먼저** 확인한다 (설계 §6.4)**
 
@@ -2219,40 +2228,77 @@ Expected: 셋 다 `fail-closed ✓`
 `plugins/quality-gates/tests/test_codex_copies_agree.sh:4-6`의 *"왜 파일 diff가 아닌가"* 문단 **뒤에** 한 문단을 추가한다 (기존 문장을 지우지 않는다 — 그것은 이 락이 무엇을 재는지의 설명이고 여전히 참이다):
 
 ```
-# **역할 분담 (2026-08 무게 감축)**: 바이트 동일성은 이제
-# `shared/tests/test_copy_of_contract.sh` 가 맡는다. 위 문단이 기각한 전제
+# **역할 분담 (2026-08 무게 감축, 2026-08-17 실측 이후 심볼릭 링크로 갱신)**: 세
+# 사본은 이제 shared/codex/detect_codex.sh 를 가리키는 상대 심볼릭 링크다(설계
+# §16.1) — 바이트 동일성은 더 이상 "측정할" 대상이 아니라 파일이 하나뿐이라는
+# 구조로 보장된다. 링크 자체가 여전히 링크인지 · 존재하는 정본을 가리키는지는
+# `shared/tests/test_copy_of_contract.sh` 가 검사한다. 위 문단이 기각한 전제
 # ("두 사본은 의도된 차이를 갖는다")는 그 차이를 형제 설정 파일
 # `codex-killswitch.conf` 로 빼내면서 사라졌다. 이 락은 **행동 등가**를 계속 잰다 —
-# 세 축 중 판정 등가는 바이트 동일화로 공허해지지만(같은 파일이니 항상 참) GREEN 이라
-# 해롭지 않고, **값 고정**(알려진-상이 두 표본의 실제 판정값)과 **kill switch**
+# 세 축 중 판정 등가는 파일이 하나뿐이라 공허해지지만 GREEN 이라 해롭지 않고,
+# **값 고정**(알려진-상이 두 표본의 실제 판정값)과 **kill switch**
 # (인자 없이 태워 자기 변수에만 반응) 두 축은 그대로 유효하다.
 ```
 
-- [ ] **Step 9: 커밋**
+- [ ] **Step 9: 호출부 loud-failure 수정 — "감지기를 못 돌렸다"와 "codex가 없다"를 구별한다**
+
+**왜 필요한가** (설계 §16.1의 잔여 위험 2): 심볼릭 링크의 역참조는 이 리포에서 측정으로 확인됐지만 **비문서 동작**이다. 미래에 링크가 대상 없는 상태(dangling)로 배포되면 `detect_codex.sh` 자체가 없거나 실행되지 않는다. 그때 `DETECT_OUT`(감지기 출력)이 빈 문자열이 되는데, 지금 호출부가 그것을 파싱하면 **"codex CLI가 설치 안 됨"과 관찰상 구별되지 않는 `SKIPPED (reason: unknown)`으로 새어** codex가 조용히 실행을 멈춘다. 이 결함은 심볼릭 링크와 무관하게 지금도 이미 있다(감지기가 어떤 이유로든 실행에 실패하면 같은 일이 난다) — 이번에 겨냥해 닫는다.
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+grep -rn 'detect_codex\.sh' plugins/*/skills/*/SKILL.md plugins/*/scripts/*.sh 2>/dev/null | grep -v tests
+```
+
+각 호출 지점에서 `DETECT_OUT`(또는 그 등가) 파싱 로직을 확인한다 — 대개 `codex_available:`·`skip_reason:` 줄을 grep하는 형태다. **패턴**: 감지기 스크립트 실행 자체가 실패했거나(비-zero exit, 빈 stdout) 출력에 `codex_available:` 줄이 아예 없으면, 그것을 `skip_reason: unknown`(codex 가용성 판정이 실제로 `false`인 경우와 같은 문구)으로 뭉개지 말고 **다른 문구**(예: `skip_reason: detector_not_runnable`)로 구별해 낸다. 정확한 변수명·삽입 지점은 각 SKILL.md/스크립트의 기존 관례를 따른다 — **새 스크립트·훅·러너를 만들지 않는다**(C16). 기존 파일 안의 조건문 하나를 강화하는 수준으로 그친다.
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+# 예: 감지기를 못 찾게 만들어 호출부가 구별해 내는지 확인 (검증 후 원복)
+for p in quality-gates spec-distill plugin-audit; do
+  mv "plugins/$p/scripts/detect_codex.sh" "plugins/$p/scripts/detect_codex.sh.bak"
+done
+# 각 SKILL.md 의 감지기 호출 절차를 그대로 따라가며 skip_reason 출력을 확인한다
+# (정확한 재현 명령은 위 grep 이 찾은 각 호출부에 맞춰 채운다)
+for p in quality-gates spec-distill plugin-audit; do
+  mv "plugins/$p/scripts/detect_codex.sh.bak" "plugins/$p/scripts/detect_codex.sh"
+done
+```
+
+Expected: 감지기 부재 시 `skip_reason`이 `unknown`이 아니라 **감지기 실행 실패임을 밝히는 별개 문구**로 나온다. codex 미설치(감지기는 정상 실행되지만 `codex_available: false`)와 구별된다.
+
+- [ ] **Step 10: 커밋**
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 git add shared/codex/detect_codex.sh plugins/*/scripts/detect_codex.sh \
         plugins/*/scripts/codex-killswitch.conf \
-        plugins/quality-gates/tests/test_codex_copies_agree.sh
+        plugins/quality-gates/tests/test_codex_copies_agree.sh \
+        plugins/*/skills/*/SKILL.md plugins/*/scripts/*.sh
 git rm -f shared/codex/.gitkeep 2>/dev/null || true
-git commit -m "refactor(codex): detect_codex.sh 3사본을 shared/ 정본 + 형제 설정으로 통합"
+git commit -m "refactor(codex): detect_codex.sh 3사본을 shared/ 정본 + 심볼릭 링크로 통합 — loud-failure 포함"
 ```
 
 ---
 
-### Task 16: `copy-of` 락 + mutation 증명
+### Task 16: 동일성 락(심볼릭 링크 무결성 + `copy-of` 잔여) + mutation 증명
+
+**2026-08-17 실측으로 이 태스크가 바뀐 이유** (설계 §16.1): 원래 이 락은 "`copy-of` 물리 사본이 정본과 바이트 동일한가"를 재는 것이 전부였다. 실측이 그 전제 자체를 바꿨다 — `detect_codex.sh`·`codex_findings_to_yaml.py`(Task 15·17)는 이제 물리 사본이 아니라 **심볼릭 링크**다. 링크는 내용을 독립적으로 가질 수 없으므로 바이트 비교 축은 **대상을 잃는다**(측정할 것이 없다 — 갈라질 수 없는 것의 동일성을 재는 것은 공허하다). 이 태스크는 폐기되지 않는다 — 남는 것에 진짜 이빨이 있기 때문이다:
+
+1. **심볼릭 링크 무결성** — 배포 지점이 여전히 링크인가(재분열 = 링크가 독립 파일로 바뀜) · 그 링크가 존재하는 대상을 가리키는가 · 그 대상이 `shared/` 아래인가. **이것이 이제 이 락의 핵심 축이다** — §12.1의 "링크 무결성" 계약을 직접 검사한다.
+2. **형제 설정(`codex-killswitch.conf`) 3요건** — Task 15의 요구를 그대로 계승한다: 배포에 실린다(git tracked) · 설정 부재 시 fail-closed(`CLAUDE.md:48`의 보안 컨트롤). **이 축은 심볼릭 링크 채택과 무관하게 원래 이유 그대로 필요하다** — 세 플러그인이 여전히 서로 다른 kill switch 변수를 가지므로.
+3. **`copy-of` 물리 사본 지원은 남긴다** — 이 사이클에 Task 18(`read_preamble.sh`)이 실제로 쓴다. 링크를 못 쓰는 잔여를 위해 마커 파싱 축의 코드는 지우지 않는다(C10과 같은 정신 — 대상을 잃은 축만 걷어낸다).
+
+**바이트-동일성 mutation은 이 파일에 없다.** 그 자리를 "링크가 여전히 링크인가"가 대신한다. 아래 Step 3에서 두 종류의 mutation을 각각 증명한다.
 
 **Files:**
-- Create: `shared/tests/test_copy_of_contract.sh` (실행비트 필수)
+- Create: `shared/tests/test_copy_of_contract.sh` (실행비트 필수) — 이름은 유지한다. Task 15·17·18·35가 이 파일명을 다수 참조하고, 파일이 검사하는 계약(§12.1)이 여전히 "copy-of" 개념(정본을 향한 배포 지점)이므로 이름 자체는 허위가 아니다 — 내부 축이 바뀌었을 뿐이다.
 
-**락은 이 한 문장이다** (설계 §12.1):
+**락은 이제 두 계약이다** (설계 §12.1):
 
-> `copy-of` 줄이 있는 파일은, 그 줄이 가리키는 파일과 **그 줄만 제외하고** 바이트가 같아야 한다.
+> **심볼릭 링크**: 배포 지점은 링크여야 하고, 그 링크가 가리키는 경로가 존재해야 하고, 그 경로가 `shared/` 아래여야 한다.
+> **`copy-of` 물리 사본**(잔여): `copy-of` 줄이 있는 파일은, 그 줄이 가리키는 파일과 **그 줄만 제외하고** 바이트가 같아야 한다. 부수 조건 셋: 정본은 `copy-of` 줄을 갖지 않는다(순환 금지) · 가리키는 경로는 존재해야 한다 · 정본은 `shared/` 아래여야 한다.
 
-부수 조건 셋: 정본은 `copy-of` 줄을 갖지 않는다(순환 금지) · 가리키는 경로는 존재해야 한다 · 정본은 `shared/` 아래여야 한다.
-
-**여기에 Task 15의 설정 파일 3요건을 같은 파일에 넣는다** — 세 사실(사본이 같다 / 설정이 실린다 / 설정 부재가 닫힌다)이 함께 깨질 때 함께 RED가 되게.
+**여기에 Task 15의 설정 파일 3요건을 같은 파일에 넣는다** — 세 사실(링크가 정본을 가리킨다 / 설정이 실린다 / 설정 부재가 닫힌다)이 함께 깨질 때 함께 RED가 되게.
 
 **실행비트가 없으면 이 락은 한 번도 실행되지 않는다.** qg 어댑터가 `run-test-selection.sh:383`(`-perm -u+x`)과 `:825`(`[[ -x ]]`) 두 곳에서 거부한다. §14의 측정은 *후보 선정*만 보므로 이 부재를 볼 수 없다.
 
@@ -2264,17 +2310,22 @@ git commit -m "refactor(codex): detect_codex.sh 3사본을 shared/ 정본 + 형�
 #!/usr/bin/env bash
 # guards: plugins/** shared/**
 #
-# 통합한 것의 **재분열**을 막는다.
+# 통합한 것의 **재분열**을 막는다. 배포 지점이 정본을 가리키는 방법은 둘이다:
 #
-#   copy-of 줄이 있는 파일은, 그 줄이 가리키는 파일과 그 줄만 제외하고 바이트가 같아야 한다.
+#   (a) 심볼릭 링크 — 배포 지점은 링크여야 하고, 그 링크가 가리키는 경로가 존재해야
+#       하고, 그 경로가 shared/ 아래여야 한다. 이것이 2026-08-17 실측(설계 §16.1)
+#       이후의 기본 방식이다 — --plugin-dir 도 실제 설치 캐시(claude plugin install)
+#       도 이 리포에서 심볼릭 링크를 실사용 가능하게 전달한다.
+#   (b) copy-of 물리 사본(잔여, 링크를 못 쓰는 경우) — copy-of 줄이 있는 파일은,
+#       그 줄이 가리키는 파일과 그 줄만 제외하고 바이트가 같아야 한다.
 #
-# 부수 조건 셋: 정본은 copy-of 줄을 갖지 않는다(순환 금지) · 가리키는 경로는 존재한다 ·
-# 정본은 shared/ 아래다.
+# 부수 조건은 둘 다 같다: 정본은 copy-of 줄을 갖지 않는다(순환 금지) · 가리키는
+# 경로는 존재한다 · 정본은 shared/ 아래다.
 #
 # 여기에 형제 설정(codex-killswitch.conf)의 세 사실을 **같은 파일에** 둔다 —
-# 사본이 같다 / 설정이 배포에 실린다 / 설정 부재가 fail-closed 다. 셋이 함께 깨질 때
-# 함께 RED 가 되어야 한다(설계 §6.1①). 설정이 실리는지만 보고 부재 시 동작을 아무도
-# 안 보면, fail-open 으로 퇴화해도 모든 검사가 GREEN 이다.
+# 배포 지점이 정본을 가리킨다 / 설정이 배포에 실린다 / 설정 부재가 fail-closed 다.
+# 셋이 함께 깨질 때 함께 RED 가 되어야 한다(설계 §6.1①). 설정이 실리는지만 보고
+# 부재 시 동작을 아무도 안 보면, fail-open 으로 퇴화해도 모든 검사가 GREEN 이다.
 #
 # 실행 지점은 `/qg` Runtime gate 하나다. 상시 자동 실행이 아니다 —
 # C16 이 실행 지점 신설을 금했으므로 이 제약 아래의 최선이다.
@@ -2294,7 +2345,43 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   exit 0
 fi
 
-# ── 축 1: copy-of 사본이 정본과 바이트 동일 ────────────────────────────────
+# ── 축 1a: 심볼릭 링크 무결성 (기본 방식, 설계 §16.1) ──────────────────────
+# git ls-files 는 워킹트리 심볼릭 링크도 낸다 — [ -L "$f" ] 로 식별한다. `readlink`는
+# 상대 경로를 낸다는 점에 주의: 링크가 있는 디렉토리를 기준으로 풀어야 존재 검사가 맞다.
+n_links=0
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  [ -L "$f" ] || continue
+  n_links=$((n_links+1))
+  raw_target="$(readlink -- "$f")"
+  resolved="$(cd "$(dirname -- "$f")" && cd "$(dirname -- "$raw_target")" 2>/dev/null && printf '%s/%s\n' "$(pwd)" "$(basename -- "$raw_target")")"
+  rel="${resolved#"$ROOT"/}"
+  if [ -z "$resolved" ] || [ ! -e "$resolved" ]; then
+    no "symlink: $f → '$raw_target' 대상이 존재하지 않는다 (dangling)"
+    continue
+  fi
+  case "$rel" in
+    shared/*) ok "symlink: $f → $rel (shared/ 아래, 대상 존재)" ;;
+    *) no "symlink: $f → $rel 가 shared/ 밖이다 (소유 관계 왜곡)" ;;
+  esac
+  # 순환 금지: 정본 자신이 다시 심볼릭 링크이거나 copy-of 를 갖지 않는다
+  if [ -L "$resolved" ]; then
+    no "symlink: 정본 '$rel' 자신이 심볼릭 링크다 (순환 위험)"
+  elif head -"$HEAD_WINDOW" -- "$resolved" 2>/dev/null | grep -qE "$MARKER_RE"; then
+    no "symlink: 정본 '$rel' 자신이 copy-of 를 갖는다 (순환)"
+  fi
+done <<EOF
+$CORPUS
+EOF
+
+# 양성(vacuous 아님): 심볼릭 링크가 실제로 발견됐는가.
+if [ "$n_links" -ge 1 ]; then
+  ok "symlink: 링크 ${n_links}건 스캔 (vacuous 아님)"
+else
+  no "symlink: 심볼릭 링크가 0건 — 통합이 안 됐거나 스캔이 깨졌다"
+fi
+
+# ── 축 1b: copy-of 물리 사본이 정본과 바이트 동일 (잔여 — 링크를 못 쓰는 경우) ──
 n_copies=0
 while IFS= read -r f; do
   [ -n "$f" ] || continue
@@ -2340,12 +2427,16 @@ done <<EOF
 $CORPUS
 EOF
 
-# 양성(vacuous 아님): 사본이 실제로 발견됐는가. 없으면 "차이 0"과 "아무것도 안 봄"이
-# 구별되지 않는다 — 마커 정규식이 깨지면 위 루프 전체가 조용히 0회 돈다.
+# copy-of 물리 사본 축의 vacuous 방지는 축 1a(심볼릭 링크)가 이미 대신한다 —
+# 이 사이클에 이 태스크(Task 16) 실행 시점에는 물리 사본이 아직 0건이다(첫 물리
+# copy-of 후보인 Task 18의 read_preamble.sh가 이 태스크보다 뒤에 온다, B.4).
+# 그래서 0건을 RED로 만들지 않는다 — "아직 아무도 이 방식을 안 썼다"와 "마커
+# 정규식이 깨졌다"를 이 축 하나만으로는 구별할 수 없기 때문에, 그 구별은 대신
+# 축 1a의 vacuous 검사가 맡는다(그쪽은 지금 이미 3건이 있어야 한다).
 if [ "$n_copies" -ge 1 ]; then
-  ok "copy-of: 사본 ${n_copies}건 스캔 (vacuous 아님)"
+  ok "copy-of: 물리 사본 ${n_copies}건 스캔"
 else
-  no "copy-of: 사본이 0건 — 마커를 하나도 못 찾았다. 정규식이 깨졌거나 통합이 안 됐다"
+  ok "copy-of: 물리 사본 0건 — 이 사이클 이 시점엔 정상(Task 18 이후 채워진다)"
 fi
 
 # ── 축 2: 형제 설정이 배포에 실린다 ───────────────────────────────────────
@@ -2404,61 +2495,103 @@ Expected: PASS · `git ls-files -s`가 mode `100755`
 
 > `100644`가 나오면 **락이 조용히 한 번도 실행되지 않는다.** `git update-index --chmod=+x`로 고친다.
 
-- [ ] **Step 3: mutation 3종 (설계 §12.5)**
+- [ ] **Step 3: mutation — 심볼릭 링크 축 3종 + `copy-of` 물리 사본 축 3종 (설계 §12.5)**
+
+**심볼릭 링크 축** (실제 대상: `plugins/spec-distill/scripts/detect_codex.sh`, Task 15가 만든 진짜 링크):
 
 | # | 변이 | 기대 | 무엇을 증명하나 |
 |---|---|---|---|
-| 1 | 사본 하나의 본문 한 줄을 바꾼다 | **RED** | 갈라짐을 잡는다 |
-| 2 | 사본 하나의 **파일 이름**을 바꾼다 (`copy-of`는 그대로) | **GREEN** | 이름 무관 — "같은 이름이면 같은 내용" 락과 다르다 |
-| 3 | `copy-of`가 존재하지 않는 경로를 가리키게 한다 | **RED** | 부수 조건 |
+| 1 | 링크를 지우고 **같은 경로에 정본과 다른 내용의 독립 파일**을 만든다 | **RED** | 재분열 — 링크가 아니게 됐다 |
+| 2 | 링크의 **경로만** 바꾼다(대상은 그대로) | **GREEN** | 이름 무관 — "같은 이름이면 같은 내용" 락과 다르다(§16) |
+| 3 | 링크가 존재하지 않는 경로를 가리키게 한다 | **RED** | 부수 조건 |
 
-**변이 1은 맨 앞·중간·맨 끝 세 위치에서 각각 수행한다.** 한 위치만 흔들면 그 위치에만 반응하는 락과 구별되지 않는다.
+**변이 1은 실제 감염 파일을 정본과 다른 내용으로 만든다는 점에서 위치 개념이 없다** — 심볼릭 링크는 파일 전체가 하나의 단위이므로 "맨 앞·중간·맨 끝"이 성립하지 않는다(설계 §12.5). 이 점 자체가 물리 사본과의 차이다.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 V="plugins/spec-distill/scripts/detect_codex.sh"
-cp "$V" /tmp/detect.bak
-NL="$(wc -l < "$V" | tr -d ' ')"
+V_TARGET="$(readlink "$V")"   # 복원용 — 상대 경로 그대로 보관
+
+# 변이 1 — 링크를 깨고 독립 파일로 바꾼다
+rm -f "$V"
+printf '#!/usr/bin/env bash\necho "MUTATED — independent file, not a link"\n' > "$V"
+chmod +x "$V"
+printf 'mutation 1 (링크 깨짐) → '
+bash shared/tests/test_copy_of_contract.sh >/dev/null 2>&1 && echo "GREEN ❌" || echo "RED ✓"
+rm -f "$V"; ln -s "$V_TARGET" "$V"   # 링크 복원
+
+# 변이 2 — 경로(파일명)만 바꾼다, 대상은 그대로
+git mv "$V" plugins/spec-distill/scripts/detect_codex_renamed.sh
+printf 'mutation 2 (경로 변경) → '
+bash shared/tests/test_copy_of_contract.sh >/dev/null 2>&1 && echo "GREEN ✓" || echo "RED ❌ (경로에 반응한다)"
+git mv plugins/spec-distill/scripts/detect_codex_renamed.sh "$V"
+
+# 변이 3 — 존재하지 않는 대상을 가리키게 한다
+rm -f "$V"; ln -s ../../../shared/codex/nonexistent.sh "$V"
+printf 'mutation 3 (없는 대상) → '
+bash shared/tests/test_copy_of_contract.sh >/dev/null 2>&1 && echo "GREEN ❌" || echo "RED ✓"
+rm -f "$V"; ln -s "$V_TARGET" "$V"   # 링크 복원
+
+printf '무변이(링크 축) → '
+bash shared/tests/test_copy_of_contract.sh >/dev/null 2>&1 && echo "GREEN ✓" || echo "RED ❌ (항상-RED)"
+git diff --stat "$V"   # 최종 상태가 원래 링크와 같은지 — diff 가 없어야 한다
+```
+
+**`copy-of` 물리 사본 축**: 이 시점에 리포에 실제 물리 `copy-of` 후보가 아직 없다(Task 18이 이 태스크보다 뒤에 온다, B.4). 그래서 **일회용 스캐치 픽스처**로 마커-파싱 코드 자체의 이빨을 증명한다 — 실제 파일을 잠깐 만들어 `git add`로 스캔 코퍼스(`git ls-files`)에 넣고, mutation을 태운 뒤, 커밋 없이 되돌린다.
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+FIX="plugins/quality-gates/scripts/_copyof_mutation_fixture.sh"
+{
+  head -1 shared/codex/detect_codex.sh
+  echo "# copy-of: shared/codex/detect_codex.sh"
+  tail -n +2 shared/codex/detect_codex.sh
+} > "$FIX"
+chmod +x "$FIX"
+git add "$FIX"
+printf '픽스처 생성 직후(무변이) → '
+bash shared/tests/test_copy_of_contract.sh >/dev/null 2>&1 && echo "GREEN ✓" || echo "RED ❌ (픽스처 자체가 안 맞는다 — 먼저 고친다)"
+
+# 변이 1 — 본문 한 줄을 바꾼다 (맨 앞·중간·맨 끝)
+NL="$(wc -l < "$FIX" | tr -d ' ')"
 for pos in 3 $((NL/2)) "$NL"; do
-  cp /tmp/detect.bak "$V"
-  python3 - "$V" "$pos" <<'PY'
+  python3 - "$FIX" "$pos" <<'PY'
 import sys, pathlib
 p, n = pathlib.Path(sys.argv[1]), int(sys.argv[2])
 ls = p.read_text(encoding="utf-8").split("\n")
 ls[n-1] = ls[n-1] + "  # MUTATED"
 p.write_text("\n".join(ls), encoding="utf-8")
 PY
-  # 계측기 확인 — 바이트가 실제로 바뀌었는가
-  git diff --stat "$V" | tail -1
-  printf 'mutation 1 @줄%s → ' "$pos"
+  printf 'mutation 1(물리 사본) @줄%s → ' "$pos"
   bash shared/tests/test_copy_of_contract.sh >/dev/null 2>&1 && echo "GREEN ❌" || echo "RED ✓"
+  git checkout -- "$FIX"
 done
-cp /tmp/detect.bak "$V"
 
-# 변이 2 — 이름만 바꾼다
-git mv "$V" plugins/spec-distill/scripts/detect_codex_renamed.sh
-printf 'mutation 2 (이름 변경) → '
+# 변이 2 — 파일 이름만 바꾼다 (copy-of 줄은 그대로)
+git mv "$FIX" "${FIX%.sh}_renamed.sh"
+printf 'mutation 2(물리 사본, 이름 변경) → '
 bash shared/tests/test_copy_of_contract.sh >/dev/null 2>&1 && echo "GREEN ✓" || echo "RED ❌ (이름에 반응한다)"
-git mv plugins/spec-distill/scripts/detect_codex_renamed.sh "$V"
+git mv "${FIX%.sh}_renamed.sh" "$FIX"
 
 # 변이 3 — 없는 경로를 가리킨다
-python3 - "$V" <<'PY'
+python3 - "$FIX" <<'PY'
 import sys, pathlib
 p = pathlib.Path(sys.argv[1]); t = p.read_text(encoding="utf-8")
 p.write_text(t.replace("# copy-of: shared/codex/detect_codex.sh",
                        "# copy-of: shared/codex/nonexistent.sh", 1), encoding="utf-8")
 PY
-git diff --stat "$V" | tail -1
-printf 'mutation 3 (없는 경로) → '
+printf 'mutation 3(물리 사본, 없는 경로) → '
 bash shared/tests/test_copy_of_contract.sh >/dev/null 2>&1 && echo "GREEN ❌" || echo "RED ✓"
-cp /tmp/detect.bak "$V"
 
-printf '무변이 → '
-bash shared/tests/test_copy_of_contract.sh >/dev/null 2>&1 && echo "GREEN ✓" || echo "RED ❌ (항상-RED)"
-rm -f /tmp/detect.bak
+# 픽스처 정리 — 커밋에 남기지 않는다
+git reset -- "$FIX" >/dev/null 2>&1 || true
+rm -f "$FIX"
+git status --short -- "$FIX"   # 아무 출력도 없어야 한다
 ```
 
-> **변이 2가 GREEN이어야 하는 이유**: 설계 §16이 *"같은 이름이면 같은 내용" 락*을 기각했다 — 이름을 바꾸면 통과하고, 이름이 다른 중복을 절반 이상 놓친다. 이 락은 이름이 아니라 마커를 본다. 변이 2가 RED면 그 기각이 무효가 된다.
+Expected: 심볼릭 링크 축 변이 1·3 → RED, 변이 2 → GREEN. 물리 사본 축 변이 1·3(3위치) → RED, 변이 2 → GREEN. 무변이 두 곳 다 GREEN. 마지막 `git status --short -- "$FIX"`가 빈 출력 — 픽스처가 실제로 안 남았다.
+
+> **변이 2가(양쪽 축 모두) GREEN이어야 하는 이유**: 설계 §16이 *"같은 이름이면 같은 내용" 락*을 기각했다 — 이름을 바꾸면 통과하고, 이름이 다른 중복을 절반 이상 놓친다. 이 락은 이름이 아니라 링크 구조·마커를 본다.
 
 - [ ] **Step 4: `/qg`가 이 락을 **실제로 실행**했는지 출력에서 확인한다**
 
@@ -2467,9 +2600,15 @@ rm -f /tmp/detect.bak
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 # 먼저 후보 선정 — 워킹트리 직접 실행 (캐시 무관)
-printf '\n# probe\n' >> plugins/spec-distill/scripts/detect_codex.sh
+# 주의: plugins/spec-distill/scripts/detect_codex.sh 는 이제 심볼릭 링크다. `>>`로
+# 그 경로에 쓰면 셸이 링크를 따라가 **정본(shared/codex/detect_codex.sh)이 수정된다**
+# — git checkout으로 링크 파일 자체를 되돌려도 정본의 변경은 안 풀린다. 그래서
+# 정본 경로를 직접 프로브한다(어차피 diff 스코프에서 두 경로는 `# guards:` 상
+# 동가다 — 링크도 shared/**도 같은 글롭에 걸린다).
+printf '\n# probe\n' >> shared/codex/detect_codex.sh
 bash plugins/quality-gates/scripts/compute-test-scope-candidates.sh | grep copy_of
-git checkout -- plugins/spec-distill/scripts/detect_codex.sh
+git checkout -- shared/codex/detect_codex.sh
+git status --short -- shared/codex/detect_codex.sh   # 빈 출력이어야 한다
 
 # 그 다음 실제 실행 — --plugin-dir (캐시 우회)
 claude -p --plugin-dir "$PWD/plugins/quality-gates" \
@@ -2491,17 +2630,21 @@ Expected: `--emit-scanned` 지원 락이 1개 이상 도출되고, 두 방향 �
 - [ ] **Step 6: 커밋**
 
 ```bash
+cd /Users/jeonghokim/Downloads/devbrew
+git status --short   # 픽스처(_copyof_mutation_fixture.sh)가 안 남았는지 마지막으로 확인
 git add shared/tests/test_copy_of_contract.sh
-git commit -m "test(shared): copy-of 동일성 락 — 재분열 방지 + 형제 설정 fail-closed"
+git commit -m "test(shared): 동일성 락 — 심볼릭 링크 무결성 + copy-of 잔여 + 형제 설정 fail-closed"
 ```
 
 ---
 
 ### Task 17: `codex_findings_to_yaml.py` 통합
 
+**2026-08-17 실측으로 바뀐 것** (설계 §16.1, Task 15와 같은 이유): 배포 지점은 물리 사본이 아니라 **정본을 가리키는 상대 심볼릭 링크**다. "emit keyset을 인자로 넘긴다"는 결정은 **바뀌지 않는다** — 그것은 소비 방식(호출자만 실행한다)에 대한 결정이지 물리적 실현(사본 vs 링크)과 무관하다.
+
 **Files:**
 - Create: `shared/codex/codex_findings_to_yaml.py`
-- Modify: `plugins/{quality-gates,spec-distill}/scripts/codex_findings_to_yaml.py` → 사본
+- Modify: `plugins/{quality-gates,spec-distill}/scripts/codex_findings_to_yaml.py` → **정본을 가리키는 상대 심볼릭 링크** (물리 사본이 아니다)
 - Modify: 호출자 (emit keyset을 인자로 넘긴다)
 
 **차이는 하나다** 〔실측〕 — emit keyset. spec-distill 사본이 `category`·`target_section`을 더한다(design-doc 리뷰 어휘). 나머지 140줄 diff는 전부 주석·포매팅이다.
@@ -2546,20 +2689,25 @@ for k in keys:
 
 주석은 두 사본의 것을 **합친다** — spec-distill 사본의 docstring이 *"'ONLY adaptation'이라는 옛 주장은 거짓이었다: 2026-07-29 CR-2 스키마 검증이 이 사본에만 들어가 판정이 갈라져 있었다"* 를 기록하고 있다. 그 역사는 이 통합이 닫는 결함의 근거이므로 정본에 남긴다.
 
-- [ ] **Step 3: 두 사본을 마커 + 바이트 동일로 교체**
+- [ ] **Step 3: 두 사본을 정본을 가리키는 상대 심볼릭 링크로 교체**
+
+**마커 규격은 이 태스크에 해당 없음** — Task 15와 같은 이유(설계 §16.1). 심볼릭 링크는 마커가 필요 없다. `__doc__`이 살아 있는지 확인하는 것도 마커 stripping 문제가 아니라 **정본의 docstring 자체**가 살아 있는지의 문제로 바뀐다 — 링크는 정본 파일을 그대로 가리키므로 애초에 별개로 확인할 것이 없다(정본에서 한 번 확인하면 모든 배포 지점에 그대로 적용된다).
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 for p in quality-gates spec-distill; do
-  {
-    head -1 shared/codex/codex_findings_to_yaml.py    # shebang
-    echo "# copy-of: shared/codex/codex_findings_to_yaml.py"
-    tail -n +2 shared/codex/codex_findings_to_yaml.py
-  } > "plugins/$p/scripts/codex_findings_to_yaml.py"
+  rm -f "plugins/$p/scripts/codex_findings_to_yaml.py"
+  ln -s ../../../shared/codex/codex_findings_to_yaml.py "plugins/$p/scripts/codex_findings_to_yaml.py"
 done
+chmod +x shared/codex/codex_findings_to_yaml.py
+for p in quality-gates spec-distill; do
+  f="plugins/$p/scripts/codex_findings_to_yaml.py"
+  printf '%-14s ' "$p"
+  [ -L "$f" ] && [ -e "$f" ] && echo "심볼릭 링크 ✓ → $(readlink "$f")" || echo "❌ 링크가 아니거나 대상이 없다"
+done
+git add plugins/*/scripts/codex_findings_to_yaml.py shared/codex/codex_findings_to_yaml.py
+git ls-files -s plugins/*/scripts/codex_findings_to_yaml.py   # mode 120000 이어야 한다
 ```
-
-> **파이썬 마커 위치 확인** (설계 §12.2 요구 2): shebang 다음, 모듈 docstring **앞**에 두면 docstring이 여전히 첫 문(statement)이므로 `__doc__`이 살아 있다. 주석은 문이 아니기 때문이다. 실제로 확인한다:
 
 ```bash
 python3 -c "
@@ -2598,7 +2746,7 @@ Expected: `category:`와 `target_section:`이 나온다. 안 나오면 인자가
 
 ```bash
 git add shared/codex/codex_findings_to_yaml.py plugins/*/scripts/codex_findings_to_yaml.py plugins/*/scripts/run_*codex*.sh
-git commit -m "refactor(codex): codex_findings_to_yaml.py 2사본 통합 — emit keyset 을 인자로"
+git commit -m "refactor(codex): codex_findings_to_yaml.py 2사본을 심볼릭 링크로 통합 — emit keyset 을 인자로"
 ```
 
 ---
@@ -3416,7 +3564,7 @@ Expected: `OK`가 아닌 줄이 0개 (플레이스홀더와 `DEVBREW_SKIP_HOOKS`
 cd /Users/jeonghokim/Downloads/devbrew
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
 export PYTHONDONTWRITEBYTECODE=1
-echo "=== detect_codex 3사본 ==="
+echo "=== detect_codex 3배포지점(심볼릭 링크) ==="
 for p in quality-gates spec-distill plugin-audit; do
   v="$(sed -n 's/^CODEX_KILL_SWITCH_VAR=//p' "plugins/$p/scripts/codex-killswitch.conf")"
   printf '%-14s %-42s ' "$p" "$v"
@@ -4518,10 +4666,12 @@ git commit -m "docs(plan): 20줄 무릎 재측정 — PR2~PR5 이후 코퍼스"
 
 **면제 술어 둘** — 아래 중 하나면 그 쌍의 블록은 세지 않는다:
 
-1. 한쪽이 다른 쪽을 `copy-of`로 가리킨다
-2. **양쪽이 같은 정본을 `copy-of`로 가리킨다**
+1. 한쪽이 다른 쪽을 `copy-of`로 가리킨다 (마커 **또는** 심볼릭 링크로)
+2. **양쪽이 같은 정본을 `copy-of`로 가리킨다** (마커 **또는** 심볼릭 링크로)
 
 **2번이 이 설계의 실제 형태다** — §2.3이 정본을 `shared/`의 제3 파일로 두므로 사본끼리는 서로를 가리키지 않는다. 1번만 있으면 통합 후에도 사본군이 영원히 RED로 남아 완료 조건과 mutation이 동시에 불가능해진다.
+
+**심볼릭 링크는 이 면제 술어를 그대로 못 쓴다** (설계 §12.4, §16.1 이후 추가된 요구). Python의 `open()`/`read_text()`는 심볼릭 링크를 투명하게 따라가 대상 내용을 반환한다 — `detect_codex.sh`의 3개 심볼릭 링크와 그 정본 `shared/codex/detect_codex.sh`는 스캐너가 손대지 않으면 **넷 다 같은 내용을 담은 별개 경로**로 잡혀 락이 자기 자신이 만든 통합에 걸린다. 마커 기반 면제 술어(위 1·2번)는 `copy-of:` 텍스트를 전제하는데 심볼릭 링크에는 그 텍스트가 없다(§12.1). **요구**: 스캐너는 `pathlib.Path.is_symlink()`(또는 `git ls-files -s`의 mode `120000`)로 심볼릭 링크를 식별하고, 그 대상 경로를 "마커가 가리키는 경로"와 동등하게 취급해 같은 면제 술어에 넣는다.
 
 **스캔 코퍼스** (§12.4):
 
@@ -4580,17 +4730,37 @@ if [ "${1:-}" = "--emit-scanned" ]; then
 fi
 
 OUT="$(printf '%s\n' "$CORPUS" | python3 - "$WINDOW" "$MIN_CHARS" <<'PY'
-import hashlib, pathlib, re, sys, collections
+import hashlib, os, pathlib, re, sys, collections
 
 WINDOW   = int(sys.argv[1])
 MIN_CHARS = int(sys.argv[2])
 MARKER = re.compile(r'^\s*(#|//|<!--)\s*copy-of:\s*(\S+)')
 HEAD_WINDOW = 20
+ROOT = pathlib.Path.cwd()   # 셸이 이미 ROOT 로 cd 했다
 
 files = [l.strip() for l in sys.stdin if l.strip()]
 
+def symlink_target_of(p):
+    """p 가 심볼릭 링크면 그 대상을 리포 루트 기준 상대 경로로. 아니면 None.
+    §16.1 요구: 심볼릭 링크는 open()/read_text() 가 대상 내용을 투명하게
+    반환하므로, 마커 기반 canonical_of() 만으로는 링크·정본 쌍을 놓친다 —
+    링크 자체가 곧 "copy-of" 이므로 같은 자격으로 취급한다."""
+    pp = pathlib.Path(p)
+    if not pp.is_symlink():
+        return None
+    try:
+        target = (pp.parent / os.readlink(p)).resolve()
+        return str(target.relative_to(ROOT))
+    except (OSError, ValueError):
+        return None   # 대상이 없거나 리포 밖 — 아래 canonical_of 의 마커 폴백으로 넘어가지 않는다(심볼릭 링크는 마커를 가질 수 없다). None 이면 면제 대상이 아니다 — 다른 락(무결성 락)이 이 상태 자체를 RED 로 잡는다.
+
 def canonical_of(p):
-    """이 파일이 가리키는 정본. 없으면 None."""
+    """이 파일이 가리키는 정본. 없으면 None. 심볼릭 링크가 마커보다 우선한다
+    — 링크는 애초에 마커를 가질 수 없고, 링크를 read_text() 로 열면 대상의
+    본문이 나오므로 거기서 우연히 마커처럼 보이는 줄을 잘못 집을 수 있다."""
+    link_target = symlink_target_of(p)
+    if link_target is not None:
+        return link_target
     try:
         with open(p, encoding="utf-8") as fh:
             for i, line in enumerate(fh):
@@ -4683,15 +4853,19 @@ Expected: PASS · mode `100755`
 
 **RED가 나오면 그것은 락의 결함이 아니라 남은 중복이다.** 위반 쌍을 §6의 등급으로 분류해 처리한다 — 진짜 사본이면 `shared/`로, 부분 사본이면 추가 추출. **락의 임계를 올려서 통과시키지 않는다.**
 
-- [ ] **Step 3: mutation 5종 (설계 §12.5)**
+- [ ] **Step 3: mutation 5종 + 심볼릭 링크 예외 자체의 mutation (설계 §12.4·§12.5)**
 
 | # | 변이 | 기대 | 무엇을 증명하나 |
 |---|---|---|---|
-| 1 | 20줄짜리 동일 블록을 두 파일에 새로 넣는다 (`copy-of` 없이) | **RED** | 본체 |
+| 1 | 20줄짜리 동일 블록을 두 파일에 새로 넣는다 (`copy-of` 없이, 심볼릭 링크도 없이) | **RED** | 본체 |
 | 2 | 같은 블록을 19줄로 줄인다 | **GREEN** | 창 경계 — 무엇이든 RED로 만드는 것과 구별 |
-| 3 | **같은 정본을 가리키는 사본 쌍을 그대로 둔다** | **GREEN** | 면제 술어 ② |
-| 4 | 그 쌍에서 `copy-of` 줄을 지운다 | **RED** | 면제가 마커에 실제로 의존 |
-| 5 | **무관한 두 파일에 같은 정본을 가리키는 `copy-of` 줄을 새로 붙여 20줄 검사를 회피한다** | **`copy-of` 락이 RED** | 회피 경로 봉쇄 |
+| 3 | **같은 정본을 가리키는 심볼릭 링크 쌍을 그대로 둔다**(실제 대상: `detect_codex.sh` 3링크, Task 15) | **GREEN** | 면제 술어 ② — 심볼릭 링크 경로 |
+| 4 | 그 쌍 중 하나를 **독립 파일로 깬다**(내용은 그대로 두고 링크성만 제거) | **RED** | 면제가 "링크라는 사실"에 실제로 의존 — 내용이 같아도 링크가 아니면 설명 안 된 중복이다 |
+| 5 | **무관한 두 파일에 같은 정본을 가리키는 `copy-of` *마커* 줄을 새로 붙여 20줄 검사를 회피한다** | **`copy-of` 락이 RED** | 회피 경로 봉쇄(마커 축) — **심볼릭 링크 축에는 이 공격이 성립하지 않는다**: 진짜 OS 심볼릭 링크는 가리키는 대상의 내용을 "주장"할 수 없다(대상이 곧 자기 내용이다). 거짓을 말할 수 있는 것은 텍스트 마커뿐이다 |
+
+**변이 1·2는 맨 앞·중간·맨 끝 세 위치에서 각각 수행한다.**
+
+**이 예외(심볼릭 링크 스킵)는 그 자체로 이빨을 증명해야 한다**(설계 §12.4의 요구) — 변이 4가 그 증명이다: 링크가 깨지면 **내용은 바뀌지 않았는데도** RED가 나와야 한다. 그러지 않으면 예외가 "내용이 같으면 무조건 통과"로 새어 진짜 새 중복(예: 4)도 놓친다.
 
 **변이는 맨 앞·중간·맨 끝 세 위치에서 각각 수행한다.**
 
@@ -4731,18 +4905,22 @@ PY
 done
 cp /tmp/A.bak "$A"; cp /tmp/B.bak "$B"; rm -f /tmp/A.bak /tmp/B.bak
 
-# 변이 3 — 같은 정본을 가리키는 사본 쌍 (현 상태 그대로)
-printf 'mutation 3 (사본 쌍 그대로) → '
-bash shared/tests/test_no_new_duplication.sh >/dev/null 2>&1 && echo "GREEN ✓ (면제 술어 ②)" || echo "RED ❌ (사본군이 영원히 RED)"
+# 변이 3 — 같은 정본을 가리키는 심볼릭 링크 쌍 (현 상태 그대로 — Task 15가 만든 진짜 링크)
+printf 'mutation 3 (심볼릭 링크 쌍 그대로) → '
+bash shared/tests/test_no_new_duplication.sh >/dev/null 2>&1 && echo "GREEN ✓ (면제 술어 ②)" || echo "RED ❌ (링크 쌍이 영원히 RED)"
 
-# 변이 4 — 사본 쌍에서 copy-of 를 지운다
+# 변이 4 — 그 쌍 중 하나를 독립 파일로 깬다. **내용은 바꾸지 않는다** — 링크라는
+# 사실만 제거해서, 예외가 "내용이 같다"가 아니라 "링크다"에 실제로 반응하는지 본다.
 C=plugins/spec-distill/scripts/detect_codex.sh
-cp "$C" /tmp/C.bak
-grep -v '^# copy-of: ' /tmp/C.bak > "$C"
-git diff --numstat "$C" | head -1
-printf 'mutation 4 (copy-of 제거) → '
-bash shared/tests/test_no_new_duplication.sh >/dev/null 2>&1 && echo "GREEN ❌ (면제가 마커에 안 기댄다)" || echo "RED ✓"
-cp /tmp/C.bak "$C"; rm -f /tmp/C.bak
+C_TARGET="$(readlink "$C")"
+rm -f "$C"
+cp shared/codex/detect_codex.sh "$C"   # 바이트는 정본과 동일 — 그러나 이제 독립 파일이다
+chmod +x "$C"
+git status --short -- "$C"   # 타입이 바뀐 것이 diff 에 보여야 한다(심볼릭 링크 → 일반 파일)
+printf 'mutation 4 (링크 깨짐, 내용은 동일) → '
+bash shared/tests/test_no_new_duplication.sh >/dev/null 2>&1 && echo "GREEN ❌ (면제가 링크 여부에 안 기댄다)" || echo "RED ✓"
+rm -f "$C"; ln -s "$C_TARGET" "$C"   # 링크 복원
+git status --short -- "$C"   # 빈 출력이어야 한다 — 원상 복구 확인
 
 # 변이 5 — 회피: 무관한 두 파일에 같은 정본 마커를 붙인다
 D=plugins/quality-gates/scripts/discover-plan.sh
@@ -4777,9 +4955,12 @@ for f in shared/tests/test_copy_of_contract.sh shared/tests/test_no_new_duplicat
   printf '%-46s ' "$(basename "$f")"; head -30 "$f" | sed -n 's/^#[[:space:]]*guards:[[:space:]]*//p' | head -1
 done
 echo "=== 같은 diff 에서 둘 다 후보로 뽑히는가 ==="
-printf '\n# probe\n' >> plugins/spec-distill/scripts/detect_codex.sh
+# 주의(Task 16 Step 4와 같은 함정): detect_codex.sh 는 심볼릭 링크다. 경로에 직접
+# `>>` 하면 정본이 수정된다 — 정본 경로를 직접 프로브한다.
+printf '\n# probe\n' >> shared/codex/detect_codex.sh
 bash plugins/quality-gates/scripts/compute-test-scope-candidates.sh | grep -E 'test_copy_of|test_no_new'
-git checkout -- plugins/spec-distill/scripts/detect_codex.sh
+git checkout -- shared/codex/detect_codex.sh
+git status --short -- shared/codex/detect_codex.sh   # 빈 출력이어야 한다
 echo "=== 양방향 커버리지 ==="
 bash plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh 2>&1 | tail -8
 ```
@@ -4801,7 +4982,7 @@ Expected: **두 파일 모두** 실행 목록에 나온다. 후보에만 있고 
 
 ```bash
 git add shared/tests/test_no_new_duplication.sh
-git commit -m "test(shared): 20줄 블록 검사 — 새 중복 유입 방지"
+git commit -m "test(shared): 20줄 블록 검사 — 새 중복 유입 방지 + 심볼릭 링크 예외(mutation 증명 포함)"
 ```
 
 ---
@@ -4830,7 +5011,12 @@ echo "[before: 6,482 (SKILL 4,185 + agents 1,694 + commands 603)]"
 echo "CLAUDE.md (별도): $(wc -l < CLAUDE.md)"
 
 echo; echo "=== 3. 락이 대상 변경 시 선택됨 — 확장자 3종 ==="
-for probe in plugins/spec-distill/scripts/detect_codex.sh \
+# 주의: plugins/spec-distill/scripts/detect_codex.sh 는 이제 심볼릭 링크다(설계 §16.1).
+# 그 경로에 직접 `>>` 하면 셸이 링크를 따라가 shared/codex/detect_codex.sh(정본)가
+# 수정된다 — git checkout으로 링크 파일을 되돌려도 정본의 변경은 안 풀린다(Task 16·35
+# Step 4와 같은 함정). .sh 확장자 프로브는 정본 경로로 바꾼다 — plugins/**·shared/**
+# 양쪽 다 두 락의 `# guards:` 글롭에 걸리므로 어느 경로를 흔들어도 같은 것을 증명한다.
+for probe in shared/codex/detect_codex.sh \
              plugins/spec-distill/scripts/kill_switch_active.py \
              plugins/spec-distill/agents/spec-reviewer.md; do
   printf '  %-56s ' "$(basename "$probe")"
@@ -5317,6 +5503,7 @@ for ps, hs in sorted(bygroup.items(), key=lambda kv: -len(kv[1])):
 import argparse
 import collections
 import hashlib
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -5336,18 +5523,37 @@ FILES = [p for p in out.strip().split("\n")
          if (p.startswith("plugins/") or p.startswith("shared/"))
          and not any(x in p for x in ("/fixtures/", "/mocks/", "/harness/"))]
 
+# 2026-08-17 실측(설계 §16.1) 이후 Task 15·17이 detect_codex.sh·codex_findings_to_yaml.py
+# 를 물리 사본에서 심볼릭 링크로 바꿨다. Task 34(이 스크립트)는 PR6에서, 즉 그 전환
+# 이후에 돈다(B.4) — 심볼릭 링크를 무시하면 정본과 그 3~5개 링크가 "설명 안 된 동일
+# 블록"으로 잡혀 무릎 곡선이 왜곡된다. 락(shared/tests/test_no_new_duplication.sh)과
+# **같은 규칙**을 써야 한다는 이 파일 자신의 주석(exempt() 위)을 지키려면 이 스킵도
+# 같이 필요하다.
+def canonical_of(p):
+    pp = ROOT / p
+    if pp.is_symlink():
+        try:
+            target = (pp.parent / os.readlink(pp)).resolve()
+            return str(target.relative_to(ROOT))
+        except (OSError, ValueError):
+            return None
+    try:
+        t = pp.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    for line in t.split("\n")[:20]:
+        m = MARKER.match(line)
+        if m:
+            return m.group(2).rstrip("->").strip()
+    return None
+
 canon, body = {}, {}
 for p in FILES:
     try:
         t = (ROOT / p).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         continue
-    canon[p] = None
-    for i, line in enumerate(t.split("\n")[:20]):
-        m = MARKER.match(line)
-        if m:
-            canon[p] = m.group(2).rstrip("->").strip()
-            break
+    canon[p] = canonical_of(p)
     body[p] = [l for l in t.split("\n") if l.strip()]
 
 wins, sample = collections.defaultdict(set), {}
@@ -5420,7 +5626,7 @@ else:
 | §13 PR 분할 | PR1~PR6 구조 |
 | §14 완료 측정 | 36 |
 | §15 위험 | 각 태스크의 검증 스텝 |
-| §16 심볼릭 링크 실측 | 3 |
+| §16 심볼릭 링크 실측 | 3 (실측) · **§16.1 결과를 소비 — 15 · 16 · 17 · 35** (2026-08-17 실측이 채택으로 뒤집힘에 따라 이 네 태스크가 물리 사본 → 심볼릭 링크로 재설계됨) |
 | §15.1 남는 것 | 28 Step 7 · 26 Step 2 |
 
 **미결 6건의 처리:**
@@ -5431,7 +5637,7 @@ else:
 | 2 | `parents[N]` 재앵커 대상 | **도출 방법 확정** (3축 grep). 목록은 실행 시점 | Task 12 Step 2 |
 | 3 | PR1 범위 | **실행 시점** — 기준선 캡처 결과에 따름 | Task 1 |
 | 4 | `# guards:` 없는 셸 테스트 기본 동작 | **확정** — 현행 유지(`CHANGED_TESTS` 만). 순수 추가라 회귀 없음 | Task 5 |
-| 5 | `copy-of` 마커 정규식·문법 | **확정** — 4요구 전부 | Task 15 Step 5 |
+| 5 | `copy-of` 마커 정규식·문법 | **확정** — 4요구 전부. **2026-08-17 실측 이후**: `detect_codex.sh`·`codex_findings_to_yaml.py`는 심볼릭 링크로 전환돼 마커가 없다(설계 §16.1) — 4요구의 실제 확정 사례는 이제 물리 사본으로 남는 `read_preamble.sh` | ~~Task 15 Step 5~~ → Task 18 Step 3 |
 | 6 | 완료 측정 실측값 | **실행 시점**. before 값은 plan 작성 시점 실측으로 박음 | Task 36 |
 
 ## B.2 설계 서술 정정 2건
@@ -5457,7 +5663,7 @@ else:
 
 느슨하게 읽으면 순서를 어길 수 있는 자리들이다.
 
-1. **Task 3(심볼릭 링크 실측)이 뒤집히면 PR3c 전체가 무효다.** PR1 안에서 닫는다.
+1. **Task 3(심볼릭 링크 실측)이 뒤집히면 PR3c 전체가 무효다.** ~~PR1 안에서 닫는다.~~ **뒤집혔다 — 그러나 PR3c는 무효가 아니라 재설계됐다(2026-08-17, 설계 §16.1).** 심볼릭 링크는 **파일**을 대체하지 **함수**를 대체하지 않는다 — 완전 동일한 전체-파일 후보(`detect_codex.sh`·`codex_findings_to_yaml.py`, Task 15·17)만 물리 사본에서 심볼릭 링크로 바뀌었고, Task 16(동일성 락)·Task 35(20줄 검사)는 그 전환을 반영하도록 다시 쓰였다. **Task 18–24는 불변이다** — 부분 사본·함수 단위 중복은 심볼릭 링크로 다룰 수 없는 대상이라 처음부터 이 반전의 영향 밖이다.
 2. **Task 1(기준선)이 없으면 이후 모든 "새 RED 0" 판정이 불가능하다.**
 3. **Task 2(census SHA 고정)가 PR2보다 앞서야 한다.** 뒤면 아카이브 이동이 모집단을 줄여 "미배정 0"이 조치 아닌 이동으로 달성된다.
 4. **PR3a → 3b → 3c 순서를 바꾸지 않는다.** 옮기기 → 계측기 → 피검체. 순서가 섞이면 RED 귀속이 불가능하다.
@@ -5473,8 +5679,8 @@ else:
 | `test_guards_coverage_bidirectional.sh` | Task 6 | **Task 16 Step 5 · Task 35 Step 4** — 대상 락이 생긴 뒤라야 실제 판정이 난다. Task 6 시점의 PASS는 vacuous이며 그 사실을 그 태스크가 명시한다 |
 | `test_assert_behavior.sh` | Task 13 | Task 13 Step 5 (5종) |
 | `test_severity_mapping.py` | Task 28 | Task 28 Step 3 (구현 전 RED) |
-| `test_copy_of_contract.sh` | Task 16 | Task 16 Step 3 (3종 × 3위치) |
-| `test_no_new_duplication.sh` | Task 35 | Task 35 Step 3 (5종 × 3위치) |
+| `test_copy_of_contract.sh` | Task 16 | Task 16 Step 3 — **심볼릭 링크 축 3종**(변이 1·3은 위치 개념 없음, 파일 전체가 단위) + **`copy-of` 물리 사본 축 3종**(변이 1은 3위치, 스캐치 픽스처로 증명 — Task 16 시점엔 리포에 실제 물리 사본이 없다, B.1의 미결 5 참조) |
+| `test_no_new_duplication.sh` | Task 35 | Task 35 Step 3 (5종, 변이 1·2는 3위치) + **심볼릭 링크 예외 자체의 mutation**(변이 4 — 링크를 깨되 내용은 유지해 예외가 "링크임"에 반응하는지 증명) |
 
 **Task 6의 락은 자기 도입 시점에 이빨을 증명할 수 없다** — 재는 대상(`--emit-scanned`를 가진 락)이 아직 없기 때문이다. 이것을 숨기지 않고 그 태스크의 Step 2와 이 표에 적었다.
 
