@@ -329,7 +329,7 @@ wc -l "$SCRATCH"/census-*.md
 | `agents-md-section.md` ×4 · `branch-strategy.md` ×3 | **우연** | git 전략별 변형 — 설계상 서로 달라야 함 |
 | `docs/git-workflow/*` ↔ `project-init/templates/*` | **템플릿-인스턴스** | `{{SCOPE_CONVENTION}}`·`{{MERGE_STRATEGY}}` 치환 표식. `branch-strategy.md:63`의 rebase 조항은 **의도된 차이 — 통합하지 않는다** |
 | `setUp`·`tearDown`·`main`·`run`·`check`·`parse`·`read`·`test_*` 등 (py) | **우연** | `unittest` API 이름 또는 범용 이름. 같은 이름 다른 뜻 |
-| `note`·`fail`·`pass`·`ok`·`no`·`ng`·`field`·`assert_*`·`ag` (sh) | **부분 사본** → Task 14 | 판정 헬퍼. `field()`는 구현이 awk 2종·sed 1종이고 **인자 순서까지 다르다** |
+| 셸 **판정 헬퍼** — 이름 불문 (목록은 Task 14 Step 2 의 `HELPERS` 가 정본) | **부분 사본** → Task 14 | assertion 을 내고 pass/fail 을 세는 것 전부(설계 §9 범위 문장). `field()`는 구현이 awk 2종·sed 1종이고 **인자 순서까지 다르다**. **여기에 이름을 나열하지 않는다** — 나열하면 `HELPERS` 와 두 벌이 되어 드리프트하고, 좁은 쪽을 본 사람이 census 행을 놓친다(2026-08-17 실측: 좁은 목록이 `bad`·`expect`·persona 쌍을 놓쳤다) |
 
 **남은 후보**(위 표에 없는 것)는 이 스텝에서 한 행씩 분류한다. 판단이 갈리면 **더 무거운 쪽**(우연이 아니라 부분 사본)으로 분류한다 — 조치를 배정하고 나중에 "조치 불필요"로 닫는 것이 조치 없이 지나가는 것보다 낫다.
 
@@ -385,16 +385,25 @@ tgt = [r for r in rows if "진짜 사본" in r[1] or "부분 사본" in r[1]]
 print("모집단", len(tgt))
 PY
 
-# ③ **위치란이 사실인가** — 함수 이름은 1열에 기계적으로 있으므로 전수로 뜰 수 있다.
+# ③ **위치란이 사실인가** — 함수 이름·언어는 1열에 기계적으로 있으므로 전수로 뜰 수 있다.
 #    출력 경로가 그 행의 위치란과 다르면 그 행의 조치는 재검토 대상이다.
-grep -oE '^\| [0-9]+ \| `[A-Za-z_][A-Za-z0-9_]*`' "$CENSUS" | sed 's/.*`\(.*\)`/\1/' | sort -u \
-  | while IFS= read -r fn; do
-      hits=$(grep -rln "def ${fn}(\|^${fn}()" plugins/ 2>/dev/null | grep -v Binary | tr '\n' ' ')
-      printf '%-32s %s\n' "$fn" "${hits:-(정의 없음 — 위치란 재확인)}"
+#
+#    ⚠ **이름만으로 `sort -u` 하지 않는다.** 축 3 행은 119개인데 이름만 유일화하면 116이
+#    된다 — `check`·`emit`·`run_hook` 이 각각 (py)행과 (sh)행을 갖고 한 줄로 합쳐지기
+#    때문이다(실측). 116을 119로 읽으면 그 셋의 한쪽 언어가 검사되지 않고 지나간다.
+#    그래서 (이름, 언어) 쌍으로 유일화하고 언어별 패턴으로 뜬다.
+grep -oE '^\| [0-9]+ \| `[A-Za-z_][A-Za-z0-9_]*` \((py|sh)\)' "$CENSUS" \
+  | sed -E 's/.*`(.*)` \((py|sh)\)/\1 \2/' | sort -u \
+  | while read -r fn lang; do
+      if [ "$lang" = py ]; then pat="^[[:space:]]*def ${fn}\("; ext='\.py$'
+      else pat="^[[:space:]]*${fn}\(\)"; ext='\.sh$'; fi
+      hits=$(grep -rlE "$pat" plugins/ shared/ 2>/dev/null \
+               | grep -E "$ext" | grep -vE '/(fixtures|mocks|harness)/' | tr '\n' ' ')
+      printf '%-28s %-3s %s\n' "$fn" "$lang" "${hits:-(정의 없음 — 위치란 재확인)}"
     done
 ```
 
-Expected: ① 0건 · ② 배정+유예 = 모집단 · ③ 각 행의 위치란과 일치. **③이 불일치를 내면 그 행의 조치부터 다시 본다** — 위치가 틀리면 그 위에 얹힌 조치도 틀리다.
+Expected: ① 0건 · ② 모집단이 이 원장의 진짜/부분 사본 행 수와 같다(**배정/유예의 합 대조는 Task 36 Step 3의 앵커 달린 판본이 한다** — 여기서는 파싱이 행을 잃지 않았는지만 본다) · ③ 각 행의 위치란과 일치. **③이 불일치를 내면 그 행의 조치부터 다시 본다** — 위치가 틀리면 그 위에 얹힌 조치도 틀리다.
 
 ```bash
 git add docs/superpowers/plans/2026-08-17-devbrew-weight-reduction-census.md
@@ -1678,6 +1687,8 @@ git commit -m "refactor(project-init,plugin-audit): 테스트 위치를 plugins/
 > | `assert_absent <name> <ERE>` | qg persona 2 | `assert_file_absent` (같은 것) |
 > | `assert_body_grep <ERE> <msg>` (변수 대상) | qg 2 | `assert_grep "$BODY" <ERE> <msg>` (기존 헬퍼) |
 > | `check <name> <cmd> <expected>` | qg 6 | `assert_count_ge <cmd> <expected> <msg>` |
+> | `bad <msg>` | qg `test_agent_tools_lock_differential.sh:119` · `test_build_codex_prompt.sh:17` | **`no <msg>`** (기존 헬퍼 — 실측상 두 본문이 `no()` 와 공백 말고 다르지 않다) |
+> | `expect <want> [file] <msg>` | qg `test_agent_tools_lock_mutation.sh:30` · `test_review_floor_lock.sh:26` | **`assert_eq "$got" "$want" <msg>`** (기존 헬퍼 — `got` 을 구하는 줄은 파일에 남기고 비교·집계·출력만 옮긴다) |
 > | (없음 — 텍스트 대상 부정 정규식) | — | `assert_not_grep <text> <ERE> <msg>` (`assert_grep`의 짝) |
 
 **실측된 문제** 〔plan 작성 시점〕:
@@ -2021,7 +2032,7 @@ SCRATCH="$(cat .git/devbrew-weight-scratch)"
 # ag→assert_file_grep · ng/assert_absent/assert_not_grep→assert_file_absent · assert_body_grep→assert_grep)
 # 옛 이름과 새 이름을 **둘 다** 세는 합집합이 아니면 "감소"가 이관 자체 때문에 뜬다.
 # 〔이 패턴을 Step 5 가 그대로 다시 쓴다 — 두 곳이 갈리면 대조가 사과-오렌지가 된다.〕
-CALLS='ok|no|pass|fail|check|ag|agf|ng|assert_eq|assert_contains|assert_not_contains|assert_grep|assert_not_grep|assert_body_grep|assert_absent|assert_file_grep|assert_file_absent|assert_count_ge'
+CALLS='ok|no|pass|fail|bad|check|expect|ag|agf|ng|assert_eq|assert_contains|assert_not_contains|assert_grep|assert_not_grep|assert_body_grep|assert_absent|assert_file_grep|assert_file_absent|assert_count_ge'
 printf '%s\n' "$CALLS" > "$SCRATCH/assert-call-pattern.txt"
 : > "$SCRATCH/assert-count-before.txt"
 for f in $(git ls-files 'plugins/*' 'shared/*' | grep -E '(^|/)tests?/.*\.sh$' | grep -vE '/(fixtures|mocks|harness)/'); do
@@ -2035,11 +2046,19 @@ awk -F'\t' '{s+=$1} END {print "총 assertion 호출:", s}' "$SCRATCH/assert-cou
 
 - [ ] **Step 2: 자체 헬퍼를 정의하는 파일을 도출한다**
 
-**이름 목록은 census 축 3이 판정 헬퍼로 분류한 전량이다** — 좁은 목록을 쓰면 그 행들의 조치가 조용히 실행되지 않는다. 〔2026-08-17 실측〕 좁은 목록(`note|ok|no|pass|fail|assert_eq|assert_contains|assert_grep|field`)은 109 파일을 냈고, `ag`·`agf`·`ng`·`check`·`assert_absent`·`assert_not_grep`·`assert_not_contains`·`assert_body_grep` 를 더하면 **11 파일이 추가로 들어온다** — 그중 둘이 `test_adversarial_persona.sh`·`test_security_reviewer_persona.sh`(census #137·#150, Task 35의 20줄 검사가 실제로 잡는 쌍)다.
+**이름 목록은 census 축 3이 판정 헬퍼로 분류한 전량이다** — 좁은 목록을 쓰면 그 행들의 조치가 조용히 실행되지 않는다. 〔2026-08-17 실측, 두 차례에 걸쳐 넓혔다〕
+
+| 목록 | 도출 파일 수 | 새로 들어온 것 |
+|---|---|---|
+| 최초 (`note\|ok\|no\|pass\|fail\|assert_eq\|assert_contains\|assert_grep\|field`) | 109 | — |
+| +`ag`·`agf`·`ng`·`check`·`assert_absent`·`assert_not_grep`·`assert_not_contains`·`assert_body_grep` | **120** | 11 — 그중 둘이 `test_adversarial_persona.sh`·`test_security_reviewer_persona.sh`(census #137·#150, Task 35의 20줄 검사가 실제로 잡는 쌍) |
+| +**`bad`**·**`expect`** (census 위치란 재도출이 드러냄) | **122** | 2 — `test_agent_tools_lock_mutation.sh` · `test_review_floor_lock.sh` (census #105) |
+
+> **왜 `verdict`·`restore`·`run_case`·`has`·`mkrepo` 는 더하지 않는가** 〔실측: 각 정의의 **본문**이 `PASS=$((` / `FAIL=$((` 를 건드리는지 전수 판독〕. `verdict`(#107)·`restore`(#108)는 **어느 사이트도** 카운터를 안 올린다 — 출력 추출기·설정 복원이라 §9의 판정 헬퍼가 아니다. `run_case`(#43)·`has`(#61)·`mkrepo`(#106)는 **사이트마다 갈린다**(일부만 카운터를 올린다) — 이름만 같고 책임이 다르다는 census의 "우연" 판정과 일치하며, 이런 이름을 목록에 넣으면 **정본에 대응이 없는 헬퍼를 정의한 파일이 Step 3의 대상으로 들어와** 지울 것과 바꿔 넣을 것이 없는 상태가 된다. `bad`·`expect`는 반대로 **모든 사이트가** 카운터를 올린다.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
-HELPERS='note|ok|no|pass|fail|check|ag|agf|ng|field|assert_eq|assert_contains|assert_not_contains|assert_grep|assert_not_grep|assert_body_grep|assert_absent'
+HELPERS='note|ok|no|pass|fail|bad|check|expect|ag|agf|ng|field|assert_eq|assert_contains|assert_not_contains|assert_grep|assert_not_grep|assert_body_grep|assert_absent'
 git ls-files 'plugins/*' | grep -E '(^|/)tests?/.*\.sh$' | grep -vE '/(fixtures|mocks|harness)/' \
   | while IFS= read -r f; do
       grep -qE "^[[:space:]]*(${HELPERS})\(\)" "$f" && echo "$f"
@@ -2054,7 +2073,7 @@ git ls-files 'plugins/*' | grep -E '(^|/)tests?/.*\.sh$' | grep -vE '/(fixtures|
   | while IFS= read -r f; do
       grep -qE '^[[:space:]]*(note|ok|no|pass|fail|assert_eq|assert_contains|assert_grep|field)\(\)' "$f" && echo "$f"
     done | sort > /tmp/t14-narrow.txt
-echo "=== 넓힌 목록에만 있는 파일 (기대: 11건, persona 2건 포함) ==="
+echo "=== 넓힌 목록에만 있는 파일 (기대: 13건 = 11 + bad·expect 가 더한 2) ==="
 comm -23 <(sort /tmp/t14-targets.txt) /tmp/t14-narrow.txt
 ```
 
@@ -2102,7 +2121,7 @@ grep -rnE '\bassert_count_ge .*[^0-9[:space:]]$' plugins/*/tests/*.sh shared/tes
 echo "=== (위 출력이 비어야 한다 — 마지막은 msg, 그 앞이 기대 개수다) ==="
 
 echo "=== 이관 전 이름이 정의로 남아 있는가 (지우기 누락) ==="
-grep -rnE '^[[:space:]]*(check|ag|agf|ng|assert_absent|assert_not_grep|assert_body_grep|pass|fail)\(\)' \
+grep -rnE '^[[:space:]]*(check|ag|agf|ng|bad|expect|assert_absent|assert_not_grep|assert_body_grep|pass|fail)\(\)' \
   plugins/*/tests/*.sh 2>/dev/null
 echo "=== (위 출력이 비어야 한다) ==="
 
@@ -2745,7 +2764,7 @@ EOF
 if [ "$n_copies" -ge 1 ]; then
   ok "copy-of: 물리 사본 ${n_copies}건 스캔"
 else
-  ok "copy-of: 물리 사본 0건 — 이 사이클 이 시점엔 정상(Task 19 이후 채워진다)"
+  ok "copy-of: 물리 사본 0건 — 이 태스크 시점엔 정상(첫 실사용은 Task 17 Step 4b, 그다음 Task 19)"
 fi
 
 # ── 축 2: 형제 설정이 배포에 실린다 ───────────────────────────────────────
@@ -2804,7 +2823,7 @@ Expected: PASS · `git ls-files -s`가 mode `100755`
 
 > `100644`가 나오면 **락이 조용히 한 번도 실행되지 않는다.** `git update-index --chmod=+x`로 고친다.
 
-- [ ] **Step 3: mutation — 심볼릭 링크 축(도미넌스) 4종(A~D) + `MARKER_RE` 카나리아 1종(E) + `copy-of` 물리 사본 축 3종(1~3) (설계 §12.5)**
+- [ ] **Step 3: mutation — 심볼릭 링크 축(도미넌스) 5종(A~D + F) + `MARKER_RE` 카나리아 1종(E) + `copy-of` 물리 사본 축 3종(1~3) (설계 §12.5)**
 
 **심볼릭 링크 축** (실제 대상: `plugins/spec-distill/scripts/detect_codex.sh`, Task 15가 만든 진짜 링크):
 
@@ -2853,29 +2872,43 @@ printf '무변이(링크 축) →\n'; report
 git diff --stat "$V"   # 최종 상태가 원래 링크와 같은지 — diff 가 없어야 한다
 
 # 변이 F — 정본별 vacuous 가드. 배포 지점을 흔드는 게 아니라 **정본 목록**을 흔든다.
-# 참조 도출이 0건을 내는 정본을 더한다: codex_jsonl.py 는 `from codex_jsonl import` 로만
-# 소비돼 리포에 `scripts/codex_jsonl.py` 문자열이 없다(Task 17 Step 4b 가 이 이유로
-# 심볼릭 링크 대신 copy-of 를 골랐다). 다른 두 정본은 건드리지 않으므로, 합산 가드만
-# 있으면 그것들의 건강한 수에 가려 GREEN 이 난다.
+#
+# **자기 픽스처를 직접 만든다 — 다른 태스크의 산출물에 기대지 않는다.** 첫 판본은
+# `shared/codex/codex_jsonl.py`(Task 17 Step 4b 의 산출물)를 목록에 더했는데, B.4 는
+# Task 15만 Task 16 앞에 두므로 **이 태스크 실행 시점에 그 파일이 없을 수 있다.**
+# 없으면 락은 `no "정본 … 자체가 없다"` 로 빠지고 `continue` 해서 "0건 도출" 메시지에
+# 도달하지 못한다 — 아래 grep 이 GREEN 을 찍으며 **"가드가 깨졌다"고 거짓 보고**한다.
+# 실제 원인은 파일 부재인데 결론은 가드 결함이 되는, 계측기가 고장 난 채 판정하는 형태다.
 LOCK="shared/tests/test_copy_of_contract.sh"
+PROBE="shared/codex/_mutf_probe.py"
 cp "$LOCK" /tmp/lock_mutF.bak
+# 정본은 존재하되 **참조 도출이 0건**이어야 한다 — 리포 어디에도 `scripts/_mutf_probe.py`
+# 문자열이 없으므로 그 조건이 구조적으로 보장된다(import 로만 소비되는 모듈의 모형).
+printf '# mutation F probe — 이 파일은 mutation 안에서만 존재한다\nVALUE = 1\n' > "$PROBE"
 python3 - <<'PY'
 import pathlib
 p = pathlib.Path("shared/tests/test_copy_of_contract.sh"); t = p.read_text(encoding="utf-8")
 old = 'shared/codex/codex_findings_to_yaml.py"'
 assert old in t, "계측기 고장 — SYMLINK_CANONICALS 대입을 못 찾았다"
-p.write_text(t.replace(old, 'shared/codex/codex_findings_to_yaml.py\nshared/codex/codex_jsonl.py"', 1), encoding="utf-8")
+p.write_text(t.replace(old, 'shared/codex/codex_findings_to_yaml.py\nshared/codex/_mutf_probe.py"', 1), encoding="utf-8")
 PY
-git diff --stat "$LOCK"   # 계측기 확인 — 실제로 바뀌었는가
+# 계측기 확인 셋 — 하나라도 어긋나면 아래 판정은 무의미하다
+[ -f "$PROBE" ] || echo "❌ 계측기: 프로브 정본이 없다"
+git diff --stat "$LOCK" | tail -1
+grep -c '_mutf_probe' "$LOCK"      # 기대: 1 (목록에 실제로 들어갔는가)
+grep -rc 'scripts/_mutf_probe.py' plugins/ 2>/dev/null | grep -v ':0$' \
+  && echo "❌ 계측기: 참조가 존재한다 — 도출이 0건이 아니게 된다" || true
 printf 'mutation F (도출 0건 정본 추가) → '
-bash "$LOCK" 2>&1 | grep -E '배포 지점이 \*\*0건 도출\*\*|배포 지점이 .*0건 도출' \
+bash "$LOCK" 2>&1 | grep -qE '배포 지점이 .*0건 도출' \
   && echo "RED ✓ (정본별 가드가 반응)" \
   || echo "GREEN ❌ (합산 가드에 가려 이 정본이 통째로 안 검사된다)"
-cp /tmp/lock_mutF.bak "$LOCK"; rm -f /tmp/lock_mutF.bak
-git diff --stat "$LOCK"   # 빈 출력이어야 한다 — 원상 복구 확인
+cp /tmp/lock_mutF.bak "$LOCK"; rm -f /tmp/lock_mutF.bak "$PROBE"
+git status --short shared/    # 빈 출력이어야 한다 — 락·프로브 둘 다 원상 복구
 ```
 
-> **변이 F 는 이 사이클이 실제로 마주친 상황이다.** Task 17 Step 4b 가 `shared/codex/codex_jsonl.py` 를 만들 때 심볼릭 링크로 배포하려다, 참조 도출이 이 정본에 대해 0건을 낸다는 것을 발견하고 `copy-of` 로 우회했다. 우회는 그 태스크의 선택일 뿐 **가드의 구멍은 그대로였다** — `SYMLINK_CANONICALS` 는 자라도록 설계돼 있고(위 목록 주석), 다음 저자가 import 로만 소비되는 정본을 더하면 조용히 같은 상태가 된다. 변이 F 가 그 자리를 지킨다.
+> **변이 F 는 이 사이클이 실제로 마주친 상황이다.** Task 17 Step 4b 가 `shared/codex/codex_jsonl.py` 를 심볼릭 링크로 배포하려다, 참조 도출이 그 정본에 대해 0건을 낸다는 것을 발견하고 `copy-of` 로 우회했다. 우회는 그 태스크의 선택일 뿐 **가드의 구멍은 그대로였다** — `SYMLINK_CANONICALS` 는 자라도록 설계돼 있고, 다음 저자가 import 로만 소비되는 정본을 더하면 조용히 같은 상태가 된다. 변이 F 가 그 자리를 지킨다.
+>
+> **부수 발견 — `SYMLINK_CANONICALS` 의 두 항목이 이 태스크 시점에 존재하지 않을 수 있다.** `shared/codex/detect_codex.sh` 는 Task 15의 산출물이고 B.4 5번이 15 → 16 을 강제하므로 안전하다. 그러나 **`shared/codex/codex_findings_to_yaml.py` 는 Task 17의 산출물이고 B.4 어디에도 17 → 16 순서가 없다.** 번호 순서대로 돌면 16 이 17 보다 먼저이므로, 이 태스크의 Step 2(락 첫 실행)에서 그 정본이 없어 `no "정본 … 자체가 없다"` 로 RED 가 난다 — 락의 결함이 아니라 **순서 문제**다. B.4 에 5b 를 더해 못박았다.
 
 **MARKER_RE 카나리아 mutation** (Important 1 — 축 1b 가 자기 것으로 vacuous 방지를 하는지):
 
@@ -6012,27 +6045,59 @@ python3 "$SCRATCH/funcs.py"  > "$SCRATCH/funcs-after.md"
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 CENSUS=docs/superpowers/plans/2026-08-17-devbrew-weight-reduction-census.md
-# 배정 + 명시 유예 = 진짜/부분 사본 행 수 인가 (한 행을 두 번 세지 않았는가).
-# 수 자체의 정의는 census §미배정에 한 번만 있다 — 여기서 상수로 다시 적지 않는다.
 python3 - "$CENSUS" <<'PY'
 import sys, re, pathlib
+# 모집단은 census §미배정의 "세는 법" 표가 고정한 값이다. **여기에 앵커를 건다** —
+# 앵커가 없으면 파싱이 행을 잃어도 남은 행끼리 합이 맞아 OK 가 찍힌다(아래 주석).
+EXPECTED_POP = 100          # census §미배정: 진짜 사본 + 부분 사본
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+
+# ── 파서 신뢰성 선검사 ────────────────────────────────────────────────────
+# 셀 안의 이스케이프된 파이프(`\|`)는 마크다운에서는 리터럴 문자지만 `split("|")` 에는
+# **열 하나로 보인다.** 그 행은 열이 하나 밀려 분류 열을 엉뚱한 인덱스에서 읽고,
+# 결과적으로 **모집단에서 조용히 빠진다** — 그리고 남은 행끼리는 여전히 합이 맞아
+# "OK" 가 찍힌다. 이 원장에는 이미 그런 셀이 있다(#50 의 `... \| python3 HOOK`).
+# 지금은 그 파이프가 파서가 보는 인덱스보다 뒤에 있어 무해할 뿐, 고정된 것이 아니다.
+# 그래서 **셀을 세기 전에 이스케이프를 제거**하고, 그래도 남는 위험은 앵커가 받는다.
+rows = []
+for line in text.split("\n"):
+    if not re.match(r'^\| (\d+) \|', line): continue
+    # `\|` 를 파이프 아닌 자리표시자로 치환해 열 분해에서 빼고, 분해 뒤 되돌린다.
+    safe = line.rstrip().replace("\\|", "\x00")
+    cells = [x.strip().replace("\x00", "\\|") for x in safe.strip("|").split("|")]
+    rows.append(cells)
+
 a = d = bad = tgt = 0
-for line in pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").split("\n"):
-    m = re.match(r'^\| (\d+) \|', line)
-    if not m: continue
-    c = [x.strip() for x in line.rstrip().strip("|").split("|")]
-    cls, act = (c[2], c[3]) if len(c) == 5 else (c[5], c[6])
+shape = {}
+for c in rows:
+    shape[len(c)] = shape.get(len(c), 0) + 1
+    if len(c) == 5:   cls, act = c[2], c[3]
+    elif len(c) == 8: cls, act = c[5], c[6]
+    else:
+        print(f"❌ #{c[0]}: 열 {len(c)}개 — 파서가 아는 모양(5 또는 8)이 아니다. 이 행은 세지 못한다")
+        continue
     if "진짜 사본" not in cls and "부분 사본" not in cls: continue
     tgt += 1
     if not act or "조치 없음" in act: bad += 1
     elif act.startswith("**유예"): d += 1
     else: a += 1
+
+print(f"행 모양 분포: {shape}")
 print(f"모집단 {tgt} = 배정 {a} + 명시 유예 {d} + 미배정 {bad}")
-print("OK" if bad == 0 and a + d == tgt else "❌ 미배정이 남았거나 합이 안 맞는다")
+ok = True
+if tgt != EXPECTED_POP:
+    print(f"❌ 모집단이 {tgt} 다 — 고정값 {EXPECTED_POP} 과 다르다. **행을 잃었거나 census 가 바뀌었다.**")
+    print("   합이 맞아도 이것부터 본다: 잃은 행끼리는 합이 맞는다.")
+    ok = False
+if bad: print(f"❌ 미배정 {bad}건"); ok = False
+if a + d != tgt: print("❌ 배정+유예가 모집단과 다르다 — 한 행을 두 번 셌거나 못 셌다"); ok = False
+print("OK" if ok else "FAIL")
 PY
 ```
 
-Expected: 미배정 **0** · 배정 + 유예 = 모집단.
+Expected: `행 모양 분포: {5: 31, 8: 119}` · 모집단 **100** · 미배정 **0** · 배정 + 유예 = 100 · `OK`.
+
+> **앵커가 왜 필요한가** (2026-08-17 fix round 2, mutation 으로 확인). 앵커 없는 판본은 부분 사본 행 하나의 분류 앞 열에 `\|` 를 넣자 그 행을 파싱에서 잃고 `모집단 99 = 배정 54 + 명시 유예 45 + 미배정 0` 뒤에 **`OK`** 를 찍었다. 이 원장이 닫으려던 결함(검사가 자기가 잰다고 주장하는 것을 안 재면서 통과)과 **같은 모양**이다. 위 판본은 이스케이프를 먼저 제거하고, 모양이 5·8이 아닌 행을 이름으로 신고하고, 모집단을 고정값과 대조한다.
 
 **이 검사는 필요조건일 뿐이다.** 조치란이 가리키는 태스크가 그 행의 일을 실제로 하는지는 스크립트가 못 본다 — census §미배정의 기계적 확인 ③(함수 이름으로 정의 지점을 떠서 위치란과 대조)을 여기서도 돌리고, 불일치가 나온 행은 조치를 다시 읽는다.
 
@@ -6631,6 +6696,7 @@ else:
 3. **Task 2(census SHA 고정)가 PR2보다 앞서야 한다.** 뒤면 아카이브 이동이 모집단을 줄여 "미배정 0"이 조치 아닌 이동으로 달성된다.
 4. **PR3a → 3b → 3c 순서를 바꾸지 않는다.** 옮기기 → 계측기 → 피검체. 순서가 섞이면 RED 귀속이 불가능하다.
 5. **Task 15가 Task 16보다 앞선다** — 락을 먼저 달면 도입 즉시 RED다(C17: 사본 제거 우선).
+5b. **Task 17도 Task 16보다 앞선다** (2026-08-17 fix round 2 발견). 5번과 **같은 이유인데 빠져 있었다**: Task 16의 `SYMLINK_CANONICALS` 는 정본 둘을 담는데 `shared/codex/detect_codex.sh` 는 Task 15의, **`shared/codex/codex_findings_to_yaml.py` 는 Task 17의 산출물**이다. 번호 순서(16 → 17)대로 돌면 Task 16 Step 2의 락 첫 실행에서 두 번째 정본이 없어 `no "정본 … 자체가 없다"` 로 RED 가 난다 — C17이 금지하는 "락을 먼저 달기"의 두 번째 인스턴스다. **실행 순서: 15 → 17 → 16 → 18 → 19 → …** Task 17 Step 5의 `bash shared/tests/test_copy_of_contract.sh` 한 줄만 그 순서에서 아직 없는 파일을 부르므로, **Task 16 완료 직후에 되돌아와 돌린다**(그 스텝의 나머지 검증은 Task 17 시점에 그대로 유효하다).
 6. **Task 34가 Task 35보다 앞선다** — 무릎을 모르고 임계를 박을 수 없다.
 7. **Task 25(env rename)가 Task 26(좀비 제거)보다 앞선다** — rename 전 이름으로 좀비를 판정하면 옛 이름 전부가 좀비로 보인다.
 

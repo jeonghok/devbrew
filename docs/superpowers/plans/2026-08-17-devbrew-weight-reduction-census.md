@@ -73,7 +73,7 @@ population 총합 = 18 + 6 + 119 + 5 = 148 raw 후보. 아래 분류표는 축 1
 | 35 | `no` (sh) | 15/5 | ◐ | — | 부분 사본 | Task 14 | 〔seed〕 판정 헬퍼 패밀리 |
 | 36 | `run_hook` (py) | 7/7 | ⚠ | quality-gates test_session_end_cleanup.py 외 3 · project-init hooks/tests 2 · spec-distill 1 | 부분 사본 | **유예 B** (python 테스트 헬퍼) — python 테스트 헬퍼의 **정본 자리를 이 사이클이 만들지 않는다**(설계 §9는 셸 판정 헬퍼 한정). §12.4 임계 미만 — 실측 | 실측: 두 샘플 모두 `subprocess.run([sys.executable, HOOK], input=json.dumps(payload), env=...)` 골격 동일, env 처리만 상이 — 3개 플러그인에 흩어진 훅-실행 테스트 헬퍼 |
 | 37 | `_disabled` (py) | 7/7 | ⚠ | qg post-tool-use.py·post-tool-use-session-tracker.py·session-start-advisor.py·session-end-cleanup.py·qg-gc.py, spec-distill session-end-cleanup.py·spec-distill-gc.py | **진짜 사본** | shared/ 정본 + copy-of (**Task 19** — `_disabled` 7곳을 이 태스크가 명시적으로 담는다) | 실측: 전부 `os.environ.get("DEVBREW_DISABLE_<PLUGIN>") == "1"` 반환 — `kill_switch_active`(#42)와 **동일 책임의 다른 이름**. CLAUDE.md가 보안 컨트롤로 규정한 kill switch 판정이 함수명 2종(kill_switch_active/​_disabled)·파일 12곳에 흩어져 있음 — census 함수축이 seed의 5곳 집계를 7곳 더 확장 |
-| 38 | `emit` (py) | 6/6 | ⚠ | plugin-audit check-staleness.py·codex_audit_to_json.py, project-init docs-lint.py, spec-distill merge_review.py·merge_brief_review.py | 우연 | 조치 없음 | 각 스크립트의 출력 포맷(구조화 finding/YAML/JSON)이 서로 다름 — "출력하다" 범용 동사 |
+| 38 | `emit` (py) | 6/6 | ⚠ | agent-transparency `prepare_standup.py`, plugin-audit `check-staleness.py`·`codex_audit_to_json.py`, project-init `docs-lint.py`, spec-distill `merge_review.py`·`merge_brief_review.py` — **6곳** | 우연 | 조치 없음 | 각 스크립트의 출력 포맷(구조화 finding/YAML/JSON)이 서로 다름 — "출력하다" 범용 동사 |
 | 39 | `check` (sh) | 6/4 | ◐ | — | 부분 사본 | Task 14 (정본 이름은 Task 13 Interfaces 의 대응표) | 3곳이 바이트 동일한 하위집합 존재(◐ 표기 자체가 그 증거) — note/fail/pass류와 같은 판정-헬퍼 계열로 판단 |
 | 40 | `field` (sh) | 6/4 | ◐ | — | 부분 사본 | Task 14 | 〔seed〕 구현이 awk 2종·sed 1종, 인자 순서까지 다름 |
 | 41 | `_degrade_if_empty` (sh) | 5/5 | ⚠ | — | 부분 사본 | 공통 조각만 추출 (**Task 20**) | 〔seed〕 5러너가 각자 다른 프롬프트 빌더를 부름, 출력 스키마 4종은 §6.2 통일 대상 |
@@ -139,10 +139,10 @@ population 총합 = 18 + 6 + 119 + 5 = 148 raw 후보. 아래 분류표는 축 1
 | 101 | `_norm_sev` (py) | 2/2 | ⚠ | quality-gates `synthesize_findings.py:365`, `synthesize_artifact_findings.py:49` | 부분 사본 | **유예 D** (통합이 동작 변경) — 두 본문의 fallback **방향이 정반대**라 합치는 것은 머지 차단 동작을 바꾸는 별개 결정이다. **fallback 방향은 절대 통합하지 말 것.** §15.1 / Task 28 Step 7 이 이 divergence 를 기록한다. §12.4 임계 미만 — 실측 | **정정(fix round 2)**: 이전 판이 "같은 fail-closed 정책"이라 적었는데 코드와 반대다. 실측: `synthesize_findings.py:365`는 미지 severity를 **SUGGESTION**으로 강등(fail-open, 주석 "Normalize to SUGGESTION… so counts == rows"), `synthesize_artifact_findings.py:49`는 **CRITICAL**로 승격(fail-closed, 주석 "Treat anything off-vocab as CRITICAL"). 두 함수는 시그니처·어휘-셋 검사 구조는 근접하지만 **동일 시나리오에 정반대 fallback 방향**을 갖는, plan §15.1/Task 28 Step 7에 이미 "머지 차단 동작을 바꾸는 별개 결정"으로 out-of-scope 기록된 **의도적** 분기다. 누가 이 행을 집더라도 fallback 분기(CRITICAL/SUGGESTION)는 절대 통합하지 말 것 — 우연으로 낮추면 이 경고 자체가 표에서 사라져 무조건 조치-없음으로 스킵될 위험이 있어, 부분 사본으로 유지하되 조치란에 금지 문구를 명시하는 쪽을 택했다. **2026-08-17 재검토**: 조치란이 가리키던 "Task 20·21"은 이 두 파일을 Files 에 담은 적이 없다(형태 ① 오귀속) — 유예 D 로 바꾸고 금지 문구는 그대로 뒀다 |
 | 102 | `assert_not_grep` (sh) | 2/2 | ⚠ | — | 부분 사본 | Task 14 (정본 이름은 Task 13 Interfaces 의 대응표) | 〔seed〕 assert_* 패밀리 |
 | 103 | `write_agent` (sh) | 2/2 | ⚠ | quality-gates `test_agent_tools_lock_mutation.sh`, `test_agent_tools_lock_differential.sh` | 부분 사본 | **유예 A** (셸 하네스) — quality-gates 안의 mutation-lock 하네스. 설계 §9의 `shared/tests/` 는 **판정 헬퍼**의 자리이고 그 근거는 소유 관계인데 이 헬퍼는 **그 플러그인 자신의 것**이라 근거가 옮겨가지 않는다. 같은 플러그인 안이므로 §6.1③이 적용 가능하나 이 사이클 범위 밖. §12.4 임계 미만 — 실측 | 실측: 둘 다 `printf -- '---\nname: probe\ndescription: fixture\nmodel: inherit\n...\n---\n\nbody\n'`로 같은 probe-agent frontmatter를 씀 — 대상 경로와 printf 포맷(`%b`/`%s`)만 다름. `bad`/`expect`/`verdict`(#104/105/107)와 같은 mutation-lock 하네스 계열 |
-| 104 | `bad` (sh) | 2/2 | ⚠ | quality-gates lock 테스트군(test_agent_tools_lock_mutation.sh 등) | 부분 사본 | **유예 A** (셸 하네스) — quality-gates 안의 mutation-lock 하네스. 설계 §9의 `shared/tests/` 는 **판정 헬퍼**의 자리이고 그 근거는 소유 관계인데 이 헬퍼는 **그 플러그인 자신의 것**이라 근거가 옮겨가지 않는다. 같은 플러그인 안이므로 §6.1③이 적용 가능하나 이 사이클 범위 밖. §12.4 임계 미만 — 실측 | mutation-lock 테스트 하네스 계열(verdict/expect/bad) — MEMORY의 "grep 회귀 락" 패턴과 일치 |
-| 105 | `expect` (sh) | 2/2 | ⚠ | 위와 같은 lock 테스트군 | 부분 사본 | **유예 A** (셸 하네스) — quality-gates 안의 mutation-lock 하네스. 설계 §9의 `shared/tests/` 는 **판정 헬퍼**의 자리이고 그 근거는 소유 관계인데 이 헬퍼는 **그 플러그인 자신의 것**이라 근거가 옮겨가지 않는다. 같은 플러그인 안이므로 §6.1③이 적용 가능하나 이 사이클 범위 밖. §12.4 임계 미만 — 실측 | 위와 같음 |
+| 104 | `bad` (sh) | 2/2 | ⚠ | quality-gates `test_agent_tools_lock_differential.sh:119` · `test_build_codex_prompt.sh:17` | 부분 사본 | **Task 14** — 판정 헬퍼다. 실측: 두 본문이 `bad() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }` 로 **공백 말고 다르지 않다**(`assert.sh` 의 `no()` 와 같은 책임). 두 파일 다 이미 도출 목록에 있고(`ok()` 를 정의한다), `bad` 를 Step 2 의 `HELPERS` 에 더한다 | **정정(2026-08-17 fix round 2)**: 이전 판의 위치란이 `test_agent_tools_lock_mutation.sh` 를 댔는데 **그 파일에는 `bad()` 가 없다**(`grep -rn '^bad()' plugins/` 로 확인 — 실제는 differential + build_codex_prompt). 위치가 틀렸으므로 그 위에 얹힌 '유예 A(mutation-lock 하네스)'도 틀렸다 — `bad` 는 하네스가 아니라 **판정 헬퍼**이고 설계 §9 범위 안이다 |
+| 105 | `expect` (sh) | 2/2 | ⚠ | quality-gates `test_agent_tools_lock_mutation.sh:30` · `test_review_floor_lock.sh:26` | 부분 사본 | **Task 14** — 판정 헬퍼다. 실측: 두 본문 다 `got` 을 구한 뒤 `want` 와 비교해 PASS/FAIL 을 세고 찍는다. **`got` 을 구하는 방법만 다르다**(`bash "$LOCK" "$TMP"` vs `check_floor "$2"`) — 그 부분은 파일에 남기고 비교·집계·출력만 기존 `assert_eq "$got" "$want" "$msg"` 로 바꾼다(새 헬퍼 불필요). 두 파일은 **현재 도출 목록에 없다** — `expect` 를 `HELPERS` 에 더하면 들어온다 | **정정(2026-08-17 fix round 2)**: 이전 판이 위치를 "위와 같은 lock 테스트군"(=#104과 같은 쌍)이라 적었는데 **쌍 자체가 다르다** — #104는 differential+build_codex_prompt, 이 행은 mutation+review_floor_lock 이다. 파일명을 안 적어 기계적 대조를 빠져나갔다 |
 | 106 | `mkrepo` (sh) | 2/2 | ⚠ | quality-gates `test_artifact_branch_guard.sh`, `test_artifact_commit.sh` | 우연 | 조치 없음 | 실측(2개 본문 전부 판독): 전자는 feature 브랜치 1개만 만드는 fixture, 후자는 doc.md+other.md 두 파일을 커밋하는 fixture — 공유 관용구(mktemp+git init)는 같지만 실제 레이아웃은 시나리오별로 다름(`mk_repo`#49와 별개 이름) |
-| 107 | `verdict` (sh) | 2/2 | ⚠ | quality-gates lock 테스트군 | 부분 사본 | **유예 A** (셸 하네스) — quality-gates 안의 mutation-lock 하네스. 설계 §9의 `shared/tests/` 는 **판정 헬퍼**의 자리이고 그 근거는 소유 관계인데 이 헬퍼는 **그 플러그인 자신의 것**이라 근거가 옮겨가지 않는다. 같은 플러그인 안이므로 §6.1③이 적용 가능하나 이 사이클 범위 밖. §12.4 임계 미만 — 실측 | #104/105와 같은 mutation-lock 하네스 계열 |
+| 107 | `verdict` (sh) | 2/2 | ⚠ | quality-gates `test_artifact_path_auth.sh:6` · `test_codex_copies_agree.sh:38` | 부분 사본 | **유예 D** (공유할 본문이 없다) — 실측: 두 본문은 무관한 **한 줄짜리 출력 추출기**다. `verdict() { python3 "$SCRIPT" "$1" "$2" \| sed -n 's/^auth: //p'; }` vs `verdict() { grep -E '^  (codex_failed\|reason\|...):' \|\| true; }` — **어느 쪽도 assertion 을 내거나 PASS/FAIL 을 세지 않아** 설계 §9의 판정 헬퍼 범위 밖이고, 추출할 공통 조각 자체가 없다. §12.4 임계 미만 — 실측 | **정정(2026-08-17 fix round 2)**: 이전 판이 위치를 "quality-gates lock 테스트군", 근거를 "#104/105와 같은 mutation-lock 하네스 계열"이라 적었는데 **둘 다 사실이 아니다** — 실제 두 파일은 lock 테스트가 아니고, #104·#105 와 파일이 겹치지도 않는다. 이름만 같은 서로 무관한 함수다 |
 | 108 | `restore` (sh) | 2/2 | ⚠ | quality-gates test_cost_consent.sh·test_check_allowed_tools_order.sh | 부분 사본 | **유예 A** (셸 하네스) — quality-gates 안의 설정 복원 헬퍼. 설계 §9의 `shared/tests/` 는 **판정 헬퍼**의 자리이고 그 근거는 소유 관계인데 이 헬퍼는 **그 플러그인 자신의 것**이라 근거가 옮겨가지 않는다. 같은 플러그인 안이므로 §6.1③이 적용 가능하나 이 사이클 범위 밖. §12.4 임계 미만 — 실측 | 같은 플러그인 내 설정 복원 테스트 헬퍼 — 판단 갈림, 무거운 쪽으로 |
 | 109 | `section_window` (sh) | 2/2 | ⚠ | quality-gates test_codex_result_banner.sh·test_runtime_verdict_precedence.sh | 부분 사본 | **유예 A** (셸 하네스) — quality-gates 안의 윈도우드-grep 헬퍼. 설계 §9의 `shared/tests/` 는 **판정 헬퍼**의 자리이고 그 근거는 소유 관계인데 이 헬퍼는 **그 플러그인 자신의 것**이라 근거가 옮겨가지 않는다. 같은 플러그인 안이므로 §6.1③이 적용 가능하나 이 사이클 범위 밖. §12.4 임계 미만 — 실측 | 윈도우드-grep 락 테스트 기법(§12.4 계열)의 quality-gates측 인스턴스 |
 | 110 | `assert_not_contains` (sh) | 2/2 | ⚠ | — | 부분 사본 | Task 14 (정본 이름은 Task 13 Interfaces 의 대응표) | 〔seed〕 assert_* 패밀리 |
@@ -212,11 +212,11 @@ population 총합 = 18 + 6 + 119 + 5 = 148 raw 후보. 아래 분류표는 축 1
 | 항 | 정의 | 값 |
 |---|---|---|
 | **모집단** | 분류표 150행 중 **진짜 사본 + 부분 사본** | **100** |
-| **배정** | 조치란이 **태스크(필요하면 스텝까지)** 를 지목한 행 | **55** |
-| **명시 유예** | 조치란이 **유예 묶음**(A–D)을 지목한 행 | **45** |
+| **배정** | 조치란이 **태스크(필요하면 스텝까지)** 를 지목한 행 | **57** |
+| **명시 유예** | 조치란이 **유예 묶음**(A–D)을 지목한 행 | **43** |
 | **미배정** | 조치란이 비었거나 "조치 없음"인 행 | **0** |
 
-**한 행은 정확히 한 번 센다.** #8은 판정 헬퍼 부분이 Task 14로 가고 커버 범위 잔여만 유예 사유 E로 같은 셀 안에 적혀 있다 — **배정으로 센다.** 잔여를 별도 행으로 세지 않으므로 A+B+C+D = 45 이고 E는 묶음이 아니라 #8 안의 각주다. 55 + 45 = 100.
+**한 행은 정확히 한 번 센다.** #8은 판정 헬퍼 부분이 Task 14로 가고 커버 범위 잔여만 유예 사유 E로 같은 셀 안에 적혀 있다 — **배정으로 센다.** 잔여를 별도 행으로 세지 않으므로 A+B+C+D = 43 이고 E는 묶음이 아니라 #8 안의 각주다. 57 + 43 = 100.
 
 > ### 2026-08-17 조치란 재검토 — 이 절이 왜 다시 쓰였나
 >
@@ -230,7 +230,21 @@ population 총합 = 18 + 6 + 119 + 5 = 148 raw 후보. 아래 분류표는 축 1
 > - **#112 `run_in_env`** — "Task 22에 흡수"로 covered 였다. 실측: 정의는 `tests/test_discover_plan.sh:33`·`test_discover_spec.sh:34` 두 **테스트** 파일에 있고 제품 스크립트 2개에는 **0회**다. Task 22는 제품을 합칠 뿐이라 **테스트 파일의 중복 헬퍼는 그대로 남는다.** → 유예 A.
 > - **#116 `run_gc`** — "Task 21"로 covered 였다. **위치란 자체가 사실이 아니었다**: `grep -c run_gc` 결과 `qg-gc.py`·`spec-distill-gc.py` 에 **0회**, 정의는 `tests/test_qg_gc.py:14`·`tests/test_gc.py:12` 다. → 유예 B.
 >
-> 그래서 2라운드는 **100행 전량의 정의 지점을 `grep -rln` 으로 다시 뜬 뒤** 태스크 Files 와 대조했다. 나머지 covered 행(33)은 그 대조를 통과했다 — 예컨대 #134 `has_auth_error` 는 `^def` 로는 안 잡히지만 두 `codex_findings_to_yaml.py` 의 `main()` 안 중첩 함수라 Task 17의 심볼릭 링크가 그대로 흡수한다.
+> 그래서 2라운드는 **covered 33행 전량의 정의 지점을 `grep -rln` 으로 다시 뜬 뒤** 태스크 Files 와 대조했다. 예컨대 #134 `has_auth_error` 는 `^def` 로는 안 잡히지만 두 `codex_findings_to_yaml.py` 의 `main()` 안 중첩 함수라 Task 17의 심볼릭 링크가 그대로 흡수한다.
+>
+> **3라운드 — 재도출을 버킷이 아니라 모집단 전체로 넓혔다.** 2라운드는 covered 만 다시 떴고 **유예 버킷은 안 떴는데, 같은 결함이 거기 남아 있었다.** 축 3의 119행 전량을 함수 이름·언어로 다시 떠서 위치란과 대조한 결과:
+>
+> | | 수 | |
+> |---|---|---|
+> | 정확 | 84 | 위치란의 파일 = 실측 정의 지점 |
+> | **거짓** | **3** | #104(유령 파일) · #105(쌍 오식별) · #107(서술이 실측과 다름) |
+> | 불완전 | 1 | #38 — 6곳 중 5곳만 적음 |
+> | 모호하나 참 | 12 | "동일 파일쌍"(7) · "(다수, 표본)"(3) · "외 N"(2) — 대조해 보니 전부 맞다 |
+> | 빈칸(`—`) | 19 | seed 시점 행. 틀린 것이 아니라 **안 적힌 것** |
+>
+> 84+3+1+12+19 = 119. **거짓 3건 중 2건(#104·#105)은 파일명을 안 적어 기계적 대조를 빠져나갔고**, 그래서 3라운드는 "위치란이 대는 파일이 틀렸나"만이 아니라 **"위치란이 파일을 대기는 하나"** 도 함께 봤다. 세 건 다 유예 버킷에 있었다 — 2라운드가 멈춘 자리다.
+>
+> **축 1·2·4(31행)는 후보란 자체가 파일 경로다**(`detect_codex.sh ×3` 처럼). 별도 위치란이 없어 같은 종류의 불일치가 생길 자리가 없고, 그 경로들은 각 태스크 Files 와의 대조에서 이미 확인됐다 — 그래서 축 3과 같은 재도출을 하지 않았다. 이 판단을 여기 적어 두는 이유는 "안 했다"와 "필요 없다"를 구별하기 위해서다.
 >
 > **이 둘이 왜 즉시 터지는가**: Task 35의 20줄 중복 락을 현재 트리에 돌리면 **6쌍**이 위반이고, 심볼릭 링크 전환(Task 15·17)을 시뮬레이션한 트리에서는 **2쌍**이 남는다 — 그 2쌍이 정확히 #149(훅 8블록)와 #137/#150(persona 7블록)이다. 즉 **아무도 제거하지 않을 중복 때문에 PR6의 핵심 산출물이 첫 실행에서 RED 로 시작**할 참이었다. 첫 실행이 RED 인 락은 꺼진다.
 >
@@ -246,15 +260,15 @@ population 총합 = 18 + 6 + 119 + 5 = 148 raw 후보. 아래 분류표는 축 1
 
 | 묶음 | 행 수 | 사유 |
 |---|---|---|
-| **A** 셸 하네스 | 16 | 설계 §9가 `shared/tests/` 를 판정 헬퍼의 자리로 삼은 **근거는 소유 관계**다 — *"판정 헬퍼는 어느 한 플러그인의 것이 아니다"*. 픽스처 빌더·훅 실행 래퍼·윈도우 추출은 **그 플러그인 자신의 것**이라 그 근거가 옮겨가지 않는다 |
+| **A** 셸 하네스 | 13 | 설계 §9가 `shared/tests/` 를 판정 헬퍼의 자리로 삼은 **근거는 소유 관계**다 — *"판정 헬퍼는 어느 한 플러그인의 것이 아니다"*. 픽스처 빌더·훅 실행 래퍼·윈도우 추출은 **그 플러그인 자신의 것**이라 그 근거가 옮겨가지 않는다 |
 | **B** python 테스트 헬퍼 | 13 | python 테스트 헬퍼의 **정본 자리를 이 사이클이 만들지 않는다** — 설계 §9는 셸 판정 헬퍼(`assert.sh`) 한정이다 |
 | **C** 1~3줄 관용구 | 8 | 정본으로 빼면 소비 지점마다 import/source 1줄이 생겨 **순증** |
-| **D** 통합이 동작 변경 | 8 | 두 본문의 계약·방향·소비 키가 다르다. 합치는 것은 별개 결정 (§15.1) |
-| 합 | **45** | |
+| **D** 통합이 동작 변경 | 9 | 두 본문의 계약·방향·소비 키가 다르다. 합치는 것은 별개 결정 (§15.1) |
+| 합 | **43** | |
 
 **E는 묶음이 아니다.** #8의 셀 안에만 있는 각주다 — 그 행은 판정 헬퍼 부분이 Task 14로 가므로 **배정으로 센다**(위 "세는 법"). 유예 행을 세는 곳에 E를 더하면 43·45가 갈린다.
 
-유예 행 (45): 13 · 36 · 50 · 62 · 66 · 72 · 74 · 76 · 78 · 82 · 86 · 87 · 89 · 101 · 103 · 104 · 105 · 107 · 108 · 109 · 112 · 113 · 114 · 115 · 116 · 117 · 118 · 120 · 123 · 124 · 126 · 127 · 128 · 129 · 130 · 131 · 132 · 138 · 139 · 140 · 141 · 142 · 143 · 144 · 145.
+유예 행 (43): 13 · 36 · 50 · 62 · 66 · 72 · 74 · 76 · 78 · 82 · 86 · 87 · 89 · 101 · 103 · 107 · 108 · 109 · 112 · 113 · 114 · 115 · 116 · 117 · 118 · 120 · 123 · 124 · 126 · 127 · 128 · 129 · 130 · 131 · 132 · 138 · 139 · 140 · 141 · 142 · 143 · 144 · 145.
 
 이 목록은 설계 §15.1 표의 "이번 사이클" 행에 한 줄로 모아 다음 사이클이 찾을 수 있게 한다 — **새 원장을 만들지 않는다**(C11).
 
@@ -270,16 +284,27 @@ cd /Users/jeonghokim/Downloads/devbrew
 
 # ② 배정 + 유예 = 모집단인가. 세 곳에 흩어진 수를 눈으로 맞추지 않고 여기서 한 번 센다.
 
-# ③ **위치란이 사실인가** — 행이 이름을 대는 함수의 정의 지점을 직접 뜬다.
+# ③ **위치란이 사실인가** — 축 3 전량(119행)의 정의 지점을 (이름, 언어)로 직접 뜬다.
 #    ②까지 통과해도 위치란이 틀리면 그 위에 얹힌 조치도 틀린다: #116은 위치란이
 #    "qg-gc.py↔spec-distill-gc.py" 였는데 실제 정의는 두 테스트 파일에 있었고,
 #    그래서 "Task 21" 이라는 조치가 covered 로 통과해 있었다.
-for fn in run_in_env run_gc; do
-  echo "=== $fn"; grep -rn "def ${fn}(\|^${fn}()" plugins/ 2>/dev/null | grep -v Binary
-done
+#    ⚠ 이름만으로 `sort -u` 하면 119 → 116 이 된다(check·emit·run_hook 이 두 언어를 겹친다).
+grep -oE '^\| [0-9]+ \| `[A-Za-z_][A-Za-z0-9_]*` \((py|sh)\)' "$CENSUS" \
+  | sed -E 's/.*`(.*)` \((py|sh)\)/\1 \2/' | sort -u \
+  | while read -r fn lang; do
+      if [ "$lang" = py ]; then pat="^[[:space:]]*def ${fn}\("; ext='\.py$'
+      else pat="^[[:space:]]*${fn}\(\)"; ext='\.sh$'; fi
+      hits=$(grep -rlE "$pat" plugins/ shared/ 2>/dev/null \
+               | grep -E "$ext" | grep -vE '/(fixtures|mocks|harness)/' | tr '\n' ' ')
+      printf '%-28s %-3s %s\n' "$fn" "$lang" "${hits:-(정의 없음 — 위치란 재확인)}"
+    done
 #    출력의 파일 경로가 그 행의 위치란과 일치해야 한다. 불일치는 조치 재검토 신호다.
 ```
 
-> **③을 전 행에 대해 자동화하지 않은 이유**: 위치란은 행마다 프로즈 표기(`qg-gc.py↔spec-distill-gc.py` · `quality-gates \`tests/x.py:14\`` · `동일 파일쌍`)라 파서가 조용히 놓친다 — **그 놓침이 이번 결함의 원인이었다.** 대신 **함수 이름은 1열에 기계적으로 있으므로** 위 형태로 이름을 뽑아 정의 지점을 뜨는 것이 전수로 가능하다. Task 2 Step 4가 이 검사를 원장 작성 시점에 돌리도록 바뀌었다.
+> **③은 축 3 전량에 대해 자동화된다.** 위치란은 행마다 프로즈 표기(`qg-gc.py↔spec-distill-gc.py` · `동일 파일쌍` · `위와 같은 …`)라 그쪽에서 출발하면 파서가 조용히 놓친다 — **그 놓침이 이 결함의 원인이었다.** 대신 **함수 이름과 언어는 1열에 기계적으로 있으므로** 이름에서 출발해 정의 지점을 뜨고, 그 결과를 위치란과 사람이 대조한다.
+>
+> 〔실측〕 위 `sort -u` 는 **116**개 이름을 낸다(축 3 행은 119개). 세 이름이 두 언어를 겹쳐 한 줄로 합쳐지기 때문이다 — **`check` · `emit` · `run_hook` 이 각각 (py)행과 (sh)행을 갖는다.** 그래서 이 셋은 언어를 붙여 따로 떠야 한다(`^def check(` 와 `^check()` 는 다른 집합이다). 116을 119로 읽으면 이 셋의 한쪽 언어가 검사되지 않은 채 지나간다.
+>
+> Task 2 Step 4b 가 이 검사를 원장 작성 시점에 돌리도록 바뀌었다.
 
 (fix round 1: 최초 판은 진짜 사본 25 / 부분 사본 64 / 우연 58 / 템플릿-인스턴스 3이었다. 우연 rows 중 위치란이 "—"이거나 근거가 추측 어휘(판단/추정)였던 항목을 전수 재검증해 11건을 재분류했다(우연→진짜 사본 2건: #58·#74, 우연→부분 사본 9건: #66·#76·#78·#82·#94·#96·#101·#103·#121). 재검증한 우연 행은 약 40행이며 그중 11행이 바뀌고 나머지는 실측 본문 판독으로 우연 판정이 확인됐다 — 상세 근거는 각 행 및 위 §discrepancy 참조.)

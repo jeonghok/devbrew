@@ -1082,7 +1082,7 @@ H가 테스트 파일을 옮기면, RED가 떴을 때 셋 중 무엇 때문인�
 | qg empty-scope guard | Option 1까지 설계 합의, 사용자 판단으로 연기 |
 | spec-distill 다수 PR | e2e 수동 검증 |
 | **이번 사이클** | 아카이브 내부 해소·제거 · 스크립트 분할(PR1 기준선 확정 후) · `scripts/` 하위 분류 · 아카이브 재성장 제동 · `run-own-tests.sh` 격리 CRITICAL · `marketplace.json` 상시 장치 |
-| **이번 사이클 — census 명시 유예** (2026-08-17 조치란 재검토, 2라운드까지) | `docs/superpowers/plans/2026-08-17-devbrew-weight-reduction-census.md` §미배정. 네 묶음(수는 census §미배정이 정본): **A** 셸 하네스(§9가 `shared/tests/` 를 판정 헬퍼의 자리로 삼은 **근거는 소유 관계**인데 — *"판정 헬퍼는 어느 한 플러그인의 것이 아니다"* — 픽스처 빌더·훅 실행 래퍼·윈도우 추출은 **그 플러그인 자신의 것**이라 그 근거가 옮겨가지 않는다) · **B** python 테스트 헬퍼(python 쪽 정본 자리를 이 사이클이 만들지 않는다) · **C** 1~3줄 관용구(추출이 순증) · **D** 통합이 소비자 동작 변경(`_norm_sev` fallback 방향 · `_frontmatter` 에러 계약 · `read_records` 문서화된 의도적 분기 · `apply_overrides` meta 키 등). **유예 행 전량이 §12.4 20줄 락의 위반이 아님을 실측했다** — 다음 사이클이 이 목록을 원장으로 만든다 |
+| **이번 사이클 — census 명시 유예** (2026-08-17 조치란 재검토) | `docs/superpowers/plans/2026-08-17-devbrew-weight-reduction-census.md` §미배정. 네 묶음(수는 census §미배정이 정본): **A** 셸 하네스(§9가 `shared/tests/` 를 판정 헬퍼의 자리로 삼은 **근거는 소유 관계**인데 — *"판정 헬퍼는 어느 한 플러그인의 것이 아니다"* — 픽스처 빌더·훅 실행 래퍼·윈도우 추출은 **그 플러그인 자신의 것**이라 그 근거가 옮겨가지 않는다) · **B** python 테스트 헬퍼(python 쪽 정본 자리를 이 사이클이 만들지 않는다) · **C** 1~3줄 관용구(추출이 순증) · **D** 통합이 소비자 동작 변경(`_norm_sev` fallback 방향 · `_frontmatter` 에러 계약 · `read_records` 문서화된 의도적 분기 · `apply_overrides` meta 키 등). **유예 행 전량이 §12.4 20줄 락의 위반이 아님을 실측했다** — 다음 사이클이 이 목록을 원장으로 만든다 |
 
 ## 16. 기각한 대안
 
