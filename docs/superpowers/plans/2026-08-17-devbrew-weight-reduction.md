@@ -2935,24 +2935,53 @@ for p in quality-gates spec-distill plugin-audit; do
   ln -s ../../../shared/codex/detect_codex.sh "plugins/$p/scripts/detect_codex.sh"
 done
 chmod +x shared/codex/detect_codex.sh
-# 링크인가 · 대상이 존재하는가 · 실행 시 정본과 같은 내용을 내는가
+CANON="$(cd shared/codex && pwd -P)/detect_codex.sh"
+# 링크인가 · 대상이 존재하는가 · **정본을** 지목하는가 · 링크로 태웠을 때 형제 conf 를 찾는가
 for p in quality-gates spec-distill plugin-audit; do
   f="plugins/$p/scripts/detect_codex.sh"
   printf '%-14s ' "$p"
   if [ -L "$f" ] && [ -e "$f" ]; then
-    tgt="$(readlink "$f")"
-    printf '심볼릭 링크 ✓ → %s ' "$tgt"
-    diff -q <(bash "$f" 2>&1 || true) <(bash shared/codex/detect_codex.sh 2>&1 || true) >/dev/null \
-      && echo "실행 결과 동일 ✓" || echo "❌ 실행 결과가 갈린다"
+    printf '링크 ✓ → %s ' "$(readlink "$f")"
+    [ "$(readlink -f "$f")" = "$CANON" ] && printf '정본 지목 ✓ ' || printf '❌ 다른 대상 '
+    out="$(bash "$f" 2>&1 || true)"
+    case "$out" in
+      *killswitch_config_missing*|*killswitch_config_incomplete*)
+        echo "❌ 형제 conf 를 못 읽었다 — 링크 경유 BASH_SOURCE 조회 실패" ;;
+      *'codex_available:'*) echo "형제 conf 조회 ✓" ;;
+      *) echo "❌ codex_available 줄이 없다: $(printf '%s' "$out" | tr '\n' ' ')" ;;
+    esac
   else
     echo "❌ 링크가 아니거나 대상이 없다"
   fi
 done
+echo "=== 세 링크의 출력이 서로 같은가 (같은 정본·같은 환경) ==="
+a="$(bash plugins/quality-gates/scripts/detect_codex.sh 2>&1)"
+b="$(bash plugins/spec-distill/scripts/detect_codex.sh 2>&1)"
+c="$(bash plugins/plugin-audit/scripts/detect_codex.sh 2>&1)"
+{ [ "$a" = "$b" ] && [ "$b" = "$c" ]; } && echo "  셋 다 동일 ✓" || echo "  ❌ 갈린다"
 git add plugins/*/scripts/detect_codex.sh shared/codex/detect_codex.sh
 git ls-files -s plugins/*/scripts/detect_codex.sh   # mode 120000 이어야 한다
 ```
 
-Expected: 셋 다 `심볼릭 링크 ✓` · `실행 결과 동일 ✓` · `git ls-files -s`의 모드가 `120000`.
+> **왜 정본과 출력을 대조하지 않는가** 〔2026-08-17 실측, 이 검사의 옛 판본을 반증한 기록〕:
+> 옛 판본은 `diff -q <(bash "$f") <(bash shared/codex/detect_codex.sh)` 로 링크와 **정본의
+> 출력을 대조**하고 "실행 결과 동일 ✓" 를 기대했다. 그것은 **설계상 항상 실패한다** — 정본
+> 옆에는 `codex-killswitch.conf` 가 없고(있으면 안 된다: 값이 플러그인마다 달라야 한다),
+> Step 4 의 fail-closed 규칙에 따라 정본을 직접 태우면 `killswitch_config_missing` 이 난다.
+> 반면 링크는 자기 플러그인의 conf 를 읽어 정상 판정을 낸다. 실측: 링크 → `codex_available:
+> true`, 정본 직접 → `killswitch_config_missing`. **이 검사가 RED 를 낸다고 링크를 의심하지
+> 말 것** — 그리고 여기서 "고치려고" 정본 옆에 conf 를 두거나 로더에 기본 변수명 fallback 을
+> 넣으면 kill switch 가 조용히 무반응이 되는 fail-open, 즉 보안 컨트롤 훼손이다(`CLAUDE.md:48`).
+>
+> 대신 재는 것: **대상 동일성**(`readlink -f` == 정본 절대경로 — 내용 비교가 아니라 같은
+> inode 를 가리키는가)과 **형제 conf 조회 성공**(`killswitch_config_missing` 이 *아닐* 것).
+> 뒤의 것이 이 태스크의 진짜 신규 위험이다 — `${BASH_SOURCE[0]}` 이 심볼릭 링크를 역참조하면
+> conf 를 정본 디렉토리에서 찾아 전부 fail-closed 로 죽는다. 〔실측: macOS bash 3.2.57 은
+> 역참조하지 않고 호출된 경로를 그대로 준다 — 그래서 이 방식이 성립한다. 이 검사는 그 전제가
+> 미래에 깨졌을 때 잡는 자리다.〕
+
+Expected: 셋 다 `링크 ✓` · `정본 지목 ✓` · `형제 conf 조회 ✓` · 세 출력이 `셋 다 동일 ✓` ·
+`git ls-files -s`의 모드가 `120000`.
 `100644`/`100755`면 심볼릭 링크가 아니라 일반 파일로 커밋됐다는 뜻이다(예: `cp -L`을 실수로
 썼을 때).
 
