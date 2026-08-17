@@ -3,6 +3,19 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [3.2.2] — 2026-08-17
+
+Task 14 이관(3.2.1)의 전이적 부작용 수정. `test_codex_backward_compat.sh`가
+`test_consent_marker_write_failure.sh`·`test_security_reviewer_kill_switch.sh`의
+실패 출력을 정규화-해시로 pin하는 fingerprint 원장(`codex-blessed-red.txt`)을
+갖고 있었는데, 두 파일의 실패 줄 접두가 `FAIL: `→`  ✗ `로 바뀌며(3.2.1, 정본
+이관) 해시가 stale해져 이 메타 테스트가 새 RED가 됐다(전체 셸 회귀 154본
+재실행에서 적발). 실패 **문구·원인은 불변**임을 확인 후 해시만 갱신.
+
+### Fixed
+- `tests/codex-blessed-red.txt` — 두 항목의 sha256을 3.2.1 이후 실제 출력에
+  맞춰 갱신(원인 불변 확인 후). `test_codex_backward_compat.sh` 재-GREEN.
+
 ## [3.2.1] — 2026-08-17
 
 devbrew-weight-reduction Task 14 — 자체 판정 헬퍼 76개를 `shared/tests/assert.sh`

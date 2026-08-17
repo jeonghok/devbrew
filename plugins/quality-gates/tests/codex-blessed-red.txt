@@ -9,5 +9,12 @@
 #       남으므로 같은 파일이 **다른 이유로** 실패하기 시작하면 해시가 바뀐다.
 #
 # 이 둘은 codex와 무관한 pre-existing red다 (설계 §8.1 범위 밖 — 고치지 말 것).
-test_consent_marker_write_failure.sh a4dcb98abf9ed6a570d9b47bb94f5e950709f167959920ba90df40cddf5dfb8e
-test_security_reviewer_kill_switch.sh cb1e4d2ada409046bd6e928c04c1dfe102cd4d0f9f9111a4ac0336c681702ba8
+#
+# 2026-08-17 devbrew-weight-reduction Task 14: 두 파일이 자체 판정 헬퍼를 지우고
+# shared/tests/assert.sh 정본을 source하며 실패 줄 접두가 `FAIL: `/`✗ FAIL: `에서
+# `  ✗ `로 바뀌었다(브리프 실측: 접두를 grep하는 소비자 0건 — 출력 형식 변경은
+# 안전). 두 실패의 **문구·원인은 불변**(같은 pre-existing red) — 그래서 해시만
+# 갱신한다. 재현: `bash tests/<file>.sh` 로 실패 줄이 기존과 동일한 메시지인지
+# 먼저 확인한 뒤에만 아래 해시를 바꿀 것.
+test_consent_marker_write_failure.sh 9570188161db7b4e49ade31f1fd596d80ea940237a64589233e25a2bc3c757de
+test_security_reviewer_kill_switch.sh 09e3e6d29c124351a9fc175f930e906d0ddbd95565f36d5053291413086e43e9
