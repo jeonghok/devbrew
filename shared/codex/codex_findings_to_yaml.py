@@ -33,12 +33,24 @@ import re
 import sys
 from typing import Any
 
-# .resolve() 는 필수다(bare .parent 가 아니다) — 배포 지점(plugins/*/scripts/…)이
-# 이 파일을 가리키는 상대 심볼릭 링크이므로, 링크 쪽에서 태우면 bare .parent 는
-# plugins/<p>/scripts/ 를 가리켜 sibling codex_jsonl.py 를 못 찾는다(실측,
-# macOS python 3.9.6: sys.path[0] 은 심볼릭 링크가 아니라 대상 디렉토리로 해석된다).
-# .resolve() 는 링크를 따라가 이 정본 파일의 실제 디렉토리를 내므로 항상 맞는다.
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+# .resolve() 를 쓰지 않는다(bare .parent) — 2026-08-17 fix round 1, CRIT-1.
+# `claude plugin install` 은 플러그인 서브트리를 벗어나는 심볼릭 링크를 설치 시점에
+# 실제 파일로 역참조한다(설계 §16.1). 그러면 설치본의
+# plugins/<p>/scripts/codex_findings_to_yaml.py 는 심볼릭 링크가 아니라 **일반
+# 파일**이고, `.resolve()`는 자기 자신을 가리켜 아무것도 바뀌지 않는다 — 즉
+# `sys.path[0]`은 그 파일 자신의 디렉토리(plugins/<p>/scripts/)가 된다. 그래서
+# sibling `codex_jsonl.py`의 **copy-of 물리 사본**을 세 배포 디렉토리
+# (plugin-audit·quality-gates·spec-distill의 scripts/) 전부에 둔다.
+#
+# 리포 안에서 실측(macOS python 3.9.6): `python3 <경로>`로 실행하면 `__file__`은
+# 심볼릭 링크를 따라가지 않은 **그대로의 경로**다 — bare `.parent`는 배포
+# 지점(plugins/<p>/scripts/)을 낸다. `.resolve()`를 쓰면 링크를 따라가 이 정본
+# 파일의 실제 디렉토리(shared/codex/)를 내므로, 리포에서 심볼릭 링크를 태우는 테스트가
+# 정본 옆의 codex_jsonl.py만 읽고 **배포 지점 옆의 copy-of 사본은 한 번도 실행하지
+# 않는다** — 그 사본이 곧 설치본에 실제로 배포되는 파일인데도. bare `.parent`를
+# 쓰면 리포 실행이 배포 지점 옆 사본을 읽으므로 리포 테스트가 곧 배포본 테스트가
+# 된다(설치본에는 애초에 링크가 없으므로 두 표기가 같아진다).
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from codex_jsonl import extract_last_agent_message  # noqa: E402
 
 AUTH_ERROR_RE = re.compile(

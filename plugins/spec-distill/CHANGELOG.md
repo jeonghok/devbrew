@@ -2,7 +2,7 @@
 
 ## [0.28.0] — 2026-08-17
 
-Task 17(무게 감축): `scripts/codex_findings_to_yaml.py`가 물리 사본에서 `shared/codex/
+Task 17(무게 감축) + fix round 1: `scripts/codex_findings_to_yaml.py`가 물리 사본에서 `shared/codex/
 codex_findings_to_yaml.py`를 가리키는 상대 심볼릭 링크로 바뀌었다(quality-gates와
 공유하는 정본). emit keyset(`category`·`target_section` — design-doc 리뷰 어휘)은
 더 이상 사본 하드코딩이 아니라 정본의 새 `--emit-keys design` 인자다. patch가 아니라
@@ -20,6 +20,27 @@ codex_findings_to_yaml.py`를 가리키는 상대 심볼릭 링크로 바뀌었�
   (quality-gates·plugin-audit 세 사본이 있던 것 중 이 플러그인 몫).
 - `tests/test_codex_findings_to_yaml.py`의 design-keyset 단언 2건이 이제
   `--emit-keys design`을 명시적으로 넘긴다(스크립트 기본값이 바뀌었으므로).
+
+### Fixed (2026-08-17 fix round 1)
+- **codex 리뷰어가 설치본에서 100% 죽는 결함(CRIT-1).** 정본의 `codex_jsonl` import가
+  `.resolve()`를 써서, `claude plugin install`이 서브트리를 벗어나는 심볼릭 링크를
+  실제 파일로 역참조하는 설치본(설계 §16.1)에서 sibling `codex_jsonl.py`를 못 찾고
+  `ImportError`가 났다. `.resolve()`를 버리고(bare `.parent`) `codex_jsonl.py`의
+  copy-of 물리 사본을 `plugins/spec-distill/scripts/`에도 배포했다(quality-gates·
+  plugin-audit과 동일 패턴).
+- `run_brief_codex_reviewer.sh`가 `--emit-keys design`을 잃어도 어떤 테스트도
+  빨개지지 않던 결함(F1) — `tests/test_brief_codex_axes.sh`에 `run_spec_codex_reviewer.sh`
+  쪽과 대칭인 assertion + mutation 증명을 추가했다.
+- 공백 가드의 방향 정정(F2) — "공백-only를 거른다"가 아니라 "뒤따르는 빈 후보가
+  앞선 유효한 메시지를 덮어쓰지 못하게 한다"이며, 이 플러그인이 이전에 배포하던
+  것 대비 fail-open 방향의 판정 변경이다(뒤이어 빈 `agent_message`가 흐르면
+  `codex_failed`가 `true → false`로 뒤집히고 finding이 살아난다). 새 테스트
+  `test_codex_findings_to_yaml.py::test_trailing_blank_agent_message_does_not_clobber_real_one`가
+  고정한다.
+- "행동 불변" 프레이밍 정정(F8) — 정본화 이전에는 `agent_message.text`가
+  문자열이 아니면 크래시(rc=1)했다. 지금은 `codex_jsonl.py`의 타입 가드가 크래시
+  없이 rc=0 + `reason: missing_result`로 degrade한다 — 개선이지만 사유 문자열이
+  바뀐다.
 
 ## [0.27.0] — 2026-08-17
 

@@ -25,7 +25,9 @@
 # 59/62, 전부 RED). 그리고 이 파일의 나머지 축들은 detect_codex 와 **무관하다** —
 # 층④는 codex_findings_to_yaml.py 를 비교한다. **2026-08-17 실측 이후** 배포 지점도
 # shared/codex/codex_findings_to_yaml.py 를 가리키는 상대 심볼릭 링크가 됐다(층①과
-# 같은 이유) — 그 결과 층④ 안의 두 축은 서로 다른 운명을 갖는다. **판정 등가**(qg
+# 같은 이유) — 그 결과 층④ 안에서 **판정 등가**와 **값 고정**은 서로 다른 운명을
+# 갖는다(다른 하위 체크들 — anti-vacuous 계측기 확인·표본 수 바닥 — 은 이 갈림과
+# 무관하게 그대로 유효하다). **판정 등가**(qg
 # 호출과 sd 호출이 같은 meta 판정을 내는가)는 파일이 하나뿐이라는 구조로 이미
 # 보장되어 더 이상 실질 판정이 아니다(GREEN이라 해롭지 않다 — Task 15가 층①에서
 # 고친 것과 같은 종류의 vacuous-but-harmless다). 그러나 **값 고정**(알려진-상이
@@ -44,7 +46,9 @@ PA="$ROOT/plugins/plugin-audit"
 TMP="$(mktemp -d -t qg-copies-XXXXXX)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
-# ── 층④: codex_findings_to_yaml.py 두 사본 ──────────────────────────────────
+# ── 층④: codex_findings_to_yaml.py — quality-gates·spec-distill 호출 경로가
+# 정본(shared/codex/codex_findings_to_yaml.py)을 가리키는 심볼릭 링크를 거쳐
+# 같은 판정을 내는가 ──────────────────────────────────────────────────────
 # 표본은 판정을 실제로 가르는 것들이다. 정상·빈 스트림·펜스 없는 raw JSON·
 # 컨테이너 위반·원소 위반·override 유무.
 mk() { printf '%s\n' "{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":$1}}"; }
@@ -57,8 +61,14 @@ mk '"no fence at all"'                               > "$samples_dir/05-no-json.
 : > "$samples_dir/06-empty.jsonl"
 printf 'not json\n'                                  > "$samples_dir/07-garbage.jsonl"
 
-# 판정 필드만 뽑는다. sd 사본은 emit keyset에 category/target_section을 더하는데
-# 그것은 **의도된 차이**이므로 findings 본문이 아니라 meta의 판정만 대조한다.
+# 판정 필드만 뽑는다. 〔2026-08-17 fix round 1〕 이 락은 아래에서 qg·sd 호출
+# **둘 다 --emit-keys 인자 없이** 부른다(정본화 이후 기본값은 DEFAULT_KEYS) —
+# category/target_section이 나타나는 design 어휘는 여기서 아예 안 켜지므로
+# findings 본문에 지금 갈릴 만한 차이가 없다. 그 배선(호출자가 --emit-keys design을
+# 실제로 넘기는가)은 이 락이 아니라 run_spec_codex_reviewer.sh·
+# run_brief_codex_reviewer.sh 쪽 락이 잰다(F1). verdict()가 findings 본문이
+# 아니라 meta만 보는 것은 그와 무관하게 유지한다 — 이 락의 목적은 codex_failed·
+# reason 같은 판정 필드의 동일성이지 렌더 형태 동일성이 아니다.
 verdict() { grep -E '^  (codex_failed|reason|raw_findings_type|bad_element_types):' || true; }
 
 seen=0
@@ -91,8 +101,9 @@ for s in "$samples_dir"/*.jsonl; do
     # 판정값을 여기서 못박는다: override 없는 01-clean은 정상 라운드라
     # `codex_failed: false`, 02-container-violation은 컨테이너 위반이라
     # `codex_failed: true`다 — 상수 추출기는 둘 중 하나에서 반드시 틀린다.
-    # 표본에 따라 verdict가 여러 줄일 수 있어 부분문자열 포함으로 재고, 두
-    # 사본 emit keyset 차이(category/target_section)는 meta 판정 밖이라 무관하다.
+    # 표본에 따라 verdict가 여러 줄일 수 있어 부분문자열 포함으로 잰다. verdict()가
+    # meta 필드만 보므로 이 비교는 emit keyset(호출자 인자, 이 락에서는 미사용 —
+    # 위 verdict() 주석 참조)과 애초에 무관하다.
     if [ -z "$ov" ]; then
       case "$name" in
         01-clean.jsonl)

@@ -5,7 +5,7 @@
 
 ## [3.4.0] — 2026-08-17
 
-Task 17(무게 감축): `codex_findings_to_yaml.py` 두 사본(quality-gates·spec-distill)을
+Task 17(무게 감축) + fix round 1: `codex_findings_to_yaml.py` 두 사본(quality-gates·spec-distill)을
 `shared/codex/codex_findings_to_yaml.py` 정본 + 상대 심볼릭 링크로 통합, 그리고
 `extract_last_agent_message`(codex JSONL 이벤트 파서) 세 사본을 `shared/codex/
 codex_jsonl.py` 정본으로 흡수(plugin-audit은 copy-of 물리 사본). patch가 아니라
@@ -28,9 +28,48 @@ emit keyset이 사본별로 하드코딩돼 있어 호출자가 고를 수 없�
   `category`·`target_section`(design-doc 리뷰 어휘)을 추가로 emit한다. 기본값은
   `default`이므로 quality-gates 자신의 호출은 무변경.
 - `shared/codex/codex_jsonl.py` — `extract_last_agent_message` 정본(codex JSONL
-  이벤트 두 shape 파싱). `codex_findings_to_yaml.py`가 여기서 import한다.
+  이벤트 두 shape 파싱). `codex_findings_to_yaml.py`가 여기서 import한다. **알려진
+  예외**: `extract_codex_artifact_yaml.py`의 `extract_text`는 비슷한 일을 하는
+  네 번째 구현으로 남아 있다(의도적으로 통합 안 함 — 폴백 shape이 달라 합치면
+  한쪽 동작이 반드시 깨진다). "고칠 자리가 하나"는 아직 참이 아니다 — 정본과
+  `extract_text` 둘이다.
 
-## [3.3.0] — 2026-08-17
+### Fixed (2026-08-17 fix round 1, CRIT-1)
+- **codex 리뷰어가 설치된 모든 배포에서 100% 죽는 결함.** 정본의 `codex_jsonl` import가
+  `pathlib.Path(__file__).resolve().parent`를 썼는데, `claude plugin install`은
+  플러그인 서브트리를 벗어나는 심볼릭 링크를 설치 시점에 실제 파일로 역참조한다
+  (설계 §16.1). 설치본에서 `.resolve()`는 자기 자신을 가리켜 아무것도 바뀌지
+  않으므로 `sys.path[0]`이 배포 지점 자기 디렉토리가 되고, 거기 sibling
+  `codex_jsonl.py`가 없어 `ImportError` → 러너 가드가 `extract_failed`/
+  `yaml_conversion_failed`로 degrade — 리포 스위트는 초록으로 남은 채였다.
+  `.resolve()`를 버리고(bare `.parent`) `codex_jsonl.py`의 copy-of 물리 사본을
+  quality-gates·spec-distill·plugin-audit 세 배포 디렉토리 전부에 배포했다
+  (Task 15의 `detect_codex.sh` 패턴과 동일).
+- `run_brief_codex_reviewer.sh`가 `--emit-keys design`을 잃어도 어떤 테스트도
+  빨개지지 않던 결함(F1) — `test_brief_codex_axes.sh`에 대칭 assertion +
+  mutation 증명을 추가했다.
+- 공백 가드(`codex_jsonl.py:extract_last_agent_message`)의 방향을 정정(F2) —
+  "공백-only 메시지를 거른다"가 아니라 "뒤따르는 비어 있는 후보가 앞선 유효한
+  메시지를 덮어쓰지 못하게 한다"이며, qg·sd가 이전에 배포하던 것 대비
+  **fail-open 방향의 판정 변경**이다(뒤이어 빈 `agent_message`가 흐르면
+  `codex_failed`가 `true → false`로 뒤집히고 finding이 살아난다). 새 동작이
+  옳다고 판단했지만(plugin-audit이 늘 하던 것 · 뒤따르는 공백에 진짜 findings를
+  잃는 쪽이 더 나쁜 실패) 방향이 바뀌었다는 사실은 감추지 않는다. 고정 테스트:
+  `plugins/spec-distill/tests/test_codex_findings_to_yaml.py::
+  test_trailing_blank_agent_message_does_not_clobber_real_one`.
+- `plugins/quality-gates/tests/test_codex_copies_agree.sh` 층④ 헤더의 만료
+  문장 셋을 마저 닫았다(F3) — 이 락이 실제로는 `--emit-keys` 없이 호출해 지금은
+  qg·sd 어느 쪽도 design 어휘를 안 내는데, 세 곳(섹션 헤더 주석 · `verdict()` 위
+  주석 · 값 고정 블록 주석)이 여전히 "sd가 keyset을 더한다"는 옛 전제를 인용하고
+  있었다. 그리고 F3을 고치며 심었던 "층④ 안의 두 축" 표현도 개수 세기라 축
+  이름(판정 등가 · 값 고정)만 남기도록 다시 고쳤다(F4).
+- **"행동 불변" 프레이밍 정정(F8)**: 정본화 이전 qg/sd 사본은 `agent_message.text`가
+  문자열이 아니면(예: 리스트) `re.findall`에서 잡히지 않은 `TypeError`로 죽었다
+  (rc=1, 빈 stdout → 러너 가드가 `extract_failed`/`yaml_conversion_failed`로
+  degrade). 정본화 이후에는 `codex_jsonl.py`의 `isinstance(candidate, str)` 가드가
+  그 값을 애초에 채택하지 않으므로 크래시 없이 rc=0 + `reason: missing_result`로
+  끝난다 — 엄격한 개선이지만 운영자에게 보이는 사유 문자열이 바뀐다(전신 CLI 비교
+  416건 중 48건이 이 계열).
 
 Task 15(무게 감축) + fix round 1: `detect_codex.sh` 세 사본을 `shared/codex/`의 정본 +
 상대 심볼릭 링크로 통합. quality-gates·spec-distill·plugin-audit 세 플러그인이 함께

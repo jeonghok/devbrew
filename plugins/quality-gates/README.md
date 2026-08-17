@@ -120,7 +120,8 @@ quality-gates/
 │   ├── check_qa_ledger.py                    # LD7 floor 5차원 원장 구조 게이트 (Law 1)
 │   ├── detect_codex.sh                       # symlink → ../../../shared/codex/detect_codex.sh — Codex CLI 10-case probe (killswitch-conf/version/auth/sandbox/kill-switch/timeout)
 │   ├── build_codex_prompt.py                 # Review gate Phase 1 codex-reviewer용 prompt builder
-│   ├── codex_findings_to_yaml.py             # Codex JSONL stream → 표준 finding YAML (auth/schema/stderr 처리)
+│   ├── codex_findings_to_yaml.py             # symlink → ../../../shared/codex/codex_findings_to_yaml.py — Codex JSONL stream → 표준 finding YAML (auth/schema/stderr 처리, --emit-keys default|design)
+│   ├── codex_jsonl.py                        # copy-of shared/codex/codex_jsonl.py — extract_last_agent_message 정본 사본 (설치본에서 sibling import가 살아있게)
 │   ├── qg-gc.py                              # TTL 기반 stale 세션 GC (fcntl-locked)
 │   ├── build-pr-context.sh                   # publish: base..HEAD 고정 context blob (diff+내용+이웃 시그니처+커밋메시지) — 빌더의 유일 입력
 │   ├── diagram-facts.sh                      # publish: nodes/edges 산출 (changed files + 이웃 import; repo-root 상대 import만)

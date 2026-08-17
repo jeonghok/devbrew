@@ -128,6 +128,32 @@ class TestCodexFindingsToYaml(unittest.TestCase):
         self.assertIn("category: ambiguity", out)
         self.assertNotIn("INJECT", out)
 
+    def test_trailing_blank_agent_message_does_not_clobber_real_one(self):
+        """F2 (2026-08-17 fix round 1): 진짜 답 뒤에 빈 agent_message가 흐르면
+        진짜 것이 살아남아야 한다 — plugin-audit에만 있던 공백 가드
+        (`codex_jsonl.py:extract_last_agent_message`)를 정본이 흡수한 이후의
+        보장. 가드가 없으면 빈 후보가 last_text를 덮어써 파싱이 실패하고
+        `codex_failed: true`(`reason: malformed_json`)로 findings가 소실된다
+        (실측, fix round 1 리뷰) — fail-open 방향의 판정 변경이라 별도로
+        고정한다.
+        """
+        import json as _json
+        real = _json.dumps({
+            "type": "item.completed",
+            "item": {"type": "agent_message",
+                      "text": "```json\n{\"findings\": [{\"file\": \"a\", "
+                              "\"severity\": \"HIGH\", \"summary\": \"x\"}]}\n```"},
+        })
+        blank = _json.dumps({
+            "type": "item.completed",
+            "item": {"type": "agent_message", "text": "   "},
+        })
+        out = run(real + "\n" + blank + "\n")
+        self.assertIn("codex_failed: false", out,
+                       "진짜 finding이 있는데도 뒤따른 빈 메시지가 판정을 덮어썼다")
+        self.assertIn("file: a", out, "뒤따른 빈 메시지가 진짜 finding을 지웠다")
+        self.assertNotIn("malformed_json", out)
+
 
 if __name__ == "__main__":
     unittest.main()

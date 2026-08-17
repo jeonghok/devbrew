@@ -161,4 +161,54 @@ else
   no "STALE mutation: seed 호출 라인을 못 찾았다 ($mutres) — 락이 vacuous하다"
 fi
 rm -f "$STALE" "$MUT"
+
+# === F1 (2026-08-17 fix round 1) : --emit-keys design 배선 락 ===============
+# codex_findings_to_yaml.py 정본화(Task 17) 이전에는 spec-distill의 emit keyset이
+# 사본에 하드코딩돼 있어 호출자 배선을 잃을 방법이 없었다. 지금은 호출자 인자
+# (`--emit-keys design`)이므로 이 러너에서 빠지면 category/target_section이
+# 조용히 사라진다 — merge_brief_review.py가 merge_review.CODEX_DISPLAY_KEYS를
+# 재사용해 그 필드를 읽는데, 필드가 없으면 codex findings가 원장에서 통째로
+# 버려지면서도 codex_failed는 false로 남는다(실행되지 못한 검사가 통과한 검사로
+# 기록된다). run_spec_codex_reviewer.sh 쪽엔 이미 대칭 assertion이 있다
+# (test_run_spec_codex_reviewer.sh:66) — 여기 없던 것을 대칭으로 건다.
+F1TMP="$(mktemp -d -t sd-brief-f1-XXXXXX)" || exit 1
+mkdir -p "$F1TMP/codexbin"
+cat > "$F1TMP/codexbin/codex" <<'SH'
+#!/usr/bin/env bash
+cat <<'JSONL'
+{"type":"item.completed","item":{"type":"agent_message","text":"```json\n{\"findings\": [{\"category\": \"ambiguity\", \"target_section\": \"#2-goals\", \"severity\": \"high\"}]}\n```"}}
+JSONL
+exit 0
+SH
+chmod +x "$F1TMP/codexbin/codex"
+
+F1OUT="$F1TMP/out.yaml"
+PATH="$F1TMP/codexbin:/usr/bin:/bin" bash "$RUNNER" fidelity "$PAYLOAD" "$REPO_ROOT" "$F1OUT" >/dev/null 2>&1
+grep -q 'category: ambiguity' "$F1OUT" \
+  && ok "F1: brief runner가 --emit-keys design을 배선해 category가 출력에 실린다" \
+  || no "F1: brief runner 출력에 category가 없다 — --emit-keys design 배선 유실"
+
+# mutation: --emit-keys design 인자 줄을 지운 사본으로 같은 것을 돌리면 위
+# assertion이 다시 RED가 나야 한다(락에 이빨이 있다는 증거 — F1 완료 조건 3).
+F1MUT="$F1TMP/run_brief_codex_reviewer_mut.sh"
+f1mutres="$(python3 - "$RUNNER" "$F1MUT" <<'PY'
+import sys
+src, dst = sys.argv[1], sys.argv[2]
+t = open(src, encoding="utf-8").read()
+out = "\n".join(l for l in t.splitlines() if l.strip() != "--emit-keys design \\")
+open(dst, "w", encoding="utf-8").write(out + "\n")
+print("MUTATED" if out.strip() != t.strip() else "UNCHANGED")
+PY
+)"
+if [[ "$f1mutres" == "MUTATED" ]]; then
+  F1OUT2="$F1TMP/out2.yaml"
+  PATH="$F1TMP/codexbin:/usr/bin:/bin" bash "$F1MUT" fidelity "$PAYLOAD" "$REPO_ROOT" "$F1OUT2" >/dev/null 2>&1
+  grep -q 'category: ambiguity' "$F1OUT2" \
+    && no "F1 mutation: --emit-keys design 제거 후에도 category가 남는다 — 락에 이빨 없음" \
+    || ok "F1 mutation: --emit-keys design 제거 → category 소실 재현 (락에 이빨 있음)"
+else
+  no "F1 mutation: --emit-keys design 줄을 못 찾았다 ($f1mutres) — 락이 vacuous하다"
+fi
+rm -rf "$F1TMP"
+
 finish
