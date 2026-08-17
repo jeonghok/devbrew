@@ -2543,12 +2543,34 @@ comm -23 <(sort /tmp/t14-targets.txt) /tmp/t14-narrow.txt
 
 #### 즉시 종료형 2파일 — 가드와 판정을 갈라서 옮긴다 〔2026-08-17 Task 13 리뷰가 적발, 전수 확인〕
 
-이 코퍼스에서 `fail() { echo "FAIL: $1" >&2; exit 1; }` 를 쓰는 파일은 **정확히 둘**이다:
+> ⚠ **이 절의 첫 판본은 "정확히 둘" 이라고 적었고 그것이 하나를 놓쳤다** 〔2026-08-17 Task 14 리뷰가 적발〕.
+> 도출에 쓴 패턴이 `^\s*(fail|no|bad|err)\s*\(\)\s*\{[^}]*exit [1-9]` 로 **이름을 열거**했는데,
+> 세 번째 멤버의 이름은 **`check`** 였다(`test_skill_orchestration.sh:37`). 결과로 그 파일의
+> `echo "PASS V2b …"` 가 무조건 출력으로 바뀌어 **체크가 실패해도 성공을 서술**하게 됐다
+> (종료 코드는 보존돼 락 손실은 아니었다).
+>
+> **도출은 이름이 아니라 성질로 한다** — *"판정 헬퍼가 `exit` 를 갖는가"*. 이름 목록은 목록을 쓴
+> 사람이 떠올린 이름까지만 덮는다. 같은 실패를 이 사이클이 Task 12 에서 이미 한 번 겪었고
+> (`parents[N]` 만 세다 `.parent.parent` 를 놓침), 그 교훈을 적어 둔 뒤에 다시 반복했다.
 
-| 파일 | `fail` 호출 | 성격 |
-|---|---|---|
-| `plugins/quality-gates/tests/test_codex_dispatch_invariant.sh:8` | 5 (`:16 :27 :32 :41 :48`) | 전부 **판정** — 각각 SKILL.md 의 독립 속성을 본다 |
-| `plugins/quality-gates/tests/test_consent_marker_write_failure.sh:4` | 2 | `:12` 은 **가드**(`[ -n "$SNIPPET" ] || fail`) · `:20` 은 판정 |
+이 코퍼스에서 **판정 헬퍼가 `exit` 를 갖는 파일은 셋**이다 (이름은 서로 다르다):
+
+| 파일 | 헬퍼 이름 | 호출 | 성격 |
+|---|---|---|---|
+| `plugins/quality-gates/tests/test_codex_dispatch_invariant.sh:8` | `fail` | 5 (`:16 :27 :32 :41 :48`) | 전부 **판정** — 각각 SKILL.md 의 독립 속성을 본다 |
+| `plugins/quality-gates/tests/test_consent_marker_write_failure.sh:4` | `fail` | 2 | `:12` 은 **가드**(`[ -n "$SNIPPET" ] || fail`) · `:20` 은 판정 |
+| `plugins/quality-gates/tests/test_skill_orchestration.sh:37` | **`check`** | — | 판정. `exit 1` 이 **뒤따르는 성공 서술의 도달 조건**이었다 — 이관 시 그 서술을 함께 지워야 한다 |
+
+**도출 명령**(이름을 열거하지 않는다):
+
+```bash
+git ls-files 'plugins/*' | grep -E '(^|/)tests?/.*\.sh$' | grep -vE '/(fixtures|mocks|harness)/' \
+  | while IFS= read -r f; do
+      grep -qE '^[[:space:]]*[a-z_]+[[:space:]]*\(\)[[:space:]]*\{.*\bexit\b' "$f" && echo "$f"
+    done
+```
+
+이 형태는 판정이 아닌 함수(setup·cleanup)도 함께 잡으므로 **후보를 낸 뒤 본문을 읽어 판정 헬퍼만 고른다.** 넓게 잡고 좁히는 방향이 옳다 — 좁게 잡으면 놓친 것이 조용하다.
 
 **출력 형식 변경은 안전하다** 〔실측〕. 이관하면 stderr→stdout, 접두 `FAIL:`→`  ✗ `, `OK:`→`  ✓ ` 로 바뀌지만
 **그 출력을 파싱하는 소비자가 없다**: qg 셸 어댑터는 `run-test-selection.sh:297` 이 *"exit code 만 읽는다,
