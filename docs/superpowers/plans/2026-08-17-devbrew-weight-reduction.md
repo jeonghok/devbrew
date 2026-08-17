@@ -2400,6 +2400,26 @@ git commit -m "feat(shared): 판정 헬퍼 정본 + 종료 행동 락"
 | **수** | 통합 전후로 **각 테스트 파일의** assertion 호출 수를 대조. 파일별로 줄면 미완료 |
 | **행동** | Task 13의 `test_assert_behavior.sh`가 종료 행동을 고정 |
 
+> ⚠ **이 태스크가 끝나면 `shared/tests/assert.sh` 편집의 안전망은 행동 락 하나뿐이다**
+> 〔2026-08-17 Task 13 리뷰가 지적, 실측 확인〕.
+>
+> `compute-test-scope-candidates.sh:143` 이 *"Other languages: no heuristic; only CHANGED_TESTS
+> counts"* — **`.sh` 에는 src→test 이름 휴리스틱이 없다.** guards 축은 선언한 파일만 고른다.
+> 실측: `shared/tests/assert.sh` 를 편집하면 선택되는 것은 **3개**
+> (`test_assert_behavior.sh` · `test_guards_coverage_bidirectional.sh` · 변경 파일 자신)이고,
+> 이 태스크가 이관할 **~120개 소비자 테스트는 선택되지 않는다.**
+>
+> 이것은 설계상 의도다 — 행동 락이 전 소비자의 **대리인**이기 때문이다(§9.2). 그러나 그 대리인이
+> 안전망 **전부**라는 뜻이기도 하다. 따라서:
+>
+> · 이관 테스트에 `# guards: shared/tests/**` 를 **붙이지 않는다.** ~120 파일에 선언을 뿌리면
+>   `shared/tests/` 아래 어떤 변경도 120개를 전부 선택한다 — fail-safe 방향이지만 이 plan 이
+>   지시하지 않은 churn 이고, 설계는 대리인 방식을 명시적으로 골랐다.
+> · 대신 **행동 락에 아직 없는 이빨의 값이 그만큼 커진다.** Task 13 리뷰가 락 밖으로 남긴 셋:
+>   `assert_count_ge` 의 숫자 가드 삭제(GREEN — fail-closed 는 유지되고 진단 메시지만 손실) ·
+>   `ok()` 의 pass 카운터 정지(GREEN) · `assert_count_ge` 의 `<cmd> <expected>` 스왑(GREEN).
+>   이 사이클에서 닫지 않되 **§15.1 에 기록**한다 — 다음에 `assert.sh` 를 만지는 사이클의 입력이다.
+
 - [ ] **Step 1: 이관 전 파일별 assertion 호출 수를 잰다**
 
 ```bash
