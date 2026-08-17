@@ -1576,6 +1576,39 @@ bash plugins/spec-distill/tests/test_brief_agents.sh 2>&1 | tail -3
 
 `validate-audit-data.py:147`이 `CLAUDE.md` 본문에 `docs/audits/` 문자열이 있는지 검사한다. **`CLAUDE.md`를 안 건드렸다면 GREEN이어야 하고, 건드려서 그 문자열이 사라지면 RED가 뜬다** — 누락이 조용히 지나가지 않는다.
 
+- [ ] **Step 4b: 상대 링크 — 전체 경로 grep 이 볼 수 없는 표기**
+
+> ⚠ 〔2026-08-17 실측 결함〕 Step 1 의 재도출이 **0 이어도 이 태스크는 안 끝난 것일 수 있다.**
+> 마크다운 링크는 **텍스트와 대상이 서로 다른 문자열**이라, Step 3 의 전체 경로 치환이
+> 텍스트만 고치고 대상을 남긴다:
+> `[\`<새 경로>\`](<옛 상대경로>)` — 문서는 새 위치를 표시하면서 **죽은 옛 위치로 이동**한다.
+> 안 고친 것보다 나쁘다. 재도출은 전체 경로 문자열만 보므로 이것을 **통과시킨다.**
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+python3 - <<'PY'
+import re, pathlib, subprocess
+files = subprocess.run(["git","ls-files"], capture_output=True, text=True).stdout.split()
+miss = 0
+for f in files:
+    p = pathlib.Path(f)
+    if p.suffix != ".md" or f.startswith("docs/archive/"): continue
+    for m in re.finditer(r'\]\(([^)\s]+)\)', p.read_text(encoding="utf-8")):
+        t = m.group(1).split("#")[0]
+        if not t or t.startswith(("http://","https://","#","mailto:")): continue
+        if not (p.parent / t).exists():
+            print(f"  MISSING {f} -> {t}"); miss += 1
+print("MISSING:", miss)
+PY
+```
+
+상대 경로는 **그 파일 자신의 디렉토리** 기준으로 해석한다 — 리포 루트 기준이 아니다.
+`docs/superpowers/specs/` 에서 `docs/archive/interview/` 로 가는 것은 `../../archive/interview/`다.
+
+**이 태스크가 남겨도 되는 잔여**(고치지 말 것):
+`docs/audits/README.md`(Task 10 소유) · 이 plan 문서 안의 예시 링크 · `](url)` 같은
+선행 플레이스홀더. **그 외 히트는 전부 이 태스크 범위다.**
+
 - [ ] **Step 5: 커밋**
 
 ```bash
