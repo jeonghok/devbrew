@@ -7,8 +7,7 @@ HOOK="$REPO_ROOT/plugins/spec-distill/hooks/review-dispatch.py"
 WORK=$(mktemp -d -t specdistill-mandate-XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 
-pass=0; fail=0
-note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # Build a main repo so state_path helper resolves to it
 cd "$WORK"
@@ -39,26 +38,23 @@ echo "$out" | jq -e '.decision == "block"' >/dev/null \
   && echo "$out" | jq -e '.reason | contains("reviewing-spec")' >/dev/null \
   && echo "$out" | jq -e '.reason | contains("terminal handoff")' >/dev/null \
   && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
-  && note PASS "AC2: mandate (.reason) contains 'reviewing-spec' + 'terminal handoff' phrases" \
-  || note FAIL "AC2 failed. out='$out'"
+  && ok "AC2: mandate (.reason) contains 'reviewing-spec' + 'terminal handoff' phrases" \
+  || no "AC2 failed. out='$out'"
 
 # AC12 — worktree_path carried forward in .reason body
 echo "$out" | jq -e '.reason | contains("worktree_path: /Users/foo/.claude/worktrees/test-wt")' >/dev/null \
-  && note PASS "AC12: mandate (.reason) carries worktree_path forward" \
-  || note FAIL "AC12 failed. out='$out'"
+  && ok "AC12: mandate (.reason) carries worktree_path forward" \
+  || no "AC12 failed. out='$out'"
 
 # Mode signal — design mode mandate should carry mode marker in .reason
 echo "$out" | jq -e '.reason | contains("mode: design")' >/dev/null \
-  && note PASS "design mode marker present in mandate body" \
-  || note FAIL "design mode marker missing. out='$out'"
+  && ok "design mode marker present in mandate body" \
+  || no "design mode marker missing. out='$out'"
 
 # pending_review cleared after fire
 [[ -f "$SDIR/state.local.md" ]] \
   && ! grep -q '^pending_review:' "$SDIR/state.local.md" \
   && grep -q '^last_dispatched_at:' "$SDIR/state.local.md" \
-  && note PASS "state rewritten: pending_review cleared, last_dispatched_at set" \
-  || note FAIL "state not rewritten cleanly"
-
-echo
-echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[[ $fail -eq 0 ]]
+  && ok "state rewritten: pending_review cleared, last_dispatched_at set" \
+  || no "state not rewritten cleanly"
+finish

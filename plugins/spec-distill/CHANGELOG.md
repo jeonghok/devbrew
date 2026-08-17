@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.26.2] — 2026-08-17
+
+devbrew-weight-reduction Task 14 — 자체 판정 헬퍼 이관. `tests/` 46개 파일이 각자
+정의하던 `note`/`pass`/`fail`/`ag` 판정 헬퍼(주로 `note PASS/FAIL <msg>` 디스패처
+관용구)를 지우고 `shared/tests/assert.sh` 정본을 source. 호출부는 `note PASS`→`ok`,
+`note FAIL`→`no`로 개명(`arm_test_helpers.sh`는 두 소비 파일—`test_arm_once.sh`·
+`test_arm_ledger_timing.sh`, Task 14 스코프 밖—의 `note PASS/FAIL` 호출 계약을 유지한
+채 정본 `ok`/`no`로 위임하는 얇은 wrapper로). `test_detect_codex.sh`의 3-인자 `ag`는
+`assert_grep`으로 인자 순서를 재배열(desc가 마지막 인자로).
+
+### Changed
+- `tests/*.sh` 46개 — 자체 헬퍼 정의 삭제, 정본 source, 종료를 `finish`로 통일.
+  assertion 판정 로직·개수 불변(파일별 감소 0), 전량 GREEN 유지.
+
 ## [0.26.1] — 2026-08-17
 
 ### Fixed

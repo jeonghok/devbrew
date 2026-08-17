@@ -14,11 +14,7 @@ trap 'rm -rf "$WORK"' EXIT
 ( cd "$WORK" && git init -q && git config user.email t@t.t \
   && git config user.name t && git commit -q --allow-empty -m seed )
 
-pass=0; fail=0
-note() {
-  if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"
-  else fail=$((fail+1)); echo "  ✗ $2"; fi
-}
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 setup_state() {
   local sid="$1"; shift
@@ -52,8 +48,8 @@ rc=$?
   && echo "$out" | jq -e '.reason | contains("reviewing-spec")' >/dev/null \
   && echo "$out" | jq -e '.reason | contains("terminal handoff")' >/dev/null \
   && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
-  && note PASS "AC11: pending_review triggers decision:block reason+systemMessage with required tokens (incl. terminal handoff)" \
-  || note FAIL "AC11 failed (rc=$rc out=$out)"
+  && ok "AC11: pending_review triggers decision:block reason+systemMessage with required tokens (incl. terminal handoff)" \
+  || no "AC11 failed (rc=$rc out=$out)"
 
 # Case 12: AC12 — no pending_review → silent exit 0
 setup_state "test-012" "---
@@ -62,8 +58,8 @@ session_id: test-012
 "
 out=$(run_hook "test-012")
 rc=$?
-[[ $rc -eq 0 ]] && [[ -z "$out" ]] && note PASS "AC12: no pending_review silent" \
-  || note FAIL "AC12 failed (rc=$rc out=$out)"
+[[ $rc -eq 0 ]] && [[ -z "$out" ]] && ok "AC12: no pending_review silent" \
+  || no "AC12 failed (rc=$rc out=$out)"
 
 # Case 13: AC13 — dispatch removes pending_review + sets last_dispatched_at;
 # second call within TTL is silent.
@@ -83,8 +79,8 @@ rc2=$?
 [[ $rc1 -eq 0 ]] && [[ $rc2 -eq 0 ]] && [[ -z "$out2" ]] \
   && ! grep -q '^pending_review:' "$WORK/.claude/spec-distill/test-013/state.local.md" \
   && grep -q '^last_dispatched_at:' "$WORK/.claude/spec-distill/test-013/state.local.md" \
-  && note PASS "AC13: dispatch consumes block; re-fire within TTL silent" \
-  || note FAIL "AC13 failed (rc1=$rc1 rc2=$rc2 out2=$out2)"
+  && ok "AC13: dispatch consumes block; re-fire within TTL silent" \
+  || no "AC13 failed (rc1=$rc1 rc2=$rc2 out2=$out2)"
 
 # Case 14 (T-1): Stop hook kill switch via DEVBREW_SKIP_HOOKS=spec-distill:Stop
 setup_state "test-014" "---
@@ -102,8 +98,8 @@ out=$(cd "$WORK" && DEVBREW_SPEC_DISTILL_SESSION_ID=test-014 \
 rc=$?
 [[ $rc -eq 0 ]] && [[ -z "$out" ]] \
   && grep -q '^pending_review:' "$WORK/.claude/spec-distill/test-014/state.local.md" \
-  && note PASS "AC14 (T-1): kill switch spec-distill:Stop suppresses emit + preserves state" \
-  || note FAIL "AC14 failed (rc=$rc out=$out)"
+  && ok "AC14 (T-1): kill switch spec-distill:Stop suppresses emit + preserves state" \
+  || no "AC14 failed (rc=$rc out=$out)"
 
 # Case 15 (T-1): kill switch via DEVBREW_SKIP_HOOKS=spec-distill:review-dispatch (alias)
 setup_state "test-015" "---
@@ -121,8 +117,8 @@ out=$(cd "$WORK" && DEVBREW_SPEC_DISTILL_SESSION_ID=test-015 \
 rc=$?
 [[ $rc -eq 0 ]] && [[ -z "$out" ]] \
   && grep -q '^pending_review:' "$WORK/.claude/spec-distill/test-015/state.local.md" \
-  && note PASS "AC15 (T-1): kill switch :review-dispatch alias suppresses emit" \
-  || note FAIL "AC15 failed (rc=$rc out=$out)"
+  && ok "AC15 (T-1): kill switch :review-dispatch alias suppresses emit" \
+  || no "AC15 failed (rc=$rc out=$out)"
 
 # Case 16: dispatch 1회차 — attempts=1 기록, armed_paths는 **안 씀** (T10 계열).
 # 완료 기록은 verdict 시점 mark-reviewed의 몫이다(§5.2).
@@ -142,8 +138,8 @@ sf16="$WORK/.claude/spec-distill/test-016/state.local.md"
   && echo "$out" | jq -e '.decision == "block"' >/dev/null \
   && ! grep -q '^armed_paths:' "$sf16" \
   && grep -q '^  docs/superpowers/specs/2026-01-01-x-design.md: 1$' "$sf16" \
-  && note PASS "§5.2: dispatch 1회차 → attempts=1, armed_paths 미기록" \
-  || note FAIL "dispatch 1회차 실패 (rc=$rc out='$out' state=$(cat "$sf16"))"
+  && ok "§5.2: dispatch 1회차 → attempts=1, armed_paths 미기록" \
+  || no "dispatch 1회차 실패 (rc=$rc out='$out' state=$(cat "$sf16"))"
 
 # Case 17: G6 상한 — attempts가 이미 2면 이번 dispatch가 3회차. emit에 상한 advisory가
 # 붙고 armed_paths에 키가 생긴다. "4회차가 억제된다"가 아니라 3회차가 마지막 자동
@@ -168,8 +164,8 @@ sf17="$WORK/.claude/spec-distill/test-017/state.local.md"
   && echo "$out" | jq -e '.reason | contains("3회 시도")' >/dev/null \
   && grep -q '^  - docs/superpowers/specs/2026-01-01-cap-design.md$' "$sf17" \
   && grep -q '^  docs/superpowers/specs/2026-01-01-cap-design.md: 3$' "$sf17" \
-  && note PASS "G6: 3회차 emit에 상한 advisory + armed_paths 기록" \
-  || note FAIL "G6 상한 실패 (rc=$rc out='$out' state=$(cat "$sf17"))"
+  && ok "G6: 3회차 emit에 상한 advisory + armed_paths 기록" \
+  || no "G6 상한 실패 (rc=$rc out='$out' state=$(cat "$sf17"))"
 
 # Case 18: 스코프 밖 pending(정규화 키 없음)은 attempts를 추적하지 않고도 정상 dispatch.
 setup_state "test-018" "---
@@ -185,9 +181,6 @@ out=$(run_hook "test-018")
 sf18="$WORK/.claude/spec-distill/test-018/state.local.md"
 echo "$out" | jq -e '.decision == "block"' >/dev/null \
   && ! grep -q '^dispatch_attempts:' "$sf18" \
-  && note PASS "스코프 밖 pending → 정상 dispatch, attempts 미추적" \
-  || note FAIL "out-of-scope dispatch 실패 (out='$out')"
-
-echo ""
-echo "summary: $pass passed, $fail failed"
-[[ $fail -eq 0 ]]
+  && ok "스코프 밖 pending → 정상 dispatch, attempts 미추적" \
+  || no "out-of-scope dispatch 실패 (out='$out')"
+finish

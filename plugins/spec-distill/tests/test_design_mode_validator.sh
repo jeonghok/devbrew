@@ -8,8 +8,7 @@ FIX="$REPO_ROOT/plugins/spec-distill/tests/fixtures"
 WORK=$(mktemp -d -t specdistill-design-XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 
-pass=0; fail=0
-note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # Build a main repo + worktree to exercise AC11
 cd "$WORK"
@@ -39,13 +38,13 @@ WT_STATE="$WORK/wt-foo/.claude/spec-distill/case-001/state.local.md"
 [[ $rc -eq 0 ]] && [[ -f "$MAIN_STATE" ]] && [[ ! -f "$WT_STATE" ]] \
   && grep -q '^pending_review:' "$MAIN_STATE" \
   && grep -q 'mode: design' "$MAIN_STATE" \
-  && note PASS "AC1+AC11: design.md write from worktree → state in main repo only" \
-  || note FAIL "AC1+AC11 failed (rc=$rc, main_exists=$([[ -f $MAIN_STATE ]] && echo y || echo n), wt_exists=$([[ -f $WT_STATE ]] && echo y || echo n))"
+  && ok "AC1+AC11: design.md write from worktree → state in main repo only" \
+  || no "AC1+AC11 failed (rc=$rc, main_exists=$([[ -f $MAIN_STATE ]] && echo y || echo n), wt_exists=$([[ -f $WT_STATE ]] && echo y || echo n))"
 
 # Case 2: AC12 — pending_review block contains worktree_path
 grep -q "^  worktree_path:.*wt-foo" "$MAIN_STATE" \
-  && note PASS "AC12: pending_review block contains worktree_path field" \
-  || note FAIL "AC12: worktree_path field missing (state: $(cat $MAIN_STATE 2>/dev/null))"
+  && ok "AC12: pending_review block contains worktree_path field" \
+  || no "AC12: worktree_path field missing (state: $(cat $MAIN_STATE 2>/dev/null))"
 
 # Case 3: regression — spec-mode (existing v0.3.0) still writes state in main repo too
 DEST2="$WORK/main-repo/docs/superpowers/specs/2026-05-17-test-spec.md"
@@ -56,12 +55,9 @@ if [[ -f "$FIX/spec-valid.md" ]]; then
   MAIN_STATE2="$WORK/main-repo/.claude/spec-distill/case-003/state.local.md"
   [[ $rc -eq 0 ]] && [[ -f "$MAIN_STATE2" ]] \
     && grep -q 'mode: spec' "$MAIN_STATE2" \
-    && note PASS "regression: spec-mode write also routes to main repo .claude" \
-    || note FAIL "spec-mode regression failed (rc=$rc)"
+    && ok "regression: spec-mode write also routes to main repo .claude" \
+    || no "spec-mode regression failed (rc=$rc)"
 else
-  note PASS "regression skipped (spec-valid.md fixture absent)"
+  ok "regression skipped (spec-valid.md fixture absent)"
 fi
-
-echo
-echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[[ $fail -eq 0 ]]
+finish

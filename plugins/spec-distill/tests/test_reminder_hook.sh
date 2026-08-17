@@ -7,8 +7,7 @@ HOOK="$REPO_ROOT/plugins/spec-distill/hooks/pending-review-reminder.py"
 WORK=$(mktemp -d -t specdistill-reminder-XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 
-pass=0; fail=0
-note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 cd "$WORK"
 git init -q main-repo
@@ -48,8 +47,8 @@ RECENT=$(python3 -c 'from datetime import datetime,timezone,timedelta; print((da
 write_state "$RECENT"
 out=$(run_hook)
 [[ -z "$out" || "$out" == "" ]] \
-  && note PASS "AC3: reminder silent within TTL" \
-  || note FAIL "AC3 unexpected output: '$out'"
+  && ok "AC3: reminder silent within TTL" \
+  || no "AC3 unexpected output: '$out'"
 
 # AC4: last_dispatched_at older than TTL (now-60s) → re-emit
 OLD=$(python3 -c 'from datetime import datetime,timezone,timedelta; print((datetime.now(timezone.utc)-timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ"))')
@@ -59,35 +58,32 @@ echo "$out" | jq -e '.hookSpecificOutput.hookEventName == "UserPromptSubmit"' >/
   && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("reviewing-spec")' >/dev/null \
   && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("terminal handoff")' >/dev/null \
   && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
-  && note PASS "AC4: reminder re-emits past TTL with full mandate body (dual-target)" \
-  || note FAIL "AC4 failed. out='$out'"
+  && ok "AC4: reminder re-emits past TTL with full mandate body (dual-target)" \
+  || no "AC4 failed. out='$out'"
 
 # AC4b (T-4): after re-emit, last_dispatched_at must be updated to a recent
 # timestamp (anti-spam guard — without this update, AC3 would silently regress).
 new_ts=$(grep -E '^last_dispatched_at:' "$SDIR/state.local.md" | awk '{print $2}')
 [[ -n "$new_ts" ]] && [[ "$new_ts" != "$OLD" ]] \
-  && note PASS "AC4b (T-4): last_dispatched_at updated after emit (anti-spam guard live)" \
-  || note FAIL "AC4b failed — last_dispatched_at unchanged after emit: '$new_ts' vs OLD='$OLD'"
+  && ok "AC4b (T-4): last_dispatched_at updated after emit (anti-spam guard live)" \
+  || no "AC4b failed — last_dispatched_at unchanged after emit: '$new_ts' vs OLD='$OLD'"
 
 # v0.25.0: reminder는 재-nag일 뿐 리뷰의 완료가 아니다 — 원장(armed_paths)을 쓰지 않는다.
 OLD6=$(python3 -c 'from datetime import datetime,timezone,timedelta; print((datetime.now(timezone.utc)-timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ"))')
 write_state "$OLD6"
 run_hook >/dev/null
 ! grep -q '^armed_paths:' "$SDIR/state.local.md" \
-  && note PASS "reminder는 armed_paths를 기록하지 않는다 (재-nag ≠ 리뷰 완료)" \
-  || note FAIL "reminder가 원장을 기록했다: $(cat "$SDIR/state.local.md")"
+  && ok "reminder는 armed_paths를 기록하지 않는다 (재-nag ≠ 리뷰 완료)" \
+  || no "reminder가 원장을 기록했다: $(cat "$SDIR/state.local.md")"
 
 # AC8: kill switch via DEVBREW_SKIP_HOOKS
 out=$(run_hook "DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit")
 [[ -z "$out" ]] \
-  && note PASS "AC8: kill switch (UserPromptSubmit) suppresses emit" \
-  || note FAIL "AC8 (UserPromptSubmit) unexpected output: '$out'"
+  && ok "AC8: kill switch (UserPromptSubmit) suppresses emit" \
+  || no "AC8 (UserPromptSubmit) unexpected output: '$out'"
 
 out=$(run_hook "DEVBREW_DISABLE_SPEC_DISTILL=1")
 [[ -z "$out" ]] \
-  && note PASS "AC8: kill switch (DISABLE_SPEC_DISTILL) suppresses emit" \
-  || note FAIL "AC8 (DISABLE) unexpected output: '$out'"
-
-echo
-echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[[ $fail -eq 0 ]]
+  && ok "AC8: kill switch (DISABLE_SPEC_DISTILL) suppresses emit" \
+  || no "AC8 (DISABLE) unexpected output: '$out'"
+finish

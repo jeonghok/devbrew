@@ -11,8 +11,7 @@ set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SKILL="$REPO_ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
-pass=0; fail=0
-note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # 윈도우 추출: ASCII-stable 구조 앵커로 Step 1 섹션만 잘라 grep(섹션 배치 증명).
 # step1_window 정의는 옛 test_reviewing_spec_lock.sh에서 그대로 옮긴 것 — 이미 이
@@ -47,8 +46,8 @@ step1_window()  { bounded_window '^## Steps$' '^## Deterministic Routing Table';
 # Routing Table 헤더)가 SKILL에서 사라졌다는 뜻이지 통과가 아니다.
 w_out="$(step1_window)"
 [[ -n "$w_out" ]] \
-  && note PASS "W: Step 1 윈도우가 비어 있지 않다 (앵커 생존)" \
-  || note FAIL "W: Step 1 윈도우가 비었다 — 구조 앵커 파손"
+  && ok "W: Step 1 윈도우가 비어 있지 않다 (앵커 생존)" \
+  || no "W: Step 1 윈도우가 비었다 — 구조 앵커 파손"
 
 # S1 (전 AC12 그대로): Step 1 이 state_path.py session-id 로 read 를 해석
 # (read==write 디렉토리 불변식 — 이게 깨지면 스킬이 훅과 다른 파일을 읽어
@@ -57,23 +56,23 @@ w_out="$(step1_window)"
 # 보내고, `set -o pipefail` 이 그 141 을 파이프라인 실패로 표면화해 **매치했는데도 FAIL**
 # 이 난다. 이 파일에서 파이프를 쓰던 유일한 검사였고, S5–S7 은 이미 herestring 이다.
 grep -qF 'state_path.py" session-id' <<<"$w_out" \
-  && note PASS "S1: Step 1 resolves state via state_path.py session-id" \
-  || note FAIL "S1: Step 1 missing session-id read resolution"
+  && ok "S1: Step 1 resolves state via state_path.py session-id" \
+  || no "S1: Step 1 missing session-id read resolution"
 
 # S2 (전 AC13 그대로): continuity non-collapse 가드 프로즈 — rereview_count/
 # issue_history를 harness sid로 collapse하지 말라는 지시. 깨지면 인터뷰-선행
 # 플로우에서 re-review cap이 조용히 리셋된다.
 grep -qF 'continuity read collapse 금지' "$SKILL" \
-  && note PASS "S2: continuity non-collapse guard prose present" \
-  || note FAIL "S2: missing 'continuity read collapse 금지'"
+  && ok "S2: continuity non-collapse guard prose present" \
+  || no "S2: missing 'continuity read collapse 금지'"
 
 # S3 (전 AC8-count 승계 — 형태만 변경): "trio 명령이 전부 $harness_sid로 키잉된다"는
 # 이제 arm_ledger.py의 strip-pending·mark-reviewed 두 verb로 표현된다
 # (check-born은 sid 인자를 받지 않는다 — approve 시점 조회이지 세션 상태 write가 아님).
 cnt=$(grep -cE 'arm_ledger\.py" (strip-pending|mark-reviewed) "\$harness_sid' "$SKILL")
 [[ "$cnt" -eq 2 ]] \
-  && note PASS "S3: exactly 2 arm_ledger trio commands key \$harness_sid (got $cnt)" \
-  || note FAIL "S3: expected 2 harness_sid-keyed arm_ledger commands, got $cnt"
+  && ok "S3: exactly 2 arm_ledger trio commands key \$harness_sid (got $cnt)" \
+  || no "S3: expected 2 harness_sid-keyed arm_ledger commands, got $cnt"
 
 # S4 (신규 teeth): S3의 정규식이 "$session_id"를 쓴 가짜 줄을 배제한다 — S3이
 # 존재만 재고 값을 구분 못 하는 위양성을 봉쇄. production 파일은 건드리지 않고
@@ -84,8 +83,8 @@ EOF
 )
 probe_cnt=$(grep -cE 'arm_ledger\.py" (strip-pending|mark-reviewed) "\$harness_sid' <<<"$probe")
 [[ "$probe_cnt" -eq 0 ]] \
-  && note PASS "S4: S3 정규식이 \$session_id 가짜 줄을 배제한다 (real teeth)" \
-  || note FAIL "S4: S3 정규식이 \$session_id 가짜 줄까지 매치했다 (got $probe_cnt) — 위양성"
+  && ok "S4: S3 정규식이 \$session_id 가짜 줄을 배제한다 (real teeth)" \
+  || no "S4: S3 정규식이 \$session_id 가짜 줄까지 매치했다 (got $probe_cnt) — 위양성"
 
 # S5 (전 AC8-c 승계): approve 창에서 `check-born` 이 **실제로 호출된다**.
 # V9 는 'approve_handoff' 를 production 밖으로 밀어내는 *음의* 락이고, 음의 락은
@@ -95,11 +94,11 @@ probe_cnt=$(grep -cE 'arm_ledger\.py" (strip-pending|mark-reviewed) "\$harness_s
 approve_window() { bounded_window '^## Approve handoff sequence' '^## In-flight state migration'; }
 aw_out="$(approve_window)"
 if [[ -z "$aw_out" ]]; then
-  note FAIL "S5: approve 윈도우가 비었다 — 구조 앵커 파손(통과 아님)"
+  no "S5: approve 윈도우가 비었다 — 구조 앵커 파손(통과 아님)"
 elif grep -qF 'arm_ledger.py" check-born' <<<"$aw_out"; then
-  note PASS "S5: approve 창에서 check-born 이 호출된다 (전 AC8-c 승계)"
+  ok "S5: approve 창에서 check-born 이 호출된다 (전 AC8-c 승계)"
 else
-  note FAIL "S5: approve 창에 check-born 호출이 없다 — 미커밋 advisory 배선 소실"
+  no "S5: approve 창에 check-born 호출이 없다 — 미커밋 advisory 배선 소실"
 fi
 
 # S6/S7 (전 AC11-a·b 승계): degradation advisory 두 개가 살아 있다.
@@ -108,11 +107,11 @@ fi
 # CLAUDE.md 의 graceful-degradation-with-loud-logging 요구이고, 조용한 degrade 는
 # 문서가 리뷰 완료로 기록되지 않은 채 넘어간다는 뜻이다.
 if [[ -z "$w_out" ]]; then
-  note FAIL "S6: Step 1 윈도우가 비었다 — 앵커 파손"
+  no "S6: Step 1 윈도우가 비었다 — 앵커 파손"
 elif grep -qF 'strip skip' <<<"$w_out"; then
-  note PASS "S6: Step 1 빈 harness_sid → strip skip advisory 존재 (전 AC11-a)"
+  ok "S6: Step 1 빈 harness_sid → strip skip advisory 존재 (전 AC11-a)"
 else
-  note FAIL "S6: Step 1 strip-skip advisory 소실 — 조용한 degrade"
+  no "S6: Step 1 strip-skip advisory 소실 — 조용한 degrade"
 fi
 
 # S7 은 섹션 윈도우 안에서 잰다 — file-wide grep 이면 리터럴이 SKILL 어디에 있든
@@ -121,11 +120,11 @@ fi
 step3_window() { bounded_window '^   \*\*리뷰 완료 기록 (v0\.25\.0)\*\*' '^4\. \*\*Apply routing table\*\*'; }
 s3_out="$(step3_window)"
 if [[ -z "$s3_out" ]]; then
-  note FAIL "S7: Step 3 윈도우가 비었다 — 구조 앵커 파손(통과 아님)"
+  no "S7: Step 3 윈도우가 비었다 — 구조 앵커 파손(통과 아님)"
 elif grep -qF '리뷰 완료 기록(mark-reviewed)을 남기지 못했다' <<<"$s3_out"; then
-  note PASS "S7: Step 3 창 안에 mark-reviewed 미기록 advisory 존재 (전 AC11-b)"
+  ok "S7: Step 3 창 안에 mark-reviewed 미기록 advisory 존재 (전 AC11-b)"
 else
-  note FAIL "S7: Step 3 창에서 mark-reviewed 미기록 advisory 소실 — 조용한 degrade"
+  no "S7: Step 3 창에서 mark-reviewed 미기록 advisory 소실 — 조용한 degrade"
 fi
 
 # S8 (S3 의 in-file 음의 짝): S3 은 개수만 세므로, 올바른 `$harness_sid` 줄과 엉뚱한
@@ -133,11 +132,8 @@ fi
 # *정규식 대조군*이지 검사 대상 파일의 속성이 아니다 — 전신 AC8-a/b 는 창 안에서
 # `! grep ... "$session_id"` 를 걸고 있었다.
 if grep -qE 'arm_ledger\.py" (strip-pending|mark-reviewed) "\$session_id' "$SKILL"; then
-  note FAIL "S8: SKILL 안에 \$session_id 로 키잉된 arm_ledger 호출이 있다 — read==write 파손"
+  no "S8: SKILL 안에 \$session_id 로 키잉된 arm_ledger 호출이 있다 — read==write 파손"
 else
-  note PASS "S8: SKILL 안에 \$session_id 로 키잉된 arm_ledger 호출이 없다 (S3 의 음의 짝)"
+  ok "S8: SKILL 안에 \$session_id 로 키잉된 arm_ledger 호출이 없다 (S3 의 음의 짝)"
 fi
-
-echo
-echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[[ $fail -eq 0 ]]
+finish

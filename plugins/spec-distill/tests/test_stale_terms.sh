@@ -26,8 +26,7 @@ set -u -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
 SKILL="$SD/skills/conducting-interview/SKILL.md"
-pass=0; fail=0
-note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # grep은 세 결과를 구분한다: 0=매치(금지어 발견), 1=매치 없음(정상), >=2=grep 자체 실패
 # (읽을 수 없는 파일·잘못된 인자 등). `|| true`로 상태를 삼키면 >=2가 1과 뭉뚱그려져
@@ -52,18 +51,18 @@ while IFS= read -r f; do prod_files+=("$f"); done < <(
 )
 # macOS bash 3.2: 빈 배열에 "${arr[@]}" 확장은 set -u 하에서 crash — 명시 guard(빈 집합=find 깨짐=FAIL).
 if [[ ${#prod_files[@]} -eq 0 ]]; then
-  note FAIL "V7: no production files found — find filter broken"
+  no "V7: no production files found — find filter broken"
   echo; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1
 fi
 
 # V7a: breadth-keeper production 잔존 0
 scan -InE 'breadth-keeper|breadth_keeper|Breadth-Keeper' "${prod_files[@]}"
 if [[ $SCAN_RC -ge 2 ]]; then
-  note FAIL "V7a: grep 자체 실패(exit=$SCAN_RC) — 검사가 실행되지 않았다:"; printf '%s\n' "$SCAN_OUT"
+  no "V7a: grep 자체 실패(exit=$SCAN_RC) — 검사가 실행되지 않았다:"; printf '%s\n' "$SCAN_OUT"
 elif [[ $SCAN_RC -eq 0 ]]; then
-  note FAIL "V7a: stale breadth-keeper in production:"; printf '%s\n' "$SCAN_OUT"
+  no "V7a: stale breadth-keeper in production:"; printf '%s\n' "$SCAN_OUT"
 else
-  note PASS "V7a: no breadth-keeper in production artifacts"
+  ok "V7a: no breadth-keeper in production artifacts"
 fi
 
 # V7b-1: SKILL.md interview_round는 migration 섹션에만
@@ -71,8 +70,8 @@ mig="$(awk '/^## In-flight state migration/{f=1;print;next} /^## /{f=0} f' "$SKI
 all_ir=$(grep -c interview_round "$SKILL" 2>/dev/null || true)
 mig_ir=$(printf '%s\n' "$mig" | grep -c interview_round 2>/dev/null || true)
 { [[ "$all_ir" -ge 1 ]] && [[ "$all_ir" -eq "$mig_ir" ]]; } \
-  && note PASS "V7b: interview_round in SKILL confined to migration ($all_ir)" \
-  || note FAIL "V7b: interview_round leaks outside SKILL migration (total=$all_ir mig=$mig_ir)"
+  && ok "V7b: interview_round in SKILL confined to migration ($all_ir)" \
+  || no "V7b: interview_round leaks outside SKILL migration (total=$all_ir mig=$mig_ir)"
 
 # V7b-2: interview_round production(SKILL 제외) 잔존 0
 # 파일별 루프라 grep 실패도 파일별로 모은다 — 한 파일이 안 읽히면 그 파일은 검사되지 않은 것이므로
@@ -86,11 +85,11 @@ for f in "${prod_files[@]}"; do
   fi
 done
 if [[ -n "$ir_err" ]]; then
-  note FAIL "V7b: grep 자체 실패 — 아래 파일은 검사되지 않았다:"; printf '%s\n' "$ir_err"
+  no "V7b: grep 자체 실패 — 아래 파일은 검사되지 않았다:"; printf '%s\n' "$ir_err"
 elif [[ -z "$ir" ]]; then
-  note PASS "V7b: no interview_round in production outside SKILL migration"
+  ok "V7b: no interview_round in production outside SKILL migration"
 else
-  note FAIL "V7b: interview_round in unexpected production files:"; printf '%s\n' "$ir"
+  no "V7b: interview_round in unexpected production files:"; printf '%s\n' "$ir"
 fi
 
 # --- V8 (AC13): v0.23.0 권위 문법 6개 리터럴 회귀 락 ---
@@ -111,12 +110,12 @@ authority_terms=(
 for term in "${authority_terms[@]}"; do
   scan -InIF -- "$term" "${prod_files[@]}"
   if [[ $SCAN_RC -ge 2 ]]; then
-    note FAIL "V8/AC13: '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
+    no "V8/AC13: '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
     printf '%s\n' "$SCAN_OUT"
   elif [[ $SCAN_RC -eq 0 ]]; then
-    note FAIL "V8/AC13: '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
+    no "V8/AC13: '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
   else
-    note PASS "V8/AC13: '$term' 잔존 0건 (production)"
+    ok "V8/AC13: '$term' 잔존 0건 (production)"
   fi
 done
 
@@ -179,23 +178,23 @@ done
 for term in "${removed_terms[@]}"; do
   scan -inIF -- "$term" "${prod_files[@]}"
   if [[ $SCAN_RC -ge 2 ]]; then
-    note FAIL "V9/T4: '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
+    no "V9/T4: '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
     printf '%s\n' "$SCAN_OUT"
   elif [[ $SCAN_RC -eq 0 ]]; then
-    note FAIL "V9/T4: '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
+    no "V9/T4: '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
   else
-    note PASS "V9/T4: '$term' 잔존 0건 (production)"
+    ok "V9/T4: '$term' 잔존 0건 (production)"
   fi
 done
 for term in "${alias_terms[@]}"; do
   scan -inIF -- "$term" "${alias_files[@]}"
   if [[ $SCAN_RC -ge 2 ]]; then
-    note FAIL "V9/T4: 별칭 '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
+    no "V9/T4: 별칭 '$term' 검사가 실행되지 않았다 — grep 자체 실패(exit=$SCAN_RC):"
     printf '%s\n' "$SCAN_OUT"
   elif [[ $SCAN_RC -eq 0 ]]; then
-    note FAIL "V9/T4: 별칭 '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
+    no "V9/T4: 별칭 '$term' 가 production에 잔존:"; printf '%s\n' "$SCAN_OUT"
   else
-    note PASS "V9/T4: 별칭 '$term' 잔존 0건 (README 제외 production)"
+    ok "V9/T4: 별칭 '$term' 잔존 0건 (README 제외 production)"
   fi
 done
 
@@ -221,8 +220,8 @@ removed_files=(
 )
 for rf in "${removed_files[@]}"; do
   [[ ! -e "$SD/$rf" ]] \
-    && note PASS "V10/T5: '$rf' 부재" \
-    || note FAIL "V10/T5: '$rf' 가 되살아났다"
+    && ok "V10/T5: '$rf' 부재" \
+    || no "V10/T5: '$rf' 가 되살아났다"
 done
 
 # --- V11 (v0.25.0): 대체 surface 가 실재한다 (음의 락만 두면 전부 지워도 통과) ---
@@ -236,12 +235,10 @@ done
 # 본문 의미는 grep으로 못 잡는다 — T-lock류의 한계와 같은 이유).
 scan -InE -- '^def should_arm\(' "$SD/scripts/arm_ledger.py"
 [[ $SCAN_RC -eq 0 ]] \
-  && note PASS "V11: arm_ledger.py 가 should_arm 을 정의한다" \
-  || note FAIL "V11: arm_ledger.py 에 should_arm 정의가 없다 (파일 부재 포함 — 대체 machinery 없음)"
+  && ok "V11: arm_ledger.py 가 should_arm 을 정의한다" \
+  || no "V11: arm_ledger.py 에 should_arm 정의가 없다 (파일 부재 포함 — 대체 machinery 없음)"
 scan -InE -- 'if (not )?arm_ledger\.should_arm\(' "$SD/hooks/spec-write-validator.py"
 [[ $SCAN_RC -eq 0 ]] \
-  && note PASS "V11: validator 가 should_arm 을 소비 위치(if)에서 부른다" \
-  || note FAIL "V11: validator 의 should_arm 호출이 소비 위치에 없다 (주석/neutered 호출 의심 — 게이트 증발)"
-
-echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[[ $fail -eq 0 ]]
+  && ok "V11: validator 가 should_arm 을 소비 위치(if)에서 부른다" \
+  || no "V11: validator 의 should_arm 호출이 소비 위치에 없다 (주석/neutered 호출 의심 — 게이트 증발)"
+finish

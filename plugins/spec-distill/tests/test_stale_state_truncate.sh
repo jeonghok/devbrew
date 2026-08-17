@@ -5,16 +5,7 @@ set -uo pipefail
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$PLUGIN_DIR/hooks/spec-write-validator.py"
 FIX="$PLUGIN_DIR/tests/fixtures"
-fail=0
-
-note() {
-    if [[ "$1" == "PASS" ]]; then
-        echo "[PASS] $2"
-    else
-        echo "[FAIL] $2"
-        fail=$((fail+1))
-    fi
-}
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 run_validator() {
     local wd=$1 sid=$2 file=$3
@@ -39,9 +30,9 @@ cp "$FIX/spec-valid.md" docs/superpowers/specs/2026-05-19-test-spec.md
 run_validator "$WORK" "new-sid12345" "$WORK/docs/superpowers/specs/2026-05-19-test-spec.md"
 if grep -q "session_id: new-sid12345" "$WORK/.claude/spec-distill/new-sid12345/state.local.md" \
     && ! grep -q "stale body content" "$WORK/.claude/spec-distill/new-sid12345/state.local.md"; then
-    note PASS "case 1: stale session_id → truncate"
+    ok "case 1: stale session_id → truncate"
 else
-    note FAIL "case 1: truncate did not occur"
+    no "case 1: truncate did not occur"
 fi
 rm -rf "$WORK"
 
@@ -58,9 +49,9 @@ EOF
 cp "$FIX/spec-valid.md" docs/superpowers/specs/2026-05-19-test-spec.md
 run_validator "$WORK" "same-sid12345" "$WORK/docs/superpowers/specs/2026-05-19-test-spec.md"
 if grep -q "existing body" "$WORK/.claude/spec-distill/same-sid12345/state.local.md"; then
-    note PASS "case 2: matching session_id → append preserves body"
+    ok "case 2: matching session_id → append preserves body"
 else
-    note FAIL "case 2: body lost"
+    no "case 2: body lost"
 fi
 rm -rf "$WORK"
 
@@ -72,9 +63,9 @@ echo "free-form body only" > .claude/spec-distill/no-fm12345/state.local.md
 cp "$FIX/spec-valid.md" docs/superpowers/specs/2026-05-19-test-spec.md
 run_validator "$WORK" "no-fm12345" "$WORK/docs/superpowers/specs/2026-05-19-test-spec.md"
 if grep -q "free-form body only" "$WORK/.claude/spec-distill/no-fm12345/state.local.md"; then
-    note PASS "case 3: no frontmatter → backward compat"
+    ok "case 3: no frontmatter → backward compat"
 else
-    note FAIL "case 3: body lost"
+    no "case 3: body lost"
 fi
 rm -rf "$WORK"
 
@@ -90,14 +81,10 @@ run_validator "$WORK" "unread12345" "$WORK/docs/superpowers/specs/2026-05-19-tes
 chmod 644 .claude/spec-distill/unread12345/state.local.md
 byte_count=$(wc -c < .claude/spec-distill/unread12345/state.local.md)
 if [[ "$byte_count" -lt 100 ]]; then
-    note PASS "case 4: unreadable → preserved"
+    ok "case 4: unreadable → preserved"
 else
-    note FAIL "case 4: overwrote unreadable (byte_count=$byte_count)"
+    no "case 4: overwrote unreadable (byte_count=$byte_count)"
 fi
 rm -rf "$WORK"
 
-if [[ "$fail" -gt 0 ]]; then
-    echo "FAILED: $fail case(s)"
-    exit 1
-fi
-echo "PASSED: 4 cases"
+finish
