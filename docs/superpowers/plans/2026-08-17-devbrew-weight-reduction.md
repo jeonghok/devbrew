@@ -40,6 +40,7 @@
 | **C17** | 사본 제거 우선, 락은 잔여에만 | 락을 먼저 달고 중복을 남기는 순서를 쓰지 않는다 |
 | **C18** | kill switch 이름은 fallback 없이 즉시 rename | 옛 이름 지원 코드를 두지 않고 CHANGELOG `Deprecated`에 기재. **근거는 "현재 제3자 설치가 없다"** — 제3자 설치가 생기면 이 제약이 바뀐다 |
 | — | 매 PR마다 `plugin.json` SemVer bump | `CLAUDE.md` 규약. 건드린 플러그인 전부. bump는 캐시 키 위생용이지 **검증 경로가 아니다**(아래) |
+| — | `unittest discover` 는 **항상** `-t <그 디렉토리 자신>` | `-t .` 은 이 리포에서 **구조적으로 불가능**하다 — devbrew 의 플러그인 디렉토리 이름에 전부 하이픈이 들어 있어 점 경로 패키지 이름이 될 수 없다(`ImportError: Start directory is not importable`). 〔실측 2026-08-17〕 같은 디렉토리를 `-t` 로 주면 `Ran 95`. `-t .` 을 쓰면 기준선 문서의 `0 RED / 957 테스트` 와 비교했을 때 **정상 상태가 신규 회귀로 오판된다.** 근거·재현은 `docs/superpowers/plans/2026-08-17-devbrew-weight-reduction-baseline.md` §측정 노트 |
 | — | 크기·개수·구조는 기계적으로 강제하지 않는다 | 파일 줄 수 · 파일/폴더 개수 · 폴더 모양 · 함수 분할 수 · 유사도 퍼센트에 게이트를 걸지 않는다. 강제 대상은 **중복뿐** |
 
 ### 로드 경로 — 이 plan 전체에 걸리는 단일 사실
@@ -199,7 +200,7 @@ export PYTHONDONTWRITEBYTECODE=1
 : > "$SCRATCH/baseline-python.txt"
 for d in plugins/*/tests plugins/*/scripts/tests plugins/*/hooks/tests; do
   [ -d "$d" ] || continue
-  out="$(python3 -m unittest discover -s "$d" -t . 2>&1)"; rc=$?
+  out="$(python3 -m unittest discover -s "$d" -t "$d" 2>&1)"; rc=$?
   ran="$(printf '%s' "$out" | sed -n 's/^Ran \([0-9]*\) test.*/\1/p' | tail -1)"
   printf '%s\trc=%s\tran=%s\t%s\n' "$( [ "$rc" -eq 0 ] && echo GREEN || echo RED )" "$rc" "${ran:-0}" "$d" >> "$SCRATCH/baseline-python.txt"
   [ "$rc" -ne 0 ] && { echo "=== $d ==="; printf '%s\n' "$out" | tail -40; } >> "$SCRATCH/baseline-python-detail.txt"
@@ -707,10 +708,19 @@ while IFS= read -r tf; do
   [ -f "$tf" ] || continue
   # 선언은 파일 머리 30줄 안에 있어야 한다 — 본문 어디서나 허용하면 테스트가
   # 자기 assertion 문자열 안에 적어 둔 `# guards:` 도 선언으로 읽힌다.
-  decl=$(head -30 -- "$tf" 2>/dev/null | sed -n 's/^[[:space:]]*#[[:space:]]*guards:[[:space:]]*//p' | head -1)
+  # 후행 공백·CR 을 함께 턴다 — CRLF 파일의 선언은 마지막 글롭에 `\r` 이 붙어
+  # 조용히 아무것도 안 맞춘다.
+  decl=$(head -30 -- "$tf" 2>/dev/null | sed -n 's/^[[:space:]]*#[[:space:]]*guards:[[:space:]]*//p' | sed 's/[[:space:]]*$//' | head -1)
   [ -z "$decl" ] && continue
   hit=0
-  for g in $decl; do
+  # 따옴표 없는 `for g in $decl` 를 쓰지 않는다 〔실측〕. bash 는 word-split **뒤에**
+  # pathname expansion 을 하므로 리터럴 `plugins/**` 가 `case` 에 닿기 전에 **실제 디렉토리
+  # 이름으로 전개**된다 — cwd 의존이라 `plugins/` 가 없는 곳에서는 정상 동작하고 있는
+  # 곳에서만 조용히 틀린다. `read -a` 는 glob 하지 않는다.
+  # **`IFS` 를 지정하지 않는다** — 기본값 `$' \t\n'` 이라야 탭 구분 선언도 쪼갠다.
+  # `IFS=' '` 로 좁히면 globbing 버그를 splitting 버그로 맞바꾸는 것이다.
+  read -r -a decl_globs <<< "$decl"
+  for g in "${decl_globs[@]}"; do
     while IFS= read -r ch; do
       [ -z "$ch" ] && continue
       # shellcheck disable=SC2254  # $g is intentionally a glob pattern
@@ -778,6 +788,7 @@ git commit -m "feat(quality-gates): 영향 매핑에 # guards: 선언 축 — �
 
 **Files:**
 - Test: `plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh` (신규)
+- Modify: `plugins/quality-gates/tests/test_guards_declaration_mapping.sh` (Task 5 산출물 — 자기 선언 + `--emit-scanned` early exit 두 줄, Step 2.5)
 - Modify: 각 락 파일의 `# guards:` 선언 (Task 16·35에서 실제 락이 생길 때 적용)
 
 **왜 양방향인가** (설계 §5.2):
@@ -807,15 +818,38 @@ git commit -m "feat(quality-gates): 영향 매핑에 # guards: 선언 축 — �
 # 판정은 락의 `--emit-scanned` 출력으로 한다 — 선언에서 파일 목록을 도출하면
 # "락이 실제로 읽었다"의 증거가 아니라 선언의 자기 반복이다.
 set -u
+
+# 이 파일 자신이 `# guards:` 를 선언하므로 아래 도출에 **자기 자신이 든다.** 그러면
+# `bash "$lock" --emit-scanned` 가 자기를 다시 실행해 **무한 자기재귀**가 된다 —
+# 게다가 안쪽 출력이 `$(...)` 와 `2>/dev/null` 에 전부 삼켜져 **크래시도 출력도 없이
+# 멈춘 것처럼** 보인다(〔실측〕 깊이 카운터로 depth=0..4 확인). 여기서 즉시 답하고 끝낸다:
+# 이 검사기는 아무 경로도 스캔하지 않으므로 빈 stdout 이 정확한 답이고, 호출부의
+# `[ -z "$scanned" ]` 분기가 그것을 "미지원"으로 읽어 아래 Expected 와 일치한다.
+# **자기 자신을 목록에서 빼는 방식은 쓰지 않는다** — PR1 시점에 목록이 비어 "vacuous"
+# FAIL 이 나기 때문이다.
+[ "${1:-}" = "--emit-scanned" ] && exit 0
+
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 pass=0; fail=0
 ok() { pass=$((pass+1)); echo "  ✓ $1"; }
 no() { fail=$((fail+1)); echo "  ✗ $1"; }
 
 # 대상은 열거가 아니라 **도출**한다 — 새 락이 생기면 자동으로 대상이 된다.
-mapfile -t LOCKS < <(cd "$ROOT" && git ls-files -- '*.sh' | grep -E '(^|/)tests?/' \
-  | while IFS= read -r f; do head -30 -- "$f" | grep -q '^[[:space:]]*#[[:space:]]*guards:' && echo "$f"; done)
+# `--cached --others --exclude-standard` 인 이유: 추적된 파일만 보면 **방금 쓴 락이 커밋
+# 전까지 보이지 않는다.** 이 파일 자신이 PR1 시점의 유일한 선언 보유자이므로, 추적-only
+# 로는 Step 2(커밋 전 실행)가 반드시 "0개 — vacuous" FAIL 을 낸다 〔실측〕. 락은 디스크에
+# 존재하는 순간부터 감사 대상이어야 한다 — 커밋 여부는 그 락이 무엇을 지키는지와 무관하다.
+# `mapfile` 을 쓰지 않는다 — 〔실측〕 이 기계의 `env bash` 는 **bash 3.2.57**(macOS 시스템
+# bash)이고 `mapfile` 은 bash 4.0+ 빌트인이라 없다. 쓰면 `LOCKS` 가 미할당인 채
+# `set -u` 아래 unbound 로 죽어 **테스트가 한 번도 못 돈다.**
+LOCKS=()
+while IFS= read -r f; do
+  [ -n "$f" ] && LOCKS+=("$f")
+done < <(cd "$ROOT" && git ls-files --cached --others --exclude-standard -- '*.sh' | grep -E '(^|/)tests?/' \
+  | while IFS= read -r g; do head -30 -- "$g" | grep -q '^[[:space:]]*#[[:space:]]*guards:' && echo "$g"; done)
 
+# `${#LOCKS[@]}` 는 빈 배열에도 안전(0)하지만 `"${LOCKS[@]}"` 확장은 bash 3.2 + `set -u`
+# 에서 **unbound 로 죽는다** 〔실측〕. 그래서 개수 검사가 반드시 for 루프보다 앞이다.
 if [ "${#LOCKS[@]}" -lt 1 ]; then
   no "guards: 선언을 가진 파일이 0개 — 이 검사가 vacuous하다"
   echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"; exit 1
@@ -823,7 +857,22 @@ fi
 ok "guards: 선언 파일 ${#LOCKS[@]}개 도출 (vacuous 아님)"
 
 for lock in "${LOCKS[@]}"; do
-  decl="$(head -30 -- "$ROOT/$lock" | sed -n 's/^[[:space:]]*#[[:space:]]*guards:[[:space:]]*//p' | head -1)"
+  # 후행 공백·CR 을 함께 턴다 — Task 5 의 추출부와 같은 규약(CRLF 파일의 선언이
+  # 마지막 글롭에 `\r` 을 붙여 조용히 아무것도 안 맞추는 것을 막는다).
+  decl="$(head -30 -- "$ROOT/$lock" | sed -n 's/^[[:space:]]*#[[:space:]]*guards:[[:space:]]*//p' | sed 's/[[:space:]]*$//' | head -1)"
+  if [ -z "$decl" ]; then
+    # 조용히 넘기지 않는다. 그리고 빈 배열을 `"${arr[@]}"` 로 확장하면 bash 3.2 +
+    # `set -u` 에서 죽으므로 여기서 끊는 것이 크래시 방지이기도 하다.
+    no "guards: $lock — 선언이 비어 있다 (guards: 뒤에 글롭이 없다)"
+    continue
+  fi
+  # 따옴표 없는 `for g in $decl` 를 쓰지 않는다 — 〔Task 5 실측〕 bash 에서 word-split
+  # **뒤에 pathname expansion** 이 일어나 리터럴 `plugins/**` 가 실제 디렉토리 이름으로
+  # 전개된다. cwd 의존이라 `plugins/` 가 없는 곳에서는 정상 동작하고 있는 곳에서만
+  # 조용히 틀린다. `read -a` 는 glob 하지 않는다.
+  # **`IFS` 를 지정하지 않는다** — 기본값 `$' \t\n'` 이라야 탭 구분 선언도 쪼갠다.
+  # `IFS=' '` 로 좁히면 globbing 버그를 splitting 버그로 맞바꾸는 것이다(Task 5 F1).
+  read -r -a decl_globs <<< "$decl"
   # `--emit-scanned` 를 지원하지 않는 선언 파일은 이 검사 대상 밖이다. 단
   # **조용히 넘어가지 않는다** — 지원 여부 자체를 보고한다.
   if ! scanned="$(cd "$ROOT" && bash "$lock" --emit-scanned 2>/dev/null)" || [ -z "$scanned" ]; then
@@ -836,7 +885,7 @@ for lock in "${LOCKS[@]}"; do
   while IFS= read -r p; do
     [ -z "$p" ] && continue
     m=0
-    for g in $decl; do
+    for g in "${decl_globs[@]}"; do
       # shellcheck disable=SC2254
       case "$p" in $g) m=1; break ;; esac
     done
@@ -847,7 +896,7 @@ for lock in "${LOCKS[@]}"; do
     || no "guards: $lock — 선언 밖 경로 ${outside}건 (선언이 좁다 → 조용한 미선택)"
 
   # 방향 B: 선언이 가리키는 것 중 실제로 읽힌 것이 있는가 (선언이 헛돌지 않는가)
-  for g in $decl; do
+  for g in "${decl_globs[@]}"; do
     n=0
     while IFS= read -r p; do
       [ -z "$p" ] && continue
@@ -880,11 +929,56 @@ Expected(PR3c·PR6 이후): 락 3개가 도출되고 두 방향이 실제로 재
 
 > **이 시점의 PASS는 이빨의 증거가 아니다.** 대상 락이 아직 없기 때문이다. Task 16과 Task 35가 락을 만들면서 `--emit-scanned`를 함께 구현하고, 그때 이 검사가 실제 판정을 낸다. 그 사실을 테스트 헤더가 아니라 **PR3c·PR6의 검증 스텝**에 적어 둔다.
 
+- [ ] **Step 2.5: 선언 규약 확립 + 첫 dogfood**
+
+**규약 (Task 16·35가 따른다)**: `# guards:` 를 선언하는 파일은 **`--emit-scanned` 에 반드시
+답한다.** 실제로 경로를 스캔하는 락은 읽은 경로를 한 줄씩 내고, 스캔할 것이 없는 파일은
+**즉시 빈 출력으로 `exit 0`** 한다. 답하지 않으면 위 검사가 그 파일을 **테스트 스위트째
+실행**하고 그 stdout(`✓` 줄들)을 "스캔한 경로"로 읽어 **거짓 FAIL** 을 낸다.
+
+**첫 dogfood** — Task 5가 만든 `plugins/quality-gates/tests/test_guards_declaration_mapping.sh`
+는 `compute-test-scope-candidates.sh` 의 선언 축을 지키는 락인데 **자기 선언이 없다.** 그래서
+그 스크립트를 고쳐도 이 락이 후보에 들지 않는다 — 이름 관례가 `.sh` 에 없고 자기 편집도
+아니기 때문이다. **이 축이 없애려는 바로 그 미선택이 이 축 자신의 락에 걸려 있다.**
+
+`test_guards_declaration_mapping.sh` 의 shebang 바로 다음 줄에 선언을, `set -u` 다음에
+early exit 를 넣는다 (두 줄):
+
+```bash
+# guards: plugins/quality-gates/scripts/compute-test-scope-candidates.sh
+```
+
+```bash
+# 위 `# guards:` 선언의 짝 — 이 파일은 아무 경로도 스캔하지 않으므로 빈 출력이 정답이다.
+# 답하지 않으면 test_guards_coverage_bidirectional.sh 가 이 스위트를 통째로 실행한다.
+[ "${1:-}" = "--emit-scanned" ] && exit 0
+```
+
+확인:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+# ① 선언이 인식된다
+bash plugins/quality-gates/scripts/compute-test-scope-candidates.sh --emit-guards \
+  | grep -c 'test_guards_declaration_mapping\.sh'
+# ② early exit 가 산다 (출력 없음, rc 0)
+bash plugins/quality-gates/tests/test_guards_declaration_mapping.sh --emit-scanned; echo "rc=$?"
+# ③ 원래 스위트는 그대로 8/8
+bash plugins/quality-gates/tests/test_guards_declaration_mapping.sh | tail -2
+# ④ 커버리지 검사가 이제 락 2개를 도출한다
+bash plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh | tail -4
+```
+
+Expected: ①은 `--emit-guards` 가 이 파일을 낼 때만 1 이상 — **`compute-test-scope-candidates.sh`
+를 건드린 상태에서 재야 한다**(선언 축은 *변경된 파일*과 선언을 대조하므로, 아무것도 안 고친
+워킹트리에서는 0이 정상이다). ②는 `rc=0` + 무출력. ③은 `Fail: 0`. ④는 "선언 파일 2개 도출".
+
 - [ ] **Step 3: 커밋**
 
 ```bash
-git add plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh
-git commit -m "test(quality-gates): # guards: 선언의 양방향 커버리지 검사"
+git add plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh \
+        plugins/quality-gates/tests/test_guards_declaration_mapping.sh
+git commit -m "test(quality-gates): # guards: 양방향 커버리지 검사 + 선언 규약 첫 dogfood"
 ```
 
 ---
@@ -990,7 +1084,7 @@ mk_target two-dirs-first-fails
 out="$(run_sut)"
 echo "      $out"
 case "$out" in
-  *'"total": 4'*|*'"total":4'*) ok "A: 두 디렉토리를 모두 돌아 total=4" ;;
+  *'"total": 2'*|*'"total":2'*) ok "A: 두 디렉토리를 모두 돌아 total=2" ;;
   *) no "A: 두 디렉토리 합산이 안 됐다 (out=$out)" ;;
 esac
 case "$out" in
@@ -1063,7 +1157,16 @@ for cand in tests scripts/tests hooks/tests; do
 
   # ── python ──────────────────────────────────────────────────────────────
   if find "$d" -type f \( -name 'test_*.py' -o -name '*_test.py' \) -print -quit 2>/dev/null | grep -q .; then
-    py_out=$( ( cd "$SANDBOX" && PYTHONDONTWRITEBYTECODE=1 $TO python3 -m unittest discover -s "$d" -t . ) 2>&1 )
+    # `-t "$d"` 이지 `-t .` 이 아니다 〔실측 2026-08-17〕. `-t .` 은 unittest 에게 테스트
+    # 디렉토리를 **점 경로 패키지로 import** 하라고 시키는데, devbrew 의 플러그인 디렉토리
+    # 이름에는 전부 하이픈이 들어 있어 파이썬 식별자가 될 수 없다:
+    #   `discover -s plugins/project-init/tests -t .`
+    #     → ImportError: Start directory is not importable
+    #   `discover -s plugins/project-init/hooks/tests -t <같은 경로>`  → **Ran 95**
+    # `-t .` 을 두면 이 태스크가 없애려는 결함(0건을 수집하고 ran=true 보고)이 그대로
+    # 남는다. 기준선 문서(2026-08-17-...-baseline.md)가 "어떤 후속 태스크도 이 형태를
+    # 재도입하지 말 것" 이라 못 박은 자리다.
+    py_out=$( ( cd "$SANDBOX" && PYTHONDONTWRITEBYTECODE=1 $TO python3 -m unittest discover -s "$d" -t "$d" ) 2>&1 )
     rc=$?
     if [ -n "$TO" ] && [ "$rc" -eq 124 ]; then
       add_why "$cand: 120s 타임아웃 초과 (AC-11 — 실행 무효)"
@@ -1127,8 +1230,12 @@ cd /Users/jeonghokim/Downloads/devbrew
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
 bash plugins/plugin-audit/scripts/tests/test_run_own_tests_accumulate.sh
 echo "--- 기존 plugin-audit 테스트 ---"
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/scripts/tests -t . 2>&1 | tail -5
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
+  -s plugins/plugin-audit/scripts/tests -t plugins/plugin-audit/scripts/tests 2>&1 | tail -5
 ```
+
+> `-t` 를 그 디렉토리 **자신**으로 맞춘다. `-t .` 은 하이픈 플러그인명 때문에 이 리포에서
+> 항상 실패하며, 기준선 문서가 회귀 판정에 재도입을 금지한 형태다.
 
 Expected: 새 테스트 PASS · 기존 파이썬 스위트가 Task 1 기준선과 동일
 
@@ -1144,13 +1251,52 @@ Expected: `ran: true`, `passed`·`total`이 **숫자**(이전에는 `null`). `pr
 
 > 이 값은 §14 완료 측정표의 `/plugin-audit project-init의 수집 수` 행의 **before**다. Task 12가 `hooks/tests/`를 옮기면 같은 행이 다시 움직이므로, **PR3a 직후에 한 번 더 잰다** — 그래야 작업 H와 B-3의 기여가 분리된다.
 
-- [ ] **Step 6: 버전 bump + 커밋**
+- [ ] **Step 6: 커밋 (bump 없이)**
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
-# plugin.json version: minor bump (새 surface — 셸 테스트 수집)
 git add plugins/plugin-audit/
 git commit -m "fix(plugin-audit): run-own-tests 누산·카운트·셸 수집 — 0건을 ran=true로 보고하던 결함"
+```
+
+- [ ] **Step 7: PR1 마감 — 건드린 플러그인 셋 전부 bump**
+
+앞 판본은 Step 6 주석에 *"minor bump"* 라고만 적고 `plugin.json` 을 고치는 **명령이 없었다.**
+그리고 PR1 은 플러그인 **셋**을 건드린다 — `spec-distill`(Task 4, 실행비트) ·
+`quality-gates`(Task 5·6) · `plugin-audit`(Task 7). 규약은 **PR 마다**이지 커밋마다가 아니므로
+여기 한 곳에 모은다. version 은 **설치 캐시 키**라, 빠뜨리면 사용자가 새 코드를 받았다고
+믿으면서 옛 코드를 돈다.
+
+| 플러그인 | 현재 | 다음 | 왜 |
+|---|---|---|---|
+| `quality-gates` | 3.1.0 | **3.2.0** | minor — `# guards:` 선언 축 + `--emit-guards` 는 새 surface |
+| `plugin-audit` | 0.3.0 | **0.4.0** | minor — 셸 테스트 수집은 새 surface |
+| `spec-distill` | 0.26.0 | **0.26.1** | patch — 실행비트만, 동작 계약 무변경 |
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+python3 - <<'PY'
+import json, pathlib
+for name, ver in (("quality-gates","3.2.0"), ("plugin-audit","0.4.0"), ("spec-distill","0.26.1")):
+    p = pathlib.Path("plugins")/name/".claude-plugin"/"plugin.json"
+    d = json.loads(p.read_text(encoding="utf-8"))
+    old = d["version"]; d["version"] = ver
+    p.write_text(json.dumps(d, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"{name}: {old} → {ver}")
+PY
+git diff --stat -- '*/plugin.json'
+```
+
+> **확인**: `git diff -- '*/plugin.json'` 이 **세 파일 모두**에서 `version` 한 줄만 바꿨는지 본다.
+> `json.dumps` 재작성이라 키 순서·들여쓰기가 바뀔 수 있다 — 바뀌었으면 그 파일은
+> `git checkout` 으로 되돌리고 해당 한 줄만 손으로 고친다.
+
+`CHANGELOG.md` 는 v1.0.0 이상인 플러그인에만 필수다 — `quality-gates`(3.x)에 항목을 추가하고,
+`plugin-audit`(0.x)·`spec-distill`(0.x)은 각자 기존 관례를 따른다.
+
+```bash
+git add plugins/*/.claude-plugin/plugin.json plugins/*/CHANGELOG.md
+git commit -m "chore: PR1 버전 bump — qg 3.2.0 · plugin-audit 0.4.0 · spec-distill 0.26.1"
 ```
 
 ---
@@ -1348,7 +1494,7 @@ done
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/scripts/tests -t . 2>&1 | tail -5
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/scripts/tests -t plugins/plugin-audit/scripts/tests 2>&1 | tail -5
 bash plugins/spec-distill/tests/test_brief_agents.sh 2>&1 | tail -3
 ```
 
@@ -1444,7 +1590,7 @@ Expected: MISSING 0건. (CHANGELOG는 의도적으로 제외 — Step 3의 판�
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/scripts/tests -t . 2>&1 | tail -3
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/scripts/tests -t plugins/plugin-audit/scripts/tests 2>&1 | tail -3
 git add -A
 git commit -m "docs: 역사 인용 경로 정리 + CLAUDE.md 아카이브 포인터"
 ```
@@ -1563,7 +1709,7 @@ cd /Users/jeonghokim/Downloads/devbrew
 SCRATCH="$(cat .git/devbrew-weight-scratch)"
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
 for d in plugins/project-init/hooks/tests plugins/plugin-audit/scripts/tests; do
-  echo "=== $d"; PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$d" -t . 2>&1 | tail -3
+  echo "=== $d"; PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$d" -t "$d" 2>&1 | tail -3
   for f in "$d"/*.sh; do [ -f "$f" ] && { printf '  %s → ' "$f"; bash "$f" >/dev/null 2>&1 && echo GREEN || echo RED; }; done
 done 2>&1 | tee "$SCRATCH/pre-move.txt"
 ```
@@ -1612,7 +1758,9 @@ rmdir plugins/plugin-audit/scripts/tests 2>/dev/null
 git status --short | head -30
 ```
 
-> `plugins/project-init/tests/`에 **`__init__.py`가 이미 있는지** 확인한다. 없는데 `hooks/tests/__init__.py`가 들어오면 그 디렉토리가 패키지가 되어 `unittest discover -t .`의 모듈 이름이 바뀐다. 있으면 충돌로 멈춘다(위 가드).
+> `plugins/project-init/tests/`에 **`__init__.py`가 이미 있는지** 확인한다. 없는데 `hooks/tests/__init__.py`가 들어오면 그 디렉토리가 패키지가 된다. 있으면 충돌로 멈춘다(위 가드).
+>
+> **이 문단의 전제가 바뀌었다** (2026-08-17): 이 plan 은 원래 `unittest discover -t .` 을 전제로 쓰였고, 그 형태에서는 디렉토리가 패키지가 되면 **모듈 이름이 바뀐다.** 이제 전 plan 이 `-t <그 디렉토리 자신>` 을 쓴다(Global Constraints 참조) — start 와 top 이 같으면 테스트 모듈이 **최상위 모듈로** 잡히므로 `__init__.py` 의 유무가 모듈 이름을 바꾸지 않는다(`hooks/tests` 는 `__init__.py` 가 있는 채 `-t` 를 자기 자신으로 줘서 **Ran 95** 가 나왔다 〔실측〕). 남는 진짜 위험은 **파일명 충돌**(두 디렉토리에 같은 `test_x.py`)이고 그것은 위 가드가 이미 잡는다. 이 태스크를 실행할 때 `__init__.py` 이동 후 수집 수를 **다시 재서** 이 서술을 확인한다 — 여기 적힌 것은 PR1 시점의 측정이지 Task 12 이후의 측정이 아니다.
 
 - [ ] **Step 4: 세 축 재앵커**
 
@@ -1634,7 +1782,7 @@ cd /Users/jeonghokim/Downloads/devbrew
 SCRATCH="$(cat .git/devbrew-weight-scratch)"
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
 for d in plugins/project-init/tests plugins/plugin-audit/tests; do
-  echo "=== $d"; PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$d" -t . 2>&1 | tail -3
+  echo "=== $d"; PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$d" -t "$d" 2>&1 | tail -3
   for f in "$d"/*.sh; do [ -f "$f" ] && { printf '  %s → ' "$f"; bash "$f" >/dev/null 2>&1 && echo GREEN || echo RED; }; done
 done 2>&1 | tee "$SCRATCH/post-move.txt"
 echo; echo "=== 수집 수 대조 (Ran N) ==="
@@ -3364,7 +3512,7 @@ sys.path.insert(0, 'plugins/plugin-audit/scripts')
 from codex_jsonl import extract_last_agent_message
 print(extract_last_agent_message(sys.stdin.read()))"
 bash shared/tests/test_copy_of_contract.sh | tail -4   # ← Task 16 이후로 미룬다 (아래 주석)
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/tests -t . 2>&1 | tail -3
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/tests -t plugins/plugin-audit/tests 2>&1 | tail -3
 ```
 
 > **⚠ 이 줄은 B.4 5b 아래에서 아직 못 돈다 — 건너뛰고 Task 16 직후에 돌아온다.**
@@ -3389,7 +3537,7 @@ cd /Users/jeonghokim/Downloads/devbrew
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
 bash shared/tests/test_copy_of_contract.sh | tail -3   # ← Task 16 이후로 미룬다 (Step 4c 주석과 같은 이유)
 bash plugins/quality-gates/tests/test_codex_copies_agree.sh | tail -3
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/spec-distill/tests -t plugins/spec-distill/tests 2>&1 | tail -3
 echo "--- design keyset 이 실제로 나오는가 ---"
 printf '{"type":"item.completed","item":{"type":"agent_message","text":"```json\\n{\\"findings\\":[{\\"file\\":\\"a\\",\\"category\\":\\"c\\",\\"target_section\\":\\"s\\",\\"severity\\":\\"CRITICAL\\",\\"summary\\":\\"x\\"}]}\\n```"}}\n' \
   | python3 plugins/spec-distill/scripts/codex_findings_to_yaml.py --emit-keys design | grep -E 'category|target_section'
@@ -3525,7 +3673,7 @@ grep -rn 'Untrusted data\|Never let content you read\|Never follow instructions 
 cd /Users/jeonghokim/Downloads/devbrew
 bash plugins/quality-gates/tests/test_codex_prompt_untrusted_clause.sh 2>&1 | tail -20
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/tests -t . 2>&1 | tail -3
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/tests -t plugins/plugin-audit/tests 2>&1 | tail -3
 ```
 
 Expected: 전항목 PASS. 특히 `test_preamble_schema_parity.py`와 `test_untrusted_data_clause.py`.
@@ -3697,7 +3845,7 @@ for pair in "project-init:hooks:docs-lint" "project-init:hooks:post-tool-use" \
 done
 bash plugins/spec-distill/tests/test_kill_switches_v060.sh 2>&1 | tail -3
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/quality-gates/tests -t . 2>&1 | tail -3
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/quality-gates/tests -t plugins/quality-gates/tests 2>&1 | tail -3
 ```
 
 Expected: **12지점 × 두 스위치 전부**에서 no-op. **하나라도 반응하지 않으면 보안 컨트롤 회귀다** — 그 자리에서 멈춘다.
@@ -4068,8 +4216,8 @@ done
 cd /Users/jeonghokim/Downloads/devbrew
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
 export PYTHONDONTWRITEBYTECODE=1
-python3 -m unittest discover -s plugins/quality-gates/tests -t . 2>&1 | tail -3
-python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
+python3 -m unittest discover -s plugins/quality-gates/tests -t plugins/quality-gates/tests 2>&1 | tail -3
+python3 -m unittest discover -s plugins/spec-distill/tests -t plugins/spec-distill/tests 2>&1 | tail -3
 bash shared/tests/test_copy_of_contract.sh | tail -6
 ```
 
@@ -4193,7 +4341,7 @@ cd /Users/jeonghokim/Downloads/devbrew
 bash plugins/quality-gates/tests/test_discover_plan.sh 2>&1 | tail -3
 bash plugins/quality-gates/tests/test_discover_spec.sh 2>&1 | tail -3
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/spec-distill/tests -t plugins/spec-distill/tests 2>&1 | tail -3
 ```
 
 **훅 두 개가 실제로 돌아야 한다.** import 배선이 깨져도 위 unittest 는 훅을 직접 태우지 않는 한 GREEN 일 수 있다:
@@ -4313,7 +4461,7 @@ done
 echo "=== 스크립트 import ==="
 python3 -c "import sys; sys.path.insert(0,'plugins/spec-distill/scripts'); import state_path; print('OK', state_path.state_root())"
 echo "=== 테스트 ==="
-python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
+python3 -m unittest discover -s plugins/spec-distill/tests -t plugins/spec-distill/tests 2>&1 | tail -3
 for t in plugins/spec-distill/tests/test_state_path.sh plugins/spec-distill/tests/test_session_id_resolution.sh \
          plugins/spec-distill/tests/test_reviewing_spec_state_keying.sh; do
   printf '%-56s ' "$t"; bash "$t" >/dev/null 2>&1 && echo GREEN || echo RED
@@ -4404,7 +4552,7 @@ cd /Users/jeonghokim/Downloads/devbrew
 python3 plugins/plugin-audit/scripts/check-staleness.py --repo-root . 2>&1 | grep -ci 'description.*drift' | head -1
 python3 -c "import json; json.load(open('marketplace.json', encoding='utf-8')); print('JSON 유효 ✓')"
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/tests -t . 2>&1 | tail -3
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/tests -t plugins/plugin-audit/tests 2>&1 | tail -3
 ```
 
 Expected: drift 0
@@ -4716,8 +4864,8 @@ grep -rhoE '\.claude/[a-z0-9<>{}$_.-]+' plugins/ shared/ --include='*.py' --incl
   | sed -E 's|\.claude/(quality-gates\|spec-distill\|plugin-audit\|project-init\|agent-transparency)/.*|SHAPE:namespaced|' \
   | sort | uniq -c
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/quality-gates/tests -t . 2>&1 | tail -3
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/spec-distill/tests -t . 2>&1 | tail -3
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/quality-gates/tests -t plugins/quality-gates/tests 2>&1 | tail -3
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/spec-distill/tests -t plugins/spec-distill/tests 2>&1 | tail -3
 ```
 
 Expected: `SHAPE:namespaced`가 아닌 줄이 `.claude/plans`·`.claude/settings.json` 외에 0개
@@ -4902,8 +5050,8 @@ python3 plugins/plugin-audit/scripts/render-audit-report.py docs/audits/2026-07-
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/tests -t . 2>&1 | tail -3
-PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/quality-gates/tests -t . 2>&1 | tail -3
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/tests -t plugins/plugin-audit/tests 2>&1 | tail -3
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/quality-gates/tests -t plugins/quality-gates/tests 2>&1 | tail -3
 echo "=== distinct 어휘 (§14의 한 행) ==="
 grep -rhoE '\b(CRITICAL|IMPORTANT|SUGGESTION|HIGH|MEDIUM|LOW)\b' \
   plugins/*/scripts/*.py plugins/*/agents/*.md 2>/dev/null | sort -u
@@ -5095,7 +5243,7 @@ echo "=== 수집 수 ==="
 tot=0
 for d in plugins/*/tests; do
   [ -d "$d" ] || continue
-  n=$(python3 -m unittest discover -s "$d" -t . 2>&1 | sed -n 's/^Ran \([0-9]*\) test.*/\1/p' | tail -1)
+  n=$(python3 -m unittest discover -s "$d" -t "$d" 2>&1 | sed -n 's/^Ran \([0-9]*\) test.*/\1/p' | tail -1)
   printf '  %-40s %s\n' "$d" "${n:-0}"
 done
 ```
@@ -5172,7 +5320,7 @@ if __name__ == "__main__":
 cd /Users/jeonghokim/Downloads/devbrew
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
 PYTHONDONTWRITEBYTECODE=1 python3 plugins/quality-gates/tests/test_utf8_explicit.py 2>&1 | tail -10
-for d in plugins/*/tests; do [ -d "$d" ] && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$d" -t . 2>&1 | tail -2; done
+for d in plugins/*/tests; do [ -d "$d" ] && PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$d" -t "$d" 2>&1 | tail -2; done
 git add -A
 git commit -m "fix: python 테스트 러너 통일 + encoding=utf-8 명시"
 ```
@@ -6370,7 +6518,7 @@ echo "=== 고쳐진 RED (기준선엔 있었는데 지금 GREEN) ==="
 comm -23 <(grep '^RED' "$SCRATCH/baseline-shell.txt" | cut -f3 | sort) \
          <(grep '^RED' "$SCRATCH/final-shell.txt" | cut -f3 | sort)
 echo "=== python ==="
-for d in plugins/*/tests; do [ -d "$d" ] && { printf '%-40s ' "$d"; python3 -m unittest discover -s "$d" -t . 2>&1 | tail -1; }; done
+for d in plugins/*/tests; do [ -d "$d" ] && { printf '%-40s ' "$d"; python3 -m unittest discover -s "$d" -t "$d" 2>&1 | tail -1; }; done
 ```
 
 Expected: 새 RED **0**
