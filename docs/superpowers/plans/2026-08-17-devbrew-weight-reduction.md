@@ -1452,6 +1452,17 @@ awk -F'\t' '{print $2}' "$(cat .git/devbrew-weight-scratch)/moved-map.txt" | xar
 
 〔plan 작성 시점 before 실측〕 전체 tracked = **145,210줄**. 그중 `docs/audits` 14파일 3,362줄 · `docs/superpowers/plans` 16파일 39,904줄 · `docs/superpowers/specs` 20파일 13,618줄 · `docs/superpowers/interview` 12파일 2,630줄 = **합 59,514줄 (41%)**.
 
+> ⚠ **이 before 의 모집단은 "이 사이클의 산출물을 하나도 포함하지 않은 트리"다** 〔2026-08-17 확인〕.
+> 145,210 은 **이 plan 파일이 커밋되기 직전**의 값이다 — plan 이 들어온 커밋 `ee1d95f` 에서
+> 다시 재면 **150,704** 이고, 차이 5,494 는 정확히 이 plan 파일의 줄 수다(`plans` 를
+> 16파일/39,904 로 적은 것도 같은 이유 — 그 시점 실제는 17파일/45,398). `audits`·`specs`·
+> `interview` 세 값은 `ee1d95f` 와 **정확히 일치**하므로 측정 자체는 건전하다.
+>
+> **§14 완료 측정표를 채울 때 이 모집단 차이를 반드시 명시할 것.** after 는 이 사이클의
+> 산출물(plan·baseline·census·신규 테스트, PR1 종료 시점 기준 약 +2,769줄)을 **포함한** 트리에서
+> 나오므로, 두 값을 그대로 빼면 **감축을 과소 보고**한다. 표에는 두 줄을 함께 적는다 —
+> ① 원문 그대로의 before/after, ② 사이클 산출물을 양쪽에서 뺀 like-for-like 값.
+
 - [ ] **Step 5: 커밋 (참조 수정 전 — 일부러)**
 
 ```bash
@@ -6308,6 +6319,14 @@ git commit -m "test(shared): 20줄 블록 검사 — 새 중복 유입 방지 + 
 
 **설계 §14의 각 행을 before/after 두 값으로 채운다.** before는 각 PR의 해당 스텝에서 이미 쟀다.
 
+> ⚠ **1번 행(정본 트리 줄 수)의 before 와 after 는 모집단이 다르다.** before `145,210` 은 이
+> plan 파일이 커밋되기 **직전**의 트리다 — 이 사이클의 산출물(plan 5,494줄 · baseline · census ·
+> 신규 테스트)이 하나도 안 들어 있다. after 는 그것들을 **포함한** 트리에서 나온다.
+> 그대로 빼면 **감축을 과소 보고**한다. 이 행만 두 줄로 적는다:
+> ① 원문 그대로 before/after, ② 양쪽에서 사이클 산출물을 뺀 like-for-like.
+> 참고값〔실측〕: plan 이 들어온 커밋 `ee1d95f` 전체 = **150,704** · PR1 종료 `168d229` 전체 =
+> **153,473**(정본 100,998 + 아카이브 52,475). 근거는 Task 8 Step 4 의 경고 블록.
+
 - [ ] **Step 1: 전 항목 측정**
 
 ```bash
@@ -6316,6 +6335,7 @@ find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
 export PYTHONDONTWRITEBYTECODE=1
 
 echo "=== 1. 정본 트리 줄 수 (archive 제외) ==="
+git ls-files | grep -v '^docs/archive/' | xargs wc -l 2>/dev/null | grep -c 'total$'   # 1이어야 tail -1 이 총계다
 git ls-files | grep -v '^docs/archive/' | xargs wc -l 2>/dev/null | tail -1
 echo "[before: 145,210 (전체) — archive 제외 기준은 PR2 Step 4 참조]"
 
