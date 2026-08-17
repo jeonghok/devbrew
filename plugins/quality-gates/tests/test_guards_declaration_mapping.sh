@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# guards: plugins/quality-gates/scripts/compute-test-scope-candidates.sh
 # `# guards:` 선언 축 — 변경 파일의 **확장자와 무관하게** 선언 글롭에 걸리면
 # 그 테스트가 후보에 든다.
 #
@@ -7,6 +8,9 @@
 # "거의 모든 코드 변경에서 선택된다"가 거짓이 되는데, 확장자 3종 중 2종만 재는
 # 측정은 그 거짓을 통과시킨다.
 set -u
+# 위 `# guards:` 선언의 짝 — 이 파일은 아무 경로도 스캔하지 않으므로 빈 출력이 정답이다.
+# 답하지 않으면 test_guards_coverage_bidirectional.sh 가 이 스위트를 통째로 실행한다.
+[ "${1:-}" = "--emit-scanned" ] && exit 0
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SUT="$ROOT/plugins/quality-gates/scripts/compute-test-scope-candidates.sh"
 pass=0; fail=0
