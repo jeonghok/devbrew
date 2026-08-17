@@ -2561,16 +2561,41 @@ comm -23 <(sort /tmp/t14-targets.txt) /tmp/t14-narrow.txt
 | `plugins/quality-gates/tests/test_consent_marker_write_failure.sh:4` | `fail` | 2 | `:12` 은 **가드**(`[ -n "$SNIPPET" ] || fail`) · `:20` 은 판정 |
 | `plugins/quality-gates/tests/test_skill_orchestration.sh:37` | **`check`** | — | 판정. `exit 1` 이 **뒤따르는 성공 서술의 도달 조건**이었다 — 이관 시 그 서술을 함께 지워야 한다 |
 
-**도출 명령**(이름을 열거하지 않는다):
+**도출은 한 줄 정규식으로 안 된다** 〔실측〕. 함수 본문이 여러 줄이면 헤더 줄에 `exit` 가 없다 —
+문제의 `check()` 가 정확히 그 모양이다(`check() {` 다음 세 줄 뒤에 `exit 1`). 한 줄 패턴
+`\(\)[[:space:]]*\{.*\bexit\b` 는 **12 파일**을 내고 그중에 `check()` 가 **없다.**
 
-```bash
-git ls-files 'plugins/*' | grep -E '(^|/)tests?/.*\.sh$' | grep -vE '/(fixtures|mocks|harness)/' \
-  | while IFS= read -r f; do
-      grep -qE '^[[:space:]]*[a-z_]+[[:space:]]*\(\)[[:space:]]*\{.*\bexit\b' "$f" && echo "$f"
-    done
+**중괄호 깊이로 본문을 떠서 그 안에 `exit` 가 있는지 본다** (BASE 기준 **33 후보**):
+
+```python
+import subprocess, re
+ref = "<BASE SHA>"
+files = [f for f in subprocess.run(["git","ls-tree","-r","--name-only",ref],
+                                   capture_output=True, text=True).stdout.split()
+         if re.search(r'^plugins/.*(^|/)tests?/.*\.sh$', f)
+         and not re.search(r'/(fixtures|mocks|harness)/', f)]
+for f in files:
+    t = subprocess.run(["git","show",f"{ref}:{f}"], capture_output=True, text=True).stdout
+    for m in re.finditer(r'^[ \t]*([a-z_]+)[ \t]*\(\)[ \t]*\{', t, re.M):
+        depth, body = 0, ""
+        for ch in t[m.end()-1:]:
+            if ch == '{': depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0: break
+            body += ch
+        if re.search(r'\bexit\b', body):
+            print(f, m.group(1)); break
 ```
 
-이 형태는 판정이 아닌 함수(setup·cleanup)도 함께 잡으므로 **후보를 낸 뒤 본문을 읽어 판정 헬퍼만 고른다.** 넓게 잡고 좁히는 방향이 옳다 — 좁게 잡으면 놓친 것이 조용하다.
+33 후보의 대부분은 **판정이 아닌 함수**다 — 픽스처 빌더(`mk_repo`·`mkstub`·`setup`), 윈도우
+추출기(`section_window`·`scoped_window`), 케이스 러너(`run_case`). **후보를 낸 뒤 본문을 읽어
+판정 헬퍼만 고른다**(위 표의 셋). 넓게 잡고 좁히는 방향이 옳다 — 좁게 잡으면 놓친 것이 조용하다.
+
+> **이 명령은 그 자체가 두 번 틀렸다.** 첫 판본은 이름을 열거해 2를 냈고(`check` 누락), 두 번째
+> 판본은 성질로 바꿨으나 **한 줄 정규식**이라 여전히 `check` 를 놓쳤다(12를 냈고 그 안에 없었다).
+> 세 번째가 위 것이다. **도출기를 고칠 때마다 "놓쳤던 그 사례를 지금 잡는가" 를 직접 확인한다** —
+> 수가 늘었다는 것은 그 사례를 잡았다는 증거가 아니다.
 
 **출력 형식 변경은 안전하다** 〔실측〕. 이관하면 stderr→stdout, 접두 `FAIL:`→`  ✗ `, `OK:`→`  ✓ ` 로 바뀌지만
 **그 출력을 파싱하는 소비자가 없다**: qg 셸 어댑터는 `run-test-selection.sh:297` 이 *"exit code 만 읽는다,
