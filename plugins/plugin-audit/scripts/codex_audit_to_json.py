@@ -18,9 +18,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import pathlib
 import re
 import sys
 from typing import Any
+
+# 이 파일은 심볼릭 링크가 아니라 실제 파일이므로 sys.path[0]이 이미
+# plugins/plugin-audit/scripts/다 — sibling copy-of 사본(codex_jsonl.py)이 그대로
+# 잡힌다. 그래도 .resolve()로 통일한다: 이 파일 자체가 나중에 다른 방식으로 실행되는
+# 경우(symlink 경유 등)에도 항상 자기 디렉토리를 가리키게 하기 위함이다.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from codex_jsonl import extract_last_agent_message  # noqa: E402
 
 COLLECTIONS = ("findings", "d_verdicts", "oq_answers", "new_open_questions")
 
@@ -29,36 +37,6 @@ AUTH_ERROR_RE = re.compile(
     r"authentication|invalid[_ ]api[_ ]key)", re.IGNORECASE)
 
 FENCE_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
-
-
-def extract_last_agent_message(stdin_text: str) -> tuple[str | None, bool]:
-    """마지막 agent_message의 텍스트. any_parsed는 '유효 JSONL이 하나라도 있었나'.
-
-    두 이벤트 shape을 지원한다:
-      1. codex 0.130+: {"type":"item.completed","item":{"type":"agent_message","text":...}}
-      2. legacy:       {"type":"agent_message","text":...} / {"message":...}
-    """
-    text: str | None = None
-    any_parsed = False
-    for line in stdin_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        any_parsed = True
-        if not isinstance(obj, dict):
-            continue
-        raw_item = obj.get("item")
-        item = raw_item if isinstance(raw_item, dict) else obj
-        if item.get("type") != "agent_message":
-            continue
-        candidate = item.get("text") or item.get("message")
-        if isinstance(candidate, str) and candidate.strip():
-            text = candidate
-    return text, any_parsed
 
 
 def parse_payload(msg: str) -> Any:

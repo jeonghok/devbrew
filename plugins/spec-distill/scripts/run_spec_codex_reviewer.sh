@@ -171,6 +171,7 @@ if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/codex_findings_to_yaml.py" \
        --stderr-file "$STDERR_FILE" \
        --meta-override-exit-code "$EXIT_CODE" \
        --meta-override-reason "$OVERRIDE_REASON" \
+       --emit-keys design \
        < "$STDOUT_FILE" > "$OUTPUT_PATH"; then
   echo 'findings: []' > "$OUTPUT_PATH"
   echo 'meta:' >> "$OUTPUT_PATH"; echo '  codex_failed: true' >> "$OUTPUT_PATH"

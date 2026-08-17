@@ -141,6 +141,7 @@ if ! python3 "$PLUGIN_ROOT/scripts/codex_findings_to_yaml.py" \
        --stderr-file "$STDERR_FILE" \
        --meta-override-exit-code "$EXIT_CODE" \
        --meta-override-reason "$OVERRIDE_REASON" \
+       --emit-keys design \
        < "$STDOUT_FILE" > "$OUTPUT_PATH"; then
   emit_fallback yaml_conversion_failed
 fi

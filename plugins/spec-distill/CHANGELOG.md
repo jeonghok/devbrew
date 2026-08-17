@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.28.0] — 2026-08-17
+
+Task 17(무게 감축): `scripts/codex_findings_to_yaml.py`가 물리 사본에서 `shared/codex/
+codex_findings_to_yaml.py`를 가리키는 상대 심볼릭 링크로 바뀌었다(quality-gates와
+공유하는 정본). emit keyset(`category`·`target_section` — design-doc 리뷰 어휘)은
+더 이상 사본 하드코딩이 아니라 정본의 새 `--emit-keys design` 인자다. patch가 아니라
+**minor**인 이유(S3): 이전에는 이 플러그인의 codex 소비 경로가 design keyset을
+암묵적으로 항상 받았지만, 이제는 호출자(`run_brief_codex_reviewer.sh`·
+`run_spec_codex_reviewer.sh`)가 명시적으로 요청해야 한다 — 잊으면 `category`/
+`target_section`이 조용히 빠진다(같은 파일 경로로 새 configurability 노출, detect_codex.sh
+선례와 같은 판단 기준).
+
+### Changed
+- `run_brief_codex_reviewer.sh`·`run_spec_codex_reviewer.sh` 두 호출 모두
+  `--emit-keys design`을 명시(행동 불변 — 이전 하드코딩과 동치).
+- `extract_last_agent_message`(codex JSONL 이벤트 파서)를 `shared/codex/
+  codex_jsonl.py` 정본으로 흡수. `codex_findings_to_yaml.py`가 여기서 import한다
+  (quality-gates·plugin-audit 세 사본이 있던 것 중 이 플러그인 몫).
+- `tests/test_codex_findings_to_yaml.py`의 design-keyset 단언 2건이 이제
+  `--emit-keys design`을 명시적으로 넘긴다(스크립트 기본값이 바뀌었으므로).
+
 ## [0.27.0] — 2026-08-17
 
 Task 15(무게 감축) + fix round 1. patch가 아니라 **minor**인 이유(S3): 새

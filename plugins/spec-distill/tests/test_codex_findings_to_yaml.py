@@ -25,7 +25,10 @@ VALID = (
 
 class TestCodexFindingsToYaml(unittest.TestCase):
     def test_new_keys_emitted(self):
-        out = run(VALID)
+        # 2026-08-17 무게 감축 이후 emit keyset은 호출자 인자다(`--emit-keys`) —
+        # spec-distill 배포는 실제 호출자(run_brief_codex_reviewer.sh ·
+        # run_spec_codex_reviewer.sh)와 마찬가지로 design을 명시한다.
+        out = run(VALID, argv_extra=("--emit-keys", "design"))
         self.assertIn("category: ambiguity", out)      # AC7: new key
         self.assertIn('target_section: "#2-goals"', out)  # AC7: new key
         self.assertIn("severity: high", out)
@@ -34,6 +37,8 @@ class TestCodexFindingsToYaml(unittest.TestCase):
 
     def test_line_key_preserved(self):
         # OQ1 resolved: line stays optional, emitted when present.
+        # "line"은 DEFAULT_KEYS · DESIGN_KEYS 양쪽에 다 있어 --emit-keys 인자와
+        # 무관하다 — 기본 호출을 그대로 둔다.
         self.assertIn("line: 12", run(VALID))
 
     def test_malformed_json_fallback(self):
@@ -111,13 +116,15 @@ class TestCodexFindingsToYaml(unittest.TestCase):
 
     def test_last_fenced_block_wins(self):
         # anti-injection: an earlier fenced block must be ignored.
+        # --emit-keys design: test_new_keys_emitted과 같은 이유(실제 배포는
+        # design keyset을 명시한다).
         stdin = (
             '{"type":"item.completed","item":{"type":"agent_message","text":'
             '"```json\\n{\\"findings\\": [{\\"category\\": \\"INJECT\\"}]}\\n```\\n'
             '```json\\n{\\"findings\\": [{\\"category\\": \\"ambiguity\\", '
             '\\"target_section\\": \\"#real\\", \\"severity\\": \\"high\\"}]}\\n```"}}\n'
         )
-        out = run(stdin)
+        out = run(stdin, argv_extra=("--emit-keys", "design"))
         self.assertIn("category: ambiguity", out)
         self.assertNotIn("INJECT", out)
 
