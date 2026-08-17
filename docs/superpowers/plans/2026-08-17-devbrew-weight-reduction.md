@@ -41,6 +41,7 @@
 | **C18** | kill switch 이름은 fallback 없이 즉시 rename | 옛 이름 지원 코드를 두지 않고 CHANGELOG `Deprecated`에 기재. **근거는 "현재 제3자 설치가 없다"** — 제3자 설치가 생기면 이 제약이 바뀐다 |
 | — | 매 PR마다 `plugin.json` SemVer bump | `CLAUDE.md` 규약. 건드린 플러그인 전부. bump는 캐시 키 위생용이지 **검증 경로가 아니다**(아래) |
 | — | `unittest discover` 는 **항상** `-t <그 디렉토리 자신>` | `-t .` 은 이 리포에서 **구조적으로 불가능**하다 — devbrew 의 플러그인 디렉토리 이름에 전부 하이픈이 들어 있어 점 경로 패키지 이름이 될 수 없다(`ImportError: Start directory is not importable`). 〔실측 2026-08-17〕 같은 디렉토리를 `-t` 로 주면 `Ran 95`. `-t .` 을 쓰면 기준선 문서의 `0 RED / 957 테스트` 와 비교했을 때 **정상 상태가 신규 회귀로 오판된다.** 근거·재현은 `docs/superpowers/plans/2026-08-17-devbrew-weight-reduction-baseline.md` §측정 노트 |
+| — | 헤드리스 `claude -p` 는 **`/<플러그인>:<커맨드>`** 형태로만 커맨드를 부른다 | 맨 이름(`/qg`)은 **등록돼 있지 않다** — `Unknown command` + `rc=0`. 그리고 `/qg` 계열은 `$ARGUMENTS` 에 **산문을 실을 수 없다**(`!` 블록의 `setup-qg.sh` 가 모르는 토큰을 거부하고, 그러면 모델 턴 0회 · 빈 출력 · `rc=0`). 지시문은 `--append-system-prompt` 로. 근거·프로브는 아래 §로드 경로 |
 | — | 크기·개수·구조는 기계적으로 강제하지 않는다 | 파일 줄 수 · 파일/폴더 개수 · 폴더 모양 · 함수 분할 수 · 유사도 퍼센트에 게이트를 걸지 않는다. 강제 대상은 **중복뿐** |
 
 ### 로드 경로 — 이 plan 전체에 걸리는 단일 사실
@@ -49,27 +50,42 @@ skill들이 스크립트를 `${CLAUDE_PLUGIN_ROOT}/scripts/...`로 부르고, `$
 
 | 하려는 일 | 쓰는 경로 |
 |---|---|
-| `/qg`·`/plugin-audit` **파이프라인**을 브랜치 코드로 검증 | `claude -p --plugin-dir <repo>/plugins/<name> ...` — **유일한 경로** |
+| `/qg`·`/plugin-audit` **파이프라인**을 브랜치 코드로 검증 | `claude -p --plugin-dir <repo>/plugins/<name> '/<플러그인>:<커맨드> <플래그>'` — **유일한 경로**. 이름 형태는 아래 실측 블록이 규정한다 |
 | 선택기·러너 **단일 스크립트** 측정 | 워킹트리에서 그냥 `bash plugins/.../script.sh` (캐시 무관) |
 | 버전 bump | 캐시 키 위생. 검증 경로 **아님** |
 
 **모든 `/qg` 검증 단계는 `--plugin-dir`로 돈다.** 이것을 빼면 PR2~PR6이 계속 구버전 선택기를 돌아 PR1의 수리가 무효가 된다.
 
-> ⚠ **이 문단의 전제가 실측에서 절반 깨졌다 (2026-08-17, PR1 Task 7). PR2 진입 전에 풀 것.**
->
-> | 측정 | 결과 |
-> |---|---|
-> | `claude -p --plugin-dir <dir> '/qg …'` | **`Unknown command: /qg`** — 그리고 **exit 0** |
-> | 같은 것을 `/plugin-audit` 로 | 동일. 이미 설치된 `/commit` 으로도 동일 → **헤드리스 `-p` 는 슬래시 커맨드 자체를 파싱하지 않는다** |
-> | `--plugin-dir` 가 플러그인을 로드하기는 하나 | **한다.** `quality-gates:qg` · `quality-gates:quality-pipeline` 이 available-skills 목록에 뜬다 |
-> | `--plugin-dir` 사본과 설치 캐시 사본 중 **어느 쪽이 이기나** | **미측정.** 캐시에 `quality-gates 3.1.0` 이 있어 같은 이름의 소스가 둘이다 |
->
-> 두 가지가 따로 확인돼야 한다: **①** 헤드리스에서 이 파이프라인을 부르는 *실제로 되는 형태*
-> (슬래시가 아닌 skill 이름 지정 등), **②** 그 형태가 캐시가 아니라 **브랜치 코드**를 도는지.
-> ②가 확인되기 전에는 이 문단의 "구버전 선택기를 돌지 않는다" 는 **주장이지 측정이 아니다.**
->
-> **rc 를 믿지 말 것** — 실패가 `exit 0` 이라, 종료 코드만 보는 검증 스텝은 이 실패를 성공으로 읽는다.
-> 출력에 `Unknown command` 가 있는지 반드시 본다.
+#### 헤드리스 호출 규격 — 2026-08-17 실측 확정 (PR1 종료 시, 프로브 A~K)
+
+Task 7 이 *"`/qg` 가 `Unknown command` 로 죽는다"* 를 관측했고, PR2 착수 전에 그 원인과
+되는 형태를 실측으로 닫았다. 결론은 세 줄이다.
+
+| 형태 | 결과 | 증거 |
+|---|---|---|
+| `/qg` · `/plugin-audit` · `/commit` — **맨 이름** | **`Unknown command`** + `rc=0` | `--plugin-dir` 로 로드한 자작 커맨드 `/zzping` 도 동일하게 죽는다 |
+| `/quality-gates:qg` — **`<플러그인>:<커맨드>`** | **된다** | `stream-json` 의 `init.slash_commands` 에 등록된 이름이 **네임스페이스 형태뿐**이다 |
+| `/<플러그인>:<스킬>` · 프롬프트 본문의 `Skill <플러그인>:<스킬>` | **된다** | `$ARGUMENTS` 도 그대로 전달된다 |
+
+**어느 사본이 이기나 — `--plugin-dir` 가 설치 캐시를 이긴다(실측).** 캐시에 `quality-gates 3.1.0`
+이 있는 상태에서 `--plugin-dir` 사본에만 심은 카나리가 로드된 스킬 설명에 그대로 나왔고,
+같은 이름 충돌 하에서 `${CLAUDE_PLUGIN_ROOT}` 가 `--plugin-dir` 경로로 확장됐다. 즉
+**스크립트도 브랜치 코드에서 온다** — 이 문단의 "구버전 선택기를 돌지 않는다" 는 이제 측정이다.
+
+> ⚠ **`/qg` 계열은 `$ARGUMENTS` 에 산문을 실으면 안 된다.** `commands/qg.md:64` 가
+> `!` 블록으로 `setup-qg.sh $ARGUMENTS` 를 무조건 실행하는데, 이 스크립트는 **모르는 토큰을
+> 거부**한다(실측: `--ensure runtime — Runtime gate …` → `Unknown argument: —`). `!` 블록이
+> 죽으면 그 턴은 **모델 턴 0회 · `result: ""` · `is_error: false` · `rc=0`** 으로 끝난다 —
+> 아무것도 안 돌았는데 성공으로 읽히는 세 번째 조용한 실패다.
+> **지시문은 `--append-system-prompt` 로 싣는다**(실측 동작 확인). `$ARGUMENTS` 에는
+> `argument-hint` 가 인정하는 플래그만 넣는다.
+> `plugin-audit.md` · `standup.md` 는 `!` 블록이 없어 `$ARGUMENTS` 가 프롬프트 텍스트로만
+> 흐르므로 산문 인자를 그대로 써도 된다 — **이 제약은 `/qg` 계열에만 걸린다.**
+
+> **rc 를 믿지 말 것** — 위 실패는 전부 `exit 0` 이다. 종료 코드만 보는 검증 스텝은
+> 성공으로 읽는다. 출력에 `Unknown command` 가 있는지, 그리고 **출력이 비어 있지 않은지**
+> 반드시 본다. 빈 출력은 성공도 실패도 아니다 — `--output-format stream-json --verbose` 로
+> `num_turns` 와 `<local-command-stderr>` 를 봐야 갈린다.
 
 ### 헤드리스 실행 시 쓰기 권한
 
@@ -487,6 +503,13 @@ claude -p --plugin-dir "$SCRATCH/symlink-probe/symprobe" \
 
 Expected(설계의 기각이 옳다면): 파일 부재 또는 링크 미해석 오류.
 Expected(기각이 뒤집힌다면): `SYMLINK_TARGET_REACHED`.
+
+> ⚠ 이 프로브는 모델이 **Bash 를 실제로 쓰는** 데 의존한다. 헤드리스 기본 권한에서 Bash 가
+> 거부되면 출력은 "실행 못 했다" 가 되는데, 그 모양이 위 첫 번째 Expected(**링크 미해석**)와
+> 구분되지 않는다 — 권한 거부를 설계 확증으로 오독하게 된다. **판정 전에 `linked.sh` 를 실제로
+> 실행한 흔적**(도구 호출 또는 stdout)이 있는지 확인하고, 없으면 `--permission-mode acceptEdits`
+> 로 다시 돌린다. 〔이 측정은 2026-08-17 에 이미 수행돼 **링크가 따라간다**로 확정됐다 —
+> 재실행 시에만 해당〕
 
 - [ ] **Step 3: 결과에 따라 분기**
 
@@ -1260,7 +1283,7 @@ Expected: 새 테스트 PASS · 기존 파이썬 스위트가 Task 1 기준선�
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 claude -p --plugin-dir "$PWD/plugins/plugin-audit" \
-  '/plugin-audit plugins/project-init 의 own_tests 블록만 그대로 보여줘.' 2>&1 | grep -A3 own_tests
+  '/plugin-audit:plugin-audit plugins/project-init 의 own_tests 블록만 그대로 보여줘.' 2>&1 | grep -A3 own_tests
 ```
 
 Expected: `ran: true`, `passed`·`total`이 **숫자**(이전에는 `null`). `project-init`은 `tests/`와 `hooks/tests/` 둘 다 갖고 있으므로 이전보다 total이 늘어야 한다.
@@ -1822,7 +1845,7 @@ Expected: `tests` 한 줄. 〔before 실측〕 `tests` · `scripts/tests` · `ho
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 claude -p --plugin-dir "$PWD/plugins/plugin-audit" \
-  '/plugin-audit plugins/project-init 의 own_tests 블록만 그대로 보여줘.' 2>&1 | grep -A3 own_tests
+  '/plugin-audit:plugin-audit plugins/project-init 의 own_tests 블록만 그대로 보여줘.' 2>&1 | grep -A3 own_tests
 ```
 
 **이 값을 Task 7 Step 5의 값과 나란히 기록한다.** H가 `hooks/tests/`를 `tests/`로 옮기면 러너의 첫 후보에서 파이썬이 잡혀 **B-3 코드 수정 없이도 그 행이 부분 달성**된다 — 두 값을 따로 재야 어느 작업의 기여인지 갈린다.
@@ -3268,7 +3291,8 @@ git status --short -- shared/codex/detect_codex.sh   # 빈 출력이어야 한�
 
 # 그 다음 실제 실행 — --plugin-dir (캐시 우회)
 claude -p --plugin-dir "$PWD/plugins/quality-gates" \
-  '/qg runtime — Runtime gate 에서 실제로 실행된 테스트 파일 목록만 그대로 보여줘.' 2>&1 \
+  --append-system-prompt 'Runtime gate 가 끝나면 실제로 실행된 테스트 파일 목록만 그대로 출력한다.' \
+  '/quality-gates:qg runtime' 2>&1 \
   | grep -i 'copy_of\|test_copy_of'
 ```
 
@@ -5213,7 +5237,7 @@ allowed-tools: ["Skill"]
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
-claude -p --plugin-dir "$PWD/plugins/agent-transparency" '/standup' 2>&1 | tail -10
+claude -p --plugin-dir "$PWD/plugins/agent-transparency" '/agent-transparency:standup' 2>&1 | tail -10
 ```
 
 `allowed-tools` 표기는 따옴표 형태로 통일한다 — `project-init/commands/project-init.md`의 `[Bash, Read, Write, Edit, Glob, Grep]`도 `["Bash", "Read", ...]`로.
@@ -5481,7 +5505,8 @@ Expected: Task 1 기준선과 동일
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 claude -p --plugin-dir "$PWD/plugins/quality-gates" \
-  '/qg runtime — Runtime 게이트 절차를 어디서 읽었는지, 그 파일 경로를 그대로 말해줘.' 2>&1 | tail -20
+  --append-system-prompt 'Runtime 게이트 절차를 어디서 읽었는지, 그 파일 경로를 그대로 말한다.' \
+  '/quality-gates:qg runtime' 2>&1 | tail -20
 ```
 
 Expected: `references/runtime-gate.md`를 읽었다고 보고
@@ -6260,7 +6285,8 @@ Expected: 두 락의 guards 선언이 동일 · 같은 diff에서 **둘 다** �
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 claude -p --plugin-dir "$PWD/plugins/quality-gates" \
-  '/qg runtime — Runtime gate 에서 실제로 실행된 테스트 파일 목록만 그대로 보여줘.' 2>&1 \
+  --append-system-prompt 'Runtime gate 가 끝나면 실제로 실행된 테스트 파일 목록만 그대로 출력한다.' \
+  '/quality-gates:qg runtime' 2>&1 \
   | grep -E 'test_copy_of_contract|test_no_new_duplication'
 ```
 
@@ -6369,7 +6395,7 @@ cd /Users/jeonghokim/Downloads/devbrew
 for t in plugins/project-init plugins/quality-gates plugins/spec-distill plugins/plugin-audit plugins/agent-transparency; do
   echo "=== $t"
   claude -p --plugin-dir "$PWD/plugins/plugin-audit" \
-    "/plugin-audit $t 의 own_tests 블록만 그대로 보여줘." 2>&1 | grep -A3 own_tests
+    "/plugin-audit:plugin-audit $t 의 own_tests 블록만 그대로 보여줘." 2>&1 | grep -A3 own_tests
 done
 ```
 
