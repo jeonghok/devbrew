@@ -1485,19 +1485,37 @@ git commit -m "refactor(docs): 완료 산출물을 docs/archive/ 로 이동 (참
 
 - [ ] **Step 1: 깨진 참조를 도출한다**
 
+> ⚠ **소비자 범위는 `docs/archive/` 밖 전 tracked 파일이다** 〔2026-08-17 Task 8 리뷰에서 교정〕.
+> 이전 판은 `plugins/ CLAUDE.md docs/audits/README.md` 세 곳만 훑었는데, **그 셋은 구조적으로
+> 0건이 나온다**: (a) `plugins/`·`CLAUDE.md` 가 참조하는 문서는 Task 8 의 핀 도출이 정의상
+> 안 옮긴다 — 이 스코프는 자기 전제와 겹쳐 아무것도 못 본다. (b) `docs/audits/README.md` 의
+> 링크는 **상대 파일명**(`[X](2026-07-15-x.md)`)이라 전체 경로 grep 에 안 걸린다(README 는
+> Task 10 Step 1 소유). 실제로 깨진 참조 **6건은 전부 `docs/superpowers/specs/` 안에 있었다.**
+> `CHANGELOG.md` 는 제외한다 — 정의상 그 시점의 기록이고 경로를 고치면 역사가 왜곡된다
+> (Task 10 Step 3 의 판단과 같다).
+
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 SCRATCH="$(cat .git/devbrew-weight-scratch)"
+cut -f1 "$SCRATCH/moved-map.txt" > "$SCRATCH/olds.txt"
+# 1패스로 후보 파일만 먼저 좁힌다 (전수 쌍 grep 은 53×700 회라 수 분 걸린다)
+git ls-files | grep -v '^docs/archive/' | grep -v 'CHANGELOG\.md$' | tr '\n' '\0' \
+  | xargs -0 grep -lF -f "$SCRATCH/olds.txt" 2>/dev/null | sort -u > "$SCRATCH/candidates.txt"
 : > "$SCRATCH/broken-refs.txt"
-while IFS=$'\t' read -r old new; do
-  [ -n "$old" ] || continue
-  grep -rln -- "$old" plugins/ CLAUDE.md docs/audits/README.md 2>/dev/null | while IFS= read -r c; do
-    printf '%s\t%s\t%s\n' "$c" "$old" "$new" >> "$SCRATCH/broken-refs.txt"
-  done
-done < "$SCRATCH/moved-map.txt"
+while IFS= read -r c; do
+  while IFS=$'\t' read -r old new; do
+    grep -qF -- "$old" "$c" && printf '%s\t%s\t%s\n' "$c" "$old" "$new" >> "$SCRATCH/broken-refs.txt"
+  done < "$SCRATCH/moved-map.txt"
+done < "$SCRATCH/candidates.txt"
 sort -u -o "$SCRATCH/broken-refs.txt" "$SCRATCH/broken-refs.txt"
-cut -f1 "$SCRATCH/broken-refs.txt" | sort -u
+echo "후보 파일:"; cat "$SCRATCH/candidates.txt"
+echo "triple 수: $(wc -l < "$SCRATCH/broken-refs.txt")"
 ```
+
+Expected 〔2026-08-17 실측, Task 8 직후〕: 후보 **3파일** · triple **6건**, 전부
+`docs/superpowers/specs/` — `2026-07-27-spec-distill-brief-review-pipeline-design.md`(2) ·
+`2026-08-05-agent-transparency-design.md`(1) · `2026-08-16-devbrew-weight-reduction-design.md`(3).
+`grep -F`(고정 문자열)를 쓴다 — 경로의 `.` 이 정규식 와일드카드로 읽히지 않게.
 
 - [ ] **Step 2: 개념 별칭도 훑는다 — 식별자 grep만으로는 부족하다**
 
@@ -1505,9 +1523,17 @@ cut -f1 "$SCRATCH/broken-refs.txt" | sort -u
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
-grep -rn 'docs/audits/\|docs/superpowers/plans/\|docs/superpowers/specs/\|docs/superpowers/interview/' \
-  plugins/ CLAUDE.md 2>/dev/null | grep -v 'CHANGELOG.md:' | grep -vE 'docs/archive/'
+# Step 1 과 같은 소비자 집합 — 여기만 좁으면 개념 별칭이 그 틈으로 빠져나간다
+git ls-files | grep -v '^docs/archive/' | grep -v 'CHANGELOG\.md$' | tr '\n' '\0' \
+  | xargs -0 grep -n 'docs/audits/\|docs/superpowers/plans/\|docs/superpowers/specs/\|docs/superpowers/interview/' \
+    2>/dev/null | grep -vE 'docs/archive/'
 ```
+
+> 이 grep 은 Step 1 과 달리 **디렉토리 접두사**만 본다 — 그래서 파일명이 아니라 디렉토리를
+> 가리키는 참조(`docs/superpowers/plans/` 같은 출력 경로 계약)까지 잡힌다. 히트 수가 Step 1 의
+> triple 수보다 훨씬 많은 것이 정상이고, 대부분은 아래 표의 **디렉토리 계약**으로 분류돼
+> 그대로 남는다. `docs/audits/README.md` 의 **상대 링크**는 이 grep 으로도 안 잡힌다 —
+> Task 10 Step 1 이 basename 치환으로 담당한다.
 
 각 히트를 세 등급으로 분류한다:
 
@@ -1634,6 +1660,34 @@ grep -rhoE 'docs/(audits|superpowers/(plans|specs|interview)|archive/[a-z]+)/[A-
 ```
 
 Expected: MISSING 0건. (CHANGELOG는 의도적으로 제외 — Step 3의 판단.)
+
+> ⚠ **위 검사는 `docs/audits/README.md` 를 구조적으로 검사하지 못한다** 〔2026-08-17 확인〕.
+> 정규식이 `docs/…` 로 시작하는 경로만 잡는데 README 의 링크는 **상대 파일명**이다
+> (`[X](2026-07-15-x.md)`, 교차링크는 `(../superpowers/specs/…)`). 즉 Step 1 이 그 링크를
+> 깨뜨려도 이 검사는 초록이다. **Step 1 의 유일한 검증 지점이 그 Step 자신을 못 본다.**
+> 아래를 함께 돌린다 — 링크를 README 위치 기준으로 실제 해석해 존재를 확인한다:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+python3 - <<'PY'
+import re, pathlib
+idx = pathlib.Path("docs/audits/README.md")
+base = idx.parent
+missing = 0
+for m in re.finditer(r'\]\(([^)]+)\)', idx.read_text(encoding="utf-8")):
+    t = m.group(1)
+    if t.startswith(("http://", "https://", "#")):
+        continue
+    p = (base / t).resolve()
+    if not p.exists():
+        print("  MISSING(README 상대링크):", t); missing += 1
+print("README 링크 MISSING:", missing)
+PY
+```
+
+Expected: **0**. 이 검사는 링크 텍스트가 아니라 **괄호 안 대상**만 본다 —
+`validate-audit-data.py:144` 가 보는 것은 파일명 문자열의 *존재*라 링크가 깨져도 통과하므로,
+그 검사와 이 검사는 서로를 대신하지 못한다.
 
 - [ ] **Step 5: 전체 스위트 + 커밋**
 
