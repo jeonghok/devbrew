@@ -105,7 +105,9 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
 # 이 블록은 **산문이 아니라 리터럴 bash**다. kill switch는 P21 보안 컨트롤이고, 게이트가
 # 산문이면 모델이 건너뛰어도 아무 검사에 걸리지 않는다 — "껐다고 믿게만" 만드는 상태다.
 # quality-gates/tests/test_codex_gate_observation.sh가 이 블록을 마커로 잘라내
-# 4개 시나리오(가용·kill switch·미설치·버전 바닥 미달)로 실행하고 codex 호출 횟수를 센다.
+# 시나리오들(가용·kill switch·미설치·버전 바닥 미달·감지기 부재)로 실행하고 codex
+# 호출 횟수를 센다 — 목록은 test_codex_gate_observation.sh 의 루프 본문이 정의한다
+# (개수를 여기서 세지 않는다: 시나리오가 늘 때마다 이 자리가 stale 해지는 것을 피한다).
 PA="${CLAUDE_PLUGIN_ROOT:-./plugins/plugin-audit}"
 DETECT_OUT="$(bash "$PA/scripts/detect_codex.sh")"
 codex_avail="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^codex_available: //p')"

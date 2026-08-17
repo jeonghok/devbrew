@@ -10,8 +10,8 @@
 #
 # 이 정본은 spec-distill 사본 헤더의 provenance 를 흡수한다:
 # "Vendored from quality-gates (spec-distill design §6 #1)" — 세 사본의 출발점이
-# quality-gates 판이었다는 사실. plugin-audit 판의 "(Task 10)" 귀속은 아래 락 이름이
-# 그대로 살려 둔다.
+# quality-gates 판이었다는 사실. plugin-audit 판이 달던 "(Task 10)" 귀속은 옮기지
+# 않았다 — 그 락의 이름(test_codex_copies_agree.sh)이 아래에 그대로 나온다.
 #
 # 행동 등가는 `quality-gates/tests/test_codex_copies_agree.sh` 가 재고,
 # 배포 지점이 이 정본을 가리키는지는 `shared/tests/test_copy_of_contract.sh` 가

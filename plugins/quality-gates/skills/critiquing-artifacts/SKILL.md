@@ -153,13 +153,18 @@ Agent({
   - 출력이 `codex_failed: true`면 **가용 판정 후 런타임 실패**: `> [quality-gates] codex 가용 판정 후 런타임 실패(<reason>) — degraded, inherit-tier 단독.` (crash 아님, C7) codex.yaml은 병합에서 제외.
 - `codex_available: false` → **미가용**: `> [quality-gates] codex 미가용(<skip_reason>) — inherit-tier 단독 비평.` (위 런타임-실패 문구와 **구분**된 별도 라인.) `<skip_reason>` 자리에는
   `not_installed`·`auth_missing`·`timeout_binary_missing`·`known_bad_version`·
-  `version_below_floor`·`version_unreadable` 외에 형제 설정 `codex-killswitch.conf`
-  문제를 가리키는 `killswitch_config_missing`·`killswitch_config_incomplete`·
-  `killswitch_config_invalid`도 정상적으로 올 수 있다(정본 통합 이후 새 사유,
-  quality-pipeline SKILL의 skip_reason 표와 동형).
+  `version_below_floor`·`version_unreadable`·`kill_switch`·`inside_codex_sandbox`
+  외에 형제 설정 `codex-killswitch.conf` 문제를 가리키는 `killswitch_config_missing`·
+  `killswitch_config_incomplete`·`killswitch_config_invalid`도 정상적으로 올 수
+  있다(정본 통합 이후 새 사유 — `kill_switch`는 이 SKILL이 사용자에게 안내하는
+  `DEVBREW_DISABLE_QG_CODEX=1`의 결과값이라 오히려 가장 흔한 사유다. `kill_switch`·
+  `inside_codex_sandbox` 두 사유는 quality-pipeline SKILL에서는 별도 "silent" 표로
+  분리돼 배너를 안 낸다 — 사용자가 직접 껐거나 재귀 방지라 결손이 아니기 때문이다.
+  이 SKILL은 배너 문구를 하나로 통일하므로 그 구분을 유지하지 않지만, `<skip_reason>`
+  값 자체는 quality-pipeline SKILL이 다루는 사유 집합과 같다).
 - **`detect_codex.sh` 실행 자체가 실패했거나(비-zero exit·빈 stdout) 출력에
   `codex_available:` 줄이 아예 없으면** → "codex 미가용"이 **아니다**. 정상 실행된 감지기는
-  `codex_available: false`여도 항상 `skip_reason`을 함께 낸다(위 아홉 사유 중 하나) — 그
+  `codex_available: false`여도 항상 `skip_reason`을 함께 낸다(위 열거 중 하나) — 그
   줄 자체가 없다는 것은 감지기가 안 돌았다는 뜻이고, 심볼릭 링크가 끊겼을 수 있다
   (`plugins/quality-gates/scripts/detect_codex.sh`는 `shared/codex/detect_codex.sh`를
   가리키는 상대 심볼릭 링크다). `<skip_reason>` 자리를 `unknown`으로 채우지 말고

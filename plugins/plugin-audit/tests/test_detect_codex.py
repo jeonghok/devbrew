@@ -91,7 +91,13 @@ class TestDetectCodex(unittest.TestCase):
         self.assertNotIn("DEVBREW_DISABLE_SPEC_DISTILL_CODEX", body)
 
     def _with_conf_bytes(self, raw_bytes):
-        """conf 를 raw_bytes 로 덮어쓰고 detect_codex.sh 출력을 반환한 뒤 바이트 그대로 원복한다."""
+        """conf 를 raw_bytes 로 덮어쓰고 detect_codex.sh 출력을 반환한 뒤 바이트 그대로 원복한다.
+
+        N5 잔여 위험(round 2): SIGKILL은 `finally`를 못 받는다 — 그때는 추적 중인
+        codex-killswitch.conf가 malformed 값(CRLF/공백만)으로 덮인 채 남는다. 테스트
+        실패로는 안 깨진다. `git checkout --`로 복구 가능하고 데이터 손실은 없다 —
+        다음 사람이 워킹트리가 왜 더러운지 알도록 남긴다.
+        """
         backup = CONF.read_bytes()
         try:
             CONF.write_bytes(raw_bytes)

@@ -5,7 +5,7 @@
 # 호출자 책임인 detect·kill switch가 러너 **앞에** 실제로 연결됐는지는 말해주지
 # 않는다 — kill switch는 P21 보안 컨트롤이라 그 공백을 남기면 "껐다고 믿게만" 만든다.
 #
-# 여기서는 SKILL의 마킹된 게이트 블록을 잘라내 4개 시나리오로 **실행하고**,
+# 여기서는 SKILL의 마킹된 게이트 블록을 잘라내 아래 시나리오들로 **실행하고**,
 # codex mock이 실제로 몇 번 불렸는지 센다.
 set -u -o pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
@@ -29,9 +29,17 @@ SCRATCH="$(mktemp -d -t qg-gate-XXXXXX)" || exit 1
 _ACTIVE_DETECTOR_ORIG=""
 _ACTIVE_DETECTOR_TARGET=""
 restore_active_detector() {
+  # N5(round 2): 파괴는 무조건, 복원은 조건부였던 결함의 짝 — `ln -sf` 실패를
+  # 조용히 삼키면 복원 시도가 있었다는 사실만으로 안전하다고 오판하게 된다.
+  # 실패하면 `no()` 로 소리 낸다(이 함수는 EXIT trap 에서도 불리므로 실패 시점의
+  # `$label` 을 그대로 참조 — bash 함수는 호출부의 전역 변수를 그대로 본다).
   if [ -n "$_ACTIVE_DETECTOR_TARGET" ]; then
-    ln -sf "$_ACTIVE_DETECTOR_TARGET" "$_ACTIVE_DETECTOR_ORIG"
-    _ACTIVE_DETECTOR_TARGET=""
+    if ln -sf "$_ACTIVE_DETECTOR_TARGET" "$_ACTIVE_DETECTOR_ORIG"; then
+      _ACTIVE_DETECTOR_TARGET=""
+    else
+      no "${label:-detector}: 배포 지점 복원 실패 — $_ACTIVE_DETECTOR_ORIG 를 $_ACTIVE_DETECTOR_TARGET 로 못 되살렸다"
+      _ACTIVE_DETECTOR_TARGET=""
+    fi
   fi
 }
 trap 'restore_active_detector; rm -rf "$SCRATCH"' EXIT
@@ -113,7 +121,9 @@ codex_resolved_desc() {   # 진단용 — 위와 같은 PATH에서 실제 해석
   PATH="$1" command -v codex 2>/dev/null || echo "<해석 안 됨>"
 }
 
-# ── 마킹된 게이트를 4개 시나리오로 실행한다 ──────────────────────────────────
+# ── 마킹된 게이트를 아래 시나리오들(가용·kill switch·미설치·버전 바닥 미달·감지기
+# 부재 — 목록은 아래 루프 본문이 정의하며 여기서 개수를 세지 않는다: N4, 개수
+# 리터럴은 시나리오가 늘 때마다 이 자리에서 또 stale 해진다)로 실행한다 ───────────
 # 블록이 요구하는 변수는 하니스가 전부 공급한다 — 어느 이름을 쓰는지는 블록 자유다.
 run_gate() {   # $1=SKILL, $2=runner basename, $3=capture, $4=gate_path(전제 검증 통과), $5..=env KEY=VAL
   local sk="$1" runner="$2" cap="$3" gate_path="$4"; shift 4
@@ -218,21 +228,68 @@ for i in "${!GATED_RUNNER[@]}"; do
     *) no "$label: 바닥 미달 → codex ${n}회" ;;
   esac
 
-  # 감지기 부재(F5, Task 15 fix round 1) — Step 9 loud-failure 수정의 보안 관련 절반이
-  # 실행 관측 없이 남아 있었다. detect_codex.sh 심볼릭 링크가 dangling 이 되면(예:
-  # 배포가 target 없이 나가면) 게이트 스크립트 자체가 안 돈다 — 그 상태에서도 codex 를
-  # 부르면 안 된다(skip_reason: detector_not_runnable 로 닫힌다, 세 fence 전부 실측
-  # 완료). PATH 는 "가용" 시나리오와 동일하게 codex 가 정상 해석되도록 둔다 — PATH
-  # 문제가 아니라 감지기 부재 자체가 codex 호출을 막는지를 격리해서 잰다.
+  # 감지기 부재(F5, Task 15 fix round 1 도입) — Step 9 loud-failure 수정의 보안 관련
+  # 절반이 실행 관측 없이 남아 있었다. detect_codex.sh 심볼릭 링크가 dangling 이
+  # 되면(예: 배포가 target 없이 나가면) 게이트 스크립트 자체가 안 돈다 — 그 상태에서도
+  # codex 를 부르면 안 된다. PATH 는 "가용" 시나리오와 동일하게 codex 가 정상
+  # 해석되도록 둔다 — PATH 문제가 아니라 감지기 부재 자체가 codex 호출을 막는지를
+  # 격리해서 잰다. 세 fence 전부 dangling 링크로 실측 완료 — 셋 다
+  # `skip_reason=detector_not_runnable` 을 올바르게 만든다(구현자가 추론만 했던
+  # `reviewing-brief` 포함). 다만 `reviewing-brief` 는 else 분기가 `:`(no-op) 라
+  # **변수는 올바르게 설정되지만 아무것도 출력하지 않는다** — 그 사용자 가시 구분은
+  # 하류 프로즈 advisory 에 실려 있지 이 fence 자체에는 없다(아래 case 참조).
+  #
+  # round 2 수정(N3): 호출 **횟수만** 세면 이 축이 무엇도 재지 못한다 — 감지기가
+  # 없으면 codex_avail 이 빈 문자열이라 세 fence 모두 `if [[ "$codex_avail" == "true"
+  # ]]` 로 codex 를 안 부르므로, `skip_reason="detector_not_runnable"` 세 줄을 통째로
+  # 지워도 호출 수는 그대로 0 이다(호출-수 axis 는 "codex 미설치"·"kill switch" 등
+  # 다른 모든 스킵 경로와 값이 같아 구별 불가). `run_gate` 가 이미 stderr 를
+  # `"$cap.stderr"` 로 캡처하므로, stderr 에 skip_reason 값을 echo 하는
+  # auditing-plugins·reviewing-spec 두 fence 는 그 캡처를 직접 grep 해 진짜 이빨을
+  # 만든다. reviewing-brief 는 else 가 no-op 이라 stderr 에 아무것도 안 남는다 — 그
+  # 축은 이 러너로는 **관측 불가**다(가짜 락을 남기지 않는다, 아래 case 의 정직한
+  # 문구 참조). mutation 증명: 세 fence 의 `skip_reason="detector_not_runnable"` 줄을
+  # 지우면 auditing-plugins·reviewing-spec 두 시나리오는 RED 가 되고(stderr 가
+  # `${skip_reason:-unknown}` 의 fallback 인 "unknown" 을 내 grep 이 실패한다),
+  # reviewing-brief 시나리오는 GREEN 그대로다(원래도 이 fence 로는 관측 불가라는
+  # 주장과 일치 — 아래 report 의 "N3 mutation 증명" 절 참조).
   _ACTIVE_DETECTOR_ORIG="$plugin_root_dir/scripts/detect_codex.sh"
+  # N5(round 2): 파괴(`rm -f`) 앞에 링크 여부를 확인한다. `readlink` 는 대상이
+  # 심볼릭 링크가 아니면 빈 출력 + rc=1을 내는데, 이 스크립트는 `-e` 없이
+  # `set -u -o pipefail` 뿐이라 그 실패를 무시하고 진행한다 — 확인 없이 진행하면
+  # `_ACTIVE_DETECTOR_TARGET` 이 빈 문자열로 잡히고, 그 뒤 `rm -f` 는 **실파일**을
+  # 지운다. 복원 가드(`[ -n "$_ACTIVE_DETECTOR_TARGET" ]`)는 빈 문자열에 대해
+  # 거짓이라 복원 분기를 안 타 원본이 통째로 유실된다 — 이번 라운드가 만든
+  # 사고(round 1 의 mv-dangling 사고)의 방향만 바꾼 재현이다. 그래서 파괴를
+  # **아예 시작하지 않는다**: 심볼릭 링크가 아니면 이 플러그인의 감지기-부재
+  # 시나리오만 건너뛴다(다른 시나리오들은 이 블록 앞에서 이미 돌았다 — 순서상
+  # 영향 없음).
+  if [ ! -L "$_ACTIVE_DETECTOR_ORIG" ]; then
+    no "$label: 배포 지점이 심볼릭 링크가 아니다 — 파괴적 시나리오를 건너뛴다"
+    continue
+  fi
   _ACTIVE_DETECTOR_TARGET="$(readlink "$_ACTIVE_DETECTOR_ORIG")"
   rm -f "$_ACTIVE_DETECTOR_ORIG"
-  n="$(run_scenario "$sk" "$r" "$SCRATCH/g-$label-nodetect" "$OBS_MOCKBIN:$BASE_SUFFIX" "$OBS_MOCKBIN" "IGNORE=1")"
+  NODETECT_CAP="$SCRATCH/g-$label-nodetect"
+  n="$(run_scenario "$sk" "$r" "$NODETECT_CAP" "$OBS_MOCKBIN:$BASE_SUFFIX" "$OBS_MOCKBIN" "IGNORE=1")"
   restore_active_detector
   case "$n" in
-    0) ok "$label: 감지기 부재 → codex 0회 (loud-failure 확인)" ;;
+    0)
+      case "$label" in
+        auditing-plugins|reviewing-spec)
+          if grep -q 'detector_not_runnable' "$NODETECT_CAP.stderr" 2>/dev/null; then
+            ok "$label: 감지기 부재 → codex 0회 + stderr에 detector_not_runnable (loud-failure 확인)"
+          else
+            no "$label: 감지기 부재 → codex 0회지만 stderr에 detector_not_runnable 없음 — loud-failure 미확인"
+          fi
+          ;;
+        *)
+          ok "$label: 감지기 부재 → codex 0회 (안전 확인) — 이 fence 는 else 가 no-op 이라 detector_not_runnable 표시 자체는 관측 불가(사용자 가시성은 하류 프로즈 advisory 에 의존, N3)"
+          ;;
+      esac
+      ;;
     PREMISE_FAIL:*) no "$label: 감지기 부재 전제 실패 — PATH에서 codex가 mock으로 해석되지 않는다 (실제: ${n#PREMISE_FAIL:})" ;;
-    *) no "$label: 감지기 부재 → codex ${n}회 — loud-failure 가 codex 호출을 막지 못한다" ;;
+    *) no "$label: 감지기 부재 → codex ${n}회 — 게이트가 codex 호출을 막지 못한다" ;;
   esac
 done
 finish

@@ -19,10 +19,7 @@ Task 15(무게 감축) + fix round 1. patch가 아니라 **minor**인 이유(S3)
   POSIX 식별자가 아니면 `skip_reason: killswitch_config_invalid`로 거절한다.
 - `reviewing-brief`·`reviewing-spec` 두 SKILL의 codex 게이트가 "감지기 실행 자체
   실패"와 "codex 미설치"를 구별하지 못하던 결함을 `skip_reason: detector_not_runnable`
-  로 닫았다. (정정: 이전 판은 "`skip_reason: unknown`으로 뭉개던"이라 서술했는데
-  부정확했다 — 두 fence 다 `${skip_reason:-unknown}` bash fallback이 있던 것이
-  아니라, 감지기가 아예 안 돌면 `skip_reason`이 빈 문자열로 advisory 템플릿에
-  그대로 새는 것이었다.) 가드 조건도 `-z codex_avail && -z skip_reason`에서
+  로 닫았다. 가드 조건도 `-z codex_avail && -z skip_reason`에서
   `-z codex_avail` 단독으로 좁혔다 — 정본은 성공 실행 시 항상 exit 0이라 이쪽이
   더 정확하다(I6).
 - `tests/test_detect_codex.sh`의 kill-switch 변수명 양/음 assertion 2개가 심볼릭

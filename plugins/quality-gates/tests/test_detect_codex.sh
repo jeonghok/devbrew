@@ -11,6 +11,10 @@ TMP="$(mktemp -d -t qg-detect-codex-test-XXXXXX)"
 CONF_BACKUP="$TMP/codex-killswitch.conf.orig"
 [ -f "$CONF" ] && cp -p "$CONF" "$CONF_BACKUP"
 restore_conf() { [ -f "$CONF_BACKUP" ] && cp -p "$CONF_BACKUP" "$CONF"; }
+# N5 잔여 위험(round 2): SIGKILL은 EXIT trap을 못 받는다 — 그때는 추적 중인
+# codex-killswitch.conf가 malformed 값(CRLF/공백만)으로 덮인 채 남는다. 테스트
+# 실패로는 안 깨진다(복원이 판정보다 먼저, no()는 exit하지 않는다). git checkout --
+# 로 복구 가능하고 데이터 손실은 없다 — 다음 사람이 워킹트리가 왜 더러운지 알도록 남긴다.
 trap 'restore_conf; rm -rf "$TMP"' EXIT
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
