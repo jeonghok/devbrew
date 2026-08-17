@@ -398,6 +398,16 @@ detect를 돌린다 — 리터럴 bash 게이트로의 전환은 이 사이클 �
 | `version_below_floor` | version_below_floor — stdin prompt(`codex exec -`)는 0.118.0 이상이 필요하다 |
 | `version_unreadable` | version_unreadable — `codex --version`에서 semver를 읽지 못했다 |
 
+**감지기 실행 자체가 실패한 경우는 위 표와 다른 사실이다.** 정상 실행된 `detect_codex.sh`는
+`codex_available: false`여도 항상 위 표의 `skip_reason` 중 하나를 함께 낸다. `detect_codex.sh`를
+돌렸는데 비-zero exit이거나 출력에 `codex_available:` 줄이 아예 없으면, 그것은 "codex가 없다"가
+아니라 **감지기 자체가 안 돈 것**이다 — `plugins/quality-gates/scripts/detect_codex.sh`는
+`shared/codex/detect_codex.sh`를 가리키는 상대 심볼릭 링크라 끊길 수 있다. 그 사유를
+`not_installed` 등 위 표의 값이나 `unknown`으로 뭉개지 말고 **`detector_not_runnable`**로
+별도 취급한다:
+
+> `[quality-gates] codex 감지기 실행 실패 (detector_not_runnable) — 이 리뷰에는 모델 다양성이 없었다 (degraded).`
+
 배너 문구:
 
 > `[quality-gates] codex 리뷰 미실행 (<사유>) — 이 리뷰에는 모델 다양성이 없었다 (degraded).`

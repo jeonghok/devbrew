@@ -3,6 +3,29 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [3.2.4] — 2026-08-17
+
+Task 15(무게 감축): `detect_codex.sh` 세 사본을 `shared/codex/`의 정본 + 상대 심볼릭
+링크로 통합. quality-gates·spec-distill·plugin-audit 세 플러그인이 함께 영향받는다.
+
+### Changed
+- `plugins/quality-gates/scripts/detect_codex.sh`가 물리 파일에서 `shared/codex/
+  detect_codex.sh`를 가리키는 상대 심볼릭 링크로 바뀌었다(2026-08-17 실측 — `--plugin-dir`·
+  설치 캐시 둘 다 심볼릭 링크를 실사용 가능하게 전달한다). kill switch 변수명(유일하게
+  플러그인마다 달라야 하는 값)은 형제 설정 파일 `plugins/quality-gates/scripts/
+  codex-killswitch.conf`로 분리됐다. 설정이 없거나 읽히지 않으면 `codex_available: false`
+  + `skip_reason: killswitch_config_missing`(또는 `killswitch_config_incomplete`)로
+  fail-closed — 조용히 무반응이 되는 것을 막는다(CLAUDE.md:48).
+- `plugins/quality-gates/tests/test_codex_copies_agree.sh` 헤더에 심볼릭 링크 전환 후의
+  역할 분담 문단 추가(기존 "왜 파일 diff가 아닌가" 문단은 보존).
+
+### Fixed
+- `critiquing-artifacts`·`quality-pipeline` 두 SKILL의 codex 게이트가 "감지기 실행 자체가
+  실패"(빈 출력·비-zero exit — 심볼릭 링크가 끊긴 경우 포함)를 "codex 미설치" 등 정상
+  skip_reason과 구별하지 못하고 `unknown`으로 뭉개던 결함을 닫았다. 이제 `skip_reason:
+  detector_not_runnable`로 별도 문구를 낸다. 심볼릭 링크와 무관하게 이미 있던 결함이었고,
+  이번에 겨냥해 닫았다.
+
 ## [3.2.3] — 2026-08-17
 
 Task 14 리뷰 라운드 1 수정(IMPORTANT 3). 컨트롤러의 전수 기계 스윕이 이관(3.2.1)의

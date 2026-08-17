@@ -217,6 +217,11 @@ Every finding must carry exactly one question for the user to decide.
 DETECT_OUT="$(bash "$PR/scripts/detect_codex.sh")"
 codex_avail="$(sed -n 's/^codex_available: //p' <<<"$DETECT_OUT")"   # 판정 1회 — 2-b·2-c가 이 값을 재사용
 skip_reason="$(sed -n 's/^skip_reason: //p' <<<"$DETECT_OUT")"
+# "감지기를 못 돌렸다"와 "codex가 없다"를 구별한다: 정상 실행된 감지기는 codex_available:
+# false여도 항상 skip_reason을 함께 낸다. 둘 다 비어 있으면 감지기 자체가 안 돈 것이다
+# (빈 stdout·비-zero exit·심볼릭 링크 끊김) — 아래 advisory가 skip_reason: unknown으로
+# 뭉개지 않도록 여기서 명시적으로 채운다.
+if [[ -z "$codex_avail" && -z "$skip_reason" ]]; then skip_reason="detector_not_runnable"; fi
 if [[ "$codex_avail" == "true" ]]; then
   bash "$PR/scripts/run_brief_codex_reviewer.sh" direction "$PAYLOAD" "$(pwd)" "$CODEX_DIR_YAML"; runner_rc=$?
   # 러너는 fail-closed 산출물을 **쓰지 못하면** exit 3으로 죽는다(쓰기 불가·디렉토리 부재).

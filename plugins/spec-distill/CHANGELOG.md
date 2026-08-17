@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.26.3] — 2026-08-17
+
+Task 15(무게 감축): `scripts/detect_codex.sh`가 물리 사본에서 `shared/codex/
+detect_codex.sh`를 가리키는 상대 심볼릭 링크로 바뀌었다(quality-gates·plugin-audit와
+공유하는 정본). kill switch 변수명(`DEVBREW_DISABLE_SPEC_DISTILL_CODEX`)은 형제 설정
+파일 `scripts/codex-killswitch.conf`로 분리 — 설정 부재 시 fail-closed
+(`skip_reason: killswitch_config_missing`). `reviewing-brief`·`reviewing-spec` 두
+SKILL의 codex 게이트가 "감지기 실행 자체 실패"와 "codex 미설치"를 구별하지 못하고
+`skip_reason: unknown`으로 뭉개던 결함을 `detector_not_runnable`로 닫았다.
+
 ## [0.26.2] — 2026-08-17
 
 devbrew-weight-reduction Task 14 — 자체 판정 헬퍼 이관. `tests/` 46개 파일이 각자
