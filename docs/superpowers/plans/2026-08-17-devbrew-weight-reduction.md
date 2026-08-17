@@ -2374,7 +2374,12 @@ rm -f /tmp/assert.bak
 
 - [ ] **Step 6: 커밋**
 
+`shared/tests/` 에 실제 파일이 처음 들어오는 태스크다 — Task 11 의 플레이스홀더를 여기서 없앤다
+(형제 셋은 각각 `codex` Task 17 · `killswitch` Task 19 · `gc` Task 21 이 같은 줄을 갖는다;
+`tests` 만 빠져 있던 것을 2026-08-17 Task 11 리뷰가 잡았다).
+
 ```bash
+git rm -f shared/tests/.gitkeep 2>/dev/null || true
 git add shared/tests/assert.sh shared/tests/test_assert_behavior.sh
 git commit -m "feat(shared): 판정 헬퍼 정본 + 종료 행동 락"
 ```
@@ -3453,10 +3458,19 @@ Expected: `--emit-scanned` 지원 락이 1개 이상 도출되고, 두 방향 �
 
 - [ ] **Step 6: 커밋**
 
+**이 락이 실재하게 됐으므로 `shared/README.md` 의 미존재 경고에서 이 줄을 지운다.** 그 경고는
+Task 11 리뷰(2026-08-17)가 *"없는 락을 근거로 내세우는 문서"* 를 막으려고 넣은 것이고, 락이
+생긴 뒤에도 남으면 **정반대 방향의 같은 거짓**이 된다. `test_no_new_duplication.sh` 는 Task 35 가
+만드므로 **표의 나머지 한 행과 경고 블록 자체는 그대로 둔다** — 지우는 것은 이 락의 행 하나뿐이다.
+
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 git status --short   # 픽스처(_copyof_mutation_fixture.sh)가 안 남았는지 마지막으로 확인
-git add shared/tests/test_copy_of_contract.sh
+grep -n 'test_copy_of_contract.sh` | plan Task 16' shared/README.md   # 지울 행을 눈으로 확인
+# 위 행을 제거한 뒤:
+grep -c 'test_copy_of_contract.sh` | plan Task 16' shared/README.md   # Expected: 0
+grep -c 'test_no_new_duplication.sh` | plan Task 35' shared/README.md # Expected: 1 (Task 35 몫)
+git add shared/tests/test_copy_of_contract.sh shared/README.md
 git commit -m "test(shared): 동일성 락 — 심볼릭 링크 도미넌스 체크 + copy-of 잔여 + 형제 설정 fail-closed"
 ```
 
@@ -6438,8 +6452,18 @@ Expected: **두 파일 모두** 실행 목록에 나온다. 후보에만 있고 
 
 - [ ] **Step 6: 커밋**
 
+**이 락이 마지막이다 — `shared/README.md` 의 미존재 경고 블록을 통째로 지운다.** Task 16 이 자기
+행을 이미 지웠으므로 여기서 남은 것은 이 락의 행 하나와 경고 문단이다. 함께 되돌릴 것: 같은 절의
+미래형 표현 셋(`검사**할 것이다**` · `RED**가 될 것이다**` · `돌게 된다`)을 현재형으로 되돌린다 —
+이제 둘 다 실재하므로 현재형이 참이다. 아래 검사가 그것을 강제한다.
+
 ```bash
-git add shared/tests/test_no_new_duplication.sh
+cd /Users/jeonghokim/Downloads/devbrew
+# 경고 블록과 미래형을 제거한 뒤:
+grep -c '아직 없다' shared/README.md            # Expected: 0
+grep -c '할 것이다\|될 것이다\|돌게 된다' shared/README.md  # Expected: 0
+git ls-files shared/tests/                       # Expected: assert.sh · 두 락 · test_assert_behavior.sh (.gitkeep 없음)
+git add shared/tests/test_no_new_duplication.sh shared/README.md
 git commit -m "test(shared): 20줄 블록 검사 — 새 중복 유입 방지 + 심볼릭 링크·마커 예외 각각의 mutation 증명"
 ```
 
