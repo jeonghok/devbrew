@@ -5,6 +5,25 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [1.7.4] — 2026-08-17
+
+devbrew-weight-reduction Task 12 — 테스트 디렉토리 규약 3종(`tests`·`scripts/tests`·`hooks/tests`)을
+`plugins/<name>/tests/` 하나로 통일. 이 플러그인은 `hooks/tests/`가 `tests/`로 합쳐졌다(기존
+`test_branch_strategy_rebase_clause.sh`와 파일명 충돌 없음).
+
+### Changed
+- `hooks/tests/*` → `tests/*`(git mv, 6개 항목 — `__init__.py`·`fixtures/`·`smoke.sh`·
+  `test_command_contract.py`·`test_docs_lint.py`·`test_post_tool_use.py`). 세 파일의 파이썬
+  `Path(__file__).resolve()` 상대경로 재앵커: `test_command_contract.py`(`parents[2]`→`parents[1]`),
+  `test_docs_lint.py`/`test_post_tool_use.py`(`.parent.parent`가 더 이상 `hooks/`에 닿지 않아
+  `.parent.parent / "hooks"`로 세그먼트 추가 — 착수 전 계측이 `parents[N]` 대괄호 형태만 찾고
+  이 `.parent.parent` 체인 형태를 놓쳐, 이동 직후 파이썬 수집이 95→7건으로 무너지는 것으로
+  드러났다). `smoke.sh`의 `ROOT=` 4-up dirname을 3-up으로.
+
+### Fixed
+- 이동 후 `plugins/project-init/tests` 파이썬 수집 수는 이동 전(`hooks/tests`)과 동일한 95건
+  (회귀 0), 셸(`smoke.sh`) GREEN 유지.
+
 ## [1.7.3] — 2026-08-03
 
 harness-capability-suppression-sweep Task 11(S4) — 규약 정렬. `templates/github-flow/`와

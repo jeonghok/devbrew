@@ -1,7 +1,7 @@
 {
   "name": "project-init",
   "description": "Initialize git-workflow rules and a project charter via a fact-routing interview, then generate agent-readable AGENTS.md/CLAUDE.md docs with hook-based validation of branches, commits, doc conventions, and charter integrity.",
-  "version": "1.7.3",
+  "version": "1.7.4",
   "author": {
     "name": "jeonghokim"
   }
