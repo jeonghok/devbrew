@@ -2826,8 +2826,9 @@ cd /Users/jeonghokim/Downloads/devbrew
 cat > plugins/quality-gates/scripts/codex-killswitch.conf <<'CONF'
 # detect_codex.sh 가 읽는 형제 설정. **사본이 아니다** — 플러그인마다 달라야 하는 값이다.
 #
-# 왜 인자가 아니라 파일인가: quality-gates/tests/test_codex_copies_agree.sh 가 세 사본을
-# **인자 없이** 태워 "각자 자기 변수에만 반응한다"를 9개 assertion 으로 검사한다.
+# 왜 인자가 아니라 파일인가: quality-gates/tests/test_codex_copies_agree.sh 가 세 배포
+# 지점을 **인자 없이** 태워 "각자 자기 변수에만 반응한다"를 9개 assertion 으로 검사한다.
+# (배포 지점은 정본을 가리키는 심볼릭 링크다 — 물리 사본이 아니다.)
 # 인자로 빼면 그 9개가 전부 RED 가 된다(C10 위반). 파일이면 인자 없이 실행해도
 # 각자 자기 디렉토리의 값을 읽으므로 그 락이 그대로 산다.
 #
@@ -2869,9 +2870,15 @@ Expected: `git ls-files`가 **3개**를 낸다.
 # 형제 파일 `codex-killswitch.conf` 로 나가 있다 — 인자가 아니라 파일인 이유는 그 conf
 # 파일의 주석과 설계 §6.4 에 있다(기존 행동 등가 락이 세 배포 지점을 **인자 없이** 태운다).
 #
+# 이 정본은 spec-distill 사본 헤더의 provenance 를 흡수한다:
+# "Vendored from quality-gates (spec-distill design §6 #1)" — 세 사본의 출발점이
+# quality-gates 판이었다는 사실. plugin-audit 판의 "(Task 10)" 귀속은 아래 락 이름이
+# 그대로 살려 둔다.
+#
 # 행동 등가는 `quality-gates/tests/test_codex_copies_agree.sh` 가 재고,
 # 배포 지점이 이 정본을 가리키는지는 `shared/tests/test_copy_of_contract.sh` 가
-# 잰다 — 두 락이 각자 다른 것을 잰다(설계 §6.4). 앞의 락 헤더가 *"왜 파일 diff 가
+# **잴 것이다 — 그 파일은 Task 16이 만든다. 이 커밋 시점에는 아직 없다.**
+# 두 락은 각자 다른 것을 잰다(설계 §6.4). 앞의 락 헤더가 *"왜 파일 diff 가
 # 아닌가: 두 사본은 의도된 차이를 갖는다"* 라고 적어 둔 그 전제는 이 통합이 없앴다.
 # (바이트 동일성은 이제 "측정할" 대상이 아니다 — 심볼릭 링크라 애초에 갈라질 수 없다.)
 
@@ -2896,6 +2903,19 @@ fi
 . "$_CONF"
 if [[ -z "${CODEX_KILL_SWITCH_VAR:-}" ]]; then
   emit_skip 'killswitch_config_incomplete'
+  exit 0
+fi
+# 0a. **값이 유효한 식별자인가** — 비어 있지 않다는 것만으로는 부족하다.
+#     〔2026-08-17 실측, 이 검사가 없던 판본을 반증한 기록〕 CRLF(`…CODEX\r`) · 공백만 ·
+#     탭 · 메타문자 값은 위 `-z` 를 통과하는데, bash 3.2 의 `${!VAR:-0}` 는 유효하지 않은
+#     식별자에 대해 **에러도 stderr 도 없이 `0`** 을 낸다. 사용자가 opt-out 을 걸어 둔 채로
+#     codex 가 그대로 도는, kill switch 우회다(보안 컨트롤 훼손 — CLAUDE.md:48).
+#     이 검사는 `${!VAR}` 가 **두 번째 코드 실행 sink** 인 것도 함께 닫는다:
+#     `a[$(cmd)]` 같은 값은 배열 첨자 산술 평가로 명령 치환이 일어나는데(실측),
+#     아래 정규식에 맞지 않아 여기서 걸린다.
+#     정규식을 따옴표로 감싸지 말 것 — bash 3.2 는 인용된 우변을 리터럴로 취급한다.
+if [[ ! "$CODEX_KILL_SWITCH_VAR" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+  emit_skip 'killswitch_config_invalid'
   exit 0
 fi
 
@@ -3020,16 +3040,22 @@ Expected: 셋 다 `fail-closed ✓`
 `plugins/quality-gates/tests/test_codex_copies_agree.sh:4-6`의 *"왜 파일 diff가 아닌가"* 문단 **뒤에** 한 문단을 추가한다 (기존 문장을 지우지 않는다 — 그것은 이 락이 무엇을 재는지의 설명이고 여전히 참이다):
 
 ```
-# **역할 분담 (2026-08 무게 감축, 2026-08-17 실측 이후 심볼릭 링크로 갱신)**: 세
-# 사본은 이제 shared/codex/detect_codex.sh 를 가리키는 상대 심볼릭 링크다(설계
-# §16.1) — 바이트 동일성은 더 이상 "측정할" 대상이 아니라 파일이 하나뿐이라는
-# 구조로 보장된다. 링크 자체가 여전히 링크인지 · 존재하는 정본을 가리키는지는
-# `shared/tests/test_copy_of_contract.sh` 가 검사한다. 위 문단이 기각한 전제
-# ("두 사본은 의도된 차이를 갖는다")는 그 차이를 형제 설정 파일
-# `codex-killswitch.conf` 로 빼내면서 사라졌다. 이 락은 **행동 등가**를 계속 잰다 —
-# 세 축 중 판정 등가는 파일이 하나뿐이라 공허해지지만 GREEN 이라 해롭지 않고,
-# **값 고정**(알려진-상이 두 표본의 실제 판정값)과 **kill switch**
-# (인자 없이 태워 자기 변수에만 반응) 두 축은 그대로 유효하다.
+# **역할 분담 — 층① (detect_codex.sh) 에 한정한 갱신** (2026-08 무게 감축,
+# 2026-08-17 실측 이후 심볼릭 링크로). 세 배포 지점은 이제
+# shared/codex/detect_codex.sh 를 가리키는 상대 심볼릭 링크다(설계 §16.1) —
+# **바이트 동일성**은 더 이상 "측정할" 대상이 아니라 파일이 하나뿐이라는 구조로
+# 보장된다. 링크가 여전히 링크인지 · 존재하는 정본을 가리키는지는
+# `shared/tests/test_copy_of_contract.sh` 가 **잴 것이다 — 그 파일은 Task 16이
+# 만든다. 이 커밋 시점에는 아직 없다.** 위 문단이 기각한 전제("두 사본은 의도된
+# 차이를 갖는다")는 그 차이를 형제 설정 파일 `codex-killswitch.conf` 로 빼내면서
+# 사라졌다.
+#
+# **이 문단이 말하지 않는 것**: 층①의 kill switch 축은 그대로 유효하다 — 세 링크가
+# **서로 다른 conf 세 개**를 읽으므로 conf 드리프트·교차배선에 여전히 이빨이 있다
+# (2026-08-17 mutation 으로 확인: 교차배선 60/62 · conf 무시 58/62 · 스위치 영구정지
+# 59/62, 전부 RED). 그리고 이 파일의 나머지 축들은 detect_codex 와 **무관하다** —
+# 층④는 아직 물리 사본 2개인 codex_findings_to_yaml.py 를 비교하고(판정 등가 + 값
+# 고정), 별도로 mock 자산 교집합 락이 있다. 이 통합은 그 축들을 건드리지 않았다.
 ```
 
 - [ ] **Step 9: 호출부 loud-failure 수정 — "감지기를 못 돌렸다"와 "codex가 없다"를 구별한다**
