@@ -5,6 +5,15 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [1.7.5] — 2026-08-17
+
+devbrew-weight-reduction Task 14 — 자체 판정 헬퍼 이관. `test_branch_strategy_rebase_clause.sh`의
+자체 `pass`/`fail` 카운터·헬퍼 정의를 지우고 `shared/tests/assert.sh` 정본을 source(`pass`→`ok`,
+`fail`→`no`로 호출부 개명, 종료를 `finish`로 통일). 판정 로직·assertion 5건은 그대로.
+
+### Changed
+- `tests/test_branch_strategy_rebase_clause.sh` — 정본 source, 종료 행동은 non-zero 유지.
+
 ## [1.7.4] — 2026-08-17
 
 devbrew-weight-reduction Task 12 — 테스트 디렉토리 규약 3종(`tests`·`scripts/tests`·`hooks/tests`)을

@@ -13,9 +13,7 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$ROOT" || exit 1
-PASS=0; FAIL=0
-pass() { PASS=$((PASS+1)); echo "  ✓ $1"; }
-fail() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
+. "$ROOT/shared/tests/assert.sh"
 
 BANNED='`git rebase`는 절대 안 됨'
 RELAXED='공유된 브랜치는 rebase하지 않는다'
@@ -23,29 +21,28 @@ RELAXED='공유된 브랜치는 rebase하지 않는다'
 for variant in github-flow git-flow; do
   f="plugins/project-init/templates/$variant/branch-strategy.md"
   if [ ! -f "$f" ]; then
-    fail "AC8e: $f 부재"
+    no "AC8e: $f 부재"
     continue
   fi
   if grep -qF "$BANNED" "$f"; then
-    fail "AC8e: $f 에 무조건 rebase 금지 조항이 잔존한다"
+    no "AC8e: $f 에 무조건 rebase 금지 조항이 잔존한다"
   else
-    pass "AC8e: $f — 무조건 rebase 금지 조항 없음"
+    ok "AC8e: $f — 무조건 rebase 금지 조항 없음"
   fi
   if grep -qF "$RELAXED" "$f"; then
-    pass "AC8e: $f — 완화된 rebase 조항(공유 여부 기준) 실재"
+    ok "AC8e: $f — 완화된 rebase 조항(공유 여부 기준) 실재"
   else
-    fail "AC8e: $f 에 완화된 rebase 조항이 없다"
+    no "AC8e: $f 에 완화된 rebase 조항이 없다"
   fi
 done
 
 ROOT_DOC="docs/git-workflow/branch-strategy.md"
 if [ ! -f "$ROOT_DOC" ]; then
-  fail "AC8e: $ROOT_DOC 부재"
+  no "AC8e: $ROOT_DOC 부재"
 elif grep -qF "$BANNED" "$ROOT_DOC"; then
-  pass "AC8e: 리포 루트 $ROOT_DOC — rebase 금지 원문 보존 (사용자 선호, C3 스코프 밖)"
+  ok "AC8e: 리포 루트 $ROOT_DOC — rebase 금지 원문 보존 (사용자 선호, C3 스코프 밖)"
 else
-  fail "AC8e: 리포 루트 $ROOT_DOC 의 rebase 금지 원문이 사라졌다 — 사용자 선호를 sweep이 침범했다"
+  no "AC8e: 리포 루트 $ROOT_DOC 의 rebase 금지 원문이 사라졌다 — 사용자 선호를 sweep이 침범했다"
 fi
 
-echo; echo "Total: $((PASS+FAIL)) | Pass: $PASS | Fail: $FAIL"
-[ "$FAIL" -eq 0 ]
+finish
