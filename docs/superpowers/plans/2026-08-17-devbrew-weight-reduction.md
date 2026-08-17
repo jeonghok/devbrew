@@ -1684,15 +1684,32 @@ grep -rn 'docs/audits/[0-9]\|docs/superpowers/\(plans\|specs\|interview\)/[0-9]'
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
-echo "=== 존재하지 않는 docs 경로를 가리키는 참조 ==="
-grep -rhoE 'docs/(audits|superpowers/(plans|specs|interview)|archive/[a-z]+)/[A-Za-z0-9._-]+\.(md|json|jsonl)' \
-  plugins/ CLAUDE.md docs/philosophy/ docs/audits/README.md 2>/dev/null \
-  | grep -v 'CHANGELOG' | sort -u | while IFS= read -r p; do
-    [ -e "$p" ] || echo "  MISSING: $p"
+echo "=== 이 사이클이 깨뜨린 참조 (선행 결손은 세지 않는다) ==="
+BASE_REF=780ec1b   # 이 브랜치의 시작 커밋
+git ls-files | grep -v '^docs/archive/' | grep -v 'CHANGELOG\.md$' | tr '\n' '\0' \
+  | xargs -0 grep -hoE 'docs/(audits|superpowers/(plans|specs|interview)|archive/[a-z]+)/[A-Za-z0-9._-]+\.(md|json|jsonl)' 2>/dev/null \
+  | sort -u | while IFS= read -r p; do
+    [ -e "$p" ] && continue
+    git cat-file -e "$BASE_REF:$p" 2>/dev/null && echo "  ❌ 이 사이클이 깨뜨림: $p"
   done
+echo "  (위에 줄이 없으면 통과)"
 ```
 
-Expected: MISSING 0건. (CHANGELOG는 의도적으로 제외 — Step 3의 판단.)
+Expected: **0건**.
+
+> ⚠ **이전 판의 "Expected: MISSING 0건"은 달성 불가능한 값이었다** 〔2026-08-17 실측: 추출된
+> 81개 경로가 **전부** 디스크에 없다〕. 원인 셋이 겹쳐 있었고, 셋 다 결함이 아니다:
+>
+> | 원인 | 실체 |
+> |---|---|
+> | 픽스처 | 플러그인 테스트가 **가짜 spec/plan 경로**를 픽스처로 쓴다(`2026-08-01-t3-design.md` 등 ~75개). 애초에 존재한 적 없다 |
+> | `grep -v 'CHANGELOG'` | **추출된 경로 문자열**을 거를 뿐 소스 파일을 못 거른다 — `-h` 때문에 스트림에 파일명이 없다. CHANGELOG 인용이 그대로 샌다(그리고 그것은 보존이 정답) |
+> | `grep -r plugins/` | 파일시스템을 걷기 때문에 **untracked·git-ignored** `plugins/*/.claude/quality-gates/<uuid>/files.md`(옛 세션 스크래치)까지 들어간다. 리포의 참조가 아니다 |
+>
+> 그래서 절대값이 아니라 **델타**를 잰다: tracked 파일에서만 추출하고, CHANGELOG 를 **소스로**
+> 제외하고, *"지금 없는데 브랜치 시작엔 있었나"* 를 묻는다. **0 이 나와야 하는 검사는 0 이
+> 나올 수 있어야 한다** — 나올 수 없는 0 을 요구하면 읽는 쪽이 고치면 안 될 것을 고치거나
+> 합리화하고 초록을 보고한다.
 
 > ⚠ **위 검사는 `docs/audits/README.md` 를 구조적으로 검사하지 못한다** 〔2026-08-17 확인〕.
 > 정규식이 `docs/…` 로 시작하는 경로만 잡는데 README 의 링크는 **상대 파일명**이다
