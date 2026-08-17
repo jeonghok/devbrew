@@ -3513,7 +3513,7 @@ bash "$LOCK" 2>&1 | grep -E '^  ✗ copy-of.*카나리아' || echo "  (카나리
 cp /tmp/lock_round1_fix.bak "$LOCK"; rm -f /tmp/lock_round1_fix.bak
 ```
 
-**`copy-of` 물리 사본 축**: 이 시점의 리포에는 실제 물리 `copy-of` 사본이 **정확히 하나** 있다 — Task 17 Step 4b 의 `plugins/plugin-audit/scripts/codex_jsonl.py` 다(B.4 5b 가 17 → 16 을 강제하므로 이미 존재한다). **그래도 스캐치 픽스처를 쓴다**, 이유가 "없어서"에서 "통제할 수 없어서"로 바뀌었을 뿐이다: mutation 은 마커를 지우고 본문을 흔들어야 하는데 **실제 사본을 대상으로 하면 앞 태스크의 산출물을 훼손**하고, 복원 실패가 조용한 손상으로 남는다. 픽스처는 크기·마커·내용을 전부 통제할 수 있고 지워도 잃을 것이 없다. 〔**정정(fix round 4)**: 이전 판이 *"실제 물리 copy-of 후보가 아직 없다(Task 19가 이 태스크보다 뒤에 온다)"* 라고 적었는데 **두 번 틀렸다** — 첫 실사용은 Task 19가 아니라 Task 17 Step 4b 이고(round 1), 5b 아래에서 Task 17은 이 태스크보다 **앞선다**(round 2).〕 그래서 **일회용 스캐치 픽스처**로 마커-파싱 코드 자체의 이빨을 증명한다 — 실제 파일을 잠깐 만들어 `git add`로 스캔 코퍼스(`git ls-files`)에 넣고, mutation을 태운 뒤, 커밋 없이 되돌린다.
+**`copy-of` 물리 사본 축**: 이 시점의 리포에는 실제 물리 `copy-of` 사본이 **셋** 있다 — Task 17 Step 4b 의 `plugins/{plugin-audit,quality-gates,spec-distill}/scripts/codex_jsonl.py` 다(B.4 5b 가 17 → 16 을 강제하므로 이미 존재한다). **그래도 스캐치 픽스처를 쓴다**, 이유가 "없어서"에서 "통제할 수 없어서"로 바뀌었을 뿐이다: mutation 은 마커를 지우고 본문을 흔들어야 하는데 **실제 사본을 대상으로 하면 앞 태스크의 산출물을 훼손**하고, 복원 실패가 조용한 손상으로 남는다. 픽스처는 크기·마커·내용을 전부 통제할 수 있고 지워도 잃을 것이 없다. 〔**정정(fix round 4)**: 이전 판이 *"실제 물리 copy-of 후보가 아직 없다(Task 19가 이 태스크보다 뒤에 온다)"* 라고 적었는데 **두 번 틀렸다** — 첫 실사용은 Task 19가 아니라 Task 17 Step 4b 이고(round 1), 5b 아래에서 Task 17은 이 태스크보다 **앞선다**(round 2).〕 그래서 **일회용 스캐치 픽스처**로 마커-파싱 코드 자체의 이빨을 증명한다 — 실제 파일을 잠깐 만들어 `git add`로 스캔 코퍼스(`git ls-files`)에 넣고, mutation을 태운 뒤, 커밋 없이 되돌린다.
 
 > **무변이에서 RED 가 나오면 이 표로 가른다.** 이 락의 실패 줄은 `  ✗ ` 로 시작하고 그 뒤 접두는 **넷뿐**이다(`symlink-∀:` · `copy-of:` · `conf:` · `fail-closed:` — 락 본문의 모든 `no`/`assert_*` 메시지가 이 넷 중 하나로 시작한다). 아래 코드가 그 줄들을 그대로 찍는다. **분기를 두 개만 두면 안 된다** — 이전 판본은 픽스처와 `codex_jsonl.py` 두 경우만 적어서, 심볼릭 링크 축이나 fail-closed 축이 걸린 실행자는 어느 가지에도 해당하지 않았다.
 >
@@ -3676,7 +3676,7 @@ bash shared/tests/test_copy_of_contract.sh | tail -4
 bash shared/tests/test_copy_of_contract.sh | tail -3
 ```
 
-Expected: **`copy-of: 물리 사본 1건`**(Task 17 Step 4b 의 `plugins/plugin-audit/scripts/codex_jsonl.py` 하나) · 전항목 GREEN.
+Expected: **`copy-of: 물리 사본 3건`**(Task 17 Step 4b 의 `plugins/{plugin-audit,quality-gates,spec-distill}/scripts/codex_jsonl.py`) · 전항목 GREEN.
 
 **`0건`이 나오면 Task 17 Step 4b 가 실행되지 않았다는 뜻이다** — 사본을 안 만들었거나 마커가 깨졌다. 이 태스크의 결함이 아니라 앞 태스크의 미실행이므로 Task 17로 돌아간다. 〔이 기대값이 Task 19의 "1에서 4로" 수열의 출발점이다 — 여기가 1이 아니면 그 뒤 셋이 전부 어긋난다.〕
 
@@ -3756,7 +3756,7 @@ Expected: `[0]` 세 줄이 각 기대대로 · `[1]`·`[2]`·`[3]` 이 **1** · 
 **Files:**
 - Create: `shared/codex/codex_findings_to_yaml.py`
 - **Create: `shared/codex/codex_jsonl.py`** (codex JSONL 이벤트 파서 정본 — census #58, Step 4b)
-- **Create: `plugins/plugin-audit/scripts/codex_jsonl.py`** (`copy-of` 물리 사본)
+- **Create: `plugins/{plugin-audit,quality-gates,spec-distill}/scripts/codex_jsonl.py`** (`copy-of` 물리 사본 **3개** — 세 개인 이유는 Step 4b, 2026-08-17 fix round 1)
 - Modify: `plugins/{quality-gates,spec-distill}/scripts/codex_findings_to_yaml.py` → **정본을 가리키는 상대 심볼릭 링크** (물리 사본이 아니다)
 - **Modify: `plugins/plugin-audit/scripts/codex_audit_to_json.py`** (자체 `extract_last_agent_message` 제거 → import, census #58)
 - Modify: 호출자 (emit keyset을 인자로 넘긴다)
@@ -3866,15 +3866,46 @@ census §discrepancy 가 이것을 *"권고"* 로만 적어 두었는데(*"착�
 
 `shared/codex/codex_jsonl.py` 를 만들어 `extract_last_agent_message` 를 옮기고, 정본 `shared/codex/codex_findings_to_yaml.py` 가 그것을 import 한다.
 
-> **심볼릭 링크된 스크립트도 이 import 가 된다 — 실측했다.** `python3 <symlink>` 의 `sys.path[0]` 은 링크가 아니라 **대상 디렉토리로 해석된다**(macOS python 3.9.6 확인). 즉 `plugins/{qg,sd}/scripts/codex_findings_to_yaml.py`(심볼릭 링크)를 태워도 `sys.path[0]` 이 `shared/codex/` 라 sibling `codex_jsonl.py` 가 그대로 잡힌다 — 두 플러그인에 사본을 둘 필요가 **없다**. 〔이 사실을 확인하지 않고 "링크 쪽 디렉토리가 잡힌다"고 가정하면 필요 없는 사본 2개를 배포하게 된다.〕
+> **형제 사본은 세 배포 디렉토리 전부에 둔다 — 리포에서만 재면 틀린다.**
+> 〔2026-08-17 fix round 1, 이 문단의 옛 판본을 반증한 기록〕 옛 판본은 *"`python3 <symlink>`
+> 의 `sys.path[0]` 이 대상 디렉토리로 해석되므로 qg·sd 에는 사본이 **필요 없다**"* 라고 적었다.
+> 그 측정 자체는 맞지만 **리포 안에서만** 참이다 — 거기엔 심볼릭 링크가 실재하기 때문이다.
+> 설계 §16.1 의 기록대로 `claude plugin install` 이 서브트리를 벗어나는 링크를 **실제 파일로
+> 역참조**하면, 설치본의 `plugins/<p>/scripts/codex_findings_to_yaml.py` 는 **실파일**이고
+> 그 옆에 `codex_jsonl.py` 가 없어 **`ImportError`** 가 난다. 러너 가드가 그것을 받아
+> `extract_failed`/`yaml_conversion_failed` 로 degrade 하므로 **설치된 모든 배포에서 codex
+> 리뷰어가 100% 죽고 리포 스위트는 초록으로 남는다.**
+>
+> **Task 15 가 같은 모양을 이미 반대로 풀었다** — `detect_codex.sh` 는 형제를 역참조하지 않은
+> `dirname "${BASH_SOURCE[0]}"` 로 찾고 그 형제(`codex-killswitch.conf`)를 세 배포 디렉토리
+> 전부에 배포한다. 여기서도 같게 한다.
+>
+> 그래서 **import 앞의 경로는 역참조하지 않는다**:
+> `sys.path.insert(0, str(pathlib.Path(__file__).parent))` — `.resolve()` 를 쓰면 리포에서
+> 링크를 태울 때 `shared/codex/` 의 형제를 읽으므로 **리포 테스트가 실제로 배포되는 파일을
+> 한 번도 실행하지 않는다.** 역참조하지 않으면 리포 실행이 배포 지점 옆 사본을 읽어
+> 테스트가 배포되는 것을 검증한다. 설치본에는 링크가 없으므로 두 표기가 같아진다.
 
 `codex_audit_to_json.py` 는 **심볼릭 링크가 아니라 실제 파일**이므로 자기 `sys.path[0]`(= `plugins/plugin-audit/scripts/`)에서 모듈을 찾는다. 그 자리에 `copy-of` **물리 사본**을 둔다 — Task 19·20·21과 같은 방식이다:
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
-{ echo "# copy-of: shared/codex/codex_jsonl.py"; cat shared/codex/codex_jsonl.py; } \
-  > plugins/plugin-audit/scripts/codex_jsonl.py
+for p in plugin-audit quality-gates spec-distill; do
+  { echo "# copy-of: shared/codex/codex_jsonl.py"; cat shared/codex/codex_jsonl.py; } \
+    > "plugins/$p/scripts/codex_jsonl.py"
+done
+# 세 사본이 마커 한 줄만 빼고 정본과 바이트 동일한가
+for p in plugin-audit quality-gates spec-distill; do
+  printf '%-14s ' "$p"
+  diff -q <(tail -n +2 "plugins/$p/scripts/codex_jsonl.py") shared/codex/codex_jsonl.py >/dev/null \
+    && echo "마커 제외 바이트 동일 ✓" || echo "❌ 갈린다"
+done
 ```
+
+**세 개인 이유**: `codex_audit_to_json.py` 는 실파일이라 자기 옆에서 찾고(그것이 원래
+이유였다), qg·sd 는 **설치본에서 링크가 실파일로 역참조된 뒤** 자기 옆에서 찾는다(위 문단).
+리포에서는 역참조하지 않은 `.parent` 덕에 링크를 태워도 배포 지점 옆 사본을 읽으므로,
+**리포 테스트가 곧 배포본 테스트**다.
 
 > **왜 여기는 심볼릭 링크가 아닌가** (Task 15·17의 기본 방식과 다른 이유). Task 16의 축 1a(심볼릭 링크 무결성)는 배포 지점 집합을 **참조원에서 도출**한다 — 정본 basename 을 `scripts/<basename>` 형태로 참조하는 파일을 찾는 방식이다. `codex_jsonl` 은 `from codex_jsonl import ...` 로만 불리므로 그 문자열이 리포 어디에도 없고, 링크로 두면 그 정본의 기대 배포 지점이 **0건**으로 도출된다. 마커 축(1b)은 도출이 아니라 마커 스캔이라 이 문제가 없다 — 그래서 여기는 `copy-of` 다.
 >
@@ -3892,7 +3923,14 @@ from codex_jsonl import extract_last_agent_message  # noqa: E402
 
 `apply_overrides`(census #62)는 pa 에서 `main()` **안의 중첩 함수**다(`codex_audit_to_json.py:155`). 시그니처는 같지만 소비하는 meta 키가 달라 여기서는 **옮기지 않는다** — census #62 조치란에 그 이유를 적는다.
 
-> **이 스텝이 이 사이클의 `copy-of` 마커 방식 첫 실제 사용자다** — 기존 서술은 Task 19를 첫 사용자로 적었는데(Task 16 rationale 3번 · 부록 B.1 미결 5), 실행 순서가 17 → 19 이므로 이 스텝이 앞선다. 누적 물리 사본 기대값: **Task 17(+1) = 1 → Task 19(+3) = 4 → Task 20(+3) = 7 → Task 21(+2) = 9.** 각 태스크의 `물리 사본 N건` 문단을 이 수열로 읽는다.
+> **이 스텝이 이 사이클의 `copy-of` 마커 방식 첫 실제 사용자다** — 기존 서술은 Task 19를 첫 사용자로 적었는데(Task 16 rationale 3번 · 부록 B.1 미결 5), 실행 순서가 17 → 19 이므로 이 스텝이 앞선다. 누적 물리 사본 기대값: **Task 17(+3) = 3 → Task 19(+3) = 6 → Task 20(+3) = 9 → Task 21(+2) = 11.** 각 태스크의 `물리 사본 N건` 문단을 이 수열로 읽는다.
+
+> ⚠ **이 수열은 개수 리터럴이고, plan 안 여러 곳에 미러돼 있다.** 미러 위치: Task 16 의 락
+> 기대값(0건 가드 · `물리 사본 N건` Expected 2곳) · Task 19·20·21 의 각 `물리 사본 N건`
+> 문단 · Task 35 변이 6 의 서술 · 부록 B.5. **어느 태스크가 사본 수를 바꾸면 이 목록을 따라
+> 전부 갱신해야 한다.** 〔2026-08-17 fix round 1 이 `+1 = 1` 을 `+3 = 3` 으로 옮기며 실제로
+> 열 곳을 고쳤다 — 이 사이클이 반복해서 부딪히는 바로 그 문제를 plan 이 자기 안에서 하고
+> 있었다.〕
 
 - [ ] **Step 4c: 검증 — 세 파일이 같은 파서를 쓰는가**
 
@@ -3924,14 +3962,14 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/t
 > `No such file or directory` 가 난다 — **락의 결함도 이 태스크의 결함도 아니다.**
 > **권위 있는 자리는 하나다: `Task 16 Step 7`.** 거기가 이 두 줄을 실제로 갚는 스텝이고, 그 스텝이
 > Task 16의 완료 조건이다. 여기와 B.4 5b 는 그 이름을 **가리키기만** 한다 — 대상은
-> Step 4c(`물리 사본 1건` — Step 4b 가 만든 `codex_jsonl.py` 사본의 copy-of 단언)와 Step 5 둘이다.
+> Step 4c(`물리 사본 3건` — Step 4b 가 만든 `codex_jsonl.py` 사본 셋의 copy-of 단언)와 Step 5 둘이다.
 >
 > **드리프트 방지**: 이 구조가 참이려면 `Task 16 Step 7` 이 존재하고 그 본문이 두 줄을 다 담아야 한다.
 > Task 16 Step 7 자신이 그것을 **자기 자리에서 검사한다**(그 스텝의 마지막 블록) — 세 자리가 서로를
 > 가리키기만 하고 아무도 확인하지 않는 구조가 이 노트의 첫 판본을 **`Step 6`(커밋 스텝)으로 잘못 가리키게** 했다.
 
 
-Expected: 두 출력이 `('HELLO', True)` 로 같다 · `물리 사본 1건` · plugin-audit 스위트 새 RED 0. 〔테스트 디렉토리 경로는 Task 12가 `scripts/tests/` → `tests/` 로 옮긴 뒤 기준이다.〕
+Expected: 두 출력이 `('HELLO', True)` 로 같다 · `물리 사본 3건` · plugin-audit 스위트 새 RED 0. 〔테스트 디렉토리 경로는 Task 12가 `scripts/tests/` → `tests/` 로 옮긴 뒤 기준이다.〕
 
 - [ ] **Step 5: 검증**
 
@@ -4197,7 +4235,7 @@ for p in project-init spec-distill quality-gates; do
 done
 ```
 
-> **사본이 3개다** (2·3 이 아니라). `_disabled` 7곳 중 5곳이 quality-gates 이므로 그 플러그인도 배포 사본을 갖는다. 아래 Step 6의 `copy-of: 물리 사본 N건 스캔` 기대값이 **2가 아니라 3**이다. 누적 수열은 Task 17 Step 4b(+1) → 이 태스크(+3) → Task 20(+3) → Task 21(+2) = **9** 이고, 각 태스크가 자기 자리에서 그 값을 적는다.
+> **사본이 3개다** (2·3 이 아니라). `_disabled` 7곳 중 5곳이 quality-gates 이므로 그 플러그인도 배포 사본을 갖는다. 아래 Step 6의 `copy-of: 물리 사본 N건 스캔` 기대값이 **2가 아니라 3**이다. 누적 수열은 Task 17 Step 4b(+3) → 이 태스크(+3) → Task 20(+3) → Task 21(+2) = **11** 이고, 각 태스크가 자기 자리에서 그 값을 적는다.
 
 > 파이썬 파일에 shebang이 없으면 마커가 **첫 줄**이다. 모듈 docstring이 그 다음 줄에 와도 여전히 첫 *문*이므로 `__doc__`이 산다. Task 17 Step 3의 검사를 여기도 돌린다.
 
@@ -4518,7 +4556,7 @@ Expected: 문법 오류 0 · 두 러너 모두 `runner_common.sh` 를 1회 이�
 > 이 태스크가 `shared/codex/runner_common.sh`를 5개 러너에 `copy-of` 사본으로 배포한다.
 > Task 16의 축 1b(마커 기반 바이트-동일성)는 실측·mutation으로 검증됐지만, **이 특정
 > 배포(5건)가 그 축의 스캔에 실제로 걸리는지는 이 태스크 실행 시점에 확인된 적이 없다.**
-> 아래 실행 시 `copy-of: 물리 사본 N건 스캔`의 N이 **4에서 7로** 늘었는지 직접 확인한다 —
+> 아래 실행 시 `copy-of: 물리 사본 N건 스캔`의 N이 **6에서 9로** 늘었는지 직접 확인한다 —
 > 이전 누적 4(Task 17 Step 4b의 1 + Task 19의 3) + **이번 3건**이다.
 > (러너는 5개지만 `runner_common.sh` 사본은 **플러그인당 하나**라 3개다 — Step 4의
 > `for p in quality-gates spec-distill plugin-audit` 가 도는 횟수다. 5로 세면 N 이
@@ -4612,7 +4650,7 @@ done
 > **미검증 — 실행자가 확인할 것** (2026-08-17 라운드 1 코드 리뷰, Task 19·20과 같은 종류의 gap):
 > `gc_common.py` ×2가 이 태스크에서 `copy-of` 사본으로 배포된다. Task 16의 축 1b는
 > 실측·mutation으로 검증됐지만, 이 배포가 그 스캔에 실제로 걸리는지는 확인된 적이
-> 없다 — 아래 실행에서 `물리 사본 N건` 이 **7에서 9로** 늘었는지 직접 확인한다 —
+> 없다 — 아래 실행에서 `물리 사본 N건` 이 **9에서 11로** 늘었는지 직접 확인한다 —
 > 이전 누적 7(Task 17 Step 4b 1 + Task 19 3 + Task 20 3) + **이번 2건**이다. 최종 **9**.
 
 ```bash
@@ -6491,7 +6529,7 @@ Expected: PASS · mode `100755`
 | 3 | **같은 정본을 가리키는 심볼릭 링크 쌍을 그대로 둔다**(실제 대상: `detect_codex.sh` 3링크, Task 15) | **GREEN** | 면제 술어 ② — 심볼릭 링크 경로 |
 | 4 | 그 쌍 중 하나를 **독립 파일로 깬다**(내용은 그대로 두고 링크성만 제거) | **RED** | 면제가 "링크라는 사실"에 실제로 의존 — 내용이 같아도 링크가 아니면 설명 안 된 중복이다 |
 | 5 | **무관한 두 파일에 같은 정본을 가리키는 `copy-of` *마커* 줄을 새로 붙여 20줄 검사를 회피한다** | **`copy-of` 락이 RED** | 회피 경로 봉쇄(마커 축) — **심볼릭 링크 축에는 이 공격이 성립하지 않는다**: 진짜 OS 심볼릭 링크는 가리키는 대상의 내용을 "주장"할 수 없다(대상이 곧 자기 내용이다). 거짓을 말할 수 있는 것은 텍스트 마커뿐이다 |
-| 6 | **마커 예외 자체의 이빨** — 스캐치 픽스처 쌍(정본 + `copy-of` 마커를 가진 사본, 둘 다 ≥20줄·≥200자 진짜 중복 블록)을 그대로 둔다(GREEN 기대) → 그다음 사본에서 `copy-of` 줄만 지운다(RED 기대) | **GREEN → RED** | 2026-08-17 라운드 3 코드 리뷰: 변이 3·4는 **심볼릭 링크 쌍만** 태웠다 — 마커 기반 면제(위 Step 1 스크립트의 `canonical_of()` 안, `symlink_target_of()`가 `None`을 준 뒤 `MARKER.match(line)`으로 떨어지는 폴백 분기)는 이번까지 mutation-proof가 전혀 없었다. 이 mutation 을 설계할 당시엔 리포에 실제 마커 쌍이 없었으므로(첫 실사용은 Task 17 Step 4b — B.1의 미결 5 참조) Task 16의 물리 사본 축과 같은 패턴(스캐치 픽스처)을 쓴다. **Task 16 시점에 이미 사본 1건(Task 17 Step 4b), PR6 시점엔 9건이 있지만 픽스처를 계속 쓴다** — 픽스처는 크기·마커를 통제할 수 있고, 실제 사본을 흔들면 앞 태스크의 산출물을 훼손한다. 또 실제 사본에 의존하면 그 사본이 사라질 때 mutation 이 조용히 vacuous 해진다 |
+| 6 | **마커 예외 자체의 이빨** — 스캐치 픽스처 쌍(정본 + `copy-of` 마커를 가진 사본, 둘 다 ≥20줄·≥200자 진짜 중복 블록)을 그대로 둔다(GREEN 기대) → 그다음 사본에서 `copy-of` 줄만 지운다(RED 기대) | **GREEN → RED** | 2026-08-17 라운드 3 코드 리뷰: 변이 3·4는 **심볼릭 링크 쌍만** 태웠다 — 마커 기반 면제(위 Step 1 스크립트의 `canonical_of()` 안, `symlink_target_of()`가 `None`을 준 뒤 `MARKER.match(line)`으로 떨어지는 폴백 분기)는 이번까지 mutation-proof가 전혀 없었다. 이 mutation 을 설계할 당시엔 리포에 실제 마커 쌍이 없었으므로(첫 실사용은 Task 17 Step 4b — B.1의 미결 5 참조) Task 16의 물리 사본 축과 같은 패턴(스캐치 픽스처)을 쓴다. **Task 16 시점에 이미 사본 3건(Task 17 Step 4b), PR6 시점엔 11건이 있지만 픽스처를 계속 쓴다** — 픽스처는 크기·마커를 통제할 수 있고, 실제 사본을 흔들면 앞 태스크의 산출물을 훼손한다. 또 실제 사본에 의존하면 그 사본이 사라질 때 mutation 이 조용히 vacuous 해진다 |
 
 **변이 1·2만 맨 앞·중간·맨 끝 세 위치에서 각각 수행한다.** 변이 3·4(심볼릭 링크)·5(마커 삽입)·6a·6b(픽스처 쌍)는 **위치 개념이 없다** — 흔드는 대상이 "본문 한 줄"이 아니라 링크성·마커·파일 쌍 전체이기 때문이다(Task 16의 변이 B와 같은 이유). 아래 스크립트도 `for pos in head mid tail` 루프를 변이 1·2에만 두른다.
 
@@ -7495,7 +7533,7 @@ else:
 3. **Task 2(census SHA 고정)가 PR2보다 앞서야 한다.** 뒤면 아카이브 이동이 모집단을 줄여 "미배정 0"이 조치 아닌 이동으로 달성된다.
 4. **PR3a → 3b → 3c 순서를 바꾸지 않는다.** 옮기기 → 계측기 → 피검체. 순서가 섞이면 RED 귀속이 불가능하다.
 5. **Task 15가 Task 16보다 앞선다** — 락을 먼저 달면 도입 즉시 RED다(C17: 사본 제거 우선).
-5b. **Task 17도 Task 16보다 앞선다** (2026-08-17 fix round 2 발견). 5번과 **같은 이유인데 빠져 있었다**: Task 16의 `SYMLINK_CANONICALS` 는 정본 둘을 담는데 `shared/codex/detect_codex.sh` 는 Task 15의, **`shared/codex/codex_findings_to_yaml.py` 는 Task 17의 산출물**이다. 번호 순서(16 → 17)대로 돌면 Task 16 Step 2의 락 첫 실행에서 두 번째 정본이 없어 `no "정본 … 자체가 없다"` 로 RED 가 난다 — C17이 금지하는 "락을 먼저 달기"의 두 번째 인스턴스다. **실행 순서: 15 → 17 → 16 → 18 → 19 → …** 그 순서에서 Task 17은 아직 없는 락을 **두 곳**에서 부른다 — **Step 4c**(`| tail -4`, Expected 에 `물리 사본 1건` 이 걸려 있다 — Step 4b 가 만든 `codex_jsonl.py` 사본의 copy-of 단언) **와 Step 5**(`| tail -3`). **둘 다 Task 16 Step 7이 이름으로 받아 갚는다**(그 스텝이 Task 16의 완료 조건이다). 두 스텝의 나머지 검증은 Task 17 시점에 그대로 유효하다. **이 사실은 부록이 아니라 그 두 호출부 옆에도 적혀 있다** — 실행자는 부록을 읽고 있지 않고, 첫 판본은 Step 5만 세어 Step 4c 를 놓쳤다. 형제 규칙 5(Task 15)는 영향받지 않는다: Task 15는 Files 의 `Test:` 줄에서 락을 **선언만** 하고 실행하지 않는다(실측 — Task 15 본문에 실행 줄이 없다).
+5b. **Task 17도 Task 16보다 앞선다** (2026-08-17 fix round 2 발견). 5번과 **같은 이유인데 빠져 있었다**: Task 16의 `SYMLINK_CANONICALS` 는 정본 둘을 담는데 `shared/codex/detect_codex.sh` 는 Task 15의, **`shared/codex/codex_findings_to_yaml.py` 는 Task 17의 산출물**이다. 번호 순서(16 → 17)대로 돌면 Task 16 Step 2의 락 첫 실행에서 두 번째 정본이 없어 `no "정본 … 자체가 없다"` 로 RED 가 난다 — C17이 금지하는 "락을 먼저 달기"의 두 번째 인스턴스다. **실행 순서: 15 → 17 → 16 → 18 → 19 → …** 그 순서에서 Task 17은 아직 없는 락을 **두 곳**에서 부른다 — **Step 4c**(`| tail -4`, Expected 에 `물리 사본 3건` 이 걸려 있다 — Step 4b 가 만든 `codex_jsonl.py` 사본 셋의 copy-of 단언) **와 Step 5**(`| tail -3`). **둘 다 Task 16 Step 7이 이름으로 받아 갚는다**(그 스텝이 Task 16의 완료 조건이다). 두 스텝의 나머지 검증은 Task 17 시점에 그대로 유효하다. **이 사실은 부록이 아니라 그 두 호출부 옆에도 적혀 있다** — 실행자는 부록을 읽고 있지 않고, 첫 판본은 Step 5만 세어 Step 4c 를 놓쳤다. 형제 규칙 5(Task 15)는 영향받지 않는다: Task 15는 Files 의 `Test:` 줄에서 락을 **선언만** 하고 실행하지 않는다(실측 — Task 15 본문에 실행 줄이 없다).
 6. **Task 34가 Task 35보다 앞선다** — 무릎을 모르고 임계를 박을 수 없다.
 7. **Task 25(env rename)가 Task 26(좀비 제거)보다 앞선다** — rename 전 이름으로 좀비를 판정하면 옛 이름 전부가 좀비로 보인다.
 
@@ -7507,8 +7545,8 @@ else:
 | `test_guards_coverage_bidirectional.sh` | Task 6 | **Task 16 Step 5 · Task 35 Step 4** — 대상 락이 생긴 뒤라야 실제 판정이 난다. Task 6 시점의 PASS는 vacuous이며 그 사실을 그 태스크가 명시한다 |
 | `test_assert_behavior.sh` | Task 13 | Task 13 Step 5 (5종) |
 | `test_severity_mapping.py` | Task 28 | Task 28 Step 3 (구현 전 RED) |
-| `test_copy_of_contract.sh` | Task 16 | Task 16 Step 3 — **심볼릭 링크 축(도미넌스) 5종**(A missing · B regular-file, 계약-보존 페이로드 · C wrong-target: mismatch · D wrong-target: dangling · **F 정본별 vacuous 가드** — 도출 0건 정본을 목록에 더해도 합산 수에 가리지 않는지, 2026-08-17 census 재검토가 실측으로 연 구멍 — 전부 위치 개념 없음, 배포 지점 전체가 단위) + **`MARKER_RE` 카나리아 1종**(E — 축 1b 자기 vacuous 방지, 정규식 대입 줄 하나만 변형) + **`copy-of` 물리 사본 축 3종**(변이 1은 3위치, 스캐치 픽스처로 증명 — 첫 실사용이 **Task 17 Step 4b** 이고 B.4 5b 아래에서 그것이 Task 16보다 앞서므로 **Task 16 시점에 이미 사본 1건이 있다**; 픽스처를 쓰는 이유는 부재가 아니라 크기·마커 통제와 앞 태스크 산출물 비훼손이다. B.1의 미결 5 참조) — 2026-08-17 라운드 1 코드 리뷰가 원래의 ∃-기반 심볼릭 링크 축(3종, "경로만 바꾸면 GREEN" 포함)을 이 도미넌스 체크로 다시 쓰게 했다(Critical) |
-| `test_no_new_duplication.sh` | Task 35 | Task 35 Step 3 (6종, 변이 1·2는 3위치) — **심볼릭 링크 예외**(변이 3 GREEN · 변이 4 — 링크를 깨되 내용은 유지해 예외가 "링크임"에 반응하는지 증명, RED) + **마커 예외**(변이 6a·6b — 2026-08-17 라운드 3 코드 리뷰가 이 축은 그때까지 mutation-proof가 전혀 없었음을 지적; Task 16과 같은 스캐치 픽스처 패턴으로 GREEN→RED 증명. 설계 당시 실제 마커 쌍이 없었다 — 첫 실사용은 Task 17 Step 4b 이고 B.4 5b 아래에서 그것이 Task 16보다 앞서므로 **Task 16 시점엔 이미 사본 1건이 있다**(B.1의 미결 5 참조). 픽스처를 계속 쓰는 이유는 부재가 아니라 **크기·마커 통제와 앞 태스크 산출물 비훼손**이다) |
+| `test_copy_of_contract.sh` | Task 16 | Task 16 Step 3 — **심볼릭 링크 축(도미넌스) 5종**(A missing · B regular-file, 계약-보존 페이로드 · C wrong-target: mismatch · D wrong-target: dangling · **F 정본별 vacuous 가드** — 도출 0건 정본을 목록에 더해도 합산 수에 가리지 않는지, 2026-08-17 census 재검토가 실측으로 연 구멍 — 전부 위치 개념 없음, 배포 지점 전체가 단위) + **`MARKER_RE` 카나리아 1종**(E — 축 1b 자기 vacuous 방지, 정규식 대입 줄 하나만 변형) + **`copy-of` 물리 사본 축 3종**(변이 1은 3위치, 스캐치 픽스처로 증명 — 첫 실사용이 **Task 17 Step 4b** 이고 B.4 5b 아래에서 그것이 Task 16보다 앞서므로 **Task 16 시점에 이미 사본 3건이 있다**; 픽스처를 쓰는 이유는 부재가 아니라 크기·마커 통제와 앞 태스크 산출물 비훼손이다. B.1의 미결 5 참조) — 2026-08-17 라운드 1 코드 리뷰가 원래의 ∃-기반 심볼릭 링크 축(3종, "경로만 바꾸면 GREEN" 포함)을 이 도미넌스 체크로 다시 쓰게 했다(Critical) |
+| `test_no_new_duplication.sh` | Task 35 | Task 35 Step 3 (6종, 변이 1·2는 3위치) — **심볼릭 링크 예외**(변이 3 GREEN · 변이 4 — 링크를 깨되 내용은 유지해 예외가 "링크임"에 반응하는지 증명, RED) + **마커 예외**(변이 6a·6b — 2026-08-17 라운드 3 코드 리뷰가 이 축은 그때까지 mutation-proof가 전혀 없었음을 지적; Task 16과 같은 스캐치 픽스처 패턴으로 GREEN→RED 증명. 설계 당시 실제 마커 쌍이 없었다 — 첫 실사용은 Task 17 Step 4b 이고 B.4 5b 아래에서 그것이 Task 16보다 앞서므로 **Task 16 시점엔 이미 사본 3건이 있다**(B.1의 미결 5 참조). 픽스처를 계속 쓰는 이유는 부재가 아니라 **크기·마커 통제와 앞 태스크 산출물 비훼손**이다) |
 
 **Task 6의 락은 자기 도입 시점에 이빨을 증명할 수 없다** — 재는 대상(`--emit-scanned`를 가진 락)이 아직 없기 때문이다. 이것을 숨기지 않고 그 태스크의 Step 2와 이 표에 적었다.
 
