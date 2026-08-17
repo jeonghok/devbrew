@@ -1920,12 +1920,41 @@ git status --short | head -30
 
 Step 2가 낸 목록의 각 파일에서:
 
-| 축 | 변환 |
+> ⚠ **이전 판의 표는 틀렸다** 〔2026-08-17 Task 12 착수 전 전수 계측으로 반증〕. 그 표는
+> 파이썬 축을 *"`parents[3]` → `parents[2]`, 한 단계 얕아짐"* 이라고 적었는데, **이 코퍼스에
+> `parents[3]` 은 한 곳도 없고**, 더 중요하게는 **일괄 감소가 성립하지 않는 부류가 최대 다수(14곳)** 다.
+> `scripts/` 를 가리키던 `parents[1]` 은 이동 후 그 디렉토리가 **조상이 아니게 되어** 어떤 N 으로도
+> 도달할 수 없다 — 감소가 아니라 **경로 세그먼트 추가**가 필요하다. "한 단계 얕아짐" 을 그대로
+> 적용하면 그 14곳이 `plugins/plugin-audit/<script>.py` 를 가리켜 조용히 깨진다.
+
+**계측된 변환 규칙** (`plugins/plugin-audit/scripts/tests/` → `plugins/plugin-audit/tests/` ·
+`plugins/project-init/hooks/tests/` → `plugins/project-init/tests/`):
+
+| 지금 표현 | 가리키는 곳 | 이동 후 | 건수 |
+|---|---|---|---|
+| `parents[1]` | `plugins/plugin-audit/scripts` | **`parents[1] / "scripts"`** — N 감소로는 도달 불가 | **14** |
+| `parents[2]` | `plugins/<plugin>` (플러그인 루트) | `parents[1]` | 12 (pa 11 · pi 1) |
+| `parents[4]` | repo root | `parents[3]` | 3 |
+| `parents[5]` | repo root (`fixtures/` 한 단계 더 깊음) | `parents[4]` | 1 |
+
+| 그 밖의 축 | 변환 |
 |---|---|
-| 파이썬 | `parents[3]` → `parents[2]` (한 단계 얕아짐. 실제 N은 파일별로 확인) |
-| 셸 | `dirname "$0")/../../..` → `dirname "$0")/../..` |
+| 셸 `ROOT=` | `dirname .../../../..` → `dirname .../../..` (repo root 도달. **2곳** — `project-init/.../smoke.sh:9` · `plugin-audit/.../test_run_own_tests_accumulate.sh:13`) |
 | `.mjs` 하네스 | `../` 하나 제거 |
-| 밖에서 가리키는 참조 | `hooks/tests/` → `tests/` · `scripts/tests/` → `tests/` |
+| 밖에서 가리키는 참조 | `hooks/tests/` → `tests/` · `scripts/tests/` → `tests/` — **단, 아래 "고치면 안 되는 것" 을 먼저 읽는다** |
+| **깊이를 서술한 주석** | `# repo root (plugins/plugin-audit/scripts/tests → parents[4])` 류. 코드를 고치고 주석을 두면 **주석이 거짓이 된다.** 최소 3곳(`test_check_shape_completeness.py:5` · `test_ac6_regression.py:4` · `fixtures/ac6_build.py:15`) |
+
+**고치면 안 되는 것** — Step 2 의 grep 이 함께 잡지만 재앵커 대상이 아니다:
+
+| 대상 | 왜 그대로 두나 |
+|---|---|
+| `scripts/tests/fixtures/ac6_*.json` 안의 `hooks/tests/` 경로 | **기록된 감사 데이터**다. 고치면 그 fixture 가 재현하는 과거 산출물이 왜곡된다 (Task 10 의 CHANGELOG 판단과 같은 이유) |
+| `test_run_own_tests_accumulate.sh` 가 `$TMP/sandbox/plugins/tgt/hooks/tests/` 를 만드는 줄 | **합성 fixture** 다. 러너가 `hooks/tests/` 레이아웃의 *감사 대상* 플러그인을 찾아내는지 검사한다 — 이 리포의 레이아웃이 아니다 |
+| `test_check_shape_completeness.py:166` 의 assertion 메시지 속 `hooks/tests/` | 감사 **대상**의 over-glob 을 서술한다. 이 리포 경로가 아니다 |
+
+**함께 고칠 것**: `scripts/tests/README.md:4` 가 `unittest discover ... -t .` 을 문서화한다 —
+Global Constraints 가 금지하는 형태다(하이픈 디렉토리명 → `ImportError`). 파일이 어차피 이동하므로
+같은 스텝에서 `-t <그 디렉토리 자신>` 으로 고친다. 같은 README 의 `node --test` 경로 2줄도 이동에 맞춘다.
 
 **각 변환 후 그 파일 하나를 즉시 돌려본다.** 일괄 치환 후 한 번에 돌리면 어느 축이 틀렸는지 못 가린다.
 
