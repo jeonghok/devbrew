@@ -14,13 +14,15 @@ plugins/project-init/
 ├── hooks/
 │   ├── hooks.json                   # PostToolUse hook 설정 (2개 entry)
 │   ├── post-tool-use.py             # 브랜치(fail-open advisory) + 커밋 검증기 (Bash matcher)
-│   ├── docs-lint.py                 # v1.4.0 — agent-readable docs convention 검증 (Write/Edit/MultiEdit matcher)
-│   └── tests/
-│       ├── test_docs_lint.py        # 60+ Python stdlib unittest (charter rule 포함)
-│       ├── test_post_tool_use.py    # v1.7.0 — post-tool-use fail-open/F2/main 검증
-│       ├── test_command_contract.py # v1.7.2 — commands/ 산문 계약 회귀 락 (4c S2a H1, AC21 abort)
-│       ├── smoke.sh                 # V2 자동화 smoke script
-│       └── fixtures/                # 13개 서브디렉토리 (valid, oversized, drifted, charter_*, ...)
+│   └── docs-lint.py                 # v1.4.0 — agent-readable docs convention 검증 (Write/Edit/MultiEdit matcher)
+├── tests/                           # 플러그인 최상위, hooks/의 형제 — 3규약(hooks/tests 포함)을 1종으로 통일
+│   ├── __init__.py
+│   ├── test_docs_lint.py            # 60+ Python stdlib unittest (charter rule 포함)
+│   ├── test_post_tool_use.py        # v1.7.0 — post-tool-use fail-open/F2/main 검증
+│   ├── test_command_contract.py     # v1.7.2 — commands/ 산문 계약 회귀 락 (4c S2a H1, AC21 abort)
+│   ├── test_branch_strategy_rebase_clause.sh  # v1.7.3 — AC8e, rebase 무조건 금지 조항 부재 락
+│   ├── smoke.sh                     # V2 자동화 smoke script
+│   └── fixtures/                    # 13개 서브디렉토리 (valid, oversized, drifted, charter_*, ...)
 └── templates/
     ├── shared/
     │   ├── commit-conventions.md

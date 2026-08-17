@@ -23,6 +23,11 @@ devbrew-weight-reduction Task 12 — 테스트 디렉토리 규약 3종(`tests`�
 ### Fixed
 - 이동 후 `plugins/project-init/tests` 파이썬 수집 수는 이동 전(`hooks/tests`)과 동일한 95건
   (회귀 0), 셸(`smoke.sh`) GREEN 유지.
+- `README.md`의 아키텍처 트리 다이어그램이 `tests/`를 여전히 `hooks/` 아래 중첩으로 그리고
+  있었다(리터럴 문자열 `hooks/tests`가 파일에 없어 grep으로 못 잡힘 — 경로가 박스 문자로
+  분해된 그림이라 문자열 패턴 검색의 사각지대였다). `tests/`를 `hooks/`의 형제(플러그인
+  최상위)로 정정하고 실제 내용(옮겨온 3개 파일 + 기존 `test_branch_strategy_rebase_clause.sh` +
+  `__init__.py` + `fixtures/`)을 반영.
 
 ## [1.7.3] — 2026-08-03
 
