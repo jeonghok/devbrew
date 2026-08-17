@@ -3458,21 +3458,34 @@ Expected: `--emit-scanned` 지원 락이 1개 이상 도출되고, 두 방향 �
 
 - [ ] **Step 6: 커밋**
 
-**이 락이 실재하게 됐으므로 `shared/README.md` 의 미존재 경고에서 이 줄을 지운다.** 그 경고는
-Task 11 리뷰(2026-08-17)가 *"없는 락을 근거로 내세우는 문서"* 를 막으려고 넣은 것이고, 락이
-생긴 뒤에도 남으면 **정반대 방향의 같은 거짓**이 된다. `test_no_new_duplication.sh` 는 Task 35 가
-만드므로 **표의 나머지 한 행과 경고 블록 자체는 그대로 둔다** — 지우는 것은 이 락의 행 하나뿐이다.
+**이 락이 실재하게 됐으므로 `shared/README.md` 의 "아직 없는 락" 표에서 이 행 하나를 지운다.**
+그 표는 Task 11 리뷰(2026-08-17)가 *"없는 락을 근거로 내세우는 문서"* 를 막으려고 넣은 것이고,
+락이 생긴 뒤에도 남으면 **정반대 방향의 같은 거짓**이 된다.
+
+**표만 고친다 — 본문 문장은 건드리지 않는다.** 본문은 락이 *검사하는 계약이 무엇인가* 를 현재형으로
+서술하며 파일의 존재를 주장하지 않는다. 존재 여부는 이 표 **한 곳에만** 인코딩돼 있고, 그래서
+동기화 지점이 하나다. 문장을 함께 고치려 들면 그 불변식이 깨진다 (재리뷰 2026-08-17 Q4).
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 git status --short   # 픽스처(_copyof_mutation_fixture.sh)가 안 남았는지 마지막으로 확인
-grep -n 'test_copy_of_contract.sh` | plan Task 16' shared/README.md   # 지울 행을 눈으로 확인
-# 위 행을 제거한 뒤:
-grep -c 'test_copy_of_contract.sh` | plan Task 16' shared/README.md   # Expected: 0
-grep -c 'test_no_new_duplication.sh` | plan Task 35' shared/README.md # Expected: 1 (Task 35 몫)
+grep -n '^> |.*test_.*\.sh' shared/README.md   # Expected: 2행. 지울 행을 눈으로 고른다
+# `test_copy_of_contract.sh` **행 하나만** 지운 뒤:
+grep -c '^> |.*test_.*\.sh'            shared/README.md  # Expected: 1  (2 → 1)
+grep -c '^> |.*test_copy_of_contract'  shared/README.md  # Expected: 0  (내 행이 갔다)
+grep -c '^> |.*test_no_new_duplication' shared/README.md # Expected: 1  (Task 35 몫은 남았다)
+grep -c '검사한다'                      shared/README.md  # Expected: 1  (본문 생존 양성증거 — Task 35 와 같은 검사)
+# ↓ 이 파일에 **다른 미커밋 편집이 없을 때만** 유효하다. 있으면 값이 부풀어 오해를 부른다(실측).
+git diff --numstat shared/README.md    # Expected: `0	1` — 본문을 안 건드렸다는 독립 증거
 git add shared/tests/test_copy_of_contract.sh shared/README.md
 git commit -m "test(shared): 동일성 락 — 심볼릭 링크 도미넌스 체크 + copy-of 잔여 + 형제 설정 fail-closed"
 ```
+
+> **앵커를 왜 이 모양으로 쓰나** 〔2026-08-17 4축 mutation 실측〕: `'^> |.*test_.*\.sh'` 는 표의
+> **열 순서를 뒤집어도 · 백틱을 지워도** 같은 수를 내고, **행을 지우면 1 줄고 블록을 지우면 0** 이
+> 된다. 열 문구를 리터럴로 무는 앵커(`` `test_x.sh` | plan Task 16 ``)는 누가 표기를 바꾸면
+> **편집 전에도 0** 이라 "지웠다" 와 "애초에 못 찾았다" 를 구분하지 못한 채 통과한다 —
+> 이 리포가 이미 겪은 헤더-satisfiable 클래스다. `--numstat` 은 본문 미변경의 독립 증거다.
 
 - [ ] **Step 7: Task 17이 이 락을 못 불러 미뤄 둔 두 단언을 여기서 갚는다** (B.4 5b)
 
@@ -6452,20 +6465,28 @@ Expected: **두 파일 모두** 실행 목록에 나온다. 후보에만 있고 
 
 - [ ] **Step 6: 커밋**
 
-**이 락이 마지막이다 — `shared/README.md` 의 미존재 경고 블록을 통째로 지운다.** Task 16 이 자기
-행을 이미 지웠으므로 여기서 남은 것은 이 락의 행 하나와 경고 문단이다. 함께 되돌릴 것: 같은 절의
-미래형 표현 셋(`검사**할 것이다**` · `RED**가 될 것이다**` · `돌게 된다`)을 현재형으로 되돌린다 —
-이제 둘 다 실재하므로 현재형이 참이다. 아래 검사가 그것을 강제한다.
+**이 락이 마지막이다 — `shared/README.md` 의 "아직 없는 락" 표에서 마지막 행을 지우고, 표가 비므로
+그 경고 블록을 통째로 지운다.** Task 16 이 자기 행을 이미 지웠으므로 여기 남은 것은 이 락의 행 하나다.
+
+**여기서도 본문 문장은 건드리지 않는다.** 본문은 처음부터 현재형이고 락이 검사하는 계약을 서술할
+뿐이다 — 존재 여부는 표에만 있었고, 그 표가 사라지면 그것으로 끝이다. 미래형 표현을 되돌리는
+작업은 **없다**(애초에 만들지 않았다, 재리뷰 2026-08-17 Q4).
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
-# 경고 블록과 미래형을 제거한 뒤:
-grep -c '아직 없다' shared/README.md            # Expected: 0
-grep -c '할 것이다\|될 것이다\|돌게 된다' shared/README.md  # Expected: 0
-git ls-files shared/tests/                       # Expected: assert.sh · 두 락 · test_assert_behavior.sh (.gitkeep 없음)
+grep -c '^> |.*test_.*\.sh' shared/README.md   # 시작 Expected: 1 — 0 이면 Task 16 이 블록째 지웠다는 뜻이니 멈추고 확인
+# 마지막 행 + 경고 블록(`> ` 로 시작하는 연속 줄)을 지운 뒤:
+grep -c '^> |.*test_.*\.sh' shared/README.md   # Expected: 0
+grep -c '아직 없는 락'       shared/README.md   # Expected: 0  (블록이 갔다)
+grep -c '검사한다'           shared/README.md   # Expected: 1  (본문은 그대로 — 지우지 않았다는 증거)
+git ls-files shared/tests/                      # Expected: assert.sh · 두 락 · test_assert_behavior.sh (.gitkeep 없음)
 git add shared/tests/test_no_new_duplication.sh shared/README.md
 git commit -m "test(shared): 20줄 블록 검사 — 새 중복 유입 방지 + 심볼릭 링크·마커 예외 각각의 mutation 증명"
 ```
+
+> **`검사한다` 를 세는 이유**: 블록만 지워야 하는데 절 전체를 날려도 위 세 검사는 전부 Expected 를
+> 만족한다(0·0). 본문이 살아 있다는 **양성 증거**가 없으면 이 스텝은 "지웠다" 와 "너무 많이
+> 지웠다" 를 구분하지 못한다 — 부재 검사에는 존재 검사가 짝으로 필요하다.
 
 ---
 

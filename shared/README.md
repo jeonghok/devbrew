@@ -14,20 +14,20 @@
 
 ## 정본과 배포 지점이 같다는 보장
 
-> ⚠ **아래 두 락은 아직 없다.** `git ls-files shared/tests/` 로 확인할 것 — 그 목록에 없으면
-> 이 절은 **계약의 서술이지 작동하는 보장이 아니다.** 지금 이 리포에서 정본과 배포 지점이
-> 갈라져도 그것을 잡는 것은 없다. 각 락이 실제로 생기면 그 태스크가 이 경고에서 해당 줄을 지운다.
+> ⚠ **아래 표에 남아 있는 락은 아직 이 리포에 없다** — 그 줄에 한해 이 절은 계약의 서술이지
+> 작동하는 보장이 아니다. `git ls-files shared/tests/` 가 판정 근거다. 각 락을 만드는 태스크가
+> **자기 행 하나만** 지우고, 마지막 행이 없어지면 그 태스크가 이 블록째 지운다.
 >
-> | 락 | 만드는 곳 | 현재 |
-> |---|---|---|
-> | `test_copy_of_contract.sh` | plan Task 16 (PR3c) | 미존재 |
-> | `test_no_new_duplication.sh` | plan Task 35 (PR6) | 미존재 |
+> | 아직 없는 락 | 만드는 곳 |
+> |---|---|
+> | `test_copy_of_contract.sh` | plan Task 16 (PR3c) |
+> | `test_no_new_duplication.sh` | plan Task 35 (PR6) |
 
-`shared/tests/test_copy_of_contract.sh` — 두 계약을 검사**할 것이다**: **심볼릭 링크**는 링크여야 하고 존재하는 대상을 가리켜야 하고 그 대상이 `shared/` 아래여야 한다(내용이 갈라질 수 없으므로 바이트 비교가 필요 없다). **`copy-of:` 잔여**는 그 줄이 가리키는 파일과 그 줄만 제외하고 바이트가 같아야 한다.
+`shared/tests/test_copy_of_contract.sh` — 두 계약을 검사한다: **심볼릭 링크**는 링크여야 하고 존재하는 대상을 가리켜야 하고 그 대상이 `shared/` 아래여야 한다(내용이 갈라질 수 없으므로 바이트 비교가 필요 없다). **`copy-of:` 잔여**는 그 줄이 가리키는 파일과 그 줄만 제외하고 바이트가 같아야 한다.
 
-`shared/tests/test_no_new_duplication.sh` — 20줄 이상 완전히 같은 블록이 2개 이상 파일에 있는데 그 파일들이 심볼릭 링크나 `copy-of`로 설명되지 않으면 RED**가 될 것이다**.
+`shared/tests/test_no_new_duplication.sh` — 20줄 이상 완전히 같은 블록이 2개 이상 파일에 있는데 그 파일들이 심볼릭 링크나 `copy-of`로 설명되지 않으면 RED.
 
-두 락 모두 `/qg` Runtime gate에서만 돌게 된다 (실행 지점을 새로 만들지 않는다 — 설계 C16).
+두 락 모두 `/qg` Runtime gate에서만 돈다 (실행 지점을 새로 만들지 않는다 — 설계 C16).
 
 ## 디렉토리
 
