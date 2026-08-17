@@ -74,7 +74,7 @@ interview brief에 Law 2 분리 리뷰를 붙인다. 축은 둘(충실도·방�
 
 ## 1. Context / Why
 
-**입력**: `docs/superpowers/interview/2026-07-25-spec-distill-brief-handoff-redesign-interview.md` (+ `.audit.md`) — Spec A와 같은 brief. 그 brief는 *"포맷·producer 교체"* 와 *"리뷰 파이프라인 신설"* 두 덩어리를 담았고, 사용자 결정으로 두 spec으로 갈렸다(B1). 이 문서가 후자다.
+**입력**: `docs/archive/interview/2026-07-25-spec-distill-brief-handoff-redesign-interview.md` (+ `.audit.md`) — Spec A와 같은 brief. 그 brief는 *"포맷·producer 교체"* 와 *"리뷰 파이프라인 신설"* 두 덩어리를 담았고, 사용자 결정으로 두 spec으로 갈렸다(B1). 이 문서가 후자다.
 
 **증상**: brief에 리뷰가 없다. 구체적으로 세 구멍:
 
@@ -776,8 +776,8 @@ in-flight migration: 키 부재 → in-memory default(`direction`, `0`, `[]`) + 
 ## 12. Metadata
 
 - **작성일**: 2026-07-27
-- **입력 brief**: `docs/superpowers/interview/2026-07-25-spec-distill-brief-handoff-redesign-interview.md` (+ `.audit.md`)
-- **선행 spec**: `docs/superpowers/specs/2026-07-25-spec-distill-brief-format-producer-design.md` (Spec A, v0.23.0, merge 5b0caff) — 이 문서가 그 §11이 예고한 후속이다
+- **입력 brief**: `docs/archive/interview/2026-07-25-spec-distill-brief-handoff-redesign-interview.md` (+ `.audit.md`)
+- **선행 spec**: `docs/archive/specs/2026-07-25-spec-distill-brief-format-producer-design.md` (Spec A, v0.23.0, merge 5b0caff) — 이 문서가 그 §11이 예고한 후속이다
 - **대상 플러그인**: `plugins/spec-distill` — `v0.23.0` → `v0.24.0`
 - **병행 작업(독립)**: 하니스 능력 억제 sweep (착수 핸드오프 문서는 제거됨 — PR #112 / merge `a4e7fa2`로 완료) — E10의 리포 전역 집행. 이 spec은 자기 신규 컴포넌트에만 선제 적용
 - **철학 근거**:

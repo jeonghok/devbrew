@@ -1073,9 +1073,9 @@ H가 테스트 파일을 옮기면, RED가 떴을 때 셋 중 무엇 때문인�
 
 | 출처 | 남은 것 |
 |---|---|
-| `docs/audits/2026-08-13-codex-unification-branch-review.md` §2·§3 | IMPORTANT·SUGGESTION 다수 (§8이 닫은 것 제외). §5에 수정 순서 제약·grep 함정 |
-| `docs/audits/2026-07-28-agent-tools-lock-value-path-gaps.md` | Law 2 락 값 경로 선행 결함 — 인덱스에 "기록 전용, 미수정" |
-| `docs/audits/2026-08-02-harness-capability-suppression-census.md` | 억제 census findings |
+| `docs/archive/audits/2026-08-13-codex-unification-branch-review.md` §2·§3 | IMPORTANT·SUGGESTION 다수 (§8이 닫은 것 제외). §5에 수정 순서 제약·grep 함정 |
+| `docs/archive/audits/2026-07-28-agent-tools-lock-value-path-gaps.md` | Law 2 락 값 경로 선행 결함 — 인덱스에 "기록 전용, 미수정" |
+| `docs/archive/audits/2026-08-02-harness-capability-suppression-census.md` | 억제 census findings |
 | **`~/.claude/qg-reports/2026-08-15-agent-transparency-branch-review/`** | IMPORTANT·SUGGESTION + A/B 게이트 실측 실행. **git 밖** |
 | 억제 sweep (PR #112 이후) | 라운드3 잔여 + 설계 §11 별건 fail-open |
 | plugin-audit (PR #106 이후) | adversarial-input · 수동 GC8 · e2e |
