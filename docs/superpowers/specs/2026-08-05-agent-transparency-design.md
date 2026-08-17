@@ -4,7 +4,7 @@
 > 시점에 먼저 드러낸다.
 
 devbrew의 다섯 번째 플러그인. 사용자가 판단해야 하는 순간에 판단할 재료가 이미 나와 있게 만든다.
-입력은 [`docs/archive/interview/2026-08-02-comprehension-debt-plugin-interview.md`](../interview/2026-08-02-comprehension-debt-plugin-interview.md)
+입력은 [`docs/archive/interview/2026-08-02-comprehension-debt-plugin-interview.md`](../../archive/interview/2026-08-02-comprehension-debt-plugin-interview.md)
 (문제공간 brief)이며, 이 문서는 그 해답공간이다.
 
 ## 목차
