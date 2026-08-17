@@ -9,7 +9,7 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$ROOT" || exit 1
-. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+. "$ROOT/shared/tests/assert.sh"
 
 # AC16 경로 화이트리스트 — 활성 문서만.
 FILES=(CLAUDE.md docs/plugin-authoring.md)

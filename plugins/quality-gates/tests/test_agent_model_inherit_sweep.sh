@@ -18,7 +18,7 @@
 set -u -o pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$ROOT" || exit 1
-. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+. "$ROOT/shared/tests/assert.sh"
 
 shopt -s nullglob
 agents=(plugins/*/agents/*.md)

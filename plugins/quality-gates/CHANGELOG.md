@@ -3,6 +3,34 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [3.2.3] — 2026-08-17
+
+Task 14 리뷰 라운드 1 수정(IMPORTANT 3). 컨트롤러의 전수 기계 스윕이 이관(3.2.1)의
+결함 3건을 적발했다.
+
+### Fixed
+- `test_skill_orchestration.sh:56` — `check()`가 즉시-종료형(`exit 1`)이던 BASE에서
+  이관 뒤에도 살아남은 무조건 성공 echo 1건(`PASS V2b (context anchors + options +
+  P21)`). BASE에선 앞선 하드 exit이 실패 시 이 줄 도달을 막아 안전했지만, `check()`를
+  count-and-continue로 이관하며 이 줄만 가드를 잃어 실패해도 거짓 성공 서술이 찍혔다
+  (종료 코드·지문 정규화엔 영향 없음 — 로그 서술만). mutation으로 재현: `Skip with
+  evidence` 앵커를 깨면 `✗ Runtime option`이 뜨는데도 그 줄이 무조건 출력됐다. 삭제 후
+  같은 mutation으로 거짓 성공 서술이 사라졌음을 재확인.
+- `test_law2_prose.sh`·`test_agent_model_inherit_sweep.sh`·
+  `test_governance_no_capability_caps.sh` — `cd "$ROOT"`로 cwd를 리포 루트로 바꾼
+  **뒤**에 `. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"`로
+  `$0` 기준 상대경로를 다시 풀어, 자기 디렉토리(`plugins/quality-gates/tests/`)에서
+  직접 실행하면 `$0`이 이미 바뀐 cwd 기준으로 해석돼 정본을 못 찾는 회귀
+  (`.../shared/tests/assert.sh: No such file or directory`, rc=127). 이미 계산된
+  `$ROOT`를 재사용하는 `. "$ROOT/shared/tests/assert.sh"`로 통일(`test_branch_
+  strategy_rebase_clause.sh`의 기존 형태와 동형). 세 파일 모두 리포 루트·자기
+  디렉토리 두 cwd에서 rc=0 확인.
+
+### Note
+- `plugins/quality-gates/tests/lib/codex_observation.sh`(6개 함수)는 판정 헬퍼를
+  0개 정의한다 — Task 14 Files의 "Delete: tests/lib/ 중 absorbed" 항목은 **삭제
+  대상 0건**으로 확인, 조치 없음(미조치와 구별하기 위해 명시).
+
 ## [3.2.2] — 2026-08-17
 
 Task 14 이관(3.2.1)의 전이적 부작용 수정. `test_codex_backward_compat.sh`가

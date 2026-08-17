@@ -14,7 +14,7 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$ROOT" || exit 1
-. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+. "$ROOT/shared/tests/assert.sh"
 
 CLAUDE_MD="CLAUDE.md"
 PHIL="docs/philosophy/devbrew-harness-philosophy.md"

@@ -53,7 +53,6 @@ assert_file_grep "$S" 'Runtime verifier needs' "Runtime anchor"
 assert_file_grep "$S" 'Yes, retry' "Runtime option"
 assert_file_grep "$S" 'Skip with evidence' "Runtime option"
 assert_file_grep "$S" 'P21' "P21 secret-policy token"
-echo "PASS V2b (context anchors + options + P21)"
 
 # V7 removed in v1.32.1 (see header). Protocol-shape coverage moved to
 # tests/harness/test_skill_orchestration_behavior.sh.
