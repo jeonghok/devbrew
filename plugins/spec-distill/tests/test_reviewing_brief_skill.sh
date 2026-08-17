@@ -424,7 +424,15 @@ grep -qE '>>[ \t]*"\$DEGRADE_FALLBACK_FILE"' "$SKILL" \
 # advisory 템플릿은 `(reason: <skip_reason>)`를 요구한다 — 렌더할 값이 없다.
 # 결함(b): direction 축은 CODEX_DIR_YAML을 소비하는 스크립트가 없어, `codex_failed: true`
 # 라는 프로즈 술어에 fail-closed 보수가 없다 — 부재·0바이트·판독불가가 전부 '정상'이다.
-grep -q 'skip_reason=' "$SKILL" \
+# NOTE (Task 15 fix round 1, I3): the bare `skip_reason=` alternative became
+# header-satisfiable once the loud-failure fix added a fallback assignment
+# `skip_reason="detector_not_runnable"` a few lines below the real capture —
+# that literal also matches `skip_reason=`, so deleting the real capture line
+# (`skip_reason="$(sed -n ...)"`) stayed GREEN (verified by mutation, see
+# report). Anchored to `skip_reason="\$\(` — the command-substitution capture
+# form, unique to the real line; the fallback assigns a plain string literal
+# and never contains `$(`.
+grep -q 'skip_reason="\$(' "$SKILL" \
   && ok "CODEXDIR: skip_reason을 실제로 포착" \
   || no "CODEXDIR: skip_reason이 버려진다 — advisory 템플릿이 렌더 불가다"
 grep -q 'codex_failed: false' "$SKILL" \

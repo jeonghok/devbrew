@@ -85,10 +85,13 @@ SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
 DETECT_OUT="$(bash "$SD/scripts/detect_codex.sh")"
 codex_avail="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^codex_available: //p')"
 skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
-# "감지기를 못 돌렸다"와 "codex가 없다"를 구별한다: 정상 실행된 감지기는 codex_available:
-# false여도 항상 skip_reason을 함께 낸다. 둘 다 비어 있으면 감지기 자체가 안 돈 것이다
-# (빈 stdout·비-zero exit·심볼릭 링크 끊김) — skip_reason: unknown으로 뭉개지 않는다.
-if [[ -z "$codex_avail" && -z "$skip_reason" ]]; then skip_reason="detector_not_runnable"; fi
+# "감지기를 못 돌렸다"와 "codex가 없다"를 구별한다: 정상 실행된 감지기는 항상 exit 0
+# 이고 codex_available: 줄을 낸다(false 여도). 그 줄이 없으면 감지기 자체가 안 돈
+# 것이다(빈 stdout·비-zero exit·심볼릭 링크 끊김) — skip_reason: unknown으로 뭉개지
+# 않는다. `codex_avail` 만으로 가드한다(I6: `&& -z "$skip_reason"`는 rc 를 안 잡고
+# 잘린 출력을 빠져나가게 뒀다 — 정본은 성공 실행 시 항상 exit 0 이므로
+# `-z "$codex_avail"` 단독이 산문과 정확히 일치한다).
+if [[ -z "$codex_avail" ]]; then skip_reason="detector_not_runnable"; fi
 if [[ "$codex_avail" == "true" ]]; then
   bash "$SD/scripts/run_spec_codex_reviewer.sh" "$spec_path" "$(pwd)" "$CODEX_YAML"; runner_rc=$?
   # 러너는 fail-closed 산출물을 **쓰지 못하면** exit 3으로 죽는다(쓰기 불가·디렉토리

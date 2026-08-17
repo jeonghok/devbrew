@@ -1,14 +1,38 @@
 # Changelog
 
-## [0.26.3] — 2026-08-17
+## [0.27.0] — 2026-08-17
 
-Task 15(무게 감축): `scripts/detect_codex.sh`가 물리 사본에서 `shared/codex/
-detect_codex.sh`를 가리키는 상대 심볼릭 링크로 바뀌었다(quality-gates·plugin-audit와
-공유하는 정본). kill switch 변수명(`DEVBREW_DISABLE_SPEC_DISTILL_CODEX`)은 형제 설정
-파일 `scripts/codex-killswitch.conf`로 분리 — 설정 부재 시 fail-closed
-(`skip_reason: killswitch_config_missing`). `reviewing-brief`·`reviewing-spec` 두
-SKILL의 codex 게이트가 "감지기 실행 자체 실패"와 "codex 미설치"를 구별하지 못하고
-`skip_reason: unknown`으로 뭉개던 결함을 `detector_not_runnable`로 닫았다.
+Task 15(무게 감축) + fix round 1. patch가 아니라 **minor**인 이유(S3): 새
+`skip_reason` 3종 + 새 필수 형제 payload 파일(`codex-killswitch.conf`)이 새 surface다.
+
+`scripts/detect_codex.sh`가 물리 사본에서 `shared/codex/detect_codex.sh`를 가리키는
+상대 심볼릭 링크로 바뀌었다(quality-gates·plugin-audit와 공유하는 정본). kill switch
+변수명(`DEVBREW_DISABLE_SPEC_DISTILL_CODEX`)은 형제 설정 파일
+`scripts/codex-killswitch.conf`로 분리 — 설정 부재 시 fail-closed
+(`skip_reason: killswitch_config_missing`).
+
+### Fixed
+- **(fix round 1, 보안)** 정본의 kill switch 가드가 값이 비어 있지 않기만 하면
+  통과시켜, CRLF·공백만·탭·셸 메타문자 값이 bash 3.2의 `${!VAR:-0}` 간접 확장에서
+  에러 없이 `0`으로 평가돼 kill switch가 fail-open하는 결함을 닫았다(정본 공유 —
+  `plugins/quality-gates/CHANGELOG.md` [3.3.0] 참조). `CODEX_KILL_SWITCH_VAR` 값이
+  POSIX 식별자가 아니면 `skip_reason: killswitch_config_invalid`로 거절한다.
+- `reviewing-brief`·`reviewing-spec` 두 SKILL의 codex 게이트가 "감지기 실행 자체
+  실패"와 "codex 미설치"를 구별하지 못하던 결함을 `skip_reason: detector_not_runnable`
+  로 닫았다. (정정: 이전 판은 "`skip_reason: unknown`으로 뭉개던"이라 서술했는데
+  부정확했다 — 두 fence 다 `${skip_reason:-unknown}` bash fallback이 있던 것이
+  아니라, 감지기가 아예 안 돌면 `skip_reason`이 빈 문자열로 advisory 템플릿에
+  그대로 새는 것이었다.) 가드 조건도 `-z codex_avail && -z skip_reason`에서
+  `-z codex_avail` 단독으로 좁혔다 — 정본은 성공 실행 시 항상 exit 0이라 이쪽이
+  더 정확하다(I6).
+- `tests/test_detect_codex.sh`의 kill-switch 변수명 양/음 assertion 2개가 심볼릭
+  링크 전환 뒤 정본 본문을 grep해 자기 변수도 못 찾고(양 — RED) 이웃 변수도 못
+  찾는(음 — 조용히 vacuous 통과) 상태였다. 형제 `codex-killswitch.conf`로
+  재조준했고, 위 fail-open 수정의 회귀 락(malformed conf fail-closed, CRLF·공백만)
+  을 추가했다.
+- `tests/test_reviewing_brief_skill.sh`의 `skip_reason=` 검사가 real capture line과
+  new fallback line 둘 다 만족시켜 header-satisfiable했다(진짜 캡처를 지워도
+  GREEN). `skip_reason="\$\(`로 캡처 형태에 앵커했다(mutation으로 확인).
 
 ## [0.26.2] — 2026-08-17
 

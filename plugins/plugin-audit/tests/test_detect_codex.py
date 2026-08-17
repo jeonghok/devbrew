@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]          # plugins/plugin-audit
 PROBE = ROOT / "scripts" / "detect_codex.sh"
+CONF = ROOT / "scripts" / "codex-killswitch.conf"
 QG_MOCKS = ROOT.parent / "quality-gates" / "tests" / "mocks"
 
 
@@ -76,13 +77,38 @@ class TestDetectCodex(unittest.TestCase):
         self.assertIn("skip_reason: version_unreadable", out)
 
     def test_11_kill_switch_var_name(self):
-        body = PROBE.read_text(encoding="utf-8")
-        self.assertIn("DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX", body)
+        # 재조준(F1/C1, 2026-08-17): PROBE 는 정본을 가리키는 심볼릭 링크라 본문에
+        # 변수명 리터럴이 없다(형제 conf 로 이동). 형제 conf 로 재조준한다 — 부재는
+        # assertTrue 로 fail-closed(테스트 실패)한다.
+        self.assertTrue(CONF.is_file(), f"conf 없음: {CONF}")
+        body = CONF.read_text(encoding="utf-8")
+        self.assertIn("CODEX_KILL_SWITCH_VAR=DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX", body)
 
     def test_12_no_stale_foreign_var(self):
-        body = PROBE.read_text(encoding="utf-8")
+        self.assertTrue(CONF.is_file(), f"conf 없음: {CONF}")
+        body = CONF.read_text(encoding="utf-8")
         self.assertNotIn("DEVBREW_DISABLE_QG_CODEX", body)
         self.assertNotIn("DEVBREW_DISABLE_SPEC_DISTILL_CODEX", body)
+
+    def _with_conf_bytes(self, raw_bytes):
+        """conf 를 raw_bytes 로 덮어쓰고 detect_codex.sh 출력을 반환한 뒤 바이트 그대로 원복한다."""
+        backup = CONF.read_bytes()
+        try:
+            CONF.write_bytes(raw_bytes)
+            return run({"CODEX_API_KEY": "t"}, self._mocks("safe-v1"))
+        finally:
+            CONF.write_bytes(backup)
+
+    def test_15_malformed_conf_crlf_fails_closed(self):
+        # F2 compounding: 리뷰를 빠져나간 버그를 그것을 잡았어야 할 검사에 넣어 닫는다.
+        out = self._with_conf_bytes(
+            b"CODEX_KILL_SWITCH_VAR=DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX\r\n"
+        )
+        self.assertIn("skip_reason: killswitch_config_invalid", out)
+
+    def test_16_malformed_conf_whitespace_only_fails_closed(self):
+        out = self._with_conf_bytes(b'CODEX_KILL_SWITCH_VAR="   "\n')
+        self.assertIn("skip_reason: killswitch_config_invalid", out)
 
     def test_13_version_probe_wrapped_in_timeout(self):
         body = PROBE.read_text(encoding="utf-8")

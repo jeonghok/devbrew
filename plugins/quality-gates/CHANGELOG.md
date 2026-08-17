@@ -3,10 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [3.2.4] — 2026-08-17
+## [3.3.0] — 2026-08-17
 
-Task 15(무게 감축): `detect_codex.sh` 세 사본을 `shared/codex/`의 정본 + 상대 심볼릭
-링크로 통합. quality-gates·spec-distill·plugin-audit 세 플러그인이 함께 영향받는다.
+Task 15(무게 감축) + fix round 1: `detect_codex.sh` 세 사본을 `shared/codex/`의 정본 +
+상대 심볼릭 링크로 통합. quality-gates·spec-distill·plugin-audit 세 플러그인이 함께
+영향받는다. patch가 아니라 **minor**인 이유(S3): 새 `skip_reason` 3종 + 새 필수 형제
+payload 파일(`codex-killswitch.conf` — 없으면 fail-closed)이 새 surface다.
 
 ### Changed
 - `plugins/quality-gates/scripts/detect_codex.sh`가 물리 파일에서 `shared/codex/
@@ -19,12 +21,32 @@ Task 15(무게 감축): `detect_codex.sh` 세 사본을 `shared/codex/`의 정�
 - `plugins/quality-gates/tests/test_codex_copies_agree.sh` 헤더에 심볼릭 링크 전환 후의
   역할 분담 문단 추가(기존 "왜 파일 diff가 아닌가" 문단은 보존).
 
+### Added
+- `detect_codex.sh` 새 `skip_reason` 3종: `killswitch_config_missing`·
+  `killswitch_config_incomplete`(conf 부재/불완전, fail-closed) ·
+  `killswitch_config_invalid`(kill switch 변수명이 유효한 식별자가 아님 — fail-open
+  보안 수정, 아래 Fixed 참조). `quality-pipeline`·`critiquing-artifacts` 두 SKILL의
+  skip_reason 안내에 반영.
+
 ### Fixed
-- `critiquing-artifacts`·`quality-pipeline` 두 SKILL의 codex 게이트가 "감지기 실행 자체가
-  실패"(빈 출력·비-zero exit — 심볼릭 링크가 끊긴 경우 포함)를 "codex 미설치" 등 정상
-  skip_reason과 구별하지 못하고 `unknown`으로 뭉개던 결함을 닫았다. 이제 `skip_reason:
-  detector_not_runnable`로 별도 문구를 낸다. 심볼릭 링크와 무관하게 이미 있던 결함이었고,
-  이번에 겨냥해 닫았다.
+- `shared/codex/detect_codex.sh`의 kill switch 가드가 값이 **비어 있지 않기만 하면**
+  통과시켜, CRLF·공백만·탭·셸 메타문자 값이 `${!CODEX_KILL_SWITCH_VAR:-0}`(bash 3.2
+  간접 확장)에서 에러 없이 `0`으로 평가돼 kill switch가 **fail-open**하는 보안 결함을
+  닫았다. `CODEX_KILL_SWITCH_VAR` 값이 POSIX 식별자(`^[A-Za-z_][A-Za-z0-9_]*$`)가
+  아니면 `skip_reason: killswitch_config_invalid`로 거절한다. 같은 검사가 `${!VAR}`가
+  두 번째 코드 실행 sink(`a[$(cmd)]` 형 배열 첨자 명령 치환)인 것도 함께 닫는다.
+- `critiquing-artifacts`·`quality-pipeline` 두 SKILL의 codex 게이트 프로즈에 "감지기
+  실행 자체가 실패"(빈 출력·비-zero exit — 심볼릭 링크가 끊긴 경우 포함)를 "codex
+  미설치" 등 정상 skip_reason과 구별하라는 지시를 추가했다(산문 게이트라 집행은
+  모델에 의존 — `test_codex_gate_observation.sh`의 UNGATED 원장 참조). 새 구별 문구는
+  `skip_reason: detector_not_runnable`. (정정: 이전 판은 이 결함을 "`unknown`으로
+  뭉개던" 것으로 서술했는데 부정확했다 — 두 SKILL 다 원래 `<skip_reason>` 프로즈
+  placeholder였지 `${skip_reason:-unknown}` bash fallback이 있던 것이 아니다.)
+- `plugins/{quality-gates,spec-distill,plugin-audit}/tests/test_detect_codex.*`의
+  kill-switch 변수명 양/음 assertion 6개가 심볼릭 링크 전환 뒤 정본 본문을 grep해
+  자기 변수도 못 찾고(양 — RED) 이웃 변수도 못 찾는(음 — 조용히 vacuous 통과) 상태였다.
+  형제 `codex-killswitch.conf`로 재조준했고, 위 fail-open 수정의 회귀 락(malformed conf
+  fail-closed, CRLF·공백만 두 케이스)을 세 파일에 추가했다.
 
 ## [3.2.3] — 2026-08-17
 

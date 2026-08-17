@@ -15,7 +15,26 @@ OBS_REPO="$ROOT"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 SCRATCH="$(mktemp -d -t qg-gate-XXXXXX)" || exit 1
-trap 'rm -rf "$SCRATCH"' EXIT
+# F5(Task 15 fix round 1)의 "감지기 부재" 시나리오가 실제 배포 지점의 detect_codex.sh
+# 심볼릭 링크를 잠깐 지웠다 되살린다. **`mv`로 다른 디렉토리에 옮기지 않는다** — 이
+# 심볼릭 링크는 **상대** 링크(`../../../shared/codex/detect_codex.sh`)라, mv로
+# 옮기면 새 위치 기준으로 재해석되어 dangling이 되고, 그 dangling 링크를 백업으로
+# 쓰면 `-e` 검사가 항상 거짓이라 원복 분기를 못 타 원본이 통째로 유실된다(실측:
+# 이 라운드에서 실제로 겪음 — SCRATCH가 지워지며 두 배포 지점이 사라졌다가 `ln -s`로
+# 즉시 재생성해 복구했다). 그래서 target 문자열만 `readlink`로 뽑아 두고 `rm -f` +
+# `ln -sf`로 복원한다 — 파일 이동이 아니라 지우고-다시-만들기라 상대 경로 문제가
+# 없다. 정상 종료든 조기 종료든 원복이 보장돼야 하므로, EXIT trap이 "지워진 채로
+# 남았으면"(_ACTIVE_DETECTOR_TARGET이 비지 않았으면) 되살리고 나서 SCRATCH를 지운다.
+# 정상 경로에서는 루프 안에서 이미 되살려 이 trap은 no-op이다.
+_ACTIVE_DETECTOR_ORIG=""
+_ACTIVE_DETECTOR_TARGET=""
+restore_active_detector() {
+  if [ -n "$_ACTIVE_DETECTOR_TARGET" ]; then
+    ln -sf "$_ACTIVE_DETECTOR_TARGET" "$_ACTIVE_DETECTOR_ORIG"
+    _ACTIVE_DETECTOR_TARGET=""
+  fi
+}
+trap 'restore_active_detector; rm -rf "$SCRATCH"' EXIT
 obs_setup "$SCRATCH"
 
 # ── 양방향 ratchet: 게이트가 **없는** 러너의 원장 ────────────────────────────
@@ -147,7 +166,8 @@ BASE_SUFFIX="/usr/bin:/bin"
 for i in "${!GATED_RUNNER[@]}"; do
   r="${GATED_RUNNER[$i]}"; sk="${GATED_SKILL[$i]}"
   label="$(basename "$(dirname "$sk")")"
-  plugin="$(basename "$(cd "$(dirname "$sk")/../.." && pwd)")"
+  plugin_root_dir="$(cd "$(dirname "$sk")/../.." && pwd)"
+  plugin="$(basename "$plugin_root_dir")"
   case "$plugin" in
     quality-gates) sw=DEVBREW_DISABLE_QG_CODEX ;;
     spec-distill)  sw=DEVBREW_DISABLE_SPEC_DISTILL_CODEX ;;
@@ -196,6 +216,23 @@ for i in "${!GATED_RUNNER[@]}"; do
     0) ok "$label: 버전 바닥 미달 → codex 0회" ;;
     PREMISE_FAIL:*) no "$label: 버전 바닥 전제 실패 — PATH에서 codex가 mock으로 해석되지 않는다 (실제: ${n#PREMISE_FAIL:})" ;;
     *) no "$label: 바닥 미달 → codex ${n}회" ;;
+  esac
+
+  # 감지기 부재(F5, Task 15 fix round 1) — Step 9 loud-failure 수정의 보안 관련 절반이
+  # 실행 관측 없이 남아 있었다. detect_codex.sh 심볼릭 링크가 dangling 이 되면(예:
+  # 배포가 target 없이 나가면) 게이트 스크립트 자체가 안 돈다 — 그 상태에서도 codex 를
+  # 부르면 안 된다(skip_reason: detector_not_runnable 로 닫힌다, 세 fence 전부 실측
+  # 완료). PATH 는 "가용" 시나리오와 동일하게 codex 가 정상 해석되도록 둔다 — PATH
+  # 문제가 아니라 감지기 부재 자체가 codex 호출을 막는지를 격리해서 잰다.
+  _ACTIVE_DETECTOR_ORIG="$plugin_root_dir/scripts/detect_codex.sh"
+  _ACTIVE_DETECTOR_TARGET="$(readlink "$_ACTIVE_DETECTOR_ORIG")"
+  rm -f "$_ACTIVE_DETECTOR_ORIG"
+  n="$(run_scenario "$sk" "$r" "$SCRATCH/g-$label-nodetect" "$OBS_MOCKBIN:$BASE_SUFFIX" "$OBS_MOCKBIN" "IGNORE=1")"
+  restore_active_detector
+  case "$n" in
+    0) ok "$label: 감지기 부재 → codex 0회 (loud-failure 확인)" ;;
+    PREMISE_FAIL:*) no "$label: 감지기 부재 전제 실패 — PATH에서 codex가 mock으로 해석되지 않는다 (실제: ${n#PREMISE_FAIL:})" ;;
+    *) no "$label: 감지기 부재 → codex ${n}회 — loud-failure 가 codex 호출을 막지 못한다" ;;
   esac
 done
 finish

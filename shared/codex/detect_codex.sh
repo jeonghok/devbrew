@@ -8,9 +8,15 @@
 # 형제 파일 `codex-killswitch.conf` 로 나가 있다 — 인자가 아니라 파일인 이유는 그 conf
 # 파일의 주석과 설계 §6.4 에 있다(기존 행동 등가 락이 세 배포 지점을 **인자 없이** 태운다).
 #
+# 이 정본은 spec-distill 사본 헤더의 provenance 를 흡수한다:
+# "Vendored from quality-gates (spec-distill design §6 #1)" — 세 사본의 출발점이
+# quality-gates 판이었다는 사실. plugin-audit 판의 "(Task 10)" 귀속은 아래 락 이름이
+# 그대로 살려 둔다.
+#
 # 행동 등가는 `quality-gates/tests/test_codex_copies_agree.sh` 가 재고,
 # 배포 지점이 이 정본을 가리키는지는 `shared/tests/test_copy_of_contract.sh` 가
-# 잰다 — 두 락이 각자 다른 것을 잰다(설계 §6.4). 앞의 락 헤더가 *"왜 파일 diff 가
+# **잴 것이다 — 그 파일은 Task 16이 만든다. 이 커밋 시점에는 아직 없다.**
+# 두 락은 각자 다른 것을 잰다(설계 §6.4). 앞의 락 헤더가 *"왜 파일 diff 가
 # 아닌가: 두 사본은 의도된 차이를 갖는다"* 라고 적어 둔 그 전제는 이 통합이 없앴다.
 # (바이트 동일성은 이제 "측정할" 대상이 아니다 — 심볼릭 링크라 애초에 갈라질 수 없다.)
 
@@ -35,6 +41,19 @@ fi
 . "$_CONF"
 if [[ -z "${CODEX_KILL_SWITCH_VAR:-}" ]]; then
   emit_skip 'killswitch_config_incomplete'
+  exit 0
+fi
+# 0a. **값이 유효한 식별자인가** — 비어 있지 않다는 것만으로는 부족하다.
+#     〔2026-08-17 실측, 이 검사가 없던 판본을 반증한 기록〕 CRLF(`…CODEX\r`) · 공백만 ·
+#     탭 · 메타문자 값은 위 `-z` 를 통과하는데, bash 3.2 의 `${!VAR:-0}` 는 유효하지 않은
+#     식별자에 대해 **에러도 stderr 도 없이 `0`** 을 낸다. 사용자가 opt-out 을 걸어 둔 채로
+#     codex 가 그대로 도는, kill switch 우회다(보안 컨트롤 훼손 — CLAUDE.md:48).
+#     이 검사는 `${!VAR}` 가 **두 번째 코드 실행 sink** 인 것도 함께 닫는다:
+#     `a[$(cmd)]` 같은 값은 배열 첨자 산술 평가로 명령 치환이 일어나는데(실측),
+#     아래 정규식에 맞지 않아 여기서 걸린다.
+#     정규식을 따옴표로 감싸지 말 것 — bash 3.2 는 인용된 우변을 리터럴로 취급한다.
+if [[ ! "$CODEX_KILL_SWITCH_VAR" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+  emit_skip 'killswitch_config_invalid'
   exit 0
 fi
 

@@ -151,13 +151,19 @@ Agent({
     (`spec-distill`의 `reviewing-brief` SKILL)가 이미 같은 `rc==3 → rm -f` 패턴을
     구현하고 있다.
   - 출력이 `codex_failed: true`면 **가용 판정 후 런타임 실패**: `> [quality-gates] codex 가용 판정 후 런타임 실패(<reason>) — degraded, inherit-tier 단독.` (crash 아님, C7) codex.yaml은 병합에서 제외.
-- `codex_available: false` → **미가용**: `> [quality-gates] codex 미가용(<skip_reason>) — inherit-tier 단독 비평.` (위 런타임-실패 문구와 **구분**된 별도 라인.)
+- `codex_available: false` → **미가용**: `> [quality-gates] codex 미가용(<skip_reason>) — inherit-tier 단독 비평.` (위 런타임-실패 문구와 **구분**된 별도 라인.) `<skip_reason>` 자리에는
+  `not_installed`·`auth_missing`·`timeout_binary_missing`·`known_bad_version`·
+  `version_below_floor`·`version_unreadable` 외에 형제 설정 `codex-killswitch.conf`
+  문제를 가리키는 `killswitch_config_missing`·`killswitch_config_incomplete`·
+  `killswitch_config_invalid`도 정상적으로 올 수 있다(정본 통합 이후 새 사유,
+  quality-pipeline SKILL의 skip_reason 표와 동형).
 - **`detect_codex.sh` 실행 자체가 실패했거나(비-zero exit·빈 stdout) 출력에
   `codex_available:` 줄이 아예 없으면** → "codex 미가용"이 **아니다**. 정상 실행된 감지기는
-  `codex_available: false`여도 항상 `skip_reason`을 함께 낸다 — 그 줄 자체가 없다는 것은
-  감지기가 안 돌았다는 뜻이고, 심볼릭 링크가 끊겼을 수 있다(`plugins/quality-gates/scripts/detect_codex.sh`는
-  `shared/codex/detect_codex.sh`를 가리키는 상대 심볼릭 링크다). `<skip_reason>` 자리를
-  `unknown`으로 채우지 말고 **`detector_not_runnable`**로 구별해 낸다:
+  `codex_available: false`여도 항상 `skip_reason`을 함께 낸다(위 아홉 사유 중 하나) — 그
+  줄 자체가 없다는 것은 감지기가 안 돌았다는 뜻이고, 심볼릭 링크가 끊겼을 수 있다
+  (`plugins/quality-gates/scripts/detect_codex.sh`는 `shared/codex/detect_codex.sh`를
+  가리키는 상대 심볼릭 링크다). `<skip_reason>` 자리를 `unknown`으로 채우지 말고
+  **`detector_not_runnable`**로 구별해 낸다:
   `> [quality-gates] codex 감지기 실행 실패(detector_not_runnable) — inherit-tier 단독 비평.`
   (위 두 문구와 **구분**된 별도 라인 — "codex가 없다"와 "감지기를 못 돌렸다"는 다른 사실이다.)
 

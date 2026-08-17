@@ -5,9 +5,13 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROBE="$PLUGIN_ROOT/scripts/detect_codex.sh"
+CONF="$PLUGIN_ROOT/scripts/codex-killswitch.conf"
 MOCKS="$SCRIPT_DIR/mocks"
 TMP="$(mktemp -d -t qg-detect-codex-test-XXXXXX)"
-trap 'rm -rf "$TMP"' EXIT
+CONF_BACKUP="$TMP/codex-killswitch.conf.orig"
+[ -f "$CONF" ] && cp -p "$CONF" "$CONF_BACKUP"
+restore_conf() { [ -f "$CONF_BACKUP" ] && cp -p "$CONF_BACKUP" "$CONF"; }
+trap 'restore_conf; rm -rf "$TMP"' EXIT
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
@@ -83,18 +87,31 @@ echo "=== Case 10: 이웃 플러그인 kill switch 변수는 무효해야 한다
 out="$(PATH="$MOCKS/safe-v1:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=test DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1 bash "$PROBE")"
 assert_grep "$out" 'codex_available: true' "foreign kill switch inert"
 
-echo "=== Case 11: kill switch 변수명 (body grep) ==="
-if grep -q 'DEVBREW_DISABLE_QG_CODEX' "$PROBE"; then
-  ok "kill-switch var name"
-else
-  no "kill-switch var name (expect DEVBREW_DISABLE_QG_CODEX)"
-fi
+# 재조준(F1/C1 수정, 2026-08-17): `$PROBE`는 이제 정본 shared/codex/detect_codex.sh
+# 를 가리키는 심볼릭 링크다 — 본문에는 어느 kill switch 변수명도 리터럴로 없다
+# (형제 conf 로 이동했다). 예전처럼 `$PROBE` 본문을 grep 하면 자기 변수도 못 찾아
+# 양(positive)이 조용히 RED 되고, 이웃 변수도 못 찾아 음(negative)이 조용히 vacuous
+# 통과가 된다 — 두 축 다 형제 conf `$CONF` 로 재조준한다. conf 부재는
+# assert_file_grep/assert_file_absent 계약대로 fail-closed(no()) 다.
+echo "=== Case 11: kill switch 변수명 (conf grep) ==="
+assert_file_grep "$CONF" 'CODEX_KILL_SWITCH_VAR=DEVBREW_DISABLE_QG_CODEX' "kill-switch var name"
 
 echo "=== Case 12: 이웃 플러그인 변수 잔존 없음 ==="
-if grep -q 'DEVBREW_DISABLE_SPEC_DISTILL_CODEX\|DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX' "$PROBE"; then
-  no "이웃 플러그인 kill switch 변수 잔존"
-else
-  ok "이웃 변수 잔존 없음"
-fi
+assert_file_absent "$CONF" 'DEVBREW_DISABLE_SPEC_DISTILL_CODEX|DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX' "이웃 변수 잔존 없음"
+
+# F2 의 compounding — malformed conf 가 fail-closed 하는지 (리뷰를 빠져나간 버그를
+# 그것을 잡았어야 할 검사 파일에 새로 넣어 닫는다). 원본을 cp -p 로 바이트 복원한다
+# (git checkout -- 아님 — 워킹트리의 다른 무관 변경을 건드리지 않기 위해).
+echo "=== Case 13: malformed conf(CRLF) 는 fail-closed 다 ==="
+printf 'CODEX_KILL_SWITCH_VAR=DEVBREW_DISABLE_QG_CODEX\r\n' > "$CONF"
+out="$(bash "$PROBE" 2>&1)"
+restore_conf
+assert_grep "$out" 'skip_reason: killswitch_config_invalid' "malformed conf(CRLF) fail-closed"
+
+echo "=== Case 14: malformed conf(공백만) 는 fail-closed 다 ==="
+printf 'CODEX_KILL_SWITCH_VAR="   "\n' > "$CONF"
+out="$(bash "$PROBE" 2>&1)"
+restore_conf
+assert_grep "$out" 'skip_reason: killswitch_config_invalid' "malformed conf(공백만) fail-closed"
 
 finish

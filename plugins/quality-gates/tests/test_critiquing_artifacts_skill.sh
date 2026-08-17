@@ -84,7 +84,15 @@ assert_contains "$(cat "$S")" 'project_dir: <project_dir>' "threads project_dir 
 # deleted (verified: a mutation deleting only the runtime-fail arm stayed
 # green under the old pattern). `가용 판정 후.*실패` is unique to the
 # runtime-fail arm's own text and doesn't collide with that cross-reference.
-assert_file_grep "$S" '미가용|not.*available|codex_available: false' "codex unavailable degrade line"
+# NOTE 2 (Task 15 fix round 1, I3): the plain `미가용` alternative was ALSO
+# header-satisfiable once the detector-not-runnable bullet was added below the
+# real unavailable-banner line — that bullet says `"codex 미가용"이 **아니다**`,
+# which contains the bare token `미가용` without the paren, so it alone kept
+# this assertion GREEN when the real banner line (`:154`) was deleted (verified
+# by mutation, see report). Anchored to `미가용\(` — body-unique to the real
+# banner's own `codex 미가용(<skip_reason>)` text; the detector-not-runnable
+# bullet never writes that literal open-paren form.
+assert_file_grep "$S" '미가용\(|not.*available' "codex unavailable degrade line"
 assert_file_grep "$S" '런타임 실패|runtime.*fail|가용 판정 후.*실패' "codex runtime-fail degrade line (distinct)"
 
 # degraded-adversarial -> NEEDS_RESOLUTION ; un-adjudicated fail-closed loud log
