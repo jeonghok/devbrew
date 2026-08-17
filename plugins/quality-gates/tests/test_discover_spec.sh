@@ -7,28 +7,10 @@
 set -u
 
 SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/scripts/discover-spec.sh"
-PASS=0
-FAIL=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
-note() { echo "  → $1"; }
 
-assert_eq() {
-  local actual="$1" expected="$2" msg="$3"
-  if [[ "$actual" == "$expected" ]]; then
-    PASS=$((PASS + 1)); note "PASS: $msg"
-  else
-    FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $msg (got '$actual', expected '$expected')"
-  fi
-}
 
-assert_contains() {
-  local haystack="$1" needle="$2" msg="$3"
-  if [[ "$haystack" == *"$needle"* ]]; then
-    PASS=$((PASS + 1)); note "PASS: $msg"
-  else
-    FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $msg (string '$needle' not in '$haystack')"
-  fi
-}
 
 # Run from a given dir; capture stdout + exit code.
 run_in_env() {
@@ -133,6 +115,4 @@ assert_contains "$OUT" '"source":"none"' "T8: source=none from wrong cwd"
 cd / && rm -rf "$TMPDIR"
 
 # --- Summary ---
-echo
-echo "Results: $PASS passed, $FAIL failed"
-[[ "$FAIL" -eq 0 ]]
+finish

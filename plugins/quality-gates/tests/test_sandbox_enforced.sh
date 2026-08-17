@@ -16,9 +16,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 OBS_REPO="$ROOT"
 . "$ROOT/plugins/quality-gates/tests/lib/codex_observation.sh"
 
-pass=0; fail=0
-ok() { pass=$((pass+1)); echo "  ✓ $1"; }
-no() { fail=$((fail+1)); echo "  ✗ $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # $1 = 후보 파일. backslash 연속줄을 하나의 논리줄로 합친 뒤, **비주석** 줄 중
 # 실제 `codex exec` 호출을 담은 논리줄만 emit한다.
@@ -153,6 +151,4 @@ while IFS= read -r cand; do
 done <<EOF
 $candidates
 EOF
-
-echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[ "$fail" -eq 0 ]
+finish

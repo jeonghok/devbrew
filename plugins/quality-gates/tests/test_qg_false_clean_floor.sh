@@ -18,12 +18,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 SCRIPT="$PLUGIN_ROOT/scripts/check-review-scope.sh"
 
-PASS=0; FAIL=0; REPO=""
-pass() { PASS=$((PASS + 1)); echo "  → PASS: $1"; }
-fail() { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+REPO=""
 
 # field <key> <output-text> → prints the value after "<key>: "
-field() { printf '%s\n' "$2" | awk -v k="$1:" '$1 == k { print $2 }'; }
 
 # floor_verdict <resolved_count> <changes_exist> <degraded> → not_clean | clean | clean_degraded
 # Mirror of SKILL Step 4.5 §5.3. The harness static anchor asserts the SKILL prose
@@ -71,9 +69,9 @@ case_false_clean_blocked() {
   if [[ "$verdict" == "not_clean" \
      && "$(field changes_exist "$out")" == "yes" \
      && "$(field branch_ahead_count "$out")" == "1" ]]; then
-    pass "false-clean (0 files + branch ahead) → NOT certified clean"
+    ok "false-clean (0 files + branch ahead) → NOT certified clean"
   else
-    fail "false-clean not blocked (resolved=$resolved verdict=$verdict out=$out)"
+    no "false-clean not blocked (resolved=$resolved verdict=$verdict out=$out)"
   fi
   cd / && rm -rf "$REPO"; unset CLAUDE_CODE_SESSION_ID
 }
@@ -89,9 +87,9 @@ case_scope_present_clean() {
   resolved=$(session_resolved_count "$CLAUDE_CODE_SESSION_ID")   # 1
   verdict=$(floor_verdict "$resolved" "$(field changes_exist "$out")" "$(field degraded "$out")")
   if [[ "$verdict" == "clean" && "$resolved" -eq 1 ]]; then
-    pass "resolved scope >0 → clean (happy-path, no floor over-fire)"
+    ok "resolved scope >0 → clean (happy-path, no floor over-fire)"
   else
-    fail "scope-present clean (resolved=$resolved verdict=$verdict out=$out)"
+    no "scope-present clean (resolved=$resolved verdict=$verdict out=$out)"
   fi
   cd / && rm -rf "$REPO"; unset CLAUDE_CODE_SESSION_ID
 }
@@ -106,9 +104,9 @@ case_genuine_noop_clean() {
   resolved=$(session_resolved_count "$CLAUDE_CODE_SESSION_ID")   # 0
   verdict=$(floor_verdict "$resolved" "$(field changes_exist "$out")" "$(field degraded "$out")")
   if [[ "$verdict" == "clean" && "$(field changes_exist "$out")" == "no" ]]; then
-    pass "genuine no-op (no changes) → clean (floor not over-fired)"
+    ok "genuine no-op (no changes) → clean (floor not over-fired)"
   else
-    fail "genuine no-op clean (verdict=$verdict out=$out)"
+    no "genuine no-op clean (verdict=$verdict out=$out)"
   fi
   cd / && rm -rf "$REPO"; unset CLAUDE_CODE_SESSION_ID
 }
@@ -125,9 +123,9 @@ case_degraded_fail_open() {
   resolved=$(session_resolved_count "$CLAUDE_CODE_SESSION_ID")   # 0
   verdict=$(floor_verdict "$resolved" "$(field changes_exist "$out")" "$(field degraded "$out")")
   if [[ "$verdict" == "clean_degraded" && "$(field degraded "$out")" == "yes" ]]; then
-    pass "no base branch → degraded → floor fail-open (clean + advisory)"
+    ok "no base branch → degraded → floor fail-open (clean + advisory)"
   else
-    fail "degraded fail-open (verdict=$verdict out=$out)"
+    no "degraded fail-open (verdict=$verdict out=$out)"
   fi
   cd / && rm -rf "$REPO"; unset CLAUDE_CODE_SESSION_ID
 }
@@ -136,7 +134,4 @@ case_false_clean_blocked
 case_scope_present_clean
 case_genuine_noop_clean
 case_degraded_fail_open
-
-echo
-echo "test_qg_false_clean_floor: $PASS passed, $FAIL failed"
-[[ "$FAIL" -eq 0 ]] && exit 0 || exit 1
+finish

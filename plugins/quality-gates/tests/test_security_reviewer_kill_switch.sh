@@ -13,27 +13,15 @@ if [ ! -f "$SKILL" ]; then
 fi
 
 set +e
-pass=0; fail=0
-check() {
-  local name="$1" cmd="$2" expected="$3"
-  local actual
-  actual="$(eval "$cmd" 2>/dev/null || true)"
-  if [ "$actual" -ge "$expected" ]; then
-    echo "  PASS: $name (got $actual, expected >= $expected)"; pass=$((pass + 1))
-  else
-    echo "  FAIL: $name (got $actual, expected >= $expected)"; fail=$((fail + 1))
-  fi
-}
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
-check "kill switch env var present" \
-  "grep -c 'DEVBREW_DISABLE_QG_SECURITY_REVIEWER' '$SKILL'" 1
+assert_count_ge "grep -c 'DEVBREW_DISABLE_QG_SECURITY_REVIEWER' '$SKILL'" 1 \
+  "kill switch env var present"
 
-check "disable log message present" \
-  "grep -cE 'security-reviewer disabled|security-reviewer.*DEVBREW_DISABLE' '$SKILL'" 1
+assert_count_ge "grep -cE 'security-reviewer disabled|security-reviewer.*DEVBREW_DISABLE' '$SKILL'" 1 \
+  "disable log message present"
 
-check "security-reviewer dispatch reference count" \
-  "grep -c 'security-reviewer' '$SKILL'" 3
+assert_count_ge "grep -c 'security-reviewer' '$SKILL'" 3 \
+  "security-reviewer dispatch reference count"
 
-echo ""
-echo "Total: $((pass + fail)), pass: $pass, fail: $fail"
-[ "$fail" -eq 0 ] || exit 1
+finish

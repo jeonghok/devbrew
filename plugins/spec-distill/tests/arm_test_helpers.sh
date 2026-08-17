@@ -24,10 +24,13 @@ MERGE="$SD/scripts/merge_review.py"
 SKILL="$SD/skills/reviewing-spec/SKILL.md"
 FIX="$SD/tests/fixtures"
 
-pass=0; fail=0
+. "$REPO_ROOT/shared/tests/assert.sh"
+# note <PASS|FAIL> <msg> — test_arm_once.sh·test_arm_ledger_timing.sh가 이 호출 계약으로
+# source한다(둘 다 Task 14 Step 2 도출 범위 밖 — 자체 헬퍼를 정의하지 않고 이 파일만
+# source하기 때문). 계약을 유지한 채 판정만 정본에 위임한다(census "위임" 처분과 동형).
 note() {
-  if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"
-  else fail=$((fail+1)); echo "  ✗ $2"; fi
+  if [[ "$1" == "PASS" ]]; then ok "$2"
+  else no "$2"; fi
 }
 
 arm_work_init() {  # $1 = mktemp prefix
@@ -98,7 +101,5 @@ run_ledger_rc() {  # rc를 살려서 부르는 변형(T11). stdout+stderr 합본
 state_of() { echo "$WORK/.claude/spec-distill/$1/state.local.md"; }
 
 arm_summary() {
-  echo
-  echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-  [[ $fail -eq 0 ]]
+  finish
 }

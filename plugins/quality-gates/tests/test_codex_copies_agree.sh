@@ -13,9 +13,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 QG="$ROOT/plugins/quality-gates"
 SD="$ROOT/plugins/spec-distill"
 PA="$ROOT/plugins/plugin-audit"
-pass=0; fail=0
-ok() { pass=$((pass+1)); echo "  ✓ $1"; }
-no() { fail=$((fail+1)); echo "  ✗ $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 TMP="$(mktemp -d -t qg-copies-XXXXXX)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
@@ -195,6 +193,4 @@ while IFS= read -r g; do
 done <<EOF
 $mock_groups
 EOF
-
-echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[ "$fail" -eq 0 ]
+finish

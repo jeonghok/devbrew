@@ -6,7 +6,7 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SKILL="$ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
-PASS=0; FAIL=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 TMP="$(mktemp -d)" || { echo "FAIL: mktemp"; exit 1; }
 [ -n "$TMP" ] && [ -d "$TMP" ] || { echo "FAIL: TMP invalid"; exit 1; }
@@ -24,9 +24,9 @@ check_floor() {
 }
 
 expect() {  # expect <GREEN|RED> <file> <msg>
-  if check_floor "$2"; then local got=GREEN; else local got=RED; fi
-  if [ "$got" = "$1" ]; then PASS=$((PASS+1)); echo "  ✓ $3 ($got)"
-  else FAIL=$((FAIL+1)); echo "  ✗ FAIL: $3 — want $1 got $got"; fi
+  local got
+  if check_floor "$2"; then got=GREEN; else got=RED; fi
+  assert_eq "$got" "$1" "$3 (want $1, got $got)"
 }
 
 echo "== 기준선: 실 SKILL은 floor 불변식 성립 =="
@@ -44,5 +44,4 @@ echo "== mutation: adversarial dispatch 제거 → RED =="
 grep -vF 'subagent_type: "quality-gates:adversarial"' "$SKILL" > "$TMP/m3.md"
 expect RED "$TMP/m3.md" "adversarial floor dispatch 제거"
 
-echo; echo "review-floor-lock: $PASS passed, $FAIL failed"
-[ "$FAIL" -eq 0 ]
+finish

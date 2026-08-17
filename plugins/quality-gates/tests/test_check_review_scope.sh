@@ -8,13 +8,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 SCRIPT="$PLUGIN_ROOT/scripts/check-review-scope.sh"
 
-PASS=0; FAIL=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 REPO=""
-pass() { PASS=$((PASS + 1)); echo "  → PASS: $1"; }
-fail() { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $1"; }
 
 # field <key> <output-text> → prints the value after "<key>: "
-field() { printf '%s\n' "$2" | awk -v k="$1:" '$1 == k { print $2 }'; }
 
 # Build a repo with a 'main' base branch + a 'feature' branch 1 commit ahead.
 # Sets global REPO and leaves CWD inside it (on feature, clean tree).
@@ -36,9 +33,9 @@ case_changes_exist_branch_ahead() {
      && "$(field branch_ahead_count "$out")" == "1" \
      && "$(field base "$out")" == "main" \
      && "$(field degraded "$out")" == "no" ]]; then
-    pass "branch ahead → changes_exist=yes (ahead=1, base=main, degraded=no)"
+    ok "branch ahead → changes_exist=yes (ahead=1, base=main, degraded=no)"
   else
-    fail "branch ahead (got: $out)"
+    no "branch ahead (got: $out)"
   fi
   cd / && rm -rf "$REPO"
 }
@@ -52,9 +49,9 @@ case_changes_exist_none() {
      && "$(field branch_ahead_count "$out")" == "0" \
      && "$(field worktree_dirty "$out")" == "no" \
      && "$(field degraded "$out")" == "no" ]]; then
-    pass "on base, clean tree → changes_exist=no (genuine no-op)"
+    ok "on base, clean tree → changes_exist=no (genuine no-op)"
   else
-    fail "no changes (got: $out)"
+    no "no changes (got: $out)"
   fi
   cd / && rm -rf "$REPO"
 }
@@ -69,9 +66,9 @@ case_ng4_ignored_not_counted() {
   if [[ "$(field changes_exist "$out")" == "no" \
      && "$(field worktree_dirty "$out")" == "no" \
      && "$(field branch_ahead_count "$out")" == "0" ]]; then
-    pass "gitignored artifact → changes_exist=no (NG4 --exclude-standard)"
+    ok "gitignored artifact → changes_exist=no (NG4 --exclude-standard)"
   else
-    fail "ng4 ignored (got: $out)"
+    no "ng4 ignored (got: $out)"
   fi
   cd / && rm -rf "$REPO"
 }
@@ -84,9 +81,9 @@ case_ng4_untracked_counted() {
   local out; out=$(bash "$SCRIPT")
   if [[ "$(field worktree_dirty "$out")" == "yes" \
      && "$(field changes_exist "$out")" == "yes" ]]; then
-    pass "non-ignored untracked → worktree_dirty=yes, changes_exist=yes (NG4)"
+    ok "non-ignored untracked → worktree_dirty=yes, changes_exist=yes (NG4)"
   else
-    fail "ng4 untracked (got: $out)"
+    no "ng4 untracked (got: $out)"
   fi
   cd / && rm -rf "$REPO"
 }
@@ -111,9 +108,9 @@ case_f2_origin_head_no_local_main() {
      && "$(field branch_ahead_count "$out")" == "1" \
      && "$(field degraded "$out")" == "no" \
      && "$rc" -eq 0 ]]; then
-    pass "origin/main but NO local main → changes_exist=yes (not degraded fail-open)"
+    ok "origin/main but NO local main → changes_exist=yes (not degraded fail-open)"
   else
-    fail "F2 no-local-main fail-open (rc=$rc got: $out)"
+    no "F2 no-local-main fail-open (rc=$rc got: $out)"
   fi
   cd / && rm -rf "$REPO" "$remote"
 }
@@ -124,9 +121,9 @@ case_degraded_detached() {
   git checkout -q --detach
   local out rc; out=$(bash "$SCRIPT"); rc=$?
   if [[ "$(field degraded "$out")" == "yes" && "$(field changes_exist "$out")" == "no" && "$rc" -eq 0 ]]; then
-    pass "detached HEAD → degraded + exit 0 (fail-open)"
+    ok "detached HEAD → degraded + exit 0 (fail-open)"
   else
-    fail "degraded detached (rc=$rc got: $out)"
+    no "degraded detached (rc=$rc got: $out)"
   fi
   cd / && rm -rf "$REPO"
 }
@@ -139,9 +136,9 @@ case_degraded_no_base() {
   echo x > a.txt; git add a.txt; git commit -qm x
   local out rc; out=$(bash "$SCRIPT"); rc=$?
   if [[ "$(field degraded "$out")" == "yes" && "$rc" -eq 0 ]]; then
-    pass "no main/master base → degraded + exit 0"
+    ok "no main/master base → degraded + exit 0"
   else
-    fail "degraded no-base (rc=$rc got: $out)"
+    no "degraded no-base (rc=$rc got: $out)"
   fi
   cd / && rm -rf "$REPO"
 }
@@ -161,13 +158,13 @@ case_degraded_shallow() {
   REPO=$(mktemp -d) || exit 1
   # file:// forces the transport that honors --depth (a plain local path may ignore it).
   git clone -q --depth 1 "file://$origin" "$REPO/clone" 2>/dev/null
-  cd "$REPO/clone" || { cd / && rm -rf "$REPO" "$origin"; fail "shallow clone setup"; return; }
+  cd "$REPO/clone" || { cd / && rm -rf "$REPO" "$origin"; no "shallow clone setup"; return; }
   local out rc shallow; out=$(bash "$SCRIPT"); rc=$?
   shallow=$(git rev-parse --is-shallow-repository 2>/dev/null)
   if [[ "$(field degraded "$out")" == "yes" && "$rc" -eq 0 && "$shallow" == "true" ]]; then
-    pass "shallow clone → degraded + exit 0 (fail-open, AC4)"
+    ok "shallow clone → degraded + exit 0 (fail-open, AC4)"
   else
-    fail "degraded shallow (rc=$rc shallow=$shallow got: $out)"
+    no "degraded shallow (rc=$rc shallow=$shallow got: $out)"
   fi
   cd / && rm -rf "$REPO" "$origin"
 }
@@ -188,9 +185,9 @@ EOF
   chmod +x "$shim/git"
   local out rc; out=$(PATH="$shim:$PATH" bash "$SCRIPT"); rc=$?
   if [[ "$(field degraded "$out")" == "yes" && "$rc" -eq 0 ]]; then
-    pass "git diff failure after sanity → degraded (fail-open, C2)"
+    ok "git diff failure after sanity → degraded (fail-open, C2)"
   else
-    fail "git-query fail-open (rc=$rc got: $out)"
+    no "git-query fail-open (rc=$rc got: $out)"
   fi
   cd / && rm -rf "$REPO"
 }
@@ -203,9 +200,9 @@ case_read_only() {
   bash "$SCRIPT" >/dev/null 2>&1
   after=$(git status --porcelain=v1; find . -type f | sort)
   if [[ "$before" == "$after" ]]; then
-    pass "read-only: working tree + git status unchanged"
+    ok "read-only: working tree + git status unchanged"
   else
-    fail "read-only violated (before != after)"
+    no "read-only violated (before != after)"
   fi
   cd / && rm -rf "$REPO"
 }
@@ -220,7 +217,4 @@ case_degraded_no_base
 case_degraded_shallow
 case_degraded_git_query_failure
 case_read_only
-
-echo
-echo "test_check_review_scope: $PASS passed, $FAIL failed"
-[[ "$FAIL" -eq 0 ]] && exit 0 || exit 1
+finish

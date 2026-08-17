@@ -3,6 +3,81 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [3.2.3] — 2026-08-17
+
+Task 14 리뷰 라운드 1 수정(IMPORTANT 3). 컨트롤러의 전수 기계 스윕이 이관(3.2.1)의
+결함 3건을 적발했다.
+
+### Fixed
+- `test_skill_orchestration.sh:56` — `check()`가 즉시-종료형(`exit 1`)이던 BASE에서
+  이관 뒤에도 살아남은 무조건 성공 echo 1건(`PASS V2b (context anchors + options +
+  P21)`). BASE에선 앞선 하드 exit이 실패 시 이 줄 도달을 막아 안전했지만, `check()`를
+  count-and-continue로 이관하며 이 줄만 가드를 잃어 실패해도 거짓 성공 서술이 찍혔다
+  (종료 코드·지문 정규화엔 영향 없음 — 로그 서술만). mutation으로 재현: `Skip with
+  evidence` 앵커를 깨면 `✗ Runtime option`이 뜨는데도 그 줄이 무조건 출력됐다. 삭제 후
+  같은 mutation으로 거짓 성공 서술이 사라졌음을 재확인.
+- `test_law2_prose.sh`·`test_agent_model_inherit_sweep.sh`·
+  `test_governance_no_capability_caps.sh` — `cd "$ROOT"`로 cwd를 리포 루트로 바꾼
+  **뒤**에 `. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"`로
+  `$0` 기준 상대경로를 다시 풀어, 자기 디렉토리(`plugins/quality-gates/tests/`)에서
+  직접 실행하면 `$0`이 이미 바뀐 cwd 기준으로 해석돼 정본을 못 찾는 회귀
+  (`.../shared/tests/assert.sh: No such file or directory`, rc=127). 이미 계산된
+  `$ROOT`를 재사용하는 `. "$ROOT/shared/tests/assert.sh"`로 통일(`test_branch_
+  strategy_rebase_clause.sh`의 기존 형태와 동형). 세 파일 모두 리포 루트·자기
+  디렉토리 두 cwd에서 rc=0 확인.
+
+### Note
+- `plugins/quality-gates/tests/lib/codex_observation.sh`(6개 함수)는 판정 헬퍼를
+  0개 정의한다 — Task 14 Files의 "Delete: tests/lib/ 중 absorbed" 항목은 **삭제
+  대상 0건**으로 확인, 조치 없음(미조치와 구별하기 위해 명시).
+
+## [3.2.2] — 2026-08-17
+
+Task 14 이관(3.2.1)의 전이적 부작용 수정. `test_codex_backward_compat.sh`가
+`test_consent_marker_write_failure.sh`·`test_security_reviewer_kill_switch.sh`의
+실패 출력을 정규화-해시로 pin하는 fingerprint 원장(`codex-blessed-red.txt`)을
+갖고 있었는데, 두 파일의 실패 줄 접두가 `FAIL: `→`  ✗ `로 바뀌며(3.2.1, 정본
+이관) 해시가 stale해져 이 메타 테스트가 새 RED가 됐다(전체 셸 회귀 154본
+재실행에서 적발). 실패 **문구·원인은 불변**임을 확인 후 해시만 갱신.
+
+### Fixed
+- `tests/codex-blessed-red.txt` — 두 항목의 sha256을 3.2.1 이후 실제 출력에
+  맞춰 갱신(원인 불변 확인 후). `test_codex_backward_compat.sh` 재-GREEN.
+
+## [3.2.1] — 2026-08-17
+
+devbrew-weight-reduction Task 14 — 자체 판정 헬퍼 76개를 `shared/tests/assert.sh`
+정본으로 이관. 지배적 관용구는 `PASS=0; FAIL=0` + `pass()/fail()` 또는 `ok()/no()`
+재구현이었고, `check`(→`assert_count_ge`, msg 인자를 첫→마지막으로 재배치) ·
+`ag`/`ng`/`agf`(→`assert_file_grep`/`assert_file_absent`/`assert_contains`) ·
+`field`(→ 키·텍스트 인자 순서 확인/교정) 등도 이관.
+
+### Changed
+- `tests/*.sh` 76개 — 자체 헬퍼 정의 삭제, 정본 source. 이름은 정본과 같지만
+  시그니처(인자 순서)가 다른 자체 `assert_grep`/`field` 재구현 3건을 실측으로 적발해
+  `assert_file_grep`/`field` 정본 순서로 교정(그대로 두면 조용히 틀린 대상을 검사했다).
+  `test_codex_dispatch_invariant.sh`·`test_consent_marker_write_failure.sh`의
+  즉시-종료형 `fail()`은 판정/가드를 구분해 이관(가드는 `no; finish; exit`,
+  판정은 count-and-continue) — 부주의한 재구조화가 만들 뻔한 판정-이중집계
+  (실패 케이스에서 no·ok 가 같은 체크에 대해 함께 발화)를 mutation 으로 잡아 수정.
+  persona 테스트 쌍(`test_adversarial_persona.sh`/`test_security_reviewer_persona.sh`)의
+  공유 스캐폴딩을 26줄→3줄로 축소.
+- `test_classify_artifact_target.sh`·`test_findings_parser.sh`·
+  `test_agent_tools_lock_mutation.sh`·`test_review_floor_lock.sh`·
+  `test_setup_qg.sh`·`arm_test_helpers.sh`(spec-distill) — 판정에 임베디드 로직이
+  섞여 정본 단일 호출로 환원되지 않는 `check`/`expect`/`assert`/`note` 를 정본
+  `ok`/`no`/`assert_eq`/`assert_grep` 로 위임하는 얇은 wrapper 로 유지(외부 호출
+  시그니처 불변).
+
+### Fixed
+- `test_critiquing_artifacts_skill.sh` 의 잠재 결함(정본 미source 상태에서
+  이미 `ok`/`no` 를 호출해 "command not found"로 무이빨이던 assertion 1건)이
+  정본 source 로 부수적으로 해소(34→35, 감소 아님).
+
+파일별 assertion 호출 수 감소 0(76개 전량, before/after 실행 비교), 74/76 GREEN
+(`test_consent_marker_write_failure.sh`·`test_security_reviewer_kill_switch.sh`는
+이관 전부터 RED — 실패 개수 불변 확인).
+
 ## [3.2.0] — 2026-08-17
 
 ### Added

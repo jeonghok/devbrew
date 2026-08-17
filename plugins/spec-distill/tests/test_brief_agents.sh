@@ -11,28 +11,27 @@ ISOLATED=("brief-critic" "brief-readback")
 ALL=("brief-critic" "brief-readback" "brief-direction-reviewer")
 
 SKILL_BRIEF="$SD/skills/reviewing-brief/SKILL.md"
-pass=0; fail=0
-note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 fm_of() { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$1"; }
 
 # probe 판정을 읽는다 — 없으면 fail-closed (구현 진행 금지 신호)
-test -f "$AUDIT" || { note FAIL "probe 감사 문서 부재: $AUDIT (AC2b — probe 미실행)"; \
+test -f "$AUDIT" || { no "probe 감사 문서 부재: $AUDIT (AC2b — probe 미실행)"; \
   echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"; exit 1; }
 VERDICT="$(grep -m1 '^\*\*분기 판정:\*\*' "$AUDIT" | sed 's/^\*\*분기 판정:\*\*[[:space:]]*//' | tr -d '[:space:]')"
 case "$VERDICT" in
-  ZERO_TOOL_OK|ZERO_TOOL_UNAVAILABLE) note PASS "probe 판정 인식: $VERDICT" ;;
-  *) note FAIL "probe 판정을 읽을 수 없다 (값: '$VERDICT')"; \
+  ZERO_TOOL_OK|ZERO_TOOL_UNAVAILABLE) ok "probe 판정 인식: $VERDICT" ;;
+  *) no "probe 판정을 읽을 수 없다 (값: '$VERDICT')"; \
      echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"; exit 1 ;;
 esac
 
 for a in "${ALL[@]}"; do
   f="$SD/agents/$a.md"
-  test -f "$f" || { note FAIL "에이전트 파일 부재: $a.md"; continue; }
+  test -f "$f" || { no "에이전트 파일 부재: $a.md"; continue; }
   FM="$(fm_of "$f")"
 
   # AC5 — model: inherit (리터럴 핀 금지, E10 선제 적용)
   grep -qE '^model: inherit$' <<<"$FM" \
-    && note PASS "$a: model: inherit" || note FAIL "$a: model이 inherit이 아님 (E10 위반)"
+    && ok "$a: model: inherit" || no "$a: model이 inherit이 아님 (E10 위반)"
 
   # AC4 — 쓰기·실행·위임 물리적 부재
   # tools: 값을 정규화한 뒤 토큰 단위 정확 일치(대소문자 무시)로 비교한다.
@@ -75,26 +74,26 @@ for a in "${ALL[@]}"; do
   for t in Write Edit MultiEdit NotebookEdit Bash Agent Monitor Task; do
     t_lc="$(tr '[:upper:]' '[:lower:]' <<<"$t")"
     if grep -qxF "$t_lc" <<<"$tools_norm"; then
-      note FAIL "$a: tools:에 $t 가 있다 (Law 2 위반, 대소문자 무시)"
+      no "$a: tools:에 $t 가 있다 (Law 2 위반, 대소문자 무시)"
     else
-      note PASS "$a: tools:에 $t 없음"
+      ok "$a: tools:에 $t 없음"
     fi
   done
-  grep -qE '^tools:.*mcp__' <<<"$FM" && note FAIL "$a: tools:에 MCP grant" || note PASS "$a: MCP 없음"
+  grep -qE '^tools:.*mcp__' <<<"$FM" && no "$a: tools:에 MCP grant" || ok "$a: MCP 없음"
 
   # 죽은 필드 금지 (allowedTools는 비공식 — 조용히 무시된다)
   grep -qE '^(allowedTools|disallowedTools):' <<<"$FM" \
-    && note FAIL "$a: allowedTools/denylist 잔존" || note PASS "$a: allowedTools·disallowedTools 없음"
+    && no "$a: allowedTools/denylist 잔존" || ok "$a: allowedTools·disallowedTools 없음"
 
   # bare `tools:` 금지 — YAML null = "키 미지정"으로 읽혀 조용한 fail-open이 된다.
   # 이 guard는 YAML block-sequence 헤더 줄(`tools:`만 있고 값이 다음 줄부터 `- Read`로
   # 이어지는 형태)도 겸해서 잡는다 — 위 AC4 정규화 파이프라인의 의도적 scope 결정 참조.
   grep -qE '^tools:[[:space:]]*$' <<<"$FM" \
-    && note FAIL "$a: bare 'tools:' (YAML null → 전체 허용 fail-open 위험; block-sequence 헤더도 이 경로로 잡힌다)" \
-    || note PASS "$a: bare 'tools:' 아님"
+    && no "$a: bare 'tools:' (YAML null → 전체 허용 fail-open 위험; block-sequence 헤더도 이 경로로 잡힌다)" \
+    || ok "$a: bare 'tools:' 아님"
 
   grep -qE '^cost_class: (low|medium|high|variable)$' <<<"$FM" \
-    && note PASS "$a: cost_class 선언" || note FAIL "$a: cost_class 없음"
+    && ok "$a: cost_class 선언" || no "$a: cost_class 없음"
 done
 
 # probe 판정에 따른 격리 에이전트의 tools: 정합
@@ -102,20 +101,20 @@ for a in "${ISOLATED[@]}"; do
   FM="$(fm_of "$SD/agents/$a.md")"
   if [[ "$VERDICT" == "ZERO_TOOL_OK" ]]; then
     grep -qE '^tools: \[\]$' <<<"$FM" \
-      && note PASS "$a: tools: [] (probe 통과 분기)" || note FAIL "$a: probe 통과인데 tools: [] 가 아님"
+      && ok "$a: tools: [] (probe 통과 분기)" || no "$a: probe 통과인데 tools: [] 가 아님"
   else
     grep -qE '^tools: Read$' <<<"$FM" \
-      && note PASS "$a: tools: Read (probe 실패 분기 — inert)" || note FAIL "$a: probe 실패인데 tools: Read 가 아님"
+      && ok "$a: tools: Read (probe 실패 분기 — inert)" || no "$a: probe 실패인데 tools: Read 가 아님"
   fi
 done
 
 # 방향성 리뷰어는 분기 무관 — 웹·repo 도구 둘 다, Bash는 없다 (T21)
 FM="$(fm_of "$SD/agents/brief-direction-reviewer.md")"
 grep -qE '^tools: Read, Grep, Glob, WebSearch, WebFetch$' <<<"$FM" \
-  && note PASS "direction-reviewer: tools 정확 일치" || note FAIL "direction-reviewer: tools 표면이 다름"
+  && ok "direction-reviewer: tools 정확 일치" || no "direction-reviewer: tools 표면이 다름"
 for t in WebSearch WebFetch; do
-  grep -qE "^tools:.*${t}" <<<"$FM" && note PASS "direction-reviewer: $t 보유 (E10 — 둘 다)" \
-    || note FAIL "direction-reviewer: $t 없음 (외부 근거 축 축소)"
+  grep -qE "^tools:.*${t}" <<<"$FM" && ok "direction-reviewer: $t 보유 (E10 — 둘 다)" \
+    || no "direction-reviewer: $t 없음 (외부 근거 축 축소)"
 done
 
 # 역할 프롬프트가 X / NOT Z를 명시한다 (CLAUDE.md 컴포넌트 격리 규약)
@@ -127,8 +126,8 @@ for a in brief-critic brief-readback brief-direction-reviewer; do
   # `-ge 2`는 3개 중 **어느 하나를 지워도** 통과한다(iter-2가 맨앞·중간·맨끝 3곳 모두
   # 실증했고, 맨끝은 Law 2 역할 경계 불릿이었다). 실제 출하 개수로 핀한다.
   [[ "$n_not" -eq 3 ]] \
-    && note PASS "$a: NOT 불릿 정확히 3개 (마커 형태 + 열거 크기 핀)" \
-    || note FAIL "$a: '- **NOT** …' 불릿이 ${n_not}개 — 3개여야 한다(하나만 지워도 역할 경계가 깨진다)"
+    && ok "$a: NOT 불릿 정확히 3개 (마커 형태 + 열거 크기 핀)" \
+    || no "$a: '- **NOT** …' 불릿이 ${n_not}개 — 3개여야 한다(하나만 지워도 역할 경계가 깨진다)"
 done
 
 # --- /qg iter-1 IMPORTANT : 출력 계약이 **생산자 쪽에서도** 락된다 ------------
@@ -141,18 +140,18 @@ done
 MERGE_PY="$SD/scripts/merge_brief_review.py"
 SENTINEL_LIT="$(grep -oE '```brief-[a-z-]+' "$MERGE_PY" | head -1 | sed 's/^```//')"
 [[ -n "$SENTINEL_LIT" ]] \
-  && note PASS "PRODUCER: 소비자에서 sentinel 리터럴 추출 ($SENTINEL_LIT)" \
-  || note FAIL "PRODUCER: merge_brief_review.py에서 sentinel 리터럴을 못 뽑았다 — 이 락이 vacuous하다"
+  && ok "PRODUCER: 소비자에서 sentinel 리터럴 추출 ($SENTINEL_LIT)" \
+  || no "PRODUCER: merge_brief_review.py에서 sentinel 리터럴을 못 뽑았다 — 이 락이 vacuous하다"
 # 빈 문자열이면 `grep -qF ""`가 모든 파일에 매치해 **가짜 PASS**가 난다(iter-2 실증).
 # 추출 실패 시 이 assert 자체를 FAIL로 떨어뜨린다.
 if [[ -n "$SENTINEL_LIT" ]] && grep -qF "$SENTINEL_LIT" "$SD/agents/brief-critic.md"; then
-  note PASS "PRODUCER: critic 파일이 소비자가 핀한 sentinel($SENTINEL_LIT)을 실제로 emit"
+  ok "PRODUCER: critic 파일이 소비자가 핀한 sentinel($SENTINEL_LIT)을 실제로 emit"
 else
-  note FAIL "PRODUCER: critic sentinel이 소비자 리터럴과 불일치(또는 추출 실패) — 매 라운드 malformed로 강제 escalate된다"
+  no "PRODUCER: critic sentinel이 소비자 리터럴과 불일치(또는 추출 실패) — 매 라운드 malformed로 강제 escalate된다"
 fi
 grep -qE '\*\*Status:\*\*' "$SD/agents/brief-critic.md" \
-  && note PASS "PRODUCER: critic 파일에 **Status:** 마커 실재 (소비자 STATUS_RE와 정합)" \
-  || note FAIL "PRODUCER: critic 파일에 **Status:** 가 없다 — verdict 파싱이 항상 실패한다"
+  && ok "PRODUCER: critic 파일에 **Status:** 마커 실재 (소비자 STATUS_RE와 정합)" \
+  || no "PRODUCER: critic 파일에 **Status:** 가 없다 — verdict 파싱이 항상 실패한다"
 
 # direction-reviewer 본문도 락한다 — SKILL이 이 출력 위에 결정 표를 세우는데 지금까지
 # frontmatter만 검사됐고 본문 전체(센티널 포함)가 무테스트였다.
@@ -160,43 +159,41 @@ grep -qE '\*\*Status:\*\*' "$SD/agents/brief-critic.md" \
 # 소비자 표기에서 뽑아 생산자(agent 본문)와 대조하므로, 어느 쪽에서 rename해도 red가 된다.
 DIR_SENT="$(grep -oE '`brief-[a-z-]+-findings`' "$SKILL_BRIEF" | head -1 | tr -d '`')"
 [[ -n "$DIR_SENT" ]] \
-  && note PASS "PRODUCER: SKILL이 direction sentinel을 참조 ($DIR_SENT)" \
-  || note FAIL "PRODUCER: SKILL에서 direction sentinel을 못 찾았다 — 아래 대조가 vacuous하다"
+  && ok "PRODUCER: SKILL이 direction sentinel을 참조 ($DIR_SENT)" \
+  || no "PRODUCER: SKILL에서 direction sentinel을 못 찾았다 — 아래 대조가 vacuous하다"
 [[ -n "$DIR_SENT" ]] && grep -qF "$DIR_SENT" "$SD/agents/brief-direction-reviewer.md" \
-  && note PASS "PRODUCER: direction-reviewer 본문이 SKILL이 기대하는 sentinel을 emit" \
-  || note FAIL "PRODUCER: direction-reviewer sentinel이 SKILL 기대와 불일치 — 결정 표가 'unavailable'로만 떨어진다"
+  && ok "PRODUCER: direction-reviewer 본문이 SKILL이 기대하는 sentinel을 emit" \
+  || no "PRODUCER: direction-reviewer sentinel이 SKILL 기대와 불일치 — 결정 표가 'unavailable'로만 떨어진다"
 
 # AC3 — readback 프롬프트에 출력 스키마 어휘와 '금지 문구'가 둘 다 없다
 RB="$SD/agents/brief-readback.md"
 for tok in "category" "severity" "sentinel" "JSON"; do
-  grep -qF "$tok" "$RB" && note FAIL "AC3: readback에 스키마 어휘 '$tok'" || note PASS "AC3: readback에 '$tok' 없음"
+  grep -qF "$tok" "$RB" && no "AC3: readback에 스키마 어휘 '$tok'" || ok "AC3: readback에 '$tok' 없음"
 done
 for tok in "audit" "readback 기준" "red-flag"; do
-  grep -qiF "$tok" "$RB" && note FAIL "AC3: readback에 '$tok' 언급 (존재 누설)" || note PASS "AC3: readback에 '$tok' 없음"
+  grep -qiF "$tok" "$RB" && no "AC3: readback에 '$tok' 언급 (존재 누설)" || ok "AC3: readback에 '$tok' 없음"
 done
 for tok in "G1" "gap 클래스" "미결을 확정으로"; do
-  grep -qF "$tok" "$RB" && note FAIL "AC25: readback에 gap 클래스 어휘 '$tok'" || note PASS "AC25: readback에 '$tok' 없음"
+  grep -qF "$tok" "$RB" && no "AC25: readback에 gap 클래스 어휘 '$tok'" || ok "AC25: readback에 '$tok' 없음"
 done
 
 # critic 프롬프트는 category 6종 전부를 명시한다 (spec §5.3 최소 필수)
 CR="$SD/agents/brief-critic.md"
 for cat in distortion omission insertion provenance_mislabel authority_syntax evidence_unsupported; do
-  grep -qF "$cat" "$CR" && note PASS "critic: category '$cat' 명시" || note FAIL "critic: category '$cat' 누락"
+  grep -qF "$cat" "$CR" && ok "critic: category '$cat' 명시" || no "critic: category '$cat' 누락"
 done
 # critic 프롬프트에 payload 경로/디렉토리가 실리지 않는다 (AC2의 정적 절)
 grep -qF "docs/superpowers/interview/" "$CR" \
-  && note FAIL "AC2: critic 프롬프트에 interview 디렉토리 문자열" || note PASS "AC2: critic에 interview 디렉토리 없음"
+  && no "AC2: critic 프롬프트에 interview 디렉토리 문자열" || ok "AC2: critic에 interview 디렉토리 없음"
 grep -qF "docs/superpowers/interview/" "$RB" \
-  && note FAIL "AC3: readback 프롬프트에 interview 디렉토리 문자열" || note PASS "AC3: readback에 interview 디렉토리 없음"
+  && no "AC3: readback 프롬프트에 interview 디렉토리 문자열" || ok "AC3: readback에 interview 디렉토리 없음"
 
 # E10 — 신규 에이전트에 단일 호출 상한 표현 없음 (T28의 agent 절)
 for a in "${ALL[@]}"; do
   if grep -qE '최대 [0-9]+회|[0-9]+회까지|max_[a-z_]+ *= *[0-9]' "$SD/agents/$a.md"; then
-    note FAIL "E10: ${a}에 단일 호출 상한 표현"
+    no "E10: ${a}에 단일 호출 상한 표현"
   else
-    note PASS "E10: ${a}에 상한 표현 없음"
+    ok "E10: ${a}에 상한 표현 없음"
   fi
 done
-
-echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[[ "$fail" -eq 0 ]]
+finish

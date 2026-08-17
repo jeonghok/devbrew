@@ -2,9 +2,7 @@
 # T12/AC12 — v2.11.0 metadata: version bump + CHANGELOG + README principles + mode docs.
 set -u
 ROOT="plugins/quality-gates"
-PASS=0; FAIL=0
-ok() { PASS=$((PASS+1)); echo "  PASS: $1"; }
-no() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # floor는 minor(>=2.11) invariant다 — 리터럴 major "2" 로 짠 원래 regex는 v3.0.0
 # major bump(비관련 기능인 Runtime 게이트 재설계)에서 stale-red 됐다. major 도
@@ -17,6 +15,4 @@ grep -qF 'critique' "$ROOT/README.md" && ok "README documents critique mode" || 
 grep -qiE 'artifact-critic|critiquing-artifacts' "$ROOT/README.md" && ok "README names new component" || no "README omits component"
 # version-pin regression: publish-docs test must not stale-red on 2.11.x
 grep -qE '2\.10\.\[0-9\]\+|2\.10\.x' "$ROOT/tests/test_qg_publish_docs.sh" && no "publish-docs still pins 2.10 (will stale-red)" || ok "publish-docs version pin relaxed off 2.10"
-
-echo ""; echo "Total: $((PASS+FAIL)), PASS=$PASS, FAIL=$FAIL"
-[ "$FAIL" -eq 0 ] || exit 1
+finish

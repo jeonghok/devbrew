@@ -8,15 +8,15 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 SCRIPT="$PLUGIN_ROOT/scripts/setup-qg.sh"
 
-PASS=0
-FAIL=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
-note() { echo "  → $1"; }
-
+# assert <label> <cmd> — eval 판정 래퍼. cmd 가 임의 셸 조건식이라 assert_eq 류로
+# 환원되지 않는다(census "정본에 갈 자리가 없다" 처분과 동형, run_case 참고) —
+# 판정만 정본(ok/no)에 위임한다.
 assert() {
   local label="$1" cmd="$2"
-  if eval "$cmd"; then PASS=$((PASS + 1)); note "PASS: $label"
-  else FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $label"; fi
+  if eval "$cmd"; then ok "$label"
+  else no "$label"; fi
 }
 
 # --- Case 1: fresh state creation ---
@@ -147,6 +147,4 @@ assert "global-kill invocation exits non-zero (pipeline disabled)" "test '$ec8' 
 assert "global-kill clears stale publish-eligible.md (structural backstop, not prose-only)" "test ! -e '$SID_DIR/publish-eligible.md'"
 cd / && rm -rf "$TMPDIR"
 
-echo
-echo "test_setup_qg.sh: $PASS passed, $FAIL failed"
-[[ "$FAIL" -eq 0 ]] && exit 0 || exit 1
+finish

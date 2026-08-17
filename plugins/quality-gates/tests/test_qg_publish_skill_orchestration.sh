@@ -6,9 +6,7 @@ set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 SKILL="$PLUGIN_ROOT/skills/publishing-pr-understanding/SKILL.md"
-PASS=0; FAIL=0
-pass() { PASS=$((PASS+1)); echo "  → PASS: $1"; }
-fail() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 test -f "$SKILL" || { echo "FAIL: SKILL.md missing at $SKILL"; exit 1; }
 
 ln() { awk -v p="$1" '$0 ~ p {print NR; exit}' "$SKILL" | { read -r n||true; echo "${n:-0}"; }; }
@@ -16,25 +14,23 @@ ln() { awk -v p="$1" '$0 ~ p {print NR; exit}' "$SKILL" | { read -r n||true; ech
 pre=$(ln '## Preflight'); scan=$(ln '## Scan'); prev=$(ln '## Preview')
 cons=$(ln '## Consent'); pub=$(ln '## Publish')
 for pair in "pre:$pre" "scan:$scan" "prev:$prev" "cons:$cons" "pub:$pub"; do
-  [[ "${pair#*:}" -gt 0 ]] || fail "section missing: ${pair%%:*}"
+  [[ "${pair#*:}" -gt 0 ]] || no "section missing: ${pair%%:*}"
 done
 # boundary order: scan < preview < consent < publish (consent precedes any sink)
 if (( scan>0 && prev>scan && cons>prev && pub>cons )); then
-  pass "boundary order preflight→scan→preview→consent→publish"
+  ok "boundary order preflight→scan→preview→consent→publish"
 else
-  fail "boundary order wrong (scan=$scan preview=$prev consent=$cons publish=$pub)"
+  no "boundary order wrong (scan=$scan preview=$prev consent=$cons publish=$pub)"
 fi
 # AC9: --dry-run stops at preview — bounded to the Preview section (fails if moved out)
 awk '/^## Preview/{f=1;next} /^## /{f=0} f' "$SKILL" | grep -qiE 'stop|중단|정지|no network|미게시' \
-  && pass "dry-run stops at preview (AC9)" || fail "dry-run stop not asserted in Preview"
+  && ok "dry-run stops at preview (AC9)" || no "dry-run stop not asserted in Preview"
 # AC8: consent every run + irreversibility — bounded to the Consent section (fails if moved out)
 awk '/^## Consent/{f=1;next} /^## /{f=0} f' "$SKILL" | grep -qiE 'AskUserQuestion|비가역|irrevers|permanent' \
-  && pass "consent gate + irreversibility (AC8)" || fail "consent/irreversibility missing"
+  && ok "consent gate + irreversibility (AC8)" || no "consent/irreversibility missing"
 # invariant: gh writes via body-file, never raw gh api in the skill body
-grep -qF -- '--body-file' "$SKILL" && pass "opaque bytes via --body-file" || fail "no --body-file invariant"
-if ! grep -qE 'gh api' "$SKILL"; then pass "no raw gh api in skill (encapsulated in comment-upsert.py)"; else fail "raw gh api leaked into skill"; fi
+grep -qF -- '--body-file' "$SKILL" && ok "opaque bytes via --body-file" || no "no --body-file invariant"
+if ! grep -qE 'gh api' "$SKILL"; then ok "no raw gh api in skill (encapsulated in comment-upsert.py)"; else no "raw gh api leaked into skill"; fi
 # scan gates on the literal scan_ok line
-grep -qF 'scan_ok: yes' "$SKILL" && pass "scan gates on literal scan_ok: yes" || fail "scan_ok gate not literal"
-
-echo "publish-orchestration: $PASS passed, $FAIL failed"
-[[ "$FAIL" -eq 0 ]]
+grep -qF 'scan_ok: yes' "$SKILL" && ok "scan gates on literal scan_ok: yes" || no "scan_ok gate not literal"
+finish

@@ -2,9 +2,7 @@
 # T5/AC6/AC16/AC20 — artifact synthesizer: key(dedup) + synth(verdict/kept/converge/degrade).
 set -u
 S="plugins/quality-gates/scripts/synthesize_artifact_findings.py"
-PASS=0; FAIL=0
-ok() { PASS=$((PASS+1)); echo "  PASS: $1"; }
-no() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 tmp="$(mktemp -d)"
 
 # --- key phase: within-round dedup (critic + codex same anchor/category/summary -> 1) ---
@@ -309,5 +307,4 @@ echo "$out" | grep -q "degraded: true" && echo "$out" | grep -q "converged: fals
   && ok "non-mapping new_findings ELEMENT degrades (fail-closed)" || no "scalar new_findings element must degrade ($out)"
 
 rm -rf "$tmp"
-echo ""; echo "Total: $((PASS+FAIL)), PASS=$PASS, FAIL=$FAIL"
-[ "$FAIL" -eq 0 ] || exit 1
+finish

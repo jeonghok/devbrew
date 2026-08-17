@@ -8,10 +8,9 @@
 set -u -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 AGENT="$REPO_ROOT/plugins/spec-distill/agents/spec-reviewer.md"
-pass=0; fail=0
-note() { if [ "$1" = "PASS" ]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
-test -f "$AGENT" || { note FAIL "agent 파일 부재: $AGENT"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1; }
+test -f "$AGENT" || { no "agent 파일 부재: $AGENT"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1; }
 FM="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$AGENT")"
 
 # 모델 티어 양방향 락 — 하니스가 세션의 모델 선택을 덮어쓰지 않는다.
@@ -21,35 +20,33 @@ FM="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$AGENT")"
 # positive+negative 둘 다 필요하다. negative만 두면 `model:` 줄을 통째로 지워도
 # 통과하고, positive만 두면 두 줄을 넣는 mutation이 통과한다.
 grep -qE '^model: inherit$' <<<"$FM" \
-  && note PASS "model: inherit (세션 티어 상속)" \
-  || note FAIL "model이 inherit이 아님 — 하니스가 티어를 덮어쓴다"
+  && ok "model: inherit (세션 티어 상속)" \
+  || no "model이 inherit이 아님 — 하니스가 티어를 덮어쓴다"
 grep -qE '^model: (opus|sonnet|haiku)$' <<<"$FM" \
-  && note FAIL "고정 티어 핀 잔존" \
-  || note PASS "고정 티어 핀 없음"
+  && no "고정 티어 핀 잔존" \
+  || ok "고정 티어 핀 없음"
 
 grep -qE '^tools: Read, Grep, Glob, WebSearch, WebFetch$' <<<"$FM" \
-  && note PASS "tools: Read, Grep, Glob, WebSearch, WebFetch (조사 도구 결핍 해소)" \
-  || note FAIL "tools: 가 census 도출 목록과 다름"
+  && ok "tools: Read, Grep, Glob, WebSearch, WebFetch (조사 도구 결핍 해소)" \
+  || no "tools: 가 census 도출 목록과 다름"
 
 grep -qE '^(allowedTools|disallowedTools):' <<<"$FM" \
-  && note FAIL "죽은 allowedTools / denylist 잔존" \
-  || note PASS "allowedTools · disallowedTools 없음"
+  && no "죽은 allowedTools / denylist 잔존" \
+  || ok "allowedTools · disallowedTools 없음"
 
 # Law 2: 쓰기·실행·위임이 물리적으로 부재
 for t in Write Edit MultiEdit NotebookEdit Bash Agent Monitor; do
   grep -qE "^tools:.*(^|,)[[:space:]]*${t}[[:space:]]*(,|$)" <<<"$FM" \
-    && note FAIL "tools: 에 $t 가 있다 (Law 2 위반)" \
-    || note PASS "tools: 에 $t 없음"
+    && no "tools: 에 $t 가 있다 (Law 2 위반)" \
+    || ok "tools: 에 $t 없음"
 done
 grep -qE '^tools:.*mcp__' <<<"$FM" \
-  && note FAIL "tools: 에 MCP grant" || note PASS "tools: 에 MCP 없음"
+  && no "tools: 에 MCP grant" || ok "tools: 에 MCP 없음"
 
 # WebSearch/WebFetch 는 유지되어야 한다 — 조용한 열화 방지 (spec §12).
 for tool in WebSearch WebFetch; do
   grep -qE "^tools:.*${tool}" <<<"$FM" \
-    && note PASS "tools: 에 $tool 유지" \
-    || note FAIL "tools: 에서 $tool 이 사라졌다 — 외부 근거 확인 불가"
+    && ok "tools: 에 $tool 유지" \
+    || no "tools: 에서 $tool 이 사라졌다 — 외부 근거 확인 불가"
 done
-
-echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[ "$fail" -eq 0 ]
+finish

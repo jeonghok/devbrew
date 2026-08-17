@@ -7,9 +7,7 @@ set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 SCRIPT="$PLUGIN_ROOT/scripts/pr-create.sh"
-PASS=0; FAIL=0
-pass() { PASS=$((PASS+1)); echo "  → PASS: $1"; }
-fail() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # Build a stub dir with git+gh that log every invocation to $CALLLOG.
 mk_stubs() {
@@ -34,8 +32,8 @@ mk_stubs
 out=$(PATH="$STUB:$PATH" bash "$SCRIPT" --dry-run --base main --head feature --body-file /dev/null 2>&1)
 if printf '%s' "$out" | grep -q 'network suppressed' \
    && ! grep -q 'push' "$CALLLOG" && ! grep -q 'pr create' "$CALLLOG"; then
-  pass "--dry-run: network suppressed, no push/create"
-else fail "--dry-run (out=$out log=$(cat "$CALLLOG"))"; fi
+  ok "--dry-run: network suppressed, no push/create"
+else no "--dry-run (out=$out log=$(cat "$CALLLOG"))"; fi
 rm -rf "$STUB"
 
 # (ii) DEVBREW_QG_DISABLE_PUBLISH=1 (no --dry-run) → suppressed, no calls.
@@ -43,16 +41,16 @@ mk_stubs
 out=$(PATH="$STUB:$PATH" DEVBREW_QG_DISABLE_PUBLISH=1 bash "$SCRIPT" --base main --head feature --body-file /dev/null 2>&1)
 if printf '%s' "$out" | grep -q 'network suppressed' \
    && ! grep -q 'push' "$CALLLOG" && ! grep -q 'pr create' "$CALLLOG"; then
-  pass "kill switch: network suppressed, no push/create"
-else fail "kill switch (out=$out log=$(cat "$CALLLOG"))"; fi
+  ok "kill switch: network suppressed, no push/create"
+else no "kill switch (out=$out log=$(cat "$CALLLOG"))"; fi
 rm -rf "$STUB"
 
 # (iii) neither set → call-log HAS push AND pr create.
 mk_stubs
 out=$(PATH="$STUB:$PATH" bash "$SCRIPT" --base main --head feature --body-file /dev/null 2>&1)
 if grep -q 'push' "$CALLLOG" && grep -q 'pr create' "$CALLLOG"; then
-  pass "live path: git push + gh pr create both fire"
-else fail "live path (out=$out log=$(cat "$CALLLOG"))"; fi
+  ok "live path: git push + gh pr create both fire"
+else no "live path (out=$out log=$(cat "$CALLLOG"))"; fi
 rm -rf "$STUB"
 
 # Build a stub dir where git and/or gh FAIL, to prove the sink fails CLOSED:
@@ -78,8 +76,8 @@ out=$(PATH="$STUB:$PATH" bash "$SCRIPT" --base main --head feature --body-file /
 if printf '%s' "$out" | grep -q 'create-failed' \
    && ! printf '%s' "$out" | grep -q 'action: created' \
    && [[ "$rc" -ne 0 ]] && ! grep -q 'pr create' "$CALLLOG"; then
-  pass "git push failure: create-failed, no 'action: created', gh unreached, non-zero exit"
-else fail "push-failure (out=$out rc=$rc log=$(cat "$CALLLOG"))"; fi
+  ok "git push failure: create-failed, no 'action: created', gh unreached, non-zero exit"
+else no "push-failure (out=$out rc=$rc log=$(cat "$CALLLOG"))"; fi
 rm -rf "$STUB"
 
 # (v) gh auth OK, git push OK, gh pr create FAILS → create-failed, push WAS
@@ -89,8 +87,8 @@ out=$(PATH="$STUB:$PATH" bash "$SCRIPT" --base main --head feature --body-file /
 if printf '%s' "$out" | grep -q 'create-failed' \
    && ! printf '%s' "$out" | grep -q 'action: created' \
    && [[ "$rc" -ne 0 ]] && grep -q 'push' "$CALLLOG"; then
-  pass "gh pr create failure: create-failed, push reached, no 'action: created', non-zero exit"
-else fail "create-failure (out=$out rc=$rc log=$(cat "$CALLLOG"))"; fi
+  ok "gh pr create failure: create-failed, push reached, no 'action: created', non-zero exit"
+else no "create-failure (out=$out rc=$rc log=$(cat "$CALLLOG"))"; fi
 rm -rf "$STUB"
 
 # (vi) gh present but UNAUTHENTICATED (gh auth status fails) → create-skipped,
@@ -101,9 +99,7 @@ if printf '%s' "$out" | grep -q 'create-skipped' \
    && ! grep -q 'push' "$CALLLOG" \
    && ! grep -q 'pr create' "$CALLLOG" \
    && [[ "$rc" -ne 0 ]]; then
-  pass "gh unauth: create-skipped, no push, gh pr create unreached, non-zero exit"
-else fail "gh-unauth (out=$out rc=$rc log=$(cat "$CALLLOG"))"; fi
+  ok "gh unauth: create-skipped, no push, gh pr create unreached, non-zero exit"
+else no "gh-unauth (out=$out rc=$rc log=$(cat "$CALLLOG"))"; fi
 rm -rf "$STUB"
-
-echo "pr-create: $PASS passed, $FAIL failed"
-[[ "$FAIL" -eq 0 ]]
+finish

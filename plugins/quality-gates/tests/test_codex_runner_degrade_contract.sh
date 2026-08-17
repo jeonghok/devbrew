@@ -44,9 +44,7 @@
 set -u -o pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 QG="$ROOT/plugins/quality-gates"
-pass=0; fail=0
-ok() { pass=$((pass+1)); echo "  ✓ $1"; }
-no() { fail=$((fail+1)); echo "  ✗ $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 tmp="$(mktemp -d -t qg-degrade-XXXXXX)" || exit 1
 trap 'rc=$?; rm -rf "$tmp"; exit $rc' EXIT
@@ -279,7 +277,4 @@ printf '{"findings": [{"summary": "STALE_MARKER_E"}], "d_verdicts": [], "oq_answ
 PATH="$tmp/bin5:$PATH" CLAUDE_PLUGIN_ROOT="$tmp/rootE" \
   bash "$PA/scripts/run_audit_codex_reviewer.sh" "$tmp/axis-fix.md" "$ROOT" "$e_stale" >/dev/null 2>&1
 assert_degrade3 "5러너 E(run_audit_codex_reviewer.sh, stale-시작)" "$e_stale" "STALE_MARKER_E"
-
-echo ""
-echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[ "$fail" -eq 0 ]
+finish

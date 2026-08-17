@@ -8,11 +8,7 @@ FIX="$REPO_ROOT/plugins/spec-distill/tests/fixtures"
 WORK=$(mktemp -d -t specdistill-validator-XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 
-pass=0; fail=0
-note() {
-  if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"
-  else fail=$((fail+1)); echo "  ✗ $2"; fi
-}
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # Helper: simulate PostToolUse stdin payload, optional env vars (stderr merged for legacy callers)
 run_hook() {
@@ -49,8 +45,8 @@ rc=$?
   && echo "$out" | jq -e '.hookSpecificOutput.hookEventName == "PostToolUse"' >/dev/null \
   && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("structural OK")' >/dev/null \
   && echo "$out" | jq -e '.systemMessage | startswith("[spec-distill]")' >/dev/null \
-  && note PASS "AC1: valid spec exits 0 + pending_review recorded + dual-target advisory emit" \
-  || note FAIL "AC1 failed (rc=$rc out=$out)"
+  && ok "AC1: valid spec exits 0 + pending_review recorded + dual-target advisory emit" \
+  || no "AC1 failed (rc=$rc out=$out)"
 
 # Case 2: AC2 — missing Goals → exit 2 + stderr matches
 cp "$FIX/spec-missing-goals.md" "$WORK/docs/superpowers/specs/2026-05-16-test2-spec.md"
@@ -58,8 +54,8 @@ out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test2-spec.md" "DEVBREW_
 rc=$?
 [[ $rc -eq 2 ]] && echo "$out" | grep -qE "missing sections:.*#goals" \
   && [[ ! -f "$WORK/.claude/spec-distill/test-ac02/state.local.md" ]] \
-  && note PASS "AC2: missing Goals → exit 2 + matching stderr + no state" \
-  || note FAIL "AC2 failed (rc=$rc out=$out)"
+  && ok "AC2: missing Goals → exit 2 + matching stderr + no state" \
+  || no "AC2 failed (rc=$rc out=$out)"
 
 # Case 3: AC3 — ambiguity hit on line 12
 cp "$FIX/spec-ambiguity-line12.md" "$WORK/docs/superpowers/specs/2026-05-16-test3-spec.md"
@@ -68,23 +64,23 @@ rc=$?
 [[ $rc -eq 2 ]] && echo "$out" | grep -q "ambiguity hit:" \
   && echo "$out" | grep -q "line 12" \
   && echo "$out" | grep -q "works correctly" \
-  && note PASS "AC3: ambiguity hit at line 12 detected" \
-  || note FAIL "AC3 failed (rc=$rc out=$out)"
+  && ok "AC3: ambiguity hit at line 12 detected" \
+  || no "AC3 failed (rc=$rc out=$out)"
 
 # Case 4: AC4 — ~escape allowed → exit 0
 cp "$FIX/spec-ambiguity-escaped.md" "$WORK/docs/superpowers/specs/2026-05-16-test4-spec.md"
 out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test4-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-ac04")
 rc=$?
-[[ $rc -eq 0 ]] && note PASS "AC4: ~escape prefix passes" \
-  || note FAIL "AC4 failed (rc=$rc out=$out)"
+[[ $rc -eq 0 ]] && ok "AC4: ~escape prefix passes" \
+  || no "AC4 failed (rc=$rc out=$out)"
 
 # Case 5: AC5 — out-of-scope path → silent exit 0
 echo "# unrelated" > "$WORK/README.md"
 payload='{"tool_name":"Write","tool_input":{"file_path":"'"$WORK/README.md"'"}}'
 out=$(echo "$payload" | python3 "$HOOK" 2>&1)
 rc=$?
-[[ $rc -eq 0 ]] && [[ -z "$out" ]] && note PASS "AC5: out-of-scope path silent exit 0" \
-  || note FAIL "AC5 failed (rc=$rc out=$out)"
+[[ $rc -eq 0 ]] && [[ -z "$out" ]] && ok "AC5: out-of-scope path silent exit 0" \
+  || no "AC5 failed (rc=$rc out=$out)"
 
 # Case 6: AC6 — design.md no-frontmatter → exit 0 + mode: design + design advisory in additionalContext
 mkdir -p "$WORK/docs/superpowers/specs"
@@ -94,8 +90,8 @@ rc=$?
 [[ $rc -eq 0 ]] && grep -q 'mode: design' "$WORK/.claude/spec-distill/test-ac06/state.local.md" \
   && echo "$out" | jq -e '.hookSpecificOutput.hookEventName == "PostToolUse"' >/dev/null \
   && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("design structural OK")' >/dev/null \
-  && note PASS "AC6: design.md no-frontmatter exits 0 + mode: design + design advisory" \
-  || note FAIL "AC6 failed (rc=$rc out=$out)"
+  && ok "AC6: design.md no-frontmatter exits 0 + mode: design + design advisory" \
+  || no "AC6 failed (rc=$rc out=$out)"
 
 # Case 7: AC7 — design.md with TBD → exit 2 + placeholder hit
 cp "$FIX/design-tbd.md" "$WORK/docs/superpowers/specs/2026-05-16-test-tbd-design.md"
@@ -103,32 +99,32 @@ out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test-tbd-design.md" "DEV
 rc=$?
 [[ $rc -eq 2 ]] && echo "$out" | grep -q 'placeholder hit:' \
   && echo "$out" | grep -q 'TBD' \
-  && note PASS "AC7: design.md TBD detected" \
-  || note FAIL "AC7 failed (rc=$rc out=$out)"
+  && ok "AC7: design.md TBD detected" \
+  || no "AC7 failed (rc=$rc out=$out)"
 
 # Case 8: AC8 — DEVBREW_DISABLE_SPEC_DISTILL=1 silent
 cp "$FIX/spec-valid.md" "$WORK/docs/superpowers/specs/2026-05-16-test8-spec.md"
 out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test8-spec.md" "DEVBREW_DISABLE_SPEC_DISTILL=1 DEVBREW_SPEC_DISTILL_SESSION_ID=test-ac08")
 rc=$?
 [[ $rc -eq 0 ]] && [[ ! -f "$WORK/.claude/spec-distill/test-ac08/state.local.md" ]] \
-  && note PASS "AC8: DEVBREW_DISABLE_SPEC_DISTILL=1 silent" \
-  || note FAIL "AC8 failed (rc=$rc out=$out)"
+  && ok "AC8: DEVBREW_DISABLE_SPEC_DISTILL=1 silent" \
+  || no "AC8 failed (rc=$rc out=$out)"
 
 # Case 9: AC9 — DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1: Layer 1 runs, no state write
 cp "$FIX/spec-valid.md" "$WORK/docs/superpowers/specs/2026-05-16-test9-spec.md"
 out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test9-spec.md" "DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1 DEVBREW_SPEC_DISTILL_SESSION_ID=test-ac09")
 rc=$?
 [[ $rc -eq 0 ]] && [[ ! -f "$WORK/.claude/spec-distill/test-ac09/state.local.md" ]] \
-  && note PASS "AC9: SKIP_AUTOREVIEW skips Layer 2" \
-  || note FAIL "AC9 failed (rc=$rc out=$out)"
+  && ok "AC9: SKIP_AUTOREVIEW skips Layer 2" \
+  || no "AC9 failed (rc=$rc out=$out)"
 
 # Case 10: AC10 — DESIGN_MODE_DISABLE skips design.md
 cp "$FIX/design-no-frontmatter.md" "$WORK/docs/superpowers/specs/2026-05-16-skip-design.md"
 out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-skip-design.md" "DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1 DEVBREW_SPEC_DISTILL_SESSION_ID=test-ac10")
 rc=$?
 [[ $rc -eq 0 ]] && [[ ! -f "$WORK/.claude/spec-distill/test-ac10/state.local.md" ]] \
-  && note PASS "AC10: DESIGN_MODE_DISABLE skips design.md silently" \
-  || note FAIL "AC10 failed (rc=$rc out=$out)"
+  && ok "AC10: DESIGN_MODE_DISABLE skips design.md silently" \
+  || no "AC10 failed (rc=$rc out=$out)"
 
 # Case 11: I1 regression — write twice, verify exactly one pending_review block
 mkdir -p "$WORK/docs/superpowers/specs"
@@ -138,8 +134,8 @@ run_hook "$WORK/docs/superpowers/specs/2026-05-16-idem-spec.md" "DEVBREW_SPEC_DI
 pending_count=$(grep -c '^pending_review:' "$WORK/.claude/spec-distill/test-idem/state.local.md")
 triggered_count=$(grep -c '^  triggered_at:' "$WORK/.claude/spec-distill/test-idem/state.local.md")
 [[ "$pending_count" == "1" ]] && [[ "$triggered_count" == "1" ]] \
-  && note PASS "I1: state file remains idempotent on re-write" \
-  || note FAIL "I1: state file has $pending_count pending_review and $triggered_count triggered_at (expected 1 each)"
+  && ok "I1: state file remains idempotent on re-write" \
+  || no "I1: state file has $pending_count pending_review and $triggered_count triggered_at (expected 1 each)"
 
 # Case 12: arm-once — 원장에 있는 문서 → arm skip + skip advisory가 normal advisory를 교체
 mkdir -p "$WORK/docs/superpowers/specs" "$WORK/.claude/spec-distill/test-armed"
@@ -159,9 +155,9 @@ if [[ $rc -eq 0 ]] \
   && ! grep -qE '^pending_review:' "$sf" \
   && echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("arm skipped")' >/dev/null \
   && ! echo "$out" | jq -e '.hookSpecificOutput.additionalContext | contains("Reviewer will be dispatched")' >/dev/null; then
-  note PASS "arm-once: armed doc → arm skip + skip advisory (no normal advisory)"
+  ok "arm-once: armed doc → arm skip + skip advisory (no normal advisory)"
 else
-  note FAIL "arm-once armed-doc case failed (rc=$rc out=$out)"
+  no "arm-once armed-doc case failed (rc=$rc out=$out)"
 fi
 
 # Case 12b: skip 사유 3종 구분 — 원장에 있고 attempts가 남아 있으면 'capped'(G6 상한),
@@ -181,8 +177,8 @@ dispatch_attempts:
 EOF
 out=$(run_hook_stdout "$WORK/docs/superpowers/specs/2026-05-16-capped-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-capped")
 echo "$out" | jq -e '.systemMessage | contains("capped")' >/dev/null \
-  && note PASS "arm-once: G6 상한 도달은 'capped'로 구분 표시" \
-  || note FAIL "capped advisory 구분 실패 (out=$out)"
+  && ok "arm-once: G6 상한 도달은 'capped'로 구분 표시" \
+  || no "capped advisory 구분 실패 (out=$out)"
 
 # Case 13: 원장에 있는 문서도 Layer 1은 그대로 실행 (구조 실패 → exit 2) — G2
 cp "$FIX/spec-missing-goals.md" "$WORK/docs/superpowers/specs/2026-05-16-armed2-spec.md"
@@ -198,8 +194,8 @@ EOF
 out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-armed2-spec.md" "DEVBREW_SPEC_DISTILL_SESSION_ID=test-armed2")
 rc=$?
 [[ $rc -eq 2 ]] && echo "$out" | grep -qE "missing sections:" \
-  && note PASS "G2: armed doc still subject to Layer 1 (exit 2)" \
-  || note FAIL "G2 failed (rc=$rc out=$out)"
+  && ok "G2: armed doc still subject to Layer 1 (exit 2)" \
+  || no "G2 failed (rc=$rc out=$out)"
 
 # Case 14: 다른 비-armed 문서의 write_state가 armed_paths를 보존 (multi-key)
 mkdir -p "$WORK/.claude/spec-distill/test-pres"
@@ -216,11 +212,8 @@ run_hook "$WORK/docs/superpowers/specs/2026-05-16-docB-spec.md" "DEVBREW_SPEC_DI
 sf="$WORK/.claude/spec-distill/test-pres/state.local.md"
 if grep -q "  - docs/superpowers/specs/2026-05-16-docA-design.md" "$sf" \
    && grep -qE '^pending_review:' "$sf"; then
-  note PASS "multi-key: armed_paths preserved across other-doc write_state"
+  ok "multi-key: armed_paths preserved across other-doc write_state"
 else
-  note FAIL "multi-key preservation failed ($(cat "$sf"))"
+  no "multi-key preservation failed ($(cat "$sf"))"
 fi
-
-echo ""
-echo "summary: $pass passed, $fail failed"
-[[ $fail -eq 0 ]]
+finish

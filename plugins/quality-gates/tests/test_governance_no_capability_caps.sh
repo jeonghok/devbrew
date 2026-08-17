@@ -14,9 +14,7 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$ROOT" || exit 1
-PASS=0; FAIL=0
-pass() { PASS=$((PASS+1)); echo "  ✓ $1"; }
-fail() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
+. "$ROOT/shared/tests/assert.sh"
 
 CLAUDE_MD="CLAUDE.md"
 PHIL="docs/philosophy/devbrew-harness-philosophy.md"
@@ -28,9 +26,9 @@ GOV_DOCS=("$CLAUDE_MD")
 while IFS= read -r f; do [[ -n "$f" ]] && GOV_DOCS+=("$f"); done \
   < <(ls docs/philosophy/*.md docs/plugin-authoring.md 2>/dev/null)
 if [[ "${#GOV_DOCS[@]}" -ge 3 ]]; then
-  pass "코퍼스 도출: 규약 문서 ${#GOV_DOCS[@]}개 (하드코딩 아님)"
+  ok "코퍼스 도출: 규약 문서 ${#GOV_DOCS[@]}개 (하드코딩 아님)"
 else
-  fail "코퍼스 도출 실패 — 규약 문서를 ${#GOV_DOCS[@]}개만 찾았다 (아래 판정 무의미)"
+  no "코퍼스 도출 실패 — 규약 문서를 ${#GOV_DOCS[@]}개만 찾았다 (아래 판정 무의미)"
 fi
 
 # **인용부까지 본다** (2026-08-05 /qg 라운드 2, adversarial N2가 지목한 구조적 근본):
@@ -43,9 +41,9 @@ CITE_FILES=()
 while IFS= read -r f; do [[ -n "$f" ]] && CITE_FILES+=("$f"); done < <(
   find plugins -name '*.md' -not -path '*/tests/*' -not -name 'CHANGELOG.md' 2>/dev/null)
 if [[ "${#CITE_FILES[@]}" -ge 20 ]]; then
-  pass "인용부 코퍼스 실재: plugins/ 산문 ${#CITE_FILES[@]}개 파일"
+  ok "인용부 코퍼스 실재: plugins/ 산문 ${#CITE_FILES[@]}개 파일"
 else
-  fail "인용부 코퍼스가 ${#CITE_FILES[@]}개뿐 — 경로가 깨졌다 (아래 인용 판정 무의미)"
+  no "인용부 코퍼스가 ${#CITE_FILES[@]}개뿐 — 경로가 깨졌다 (아래 인용 판정 무의미)"
 fi
 
 # --- AC8a: 숫자 임계 · 기본값 편향 · wall-clock 부재, 승인 게이트는 존속 ---
@@ -57,9 +55,9 @@ fi
 # ("PLUGIN>" 다음 "=1" — 5가 아니라 1이라 애초에 후보 밖), philosophy의
 # "re-review cap 5"·"Phase 5"·"5-ritual gate"(비교 연산자 없이 숫자만 등장).
 if grep -qE '(≥|>=)[[:space:]]*5' "${GOV_DOCS[@]}"; then
-  fail "AC8a: fan-out 하드 게이트 임계(≥5, N-접두 여부 무관)가 규약 문서에 잔존한다"
+  no "AC8a: fan-out 하드 게이트 임계(≥5, N-접두 여부 무관)가 규약 문서에 잔존한다"
 else
-  pass "AC8a: fan-out 하드 게이트 임계(≥5, N-접두 여부 무관) 없음"
+  ok "AC8a: fan-out 하드 게이트 임계(≥5, N-접두 여부 무관) 없음"
 fi
 
 # 위 assert는 **글리프**만 막는다 — 숫자와 언어 차원은 열려 있었다. 산문형
@@ -79,25 +77,25 @@ CAP_COMPARE='이상|초과|넘으|넘는|부터|까지만|이하|미만|≥|>=|�
 if grep -hE "$CAP_SUBJECT" "${GOV_DOCS[@]}" \
      | grep -E "$CAP_QUANT" \
      | grep -qE "$CAP_COMPARE"; then
-  fail "AC8a: fan-out(및 개념 별칭)을 수량 임계에 묶는 문장이 잔존한다 — 값·표기·언어를 바꿔도 같은 억제다"
+  no "AC8a: fan-out(및 개념 별칭)을 수량 임계에 묶는 문장이 잔존한다 — 값·표기·언어를 바꿔도 같은 억제다"
 else
-  pass "AC8a: fan-out 개념을 수량 임계에 묶는 문장 없음 (별칭·한글수사·영어 포함)"
+  ok "AC8a: fan-out 개념을 수량 임계에 묶는 문장 없음 (별칭·한글수사·영어 포함)"
 fi
 
 # 두 particle 변형(를/가) 모두 커버 — CLAUDE.md는 "single-agent를 default로",
 # philosophy AP9 앵커는 "single-agent가 default다"로 다르게 적혀 있었다.
 if grep -qE 'single-agent(를|가) default' "${GOV_DOCS[@]}"; then
-  fail "AC8a: 'single-agent ... default' 기본값 편향 문구가 잔존한다"
+  no "AC8a: 'single-agent ... default' 기본값 편향 문구가 잔존한다"
 else
-  pass "AC8a: 기본값-편향(single-agent default) 문구 없음"
+  ok "AC8a: 기본값-편향(single-agent default) 문구 없음"
 fi
 
 # wall-clock은 CLAUDE.md만 봤다 — philosophy에 같은 요구를 다시 쓰면 통과했다
 # (mutation m08 생존). 규약 문서 전체로 넓힌다.
 if grep -qE 'wall-clock' "${GOV_DOCS[@]}"; then
-  fail "AC8a: 규약 문서에 wall-clock budget 문구가 잔존한다 (spec-distill v0.17.0이 이미 폐기한 것을 규약이 요구 중)"
+  no "AC8a: 규약 문서에 wall-clock budget 문구가 잔존한다 (spec-distill v0.17.0이 이미 폐기한 것을 규약이 요구 중)"
 else
-  pass "AC8a: 규약 문서에 wall-clock 문구 없음"
+  ok "AC8a: 규약 문서에 wall-clock 문구 없음"
 fi
 
 # ── AC8e: 삭제된 규칙을 **현존 백스톱으로 인용**하는 곳이 없다 ────────────────
@@ -116,9 +114,9 @@ if [[ "${#CITE_FILES[@]}" -gt 0 ]]; then
     | grep -vE '제거|removed|no longer exists|더는|파일 수와 무관|파일 수는' || true)"
 fi
 if [[ -z "$cite_hits" ]]; then
-  pass "AC8e: plugins/ 산문에 삭제된 규칙의 현존-백스톱 인용 없음"
+  ok "AC8e: plugins/ 산문에 삭제된 규칙의 현존-백스톱 인용 없음"
 else
-  fail "AC8e: 삭제된 규칙을 현존 백스톱으로 인용하는 곳이 남았다"
+  no "AC8e: 삭제된 규칙을 현존 백스톱으로 인용하는 곳이 남았다"
   printf '      %s\n' $(printf '%s\n' "$cite_hits" | cut -d: -f1 | sort -u)
 fi
 
@@ -127,14 +125,14 @@ fi
 # "cost_class: high" 문자열이 존재하지 않는다 — 그래서 게이트 절 자체의 고유 문구를
 # 직접 앵커한다. philosophy는 실제로 `cost_class: high` 리터럴을 갖고 있으므로 함께 확인.
 if grep -qF '지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함' "$CLAUDE_MD"; then
-  pass "AC8a: CLAUDE.md의 cost_class high 승인 게이트 절 존속"
+  ok "AC8a: CLAUDE.md의 cost_class high 승인 게이트 절 존속"
 else
-  fail "AC8a: CLAUDE.md의 cost_class high 승인 게이트 절이 사라졌다 — P17 사용자-주권 컨트롤 소실"
+  no "AC8a: CLAUDE.md의 cost_class high 승인 게이트 절이 사라졌다 — P17 사용자-주권 컨트롤 소실"
 fi
 if grep -qF 'cost_class: high' "$PHIL"; then
-  pass "AC8a: philosophy의 cost_class: high 리터럴 존속"
+  ok "AC8a: philosophy의 cost_class: high 리터럴 존속"
 else
-  fail "AC8a: philosophy의 cost_class: high 승인 게이트 리터럴이 사라졌다"
+  no "AC8a: philosophy의 cost_class: high 승인 게이트 리터럴이 사라졌다"
 fi
 
 # --- AC8b: philosophy :20 — Three Laws 집행은 불변, 개별 임계치는 재평가 대상 ---
@@ -143,19 +141,19 @@ fi
 # (2026-08-04 /qg 라운드 1, pr-test-analyzer mutation M7). 문장 전체를 앵커하고
 # 부정형을 따로 막는다 — 긍정 assert 하나로는 의미를 잴 수 없다.
 if grep -qF '재평가 대상이다' "$PHIL"; then
-  pass "AC8b: 임계치·예산·상한이 재평가 대상임을 명시하는 문장 실재"
+  ok "AC8b: 임계치·예산·상한이 재평가 대상임을 명시하는 문장 실재"
 else
-  fail "AC8b: philosophy에 '재평가 대상이다' 문장이 없다 — sweep 자체가 규칙 위반으로 읽힌다"
+  no "AC8b: philosophy에 '재평가 대상이다' 문장이 없다 — sweep 자체가 규칙 위반으로 읽힌다"
 fi
 if grep -qE '재평가 대상이[[:space:]]*아니' "$PHIL"; then
-  fail "AC8b: '재평가 대상이 아니다'로 정책이 뒤집혔다 — 긍정 assert만으로는 못 잡는 반전이다"
+  no "AC8b: '재평가 대상이 아니다'로 정책이 뒤집혔다 — 긍정 assert만으로는 못 잡는 반전이다"
 else
-  pass "AC8b: 재평가 가능성을 부정하는 문구 없음"
+  ok "AC8b: 재평가 가능성을 부정하는 문구 없음"
 fi
 if grep -qF '모델 성능이 향상돼도 이 메커니즘은 불변이다' "$PHIL"; then
-  fail "AC8b: philosophy :20 원문(전면 불변 선언)이 아직 남아 있다"
+  no "AC8b: philosophy :20 원문(전면 불변 선언)이 아직 남아 있다"
 else
-  pass "AC8b: philosophy :20 원문(전면 불변 선언) 제거됨"
+  ok "AC8b: philosophy :20 원문(전면 불변 선언) 제거됨"
 fi
 
 # --- AC8c: P12 trivia escape에서 single-file 제약 제거 (섹션 윈도우로 스코프) ---
@@ -163,11 +161,11 @@ fi
 # 섹션(다음 ## 또는 ### 헤딩 전까지)으로 잘라서 그 안에서만 확인한다.
 p12="$(awk '/^### P12/{f=1;next} /^(## |### )/{f=0} f' "$PHIL")"
 if [ -z "$p12" ]; then
-  fail "AC8c: philosophy에서 ### P12 섹션을 찾지 못했다"
+  no "AC8c: philosophy에서 ### P12 섹션을 찾지 못했다"
 elif grep -qF 'single-file' <<<"$p12"; then
-  fail "AC8c: P12 섹션에 single-file 제약이 잔존한다 (multi-file trivia diff가 여전히 게이트에 걸린다)"
+  no "AC8c: P12 섹션에 single-file 제약이 잔존한다 (multi-file trivia diff가 여전히 게이트에 걸린다)"
 else
-  pass "AC8c: P12 섹션에 single-file 제약 없음"
+  ok "AC8c: P12 섹션에 single-file 제약 없음"
 fi
 
 # --- AC8d: docs/plugin-authoring.md에 agent model: inherit 규약 신설 ---
@@ -175,15 +173,13 @@ fi
 # 금지를 구별하지 못한다**. "`inherit`을 쓰지 말고 리터럴 티어를 박아라"로 바꿔도
 # GREEN이었다(mutation M8). 처방 문장 전체를 앵커하고, 금지 어법을 따로 막는다.
 if grep -qF '**agent `model:`은 `inherit`.**' "$AUTHORING"; then
-  pass "AC8d: plugin-authoring.md에 agent model: inherit **처방** 존재"
+  ok "AC8d: plugin-authoring.md에 agent model: inherit **처방** 존재"
 else
-  fail "AC8d: agent model: inherit 처방 문장이 없다 — 신규 플러그인이 리터럴 티어 핀을 복제할 수 있다"
+  no "AC8d: agent model: inherit 처방 문장이 없다 — 신규 플러그인이 리터럴 티어 핀을 복제할 수 있다"
 fi
 if grep -nE 'inherit' "$AUTHORING" | grep -qE '쓰지[[:space:]]*(마|말)|금지|말고[[:space:]]*리터럴'; then
-  fail "AC8d: inherit을 **금지**하는 어법이 있다 — 규약이 뒤집혔다"
+  no "AC8d: inherit을 **금지**하는 어법이 있다 — 규약이 뒤집혔다"
 else
-  pass "AC8d: inherit을 금지하는 어법 없음"
+  ok "AC8d: inherit을 금지하는 어법 없음"
 fi
-
-echo; echo "Total: $((PASS+FAIL)) | Pass: $PASS | Fail: $FAIL"
-[ "$FAIL" -eq 0 ]
+finish

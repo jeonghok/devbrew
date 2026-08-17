@@ -5,6 +5,39 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [1.7.5] — 2026-08-17
+
+devbrew-weight-reduction Task 14 — 자체 판정 헬퍼 이관. `test_branch_strategy_rebase_clause.sh`의
+자체 `pass`/`fail` 카운터·헬퍼 정의를 지우고 `shared/tests/assert.sh` 정본을 source(`pass`→`ok`,
+`fail`→`no`로 호출부 개명, 종료를 `finish`로 통일). 판정 로직·assertion 5건은 그대로.
+
+### Changed
+- `tests/test_branch_strategy_rebase_clause.sh` — 정본 source, 종료 행동은 non-zero 유지.
+
+## [1.7.4] — 2026-08-17
+
+devbrew-weight-reduction Task 12 — 테스트 디렉토리 규약 3종(`tests`·`scripts/tests`·`hooks/tests`)을
+`plugins/<name>/tests/` 하나로 통일. 이 플러그인은 `hooks/tests/`가 `tests/`로 합쳐졌다(기존
+`test_branch_strategy_rebase_clause.sh`와 파일명 충돌 없음).
+
+### Changed
+- `hooks/tests/*` → `tests/*`(git mv, 6개 항목 — `__init__.py`·`fixtures/`·`smoke.sh`·
+  `test_command_contract.py`·`test_docs_lint.py`·`test_post_tool_use.py`). 세 파일의 파이썬
+  `Path(__file__).resolve()` 상대경로 재앵커: `test_command_contract.py`(`parents[2]`→`parents[1]`),
+  `test_docs_lint.py`/`test_post_tool_use.py`(`.parent.parent`가 더 이상 `hooks/`에 닿지 않아
+  `.parent.parent / "hooks"`로 세그먼트 추가 — 착수 전 계측이 `parents[N]` 대괄호 형태만 찾고
+  이 `.parent.parent` 체인 형태를 놓쳐, 이동 직후 파이썬 수집이 95→7건으로 무너지는 것으로
+  드러났다). `smoke.sh`의 `ROOT=` 4-up dirname을 3-up으로.
+
+### Fixed
+- 이동 후 `plugins/project-init/tests` 파이썬 수집 수는 이동 전(`hooks/tests`)과 동일한 95건
+  (회귀 0), 셸(`smoke.sh`) GREEN 유지.
+- `README.md`의 아키텍처 트리 다이어그램이 `tests/`를 여전히 `hooks/` 아래 중첩으로 그리고
+  있었다(리터럴 문자열 `hooks/tests`가 파일에 없어 grep으로 못 잡힘 — 경로가 박스 문자로
+  분해된 그림이라 문자열 패턴 검색의 사각지대였다). `tests/`를 `hooks/`의 형제(플러그인
+  최상위)로 정정하고 실제 내용(옮겨온 3개 파일 + 기존 `test_branch_strategy_rebase_clause.sh` +
+  `__init__.py` + `fixtures/`)을 반영.
+
 ## [1.7.3] — 2026-08-03
 
 harness-capability-suppression-sweep Task 11(S4) — 규약 정렬. `templates/github-flow/`와

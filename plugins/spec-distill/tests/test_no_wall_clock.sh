@@ -25,36 +25,22 @@ TOKENS=(
   "wall-clock"
 )
 
-pass=0
-fail=0
-
-note() {
-  if [[ "$1" == "PASS" ]]; then
-    pass=$((pass+1))
-    echo "  ✓ $2"
-  else
-    fail=$((fail+1))
-    echo "  ✗ $2"
-  fi
-}
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 echo "=== interview wall-clock removal regression lock ==="
 
 for surface in "${SURFACES[@]}"; do
   rel="${surface#"$REPO_ROOT"/}"
   if [[ ! -f "$surface" ]]; then
-    note FAIL "surface missing: $rel"
+    no "surface missing: $rel"
     continue
   fi
   for tok in "${TOKENS[@]}"; do
     if grep -qiF -- "$tok" "$surface"; then
-      note FAIL "$rel still contains token '$tok'"
+      no "$rel still contains token '$tok'"
     else
-      note PASS "$rel free of '$tok'"
+      ok "$rel free of '$tok'"
     fi
   done
 done
-
-echo ""
-echo "Results: $pass passed, $fail failed"
-[[ $fail -eq 0 ]] && exit 0 || exit 1
+finish

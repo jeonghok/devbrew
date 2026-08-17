@@ -9,8 +9,7 @@
 # `-c` 인자 줄에만 앵커한다 — 주석·문서가 이름을 언급하는 것은 위반이 아니다.
 set -u -o pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-pass=0; fail=0
-note() { if [[ "$1" == PASS ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # ── 리포 전역 스캔 ───────────────────────────────────────────────────────────
 # 이 락은 두 번 좁았다.
@@ -60,9 +59,9 @@ if [[ "${#scan_roots[@]}" -gt 0 ]]; then
   callsites="$(grep -rlE "$INVOKE" "${scan_roots[@]}" 2>/dev/null | wc -l | tr -d ' ')"
 fi
 if [[ "${#scan_roots[@]}" -ge 4 && "$callsites" -ge 3 ]]; then
-  note PASS "스캔 코퍼스 실재: 디렉토리 ${#scan_roots[@]}개 · codex 호출부 ${callsites}개 파일"
+  ok "스캔 코퍼스 실재: 디렉토리 ${#scan_roots[@]}개 · codex 호출부 ${callsites}개 파일"
 else
-  note FAIL "스캔 코퍼스가 비었거나 너무 작다 (dirs=${#scan_roots[@]} callsites=$callsites) — 아래 결과는 무의미하다"
+  no "스캔 코퍼스가 비었거나 너무 작다 (dirs=${#scan_roots[@]} callsites=$callsites) — 아래 결과는 무의미하다"
 fi
 
 stray=""
@@ -73,9 +72,9 @@ if [[ "${#scan_roots[@]}" -gt 0 ]]; then
              done)"
 fi
 if [[ -z "$stray" ]]; then
-  note PASS "리포 전역: 추론 강도 실행 인자 핀 없음"
+  ok "리포 전역: 추론 강도 실행 인자 핀 없음"
 else
-  note FAIL "리포 전역: 추론 강도 핀이 남아 있다 → $(echo "$stray" | tr '\n' ' ')"
+  no "리포 전역: 추론 강도 핀이 남아 있다 → $(echo "$stray" | tr '\n' ' ')"
 fi
 
 # ── 보안 플래그 존속 (C1 유지선) — codex 호출부 **전부**에 대해 ─────────────
@@ -115,26 +114,24 @@ if [[ "${#scan_roots[@]}" -gt 0 ]]; then
 fi
 # 스캔이 실제로 호출부를 봤는가 — 없으면 "위반 0"과 "아무것도 안 봄"이 구별되지 않는다.
 if [[ "$sandbox_seen" -ge 3 ]]; then
-  note PASS "샌드박스 스캔이 실제 codex 호출부 ${sandbox_seen}곳을 열었다 (vacuous 아님)"
+  ok "샌드박스 스캔이 실제 codex 호출부 ${sandbox_seen}곳을 열었다 (vacuous 아님)"
 else
-  note FAIL "샌드박스 스캔이 본 호출부가 ${sandbox_seen}곳뿐 — 경로가 깨졌다(아래 판정 무의미)"
+  no "샌드박스 스캔이 본 호출부가 ${sandbox_seen}곳뿐 — 경로가 깨졌다(아래 판정 무의미)"
 fi
 if [[ -z "${missing_sandbox// /}" ]]; then
-  note PASS "codex invocation 전부가 -s read-only 샌드박스를 유지한다 (주석 제외 후 판정)"
+  ok "codex invocation 전부가 -s read-only 샌드박스를 유지한다 (주석 제외 후 판정)"
 else
-  note FAIL "샌드박스 없는 codex invocation →$missing_sandbox"
+  no "샌드박스 없는 codex invocation →$missing_sandbox"
 fi
 
 # `-C`/`--json`도 같은 이유로 invocation 블록에서 잰다 — 주석에 이름만 있어도 통과하면
 # 파싱 계약과 작업디렉토리 핀 역시 조용히 사라질 수 있다.
 for r in run_codex_reviewer run_artifact_codex_reviewer; do
   RUN="$ROOT/scripts/$r.sh"
-  if [[ ! -f "$RUN" ]]; then note FAIL "$r.sh 부재"; continue; fi
+  if [[ ! -f "$RUN" ]]; then no "$r.sh 부재"; continue; fi
   _invocation_block "$RUN" | grep -qE '(^|[[:space:]])-C[[:space:]]' \
-    && note PASS "$r: -C 작업디렉토리 핀 존속 (invocation)" || note FAIL "$r: -C 사라짐"
+    && ok "$r: -C 작업디렉토리 핀 존속 (invocation)" || no "$r: -C 사라짐"
   _invocation_block "$RUN" | grep -qE '(^|[[:space:]])--json' \
-    && note PASS "$r: --json 파싱 계약 존속 (invocation)" || note FAIL "$r: --json 사라짐"
+    && ok "$r: --json 파싱 계약 존속 (invocation)" || no "$r: --json 사라짐"
 done
-
-echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[[ $fail -eq 0 ]]
+finish

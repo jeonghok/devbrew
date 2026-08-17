@@ -9,8 +9,7 @@ SKILL="$PLUGIN_DIR/skills/conducting-interview/SKILL.md"
 CMD="$PLUGIN_DIR/commands/interview.md"
 REVIEW="$PLUGIN_DIR/skills/reviewing-spec/SKILL.md"
 
-fail=0
-note() { echo "[$1] $2"; [[ "$1" == "FAIL" ]] && fail=$((fail+1)) || true; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # AC1 — user-invocable: false가 frontmatter 블록 안에 존재 (메뉴 은닉).
 # frontmatter 한정: 첫 '---'…두 번째 '---' 블록만 추출 후 검사. 본문(markdown)에
@@ -19,28 +18,25 @@ note() { echo "[$1] $2"; [[ "$1" == "FAIL" ]] && fail=$((fail+1)) || true; }
 # set -uo pipefail SIGPIPE 오탐 회피.
 frontmatter="$(awk '/^---$/{c++} c==1' "$SKILL")"
 grep -q '^user-invocable: false$' <<<"$frontmatter" \
-    && note PASS "AC1: user-invocable: false present (frontmatter-scoped)" \
-    || note FAIL "AC1: user-invocable: false MISSING from frontmatter"
+    && ok "AC1: user-invocable: false present (frontmatter-scoped)" \
+    || no "AC1: user-invocable: false MISSING from frontmatter"
 
 # AC2 — 기존 frontmatter 키 보존 (의미 변경 없음)
 grep -q '^name: conducting-interview$' "$SKILL" \
-    && note PASS "AC2: name preserved" \
-    || note FAIL "AC2: name field broken"
+    && ok "AC2: name preserved" \
+    || no "AC2: name field broken"
 grep -q '^description:' "$SKILL" \
-    && note PASS "AC2: description preserved" \
-    || note FAIL "AC2: description field broken"
+    && ok "AC2: description preserved" \
+    || no "AC2: description field broken"
 grep -q '^cost_class: variable$' "$SKILL" \
-    && note PASS "AC2: cost_class: variable (v0.12.0)" \
-    || note FAIL "AC2: cost_class not variable"
+    && ok "AC2: cost_class: variable (v0.12.0)" \
+    || no "AC2: cost_class not variable"
 
 # AC3 — 프로그램 호출 경로 보존 (메뉴만 숨고 dispatch는 살아있음)
 grep -q 'Skill conducting-interview' "$CMD" \
-    && note PASS "AC3: command dispatch line preserved" \
-    || note FAIL "AC3: command dispatch line MISSING"
+    && ok "AC3: command dispatch line preserved" \
+    || no "AC3: command dispatch line MISSING"
 grep -q 'conducting-interview' "$REVIEW" \
-    && note PASS "AC3: reviewing-spec re-entry reference preserved" \
-    || note FAIL "AC3: reviewing-spec re-entry reference MISSING"
-
-echo
-[[ $fail -eq 0 ]] && echo "PASSED: all AC1/AC2/AC3 guards green" || echo "FAILED: $fail guard(s)"
-[[ $fail -eq 0 ]]
+    && ok "AC3: reviewing-spec re-entry reference preserved" \
+    || no "AC3: reviewing-spec re-entry reference MISSING"
+finish

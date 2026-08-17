@@ -13,9 +13,7 @@ set -u
 [ "${1:-}" = "--emit-scanned" ] && exit 0
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SUT="$ROOT/plugins/quality-gates/scripts/compute-test-scope-candidates.sh"
-pass=0; fail=0
-ok() { pass=$((pass+1)); echo "  ✓ $1"; }
-no() { fail=$((fail+1)); echo "  ✗ $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 TMP="$(mktemp -d -t qg-guards-XXXXXX)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
@@ -124,6 +122,4 @@ case "$out" in
   *shared/tests/test_lock.sh*) ok "guards: --emit-guards 가 후보 락 경로를 낸다 (F3)" ;;
   *) no "guards: --emit-guards 가 락 경로를 안 낸다 (출력: $(printf '%s' "$out" | tr '\n' ' '))" ;;
 esac
-
-echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[ "$fail" -eq 0 ]
+finish

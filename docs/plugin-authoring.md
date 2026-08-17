@@ -16,7 +16,8 @@ plugins/<your-plugin>/
 ├── agents/                   # optional — 각각 tools: allowlist 선언 (fail-closed)
 ├── hooks/                    # optional — 각각 DEVBREW_DISABLE_<PLUGIN>=1 opt-out
 ├── scripts/                  # optional — hook에서 호출하는 shell/python 헬퍼
-└── templates/                # optional — 플러그인이 설치하는 정적 파일
+├── templates/                # optional — 플러그인이 설치하는 정적 파일
+└── tests/                    # optional — 테스트는 여기 하나로. hooks/tests·scripts/tests 신설 금지
 ```
 
 - **agent `model:`은 `inherit`.** 리터럴 티어(`opus`/`sonnet`/`haiku`)를 박으면 하니스가 사용자의 모델 선택을 덮어쓴다 — 세션이 더 강한 모델을 쓸 때는 조용한 하향이고, 더 약한 모델을 쓸 때는 동의 없는 비용 증가다. 어느 방향이든 P8(Determinism Economy) 위반이다. reference: `plugins/plugin-audit/agents/*.md`.

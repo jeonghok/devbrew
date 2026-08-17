@@ -16,8 +16,7 @@
 set -u -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
-pass=0; fail=0
-note() { if [[ "$1" == PASS ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # ── 소비자 목록은 **열거하지 않고 도출한다** ────────────────────────────────
 # 원래 이 루프는 두 SKILL을 하드코딩했다. 그래서 `scripts/run_brief_codex_reviewer.sh`
@@ -35,9 +34,9 @@ CHECK='^[[:space:]]*if \[\[ "\$\{DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0\}" == "1" \
 web_agents="$(grep -lE '^tools:.*Web(Search|Fetch)' "$SD"/agents/*.md 2>/dev/null \
               | while IFS= read -r a; do basename "$a" .md; done)"
 if [[ -n "$web_agents" ]]; then
-  note PASS "도출: 웹 도구 보유 agent $(echo "$web_agents" | wc -l | tr -d ' ')개 식별"
+  ok "도출: 웹 도구 보유 agent $(echo "$web_agents" | wc -l | tr -d ' ')개 식별"
 else
-  note FAIL "도출: 웹 도구 보유 agent를 하나도 못 찾았다 — 도출 기준이 깨졌다(아래 결과 무의미)"
+  no "도출: 웹 도구 보유 agent를 하나도 못 찾았다 — 도출 기준이 깨졌다(아래 결과 무의미)"
 fi
 
 # (a)+(a-값) codex 웹 posture — **실행 관측**으로 판정한다 (설계 §4.3, AC11과 동형).
@@ -74,7 +73,7 @@ OBS_REPO="$REPO_ROOT"
 
 SCRATCH="$(mktemp -d -t sd-web-obs-XXXXXX)" || SCRATCH=""
 if [[ -z "$SCRATCH" || ! -d "$SCRATCH" ]]; then
-  note FAIL "관측 scratch 디렉토리 생성 실패 — 아래 AC21 실행-관측 판정은 전부 건너뛴다"
+  no "관측 scratch 디렉토리 생성 실패 — 아래 AC21 실행-관측 판정은 전부 건너뛴다"
 else
   trap 'rm -rf "$SCRATCH"' EXIT
   obs_setup "$SCRATCH"
@@ -121,11 +120,11 @@ else
       want_web='tools.web_search=false'; want_mode='web_search="disabled"'
       avoid_web='tools.web_search=true'; avoid_mode='web_search="live"'
     fi
-    argv_has "$d" "$want_web"   || { note FAIL "$label: 관측된 argv에 '$want_web' 부재"; ok=0; }
-    argv_has "$d" "$want_mode"  || { note FAIL "$label: 관측된 argv에 '$want_mode' 부재"; ok=0; }
-    argv_has "$d" "$avoid_web"  && { note FAIL "$label: 관측된 argv에 '$avoid_web' 존재(반대 방향 위반)"; ok=0; }
-    argv_has "$d" "$avoid_mode" && { note FAIL "$label: 관측된 argv에 '$avoid_mode' 존재(반대 방향 위반)"; ok=0; }
-    [[ "$ok" -eq 1 ]] && note PASS "$label: tools.web_search·web_search 모드 둘 다 기대값과 일치"
+    argv_has "$d" "$want_web"   || { no "$label: 관측된 argv에 '$want_web' 부재"; ok=0; }
+    argv_has "$d" "$want_mode"  || { no "$label: 관측된 argv에 '$want_mode' 부재"; ok=0; }
+    argv_has "$d" "$avoid_web"  && { no "$label: 관측된 argv에 '$avoid_web' 존재(반대 방향 위반)"; ok=0; }
+    argv_has "$d" "$avoid_mode" && { no "$label: 관측된 argv에 '$avoid_mode' 존재(반대 방향 위반)"; ok=0; }
+    [[ "$ok" -eq 1 ]] && ok "$label: tools.web_search·web_search 모드 둘 다 기대값과 일치"
   }
 
   # 코퍼스: codex_observation.sh의 codex_candidates() — plugins/ 전체를 비주석
@@ -172,11 +171,11 @@ EOF_LBL
   [ -n "$known_names" ] && n_known="$(printf '%s\n' "$known_names" | wc -l | tr -d ' ')"
 
   if [ "$n_known" -lt 1 ]; then
-    note FAIL "expected_posture 표에서 이름을 하나도 추출하지 못했다 — 추출기가 표 문법과 어긋났다(아래 AC21 판정은 건너뛴다)"
+    no "expected_posture 표에서 이름을 하나도 추출하지 못했다 — 추출기가 표 문법과 어긋났다(아래 AC21 판정은 건너뛴다)"
   elif [ "$n_cand" -lt 1 ]; then
-    note FAIL "도출: codex 호출부를 하나도 못 찾았다 — 도출 기준이 깨졌다(아래 AC21 실행-관측 판정은 건너뛴다)"
+    no "도출: codex 호출부를 하나도 못 찾았다 — 도출 기준이 깨졌다(아래 AC21 실행-관측 판정은 건너뛴다)"
   else
-    note PASS "도출: codex 호출부 ${n_cand}곳 (실행 관측 대상, AC21)"
+    ok "도출: codex 호출부 ${n_cand}곳 (실행 관측 대상, AC21)"
 
     scanned_names="$(printf '%s\n' "$candidates" | xargs -n1 basename 2>/dev/null | sort -u)"
     missing=0
@@ -184,31 +183,31 @@ EOF_LBL
       [ -n "$k" ] || continue
       if ! printf '%s\n' "$scanned_names" | grep -qxF "$k"; then
         missing=$((missing + 1))
-        note FAIL "AC21 표의 '$k'가 codex_candidates() 스캔 결과에 없다 — 코퍼스 도출이 놓쳤다(변수 간접 호출 등)"
+        no "AC21 표의 '$k'가 codex_candidates() 스캔 결과에 없다 — 코퍼스 도출이 놓쳤다(변수 간접 호출 등)"
       fi
     done <<EOF_KNOWN
 $known_names
 EOF_KNOWN
-    [ "$missing" -eq 0 ] && note PASS "AC21 표의 알려진 호출부 ${n_known}곳이 스캔 결과에서 전부 발견됨"
+    [ "$missing" -eq 0 ] && ok "AC21 표의 알려진 호출부 ${n_known}곳이 스캔 결과에서 전부 발견됨"
 
     while IFS= read -r f; do
       [ -n "$f" ] || continue
       bn="$(basename "$f")"
       exp="$(expected_posture "$bn")"
       if [[ -z "$exp" ]]; then
-        note FAIL "$bn: AC21 표에 없는 codex 호출부 — 표가 낡았다(expected_posture()에 추가하라)"
+        no "$bn: AC21 표에 없는 codex 호출부 — 표가 낡았다(expected_posture()에 추가하라)"
         continue
       fi
 
       cap_normal="$SCRATCH/ac21-normal-$bn"
       mkdir -p "$cap_normal"
       if ! obs_invoke "$f" "$cap_normal"; then
-        note FAIL "$bn: 후보인데 실행할 방법이 없다 (obs_invoke 인자 표에 부재이거나 mock 준비 실패)"
+        no "$bn: 후보인데 실행할 방법이 없다 (obs_invoke 인자 표에 부재이거나 mock 준비 실패)"
         continue
       fi
       n_calls="$(obs_call_count "$cap_normal")"
       if [[ "$n_calls" -lt 1 ]]; then
-        note FAIL "$bn: 실행했으나 codex 호출이 관측되지 않았다 (calls=0) — 값 판정을 건너뛴다"
+        no "$bn: 실행했으나 codex 호출이 관측되지 않았다 (calls=0) — 값 판정을 건너뛴다"
         continue
       fi
       # 관측된 **모든** 호출을 잰다(call-0만이 아니다) — 코퍼스 안에 이미
@@ -224,7 +223,7 @@ EOF_KNOWN
       if [[ "$exp" == on ]]; then
         sw="$(kill_switch_for "$bn")"
         if [[ -z "$sw" ]]; then
-          note FAIL "$bn: ON인데 kill switch 변수를 특정할 수 없다(kill_switch_for에 등록하라)"
+          no "$bn: ON인데 kill switch 변수를 특정할 수 없다(kill_switch_for에 등록하라)"
           continue
         fi
 
@@ -235,7 +234,7 @@ EOF_KNOWN
         unset "$sw"
         n_killed="$(obs_call_count "$cap_killed")"
         if [[ "$n_killed" -lt 1 ]]; then
-          note FAIL "$bn: $sw=1로 실행했으나 codex 호출이 관측되지 않았다"
+          no "$bn: $sw=1로 실행했으나 codex 호출이 관측되지 않았다"
         else
           for d in "$cap_killed"/call-*; do
             [ -d "$d" ] || continue
@@ -260,7 +259,7 @@ EOF_KNOWN
         unset "$sw"
         n_strict="$(obs_call_count "$cap_strict")"
         if [[ "$n_strict" -lt 1 ]]; then
-          note FAIL "$bn: $sw=yes로 실행했으나 codex 호출이 관측되지 않았다"
+          no "$bn: $sw=yes로 실행했으나 codex 호출이 관측되지 않았다"
         else
           for d in "$cap_strict"/call-*; do
             [ -d "$d" ] || continue
@@ -316,20 +315,20 @@ for sk in "$SD"/skills/*/SKILL.md; do
     fi
   done
   if [[ -z "${unguarded// /}" ]]; then
-    note PASS "$name: web agent dispatch $(echo $dispatch_lines | wc -w | tr -d ' ')곳 전부가 스위치 확인 아래에 있다"
+    ok "$name: web agent dispatch $(echo $dispatch_lines | wc -w | tr -d ' ')곳 전부가 스위치 확인 아래에 있다"
   else
-    note FAIL "$name: 스위치 확인 없는 web agent dispatch — 줄$unguarded (위 ${GUARD_WINDOW}줄 내 확인 부재)"
+    no "$name: 스위치 확인 없는 web agent dispatch — 줄$unguarded (위 ${GUARD_WINDOW}줄 내 확인 부재)"
   fi
 
   grep -qE "$CHECK" "$sk" \
-    && note PASS "$name: 실행 가능한 스위치 확인 블록 실재" \
-    || note FAIL "$name: 스위치 확인이 실행 가능한 형태가 아니다(산문만으로는 집행되지 않는다)"
+    && ok "$name: 실행 가능한 스위치 확인 블록 실재" \
+    || no "$name: 스위치 확인이 실행 가능한 형태가 아니다(산문만으로는 집행되지 않는다)"
   grep -qE 'DEVBREW_SPEC_DISTILL_DISABLE_WEB.*(true|yes|-n |!= *"")' "$sk" \
-    && note FAIL "$name: 느슨한 참 판정 — 계약은 정확히 \"1\"이다" \
-    || note PASS "$name: 참 판정이 \"1\" 한정"
+    && no "$name: 느슨한 참 판정 — 계약은 정확히 \"1\"이다" \
+    || ok "$name: 참 판정이 \"1\" 한정"
   grep -qE 'web_budget|SWEEP_CAP|SESSION_CAP' "$sk" \
-    && note FAIL "$name: 상한 게이트 재도입" \
-    || note PASS "$name: 상한 게이트 없음"
+    && no "$name: 상한 게이트 재도입" \
+    || ok "$name: 상한 게이트 없음"
 done
 
 # ── 스위치가 **소비되는가** (선언만으로는 부족하다) ──────────────────────────
@@ -340,13 +339,13 @@ RB="$SD/skills/reviewing-brief/SKILL.md"
 if [[ -f "$RB" ]]; then
   reads="$(grep -cE 'web_disabled[[:space:]]*==[[:space:]]*1|web_disabled[[:space:]]*==[[:space:]]*0' "$RB" 2>/dev/null || echo 0)"
   if [[ "$reads" -ge 1 ]]; then
-    note PASS "reviewing-brief: web_disabled가 실제로 **읽히는** 분기가 있다"
+    ok "reviewing-brief: web_disabled가 실제로 **읽히는** 분기가 있다"
   else
-    note FAIL "reviewing-brief: web_disabled를 세팅만 하고 아무도 읽지 않는다 (죽은 스위치)"
+    no "reviewing-brief: web_disabled를 세팅만 하고 아무도 읽지 않는다 (죽은 스위치)"
   fi
   grep -qE 'kill switch 활성' "$RB" \
-    && note PASS "reviewing-brief: dispatch 프롬프트에 web-disabled 조건이 실린다" \
-    || note FAIL "reviewing-brief: dispatch 프롬프트에서 web-disabled 조건이 사라졌다"
+    && ok "reviewing-brief: dispatch 프롬프트에 web-disabled 조건이 실린다" \
+    || no "reviewing-brief: dispatch 프롬프트에서 web-disabled 조건이 사라졌다"
 fi
 
 # production 전역 — 스크립트와 카운터가 실제로 사라졌다(AC7a).
@@ -354,10 +353,8 @@ fi
 leftover="$(grep -rln 'web_budget\|web_sweep_count\|web_search_count' "$SD" \
   --exclude-dir=tests --exclude=CHANGELOG.md 2>/dev/null || true)"
 if [[ -z "$leftover" ]]; then
-  note PASS "AC7a: production에 web_budget/카운터 잔존 0"
+  ok "AC7a: production에 web_budget/카운터 잔존 0"
 else
-  note FAIL "AC7a: production 잔존:"; printf '    %s\n' $leftover
+  no "AC7a: production 잔존:"; printf '    %s\n' $leftover
 fi
-
-echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[[ $fail -eq 0 ]]
+finish

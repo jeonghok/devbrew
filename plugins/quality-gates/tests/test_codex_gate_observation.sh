@@ -12,9 +12,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 OBS_REPO="$ROOT"
 . "$ROOT/plugins/quality-gates/tests/lib/codex_observation.sh"
 
-pass=0; fail=0
-ok() { pass=$((pass+1)); echo "  ✓ $1"; }
-no() { fail=$((fail+1)); echo "  ✗ $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 SCRATCH="$(mktemp -d -t qg-gate-XXXXXX)" || exit 1
 trap 'rm -rf "$SCRATCH"' EXIT
@@ -200,6 +198,4 @@ for i in "${!GATED_RUNNER[@]}"; do
     *) no "$label: 바닥 미달 → codex ${n}회" ;;
   esac
 done
-
-echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[ "$fail" -eq 0 ]
+finish

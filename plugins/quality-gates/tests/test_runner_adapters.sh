@@ -9,9 +9,8 @@ SKILL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 
 TAB=$'\t'
 
-PASS=0; FAIL=0; W=""
-pass() { PASS=$((PASS + 1)); echo "  → PASS: $1"; }
-fail() { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+W=""
 # setup_cmd_of <worktree> — detect 출력에서 setup_cmd 값만 뽑는다
 setup_cmd_of_tree() { bash "$RTS" detect "$1" | awk '$1 == "setup_cmd:" { $1=""; sub(/^ /,""); print }'; }
 # fn_body <file> <function-name> — 셸 함수 하나의 본문만 뽑는다.
@@ -63,7 +62,7 @@ case_adapter_count_derives_from_closed_set() {
           | grep -oE '^[[:space:]]+[a-z|*-]+\)' | tr -d ' )' | tr '|' '\n' | grep -vx '\*')
   n=$(printf '%s\n' "$names" | grep -c .)
   if [[ "$n" -lt 2 ]]; then
-    fail "닫힌 집합 파싱 실패 (n=$n) — 아래 대조가 공허해진다"; return
+    no "닫힌 집합 파싱 실패 (n=$n) — 아래 대조가 공허해진다"; return
   fi
 
   # 파서가 엉뚱한 토큰을 셌는지 교차 확인한다 (계측기 검증). `run` 은 **실재하는 빈
@@ -73,7 +72,7 @@ case_adapter_count_derives_from_closed_set() {
   for nm in $names; do
     bash "$RTS" run "$probe_dir" "$nm" per-unit X >/dev/null 2>&1
     if [[ $? -eq 2 ]]; then
-      rm -rf "$probe_dir"; fail "닫힌 집합 파싱 오염: '$nm' 은 러너 이름이 아니다"; return
+      rm -rf "$probe_dir"; no "닫힌 집합 파싱 오염: '$nm' 은 러너 이름이 아니다"; return
     fi
   done
   rm -rf "$probe_dir"
@@ -99,51 +98,51 @@ case_adapter_count_derives_from_closed_set() {
 
   # 양의 짝 — 주장이 하나도 없으면 ∀ 는 공허하게 참이다. 코퍼스를 봤다는 증거.
   if [[ $found -eq 0 ]]; then
-    fail "플러그인 안에 어댑터 개수 주장이 0건 — ∀ 가 공허하게 통과할 뻔했다"
+    no "플러그인 안에 어댑터 개수 주장이 0건 — ∀ 가 공허하게 통과할 뻔했다"
   elif [[ $bad -eq 0 ]]; then
-    pass "어댑터 개수 주장 ${found}곳이 닫힌 집합(${n}종)과 일치 (∀ + 코퍼스 실재)"
+    ok "어댑터 개수 주장 ${found}곳이 닫힌 집합(${n}종)과 일치 (∀ + 코퍼스 실재)"
   else
-    fail "어댑터 개수 주장이 닫힌 집합(${n}종)과 불일치"
+    no "어댑터 개수 주장이 닫힌 집합(${n}종)과 불일치"
   fi
 }
 
 # T34/T25: 러너 어댑터 9종 각각 감지
 case_pytest()   { mkw; : > "$W/pytest.ini"; mkdir -p "$W/tests"; : > "$W/tests/test_a.py"
-  [[ "$(runners "$W")" == "pytest" ]] && pass "pytest.ini → pytest" || fail "pytest ($(runners "$W"))"; rmw; }
+  [[ "$(runners "$W")" == "pytest" ]] && ok "pytest.ini → pytest" || no "pytest ($(runners "$W"))"; rmw; }
 case_unittest() { mkw; mkdir -p "$W/tests"; : > "$W/tests/test_a.py"
-  [[ "$(runners "$W")" == "unittest" ]] && pass "설정 없는 test_*.py → unittest" || fail "unittest ($(runners "$W"))"; rmw; }
+  [[ "$(runners "$W")" == "unittest" ]] && ok "설정 없는 test_*.py → unittest" || no "unittest ($(runners "$W"))"; rmw; }
 # 설정 섹션이 없어도 레포가 pytest 를 선언하면 pytest — 이 케이스가 없으면
 # tier 2 가 죽은 코드인지 산 코드인지 스위트가 구분하지 못한다.
 case_pytest_declared_without_config() {
   mkw; mkdir -p "$W/tests"; : > "$W/tests/test_a.py"; : > "$W/conftest.py"
   [[ "$(runners "$W")" == "pytest" ]] \
-    && pass "conftest.py + test_*.py (설정 섹션 없음) → pytest" \
-    || fail "tier2 conftest ($(runners "$W"))"
+    && ok "conftest.py + test_*.py (설정 섹션 없음) → pytest" \
+    || no "tier2 conftest ($(runners "$W"))"
   rmw
 }
 case_shell()    { mkw; mkdir -p "$W/tests"; printf '#!/usr/bin/env bash\nexit 0\n' > "$W/tests/t.sh"; chmod +x "$W/tests/t.sh"
-  [[ "$(runners "$W")" == "shell" ]] && pass "실행비트 tests/*.sh → shell" || fail "shell ($(runners "$W"))"; rmw; }
+  [[ "$(runners "$W")" == "shell" ]] && ok "실행비트 tests/*.sh → shell" || no "shell ($(runners "$W"))"; rmw; }
 case_jest()     { mkw; printf '{"devDependencies":{"jest":"29"}}' > "$W/package.json"
-  [[ "$(runners "$W")" == "jest" ]] && pass "devDeps.jest → jest" || fail "jest ($(runners "$W"))"; rmw; }
+  [[ "$(runners "$W")" == "jest" ]] && ok "devDeps.jest → jest" || no "jest ($(runners "$W"))"; rmw; }
 case_vitest()   { mkw; printf '{"devDependencies":{"vitest":"1"}}' > "$W/package.json"
-  [[ "$(runners "$W")" == "vitest" ]] && pass "devDeps.vitest → vitest" || fail "vitest ($(runners "$W"))"; rmw; }
+  [[ "$(runners "$W")" == "vitest" ]] && ok "devDeps.vitest → vitest" || no "vitest ($(runners "$W"))"; rmw; }
 case_go()       { mkw; printf 'module x\n' > "$W/go.mod"
   [[ "$(runners "$W")" == "go" && "$(gran_of "$W" go)" == "package" ]] \
-    && pass "go.mod → go(package)" || fail "go ($(runners "$W"))"; rmw; }
+    && ok "go.mod → go(package)" || no "go ($(runners "$W"))"; rmw; }
 case_cargo()    { mkw; printf '[package]\nname="x"\n' > "$W/Cargo.toml"
   [[ "$(runners "$W")" == "cargo" && "$(gran_of "$W" cargo)" == "bulk" ]] \
-    && pass "Cargo.toml → cargo(bulk)" || fail "cargo ($(runners "$W"))"; rmw; }
+    && ok "Cargo.toml → cargo(bulk)" || no "cargo ($(runners "$W"))"; rmw; }
 case_make()     { mkw; printf 'test:\n\t@true\n' > "$W/Makefile"
-  [[ "$(runners "$W")" == "make" ]] && pass "Makefile test: → make" || fail "make ($(runners "$W"))"; rmw; }
+  [[ "$(runners "$W")" == "make" ]] && ok "Makefile test: → make" || no "make ($(runners "$W"))"; rmw; }
 case_npmscript(){ mkw; printf '{"scripts":{"test":"node t.js"}}' > "$W/package.json"
-  [[ "$(runners "$W")" == "npm-script" ]] && pass "scripts.test(비-jest/vitest) → npm-script" || fail "npm-script ($(runners "$W"))"; rmw; }
+  [[ "$(runners "$W")" == "npm-script" ]] && ok "scripts.test(비-jest/vitest) → npm-script" || no "npm-script ($(runners "$W"))"; rmw; }
 
 # T54(detect 절반) + AC56: 감지 0개 → 빈 stdout + exit 0
 case_zero_adapters() {
   mkw; : > "$W/README.md"
   local out rc; out=$(bash "$RTS" detect "$W"); rc=$?
-  if [[ $rc -eq 0 && -z "$out" ]]; then pass "감지 0개 → 빈 stdout + exit 0"
-  else fail "0-어댑터 (rc=$rc out='$out')"; fi
+  if [[ $rc -eq 0 && -z "$out" ]]; then ok "감지 0개 → 빈 stdout + exit 0"
+  else no "0-어댑터 (rc=$rc out='$out')"; fi
   rmw
 }
 
@@ -153,8 +152,8 @@ case_polyglot() {
   : > "$W/tests/test_a.py"
   printf '#!/usr/bin/env bash\nexit 0\n' > "$W/tests/t.sh"; chmod +x "$W/tests/t.sh"
   local got; got=$(runners "$W" | sort | tr '\n' ',')
-  if [[ "$got" == "shell,unittest," ]]; then pass "폴리글랏 → 어댑터 2개 모두 반환"
-  else fail "폴리글랏 (got: $got, expected shell,unittest,)"; fi
+  if [[ "$got" == "shell,unittest," ]]; then ok "폴리글랏 → 어댑터 2개 모두 반환"
+  else no "폴리글랏 (got: $got, expected shell,unittest,)"; fi
   rmw
 }
 
@@ -162,19 +161,19 @@ case_polyglot() {
 case_conflict_python() {
   mkw; : > "$W/pytest.ini"; mkdir -p "$W/tests"; : > "$W/tests/test_a.py"
   local got; got=$(runners "$W" | tr '\n' ',')
-  [[ "$got" == "pytest," ]] && pass "pytest 설정 존재 → unittest 미주장" || fail "py 충돌 ($got)"
+  [[ "$got" == "pytest," ]] && ok "pytest 설정 존재 → unittest 미주장" || no "py 충돌 ($got)"
   rmw
 }
 case_conflict_js_ambiguous() {
   mkw; printf '{"devDependencies":{"jest":"29","vitest":"1"},"scripts":{"test":"run-tests"}}' > "$W/package.json"
   local got; got=$(runners "$W" | tr '\n' ',')
-  [[ "$got" == "npm-script," ]] && pass "jest+vitest 판별불가 → npm-script 폴백" || fail "js 모호 ($got)"
+  [[ "$got" == "npm-script," ]] && ok "jest+vitest 판별불가 → npm-script 폴백" || no "js 모호 ($got)"
   rmw
 }
 case_conflict_js_resolved() {
   mkw; printf '{"devDependencies":{"jest":"29","vitest":"1"},"scripts":{"test":"vitest run"}}' > "$W/package.json"
   local got; got=$(runners "$W" | tr '\n' ',')
-  [[ "$got" == "vitest," ]] && pass "scripts.test가 vitest 호출 → vitest" || fail "js 해소 ($got)"
+  [[ "$got" == "vitest," ]] && ok "scripts.test가 vitest 호출 → vitest" || no "js 해소 ($got)"
   rmw
 }
 
@@ -184,17 +183,17 @@ case_no_reimpl_in_skill() {
   # 코퍼스 실재 확인이 먼저다 (/qg iter-6 E5): 맨 `grep -q` 는 파일이 없으면 exit 2 →
   # 거짓 분기 → PASS 를 찍는다. 실측으로 `$SKILL` 을 /nonexistent 로 돌려도 통과했다.
   if [[ ! -s "$SKILL" ]]; then
-    fail "SKILL.md 를 읽지 못했다 ($SKILL) — 아래 부재 검사가 공허해진다"; return
+    no "SKILL.md 를 읽지 못했다 ($SKILL) — 아래 부재 검사가 공허해진다"; return
   fi
   if ! grep -qF 'quality-gates' "$SKILL"; then
-    fail "SKILL.md 를 읽었으나 내용이 예상과 다르다 — 코퍼스 오조준"; return
+    no "SKILL.md 를 읽었으나 내용이 예상과 다르다 — 코퍼스 오조준"; return
   fi
   local bad=0 s
   for s in 'devDependencies' 'pytest.ini' 'Cargo.toml' 'go.mod'; do
     if grep -qF "$s" "$SKILL"; then echo "    SKILL.md가 감지 조건 '$s'를 담고 있음"; bad=1; fi
   done
-  [[ $bad -eq 0 ]] && pass "SKILL.md에 어댑터 감지 표 재구현 0회 (코퍼스 실재 확인됨)" \
-                   || fail "SKILL.md 감지 표 재구현"
+  [[ $bad -eq 0 ]] && ok "SKILL.md에 어댑터 감지 표 재구현 0회 (코퍼스 실재 확인됨)" \
+                   || no "SKILL.md 감지 표 재구현"
 }
 
 # 컨트롤러 룰링 회귀 락: pytest 감지는 **레포 선언**만 본다. 앰비언트 인터프리터 프로브가
@@ -217,13 +216,13 @@ case_no_ambient_pytest_probe() {
   # 관문이 통째로 사라진 것이고, 그러면 아래 ∀ 는 공허하게 참이 된다.
   local exec_body; exec_body=$(fn_body "$RTS" runner_available)
   if ! grep -q 'command -v' <<<"$exec_body" || ! grep -q -- '--version' <<<"$exec_body"; then
-    fail "runner_available 에 가용성 프로브가 없다 — 추출기 고장이거나 실행 관문 소실"; return
+    no "runner_available 에 가용성 프로브가 없다 — 추출기 고장이거나 실행 관문 소실"; return
   fi
 
   for fn in $declare_fns; do
     body=$(fn_body "$RTS" "$fn")
     if [[ -z "$body" ]]; then
-      fail "선언 측 함수 '$fn' 본문 추출 실패 — ∀ 가 공허해진다"; return
+      no "선언 측 함수 '$fn' 본문 추출 실패 — ∀ 가 공허해진다"; return
     fi
     scanned=$((scanned + 1))
     if grep -qE 'command -v|--version' <<<"$body"; then
@@ -231,8 +230,8 @@ case_no_ambient_pytest_probe() {
     fi
   done
 
-  [[ $bad -eq 0 ]] && pass "선언 측 ${scanned}개 함수 전부 앰비언트 프로브 0회 (실행 측엔 존재 — ∀ + 양의 짝)" \
-                   || fail "앰비언트 프로브가 선언 측에 재도입됨 (레포 선언 기반이어야 함)"
+  [[ $bad -eq 0 ]] && ok "선언 측 ${scanned}개 함수 전부 앰비언트 프로브 0회 (실행 측엔 존재 — ∀ + 양의 짝)" \
+                   || no "앰비언트 프로브가 선언 측에 재도입됨 (레포 선언 기반이어야 함)"
 }
 
 # T84 (/qg iter-6 C2(b)): poetry 가 env-dir 열거에서 통째로 빠져 있었다. 근거는
@@ -281,8 +280,8 @@ case_poetry_in_project_env_dir() {
   case "$explicit_false" in *env_dir_not_ignored*) ok=0; echo "    poetry 가 false 를 냈는데도 .venv 요구(과잉)" ;; esac
   rm -rf "$stub"
 
-  [[ $ok -eq 1 ]] && pass "poetry: in-project 를 세 축(env·poetry.toml·질의)에서 판정하고 **질의 실패는 보수적** (양의 짝 2종)" \
-                  || fail "poetry in-project env-dir (on='${on:0:50}' off='${off:0:50}' toml='${toml:0:50}' fail='${failing:0:50}')"
+  [[ $ok -eq 1 ]] && ok "poetry: in-project 를 세 축(env·poetry.toml·질의)에서 판정하고 **질의 실패는 보수적** (양의 짝 2종)" \
+                  || no "poetry in-project env-dir (on='${on:0:50}' off='${off:0:50}' toml='${toml:0:50}' fail='${failing:0:50}')"
   rmw
 }
 
@@ -302,14 +301,14 @@ case_qg_test_scripts_are_executable() {
   listing=$(git -C "$PLUGIN_ROOT" ls-files -s -- 'tests/' 2>/dev/null | grep '\.sh$')
   total=$(printf '%s\n' "$listing" | grep -c . )
   if [[ "$total" -lt 10 ]]; then
-    fail "tests/ 하위 .sh 열거가 ${total}건 — 코퍼스를 못 읽었다, ∀ 가 공허해진다"; return
+    no "tests/ 하위 .sh 열거가 ${total}건 — 코퍼스를 못 읽었다, ∀ 가 공허해진다"; return
   fi
   nonexec=$(printf '%s\n' "$listing" | awk '$1 != "100755" { print $4 }')
   if [[ -n "$nonexec" ]]; then
     printf '    비실행 커밋 모드: %s\n' $nonexec
-    fail "셸 어댑터가 claim 할 수 없는 테스트 스크립트 존재 → unclaimed → PASS 불가"
+    no "셸 어댑터가 claim 할 수 없는 테스트 스크립트 존재 → unclaimed → PASS 불가"
   else
-    pass "quality-gates/tests 하위 .sh ${total}개 전부 실행 가능(인덱스 모드) — self-dogfood 가능"
+    ok "quality-gates/tests 하위 .sh ${total}개 전부 실행 가능(인덱스 모드) — self-dogfood 가능"
   fi
 }
 
@@ -324,8 +323,8 @@ case_setup_cmd_identical_both_sides() {
   sa=$(bash "$RTS" detect "$a" | awk '$1 == "setup_cmd:" { $1=""; sub(/^ /,""); print }')
   sb=$(bash "$RTS" detect "$b" | awk '$1 == "setup_cmd:" { $1=""; sub(/^ /,""); print }')
   if [[ -n "$sa" && "$sa" == "$sb" && "$sa" != "-" ]]; then
-    pass "동일 형상 두 트리 → setup_cmd 동일 문자열 ('$sa')"
-  else fail "setup_cmd 비대칭 (a='$sa' b='$sb')"; fi
+    ok "동일 형상 두 트리 → setup_cmd 동일 문자열 ('$sa')"
+  else no "setup_cmd 비대칭 (a='$sa' b='$sb')"; fi
   rm -rf "$a" "$b"
 }
 
@@ -337,16 +336,16 @@ case_build_output_not_shared() {
   ta=$(bash "$RTS" cargo-target-dir "$a" 2>/dev/null || true)
   tb=$(bash "$RTS" cargo-target-dir "$b" 2>/dev/null || true)
   if [[ -n "$ta" && -n "$tb" && "$ta" != "$tb" && "$ta" == "$a"* && "$tb" == "$b"* ]]; then
-    pass "CARGO_TARGET_DIR가 트리별 독립 ('$ta' != '$tb')"
-  else fail "CARGO_TARGET_DIR 공유 위험 (a='$ta' b='$tb')"; fi
+    ok "CARGO_TARGET_DIR가 트리별 독립 ('$ta' != '$tb')"
+  else no "CARGO_TARGET_DIR 공유 위험 (a='$ta' b='$tb')"; fi
   # node_modules / .venv를 트리 밖으로 내보내는 코드 경로가 없어야 한다.
   # 코퍼스 실재 확인 선행 (/qg iter-6 E5) — 맨 grep 은 파일 부재 시 exit 2 로 PASS 를 찍는다.
   if [[ ! -s "$RTS" ]] || ! grep -q 'CARGO_TARGET_DIR' "$RTS"; then
-    fail "run-test-selection.sh 를 읽지 못했다 — 아래 부재 검사가 공허해진다"
+    no "run-test-selection.sh 를 읽지 못했다 — 아래 부재 검사가 공허해진다"
   elif grep -qE 'NODE_PATH=|VIRTUAL_ENV=|--prefix[[:space:]]' "$RTS"; then
-    fail "트리 밖 deps 경로 지정 코드 존재"
+    no "트리 밖 deps 경로 지정 코드 존재"
   else
-    pass "node_modules/.venv 트리 밖 지정 0회 (코퍼스 실재 확인됨)"
+    ok "node_modules/.venv 트리 밖 지정 0회 (코퍼스 실재 확인됨)"
   fi
   rm -rf "$a" "$b"
 }
@@ -372,9 +371,9 @@ case_artifact_leak_measurement() {
   # 실패 조건은 **스크립트 자신이** 유출을 만드는 경우뿐이다. 러너가 만든 유출은
   # 통제 밖이므로 §11 ⑨의 잔여 갭으로 기록될 뿐 여기서 RED가 아니다.
   if printf '%s\n' "$leaked" | grep -q '^\.qg-'; then
-    fail "run 자신이 비-ignored 아티팩트를 남김"
+    no "run 자신이 비-ignored 아티팩트를 남김"
   else
-    pass "run 자신은 비-ignored 아티팩트를 남기지 않음"
+    ok "run 자신은 비-ignored 아티팩트를 남기지 않음"
   fi
   rm -rf "$t"
 }
@@ -413,15 +412,15 @@ case_cargo_artifacts_are_gitignored() {
   leaked=$( cd "$t" && git ls-files --others --exclude-standard )
   echo "    [측정] cargo 어댑터 실행 후 비-ignored 신규 파일: ${leaked:-<없음>}"
   if [[ -z "$leaked" ]]; then
-    pass "cargo 산출물이 레포의 .gitignore(/target)에 덮임 — disallowed_new_files 0"
+    ok "cargo 산출물이 레포의 .gitignore(/target)에 덮임 — disallowed_new_files 0"
   else
-    fail "cargo 산출물 유출 → mutation-guard forced_downgrade → terminal FAIL ($leaked)"
+    no "cargo 산출물 유출 → mutation-guard forced_downgrade → terminal FAIL ($leaked)"
   fi
   # 같은 술어를 **발화 가능한 대상**에 겨눈다: qg 가 발명한 이름은 어떤 레포도 안 덮는다
   if printf '%s\n' "$leaked" | grep -q '^\.qg-'; then
-    fail "qg-발명 아티팩트 경로가 트리에 남음"
+    no "qg-발명 아티팩트 경로가 트리에 남음"
   else
-    pass "qg-발명 아티팩트 경로 0회"
+    ok "qg-발명 아티팩트 경로 0회"
   fi
   rm -rf "$t" "$bindir"
 }
@@ -444,15 +443,15 @@ case_missing_toolchain_blocks_pass() {
   # 먼저 픽스처 자체를 증명한다: 축소 PATH 가 **감지**를 죽인 것이 아니다.
   det=$(PATH="$bindir" bash "$RTS" detect "$w" | awk '$1=="runner:"{print $2}' | tr '\n' ',')
   if [[ "$det" != "go," ]]; then
-    fail "픽스처 무효: 축소 PATH 에서 감지가 'go,' 가 아님 ('$det')"; rm -rf "$w" "$bindir"; return
+    no "픽스처 무효: 축소 PATH 에서 감지가 'go,' 가 아님 ('$det')"; rm -rf "$w" "$bindir"; return
   fi
-  pass "픽스처: 축소 PATH 에서도 go 는 여전히 감지된다 (감지는 레포 선언 기반)"
+  ok "픽스처: 축소 PATH 에서도 go 는 여전히 감지된다 (감지는 레포 선언 기반)"
 
   out=$(PATH="$bindir" bash "$RTS" run "$w" go per-unit pkg 2>/dev/null); rc=$?
   if [[ $rc -eq 3 && "$out" == "pkg${TAB}unrun${TAB}-" ]]; then
-    pass "toolchain 부재 → exit 3 + 전 unit unrun (설계 §5.10 row 3 · AC34 · AC44)"
+    ok "toolchain 부재 → exit 3 + 전 unit unrun (설계 §5.10 row 3 · AC34 · AC44)"
   else
-    fail "toolchain 부재가 exit 3 로 안 감 (rc=$rc out='$out')"
+    no "toolchain 부재가 exit 3 로 안 감 (rc=$rc out='$out')"
   fi
 
   # 하류: 이 행이 양측에 오면 PASS 가 **불가능**해야 한다.
@@ -462,9 +461,9 @@ case_missing_toolchain_blocks_pass() {
            --granularity package --baseline-mode bulk --head-mode bulk --runner go --baseline-detected go 2>&1)
   if printf '%s\n' "$yaml" | grep -q 'baseline_unrunnable: true' \
      && printf '%s\n' "$yaml" | grep -q 'attribution_status: degraded'; then
-    pass "toolchain 부재가 PASS 를 막는다 (baseline_unrunnable + attribution degraded)"
+    ok "toolchain 부재가 PASS 를 막는다 (baseline_unrunnable + attribution degraded)"
   else
-    fail "toolchain 부재인데 PASS 가 가능한 귀속이 나옴:
+    no "toolchain 부재인데 PASS 가 가능한 귀속이 나옴:
 $yaml"
   fi
   rm -rf "$w" "$bindir"
@@ -479,16 +478,16 @@ case_pytest_plugin_only_declaration() {
   printf 'pytest-cov==5.0.0\npytest-mock\n' > "$w/requirements.txt"
   got=$(runners "$w" | tr '\n' ',')
   [[ "$got" == "pytest," ]] \
-    && pass "pytest-cov/-mock 만 선언 → pytest (unittest 로 새지 않음)" \
-    || fail "플러그인-only 선언 ($got)"
+    && ok "pytest-cov/-mock 만 선언 → pytest (unittest 로 새지 않음)" \
+    || no "플러그인-only 선언 ($got)"
   # 접두 오탐은 여전히 막혀야 한다 — 상위집합화가 경계를 무너뜨리지 않았는지 확인
   local w2 got2
   w2=$(mktemp -d); mkdir -p "$w2/tests"; : > "$w2/tests/test_a.py"
   printf 'mypytester\n' > "$w2/requirements.txt"
   got2=$(runners "$w2" | tr '\n' ',')
   [[ "$got2" == "unittest," ]] \
-    && pass "'mypytester' 는 pytest 선언이 아니다 (접두 경계 유지)" \
-    || fail "접두 오탐 ($got2)"
+    && ok "'mypytester' 는 pytest 선언이 아니다 (접두 경계 유지)" \
+    || no "접두 오탐 ($got2)"
   rm -rf "$w" "$w2"
 }
 
@@ -502,18 +501,18 @@ case_python_setup_and_run_share_env() {
   : > "$w/tests/test_a.py"; : > "$w/uv.lock"; : > "$w/conftest.py"
   scmd=$(setup_cmd_of_tree "$w")
   [[ "$scmd" == "uv sync --frozen" ]] \
-    && pass "uv.lock → setup_cmd 'uv sync --frozen'" || fail "uv setup_cmd ('$scmd')"
+    && ok "uv.lock → setup_cmd 'uv sync --frozen'" || no "uv setup_cmd ('$scmd')"
 
   bindir=$(mktemp -d)
   record_stub "$bindir/uv" uv "$w/.observed"
   PATH="$bindir:$PATH" bash "$RTS" run "$w" pytest per-unit tests/test_a.py >/dev/null 2>&1
   observed=$(cat "$w/.observed" 2>/dev/null || echo "<관측 안 됨>")
   printf '%s\n' "$observed" | grep -q '^uv sync --frozen$' \
-    && pass "setup 이 uv 로 실행됨" || fail "setup 미실행 (관측: $observed)"
+    && ok "setup 이 uv 로 실행됨" || no "setup 미실행 (관측: $observed)"
   if printf '%s\n' "$observed" | grep -q '^uv run python -m pytest -p no:cacheprovider'; then
-    pass "run 이 setup 이 만든 환경(uv run python)으로 테스트를 실행"
+    ok "run 이 setup 이 만든 환경(uv run python)으로 테스트를 실행"
   else
-    fail "run 이 앰비언트 인터프리터를 씀 — setup 이 실행에 대해 no-op (관측: $observed)"
+    no "run 이 앰비언트 인터프리터를 씀 — setup 이 실행에 대해 no-op (관측: $observed)"
   fi
   rm -rf "$w" "$bindir"
 }
@@ -528,12 +527,12 @@ case_requirements_env_is_sandbox_local() {
   printf 'pytest\n' > "$w/requirements.txt"
   scmd=$(setup_cmd_of_tree "$w")
   case "$scmd" in
-    *".venv/bin/python -m pip install"*) pass "requirements.txt → 트리-로컬 .venv 로 설치 ('$scmd')" ;;
-    *) fail "requirements setup_cmd 가 트리-로컬이 아님 ('$scmd')" ;;
+    *".venv/bin/python -m pip install"*) ok "requirements.txt → 트리-로컬 .venv 로 설치 ('$scmd')" ;;
+    *) no "requirements setup_cmd 가 트리-로컬이 아님 ('$scmd')" ;;
   esac
   case "$scmd" in
-    "python3 -m pip install"*) fail "앰비언트 pip 설치 분기 잔존 — 샌드박스 밖을 바꾼다" ;;
-    *) pass "앰비언트 pip 설치 분기 없음" ;;
+    "python3 -m pip install"*) no "앰비언트 pip 설치 분기 잔존 — 샌드박스 밖을 바꾼다" ;;
+    *) ok "앰비언트 pip 설치 분기 없음" ;;
   esac
 
   # 실행 argv 관측: python3 스텁으로 venv 생성을 no-op 화하고, .venv/bin/python 스텁이
@@ -548,9 +547,9 @@ case_requirements_env_is_sandbox_local() {
   PATH="$bindir:$PATH" bash "$RTS" run "$w" pytest per-unit tests/test_a.py >/dev/null 2>&1
   observed=$(cat "$w/.observed" 2>/dev/null || echo "<관측 안 됨>")
   if printf '%s\n' "$observed" | grep -q '^venvpy -m pytest -p no:cacheprovider'; then
-    pass "run 이 트리-로컬 .venv 인터프리터로 테스트를 실행"
+    ok "run 이 트리-로컬 .venv 인터프리터로 테스트를 실행"
   else
-    fail "run 이 .venv 를 쓰지 않음 (관측: $observed)"
+    no "run 이 .venv 를 쓰지 않음 (관측: $observed)"
   fi
   rm -rf "$w" "$bindir"
 }
@@ -584,13 +583,13 @@ case_env_dir_gate_uses_directory_pattern() {
   record_stub "$b/uv" uv "$t/.observed"
   out=$(PATH="$b:$PATH" bash "$RTS" run "$t" pytest per-unit tests/test_a.py 2>/dev/null); rc=$?
   if [[ $rc -eq 0 && "$out" == "tests/test_a.py${TAB}pass${TAB}0" ]]; then
-    pass "'.venv/' 디렉토리 패턴 레포에서 실행이 정상 진행 (부재 상태 질의)"
+    ok "'.venv/' 디렉토리 패턴 레포에서 실행이 정상 진행 (부재 상태 질의)"
   else
-    fail "정상 레포의 setup 이 꺼짐 → 테스트 0개 PASS 경로 (rc=$rc out='$out')"
+    no "정상 레포의 setup 이 꺼짐 → 테스트 0개 PASS 경로 (rc=$rc out='$out')"
   fi
   grep -q '^uv sync --frozen$' "$t/.observed" 2>/dev/null \
-    && pass "그 레포에서 setup 이 실제로 실행됨" \
-    || fail "setup 미실행 (관측: $(cat "$t/.observed" 2>/dev/null))"
+    && ok "그 레포에서 setup 이 실제로 실행됨" \
+    || no "setup 미실행 (관측: $(cat "$t/.observed" 2>/dev/null))"
   rm -rf "$t" "$b"
 
   # ② 진짜로 무시하지 않는 레포 → **조용한 setup skip 이 아니라** exit 3 degrade.
@@ -601,21 +600,21 @@ case_env_dir_gate_uses_directory_pattern() {
   record_stub "$b/uv" uv "$t/.observed"
   out=$(PATH="$b:$PATH" bash "$RTS" run "$t" pytest per-unit tests/test_a.py 2>/dev/null); rc=$?
   if [[ $rc -eq 3 && "$out" == "tests/test_a.py${TAB}unrun${TAB}-" ]]; then
-    pass ".venv 미무시 레포 → exit 3 + unrun (조용한 skip 아님)"
+    ok ".venv 미무시 레포 → exit 3 + unrun (조용한 skip 아님)"
   else
-    fail "미무시 레포 처리 (rc=$rc out='$out')"
+    no "미무시 레포 처리 (rc=$rc out='$out')"
   fi
   # 측정하는 것을 그대로 적는다: 거부는 setup **이전**에 일어나므로 uv 는 setup·프로브·
   # 실행 어느 것으로도 호출되지 않는다. 한 번이라도 불렸다면 `.venv` 가 생겼다는 뜻이고
   # 그것이 terminal FAIL 의 씨앗이다.
-  [[ ! -s "$t/.observed" ]] && pass "그 경우 uv 를 한 번도 호출하지 않음 (트리 오염 0)" \
-                            || fail "거부했어야 할 트리에서 uv 가 호출됨 ($(cat "$t/.observed"))"
+  [[ ! -s "$t/.observed" ]] && ok "그 경우 uv 를 한 번도 호출하지 않음 (트리 오염 0)" \
+                            || no "거부했어야 할 트리에서 uv 가 호출됨 ($(cat "$t/.observed"))"
   printf 'tests/test_a.py\n' > "$t/expected.txt"; printf '%s\n' "$out" > "$t/side.tsv"
   yaml=$(python3 "$PLUGIN_ROOT/scripts/diff-test-results.py" --expected "$t/expected.txt" \
            --baseline "$t/side.tsv" --head "$t/side.tsv" --granularity file --baseline-mode per-unit --head-mode per-unit --runner pytest \
            --baseline-detected pytest 2>&1)
   printf '%s\n' "$yaml" | grep -q 'baseline_unrunnable: true' \
-    && pass "그 degrade 가 PASS 를 막는다 (baseline_unrunnable)" || fail "PASS 가 가능:
+    && ok "그 degrade 가 PASS 를 막는다 (baseline_unrunnable)" || no "PASS 가 가능:
 $yaml"
   rm -rf "$t" "$b"
 
@@ -626,8 +625,8 @@ $yaml"
   record_stub "$b/npm" npm "$t/.observed"
   out=$(PATH="$b:$PATH" bash "$RTS" run "$t" npm-script bulk BULK 2>/dev/null); rc=$?
   [[ $rc -eq 0 && "$out" == "BULK${TAB}pass${TAB}0" ]] \
-    && pass "'node_modules/' 패턴 레포에서 실행이 정상 진행" \
-    || fail "node_modules 정상 레포가 막힘 (rc=$rc out='$out')"
+    && ok "'node_modules/' 패턴 레포에서 실행이 정상 진행" \
+    || no "node_modules 정상 레포가 막힘 (rc=$rc out='$out')"
   rm -rf "$t" "$b"
 
   t=$(mk_git_repo 'unrelated'); b=$(mktemp -d)
@@ -636,8 +635,8 @@ $yaml"
   record_stub "$b/npm" npm "$t/.observed"
   out=$(PATH="$b:$PATH" bash "$RTS" run "$t" npm-script bulk BULK 2>/dev/null); rc=$?
   [[ $rc -eq 3 && "$out" == "BULK${TAB}unrun${TAB}-" ]] \
-    && pass "node_modules 미무시 레포 → exit 3 + unrun (terminal FAIL 도, 조용한 PASS 도 아님)" \
-    || fail "node_modules 미무시 처리 (rc=$rc out='$out')"
+    && ok "node_modules 미무시 레포 → exit 3 + unrun (terminal FAIL 도, 조용한 PASS 도 아님)" \
+    || no "node_modules 미무시 처리 (rc=$rc out='$out')"
   rm -rf "$t" "$b"
 }
 
@@ -649,13 +648,13 @@ case_npm_install_writes_no_lockfile() {
   w=$(mktemp -d); printf '{"scripts":{"test":"node t.js"}}' > "$w/package.json"
   scmd=$(setup_cmd_of_tree "$w")
   case "$scmd" in
-    *--no-package-lock*) pass "락파일 없는 레포 → '$scmd'" ;;
-    *) fail "npm install 이 락파일을 쓴다 ('$scmd')" ;;
+    *--no-package-lock*) ok "락파일 없는 레포 → '$scmd'" ;;
+    *) no "npm install 이 락파일을 쓴다 ('$scmd')" ;;
   esac
   # 락파일이 **있는** 레포는 여전히 `npm ci` 다 (수정이 다른 분기를 갉아먹지 않았는지)
   : > "$w/package-lock.json"
   [[ "$(setup_cmd_of_tree "$w")" == "npm ci" ]] \
-    && pass "락파일 있는 레포 → npm ci (무변경)" || fail "npm ci 분기 손상"
+    && ok "락파일 있는 레포 → npm ci (무변경)" || no "npm ci 분기 손상"
 
   if command -v npm >/dev/null 2>&1; then
     t=$(mktemp -d)
@@ -666,8 +665,8 @@ case_npm_install_writes_no_lockfile() {
     bash "$RTS" run "$t" npm-script bulk BULK >/dev/null 2>&1
     leaked=$( cd "$t" && git ls-files --others --exclude-standard )
     echo "    [측정] npm-script 어댑터 실행 후 비-ignored 신규 파일: ${leaked:-<없음>}"
-    [[ -z "$leaked" ]] && pass "npm 설치가 비-ignored 신규 파일을 남기지 않음 (실측)" \
-                       || fail "npm 설치 유출 → mutation-guard terminal FAIL ($leaked)"
+    [[ -z "$leaked" ]] && ok "npm 설치가 비-ignored 신규 파일을 남기지 않음 (실측)" \
+                       || no "npm 설치 유출 → mutation-guard terminal FAIL ($leaked)"
     rm -rf "$t"
   else
     echo "    [degrade] npm 미설치 — 실측 arm 생략, 문자열 arm 만 검증됨"
@@ -693,9 +692,9 @@ case_run_cargo_uses_cargo_target_dir_helper() {
   PATH="$bindir:$PATH" bash "$RTS" run "$w" cargo bulk BULK >/dev/null 2>&1
   observed=$(cat "$w/.observed-target" 2>/dev/null || echo "<관측 안 됨>")
   if [[ "$observed" == "$expected" ]]; then
-    pass "run 의 cargo 실행이 cargo-target-dir 서브커맨드와 같은 값을 씀 ('$expected')"
+    ok "run 의 cargo 실행이 cargo-target-dir 서브커맨드와 같은 값을 씀 ('$expected')"
   else
-    fail "cargo target dir 불일치 (expected='$expected' observed='$observed')"
+    no "cargo target dir 불일치 (expected='$expected' observed='$observed')"
   fi
   rm -rf "$w" "$bindir"
 }
@@ -715,8 +714,8 @@ case_go_run_prefixes_package_with_dotslash() {
   PATH="$b:$PATH" bash "$RTS" run "$w" go per-unit pkg/a >/dev/null 2>&1
   observed=$(cat "$w/.observed" 2>/dev/null || echo "<관측 안 됨>")
   printf '%s\n' "$observed" | grep -qx 'go test ./pkg/a' \
-    && pass "go run: package unit 에 ./ 접두 (import 경로 오해석 차단)" \
-    || fail "go run 이 import 경로로 넘김 (관측: $observed)"
+    && ok "go run: package unit 에 ./ 접두 (import 경로 오해석 차단)" \
+    || no "go run 이 import 경로로 넘김 (관측: $observed)"
   rm -rf "$w" "$b"
 }
 
@@ -730,8 +729,8 @@ case_go_run_root_package_unchanged() {
   PATH="$b:$PATH" bash "$RTS" run "$w" go per-unit . >/dev/null 2>&1
   observed=$(cat "$w/.observed" 2>/dev/null || echo "<관측 안 됨>")
   printf '%s\n' "$observed" | grep -qx 'go test \.' \
-    && pass "go run: 루트 unit '.' 은 그대로 (이중 접두 없음)" \
-    || fail "루트 unit 이 변형됨 (관측: $observed)"
+    && ok "go run: 루트 unit '.' 은 그대로 (이중 접두 없음)" \
+    || no "루트 unit 이 변형됨 (관측: $observed)"
   rm -rf "$w" "$b"
 }
 
@@ -753,9 +752,9 @@ case_go_package_without_tests_is_absent() {
   record_stub "$b/go" go "$w/.observed"
   out=$(PATH="$b:$PATH" bash "$RTS" run "$w" go per-unit pkg/a pkg/b 2>/dev/null | tr '\n' ';')
   if [[ "$out" == "pkg/a${TAB}pass${TAB}0;pkg/b${TAB}absent${TAB}-;" ]]; then
-    pass "go: 테스트 없는 패키지는 absent · 있는 패키지는 실행(양의 짝)"
+    ok "go: 테스트 없는 패키지는 absent · 있는 패키지는 실행(양의 짝)"
   else
-    fail "go 패키지 존재 판정 (got: $out)"
+    no "go 패키지 존재 판정 (got: $out)"
   fi
   rm -rf "$w" "$b"
 }
@@ -786,10 +785,10 @@ case_exit_code_mapping() {
     exit_stub "$b/python3" "$code"
     out=$(PATH="$b:$PATH" bash "$RTS" run "$w" pytest per-unit tests/test_a.py 2>/dev/null)
     if [[ "$out" != "tests/test_a.py${TAB}${want}${TAB}${code}" ]]; then
-      fail "pytest exit ${code} → ${want} (got: '$out')"; ok=0
+      no "pytest exit ${code} → ${want} (got: '$out')"; ok=0
     fi
   done
-  [[ "$ok" == "1" ]] && pass "종료코드→상태 매핑 10종 (127 만 unrun · 0/1 양의 짝 · 나머지 error)"
+  [[ "$ok" == "1" ]] && ok "종료코드→상태 매핑 10종 (127 만 unrun · 0/1 양의 짝 · 나머지 error)"
   rm -rf "$w" "$b"
 }
 
@@ -811,10 +810,10 @@ case_asymmetric_product_breakage_is_a_defect() {
             --granularity file --baseline-mode per-unit --head-mode per-unit --runner pytest --baseline-detected pytest 2>/dev/null \
           | awk '$1=="confirmed_product_defect:"{print $2}')
     if [[ "$out" != "true" ]]; then
-      fail "기준선 pass · HEAD exit ${code} → confirmed_product_defect=${out} (true 여야 함)"; ok=0
+      no "기준선 pass · HEAD exit ${code} → confirmed_product_defect=${out} (true 여야 함)"; ok=0
     fi
   done
-  [[ "$ok" == "1" ]] && pass "비대칭 제품 파손 6종이 전부 확증 제품결함 (회귀 재발 방지)"
+  [[ "$ok" == "1" ]] && ok "비대칭 제품 파손 6종이 전부 확증 제품결함 (회귀 재발 방지)"
   rm -rf "$w" "$b" "$d"
 }
 
@@ -834,5 +833,4 @@ for c in case_pytest case_unittest case_pytest_declared_without_config case_shel
          case_qg_test_scripts_are_executable case_poetry_in_project_env_dir; do
   echo "== $c"; $c
 done
-echo "── runner adapters: $PASS passed, $FAIL failed"
-[[ $FAIL -eq 0 ]]
+finish

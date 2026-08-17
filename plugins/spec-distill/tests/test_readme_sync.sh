@@ -32,54 +32,50 @@ README="$REPO_ROOT/plugins/spec-distill/README.md"
 PLUGIN_JSON="$REPO_ROOT/plugins/spec-distill/.claude-plugin/plugin.json"
 CHANGELOG="$REPO_ROOT/plugins/spec-distill/CHANGELOG.md"
 
-pass=0; fail=0
-note() { if [[ "$1" == "PASS" ]]; then pass=$((pass+1)); echo "  ✓ $2"; else fail=$((fail+1)); echo "  ✗ $2"; fi; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 grep -qE '"version": "0\.(2[6-9]|[3-9][0-9])\.[0-9]+"' "$PLUGIN_JSON" \
-  && note PASS "T20: plugin.json version >= 0.26.x" \
-  || note FAIL "T20: plugin.json이 0.26 floor 미만"
+  && ok "T20: plugin.json version >= 0.26.x" \
+  || no "T20: plugin.json이 0.26 floor 미만"
 grep -qE '^## \[0\.23\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
-  && note PASS "T20: CHANGELOG [0.23.0] 엔트리 + ISO 날짜" \
-  || note FAIL "T20: CHANGELOG [0.23.0] 누락/비-ISO"
+  && ok "T20: CHANGELOG [0.23.0] 엔트리 + ISO 날짜" \
+  || no "T20: CHANGELOG [0.23.0] 누락/비-ISO"
 grep -qE '^## \[0\.24\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
-  && note PASS "T20: CHANGELOG [0.24.0] 엔트리 + ISO 날짜" \
-  || note FAIL "T20: CHANGELOG [0.24.0] 누락/비-ISO"
+  && ok "T20: CHANGELOG [0.24.0] 엔트리 + ISO 날짜" \
+  || no "T20: CHANGELOG [0.24.0] 누락/비-ISO"
 grep -qE '^## \[0\.2[02]\.0\].*XX' "$CHANGELOG" \
-  && note FAIL "T20: CHANGELOG 날짜에 XX placeholder" || note PASS "T20: XX placeholder 없음"
+  && no "T20: CHANGELOG 날짜에 XX placeholder" || ok "T20: XX placeholder 없음"
 grep -qE '^## \[0\.20\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
-  && note PASS "CHANGELOG append-only: [0.20.0] 엔트리 보존" \
-  || note FAIL "CHANGELOG append-only: [0.20.0] 엔트리가 사라졌다"
+  && ok "CHANGELOG append-only: [0.20.0] 엔트리 보존" \
+  || no "CHANGELOG append-only: [0.20.0] 엔트리가 사라졌다"
 grep -qE '^## \[0\.22\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
-  && note PASS "CHANGELOG append-only: [0.22.0] 엔트리 보존" \
-  || note FAIL "CHANGELOG append-only: [0.22.0] 엔트리가 사라졌다"
+  && ok "CHANGELOG append-only: [0.22.0] 엔트리 보존" \
+  || no "CHANGELOG append-only: [0.22.0] 엔트리가 사라졌다"
 grep -qE '^## \[0\.25\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
-  && note PASS "CHANGELOG append-only: [0.25.0] 엔트리 보존" \
-  || note FAIL "CHANGELOG append-only: [0.25.0] 엔트리가 없다"
+  && ok "CHANGELOG append-only: [0.25.0] 엔트리 보존" \
+  || no "CHANGELOG append-only: [0.25.0] 엔트리가 없다"
 
 for kw in 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' 'armed_paths' 'arm-once' 'interview-brief' 'steelman-builder' 'DEVBREW_DISABLE_SPEC_DISTILL_CODEX' 'model diversity' 'coverage-mapper' 'blind-spot-prober' 'probe_budget' 'user_sourced_items' 'audit_file' 'user_statements' 'bijection'; do
   grep -q "$kw" "$README" \
-    && note PASS "README-sync: mentions $kw" || note FAIL "README-sync: missing $kw"
+    && ok "README-sync: mentions $kw" || no "README-sync: missing $kw"
 done
 
 # AC14: README "Principles Instantiated"가 네 사실을 각각 명시하는지 (섹션 스코프 — 헤더-satisfiable 회피)
 pi_block="$(awk '/^## Principles Instantiated/{f=1;print;next} /^## /{f=0} f' "$README")"
 { [[ -n "$pi_block" ]] && grep -qE '라운드별 잠금|라운드마다 결정' <<<"$pi_block"; } \
-  && note PASS "AC14/1: 라운드별 잠금 제거 명시" || note FAIL "AC14/1: 라운드별 잠금 제거가 없다"
+  && ok "AC14/1: 라운드별 잠금 제거 명시" || no "AC14/1: 라운드별 잠금 제거가 없다"
 grep -qE '일괄 확인|사용자 확인' <<<"$pi_block" \
-  && note PASS "AC14/2: 종료 시 사용자 일괄 확인 명시" || note FAIL "AC14/2: 사용자 일괄 확인이 없다"
+  && ok "AC14/2: 종료 시 사용자 일괄 확인 명시" || no "AC14/2: 사용자 일괄 확인이 없다"
 grep -qE 'payload.*audit|2파일|두 파일' <<<"$pi_block" \
-  && note PASS "AC14/3: payload/audit 분리 명시" || note FAIL "AC14/3: payload/audit 분리가 없다"
+  && ok "AC14/3: payload/audit 분리 명시" || no "AC14/3: payload/audit 분리가 없다"
 grep -q 'user_sourced_items' <<<"$pi_block" \
-  && note PASS "AC14/4: user_sourced_items 계약 명시" || note FAIL "AC14/4: user_sourced_items 계약이 없다"
+  && ok "AC14/4: user_sourced_items 계약 명시" || no "AC14/4: user_sourced_items 계약이 없다"
 
 # v0.23.0: README 서두가 산출물을 **2파일 쌍**으로 설명해야 한다. 이 문장은 오랫동안 "7-section
 # 단일 파일"이라 적혀 있었고(옛 포맷), 어떤 assertion도 그걸 잡지 않았다 — AC14 블록만 잠겨 있어
 # 서두는 무검증이었다. 사용자가 README "What it does"를 따라 쓰면 게이트가 거부하는 포맷이 나온다.
 { grep -qF '2파일 쌍' "$README" && grep -qF '.audit.md' "$README" \
     && grep -qF '8섹션' "$README"; } \
-  && note PASS "v0.23.0: README 서두가 payload+audit 2파일 쌍을 설명" \
-  || note FAIL "README 서두가 산출물을 2파일 쌍으로 설명하지 않는다"
-
-echo
-echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[[ $fail -eq 0 ]]
+  && ok "v0.23.0: README 서두가 payload+audit 2파일 쌍을 설명" \
+  || no "README 서두가 산출물을 2파일 쌍으로 설명하지 않는다"
+finish

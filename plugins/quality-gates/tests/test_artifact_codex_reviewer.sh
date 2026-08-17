@@ -4,9 +4,7 @@ set -u
 SCRIPTS="$(cd "$(dirname "$0")/../scripts" && pwd)"
 FIXTURES="$(cd "$(dirname "$0")/spike/fixtures" && pwd)"
 BUILD="$SCRIPTS/build_artifact_codex_prompt.py"; EXTRACT="$SCRIPTS/extract_codex_artifact_yaml.py"
-PASS=0; FAIL=0
-ok() { PASS=$((PASS+1)); echo "  PASS: $1"; }
-no() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 tmp="$(mktemp -d)"
 
 # build: artifact content embedded, rubric present, findings fence instruction
@@ -121,5 +119,4 @@ if [ -f "$SCRIPTS/run_artifact_codex_reviewer.sh" ]; then
 fi
 
 rm -rf "$tmp"
-echo ""; echo "Total: $((PASS+FAIL)), PASS=$PASS, FAIL=$FAIL"
-[ "$FAIL" -eq 0 ] || exit 1
+finish

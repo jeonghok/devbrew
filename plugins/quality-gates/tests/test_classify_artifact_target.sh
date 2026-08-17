@@ -2,12 +2,11 @@
 # T1/AC15/AC22 — E1 code/non-code/ambiguous classifier. 3분기 계약 + 정규화 + fail-safe.
 set -u
 SCRIPT="plugins/quality-gates/scripts/classify_artifact_target.py"
-PASS=0; FAIL=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 check() { # <label> <path> <expected-classification>
   local label="$1" path="$2" want="$3"
   local got; got="$(python3 "$SCRIPT" "$path" | sed -n 's/^classification: //p')"
-  if [ "$got" = "$want" ]; then PASS=$((PASS+1)); echo "  PASS: $label ($path -> $got)"
-  else FAIL=$((FAIL+1)); echo "  ✗ FAIL: $label ($path -> got '$got', want '$want')"; fi
+  assert_eq "$got" "$want" "$label ($path -> $got)"
 }
 # 코드 확장자 -> code (종료)
 check "py is code" "src/app.py" code
@@ -28,5 +27,4 @@ check "yaml unlisted -> ambiguous" "config.yaml" ambiguous
 check "json unlisted -> ambiguous" "package.json" ambiguous
 # 디렉터리 -> ambiguous (실제 디렉터리 fixture)
 tmp="$(mktemp -d)"; check "directory ambiguous" "$tmp" ambiguous; rmdir "$tmp"
-echo ""; echo "Total: $((PASS+FAIL)), PASS=$PASS, FAIL=$FAIL"
-[ "$FAIL" -eq 0 ] || exit 1
+finish

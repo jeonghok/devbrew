@@ -1920,12 +1920,41 @@ git status --short | head -30
 
 Step 2가 낸 목록의 각 파일에서:
 
-| 축 | 변환 |
+> ⚠ **이전 판의 표는 틀렸다** 〔2026-08-17 Task 12 착수 전 전수 계측으로 반증〕. 그 표는
+> 파이썬 축을 *"`parents[3]` → `parents[2]`, 한 단계 얕아짐"* 이라고 적었는데, **이 코퍼스에
+> `parents[3]` 은 한 곳도 없고**, 더 중요하게는 **일괄 감소가 성립하지 않는 부류가 최대 다수(14곳)** 다.
+> `scripts/` 를 가리키던 `parents[1]` 은 이동 후 그 디렉토리가 **조상이 아니게 되어** 어떤 N 으로도
+> 도달할 수 없다 — 감소가 아니라 **경로 세그먼트 추가**가 필요하다. "한 단계 얕아짐" 을 그대로
+> 적용하면 그 14곳이 `plugins/plugin-audit/<script>.py` 를 가리켜 조용히 깨진다.
+
+**계측된 변환 규칙** (`plugins/plugin-audit/scripts/tests/` → `plugins/plugin-audit/tests/` ·
+`plugins/project-init/hooks/tests/` → `plugins/project-init/tests/`):
+
+| 지금 표현 | 가리키는 곳 | 이동 후 | 건수 |
+|---|---|---|---|
+| `parents[1]` | `plugins/plugin-audit/scripts` | **`parents[1] / "scripts"`** — N 감소로는 도달 불가 | **14** |
+| `parents[2]` | `plugins/<plugin>` (플러그인 루트) | `parents[1]` | 12 (pa 11 · pi 1) |
+| `parents[4]` | repo root | `parents[3]` | 3 |
+| `parents[5]` | repo root (`fixtures/` 한 단계 더 깊음) | `parents[4]` | 1 |
+
+| 그 밖의 축 | 변환 |
 |---|---|
-| 파이썬 | `parents[3]` → `parents[2]` (한 단계 얕아짐. 실제 N은 파일별로 확인) |
-| 셸 | `dirname "$0")/../../..` → `dirname "$0")/../..` |
+| 셸 `ROOT=` | `dirname .../../../..` → `dirname .../../..` (repo root 도달. **2곳** — `project-init/.../smoke.sh:9` · `plugin-audit/.../test_run_own_tests_accumulate.sh:13`) |
 | `.mjs` 하네스 | `../` 하나 제거 |
-| 밖에서 가리키는 참조 | `hooks/tests/` → `tests/` · `scripts/tests/` → `tests/` |
+| 밖에서 가리키는 참조 | `hooks/tests/` → `tests/` · `scripts/tests/` → `tests/` — **단, 아래 "고치면 안 되는 것" 을 먼저 읽는다** |
+| **깊이를 서술한 주석** | `# repo root (plugins/plugin-audit/scripts/tests → parents[4])` 류. 코드를 고치고 주석을 두면 **주석이 거짓이 된다.** 최소 3곳(`test_check_shape_completeness.py:5` · `test_ac6_regression.py:4` · `fixtures/ac6_build.py:15`) |
+
+**고치면 안 되는 것** — Step 2 의 grep 이 함께 잡지만 재앵커 대상이 아니다:
+
+| 대상 | 왜 그대로 두나 |
+|---|---|
+| `scripts/tests/fixtures/ac6_*.json` 안의 `hooks/tests/` 경로 | **기록된 감사 데이터**다. 고치면 그 fixture 가 재현하는 과거 산출물이 왜곡된다 (Task 10 의 CHANGELOG 판단과 같은 이유) |
+| `test_run_own_tests_accumulate.sh` 가 `$TMP/sandbox/plugins/tgt/hooks/tests/` 를 만드는 줄 | **합성 fixture** 다. 러너가 `hooks/tests/` 레이아웃의 *감사 대상* 플러그인을 찾아내는지 검사한다 — 이 리포의 레이아웃이 아니다 |
+| `test_check_shape_completeness.py:166` 의 assertion 메시지 속 `hooks/tests/` | 감사 **대상**의 over-glob 을 서술한다. 이 리포 경로가 아니다 |
+
+**함께 고칠 것**: `scripts/tests/README.md:4` 가 `unittest discover ... -t .` 을 문서화한다 —
+Global Constraints 가 금지하는 형태다(하이픈 디렉토리명 → `ImportError`). 파일이 어차피 이동하므로
+같은 스텝에서 `-t <그 디렉토리 자신>` 으로 고친다. 같은 README 의 `node --test` 경로 2줄도 이동에 맞춘다.
 
 **각 변환 후 그 파일 하나를 즉시 돌려본다.** 일괄 치환 후 한 번에 돌리면 어느 축이 틀렸는지 못 가린다.
 
@@ -2345,7 +2374,12 @@ rm -f /tmp/assert.bak
 
 - [ ] **Step 6: 커밋**
 
+`shared/tests/` 에 실제 파일이 처음 들어오는 태스크다 — Task 11 의 플레이스홀더를 여기서 없앤다
+(형제 셋은 각각 `codex` Task 17 · `killswitch` Task 19 · `gc` Task 21 이 같은 줄을 갖는다;
+`tests` 만 빠져 있던 것을 2026-08-17 Task 11 리뷰가 잡았다).
+
 ```bash
+git rm -f shared/tests/.gitkeep 2>/dev/null || true
 git add shared/tests/assert.sh shared/tests/test_assert_behavior.sh
 git commit -m "feat(shared): 판정 헬퍼 정본 + 종료 행동 락"
 ```
@@ -2356,6 +2390,7 @@ git commit -m "feat(shared): 판정 헬퍼 정본 + 종료 행동 락"
 
 **Files:**
 - Modify: 자체 판정 헬퍼를 정의하는 셸 테스트 전부 — **이름 불문** (Step 2가 도출; 〔실측〕 120 파일)
+- **Exclude(명시): `plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh`** — 아래 순환 규칙
 - Modify(명시): `plugins/quality-gates/tests/test_adversarial_persona.sh` · `test_security_reviewer_persona.sh` — 설계 §6.1③의 "persona 테스트 쌍". Step 2의 좁은 도출이 놓쳤고 Task 35의 20줄 검사가 실제로 잡는 유일한 테스트 쌍이라 **Files에 이름으로 올린다**(Step 4b)
 - Delete: `plugins/quality-gates/tests/lib/` 중 `shared/tests/assert.sh`로 흡수된 것
 
@@ -2365,6 +2400,48 @@ git commit -m "feat(shared): 판정 헬퍼 정본 + 종료 행동 락"
 |---|---|
 | **수** | 통합 전후로 **각 테스트 파일의** assertion 호출 수를 대조. 파일별로 줄면 미완료 |
 | **행동** | Task 13의 `test_assert_behavior.sh`가 종료 행동을 고정 |
+
+> ⚠ **이 태스크가 끝나면 `shared/tests/assert.sh` 편집의 안전망은 행동 락 하나뿐이다**
+> 〔2026-08-17 Task 13 리뷰가 지적, 실측 확인〕.
+>
+> `compute-test-scope-candidates.sh:143` 이 *"Other languages: no heuristic; only CHANGED_TESTS
+> counts"* — **`.sh` 에는 src→test 이름 휴리스틱이 없다.** guards 축은 선언한 파일만 고른다.
+> 실측: `shared/tests/assert.sh` 를 편집하면 선택되는 것은 **3개**
+> (`test_assert_behavior.sh` · `test_guards_coverage_bidirectional.sh` · 변경 파일 자신)이고,
+> 이 태스크가 이관할 **~120개 소비자 테스트는 선택되지 않는다.**
+>
+> 이것은 설계상 의도다 — 행동 락이 전 소비자의 **대리인**이기 때문이다(§9.2). 그러나 그 대리인이
+> 안전망 **전부**라는 뜻이기도 하다. 따라서:
+>
+> · 이관 테스트에 `# guards: shared/tests/**` 를 **붙이지 않는다.** ~120 파일에 선언을 뿌리면
+>   `shared/tests/` 아래 어떤 변경도 120개를 전부 선택한다 — fail-safe 방향이지만 이 plan 이
+>   지시하지 않은 churn 이고, 설계는 대리인 방식을 명시적으로 골랐다.
+> · 대신 **행동 락에 아직 없는 이빨의 값이 그만큼 커진다.** Task 13 리뷰가 락 밖으로 남긴 셋:
+>   `assert_count_ge` 의 숫자 가드 삭제(GREEN — fail-closed 는 유지되고 진단 메시지만 손실) ·
+>   `ok()` 의 pass 카운터 정지(GREEN) · `assert_count_ge` 의 `<cmd> <expected>` 스왑(GREEN).
+>   이 사이클에서 닫지 않되 **§15.1 에 기록**한다 — 다음에 `assert.sh` 를 만지는 사이클의 입력이다.
+
+> ⚠ **순환 금지 — 정본을 검증하는 자리는 정본을 쓰지 않는다** 〔2026-08-17 Task 14 pre-flight 실측〕.
+>
+> **규칙**: `shared/tests/assert.sh` **변경 시 선택되는** 테스트는 자기 판정(`ok`/`no` 계열)에
+> `assert.sh` 를 source 하지 않는다. 쓰면 깨진 정본이 **자기를 잡을 검사 안에서** 도는 꼴이 되어,
+> `no()` 가 세기를 멈추는 종류의 결함이 두 자리 모두를 GREEN 으로 만든다.
+>
+> 실측으로 그 자리는 **정확히 둘**이다:
+>
+> | 파일 | 선택되는 이유 | 지금 상태 |
+> |---|---|---|
+> | `shared/tests/test_assert_behavior.sh` | `# guards: shared/tests/**` | ✅ 이미 격리 — 자체 `t_ok`/`t_no`(:27-28)로 판정하고 `assert.sh` 는 probe 안(:42, :129)에서만 source. **Step 2 도출 범위(`plugins/*`) 밖이라 대상이 아니다** |
+> | `plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh` | `# guards: plugins/** shared/**` (`:2`) | ⚠ 자체 `ok()`/`no()`(:27-28) 보유 → **이관 대상으로 잡힌다. 제외한다** |
+>
+> 이 규칙이 무는 파일은 **하나**다. 나머지 ~124 개는 정상 이관한다.
+>
+> **모집단 정정** 〔같은 pre-flight〕: plan 이 적은 `122`(넓은 목록)는 **브랜치 시작점 `ee1d95f`
+> 기준으로 정확했다**(재측정 122). 지금은 **125** 다 — 이 사이클이 PR1 에서 만든 락 3개
+> (`test_guards_coverage_bidirectional.sh` · `test_guards_declaration_mapping.sh` ·
+> `test_run_own_tests_accumulate.sh`)가 늘어난 것이고, 그중 첫 번째만 위 규칙으로 빠진다.
+> 좁은 목록도 같은 이유로 109 → 112, **차집합 13 은 그대로**(plan 의 수와 일치).
+> **§14 완료 측정의 "자체 헬퍼 정의 파일 수" after 값은 0 이 아니라 1 이 정답이다** — 위 제외 1건.
 
 - [ ] **Step 1: 이관 전 파일별 assertion 호출 수를 잰다**
 
@@ -2463,6 +2540,84 @@ comm -23 <(sort /tmp/t14-targets.txt) /tmp/t14-narrow.txt
    - `check "<msg>" '<cmd>' <N>` → `assert_count_ge '<cmd>' <N> "<msg>"` — **인자 순서가 바뀐다**(msg 가 첫째→마지막). `field` 와 같은 종류의 조용한 실패원이다.
 5. 파일 끝의 자체 집계·종료 줄(`echo "Total: ..."; [ "$fail" -eq 0 ]`)을 `finish`로 바꾼다.
 6. **그 파일 하나를 즉시 돌린다.**
+
+#### 즉시 종료형 2파일 — 가드와 판정을 갈라서 옮긴다 〔2026-08-17 Task 13 리뷰가 적발, 전수 확인〕
+
+> ⚠ **이 절의 첫 판본은 "정확히 둘" 이라고 적었고 그것이 하나를 놓쳤다** 〔2026-08-17 Task 14 리뷰가 적발〕.
+> 도출에 쓴 패턴이 `^\s*(fail|no|bad|err)\s*\(\)\s*\{[^}]*exit [1-9]` 로 **이름을 열거**했는데,
+> 세 번째 멤버의 이름은 **`check`** 였다(`test_skill_orchestration.sh:37`). 결과로 그 파일의
+> `echo "PASS V2b …"` 가 무조건 출력으로 바뀌어 **체크가 실패해도 성공을 서술**하게 됐다
+> (종료 코드는 보존돼 락 손실은 아니었다).
+>
+> **도출은 이름이 아니라 성질로 한다** — *"판정 헬퍼가 `exit` 를 갖는가"*. 이름 목록은 목록을 쓴
+> 사람이 떠올린 이름까지만 덮는다. 같은 실패를 이 사이클이 Task 12 에서 이미 한 번 겪었고
+> (`parents[N]` 만 세다 `.parent.parent` 를 놓침), 그 교훈을 적어 둔 뒤에 다시 반복했다.
+
+이 코퍼스에서 **판정 헬퍼가 `exit` 를 갖는 파일은 셋**이다 (이름은 서로 다르다):
+
+| 파일 | 헬퍼 이름 | 호출 | 성격 |
+|---|---|---|---|
+| `plugins/quality-gates/tests/test_codex_dispatch_invariant.sh:8` | `fail` | 5 (`:16 :27 :32 :41 :48`) | 전부 **판정** — 각각 SKILL.md 의 독립 속성을 본다 |
+| `plugins/quality-gates/tests/test_consent_marker_write_failure.sh:4` | `fail` | 2 | `:12` 은 **가드**(`[ -n "$SNIPPET" ] || fail`) · `:20` 은 판정 |
+| `plugins/quality-gates/tests/test_skill_orchestration.sh:37` | **`check`** | — | 판정. `exit 1` 이 **뒤따르는 성공 서술의 도달 조건**이었다 — 이관 시 그 서술을 함께 지워야 한다 |
+
+**도출은 한 줄 정규식으로 안 된다** 〔실측〕. 함수 본문이 여러 줄이면 헤더 줄에 `exit` 가 없다 —
+문제의 `check()` 가 정확히 그 모양이다(`check() {` 다음 세 줄 뒤에 `exit 1`). 한 줄 패턴
+`\(\)[[:space:]]*\{.*\bexit\b` 는 **12 파일**을 내고 그중에 `check()` 가 **없다.**
+
+**중괄호 깊이로 본문을 떠서 그 안에 `exit` 가 있는지 본다** (BASE 기준 **33 후보**):
+
+```python
+import subprocess, re
+ref = "<BASE SHA>"
+files = [f for f in subprocess.run(["git","ls-tree","-r","--name-only",ref],
+                                   capture_output=True, text=True).stdout.split()
+         if re.search(r'^plugins/.*(^|/)tests?/.*\.sh$', f)
+         and not re.search(r'/(fixtures|mocks|harness)/', f)]
+for f in files:
+    t = subprocess.run(["git","show",f"{ref}:{f}"], capture_output=True, text=True).stdout
+    for m in re.finditer(r'^[ \t]*([a-z_]+)[ \t]*\(\)[ \t]*\{', t, re.M):
+        depth, body = 0, ""
+        for ch in t[m.end()-1:]:
+            if ch == '{': depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0: break
+            body += ch
+        if re.search(r'\bexit\b', body):
+            print(f, m.group(1)); break
+```
+
+33 후보의 대부분은 **판정이 아닌 함수**다 — 픽스처 빌더(`mk_repo`·`mkstub`·`setup`), 윈도우
+추출기(`section_window`·`scoped_window`), 케이스 러너(`run_case`). **후보를 낸 뒤 본문을 읽어
+판정 헬퍼만 고른다**(위 표의 셋). 넓게 잡고 좁히는 방향이 옳다 — 좁게 잡으면 놓친 것이 조용하다.
+
+> **이 명령은 그 자체가 두 번 틀렸다.** 첫 판본은 이름을 열거해 2를 냈고(`check` 누락), 두 번째
+> 판본은 성질로 바꿨으나 **한 줄 정규식**이라 여전히 `check` 를 놓쳤다(12를 냈고 그 안에 없었다).
+> 세 번째가 위 것이다. **도출기를 고칠 때마다 "놓쳤던 그 사례를 지금 잡는가" 를 직접 확인한다** —
+> 수가 늘었다는 것은 그 사례를 잡았다는 증거가 아니다.
+
+**출력 형식 변경은 안전하다** 〔실측〕. 이관하면 stderr→stdout, 접두 `FAIL:`→`  ✗ `, `OK:`→`  ✓ ` 로 바뀌지만
+**그 출력을 파싱하는 소비자가 없다**: qg 셸 어댑터는 `run-test-selection.sh:297` 이 *"exit code 만 읽는다,
+러너별 출력 파서 없이"* 를 규약으로 못박고, `run-own-tests.sh:93` 은 출력을 `/dev/null` 로 버리고 `$?` 만 본다.
+리포 전체에서 `FAIL:` 접두를 grep 하는 스크립트도 없다.
+
+**진짜 위험은 가드다.** `test_consent_marker_write_failure.sh:12` 이 실패하면 `$SNIPPET` 이 비고,
+`exit 1` 이 없으면 `:20` 이 **빈 입력 위에서 돌아 연쇄 허위 실패**를 낸다. 그러면 실패 수가 부풀어
+"이관이 뭔가 깨뜨렸다" 로 읽히는데 실제로는 가드가 사라진 것뿐이다 — 원인이 안 보이는 종류의 오독이다.
+
+| 성격 | 이관 방식 |
+|---|---|
+| **판정** (뒤 줄이 이 결과에 의존하지 않음) | `no "<msg>"` — 세고 계속. 정본 계약대로 |
+| **가드** (실패 시 뒤 줄이 무의미해짐) | `no "<msg>"; finish; exit` — 세고 **거기서 끝낸다.** `finish` 가 non-zero 를 내므로 종료 코드는 보존된다 |
+
+C10 의 "종료 행동도 보존" 은 **스크립트의 최종 판정**(실패가 있으면 non-zero)을 뜻하고, 첫 실패에서
+멈추는 제어 흐름 자체를 뜻하지 않는다 — 설계 §9.2 가 `exit`→계속 전환을 *예상하고* 그것을 위해
+행동 락(`shared/tests/test_assert_behavior.sh`)을 만든 것이 근거다. 위 가드 규칙은 그 전환이
+**뒤 줄을 오염시키는 경우에만** 예외를 둔다.
+
+**검증**: 이관 후 두 파일을 각각 돌려 **실패 수가 이관 전보다 늘지 않는지** 본다. 늘었으면 가드를
+판정으로 잘못 옮긴 것이다. (C10 은 감소를 금하지만, 여기서는 **증가**가 결함의 신호다.)
 
 ```bash
 bash <그 파일> ; echo "rc=$?"
@@ -3424,12 +3579,34 @@ Expected: `--emit-scanned` 지원 락이 1개 이상 도출되고, 두 방향 �
 
 - [ ] **Step 6: 커밋**
 
+**이 락이 실재하게 됐으므로 `shared/README.md` 의 "아직 없는 락" 표에서 이 행 하나를 지운다.**
+그 표는 Task 11 리뷰(2026-08-17)가 *"없는 락을 근거로 내세우는 문서"* 를 막으려고 넣은 것이고,
+락이 생긴 뒤에도 남으면 **정반대 방향의 같은 거짓**이 된다.
+
+**표만 고친다 — 본문 문장은 건드리지 않는다.** 본문은 락이 *검사하는 계약이 무엇인가* 를 현재형으로
+서술하며 파일의 존재를 주장하지 않는다. 존재 여부는 이 표 **한 곳에만** 인코딩돼 있고, 그래서
+동기화 지점이 하나다. 문장을 함께 고치려 들면 그 불변식이 깨진다 (재리뷰 2026-08-17 Q4).
+
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 git status --short   # 픽스처(_copyof_mutation_fixture.sh)가 안 남았는지 마지막으로 확인
-git add shared/tests/test_copy_of_contract.sh
+grep -n '^> |.*test_.*\.sh' shared/README.md   # Expected: 2행. 지울 행을 눈으로 고른다
+# `test_copy_of_contract.sh` **행 하나만** 지운 뒤:
+grep -c '^> |.*test_.*\.sh'            shared/README.md  # Expected: 1  (2 → 1)
+grep -c '^> |.*test_copy_of_contract'  shared/README.md  # Expected: 0  (내 행이 갔다)
+grep -c '^> |.*test_no_new_duplication' shared/README.md # Expected: 1  (Task 35 몫은 남았다)
+grep -c '검사한다'                      shared/README.md  # Expected: 1  (본문 생존 양성증거 — Task 35 와 같은 검사)
+# ↓ 이 파일에 **다른 미커밋 편집이 없을 때만** 유효하다. 있으면 값이 부풀어 오해를 부른다(실측).
+git diff --numstat shared/README.md    # Expected: `0	1` — 본문을 안 건드렸다는 독립 증거
+git add shared/tests/test_copy_of_contract.sh shared/README.md
 git commit -m "test(shared): 동일성 락 — 심볼릭 링크 도미넌스 체크 + copy-of 잔여 + 형제 설정 fail-closed"
 ```
+
+> **앵커를 왜 이 모양으로 쓰나** 〔2026-08-17 4축 mutation 실측〕: `'^> |.*test_.*\.sh'` 는 표의
+> **열 순서를 뒤집어도 · 백틱을 지워도** 같은 수를 내고, **행을 지우면 1 줄고 블록을 지우면 0** 이
+> 된다. 열 문구를 리터럴로 무는 앵커(`` `test_x.sh` | plan Task 16 ``)는 누가 표기를 바꾸면
+> **편집 전에도 0** 이라 "지웠다" 와 "애초에 못 찾았다" 를 구분하지 못한 채 통과한다 —
+> 이 리포가 이미 겪은 헤더-satisfiable 클래스다. `--numstat` 은 본문 미변경의 독립 증거다.
 
 - [ ] **Step 7: Task 17이 이 락을 못 불러 미뤄 둔 두 단언을 여기서 갚는다** (B.4 5b)
 
@@ -6409,10 +6586,28 @@ Expected: **두 파일 모두** 실행 목록에 나온다. 후보에만 있고 
 
 - [ ] **Step 6: 커밋**
 
+**이 락이 마지막이다 — `shared/README.md` 의 "아직 없는 락" 표에서 마지막 행을 지우고, 표가 비므로
+그 경고 블록을 통째로 지운다.** Task 16 이 자기 행을 이미 지웠으므로 여기 남은 것은 이 락의 행 하나다.
+
+**여기서도 본문 문장은 건드리지 않는다.** 본문은 처음부터 현재형이고 락이 검사하는 계약을 서술할
+뿐이다 — 존재 여부는 표에만 있었고, 그 표가 사라지면 그것으로 끝이다. 미래형 표현을 되돌리는
+작업은 **없다**(애초에 만들지 않았다, 재리뷰 2026-08-17 Q4).
+
 ```bash
-git add shared/tests/test_no_new_duplication.sh
+cd /Users/jeonghokim/Downloads/devbrew
+grep -c '^> |.*test_.*\.sh' shared/README.md   # 시작 Expected: 1 — 0 이면 Task 16 이 블록째 지웠다는 뜻이니 멈추고 확인
+# 마지막 행 + 경고 블록(`> ` 로 시작하는 연속 줄)을 지운 뒤:
+grep -c '^> |.*test_.*\.sh' shared/README.md   # Expected: 0
+grep -c '아직 없는 락'       shared/README.md   # Expected: 0  (블록이 갔다)
+grep -c '검사한다'           shared/README.md   # Expected: 1  (본문은 그대로 — 지우지 않았다는 증거)
+git ls-files shared/tests/                      # Expected: assert.sh · 두 락 · test_assert_behavior.sh (.gitkeep 없음)
+git add shared/tests/test_no_new_duplication.sh shared/README.md
 git commit -m "test(shared): 20줄 블록 검사 — 새 중복 유입 방지 + 심볼릭 링크·마커 예외 각각의 mutation 증명"
 ```
+
+> **`검사한다` 를 세는 이유**: 블록만 지워야 하는데 절 전체를 날려도 위 세 검사는 전부 Expected 를
+> 만족한다(0·0). 본문이 살아 있다는 **양성 증거**가 없으면 이 스텝은 "지웠다" 와 "너무 많이
+> 지웠다" 를 구분하지 못한다 — 부재 검사에는 존재 검사가 짝으로 필요하다.
 
 ---
 
