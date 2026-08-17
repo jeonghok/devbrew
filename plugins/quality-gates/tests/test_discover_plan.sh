@@ -6,28 +6,10 @@
 set -u
 
 SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/scripts/discover-plan.sh"
-PASS=0
-FAIL=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
-note() { echo "  → $1"; }
 
-assert_eq() {
-  local actual="$1" expected="$2" msg="$3"
-  if [[ "$actual" == "$expected" ]]; then
-    PASS=$((PASS + 1)); note "PASS: $msg"
-  else
-    FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $msg (got '$actual', expected '$expected')"
-  fi
-}
 
-assert_contains() {
-  local haystack="$1" needle="$2" msg="$3"
-  if [[ "$haystack" == *"$needle"* ]]; then
-    PASS=$((PASS + 1)); note "PASS: $msg"
-  else
-    FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $msg (string '$needle' not in '$haystack')"
-  fi
-}
 
 # Helper: build a tmp HOME + project root, run script, capture stdout + exit code
 run_in_env() {
@@ -153,6 +135,4 @@ assert_contains "$OUT" "requires a path argument" "T10: reason mentions path arg
 cd / && rm -rf "$TMPDIR"
 
 # --- Summary ---
-echo
-echo "Results: $PASS passed, $FAIL failed"
-[[ "$FAIL" -eq 0 ]]
+finish

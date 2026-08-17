@@ -4,9 +4,8 @@ set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 SCRIPT="$PLUGIN_ROOT/scripts/build-pr-context.sh"
-PASS=0; FAIL=0; REPO=""
-pass() { PASS=$((PASS+1)); echo "  → PASS: $1"; }
-fail() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+REPO=""
 
 mk_repo() {
   REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
@@ -24,9 +23,9 @@ case_blob_has_content() {
   if printf '%s' "$out" | grep -qF "def handler():" \
      && printf '%s' "$out" | grep -qF "add api handler" \
      && printf '%s' "$out" | grep -qF "branch: feature"; then
-    pass "blob includes changed content + commit subject + branch"
+    ok "blob includes changed content + commit subject + branch"
   else
-    fail "blob content (got head: $(printf '%s' "$out" | head -20))"
+    no "blob content (got head: $(printf '%s' "$out" | head -20))"
   fi
   cd / && rm -rf "$REPO"
 }
@@ -35,9 +34,9 @@ case_blob_has_neighbor_signature() {
   mk_repo
   local out; out=$(bash "$SCRIPT" --base main)
   if printf '%s' "$out" | grep -qF "def base()"; then
-    pass "neighbor signature (unchanged db.py def) surfaced"
+    ok "neighbor signature (unchanged db.py def) surfaced"
   else
-    fail "neighbor signature missing"
+    no "neighbor signature missing"
   fi
   cd / && rm -rf "$REPO"
 }
@@ -45,7 +44,7 @@ case_blob_has_neighbor_signature() {
 case_deterministic() {
   mk_repo
   local a b; a=$(bash "$SCRIPT" --base main); b=$(bash "$SCRIPT" --base main)
-  if [[ "$a" == "$b" ]]; then pass "byte-identical across runs"; else fail "non-deterministic"; fi
+  if [[ "$a" == "$b" ]]; then ok "byte-identical across runs"; else no "non-deterministic"; fi
   cd / && rm -rf "$REPO"
 }
 
@@ -61,9 +60,9 @@ case_rename_modify_in_corpus() {
   git add -A; git commit -qm "rename and modify"
   local out; out=$(bash "$SCRIPT" --base main)
   if printf '%s' "$out" | grep -qF "MARKER_RENAME_MOD"; then
-    pass "renamed+modified file content present in blob (corpus completeness)"
+    ok "renamed+modified file content present in blob (corpus completeness)"
   else
-    fail "rename+modify content dropped from blob (got: $(printf '%s' "$out" | head -30))"
+    no "rename+modify content dropped from blob (got: $(printf '%s' "$out" | head -30))"
   fi
   cd / && rm -rf "$REPO"
 }
@@ -77,9 +76,9 @@ case_binary_skipped() {
   git add -A; git commit -qm "add binary"
   local out; out=$(bash "$SCRIPT" --base main)
   if printf '%s' "$out" | grep -qF "(binary omitted)"; then
-    pass "binary file labeled (binary omitted), no garbage in blob"
+    ok "binary file labeled (binary omitted), no garbage in blob"
   else
-    fail "binary handling (got head: $(printf '%s' "$out" | head -20))"
+    no "binary handling (got head: $(printf '%s' "$out" | head -20))"
   fi
   cd / && rm -rf "$REPO"
 }
@@ -95,8 +94,8 @@ case_history_flag_includes_intermediate_secret() {
   local plain hist
   plain=$(bash "$SCRIPT" --base main); hist=$(bash "$SCRIPT" --base main --history)
   if ! printf '%s' "$plain" | grep -q "ghp_intermediate" && printf '%s' "$hist" | grep -q "ghp_intermediate"; then
-    pass "--history surfaces intermediate-commit content the default blob omits"
-  else fail "history flag (plain-has=$(printf '%s' "$plain"|grep -c ghp_intermediate) hist-has=$(printf '%s' "$hist"|grep -c ghp_intermediate))"; fi
+    ok "--history surfaces intermediate-commit content the default blob omits"
+  else no "history flag (plain-has=$(printf '%s' "$plain"|grep -c ghp_intermediate) hist-has=$(printf '%s' "$hist"|grep -c ghp_intermediate))"; fi
   cd / && rm -rf "$REPO"
 }
 case_no_merge_base_degrades() {
@@ -107,8 +106,8 @@ case_no_merge_base_degrades() {
   echo b > b.txt; git add -A; git commit -qm b
   local out rc; out=$(bash "$SCRIPT" --base main 2>&1); rc=$?
   if [[ "$rc" -eq 0 ]] && printf '%s' "$out" | grep -qi 'degraded'; then
-    pass "no merge-base → graceful degrade (exit 0)"
-  else fail "no-merge-base (rc=$rc)"; fi
+    ok "no merge-base → graceful degrade (exit 0)"
+  else no "no-merge-base (rc=$rc)"; fi
   cd / && rm -rf "$REPO"
 }
 
@@ -119,5 +118,4 @@ case_rename_modify_in_corpus
 case_binary_skipped
 case_history_flag_includes_intermediate_secret
 case_no_merge_base_degrades
-echo "build-pr-context: $PASS passed, $FAIL failed"
-[[ "$FAIL" -eq 0 ]]
+finish

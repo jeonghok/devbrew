@@ -9,9 +9,7 @@ SKILL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 RTS="$PLUGIN_ROOT/scripts/run-test-selection.sh"
 TAB=$'\t'
 
-PASS=0; FAIL=0
-pass() { PASS=$((PASS + 1)); echo "  → PASS: $1"; }
-fail() { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # section_window <start-anchor> <end-anchor> → 두 앵커 사이의 본문
 # 락 문구를 섹션 윈도우 안에서 찾는 이유: 문서 아무 데나 있는 같은 단어가
@@ -35,7 +33,7 @@ case_unclaimed_row_is_produced() {
   mkdir -p "$w/tests"; : > "$w/tests/test_a.py"
   local out; out=$(printf 'spec/a_spec.rb\n' | bash "$RTS" assign "$w")
   [[ "$out" == "spec/a_spec.rb${TAB}unclaimed${TAB}file" ]] \
-    && pass "미지원 레포 → unclaimed 행 산출" || fail "unclaimed 미산출 ($out)"
+    && ok "미지원 레포 → unclaimed 행 산출" || no "unclaimed 미산출 ($out)"
   rm -rf "$w"
 }
 
@@ -43,7 +41,7 @@ case_unclaimed_row_is_produced() {
 case_runner_absent_is_distinguishable() {
   local w; w=$(mktemp -d); mkdir -p "$w/tests"; : > "$w/tests/test_a.py"
   local rc; bash "$RTS" run "$w" cargo bulk BULK >/dev/null 2>&1; rc=$?
-  [[ $rc -eq 3 ]] && pass "영향분 러너 부재 → exit 3 (gap과 구별 가능)" || fail "exit 3 아님 ($rc)"
+  [[ $rc -eq 3 ]] && ok "영향분 러너 부재 → exit 3 (gap과 구별 가능)" || no "exit 3 아님 ($rc)"
   rm -rf "$w"
 }
 
@@ -73,8 +71,8 @@ case_rinit_discriminator_table() {
     ok=0; echo "    (regress) 포괄 형태가 R-init 창에 재등장"
   fi
 
-  [[ $ok -eq 1 ]] && pass "R-init 판별자 표: clean→PASS불가 · dirty→정상진행 · 포괄형태 0회" \
-    || fail "R-init 판별자 표 락"
+  [[ $ok -eq 1 ]] && ok "R-init 판별자 표: clean→PASS불가 · dirty→정상진행 · 포괄형태 0회" \
+    || no "R-init 판별자 표 락"
 }
 
 # T67 — R4 가 판별자를 **자기 스텝 안에서** 구한다 (/qg iter-5, SF3).
@@ -91,8 +89,8 @@ case_r4_resolves_discriminator_itself() {
   # degraded 를 dirty 로 접는 fail-closed 규칙 (모름 → 실행)
   printf '%s\n' "$w" | grep -qE '^\|[[:space:]]*yes[[:space:]]*\|.*degraded: yes.*\|.*R4 실행' \
     || { ok=0; echo "    (miss) degraded: yes → R4 실행 행"; }
-  [[ $ok -eq 1 ]] && pass "R4 가 판별자를 자기 스텝에서 구하고 degraded 를 dirty 로 접는다" \
-    || fail "R4 판별자 자립 락"
+  [[ $ok -eq 1 ]] && ok "R4 가 판별자를 자기 스텝에서 구하고 degraded 를 dirty 로 접는다" \
+    || no "R4 판별자 자립 락"
 }
 
 # T68 — 좁힌 규칙의 **원래 형태가 문서 어디에도 인용 가능한 채로 남지 않는다** (∀).
@@ -122,8 +120,8 @@ case_same_as_head_never_unqualified() {
       *) bad=$((bad+1)); echo "    (unqualified) ${line:0:96}" ;;
     esac
   done < "$SKILL"
-  [[ $bad -eq 0 ]] && pass "same_as_head 를 스킵/PASS 사유로 쓰는 모든 줄이 한정어 동반 (∀)" \
-    || fail "한정어 없는 same_as_head 진술 ${bad}줄"
+  [[ $bad -eq 0 ]] && ok "same_as_head 를 스킵/PASS 사유로 쓰는 모든 줄이 한정어 동반 (∀)" \
+    || no "한정어 없는 same_as_head 진술 ${bad}줄"
 }
 
 # ── (ii) SKILL.md 산문 락 (섹션 윈도우 + body-unique) ─────────────────────────
@@ -135,8 +133,8 @@ case_skill_unclaimed_blocks_pass() {
   local w; w=$(section_window '**Step R8' '## Blocked-path routing')
   if [[ $(count_in "$w" '가 하나라도 있으면 `verification: degraded` 이고 verdict 를 PASS 로 올리지 않는다') -ge 1 ]] \
      && [[ $(count_in "$w" '열거가 인증을 대신하지 않는다') -ge 1 ]]; then
-    pass "R8 절이 unclaimed → verification degraded → PASS 불가를 명시"
-  else fail "R8 절에 unclaimed 라우팅 규칙 부재"; fi
+    ok "R8 절이 unclaimed → verification degraded → PASS 불가를 명시"
+  else no "R8 절에 unclaimed 라우팅 규칙 부재"; fi
 }
 
 # M19 + T40 + AC44: 영향분 러너 부재(exit 3)는 **PASS 불가 행**에 있어야 한다.
@@ -146,9 +144,9 @@ case_skill_unclaimed_blocks_pass() {
 case_skill_runner_absent_blocks_pass() {
   local w; w=$(section_window '**Step R8' '## Blocked-path routing')
   if printf '%s\n' "$w" | grep -F '러너 부재 exit 3' | grep -qF '**불가**'; then
-    pass "영향분 러너 부재(exit 3)가 PASS 불가 행에 있다"
+    ok "영향분 러너 부재(exit 3)가 PASS 불가 행에 있다"
   else
-    fail "러너 부재 exit 3 이 PASS 불가 행에 없음 (gap: closed 행으로 새면 M19)"
+    no "러너 부재 exit 3 이 PASS 불가 행에 없음 (gap: closed 행으로 새면 M19)"
   fi
 }
 
@@ -156,8 +154,8 @@ case_skill_runner_absent_blocks_pass() {
 case_skill_zero_impact_is_skip() {
   local w; w=$(section_window '**Step R8' '## Blocked-path routing')
   [[ $(count_in "$w" '영향분 0개 → `SKIP_WITH_EVIDENCE`') -ge 1 ]] \
-    && pass "영향분 0개 → SKIP_WITH_EVIDENCE (정확 토큰)" \
-    || fail "영향분 0개 규칙 부재/토큰 불일치"
+    && ok "영향분 0개 → SKIP_WITH_EVIDENCE (정확 토큰)" \
+    || no "영향분 0개 규칙 부재/토큰 불일치"
 }
 
 # T26 + M5 + M15 + AC35: 확증 제품결함이 terminal이고 degrade가 함께 기록된다
@@ -165,16 +163,16 @@ case_skill_precedence_total_order() {
   local w; w=$(section_window '**Step R8' '## Blocked-path routing')
   if [[ $(count_in "$w" '확증 제품결함(FAIL, terminal)  >  NEEDS_RESOLUTION  >  SKIP_WITH_EVIDENCE  >  PASS') -eq 1 ]] \
      && [[ $(count_in "$w" 'degrade 사실은 원장과 보고서에 함께 기록된다') -ge 1 ]]; then
-    pass "verdict 총 순서 1회 + degrade 동시 기록 명시"
-  else fail "verdict 총 순서 / degrade 동시 기록 락 실패"; fi
+    ok "verdict 총 순서 1회 + degrade 동시 기록 명시"
+  else no "verdict 총 순서 / degrade 동시 기록 락 실패"; fi
 }
 
 # T21 + M6 + AC12: 재실행은 정확히 1회 (무한 재실행이 false green 경로)
 case_skill_rerun_exactly_once() {
   local w; w=$(section_window '**Step R6' '**Step R7')
   if [[ $(count_in "$w" '재실행은 정확히 1회다 — green 이 나올 때까지가 아니다') -eq 1 ]]; then
-    pass "재실행 1회 잠금 문장 존재 (body-unique)"
-  else fail "재실행 1회 문장 부재/중복"; fi
+    ok "재실행 1회 잠금 문장 존재 (body-unique)"
+  else no "재실행 1회 문장 부재/중복"; fi
 }
 
 # T8 + AC10: bulk green이면 per-unit 재실행을 하지 않는다 (2단 구조)
@@ -195,8 +193,8 @@ case_skill_two_stage() {
   # 흡수되므로 그쪽이 빠져도 인증이 늘지 않는다.)
   [[ $(count_in "$w" 'red 일 때만 실패한 unit 에 대해 `per-unit` 으로 재실행한다') -ge 1 ]] \
     || missing="$missing red방향"
-  [[ -z "$missing" ]] && pass "2단 구조 **양방향** 명시 (green→재실행 0회 / red→실패분만 per-unit)" \
-                      || fail "2단 구조 문장 부재:$missing"
+  [[ -z "$missing" ]] && ok "2단 구조 **양방향** 명시 (green→재실행 0회 / red→실패분만 per-unit)" \
+                      || no "2단 구조 문장 부재:$missing"
 }
 
 # T28 + AC19: 계획 산문 6필드가 R2 절에 열거된다
@@ -207,9 +205,9 @@ case_skill_plan_prose_six_fields() {
            '비용 신호' '무엇을 안 돌리나' 'CI 와 다르면'; do
     [[ $(count_in "$w" "$f") -ge 1 ]] || { echo "    누락 필드: $f"; missing=1; }
   done
-  [[ $missing -eq 0 ]] && pass "계획 산문 6필드 전부 R2에 존재" || fail "계획 산문 필드 누락"
+  [[ $missing -eq 0 ]] && ok "계획 산문 6필드 전부 R2에 존재" || no "계획 산문 필드 누락"
   [[ $(count_in "$w" '개 선택 (전체 ') -ge 1 ]] \
-    && pass "선택 비율 포맷 \`N개 선택 (전체 M개 중)\`" || fail "선택 비율 포맷 부재"
+    && ok "선택 비율 포맷 \`N개 선택 (전체 M개 중)\`" || no "선택 비율 포맷 부재"
 }
 
 # T55 + AC57: 비용 신호는 3단계 범주값이고 숫자 시간 추정을 쓰지 않는다
@@ -219,17 +217,17 @@ case_skill_cost_signal_categorical() {
   for c in '즉시' '수 분' '설치 포함'; do
     [[ $(count_in "$w" "$c") -ge 1 ]] || { echo "    누락 등급: $c"; ok=0; }
   done
-  [[ $ok -eq 1 ]] && pass "비용 등급 3단계 존재" || fail "비용 등급 누락"
+  [[ $ok -eq 1 ]] && ok "비용 등급 3단계 존재" || no "비용 등급 누락"
   # 숫자 시간 추정(예: "약 3분", "5 min")이 R2 절에 없어야 한다.
   # 단위 토큰에 bare `s` 를 넣지 않는다 — "R5b" 같은 식별자를 오탐한다.
   # 빈 윈도우 가드: 앵커가 어긋나 윈도우가 비면 이 **음의** 락은 공허하게 통과한다
   # (양의 락들과 달리 부재를 재는 락이라 스스로 못 알아챈다).
   if [[ -z "$w" ]]; then
-    fail "R2 윈도우가 비어 있음 — 음의 락이 공허하게 통과할 뻔했다"
+    no "R2 윈도우가 비어 있음 — 음의 락이 공허하게 통과할 뻔했다"
   elif printf '%s\n' "$w" | grep -qE '(약[[:space:]]+)?[0-9]+[[:space:]]*(초|분|시간|sec|min|hour)'; then
-    fail "R2 절에 숫자 시간 추정이 있음"
+    no "R2 절에 숫자 시간 추정이 있음"
   else
-    pass "숫자 시간 추정 0회 (추정기가 없으므로 지어낸 숫자가 된다)"
+    ok "숫자 시간 추정 0회 (추정기가 없으므로 지어낸 숫자가 된다)"
   fi
 }
 
@@ -238,8 +236,8 @@ case_skill_gap_gate_zero_click() {
   local w; w=$(section_window '**Step R3' '**Step R4')
   if [[ $(count_in "$w" '생략 목록이 비어 있으면 `AskUserQuestion` 을 발화하지 않는다') -ge 1 ]] \
      && [[ $(count_in "$w" 'zero-click') -ge 1 ]]; then
-    pass "생략 0 → zero-click 조건 명시"
-  else fail "zero-click 조건 부재"; fi
+    ok "생략 0 → zero-click 조건 명시"
+  else no "zero-click 조건 부재"; fi
 }
 
 # T46 + AC49: bulk 어댑터의 커버리지 미보장 공시가 R2와 R8 **양쪽**에 있다
@@ -249,8 +247,8 @@ case_skill_bulk_disclosure() {
   w8=$(section_window '**Step R8' '## Blocked-path routing')
   if [[ $(count_in "$w2" '커버리지 미보장(러너가 선택을 무시함)') -ge 1 ]] \
      && [[ $(count_in "$w8" '커버리지 미보장(러너가 선택을 무시함)') -ge 1 ]]; then
-    pass "bulk 커버리지 미보장 공시가 계획 산문과 보고서 양쪽에"
-  else fail "bulk 공시 누락 (R2=$(count_in "$w2" '커버리지 미보장(러너가 선택을 무시함)') R8=$(count_in "$w8" '커버리지 미보장(러너가 선택을 무시함)'))"; fi
+    ok "bulk 커버리지 미보장 공시가 계획 산문과 보고서 양쪽에"
+  else no "bulk 공시 누락 (R2=$(count_in "$w2" '커버리지 미보장(러너가 선택을 무시함)') R8=$(count_in "$w8" '커버리지 미보장(러너가 선택을 무시함)'))"; fi
 }
 
 # ── fix round 1 이 닫은 세 개의 fail-open 을 지키는 락 ────────────────────────
@@ -262,7 +260,7 @@ case_skill_bulk_disclosure() {
 # 표를 쪼개 한쪽만 남겨도 통과한다(값의 부재를 음성 결과로 읽는 바로 그 실패).
 case_skill_r6_error_never_passes() {
   local w; w=$(section_window '**Step R6' '**Step R7')
-  [[ -n "$w" ]] || { fail "R6 윈도우가 비어 있음 (앵커 미스 — 아래 락이 공허해진다)"; return; }
+  [[ -n "$w" ]] || { no "R6 윈도우가 비어 있음 (앵커 미스 — 아래 락이 공허해진다)"; return; }
   local bad=0
   [[ $(count_in "$w" '**R6 exit-code routing') -ge 1 ]] \
     || { echo "    누락: R6 exit-code 라우팅 절"; bad=1; }
@@ -271,8 +269,8 @@ case_skill_r6_error_never_passes() {
   printf '%s\n' "$w" | grep -F '그 외 non-zero' | grep -F '**`degraded`** 로 적은 뒤' \
     | grep -qF 'verdict 를 PASS 로 올리지 않는다' \
     || { echo "    누락: 오류 행이 같은 줄에서 degraded + PASS 불가로 라우팅"; bad=1; }
-  [[ $bad -eq 0 ]] && pass "R6: 실패한 대조/집계 → degraded, PASS 불가" \
-                   || fail "R6 exit-code 라우팅 락 실패"
+  [[ $bad -eq 0 ]] && ok "R6: 실패한 대조/집계 → degraded, PASS 불가" \
+                   || no "R6 exit-code 라우팅 락 실패"
 }
 
 # I2 회귀 락: NEEDS_RESOLUTION 재시도가 R5b·R6 를 다시 돌고 옛 HEAD 행을 버린다.
@@ -280,7 +278,7 @@ case_skill_r6_error_never_passes() {
 # 서거나(거짓 FAIL) 옛 green 이 재시도가 만든 회귀를 가린다.
 case_skill_retry_reruns_r5b_r6() {
   local w; w=$(section_window '- **Yes, retry**' '- **Skip with evidence**')
-  [[ -n "$w" ]] || { fail "재시도 윈도우가 비어 있음 (앵커 미스)"; return; }
+  [[ -n "$w" ]] || { no "재시도 윈도우가 비어 있음 (앵커 미스)"; return; }
   local bad=0
   [[ $(count_in "$w" '재시도는 R5b·R6 도 다시 돈다') -ge 1 ]] \
     || { echo "    누락: 재시도가 R5b·R6 를 다시 돈다는 규칙"; bad=1; }
@@ -303,8 +301,8 @@ case_skill_retry_reruns_r5b_r6() {
       a = index(p, "R5b("); b = index(p, "→ R6("); c = index(p, "→ R7 → R8")
       exit !(a > 0 && b > a && c > b)
     }' || { echo "    누락/역전: R5b → R6 → R7 → R8 순서"; bad=1; }
-  [[ $bad -eq 0 ]] && pass "재시도가 R5b → R6 → R7 → R8 를 다시 돌고 옛 HEAD 행을 버린다" \
-                   || fail "재시도 순서 락 실패"
+  [[ $bad -eq 0 ]] && ok "재시도가 R5b → R6 → R7 → R8 를 다시 돌고 옛 HEAD 행을 버린다" \
+                   || no "재시도 순서 락 실패"
 }
 
 # I3 회귀 락: fallback working-tree guard 의 **실행 가능한** 두 명세.
@@ -315,7 +313,7 @@ case_skill_fallback_treehash_guard() {
   local w1 w7 bad=0
   w1=$(section_window '**Step R5a¹' '**Step R5a²')
   w7=$(section_window '**Step R7' '**Step R8')
-  [[ -n "$w1" && -n "$w7" ]] || { fail "R5a¹/R7 윈도우가 비어 있음 (앵커 미스)"; return; }
+  [[ -n "$w1" && -n "$w7" ]] || { no "R5a¹/R7 윈도우가 비어 있음 (앵커 미스)"; return; }
   [[ $(count_in "$w1" 'GIT_INDEX_FILE=<tmp>') -ge 1 ]] \
     || { echo "    누락: fallback_pre tree-hash 레시피(GIT_INDEX_FILE)"; bad=1; }
   [[ $(count_in "$w1" 'write-tree') -ge 1 ]] \
@@ -324,15 +322,15 @@ case_skill_fallback_treehash_guard() {
     || { echo "    누락: fallback_post 가 같은 레시피라는 명시"; bad=1; }
   [[ $(count_in "$w7" 'that is not in `fallback_pre`, **or** a differing tree-hash') -ge 1 ]] \
     || { echo "    누락: 변경 판정 술어(porcelain 신규 항목 or tree-hash 상이)"; bad=1; }
-  [[ $bad -eq 0 ]] && pass "fallback tree-hash guard: 레시피 + 비교 술어 양쪽 생존" \
-                   || fail "fallback tree-hash guard 락 실패"
+  [[ $bad -eq 0 ]] && ok "fallback tree-hash guard: 레시피 + 비교 술어 양쪽 생존" \
+                   || no "fallback tree-hash guard 락 실패"
 }
 
 # AC47: 기준선 트리에서 detect를 **재실행**한다 (HEAD 집합 재사용 금지)
 case_skill_both_side_detect() {
   local w; w=$(section_window '**Step R4' '**Step R5a')
   [[ $(count_in "$w" 'HEAD 의 어댑터 집합을 재사용하지 않는다') -ge 1 ]] \
-    && pass "기준선 트리 재감지 명시" || fail "양측 재감지 문장 부재"
+    && ok "기준선 트리 재감지 명시" || no "양측 재감지 문장 부재"
 }
 
 # T73 — R4②-a 의 `probe` 스텝에 락 (/qg iter-5 CRITICAL SR1).
@@ -348,7 +346,7 @@ case_skill_both_side_detect() {
 # 있을 때만"), 같은 최적화가 probe 에 붙는 것을 명시적으로 막는 문장을 잠근다.
 case_r4_probe_step_is_locked() {
   local win; win=$(section_window '②-a **감지된 러너마다' '그다음 어댑터마다')
-  if [[ -z "$win" ]]; then fail "R4②-a 섹션 윈도우가 비었다 (앵커 소실)"; return; fi
+  if [[ -z "$win" ]]; then no "R4②-a 섹션 윈도우가 비었다 (앵커 소실)"; return; fi
   local bad=0
   # ① 실제 호출 — 산문이 아니라 실행 가능한 커맨드가 있어야 한다.
   [[ $(count_in "$win" 'run-test-selection.sh" probe "$baseline_wt" "$runner"') -ge 1 ]] \
@@ -365,8 +363,8 @@ case_r4_probe_step_is_locked() {
   #    있으므로 그것으로 재면 ②-a 를 통째로 지워도 통과한다(헤더-satisfiable 함정).
   [[ $(count_in "$win" '조건을 붙이지 않는다') -ge 1 ]] \
     || { bad=1; echo "    (누락) probe 무조건성 선언"; }
-  [[ $bad -eq 0 ]] && pass "R4②-a: probe 호출 · 소비 규칙 2방향 · 무조건성 (4축)" \
-    || fail "R4②-a probe 스텝 결손"
+  [[ $bad -eq 0 ]] && ok "R4②-a: probe 호출 · 소비 규칙 2방향 · 무조건성 (4축)" \
+    || no "R4②-a probe 스텝 결손"
 }
 
 # T74 — **`baseline_detected` 의 출처를 `detect` 로 되돌리는 진술이 없다 (∀).**
@@ -396,9 +394,9 @@ case_baseline_detected_source_is_probe_forall() {
   local positive=0
   grep -qF 'probe` 가 기준선 트리에서 **`usable: yes`**' "$SKILL" && positive=1
   if [[ $bad -eq 0 && $positive -eq 1 ]]; then
-    pass "baseline_detected 출처 = probe (∀ 위반 0 + 양의 짝 실재)"
+    ok "baseline_detected 출처 = probe (∀ 위반 0 + 양의 짝 실재)"
   else
-    fail "출처 진술: 위반 ${bad}줄 · 양의 짝 ${positive}"
+    no "출처 진술: 위반 ${bad}줄 · 양의 짝 ${positive}"
   fi
 }
 
@@ -410,7 +408,7 @@ case_baseline_detected_source_is_probe_forall() {
 # 그것을 막고 있었지만, **막는 것이 표가 아니면 표를 읽는 소비자는 통과시킨다.**
 case_pass_row_reads_all_three_flags() {
   local row; row=$(grep -F '| `PASS` |' "$SKILL")
-  if [[ -z "$row" ]]; then fail "R8 PASS 행을 못 찾음 (앵커 소실)"; return; fi
+  if [[ -z "$row" ]]; then no "R8 PASS 행을 못 찾음 (앵커 소실)"; return; fi
   local missing="" k
   # /qg iter-6 E3: 앞선 판본은 **정확히 이 4토큰만** 열거하고 멈췄다. 그래서 PASS 행에서
   # `floor 5차원 전부 closed` 절을 **통째로 지워도** 스위트 전체가 GREEN 이었다(실측:
@@ -428,8 +426,8 @@ case_pass_row_reads_all_three_flags() {
   else
     printf '%s\n' "$skip_row" | grep -qF '어느 floor 차원이' || missing="$missing SKIP행-floor-disjunct"
   fi
-  [[ -z "$missing" ]] && pass "R8 PASS 행이 floor 절 + verdict_input 3플래그 + forced_downgrade 를, SKIP 행이 floor disjunct 를 요구" \
-    || fail "R8 판정표 누락:$missing"
+  [[ -z "$missing" ]] && ok "R8 PASS 행이 floor 절 + verdict_input 3플래그 + forced_downgrade 를, SKIP 행이 floor disjunct 를 요구" \
+    || no "R8 판정표 누락:$missing"
 }
 
 # T77 — `FLAKY` 는 **귀속 카테고리가 아니다** (/qg iter-5 SF2).
@@ -448,7 +446,7 @@ case_flaky_is_a_note_not_a_category() {
   # 음의 락은 빈 코퍼스 위에서 언제나 참이다.
   local missing_cat="" c
   if [[ ! -f "$py" ]]; then
-    fail "diff-test-results.py 부재 ($py) — FLAKY 음의 락이 공허하게 통과할 뻔했다"
+    no "diff-test-results.py 부재 ($py) — FLAKY 음의 락이 공허하게 통과할 뻔했다"
   else
     # 8종 닫힌 집합이 실제로 그 파일에 있는가. 이것이 "코퍼스를 읽었다"의 증거이자,
     # 카테고리를 전부 지우는 mutation 을 음의 락 단독이 놓치는 것을 막는 짝이다.
@@ -457,18 +455,18 @@ case_flaky_is_a_note_not_a_category() {
       grep -qF "$c" "$py" || missing_cat="$missing_cat $c"
     done
     if [[ -n "$missing_cat" ]]; then
-      fail "산출 스크립트에서 카테고리 누락:$missing_cat (코퍼스가 기대와 다르다)"
+      no "산출 스크립트에서 카테고리 누락:$missing_cat (코퍼스가 기대와 다르다)"
     elif grep -qF 'FLAKY' "$py"; then
-      fail "diff-test-results.py 가 FLAKY 를 언급 — 카테고리 계약(8종)과 충돌"
+      no "diff-test-results.py 가 FLAKY 를 언급 — 카테고리 계약(8종)과 충돌"
     else
-      pass "산출 스크립트에 FLAKY 0회 + 카테고리 실재 (코퍼스 확인된 음의 락)"
+      ok "산출 스크립트에 FLAKY 0회 + 카테고리 실재 (코퍼스 확인된 음의 락)"
     fi
   fi
   # 양의 짝 — 재실행 규칙이 **기록 위치를 지정**해야 한다. 지정 없이 토큰만 지우면
   # flaky 관측이 아무 데도 안 남는다.
   grep -qF 'derived: flaky' "$SKILL" \
-    && pass "SKILL 이 flaky 를 원장 note(derived:)로 기록하도록 지시" \
-    || fail "flaky 기록 위치 미지정 — 관측이 사라진다"
+    && ok "SKILL 이 flaky 를 원장 note(derived:)로 기록하도록 지시" \
+    || no "flaky 기록 위치 미지정 — 관측이 사라진다"
 }
 
 # T78 — 폴백에서 R4 를 건너뛴다 (/qg iter-5 SR4).
@@ -479,7 +477,7 @@ case_flaky_is_a_note_not_a_category() {
 # 생성 + 전체 스위트 실행을 대가로 **아무것도 얻지 못한다.**
 case_r4_skipped_in_fallback() {
   local win; win=$(section_window '**Step R4 — 기준선 측' '① 캐시 조회')
-  if [[ -z "$win" ]]; then fail "R4 섹션 윈도우가 비었다 (앵커 소실)"; return; fi
+  if [[ -z "$win" ]]; then no "R4 섹션 윈도우가 비었다 (앵커 소실)"; return; fi
   # needle 은 **body-unique** 여야 한다. `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX`(3회)와
   # `unrun\t-`(3회)는 같은 창의 *다른* 스킵 규칙(same_as_head × clean)에도 있어서,
   # 그것으로 재면 이 SR4 문단을 통째로 지워도 GREEN 이다(실측 — N6·N7 mutation).
@@ -492,8 +490,8 @@ case_r4_skipped_in_fallback() {
   # 건너뛸 때의 행 채우기 — 빈 파일을 넘기면 SILENT_DROP 으로 오라벨된다.
   [[ $(count_in "$win" '고른 것이 사라졌다"로 잘못 보고된다') -ge 1 ]] \
     || { bad=1; echo "    (누락) 스킵 시 unrun 행 채우기 (빈 파일 금지)"; }
-  [[ $bad -eq 0 ]] && pass "R4: 폴백 스킵 판별자 + unrun 행 채우기" \
-    || fail "R4 폴백 스킵 규칙 결손"
+  [[ $bad -eq 0 ]] && ok "R4: 폴백 스킵 판별자 + unrun 행 채우기" \
+    || no "R4 폴백 스킵 규칙 결손"
 }
 
 for c in case_unclaimed_row_is_produced case_runner_absent_is_distinguishable \
@@ -512,5 +510,4 @@ for c in case_unclaimed_row_is_produced case_runner_absent_is_distinguishable \
          case_r4_skipped_in_fallback; do
   echo "== $c"; $c
 done
-echo "── runtime verdict precedence: $PASS passed, $FAIL failed"
-[[ $FAIL -eq 0 ]]
+finish

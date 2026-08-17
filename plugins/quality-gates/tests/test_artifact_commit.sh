@@ -3,9 +3,7 @@
 set -u
 SCRIPTS="$(cd "$(dirname "$0")/../scripts" && pwd)"
 SIG="$SCRIPTS/artifact_change_signal.sh"; COMMIT="$SCRIPTS/artifact_commit.sh"
-PASS=0; FAIL=0
-ok() { PASS=$((PASS+1)); echo "  PASS: $1"; }
-no() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 mkrepo() { local d; d="$(mktemp -d)"; ( cd "$d"; git init -q; git config user.email t@t
   git config user.name t; echo "v0" > doc.md; echo "other0" > other.md
@@ -66,6 +64,4 @@ rm -rf "$d"
 
 # no `git add -A` anywhere in either script (C5 grep lock)
 grep -qE 'git[[:space:]]+add[[:space:]]+-A' "$COMMIT" "$SIG" && no "git add -A present (forbidden)" || ok "no git add -A"
-
-echo ""; echo "Total: $((PASS+FAIL)), PASS=$PASS, FAIL=$FAIL"
-[ "$FAIL" -eq 0 ] || exit 1
+finish

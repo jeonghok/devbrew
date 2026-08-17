@@ -11,7 +11,7 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 LOCK="$ROOT/plugins/quality-gates/tests/test_agent_frontmatter_keys.sh"
-PASS=0; FAIL=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # GC9: mktemp 가드 — 대입 실패 시 trap arm 전에 abort. 빈 변수가 cwd 로 laundering 되면
 # trap 의 rm -rf 가 repo 를 지운다.
@@ -30,8 +30,7 @@ write_agent() {
 expect() {  # expect <RED|GREEN> <설명>
   local want="$1" msg="$2"
   if bash "$LOCK" "$TMP" >/dev/null 2>&1; then local got=GREEN; else local got=RED; fi
-  if [ "$got" = "$want" ]; then PASS=$((PASS+1)); echo "  ✓ $msg ($got)"
-  else FAIL=$((FAIL+1)); echo "  ✗ FAIL: $msg — want $want, got $got"; fi
+  assert_eq "$got" "$want" "$msg (want $want, got $got)"
 }
 
 echo "== 기준선 =="
@@ -239,8 +238,7 @@ emit_expect() {  # emit_expect <RED|GREEN> <EMIT 값|UNSET> <open|closed> <설�
     fi
   fi
   if [ "$rc" -eq 0 ]; then got=GREEN; else got=RED; fi
-  if [ "$got" = "$want" ]; then PASS=$((PASS+1)); echo "  ✓ $msg ($got)"
-  else FAIL=$((FAIL+1)); echo "  ✗ FAIL: $msg — want $want, got $got"; fi
+  assert_eq "$got" "$want" "$msg (want $want, got $got)"
 }
 
 echo "== A-1: 진단 스위치(EMIT) × stdout 가용성은 verdict 를 바꿀 수 없다 — 위반 코퍼스 =="
@@ -259,5 +257,4 @@ for ev in UNSET 0 1 arbitrary; do
   done
 done
 
-echo; echo "mutation: $PASS passed, $FAIL failed"
-[ "$FAIL" -eq 0 ]
+finish

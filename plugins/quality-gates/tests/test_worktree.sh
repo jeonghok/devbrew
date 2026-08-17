@@ -16,12 +16,8 @@ DISCOVER="$PLUGIN_DIR/scripts/discover-plan.sh"
 TRIVIA="$PLUGIN_DIR/scripts/check-trivia.sh"
 PRECHECK="$PLUGIN_DIR/scripts/pre-pipeline-check.sh"
 
-PASS=0
-FAIL=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
-note() { echo "  → $1"; }
-pass() { PASS=$((PASS+1)); note "PASS: $1"; }
-fail() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
 
 # Create an isolated repo + worktree pair, echo "<repo>|<worktree>|<branch>".
 # Caller must remove the returned root manually (or trap-cleanup).
@@ -58,21 +54,21 @@ SID="wt1session01"
 RC=$?
 
 if [[ "$RC" -eq 0 && -f "$WT/.claude/quality-gates/$SID/pipeline.md" ]]; then
-  pass "T1a: state file created inside worktree"
+  ok "T1a: state file created inside worktree"
 else
-  fail "T1a: state file missing in worktree (rc=$RC)"
+  no "T1a: state file missing in worktree (rc=$RC)"
 fi
 
 if [[ ! -d "$REPO/.claude/quality-gates/$SID" ]]; then
-  pass "T1b: origin repo .claude untouched (no leakage from worktree)"
+  ok "T1b: origin repo .claude untouched (no leakage from worktree)"
 else
-  fail "T1b: LEAKAGE — origin repo has state for SID=$SID"
+  no "T1b: LEAKAGE — origin repo has state for SID=$SID"
 fi
 
 if grep -q "session_id: \"$SID\"" "$WT/.claude/quality-gates/$SID/pipeline.md" 2>/dev/null; then
-  pass "T1c: state frontmatter carries correct session_id"
+  ok "T1c: state frontmatter carries correct session_id"
 else
-  fail "T1c: state file missing session_id frontmatter"
+  no "T1c: state file missing session_id frontmatter"
 fi
 
 rm -rf "$(dirname "$REPO")"
@@ -89,15 +85,15 @@ EOF
 OUT=$(cd "$WT" && HOME="$WT" "$DISCOVER" 2>&1)
 RC=$?
 if [[ "$RC" -eq 0 ]] && echo "$OUT" | grep -q '"source":"project-local"'; then
-  pass "T2a: discover-plan resolved project-local in worktree (rc=$RC)"
+  ok "T2a: discover-plan resolved project-local in worktree (rc=$RC)"
 else
-  fail "T2a: discover-plan did not pick worktree-local plan (rc=$RC, out=$OUT)"
+  no "T2a: discover-plan did not pick worktree-local plan (rc=$RC, out=$OUT)"
 fi
 
 if echo "$OUT" | grep -q "$WT/docs/superpowers/plans"; then
-  pass "T2b: discover-plan emitted worktree-rooted path"
+  ok "T2b: discover-plan emitted worktree-rooted path"
 else
-  fail "T2b: emitted path not worktree-rooted: $OUT"
+  no "T2b: emitted path not worktree-rooted: $OUT"
 fi
 
 rm -rf "$(dirname "$REPO")"
@@ -107,18 +103,18 @@ IFS='|' read -r REPO WT BRANCH < <(make_repo_with_worktree)
 
 WT_BRANCH=$(cd "$WT" && git rev-parse --abbrev-ref HEAD)
 if [[ "$WT_BRANCH" == "$BRANCH" ]]; then
-  pass "T3a: git rev-parse returned worktree branch ($BRANCH)"
+  ok "T3a: git rev-parse returned worktree branch ($BRANCH)"
 else
-  fail "T3a: got '$WT_BRANCH', expected '$BRANCH'"
+  no "T3a: got '$WT_BRANCH', expected '$BRANCH'"
 fi
 
 # Stage a change in worktree; trivia/diff should observe it
 echo "extra line" >> "$WT/README.md"
 DIFF_BYTES=$(cd "$WT" && git diff HEAD | wc -c)
 if [[ "$DIFF_BYTES" -gt 0 ]]; then
-  pass "T3b: git diff HEAD sees worktree-local changes"
+  ok "T3b: git diff HEAD sees worktree-local changes"
 else
-  fail "T3b: git diff HEAD empty in worktree"
+  no "T3b: git diff HEAD empty in worktree"
 fi
 
 # trivia script runs cleanly from worktree (exit 0 or 1 are both expected
@@ -126,18 +122,18 @@ fi
 OUT=$(cd "$WT" && HOME="$WT" "$TRIVIA" 2>&1)
 RC=$?
 if [[ "$RC" -eq 0 || "$RC" -eq 1 ]]; then
-  pass "T3c: check-trivia.sh ran from worktree (rc=$RC)"
+  ok "T3c: check-trivia.sh ran from worktree (rc=$RC)"
 else
-  fail "T3c: check-trivia.sh unusual rc=$RC, out=$OUT"
+  no "T3c: check-trivia.sh unusual rc=$RC, out=$OUT"
 fi
 
 # pre-pipeline-check.sh should not crash; reads `git rev-parse --abbrev-ref HEAD`
 OUT=$(cd "$WT" && HOME="$WT" "$PRECHECK" 2>&1 || true)
 # Script may exit non-zero based on its own logic; we only assert no shell error
 if [[ -n "$OUT" || $? -lt 127 ]]; then
-  pass "T3d: pre-pipeline-check.sh ran from worktree"
+  ok "T3d: pre-pipeline-check.sh ran from worktree"
 else
-  fail "T3d: pre-pipeline-check.sh failed to execute"
+  no "T3d: pre-pipeline-check.sh failed to execute"
 fi
 
 rm -rf "$(dirname "$REPO")"
@@ -145,9 +141,9 @@ rm -rf "$(dirname "$REPO")"
 # --- Test 4: .git in worktree is a file (gitdir pointer), not a directory ---
 IFS='|' read -r REPO WT BRANCH < <(make_repo_with_worktree)
 if [[ -f "$WT/.git" && ! -d "$WT/.git" ]]; then
-  pass "T4: worktree .git is a file pointer (any -d \".git\" check would skip worktree)"
+  ok "T4: worktree .git is a file pointer (any -d \".git\" check would skip worktree)"
 else
-  fail "T4: worktree .git layout unexpected"
+  no "T4: worktree .git layout unexpected"
 fi
 rm -rf "$(dirname "$REPO")"
 
@@ -157,19 +153,19 @@ rm -rf "$(dirname "$REPO")"
 # T3-1: scout.md deleted — removed from this loop (no longer applicable post-T3-1).
 for agent in adversarial test-scope-validator security-reviewer; do
   if grep -q 'project_dir' "$PLUGIN_DIR/agents/$agent.md"; then
-    pass "T8: agents/$agent.md declares project_dir input"
+    ok "T8: agents/$agent.md declares project_dir input"
   else
-    fail "T8: agents/$agent.md missing project_dir input contract"
+    no "T8: agents/$agent.md missing project_dir input contract"
   fi
 done
 
 # --- Test 7: T3-3 — codex-reviewer.md deleted; script exists + uses CLAUDE_PLUGIN_ROOT ---
 if [[ -f "$PLUGIN_DIR/agents/codex-reviewer.md" ]]; then
-  fail "T7: codex-reviewer.md should be absent post-T3-3"
+  no "T7: codex-reviewer.md should be absent post-T3-3"
 elif grep -q '\$REPO_ROOT/plugins/quality-gates' "$PLUGIN_DIR/scripts/run_codex_reviewer.sh" 2>/dev/null; then
-  fail "T7: run_codex_reviewer.sh still references \$REPO_ROOT/plugins/quality-gates (breaks outside devbrew)"
+  no "T7: run_codex_reviewer.sh still references \$REPO_ROOT/plugins/quality-gates (breaks outside devbrew)"
 else
-  pass "T7: codex-reviewer migrated to script; script uses \${CLAUDE_PLUGIN_ROOT} (devbrew-portable)"
+  ok "T7: codex-reviewer migrated to script; script uses \${CLAUDE_PLUGIN_ROOT} (devbrew-portable)"
 fi
 
 # --- Test 5: SKILL.md prose contains project_dir in agent dispatch blocks ---
@@ -185,10 +181,10 @@ for name in adversarial test-scope-validator security-reviewer runtime-verifier;
     END { exit !ok }
   ' "$SKILL_MD"; then
     T5_FAIL=1
-    fail "T5: SKILL.md dispatch for $name lacks project_dir"
+    no "T5: SKILL.md dispatch for $name lacks project_dir"
   fi
 done
-[[ "$T5_FAIL" -eq 0 ]] && pass "T5: SKILL.md propagates project_dir to all 4 dispatch points"
+[[ "$T5_FAIL" -eq 0 ]] && ok "T5: SKILL.md propagates project_dir to all 4 dispatch points"
 
 # --- Test 6: hooks read payload cwd (AST-based, not grep) ---
 T6_FAIL=0
@@ -208,10 +204,10 @@ for node in ast.walk(tree):
 sys.exit(0 if found else 1)
 "; then
     T6_FAIL=1
-    fail "T6: hooks/$hook does not call .get('cwd') anywhere"
+    no "T6: hooks/$hook does not call .get('cwd') anywhere"
   fi
 done
-[[ "$T6_FAIL" -eq 0 ]] && pass "T6: all 2 hooks read payload cwd (AST verified)"
+[[ "$T6_FAIL" -eq 0 ]] && ok "T6: all 2 hooks read payload cwd (AST verified)"
 
 # --- Test 9: REMOVED — v1.32.0 schema intentionally has no project_dir field ---
 # project_dir is now a per-dispatch runtime parameter threaded by the SKILL
@@ -219,6 +215,4 @@ done
 # avoid coordinate drift between worktree-mode and main-repo-mode pipelines.
 
 # --- Summary ---
-echo
-echo "Results: $PASS passed, $FAIL failed"
-[[ "$FAIL" -eq 0 ]]
+finish

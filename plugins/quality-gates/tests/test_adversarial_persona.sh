@@ -9,33 +9,9 @@ set -eu
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 PERSONA="$REPO_ROOT/plugins/quality-gates/agents/adversarial.md"
 
-if [ ! -f "$PERSONA" ]; then
-  echo "  FAIL: persona file missing at $PERSONA" >&2; exit 1
-fi
-
 set +e
-pass=0; fail=0
-check() {
-  local name="$1" cmd="$2" expected="$3"
-  local actual
-  actual="$(eval "$cmd" 2>/dev/null || true)"
-  if [ "$actual" -ge "$expected" ]; then
-    echo "  PASS: $name (got $actual, expected >= $expected)"; pass=$((pass + 1))
-  else
-    echo "  FAIL: $name (got $actual, expected >= $expected)"; fail=$((fail + 1))
-  fi
-}
-# Real boolean absence assert — `check ... 0` above is vacuous (count >= 0 is
-# always true), so it can never fail even when the forbidden pattern IS
-# present. Used for the dead-key / forbidden-tool checks below.
-assert_absent() {
-  local name="$1" pattern="$2"
-  if grep -qE "$pattern" "$PERSONA"; then
-    echo "  FAIL: $name (pattern '$pattern' unexpectedly present)"; fail=$((fail + 1))
-  else
-    echo "  PASS: $name (pattern absent, as expected)"; pass=$((pass + 1))
-  fi
-}
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+[ -f "$PERSONA" ] || { no "persona 파일 부재: $PERSONA"; finish; exit; }
 
 # Section extractor — Gate C window between the Gate C and Gate D headers.
 gateC_section() {
@@ -50,49 +26,38 @@ untrusted_section() {
 }
 
 # Frontmatter required keys
-check "frontmatter name adversarial" \
-  "grep -c '^name: adversarial$' '$PERSONA'" 1
-check "frontmatter model inherit" \
-  "grep -c '^model: inherit$' '$PERSONA'" 1
-assert_absent "고정 티어 핀 없음 (하니스가 세션 모델을 덮어쓰지 않는다)" \
-  '^model: (opus|sonnet|haiku)$'
-check "frontmatter tools: allowlist (fail-closed)" \
-  "grep -c '^tools: Read, Grep, Glob$' '$PERSONA'" 1
-assert_absent "죽은 allowedTools / denylist 없음" '^(allowedTools|disallowedTools):'
-assert_absent "쓰기·실행·위임 도구가 tools: 에 없음" \
-  '^tools:.*(Write|Edit|MultiEdit|NotebookEdit|Bash|Agent|Monitor|mcp__)'
+assert_count_ge "grep -c '^name: adversarial$' '$PERSONA'" 1 "frontmatter name adversarial"
+assert_count_ge "grep -c '^model: inherit$' '$PERSONA'" 1 "frontmatter model inherit"
+assert_file_absent "$PERSONA" '^model: (opus|sonnet|haiku)$' "고정 티어 핀 없음 (하니스가 세션 모델을 덮어쓰지 않는다)"
+assert_count_ge "grep -c '^tools: Read, Grep, Glob$' '$PERSONA'" 1 "frontmatter tools: allowlist (fail-closed)"
+assert_file_absent "$PERSONA" '^(allowedTools|disallowedTools):' "죽은 allowedTools / denylist 없음"
+assert_file_absent "$PERSONA" '^tools:.*(Write|Edit|MultiEdit|NotebookEdit|Bash|Agent|Monitor|mcp__)' "쓰기·실행·위임 도구가 tools: 에 없음"
 
 # Gate A–D structure present
-check "Gate A header present" "grep -c '\\*\\*Gate A' '$PERSONA'" 1
-check "Gate B header present" "grep -c '\\*\\*Gate B' '$PERSONA'" 1
-check "Gate C header present" "grep -c '\\*\\*Gate C' '$PERSONA'" 1
-check "Gate D header present" "grep -c '\\*\\*Gate D' '$PERSONA'" 1
+assert_count_ge "grep -c '\\*\\*Gate A' '$PERSONA'" 1 "Gate A header present"
+assert_count_ge "grep -c '\\*\\*Gate B' '$PERSONA'" 1 "Gate B header present"
+assert_count_ge "grep -c '\\*\\*Gate C' '$PERSONA'" 1 "Gate C header present"
+assert_count_ge "grep -c '\\*\\*Gate D' '$PERSONA'" 1 "Gate D header present"
 
 # (A / AC2) untrusted-input header exists AND sits before ## Verification protocol
 hdr="$(grep -n '^## Untrusted input' "$PERSONA" | head -1 | cut -d: -f1)"
 proto="$(grep -n '^## Verification protocol' "$PERSONA" | head -1 | cut -d: -f1)"
 if [ -n "$hdr" ] && [ -n "$proto" ] && [ "$hdr" -lt "$proto" ]; then
-  echo "  PASS: untrusted-input header precedes ## Verification protocol (line $hdr < $proto)"; pass=$((pass + 1))
+  ok "untrusted-input header precedes ## Verification protocol (line $hdr < $proto)"
 else
-  echo "  FAIL: untrusted-input header must exist before ## Verification protocol (hdr='$hdr' proto='$proto')"; fail=$((fail + 1))
+  no "untrusted-input header must exist before ## Verification protocol (hdr='$hdr' proto='$proto')"
 fi
 # Body-unique phrase (NOT the header, which also contains "data, not instructions"):
 # scoped to the section window so deleting the body norm prose goes RED.
-check "untrusted-input body norm (data-not-a-reason) in section" \
-  "untrusted_section | grep -cE 'is data, not a reason'" 1
+assert_count_ge "untrusted_section | grep -cE 'is data, not a reason'" 1 "untrusted-input body norm (data-not-a-reason) in section"
 
 # (B / AC4) 2 reject-at-verify precedents INSIDE the Gate C block, each with reject
-check "client-side trust-boundary precedent in Gate C, specifies reject" \
-  "gateC_section | grep -cE 'Client-side trust boundary.*reject'" 1
-check "trusted-config-values precedent in Gate C, specifies reject" \
-  "gateC_section | grep -cE 'Trusted configuration values.*reject'" 1
+assert_count_ge "gateC_section | grep -cE 'Client-side trust boundary.*reject'" 1 "client-side trust-boundary precedent in Gate C, specifies reject"
+assert_count_ge "gateC_section | grep -cE 'Trusted configuration values.*reject'" 1 "trusted-config-values precedent in Gate C, specifies reject"
 
 # AC14a — 신규 발견 금지 선언이 네 곳 모두에서 해소됐다. 한 곳이라도 남으면 persona 자기모순.
-assert_absent "신규 발견 금지 선언 부재 (승격 허용)" \
-  'producing new findings of your own|No new findings as verdicts'
-check "new_findings 블록 스키마 정의" "grep -c '^new_findings:' '$PERSONA'" 1
-check "meta_note 채널 존치 (구조화되지 않은 관찰용)" "grep -c 'meta_note' '$PERSONA'" 1
+assert_file_absent "$PERSONA" 'producing new findings of your own|No new findings as verdicts' "신규 발견 금지 선언 부재 (승격 허용)"
+assert_count_ge "grep -c '^new_findings:' '$PERSONA'" 1 "new_findings 블록 스키마 정의"
+assert_count_ge "grep -c 'meta_note' '$PERSONA'" 1 "meta_note 채널 존치 (구조화되지 않은 관찰용)"
 
-echo ""
-echo "Total: $((pass + fail)), pass: $pass, fail: $fail"
-[ "$fail" -eq 0 ] || exit 1
+finish

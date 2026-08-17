@@ -18,9 +18,7 @@
 set -u -o pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$ROOT" || exit 1
-pass=0; fail=0
-ok() { pass=$((pass+1)); echo "  ✓ $1"; }
-no() { fail=$((fail+1)); echo "  ✗ $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 shopt -s nullglob
 agents=(plugins/*/agents/*.md)
@@ -35,7 +33,7 @@ if [ "${#agents[@]}" -ge 10 ]; then
   ok "0 — 스윕이 agent ${#agents[@]}개를 실제로 열었다 (vacuous pass 아님)"
 else
   no "0 — 스윕이 본 agent가 ${#agents[@]}개뿐 — glob이 깨졌거나 리포 구조가 바뀌었다"
-  echo ""; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"; exit 1
+  finish; exit
 fi
 
 missing=(); pinned=(); dup=()
@@ -54,7 +52,4 @@ done
   no "2 — 리터럴 티어 핀 ${#pinned[@]}개"; printf '      %s\n' "${pinned[@]}"; }
 [ "${#dup[@]}" -eq 0 ] && ok "3 — 'model:' 키 중복 선언 0개" || {
   no "3 — 'model:' 키 중복 ${#dup[@]}개"; printf '      %s\n' "${dup[@]}"; }
-
-echo ""
-echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[ "$fail" -eq 0 ]
+finish

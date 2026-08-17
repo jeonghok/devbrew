@@ -10,12 +10,8 @@ set -u
 PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SETUP="$PLUGIN_DIR/scripts/setup-qg.sh"
 
-PASS=0
-FAIL=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
-note() { echo "  → $1"; }
-pass() { PASS=$((PASS+1)); note "PASS: $1"; }
-fail() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
 
 make_repo_with_worktree() {
   local root branch
@@ -57,17 +53,17 @@ RC_REPO=$?
 WT_FILE="$WT/.claude/quality-gates/$SID/pipeline.md"
 REPO_FILE="$REPO/.claude/quality-gates/$SID/pipeline.md"
 
-[[ "$RC_WT" -eq 0 && -f "$WT_FILE" ]] && pass "T1a: worktree setup ok" || fail "T1a: worktree setup failed (rc=$RC_WT)"
+[[ "$RC_WT" -eq 0 && -f "$WT_FILE" ]] && ok "T1a: worktree setup ok" || no "T1a: worktree setup failed (rc=$RC_WT)"
 [[ "$RC_REPO" -eq 0 && -f "$REPO_FILE" ]] \
-  && pass "T1b: origin setup with same SID succeeded (origin did not see worktree state)" \
-  || fail "T1b: origin setup failed (rc=$RC_REPO) — isolation broken"
+  && ok "T1b: origin setup with same SID succeeded (origin did not see worktree state)" \
+  || no "T1b: origin setup failed (rc=$RC_REPO) — isolation broken"
 
 WT_INODE=$(inode_of "$WT_FILE")
 REPO_INODE=$(inode_of "$REPO_FILE")
 if [[ -n "$WT_INODE" && -n "$REPO_INODE" && "$WT_INODE" != "$REPO_INODE" ]]; then
-  pass "T1c: state files are physically distinct (inodes differ)"
+  ok "T1c: state files are physically distinct (inodes differ)"
 else
-  fail "T1c: state files share inode or could not be read"
+  no "T1c: state files share inode or could not be read"
 fi
 
 rm -rf "$(dirname "$REPO")"
@@ -81,10 +77,10 @@ RC_REPO=$?
 (cd "$WT"   && HOME="$WT"   "$SETUP" --session-id "$SID" >/dev/null 2>&1)
 RC_WT=$?
 
-[[ "$RC_REPO" -eq 0 ]] && pass "T2a: origin setup ok" || fail "T2a: origin setup failed"
+[[ "$RC_REPO" -eq 0 ]] && ok "T2a: origin setup ok" || no "T2a: origin setup failed"
 [[ "$RC_WT" -eq 0 && -f "$WT/.claude/quality-gates/$SID/pipeline.md" ]] \
-  && pass "T2b: worktree setup with same SID succeeded (worktree did not see origin state)" \
-  || fail "T2b: worktree setup failed (rc=$RC_WT)"
+  && ok "T2b: worktree setup with same SID succeeded (worktree did not see origin state)" \
+  || no "T2b: worktree setup failed (rc=$RC_WT)"
 
 rm -rf "$(dirname "$REPO")"
 
@@ -99,9 +95,9 @@ SID="isoshared03"
 rm -rf "$WT/.claude/quality-gates/$SID"
 
 if [[ ! -d "$WT/.claude/quality-gates/$SID" && -f "$REPO/.claude/quality-gates/$SID/pipeline.md" ]]; then
-  pass "T3: worktree cancel left origin's pipeline.md intact"
+  ok "T3: worktree cancel left origin's pipeline.md intact"
 else
-  fail "T3: cancel affected origin state OR worktree state still present"
+  no "T3: cancel affected origin state OR worktree state still present"
 fi
 
 rm -rf "$(dirname "$REPO")"
@@ -132,36 +128,34 @@ RC_B=$?
 FILE_A="$ROOT/.claude/quality-gates/$SID_A/pipeline.md"
 FILE_B="$ROOT/.claude/quality-gates/$SID_B/pipeline.md"
 
-[[ "$RC_A" -eq 0 && -f "$FILE_A" ]] && pass "T4a: SID_A setup ok" || fail "T4a: SID_A failed"
-[[ "$RC_B" -eq 0 && -f "$FILE_B" ]] && pass "T4b: SID_B setup ok (concurrent)" || fail "T4b: SID_B failed"
+[[ "$RC_A" -eq 0 && -f "$FILE_A" ]] && ok "T4a: SID_A setup ok" || no "T4a: SID_A failed"
+[[ "$RC_B" -eq 0 && -f "$FILE_B" ]] && ok "T4b: SID_B setup ok (concurrent)" || no "T4b: SID_B failed"
 
 if grep -q "session_id: \"$SID_A\"" "$FILE_A" 2>/dev/null \
    && grep -q "session_id: \"$SID_B\"" "$FILE_B" 2>/dev/null; then
-  pass "T4c: each pipeline.md owns its session_id (no cross-contamination)"
+  ok "T4c: each pipeline.md owns its session_id (no cross-contamination)"
 else
-  fail "T4c: session_id mismatch in one of the state files"
+  no "T4c: session_id mismatch in one of the state files"
 fi
 
 # --- T5: cancel SID_A leaves SID_B intact ---
 rm -rf "$ROOT/.claude/quality-gates/$SID_A"
 if [[ ! -d "$ROOT/.claude/quality-gates/$SID_A" && -f "$FILE_B" ]]; then
-  pass "T5: SID_B unaffected by SID_A cancel"
+  ok "T5: SID_B unaffected by SID_A cancel"
 else
-  fail "T5: SID_B state lost OR SID_A folder still present"
+  no "T5: SID_B state lost OR SID_A folder still present"
 fi
 
 # --- T6: same-SID re-invocation is rejected (per-session active boundary) ---
 OUT=$(HOME="$ROOT" "$SETUP" --session-id "$SID_B" 2>&1)
 RC=$?
 if [[ "$RC" -ne 0 ]] && echo "$OUT" | grep -qi "already active"; then
-  pass "T6: re-invocation rejected with 'already active' (rc=$RC)"
+  ok "T6: re-invocation rejected with 'already active' (rc=$RC)"
 else
-  fail "T6: re-invocation NOT rejected (rc=$RC, out=$OUT)"
+  no "T6: re-invocation NOT rejected (rc=$RC, out=$OUT)"
 fi
 
 cd / && rm -rf "$ROOT"
 
 # --- Summary ---
-echo
-echo "Results: $PASS passed, $FAIL failed"
-[[ "$FAIL" -eq 0 ]]
+finish

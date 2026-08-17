@@ -33,7 +33,8 @@
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 LOCK="$ROOT/plugins/quality-gates/tests/test_agent_frontmatter_keys.sh"
-PASS=0; FAIL=0; SKIP=0
+SKIP=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # GC9: mktemp 가드 — 대입 실패 시 trap arm 전에 abort (빈 변수 → trap 의 rm -rf 가 repo 를 지운다).
 TMP="$(mktemp -d)" || { echo "FAIL: mktemp 실패"; exit 1; }
@@ -115,9 +116,6 @@ write_agent() {  # write_agent <printf %b 프래그먼트>
   printf -- '---\nname: probe\ndescription: fixture\nmodel: inherit\n%b\n---\n\nbody\n' "$1" > "$AGENT"
 }
 
-ok()  { PASS=$((PASS+1)); echo "  ✓ $1"; }
-bad() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
-
 # dcase <want_lock GREEN|RED> <want_parser status:kind> <설명> <프래그먼트>
 dcase() {
   local want_lock="$1" want_parser="$2" msg="$3" frag="$4"
@@ -137,7 +135,7 @@ dcase() {
   if [ "$got_lock" = "$want_lock" ]; then
     ok "[L1] ${msg} → ${got_lock}"
   else
-    bad "[L1] ${msg} — want ${want_lock}, got ${got_lock}"
+    no "[L1] ${msg} — want ${want_lock}, got ${got_lock}"
   fi
 
   if [ "$PARSER" = no ]; then SKIP=$((SKIP+1)); return; fi
@@ -152,7 +150,7 @@ dcase() {
   if [ "${pstatus}:${pkind}" = "$want_parser" ]; then
     ok "[L2-ground] ${msg} — 파서 실제 resolve = ${want_parser}"
   else
-    bad "[L2-ground] ${msg} — 파서 resolve want ${want_parser}, got ${pstatus}:${pkind}"
+    no "[L2-ground] ${msg} — 파서 resolve want ${want_parser}, got ${pstatus}:${pkind}"
   fi
 
   # 불변식은 락이 GREEN 을 준 경우에만 의미가 있다 (RED 면 락은 아무것도 주장하지 않았다).
@@ -162,14 +160,14 @@ dcase() {
   local dline basis bel
   dline="$(printf '%s\n' "$decl" | grep '^DECL	' | head -1)"
   if [ -z "$dline" ]; then
-    bad "[L2-diff] ${msg} — 락이 GREEN 인데 DECL 을 내보내지 않았다(믿은 값 불명 = 검증 불가)"
+    no "[L2-diff] ${msg} — 락이 GREEN 인데 DECL 을 내보내지 않았다(믿은 값 불명 = 검증 불가)"
     return
   fi
   basis="$(printf '%s' "$dline" | cut -f3)"
   bel="$(printf '%s' "$dline" | cut -f4)"
 
   if [ "$pstatus" != ok ]; then
-    bad "[L2-diff] ${msg} — 락 GREEN 인데 파서는 이 frontmatter 를 파싱하지 못한다(런타임이 읽지 못할 선언을 승인)"
+    no "[L2-diff] ${msg} — 락 GREEN 인데 파서는 이 frontmatter 를 파싱하지 못한다(런타임이 읽지 못할 선언을 승인)"
     return
   fi
 
@@ -178,7 +176,7 @@ dcase() {
       if [ "$pkind" = list ] && [ -z "$ptoks" ]; then
         ok "[L2-diff] ${msg} — zero-tool 근거 GREEN, 파서도 실제 빈 시퀀스"
       else
-        bad "[L2-diff] ${msg} — 락은 zero-tool(\`[]\`) 근거로 통과시켰는데 파서는 ${pkind}='${ptoks}' 로 resolve 한다"
+        no "[L2-diff] ${msg} — 락은 zero-tool(\`[]\`) 근거로 통과시켰는데 파서는 ${pkind}='${ptoks}' 로 resolve 한다"
       fi
       ;;
     scalar)
@@ -188,11 +186,11 @@ dcase() {
       if [ "$pkind" = str ] && [ "$beltoks" = "$ptoks" ]; then
         ok "[L2-diff] ${msg} — scalar 근거 GREEN, 파서 토큰과 정확히 일치"
       else
-        bad "[L2-diff] ${msg} — 락이 검증한 토큰 '${beltoks}' vs 파서 ${pkind}='${ptoks}'"
+        no "[L2-diff] ${msg} — 락이 검증한 토큰 '${beltoks}' vs 파서 ${pkind}='${ptoks}'"
       fi
       ;;
     *)
-      bad "[L2-diff] ${msg} — 알 수 없는 DECL basis '${basis}'"
+      no "[L2-diff] ${msg} — 알 수 없는 DECL basis '${basis}'"
       ;;
   esac
 }
@@ -291,8 +289,6 @@ dcase RED ok:null "bare tools: (YAML null)" 'tools:'
 
 echo
 if [ "$PARSER" = no ]; then
-  echo "differential: ${PASS} passed, ${FAIL} failed, ${SKIP} SKIPPED (파서 부재 — L2 미실행, pass 아님)"
-else
-  echo "differential: ${PASS} passed, ${FAIL} failed, ${SKIP} skipped"
+  echo "differential: L2 파서 합치 ${SKIP}건 SKIPPED (파서 부재 — 미실행, pass 아님)"
 fi
-[ "$FAIL" -eq 0 ]
+finish

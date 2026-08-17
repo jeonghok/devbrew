@@ -10,13 +10,9 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 SCRIPT="$PLUGIN_ROOT/scripts/pre-pipeline-check.sh"
 
-PASS=0
-FAIL=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
-note() { echo "  → $1"; }
 
-pass() { PASS=$((PASS + 1)); note "PASS: $1"; }
-fail() { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $1"; }
 
 write_pipeline() {
   local dir="$1" sid="$2"
@@ -44,9 +40,9 @@ case_fresh_start() {
   local tmp; tmp=$(mktemp -d); cd "$tmp"
   export CLAUDE_CODE_SESSION_ID="test-pre-fresh-$$"
   if bash "$SCRIPT" 2>/dev/null | grep -q 'result: fresh_start\|result: no_session_data'; then
-    pass "case_fresh_start"
+    ok "case_fresh_start"
   else
-    fail "case_fresh_start (no fresh_start/no_session_data emitted)"
+    no "case_fresh_start (no fresh_start/no_session_data emitted)"
   fi
   cd / && rm -rf "$tmp"
   unset CLAUDE_CODE_SESSION_ID
@@ -62,9 +58,9 @@ case_same_session_preserved() {
   write_branch_marker "$dir" "stale-branch"
   bash "$SCRIPT" >/dev/null 2>&1
   if [[ -f "$dir/pipeline.md" ]]; then
-    pass "case_same_session_preserved"
+    ok "case_same_session_preserved"
   else
-    fail "case_same_session_preserved (pipeline.md deleted)"
+    no "case_same_session_preserved (pipeline.md deleted)"
   fi
   cd / && rm -rf "$tmp"
   unset CLAUDE_CODE_SESSION_ID
@@ -80,9 +76,9 @@ case_cross_session_deleted() {
   write_branch_marker "$dir" "stale-branch"
   bash "$SCRIPT" >/dev/null 2>&1
   if [[ ! -f "$dir/pipeline.md" ]]; then
-    pass "case_cross_session_deleted"
+    ok "case_cross_session_deleted"
   else
-    fail "case_cross_session_deleted (pipeline.md survived)"
+    no "case_cross_session_deleted (pipeline.md survived)"
   fi
   cd / && rm -rf "$tmp"
   unset CLAUDE_CODE_SESSION_ID
@@ -99,9 +95,9 @@ case_advisory_emitted() {
   local err
   err=$(bash "$SCRIPT" 2>&1 >/dev/null)
   if echo "$err" | grep -q 'preserving session-owned state file'; then
-    pass "case_advisory_emitted"
+    ok "case_advisory_emitted"
   else
-    fail "case_advisory_emitted (stderr: $err)"
+    no "case_advisory_emitted (stderr: $err)"
   fi
   cd / && rm -rf "$tmp"
   unset CLAUDE_CODE_SESSION_ID
@@ -117,9 +113,9 @@ case_sid_empty() {
   export CLAUDE_CODE_SESSION_ID=""
   local out; out=$(bash "$SCRIPT" 2>&1) || true
   if echo "$out" | grep -q '^result: no_session_id'; then
-    pass "T-SID-empty"
+    ok "T-SID-empty"
   else
-    fail "T-SID-empty (no result: no_session_id, got: $out)"
+    no "T-SID-empty (no result: no_session_id, got: $out)"
   fi
   cd / && rm -rf "$tmp"
   unset CLAUDE_CODE_SESSION_ID
@@ -133,9 +129,9 @@ case_sid_short() {
   export CLAUDE_CODE_SESSION_ID="abcd123"
   local out; out=$(bash "$SCRIPT" 2>&1) || true
   if echo "$out" | grep -q '^result: invalid_session_id' && echo "$out" | grep -q 'fails pattern guard'; then
-    pass "T-SID-short"
+    ok "T-SID-short"
   else
-    fail "T-SID-short (got: $out)"
+    no "T-SID-short (got: $out)"
   fi
   cd / && rm -rf "$tmp"
   unset CLAUDE_CODE_SESSION_ID
@@ -149,9 +145,9 @@ case_sid_invalid_char() {
   export CLAUDE_CODE_SESSION_ID="abc/def123"
   local out; out=$(bash "$SCRIPT" 2>&1) || true
   if echo "$out" | grep -q '^result: invalid_session_id' && echo "$out" | grep -q 'fails pattern guard'; then
-    pass "T-SID-invalid-char"
+    ok "T-SID-invalid-char"
   else
-    fail "T-SID-invalid-char (got: $out)"
+    no "T-SID-invalid-char (got: $out)"
   fi
   cd / && rm -rf "$tmp"
   unset CLAUDE_CODE_SESSION_ID
@@ -165,9 +161,9 @@ case_sid_valid() {
   export CLAUDE_CODE_SESSION_ID="abc-def_123ABC"
   local out; out=$(bash "$SCRIPT" 2>&1) || true
   if echo "$out" | grep -q '^result: fresh_start'; then
-    pass "T-SID-valid"
+    ok "T-SID-valid"
   else
-    fail "T-SID-valid (got: $out)"
+    no "T-SID-valid (got: $out)"
   fi
   cd / && rm -rf "$tmp"
   unset CLAUDE_CODE_SESSION_ID
@@ -181,7 +177,4 @@ case_sid_empty
 case_sid_short
 case_sid_invalid_char
 case_sid_valid
-
-echo
-echo "test_pre_pipeline_check: $PASS passed, $FAIL failed"
-[[ "$FAIL" -eq 0 ]] && exit 0 || exit 1
+finish

@@ -6,39 +6,11 @@
 set -u
 
 SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/scripts/compute-test-scope-candidates.sh"
-PASS=0
-FAIL=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
-note() { echo "  → $1"; }
 
-assert_eq() {
-  local actual="$1" expected="$2" msg="$3"
-  if [[ "$actual" == "$expected" ]]; then
-    PASS=$((PASS + 1)); note "PASS: $msg"
-  else
-    FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $msg"
-    echo "    got:      $actual"
-    echo "    expected: $expected"
-  fi
-}
 
-assert_contains() {
-  local haystack="$1" needle="$2" msg="$3"
-  if [[ "$haystack" == *"$needle"* ]]; then
-    PASS=$((PASS + 1)); note "PASS: $msg"
-  else
-    FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $msg (missing '$needle')"
-  fi
-}
 
-assert_not_contains() {
-  local haystack="$1" needle="$2" msg="$3"
-  if [[ "$haystack" != *"$needle"* ]]; then
-    PASS=$((PASS + 1)); note "PASS: $msg"
-  else
-    FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $msg (unexpected '$needle')"
-  fi
-}
 
 mktemp_repo() {
   local d
@@ -184,14 +156,14 @@ done <<< "$CANDS"
 # 양의 짝: 후보가 0개면 위 ∀ 는 공허하게 참이다.
 CAND_N=$(printf '%s\n' "$CANDS" | grep -c . || true)
 if [[ "$CAND_N" -lt 1 ]]; then
-  FAIL=$((FAIL + 1)); echo "  ✗ FAIL: T7 후보가 0개 — ∀ 가 공허하게 통과할 뻔했다"
+  no "T7 후보가 0개 — ∀ 가 공허하게 통과할 뻔했다"
 else
   assert_eq "$MISSING" "" "T7: 후보 ${CAND_N}개 전부가 --total 분모에 포함 (∀)"
   # 분모가 분자보다 작아질 수 없다
   if [[ "$TOTAL_N" -ge "$CAND_N" ]]; then
-    PASS=$((PASS + 1)); note "PASS: T7: 분모 M=$TOTAL_N ≥ 분자 N=$CAND_N"
+    ok "T7: 분모 M=$TOTAL_N ≥ 분자 N=$CAND_N"
   else
-    FAIL=$((FAIL + 1)); echo "  ✗ FAIL: T7: 분모 M=$TOTAL_N < 분자 N=$CAND_N"
+    no "T7: 분모 M=$TOTAL_N < 분자 N=$CAND_N"
   fi
 fi
 rm -rf "$REPO"
@@ -223,7 +195,4 @@ REPO=$(mktemp -d)
 NORMAL_ERR=$( ( cd "$REPO" && bash "$SCRIPT" ) 2>&1 >/dev/null )
 assert_not_contains "$NORMAL_ERR" "resolve-baseline.sh 실행 실패" "T8: 소유자가 있으면 무경고 (양의 짝)"
 rm -rf "$REPO"
-
-echo ""
-echo "Results: $PASS passed, $FAIL failed"
-[[ $FAIL -eq 0 ]]
+finish

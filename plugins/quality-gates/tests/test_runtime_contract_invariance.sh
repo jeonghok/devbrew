@@ -7,9 +7,8 @@ PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 WT="$PLUGIN_ROOT/scripts/qg-worktree.sh"
 SKILL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 
-PASS=0; FAIL=0; REPO=""
-pass() { PASS=$((PASS + 1)); echo "  → PASS: $1"; }
-fail() { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+REPO=""
 
 # T5 + AC7: create-baseline이 merge_base에 detached worktree를 만들고 경로를 emit
 case_create_baseline() {
@@ -23,23 +22,23 @@ case_create_baseline() {
 
   local out rc; out=$(bash "$WT" create-baseline "$base_sha" "sess1234"); rc=$?
   if [[ $rc -ne 0 || ! -d "$out" ]]; then
-    fail "create-baseline (rc=$rc out='$out')"; cd / && rm -rf "$REPO"; return
+    no "create-baseline (rc=$rc out='$out')"; cd / && rm -rf "$REPO"; return
   fi
-  pass "create-baseline → 워크트리 경로 emit"
+  ok "create-baseline → 워크트리 경로 emit"
 
   # 네임스페이스: worktrees/ 아래여야 remove 가드가 적용된다
   case "$out" in
-    */.claude/quality-gates/worktrees/*) pass "worktrees/ 네임스페이스 안" ;;
-    *) fail "네임스페이스 밖: $out" ;;
+    */.claude/quality-gates/worktrees/*) ok "worktrees/ 네임스페이스 안" ;;
+    *) no "네임스페이스 밖: $out" ;;
   esac
   # 내용이 merge_base 상태인가 (HEAD의 v2가 아니라 v1)
-  [[ "$(cat "$out/a.txt")" == "v1" ]] && pass "기준선 트리 내용 == merge_base" \
-                                      || fail "기준선 내용 오염 ($(cat "$out/a.txt"))"
+  [[ "$(cat "$out/a.txt")" == "v1" ]] && ok "기준선 트리 내용 == merge_base" \
+                                      || no "기준선 내용 오염 ($(cat "$out/a.txt"))"
   # detached HEAD인가
   ( cd "$out" && ! git symbolic-ref --quiet HEAD >/dev/null 2>&1 ) \
-    && pass "기준선 워크트리는 detached" || fail "detached 아님"
+    && ok "기준선 워크트리는 detached" || no "detached 아님"
   # remove가 동작 (네임스페이스 가드 통과)
-  bash "$WT" remove "$out" && [[ ! -d "$out" ]] && pass "remove 적용됨" || fail "remove 실패"
+  bash "$WT" remove "$out" && [[ ! -d "$out" ]] && ok "remove 적용됨" || no "remove 실패"
   cd / && rm -rf "$REPO"
 }
 
@@ -64,21 +63,21 @@ case_create_baseline_refuses_colliding_user_worktree() {
   # 사용자가 같은 세션에서 `/qg branch base` 를 돌린 상태를 만든다
   local user_wt; user_wt=$(bash "$WT" create base "sess1234" 2>/dev/null)
   if [[ -z "$user_wt" || ! -d "$user_wt" ]]; then
-    fail "픽스처 무효: /qg branch base 워크트리 생성 실패"; cd / && rm -rf "$REPO"; return
+    no "픽스처 무효: /qg branch base 워크트리 생성 실패"; cd / && rm -rf "$REPO"; return
   fi
   # 픽스처가 실제로 충돌하는지 먼저 증명한다 (경로가 안 겹치면 이 락은 무의미하다)
   [[ "$(basename "$user_wt")" == "base-sess1234" ]] \
-    && pass "픽스처: /qg branch base 와 create-baseline 이 같은 경로를 노린다" \
-    || fail "픽스처 무효: 경로 불일치 ($user_wt)"
+    && ok "픽스처: /qg branch base 와 create-baseline 이 같은 경로를 노린다" \
+    || no "픽스처 무효: 경로 불일치 ($user_wt)"
   echo "uncommitted work" > "$user_wt/WIP.txt"
 
   local out rc; out=$(bash "$WT" create-baseline "$base_sha" "sess1234" 2>/dev/null); rc=$?
   [[ -f "$user_wt/WIP.txt" ]] \
-    && pass "충돌 경로의 미커밋 작업이 살아남음" \
-    || fail "create-baseline 이 사용자 워크트리의 미커밋 작업을 파괴함"
+    && ok "충돌 경로의 미커밋 작업이 살아남음" \
+    || no "create-baseline 이 사용자 워크트리의 미커밋 작업을 파괴함"
   [[ $rc -ne 0 ]] \
-    && pass "충돌 시 조용히 진행하지 않고 non-zero 로 죽는다" \
-    || fail "충돌인데 exit 0 (rc=$rc out='$out')"
+    && ok "충돌 시 조용히 진행하지 않고 non-zero 로 죽는다" \
+    || no "충돌인데 exit 0 (rc=$rc out='$out')"
   cd / && rm -rf "$REPO"
 }
 
@@ -101,9 +100,9 @@ case_create_baseline_is_still_idempotent() {
   mkdir -p "$first/target/debug" && : > "$first/target/debug/x.o"
   second=$(bash "$WT" create-baseline "$base_sha" "sess9999" 2>/dev/null); rc=$?
   if [[ $rc -eq 0 && "$second" == "$first" && -d "$second" ]]; then
-    pass "clean 한 기준선 트리 재실행은 그대로 성공 (idempotent 보존)"
+    ok "clean 한 기준선 트리 재실행은 그대로 성공 (idempotent 보존)"
   else
-    fail "idempotent 회귀 (rc=$rc first='$first' second='$second')"
+    no "idempotent 회귀 (rc=$rc first='$first' second='$second')"
   fi
   cd / && rm -rf "$REPO"
 }
@@ -115,9 +114,9 @@ case_remove_namespace_guard() {
   echo x > a.txt; git add a.txt; git commit -qm x
   mkdir -p "$REPO/outside"
   bash "$WT" remove "$REPO/outside" >/dev/null 2>&1 \
-    && fail "네임스페이스 밖 remove가 통과" \
-    || pass "네임스페이스 밖 remove 거부"
-  [[ -d "$REPO/outside" ]] && pass "거부된 대상이 살아있음" || fail "대상이 삭제됨"
+    && no "네임스페이스 밖 remove가 통과" \
+    || ok "네임스페이스 밖 remove 거부"
+  [[ -d "$REPO/outside" ]] && ok "거부된 대상이 살아있음" || no "대상이 삭제됨"
   cd / && rm -rf "$REPO"
 }
 
@@ -136,8 +135,8 @@ DETECT_RUNTIME_SHA256="2f70d7660bd4fa30ad873c9c178e54631e8be1c936b7527a284e6f754
 case_detect_runtime_frozen() {
   local got; got=$(shasum -a 256 "$PLUGIN_ROOT/scripts/detect-runtime.sh" | awk '{print $1}')
   [[ "$got" == "$DETECT_RUNTIME_SHA256" ]] \
-    && pass "detect-runtime.sh 가 핀된 sha 와 동일 (무단 변경 0)" \
-    || fail "detect-runtime.sh 변경됨 (got $got, pinned $DETECT_RUNTIME_SHA256)"
+    && ok "detect-runtime.sh 가 핀된 sha 와 동일 (무단 변경 0)" \
+    || no "detect-runtime.sh 변경됨 (got $got, pinned $DETECT_RUNTIME_SHA256)"
 }
 
 # T17 + AC22: create-sandbox / mutation-guard case 본문 바이트 무변경
@@ -155,10 +154,10 @@ case_sandbox_guard_frozen() {
   local a b
   a=$(extract_case create-sandbox | shasum -a 256 | awk '{print $1}')
   b=$(extract_case mutation-guard | shasum -a 256 | awk '{print $1}')
-  [[ "$a" == "$CREATE_SANDBOX_SHA256" ]] && pass "create-sandbox 본문 무변경" \
-    || fail "create-sandbox 변경 (got $a)"
-  [[ "$b" == "$MUTATION_GUARD_SHA256" ]] && pass "mutation-guard 본문 무변경" \
-    || fail "mutation-guard 변경 (got $b)"
+  [[ "$a" == "$CREATE_SANDBOX_SHA256" ]] && ok "create-sandbox 본문 무변경" \
+    || no "create-sandbox 변경 (got $a)"
+  [[ "$b" == "$MUTATION_GUARD_SHA256" ]] && ok "mutation-guard 본문 무변경" \
+    || no "mutation-guard 변경 (got $b)"
 }
 
 # T18 + AC24/AC25/AC26: 훅 항목 수 · 에이전트 파일 수 · verdict 토큰 집합 불변
@@ -171,8 +170,8 @@ with open('$PLUGIN_ROOT/hooks/hooks.json', encoding='utf-8') as f:
 print(sum(len(v) for v in d.get('hooks', {}).values()))
 ")
   agents=$(ls "$PLUGIN_ROOT/agents" | wc -l | tr -d ' ')
-  [[ "$hooks" == "4" ]]  && pass "hooks.json 항목 4개 불변" || fail "hooks 항목 수 $hooks (기대 4)"
-  [[ "$agents" == "7" ]] && pass "agents/ 파일 7개 불변"    || fail "agents 파일 수 $agents (기대 7)"
+  [[ "$hooks" == "4" ]]  && ok "hooks.json 항목 4개 불변" || no "hooks 항목 수 $hooks (기대 4)"
+  [[ "$agents" == "7" ]] && ok "agents/ 파일 7개 불변"    || no "agents 파일 수 $agents (기대 7)"
   # verdict 토큰은 4종 밖으로 늘지 않는다.
   #
   # **부재를 통과로 읽지 않는다 (/qg iter-5 C3).** 앞 버전은 `if grep -qE … "$SKILL"`
@@ -181,9 +180,9 @@ print(sum(len(v) for v in d.get('hooks', {}).values()))
   # 을 PASS 로 찍었다 — 파일을 지워도, 이름을 바꿔도, 경로를 오타내도 GREEN 이다.
   # 음의 락은 빈 코퍼스 위에서 항상 참이므로 **코퍼스를 봤다는 positive** 가 필요하다.
   if [[ ! -f "$SKILL" ]]; then
-    fail "SKILL.md 부재 ($SKILL) — verdict 토큰 락이 공허하게 통과할 뻔했다"
+    no "SKILL.md 부재 ($SKILL) — verdict 토큰 락이 공허하게 통과할 뻔했다"
   elif grep -qE '\bPARTIAL\b|\bINCONCLUSIVE\b|\bDEGRADED_VERDICT\b' "$SKILL"; then
-    fail "SKILL.md에 신규 verdict 토큰 등장"
+    no "SKILL.md에 신규 verdict 토큰 등장"
   else
     # 양의 짝 — 4종이 실제로 그 파일에 있는가. 없으면 "토큰을 전부 지운" mutation 이
     # 음의 락만으로는 통과한다 (금지 토큰이 없는 것은 맞으므로).
@@ -191,8 +190,8 @@ print(sum(len(v) for v in d.get('hooks', {}).values()))
     for t in PASS FAIL SKIP_WITH_EVIDENCE NEEDS_RESOLUTION; do
       grep -qF "$t" "$SKILL" || missing="$missing $t"
     done
-    [[ -z "$missing" ]] && pass "verdict 토큰 4종 불변 (금지 토큰 0 + 4종 실재)" \
-      || fail "verdict 4종 중 누락:$missing"
+    [[ -z "$missing" ]] && ok "verdict 토큰 4종 불변 (금지 토큰 0 + 4종 실재)" \
+      || no "verdict 4종 중 누락:$missing"
   fi
 }
 
@@ -224,41 +223,41 @@ case_head_and_baseline_coexist() {
   # 그 출력 2행(= B)을 쓴다. 픽스처가 이 순서를 지켜야 하는 것 자체가 계약이다.
   local sb b h
   if ! sb=$(bash "$WT" create-sandbox "sess1234"); then
-    fail "create-sandbox 실패"; cd / && rm -rf "$REPO"; return
+    no "create-sandbox 실패"; cd / && rm -rf "$REPO"; return
   fi
   head_sha=$(printf '%s\n' "$sb" | sed -n 2p)
   if ! b=$(bash "$WT" create-baseline "$base_sha" "sess1234"); then
-    fail "create-baseline 실패"; cd / && rm -rf "$REPO"; return
+    no "create-baseline 실패"; cd / && rm -rf "$REPO"; return
   fi
   if ! h=$(bash "$WT" create-head "$head_sha" "sess1234"); then
-    fail "create-head 실패"; cd / && rm -rf "$REPO"; return
+    no "create-head 실패"; cd / && rm -rf "$REPO"; return
   fi
 
-  [[ "$b" != "$h" ]] && pass "두 축이 서로 다른 경로" || fail "두 축이 같은 경로: $b"
+  [[ "$b" != "$h" ]] && ok "두 축이 서로 다른 경로" || no "두 축이 같은 경로: $b"
   case "$h" in
-    */.claude/quality-gates/worktrees/*) pass "HEAD 축도 worktrees/ 네임스페이스 안" ;;
-    *) fail "네임스페이스 밖: $h" ;;
+    */.claude/quality-gates/worktrees/*) ok "HEAD 축도 worktrees/ 네임스페이스 안" ;;
+    *) no "네임스페이스 밖: $h" ;;
   esac
 
   local b_here=no h_here=no
   [[ -d "$b" ]] && b_here=yes
   [[ -d "$h" ]] && h_here=yes
   [[ "$b_here" == yes && "$h_here" == yes ]] \
-    && pass "기준선·HEAD 두 트리가 동시에 존재 (한쪽이 다른 쪽을 갈아엎지 않음)" \
-    || fail "공존 실패 (기준선=$b_here HEAD=$h_here) — 두 축이 한 트리로 붕괴"
+    && ok "기준선·HEAD 두 트리가 동시에 존재 (한쪽이 다른 쪽을 갈아엎지 않음)" \
+    || no "공존 실패 (기준선=$b_here HEAD=$h_here) — 두 축이 한 트리로 붕괴"
 
   # 내용 축 — 공존해도 같은 커밋이면 차등이 0 이다.
   [[ -f "$b/a.txt" && "$(cat "$b/a.txt")" == "v1" ]] \
-    && pass "기준선 트리 내용 == merge_base" || fail "기준선 내용 오염"
+    && ok "기준선 트리 내용 == merge_base" || no "기준선 내용 오염"
   [[ -f "$h/a.txt" && "$(cat "$h/a.txt")" == "v2" ]] \
-    && pass "HEAD 축 트리 내용 == 봉인 커밋 B" || fail "HEAD 축 내용 오염"
+    && ok "HEAD 축 트리 내용 == 봉인 커밋 B" || no "HEAD 축 내용 오염"
 
   ( cd "$h" && ! git symbolic-ref --quiet HEAD >/dev/null 2>&1 ) \
-    && pass "HEAD 축 워크트리는 detached" || fail "HEAD 축 detached 아님"
+    && ok "HEAD 축 워크트리는 detached" || no "HEAD 축 detached 아님"
 
   # remove 네임스페이스 가드가 HEAD 축에도 적용된다 (일회용이므로 지워질 수 있어야 함)
   bash "$WT" remove "$h" >/dev/null 2>&1
-  [[ ! -d "$h" ]] && pass "HEAD 축 트리 remove 적용됨" || fail "HEAD 축 remove 실패"
+  [[ ! -d "$h" ]] && ok "HEAD 축 트리 remove 적용됨" || no "HEAD 축 remove 실패"
   bash "$WT" remove "$b" >/dev/null 2>&1
   cd / && rm -rf "$REPO"
 }
@@ -292,37 +291,37 @@ case_create_head_asserts_sealed_commit() {
 
   # 음 ①: 샌드박스가 없으면 붙을 봉인 커밋이 없다 → 거부
   if bash "$WT" create-head "$tip" "sess7777" >/dev/null 2>&1; then
-    fail "샌드박스 없이 create-head 가 통과함"
+    no "샌드박스 없이 create-head 가 통과함"
   else
-    pass "샌드박스 부재 → create-head 거부"
+    ok "샌드박스 부재 → create-head 거부"
   fi
 
   local sb sealed
   if ! sb=$(bash "$WT" create-sandbox "sess7777"); then
-    fail "create-sandbox 실패"; cd / && rm -rf "$REPO"; return
+    no "create-sandbox 실패"; cd / && rm -rf "$REPO"; return
   fi
   sealed=$(printf '%s\n' "$sb" | sed -n 2p)
 
   # 양의 짝: 봉인 커밋은 받아들인다 (음만 재면 "언제나 거부" 가 통과한다)
   if bash "$WT" create-head "$sealed" "sess7777" >/dev/null 2>&1; then
-    pass "봉인 커밋 B → create-head 수락 (양의 짝)"
+    ok "봉인 커밋 B → create-head 수락 (양의 짝)"
     bash "$WT" remove "$(pwd)/.claude/quality-gates/worktrees/head-sess7777" >/dev/null 2>&1
   else
-    fail "봉인 커밋인데 create-head 가 거부함"
+    no "봉인 커밋인데 create-head 가 거부함"
   fi
 
   # 음 ②: merge_base — 형제 호출과 인자 모양이 같아 가장 현실적인 오값
   if bash "$WT" create-head "$mb" "sess7777" >/dev/null 2>&1; then
-    fail "merge_base 가 통과함 — HEAD 축이 기준선 복사본이 되어 degrade 없이 PASS"
+    no "merge_base 가 통과함 — HEAD 축이 기준선 복사본이 되어 degrade 없이 PASS"
   else
-    pass "merge_base → create-head 거부 (차등 구조적 0 봉쇄)"
+    ok "merge_base → create-head 거부 (차등 구조적 0 봉쇄)"
   fi
 
   # 음 ③: 봉인 전 브랜치 tip — 재시도가 새 B 를 만든 뒤 옛 값을 재사용하는 축
   if bash "$WT" create-head "$tip" "sess7777" >/dev/null 2>&1; then
-    fail "봉인 아닌 커밋(브랜치 tip)이 통과함 — 재시도 stale 축이 열려 있다"
+    no "봉인 아닌 커밋(브랜치 tip)이 통과함 — 재시도 stale 축이 열려 있다"
   else
-    pass "비-봉인 커밋 → create-head 거부 (재시도 stale 봉쇄)"
+    ok "비-봉인 커밋 → create-head 거부 (재시도 stale 봉쇄)"
   fi
 
   cd / && rm -rf "$REPO"
@@ -335,5 +334,4 @@ for c in case_create_baseline case_create_baseline_refuses_colliding_user_worktr
          case_sandbox_guard_frozen case_no_new_surfaces; do
   echo "== $c"; $c
 done
-echo "── runtime contract invariance: $PASS passed, $FAIL failed"
-[[ $FAIL -eq 0 ]]
+finish

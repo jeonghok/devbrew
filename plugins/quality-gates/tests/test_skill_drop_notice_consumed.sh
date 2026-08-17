@@ -14,9 +14,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 QG="$ROOT/plugins/quality-gates"
 SKILL="$QG/skills/quality-pipeline/SKILL.md"
 SCRIPT="$QG/scripts/synthesize_findings.py"
-pass=0; fail=0
-ok() { pass=$((pass+1)); echo "  ✓ $1"; }
-no() { fail=$((fail+1)); echo "  ✗ $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 tmp="$(mktemp -d -t qg-dropnotice-XXXXXX)" || exit 1
 trap 'rc=$?; rm -rf "$tmp"; exit $rc' EXIT
@@ -74,7 +72,4 @@ if [ -n "$producer_phrase" ] && printf '%s' "$window" | grep -qF "$producer_phra
 else
   no "c — 생산자/소비자 문구 불일치 (producer='${producer_phrase:-<none>}')"
 fi
-
-echo ""
-echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[ "$fail" -eq 0 ]
+finish

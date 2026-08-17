@@ -8,10 +8,8 @@ RESOLVE="$PLUGIN_ROOT/scripts/resolve-baseline.sh"
 REVIEW_SCOPE="$PLUGIN_ROOT/scripts/check-review-scope.sh"
 CANDIDATES="$PLUGIN_ROOT/scripts/compute-test-scope-candidates.sh"
 
-PASS=0; FAIL=0; REPO=""
-pass() { PASS=$((PASS + 1)); echo "  → PASS: $1"; }
-fail() { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $1"; }
-field() { printf '%s\n' "$2" | awk -v k="$1:" '$1 == k { print $2 }'; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+REPO=""
 
 mk_repo() {   # main + feature(1 commit ahead), CWD = repo
   REPO=$(mktemp -d) || exit 1; cd "$REPO" || exit 1
@@ -32,8 +30,8 @@ case_normal() {
      && "$(field base_ref "$out")" == "main" \
      && "$(field merge_base "$out")" == "$expect" \
      && "$(field degraded "$out")" == "no" ]]; then
-    pass "정상 레포 → base/base_ref/merge_base/degraded 4키"
-  else fail "정상 (got: $out)"; fi
+    ok "정상 레포 → base/base_ref/merge_base/degraded 4키"
+  else no "정상 (got: $out)"; fi
   cleanup
 }
 
@@ -43,8 +41,8 @@ case_detached() {
   git checkout -q --detach HEAD
   local out; out=$(bash "$RESOLVE")
   if [[ "$(field degraded "$out")" == "yes" && "$(field merge_base "$out")" == "-" ]]; then
-    pass "detached HEAD → degraded:yes, merge_base:-"
-  else fail "detached (got: $out)"; fi
+    ok "detached HEAD → degraded:yes, merge_base:-"
+  else no "detached (got: $out)"; fi
   cleanup
 }
 
@@ -53,11 +51,11 @@ case_shallow() {
   mk_repo
   local src="$REPO" dst; dst=$(mktemp -d)
   git clone -q --depth 1 "file://$src" "$dst/s" 2>/dev/null
-  cd "$dst/s" || { fail "shallow clone 실패"; rm -rf "$dst"; cleanup; return; }
+  cd "$dst/s" || { no "shallow clone 실패"; rm -rf "$dst"; cleanup; return; }
   local out; out=$(bash "$RESOLVE")
   if [[ "$(field degraded "$out")" == "yes" ]]; then
-    pass "shallow clone → degraded:yes"
-  else fail "shallow (got: $out)"; fi
+    ok "shallow clone → degraded:yes"
+  else no "shallow (got: $out)"; fi
   cd / && rm -rf "$dst"; cleanup
 }
 
@@ -69,8 +67,8 @@ case_no_base() {
   echo x > a.txt; git add a.txt; git commit -qm x
   local out; out=$(bash "$RESOLVE")
   if [[ "$(field degraded "$out")" == "yes" && "$(field base "$out")" == "-" ]]; then
-    pass "base 미해결 → degraded:yes"
-  else fail "no-base (got: $out)"; fi
+    ok "base 미해결 → degraded:yes"
+  else no "no-base (got: $out)"; fi
   cleanup
 }
 
@@ -80,11 +78,11 @@ case_no_hardcoded_main() {
   # `main`을 baseline으로 쓰는 리터럴 패턴만 검사 (주석/산문의 'main' 단어는 무관)
   grep -nE '(verify --quiet main|main\.\.\.HEAD|main\.\.HEAD|log --oneline main)' \
        "$REVIEW_SCOPE" "$CANDIDATES" && bad=1
-  if [[ $bad -eq 0 ]]; then pass "두 소비자에 main 하드코딩 baseline 0회"
-  else fail "main 하드코딩 잔존"; fi
+  if [[ $bad -eq 0 ]]; then ok "두 소비자에 main 하드코딩 baseline 0회"
+  else no "main 하드코딩 잔존"; fi
   if grep -q 'resolve-baseline.sh' "$REVIEW_SCOPE" && grep -q 'resolve-baseline.sh' "$CANDIDATES"; then
-    pass "두 소비자가 resolve-baseline.sh를 실제 호출"
-  else fail "resolve-baseline.sh 호출 부재"; fi
+    ok "두 소비자가 resolve-baseline.sh를 실제 호출"
+  else no "resolve-baseline.sh 호출 부재"; fi
 }
 
 # T4: check-review-scope.sh 출력 계약 불변 (5키 + exit 0)
@@ -93,8 +91,8 @@ case_review_scope_contract() {
   local out rc; out=$(bash "$REVIEW_SCOPE"); rc=$?
   local keys; keys=$(printf '%s\n' "$out" | awk -F: '{print $1}' | tr '\n' ',')
   if [[ $rc -eq 0 && "$keys" == "changes_exist,branch_ahead_count,worktree_dirty,base,degraded," ]]; then
-    pass "check-review-scope 5키 순서 + exit 0 불변"
-  else fail "check-review-scope 계약 (rc=$rc keys=$keys)"; fi
+    ok "check-review-scope 5키 순서 + exit 0 불변"
+  else no "check-review-scope 계약 (rc=$rc keys=$keys)"; fi
   cleanup
 }
 
@@ -110,16 +108,16 @@ case_same_as_head() {
   # (1) feature 브랜치 정상 — base 가 뒤에 있다.
   local out; out=$(bash "$RESOLVE")
   if [[ "$(field same_as_head "$out")" == "no" && "$(field ahead "$out")" == "1" ]]; then
-    pass "feature 1커밋 앞섬 → same_as_head:no, ahead:1"
-  else fail "feature 정상 (got: $out)"; fi
+    ok "feature 1커밋 앞섬 → same_as_head:no, ahead:1"
+  else no "feature 정상 (got: $out)"; fi
 
   # (2) **변조** — refs/heads/main 을 HEAD 로 옮긴다. update-ref 한 번이면 된다.
   git update-ref refs/heads/main "$(git rev-parse HEAD)"
   out=$(bash "$RESOLVE")
   if [[ "$(field same_as_head "$out")" == "yes" && "$(field ahead "$out")" == "0" \
      && "$(field degraded "$out")" == "no" ]]; then
-    pass "base ref 변조로 merge_base==HEAD → same_as_head:yes (degraded 와 별개 키)"
-  else fail "변조 감지 (got: $out)"; fi
+    ok "base ref 변조로 merge_base==HEAD → same_as_head:yes (degraded 와 별개 키)"
+  else no "변조 감지 (got: $out)"; fi
   cleanup
 }
 
@@ -137,8 +135,8 @@ case_same_as_head_does_not_kill_review_floor() {
      && $rc -eq 0 \
      && "$(field changes_exist "$out")" == "yes" \
      && "$(field degraded "$out")" == "no" ]]; then
-    pass "main 위 미커밋 변경 → same_as_head:yes 인데 floor 는 changes_exist:yes/degraded:no"
-  else fail "review floor 보존 (rb: $rb | scope: $out rc=$rc)"; fi
+    ok "main 위 미커밋 변경 → same_as_head:yes 인데 floor 는 changes_exist:yes/degraded:no"
+  else no "review floor 보존 (rb: $rb | scope: $out rc=$rc)"; fi
   cleanup
 }
 
@@ -151,8 +149,8 @@ case_degraded_emits_all_keys() {
   local keys; keys=$(printf '%s\n' "$out" | awk -F: '{print $1}' | tr '\n' ',')
   if [[ "$keys" == "base,base_ref,merge_base,degraded,same_as_head,ahead," \
      && "$(field same_as_head "$out")" == "-" && "$(field ahead "$out")" == "-" ]]; then
-    pass "degraded 경로도 6키 전부 (same_as_head:- ahead:-)"
-  else fail "degraded 키 (got keys=$keys out=$out)"; fi
+    ok "degraded 경로도 6키 전부 (same_as_head:- ahead:-)"
+  else no "degraded 키 (got keys=$keys out=$out)"; fi
   cleanup
 }
 
@@ -185,8 +183,8 @@ case_same_as_head_x_worktree_dirty() {
      && "$(field same_as_head "$rb_c")" == "yes" \
      && "$(field worktree_dirty "$sc_d")" == "yes" \
      && "$(field worktree_dirty "$sc_c")" == "no" ]]; then
-    pass "same_as_head:yes 고정, worktree_dirty 가 dirty/clean 을 구별 → 판별자 결정 가능"
-  else fail "판별자 구별력 (dirty: rb=$rb_d sc=$sc_d | clean: rb=$rb_c sc=$sc_c)"; fi
+    ok "same_as_head:yes 고정, worktree_dirty 가 dirty/clean 을 구별 → 판별자 결정 가능"
+  else no "판별자 구별력 (dirty: rb=$rb_d sc=$sc_d | clean: rb=$rb_c sc=$sc_c)"; fi
   cleanup
 }
 
@@ -197,8 +195,8 @@ case_total() {
   : > tests/test_a.py; : > tests/test_b.py; : > src/plain.py
   git add -A; git commit -qm tests
   local out; out=$(bash "$CANDIDATES" --total)
-  if [[ "$out" == "2" ]]; then pass "--total → 2 (테스트 2, 비테스트 1)"
-  else fail "--total (got: '$out', expected 2)"; fi
+  if [[ "$out" == "2" ]]; then ok "--total → 2 (테스트 2, 비테스트 1)"
+  else no "--total (got: '$out', expected 2)"; fi
   cleanup
 }
 
@@ -209,5 +207,4 @@ for c in case_normal case_detached case_shallow case_no_base \
          case_no_hardcoded_main case_review_scope_contract case_total; do
   echo "== $c"; $c
 done
-echo "── resolve-baseline: $PASS passed, $FAIL failed"
-[[ $FAIL -eq 0 ]]
+finish

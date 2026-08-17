@@ -34,16 +34,9 @@ awk '/Review gate/{if(!r)r=NR} /Runtime gate/{if(!rt)rt=NR} END{
 echo "PASS V2a (gate-label order: review < runtime)"
 
 # ============== V2b: Context anchors + options + P21 (AC6/7/8) ==============
-check() {
-  local needle="$1"
-  local label="$2"
-  if ! grep -q -- "$needle" "$S"; then
-    echo "FAIL V2b: missing $label — needle: $needle"
-    exit 1
-  fi
-}
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 # Review iter context
-check "findings remain"          "Review iter anchor"
+assert_file_grep "$S" 'findings remain' "Review iter anchor"
 # AC6 anchor uniqueness (Medium): `findings remain` must appear in EXACTLY
 # ONE AskUserQuestion question template, so the routing is unambiguous.
 # Prose mentions and meta-comments outside `question:` lines are allowed.
@@ -53,16 +46,16 @@ if [[ "$question_findings" -ne 1 ]]; then
   exit 1
 fi
 echo "PASS V2b (anchor uniqueness: 1 question line)"
-check "Retry"                    "Review iter option"
-check "Proceed to Runtime gate"  "Review iter option"
+assert_file_grep "$S" 'Retry' "Review iter option"
+assert_file_grep "$S" 'Proceed to Runtime gate' "Review iter option"
 # Runtime NEEDS_RESOLUTION context
-check "Runtime verifier needs"   "Runtime anchor"
-check "Yes, retry"               "Runtime option"
-check "Skip with evidence"       "Runtime option"
-check "P21"                      "P21 secret-policy token"
+assert_file_grep "$S" 'Runtime verifier needs' "Runtime anchor"
+assert_file_grep "$S" 'Yes, retry' "Runtime option"
+assert_file_grep "$S" 'Skip with evidence' "Runtime option"
+assert_file_grep "$S" 'P21' "P21 secret-policy token"
 echo "PASS V2b (context anchors + options + P21)"
 
 # V7 removed in v1.32.1 (see header). Protocol-shape coverage moved to
 # tests/harness/test_skill_orchestration_behavior.sh.
 
-echo "All SKILL orchestration checks pass."
+finish

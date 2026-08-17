@@ -8,9 +8,8 @@ PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 RTS="$PLUGIN_ROOT/scripts/run-test-selection.sh"
 TAB=$'\t'
 
-PASS=0; FAIL=0; W=""
-pass() { PASS=$((PASS + 1)); echo "  → PASS: $1"; }
-fail() { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+W=""
 mkw()  { W=$(mktemp -d) || exit 1; }
 rmw()  { cd / && rm -rf "$W"; }
 
@@ -25,8 +24,8 @@ case_assign_go_package() {
   local out; out=$(printf 'pkg/a/one_test.go\npkg/a/two_test.go\npkg/b/three_test.go\n' \
                    | bash "$RTS" assign "$W" | sort | tr '\n' ';')
   if [[ "$out" == "pkg/a${TAB}go${TAB}package;pkg/b${TAB}go${TAB}package;" ]]; then
-    pass "go: 3파일 → 2패키지 unit (중복 제거)"
-  else fail "go assign (got: $out)"; fi
+    ok "go: 3파일 → 2패키지 unit (중복 제거)"
+  else no "go assign (got: $out)"; fi
   rmw
 }
 
@@ -45,8 +44,8 @@ case_assign_unclaimed() {
   local out; out=$(printf 'tests/test_a.py\nspec/foo_spec.rb\n' \
                    | bash "$RTS" assign "$W" | sort | tr '\n' ';')
   if [[ "$out" == "spec/foo_spec.rb${TAB}unclaimed${TAB}file;tests/test_a.py${TAB}unittest${TAB}file;" ]]; then
-    pass "미주장 파일 → unclaimed 행"
-  else fail "unclaimed (got: $out)"; fi
+    ok "미주장 파일 → unclaimed 행"
+  else no "unclaimed (got: $out)"; fi
   rmw
 }
 
@@ -65,8 +64,8 @@ case_assign_unittest_skips_unjudgeable_file() {
   local out; out=$(printf 'tests/test_pytest_style.py\ntests/test_unittest_style.py\n' \
                    | bash "$RTS" assign "$W" | sort | tr '\n' ';')
   if [[ "$out" == "tests/test_pytest_style.py${TAB}unclaimed${TAB}file;tests/test_unittest_style.py${TAB}unittest${TAB}file;" ]]; then
-    pass "unittest: bare def test_ 는 unclaimed(→degraded) · TestCase 는 claim(양의 짝)"
-  else fail "unittest 판정가능성 게이트 (got: $out)"; fi
+    ok "unittest: bare def test_ 는 unclaimed(→degraded) · TestCase 는 claim(양의 짝)"
+  else no "unittest 판정가능성 게이트 (got: $out)"; fi
   rmw
 }
 
@@ -94,8 +93,8 @@ case_assign_unittest_substring_escapes() {
   want+="tests/test_helper.py${TAB}unclaimed${TAB}file;"
   want+="tests/test_mockimport.py${TAB}unclaimed${TAB}file;"
   if [[ "$out" == "$want" ]]; then
-    pass "unittest: mock-import·주석·비상속 헬퍼 3축 전부 unclaimed (부분문자열 탈출 봉쇄)"
-  else fail "부분문자열 탈출 (got: $out)"; fi
+    ok "unittest: mock-import·주석·비상속 헬퍼 3축 전부 unclaimed (부분문자열 탈출 봉쇄)"
+  else no "부분문자열 탈출 (got: $out)"; fi
   rmw
 }
 
@@ -119,8 +118,8 @@ case_assign_unittest_still_claims_real_files() {
   want+="tests/test_loadtests.py${TAB}unittest${TAB}file;"
   want+="tests/test_multi.py${TAB}unittest${TAB}file;"
   if [[ "$out" == "$want" ]]; then
-    pass "unittest: django 상속·다중 상속·load_tests 는 여전히 claim (양의 짝)"
-  else fail "정상 unittest 파일 claim (got: $out)"; fi
+    ok "unittest: django 상속·다중 상속·load_tests 는 여전히 claim (양의 짝)"
+  else no "정상 unittest 파일 claim (got: $out)"; fi
   rmw
 }
 
@@ -142,8 +141,8 @@ case_assign_unittest_forall_not_exists() {
                    | bash "$RTS" assign "$W" | sort | tr '\n' ';')
   local want="tests/test_doc.py${TAB}unclaimed${TAB}file;tests/test_mixed.py${TAB}unclaimed${TAB}file;"
   if [[ "$out" == "$want" ]]; then
-    pass "unittest: mixed·docstring-예제 둘 다 unclaimed (∃ 가 아니라 ∀)"
-  else fail "∀-조건 (got: $out)"; fi
+    ok "unittest: mixed·docstring-예제 둘 다 unclaimed (∃ 가 아니라 ∀)"
+  else no "∀-조건 (got: $out)"; fi
   rmw
 }
 
@@ -159,8 +158,8 @@ case_assign_judge_gate_is_unittest_only() {
   printf 'def test_bare():\n    assert False\n' > "$W/tests/test_bare.py"
   local out; out=$(printf 'tests/test_bare.py\n' | bash "$RTS" assign "$W" | tr '\n' ';')
   if [[ "$out" == "tests/test_bare.py${TAB}pytest${TAB}file;" ]]; then
-    pass "pytest 레포의 bare def test_ 는 claim 된다 (게이트는 unittest 한정)"
-  else fail "판정가능성 게이트 스코프 (got: $out)"; fi
+    ok "pytest 레포의 bare def test_ 는 claim 된다 (게이트는 unittest 한정)"
+  else no "판정가능성 게이트 스코프 (got: $out)"; fi
   rmw
 }
 
@@ -173,8 +172,8 @@ case_assign_bulk_conflict() {
   out=$(printf 'src/lib.rs\nsrc/other.rs\n' | bash "$RTS" assign "$W" 2>"$W/err.txt")
   err=$(cat "$W/err.txt")
   if [[ "$out" == "BULK${TAB}cargo${TAB}bulk" ]] && printf '%s' "$err" | grep -q '미실행 러너: make'; then
-    pass "cargo+make → cargo 1행 흡수 + make는 미실행 러너로 loud"
-  else fail "bulk 충돌 (out='$out' err='$err')"; fi
+    ok "cargo+make → cargo 1행 흡수 + make는 미실행 러너로 loud"
+  else no "bulk 충돌 (out='$out' err='$err')"; fi
   rmw
 }
 
@@ -183,7 +182,7 @@ case_assign_residual_no_absorber() {
   mkw; mkdir -p "$W/tests"; mk_unittest_file "$W/tests/test_a.py"
   local out; out=$(printf 'src/main.rs\n' | bash "$RTS" assign "$W")
   [[ "$out" == "src/main.rs${TAB}unclaimed${TAB}file" ]] \
-    && pass "흡수자 없음 → 잔여는 unclaimed" || fail "잔여 (got: $out)"
+    && ok "흡수자 없음 → 잔여는 unclaimed" || no "잔여 (got: $out)"
   rmw
 }
 
@@ -194,8 +193,8 @@ case_assign_shell_scope_excludes_non_test() {
   printf '#!/usr/bin/env bash\nexit 0\n' > "$W/scripts/deploy.sh"; chmod +x "$W/scripts/deploy.sh"
   local out; out=$(printf 'tests/t.sh\nscripts/deploy.sh\n' | bash "$RTS" assign "$W" | sort | tr '\n' ';')
   if [[ "$out" == "scripts/deploy.sh${TAB}unclaimed${TAB}file;tests/t.sh${TAB}shell${TAB}file;" ]]; then
-    pass "tests/ 밖 실행 스크립트 → unclaimed (shell 미주장)"
-  else fail "shell 스코프 (got: $out)"; fi
+    ok "tests/ 밖 실행 스크립트 → unclaimed (shell 미주장)"
+  else no "shell 스코프 (got: $out)"; fi
   rmw
 }
 
@@ -205,7 +204,7 @@ case_assign_shell_scope_includes_nested() {
   printf '#!/usr/bin/env bash\nexit 0\n' > "$W/pkg/tests/t.sh"; chmod +x "$W/pkg/tests/t.sh"
   local out; out=$(printf 'pkg/tests/t.sh\n' | bash "$RTS" assign "$W")
   [[ "$out" == "pkg/tests/t.sh${TAB}shell${TAB}file" ]] \
-    && pass "중첩 tests/ 실행 스크립트 → shell" || fail "중첩 tests/ (got: $out)"
+    && ok "중첩 tests/ 실행 스크립트 → shell" || no "중첩 tests/ (got: $out)"
   rmw
 }
 
@@ -215,7 +214,7 @@ case_assign_dedup_claimed_file() {
   printf '#!/usr/bin/env bash\nexit 0\n' > "$W/tests/t.sh"; chmod +x "$W/tests/t.sh"
   local out; out=$(printf 'tests/t.sh\ntests/t.sh\n' | bash "$RTS" assign "$W")
   [[ "$out" == "tests/t.sh${TAB}shell${TAB}file" ]] \
-    && pass "중복 stdin (claimed) → unit 행 1개" || fail "중복 claimed (got: $out)"
+    && ok "중복 stdin (claimed) → unit 행 1개" || no "중복 claimed (got: $out)"
   rmw
 }
 
@@ -224,7 +223,7 @@ case_assign_dedup_unclaimed() {
   mkw; mkdir -p "$W/tests"; mk_unittest_file "$W/tests/test_a.py"   # unittest만 감지 — .rb는 미주장
   local out; out=$(printf 'spec/foo_spec.rb\nspec/foo_spec.rb\n' | bash "$RTS" assign "$W")
   [[ "$out" == "spec/foo_spec.rb${TAB}unclaimed${TAB}file" ]] \
-    && pass "중복 stdin (unclaimed) → unit 행 1개" || fail "중복 unclaimed (got: $out)"
+    && ok "중복 stdin (unclaimed) → unit 행 1개" || no "중복 unclaimed (got: $out)"
   rmw
 }
 
@@ -241,8 +240,8 @@ case_assign_dedup_is_literal_not_regex() {
   # 반대 순서(a.sh 먼저)는 이 결함을 통과시키지 못한다 — 이 순서로 mutation-확인했다.
   local out; out=$(printf 'tests/axsh\ntests/a.sh\n' | bash "$RTS" assign "$W" | sort | tr '\n' ';')
   if [[ "$out" == "tests/a.sh${TAB}shell${TAB}file;tests/axsh${TAB}unclaimed${TAB}file;" ]]; then
-    pass "메타문자 경로가 서로를 삼키지 않는다 (literal dedup)"
-  else fail "dedup literal (got: $out)"; fi
+    ok "메타문자 경로가 서로를 삼키지 않는다 (literal dedup)"
+  else no "dedup literal (got: $out)"; fi
   rmw
 }
 
@@ -253,7 +252,7 @@ case_assign_spec_any_extension() {
   mkw; printf '{"devDependencies":{"vitest":"1"}}' > "$W/package.json"
   local out; out=$(printf 'src/foo.spec.mjs\n' | bash "$RTS" assign "$W")
   [[ "$out" == "src/foo.spec.mjs${TAB}vitest${TAB}file" ]] \
-    && pass ".spec.mjs → vitest (설계 표의 *.spec.*)" || fail "spec 확장자 (got: $out)"
+    && ok ".spec.mjs → vitest (설계 표의 *.spec.*)" || no "spec 확장자 (got: $out)"
   rmw
 }
 
@@ -273,14 +272,14 @@ case_run_test_failure_vs_absent_runner() {
   if [[ $rc -eq 0 ]] \
      && printf '%s\n' "$out" | grep -q "^tests/ok\.sh${TAB}pass${TAB}0$" \
      && printf '%s\n' "$out" | grep -q "^tests/bad\.sh${TAB}fail${TAB}1$"; then
-    pass "테스트 실패 → exit 0 + status=fail"
-  else fail "테스트 실패 분리 (rc=$rc out='$out')"; fi
+    ok "테스트 실패 → exit 0 + status=fail"
+  else no "테스트 실패 분리 (rc=$rc out='$out')"; fi
 
   # 같은 트리에서 감지되지 않는 러너 → exit 3 + 전 unit unrun (T54 run 절반, AC56)
   out=$(bash "$RTS" run "$W" cargo bulk BULK 2>/dev/null); rc=$?
   if [[ $rc -eq 3 && "$out" == "BULK${TAB}unrun${TAB}-" ]]; then
-    pass "어댑터 사용 불가 → exit 3 + 전 unit unrun"
-  else fail "exit 3 (rc=$rc out='$out')"; fi
+    ok "어댑터 사용 불가 → exit 3 + 전 unit unrun"
+  else no "exit 3 (rc=$rc out='$out')"; fi
   rmw
 }
 
@@ -290,9 +289,9 @@ case_run_total_function() {
   local n
   n=$(bash "$RTS" run "$W" shell per-unit tests/ok.sh tests/bad.sh tests/gone.sh 2>/dev/null \
       | wc -l | tr -d ' ')
-  [[ "$n" == "3" ]] && pass "정상+absent 혼합: 3 입력 → 3 행" || fail "총 함수 정상 ($n)"
+  [[ "$n" == "3" ]] && ok "정상+absent 혼합: 3 입력 → 3 행" || no "총 함수 정상 ($n)"
   n=$(bash "$RTS" run "$W" cargo bulk A B C 2>/dev/null | wc -l | tr -d ' ')
-  [[ "$n" == "3" ]] && pass "exit 3: 3 입력 → 3 unrun 행" || fail "총 함수 exit3 ($n)"
+  [[ "$n" == "3" ]] && ok "exit 3: 3 입력 → 3 unrun 행" || no "총 함수 exit3 ($n)"
   rmw
 }
 
@@ -301,7 +300,7 @@ case_run_absent() {
   mk_shell_repo
   local out; out=$(bash "$RTS" run "$W" shell per-unit tests/gone.sh 2>/dev/null)
   [[ "$out" == "tests/gone.sh${TAB}absent${TAB}-" ]] \
-    && pass "부재 unit → absent" || fail "absent (got: $out)"
+    && ok "부재 unit → absent" || no "absent (got: $out)"
   rmw
 }
 
@@ -313,7 +312,7 @@ case_run_bulk_green() {
   local out passes
   out=$(bash "$RTS" run "$W" shell bulk tests/ok.sh tests/ok2.sh 2>/dev/null)
   passes=$(printf '%s\n' "$out" | grep -c "${TAB}pass${TAB}0$")
-  [[ "$passes" == "2" ]] && pass "bulk green → 전 unit pass 행" || fail "bulk green ($out)"
+  [[ "$passes" == "2" ]] && ok "bulk green → 전 unit pass 행" || no "bulk green ($out)"
   rmw
 }
 
@@ -339,9 +338,9 @@ case_run_bulk_red_stamps_every_unit() {
   # 관측 기반 degrade 가 정확히 이 모양을 본다.
   distinct=$(printf '%s\n' "$out" | awk -F'\t' 'NF==3 {print $2"\t"$3}' | sort -u | grep -c .)
   if [[ "$fails" == "3" && "$distinct" == "1" ]]; then
-    pass "bulk red → 전 unit 에 실패 코드가 찍힌다(도말 서명 = 쌍 1종)"
+    ok "bulk red → 전 unit 에 실패 코드가 찍힌다(도말 서명 = 쌍 1종)"
   else
-    fail "bulk red (fails=$fails distinct=$distinct out='$out')"
+    no "bulk red (fails=$fails distinct=$distinct out='$out')"
   fi
   rmw
 }
@@ -370,8 +369,8 @@ case_run_bulk_red_reaches_degrade() {
        | awk '$1 == "attribution_status:" { print $2 }')
   rm -rf "$d"
   [[ "$st" == "degraded" ]] \
-    && pass "bulk red 도말이 하류에서 degraded 로 읽힌다 (mode 를 per-unit 이라 선언해도)" \
-    || fail "bulk red 하류 degrade (attribution_status=$st)"
+    && ok "bulk red 도말이 하류에서 degraded 로 읽힌다 (mode 를 per-unit 이라 선언해도)" \
+    || no "bulk red 하류 degrade (attribution_status=$st)"
   rmw
 }
 
@@ -384,8 +383,8 @@ case_run_shell_refuses_out_of_scope_unit() {
   chmod +x "$W/scripts/deploy.sh"
   local out; out=$(bash "$RTS" run "$W" shell per-unit scripts/deploy.sh 2>/dev/null)
   if [[ "$out" == "scripts/deploy.sh${TAB}unrun${TAB}-" && ! -e "$W/PWNED" ]]; then
-    pass "스코프 밖 unit → 실행 거부 + unrun (부작용 없음)"
-  else fail "실행 거부 (out='$out', PWNED=$([[ -e "$W/PWNED" ]] && echo yes || echo no))"; fi
+    ok "스코프 밖 unit → 실행 거부 + unrun (부작용 없음)"
+  else no "실행 거부 (out='$out', PWNED=$([[ -e "$W/PWNED" ]] && echo yes || echo no))"; fi
   rmw
 }
 
@@ -396,8 +395,8 @@ case_run_unknown_runner_usage_error() {
   mkw
   local out rc; out=$(bash "$RTS" run "$W" bogus-runner bulk X 2>/dev/null); rc=$?
   if [[ $rc -eq 2 && -z "$out" ]]; then
-    pass "알 수 없는 runner → exit 2 (usage) + stdout 없음"
-  else fail "unknown runner exit (rc=$rc out='$out')"; fi
+    ok "알 수 없는 runner → exit 2 (usage) + stdout 없음"
+  else no "unknown runner exit (rc=$rc out='$out')"; fi
   rmw
 }
 
@@ -411,8 +410,8 @@ case_run_bulk_partial_absent() {
   if [[ "$n" == "2" ]] \
      && printf '%s\n' "$out" | grep -q "^tests/ok\.sh${TAB}" \
      && printf '%s\n' "$out" | grep -q "^tests/gone\.sh${TAB}absent${TAB}-$"; then
-    pass "bulk 부분 부재 → 2행 (존재분 + absent)"
-  else fail "bulk partial absent (got: $out)"; fi
+    ok "bulk 부분 부재 → 2행 (존재분 + absent)"
+  else no "bulk partial absent (got: $out)"; fi
   rmw
 }
 
@@ -428,8 +427,8 @@ case_run_bulk_refused_does_not_corrupt_sibling() {
   if printf '%s\n' "$out" | grep -q "^tests/ok\.sh${TAB}pass${TAB}0$" \
      && printf '%s\n' "$out" | grep -q "^scripts/deploy\.sh${TAB}unrun${TAB}-$" \
      && [[ ! -e "$W/PWNED" ]]; then
-    pass "bulk 거부 unit 이 형제 상태를 오염시키지 않음 (부작용 없음)"
-  else fail "bulk 혼합 거부 (out='$out', PWNED=$([[ -e "$W/PWNED" ]] && echo yes || echo no))"; fi
+    ok "bulk 거부 unit 이 형제 상태를 오염시키지 않음 (부작용 없음)"
+  else no "bulk 혼합 거부 (out='$out', PWNED=$([[ -e "$W/PWNED" ]] && echo yes || echo no))"; fi
   rmw
 }
 
@@ -447,8 +446,8 @@ case_run_bulk_unit_path_with_space() {
   printf 'def test_ok():\n    assert True\n' > "$W/tests/test my.py"
   local out; out=$(bash "$RTS" run "$W" pytest bulk "tests/test my.py" 2>/dev/null)
   [[ "$out" == "tests/test my.py${TAB}pass${TAB}0" ]] \
-    && pass "공백 포함 unit 경로가 bulk 모드에서 쪼개지지 않음" \
-    || fail "공백 경로 bulk (got: $out)"
+    && ok "공백 포함 unit 경로가 bulk 모드에서 쪼개지지 않음" \
+    || no "공백 경로 bulk (got: $out)"
   rmw
 }
 
@@ -471,24 +470,24 @@ case_unit_outside_worktree_is_refused() {
 
   out=$(printf '../other/tests/evil.sh\n' | bash "$RTS" assign "$w")
   [[ "$out" == "../other/tests/evil.sh${TAB}unclaimed${TAB}file" ]] \
-    && pass "assign: 워크트리 밖 unit 미주장 (unclaimed → verification degraded)" \
-    || fail "assign 담김 (got: $out)"
+    && ok "assign: 워크트리 밖 unit 미주장 (unclaimed → verification degraded)" \
+    || no "assign 담김 (got: $out)"
 
   out=$(bash "$RTS" run "$w" shell per-unit ../other/tests/evil.sh 2>/dev/null)
   if [[ ! -e "$root/ESCAPED" ]]; then
-    pass "run: 워크트리 밖 unit 미실행 (부작용 없음)"
+    ok "run: 워크트리 밖 unit 미실행 (부작용 없음)"
   else
-    fail "run 이 워크트리 밖 스크립트를 실행함 (out='$out')"
+    no "run 이 워크트리 밖 스크립트를 실행함 (out='$out')"
     rm -f "$root/ESCAPED"
   fi
   n=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
-  [[ "$n" == "1" ]] && pass "거부해도 입력당 정확히 1행 (총 함수 유지)" \
-                    || fail "총 함수 깨짐 ($n 행: '$out')"
+  [[ "$n" == "1" ]] && ok "거부해도 입력당 정확히 1행 (총 함수 유지)" \
+                    || no "총 함수 깨짐 ($n 행: '$out')"
 
   # 절대경로도 같은 클래스다 — `..` 만 막으면 절반만 막은 것이다.
   out=$(bash "$RTS" run "$w" shell per-unit "$evil" 2>/dev/null)
-  [[ ! -e "$root/ESCAPED" ]] && pass "절대경로 unit 도 미실행" \
-                             || fail "절대경로 unit 이 실행됨 (out='$out')"
+  [[ ! -e "$root/ESCAPED" ]] && ok "절대경로 unit 도 미실행" \
+                             || no "절대경로 unit 이 실행됨 (out='$out')"
 
   # 심볼릭 링크에는 **두 축**이 있고 서로 다른 코드가 막는다. 디렉토리 축만 재면
   # 잎(leaf) 축이 열린 채로 통과한다 — 라운드 2 NEW-2 가 그 상태를 실측으로 뚫었다.
@@ -496,21 +495,21 @@ case_unit_outside_worktree_is_refused() {
   # 축 A — 디렉토리 심볼릭 링크: `dirname` 의 `pwd -P` 해소가 막는다.
   ln -s "$root/other/tests" "$w/tests/link"
   out=$(bash "$RTS" run "$w" shell per-unit tests/link/evil.sh 2>/dev/null)
-  [[ ! -e "$root/ESCAPED" ]] && pass "축 A: 디렉토리 심볼릭 링크 경유 unit 미실행" \
-                             || fail "디렉토리 링크로 탈출 (out='$out')"
+  [[ ! -e "$root/ESCAPED" ]] && ok "축 A: 디렉토리 심볼릭 링크 경유 unit 미실행" \
+                             || no "디렉토리 링크로 탈출 (out='$out')"
 
   # 축 B — **잎** 심볼릭 링크: `dirname` 은 트리 안이고 `-x`/`-e` 는 링크를 따라간다.
   # 잎을 해소하지 않으면 assign 이 주장하고 run 이 트리 밖 스크립트를 실행한다(실측).
   ln -s ../../other/tests/evil.sh "$w/tests/evil.sh"
   out=$(printf 'tests/evil.sh\n' | bash "$RTS" assign "$w")
   [[ "$out" == "tests/evil.sh${TAB}unclaimed${TAB}file" ]] \
-    && pass "축 B: assign 이 잎 심볼릭 링크 unit 을 미주장" \
-    || fail "assign 잎 링크 (got: $out)"
+    && ok "축 B: assign 이 잎 심볼릭 링크 unit 을 미주장" \
+    || no "assign 잎 링크 (got: $out)"
   out=$(bash "$RTS" run "$w" shell per-unit tests/evil.sh 2>/dev/null)
   if [[ ! -e "$root/ESCAPED" ]]; then
-    pass "축 B: run 이 잎 심볼릭 링크 unit 을 미실행"
+    ok "축 B: run 이 잎 심볼릭 링크 unit 을 미실행"
   else
-    fail "잎 심볼릭 링크로 탈출 (out='$out')"; rm -f "$root/ESCAPED"
+    no "잎 심볼릭 링크로 탈출 (out='$out')"; rm -f "$root/ESCAPED"
   fi
 
   # 축 D — 대상이 **워크트리 루트 자신**(`-> ..`). 담김은 정당하게 통과한다(진짜로 트리
@@ -520,19 +519,19 @@ case_unit_outside_worktree_is_refused() {
   ln -s .. "$w/tests/rootlink.sh"
   out=$(bash "$RTS" run "$w" shell per-unit tests/rootlink.sh 2>/dev/null)
   [[ "$out" == "tests/rootlink.sh${TAB}absent${TAB}-" ]] \
-    && pass "축 D: 루트를 가리키는 잎 링크는 file unit 이 아님 → absent (전-트리 실행 없음)" \
-    || fail "루트 링크가 file unit 으로 통과 (out='$out')"
+    && ok "축 D: 루트를 가리키는 잎 링크는 file unit 이 아님 → absent (전-트리 실행 없음)" \
+    || no "루트 링크가 file unit 으로 통과 (out='$out')"
 
   # 정당한 트리-안 unit 은 여전히 돈다 — 담김 검사가 대상을 통째로 죽이지 않았는가
   out=$(bash "$RTS" run "$w" shell per-unit tests/ok.sh 2>/dev/null)
   [[ "$out" == "tests/ok.sh${TAB}pass${TAB}0" ]] \
-    && pass "트리 안 정당한 unit 은 그대로 실행" || fail "정당 unit 회귀 (got: $out)"
+    && ok "트리 안 정당한 unit 은 그대로 실행" || no "정당 unit 회귀 (got: $out)"
   # 트리 **안**을 가리키는 잎 심볼릭 링크는 막지 않는다 (과잉 차단 방지)
   ln -s ok.sh "$w/tests/alias.sh"
   out=$(bash "$RTS" run "$w" shell per-unit tests/alias.sh 2>/dev/null)
   [[ "$out" == "tests/alias.sh${TAB}pass${TAB}0" ]] \
-    && pass "트리 안을 가리키는 잎 링크는 그대로 실행 (과잉 차단 없음)" \
-    || fail "트리 안 링크 과잉 차단 (got: $out)"
+    && ok "트리 안을 가리키는 잎 링크는 그대로 실행 (과잉 차단 없음)" \
+    || no "트리 안 링크 과잉 차단 (got: $out)"
   rm -rf "$root"
 }
 
@@ -550,13 +549,13 @@ case_leaf_symlink_escape_via_pytest() {
 
   out=$(printf 'tests/test_evil.py\n' | bash "$RTS" assign "$w")
   [[ "$out" == "tests/test_evil.py${TAB}unclaimed${TAB}file" ]] \
-    && pass "pytest: assign 이 잎 링크 unit 을 미주장" || fail "pytest assign 잎 링크 (got: $out)"
+    && ok "pytest: assign 이 잎 링크 unit 을 미주장" || no "pytest assign 잎 링크 (got: $out)"
 
   out=$(bash "$RTS" run "$w" pytest per-unit tests/test_evil.py 2>/dev/null)
   if [[ ! -e "$root/ESCAPED" ]]; then
-    pass "pytest: run 이 잎 링크 unit 을 미실행 (exists_unit 축)"
+    ok "pytest: run 이 잎 링크 unit 을 미실행 (exists_unit 축)"
   else
-    fail "pytest 잎 링크로 탈출 (out='$out')"
+    no "pytest 잎 링크로 탈출 (out='$out')"
   fi
   rm -rf "$root"
 }
@@ -589,16 +588,16 @@ case_package_unit_updot_symlink_escape() {
 
   out=$(PATH="$bindir:$PATH" bash "$RTS" run "$w" go per-unit sub/escape 2>/dev/null); rc=$?
   if [[ "$out" == "sub/escape${TAB}absent${TAB}-" ]]; then
-    pass "package unit: '..' 종단 잎 링크가 러너에 전달되지 않음 (대상 자신을 정규화)"
+    ok "package unit: '..' 종단 잎 링크가 러너에 전달되지 않음 (대상 자신을 정규화)"
   else
-    fail "'..' 종단 링크가 package unit 으로 러너에 전달됨 (rc=$rc out='$out')"
+    no "'..' 종단 링크가 package unit 으로 러너에 전달됨 (rc=$rc out='$out')"
   fi
 
   # 정당한 트리-안 패키지는 그대로 돈다 — 과잉 차단 방지
   mkdir -p "$w/pkg"; : > "$w/pkg/a_test.go"
   out=$(PATH="$bindir:$PATH" bash "$RTS" run "$w" go per-unit pkg 2>/dev/null)
   [[ "$out" == "pkg${TAB}pass${TAB}0" ]] \
-    && pass "트리 안 정당한 package unit 은 그대로 실행" || fail "package 과잉 차단 (out='$out')"
+    && ok "트리 안 정당한 package unit 은 그대로 실행" || no "package 과잉 차단 (out='$out')"
   rm -rf "$root" "$bindir"
 }
 
@@ -613,11 +612,11 @@ case_run_exit_127_is_unrun() {
   local out
   out=$(bash "$RTS" run "$W" shell per-unit tests/gone.sh 2>/dev/null)
   [[ "$out" == "tests/gone.sh${TAB}unrun${TAB}127" ]] \
-    && pass "exit 127 → unrun (미실행 축)" || fail "127 매핑 (got: $out)"
+    && ok "exit 127 → unrun (미실행 축)" || no "127 매핑 (got: $out)"
   # 127 이 아닌 그 외 코드는 여전히 error 다 — 매핑을 통째로 바꾼 게 아님을 고정한다
   out=$(bash "$RTS" run "$W" shell per-unit tests/err.sh 2>/dev/null)
   [[ "$out" == "tests/err.sh${TAB}error${TAB}2" ]] \
-    && pass "exit 2 → error (기존 매핑 무변경)" || fail "error 매핑 회귀 (got: $out)"
+    && ok "exit 2 → error (기존 매핑 무변경)" || no "error 매핑 회귀 (got: $out)"
   rmw
 }
 
@@ -640,21 +639,21 @@ case_probe_declaration_is_not_execution() {
 
   # go 는 **선언**돼 있다 — detect 가 이름을 낸다.
   bash "$RTS" detect "$W" 2>/dev/null | grep -q '^runner: go$' \
-    && pass "detect: 선언된 go 를 낸다" || fail "detect 가 go 를 안 냄"
+    && ok "detect: 선언된 go 를 낸다" || no "detect 가 go 를 안 냄"
 
   # 같은 트리, toolchain 없는 PATH → probe 는 못 쓴다고 답한다.
   local out rc
   out=$(PATH=/usr/bin:/bin bash "$RTS" probe "$W" go 2>/dev/null); rc=$?
   if [[ $rc -eq 3 ]] && printf '%s\n' "$out" | grep -qx 'usable: no' \
      && printf '%s\n' "$out" | grep -qx 'reason: runner_missing'; then
-    pass "probe: 선언됐지만 실행 불가 → usable: no / runner_missing / rc=3"
-  else fail "probe 미가용 (rc=$rc out='${out//$'\n'/|}')"; fi
+    ok "probe: 선언됐지만 실행 불가 → usable: no / runner_missing / rc=3"
+  else no "probe 미가용 (rc=$rc out='${out//$'\n'/|}')"; fi
 
   # 양의 짝 — 실제로 돌릴 수 있는 어댑터는 yes 여야 한다 ("항상 no" 봉쇄).
   out=$(bash "$RTS" probe "$W" shell 2>/dev/null); rc=$?
   if [[ $rc -eq 0 ]] && printf '%s\n' "$out" | grep -qx 'usable: yes'; then
-    pass "probe: 실행 가능한 어댑터 → usable: yes / rc=0 (양의 짝)"
-  else fail "probe 가용 (rc=$rc out='${out//$'\n'/|}')"; fi
+    ok "probe: 실행 가능한 어댑터 → usable: yes / rc=0 (양의 짝)"
+  else no "probe 가용 (rc=$rc out='${out//$'\n'/|}')"; fi
   rmw
 }
 
@@ -667,14 +666,14 @@ case_probe_runs_no_tests() {
   chmod +x "$W/tests/t.sh"
 
   bash "$RTS" probe "$W" shell >/dev/null 2>&1
-  [[ ! -e "$W/RAN" ]] && pass "probe: 테스트 미실행 (센티널 부재)" \
-                      || fail "probe 가 테스트를 실행했다"
+  [[ ! -e "$W/RAN" ]] && ok "probe: 테스트 미실행 (센티널 부재)" \
+                      || no "probe 가 테스트를 실행했다"
 
   # 음의 짝 — 센티널이 애초에 만들어질 수 있는 픽스처인지 확인한다. 이것이 없으면
   # "테스트가 원래 아무것도 안 쓴다" 는 계측기 고장이 GREEN 으로 보인다.
   bash "$RTS" run "$W" shell per-unit tests/t.sh >/dev/null 2>&1
-  [[ -e "$W/RAN" ]] && pass "run: 같은 픽스처가 센티널을 만든다 (계측기 확인)" \
-                    || fail "계측기 고장 — run 도 센티널을 안 만듦"
+  [[ -e "$W/RAN" ]] && ok "run: 같은 픽스처가 센티널을 만든다 (계측기 확인)" \
+                    || no "계측기 고장 — run 도 센티널을 안 만듦"
   rmw
 }
 
@@ -745,8 +744,8 @@ case_probe_and_run_share_the_gauntlet() {
     fi
     rm -rf "$w"
   done
-  [[ $bad -eq 0 ]] && pass "probe ↔ run: 미가용 **4사유**(사유 문자열까지) + 가용 1건 전부에서 답이 일치 (∀)" \
-                   || fail "관문 drift:$detail"
+  [[ $bad -eq 0 ]] && ok "probe ↔ run: 미가용 **4사유**(사유 문자열까지) + 가용 1건 전부에서 답이 일치 (∀)" \
+                   || no "관문 drift:$detail"
 }
 
 # ── /qg iter-6 회귀 락 ───────────────────────────────────────────────────────
@@ -765,8 +764,8 @@ case_assign_last_candidate_without_trailing_newline() {
   with_nl=$(printf 'tests/test_a.py\ntests/test_b.py\n' | bash "$RTS" assign "$W" | sort | tr '\n' ';')
   without_nl=$(printf 'tests/test_a.py\ntests/test_b.py' | bash "$RTS" assign "$W" | sort | tr '\n' ';')
   if [[ "$with_nl" == "$expect" && "$without_nl" == "$expect" ]]; then
-    pass "assign: 후행 개행 유무와 무관하게 같은 unit 집합 (마지막 후보 무음 소실 0)"
-  else fail "trailing-newline drop (with: $with_nl / without: $without_nl)"; fi
+    ok "assign: 후행 개행 유무와 무관하게 같은 unit 집합 (마지막 후보 무음 소실 0)"
+  else no "trailing-newline drop (with: $with_nl / without: $without_nl)"; fi
   rmw
 }
 
@@ -785,8 +784,8 @@ case_assign_unittest_refuses_async_bare_test() {
   local out; out=$(printf 'tests/test_async.py\ntests/test_plain.py\n' \
                    | bash "$RTS" assign "$W" | sort | tr '\n' ';')
   if [[ "$out" == "tests/test_async.py${TAB}unclaimed${TAB}file;tests/test_plain.py${TAB}unittest${TAB}file;" ]]; then
-    pass "unittest: 모듈-레벨 async def test_ → 판정 불가 → unclaimed (동종 파일은 claim 유지)"
-  else fail "async bare test (got: $out)"; fi
+    ok "unittest: 모듈-레벨 async def test_ → 판정 불가 → unclaimed (동종 파일은 claim 유지)"
+  else no "async bare test (got: $out)"; fi
   rmw
 }
 
@@ -812,8 +811,8 @@ case_assign_unittest_refuses_bare_pytest_class() {
                    | bash "$RTS" assign "$W" | sort | tr '\n' ';')
   local want="tests/test_bare.py${TAB}unclaimed${TAB}file;tests/test_named.py${TAB}unittest${TAB}file;tests/test_plain.py${TAB}unittest${TAB}file;"
   if [[ "$out" == "$want" ]]; then
-    pass "unittest: bare pytest 클래스 → unclaimed (TestCase 상속 Test* 클래스는 claim 유지)"
-  else fail "bare pytest class (got: $out)"; fi
+    ok "unittest: bare pytest 클래스 → unclaimed (TestCase 상속 Test* 클래스는 claim 유지)"
+  else no "bare pytest class (got: $out)"; fi
   rmw
 }
 
@@ -834,8 +833,8 @@ case_detect_malformed_package_json_is_loud() {
   printf '{"scripts":{"test":"true"}}\n' > "$W/package.json"  # 양의 짝: 정상 파일
   local err2; err2=$(bash "$RTS" detect "$W" 2>&1 >/dev/null)
   case "$err2" in *"파싱에 실패"*) ok=0 ;; esac
-  [[ $ok -eq 1 ]] && pass "파손된 package.json: fail-closed 유지 + 원인 loud (정상 파일엔 무경고)" \
-                  || fail "malformed package.json (err:$err / out:$out / err2:$err2)"
+  [[ $ok -eq 1 ]] && ok "파손된 package.json: fail-closed 유지 + 원인 loud (정상 파일엔 무경고)" \
+                  || no "malformed package.json (err:$err / out:$out / err2:$err2)"
   rmw
 }
 
@@ -860,8 +859,8 @@ case_detect_js_ambiguity_is_loud() {
   out2=$(bash "$RTS" detect "$W" 2>/dev/null)
   case "$err2" in *"jest 와 vitest 가 함께 선언됐고"*) ok=0 ;; esac
   case "$out2" in *"runner: vitest"*) ;; *) ok=0 ;; esac
-  [[ $ok -eq 1 ]] && pass "jest·vitest 판별불가: bulk 강등이 loud (판별 가능하면 무경고 + file 귀속 복구)" \
-                  || fail "js ambiguity loudness (err:$err / out:$out / err2:$err2 / out2:$out2)"
+  [[ $ok -eq 1 ]] && ok "jest·vitest 판별불가: bulk 강등이 loud (판별 가능하면 무경고 + file 귀속 복구)" \
+                  || no "js ambiguity loudness (err:$err / out:$out / err2:$err2 / out2:$out2)"
   rmw
 }
 
@@ -890,5 +889,4 @@ for c in case_assign_go_package case_assign_unclaimed case_assign_unittest_skips
          case_assign_unittest_refuses_bare_pytest_class; do
   echo "== $c"; $c
 done
-echo "── run-test-selection: $PASS passed, $FAIL failed"
-[[ $FAIL -eq 0 ]]
+finish

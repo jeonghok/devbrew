@@ -13,9 +13,7 @@ ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 OBS_REPO="$ROOT"
 . "$ROOT/plugins/quality-gates/tests/lib/codex_observation.sh"
 
-pass=0; fail=0
-ok() { pass=$((pass+1)); echo "  ✓ $1"; }
-no() { fail=$((fail+1)); echo "  ✗ $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 SCRATCH="$(mktemp -d -t qg-obs-XXXXXX)" || exit 1
 trap 'rm -rf "$SCRATCH"' EXIT
@@ -146,6 +144,4 @@ if [ "$observed_total" -ge 1 ]; then
 else
   no "관측된 호출이 0건 — 계측기가 붕괴했다"
 fi
-
-echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[ "$fail" -eq 0 ]
+finish

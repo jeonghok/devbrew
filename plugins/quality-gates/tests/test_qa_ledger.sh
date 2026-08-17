@@ -5,9 +5,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 LEDGER="$PLUGIN_ROOT/scripts/check_qa_ledger.py"
 
-PASS=0; FAIL=0; TMP=""
-pass() { PASS=$((PASS + 1)); echo "  → PASS: $1"; }
-fail() { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+TMP=""
 setup()   { TMP=$(mktemp -d) || exit 1; }
 cleanup() { rm -rf "$TMP"; }
 
@@ -55,7 +54,7 @@ run_ledger() {
 # T14: 완전한 원장 → 0
 case_complete() {
   setup; write_ledger "$TMP/l.md"
-  run_ledger "$TMP/l.md" && pass "완전한 원장 → exit 0" || fail "완전 원장이 red"
+  run_ledger "$TMP/l.md" && ok "완전한 원장 → exit 0" || no "완전 원장이 red"
   cleanup
 }
 
@@ -67,7 +66,7 @@ case_each_missing_dimension() {
     write_ledger "$TMP/l.md" "$d"
     if run_ledger "$TMP/l.md"; then echo "    '$d' 누락인데 통과함"; ok=0; fi
   done
-  [[ $ok -eq 1 ]] && pass "5차원 각각 누락 → 전부 non-zero" || fail "누락 감지 실패"
+  [[ $ok -eq 1 ]] && ok "5차원 각각 누락 → 전부 non-zero" || no "누락 감지 실패"
   cleanup
 }
 
@@ -78,7 +77,7 @@ case_degraded_is_valid() {
   setup; write_ledger "$TMP/l.md"
   grep -vF 'floor:verification' "$TMP/l.md" > "$TMP/l2.md"
   printf -- '- floor:verification — degraded — unclaimed 2건, 실행 수단 없음\n' >> "$TMP/l2.md"
-  run_ledger "$TMP/l2.md" && pass "status=degraded → exit 0 (1급 상태)" || fail "degraded가 red"
+  run_ledger "$TMP/l2.md" && ok "status=degraded → exit 0 (1급 상태)" || no "degraded가 red"
   cleanup
 }
 
@@ -87,7 +86,7 @@ case_unknown_status() {
   setup; write_ledger "$TMP/l.md"
   grep -v 'floor:gap' "$TMP/l.md" > "$TMP/l2.md"
   printf -- '- floor:gap — unknown — whatever\n' >> "$TMP/l2.md"
-  run_ledger "$TMP/l2.md" && fail "status=unknown이 통과함" || pass "알 수 없는 status → non-zero"
+  run_ledger "$TMP/l2.md" && no "status=unknown이 통과함" || ok "알 수 없는 status → non-zero"
   cleanup
 }
 
@@ -96,7 +95,7 @@ case_empty_evidence() {
   setup; write_ledger "$TMP/l.md"
   grep -v 'floor:gap' "$TMP/l.md" > "$TMP/l2.md"
   printf -- '- floor:gap — closed —   \n' >> "$TMP/l2.md"
-  run_ledger "$TMP/l2.md" && fail "빈 evidence가 통과함" || pass "빈 evidence → non-zero"
+  run_ledger "$TMP/l2.md" && no "빈 evidence가 통과함" || ok "빈 evidence → non-zero"
   cleanup
 }
 
@@ -106,9 +105,9 @@ case_derived_reason_required() {
   write_ledger "$TMP/ok.md"   "" '- derived: 없음 — 순수 로직 변경이라 확인 축 추가 없음'
   write_ledger "$TMP/bad.md"  "" '- derived: 없음'
   write_ledger "$TMP/none.md" "" '# derived 줄 자체가 없음'
-  run_ledger "$TMP/ok.md"   && pass "derived 없음 + 이유 → exit 0"   || fail "derived 이유 있음이 red"
-  run_ledger "$TMP/bad.md"  && fail "이유 없는 'derived: 없음'이 통과" || pass "derived 없음 + 이유 부재 → non-zero"
-  run_ledger "$TMP/none.md" && fail "derived 줄 부재가 통과"          || pass "derived 줄 부재 → non-zero"
+  run_ledger "$TMP/ok.md"   && ok "derived 없음 + 이유 → exit 0"   || no "derived 이유 있음이 red"
+  run_ledger "$TMP/bad.md"  && no "이유 없는 'derived: 없음'이 통과" || ok "derived 없음 + 이유 부재 → non-zero"
+  run_ledger "$TMP/none.md" && no "derived 줄 부재가 통과"          || ok "derived 줄 부재 → non-zero"
   cleanup
 }
 
@@ -117,8 +116,8 @@ case_derived_named() {
   setup
   write_ledger "$TMP/ok.md"  "" '- derived:migration — closed — 스키마 up/down 양방향 확인'
   write_ledger "$TMP/bad.md" "" '- derived:migration'
-  run_ledger "$TMP/ok.md"  && pass "명명 derived + status + evidence → exit 0" || fail "명명 derived가 red"
-  run_ledger "$TMP/bad.md" && fail "status/evidence 없는 명명 derived가 통과"   || pass "불완전 명명 derived → non-zero"
+  run_ledger "$TMP/ok.md"  && ok "명명 derived + status + evidence → exit 0" || no "명명 derived가 red"
+  run_ledger "$TMP/bad.md" && no "status/evidence 없는 명명 derived가 통과"   || ok "불완전 명명 derived → non-zero"
   cleanup
 }
 
@@ -128,8 +127,8 @@ case_heading_does_not_satisfy() {
   setup
   write_ledger "$TMP/l.md" gap
   printf '## floor:gap\n\n- floor:gap 이라는 문구가 산문에 등장한다\n' >> "$TMP/l.md"
-  run_ledger "$TMP/l.md" && fail "헤딩/산문 언급만으로 gap이 닫힘" \
-                         || pass "헤딩·산문 언급은 차원을 닫지 못함 (M8)"
+  run_ledger "$TMP/l.md" && no "헤딩/산문 언급만으로 gap이 닫힘" \
+                         || ok "헤딩·산문 언급은 차원을 닫지 못함 (M8)"
   cleanup
 }
 
@@ -140,14 +139,14 @@ case_c1_no_false_contradiction() {
   setup
   # 방향 A: 명명 derived의 evidence 안에 "없음"이 등장해도 통과해야 한다.
   write_ledger "$TMP/ok.md" "" '- derived:migration — closed — 스키마 변경 회귀 없음, 양방향 확인 완료'
-  run_ledger "$TMP/ok.md" && pass "evidence 속 '없음'은 명명 derived를 모순으로 만들지 않음" \
-                          || fail "evidence 속 '없음' 때문에 정상 명명 derived가 red (C1)"
+  run_ledger "$TMP/ok.md" && ok "evidence 속 '없음'은 명명 derived를 모순으로 만들지 않음" \
+                          || no "evidence 속 '없음' 때문에 정상 명명 derived가 red (C1)"
 
   # 방향 B: 진짜 모순 — `derived: 없음` 선언과 명명 derived가 함께 있으면 non-zero.
   write_ledger "$TMP/bad.md" "" '- derived: 없음 — 이 diff엔 추가 확인 축 없음'
   printf -- '- derived:migration — closed — 스키마 up/down 양방향 확인\n' >> "$TMP/bad.md"
-  run_ledger "$TMP/bad.md" && fail "'없음' 선언 + 명명 derived 공존이 통과함 (모순 검사 소실)" \
-                           || pass "'없음' 선언 + 명명 derived 공존 → non-zero (진짜 모순은 여전히 잡힘)"
+  run_ledger "$TMP/bad.md" && no "'없음' 선언 + 명명 derived 공존이 통과함 (모순 검사 소실)" \
+                           || ok "'없음' 선언 + 명명 derived 공존 → non-zero (진짜 모순은 여전히 잡힘)"
   cleanup
 }
 
@@ -166,9 +165,9 @@ case_stdin_utf8_locale_independent() {
   if PYTHONIOENCODING=ascii LC_ALL=C python3 "$LEDGER" \
        --aggregate "$TMP/agg_ko.yaml" --assign-rows "$TMP/assign_ko.tsv" \
        < "$TMP/l.md" >/dev/null 2>&1; then
-    pass "stdin·집계·배정 세 read 경로: ascii 로케일에서도 exit 0 (UTF-8 명시)"
+    ok "stdin·집계·배정 세 read 경로: ascii 로케일에서도 exit 0 (UTF-8 명시)"
   else
-    fail "read 경로가 로케일 의존 디코딩으로 깨짐 (I1)"
+    no "read 경로가 로케일 의존 디코딩으로 깨짐 (I1)"
   fi
   cleanup
 }
@@ -177,8 +176,8 @@ case_stdin_utf8_locale_independent() {
 case_duplicate_floor_dimension() {
   setup; write_ledger "$TMP/l.md"
   printf -- '- floor:changed      — degraded — 중복 선언\n' >> "$TMP/l.md"
-  run_ledger "$TMP/l.md" && fail "중복 floor 차원 선언이 통과함" \
-                         || pass "중복 floor 차원 선언 → non-zero"
+  run_ledger "$TMP/l.md" && no "중복 floor 차원 선언이 통과함" \
+                         || ok "중복 floor 차원 선언 → non-zero"
   cleanup
 }
 
@@ -188,8 +187,8 @@ case_duplicate_floor_dimension() {
 case_derived_named_bad_status() {
   setup
   write_ledger "$TMP/l.md" "" '- derived:migration — bogus — evidence for migration'
-  run_ledger "$TMP/l.md" && fail "out-of-set status인 명명 derived가 통과함" \
-                         || pass "명명 derived의 status가 {closed,degraded} 밖 → non-zero"
+  run_ledger "$TMP/l.md" && no "out-of-set status인 명명 derived가 통과함" \
+                         || ok "명명 derived의 status가 {closed,degraded} 밖 → non-zero"
   cleanup
 }
 
@@ -223,8 +222,8 @@ case_transcription_matches_machine() {
   # 음 ②: 반대 방향도 잡는다 — 한 방향만 잡으면 '언제나 closed 를 기대' 로 퇴화한다
   python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as.tsv" "$TMP/ld.md" \
     >/dev/null 2>&1 && { echo "    기계 closed → 원장 degraded 가 통과함"; ok=0; }
-  [[ $ok -eq 1 ]] && pass "전사 대조 — 양방향 불일치 red · 양의 짝 2종 green" \
-                  || fail "전사 대조 이빨 없음"
+  [[ $ok -eq 1 ]] && ok "전사 대조 — 양방향 불일치 red · 양의 짝 2종 green" \
+                  || no "전사 대조 이빨 없음"
   cleanup
 }
 
@@ -247,8 +246,8 @@ case_aggregate_is_mandatory_and_fail_closed() {
   printf 'attribution_status: closed\nattribution_status: degraded\n' > "$TMP/a2.yaml"
   python3 "$LEDGER" --aggregate "$TMP/a2.yaml" --assign-rows "$TMP/as.tsv" "$TMP/l.md" \
     >/dev/null 2>&1 && { echo "    attribution_status 2개인데 통과함"; ok=0; }
-  [[ $ok -eq 1 ]] && pass "대조 입력 부재·불량 4종 → 전부 non-zero (fail-closed)" \
-                  || fail "대조 입력 fail-open"
+  [[ $ok -eq 1 ]] && ok "대조 입력 부재·불량 4종 → 전부 non-zero (fail-closed)" \
+                  || no "대조 입력 fail-open"
   cleanup
 }
 
@@ -283,8 +282,8 @@ case_unclaimed_forces_degraded() {
   printf 'tests/test_a.py\tunittest\n' > "$TMP/asbad.tsv"
   python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/asbad.tsv" "$TMP/l.md" \
     >/dev/null 2>&1 && { echo "    문법 위반 배정 행이 통과함 (셀 수 없는데 0건 취급)"; ok=0; }
-  [[ $ok -eq 1 ]] && pass "unclaimed 집행 — 유출 방향 red · 양의 짝 2종 green · 불량 입력 fail-closed" \
-                  || fail "unclaimed 집행 이빨 없음"
+  [[ $ok -eq 1 ]] && ok "unclaimed 집행 — 유출 방향 red · 양의 짝 2종 green · 불량 입력 fail-closed" \
+                  || no "unclaimed 집행 이빨 없음"
   cleanup
 }
 
@@ -323,8 +322,8 @@ case_exit_code_shape_vs_content() {
     || { echo "    구조 위반이 1 이 아님"; ok=0; }
   [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as.tsv" "$TMP/l.md")" == 0 ]] \
     || { echo "    정상 입력이 0 이 아님"; ok=0; }
-  [[ $ok -eq 1 ]] && pass "종료 코드 4갈래 — 모양 2 · 내용 4 · 구조 1 · 통과 0" \
-                  || fail "종료 코드가 축을 구분하지 못함"
+  [[ $ok -eq 1 ]] && ok "종료 코드 4갈래 — 모양 2 · 내용 4 · 구조 1 · 통과 0" \
+                  || no "종료 코드가 축을 구분하지 못함"
   cleanup
 }
 
@@ -339,8 +338,8 @@ case_assign_rows_is_mandatory_and_fail_closed() {
     >/dev/null 2>&1 && { echo "    배정 파일 부재인데 통과함"; ok=0; }
   python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows >/dev/null 2>&1 \
     && { echo "    --assign-rows 값 없이 통과함"; ok=0; }
-  [[ $ok -eq 1 ]] && pass "--assign-rows 부재·파일부재·값부재 → 전부 non-zero (fail-closed)" \
-                  || fail "--assign-rows fail-open"
+  [[ $ok -eq 1 ]] && ok "--assign-rows 부재·파일부재·값부재 → 전부 non-zero (fail-closed)" \
+                  || no "--assign-rows fail-open"
   cleanup
 }
 
@@ -377,8 +376,8 @@ case_parser_axes() {
   printf 'tests/a.py\tunittest\tfile\npkg\tgo\tpackage\nBULK\tcargo\tbulk\n' > "$TMP/asok.tsv"
   [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/asok.tsv" "$TMP/l.md")" == 0 ]] \
     || { echo "    정상 3종 granularity 가 red (과차단)"; ok=0; }
-  [[ $ok -eq 1 ]] && pass "파서 축 — 중복 플래그 2 · 4필드 4 · granularity 어휘 4 · 정상 3종 0" \
-                  || fail "파서 축 이빨 없음"
+  [[ $ok -eq 1 ]] && ok "파서 축 — 중복 플래그 2 · 4필드 4 · granularity 어휘 4 · 정상 3종 0" \
+                  || no "파서 축 이빨 없음"
   cleanup
 }
 
@@ -414,8 +413,8 @@ case_exit_code_remaining_paths() {
   printf 'spec/\xff\tunclaimed\tfile\n' > "$TMP/as_bad.tsv"
   [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/as_bad.tsv" "$TMP/l.md")" == 4 ]] \
     || { echo "    비-UTF-8 배정이 4 가 아님 (핸들러 회귀)"; ok=0; }
-  [[ $ok -eq 1 ]] && pass "잔여 반환 지점 3개 + 세 read 경로 음의 짝 전부 정확한 코드" \
-                  || fail "반환 지점 커버리지 갭"
+  [[ $ok -eq 1 ]] && ok "잔여 반환 지점 3개 + 세 read 경로 음의 짝 전부 정확한 코드" \
+                  || no "반환 지점 커버리지 갭"
   cleanup
 }
 
@@ -467,8 +466,8 @@ case_zero_rows_is_not_an_error() {
   { printf '\n'; cat "$TMP/as0.tsv"; printf '\n   \n'; } > "$TMP/asblank.tsv"
   [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/asblank.tsv" "$TMP/l.md")" == 0 ]] \
     || { echo "    빈 줄이 섞인 배정이 red (빈 줄 skip 회귀)"; ok=0; }
-  [[ $ok -eq 1 ]] && pass "실물 생산자의 0행 출력·빈 줄 혼입 → exit 0 (§11 ⑭ 는 이 인자의 축이 아니다)" \
-                  || fail "빈 스코프 축이 침범됨"
+  [[ $ok -eq 1 ]] && ok "실물 생산자의 0행 출력·빈 줄 혼입 → exit 0 (§11 ⑭ 는 이 인자의 축이 아니다)" \
+                  || no "빈 스코프 축이 침범됨"
   cleanup
 }
 
@@ -507,8 +506,8 @@ case_producer_consumer_contract() {
   printf -- '- floor:verification — degraded — unclaimed 1건, 실행 수단 없음\n' >> "$TMP/ld.md"
   [[ "$(rc_of python3 "$LEDGER" --aggregate "$TMP/a.yaml" --assign-rows "$TMP/real.tsv" "$TMP/ld.md")" == 0 ]] \
     || { echo "    실물 출력 + degraded 가 red"; ok=0; }
-  [[ $ok -eq 1 ]] && pass "실물 assign stdout → 소비자: 집행 발화(1) · degraded 원장 통과(0)" \
-                  || fail "생산자-소비자 계약 미잠금"
+  [[ $ok -eq 1 ]] && ok "실물 assign stdout → 소비자: 집행 발화(1) · degraded 원장 통과(0)" \
+                  || no "생산자-소비자 계약 미잠금"
   cleanup
 }
 
@@ -526,5 +525,4 @@ for c in case_complete case_each_missing_dimension case_degraded_is_valid \
          case_producer_consumer_contract; do
   echo "== $c"; $c
 done
-echo "── qa ledger: $PASS passed, $FAIL failed"
-[[ $FAIL -eq 0 ]]
+finish

@@ -3,6 +3,40 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [3.2.1] — 2026-08-17
+
+devbrew-weight-reduction Task 14 — 자체 판정 헬퍼 76개를 `shared/tests/assert.sh`
+정본으로 이관. 지배적 관용구는 `PASS=0; FAIL=0` + `pass()/fail()` 또는 `ok()/no()`
+재구현이었고, `check`(→`assert_count_ge`, msg 인자를 첫→마지막으로 재배치) ·
+`ag`/`ng`/`agf`(→`assert_file_grep`/`assert_file_absent`/`assert_contains`) ·
+`field`(→ 키·텍스트 인자 순서 확인/교정) 등도 이관.
+
+### Changed
+- `tests/*.sh` 76개 — 자체 헬퍼 정의 삭제, 정본 source. 이름은 정본과 같지만
+  시그니처(인자 순서)가 다른 자체 `assert_grep`/`field` 재구현 3건을 실측으로 적발해
+  `assert_file_grep`/`field` 정본 순서로 교정(그대로 두면 조용히 틀린 대상을 검사했다).
+  `test_codex_dispatch_invariant.sh`·`test_consent_marker_write_failure.sh`의
+  즉시-종료형 `fail()`은 판정/가드를 구분해 이관(가드는 `no; finish; exit`,
+  판정은 count-and-continue) — 부주의한 재구조화가 만들 뻔한 판정-이중집계
+  (실패 케이스에서 no·ok 가 같은 체크에 대해 함께 발화)를 mutation 으로 잡아 수정.
+  persona 테스트 쌍(`test_adversarial_persona.sh`/`test_security_reviewer_persona.sh`)의
+  공유 스캐폴딩을 26줄→3줄로 축소.
+- `test_classify_artifact_target.sh`·`test_findings_parser.sh`·
+  `test_agent_tools_lock_mutation.sh`·`test_review_floor_lock.sh`·
+  `test_setup_qg.sh`·`arm_test_helpers.sh`(spec-distill) — 판정에 임베디드 로직이
+  섞여 정본 단일 호출로 환원되지 않는 `check`/`expect`/`assert`/`note` 를 정본
+  `ok`/`no`/`assert_eq`/`assert_grep` 로 위임하는 얇은 wrapper 로 유지(외부 호출
+  시그니처 불변).
+
+### Fixed
+- `test_critiquing_artifacts_skill.sh` 의 잠재 결함(정본 미source 상태에서
+  이미 `ok`/`no` 를 호출해 "command not found"로 무이빨이던 assertion 1건)이
+  정본 source 로 부수적으로 해소(34→35, 감소 아님).
+
+파일별 assertion 호출 수 감소 0(76개 전량, before/after 실행 비교), 74/76 GREEN
+(`test_consent_marker_write_failure.sh`·`test_security_reviewer_kill_switch.sh`는
+이관 전부터 RED — 실패 개수 불변 확인).
+
 ## [3.2.0] — 2026-08-17
 
 ### Added

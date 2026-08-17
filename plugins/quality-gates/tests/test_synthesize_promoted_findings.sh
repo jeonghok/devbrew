@@ -6,12 +6,10 @@
 # (see task-9 brief). This file must not `grep`/`cat`/`Read` any *.md persona.
 set -u
 SCRIPT="plugins/quality-gates/scripts/synthesize_findings.py"
-PASS=0; FAIL=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-ok() { PASS=$((PASS+1)); echo "  PASS: $1"; }
-no() { FAIL=$((FAIL+1)); echo "  FAIL: $1"; }
 
 # --- fixture: no pre-existing findings, one well-formed IMPORTANT new_finding ---
 cat > "$tmp/findings_empty.yaml" <<'Y'
@@ -410,7 +408,4 @@ if printf '%s' "$out15" | grep -qE '^1 finding\(s\) dropped as malformed'; then
 else
   no "15 — verdicts가 매핑이면 소실이 drop 공지에 집계된다"
 fi
-
-echo ""
-echo "Total: $((PASS+FAIL)), PASS=$PASS, FAIL=$FAIL"
-[ "$FAIL" -eq 0 ] || exit 1
+finish

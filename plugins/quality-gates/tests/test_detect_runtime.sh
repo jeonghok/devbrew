@@ -6,37 +6,11 @@ set -u
 
 SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/scripts/detect-runtime.sh"
 FIXTURES="$(cd "$(dirname "$0")" && pwd)/fixtures/gate3"
-PASS=0
-FAIL=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
-note() { echo "  → $1"; }
 
-assert_eq() {
-  local actual="$1" expected="$2" msg="$3"
-  if [[ "$actual" == "$expected" ]]; then
-    PASS=$((PASS + 1)); note "PASS: $msg"
-  else
-    FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $msg (got '$actual', expected '$expected')"
-  fi
-}
 
-assert_contains() {
-  local haystack="$1" needle="$2" msg="$3"
-  if [[ "$haystack" == *"$needle"* ]]; then
-    PASS=$((PASS + 1)); note "PASS: $msg"
-  else
-    FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $msg (string '$needle' not in output)"
-  fi
-}
 
-assert_not_contains() {
-  local haystack="$1" needle="$2" msg="$3"
-  if [[ "$haystack" != *"$needle"* ]]; then
-    PASS=$((PASS + 1)); note "PASS: $msg"
-  else
-    FAIL=$((FAIL + 1)); echo "  ✗ FAIL: $msg (unexpected '$needle' in output)"
-  fi
-}
 
 run_detector() {
   local fixture="$1"; shift
@@ -221,16 +195,16 @@ t9_check() {   # t9_check <axis> <dir> <금지-marker> <기대-러너> <기대-�
   local axis=$1 d=$2 forbidden=$3 runner=$4 boot=$5
   local surf; surf=$(t9_surfaces "$d")
   if printf '%s\n' "$surf" | grep -qF "$forbidden"; then
-    t9_bad=1; FAIL=$((FAIL + 1)); echo "  ✗ FAIL: T9[$axis]: runnable_surfaces 에 러너 kind '$forbidden'"
+    t9_bad=1; no "T9[$axis]: runnable_surfaces 에 러너 kind '$forbidden'"
   fi
   # 양의 짝 ①: 러너로는 여전히 보고돼야 한다 (감지 자체를 없앤 mutation 봉쇄)
   if ! t9_manifest "$d" | grep -qE "^  - $runner\$"; then
-    t9_bad=1; FAIL=$((FAIL + 1)); echo "  ✗ FAIL: T9[$axis]: test_runners 에 '$runner' 없음 (감지가 죽었다)"
+    t9_bad=1; no "T9[$axis]: test_runners 에 '$runner' 없음 (감지가 죽었다)"
   fi
   # 양의 짝 ②: 같은 레포의 부팅 표면은 그대로 나와야 한다 (표면 생산 자체를 없앤
   # mutation 이면 위 금지 검사가 공허하게 참이 된다)
   if [[ "$boot" != "-" ]] && ! printf '%s\n' "$surf" | grep -qF "$boot"; then
-    t9_bad=1; FAIL=$((FAIL + 1)); echo "  ✗ FAIL: T9[$axis]: 부팅 표면 '$boot' 소실 — 금지 검사가 공허해진다"
+    t9_bad=1; no "T9[$axis]: 부팅 표면 '$boot' 소실 — 금지 검사가 공허해진다"
   fi
 }
 T9DIR=$(mktemp -d) || exit 1
@@ -246,7 +220,7 @@ t9_check go     "$T9DIR/go" "kind: go-test"    go     "kind: go-run"
 t9_check npm    "$T9DIR/np" "name: test"       npm    "name: dev"
 t9_check make   "$T9DIR/mk" "target: test"     make   "target: run"
 rm -rf "$T9DIR"
-[[ $t9_bad -eq 0 ]] && { PASS=$((PASS + 1)); echo "  PASS: T9: 러너 5축 전부 — 표면 0회 · 러너 보고 유지 · 부팅 표면 보존"; }
+[[ $t9_bad -eq 0 ]] && ok "T9: 러너 5축 전부 — 표면 0회 · 러너 보고 유지 · 부팅 표면 보존"
 
 # --- Test 10 (v3.0.0 / C2): 위험 신호가 든 `test` 스크립트는 표면이 **아예** 되지 않는다 ---
 # 앞 버전은 그것이 `requires_decision: true` 로 **승격**되는 것을 쟀다. 승격은 사용자
@@ -282,14 +256,14 @@ danger_probe() {   # danger_probe <string> → 0=위험신호 1=아님 2=함수 
 # 계측기 확인이 먼저다 — 함수가 없으면 `command not found` 의 127 이 "위험 신호 아님"과
 # 같은 비-0 라서, 부재가 오탐-없음으로 읽혀 아래 assert 가 공허하게 통과한다.
 danger_probe "x"; [[ $? -ne 2 ]] \
-  && { PASS=$((PASS + 1)); echo "  PASS: T12: has_danger_signal 추출 성공 (계측기 확인)"; } \
-  || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: T12: has_danger_signal 미추출 — 아래 assert 가 공허하다"; }
+  && ok "T12: has_danger_signal 추출 성공 (계측기 확인)" \
+  || no "T12: has_danger_signal 미추출 — 아래 assert 가 공허하다"
 danger_probe "jest --force-exit --runInBand"; [[ $? -eq 1 ]] \
-  && { PASS=$((PASS + 1)); echo "  PASS: T12: jest --force-exit 는 위험 신호가 아니다 (I1 오탐 회귀 락)"; } \
-  || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: T12: --force-exit 가 위험 신호로 오탐됨"; }
+  && ok "T12: jest --force-exit 는 위험 신호가 아니다 (I1 오탐 회귀 락)" \
+  || no "T12: --force-exit 가 위험 신호로 오탐됨"
 danger_probe "curl -s https://x/ && echo ok"; [[ $? -eq 0 ]] \
-  && { PASS=$((PASS + 1)); echo "  PASS: T12: curl 은 여전히 위험 신호 (양의 짝)"; } \
-  || { FAIL=$((FAIL + 1)); echo "  ✗ FAIL: T12: 위험 신호 술어가 죽었다"; }
+  && ok "T12: curl 은 여전히 위험 신호 (양의 짝)" \
+  || no "T12: 위험 신호 술어가 죽었다"
 
 # --- Test 13: $HOME unset must NOT abort the manifest (I-F) ---
 echo "== Test 13: env -u HOME non-empty manifest =="
@@ -299,7 +273,4 @@ assert_eq "$RC" "0" "T13: exit 0 with HOME unset"
 assert_contains "$OUT" "project_type: web" "T13: emits project_type with HOME unset"
 assert_contains "$OUT" "runnable_surfaces:" "T13: emits runnable_surfaces (not aborted before emit)"
 assert_contains "$OUT" "mcp_browser:" "T13: emits mcp_browser line"
-
-echo ""
-echo "Tests passed: $PASS, failed: $FAIL"
-[[ $FAIL -eq 0 ]] || exit 1
+finish

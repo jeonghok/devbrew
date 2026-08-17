@@ -14,9 +14,7 @@
 set -u -o pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SKILL="$ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
-pass=0; fail=0
-ok() { pass=$((pass+1)); echo "  ✓ $1"; }
-no() { fail=$((fail+1)); echo "  ✗ $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 [ -f "$SKILL" ] || { echo "FAIL: SKILL 부재"; exit 1; }
 
@@ -136,6 +134,4 @@ if echo "$SKIP_WINDOW" | grep -qE '산문 게이트|범위 밖'; then
 else
   no "산문 게이트가 미해결이라는 사실이 문서에서 사라졌다"
 fi
-
-echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[ "$fail" -eq 0 ]
+finish

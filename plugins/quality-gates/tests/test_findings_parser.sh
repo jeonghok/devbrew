@@ -8,7 +8,7 @@ PARSER="$PLUGIN_ROOT/scripts/codex_findings_to_yaml.py"
 TMP="$(mktemp -d -t qg-parser-test-XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
 
-pass=0; fail=0
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 check() {
   local name="$1" stdin_file="$2" stderr_file="$3" expected_grep="$4"
@@ -17,13 +17,7 @@ check() {
   else
     output="$(python3 "$PARSER" < "$stdin_file" 2>&1)"
   fi
-  if echo "$output" | grep -q "$expected_grep"; then
-    echo "  PASS: $name"; pass=$((pass + 1))
-  else
-    echo "  FAIL: $name"; echo "    expected grep: $expected_grep"
-    echo "$output" | sed 's/^/      /'
-    fail=$((fail + 1))
-  fi
+  assert_grep "$output" "$expected_grep" "$name"
 }
 
 # Fixture 1: fenced JSON in nested item.completed → agent_message (Codex 0.130+ shape, Stage 1 success)
@@ -80,11 +74,9 @@ output="$(python3 "$PARSER" \
   --meta-override-reason timeout \
   < "$TMP/empty-for-timeout.jsonl" 2>&1)"
 if echo "$output" | grep -q 'reason: timeout' && echo "$output" | grep -q 'exit_code: 124' && echo "$output" | grep -q 'codex_failed: true'; then
-  echo "  PASS: meta override timeout"; pass=$((pass + 1))
+  ok "meta override timeout"
 else
-  echo "  FAIL: meta override timeout"
-  echo "$output" | sed 's/^/      /'
-  fail=$((fail + 1))
+  no "meta override timeout"
 fi
 
 # Fixture 7: exit-code override on success (findings present, exit 0)
@@ -96,11 +88,9 @@ output="$(python3 "$PARSER" \
   --meta-override-reason "" \
   < "$TMP/success.jsonl" 2>&1)"
 if echo "$output" | grep -q 'codex_failed: false' && echo "$output" | grep -q 'file: s.py'; then
-  echo "  PASS: meta override on success (no reason set)"; pass=$((pass + 1))
+  ok "meta override on success (no reason set)"
 else
-  echo "  FAIL: meta override on success"
-  echo "$output" | sed 's/^/      /'
-  fail=$((fail + 1))
+  no "meta override on success"
 fi
 
 # Fixture 8: parser handles agent_message text containing """ safely (injection safety)
@@ -109,11 +99,9 @@ cat > "$TMP/injection-attempt.jsonl" <<'EOF'
 EOF
 output="$(python3 "$PARSER" < "$TMP/injection-attempt.jsonl" 2>&1)"
 if echo "$output" | grep -q 'file: i.py' && ! echo "$output" | grep -q 'PWNED'; then
-  echo "  PASS: parser ignores triple-quote injection in agent_message text"; pass=$((pass + 1))
+  ok "parser ignores triple-quote injection in agent_message text"
 else
-  echo "  FAIL: parser reacted to injection attempt"
-  echo "$output" | sed 's/^/      /'
-  fail=$((fail + 1))
+  no "parser reacted to injection attempt"
 fi
 
 # AC9(a) — non-list findings coerce + meta.reason
@@ -121,33 +109,24 @@ FIXTURES="$PLUGIN_ROOT/tests/fixtures"
 output="$(python3 "$PARSER" < "$FIXTURES/codex_findings_dict_input.json" 2>&1)"
 if echo "$output" | grep -qE "reason:[[:space:]]*schema_mismatch" && \
    echo "$output" | grep -qE "raw_findings_type:[[:space:]]*dict"; then
-  echo "  PASS: AC9(a): dict findings → meta.reason: schema_mismatch + raw_findings_type: dict"
-  pass=$((pass + 1))
+  ok "AC9(a): dict findings → meta.reason: schema_mismatch + raw_findings_type: dict"
 else
-  echo "  FAIL: AC9(a): dict findings did not produce meta.reason: schema_mismatch or raw_findings_type: dict"
-  echo "$output" | sed 's/^/      /'
-  fail=$((fail + 1))
+  no "AC9(a): dict findings did not produce meta.reason: schema_mismatch or raw_findings_type: dict"
 fi
 
 output="$(python3 "$PARSER" < "$FIXTURES/codex_findings_string_input.json" 2>&1)"
 if echo "$output" | grep -qE "raw_findings_type:[[:space:]]*str"; then
-  echo "  PASS: AC9(a): string findings → meta.raw_findings_type: str"
-  pass=$((pass + 1))
+  ok "AC9(a): string findings → meta.raw_findings_type: str"
 else
-  echo "  FAIL: AC9(a): string findings missing meta.raw_findings_type: str"
-  echo "$output" | sed 's/^/      /'
-  fail=$((fail + 1))
+  no "AC9(a): string findings missing meta.raw_findings_type: str"
 fi
 
 # AC9(b) — last fenced block selection
 output="$(python3 "$PARSER" < "$FIXTURES/codex_two_fenced_blocks.json" 2>&1)"
 if echo "$output" | grep -q "real.py" && ! (echo "$output" | grep -qE "findings:[[:space:]]*\[\]"); then
-  echo "  PASS: AC9(b): last fenced block selected (prompt injection 차단)"
-  pass=$((pass + 1))
+  ok "AC9(b): last fenced block selected (prompt injection 차단)"
 else
-  echo "  FAIL: AC9(b): parser did not pick LAST fenced block (real finding lost or first fake block selected)"
-  echo "$output" | sed 's/^/      /'
-  fail=$((fail + 1))
+  no "AC9(b): parser did not pick LAST fenced block (real finding lost or first fake block selected)"
 fi
 
 # AC9(c) — AUTH_ERROR_RE extended patterns (import from actual parser module)
@@ -169,14 +148,12 @@ for pattern in "401 Unauthorized" "403 Forbidden" "quota exceeded" \
                "subscription required" "credential expired"; do
   result=$(python3 "$AC9C_PY" "$PLUGIN_ROOT/scripts" "$pattern")
   if [ "$result" != "MATCH" ]; then
-    echo "  FAIL: AC9(c): AUTH_ERROR_RE missed pattern: $pattern"
-    fail=$((fail + 1))
+    no "AC9(c): AUTH_ERROR_RE missed pattern: $pattern"
     ac9c_pass=false
   fi
 done
 if [ "$ac9c_pass" = "true" ]; then
-  echo "  PASS: AC9(c): AUTH_ERROR_RE matches 5 extended patterns"
-  pass=$((pass + 1))
+  ok "AC9(c): AUTH_ERROR_RE matches 5 extended patterns"
 fi
 
 # AC9(d) — stderr read error surfaced via meta.stderr_read_error
@@ -188,16 +165,11 @@ else
   chmod 000 "$UNREADABLE"
   OUT=$(echo '{}' | python3 "$PARSER" --stderr-file "$UNREADABLE" 2>&1 || true)
   if echo "$OUT" | grep -qE "stderr_read_error:"; then
-    echo "  PASS: AC9(d): chmod 000 stderr → meta.stderr_read_error surfaced"
-    pass=$((pass + 1))
+    ok "AC9(d): chmod 000 stderr → meta.stderr_read_error surfaced"
   else
-    echo "  FAIL: AC9(d): stderr read failure not surfaced via meta.stderr_read_error"
-    echo "$OUT" | sed 's/^/      /'
-    fail=$((fail + 1))
+    no "AC9(d): stderr read failure not surfaced via meta.stderr_read_error"
   fi
   chmod 600 "$UNREADABLE" 2>/dev/null || true
 fi
 
-echo ""
-echo "Total: $((pass + fail)), pass: $pass, fail: $fail"
-[[ $fail -eq 0 ]] || exit 1
+finish

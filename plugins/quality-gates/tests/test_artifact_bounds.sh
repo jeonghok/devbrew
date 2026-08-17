@@ -3,9 +3,7 @@
 set -u
 SCRIPTS="$(cd "$(dirname "$0")/../scripts" && pwd)"
 MR="$SCRIPTS/artifact_max_rounds.sh"; ST="$SCRIPTS/artifact_stagnation.py"
-PASS=0; FAIL=0
-ok() { PASS=$((PASS+1)); echo "  PASS: $1"; }
-no() { FAIL=$((FAIL+1)); echo "  ✗ FAIL: $1"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 mr() { bash "$MR" | sed -n 's/^effective_max_rounds: //p'; }
 st() { python3 "$ST" --this "$1" --prev "$2" --changed "$3" | sed -n 's/^stagnant: //p'; }
 
@@ -37,6 +35,4 @@ st() { python3 "$ST" --this "$1" --prev "$2" --changed "$3" | sed -n 's/^stagnan
 [ "$(st "a" "a,b" true)" = "false" ] && ok "progressing keyset not stagnant" || no "progressing"
 # fail-closed: invalid changed signal -> stagnant (stop rather than loop forever)
 [ "$(st "a" "b" garbage)" = "true" ] && ok "invalid changed -> fail-closed stagnant" || no "invalid changed fail-closed"
-
-echo ""; echo "Total: $((PASS+FAIL)), PASS=$PASS, FAIL=$FAIL"
-[ "$FAIL" -eq 0 ] || exit 1
+finish
