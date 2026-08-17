@@ -4,7 +4,7 @@
 > 시점에 먼저 드러낸다.
 
 devbrew의 다섯 번째 플러그인. 사용자가 판단해야 하는 순간에 판단할 재료가 이미 나와 있게 만든다.
-입력은 [`docs/superpowers/interview/2026-08-02-comprehension-debt-plugin-interview.md`](../interview/2026-08-02-comprehension-debt-plugin-interview.md)
+입력은 [`docs/archive/interview/2026-08-02-comprehension-debt-plugin-interview.md`](../../archive/interview/2026-08-02-comprehension-debt-plugin-interview.md)
 (문제공간 brief)이며, 이 문서는 그 해답공간이다.
 
 ## 목차
@@ -1949,7 +1949,7 @@ K8을 되살려 kill switch 2종을 붙인다. **(iii)이 없으면 이 절이 �
 | 플러그인 | `plugins/agent-transparency/` (신규) |
 | 버전 | `0.1.0` |
 | 브랜치 | `worktree-feature+comprehension-debt-plugin` |
-| 문제공간 입력 | `docs/superpowers/interview/2026-08-02-comprehension-debt-plugin-interview.md` |
+| 문제공간 입력 | `docs/archive/interview/2026-08-02-comprehension-debt-plugin-interview.md` |
 | 의존 | 없음 |
 | 신규 훅 | **없음** — 앞선 판의 `SubagentStop` 1건은 2026-08-13에 제거됐다([§11](#11-기각된-대안)) |
 | 신규 agent | `agent-transparency:transcript-reader` 1건 — `/standup` fork 전용 read-only(`tools: Read, Glob, Grep`). 계약 전문은 [§6.2](#62-standup--명령--skill--준비-스크립트) 「전용 agent 계약」 |

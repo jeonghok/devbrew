@@ -144,10 +144,68 @@ while IFS= read -r src; do
   esac
 done <<< "$CHANGED_SRC"
 
+# ── `# guards:` 선언 축 (2026-08 무게 감축 설계 §5.2) ──────────────────────────
+# 위 heuristic은 **이름**으로 매핑한다(`test_<base>.py`). `.sh`·`.md`에는 그 관례가
+# 없다 — `test_law2_prose.sh`는 `law2_prose.md`를 검사하지 않는다. 그래서 락이
+# 자기가 지키는 경로 글롭을 **스스로 선언**하고, 여기서 그 선언을 변경 파일 전량과
+# 대조한다.
+#
+# **확장자를 보지 않는다.** 확장자별 arm으로 구현하면 `.py` 사본(codex_findings_to_yaml.py
+# 등)이 편집돼도 그것을 지키는 copy-of 락이 후보에 안 든다 — 락이 지키는 대상이
+# 바뀔 때 그 락이 돌지 않는, 이 축이 닫으려던 바로 그 결함이 절반만 닫힌다.
+#
+# 글롭 의미: bash `case` 패턴이므로 `*`가 `/`를 **넘는다**. 즉 `plugins/**` 와
+# `plugins/*` 가 같은 뜻이고, 오차 방향은 "더 많이 고른다"(fail-safe)다.
+#
+# 선언이 없는 테스트는 현행 동작 그대로 — CHANGED_TESTS(자기 편집)로만 들어온다.
+# 이 축은 순수 추가이며 기존 후보를 줄이지 않는다.
+GUARDED=""
+while IFS= read -r tf; do
+  [ -z "$tf" ] && continue
+  [ -f "$tf" ] || continue
+  # 선언은 파일 머리 30줄 안에 있어야 한다 — 본문 어디서나 허용하면 테스트가
+  # 자기 assertion 문자열 안에 적어 둔 `# guards:` 도 선언으로 읽힌다.
+  # F2 (리뷰): 두 번째 sed 로 trailing whitespace(CRLF 파일의 `\r` 포함 — BSD
+  # sed 에서 `[[:space:]]` 는 `\r` 를 포함한다)를 제거한다. 제거 안 하면 `\r` 가
+  # 마지막 글롭에 눌어붙어 아무것도 매칭하지 않는데, 이것도 rc=0·빈 출력이라
+  # "영향 없음"과 구별이 안 된다.
+  decl=$(head -30 -- "$tf" 2>/dev/null | sed -n 's/^[[:space:]]*#[[:space:]]*guards:[[:space:]]*//p' | sed 's/[[:space:]]*$//' | head -1)
+  [ -z "$decl" ] && continue
+  hit=0
+  # /qg PR1 T5 실측: `for g in $decl`(따옴표 없음)는 word-split **뒤에** pathname
+  # expansion(globbing)까지 적용한다 — bash에서도. `plugins/**`가 실제 cwd의
+  # `plugins/` 하위 디렉터리명으로 조용히 치환돼(예: `plugins/quality-gates`)
+  # 의도한 리터럴 글롭 패턴이 아예 case 에 못 들어갔다(실측: 4/4 미스매치).
+  # `read -a`는 word-split만 하고 globbing은 하지 않으므로, 배열에 담아
+  # 따옴표를 씌워 순회한다 — case 패턴 자리는 원래 globbing 대상이 아니다.
+  # F1 (리뷰): `IFS=' '` 로 좁히면 **공백만** 자른다 — 탭으로 구분된 선언
+  # (`# guards:<TAB>plugins/**<TAB>shared/**`)이 한 필드로 뭉쳐 아무 글롭에도
+  # 안 걸린다(역시 rc=0·빈 출력). 기본 IFS($' \t\n')를 그대로 쓰면 공백·탭·개행
+  # 전부 자른다 — 감싸는 `while IFS= read -r tf` 의 `IFS=` 는 그 read 명령 한 줄에만
+  # 임시로 적용되는 접두 대입이라 여기까지 새지 않는다.
+  read -r -a decl_globs <<< "$decl"
+  for g in "${decl_globs[@]}"; do
+    while IFS= read -r ch; do
+      [ -z "$ch" ] && continue
+      # shellcheck disable=SC2254  # $g is intentionally a glob pattern
+      case "$ch" in $g) hit=1; break 2 ;; esac
+    done <<< "$CHANGED_ALL"
+  done
+  [ "$hit" -eq 1 ] && GUARDED="${GUARDED}${tf}"$'\n'
+done < <(git -c core.quotePath=false ls-files -- '*.sh' | grep -E '(^|/)tests?/' || true)
+
+# --emit-guards: Task 6 의 양방향 커버리지 검사가 쓰는 진단 출력. 후보 목록을
+# 오염시키지 않도록 별도 플래그로만 낸다.
+if [ "${1:-}" = "--emit-guards" ]; then
+  printf '%s' "$GUARDED" | grep -v '^[[:space:]]*$' | sort -u
+  exit 0
+fi
+
 # Union, strip leading ./, sort -u, drop empty lines.
 {
   echo "$MAPPED"
   echo "$CHANGED_TESTS"
+  echo "$GUARDED"
 } | sed 's|^\./||' | sort -u | grep -v '^[[:space:]]*$' || true
 
 exit 0

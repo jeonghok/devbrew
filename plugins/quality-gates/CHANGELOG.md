@@ -3,6 +3,21 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [3.2.0] — 2026-08-17
+
+### Added
+
+- **`compute-test-scope-candidates.sh` 에 `# guards:` 선언 축** (2026-08 무게 감축
+  설계 §5.2, 확장자 무관). 테스트 파일 상단 30줄 안의 `# guards:<TAB>glob1<TAB>glob2`
+  주석을 읽어, 변경된 파일이 그 글롭에 매치하면 확장자 기반 매핑과 무관하게 해당
+  테스트를 스코프 후보에 넣는다. 탭 구분 필드가 기본 IFS 복원 전엔 한 필드로 뭉개지고
+  (F1), CRLF 파일의 trailing `\r` 이 마지막 글롭에 눌어붙어 무매칭되던(F2) 두 회귀를
+  같은 라운드에서 픽스처로 고정.
+- **`--emit-guards` 진단 플래그**. `# guards:` 선언 후보 목록만 방출 — 양방향 커버리지
+  검사(`tests/test_guards_coverage_bidirectional.sh`)가 소비하는 새 surface. 이 플래그가
+  GUARDED 계산 전에 조기 종료해도 커버리지 공백을 어느 스위트도 못 잡던 구멍(F3)을
+  진단 출력 존재 어서션으로 막았다.
+
 ## [3.1.0] — 2026-08-13
 
 > 이 절은 `2.15.0` 으로 작성됐다가 머지 시점에 `3.1.0` 으로 재산정됐다 — 브랜치가 분기한

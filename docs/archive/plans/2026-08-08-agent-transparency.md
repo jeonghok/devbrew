@@ -18,7 +18,7 @@
 
 **Tech Stack:** Python 3.9 표준 라이브러리만 · bash 3.2 · `unittest` · Claude Code 플러그인 표면(output style · hook · command · skill · agent)
 
-**Spec:** [`docs/superpowers/specs/2026-08-05-agent-transparency-design.md`](../specs/2026-08-05-agent-transparency-design.md) — 아래에서 **spec** 이라고만 쓴다. 인수 조건 38건의 정본은 그 문서 §9.
+**Spec:** [`docs/superpowers/specs/2026-08-05-agent-transparency-design.md`](../../superpowers/specs/2026-08-05-agent-transparency-design.md) — 아래에서 **spec** 이라고만 쓴다. 인수 조건 38건의 정본은 그 문서 §9.
 
 ## 목차
 

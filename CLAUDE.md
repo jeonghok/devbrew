@@ -78,4 +78,4 @@ Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md
 
 ## Audits
 
-읽기전용 플러그인 감사 리포트는 `docs/audits/`에 축적된다 (인덱스: `docs/audits/README.md`, 원장: `*-journal.jsonl`). Law 3 compounding substrate — 미래 세션이 과거 감사 결과와 우선순위 갭 목록을 여기서 찾는다.
+읽기전용 플러그인 감사 리포트는 `docs/audits/`에 축적되고 완료분은 `docs/archive/audits/`로 옮겨진다 (인덱스: `docs/audits/README.md`, 원장: `*-journal.jsonl`). Law 3 compounding substrate — 미래 세션이 과거 감사 결과와 우선순위 갭 목록을 여기서 찾는다.
