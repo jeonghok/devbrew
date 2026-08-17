@@ -2390,6 +2390,7 @@ git commit -m "feat(shared): 판정 헬퍼 정본 + 종료 행동 락"
 
 **Files:**
 - Modify: 자체 판정 헬퍼를 정의하는 셸 테스트 전부 — **이름 불문** (Step 2가 도출; 〔실측〕 120 파일)
+- **Exclude(명시): `plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh`** — 아래 순환 규칙
 - Modify(명시): `plugins/quality-gates/tests/test_adversarial_persona.sh` · `test_security_reviewer_persona.sh` — 설계 §6.1③의 "persona 테스트 쌍". Step 2의 좁은 도출이 놓쳤고 Task 35의 20줄 검사가 실제로 잡는 유일한 테스트 쌍이라 **Files에 이름으로 올린다**(Step 4b)
 - Delete: `plugins/quality-gates/tests/lib/` 중 `shared/tests/assert.sh`로 흡수된 것
 
@@ -2419,6 +2420,28 @@ git commit -m "feat(shared): 판정 헬퍼 정본 + 종료 행동 락"
 >   `assert_count_ge` 의 숫자 가드 삭제(GREEN — fail-closed 는 유지되고 진단 메시지만 손실) ·
 >   `ok()` 의 pass 카운터 정지(GREEN) · `assert_count_ge` 의 `<cmd> <expected>` 스왑(GREEN).
 >   이 사이클에서 닫지 않되 **§15.1 에 기록**한다 — 다음에 `assert.sh` 를 만지는 사이클의 입력이다.
+
+> ⚠ **순환 금지 — 정본을 검증하는 자리는 정본을 쓰지 않는다** 〔2026-08-17 Task 14 pre-flight 실측〕.
+>
+> **규칙**: `shared/tests/assert.sh` **변경 시 선택되는** 테스트는 자기 판정(`ok`/`no` 계열)에
+> `assert.sh` 를 source 하지 않는다. 쓰면 깨진 정본이 **자기를 잡을 검사 안에서** 도는 꼴이 되어,
+> `no()` 가 세기를 멈추는 종류의 결함이 두 자리 모두를 GREEN 으로 만든다.
+>
+> 실측으로 그 자리는 **정확히 둘**이다:
+>
+> | 파일 | 선택되는 이유 | 지금 상태 |
+> |---|---|---|
+> | `shared/tests/test_assert_behavior.sh` | `# guards: shared/tests/**` | ✅ 이미 격리 — 자체 `t_ok`/`t_no`(:27-28)로 판정하고 `assert.sh` 는 probe 안(:42, :129)에서만 source. **Step 2 도출 범위(`plugins/*`) 밖이라 대상이 아니다** |
+> | `plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh` | `# guards: plugins/** shared/**` (`:2`) | ⚠ 자체 `ok()`/`no()`(:27-28) 보유 → **이관 대상으로 잡힌다. 제외한다** |
+>
+> 이 규칙이 무는 파일은 **하나**다. 나머지 ~124 개는 정상 이관한다.
+>
+> **모집단 정정** 〔같은 pre-flight〕: plan 이 적은 `122`(넓은 목록)는 **브랜치 시작점 `ee1d95f`
+> 기준으로 정확했다**(재측정 122). 지금은 **125** 다 — 이 사이클이 PR1 에서 만든 락 3개
+> (`test_guards_coverage_bidirectional.sh` · `test_guards_declaration_mapping.sh` ·
+> `test_run_own_tests_accumulate.sh`)가 늘어난 것이고, 그중 첫 번째만 위 규칙으로 빠진다.
+> 좁은 목록도 같은 이유로 109 → 112, **차집합 13 은 그대로**(plan 의 수와 일치).
+> **§14 완료 측정의 "자체 헬퍼 정의 파일 수" after 값은 0 이 아니라 1 이 정답이다** — 위 제외 1건.
 
 - [ ] **Step 1: 이관 전 파일별 assertion 호출 수를 잰다**
 
