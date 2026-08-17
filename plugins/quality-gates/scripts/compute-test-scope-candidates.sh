@@ -165,7 +165,11 @@ while IFS= read -r tf; do
   [ -f "$tf" ] || continue
   # 선언은 파일 머리 30줄 안에 있어야 한다 — 본문 어디서나 허용하면 테스트가
   # 자기 assertion 문자열 안에 적어 둔 `# guards:` 도 선언으로 읽힌다.
-  decl=$(head -30 -- "$tf" 2>/dev/null | sed -n 's/^[[:space:]]*#[[:space:]]*guards:[[:space:]]*//p' | head -1)
+  # F2 (리뷰): 두 번째 sed 로 trailing whitespace(CRLF 파일의 `\r` 포함 — BSD
+  # sed 에서 `[[:space:]]` 는 `\r` 를 포함한다)를 제거한다. 제거 안 하면 `\r` 가
+  # 마지막 글롭에 눌어붙어 아무것도 매칭하지 않는데, 이것도 rc=0·빈 출력이라
+  # "영향 없음"과 구별이 안 된다.
+  decl=$(head -30 -- "$tf" 2>/dev/null | sed -n 's/^[[:space:]]*#[[:space:]]*guards:[[:space:]]*//p' | sed 's/[[:space:]]*$//' | head -1)
   [ -z "$decl" ] && continue
   hit=0
   # /qg PR1 T5 실측: `for g in $decl`(따옴표 없음)는 word-split **뒤에** pathname
@@ -174,7 +178,12 @@ while IFS= read -r tf; do
   # 의도한 리터럴 글롭 패턴이 아예 case 에 못 들어갔다(실측: 4/4 미스매치).
   # `read -a`는 word-split만 하고 globbing은 하지 않으므로, 배열에 담아
   # 따옴표를 씌워 순회한다 — case 패턴 자리는 원래 globbing 대상이 아니다.
-  IFS=' ' read -r -a decl_globs <<< "$decl"
+  # F1 (리뷰): `IFS=' '` 로 좁히면 **공백만** 자른다 — 탭으로 구분된 선언
+  # (`# guards:<TAB>plugins/**<TAB>shared/**`)이 한 필드로 뭉쳐 아무 글롭에도
+  # 안 걸린다(역시 rc=0·빈 출력). 기본 IFS($' \t\n')를 그대로 쓰면 공백·탭·개행
+  # 전부 자른다 — 감싸는 `while IFS= read -r tf` 의 `IFS=` 는 그 read 명령 한 줄에만
+  # 임시로 적용되는 접두 대입이라 여기까지 새지 않는다.
+  read -r -a decl_globs <<< "$decl"
   for g in "${decl_globs[@]}"; do
     while IFS= read -r ch; do
       [ -z "$ch" ] && continue
