@@ -11,9 +11,7 @@ set -u
 # 지금은 tests/ 로부터 repo root까지 3단 상위: tests -> plugin-audit -> plugins -> devbrew.
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SUT="$ROOT/plugins/plugin-audit/scripts/run-own-tests.sh"
-pass=0; fail=0
-ok() { pass=$((pass+1)); echo "  ✓ $1"; }
-no() { fail=$((fail+1)); echo "  ✗ $1"; }
+. "$ROOT/shared/tests/assert.sh"
 TMP="$(mktemp -d -t pa-own-XXXXXX)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
@@ -110,5 +108,4 @@ case "$out" in
   *) no "D: 셸 통과 수가 틀렸다 (out=$out)" ;;
 esac
 
-echo; echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"
-[ "$fail" -eq 0 ]
+finish
