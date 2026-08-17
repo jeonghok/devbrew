@@ -26,6 +26,14 @@ SCRATCH="$(mktemp -d -t qg-gate-XXXXXX)" || exit 1
 # 없다. 정상 종료든 조기 종료든 원복이 보장돼야 하므로, EXIT trap이 "지워진 채로
 # 남았으면"(_ACTIVE_DETECTOR_TARGET이 비지 않았으면) 되살리고 나서 SCRATCH를 지운다.
 # 정상 경로에서는 루프 안에서 이미 되살려 이 trap은 no-op이다.
+# **단, 이 "보장"은 SIGKILL 앞에서는 깨진다** — EXIT trap 자체가 SIGKILL을 못 받으므로
+# 그 시점에는 배포 지점 심볼릭 링크가 지워진 채로 남는다. 이것이 이 라운드가 다루는
+# 두 SIGKILL 잔여(round 2 findings) 중 **더 나쁜 쪽**이다 — 형제 conf 헬퍼들의
+# 잔여(malformed 값으로 덮인 conf, `test_detect_codex.sh`·`test_detect_codex.py` 주석
+# 참조)는 conf 를 읽는 코드가 fail-closed 로 죽지만, 이쪽은 배포 지점 자체가
+# 사라진다(그래도 `git checkout --`로 복구 가능하고 데이터 손실은 없다 — 심볼릭
+# 링크는 target 문자열만 알면 완전히 재구성되는 무상태 포인터다, round 1 사고 복구
+# 참조).
 _ACTIVE_DETECTOR_ORIG=""
 _ACTIVE_DETECTOR_TARGET=""
 restore_active_detector() {
@@ -272,9 +280,29 @@ for i in "${!GATED_RUNNER[@]}"; do
   rm -f "$_ACTIVE_DETECTOR_ORIG"
   NODETECT_CAP="$SCRATCH/g-$label-nodetect"
   n="$(run_scenario "$sk" "$r" "$NODETECT_CAP" "$OBS_MOCKBIN:$BASE_SUFFIX" "$OBS_MOCKBIN" "IGNORE=1")"
+  # 이 in-loop 호출이 `restore_active_detector`의 `ln -sf` 실패 검사(N5, round 2)가
+  # **실제로 관측 가능한** 유일한 경로다: `finish`(shared/tests/assert.sh:111-114)는
+  # 이 스크립트 끝에서 한 번만 불려 Total 을 찍고 종료 상태를 확정하는데, `no()`가
+  # EXIT trap 경로(:53)에서만 불리면 `finish` 가 이미 지나간 뒤라 `✗` 줄만 찍히고
+  # 아무것도 안 바뀐다(round 3 재리뷰가 확인한 잠재 사실 — 지금은 도달 불가능하다:
+  # 이 호출이 `rm -f`와 모든 `case` 분기(`PREMISE_FAIL:*` 포함) 사이에 **무조건**
+  # 있고, `run_scenario`는 `$( )` 안에서 도니 부모를 종료시킬 수 없다). **이 호출을
+  # 나중에 옮기면 그 이빨을 조용히 잃는다** — 옮길 일이 있으면 이 사실부터 다시 확인할 것.
   restore_active_detector
   case "$n" in
     0)
+      # R1(round 3): `GATED_RUNNER`는 **선언이 아니라 발견**이다(`:60-68`, SKILL.md를
+      # 스캔해 채운다) — 그래서 아래 label 분류는 "stderr를 실제로 확인해 본 fence의
+      # 열거"이지 fail-closed 총합이 아니었다. 이전 판은 미분류 label을 `*)`에서
+      # 조용히 `ok`로 통과시키며 "이 fence는 else가 no-op이라 관측 불가"라는 구체
+      # 문장까지 붙였다 — reviewing-brief에 대해서는 참이지만, 넷째 gated fence가
+      # 생기면 아무도 확인하지 않은 그 fence에 대해 자동으로 거짓이 되는 문장이다
+      # (N1/N2와 같은 종류의 결함, 이번엔 프로즈가 아니라 코드가 낸다). `:181-186`이
+      # 이미 같은 모양(미인식 값을 추측하지 않고 `no … ; continue`)의 idiom을 쓰고
+      # 있다 — 그것을 그대로 따른다: 분류된 두 갈래만 이름으로 열거하고, 나머지는
+      # 전부 loud `no`로 떨어뜨려 다음 사람이 위 두 갈래 중 하나에 등재하게 만든다.
+      # (`quality-pipeline/SKILL.md:386-388`이 나머지 두 산문 게이트의 리터럴화가
+      # "이 사이클 범위 밖"이라고 적어 뒀다 — 즉 이 목록은 언젠가 반드시 자란다.)
       case "$label" in
         auditing-plugins|reviewing-spec)
           if grep -q 'detector_not_runnable' "$NODETECT_CAP.stderr" 2>/dev/null; then
@@ -283,8 +311,11 @@ for i in "${!GATED_RUNNER[@]}"; do
             no "$label: 감지기 부재 → codex 0회지만 stderr에 detector_not_runnable 없음 — loud-failure 미확인"
           fi
           ;;
-        *)
+        reviewing-brief)
           ok "$label: 감지기 부재 → codex 0회 (안전 확인) — 이 fence 는 else 가 no-op 이라 detector_not_runnable 표시 자체는 관측 불가(사용자 가시성은 하류 프로즈 advisory 에 의존, N3)"
+          ;;
+        *)
+          no "$label: 감지기 부재 시나리오의 stderr 관측성이 분류돼 있지 않다 — 이 fence 가 skip_reason 을 stderr 로 내는지 확인하고 위 두 갈래(stderr 에 값을 내는 auditing-plugins|reviewing-spec 계열, 또는 else 가 no-op 인 reviewing-brief 계열) 중 하나에 등재할 것"
           ;;
       esac
       ;;
