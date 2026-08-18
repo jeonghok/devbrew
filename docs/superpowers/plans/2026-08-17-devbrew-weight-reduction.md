@@ -3194,6 +3194,35 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   exit 0
 fi
 
+# ── 축 0: README 의 계약 수 서술이 이 락의 실제 계약 축 수와 맞는가 ─────────
+# 〔2026-08-18 Ruling 45〕 축 1c 가 들어오기 전 shared/README.md 는 이 락을 "두 계약"
+# 으로 서술했고, 축이 셋이 된 뒤에도 그 문장이 그대로 남았다. **존재 검사로는 못 잡는다**
+# — README 에 특정 문구가 살아 있는지만 보는 grep 은 서술이 낡아도 똑같이 1 을 낸다.
+# 양성 존재 단언은 정확성을 재지 않는다. 그래서 여기서는 **수를 센다**, 그것도 손으로
+# 적지 않고 이 파일 자신의 두 자리(머리말 (a)(b)(c) 목록 · 축 헤더)에서 도출해 셋이
+# 서로를 덮는지 본다 — 한 자리만 재면 그 자리를 고치는 편집이 나머지를 조용히 낡게 둔다.
+#
+# **못 보는 것**: 도출은 축 헤더의 번호 관례에 기댄다. 다음 저자가 네 번째 계약을
+# `축 4` 로 붙이면 이 도출은 그것을 안 센다 — 계약 축은 1 번대 문자 접미로 붙인다.
+SELF="shared/tests/$(basename -- "$0")"
+if [ ! -f "$SELF" ] || [ ! -f "shared/README.md" ]; then
+  no "README: 대조 대상이 없다 (self='$SELF') — 아래 계약 수 대조는 무의미하다"
+else
+  n_head="$(grep -cE '^#   \([a-z]\) ' "$SELF" || true)"
+  n_axis="$(grep -cE '^# ── 축 1[a-z]: ' "$SELF" || true)"
+  assert_eq "$n_head" "$n_axis" "README: 머리말 계약 목록(${n_head}건)과 축 헤더(${n_axis}건)가 같은 수를 낸다"
+  case "$n_axis" in
+    1) want='한' ;; 2) want='두' ;; 3) want='세' ;; 4) want='네' ;; 5) want='다섯' ;; *) want='' ;;
+  esac
+  if [ -z "$want" ]; then
+    no "README: 축 수 '${n_axis}' 에 대응하는 수사를 모른다 — 도출이 깨졌거나 대응표 밖의 값이다"
+  else
+    ok "README: 계약 축 ${n_axis}건을 이 파일에서 도출 (열거 없음)"
+    said="$(sed -nE 's/^`shared\/tests\/test_copy_of_contract\.sh` — ([^ ]+) 계약을 검사한다.*/\1/p' shared/README.md | head -1)"
+    assert_eq "${said:-없음}" "$want" "README: shared/README.md 의 계약 수 서술이 실제 축 수(${n_axis}건)와 일치한다"
+  fi
+fi
+
 # ── 축 1a: 심볼릭 링크 무결성 — 도미넌스(∀) 체크 (기본 방식, 설계 §16.1) ────
 # 정본 목록은 이 사이클에 심볼릭 링크로 전환된 것 둘로 고정한다(설계 §16.1) —
 # 이 목록이 배포 지점 목록과 다른 이유는 이 태스크 본문에 적었다.
@@ -3646,7 +3675,7 @@ cp /tmp/lock_round1_fix.bak "$LOCK"; rm -f /tmp/lock_round1_fix.bak
 
 **`copy-of` 물리 사본 축**: 이 시점의 리포에는 실제 물리 `copy-of` 사본이 **셋** 있다 — Task 17 Step 4b 의 `plugins/{plugin-audit,quality-gates,spec-distill}/scripts/codex_jsonl.py` 다(B.4 5b 가 17 → 16 을 강제하므로 이미 존재한다). **그래도 스캐치 픽스처를 쓴다**, 이유가 "없어서"에서 "통제할 수 없어서"로 바뀌었을 뿐이다: mutation 은 마커를 지우고 본문을 흔들어야 하는데 **실제 사본을 대상으로 하면 앞 태스크의 산출물을 훼손**하고, 복원 실패가 조용한 손상으로 남는다. 픽스처는 크기·마커·내용을 전부 통제할 수 있고 지워도 잃을 것이 없다. 〔**정정(fix round 4)**: 이전 판이 *"실제 물리 copy-of 후보가 아직 없다(Task 19가 이 태스크보다 뒤에 온다)"* 라고 적었는데 **두 번 틀렸다** — 첫 실사용은 Task 19가 아니라 Task 17 Step 4b 이고(round 1), 5b 아래에서 Task 17은 이 태스크보다 **앞선다**(round 2).〕 그래서 **일회용 스캐치 픽스처**로 마커-파싱 코드 자체의 이빨을 증명한다 — 실제 파일을 잠깐 만들어 `git add`로 스캔 코퍼스(`git ls-files`)에 넣고, mutation을 태운 뒤, 커밋 없이 되돌린다.
 
-> **무변이에서 RED 가 나오면 이 표로 가른다.** 이 락의 실패 줄은 `  ✗ ` 로 시작하고 그 뒤 접두는 **다섯뿐**이다(`symlink-∀:` · `copy-of:` · `형제-∀:` · `conf:` · `fail-closed:` — 락 본문의 모든 `no`/`assert_*` 메시지가 이 다섯 중 하나로 시작한다. 〔`형제-∀:` 는 2026-08-17 fix round 2 가 더한 축 1c 다 — 축을 더하면 이 목록도 같은 커밋에서 늘려야 한다〕). 아래 코드가 그 줄들을 그대로 찍는다. **분기를 두 개만 두면 안 된다** — 이전 판본은 픽스처와 `codex_jsonl.py` 두 경우만 적어서, 심볼릭 링크 축이나 fail-closed 축이 걸린 실행자는 어느 가지에도 해당하지 않았다.
+> **무변이에서 RED 가 나오면 이 표로 가른다.** 이 락의 실패 줄은 `  ✗ ` 로 시작하고 그 뒤 접두는 **여섯뿐**이다(`README:` · `symlink-∀:` · `copy-of:` · `형제-∀:` · `conf:` · `fail-closed:` — 락 본문의 모든 `no`/`assert_*` 메시지가 이 여섯 중 하나로 시작한다. 〔`형제-∀:` 는 2026-08-17 fix round 2 가 더한 축 1c 다 — 축을 더하면 이 목록도 같은 커밋에서 늘려야 한다. `README:` 는 2026-08-18 Ruling 45 가 더한 축 0 이고, 이 규칙에 따라 같은 커밋에서 늘린 자리가 여기다〕). 아래 코드가 그 줄들을 그대로 찍는다. **분기를 두 개만 두면 안 된다** — 이전 판본은 픽스처와 `codex_jsonl.py` 두 경우만 적어서, 심볼릭 링크 축이나 fail-closed 축이 걸린 실행자는 어느 가지에도 해당하지 않았다.
 >
 > | 실패 줄이 이렇게 시작하면 | 무엇이 깨졌나 | 어디로 |
 > |---|---|---|
@@ -3654,6 +3683,7 @@ cp /tmp/lock_round1_fix.bak "$LOCK"; rm -f /tmp/lock_round1_fix.bak
 > | `✗ copy-of:` + `plugins/*/scripts/codex_jsonl.py` (plugin-audit·quality-gates·spec-distill **어느 것이든**) | **Task 17 산출물의 진짜 결함** — 그 사본이 정본과 갈라졌다 | **Task 17** 로 돌아간다 |
 > | `✗ copy-of: 물리 사본 0건` | Task 17 Step 4b 가 실행되지 않았다 | **Task 17 Step 4b** |
 > | `✗ 형제-∀:` | import 로만 소비되는 정본의 형제 사본이 배포 디렉토리 하나에서 빠졌다(또는 설치본 대역에서 import 가 안 풀린다. `✗ 형제-∀ 도출:` 이면 정본 도출 규칙 자체가 깨진 것이다) — **픽스처와 무관** | **Task 17 Step 4b** (사본을 만드는 스텝) |
+> | `✗ README:` | `shared/README.md` 의 계약 수 서술이 이 락의 실제 계약 축 수와 어긋난다(또는 대조 대상 자체가 없다) — **픽스처와 무관** | **여기서** 고친다 (서술과 축 중 어느 쪽이 참인지부터 정한다) |
 > | `✗ symlink-∀:` | Task 15/17 의 심볼릭 링크 배포가 실제로는 안 됐다 — **픽스처와 무관** | 픽스처를 지우고 **Task 15/17** 부터 |
 > | `✗ conf:` | 형제 설정(`codex-killswitch.conf`)이 배포 지점 수만큼 없다 | **Task 15** |
 > | `✗ fail-closed:` | `detect_codex.sh` 가 설정 부재에 fail-open 한다 (보안 컨트롤) | **Task 15** — 여기서 우회하지 않는다 |
