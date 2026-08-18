@@ -7636,7 +7636,7 @@ else:
 | 2 | `parents[N]` 재앵커 대상 | **도출 방법 확정** (3축 grep). 목록은 실행 시점 | Task 12 Step 2 |
 | 3 | PR1 범위 | **실행 시점** — 기준선 캡처 결과에 따름 | Task 1 |
 | 4 | `# guards:` 없는 셸 테스트 기본 동작 | **확정** — 현행 유지(`CHANGED_TESTS` 만). 순수 추가라 회귀 없음 | Task 5 |
-| 5 | `copy-of` 마커 정규식·문법 | **확정** — 4요구 전부. **2026-08-17 실측 이후**: `detect_codex.sh`·`codex_findings_to_yaml.py`는 심볼릭 링크로 전환돼 마커가 없다(설계 §16.1). **2026-08-17 라운드 1 코드 리뷰가 정정**: 4요구가 실제 배포 파일에 처음 적용되는 사례는 Task 18이 아니다 — Task 18의 `read_preamble.sh`는 요구를 확정할 뿐 배포 스텝을 실제로 쓰지 않는다(Task 18 절 하단 기록). **2026-08-17 census 조치 재검토가 다시 정정**: 첫 적용은 Task 19가 아니라 **Task 17 Step 4b**(`codex_jsonl.py` ×1)이고 Task 19(×3)가 그다음이다 | ~~Task 15 Step 5~~ → ~~Task 18 Step 3~~ → ~~Task 19 Step 3~~ → **Task 17 Step 4b** |
+| 5 | `copy-of` 마커 정규식·문법 | **확정** — 4요구 전부. **2026-08-17 실측 이후**: `detect_codex.sh`·`codex_findings_to_yaml.py`는 심볼릭 링크로 전환돼 마커가 없다(설계 §16.1). **2026-08-17 라운드 1 코드 리뷰가 정정**: 4요구가 실제 배포 파일에 처음 적용되는 사례는 Task 18이 아니다 — Task 18의 `read_preamble.sh`는 요구를 확정할 뿐 배포 스텝을 실제로 쓰지 않는다(Task 18 절 하단 기록). **2026-08-17 census 조치 재검토가 다시 정정**: 첫 적용은 Task 19가 아니라 **Task 17 Step 4b**(`codex_jsonl.py` ×3 — 배포 지점 셋)이고 Task 19(×3)가 그다음이다 | ~~Task 15 Step 5~~ → ~~Task 18 Step 3~~ → ~~Task 19 Step 3~~ → **Task 17 Step 4b** |
 | 6 | 완료 측정 실측값 | **실행 시점**. before 값은 plan 작성 시점 실측으로 박음 | Task 36 |
 
 ## B.2 설계 서술 정정 2건
