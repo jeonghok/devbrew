@@ -50,10 +50,31 @@ codex_findings_to_yaml.py`를 가리키는 상대 심볼릭 링크로 바뀌었�
   을 출력했다(**플래그와 무관한 실패를 플래그 증거로 보고**). 형제 락
   `test_run_spec_codex_reviewer.sh` 처럼 `CLAUDE_PLUGIN_ROOT` 를 명시로 넘기고,
   ① **identity 사본**(플래그 그대로 위치만 이동) 통제와 ② 변이본이 조기 degrade
-  없이 변환까지 갔는지 확인하는 원인-확정 단언을 더했다. 양방향 증명: identity 는
-  "이빨 있음"을 내지 않고(계측기 RED), 실제 플래그 제거는 낸다.
+  없이 변환까지 갔는지 확인하는 원인-확정 단언을 더했다. 양방향 증명: identity
+  사본(플래그 온전)에서는 **계측기 줄이 GREEN** 이고 락이 "이빨 있음"을 거짓으로
+  내지 않는다 — 그 거짓을 막는 것은 **mutation 줄이 RED 로 가는 것**이다(실측:
+  40 중 1 RED, 계측기 줄과 원인-확정 줄은 둘 다 GREEN). 실제 플래그 제거에서는
+  "이빨 있음"을 낸다. 계측기 줄이 RED 로 가는 경우는 계측기 자체(`F1ENV` 의
+  `CLAUDE_PLUGIN_ROOT`)가 깨졌을 때다(실측: 40 중 2 RED). 〔2026-08-17 fix round 3,
+  R3-5 — 앞 판본은 identity 일 때 "계측기 RED" 라 적어 `task-17-report-r2.md:158`
+  과 모순이었다.〕
 - `codex_jsonl.py` 사본의 docstring 정정(정본과 동기) — 없는 테스트 파일 인용 제거,
   배포 지점 도출 규칙 명시(R2-4·R2-11).
+
+### Fixed (2026-08-17 fix round 3)
+- **원인-확정 판별자 자신이 두 방향으로 fail-open 이던 결함(R3-1).**
+  round 2 가 더한 `tests/test_brief_codex_axes.sh` 의 원인-확정 검사는 ① 맨 `grep` 이라
+  **출력 파일 부재를 PASS 분기로 라우팅**했고(변이본이 구문 파손돼 아무것도 안 남겨도
+  40/40 GREEN + "이빨 있음"), ② degrade 사유를 **하드코딩**해 러너가 내지 않는
+  `extract_failed` 를 열거하면서 러너가 실제로 내는 여섯(`runner_incomplete` ·
+  `payload_missing` · `missing_project_dir` · `project_dir_unreachable` ·
+  `scratch_dir_uncreatable` · `codex_not_installed`)을 빠뜨렸다 — 그래서
+  `reason: codex_not_installed` 로 degrade 한 변이본도 "원인 확정" 을 통과했다.
+  즉 R2-6 이 닫혔다고 주장한 실패가 그대로 재현됐다. 두 판정 모두
+  `shared/tests/assert.sh` 의 `assert_file_absent`(파일 부재 = `no()`)로 바꾸고,
+  사유 열거는 러너의 `emit_fallback`/`write_failclosed` 호출부에서 **도출**한다
+  (현재 9종). 도출이 0건이면 vacuous 로 보고 RED. 실측: 구문 파손 변이 → 2 RED,
+  `codex_not_installed` degrade 변이 → 1 RED, 무변이 40/40 GREEN.
 
 ## [0.27.0] — 2026-08-17
 

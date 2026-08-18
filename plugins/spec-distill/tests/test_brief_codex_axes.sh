@@ -228,14 +228,39 @@ if [[ "$f1mutres" == "MUTATED" ]]; then
   # 원인 확정 먼저: 변이본이 실제로 codex 를 태우고 변환까지 갔는가. degrade
   # 사유(prompt_build_failed 등)로 조기 종료했다면 category 부재는 플래그와
   # 무관하고, 그것을 "이빨 있음"으로 읽으면 거짓 원인 보고다 (R2-6).
-  if grep -qE '^[[:space:]]*reason: (prompt_build_failed|aborted_before_completion|yaml_conversion_failed|extract_failed)' "$F1OUT2"; then
-    no "F1 mutation: 변이본이 조기 degrade($(grep -oE 'reason: [a-z_]+' "$F1OUT2" | head -1))로 끝났다 — 플래그 줄에 도달 못 함, 아래 판정은 무의미"
+  #
+  # 〔2026-08-17 fix round 3, R3-1〕 이 판별자는 **두 방향으로 fail-open** 이었다.
+  # ① 맨 `grep -qE … "$F1OUT2"`: 변이본이 구문 파손돼 출력 파일 자체가 안 생기면
+  #    grep 이 비-0 으로 끝나 `else` 즉 **PASS 분기**로 갔다 — 그리고 그 상태에서
+  #    아래 category 판정도 "이빨 있음"을 내서 40/40 GREEN 이 나왔다(실측).
+  #    `shared/tests/assert.sh` 가 그 이빨을 이미 갖고 있다: `assert_file_absent`
+  #    (와 `assert_file_grep`)는 *"파일 부재는 fail-closed — `no()` 로 센다"* 다.
+  #    `"$(cat …)"` 로 텍스트 변형에 넘기는 우회는 정확히 저 결함이므로 쓰지 않는다.
+  # ② 사유 열거가 **하드코딩**이었다. 목록의 `extract_failed` 는 이 러너가 내지
+  #    **않는** 이름이었고, 러너가 실제로 내는 여섯(`runner_incomplete` ·
+  #    `payload_missing` · `missing_project_dir` · `project_dir_unreachable` ·
+  #    `scratch_dir_uncreatable` · `codex_not_installed`)이 빠져 있었다 — 그래서
+  #    `reason: codex_not_installed` 로 degrade 한 변이본도 "원인 확정" PASS 였다.
+  #    열거는 공간·시간 양쪽으로 fail-open 이므로 **러너에서 도출**한다: 이 러너의
+  #    degrade 사유는 전부 `write_failclosed` 한 곳을 지나므로 그 호출부 두 형태
+  #    (`emit_fallback <reason>` · `write_failclosed "<reason>"`)가 코퍼스다.
+  F1REASONS="$(
+    { grep -oE 'emit_fallback[[:space:]]+[a-z_]+' "$RUNNER" \
+        | sed -E 's/^emit_fallback[[:space:]]+//'
+      grep -oE 'write_failclosed[[:space:]]+"[a-z_]+"' "$RUNNER" \
+        | sed -E 's/^write_failclosed[[:space:]]+"//; s/"$//'
+    } | sort -u)"
+  n_f1reasons="$(printf '%s\n' "$F1REASONS" | grep -c . || true)"
+  if [[ "$n_f1reasons" -lt 1 ]]; then
+    # 도출이 0건이면 아래 ∄ 판정이 vacuous 하다 — 빈 열거는 어떤 degrade 도 못 잡는다.
+    no "F1 mutation: 러너에서 degrade 사유를 한 건도 도출하지 못했다 — 원인-확정 판별자가 vacuous 하다"
   else
-    ok "F1 mutation: 변이본이 조기 degrade 없이 변환까지 도달했다 (원인 확정)"
+    assert_file_absent "$F1OUT2" \
+      "^[[:space:]]*reason: ($(printf '%s' "$F1REASONS" | tr '\n' '|'))"'$' \
+      "F1 mutation: 변이본이 조기 degrade 없이 변환까지 도달했다 (원인 확정 — 러너에서 도출한 사유 ${n_f1reasons}종 대조)"
   fi
-  grep -q 'category: ambiguity' "$F1OUT2" \
-    && no "F1 mutation: --emit-keys design 제거 후에도 category가 남는다 — 락에 이빨 없음" \
-    || ok "F1 mutation: --emit-keys design 제거 → category 소실 재현 (락에 이빨 있음)"
+  assert_file_absent "$F1OUT2" 'category: ambiguity' \
+    "F1 mutation: --emit-keys design 제거 → category 소실 재현 (락에 이빨 있음)"
 else
   no "F1 mutation: --emit-keys design 줄을 못 찾았다 ($f1mutres) — 락이 vacuous하다"
 fi

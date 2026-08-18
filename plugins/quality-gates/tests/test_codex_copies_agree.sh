@@ -154,22 +154,51 @@ else no "층④ 표본이 ${seen}건뿐 — 위 판정이 무의미하다"; fi
 # 대상 집합은 **이름을 열거하지 않고** git 코퍼스에서 도출한다 — 정본과 그 copy-of
 # 사본 전부. 사본이 늘어나면 자동으로 함께 검사된다.
 #
-# 재는 것: 진짜 agent_message 뒤에 공백-only agent_message 가 흐를 때 **앞선 진짜
-# 것이 살아남는가**. 가드가 없으면 빈 후보가 last_text 를 덮어써 하류에서
-# codex_failed 가 뒤집힌다(fix round 1 F2 의 방향 서술 참조).
+# 재는 것 셋 〔셋째·둘째는 2026-08-17 fix round 3, R3-2 가 더했다〕:
+#  ① 진짜 agent_message 뒤에 **공백-only** agent_message 가 흐를 때 앞선 진짜 것이
+#     살아남는가 — `candidate.strip()` 연언지. 가드가 없으면 빈 후보가 last_text 를
+#     덮어써 하류에서 codex_failed 가 뒤집힌다(fix round 1 F2 의 방향 서술 참조).
+#  ② 진짜 것 뒤에 **비-문자열** agent_message 가 흐를 때도 살아남는가 —
+#     `isinstance(candidate, str)` 연언지. 앞 판본은 ①만 태워서 이 연언지가 **네 파일
+#     어디에도 락이 없었다**: `isinstance(candidate, str) and candidate.strip()` 을
+#     `candidate and str(candidate).strip()` 로 네 파일 동시에 바꿔도 69/69 GREEN 이었고
+#     (실측), 그 상태에서 비-문자열 `text` 스트림은 codex_findings_to_yaml.py 에서
+#     잡히지 않는 TypeError 로 죽으며 YAML 을 **0바이트**로 남긴다. 표본은 **truthy**
+#     여야 한다 — falsy(0·"")면 `text or message` 가 message 로 넘어가 이 연언지를
+#     태우지 못한다.
+#  ③ legacy `{"type":"agent_message","message":…}` 폴백이 살아 있는가 —
+#     `item.get("text") or item.get("message")` 의 뒷항. 정본 docstring(Legacy shape,
+#     still supported as fallback)이 약속하는 동작이고, 역시 앞 판본에 락이 없었다.
+# 이 셋이 함께 있어야 `codex_jsonl.py` docstring 이 층⑤ 를 "이 동작을 고정하는 락" 으로
+# 인용하는 서술(R2-4)이 실제로 참이 된다.
 CJ_PROBE="$TMP/blank_guard_probe.py"
 cat > "$CJ_PROBE" <<'PYEOF'
 import importlib.util, json, sys
 spec = importlib.util.spec_from_file_location("cj_probe", sys.argv[1])
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
-real = json.dumps({"type": "item.completed",
-                   "item": {"type": "agent_message", "text": "REAL-ANSWER"}})
-blank = json.dumps({"type": "item.completed",
-                    "item": {"type": "agent_message", "text": "   "}})
+
+
+def ev(item):
+    return json.dumps({"type": "item.completed", "item": item})
+
+
+real = ev({"type": "agent_message", "text": "REAL-ANSWER"})
+blank = ev({"type": "agent_message", "text": "   "})
+nonstr = ev({"type": "agent_message", "text": {"nested": "CLOBBER"}})
+legacy = json.dumps({"type": "agent_message", "message": "LEGACY-ANSWER"})
+
+# ① 앞선 진짜 메시지가 살아남고, JSONL 이 실제로 파싱됐어야 한다.
 text, parsed = mod.extract_last_agent_message(real + "\n" + blank + "\n")
-# 앞선 진짜 메시지가 살아남고, JSONL 이 실제로 파싱됐어야 한다.
-print("GUARD_OK" if (text == "REAL-ANSWER" and parsed) else "GUARD_BROKEN text=%r parsed=%r" % (text, parsed))
+print("BLANK_OK" if (text == "REAL-ANSWER" and parsed) else "BLANK_BROKEN text=%r parsed=%r" % (text, parsed))
+
+# ② 비-문자열 후보도 앞선 진짜 것을 덮어쓰지 못한다.
+text, parsed = mod.extract_last_agent_message(real + "\n" + nonstr + "\n")
+print("NONSTR_OK" if (text == "REAL-ANSWER" and parsed) else "NONSTR_BROKEN text=%r parsed=%r" % (text, parsed))
+
+# ③ legacy message 폴백이 채택된다.
+text, parsed = mod.extract_last_agent_message(legacy + "\n")
+print("LEGACY_OK" if (text == "LEGACY-ANSWER" and parsed) else "LEGACY_BROKEN text=%r parsed=%r" % (text, parsed))
 PYEOF
 
 cj_corpus="$(git -C "$ROOT" ls-files -- 'shared/codex/codex_jsonl.py' 'plugins/*/scripts/codex_jsonl.py')"
@@ -186,8 +215,16 @@ while IFS= read -r rel; do
   esac
   cj_res="$(python3 "$CJ_PROBE" "$ROOT/$rel" 2>&1)"
   case "$cj_res" in
-    GUARD_OK) ok "층⑤ $rel: 뒤따르는 빈 agent_message 가 앞선 진짜 것을 덮어쓰지 못한다(F2 공백 가드)" ;;
+    *BLANK_OK*) ok "층⑤ $rel: 뒤따르는 빈 agent_message 가 앞선 진짜 것을 덮어쓰지 못한다(F2 — candidate.strip() 연언지)" ;;
     *) no "층⑤ $rel: 공백 가드가 없다 — $cj_res" ;;
+  esac
+  case "$cj_res" in
+    *NONSTR_OK*) ok "층⑤ $rel: 뒤따르는 비-문자열 agent_message 도 앞선 진짜 것을 덮어쓰지 못한다(F2 — isinstance(candidate, str) 연언지)" ;;
+    *) no "층⑤ $rel: 비-문자열 가드가 없다 — $cj_res" ;;
+  esac
+  case "$cj_res" in
+    *LEGACY_OK*) ok "층⑤ $rel: legacy agent_message 의 message 폴백이 살아 있다(item.get(\"message\"))" ;;
+    *) no "층⑤ $rel: legacy message 폴백이 없다 — $cj_res" ;;
   esac
 done <<EOF
 $cj_corpus

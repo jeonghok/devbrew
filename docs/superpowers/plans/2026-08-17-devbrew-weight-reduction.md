@@ -3362,10 +3362,18 @@ fi
 # 초록으로 남는다.** 그래서 여기서는 배포 지점 집합을 **도출하고 그 각각에**
 # 형제 사본이 있음을 단언한다 — ∃ 가 아니라 ∀ 다.
 #
-# **도출 규칙**: `plugins/*/scripts/` 안에서 `from <mod> import` 하는 소비자를 가진
-# 플러그인 전부. 이름을 열거하지 않는다(열거는 공간·시간 양쪽으로 fail-open).
-# `grep` 이 심볼릭 링크를 따라가므로 qg·sd 의 `codex_findings_to_yaml.py` 링크가
-# 정본 본문을 통해 소비자로 걸린다.
+# **도출 규칙**: `plugins/*/scripts/` · `plugins/*/hooks/` 안에서 `from <mod> import`
+# 하는 소비자가 있는 **디렉토리** 전부. 이름을 열거하지 않는다(열거는 공간·시간
+# 양쪽으로 fail-open). `grep` 이 심볼릭 링크를 따라가므로 qg·sd 의
+# `codex_findings_to_yaml.py` 링크가 정본 본문을 통해 소비자로 걸린다.
+#
+# **왜 플러그인 단위가 아니라 디렉토리 단위인가** 〔2026-08-17 fix round 3, R3-3〕:
+# 형제 import 는 `sys.path[0]`(= 실행되는 스크립트 자신의 디렉토리)에서 풀린다.
+# 소비자가 `plugins/<p>/hooks/` 에 살면 형제 사본도 **거기** 있어야 하고 `scripts/` 에만
+# 있으면 설치본에서 ImportError 다. Task 19(`kill_switch_active.py`)의 소비자가 정확히
+# `plugins/*/hooks/` 이므로(plan Task 19), 코퍼스를 `scripts/` 로만 두면 그 정본은 이 축이
+# **한 번도 안 보는** 상태로 착지한다 — 축 1b 는 ∃ 라 GREEN, 축 1a 는 import-only 모듈에
+# 대해 배포 지점 0건, 축 1c 는 애초에 안 봄. CRIT-1 이 다른 모듈에서 그대로 재현된다.
 #
 # 규칙에 붙는 조건 둘 — 둘 다 실측으로 강제된 것이다:
 #  ① **모듈 자신을 코퍼스에서 뺀다.** 사본은 자기 코드 때문에 자기 자신의
@@ -3384,7 +3392,36 @@ fi
 # 조건에서만 `rc=1` + `ImportError`). 그래서 배포 지점을 `cp -RL` 로 **링크 없는
 # 일반 파일 트리**에 펼치고(설치본과 같은 모양, `shared/` 는 그 트리에 없다)
 # 거기서 소비자를 실제로 import 해 본다.
-IMPORT_ONLY_CANONICALS="shared/codex/codex_jsonl.py"   # import 로만 소비되는 정본들
+# **정본 집합도 도출한다 — 열거하지 않는다** 〔2026-08-17 fix round 3, R3-3〕. 앞 판본은
+# 배포 지점은 도출하면서 정본만 `IMPORT_ONLY_CANONICALS="shared/codex/codex_jsonl.py"` 로
+# 박아 뒀다 — 바로 위 "이름을 열거하지 않는다(열거는 공간·시간 양쪽으로 fail-open)"
+# 주석 30줄 아래에서. 같은 plan 의 후속 태스크가 같은 모양을 두 번 더 만든다(Task 19
+# `shared/killswitch/kill_switch_active.py` ×3 · Task 21 `shared/gc/gc_common.py` ×2 —
+# 둘 다 이 태스크 **뒤**에 온다). 목록을 안 늘려도 RED 가 안 나므로, 늘리라는 지시가
+# 없는 한 그 정본들은 이 축 밖에 남는다.
+#
+# 규칙: `shared/` 아래 `.py` 중 ① 실행 지점이 없고(import-only) ② 리포 어딘가가
+# `from <basename> import` 로 소비하는 것.
+#  · `^` 앵커가 **필수**다. `codex_jsonl.py` 는 자기 docstring 안에서 `if __name__ ==
+#    "__main__"` 을 **인용**한다("… 없음, 실행 지점 아님"). 앵커 없이 재면 정본이 스스로
+#    실행 지점으로 오인돼 집합에서 빠지고, 빈 집합은 아래 `for` 를 통째로 건너뛰어
+#    **0 단언 GREEN** 이 된다 — 축이 조용히 사라진다. 그래서 도출 직후 개수를 못박는다.
+#  · 소비 여부 grep 에서 **모듈 자신과 그 사본을 뺀다.** 안 빼면 docstring 자기인용만으로
+#    자격을 얻는다(위 조건 ①과 같은 함정의 다른 자리).
+IMPORT_ONLY_CANONICALS="$(git ls-files -- 'shared/*.py' \
+  | while IFS= read -r cf; do
+      grep -qE '^if __name__ == "__main__"' -- "$cf" && continue
+      cm="$(basename "$cf" .py)"
+      git grep -lE "from ${cm} import" 2>/dev/null \
+        | grep -v "/${cm}\.py\$" | grep -q . && printf '%s\n' "$cf"
+    done)"
+n_canon="$(printf '%s\n' "$IMPORT_ONLY_CANONICALS" | grep -c . || true)"
+if [ "$n_canon" -ge 1 ]; then
+  ok "형제-∀ 도출: import-only 정본 ${n_canon}건 (이름 열거 없음)"
+else
+  no "형제-∀ 도출: import-only 정본이 0건 — 도출 규칙이 깨졌다. 아래 ∀ 는 한 번도 안 돈다"
+fi
+
 SIMPROBE="$(mktemp -t copyof-probe-XXXXXX)" || exit 1
 cat > "$SIMPROBE" <<'PYEOF'
 import importlib.util, sys
@@ -3397,25 +3434,25 @@ for canon in $IMPORT_ONLY_CANONICALS; do
   mod="$(basename "$canon" .py)"
   if [ ! -f "$canon" ]; then no "형제-∀: 정본 $canon 이 없다"; continue; fi
 
-  consumers="$(git ls-files -- 'plugins/*/scripts/*' | grep -v "/${mod}\.py\$" \
+  consumers="$(git ls-files -- 'plugins/*/scripts/*' 'plugins/*/hooks/*' | grep -v "/${mod}\.py\$" \
     | while IFS= read -r f; do
         grep -q "from ${mod} import" -- "$f" 2>/dev/null && printf '%s\n' "$f"
       done)"
-  expected="$(printf '%s\n' "$consumers" | grep . | sed -E 's#^plugins/([^/]+)/.*#\1#' | sort -u || true)"
+  expected="$(printf '%s\n' "$consumers" | grep . | sed -E 's#/[^/]+$##' | sort -u || true)"
   n_exp="$(printf '%s\n' "$expected" | grep -c . || true)"
 
   # positive(도출이 살아 있는가): 0건이면 아래 ∀ 가 통째로 vacuous 다.
   if [ "$n_exp" -ge 1 ]; then
-    ok "형제-∀: ${mod} 소비자를 가진 배포 지점 ${n_exp}건 도출 (vacuous 아님)"
+    ok "형제-∀: ${mod} 소비자를 가진 배포 디렉토리 ${n_exp}건 도출 (vacuous 아님)"
   else
     no "형제-∀: ${mod} 소비자가 0건 도출됐다 — 도출 규칙이 깨졌다. 아래 ∀ 는 무의미하다"
   fi
 
-  while IFS= read -r plug; do
-    [ -n "$plug" ] || continue
-    sib="plugins/$plug/scripts/${mod}.py"
-    if [ -f "$sib" ]; then ok "형제-∀: $plug 에 ${mod}.py 형제 사본이 있다"
-    else no "형제-∀: $plug 에 ${mod}.py 형제 사본이 없다 — 설치본에서 ImportError (CRIT-1 결함 모양)"; fi
+  while IFS= read -r cdir; do
+    [ -n "$cdir" ] || continue
+    sib="$cdir/${mod}.py"
+    if [ -f "$sib" ]; then ok "형제-∀: $cdir 에 ${mod}.py 형제 사본이 있다"
+    else no "형제-∀: $cdir 에 ${mod}.py 형제 사본이 없다 — 설치본에서 ImportError (CRIT-1 결함 모양)"; fi
   done <<EOF
 $expected
 EOF
@@ -3423,9 +3460,9 @@ EOF
   SIM="$(mktemp -d -t copyof-install-XXXXXX)" || exit 1
   while IFS= read -r c; do
     [ -n "$c" ] || continue
-    plug="$(printf '%s' "$c" | sed -E 's#^plugins/([^/]+)/.*#\1#')"
-    d="$SIM/$plug/scripts"
-    [ -d "$d" ] || { mkdir -p "$d"; cp -RL "plugins/$plug/scripts/." "$d/" 2>/dev/null; }
+    cdir="$(printf '%s' "$c" | sed -E 's#/[^/]+$##')"
+    d="$SIM/$cdir"
+    [ -d "$d" ] || { mkdir -p "$d"; cp -RL "$cdir/." "$d/" 2>/dev/null; }
     res="$(PYTHONDONTWRITEBYTECODE=1 python3 "$SIMPROBE" "$d/$(basename "$c")" 2>&1)"
     case "$res" in
       *IMPORT_OK*) ok "형제-∀(설치본 대역): $c 가 링크 없는 일반 파일 트리에서 ${mod} 를 import 한다" ;;
@@ -3616,7 +3653,7 @@ cp /tmp/lock_round1_fix.bak "$LOCK"; rm -f /tmp/lock_round1_fix.bak
 > | `✗ copy-of:` + `_copyof_mutation_fixture` | 픽스처 생성이 잘못됐다(마커 줄·크기·권한) | **여기서** 고친다 |
 > | `✗ copy-of:` + `plugins/*/scripts/codex_jsonl.py` (plugin-audit·quality-gates·spec-distill **어느 것이든**) | **Task 17 산출물의 진짜 결함** — 그 사본이 정본과 갈라졌다 | **Task 17** 로 돌아간다 |
 > | `✗ copy-of: 물리 사본 0건` | Task 17 Step 4b 가 실행되지 않았다 | **Task 17 Step 4b** |
-> | `✗ 형제-∀:` | import 로만 소비되는 정본의 형제 사본이 배포 지점 하나에서 빠졌다(또는 설치본 대역에서 import 가 안 풀린다) — **픽스처와 무관** | **Task 17 Step 4b** (사본을 만드는 스텝) |
+> | `✗ 형제-∀:` | import 로만 소비되는 정본의 형제 사본이 배포 디렉토리 하나에서 빠졌다(또는 설치본 대역에서 import 가 안 풀린다. `✗ 형제-∀ 도출:` 이면 정본 도출 규칙 자체가 깨진 것이다) — **픽스처와 무관** | **Task 17 Step 4b** (사본을 만드는 스텝) |
 > | `✗ symlink-∀:` | Task 15/17 의 심볼릭 링크 배포가 실제로는 안 됐다 — **픽스처와 무관** | 픽스처를 지우고 **Task 15/17** 부터 |
 > | `✗ conf:` | 형제 설정(`codex-killswitch.conf`)이 배포 지점 수만큼 없다 | **Task 15** |
 > | `✗ fail-closed:` | `detect_codex.sh` 가 설정 부재에 fail-open 한다 (보안 컨트롤) | **Task 15** — 여기서 우회하지 않는다 |
@@ -3695,7 +3732,7 @@ Expected: 심볼릭 링크 축 변이 A·B·C·D → RED, 각각 `missing`·`reg
 
 | # | 변이 | 기대 | 무엇을 증명하나 |
 |---|---|---|---|
-| G | **spec-distill** 의 `scripts/codex_jsonl.py` 사본을 지운다 | **RED ×2** — `형제-∀: spec-distill 에 … 형제 사본이 없다` + `형제-∀(설치본 대역): …/codex_findings_to_yaml.py 가 … import 못 한다` | ∃(축 1b)가 아니라 ∀ 다 — 남은 사본 수와 무관하게 **빠진 자리**가 RED 를 낸다 |
+| G | **spec-distill** 의 `scripts/codex_jsonl.py` 사본을 지운다 | **RED ×2** — `형제-∀: plugins/spec-distill/scripts 에 … 형제 사본이 없다` + `형제-∀(설치본 대역): …/codex_findings_to_yaml.py 가 … import 못 한다` | ∃(축 1b)가 아니라 ∀ 다 — 남은 사본 수와 무관하게 **빠진 자리**가 RED 를 낸다 |
 | H | **quality-gates** 의 같은 사본을 지운다 | **RED ×2** (같은 두 줄, 경로만 다르다) | 대상이 하나에 고정되지 않았다 |
 
 > ⚠ **`plugin-audit` 사본만 지우는 mutation 으로 이 축을 증명하면 안 된다.**
