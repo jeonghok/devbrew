@@ -416,22 +416,61 @@ axis_tally 1b
 #    **0 단언 GREEN** 이 된다 — 축이 조용히 사라진다. 그래서 도출 직후 개수를 못박는다.
 #  · 소비 여부 grep 에서 **모듈 자신과 그 사본을 뺀다.** 안 빼면 docstring 자기인용만으로
 #    자격을 얻는다(위 조건 ①과 같은 함정의 다른 자리).
-# 소비 표기를 무는 정규식 — 고정 문자열 `from <mod> import` 하나로는 부족하다
-# 〔2026-08-18 fix round 1, F6〕. 실측(A2)으로 `import X` · `import X as Y` ·
-# `from  X  import`(이중 공백) · `from .X import`(상대) 가 **전부 미탐지**였다.
-# 놓친 소비자는 기대 집합에서도 설치 프로브에서도 빠져 형제 단언과 설치 검증을 **양쪽 다**
-# 건너뛴다 — 표기 하나 바꾸는 편집으로 CRIT-1 이 그대로 되돌아온다.
-# 모듈명은 파이썬 식별자라 정규식 메타문자가 없다(이스케이프 불필요).
-import_re() {   # import_re <모듈명> → ERE
-  printf '%s' "^[[:space:]]*(from[[:space:]]+\.*$1[[:space:]]+import[[:space:]]|import[[:space:]]+$1([[:space:],]|\$))"
+# 소비 표기를 무는 것은 정규식이 아니라 **파이썬 파서**다 〔2026-08-19 fix round 2a, M5〕.
+# 앞 판본은 표기를 여덟 개까지 늘린 ERE 였는데 그래도 여섯을 놓쳤다. 결정적인 것은
+# `import json, <mod>`(콤마 목록에서 첫째가 아님 — **이 리포의 자체 스타일**이고 바로
+# 아래 프로브 heredoc 도 그렇게 쓴다)와 `from . import <mod>`(표준 상대 형식)이다.
+# 목록을 아홉으로 늘리는 것은 같은 결함의 다음 판본일 뿐이라, 표기를 세는 대신 **문법을
+# 읽는다**: `ast` 로 파싱해 `Import`/`ImportFrom` 노드가 묶는 최상위 이름을 본다.
+# 표기 목록이 사라지므로 새 표기가 조용히 새지 않는다.
+#  · **`.py` 만 읽는다** 〔L1〕. 파서에 문법이 하나뿐이고, 아래 설치 프로브도 `.py` 만
+#    실행할 수 있다(`spec_from_file_location` 은 비-`.py` 에 `None` 을 돌려준다).
+#  · 파일은 `open()` 으로 읽으므로 **심볼릭 링크를 따라간다**(git grep 과 다르다) —
+#    링크로 배포된 소비자도 정본 본문을 통해 걸린다.
+#  · 파싱이 안 되는 `.py` 는 "소비하지 않는다" 로 떨어진다. 이 프로브가 도는 인터프리터가
+#    읽지 못하는 파일은 같은 인터프리터에서 아무것도 import 하지 못한다. 더 새 문법으로
+#    쓰인 소비자는 이 축의 사각지대이고, 그것은 여기서 판정하지 않는다.
+IMPSCAN="$(mktemp -t copyof-impscan-XXXXXX)" || exit 1
+cat > "$IMPSCAN" <<'IMPEOF'
+# argv: <모듈명>. stdin 으로 후보 `.py` 경로(줄 단위), stdout 으로 그 모듈을 import 하는 것.
+import ast, sys
+mod = sys.argv[1]
+
+def imports(path):
+    try:
+        with open(path, "rb") as fh:
+            tree = ast.parse(fh.read(), filename=path)
+    except (OSError, SyntaxError, ValueError):
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            # `import a.b` 는 최상위 이름 `a` 를 묶는다 — 형제 사본의 이름은 첫 성분이다.
+            if any(a.name.split(".")[0] == mod for a in node.names):
+                return True
+        elif isinstance(node, ast.ImportFrom):
+            # `from <mod> import x` · `from .<mod> import x` · `from <mod>.sub import x`
+            if node.module is not None and node.module.split(".")[0] == mod:
+                return True
+            # `from . import <mod>` — 모듈명이 names 쪽에 온다
+            if node.level and node.module is None and any(a.name == mod for a in node.names):
+                return True
+    return False
+
+for line in sys.stdin.read().splitlines():
+    if line and imports(line):
+        sys.stdout.write(line + "\n")
+IMPEOF
+impscan() {   # impscan <모듈명> — stdin: 후보 `.py` 경로 / stdout: 그 모듈을 import 하는 것
+  python3 "$IMPSCAN" "$1"
 }
 
-# 분류기 **앞**의 집합 — `shared/*.py` 중 리포 어딘가가 import 로 소비하는 것 전부.
+# 분류기 **앞**의 집합 — `shared/*.py` 중 리포의 추적되는 `.py` 어딘가가 import 로
+# 소비하는 것 전부.
 CONSUMED_PY="$(git ls-files -- 'shared/*.py' \
   | while IFS= read -r cf; do
       cm="$(basename "$cf" .py)"
-      git grep -lE "$(import_re "$cm")" 2>/dev/null \
-        | grep -v "/${cm}\.py\$" | grep -q . && printf '%s\n' "$cf"
+      git ls-files -- '*.py' | grep -v "/${cm}\.py\$" \
+        | impscan "$cm" | grep -q . && printf '%s\n' "$cf"
     done)"
 # 분류기 **뒤**의 집합 — 위에서 실행 지점(`^if __name__`)이 있는 것을 뺀다.
 IMPORT_ONLY_CANONICALS="$(printf '%s\n' "$CONSUMED_PY" \
@@ -466,46 +505,88 @@ else
 fi
 
 # 〔2026-08-18 fix round 1, F2〕 **형제 기대 위치를 소비자가 사는 곳이 아니라
-# 소비자가 `sys.path` 에 얹는 곳에서 도출한다.** 앞 판본은 소비자 자신의 디렉토리를
+# 그 모듈이 실제로 풀리는 곳에서 도출한다.** 앞 판본은 소비자 자신의 디렉토리를
 # 요구했고 근거를 *"scripts/ 에만 있으면 설치본에서 ImportError 다"* 로 적었는데,
 # 그 전제는 `sys.path.insert` 로 형제 디렉토리를 얹는 소비자에게 **거짓**이다 —
 # 이 리포는 이미 그 패턴을 양방향으로 배포 중이고(예: `scripts/` 의 소비자가 `hooks/` 를
 # 얹는다), 후속 태스크는 그 반대 방향(사본은 `scripts/`, 소비자는 `hooks/`)을 열두 곳에
 # 만든다. 그대로 두면 **정상 배포에 열세 건의 거짓 RED** 가 나고, 그 압력이 축을
 # 약화시킨다 — 가장 싼 약화가 코퍼스를 되돌리는 것이고 그게 CRIT-1 그 자체다.
-# 얹는 구문이 없으면 소비자 자신의 디렉토리로 떨어진다(그때는 앞 판본과 같다).
 #
 # **표기를 정적으로 해석하지 않는다.** 얹는 자리는 `Path(__file__).resolve().parents[1]
 # / "scripts"` · `os.path.dirname(os.path.abspath(__file__))` · 미리 만든 변수 등 형태가
 # 제각각이라, 파서를 쓰면 모르는 형태마다 조용히 fail-open 한다. 대신 소비자를 **실제로
-# 실행해** `sys.path` 델타를 잰다 — 아래 설치본 대역 프로브가 이미 같은 파일을 실행하므로
-# 실행 위험은 새로 늘지 않는다.
+# 실행**한다 — 아래 설치본 대역 프로브가 이미 같은 파일을 실행하므로 실행 위험은 새로
+# 늘지 않는다.
+#
+# 〔2026-08-19 fix round 2a, M3〕 실행해서 **무엇을 재는가**가 바뀌었다. 앞 판본은
+# `sys.path` **델타**를 쟀다 — 델타는 "어딘가에 얹혔다"는 **흔적**이라 얹은 쪽이 치우면
+# 지워진다. 평범한 네 모양이 전부 빈 델타를 낸다: `insert` 후 `finally: pop` ·
+# contextmanager · `if p not in sys.path` · `PYTHONPATH` 선존재. 그러면 판정이 조용히
+# "아무것도 안 얹는다" 로 떨어져 소비자 자신의 디렉토리를 요구하고, 형제를 다른 디렉토리에
+# 두는 **정상 배포에 거짓 RED** 가 난다(실측: 표준 위생 관용구 하나로 2건 — F2 가 고쳤다는
+# 결함이 그대로 돌아왔다). 그래서 흔적이 아니라 **결과**를 읽는다: import 가 끝난 뒤
+# `sys.modules[<mod>].__file__` 은 그 모듈이 **실제로 어디서 풀렸는지**를 말한다.
+# pop·재삽입·표기·`PYTHONPATH` 어느 것에도 지워지지 않고, 형제 사본이 있어야 할 디렉토리는
+# 그 파일의 디렉토리 그 자체다. 끝까지 안 풀리면(지연 import 등) 소비자 자신의 디렉토리로
+# 떨어진다 — 지연 import 도 호출 시점의 `sys.path[0]` 에서 풀리기 때문이다.
+#  · `python3 <소비자>` 로 직접 실행할 때와 같은 `sys.path[0]`(= 소비자 자신의 디렉토리)를
+#    준다. 앞 판본은 프로브 자신의 임시 디렉토리를 `sys.path[0]` 에 남겨 뒀는데, 그것은
+#    설치본에서 일어나는 일이 아니다.
+#  · `PYTHONPATH` 를 비우고 실행한다 — 판정이 실행자의 환경에 의존하면 안 된다.
+#  · 〔M1/M2〕 판정은 stdout 이 아니라 **결과 파일**로만 나간다. 앞 판본은 소비자 출력과
+#    프로브 출력을 합류시킨 스트림의 **부분문자열**로 판정했다: 소비자가 스스로 `STATUS:`
+#    / `PATH:` 를 찍으면 락의 기대 위치에 **주입**됐고(실측), 성공 토큰을 담은 traceback
+#    한 줄이 설치본 `ImportError` 를 ✓ 로 만들었다(실측). 소비자는 결과 파일 경로를
+#    모르고, 설치본 대역의 성공은 **종료 코드**와 그 파일 둘 다로만 신호한다.
 SIMPROBE="$(mktemp -t copyof-probe-XXXXXX)" || exit 1
+PROBEOUT="$(mktemp -t copyof-probeout-XXXXXX)" || exit 1
+PROBEERR="$(mktemp -t copyof-probeerr-XXXXXX)" || exit 1
 cat > "$SIMPROBE" <<'PYEOF'
-# argv: <mode> <소비자 파일>
-#   import — 링크 없는 일반 파일 트리에서 소비자를 실제로 실행한다(설치본 대역)
-#   paths  — 소비자가 sys.path 에 **실제로 얹는** 디렉토리를 잰다
+# argv: <mode> <소비자 파일> <모듈명> <결과 파일> <트리 루트>
+#   import  — 링크 없는 일반 파일 트리에서 소비자를 실제로 실행한다(설치본 대역).
+#             실패는 traceback + rc≠0 으로 나간다.
+#   resolve — 소비자를 실행하고, 예외로 죽어도 계속 간다.
+# 두 모드 모두 **그 모듈이 실제로 풀린 파일**을 결과 파일에 한 줄로 적는다:
+#   MODFILE:<트리 루트 기준 상대경로> · OUTSIDE:<절대경로> · NOMOD:<상태>
 import importlib.util, os, sys
-mode, target = sys.argv[1], sys.argv[2]
-before = set(sys.path)
+mode, target, mod, out, root = sys.argv[1:6]
+# `python3 <소비자>` 와 같은 sys.path[0]. 프로브 자신의 디렉토리는 경로에서 뺀다.
+sys.path[0:1] = [os.path.dirname(os.path.abspath(target))]
 
 def run():
     spec = importlib.util.spec_from_file_location("dep_probe", target)
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)      # 여기서 `from <mod> import ...` 가 실제로 돈다
 
+def rel_to(root, path):
+    # 풀린 경로 자체는 realpath 하지 않는다 — 링크로 배포된 형제 사본은 **링크 쪽**
+    # 경로가 배포 자리다. 루트만 양쪽(abspath·realpath)으로 재서 /var → /private/var
+    # 같은 마운트 표기 차이를 흡수한다.
+    path = os.path.abspath(path)
+    for r in (os.path.abspath(root), os.path.realpath(root)):
+        if path.startswith(r + os.sep):
+            return path[len(r) + 1:]
+    return None
+
+status = "OK"
 if mode == "import":
-    run()                            # 실패하면 traceback 이 그대로 stderr 로 나간다
-    print("IMPORT_OK")
+    run()                            # 실패하면 traceback 이 stderr 로 나가고 rc≠0 이다
 else:
-    status = "OK"
     try:
         run()
-    except BaseException as exc:     # 얹는 구문은 import 문 **앞**에 오므로
-        status = "EXC:%s" % type(exc).__name__   # 여기서 죽어도 델타는 남아 있을 수 있다
-    print("STATUS:" + status)
-    for p in [q for q in sys.path if q not in before]:
-        print("PATH:" + os.path.abspath(p))
+    except BaseException as exc:     # import 뒤에 죽어도 sys.modules 에는 남는다
+        status = "EXC:%s" % type(exc).__name__
+
+m = sys.modules.get(mod)
+where = getattr(m, "__file__", None) if m is not None else None
+if where is None:
+    line = "NOMOD:" + status
+else:
+    rel = rel_to(root, where)
+    line = ("MODFILE:" + rel) if rel is not None else ("OUTSIDE:" + os.path.abspath(where))
+with open(out, "w", encoding="utf-8") as fh:   # 소비자가 경로를 모르는 채널
+    fh.write(line + "\n")
 PYEOF
 
 CONSUMER_DIRS=""
@@ -516,14 +597,11 @@ dirs_of() {  # dirs_of <소비자> → 그 소비자가 형제를 푸는 디렉�
 for canon in $IMPORT_ONLY_CANONICALS; do
   mod="$(basename "$canon" .py)"
   if [ ! -f "$canon" ]; then no "형제-∀: 정본 $canon 이 없다"; continue; fi
-  ire="$(import_re "$mod")"
-
-  # 소비자 도출 — `grep` 은 심볼릭 링크를 따라가므로(git grep 과 달리) 링크로 배포된
-  # 소비자도 정본 본문을 통해 걸린다. 모듈 자신과 그 사본은 뺀다(자기 소비 방지).
-  consumers="$(git ls-files -- 'plugins/*/scripts/*' 'plugins/*/hooks/*' | grep -v "/${mod}\.py\$" \
-    | while IFS= read -r f; do
-        grep -qE "$ire" -- "$f" 2>/dev/null && printf '%s\n' "$f"
-      done)"
+  # 소비자 도출 — `.py` 만 본다 〔L1〕. 읽기는 `open()` 이라 심볼릭 링크를 따라가므로
+  # (git grep 과 달리) 링크로 배포된 소비자도 정본 본문을 통해 걸린다. 모듈 자신과
+  # 그 사본은 뺀다(자기 소비 방지).
+  consumers="$(git ls-files -- 'plugins/*/scripts/*' 'plugins/*/hooks/*' \
+    | grep -E '\.py$' | grep -v "/${mod}\.py\$" | impscan "$mod")"
   n_cons="$(printf '%s\n' "$consumers" | grep -c . || true)"
 
   # positive(도출이 살아 있는가): 0건이면 아래 ∀ 가 통째로 vacuous 다.
@@ -537,45 +615,44 @@ for canon in $IMPORT_ONLY_CANONICALS; do
   while IFS= read -r c; do
     [ -n "$c" ] || continue
     own="$(printf '%s' "$c" | sed -E 's#/[^/]+$##')"
-    praw="$(PYTHONDONTWRITEBYTECODE=1 python3 "$SIMPROBE" paths "$ROOT/$c" 2>/dev/null)"
-    pstatus="$(printf '%s\n' "$praw" | sed -n 's/^STATUS://p' | head -1)"
-    pabs="$(printf '%s\n' "$praw" | sed -n 's|^PATH:||p')"
-    n_pabs="$(printf '%s\n' "$pabs" | grep -c . || true)"
-    cdirs="$(printf '%s\n' "$pabs" | sed "s|^${ROOT}/||" | grep -E '^plugins/[^/]+/' | sort -u)"
-    n_cdirs="$(printf '%s\n' "$cdirs" | grep -c . || true)"
-    if [ -z "$pstatus" ]; then
-      no "형제-∀: $c 의 sys.path 도출 프로브가 아무 것도 내지 않았다 — 기대 위치를 알 수 없다 (python3 부재/프로브 파손)"
-      continue
-    elif [ "$n_cdirs" -ge 1 ]; then
-      :   # 얹는 자리가 있다 — 그것이 기대 위치다
-    elif [ "$n_pabs" -ge 1 ]; then
-      no "형제-∀: $c 가 sys.path 에 얹는 자리가 플러그인 트리 밖이다 ($(printf '%s' "$pabs" | tr '\n' ' ')) — 설치본에는 그 경로가 없다"
+    : > "$PROBEOUT"
+    env -u PYTHONPATH PYTHONDONTWRITEBYTECODE=1 python3 "$SIMPROBE" resolve "$ROOT/$c" "$mod" "$PROBEOUT" "$ROOT" >/dev/null 2>&1
+    pfile="$(sed -n 's|^MODFILE:||p' "$PROBEOUT" | head -1)"
+    pout="$(sed -n 's|^OUTSIDE:||p' "$PROBEOUT" | head -1)"
+    pstatus="$(sed -n 's|^NOMOD:||p' "$PROBEOUT" | head -1)"
+    if [ -n "$pfile" ]; then
+      case "$pfile" in
+        plugins/*/*)
+          cdir_e="${pfile%/*}"   # 실제로 풀린 파일의 디렉토리 = 형제가 있어야 할 자리
+          ;;
+        *)
+          no "형제-∀: $c 가 ${mod} 를 플러그인 트리 밖($pfile)에서 풀었다 — 설치본에는 그 경로가 없다"
+          continue
+          ;;
+      esac
+    elif [ -n "$pout" ]; then
+      no "형제-∀: $c 가 ${mod} 를 리포 밖($pout)에서 풀었다 — 설치본에는 그 경로가 없다"
       continue
     elif [ "$pstatus" = "OK" ]; then
-      cdirs="$own"   # 아무것도 얹지 않는다 → 소비자 자신의 디렉토리
+      cdir_e="$own"   # 실행이 끝나도록 안 풀렸다(지연 import 등) → 소비자 자신의 디렉토리
+    elif [ -n "$pstatus" ]; then
+      no "형제-∀: $c 가 ${mod} 를 풀지 못한 채 예외로 죽었다($pstatus) — 설치본에서 ImportError 이거나 그 앞에서 죽었다"
+      continue
     else
-      no "형제-∀: $c 가 sys.path 도출 중 예외로 죽었고($pstatus) 얹은 자리도 없다 — '얹지 않는다' 와 '얹기 전에 죽었다' 를 구별할 수 없다"
+      no "형제-∀: $c 의 해석 프로브가 결과를 내지 않았다 — 기대 위치를 알 수 없다 (python3 부재/프로브 파손)"
       continue
     fi
 
-    hit=""
-    while IFS= read -r d; do
-      [ -n "$d" ] || continue
-      CONSUMER_DIRS="${CONSUMER_DIRS}${c} ${d}
+    CONSUMER_DIRS="${CONSUMER_DIRS}${c} ${cdir_e}
 "
-      [ -n "$hit" ] && continue
-      [ -f "$d/${mod}.py" ] && hit="$d"
-    done <<DIRS
-$cdirs
-DIRS
-    if [ -z "$hit" ]; then
-      no "형제-∀: $c 가 ${mod} 를 푸는 자리($(printf '%s' "$cdirs" | tr '\n' ' '))에 ${mod}.py 형제 사본이 없다 — 설치본에서 ImportError (CRIT-1 결함 모양)"
-    elif git ls-files --error-unmatch -- "$hit/${mod}.py" >/dev/null 2>&1; then
-      ok "형제-∀: $c → $hit/${mod}.py (sys.path 도출 위치에 형제 사본이 있고 git 에 실려 있다)"
+    if [ ! -f "$cdir_e/${mod}.py" ]; then
+      no "형제-∀: $c 가 ${mod} 를 푸는 자리($cdir_e)에 ${mod}.py 형제 사본이 없다 — 설치본에서 ImportError (CRIT-1 결함 모양)"
+    elif git ls-files --error-unmatch -- "$cdir_e/${mod}.py" >/dev/null 2>&1; then
+      ok "형제-∀: $c → $cdir_e/${mod}.py (실제로 풀린 자리에 형제 사본이 있고 git 에 실려 있다)"
     else
       # 〔F4/H1〕 사본을 untrack 하면 디스크엔 남아 존재 검사를 통과하지만 **설치본에는
       # 안 실린다** — 스캔 코퍼스(git ls-files)에서만 조용히 사라진다. 존재와 배포는 다르다.
-      no "형제-∀: $hit/${mod}.py 가 git 에 추적되지 않는다 — 디스크엔 있어도 설치본에 안 실린다"
+      no "형제-∀: $cdir_e/${mod}.py 가 git 에 추적되지 않는다 — 디스크엔 있어도 설치본에 안 실린다"
     fi
   done <<EOF
 $consumers
@@ -596,17 +673,23 @@ EOF
 $cdir
 $(dirs_of "$c")
 TREE
-    res="$(PYTHONDONTWRITEBYTECODE=1 python3 "$SIMPROBE" import "$SIM/$c" 2>&1)"
-    case "$res" in
-      *IMPORT_OK*) ok "형제-∀(설치본 대역): $c 가 링크 없는 일반 파일 트리에서 ${mod} 를 import 한다" ;;
-      *) no "형제-∀(설치본 대역): $c 가 ${mod} 를 import 못 한다 — $(printf '%s' "$res" | tail -1)" ;;
-    esac
+    # 〔M1〕 성공은 **종료 코드**로만 신호하고, 그 위에 "${mod} 가 이 트리 안에서 풀렸다"를
+    # 결과 파일로 확인한다. 소비자 출력은 어느 쪽에도 섞이지 않는다.
+    : > "$PROBEOUT"; : > "$PROBEERR"
+    if env -u PYTHONPATH PYTHONDONTWRITEBYTECODE=1 python3 "$SIMPROBE" import "$SIM/$c" "$mod" "$PROBEOUT" "$SIM" >/dev/null 2>"$PROBEERR" \
+       && grep -q '^MODFILE:' "$PROBEOUT"; then
+      ok "형제-∀(설치본 대역): $c 가 링크 없는 일반 파일 트리에서 ${mod} 를 import 한다"
+    else
+      det="$(tail -1 "$PROBEERR")"
+      [ -n "$det" ] || det="$(cat "$PROBEOUT")"
+      no "형제-∀(설치본 대역): $c 가 ${mod} 를 import 못 한다 — ${det:-(진단 없음)}"
+    fi
   done <<EOF
 $consumers
 EOF
   rm -rf "$SIM"
 done
-rm -f "$SIMPROBE"
+rm -f "$SIMPROBE" "$IMPSCAN" "$PROBEOUT" "$PROBEERR"
 axis_tally 1c
 
 # ── 축 2: 형제 설정이 배포에 실린다 ───────────────────────────────────────
