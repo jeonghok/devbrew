@@ -8,7 +8,8 @@
 Task 17(무게 감축) + fix round 1: `codex_findings_to_yaml.py` 두 사본(quality-gates·spec-distill)을
 `shared/codex/codex_findings_to_yaml.py` 정본 + 상대 심볼릭 링크로 통합, 그리고
 `extract_last_agent_message`(codex JSONL 이벤트 파서) 세 사본을 `shared/codex/
-codex_jsonl.py` 정본으로 흡수(plugin-audit은 copy-of 물리 사본). patch가 아니라
+codex_jsonl.py` 정본으로 흡수(배포 지점 셋 — plugin-audit·quality-gates·spec-distill —
+에 각각 `copy-of` 물리 사본을 둔다. 이유는 아래 Fixed 의 CRIT-1). patch가 아니라
 **minor**인 이유: 정본이 새 `--emit-keys {default,design}` 인자를 얻었다 — 이전에는
 emit keyset이 사본별로 하드코딩돼 있어 호출자가 고를 수 없었다. quality-gates는
 기본값을 그대로 쓰므로 행동 불변이지만, 이 스크립트가 도달 가능한 인터페이스 자체가
@@ -70,6 +71,33 @@ emit keyset이 사본별로 하드코딩돼 있어 호출자가 고를 수 없�
   그 값을 애초에 채택하지 않으므로 크래시 없이 rc=0 + `reason: missing_result`로
   끝난다 — 엄격한 개선이지만 운영자에게 보이는 사유 문자열이 바뀐다(전신 CLI 비교
   416건 중 48건이 이 계열).
+
+### Fixed (2026-08-17 fix round 2)
+- **`## [3.3.0]` 헤딩 소실(R2-1).** fix round 1 이 이 파일을 편집하며 3.3.0 섹션
+  헤딩을 지워, Task 15 릴리스 노트 전체가 3.4.0 아래로 흡수돼 있었다. 헤딩을
+  원위치에 복원했다(섹션 개수 82 = 편집 전 기준선).
+- **층④ 헤더가 스스로를 vacuous 라 부르던 서술 정정(R2-7).** fix round 1 이
+  배포 지점마다 형제 `codex_jsonl.py` 사본을 두고 import 경로를 bare `.parent` 로
+  바꾸면서, qg 호출과 sd 호출은 **서로 다른 물리 파일**을 태우게 됐다 — 판정 등가는
+  다시 실질 판정이다(qg 사본만 파손하는 mutation 으로 확인: 층④ 7줄 RED).
+  자기를 vacuous 라 부르는 서술은 그 축을 지워도 안전하다는 신호를 남긴다.
+- **F2 공백 가드 락이 물리 4 인스턴스 중 하나만 덮던 결함(R2-8).**
+  `test_codex_copies_agree.sh` 에 **층⑤** 를 더했다 — 정본과 모든 `copy-of` 사본을
+  git 코퍼스에서 도출해(이름 열거 없음) 각각 직접 import 해 공백 가드를 잰다.
+  mutation 4/4 RED(각 변이가 자기 파일만 지목).
+- **존재하지 않는 락 파일 인용 4곳(R2-4)** — `codex_jsonl.py` 정본과 세 사본의
+  docstring 이 없는 테스트 파일명을 F2 의 고정 락으로 적고 있었다(grep → 0건 →
+  "락이 없다" → 가드 제거로 이어지는 거짓 근거). 실재하는 두 락으로 바꿨다.
+- **정본 docstring 이 plugin-audit 을 유일 사본으로 명명(R2-11)** — 재생성 레시피가
+  거기 살아 있어 다음 저자가 사본 하나만 만들게 된다. 배포 지점 집합을 **도출하는**
+  규칙으로 바꿨고, 그 규칙이 걸린 두 함정(모듈 자기제외 · `:(exclude)` pathspec)을
+  함께 적었다.
+- **사본 개수 리터럴 스윕 잔여(R2-3·R2-15)** — 이 CHANGELOG 리드 문단이 여전히
+  *"plugin-audit 은 copy-of 물리 사본"* 이라 적어 셋 중 하나만 열거하고 있었다.
+  plan 쪽 잔여 11곳(누적 산술 · 라우팅 표 · 커밋 스텝의 `git add` 경로 포함)도
+  같은 커밋에서 닫았다.
+
+## [3.3.0] — 2026-08-17
 
 Task 15(무게 감축) + fix round 1: `detect_codex.sh` 세 사본을 `shared/codex/`의 정본 +
 상대 심볼릭 링크로 통합. quality-gates·spec-distill·plugin-audit 세 플러그인이 함께

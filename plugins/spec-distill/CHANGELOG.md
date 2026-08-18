@@ -42,6 +42,19 @@ codex_findings_to_yaml.py`를 가리키는 상대 심볼릭 링크로 바뀌었�
   없이 rc=0 + `reason: missing_result`로 degrade한다 — 개선이지만 사유 문자열이
   바뀐다.
 
+### Fixed (2026-08-17 fix round 2)
+- **F1 mutation 이 플래그 줄에 도달조차 못 하던 결함(R2-5·R2-6).**
+  `tests/test_brief_codex_axes.sh` 의 mutation 은 러너 사본을 temp dir 에서 돌리는데
+  `CLAUDE_PLUGIN_ROOT` 를 넘기지 않아 `PLUGIN_ROOT` 유도가 어긋났고, 프롬프트 빌더를
+  못 찾아 `reason: prompt_build_failed` 로 조기 종료했다 — 그런데도 락은 "이빨 있음"
+  을 출력했다(**플래그와 무관한 실패를 플래그 증거로 보고**). 형제 락
+  `test_run_spec_codex_reviewer.sh` 처럼 `CLAUDE_PLUGIN_ROOT` 를 명시로 넘기고,
+  ① **identity 사본**(플래그 그대로 위치만 이동) 통제와 ② 변이본이 조기 degrade
+  없이 변환까지 갔는지 확인하는 원인-확정 단언을 더했다. 양방향 증명: identity 는
+  "이빨 있음"을 내지 않고(계측기 RED), 실제 플래그 제거는 낸다.
+- `codex_jsonl.py` 사본의 docstring 정정(정본과 동기) — 없는 테스트 파일 인용 제거,
+  배포 지점 도출 규칙 명시(R2-4·R2-11).
+
 ## [0.27.0] — 2026-08-17
 
 Task 15(무게 감축) + fix round 1. patch가 아니라 **minor**인 이유(S3): 새

@@ -170,7 +170,7 @@ rm -f "$STALE" "$MUT"
 # 재사용해 그 필드를 읽는데, 필드가 없으면 codex findings가 원장에서 통째로
 # 버려지면서도 codex_failed는 false로 남는다(실행되지 못한 검사가 통과한 검사로
 # 기록된다). run_spec_codex_reviewer.sh 쪽엔 이미 대칭 assertion이 있다
-# (test_run_spec_codex_reviewer.sh:66) — 여기 없던 것을 대칭으로 건다.
+# (test_run_spec_codex_reviewer.sh) — 여기 없던 것을 대칭으로 건다.
 F1TMP="$(mktemp -d -t sd-brief-f1-XXXXXX)" || exit 1
 mkdir -p "$F1TMP/codexbin"
 cat > "$F1TMP/codexbin/codex" <<'SH'
@@ -182,11 +182,33 @@ exit 0
 SH
 chmod +x "$F1TMP/codexbin/codex"
 
+# CLAUDE_PLUGIN_ROOT 를 **명시로** 넘긴다 — 형제 락
+# test_run_spec_codex_reviewer.sh:62 이 이미 그렇게 한다. 러너는
+# `${CLAUDE_PLUGIN_ROOT:-$(dirname "${BASH_SOURCE[0]}")/..}` 로 유도하므로,
+# ① 넘기지 않으면 호출 환경이 우연히 갖고 있는 값에 이 락의 판정이 좌우되고
+# ② 아래 mutation 사본은 temp dir 에 있어 유도가 엉뚱한 곳을 가리킨다
+# (2026-08-17 fix round 2, R2-5·R2-6 — 이 두 줄이 없어서 mutation 이
+# `prompt_build_failed` 로 조기 종료하며 **플래그 줄에 도달조차 못 했다**).
+F1ENV=(CLAUDE_PLUGIN_ROOT="$SD" PATH="$F1TMP/codexbin:/usr/bin:/bin")
+
 F1OUT="$F1TMP/out.yaml"
-PATH="$F1TMP/codexbin:/usr/bin:/bin" bash "$RUNNER" fidelity "$PAYLOAD" "$REPO_ROOT" "$F1OUT" >/dev/null 2>&1
+env "${F1ENV[@]}" bash "$RUNNER" fidelity "$PAYLOAD" "$REPO_ROOT" "$F1OUT" >/dev/null 2>&1
 grep -q 'category: ambiguity' "$F1OUT" \
   && ok "F1: brief runner가 --emit-keys design을 배선해 category가 출력에 실린다" \
   || no "F1: brief runner 출력에 category가 없다 — --emit-keys design 배선 유실"
+
+# --- 계측기 검사: identity 사본(플래그 그대로, 위치만 이동) ------------------
+# mutation 이 "이빨 있음"을 주장하려면 **변이만이** category 를 죽였어야 한다.
+# 위치 이동 자체가 죽이면 그 주장은 거짓이다. identity 사본을 같은 자리에서
+# 같은 방식으로 돌려 그것을 먼저 배제한다 (R2-5: 이 통제가 없어서 락이
+# 도달조차 못 한 실행을 "이빨 있음"으로 보고했다).
+F1ID="$F1TMP/run_brief_codex_reviewer_identity.sh"
+cp "$RUNNER" "$F1ID"
+F1OUTID="$F1TMP/out_identity.yaml"
+env "${F1ENV[@]}" bash "$F1ID" fidelity "$PAYLOAD" "$REPO_ROOT" "$F1OUTID" >/dev/null 2>&1
+grep -q 'category: ambiguity' "$F1OUTID" \
+  && ok "F1 계측기: identity 사본(위치만 이동)은 여전히 category 를 낸다 — 아래 변이가 플래그 줄에 도달한다" \
+  || no "F1 계측기: identity 사본이 이미 category 를 못 낸다 — 아래 mutation 은 변이가 아니라 위치 때문에 실패한다(도달 불가)"
 
 # mutation: --emit-keys design 인자 줄을 지운 사본으로 같은 것을 돌리면 위
 # assertion이 다시 RED가 나야 한다(락에 이빨이 있다는 증거 — F1 완료 조건 3).
@@ -202,7 +224,15 @@ PY
 )"
 if [[ "$f1mutres" == "MUTATED" ]]; then
   F1OUT2="$F1TMP/out2.yaml"
-  PATH="$F1TMP/codexbin:/usr/bin:/bin" bash "$F1MUT" fidelity "$PAYLOAD" "$REPO_ROOT" "$F1OUT2" >/dev/null 2>&1
+  env "${F1ENV[@]}" bash "$F1MUT" fidelity "$PAYLOAD" "$REPO_ROOT" "$F1OUT2" >/dev/null 2>&1
+  # 원인 확정 먼저: 변이본이 실제로 codex 를 태우고 변환까지 갔는가. degrade
+  # 사유(prompt_build_failed 등)로 조기 종료했다면 category 부재는 플래그와
+  # 무관하고, 그것을 "이빨 있음"으로 읽으면 거짓 원인 보고다 (R2-6).
+  if grep -qE '^[[:space:]]*reason: (prompt_build_failed|aborted_before_completion|yaml_conversion_failed|extract_failed)' "$F1OUT2"; then
+    no "F1 mutation: 변이본이 조기 degrade($(grep -oE 'reason: [a-z_]+' "$F1OUT2" | head -1))로 끝났다 — 플래그 줄에 도달 못 함, 아래 판정은 무의미"
+  else
+    ok "F1 mutation: 변이본이 조기 degrade 없이 변환까지 도달했다 (원인 확정)"
+  fi
   grep -q 'category: ambiguity' "$F1OUT2" \
     && no "F1 mutation: --emit-keys design 제거 후에도 category가 남는다 — 락에 이빨 없음" \
     || ok "F1 mutation: --emit-keys design 제거 → category 소실 재현 (락에 이빨 있음)"

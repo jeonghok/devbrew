@@ -27,15 +27,25 @@
 # shared/codex/codex_findings_to_yaml.py 를 가리키는 상대 심볼릭 링크가 됐다(층①과
 # 같은 이유) — 그 결과 층④ 안에서 **판정 등가**와 **값 고정**은 서로 다른 운명을
 # 갖는다(다른 하위 체크들 — anti-vacuous 계측기 확인·표본 수 바닥 — 은 이 갈림과
-# 무관하게 그대로 유효하다). **판정 등가**(qg
-# 호출과 sd 호출이 같은 meta 판정을 내는가)는 파일이 하나뿐이라는 구조로 이미
-# 보장되어 더 이상 실질 판정이 아니다(GREEN이라 해롭지 않다 — Task 15가 층①에서
-# 고친 것과 같은 종류의 vacuous-but-harmless다). 그러나 **값 고정**(알려진-상이
-# 표본에 대해 `codex_failed: false`/`true`가 실제로 나오는가)은 파일 수와 무관하게
-# 그대로 이빨이 있다 — 사본이 하나가 돼도 verdict()가 상수 추출기로 퇴화하면 여전히
-# 잡힌다. 이 둘을 뭉뚱그려 "층④가 통째로 공허해졌다"고 적으면 Task 15가 고친
-# I1(판정 등가가 공허해진다는 관찰을 파일 전체에 대해 말한 오류)을 방향만 바꿔
-# 재현한다. 별도로 mock 자산 교집합 락이 있다. 이 통합은 그 축들을 건드리지 않았다.
+# 무관하게 그대로 유효하다).
+#
+# **판정 등가는 다시 실질 판정이다** 〔2026-08-17 fix round 2, R2-7 — 이 문단의
+# 앞 판본을 정정한다〕. 앞 판본은 *"파일이 하나뿐이라는 구조로 이미 보장되어 더
+# 이상 실질 판정이 아니다(vacuous-but-harmless)"* 라고 적었는데, **그 문장을 쓴
+# 커밋 자신이 그 전제를 깼다.** fix round 1(CRIT-1)이 배포 지점마다 형제
+# `codex_jsonl.py` 사본을 두고 정본의 import 경로를 역참조하지 않는 `.parent` 로
+# 바꿨다 — 그래서 `python3 $QG/scripts/...` 는 **qg 옆 사본**을, `$SD/scripts/...`
+# 는 **sd 옆 사본**을 읽는다. 두 호출이 태우는 코드는 더 이상 전부 같은 파일이
+# 아니고, 그 사본들이 갈라지면 아래 판정 등가가 실제로 갈라진다(2026-08-17
+# mutation 으로 확인 — 아래 층⑤ 주석 참조). 스스로를 vacuous 라 부르는 서술은
+# 그 축을 지워도 안전하다는 신호를 남기므로 거짓 그 자체보다 위험하다.
+#
+# **값 고정**(알려진-상이 표본에 대해 `codex_failed: false`/`true`가 실제로
+# 나오는가)은 파일 수와 무관하게 그대로 이빨이 있다 — 사본이 하나가 돼도
+# verdict()가 상수 추출기로 퇴화하면 여전히 잡힌다. 이 둘을 뭉뚱그려 "층④가
+# 통째로 공허해졌다"고 적으면 Task 15가 고친 I1(판정 등가가 공허해진다는 관찰을
+# 파일 전체에 대해 말한 오류)을 방향만 바꿔 재현한다. 별도로 mock 자산 교집합
+# 락이 있다. 이 통합은 그 축들을 건드리지 않았다.
 set -u -o pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 QG="$ROOT/plugins/quality-gates"
@@ -133,6 +143,68 @@ done
 # positive: 표본을 실제로 돌렸는가. 없으면 "차이 0"과 "아무것도 안 봄"이 구별되지 않는다.
 if [ "$seen" -ge 7 ]; then ok "층④ 표본 ${seen}건 실행 (vacuous 아님)"
 else no "층④ 표본이 ${seen}건뿐 — 위 판정이 무의미하다"; fi
+
+# ── 층⑤: 공백 가드(F2)를 **물리 인스턴스 전부**에 대해 잰다 ────────────────────
+# 〔2026-08-17 fix round 2, R2-8〕 fix round 1 이 이 동작을 고정한 락은
+# plugins/spec-distill/tests/test_codex_findings_to_yaml.py 하나였는데, 그것은
+# sd 배포 지점을 태우므로 **sd 옆 사본만** 읽는다 — 정본이나 qg 옆 사본에서 가드를
+# 지우면 전부 GREEN 이었다(리뷰어 실측 행렬). 층④의 표본 7종에도 이 모양이 없다
+# ("진짜 메시지 뒤에 빈 메시지" 는 01~07 어디에도 없다).
+#
+# 대상 집합은 **이름을 열거하지 않고** git 코퍼스에서 도출한다 — 정본과 그 copy-of
+# 사본 전부. 사본이 늘어나면 자동으로 함께 검사된다.
+#
+# 재는 것: 진짜 agent_message 뒤에 공백-only agent_message 가 흐를 때 **앞선 진짜
+# 것이 살아남는가**. 가드가 없으면 빈 후보가 last_text 를 덮어써 하류에서
+# codex_failed 가 뒤집힌다(fix round 1 F2 의 방향 서술 참조).
+CJ_PROBE="$TMP/blank_guard_probe.py"
+cat > "$CJ_PROBE" <<'PYEOF'
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("cj_probe", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+real = json.dumps({"type": "item.completed",
+                   "item": {"type": "agent_message", "text": "REAL-ANSWER"}})
+blank = json.dumps({"type": "item.completed",
+                    "item": {"type": "agent_message", "text": "   "}})
+text, parsed = mod.extract_last_agent_message(real + "\n" + blank + "\n")
+# 앞선 진짜 메시지가 살아남고, JSONL 이 실제로 파싱됐어야 한다.
+print("GUARD_OK" if (text == "REAL-ANSWER" and parsed) else "GUARD_BROKEN text=%r parsed=%r" % (text, parsed))
+PYEOF
+
+cj_corpus="$(git -C "$ROOT" ls-files -- 'shared/codex/codex_jsonl.py' 'plugins/*/scripts/codex_jsonl.py')"
+cj_listed="$(printf '%s\n' "$cj_corpus" | grep -c . || true)"
+cj_seen=0
+cj_has_canonical=no
+cj_has_copy=no
+while IFS= read -r rel; do
+  [ -n "$rel" ] || continue
+  cj_seen=$((cj_seen+1))
+  case "$rel" in
+    shared/codex/codex_jsonl.py) cj_has_canonical=yes ;;
+    plugins/*/scripts/codex_jsonl.py) cj_has_copy=yes ;;
+  esac
+  cj_res="$(python3 "$CJ_PROBE" "$ROOT/$rel" 2>&1)"
+  case "$cj_res" in
+    GUARD_OK) ok "층⑤ $rel: 뒤따르는 빈 agent_message 가 앞선 진짜 것을 덮어쓰지 못한다(F2 공백 가드)" ;;
+    *) no "층⑤ $rel: 공백 가드가 없다 — $cj_res" ;;
+  esac
+done <<EOF
+$cj_corpus
+EOF
+
+# positive(도출이 살아 있는가): 개수를 리터럴로 심지 않고 **구조**로 잰다 —
+# 정본 하나와 배포 지점 사본이 적어도 하나는 코퍼스에 들어야 하고, 열거된 수와
+# 실제로 태운 수가 같아야 한다. 셋 중 하나라도 어긋나면 위 ∀ 가 vacuous 다.
+[ "$cj_has_canonical" = yes ] \
+  && ok "층⑤ 도출: 정본 shared/codex/codex_jsonl.py 가 코퍼스에 있다" \
+  || no "층⑤ 도출: 정본이 코퍼스에 없다 — 위 ∀ 가 정본을 한 번도 안 봤다"
+[ "$cj_has_copy" = yes ] \
+  && ok "층⑤ 도출: plugins/*/scripts/ 배포 사본이 코퍼스에 있다" \
+  || no "층⑤ 도출: 배포 사본이 하나도 없다 — 위 ∀ 가 배포되는 파일을 안 봤다"
+[ "$cj_seen" = "$cj_listed" ] && [ "$cj_seen" -ge 1 ] \
+  && ok "층⑤ 도출: 열거 ${cj_listed}건 = 실행 ${cj_seen}건 (누락 없음)" \
+  || no "층⑤ 도출: 열거 ${cj_listed}건인데 ${cj_seen}건만 태웠다 — 루프가 조용히 건너뛰었다"
 
 # ── 층①: detect_codex.sh 세 사본 ────────────────────────────────────────────
 # kill switch 변수명은 **의도된 차이**이므로 그 축만 파라미터로 뺀다. 순진하게 걸면
