@@ -51,7 +51,10 @@ trap 'rc=$?; rm -rf "$tmp"; exit $rc' EXIT
 mkdir -p "$tmp/root/scripts" "$tmp/bin"
 
 # 실제 러너가 필요로 하는 형제들은 진짜를 쓰고, 추출기만 실패하는 스텁으로 바꾼다.
-for f in build_codex_prompt.py discover-spec.sh; do
+# `discover-spec.sh` 이 source 하는 `discover_common.sh` 도 형제다 — 빠지면 러너가
+# 조용히 빈 <spec_context> 로 degrade 해, 이 테스트가 재는 경로가 바뀌면서도 GREEN 이
+# 유지된다(실측: spec 해석이 `plugin install incomplete` 로 떨어짐).
+for f in build_codex_prompt.py discover-spec.sh discover_common.sh prompt-preamble.md; do
   [ -f "$QG/scripts/$f" ] && cp "$QG/scripts/$f" "$tmp/root/scripts/"
 done
 printf '#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n' > "$tmp/root/scripts/codex_findings_to_yaml.py"
@@ -245,6 +248,7 @@ mkdir -p "$tmp/rootD/scripts"
 cp "$SD/scripts/build_brief_codex_prompt.py" "$tmp/rootD/scripts/"
 cp "$SD/scripts/brief-codex-direction-checklist.md" "$tmp/rootD/scripts/"
 cp "$SD/scripts/brief-codex-fidelity-checklist.md" "$tmp/rootD/scripts/"
+cp "$SD/scripts/prompt-preamble.md" "$tmp/rootD/scripts/"
 printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$tmp/rootD/scripts/codex_findings_to_yaml.py"
 chmod +x "$tmp/rootD/scripts/codex_findings_to_yaml.py"
 printf '브리프 fixture\n사용자 원문 예시\n' > "$tmp/payload-fix.md"
@@ -263,6 +267,7 @@ assert_degrade3 "5러너 D(run_brief_codex_reviewer.sh, stale-시작)" "$d_stale
 # --- E) run_audit_codex_reviewer.sh (이미 준수 — 회귀 방지, JSON 소비자) ---
 mkdir -p "$tmp/rootE/scripts"
 cp "$PA/scripts/codex-prompt-preamble.md" "$tmp/rootE/scripts/"
+cp "$PA/scripts/prompt-preamble.md" "$tmp/rootE/scripts/"
 printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$tmp/rootE/scripts/codex_audit_to_json.py"
 chmod +x "$tmp/rootE/scripts/codex_audit_to_json.py"
 printf '# axis question fixture\n' > "$tmp/axis-fix.md"

@@ -1,5 +1,277 @@
 # Changelog
 
+## [0.28.0] — 2026-08-17
+
+Task 17(무게 감축) + fix round 1: `scripts/codex_findings_to_yaml.py`가 물리 사본에서 `shared/codex/
+codex_findings_to_yaml.py`를 가리키는 상대 심볼릭 링크로 바뀌었다(quality-gates와
+공유하는 정본). emit keyset(`category`·`target_section` — design-doc 리뷰 어휘)은
+더 이상 사본 하드코딩이 아니라 정본의 새 `--emit-keys design` 인자다. patch가 아니라
+**minor**인 이유(S3): 이전에는 이 플러그인의 codex 소비 경로가 design keyset을
+암묵적으로 항상 받았지만, 이제는 호출자(`run_brief_codex_reviewer.sh`·
+`run_spec_codex_reviewer.sh`)가 명시적으로 요청해야 한다 — 잊으면 `category`/
+`target_section`이 조용히 빠진다(같은 파일 경로로 새 configurability 노출, detect_codex.sh
+선례와 같은 판단 기준).
+
+Task 19(무게 감축): kill switch 판정 12정의를 `shared/killswitch/kill_switch_active.py`
+정본으로 통합. 이 플러그인이 그중 5곳(훅 4 + `scripts/spec-distill-gc.py`)을 갖고 있었다.
+
+Task 22(무게 감축): **같은 플러그인 안의** 중복을 `scripts/hook_common.py` 하나로 접었다.
+`shared/` 정본과 달리 플러그인-로컬이라 `copy-of` 마커도 사본 동일성 검사도 붙지 않는다 —
+같은 플러그인 안에서는 import 하나로 중복 자체가 소멸한다(설계 §6.1③). 두 훅
+(`review-dispatch.py` ↔ `pending-review-reminder.py`)의 최장 공유 구간이 **24줄 → 11줄**
+로 내려갔다(20줄 창 5개 → 0개). `_yaml_scalar` 는 **행동이 바뀐다** — 아래 Fixed 참조.
+
+### Added
+- `scripts/hook_common.py` — 두 훅이 공유하던 조각의 단일 정의:
+  `configure_utf8_streams()` · `PENDING_RE` · `LAST_DISPATCHED_RE` · `GC_SCRIPT` ·
+  `fire_and_forget_gc()` · `parse_iso()` · `state_file_for()` · `_yaml_scalar()`.
+  `kill_switch_active`(Task 19의 `shared/` 정본)와 `resolve_session_id`/`state_root`
+  (`state_path.py` 소유)는 담지 않는다 — 가져오면 정본이 둘이 된다.
+- `tests/test_yaml_scalar_single_definition.py` — 정의가 하나이고(구조 스캔), 소비자
+  셋이 **같은 함수 객체**를 부르며(텍스트가 아니라 identity 로 잰다), 그 하나가
+  합집합 행동을 갖는지. 각 단언은 세 사본 중 적어도 하나가 갖지 못했던 성질이라,
+  어느 옛 본문으로 되돌려도 하나는 RED 가 된다. `float` 분기는 단언하지 않는다 —
+  없어도 `str(v)` 경로가 같은 값을 내 어떤 입력으로도 구분되지 않는다(이빨 없는 단언).
+- `tests/test_yaml_scalar_single_definition.py` `TestCanonicalAgreesWithSharedCodex`
+  — 이 플러그인의 `_yaml_scalar` 와 `shared/codex/` 정본이 **같은 입력을 인용하는지**.
+  케이스 목록(내가 떠올린 값)과 상수 자체 비교(내가 안 떠올린 문자) 두 겹으로 잰다.
+  인용 표기(`ensure_ascii`)는 다를 수 있으므로 `json.loads` 로 되돌린 뒤 비교한다.
+  위치 축의 **음의 짝**(`codex-reviewer`·`fail-safe` 처럼 첫 글자가 아닌 지시자는
+  bare 로 남는다)도 같이 잰다 — 없으면 "전부 인용" 으로 도망갈 수 있다.
+- `tests/test_codex_findings_to_yaml.py` `TestSummaryScalarRoundTrip` — 정본
+  스크립트를 실제로 태워 산출 YAML 을 **파싱해서 원문과 정확히 같은지** 잰다.
+  텍스트 겹(인용됐는가)과 왕복 겹(되돌아오는가)을 갈라 둬서, PyYAML 이 없는 환경에서도
+  텍스트 겹은 이빨을 유지한다.
+
+### Changed
+- `review-dispatch.py`·`pending-review-reminder.py` 가 UTF-8 프리앰블·`PENDING_RE`·
+  `LAST_DISPATCHED_RE`·`GC_SCRIPT`·GC fire-and-forget 블록·`parse_iso` 자체 정의를
+  버리고 `hook_common` 에서 import 한다. `pending-review-reminder.py` 는 인라인으로
+  조립하던 상태 파일 경로도 `state_file_for()` 로 바꿨다(같은 표현식의 세 번째 사본).
+- `scripts/arm_ledger.py` 의 `state_file_for` 정의를 지우고 `hook_common` 에서 import.
+  `arm_ledger.state_file_for` 로 부르는 소비자(`spec-write-validator.py`)는 그대로다.
+  그 docstring("저장소 위치 변경 시 이 한 곳만 갱신")이 두 번째 정의 때문에 거짓이었는데
+  이제 다시 참이다(census #122).
+- `merge_review.py`·`merge_brief_review.py`·`brief_review_state.py` 가 각자의
+  `_yaml_scalar` 정의를 버리고 `hook_common` 에서 import(census #45의 spec-distill 부분).
+- `tests/test_arm_ledger.py` 의 착지점 계산이 `arm_ledger.state_root()`(소유하지 않는
+  이름의 re-export)가 아니라 `state_path.state_root()` 를 직접 쓴다. 피검자의 경로 조립
+  함수를 쓰지 않는 것은 의도적이다 — 그 함수의 버그가 traversal 테스트를 눈멀게 한다.
+
+### Fixed
+- **`_yaml_scalar` 세 사본이 갈라져 있었다** — 빈 문자열 가드가 `merge_review` 에만
+  없었고, flow indicator(`[]{}`) escape 가 `brief_review_state` 에만 있었고, None 분기가
+  `brief_review_state` 에만 없었다. 합집합으로 접었다(더 인용하는 것은 파싱 결과를 바꾸지
+  않고, 덜 인용하는 것만 바꾼다). 그래서 **출력이 바뀌는 자리가 있다**: `[` 로 시작하고
+  `:` 를 갖지 않는 advisory 문구가 이제 따옴표로 감싸여 나간다. 이관 전에는 인용 없이 나가
+  YAML flow sequence 로 읽혔다 — 두 merge 스크립트의 advisory 리터럴 **5건**이 이 모양이었다
+  (예: "[spec-distill v0.20.0] review indeterminate …", "[spec-distill v0.24.0] critic
+  sentinel 블록 …"). 빈 문자열과 None 쪽은 현재 소비자 경로로는 도달하지 않는다.
+- **정본(`shared/codex/codex_findings_to_yaml.py`)의 `_yaml_scalar` 도 같은 술어로
+  맞췄다** (2026-08-19). 사본 셋을 합집합으로 접는 동안 그 사본들이 모여야 할 정본은
+  옛 술어를 그대로 갖고 있었다 — 통합이 뒤집혀 있던 셈이다. 실측(정본 종단):
+  `summary` 가 `[` 로 시작하면(`"[CRITICAL] …"` — 리뷰어가 흔히 쓰는 모양) 인용 없이
+  나가 **문서 전체가 ParserError** 로 죽었고, 소비자
+  (`merge_review.parse_codex_yaml`)는 그 파일을 읽지 못해 그 라운드의 findings 가
+  통째로 소실됐다. 빈 문자열은 `null` 로, `{` 로 시작하는 값은 매핑으로 읽혔다.
+- **위치 축(`_YAML_UNSAFE_FIRST`)을 새로 넣었다 — 합집합에도 없던 잔여 구멍이다.**
+  세 사본의 합집합은 **문자 멤버십** 하나뿐이라, block sequence 지시자로 시작하는 값
+  (`- dash`)이나 backtick 으로 시작하는 값(``"`handler()` 가 null 을 반환한다"``)은
+  여전히 인용 없이 나가 ScannerError 를 냈다. 첫 글자를 0x20–0x7E 전수로 돌려
+  `k: <값>` 을 파싱하는 방식으로 위험 집합을 **측정해서** 얻었고, 그중 기존 검사가
+  덮지 못하는 잔여를 상수로 뒀다. 정본과 이 파일이 같은 두 상수를 쓴다.
+- **표기(`ensure_ascii`)까지 같아졌다** — 정본만 기본값(True)이라 인용된 한국어가
+  `\uXXXX` 로 나갔고, 인용 술어를 넓히면서 그 노출이 늘어 정본을 `False` 로 맞췄다.
+  이제 두 `_yaml_scalar` 의 출력은 **바이트로 동일**하고,
+  `TestCanonicalAgreesWithSharedCodex` 가 여부·표기 둘 다 락으로 고정한다.
+
+### Added
+- `scripts/kill_switch_active.py` — `shared/killswitch/kill_switch_active.py` 의
+  `# copy-of:` 물리 사본. 설치본에는 `shared/` 가 없으므로 형제 사본이어야 import 가 풀린다.
+- **`DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc`** — `scripts/spec-distill-gc.py` 만
+  끈다. 이관 전 이 파일은 `DEVBREW_SKIP_HOOKS` 를 **아예 읽지 않았다** — 사용자가 그 변수로
+  껐다고 믿어도 GC 는 계속 돌았다(이관 전 HEAD 판본을 실제로 태워 확인). 훅이 아니지만
+  지목할 이름을 갖는 쪽이 더 잘 꺼지는 방향이라 회귀가 아니다.
+- `hooks/session-end-cleanup.py` 가 훅명 별칭 `spec-distill:session-end-cleanup` 도 받는다
+  (이관 전에는 이벤트명 `spec-distill:SessionEnd` 하나뿐이었다).
+
+### Changed
+- 훅 4종(`review-dispatch.py`·`pending-review-reminder.py`·`spec-write-validator.py`·
+  `session-end-cleanup.py`)과 `scripts/spec-distill-gc.py` 에서 자체 판정 정의
+  (`kill_switch_active()` 3 + `_disabled()` 2)를 지우고 정본 호출로 교체. 기존 토큰
+  (`:Stop`/`:review-dispatch` · `:UserPromptSubmit`/`:reminder` · `:PostToolUse`/`:validator` ·
+  `:SessionEnd`)과 전역 `DEVBREW_DISABLE_SPEC_DISTILL=1` 의 동작은 전부 불변이다.
+- `run_brief_codex_reviewer.sh`·`run_spec_codex_reviewer.sh` 두 호출 모두
+  `--emit-keys design`을 명시(행동 불변 — 이전 하드코딩과 동치).
+- `extract_last_agent_message`(codex JSONL 이벤트 파서)를 `shared/codex/
+  codex_jsonl.py` 정본으로 흡수. `codex_findings_to_yaml.py`가 여기서 import한다
+  (quality-gates·plugin-audit 세 사본이 있던 것 중 이 플러그인 몫).
+- `tests/test_codex_findings_to_yaml.py`의 design-keyset 단언 2건이 이제
+  `--emit-keys design`을 명시적으로 넘긴다(스크립트 기본값이 바뀌었으므로).
+
+### Fixed (2026-08-17 fix round 1)
+- **codex 리뷰어가 설치본에서 100% 죽는 결함(CRIT-1).** 정본의 `codex_jsonl` import가
+  `.resolve()`를 써서, `claude plugin install`이 서브트리를 벗어나는 심볼릭 링크를
+  실제 파일로 역참조하는 설치본(설계 §16.1)에서 sibling `codex_jsonl.py`를 못 찾고
+  `ImportError`가 났다. `.resolve()`를 버리고(bare `.parent`) `codex_jsonl.py`의
+  copy-of 물리 사본을 `plugins/spec-distill/scripts/`에도 배포했다(quality-gates·
+  plugin-audit과 동일 패턴).
+- `run_brief_codex_reviewer.sh`가 `--emit-keys design`을 잃어도 어떤 테스트도
+  빨개지지 않던 결함(F1) — `tests/test_brief_codex_axes.sh`에 `run_spec_codex_reviewer.sh`
+  쪽과 대칭인 assertion + mutation 증명을 추가했다.
+- 공백 가드의 방향 정정(F2) — "공백-only를 거른다"가 아니라 "뒤따르는 빈 후보가
+  앞선 유효한 메시지를 덮어쓰지 못하게 한다"이며, 이 플러그인이 이전에 배포하던
+  것 대비 fail-open 방향의 판정 변경이다(뒤이어 빈 `agent_message`가 흐르면
+  `codex_failed`가 `true → false`로 뒤집히고 finding이 살아난다). 새 테스트
+  `test_codex_findings_to_yaml.py::test_trailing_blank_agent_message_does_not_clobber_real_one`가
+  고정한다.
+- "행동 불변" 프레이밍 정정(F8) — 정본화 이전에는 `agent_message.text`가
+  문자열이 아니면 크래시(rc=1)했다. 지금은 `codex_jsonl.py`의 타입 가드가 크래시
+  없이 rc=0 + `reason: missing_result`로 degrade한다 — 개선이지만 사유 문자열이
+  바뀐다.
+
+### Fixed (2026-08-17 fix round 2)
+- **F1 mutation 이 플래그 줄에 도달조차 못 하던 결함(R2-5·R2-6).**
+  `tests/test_brief_codex_axes.sh` 의 mutation 은 러너 사본을 temp dir 에서 돌리는데
+  `CLAUDE_PLUGIN_ROOT` 를 넘기지 않아 `PLUGIN_ROOT` 유도가 어긋났고, 프롬프트 빌더를
+  못 찾아 `reason: prompt_build_failed` 로 조기 종료했다 — 그런데도 락은 "이빨 있음"
+  을 출력했다(**플래그와 무관한 실패를 플래그 증거로 보고**). 형제 락
+  `test_run_spec_codex_reviewer.sh` 처럼 `CLAUDE_PLUGIN_ROOT` 를 명시로 넘기고,
+  ① **identity 사본**(플래그 그대로 위치만 이동) 통제와 ② 변이본이 조기 degrade
+  없이 변환까지 갔는지 확인하는 원인-확정 단언을 더했다. 양방향 증명: identity
+  사본(플래그 온전)에서는 **계측기 줄이 GREEN** 이고 락이 "이빨 있음"을 거짓으로
+  내지 않는다 — 그 거짓을 막는 것은 **mutation 줄이 RED 로 가는 것**이다(실측:
+  40 중 1 RED, 계측기 줄과 원인-확정 줄은 둘 다 GREEN). 실제 플래그 제거에서는
+  "이빨 있음"을 낸다. 계측기 줄이 RED 로 가는 경우는 계측기 자체(`F1ENV` 의
+  `CLAUDE_PLUGIN_ROOT`)가 깨졌을 때다(실측: 40 중 2 RED). 〔2026-08-17 fix round 3,
+  R3-5 — 앞 판본은 identity 일 때 "계측기 RED" 라 적어 `task-17-report-r2.md:158`
+  과 모순이었다.〕
+- `codex_jsonl.py` 사본의 docstring 정정(정본과 동기) — 없는 테스트 파일 인용 제거,
+  배포 지점 도출 규칙 명시(R2-4·R2-11).
+
+### Fixed (2026-08-17 fix round 3)
+- **원인-확정 판별자 자신이 두 방향으로 fail-open 이던 결함(R3-1).**
+  round 2 가 더한 `tests/test_brief_codex_axes.sh` 의 원인-확정 검사는 ① 맨 `grep` 이라
+  **출력 파일 부재를 PASS 분기로 라우팅**했고(변이본이 구문 파손돼 아무것도 안 남겨도
+  40/40 GREEN + "이빨 있음"), ② degrade 사유를 **하드코딩**해 러너가 내지 않는
+  `extract_failed` 를 열거하면서 러너가 실제로 내는 여섯(`runner_incomplete` ·
+  `payload_missing` · `missing_project_dir` · `project_dir_unreachable` ·
+  `scratch_dir_uncreatable` · `codex_not_installed`)을 빠뜨렸다 — 그래서
+  `reason: codex_not_installed` 로 degrade 한 변이본도 "원인 확정" 을 통과했다.
+  즉 R2-6 이 닫혔다고 주장한 실패가 그대로 재현됐다. 두 판정 모두
+  `shared/tests/assert.sh` 의 `assert_file_absent`(파일 부재 = `no()`)로 바꾸고,
+  사유 열거는 러너의 `emit_fallback`/`write_failclosed` 호출부에서 **도출**한다
+  (현재 9종). 도출이 0건이면 vacuous 로 보고 RED. 실측: 구문 파손 변이 → 2 RED,
+  `codex_not_installed` degrade 변이 → 1 RED, 무변이 40/40 GREEN.
+
+### Added (Task 20 — codex 러너 공통 조각)
+
+- `scripts/runner_common.sh` — `shared/codex/runner_common.sh` 의 `copy-of` 물리 사본
+  (`_degrade_if_empty` · `write_failclosed` 정본).
+
+### Changed (Task 20)
+
+- `run_spec_codex_reviewer.sh` · `run_brief_codex_reviewer.sh` 가 두 함수를 자체 정의하지
+  않고 위 정본을 source 한다(census #24·#125 — 두 파일에 그대로 복제돼 있었다).
+- **`write_failclosed` 의 시그니처가 `<output_path> <reason>` 두 인자로 바뀌었다.** 이전에는
+  reason 한 인자만 받고 경로는 전역 `$OUTPUT_PATH` 에서 읽었다 — 공유 파일이 호출자의 전역을
+  읽으면 그 전역 이름이 조용한 계약이 된다. 호출부 셋(`emit_fallback` ×2 · `seed_failclosed`)이
+  모두 `"$OUTPUT_PATH"` 를 먼저 넘기도록 바뀌었고, 정본에 빈-인자 가드가 있어 옛 형태로
+  부르면 rc=1 로 거절된다(빠뜨린 호출이 `runner_incomplete` 라는 **파일 이름**으로 쓰기를
+  시도하던 실패원을 조용히 통과시키지 않는다).
+- `emit_fallback` 은 정본화하지 **않는다** — `exit 0` 으로 호출자 프로세스를 끝내는 제어흐름
+  래퍼라, 아끼는 3줄보다 공유 계약이 무겁다(census #126).
+
+### Fixed (Task 20)
+
+- **정본 로드 실패 시 stale/0바이트 산출물이 남던 새 경로** 봉쇄 — quality-gates 3.4.0 의
+  같은 항목과 동형(`[ -r ]` + `bash -n` 선검사 → `reason: runner_common_unloadable`).
+  `run_brief_codex_reviewer.sh` 쪽은 특히 `seed_failclosed` 에 **닿기 전에** 죽는 형태라
+  직전 라운드 YAML 이 그대로 이번 판정으로 읽혔다.
+- `tests/test_brief_codex_axes.sh` 의 mutation fixture가 러너를 다른 디렉토리로 옮기면서
+  형제 정본을 두고 가, 사본이 로드 가드에 걸려 **조기 degrade** 했다 — 그 상태에서 mutation 은
+  변이가 아니라 위치 때문에 실패한다(도달 불가). 이 테스트의 계측기 assertion 둘이 그것을
+  RED 로 잡아냈고, fixture 가 정본을 함께 옮기도록 고쳤다.
+
+### Added (Task 21 — GC 공통 조각)
+
+- `scripts/gc_common.py` — `shared/gc/gc_common.py` 의 물리 사본(머리 한 줄 마커).
+  quality-gates 와 공유하는 정본이다.
+
+### Changed (Task 21)
+
+- `scripts/spec-distill-gc.py` 가 `_ttl_ns`·`_folder_mtime_ns`·`_within_grace`·`_gc_one` 과
+  상수 셋(`GRACE_NS`·`DOUBLE_STAT_DELAY_S`·`GC_PENDING_PREFIX`)을 지우고 `gc_common` 을
+  부른다. `GC_PENDING_PREFIX` 를 정본에서 가져오는 것이 특히 중요하다 — 그 접두를 **쓰는**
+  쪽(`gc_one`)과 **줍는** 쪽(`_sweep_gc_pending`)이 갈라지면 고아가 영원히 안 지워진다.
+  남은 고유 본문은 git-aware state root 와 `.gc-pending-*` 고아 스윕이다.
+- `hooks/session-end-cleanup.py` 와 위 고아 스윕의 삭제가 `gc_common.safe_rmtree` 를 거쳐
+  root 밖 경로를 거부한다. 이 플러그인은 `SESSION_PATTERN` charset 검증을 이미 갖고 있어
+  동작 변화가 없다 — 그 패턴이 완화되는 편집이 곧바로 root 밖 삭제가 되지 않도록 하는
+  두 번째 겹이다.
+- **state root 해석은 공통 조각에 넣지 않았다.** 이 플러그인은 git-aware
+  (`git rev-parse --git-common-dir`, worktree 호환)이고 quality-gates 는 payload cwd
+  상대다 — 부분 사본의 "각자 고유 본문"이라 플러그인 경계를 넘는 통합은 하지 않는다.
+
+### Changed (Task 23 — `state_path.py` 를 `hooks/` 에서 `scripts/` 로)
+
+- `hooks/state_path.py` → `scripts/state_path.py` (본문 무변경, git 인식 rename).
+  `hooks/` 에는 `hooks.json` 이 등록한 훅 4개와 `hooks.json` 만 남는다 — 이 리포의
+  어느 플러그인 `hooks/` 에도 비-등록 `.py` 가 없다(이동 전 1건).
+- SKILL 실행 라인 9곳이 `${CLAUDE_PLUGIN_ROOT}/scripts/state_path.py` 를 부른다
+  (`conducting-interview` 5 · `reviewing-brief` 2 · `reviewing-spec` 2).
+  이 세 SKILL 에는 `allowed-tools` frontmatter 가 없어 함께 고칠 권한 선언이 없다.
+- `scripts/{arm_ledger,spec-distill-gc,hook_common}.py` 가 `state_path` 를 찾으려고
+  형제 디렉토리 `hooks/` 를 `sys.path` 에 얹던 것을 **자기 디렉토리**로 바꿨다.
+  훅 4개는 이미 `scripts/` 를 `sys.path[0]` 에 얹고 있어 import 경로 변경이 없다.
+
+### Fixed (Task 23)
+
+- **설치본에서 `scripts/spec-distill-gc.py` 가 홀로 배포되면 죽던 잠복 결함**(Task 19
+  발견 · Task 21 확대 확인). 이 파일은 `state_path` 를 `hooks/` 에서 풀었는데,
+  `shared/` 정본 형제 락(`test_copy_of_contract.sh` 축 1c)의 설치본 대역은 소비자마다
+  디렉토리를 도출해 편다 — 이 소비자만 격리하면 `hooks/` 가 트리에 없어
+  `ModuleNotFoundError: No module named 'state_path'` 였다. 지금까지 GREEN 이었던 것은
+  락이 SIM 트리를 코호트로 공유하고 `git ls-files` 가 `hooks/*` 를 `scripts/*` 앞에
+  정렬해, 앞선 훅 소비자가 이미 `hooks/` 를 펴 두었기 때문이다 — 통과가 **코호트와
+  순서에 의존**했다. 이동 후 소비자 19건 전부가 격리에서 GREEN 이다(측정: 이동 전
+  트리에서 같은 계측기가 이 파일 하나만, 두 코호트 모두에서 RED).
+- `plugins/plugin-audit/scripts/check-shape-completeness.py` 의 over-glob 방어 주석이
+  들던 실측 사례가 이 이동으로 사라졌다 — 주석을 과거 사례로 표시하고, 사례가 없다고
+  가드를 지우면 안 된다는 이유를 남겼다(정의부만 옮기고 인용부를 남기면 없는 것을
+  근거로 내세우는 서술이 된다).
+
+## [0.27.0] — 2026-08-17
+
+Task 15(무게 감축) + fix round 1. patch가 아니라 **minor**인 이유(S3): 새
+`skip_reason` 3종 + 새 필수 형제 payload 파일(`codex-killswitch.conf`)이 새 surface다.
+
+`scripts/detect_codex.sh`가 물리 사본에서 `shared/codex/detect_codex.sh`를 가리키는
+상대 심볼릭 링크로 바뀌었다(quality-gates·plugin-audit와 공유하는 정본). kill switch
+변수명(`DEVBREW_DISABLE_SPEC_DISTILL_CODEX`)은 형제 설정 파일
+`scripts/codex-killswitch.conf`로 분리 — 설정 부재 시 fail-closed
+(`skip_reason: killswitch_config_missing`).
+
+### Fixed
+- **(fix round 1, 보안)** 정본의 kill switch 가드가 값이 비어 있지 않기만 하면
+  통과시켜, CRLF·공백만·탭·셸 메타문자 값이 bash 3.2의 `${!VAR:-0}` 간접 확장에서
+  에러 없이 `0`으로 평가돼 kill switch가 fail-open하는 결함을 닫았다(정본 공유 —
+  `plugins/quality-gates/CHANGELOG.md` [3.3.0] 참조). `CODEX_KILL_SWITCH_VAR` 값이
+  POSIX 식별자가 아니면 `skip_reason: killswitch_config_invalid`로 거절한다.
+- `reviewing-brief`·`reviewing-spec` 두 SKILL의 codex 게이트가 "감지기 실행 자체
+  실패"와 "codex 미설치"를 구별하지 못하던 결함을 `skip_reason: detector_not_runnable`
+  로 닫았다. 가드 조건도 `-z codex_avail && -z skip_reason`에서
+  `-z codex_avail` 단독으로 좁혔다 — 정본은 성공 실행 시 항상 exit 0이라 이쪽이
+  더 정확하다(I6).
+- `tests/test_detect_codex.sh`의 kill-switch 변수명 양/음 assertion 2개가 심볼릭
+  링크 전환 뒤 정본 본문을 grep해 자기 변수도 못 찾고(양 — RED) 이웃 변수도 못
+  찾는(음 — 조용히 vacuous 통과) 상태였다. 형제 `codex-killswitch.conf`로
+  재조준했고, 위 fail-open 수정의 회귀 락(malformed conf fail-closed, CRLF·공백만)
+  을 추가했다.
+- `tests/test_reviewing_brief_skill.sh`의 `skip_reason=` 검사가 real capture line과
+  new fallback line 둘 다 만족시켜 header-satisfiable했다(진짜 캡처를 지워도
+  GREEN). `skip_reason="\$\(`로 캡처 형태에 앵커했다(mutation으로 확인).
+
 ## [0.26.2] — 2026-08-17
 
 devbrew-weight-reduction Task 14 — 자체 판정 헬퍼 이관. `tests/` 46개 파일이 각자

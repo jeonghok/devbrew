@@ -8,6 +8,44 @@
 # 봉쇄하는 실패: qg 사본의 마지막 변경은 2026-05-14, sd 사본은 2026-07-29까지 받았다.
 # 그 사이 qg는 `{"findings": {}}`에 `codex_failed: false`를 내고 있었다 — 실행되지
 # 못한 검사가 통과한 검사로 기록된다. 두 사본의 동기 여부를 재는 테스트는 없었다.
+#
+# **역할 분담 — 층① (detect_codex.sh) 에 한정한 갱신** (2026-08 무게 감축,
+# 2026-08-17 실측 이후 심볼릭 링크로). 세 배포 지점은 이제
+# shared/codex/detect_codex.sh 를 가리키는 상대 심볼릭 링크다(설계 §16.1) —
+# **바이트 동일성**은 더 이상 "측정할" 대상이 아니라 파일이 하나뿐이라는 구조로
+# 보장된다. 링크가 여전히 링크인지 · 존재하는 정본을 가리키는지는
+# `shared/tests/test_copy_of_contract.sh` 가 **잴 것이다 — 그 파일은 Task 16이
+# 만든다. 이 커밋 시점에는 아직 없다.** 위 문단이 기각한 전제("두 사본은 의도된
+# 차이를 갖는다")는 그 차이를 형제 설정 파일 `codex-killswitch.conf` 로 빼내면서
+# 사라졌다.
+#
+# **이 문단이 말하지 않는 것**: 층①의 kill switch 축은 그대로 유효하다 — 세 링크가
+# **서로 다른 conf 세 개**를 읽으므로 conf 드리프트·교차배선에 여전히 이빨이 있다
+# (2026-08-17 mutation 으로 확인: 교차배선 60/62 · conf 무시 58/62 · 스위치 영구정지
+# 59/62, 전부 RED). 그리고 이 파일의 나머지 축들은 detect_codex 와 **무관하다** —
+# 층④는 codex_findings_to_yaml.py 를 비교한다. **2026-08-17 실측 이후** 배포 지점도
+# shared/codex/codex_findings_to_yaml.py 를 가리키는 상대 심볼릭 링크가 됐다(층①과
+# 같은 이유) — 그 결과 층④ 안에서 **판정 등가**와 **값 고정**은 서로 다른 운명을
+# 갖는다(다른 하위 체크들 — anti-vacuous 계측기 확인·표본 수 바닥 — 은 이 갈림과
+# 무관하게 그대로 유효하다).
+#
+# **판정 등가는 다시 실질 판정이다** 〔2026-08-17 fix round 2, R2-7 — 이 문단의
+# 앞 판본을 정정한다〕. 앞 판본은 *"파일이 하나뿐이라는 구조로 이미 보장되어 더
+# 이상 실질 판정이 아니다(vacuous-but-harmless)"* 라고 적었는데, **그 문장을 쓴
+# 커밋 자신이 그 전제를 깼다.** fix round 1(CRIT-1)이 배포 지점마다 형제
+# `codex_jsonl.py` 사본을 두고 정본의 import 경로를 역참조하지 않는 `.parent` 로
+# 바꿨다 — 그래서 `python3 $QG/scripts/...` 는 **qg 옆 사본**을, `$SD/scripts/...`
+# 는 **sd 옆 사본**을 읽는다. 두 호출이 태우는 코드는 더 이상 전부 같은 파일이
+# 아니고, 그 사본들이 갈라지면 아래 판정 등가가 실제로 갈라진다(2026-08-17
+# mutation 으로 확인 — 아래 층⑤ 주석 참조). 스스로를 vacuous 라 부르는 서술은
+# 그 축을 지워도 안전하다는 신호를 남기므로 거짓 그 자체보다 위험하다.
+#
+# **값 고정**(알려진-상이 표본에 대해 `codex_failed: false`/`true`가 실제로
+# 나오는가)은 파일 수와 무관하게 그대로 이빨이 있다 — 사본이 하나가 돼도
+# verdict()가 상수 추출기로 퇴화하면 여전히 잡힌다. 이 둘을 뭉뚱그려 "층④가
+# 통째로 공허해졌다"고 적으면 Task 15가 고친 I1(판정 등가가 공허해진다는 관찰을
+# 파일 전체에 대해 말한 오류)을 방향만 바꿔 재현한다. 별도로 mock 자산 교집합
+# 락이 있다. 이 통합은 그 축들을 건드리지 않았다.
 set -u -o pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 QG="$ROOT/plugins/quality-gates"
@@ -18,7 +56,9 @@ PA="$ROOT/plugins/plugin-audit"
 TMP="$(mktemp -d -t qg-copies-XXXXXX)" || exit 1
 trap 'rm -rf "$TMP"' EXIT
 
-# ── 층④: codex_findings_to_yaml.py 두 사본 ──────────────────────────────────
+# ── 층④: codex_findings_to_yaml.py — quality-gates·spec-distill 호출 경로가
+# 정본(shared/codex/codex_findings_to_yaml.py)을 가리키는 심볼릭 링크를 거쳐
+# 같은 판정을 내는가 ──────────────────────────────────────────────────────
 # 표본은 판정을 실제로 가르는 것들이다. 정상·빈 스트림·펜스 없는 raw JSON·
 # 컨테이너 위반·원소 위반·override 유무.
 mk() { printf '%s\n' "{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":$1}}"; }
@@ -31,8 +71,14 @@ mk '"no fence at all"'                               > "$samples_dir/05-no-json.
 : > "$samples_dir/06-empty.jsonl"
 printf 'not json\n'                                  > "$samples_dir/07-garbage.jsonl"
 
-# 판정 필드만 뽑는다. sd 사본은 emit keyset에 category/target_section을 더하는데
-# 그것은 **의도된 차이**이므로 findings 본문이 아니라 meta의 판정만 대조한다.
+# 판정 필드만 뽑는다. 〔2026-08-17 fix round 1〕 이 락은 아래에서 qg·sd 호출
+# **둘 다 --emit-keys 인자 없이** 부른다(정본화 이후 기본값은 DEFAULT_KEYS) —
+# category/target_section이 나타나는 design 어휘는 여기서 아예 안 켜지므로
+# findings 본문에 지금 갈릴 만한 차이가 없다. 그 배선(호출자가 --emit-keys design을
+# 실제로 넘기는가)은 이 락이 아니라 run_spec_codex_reviewer.sh·
+# run_brief_codex_reviewer.sh 쪽 락이 잰다(F1). verdict()가 findings 본문이
+# 아니라 meta만 보는 것은 그와 무관하게 유지한다 — 이 락의 목적은 codex_failed·
+# reason 같은 판정 필드의 동일성이지 렌더 형태 동일성이 아니다.
 verdict() { grep -E '^  (codex_failed|reason|raw_findings_type|bad_element_types):' || true; }
 
 seen=0
@@ -65,8 +111,9 @@ for s in "$samples_dir"/*.jsonl; do
     # 판정값을 여기서 못박는다: override 없는 01-clean은 정상 라운드라
     # `codex_failed: false`, 02-container-violation은 컨테이너 위반이라
     # `codex_failed: true`다 — 상수 추출기는 둘 중 하나에서 반드시 틀린다.
-    # 표본에 따라 verdict가 여러 줄일 수 있어 부분문자열 포함으로 재고, 두
-    # 사본 emit keyset 차이(category/target_section)는 meta 판정 밖이라 무관하다.
+    # 표본에 따라 verdict가 여러 줄일 수 있어 부분문자열 포함으로 잰다. verdict()가
+    # meta 필드만 보므로 이 비교는 emit keyset(호출자 인자, 이 락에서는 미사용 —
+    # 위 verdict() 주석 참조)과 애초에 무관하다.
     if [ -z "$ov" ]; then
       case "$name" in
         01-clean.jsonl)
@@ -96,6 +143,105 @@ done
 # positive: 표본을 실제로 돌렸는가. 없으면 "차이 0"과 "아무것도 안 봄"이 구별되지 않는다.
 if [ "$seen" -ge 7 ]; then ok "층④ 표본 ${seen}건 실행 (vacuous 아님)"
 else no "층④ 표본이 ${seen}건뿐 — 위 판정이 무의미하다"; fi
+
+# ── 층⑤: 공백 가드(F2)를 **물리 인스턴스 전부**에 대해 잰다 ────────────────────
+# 〔2026-08-17 fix round 2, R2-8〕 fix round 1 이 이 동작을 고정한 락은
+# plugins/spec-distill/tests/test_codex_findings_to_yaml.py 하나였는데, 그것은
+# sd 배포 지점을 태우므로 **sd 옆 사본만** 읽는다 — 정본이나 qg 옆 사본에서 가드를
+# 지우면 전부 GREEN 이었다(리뷰어 실측 행렬). 층④의 표본 7종에도 이 모양이 없다
+# ("진짜 메시지 뒤에 빈 메시지" 는 01~07 어디에도 없다).
+#
+# 대상 집합은 **이름을 열거하지 않고** git 코퍼스에서 도출한다 — 정본과 그 copy-of
+# 사본 전부. 사본이 늘어나면 자동으로 함께 검사된다.
+#
+# 재는 것 셋 〔셋째·둘째는 2026-08-17 fix round 3, R3-2 가 더했다〕:
+#  ① 진짜 agent_message 뒤에 **공백-only** agent_message 가 흐를 때 앞선 진짜 것이
+#     살아남는가 — `candidate.strip()` 연언지. 가드가 없으면 빈 후보가 last_text 를
+#     덮어써 하류에서 codex_failed 가 뒤집힌다(fix round 1 F2 의 방향 서술 참조).
+#  ② 진짜 것 뒤에 **비-문자열** agent_message 가 흐를 때도 살아남는가 —
+#     `isinstance(candidate, str)` 연언지. 앞 판본은 ①만 태워서 이 연언지가 **네 파일
+#     어디에도 락이 없었다**: `isinstance(candidate, str) and candidate.strip()` 을
+#     `candidate and str(candidate).strip()` 로 네 파일 동시에 바꿔도 69/69 GREEN 이었고
+#     (실측), 그 상태에서 비-문자열 `text` 스트림은 codex_findings_to_yaml.py 에서
+#     잡히지 않는 TypeError 로 죽으며 YAML 을 **0바이트**로 남긴다. 표본은 **truthy**
+#     여야 한다 — falsy(0·"")면 `text or message` 가 message 로 넘어가 이 연언지를
+#     태우지 못한다.
+#  ③ legacy `{"type":"agent_message","message":…}` 폴백이 살아 있는가 —
+#     `item.get("text") or item.get("message")` 의 뒷항. 정본 docstring(Legacy shape,
+#     still supported as fallback)이 약속하는 동작이고, 역시 앞 판본에 락이 없었다.
+# 이 셋이 함께 있어야 `codex_jsonl.py` docstring 이 층⑤ 를 "이 동작을 고정하는 락" 으로
+# 인용하는 서술(R2-4)이 실제로 참이 된다.
+CJ_PROBE="$TMP/blank_guard_probe.py"
+cat > "$CJ_PROBE" <<'PYEOF'
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("cj_probe", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+
+def ev(item):
+    return json.dumps({"type": "item.completed", "item": item})
+
+
+real = ev({"type": "agent_message", "text": "REAL-ANSWER"})
+blank = ev({"type": "agent_message", "text": "   "})
+nonstr = ev({"type": "agent_message", "text": {"nested": "CLOBBER"}})
+legacy = json.dumps({"type": "agent_message", "message": "LEGACY-ANSWER"})
+
+# ① 앞선 진짜 메시지가 살아남고, JSONL 이 실제로 파싱됐어야 한다.
+text, parsed = mod.extract_last_agent_message(real + "\n" + blank + "\n")
+print("BLANK_OK" if (text == "REAL-ANSWER" and parsed) else "BLANK_BROKEN text=%r parsed=%r" % (text, parsed))
+
+# ② 비-문자열 후보도 앞선 진짜 것을 덮어쓰지 못한다.
+text, parsed = mod.extract_last_agent_message(real + "\n" + nonstr + "\n")
+print("NONSTR_OK" if (text == "REAL-ANSWER" and parsed) else "NONSTR_BROKEN text=%r parsed=%r" % (text, parsed))
+
+# ③ legacy message 폴백이 채택된다.
+text, parsed = mod.extract_last_agent_message(legacy + "\n")
+print("LEGACY_OK" if (text == "LEGACY-ANSWER" and parsed) else "LEGACY_BROKEN text=%r parsed=%r" % (text, parsed))
+PYEOF
+
+cj_corpus="$(git -C "$ROOT" ls-files -- 'shared/codex/codex_jsonl.py' 'plugins/*/scripts/codex_jsonl.py')"
+cj_listed="$(printf '%s\n' "$cj_corpus" | grep -c . || true)"
+cj_seen=0
+cj_has_canonical=no
+cj_has_copy=no
+while IFS= read -r rel; do
+  [ -n "$rel" ] || continue
+  cj_seen=$((cj_seen+1))
+  case "$rel" in
+    shared/codex/codex_jsonl.py) cj_has_canonical=yes ;;
+    plugins/*/scripts/codex_jsonl.py) cj_has_copy=yes ;;
+  esac
+  cj_res="$(python3 "$CJ_PROBE" "$ROOT/$rel" 2>&1)"
+  case "$cj_res" in
+    *BLANK_OK*) ok "층⑤ $rel: 뒤따르는 빈 agent_message 가 앞선 진짜 것을 덮어쓰지 못한다(F2 — candidate.strip() 연언지)" ;;
+    *) no "층⑤ $rel: 공백 가드가 없다 — $cj_res" ;;
+  esac
+  case "$cj_res" in
+    *NONSTR_OK*) ok "층⑤ $rel: 뒤따르는 비-문자열 agent_message 도 앞선 진짜 것을 덮어쓰지 못한다(F2 — isinstance(candidate, str) 연언지)" ;;
+    *) no "층⑤ $rel: 비-문자열 가드가 없다 — $cj_res" ;;
+  esac
+  case "$cj_res" in
+    *LEGACY_OK*) ok "층⑤ $rel: legacy agent_message 의 message 폴백이 살아 있다(item.get(\"message\"))" ;;
+    *) no "층⑤ $rel: legacy message 폴백이 없다 — $cj_res" ;;
+  esac
+done <<EOF
+$cj_corpus
+EOF
+
+# positive(도출이 살아 있는가): 개수를 리터럴로 심지 않고 **구조**로 잰다 —
+# 정본 하나와 배포 지점 사본이 적어도 하나는 코퍼스에 들어야 하고, 열거된 수와
+# 실제로 태운 수가 같아야 한다. 셋 중 하나라도 어긋나면 위 ∀ 가 vacuous 다.
+[ "$cj_has_canonical" = yes ] \
+  && ok "층⑤ 도출: 정본 shared/codex/codex_jsonl.py 가 코퍼스에 있다" \
+  || no "층⑤ 도출: 정본이 코퍼스에 없다 — 위 ∀ 가 정본을 한 번도 안 봤다"
+[ "$cj_has_copy" = yes ] \
+  && ok "층⑤ 도출: plugins/*/scripts/ 배포 사본이 코퍼스에 있다" \
+  || no "층⑤ 도출: 배포 사본이 하나도 없다 — 위 ∀ 가 배포되는 파일을 안 봤다"
+[ "$cj_seen" = "$cj_listed" ] && [ "$cj_seen" -ge 1 ] \
+  && ok "층⑤ 도출: 열거 ${cj_listed}건 = 실행 ${cj_seen}건 (누락 없음)" \
+  || no "층⑤ 도출: 열거 ${cj_listed}건인데 ${cj_seen}건만 태웠다 — 루프가 조용히 건너뛰었다"
 
 # ── 층①: detect_codex.sh 세 사본 ────────────────────────────────────────────
 # kill switch 변수명은 **의도된 차이**이므로 그 축만 파라미터로 뺀다. 순진하게 걸면

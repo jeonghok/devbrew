@@ -93,8 +93,9 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
    **`run_codex_reviewer.sh`를 재사용하지 않는다** — 그 스크립트는 diff-shaped이고 최신 spec의
    AC를 자동 주입해서 blind(모델이 답을 미리 못 본 상태)를 깬다
    ([[reference_codex_reviewer_spec_ac_injection]]). plugin-audit 전용 러너
-   `run_audit_codex_reviewer.sh`가 자기 `codex-prompt-preamble.md`(untrusted-data, P21)를
-   프롬프트 맨 앞에 싣고 축 질문을 이어 붙인다.
+   `run_audit_codex_reviewer.sh`가 자기 `codex-prompt-preamble.md`(응답 스키마)와 shared
+   정본 `prompt-preamble.md`(untrusted-data, P21)를 프롬프트 앞에 싣고 축 질문을 이어
+   붙인다.
 
    축마다 축 질문을 파일(`$AXIS_FILE`)로 쓰고 아래 게이트를 **그대로** 실행한다. kill switch는
    `DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX=1`이며 `detect_codex.sh`가 그것을 읽는다 — 러너는 읽지
@@ -105,11 +106,21 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
 # 이 블록은 **산문이 아니라 리터럴 bash**다. kill switch는 P21 보안 컨트롤이고, 게이트가
 # 산문이면 모델이 건너뛰어도 아무 검사에 걸리지 않는다 — "껐다고 믿게만" 만드는 상태다.
 # quality-gates/tests/test_codex_gate_observation.sh가 이 블록을 마커로 잘라내
-# 4개 시나리오(가용·kill switch·미설치·버전 바닥 미달)로 실행하고 codex 호출 횟수를 센다.
+# 시나리오들(가용·kill switch·미설치·버전 바닥 미달·감지기 부재)로 실행하고 codex
+# 호출 횟수를 센다 — 목록은 test_codex_gate_observation.sh 의 루프 본문이 정의한다
+# (개수를 여기서 세지 않는다: 시나리오가 늘 때마다 이 자리가 stale 해지는 것을 피한다).
 PA="${CLAUDE_PLUGIN_ROOT:-./plugins/plugin-audit}"
 DETECT_OUT="$(bash "$PA/scripts/detect_codex.sh")"
 codex_avail="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^codex_available: //p')"
 skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
+# "감지기를 못 돌렸다"와 "codex가 없다"를 구별한다: 정상 실행된 감지기는 항상 exit 0
+# 이고 codex_available: 줄을 낸다(false 여도). 그 줄이 아예 없으면(빈 stdout·비-zero
+# exit·심볼릭 링크 끊김) 감지기 자체가 안 돈 것이다 — 그것을 skip_reason: unknown으로
+# 뭉개면 "codex 미설치"와 관찰상 구별되지 않는다. `codex_avail` 만으로 가드한다
+# (I6: `&& -z "$skip_reason"`는 산문의 서술보다 좁았다 — rc 를 안 잡고, skip_reason
+# 만 있고 codex_available 은 없는 잘린 출력을 빠져나가게 뒀다. 정본은 성공 실행 시
+# 항상 exit 0 이므로 `-z "$codex_avail"` 단독이 더 단순하며 산문과 정확히 일치한다).
+if [[ -z "$codex_avail" ]]; then skip_reason="detector_not_runnable"; fi
 if [[ "$codex_avail" == "true" ]]; then
   bash "$PA/scripts/run_audit_codex_reviewer.sh" "$AXIS_FILE" "$(pwd)" "$CODEX_JSON"
 else
@@ -164,6 +175,14 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    `<codex.json>`은 `codex_audit_to_json.py`의 출력을 그대로 쓴다. assemble은 그중
    `d_verdicts`·`oq_answers`·`new_open_questions` 셋만 읽는다 — `findings`는 이미 workflow
    경로로 들어와 있어 여기서 무시된다(중복 병합 아님).
+
+   🔴 **`description drift`는 재량 사실이 아니라 verdict에 반영한다 (설계 §6.1④).** pre-1의
+   `staleness_facts`에 그 class가 있으면 `plugin.json` ↔ `.claude-plugin/marketplace.json`의 기계적
+   부등식이고 **감사 대상 자신의 결함**이다(리포 전역 락의 오귀속이 아니다). assemble 전에
+   `<wf.json>`의 findings에 대응 갭이 있는지 확인하고, 없으면 그 누락을 `<meta.json>`의
+   `pre1_degraded`에 적는다 — 최상위 `degraded[]`로 올라가 step 6 배너·`## 결손` 절에 드러난다.
+   drift가 남아 있던 이유는 검사 부재가 아니라 **사실로만 보고되고 아무도 고치지 않은 것**이다.
+   조치는 `plugin.json`을 정본으로 marketplace 항목을 맞추는 것이다.
 3. `validate-audit-data.py --data <data.json>` → RED면 abort(완결성·consent·codex-merge·NOQ·gate-E).
 4. `render-audit-report.py <data.json> --out docs/audits/<date>-<target>-audit.md --readme docs/audits/README.md`.
    6축 전멸(exit 1) → 리포트 없음(AC-4).

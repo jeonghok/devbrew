@@ -70,6 +70,29 @@ class TestSessionEndCleanup(unittest.TestCase):
         proc = run_hook(self.tmp, {"session_id": ""})
         self.assertEqual(proc.returncode, 0)
 
+    def test_traversal_session_id_cannot_delete_outside_state_root(self):
+        """`session_id` 는 payload 에서 오는 미검증 입력이다.
+
+        이 훅은 spec-distill 쪽과 달리 charset 패턴으로 거르지 않는다. Task 21 이전에는
+        `Path(root) / "../../victim"` 이 그대로 `shutil.rmtree` 로 흘러가 state root
+        **밖**이 지워졌다(수정 전 판본으로 실측: victim 디렉토리가 삭제됨).
+        `gc_common.safe_rmtree` 의 root 검증이 그 자리를 막는다.
+        """
+        victim = Path(self.tmp) / "victim"
+        victim.mkdir()
+        (victim / "keep.txt").write_text("살아있어야 한다", encoding="utf-8")
+        (Path(self.tmp) / ".claude" / "quality-gates").mkdir(parents=True)
+
+        proc = run_hook(self.tmp, {"session_id": "../../victim", "cwd": self.tmp})
+
+        self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+        self.assertTrue(
+            victim.exists(),
+            msg=f"state root 밖 경로가 삭제됐다 (경로 탈출); stderr={proc.stderr}",
+        )
+        # 양의 짝: 거부는 **조용하면 안 된다.** stderr 가 비면 삭제 실패가 성공으로 읽힌다.
+        self.assertIn("삭제 거부", proc.stderr, msg=f"거부가 조용했다: {proc.stderr!r}")
+
     def test_removes_dangling_worktree(self):
         """Dangling worktree (no terminal Stop hook fired) is cleaned at SessionEnd."""
         # Set up a git repo with a worktree and state pointing to it

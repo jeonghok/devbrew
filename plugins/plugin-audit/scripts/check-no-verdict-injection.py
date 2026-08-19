@@ -37,6 +37,7 @@ SURFACES = [
     "scripts/audit-workflow.js",
     "scripts/smoke-workflow.js",
     "scripts/codex-prompt-preamble.md",
+    "scripts/prompt-preamble.md",
     "agents/plugin-auditor.md",
     "agents/audit-refuter.md",
     "agents/smoke-probe.md",

@@ -7,6 +7,7 @@ Triggered by Edit, Write, MultiEdit. Idempotent (dedup). Atomic rename.
 Kill switches:
   DEVBREW_DISABLE_QUALITY_GATES=1   - disables this hook entirely
   DEVBREW_SKIP_HOOKS=quality-gates:session-tracker  - skip just this one
+  DEVBREW_SKIP_HOOKS=quality-gates:PostToolUse      - skip every PostToolUse hook here
 """
 from __future__ import annotations
 
@@ -15,16 +16,11 @@ import os
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from kill_switch_active import kill_switch_active  # noqa: E402
+
 TRACKED_TOOLS = {"Edit", "Write", "MultiEdit"}
 HEADER = "# Quality-Gates Session Files\n\n"
-
-
-def _disabled() -> bool:
-    if os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1":
-        return True
-    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
-    tokens = {t.strip() for t in skip.split(",") if t.strip()}
-    return "quality-gates:session-tracker" in tokens
 
 
 def _read_existing(path: Path) -> set[str]:
@@ -45,7 +41,7 @@ def _write_atomic(path: Path, content: str) -> None:
 
 
 def main() -> int:
-    if _disabled():
+    if kill_switch_active("quality-gates", "session-tracker", "PostToolUse"):
         return 0
     try:
         payload = json.load(sys.stdin)

@@ -106,11 +106,11 @@ Conventional Commits (`<type>(<scope>): <description>`). 브랜치는 `main`에�
 | `shared/codex/detect_codex.sh` | codex 가용성 판정 정본 (3개 상대 심볼릭 링크가 가리킴 — 2026-08-17 실측으로 물리 사본에서 전환, 설계 §16.1) |
 | `shared/codex/codex_findings_to_yaml.py` | codex JSONL → finding YAML 정본 (2개 상대 심볼릭 링크가 가리킴 — 같은 전환) |
 | `shared/codex/codex_jsonl.py` | codex JSONL 이벤트 파서 정본 — `extract_last_agent_message` (3사본, census #58. Task 17 Step 4b) |
-| `plugins/plugin-audit/scripts/codex_jsonl.py` | 위의 `copy-of` 물리 사본 (심볼릭 링크가 아닌 이유는 Task 17 Step 4b) |
+| `plugins/{plugin-audit,quality-gates,spec-distill}/scripts/codex_jsonl.py` | 위의 `copy-of` 물리 사본 **셋** — 배포 지점마다 하나 (심볼릭 링크가 아닌 이유·셋인 이유는 Task 17 Step 4b) |
 | `plugins/spec-distill/scripts/hook_common.py` | spec-distill 훅 두 개 + `arm_ledger.py` 의 공유 조각 (census #149·#121·#122·#45. Task 22 Step 2b·2c) |
 | `plugins/quality-gates/scripts/state_path.py` | quality-gates 내부 state root 해석 정본 (census #88. Task 21 Step 2b) |
 | `plugins/quality-gates/scripts/kill_switch_active.py` | kill switch 판정 `copy-of` 사본 — `_disabled` 5곳이 quality-gates 다 (census #37. Task 19) |
-| `shared/codex/runner_common.sh` | `_degrade_if_empty` 등 러너 공통 조각 (5러너) |
+| `shared/codex/runner_common.sh` | `_degrade_if_empty` · `write_failclosed` — codex 러너 공통 조각. **중첩 YAML 계열 3러너**가 source 한다(감사 러너는 JSON, 아티팩트 러너는 평면 YAML 소비자라 제외 — 설계 §6.2 정정) |
 | `shared/codex/prompt-preamble.md` | P21 untrusted-data 3문장 정본 (5빌더) |
 | `shared/killswitch/kill_switch_active.py` | kill switch 판정 정본 (5정의) |
 | `shared/gc/gc_common.py` | TTL-GC 공통 조각 (2 GC 스크립트) |
@@ -351,7 +351,7 @@ wc -l "$SCRATCH"/census-*.md
 | `codex_findings_to_yaml.py` ×2 | **진짜 사본** | 유일한 행동 차이는 emit keyset(`category`·`target_section`). 나머지 140줄 diff는 전부 주석·포매팅 |
 | `kill_switch_active` ×5 (py) | **진짜 사본** | 같은 책임(kill switch 판정), 본문 5종 전부 다름 = drift. `CLAUDE.md:48`이 보안 컨트롤로 규정 |
 | `emit_skip` ×3 · `_ver_lt` ×3 (sh) | 진짜 사본에 **흡수** | `detect_codex.sh` 안에만 존재 — 그 파일 통합으로 함께 소멸 |
-| `_degrade_if_empty` ×5 (sh) | **부분 사본** | 5러너가 각자 다른 프롬프트 빌더를 부름. 출력 스키마 4종은 §6.2가 통일 대상으로 지정 |
+| `_degrade_if_empty` ×5 (sh) | **부분 사본** | 5러너가 각자 다른 프롬프트 빌더를 부름. 출력 스키마 4종 중 **중첩 YAML 계열 셋만** 통일됐다(Task 20 완료) — 나머지 둘은 소비자 계약이 달라 의도적으로 남는다, 설계 §6.2 정정 |
 | `session-end-cleanup.py` ×2 | **부분 사본** | 각자 kill switch 토큰 + `sys.path.insert`; qg는 worktree 정리까지 |
 | `qg-gc.py` ↔ `spec-distill-gc.py` | **부분 사본** | state root 해석 방식이 다름 |
 | `test_detect_codex.sh` ×2 (120 vs 54줄) | **부분 사본** | 같은 대상을 재지만 커버 범위가 다름 |
@@ -1795,7 +1795,7 @@ mkdir -p shared/codex shared/killswitch shared/gc shared/tests
 
 ## 정본과 배포 지점이 같다는 보장
 
-`shared/tests/test_copy_of_contract.sh` — 두 계약을 검사한다: **심볼릭 링크**는 링크여야 하고 존재하는 대상을 가리켜야 하고 그 대상이 `shared/` 아래여야 한다(내용이 갈라질 수 없으므로 바이트 비교가 필요 없다). **`copy-of:` 잔여**는 그 줄이 가리키는 파일과 그 줄만 제외하고 바이트가 같아야 한다.
+`shared/tests/test_copy_of_contract.sh` — 세 계약을 검사한다: **심볼릭 링크**는 구조에서 도출된 모든 배포 지점이 링크여야 하고 존재하는 대상을 가리켜야 하고 그 대상이 기대한 정본과 일치해야 한다(내용이 갈라질 수 없으므로 바이트 비교가 필요 없다). **`copy-of:` 잔여**는 그 줄이 가리키는 파일과 그 줄만 제외하고 바이트가 같아야 한다. **import 형제 사본**은 `import` 로만 소비되는 정본이, 소비자를 실제로 실행했을 때 그 모듈이 **풀린 디렉토리**(끝까지 안 풀리면 소비자 자신의 디렉토리)에 형제 사본을 가져야 한다(∃ 가 아니라 ∀).
 
 `shared/tests/test_no_new_duplication.sh` — 20줄 이상 완전히 같은 블록이 2개 이상 파일에 있는데 그 파일들이 심볼릭 링크나 `copy-of`로 설명되지 않으면 RED.
 
@@ -2629,8 +2629,6 @@ Expected: Task 1 기준선과 같은 결과 + `Total:` 줄의 개수가 이관 �
 
 이 축이 가장 조용하게 실패한다. 이관 후 **모든 `field` 호출의 첫 인자가 리터럴 키인지** 확인한다.
 
-> **⚠ 렌더링 주의 — 아래 블록의 코드 펜스가 닫혀 있지 않다** (`ee1d95f` 부터 있던 것, 2026-08-17 재검토 기록). 다음 ```` ```bash ```` 이 열린 뒤 닫는 ```` ``` ```` 없이 산문과 두 번째 ```` ```bash ```` 이 이어져, 뷰어에 따라 **"음의 짝이 필요하다" 문단과 그 아래 양성 확인 `grep -rcE` 까지 한 덩어리 bash 블록 안에 들어가 보인다.** 실행에는 영향이 없다 — 명령을 한 줄씩 복사해 돌리면 그대로 동작한다. **산문이 코드처럼 보여도 그것을 셸에 붙여넣지 말 것.** 펜스 구조 자체는 이 라운드 범위 밖이라 손대지 않았다.
-
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
 echo "=== 첫 인자가 변수인 field 호출 (순서 뒤집기 누락 의심) ==="
@@ -2645,6 +2643,7 @@ echo "=== 이관 전 이름이 정의로 남아 있는가 (지우기 누락) ===
 grep -rnE '^[[:space:]]*(check|ag|agf|ng|bad|expect|assert_absent|assert_not_grep|assert_body_grep|pass|fail)\(\)' \
   plugins/*/tests/*.sh 2>/dev/null
 echo "=== (위 출력이 비어야 한다) ==="
+```
 
 **음의 짝이 필요하다.** "출력이 비었다"는 grep이 코퍼스를 실제로 봤다는 증거가 아니다:
 
@@ -2827,8 +2826,9 @@ cd /Users/jeonghokim/Downloads/devbrew
 cat > plugins/quality-gates/scripts/codex-killswitch.conf <<'CONF'
 # detect_codex.sh 가 읽는 형제 설정. **사본이 아니다** — 플러그인마다 달라야 하는 값이다.
 #
-# 왜 인자가 아니라 파일인가: quality-gates/tests/test_codex_copies_agree.sh 가 세 사본을
-# **인자 없이** 태워 "각자 자기 변수에만 반응한다"를 9개 assertion 으로 검사한다.
+# 왜 인자가 아니라 파일인가: quality-gates/tests/test_codex_copies_agree.sh 가 세 배포
+# 지점을 **인자 없이** 태워 "각자 자기 변수에만 반응한다"를 9개 assertion 으로 검사한다.
+# (배포 지점은 정본을 가리키는 심볼릭 링크다 — 물리 사본이 아니다.)
 # 인자로 빼면 그 9개가 전부 RED 가 된다(C10 위반). 파일이면 인자 없이 실행해도
 # 각자 자기 디렉토리의 값을 읽으므로 그 락이 그대로 산다.
 #
@@ -2870,9 +2870,15 @@ Expected: `git ls-files`가 **3개**를 낸다.
 # 형제 파일 `codex-killswitch.conf` 로 나가 있다 — 인자가 아니라 파일인 이유는 그 conf
 # 파일의 주석과 설계 §6.4 에 있다(기존 행동 등가 락이 세 배포 지점을 **인자 없이** 태운다).
 #
+# 이 정본은 spec-distill 사본 헤더의 provenance 를 흡수한다:
+# "Vendored from quality-gates (spec-distill design §6 #1)" — 세 사본의 출발점이
+# quality-gates 판이었다는 사실. plugin-audit 판이 달던 "(Task 10)" 귀속은 옮기지
+# 않았다 — 그 락의 이름(test_codex_copies_agree.sh)이 아래에 그대로 나온다.
+#
 # 행동 등가는 `quality-gates/tests/test_codex_copies_agree.sh` 가 재고,
 # 배포 지점이 이 정본을 가리키는지는 `shared/tests/test_copy_of_contract.sh` 가
-# 잰다 — 두 락이 각자 다른 것을 잰다(설계 §6.4). 앞의 락 헤더가 *"왜 파일 diff 가
+# **잴 것이다 — 그 파일은 Task 16이 만든다. 이 커밋 시점에는 아직 없다.**
+# 두 락은 각자 다른 것을 잰다(설계 §6.4). 앞의 락 헤더가 *"왜 파일 diff 가
 # 아닌가: 두 사본은 의도된 차이를 갖는다"* 라고 적어 둔 그 전제는 이 통합이 없앴다.
 # (바이트 동일성은 이제 "측정할" 대상이 아니다 — 심볼릭 링크라 애초에 갈라질 수 없다.)
 
@@ -2897,6 +2903,19 @@ fi
 . "$_CONF"
 if [[ -z "${CODEX_KILL_SWITCH_VAR:-}" ]]; then
   emit_skip 'killswitch_config_incomplete'
+  exit 0
+fi
+# 0a. **값이 유효한 식별자인가** — 비어 있지 않다는 것만으로는 부족하다.
+#     〔2026-08-17 실측, 이 검사가 없던 판본을 반증한 기록〕 CRLF(`…CODEX\r`) · 공백만 ·
+#     탭 · 메타문자 값은 위 `-z` 를 통과하는데, bash 3.2 의 `${!VAR:-0}` 는 유효하지 않은
+#     식별자에 대해 **에러도 stderr 도 없이 `0`** 을 낸다. 사용자가 opt-out 을 걸어 둔 채로
+#     codex 가 그대로 도는, kill switch 우회다(보안 컨트롤 훼손 — CLAUDE.md:48).
+#     이 검사는 `${!VAR}` 가 **두 번째 코드 실행 sink** 인 것도 함께 닫는다:
+#     `a[$(cmd)]` 같은 값은 배열 첨자 산술 평가로 명령 치환이 일어나는데(실측),
+#     아래 정규식에 맞지 않아 여기서 걸린다.
+#     정규식을 따옴표로 감싸지 말 것 — bash 3.2 는 인용된 우변을 리터럴로 취급한다.
+if [[ ! "$CODEX_KILL_SWITCH_VAR" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+  emit_skip 'killswitch_config_invalid'
   exit 0
 fi
 
@@ -2936,24 +2955,53 @@ for p in quality-gates spec-distill plugin-audit; do
   ln -s ../../../shared/codex/detect_codex.sh "plugins/$p/scripts/detect_codex.sh"
 done
 chmod +x shared/codex/detect_codex.sh
-# 링크인가 · 대상이 존재하는가 · 실행 시 정본과 같은 내용을 내는가
+CANON="$(cd shared/codex && pwd -P)/detect_codex.sh"
+# 링크인가 · 대상이 존재하는가 · **정본을** 지목하는가 · 링크로 태웠을 때 형제 conf 를 찾는가
 for p in quality-gates spec-distill plugin-audit; do
   f="plugins/$p/scripts/detect_codex.sh"
   printf '%-14s ' "$p"
   if [ -L "$f" ] && [ -e "$f" ]; then
-    tgt="$(readlink "$f")"
-    printf '심볼릭 링크 ✓ → %s ' "$tgt"
-    diff -q <(bash "$f" 2>&1 || true) <(bash shared/codex/detect_codex.sh 2>&1 || true) >/dev/null \
-      && echo "실행 결과 동일 ✓" || echo "❌ 실행 결과가 갈린다"
+    printf '링크 ✓ → %s ' "$(readlink "$f")"
+    [ "$(readlink -f "$f")" = "$CANON" ] && printf '정본 지목 ✓ ' || printf '❌ 다른 대상 '
+    out="$(bash "$f" 2>&1 || true)"
+    case "$out" in
+      *killswitch_config_missing*|*killswitch_config_incomplete*)
+        echo "❌ 형제 conf 를 못 읽었다 — 링크 경유 BASH_SOURCE 조회 실패" ;;
+      *'codex_available:'*) echo "형제 conf 조회 ✓" ;;
+      *) echo "❌ codex_available 줄이 없다: $(printf '%s' "$out" | tr '\n' ' ')" ;;
+    esac
   else
     echo "❌ 링크가 아니거나 대상이 없다"
   fi
 done
+echo "=== 세 링크의 출력이 서로 같은가 (같은 정본·같은 환경) ==="
+a="$(bash plugins/quality-gates/scripts/detect_codex.sh 2>&1)"
+b="$(bash plugins/spec-distill/scripts/detect_codex.sh 2>&1)"
+c="$(bash plugins/plugin-audit/scripts/detect_codex.sh 2>&1)"
+{ [ "$a" = "$b" ] && [ "$b" = "$c" ]; } && echo "  셋 다 동일 ✓" || echo "  ❌ 갈린다"
 git add plugins/*/scripts/detect_codex.sh shared/codex/detect_codex.sh
 git ls-files -s plugins/*/scripts/detect_codex.sh   # mode 120000 이어야 한다
 ```
 
-Expected: 셋 다 `심볼릭 링크 ✓` · `실행 결과 동일 ✓` · `git ls-files -s`의 모드가 `120000`.
+> **왜 정본과 출력을 대조하지 않는가** 〔2026-08-17 실측, 이 검사의 옛 판본을 반증한 기록〕:
+> 옛 판본은 `diff -q <(bash "$f") <(bash shared/codex/detect_codex.sh)` 로 링크와 **정본의
+> 출력을 대조**하고 "실행 결과 동일 ✓" 를 기대했다. 그것은 **설계상 항상 실패한다** — 정본
+> 옆에는 `codex-killswitch.conf` 가 없고(있으면 안 된다: 값이 플러그인마다 달라야 한다),
+> Step 4 의 fail-closed 규칙에 따라 정본을 직접 태우면 `killswitch_config_missing` 이 난다.
+> 반면 링크는 자기 플러그인의 conf 를 읽어 정상 판정을 낸다. 실측: 링크 → `codex_available:
+> true`, 정본 직접 → `killswitch_config_missing`. **이 검사가 RED 를 낸다고 링크를 의심하지
+> 말 것** — 그리고 여기서 "고치려고" 정본 옆에 conf 를 두거나 로더에 기본 변수명 fallback 을
+> 넣으면 kill switch 가 조용히 무반응이 되는 fail-open, 즉 보안 컨트롤 훼손이다(`CLAUDE.md:48`).
+>
+> 대신 재는 것: **대상 동일성**(`readlink -f` == 정본 절대경로 — 내용 비교가 아니라 같은
+> inode 를 가리키는가)과 **형제 conf 조회 성공**(`killswitch_config_missing` 이 *아닐* 것).
+> 뒤의 것이 이 태스크의 진짜 신규 위험이다 — `${BASH_SOURCE[0]}` 이 심볼릭 링크를 역참조하면
+> conf 를 정본 디렉토리에서 찾아 전부 fail-closed 로 죽는다. 〔실측: macOS bash 3.2.57 은
+> 역참조하지 않고 호출된 경로를 그대로 준다 — 그래서 이 방식이 성립한다. 이 검사는 그 전제가
+> 미래에 깨졌을 때 잡는 자리다.〕
+
+Expected: 셋 다 `링크 ✓` · `정본 지목 ✓` · `형제 conf 조회 ✓` · 세 출력이 `셋 다 동일 ✓` ·
+`git ls-files -s`의 모드가 `120000`.
 `100644`/`100755`면 심볼릭 링크가 아니라 일반 파일로 커밋됐다는 뜻이다(예: `cp -L`을 실수로
 썼을 때).
 
@@ -2992,16 +3040,22 @@ Expected: 셋 다 `fail-closed ✓`
 `plugins/quality-gates/tests/test_codex_copies_agree.sh:4-6`의 *"왜 파일 diff가 아닌가"* 문단 **뒤에** 한 문단을 추가한다 (기존 문장을 지우지 않는다 — 그것은 이 락이 무엇을 재는지의 설명이고 여전히 참이다):
 
 ```
-# **역할 분담 (2026-08 무게 감축, 2026-08-17 실측 이후 심볼릭 링크로 갱신)**: 세
-# 사본은 이제 shared/codex/detect_codex.sh 를 가리키는 상대 심볼릭 링크다(설계
-# §16.1) — 바이트 동일성은 더 이상 "측정할" 대상이 아니라 파일이 하나뿐이라는
-# 구조로 보장된다. 링크 자체가 여전히 링크인지 · 존재하는 정본을 가리키는지는
-# `shared/tests/test_copy_of_contract.sh` 가 검사한다. 위 문단이 기각한 전제
-# ("두 사본은 의도된 차이를 갖는다")는 그 차이를 형제 설정 파일
-# `codex-killswitch.conf` 로 빼내면서 사라졌다. 이 락은 **행동 등가**를 계속 잰다 —
-# 세 축 중 판정 등가는 파일이 하나뿐이라 공허해지지만 GREEN 이라 해롭지 않고,
-# **값 고정**(알려진-상이 두 표본의 실제 판정값)과 **kill switch**
-# (인자 없이 태워 자기 변수에만 반응) 두 축은 그대로 유효하다.
+# **역할 분담 — 층① (detect_codex.sh) 에 한정한 갱신** (2026-08 무게 감축,
+# 2026-08-17 실측 이후 심볼릭 링크로). 세 배포 지점은 이제
+# shared/codex/detect_codex.sh 를 가리키는 상대 심볼릭 링크다(설계 §16.1) —
+# **바이트 동일성**은 더 이상 "측정할" 대상이 아니라 파일이 하나뿐이라는 구조로
+# 보장된다. 링크가 여전히 링크인지 · 존재하는 정본을 가리키는지는
+# `shared/tests/test_copy_of_contract.sh` 가 **잴 것이다 — 그 파일은 Task 16이
+# 만든다. 이 커밋 시점에는 아직 없다.** 위 문단이 기각한 전제("두 사본은 의도된
+# 차이를 갖는다")는 그 차이를 형제 설정 파일 `codex-killswitch.conf` 로 빼내면서
+# 사라졌다.
+#
+# **이 문단이 말하지 않는 것**: 층①의 kill switch 축은 그대로 유효하다 — 세 링크가
+# **서로 다른 conf 세 개**를 읽으므로 conf 드리프트·교차배선에 여전히 이빨이 있다
+# (2026-08-17 mutation 으로 확인: 교차배선 60/62 · conf 무시 58/62 · 스위치 영구정지
+# 59/62, 전부 RED). 그리고 이 파일의 나머지 축들은 detect_codex 와 **무관하다** —
+# 층④는 아직 물리 사본 2개인 codex_findings_to_yaml.py 를 비교하고(판정 등가 + 값
+# 고정), 별도로 mock 자산 교집합 락이 있다. 이 통합은 그 축들을 건드리지 않았다.
 ```
 
 - [ ] **Step 9: 호출부 loud-failure 수정 — "감지기를 못 돌렸다"와 "codex가 없다"를 구별한다**
@@ -3059,10 +3113,11 @@ git commit -m "refactor(codex): detect_codex.sh 3사본을 shared/ 정본 + 심�
 **Files:**
 - Create: `shared/tests/test_copy_of_contract.sh` (실행비트 필수) — 이름은 유지한다. Task 15·17·18·19·35가 이 파일명을 다수 참조하고, 파일이 검사하는 계약(§12.1)이 여전히 "copy-of" 개념(정본을 향한 배포 지점)이므로 이름 자체는 허위가 아니다 — 내부 축이 바뀌었을 뿐이다.
 
-**락은 이제 두 계약이다** (설계 §12.1):
+**락은 이제 세 계약이다** (설계 §12.1 + 2026-08-17 fix round 2 R2-2):
 
 > **심볼릭 링크**: 구조에서 도출된 모든 배포 지점은 존재해야 하고, 심볼릭 링크여야 하고, 기대한 정본을 정확히 가리켜야 한다. **missing·regular-file·wrong-target 셋은 서로 다른 실패이고 메시지에서 구별돼야 한다.**
 > **`copy-of` 물리 사본**(잔여): `copy-of` 줄이 있는 파일은, 그 줄이 가리키는 파일과 **그 줄만 제외하고** 바이트가 같아야 한다. 부수 조건 셋: 정본은 `copy-of` 줄을 갖지 않는다(순환 금지) · 가리키는 경로는 존재해야 한다 · 정본은 `shared/` 아래여야 한다.
+> **import 형제 사본**(축 1c): `import` 로만 소비되는 정본은 **소비자를 가진 모든 배포 디렉토리**에 형제 사본을 가져야 한다 — ∃ 가 아니라 ∀ 다. 그리고 그 조건은 **링크 없는 일반 파일 트리**(설치본 대역)에서 재야 한다. 리포 경로는 심볼릭 링크가 실재해 형제가 없어도 통과하기 때문이다.
 
 **배포 지점 집합을 손으로 나열하지 않는다.** 심볼릭 링크 축은 **어느 플러그인이 그 정본을 배포해야 하는가를 구조에서 도출**한다 — 정본의 basename을 `scripts/<basename>` 형태(실제 호출 패턴: `${CLAUDE_PLUGIN_ROOT}/scripts/<basename>` 또는 상대 경로)로 참조하는 SKILL.md·스크립트·훅·에이전트·커맨드 파일을 찾고(배포 지점 자기 자신은 제외), 그 참조원이 속한 플러그인이 기대 집합이다. **이 도출이 mutation 대상(배포 지점 자신)에 조종될 수 없는 이유**: 참조원은 SKILL.md·호출자 스크립트다 — 배포 지점을 지우거나 깨뜨려도 참조원은 그대로 남아 여전히 `scripts/<basename>`을 참조하므로 기대 집합이 줄지 않는다(위 결함 기록의 mutation들로 실측 확인, 아래 Step 3).
 
@@ -3098,13 +3153,17 @@ git commit -m "refactor(codex): detect_codex.sh 3사본을 shared/ 정본 + 심�
 #!/usr/bin/env bash
 # guards: plugins/** shared/**
 #
-# 통합한 것의 **재분열**을 막는다. 배포 지점이 정본을 가리키는 방법은 둘이다:
+# 통합한 것의 **재분열**을 막는다. 배포 지점이 정본을 가리키는 방법은 셋이다:
+# (이 수사는 축 0 이 아래 목록·축 헤더와 대조한다 — 손으로 어긋나게 둘 수 없다.)
 #
 #   (a) 심볼릭 링크 — 구조에서 도출된 모든 배포 지점이 링크여야 하고, 존재하는
 #       대상을 가리켜야 하고, 그 대상이 기대한 정본과 정확히 일치해야 한다.
 #       이것이 2026-08-17 실측(설계 §16.1) 이후의 기본 방식이다.
 #   (b) copy-of 물리 사본(잔여, 링크를 못 쓰는 경우) — copy-of 줄이 있는 파일은,
 #       그 줄이 가리키는 파일과 그 줄만 제외하고 바이트가 같아야 한다.
+#   (c) import 형제 사본(축 1c) — import 로만 소비되는 정본은 소비자를 가진 모든
+#       배포 디렉토리에 형제 사본을 가져야 한다(∀). (b)는 있는 사본이 같은지만
+#       보므로 **빠진 자리**를 못 잡는다. 자세한 이유는 축 1c 주석.
 #
 # **(a)는 도미넌스(∀) 체크다 — "링크인 것들만" 훑지 않는다.** 첫 판본은
 # git ls-files 로 나온 파일 중 [ -L "$f" ] 인 것만 봤다: 링크가 깨져 일반
@@ -3120,6 +3179,14 @@ git commit -m "refactor(codex): detect_codex.sh 3사본을 shared/ 정본 + 심�
 #
 # 실행 지점은 `/qg` Runtime gate 하나다. 상시 자동 실행이 아니다 —
 # C16 이 실행 지점 신설을 금했으므로 이 제약 아래의 최선이다.
+#
+# **이 락이 스스로 지키지 못하는 것**은 이 파일 자신을 고치는 편집인데, 그 모양이 정확히
+# 하나다 — **마지막 `axis_audit` 호출과 EXIT 트랩 등록을 함께 지우는 것.** 그러면 락은
+# `rc=0` 으로, `Total:` 줄 없이, 실패 `✗` 를 찍은 채로 끝난다(2026-08-19 실측). 둘 중
+# 하나만 지우는 것은 잡히거나(호출) 아무 효과가 없다(트랩). 각 축이 넘기는 기대 최소치도
+# 상수로 바꿔치기할 수 있지만 **그 축이 코퍼스-무관 단언을 남긴 채 축소될 때에 한한다.**
+# 실측 근거는 아래 축-실행 계측기 주석에 있다. 이 면은 사람이 읽는 diff 리뷰와
+# plan Task 16 Step 1 의 verbatim 임베드 대조가 맡는다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT" || exit 1
@@ -3136,11 +3203,257 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   exit 0
 fi
 
+# ── 축-실행 계측과 감사 (F1) ─────────────────────────────────────────────────
+# 〔2026-08-18 fix round 1, F1〕 축 0 은 **주석 텍스트**만 센다. 그래서 어떤 축의
+# 구현 본문을 통째로 지우고 헤더 주석만 남기면 세 카운터가 전부 그대로라 GREEN 이
+# 된다(실측). 주석 개수는 "그 축이 있다고 **적혀 있다**"만 말할 뿐 "그 축이 **돌았다**"
+# 는 말하지 않는다. 그래서 각 축이 **실제로 실행한 단언 수**를 여기서 기록하고,
+# 마지막에 헤더 집합과 대조한다. 호출은 **각 축 본문의 맨 끝**에 둔다.
+#
+# 〔2026-08-19 fix round 2b, H1·H2·H3〕 첫 판본의 계측기는 **통째-본문 삭제** — 그것을
+# 쓴 저자가 흔든 유일한 모양 — 하나에만 저항했다. 실측으로 뚫린 네 모양과 그것을 닫은
+# 구조는 이렇다. 어느 것도 계측기 위에 계측기를 얹지 않는다.
+#  · H3 — `axis_tally 1c` 처럼 **라벨을 인자로** 받으면 그 호출을 축 2 본문으로 옮겨도
+#    기록은 `1c` 로 남았다(실측: GREEN + *"축 1c 가 단언 3건을 실제로 실행했다"* 라는
+#    거짓 문장이 pass 로 출력). 이제 id 를 인자로 받지 않고 **호출 줄 번호에서 가장
+#    가까운 앞 축 헤더**로 도출한다 — 라벨과 호출 자리가 같은 것이 되어, 옮기면 옮겨
+#    간 축의 이름이 나온다. 이름을 대는 자가 자기 위치를 고를 수 없다.
+#  · H1(a) — `_AXIS_SEEN=$now` **한 줄**을 지우면 모든 축의 기록이 누계가 되어 전부
+#    `≥1` 을 만족했다(실측 GREEN). 이제 워터마크를 두지 않고 **절대 카운터를 그대로**
+#    적는다. 축별 수는 감사가 이웃한 두 절대값의 차로 낸다 — 지울 리셋 줄이 없다.
+#    차 계산 자체를 망가뜨리는 편집(누계로 되돌리기)은 감사의 **합 불변식**이 잡는다:
+#    축별 수의 합은 감사 직전까지 실행된 단언 총수와 정확히 같아야 한다.
+#  · H1(b) — 감사 블록 자체는 축이 아니라(헤더에 콜론이 없어 `AXIS_IDS` 밖이다) 통째로
+#    지워도 아무도 몰랐다(실측 GREEN). 이제 감사가 `finish` 를 품고, 감사가 돌지 않으면
+#    **EXIT 트랩이 rc=1 로 죽인다.** `finish` 없이는 실패 개수가 종료 코드로 바뀌지
+#    않으므로 — 삭제가 조용해지는 바로 그 이유로 — 트랩이 그 자리를 맡는다.
+#  · H2 — `≥1` 은 코퍼스를 안 건드리는 가드 하나로도 충족됐다(축 1c 를 F3 가드만 남기고
+#    줄여도 GREEN 이었다). 이제 각 축이 **자기 본문에서 도출한 기대 최소치**를
+#    `axis_tally` 에 넘긴다: 코퍼스 축은 자기가 실제로 훑은 항목 수를, 축 0 은 자기 헤더가
+#    열거한 도출 자리 수를 낸다. 본문을 가드만 남기고 줄이면 그 수가 0 으로 떨어지거나
+#    실행 수가 그 밑으로 내려가 RED 다.
+#
+# **여기까지도 남는 것(주장 축소).** 2026-08-19 에 실측한 것만 적는다 — 앞 판본의 이 문단은
+# 양쪽으로 다 틀렸다(트랩 한 줄을 과소평가하고, 상수 바꿔치기를 과대평가했다).
+#  · **한 줄씩 지우는 것은 잡히거나 무해하다.** 마지막 `axis_audit` 호출만 지우면 트랩이
+#    `rc=1` 로 죽인다(`Total:` 줄 없이 `✗` 한 줄). 반대로 **트랩 등록 줄만** 지우면 감사가
+#    그대로 돌고 `finish` 가 종료 코드를 내므로 **아무 효과가 없다** — 무변이와 **한 글자도
+#    다르지 않은** 요약이 나온다. 그 한 줄은 감사가 돌 때는 죽은 코드다.
+#  · **둘을 함께 지우면 약해지는 것이 아니라 판정이 사라진다.** 감사 호출과 트랩 등록이
+#    같이 없어지면 `rc=0` 이고 `Total:` 줄이 아예 안 나온다. 더 나쁜 실측: **진짜 결함이
+#    있어도**(인덱스에 없는 배포 지점 하나를 얹은 상태) `✗` 두 줄을 찍은 채 `rc=0` 으로
+#    끝났다. 종료 코드로 판정하는 러너에게 그것은 GREEN 이다 — 침묵하는 성공 보고다.
+#    이 **쌍**이 이 락의 유일한 조용한 실패 모양이고, 그래서 여기 이름을 적어 둔다.
+#  · **기대 최소치를 상수로 바꾸는 것만으로는 안 된다.** 축 1c 본문을 (F3 분류기 가드와
+#    M6 사본 앵커까지) 통째로 지우면 실행 수가 0 이라 어떤 양수 상수도 미달이고, `0` 을
+#    선언하는 것 자체가 이름 붙은 실패다(둘 다 실측 RED). 상수가 먹히는 것은 **축소가
+#    살아남은 단언을 남길 때뿐**이다 — 축 1c 의 ∀ 프로브 루프만 지우고 위 두 가드를 남기면
+#    그 가드들이 계속 단언을 실행하므로 **그 수 이하의 상수**가 통과한다(실측 GREEN). 즉 잔여는
+#    "상수로 바꾸면 뚫린다" 가 아니라 **"살아남은 코퍼스-무관 단언 수 이하의 상수"** 하나로
+#    좁혀진다. H2 가 겨냥한 바로 그 모양이고, 여기서 완전히 닫히지는 않았다.
+# 계측기를 계측하는 계측기를 무한히 쌓지 않기로 했으므로 이 셋은 **여기서 그렇게 말하는
+# 것**으로 둔다(머리말의 같은 문장 참조).
+# 〔이 문단에 **개수를 적지 않는다**〕 첫 판본은 단언 총계와 잔여 가드 수를 리터럴로 적었다.
+# 다섯 커밋 뒤 Ruling 51 이 정본 도출을 바꾸자 총계가 달라졌고, 변이의 **모양**은 그대로인데
+# **주석만 거짓**이 됐다. 이 파일이 락으로서 잡는 것은 코드지 자기 주석이 아니라, 드리프트하는
+# 값은 아무도 못 잡는다. 그래서 여기서는 값이 아니라 모양만 적는다 — 옛 값을 인용해서도 안
+# 된다(인용된 리터럴은 다음 독자에게 다시 현재 값으로 읽힌다).
+_AXIS_TALLY=""
+_AXIS_AUDIT_DONE=0
+_LOCK_TMP=""
+_LOCK_RC=0
+
+lock_tmp_add() {   # 정리 대상 등록. 축마다 trap 을 걸면 나중 것이 앞의 것을 조용히 덮는다.
+  _LOCK_TMP="${_LOCK_TMP}$1
+"
+}
+
+axis_tally() {   # axis_tally <이 축이 자기 본문에서 도출한 기대 최소 단언 수>
+  # 축 id 는 **인자가 아니라 호출 자리**에서 온다 〔H3〕. 도출 규칙은 `AXIS_IDS` 와 같다.
+  local ln="${BASH_LINENO[0]}" aid=""
+  [ -f "${SELF:-}" ] && aid="$(sed -n "1,$((ln-1))p" "$SELF" \
+      | sed -nE 's/^# ── 축 ([0-9][a-z]?):.*/\1/p' | tail -1)"
+  _AXIS_TALLY="${_AXIS_TALLY}${aid:-?} $((_ASSERT_PASS+_ASSERT_FAIL)) ${1:-0}
+"
+}
+
+# 감사 — 헤더가 선언한 축 집합과 **실제로 단언을 남긴** 축 집합을 대조하고, 축별 수가
+# 그 축이 스스로 도출한 기대 최소치 이상인지 본다. 두 방향 다 본다(선언했는데 안 돌았다 /
+# 돌았는데 선언이 없다). 어느 쪽도 주석만 고쳐서는 맞출 수 없다.
+# 이 함수가 `finish` 를 품는다 — 이 락의 마지막 실행 줄은 `axis_audit` 다.
+axis_audit() {
+  local total prev=0 sum=0 line aid abs amin d tallied_ids n_axis_ids
+  total=$((_ASSERT_PASS+_ASSERT_FAIL))
+  tallied_ids="$(printf '%s' "$_AXIS_TALLY" | awk '{print $1}' | sort -u)"
+  assert_eq "$tallied_ids" "$AXIS_IDS" "축-실행: 헤더가 선언한 축 집합과 실제로 단언을 실행한 축 집합이 같다"
+  n_axis_ids="$(printf '%s\n' "$AXIS_IDS" | grep -c . || true)"
+  if [ "$n_axis_ids" -ge 1 ]; then
+    ok "축-실행: 축 헤더에서 ${n_axis_ids}건의 축 id 를 도출 (대조 근거가 살아 있다)"
+  else
+    no "축-실행: 축 id 가 0건 도출됐다 — 헤더 도출이 깨졌다. 위 집합 대조는 무의미하다"
+  fi
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    set -- $line
+    aid="$1"; abs="$2"; amin="$3"
+    d=$((abs-prev)); prev="$abs"; sum=$((sum+d))
+    if [ "$amin" -lt 1 ] 2>/dev/null; then
+      no "축-실행: 축 $aid 가 기대 최소치를 ${amin} 로 냈다 — 이 축은 자기 코퍼스를 한 번도 훑지 못했다(본문이 죽었거나 도출이 깨졌다)"
+    elif [ "$d" -ge "$amin" ] 2>/dev/null; then
+      ok "축-실행: 축 $aid 가 단언 ${d}건을 실행했다 (자기 본문이 도출한 기대 최소 ${amin}건 이상)"
+    else
+      no "축-실행: 축 $aid 가 단언 ${d}건만 실행했다 — 자기 본문이 도출한 기대 최소는 ${amin}건이다 (본문이 줄었거나 코퍼스 항목이 조용히 건너뛰어졌다)"
+    fi
+  done <<TALLY
+$_AXIS_TALLY
+TALLY
+  assert_eq "$sum" "$total" "축-실행: 축별 단언 수의 합이 감사 직전까지 실행된 단언 총수(${total})와 같다 (축 밖 실행도, 누계로 되돌아간 델타도 없다)"
+  _AXIS_AUDIT_DONE=1
+  finish
+}
+
+# 감사가 안 돌면 실패 개수가 종료 코드가 되지 않는다 — 그 자리를 트랩이 맡는다 〔H1(b)〕.
+_lock_exit() {
+  _LOCK_RC=$?
+  local p
+  while IFS= read -r p; do
+    case "$p" in /*) rm -rf "$p" ;; esac
+  done <<TMPS
+$_LOCK_TMP
+TMPS
+  if [ "$_AXIS_AUDIT_DONE" != "1" ]; then
+    printf '\n  ✗ 축-실행: 감사(axis_audit)가 실행되지 않은 채 락이 끝났다 — 감사가 지워졌거나 그 앞에서 죽었다\n'
+    exit 1
+  fi
+  exit "$_LOCK_RC"
+}
+trap _lock_exit EXIT
+
+# ── 축 0: 계약 수 서술이 이 락의 실제 계약 축 수와 맞는가 ─────────────────────
+# 〔2026-08-18 Ruling 45〕 축 1c 가 들어오기 전 shared/README.md 는 이 락의 계약 수를
+# 실제보다 하나 적게 서술했고, 축이 늘어난 뒤에도 그 문장이 그대로 남았다.
+# **존재 검사로는 못 잡는다** — README 에 특정 문구가 살아 있는지만 보는 grep 은
+# 서술이 낡아도 똑같이 1 을 낸다. 양성 존재 단언은 정확성을 재지 않는다. 그래서
+# 여기서는 **수를 센다**, 그것도 손으로 적지 않고 **세 자리**에서 도출해 서로를 덮는지
+# 본다 — 한 자리만 재면 그 자리를 고치는 편집이 나머지를 조용히 낡게 둔다.
+#   ① 이 파일 머리말의 개수 문장  ② 머리말 (a)(b)(c) 목록  ③ 축 헤더
+#   그리고 ④ shared/README.md 의 서술이 ①②③ 이 합의한 수와 맞는가.
+#
+# 〔2026-08-18 fix round 1, I1〕 ①이 이번에 들어왔다. 그전까지 머리말의 개수 문장은
+# 축 수보다 하나 적은 수를 말한 채 바로 아래에 실제 개수만큼을 나열했고, 축 0 은
+# **그 줄을 안 읽었다** — 이 파일이 더한 기계 검사가 못 보는 유일한 개수 리터럴이
+# 그 파일 자신의 첫 문장이었다. F1 과 맞물리면 최악이다: 그 문장을 믿고 마지막 계약
+# 축의 헤더를 지워 수를 "맞추면" README 까지 함께 "정정"돼, CRIT-1 을 닫은 축이
+# 사라진 채 전부 GREEN 이 된다.
+#
+# **못 보는 것**: 도출은 축 헤더의 번호 관례에 기댄다. 다음 저자가 네 번째 계약을
+# `축 4` 로 붙이면 이 도출은 그것을 **계약 축으로는** 안 센다 — 계약 축은 1 번대 문자
+# 접미로 붙인다(축 2·3 은 계약이 아니라 형제 설정 축이다).
+SELF="shared/tests/$(basename -- "$0")"
+AXIS_IDS=""
+
+# 〔2026-08-19 fix round 2b, H2〕 이 축의 기대 최소 단언 수 — **①②③④ 각 도출 자리가
+# 실제로 존재하는가**를 코퍼스에서 세어 낸다. 축 0 은 훑는 목록이 아니라 *자리*를 갖는
+# 축이라 항목 수가 없다. 첫 시도는 이 수를 축 0 **헤더 주석의 원문자 열거**에서 냈는데,
+# 자기 mutation 이 그것을 뚫었다(실측 A4: 본문을 개수 assert 하나로 줄이면서 그 주석의
+# 원문자를 함께 지우면 기대치가 1 로 떨어져 GREEN). 산문은 그 산문을 고치는 편집과 함께
+# 줄어든다 — 그래서 산문이 아니라 **자리 자체**를 센다. 각 자리는 이 파일과
+# `shared/README.md` 의 실제 줄이고, ②③ 이 없어지면 아래 개수 대조가 먼저 RED 다.
+# 계산은 `if` **밖**에 둔다: 본문을 줄이는 축소가 이 도출까지 함께 지우면 안 된다.
+n_src0=0
+[ "$(grep -cE '^# .*방법은 [^ ]+이다:' "$SELF" 2>/dev/null || true)" -ge 1 ] 2>/dev/null \
+  && n_src0=$((n_src0+1))                                          # ① 머리말 개수 문장
+[ "$(grep -cE '^#   \([a-z]\) ' "$SELF" 2>/dev/null || true)" -ge 1 ] 2>/dev/null \
+  && n_src0=$((n_src0+1))                                          # ② 머리말 (a)(b)(c) 목록
+[ "$(grep -cE '^# ── 축 [0-9][a-z]?:' "$SELF" 2>/dev/null || true)" -ge 1 ] 2>/dev/null \
+  && n_src0=$((n_src0+1))                                          # ③ 축 헤더
+[ "$(grep -cE '계약을 검사한다' shared/README.md 2>/dev/null || true)" -ge 1 ] 2>/dev/null \
+  && n_src0=$((n_src0+1))                                          # ④ shared/README.md 서술
+if [ ! -f "$SELF" ] || [ ! -f "shared/README.md" ]; then
+  no "README: 대조 대상이 없다 (self='$SELF') — 아래 계약 수 대조는 무의미하다"
+else
+  # 축 id 전부(계약 축 1x + 형제 설정 축 2·3 + 이 축 0). 파일 끝의 축-실행 대조가
+  # 같은 집합을 쓴다 — 이름을 열거하지 않고 헤더에서 도출한다.
+  AXIS_IDS="$(sed -nE 's/^# ── 축 ([0-9][a-z]?):.*/\1/p' "$SELF" | sort -u)"
+  n_head="$(grep -cE '^#   \([a-z]\) ' "$SELF" || true)"
+  n_axis="$(printf '%s\n' "$AXIS_IDS" | grep -cE '^1[a-z]$' || true)"
+  assert_eq "$n_head" "$n_axis" "README: 머리말 계약 목록(${n_head}건)과 축 헤더(${n_axis}건)가 같은 수를 낸다"
+  case "$n_axis" in
+    1) want='한';    want_intro='하나' ;;
+    2) want='두';    want_intro='둘' ;;
+    3) want='세';    want_intro='셋' ;;
+    4) want='네';    want_intro='넷' ;;
+    5) want='다섯';  want_intro='다섯' ;;
+    *) want='';      want_intro='' ;;
+  esac
+  if [ -z "$want" ]; then
+    no "README: 축 수 '${n_axis}' 에 대응하는 수사를 모른다 — 도출이 깨졌거나 대응표 밖의 값이다"
+  else
+    ok "README: 계약 축 ${n_axis}건을 이 파일에서 도출 (열거 없음)"
+    # ① 이 파일 머리말의 개수 문장 — **정확히 1건**이어야 한다. 0 건이면 문장이
+    #    사라진 것이고(대조가 조용히 vacuous 해진다), 2 건이면 낡은 문장이 남아 있다.
+    intro_all="$(sed -nE 's/^# .*방법은 ([^ ]+)이다:.*/\1/p' "$SELF")"
+    n_intro="$(printf '%s\n' "$intro_all" | grep -c . || true)"
+    assert_eq "$n_intro" "1" "README: 머리말 개수 문장이 정확히 1건 (소실·누적 없음)"
+    intro="$(printf '%s\n' "$intro_all" | head -1)"
+    assert_eq "${intro:-없음}" "$want_intro" "README: 머리말 개수 문장의 수사가 실제 축 수(${n_axis}건)와 일치한다"
+    # ④ shared/README.md — **모든** 매치를 본다. 〔2026-08-18 fix round 1, F7〕
+    #    `head -1` 만 보면 낡은 문장이 **뒤에** 덧붙는 누적을 못 본다(실측 E1: 앞에
+    #    놓으면 RED, 뒤에 놓으면 GREEN 이었다). Ruling 45 의 전제 자체가 "낡은 산문이
+    #    살아남는다" 이므로 편집뿐 아니라 **누적**에도 걸어야 한다.
+    said_all="$(sed -nE 's/^`shared\/tests\/test_copy_of_contract\.sh` — ([^ ]+) 계약을 검사한다.*/\1/p' shared/README.md)"
+    n_said="$(printf '%s\n' "$said_all" | grep -c . || true)"
+    assert_eq "$n_said" "1" "README: shared/README.md 의 계약 수 서술이 정확히 1건 (낡은 문장 누적 없음)"
+    said="$(printf '%s\n' "$said_all" | head -1)"
+    assert_eq "${said:-없음}" "$want" "README: shared/README.md 의 계약 수 서술이 실제 축 수(${n_axis}건)와 일치한다"
+  fi
+fi
+axis_tally "$n_src0"   # 기대 최소치 도출은 이 축 머리(if 밖)에 있다
+
 # ── 축 1a: 심볼릭 링크 무결성 — 도미넌스(∀) 체크 (기본 방식, 설계 §16.1) ────
-# 정본 목록은 이 사이클에 심볼릭 링크로 전환된 것 둘로 고정한다(설계 §16.1) —
-# 이 목록이 배포 지점 목록과 다른 이유는 이 태스크 본문에 적었다.
-SYMLINK_CANONICALS="shared/codex/detect_codex.sh
-shared/codex/codex_findings_to_yaml.py"
+# 〔2026-08-19 Ruling 51〕 정본 목록은 **도출한다** — 이름을 적어 두지 않는다. 앞 판본은
+# 둘을 손으로 열거했고, 그래서 새 정본이 들어오면 그 배포 지점은 이 축이 **한 번도 안 보는**
+# 상태로 착지했다(실측: Task 18 이 `prompt-preamble.md` 링크 3개를 더했을 때 열거는 그대로
+# 둘이었고 이 축은 GREEN 이었다). 열거는 공간뿐 아니라 **시간에도** fail-open 이다 — 내일
+# 추가될 정본을 오늘 적을 수 없고, 뒤이은 태스크마다 잊을 기회가 하나씩 늘어난다.
+#
+# 도출 규칙: **`plugins/**` 의 추적된 심볼릭 링크가 실제로 가리키는 `shared/**` 파일 전부.**
+# 양쪽 다 git 인덱스(`git ls-files -s` 의 모드 `120000`)에서 온다 — 워킹트리만 보면 인덱스에서
+# 사라진 링크를 놓치고, 인덱스만 보면 링크가 깨져도 못 본다. 그래서 인덱스로 **후보를 고르고**
+# 워킹트리에서 **해석**한다. 해석 실패는 여기서 조용히 버리지 않는다 — 그 경로는 아래 ∀
+# 루프가 `dangling`/`regular-file` 로 잡는다(정본이 도출되기만 하면).
+#
+# 이 도출이 자기 자신에 대해 fail-open 하지 않게, 도출 결과가 0건이면 아래에서 RED 다.
+SYMLINK_CANONICALS="$(git ls-files -s -- 'plugins/*' \
+  | awk '$1=="120000" { sub(/^[^\t]*\t/, ""); print }' \
+  | while IFS= read -r _link; do
+      [ -L "$_link" ] || continue
+      _tgt="$(readlink -- "$_link")"
+      _abs="$(cd "$(dirname -- "$_link")" 2>/dev/null \
+              && cd "$(dirname -- "$_tgt")" 2>/dev/null \
+              && printf '%s/%s\n' "$(pwd)" "$(basename -- "$_tgt")")"
+      [ -n "$_abs" ] || continue
+      _rel="${_abs#"$ROOT"/}"
+      # `case ... in shared/*)` 를 쓰지 않는다 — 명령 치환 `$( )` 안에서 bash 3.2 가
+      # 패턴의 `)` 를 치환의 끝으로 읽어 이 줄을 통째로 망가뜨린다(실측: 도출이 쓰레기
+      # 문자열 둘을 뱉고 "정본 자체가 없다" 로 RED). 접두 제거 비교는 그 함정이 없다.
+      [ "$_rel" != "${_rel#shared/}" ] && printf '%s\n' "$_rel"
+    done | sort -u)"
+n_canon="$(printf '%s\n' "$SYMLINK_CANONICALS" | grep -c . || true)"
+if [ "$n_canon" -ge 1 ]; then
+  ok "symlink-∀: 정본 ${n_canon}건을 배포 지점의 링크 대상에서 도출 (열거 없음)"
+else
+  no "symlink-∀: 정본이 0건 도출됐다 — 배포 지점 심볼릭 링크가 인덱스에서 사라졌거나 도출이 깨졌다. 아래 ∀ 루프는 한 번도 돌지 않는다"
+fi
+
+# 정본 basename → 참조원에서 도출된 배포 지점 수. 축 2·3 이 자기 코퍼스가 비었는지
+# 판정할 때 이 값을 **독립 앵커**로 쓴다 〔2026-08-18 fix round 1, F5〕.
+DEP_COUNTS=""
+n_ref_detect=""   # 축 2 가 채운다. 여기서 미리 정의해 두는 이유: 축 2 의 본문이 사라져도
+                  # 축 3 이 `set -u` 로 죽는 대신 자기 판정을 내고 RED 를 남긴다.
+dep_count() {   # dep_count <basename> → 도출 수(있으면), 없으면 rc≠0
+  printf '%s' "$DEP_COUNTS" | awk -v b="$1" '$1==b {print $2; f=1} END{ exit !f }'
+}
 
 n_expected=0
 while IFS= read -r canonical; do
@@ -3154,9 +3467,22 @@ while IFS= read -r canonical; do
   # 참조원 도출 — 실제 호출 패턴(scripts/<basename>)을 참조하는 파일. 배포
   # 지점 자기 자신(plugins/*/scripts/<basename>)은 도출 대상에서 제외한다 —
   # 그러지 않으면 배포 지점 자신이 스스로를 참조원으로 세어 도출이 순환한다.
-  refs="$(grep -rlE "scripts/${esc_base}" \
-            plugins/*/skills plugins/*/scripts plugins/*/hooks plugins/*/agents plugins/*/commands \
-            2>/dev/null | grep -vE "^plugins/[^/]+/scripts/${esc_base}\$")"
+  #
+  # 〔2026-08-18 fix round 1, F8〕 코퍼스는 **git 이 추적하는 `plugins/` 전부**다.
+  # 앞 판본은 `skills`·`scripts`·`hooks`·`agents`·`commands` 다섯 디렉토리를 손으로
+  # 열거했다 — *"열거하지 않는다"* 를 원칙으로 내건 이 파일 안에서 공간(빠뜨린
+  # 디렉토리)·시간(내일 생길 디렉토리) 양쪽으로 fail-open 이었다. 오늘 그 다섯 밖에서
+  # `scripts/<basename>` 를 참조하는 파일이 8개 있고(`plugins/*/tests/` · `README.md` ·
+  # `CHANGELOG.md`), 넓혀도 **도출된 플러그인 집합은 다섯 열거와 같다**(2026-08-18 실측)
+  # — 값이 안 변한다는 것을 먼저 재고 넓혔다. 소비자가 테스트뿐인 플러그인은 앞 판본에서
+  # ∀ 집합에 조용히 빠졌고, 정본별 가드도 다른 정본이 정상 도출되면 안 터졌다.
+  # fixtures/mocks/harness 는 CORPUS 와 같은 이유로 뺀다 — 픽스처가 기대를 만들면 안 된다.
+  # `/dev/null` 을 목록 끝에 붙이는 이유: 목록이 비면 `xargs` 가 인자 없는 `grep` 을
+  # 실행해 **stdin 을 기다리며 멈춘다**. 절대 매치하지 않는 파일 하나가 그것을 막는다.
+  refs="$( { git ls-files -- 'plugins/*' | grep -vE '/(fixtures|mocks|harness)/'; echo /dev/null; } \
+            | tr '\n' '\0' \
+            | xargs -0 grep -lE "scripts/${esc_base}" 2>/dev/null \
+            | grep -vE "^plugins/[^/]+/scripts/${esc_base}\$" || true)"
   expected_plugins="$(printf '%s\n' "$refs" | sed -nE 's#^plugins/([^/]+)/.*#\1#p' | sort -u)"
 
   # 순환 금지: 정본 자신이 심볼릭 링크이거나 copy-of 마커를 갖지 않는다
@@ -3207,6 +3533,28 @@ PLUGINS
   else
     no "symlink-∀: $canonical 의 배포 지점이 **0건 도출**됐다 — 이 정본은 아무것도 검사되지 않았다. 참조 도출(scripts/${base})이 이 정본에 안 맞거나(예: import 로만 소비되는 모듈) 참조원이 사라졌다"
   fi
+  # 〔2026-08-19 fix round 2b, M4〕 **반대 방향 도미넌스** — 실재하는 배포 지점이 전부
+  # 도출됐는가. 위 ∀ 는 "도출된 자리에 링크가 있는가"만 본다. 도출은 참조원 **파일 수**에
+  # 기대므로, 어떤 플러그인의 유일한 참조가 산문 한 줄이면 그 줄을 고쳐 쓰는 편집만으로
+  # 그 플러그인이 기대 집합에서 **조용히** 빠진다 — 실측: plugin-audit 은
+  # `skills/auditing-plugins/SKILL.md` 한 줄만 기여하고, 그 줄을 바꾸면 심볼릭 링크 ∀ ·
+  # conf 축 · fail-closed(보안) 축에서 함께 이탈한다. 그래서 인덱스(git)와 워킹트리
+  # **양쪽**에 실재하는 `plugins/*/scripts/<basename>` 를 모아 도출이 그것을 덮는지 묻는다.
+  # untrack 은 인덱스에서만 지우므로 워킹트리 쪽이 남아 두 수가 갈라진다.
+  actual_plugins="$( { git ls-files -- "plugins/*/scripts/$base";
+      for p in plugins/*/scripts/"$base"; do
+        { [ -e "$p" ] || [ -L "$p" ]; } && printf '%s\n' "$p"
+      done; } 2>/dev/null | sed -nE 's#^plugins/([^/]+)/.*#\1#p' | sort -u)"
+  n_actual="$(printf '%s\n' "$actual_plugins" | grep -c . || true)"
+  if [ "$n_actual" = "$n_this" ]; then
+    ok "symlink-∀: $canonical — 실재하는 배포 지점 ${n_actual}건이 참조원 도출 ${n_this}건과 같다 (도출이 실재를 덮는다)"
+  else
+    no "symlink-∀: $canonical — 실재하는 배포 지점 ${n_actual}건과 참조원 도출 ${n_this}건이 다르다 — 도출 앵커가 낡았거나(참조 산문이 바뀌었다) 배포 지점이 인덱스에서만 사라졌다"
+    printf '      도출: %s\n      실재: %s\n' "$(printf '%s' "$expected_plugins" | tr '\n' ' ')" "$(printf '%s' "$actual_plugins" | tr '\n' ' ')"
+  fi
+
+  DEP_COUNTS="${DEP_COUNTS}${base} ${n_this}
+"
 done <<CANON
 $SYMLINK_CANONICALS
 CANON
@@ -3215,24 +3563,36 @@ CANON
 if [ "$n_expected" -ge 1 ]; then
   ok "symlink-∀: 파생된 배포 지점 총 ${n_expected}건 검사 (vacuous 아님)"
 else
-  no "symlink-∀: 파생된 배포 지점이 0건 — 참조 도출이 깨졌거나 SYMLINK_CANONICALS 가 비었다"
+  no "symlink-∀: 파생된 배포 지점이 0건 — 참조 도출이 깨졌거나 정본 도출이 비었다"
 fi
+axis_tally "$n_expected"
 
 # ── 축 1b: copy-of 물리 사본이 정본과 바이트 동일 (잔여 — 링크를 못 쓰는 경우) ──
 # 카나리아(vacuous 방지, 축 1a에 기대지 않는다) — 코퍼스와 무관한 합성 문자열로
-# MARKER_RE 자체를 매 실행마다 검사한다. 이 사이클 이 시점엔 물리 copy-of
-# 파일이 0건이라(Task 19 이전) "0건 발견"과 "정규식이 깨졌다"를 코퍼스
-# 스캔만으로는 구별할 수 없다 — 축 1a의 결과를 빌려 오면 두 독립 코드 경로
+# MARKER_RE 자체를 매 실행마다 검사한다. 코퍼스 스캔 결과만으로는 "0건 발견"과
+# "정규식이 깨졌다"를 구별할 수 없고, 축 1a의 결과를 빌려 오면 두 독립 코드 경로
 # (심볼릭 링크 판정 vs 마커 정규식)를 하나가 맞으면 나머지도 맞다고 가정하는
 # 것이라 MARKER_RE 가 리팩터로 조용히 깨져도 아무도 못 잡는다(2026-08-17
 # 라운드 1 코드 리뷰 지적). 그래서 축 1b는 **자기 것으로** vacuous 방지를 한다.
+# 〔2026-08-18 fix round 1, I2 — 앞 판본은 여기에 *"이 시점엔 물리 copy-of 파일이
+# 0건이다"* 라고 적었다. 브리프가 **두 번 철회한** 서술이고(첫 실사용은 Task 17
+# Step 4b 이며 그것이 이 태스크보다 앞선다), 실측은 3건이다. 아래 `물리 사본 0건`
+# 가지가 **0건은 정상이 아니다** 라고 말하는데 바로 위 주석이 정상이라고 말하면,
+# 실행자가 진짜 알람을 보고 위로 스크롤해 기각한다. 그 문장은 삭제했다.〕
+# 〔2026-08-19 fix round 2b, H2〕 이 축이 실제로 훑은 코퍼스 항목 수 — 물리 사본 + 구조에서
+# 도출한 사본 후보. 축 끝의 `axis_tally` 가 이것을 기대 최소치로 넘긴다. **초기화를 축
+# 헤더 직후에 둔다**: 아래 두 루프를 통째로 지우고 카나리아만 남기는 축소(실측 Q4)에서
+# 두 값이 0 으로 남아 감사가 "코퍼스를 한 번도 안 훑었다"를 RED 로 내게 하려면, 초기화가
+# 지워지는 범위 **밖**에 있어야 한다.
+n_copies=0
+n_cand=0
+
 if printf '# copy-of: shared/x\n' | grep -qE "$MARKER_RE"; then
   ok "copy-of: MARKER_RE 카나리아 매치 (정규식 자체는 살아있다)"
 else
   no "copy-of: MARKER_RE 카나리아가 매치하지 않는다 — 정규식이 깨졌다. 아래 물리 사본 스캔 결과는 무의미하다"
 fi
 
-n_copies=0
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   [ -f "$f" ] || continue
@@ -3285,12 +3645,466 @@ EOF
 if [ "$n_copies" -ge 1 ]; then
   ok "copy-of: 물리 사본 ${n_copies}건 스캔"
 else
-  # B.4 5b 아래(15 → 17 → 16)에서는 Task 17 Step 4b 가 이미 사본 하나를 만들었으므로
+  # B.4 5b 아래(15 → 17 → 16)에서는 Task 17 Step 4b 가 이미 배포 지점마다 사본을 만들었으므로
   # **0건은 정상이 아니다** — Step 4b 미실행 신호다. 이 가지는 그 사실을 알린다.
   no "copy-of: 물리 사본 0건 — B.4 5b 순서라면 Task 17 Step 4b 의 codex_jsonl.py 사본이 있어야 한다"
 fi
 
+# 〔2026-08-18 fix round 1, F4〕 위 스캔 코퍼스는 **마커 자신**으로 게이트된다 —
+# 마커가 사라지는 방향은 코퍼스 축소로만 보이고, 존재형 가드(`n_copies -ge 1`)는
+# 3 → 2 를 그대로 통과한다(실측 D2: 사본 머리에 20줄을 덧붙여 마커를 `HEAD_WINDOW`
+# 밖으로 밀면 매치 1 → 0, 코퍼스 3 → 2, GREEN). 그래서 사본 후보를 **마커가 아니라
+# 구조에서** 따로 도출해 그 각각이 마커를 갖는지 ∀ 로 묻는다 — 마커를 지우는 편집이
+# 스스로 검사 대상에서 빠져나가지 못하게.
+#
+# 후보 = 배포 트리 안의 **심볼릭 링크가 아닌** 추적 파일 중 basename 이 `shared/` 의
+# 배포 대상 정본과 같은 것. `shared/` 쪽에서 빼는 것 셋, 전부 이유가 있다:
+#  · `shared/tests/` — 판정 헬퍼·락은 리포에서만 돌고 사본이 없다는 것이
+#    `shared/tests/assert.sh` 머리말의 명시 계약이다.
+#  · `shared/` **최상위**의 `*.md` — 이 디렉토리 자체를 설명하는 문서다(오늘은
+#    `shared/README.md` 하나). 배포되는 payload 는 `shared/<하위>/` 에 산다.
+#    〔2026-08-19 fix round 2b, L2〕 앞 판본은 `*.md` 를 **전부** 뺐다. 그러면 사본으로
+#    배포되는 마크다운 정본에 후보 규칙이 아예 없어, F4 가 닫으려던 결함(마커가
+#    `HEAD_WINDOW` 밖으로 밀려 파일이 스캔에서 조용히 이탈)이 `.md` 에 대해 열린 채 남는다.
+#    좁힐 당시엔 잠재 결함이었다 — 그때는 `shared/` 아래에 마크다운 정본이 없었고, 좁힘이
+#    `n_sb`·`n_cand` 를 바꾸지 않는 것을 먼저 재고 좁혔다.
+#    **지금은 실효 중이다** 〔2026-08-19 Task 18〕: `shared/codex/prompt-preamble.md` 가
+#    `shared/` 아래 첫 마크다운 정본으로 들어왔고, 최상위가 아니므로 이 규칙 안으로 들어온다
+#    (그 basename 이 `SHARED_BASENAMES` 에 실린다). 사본으로 배포되는 마크다운은 아직 없다 —
+#    그 정본은 심볼릭 링크로 배포되고 링크는 아래 후보 루프가 건너뛴다. 이빨은 실측했다:
+#    마커 없는 마크다운 사본을 배포 지점에 놓으면 RED, 마커를 붙이면 바이트 비교까지 돌고,
+#    본문을 흔들면 다시 RED 다 — 앞 판본의 `*.md` 전량 제외였다면 셋 다 조용히 통과한다.
+#    남는 위험은 basename 우연 충돌(`README.md` 류)인데, 그것은 **좁히는 방향**의
+#    실패라 거짓 RED 로 시끄럽다.
+#  · 빈 파일(`.gitkeep` 등) — 마커를 실을 수 없고 갈라질 내용도 없다.
+# 이 세 제외는 **좁히는 방향**이라 빠뜨리면 거짓 RED 로 시끄럽게 드러난다(넓히는
+# 방향의 열거와 달리 조용히 fail-open 하지 않는다).
+SHARED_BASENAMES="$(git ls-files -- 'shared/*' \
+  | grep -vE '^shared/tests/' | grep -vE '^shared/[^/]+\.md$' \
+  | while IFS= read -r p; do [ -s "$p" ] && basename -- "$p"; done | sort -u)"
+n_sb="$(printf '%s\n' "$SHARED_BASENAMES" | grep -c . || true)"
+if [ "$n_sb" -ge 1 ]; then
+  ok "copy-of: 배포 대상 정본 basename ${n_sb}건 도출 (후보 판별의 근거가 살아 있다)"
+else
+  no "copy-of: 배포 대상 정본이 0건 도출됐다 — 아래 사본 후보 판별이 통째로 vacuous 하다"
+fi
+
+while IFS= read -r cand; do
+  [ -n "$cand" ] || continue
+  case "$cand" in plugins/*) ;; *) continue ;; esac
+  [ -L "$cand" ] && continue
+  [ -f "$cand" ] || continue
+  cb="$(basename -- "$cand")"
+  printf '%s\n' "$SHARED_BASENAMES" | grep -qxF -- "$cb" || continue
+  n_cand=$((n_cand+1))
+  if head -"$HEAD_WINDOW" -- "$cand" 2>/dev/null | grep -qE "$MARKER_RE"; then
+    ok "copy-of: 후보 $cand 가 머리 ${HEAD_WINDOW}줄 안에 마커를 갖는다 (스캔 대상에 남아 있다)"
+  else
+    no "copy-of: $cand 는 shared/ 정본과 같은 이름의 일반 파일인데 머리 ${HEAD_WINDOW}줄 안에 copy-of 마커가 없다 — 위 바이트 비교에서 조용히 빠진다"
+  fi
+done <<EOF
+$CORPUS
+EOF
+if [ "$n_cand" -ge 1 ]; then
+  ok "copy-of: 구조에서 도출된 사본 후보 ${n_cand}건 (마커와 무관하게 셌다)"
+else
+  no "copy-of: 사본 후보가 0건 도출됐다 — 후보 도출이 깨졌다. 위 ∀ 는 한 번도 안 돌았다"
+fi
+axis_tally "$((n_copies+n_cand))"
+
+# ── 축 1c: import 형제 사본의 ∀ 도미넌스 (설치본 조건) ────────────────────────
+# 〔2026-08-17 fix round 2, R2-2 — 축 1a·1b 어느 쪽도 닫지 못하는 결함 클래스〕
+#
+# **왜 필요한가.** 축 1b 는 **존재하는** 사본이 정본과 같은지만 본다 — ∃ 다
+# (`n_copies -ge 1`). 배포 지점 하나에서 사본을 **지우면** 스캔 대상에서 빠질 뿐
+# 아무것도 RED 가 되지 않는다(사본이 하나라도 남으면 존재 가드가 계속 만족된다).
+# 〔여기에 사본 **개수를 적지 않는다** — 태스크마다 움직이는 값이고, 이 락이 잡는 것은
+# 코드지 자기 주석이 아니다. 머리말의 같은 규칙 참조.〕 축 1a 도 못 잡는다 — 심볼릭 링크 축의 배포 지점 도출은
+# `codex_jsonl` 에 대해 **0건**을 낸다(`from codex_jsonl import` 로만 불려
+# `scripts/<basename>` 형태의 참조 문자열이 리포에 없다. Task 17 Step 4b 주석 참조).
+# 그런데 지워진 그 한 곳이 정확히 CRIT-1 의 결함 모양이다: 설치본에서 sibling
+# import 가 풀리지 않아 **그 플러그인의 codex 리뷰어가 100% 죽고 리포 스위트는
+# 초록으로 남는다.** 그래서 여기서는 배포 지점 집합을 **도출하고 그 각각에**
+# 형제 사본이 있음을 단언한다 — ∃ 가 아니라 ∀ 다.
+#
+# **도출 규칙**: git 이 추적하는 `plugins/` **전부** 안에서 그 모듈을 import 하는 `.py`
+# 소비자가 있는 **디렉토리** 전부. 이름을 열거하지 않는다(열거는 공간·시간 양쪽으로
+# fail-open). 파일을 `open()` 으로 읽으므로 심볼릭 링크를 따라가고, qg·sd 의
+# `codex_findings_to_yaml.py` 링크가 정본 본문을 통해 소비자로 걸린다.
+# 〔2026-08-19 fix round 2b, M7〕 앞 판본은 `plugins/*/scripts/*` · `plugins/*/hooks/*`
+# **두 이름의 손열거**였다 — 바로 위 *"이름을 열거하지 않는다"* 20줄 아래에서. 라운드 1 은
+# 같은 결함(F8)을 축 1a 에서만 고치고 여기는 그대로 뒀다. 넓혀도 **오늘 도출되는 소비자
+# 집합은 그대로 3건**이다(2026-08-19 실측) — 값이 안 변한다는 것을 먼저 재고 넓혔다.
+# fixtures/mocks/harness 는 `CORPUS` 와 같은 이유로 뺀다(픽스처가 기대를 만들면 안 된다).
+#
+# **왜 플러그인 단위가 아니라 디렉토리 단위인가** 〔2026-08-17 fix round 3, R3-3〕:
+# 형제 import 는 `sys.path[0]`(= 실행되는 스크립트 자신의 디렉토리)에서 풀린다.
+# 소비자가 `plugins/<p>/hooks/` 에 살면 형제 사본도 **거기** 있어야 하고 `scripts/` 에만
+# 있으면 설치본에서 ImportError 다. Task 19(`kill_switch_active.py`)의 소비자가 정확히
+# `plugins/*/hooks/` 이므로(plan Task 19), 코퍼스를 `scripts/` 로만 두면 그 정본은 이 축이
+# **한 번도 안 보는** 상태로 착지한다 — 축 1b 는 ∃ 라 GREEN, 축 1a 는 import-only 모듈에
+# 대해 배포 지점 0건, 축 1c 는 애초에 안 봄. CRIT-1 이 다른 모듈에서 그대로 재현된다.
+#
+# 규칙에 붙는 조건 둘 — 둘 다 실측으로 강제된 것이다:
+#  ① **모듈 자신을 코퍼스에서 뺀다.** 사본은 자기 코드 때문에 자기 자신의
+#     "소비자" 로 잡힌다. 어떤 플러그인이 사본만 받고 독립 소비자가 없으면,
+#     사본을 지웠을 때 그 플러그인이 기대 집합에서 **함께** 사라져 GREEN 이 된다
+#     (fail-open). 오늘 세 배포 지점은 전부 독립 소비자를 갖고 있어 이 필터가
+#     없어도 결과가 같지만(2026-08-17 실측), 독립 소비자 없이 사본만 받는 배포
+#     지점이 하나라도 생기면 그 우연이 깨진다.
+#  ② **제외는 셸 필터(`grep -v`)로 한다 — `:(exclude)` pathspec 매직을 쓰지 않는다.**
+#     와일드카드가 섞인 exclude pathspec 이 의도보다 훨씬 넓게 걸러냈다
+#     (실측, git 2.50.1: `plugins/<p>/scripts/` 20개 중 11개가 사라졌다).
+#
+# **설치본 대역이 왜 별도인가.** 형제 부재를 **리포 경로에서만** 재면 부족하다 —
+# 리포에는 심볼릭 링크가 실재해서 형제를 치워도 정본 옆 사본으로 풀려 PASS 한다
+# (codex 교차 계열 리뷰가 실제로 재현: 정본을 일반 파일로 바꾸고 형제를 치운
+# 조건에서만 `rc=1` + `ImportError`). 그래서 배포 지점을 `cp -RL` 로 **링크 없는
+# 일반 파일 트리**에 펼치고(설치본과 같은 모양, `shared/` 는 그 트리에 없다)
+# 거기서 소비자를 실제로 import 해 본다.
+# **정본 집합도 도출한다 — 열거하지 않는다** 〔2026-08-17 fix round 3, R3-3〕. 앞 판본은
+# 배포 지점은 도출하면서 정본만 `IMPORT_ONLY_CANONICALS="shared/codex/codex_jsonl.py"` 로
+# 박아 뒀다 — 바로 위 "이름을 열거하지 않는다(열거는 공간·시간 양쪽으로 fail-open)"
+# 주석 30줄 아래에서. 같은 plan 의 후속 태스크가 같은 모양을 두 번 더 만든다(Task 19
+# `shared/killswitch/kill_switch_active.py` ×3 · Task 21 `shared/gc/gc_common.py` ×2 —
+# 둘 다 이 태스크 **뒤**에 온다). 목록을 안 늘려도 RED 가 안 나므로, 늘리라는 지시가
+# 없는 한 그 정본들은 이 축 밖에 남는다.
+#
+# 규칙: `shared/` 아래 `.py` 중 ① 실행 지점이 없고(import-only) ② 리포 어딘가가
+# `from <basename> import` 로 소비하는 것.
+#  · `^` 앵커가 **필수**다. `codex_jsonl.py` 는 자기 docstring 안에서 `if __name__ ==
+#    "__main__"` 을 **인용**한다("… 없음, 실행 지점 아님"). 앵커 없이 재면 정본이 스스로
+#    실행 지점으로 오인돼 집합에서 빠지고, 빈 집합은 아래 `for` 를 통째로 건너뛰어
+#    **0 단언 GREEN** 이 된다 — 축이 조용히 사라진다. 그래서 도출 직후 개수를 못박는다.
+#  · 소비 여부 grep 에서 **모듈 자신과 그 사본을 뺀다.** 안 빼면 docstring 자기인용만으로
+#    자격을 얻는다(위 조건 ①과 같은 함정의 다른 자리).
+# 소비 표기를 무는 것은 정규식이 아니라 **파이썬 파서**다 〔2026-08-19 fix round 2a, M5〕.
+# 앞 판본은 표기를 여덟 개까지 늘린 ERE 였는데 그래도 여섯을 놓쳤다. 결정적인 것은
+# `import json, <mod>`(콤마 목록에서 첫째가 아님 — **이 리포의 자체 스타일**이고 바로
+# 아래 프로브 heredoc 도 그렇게 쓴다)와 `from . import <mod>`(표준 상대 형식)이다.
+# 목록을 아홉으로 늘리는 것은 같은 결함의 다음 판본일 뿐이라, 표기를 세는 대신 **문법을
+# 읽는다**: `ast` 로 파싱해 `Import`/`ImportFrom` 노드가 묶는 최상위 이름을 본다.
+# 표기 목록이 사라지므로 새 표기가 조용히 새지 않는다.
+#  · **`.py` 만 읽는다** 〔L1〕. 파서에 문법이 하나뿐이고, 아래 설치 프로브도 `.py` 만
+#    실행할 수 있다(`spec_from_file_location` 은 비-`.py` 에 `None` 을 돌려준다).
+#  · 파일은 `open()` 으로 읽으므로 **심볼릭 링크를 따라간다**(git grep 과 다르다) —
+#    링크로 배포된 소비자도 정본 본문을 통해 걸린다.
+#  · 파싱이 안 되는 `.py` 는 "소비하지 않는다" 로 떨어진다. 이 프로브가 도는 인터프리터가
+#    읽지 못하는 파일은 같은 인터프리터에서 아무것도 import 하지 못한다. 더 새 문법으로
+#    쓰인 소비자는 이 축의 사각지대이고, 그것은 여기서 판정하지 않는다.
+IMPSCAN="$(mktemp -t copyof-impscan-XXXXXX)" || exit 1
+lock_tmp_add "$IMPSCAN"
+cat > "$IMPSCAN" <<'IMPEOF'
+# argv: <모듈명>. stdin 으로 후보 `.py` 경로(줄 단위), stdout 으로 그 모듈을 import 하는 것.
+import ast, sys
+mod = sys.argv[1]
+
+def imports(path):
+    try:
+        with open(path, "rb") as fh:
+            tree = ast.parse(fh.read(), filename=path)
+    except (OSError, SyntaxError, ValueError):
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            # `import a.b` 는 최상위 이름 `a` 를 묶는다 — 형제 사본의 이름은 첫 성분이다.
+            if any(a.name.split(".")[0] == mod for a in node.names):
+                return True
+        elif isinstance(node, ast.ImportFrom):
+            # `from <mod> import x` · `from .<mod> import x` · `from <mod>.sub import x`
+            if node.module is not None and node.module.split(".")[0] == mod:
+                return True
+            # `from . import <mod>` — 모듈명이 names 쪽에 온다
+            if node.level and node.module is None and any(a.name == mod for a in node.names):
+                return True
+    return False
+
+for line in sys.stdin.read().splitlines():
+    if line and imports(line):
+        sys.stdout.write(line + "\n")
+IMPEOF
+impscan() {   # impscan <모듈명> — stdin: 후보 `.py` 경로 / stdout: 그 모듈을 import 하는 것
+  python3 "$IMPSCAN" "$1"
+}
+
+# 분류기 **앞**의 집합 — `shared/*.py` 중 리포의 추적되는 `.py` 어딘가가 import 로
+# 소비하는 것 전부.
+CONSUMED_PY="$(git ls-files -- 'shared/*.py' \
+  | while IFS= read -r cf; do
+      cm="$(basename "$cf" .py)"
+      git ls-files -- '*.py' | grep -v "/${cm}\.py\$" \
+        | impscan "$cm" | grep -q . && printf '%s\n' "$cf"
+    done)"
+# 분류기 **뒤**의 집합 — 위에서 실행 지점(`^if __name__`)이 있는 것을 뺀다.
+IMPORT_ONLY_CANONICALS="$(printf '%s\n' "$CONSUMED_PY" \
+  | while IFS= read -r cf; do
+      [ -n "$cf" ] || continue
+      grep -qE '^if __name__ == "__main__"' -- "$cf" && continue
+      printf '%s\n' "$cf"
+    done)"
+
+# 〔2026-08-18 fix round 1, F3〕 정본 집합 가드가 **합계 전용**(`n_canon -ge 1`)이면,
+# 정본이 여럿일 때 하나가 분류기에 떨어져 나가도 남은 수에 가려 GREEN 이다 — 그 정본의
+# ∀ 계약이 조용히 소멸한다(오늘 안전한 이유는 n_canon 이 우연히 1 이라서일 뿐이고,
+# 후속 태스크가 이 수를 셋으로 만든다). 축 1a 는 같은 모양에 **정본별** 가드를 갖는데
+# 축 1c 는 그것도 구조 가드도 없었다. 그래서 형제 락 `test_codex_copies_agree.sh` 의
+# `listed == burned` 와 같은 모양으로 **분류기 앞뒤 두 집합을 대조**한다. 떨어진 것이
+# 있으면 이름을 찍고 RED 다 — 배포 소비자가 import 하는 모듈은 실행 지점이 있든 없든
+# 설치본에 형제가 필요하다(보안 모듈이 컬럼 0 에 스모크 테스트를 얻는 것은 흔하다).
+while IFS= read -r cf; do
+  [ -n "$cf" ] || continue
+  printf '%s\n' "$IMPORT_ONLY_CANONICALS" | grep -qxF -- "$cf" && continue
+  no "형제-∀ 도출: $cf 는 import 로 소비되는데 실행 지점(^if __name__)이 있다는 이유로 축 1c 밖으로 떨어졌다 — 이 정본의 형제 ∀ 계약이 조용히 소멸한다"
+done <<EOF
+$CONSUMED_PY
+EOF
+n_consumed="$(printf '%s\n' "$CONSUMED_PY" | grep -c . || true)"
+n_canon="$(printf '%s\n' "$IMPORT_ONLY_CANONICALS" | grep -c . || true)"
+assert_eq "$n_canon" "$n_consumed" "형제-∀ 도출: import 로 소비되는 shared 모듈 ${n_consumed}건이 전부 축 1c 집합에 남았다 (분류기가 아무것도 떨어뜨리지 않았다)"
+if [ "$n_canon" -ge 1 ]; then
+  ok "형제-∀ 도출: import-only 정본 ${n_canon}건 (이름 열거 없음)"
+else
+  no "형제-∀ 도출: import-only 정본이 0건 — 도출 규칙이 깨졌다. 아래 ∀ 는 한 번도 안 돈다"
+fi
+
+# 〔2026-08-19 fix round 2b, M6〕 위 `listed == burned` 는 **함께 줄어드는 두 집합**을
+# 비교한다: `IMPORT_ONLY_CANONICALS` 가 `CONSUMED_PY` **로부터** 도출되므로, 어떤 정본이
+# 탐지 가능한 소비자를 전부 잃으면 양쪽에서 함께 빠지고 등식은 그대로 성립한다. F3 는
+# "분류기가 떨어뜨린다"만 닫았고 "1단계가 애초에 안 만든다"는 안 닫았다 — 오늘은
+# `n_canon=1` 이라 `≥1` 가드가 가리지만, 이 파일이 예고한 Task 19·21 이후의 `n_canon=3`
+# 에서 하나를 잃으면 조용하다. 그래서 소비자 스캔과 **무관한 자리**에 세 번째 앵커를 둔다:
+# **배포 트리에 형제 사본이 실재하는** 정본. 사본이 있다는 것은 누군가 이 모듈을 형제로
+# 배포했다는 뜻이고, 그렇다면 그 정본은 이 축의 ∀ 대상이어야 한다. 사본은 소비자 목록이
+# 비어도 사라지지 않는다. 심볼릭 링크로 배포되는 정본은 형제 **사본**이 아니라서 여기
+# 걸리지 않는다 — 그쪽 계약은 축 1a 가 진다.
+PLUGIN_PY="$(git ls-files -- 'plugins/*' | grep -E '\.py$' || true)"
+while IFS= read -r sp; do
+  [ -n "$sp" ] || continue
+  sb="$(basename -- "$sp")"
+  n_sib=0
+  while IFS= read -r pp; do
+    [ -n "$pp" ] || continue
+    [ "$(basename -- "$pp")" = "$sb" ] || continue
+    [ -L "$pp" ] && continue
+    [ -f "$pp" ] || continue
+    n_sib=$((n_sib+1))
+  done <<PLGPY
+$PLUGIN_PY
+PLGPY
+  [ "$n_sib" -ge 1 ] || continue
+  if printf '%s\n' "$IMPORT_ONLY_CANONICALS" | grep -qxF -- "$sp"; then
+    ok "형제-∀ 도출: $sp 는 배포 트리에 형제 사본 ${n_sib}건이 실재하고 축 1c 집합에 남아 있다"
+  else
+    no "형제-∀ 도출: $sp 는 배포 트리에 형제 사본 ${n_sib}건이 실재하는데 축 1c 집합에 없다 — 소비자 탐지가 이 정본을 통째로 잃었다(두 집합이 함께 줄어 위 등식은 성립한다)"
+  fi
+done <<SHPY
+$(git ls-files -- 'shared/*.py')
+SHPY
+
+# 〔2026-08-18 fix round 1, F2〕 **형제 기대 위치를 소비자가 사는 곳이 아니라
+# 그 모듈이 실제로 풀리는 곳에서 도출한다.** 앞 판본은 소비자 자신의 디렉토리를
+# 요구했고 근거를 *"scripts/ 에만 있으면 설치본에서 ImportError 다"* 로 적었는데,
+# 그 전제는 `sys.path.insert` 로 형제 디렉토리를 얹는 소비자에게 **거짓**이다 —
+# 이 리포는 이미 그 패턴을 양방향으로 배포 중이고(예: `scripts/` 의 소비자가 `hooks/` 를
+# 얹는다), 후속 태스크는 그 반대 방향(사본은 `scripts/`, 소비자는 `hooks/`)을 열두 곳에
+# 만든다. 그대로 두면 **정상 배포에 열세 건의 거짓 RED** 가 나고, 그 압력이 축을
+# 약화시킨다 — 가장 싼 약화가 코퍼스를 되돌리는 것이고 그게 CRIT-1 그 자체다.
+#
+# **표기를 정적으로 해석하지 않는다.** 얹는 자리는 `Path(__file__).resolve().parents[1]
+# / "scripts"` · `os.path.dirname(os.path.abspath(__file__))` · 미리 만든 변수 등 형태가
+# 제각각이라, 파서를 쓰면 모르는 형태마다 조용히 fail-open 한다. 대신 소비자를 **실제로
+# 실행**한다 — 아래 설치본 대역 프로브가 이미 같은 파일을 실행하므로 실행 위험은 새로
+# 늘지 않는다.
+#
+# 〔2026-08-19 fix round 2a, M3〕 실행해서 **무엇을 재는가**가 바뀌었다. 앞 판본은
+# `sys.path` **델타**를 쟀다 — 델타는 "어딘가에 얹혔다"는 **흔적**이라 얹은 쪽이 치우면
+# 지워진다. 평범한 네 모양이 전부 빈 델타를 낸다: `insert` 후 `finally: pop` ·
+# contextmanager · `if p not in sys.path` · `PYTHONPATH` 선존재. 그러면 판정이 조용히
+# "아무것도 안 얹는다" 로 떨어져 소비자 자신의 디렉토리를 요구하고, 형제를 다른 디렉토리에
+# 두는 **정상 배포에 거짓 RED** 가 난다(실측: 표준 위생 관용구 하나로 2건 — F2 가 고쳤다는
+# 결함이 그대로 돌아왔다). 그래서 흔적이 아니라 **결과**를 읽는다: import 가 끝난 뒤
+# `sys.modules[<mod>].__file__` 은 그 모듈이 **실제로 어디서 풀렸는지**를 말한다.
+# pop·재삽입·표기·`PYTHONPATH` 어느 것에도 지워지지 않고, 형제 사본이 있어야 할 디렉토리는
+# 그 파일의 디렉토리 그 자체다. 끝까지 안 풀리면(지연 import 등) 소비자 자신의 디렉토리로
+# 떨어진다 — 지연 import 도 호출 시점의 `sys.path[0]` 에서 풀리기 때문이다.
+#  · `python3 <소비자>` 로 직접 실행할 때와 같은 `sys.path[0]`(= 소비자 자신의 디렉토리)를
+#    준다. 앞 판본은 프로브 자신의 임시 디렉토리를 `sys.path[0]` 에 남겨 뒀는데, 그것은
+#    설치본에서 일어나는 일이 아니다.
+#  · `PYTHONPATH` 를 비우고 실행한다 — 판정이 실행자의 환경에 의존하면 안 된다.
+#  · 〔M1/M2〕 판정은 stdout 이 아니라 **결과 파일**로만 나간다. 앞 판본은 소비자 출력과
+#    프로브 출력을 합류시킨 스트림의 **부분문자열**로 판정했다: 소비자가 스스로 `STATUS:`
+#    / `PATH:` 를 찍으면 락의 기대 위치에 **주입**됐고(실측), 성공 토큰을 담은 traceback
+#    한 줄이 설치본 `ImportError` 를 ✓ 로 만들었다(실측). 소비자는 결과 파일 경로를
+#    모르고, 설치본 대역의 성공은 **종료 코드**와 그 파일 둘 다로만 신호한다.
+SIMPROBE="$(mktemp -t copyof-probe-XXXXXX)" || exit 1
+PROBEOUT="$(mktemp -t copyof-probeout-XXXXXX)" || exit 1
+PROBEERR="$(mktemp -t copyof-probeerr-XXXXXX)" || exit 1
+lock_tmp_add "$SIMPROBE"; lock_tmp_add "$PROBEOUT"; lock_tmp_add "$PROBEERR"
+cat > "$SIMPROBE" <<'PYEOF'
+# argv: <mode> <소비자 파일> <모듈명> <결과 파일> <트리 루트>
+#   import  — 링크 없는 일반 파일 트리에서 소비자를 실제로 실행한다(설치본 대역).
+#             실패는 traceback + rc≠0 으로 나간다.
+#   resolve — 소비자를 실행하고, 예외로 죽어도 계속 간다.
+# 두 모드 모두 **그 모듈이 실제로 풀린 파일**을 결과 파일에 한 줄로 적는다:
+#   MODFILE:<트리 루트 기준 상대경로> · OUTSIDE:<절대경로> · NOMOD:<상태>
+import importlib.util, os, sys
+mode, target, mod, out, root = sys.argv[1:6]
+# `python3 <소비자>` 와 같은 sys.path[0]. 프로브 자신의 디렉토리는 경로에서 뺀다.
+sys.path[0:1] = [os.path.dirname(os.path.abspath(target))]
+
+def run():
+    spec = importlib.util.spec_from_file_location("dep_probe", target)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)      # 여기서 `from <mod> import ...` 가 실제로 돈다
+
+def rel_to(root, path):
+    # 풀린 경로 자체는 realpath 하지 않는다 — 링크로 배포된 형제 사본은 **링크 쪽**
+    # 경로가 배포 자리다. 루트만 양쪽(abspath·realpath)으로 재서 /var → /private/var
+    # 같은 마운트 표기 차이를 흡수한다.
+    path = os.path.abspath(path)
+    for r in (os.path.abspath(root), os.path.realpath(root)):
+        if path.startswith(r + os.sep):
+            return path[len(r) + 1:]
+    return None
+
+status = "OK"
+if mode == "import":
+    run()                            # 실패하면 traceback 이 stderr 로 나가고 rc≠0 이다
+else:
+    try:
+        run()
+    except BaseException as exc:     # import 뒤에 죽어도 sys.modules 에는 남는다
+        status = "EXC:%s" % type(exc).__name__
+
+m = sys.modules.get(mod)
+where = getattr(m, "__file__", None) if m is not None else None
+if where is None:
+    line = "NOMOD:" + status
+else:
+    rel = rel_to(root, where)
+    line = ("MODFILE:" + rel) if rel is not None else ("OUTSIDE:" + os.path.abspath(where))
+with open(out, "w", encoding="utf-8") as fh:   # 소비자가 경로를 모르는 채널
+    fh.write(line + "\n")
+PYEOF
+
+CONSUMER_DIRS=""
+dirs_of() {  # dirs_of <소비자> → 그 소비자가 형제를 푸는 디렉토리들
+  printf '%s' "$CONSUMER_DIRS" | awk -v c="$1" '$1==c {print $2}'
+}
+
+# 〔2026-08-19 fix round 2b, H2〕 이 축이 실제로 훑은 소비자 총수. 축 끝의 `axis_tally` 가
+# 이것을 기대 최소치로 넘긴다. 초기화가 아래 루프 **밖**에 있어야, 루프를 통째로 지우고
+# F3 가드만 남기는 축소(실측 Q3)에서 0 으로 남아 RED 가 된다.
+n_cons_all=0
+for canon in $IMPORT_ONLY_CANONICALS; do
+  mod="$(basename "$canon" .py)"
+  if [ ! -f "$canon" ]; then no "형제-∀: 정본 $canon 이 없다"; continue; fi
+  # 소비자 도출 — `.py` 만 본다 〔L1〕. 읽기는 `open()` 이라 심볼릭 링크를 따라가므로
+  # (git grep 과 달리) 링크로 배포된 소비자도 정본 본문을 통해 걸린다. 모듈 자신과
+  # 그 사본은 뺀다(자기 소비 방지).
+  consumers="$(git ls-files -- 'plugins/*' | grep -vE '/(fixtures|mocks|harness)/' \
+    | grep -E '\.py$' | grep -v "/${mod}\.py\$" | impscan "$mod")"
+  n_cons="$(printf '%s\n' "$consumers" | grep -c . || true)"
+  n_cons_all=$((n_cons_all+n_cons))
+
+  # positive(도출이 살아 있는가): 0건이면 아래 ∀ 가 통째로 vacuous 다.
+  if [ "$n_cons" -ge 1 ]; then
+    ok "형제-∀: ${mod} 를 import 하는 배포 소비자 ${n_cons}건 도출 (vacuous 아님)"
+  else
+    no "형제-∀: ${mod} 소비자가 0건 도출됐다 — 도출 규칙이 깨졌다. 아래 ∀ 는 무의미하다"
+  fi
+
+  CONSUMER_DIRS=""
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    own="$(printf '%s' "$c" | sed -E 's#/[^/]+$##')"
+    : > "$PROBEOUT"
+    env -u PYTHONPATH PYTHONDONTWRITEBYTECODE=1 python3 "$SIMPROBE" resolve "$ROOT/$c" "$mod" "$PROBEOUT" "$ROOT" >/dev/null 2>&1
+    pfile="$(sed -n 's|^MODFILE:||p' "$PROBEOUT" | head -1)"
+    pout="$(sed -n 's|^OUTSIDE:||p' "$PROBEOUT" | head -1)"
+    pstatus="$(sed -n 's|^NOMOD:||p' "$PROBEOUT" | head -1)"
+    if [ -n "$pfile" ]; then
+      case "$pfile" in
+        plugins/*/*)
+          cdir_e="${pfile%/*}"   # 실제로 풀린 파일의 디렉토리 = 형제가 있어야 할 자리
+          ;;
+        *)
+          no "형제-∀: $c 가 ${mod} 를 플러그인 트리 밖($pfile)에서 풀었다 — 설치본에는 그 경로가 없다"
+          continue
+          ;;
+      esac
+    elif [ -n "$pout" ]; then
+      no "형제-∀: $c 가 ${mod} 를 리포 밖($pout)에서 풀었다 — 설치본에는 그 경로가 없다"
+      continue
+    elif [ "$pstatus" = "OK" ]; then
+      cdir_e="$own"   # 실행이 끝나도록 안 풀렸다(지연 import 등) → 소비자 자신의 디렉토리
+    elif [ -n "$pstatus" ]; then
+      no "형제-∀: $c 가 ${mod} 를 풀지 못한 채 예외로 죽었다($pstatus) — 설치본에서 ImportError 이거나 그 앞에서 죽었다"
+      continue
+    else
+      no "형제-∀: $c 의 해석 프로브가 결과를 내지 않았다 — 기대 위치를 알 수 없다 (python3 부재/프로브 파손)"
+      continue
+    fi
+
+    CONSUMER_DIRS="${CONSUMER_DIRS}${c} ${cdir_e}
+"
+    if [ ! -f "$cdir_e/${mod}.py" ]; then
+      no "형제-∀: $c 가 ${mod} 를 푸는 자리($cdir_e)에 ${mod}.py 형제 사본이 없다 — 설치본에서 ImportError (CRIT-1 결함 모양)"
+    elif git ls-files --error-unmatch -- "$cdir_e/${mod}.py" >/dev/null 2>&1; then
+      ok "형제-∀: $c → $cdir_e/${mod}.py (실제로 풀린 자리에 형제 사본이 있고 git 에 실려 있다)"
+    else
+      # 〔F4/H1〕 사본을 untrack 하면 디스크엔 남아 존재 검사를 통과하지만 **설치본에는
+      # 안 실린다** — 스캔 코퍼스(git ls-files)에서만 조용히 사라진다. 존재와 배포는 다르다.
+      no "형제-∀: $cdir_e/${mod}.py 가 git 에 추적되지 않는다 — 디스크엔 있어도 설치본에 안 실린다"
+    fi
+  done <<EOF
+$consumers
+EOF
+
+  SIM="$(mktemp -d -t copyof-install-XXXXXX)" || exit 1
+  lock_tmp_add "$SIM"
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    cdir="$(printf '%s' "$c" | sed -E 's#/[^/]+$##')"
+    # 소비자 자신의 디렉토리 **와** 그 소비자가 sys.path 에 얹는 디렉토리를 함께 편다.
+    # 앞 판본은 소비자 디렉토리만 폈다 — 형제 디렉토리를 얹는 소비자에게는 그 디렉토리가
+    # 트리에 아예 없어 **정상 배포가 통째로 ImportError** 였다 〔F2〕.
+    while IFS= read -r sd; do
+      [ -n "$sd" ] || continue
+      d="$SIM/$sd"
+      [ -d "$d" ] || { mkdir -p "$d"; cp -RL "$sd/." "$d/" 2>/dev/null; }
+    done <<TREE
+$cdir
+$(dirs_of "$c")
+TREE
+    # 〔M1〕 성공은 **종료 코드**로만 신호하고, 그 위에 "${mod} 가 이 트리 안에서 풀렸다"를
+    # 결과 파일로 확인한다. 소비자 출력은 어느 쪽에도 섞이지 않는다.
+    : > "$PROBEOUT"; : > "$PROBEERR"
+    if env -u PYTHONPATH PYTHONDONTWRITEBYTECODE=1 python3 "$SIMPROBE" import "$SIM/$c" "$mod" "$PROBEOUT" "$SIM" >/dev/null 2>"$PROBEERR" \
+       && grep -q '^MODFILE:' "$PROBEOUT"; then
+      ok "형제-∀(설치본 대역): $c 가 링크 없는 일반 파일 트리에서 ${mod} 를 import 한다"
+    else
+      det="$(tail -1 "$PROBEERR")"
+      [ -n "$det" ] || det="$(cat "$PROBEOUT")"
+      no "형제-∀(설치본 대역): $c 가 ${mod} 를 import 못 한다 — ${det:-(진단 없음)}"
+    fi
+  done <<EOF
+$consumers
+EOF
+  rm -rf "$SIM"
+done
+rm -f "$SIMPROBE" "$IMPSCAN" "$PROBEOUT" "$PROBEERR"
+axis_tally "$n_cons_all"
+
 # ── 축 2: 형제 설정이 배포에 실린다 ───────────────────────────────────────
+# 〔2026-08-18 fix round 1, F5〕 이 축과 축 3 만 vacuity 가드가 없었다. 아래
+# `assert_eq "$n_conf" "$n_detect"` 는 **`0 == 0` 에 통과**한다 — conf 와 detect 사본을
+# 짝으로 untrack 하면(또는 두 코퍼스가 함께 비면) 한 플러그인이 fail-closed 검사에서
+# 조용히 이탈하고 락은 완전 초록이다(실측 N6: `Total: 5 | Pass: 5 | Fail: 0`).
+# 축 1a 는 백스톱이 되지 못한다 — 그쪽은 인덱스가 아니라 **워킹트리**에서 존재를 보므로
+# untrack 된 파일도 통과한다. 그래서 **독립 앵커**를 쓴다: 축 1a 가 참조원(SKILL.md·
+# 호출자·문서)에서 도출한 배포 지점 수. 참조원은 이 두 코퍼스와 다른 자리에 있어
+# conf/detect 를 지우는 편집이 기대치를 함께 줄이지 못한다.
 n_conf=0
 while IFS= read -r c; do
   [ -n "$c" ] || continue
@@ -3302,14 +4116,43 @@ EOF
 # detect_codex.sh 사본이 있는 만큼 conf 도 있어야 한다 — 개수를 열거하지 않고 **도출**한다.
 n_detect="$(git ls-files -- 'plugins/*/scripts/detect_codex.sh' | grep -c . || true)"
 assert_eq "$n_conf" "$n_detect" "conf: detect_codex.sh 사본 수(${n_detect})만큼 conf 가 git 에 있다"
+if n_ref_detect="$(dep_count detect_codex.sh)"; then
+  assert_eq "$n_detect" "$n_ref_detect" "conf: git 에 실린 detect_codex.sh 사본 수(${n_detect})가 축 1a 의 참조원 도출(${n_ref_detect}건)과 같다 (코퍼스가 조용히 줄지 않았다)"
+else
+  no "conf: 축 1a 가 detect_codex.sh 의 배포 지점 수를 내지 않았다 — 아래 개수 대조의 앵커가 없다"
+  n_ref_detect=""
+fi
+
+# 〔2026-08-19 fix round 2b, M4〕 참조원 앵커는 **참조 파일 수**에 기대므로, 어떤
+# 플러그인의 유일한 참조가 산문 한 줄이면 그 줄을 고쳐 쓰는 편집이 앵커를 함께 줄인다
+# (실측: plugin-audit 은 `skills/auditing-plugins/SKILL.md` 한 줄만 기여한다). 그 상태에서
+# conf·detect 를 짝으로 untrack 하면 세 수가 **함께** 줄어 위 등식이 전부 성립한다.
+# 그래서 참조원과 무관한 두 번째 앵커를 둔다: **워킹트리 실재 수.** `git rm --cached` 는
+# 인덱스에서만 지우고 디스크에는 남기므로 두 수가 갈라진다.
+n_detect_disk=0
+for p in plugins/*/scripts/detect_codex.sh; do
+  { [ -e "$p" ] || [ -L "$p" ]; } && n_detect_disk=$((n_detect_disk+1))
+done
+assert_eq "$n_detect" "$n_detect_disk" "conf: git 에 실린 detect_codex.sh 사본 수(${n_detect})가 워킹트리 실재 수(${n_detect_disk})와 같다 (untrack 으로 인덱스에서만 조용히 빠지지 않았다)"
+n_conf_disk=0
+for p in plugins/*/scripts/codex-killswitch.conf; do
+  { [ -e "$p" ] || [ -L "$p" ]; } && n_conf_disk=$((n_conf_disk+1))
+done
+assert_eq "$n_conf" "$n_conf_disk" "conf: git 에 실린 conf 수(${n_conf})가 워킹트리 실재 수(${n_conf_disk})와 같다 (untrack 으로 인덱스에서만 조용히 빠지지 않았다)"
+axis_tally "$n_conf"
 
 # ── 축 3: 설정 부재 시 fail-closed ────────────────────────────────────────
 # kill switch 는 보안 컨트롤이다(CLAUDE.md:48). 설정을 못 읽었을 때 변수명이 빈 값으로
 # 해석돼 스위치가 조용히 무반응이 되면, 사용자는 껐다고 **믿게만** 된다.
+# 〔F5〕 이 루프는 카운터조차 없었다 — 코퍼스가 비면 **단언 0개로 통과**했다(실측 N7:
+# `Total: 1 | Pass: 1 | Fail: 0`). 보안 컨트롤 축이 조용히 사라지는 모양이다.
+# 그래서 실제로 태운 횟수를 세고 축 1a 의 도출과 대조한다.
 TMPC="$(mktemp -d -t copyof-failclosed-XXXXXX)" || exit 1
-trap 'rm -rf "$TMPC"' EXIT
+lock_tmp_add "$TMPC"   # 축마다 `trap ... EXIT` 를 걸면 나중 것이 앞의 것을 조용히 덮는다
+n_fc=0
 while IFS= read -r d; do
   [ -n "$d" ] || continue
+  n_fc=$((n_fc+1))
   # 원본을 건드리지 않는다 — 사본을 임시 디렉토리에 만들고 conf 없이 태운다.
   wd="$TMPC/$(printf '%s' "$d" | tr '/' '_')"; mkdir -p "$wd"
   cp "$d" "$wd/detect_codex.sh"
@@ -3323,8 +4166,16 @@ while IFS= read -r d; do
 done <<EOF
 $(git ls-files -- 'plugins/*/scripts/detect_codex.sh')
 EOF
+if [ -n "$n_ref_detect" ]; then
+  assert_eq "$n_fc" "$n_ref_detect" "fail-closed: 설정 부재로 태운 배포 지점 ${n_fc}건이 축 1a 의 참조원 도출(${n_ref_detect}건)과 같다 (보안 축이 vacuous 하지 않다)"
+else
+  no "fail-closed: 축 1a 의 도출 앵커가 없어 이 축이 vacuous 한지 판정할 수 없다"
+fi
+axis_tally "$n_fc"
 
-finish
+# 축-실행 감사 — 정의는 파일 머리의 계측기 옆에 있다. 이 호출이 이 락의 마지막 실행
+# 줄이고, `finish` 는 그 안에 있다. 이 줄이 사라지면 EXIT 트랩이 rc=1 로 죽인다 〔H1(b)〕.
+axis_audit
 ```
 
 ```bash
@@ -3346,7 +4197,7 @@ Expected: PASS · `git ls-files -s`가 mode `100755`
 
 > `100644`가 나오면 **락이 조용히 한 번도 실행되지 않는다.** `git update-index --chmod=+x`로 고친다.
 
-- [ ] **Step 3: mutation — 심볼릭 링크 축(도미넌스) 5종(A~D + F) + `MARKER_RE` 카나리아 1종(E) + `copy-of` 물리 사본 축 3종(1~3) (설계 §12.5)**
+- [ ] **Step 3: mutation — 심볼릭 링크 축(도미넌스) 5종(A~D + F) + `MARKER_RE` 카나리아 1종(E) + `copy-of` 물리 사본 축 3종(1~3) + **형제-∀ 축 2종(G·H)** (설계 §12.5)**
 
 **심볼릭 링크 축** (실제 대상: `plugins/spec-distill/scripts/detect_codex.sh`, Task 15가 만든 진짜 링크):
 
@@ -3459,20 +4310,23 @@ bash "$LOCK" 2>&1 | grep -E '^  ✗ copy-of.*카나리아' || echo "  (카나리
 cp /tmp/lock_round1_fix.bak "$LOCK"; rm -f /tmp/lock_round1_fix.bak
 ```
 
-**`copy-of` 물리 사본 축**: 이 시점의 리포에는 실제 물리 `copy-of` 사본이 **정확히 하나** 있다 — Task 17 Step 4b 의 `plugins/plugin-audit/scripts/codex_jsonl.py` 다(B.4 5b 가 17 → 16 을 강제하므로 이미 존재한다). **그래도 스캐치 픽스처를 쓴다**, 이유가 "없어서"에서 "통제할 수 없어서"로 바뀌었을 뿐이다: mutation 은 마커를 지우고 본문을 흔들어야 하는데 **실제 사본을 대상으로 하면 앞 태스크의 산출물을 훼손**하고, 복원 실패가 조용한 손상으로 남는다. 픽스처는 크기·마커·내용을 전부 통제할 수 있고 지워도 잃을 것이 없다. 〔**정정(fix round 4)**: 이전 판이 *"실제 물리 copy-of 후보가 아직 없다(Task 19가 이 태스크보다 뒤에 온다)"* 라고 적었는데 **두 번 틀렸다** — 첫 실사용은 Task 19가 아니라 Task 17 Step 4b 이고(round 1), 5b 아래에서 Task 17은 이 태스크보다 **앞선다**(round 2).〕 그래서 **일회용 스캐치 픽스처**로 마커-파싱 코드 자체의 이빨을 증명한다 — 실제 파일을 잠깐 만들어 `git add`로 스캔 코퍼스(`git ls-files`)에 넣고, mutation을 태운 뒤, 커밋 없이 되돌린다.
+**`copy-of` 물리 사본 축**: 이 시점의 리포에는 실제 물리 `copy-of` 사본이 **셋** 있다 — Task 17 Step 4b 의 `plugins/{plugin-audit,quality-gates,spec-distill}/scripts/codex_jsonl.py` 다(B.4 5b 가 17 → 16 을 강제하므로 이미 존재한다). **그래도 스캐치 픽스처를 쓴다**, 이유가 "없어서"에서 "통제할 수 없어서"로 바뀌었을 뿐이다: mutation 은 마커를 지우고 본문을 흔들어야 하는데 **실제 사본을 대상으로 하면 앞 태스크의 산출물을 훼손**하고, 복원 실패가 조용한 손상으로 남는다. 픽스처는 크기·마커·내용을 전부 통제할 수 있고 지워도 잃을 것이 없다. 〔**정정(fix round 4)**: 이전 판이 *"실제 물리 copy-of 후보가 아직 없다(Task 19가 이 태스크보다 뒤에 온다)"* 라고 적었는데 **두 번 틀렸다** — 첫 실사용은 Task 19가 아니라 Task 17 Step 4b 이고(round 1), 5b 아래에서 Task 17은 이 태스크보다 **앞선다**(round 2).〕 그래서 **일회용 스캐치 픽스처**로 마커-파싱 코드 자체의 이빨을 증명한다 — 실제 파일을 잠깐 만들어 `git add`로 스캔 코퍼스(`git ls-files`)에 넣고, mutation을 태운 뒤, 커밋 없이 되돌린다.
 
-> **무변이에서 RED 가 나오면 이 표로 가른다.** 이 락의 실패 줄은 `  ✗ ` 로 시작하고 그 뒤 접두는 **넷뿐**이다(`symlink-∀:` · `copy-of:` · `conf:` · `fail-closed:` — 락 본문의 모든 `no`/`assert_*` 메시지가 이 넷 중 하나로 시작한다). 아래 코드가 그 줄들을 그대로 찍는다. **분기를 두 개만 두면 안 된다** — 이전 판본은 픽스처와 `codex_jsonl.py` 두 경우만 적어서, 심볼릭 링크 축이나 fail-closed 축이 걸린 실행자는 어느 가지에도 해당하지 않았다.
+> **무변이에서 RED 가 나오면 이 표로 가른다.** 이 락의 실패 줄은 `  ✗ ` 로 시작하고 그 뒤 접두는 **일곱뿐**이다(`README:` · `축-실행:` · `symlink-∀` · `copy-of:` · `형제-∀` · `conf:` · `fail-closed:` — 락 본문의 모든 `no`/`assert_*` 메시지가 이 일곱 중 하나로 시작한다. 〔**콜론 없이 적은 둘에 주의한다** — `형제-∀` 로 시작하는 줄은 `형제-∀:` 말고도 `형제-∀ 도출:`(정본 집합 도출)과 `형제-∀(설치본 대역):`(링크 없는 트리 import)이 있다. 2026-08-18 fix round 1 이전 판본은 이 접두를 `형제-∀:` 로 적어 그 두 형태를 라우팅 표 밖에 두었다 — 실행자가 분류를 못 했다. 축을 더하면 이 목록도 같은 커밋에서 늘려야 한다. `README:` 는 2026-08-18 Ruling 45 가 더한 축 0, `축-실행:` 은 2026-08-18 fix round 1(F1)이 더한 축-실행 계측이다 — 2026-08-19 fix round 2b 이후 그 감사는 파일 머리에 `axis_audit` 로 있고 이 락의 마지막 실행 줄이 그 호출이다. 감사가 아예 안 돌면 `finish` 도 안 돌아 `Total:` 줄 없이 `  ✗ 축-실행: 감사(axis_audit)가 실행되지 않은 채…` 한 줄과 rc=1 만 나온다〕). 아래 코드가 그 줄들을 그대로 찍는다. **분기를 두 개만 두면 안 된다** — 이전 판본은 픽스처와 `codex_jsonl.py` 두 경우만 적어서, 심볼릭 링크 축이나 fail-closed 축이 걸린 실행자는 어느 가지에도 해당하지 않았다.
 >
 > | 실패 줄이 이렇게 시작하면 | 무엇이 깨졌나 | 어디로 |
 > |---|---|---|
 > | `✗ copy-of:` + `_copyof_mutation_fixture` | 픽스처 생성이 잘못됐다(마커 줄·크기·권한) | **여기서** 고친다 |
-> | `✗ copy-of:` + `plugins/plugin-audit/scripts/codex_jsonl.py` | **Task 17 산출물의 진짜 결함** — 사본이 정본과 갈라졌다 | **Task 17** 로 돌아간다 |
+> | `✗ copy-of:` + `plugins/*/scripts/codex_jsonl.py` (plugin-audit·quality-gates·spec-distill **어느 것이든**) | **Task 17 산출물의 진짜 결함** — 그 사본이 정본과 갈라졌다 | **Task 17** 로 돌아간다 |
 > | `✗ copy-of: 물리 사본 0건` | Task 17 Step 4b 가 실행되지 않았다 | **Task 17 Step 4b** |
+> | `✗ 형제-∀:` | import 로만 소비되는 정본의 형제 사본이 배포 디렉토리 하나에서 빠졌다(또는 설치본 대역에서 import 가 안 풀린다. `✗ 형제-∀ 도출:` 이면 정본 도출 규칙 자체가 깨진 것이다) — **픽스처와 무관** | **Task 17 Step 4b** (사본을 만드는 스텝) |
+> | `✗ README:` | `shared/README.md` 또는 락 머리말의 계약 수 서술이 이 락의 실제 계약 축 수와 어긋난다(또는 대조 대상 자체가 없다) — **픽스처와 무관** | **여기서** 고친다 (서술과 축 중 어느 쪽이 참인지부터 정한다) |
+> | `✗ 축-실행:` | 어떤 축이 헤더 주석만 남고 **본문이 안 돌았다**(또는 반대로 헤더 없이 돌았다) — **픽스처와 무관** | **여기서** 고친다 (주석을 지워 수를 맞추지 않는다 — 사라진 쪽이 계약이다) |
 > | `✗ symlink-∀:` | Task 15/17 의 심볼릭 링크 배포가 실제로는 안 됐다 — **픽스처와 무관** | 픽스처를 지우고 **Task 15/17** 부터 |
 > | `✗ conf:` | 형제 설정(`codex-killswitch.conf`)이 배포 지점 수만큼 없다 | **Task 15** |
 > | `✗ fail-closed:` | `detect_codex.sh` 가 설정 부재에 fail-open 한다 (보안 컨트롤) | **Task 15** — 여기서 우회하지 않는다 |
 >
-> 다섯째 경우도 있다: **줄이 하나도 안 찍히는 것.** 그러면 락이 판정에 도달하기 전에 죽은 것이다(`set -u` 미정의 변수, `shared/` 부재 등) — 아래 코드가 그 경우를 따로 알린다.
+> **위 표의 어느 행에도 해당하지 않는 경우가 하나 더 있다**: 줄이 하나도 안 찍히는 것. 그러면 락이 판정에 도달하기 전에 죽은 것이다(`set -u` 미정의 변수, `shared/` 부재 등) — 아래 코드가 그 경우를 따로 알린다. 〔2026-08-18 fix round 1, S1: 여기 있던 서수 리터럴("다섯째")을 지웠다. 표가 네 행이던 시절의 값이 표가 늘어나는 동안 그대로 남아 인접한 접두 리터럴만 고쳐졌었다 — 서수는 표 행 수에 종속된 파생값이라 리터럴로 두면 매번 같은 방식으로 낡는다.〕
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
@@ -3538,9 +4392,44 @@ rm -f "$FIX"
 git status --short -- "$FIX"   # 아무 출력도 없어야 한다
 ```
 
-Expected: 심볼릭 링크 축 변이 A·B·C·D → RED, 각각 `missing`·`regular-file`·`wrong-target: mismatch`·`wrong-target: dangling`으로 메시지가 서로 다르다. MARKER_RE 카나리아 변이 → RED (카나리아만). 물리 사본 축 변이 1(3위치)·3 → RED, 변이 2 → GREEN. 무변이 전부 GREEN. 마지막 `git status --short -- "$FIX"`가 빈 출력.
+Expected: 심볼릭 링크 축 변이 A·B·C·D → RED, 각각 `missing`·`regular-file`·`wrong-target: mismatch`·`wrong-target: dangling`으로 메시지가 서로 다르다. MARKER_RE 카나리아 변이 → RED (카나리아만). 물리 사본 축 변이 1(3위치)·3 → RED, 변이 2 → GREEN. 형제-∀ 축 변이 G·H → 각각 **2줄 RED**(형제 부재 + 설치본 대역 import 실패). 무변이 전부 GREEN. 마지막 `git status --short -- "$FIX"`가 빈 출력.
 
 > **변이 2(물리 사본 축)가 GREEN이어야 하는 이유**: 설계 §16이 *"같은 이름이면 같은 내용" 락*을 기각했다 — 이름을 바꾸면 통과하고, 이름이 다른 중복을 절반 이상 놓친다. 이 락은 이름이 아니라 마커를 본다. 심볼릭 링크 축에는 이제 이와 대칭인 "경로만 바꾸면 GREEN" mutation이 없다 — 도미넌스 체크에서는 배포 지점의 **경로 자체가 계약의 일부**다(참조원이 정확히 그 경로를 호출하므로). 이것은 퇴보가 아니라 더 정확해진 것이다: 옛 ∃-체크는 이름이 바뀌어도 "어딘가에 링크가 있으면" 만족했지만, 실제 시스템은 정확한 경로가 아니면 작동하지 않는다.
+
+**형제-∀ 축 mutation** (축 1c — 2026-08-17 fix round 2, R2-2):
+
+| # | 변이 | 기대 | 무엇을 증명하나 |
+|---|---|---|---|
+| G | **spec-distill** 의 `scripts/codex_jsonl.py` 사본을 지운다 | **RED ×2** — `형제-∀: plugins/spec-distill/scripts 에 … 형제 사본이 없다` + `형제-∀(설치본 대역): …/codex_findings_to_yaml.py 가 … import 못 한다` | ∃(축 1b)가 아니라 ∀ 다 — 남은 사본 수와 무관하게 **빠진 자리**가 RED 를 낸다 |
+| H | **quality-gates** 의 같은 사본을 지운다 | **RED ×2** (같은 두 줄, 경로만 다르다) | 대상이 하나에 고정되지 않았다 |
+
+> ⚠ **`plugin-audit` 사본만 지우는 mutation 으로 이 축을 증명하면 안 된다.**
+> pa 사본은 **기존 테스트가 이미 잡는다** — 리뷰어 실측: pa+sd 둘 다 지우면 5 RED,
+> **sd 만 지우면 전부 GREEN** 이었다. 즉 pa 로만 흔든 RED 는 이 축이 반응한 증거가
+> 아니라 다른 락이 반응한 증거다. 계측기가 엉뚱한 대상을 흔든 것이므로 **qg 또는
+> sd 로 증명한다.**
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew
+BAK="$(mktemp -d -t copyof-mutGH-XXXXXX)" || exit 1
+for plug in spec-distill quality-gates; do          # ← pa 는 쓰지 않는다 (위 경고)
+  f="plugins/$plug/scripts/codex_jsonl.py"
+  cp -p "$f" "$BAK/$plug.py"                        # git checkout 으로 되돌리지 않는다 — 백업에서 복원
+  rm -f "$f"
+  printf 'mutation %s (형제-∀, %s 사본 삭제) → ' "$([ "$plug" = spec-distill ] && echo G || echo H)" "$plug"
+  out="$(bash shared/tests/test_copy_of_contract.sh 2>&1)"
+  n="$(printf '%s\n' "$out" | grep -c '✗ 형제-∀' || true)"
+  [ "$n" -ge 2 ] && echo "RED ✓ (형제-∀ 실패 ${n}줄)" || echo "GREEN ❌ (형제-∀ 실패 ${n}줄 — ∀ 가 아니라 ∃ 다)"
+  printf '%s\n' "$out" | grep '✗ 형제-∀' | sed 's/^/     /'
+  cp -p "$BAK/$plug.py" "$f"
+done
+rm -rf "$BAK"
+git status --short -- 'plugins/*/scripts/codex_jsonl.py'   # 빈 출력이어야 한다
+```
+
+〔**이 코드는 Task 17 fix round 2 에서 실제로 돌려 봤다** — 그 시점엔 축 1c 만 떼어
+스탠드얼론으로 태웠고, G·H 둘 다 정확히 위 두 줄로 RED 였다(무변이 7/7 GREEN).
+`test_copy_of_contract.sh` 안에 들어간 뒤에도 같은 두 줄이 나와야 한다.〕
 
 - [ ] **Step 4: `/qg`가 이 락을 **실제로 실행**했는지 출력에서 확인한다**
 
@@ -3583,9 +4472,14 @@ Expected: `--emit-scanned` 지원 락이 1개 이상 도출되고, 두 방향 �
 그 표는 Task 11 리뷰(2026-08-17)가 *"없는 락을 근거로 내세우는 문서"* 를 막으려고 넣은 것이고,
 락이 생긴 뒤에도 남으면 **정반대 방향의 같은 거짓**이 된다.
 
-**표만 고친다 — 본문 문장은 건드리지 않는다.** 본문은 락이 *검사하는 계약이 무엇인가* 를 현재형으로
-서술하며 파일의 존재를 주장하지 않는다. 존재 여부는 이 표 **한 곳에만** 인코딩돼 있고, 그래서
-동기화 지점이 하나다. 문장을 함께 고치려 들면 그 불변식이 깨진다 (재리뷰 2026-08-17 Q4).
+**표는 반드시 고치고, 본문 문장도 축 수가 바뀌었으면 함께 고친다.**
+〔**정정(2026-08-18 fix round 1, I4)** — 이전 판은 *"표만 고친다 — 본문 문장은 건드리지 않는다"*
+였다. 그 지시의 전제는 *"존재 여부가 표 한 곳에만 인코딩돼 있다"*(재리뷰 2026-08-17 Q4)였고
+**존재**에 대해서는 지금도 맞다. 그러나 **Ruling 45 와 그것이 만든 축 0 이 그 전제를 넘어섰다**:
+본문 문장은 이제 락의 계약 **축 수**를 인코딩하고, 축 0 이 그 수사를 기계로 대조한다. 축 1c 가
+들어오면서 실제 축 수가 바뀌었으므로 본문을 안 고치면 **락 자신이 RED** 다. 지시를 그대로 따르면
+확정 RED + 도달 불가 오라클로 실행자를 몰아넣는다. 존재(표)와 계약 수(본문)는 **서로 다른
+동기화 지점**이고, 둘 다 이 커밋에 있다.〕
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
@@ -3597,7 +4491,12 @@ grep -c '^> |.*test_copy_of_contract'  shared/README.md  # Expected: 0  (내 행
 grep -c '^> |.*test_no_new_duplication' shared/README.md # Expected: 1  (Task 35 몫은 남았다)
 grep -c '검사한다'                      shared/README.md  # Expected: 1  (본문 생존 양성증거 — Task 35 와 같은 검사)
 # ↓ 이 파일에 **다른 미커밋 편집이 없을 때만** 유효하다. 있으면 값이 부풀어 오해를 부른다(실측).
-git diff --numstat shared/README.md    # Expected: `0	1` — 본문을 안 건드렸다는 독립 증거
+# Expected: `1	2` — 표에서 한 행이 빠지고(-1), 본문 문장이 축 수에 맞게 다시 쓰인다(-1/+1).
+# 〔정정 2026-08-18 fix round 1, I4 — 이전 판의 `0	1` 은 "본문을 안 건드렸다"를 재는 값이었다.
+#  축 0 이 본문의 축 수 서술을 기계로 물면서 그 기대는 **도달 불가**가 됐다(실측 `1	2`).
+#  이 숫자는 위 두 편집의 파생값이다 — 편집이 늘면 함께 늘려야 하고, 어긋나면 **먼저
+#  무엇을 더 고쳤는지 확인**한다. 값 자체를 맞추려고 편집을 되돌리지 않는다.〕
+git diff --numstat shared/README.md
 git add shared/tests/test_copy_of_contract.sh shared/README.md
 git commit -m "test(shared): 동일성 락 — 심볼릭 링크 도미넌스 체크 + copy-of 잔여 + 형제 설정 fail-closed"
 ```
@@ -3606,7 +4505,8 @@ git commit -m "test(shared): 동일성 락 — 심볼릭 링크 도미넌스 체
 > **열 순서를 뒤집어도 · 백틱을 지워도** 같은 수를 내고, **행을 지우면 1 줄고 블록을 지우면 0** 이
 > 된다. 열 문구를 리터럴로 무는 앵커(`` `test_x.sh` | plan Task 16 ``)는 누가 표기를 바꾸면
 > **편집 전에도 0** 이라 "지웠다" 와 "애초에 못 찾았다" 를 구분하지 못한 채 통과한다 —
-> 이 리포가 이미 겪은 헤더-satisfiable 클래스다. `--numstat` 은 본문 미변경의 독립 증거다.
+> 이 리포가 이미 겪은 헤더-satisfiable 클래스다. `--numstat` 은 **이 커밋이 이 파일에서 정확히
+> 무엇을 건드렸는지**의 독립 증거다(본문 미변경의 증거가 아니다 — 위 I4 정정 참조).
 
 - [ ] **Step 7: Task 17이 이 락을 못 불러 미뤄 둔 두 단언을 여기서 갚는다** (B.4 5b)
 
@@ -3622,9 +4522,9 @@ bash shared/tests/test_copy_of_contract.sh | tail -4
 bash shared/tests/test_copy_of_contract.sh | tail -3
 ```
 
-Expected: **`copy-of: 물리 사본 1건`**(Task 17 Step 4b 의 `plugins/plugin-audit/scripts/codex_jsonl.py` 하나) · 전항목 GREEN.
+Expected: **`copy-of: 물리 사본 3건`**(Task 17 Step 4b 의 `plugins/{plugin-audit,quality-gates,spec-distill}/scripts/codex_jsonl.py`) · 전항목 GREEN.
 
-**`0건`이 나오면 Task 17 Step 4b 가 실행되지 않았다는 뜻이다** — 사본을 안 만들었거나 마커가 깨졌다. 이 태스크의 결함이 아니라 앞 태스크의 미실행이므로 Task 17로 돌아간다. 〔이 기대값이 Task 19의 "1에서 4로" 수열의 출발점이다 — 여기가 1이 아니면 그 뒤 셋이 전부 어긋난다.〕
+**`0건`이 나오면 Task 17 Step 4b 가 실행되지 않았다는 뜻이다** — 사본을 안 만들었거나 마커가 깨졌다. 이 태스크의 결함이 아니라 앞 태스크의 미실행이므로 Task 17로 돌아간다. 〔이 기대값이 Task 19·20·21 누적 수열의 출발점이다 — 여기가 어긋나면 그 뒤 셋이 전부 어긋난다. 수열의 정의 자리는 Task 17 Step 4b 의 "누적 물리 사본 기대값" 문단이고, 여기서 개수를 **다시 적지 않는다**(적으면 그 자체가 또 하나의 미러가 된다).〕
 
 **세 자리가 어긋나지 않는지 여기서 검사한다.** 이 스텝(권위 있는 자리) · Task 17의 두 호출부 주석 · B.4 5b — 셋은 서로를 이름으로 가리키는데, **가리키는 이름이 틀려도 아무것도 안 깨진다.** 실제로 첫 판본에서 호출부 주석이 이 스텝을 `Step 6`(커밋 스텝)으로 잘못 가리켰고 아무 검사도 반응하지 않았다.
 
@@ -3702,7 +4602,7 @@ Expected: `[0]` 세 줄이 각 기대대로 · `[1]`·`[2]`·`[3]` 이 **1** · 
 **Files:**
 - Create: `shared/codex/codex_findings_to_yaml.py`
 - **Create: `shared/codex/codex_jsonl.py`** (codex JSONL 이벤트 파서 정본 — census #58, Step 4b)
-- **Create: `plugins/plugin-audit/scripts/codex_jsonl.py`** (`copy-of` 물리 사본)
+- **Create: `plugins/{plugin-audit,quality-gates,spec-distill}/scripts/codex_jsonl.py`** (`copy-of` 물리 사본 **3개** — 세 개인 이유는 Step 4b, 2026-08-17 fix round 1)
 - Modify: `plugins/{quality-gates,spec-distill}/scripts/codex_findings_to_yaml.py` → **정본을 가리키는 상대 심볼릭 링크** (물리 사본이 아니다)
 - **Modify: `plugins/plugin-audit/scripts/codex_audit_to_json.py`** (자체 `extract_last_agent_message` 제거 → import, census #58)
 - Modify: 호출자 (emit keyset을 인자로 넘긴다)
@@ -3778,6 +4678,23 @@ print('docstring 살아있음:', bool(m.__doc__))
 " 2>&1 | tail -2
 ```
 
+- [ ] **Step 3b: 기존 락 헤더를 갱신한다 — Task 15가 쓴 문장이 여기서 만료된다**
+
+Task 15 Step 8이 `plugins/quality-gates/tests/test_codex_copies_agree.sh` 헤더에 이렇게 적어 뒀다:
+
+> 층④는 **아직 물리 사본 2개인** `codex_findings_to_yaml.py` 를 비교하고(판정 등가 + 값 고정), …
+
+Step 3이 그 두 사본을 심볼릭 링크로 만드는 순간 이 문장은 거짓이 된다. **그 문장을 쓴 시점에는 참이었다** — 만료 날짜가 있는 참인 문장은 결함이 아니고, 그것을 닫는 것은 **만료시키는 쪽 태스크의 일**이다. B.4가 순서를 강제하는 이유와 같은 구조다.
+
+바꿀 것 둘:
+
+1. *"아직 물리 사본 2개인"* 을 지운다 — 층④의 배포 지점도 이제 정본을 가리키는 심볼릭 링크다.
+2. **판정 등가와 값 고정을 갈라 적는다.** 층①에서 그랬듯 **판정 등가**는 파일이 하나뿐이라 구조로 보장되어 실질 판정이 아니게 된다(GREEN이라 해롭지 않다). 그러나 **값 고정은 그대로 이빨이 있다** — 그 축은 *두 사본이 일치하는가*가 아니라 **알려진-상이 표본에 대한 실제 출력값**(`codex_failed: false` / `true`)을 핀하므로, 사본이 하나가 되어도 상수 추출기로 퇴화하면 잡힌다. 두 축을 뭉뚱그리면 Task 15가 고친 I1(*"판정 등가가 공허해진다"를 파일 전체에 대해 말한 오류*)을 방향만 바꿔 재현한다.
+
+**개수 리터럴을 새로 심지 말 것** — Task 15 fix round 2의 N1·N4가 정확히 그것으로 깨졌다. 축의 이름을 쓰고 개수는 세지 않는다.
+
+검증: 고친 뒤 `git diff` 로 **기존 `:4-10` 문단이 그대로인지** 확인한다 (Task 15 Step 8과 같은 규칙 — 추가·수정만, 삭제 금지). 그리고 `bash plugins/quality-gates/tests/test_codex_copies_agree.sh` 가 여전히 **62/62** 인지 확인한다.
+
 - [ ] **Step 4: 호출자를 고친다**
 
 ```bash
@@ -3795,15 +4712,46 @@ census §discrepancy 가 이것을 *"권고"* 로만 적어 두었는데(*"착�
 
 `shared/codex/codex_jsonl.py` 를 만들어 `extract_last_agent_message` 를 옮기고, 정본 `shared/codex/codex_findings_to_yaml.py` 가 그것을 import 한다.
 
-> **심볼릭 링크된 스크립트도 이 import 가 된다 — 실측했다.** `python3 <symlink>` 의 `sys.path[0]` 은 링크가 아니라 **대상 디렉토리로 해석된다**(macOS python 3.9.6 확인). 즉 `plugins/{qg,sd}/scripts/codex_findings_to_yaml.py`(심볼릭 링크)를 태워도 `sys.path[0]` 이 `shared/codex/` 라 sibling `codex_jsonl.py` 가 그대로 잡힌다 — 두 플러그인에 사본을 둘 필요가 **없다**. 〔이 사실을 확인하지 않고 "링크 쪽 디렉토리가 잡힌다"고 가정하면 필요 없는 사본 2개를 배포하게 된다.〕
+> **형제 사본은 세 배포 디렉토리 전부에 둔다 — 리포에서만 재면 틀린다.**
+> 〔2026-08-17 fix round 1, 이 문단의 옛 판본을 반증한 기록〕 옛 판본은 *"`python3 <symlink>`
+> 의 `sys.path[0]` 이 대상 디렉토리로 해석되므로 qg·sd 에는 사본이 **필요 없다**"* 라고 적었다.
+> 그 측정 자체는 맞지만 **리포 안에서만** 참이다 — 거기엔 심볼릭 링크가 실재하기 때문이다.
+> 설계 §16.1 의 기록대로 `claude plugin install` 이 서브트리를 벗어나는 링크를 **실제 파일로
+> 역참조**하면, 설치본의 `plugins/<p>/scripts/codex_findings_to_yaml.py` 는 **실파일**이고
+> 그 옆에 `codex_jsonl.py` 가 없어 **`ImportError`** 가 난다. 러너 가드가 그것을 받아
+> `extract_failed`/`yaml_conversion_failed` 로 degrade 하므로 **설치된 모든 배포에서 codex
+> 리뷰어가 100% 죽고 리포 스위트는 초록으로 남는다.**
+>
+> **Task 15 가 같은 모양을 이미 반대로 풀었다** — `detect_codex.sh` 는 형제를 역참조하지 않은
+> `dirname "${BASH_SOURCE[0]}"` 로 찾고 그 형제(`codex-killswitch.conf`)를 세 배포 디렉토리
+> 전부에 배포한다. 여기서도 같게 한다.
+>
+> 그래서 **import 앞의 경로는 역참조하지 않는다**:
+> `sys.path.insert(0, str(pathlib.Path(__file__).parent))` — `.resolve()` 를 쓰면 리포에서
+> 링크를 태울 때 `shared/codex/` 의 형제를 읽으므로 **리포 테스트가 실제로 배포되는 파일을
+> 한 번도 실행하지 않는다.** 역참조하지 않으면 리포 실행이 배포 지점 옆 사본을 읽어
+> 테스트가 배포되는 것을 검증한다. 설치본에는 링크가 없으므로 두 표기가 같아진다.
 
 `codex_audit_to_json.py` 는 **심볼릭 링크가 아니라 실제 파일**이므로 자기 `sys.path[0]`(= `plugins/plugin-audit/scripts/`)에서 모듈을 찾는다. 그 자리에 `copy-of` **물리 사본**을 둔다 — Task 19·20·21과 같은 방식이다:
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
-{ echo "# copy-of: shared/codex/codex_jsonl.py"; cat shared/codex/codex_jsonl.py; } \
-  > plugins/plugin-audit/scripts/codex_jsonl.py
+for p in plugin-audit quality-gates spec-distill; do
+  { echo "# copy-of: shared/codex/codex_jsonl.py"; cat shared/codex/codex_jsonl.py; } \
+    > "plugins/$p/scripts/codex_jsonl.py"
+done
+# 세 사본이 마커 한 줄만 빼고 정본과 바이트 동일한가
+for p in plugin-audit quality-gates spec-distill; do
+  printf '%-14s ' "$p"
+  diff -q <(tail -n +2 "plugins/$p/scripts/codex_jsonl.py") shared/codex/codex_jsonl.py >/dev/null \
+    && echo "마커 제외 바이트 동일 ✓" || echo "❌ 갈린다"
+done
 ```
+
+**세 개인 이유**: `codex_audit_to_json.py` 는 실파일이라 자기 옆에서 찾고(그것이 원래
+이유였다), qg·sd 는 **설치본에서 링크가 실파일로 역참조된 뒤** 자기 옆에서 찾는다(위 문단).
+리포에서는 역참조하지 않은 `.parent` 덕에 링크를 태워도 배포 지점 옆 사본을 읽으므로,
+**리포 테스트가 곧 배포본 테스트**다.
 
 > **왜 여기는 심볼릭 링크가 아닌가** (Task 15·17의 기본 방식과 다른 이유). Task 16의 축 1a(심볼릭 링크 무결성)는 배포 지점 집합을 **참조원에서 도출**한다 — 정본 basename 을 `scripts/<basename>` 형태로 참조하는 파일을 찾는 방식이다. `codex_jsonl` 은 `from codex_jsonl import ...` 로만 불리므로 그 문자열이 리포 어디에도 없고, 링크로 두면 그 정본의 기대 배포 지점이 **0건**으로 도출된다. 마커 축(1b)은 도출이 아니라 마커 스캔이라 이 문제가 없다 — 그래서 여기는 `copy-of` 다.
 >
@@ -3813,7 +4761,11 @@ cd /Users/jeonghokim/Downloads/devbrew
 
 ```python
 import sys, pathlib
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+# 역참조하지 않는다(bare .parent) — 정본과 같은 규칙. `.resolve()` 를 "symlink 경유에도
+# 자기 디렉토리를 가리킨다"로 정당화한 앞 판본은 거짓이었다(2026-08-17 fix round 2, R2-12):
+# `.resolve()` 는 링크를 따라가 정본 디렉토리를 내므로, 이 파일이 나중에 링크가 되면
+# (Task 19~21 이 그 변환을 한다) 배포 지점 옆 copy-of 사본을 못 읽는다.
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from codex_jsonl import extract_last_agent_message  # noqa: E402
 ```
 
@@ -3821,7 +4773,14 @@ from codex_jsonl import extract_last_agent_message  # noqa: E402
 
 `apply_overrides`(census #62)는 pa 에서 `main()` **안의 중첩 함수**다(`codex_audit_to_json.py:155`). 시그니처는 같지만 소비하는 meta 키가 달라 여기서는 **옮기지 않는다** — census #62 조치란에 그 이유를 적는다.
 
-> **이 스텝이 이 사이클의 `copy-of` 마커 방식 첫 실제 사용자다** — 기존 서술은 Task 19를 첫 사용자로 적었는데(Task 16 rationale 3번 · 부록 B.1 미결 5), 실행 순서가 17 → 19 이므로 이 스텝이 앞선다. 누적 물리 사본 기대값: **Task 17(+1) = 1 → Task 19(+3) = 4 → Task 20(+3) = 7 → Task 21(+2) = 9.** 각 태스크의 `물리 사본 N건` 문단을 이 수열로 읽는다.
+> **이 스텝이 이 사이클의 `copy-of` 마커 방식 첫 실제 사용자다** — 기존 서술은 Task 19를 첫 사용자로 적었는데(Task 16 rationale 3번 · 부록 B.1 미결 5), 실행 순서가 17 → 19 이므로 이 스텝이 앞선다. 누적 물리 사본 기대값: **Task 17(+3) = 3 → Task 19(+3) = 6 → Task 20(+3) = 9 → Task 21(+2) = 11.** 각 태스크의 `물리 사본 N건` 문단을 이 수열로 읽는다.
+
+> ⚠ **이 수열은 개수 리터럴이고, plan 안 여러 곳에 미러돼 있다.** 미러 위치: Task 16 의 락
+> 기대값(0건 가드 · `물리 사본 N건` Expected 2곳) · Task 19·20·21 의 각 `물리 사본 N건`
+> 문단 · Task 35 변이 6 의 서술 · 부록 B.5. **어느 태스크가 사본 수를 바꾸면 이 목록을 따라
+> 전부 갱신해야 한다.** 〔2026-08-17 fix round 1 이 `+1 = 1` 을 `+3 = 3` 으로 옮기며 실제로
+> 열 곳을 고쳤다 — 이 사이클이 반복해서 부딪히는 바로 그 문제를 plan 이 자기 안에서 하고
+> 있었다.〕
 
 - [ ] **Step 4c: 검증 — 세 파일이 같은 파서를 쓰는가**
 
@@ -3853,14 +4812,14 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/t
 > `No such file or directory` 가 난다 — **락의 결함도 이 태스크의 결함도 아니다.**
 > **권위 있는 자리는 하나다: `Task 16 Step 7`.** 거기가 이 두 줄을 실제로 갚는 스텝이고, 그 스텝이
 > Task 16의 완료 조건이다. 여기와 B.4 5b 는 그 이름을 **가리키기만** 한다 — 대상은
-> Step 4c(`물리 사본 1건` — Step 4b 가 만든 `codex_jsonl.py` 사본의 copy-of 단언)와 Step 5 둘이다.
+> Step 4c(`물리 사본 3건` — Step 4b 가 만든 `codex_jsonl.py` 사본 셋의 copy-of 단언)와 Step 5 둘이다.
 >
 > **드리프트 방지**: 이 구조가 참이려면 `Task 16 Step 7` 이 존재하고 그 본문이 두 줄을 다 담아야 한다.
 > Task 16 Step 7 자신이 그것을 **자기 자리에서 검사한다**(그 스텝의 마지막 블록) — 세 자리가 서로를
 > 가리키기만 하고 아무도 확인하지 않는 구조가 이 노트의 첫 판본을 **`Step 6`(커밋 스텝)으로 잘못 가리키게** 했다.
 
 
-Expected: 두 출력이 `('HELLO', True)` 로 같다 · `물리 사본 1건` · plugin-audit 스위트 새 RED 0. 〔테스트 디렉토리 경로는 Task 12가 `scripts/tests/` → `tests/` 로 옮긴 뒤 기준이다.〕
+Expected: 두 출력이 `('HELLO', True)` 로 같다 · `물리 사본 3건` · plugin-audit 스위트 새 RED 0. 〔테스트 디렉토리 경로는 Task 12가 `scripts/tests/` → `tests/` 로 옮긴 뒤 기준이다.〕
 
 - [ ] **Step 5: 검증**
 
@@ -3882,9 +4841,9 @@ Expected: `category:`와 `target_section:`이 나온다. 안 나오면 인자가
 ```bash
 git add shared/codex/codex_findings_to_yaml.py shared/codex/codex_jsonl.py \
         plugins/*/scripts/codex_findings_to_yaml.py plugins/*/scripts/run_*codex*.sh \
-        plugins/plugin-audit/scripts/codex_jsonl.py plugins/plugin-audit/scripts/codex_audit_to_json.py
+        plugins/*/scripts/codex_jsonl.py plugins/plugin-audit/scripts/codex_audit_to_json.py
 git commit -m "refactor(codex): codex_findings_to_yaml.py 2사본을 심볼릭 링크로 통합 — emit keyset 을 인자로 + JSONL 파서 3사본 정본화"
-git ls-files shared/codex/codex_jsonl.py plugins/plugin-audit/scripts/codex_jsonl.py
+git ls-files shared/codex/codex_jsonl.py 'plugins/*/scripts/codex_jsonl.py'   # 정본 1 + 사본 3 = 4줄
 ```
 
 ---
@@ -4126,7 +5085,7 @@ for p in project-init spec-distill quality-gates; do
 done
 ```
 
-> **사본이 3개다** (2·3 이 아니라). `_disabled` 7곳 중 5곳이 quality-gates 이므로 그 플러그인도 배포 사본을 갖는다. 아래 Step 6의 `copy-of: 물리 사본 N건 스캔` 기대값이 **2가 아니라 3**이다. 누적 수열은 Task 17 Step 4b(+1) → 이 태스크(+3) → Task 20(+3) → Task 21(+2) = **9** 이고, 각 태스크가 자기 자리에서 그 값을 적는다.
+> **사본이 3개다** (2·3 이 아니라). `_disabled` 7곳 중 5곳이 quality-gates 이므로 그 플러그인도 배포 사본을 갖는다. 아래 Step 6의 `copy-of: 물리 사본 N건 스캔` 기대값이 **2가 아니라 3**이다. 누적 수열은 Task 17 Step 4b(+3) → 이 태스크(+3) → Task 20(+3) → Task 21(+2) = **11** 이고, 각 태스크가 자기 자리에서 그 값을 적는다.
 
 > 파이썬 파일에 shebang이 없으면 마커가 **첫 줄**이다. 모듈 docstring이 그 다음 줄에 와도 여전히 첫 *문*이므로 `__doc__`이 산다. Task 17 Step 3의 검사를 여기도 돌린다.
 
@@ -4188,13 +5147,13 @@ Expected: **12지점 × 두 스위치 전부**에서 no-op. **하나라도 반�
 
 > **미검증 — 실행자가 확인할 것** (2026-08-17 라운드 1 코드 리뷰): 이 태스크가 만드는
 > `kill_switch_active.py` **×3** 배포는 이 사이클의 `copy-of` 마커 방식 **두 번째** 실사용이다
-> — 첫 실사용은 **Task 17 Step 4b**(`codex_jsonl.py` ×1)이며, Task 16 rationale 3번과
+> — 첫 실사용은 **Task 17 Step 4b**(`codex_jsonl.py` ×3 — 배포 지점 셋)이며, Task 16 rationale 3번과
 > 부록 B.1 미결 5가 "첫 사용자 = Task 19"라고 적은 것은 그 스텝이 2026-08-17 census 조치
 > 재검토로 추가되기 전의 서술이다. Task 16의 축 1b(마커 기반 바이트-동일성 검사)
 > 자체는 실측·mutation으로 검증됐지만, **이 배포가 그 축의 vacuous-check 개정
 > 이후에도 여전히 스캔에 걸리는지는 이 태스크 실행 시점에 실제로 확인된 적이 없다**
 > — 아래 `bash shared/tests/test_copy_of_contract.sh` 실행 시 `copy-of: 물리 사본
-> N건 스캔`이 **1(Task 17 Step 4b)에서 4로** 늘었는지 — 이 태스크가 3을 더한다
+> N건 스캔`이 **3(Task 17 Step 4b)에서 6으로** 늘었는지 — 이 태스크가 3을 더한다
 > (project-init · spec-distill · quality-gates) —, `git ls-files -s`가 **세 파일** 모두 마커 헤더를 포함해
 > 정본과 바이트가 같다고 보는지 **직접 눈으로 확인한다.** 조용히 통과만 하고 넘어가지 않는다.
 
@@ -4217,12 +5176,28 @@ git commit -m "refactor(killswitch): kill_switch_active·_disabled 12정의를 s
 
 **§3 분류: 부분 사본.** 다섯 러너가 각자 다른 프롬프트 빌더를 부르므로 파일 전체 동일화가 불가능하다. **잔여의 보호는 Task 35의 20줄 검사가 맡는다** — 추출 후에도 긴 구간이 겹치면 RED가 되어 추가 추출을 요구한다.
 
+> **〔2026-08-19 실행 결과 — 아래 스텝의 "다섯 러너" 서술을 이 렌즈로 읽을 것〕**
+>
+> Step 2(소비자 확인)가 **이 태스크의 지시 하나를 반증했다.** 정본을 실제로 source 하는
+> 러너는 **셋**이다 — `run_codex_reviewer.sh` · `run_spec_codex_reviewer.sh` ·
+> `run_brief_codex_reviewer.sh`(전부 중첩 YAML 소비자). 나머지 둘은 **의도적으로 제외**했다:
+> `run_audit_codex_reviewer.sh` 는 JSON 소비자(`assemble-audit-data.py` 가 `json.loads` 로
+> 읽고 `d_verdicts` 등을 꺼낸다 → YAML 이면 하드 크래시)이고,
+> `run_artifact_codex_reviewer.sh` 의 평면 YAML 은 `synthesize_artifact_findings.py` 의
+> `_is_findings_doc` 이 의지하는 fail-closed 백스톱이다(`findings: []` 로 바꾸면 실패가
+> "정상 0건"으로 조용히 읽힌다). 근거는 설계 §6.2 정정 문단과
+> `shared/codex/runner_common.sh` 헤더에 file:line 으로 있다.
+>
+> **이 둘의 스키마 차이는 남은 작업이 아니라 의도된 최종 상태다.** 아래 Step 1·4·5 의
+> "다섯 러너" 는 *대조 대상*이 다섯이라는 뜻이고, *정본을 공유하는* 러너는 셋이다.
+> 이 태스크는 완료됐다 — 마저 통일하러 돌아오지 말 것.
+
 **§6.2가 지정한 결함 4건 중 이 태스크가 닫는 둘:**
 
 | 결함 | 결정 | 근거 |
 |---|---|---|
 | `run_codex_reviewer.sh:92`의 가드에 `-n` 검사 누락 — `OUTPUT_PATH`가 빈 문자열이면 **빈 경로에 쓰기 시도** | 나머지 사본과 같이 `-n` 검사를 넣는다 | 다섯 중 하나만 빠져 있다 |
-| `_degrade_if_empty`의 출력 스키마가 **4종** (JSON / 평면 YAML / `agent:` 포함 중첩 / `agent:` 없는 중첩) | **중첩 YAML + `findings: []` + `meta:`로 통일** | 소비자(`merge_review.py`·`synthesize_findings.py`)가 그 형태를 기대한다 |
+| `_degrade_if_empty`의 출력 스키마가 **4종** (JSON / 평면 YAML / `agent:` 포함 중첩 / `agent:` 없는 중첩) | **중첩 YAML 계열 셋만 통일. 나머지 둘은 통일하지 않는다**(설계 §6.2 정정) | 셋의 소비자(`merge_review.py`·`synthesize_findings.py`)는 그 형태를 기대하지만, 감사 러너는 JSON 소비자(`assemble-audit-data.py` 가 `json.loads`)이고 아티팩트 러너의 평면 YAML 은 `synthesize_artifact_findings.py` 의 fail-closed 백스톱이다 |
 
 **이 태스크가 다루는 함수는 `_degrade_if_empty` 하나가 아니다** (2026-08-17 census 조치 재검토). census #24(파일쌍 `run_brief_codex_reviewer.sh` ↔ `run_spec_codex_reviewer.sh`, 74.0%)의 근거는 *"`write_failclosed`·`emit_fallback` 함수가 두 파일에 그대로 복제"*라고 적고 있고 #125·#126이 그 둘을 따로 세는데, **이 태스크의 Step 3은 `_degrade_if_empty` 만 정본으로 만들었다** — 세 행 모두 "Task 20·21"을 가리키면서 실제 추출 대상에서 빠져 있었다. 아래 Step 3b가 채운다.
 
@@ -4254,14 +5229,16 @@ grep -n 'codex_failed\|meta' plugins/quality-gates/scripts/synthesize_findings.p
 
 ```bash
 #!/usr/bin/env bash
-# codex 러너 5종의 공통 조각. **부분 사본**이므로 파일 전체 동일화는 불가능하다
+# codex 러너의 fail-closed 산출물 정본. **부분 사본**이므로 파일 전체 동일화는 불가능하다
 # (각 러너가 다른 프롬프트 빌더를 부른다) — 잔여는 shared/tests/test_no_new_duplication.sh
 # 의 20줄 검사가 지킨다.
 #
 # ── 출력 스키마 통일 (설계 §6.2) ─────────────────────────────────────────
 # 통합 전 `_degrade_if_empty` 의 출력이 4종이었다: JSON · 평면 YAML ·
 # `agent:` 포함 중첩 · `agent:` 없는 중첩. 행동 등가 락이 판정만 재느라 스키마가
-# 락 밖으로 샜다. 여기서 **중첩 YAML + findings: [] + meta:** 하나로 못박는다.
+# 락 밖으로 샜다. 여기서 **중첩 YAML + findings: [] + meta:** 하나로 못박는다 —
+# 단, **중첩 YAML 계열 셋에 대해서만**이다. JSON(감사)·평면 YAML(아티팩트) 러너는
+# 소비자 계약이 달라 정본을 쓰지 않는다(설계 §6.2 정정, 실제 파일 헤더에 근거 기록).
 
 # _degrade_if_empty <output_path> <reason> [exit_code]
 # 산출물이 비었거나 없을 때 fail-closed 산출물을 쓴다. **쓰지 못하면 exit 3** —
@@ -4444,14 +5421,17 @@ Expected: 문법 오류 0 · 두 러너 모두 `runner_common.sh` 를 1회 이�
 - [ ] **Step 6: 기존 러너 락 + `copy-of` 락**
 
 > **미검증 — 실행자가 확인할 것** (2026-08-17 라운드 1 코드 리뷰, Task 19와 같은 종류의 gap):
-> 이 태스크가 `shared/codex/runner_common.sh`를 5개 러너에 `copy-of` 사본으로 배포한다.
-> Task 16의 축 1b(마커 기반 바이트-동일성)는 실측·mutation으로 검증됐지만, **이 특정
-> 배포(5건)가 그 축의 스캔에 실제로 걸리는지는 이 태스크 실행 시점에 확인된 적이 없다.**
-> 아래 실행 시 `copy-of: 물리 사본 N건 스캔`의 N이 **4에서 7로** 늘었는지 직접 확인한다 —
-> 이전 누적 4(Task 17 Step 4b의 1 + Task 19의 3) + **이번 3건**이다.
-> (러너는 5개지만 `runner_common.sh` 사본은 **플러그인당 하나**라 3개다 — Step 4의
-> `for p in quality-gates spec-distill plugin-audit` 가 도는 횟수다. 5로 세면 N 이
-> 기대보다 2 적게 나와 정상을 결함으로 오독한다.)
+> 이 태스크가 `shared/codex/runner_common.sh`를 **정본을 실제로 source 하는 러너들**에 `copy-of` 사본으로 배포한다.
+> Task 16의 축 1b(마커 기반 바이트-동일성)는 실측·mutation으로 검증됐지만, 이 배포가 그
+> 축의 스캔에 실제로 걸리는지는 이 태스크 실행 시점에 확인된 적이 없었다.
+> **〔2026-08-19 실행 결과로 확정〕** N 은 **6 → 8** 이다 — 이전 누적 6(Task 17 Step 4b 3 +
+> Task 19 3) + **이번 2건**. 사본은 러너 수가 아니라 **정본을 source 하는 플러그인 수**만큼
+> 생기고, 그 플러그인은 quality-gates · spec-distill **둘**이다(plugin-audit 러너는 JSON
+> 소비자라 정본을 쓰지 않는다 — 설계 §6.2 정정). 축 1b 는 이 배포를 자동으로 잡았다(114/114).
+>
+> **함정 하나 — 실측으로 확인됐다**: 사본을 만든 직후에도 락은 여전히 6 을 냈다. 락의 코퍼스가
+> `git ls-files` 에서 오므로 **미추적 파일이 보이지 않는다.** `git add` 후에야 8 이 됐다.
+> 스테이징 전에 이 확인을 한 사람은 아무것도 확인한 것이 아니다.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
@@ -4467,7 +5447,10 @@ bash shared/tests/test_copy_of_contract.sh | tail -6
 
 ```bash
 git add shared/codex/runner_common.sh plugins/*/scripts/
-git commit -m "refactor(codex): 러너 공통 조각 추출 — _degrade_if_empty 스키마 4종을 1종으로 + write_failclosed 정본화"
+git commit -m "refactor(codex): 러너 fail-closed 조각을 shared 정본으로 — 중첩 YAML 계열 3러너"
+# 〔2026-08-19 정정〕 앞 판본의 메시지는 모든 스키마가 하나로 합쳐진다고 적었다. 실제로
+# 통일된 것은 중첩 YAML 계열 셋이고, 나머지 둘은 소비자 계약이 달라 의도적으로 남는다
+# (설계 §6.2 정정).
 ```
 
 ---
@@ -4541,8 +5524,14 @@ done
 > **미검증 — 실행자가 확인할 것** (2026-08-17 라운드 1 코드 리뷰, Task 19·20과 같은 종류의 gap):
 > `gc_common.py` ×2가 이 태스크에서 `copy-of` 사본으로 배포된다. Task 16의 축 1b는
 > 실측·mutation으로 검증됐지만, 이 배포가 그 스캔에 실제로 걸리는지는 확인된 적이
-> 없다 — 아래 실행에서 `물리 사본 N건` 이 **7에서 9로** 늘었는지 직접 확인한다 —
-> 이전 누적 7(Task 17 Step 4b 1 + Task 19 3 + Task 20 3) + **이번 2건**이다. 최종 **9**.
+> 없다 — 아래 실행에서 `물리 사본 N건` 이 **8에서 10으로** 늘었는지 직접 확인한다 —
+> 이전 누적 **8**(Task 17 Step 4b 3 + Task 19 3 + **Task 20 2**) + **이번 2건**이다. 최종 **10**.
+> 〔2026-08-19 정정: 앞 판본은 Task 20 을 3 으로 세어 9 → 11 이라 적었다. Task 20 의 사본은
+> 정본을 source 하는 플러그인 수만큼이고 그것은 **둘**이다(설계 §6.2 정정). 8 은 Task 20
+> 실행 후 락이 실제로 낸 값이다.〕
+>
+> **`git add` 전에는 이 확인이 무의미하다** — 락의 코퍼스가 `git ls-files` 에서 오므로
+> 미추적 사본은 세지 않는다(Task 20 실측).
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
@@ -4842,7 +5831,7 @@ git commit -m "refactor(spec-distill): state_path.py 를 scripts/ 로 — hooks/
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
-python3 plugins/plugin-audit/scripts/check-staleness.py --repo-root . 2>&1 | grep -i -A3 'description'
+for p in plugins/*/; do python3 plugins/plugin-audit/scripts/check-staleness.py "$p" --repo-root . || echo "⚠ SWEEP FAILED $p" >&2; done | grep -i 'description drift'
 ```
 
 - [ ] **Step 2: `plugin.json`을 정본으로 동기화**
@@ -4881,7 +5870,7 @@ git diff --stat marketplace.json
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
-python3 plugins/plugin-audit/scripts/check-staleness.py --repo-root . 2>&1 | grep -ci 'description.*drift' | head -1
+for p in plugins/*/; do python3 plugins/plugin-audit/scripts/check-staleness.py "$p" --repo-root . || echo "⚠ SWEEP FAILED $p" >&2; done | grep -ci 'description drift'
 python3 -c "import json; json.load(open('marketplace.json', encoding='utf-8')); print('JSON 유효 ✓')"
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/tests -t plugins/plugin-audit/tests 2>&1 | tail -3
@@ -6420,7 +7409,7 @@ Expected: PASS · mode `100755`
 | 3 | **같은 정본을 가리키는 심볼릭 링크 쌍을 그대로 둔다**(실제 대상: `detect_codex.sh` 3링크, Task 15) | **GREEN** | 면제 술어 ② — 심볼릭 링크 경로 |
 | 4 | 그 쌍 중 하나를 **독립 파일로 깬다**(내용은 그대로 두고 링크성만 제거) | **RED** | 면제가 "링크라는 사실"에 실제로 의존 — 내용이 같아도 링크가 아니면 설명 안 된 중복이다 |
 | 5 | **무관한 두 파일에 같은 정본을 가리키는 `copy-of` *마커* 줄을 새로 붙여 20줄 검사를 회피한다** | **`copy-of` 락이 RED** | 회피 경로 봉쇄(마커 축) — **심볼릭 링크 축에는 이 공격이 성립하지 않는다**: 진짜 OS 심볼릭 링크는 가리키는 대상의 내용을 "주장"할 수 없다(대상이 곧 자기 내용이다). 거짓을 말할 수 있는 것은 텍스트 마커뿐이다 |
-| 6 | **마커 예외 자체의 이빨** — 스캐치 픽스처 쌍(정본 + `copy-of` 마커를 가진 사본, 둘 다 ≥20줄·≥200자 진짜 중복 블록)을 그대로 둔다(GREEN 기대) → 그다음 사본에서 `copy-of` 줄만 지운다(RED 기대) | **GREEN → RED** | 2026-08-17 라운드 3 코드 리뷰: 변이 3·4는 **심볼릭 링크 쌍만** 태웠다 — 마커 기반 면제(위 Step 1 스크립트의 `canonical_of()` 안, `symlink_target_of()`가 `None`을 준 뒤 `MARKER.match(line)`으로 떨어지는 폴백 분기)는 이번까지 mutation-proof가 전혀 없었다. 이 mutation 을 설계할 당시엔 리포에 실제 마커 쌍이 없었으므로(첫 실사용은 Task 17 Step 4b — B.1의 미결 5 참조) Task 16의 물리 사본 축과 같은 패턴(스캐치 픽스처)을 쓴다. **Task 16 시점에 이미 사본 1건(Task 17 Step 4b), PR6 시점엔 9건이 있지만 픽스처를 계속 쓴다** — 픽스처는 크기·마커를 통제할 수 있고, 실제 사본을 흔들면 앞 태스크의 산출물을 훼손한다. 또 실제 사본에 의존하면 그 사본이 사라질 때 mutation 이 조용히 vacuous 해진다 |
+| 6 | **마커 예외 자체의 이빨** — 스캐치 픽스처 쌍(정본 + `copy-of` 마커를 가진 사본, 둘 다 ≥20줄·≥200자 진짜 중복 블록)을 그대로 둔다(GREEN 기대) → 그다음 사본에서 `copy-of` 줄만 지운다(RED 기대) | **GREEN → RED** | 2026-08-17 라운드 3 코드 리뷰: 변이 3·4는 **심볼릭 링크 쌍만** 태웠다 — 마커 기반 면제(위 Step 1 스크립트의 `canonical_of()` 안, `symlink_target_of()`가 `None`을 준 뒤 `MARKER.match(line)`으로 떨어지는 폴백 분기)는 이번까지 mutation-proof가 전혀 없었다. 이 mutation 을 설계할 당시엔 리포에 실제 마커 쌍이 없었으므로(첫 실사용은 Task 17 Step 4b — B.1의 미결 5 참조) Task 16의 물리 사본 축과 같은 패턴(스캐치 픽스처)을 쓴다. **Task 16 시점에 이미 사본 3건(Task 17 Step 4b), PR6 시점엔 10건이 있지만 픽스처를 계속 쓴다** — 픽스처는 크기·마커를 통제할 수 있고, 실제 사본을 흔들면 앞 태스크의 산출물을 훼손한다. 또 실제 사본에 의존하면 그 사본이 사라질 때 mutation 이 조용히 vacuous 해진다 |
 
 **변이 1·2만 맨 앞·중간·맨 끝 세 위치에서 각각 수행한다.** 변이 3·4(심볼릭 링크)·5(마커 삽입)·6a·6b(픽스처 쌍)는 **위치 개념이 없다** — 흔드는 대상이 "본문 한 줄"이 아니라 링크성·마커·파일 쌍 전체이기 때문이다(Task 16의 변이 B와 같은 이유). 아래 스크립트도 `for pos in head mid tail` 루프를 변이 1·2에만 두른다.
 
@@ -6589,9 +7578,14 @@ Expected: **두 파일 모두** 실행 목록에 나온다. 후보에만 있고 
 **이 락이 마지막이다 — `shared/README.md` 의 "아직 없는 락" 표에서 마지막 행을 지우고, 표가 비므로
 그 경고 블록을 통째로 지운다.** Task 16 이 자기 행을 이미 지웠으므로 여기 남은 것은 이 락의 행 하나다.
 
-**여기서도 본문 문장은 건드리지 않는다.** 본문은 처음부터 현재형이고 락이 검사하는 계약을 서술할
-뿐이다 — 존재 여부는 표에만 있었고, 그 표가 사라지면 그것으로 끝이다. 미래형 표현을 되돌리는
-작업은 **없다**(애초에 만들지 않았다, 재리뷰 2026-08-17 Q4).
+**이 스텝에서는 본문 문장을 건드릴 일이 없다.** 이 락(`test_no_new_duplication.sh`)에 대한 본문은
+처음부터 현재형이고, 그 존재 여부는 표에만 있었으며 그 표가 사라지면 그것으로 끝이다. 미래형
+표현을 되돌리는 작업은 **없다**(애초에 만들지 않았다, 재리뷰 2026-08-17 Q4).
+〔2026-08-18 fix round 1, I4: 이전 판은 *"여기서도"* 로 Task 16 Step 6 의 *"본문 문장은 건드리지
+않는다"* 를 인용했다. **그 지시는 정정됐다** — Task 16 은 축 0 때문에 본문 문장도 함께 고쳐야
+한다. 여기가 본문을 안 건드리는 이유는 그 규칙을 물려받아서가 아니라, **이 락의 계약 축 수가
+바뀌지 않기 때문**이다. 이 스텝이 `test_copy_of_contract.sh` 의 축을 늘리거나 줄인다면 그때는
+여기서도 본문을 고쳐야 하고, 안 고치면 축 0 이 RED 를 낸다.〕
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
@@ -6666,7 +7660,7 @@ echo; echo "=== 6. 20줄 동일 블록 (copy-of 미설명) ==="
 bash shared/tests/test_no_new_duplication.sh 2>&1 | tail -2
 
 echo; echo "=== 7. marketplace.json drift ==="
-python3 plugins/plugin-audit/scripts/check-staleness.py --repo-root . 2>&1 | grep -ci 'description.*drift' | head -1
+for p in plugins/*/; do python3 plugins/plugin-audit/scripts/check-staleness.py "$p" --repo-root . || echo "⚠ SWEEP FAILED $p" >&2; done | grep -ci 'description drift'
 
 echo; echo "=== 8. 환경변수 어순 패턴 ==="
 grep -rhoE 'DEVBREW_[A-Z0-9_]+' plugins/ CLAUDE.md shared/ 2>/dev/null | grep -v CHANGELOG | sort -u \
@@ -7393,7 +8387,7 @@ else:
 | 2 | `parents[N]` 재앵커 대상 | **도출 방법 확정** (3축 grep). 목록은 실행 시점 | Task 12 Step 2 |
 | 3 | PR1 범위 | **실행 시점** — 기준선 캡처 결과에 따름 | Task 1 |
 | 4 | `# guards:` 없는 셸 테스트 기본 동작 | **확정** — 현행 유지(`CHANGED_TESTS` 만). 순수 추가라 회귀 없음 | Task 5 |
-| 5 | `copy-of` 마커 정규식·문법 | **확정** — 4요구 전부. **2026-08-17 실측 이후**: `detect_codex.sh`·`codex_findings_to_yaml.py`는 심볼릭 링크로 전환돼 마커가 없다(설계 §16.1). **2026-08-17 라운드 1 코드 리뷰가 정정**: 4요구가 실제 배포 파일에 처음 적용되는 사례는 Task 18이 아니다 — Task 18의 `read_preamble.sh`는 요구를 확정할 뿐 배포 스텝을 실제로 쓰지 않는다(Task 18 절 하단 기록). **2026-08-17 census 조치 재검토가 다시 정정**: 첫 적용은 Task 19가 아니라 **Task 17 Step 4b**(`codex_jsonl.py` ×1)이고 Task 19(×3)가 그다음이다 | ~~Task 15 Step 5~~ → ~~Task 18 Step 3~~ → ~~Task 19 Step 3~~ → **Task 17 Step 4b** |
+| 5 | `copy-of` 마커 정규식·문법 | **확정** — 4요구 전부. **2026-08-17 실측 이후**: `detect_codex.sh`·`codex_findings_to_yaml.py`는 심볼릭 링크로 전환돼 마커가 없다(설계 §16.1). **2026-08-17 라운드 1 코드 리뷰가 정정**: 4요구가 실제 배포 파일에 처음 적용되는 사례는 Task 18이 아니다 — Task 18의 `read_preamble.sh`는 요구를 확정할 뿐 배포 스텝을 실제로 쓰지 않는다(Task 18 절 하단 기록). **2026-08-17 census 조치 재검토가 다시 정정**: 첫 적용은 Task 19가 아니라 **Task 17 Step 4b**(`codex_jsonl.py` ×3 — 배포 지점 셋)이고 Task 19(×3)가 그다음이다 | ~~Task 15 Step 5~~ → ~~Task 18 Step 3~~ → ~~Task 19 Step 3~~ → **Task 17 Step 4b** |
 | 6 | 완료 측정 실측값 | **실행 시점**. before 값은 plan 작성 시점 실측으로 박음 | Task 36 |
 
 ## B.2 설계 서술 정정 2건
@@ -7424,7 +8418,7 @@ else:
 3. **Task 2(census SHA 고정)가 PR2보다 앞서야 한다.** 뒤면 아카이브 이동이 모집단을 줄여 "미배정 0"이 조치 아닌 이동으로 달성된다.
 4. **PR3a → 3b → 3c 순서를 바꾸지 않는다.** 옮기기 → 계측기 → 피검체. 순서가 섞이면 RED 귀속이 불가능하다.
 5. **Task 15가 Task 16보다 앞선다** — 락을 먼저 달면 도입 즉시 RED다(C17: 사본 제거 우선).
-5b. **Task 17도 Task 16보다 앞선다** (2026-08-17 fix round 2 발견). 5번과 **같은 이유인데 빠져 있었다**: Task 16의 `SYMLINK_CANONICALS` 는 정본 둘을 담는데 `shared/codex/detect_codex.sh` 는 Task 15의, **`shared/codex/codex_findings_to_yaml.py` 는 Task 17의 산출물**이다. 번호 순서(16 → 17)대로 돌면 Task 16 Step 2의 락 첫 실행에서 두 번째 정본이 없어 `no "정본 … 자체가 없다"` 로 RED 가 난다 — C17이 금지하는 "락을 먼저 달기"의 두 번째 인스턴스다. **실행 순서: 15 → 17 → 16 → 18 → 19 → …** 그 순서에서 Task 17은 아직 없는 락을 **두 곳**에서 부른다 — **Step 4c**(`| tail -4`, Expected 에 `물리 사본 1건` 이 걸려 있다 — Step 4b 가 만든 `codex_jsonl.py` 사본의 copy-of 단언) **와 Step 5**(`| tail -3`). **둘 다 Task 16 Step 7이 이름으로 받아 갚는다**(그 스텝이 Task 16의 완료 조건이다). 두 스텝의 나머지 검증은 Task 17 시점에 그대로 유효하다. **이 사실은 부록이 아니라 그 두 호출부 옆에도 적혀 있다** — 실행자는 부록을 읽고 있지 않고, 첫 판본은 Step 5만 세어 Step 4c 를 놓쳤다. 형제 규칙 5(Task 15)는 영향받지 않는다: Task 15는 Files 의 `Test:` 줄에서 락을 **선언만** 하고 실행하지 않는다(실측 — Task 15 본문에 실행 줄이 없다).
+5b. **Task 17도 Task 16보다 앞선다** (2026-08-17 fix round 2 발견). 5번과 **같은 이유인데 빠져 있었다**: Task 16의 `SYMLINK_CANONICALS` 는 정본 둘을 담는데 `shared/codex/detect_codex.sh` 는 Task 15의, **`shared/codex/codex_findings_to_yaml.py` 는 Task 17의 산출물**이다. 번호 순서(16 → 17)대로 돌면 Task 16 Step 2의 락 첫 실행에서 두 번째 정본이 없어 `no "정본 … 자체가 없다"` 로 RED 가 난다 — C17이 금지하는 "락을 먼저 달기"의 두 번째 인스턴스다. **실행 순서: 15 → 17 → 16 → 18 → 19 → …** 그 순서에서 Task 17은 아직 없는 락을 **두 곳**에서 부른다 — **Step 4c**(`| tail -4`, Expected 에 `물리 사본 3건` 이 걸려 있다 — Step 4b 가 만든 `codex_jsonl.py` 사본 셋의 copy-of 단언) **와 Step 5**(`| tail -3`). **둘 다 Task 16 Step 7이 이름으로 받아 갚는다**(그 스텝이 Task 16의 완료 조건이다). 두 스텝의 나머지 검증은 Task 17 시점에 그대로 유효하다. **이 사실은 부록이 아니라 그 두 호출부 옆에도 적혀 있다** — 실행자는 부록을 읽고 있지 않고, 첫 판본은 Step 5만 세어 Step 4c 를 놓쳤다. 형제 규칙 5(Task 15)는 영향받지 않는다: Task 15는 Files 의 `Test:` 줄에서 락을 **선언만** 하고 실행하지 않는다(실측 — Task 15 본문에 실행 줄이 없다).
 6. **Task 34가 Task 35보다 앞선다** — 무릎을 모르고 임계를 박을 수 없다.
 7. **Task 25(env rename)가 Task 26(좀비 제거)보다 앞선다** — rename 전 이름으로 좀비를 판정하면 옛 이름 전부가 좀비로 보인다.
 
@@ -7436,8 +8430,8 @@ else:
 | `test_guards_coverage_bidirectional.sh` | Task 6 | **Task 16 Step 5 · Task 35 Step 4** — 대상 락이 생긴 뒤라야 실제 판정이 난다. Task 6 시점의 PASS는 vacuous이며 그 사실을 그 태스크가 명시한다 |
 | `test_assert_behavior.sh` | Task 13 | Task 13 Step 5 (5종) |
 | `test_severity_mapping.py` | Task 28 | Task 28 Step 3 (구현 전 RED) |
-| `test_copy_of_contract.sh` | Task 16 | Task 16 Step 3 — **심볼릭 링크 축(도미넌스) 5종**(A missing · B regular-file, 계약-보존 페이로드 · C wrong-target: mismatch · D wrong-target: dangling · **F 정본별 vacuous 가드** — 도출 0건 정본을 목록에 더해도 합산 수에 가리지 않는지, 2026-08-17 census 재검토가 실측으로 연 구멍 — 전부 위치 개념 없음, 배포 지점 전체가 단위) + **`MARKER_RE` 카나리아 1종**(E — 축 1b 자기 vacuous 방지, 정규식 대입 줄 하나만 변형) + **`copy-of` 물리 사본 축 3종**(변이 1은 3위치, 스캐치 픽스처로 증명 — 첫 실사용이 **Task 17 Step 4b** 이고 B.4 5b 아래에서 그것이 Task 16보다 앞서므로 **Task 16 시점에 이미 사본 1건이 있다**; 픽스처를 쓰는 이유는 부재가 아니라 크기·마커 통제와 앞 태스크 산출물 비훼손이다. B.1의 미결 5 참조) — 2026-08-17 라운드 1 코드 리뷰가 원래의 ∃-기반 심볼릭 링크 축(3종, "경로만 바꾸면 GREEN" 포함)을 이 도미넌스 체크로 다시 쓰게 했다(Critical) |
-| `test_no_new_duplication.sh` | Task 35 | Task 35 Step 3 (6종, 변이 1·2는 3위치) — **심볼릭 링크 예외**(변이 3 GREEN · 변이 4 — 링크를 깨되 내용은 유지해 예외가 "링크임"에 반응하는지 증명, RED) + **마커 예외**(변이 6a·6b — 2026-08-17 라운드 3 코드 리뷰가 이 축은 그때까지 mutation-proof가 전혀 없었음을 지적; Task 16과 같은 스캐치 픽스처 패턴으로 GREEN→RED 증명. 설계 당시 실제 마커 쌍이 없었다 — 첫 실사용은 Task 17 Step 4b 이고 B.4 5b 아래에서 그것이 Task 16보다 앞서므로 **Task 16 시점엔 이미 사본 1건이 있다**(B.1의 미결 5 참조). 픽스처를 계속 쓰는 이유는 부재가 아니라 **크기·마커 통제와 앞 태스크 산출물 비훼손**이다) |
+| `test_copy_of_contract.sh` | Task 16 | Task 16 Step 3 — **심볼릭 링크 축(도미넌스) 5종**(A missing · B regular-file, 계약-보존 페이로드 · C wrong-target: mismatch · D wrong-target: dangling · **F 정본별 vacuous 가드** — 도출 0건 정본을 목록에 더해도 합산 수에 가리지 않는지, 2026-08-17 census 재검토가 실측으로 연 구멍 — 전부 위치 개념 없음, 배포 지점 전체가 단위) + **`MARKER_RE` 카나리아 1종**(E — 축 1b 자기 vacuous 방지, 정규식 대입 줄 하나만 변형) + **`copy-of` 물리 사본 축 3종**(변이 1은 3위치, 스캐치 픽스처로 증명 — 첫 실사용이 **Task 17 Step 4b** 이고 B.4 5b 아래에서 그것이 Task 16보다 앞서므로 **Task 16 시점에 이미 사본 3건이 있다**; 픽스처를 쓰는 이유는 부재가 아니라 크기·마커 통제와 앞 태스크 산출물 비훼손이다. B.1의 미결 5 참조) + **형제-∀ 축 2종**(G·H — 2026-08-17 fix round 2 R2-2 가 더한 축 1c. **실제 사본을 지워** 증명하며 반드시 qg 또는 sd 로 한다: pa 사본은 기존 락이 이미 잡으므로 pa-only mutation 은 엉뚱한 대상을 흔든 것이다) — 2026-08-17 라운드 1 코드 리뷰가 원래의 ∃-기반 심볼릭 링크 축(3종, "경로만 바꾸면 GREEN" 포함)을 이 도미넌스 체크로 다시 쓰게 했다(Critical) |
+| `test_no_new_duplication.sh` | Task 35 | Task 35 Step 3 (6종, 변이 1·2는 3위치) — **심볼릭 링크 예외**(변이 3 GREEN · 변이 4 — 링크를 깨되 내용은 유지해 예외가 "링크임"에 반응하는지 증명, RED) + **마커 예외**(변이 6a·6b — 2026-08-17 라운드 3 코드 리뷰가 이 축은 그때까지 mutation-proof가 전혀 없었음을 지적; Task 16과 같은 스캐치 픽스처 패턴으로 GREEN→RED 증명. 설계 당시 실제 마커 쌍이 없었다 — 첫 실사용은 Task 17 Step 4b 이고 B.4 5b 아래에서 그것이 Task 16보다 앞서므로 **Task 16 시점엔 이미 사본 3건이 있다**(B.1의 미결 5 참조). 픽스처를 계속 쓰는 이유는 부재가 아니라 **크기·마커 통제와 앞 태스크 산출물 비훼손**이다) |
 
 **Task 6의 락은 자기 도입 시점에 이빨을 증명할 수 없다** — 재는 대상(`--emit-scanned`를 가진 락)이 아직 없기 때문이다. 이것을 숨기지 않고 그 태스크의 Step 2와 이 표에 적었다.
 

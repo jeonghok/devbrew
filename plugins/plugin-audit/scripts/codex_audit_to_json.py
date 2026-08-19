@@ -18,9 +18,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import pathlib
 import re
 import sys
 from typing import Any
+
+# **역참조하지 않는다**(bare .parent) — 정본 shared/codex/codex_findings_to_yaml.py
+# 와 같은 규칙이다. 오늘 이 파일은 실제 파일이라 두 표기의 결과가 같지만, 앞 판본은
+# `.resolve()` 를 *"symlink 경유로 실행돼도 항상 자기 디렉토리를 가리킨다"* 로
+# 정당화했다 — 그 명제는 거짓이다(2026-08-17 fix round 2, R2-12). `.resolve()` 는
+# 링크를 **따라가** 정본이 있는 디렉토리를 내므로, 이 파일이 나중에 심볼릭 링크로
+# 바뀌면(Task 19~21 이 정확히 그 변환을 한다) 배포 지점 옆의 copy-of 사본 대신
+# shared/codex/ 의 형제를 읽는다 — 리포 테스트가 실제로 배포되는 파일을 한 번도
+# 실행하지 않게 되고, 설치본(링크가 실파일로 역참조된 상태)과도 갈라진다.
+# bare .parent 는 두 경우에 모두 배포 지점을 가리킨다.
+sys.path.insert(0, str(pathlib.Path(__file__).parent))
+from codex_jsonl import extract_last_agent_message  # noqa: E402
 
 COLLECTIONS = ("findings", "d_verdicts", "oq_answers", "new_open_questions")
 
@@ -29,36 +42,6 @@ AUTH_ERROR_RE = re.compile(
     r"authentication|invalid[_ ]api[_ ]key)", re.IGNORECASE)
 
 FENCE_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
-
-
-def extract_last_agent_message(stdin_text: str) -> tuple[str | None, bool]:
-    """마지막 agent_message의 텍스트. any_parsed는 '유효 JSONL이 하나라도 있었나'.
-
-    두 이벤트 shape을 지원한다:
-      1. codex 0.130+: {"type":"item.completed","item":{"type":"agent_message","text":...}}
-      2. legacy:       {"type":"agent_message","text":...} / {"message":...}
-    """
-    text: str | None = None
-    any_parsed = False
-    for line in stdin_text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        any_parsed = True
-        if not isinstance(obj, dict):
-            continue
-        raw_item = obj.get("item")
-        item = raw_item if isinstance(raw_item, dict) else obj
-        if item.get("type") != "agent_message":
-            continue
-        candidate = item.get("text") or item.get("message")
-        if isinstance(candidate, str) and candidate.strip():
-            text = candidate
-    return text, any_parsed
 
 
 def parse_payload(msg: str) -> Any:

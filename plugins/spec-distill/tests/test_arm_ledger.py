@@ -12,9 +12,12 @@ import uuid
 from pathlib import Path
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PLUGIN_ROOT / "hooks"))
 sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
 import arm_ledger  # noqa: E402
+# 착지점은 `state_path` 에서 **직접** 조립한다. arm_ledger 를 통해 부르면(예전 형태)
+# 소유하지도 않는 이름의 re-export 에 기대게 되고, 무엇보다 착지점 계산이 피검자의
+# 경로 조립 함수(`state_file_for`)와 같아지면 그 함수의 버그가 이 테스트를 눈멀게 한다.
+from state_path import state_root  # noqa: E402 # pyright: ignore[reportMissingImports]
 
 SPEC = "docs/superpowers/specs/2026-08-01-x-design.md"
 OTHER = "docs/superpowers/specs/2026-08-01-y-design.md"
@@ -365,7 +368,7 @@ class TestArmLedgerCLIRejects(unittest.TestCase):
         치운다. 셋 중 하나라도 빠지면 한 번의 유출이 그 머신에서 **무관한 변경까지
         영구 RED** 로 만든다 (리뷰에서 실제 관측: 연속 5 RED → 파일 삭제 후 복구).
         """
-        return (arm_ledger.state_root() / sid / "state.local.md").resolve()
+        return (state_root() / sid / "state.local.md").resolve()
 
     def test_traversal_sid_rejected_and_writes_nothing(self):
         cp = self._run("mark-reviewed", "../../../etc", SPEC)

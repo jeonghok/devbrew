@@ -30,7 +30,7 @@ Brewing better dev tools for Claude Code.
 
 | Plugin | Description | Category |
 |--------|-------------|----------|
-| [quality-gates](plugins/quality-gates/) | 3-gate quality verification pipeline | development |
+| [quality-gates](plugins/quality-gates/) | 2-gate quality verification pipeline (review + runtime) | development |
 | [project-init](plugins/project-init/) | Git workflow initialization: branching strategy, commit conventions, PR process | development |
 
 ## 구조

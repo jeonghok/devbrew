@@ -5,6 +5,38 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [1.8.0] — 2026-08-19
+
+devbrew-weight-reduction Task 19 — kill switch 판정을 `shared/killswitch/kill_switch_active.py`
+정본으로 이관. 이 플러그인의 두 훅은 자체 `kill_switch_active()` 정의를 지우고
+`scripts/kill_switch_active.py` (`copy-of` 물리 사본)를 import 한다.
+
+patch 가 아니라 **minor** 인 이유: 두 훅이 **이벤트명 별칭**(`project-init:PostToolUse`)을
+새로 받는다. 이관 전에는 훅명만 받았고 spec-distill 훅은 이벤트명·훅명 둘 다 받았다 —
+한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것이 결함이며, kill switch 는
+보안 컨트롤이라(`CLAUDE.md:48`) 그 결함의 방향이 fail-open 이다. 둘 다 받는 쪽으로
+통일했다(더 잘 꺼지는 방향 — 회귀는 반대 방향뿐이다).
+
+### Added
+- `scripts/kill_switch_active.py` — `shared/killswitch/kill_switch_active.py` 의
+  `# copy-of:` 물리 사본. 설치본에는 `shared/` 가 없으므로 형제 사본이어야 import 가 풀린다.
+  이 플러그인의 첫 `scripts/` 디렉토리다.
+- 두 훅이 `DEVBREW_SKIP_HOOKS=project-init:PostToolUse` 를 받는다(둘 다 PostToolUse 훅이라
+  이 토큰 하나가 둘을 함께 끈다).
+
+### Changed
+- `hooks/post-tool-use.py`·`hooks/docs-lint.py` — 자체 `kill_switch_active()` 정의 삭제,
+  정본 import + `("project-init", "<훅명>", "PostToolUse")` 호출로 교체. 기존 토큰
+  (`project-init:post-tool-use`·`project-init:docs-lint`)과 전역
+  `DEVBREW_DISABLE_PROJECT_INIT=1` 의 동작은 불변.
+- 두 훅의 docstring 에 `Kill switches:` 블록 추가. 이관 전 이 두 파일은 kill switch 환경변수
+  이름을 **함수 본문에만** 갖고 있어서, 본문을 정본으로 옮기면 소스 텍스트에서 그 이름이
+  사라졌다 — `plugin-audit` 의 `check-shape-completeness.py` 는 등록된 훅 스크립트의
+  텍스트에 그 이름이 있는지로 `hooks_killswitch` 를 판정하므로, docstring 이 없으면 이
+  플러그인이 그 검사에서 조용히 gap 으로 떨어진다(이관 전후 실측으로 확인).
+- `README.md` — 이벤트명 별칭 문서화. `docs-lint` 항목의 *"새 토큰 없음"* 서술은 이제
+  거짓이라 문장을 고쳤다(헌장 전용 토큰이 없다는 원래 뜻은 유지).
+
 ## [1.7.5] — 2026-08-17
 
 devbrew-weight-reduction Task 14 — 자체 판정 헬퍼 이관. `test_branch_strategy_rebase_clause.sh`의

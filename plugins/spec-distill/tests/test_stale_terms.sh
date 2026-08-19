@@ -144,7 +144,7 @@ removed_terms=(
 
 # 개념 별칭 — 식별자만 grep 하면 **같은 것을 다른 이름으로 부른 참조**가 살아남는다.
 # 근거는 실적이다: 식별자 'review_lock' 만 열거했을 때 살아남았던 생존자 두 건이
-#   hooks/state_path.py — "keys the review lock to the SAME state file" (공백 표기)
+#   scripts/state_path.py — "keys the review lock to the SAME state file" (공백 표기)
 #   skills/reviewing-spec/SKILL.md — "락이 훅에 보인다" (한국어)
 # 였고, 영어 식별자 grep 은 어느 쪽에도 닿지 못했다. 세 번째 항목 'suppressed path' 는
 # 위 두 건 같은 실적이 없는 **예방적 별칭**이다 — 같은 문단이 근거를 대는 척하면 안 되므로
@@ -160,7 +160,7 @@ removed_terms=(
 # 락이 정직한 문서 작성에 RED 를 내면 사람들은 락을 무시하게 된다.
 #
 # 커버리지는 줄지 않는다: 이 별칭들이 잡아낸 **실제 생존자 두 건**은 README 가 아니라
-# hooks/state_path.py 와 skills/reviewing-spec/SKILL.md 였다. README 만 면제하면
+# scripts/state_path.py 와 skills/reviewing-spec/SKILL.md 였다. README 만 면제하면
 # 위양성 표면은 사라지고 실적은 그대로 남는다.
 alias_terms=(
   'review lock'

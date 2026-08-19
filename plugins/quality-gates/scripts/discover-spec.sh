@@ -65,36 +65,28 @@ if [[ -n "$EXPLICIT" ]]; then
   fi
 fi
 
-# Portable mtime (BSD stat on macOS, GNU stat on Linux)
-get_mtime() {
-  stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0
-}
+# 디렉토리 탐색 조각(get_mtime · pick_newest)은 형제 discover-plan.sh 과 공유한다.
+# source 는 explicit override 이후에 온다 — `--spec <path>` 만 쓰는 호출은 이 파일이
+# 없어도 성립하므로, 공유 파일 부재로 그 경로까지 깨뜨리지 않는다.
+# `.` 는 POSIX special builtin 이라 파일이 없으면 `if !` 안에서도 셸이 즉시 죽는다
+# (bash 3.2.57 실측) — 그래서 source **전에** 읽기 가능 여부를 확인하고, 부재는
+# 조용한 crash 가 아니라 계약대로의 JSON + exit 2 로 낸다.
+_QG_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ ! -r "$_QG_SCRIPTS_DIR/discover_common.sh" ]]; then
+  printf '{"spec_path":"","source":"none","reason":"discover_common.sh not readable next to discover-spec.sh (%s) — plugin install incomplete"}\n' "$_QG_SCRIPTS_DIR"
+  exit 2
+fi
+# shellcheck source=discover_common.sh
+. "$_QG_SCRIPTS_DIR/discover_common.sh"
+
+# 적격성 술어 — spec 쪽의 고유 본문. Acceptance Criteria 헤더가 spec 의 정의다.
+_spec_has_ac() { grep -qE '^#+ .*Acceptance Criteria' "$1" 2>/dev/null; }
 
 # Pick the best spec from a directory of *.md files.
 # Eligible = contains an Acceptance Criteria header. Among eligible, newest mtime.
 # Echoes the chosen path on success (return 0); returns 1 if none eligible.
 pick_best() {
-  local dir="$1"
-  [[ ! -d "$dir" ]] && return 1
-
-  local best="" best_mtime=0
-  local f m
-
-  while IFS= read -r f; do
-    [[ -z "$f" ]] && continue
-    grep -qE '^#+ .*Acceptance Criteria' "$f" 2>/dev/null || continue
-    m=$(get_mtime "$f")
-    if [[ "$m" -gt "$best_mtime" ]]; then
-      best="$f"
-      best_mtime="$m"
-    fi
-  done < <(find "$dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null)
-
-  if [[ -n "$best" ]]; then
-    printf '%s\n' "$best"
-    return 0
-  fi
-  return 1
+  pick_newest "$1" _spec_has_ac
 }
 
 # Source 2: project-local

@@ -9,30 +9,25 @@ Best-effort: idempotent (no-op if missing), tolerant of permission errors.
 Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
   DEVBREW_DISABLE_SPEC_DISTILL=1                       - disables entirely
   DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd           - skip just this one
+  DEVBREW_SKIP_HOOKS=spec-distill:session-end-cleanup  - 같은 훅을 훅명으로 지목 (이관 후 추가)
 """
 from __future__ import annotations
 
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent / "scripts"))
 from state_path import state_root, SESSION_PATTERN  # noqa: E402 # pyright: ignore[reportMissingImports]
-
-
-def _disabled() -> bool:
-    if os.environ.get("DEVBREW_DISABLE_SPEC_DISTILL") == "1":
-        return True
-    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
-    tokens = {t.strip() for t in skip.split(",") if t.strip()}
-    return "spec-distill:SessionEnd" in tokens
+from gc_common import safe_rmtree  # noqa: E402 # pyright: ignore[reportMissingImports]
+from kill_switch_active import kill_switch_active  # noqa: E402
 
 
 def main() -> int:
-    if _disabled():
+    if kill_switch_active("spec-distill", "session-end-cleanup", "SessionEnd"):
         return 0
     try:
         payload = json.load(sys.stdin)
@@ -55,8 +50,11 @@ def main() -> int:
             file=sys.stderr,
         )
         cwd = os.getcwd()
-    folder = state_root(cwd) / session_id
-    shutil.rmtree(folder, ignore_errors=True)
+    root = state_root(cwd)
+    folder = root / session_id
+    # `SESSION_PATTERN` 이 위에서 이미 charset 으로 걸렀지만 삭제는 두 겹으로 막는다 —
+    # 그 패턴이 완화되는 편집이 곧바로 root 밖 삭제로 이어지지 않도록.
+    safe_rmtree(folder, root)
     return 0
 
 

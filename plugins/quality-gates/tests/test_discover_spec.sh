@@ -114,5 +114,24 @@ assert_eq "$RC" "1" "T8: exit 1 when invoked from a subdir (project-local resolv
 assert_contains "$OUT" '"source":"none"' "T8: source=none from wrong cwd"
 cd / && rm -rf "$TMPDIR"
 
+# --- Test 9: sibling discover_common.sh missing (broken install) ---
+# `.` 는 POSIX special builtin 이라 파일이 없으면 셸이 즉시 죽는다 — stdout 은 비고
+# 계약(JSON)이 사라진다. 가드가 그것을 계약대로의 JSON + exit 2 로 바꾼다.
+# 짝(positive): 공유 파일이 없어도 explicit `--spec <path>` 는 여전히 성립해야 한다.
+TMPDIR=$(mktemp -d); mkdir -p "$TMPDIR/scripts"
+cp "$SCRIPT" "$TMPDIR/scripts/discover-spec.sh"
+write_spec "$TMPDIR/docs/superpowers/specs/foo-design.md" 1
+cd "$TMPDIR"
+OUT=$(bash "$TMPDIR/scripts/discover-spec.sh" 2>/dev/null)
+RC=$?
+assert_eq "$RC" "2" "T9: exit 2 when discover_common.sh is absent"
+assert_contains "$OUT" '"spec_path":""' "T9: contract JSON still emitted (stdout not empty)"
+assert_contains "$OUT" "discover_common.sh" "T9: reason names the missing sibling"
+OUT=$(bash "$TMPDIR/scripts/discover-spec.sh" --spec "$TMPDIR/docs/superpowers/specs/foo-design.md" 2>/dev/null)
+RC=$?
+assert_eq "$RC" "0" "T9-pair: explicit --spec still resolves without the shared file"
+assert_contains "$OUT" '"source":"explicit"' "T9-pair: source=explicit"
+cd / && rm -rf "$TMPDIR"
+
 # --- Summary ---
 finish

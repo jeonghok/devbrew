@@ -7,37 +7,23 @@ Best-effort: idempotent (no-op if missing), tolerant of permission errors.
 Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
   DEVBREW_DISABLE_QUALITY_GATES=1                       - disables this hook entirely
   DEVBREW_SKIP_HOOKS=quality-gates:session-end-cleanup  - skip just this one
+  DEVBREW_SKIP_HOOKS=quality-gates:SessionEnd           - skip every SessionEnd hook here
 """
 from __future__ import annotations
 
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
 
-
-def _disabled() -> bool:
-    if os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1":
-        return True
-    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
-    tokens = {t.strip() for t in skip.split(",") if t.strip()}
-    return "quality-gates:session-end-cleanup" in tokens
-
-
-def _state_root(hook_input: dict) -> Path:
-    """Resolve state root from hook stdin payload cwd; fall back loudly."""
-    cwd = hook_input.get("cwd") if hook_input else None
-    if not cwd:
-        print("[quality-gates] session-end-cleanup payload missing 'cwd'; "
-              "falling back to process cwd",
-              file=sys.stderr)
-        cwd = os.getcwd()
-    return Path(cwd) / ".claude" / "quality-gates"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from gc_common import safe_rmtree  # noqa: E402
+from kill_switch_active import kill_switch_active  # noqa: E402
+from state_path import state_root  # noqa: E402
 
 
 def main() -> int:
-    if _disabled():
+    if kill_switch_active("quality-gates", "session-end-cleanup", "SessionEnd"):
         return 0
     try:
         payload = json.load(sys.stdin)
@@ -46,7 +32,8 @@ def main() -> int:
     session_id = payload.get("session_id", "")
     if not session_id:
         return 0
-    folder = _state_root(payload) / session_id
+    root = state_root(payload, "session-end-cleanup")
+    folder = root / session_id
     # Best-effort: parse state for worktree_path before removing the folder.
     state_file = folder / "pipeline.md"
     worktree_path = ""
@@ -73,7 +60,10 @@ def main() -> int:
         except (OSError, subprocess.TimeoutExpired) as e:
             print(f"[quality-gates] session-end worktree cleanup failed: {e}",
                   file=sys.stderr)
-    shutil.rmtree(folder, ignore_errors=True)
+    # `session_id` 는 payload 에서 온 미검증 입력이다 — 이 훅은 spec-distill 쪽과 달리
+    # charset 패턴으로 거르지 않으므로, `../..` 가 섞이면 state root **밖**이 지워진다.
+    # `safe_rmtree` 가 root 밖 경로를 거부하는 자리가 여기다.
+    safe_rmtree(folder, root)
     return 0
 
 

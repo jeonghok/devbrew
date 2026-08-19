@@ -3,6 +3,311 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [3.4.0] — 2026-08-17
+
+Task 17(무게 감축) + fix round 1: `codex_findings_to_yaml.py` 두 사본(quality-gates·spec-distill)을
+`shared/codex/codex_findings_to_yaml.py` 정본 + 상대 심볼릭 링크로 통합, 그리고
+`extract_last_agent_message`(codex JSONL 이벤트 파서) 세 사본을 `shared/codex/
+codex_jsonl.py` 정본으로 흡수(배포 지점 셋 — plugin-audit·quality-gates·spec-distill —
+에 각각 `copy-of` 물리 사본을 둔다. 이유는 아래 Fixed 의 CRIT-1). patch가 아니라
+**minor**인 이유: 정본이 새 `--emit-keys {default,design}` 인자를 얻었다 — 이전에는
+emit keyset이 사본별로 하드코딩돼 있어 호출자가 고를 수 없었다. quality-gates는
+기본값을 그대로 쓰므로 행동 불변이지만, 이 스크립트가 도달 가능한 인터페이스 자체가
+바뀌었다(같은 파일 경로로 새 configurability 노출 — detect_codex.sh 의
+`codex-killswitch.conf` 선례와 같은 판단 기준, S3).
+
+Task 19(무게 감축): kill switch 판정 12정의(`kill_switch_active` 5 + `_disabled` 7)를
+`shared/killswitch/kill_switch_active.py` 정본으로 통합. 이 플러그인이 그중 5곳
+(훅 4 + `scripts/qg-gc.py`)을 갖고 있었다. 훅들은 `scripts/kill_switch_active.py`
+(`copy-of` 물리 사본)를 import 한다. 새 surface 둘: **이벤트명 별칭**과 **`qg-gc` 토큰**.
+
+Task 22(무게 감축): **같은 플러그인 안의** 중복을 파일 하나로 접었다 —
+`discover-plan.sh`·`discover-spec.sh` 의 디렉토리 탐색 조각을 `scripts/discover_common.sh`
+로 빼고 두 스크립트가 source 한다. `shared/` 정본과 달리 플러그인-로컬이라 `copy-of`
+마커도 사본 동일성 검사도 붙지 않는다 — 같은 플러그인 안에서는 파일 하나를 source 하면
+중복 자체가 소멸한다(설계 §6.1③). 행동은 불변이다.
+
+### Added
+- `scripts/discover_common.sh` — `get_mtime()` · `pick_newest <dir> <predicate>`.
+  실행 지점이 없는 source 전용 파일. 두 탐색기의 차이는 **적격성 술어** 하나뿐이라
+  그 술어를 인자로 받는다. `emit_json` 은 여기 두지 않는다 — 키 이름(`plan_path` ↔
+  `spec_path`)이 각 스크립트의 계약이기 때문이다.
+- `tests/test_discover_plan.sh` T11 — 공유 파일이 없는 깨진 설치에서 계약(JSON +
+  exit 2)이 유지되는가. `.` 는 POSIX special builtin 이라 가드가 없으면 셸이 즉시 죽어
+  stdout 이 빈다. 짝(positive)으로 `--plan <path>` 는 공유 파일 없이도 성립함을 잰다.
+  `tests/test_discover_spec.sh` T9 가 같은 쌍을 spec 쪽에서 잰다.
+- `tests/test_discover_plan.sh` T12/T12b — tier 순서(미체크 우선)와 tier 안의 mtime
+  비교를 **갈라서** 잰다. 이관 전 스위트는 tier 순서를 뒤집어도 GREEN 이었다(mutation
+  실측) — 이관이 그 랭킹을 다시 쓰는 만큼 락이 필요했다.
+
+### Changed
+- `discover-plan.sh`·`discover-spec.sh` 가 자체 `get_mtime`·`pick_best` 본문 대신
+  `discover_common.sh` 를 source 한다. source 는 explicit override **뒤**에 온다 —
+  `--plan`/`--spec` 만 쓰는 호출은 공유 파일 없이도 성립해야 하므로, 부재로 그 경로까지
+  깨뜨리지 않는다. 출력 동치는 72건 코퍼스(체크박스 조합·mtime 순서·디렉토리 부재·
+  하위디렉토리·legacy fallthrough·잘못된 인자) 구/신 대조로 확인했다(불일치 0).
+- `tests/test_codex_runner_degrade_contract.sh` 의 fake root 형제 목록에
+  `discover_common.sh` 를 추가. 빠지면 `run_codex_reviewer.sh` 가 조용히 빈
+  `<spec_context>` 로 degrade 하면서도 이 테스트는 GREEN 으로 남는다(실측).
+
+### Added
+- `scripts/kill_switch_active.py` — `shared/killswitch/kill_switch_active.py` 의
+  `# copy-of:` 물리 사본. 설치본에는 `shared/` 가 없으므로 형제 사본이어야 import 가 풀린다.
+- **이벤트명 별칭** — `DEVBREW_SKIP_HOOKS=quality-gates:PostToolUse` ·
+  `:SessionStart` · `:SessionEnd`. 이관 전에는 훅명만 받았고 spec-distill 훅은 이벤트명·
+  훅명 둘 다 받았다. 한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것은 결함이며
+  kill switch 는 보안 컨트롤이라(`CLAUDE.md:48`) 그 방향이 fail-open 이다.
+- **`DEVBREW_SKIP_HOOKS=quality-gates:qg-gc`** — `scripts/qg-gc.py` 만 끈다. 훅이 아니지만
+  지목할 이름을 갖는다. 이관 전 이 스크립트는 전역 `DEVBREW_DISABLE_QUALITY_GATES=1` 하나만
+  봤고 `DEVBREW_SKIP_HOOKS` 는 **아예 읽지 않았다**(이관 전 HEAD 판본을 실제로 태워 확인 —
+  토큰을 줘도 GC 가 그대로 돌았다). 더 잘 꺼지는 방향이라 회귀가 아니다.
+
+### Changed
+- `plugins/quality-gates/scripts/codex_findings_to_yaml.py`가 물리 파일에서
+  `shared/codex/codex_findings_to_yaml.py`를 가리키는 상대 심볼릭 링크로 바뀌었다.
+- 훅 4종(`post-tool-use.py`·`post-tool-use-session-tracker.py`·`session-start-advisor.py`·
+  `session-end-cleanup.py`)과 `scripts/qg-gc.py` 에서 자체 `_disabled()` 정의를 지우고
+  정본 호출로 교체. 기존 훅 키(`post-tool-use`·`session-tracker`·`session-start-advisor`·
+  `session-end-cleanup`)와 전역 스위치의 동작은 불변이며, 전체-토큰 대조도 정본이 그대로
+  유지한다(`quality-gates:post-tool-use-session-tracker` 가 `quality-gates:post-tool-use` 를
+  접두 오매칭으로 함께 끄지 않는다 — v1.6.2 결함).
+- `session-start-advisor.py` 의 sub-feature 스위치(`:frontmatter-scan`)는 그대로다 —
+  `_subfeature_disabled()` 가 정본을 먼저 묻고 자기 토큰을 추가로 본다.
+- `plugins/quality-gates/tests/test_codex_copies_agree.sh` 헤더의 층④ 문단을 갱신 —
+  "아직 물리 사본 2개" 서술을 지우고, 판정 등가(파일이 하나뿐이라 구조로 보장, 이제
+  vacuous-but-harmless)와 값 고정(알려진-상이 표본 실제 출력값 고정, 여전히 이빨 있음)을
+  갈라 적었다.
+
+### Added
+- `codex_findings_to_yaml.py`에 `--emit-keys {default,design}` 인자. `design`은
+  `category`·`target_section`(design-doc 리뷰 어휘)을 추가로 emit한다. 기본값은
+  `default`이므로 quality-gates 자신의 호출은 무변경.
+- `shared/codex/codex_jsonl.py` — `extract_last_agent_message` 정본(codex JSONL
+  이벤트 두 shape 파싱). `codex_findings_to_yaml.py`가 여기서 import한다. **알려진
+  예외**: `extract_codex_artifact_yaml.py`의 `extract_text`는 비슷한 일을 하는
+  네 번째 구현으로 남아 있다(의도적으로 통합 안 함 — 폴백 shape이 달라 합치면
+  한쪽 동작이 반드시 깨진다). "고칠 자리가 하나"는 아직 참이 아니다 — 정본과
+  `extract_text` 둘이다.
+
+### Fixed (2026-08-17 fix round 1, CRIT-1)
+- **codex 리뷰어가 설치된 모든 배포에서 100% 죽는 결함.** 정본의 `codex_jsonl` import가
+  `pathlib.Path(__file__).resolve().parent`를 썼는데, `claude plugin install`은
+  플러그인 서브트리를 벗어나는 심볼릭 링크를 설치 시점에 실제 파일로 역참조한다
+  (설계 §16.1). 설치본에서 `.resolve()`는 자기 자신을 가리켜 아무것도 바뀌지
+  않으므로 `sys.path[0]`이 배포 지점 자기 디렉토리가 되고, 거기 sibling
+  `codex_jsonl.py`가 없어 `ImportError` → 러너 가드가 `extract_failed`/
+  `yaml_conversion_failed`로 degrade — 리포 스위트는 초록으로 남은 채였다.
+  `.resolve()`를 버리고(bare `.parent`) `codex_jsonl.py`의 copy-of 물리 사본을
+  quality-gates·spec-distill·plugin-audit 세 배포 디렉토리 전부에 배포했다
+  (Task 15의 `detect_codex.sh` 패턴과 동일).
+- `run_brief_codex_reviewer.sh`가 `--emit-keys design`을 잃어도 어떤 테스트도
+  빨개지지 않던 결함(F1) — `test_brief_codex_axes.sh`에 대칭 assertion +
+  mutation 증명을 추가했다.
+- 공백 가드(`codex_jsonl.py:extract_last_agent_message`)의 방향을 정정(F2) —
+  "공백-only 메시지를 거른다"가 아니라 "뒤따르는 비어 있는 후보가 앞선 유효한
+  메시지를 덮어쓰지 못하게 한다"이며, qg·sd가 이전에 배포하던 것 대비
+  **fail-open 방향의 판정 변경**이다(뒤이어 빈 `agent_message`가 흐르면
+  `codex_failed`가 `true → false`로 뒤집히고 finding이 살아난다). 새 동작이
+  옳다고 판단했지만(plugin-audit이 늘 하던 것 · 뒤따르는 공백에 진짜 findings를
+  잃는 쪽이 더 나쁜 실패) 방향이 바뀌었다는 사실은 감추지 않는다. 고정 테스트:
+  `plugins/spec-distill/tests/test_codex_findings_to_yaml.py::
+  test_trailing_blank_agent_message_does_not_clobber_real_one`.
+- `plugins/quality-gates/tests/test_codex_copies_agree.sh` 층④ 헤더의 만료
+  문장 셋을 마저 닫았다(F3) — 이 락이 실제로는 `--emit-keys` 없이 호출해 지금은
+  qg·sd 어느 쪽도 design 어휘를 안 내는데, 세 곳(섹션 헤더 주석 · `verdict()` 위
+  주석 · 값 고정 블록 주석)이 여전히 "sd가 keyset을 더한다"는 옛 전제를 인용하고
+  있었다. 그리고 F3을 고치며 심었던 "층④ 안의 두 축" 표현도 개수 세기라 축
+  이름(판정 등가 · 값 고정)만 남기도록 다시 고쳤다(F4).
+- **"행동 불변" 프레이밍 정정(F8)**: 정본화 이전 qg/sd 사본은 `agent_message.text`가
+  문자열이 아니면(예: 리스트) `re.findall`에서 잡히지 않은 `TypeError`로 죽었다
+  (rc=1, 빈 stdout → 러너 가드가 `extract_failed`/`yaml_conversion_failed`로
+  degrade). 정본화 이후에는 `codex_jsonl.py`의 `isinstance(candidate, str)` 가드가
+  그 값을 애초에 채택하지 않으므로 크래시 없이 rc=0 + `reason: missing_result`로
+  끝난다 — 엄격한 개선이지만 운영자에게 보이는 사유 문자열이 바뀐다(전신 CLI 비교
+  416건 중 48건이 이 계열).
+
+### Fixed (2026-08-17 fix round 2)
+- **`## [3.3.0]` 헤딩 소실(R2-1).** fix round 1 이 이 파일을 편집하며 3.3.0 섹션
+  헤딩을 지워, Task 15 릴리스 노트 전체가 3.4.0 아래로 흡수돼 있었다. 헤딩을
+  원위치에 복원했다(섹션 개수 82 = 편집 전 기준선).
+- **층④ 헤더가 스스로를 vacuous 라 부르던 서술 정정(R2-7).** fix round 1 이
+  배포 지점마다 형제 `codex_jsonl.py` 사본을 두고 import 경로를 bare `.parent` 로
+  바꾸면서, qg 호출과 sd 호출은 **서로 다른 물리 파일**을 태우게 됐다 — 판정 등가는
+  다시 실질 판정이다(qg 사본만 파손하는 mutation 으로 확인: 층④ 7줄 RED).
+  자기를 vacuous 라 부르는 서술은 그 축을 지워도 안전하다는 신호를 남긴다.
+- **F2 공백 가드 락이 물리 4 인스턴스 중 하나만 덮던 결함(R2-8).**
+  `test_codex_copies_agree.sh` 에 **층⑤** 를 더했다 — 정본과 모든 `copy-of` 사본을
+  git 코퍼스에서 도출해(이름 열거 없음) 각각 직접 import 해 공백 가드를 잰다.
+  mutation 4/4 RED(각 변이가 자기 파일만 지목).
+- **존재하지 않는 락 파일 인용 4곳(R2-4)** — `codex_jsonl.py` 정본과 세 사본의
+  docstring 이 없는 테스트 파일명을 F2 의 고정 락으로 적고 있었다(grep → 0건 →
+  "락이 없다" → 가드 제거로 이어지는 거짓 근거). 실재하는 두 락으로 바꿨다.
+- **정본 docstring 이 plugin-audit 을 유일 사본으로 명명(R2-11)** — 재생성 레시피가
+  거기 살아 있어 다음 저자가 사본 하나만 만들게 된다. 배포 지점 집합을 **도출하는**
+  규칙으로 바꿨고, 그 규칙이 걸린 두 함정(모듈 자기제외 · `:(exclude)` pathspec)을
+  함께 적었다.
+- **사본 개수 리터럴 스윕 잔여(R2-3·R2-15)** — 이 CHANGELOG 리드 문단이 여전히
+  *"plugin-audit 은 copy-of 물리 사본"* 이라 적어 셋 중 하나만 열거하고 있었다.
+  plan 쪽 잔여(누적 산술 · 라우팅 표 · 커밋 스텝의 `git add` 경로 포함)도 함께
+  닫았다 — **전부가 같은 커밋은 아니다**: 부록 B.1 미결 5의 마지막 한 자리는
+  뒤이은 커밋(`8d4c823`)에서 닫혔다. **개수를 여기 적지 않는 것은 의도다**
+  〔2026-08-17 fix round 3, R3-4〕 — 앞 판본이 적은 숫자가 어느 셈으로도 맞지
+  않았다. 개수 리터럴 스윕을 서술하는 문장이 자기 안에 개수 리터럴을 새로 심었고,
+  그 새 리터럴이 다시 틀렸다. 고칠 것은 숫자가 아니라 숫자를 적는 습관이다.
+
+### Fixed (2026-08-17 fix round 3)
+- **층⑤ 가 공백 가드의 연언지 한쪽만 태우던 결함(R3-2).**
+  `tests/test_codex_copies_agree.sh` 의 층⑤ 프로브는 `candidate.strip()` 만 흔들었고
+  `isinstance(candidate, str)` 쪽은 **네 파일 어디에도 락이 없었다** — 네 파일 동시에
+  `candidate and str(candidate).strip()` 로 바꿔도 69/69 GREEN 이었다(실측). 그 상태에서
+  비-문자열 `text` 스트림은 `codex_findings_to_yaml.py` 에서 잡히지 않는 `TypeError` 로
+  죽고 YAML 을 0바이트로 남긴다. legacy `item.get("message")` 폴백도 미커버였다.
+  프로브를 세 케이스(BLANK · NONSTR · LEGACY)로 넓혀 두 연언지와 두 폴백을 전부
+  덮었다 — 이로써 `codex_jsonl.py` docstring 이 층⑤ 를 "이 동작을 고정하는 락" 으로
+  인용하는 서술(R2-4)이 실제로 참이 된다. mutation: 두 변이 각각 4/4 RED(네 물리
+  인스턴스 전부, 자기 케이스만 지목), 무변이 77/77 GREEN.
+
+### Fixed (2026-08-19 fix round 4 — 정본 `_yaml_scalar` 의 인용 술어)
+- **정본이 YAML flow 지시자로 시작하는 값을 인용 없이 내보내 문서 전체가 죽었다.**
+  `shared/codex/codex_findings_to_yaml.py` 의 `_yaml_scalar` 는 `:#"'\n` 과 앞뒤 공백만
+  보고 인용했다. `summary` 는 codex 가 쓴 **임의의 모델 텍스트**라 `[CRITICAL] …`
+  처럼 `[` 로 시작하는 요약이 평범한데, 그때 산출 YAML 이 통째로 ParserError 로 죽어
+  **그 리뷰 라운드의 findings 가 전부 소실**됐다(실측, 이 스크립트 종단). 빈 문자열은
+  `null` 로, `{` 로 시작하는 값은 매핑으로 읽혔다. 이 결함은 Task 17 이 두 사본을
+  정본으로 접을 때 함께 옮겨왔고, Task 22 는 spec-distill 쪽 사본 셋만 합집합으로
+  고쳤다 — **사본은 고쳐지고 정본은 안 고쳐진** 역전 상태였다.
+- 인용 술어를 `plugins/spec-distill/scripts/hook_common.py` 의 합집합과 같게 맞추고
+  (`[]{}` + 빈 문자열 가드), 거기에도 없던 **위치 축**을 두 파일에 동시에 넣었다:
+  `- dash`(block sequence)·`` `code` ``(reserved)처럼 **첫 글자만** 위험한 지시자는
+  문자 멤버십으로는 잡히지 않아 ScannerError 로 죽었다. 위험 집합은 첫 글자를
+  0x20–0x7E 전수로 돌려 `k: <값>` 을 파싱해 **측정**했다(PyYAML 6.0.3).
+- **이 플러그인의 출력이 바뀌는 자리**: `[`·`]`·`{`·`}` 를 포함하거나 위 지시자 중
+  하나로 시작하는 finding 값(주로 `summary`·`proposed_fix`)이 이제 따옴표로 감싸여
+  나간다. 소비자는 인용을 되돌려 읽으므로(`merge_review._yaml_unscalar` 의 `json.loads`)
+  값 자체는 불변이고, 이전에 죽던 문서가 이제 파싱된다.
+- **표기도 형제와 통일했다 (`ensure_ascii=False`).** 이 정본만 `json.dumps(s)` 를
+  기본값(True)으로 불러 인용된 한국어가 `\uXXXX` 로 나갔다. 술어를 넓히기 전에는
+  `:#"'\n` 을 가진 값만 인용돼 한국어가 escape 경로에 잘 닿지 않았지만, 이제
+  flow 지시자로 시작하는 값이 전부 인용되므로 **노출이 늘었다** — 이 리포는
+  Korean-primary 이고 이 산출물은 사람이 리뷰 게이트에서 읽는다.
+  `array[0] 범위 초과` 가 `"array[0] 범위 초과"` 로 나가던 것이
+  `"array[0] 범위 초과"` 가 된다. 왕복은 어느 쪽이든 정확했으므로 행동 변화가 아니라
+  **판독성** 수정이다.
+- 이 전환으로 **잃는 보장은 없다**(실측): `ensure_ascii=True` 가 ASCII-only 산출을
+  보장한 적이 없다 — 인용되지 않는 경로가 raw 한국어를 그대로 내보내므로, ASCII 만
+  받는 stdout 인코더(`PYTHONIOENCODING=ascii`)는 True 이던 시절에도 이미
+  `UnicodeEncodeError` 로 죽었다. 실제 배포 경로(`LC_ALL=C` 포함)에서는 macOS
+  python 의 stdout 이 utf-8 이라 양쪽 모두 rc=0 이다.
+
+### Added (Task 20 — codex 러너 공통 조각)
+
+- `scripts/runner_common.sh` — `shared/codex/runner_common.sh` 의 `copy-of` 물리 사본.
+  `_degrade_if_empty`(산출물이 비었을 때만 기록) · `write_failclosed`(무조건 기록) 두
+  함수의 정본이다. 심볼릭 링크가 아니라 사본인 이유는 3.4.0 Fixed CRIT-1 과 같다.
+
+### Changed (Task 20)
+
+- `run_codex_reviewer.sh` 가 `_degrade_if_empty` 를 자체 정의하지 않고 위 정본을
+  source 한다. 정본은 경로를 **인자**로 받으므로 EXIT 트랩이
+  `_degrade_if_empty "$OUTPUT_PATH" aborted_before_completion` 으로 바뀌었다.
+- degrade 산출물에서 **최상위 `agent:` 키를 제거**했다(설계 §6.2 "`agent:` 포함 중첩 →
+  없는 중첩"). 이 키는 성공 경로의 산출자(`codex_findings_to_yaml.py` 의 `yaml_emit`)가
+  내지 않는 것이었다 — `agent:` 는 finding 마다 붙는다. 즉 degrade 경로 둘과 헤더 주석만
+  최상위 키를 주장하던 drift 였고, 읽는 소비자는 없다(`synthesize_findings.py` 는
+  `findings`/`verdicts` 만 꺼낸다). 헤더의 스키마 주석도 실제 출력에 맞게 정정했다.
+
+### Fixed (Task 20)
+
+- **빈 `OUTPUT_PATH` 에서 degrade 가 "성공"으로 보고되던 것**(설계 §6.2 첫 행). 이전
+  `_degrade_if_empty` 는 `-n` 검사가 없어 빈 경로에 리다이렉트를 시도했고, 실패해도
+  마지막 `echo` 의 상태가 함수 반환값이 되어 **rc=0 · 산출물 없음**으로 끝났다(재현 확인).
+  정본은 빈 경로를 rc=3 으로 거절한다.
+- **정본 로드 실패가 0바이트 산출물을 남기던 새 경로**(이번 추출이 만든 것을 같은 커밋에서
+  봉쇄). `.` 는 POSIX special builtin 이라 대상 파일이 없으면 bash 3.2.57 이 `if !` 안에서도
+  셸을 즉시 종료시키고, 문법이 깨진 파일은 source 순간 죽는다 — 둘 다 guarded truncate
+  **뒤**라 0바이트 산출물이 남고 소비자에겐 "codex 성공, 발견 0건"으로 읽힌다. 그래서
+  `[ -r ]` + `bash -n` 을 source 앞에 두고, 실패하면 `reason: runner_common_unloadable`
+  degrade 를 남기고 exit 0 한다(기록조차 못 하면 exit 3).
+
+### Added (Task 21 — GC 공통 조각 + state root 해석 단일화)
+
+- `scripts/gc_common.py` — `shared/gc/gc_common.py` 의 물리 사본(머리 한 줄 마커).
+  TTL 계산(`ttl_ns`) · 폴더 나이 판정(`folder_mtime_ns`·`within_grace`) ·
+  안전 삭제(`safe_rmtree`) · 폴더 수집(`gc_one`)을 담는다. 설치본에는 `shared/` 가
+  없으므로 형제 사본이어야 import 가 풀린다.
+- `scripts/state_path.py` — 이 플러그인 **안**의 state root 해석 정본(`state_root`).
+  `shared/` 아래가 아니다: quality-gates ↔ spec-distill 의 해석 방식 차이(payload cwd
+  상대 vs git-aware)는 보존하고, 같은 플러그인 안의 중복만 접는다.
+
+### Changed (Task 21)
+
+- `hooks/session-end-cleanup.py` 와 `hooks/session-start-advisor.py` 가 각자 갖고 있던
+  11줄짜리 `_state_root()` 두 벌을 지우고 `state_path.state_root(payload, <훅 이름>)` 를
+  부른다. 훅 이름이 인자가 됐다 — 두 경고 메시지를 구별하는 유일한 근거이므로 기본값을
+  주지 않는다. **stderr 문구는 두 훅 모두 바이트 동일**(이관 전 판본과 직접 대조).
+- `scripts/qg-gc.py` 가 `_ttl_ns`·`_folder_mtime_ns`·`_within_grace`·`_gc_one` 을 지우고
+  `gc_common` 을 부른다. 남은 고유 본문은 `ROOT` 표기와 세션 폴더 마커 식별
+  (`SESSION_MARKERS`/`_is_session_folder`)뿐이다 — spec-distill 의 GC 에는 없는 것들이다.
+- 위 통합에 **행동 델타 하나**가 붙는다: `within_grace` 가 spec-distill 판본을 따라
+  `folder.stat()` 의 `OSError` 를 잡아 `False` 를 돌려준다. 이관 전 quality-gates 판본은
+  그 예외를 밖으로 흘려 호출자가 `GC failed on <name>` 진단을 찍었다. 어느 쪽도 그 폴더를
+  **지우지 않는다** — 달라지는 것은 레이스 상황의 진단 한 줄뿐이다.
+
+### Security (Task 21)
+
+- **`session_id` 를 통한 state root 밖 삭제**를 막는다. 이 훅은 spec-distill 쪽과 달리
+  charset 패턴 검증이 없어, payload 의 `session_id: "../../victim"` 이
+  `shutil.rmtree` 로 그대로 흘러가 state root 밖 디렉토리가 지워졌다(이관 전 판본으로
+  실측 재현 — victim 디렉토리 삭제됨). `gc_common.safe_rmtree` 가 root 밖 경로를 거부하고
+  거부를 stderr 로 알린다. 회귀 락:
+  `tests/test_session_end_cleanup.py::test_traversal_session_id_cannot_delete_outside_state_root`
+  (삭제·조건반전·침묵 세 축의 mutation 으로 이빨 확인).
+
+## [3.3.0] — 2026-08-17
+
+Task 15(무게 감축) + fix round 1: `detect_codex.sh` 세 사본을 `shared/codex/`의 정본 +
+상대 심볼릭 링크로 통합. quality-gates·spec-distill·plugin-audit 세 플러그인이 함께
+영향받는다. patch가 아니라 **minor**인 이유(S3): 새 `skip_reason` 3종 + 새 필수 형제
+payload 파일(`codex-killswitch.conf` — 없으면 fail-closed)이 새 surface다.
+
+### Changed
+- `plugins/quality-gates/scripts/detect_codex.sh`가 물리 파일에서 `shared/codex/
+  detect_codex.sh`를 가리키는 상대 심볼릭 링크로 바뀌었다(2026-08-17 실측 — `--plugin-dir`·
+  설치 캐시 둘 다 심볼릭 링크를 실사용 가능하게 전달한다). kill switch 변수명(유일하게
+  플러그인마다 달라야 하는 값)은 형제 설정 파일 `plugins/quality-gates/scripts/
+  codex-killswitch.conf`로 분리됐다. 설정이 없거나 읽히지 않으면 `codex_available: false`
+  + `skip_reason: killswitch_config_missing`(또는 `killswitch_config_incomplete`)로
+  fail-closed — 조용히 무반응이 되는 것을 막는다(CLAUDE.md:48).
+- `plugins/quality-gates/tests/test_codex_copies_agree.sh` 헤더에 심볼릭 링크 전환 후의
+  역할 분담 문단 추가(기존 "왜 파일 diff가 아닌가" 문단은 보존).
+
+### Added
+- `detect_codex.sh` 새 `skip_reason` 3종: `killswitch_config_missing`·
+  `killswitch_config_incomplete`(conf 부재/불완전, fail-closed) ·
+  `killswitch_config_invalid`(kill switch 변수명이 유효한 식별자가 아님 — fail-open
+  보안 수정, 아래 Fixed 참조). `quality-pipeline`·`critiquing-artifacts` 두 SKILL의
+  skip_reason 안내에 반영.
+
+### Fixed
+- `shared/codex/detect_codex.sh`의 kill switch 가드가 값이 **비어 있지 않기만 하면**
+  통과시켜, CRLF·공백만·탭·셸 메타문자 값이 `${!CODEX_KILL_SWITCH_VAR:-0}`(bash 3.2
+  간접 확장)에서 에러 없이 `0`으로 평가돼 kill switch가 **fail-open**하는 보안 결함을
+  닫았다. `CODEX_KILL_SWITCH_VAR` 값이 POSIX 식별자(`^[A-Za-z_][A-Za-z0-9_]*$`)가
+  아니면 `skip_reason: killswitch_config_invalid`로 거절한다. 같은 검사가 `${!VAR}`가
+  두 번째 코드 실행 sink(`a[$(cmd)]` 형 배열 첨자 명령 치환)인 것도 함께 닫는다.
+- `critiquing-artifacts`·`quality-pipeline` 두 SKILL의 codex 게이트 프로즈에 "감지기
+  실행 자체가 실패"(빈 출력·비-zero exit — 심볼릭 링크가 끊긴 경우 포함)를 "codex
+  미설치" 등 정상 skip_reason과 구별하라는 지시를 추가했다(산문 게이트라 집행은
+  모델에 의존 — `test_codex_gate_observation.sh`의 UNGATED 원장 참조). 새 구별 문구는
+  `skip_reason: detector_not_runnable`. (정정: 이전 판은 이 결함을 "`unknown`으로
+  뭉개던" 것으로 서술했는데 부정확했다 — 두 SKILL 다 원래 `<skip_reason>` 프로즈
+  placeholder였지 `${skip_reason:-unknown}` bash fallback이 있던 것이 아니다.)
+- `plugins/{quality-gates,spec-distill,plugin-audit}/tests/test_detect_codex.*`의
+  kill-switch 변수명 양/음 assertion 6개가 심볼릭 링크 전환 뒤 정본 본문을 grep해
+  자기 변수도 못 찾고(양 — RED) 이웃 변수도 못 찾는(음 — 조용히 vacuous 통과) 상태였다.
+  형제 `codex-killswitch.conf`로 재조준했고, 위 fail-open 수정의 회귀 락(malformed conf
+  fail-closed, CRLF·공백만 두 케이스)을 세 파일에 추가했다.
+
 ## [3.2.3] — 2026-08-17
 
 Task 14 리뷰 라운드 1 수정(IMPORTANT 3). 컨트롤러의 전수 기계 스윕이 이관(3.2.1)의

@@ -24,7 +24,7 @@ plugins/<your-plugin>/
 
 **Reference 구현** — 본인 플러그인의 형태와 맞는 것을 읽으세요:
 
-- [`plugins/quality-gates/`](../plugins/quality-gates/) — **writer + reviewer + hook 파이프라인**. 3-gate `tools:` allowlist 격리로 Laws 1–2를 embody. `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`를 shipping.
+- [`plugins/quality-gates/`](../plugins/quality-gates/) — **writer + reviewer + hook 파이프라인**. 2-gate `tools:` allowlist 격리로 Laws 1–2를 embody. `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`를 shipping.
 - [`plugins/project-init/`](../plugins/project-init/) — **git-workflow enforcement**. Compounding hook과 branching-strategy 템플릿으로 Law 3를 embody. `commands/`, `hooks/`, `templates/`를 shipping. `agents/`나 `skills/` 없음 — hooks-and-templates 플러그인도 유효한 형태.
 
 **단계별 문법 레퍼런스** — `plugin-dev`(claude-plugins-official)가 Claude Code 컴포넌트 문법을 skill로 shipping한다. 해당 단계에 진입할 때만 로드 — 선행 일괄 로드는 progressive disclosure 위반:

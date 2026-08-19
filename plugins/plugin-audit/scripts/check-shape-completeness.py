@@ -135,9 +135,12 @@ def _walk_hook_commands(data):
 
 def _hooks_killswitch_present(pd):
     # CLAUDE.md §런타임 "모든 훅에 kill switch" — 여기서 "훅"은 hooks.json이 **등록한** 스크립트다.
-    # hooks/ 아래를 통째 rglob하면 tests/·__init__.py·공유 헬퍼(state_path.py 등 비-등록 파일)까지
-    # 훅으로 오인해 정상 플러그인(project-init·spec-distill 실측)에 거짓 "kill switch 부재"를 낸다
-    # (/qg 2026-07-20 codex, over-glob) → hooks.json의 command가 가리키는 스크립트만 검증한다.
+    # hooks/ 아래를 통째 rglob하면 tests/·__init__.py·비-등록 공유 헬퍼까지 훅으로 오인해
+    # 정상 플러그인에 거짓 "kill switch 부재"를 낸다 (/qg 2026-07-20 codex, over-glob)
+    # → hooks.json의 command가 가리키는 스크립트만 검증한다.
+    # 당시의 실측 사례는 spec-distill 의 `state_path.py` 였다. 그 파일은 이후 그 플러그인의
+    # `scripts/` 로 옮겨졌고, 지금은 어느 플러그인의 hooks/ 에도 비-등록 `.py` 가 없다 —
+    # 그래도 이 가드는 남는다. 사례가 없다는 것이 규칙이 없어도 된다는 뜻은 아니다.
     # 단, **판정 불가**는 fail-closed로 gap이어야 한다 (codex re-verify R2): malformed hooks.json /
     # 해석 불가 command / 등록됐으나 디스크에 부재한 스크립트를 빈 리스트→all([])로 조용히 통과시키면
     # fail-open이다. 판정할 수 있을 때만 True/False, 판정 불가면 False.

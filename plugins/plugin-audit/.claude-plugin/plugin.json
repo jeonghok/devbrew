@@ -1,6 +1,6 @@
 {
   "name": "plugin-audit",
   "description": "Read-only, evidence-based multi-agent audit of an arbitrary devbrew plugin: 6-axis discovery → adversarial refutation → blind codex co-audit → prioritized gap report. Invoke via /plugin-audit <target> [--seed <path>].",
-  "version": "0.4.2",
+  "version": "0.5.1",
   "author": { "name": "jeonghokim" }
 }

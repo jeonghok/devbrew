@@ -14,78 +14,37 @@ from __future__ import annotations
 
 import json
 import os
-import re
-import subprocess
 import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-
-# 표준 스트림을 UTF-8 로 고정한다 (v0.25.0). `read_text(encoding="utf-8")` 와 달리
-# stdin 디코딩은 **프로세스 locale** 을 따르므로, LC_ALL=C 환경에서 훅 payload 의
-# 한국어(UserPromptSubmit 의 user prompt, PostToolUse 의 문서 내용)가
-# UnicodeDecodeError 로 훅을 죽인다 — 이 플러그인이 [0.24.4] 에서 이미 겪은 실패다.
-# except 절을 늘려 열거하는 대신 클래스 자체를 없앤다 (check_verbatim_coverage.py 와 동일 패턴).
-for _s in (sys.stdin, sys.stdout, sys.stderr):
-    try:
-        _s.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-    except (AttributeError, OSError):
-        pass
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 SCRIPTS_DIR = SCRIPT_DIR.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
-from state_path import state_root as _state_root, resolve_session_id  # noqa: E402
-
-GC_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "spec-distill-gc.py"
-
-
-PENDING_RE = re.compile(
-    r"^pending_review:\n  path:\s*(?P<path>[^\n]+)\n  mode:\s*(?P<mode>[^\n]+)\n"
-    r"(?:  worktree_path:\s*(?P<wt>[^\n]+)\n)?"
-    r"  triggered_at:\s*(?P<triggered>[^\n]+)\n",
-    re.MULTILINE,
+from state_path import resolve_session_id  # noqa: E402
+from kill_switch_active import kill_switch_active  # noqa: E402
+# 형제 훅(review-dispatch.py)과 공유하는 조각 — 같은 플러그인 안이라 import 하나로
+# 중복이 소멸한다(설계 §6.1③). 사본이 아니다.
+from hook_common import (  # noqa: E402
+    LAST_DISPATCHED_RE,
+    PENDING_RE,
+    configure_utf8_streams,
+    fire_and_forget_gc,
+    parse_iso,
+    state_file_for,
 )
-LAST_DISPATCHED_RE = re.compile(r"^last_dispatched_at:\s*(.+)$", re.MULTILINE)
 
-
-def kill_switch_active() -> bool:
-    if os.environ.get("DEVBREW_DISABLE_SPEC_DISTILL") == "1":
-        return True
-    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
-    tokens = {p.strip() for p in skip.split(",") if p.strip()}
-    return bool(tokens & {
-        "spec-distill:UserPromptSubmit",
-        "spec-distill:reminder",
-    })
-
-
-def parse_iso(s: str):
-    try:
-        return datetime.strptime(s.strip(), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    except (ValueError, AttributeError):
-        return None
+# stdin 을 읽기 **전에** 표준 스트림을 UTF-8 로 고정한다. 위 import 들은 stdin 을
+# 건드리지 않으므로 이 자리가 여전히 "첫 문장"이다 (근거는 hook_common 쪽 docstring).
+configure_utf8_streams()
 
 
 def main() -> int:
-    if kill_switch_active():
+    if kill_switch_active("spec-distill", "reminder", "UserPromptSubmit"):
         return 0
     # Best-effort GC FIRST (matches review-dispatch.py ordering) — fire-and-forget
-    try:
-        result = subprocess.run(
-            ["python3", str(GC_SCRIPT)],
-            timeout=5, check=False, capture_output=True, text=True,
-        )
-        if result.returncode != 0:
-            print(
-                f"[spec-distill] GC exited rc={result.returncode}: {result.stderr.strip()}",
-                file=sys.stderr,
-            )
-    except (subprocess.TimeoutExpired, OSError) as exc:
-        print(
-            f"[spec-distill] gc fire-and-forget failed (non-fatal): {exc}",
-            file=sys.stderr,
-        )
+    fire_and_forget_gc()
     # Read stdin (UserPromptSubmit payload) for session_id resolution
     try:
         payload = json.load(sys.stdin)
@@ -98,7 +57,7 @@ def main() -> int:
     session_id = resolve_session_id(payload)
     if session_id is None:
         return 0
-    state_file = _state_root() / session_id / "state.local.md"
+    state_file = state_file_for(session_id)
     if not state_file.exists():
         return 0
     try:

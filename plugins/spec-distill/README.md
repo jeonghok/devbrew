@@ -135,7 +135,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 | PostToolUse | `hooks/spec-write-validator.py` | `docs/superpowers/specs/` 아래 **모든 `.md`** (sub-folder hierarchy 포함) write 시 (content-aware: frontmatter `locked_decisions` 유무로 spec/design mode) mechanical Layer 1 검증 + `pending_review:` ledger 기록 (v0.3.0). **v0.25.0: arm 직전 `should_arm`(세션 원장 ∧ git 추적 여부) 게이트 — 이미 리뷰됐거나 커밋된 문서는 arm skip(Layer 1 은 불변). skip 사유를 세 가지로 구분해 표시한다.** | spec writer가 *자기 작업을 자기가 검증*하는 회색지대를 file-system level에서 가로채는 것이 Law 2의 가장 강력한 구현. skill은 LLM이 invoke해야 동작하므로 trigger 결정론이 부족함. |
 | Stop | `hooks/review-dispatch.py` | `pending_review:` block 있으면 systemMessage 주입으로 reviewer dispatch 강제 (v0.3.0) **v0.25.0: `dispatch_attempts` 증가 + G6 상한(3회) 도달 시에만 원장 기록 — 정상 dispatch 는 원장을 건드리지 않는다.** | turn boundary는 LLM의 메시지 형식과 무관한 결정론적 지점 — skill로는 hit 불가. |
 | UserPromptSubmit | `hooks/pending-review-reminder.py` | pending_review가 살아있고 TTL 만료 시 mandate 재emit (L4b redundancy). TTL(30s) 가드로 spam 방지. Kill switch: `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` / `:reminder`. **v0.25.0: 원장을 기록하지 않는다 — 재-nag 는 리뷰의 완료가 아니다.** | Stop hook single-shot mandate가 next-turn에서 silent drop될 경우 매 user prompt에 mandate 재emit하는 redundancy layer 필요 — turn boundary 이벤트라 skill로 처리 불가. |
-| SessionEnd | `hooks/session-end-cleanup.py` | deterministic per-session `.claude/spec-distill/<sid>/` cleanup (v0.6.0). polite-stop이나 approve 누락 시에도 cleanup 보장 (4-layer defense의 layer 2). Kill switch: `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd`. | Claude lifecycle 이벤트는 hook이 catch해야 함 — skill은 사용자/LLM이 invoke해야 동작. |
+| SessionEnd | `hooks/session-end-cleanup.py` | deterministic per-session `.claude/spec-distill/<sid>/` cleanup (v0.6.0). polite-stop이나 approve 누락 시에도 cleanup 보장 (4-layer defense의 layer 2). Kill switch: `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` / `:session-end-cleanup`. | Claude lifecycle 이벤트는 hook이 catch해야 함 — skill은 사용자/LLM이 invoke해야 동작. |
 
 **Output schema (v0.5.0+):** 모든 hook이 *dual-target output* 패턴 — Claude-target field (`hookSpecificOutput.additionalContext` for PostToolUse/UserPromptSubmit, `decision:"block" + reason` for Stop) + `systemMessage` (짧은 흔적, ≤120자, `[spec-distill]` prefix). Claude는 context로 dispatch 메시지를 받고, user는 transcript에서 hook 발화 흔적을 확인 가능. 이전 (`v0.4.0` 이하) 의 `systemMessage`-only 출력은 user transcript에는 보였으나 Claude LLM context로 inject되지 않는 silent failure였음 — `v0.5.0`에서 fix. Reference 패턴: `plugins/quality-gates/hooks/stop-hook.py:845-849`.
 
@@ -183,7 +183,8 @@ arm** 뿐이고, 그마저 위 표의 fail-open 단서가 붙습니다.
 - `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=<int>` (v0.3.0) — Stop hook redispatch TTL guard (default 30초). spec self-reference cycle 방지용. plan phase에서 default 값 재검토.
 - `DEVBREW_SKIP_HOOKS=spec-distill:PostToolUse` (alias: `spec-distill:validator`) — PostToolUse hook만 skip.
 - `DEVBREW_SKIP_HOOKS=spec-distill:Stop` (alias: `spec-distill:review-dispatch`) — Stop hook만 skip.
-- `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` (v0.6.0) — SessionEnd cleanup hook만 skip. TTL-GC가 backup으로 작동.
+- `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` (alias: `spec-distill:session-end-cleanup`) — SessionEnd cleanup hook만 skip. TTL-GC가 backup으로 작동.
+- `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` — TTL-GC 스크립트(`scripts/spec-distill-gc.py`)만 skip. 훅이 아니지만 지목할 이름을 갖는다 — 그전에는 이 스크립트가 `DEVBREW_SKIP_HOOKS`를 **아예 읽지 않아서**, 그 변수로 껐다고 믿어도 GC는 계속 돌았다.
 - `DEVBREW_SPEC_DISTILL_TTL_HOURS=<int>` (v0.6.0) — TTL-GC orphan 정리 임계값 (default 24h). 짧게 설정 시 자주 정리, in-flight 작업 risk 증가.
 - `DEVBREW_SPEC_DISTILL_GC_VERBOSE=1` (v0.6.0) — TTL-GC가 cleanup 발생 시 stdout summary 출력. CI/디버깅용.
 - `DEVBREW_SPEC_DISTILL_SKIP_HANDOFF_CHECK=1` (v0.9.0) — `handoff_incomplete` 카테고리만 우회. 다른 검사 (`missing_section` 등)는 정상 동작. loud warning stderr 출력. /compact 이후 정보 손실 risk 명시.

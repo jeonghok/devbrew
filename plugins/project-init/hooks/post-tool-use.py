@@ -7,12 +7,21 @@ Validates two things on Bash tool use:
 2. Commit message — detects git commit -m and validates Conventional Commits format.
 
 Both validators emit non-blocking warnings via systemMessage.
+
+Kill switches:
+  DEVBREW_DISABLE_PROJECT_INIT=1                 - disables this hook entirely
+  DEVBREW_SKIP_HOOKS=project-init:post-tool-use  - skip just this one
+  DEVBREW_SKIP_HOOKS=project-init:PostToolUse    - skip every PostToolUse hook here
 """
 
 import json
 import os
+import pathlib
 import re
 import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
+from kill_switch_active import kill_switch_active  # noqa: E402
 
 # --- Constants ---
 
@@ -175,16 +184,8 @@ def validate_commit(command):
 # --- Main ---
 
 
-def kill_switch_active():
-    """Return True if devbrew kill switch env vars opt this hook out."""
-    if os.environ.get("DEVBREW_DISABLE_PROJECT_INIT") == "1":
-        return True
-    skip_list = [s.strip() for s in os.environ.get("DEVBREW_SKIP_HOOKS", "").split(",")]
-    return "project-init:post-tool-use" in skip_list
-
-
 def main():
-    if kill_switch_active():
+    if kill_switch_active("project-init", "post-tool-use", "PostToolUse"):
         print(json.dumps({}))
         sys.exit(0)
 

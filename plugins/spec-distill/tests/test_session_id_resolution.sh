@@ -2,7 +2,7 @@
 # AC1 verification — resolve_session_id() precedence + charset/length validation.
 set -uo pipefail
 
-HOOKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/hooks"
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/scripts"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # call_resolve <payload-json-or-empty> [KEY=VALUE ...]
@@ -13,7 +13,7 @@ call_resolve() {
     local extra_vars=("$@")
     env -i "PATH=$PATH" "${extra_vars[@]+"${extra_vars[@]}"}" python3 -c "
 import sys, json, os
-sys.path.insert(0, '$HOOKS_DIR')
+sys.path.insert(0, '$SCRIPTS_DIR')
 from state_path import resolve_session_id
 p = json.loads('''$payload''') if '$payload' else None
 r = resolve_session_id(p)
@@ -93,7 +93,7 @@ result="$(call_resolve '' "CLAUDE_CODE_SESSION_ID=$long_sid")"
     || no "case 11: 256-char accept"
 
 # ── session-id 서브커맨드 (AC9 / T3) ──────────────────────────────────────
-STATE_PATH="$HOOKS_DIR/state_path.py"
+STATE_PATH="$SCRIPTS_DIR/state_path.py"
 
 # call_session_id [KEY=VALUE ...] — runs `state_path.py session-id` in clean env,
 # echoes "<stdout>|<exit_code>".

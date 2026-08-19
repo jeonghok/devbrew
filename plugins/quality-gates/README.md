@@ -111,6 +111,7 @@ quality-gates/
 │   ├── filter-docs.sh                        # 코드 reviewer용 docs path 필터
 │   ├── discover-plan.sh                      # Plan 파일 우선순위 탐색 (Runtime gate test-scope-validator)
 │   ├── discover-spec.sh                      # Spec 파일 우선순위 탐색 (test-scope-validator + codex; AC-섹션 적격성)
+│   ├── discover_common.sh                    # 위 두 탐색기가 source 하는 공통 조각 (get_mtime · pick_newest; 실행 지점 없음)
 │   ├── detect-runtime.sh                     # Runtime gate 런타임 surface 탐지 (manifest 산출)
 │   ├── compute-test-scope-candidates.sh      # Runtime gate Step 2.5 — 후보 test 파일 산출 (Python/JS/TS heuristic)
 │   ├── resolve-baseline.sh                   # 공유 baseline resolution (base/base_ref/merge_base/degraded/same_as_head/ahead)
@@ -118,9 +119,10 @@ quality-gates/
 │   ├── baseline-cache.sh                     # (merge_base, runner, unit) 내용주소 기준선 캐시 get/put
 │   ├── diff-test-results.py                  # 기준선×HEAD 귀속 8종 + 어댑터 간 --aggregate
 │   ├── check_qa_ledger.py                    # LD7 floor 5차원 원장 구조 게이트 (Law 1)
-│   ├── detect_codex.sh                       # Codex CLI 7-case probe (version/auth/sandbox/kill-switch/timeout)
+│   ├── detect_codex.sh                       # symlink → ../../../shared/codex/detect_codex.sh — Codex CLI 10-case probe (killswitch-conf/version/auth/sandbox/kill-switch/timeout)
 │   ├── build_codex_prompt.py                 # Review gate Phase 1 codex-reviewer용 prompt builder
-│   ├── codex_findings_to_yaml.py             # Codex JSONL stream → 표준 finding YAML (auth/schema/stderr 처리)
+│   ├── codex_findings_to_yaml.py             # symlink → ../../../shared/codex/codex_findings_to_yaml.py — Codex JSONL stream → 표준 finding YAML (auth/schema/stderr 처리, --emit-keys default|design)
+│   ├── codex_jsonl.py                        # copy-of shared/codex/codex_jsonl.py — extract_last_agent_message 정본 사본 (설치본에서 sibling import가 살아있게)
 │   ├── qg-gc.py                              # TTL 기반 stale 세션 GC (fcntl-locked)
 │   ├── build-pr-context.sh                   # publish: base..HEAD 고정 context blob (diff+내용+이웃 시그니처+커밋메시지) — 빌더의 유일 입력
 │   ├── diagram-facts.sh                      # publish: nodes/edges 산출 (changed files + 이웃 import; repo-root 상대 import만)
@@ -371,7 +373,7 @@ Runtime gate의 test-scope-validator가 `--plan <path>`를 받지 않으면 다�
 
 **Soft dependency:** project-local source는 `superpowers:writing-plans` skill이 plan을 저장하는 경로 (`docs/superpowers/plans/`) 와 동일합니다. superpowers 플러그인을 설치하지 않았더라도 동일 경로에 `.md` 파일을 직접 두면 동작합니다.
 
-알고리즘 자체는 `scripts/discover-plan.sh`에 분리되어 `tests/test_discover_plan.sh` 10개 fixture로 검증됩니다.
+알고리즘 자체는 `scripts/discover-plan.sh`(적격성 술어 + source 우선순위)와 그것이 source 하는 `scripts/discover_common.sh`(디렉토리 스캔 + mtime 선택)에 분리되어 `tests/test_discover_plan.sh` 12개 fixture로 검증됩니다.
 
 ## Spec Discovery Sources (Runtime gate test-scope-validator + Review gate codex)
 
@@ -390,7 +392,7 @@ plan과 달리 **legacy-global 소스는 없습니다** — spec은 프로젝트
 
 **Soft dependency:** project-local source는 `superpowers:brainstorming` / `spec-distill`이 spec을 저장하는 경로 (`docs/superpowers/specs/`)와 동일합니다. spec-distill / `superpowers:brainstorming` 플러그인을 설치하지 않았더라도 동일 경로에 `.md` 파일을 직접 두면 동작합니다.
 
-알고리즘 자체는 `scripts/discover-spec.sh`에 분리되어 `tests/test_discover_spec.sh` 8개 fixture로 검증됩니다.
+알고리즘 자체는 `scripts/discover-spec.sh`(적격성 술어 + source 우선순위)와 그것이 source 하는 `scripts/discover_common.sh`(디렉토리 스캔 + mtime 선택)에 분리되어 `tests/test_discover_spec.sh` 9개 fixture로 검증됩니다.
 
 ## 사전 요건
 
@@ -457,7 +459,15 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 | `quality-gates:session-start-advisor` | `hooks/session-start-advisor.py` | SessionStart — stale state 안내 (read-only) |
 | `quality-gates:session-start-advisor:frontmatter-scan` | 위 hook의 sub-feature | Plugin 전체 agent frontmatter drift 스캔만 disable |
 | `quality-gates:session-end-cleanup` | `hooks/session-end-cleanup.py` | SessionEnd — 현재 세션 폴더 cleanup |
+| `quality-gates:qg-gc` | `scripts/qg-gc.py` | TTL-GC 스크립트. 훅이 아니지만 지목할 이름을 갖는다 — 그전에는 전역 스위치 하나뿐이라 "이 GC만 끈다"가 불가능했다 |
 | `quality-gates:runtime-test-scope` | (위 `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION`과 동의어) | Runtime gate Step 2.5 |
+
+훅 키에 더해 **이벤트명 별칭**도 받는다 — `quality-gates:PostToolUse`(session-tracker + post-tool-use
+둘 다) · `quality-gates:SessionStart` · `quality-gates:SessionEnd`. spec-distill 훅이 쓰던 형태를
+전 플러그인으로 통일한 것이다(한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것이
+결함이고, kill switch 는 보안 컨트롤이라 그 결함의 방향이 fail-open 이다). 대조는 **전체 토큰**이라
+`quality-gates:post-tool-use-session-tracker` 같은 더 긴 키가 `quality-gates:post-tool-use` 를
+접두 오매칭으로 함께 끄지 않는다.
 
 (`MAX_TOTAL_ITERATIONS`와 cross-gate restart 루프는 v1.5.0에서 제거됨.)
 

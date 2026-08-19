@@ -32,9 +32,12 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-HOOKS_DIR = SCRIPT_DIR.parent / "hooks"
-sys.path.insert(0, str(HOOKS_DIR))
-from state_path import state_root, SESSION_PATTERN  # noqa: E402 # pyright: ignore[reportMissingImports]
+sys.path.insert(0, str(SCRIPT_DIR))
+from state_path import SESSION_PATTERN  # noqa: E402 # pyright: ignore[reportMissingImports]
+# `state_file_for` 는 훅과 공유하는 정의다 — 같은 플러그인 안이므로 import 하나로
+# 중복이 소멸한다(설계 §6.1③). 여기서 재-export 되므로 `arm_ledger.state_file_for`
+# 로 부르는 소비자(spec-write-validator.py)는 그대로 동작한다.
+from hook_common import state_file_for  # noqa: E402,F401 # pyright: ignore[reportMissingImports]
 
 PREFIX = "docs/superpowers/specs/"
 
@@ -85,11 +88,6 @@ def canonical_key(raw_path: str) -> str | None:
     if any(c in key for c in "\n\r\t\x00") or not key.isprintable():
         return None
     return key
-
-
-def state_file_for(sid: str) -> Path:
-    """sid → state.local.md 경로 단일 해석(저장소 위치 변경 시 이 한 곳만 갱신)."""
-    return state_root() / sid / "state.local.md"
 
 
 def pending_path(body: str) -> str | None:

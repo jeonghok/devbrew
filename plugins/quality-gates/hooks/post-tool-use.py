@@ -9,30 +9,25 @@ Passes --session-id explicitly to setup-qg.sh in case env var is unset.
 Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
   DEVBREW_DISABLE_QUALITY_GATES=1                     - disables this hook entirely
   DEVBREW_SKIP_HOOKS=quality-gates:post-tool-use      - skip just this one
+  DEVBREW_SKIP_HOOKS=quality-gates:PostToolUse        - skip every PostToolUse hook here
+
+토큰은 **전체 토큰**으로 대조된다(정본 `shared/killswitch/kill_switch_active.py`).
+`quality-gates:post-tool-use-session-tracker` 처럼 더 긴 키를 지목해도 이 훅이
+접두 오매칭으로 함께 꺼지지 않는다.
 """
 
 import json
 import os
+import pathlib
 import re
 import sys
 
-
-def _disabled() -> bool:
-    """Honor devbrew kill switches before any side effect.
-
-    Uses whole-token match against comma-separated DEVBREW_SKIP_HOOKS so a
-    longer key like 'quality-gates:post-tool-use-session-tracker' does not
-    accidentally silence this hook (substring `in` would prefix-match).
-    """
-    if os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1":
-        return True
-    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
-    tokens = {t.strip() for t in skip.split(",") if t.strip()}
-    return "quality-gates:post-tool-use" in tokens
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "scripts"))
+from kill_switch_active import kill_switch_active  # noqa: E402
 
 
 def main():
-    if _disabled():
+    if kill_switch_active("quality-gates", "post-tool-use", "PostToolUse"):
         print(json.dumps({}))
         sys.exit(0)
     try:

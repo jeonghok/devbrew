@@ -10,65 +10,42 @@ qg-gc.py pattern adaptation:
   - .gc-pending-* orphan sweep (>60s) at iteration start
 
 Kill switches:
-  DEVBREW_DISABLE_SPEC_DISTILL=1     - no-op
+  DEVBREW_DISABLE_SPEC_DISTILL=1              - no-op
+  DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc - no-op (이 스크립트 하나만)
+
+훅이 아니지만 `DEVBREW_SKIP_HOOKS` 토큰으로 지목할 이름을 갖는다 — 이관 전에는
+이 파일이 `DEVBREW_SKIP_HOOKS` 를 **아예 읽지 않아서**, 사용자가 그 변수로 껐다고
+믿어도 이 GC 는 무반응이었다. kill switch 는 opt-out 컨트롤이므로 **더 잘 꺼지는**
+방향이고, 회귀는 반대 방향(덜 꺼짐)뿐이다.
 """
 from __future__ import annotations
 
 import fcntl
 import os
-import shutil
 import sys
 import time
-import uuid
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent.parent / "hooks"
+HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from state_path import state_root, SESSION_PATTERN  # noqa: E402 # pyright: ignore[reportMissingImports]
+from gc_common import (  # noqa: E402 # pyright: ignore[reportMissingImports]
+    GC_PENDING_PREFIX, gc_one, safe_rmtree, ttl_ns,
+)
+from kill_switch_active import kill_switch_active  # noqa: E402
 
 LOCK_NAME = ".gc.lock"
-GRACE_NS = 60 * 1_000_000_000
-DOUBLE_STAT_DELAY_S = 0.05
-GC_PENDING_PREFIX = ".gc-pending-"
 GC_PENDING_SWEEP_AGE_S = 60
 
-
-def _disabled() -> bool:
-    return os.environ.get("DEVBREW_DISABLE_SPEC_DISTILL") == "1"
-
-
-def _ttl_ns() -> int:
-    raw = os.environ.get("DEVBREW_SPEC_DISTILL_TTL_HOURS", "24")
-    try:
-        n = int(raw)
-        if n <= 0:
-            n = 24
-    except ValueError:
-        n = 24
-    return n * 3600 * 1_000_000_000
+# TTL 계산 · 나이 판정 · 안전 삭제 · 폴더 수집은 `shared/gc/gc_common.py` 정본(형제
+# 사본 `scripts/gc_common.py`)이 갖는다. 여기 남는 것은 spec-distill 고유 본문이다 —
+# git-aware state root(`state_path.state_root`)와 `.gc-pending-*` 고아 스윕.
+# `GC_PENDING_PREFIX` 는 정본에서 가져온다: 그 접두를 **쓰는** 쪽(`gc_one`)과
+# **줍는** 쪽(아래 스윕)이 갈라지면 고아가 영원히 안 지워진다.
 
 
 def _verbose() -> bool:
     return os.environ.get("DEVBREW_SPEC_DISTILL_GC_VERBOSE") == "1"
-
-
-def _folder_mtime_ns(folder: Path) -> int:
-    files = [p for p in folder.iterdir() if p.is_file()]
-    if not files:
-        return folder.stat().st_mtime_ns
-    return max(p.stat().st_mtime_ns for p in files)
-
-
-def _within_grace(folder: Path) -> bool:
-    try:
-        has_files = any(p.is_file() for p in folder.iterdir())
-        if has_files:
-            return False
-        age_ns = time.time_ns() - folder.stat().st_ctime_ns
-        return age_ns < GRACE_NS
-    except OSError:
-        # Folder vanished between iterdir() and stat() — race with concurrent cleanup.
-        return False
 
 
 def _sweep_gc_pending(root: Path) -> int:
@@ -95,38 +72,13 @@ def _sweep_gc_pending(root: Path) -> int:
             continue
         if age < GC_PENDING_SWEEP_AGE_S:
             continue
-        shutil.rmtree(child, ignore_errors=True)
-        removed += 1
+        if safe_rmtree(child, root):
+            removed += 1
     return removed
 
 
-def _gc_one(folder: Path, ttl_ns: int) -> bool:
-    if _within_grace(folder):
-        return False
-    try:
-        snap1 = _folder_mtime_ns(folder)
-    except OSError:
-        return False
-    if time.time_ns() - snap1 < ttl_ns:
-        return False
-    time.sleep(DOUBLE_STAT_DELAY_S)
-    try:
-        snap2 = _folder_mtime_ns(folder)
-    except OSError:
-        return False
-    if snap1 != snap2:
-        return False
-    pending = folder.parent / f"{GC_PENDING_PREFIX}{uuid.uuid4().hex}"
-    try:
-        folder.rename(pending)
-    except OSError:
-        return False
-    shutil.rmtree(pending, ignore_errors=True)
-    return True
-
-
 def gc(self_session_id: str | None = None) -> int:
-    if _disabled():
+    if kill_switch_active("spec-distill", "spec-distill-gc"):
         return 0
     root = state_root()
     if not root.exists():
@@ -140,7 +92,7 @@ def gc(self_session_id: str | None = None) -> int:
             file=sys.stderr,
         )
         return 0
-    ttl_ns = _ttl_ns()
+    ttl = ttl_ns("DEVBREW_SPEC_DISTILL_TTL_HOURS")
     removed = 0
     try:
         lockfile = open(lock_path, "w")
@@ -165,7 +117,7 @@ def gc(self_session_id: str | None = None) -> int:
                 if self_session_id and child.name == self_session_id:
                     continue
                 try:
-                    if _gc_one(child, ttl_ns):
+                    if gc_one(child, ttl, root):
                         removed += 1
                 except OSError as exc:
                     print(

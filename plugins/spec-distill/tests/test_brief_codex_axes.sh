@@ -141,7 +141,14 @@ grep -q 'codex_failed: false' "$STALE" \
   || ok "STALE: project_dir 부재 경로도 stale을 남기지 않음"
 
 # mutation: 선-기록(seed_failclosed)을 제거하면 위 (1)이 다시 통과해야 한다.
-MUT="$(mktemp)" || exit 1
+#
+# 러너는 형제 `runner_common.sh` 를 **자기 위치 기준**(`${BASH_SOURCE[0]}` 의 디렉토리)으로
+# source 한다(Task 20). 그래서 다른 디렉토리로 옮긴 사본에는 그 형제도 함께 놓아야 한다 —
+# 놓지 않으면 사본이 로드 가드에 걸려 **조기 degrade** 하고, 아래 mutation 은 변이가 아니라
+# **위치** 때문에 실패한다(도달 불가). 그 상태의 판정은 이빨의 증거가 아니다.
+MUTDIR="$(mktemp -d -t sd-brief-mut-XXXXXX)" || exit 1
+cp "$SD/scripts/runner_common.sh" "$MUTDIR/runner_common.sh"
+MUT="$MUTDIR/run_brief_codex_reviewer_mut.sh"
 mutres="$(python3 - "$RUNNER" "$MUT" <<'PY'
 import sys
 src, dst = sys.argv[1], sys.argv[2]
@@ -160,5 +167,113 @@ if [[ "$mutres" == "MUTATED" ]]; then
 else
   no "STALE mutation: seed 호출 라인을 못 찾았다 ($mutres) — 락이 vacuous하다"
 fi
-rm -f "$STALE" "$MUT"
+rm -f "$STALE"; rm -rf "$MUTDIR"
+
+# === F1 (2026-08-17 fix round 1) : --emit-keys design 배선 락 ===============
+# codex_findings_to_yaml.py 정본화(Task 17) 이전에는 spec-distill의 emit keyset이
+# 사본에 하드코딩돼 있어 호출자 배선을 잃을 방법이 없었다. 지금은 호출자 인자
+# (`--emit-keys design`)이므로 이 러너에서 빠지면 category/target_section이
+# 조용히 사라진다 — merge_brief_review.py가 merge_review.CODEX_DISPLAY_KEYS를
+# 재사용해 그 필드를 읽는데, 필드가 없으면 codex findings가 원장에서 통째로
+# 버려지면서도 codex_failed는 false로 남는다(실행되지 못한 검사가 통과한 검사로
+# 기록된다). run_spec_codex_reviewer.sh 쪽엔 이미 대칭 assertion이 있다
+# (test_run_spec_codex_reviewer.sh) — 여기 없던 것을 대칭으로 건다.
+F1TMP="$(mktemp -d -t sd-brief-f1-XXXXXX)" || exit 1
+mkdir -p "$F1TMP/codexbin"
+cat > "$F1TMP/codexbin/codex" <<'SH'
+#!/usr/bin/env bash
+cat <<'JSONL'
+{"type":"item.completed","item":{"type":"agent_message","text":"```json\n{\"findings\": [{\"category\": \"ambiguity\", \"target_section\": \"#2-goals\", \"severity\": \"high\"}]}\n```"}}
+JSONL
+exit 0
+SH
+chmod +x "$F1TMP/codexbin/codex"
+# 아래 identity/mutation 사본이 F1TMP 로 옮겨가므로 형제 정본도 같이 옮긴다
+# (러너가 자기 위치 기준으로 source 한다 — Task 20).
+cp "$SD/scripts/runner_common.sh" "$F1TMP/runner_common.sh"
+
+# CLAUDE_PLUGIN_ROOT 를 **명시로** 넘긴다 — 형제 락
+# test_run_spec_codex_reviewer.sh:62 이 이미 그렇게 한다. 러너는
+# `${CLAUDE_PLUGIN_ROOT:-$(dirname "${BASH_SOURCE[0]}")/..}` 로 유도하므로,
+# ① 넘기지 않으면 호출 환경이 우연히 갖고 있는 값에 이 락의 판정이 좌우되고
+# ② 아래 mutation 사본은 temp dir 에 있어 유도가 엉뚱한 곳을 가리킨다
+# (2026-08-17 fix round 2, R2-5·R2-6 — 이 두 줄이 없어서 mutation 이
+# `prompt_build_failed` 로 조기 종료하며 **플래그 줄에 도달조차 못 했다**).
+F1ENV=(CLAUDE_PLUGIN_ROOT="$SD" PATH="$F1TMP/codexbin:/usr/bin:/bin")
+
+F1OUT="$F1TMP/out.yaml"
+env "${F1ENV[@]}" bash "$RUNNER" fidelity "$PAYLOAD" "$REPO_ROOT" "$F1OUT" >/dev/null 2>&1
+grep -q 'category: ambiguity' "$F1OUT" \
+  && ok "F1: brief runner가 --emit-keys design을 배선해 category가 출력에 실린다" \
+  || no "F1: brief runner 출력에 category가 없다 — --emit-keys design 배선 유실"
+
+# --- 계측기 검사: identity 사본(플래그 그대로, 위치만 이동) ------------------
+# mutation 이 "이빨 있음"을 주장하려면 **변이만이** category 를 죽였어야 한다.
+# 위치 이동 자체가 죽이면 그 주장은 거짓이다. identity 사본을 같은 자리에서
+# 같은 방식으로 돌려 그것을 먼저 배제한다 (R2-5: 이 통제가 없어서 락이
+# 도달조차 못 한 실행을 "이빨 있음"으로 보고했다).
+F1ID="$F1TMP/run_brief_codex_reviewer_identity.sh"
+cp "$RUNNER" "$F1ID"
+F1OUTID="$F1TMP/out_identity.yaml"
+env "${F1ENV[@]}" bash "$F1ID" fidelity "$PAYLOAD" "$REPO_ROOT" "$F1OUTID" >/dev/null 2>&1
+grep -q 'category: ambiguity' "$F1OUTID" \
+  && ok "F1 계측기: identity 사본(위치만 이동)은 여전히 category 를 낸다 — 아래 변이가 플래그 줄에 도달한다" \
+  || no "F1 계측기: identity 사본이 이미 category 를 못 낸다 — 아래 mutation 은 변이가 아니라 위치 때문에 실패한다(도달 불가)"
+
+# mutation: --emit-keys design 인자 줄을 지운 사본으로 같은 것을 돌리면 위
+# assertion이 다시 RED가 나야 한다(락에 이빨이 있다는 증거 — F1 완료 조건 3).
+F1MUT="$F1TMP/run_brief_codex_reviewer_mut.sh"
+f1mutres="$(python3 - "$RUNNER" "$F1MUT" <<'PY'
+import sys
+src, dst = sys.argv[1], sys.argv[2]
+t = open(src, encoding="utf-8").read()
+out = "\n".join(l for l in t.splitlines() if l.strip() != "--emit-keys design \\")
+open(dst, "w", encoding="utf-8").write(out + "\n")
+print("MUTATED" if out.strip() != t.strip() else "UNCHANGED")
+PY
+)"
+if [[ "$f1mutres" == "MUTATED" ]]; then
+  F1OUT2="$F1TMP/out2.yaml"
+  env "${F1ENV[@]}" bash "$F1MUT" fidelity "$PAYLOAD" "$REPO_ROOT" "$F1OUT2" >/dev/null 2>&1
+  # 원인 확정 먼저: 변이본이 실제로 codex 를 태우고 변환까지 갔는가. degrade
+  # 사유(prompt_build_failed 등)로 조기 종료했다면 category 부재는 플래그와
+  # 무관하고, 그것을 "이빨 있음"으로 읽으면 거짓 원인 보고다 (R2-6).
+  #
+  # 〔2026-08-17 fix round 3, R3-1〕 이 판별자는 **두 방향으로 fail-open** 이었다.
+  # ① 맨 `grep -qE … "$F1OUT2"`: 변이본이 구문 파손돼 출력 파일 자체가 안 생기면
+  #    grep 이 비-0 으로 끝나 `else` 즉 **PASS 분기**로 갔다 — 그리고 그 상태에서
+  #    아래 category 판정도 "이빨 있음"을 내서 40/40 GREEN 이 나왔다(실측).
+  #    `shared/tests/assert.sh` 가 그 이빨을 이미 갖고 있다: `assert_file_absent`
+  #    (와 `assert_file_grep`)는 *"파일 부재는 fail-closed — `no()` 로 센다"* 다.
+  #    `"$(cat …)"` 로 텍스트 변형에 넘기는 우회는 정확히 저 결함이므로 쓰지 않는다.
+  # ② 사유 열거가 **하드코딩**이었다. 목록의 `extract_failed` 는 이 러너가 내지
+  #    **않는** 이름이었고, 러너가 실제로 내는 여섯(`runner_incomplete` ·
+  #    `payload_missing` · `missing_project_dir` · `project_dir_unreachable` ·
+  #    `scratch_dir_uncreatable` · `codex_not_installed`)이 빠져 있었다 — 그래서
+  #    `reason: codex_not_installed` 로 degrade 한 변이본도 "원인 확정" PASS 였다.
+  #    열거는 공간·시간 양쪽으로 fail-open 이므로 **러너에서 도출**한다: 이 러너의
+  #    degrade 사유는 전부 `write_failclosed` 한 곳을 지나므로 그 호출부 두 형태
+  #    (`emit_fallback <reason>` · `write_failclosed "<reason>"`)가 코퍼스다.
+  F1REASONS="$(
+    { grep -oE 'emit_fallback[[:space:]]+[a-z_]+' "$RUNNER" \
+        | sed -E 's/^emit_fallback[[:space:]]+//'
+      grep -oE 'write_failclosed[[:space:]]+"[a-z_]+"' "$RUNNER" \
+        | sed -E 's/^write_failclosed[[:space:]]+"//; s/"$//'
+    } | sort -u)"
+  n_f1reasons="$(printf '%s\n' "$F1REASONS" | grep -c . || true)"
+  if [[ "$n_f1reasons" -lt 1 ]]; then
+    # 도출이 0건이면 아래 ∄ 판정이 vacuous 하다 — 빈 열거는 어떤 degrade 도 못 잡는다.
+    no "F1 mutation: 러너에서 degrade 사유를 한 건도 도출하지 못했다 — 원인-확정 판별자가 vacuous 하다"
+  else
+    assert_file_absent "$F1OUT2" \
+      "^[[:space:]]*reason: ($(printf '%s' "$F1REASONS" | tr '\n' '|'))"'$' \
+      "F1 mutation: 변이본이 조기 degrade 없이 변환까지 도달했다 (원인 확정 — 러너에서 도출한 사유 ${n_f1reasons}종 대조)"
+  fi
+  assert_file_absent "$F1OUT2" 'category: ambiguity' \
+    "F1 mutation: --emit-keys design 제거 → category 소실 재현 (락에 이빨 있음)"
+else
+  no "F1 mutation: --emit-keys design 줄을 못 찾았다 ($f1mutres) — 락이 vacuous하다"
+fi
+rm -rf "$F1TMP"
+
 finish

@@ -36,20 +36,34 @@ fi
 [[ "$OUTPUT_PATH" = /* ]] || OUTPUT_PATH="$PWD/$OUTPUT_PATH"
 [[ "$PAYLOAD" = /* ]] || PAYLOAD="$PWD/$PAYLOAD"
 
-write_failclosed() {                   # $1 = reason — 리다이렉트 실패를 삼키지 않는다
-  {
-    echo 'findings: []'
-    echo 'meta:'
-    echo '  codex_failed: true'
-    echo "  reason: $1"
-  } > "$OUTPUT_PATH" || {
-    echo "[spec-distill] fail-closed YAML 기록 실패: $OUTPUT_PATH ($1)" >&2
-    return 1
-  }
-}
+# `write_failclosed` · `_degrade_if_empty` 는 형제 러너와 공유하는 정본이다(census #24·#125).
+# 정본은 경로를 **인자**로 받는다 — 아래 호출부가 전부 `"$OUTPUT_PATH"` 를 먼저 넘긴다.
+#
+# **source 를 가드한다.** 이 러너는 아래 seed_failclosed 가 stale 을 치우는데, `set -e`
+# 아래에서 source 가 실패하면 그 seed 에 **닿기 전에** 죽는다 — OUTPUT_PATH 는 손도 안 댄
+# 채 직전 라운드의 YAML(양성 `codex_failed: false` 포함)이 그대로 이번 판정으로 읽힌다.
+# seed 가 막으려던 바로 그 형태이므로, 여기서 seed 와 같은 일을 직접 한다.
+# shellcheck source=/dev/null
+_RUNNER_COMMON="$(dirname -- "${BASH_SOURCE[0]}")/runner_common.sh"
+# `[ -r ]` + `bash -n` 을 **source 앞에** 둔다. `.` 는 POSIX special builtin 이라
+# 파일이 없으면 bash 3.2.57 이 `if !` 안에서도 셸을 **즉시 종료**시키고(실측),
+# 문법이 깨진 파일은 source 하는 순간 rc=2 로 죽는다 — 둘 다 이 if 로는 못 잡는다.
+# 그래서 "읽을 수 있는가"와 "파싱되는가"를 먼저 묻고 그 다음에만 실제로 싣는다.
+if [ -r "$_RUNNER_COMMON" ] && bash -n "$_RUNNER_COMMON" 2>/dev/null \
+   && . "$_RUNNER_COMMON"; then
+  :
+else
+  printf 'findings: []\nmeta:\n  codex_failed: true\n  reason: runner_common_unloadable\n  exit_code: 0\n' \
+    > "$OUTPUT_PATH" 2>/dev/null || {
+      echo "[spec-distill] runner_common.sh 로드 실패 + 산출물 기록 실패 — 호출자는 stale 을 지워야 한다" >&2
+      exit 3
+    }
+  echo "[spec-distill] runner_common.sh 를 로드할 수 없다 — degrade 기록 후 종료(공유 정본 미배포)" >&2
+  exit 0
+fi
 
 emit_fallback() {                      # $1 = reason
-  write_failclosed "$1" || exit 3
+  write_failclosed "$OUTPUT_PATH" "$1" || exit 3
   exit 0
 }
 
@@ -59,7 +73,7 @@ emit_fallback() {                      # $1 = reason
 # 러너의 exit code를 잡지 않으므로 merge가 그 stale clean YAML을 이번 라운드의 codex
 # 판정으로 읽는다(codex_degraded: false → approved, 흔적 0). SKILL이 "라운드마다
 # 덮어씁니다"라고 보장한 속성은 이 한 줄이 있어야 실제로 성립한다.
-seed_failclosed() { write_failclosed "runner_incomplete" || exit 3; }
+seed_failclosed() { write_failclosed "$OUTPUT_PATH" "runner_incomplete" || exit 3; }
 seed_failclosed
 
 case "$AXIS" in
@@ -81,14 +95,9 @@ SCRATCH="$(mktemp -d -t sd-brief-codex-XXXXXX)" || emit_fallback scratch_dir_unc
 # 안 쓰면(부분 실행·침묵 crash) 그 실패를 잡는 `if !`가 발동하지 않아
 # emit_fallback도 못 타고 0바이트 산출물이 그대로 남는다 — EXIT 트랩은 있었으나
 # 이 형태를 잡는 가드가 없었다(2026-08-09/10 컨트롤러 확인). 형제 러너들의
-# `_degrade_if_empty`와 동일한 최종 backstop을 여기 둔다 — write_failclosed를
-# 재사용해 소비자 스키마(중첩 meta:)를 그대로 지킨다.
-_degrade_if_empty() {
-  [[ -n "$OUTPUT_PATH" && ! -s "$OUTPUT_PATH" ]] || return 0
-  write_failclosed "aborted_before_completion" || true
-  echo "[spec-distill] codex 리뷰가 완료 전에 중단됨 — degrade YAML 기록(stale 재사용 방지)" >&2
-}
-trap 'rm -rf "$SCRATCH"; _degrade_if_empty' EXIT
+# `_degrade_if_empty`와 동일한 최종 backstop을 여기 둔다 — 그 정의는 이제 위에서
+# source 한 정본(runner_common.sh)에 있고, 소비자 스키마(중첩 meta:)를 그대로 지킨다.
+trap 'rm -rf "$SCRATCH"; _degrade_if_empty "$OUTPUT_PATH" aborted_before_completion' EXIT
 PROMPT_FILE="$SCRATCH/prompt.md"
 STDOUT_FILE="$SCRATCH/codex.jsonl"
 STDERR_FILE="$SCRATCH/codex.stderr"
@@ -141,6 +150,7 @@ if ! python3 "$PLUGIN_ROOT/scripts/codex_findings_to_yaml.py" \
        --stderr-file "$STDERR_FILE" \
        --meta-override-exit-code "$EXIT_CODE" \
        --meta-override-reason "$OVERRIDE_REASON" \
+       --emit-keys design \
        < "$STDOUT_FILE" > "$OUTPUT_PATH"; then
   emit_fallback yaml_conversion_failed
 fi
