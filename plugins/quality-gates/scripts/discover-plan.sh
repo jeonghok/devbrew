@@ -61,50 +61,32 @@ if [[ -n "$EXPLICIT" ]]; then
   fi
 fi
 
-# Portable mtime (BSD stat on macOS, GNU stat on Linux)
-get_mtime() {
-  stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0
-}
+# 디렉토리 탐색 조각(get_mtime · pick_newest)은 형제 discover-spec.sh 과 공유한다.
+# source 는 explicit override 이후에 온다 — `--plan <path>` 만 쓰는 호출은 이 파일이
+# 없어도 성립하므로, 공유 파일 부재로 그 경로까지 깨뜨리지 않는다.
+# `.` 는 POSIX special builtin 이라 파일이 없으면 `if !` 안에서도 셸이 즉시 죽는다
+# (bash 3.2.57 실측) — 그래서 source **전에** 읽기 가능 여부를 확인하고, 부재는
+# 조용한 crash 가 아니라 계약대로의 JSON + exit 2 로 낸다.
+_QG_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ ! -r "$_QG_SCRIPTS_DIR/discover_common.sh" ]]; then
+  printf '{"plan_path":"","source":"none","reason":"discover_common.sh not readable next to discover-plan.sh (%s) — plugin install incomplete"}\n' "$_QG_SCRIPTS_DIR"
+  exit 2
+fi
+# shellcheck source=discover_common.sh
+. "$_QG_SCRIPTS_DIR/discover_common.sh"
+
+# 적격성 술어 — plan 쪽의 고유 본문. tier 1 은 미체크 항목이 남은 plan,
+# tier 2 는 체크박스는 있으나 전부 체크된 plan.
+# `^- [ ]` 는 `^- [[ xX]]` 의 부분집합이라 tier 1 통과 = 체크박스 보유가 성립한다.
+_plan_has_unchecked() { grep -qE '^- \[ \]' "$1" 2>/dev/null; }
+_plan_has_checkbox()  { grep -qE '^- \[[ xX]\]' "$1" 2>/dev/null; }
 
 # Pick the best plan from a directory of *.md files.
 # Echoes the chosen path on success (return 0); returns 1 if none eligible.
 pick_best() {
   local dir="$1"
-  [[ ! -d "$dir" ]] && return 1
-
-  local best_unchecked="" best_unchecked_mtime=0
-  local best_checked="" best_checked_mtime=0
-  local f cb_total cb_unchecked m
-
-  while IFS= read -r f; do
-    [[ -z "$f" ]] && continue
-    cb_total=$(grep -cE '^- \[[ xX]\]' "$f" 2>/dev/null || true)
-    [[ -z "$cb_total" || "$cb_total" -eq 0 ]] && continue
-    cb_unchecked=$(grep -cE '^- \[ \]' "$f" 2>/dev/null || true)
-    m=$(get_mtime "$f")
-
-    if [[ -n "$cb_unchecked" && "$cb_unchecked" -gt 0 ]]; then
-      if [[ "$m" -gt "$best_unchecked_mtime" ]]; then
-        best_unchecked="$f"
-        best_unchecked_mtime="$m"
-      fi
-    else
-      if [[ "$m" -gt "$best_checked_mtime" ]]; then
-        best_checked="$f"
-        best_checked_mtime="$m"
-      fi
-    fi
-  done < <(find "$dir" -maxdepth 1 -type f -name '*.md' 2>/dev/null)
-
-  if [[ -n "$best_unchecked" ]]; then
-    printf '%s\n' "$best_unchecked"
-    return 0
-  fi
-  if [[ -n "$best_checked" ]]; then
-    printf '%s\n' "$best_checked"
-    return 0
-  fi
-  return 1
+  pick_newest "$dir" _plan_has_unchecked && return 0
+  pick_newest "$dir" _plan_has_checkbox
 }
 
 # Source 2: project-local

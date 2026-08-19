@@ -21,6 +21,35 @@ Task 19(무게 감축): kill switch 판정 12정의(`kill_switch_active` 5 + `_d
 (훅 4 + `scripts/qg-gc.py`)을 갖고 있었다. 훅들은 `scripts/kill_switch_active.py`
 (`copy-of` 물리 사본)를 import 한다. 새 surface 둘: **이벤트명 별칭**과 **`qg-gc` 토큰**.
 
+Task 22(무게 감축): **같은 플러그인 안의** 중복을 파일 하나로 접었다 —
+`discover-plan.sh`·`discover-spec.sh` 의 디렉토리 탐색 조각을 `scripts/discover_common.sh`
+로 빼고 두 스크립트가 source 한다. `shared/` 정본과 달리 플러그인-로컬이라 `copy-of`
+마커도 사본 동일성 검사도 붙지 않는다 — 같은 플러그인 안에서는 파일 하나를 source 하면
+중복 자체가 소멸한다(설계 §6.1③). 행동은 불변이다.
+
+### Added
+- `scripts/discover_common.sh` — `get_mtime()` · `pick_newest <dir> <predicate>`.
+  실행 지점이 없는 source 전용 파일. 두 탐색기의 차이는 **적격성 술어** 하나뿐이라
+  그 술어를 인자로 받는다. `emit_json` 은 여기 두지 않는다 — 키 이름(`plan_path` ↔
+  `spec_path`)이 각 스크립트의 계약이기 때문이다.
+- `tests/test_discover_plan.sh` T11 — 공유 파일이 없는 깨진 설치에서 계약(JSON +
+  exit 2)이 유지되는가. `.` 는 POSIX special builtin 이라 가드가 없으면 셸이 즉시 죽어
+  stdout 이 빈다. 짝(positive)으로 `--plan <path>` 는 공유 파일 없이도 성립함을 잰다.
+  `tests/test_discover_spec.sh` T9 가 같은 쌍을 spec 쪽에서 잰다.
+- `tests/test_discover_plan.sh` T12/T12b — tier 순서(미체크 우선)와 tier 안의 mtime
+  비교를 **갈라서** 잰다. 이관 전 스위트는 tier 순서를 뒤집어도 GREEN 이었다(mutation
+  실측) — 이관이 그 랭킹을 다시 쓰는 만큼 락이 필요했다.
+
+### Changed
+- `discover-plan.sh`·`discover-spec.sh` 가 자체 `get_mtime`·`pick_best` 본문 대신
+  `discover_common.sh` 를 source 한다. source 는 explicit override **뒤**에 온다 —
+  `--plan`/`--spec` 만 쓰는 호출은 공유 파일 없이도 성립해야 하므로, 부재로 그 경로까지
+  깨뜨리지 않는다. 출력 동치는 72건 코퍼스(체크박스 조합·mtime 순서·디렉토리 부재·
+  하위디렉토리·legacy fallthrough·잘못된 인자) 구/신 대조로 확인했다(불일치 0).
+- `tests/test_codex_runner_degrade_contract.sh` 의 fake root 형제 목록에
+  `discover_common.sh` 를 추가. 빠지면 `run_codex_reviewer.sh` 가 조용히 빈
+  `<spec_context>` 로 degrade 하면서도 이 테스트는 GREEN 으로 남는다(실측).
+
 ### Added
 - `scripts/kill_switch_active.py` — `shared/killswitch/kill_switch_active.py` 의
   `# copy-of:` 물리 사본. 설치본에는 `shared/` 가 없으므로 형제 사본이어야 import 가 풀린다.

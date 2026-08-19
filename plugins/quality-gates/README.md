@@ -111,6 +111,7 @@ quality-gates/
 │   ├── filter-docs.sh                        # 코드 reviewer용 docs path 필터
 │   ├── discover-plan.sh                      # Plan 파일 우선순위 탐색 (Runtime gate test-scope-validator)
 │   ├── discover-spec.sh                      # Spec 파일 우선순위 탐색 (test-scope-validator + codex; AC-섹션 적격성)
+│   ├── discover_common.sh                    # 위 두 탐색기가 source 하는 공통 조각 (get_mtime · pick_newest; 실행 지점 없음)
 │   ├── detect-runtime.sh                     # Runtime gate 런타임 surface 탐지 (manifest 산출)
 │   ├── compute-test-scope-candidates.sh      # Runtime gate Step 2.5 — 후보 test 파일 산출 (Python/JS/TS heuristic)
 │   ├── resolve-baseline.sh                   # 공유 baseline resolution (base/base_ref/merge_base/degraded/same_as_head/ahead)
@@ -372,7 +373,7 @@ Runtime gate의 test-scope-validator가 `--plan <path>`를 받지 않으면 다�
 
 **Soft dependency:** project-local source는 `superpowers:writing-plans` skill이 plan을 저장하는 경로 (`docs/superpowers/plans/`) 와 동일합니다. superpowers 플러그인을 설치하지 않았더라도 동일 경로에 `.md` 파일을 직접 두면 동작합니다.
 
-알고리즘 자체는 `scripts/discover-plan.sh`에 분리되어 `tests/test_discover_plan.sh` 10개 fixture로 검증됩니다.
+알고리즘 자체는 `scripts/discover-plan.sh`(적격성 술어 + source 우선순위)와 그것이 source 하는 `scripts/discover_common.sh`(디렉토리 스캔 + mtime 선택)에 분리되어 `tests/test_discover_plan.sh` 12개 fixture로 검증됩니다.
 
 ## Spec Discovery Sources (Runtime gate test-scope-validator + Review gate codex)
 
@@ -391,7 +392,7 @@ plan과 달리 **legacy-global 소스는 없습니다** — spec은 프로젝트
 
 **Soft dependency:** project-local source는 `superpowers:brainstorming` / `spec-distill`이 spec을 저장하는 경로 (`docs/superpowers/specs/`)와 동일합니다. spec-distill / `superpowers:brainstorming` 플러그인을 설치하지 않았더라도 동일 경로에 `.md` 파일을 직접 두면 동작합니다.
 
-알고리즘 자체는 `scripts/discover-spec.sh`에 분리되어 `tests/test_discover_spec.sh` 8개 fixture로 검증됩니다.
+알고리즘 자체는 `scripts/discover-spec.sh`(적격성 술어 + source 우선순위)와 그것이 source 하는 `scripts/discover_common.sh`(디렉토리 스캔 + mtime 선택)에 분리되어 `tests/test_discover_spec.sh` 9개 fixture로 검증됩니다.
 
 ## 사전 요건
 
