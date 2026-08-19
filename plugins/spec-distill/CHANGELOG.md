@@ -32,6 +32,16 @@ Task 22(무게 감축): **같은 플러그인 안의** 중복을 `scripts/hook_c
   합집합 행동을 갖는지. 각 단언은 세 사본 중 적어도 하나가 갖지 못했던 성질이라,
   어느 옛 본문으로 되돌려도 하나는 RED 가 된다. `float` 분기는 단언하지 않는다 —
   없어도 `str(v)` 경로가 같은 값을 내 어떤 입력으로도 구분되지 않는다(이빨 없는 단언).
+- `tests/test_yaml_scalar_single_definition.py` `TestCanonicalAgreesWithSharedCodex`
+  — 이 플러그인의 `_yaml_scalar` 와 `shared/codex/` 정본이 **같은 입력을 인용하는지**.
+  케이스 목록(내가 떠올린 값)과 상수 자체 비교(내가 안 떠올린 문자) 두 겹으로 잰다.
+  인용 표기(`ensure_ascii`)는 다를 수 있으므로 `json.loads` 로 되돌린 뒤 비교한다.
+  위치 축의 **음의 짝**(`codex-reviewer`·`fail-safe` 처럼 첫 글자가 아닌 지시자는
+  bare 로 남는다)도 같이 잰다 — 없으면 "전부 인용" 으로 도망갈 수 있다.
+- `tests/test_codex_findings_to_yaml.py` `TestSummaryScalarRoundTrip` — 정본
+  스크립트를 실제로 태워 산출 YAML 을 **파싱해서 원문과 정확히 같은지** 잰다.
+  텍스트 겹(인용됐는가)과 왕복 겹(되돌아오는가)을 갈라 둬서, PyYAML 이 없는 환경에서도
+  텍스트 겹은 이빨을 유지한다.
 
 ### Changed
 - `review-dispatch.py`·`pending-review-reminder.py` 가 UTF-8 프리앰블·`PENDING_RE`·
@@ -57,10 +67,21 @@ Task 22(무게 감축): **같은 플러그인 안의** 중복을 `scripts/hook_c
   YAML flow sequence 로 읽혔다 — 두 merge 스크립트의 advisory 리터럴 **5건**이 이 모양이었다
   (예: "[spec-distill v0.20.0] review indeterminate …", "[spec-distill v0.24.0] critic
   sentinel 블록 …"). 빈 문자열과 None 쪽은 현재 소비자 경로로는 도달하지 않는다.
-- **범위 밖으로 남긴 것**: `scripts/codex_findings_to_yaml.py`(→ `shared/codex/` 심볼릭
-  링크) 안의 `_yaml_scalar` 는 네 번째 변종으로 남아 있다(`ensure_ascii` 기본값, `[]{}`
-  없음). 세 플러그인이 공유하는 정본이라 여기서 고치면 quality-gates·plugin-audit 의
-  출력도 함께 바뀐다 — 같은-플러그인 범위 밖이다.
+- **정본(`shared/codex/codex_findings_to_yaml.py`)의 `_yaml_scalar` 도 같은 술어로
+  맞췄다** (2026-08-19). 사본 셋을 합집합으로 접는 동안 그 사본들이 모여야 할 정본은
+  옛 술어를 그대로 갖고 있었다 — 통합이 뒤집혀 있던 셈이다. 실측(정본 종단):
+  `summary` 가 `[` 로 시작하면(`"[CRITICAL] …"` — 리뷰어가 흔히 쓰는 모양) 인용 없이
+  나가 **문서 전체가 ParserError** 로 죽었고, 소비자
+  (`merge_review.parse_codex_yaml`)는 그 파일을 읽지 못해 그 라운드의 findings 가
+  통째로 소실됐다. 빈 문자열은 `null` 로, `{` 로 시작하는 값은 매핑으로 읽혔다.
+- **위치 축(`_YAML_UNSAFE_FIRST`)을 새로 넣었다 — 합집합에도 없던 잔여 구멍이다.**
+  세 사본의 합집합은 **문자 멤버십** 하나뿐이라, block sequence 지시자로 시작하는 값
+  (`- dash`)이나 backtick 으로 시작하는 값(``"`handler()` 가 null 을 반환한다"``)은
+  여전히 인용 없이 나가 ScannerError 를 냈다. 첫 글자를 0x20–0x7E 전수로 돌려
+  `k: <값>` 을 파싱하는 방식으로 위험 집합을 **측정해서** 얻었고, 그중 기존 검사가
+  덮지 못하는 잔여를 상수로 뒀다. 정본과 이 파일이 같은 두 상수를 쓴다.
+  남은 의도된 차이는 인용 **표기** 하나뿐이다 — 정본은 `ensure_ascii` 기본값(True),
+  여기는 False. 왕복(`json.loads`)은 어느 쪽이든 원문을 그대로 낸다.
 
 ### Added
 - `scripts/kill_switch_active.py` — `shared/killswitch/kill_switch_active.py` 의

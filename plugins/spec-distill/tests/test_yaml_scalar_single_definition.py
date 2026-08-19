@@ -17,6 +17,7 @@ census #45(spec-distill 부분): 같은 이름의 함수가 셋 있었고 **셋 
 assert 는 이빨이 없다.
 """
 import importlib
+import json
 import re
 import sys
 import unittest
@@ -35,10 +36,15 @@ def _plugin_py_files():
     """tests 를 뺀 이 플러그인이 **소유한** .py — 이름을 열거하지 않고 구조에서 얻는다.
 
     심볼릭 링크는 뺀다. `scripts/codex_findings_to_yaml.py` 는
-    `shared/codex/codex_findings_to_yaml.py` 를 가리키는 링크이고, 그 파일은 세
-    플러그인이 공유하는 정본이라 이 플러그인 안의 사본이 아니다(그쪽 `_yaml_scalar`
-    는 여전히 네 번째 변종이지만 — ensure_ascii 기본값, `[]{}` 없음 — 이 락의 범위
-    밖이다. 고치면 quality-gates·plugin-audit 의 출력이 함께 바뀐다).
+    `shared/codex/codex_findings_to_yaml.py` 를 가리키는 링크이고, 그 파일은 두
+    플러그인(quality-gates·spec-distill)이 공유하는 정본이라 이 플러그인 안의 사본이
+    아니다 — **정의 개수**를 세는 이 검사의 범위 밖이다.
+
+    2026-08-19: 그 정본의 `_yaml_scalar` 는 한때 네 번째 변종이었다(`[]{}` 없음 +
+    빈 문자열 가드 없음). 지금은 인용 **여부**를 정하는 두 상수가 이 파일의 정본과
+    같은 값이고, 그것을 `TestCanonicalAgreesWithSharedCodex` 가 잰다. 남은 의도된
+    차이는 인용 **표기** 하나뿐이다 — 정본은 `ensure_ascii` 기본값(True), 여기는
+    False. 왕복은 어느 쪽이든 원문을 그대로 낸다.
     """
     return sorted(p for p in SD.rglob("*.py")
                   if "tests" not in p.parts and "__pycache__" not in p.parts
@@ -98,6 +104,33 @@ class TestYamlScalarSingleDefinition(unittest.TestCase):
                     "[bracket]", "{brace}", "a[b", "a]b", "a{b", "a}b"):
             self.assertEqual(f(raw), f'"{raw}"', f"인용되지 않았다: {raw!r}")
 
+    def test_leading_indicators_are_quoted(self):
+        """문자 멤버십 축이 못 잡는 **위치** 축 (2026-08-19).
+
+        세 사본의 합집합(`:#"'\\n[]{}`)에는 `-` 도 backtick 도 없다. `- dash` 는
+        인용 없이 나가면 block sequence 시작으로 읽혀 ScannerError 로 죽는다 —
+        합집합 이관 뒤에도 남아 있던 잔여 구멍이다. 여기 값들은 전부 첫 글자를
+        0x20–0x7E 전수로 돌려 얻은 "깨지는 첫 글자" 집합에서 왔다(상상이 아니다).
+        """
+        f = self._f()
+        for raw in ("- dash", "? question", "@decorator 누락", "*args 처리 누락",
+                    "!important 무시", "`handler()` 가 null 을 반환한다",
+                    "| pipe", "> quote", ", comma", "% percent", "& anchor"):
+            self.assertEqual(f(raw), json.dumps(raw, ensure_ascii=False),
+                             f"첫 글자 지시자가 인용되지 않았다: {raw!r}")
+
+    def test_indicator_not_at_first_position_stays_unquoted(self):
+        """위치 축의 **음의 짝** — `_YAML_UNSAFE_FIRST` 를 멤버십 축으로 넓히면 RED.
+
+        `codex-reviewer` · `fail-safe` 처럼 하이픈을 품은 값은 이 리포 전역에 있고,
+        이들이 인용되기 시작하면 정본 출력의 `agent: codex-reviewer` 같은 줄이 통째로
+        모양을 바꾼다. 첫 글자가 아닌 지시자는 bare 로 남아야 한다.
+        """
+        f = self._f()
+        for raw in ("codex-reviewer", "fail-safe", "a*b", "a?b", "a@b", "a,b",
+                    "a|b", "a>b", "a%b", "a&b", "a!b"):
+            self.assertEqual(f(raw), raw, f"첫 글자가 아닌데 인용됐다: {raw!r}")
+
     def test_none_becomes_yaml_null(self):
         """`brief_review_state` 본문에 없던 분기 — 그쪽은 `None` 이라는 문자열을 냈다."""
         self.assertEqual(self._f()(None), "null")
@@ -116,6 +149,75 @@ class TestYamlScalarSingleDefinition(unittest.TestCase):
         out = self._f()("사유: 판정 불가")
         self.assertIn("판정 불가", out)
         self.assertNotIn("\\u", out)
+
+
+class TestCanonicalAgreesWithSharedCodex(unittest.TestCase):
+    """이 플러그인의 `_yaml_scalar` 와 `shared/codex/` 정본이 **같이 인용한다**.
+
+    census #45 는 두 태스크에 걸쳐 있었다 — Task 22 가 spec-distill 세 사본을
+    합집합으로 모으고, Task 17 이 `codex_findings_to_yaml.py` 두 벌을 심볼릭 링크로
+    하나로 만들었다. 그래서 **사본은 고쳐지고 그 사본들이 모여야 할 정본은 안 고쳐진**
+    상태가 남았다(2026-08-19 실측: 정본은 `[CRITICAL] …` 를 bare 로 내보내 문서 전체가
+    ParserError). 이 락은 그 역전이 다시 생기는 것을 막는다.
+
+    무엇을 재고 무엇을 안 재는가: 인용 **여부**(어떤 입력을 인용하는가)는 같아야 하고,
+    인용 **표기**(`ensure_ascii`)는 다를 수 있다 — 정본은 True, 여기는 False. 표기
+    차이는 왕복을 바꾸지 않는다. 그래서 아래는 `json.loads` 로 되돌린 뒤 비교한다.
+    """
+
+    def _canon_pair(self):
+        sys.path.insert(0, str(SCRIPTS))
+        shared = importlib.import_module("codex_findings_to_yaml")
+        local = importlib.import_module(CANON_MODULE)
+        return local._yaml_scalar, shared._yaml_scalar
+
+    def test_both_quote_the_same_inputs(self):
+        local, shared = self._canon_pair()
+        # 축을 먼저 적는다: ① 첫 글자 지시자 ② 문자열 내부 지시자 ③ 빈/공백
+        # ④ 인용이 필요 없는 값. 각 축의 값들을 돌려 "인용했는가"만 비교한다.
+        cases = [
+            "[CRITICAL] 대괄호로 시작하는 요약", "[spec-distill] advisory",
+            "{brace}", "- dash", "? q", "@a", "*a", "!a", "`code`", "| p",
+            "> q", ", c", "% p", "& a",
+            "", " lead", "trail ", "a: b", "a # b", 'say "hi"', "it's",
+            "array[0] 범위 초과", "done}", "a[b", "a]b", "a{b", "a}b",
+            "approved", "needs_revise", "codex-reviewer", "fail-safe",
+            "a*b", "a?b", "a,b", "a|b", "plain summary", "한국어 요약",
+        ]
+        # 축퇴 가드: 두 진영(인용/비인용)이 모두 비면 아래 비교가 공허하다.
+        quoted = [c for c in cases if local(c).startswith('"')]
+        bare = [c for c in cases if not local(c).startswith('"')]
+        self.assertGreaterEqual(len(quoted), 20, "인용 사례가 너무 적다 — 검사가 공허하다")
+        self.assertGreaterEqual(len(bare), 5, "비인용 사례가 없다 — '전부 인용' 으로 도망갔다")
+        for c in cases:
+            with self.subTest(value=c):
+                a, b = local(c), shared(c)
+                self.assertEqual(a.startswith('"'), b.startswith('"'),
+                                 f"인용 여부가 갈렸다: local={a!r} shared={b!r}")
+                # 표기가 달라도(ensure_ascii) 되돌린 값은 같아야 한다.
+                da = json.loads(a) if a.startswith('"') else a
+                db = json.loads(b) if b.startswith('"') else b
+                self.assertEqual(da, db)
+                self.assertEqual(da, c, "인용/역인용 왕복이 원문을 바꿨다")
+
+    def test_the_two_unsafe_sets_are_literally_equal(self):
+        """행동 락의 구조적 짝 — 위 케이스 목록이 놓친 문자를 잡는다.
+
+        `test_both_quote_the_same_inputs` 는 내가 떠올린 값만 돈다. 상수 자체를
+        비교해야 내가 안 떠올린 문자에서 갈라지는 것을 잡는다.
+        """
+        sys.path.insert(0, str(SCRIPTS))
+        shared = importlib.import_module("codex_findings_to_yaml")
+        local = importlib.import_module(CANON_MODULE)
+        for name in ("_YAML_UNSAFE_ANYWHERE", "_YAML_UNSAFE_FIRST"):
+            a = getattr(local, name, None)
+            b = getattr(shared, name, None)
+            self.assertIsNotNone(a, f"{CANON_MODULE} 에 {name} 이 없다")
+            self.assertIsNotNone(b, f"정본에 {name} 이 없다")
+            self.assertEqual(a, b, f"{name} 이 정본과 다르다 (drift 재발)")
+        # 두 상수가 겹치면 "위치 축" 이 사실상 죽은 코드가 된다.
+        self.assertEqual(set(local._YAML_UNSAFE_ANYWHERE) & set(local._YAML_UNSAFE_FIRST),
+                         set(), "두 집합이 겹친다 — 위치 축이 무의미해진다")
 
 
 if __name__ == "__main__":

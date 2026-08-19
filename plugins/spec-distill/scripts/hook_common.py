@@ -119,6 +119,25 @@ def state_file_for(session_id: str) -> Path:
     return state_root() / session_id / "state.local.md"
 
 
+# `_yaml_scalar` 가 인용해야 하는 문자 — **두 축**이다. 이 두 상수는
+# `shared/codex/codex_findings_to_yaml.py` 와 같은 값이어야 한다(정본과 이 소비자가
+# 다른 인용 규칙을 쓰면 census #45 가 닫은 drift 가 되살아난다).
+#
+# _YAML_UNSAFE_ANYWHERE — 문자열 어디에 있어도 위험: 매핑 구분자 `:` · 주석 `#` ·
+#   인용부호 · 개행 · flow collection 지시자 `[]{}`.
+# _YAML_UNSAFE_FIRST — **첫 글자일 때만** 위험: block sequence `-` · complex key
+#   `?` · tag `!` · anchor/alias `&`/`*` · directive `%` · block scalar `|`/`>` ·
+#   flow 구분자 `,` · YAML 이 예약한 `@`/backtick.
+#
+# 두 집합은 상상이 아니라 전수 측정으로 얻었다(2026-08-19, PyYAML 6.0.3): 첫 글자를
+# 0x20–0x7E 전부로 돌려 `k: <값>` 을 파싱했을 때 깨진 첫 글자는
+# ` !"#%&'*,-:>?@[]`{|}` 였다. 그 중 ANYWHERE 와 앞뒤 공백 검사(`s.strip() != s`)
+# 가 이미 덮는 것을 뺀 잔여가 FIRST 다. 합집합(문자 멤버십)만으로는 `- ` 로 시작하는
+# 값이 ScannerError 로 죽는 잔여 구멍이 남아 있었다 — 위치 축이 별도로 필요하다.
+_YAML_UNSAFE_ANYWHERE = ":#\"'\n[]{}"
+_YAML_UNSAFE_FIRST = "!%&*,->?@|`"
+
+
 def _yaml_scalar(v) -> str:
     """값 하나를 YAML 인라인 스칼라로. 필요할 때만 인용한다.
 
@@ -135,8 +154,15 @@ def _yaml_scalar(v) -> str:
       - None 이 `brief_review_state` 에서 `None` 이라는 문자열로 나갔다(도달 경로는
         없다 — 서브커맨드 인자가 전부 required 라 항상 str 이다).
 
+    2026-08-19 추가: 세 사본의 합집합은 **문자 멤버십** 축만 갖고 있어서 위치 축의
+    잔여 구멍이 남아 있었다 — `- dash` 처럼 block sequence 지시자로 시작하는 값이
+    인용 없이 나가 ScannerError 를 냈다(실측). `_YAML_UNSAFE_FIRST` 가 그 축이고,
+    정본(`shared/codex/codex_findings_to_yaml.py`)과 **같은 값**을 쓴다.
+
     ensure_ascii=False: 이 리포는 Korean-primary 이고 advisory 는 한국어다 —
     \\uXXXX 로 escape 하면 사람이 읽는 게이트가 판독 불가가 된다. 산출 파일은 UTF-8.
+    정본은 ensure_ascii 기본값(True)을 쓴다 — 인용 **여부**(위 두 상수)는 같고
+    인용 **표기**만 다르다. 왕복(`json.loads`)은 어느 쪽이든 원문을 그대로 낸다.
     """
     if isinstance(v, bool):
         return "true" if v else "false"
@@ -145,6 +171,9 @@ def _yaml_scalar(v) -> str:
     if v is None:
         return "null"
     s = str(v)
-    if s == "" or any(c in s for c in ":#\"'\n[]{}") or s.strip() != s:
+    if (s == ""
+            or any(c in s for c in _YAML_UNSAFE_ANYWHERE)
+            or s[:1] in _YAML_UNSAFE_FIRST
+            or s.strip() != s):
         return json.dumps(s, ensure_ascii=False)
     return s

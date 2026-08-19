@@ -167,6 +167,30 @@ Task 22(무게 감축): **같은 플러그인 안의** 중복을 파일 하나�
   인용하는 서술(R2-4)이 실제로 참이 된다. mutation: 두 변이 각각 4/4 RED(네 물리
   인스턴스 전부, 자기 케이스만 지목), 무변이 77/77 GREEN.
 
+### Fixed (2026-08-19 fix round 4 — 정본 `_yaml_scalar` 의 인용 술어)
+- **정본이 YAML flow 지시자로 시작하는 값을 인용 없이 내보내 문서 전체가 죽었다.**
+  `shared/codex/codex_findings_to_yaml.py` 의 `_yaml_scalar` 는 `:#"'\n` 과 앞뒤 공백만
+  보고 인용했다. `summary` 는 codex 가 쓴 **임의의 모델 텍스트**라 `[CRITICAL] …`
+  처럼 `[` 로 시작하는 요약이 평범한데, 그때 산출 YAML 이 통째로 ParserError 로 죽어
+  **그 리뷰 라운드의 findings 가 전부 소실**됐다(실측, 이 스크립트 종단). 빈 문자열은
+  `null` 로, `{` 로 시작하는 값은 매핑으로 읽혔다. 이 결함은 Task 17 이 두 사본을
+  정본으로 접을 때 함께 옮겨왔고, Task 22 는 spec-distill 쪽 사본 셋만 합집합으로
+  고쳤다 — **사본은 고쳐지고 정본은 안 고쳐진** 역전 상태였다.
+- 인용 술어를 `plugins/spec-distill/scripts/hook_common.py` 의 합집합과 같게 맞추고
+  (`[]{}` + 빈 문자열 가드), 거기에도 없던 **위치 축**을 두 파일에 동시에 넣었다:
+  `- dash`(block sequence)·`` `code` ``(reserved)처럼 **첫 글자만** 위험한 지시자는
+  문자 멤버십으로는 잡히지 않아 ScannerError 로 죽었다. 위험 집합은 첫 글자를
+  0x20–0x7E 전수로 돌려 `k: <값>` 을 파싱해 **측정**했다(PyYAML 6.0.3).
+- **이 플러그인의 출력이 바뀌는 자리**: `[`·`]`·`{`·`}` 를 포함하거나 위 지시자 중
+  하나로 시작하는 finding 값(주로 `summary`·`proposed_fix`)이 이제 따옴표로 감싸여
+  나간다. 소비자는 인용을 되돌려 읽으므로(`merge_review._yaml_unscalar` 의 `json.loads`)
+  값 자체는 불변이고, 이전에 죽던 문서가 이제 파싱된다.
+- **알려진 잔여(행동 아님, 가독성)**: 이 정본은 `json.dumps(s)` 를 `ensure_ascii`
+  기본값(True)으로 부른다 — 인용된 한국어가 `\uXXXX` 로 나간다. 왕복은 정확하지만
+  사람·모델이 읽는 게이트 산출물의 가독성이 떨어지고, 인용이 잦아진 만큼 노출도 늘었다.
+  `hook_common` 쪽은 `ensure_ascii=False` 다. 두 파일의 인용 **여부**는 이제 같고
+  **표기**만 다르다 — 통일은 별건으로 남긴다.
+
 ### Added (Task 20 — codex 러너 공통 조각)
 
 - `scripts/runner_common.sh` — `shared/codex/runner_common.sh` 의 `copy-of` 물리 사본.
