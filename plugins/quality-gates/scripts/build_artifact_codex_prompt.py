@@ -27,7 +27,8 @@ try:
 except (AttributeError, OSError, ValueError):
     pass
 
-# P21 프리앰블은 **형제 파일**에서 읽는다 — 이 경로는 `shared/codex/prompt-preamble.md`
+# P21 프리앰블은 **형제 파일** `scripts/prompt-preamble.md` 에서 읽는다 — 그 경로는
+# `shared/codex/prompt-preamble.md`
 # 를 가리키는 상대 심볼릭 링크이고, 설치 시점에 실제 내용으로 역참조되어 배포 트리 안으로
 # 들어온다(설계 §2.2·§16.1). 런타임에 `shared/` 로 나가지 않는다 — `${CLAUDE_PLUGIN_ROOT}`
 # 에서 그곳은 도달 불가다(§2.1).
