@@ -93,8 +93,9 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
    **`run_codex_reviewer.sh`를 재사용하지 않는다** — 그 스크립트는 diff-shaped이고 최신 spec의
    AC를 자동 주입해서 blind(모델이 답을 미리 못 본 상태)를 깬다
    ([[reference_codex_reviewer_spec_ac_injection]]). plugin-audit 전용 러너
-   `run_audit_codex_reviewer.sh`가 자기 `codex-prompt-preamble.md`(untrusted-data, P21)를
-   프롬프트 맨 앞에 싣고 축 질문을 이어 붙인다.
+   `run_audit_codex_reviewer.sh`가 자기 `codex-prompt-preamble.md`(응답 스키마)와 shared
+   정본 `prompt-preamble.md`(untrusted-data, P21)를 프롬프트 앞에 싣고 축 질문을 이어
+   붙인다.
 
    축마다 축 질문을 파일(`$AXIS_FILE`)로 쓰고 아래 게이트를 **그대로** 실행한다. kill switch는
    `DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX=1`이며 `detect_codex.sh`가 그것을 읽는다 — 러너는 읽지

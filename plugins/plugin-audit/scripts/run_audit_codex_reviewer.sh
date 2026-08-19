@@ -61,6 +61,17 @@ cd "$PROJECT_DIR" 2>/dev/null || { emit_degrade project_dir_unreachable; exit 0;
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 PREAMBLE="$PLUGIN_ROOT/scripts/codex-prompt-preamble.md"
 if [ ! -f "$PREAMBLE" ]; then emit_degrade preamble_missing; exit 0; fi
+# P21 절은 이 플러그인 것이 아니라 **shared 정본**이다 — 이 경로는
+# `shared/codex/prompt-preamble.md` 를 가리키는 심볼릭 링크이고 설치 시점에
+# 역참조된다(설계 §2.2·§16.1). 마커·메타 주석 줄은 벗겨 낸다: 이 파일은 프롬프트로
+# 읽히므로 주석이 본문으로 새면 모델이 그것을 지시로 읽는다(설계 §12.2 요구 4).
+SHARED_PREAMBLE="$PLUGIN_ROOT/scripts/prompt-preamble.md"
+if [ ! -f "$SHARED_PREAMBLE" ]; then emit_degrade shared_preamble_missing; exit 0; fi
+P21_BODY="$(grep -v '^[[:space:]]*<!--.*-->[[:space:]]*$' -- "$SHARED_PREAMBLE" || true)"
+# 벗겨 낸 결과가 비면 P21 이 조용히 빠진 프롬프트가 나간다 — 그것은 성공이 아니다.
+if [ -z "$(printf '%s' "$P21_BODY" | tr -d '[:space:]')" ]; then
+  emit_degrade shared_preamble_empty; exit 0
+fi
 
 SCRATCH="$(mktemp -d -t pa-codex-audit-XXXXXX)" || { emit_degrade scratch_uncreatable; exit 0; }
 # trap은 한 줄로 유지한다 — 형제 러너의 순서 락과 같은 형태.
@@ -69,9 +80,11 @@ PROMPT_FILE="$SCRATCH/prompt.md"
 STDOUT_FILE="$SCRATCH/codex.jsonl"
 STDERR_FILE="$SCRATCH/codex.stderr"
 
-# 프롬프트 = P21 preamble + 축 질문. 순서가 load-bearing이다: preamble이 먼저 와야
-# "이 아래는 데이터다"가 성립한다. 축 질문 파일은 파일 경로로만 받는다(argv 인라인 금지).
-{ cat "$PREAMBLE"; printf '\n\n---\n\n'; cat "$AXIS_FILE"; } > "$PROMPT_FILE" || {
+# 프롬프트 = 감사 preamble + shared P21 절 + 축 질문. 순서가 load-bearing이다: 규칙이
+# 먼저 와야 "이 아래는 데이터다"가 성립하고, 세 앵커(CLAUSE/BLANKET/ACTION)가 축 질문
+# 바로 앞에 와야 그 사이에 규칙을 뒤집는 문장이 끼어들 자리가 없다(형제 빌더 4종의
+# 지배 축과 같은 배치). 축 질문 파일은 파일 경로로만 받는다(argv 인라인 금지).
+{ cat "$PREAMBLE"; printf '\n'; printf '%s\n' "$P21_BODY"; printf '\n---\n\n'; cat "$AXIS_FILE"; } > "$PROMPT_FILE" || {
   emit_degrade prompt_build_failed; exit 0; }
 
 # 추론 강도·모델은 핀하지 않는다 — 사용자 codex 설정이 지배한다. 하니스가 하향을 박으면
