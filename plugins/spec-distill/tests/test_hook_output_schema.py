@@ -801,7 +801,7 @@ class TestCrossResolverAdvisory(unittest.TestCase):
     @unittest.skipUnless(_in_worktree(), "cross-resolver test runs only inside a git worktree")
     def test_python_and_bash_resolvers_agree(self):
         # Python resolver: state_path.state_root()
-        sys.path.insert(0, str(HOOKS_DIR))
+        sys.path.insert(0, str(SCRIPTS_DIR))
         try:
             import state_path  # type: ignore
             py_root = state_path.state_root()

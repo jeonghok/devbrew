@@ -32,8 +32,7 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-HOOKS_DIR = SCRIPT_DIR.parent / "hooks"
-sys.path.insert(0, str(HOOKS_DIR))
+sys.path.insert(0, str(SCRIPT_DIR))
 from state_path import SESSION_PATTERN  # noqa: E402 # pyright: ignore[reportMissingImports]
 # `state_file_for` 는 훅과 공유하는 정의다 — 같은 플러그인 안이므로 import 하나로
 # 중복이 소멸한다(설계 §6.1③). 여기서 재-export 되므로 `arm_ledger.state_file_for`

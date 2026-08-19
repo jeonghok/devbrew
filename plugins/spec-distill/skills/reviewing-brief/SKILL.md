@@ -60,8 +60,8 @@ state는 새 파일을 만들지 않고 기존 `.claude/spec-distill/<session-id
 
 ```bash
 PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
-harness_sid="$(python3 "$PR/hooks/state_path.py" session-id)"
-ROOT="$(python3 "$PR/hooks/state_path.py" state-root)"
+harness_sid="$(python3 "$PR/scripts/state_path.py" session-id)"
+ROOT="$(python3 "$PR/scripts/state_path.py" state-root)"
 STATE="$ROOT/$harness_sid/state.local.md"
 # 두 번째 채널. 경로는 **세션의 순수 함수**여야 한다 — 어느 블록이 언제 재도출해도 같은
 # 파일을 가리켜야 하기 때문이다. `$$`(PID)는 Bash 호출마다 달라 재발견이 불가능하고,

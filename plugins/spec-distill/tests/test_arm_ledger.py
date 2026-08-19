@@ -12,7 +12,6 @@ import uuid
 from pathlib import Path
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(PLUGIN_ROOT / "hooks"))
 sys.path.insert(0, str(PLUGIN_ROOT / "scripts"))
 import arm_ledger  # noqa: E402
 # 착지점은 `state_path` 에서 **직접** 조립한다. arm_ledger 를 통해 부르면(예전 형태)

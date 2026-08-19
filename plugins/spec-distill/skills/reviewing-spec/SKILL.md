@@ -18,8 +18,8 @@ cost_class: medium
 1. **Load state.local.md (hook-facing 상태는 harness sid 로 명시 해석)** — 먼저 훅(Stop/UserPromptSubmit/PostToolUse)이 읽는 파일과 *정의상 동일한* harness session id + state root 로 상태 파일을 연다. 훅은 raw sid 가 아니라 `resolve_session_id`(env-first: `DEVBREW_SPEC_DISTILL_SESSION_ID` → `CLAUDE_CODE_SESSION_ID` → payload)를 쓰므로, 스킬도 같은 리졸버를 CLI 로 재사용한다(DRY, C4):
 
    ```bash
-   harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/hooks/state_path.py" session-id)"
-   ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/hooks/state_path.py" state-root)"
+   harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" session-id)"
+   ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" state-root)"
    STATE="$ROOT/$harness_sid/state.local.md"   # 훅이 읽는 바로 그 파일
    ```
 

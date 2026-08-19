@@ -28,7 +28,6 @@ from pathlib import Path
 from typing import Optional
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
-HOOKS_DIR = SCRIPTS_DIR.parent / "hooks"
 
 GC_SCRIPT = SCRIPTS_DIR / "spec-distill-gc.py"
 
@@ -111,11 +110,11 @@ def state_file_for(session_id: str) -> Path:
 
     `state_path` import 를 함수 안에 둔다. 이 모듈의 `_yaml_scalar` 만 쓰는 소비자가
     셋 있고(merge_review · merge_brief_review · brief_review_state) 그 셋은 상태 경로를
-    전혀 해석하지 않는다 — 모듈 최상단에서 import 하면 그 셋이 훅 트리의
+    전혀 해석하지 않는다 — 모듈 최상단에서 import 하면 그 셋이 같은 디렉토리의
     `state_path.py` 에 import 시점으로 묶인다.
     """
-    if str(HOOKS_DIR) not in sys.path:
-        sys.path.insert(0, str(HOOKS_DIR))
+    if str(SCRIPTS_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPTS_DIR))
     from state_path import state_root  # pyright: ignore[reportMissingImports]
     return state_root() / session_id / "state.local.md"
 

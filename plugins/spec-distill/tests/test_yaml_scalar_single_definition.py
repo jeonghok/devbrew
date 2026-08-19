@@ -24,7 +24,6 @@ from pathlib import Path
 
 SD = Path(__file__).resolve().parents[1]
 SCRIPTS = SD / "scripts"
-sys.path.insert(0, str(SD / "hooks"))
 sys.path.insert(0, str(SCRIPTS))
 
 CANON_MODULE = "hook_common"

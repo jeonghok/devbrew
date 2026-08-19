@@ -72,7 +72,7 @@ State body: 각 round의 4-block 출력 + 사용자 답변 + (있다면) coverag
 tool이 차단됩니다 — state 갱신은 **반드시 Bash**로 하십시오:
 
 ```bash
-ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" state-root)"
+ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/state_path.py" state-root)"
 STATE="$ROOT/<session-id>/state.local.md"
 # read-modify-write via python3 -c / heredoc (Edit tool 사용 금지 — main-repo 경로)
 ```
@@ -177,7 +177,7 @@ bound한다(프로즈 self-tracking 금지). **원자성**: probe(= (b)/(d)-path
 *전에* `check`(gate)를 호출하고, 질문을 실제로 제기한 *후에만* `increment`한다.
 
 ```bash
-ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" state-root)"
+ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/state_path.py" state-root)"
 STATE="$ROOT/<session-id>/state.local.md"
 # 1) probe 조립 전 gate (check가 유일한 gate — C10)
 if python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" check "$STATE"; then
@@ -401,8 +401,8 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 핸드오프 변수 3개를 그 skill과 같은 리졸버로 세팅합니다(state 배치 규약 정합, PN1):
 
 ```bash
-ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" state-root)"
-harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" session-id)"
+ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/state_path.py" state-root)"
+harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/state_path.py" session-id)"
 PAYLOAD="docs/superpowers/interview/<file>"          # Step A가 방금 쓰고 검증한 경로
 CODEX_DIR_YAML="$ROOT/$harness_sid/codex-direction.yaml"
 CODEX_FID_YAML="$ROOT/$harness_sid/codex-fidelity.yaml"
@@ -461,7 +461,7 @@ Step A가 끝난 시점에 `user_sourced_items`는 **전부 `provisional`**입�
 카운터는 프로즈 self-tracking이 아니라 state에 씁니다(PN1 Bash write contract):
 
 ```bash
-ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/hooks/state_path.py" state-root)"
+ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/state_path.py" state-root)"
 STATE="$ROOT/<session-id>/state.local.md"
 # confirm_repost_count read-modify-write via python3 -c / heredoc
 ```

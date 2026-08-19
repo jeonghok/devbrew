@@ -84,11 +84,11 @@ KS_CODEX="$(grep -F 'DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1' <<<"$KS" | head -1)"
   || no "C4: codex kill switch가 design-doc 경로만 말한다 — brief 3개 호출 지점이 미문서화"
 
 # --- T18 / AC22a : 훅 집합 고정 열거 + 'brief' 문자열 0건 --------------------
-EXPECTED="hooks.json pending-review-reminder.py review-dispatch.py session-end-cleanup.py spec-write-validator.py state_path.py"
+EXPECTED="hooks.json pending-review-reminder.py review-dispatch.py session-end-cleanup.py spec-write-validator.py"
 ACTUAL="$(cd "$HOOKS" && ls -1 | sort | tr '\n' ' ' | sed 's/ $//')"
 EXPECTED_SORTED="$(tr ' ' '\n' <<<"$EXPECTED" | sort | tr '\n' ' ' | sed 's/ $//')"
 [[ "$ACTUAL" == "$EXPECTED_SORTED" ]] \
-  && ok "T18: hooks/ 집합이 고정 열거와 정확히 일치 (6개)" \
+  && ok "T18: hooks/ 집합이 고정 열거와 정확히 일치 (5개)" \
   || no "T18: hooks/ 집합 불일치 — 기대[$EXPECTED_SORTED] 실제[$ACTUAL]"
 n_brief="$(grep -cF 'brief' "$HOOKS/hooks.json" || true)"
 [[ "$n_brief" == "0" ]] && ok "T18: hooks.json에 'brief' 문자열 0건" \

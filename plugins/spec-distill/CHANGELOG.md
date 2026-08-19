@@ -190,6 +190,34 @@ Task 22(무게 감축): **같은 플러그인 안의** 중복을 `scripts/hook_c
   (`git rev-parse --git-common-dir`, worktree 호환)이고 quality-gates 는 payload cwd
   상대다 — 부분 사본의 "각자 고유 본문"이라 플러그인 경계를 넘는 통합은 하지 않는다.
 
+### Changed (Task 23 — `state_path.py` 를 `hooks/` 에서 `scripts/` 로)
+
+- `hooks/state_path.py` → `scripts/state_path.py` (본문 무변경, git 인식 rename).
+  `hooks/` 에는 `hooks.json` 이 등록한 훅 4개와 `hooks.json` 만 남는다 — 이 리포의
+  어느 플러그인 `hooks/` 에도 비-등록 `.py` 가 없다(이동 전 1건).
+- SKILL 실행 라인 9곳이 `${CLAUDE_PLUGIN_ROOT}/scripts/state_path.py` 를 부른다
+  (`conducting-interview` 5 · `reviewing-brief` 2 · `reviewing-spec` 2).
+  이 세 SKILL 에는 `allowed-tools` frontmatter 가 없어 함께 고칠 권한 선언이 없다.
+- `scripts/{arm_ledger,spec-distill-gc,hook_common}.py` 가 `state_path` 를 찾으려고
+  형제 디렉토리 `hooks/` 를 `sys.path` 에 얹던 것을 **자기 디렉토리**로 바꿨다.
+  훅 4개는 이미 `scripts/` 를 `sys.path[0]` 에 얹고 있어 import 경로 변경이 없다.
+
+### Fixed (Task 23)
+
+- **설치본에서 `scripts/spec-distill-gc.py` 가 홀로 배포되면 죽던 잠복 결함**(Task 19
+  발견 · Task 21 확대 확인). 이 파일은 `state_path` 를 `hooks/` 에서 풀었는데,
+  `shared/` 정본 형제 락(`test_copy_of_contract.sh` 축 1c)의 설치본 대역은 소비자마다
+  디렉토리를 도출해 편다 — 이 소비자만 격리하면 `hooks/` 가 트리에 없어
+  `ModuleNotFoundError: No module named 'state_path'` 였다. 지금까지 GREEN 이었던 것은
+  락이 SIM 트리를 코호트로 공유하고 `git ls-files` 가 `hooks/*` 를 `scripts/*` 앞에
+  정렬해, 앞선 훅 소비자가 이미 `hooks/` 를 펴 두었기 때문이다 — 통과가 **코호트와
+  순서에 의존**했다. 이동 후 소비자 19건 전부가 격리에서 GREEN 이다(측정: 이동 전
+  트리에서 같은 계측기가 이 파일 하나만, 두 코호트 모두에서 RED).
+- `plugins/plugin-audit/scripts/check-shape-completeness.py` 의 over-glob 방어 주석이
+  들던 실측 사례가 이 이동으로 사라졌다 — 주석을 과거 사례로 표시하고, 사례가 없다고
+  가드를 지우면 안 된다는 이유를 남겼다(정의부만 옮기고 인용부를 남기면 없는 것을
+  근거로 내세우는 서술이 된다).
+
 ## [0.27.0] — 2026-08-17
 
 Task 15(무게 감축) + fix round 1. patch가 아니라 **minor**인 이유(S3): 새

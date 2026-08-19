@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Tests for hooks/state_path.py — state_root() helper.
+# Tests for scripts/state_path.py — state_root() helper.
 set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-HELPER="$REPO_ROOT/plugins/spec-distill/hooks/state_path.py"
+HELPER="$REPO_ROOT/plugins/spec-distill/scripts/state_path.py"
 WORK=$(mktemp -d -t specdistill-statepath-XXXXXX) || exit 1
 # Resolve symlinks (macOS /var/folders → /private/var/folders) so that
 # expected paths match Python's Path.resolve() output.

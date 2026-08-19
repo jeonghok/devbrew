@@ -26,9 +26,8 @@ import sys
 import time
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent.parent / "hooks"
+HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 from state_path import state_root, SESSION_PATTERN  # noqa: E402 # pyright: ignore[reportMissingImports]
 from gc_common import (  # noqa: E402 # pyright: ignore[reportMissingImports]
     GC_PENDING_PREFIX, gc_one, safe_rmtree, ttl_ns,
