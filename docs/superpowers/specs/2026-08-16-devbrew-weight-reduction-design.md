@@ -536,9 +536,38 @@ verdict에 반영**하는 것으로 한다. 새 락을 만들지 않는다.
 | 결함 | 결정 |
 |---|---|
 | `run_codex_reviewer.sh:92`의 가드에 `-n` 검사 누락 — `OUTPUT_PATH`가 빈 문자열이면 빈 경로에 쓰기 시도 | 나머지 사본과 같이 `-n` 검사를 넣는다 |
-| `_degrade_if_empty`의 출력 스키마가 4종(JSON / 평면 YAML / `agent:` 포함 중첩 / `agent:` 없는 중첩) | 중첩 YAML + `findings: []` + `meta:`로 통일 |
+| `_degrade_if_empty`의 출력 스키마가 4종(JSON / 평면 YAML / `agent:` 포함 중첩 / `agent:` 없는 중첩) | **중첩 YAML 계열 셋만 `findings: []` + `meta:`로 통일. 나머지 둘은 통일하지 않는다** — 아래 정정 참조 |
 | kill switch 토큰 별칭 수 불일치 — spec-distill 훅은 이벤트명·훅명 둘 다 받고 project-init은 훅명만 | **둘 다 받는 쪽으로 통일.** kill switch는 보안 컨트롤이며(`CLAUDE.md:48`), 한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것은 결함이다 |
 | `marketplace.json` description이 없어진 게이트·산출물을 광고 | `plugin.json`을 정본으로 동기화 |
+
+
+> **〔2026-08-19 정정 — Task 20 실행이 위 두 번째 행을 반증했다〕**
+>
+> 위 행은 네 스키마를 하나로 합치라고 적었다. **그중 둘은 drift 가 아니라 서로 다른 소비자
+> 계약이고, 합치면 소비자가 깨진다.** Task 20 이 실행 전에 소비자를 읽어 확인했다:
+>
+> - `run_audit_codex_reviewer.sh` 는 **JSON** 을 낸다. 소비자
+>   `plugins/plugin-audit/scripts/assemble-audit-data.py` 가 `json.loads(...)` 로 읽고
+>   `d_verdicts` · `oq_answers` · `new_open_questions` 를 꺼낸다. 중첩 YAML 을 쓰면
+>   `JSONDecodeError` — 조용한 degrade 가 아니라 **하드 크래시**이며, 위 행이 제시한
+>   스키마에는 그 세 키가 아예 없다.
+> - `run_artifact_codex_reviewer.sh` 는 **평면 YAML** 을 낸다. 소비자
+>   `plugins/quality-gates/scripts/synthesize_artifact_findings.py` 의 `_is_findings_doc`
+>   은 `findings:` 리스트가 **없는** 문서를 load 실패로 세어 손실을 계상한다 — 그것이 이
+>   파이프라인의 fail-closed 백스톱이다. `findings: []` 를 쓰면 같은 문서가 "진짜로 발견
+>   0건인 정상 소스"로 **조용히** 읽힌다(indeterminate 를 clean 으로 승격). 게다가 그
+>   파이프라인의 주 degrade 산출자인 `extract_codex_artifact_yaml.py` 가 같은 평면 형태를
+>   내므로, 러너만 바꾸면 한 파이프라인 안에서 스키마가 오히려 **둘로 갈라진다**.
+>
+> **그래서 통일의 정본 범위는 중첩 YAML 계열 셋**(`run_codex_reviewer.sh` ·
+> `run_spec_codex_reviewer.sh` · `run_brief_codex_reviewer.sh`)이고, 셋은
+> `shared/codex/runner_common.sh` 를 공유한다. 그 셋에서 최상위 `agent:` 키는 제거됐다 —
+> 성공 경로 산출자(`codex_findings_to_yaml.py` 의 `yaml_emit`)가 `agent:` 를 finding 마다
+> 붙일 뿐 최상위에는 내지 않으므로, 그 키는 degrade 경로에만 있던 진짜 drift 였다.
+>
+> **나머지 둘의 스키마 차이는 남은 작업이 아니다 — 의도된 최종 상태다.** 이 문단을 근거로
+> "통일이 미완"이라고 읽지 말 것. 근거는 `shared/codex/runner_common.sh` 헤더에 file:line
+> 으로도 박혀 있다.
 
 ### 6.3 P21 프리앰블 — 이미 있는 방식을 넓힌다
 

@@ -76,7 +76,7 @@ population 총합 = 18 + 6 + 119 + 5 = 148 raw 후보. 아래 분류표는 축 1
 | 38 | `emit` (py) | 6/6 | ⚠ | agent-transparency `prepare_standup.py`, plugin-audit `check-staleness.py`·`codex_audit_to_json.py`, project-init `docs-lint.py`, spec-distill `merge_review.py`·`merge_brief_review.py` — **6곳** | 우연 | 조치 없음 | 각 스크립트의 출력 포맷(구조화 finding/YAML/JSON)이 서로 다름 — "출력하다" 범용 동사 |
 | 39 | `check` (sh) | 6/4 | ◐ | — | 부분 사본 | Task 14 (정본 이름은 Task 13 Interfaces 의 대응표) | 3곳이 바이트 동일한 하위집합 존재(◐ 표기 자체가 그 증거) — note/fail/pass류와 같은 판정-헬퍼 계열로 판단 |
 | 40 | `field` (sh) | 6/4 | ◐ | — | 부분 사본 | Task 14 | 〔seed〕 구현이 awk 2종·sed 1종, 인자 순서까지 다름 |
-| 41 | `_degrade_if_empty` (sh) | 5/5 | ⚠ | — | 부분 사본 | 공통 조각만 추출 (**Task 20**) | 〔seed〕 5러너가 각자 다른 프롬프트 빌더를 부름, 출력 스키마 4종은 §6.2 통일 대상 |
+| 41 | `_degrade_if_empty` (sh) | 5/5 | ⚠ | — | 부분 사본 | 공통 조각만 추출 (**Task 20 — 완료**) | 〔seed〕 5러너가 각자 다른 프롬프트 빌더를 부름. 출력 스키마 4종 중 **중첩 YAML 계열 셋만** `shared/codex/runner_common.sh` 로 통일됐다. 감사 러너(JSON 소비자)·아티팩트 러너(평면 YAML fail-closed 백스톱)는 소비자 계약이 달라 **의도적으로 제외** — 남은 작업이 아니다(설계 §6.2 정정) |
 | 42 | `kill_switch_active` (py) | 5/5 | ⚠ | — | **진짜 사본** | shared/ 정본 + copy-of (**Task 19**) | 〔seed〕 같은 책임(kill switch 판정), 본문 5종 전부 다름 = drift. `_disabled`(#37)와 합쳐 12곳 |
 | 43 | `run_case` (sh) | 5/5 | ⚠ | quality-gates test_synthesize_findings.sh·test_scout_script.sh·test_check_trivia.sh·test_read_frontmatter.sh·test_pr_detect.sh | 우연 | 조치 없음 | 실측: 파라미터 시그니처가 파일마다 근본적으로 다름(`name adv_yaml findings_yaml ...` vs `name setup_fn expected_exit ...`) — 이름만 "테스트케이스 실행"이라는 자연스러운 관례를 공유, 로직 추출 불가 |
 | 44 | `_plugin` (py) | 5/4 | ◐ | plugin-audit test_check_staleness.py (단일 파일 내 5회) | 우연 | 조치 없음 | 실측: **같은 파일 안** 서로 다른 테스트 클래스의 fixture 빌더 메서드 — 파일간 중복 아님 |

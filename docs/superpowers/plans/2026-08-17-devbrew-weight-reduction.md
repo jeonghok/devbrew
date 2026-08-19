@@ -110,7 +110,7 @@ Conventional Commits (`<type>(<scope>): <description>`). 브랜치는 `main`에�
 | `plugins/spec-distill/scripts/hook_common.py` | spec-distill 훅 두 개 + `arm_ledger.py` 의 공유 조각 (census #149·#121·#122·#45. Task 22 Step 2b·2c) |
 | `plugins/quality-gates/scripts/state_path.py` | quality-gates 내부 state root 해석 정본 (census #88. Task 21 Step 2b) |
 | `plugins/quality-gates/scripts/kill_switch_active.py` | kill switch 판정 `copy-of` 사본 — `_disabled` 5곳이 quality-gates 다 (census #37. Task 19) |
-| `shared/codex/runner_common.sh` | `_degrade_if_empty` 등 러너 공통 조각 (5러너) |
+| `shared/codex/runner_common.sh` | `_degrade_if_empty` · `write_failclosed` — codex 러너 공통 조각. **중첩 YAML 계열 3러너**가 source 한다(감사 러너는 JSON, 아티팩트 러너는 평면 YAML 소비자라 제외 — 설계 §6.2 정정) |
 | `shared/codex/prompt-preamble.md` | P21 untrusted-data 3문장 정본 (5빌더) |
 | `shared/killswitch/kill_switch_active.py` | kill switch 판정 정본 (5정의) |
 | `shared/gc/gc_common.py` | TTL-GC 공통 조각 (2 GC 스크립트) |
@@ -351,7 +351,7 @@ wc -l "$SCRATCH"/census-*.md
 | `codex_findings_to_yaml.py` ×2 | **진짜 사본** | 유일한 행동 차이는 emit keyset(`category`·`target_section`). 나머지 140줄 diff는 전부 주석·포매팅 |
 | `kill_switch_active` ×5 (py) | **진짜 사본** | 같은 책임(kill switch 판정), 본문 5종 전부 다름 = drift. `CLAUDE.md:48`이 보안 컨트롤로 규정 |
 | `emit_skip` ×3 · `_ver_lt` ×3 (sh) | 진짜 사본에 **흡수** | `detect_codex.sh` 안에만 존재 — 그 파일 통합으로 함께 소멸 |
-| `_degrade_if_empty` ×5 (sh) | **부분 사본** | 5러너가 각자 다른 프롬프트 빌더를 부름. 출력 스키마 4종은 §6.2가 통일 대상으로 지정 |
+| `_degrade_if_empty` ×5 (sh) | **부분 사본** | 5러너가 각자 다른 프롬프트 빌더를 부름. 출력 스키마 4종 중 **중첩 YAML 계열 셋만** 통일됐다(Task 20 완료) — 나머지 둘은 소비자 계약이 달라 의도적으로 남는다, 설계 §6.2 정정 |
 | `session-end-cleanup.py` ×2 | **부분 사본** | 각자 kill switch 토큰 + `sys.path.insert`; qg는 worktree 정리까지 |
 | `qg-gc.py` ↔ `spec-distill-gc.py` | **부분 사본** | state root 해석 방식이 다름 |
 | `test_detect_codex.sh` ×2 (120 vs 54줄) | **부분 사본** | 같은 대상을 재지만 커버 범위가 다름 |
@@ -5175,12 +5175,28 @@ git commit -m "refactor(killswitch): kill_switch_active·_disabled 12정의를 s
 
 **§3 분류: 부분 사본.** 다섯 러너가 각자 다른 프롬프트 빌더를 부르므로 파일 전체 동일화가 불가능하다. **잔여의 보호는 Task 35의 20줄 검사가 맡는다** — 추출 후에도 긴 구간이 겹치면 RED가 되어 추가 추출을 요구한다.
 
+> **〔2026-08-19 실행 결과 — 아래 스텝의 "다섯 러너" 서술을 이 렌즈로 읽을 것〕**
+>
+> Step 2(소비자 확인)가 **이 태스크의 지시 하나를 반증했다.** 정본을 실제로 source 하는
+> 러너는 **셋**이다 — `run_codex_reviewer.sh` · `run_spec_codex_reviewer.sh` ·
+> `run_brief_codex_reviewer.sh`(전부 중첩 YAML 소비자). 나머지 둘은 **의도적으로 제외**했다:
+> `run_audit_codex_reviewer.sh` 는 JSON 소비자(`assemble-audit-data.py` 가 `json.loads` 로
+> 읽고 `d_verdicts` 등을 꺼낸다 → YAML 이면 하드 크래시)이고,
+> `run_artifact_codex_reviewer.sh` 의 평면 YAML 은 `synthesize_artifact_findings.py` 의
+> `_is_findings_doc` 이 의지하는 fail-closed 백스톱이다(`findings: []` 로 바꾸면 실패가
+> "정상 0건"으로 조용히 읽힌다). 근거는 설계 §6.2 정정 문단과
+> `shared/codex/runner_common.sh` 헤더에 file:line 으로 있다.
+>
+> **이 둘의 스키마 차이는 남은 작업이 아니라 의도된 최종 상태다.** 아래 Step 1·4·5 의
+> "다섯 러너" 는 *대조 대상*이 다섯이라는 뜻이고, *정본을 공유하는* 러너는 셋이다.
+> 이 태스크는 완료됐다 — 마저 통일하러 돌아오지 말 것.
+
 **§6.2가 지정한 결함 4건 중 이 태스크가 닫는 둘:**
 
 | 결함 | 결정 | 근거 |
 |---|---|---|
 | `run_codex_reviewer.sh:92`의 가드에 `-n` 검사 누락 — `OUTPUT_PATH`가 빈 문자열이면 **빈 경로에 쓰기 시도** | 나머지 사본과 같이 `-n` 검사를 넣는다 | 다섯 중 하나만 빠져 있다 |
-| `_degrade_if_empty`의 출력 스키마가 **4종** (JSON / 평면 YAML / `agent:` 포함 중첩 / `agent:` 없는 중첩) | **중첩 YAML + `findings: []` + `meta:`로 통일** | 소비자(`merge_review.py`·`synthesize_findings.py`)가 그 형태를 기대한다 |
+| `_degrade_if_empty`의 출력 스키마가 **4종** (JSON / 평면 YAML / `agent:` 포함 중첩 / `agent:` 없는 중첩) | **중첩 YAML 계열 셋만 통일. 나머지 둘은 통일하지 않는다**(설계 §6.2 정정) | 셋의 소비자(`merge_review.py`·`synthesize_findings.py`)는 그 형태를 기대하지만, 감사 러너는 JSON 소비자(`assemble-audit-data.py` 가 `json.loads`)이고 아티팩트 러너의 평면 YAML 은 `synthesize_artifact_findings.py` 의 fail-closed 백스톱이다 |
 
 **이 태스크가 다루는 함수는 `_degrade_if_empty` 하나가 아니다** (2026-08-17 census 조치 재검토). census #24(파일쌍 `run_brief_codex_reviewer.sh` ↔ `run_spec_codex_reviewer.sh`, 74.0%)의 근거는 *"`write_failclosed`·`emit_fallback` 함수가 두 파일에 그대로 복제"*라고 적고 있고 #125·#126이 그 둘을 따로 세는데, **이 태스크의 Step 3은 `_degrade_if_empty` 만 정본으로 만들었다** — 세 행 모두 "Task 20·21"을 가리키면서 실제 추출 대상에서 빠져 있었다. 아래 Step 3b가 채운다.
 
@@ -5212,14 +5228,16 @@ grep -n 'codex_failed\|meta' plugins/quality-gates/scripts/synthesize_findings.p
 
 ```bash
 #!/usr/bin/env bash
-# codex 러너 5종의 공통 조각. **부분 사본**이므로 파일 전체 동일화는 불가능하다
+# codex 러너의 fail-closed 산출물 정본. **부분 사본**이므로 파일 전체 동일화는 불가능하다
 # (각 러너가 다른 프롬프트 빌더를 부른다) — 잔여는 shared/tests/test_no_new_duplication.sh
 # 의 20줄 검사가 지킨다.
 #
 # ── 출력 스키마 통일 (설계 §6.2) ─────────────────────────────────────────
 # 통합 전 `_degrade_if_empty` 의 출력이 4종이었다: JSON · 평면 YAML ·
 # `agent:` 포함 중첩 · `agent:` 없는 중첩. 행동 등가 락이 판정만 재느라 스키마가
-# 락 밖으로 샜다. 여기서 **중첩 YAML + findings: [] + meta:** 하나로 못박는다.
+# 락 밖으로 샜다. 여기서 **중첩 YAML + findings: [] + meta:** 하나로 못박는다 —
+# 단, **중첩 YAML 계열 셋에 대해서만**이다. JSON(감사)·평면 YAML(아티팩트) 러너는
+# 소비자 계약이 달라 정본을 쓰지 않는다(설계 §6.2 정정, 실제 파일 헤더에 근거 기록).
 
 # _degrade_if_empty <output_path> <reason> [exit_code]
 # 산출물이 비었거나 없을 때 fail-closed 산출물을 쓴다. **쓰지 못하면 exit 3** —
@@ -5402,14 +5420,17 @@ Expected: 문법 오류 0 · 두 러너 모두 `runner_common.sh` 를 1회 이�
 - [ ] **Step 6: 기존 러너 락 + `copy-of` 락**
 
 > **미검증 — 실행자가 확인할 것** (2026-08-17 라운드 1 코드 리뷰, Task 19와 같은 종류의 gap):
-> 이 태스크가 `shared/codex/runner_common.sh`를 5개 러너에 `copy-of` 사본으로 배포한다.
-> Task 16의 축 1b(마커 기반 바이트-동일성)는 실측·mutation으로 검증됐지만, **이 특정
-> 배포(5건)가 그 축의 스캔에 실제로 걸리는지는 이 태스크 실행 시점에 확인된 적이 없다.**
-> 아래 실행 시 `copy-of: 물리 사본 N건 스캔`의 N이 **6에서 9로** 늘었는지 직접 확인한다 —
-> 이전 누적 6(Task 17 Step 4b의 3 + Task 19의 3) + **이번 3건**이다.
-> (러너는 5개지만 `runner_common.sh` 사본은 **플러그인당 하나**라 3개다 — Step 4의
-> `for p in quality-gates spec-distill plugin-audit` 가 도는 횟수다. 5로 세면 N 이
-> 기대보다 2 적게 나와 정상을 결함으로 오독한다.)
+> 이 태스크가 `shared/codex/runner_common.sh`를 **정본을 실제로 source 하는 러너들**에 `copy-of` 사본으로 배포한다.
+> Task 16의 축 1b(마커 기반 바이트-동일성)는 실측·mutation으로 검증됐지만, 이 배포가 그
+> 축의 스캔에 실제로 걸리는지는 이 태스크 실행 시점에 확인된 적이 없었다.
+> **〔2026-08-19 실행 결과로 확정〕** N 은 **6 → 8** 이다 — 이전 누적 6(Task 17 Step 4b 3 +
+> Task 19 3) + **이번 2건**. 사본은 러너 수가 아니라 **정본을 source 하는 플러그인 수**만큼
+> 생기고, 그 플러그인은 quality-gates · spec-distill **둘**이다(plugin-audit 러너는 JSON
+> 소비자라 정본을 쓰지 않는다 — 설계 §6.2 정정). 축 1b 는 이 배포를 자동으로 잡았다(114/114).
+>
+> **함정 하나 — 실측으로 확인됐다**: 사본을 만든 직후에도 락은 여전히 6 을 냈다. 락의 코퍼스가
+> `git ls-files` 에서 오므로 **미추적 파일이 보이지 않는다.** `git add` 후에야 8 이 됐다.
+> 스테이징 전에 이 확인을 한 사람은 아무것도 확인한 것이 아니다.
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
@@ -5425,7 +5446,10 @@ bash shared/tests/test_copy_of_contract.sh | tail -6
 
 ```bash
 git add shared/codex/runner_common.sh plugins/*/scripts/
-git commit -m "refactor(codex): 러너 공통 조각 추출 — _degrade_if_empty 스키마 4종을 1종으로 + write_failclosed 정본화"
+git commit -m "refactor(codex): 러너 fail-closed 조각을 shared 정본으로 — 중첩 YAML 계열 3러너"
+# 〔2026-08-19 정정〕 앞 판본의 메시지는 모든 스키마가 하나로 합쳐진다고 적었다. 실제로
+# 통일된 것은 중첩 YAML 계열 셋이고, 나머지 둘은 소비자 계약이 달라 의도적으로 남는다
+# (설계 §6.2 정정).
 ```
 
 ---
@@ -5499,8 +5523,14 @@ done
 > **미검증 — 실행자가 확인할 것** (2026-08-17 라운드 1 코드 리뷰, Task 19·20과 같은 종류의 gap):
 > `gc_common.py` ×2가 이 태스크에서 `copy-of` 사본으로 배포된다. Task 16의 축 1b는
 > 실측·mutation으로 검증됐지만, 이 배포가 그 스캔에 실제로 걸리는지는 확인된 적이
-> 없다 — 아래 실행에서 `물리 사본 N건` 이 **9에서 11로** 늘었는지 직접 확인한다 —
-> 이전 누적 9(Task 17 Step 4b 3 + Task 19 3 + Task 20 3) + **이번 2건**이다. 최종 **11**.
+> 없다 — 아래 실행에서 `물리 사본 N건` 이 **8에서 10으로** 늘었는지 직접 확인한다 —
+> 이전 누적 **8**(Task 17 Step 4b 3 + Task 19 3 + **Task 20 2**) + **이번 2건**이다. 최종 **10**.
+> 〔2026-08-19 정정: 앞 판본은 Task 20 을 3 으로 세어 9 → 11 이라 적었다. Task 20 의 사본은
+> 정본을 source 하는 플러그인 수만큼이고 그것은 **둘**이다(설계 §6.2 정정). 8 은 Task 20
+> 실행 후 락이 실제로 낸 값이다.〕
+>
+> **`git add` 전에는 이 확인이 무의미하다** — 락의 코퍼스가 `git ls-files` 에서 오므로
+> 미추적 사본은 세지 않는다(Task 20 실측).
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
@@ -7378,7 +7408,7 @@ Expected: PASS · mode `100755`
 | 3 | **같은 정본을 가리키는 심볼릭 링크 쌍을 그대로 둔다**(실제 대상: `detect_codex.sh` 3링크, Task 15) | **GREEN** | 면제 술어 ② — 심볼릭 링크 경로 |
 | 4 | 그 쌍 중 하나를 **독립 파일로 깬다**(내용은 그대로 두고 링크성만 제거) | **RED** | 면제가 "링크라는 사실"에 실제로 의존 — 내용이 같아도 링크가 아니면 설명 안 된 중복이다 |
 | 5 | **무관한 두 파일에 같은 정본을 가리키는 `copy-of` *마커* 줄을 새로 붙여 20줄 검사를 회피한다** | **`copy-of` 락이 RED** | 회피 경로 봉쇄(마커 축) — **심볼릭 링크 축에는 이 공격이 성립하지 않는다**: 진짜 OS 심볼릭 링크는 가리키는 대상의 내용을 "주장"할 수 없다(대상이 곧 자기 내용이다). 거짓을 말할 수 있는 것은 텍스트 마커뿐이다 |
-| 6 | **마커 예외 자체의 이빨** — 스캐치 픽스처 쌍(정본 + `copy-of` 마커를 가진 사본, 둘 다 ≥20줄·≥200자 진짜 중복 블록)을 그대로 둔다(GREEN 기대) → 그다음 사본에서 `copy-of` 줄만 지운다(RED 기대) | **GREEN → RED** | 2026-08-17 라운드 3 코드 리뷰: 변이 3·4는 **심볼릭 링크 쌍만** 태웠다 — 마커 기반 면제(위 Step 1 스크립트의 `canonical_of()` 안, `symlink_target_of()`가 `None`을 준 뒤 `MARKER.match(line)`으로 떨어지는 폴백 분기)는 이번까지 mutation-proof가 전혀 없었다. 이 mutation 을 설계할 당시엔 리포에 실제 마커 쌍이 없었으므로(첫 실사용은 Task 17 Step 4b — B.1의 미결 5 참조) Task 16의 물리 사본 축과 같은 패턴(스캐치 픽스처)을 쓴다. **Task 16 시점에 이미 사본 3건(Task 17 Step 4b), PR6 시점엔 11건이 있지만 픽스처를 계속 쓴다** — 픽스처는 크기·마커를 통제할 수 있고, 실제 사본을 흔들면 앞 태스크의 산출물을 훼손한다. 또 실제 사본에 의존하면 그 사본이 사라질 때 mutation 이 조용히 vacuous 해진다 |
+| 6 | **마커 예외 자체의 이빨** — 스캐치 픽스처 쌍(정본 + `copy-of` 마커를 가진 사본, 둘 다 ≥20줄·≥200자 진짜 중복 블록)을 그대로 둔다(GREEN 기대) → 그다음 사본에서 `copy-of` 줄만 지운다(RED 기대) | **GREEN → RED** | 2026-08-17 라운드 3 코드 리뷰: 변이 3·4는 **심볼릭 링크 쌍만** 태웠다 — 마커 기반 면제(위 Step 1 스크립트의 `canonical_of()` 안, `symlink_target_of()`가 `None`을 준 뒤 `MARKER.match(line)`으로 떨어지는 폴백 분기)는 이번까지 mutation-proof가 전혀 없었다. 이 mutation 을 설계할 당시엔 리포에 실제 마커 쌍이 없었으므로(첫 실사용은 Task 17 Step 4b — B.1의 미결 5 참조) Task 16의 물리 사본 축과 같은 패턴(스캐치 픽스처)을 쓴다. **Task 16 시점에 이미 사본 3건(Task 17 Step 4b), PR6 시점엔 10건이 있지만 픽스처를 계속 쓴다** — 픽스처는 크기·마커를 통제할 수 있고, 실제 사본을 흔들면 앞 태스크의 산출물을 훼손한다. 또 실제 사본에 의존하면 그 사본이 사라질 때 mutation 이 조용히 vacuous 해진다 |
 
 **변이 1·2만 맨 앞·중간·맨 끝 세 위치에서 각각 수행한다.** 변이 3·4(심볼릭 링크)·5(마커 삽입)·6a·6b(픽스처 쌍)는 **위치 개념이 없다** — 흔드는 대상이 "본문 한 줄"이 아니라 링크성·마커·파일 쌍 전체이기 때문이다(Task 16의 변이 B와 같은 이유). 아래 스크립트도 `for pos in head mid tail` 루프를 변이 1·2에만 두른다.
 
