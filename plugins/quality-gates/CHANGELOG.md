@@ -3,6 +3,45 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.0.0] — 2026-08-20 (BREAKING)
+
+Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일 — 축약
+`QG`도 `QUALITY_GATES`로 펼쳤다. 이 플러그인이 소유한 kill switch·설정 변수 전량이
+영향을 받는다:
+
+| 옛 이름 | 새 이름 |
+|---|---|
+| `DEVBREW_DISABLE_QUALITY_GATES` | `DEVBREW_QUALITY_GATES_DISABLE` |
+| `DEVBREW_DISABLE_QG_CODEX` | `DEVBREW_QUALITY_GATES_DISABLE_CODEX` |
+| `DEVBREW_DISABLE_QG_WEB` | `DEVBREW_QUALITY_GATES_DISABLE_WEB` |
+| `DEVBREW_DISABLE_QG_SECURITY_REVIEWER` | `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER` |
+| `DEVBREW_QG_DISABLE_BRANCH_WORKTREE` | `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE` |
+| `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX` | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` |
+| `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION` | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_TEST_VALIDATION` |
+| `DEVBREW_QG_DISABLE_SCOPE_REDIRECT` | `DEVBREW_QUALITY_GATES_DISABLE_SCOPE_REDIRECT` |
+| `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE` | `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE` |
+| `DEVBREW_QG_DISABLE_CRITIQUE` | `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE` |
+| `DEVBREW_QG_DISABLE_PUBLISH` | `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH` |
+| `DEVBREW_QG_CRITIQUE_MAX_ROUNDS` | `DEVBREW_QUALITY_GATES_CRITIQUE_MAX_ROUNDS` |
+| `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS` | `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS` |
+| `DEVBREW_QG_GC_VERBOSE` | `DEVBREW_QUALITY_GATES_GC_VERBOSE` |
+| `DEVBREW_QG_KEEP_WORKTREE` | `DEVBREW_QUALITY_GATES_KEEP_WORKTREE` |
+| `DEVBREW_QG_TTL_HOURS` | `DEVBREW_QUALITY_GATES_TTL_HOURS` |
+| `DEVBREW_AGENT_TOOLS_LOCK_EMIT` (test-only) | `DEVBREW_QUALITY_GATES_AGENT_TOOLS_LOCK_EMIT` |
+
+전역 `DEVBREW_SKIP_HOOKS`는 정의상 불변. `shared/killswitch/kill_switch_active.py`
+정본(과 이 플러그인의 `scripts/kill_switch_active.py` 물리 사본)의 전역 스위치
+**도출식** 자체도 `DEVBREW_DISABLE_<PLUGIN>` → `DEVBREW_<PLUGIN>_DISABLE`로 바뀌었다
+— 리터럴 문자열 치환으로는 안 잡히는 자리였다(태스크 실행 중 burn-test로 실측:
+`kill_switch_active`가 여전히 옛 패턴을 조립해 spec-distill 훅 kill switch가
+무반응이었다).
+
+### Deprecated
+- 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일. 옛 이름(`DEVBREW_DISABLE_QG_CODEX` 등)은
+  **fallback 없이 즉시 제거**됐다. 근거: 현재 제3자 설치가 없다 (CLAUDE.md §메타데이터의
+  one-minor deprecation window 와의 충돌을 그 조건 아래 수용). **제3자 설치가 생기면 이 근거가
+  바뀐다** — 그때는 다음 rename 에 fallback 창을 둔다.
+
 ## [3.4.0] — 2026-08-17
 
 Task 17(무게 감축) + fix round 1: `codex_findings_to_yaml.py` 두 사본(quality-gates·spec-distill)을

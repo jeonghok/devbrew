@@ -5,6 +5,21 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [2.0.0] — 2026-08-20 (BREAKING)
+
+Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일.
+`DEVBREW_DISABLE_PROJECT_INIT` → `DEVBREW_PROJECT_INIT_DISABLE`. 이 플러그인이
+소유한 유일한 kill switch. `shared/killswitch/kill_switch_active.py` 정본(과 이
+플러그인의 `scripts/kill_switch_active.py` 물리 사본)의 전역 스위치 **도출식**도
+`DEVBREW_DISABLE_<PLUGIN>` → `DEVBREW_<PLUGIN>_DISABLE`로 함께 바뀌었다 — 리터럴
+문자열 치환으로는 안 잡히는 자리였다.
+
+### Deprecated
+- 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일. 옛 이름(`DEVBREW_DISABLE_PROJECT_INIT` 등)은
+  **fallback 없이 즉시 제거**됐다. 근거: 현재 제3자 설치가 없다 (CLAUDE.md §메타데이터의
+  one-minor deprecation window 와의 충돌을 그 조건 아래 수용). **제3자 설치가 생기면 이 근거가
+  바뀐다** — 그때는 다음 rename 에 fallback 창을 둔다.
+
 ## [1.8.0] — 2026-08-19
 
 devbrew-weight-reduction Task 19 — kill switch 판정을 `shared/killswitch/kill_switch_active.py`
