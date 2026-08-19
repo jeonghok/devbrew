@@ -168,6 +168,40 @@ Task 19(무게 감축): kill switch 판정 12정의(`kill_switch_active` 5 + `_d
   `[ -r ]` + `bash -n` 을 source 앞에 두고, 실패하면 `reason: runner_common_unloadable`
   degrade 를 남기고 exit 0 한다(기록조차 못 하면 exit 3).
 
+### Added (Task 21 — GC 공통 조각 + state root 해석 단일화)
+
+- `scripts/gc_common.py` — `shared/gc/gc_common.py` 의 물리 사본(머리 한 줄 마커).
+  TTL 계산(`ttl_ns`) · 폴더 나이 판정(`folder_mtime_ns`·`within_grace`) ·
+  안전 삭제(`safe_rmtree`) · 폴더 수집(`gc_one`)을 담는다. 설치본에는 `shared/` 가
+  없으므로 형제 사본이어야 import 가 풀린다.
+- `scripts/state_path.py` — 이 플러그인 **안**의 state root 해석 정본(`state_root`).
+  `shared/` 아래가 아니다: quality-gates ↔ spec-distill 의 해석 방식 차이(payload cwd
+  상대 vs git-aware)는 보존하고, 같은 플러그인 안의 중복만 접는다.
+
+### Changed (Task 21)
+
+- `hooks/session-end-cleanup.py` 와 `hooks/session-start-advisor.py` 가 각자 갖고 있던
+  11줄짜리 `_state_root()` 두 벌을 지우고 `state_path.state_root(payload, <훅 이름>)` 를
+  부른다. 훅 이름이 인자가 됐다 — 두 경고 메시지를 구별하는 유일한 근거이므로 기본값을
+  주지 않는다. **stderr 문구는 두 훅 모두 바이트 동일**(이관 전 판본과 직접 대조).
+- `scripts/qg-gc.py` 가 `_ttl_ns`·`_folder_mtime_ns`·`_within_grace`·`_gc_one` 을 지우고
+  `gc_common` 을 부른다. 남은 고유 본문은 `ROOT` 표기와 세션 폴더 마커 식별
+  (`SESSION_MARKERS`/`_is_session_folder`)뿐이다 — spec-distill 의 GC 에는 없는 것들이다.
+- 위 통합에 **행동 델타 하나**가 붙는다: `within_grace` 가 spec-distill 판본을 따라
+  `folder.stat()` 의 `OSError` 를 잡아 `False` 를 돌려준다. 이관 전 quality-gates 판본은
+  그 예외를 밖으로 흘려 호출자가 `GC failed on <name>` 진단을 찍었다. 어느 쪽도 그 폴더를
+  **지우지 않는다** — 달라지는 것은 레이스 상황의 진단 한 줄뿐이다.
+
+### Security (Task 21)
+
+- **`session_id` 를 통한 state root 밖 삭제**를 막는다. 이 훅은 spec-distill 쪽과 달리
+  charset 패턴 검증이 없어, payload 의 `session_id: "../../victim"` 이
+  `shutil.rmtree` 로 그대로 흘러가 state root 밖 디렉토리가 지워졌다(이관 전 판본으로
+  실측 재현 — victim 디렉토리 삭제됨). `gc_common.safe_rmtree` 가 root 밖 경로를 거부하고
+  거부를 stderr 로 알린다. 회귀 락:
+  `tests/test_session_end_cleanup.py::test_traversal_session_id_cannot_delete_outside_state_root`
+  (삭제·조건반전·침묵 세 축의 mutation 으로 이빨 확인).
+
 ## [3.3.0] — 2026-08-17
 
 Task 15(무게 감축) + fix round 1: `detect_codex.sh` 세 사본을 `shared/codex/`의 정본 +

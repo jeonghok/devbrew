@@ -34,6 +34,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from kill_switch_active import kill_switch_active  # noqa: E402
+from state_path import state_root  # noqa: E402
 
 LEGACY_RELATIVE = (
     ".claude/quality-gates.local.md",
@@ -62,17 +63,6 @@ LEGACY_RELATIVE = (
 # v1.32.0: in-flight detection removed — legacy v1.x markers are detected
 # for one-shot advisory only (see _emit_legacy_v1_advisory).
 LEGACY_V1_KEYS = ("status:", "current" + "_gate:", "consecutive_no" + "_signal:")
-
-
-def _state_root(hook_input: dict) -> Path:
-    """Resolve state root from hook stdin payload cwd; fall back loudly."""
-    cwd = hook_input.get("cwd") if hook_input else None
-    if not cwd:
-        print("[quality-gates] session-start-advisor payload missing 'cwd'; "
-              "falling back to process cwd",
-              file=sys.stderr)
-        cwd = os.getcwd()
-    return Path(cwd) / ".claude" / "quality-gates"
 
 
 # AC14: sub-feature kill switch
@@ -148,7 +138,7 @@ def _emit_legacy_v1_advisory(payload: dict, self_sid: str) -> bool:
     found = False
     # 1. Per-session v1.x state file with stop-hook-era keys.
     if self_sid:
-        per_session = _state_root(payload) / self_sid / "pipeline.md"
+        per_session = state_root(payload, "session-start-advisor") / self_sid / "pipeline.md"
         if per_session.exists():
             try:
                 text = per_session.read_text()

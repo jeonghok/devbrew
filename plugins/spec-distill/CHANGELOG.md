@@ -123,6 +123,26 @@ Task 19(무게 감축): kill switch 판정 12정의를 `shared/killswitch/kill_s
   변이가 아니라 위치 때문에 실패한다(도달 불가). 이 테스트의 계측기 assertion 둘이 그것을
   RED 로 잡아냈고, fixture 가 정본을 함께 옮기도록 고쳤다.
 
+### Added (Task 21 — GC 공통 조각)
+
+- `scripts/gc_common.py` — `shared/gc/gc_common.py` 의 물리 사본(머리 한 줄 마커).
+  quality-gates 와 공유하는 정본이다.
+
+### Changed (Task 21)
+
+- `scripts/spec-distill-gc.py` 가 `_ttl_ns`·`_folder_mtime_ns`·`_within_grace`·`_gc_one` 과
+  상수 셋(`GRACE_NS`·`DOUBLE_STAT_DELAY_S`·`GC_PENDING_PREFIX`)을 지우고 `gc_common` 을
+  부른다. `GC_PENDING_PREFIX` 를 정본에서 가져오는 것이 특히 중요하다 — 그 접두를 **쓰는**
+  쪽(`gc_one`)과 **줍는** 쪽(`_sweep_gc_pending`)이 갈라지면 고아가 영원히 안 지워진다.
+  남은 고유 본문은 git-aware state root 와 `.gc-pending-*` 고아 스윕이다.
+- `hooks/session-end-cleanup.py` 와 위 고아 스윕의 삭제가 `gc_common.safe_rmtree` 를 거쳐
+  root 밖 경로를 거부한다. 이 플러그인은 `SESSION_PATTERN` charset 검증을 이미 갖고 있어
+  동작 변화가 없다 — 그 패턴이 완화되는 편집이 곧바로 root 밖 삭제가 되지 않도록 하는
+  두 번째 겹이다.
+- **state root 해석은 공통 조각에 넣지 않았다.** 이 플러그인은 git-aware
+  (`git rev-parse --git-common-dir`, worktree 호환)이고 quality-gates 는 payload cwd
+  상대다 — 부분 사본의 "각자 고유 본문"이라 플러그인 경계를 넘는 통합은 하지 않는다.
+
 ## [0.27.0] — 2026-08-17
 
 Task 15(무게 감축) + fix round 1. patch가 아니라 **minor**인 이유(S3): 새

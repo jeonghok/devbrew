@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -23,6 +22,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "scripts"))
 from state_path import state_root, SESSION_PATTERN  # noqa: E402 # pyright: ignore[reportMissingImports]
+from gc_common import safe_rmtree  # noqa: E402 # pyright: ignore[reportMissingImports]
 from kill_switch_active import kill_switch_active  # noqa: E402
 
 
@@ -50,8 +50,11 @@ def main() -> int:
             file=sys.stderr,
         )
         cwd = os.getcwd()
-    folder = state_root(cwd) / session_id
-    shutil.rmtree(folder, ignore_errors=True)
+    root = state_root(cwd)
+    folder = root / session_id
+    # `SESSION_PATTERN` 이 위에서 이미 charset 으로 걸렀지만 삭제는 두 겹으로 막는다 —
+    # 그 패턴이 완화되는 편집이 곧바로 root 밖 삭제로 이어지지 않도록.
+    safe_rmtree(folder, root)
     return 0
 
 

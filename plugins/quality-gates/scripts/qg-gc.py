@@ -23,13 +23,11 @@ from __future__ import annotations
 import fcntl
 import os
 import re
-import shutil
 import sys
-import time
-import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from gc_common import gc_one, ttl_ns  # noqa: E402
 from kill_switch_active import kill_switch_active  # noqa: E402
 
 ROOT = Path(".claude/quality-gates")
@@ -49,8 +47,12 @@ SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
 # `.claude/quality-gates/<sid>/runtime-evidence.md`에 직접 쓴다(실재 확인됨).
 # 목록에서 빠진 마커의 오판 방향은 "안 지움"(누수)이라 안전하다 — 반대 방향이 아니다.
 SESSION_MARKERS = ("pipeline.md", "files.md", "publish-eligible.md", "runtime-evidence.md")
-GRACE_NS = 60 * 1_000_000_000
-DOUBLE_STAT_DELAY_S = 0.05
+
+# TTL 계산 · 나이 판정 · 안전 삭제는 `shared/gc/gc_common.py` 정본(형제 사본
+# `scripts/gc_common.py`)이 갖는다. 여기 남는 것은 quality-gates 고유 본문이다 —
+# state root 표기(`ROOT`)와 세션 폴더 **식별**(`SESSION_MARKERS`, 위 주석의 이유).
+# spec-distill 의 GC 에는 마커 식별이 아예 없다(패턴만 본다). 두 계약이 다르므로
+# 이 둘은 통합 대상이 아니다 — **왜** 다른지는 여기서 판정하지 않는다.
 
 
 def _is_session_folder(folder: Path) -> bool:
@@ -60,66 +62,8 @@ def _is_session_folder(folder: Path) -> bool:
         return False
 
 
-def _ttl_ns() -> int:
-    raw = os.environ.get("DEVBREW_QG_TTL_HOURS", "24")
-    try:
-        n = int(raw)
-        if n <= 0:
-            n = 24
-    except ValueError:
-        n = 24
-    return n * 3600 * 1_000_000_000
-
-
 def _verbose() -> bool:
     return os.environ.get("DEVBREW_QG_GC_VERBOSE") == "1"
-
-
-def _folder_mtime_ns(folder: Path) -> int:
-    files = [p for p in folder.iterdir() if p.is_file()]
-    if not files:
-        return folder.stat().st_mtime_ns
-    return max(p.stat().st_mtime_ns for p in files)
-
-
-def _within_grace(folder: Path) -> bool:
-    """Protect newly-created empty folders from being GC'd before first write.
-
-    Only applies when folder has no files — once content lands, mtime governs.
-    """
-    try:
-        has_files = any(p.is_file() for p in folder.iterdir())
-    except OSError:
-        return False
-    if has_files:
-        return False
-    age_ns = time.time_ns() - folder.stat().st_ctime_ns
-    return age_ns < GRACE_NS
-
-
-def _gc_one(folder: Path, ttl_ns: int) -> bool:
-    if _within_grace(folder):
-        return False
-    try:
-        snap1 = _folder_mtime_ns(folder)
-    except OSError:
-        return False
-    if time.time_ns() - snap1 < ttl_ns:
-        return False
-    time.sleep(DOUBLE_STAT_DELAY_S)
-    try:
-        snap2 = _folder_mtime_ns(folder)
-    except OSError:
-        return False
-    if snap1 != snap2:
-        return False
-    pending = folder.parent / f".gc-pending-{uuid.uuid4().hex}"
-    try:
-        folder.rename(pending)
-    except OSError:
-        return False
-    shutil.rmtree(pending, ignore_errors=True)
-    return True
 
 
 def gc(self_session_id: str | None = None) -> int:
@@ -130,7 +74,7 @@ def gc(self_session_id: str | None = None) -> int:
         lock_path.touch(exist_ok=True)
     except OSError:
         return 0
-    ttl_ns = _ttl_ns()
+    ttl = ttl_ns("DEVBREW_QG_TTL_HOURS")
     removed = 0
     with open(lock_path, "w") as lockfile:
         try:
@@ -150,7 +94,7 @@ def gc(self_session_id: str | None = None) -> int:
                 if self_session_id and child.name == self_session_id:
                     continue
                 try:
-                    if _gc_one(child, ttl_ns):
+                    if gc_one(child, ttl, ROOT):
                         removed += 1
                 except OSError as exc:
                     print(
