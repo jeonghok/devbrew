@@ -94,6 +94,35 @@ Task 19(무게 감축): kill switch 판정 12정의를 `shared/killswitch/kill_s
   (현재 9종). 도출이 0건이면 vacuous 로 보고 RED. 실측: 구문 파손 변이 → 2 RED,
   `codex_not_installed` degrade 변이 → 1 RED, 무변이 40/40 GREEN.
 
+### Added (Task 20 — codex 러너 공통 조각)
+
+- `scripts/runner_common.sh` — `shared/codex/runner_common.sh` 의 `copy-of` 물리 사본
+  (`_degrade_if_empty` · `write_failclosed` 정본).
+
+### Changed (Task 20)
+
+- `run_spec_codex_reviewer.sh` · `run_brief_codex_reviewer.sh` 가 두 함수를 자체 정의하지
+  않고 위 정본을 source 한다(census #24·#125 — 두 파일에 그대로 복제돼 있었다).
+- **`write_failclosed` 의 시그니처가 `<output_path> <reason>` 두 인자로 바뀌었다.** 이전에는
+  reason 한 인자만 받고 경로는 전역 `$OUTPUT_PATH` 에서 읽었다 — 공유 파일이 호출자의 전역을
+  읽으면 그 전역 이름이 조용한 계약이 된다. 호출부 셋(`emit_fallback` ×2 · `seed_failclosed`)이
+  모두 `"$OUTPUT_PATH"` 를 먼저 넘기도록 바뀌었고, 정본에 빈-인자 가드가 있어 옛 형태로
+  부르면 rc=1 로 거절된다(빠뜨린 호출이 `runner_incomplete` 라는 **파일 이름**으로 쓰기를
+  시도하던 실패원을 조용히 통과시키지 않는다).
+- `emit_fallback` 은 정본화하지 **않는다** — `exit 0` 으로 호출자 프로세스를 끝내는 제어흐름
+  래퍼라, 아끼는 3줄보다 공유 계약이 무겁다(census #126).
+
+### Fixed (Task 20)
+
+- **정본 로드 실패 시 stale/0바이트 산출물이 남던 새 경로** 봉쇄 — quality-gates 3.4.0 의
+  같은 항목과 동형(`[ -r ]` + `bash -n` 선검사 → `reason: runner_common_unloadable`).
+  `run_brief_codex_reviewer.sh` 쪽은 특히 `seed_failclosed` 에 **닿기 전에** 죽는 형태라
+  직전 라운드 YAML 이 그대로 이번 판정으로 읽혔다.
+- `tests/test_brief_codex_axes.sh` 의 mutation fixture가 러너를 다른 디렉토리로 옮기면서
+  형제 정본을 두고 가, 사본이 로드 가드에 걸려 **조기 degrade** 했다 — 그 상태에서 mutation 은
+  변이가 아니라 위치 때문에 실패한다(도달 불가). 이 테스트의 계측기 assertion 둘이 그것을
+  RED 로 잡아냈고, fixture 가 정본을 함께 옮기도록 고쳤다.
+
 ## [0.27.0] — 2026-08-17
 
 Task 15(무게 감축) + fix round 1. patch가 아니라 **minor**인 이유(S3): 새

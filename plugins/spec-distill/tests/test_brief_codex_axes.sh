@@ -141,7 +141,14 @@ grep -q 'codex_failed: false' "$STALE" \
   || ok "STALE: project_dir 부재 경로도 stale을 남기지 않음"
 
 # mutation: 선-기록(seed_failclosed)을 제거하면 위 (1)이 다시 통과해야 한다.
-MUT="$(mktemp)" || exit 1
+#
+# 러너는 형제 `runner_common.sh` 를 **자기 위치 기준**(`${BASH_SOURCE[0]}` 의 디렉토리)으로
+# source 한다(Task 20). 그래서 다른 디렉토리로 옮긴 사본에는 그 형제도 함께 놓아야 한다 —
+# 놓지 않으면 사본이 로드 가드에 걸려 **조기 degrade** 하고, 아래 mutation 은 변이가 아니라
+# **위치** 때문에 실패한다(도달 불가). 그 상태의 판정은 이빨의 증거가 아니다.
+MUTDIR="$(mktemp -d -t sd-brief-mut-XXXXXX)" || exit 1
+cp "$SD/scripts/runner_common.sh" "$MUTDIR/runner_common.sh"
+MUT="$MUTDIR/run_brief_codex_reviewer_mut.sh"
 mutres="$(python3 - "$RUNNER" "$MUT" <<'PY'
 import sys
 src, dst = sys.argv[1], sys.argv[2]
@@ -160,7 +167,7 @@ if [[ "$mutres" == "MUTATED" ]]; then
 else
   no "STALE mutation: seed 호출 라인을 못 찾았다 ($mutres) — 락이 vacuous하다"
 fi
-rm -f "$STALE" "$MUT"
+rm -f "$STALE"; rm -rf "$MUTDIR"
 
 # === F1 (2026-08-17 fix round 1) : --emit-keys design 배선 락 ===============
 # codex_findings_to_yaml.py 정본화(Task 17) 이전에는 spec-distill의 emit keyset이
@@ -181,6 +188,9 @@ JSONL
 exit 0
 SH
 chmod +x "$F1TMP/codexbin/codex"
+# 아래 identity/mutation 사본이 F1TMP 로 옮겨가므로 형제 정본도 같이 옮긴다
+# (러너가 자기 위치 기준으로 source 한다 — Task 20).
+cp "$SD/scripts/runner_common.sh" "$F1TMP/runner_common.sh"
 
 # CLAUDE_PLUGIN_ROOT 를 **명시로** 넘긴다 — 형제 락
 # test_run_spec_codex_reviewer.sh:62 이 이미 그렇게 한다. 러너는

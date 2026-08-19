@@ -138,6 +138,36 @@ Task 19(무게 감축): kill switch 판정 12정의(`kill_switch_active` 5 + `_d
   인용하는 서술(R2-4)이 실제로 참이 된다. mutation: 두 변이 각각 4/4 RED(네 물리
   인스턴스 전부, 자기 케이스만 지목), 무변이 77/77 GREEN.
 
+### Added (Task 20 — codex 러너 공통 조각)
+
+- `scripts/runner_common.sh` — `shared/codex/runner_common.sh` 의 `copy-of` 물리 사본.
+  `_degrade_if_empty`(산출물이 비었을 때만 기록) · `write_failclosed`(무조건 기록) 두
+  함수의 정본이다. 심볼릭 링크가 아니라 사본인 이유는 3.4.0 Fixed CRIT-1 과 같다.
+
+### Changed (Task 20)
+
+- `run_codex_reviewer.sh` 가 `_degrade_if_empty` 를 자체 정의하지 않고 위 정본을
+  source 한다. 정본은 경로를 **인자**로 받으므로 EXIT 트랩이
+  `_degrade_if_empty "$OUTPUT_PATH" aborted_before_completion` 으로 바뀌었다.
+- degrade 산출물에서 **최상위 `agent:` 키를 제거**했다(설계 §6.2 "`agent:` 포함 중첩 →
+  없는 중첩"). 이 키는 성공 경로의 산출자(`codex_findings_to_yaml.py` 의 `yaml_emit`)가
+  내지 않는 것이었다 — `agent:` 는 finding 마다 붙는다. 즉 degrade 경로 둘과 헤더 주석만
+  최상위 키를 주장하던 drift 였고, 읽는 소비자는 없다(`synthesize_findings.py` 는
+  `findings`/`verdicts` 만 꺼낸다). 헤더의 스키마 주석도 실제 출력에 맞게 정정했다.
+
+### Fixed (Task 20)
+
+- **빈 `OUTPUT_PATH` 에서 degrade 가 "성공"으로 보고되던 것**(설계 §6.2 첫 행). 이전
+  `_degrade_if_empty` 는 `-n` 검사가 없어 빈 경로에 리다이렉트를 시도했고, 실패해도
+  마지막 `echo` 의 상태가 함수 반환값이 되어 **rc=0 · 산출물 없음**으로 끝났다(재현 확인).
+  정본은 빈 경로를 rc=3 으로 거절한다.
+- **정본 로드 실패가 0바이트 산출물을 남기던 새 경로**(이번 추출이 만든 것을 같은 커밋에서
+  봉쇄). `.` 는 POSIX special builtin 이라 대상 파일이 없으면 bash 3.2.57 이 `if !` 안에서도
+  셸을 즉시 종료시키고, 문법이 깨진 파일은 source 순간 죽는다 — 둘 다 guarded truncate
+  **뒤**라 0바이트 산출물이 남고 소비자에겐 "codex 성공, 발견 0건"으로 읽힌다. 그래서
+  `[ -r ]` + `bash -n` 을 source 앞에 두고, 실패하면 `reason: runner_common_unloadable`
+  degrade 를 남기고 exit 0 한다(기록조차 못 하면 exit 3).
+
 ## [3.3.0] — 2026-08-17
 
 Task 15(무게 감축) + fix round 1: `detect_codex.sh` 세 사본을 `shared/codex/`의 정본 +

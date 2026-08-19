@@ -18,9 +18,10 @@
 #   DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1 — force the no-spec path even when a
 #                  spec exists (empty <spec_context>; loud log emitted).
 #
-# Emits: YAML to <output_yaml_path>. Schema:
-#   agent: codex-reviewer
-#   findings: [...]
+# Emits: YAML to <output_yaml_path>. Schema (최상위 `agent:` 키는 **없다** — 산출자
+# codex_findings_to_yaml.py 의 yaml_emit 은 `agent:` 를 finding 마다 달 뿐 최상위에는
+# 내지 않는다. 예전 이 주석과 degrade 경로 둘만 최상위 키를 주장했다, 설계 §6.2):
+#   findings: [...]        # 각 항목이 `agent: codex-reviewer` 를 갖는다
 #   meta:
 #     codex_failed: bool
 #     exit_code: int
@@ -89,15 +90,34 @@ fi
   echo "[quality-gates] 산출물 경로에 쓸 수 없다: $OUTPUT_PATH" >&2
   exit 3
 }
-_degrade_if_empty() {
-  [[ -s "$OUTPUT_PATH" ]] && return 0
-  { echo 'agent: codex-reviewer'; echo 'findings: []'; echo 'meta:'
-    echo '  codex_failed: true'; echo '  reason: aborted_before_completion'; } \
-    > "$OUTPUT_PATH" 2>/dev/null \
-    || echo "[quality-gates] degrade YAML 기록마저 실패 — 호출자가 읽을 산출물이 없다" >&2
-  echo "[quality-gates] codex 리뷰가 완료 전에 중단됨 — degrade YAML 기록(stale 재사용 방지)" >&2
-}
-trap '_degrade_if_empty' EXIT
+# `_degrade_if_empty` 는 형제 러너와 공유하는 정본이다(설계 §6.2 스키마 통일 + `-n` 가드).
+#
+# **source 를 가드한다.** 위 truncate 가 이미 OUTPUT_PATH 를 0바이트로 만들어 놨고 트랩은
+# 아직 안 떴다. `set -e` 아래에서 source 가 실패하면(사본 미배포·문법 오류) 스크립트는
+# 여기서 즉사하고 **0바이트 산출물**이 남는다 — 소비자에게 그것은 "codex 성공, 발견 0건"
+# 이다. 추출을 하며 새로 생긴 실패 경로이므로 여기서 닫는다. 산출물을 쓸 수 있으면
+# 계약대로 degrade + exit 0, 그것마저 실패하면 exit 3(호출자가 stale 을 지운다).
+# shellcheck source=/dev/null
+_RUNNER_COMMON="$(dirname -- "${BASH_SOURCE[0]}")/runner_common.sh"
+# `[ -r ]` + `bash -n` 을 **source 앞에** 둔다. `.` 는 POSIX special builtin 이라
+# 파일이 없으면 bash 3.2.57 이 `if !` 안에서도 셸을 **즉시 종료**시키고(실측),
+# 문법이 깨진 파일은 source 하는 순간 rc=2 로 죽는다 — 둘 다 이 if 로는 못 잡는다.
+# 그래서 "읽을 수 있는가"와 "파싱되는가"를 먼저 묻고 그 다음에만 실제로 싣는다.
+if [ -r "$_RUNNER_COMMON" ] && bash -n "$_RUNNER_COMMON" 2>/dev/null \
+   && . "$_RUNNER_COMMON"; then
+  :
+else
+  printf 'findings: []\nmeta:\n  codex_failed: true\n  reason: runner_common_unloadable\n  exit_code: 0\n' \
+    > "$OUTPUT_PATH" 2>/dev/null || {
+      echo "[quality-gates] runner_common.sh 로드 실패 + 산출물 기록 실패 — 호출자는 stale 을 지워야 한다" >&2
+      exit 3
+    }
+  echo "[quality-gates] runner_common.sh 를 로드할 수 없다 — degrade 기록 후 종료(공유 정본 미배포)" >&2
+  exit 0
+fi
+# 인자를 넘긴다 — 정본은 호출자의 전역 `$OUTPUT_PATH` 를 읽지 않는다. 인자 없이 부르면
+# 정본의 `-n` 가드가 rc=3 을 내고 **아무것도 쓰지 않는다**(degrade 소실).
+trap '_degrade_if_empty "$OUTPUT_PATH" aborted_before_completion' EXIT
 
 if [[ -z "$PROJECT_DIR" ]]; then
   echo '{"codex_failed": true, "reason": "missing_project_dir"}' > "$OUTPUT_PATH"
@@ -213,6 +233,9 @@ if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/codex_findings_to_yaml.py" \
     --meta-override-reason "$OVERRIDE_REASON" \
     < "$STDOUT_FILE" > "$OUTPUT_PATH" || [[ ! -s "$OUTPUT_PATH" ]]; then
   echo "[quality-gates] codex 추출 실패 — 빈 산출물 대신 codex_failed를 기록한다 (리뷰어 1명 손실, degrade)" >&2
-  printf 'agent: codex-reviewer\nfindings: []\nmeta:\n  codex_failed: true\n  exit_code: %s\n  reason: extract_failed\n' \
+  # 최상위 `agent:` 를 내지 않는다 — 성공 경로(codex_findings_to_yaml.py 의 yaml_emit)가
+  # `agent:` 를 finding 마다 달 뿐 최상위에는 내지 않으므로, 이 키는 degrade 경로에만
+  # 있던 스키마 drift 였다(설계 §6.2 "`agent:` 포함 중첩 → 없는 중첩"). 읽는 소비자도 없다.
+  printf 'findings: []\nmeta:\n  codex_failed: true\n  exit_code: %s\n  reason: extract_failed\n' \
     "$EXIT_CODE" > "$OUTPUT_PATH"
 fi

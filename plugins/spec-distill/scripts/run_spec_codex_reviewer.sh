@@ -52,16 +52,39 @@ fi
   exit 3
 }
 
-write_failclosed() {                   # $1 = reason — 리다이렉트 실패를 삼키지 않는다
-  { echo 'findings: []'
-    echo 'meta:'
-    echo '  codex_failed: true'
-    echo "  reason: $1"; } > "$OUTPUT_PATH" || {
-    echo "[spec-distill] fail-closed YAML 기록 실패: $OUTPUT_PATH ($1)" >&2
-    return 1
-  }
-}
-emit_fallback() { write_failclosed "$1" || exit 3; exit 0; }
+# `write_failclosed` · `_degrade_if_empty` 는 형제 러너와 공유하는 정본이다(census #24·#125).
+# 정본은 경로를 **인자**로 받는다 — 여기서 전역 `$OUTPUT_PATH` 를 넘긴다.
+#
+# **source 를 가드한다.** 위 guarded truncate 가 이미 OUTPUT_PATH 를 0바이트로 만들어 놨고
+# 트랩은 아직 안 떴다. `set -e` 아래에서 source 가 실패하면 스크립트가 즉사하며 0바이트
+# 산출물이 남는다 — 소비자에게 "codex 성공, 발견 0건"이다(추출로 새로 생긴 실패 경로).
+# shellcheck source=/dev/null
+_RUNNER_COMMON="$(dirname -- "${BASH_SOURCE[0]}")/runner_common.sh"
+# `[ -r ]` + `bash -n` 을 **source 앞에** 둔다. `.` 는 POSIX special builtin 이라
+# 파일이 없으면 bash 3.2.57 이 `if !` 안에서도 셸을 **즉시 종료**시키고(실측),
+# 문법이 깨진 파일은 source 하는 순간 rc=2 로 죽는다 — 둘 다 이 if 로는 못 잡는다.
+# 그래서 "읽을 수 있는가"와 "파싱되는가"를 먼저 묻고 그 다음에만 실제로 싣는다.
+if [ -r "$_RUNNER_COMMON" ] && bash -n "$_RUNNER_COMMON" 2>/dev/null \
+   && . "$_RUNNER_COMMON"; then
+  :
+else
+  printf 'findings: []\nmeta:\n  codex_failed: true\n  reason: runner_common_unloadable\n  exit_code: 0\n' \
+    > "$OUTPUT_PATH" 2>/dev/null || {
+      echo "[spec-distill] runner_common.sh 로드 실패 + 산출물 기록 실패 — 호출자는 stale 을 지워야 한다" >&2
+      exit 3
+    }
+  echo "[spec-distill] runner_common.sh 를 로드할 수 없다 — degrade 기록 후 종료(공유 정본 미배포)" >&2
+  exit 0
+fi
+# `emit_fallback` 은 정본화하지 **않는다.** 근거를 정정해 둔다 — task-20 브리프 Step 3b 의
+# 표는 이쪽 본문을 "47줄, spec 전용 fallback 본문"이라 적었으나 2026-08-19 실측으로 **1줄**
+# 이고, 형제 run_brief_codex_reviewer.sh:51-54 의 4줄과 **같은 두 문장**이다(차이는 포매팅뿐).
+# 즉 브리프가 든 "바이트 동일이 불가능하다"는 사유는 성립하지 않는다.
+# 그래도 남기는 진짜 이유: 이 함수는 `exit 0` 으로 **호출자 프로세스를 끝내는** 제어흐름
+# 래퍼다. `exit` 를 공유 파일에 넣으면 source 한 쪽이 자기 종료 시점을 남의 파일에 넘기는
+# 셈이라, 아끼는 3줄보다 계약이 무겁다. 잔여 중복은 shared/tests/test_no_new_duplication.sh
+# 의 20줄 검사가 지킨다(4줄이므로 임계 아래).
+emit_fallback() { write_failclosed "$OUTPUT_PATH" "$1" || exit 3; exit 0; }
 
 if [[ -z "$PROJECT_DIR" ]]; then
   emit_fallback missing_project_dir
@@ -100,19 +123,12 @@ SCRATCH="$(mktemp -d -t sd-codex-rev-XXXXXX)" || emit_fallback scratch_dir_uncre
 # (seed 는 위 B3 블록으로 올라갔다 — 여기서 다시 truncate 하지 않는다. 이 지점에
 # 도달했다는 것은 seed 가 이미 성공했다는 뜻이고, 재truncate 는 그 사이 분기가 쓴
 # 진짜 reason 을 지울 위험만 만든다.)
-_degrade_if_empty() {
-  [[ -n "$OUTPUT_PATH" && ! -s "$OUTPUT_PATH" ]] || return 0
-  { echo 'findings: []'
-    echo 'meta:'
-    echo '  codex_failed: true'
-    echo '  reason: aborted_before_completion'; } > "$OUTPUT_PATH" 2>/dev/null || true
-  echo "[spec-distill] codex 리뷰가 완료 전에 중단됨 — degrade YAML 기록(stale 재사용 방지)" >&2
-}
+# `_degrade_if_empty` 정의는 위에서 source 한 정본(runner_common.sh)에 있다.
 # trap은 한 줄로 유지한다: C7 순서 락(test_run_spec_codex_reviewer.sh AC6)이
 # `trap.*rm -rf.*SCRATCH.*EXIT`를 한 줄 정규식으로 앵커한다. 여러 줄로 펼치면
 # 그 락이 trap을 **못 보고** guard 순서 검사가 통째로 무력화된다 — 락을 약화시키지
 # 않으려면 로직을 함수로 빼고 arm 줄은 그대로 둔다.
-trap 'rm -rf "$SCRATCH"; _degrade_if_empty' EXIT
+trap 'rm -rf "$SCRATCH"; _degrade_if_empty "$OUTPUT_PATH" aborted_before_completion' EXIT
 PROMPT_FILE="$SCRATCH/prompt.md"
 STDOUT_FILE="$SCRATCH/codex.jsonl"
 STDERR_FILE="$SCRATCH/codex.stderr"
