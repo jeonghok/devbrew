@@ -27,6 +27,10 @@
 #
 # 실행 지점은 `/qg` Runtime gate 하나다. 상시 자동 실행이 아니다 —
 # C16 이 실행 지점 신설을 금했으므로 이 제약 아래의 최선이다.
+#
+# **이 락이 스스로 지키지 못하는 것**: 이 파일 자신을 고치는 편집 — 아래 축-실행 계측기와
+# 감사의 본문, 각 축이 넘기는 기대 최소치, EXIT 트랩 등록 — 은 이 락의 사정거리 밖이다.
+# 그 면은 사람이 읽는 diff 리뷰와 plan Task 16 Step 1 의 verbatim 임베드 대조가 맡는다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT" || exit 1
@@ -43,23 +47,110 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   exit 0
 fi
 
-# ── 축-실행 계측 (F1 의 절반) ────────────────────────────────────────────────
+# ── 축-실행 계측과 감사 (F1) ─────────────────────────────────────────────────
 # 〔2026-08-18 fix round 1, F1〕 축 0 은 **주석 텍스트**만 센다. 그래서 어떤 축의
 # 구현 본문을 통째로 지우고 헤더 주석만 남기면 세 카운터가 전부 그대로라 GREEN 이
 # 된다(실측). 주석 개수는 "그 축이 있다고 **적혀 있다**"만 말할 뿐 "그 축이 **돌았다**"
 # 는 말하지 않는다. 그래서 각 축이 **실제로 실행한 단언 수**를 여기서 기록하고,
-# 파일 끝에서 헤더 집합과 대조한다.
-# 호출은 **각 축 본문의 맨 끝**에 둔다 — 본문이 지워지면 이 호출도 함께 사라져
-# 기록 집합이 헤더 집합보다 작아지고, 본문만 죽으면 기록된 수가 0 이 된다.
-# 어느 쪽도 헤더 주석만으로는 만족시킬 수 없다.
+# 마지막에 헤더 집합과 대조한다. 호출은 **각 축 본문의 맨 끝**에 둔다.
+#
+# 〔2026-08-19 fix round 2b, H1·H2·H3〕 첫 판본의 계측기는 **통째-본문 삭제** — 그것을
+# 쓴 저자가 흔든 유일한 모양 — 하나에만 저항했다. 실측으로 뚫린 네 모양과 그것을 닫은
+# 구조는 이렇다. 어느 것도 계측기 위에 계측기를 얹지 않는다.
+#  · H3 — `axis_tally 1c` 처럼 **라벨을 인자로** 받으면 그 호출을 축 2 본문으로 옮겨도
+#    기록은 `1c` 로 남았다(실측: GREEN + *"축 1c 가 단언 3건을 실제로 실행했다"* 라는
+#    거짓 문장이 pass 로 출력). 이제 id 를 인자로 받지 않고 **호출 줄 번호에서 가장
+#    가까운 앞 축 헤더**로 도출한다 — 라벨과 호출 자리가 같은 것이 되어, 옮기면 옮겨
+#    간 축의 이름이 나온다. 이름을 대는 자가 자기 위치를 고를 수 없다.
+#  · H1(a) — `_AXIS_SEEN=$now` **한 줄**을 지우면 모든 축의 기록이 누계가 되어 전부
+#    `≥1` 을 만족했다(실측 GREEN). 이제 워터마크를 두지 않고 **절대 카운터를 그대로**
+#    적는다. 축별 수는 감사가 이웃한 두 절대값의 차로 낸다 — 지울 리셋 줄이 없다.
+#    차 계산 자체를 망가뜨리는 편집(누계로 되돌리기)은 감사의 **합 불변식**이 잡는다:
+#    축별 수의 합은 감사 직전까지 실행된 단언 총수와 정확히 같아야 한다.
+#  · H1(b) — 감사 블록 자체는 축이 아니라(헤더에 콜론이 없어 `AXIS_IDS` 밖이다) 통째로
+#    지워도 아무도 몰랐다(실측 GREEN). 이제 감사가 `finish` 를 품고, 감사가 돌지 않으면
+#    **EXIT 트랩이 rc=1 로 죽인다.** `finish` 없이는 실패 개수가 종료 코드로 바뀌지
+#    않으므로 — 삭제가 조용해지는 바로 그 이유로 — 트랩이 그 자리를 맡는다.
+#  · H2 — `≥1` 은 코퍼스를 안 건드리는 가드 하나로도 충족됐다(축 1c 를 F3 가드만 남기고
+#    줄여도 GREEN 이었다). 이제 각 축이 **자기 본문에서 도출한 기대 최소치**를
+#    `axis_tally` 에 넘긴다: 코퍼스 축은 자기가 실제로 훑은 항목 수를, 축 0 은 자기 헤더가
+#    열거한 도출 자리 수를 낸다. 본문을 가드만 남기고 줄이면 그 수가 0 으로 떨어지거나
+#    실행 수가 그 밑으로 내려가 RED 다.
+#
+# **여기까지도 남는 것(주장 축소)**: 이 계측기와 감사 **자신을 고치는 편집**은 막지 못한다 —
+# `axis_audit` 본문의 단언을 지우거나, 축이 넘기는 기대 최소치를 상수로 바꾸거나, 아래 EXIT
+# 트랩 등록 줄을 지우면 이 계측은 그만큼 약해진다. 계측기를 계측하는 계측기를 무한히 쌓지
+# 않기로 했으므로 그 면은 **여기서 그렇게 말하는 것**으로 둔다(머리말의 같은 문장 참조).
 _AXIS_TALLY=""
-_AXIS_SEEN=0
-axis_tally() {   # axis_tally <축 id>
-  local now=$((_ASSERT_PASS+_ASSERT_FAIL))
-  _AXIS_TALLY="${_AXIS_TALLY}$1 $((now-_AXIS_SEEN))
+_AXIS_AUDIT_DONE=0
+_LOCK_TMP=""
+_LOCK_RC=0
+
+lock_tmp_add() {   # 정리 대상 등록. 축마다 trap 을 걸면 나중 것이 앞의 것을 조용히 덮는다.
+  _LOCK_TMP="${_LOCK_TMP}$1
 "
-  _AXIS_SEEN=$now
 }
+
+axis_tally() {   # axis_tally <이 축이 자기 본문에서 도출한 기대 최소 단언 수>
+  # 축 id 는 **인자가 아니라 호출 자리**에서 온다 〔H3〕. 도출 규칙은 `AXIS_IDS` 와 같다.
+  local ln="${BASH_LINENO[0]}" aid=""
+  [ -f "${SELF:-}" ] && aid="$(sed -n "1,$((ln-1))p" "$SELF" \
+      | sed -nE 's/^# ── 축 ([0-9][a-z]?):.*/\1/p' | tail -1)"
+  _AXIS_TALLY="${_AXIS_TALLY}${aid:-?} $((_ASSERT_PASS+_ASSERT_FAIL)) ${1:-0}
+"
+}
+
+# 감사 — 헤더가 선언한 축 집합과 **실제로 단언을 남긴** 축 집합을 대조하고, 축별 수가
+# 그 축이 스스로 도출한 기대 최소치 이상인지 본다. 두 방향 다 본다(선언했는데 안 돌았다 /
+# 돌았는데 선언이 없다). 어느 쪽도 주석만 고쳐서는 맞출 수 없다.
+# 이 함수가 `finish` 를 품는다 — 이 락의 마지막 실행 줄은 `axis_audit` 다.
+axis_audit() {
+  local total prev=0 sum=0 line aid abs amin d tallied_ids n_axis_ids
+  total=$((_ASSERT_PASS+_ASSERT_FAIL))
+  tallied_ids="$(printf '%s' "$_AXIS_TALLY" | awk '{print $1}' | sort -u)"
+  assert_eq "$tallied_ids" "$AXIS_IDS" "축-실행: 헤더가 선언한 축 집합과 실제로 단언을 실행한 축 집합이 같다"
+  n_axis_ids="$(printf '%s\n' "$AXIS_IDS" | grep -c . || true)"
+  if [ "$n_axis_ids" -ge 1 ]; then
+    ok "축-실행: 축 헤더에서 ${n_axis_ids}건의 축 id 를 도출 (대조 근거가 살아 있다)"
+  else
+    no "축-실행: 축 id 가 0건 도출됐다 — 헤더 도출이 깨졌다. 위 집합 대조는 무의미하다"
+  fi
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    set -- $line
+    aid="$1"; abs="$2"; amin="$3"
+    d=$((abs-prev)); prev="$abs"; sum=$((sum+d))
+    if [ "$amin" -lt 1 ] 2>/dev/null; then
+      no "축-실행: 축 $aid 가 기대 최소치를 ${amin} 로 냈다 — 이 축은 자기 코퍼스를 한 번도 훑지 못했다(본문이 죽었거나 도출이 깨졌다)"
+    elif [ "$d" -ge "$amin" ] 2>/dev/null; then
+      ok "축-실행: 축 $aid 가 단언 ${d}건을 실행했다 (자기 본문이 도출한 기대 최소 ${amin}건 이상)"
+    else
+      no "축-실행: 축 $aid 가 단언 ${d}건만 실행했다 — 자기 본문이 도출한 기대 최소는 ${amin}건이다 (본문이 줄었거나 코퍼스 항목이 조용히 건너뛰어졌다)"
+    fi
+  done <<TALLY
+$_AXIS_TALLY
+TALLY
+  assert_eq "$sum" "$total" "축-실행: 축별 단언 수의 합이 감사 직전까지 실행된 단언 총수(${total})와 같다 (축 밖 실행도, 누계로 되돌아간 델타도 없다)"
+  _AXIS_AUDIT_DONE=1
+  finish
+}
+
+# 감사가 안 돌면 실패 개수가 종료 코드가 되지 않는다 — 그 자리를 트랩이 맡는다 〔H1(b)〕.
+_lock_exit() {
+  _LOCK_RC=$?
+  local p
+  while IFS= read -r p; do
+    case "$p" in /*) rm -rf "$p" ;; esac
+  done <<TMPS
+$_LOCK_TMP
+TMPS
+  if [ "$_AXIS_AUDIT_DONE" != "1" ]; then
+    printf '\n  ✗ 축-실행: 감사(axis_audit)가 실행되지 않은 채 락이 끝났다 — 감사가 지워졌거나 그 앞에서 죽었다\n'
+    exit 1
+  fi
+  exit "$_LOCK_RC"
+}
+trap _lock_exit EXIT
 
 # ── 축 0: 계약 수 서술이 이 락의 실제 계약 축 수와 맞는가 ─────────────────────
 # 〔2026-08-18 Ruling 45〕 축 1c 가 들어오기 전 shared/README.md 는 이 락의 계약 수를
@@ -122,7 +213,13 @@ else
     assert_eq "${said:-없음}" "$want" "README: shared/README.md 의 계약 수 서술이 실제 축 수(${n_axis}건)와 일치한다"
   fi
 fi
-axis_tally 0
+# 〔2026-08-19 fix round 2b, H2〕 이 축의 기대 최소 단언 수를 **자기 헤더 주석이 열거한
+# 도출 자리 수**(①②③④)에서 낸다. 축 0 은 훑는 코퍼스가 아니라 *자리*를 갖는 축이라
+# 셀 항목이 없다 — 대신 이 축이 스스로 "이 자리들에서 도출한다"고 적은 그 수를 쓴다.
+# 본문을 개수 assert 하나만 남기고 줄이면 실행 수가 이 밑으로 떨어져 RED 다(실측 Q4).
+n_src0="$(awk '/^# ── 축 0:/{f=1} f&&/^[^#]/{exit} f' "$SELF" 2>/dev/null \
+  | grep -oE '①|②|③|④|⑤|⑥|⑦|⑧|⑨' | sort -u | grep -c . || true)"
+axis_tally "$n_src0"
 
 # ── 축 1a: 심볼릭 링크 무결성 — 도미넌스(∀) 체크 (기본 방식, 설계 §16.1) ────
 # 정본 목록은 이 사이클에 심볼릭 링크로 전환된 것 둘로 고정한다(설계 §16.1) —
@@ -217,6 +314,26 @@ PLUGINS
   else
     no "symlink-∀: $canonical 의 배포 지점이 **0건 도출**됐다 — 이 정본은 아무것도 검사되지 않았다. 참조 도출(scripts/${base})이 이 정본에 안 맞거나(예: import 로만 소비되는 모듈) 참조원이 사라졌다"
   fi
+  # 〔2026-08-19 fix round 2b, M4〕 **반대 방향 도미넌스** — 실재하는 배포 지점이 전부
+  # 도출됐는가. 위 ∀ 는 "도출된 자리에 링크가 있는가"만 본다. 도출은 참조원 **파일 수**에
+  # 기대므로, 어떤 플러그인의 유일한 참조가 산문 한 줄이면 그 줄을 고쳐 쓰는 편집만으로
+  # 그 플러그인이 기대 집합에서 **조용히** 빠진다 — 실측: plugin-audit 은
+  # `skills/auditing-plugins/SKILL.md` 한 줄만 기여하고, 그 줄을 바꾸면 심볼릭 링크 ∀ ·
+  # conf 축 · fail-closed(보안) 축에서 함께 이탈한다. 그래서 인덱스(git)와 워킹트리
+  # **양쪽**에 실재하는 `plugins/*/scripts/<basename>` 를 모아 도출이 그것을 덮는지 묻는다.
+  # untrack 은 인덱스에서만 지우므로 워킹트리 쪽이 남아 두 수가 갈라진다.
+  actual_plugins="$( { git ls-files -- "plugins/*/scripts/$base";
+      for p in plugins/*/scripts/"$base"; do
+        { [ -e "$p" ] || [ -L "$p" ]; } && printf '%s\n' "$p"
+      done; } 2>/dev/null | sed -nE 's#^plugins/([^/]+)/.*#\1#p' | sort -u)"
+  n_actual="$(printf '%s\n' "$actual_plugins" | grep -c . || true)"
+  if [ "$n_actual" = "$n_this" ]; then
+    ok "symlink-∀: $canonical — 실재하는 배포 지점 ${n_actual}건이 참조원 도출 ${n_this}건과 같다 (도출이 실재를 덮는다)"
+  else
+    no "symlink-∀: $canonical — 실재하는 배포 지점 ${n_actual}건과 참조원 도출 ${n_this}건이 다르다 — 도출 앵커가 낡았거나(참조 산문이 바뀌었다) 배포 지점이 인덱스에서만 사라졌다"
+    printf '      도출: %s\n      실재: %s\n' "$(printf '%s' "$expected_plugins" | tr '\n' ' ')" "$(printf '%s' "$actual_plugins" | tr '\n' ' ')"
+  fi
+
   DEP_COUNTS="${DEP_COUNTS}${base} ${n_this}
 "
 done <<CANON
@@ -229,7 +346,7 @@ if [ "$n_expected" -ge 1 ]; then
 else
   no "symlink-∀: 파생된 배포 지점이 0건 — 참조 도출이 깨졌거나 SYMLINK_CANONICALS 가 비었다"
 fi
-axis_tally 1a
+axis_tally "$n_expected"
 
 # ── 축 1b: copy-of 물리 사본이 정본과 바이트 동일 (잔여 — 링크를 못 쓰는 경우) ──
 # 카나리아(vacuous 방지, 축 1a에 기대지 않는다) — 코퍼스와 무관한 합성 문자열로
@@ -243,13 +360,20 @@ axis_tally 1a
 # Step 4b 이며 그것이 이 태스크보다 앞선다), 실측은 3건이다. 아래 `물리 사본 0건`
 # 가지가 **0건은 정상이 아니다** 라고 말하는데 바로 위 주석이 정상이라고 말하면,
 # 실행자가 진짜 알람을 보고 위로 스크롤해 기각한다. 그 문장은 삭제했다.〕
+# 〔2026-08-19 fix round 2b, H2〕 이 축이 실제로 훑은 코퍼스 항목 수 — 물리 사본 + 구조에서
+# 도출한 사본 후보. 축 끝의 `axis_tally` 가 이것을 기대 최소치로 넘긴다. **초기화를 축
+# 헤더 직후에 둔다**: 아래 두 루프를 통째로 지우고 카나리아만 남기는 축소(실측 Q4)에서
+# 두 값이 0 으로 남아 감사가 "코퍼스를 한 번도 안 훑었다"를 RED 로 내게 하려면, 초기화가
+# 지워지는 범위 **밖**에 있어야 한다.
+n_copies=0
+n_cand=0
+
 if printf '# copy-of: shared/x\n' | grep -qE "$MARKER_RE"; then
   ok "copy-of: MARKER_RE 카나리아 매치 (정규식 자체는 살아있다)"
 else
   no "copy-of: MARKER_RE 카나리아가 매치하지 않는다 — 정규식이 깨졌다. 아래 물리 사본 스캔 결과는 무의미하다"
 fi
 
-n_copies=0
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   [ -f "$f" ] || continue
@@ -318,12 +442,19 @@ fi
 # 배포 대상 정본과 같은 것. `shared/` 쪽에서 빼는 것 셋, 전부 이유가 있다:
 #  · `shared/tests/` — 판정 헬퍼·락은 리포에서만 돌고 사본이 없다는 것이
 #    `shared/tests/assert.sh` 머리말의 명시 계약이다.
-#  · `*.md` — 문서는 배포 코드가 아니다.
+#  · `shared/` **최상위**의 `*.md` — 이 디렉토리 자체를 설명하는 문서다(오늘은
+#    `shared/README.md` 하나). 배포되는 payload 는 `shared/<하위>/` 에 산다.
+#    〔2026-08-19 fix round 2b, L2〕 앞 판본은 `*.md` 를 **전부** 뺐다. 그러면 사본으로
+#    배포되는 마크다운 정본에 후보 규칙이 아예 없어, F4 가 닫으려던 결함(마커가
+#    `HEAD_WINDOW` 밖으로 밀려 파일이 스캔에서 조용히 이탈)이 `.md` 에 대해 그대로
+#    열린 채 남았다. 오늘 `shared/` 에 하위 `.md` 가 없어 이 좁힘은 **값을 바꾸지
+#    않는다**(실측) — 값이 안 변한다는 것을 먼저 재고 좁혔다. 남는 위험은 basename 우연
+#    충돌(`README.md` 류)인데, 그것은 **좁히는 방향**의 실패라 거짓 RED 로 시끄럽다.
 #  · 빈 파일(`.gitkeep` 등) — 마커를 실을 수 없고 갈라질 내용도 없다.
 # 이 세 제외는 **좁히는 방향**이라 빠뜨리면 거짓 RED 로 시끄럽게 드러난다(넓히는
 # 방향의 열거와 달리 조용히 fail-open 하지 않는다).
 SHARED_BASENAMES="$(git ls-files -- 'shared/*' \
-  | grep -vE '^shared/tests/' | grep -vE '\.md$' \
+  | grep -vE '^shared/tests/' | grep -vE '^shared/[^/]+\.md$' \
   | while IFS= read -r p; do [ -s "$p" ] && basename -- "$p"; done | sort -u)"
 n_sb="$(printf '%s\n' "$SHARED_BASENAMES" | grep -c . || true)"
 if [ "$n_sb" -ge 1 ]; then
@@ -332,7 +463,6 @@ else
   no "copy-of: 배포 대상 정본이 0건 도출됐다 — 아래 사본 후보 판별이 통째로 vacuous 하다"
 fi
 
-n_cand=0
 while IFS= read -r cand; do
   [ -n "$cand" ] || continue
   case "$cand" in plugins/*) ;; *) continue ;; esac
@@ -354,7 +484,7 @@ if [ "$n_cand" -ge 1 ]; then
 else
   no "copy-of: 사본 후보가 0건 도출됐다 — 후보 도출이 깨졌다. 위 ∀ 는 한 번도 안 돌았다"
 fi
-axis_tally 1b
+axis_tally "$((n_copies+n_cand))"
 
 # ── 축 1c: import 형제 사본의 ∀ 도미넌스 (설치본 조건) ────────────────────────
 # 〔2026-08-17 fix round 2, R2-2 — 축 1a·1b 어느 쪽도 닫지 못하는 결함 클래스〕
@@ -370,10 +500,15 @@ axis_tally 1b
 # 초록으로 남는다.** 그래서 여기서는 배포 지점 집합을 **도출하고 그 각각에**
 # 형제 사본이 있음을 단언한다 — ∃ 가 아니라 ∀ 다.
 #
-# **도출 규칙**: `plugins/*/scripts/` · `plugins/*/hooks/` 안에서 `from <mod> import`
-# 하는 소비자가 있는 **디렉토리** 전부. 이름을 열거하지 않는다(열거는 공간·시간
-# 양쪽으로 fail-open). `grep` 이 심볼릭 링크를 따라가므로 qg·sd 의
+# **도출 규칙**: git 이 추적하는 `plugins/` **전부** 안에서 그 모듈을 import 하는 `.py`
+# 소비자가 있는 **디렉토리** 전부. 이름을 열거하지 않는다(열거는 공간·시간 양쪽으로
+# fail-open). 파일을 `open()` 으로 읽으므로 심볼릭 링크를 따라가고, qg·sd 의
 # `codex_findings_to_yaml.py` 링크가 정본 본문을 통해 소비자로 걸린다.
+# 〔2026-08-19 fix round 2b, M7〕 앞 판본은 `plugins/*/scripts/*` · `plugins/*/hooks/*`
+# **두 이름의 손열거**였다 — 바로 위 *"이름을 열거하지 않는다"* 20줄 아래에서. 라운드 1 은
+# 같은 결함(F8)을 축 1a 에서만 고치고 여기는 그대로 뒀다. 넓혀도 **오늘 도출되는 소비자
+# 집합은 그대로 3건**이다(2026-08-19 실측) — 값이 안 변한다는 것을 먼저 재고 넓혔다.
+# fixtures/mocks/harness 는 `CORPUS` 와 같은 이유로 뺀다(픽스처가 기대를 만들면 안 된다).
 #
 # **왜 플러그인 단위가 아니라 디렉토리 단위인가** 〔2026-08-17 fix round 3, R3-3〕:
 # 형제 import 는 `sys.path[0]`(= 실행되는 스크립트 자신의 디렉토리)에서 풀린다.
@@ -431,6 +566,7 @@ axis_tally 1b
 #    읽지 못하는 파일은 같은 인터프리터에서 아무것도 import 하지 못한다. 더 새 문법으로
 #    쓰인 소비자는 이 축의 사각지대이고, 그것은 여기서 판정하지 않는다.
 IMPSCAN="$(mktemp -t copyof-impscan-XXXXXX)" || exit 1
+lock_tmp_add "$IMPSCAN"
 cat > "$IMPSCAN" <<'IMPEOF'
 # argv: <모듈명>. stdin 으로 후보 `.py` 경로(줄 단위), stdout 으로 그 모듈을 import 하는 것.
 import ast, sys
@@ -504,6 +640,40 @@ else
   no "형제-∀ 도출: import-only 정본이 0건 — 도출 규칙이 깨졌다. 아래 ∀ 는 한 번도 안 돈다"
 fi
 
+# 〔2026-08-19 fix round 2b, M6〕 위 `listed == burned` 는 **함께 줄어드는 두 집합**을
+# 비교한다: `IMPORT_ONLY_CANONICALS` 가 `CONSUMED_PY` **로부터** 도출되므로, 어떤 정본이
+# 탐지 가능한 소비자를 전부 잃으면 양쪽에서 함께 빠지고 등식은 그대로 성립한다. F3 는
+# "분류기가 떨어뜨린다"만 닫았고 "1단계가 애초에 안 만든다"는 안 닫았다 — 오늘은
+# `n_canon=1` 이라 `≥1` 가드가 가리지만, 이 파일이 예고한 Task 19·21 이후의 `n_canon=3`
+# 에서 하나를 잃으면 조용하다. 그래서 소비자 스캔과 **무관한 자리**에 세 번째 앵커를 둔다:
+# **배포 트리에 형제 사본이 실재하는** 정본. 사본이 있다는 것은 누군가 이 모듈을 형제로
+# 배포했다는 뜻이고, 그렇다면 그 정본은 이 축의 ∀ 대상이어야 한다. 사본은 소비자 목록이
+# 비어도 사라지지 않는다. 심볼릭 링크로 배포되는 정본은 형제 **사본**이 아니라서 여기
+# 걸리지 않는다 — 그쪽 계약은 축 1a 가 진다.
+PLUGIN_PY="$(git ls-files -- 'plugins/*' | grep -E '\.py$' || true)"
+while IFS= read -r sp; do
+  [ -n "$sp" ] || continue
+  sb="$(basename -- "$sp")"
+  n_sib=0
+  while IFS= read -r pp; do
+    [ -n "$pp" ] || continue
+    [ "$(basename -- "$pp")" = "$sb" ] || continue
+    [ -L "$pp" ] && continue
+    [ -f "$pp" ] || continue
+    n_sib=$((n_sib+1))
+  done <<PLGPY
+$PLUGIN_PY
+PLGPY
+  [ "$n_sib" -ge 1 ] || continue
+  if printf '%s\n' "$IMPORT_ONLY_CANONICALS" | grep -qxF -- "$sp"; then
+    ok "형제-∀ 도출: $sp 는 배포 트리에 형제 사본 ${n_sib}건이 실재하고 축 1c 집합에 남아 있다"
+  else
+    no "형제-∀ 도출: $sp 는 배포 트리에 형제 사본 ${n_sib}건이 실재하는데 축 1c 집합에 없다 — 소비자 탐지가 이 정본을 통째로 잃었다(두 집합이 함께 줄어 위 등식은 성립한다)"
+  fi
+done <<SHPY
+$(git ls-files -- 'shared/*.py')
+SHPY
+
 # 〔2026-08-18 fix round 1, F2〕 **형제 기대 위치를 소비자가 사는 곳이 아니라
 # 그 모듈이 실제로 풀리는 곳에서 도출한다.** 앞 판본은 소비자 자신의 디렉토리를
 # 요구했고 근거를 *"scripts/ 에만 있으면 설치본에서 ImportError 다"* 로 적었는데,
@@ -542,6 +712,7 @@ fi
 SIMPROBE="$(mktemp -t copyof-probe-XXXXXX)" || exit 1
 PROBEOUT="$(mktemp -t copyof-probeout-XXXXXX)" || exit 1
 PROBEERR="$(mktemp -t copyof-probeerr-XXXXXX)" || exit 1
+lock_tmp_add "$SIMPROBE"; lock_tmp_add "$PROBEOUT"; lock_tmp_add "$PROBEERR"
 cat > "$SIMPROBE" <<'PYEOF'
 # argv: <mode> <소비자 파일> <모듈명> <결과 파일> <트리 루트>
 #   import  — 링크 없는 일반 파일 트리에서 소비자를 실제로 실행한다(설치본 대역).
@@ -594,15 +765,20 @@ dirs_of() {  # dirs_of <소비자> → 그 소비자가 형제를 푸는 디렉�
   printf '%s' "$CONSUMER_DIRS" | awk -v c="$1" '$1==c {print $2}'
 }
 
+# 〔2026-08-19 fix round 2b, H2〕 이 축이 실제로 훑은 소비자 총수. 축 끝의 `axis_tally` 가
+# 이것을 기대 최소치로 넘긴다. 초기화가 아래 루프 **밖**에 있어야, 루프를 통째로 지우고
+# F3 가드만 남기는 축소(실측 Q3)에서 0 으로 남아 RED 가 된다.
+n_cons_all=0
 for canon in $IMPORT_ONLY_CANONICALS; do
   mod="$(basename "$canon" .py)"
   if [ ! -f "$canon" ]; then no "형제-∀: 정본 $canon 이 없다"; continue; fi
   # 소비자 도출 — `.py` 만 본다 〔L1〕. 읽기는 `open()` 이라 심볼릭 링크를 따라가므로
   # (git grep 과 달리) 링크로 배포된 소비자도 정본 본문을 통해 걸린다. 모듈 자신과
   # 그 사본은 뺀다(자기 소비 방지).
-  consumers="$(git ls-files -- 'plugins/*/scripts/*' 'plugins/*/hooks/*' \
+  consumers="$(git ls-files -- 'plugins/*' | grep -vE '/(fixtures|mocks|harness)/' \
     | grep -E '\.py$' | grep -v "/${mod}\.py\$" | impscan "$mod")"
   n_cons="$(printf '%s\n' "$consumers" | grep -c . || true)"
+  n_cons_all=$((n_cons_all+n_cons))
 
   # positive(도출이 살아 있는가): 0건이면 아래 ∀ 가 통째로 vacuous 다.
   if [ "$n_cons" -ge 1 ]; then
@@ -659,6 +835,7 @@ $consumers
 EOF
 
   SIM="$(mktemp -d -t copyof-install-XXXXXX)" || exit 1
+  lock_tmp_add "$SIM"
   while IFS= read -r c; do
     [ -n "$c" ] || continue
     cdir="$(printf '%s' "$c" | sed -E 's#/[^/]+$##')"
@@ -690,7 +867,7 @@ EOF
   rm -rf "$SIM"
 done
 rm -f "$SIMPROBE" "$IMPSCAN" "$PROBEOUT" "$PROBEERR"
-axis_tally 1c
+axis_tally "$n_cons_all"
 
 # ── 축 2: 형제 설정이 배포에 실린다 ───────────────────────────────────────
 # 〔2026-08-18 fix round 1, F5〕 이 축과 축 3 만 vacuity 가드가 없었다. 아래
@@ -718,7 +895,24 @@ else
   no "conf: 축 1a 가 detect_codex.sh 의 배포 지점 수를 내지 않았다 — 아래 개수 대조의 앵커가 없다"
   n_ref_detect=""
 fi
-axis_tally 2
+
+# 〔2026-08-19 fix round 2b, M4〕 참조원 앵커는 **참조 파일 수**에 기대므로, 어떤
+# 플러그인의 유일한 참조가 산문 한 줄이면 그 줄을 고쳐 쓰는 편집이 앵커를 함께 줄인다
+# (실측: plugin-audit 은 `skills/auditing-plugins/SKILL.md` 한 줄만 기여한다). 그 상태에서
+# conf·detect 를 짝으로 untrack 하면 세 수가 **함께** 줄어 위 등식이 전부 성립한다.
+# 그래서 참조원과 무관한 두 번째 앵커를 둔다: **워킹트리 실재 수.** `git rm --cached` 는
+# 인덱스에서만 지우고 디스크에는 남기므로 두 수가 갈라진다.
+n_detect_disk=0
+for p in plugins/*/scripts/detect_codex.sh; do
+  { [ -e "$p" ] || [ -L "$p" ]; } && n_detect_disk=$((n_detect_disk+1))
+done
+assert_eq "$n_detect" "$n_detect_disk" "conf: git 에 실린 detect_codex.sh 사본 수(${n_detect})가 워킹트리 실재 수(${n_detect_disk})와 같다 (untrack 으로 인덱스에서만 조용히 빠지지 않았다)"
+n_conf_disk=0
+for p in plugins/*/scripts/codex-killswitch.conf; do
+  { [ -e "$p" ] || [ -L "$p" ]; } && n_conf_disk=$((n_conf_disk+1))
+done
+assert_eq "$n_conf" "$n_conf_disk" "conf: git 에 실린 conf 수(${n_conf})가 워킹트리 실재 수(${n_conf_disk})와 같다 (untrack 으로 인덱스에서만 조용히 빠지지 않았다)"
+axis_tally "$n_conf"
 
 # ── 축 3: 설정 부재 시 fail-closed ────────────────────────────────────────
 # kill switch 는 보안 컨트롤이다(CLAUDE.md:48). 설정을 못 읽었을 때 변수명이 빈 값으로
@@ -727,7 +921,7 @@ axis_tally 2
 # `Total: 1 | Pass: 1 | Fail: 0`). 보안 컨트롤 축이 조용히 사라지는 모양이다.
 # 그래서 실제로 태운 횟수를 세고 축 1a 의 도출과 대조한다.
 TMPC="$(mktemp -d -t copyof-failclosed-XXXXXX)" || exit 1
-trap 'rm -rf "$TMPC"' EXIT
+lock_tmp_add "$TMPC"   # 축마다 `trap ... EXIT` 를 걸면 나중 것이 앞의 것을 조용히 덮는다
 n_fc=0
 while IFS= read -r d; do
   [ -n "$d" ] || continue
@@ -750,33 +944,8 @@ if [ -n "$n_ref_detect" ]; then
 else
   no "fail-closed: 축 1a 의 도출 앵커가 없어 이 축이 vacuous 한지 판정할 수 없다"
 fi
-axis_tally 3
+axis_tally "$n_fc"
 
-# ── 축 0 후반부 — 주석 개수와 **실행된 단언 수**를 함께 묶는다 〔F1〕 ────────
-# 앞의 축 0 은 주석 텍스트만 셌다. 그래서 어떤 축의 구현 본문을 통째로 지우고 헤더
-# 주석만 남기면 세 카운터가 전부 그대로였고, 락에 단언 **개수**를 재는 것이 하나도
-# 없었다(실측: 축 1c 본문 삭제 → `n_head=3 n_axis=3` 불변 → GREEN, 단언 자리 4개 소멸).
-# 여기서 헤더가 선언한 축 집합과 **실제로 단언을 남긴** 축 집합을 대조한다 —
-# 두 방향 다 본다(선언했는데 안 돌았다 / 돌았는데 선언이 없다). 어느 쪽도 주석만
-# 고쳐서는 맞출 수 없다.
-tallied_ids="$(printf '%s' "$_AXIS_TALLY" | awk '{print $1}' | sort -u)"
-assert_eq "$tallied_ids" "$AXIS_IDS" "축-실행: 헤더가 선언한 축 집합과 실제로 단언을 실행한 축 집합이 같다"
-n_axis_ids="$(printf '%s\n' "$AXIS_IDS" | grep -c . || true)"
-if [ "$n_axis_ids" -ge 1 ]; then
-  ok "축-실행: 축 헤더에서 ${n_axis_ids}건의 축 id 를 도출 (대조 근거가 살아 있다)"
-else
-  no "축-실행: 축 id 가 0건 도출됐다 — 헤더 도출이 깨졌다. 위 집합 대조는 무의미하다"
-fi
-while IFS= read -r aid; do
-  [ -n "$aid" ] || continue
-  n_run="$(printf '%s' "$_AXIS_TALLY" | awk -v a="$aid" '$1==a {s+=$2} END{print s+0}')"
-  if [ "$n_run" -ge 1 ]; then
-    ok "축-실행: 축 $aid 가 단언 ${n_run}건을 실제로 실행했다"
-  else
-    no "축-실행: 축 $aid 가 단언을 0건 실행했다 — 헤더 주석은 있는데 본문이 죽었다(또는 통째로 지워졌다)"
-  fi
-done <<EOF
-$AXIS_IDS
-EOF
-
-finish
+# 축-실행 감사 — 정의는 파일 머리의 계측기 옆에 있다. 이 호출이 이 락의 마지막 실행
+# 줄이고, `finish` 는 그 안에 있다. 이 줄이 사라지면 EXIT 트랩이 rc=1 로 죽인다 〔H1(b)〕.
+axis_audit
