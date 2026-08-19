@@ -5,7 +5,7 @@ Per-session path: .claude/quality-gates/<session-id>/files.md.
 Triggered by Edit, Write, MultiEdit. Idempotent (dedup). Atomic rename.
 
 Kill switches:
-  DEVBREW_DISABLE_QUALITY_GATES=1   - disables this hook entirely
+  DEVBREW_QUALITY_GATES_DISABLE=1   - disables this hook entirely
   DEVBREW_SKIP_HOOKS=quality-gates:session-tracker  - skip just this one
   DEVBREW_SKIP_HOOKS=quality-gates:PostToolUse      - skip every PostToolUse hook here
 """

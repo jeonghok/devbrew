@@ -8,15 +8,15 @@ Triggers (must be explicit, never SessionStart):
 Race guard: 3-layer (fcntl lock + double-stat ns + rename-then-rmtree).
 
 Kill switches:
-  DEVBREW_DISABLE_QUALITY_GATES=1        → no-op.
+  DEVBREW_QUALITY_GATES_DISABLE=1        → no-op.
   DEVBREW_SKIP_HOOKS=quality-gates:qg-gc → no-op (이 스크립트 하나만).
 
 훅이 아니지만 `DEVBREW_SKIP_HOOKS` 토큰으로 지목할 이름을 갖는다 — 이관 전에는
 전역 스위치 하나뿐이라 "이 GC만 끈다"가 불가능했다. kill switch 는 opt-out
 컨트롤이므로 **더 잘 꺼지는** 방향이고, 회귀는 반대 방향(덜 꺼짐)뿐이다.
 
-TTL override: DEVBREW_QG_TTL_HOURS (positive int, default 24).
-Verbose: DEVBREW_QG_GC_VERBOSE=1 → print summary line on stdout.
+TTL override: DEVBREW_QUALITY_GATES_TTL_HOURS (positive int, default 24).
+Verbose: DEVBREW_QUALITY_GATES_GC_VERBOSE=1 → print summary line on stdout.
 """
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def _is_session_folder(folder: Path) -> bool:
 
 
 def _verbose() -> bool:
-    return os.environ.get("DEVBREW_QG_GC_VERBOSE") == "1"
+    return os.environ.get("DEVBREW_QUALITY_GATES_GC_VERBOSE") == "1"
 
 
 def gc(self_session_id: str | None = None) -> int:
@@ -74,7 +74,7 @@ def gc(self_session_id: str | None = None) -> int:
         lock_path.touch(exist_ok=True)
     except OSError:
         return 0
-    ttl = ttl_ns("DEVBREW_QG_TTL_HOURS")
+    ttl = ttl_ns("DEVBREW_QUALITY_GATES_TTL_HOURS")
     removed = 0
     with open(lock_path, "w") as lockfile:
         try:

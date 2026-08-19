@@ -78,7 +78,7 @@ WTPATH2=$(cd "$REPO" && "$WT" create feat-x "$SID" 2>/dev/null)
   || no "second create differs"
 
 # Kill switch
-( cd "$REPO" && DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1 \
+( cd "$REPO" && DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1 \
     "$WT" create feat-x "killtest-$SID" 2>/dev/null ) \
   && no "kill switch ignored" || ok "kill switch honored"
 

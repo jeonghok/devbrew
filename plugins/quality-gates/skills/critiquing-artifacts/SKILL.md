@@ -42,8 +42,8 @@ allowed-tools:
 ### E0 — Preflight (kill switch)
 
 두 kill switch를 존중한다. 켜져 있으면 한 줄 출력 후 즉시 종료(파일 무변경):
-- 전역 `DEVBREW_DISABLE_QUALITY_GATES=1` → `> [quality-gates] critique skipped: quality-gates globally disabled.`
-- 모드 전용 `DEVBREW_QG_DISABLE_CRITIQUE=1` → `> [quality-gates] critique mode disabled via DEVBREW_QG_DISABLE_CRITIQUE=1.`
+- 전역 `DEVBREW_QUALITY_GATES_DISABLE=1` → `> [quality-gates] critique skipped: quality-gates globally disabled.`
+- 모드 전용 `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1` → `> [quality-gates] critique mode disabled via DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1.`
 
 ### E1 — 대상 해석 + 코드/비-코드 분류
 
@@ -157,7 +157,7 @@ Agent({
   외에 형제 설정 `codex-killswitch.conf` 문제를 가리키는 `killswitch_config_missing`·
   `killswitch_config_incomplete`·`killswitch_config_invalid`도 정상적으로 올 수
   있다(정본 통합 이후 새 사유 — `kill_switch`는 이 SKILL이 사용자에게 안내하는
-  `DEVBREW_DISABLE_QG_CODEX=1`의 결과값이라 오히려 가장 흔한 사유다. `kill_switch`·
+  `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1`의 결과값이라 오히려 가장 흔한 사유다. `kill_switch`·
   `inside_codex_sandbox` 두 사유는 quality-pipeline SKILL에서는 별도 "silent" 표로
   분리돼 배너를 안 낸다 — 사용자가 직접 껐거나 재귀 방지라 결손이 아니기 때문이다.
   이 SKILL은 배너 문구를 하나로 통일하므로 그 구분을 유지하지 않지만, `<skip_reason>`
@@ -278,6 +278,6 @@ critic·adversarial·codex는 read-only(`tools:` allowlist / codex `-s read-only
 
 ## kill switch (보안 컨트롤)
 
-- `DEVBREW_DISABLE_QUALITY_GATES=1` — 전역 즉시 종료(E0).
-- `DEVBREW_QG_DISABLE_CRITIQUE=1` — 이 모드만 종료(E0).
-- `DEVBREW_DISABLE_QG_CODEX=1` — codex co-review만 skip(`detect_codex.sh` 존중), inherit-tier 단독으로 degrade.
+- `DEVBREW_QUALITY_GATES_DISABLE=1` — 전역 즉시 종료(E0).
+- `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1` — 이 모드만 종료(E0).
+- `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — codex co-review만 skip(`detect_codex.sh` 존중), inherit-tier 단독으로 degrade.

@@ -1,7 +1,7 @@
 """Regression tests: every hook honors devbrew kill switches.
 
 Per CLAUDE.md ("kill switch는 보안 컨트롤"), every hook must check both
-DEVBREW_DISABLE_QUALITY_GATES=1 (global) and DEVBREW_SKIP_HOOKS=quality-gates:<key>
+DEVBREW_QUALITY_GATES_DISABLE=1 (global) and DEVBREW_SKIP_HOOKS=quality-gates:<key>
 (per-hook). This test guards against the v1.6.1/v1.6.2 regression pattern
 where new hooks shipped without the env var checks, contradicting the README's
 "All hooks honor..." promise.
@@ -88,7 +88,7 @@ def _setup_state(cwd: str, script: str) -> None:
 def _run_hook(script: str, payload: dict, env_extra: dict, cwd: str) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     # Drop any kill switch the test runner inherited so we control the var precisely.
-    env.pop("DEVBREW_DISABLE_QUALITY_GATES", None)
+    env.pop("DEVBREW_QUALITY_GATES_DISABLE", None)
     env.pop("DEVBREW_SKIP_HOOKS", None)
     env.update(env_extra)
     if "cwd" in payload:
@@ -162,13 +162,13 @@ class KillSwitchRegressionTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
 
     def test_global_disable_silences_every_hook(self) -> None:
-        """DEVBREW_DISABLE_QUALITY_GATES=1 must suppress every hook."""
+        """DEVBREW_QUALITY_GATES_DISABLE=1 must suppress every hook."""
         for script, _ in HOOK_CONTRACTS:
             with self.subTest(hook=script):
                 _setup_state(self.tmp, script)
                 proc = _run_hook(
                     script, _payload_for(script),
-                    {"DEVBREW_DISABLE_QUALITY_GATES": "1"}, self.tmp,
+                    {"DEVBREW_QUALITY_GATES_DISABLE": "1"}, self.tmp,
                 )
                 _assert_no_side_effect(self, script, self.tmp, proc, f"global / {script}")
 
@@ -222,7 +222,7 @@ class KillSwitchRegressionTest(unittest.TestCase):
         )
 
     def test_skill_setup_qg_honors_disable_kill_switch(self) -> None:
-        """setup-qg.sh must short-circuit when DEVBREW_DISABLE_QUALITY_GATES=1.
+        """setup-qg.sh must short-circuit when DEVBREW_QUALITY_GATES_DISABLE=1.
 
         SKILL preflight P1 already checks this upstream, but defense in depth:
         the script itself must reject invocation so direct callers (tests,
@@ -230,7 +230,7 @@ class KillSwitchRegressionTest(unittest.TestCase):
         """
         script = PLUGIN_ROOT / "scripts" / "setup-qg.sh"
         env = os.environ.copy()
-        env["DEVBREW_DISABLE_QUALITY_GATES"] = "1"
+        env["DEVBREW_QUALITY_GATES_DISABLE"] = "1"
         env["CLAUDE_CODE_SESSION_ID"] = "killswitch-skill-test1"
         result = subprocess.run(
             ["bash", str(script), "--ensure"],
@@ -242,13 +242,13 @@ class KillSwitchRegressionTest(unittest.TestCase):
         )
         self.assertNotEqual(
             result.returncode, 0,
-            "DEVBREW_DISABLE_QUALITY_GATES=1 must cause setup-qg to exit non-zero "
+            "DEVBREW_QUALITY_GATES_DISABLE=1 must cause setup-qg to exit non-zero "
             f"(stdout={result.stdout!r}, stderr={result.stderr!r})",
         )
         self.assertRegex(
             result.stderr,
-            r"DEVBREW_DISABLE_QUALITY_GATES|disabled",
-            "kill-switch error message must reference DEVBREW_DISABLE_QUALITY_GATES or 'disabled'",
+            r"DEVBREW_QUALITY_GATES_DISABLE|disabled",
+            "kill-switch error message must reference DEVBREW_QUALITY_GATES_DISABLE or 'disabled'",
         )
         # And no state file should have been created.
         state = Path(self.tmp) / ".claude" / "quality-gates" / "killswitch-skill-test1" / "pipeline.md"
@@ -269,7 +269,7 @@ class KillSwitchRegressionTest(unittest.TestCase):
             with self.subTest(hook=hook_file.name):
                 src = hook_file.read_text()
                 self.assertIn(
-                    "DEVBREW_DISABLE_QUALITY_GATES", src,
+                    "DEVBREW_QUALITY_GATES_DISABLE", src,
                     f"{hook_file.name} missing global kill switch env var",
                 )
                 self.assertIn(

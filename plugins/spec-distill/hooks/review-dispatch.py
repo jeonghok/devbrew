@@ -21,7 +21,7 @@ to preserve the race-free TTL guard (AC7.2) — the L4b UserPromptSubmit
 reminder picks up the missed dispatch on the next user prompt.
 
 Kill switches:
-- DEVBREW_DISABLE_SPEC_DISTILL=1
+- DEVBREW_SPEC_DISTILL_DISABLE=1
 - DEVBREW_SKIP_HOOKS=spec-distill:Stop  (or :review-dispatch)
 - DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=<int>  (default 30; self-ref cycle guard)
 """
@@ -224,7 +224,7 @@ def main() -> int:
     )
     # 범위(scope)는 알리되 면제(permission)는 알리지 않는다. 이 mandate 가 언제까지
     # 유효한지 적지 않았더니, "이번 리뷰만 멈춰달라"는 요청에 세션 전체를 끄는
-    # 환경변수(DEVBREW_DISABLE_SPEC_DISTILL 등)가 답으로 나왔다 — 수명을 모르면
+    # 환경변수(DEVBREW_SPEC_DISTILL_DISABLE 등)가 답으로 나왔다 — 수명을 모르면
     # 영구로 가정하고 최대 화력을 고르기 때문이다. 그래서 **수명 사실만** 적는다:
     # "건너뛰어도 된다" 나 "무시하면 재발동하지 않는다" 같은 집행 공백은 적지 않는다.
     # 그것은 모델이 스스로 리뷰를 면제할 근거가 되어 Law 2 를 뚫는다. 반대로 수명

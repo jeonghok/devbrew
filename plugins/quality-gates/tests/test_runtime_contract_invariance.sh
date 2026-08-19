@@ -148,7 +148,7 @@ extract_case() {   # extract_case <case-label> → 그 case 절 본문
     inblock { print }
   ' "$WT"
 }
-CREATE_SANDBOX_SHA256="1f3f545ec57065abffcff36b7df1252bf009e6608c237dd8d9f0fb49bebdf055"
+CREATE_SANDBOX_SHA256="7585a46b39036685d47fbd08c3f748c915c30b326a65471fb97d1e422406e49e"
 MUTATION_GUARD_SHA256="000c3a26953269b237c4e272bbddfad8ea4a33b2d3f6f5787e80fecbdd1ed830"
 case_sandbox_guard_frozen() {
   local a b

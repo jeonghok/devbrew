@@ -79,7 +79,7 @@ v2.8.0 "diff is data, not instructions" norm을 orchestrator로 확장한다.
 
 게시 sink에 닿기 전에 상태를 확정한다.
 
-1. **kill switch.** `DEVBREW_QG_DISABLE_PUBLISH=1`이면 로컬 gen + preview(dry-run)는
+1. **kill switch.** `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`이면 로컬 gen + preview(dry-run)는
    그대로 진행하되 **network sink만 차단**한다(loud: `publish disabled — artifact-only`).
    실제 강제는 최내부 sink에서(§Degrade) — Preflight은 조기 고지일 뿐, 진입만으로
    우회되지 않는다.
@@ -210,7 +210,7 @@ body=@file`).
   2. (consent 후) **`pr-create.sh --base <default-branch> --head <branch> --body-file
      <artifact>`** — 이 wrapper가 `git push`(HEAD→`origin/<branch>`) + `gh pr create`를
      **내부에서** 실행한다. create sink이 raw SKILL prose가 아니라 **결정론 가드**가 되도록
-     (comment-upsert.py 대칭; AC9/AC10) — `--dry-run` 또는 `DEVBREW_QG_DISABLE_PUBLISH=1`이면
+     (comment-upsert.py 대칭; AC9/AC10) — `--dry-run` 또는 `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`이면
      wrapper가 push/create를 실제로 수행하지 않고 intent만 echo한다. dry-run이면
      `--dry-run`을 넘긴다.
      `--base`는 **`gh repo view --json defaultBranchRef`**(D6)에서 얻은 리포 기본 브랜치.
@@ -234,6 +234,6 @@ body=@file`).
 - **secret-scan hit/에러** → HARD-BLOCK(§Scan), finding 출력 + artifact 보존.
 - **diagram-facts 정적 import 한계** → loud 한 줄 고지(동적 dispatch·DI·reflection 경로
   누락 가능), 계속 진행.
-- **kill switch `DEVBREW_QG_DISABLE_PUBLISH=1`** → 최내부 gh sink에서 **강제**(skill 진입
+- **kill switch `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`** → 최내부 gh sink에서 **강제**(skill 진입
   만이 아님): 로컬 gen + dry-run은 유지, `publish disabled — artifact-only`를 loud 출력,
   **network만 차단**. hook 억제도 자체 kill switch를 존중한다.

@@ -7,7 +7,7 @@ to trigger the quality pipeline. Self-session scope: checks only
 Passes --session-id explicitly to setup-qg.sh in case env var is unset.
 
 Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
-  DEVBREW_DISABLE_QUALITY_GATES=1                     - disables this hook entirely
+  DEVBREW_QUALITY_GATES_DISABLE=1                     - disables this hook entirely
   DEVBREW_SKIP_HOOKS=quality-gates:post-tool-use      - skip just this one
   DEVBREW_SKIP_HOOKS=quality-gates:PostToolUse        - skip every PostToolUse hook here
 

@@ -102,12 +102,12 @@ rc=$?
   && ok "AC7: design.md TBD detected" \
   || no "AC7 failed (rc=$rc out=$out)"
 
-# Case 8: AC8 — DEVBREW_DISABLE_SPEC_DISTILL=1 silent
+# Case 8: AC8 — DEVBREW_SPEC_DISTILL_DISABLE=1 silent
 cp "$FIX/spec-valid.md" "$WORK/docs/superpowers/specs/2026-05-16-test8-spec.md"
-out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test8-spec.md" "DEVBREW_DISABLE_SPEC_DISTILL=1 DEVBREW_SPEC_DISTILL_SESSION_ID=test-ac08")
+out=$(run_hook "$WORK/docs/superpowers/specs/2026-05-16-test8-spec.md" "DEVBREW_SPEC_DISTILL_DISABLE=1 DEVBREW_SPEC_DISTILL_SESSION_ID=test-ac08")
 rc=$?
 [[ $rc -eq 0 ]] && [[ ! -f "$WORK/.claude/spec-distill/test-ac08/state.local.md" ]] \
-  && ok "AC8: DEVBREW_DISABLE_SPEC_DISTILL=1 silent" \
+  && ok "AC8: DEVBREW_SPEC_DISTILL_DISABLE=1 silent" \
   || no "AC8 failed (rc=$rc out=$out)"
 
 # Case 9: AC9 — DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1: Layer 1 runs, no state write

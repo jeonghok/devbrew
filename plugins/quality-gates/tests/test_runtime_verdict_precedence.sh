@@ -471,14 +471,14 @@ case_flaky_is_a_note_not_a_category() {
 
 # T78 — 폴백에서 R4 를 건너뛴다 (/qg iter-5 SR4).
 #
-# `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1` 이면 R5b 가 아예 안 돌아 HEAD 축이 전량
+# `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` 이면 R5b 가 아예 안 돌아 HEAD 축이 전량
 # `unrun` 이다. 그러면 R4 의 기준선 행은 SILENT_DROP/BASELINE_UNRUNNABLE 로만
 # 짝지어지고 verdict 는 이미 SKIP_WITH_EVIDENCE 로 cap 돼 있다 — 기준선 워크트리
 # 생성 + 전체 스위트 실행을 대가로 **아무것도 얻지 못한다.**
 case_r4_skipped_in_fallback() {
   local win; win=$(section_window '**Step R4 — 기준선 측' '① 캐시 조회')
   if [[ -z "$win" ]]; then no "R4 섹션 윈도우가 비었다 (앵커 소실)"; return; fi
-  # needle 은 **body-unique** 여야 한다. `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX`(3회)와
+  # needle 은 **body-unique** 여야 한다. `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX`(3회)와
   # `unrun\t-`(3회)는 같은 창의 *다른* 스킵 규칙(same_as_head × clean)에도 있어서,
   # 그것으로 재면 이 SR4 문단을 통째로 지워도 GREEN 이다(실측 — N6·N7 mutation).
   # 이 문단에만 있는 문구로 세 축을 각각 잰다.

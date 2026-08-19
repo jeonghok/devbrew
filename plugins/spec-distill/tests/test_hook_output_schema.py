@@ -707,7 +707,7 @@ class TestPendingReviewReminderSchema(HookOutputSchemaTestBase):
 
 
 class TestKillSwitches(HookOutputSchemaTestBase):
-    """AC10/AC11 — DEVBREW_DISABLE_SPEC_DISTILL=1 and DEVBREW_SKIP_HOOKS=spec-distill:<event>."""
+    """AC10/AC11 — DEVBREW_SPEC_DISTILL_DISABLE=1 and DEVBREW_SKIP_HOOKS=spec-distill:<event>."""
 
     def _empty_or_braces(self, stdout: str) -> bool:
         s = stdout.strip()
@@ -719,7 +719,7 @@ class TestKillSwitches(HookOutputSchemaTestBase):
         result = _run_hook(
             "review-dispatch.py", cwd=self.repo,
             env_extra={
-                "DEVBREW_DISABLE_SPEC_DISTILL": "1",
+                "DEVBREW_SPEC_DISTILL_DISABLE": "1",
                 "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
             },
         )
@@ -751,7 +751,7 @@ class TestKillSwitches(HookOutputSchemaTestBase):
         }
         result = _run_hook(
             "spec-write-validator.py", cwd=self.repo, stdin_payload=stdin_payload,
-            env_extra={"DEVBREW_DISABLE_SPEC_DISTILL": "1"},
+            env_extra={"DEVBREW_SPEC_DISTILL_DISABLE": "1"},
         )
         self.assertEqual(result.returncode, 0)
         self.assertTrue(self._empty_or_braces(result.stdout))
@@ -766,7 +766,7 @@ class TestKillSwitches(HookOutputSchemaTestBase):
             "pending-review-reminder.py", cwd=self.repo,
             stdin_payload={"user_prompt": "hi"},
             env_extra={
-                "DEVBREW_DISABLE_SPEC_DISTILL": "1",
+                "DEVBREW_SPEC_DISTILL_DISABLE": "1",
                 "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
             },
         )

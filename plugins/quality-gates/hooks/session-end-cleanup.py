@@ -5,7 +5,7 @@ Removes `.claude/quality-gates/<self-session>/` if it exists.
 Best-effort: idempotent (no-op if missing), tolerant of permission errors.
 
 Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
-  DEVBREW_DISABLE_QUALITY_GATES=1                       - disables this hook entirely
+  DEVBREW_QUALITY_GATES_DISABLE=1                       - disables this hook entirely
   DEVBREW_SKIP_HOOKS=quality-gates:session-end-cleanup  - skip just this one
   DEVBREW_SKIP_HOOKS=quality-gates:SessionEnd           - skip every SessionEnd hook here
 """
@@ -47,7 +47,7 @@ def main() -> int:
                     break
         except OSError:
             pass
-    if worktree_path and os.environ.get("DEVBREW_QG_KEEP_WORKTREE", "0") != "1":
+    if worktree_path and os.environ.get("DEVBREW_QUALITY_GATES_KEEP_WORKTREE", "0") != "1":
         plugin_root = Path(__file__).resolve().parent.parent
         wt_script = plugin_root / "scripts" / "qg-worktree.sh"
         try:

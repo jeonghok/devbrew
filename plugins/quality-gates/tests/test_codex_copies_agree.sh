@@ -248,7 +248,7 @@ EOF
 # 첫 실행부터 RED다. §4.2의 버전 바닥은 **공통 축**이므로 빼지 않는다.
 MOCKS="$QG/tests/mocks"
 declare -a PROBES=("$QG/scripts/detect_codex.sh" "$SD/scripts/detect_codex.sh" "$PA/scripts/detect_codex.sh")
-declare -a SWITCHES=(DEVBREW_DISABLE_QG_CODEX DEVBREW_DISABLE_SPEC_DISTILL_CODEX DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX)
+declare -a SWITCHES=(DEVBREW_QUALITY_GATES_DISABLE_CODEX DEVBREW_SPEC_DISTILL_DISABLE_CODEX DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX)
 
 probe_out() {   # $1 = probe, $2 = mock dir 이름, $3 = 추가 env(KEY=VAL 또는 빈 문자열)
   local extra="$3"

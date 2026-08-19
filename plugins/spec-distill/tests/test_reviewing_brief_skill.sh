@@ -91,11 +91,11 @@ QGATE_LINE="$(grep -E '^[[:space:]]*question: "brief 리뷰 파이프라인' "$S
   || no "B4: 게이트 텍스트가 하한만 말한다 — 사용자가 승인한 값보다 더 쓰게 된다"
 
 # --- T14 / AC18 : 신규 kill switch --------------------------------------------
-grep -qF 'DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW' "$SKILL" \
-  && ok "T14: 신규 kill switch 실재" || no "T14: DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW 부재"
-grep -qF 'DEVBREW_DISABLE_SPEC_DISTILL=1' "$SKILL" \
+grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW' "$SKILL" \
+  && ok "T14: 신규 kill switch 실재" || no "T14: DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW 부재"
+grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE=1' "$SKILL" \
   && ok "T14: 전역 kill switch 존중" || no "T14: 전역 kill switch 부재"
-grep -qF 'DEVBREW_DISABLE_SPEC_DISTILL_CODEX' "$SKILL" \
+grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_CODEX' "$SKILL" \
   && ok "T14: codex kill switch 존중" || no "T14: codex kill switch 부재"
 grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' "$SKILL" \
   && ok "T14: 웹 kill switch 존중" || no "T14: 웹 kill switch 부재"
@@ -481,7 +481,7 @@ grep -qE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*="\$\(bash "\$PR/scripts/detect_cod
   && ok "AC9: detect_codex.sh 선행 확인이 실행 라인 (줄-시작 앵커)" || no "AC9: detect_codex.sh 호출 라인 부재 — 가용성 판정 없이 러너를 부른다"
 
 # --- AC18/AC9 : codex 호출 지점이 **전부** 가용성 게이트 안에 있다 ------------
-# kill switch(DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1)는 detect_codex.sh를 거쳐 $codex_avail로만
+# kill switch(DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1)는 detect_codex.sh를 거쳐 $codex_avail로만
 # 전달된다 — 러너는 이 변수를 보지 않는다(run_spec_codex_reviewer.sh와 같은 호출자-게이트
 # 규약). 게이트 밖 호출이 하나라도 있으면 (a) cost_class: high skill에서 사용자의 명시적
 # opt-out이 무시된 채 외부 모델에 지출이 나가고, (b) 1-c가 남기는 affected_axis: all record가

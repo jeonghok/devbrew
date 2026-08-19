@@ -45,13 +45,13 @@ mtime2=$(stat -f %m "$STATE_FILE" 2>/dev/null || stat -c %Y "$STATE_FILE")
 assert "--ensure idempotent (no rewrite)" "test '$mtime1' = '$mtime2'"
 cd / && rm -rf "$TMPDIR"
 
-# --- Case 3: clamp DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS=99 → 10 (C3) ---
+# --- Case 3: clamp DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS=99 → 10 (C3) ---
 TMPDIR=$(mktemp -d); cd "$TMPDIR"
 SID="test-clamp-$$"
 unset CLAUDE_CODE_SESSION_ID
-DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS=99 "$SCRIPT" --session-id "$SID" >/dev/null 2>err
+DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS=99 "$SCRIPT" --session-id "$SID" >/dev/null 2>err
 STATE_FILE=".claude/quality-gates/$SID/pipeline.md"
-assert "DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS=99 clamped to 10" "grep -q 'runtime_max_resolutions: 10' '$STATE_FILE'"
+assert "DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS=99 clamped to 10" "grep -q 'runtime_max_resolutions: 10' '$STATE_FILE'"
 assert "clamp warning emitted on stderr" "grep -q 'exceeds maximum 10' err"
 cd / && rm -rf "$TMPDIR"
 
@@ -59,7 +59,7 @@ cd / && rm -rf "$TMPDIR"
 TMPDIR=$(mktemp -d); cd "$TMPDIR"
 SID="test-nonnum-$$"
 unset CLAUDE_CODE_SESSION_ID
-DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS=abc "$SCRIPT" --session-id "$SID" >/dev/null 2>err
+DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS=abc "$SCRIPT" --session-id "$SID" >/dev/null 2>err
 STATE_FILE=".claude/quality-gates/$SID/pipeline.md"
 assert "non-numeric env defaults to 3" "grep -q 'runtime_max_resolutions: 3' '$STATE_FILE'"
 assert "non-numeric warning emitted on stderr" "grep -q 'is not numeric' err"
@@ -128,7 +128,7 @@ assert "setup-qg --ensure deletes stale publish-eligible.md even past the early-
 cd / && rm -rf "$TMPDIR"
 
 # --- Case 8: global-kill clears stale publish-eligible.md (v2.10.0 S1 backstop) ---
-# The DEVBREW_DISABLE_QUALITY_GATES early-exit is UPSTREAM of the arg-parsed
+# The DEVBREW_QUALITY_GATES_DISABLE early-exit is UPSTREAM of the arg-parsed
 # sentinel cleanup, so without a dedicated backstop a stale sentinel would
 # survive a globally-disabled invocation — leaving the qg.md offer's global-kill
 # guard as prose-only enforcement of a security control (CLAUDE.md: kill switch
@@ -142,7 +142,7 @@ SID_DIR=".claude/quality-gates/$SID"
 mkdir -p "$SID_DIR"
 printf '%s\n' '<!-- qg-publish-eligible:v1 -->' 'verdict: clean' > "$SID_DIR/publish-eligible.md"
 assert "Case 8 fixture: stale sentinel present before global-kill invocation" "test -e '$SID_DIR/publish-eligible.md'"
-DEVBREW_DISABLE_QUALITY_GATES=1 CLAUDE_CODE_SESSION_ID="$SID" "$SCRIPT" --ensure >/dev/null 2>&1; ec8=$?
+DEVBREW_QUALITY_GATES_DISABLE=1 CLAUDE_CODE_SESSION_ID="$SID" "$SCRIPT" --ensure >/dev/null 2>&1; ec8=$?
 assert "global-kill invocation exits non-zero (pipeline disabled)" "test '$ec8' -ne 0"
 assert "global-kill clears stale publish-eligible.md (structural backstop, not prose-only)" "test ! -e '$SID_DIR/publish-eligible.md'"
 cd / && rm -rf "$TMPDIR"

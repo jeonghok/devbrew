@@ -187,9 +187,9 @@ for i in "${!GATED_RUNNER[@]}"; do
   plugin_root_dir="$(cd "$(dirname "$sk")/../.." && pwd)"
   plugin="$(basename "$plugin_root_dir")"
   case "$plugin" in
-    quality-gates) sw=DEVBREW_DISABLE_QG_CODEX ;;
-    spec-distill)  sw=DEVBREW_DISABLE_SPEC_DISTILL_CODEX ;;
-    plugin-audit)  sw=DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX ;;
+    quality-gates) sw=DEVBREW_QUALITY_GATES_DISABLE_CODEX ;;
+    spec-distill)  sw=DEVBREW_SPEC_DISTILL_DISABLE_CODEX ;;
+    plugin-audit)  sw=DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX ;;
     *) no "$label: 알 수 없는 플러그인 $plugin — kill switch 변수를 특정할 수 없다"; continue ;;
   esac
 

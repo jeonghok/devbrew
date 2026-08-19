@@ -58,7 +58,7 @@ Default: **{{MERGE_STRATEGY}}**
 
 ## Server-Side Enforcement
 
-> **이 플러그인의 hook은 client-side 검증만** — server-side enforcement는 GitHub Settings → Branches → Branch protection rules (또는 organization 단위 Repository rulesets)에서 별도 설정 필요. Hook이 우회되거나 (`DEVBREW_DISABLE_PROJECT_INIT=1`) 다른 도구에서 push될 때 server-side만이 진정한 enforcement.
+> **이 플러그인의 hook은 client-side 검증만** — server-side enforcement는 GitHub Settings → Branches → Branch protection rules (또는 organization 단위 Repository rulesets)에서 별도 설정 필요. Hook이 우회되거나 (`DEVBREW_PROJECT_INIT_DISABLE=1`) 다른 도구에서 push될 때 server-side만이 진정한 enforcement.
 
 `main` (또는 보호 대상 브랜치) protection 권장 설정:
 

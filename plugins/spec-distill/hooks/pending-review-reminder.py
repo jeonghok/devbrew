@@ -6,7 +6,7 @@ older than TTL (default 30s), re-emit the Stop hook's mandate so the next-turn
 agent doesn't silently drop the dispatch.
 
 Kill switches:
-- DEVBREW_DISABLE_SPEC_DISTILL=1
+- DEVBREW_SPEC_DISTILL_DISABLE=1
 - DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit  (or :reminder)
 - DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=<int>  (default 30; shared with Stop hook)
 """

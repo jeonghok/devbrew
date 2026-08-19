@@ -22,7 +22,7 @@ parse만 되고 `check()`엔 전달되지 않는 dead flag — cwd 민감성의 
 
 ## phase 0 — consent (dispatch 전 필수)
 
-1. **kill switch**: `DEVBREW_DISABLE_PLUGIN_AUDIT=1`이면 즉시 종료(no-op).
+1. **kill switch**: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`이면 즉시 종료(no-op).
 2. **target 검증** — `<target>`이 **평범한 플러그인 이름**인지 확인한다: `plugins/<target>/`이 실존하는
    디렉토리여야 하고, `../`나 경로 구분자(`/`)를 포함하면 즉시 거부한다. 이 검증은 scope 문자열이나
    샌드박스 경로(`run-own-tests.sh`, `check-integrity.sh --target`)에 target을 꽂아 넣기 **전에** 끝낸다
@@ -98,7 +98,7 @@ abort가 아니다** — E(`check-plugin-structure.sh`)는 plugin-dev 부재 시
    붙인다.
 
    축마다 축 질문을 파일(`$AXIS_FILE`)로 쓰고 아래 게이트를 **그대로** 실행한다. kill switch는
-   `DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX=1`이며 `detect_codex.sh`가 그것을 읽는다 — 러너는 읽지
+   `DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX=1`이며 `detect_codex.sh`가 그것을 읽는다 — 러너는 읽지
    않는다(게이트는 호출자 책임).
 
 <!-- codex-gate:begin runner=run_audit_codex_reviewer.sh -->
@@ -201,7 +201,7 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
 
 ## kill switch / degrade
 
-- `DEVBREW_DISABLE_PLUGIN_AUDIT=1` → 즉시 종료.
+- `DEVBREW_PLUGIN_AUDIT_DISABLE=1` → 즉시 종료.
 - plugin-dev 부재(E) → loud degrade(core는 F가 커버). quality-gates 부재(run-own-tests) → 자체 테스트
   skip 배너.
 - codex 미설치 → Claude-only degrade 배너(model diversity 없음).

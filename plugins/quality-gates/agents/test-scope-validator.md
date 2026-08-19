@@ -121,7 +121,7 @@ Rules:
   stale ACs far from the diff are noise).
 
 **No-spec fallback (loud).** If `spec_path` is absent or the literal `none`
-(the SKILL passes `none` when `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1`), do NOT
+(the SKILL passes `none` when `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1`), do NOT
 emit `ac_coverage`. Instead, emit exactly one diagnostic line as prose BEFORE
 your YAML block (the "one YAML block, nothing after it" rule forbids trailing
 prose, not a leading diagnostic):

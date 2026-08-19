@@ -25,7 +25,7 @@
 #   (c) 락이 **plain scalar 근거**로 통과시켰다면 파서도 문자열로 resolve 해야 하고,
 #       comma 토큰 집합이 락이 검증한 토큰 집합과 **정확히 같아야** 한다.
 #
-#   "락이 믿은 값" 은 추측하지 않는다 — 락이 `DEVBREW_AGENT_TOOLS_LOCK_EMIT=1` 에서 내보내는
+#   "락이 믿은 값" 은 추측하지 않는다 — 락이 `DEVBREW_QUALITY_GATES_AGENT_TOOLS_LOCK_EMIT=1` 에서 내보내는
 #   `DECL` 라인에서 읽는다. 락의 로직을 이 파일에 다시 구현하면 같은 버그를 두 번 쓰게 되어
 #   (순환) 아무것도 증명하지 못한다.
 #
@@ -127,7 +127,7 @@ dcase() {
   # 실패한 printf 의 stdio 버퍼가 토큰 루프의 process substitution 으로 새어
   # verdict 를 뒤집는다. 채널을 호출자가 명시적으로 주는 것이 그 계약이다.
   local got_lock decl
-  if decl="$(DEVBREW_AGENT_TOOLS_LOCK_EMIT=1 bash "$LOCK" "$TMP" 3>&1 1>/dev/null 2>/dev/null)"; then
+  if decl="$(DEVBREW_QUALITY_GATES_AGENT_TOOLS_LOCK_EMIT=1 bash "$LOCK" "$TMP" 3>&1 1>/dev/null 2>/dev/null)"; then
     got_lock=GREEN
   else
     got_lock=RED

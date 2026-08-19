@@ -23,8 +23,8 @@ CUR_MINOR="$(grep -oE '"version":[[:space:]]*"[0-9]+\.[0-9]+' "$PLUGIN_ROOT/.cla
 grep -qE "^## \[${CUR_MINOR//./\\.}\.[0-9]+\]" "$PLUGIN_ROOT/CHANGELOG.md" \
   && ok "CHANGELOG has entry for current minor [$CUR_MINOR.x]" || no "CHANGELOG missing entry for plugin.json current minor $CUR_MINOR (버전 bump 하고 CHANGELOG 섹션 잊음?)"
 README="$PLUGIN_ROOT/README.md"
-awk '/^### Kill switches/{f=1;next} f&&/^## /{f=0} f' "$README" | grep -qF 'DEVBREW_QG_DISABLE_PUBLISH' \
-  && ok "README kill-switch inventory lists DEVBREW_QG_DISABLE_PUBLISH" || no "kill switch not inventoried"
+awk '/^### Kill switches/{f=1;next} f&&/^## /{f=0} f' "$README" | grep -qF 'DEVBREW_QUALITY_GATES_DISABLE_PUBLISH' \
+  && ok "README kill-switch inventory lists DEVBREW_QUALITY_GATES_DISABLE_PUBLISH" || no "kill switch not inventoried"
 grep -qiE 'deterministic envelope|model-authored|모델 저술' "$PLUGIN_ROOT/README.md" \
   && ok "README honesty framing present" || no "honesty framing missing"
 grep -qF '/qg-publish' "$PLUGIN_ROOT/commands/qg.md" \

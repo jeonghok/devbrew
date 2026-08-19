@@ -13,7 +13,7 @@
 - On fail: exit 2 + stderr; stdout `{"decision": "block", "reason": "..."}` for safety.
 
 Kill switches:
-- DEVBREW_DISABLE_SPEC_DISTILL=1
+- DEVBREW_SPEC_DISTILL_DISABLE=1
 - DEVBREW_SKIP_HOOKS=spec-distill:PostToolUse  (or :validator)
 - DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1  (Layer 1 only; skip state write)
 - DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1  (skip design.md)

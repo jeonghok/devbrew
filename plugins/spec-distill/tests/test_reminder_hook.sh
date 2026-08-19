@@ -82,8 +82,8 @@ out=$(run_hook "DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit")
   && ok "AC8: kill switch (UserPromptSubmit) suppresses emit" \
   || no "AC8 (UserPromptSubmit) unexpected output: '$out'"
 
-out=$(run_hook "DEVBREW_DISABLE_SPEC_DISTILL=1")
+out=$(run_hook "DEVBREW_SPEC_DISTILL_DISABLE=1")
 [[ -z "$out" ]] \
-  && ok "AC8: kill switch (DISABLE_SPEC_DISTILL) suppresses emit" \
+  && ok "AC8: kill switch (SPEC_DISTILL_DISABLE) suppresses emit" \
   || no "AC8 (DISABLE) unexpected output: '$out'"
 finish

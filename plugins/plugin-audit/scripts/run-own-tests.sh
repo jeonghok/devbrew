@@ -29,7 +29,7 @@ TO=""; command -v timeout >/dev/null && TO="timeout 120"; [ -z "$TO" ] && comman
 
 # 샌드박스 생성 (3줄 stdout)
 sb_out=$(bash "$QG" create-sandbox "$SID" 2>/dev/null); rc=$?
-if [ $rc -eq 3 ]; then emit "$(fact false null null false 'sandbox kill-switch (DEVBREW_QG_DISABLE_RUNTIME_SANDBOX)')"; exit 0; fi
+if [ $rc -eq 3 ]; then emit "$(fact false null null false 'sandbox kill-switch (DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX)')"; exit 0; fi
 if [ $rc -ne 0 ]; then emit "$(fact false null null false 'sandbox 생성 실패')"; exit 0; fi
 SANDBOX=$(echo "$sb_out" | sed -n '1p'); BASE=$(echo "$sb_out" | sed -n '2p'); DIGEST=$(echo "$sb_out" | sed -n '3p')
 

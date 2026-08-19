@@ -2,7 +2,7 @@
 # pr-create.sh — kill-switch/dry-run-enforcing wrapper for the PR-create sink
 # (git push + gh pr create), so the create path is a DETERMINISTIC guard, not
 # SKILL prose (AC9/AC10 — parity with comment-upsert.py). --dry-run OR
-# DEVBREW_QG_DISABLE_PUBLISH=1 → echo intent, perform NO push/create.
+# DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1 → echo intent, perform NO push/create.
 set -euo pipefail
 dry=0; base=""; head=""; body=""
 while [[ $# -gt 0 ]]; do
@@ -14,8 +14,8 @@ while [[ $# -gt 0 ]]; do
     *) shift;;
   esac
 done
-if [[ "${DEVBREW_QG_DISABLE_PUBLISH:-}" == "1" || "$dry" -eq 1 ]]; then
-  why="dry-run"; [[ "${DEVBREW_QG_DISABLE_PUBLISH:-}" == "1" ]] && why="publish disabled"
+if [[ "${DEVBREW_QUALITY_GATES_DISABLE_PUBLISH:-}" == "1" || "$dry" -eq 1 ]]; then
+  why="dry-run"; [[ "${DEVBREW_QUALITY_GATES_DISABLE_PUBLISH:-}" == "1" ]] && why="publish disabled"
   echo "action: create ($why — network suppressed)"
   exit 0
 fi

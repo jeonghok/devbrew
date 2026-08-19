@@ -9,7 +9,7 @@ _BUGGY_ARTIFACTS_DIR_FORM = re.compile(r"--artifacts docs/audits/\s")
 # 각 불변식 = body-unique 문구 (헤더-satisfiable 금지)
 INVARIANTS = [
     "cost_class: high",                                    # 지출 게이트 owner
-    "DEVBREW_DISABLE_PLUGIN_AUDIT",                         # kill switch
+    "DEVBREW_PLUGIN_AUDIT_DISABLE",                         # kill switch
     "AskUserQuestion",                                     # 지출 동의 게이트 (C2)
     "check-law2.py",                                        # pre-0 정적 게이트
     "check-no-verdict-injection.py",                       # B

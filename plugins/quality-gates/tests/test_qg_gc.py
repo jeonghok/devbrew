@@ -13,9 +13,9 @@ GC = Path(__file__).resolve().parent.parent / "scripts" / "qg-gc.py"
 
 def run_gc(cwd, env_extra=None, args=None):
     env = os.environ.copy()
-    env.pop("DEVBREW_QG_GC_VERBOSE", None)
-    env.pop("DEVBREW_QG_TTL_HOURS", None)
-    env.pop("DEVBREW_DISABLE_QUALITY_GATES", None)
+    env.pop("DEVBREW_QUALITY_GATES_GC_VERBOSE", None)
+    env.pop("DEVBREW_QUALITY_GATES_TTL_HOURS", None)
+    env.pop("DEVBREW_QUALITY_GATES_DISABLE", None)
     if env_extra:
         env.update(env_extra)
     cmd = [sys.executable, str(GC)]
@@ -43,7 +43,7 @@ class TestQgGc(unittest.TestCase):
 
     def test_old_folder_removed(self):
         old = make_session_dir(self.tmp, "abcd1234efgh", mtime_offset_seconds=-25 * 3600)
-        proc = run_gc(self.tmp, env_extra={"DEVBREW_QG_GC_VERBOSE": "1"})
+        proc = run_gc(self.tmp, env_extra={"DEVBREW_QUALITY_GATES_GC_VERBOSE": "1"})
         self.assertEqual(proc.returncode, 0, msg=proc.stderr)
         self.assertFalse(old.exists(), msg=f"stale folder should be removed; stderr={proc.stderr}")
         self.assertIn("removed 1", proc.stdout)
@@ -80,7 +80,7 @@ class TestQgGc(unittest.TestCase):
 
     def test_kill_switch(self):
         old = make_session_dir(self.tmp, "killsess1234", mtime_offset_seconds=-25 * 3600)
-        proc = run_gc(self.tmp, env_extra={"DEVBREW_DISABLE_QUALITY_GATES": "1"})
+        proc = run_gc(self.tmp, env_extra={"DEVBREW_QUALITY_GATES_DISABLE": "1"})
         self.assertEqual(proc.returncode, 0)
         self.assertTrue(old.exists(), msg="kill switch must skip GC")
 
@@ -106,7 +106,7 @@ class TestQgGc(unittest.TestCase):
 
     def test_invalid_ttl_falls_back_to_default(self):
         old = make_session_dir(self.tmp, "ttlsess12345", mtime_offset_seconds=-25 * 3600)
-        proc = run_gc(self.tmp, env_extra={"DEVBREW_QG_TTL_HOURS": "not-a-number"})
+        proc = run_gc(self.tmp, env_extra={"DEVBREW_QUALITY_GATES_TTL_HOURS": "not-a-number"})
         self.assertEqual(proc.returncode, 0)
         self.assertFalse(old.exists(), msg="invalid TTL should fall back to 24h")
 

@@ -43,7 +43,7 @@ for kw in 'brief-critic' 'brief-direction-reviewer' 'brief-readback' 'reviewing-
     && ok "T15: README에 신규 컴포넌트 '$kw'" || no "T15: README에 '$kw' 부재"
 done
 KS="$(section '^## Kill switches' "$RM")"
-grep -qF 'DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW' <<<"$KS" \
+grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW' <<<"$KS" \
   && ok "T15: README Kill switches에 신규 스위치" || no "T15: 신규 kill switch 미문서화"
 grep -qF 'Law 2' <<<"$PRIN" && ok "T15: Principles Instantiated에 Law 2" || no "T15: Law 2 항목 부재"
 
@@ -78,7 +78,7 @@ ORPHAN="$(grep -nE '^[0-9]+\.[0-9]*\.? ' <<<"$FLOW" || true)"
   && ok "C4: Flow 섹션에 고아 리스트 번호 없음" \
   || no "C4: Flow 섹션에 붙을 리스트가 없는 번호 항목: ${ORPHAN}"
 # codex kill switch가 brief 파이프라인까지 문서화됐는가 (design-doc 경로만 적혀 있었다)
-KS_CODEX="$(grep -F 'DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1' <<<"$KS" | head -1)"
+KS_CODEX="$(grep -F 'DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1' <<<"$KS" | head -1)"
 { grep -qF 'reviewing-brief' <<<"$KS_CODEX" && grep -qE '3곳|세 곳' <<<"$KS_CODEX"; } \
   && ok "C4: codex kill switch가 brief 파이프라인 호출 지점까지 문서화" \
   || no "C4: codex kill switch가 design-doc 경로만 말한다 — brief 3개 호출 지점이 미문서화"

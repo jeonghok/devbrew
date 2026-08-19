@@ -339,7 +339,7 @@ class TestArmLedgerCLIRejects(unittest.TestCase):
 
     def _run(self, *args, **extra_env):
         env = dict(os.environ)
-        env.pop("DEVBREW_DISABLE_SPEC_DISTILL", None)
+        env.pop("DEVBREW_SPEC_DISTILL_DISABLE", None)
         env.update(extra_env)
         return subprocess.run(
             [sys.executable, str(PLUGIN_ROOT / "scripts" / "arm_ledger.py"), *args],
@@ -420,7 +420,7 @@ class TestArmLedgerCLIRejects(unittest.TestCase):
 
     def test_kill_switch_is_a_noop_that_writes_nothing(self):
         cp = self._run("mark-reviewed", "valid-sid-0001", SPEC,
-                       DEVBREW_DISABLE_SPEC_DISTILL="1")
+                       DEVBREW_SPEC_DISTILL_DISABLE="1")
         self.assertEqual(cp.returncode, 0)
         self.assertIn("no-op", cp.stderr)
         # rc-only assert 는 "돌고 나서 0 을 냈다" 와 구분하지 못한다 — 부작용까지 본다.

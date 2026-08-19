@@ -27,7 +27,7 @@ grep -qF 'publishing-pr-understanding' <<<"$OFFER" && ok "offer delegates to pub
 grep -qF '/qg-publish' <<<"$OFFER" && ok "offer has /qg-publish floor" || no "no /qg-publish floor in offer"
 
 # (5) kill switch 체크.
-grep -qF 'DEVBREW_QG_DISABLE_PUBLISH' <<<"$OFFER" && ok "offer honors DEVBREW_QG_DISABLE_PUBLISH" || no "kill switch not checked in offer"
+grep -qF 'DEVBREW_QUALITY_GATES_DISABLE_PUBLISH' <<<"$OFFER" && ok "offer honors DEVBREW_QUALITY_GATES_DISABLE_PUBLISH" || no "kill switch not checked in offer"
 
 # (6) sentinel 유효성(마커) 체크.
 grep -qF 'publish-eligible.md' <<<"$OFFER" && ok "offer checks publish-eligible sentinel" || no "sentinel presence not checked in offer"
@@ -38,10 +38,10 @@ grep -qF 'publish-eligible.md' <<<"$OFFER" && ok "offer checks publish-eligible 
 # to the OFFER window + body-unique literal (this marker id is not in a header).
 grep -qF 'qg-publish-eligible:v1' <<<"$OFFER" && ok "offer requires the exact v1 sentinel marker (validity gate)" || no "marker-validity gate missing from offer (filename presence alone is insufficient)"
 
-# (7) GLOBAL kill switch 체크 (offer must ALSO honor DEVBREW_DISABLE_QUALITY_GATES —
+# (7) GLOBAL kill switch 체크 (offer must ALSO honor DEVBREW_QUALITY_GATES_DISABLE —
 # setup-qg.sh exits at its own global-kill check before reaching its stale-sentinel
 # delete, so a stale sentinel from a prior same-session run can survive; the offer
 # must not fire on that stale sentinel when the global switch is set). Scoped to
 # the OFFER window + body-unique (this literal doesn't appear in a header).
-grep -qF 'DEVBREW_DISABLE_QUALITY_GATES' <<<"$OFFER" && ok "offer honors DEVBREW_DISABLE_QUALITY_GATES (global kill)" || no "global kill switch not checked in offer"
+grep -qF 'DEVBREW_QUALITY_GATES_DISABLE' <<<"$OFFER" && ok "offer honors DEVBREW_QUALITY_GATES_DISABLE (global kill)" || no "global kill switch not checked in offer"
 finish

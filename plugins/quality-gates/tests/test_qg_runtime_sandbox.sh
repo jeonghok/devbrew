@@ -101,7 +101,7 @@ rm -rf "$REPO"
 
 echo "[create-sandbox: kill switch]"
 REPO=$(mk_repo)
-( cd "$REPO" && DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1 "$WT" create-sandbox "kill01234567" 2>/dev/null )
+( cd "$REPO" && DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1 "$WT" create-sandbox "kill01234567" 2>/dev/null )
 rc=$?
 [ "$rc" -eq 3 ] && ok "kill switch → exit 3" || no "kill switch exit was $rc (want 3)"
 rm -rf "$REPO"

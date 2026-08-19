@@ -17,7 +17,7 @@ Working-directory contract: state root derived from payload['cwd']; falls
 back loudly.
 
 Kill switches:
-  DEVBREW_DISABLE_QUALITY_GATES=1                          - disables this hook entirely
+  DEVBREW_QUALITY_GATES_DISABLE=1                          - disables this hook entirely
   DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor   - skip just this one
   DEVBREW_SKIP_HOOKS=quality-gates:SessionStart            - skip every SessionStart hook here
 

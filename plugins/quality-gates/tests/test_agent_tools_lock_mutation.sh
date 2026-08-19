@@ -228,13 +228,13 @@ emit_expect() {  # emit_expect <RED|GREEN> <EMIT 값|UNSET> <open|closed> <설�
     if [ "$ev" = UNSET ]; then
       bash -c 'bash "$0" "$1" >&- 2>/dev/null' "$LOCK" "$TMP"; rc=$?
     else
-      DEVBREW_AGENT_TOOLS_LOCK_EMIT="$ev" bash -c 'bash "$0" "$1" >&- 2>/dev/null' "$LOCK" "$TMP"; rc=$?
+      DEVBREW_QUALITY_GATES_AGENT_TOOLS_LOCK_EMIT="$ev" bash -c 'bash "$0" "$1" >&- 2>/dev/null' "$LOCK" "$TMP"; rc=$?
     fi
   else
     if [ "$ev" = UNSET ]; then
       bash "$LOCK" "$TMP" >/dev/null 2>&1; rc=$?
     else
-      DEVBREW_AGENT_TOOLS_LOCK_EMIT="$ev" bash "$LOCK" "$TMP" >/dev/null 2>&1; rc=$?
+      DEVBREW_QUALITY_GATES_AGENT_TOOLS_LOCK_EMIT="$ev" bash "$LOCK" "$TMP" >/dev/null 2>&1; rc=$?
     fi
   fi
   if [ "$rc" -eq 0 ]; then got=GREEN; else got=RED; fi

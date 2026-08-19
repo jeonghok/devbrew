@@ -15,7 +15,7 @@
 #                  the spec is resolved script-internally via discover-spec.sh
 #                  and its AC section is extracted. When no spec exists, the
 #                  <spec_context> slot is left empty (v2.0.0 behavior).
-#   DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1 — force the no-spec path even when a
+#   DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1 — force the no-spec path even when a
 #                  spec exists (empty <spec_context>; loud log emitted).
 #
 # Emits: YAML to <output_yaml_path>. Schema (최상위 `agent:` 키는 **없다** — 산출자
@@ -142,8 +142,8 @@ STDERR_FILE="$SCRATCH/codex.stderr"
 # Resolution is script-internal: invocation parity with discover-plan.sh means
 # the SKILL allowed-tools list is NOT touched. Graceful + LOUD on every branch.
 SPEC_AC="/dev/null"
-if [[ "${DEVBREW_QG_DISABLE_SPEC_CONFORMANCE:-}" == "1" ]]; then
-  echo "[quality-gates] codex spec context: DISABLED via DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1 — empty <spec_context>." >&2
+if [[ "${DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE:-}" == "1" ]]; then
+  echo "[quality-gates] codex spec context: DISABLED via DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1 — empty <spec_context>." >&2
 elif [[ -n "${SPEC_AC_FILE:-}" && -f "${SPEC_AC_FILE}" ]]; then
   SPEC_AC="$SPEC_AC_FILE"
   echo "[quality-gates] codex spec context: using explicit SPEC_AC_FILE=$SPEC_AC_FILE" >&2
@@ -195,7 +195,7 @@ fi
 # (`run_brief_codex_reviewer.sh`가 이미 쓰던 계약을 전파한 것이다.)
 #
 # Direct codex invocation — no per-call timeout (hang risk accepted; backstops:
-# Bash tool timeout, DEVBREW_DISABLE_QG_CODEX=1, /cancel-qg). Layer 3 sandbox
+# Bash tool timeout, DEVBREW_QUALITY_GATES_DISABLE_CODEX=1, /cancel-qg). Layer 3 sandbox
 # (-s read-only) preserved. `|| EXIT_CODE=$?` keeps capture safe under set -e.
 #
 # 웹 posture를 **명시한다.** 미지정은 codex 기본값(`web_search = "cached"`)에 맡기는

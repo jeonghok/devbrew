@@ -14,7 +14,7 @@
 # — 이 러너는 그 kill switch를 읽지 않는다(test_run_audit_codex_reviewer.py가 그
 # 변수명 리터럴 부재를 고정한다). 다만 "웹 검색을 켤지"는 이 러너 **자신**의 결정이다
 # (형제 러너 run_spec_codex_reviewer.sh · run_brief_codex_reviewer.sh와 동형) —
-# `DEVBREW_DISABLE_PLUGIN_AUDIT_WEB`은 아래에서 읽는다(AC21, Task 18).
+# `DEVBREW_PLUGIN_AUDIT_DISABLE_WEB`은 아래에서 읽는다(AC21, Task 18).
 #
 # Usage: run_audit_codex_reviewer.sh <axis_question_file> <project_dir> <output_json_path>
 #
@@ -93,13 +93,13 @@ STDERR_FILE="$SCRATCH/codex.stderr"
 # 그 실패는 러너가 항상 exit 0을 내므로 조용하다. `< /dev/null`을 두면 안 된다 —
 # "No prompt provided via stdin." + exit 1이 된다.
 #
-# 웹 검색: 사용자 kill switch(DEVBREW_DISABLE_PLUGIN_AUDIT_WEB=1)만 끈다. 그 밖에는
+# 웹 검색: 사용자 kill switch(DEVBREW_PLUGIN_AUDIT_DISABLE_WEB=1)만 끈다. 그 밖에는
 # 명시적으로 켠다 — 감사 preamble이 외부 근거를 요구한다(P21 preamble을 가진 유일한
 # 경로). `web_search="live"`: `tools.web_search=true` 단독은 codex 기본 모드(`cached`,
 # 최대 12일 지연 실측 — V1 probe, 2026-08-09)라 `live`로 승격해야 실제 현재 웹에
 # 닿는다. `allowed_domains`로 좁히지 않는다 — 조사 능력을 억제하지 않는다.
 WEB_ARGS=(-c 'tools.web_search=true' -c 'web_search="live"')
-if [[ "${DEVBREW_DISABLE_PLUGIN_AUDIT_WEB:-0}" == "1" ]]; then
+if [[ "${DEVBREW_PLUGIN_AUDIT_DISABLE_WEB:-0}" == "1" ]]; then
   WEB_ARGS=(-c 'tools.web_search=false' -c 'web_search="disabled"')
   echo "[plugin-audit] web 비활성 — codex 감사가 리포 근거만 사용 (외부 사실 확인 없음)" >&2
 fi

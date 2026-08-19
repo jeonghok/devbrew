@@ -50,7 +50,7 @@ class TestSkillCodexGate(unittest.TestCase):
                         "detect가 러너보다 먼저 와야 게이트다")
 
     def test_kill_switch_is_documented(self):
-        self.assertIn("DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX", self.body,
+        self.assertIn("DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX", self.body,
                       "kill switch가 문서에서 발견 가능해야 한다 (P21)")
 
     def test_degrade_advisory_is_loud(self):

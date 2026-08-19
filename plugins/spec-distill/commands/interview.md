@@ -14,7 +14,7 @@ argument-hint: "[rough request]"
 
 다음 환경변수가 set이면 즉시 종료 (no-op):
 
-- `DEVBREW_DISABLE_SPEC_DISTILL=1` — 모든 spec-distill 동작 abort.
+- `DEVBREW_SPEC_DISTILL_DISABLE=1` — 모든 spec-distill 동작 abort.
 
 (`DEVBREW_SKIP_HOOKS` 는 hook 영역으로, command 자체에는 영향 없음.)
 

@@ -18,7 +18,7 @@ def run(env_extra=None, path_dirs=None):
     env = dict(os.environ)
     env.pop("CODEX_SANDBOX", None)
     env.pop("CODEX_SESSION_ID", None)
-    env.pop("DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX", None)
+    env.pop("DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX", None)
     if path_dirs is not None:
         env["PATH"] = ":".join(str(p) for p in path_dirs) + ":/usr/bin:/bin"
     env.update(env_extra or {})
@@ -38,7 +38,7 @@ class TestDetectCodex(unittest.TestCase):
         self.assertIn("codex_available: true", out)
 
     def test_3_kill_switch(self):
-        out = run({"DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX": "1"})
+        out = run({"DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX": "1"})
         self.assertIn("skip_reason: kill_switch", out)
 
     def test_4a_inside_sandbox(self):
@@ -64,7 +64,7 @@ class TestDetectCodex(unittest.TestCase):
 
     def test_8_foreign_kill_switch_inert(self):
         # 이웃 플러그인의 변수는 이 사본에 무효해야 한다.
-        out = run({"CODEX_API_KEY": "t", "DEVBREW_DISABLE_QG_CODEX": "1"},
+        out = run({"CODEX_API_KEY": "t", "DEVBREW_QUALITY_GATES_DISABLE_CODEX": "1"},
                   self._mocks("safe-v1"))
         self.assertIn("codex_available: true", out)
 
@@ -82,13 +82,13 @@ class TestDetectCodex(unittest.TestCase):
         # assertTrue 로 fail-closed(테스트 실패)한다.
         self.assertTrue(CONF.is_file(), f"conf 없음: {CONF}")
         body = CONF.read_text(encoding="utf-8")
-        self.assertIn("CODEX_KILL_SWITCH_VAR=DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX", body)
+        self.assertIn("CODEX_KILL_SWITCH_VAR=DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX", body)
 
     def test_12_no_stale_foreign_var(self):
         self.assertTrue(CONF.is_file(), f"conf 없음: {CONF}")
         body = CONF.read_text(encoding="utf-8")
-        self.assertNotIn("DEVBREW_DISABLE_QG_CODEX", body)
-        self.assertNotIn("DEVBREW_DISABLE_SPEC_DISTILL_CODEX", body)
+        self.assertNotIn("DEVBREW_QUALITY_GATES_DISABLE_CODEX", body)
+        self.assertNotIn("DEVBREW_SPEC_DISTILL_DISABLE_CODEX", body)
 
     def _with_conf_bytes(self, raw_bytes):
         """conf 를 raw_bytes 로 덮어쓰고 detect_codex.sh 출력을 반환한 뒤 바이트 그대로 원복한다.
@@ -108,7 +108,7 @@ class TestDetectCodex(unittest.TestCase):
     def test_15_malformed_conf_crlf_fails_closed(self):
         # F2 compounding: 리뷰를 빠져나간 버그를 그것을 잡았어야 할 검사에 넣어 닫는다.
         out = self._with_conf_bytes(
-            b"CODEX_KILL_SWITCH_VAR=DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX\r\n"
+            b"CODEX_KILL_SWITCH_VAR=DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX\r\n"
         )
         self.assertIn("skip_reason: killswitch_config_invalid", out)
 

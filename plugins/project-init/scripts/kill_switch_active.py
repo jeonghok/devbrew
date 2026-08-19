@@ -31,7 +31,7 @@ def kill_switch_active(plugin: str, hook: str, event: str = "") -> bool:
     """이 훅이 꺼져 있는가.
 
     두 스위치를 본다 (CLAUDE.md §런타임):
-      · DEVBREW_DISABLE_<PLUGIN>=1        — 그 플러그인 전체
+      · DEVBREW_<PLUGIN>_DISABLE=1        — 그 플러그인 전체
       · DEVBREW_SKIP_HOOKS=<plugin>:<tok> — 콤마 구분 목록. tok 은 훅명 **또는** 이벤트명.
 
     별칭 둘을 다 받는 이유: spec-distill 훅은 이벤트명·훅명 둘 다 받고 project-init 은
@@ -43,8 +43,8 @@ def kill_switch_active(plugin: str, hook: str, event: str = "") -> bool:
     # 전역 스위치의 변수명은 **도출한다** — 플러그인 이름을 열거한 표를 두지 않는다.
     # 표를 두면 새 플러그인이 그 표에 없는 채로 착지해 전역 스위치가 조용히 무반응이
     # 된다(열거는 공간·시간 양쪽으로 fail-open). `-` → `_`, 대문자화가 CLAUDE.md 의
-    # `DEVBREW_DISABLE_<PLUGIN>` 관례 그 자체다.
-    if os.environ.get("DEVBREW_DISABLE_" + plugin.upper().replace("-", "_")) == "1":
+    # `DEVBREW_<PLUGIN>_DISABLE` 관례 그 자체다.
+    if os.environ.get("DEVBREW_" + plugin.upper().replace("-", "_") + "_DISABLE") == "1":
         return True
 
     # 부분 문자열이 아니라 **전체 토큰**으로 대조한다. `in` 부분 일치를 쓰면

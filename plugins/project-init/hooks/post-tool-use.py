@@ -9,7 +9,7 @@ Validates two things on Bash tool use:
 Both validators emit non-blocking warnings via systemMessage.
 
 Kill switches:
-  DEVBREW_DISABLE_PROJECT_INIT=1                 - disables this hook entirely
+  DEVBREW_PROJECT_INIT_DISABLE=1                 - disables this hook entirely
   DEVBREW_SKIP_HOOKS=project-init:post-tool-use  - skip just this one
   DEVBREW_SKIP_HOOKS=project-init:PostToolUse    - skip every PostToolUse hook here
 """
