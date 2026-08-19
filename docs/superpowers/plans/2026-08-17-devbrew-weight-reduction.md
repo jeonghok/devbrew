@@ -5831,7 +5831,7 @@ git commit -m "refactor(spec-distill): state_path.py 를 scripts/ 로 — hooks/
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
-python3 plugins/plugin-audit/scripts/check-staleness.py --repo-root . 2>&1 | grep -i -A3 'description'
+for p in plugins/*/; do python3 plugins/plugin-audit/scripts/check-staleness.py "$p" --repo-root . || echo "⚠ SWEEP FAILED $p" >&2; done | grep -i 'description drift'
 ```
 
 - [ ] **Step 2: `plugin.json`을 정본으로 동기화**
@@ -5870,7 +5870,7 @@ git diff --stat marketplace.json
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew
-python3 plugins/plugin-audit/scripts/check-staleness.py --repo-root . 2>&1 | grep -ci 'description.*drift' | head -1
+for p in plugins/*/; do python3 plugins/plugin-audit/scripts/check-staleness.py "$p" --repo-root . || echo "⚠ SWEEP FAILED $p" >&2; done | grep -ci 'description drift'
 python3 -c "import json; json.load(open('marketplace.json', encoding='utf-8')); print('JSON 유효 ✓')"
 find . -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/plugin-audit/tests -t plugins/plugin-audit/tests 2>&1 | tail -3
@@ -7660,7 +7660,7 @@ echo; echo "=== 6. 20줄 동일 블록 (copy-of 미설명) ==="
 bash shared/tests/test_no_new_duplication.sh 2>&1 | tail -2
 
 echo; echo "=== 7. marketplace.json drift ==="
-python3 plugins/plugin-audit/scripts/check-staleness.py --repo-root . 2>&1 | grep -ci 'description.*drift' | head -1
+for p in plugins/*/; do python3 plugins/plugin-audit/scripts/check-staleness.py "$p" --repo-root . || echo "⚠ SWEEP FAILED $p" >&2; done | grep -ci 'description drift'
 
 echo; echo "=== 8. 환경변수 어순 패턴 ==="
 grep -rhoE 'DEVBREW_[A-Z0-9_]+' plugins/ CLAUDE.md shared/ 2>/dev/null | grep -v CHANGELOG | sort -u \

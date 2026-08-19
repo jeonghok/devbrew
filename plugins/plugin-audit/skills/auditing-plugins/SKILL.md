@@ -175,6 +175,14 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    `<codex.json>`은 `codex_audit_to_json.py`의 출력을 그대로 쓴다. assemble은 그중
    `d_verdicts`·`oq_answers`·`new_open_questions` 셋만 읽는다 — `findings`는 이미 workflow
    경로로 들어와 있어 여기서 무시된다(중복 병합 아님).
+
+   🔴 **`description drift`는 재량 사실이 아니라 verdict에 반영한다 (설계 §6.1④).** pre-1의
+   `staleness_facts`에 그 class가 있으면 `plugin.json` ↔ `.claude-plugin/marketplace.json`의 기계적
+   부등식이고 **감사 대상 자신의 결함**이다(리포 전역 락의 오귀속이 아니다). assemble 전에
+   `<wf.json>`의 findings에 대응 갭이 있는지 확인하고, 없으면 그 누락을 `<meta.json>`의
+   `pre1_degraded`에 적는다 — 최상위 `degraded[]`로 올라가 step 6 배너·`## 결손` 절에 드러난다.
+   drift가 남아 있던 이유는 검사 부재가 아니라 **사실로만 보고되고 아무도 고치지 않은 것**이다.
+   조치는 `plugin.json`을 정본으로 marketplace 항목을 맞추는 것이다.
 3. `validate-audit-data.py --data <data.json>` → RED면 abort(완결성·consent·codex-merge·NOQ·gate-E).
 4. `render-audit-report.py <data.json> --out docs/audits/<date>-<target>-audit.md --readme docs/audits/README.md`.
    6축 전멸(exit 1) → 리포트 없음(AC-4).

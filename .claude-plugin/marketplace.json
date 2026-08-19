@@ -8,25 +8,25 @@
   "plugins": [
     {
       "name": "quality-gates",
-      "description": "3-gate quality verification pipeline: plan verification, iterative PR review, and runtime verification.",
+      "description": "2-gate quality verification pipeline (review + runtime) with multi-plugin review delegation, plus a separate consent-gated PR-understanding generate/publish surface (not a gate). Invoke manually via /qg or /qg-publish.",
       "source": "./plugins/quality-gates",
       "category": "development"
     },
     {
       "name": "project-init",
-      "description": "Git workflow initialization: select branching strategy (GitHub Flow, Git Flow, Trunk-based), generate rules and auto-validate.",
+      "description": "Initialize git-workflow rules and a project charter via a fact-routing interview, then generate agent-readable AGENTS.md/CLAUDE.md docs with hook-based validation of branches, commits, doc conventions, and charter integrity.",
       "source": "./plugins/project-init",
       "category": "development"
     },
     {
       "name": "spec-distill",
-      "description": "A devbrew-native plugin that turns ambiguity into clarity through relentless interviewing to produce a superpowers-compatible spec.md. Drop-in replacement for superpowers/brainstorming.",
+      "description": "A strong problem-space interview stage (meta-prompting + web research + adversarial steelman) that produces a superpowers-brainstorming-ready interview brief; design docs reviewed by a physically-separated Law 2 reviewer. A devbrew Laws 1+2 instantiation.",
       "source": "./plugins/spec-distill",
       "category": "development"
     },
     {
       "name": "plugin-audit",
-      "description": "Read-only, evidence-based multi-agent audit of an arbitrary devbrew plugin.",
+      "description": "Read-only, evidence-based multi-agent audit of an arbitrary devbrew plugin: 6-axis discovery → adversarial refutation → blind codex co-audit → prioritized gap report. Invoke via /plugin-audit <target> [--seed <path>].",
       "source": "./plugins/plugin-audit",
       "category": "development"
     },
