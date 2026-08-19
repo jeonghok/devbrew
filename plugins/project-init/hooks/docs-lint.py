@@ -7,6 +7,11 @@ R1 size, R2 TOC, R5 fenced code language, R6 internal links resolve,
 R-pointer CLAUDE/AGENTS drift, R-charter AGENTS.md '## Project Charter' integrity.
 
 Non-blocking advisory pattern: outputs systemMessage on violation, {} on pass.
+
+Kill switches:
+  DEVBREW_DISABLE_PROJECT_INIT=1                 - disables this hook entirely
+  DEVBREW_SKIP_HOOKS=project-init:docs-lint      - skip just this one
+  DEVBREW_SKIP_HOOKS=project-init:PostToolUse    - skip every PostToolUse hook here
 """
 from __future__ import annotations
 
@@ -17,6 +22,9 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from kill_switch_active import kill_switch_active  # noqa: E402
+
 
 # --- Filter constants ---
 
@@ -26,18 +34,6 @@ WORKTREE_MARKER = os.sep + ".git" + os.sep + "worktrees" + os.sep
 
 
 # --- Helpers ---
-
-
-def kill_switch_active() -> bool:
-    """Return True if devbrew kill switch env vars opt this hook out.
-
-    Mirrors plugins/project-init/hooks/post-tool-use.py:149-154 pattern,
-    differing only in the hook token string.
-    """
-    if os.environ.get("DEVBREW_DISABLE_PROJECT_INIT") == "1":
-        return True
-    skip_list = [s.strip() for s in os.environ.get("DEVBREW_SKIP_HOOKS", "").split(",")]
-    return "project-init:docs-lint" in skip_list
 
 
 def safe_resolve(p: Path, why: str = "path") -> Optional[Path]:
@@ -450,7 +446,7 @@ def check_r_charter(target: Path, rel_display: str) -> Optional[str]:
 
 
 def main() -> int:
-    if kill_switch_active():
+    if kill_switch_active("project-init", "docs-lint", "PostToolUse"):
         emit()
         return 0
     try:

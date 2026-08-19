@@ -46,6 +46,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 SCRIPTS_DIR = SCRIPT_DIR.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 from state_path import state_root as _state_root  # noqa: E402
+from kill_switch_active import kill_switch_active  # noqa: E402
 PARSE_LIB = SCRIPT_DIR.parent / "scripts" / "parse_spec_structure.py"
 BLACKLIST = SCRIPT_DIR.parent / "scripts" / "ambiguity-blacklist.txt"
 
@@ -55,17 +56,6 @@ PATH_PREFIX = "docs/superpowers/specs/"
 # review-dispatch.py·pending-review-reminder.py·arm_ledger.py
 # 세 곳에서 이 정규식을 각자 정의한다 — 새 중복이 아니라 기존 관례.
 PENDING_RE = re.compile(r"^pending_review:\n(?:  [^\n]*\n)*", re.MULTILINE)
-
-
-def kill_switch_active() -> bool:
-    if os.environ.get("DEVBREW_DISABLE_SPEC_DISTILL") == "1":
-        return True
-    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
-    skip_tokens = {p.strip() for p in skip.split(",") if p.strip()}
-    for token in ("spec-distill:PostToolUse", "spec-distill:validator"):
-        if token in skip_tokens:
-            return True
-    return False
 
 
 def _frontmatter_has_locked_decisions(file_path: str) -> bool:
@@ -366,7 +356,7 @@ def emit_arm_skip_advisory(mode: str, key: str, reason: str) -> None:
 
 
 def main() -> int:
-    if kill_switch_active():
+    if kill_switch_active("spec-distill", "validator", "PostToolUse"):
         return 0
     try:
         payload = json.load(sys.stdin)

@@ -10,7 +10,13 @@ qg-gc.py pattern adaptation:
   - .gc-pending-* orphan sweep (>60s) at iteration start
 
 Kill switches:
-  DEVBREW_DISABLE_SPEC_DISTILL=1     - no-op
+  DEVBREW_DISABLE_SPEC_DISTILL=1              - no-op
+  DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc - no-op (이 스크립트 하나만)
+
+훅이 아니지만 `DEVBREW_SKIP_HOOKS` 토큰으로 지목할 이름을 갖는다 — 이관 전에는
+이 파일이 `DEVBREW_SKIP_HOOKS` 를 **아예 읽지 않아서**, 사용자가 그 변수로 껐다고
+믿어도 이 GC 는 무반응이었다. kill switch 는 opt-out 컨트롤이므로 **더 잘 꺼지는**
+방향이고, 회귀는 반대 방향(덜 꺼짐)뿐이다.
 """
 from __future__ import annotations
 
@@ -24,17 +30,15 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent / "hooks"
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from state_path import state_root, SESSION_PATTERN  # noqa: E402 # pyright: ignore[reportMissingImports]
+from kill_switch_active import kill_switch_active  # noqa: E402
 
 LOCK_NAME = ".gc.lock"
 GRACE_NS = 60 * 1_000_000_000
 DOUBLE_STAT_DELAY_S = 0.05
 GC_PENDING_PREFIX = ".gc-pending-"
 GC_PENDING_SWEEP_AGE_S = 60
-
-
-def _disabled() -> bool:
-    return os.environ.get("DEVBREW_DISABLE_SPEC_DISTILL") == "1"
 
 
 def _ttl_ns() -> int:
@@ -126,7 +130,7 @@ def _gc_one(folder: Path, ttl_ns: int) -> bool:
 
 
 def gc(self_session_id: str | None = None) -> int:
-    if _disabled():
+    if kill_switch_active("spec-distill", "spec-distill-gc"):
         return 0
     root = state_root()
     if not root.exists():

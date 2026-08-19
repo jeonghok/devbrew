@@ -16,9 +16,34 @@ emit keyset이 사본별로 하드코딩돼 있어 호출자가 고를 수 없�
 바뀌었다(같은 파일 경로로 새 configurability 노출 — detect_codex.sh 의
 `codex-killswitch.conf` 선례와 같은 판단 기준, S3).
 
+Task 19(무게 감축): kill switch 판정 12정의(`kill_switch_active` 5 + `_disabled` 7)를
+`shared/killswitch/kill_switch_active.py` 정본으로 통합. 이 플러그인이 그중 5곳
+(훅 4 + `scripts/qg-gc.py`)을 갖고 있었다. 훅들은 `scripts/kill_switch_active.py`
+(`copy-of` 물리 사본)를 import 한다. 새 surface 둘: **이벤트명 별칭**과 **`qg-gc` 토큰**.
+
+### Added
+- `scripts/kill_switch_active.py` — `shared/killswitch/kill_switch_active.py` 의
+  `# copy-of:` 물리 사본. 설치본에는 `shared/` 가 없으므로 형제 사본이어야 import 가 풀린다.
+- **이벤트명 별칭** — `DEVBREW_SKIP_HOOKS=quality-gates:PostToolUse` ·
+  `:SessionStart` · `:SessionEnd`. 이관 전에는 훅명만 받았고 spec-distill 훅은 이벤트명·
+  훅명 둘 다 받았다. 한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것은 결함이며
+  kill switch 는 보안 컨트롤이라(`CLAUDE.md:48`) 그 방향이 fail-open 이다.
+- **`DEVBREW_SKIP_HOOKS=quality-gates:qg-gc`** — `scripts/qg-gc.py` 만 끈다. 훅이 아니지만
+  지목할 이름을 갖는다. 이관 전 이 스크립트는 전역 `DEVBREW_DISABLE_QUALITY_GATES=1` 하나만
+  봤고 `DEVBREW_SKIP_HOOKS` 는 **아예 읽지 않았다**(이관 전 HEAD 판본을 실제로 태워 확인 —
+  토큰을 줘도 GC 가 그대로 돌았다). 더 잘 꺼지는 방향이라 회귀가 아니다.
+
 ### Changed
 - `plugins/quality-gates/scripts/codex_findings_to_yaml.py`가 물리 파일에서
   `shared/codex/codex_findings_to_yaml.py`를 가리키는 상대 심볼릭 링크로 바뀌었다.
+- 훅 4종(`post-tool-use.py`·`post-tool-use-session-tracker.py`·`session-start-advisor.py`·
+  `session-end-cleanup.py`)과 `scripts/qg-gc.py` 에서 자체 `_disabled()` 정의를 지우고
+  정본 호출로 교체. 기존 훅 키(`post-tool-use`·`session-tracker`·`session-start-advisor`·
+  `session-end-cleanup`)와 전역 스위치의 동작은 불변이며, 전체-토큰 대조도 정본이 그대로
+  유지한다(`quality-gates:post-tool-use-session-tracker` 가 `quality-gates:post-tool-use` 를
+  접두 오매칭으로 함께 끄지 않는다 — v1.6.2 결함).
+- `session-start-advisor.py` 의 sub-feature 스위치(`:frontmatter-scan`)는 그대로다 —
+  `_subfeature_disabled()` 가 정본을 먼저 묻고 자기 토큰을 추가로 본다.
 - `plugins/quality-gates/tests/test_codex_copies_agree.sh` 헤더의 층④ 문단을 갱신 —
   "아직 물리 사본 2개" 서술을 지우고, 판정 등가(파일이 하나뿐이라 구조로 보장, 이제
   vacuous-but-harmless)와 값 고정(알려진-상이 표본 실제 출력값 고정, 여전히 이빨 있음)을

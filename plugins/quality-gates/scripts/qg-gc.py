@@ -7,7 +7,14 @@ Triggers (must be explicit, never SessionStart):
 
 Race guard: 3-layer (fcntl lock + double-stat ns + rename-then-rmtree).
 
-Kill switch: DEVBREW_DISABLE_QUALITY_GATES=1 → no-op.
+Kill switches:
+  DEVBREW_DISABLE_QUALITY_GATES=1        → no-op.
+  DEVBREW_SKIP_HOOKS=quality-gates:qg-gc → no-op (이 스크립트 하나만).
+
+훅이 아니지만 `DEVBREW_SKIP_HOOKS` 토큰으로 지목할 이름을 갖는다 — 이관 전에는
+전역 스위치 하나뿐이라 "이 GC만 끈다"가 불가능했다. kill switch 는 opt-out
+컨트롤이므로 **더 잘 꺼지는** 방향이고, 회귀는 반대 방향(덜 꺼짐)뿐이다.
+
 TTL override: DEVBREW_QG_TTL_HOURS (positive int, default 24).
 Verbose: DEVBREW_QG_GC_VERBOSE=1 → print summary line on stdout.
 """
@@ -21,6 +28,9 @@ import sys
 import time
 import uuid
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from kill_switch_active import kill_switch_active  # noqa: E402
 
 ROOT = Path(".claude/quality-gates")
 LOCK_NAME = ".gc.lock"
@@ -48,10 +58,6 @@ def _is_session_folder(folder: Path) -> bool:
         return any((folder / name).is_file() for name in SESSION_MARKERS)
     except OSError:
         return False
-
-
-def _disabled() -> bool:
-    return os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1"
 
 
 def _ttl_ns() -> int:
@@ -117,7 +123,7 @@ def _gc_one(folder: Path, ttl_ns: int) -> bool:
 
 
 def gc(self_session_id: str | None = None) -> int:
-    if _disabled() or not ROOT.exists():
+    if kill_switch_active("quality-gates", "qg-gc") or not ROOT.exists():
         return 0
     lock_path = ROOT / LOCK_NAME
     try:

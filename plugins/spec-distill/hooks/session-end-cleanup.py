@@ -9,6 +9,7 @@ Best-effort: idempotent (no-op if missing), tolerant of permission errors.
 Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
   DEVBREW_DISABLE_SPEC_DISTILL=1                       - disables entirely
   DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd           - skip just this one
+  DEVBREW_SKIP_HOOKS=spec-distill:session-end-cleanup  - 같은 훅을 훅명으로 지목 (이관 후 추가)
 """
 from __future__ import annotations
 
@@ -20,19 +21,13 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent / "scripts"))
 from state_path import state_root, SESSION_PATTERN  # noqa: E402 # pyright: ignore[reportMissingImports]
-
-
-def _disabled() -> bool:
-    if os.environ.get("DEVBREW_DISABLE_SPEC_DISTILL") == "1":
-        return True
-    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
-    tokens = {t.strip() for t in skip.split(",") if t.strip()}
-    return "spec-distill:SessionEnd" in tokens
+from kill_switch_active import kill_switch_active  # noqa: E402
 
 
 def main() -> int:
-    if _disabled():
+    if kill_switch_active("spec-distill", "session-end-cleanup", "SessionEnd"):
         return 0
     try:
         payload = json.load(sys.stdin)

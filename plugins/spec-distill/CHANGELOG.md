@@ -12,7 +12,25 @@ codex_findings_to_yaml.py`를 가리키는 상대 심볼릭 링크로 바뀌었�
 `target_section`이 조용히 빠진다(같은 파일 경로로 새 configurability 노출, detect_codex.sh
 선례와 같은 판단 기준).
 
+Task 19(무게 감축): kill switch 판정 12정의를 `shared/killswitch/kill_switch_active.py`
+정본으로 통합. 이 플러그인이 그중 5곳(훅 4 + `scripts/spec-distill-gc.py`)을 갖고 있었다.
+
+### Added
+- `scripts/kill_switch_active.py` — `shared/killswitch/kill_switch_active.py` 의
+  `# copy-of:` 물리 사본. 설치본에는 `shared/` 가 없으므로 형제 사본이어야 import 가 풀린다.
+- **`DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc`** — `scripts/spec-distill-gc.py` 만
+  끈다. 이관 전 이 파일은 `DEVBREW_SKIP_HOOKS` 를 **아예 읽지 않았다** — 사용자가 그 변수로
+  껐다고 믿어도 GC 는 계속 돌았다(이관 전 HEAD 판본을 실제로 태워 확인). 훅이 아니지만
+  지목할 이름을 갖는 쪽이 더 잘 꺼지는 방향이라 회귀가 아니다.
+- `hooks/session-end-cleanup.py` 가 훅명 별칭 `spec-distill:session-end-cleanup` 도 받는다
+  (이관 전에는 이벤트명 `spec-distill:SessionEnd` 하나뿐이었다).
+
 ### Changed
+- 훅 4종(`review-dispatch.py`·`pending-review-reminder.py`·`spec-write-validator.py`·
+  `session-end-cleanup.py`)과 `scripts/spec-distill-gc.py` 에서 자체 판정 정의
+  (`kill_switch_active()` 3 + `_disabled()` 2)를 지우고 정본 호출로 교체. 기존 토큰
+  (`:Stop`/`:review-dispatch` · `:UserPromptSubmit`/`:reminder` · `:PostToolUse`/`:validator` ·
+  `:SessionEnd`)과 전역 `DEVBREW_DISABLE_SPEC_DISTILL=1` 의 동작은 전부 불변이다.
 - `run_brief_codex_reviewer.sh`·`run_spec_codex_reviewer.sh` 두 호출 모두
   `--emit-keys design`을 명시(행동 불변 — 이전 하드코딩과 동치).
 - `extract_last_agent_message`(codex JSONL 이벤트 파서)를 `shared/codex/

@@ -52,6 +52,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 SCRIPTS_DIR = SCRIPT_DIR.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 from state_path import state_root as _state_root, resolve_session_id  # noqa: E402
+from kill_switch_active import kill_switch_active  # noqa: E402
 
 GC_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "spec-distill-gc.py"
 
@@ -63,17 +64,6 @@ PENDING_RE = re.compile(
     re.MULTILINE,
 )
 LAST_DISPATCHED_RE = re.compile(r"^last_dispatched_at:\s*(.+)$", re.MULTILINE)
-
-
-def kill_switch_active() -> bool:
-    if os.environ.get("DEVBREW_DISABLE_SPEC_DISTILL") == "1":
-        return True
-    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
-    skip_tokens = {p.strip() for p in skip.split(",") if p.strip()}
-    for token in ("spec-distill:Stop", "spec-distill:review-dispatch"):
-        if token in skip_tokens:
-            return True
-    return False
 
 
 def state_file_for(session_id: str) -> Path:
@@ -122,7 +112,7 @@ def rewrite_state(
 
 
 def main() -> int:
-    if kill_switch_active():
+    if kill_switch_active("spec-distill", "review-dispatch", "Stop"):
         return 0
     try:
         result = subprocess.run(

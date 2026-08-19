@@ -83,11 +83,11 @@ plugins/project-init/
 ## 설치된 Hook
 
 - **`PostToolUse` (Bash matcher) — `post-tool-use.py`**: 브랜치 명·커밋 메시지 검증 (advisory, non-blocking). 브랜치 검증은 `docs/git-workflow/branch-strategy.md`의 선언된 전략 패턴을 런타임에 읽어 수행하며, 전략 미선언(파일/`` ```regex `` 블록 부재·malformed·빈 블록·비-UTF-8 파일)이면 GitHub Flow를 단정하지 않고 **loud advisory로 검증을 건너뛴다**(fail-open, v1.7.0). 교정 제안은 활성 패턴에서 파생된 prefix를 제시한다. **왜 hook인가?**: 검증은 모델 attention 여부와 무관하게 모든 Bash invocation에 발화해야 한다. skill은 모델이 invoke하는 단위라 action 레이어에서의 결정적 실행을 보장하지 못함.
-  - Kill switch: `DEVBREW_DISABLE_PROJECT_INIT=1` 또는 `DEVBREW_SKIP_HOOKS=project-init:post-tool-use`
+  - Kill switch: `DEVBREW_DISABLE_PROJECT_INIT=1` 또는 `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` (이벤트명 별칭 `project-init:PostToolUse` 도 받는다)
 
 - **`PostToolUse` (Write|Edit|MultiEdit matcher) — `docs-lint.py`**: root context 파일 (CLAUDE.md, AGENTS.md, .claude/CLAUDE.md, .claude/AGENTS.md) **및 `docs/project/*.md` (v1.6.0)**의 agent-readable convention (size ≤200, TOC if >300, fenced code language, internal links resolve, CLAUDE/AGENTS drift) + `AGENTS.md`의 `## Project Charter` 필수 하위항목(vision·non-goals·tech-stack: 존재·비어있지 않음·placeholder 잔존 없음, v1.6.0) 검증. **왜 hook인가?**: Write/Edit이 일어날 때마다 deterministic하게 발화해야 함, advisory only (non-blocking).
-  - Kill switch: `DEVBREW_DISABLE_PROJECT_INIT=1` (전체) 또는 `DEVBREW_SKIP_HOOKS=project-init:docs-lint` (이 hook만). 새 토큰 없음 — 헌장 검증도 동일 스위치가 커버.
-  - 두 hook 모두 끄려면: `DEVBREW_SKIP_HOOKS=project-init:post-tool-use,project-init:docs-lint`
+  - Kill switch: `DEVBREW_DISABLE_PROJECT_INIT=1` (전체) 또는 `DEVBREW_SKIP_HOOKS=project-init:docs-lint` (이 hook만). 헌장 검증도 동일 스위치가 커버한다 — 헌장 전용 토큰은 없다.
+  - 두 hook 모두 끄려면: `DEVBREW_SKIP_HOOKS=project-init:post-tool-use,project-init:docs-lint` — 또는 이벤트명 하나로 `DEVBREW_SKIP_HOOKS=project-init:PostToolUse` (둘 다 PostToolUse 훅이다). 이벤트명 별칭은 spec-distill 이 쓰던 형태를 이 플러그인으로 통일한 것이다 — 한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것이 결함이었다.
 
 ## 인스턴스화한 원칙
 

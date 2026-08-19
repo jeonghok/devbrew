@@ -7,6 +7,7 @@ Best-effort: idempotent (no-op if missing), tolerant of permission errors.
 Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
   DEVBREW_DISABLE_QUALITY_GATES=1                       - disables this hook entirely
   DEVBREW_SKIP_HOOKS=quality-gates:session-end-cleanup  - skip just this one
+  DEVBREW_SKIP_HOOKS=quality-gates:SessionEnd           - skip every SessionEnd hook here
 """
 from __future__ import annotations
 
@@ -16,13 +17,8 @@ import shutil
 import sys
 from pathlib import Path
 
-
-def _disabled() -> bool:
-    if os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1":
-        return True
-    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
-    tokens = {t.strip() for t in skip.split(",") if t.strip()}
-    return "quality-gates:session-end-cleanup" in tokens
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from kill_switch_active import kill_switch_active  # noqa: E402
 
 
 def _state_root(hook_input: dict) -> Path:
@@ -37,7 +33,7 @@ def _state_root(hook_input: dict) -> Path:
 
 
 def main() -> int:
-    if _disabled():
+    if kill_switch_active("quality-gates", "session-end-cleanup", "SessionEnd"):
         return 0
     try:
         payload = json.load(sys.stdin)

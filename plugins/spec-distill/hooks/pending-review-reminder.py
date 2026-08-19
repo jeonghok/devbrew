@@ -36,6 +36,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 SCRIPTS_DIR = SCRIPT_DIR.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 from state_path import state_root as _state_root, resolve_session_id  # noqa: E402
+from kill_switch_active import kill_switch_active  # noqa: E402
 
 GC_SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "spec-distill-gc.py"
 
@@ -49,17 +50,6 @@ PENDING_RE = re.compile(
 LAST_DISPATCHED_RE = re.compile(r"^last_dispatched_at:\s*(.+)$", re.MULTILINE)
 
 
-def kill_switch_active() -> bool:
-    if os.environ.get("DEVBREW_DISABLE_SPEC_DISTILL") == "1":
-        return True
-    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
-    tokens = {p.strip() for p in skip.split(",") if p.strip()}
-    return bool(tokens & {
-        "spec-distill:UserPromptSubmit",
-        "spec-distill:reminder",
-    })
-
-
 def parse_iso(s: str):
     try:
         return datetime.strptime(s.strip(), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
@@ -68,7 +58,7 @@ def parse_iso(s: str):
 
 
 def main() -> int:
-    if kill_switch_active():
+    if kill_switch_active("spec-distill", "reminder", "UserPromptSubmit"):
         return 0
     # Best-effort GC FIRST (matches review-dispatch.py ordering) — fire-and-forget
     try:

@@ -19,6 +19,7 @@ back loudly.
 Kill switches:
   DEVBREW_DISABLE_QUALITY_GATES=1                          - disables this hook entirely
   DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor   - skip just this one
+  DEVBREW_SKIP_HOOKS=quality-gates:SessionStart            - skip every SessionStart hook here
 
 Sub-feature kill switch:
   DEVBREW_SKIP_HOOKS=quality-gates:session-start-advisor:frontmatter-scan
@@ -30,6 +31,9 @@ import os
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from kill_switch_active import kill_switch_active  # noqa: E402
 
 LEGACY_RELATIVE = (
     ".claude/quality-gates.local.md",
@@ -60,14 +64,6 @@ LEGACY_RELATIVE = (
 LEGACY_V1_KEYS = ("status:", "current" + "_gate:", "consecutive_no" + "_signal:")
 
 
-def _disabled() -> bool:
-    if os.environ.get("DEVBREW_DISABLE_QUALITY_GATES") == "1":
-        return True
-    skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
-    tokens = {t.strip() for t in skip.split(",") if t.strip()}
-    return "quality-gates:session-start-advisor" in tokens
-
-
 def _state_root(hook_input: dict) -> Path:
     """Resolve state root from hook stdin payload cwd; fall back loudly."""
     cwd = hook_input.get("cwd") if hook_input else None
@@ -81,7 +77,7 @@ def _state_root(hook_input: dict) -> Path:
 
 # AC14: sub-feature kill switch
 def _subfeature_disabled(feature: str) -> bool:
-    if _disabled():
+    if kill_switch_active("quality-gates", "session-start-advisor", "SessionStart"):
         return True
     skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
     tokens = {t.strip() for t in skip.split(",") if t.strip()}
@@ -178,7 +174,7 @@ def _emit_legacy_v1_advisory(payload: dict, self_sid: str) -> bool:
 
 
 def main() -> int:
-    if _disabled():
+    if kill_switch_active("quality-gates", "session-start-advisor", "SessionStart"):
         return 0
     payload = _load_payload()
     self_sid = _self_session_id(payload)
