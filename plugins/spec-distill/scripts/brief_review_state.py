@@ -29,6 +29,11 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+# `_yaml_scalar` 는 이 플러그인 안의 세 소비자가 공유한다(merge_review ·
+# merge_brief_review · 여기). 같은 플러그인 안이라 import 하나로 중복이 소멸한다(설계 §6.1③).
+from hook_common import _yaml_scalar  # noqa: E402
+
 STAGES = ("direction", "fidelity", "readback", "done")
 CRITIC_ROUND_CAP = 2
 
@@ -50,17 +55,6 @@ def _fail(reason: str) -> int:
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
-
-
-def _yaml_scalar(v) -> str:
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, int):
-        return str(v)
-    s = str(v)
-    if s == "" or any(c in s for c in ":#\"'\n[]{}") or s.strip() != s:
-        return json.dumps(s, ensure_ascii=False)
-    return s
 
 
 def _unscalar(v: str):

@@ -15,6 +15,53 @@ codex_findings_to_yaml.py`를 가리키는 상대 심볼릭 링크로 바뀌었�
 Task 19(무게 감축): kill switch 판정 12정의를 `shared/killswitch/kill_switch_active.py`
 정본으로 통합. 이 플러그인이 그중 5곳(훅 4 + `scripts/spec-distill-gc.py`)을 갖고 있었다.
 
+Task 22(무게 감축): **같은 플러그인 안의** 중복을 `scripts/hook_common.py` 하나로 접었다.
+`shared/` 정본과 달리 플러그인-로컬이라 `copy-of` 마커도 사본 동일성 검사도 붙지 않는다 —
+같은 플러그인 안에서는 import 하나로 중복 자체가 소멸한다(설계 §6.1③). 두 훅
+(`review-dispatch.py` ↔ `pending-review-reminder.py`)의 최장 공유 구간이 **24줄 → 11줄**
+로 내려갔다(20줄 창 5개 → 0개). `_yaml_scalar` 는 **행동이 바뀐다** — 아래 Fixed 참조.
+
+### Added
+- `scripts/hook_common.py` — 두 훅이 공유하던 조각의 단일 정의:
+  `configure_utf8_streams()` · `PENDING_RE` · `LAST_DISPATCHED_RE` · `GC_SCRIPT` ·
+  `fire_and_forget_gc()` · `parse_iso()` · `state_file_for()` · `_yaml_scalar()`.
+  `kill_switch_active`(Task 19의 `shared/` 정본)와 `resolve_session_id`/`state_root`
+  (`state_path.py` 소유)는 담지 않는다 — 가져오면 정본이 둘이 된다.
+- `tests/test_yaml_scalar_single_definition.py` — 정의가 하나이고(구조 스캔), 소비자
+  셋이 **같은 함수 객체**를 부르며(텍스트가 아니라 identity 로 잰다), 그 하나가
+  합집합 행동을 갖는지. 각 단언은 세 사본 중 적어도 하나가 갖지 못했던 성질이라,
+  어느 옛 본문으로 되돌려도 하나는 RED 가 된다. `float` 분기는 단언하지 않는다 —
+  없어도 `str(v)` 경로가 같은 값을 내 어떤 입력으로도 구분되지 않는다(이빨 없는 단언).
+
+### Changed
+- `review-dispatch.py`·`pending-review-reminder.py` 가 UTF-8 프리앰블·`PENDING_RE`·
+  `LAST_DISPATCHED_RE`·`GC_SCRIPT`·GC fire-and-forget 블록·`parse_iso` 자체 정의를
+  버리고 `hook_common` 에서 import 한다. `pending-review-reminder.py` 는 인라인으로
+  조립하던 상태 파일 경로도 `state_file_for()` 로 바꿨다(같은 표현식의 세 번째 사본).
+- `scripts/arm_ledger.py` 의 `state_file_for` 정의를 지우고 `hook_common` 에서 import.
+  `arm_ledger.state_file_for` 로 부르는 소비자(`spec-write-validator.py`)는 그대로다.
+  그 docstring("저장소 위치 변경 시 이 한 곳만 갱신")이 두 번째 정의 때문에 거짓이었는데
+  이제 다시 참이다(census #122).
+- `merge_review.py`·`merge_brief_review.py`·`brief_review_state.py` 가 각자의
+  `_yaml_scalar` 정의를 버리고 `hook_common` 에서 import(census #45의 spec-distill 부분).
+- `tests/test_arm_ledger.py` 의 착지점 계산이 `arm_ledger.state_root()`(소유하지 않는
+  이름의 re-export)가 아니라 `state_path.state_root()` 를 직접 쓴다. 피검자의 경로 조립
+  함수를 쓰지 않는 것은 의도적이다 — 그 함수의 버그가 traversal 테스트를 눈멀게 한다.
+
+### Fixed
+- **`_yaml_scalar` 세 사본이 갈라져 있었다** — 빈 문자열 가드가 `merge_review` 에만
+  없었고, flow indicator(`[]{}`) escape 가 `brief_review_state` 에만 있었고, None 분기가
+  `brief_review_state` 에만 없었다. 합집합으로 접었다(더 인용하는 것은 파싱 결과를 바꾸지
+  않고, 덜 인용하는 것만 바꾼다). 그래서 **출력이 바뀌는 자리가 있다**: `[` 로 시작하고
+  `:` 를 갖지 않는 advisory 문구가 이제 따옴표로 감싸여 나간다. 이관 전에는 인용 없이 나가
+  YAML flow sequence 로 읽혔다 — 두 merge 스크립트의 advisory 리터럴 **5건**이 이 모양이었다
+  (예: "[spec-distill v0.20.0] review indeterminate …", "[spec-distill v0.24.0] critic
+  sentinel 블록 …"). 빈 문자열과 None 쪽은 현재 소비자 경로로는 도달하지 않는다.
+- **범위 밖으로 남긴 것**: `scripts/codex_findings_to_yaml.py`(→ `shared/codex/` 심볼릭
+  링크) 안의 `_yaml_scalar` 는 네 번째 변종으로 남아 있다(`ensure_ascii` 기본값, `[]{}`
+  없음). 세 플러그인이 공유하는 정본이라 여기서 고치면 quality-gates·plugin-audit 의
+  출력도 함께 바뀐다 — 같은-플러그인 범위 밖이다.
+
 ### Added
 - `scripts/kill_switch_active.py` — `shared/killswitch/kill_switch_active.py` 의
   `# copy-of:` 물리 사본. 설치본에는 `shared/` 가 없으므로 형제 사본이어야 import 가 풀린다.

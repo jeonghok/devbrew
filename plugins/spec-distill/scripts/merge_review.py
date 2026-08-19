@@ -25,6 +25,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import compute_issue_id  # noqa: E402  (sibling helper, centralized id — §8)
+# `_yaml_scalar` 는 이 플러그인 안의 세 소비자가 공유한다(여기 · merge_brief_review ·
+# brief_review_state). 같은 플러그인 안이라 import 하나로 중복이 소멸한다(설계 §6.1③).
+from hook_common import _yaml_scalar  # noqa: E402
 
 # --- verdict precedence (§7b) ------------------------------------------------
 RANK = {"approved": 0, "needs_revise": 1, "needs_interview": 2}
@@ -248,22 +251,6 @@ def build_codex_findings_display(codex_findings: list[dict], codex_avail: bool) 
 # --- merge -------------------------------------------------------------------
 def conservative(a: str, b: str) -> str:
     return INV_RANK[max(RANK[a], RANK[b])]
-
-
-def _yaml_scalar(v) -> str:
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, (int, float)):
-        return str(v)
-    if v is None:
-        return "null"
-    s = str(v)
-    if any(c in s for c in ":#\"'\n") or s.strip() != s:
-        # ensure_ascii=False: this repo is Korean-primary and advisories are
-        # Korean; escaping them to \uXXXX (sibling check_brief.py avoids this)
-        # makes the human-gate advisory unreadable. The output file is UTF-8.
-        return json.dumps(s, ensure_ascii=False)
-    return s
 
 
 def _sanitize_history_record(rec: dict) -> dict:

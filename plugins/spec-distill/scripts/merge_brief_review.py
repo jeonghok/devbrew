@@ -39,6 +39,11 @@ try:
     _REUSE_OK = True
 except Exception:  # noqa: BLE001 — import 실패는 codex 축 degrade로 흡수
     _REUSE_OK = False
+# `_yaml_scalar` 는 이 플러그인 안의 세 소비자가 공유한다(merge_review · 여기 ·
+# brief_review_state). 같은 플러그인 안이라 import 하나로 중복이 소멸한다(설계 §6.1③).
+# merge_review 재사용과 달리 이 import 는 try 로 감싸지 않는다 — codex 축의 degrade 로
+# 흡수할 수 있는 것이 아니라 emit 자체가 불가능해지기 때문이다(조용한 축소 금지).
+from hook_common import _yaml_scalar  # noqa: E402
 
 # 줄 앵커 + 인정 토큰. `**Status:**` 와 `## Status:` 둘 다 받는다(round-4 실측 결함).
 # 산문 속 "Status:"는 잡지 않는다 — 줄 시작 + 열거된 verdict 토큰이 필수다.
@@ -169,19 +174,6 @@ def extract_critic_issues(text: str) -> tuple[list[dict], bool, list[str]]:
                 f"{', '.join(bad)}")
         kept.append(it)
     return kept, malformed, reasons
-
-
-def _yaml_scalar(v) -> str:
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, (int, float)):
-        return str(v)
-    if v is None:
-        return "null"
-    s = str(v)
-    if s == "" or any(c in s for c in ":#\"'\n") or s.strip() != s:
-        return json.dumps(s, ensure_ascii=False)
-    return s
 
 
 def emit(result: dict) -> str:
