@@ -174,6 +174,24 @@ trap _lock_exit EXIT
 # 접미로 붙인다(축 2·3 은 계약이 아니라 형제 설정 축이다).
 SELF="shared/tests/$(basename -- "$0")"
 AXIS_IDS=""
+
+# 〔2026-08-19 fix round 2b, H2〕 이 축의 기대 최소 단언 수 — **①②③④ 각 도출 자리가
+# 실제로 존재하는가**를 코퍼스에서 세어 낸다. 축 0 은 훑는 목록이 아니라 *자리*를 갖는
+# 축이라 항목 수가 없다. 첫 시도는 이 수를 축 0 **헤더 주석의 원문자 열거**에서 냈는데,
+# 자기 mutation 이 그것을 뚫었다(실측 A4: 본문을 개수 assert 하나로 줄이면서 그 주석의
+# 원문자를 함께 지우면 기대치가 1 로 떨어져 GREEN). 산문은 그 산문을 고치는 편집과 함께
+# 줄어든다 — 그래서 산문이 아니라 **자리 자체**를 센다. 각 자리는 이 파일과
+# `shared/README.md` 의 실제 줄이고, ②③ 이 없어지면 아래 개수 대조가 먼저 RED 다.
+# 계산은 `if` **밖**에 둔다: 본문을 줄이는 축소가 이 도출까지 함께 지우면 안 된다.
+n_src0=0
+[ "$(grep -cE '^# .*방법은 [^ ]+이다:' "$SELF" 2>/dev/null || true)" -ge 1 ] 2>/dev/null \
+  && n_src0=$((n_src0+1))                                          # ① 머리말 개수 문장
+[ "$(grep -cE '^#   \([a-z]\) ' "$SELF" 2>/dev/null || true)" -ge 1 ] 2>/dev/null \
+  && n_src0=$((n_src0+1))                                          # ② 머리말 (a)(b)(c) 목록
+[ "$(grep -cE '^# ── 축 [0-9][a-z]?:' "$SELF" 2>/dev/null || true)" -ge 1 ] 2>/dev/null \
+  && n_src0=$((n_src0+1))                                          # ③ 축 헤더
+[ "$(grep -cE '계약을 검사한다' shared/README.md 2>/dev/null || true)" -ge 1 ] 2>/dev/null \
+  && n_src0=$((n_src0+1))                                          # ④ shared/README.md 서술
 if [ ! -f "$SELF" ] || [ ! -f "shared/README.md" ]; then
   no "README: 대조 대상이 없다 (self='$SELF') — 아래 계약 수 대조는 무의미하다"
 else
@@ -213,13 +231,7 @@ else
     assert_eq "${said:-없음}" "$want" "README: shared/README.md 의 계약 수 서술이 실제 축 수(${n_axis}건)와 일치한다"
   fi
 fi
-# 〔2026-08-19 fix round 2b, H2〕 이 축의 기대 최소 단언 수를 **자기 헤더 주석이 열거한
-# 도출 자리 수**(①②③④)에서 낸다. 축 0 은 훑는 코퍼스가 아니라 *자리*를 갖는 축이라
-# 셀 항목이 없다 — 대신 이 축이 스스로 "이 자리들에서 도출한다"고 적은 그 수를 쓴다.
-# 본문을 개수 assert 하나만 남기고 줄이면 실행 수가 이 밑으로 떨어져 RED 다(실측 Q4).
-n_src0="$(awk '/^# ── 축 0:/{f=1} f&&/^[^#]/{exit} f' "$SELF" 2>/dev/null \
-  | grep -oE '①|②|③|④|⑤|⑥|⑦|⑧|⑨' | sort -u | grep -c . || true)"
-axis_tally "$n_src0"
+axis_tally "$n_src0"   # 기대 최소치 도출은 이 축 머리(if 밖)에 있다
 
 # ── 축 1a: 심볼릭 링크 무결성 — 도미넌스(∀) 체크 (기본 방식, 설계 §16.1) ────
 # 정본 목록은 이 사이클에 심볼릭 링크로 전환된 것 둘로 고정한다(설계 §16.1) —
