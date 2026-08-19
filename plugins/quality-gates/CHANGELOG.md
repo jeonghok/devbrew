@@ -185,11 +185,19 @@ Task 22(무게 감축): **같은 플러그인 안의** 중복을 파일 하나�
   하나로 시작하는 finding 값(주로 `summary`·`proposed_fix`)이 이제 따옴표로 감싸여
   나간다. 소비자는 인용을 되돌려 읽으므로(`merge_review._yaml_unscalar` 의 `json.loads`)
   값 자체는 불변이고, 이전에 죽던 문서가 이제 파싱된다.
-- **알려진 잔여(행동 아님, 가독성)**: 이 정본은 `json.dumps(s)` 를 `ensure_ascii`
-  기본값(True)으로 부른다 — 인용된 한국어가 `\uXXXX` 로 나간다. 왕복은 정확하지만
-  사람·모델이 읽는 게이트 산출물의 가독성이 떨어지고, 인용이 잦아진 만큼 노출도 늘었다.
-  `hook_common` 쪽은 `ensure_ascii=False` 다. 두 파일의 인용 **여부**는 이제 같고
-  **표기**만 다르다 — 통일은 별건으로 남긴다.
+- **표기도 형제와 통일했다 (`ensure_ascii=False`).** 이 정본만 `json.dumps(s)` 를
+  기본값(True)으로 불러 인용된 한국어가 `\uXXXX` 로 나갔다. 술어를 넓히기 전에는
+  `:#"'\n` 을 가진 값만 인용돼 한국어가 escape 경로에 잘 닿지 않았지만, 이제
+  flow 지시자로 시작하는 값이 전부 인용되므로 **노출이 늘었다** — 이 리포는
+  Korean-primary 이고 이 산출물은 사람이 리뷰 게이트에서 읽는다.
+  `array[0] 범위 초과` 가 `"array[0] 범위 초과"` 로 나가던 것이
+  `"array[0] 범위 초과"` 가 된다. 왕복은 어느 쪽이든 정확했으므로 행동 변화가 아니라
+  **판독성** 수정이다.
+- 이 전환으로 **잃는 보장은 없다**(실측): `ensure_ascii=True` 가 ASCII-only 산출을
+  보장한 적이 없다 — 인용되지 않는 경로가 raw 한국어를 그대로 내보내므로, ASCII 만
+  받는 stdout 인코더(`PYTHONIOENCODING=ascii`)는 True 이던 시절에도 이미
+  `UnicodeEncodeError` 로 죽었다. 실제 배포 경로(`LC_ALL=C` 포함)에서는 macOS
+  python 의 stdout 이 utf-8 이라 양쪽 모두 rc=0 이다.
 
 ### Added (Task 20 — codex 러너 공통 조각)
 

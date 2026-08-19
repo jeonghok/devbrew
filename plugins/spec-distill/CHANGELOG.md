@@ -80,8 +80,10 @@ Task 22(무게 감축): **같은 플러그인 안의** 중복을 `scripts/hook_c
   여전히 인용 없이 나가 ScannerError 를 냈다. 첫 글자를 0x20–0x7E 전수로 돌려
   `k: <값>` 을 파싱하는 방식으로 위험 집합을 **측정해서** 얻었고, 그중 기존 검사가
   덮지 못하는 잔여를 상수로 뒀다. 정본과 이 파일이 같은 두 상수를 쓴다.
-  남은 의도된 차이는 인용 **표기** 하나뿐이다 — 정본은 `ensure_ascii` 기본값(True),
-  여기는 False. 왕복(`json.loads`)은 어느 쪽이든 원문을 그대로 낸다.
+- **표기(`ensure_ascii`)까지 같아졌다** — 정본만 기본값(True)이라 인용된 한국어가
+  `\uXXXX` 로 나갔고, 인용 술어를 넓히면서 그 노출이 늘어 정본을 `False` 로 맞췄다.
+  이제 두 `_yaml_scalar` 의 출력은 **바이트로 동일**하고,
+  `TestCanonicalAgreesWithSharedCodex` 가 여부·표기 둘 다 락으로 고정한다.
 
 ### Added
 - `scripts/kill_switch_active.py` — `shared/killswitch/kill_switch_active.py` 의

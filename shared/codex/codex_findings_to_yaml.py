@@ -144,9 +144,16 @@ def _yaml_scalar(v: Any) -> str:
             or any(c in s for c in _YAML_UNSAFE_ANYWHERE)
             or s[:1] in _YAML_UNSAFE_FIRST
             or s.strip() != s):
-        # ensure_ascii 기본값(True)은 이 정본 고유다 — hook_common 쪽은 False 다.
-        # 이 차이는 왕복(`json.loads`)을 바꾸지 않고 산출 파일의 가독성만 바꾼다.
-        return json.dumps(s)
+        # ensure_ascii=False — 이 리포는 Korean-primary 이고 이 산출물은 사람이
+        # 리뷰 게이트에서 읽는다. \uXXXX 로 escape 하면 판독 불가가 된다.
+        # `hook_common._yaml_scalar` 와 **같은 값**이다: 인용 여부(위 두 상수)도
+        # 표기(여기)도 같아야 한다 — 정본과 사본이 갈라지는 것이 census #45 다.
+        #
+        # 이 값이 True 였을 때 ASCII-only 를 보장한 적은 **없다**(실측): 인용되지
+        # 않는 경로가 raw 한국어를 그대로 내보내므로, ASCII 만 받는 stdout 인코더는
+        # 이 파일이 True 이던 시절에도 이미 UnicodeEncodeError 로 죽었다. 따라서
+        # 이 전환으로 잃는 보장은 없다.
+        return json.dumps(s, ensure_ascii=False)
     return s
 
 

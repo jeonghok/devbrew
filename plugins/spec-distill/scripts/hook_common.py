@@ -161,8 +161,9 @@ def _yaml_scalar(v) -> str:
 
     ensure_ascii=False: 이 리포는 Korean-primary 이고 advisory 는 한국어다 —
     \\uXXXX 로 escape 하면 사람이 읽는 게이트가 판독 불가가 된다. 산출 파일은 UTF-8.
-    정본은 ensure_ascii 기본값(True)을 쓴다 — 인용 **여부**(위 두 상수)는 같고
-    인용 **표기**만 다르다. 왕복(`json.loads`)은 어느 쪽이든 원문을 그대로 낸다.
+    정본(`shared/codex/codex_findings_to_yaml.py`)도 **같다** — 인용 여부(위 두
+    상수)도 표기(ensure_ascii)도 같다. 2026-08-19 이전에는 정본만 기본값(True)이라
+    한국어가 \\uXXXX 로 나갔고, 인용 술어를 넓히면서 그 노출이 늘어 함께 맞췄다.
     """
     if isinstance(v, bool):
         return "true" if v else "false"

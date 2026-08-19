@@ -42,9 +42,9 @@ def _plugin_py_files():
 
     2026-08-19: 그 정본의 `_yaml_scalar` 는 한때 네 번째 변종이었다(`[]{}` 없음 +
     빈 문자열 가드 없음). 지금은 인용 **여부**를 정하는 두 상수가 이 파일의 정본과
-    같은 값이고, 그것을 `TestCanonicalAgreesWithSharedCodex` 가 잰다. 남은 의도된
-    차이는 인용 **표기** 하나뿐이다 — 정본은 `ensure_ascii` 기본값(True), 여기는
-    False. 왕복은 어느 쪽이든 원문을 그대로 낸다.
+    같은 값이고, 그것을 `TestCanonicalAgreesWithSharedCodex` 가 잰다. 2026-08-19
+    이후로는 인용 **표기**(`ensure_ascii=False`)까지 같아서 두 함수의 출력은
+    **바이트로 동일**하다 — 그쪽 검사도 같은 클래스에 있다.
     """
     return sorted(p for p in SD.rglob("*.py")
                   if "tests" not in p.parts and "__pycache__" not in p.parts
@@ -160,9 +160,10 @@ class TestCanonicalAgreesWithSharedCodex(unittest.TestCase):
     상태가 남았다(2026-08-19 실측: 정본은 `[CRITICAL] …` 를 bare 로 내보내 문서 전체가
     ParserError). 이 락은 그 역전이 다시 생기는 것을 막는다.
 
-    무엇을 재고 무엇을 안 재는가: 인용 **여부**(어떤 입력을 인용하는가)는 같아야 하고,
-    인용 **표기**(`ensure_ascii`)는 다를 수 있다 — 정본은 True, 여기는 False. 표기
-    차이는 왕복을 바꾸지 않는다. 그래서 아래는 `json.loads` 로 되돌린 뒤 비교한다.
+    무엇을 재는가: 인용 **여부**(어떤 입력을 인용하는가)와 인용 **표기**
+    (`ensure_ascii`) 둘 다. 2026-08-19 이전에는 표기가 갈라져 있었고(정본만 True)
+    한국어가 정본 쪽에서만 \\uXXXX 로 나갔다 — 인용 술어를 넓히면서 그 노출이 늘어
+    함께 맞췄다. 이제 두 출력은 **바이트로 동일**해야 한다.
     """
 
     def _canon_pair(self):
@@ -183,22 +184,40 @@ class TestCanonicalAgreesWithSharedCodex(unittest.TestCase):
             "array[0] 범위 초과", "done}", "a[b", "a]b", "a{b", "a}b",
             "approved", "needs_revise", "codex-reviewer", "fail-safe",
             "a*b", "a?b", "a,b", "a|b", "plain summary", "한국어 요약",
+            # 표기 축 — 인용되면서 **동시에** 한국어인 값. 이게 없으면 ensure_ascii
+            # 갈라짐을 어떤 케이스도 구분하지 못한다(순수 ASCII 값끼리는 True/False
+            # 가 같은 문자열을 낸다 — 통과가 정답인 assert 가 된다).
+            "[CRITICAL] 한국어 요약", "사유: 판정 불가", "- 한국어 항목",
         ]
         # 축퇴 가드: 두 진영(인용/비인용)이 모두 비면 아래 비교가 공허하다.
         quoted = [c for c in cases if local(c).startswith('"')]
         bare = [c for c in cases if not local(c).startswith('"')]
         self.assertGreaterEqual(len(quoted), 20, "인용 사례가 너무 적다 — 검사가 공허하다")
         self.assertGreaterEqual(len(bare), 5, "비인용 사례가 없다 — '전부 인용' 으로 도망갔다")
+        # 표기 축의 축퇴 가드: 비-ASCII 인용 사례가 없으면 ensure_ascii 비교가 공허하다.
+        non_ascii_quoted = [c for c in quoted if not c.isascii()]
+        self.assertGreaterEqual(len(non_ascii_quoted), 3,
+                                "인용되는 비-ASCII 사례가 없다 — 표기 비교가 공허하다")
         for c in cases:
             with self.subTest(value=c):
                 a, b = local(c), shared(c)
-                self.assertEqual(a.startswith('"'), b.startswith('"'),
-                                 f"인용 여부가 갈렸다: local={a!r} shared={b!r}")
-                # 표기가 달라도(ensure_ascii) 되돌린 값은 같아야 한다.
+                # 바이트로 동일하다 — 인용 여부도 표기(ensure_ascii)도 같다.
+                self.assertEqual(a, b, f"정본과 갈라졌다: local={a!r} shared={b!r}")
                 da = json.loads(a) if a.startswith('"') else a
-                db = json.loads(b) if b.startswith('"') else b
-                self.assertEqual(da, db)
                 self.assertEqual(da, c, "인용/역인용 왕복이 원문을 바꿨다")
+
+    def test_neither_escapes_korean(self):
+        """표기 축의 **양의 짝** — 둘이 같이 True 로 가면 위 검사는 그대로 통과한다.
+
+        `test_both_quote_the_same_inputs` 는 두 함수가 **같은지**만 잰다. 둘 다
+        `ensure_ascii=True` 로 바뀌어도 GREEN 이다. 리포 컨벤션(Korean-primary,
+        사람이 읽는 게이트)을 고정하는 절대 기준이 따로 필요하다.
+        """
+        local, shared = self._canon_pair()
+        for f, who in ((local, "hook_common"), (shared, "shared/codex 정본")):
+            out = f("[CRITICAL] 사유: 판정 불가")
+            self.assertIn("판정 불가", out, f"{who}: 한국어가 원문 그대로 있지 않다")
+            self.assertNotIn("\\u", out, f"{who}: 한국어가 \\uXXXX 로 escape 됐다")
 
     def test_the_two_unsafe_sets_are_literally_equal(self):
         """행동 락의 구조적 짝 — 위 케이스 목록이 놓친 문자를 잡는다.
