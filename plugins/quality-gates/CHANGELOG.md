@@ -6,8 +6,9 @@
 ## [4.0.0] — 2026-08-20 (BREAKING)
 
 Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일 — 축약
-`QG`도 `QUALITY_GATES`로 펼쳤다. 이 플러그인이 소유한 kill switch·설정 변수 전량이
-영향을 받는다:
+`QG`도 `QUALITY_GATES`로 펼쳤다. 아래는 이 리네임이 닿은 **옛 이름 → 새 이름 매핑
+표**다 — 지금 실제로 살아 읽는 kill switch·설정 변수의 완전한 목록이라는 주장은
+아니다(그 판정은 별도 태스크의 몫; fix round 1 리뷰 지적).
 
 | 옛 이름 | 새 이름 |
 |---|---|
@@ -18,7 +19,6 @@ Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나�
 | `DEVBREW_QG_DISABLE_BRANCH_WORKTREE` | `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE` |
 | `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX` | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` |
 | `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION` | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_TEST_VALIDATION` |
-| `DEVBREW_QG_DISABLE_SCOPE_REDIRECT` | `DEVBREW_QUALITY_GATES_DISABLE_SCOPE_REDIRECT` |
 | `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE` | `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE` |
 | `DEVBREW_QG_DISABLE_CRITIQUE` | `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE` |
 | `DEVBREW_QG_DISABLE_PUBLISH` | `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH` |
@@ -28,6 +28,10 @@ Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나�
 | `DEVBREW_QG_KEEP_WORKTREE` | `DEVBREW_QUALITY_GATES_KEEP_WORKTREE` |
 | `DEVBREW_QG_TTL_HOURS` | `DEVBREW_QUALITY_GATES_TTL_HOURS` |
 | `DEVBREW_AGENT_TOOLS_LOCK_EMIT` (test-only) | `DEVBREW_QUALITY_GATES_AGENT_TOOLS_LOCK_EMIT` |
+
+(`DEVBREW_QG_DISABLE_SCOPE_REDIRECT`는 최초 초안에 실렸으나 제거했다 — 그 스위치는 [2.7.0]에서
+이미 제거됐고, 오늘 살아있지 않은 이름을 새 이름으로 "부활"시키는 것으로 잘못 읽혔다. 부재
+검증은 `tests/harness/test_skill_orchestration_behavior.sh:473`가 새 이름으로 여전히 지킨다.)
 
 전역 `DEVBREW_SKIP_HOOKS`는 정의상 불변. `shared/killswitch/kill_switch_active.py`
 정본(과 이 플러그인의 `scripts/kill_switch_active.py` 물리 사본)의 전역 스위치

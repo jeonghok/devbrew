@@ -22,6 +22,25 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 꺼지면 codex가 리포 근거만으로 감사하고 그 사실을 stderr에 loud하게 남긴다 — crash 없음
 (graceful degradation).
 
+`DEVBREW_PLUGIN_AUDIT_STALENESS_REGISTRY` — staleness census가 참조하는 원장 경로 override.
+
+**환경변수 어순 rename (0.6.0, devbrew-weight-reduction Task 25).** 이 플러그인이 노출하는
+사용자-표면 이름 4개가 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일됐다:
+
+| 옛 이름 | 새 이름 |
+|---|---|
+| `DEVBREW_DISABLE_PLUGIN_AUDIT` | `DEVBREW_PLUGIN_AUDIT_DISABLE` |
+| `DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX` | `DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX` |
+| `DEVBREW_DISABLE_PLUGIN_AUDIT_WEB` | `DEVBREW_PLUGIN_AUDIT_DISABLE_WEB` |
+| `DEVBREW_STALENESS_REGISTRY` (플러그인 토큰 없던 이름) | `DEVBREW_PLUGIN_AUDIT_STALENESS_REGISTRY` |
+
+옛 이름은 **fallback 없이 즉시 제거**됐다 — 이 플러그인은 `CHANGELOG.md`가 없다(`plugin.json`
+버전이 0.6.0으로 CLAUDE.md §메타데이터의 "v1.0.0 이상이면 CHANGELOG.md" 문턱 아래라 별도
+파일을 만들지 않았고, 대신 이 kill-switch 절에 기록한다). 근거는 현재 제3자 설치가 없다는
+것 하나이며, CLAUDE.md §메타데이터의 one-minor deprecation window 원칙과의 충돌을 그 조건
+아래 수용한 것이다. **제3자 설치가 생기면 이 근거가 바뀐다** — 그때는 다음 rename에
+fallback 창을 둔다.
+
 ## Prerequisites (cross-plugin 의존)
 
 - **plugin-dev (official, optional)** — 구조 hard-check tier(E)가 `validate-agent.sh`·

@@ -351,7 +351,7 @@ const AXES = [
       '  **대상이 쓰는 방식의 실제 귀결이 무엇인가** — 구체적 시나리오로.',
       '- **테스트가 훅의 *실제 능력*을 증명하는가, 통과하기 쉬운 대리 지표인가?** fixture가 **진짜 실패',
       '  케이스**를 담는가? (devbrew 교훈: 헤더만 만족시켜도 GREEN인 회귀 락은 **이빨이 없다**.)',
-      '- kill switch(`DEVBREW_DISABLE_*` / `DEVBREW_SKIP_HOOKS`)가 실제로 존중되는가 — 코드로 확인하라.',
+      '- kill switch(`DEVBREW_<PLUGIN>_DISABLE` / `DEVBREW_SKIP_HOOKS`)가 실제로 존중되는가 — 코드로 확인하라.',
       '',
       '**이 축의 후보 단서 (검증하라):**',
       ...axisClueBlock(3),

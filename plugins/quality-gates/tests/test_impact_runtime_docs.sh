@@ -12,8 +12,12 @@ README="$PLUGIN_ROOT/README.md"
 NEW_SCRIPTS=(resolve-baseline.sh run-test-selection.sh baseline-cache.sh
              diff-test-results.py check_qa_ledger.py)
 
-# T20 + AC29: major digit 만 핀한다. `"version": "3.0.0"` 리터럴을 핀하면
-# doc-only patch bump 마다 stale-red 가 된다 — 불변식만 검사하고 patch 는 unpin.
+# T20 + AC29: major digit 만 핀한다 — **floor**로. `"version": "3.0.0"` 리터럴을
+# 핀하면 doc-only patch bump 마다 stale-red 가 되고, `== "3"` 로 정확히 고정하면
+# 다음 major bump(예: 4.0.0)에서 이 락이 그 자체로 stale-red 가 된다(devbrew
+# weight-reduction Task 25 fix round 1 실측). 이 락이 실제로 잡아야 하는 것은
+# "impact-driven runtime이 major 3에서 출시됐고 그 이후 roll back 되지 않았다"는
+# 불변식이지 "major가 정확히 3이다"가 아니다 — `-ge 3`로 floor를 검사한다.
 case_major_bump() {
   local v major
   v=$(python3 -c "
@@ -22,8 +26,8 @@ with open('$MANIFEST', encoding='utf-8') as f:
     print(json.load(f)['version'])
 ")
   major="${v%%.*}"
-  [[ "$major" == "3" ]] && ok "plugin.json major digit == 3 (v$v)" \
-                        || no "major digit $major (기대 3, v$v)"
+  [[ "$major" -ge 3 ]] && ok "plugin.json major digit >= 3 (floor, v$v)" \
+                       || no "major digit $major (기대 floor >= 3, v$v)"
 }
 
 # AC29: CHANGELOG 에 3.0.0 항목이 있고 날짜가 리터럴 placeholder 가 아니다
