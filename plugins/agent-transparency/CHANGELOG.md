@@ -10,15 +10,34 @@
   **집합은 불변** — allowlist에서 도구가 추가되거나 빠지지 않았다(Law 2 경계
   무변경, `test_agent_tools_lock_differential.sh` / `test_agent_tools_lock_mutation.sh`
   green으로 확인).
-- **`test_plugin_contract.py`의 리터럴 mutation-lock 3개를 새 어순에 맞춰
-  갱신.** `TestDedicatedAgent.test_mutation_tools_line_emptied` ·
-  `test_mutation_write_tool_added` · `TestAgentTrustBoundary.
-  test_tools_allowlist_is_unchanged_by_the_boundary`가 옛 문자열
-  `"tools: Read, Glob, Grep"`을 그대로 찾고 있어 위 어순 통일 직후
-  RED였다(mutation replace가 no-op이 되어 "변형 안 된 파일이 변형된 값을
-  낸다"고 기대하는 assert가 깨짐) — 세 assert 전부 새 문자열
-  `"tools: Read, Grep, Glob"`으로 교체해 원래 의도(도구 추가/삭제
-  mutation을 잡는다)를 그대로 유지한 채 green으로 되돌렸다.
+- **`test_plugin_contract.py`의 mutation-lock 3개를 리터럴 앵커에서 파싱된
+  집합(set) 기반으로 재작성.** `TestDedicatedAgent.
+  test_mutation_tools_line_emptied` · `test_mutation_write_tool_added` ·
+  `TestAgentTrustBoundary.test_tools_allowlist_is_unchanged_by_the_boundary`가
+  옛 문자열 `"tools: Read, Glob, Grep"`을 리터럴로 찾고 있어 위 어순 통일
+  직후 RED였다. **fix round 1**은 처음엔 그 리터럴을 새 문자열
+  `"tools: Read, Grep, Glob"`로 바꿔 넣는 것으로 green을 만들었지만, 이
+  branch에서 같은 계열의 재발(Task 25의 `major == "3"`, Task 28의
+  non-strict `ranks == sorted(ranks)`)이 이미 두 번 있었던 뒤라 리뷰가
+  "재anchoring일 뿐 치료가 아니다"로 정확히 짚었다 — 다음 정당한 `tools:`
+  편집이 같은 이유로 또 RED가 된다. **진짜 수정**: 이미 이 모듈에 있던
+  order-agnostic 파서 `TestDedicatedAgent.tools_of()`를 세 곳 다 재사용하도록
+  다시 썼다. mutation 두 개(`_emptied` · `_write_tool_added`)는 이제
+  `tools_line()`(새 헬퍼 — frontmatter에서 실제 `tools:` 원문 줄을 읽어
+  온다)으로 실제 줄을 찾아 그 값으로 치환하므로 어순과 무관하게 항상
+  맞는다. `test_tools_allowlist_is_unchanged_by_the_boundary`는 문자열
+  포함이 아니라 `tools_of(self.text) == ALLOWED`(집합 등치)로 바뀌었다.
+  **계측기 자체의 무결성 가드도 추가**: `.replace()`가 대상을 못 찾으면
+  조용히 원문을 그대로 돌려주므로(no-op), 두 mutation 테스트 모두
+  `assertNotEqual(mutated, self.text)`로 "실제로 변형됐는가"를 먼저
+  확인한 뒤에야 mutation의 효과를 판정한다 — 그렇지 않으면 다음 리팩터가
+  이 계측기를 거짓 **green**으로 만들 수 있었다(지금은 거짓 RED로만
+  드러났지만). **mutation 증명**: 실제 `tools:` 줄을 다른 순열(`Glob,
+  Read, Grep`)로 바꿔도 세 테스트 모두 green을 유지했고(order-blind 확인),
+  거기에 `Write`를 더하자 셋 중 직접-검사 두 개(`test_tools_are_
+  dominated_by_allowlist` · `test_tools_allowlist_is_unchanged_by_the_
+  boundary`)가 정확히 red로 전환했다(권한 위반 감지 확인) — 검증 뒤 원본
+  파일로 복원, `git diff` clean 확인.
 
 ## [0.2.1] — 2026-08-15
 

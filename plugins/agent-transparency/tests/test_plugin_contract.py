@@ -857,6 +857,22 @@ class TestDedicatedAgent(unittest.TestCase):
                 return {t.strip() for t in raw.split(",") if t.strip()}
         return None
 
+    @staticmethod
+    def tools_line(text: str) -> str:
+        """`tools:` 로 시작하는 실제 원문 줄(개행 제외).
+
+        어순 리터럴을 하드코딩하지 않기 위해 파일에서 직접 뽑는다 — mutation
+        테스트가 이 값으로 `.replace()`하면 어순이 바뀌어도 항상 실제 줄을
+        맞춘다(devbrew weight-reduction Task 29 axis 1 회귀 전례: 어순이
+        바뀌자 하드코딩된 옛 문자열의 `.replace()`가 no-op이 되어 mutation
+        없이 "변형됐다"고 기대하는 assert가 깨졌었다).
+        """
+        body = text.split("---", 2)[1]
+        for line in body.splitlines():
+            if line.startswith("tools:"):
+                return line
+        raise AssertionError("tools: 줄을 찾지 못했다 — 실물 파일 구조가 바뀌었다")
+
     def setUp(self) -> None:
         self.text = self.AGENT.read_text(encoding="utf-8")
 
@@ -886,13 +902,18 @@ class TestDedicatedAgent(unittest.TestCase):
         self.assertIsNone(self.tools_of(mutated))
 
     def test_mutation_tools_line_emptied(self) -> None:
-        mutated = self.text.replace("tools: Read, Grep, Glob", "tools:")
+        line = self.tools_line(self.text)
+        mutated = self.text.replace(line, "tools:")
+        self.assertNotEqual(mutated, self.text,
+                             "치환이 no-op — line 이 self.text 안에 없다(어순 드리프트?)")
         self.assertEqual(self.tools_of(mutated), set())
 
     def test_mutation_write_tool_added(self) -> None:
         """추가 축 — 쓰기 도구가 들어오면 지배관계가 깨진다."""
-        mutated = self.text.replace("tools: Read, Grep, Glob",
-                                    "tools: Read, Grep, Glob, Write")
+        line = self.tools_line(self.text)
+        mutated = self.text.replace(line, line + ", Write")
+        self.assertNotEqual(mutated, self.text,
+                             "치환이 no-op — line 이 self.text 안에 없다(어순 드리프트?)")
         self.assertFalse(self.tools_of(mutated) <= self.ALLOWED)
 
 
@@ -1038,9 +1059,12 @@ class TestAgentTrustBoundary(unittest.TestCase):
         """경계를 **도구 축소로** 구현하지 않았음을 고정한다.
 
         `Glob` 을 빼면 OQ-AD 의 잔여위험 논증이 무너진다 — 경계는 선언이지
-        권한 축소가 아니다.
+        권한 축소가 아니다. **집합**으로 고정한다 — 어순 리터럴 앵커는
+        `tools:` 표기 순서가 바뀔 때마다(권한과 무관하게) 깨진다
+        (devbrew weight-reduction Task 29 axis 1 회귀 전례).
         """
-        self.assertIn("tools: Read, Grep, Glob", self.text)
+        self.assertEqual(TestDedicatedAgent.tools_of(self.text),
+                          TestDedicatedAgent.ALLOWED)
 
 
 if __name__ == "__main__":
