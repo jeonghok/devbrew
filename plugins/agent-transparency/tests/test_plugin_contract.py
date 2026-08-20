@@ -886,13 +886,13 @@ class TestDedicatedAgent(unittest.TestCase):
         self.assertIsNone(self.tools_of(mutated))
 
     def test_mutation_tools_line_emptied(self) -> None:
-        mutated = self.text.replace("tools: Read, Glob, Grep", "tools:")
+        mutated = self.text.replace("tools: Read, Grep, Glob", "tools:")
         self.assertEqual(self.tools_of(mutated), set())
 
     def test_mutation_write_tool_added(self) -> None:
         """추가 축 — 쓰기 도구가 들어오면 지배관계가 깨진다."""
-        mutated = self.text.replace("tools: Read, Glob, Grep",
-                                    "tools: Read, Glob, Grep, Write")
+        mutated = self.text.replace("tools: Read, Grep, Glob",
+                                    "tools: Read, Grep, Glob, Write")
         self.assertFalse(self.tools_of(mutated) <= self.ALLOWED)
 
 
@@ -1040,7 +1040,7 @@ class TestAgentTrustBoundary(unittest.TestCase):
         `Glob` 을 빼면 OQ-AD 의 잔여위험 논증이 무너진다 — 경계는 선언이지
         권한 축소가 아니다.
         """
-        self.assertIn("tools: Read, Glob, Grep", self.text)
+        self.assertIn("tools: Read, Grep, Glob", self.text)
 
 
 if __name__ == "__main__":

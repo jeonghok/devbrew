@@ -10,6 +10,15 @@
   **집합은 불변** — allowlist에서 도구가 추가되거나 빠지지 않았다(Law 2 경계
   무변경, `test_agent_tools_lock_differential.sh` / `test_agent_tools_lock_mutation.sh`
   green으로 확인).
+- **`test_plugin_contract.py`의 리터럴 mutation-lock 3개를 새 어순에 맞춰
+  갱신.** `TestDedicatedAgent.test_mutation_tools_line_emptied` ·
+  `test_mutation_write_tool_added` · `TestAgentTrustBoundary.
+  test_tools_allowlist_is_unchanged_by_the_boundary`가 옛 문자열
+  `"tools: Read, Glob, Grep"`을 그대로 찾고 있어 위 어순 통일 직후
+  RED였다(mutation replace가 no-op이 되어 "변형 안 된 파일이 변형된 값을
+  낸다"고 기대하는 assert가 깨짐) — 세 assert 전부 새 문자열
+  `"tools: Read, Grep, Glob"`으로 교체해 원래 의도(도구 추가/삭제
+  mutation을 잡는다)를 그대로 유지한 채 green으로 되돌렸다.
 
 ## [0.2.1] — 2026-08-15
 

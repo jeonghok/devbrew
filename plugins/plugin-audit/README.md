@@ -66,7 +66,7 @@ fallback 창을 둔다.
 - **Law 1 (Clarity Before Code)** — 1차 산출물은 증거로 뒷받침된 갭 목록. 빈 감사는 감사가 아니다
   (6축 전멸 시 리포트 없음, AC-4). 갭이 적게 나오는 것은 실패가 아니고 없는 갭을 만드는 것이 실패.
 - **Law 2 (Writer ≠ Reviewer, 물리 분리)** — 3 agent(`plugin-auditor`·`audit-refuter`·`smoke-probe`)의
-  `tools:` allowlist(`Glob, Grep, Read, WebSearch, WebFetch`)가 쓰기·실행을 fail-closed로 차단.
+  `tools:` allowlist(`Read, Grep, Glob, WebSearch, WebFetch`)가 쓰기·실행을 fail-closed로 차단.
   프롬프트가 아니라 frontmatter scoping. `check-law2.py` 정적 게이트 + smoke가 런타임 실증.
 - **Law 3 (Every Cycle Leaves the System Smarter)** — 감사 결과는 `docs/audits/<date>-<target>-audit.*`로
   커밋되고 인덱스(`docs/audits/README.md`)에서 검색 가능. journal.jsonl이 named/diff-able history.
