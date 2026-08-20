@@ -1,7 +1,7 @@
 ---
 name: audit-refuter
 description: Adversarial verifier for plugin-audit findings. Tries to REFUTE each gap — checks that the cited file:line actually says what the auditor claims, hunts false positives and taste-disguised-as-defect. Physically cannot write — no Bash, no Write, no Edit. Defaults to refuted when uncertain.
-tools: Glob, Grep, Read, WebSearch, WebFetch
+tools: Read, Grep, Glob, WebSearch, WebFetch
 model: inherit
 color: red
 cost_class: medium

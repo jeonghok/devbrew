@@ -1,7 +1,7 @@
 ---
 name: plugin-auditor
 description: Read-only auditor for a single axis of a devbrew plugin audit. Reads whole files end-to-end (no excerpt sampling), gathers file:line evidence, and emits gap findings against a fixed schema. Physically cannot write — no Bash, no Write, no Edit. Not a code-locator; not a fixer.
-tools: Glob, Grep, Read, WebSearch, WebFetch
+tools: Read, Grep, Glob, WebSearch, WebFetch
 model: inherit
 color: cyan
 cost_class: medium

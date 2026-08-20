@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.2] — 2026-08-20
+
+### Changed
+
+- **`transcript-reader` agent의 `tools:` 어순을 형제 agent들과 통일**(devbrew
+  weight-reduction Task 29 축 1). `Read, Glob, Grep` → `Read, Grep, Glob` —
+  다른 17개 agent가 이미 쓰던 "읽기 → 검색 → 열거 → 그 외" 순서에 맞췄다.
+  **집합은 불변** — allowlist에서 도구가 추가되거나 빠지지 않았다(Law 2 경계
+  무변경, `test_agent_tools_lock_differential.sh` / `test_agent_tools_lock_mutation.sh`
+  green으로 확인).
+
 ## [0.2.1] — 2026-08-15
 
 CRITICAL 을 닫은 뒤 남은 IMPORTANT 중 **게이트를 거짓말하게 만드는 것들**. 그중 하나는
