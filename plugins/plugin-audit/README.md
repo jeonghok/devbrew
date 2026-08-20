@@ -41,6 +41,14 @@ Kill switch: `DEVBREW_PLUGIN_AUDIT_DISABLE=1`.
 아래 수용한 것이다. **제3자 설치가 생기면 이 근거가 바뀐다** — 그때는 다음 rename에
 fallback 창을 둔다.
 
+**severity 어휘 통일 (0.6.0, devbrew-weight-reduction Task 28).** 감사 리포트 발견 항목의
+`[severity]` 배지가 옛 4-vocab(`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`)에서 quality-gates와 동일한
+3-vocab(`CRITICAL`/`IMPORTANT`/`SUGGESTION`)으로 바뀌었다 — `HIGH`→`IMPORTANT`,
+`MEDIUM`·`LOW`→`SUGGESTION`. `HIGH`를 `CRITICAL`로 승격하지 않은 이유: quality-gates의
+`CRITICAL`은 머지 차단 등급이고 plugin-audit의 `HIGH`는 정렬 순위일 뿐이라, 승격하면 차단
+임계가 조용히 내려간다. 옛 어휘로 쓰인 과거 리포트/데이터는 그대로 렌더되지만(크래시 없음)
+정렬 순위표에 없어 맨 뒤로 밀린다.
+
 ## Prerequisites (cross-plugin 의존)
 
 - **plugin-dev (official, optional)** — 구조 hard-check tier(E)가 `validate-agent.sh`·
