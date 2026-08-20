@@ -66,6 +66,19 @@ Task 27(무게 감축) — `.claude/` state 배치 통일 감사: quality-gates�
 stale 서술이었다(81c6e97이 이미 `scripts/`로 이동) — 정정. `CLAUDE.md:47`(state
 배치 규약 문장)을 코드가 실제로 쓰는 모양에 맞춰 갱신.
 
+Task 27 fix round 1: 위 감사가 놓친 것을 코디네이터 독립 확인이 잡았다 — `README.md`의
+"파이프라인 state" 절이 세션 디렉토리 내용물로 `diff-cache.txt`·`code-paths.tmp`를
+"transient cache"로 광고하고 있었으나, 이 플러그인 전체에서 그 두 이름이 나타나는
+자리는 위 다섯 리터럴의 죽은 cleanup 목록뿐 — 그 경로·이름으로 쓰는 코드가 없다.
+해당 줄 삭제(README.md:479). 아울러 Step 4 검증 스크립트 자체의 결함도 확인: 문자
+클래스 `[a-z0-9<>{}$_.-]`에 `/`가 빠져 있어 추출 토큰이 경로 구분자를 못 넘고
+`SHAPE:namespaced` 치환이 원천적으로 발화 불가능했다(검증이 "통과할 수 없는 검증"
+이었다). `/`를 넣어 재실행하면 고유 토큰 135개 중 101–104개(엄격/느슨한 매칭 기준)가
+5개 플러그인 네임스페이스 하위, 나머지는 이번 감사가 이미 분류를 마친 죽은 legacy
+리터럴 5종·하니스 소유(`plans`/`projects`/`plugins`/`jobs`/`worktrees`)·HOME-상대
+(`~/.claude/{agent-transparency-ab,qg-reports}`)로 남는다 — "라이브 경로는 이미
+통일돼 있었다"는 결론을 뒷받침.
+
 ### Deprecated
 - 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일. 옛 이름(`DEVBREW_DISABLE_QG_CODEX` 등)은
   **fallback 없이 즉시 제거**됐다. 근거: 현재 제3자 설치가 없다 (CLAUDE.md §메타데이터의
