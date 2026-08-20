@@ -3,6 +3,37 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.1.0] — 2026-08-21
+
+Task 31(무게 감축): `quality-pipeline` SKILL.md의 `## Runtime gate` 절차 전문(1,190줄,
+파일의 58%)을 `skills/quality-pipeline/references/runtime-gate.md`로 분리했다.
+SKILL.md에는 같은 `## Runtime gate` 헤딩 아래 포인터 산문만 남아 `## Contents`의
+`#runtime-gate` 앵커는 그대로 산다 — Runtime 게이트를 실제로 돌 때만 그 파일을
+Read 하고, `/qg review`처럼 Runtime을 안 도는 실행은 읽지 않는다(조건부 로드).
+on-demand 로드 표면(SKILL 8 + agent 18 + command 7) 6,482줄 중 이 한 섹션이
+1,190줄(18.4%)을 차지했었다.
+
+**Added**
+- `skills/quality-pipeline/references/runtime-gate.md` — Runtime 게이트 Step
+  R-init..R9 절차 전문(분할 전 SKILL.md에서 그대로 이동, 내용 변경 없음).
+- `tests/lib/reconstruct-skill.sh` — SKILL.md 포인터 자리에 참조 파일을 되접어
+  분할 전과 줄 단위로 동일한 논리적 문서를 재구성하는 테스트 헬퍼. 줄 번호·
+  섹션 윈도우로 Runtime 절차를 검증하던 기존 테스트들이 이것을 쓴다.
+- `shared/tests/test_skill_reference_pointers.sh` — 모든 `plugins/*/skills/*/
+  SKILL.md`가 가리키는 `references/*.md` 포인터가 실제로 존재하는지 검증하는
+  신규 락. 참조 파일이 나중에 삭제·개명되면 SKILL.md가 존재하지 않는 파일을
+  가리키게 되는 fail-open을 막는다. mutation(참조 파일 임시 rename)으로 이빨을
+  확인했다(RED→복원→GREEN).
+
+**Fixed**
+- `tests/harness/test_skill_orchestration_behavior.sh` · `tests/
+  test_runtime_verdict_precedence.sh` — 위 분할로 Runtime 절차의 앵커 문자열이
+  SKILL.md에서 사라져 새 RED가 될 뻔한 것을, `reconstruct-skill.sh`로 SKILL.md를
+  분할 전과 동일한 논리적 문서로 재구성해 읽도록 고쳤다(검사 로직 자체는
+  불변). 재구성 실패는 원본 SKILL.md로 조용히 폴백하지 않고 FAIL한다 — 폴백하면
+  Runtime 관련 검사 전부가 포인터 산문 몇 줄만 보고 앵커 소실로 전량 FAIL 하거나
+  창이 비어 음의 락이 vacuous 통과한다.
+
 ## [4.0.0] — 2026-08-20 (BREAKING)
 
 Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일 — 축약

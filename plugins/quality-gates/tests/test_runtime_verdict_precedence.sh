@@ -5,11 +5,23 @@
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-SKILL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
+SKILL_REAL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 RTS="$PLUGIN_ROOT/scripts/run-test-selection.sh"
 TAB=$'\t'
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+
+# Task 31(무게 감축): Runtime gate 절차 전문이 references/runtime-gate.md 로 분리됐다.
+# 아래 section_window() 는 R-init..R9 앵커로 SKILL.md 를 창-스캔하도록 설계됐으므로,
+# 분할 전과 동일한 논리적 문서를 재구성해 그 위에서 돈다. 재구성 실패를 원본 SKILL.md
+# 로 조용히 폴백하면 앵커가 전부 소실돼 아래 창들이 비고, 음의 락들이 vacuous 하게
+# 통과한다 — 그래서 폴백하지 않고 즉시 FAIL 한다.
+. "$SCRIPT_DIR/lib/reconstruct-skill.sh"
+if ! SKILL="$(reconstruct_skill_md "$SKILL_REAL")"; then
+  echo "FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패 ($SKILL_REAL)"
+  exit 1
+fi
+trap 'rm -f "$SKILL"' EXIT
 
 # section_window <start-anchor> <end-anchor> → 두 앵커 사이의 본문
 # 락 문구를 섹션 윈도우 안에서 찾는 이유: 문서 아무 데나 있는 같은 단어가
