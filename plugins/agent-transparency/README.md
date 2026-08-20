@@ -39,7 +39,7 @@
 ```
 
 `/standup` 의 응답은 전용 agent(`agent-transparency:transcript-reader`)의 fork 가
-만든다. 이 agent 는 `tools: Read, Glob, Grep` fail-closed allowlist 를 선언한다 —
+만든다. 이 agent 는 `tools: Read, Grep, Glob` fail-closed allowlist 를 선언한다 —
 파일을 쓰거나 명령을 실행하거나 네트워크에 닿을 수 없다.
 
 ## 훅을 두지 않는다 (2026-08-13)
@@ -62,7 +62,7 @@
 - **Law 1 (Clarity Before Code)** — 일곱 순간의 필수 항목이 표로 열거돼 있고,
   `tests/test_output_style.py` 가 그 표를 mutation 과 함께 잠근다.
 - **Law 2 (Writer ≠ Reviewer)** — `/standup` 의 전용 agent 가 fail-closed
-  `tools: Read, Glob, Grep` allowlist 를 선언한다. 쓰기·실행·네트워크 도구가
+  `tools: Read, Grep, Glob` allowlist 를 선언한다. 쓰기·실행·네트워크 도구가
   **없다** — `disallowedTools` 단독은 시간축으로 fail-open 이라 쓰지 않는다.
 - **Law 3 (Every Cycle Leaves the System Smarter)** — 이 플러그인이 하는 일
   자체가 compounding 이다. 설명이 트랜스크립트에 쌓이고 `/standup` 이 그것을

@@ -33,7 +33,7 @@ def load_yaml(path):
     if not path:
         return [], 0
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or []
     except FileNotFoundError:
         return [], 0
@@ -54,7 +54,7 @@ def load_yaml_doc(path):
     if not path:
         return None
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             return yaml.safe_load(f)
     except FileNotFoundError:
         return None

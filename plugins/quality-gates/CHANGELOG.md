@@ -3,6 +3,171 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.0.0] — 2026-08-20 (BREAKING)
+
+Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일 — 축약
+`QG`도 `QUALITY_GATES`로 펼쳤다. 아래는 이 리네임이 닿은 **옛 이름 → 새 이름 매핑
+표**다 — 지금 실제로 살아 읽는 kill switch·설정 변수의 완전한 목록이라는 주장은
+아니다(그 판정은 별도 태스크의 몫; fix round 1 리뷰 지적).
+
+| 옛 이름 | 새 이름 |
+|---|---|
+| `DEVBREW_DISABLE_QUALITY_GATES` | `DEVBREW_QUALITY_GATES_DISABLE` |
+| `DEVBREW_DISABLE_QG_CODEX` | `DEVBREW_QUALITY_GATES_DISABLE_CODEX` |
+| `DEVBREW_DISABLE_QG_WEB` | `DEVBREW_QUALITY_GATES_DISABLE_WEB` |
+| `DEVBREW_DISABLE_QG_SECURITY_REVIEWER` | `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER` |
+| `DEVBREW_QG_DISABLE_BRANCH_WORKTREE` | `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE` |
+| `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX` | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` |
+| `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION` | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_TEST_VALIDATION` †이 릴리스에서 rename 직후 제거됨 — 아래 Task 26 및 표 뒤 SCOPE_REDIRECT 대비 설명 참조 |
+| `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE` | `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE` |
+| `DEVBREW_QG_DISABLE_CRITIQUE` | `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE` |
+| `DEVBREW_QG_DISABLE_PUBLISH` | `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH` |
+| `DEVBREW_QG_CRITIQUE_MAX_ROUNDS` | `DEVBREW_QUALITY_GATES_CRITIQUE_MAX_ROUNDS` |
+| `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS` | `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS` |
+| `DEVBREW_QG_GC_VERBOSE` | `DEVBREW_QUALITY_GATES_GC_VERBOSE` |
+| `DEVBREW_QG_KEEP_WORKTREE` | `DEVBREW_QUALITY_GATES_KEEP_WORKTREE` |
+| `DEVBREW_QG_TTL_HOURS` | `DEVBREW_QUALITY_GATES_TTL_HOURS` |
+| `DEVBREW_AGENT_TOOLS_LOCK_EMIT` (test-only) | `DEVBREW_QUALITY_GATES_AGENT_TOOLS_LOCK_EMIT` |
+
+(`DEVBREW_QG_DISABLE_SCOPE_REDIRECT`는 최초 초안에 실렸으나 제거했다 — 그 스위치는 [2.7.0]에서
+이미 제거됐고, 오늘 살아있지 않은 이름을 새 이름으로 "부활"시키는 것으로 잘못 읽혔다. 부재
+검증은 `tests/harness/test_skill_orchestration_behavior.sh:473`가 새 이름으로 여전히 지킨다.)
+
+위 표의 `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION` 행(†)은 겉보기엔 SCOPE_REDIRECT와 같은
+운명(아래 Task 26이 새 이름 `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_TEST_VALIDATION`을 좀비로
+판정해 제거)이지만 **의도적으로 다르게** 취급했다 — 두 경우가 표에서 다르게 보이는 것은
+누락이 아니라 이 구분 때문이다. SCOPE_REDIRECT는 [2.7.0]에서 이미 제거돼 3.4.0→4.0.0
+업그레이드 사용자에게 살아있던 적이 없어 그 행이 무엇도 가르치지 않았다. 반면
+RUNTIME_TEST_VALIDATION은 **이 릴리스 안에서** rename된 직후 제거된다 — 3.4.0 사용자의
+환경에는 옛 이름이 지금 설정돼 있을 수 있다. 행을 통째로 지우면 "이 변수가 어떻게 됐는지"의
+흔적이 아예 사라지므로, 표에는 남기고 rename→제거 이력만 표시했다. 근거는 아래 Task 26.
+
+전역 `DEVBREW_SKIP_HOOKS`는 정의상 불변. `shared/killswitch/kill_switch_active.py`
+정본(과 이 플러그인의 `scripts/kill_switch_active.py` 물리 사본)의 전역 스위치
+**도출식** 자체도 `DEVBREW_DISABLE_<PLUGIN>` → `DEVBREW_<PLUGIN>_DISABLE`로 바뀌었다
+— 리터럴 문자열 치환으로는 안 잡히는 자리였다(태스크 실행 중 burn-test로 실측:
+`kill_switch_active`가 여전히 옛 패턴을 조립해 spec-distill 훅 kill switch가
+무반응이었다).
+
+Task 26(무게 감축) — 위 안내가 예고한 "지금 실제로 살아 읽는지" 판정: 집행 지점 넷
+(코드·SKILL bash fence·SKILL 프로즈·agent frontmatter) 전부를 훑어 README `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_TEST_VALIDATION`이
+**좀비**임을 확인했다 — `README.md`가 광고하던 "Runtime gate Step 2.5"도 `quality-gates:runtime-test-scope`
+훅 키도 실재하지 않는다(`hooks/hooks.json`에 그 키 없음, `quality-pipeline/SKILL.md`에 "Step 2.5" 헤딩
+자체가 없음, `test-scope-validator` dispatch 직전에 이 env var를 확인하는 조건문도 없음). 두 표 행
+(Runtime gate 단위 disable 표 + Hook 단위 disable 표) 제거. `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER`는
+같은 훑기에서 **다른 판정**을 받았다 — `tests/test_security_reviewer_kill_switch.sh`(2026-07-16부터
+`codex-blessed-red.txt`에 등록된 pre-existing red)가 SKILL이 이 env var를 문서화해야 한다고 이미
+주장 중이라 광고만 있고 주장하는 쪽이 없는 좀비가 아니라 **미구현 결함** — README 유지, 별도 태스크
+몫으로 남긴다. `DEVBREW_QUALITY_GATES_DISABLE_WEB`은 `plugins/spec-distill/tests/test_web_kill_switch.sh:95-105`가
+"지금 죽은 스위치를 만들지는 않는다"는 주석과 함께 의도적으로 예약해둔 이름 — 두 ON 사이트가
+아직 없어 그 표에 미도달일 뿐 광고-집행 불일치가 아니다. `plugin-audit/README.md`의 옛 이름 매핑
+표(`DEVBREW_DISABLE_PLUGIN_AUDIT` 등)는 그 표 자신이 "이 플러그인은 CHANGELOG.md가 없어 이 절이
+그 대체"라고 명시하므로 CHANGELOG와 동격으로 보존.
+
+Task 27(무게 감축) — `.claude/` state 배치 통일 감사: quality-gates·spec-distill 모두
+이미 `.claude/<plugin>/<session-id>/<file>` 한 모양만 쓴다(라이브 write 경로 기준).
+`.claude/quality-gates.local.md`·`-session.local.md`·`-branch.local.md`·
+`qg-diff-cache.txt`·`qg-code-paths.tmp` 다섯 리터럴(`session-start-advisor.py`의
+`LEGACY_RELATIVE`, `setup-qg.sh`의 `LEGACY_FILES`, `/cancel-qg`의 `rm -f` 목록)은
+지금 쓰는 경로가 아니라 v1.5.0 이전 flat 모델의 **일회성 cleanup 대상 리터럴**임을
+확인하고 그대로 두었다 — rename하면 실제로 남아있는 옛 파일을 못 찾아 cleanup이
+깨진다. `scripts/state_path.py` 머리말의 "spec-distill 쪽은 아직 `hooks/`에 있고"는
+stale 서술이었다(81c6e97이 이미 `scripts/`로 이동) — 정정. `CLAUDE.md:47`(state
+배치 규약 문장)을 코드가 실제로 쓰는 모양에 맞춰 갱신.
+
+Task 27 fix round 1: 위 감사가 놓친 것을 코디네이터 독립 확인이 잡았다 — `README.md`의
+"파이프라인 state" 절이 세션 디렉토리 내용물로 `diff-cache.txt`·`code-paths.tmp`를
+"transient cache"로 광고하고 있었으나, 이 플러그인 전체에서 그 두 이름이 나타나는
+자리는 위 다섯 리터럴의 죽은 cleanup 목록뿐 — 그 경로·이름으로 쓰는 코드가 없다.
+해당 줄 삭제(README.md:479). 아울러 Step 4 검증 스크립트 자체의 결함도 확인: 문자
+클래스 `[a-z0-9<>{}$_.-]`에 `/`가 빠져 있어 추출 토큰이 경로 구분자를 못 넘고
+`SHAPE:namespaced` 치환이 원천적으로 발화 불가능했다(검증이 "통과할 수 없는 검증"
+이었다). `/`를 넣어 재실행하면 고유 토큰 135개 중 101–104개(엄격/느슨한 매칭 기준)가
+5개 플러그인 네임스페이스 하위, 나머지는 이번 감사가 이미 분류를 마친 죽은 legacy
+리터럴 5종·하니스 소유(`plans`/`projects`/`plugins`/`jobs`/`worktrees`)·HOME-상대
+(`~/.claude/{agent-transparency-ab,qg-reports}`)로 남는다 — "라이브 경로는 이미
+통일돼 있었다"는 결론을 뒷받침.
+
+Task 27 fix round 2: 독립 리뷰가 Task 27의 legacy-리터럴 판단(fix round 1까지)을
+확인(spec compliance PASS + disclosed deviation, quality Good)한 뒤 남긴 나머지 둘.
+(1) `scripts/state_path.py` 머리말의 "`state_root()`는 이미 목표 모양
+(`<plugin>/<session-id>/<file>`)을 반환한다"가 과잉 주장이었다 — 실제로는
+`.claude/quality-gates`까지만(플러그인 접두) 반환하고, `<session-id>/<file>`은
+호출자(`hooks/session-end-cleanup.py:36`의 `root / session_id` 등)가 붙인다.
+바로 이 stale 주석을 "정정"하려던 커밋이 스스로 같은 종류의 과잉 서술을 남긴 것 —
+표현을 접두/호출자-조립으로 좁혔다. (2) `CLAUDE.md:47`의 "철학 P13 참조"가 잘못된
+인용이었다 — `docs/philosophy/devbrew-harness-philosophy.md`의 P13은 "Hooks for
+Enforcement, Skills for Capability, Agents for Personas"(훅 signal-tag 네임스페이스)이지
+state-디렉토리 containment가 아니다. 이 규약을 다루는 P#는 그 문서에 없다 —
+새 P#를 만들지 않고(devbrew는 orthogonal한 원칙만 신규 채번) 인용만 제거,
+규칙 본문은 유지.
+
+`CLAUDE.md`의 `P<n>`/`AP<n>`/`Law <n>` 인용 전수(18개 occurrence, `docs/philosophy/
+devbrew-harness-philosophy.md`와 대조)도 이번에 수행 — 위 P13 하나만 결함, 나머지
+17개(Law 1/2/3 정의 3 + 인용 14: P2·P12·Law 2 scoped-exception·Law 3 compounding
+substrate ×3·Law 2 위반 ×2·P21·P17×2·AP2×3)는 전부 대상 원칙이 실제로 주장을
+뒷받침함을 확인 — 무변경. 원장은 Task 27 fix round 2 리포트에 전수 표로 보존.
+
+### Deprecated
+- 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일. 옛 이름(`DEVBREW_DISABLE_QG_CODEX` 등)은
+  **fallback 없이 즉시 제거**됐다. 근거: 현재 제3자 설치가 없다 (CLAUDE.md §메타데이터의
+  one-minor deprecation window 와의 충돌을 그 조건 아래 수용). **제3자 설치가 생기면 이 근거가
+  바뀐다** — 그때는 다음 rename 에 fallback 창을 둔다.
+
+### Changed (devbrew weight-reduction Task 29)
+- **`critiquing-artifacts`·`publishing-pr-understanding`·`quality-pipeline` 세
+  SKILL이 전부 `## kill switch` 헤딩을 갖는다.** `critiquing-artifacts`는
+  `## kill switch (보안 컨트롤)`을 `## kill switch`로 줄이고 부제는 본문 첫
+  줄로 내렸다(`### E0 — Preflight (kill switch)`는 단계 번호 계약이라
+  그대로 둠 — 헤딩 하나가 아니라 두 자리에서 kill switch를 documents하는
+  구조는 유지). `publishing-pr-understanding`·`quality-pipeline`은 이전에
+  헤딩이 아예 없었다 — 코드가 실제로 보는 kill switch만 인덱스로 추가했고
+  (`quality-pipeline`은 `## Contents`도 함께 갱신), 새 스위치를 발명하지
+  않았다.
+
+### Added (devbrew weight-reduction Task 30)
+- **`test_utf8_explicit.py`** — production 표면(`hooks/`·`scripts/`)에 새
+  미지정 `encoding` 이 들어오면 잡는 정적 sweep(`ProductionEncodingSweep`,
+  여러 줄에 걸친 호출도 정확히 판별) + 실제 non-UTF-8 로케일 아래서
+  `post-tool-use-session-tracker.py`의 한국어 경로 write/read 왕복을 돌리는
+  행동 락(`LocaleRegressionTests`). `LC_ALL=C`·`LANG=C` 만으로는 이 macOS
+  파이썬이 PEP 538/540 coercion 으로 로케일을 조용히 UTF-8 로 승격시켜
+  `locale.getpreferredencoding()` 이 그대로 `UTF-8` 이다(실측) — `PYTHONUTF8=0`·
+  `PYTHONCOERCECLOCALE=0` 이 함께 있어야 진짜 non-UTF-8 fallback 이 된다
+  (`plugins/project-init/tests/test_post_tool_use.py`가 이미 쓰던 패턴 재사용).
+  `sys.stdin` 은 별도로 `PYTHONIOENCODING=utf-8` 로 고정해 stdin 디코딩(이
+  axis 스코프 밖)과 `read_text`/`write_text` 기본 인코딩(이 axis 대상)을
+  분리했다. mutation 검증: 방금 고친 `encoding="utf-8"` 하나를 제거하면
+  행동 락·정적 sweep 둘 다 실제로 RED(전자는 `UnicodeEncodeError`), 복원하면
+  GREEN.
+- 러너 수집에서 빠져 있던 quality-gates 테스트 6개 파일을 `python3 -m
+  unittest`로 전환·수집: `test_adversarial_behavior.py`·
+  `test_agent_stub_harness.py`·`test_security_reviewer_behavior.py`·
+  `test_runtime_verifier_behavior.py`·`test_test_scope_validator_behavior.py`
+  (전부 `import pytest` + 맨 함수라 unittest discover 에 0건 수집되던 것을
+  `unittest.TestCase`/`assertRaises`로 변환, 24개 assertion 무변경 이식) +
+  `test_hook_cwd_contract.py`(pytest `tmp_path` fixture 3개를
+  `tempfile.TemporaryDirectory()`로 재작성 — 이전엔 `__main__` 블록이 2/5만
+  돌렸다). `test_agent_stub_harness.py`는 확인 결과 helper 가 아니라 harness
+  자신을 검증하는 진짜 테스트(9 assertion) — 이름이 거짓이 아니었다.
+  quality-gates 수집 수 129 → 163(+34: 위 6개 파일 변환으로 +29, 이 바로 위
+  bullet의 `test_utf8_explicit.py` 신규로 +5), 리포 전체 python 980 → 1014.
+
+### Fixed (devbrew weight-reduction Task 30)
+- **`encoding="utf-8"` 명시** — non-UTF-8 로케일에서 `read_text`/`write_text`/
+  `open` 이 로케일 기본 인코딩에 fail-open 하던 지점을 닫았다:
+  `hooks/post-tool-use-session-tracker.py`(read·write 각 1), `hooks/
+  session-end-cleanup.py`, `hooks/session-start-advisor.py`(이 자리는
+  `except OSError` 로만 잡고 있었는데 `UnicodeDecodeError`는 `OSError`의
+  하위가 아니라 `ValueError`의 하위라 로케일이 어긋나면 훅이 그대로
+  죽었다), `scripts/synthesize_findings.py`(YAML 판정 파일 read 2곳,
+  `open()`). `scripts/qg-gc.py:79`의 `open(lock_path, "w")`는 조사 결과
+  `fcntl.flock` 전용이라 텍스트가 한 번도 오가지 않아 예외로 남겼다
+  (테스트에 그 사실을 잠그는 계측기 확인 포함). `tests/test_no_secret_prompts.py`·
+  `tests/test_kill_switches.py`는 각각 `agents/runtime-verifier.md`·
+  `skills/quality-pipeline/SKILL.md`(실제 한국어 프로즈 확인됨)·
+  `hooks/*.py`(한국어 주석 포함)를 인코딩 미지정으로 읽고 있어 함께 고쳤다.
+
 ## [3.4.0] — 2026-08-17
 
 Task 17(무게 감축) + fix round 1: `codex_findings_to_yaml.py` 두 사본(quality-gates·spec-distill)을

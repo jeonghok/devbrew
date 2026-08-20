@@ -11,7 +11,7 @@ GC = (Path(__file__).resolve().parent.parent / "scripts" / "spec-distill-gc.py")
 
 def run_gc(env_extra=None, cwd=None):
     env = {**os.environ}
-    for k in ("DEVBREW_DISABLE_SPEC_DISTILL", "DEVBREW_SKIP_HOOKS",
+    for k in ("DEVBREW_SPEC_DISTILL_DISABLE", "DEVBREW_SKIP_HOOKS",
               "DEVBREW_SPEC_DISTILL_TTL_HOURS", "DEVBREW_SPEC_DISTILL_GC_VERBOSE",
               "CLAUDE_CODE_SESSION_ID"):
         env.pop(k, None)
@@ -82,7 +82,7 @@ class GcTest(unittest.TestCase):
 
     def test_7_global_killswitch(self):
         d = self._make_session("abc12345", 25 * 3600)
-        run_gc(env_extra={"DEVBREW_DISABLE_SPEC_DISTILL": "1"}, cwd=self.tmp)
+        run_gc(env_extra={"DEVBREW_SPEC_DISTILL_DISABLE": "1"}, cwd=self.tmp)
         self.assertTrue(d.exists())
 
     def test_8_verbose(self):

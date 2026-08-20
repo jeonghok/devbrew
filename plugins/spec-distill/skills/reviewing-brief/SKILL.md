@@ -16,14 +16,17 @@ user-invocable: false
 
 **당신(orchestrator)의 책임**: dispatch · 결정론 스크립트 호출 · 결과 표면화 · Step B로 전달. **당신의 책임이 아닌 것**: finding을 임의로 기각하는 것 · 방향을 바꾸는 것 · 리뷰어 대신 판정하는 것.
 
-## kill switch (먼저 확인)
+## kill switch
 
-- `DEVBREW_DISABLE_SPEC_DISTILL=1` → 즉시 abort, state 보존. 이 skill에 진입하지 않습니다.
-- `DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW=1` (v0.24.0 신규) → **파이프라인 전체 skip.** `component: pipeline` / `affected_axis: all` / `verification_status: skipped` record를 남기고 loud advisory 후 Step B로 직행합니다. 조용히 건너뛰지 않습니다:
+**먼저 확인** — 아래 스위치는 이 skill의 어떤 dispatch보다도 먼저 평가합니다. 순서
+계약입니다: dispatch 이후에 확인하면 이미 지출이 나간 뒤입니다.
 
-  > `[spec-distill v0.24.0] brief 리뷰 파이프라인 SKIPPED (DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW=1) — 충실도·방향성·냉독 전부 미검증. Step B 게이트에서 확인하세요.`
+- `DEVBREW_SPEC_DISTILL_DISABLE=1` → 즉시 abort, state 보존. 이 skill에 진입하지 않습니다.
+- `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1` (v0.24.0 신규) → **파이프라인 전체 skip.** `component: pipeline` / `affected_axis: all` / `verification_status: skipped` record를 남기고 loud advisory 후 Step B로 직행합니다. 조용히 건너뛰지 않습니다:
 
-- `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1` → codex 호출만 skip(Claude 리뷰는 정상). `detect_codex.sh`가 이 스위치를 `codex_available: false`로 옮기고, **codex를 부르는 지점 전부**(1-c 방향성 · 2-b 충실도 · 2-c 충실도 재실행)가 같은 `$codex_avail`로 게이트됩니다. 러너(`run_brief_codex_reviewer.sh`)는 이 변수를 보지 않습니다 — 게이트는 **호출자 책임**입니다(`run_spec_codex_reviewer.sh`와 같은 규약). 한 지점이라도 게이트 밖이면 사용자 opt-out이 무시된 채 외부 모델에 지출이 나가고, 아래 `affected_axis: all` record가 거짓이 됩니다.
+  > `[spec-distill v0.24.0] brief 리뷰 파이프라인 SKIPPED (DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1) — 충실도·방향성·냉독 전부 미검증. Step B 게이트에서 확인하세요.`
+
+- `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` → codex 호출만 skip(Claude 리뷰는 정상). `detect_codex.sh`가 이 스위치를 `codex_available: false`로 옮기고, **codex를 부르는 지점 전부**(1-c 방향성 · 2-b 충실도 · 2-c 충실도 재실행)가 같은 `$codex_avail`로 게이트됩니다. 러너(`run_brief_codex_reviewer.sh`)는 이 변수를 보지 않습니다 — 게이트는 **호출자 책임**입니다(`run_spec_codex_reviewer.sh`와 같은 규약). 한 지점이라도 게이트 밖이면 사용자 opt-out이 무시된 채 외부 모델에 지출이 나가고, 아래 `affected_axis: all` record가 거짓이 됩니다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` → 양쪽 웹 없이 진행 + record.
 
 ## 진입 승인 게이트 (`cost_class: high`)

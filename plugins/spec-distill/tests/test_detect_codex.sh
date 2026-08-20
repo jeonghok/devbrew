@@ -25,7 +25,7 @@ assert_grep "$(PATH=/usr/bin:/bin bash "$PROBE")" 'skip_reason: not_installed' "
 # Case 2: ok
 assert_grep "$(PATH="$MOCKS/safe-v1:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=t bash "$PROBE")" 'codex_available: true' "available"
 # Case 3: codex-only kill switch (AC1 + AC15 codex-only)
-assert_grep "$(DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1 bash "$PROBE")" 'skip_reason: kill_switch' "kill_switch"
+assert_grep "$(DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1 bash "$PROBE")" 'skip_reason: kill_switch' "kill_switch"
 # Case 4a/4b: recursion guard
 assert_grep "$(CODEX_SANDBOX=1 bash "$PROBE")" 'skip_reason: inside_codex_sandbox' "inside CODEX_SANDBOX"
 assert_grep "$(CODEX_SESSION_ID=abc bash "$PROBE")" 'skip_reason: inside_codex_sandbox' "inside CODEX_SESSION_ID"
@@ -43,21 +43,21 @@ assert_grep "$(PATH="$MOCKS/unreadable-version:$MOCKS/bin-stubs:/usr/bin:/bin" C
 # Case 10: AC7 timeout 5 wrap (qg 사본에만 있던 검사 — 합집합)
 assert_file_grep "$PROBE" '\$TIMEOUT_BIN"?[[:space:]]+5[[:space:]]+codex[[:space:]]+--version' "codex --version이 timeout 5로 감싸져 있다"
 
-# AC1 regression: qg var DEVBREW_DISABLE_QG_CODEX must NOT affect this script.
-assert_grep "$(PATH="$MOCKS/safe-v1:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=t DEVBREW_DISABLE_QG_CODEX=1 bash "$PROBE")" 'codex_available: true' "qg var inert"
+# AC1 regression: qg var DEVBREW_QUALITY_GATES_DISABLE_CODEX must NOT affect this script.
+assert_grep "$(PATH="$MOCKS/safe-v1:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=t DEVBREW_QUALITY_GATES_DISABLE_CODEX=1 bash "$PROBE")" 'codex_available: true' "qg var inert"
 
 # 재조준(F1/C1 수정, 2026-08-17): $PROBE는 정본을 가리키는 심볼릭 링크라 본문에
 # 어느 변수명도 리터럴로 없다(형제 conf 로 이동). 형제 conf 로 재조준한다 — 부재는
 # assert_file_grep/assert_file_absent 계약대로 fail-closed.
-assert_file_grep "$CONF" 'CODEX_KILL_SWITCH_VAR=DEVBREW_DISABLE_SPEC_DISTILL_CODEX' "kill-switch var name (expect DEVBREW_DISABLE_SPEC_DISTILL_CODEX)"
+assert_file_grep "$CONF" 'CODEX_KILL_SWITCH_VAR=DEVBREW_SPEC_DISTILL_DISABLE_CODEX' "kill-switch var name (expect DEVBREW_SPEC_DISTILL_DISABLE_CODEX)"
 # N6(round 2): qg·pa 두 형제 파일은 자기 이웃 변수를 전부 확인한다(qg는
 # SPEC_DISTILL|PLUGIN_AUDIT, pa는 QG·SPEC_DISTILL 각각). 이 파일은 QG만 봤다 —
 # baseline에서 그대로 옮겨와 회귀는 아니지만, 형제 conf로 재조준하는 김에 열거를
 # 맞춘다(C10: 추가는 허용, 감소만 금지).
-assert_file_absent "$CONF" 'DEVBREW_DISABLE_QG_CODEX|DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX' "no stale foreign var"
+assert_file_absent "$CONF" 'DEVBREW_QUALITY_GATES_DISABLE_CODEX|DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX' "no stale foreign var"
 
 # F2 compounding: malformed conf 는 fail-closed 다.
-printf 'CODEX_KILL_SWITCH_VAR=DEVBREW_DISABLE_SPEC_DISTILL_CODEX\r\n' > "$CONF"
+printf 'CODEX_KILL_SWITCH_VAR=DEVBREW_SPEC_DISTILL_DISABLE_CODEX\r\n' > "$CONF"
 out="$(bash "$PROBE" 2>&1)"
 restore_conf
 assert_grep "$out" 'skip_reason: killswitch_config_invalid' "malformed conf(CRLF) fail-closed"

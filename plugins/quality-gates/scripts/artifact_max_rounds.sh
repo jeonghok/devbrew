@@ -3,7 +3,7 @@
 # E3 computes this ONCE, puts it in the consent wording, and the loop uses the
 # SAME value -> consent scope == execution scope (no env/consent drift).
 set -u
-v="${DEVBREW_QG_CRITIQUE_MAX_ROUNDS:-5}"
+v="${DEVBREW_QUALITY_GATES_CRITIQUE_MAX_ROUNDS:-5}"
 case "$v" in
   ''|*[!0-9]*) v=5 ;;   # empty or non-integer (incl. negative sign) -> default 5
   *)

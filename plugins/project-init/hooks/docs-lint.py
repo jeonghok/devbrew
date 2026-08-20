@@ -9,7 +9,7 @@ R-pointer CLAUDE/AGENTS drift, R-charter AGENTS.md '## Project Charter' integrit
 Non-blocking advisory pattern: outputs systemMessage on violation, {} on pass.
 
 Kill switches:
-  DEVBREW_DISABLE_PROJECT_INIT=1                 - disables this hook entirely
+  DEVBREW_PROJECT_INIT_DISABLE=1                 - disables this hook entirely
   DEVBREW_SKIP_HOOKS=project-init:docs-lint      - skip just this one
   DEVBREW_SKIP_HOOKS=project-init:PostToolUse    - skip every PostToolUse hook here
 """

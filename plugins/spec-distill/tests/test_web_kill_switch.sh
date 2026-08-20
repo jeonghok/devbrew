@@ -97,8 +97,8 @@ else
   kill_switch_for() {  # <basename> -> switch var name
     case "$1" in
       run_spec_codex_reviewer.sh|run_brief_codex_reviewer.sh) echo 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' ;;
-      run_audit_codex_reviewer.sh) echo 'DEVBREW_DISABLE_PLUGIN_AUDIT_WEB' ;;
-      run_codex_reviewer.sh|run_artifact_codex_reviewer.sh) echo 'DEVBREW_DISABLE_QG_WEB' ;;
+      run_audit_codex_reviewer.sh) echo 'DEVBREW_PLUGIN_AUDIT_DISABLE_WEB' ;;
+      run_codex_reviewer.sh|run_artifact_codex_reviewer.sh) echo 'DEVBREW_QUALITY_GATES_DISABLE_WEB' ;;
       *) echo '' ;;
     esac
   }

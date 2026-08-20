@@ -33,11 +33,11 @@ grep -qE 'verbatim|그대로|요약.*(금지|말)' "$SKILL" && grep -q -- '--cla
 grep -qE 'same-origin|same origin|동일 출처|codex 과거' "$SKILL" \
   && ok "AC12: same-origin history (blind)" || no "AC12: blind history not specified"
 
-# (7) AC15 global kill switch: DEVBREW_DISABLE_SPEC_DISTILL skips the codex path;
+# (7) AC15 global kill switch: DEVBREW_SPEC_DISTILL_DISABLE skips the codex path;
 #     and Claude review is NOT nested under codex-availability (codex kill != Claude block).
-grep -q 'DEVBREW_DISABLE_SPEC_DISTILL_CODEX' "$SKILL" \
+grep -q 'DEVBREW_SPEC_DISTILL_DISABLE_CODEX' "$SKILL" \
   && ok "AC15: codex-only kill switch documented" || no "AC15: codex-only kill switch missing"
-grep -qE 'DEVBREW_DISABLE_SPEC_DISTILL\b' "$SKILL" \
+grep -qE 'DEVBREW_SPEC_DISTILL_DISABLE\b' "$SKILL" \
   && ok "AC15: global kill switch referenced" || no "AC15: global kill switch missing"
 
 # (8) degrade advisory present.

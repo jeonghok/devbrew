@@ -56,7 +56,7 @@ export async function runWorkflow(scriptRel, opts = {}) {
 // A stub that returns one finding of the given severity for the audit phase, an empty
 // (non-killing) refuter verdict, and a non-refuting deep vote. Callers override per test.
 // The phase keys (감사/검증/병합/심층검증) are ENGINE phase names — target-independent.
-export function stubOneFinding(severity = 'HIGH', extra = {}) {
+export function stubOneFinding(severity = 'IMPORTANT', extra = {}) {
   return async (prompt, o) => {
     if (o.phase === '감사') {
       return {

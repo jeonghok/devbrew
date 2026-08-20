@@ -53,11 +53,11 @@ rm -rf "$d"
 d="$(mkrepo)"
 ( cd "$d"; echo "v1" >> doc.md )   # a real, committable change is present
 head0="$(cd "$d" && git rev-parse HEAD)"
-out="$(cd "$d" && DEVBREW_QG_DISABLE_CRITIQUE=1 bash "$COMMIT" doc.md "critique(round 1): x" 2>&1)"; rc=$?
+out="$(cd "$d" && DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1 bash "$COMMIT" doc.md "critique(round 1): x" 2>&1)"; rc=$?
 head1="$(cd "$d" && git rev-parse HEAD)"
 { [ "$rc" -ne 0 ] && echo "$out" | grep -q "killed_by_switch" && [ "$head0" = "$head1" ]; } \
   && ok "mode kill switch blocks commit at the sink, no commit made (F-H)" || no "kill switch should block commit ($out rc=$rc head0=$head0 head1=$head1)"
-out="$(cd "$d" && DEVBREW_DISABLE_QUALITY_GATES=1 bash "$COMMIT" doc.md "msg" 2>&1)"; rc=$?
+out="$(cd "$d" && DEVBREW_QUALITY_GATES_DISABLE=1 bash "$COMMIT" doc.md "msg" 2>&1)"; rc=$?
 { [ "$rc" -ne 0 ] && echo "$out" | grep -q "killed_by_switch"; } \
   && ok "global kill switch also blocks the commit sink (F-H)" || no "global kill switch should block ($out rc=$rc)"
 rm -rf "$d"

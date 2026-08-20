@@ -11,9 +11,9 @@ cd "$WORK" && git init -q
 mkdir -p .claude/spec-distill/kill-test-12345
 echo "x" > .claude/spec-distill/kill-test-12345/state.local.md
 
-# Case 1: global DEVBREW_DISABLE_SPEC_DISTILL=1 blocks SessionEnd
+# Case 1: global DEVBREW_SPEC_DISTILL_DISABLE=1 blocks SessionEnd
 printf '{"session_id":"kill-test-12345","cwd":"%s"}' "$WORK" \
-    | env DEVBREW_DISABLE_SPEC_DISTILL=1 python3 "$PLUGIN_DIR/hooks/session-end-cleanup.py" >/dev/null
+    | env DEVBREW_SPEC_DISTILL_DISABLE=1 python3 "$PLUGIN_DIR/hooks/session-end-cleanup.py" >/dev/null
 [[ -d .claude/spec-distill/kill-test-12345 ]] \
     && ok "case 1: global kill switch blocks SessionEnd" \
     || no "case 1: SessionEnd fired despite kill switch"
@@ -24,7 +24,7 @@ echo "x" > .claude/spec-distill/old-12345678/state.local.md
 past=$(($(date +%s) - 90000))
 touch -d "@$past" .claude/spec-distill/old-12345678/state.local.md 2>/dev/null \
     || python3 -c "import os; os.utime('.claude/spec-distill/old-12345678/state.local.md', ($past, $past))"
-env DEVBREW_DISABLE_SPEC_DISTILL=1 python3 "$PLUGIN_DIR/scripts/spec-distill-gc.py" >/dev/null
+env DEVBREW_SPEC_DISTILL_DISABLE=1 python3 "$PLUGIN_DIR/scripts/spec-distill-gc.py" >/dev/null
 [[ -d .claude/spec-distill/old-12345678 ]] \
     && ok "case 2: global kill switch blocks GC" \
     || no "case 2: GC fired despite kill switch"

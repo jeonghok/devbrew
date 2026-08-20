@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # test_pr_create.sh — Fix #4: pr-create.sh is a deterministic create-path guard.
-# --dry-run OR DEVBREW_QG_DISABLE_PUBLISH=1 → network suppressed, NO push/create.
+# --dry-run OR DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1 → network suppressed, NO push/create.
 # Neither set → git push + gh pr create both fire. Stubs git+gh on PATH into a
 # call-log (parity with comment-upsert.py dry-run/kill-switch tests).
 set -u
@@ -36,9 +36,9 @@ if printf '%s' "$out" | grep -q 'network suppressed' \
 else no "--dry-run (out=$out log=$(cat "$CALLLOG"))"; fi
 rm -rf "$STUB"
 
-# (ii) DEVBREW_QG_DISABLE_PUBLISH=1 (no --dry-run) → suppressed, no calls.
+# (ii) DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1 (no --dry-run) → suppressed, no calls.
 mk_stubs
-out=$(PATH="$STUB:$PATH" DEVBREW_QG_DISABLE_PUBLISH=1 bash "$SCRIPT" --base main --head feature --body-file /dev/null 2>&1)
+out=$(PATH="$STUB:$PATH" DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1 bash "$SCRIPT" --base main --head feature --body-file /dev/null 2>&1)
 if printf '%s' "$out" | grep -q 'network suppressed' \
    && ! grep -q 'push' "$CALLLOG" && ! grep -q 'pr create' "$CALLLOG"; then
   ok "kill switch: network suppressed, no push/create"

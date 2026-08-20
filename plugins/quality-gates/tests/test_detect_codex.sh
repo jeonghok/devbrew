@@ -28,7 +28,7 @@ out="$(PATH="$MOCKS/safe-v1:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=test b
 assert_grep "$out" 'codex_available: true' "ok"
 
 echo "=== Case 3: kill switch ==="
-out="$(DEVBREW_DISABLE_QG_CODEX=1 bash "$PROBE")"
+out="$(DEVBREW_QUALITY_GATES_DISABLE_CODEX=1 bash "$PROBE")"
 assert_grep "$out" 'skip_reason: kill_switch' "kill switch"
 
 echo "=== Case 4a: inside codex (CODEX_SANDBOX) ==="
@@ -88,7 +88,7 @@ fi
 # 합집합(AC25): sd 사본에만 있던 케이스를 가져온다. 두 사본이 **어느 쪽도 합집합이
 # 아닌** 상태였고, 그래서 한쪽에만 있는 케이스는 반대쪽 사본의 회귀를 못 잡았다.
 echo "=== Case 10: 이웃 플러그인 kill switch 변수는 무효해야 한다 ==="
-out="$(PATH="$MOCKS/safe-v1:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=test DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1 bash "$PROBE")"
+out="$(PATH="$MOCKS/safe-v1:$MOCKS/bin-stubs:/usr/bin:/bin" CODEX_API_KEY=test DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1 bash "$PROBE")"
 assert_grep "$out" 'codex_available: true' "foreign kill switch inert"
 
 # 재조준(F1/C1 수정, 2026-08-17): `$PROBE`는 이제 정본 shared/codex/detect_codex.sh
@@ -98,16 +98,16 @@ assert_grep "$out" 'codex_available: true' "foreign kill switch inert"
 # 통과가 된다 — 두 축 다 형제 conf `$CONF` 로 재조준한다. conf 부재는
 # assert_file_grep/assert_file_absent 계약대로 fail-closed(no()) 다.
 echo "=== Case 11: kill switch 변수명 (conf grep) ==="
-assert_file_grep "$CONF" 'CODEX_KILL_SWITCH_VAR=DEVBREW_DISABLE_QG_CODEX' "kill-switch var name"
+assert_file_grep "$CONF" 'CODEX_KILL_SWITCH_VAR=DEVBREW_QUALITY_GATES_DISABLE_CODEX' "kill-switch var name"
 
 echo "=== Case 12: 이웃 플러그인 변수 잔존 없음 ==="
-assert_file_absent "$CONF" 'DEVBREW_DISABLE_SPEC_DISTILL_CODEX|DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX' "이웃 변수 잔존 없음"
+assert_file_absent "$CONF" 'DEVBREW_SPEC_DISTILL_DISABLE_CODEX|DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX' "이웃 변수 잔존 없음"
 
 # F2 의 compounding — malformed conf 가 fail-closed 하는지 (리뷰를 빠져나간 버그를
 # 그것을 잡았어야 할 검사 파일에 새로 넣어 닫는다). 원본을 cp -p 로 바이트 복원한다
 # (git checkout -- 아님 — 워킹트리의 다른 무관 변경을 건드리지 않기 위해).
 echo "=== Case 13: malformed conf(CRLF) 는 fail-closed 다 ==="
-printf 'CODEX_KILL_SWITCH_VAR=DEVBREW_DISABLE_QG_CODEX\r\n' > "$CONF"
+printf 'CODEX_KILL_SWITCH_VAR=DEVBREW_QUALITY_GATES_DISABLE_CODEX\r\n' > "$CONF"
 out="$(bash "$PROBE" 2>&1)"
 restore_conf
 assert_grep "$out" 'skip_reason: killswitch_config_invalid' "malformed conf(CRLF) fail-closed"

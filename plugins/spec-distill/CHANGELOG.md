@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.29.0] — 2026-08-20 (BREAKING)
+
+Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일. 이
+플러그인이 소유한 kill switch·설정 변수:
+
+| 옛 이름 | 새 이름 |
+|---|---|
+| `DEVBREW_DISABLE_SPEC_DISTILL` | `DEVBREW_SPEC_DISTILL_DISABLE` |
+| `DEVBREW_DISABLE_SPEC_DISTILL_CODEX` | `DEVBREW_SPEC_DISTILL_DISABLE_CODEX` |
+| `DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW` | `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW` |
+| `DEVBREW_RHYTHM_GUARD_THRESHOLD` (플러그인 토큰 없던 패턴 D) | `DEVBREW_SPEC_DISTILL_RHYTHM_GUARD_THRESHOLD` |
+
+이미 `DEVBREW_SPEC_DISTILL_*` 어순을 쓰던 변수(`DISABLE_WEB`·`DESIGN_MODE_DISABLE`·
+`TTL_HOURS`·`PROBE_CAP` 등)는 무변경. `shared/killswitch/kill_switch_active.py`
+정본(과 이 플러그인의 `scripts/kill_switch_active.py` 물리 사본)의 전역 스위치
+**도출식** 자체도 `DEVBREW_DISABLE_<PLUGIN>` → `DEVBREW_<PLUGIN>_DISABLE`로 바뀌었다
+— 리터럴 문자열 치환으로는 안 잡히는 자리였다(태스크 실행 중 burn-test로 실측:
+`test_kill_switches_v060.sh` case 1–4가 이 도출식 미수정 상태에서 RED였다).
+
+### Deprecated
+- 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일. 옛 이름(`DEVBREW_DISABLE_SPEC_DISTILL_CODEX` 등)은
+  **fallback 없이 즉시 제거**됐다. 근거: 현재 제3자 설치가 없다 (CLAUDE.md §메타데이터의
+  one-minor deprecation window 와의 충돌을 그 조건 아래 수용). **제3자 설치가 생기면 이 근거가
+  바뀐다** — 그때는 다음 rename 에 fallback 창을 둔다.
+
+### Changed (devbrew weight-reduction Task 29)
+- **`reviewing-brief` SKILL의 헤딩을 `## kill switch (먼저 확인)`에서
+  `## kill switch`로 줄였다.** "먼저 확인"은 순서 계약(이 skill의 어떤
+  dispatch보다도 먼저 평가한다)이었으므로 삭제하지 않고 본문 첫 줄 문장으로
+  내렸다 — 헤딩만 보고 넘어가면 그 계약이 사라지므로.
+
+### Fixed (devbrew weight-reduction Task 30)
+- **`hooks/spec-write-validator.py:137`에 `encoding="utf-8"` 명시.** 나머지
+  `write_text` 호출(255·276번 줄)은 조사 결과 이미 `encoding="utf-8"`을 다음
+  줄에 갖고 있었다 — 같은 줄만 보는 grep이 오탐한 자리였다(quality-gates
+  Task 30 CHANGELOG의 axis 2 참조).
+
 ## [0.28.0] — 2026-08-17
 
 Task 17(무게 감축) + fix round 1: `scripts/codex_findings_to_yaml.py`가 물리 사본에서 `shared/codex/

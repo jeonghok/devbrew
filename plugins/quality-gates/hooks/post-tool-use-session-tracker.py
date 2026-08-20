@@ -5,7 +5,7 @@ Per-session path: .claude/quality-gates/<session-id>/files.md.
 Triggered by Edit, Write, MultiEdit. Idempotent (dedup). Atomic rename.
 
 Kill switches:
-  DEVBREW_DISABLE_QUALITY_GATES=1   - disables this hook entirely
+  DEVBREW_QUALITY_GATES_DISABLE=1   - disables this hook entirely
   DEVBREW_SKIP_HOOKS=quality-gates:session-tracker  - skip just this one
   DEVBREW_SKIP_HOOKS=quality-gates:PostToolUse      - skip every PostToolUse hook here
 """
@@ -27,7 +27,7 @@ def _read_existing(path: Path) -> set[str]:
     if not path.exists():
         return set()
     seen: set[str] = set()
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         if line.startswith("- "):
             seen.add(line[2:].strip())
     return seen
@@ -36,7 +36,7 @@ def _read_existing(path: Path) -> set[str]:
 def _write_atomic(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + f".tmp.{os.getpid()}")
-    tmp.write_text(content)
+    tmp.write_text(content, encoding="utf-8")
     tmp.replace(path)
 
 

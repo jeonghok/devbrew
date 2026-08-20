@@ -2,8 +2,11 @@
 """render-audit-report.py — audit-data.json → 마크다운 (design §11·§16).
 
 렌더러는 신규 load-bearing 코드다: 정렬은 순회가 아니라 4단 비교자이고 두 키 모두 비-사전순
-서수다 (순진한 문자열 비교가 CRITICAL<HIGH, L<M<S로 조용히 뒤집는다). fix_cost에 산문이 섞이면
-비교자가 NaN을 낸다 → 첫 글자만 본다. AC-4: 6축 전멸이면 리포트를 안 만든다 (빈 감사는 감사가 아니다).
+서수다 — fix_cost 문자(S/M/L)는 알파벳순(L<M<S)이 실제 순위(S<M<L)를 조용히 뒤집는다.
+severity(CRITICAL/IMPORTANT/SUGGESTION, Task 28 어휘통일)는 알파벳순이 우연히 순위와
+일치하지만(C<I<S) SEV_RANK로 명시한다 — 어휘가 다시 바뀌면 이 우연은 보장되지 않는다.
+fix_cost에 산문이 섞이면 비교자가 NaN을 낸다 → 첫 글자만 본다. AC-4: 6축 전멸이면 리포트를
+안 만든다 (빈 감사는 감사가 아니다).
 """
 from __future__ import annotations
 
@@ -12,7 +15,12 @@ import json
 import sys
 from pathlib import Path
 
-SEV_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+# Task 28: quality-gates와 동일한 3-vocab로 통일 (CRITICAL/IMPORTANT/SUGGESTION).
+# plugin-audit의 옛 HIGH→IMPORTANT, MEDIUM/LOW→SUGGESTION (§15.1 mapping) — verdict를
+# 게이트하지 않는 정렬 전용 순위이므로 4→3 축약이 차단 동작을 바꾸지 않는다.
+# sort_key의 .get(..., 99)는 미지 severity(예: 옛 데이터의 HIGH/MEDIUM/LOW)를 맨 뒤로
+# 정렬한다 — 크래시하지 않고 뒤로 밀릴 뿐이므로 허용한다.
+SEV_RANK = {"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 2}
 COST_RANK = {"S": 0, "M": 1, "L": 2}
 
 

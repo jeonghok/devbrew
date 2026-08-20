@@ -18,14 +18,14 @@ assert_contains "$(cat "$S")" 'run_artifact_codex_reviewer.sh' "wires codex wrap
 assert_contains "$(cat "$S")" 'detect_codex.sh' "reuses codex detection"
 
 # E0 both kill switches (ENFORCEMENT body, not the bottom kill-switch inventory).
-# NOTE: the old `agf 'DEVBREW_DISABLE_QUALITY_GATES'` / `agf 'DEVBREW_QG_DISABLE_CRITIQUE'`
+# NOTE: the old `agf 'DEVBREW_QUALITY_GATES_DISABLE'` / `agf 'DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE'`
 # were inventory-satisfiable — both var names ALSO appear in the "kill switch (보안
 # 컨트롤)" inventory at the SKILL foot, so gutting the E0 enforcement body stayed
 # GREEN (verified by mutation: deleting E0's exit lines while leaving the inventory
 # passed). These exact user-facing exit messages appear ONLY in the E0 enforcement
 # lines and nowhere in the inventory.
 assert_contains "$(cat "$S")" 'critique skipped: quality-gates globally disabled' "E0 global kill switch (enforcement body, not inventory)"
-assert_contains "$(cat "$S")" 'critique mode disabled via DEVBREW_QG_DISABLE_CRITIQUE' "E0 mode kill switch (enforcement body, not inventory)"
+assert_contains "$(cat "$S")" 'critique mode disabled via DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE' "E0 mode kill switch (enforcement body, not inventory)"
 
 # E1 three-branch classify
 assert_file_grep "$S" 'code.*(종료|안내|exit)|코드.*종료' "E1 code -> stop"

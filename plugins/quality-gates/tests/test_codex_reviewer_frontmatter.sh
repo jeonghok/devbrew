@@ -14,6 +14,6 @@ SCRIPT_FILE="plugins/quality-gates/scripts/run_codex_reviewer.sh"
 # 넘긴다: tests/test_sandbox_enforced.sh가 mock codex로 실제 argv를 보고,
 # tests/test_codex_invocation_contract.sh가 같은 판정을 모든 후보 러너에 대해 한다.
 # 여기 남는 것은 '스크립트가 실재하고 실행 가능한가' + AC42(kill switch 발견성)다.
-grep -q 'DEVBREW_DISABLE_QG_CODEX\|codex_available' plugins/quality-gates/skills/quality-pipeline/SKILL.md \
+grep -q 'DEVBREW_QUALITY_GATES_DISABLE_CODEX\|codex_available' plugins/quality-gates/skills/quality-pipeline/SKILL.md \
   || { echo "FAIL AC42: kill switch reference missing in SKILL"; exit 1; }
 echo "PASS T3-3: codex-reviewer migrated from agent to script; sandbox + kill switch preserved"

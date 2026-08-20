@@ -67,7 +67,7 @@ violations=0
 # `exec` 의 리다이렉션은 영구적이므로 `2>/dev/null` 은 그룹으로 스코프한다
 # (`exec 3>&1 2>/dev/null` 로 쓰면 이후 모든 FAIL 메시지가 조용히 사라진다).
 EMIT_DECL=no
-if [ "${DEVBREW_AGENT_TOOLS_LOCK_EMIT:-0}" = 1 ]; then
+if [ "${DEVBREW_QUALITY_GATES_AGENT_TOOLS_LOCK_EMIT:-0}" = 1 ]; then
   if ! { : >&3; } 2>/dev/null; then
     { exec 3>&1; } 2>/dev/null
     { : >&3; } 2>/dev/null || exec 3>/dev/null

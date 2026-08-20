@@ -14,7 +14,7 @@ plugins/<your-plugin>/
 ├── skills/<gerund-name>/     # optional — running-x, authoring-y (동명사)
 │   └── SKILL.md              # cost_class 선언, frontmatter trigger
 ├── agents/                   # optional — 각각 tools: allowlist 선언 (fail-closed)
-├── hooks/                    # optional — 각각 DEVBREW_DISABLE_<PLUGIN>=1 opt-out
+├── hooks/                    # optional — 각각 DEVBREW_<PLUGIN>_DISABLE=1 opt-out
 ├── scripts/                  # optional — hook에서 호출하는 shell/python 헬퍼
 ├── templates/                # optional — 플러그인이 설치하는 정적 파일
 └── tests/                    # optional — 테스트는 여기 하나로. hooks/tests·scripts/tests 신설 금지

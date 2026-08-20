@@ -13,7 +13,7 @@ Not a substring match: a first line with any prefix/suffix around the marker fai
   1 match   → PATCH
   ≥2 matches → REFUSE (print both html_urls; human disambiguates)
 
-DEVBREW_QG_DISABLE_PUBLISH=1 or --dry-run → decide but DO NOT mutate.
+DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1 or --dry-run → decide but DO NOT mutate.
 
 Usage:
   comment-upsert.py --pr N --marker M --body-file F --my-id ID
@@ -74,7 +74,7 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    disabled = os.environ.get("DEVBREW_QG_DISABLE_PUBLISH") == "1"
+    disabled = os.environ.get("DEVBREW_QUALITY_GATES_DISABLE_PUBLISH") == "1"
     suppress = args.dry_run or disabled
 
     try:

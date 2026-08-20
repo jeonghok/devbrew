@@ -18,7 +18,7 @@ PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 pass=0; fail=0
 
 # Check 1: kill switch produces skip
-out="$(DEVBREW_DISABLE_QG_CODEX=1 bash "$PLUGIN_ROOT/scripts/detect_codex.sh")"
+out="$(DEVBREW_QUALITY_GATES_DISABLE_CODEX=1 bash "$PLUGIN_ROOT/scripts/detect_codex.sh")"
 if echo "$out" | grep -q 'skip_reason: kill_switch'; then
   echo "  PASS: kill switch -> codex_available: false"
   pass=$((pass + 1))

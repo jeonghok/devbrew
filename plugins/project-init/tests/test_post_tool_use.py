@@ -198,7 +198,7 @@ class PreservedBehaviorTest(_ProjectDirTestCase):
     def test_kill_switch_disable(self):
         out, rc = run_hook(
             {"tool_name": "Bash", "tool_input": {"command": "git checkout -b Bad_Name"}},
-            env_override={"DEVBREW_DISABLE_PROJECT_INIT": "1"},
+            env_override={"DEVBREW_PROJECT_INIT_DISABLE": "1"},
         )
         self.assertEqual(out.strip(), "{}")
         self.assertEqual(rc, 0)

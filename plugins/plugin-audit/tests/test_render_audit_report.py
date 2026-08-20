@@ -29,18 +29,20 @@ META_OK = {"date": "2026-07-13", "fanout_declared": 30,
 
 class TestRender(unittest.TestCase):
     def test_sort_severity_then_cost(self):
-        # CRITICAL<HIGH는 알파벳순으로도 우연히 맞다(C<H) — 실제 뒤집힘 창은 MEDIUM/LOW다
-        # (알파벳순: LOW < MEDIUM, 그러나 서수는 MEDIUM(2) < LOW(3)). A1-4/A1-5로 그 창을 태운다.
-        data = {"meta": META_OK, "findings": [f("A1-2", "HIGH", "L"), f("A1-1", "HIGH", "S"),
-                f("A1-3", "CRITICAL", "M"), f("A1-5", "LOW", "S"), f("A1-4", "MEDIUM", "S")],
+        # Task 28 어휘통일 전(CRITICAL/HIGH/MEDIUM/LOW)에는 MEDIUM/LOW 알파벳 역전 창이
+        # 있었다(알파벳순 LOW<MEDIUM, 서수는 MEDIUM(2)<LOW(3)). MEDIUM·LOW가 둘 다
+        # SUGGESTION으로 합쳐지며 그 창은 사라졌다 — CRITICAL<IMPORTANT<SUGGESTION은
+        # 알파벳순과도 우연히 일치한다(C<I<S). 그래도 SEV_RANK가 명시적이어야 하는 이유는
+        # 어휘가 다시 바뀌면 그 우연이 보장되지 않기 때문 — 여기선 severity 우선, 동률이면
+        # cost로 정렬되는 기본 규약만 검증한다.
+        data = {"meta": META_OK, "findings": [f("A1-2", "IMPORTANT", "L"), f("A1-1", "IMPORTANT", "S"),
+                f("A1-3", "CRITICAL", "M"), f("A1-4", "SUGGESTION", "S")],
                 "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "axis_failures": [], "degraded": []}
         rc, md, err = render(data)
         self.assertEqual(rc, 0, err)
-        # CRITICAL 먼저, 그 다음 HIGH 중 S(cost) 먼저
-        order = [md.index("A1-3"), md.index("A1-1"), md.index("A1-2")]
+        # CRITICAL 먼저, 그 다음 IMPORTANT 중 S(cost) 먼저, SUGGESTION 마지막
+        order = [md.index("A1-3"), md.index("A1-1"), md.index("A1-2"), md.index("A1-4")]
         self.assertEqual(order, sorted(order), f"정렬 뒤집힘:\n{md}")
-        self.assertLess(md.index("A1-4"), md.index("A1-5"),
-                         "MEDIUM이 LOW보다 먼저여야 — 알파벳순 문자열 비교는 여기서 뒤집는다(L<M)")
 
     def test_prose_fix_cost_does_not_break_sort(self):
         # fix_cost에 산문이 섞여도(비교자가 NaN 안 나게) 정렬이 결정론이어야 (§9.2)
@@ -49,8 +51,8 @@ class TestRender(unittest.TestCase):
         # (header-satisfiable 함정 — 회귀 락 실측: 0<1(correct)과 0<99(naive) 모두 동일 순서).
         # prose-M(correct=1) vs L(correct=2, exact)이 진짜 이빨: naive lookup은 prose를 99로
         # 떨어뜨려 L(naive=2)이 먼저 오도록 뒤집는다.
-        data = {"meta": META_OK, "findings": [f("A1-1", "HIGH", "M — 훅 20줄"), f("A1-2", "HIGH", "S"),
-                f("A1-3", "HIGH", "L")],
+        data = {"meta": META_OK, "findings": [f("A1-1", "IMPORTANT", "M — 훅 20줄"), f("A1-2", "IMPORTANT", "S"),
+                f("A1-3", "IMPORTANT", "L")],
                 "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "axis_failures": [], "degraded": []}
         rc, md, err = render(data)
         self.assertEqual(rc, 0, err)
@@ -79,7 +81,7 @@ class TestRender(unittest.TestCase):
         self.assertEqual(rc, 1, "6축 전멸인데 리포트를 만들었다 (AC-4a)")
 
     def test_partial_axes_banner(self):  # AC-4(b)
-        data = {"meta": META_OK, "findings": [f("A1-1", "HIGH", "S")], "d_verdicts": [], "oq_answers": [],
+        data = {"meta": META_OK, "findings": [f("A1-1", "IMPORTANT", "S")], "d_verdicts": [], "oq_answers": [],
                 "new_open_questions": [], "axis_failures": [{"axis": 2, "why": "x"}], "degraded": [{"what": "x", "why": "y"}]}
         rc, md, _ = render(data)
         head = "\n".join(md.splitlines()[:20])
@@ -89,9 +91,9 @@ class TestRender(unittest.TestCase):
         # toothless였던 원래 형태(assertIn("상한 초과", md) 전역 1건)는 3-state가 2-state로
         # collapse돼도 GREEN — finding별 라인을 추출해 세 상태를 개별 단언한다.
         data = {"meta": META_OK, "findings": [
-            f("A1-1", "HIGH", "S", deep_verified=True),
-            f("A1-2", "HIGH", "S", deep_verified=False),
-            f("A1-3", "MEDIUM", "S", deep_verified=None)],
+            f("A1-1", "IMPORTANT", "S", deep_verified=True),
+            f("A1-2", "IMPORTANT", "S", deep_verified=False),
+            f("A1-3", "SUGGESTION", "S", deep_verified=None)],
             "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "axis_failures": [], "degraded": []}
         rc, md, err = render(data)
         self.assertEqual(rc, 0, err)
@@ -111,7 +113,7 @@ class TestRender(unittest.TestCase):
 
     def test_noq_section_and_cross_model_badge(self):
         data = {"meta": META_OK,
-                "findings": [f("A1-1", "HIGH", "S", cross_model_confirmed=True)],
+                "findings": [f("A1-1", "IMPORTANT", "S", cross_model_confirmed=True)],
                 "d_verdicts": [], "oq_answers": [],
                 "new_open_questions": [{"id": "NOQ-1", "source": "claude", "axis": 3,
                                         "observation": "obs", "why_not_gap": "LD5 밖", "evidence": []}],
@@ -127,8 +129,8 @@ class TestRender(unittest.TestCase):
         # 우연히 통과하는 걸 배제한다: id만으로 정렬되면 A3-1이 먼저 와야 하는데
         # stage 3가 살아있으면 A3-9(레퍼런스 격차 있음)가 먼저 와야 한다.
         data = {"meta": META_OK, "findings": [
-            f("A3-9", "HIGH", "S", reference_gap="OMC 있음"),
-            f("A3-1", "HIGH", "S", reference_gap="none")],
+            f("A3-9", "IMPORTANT", "S", reference_gap="OMC 있음"),
+            f("A3-1", "IMPORTANT", "S", reference_gap="none")],
             "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "axis_failures": [], "degraded": []}
         rc, md, err = render(data)
         self.assertEqual(rc, 0, err)
@@ -140,8 +142,8 @@ class TestRender(unittest.TestCase):
         # 입력 순서를 내림차순(A4-9 먼저)으로 줘서, id 요소가 tuple에서 빠지면(stable sort로
         # 입력 순서 그대로 유지) 실패하도록 만든다.
         data = {"meta": META_OK, "findings": [
-            f("A4-9", "HIGH", "S", reference_gap="none"),
-            f("A4-1", "HIGH", "S", reference_gap="none")],
+            f("A4-9", "IMPORTANT", "S", reference_gap="none"),
+            f("A4-1", "IMPORTANT", "S", reference_gap="none")],
             "d_verdicts": [], "oq_answers": [], "new_open_questions": [], "axis_failures": [], "degraded": []}
         rc, md, err = render(data)
         self.assertEqual(rc, 0, err)
@@ -153,7 +155,7 @@ class TestRender(unittest.TestCase):
         # OQ2..6은 answer+evidence+reason. finding.oq_ref는 해당 OQ 서브섹션에
         # 역참조로 나타나야 한다.
         data = {"meta": META_OK,
-                "findings": [f("A2-1", "HIGH", "S", oq_ref="OQ2")],
+                "findings": [f("A2-1", "IMPORTANT", "S", oq_ref="OQ2")],
                 "d_verdicts": [],
                 "oq_answers": [
                     {"id": "OQ1", "source": "claude", "reason": "r1",

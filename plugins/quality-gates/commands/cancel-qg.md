@@ -41,7 +41,7 @@ before completion.
      ```!
      bash "${CLAUDE_PLUGIN_ROOT}/scripts/cancel-qg-core.sh"
      ```
-   - 헬퍼는 성공 시 `cancel-qg-core: removed ...`을 stdout으로 출력, 실패 시 stderr + non-zero exit. `worktree_path:` 필드가 있고 `DEVBREW_QG_KEEP_WORKTREE=1`이 아니면 헬퍼가 `qg-worktree.sh remove`도 호출.
+   - 헬퍼는 성공 시 `cancel-qg-core: removed ...`을 stdout으로 출력, 실패 시 stderr + non-zero exit. `worktree_path:` 필드가 있고 `DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1`이 아니면 헬퍼가 `qg-worktree.sh remove`도 호출.
    - 보고: "Cancelled quality gates pipeline (session_id: <SID>, started_at: <ISO>, worktree: <path or 'none'>)".
 
 ## `--gc` — cancel + immediate TTL sweep

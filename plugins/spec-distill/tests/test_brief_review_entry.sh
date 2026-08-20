@@ -153,7 +153,7 @@ for handoff_var in '$PAYLOAD' '$CODEX_DIR_YAML' '$CODEX_FID_YAML'; do
     && ok "invocation 라인이 ${handoff_var} 전달 (트레일링 # 코멘트 제외하고 검사)" \
     || no "invocation 라인(코멘트 제외)에 ${handoff_var} 부재 — 주석에만 적혀 있으면 호출은 인자 없이 나간다"
 done
-grep -qF 'DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW' <<<"$WA5" \
+grep -qF 'DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW' <<<"$WA5" \
   && ok "A.5에 kill switch 경로" || no "A.5에 kill switch 경로 부재"
 # 한 블록만 추가 — A.5가 파이프라인 절차를 복제하면 두 곳 drift가 생긴다
 n5="$(wc -l <<<"$WA5" | tr -d ' ')"

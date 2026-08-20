@@ -159,7 +159,7 @@ class TestData(unittest.TestCase):
             t = Path(t)
             wf = {"findings": [{"id": "A1-9", "axis": 1, "source": "claude", "status": "refuted",
                                 "refutation": {"stage": "axis", "gate": "E", "reason": "scope-out"},
-                                "evidence": [{"file": "x", "line": 1, "quote": "q"}], "severity": "LOW"}],
+                                "evidence": [{"file": "x", "line": 1, "quote": "q"}], "severity": "SUGGESTION"}],
                   "d_verdicts": [], "oq_answers": [], "new_open_questions": [],
                   "axis_failures": [], "degraded_events": []}
             codex = {"d_verdicts": [], "oq_answers": [], "new_open_questions": []}

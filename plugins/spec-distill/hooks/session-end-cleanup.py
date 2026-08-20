@@ -7,7 +7,7 @@ diverges from qg's simple cwd-relative pattern; see spec §C9).
 Best-effort: idempotent (no-op if missing), tolerant of permission errors.
 
 Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
-  DEVBREW_DISABLE_SPEC_DISTILL=1                       - disables entirely
+  DEVBREW_SPEC_DISTILL_DISABLE=1                       - disables entirely
   DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd           - skip just this one
   DEVBREW_SKIP_HOOKS=spec-distill:session-end-cleanup  - 같은 훅을 훅명으로 지목 (이관 후 추가)
 """

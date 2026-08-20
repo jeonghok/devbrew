@@ -16,7 +16,7 @@ fi
 # (CLAUDE.md) and must be enforced STRUCTURALLY at the commit sink, not only by the
 # orchestrator's prose E0 -- if the orchestrator ever proceeds under a set switch,
 # this refuses the commit (fail-closed).
-if [ "${DEVBREW_DISABLE_QUALITY_GATES:-}" = "1" ] || [ "${DEVBREW_QG_DISABLE_CRITIQUE:-}" = "1" ]; then
+if [ "${DEVBREW_QUALITY_GATES_DISABLE:-}" = "1" ] || [ "${DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE:-}" = "1" ]; then
   echo "error: killed_by_switch" >&2
   exit 1
 fi

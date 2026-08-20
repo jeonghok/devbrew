@@ -55,7 +55,7 @@ grep -qE '^## \[0\.25\.0\] — 2026-[0-9]{2}-[0-9]{2}$' "$CHANGELOG" \
   && ok "CHANGELOG append-only: [0.25.0] 엔트리 보존" \
   || no "CHANGELOG append-only: [0.25.0] 엔트리가 없다"
 
-for kw in 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' 'armed_paths' 'arm-once' 'interview-brief' 'steelman-builder' 'DEVBREW_DISABLE_SPEC_DISTILL_CODEX' 'model diversity' 'coverage-mapper' 'blind-spot-prober' 'probe_budget' 'user_sourced_items' 'audit_file' 'user_statements' 'bijection'; do
+for kw in 'DEVBREW_SPEC_DISTILL_DISABLE_WEB' 'armed_paths' 'arm-once' 'interview-brief' 'steelman-builder' 'DEVBREW_SPEC_DISTILL_DISABLE_CODEX' 'model diversity' 'coverage-mapper' 'blind-spot-prober' 'probe_budget' 'user_sourced_items' 'audit_file' 'user_statements' 'bijection'; do
   grep -q "$kw" "$README" \
     && ok "README-sync: mentions $kw" || no "README-sync: missing $kw"
 done

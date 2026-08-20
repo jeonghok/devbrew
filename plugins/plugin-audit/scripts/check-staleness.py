@@ -289,7 +289,7 @@ COLON_REF_RE = re.compile(r"`([a-z][a-z0-9_-]*):([a-z][a-z0-9_-]+)`")
 BOLD_ATTR_RE = re.compile(r"\*\*([a-z][a-z0-9_-]*)\*\*\s*[:：]")
 PAREN_ATTR_RE = re.compile(r"\(([a-z][a-z0-9_-]*)\s*(?:플러그인|plugin)\)", re.IGNORECASE)
 
-_REGISTRY_ENV = "DEVBREW_STALENESS_REGISTRY"
+_REGISTRY_ENV = "DEVBREW_PLUGIN_AUDIT_STALENESS_REGISTRY"
 
 
 def _registry_path() -> Path:
@@ -491,7 +491,7 @@ def scan_declared_surface(plugin_dir: Path, facts):
 # emit하지 않는다 ("해당 없음"도 사실이 아니다 — facts는 관측된 것만 담는다).
 # ---------------------------------------------------------------------------
 
-KILL_SWITCH_RE = re.compile(r"DEVBREW_DISABLE_|DEVBREW_SKIP_HOOKS|[Kk]ill switch|kill\s*switch")
+KILL_SWITCH_RE = re.compile(r"DEVBREW_[A-Z0-9_]*_DISABLE|DEVBREW_SKIP_HOOKS|[Kk]ill switch|kill\s*switch")
 PRINCIPLES_HEADING_RE = re.compile(
     r"^##\s*(?:Principles Instantiated|인스턴스화한\s*원칙)\s*$", re.MULTILINE)
 
@@ -536,7 +536,7 @@ def scan_category_absence(plugin_dir: Path, facts):
         readme_text = readme.read_text(encoding="utf-8", errors="replace") if readme.is_file() else ""
         if not KILL_SWITCH_RE.search(readme_text):
             emit(facts, "category absence", "README.md", 0,
-                 "hook이 있는데 kill switch(DEVBREW_DISABLE_*/DEVBREW_SKIP_HOOKS) 미문서화",
+                 "hook이 있는데 kill switch(DEVBREW_<PLUGIN>_DISABLE/DEVBREW_SKIP_HOOKS) 미문서화",
                  norm="kill switch")
 
     # (4) Principles Instantiated ← README가 있을 때만.

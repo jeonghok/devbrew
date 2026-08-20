@@ -50,7 +50,7 @@ fi
 target_dir=".claude/quality-gates/$session_id"
 
 # Read worktree_path once before any cleanup so we know whether to honor
-# DEVBREW_QG_KEEP_WORKTREE. If the env var is set, BOTH the worktree AND
+# DEVBREW_QUALITY_GATES_KEEP_WORKTREE. If the env var is set, BOTH the worktree AND
 # the state folder are preserved as a unit — removing pipeline.md would
 # orphan worktree_path (session-end-cleanup.py discovers worktrees by
 # reading the same file).
@@ -59,8 +59,8 @@ if [[ -f "$target_dir/pipeline.md" ]]; then
   worktree_path=$(python3 "$SCRIPT_DIR/read-frontmatter.py" "$target_dir/pipeline.md" worktree_path 2>/dev/null)
 fi
 
-if [[ -n "$worktree_path" && "${DEVBREW_QG_KEEP_WORKTREE:-}" == "1" ]]; then
-  echo "cancel-qg-core: DEVBREW_QG_KEEP_WORKTREE=1 — preserving worktree at $worktree_path AND state folder $target_dir." >&2
+if [[ -n "$worktree_path" && "${DEVBREW_QUALITY_GATES_KEEP_WORKTREE:-}" == "1" ]]; then
+  echo "cancel-qg-core: DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1 — preserving worktree at $worktree_path AND state folder $target_dir." >&2
   echo "cancel-qg-core: NOTE: pipeline.md retained so session-end-cleanup.py / future /cancel-qg can still rediscover the worktree." >&2
   exit 0
 fi

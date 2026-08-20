@@ -15,10 +15,10 @@ fi
 set +e
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
-assert_count_ge "grep -c 'DEVBREW_DISABLE_QG_SECURITY_REVIEWER' '$SKILL'" 1 \
+assert_count_ge "grep -c 'DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER' '$SKILL'" 1 \
   "kill switch env var present"
 
-assert_count_ge "grep -cE 'security-reviewer disabled|security-reviewer.*DEVBREW_DISABLE' '$SKILL'" 1 \
+assert_count_ge "grep -cE 'security-reviewer disabled|security-reviewer.*DEVBREW_QUALITY_GATES_DISABLE' '$SKILL'" 1 \
   "disable log message present"
 
 assert_count_ge "grep -c 'security-reviewer' '$SKILL'" 3 \

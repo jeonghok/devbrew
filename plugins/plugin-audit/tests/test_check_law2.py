@@ -10,10 +10,10 @@ GOOD_WF = (
     "const refuter = (prompt, opts) => agent(prompt, {...opts, agentType: 'plugin-audit:audit-refuter'})\n"
     "return { findings: [] }\n"
 )
-FM_GOOD = "---\nname: plugin-auditor\ntools: Glob, Grep, Read, WebSearch, WebFetch\n---\nbody\n"
-FM_GOOD_REFUTER = "---\nname: audit-refuter\ntools: Glob, Grep, Read, WebSearch, WebFetch\n---\nbody\n"
+FM_GOOD = "---\nname: plugin-auditor\ntools: Read, Grep, Glob, WebSearch, WebFetch\n---\nbody\n"
+FM_GOOD_REFUTER = "---\nname: audit-refuter\ntools: Read, Grep, Glob, WebSearch, WebFetch\n---\nbody\n"
 # frontmatter에 tools: 없음, 본문에만 있음 (런타임은 기본 쓰기 도구 부여 → Law 2 구멍)
-FM_TOOLS_IN_BODY = "---\nname: plugin-auditor\nmodel: inherit\n---\ntools: Glob, Grep, Read\n"
+FM_TOOLS_IN_BODY = "---\nname: plugin-auditor\nmodel: inherit\n---\ntools: Read, Grep, Glob\n"
 
 
 def run_law2(script_path, agents_dir):

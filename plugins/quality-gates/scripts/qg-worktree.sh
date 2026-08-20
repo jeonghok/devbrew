@@ -30,9 +30,9 @@
 # anything outside [A-Za-z0-9._-], or contains '..' substring, or has
 # leading '.', or exceeds 64 chars.
 #
-# Kill switch: DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1 — `create` exits 2
+# Kill switch: DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1 — `create` exits 2
 # with a loud message.
-# Kill switch: DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1 — `create-sandbox` exits 3
+# Kill switch: DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1 — `create-sandbox` exits 3
 # (distinct from die's exit 2) so the orchestrator can fall back to read-only.
 
 set -u
@@ -108,8 +108,8 @@ case "${1:-}" in
     ;;
   create)
     [[ $# -eq 3 ]] || die "usage: create <branch> <session-id>"
-    if [[ "${DEVBREW_QG_DISABLE_BRANCH_WORKTREE:-0}" == "1" ]]; then
-      die "Branch worktree mode disabled via DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1"
+    if [[ "${DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE:-0}" == "1" ]]; then
+      die "Branch worktree mode disabled via DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1"
     fi
     branch="$2" sid="$3"
     sanitized=$(cmd_sanitize "$branch") || exit 2
@@ -138,8 +138,8 @@ case "${1:-}" in
     # Disposable git worktree reflecting the main working tree (code-under-
     # review), sealed into an immutable baseline commit B. §6.3 of the spec.
     [[ $# -eq 2 ]] || die "usage: create-sandbox <session-id>"
-    if [[ "${DEVBREW_QG_DISABLE_RUNTIME_SANDBOX:-0}" == "1" ]]; then
-      echo "qg-worktree: runtime sandbox disabled via DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1 — orchestrator must fall back to read-only smoke mode" >&2
+    if [[ "${DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX:-0}" == "1" ]]; then
+      echo "qg-worktree: runtime sandbox disabled via DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1 — orchestrator must fall back to read-only smoke mode" >&2
       exit 3   # distinct from die's exit 2 → SKILL branches on this
     fi
     sid="$2"

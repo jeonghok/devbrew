@@ -10,7 +10,7 @@ agent() call with no agentType silently falls back to a write-capable default. S
 whole of Law 2 rests on two claims:
 
     every agent() call carries an agentType from a fixed allowlist, and
-    every agent in that allowlist declares tools: ⊆ {Glob, Grep, Read, WebSearch, WebFetch}
+    every agent in that allowlist declares tools: ⊆ {Read, Grep, Glob, WebSearch, WebFetch}
 
 ## What this gate is, and is NOT.
 
@@ -59,7 +59,7 @@ import re
 import sys
 from pathlib import Path
 
-SAFE_TOOLS = {"Glob", "Grep", "Read", "WebSearch", "WebFetch"}
+SAFE_TOOLS = {"Read", "Grep", "Glob", "WebSearch", "WebFetch"}
 
 # Identifier `agent`, not preceded by a word char / $ / dot, not followed by a word char.
 AGENT_TOKEN = re.compile(r"(?<![\w$.])agent(?![\w$])")

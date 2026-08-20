@@ -11,7 +11,7 @@ HOOK = (Path(__file__).resolve().parent.parent / "hooks" / "session-end-cleanup.
 
 def run_hook(payload, env_extra=None, cwd=None):
     env = {**os.environ}
-    for k in ("DEVBREW_DISABLE_SPEC_DISTILL", "DEVBREW_SKIP_HOOKS"):
+    for k in ("DEVBREW_SPEC_DISTILL_DISABLE", "DEVBREW_SKIP_HOOKS"):
         env.pop(k, None)
     if env_extra:
         env.update(env_extra)
@@ -71,7 +71,7 @@ class SessionEndCleanupTest(unittest.TestCase):
     def test_7_global_killswitch(self):
         rc, _, _ = run_hook(
             {"session_id": self.sid, "cwd": self.tmp},
-            env_extra={"DEVBREW_DISABLE_SPEC_DISTILL": "1"},
+            env_extra={"DEVBREW_SPEC_DISTILL_DISABLE": "1"},
         )
         self.assertEqual(rc, 0)
         self.assertTrue(self.folder.exists())

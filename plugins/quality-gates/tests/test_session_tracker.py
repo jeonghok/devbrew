@@ -110,7 +110,7 @@ class TestSessionTracker(unittest.TestCase):
         self.assertFalse(state_path(self.tmp, SID_A).exists())
 
     def test_kill_switch_env(self):
-        env = {"DEVBREW_DISABLE_QUALITY_GATES": "1"}
+        env = {"DEVBREW_QUALITY_GATES_DISABLE": "1"}
         proc = run_hook(
             {
                 "session_id": SID_A,

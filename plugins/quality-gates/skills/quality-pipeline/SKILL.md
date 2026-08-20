@@ -57,7 +57,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v3.0.0)
+# Quality Gates — In-Turn Orchestrator (v4.0.0)
 
 You are running the **full quality-gates pipeline** in a single assistant
 turn. You dispatch up to two gates serially in order (Runtime gate only when selected). At decision points
@@ -93,6 +93,7 @@ handles deletion.
    - Review / Runtime result templates
    - [Publish-eligible sentinel](#publish-eligible-sentinel) — fail-safe write contract shared by Final Summary + Runtime R8
    - Final summary template
+   - [kill switch](#kill-switch) — DEVBREW_QUALITY_GATES_DISABLE* 색인, 각 스위치가 실제로 검사되는 스텝으로 포인터만
    - [Rules](#rules) — Law 2 invariants, state file invariants
 
 ## Preflight
@@ -113,8 +114,8 @@ in any per-dispatch block — the reviewer agents declare `project_dir` as a
 required dispatch parameter and forbid `pwd`/`git rev-parse` recomputation
 in their personas.
 
-**Step P1 — Global kill switch.** If `DEVBREW_DISABLE_QUALITY_GATES=1`,
-emit `[quality-gates] disabled via DEVBREW_DISABLE_QUALITY_GATES=1` and
+**Step P1 — Global kill switch.** If `DEVBREW_QUALITY_GATES_DISABLE=1`,
+emit `[quality-gates] disabled via DEVBREW_QUALITY_GATES_DISABLE=1` and
 return immediately. Do NOT call setup-qg.sh or any agent.
 
 **Step P2 — Setup state.** Run:
@@ -174,7 +175,7 @@ Parse from `/qg` invocation:
   gate's test-scope-validator (used to assess per-AC coverage — emitted as the advisory `ac_coverage` output) and by
   the Review gate codex path (spec AC injected into `<spec_context>`,
   script-internal in `run_codex_reviewer.sh`). If
-  `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1`, pass `spec_path: none` to the
+  `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1`, pass `spec_path: none` to the
   test-scope-validator dispatch — this forces the no-spec fallback (ac_coverage
   omitted, plan-based scope only). All spec behavior is advisory; it never
   blocks a gate.
@@ -241,7 +242,7 @@ AskUserQuestion({
       header: "Runtime scope",
       options: [
         {label: "Run all + skip blocked", description: "Opt into all listed surfaces; block_policy=skip (SKIP_WITH_EVIDENCE, continue)."},
-        {label: "Run all + ask on block", description: "Opt into all; block_policy=ask (mid-run question, bounded by DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS)."},
+        {label: "Run all + ask on block", description: "Opt into all; block_policy=ask (mid-run question, bounded by DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS)."},
         {label: "Boot nothing",            description: "Skip every requires_decision surface. The Runtime floor (R4/R5b differential test run) still runs — it is the orchestrator's, not the verifier's."},
         {label: "Stop on block",            description: "Opt into all; block_policy=stop (abort the gate at the first unrecoverable block)."}
       ],
@@ -251,7 +252,7 @@ AskUserQuestion({
 })
 ```
 
-**Upfront approval is authoritative.** A surface opted in here is NOT re-asked mid-run. A mid-run question fires only for a *newly discovered* block when `block_policy=ask`, and the total number of such mid-run questions is itself bounded by `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS`.
+**Upfront approval is authoritative.** A surface opted in here is NOT re-asked mid-run. A mid-run question fires only for a *newly discovered* block when `block_policy=ask`, and the total number of such mid-run questions is itself bounded by `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS`.
 
 **Cost heads-up (AC13):** if the plan includes a web process-start surface (a heavy interactive flow on the inherited model), print one line before dispatching: `> Runtime gate will boot a web app and drive browser flows (heavier; inherited model).`
 
@@ -361,7 +362,7 @@ Agent({
    the project spec's Acceptance Criteria into its `<spec_context>` slot, resolved
    **script-internally** by `run_codex_reviewer.sh` (via `discover-spec.sh`) — so no
    `spec_path` dispatch field and no `allowed-tools` change are needed.
-   `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1` empties the slot (the script reads the env
+   `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` empties the slot (the script reads the env
    var directly). If codex is unavailable, continue without it — scope does not change
    this.
 
@@ -383,7 +384,7 @@ Agent({
 집행 파일로 `run_codex_reviewer.sh`를 명시한다. 그러므로 배너는 "codex 없음"이 아니라
 **"이 리뷰에는 모델 다양성이 없었다"**를 말해야 한다.
 
-kill switch는 `DEVBREW_DISABLE_QG_CODEX=1`이다. 이 게이트는 현재 **산문**이며 모델이
+kill switch는 `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1`이다. 이 게이트는 현재 **산문**이며 모델이
 detect를 돌린다 — 리터럴 bash 게이트로의 전환은 이 사이클 범위 밖이고,
 `test_codex_gate_observation.sh`의 UNGATED 원장에 사유와 함께 등재돼 있다.
 
@@ -1006,7 +1007,7 @@ Agent({
   description: "Classify scope-relevant test files (Runtime gate)",
   prompt: "Validate test scope against current diff, spec acceptance criteria, and plan items.
     project_dir: \"$project_dir\"
-    spec_path: <path or 'auto'; pass 'none' if DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1>
+    spec_path: <path or 'auto'; pass 'none' if DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1>
     plan_path: <path or 'auto'>
     candidate_test_files: <compute-test-scope-candidates.sh 출력>"
 })
@@ -1141,7 +1142,7 @@ R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 �
 `BASELINE_UNRUNNABLE` 은 채워야만 실제로 나온다 — 이 지시가 빠져 있었다.
 
 **폴백(샌드박스 비활성)에서도 이 스텝 전체를 건너뛴다 (/qg iter-5 SR4).**
-`DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1` 이면 R5a¹ 이 폴백으로 가고 **R5b 가 아예 돌지
+`DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` 이면 R5a¹ 이 폴백으로 가고 **R5b 가 아예 돌지
 않는다** — HEAD 축이 전량 `unrun` 이라는 뜻이다. 그러면 R4 가 만든 기준선 행은 어떤
 값이든 `(P,U)`/`(F,U)`/`(A,U) → SILENT_DROP` 또는 `(U,*) → BASELINE_UNRUNNABLE` 로만
 짝지어진다. 어느 쪽도 새 정보가 아니고 verdict 는 이미 SKIP_WITH_EVIDENCE 로 cap 돼
@@ -1416,7 +1417,7 @@ a disposable git-worktree:
   guard fail-closed on every run. Hold all three as orchestrator variables
   (verifier-unreachable). Set `runtime_project_dir = sandbox_dir` (frozen — it
   overrides the preflight `project_dir` for the Runtime gate only).
-- **Exit 3** (kill switch `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1`) → graceful fallback
+- **Exit 3** (kill switch `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1`) → graceful fallback
   (no sandbox): set `runtime_project_dir = project_dir` (the preflight main-repo dir;
   `sandbox_dir`/`baseline_sha` stay UNSET). The verdict is **capped at
   SKIP_WITH_EVIDENCE — never PASS** (no sandbox = no structural Law-2 guarantee = no
@@ -1430,7 +1431,7 @@ a disposable git-worktree:
   smoke mode on the real tree (qg runs no installer and no test command there; R5b
   skipped, HEAD units recorded unrun). Verifier still holds write access — see the R7
   working-tree warning. Verdict capped at SKIP_WITH_EVIDENCE
-  (DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1).`
+  (DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1).`
 - Any other non-zero → surface stderr verbatim and mark the Runtime gate failed.
 
 **Step R5a² — gather spec Acceptance Criteria.** Resolve the spec (reuse
@@ -1457,7 +1458,7 @@ Agent({
     manifest: <output of detect-runtime.sh>
     approved_surfaces: <surfaces opted in at the Upfront Execution Plan>
     block_policy: <stop|skip|ask>
-    resolution_iter: <N (1..DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS)>"
+    resolution_iter: <N (1..DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS)>"
 })
 ```
 
@@ -1949,11 +1950,11 @@ A surface is *blocked* when the executor cannot complete it. Routing (per-surfac
 On executor `NEEDS_RESOLUTION` (setup retries exhausted), apply the upfront `block_policy`:
 - `stop` → abort the gate at the block; terminal summary.
 - `skip` → record SKIP_WITH_EVIDENCE for that surface; finalize with partial results.
-- `ask` → invoke [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision) (retry / skip-with-evidence / stop). Total `ask` mid-run questions are bounded by `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS`; on exhaustion, fall through to skip-with-evidence.
+- `ask` → invoke [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision) (retry / skip-with-evidence / stop). Total `ask` mid-run questions are bounded by `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS`; on exhaustion, fall through to skip-with-evidence.
 
 ---
 
-The NEEDS_RESOLUTION branch is the only Runtime gate outcome that surfaces a user question when `block_policy=ask`. It is bounded by `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS` so a mis-configured environment cannot loop indefinitely.
+The NEEDS_RESOLUTION branch is the only Runtime gate outcome that surfaces a user question when `block_policy=ask`. It is bounded by `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS` so a mis-configured environment cannot loop indefinitely.
 
 Per spec AC8 and the secret-policy rule (P21), the prompt body asks the user to place secrets on disk first and respond yes/no. Never request a secret value as a literal string.
 
@@ -1961,7 +1962,7 @@ Per spec AC8 and the secret-policy rule (P21), the prompt body asks the user to 
 
 > **Spec anchor (AC8):** the literal phrase `Runtime verifier needs` MUST appear in the prompt — V2b grep checks this. **P21 reaffirmation MUST also appear in the prompt body** (literal token `P21`) — the prompt never asks for secret values, only paths or yes/no.
 
-Loop up to `DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS` times (default 3, env override clamped 0..10):
+Loop up to `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS` times (default 3, env override clamped 0..10):
 
 ```
 AskUserQuestion({
@@ -2038,6 +2039,22 @@ sentinel](#publish-eligible-sentinel) 포맷으로 `Write`한다 — `<verdict>`
 Review 셀). 이 Write가 커맨드 계층 offer를 arm한다.
 
 State file cleanup is deferred to /cancel-qg or SessionEnd cleanup hook.
+
+## kill switch
+
+이 SKILL이 존중하는 kill switch 색인 — 각 스위치의 전체 동작은 아래 명시된 스텝/절
+본문에 있다(여기서 재서술하지 않는다, drift 방지):
+
+- `DEVBREW_QUALITY_GATES_DISABLE=1` — 전역, 파이프라인 전체를 즉시 종료한다. Preflight
+  Step P1.
+- `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — Review gate의 codex co-review만 skip한다
+  (Claude 리뷰는 정상 진행). Review gate의 "Codex skip 안내".
+- `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` — Runtime gate의
+  test-scope-validator dispatch에 `spec_path: none`을 강제해 spec 기반 ac_coverage를
+  끈다(plan 기반 scope만 남는다). Arguments 절.
+- `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` — Runtime gate 샌드박스를 끄고
+  실제 트리 폴백으로 간다. verdict는 SKIP_WITH_EVIDENCE로 cap — 이 스위치가 켜진
+  경로는 PASS를 낼 수 없다. Runtime gate Exit 3.
 
 ## Rules
 

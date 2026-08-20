@@ -166,7 +166,7 @@ STATE="$ROOT/<session-id>/state.local.md"
 - (d) ontological 사용자 답변 받음: streak = 0
 - (a) web auto-research: streak +1 (과도하면 강제 (b)로 사용자를 loop에 유지 — AP16).
 
-`non_user_streak >= DEVBREW_RHYTHM_GUARD_THRESHOLD` (default 3) 도달 시:
+`non_user_streak >= DEVBREW_SPEC_DISTILL_RHYTHM_GUARD_THRESHOLD` (default 3) 도달 시:
 
 → 다음 probe의 질문은 **반드시 (b) judgment path** (사용자에게 직접 질문)로 라우팅. 강제.
 
@@ -415,7 +415,7 @@ Skill spec-distill:reviewing-brief $PAYLOAD $CODEX_DIR_YAML $CODEX_FID_YAML
 세 인자는 **주석이 아니라 호출 라인 위에** 있어야 합니다 — `reviewing-brief`는 이 값들을 스스로 정의하지 않는다고 명시하므로, `#` 뒤에만 적혀 있으면 호출은 인자 없이 나가고 callee는 정의되지 않은 변수를 쥡니다.
 
 - 그 skill이 `cost_class: high` 진입 승인 게이트를 띄웁니다(모델 호출 하한 5 · 상한 9).
-- `DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW=1`이면 파이프라인이 전체 skip되고 skip record가
+- `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1`이면 파이프라인이 전체 skip되고 skip record가
   Step B 게이트 질문에 표시됩니다 — 조용한 생략이 아닙니다.
 - 리뷰가 payload를 수정할 수 있습니다(§2 제약·§3 OQ 등). 수정이 일어나면 Step B는 **리뷰 후
   최종 문서**를 봅니다.
@@ -609,6 +609,6 @@ forward promotion이며 backward-rewrite가 아니다 — `interview_round`는 �
 
 ## kill switch
 
-- `DEVBREW_DISABLE_SPEC_DISTILL=1`: 즉시 abort, state.local.md 보존 (실패 분석용).
-- `DEVBREW_RHYTHM_GUARD_THRESHOLD=N`: rhythm guard threshold override.
+- `DEVBREW_SPEC_DISTILL_DISABLE=1`: 즉시 abort, state.local.md 보존 (실패 분석용).
+- `DEVBREW_SPEC_DISTILL_RHYTHM_GUARD_THRESHOLD=N`: rhythm guard threshold override.
 - `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`: web landscape(R2) 비활성 — loud advisory 후 codebase 근거만 사용.

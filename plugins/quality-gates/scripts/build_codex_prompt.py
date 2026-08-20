@@ -112,7 +112,7 @@ def main() -> int:
     diff_content = diff_path.read_text(encoding="utf-8", errors="replace")
     # Spec AC is optional. The canonical "no spec found" path passes /dev/null
     # (a char device, not a regular file); upstream run_codex_reviewer.sh also
-    # passes /dev/null when DEVBREW_QG_DISABLE_SPEC_CONFORMANCE=1. Treat any
+    # passes /dev/null when DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1. Treat any
     # non-regular-file as empty context rather than erroring — only a real spec
     # AC file contributes text.
     if spec_ac_path.is_file():

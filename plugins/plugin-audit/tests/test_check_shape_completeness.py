@@ -157,7 +157,7 @@ class TestShapeCompleteness(unittest.TestCase):
                     {"type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/real-hook.py"}]}]}
             }), encoding="utf-8")
             (hooks / "real-hook.py").write_text(
-                "import os\nif os.environ.get('DEVBREW_DISABLE_MYPLUGIN'):\n    raise SystemExit\n", encoding="utf-8")
+                "import os\nif os.environ.get('DEVBREW_MYPLUGIN_DISABLE'):\n    raise SystemExit\n", encoding="utf-8")
             (hooks / "tests" / "test_real_hook.py").write_text("assert True  # no kill switch\n", encoding="utf-8")
             (hooks / "tests" / "__init__.py").write_text("", encoding="utf-8")
             r, obj = run(dd)
@@ -197,7 +197,7 @@ class TestShapeCompleteness(unittest.TestCase):
         # 판독 전에 거부(gap)해야 한다. 외부 파일은 kill-switch 토큰을 가져 — 미차단 시 present=True(버그).
         with tempfile.TemporaryDirectory() as outside:
             evil = Path(outside) / "evil.py"
-            evil.write_text("# DEVBREW_DISABLE_X — plugin 밖 파일\n", encoding="utf-8")
+            evil.write_text("# DEVBREW_X_DISABLE — plugin 밖 파일\n", encoding="utf-8")
             with tempfile.TemporaryDirectory() as d:
                 dd = _mk_plugin(d)
                 hooks = dd / "hooks"; hooks.mkdir()

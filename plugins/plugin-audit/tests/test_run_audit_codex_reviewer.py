@@ -89,7 +89,7 @@ class TestRunAuditCodexReviewer(unittest.TestCase):
     def test_does_not_read_kill_switch(self):
         """게이트는 호출자(SKILL) 책임이다. 러너가 kill switch를 읽으면 책임이 갈라진다."""
         body = RUNNER.read_text(encoding="utf-8")
-        self.assertNotIn("DEVBREW_DISABLE_PLUGIN_AUDIT_CODEX", body)
+        self.assertNotIn("DEVBREW_PLUGIN_AUDIT_DISABLE_CODEX", body)
 
     def test_argv_carries_contract_flags_and_dash(self):
         """AC1 — 실행 관측: argv에 `-` · `-s read-only` · `-C <dir>` · `--json`."""

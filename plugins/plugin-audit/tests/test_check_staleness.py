@@ -271,7 +271,7 @@ class TestDanglingRefs(unittest.TestCase):
 
     def _no_registry_env(self, tmp):
         env = dict(os.environ)
-        env["DEVBREW_STALENESS_REGISTRY"] = str(Path(tmp) / "no-such-registry.json")
+        env["DEVBREW_PLUGIN_AUDIT_STALENESS_REGISTRY"] = str(Path(tmp) / "no-such-registry.json")
         return env
 
     def test_dangling_self_command_flagged(self):
@@ -338,7 +338,7 @@ class TestDanglingRefs(unittest.TestCase):
                 {"version": 2, "plugins": {"other-plugin@some-marketplace": {"scope": "user"}}}),
                 encoding="utf-8")
             env = dict(os.environ)
-            env["DEVBREW_STALENESS_REGISTRY"] = str(registry)
+            env["DEVBREW_PLUGIN_AUDIT_STALENESS_REGISTRY"] = str(registry)
             facts = run_sweep(p, env=env)
             self.assertNotIn("dangling command/plugin ref", classes(facts),
                              "레지스트리에 실제 설치된 plugin을 dangling으로 오탐")
@@ -555,7 +555,7 @@ class TestCategoryAbsence(unittest.TestCase):
                 json.dumps({"hooks": {"PostToolUse": [{"matcher": "Bash", "hooks": [{}]}]}}),
                 encoding="utf-8")
             (p / "README.md").write_text(
-                "Kill switch: `DEVBREW_DISABLE_MYPLUGIN=1`\n", encoding="utf-8")
+                "Kill switch: `DEVBREW_MYPLUGIN_DISABLE=1`\n", encoding="utf-8")
             facts = run_sweep(p)
             hits = [f for f in facts if f["class"] == "category absence" and f.get("norm") == "kill switch"]
             self.assertFalse(hits)

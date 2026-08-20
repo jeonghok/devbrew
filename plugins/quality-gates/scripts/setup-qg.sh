@@ -12,7 +12,7 @@ set -euo pipefail
 # SKILL preflight P1 also checks this and short-circuits before calling
 # setup-qg.sh. Honoring it here too means direct callers (tests, scripts)
 # can't accidentally bypass the kill switch via a fresh invocation.
-if [[ "${DEVBREW_DISABLE_QUALITY_GATES:-}" == "1" ]]; then
+if [[ "${DEVBREW_QUALITY_GATES_DISABLE:-}" == "1" ]]; then
   # Structural backstop (v2.10.0): even when globally disabled, clear any stale
   # publish-eligible sentinel for this session BEFORE exiting. The global-kill
   # exit is upstream of the arg-parsed cleanup in the "Stale publish-eligible
@@ -37,7 +37,7 @@ if [[ "${DEVBREW_DISABLE_QUALITY_GATES:-}" == "1" ]]; then
     rm -f ".claude/quality-gates/$_kill_sid/publish-eligible.md" \
       || echo "[quality-gates] WARN: could not clear stale publish-eligible sentinel at .claude/quality-gates/$_kill_sid/ — publish offer falls back to the qg.md kill-switch guard." >&2
   fi
-  echo "[quality-gates] setup-qg disabled via DEVBREW_DISABLE_QUALITY_GATES=1" >&2
+  echo "[quality-gates] setup-qg disabled via DEVBREW_QUALITY_GATES_DISABLE=1" >&2
   exit 1
 fi
 
@@ -297,15 +297,15 @@ if plugin_installed "superpowers"; then
   fi
 fi
 
-# --- Validate DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS (P18 unbounded-autonomy guard) ---
+# --- Validate DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS (P18 unbounded-autonomy guard) ---
 # Default 3. Clamped to 0..10. Non-numeric → warning + default.
 
-runtime_max="${DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS:-3}"
+runtime_max="${DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS:-3}"
 if ! [[ "$runtime_max" =~ ^[0-9]+$ ]]; then
-  echo "setup-qg: DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS='$runtime_max' is not numeric; defaulting to 3" >&2
+  echo "setup-qg: DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS='$runtime_max' is not numeric; defaulting to 3" >&2
   runtime_max=3
 elif (( runtime_max > 10 )); then
-  echo "setup-qg: DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS='$runtime_max' exceeds maximum 10; clamping to 10" >&2
+  echo "setup-qg: DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS='$runtime_max' exceeds maximum 10; clamping to 10" >&2
   runtime_max=10
 fi
 

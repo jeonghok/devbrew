@@ -1,4 +1,4 @@
-"""test_publish_kill_switch.py — AC10: DEVBREW_QG_DISABLE_PUBLISH suppresses the
+"""test_publish_kill_switch.py — AC10: DEVBREW_QUALITY_GATES_DISABLE_PUBLISH suppresses the
 network mutation at the innermost sink while still computing the decision.
 Run: python3 -m unittest (from repo root)."""
 from __future__ import annotations
@@ -25,7 +25,7 @@ class KillSwitch(unittest.TestCase):
             body = Path(d) / "body"; body.write_text(MARKER + "\nx", encoding="utf-8")
             cj = Path(d) / "c.json"; cj.write_text(json.dumps([]), encoding="utf-8")
             env = dict(os.environ, PATH=f"{d}:{os.environ['PATH']}",
-                       DEVBREW_QG_DISABLE_PUBLISH="1")
+                       DEVBREW_QUALITY_GATES_DISABLE_PUBLISH="1")
             r = subprocess.run(
                 [sys.executable, str(SCRIPT), "--pr", "1", "--marker", MARKER,
                  "--body-file", str(body), "--my-id", "5", "--repo", "o/r",

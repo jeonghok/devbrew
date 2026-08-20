@@ -5,7 +5,7 @@ export const meta = {
     { title: '감사', detail: '6축 병렬 발견 (plugin-auditor, 쓰기 불가)' },
     { title: '검증', detail: '축별 적대적 반박 (audit-refuter, 기본 verdict = refuted)' },
     { title: '병합', detail: 'exact-key dedup + codex 갭 반박' },
-    { title: '심층검증', detail: 'CRITICAL/HIGH 생존 갭에 2개 추가 렌즈 (캡 8)' },
+    { title: '심층검증', detail: 'CRITICAL/IMPORTANT 생존 갭에 2개 추가 렌즈 (캡 8)' },
   ],
 }
 
@@ -74,7 +74,7 @@ const AXIS_SCHEMA = {
           recommendation: { type: 'string' },
           counter_argument: { type: 'string' },
           evidence: EVIDENCE,
-          severity: { type: 'string', enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] },
+          severity: { type: 'string', enum: ['CRITICAL', 'IMPORTANT', 'SUGGESTION'] },
           fix_cost: { type: 'string', enum: ['S', 'M', 'L'] },
           fix_cost_rationale: { type: 'string' },
           reference_gap: { type: 'string' },
@@ -201,9 +201,8 @@ const CONTRACT = [
   '',
   '## severity / fix_cost 기준 (기준은 공유하고, 판정은 네가 한다)',
   '- `CRITICAL` 사용자 데이터·파일 파괴, 크레덴셜 유출, 또는 **생성물을 통해 거짓이 사용자 프로젝트로 배포**',
-  '- `HIGH` 광고된 기능이 동작 안 함 / 보안 컨트롤 우회 / 문서가 코드에 대해 **거짓**',
-  '- `MEDIUM` 동작하나 사용자를 오도하거나 예측 가능하게 실패 (회복 가능)',
-  '- `LOW` 불편·비일관·유지보수 부담',
+  '- `IMPORTANT` 광고된 기능이 동작 안 함 / 보안 컨트롤 우회 / 문서가 코드에 대해 **거짓**',
+  '- `SUGGESTION` 동작하나 사용자를 오도하거나 예측 가능하게 실패(회복 가능) / 불편·비일관·유지보수 부담',
   '- `fix_cost`: `S` 한 파일 국소 편집 / `M` 여러 파일 또는 새 동작+테스트 / `L` 구조 변경·마이그레이션',
   '',
   '## 후보 단서 (검증하라, 전제하지 마라)',
@@ -351,7 +350,7 @@ const AXES = [
       '  **대상이 쓰는 방식의 실제 귀결이 무엇인가** — 구체적 시나리오로.',
       '- **테스트가 훅의 *실제 능력*을 증명하는가, 통과하기 쉬운 대리 지표인가?** fixture가 **진짜 실패',
       '  케이스**를 담는가? (devbrew 교훈: 헤더만 만족시켜도 GREEN인 회귀 락은 **이빨이 없다**.)',
-      '- kill switch(`DEVBREW_DISABLE_*` / `DEVBREW_SKIP_HOOKS`)가 실제로 존중되는가 — 코드로 확인하라.',
+      '- kill switch(`DEVBREW_<PLUGIN>_DISABLE` / `DEVBREW_SKIP_HOOKS`)가 실제로 존중되는가 — 코드로 확인하라.',
       '',
       '**이 축의 후보 단서 (검증하라):**',
       ...axisClueBlock(3),
@@ -622,12 +621,13 @@ for (const f of findings) {
   }
 }
 
-// ── 심층검증: two more lenses on surviving CRITICAL/HIGH. Cap 8.
+// ── 심층검증: two more lenses on surviving CRITICAL/IMPORTANT. Cap 8.
+// (Task 28: 옛 HIGH → IMPORTANT — quality-gates와 severity 어휘 통일, §15.1 mapping)
 phase('심층검증')
 
-const RANK = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }
+const RANK = { CRITICAL: 0, IMPORTANT: 1, SUGGESTION: 2 }
 const deepPool = findings
-  .filter((f) => f.status === 'reported' && (f.severity === 'CRITICAL' || f.severity === 'HIGH'))
+  .filter((f) => f.status === 'reported' && (f.severity === 'CRITICAL' || f.severity === 'IMPORTANT'))
   .sort((a, b) => (RANK[a.severity] - RANK[b.severity]) || (a.axis - b.axis) || (a.id < b.id ? -1 : 1))
 
 const DEEP_CAP = 8

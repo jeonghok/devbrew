@@ -7,8 +7,8 @@ enum contract. Uses tests/harness/agent_stub.py to short-circuit dispatch
 AC45 verdict enum match | AC46 schema completeness | AC47 no-silent-skip.
 """
 import sys
+import unittest
 from pathlib import Path
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "harness"))
 from agent_stub import run_agent_stub, assert_yaml_schema  # noqa: E402
@@ -31,25 +31,28 @@ findings:
 """
 
 
-def test_AC45_security_reviewer_findings_schema():
-    parsed = run_agent_stub("security-reviewer", "p", SEC_REVIEWER_FROZEN)
-    assert_yaml_schema(parsed, required_keys=["agent", "findings"])
-    for f in parsed["findings"]:
-        assert_yaml_schema(
-            f,
-            required_keys=["severity", "confidence", "file", "line"],
-            enum={"severity": ["CRITICAL", "IMPORTANT", "SUGGESTION"]},
-        )
-        assert 1 <= int(f["confidence"]) <= 10
+class SecurityReviewerBehaviorTests(unittest.TestCase):
+    def test_AC45_security_reviewer_findings_schema(self):
+        parsed = run_agent_stub("security-reviewer", "p", SEC_REVIEWER_FROZEN)
+        assert_yaml_schema(parsed, required_keys=["agent", "findings"])
+        for f in parsed["findings"]:
+            assert_yaml_schema(
+                f,
+                required_keys=["severity", "confidence", "file", "line"],
+                enum={"severity": ["CRITICAL", "IMPORTANT", "SUGGESTION"]},
+            )
+            self.assertTrue(1 <= int(f["confidence"]) <= 10)
+
+    def test_AC46_security_reviewer_missing_key_raises(self):
+        bad = "agent: security-reviewer\n"
+        parsed = run_agent_stub("security-reviewer", "p", bad)
+        with self.assertRaises(AssertionError):
+            assert_yaml_schema(parsed, ["agent", "findings"])
+
+    def test_AC47_security_reviewer_invalid_yaml_raises(self):
+        with self.assertRaises(AssertionError):
+            run_agent_stub("security-reviewer", "p", "agent: : : invalid")
 
 
-def test_AC46_security_reviewer_missing_key_raises():
-    bad = "agent: security-reviewer\n"
-    parsed = run_agent_stub("security-reviewer", "p", bad)
-    with pytest.raises(AssertionError):
-        assert_yaml_schema(parsed, ["agent", "findings"])
-
-
-def test_AC47_security_reviewer_invalid_yaml_raises():
-    with pytest.raises(AssertionError):
-        run_agent_stub("security-reviewer", "p", "agent: : : invalid")
+if __name__ == "__main__":
+    unittest.main()

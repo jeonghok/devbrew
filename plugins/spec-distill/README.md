@@ -103,7 +103,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 ### Roadmap absorption (C-numbers)
 
 - **C43** 4-path Socratic routing (factual auto-confirm / judgment→user / ambiguity→sub-agent / ontological→5-type).
-- **C44** Dialectic Rhythm Guard (env: `DEVBREW_RHYTHM_GUARD_THRESHOLD`, default 3).
+- **C44** Dialectic Rhythm Guard (env: `DEVBREW_SPEC_DISTILL_RHYTHM_GUARD_THRESHOLD`, default 3).
 - **C10** `probe_budget.py` 백스톱 — Unbounded-autonomy 가드(effective_cap = base 12 + override, `DEVBREW_SPEC_DISTILL_PROBE_CAP`).
 - **C11** coverage-mapper agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — advisory 주제-도출 차원 제안자) + **blind-spot-prober** agent (`tools: Read, Grep, Glob, WebSearch, WebFetch` — 적대적 premortem, fan-out 1).
 - **C51** 5-type ontology (ESSENCE / ROOT_CAUSE / PREREQUISITES / HIDDEN_ASSUMPTIONS / EXISTING_CONTEXT).
@@ -154,7 +154,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 | **그 문서의 재발동** | 재발동은 그 문서를 **다시 편집**할 때 일어난다. `should_arm()` 이 git-unknown 을 요구하므로 **커밋된 문서는 원칙적으로 다시 arm 되지 않는다** — 단 `is_born()` 은 git 판정 실패(`ls-files` timeout·rc 128 등)를 전부 arm 쪽으로 fail-open 하므로 이는 보장이 아니다 | 불필요 |
 | 모든 문서, 자동 리뷰만 | `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (Layer 1 구조 검증은 유지) | 필요 |
 | 훅 하나 | `DEVBREW_SKIP_HOOKS=spec-distill:Stop` | 필요 |
-| 플러그인 전체 | `DEVBREW_DISABLE_SPEC_DISTILL=1` | 필요 |
+| 플러그인 전체 | `DEVBREW_SPEC_DISTILL_DISABLE=1` | 필요 |
 
 **커밋은 이미 걸린 dispatch 를 취소하지 않습니다.** Stop 훅은 pending 을 찾은 뒤
 `armed_paths` 만 조회하고 git 추적 여부를 재검사하지 않으므로, pending 이 생긴 뒤 같은
@@ -174,10 +174,10 @@ arm** 뿐이고, 그마저 위 표의 fail-open 단서가 붙습니다.
 
 ### 스위치 목록
 
-- `DEVBREW_DISABLE_SPEC_DISTILL=1` — plugin 전체 abort, state 보존.
-- `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1` (v0.20.0, v0.24.0 확대) — codex 병렬 co-review만 skip. Claude 리뷰는 정상 동작, combined = Claude verdict + loud degrade advisory. 전역 `DEVBREW_DISABLE_SPEC_DISTILL`과 독립. **적용 범위는 두 경로 전부**: (a) design-doc 리뷰(`reviewing-spec`), (b) brief 리뷰(`reviewing-brief`)의 **호출 지점 3곳** — 1-c 방향성 축 · 2-b 충실도 축 · 2-c 충실도 재실행. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`로 옮기고 세 지점이 같은 `$codex_avail`로 묶이며, 러너(`run_brief_codex_reviewer.sh`)는 이 변수를 보지 않는다. 한 지점이라도 게이트 밖이면 opt-out이 무시된 채 지출이 나가고 `affected_axis: all` degradation record가 거짓이 된다.
+- `DEVBREW_SPEC_DISTILL_DISABLE=1` — plugin 전체 abort, state 보존.
+- `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` (v0.20.0, v0.24.0 확대) — codex 병렬 co-review만 skip. Claude 리뷰는 정상 동작, combined = Claude verdict + loud degrade advisory. 전역 `DEVBREW_SPEC_DISTILL_DISABLE`과 독립. **적용 범위는 두 경로 전부**: (a) design-doc 리뷰(`reviewing-spec`), (b) brief 리뷰(`reviewing-brief`)의 **호출 지점 3곳** — 1-c 방향성 축 · 2-b 충실도 축 · 2-c 충실도 재실행. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`로 옮기고 세 지점이 같은 `$codex_avail`로 묶이며, 러너(`run_brief_codex_reviewer.sh`)는 이 변수를 보지 않는다. 한 지점이라도 게이트 밖이면 opt-out이 무시된 채 지출이 나가고 `affected_axis: all` degradation record가 거짓이 된다.
 - `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` — UserPromptSubmit hook만 skip.
-- `DEVBREW_RHYTHM_GUARD_THRESHOLD=N` — Dialectic Rhythm Guard threshold (default 3).
+- `DEVBREW_SPEC_DISTILL_RHYTHM_GUARD_THRESHOLD=N` — Dialectic Rhythm Guard threshold (default 3).
 - `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (v0.3.0) — PostToolUse Layer 1 (structural check) 정상 동작, Layer 2 (`pending_review:` ledger 기록) skip. 비상시 reviewer dispatch cost 회피용.
 - `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` (v0.3.0, v0.8.0 확대, v0.8.1 sub-folder 명시) — `design`으로 분류된 모든 `.md` 게이트 해제: `-design.md` suffix 파일 + content-aware 판별로 `design`이 된 임의 `.md` (sub-folder 포함). `locked_decisions`로 `spec` 분류된 파일은 영향 없음. brainstorming 산출물 review를 일시 정지하고 싶을 때.
 - `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=<int>` (v0.3.0) — Stop hook redispatch TTL guard (default 30초). spec self-reference cycle 방지용. plan phase에서 default 값 재검토.
@@ -192,7 +192,7 @@ arm** 뿐이고, 그마저 위 표의 fail-open 단서가 붙습니다.
   **세 소비자**의 웹 접근을 끈다: interview 웹 리서치(landscape, v0.12.0), codex design-doc
   co-reviewer(`run_spec_codex_reviewer.sh`), codex brief co-reviewer(`run_brief_codex_reviewer.sh`,
   둘 다 AC21). 어느 쪽이든 loud log와 함께 생략, crash 없음 (graceful degradation, AC8).
-- `DEVBREW_DISABLE_SPEC_DISTILL_BRIEF_REVIEW=1` (v0.24.0) — brief 리뷰 파이프라인 전체 skip.
+- `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1` (v0.24.0) — brief 리뷰 파이프라인 전체 skip.
   `component: pipeline` degradation record + loud advisory를 남기고 Step B로 직행한다(조용한
   생략이 아니다). 충실도·방향성·냉독 전부 미검증 상태가 게이트 질문에 표시된다.
 - 자동 dispatch 가 G6 상한(3회)에 닿으면 그 문서는 이 세션에서 더 이상 자동으로 리뷰되지
@@ -204,7 +204,7 @@ arm** 뿐이고, 그마저 위 표의 fail-open 단서가 붙습니다.
 - **Claude Code built-in `general-purpose` agent** — 항상 사용 가능 (별도 설치 불필요). `conducting-interview` skill의 C43 ambiguity path가 dispatch.
 - **`jq`** (CLI, recommended) — hook 스크립트가 stdin JSON payload 파싱과 `{"systemMessage": "..."}` JSON 출력에 사용. 없으면 regex fallback + loud warning (devbrew "loud-logging graceful degradation").
 - **superpowers** (외부, optional) — 있으면 brief를 `brainstorming` 해답공간으로 넘기고 `writing-plans`로 이어집니다. 없으면 interview는 brief를 완료하고 loud advisory 후 정지 (단독 완결, AC13).
-- **codex CLI** (외부, optional) — 있으면 Phase 3 design-doc 리뷰에 병렬 독립 co-reviewer로 참여(model diversity). 없거나 auth 미설정이면 Claude-only로 graceful degrade + loud advisory(crash 없음). kill switch `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1`.
+- **codex CLI** (외부, optional) — 있으면 Phase 3 design-doc 리뷰에 병렬 독립 co-reviewer로 참여(model diversity). 없거나 auth 미설정이면 Claude-only로 graceful degrade + loud advisory(crash 없음). kill switch `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1`.
 
 ## License
 

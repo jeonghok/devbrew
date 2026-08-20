@@ -61,7 +61,7 @@ class TestSessionEndCleanup(unittest.TestCase):
         proc = run_hook(
             self.tmp,
             {"session_id": SID},
-            env_extra={"DEVBREW_DISABLE_QUALITY_GATES": "1"},
+            env_extra={"DEVBREW_QUALITY_GATES_DISABLE": "1"},
         )
         self.assertEqual(proc.returncode, 0)
         self.assertTrue(folder.exists())
@@ -127,7 +127,7 @@ class TestSessionEndCleanup(unittest.TestCase):
                          msg="session state folder should be cleaned")
 
     def test_keep_env_preserves_worktree(self):
-        """DEVBREW_QG_KEEP_WORKTREE=1 preserves the worktree at session end."""
+        """DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1 preserves the worktree at session end."""
         repo = Path(self.tmp) / "repo2"
         repo.mkdir()
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, check=True)
@@ -152,7 +152,7 @@ class TestSessionEndCleanup(unittest.TestCase):
         )
 
         proc = run_hook(str(repo), {"session_id": sid},
-                        env_extra={"DEVBREW_QG_KEEP_WORKTREE": "1"})
+                        env_extra={"DEVBREW_QUALITY_GATES_KEEP_WORKTREE": "1"})
         self.assertEqual(proc.returncode, 0, msg=proc.stderr)
         self.assertTrue(wt.exists(),
                         msg="worktree should be preserved with KEEP=1")

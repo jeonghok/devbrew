@@ -92,10 +92,10 @@ grep -q "reusing existing" "$REPO/stderr.txt" \
 rm -rf "$REPO"
 
 # --- AC9: kill switch ---
-echo "[AC9] DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1"
+echo "[AC9] DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1"
 REPO=$(make_repo feat-f)
 out=$(cd "$REPO" && CLAUDE_CODE_SESSION_ID=ac9session12 \
-        DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1 \
+        DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1 \
         "$SETUP" branch feat-f 2>&1 >/dev/null) || true
 echo "$out" | grep -qi "disabled" \
   && ok "kill switch message" \
@@ -105,7 +105,7 @@ echo "$out" | grep -qi "disabled" \
   || no "state created despite kill switch"
 # Legacy /qg branch (no name) still works under the kill switch
 (cd "$REPO" && CLAUDE_CODE_SESSION_ID=ac9bsession \
-   DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1 \
+   DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1 \
    "$SETUP" branch >/dev/null) \
   && ok "kill switch does not affect legacy /qg branch" \
   || no "kill switch killed legacy mode"
@@ -136,7 +136,7 @@ wpath=$(awk -F'"' '/^worktree_path:/{print $2}' "$REPO/.claude/quality-gates/ac7
   || no "cancel cleanup failed: $wpath"
 rm -rf "$REPO"
 
-# --- AC10: DEVBREW_QG_KEEP_WORKTREE documented somewhere ---
+# --- AC10: DEVBREW_QUALITY_GATES_KEEP_WORKTREE documented somewhere ---
 echo "[AC10] KEEP_WORKTREE documentation"
 # AC10 end-to-end behavior (KEEP env actually preserves worktree at
 # terminal status) was previously verified in test_stop_hook_worktree_cleanup.py,
@@ -149,8 +149,8 @@ found=0
 grep -qi "KEEP_WORKTREE" "$PLUGIN_DIR/README.md" 2>/dev/null && found=1
 grep -qi "KEEP_WORKTREE" "$PLUGIN_DIR/commands/qg.md" 2>/dev/null && found=1
 [ "$found" -eq 1 ] \
-  && ok "DEVBREW_QG_KEEP_WORKTREE documented" \
-  || no "DEVBREW_QG_KEEP_WORKTREE not documented anywhere"
+  && ok "DEVBREW_QUALITY_GATES_KEEP_WORKTREE documented" \
+  || no "DEVBREW_QUALITY_GATES_KEEP_WORKTREE not documented anywhere"
 
 # --- AC11: working tree non-interference ---
 echo "[AC11] working-tree non-interference"

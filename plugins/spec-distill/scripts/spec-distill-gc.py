@@ -10,7 +10,7 @@ qg-gc.py pattern adaptation:
   - .gc-pending-* orphan sweep (>60s) at iteration start
 
 Kill switches:
-  DEVBREW_DISABLE_SPEC_DISTILL=1              - no-op
+  DEVBREW_SPEC_DISTILL_DISABLE=1              - no-op
   DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc - no-op (이 스크립트 하나만)
 
 훅이 아니지만 `DEVBREW_SKIP_HOOKS` 토큰으로 지목할 이름을 갖는다 — 이관 전에는

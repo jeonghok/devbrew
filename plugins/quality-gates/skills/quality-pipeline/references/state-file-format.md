@@ -25,7 +25,7 @@ during preflight to confirm working directory; nothing else.
 ---
 session_id: "<session_id>"           # CLAUDE_CODE_SESSION_ID
 started_at: "<ISO-8601 UTC>"         # setup-qg.sh timestamp
-runtime_max_resolutions: 3           # DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS clamped 0..10
+runtime_max_resolutions: 3           # DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS clamped 0..10
 worktree_path: "<absolute path>"     # OPTIONAL — set only when /qg branch <name> used
 target_branch: "<branch name>"       # OPTIONAL — paired with worktree_path
 ---

@@ -68,7 +68,7 @@ dispatch 의 연료는 `pending_review` 다. 진입 시점에 연료를 없애�
 
 ### Step 2.5 — codex 병렬 co-review + 결정론 병합 (v0.20.0)
 
-전역 kill switch(`DEVBREW_DISABLE_SPEC_DISTILL=1`)가 켜져 있으면 이 스텝을 포함해 스킬 전체에 진입하지 않는다 — `review-dispatch.py`(Stop)가 dispatch 이전에 이미 걸러낸다. 아래는 codex 경로이며, **Claude 리뷰(Step 2)는 codex 가용성과 무관하게 항상 수행**된다 — codex kill switch가 Claude 리뷰를 막지 않는다(AC15: Claude dispatch는 codex-availability 조건 아래 nest되지 않음).
+전역 kill switch(`DEVBREW_SPEC_DISTILL_DISABLE=1`)가 켜져 있으면 이 스텝을 포함해 스킬 전체에 진입하지 않는다 — `review-dispatch.py`(Stop)가 dispatch 이전에 이미 걸러낸다. 아래는 codex 경로이며, **Claude 리뷰(Step 2)는 codex 가용성과 무관하게 항상 수행**된다 — codex kill switch가 Claude 리뷰를 막지 않는다(AC15: Claude dispatch는 codex-availability 조건 아래 nest되지 않음).
 
 1. **⟦review-claude⟧ verbatim 저장 (C8)**: Step 2에서 받은 spec-reviewer의 **raw 출력을 요약·바꿔쓰기 없이 그대로(verbatim)** scratch 파일 `$CLAUDE_OUT`에 저장한다. 파싱은 merge_review가 그 파일에서 수행하므로, orchestrating 세션이 여기서 category/target_section을 전사(轉寫)하면 안 된다([fc2ef911] 재도입 금지).
 
@@ -105,7 +105,7 @@ fi
 ```
 <!-- codex-gate:end -->
 
-   `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1`이면 `detect_codex.sh`가
+   `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1`이면 `detect_codex.sh`가
    `codex_available: false` + `skip_reason: kill_switch`를 내므로 codex만 skip되고
    **Claude 리뷰(Step 2)는 이미 정상 수행됐다** — codex kill switch가 Claude 리뷰를
    막지 않는다(AC15). `codex_avail=false`인 경우의 advisory는 위 블록이 stderr로 내며,
@@ -256,5 +256,5 @@ corruption 시 → "v0.1.x in-flight state 호환 실패 — 세션 재시작 �
 
 ## kill switch
 
-- `DEVBREW_DISABLE_SPEC_DISTILL=1`: 즉시 abort, state.local.md 보존.
-- `DEVBREW_DISABLE_SPEC_DISTILL_CODEX=1`: codex co-review만 skip(Claude 리뷰 정상). combined = Claude verdict + loud degrade advisory.
+- `DEVBREW_SPEC_DISTILL_DISABLE=1`: 즉시 abort, state.local.md 보존.
+- `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1`: codex co-review만 skip(Claude 리뷰 정상). combined = Claude verdict + loud degrade advisory.

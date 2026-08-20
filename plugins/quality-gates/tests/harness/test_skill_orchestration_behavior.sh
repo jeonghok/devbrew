@@ -11,7 +11,7 @@
 #   - Review gate → Runtime gate dispatch line order monotonic
 #   - All 4 reviewer agents present in Review/Runtime gate fan-out (consistency w/ C1)
 #   - Review gate iter cap within proximity of AskUserQuestion section
-#   - DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS within 100 lines of Runtime gate dispatch
+#   - DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS within 100 lines of Runtime gate dispatch
 #   - Retry-path AskUserQuestion block lies between Review gate and Runtime gate
 
 set -euo pipefail
@@ -108,10 +108,10 @@ itercap_line=$(first_line 'max_review_iterations')
 # adversarial dispatch와 iter-boundary 결정 사이 영역을 정당하게 키움. 여전히 tight sanity.
 assert_proximity "iter cap near Review gate AskUserQuestion" "$askuser_review_line" "$itercap_line" 160
 
-# DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS near Runtime gate dispatch — use first mention
+# DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS near Runtime gate dispatch — use first mention
 # AT OR AFTER the Runtime gate dispatch line (the top-of-file "up to ..." preview
 # mention is irrelevant; we want the Runtime NEEDS_RESOLUTION section reference).
-runtime_max_line=$(first_line_after 'DEVBREW_QG_RUNTIME_MAX_RESOLUTIONS' "$runtime_line")
+runtime_max_line=$(first_line_after 'DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS' "$runtime_line")
 assert_proximity "RUNTIME_MAX_RESOLUTIONS near Runtime dispatch" "$runtime_line" "$runtime_max_line" 100
 
 # Retry-path AskUserQuestion (I6) between Review gate dispatch and Runtime gate dispatch.
@@ -156,7 +156,7 @@ assert_line "requires_decision referenced in plan gate" "$(first_line 'requires_
 assert_line "block policy stop/skip/ask present" "$(first_line 'block_policy|stop / skip / ask|stop/skip/ask')"
 
 # Kill-switch fallback present.
-assert_line "runtime sandbox kill switch present" "$(first_line 'DEVBREW_QG_DISABLE_RUNTIME_SANDBOX')"
+assert_line "runtime sandbox kill switch present" "$(first_line 'DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX')"
 
 # spec_acceptance_criteria threaded to the verifier.
 assert_line "spec_acceptance_criteria threaded" "$(first_line 'spec_acceptance_criteria')"
@@ -470,7 +470,7 @@ for pat in 'review scope is empty' 'Empty-scope redirect' 'empty_scope_with_chan
 done
 # (AC9) $effective_diff_scope wiring gone; (AC10) scope-redirect kill switch gone;
 # (hygiene) the old scope_signal variable gone.
-for pat in 'effective_diff_scope' 'DEVBREW_QG_DISABLE_SCOPE_REDIRECT' 'scope_signal'; do
+for pat in 'effective_diff_scope' 'DEVBREW_QUALITY_GATES_DISABLE_SCOPE_REDIRECT' 'scope_signal'; do
   n=$(grep -cF "$pat" "$SKILL_MD" || true)
   if [[ "$n" -eq 0 ]]; then
     echo "PASS: removed variable/switch absent — '$pat' (0)"

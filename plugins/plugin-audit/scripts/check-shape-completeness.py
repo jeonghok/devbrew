@@ -174,8 +174,11 @@ def _hooks_killswitch_present(pd):
     return all(_has_killswitch(_read(c) or "") for c in scripts)
 
 
+_KILLSWITCH_RE = re.compile(r"DEVBREW_[A-Z0-9_]*_DISABLE")
+
+
 def _has_killswitch(text):
-    return "DEVBREW_DISABLE_" in text or "DEVBREW_SKIP_HOOKS" in text
+    return bool(_KILLSWITCH_RE.search(text)) or "DEVBREW_SKIP_HOOKS" in text
 
 
 def main(argv):

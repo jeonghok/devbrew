@@ -21,7 +21,7 @@ CLI:
   arm_ledger.py check-born    <raw_path>         # reviewing-spec approve(①/②)
                                                  #   0=git-tracked, 1=미커밋+advisory, 2=usage
 
-Kill switch (CLI defense-in-depth): DEVBREW_DISABLE_SPEC_DISTILL=1 → no-op.
+Kill switch (CLI defense-in-depth): DEVBREW_SPEC_DISTILL_DISABLE=1 → no-op.
 """
 from __future__ import annotations
 
@@ -385,9 +385,9 @@ def _usage() -> int:
 
 
 def main(argv: list[str]) -> int:
-    if os.environ.get("DEVBREW_DISABLE_SPEC_DISTILL") == "1":
+    if os.environ.get("DEVBREW_SPEC_DISTILL_DISABLE") == "1":
         print(
-            "[spec-distill] arm_ledger: DEVBREW_DISABLE_SPEC_DISTILL=1 — no-op",
+            "[spec-distill] arm_ledger: DEVBREW_SPEC_DISTILL_DISABLE=1 — no-op",
             file=sys.stderr,
         )
         return 0

@@ -48,10 +48,10 @@ class TestSkeleton(unittest.TestCase):
     """AC1, AC2, AC4, AC5, AC6 — skeleton behavior."""
 
     def test_kill_switch_full_disable(self):
-        """AC4: DEVBREW_DISABLE_PROJECT_INIT=1 → {} exit 0."""
+        """AC4: DEVBREW_PROJECT_INIT_DISABLE=1 → {} exit 0."""
         out, rc = run_hook(
             {"tool_name": "Write", "tool_input": {"file_path": "/anything/CLAUDE.md"}},
-            env_override={"DEVBREW_DISABLE_PROJECT_INIT": "1"},
+            env_override={"DEVBREW_PROJECT_INIT_DISABLE": "1"},
         )
         self.assertEqual(out.strip(), "{}")
         self.assertEqual(rc, 0)
@@ -231,7 +231,8 @@ class TestR2Toc(unittest.TestCase):
             target = Path(td) / "AGENTS.md"
             target.write_text(
                 "# Title\n\n## 목차\n\n- intro\n\n"
-                + "\n".join(f"line {i}" for i in range(350)) + "\n"
+                + "\n".join(f"line {i}" for i in range(350)) + "\n",
+                encoding="utf-8",
             )
             out, rc = run_hook(
                 {"tool_name": "Write", "tool_input": {"file_path": str(target)}},

@@ -96,7 +96,7 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 **Run**: `/qg --reset`
 **Expected**: `quality-gates.local.md`, `quality-gates-session.local.md`, `quality-gates-branch.local.md`, plus `qg-diff-cache.txt` and `qg-code-paths.tmp` all removed. Message "Quality-gates state cleared."
 
-### L — `DEVBREW_DISABLE_QUALITY_GATES=1`
+### L — `DEVBREW_QUALITY_GATES_DISABLE=1`
 **Run**: set env var, then trigger any Edit/Write tool call AND start a new Claude Code session AND attempt `/qg`.
 **Expected**: PostToolUse session-tracker is no-op (no session file written). SessionStart advisor is silent. `/qg` should also detect the env var (this happens via the setup script and skill check; not yet covered by a test, but the existing kill-switch tests for individual hooks confirm the propagation).
 
@@ -166,7 +166,7 @@ touch -t "$(date -r $old +%Y%m%d%H%M)" .claude/quality-gates/oldsess0001/pipelin
 touch -t "$(date -r $old +%Y%m%d%H%M)" .claude/quality-gates/oldsess0001
 ```
 1. Run `/qg` (any flavor). Verify `.claude/quality-gates/oldsess0001/` no longer exists.
-2. Set `DEVBREW_QG_GC_VERBOSE=1` and observe stdout: `[quality-gates] GC: removed 1 stale session folder(s)`.
+2. Set `DEVBREW_QUALITY_GATES_GC_VERBOSE=1` and observe stdout: `[quality-gates] GC: removed 1 stale session folder(s)`.
 
 ### V3 — Graceful SessionEnd cleanup
 
@@ -204,7 +204,7 @@ flock -n 9 || echo "fail"
 ### V6 — Kill switch globally disables
 
 ```bash
-DEVBREW_DISABLE_QUALITY_GATES=1 /qg
+DEVBREW_QUALITY_GATES_DISABLE=1 /qg
 ```
 1. Verify no `.claude/quality-gates/` folder created.
 2. Verify SessionEnd hook noop.

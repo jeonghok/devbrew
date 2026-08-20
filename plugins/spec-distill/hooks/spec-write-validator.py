@@ -13,7 +13,7 @@
 - On fail: exit 2 + stderr; stdout `{"decision": "block", "reason": "..."}` for safety.
 
 Kill switches:
-- DEVBREW_DISABLE_SPEC_DISTILL=1
+- DEVBREW_SPEC_DISTILL_DISABLE=1
 - DEVBREW_SKIP_HOOKS=spec-distill:PostToolUse  (or :validator)
 - DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1  (Layer 1 only; skip state write)
 - DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1  (skip design.md)
@@ -134,7 +134,7 @@ def _legacy_advisory_check(state_root_path: Path) -> None:
         return
     try:
         state_root_path.mkdir(parents=True, exist_ok=True)
-        marker.write_text("")
+        marker.write_text("", encoding="utf-8")
         print(
             "[spec-distill] v0.6.0 detected: .claude/spec-distill/default/ "
             "legacy folder, manual cleanup recommended (no auto-delete to "

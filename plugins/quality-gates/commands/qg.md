@@ -80,15 +80,15 @@ is aborted at a decision point.
 <!-- 이 "예" 분기의 Skill 호출은 commands/qg-publish.md의 dispatch와 동일 호출.
      두 call site가 drift하지 않도록 함께 수정할 것 (Law 3 위생). -->
 
-1. **Kill switch.** `DEVBREW_DISABLE_QUALITY_GATES=1`(전역) 또는
-   `DEVBREW_QG_DISABLE_PUBLISH=1`(publish 전용) 중 **어느 하나라도** 설정돼
+1. **Kill switch.** `DEVBREW_QUALITY_GATES_DISABLE=1`(전역) 또는
+   `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`(publish 전용) 중 **어느 하나라도** 설정돼
    있으면 offer를 건너뛴다 — 전역 kill 시 `setup-qg.sh`는 자신의 global-kill
    체크에서 즉시 exit해 stale-sentinel 삭제(더 뒤 단계)까지 도달하지 못하므로,
    이전 같은-세션 실행의 sentinel이 남아있을 수 있다; offer도 publish-전용
    switch만 보면 이를 놓친다(kill switch = security control, CLAUDE.md). 설정된
    쪽에 맞춰 한 줄만 출력하고 종료:
-   - `DEVBREW_QG_DISABLE_PUBLISH=1` → `> [quality-gates] publish offer disabled via DEVBREW_QG_DISABLE_PUBLISH=1`
-   - `DEVBREW_DISABLE_QUALITY_GATES=1` → `> [quality-gates] publish offer skipped: quality-gates globally disabled (DEVBREW_DISABLE_QUALITY_GATES=1).`
+   - `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` → `> [quality-gates] publish offer disabled via DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`
+   - `DEVBREW_QUALITY_GATES_DISABLE=1` → `> [quality-gates] publish offer skipped: quality-gates globally disabled (DEVBREW_QUALITY_GATES_DISABLE=1).`
 2. **Eligibility (fail-safe — default no-offer).** 아래 둘이 **모두** 참이 아니면
    offer 없이 조용히 종료(비완료/abort/trivia는 sentinel 부재 → 여기서 걸림):
    - `test -f ".claude/quality-gates/$CLAUDE_CODE_SESSION_ID/publish-eligible.md"` 성공, **그리고**
@@ -136,10 +136,10 @@ is aborted at a decision point.
 | `/qg --pr-url <url>` | Specify PR URL |
 | `/cancel-qg` | Cancel active pipeline |
 | `/qg-publish [--dry-run]` | Generate + publish a PR-understanding comment (separate skill; consent-gated; not a gate) |
-| (완료 후 자동) | 비중단 완료 시 "PR-이해글 이어서 게시?" opt-in offer (consent-gated; 게이트 아님; `DEVBREW_QG_DISABLE_PUBLISH=1`로 끔) |
-| `DEVBREW_QG_DISABLE_BRANCH_WORKTREE=1` | Disable `/qg branch <name>` auto-worktree mode |
-| `DEVBREW_QG_KEEP_WORKTREE=1` | Preserve branch worktree after pipeline completes or is cancelled (default: removed) |
-| `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX=1` | Disable the Runtime gate sandbox executor (read-only smoke fallback; verdict capped at SKIP_WITH_EVIDENCE) |
+| (완료 후 자동) | 비중단 완료 시 "PR-이해글 이어서 게시?" opt-in offer (consent-gated; 게이트 아님; `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`로 끔) |
+| `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1` | Disable `/qg branch <name>` auto-worktree mode |
+| `DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1` | Preserve branch worktree after pipeline completes or is cancelled (default: removed) |
+| `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` | Disable the Runtime gate sandbox executor (read-only smoke fallback; verdict capped at SKIP_WITH_EVIDENCE) |
 
 ### Scope (default: session)
 
@@ -175,7 +175,7 @@ loop, the pre-redesign behavior):
 | Standard | ~30–45% | 50–199 LOC or multi-file simple |
 | Deep | ~55–75% | ≥200 LOC, new files, config changes (AskUserQuestion gate fires) |
 
-Set `DEVBREW_DISABLE_QUALITY_GATES=1` to globally disable. Set
+Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable. Set
 `DEVBREW_SKIP_HOOKS=quality-gates:session-tracker` to disable just the
 session-tracker hook (keeps SessionStart advisor active). v1.32.0 has no
 Stop hook.
