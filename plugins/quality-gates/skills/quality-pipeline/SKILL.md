@@ -93,6 +93,7 @@ handles deletion.
    - Review / Runtime result templates
    - [Publish-eligible sentinel](#publish-eligible-sentinel) — fail-safe write contract shared by Final Summary + Runtime R8
    - Final summary template
+   - [kill switch](#kill-switch) — DEVBREW_QUALITY_GATES_DISABLE* 색인, 각 스위치가 실제로 검사되는 스텝으로 포인터만
    - [Rules](#rules) — Law 2 invariants, state file invariants
 
 ## Preflight
@@ -2038,6 +2039,22 @@ sentinel](#publish-eligible-sentinel) 포맷으로 `Write`한다 — `<verdict>`
 Review 셀). 이 Write가 커맨드 계층 offer를 arm한다.
 
 State file cleanup is deferred to /cancel-qg or SessionEnd cleanup hook.
+
+## kill switch
+
+이 SKILL이 존중하는 kill switch 색인 — 각 스위치의 전체 동작은 아래 명시된 스텝/절
+본문에 있다(여기서 재서술하지 않는다, drift 방지):
+
+- `DEVBREW_QUALITY_GATES_DISABLE=1` — 전역, 파이프라인 전체를 즉시 종료한다. Preflight
+  Step P1.
+- `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — Review gate의 codex co-review만 skip한다
+  (Claude 리뷰는 정상 진행). Review gate의 "Codex skip 안내".
+- `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` — Runtime gate의
+  test-scope-validator dispatch에 `spec_path: none`을 강제해 spec 기반 ac_coverage를
+  끈다(plan 기반 scope만 남는다). Arguments 절.
+- `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` — Runtime gate 샌드박스를 끄고
+  실제 트리 폴백으로 간다. verdict는 SKIP_WITH_EVIDENCE로 cap — 이 스위치가 켜진
+  경로는 PASS를 낼 수 없다. Runtime gate Exit 3.
 
 ## Rules
 

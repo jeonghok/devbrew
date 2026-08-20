@@ -276,7 +276,9 @@ critic·adversarial·codex는 read-only(`tools:` allowlist / codex `-s read-only
 *독립* critic이 재검토하며, 최종 "수렴"은 마지막 독립 critic 패스의 kept 집합이 결정 —
 자기 편집을 자기 판단으로 승인하는 경로가 구조적으로 없다.
 
-## kill switch (보안 컨트롤)
+## kill switch
+
+**보안 컨트롤** — 아래 스위치는 취향 설정이 아니다; 약화하는 PR은 보안 리뷰 대상이다.
 
 - `DEVBREW_QUALITY_GATES_DISABLE=1` — 전역 즉시 종료(E0).
 - `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1` — 이 모드만 종료(E0).

@@ -16,7 +16,10 @@ user-invocable: false
 
 **당신(orchestrator)의 책임**: dispatch · 결정론 스크립트 호출 · 결과 표면화 · Step B로 전달. **당신의 책임이 아닌 것**: finding을 임의로 기각하는 것 · 방향을 바꾸는 것 · 리뷰어 대신 판정하는 것.
 
-## kill switch (먼저 확인)
+## kill switch
+
+**먼저 확인** — 아래 스위치는 이 skill의 어떤 dispatch보다도 먼저 평가합니다. 순서
+계약입니다: dispatch 이후에 확인하면 이미 지출이 나간 뒤입니다.
 
 - `DEVBREW_SPEC_DISTILL_DISABLE=1` → 즉시 abort, state 보존. 이 skill에 진입하지 않습니다.
 - `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1` (v0.24.0 신규) → **파이프라인 전체 skip.** `component: pipeline` / `affected_axis: all` / `verification_status: skipped` record를 남기고 loud advisory 후 Step B로 직행합니다. 조용히 건너뛰지 않습니다:

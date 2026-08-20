@@ -10,7 +10,7 @@ cost_class: high
 # Auditing Plugins — 오케스트레이션
 
 당신은 plugin-audit orchestrator(writer)다. 감사 agent(plugin-auditor/audit-refuter/smoke-probe)는
-read-only reviewer다 — 셋 다 `tools:` allowlist가 `Glob, Grep, Read, WebSearch, WebFetch`로 fail-closed
+read-only reviewer다 — 셋 다 `tools:` allowlist가 `Read, Grep, Glob, WebSearch, WebFetch`로 fail-closed
 scoping되어 있어 물리적으로 쓸 수 없다. 모든 파일 write(consent artifact·evidence pack·audit-data·
 리포트)는 **orchestrator만** 한다 (Law 2).
 
@@ -199,7 +199,9 @@ Workflow opt-in 요건을 충족(cost_class 게이트 통과 후).
    validate_artifacts에 아직 없다 — step 1의 persist 성공/degrade 사실이 배너로 드러나는 것으로 갈음한다
    (journal artifact 정합 검사는 향후 하드닝, codex re-verify round-2 V2-5).
 
-## kill switch / degrade
+## kill switch
+
+이 절은 kill switch와 degrade 경로를 함께 다룬다.
 
 - `DEVBREW_PLUGIN_AUDIT_DISABLE=1` → 즉시 종료.
 - plugin-dev 부재(E) → loud degrade(core는 F가 커버). quality-gates 부재(run-own-tests) → 자체 테스트

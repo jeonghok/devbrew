@@ -25,6 +25,12 @@ Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나�
   one-minor deprecation window 와의 충돌을 그 조건 아래 수용). **제3자 설치가 생기면 이 근거가
   바뀐다** — 그때는 다음 rename 에 fallback 창을 둔다.
 
+### Changed (devbrew weight-reduction Task 29)
+- **`reviewing-brief` SKILL의 헤딩을 `## kill switch (먼저 확인)`에서
+  `## kill switch`로 줄였다.** "먼저 확인"은 순서 계약(이 skill의 어떤
+  dispatch보다도 먼저 평가한다)이었으므로 삭제하지 않고 본문 첫 줄 문장으로
+  내렸다 — 헤딩만 보고 넘어가면 그 계약이 사라지므로.
+
 ## [0.28.0] — 2026-08-17
 
 Task 17(무게 감축) + fix round 1: `scripts/codex_findings_to_yaml.py`가 물리 사본에서 `shared/codex/

@@ -237,3 +237,10 @@ body=@file`).
 - **kill switch `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`** → 최내부 gh sink에서 **강제**(skill 진입
   만이 아님): 로컬 gen + dry-run은 유지, `publish disabled — artifact-only`를 loud 출력,
   **network만 차단**. hook 억제도 자체 kill switch를 존중한다.
+
+## kill switch
+
+- `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` — network sink(gh push/create/upsert)만
+  차단한다. 로컬 artifact 생성 + preview(dry-run)는 그대로 진행한다. 조기 고지는
+  Preflight 1항, 실제 강제 지점은 최내부 gh sink(§Degrade) — Preflight 진입만으로
+  우회되지 않는다.

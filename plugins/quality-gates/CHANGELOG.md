@@ -105,6 +105,17 @@ substrate ×3·Law 2 위반 ×2·P21·P17×2·AP2×3)는 전부 대상 원칙이
   one-minor deprecation window 와의 충돌을 그 조건 아래 수용). **제3자 설치가 생기면 이 근거가
   바뀐다** — 그때는 다음 rename 에 fallback 창을 둔다.
 
+### Changed (devbrew weight-reduction Task 29)
+- **`critiquing-artifacts`·`publishing-pr-understanding`·`quality-pipeline` 세
+  SKILL이 전부 `## kill switch` 헤딩을 갖는다.** `critiquing-artifacts`는
+  `## kill switch (보안 컨트롤)`을 `## kill switch`로 줄이고 부제는 본문 첫
+  줄로 내렸다(`### E0 — Preflight (kill switch)`는 단계 번호 계약이라
+  그대로 둠 — 헤딩 하나가 아니라 두 자리에서 kill switch를 documents하는
+  구조는 유지). `publishing-pr-understanding`·`quality-pipeline`은 이전에
+  헤딩이 아예 없었다 — 코드가 실제로 보는 kill switch만 인덱스로 추가했고
+  (`quality-pipeline`은 `## Contents`도 함께 갱신), 새 스위치를 발명하지
+  않았다.
+
 ## [3.4.0] — 2026-08-17
 
 Task 17(무게 감축) + fix round 1: `codex_findings_to_yaml.py` 두 사본(quality-gates·spec-distill)을
