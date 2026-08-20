@@ -43,10 +43,20 @@ class SeverityVocabulary(unittest.TestCase):
             self.assertNotIn(old, table, f"옛 어휘 '{old}' 가 정렬 테이블에 남아 있다")
 
     def test_c_order_preserved(self):
+        # 비감소(ranks == sorted(ranks))만으로는 부족하다 — IMPORTANT 와 SUGGESTION 이
+        # 같은 rank(예: 둘 다 1)로 붕괴해도 [0,1,1] == sorted([0,1,1])이라 통과한다.
+        # 엄격 단조증가(ascending 이자 distinct)를 두 조건으로 나눠 검증한다 — 실패
+        # 메시지가 "역전"인지 "붕괴"인지 구분되게. 미래에 4번째 등급이 추가돼도 살아남도록
+        # 리터럴 랭크값([0,1,2])은 pin하지 않는다 (Task 25의 `major == "3"` 핀이 stale-red로
+        # 죽었던 전례 — 불변식만 핀, 리터럴은 unpin).
         table = _sev_rank_table()
         ranks = [table[s] for s in CANON]
         self.assertEqual(ranks, sorted(ranks),
-                         "정렬 순위가 CRITICAL < IMPORTANT < SUGGESTION 순이 아니다")
+                         "정렬 순위가 CRITICAL < IMPORTANT < SUGGESTION 순으로 오름차순이 "
+                         "아니다 (역전)")
+        self.assertEqual(len(set(ranks)), len(ranks),
+                         "정렬 순위에 중복이 있다 — 서로 다른 severity 가 같은 rank 로 "
+                         "붕괴했다 (예: IMPORTANT 와 SUGGESTION 이 같은 값)")
 
     def test_d_preamble_advertises_canonical_vocabulary(self):
         """codex 에게 주는 프리앰블이 옛 어휘를 광고하면 codex 가 그것을 낸다.
