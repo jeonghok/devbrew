@@ -40,6 +40,21 @@ Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나�
 `kill_switch_active`가 여전히 옛 패턴을 조립해 spec-distill 훅 kill switch가
 무반응이었다).
 
+Task 26(무게 감축) — 위 안내가 예고한 "지금 실제로 살아 읽는지" 판정: 집행 지점 넷
+(코드·SKILL bash fence·SKILL 프로즈·agent frontmatter) 전부를 훑어 README `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_TEST_VALIDATION`이
+**좀비**임을 확인했다 — `README.md`가 광고하던 "Runtime gate Step 2.5"도 `quality-gates:runtime-test-scope`
+훅 키도 실재하지 않는다(`hooks/hooks.json`에 그 키 없음, `quality-pipeline/SKILL.md`에 "Step 2.5" 헤딩
+자체가 없음, `test-scope-validator` dispatch 직전에 이 env var를 확인하는 조건문도 없음). 두 표 행
+(Runtime gate 단위 disable 표 + Hook 단위 disable 표) 제거. `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER`는
+같은 훑기에서 **다른 판정**을 받았다 — `tests/test_security_reviewer_kill_switch.sh`(2026-07-16부터
+`codex-blessed-red.txt`에 등록된 pre-existing red)가 SKILL이 이 env var를 문서화해야 한다고 이미
+주장 중이라 광고만 있고 주장하는 쪽이 없는 좀비가 아니라 **미구현 결함** — README 유지, 별도 태스크
+몫으로 남긴다. `DEVBREW_QUALITY_GATES_DISABLE_WEB`은 `plugins/spec-distill/tests/test_web_kill_switch.sh:95-105`가
+"지금 죽은 스위치를 만들지는 않는다"는 주석과 함께 의도적으로 예약해둔 이름 — 두 ON 사이트가
+아직 없어 그 표에 미도달일 뿐 광고-집행 불일치가 아니다. `plugin-audit/README.md`의 옛 이름 매핑
+표(`DEVBREW_DISABLE_PLUGIN_AUDIT` 등)는 그 표 자신이 "이 플러그인은 CHANGELOG.md가 없어 이 절이
+그 대체"라고 명시하므로 CHANGELOG와 동격으로 보존.
+
 ### Deprecated
 - 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일. 옛 이름(`DEVBREW_DISABLE_QG_CODEX` 등)은
   **fallback 없이 즉시 제거**됐다. 근거: 현재 제3자 설치가 없다 (CLAUDE.md §메타데이터의

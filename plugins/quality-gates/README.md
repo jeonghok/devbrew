@@ -439,7 +439,6 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | Env var | 효과 |
 |---|---|
-| `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_TEST_VALIDATION=1` | Runtime gate Step 2.5 (test scope validation) 완전 skip. `DEVBREW_SKIP_HOOKS=quality-gates:runtime-test-scope`과 동일. |
 | `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1` | `/qg branch <name>` auto-worktree 기능 disable (`/qg branch` no-arg는 영향 없음). |
 | `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` | spec 발견 시에도 no-spec 경로 강제 (ac_coverage 생략, codex `<spec_context>` 비움; validator는 plan-기반 계속). |
 | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` | Runtime gate의 git-worktree 샌드박스 executor를 끄고 read-only smoke fallback. verdict는 SKIP_WITH_EVIDENCE로 cap(절대 PASS 아님), real-tree 변경 시 loud 경고. `qg-worktree.sh create-sandbox`가 exit 3. |
@@ -460,7 +459,6 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 | `quality-gates:session-start-advisor:frontmatter-scan` | 위 hook의 sub-feature | Plugin 전체 agent frontmatter drift 스캔만 disable |
 | `quality-gates:session-end-cleanup` | `hooks/session-end-cleanup.py` | SessionEnd — 현재 세션 폴더 cleanup |
 | `quality-gates:qg-gc` | `scripts/qg-gc.py` | TTL-GC 스크립트. 훅이 아니지만 지목할 이름을 갖는다 — 그전에는 전역 스위치 하나뿐이라 "이 GC만 끈다"가 불가능했다 |
-| `quality-gates:runtime-test-scope` | (위 `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_TEST_VALIDATION`과 동의어) | Runtime gate Step 2.5 |
 
 훅 키에 더해 **이벤트명 별칭**도 받는다 — `quality-gates:PostToolUse`(session-tracker + post-tool-use
 둘 다) · `quality-gates:SessionStart` · `quality-gates:SessionEnd`. spec-distill 훅이 쓰던 형태를
