@@ -9,9 +9,11 @@
 git-aware(`git rev-parse --git-common-dir`, worktree 호환)이고 이쪽은 payload cwd 상대다.
 그 둘은 서로 다른 계약이라 부분 사본의 "각자 고유 본문"으로 남는다.
 
-배치는 spec-distill 이 이미 쓰는 이름·자리와 같은 모양이다(`state_path.py` 에
-`state_root`). spec-distill 쪽은 아직 `hooks/` 에 있고, plan Task 27 이 `.claude/`
-state 배치를 통일할 때 고칠 자리가 **한 곳**이 되는 것이 이 파일의 부수 효과다.
+배치는 spec-distill 이 쓰는 이름·자리와 같은 모양이다(`state_path.py` 에
+`state_root`) — 81c6e97 이 spec-distill 쪽 파일도 `scripts/` 로 옮겨 두 곳이 이미
+한 자리다. plan Task 27 이 검증한 것은 이 파일의 위치가 아니라 **반환하는 `.claude/`
+경로 모양** — 아래 `state_root()` 는 이미 목표 모양(`<plugin>/<session-id>/<file>`)을
+반환한다.
 """
 from __future__ import annotations
 

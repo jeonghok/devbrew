@@ -55,6 +55,17 @@ Task 26(무게 감축) — 위 안내가 예고한 "지금 실제로 살아 읽�
 표(`DEVBREW_DISABLE_PLUGIN_AUDIT` 등)는 그 표 자신이 "이 플러그인은 CHANGELOG.md가 없어 이 절이
 그 대체"라고 명시하므로 CHANGELOG와 동격으로 보존.
 
+Task 27(무게 감축) — `.claude/` state 배치 통일 감사: quality-gates·spec-distill 모두
+이미 `.claude/<plugin>/<session-id>/<file>` 한 모양만 쓴다(라이브 write 경로 기준).
+`.claude/quality-gates.local.md`·`-session.local.md`·`-branch.local.md`·
+`qg-diff-cache.txt`·`qg-code-paths.tmp` 다섯 리터럴(`session-start-advisor.py`의
+`LEGACY_RELATIVE`, `setup-qg.sh`의 `LEGACY_FILES`, `/cancel-qg`의 `rm -f` 목록)은
+지금 쓰는 경로가 아니라 v1.5.0 이전 flat 모델의 **일회성 cleanup 대상 리터럴**임을
+확인하고 그대로 두었다 — rename하면 실제로 남아있는 옛 파일을 못 찾아 cleanup이
+깨진다. `scripts/state_path.py` 머리말의 "spec-distill 쪽은 아직 `hooks/`에 있고"는
+stale 서술이었다(81c6e97이 이미 `scripts/`로 이동) — 정정. `CLAUDE.md:47`(state
+배치 규약 문장)을 코드가 실제로 쓰는 모양에 맞춰 갱신.
+
 ### Deprecated
 - 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일. 옛 이름(`DEVBREW_DISABLE_QG_CODEX` 등)은
   **fallback 없이 즉시 제거**됐다. 근거: 현재 제3자 설치가 없다 (CLAUDE.md §메타데이터의

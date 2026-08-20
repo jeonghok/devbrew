@@ -44,7 +44,7 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 
 ### 런타임 상태 & 훅
 
-- **JSON이 아니라 마크다운 state.** State는 `.claude/<plugin>.local.md`에 살음 (git-ignored, 성공 시 auto-delete, 실패 시 디버깅을 위해 보존). per-session 격리가 필요하면 `.claude/<plugin>/<session-id>/...` 하위 디렉토리도 허용 — plugin namespace(`.claude/<plugin>/`) 하위에 머물 것 (철학 P13 참조). **Secret 기록 금지** — placeholder 참조 사용 (철학 P21).
+- **JSON이 아니라 마크다운 state.** State는 `.claude/<plugin>/<session-id>/<file>`에 살음 (git-ignored, 성공 시 auto-delete, 실패 시 디버깅을 위해 보존, plugin namespace(`.claude/<plugin>/`) 하위에 머물 것 — 철학 P13 참조). **Secret 기록 금지** — placeholder 참조 사용 (철학 P21).
 - **모든 훅에 kill switch.** `DEVBREW_<PLUGIN>_DISABLE=1` 또는 `DEVBREW_SKIP_HOOKS=<plugin>:<hook>`. 어떤 훅도 자신의 kill switch 존중을 거부할 수 없음 — kill switch는 보안 컨트롤.
 - **훅 공존.** 같은 event 내 훅은 교환 가능해야 함. Signal tag는 `<{plugin}-signal>` 네임스페이스. `SessionStart` 훅은 read-only 조언자, 절대 mutate 안 함. 각 훅은 README의 "Hooks Installed"에 "왜 skill이 아닌가"의 한 줄 justification과 함께 문서화.
 - **Loud logging을 동반한 graceful degradation.** 누락된 optional 의존성은 capability를 downgrade, crash하지 않음 — 사용자가 출력에서 fallback이 돌았음을 알 수 있어야 함.
