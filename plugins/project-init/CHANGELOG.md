@@ -27,6 +27,12 @@ Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나�
   `cancel-qg.md`/`qg.md`/`qg-publish.md`가 이미 쓰는 표기와 맞춘 것.
   도구 집합은 불변.
 
+### Fixed (devbrew weight-reduction Task 30)
+- `tests/test_docs_lint.py:232`(`test_350_lines_with_korean_toc_passes`)가
+  한국어 TOC(`## 목차`) 문자열을 `encoding` 미지정으로 쓰고 있었다 —
+  non-UTF-8 로케일에서 재현 불가능해질 수 있는 유일한 test-file 자리였다
+  (다른 write_text 사이트는 전부 ASCII 픽스처).
+
 ## [1.8.0] — 2026-08-19
 
 devbrew-weight-reduction Task 19 — kill switch 판정을 `shared/killswitch/kill_switch_active.py`

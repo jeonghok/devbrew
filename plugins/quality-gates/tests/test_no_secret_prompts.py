@@ -40,7 +40,7 @@ class TestNoSecretPrompts(unittest.TestCase):
         for path in TARGETS:
             if not path.exists():
                 continue
-            text = path.read_text()
+            text = path.read_text(encoding="utf-8")
             for match in LEAK_PATTERN.finditer(text):
                 start = max(0, match.start() - 100)
                 ctx = text[start:match.end() + 50]
@@ -55,7 +55,7 @@ class TestNoSecretPrompts(unittest.TestCase):
     def test_runtime_verifier_disallows_secret_request(self):
         """runtime-verifier.md must explicitly state it does not request secret values."""
         path = ROOT / "agents/runtime-verifier.md"
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         # Must contain explicit guard text.
         self.assertRegex(
             text,

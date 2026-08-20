@@ -116,6 +116,48 @@ substrate ×3·Law 2 위반 ×2·P21·P17×2·AP2×3)는 전부 대상 원칙이
   (`quality-pipeline`은 `## Contents`도 함께 갱신), 새 스위치를 발명하지
   않았다.
 
+### Added (devbrew weight-reduction Task 30)
+- **`test_utf8_explicit.py`** — production 표면(`hooks/`·`scripts/`)에 새
+  미지정 `encoding` 이 들어오면 잡는 정적 sweep(`ProductionEncodingSweep`,
+  여러 줄에 걸친 호출도 정확히 판별) + 실제 non-UTF-8 로케일 아래서
+  `post-tool-use-session-tracker.py`의 한국어 경로 write/read 왕복을 돌리는
+  행동 락(`LocaleRegressionTests`). `LC_ALL=C`·`LANG=C` 만으로는 이 macOS
+  파이썬이 PEP 538/540 coercion 으로 로케일을 조용히 UTF-8 로 승격시켜
+  `locale.getpreferredencoding()` 이 그대로 `UTF-8` 이다(실측) — `PYTHONUTF8=0`·
+  `PYTHONCOERCECLOCALE=0` 이 함께 있어야 진짜 non-UTF-8 fallback 이 된다
+  (`plugins/project-init/tests/test_post_tool_use.py`가 이미 쓰던 패턴 재사용).
+  `sys.stdin` 은 별도로 `PYTHONIOENCODING=utf-8` 로 고정해 stdin 디코딩(이
+  axis 스코프 밖)과 `read_text`/`write_text` 기본 인코딩(이 axis 대상)을
+  분리했다. mutation 검증: 방금 고친 `encoding="utf-8"` 하나를 제거하면
+  행동 락·정적 sweep 둘 다 실제로 RED(전자는 `UnicodeEncodeError`), 복원하면
+  GREEN.
+- 러너 수집에서 빠져 있던 quality-gates 테스트 6개 파일을 `python3 -m
+  unittest`로 전환·수집: `test_adversarial_behavior.py`·
+  `test_agent_stub_harness.py`·`test_security_reviewer_behavior.py`·
+  `test_runtime_verifier_behavior.py`·`test_test_scope_validator_behavior.py`
+  (전부 `import pytest` + 맨 함수라 unittest discover 에 0건 수집되던 것을
+  `unittest.TestCase`/`assertRaises`로 변환, 24개 assertion 무변경 이식) +
+  `test_hook_cwd_contract.py`(pytest `tmp_path` fixture 3개를
+  `tempfile.TemporaryDirectory()`로 재작성 — 이전엔 `__main__` 블록이 2/5만
+  돌렸다). `test_agent_stub_harness.py`는 확인 결과 helper 가 아니라 harness
+  자신을 검증하는 진짜 테스트(9 assertion) — 이름이 거짓이 아니었다.
+  quality-gates 수집 수 129 → 158(+29), 리포 전체 python 980 → 1009.
+
+### Fixed (devbrew weight-reduction Task 30)
+- **`encoding="utf-8"` 명시** — non-UTF-8 로케일에서 `read_text`/`write_text`/
+  `open` 이 로케일 기본 인코딩에 fail-open 하던 지점을 닫았다:
+  `hooks/post-tool-use-session-tracker.py`(read·write 각 1), `hooks/
+  session-end-cleanup.py`, `hooks/session-start-advisor.py`(이 자리는
+  `except OSError` 로만 잡고 있었는데 `UnicodeDecodeError`는 `OSError`의
+  하위가 아니라 `ValueError`의 하위라 로케일이 어긋나면 훅이 그대로
+  죽었다), `scripts/synthesize_findings.py`(YAML 판정 파일 read 2곳,
+  `open()`). `scripts/qg-gc.py:79`의 `open(lock_path, "w")`는 조사 결과
+  `fcntl.flock` 전용이라 텍스트가 한 번도 오가지 않아 예외로 남겼다
+  (테스트에 그 사실을 잠그는 계측기 확인 포함). `tests/test_no_secret_prompts.py`·
+  `tests/test_kill_switches.py`는 각각 `agents/runtime-verifier.md`·
+  `skills/quality-pipeline/SKILL.md`(실제 한국어 프로즈 확인됨)·
+  `hooks/*.py`(한국어 주석 포함)를 인코딩 미지정으로 읽고 있어 함께 고쳤다.
+
 ## [3.4.0] — 2026-08-17
 
 Task 17(무게 감축) + fix round 1: `codex_findings_to_yaml.py` 두 사본(quality-gates·spec-distill)을

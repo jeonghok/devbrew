@@ -39,6 +39,21 @@
   boundary`)가 정확히 red로 전환했다(권한 위반 감지 확인) — 검증 뒤 원본
   파일로 복원, `git diff` clean 확인.
 
+### Documented (devbrew weight-reduction Task 30)
+- **`tests/oracle/test_add_contract.py`가 `python3 -m unittest discover -s
+  plugins/agent-transparency/tests` 스윕에 안 잡히는 이유를 docstring에
+  명시.** 결함이 아니라 설계다 — `src.calc`/`src.util`는 피검체 트리
+  (`AT_SUBJECT_DIR`)에만 있어 원본 위치에서 discover 하면
+  `ModuleNotFoundError`이고, `__init__.py`를 추가해 discover 대상으로 만드는
+  것은 신뢰 사본(`$VER`) 분리라는 Law 2 경계 자체를 없앤다. 이 파일의
+  5개 assertion이 옳게 가르는지는 `test_ab_runner_contract.py`의
+  `TestOracleHasTeeth`(정답/미완성 피검체로 실행 확인)·`TestOracleSignal`이
+  이미 대신 검증하며, 그 파일은 top-level discover 대상이다(283 baseline에
+  포함). `ab_driver.py run --subject <ab-project fixture> --expect 5
+  test_add_contract`로 직접 재현: 미수정 baseline fixture(음수를 거부하는
+  `add`)로는 5개 중 3개가 의도대로 fail, `TestOracleHasTeeth.
+  test_a_correct_solution_passes`의 합성 정답 fixture로는 5개 전부 pass.
+
 ## [0.2.1] — 2026-08-15
 
 CRITICAL 을 닫은 뒤 남은 IMPORTANT 중 **게이트를 거짓말하게 만드는 것들**. 그중 하나는

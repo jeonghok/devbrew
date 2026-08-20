@@ -3,6 +3,18 @@
 리포 관행대로 `unittest` 만 쓴다(pytest 를 쓰면 미설치 환경에서 게이트 2 가
 구조적으로 통과 불가다).
 
+**이 파일은 `plugins/agent-transparency/tests/` 상위 `python3 -m unittest
+discover` 스윕에 잡히지 않는다 — 그것이 결함이 아니라 설계다.** `src.calc`·
+`src.util` 를 import 하는데 그 모듈은 피검체 트리(`AT_SUBJECT_DIR`)에만 있고 이
+리포에는 없다 — 그대로 discover 하면 `ModuleNotFoundError` 다. `tests/oracle/`
+에 `__init__.py` 를 넣어 discover 에 잡히게 만드는 수정은 하지 않는다: Run 형태
+아래에 적힌 대로 이 파일은 신뢰 사본(`$VER`)으로 복사돼 피검체 코드와 같은
+경계 밖에서 돌아야 하고, 원본 트리에서 직접 돌리면 그 경계 자체가 없어진다.
+이 파일의 다섯 assertion 이 옳게 가르는지는 `test_ab_runner_contract.py` 의
+`TestOracleHasTeeth`(정답 피검체는 통과·미완성 피검체는 실패시키는지 실행으로
+잰다)와 `TestOracleSignal`(완주 센티널 소유권)이 대신 검증하고, 그 파일은
+이미 top-level discover 대상이다.
+
 **이 파일은 자기 실행을 증명하지 않는다.** 완주 센티널은 신뢰 드라이버
 (`tests/ab_driver.py`)가 소유한다. 앞선 판은 이 파일이 모듈 정리 훅에서
 **환경변수로 건네받은 경로**에 완주 표시를 썼는데, 오라클은 정의상 피검체 코드를

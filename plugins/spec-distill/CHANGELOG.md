@@ -31,6 +31,12 @@ Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나�
   dispatch보다도 먼저 평가한다)이었으므로 삭제하지 않고 본문 첫 줄 문장으로
   내렸다 — 헤딩만 보고 넘어가면 그 계약이 사라지므로.
 
+### Fixed (devbrew weight-reduction Task 30)
+- **`hooks/spec-write-validator.py:137`에 `encoding="utf-8"` 명시.** 나머지
+  `write_text` 호출(255·276번 줄)은 조사 결과 이미 `encoding="utf-8"`을 다음
+  줄에 갖고 있었다 — 같은 줄만 보는 grep이 오탐한 자리였다(quality-gates
+  Task 30 CHANGELOG의 axis 2 참조).
+
 ## [0.28.0] — 2026-08-17
 
 Task 17(무게 감축) + fix round 1: `scripts/codex_findings_to_yaml.py`가 물리 사본에서 `shared/codex/

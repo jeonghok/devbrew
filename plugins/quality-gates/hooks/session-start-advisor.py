@@ -141,7 +141,7 @@ def _emit_legacy_v1_advisory(payload: dict, self_sid: str) -> bool:
         per_session = state_root(payload, "session-start-advisor") / self_sid / "pipeline.md"
         if per_session.exists():
             try:
-                text = per_session.read_text()
+                text = per_session.read_text(encoding="utf-8")
             except OSError as e:
                 print(f"[qg-advisor] legacy-v1 scan skipped: {e}", file=sys.stderr)
                 text = ""

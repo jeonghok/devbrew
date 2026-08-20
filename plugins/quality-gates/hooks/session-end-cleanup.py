@@ -39,7 +39,7 @@ def main() -> int:
     worktree_path = ""
     if state_file.exists():
         try:
-            for line in state_file.read_text().splitlines():
+            for line in state_file.read_text(encoding="utf-8").splitlines():
                 if line.startswith("worktree_path:"):
                     parts = line.split('"', 2)
                     if len(parts) >= 2:

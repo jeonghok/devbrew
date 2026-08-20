@@ -267,7 +267,7 @@ class KillSwitchRegressionTest(unittest.TestCase):
         """
         for hook_file in sorted(HOOKS.glob("*.py")):
             with self.subTest(hook=hook_file.name):
-                src = hook_file.read_text()
+                src = hook_file.read_text(encoding="utf-8")
                 self.assertIn(
                     "DEVBREW_QUALITY_GATES_DISABLE", src,
                     f"{hook_file.name} missing global kill switch env var",
