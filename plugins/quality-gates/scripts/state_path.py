@@ -12,8 +12,9 @@ git-aware(`git rev-parse --git-common-dir`, worktree 호환)이고 이쪽은 pay
 배치는 spec-distill 이 쓰는 이름·자리와 같은 모양이다(`state_path.py` 에
 `state_root`) — 81c6e97 이 spec-distill 쪽 파일도 `scripts/` 로 옮겨 두 곳이 이미
 한 자리다. plan Task 27 이 검증한 것은 이 파일의 위치가 아니라 **반환하는 `.claude/`
-경로 모양** — 아래 `state_root()` 는 이미 목표 모양(`<plugin>/<session-id>/<file>`)을
-반환한다.
+경로 모양** — 아래 `state_root()` 는 플러그인 레벨 접두(`.claude/quality-gates`)까지만
+반환한다; `<session-id>/<file>`은 각 호출자가 붙인다(예: `hooks/session-end-cleanup.py:36`
+의 `root / session_id`) — 그 조립 결과가 이미 목표 모양이다.
 """
 from __future__ import annotations
 

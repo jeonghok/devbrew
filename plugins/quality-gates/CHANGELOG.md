@@ -79,6 +79,26 @@ Task 27 fix round 1: 위 감사가 놓친 것을 코디네이터 독립 확인�
 (`~/.claude/{agent-transparency-ab,qg-reports}`)로 남는다 — "라이브 경로는 이미
 통일돼 있었다"는 결론을 뒷받침.
 
+Task 27 fix round 2: 독립 리뷰가 Task 27의 legacy-리터럴 판단(fix round 1까지)을
+확인(spec compliance PASS + disclosed deviation, quality Good)한 뒤 남긴 나머지 둘.
+(1) `scripts/state_path.py` 머리말의 "`state_root()`는 이미 목표 모양
+(`<plugin>/<session-id>/<file>`)을 반환한다"가 과잉 주장이었다 — 실제로는
+`.claude/quality-gates`까지만(플러그인 접두) 반환하고, `<session-id>/<file>`은
+호출자(`hooks/session-end-cleanup.py:36`의 `root / session_id` 등)가 붙인다.
+바로 이 stale 주석을 "정정"하려던 커밋이 스스로 같은 종류의 과잉 서술을 남긴 것 —
+표현을 접두/호출자-조립으로 좁혔다. (2) `CLAUDE.md:47`의 "철학 P13 참조"가 잘못된
+인용이었다 — `docs/philosophy/devbrew-harness-philosophy.md`의 P13은 "Hooks for
+Enforcement, Skills for Capability, Agents for Personas"(훅 signal-tag 네임스페이스)이지
+state-디렉토리 containment가 아니다. 이 규약을 다루는 P#는 그 문서에 없다 —
+새 P#를 만들지 않고(devbrew는 orthogonal한 원칙만 신규 채번) 인용만 제거,
+규칙 본문은 유지.
+
+`CLAUDE.md`의 `P<n>`/`AP<n>`/`Law <n>` 인용 전수(18개 occurrence, `docs/philosophy/
+devbrew-harness-philosophy.md`와 대조)도 이번에 수행 — 위 P13 하나만 결함, 나머지
+17개(Law 1/2/3 정의 3 + 인용 14: P2·P12·Law 2 scoped-exception·Law 3 compounding
+substrate ×3·Law 2 위반 ×2·P21·P17×2·AP2×3)는 전부 대상 원칙이 실제로 주장을
+뒷받침함을 확인 — 무변경. 원장은 Task 27 fix round 2 리포트에 전수 표로 보존.
+
 ### Deprecated
 - 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일. 옛 이름(`DEVBREW_DISABLE_QG_CODEX` 등)은
   **fallback 없이 즉시 제거**됐다. 근거: 현재 제3자 설치가 없다 (CLAUDE.md §메타데이터의
