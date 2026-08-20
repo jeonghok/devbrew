@@ -20,6 +20,13 @@ Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나�
   one-minor deprecation window 와의 충돌을 그 조건 아래 수용). **제3자 설치가 생기면 이 근거가
   바뀐다** — 그때는 다음 rename 에 fallback 창을 둔다.
 
+### Changed (devbrew weight-reduction Task 29)
+- `commands/project-init.md`의 `allowed-tools:` 표기를 `[Bash, Read, Write,
+  Edit, Glob, Grep]`(따옴표 없음)에서 `["Bash", "Read", "Write", "Edit",
+  "Glob", "Grep"]`(따옴표 있는 패턴 표기)로 통일했다 — `quality-gates`의
+  `cancel-qg.md`/`qg.md`/`qg-publish.md`가 이미 쓰는 표기와 맞춘 것.
+  도구 집합은 불변.
+
 ## [1.8.0] — 2026-08-19
 
 devbrew-weight-reduction Task 19 — kill switch 판정을 `shared/killswitch/kill_switch_active.py`

@@ -1,6 +1,6 @@
 ---
 description: "Initialize git workflow rules for the project (branch strategy, commit conventions, PR process)"
-allowed-tools: [Bash, Read, Write, Edit, Glob, Grep]
+allowed-tools: ["Bash", "Read", "Write", "Edit", "Glob", "Grep"]
 ---
 
 # project-init
