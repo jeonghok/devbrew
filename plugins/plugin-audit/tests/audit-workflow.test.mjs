@@ -172,18 +172,19 @@ test('row 4b — CONTRACT degrades loudly when staleness/own-test absent', async
   assert.ok(/선례 코퍼스 부재/.test(p), 'absent precedent → loud fallback line')
 })
 
-test('row 5a — MEDIUM survivor outside deepPool has deep_verified === null (not undefined)', async () => {
+test('row 5a — SUGGESTION survivor outside deepPool has deep_verified === null (not undefined)', async () => {
   // stubOneFinding()의 기본 '검증' 응답({ verdicts: [] })은 "판정 누락" 병합-분기(!v, 이미
   // deep_verified:null을 세움)를 타 버려 이 테스트가 겨냥해야 할 "plain else"(축 refuter가
   // 살아서 명시적으로 안 죽인 생존자) 분기를 exercise하지 못한다 — 커스텀 stub으로
   // 명시적 non-refuted verdict('survives')를 줘서 정확한 분기를 겨냥한다.
+  // (Task 28: 옛 MEDIUM → SUGGESTION — deepPool 밖이라는 의미는 그대로 보존)
   const stub = async (prompt, o) => {
     if (o.phase === '감사') {
       return {
         findings: [{
           id: 'A1-1', axis: 1, title: 't', user_harm: 'h', recommendation: 'r',
           counter_argument: 'c', evidence: [{ file: 'f', line: 1, quote: 'q' }],
-          severity: 'MEDIUM', fix_cost: 'S', fix_cost_rationale: 'x', reference_gap: 'none',
+          severity: 'SUGGESTION', fix_cost: 'S', fix_cost_rationale: 'x', reference_gap: 'none',
         }],
         d_verdicts: [], oq_answers: [], new_open_questions: [],
       }
@@ -198,16 +199,17 @@ test('row 5a — MEDIUM survivor outside deepPool has deep_verified === null (no
   assert.strictEqual(f.deep_verified, null, 'must be explicit null, not undefined')
 })
 
-test('row 5b — refuter-dead-axis HIGH is not labeled deep_verified:true by lenses alone', async () => {
-  // 축 refuter가 죽는다 (검증 phase에서 null 반환). HIGH finding은 unverified가 되고,
+test('row 5b — refuter-dead-axis IMPORTANT is not labeled deep_verified:true by lenses alone', async () => {
+  // 축 refuter가 죽는다 (검증 phase에서 null 반환). IMPORTANT finding은 unverified가 되고,
   // 심층 2렌즈가 refute하지 않아도 true 라벨을 받으면 안 된다.
+  // (Task 28: 옛 HIGH → IMPORTANT — deepPool 안이라는 의미는 그대로 보존)
   const stub = async (prompt, o) => {
     if (o.phase === '감사') {
       return {
         findings: [{
           id: 'A1-1', axis: 1, title: 't', user_harm: 'h', recommendation: 'r',
           counter_argument: 'c', evidence: [{ file: 'f', line: 1, quote: 'q' }],
-          severity: 'HIGH', fix_cost: 'S', fix_cost_rationale: 'x', reference_gap: 'none',
+          severity: 'IMPORTANT', fix_cost: 'S', fix_cost_rationale: 'x', reference_gap: 'none',
         }],
         d_verdicts: [], oq_answers: [], new_open_questions: [],
       }
@@ -223,8 +225,8 @@ test('row 5b — refuter-dead-axis HIGH is not labeled deep_verified:true by len
   assert.notEqual(f.deep_verified, true, 'must NOT be labeled true from deep lenses alone')
 })
 
-test('row 5 regression — normal surviving HIGH still gets deep_verified:true', async () => {
-  // stubOneFinding('HIGH')를 문자로 그대로 쓰면 그 기본 '검증' 응답({ verdicts: [] })이 "판정
+test('row 5 regression — normal surviving IMPORTANT still gets deep_verified:true', async () => {
+  // stubOneFinding('IMPORTANT')를 문자로 그대로 쓰면 그 기본 '검증' 응답({ verdicts: [] })이 "판정
   // 누락"(!v) 분기를 타 unverified:true를 세워버려 — 가드가 진짜 "정상 생존"과 "축 검증
   // 누락"을 구분하는지가 아니라 우연히 같은 필드에 걸려 통과하는 위장 그린이 된다. 커스텀
   // stub으로 축 refuter가 명시적으로 생존시킨('survives') 진짜 정상 케이스를 만든다.
@@ -234,7 +236,7 @@ test('row 5 regression — normal surviving HIGH still gets deep_verified:true',
         findings: [{
           id: 'A1-1', axis: 1, title: 't', user_harm: 'h', recommendation: 'r',
           counter_argument: 'c', evidence: [{ file: 'f', line: 1, quote: 'q' }],
-          severity: 'HIGH', fix_cost: 'S', fix_cost_rationale: 'x', reference_gap: 'none',
+          severity: 'IMPORTANT', fix_cost: 'S', fix_cost_rationale: 'x', reference_gap: 'none',
         }],
         d_verdicts: [], oq_answers: [], new_open_questions: [],
       }

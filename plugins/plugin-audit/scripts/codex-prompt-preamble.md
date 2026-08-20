@@ -22,7 +22,7 @@ Zero findings is `"findings": []`, not an omitted key or prose instead of the fe
 be rejected downstream. Minimum fields per collection (extra fields are fine, these are the ones
 actually read by the pipeline that ingests your answer):
   - `findings`: `id` (string), `axis` (integer), `title` (string), `severity` (one of `CRITICAL`,
-    `HIGH`, `MEDIUM`, `LOW`), `evidence` (array of `{file, line}` objects; `quote` optional).
+    `IMPORTANT`, `SUGGESTION`), `evidence` (array of `{file, line}` objects; `quote` optional).
   - `d_verdicts`: `id` (string, matching a Discovery-phase item the axis assigned you), `verdict`
     (one of `confirmed`, `withdrawn`, `reclassified`, `unverified`), `reason` (string).
   - `oq_answers`: `id` (string, matching an open question the axis assigned you), `answer`
@@ -36,7 +36,7 @@ real content for this axis, still has to be the LAST fence in your reply):
 ```json
 {
   "findings": [
-    {"id": "CX-1", "axis": 3, "title": "example finding title", "severity": "MEDIUM",
+    {"id": "CX-1", "axis": 3, "title": "example finding title", "severity": "IMPORTANT",
      "evidence": [{"file": "path/to/file.py", "line": 42, "quote": "the relevant line"}]}
   ],
   "d_verdicts": [

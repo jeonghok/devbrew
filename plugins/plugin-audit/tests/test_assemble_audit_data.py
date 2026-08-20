@@ -83,13 +83,13 @@ class TestAssemble(unittest.TestCase):
 
     def test_cross_model_confirmed_on_file_line_overlap(self):
         f_claude = {"id": "A1-1", "axis": 1, "source": "claude", "status": "reported",
-                    "evidence": [{"file": "a.py", "line": 5, "quote": "q"}], "severity": "HIGH"}
+                    "evidence": [{"file": "a.py", "line": 5, "quote": "q"}], "severity": "IMPORTANT"}
         f_codex = {"id": "CX-1", "axis": 1, "source": "codex", "status": "reported",
-                   "evidence": [{"file": "a.py", "line": 5, "quote": "q"}], "severity": "HIGH"}
+                   "evidence": [{"file": "a.py", "line": 5, "quote": "q"}], "severity": "IMPORTANT"}
         # MUTATION-TEETH: non-overlapping finding must NOT be marked cross_model_confirmed.
         # Catches an `&` (intersection) -> `|` (union) mutation in ev_keys(f) & other[...].
         f_claude_solo = {"id": "A1-2", "axis": 1, "source": "claude", "status": "reported",
-                         "evidence": [{"file": "b.py", "line": 9, "quote": "q2"}], "severity": "HIGH"}
+                         "evidence": [{"file": "b.py", "line": 9, "quote": "q2"}], "severity": "IMPORTANT"}
         r, data = run(
             workflow_return={"findings": [f_claude, f_codex, f_claude_solo], "d_verdicts": [], "oq_answers": [],
                              "new_open_questions": [], "axis_failures": [], "degraded_events": []},
@@ -102,7 +102,7 @@ class TestAssemble(unittest.TestCase):
     def test_gate_e_refuted_becomes_noq(self):
         f = {"id": "A1-9", "axis": 1, "source": "claude", "status": "refuted",
              "refutation": {"stage": "axis", "gate": "E", "reason": "scope-out"},
-             "evidence": [{"file": "x", "line": 1, "quote": "q"}], "severity": "LOW"}
+             "evidence": [{"file": "x", "line": 1, "quote": "q"}], "severity": "SUGGESTION"}
         r, data = run(
             workflow_return={"findings": [f], "d_verdicts": [], "oq_answers": [],
                              "new_open_questions": [], "axis_failures": [], "degraded_events": []},
@@ -129,9 +129,9 @@ class TestAssemble(unittest.TestCase):
         # check-grounding.py를 실제로 resolve하고 ground_finding()이 findings를 mutate하는
         # LIVE 경로를 잠근다.
         f_match = {"id": "G-1", "axis": 1, "source": "claude", "status": "reported",
-                   "evidence": [{"file": "src.py", "line": 3, "quote": "HELLO WORLD"}], "severity": "HIGH"}
+                   "evidence": [{"file": "src.py", "line": 3, "quote": "HELLO WORLD"}], "severity": "IMPORTANT"}
         f_nomatch = {"id": "G-2", "axis": 1, "source": "claude", "status": "reported",
-                     "evidence": [{"file": "src.py", "line": 1, "quote": "NOT PRESENT ANYWHERE"}], "severity": "LOW"}
+                     "evidence": [{"file": "src.py", "line": 1, "quote": "NOT PRESENT ANYWHERE"}], "severity": "SUGGESTION"}
         r, data = run_live_grounding(
             {"src.py": "line1\nline2\nHELLO WORLD\nline4\n"},
             workflow_return={"findings": [f_match, f_nomatch], "d_verdicts": [], "oq_answers": [],
@@ -149,7 +149,7 @@ class TestAssemble(unittest.TestCase):
         # 정직성 배너에 흔적을 남겨야 한다 (AC-3, 조용한 증발 금지). LIVE grounding 경로로
         # (--no-grounding 없이) 인용이 부재한 finding을 태운다 — 승격 루프를 제거하면 RED.
         f_absent = {"id": "G-9", "axis": 1, "source": "claude", "status": "reported",
-                    "evidence": [{"file": "src.py", "line": 1, "quote": "NOT PRESENT ANYWHERE"}], "severity": "HIGH"}
+                    "evidence": [{"file": "src.py", "line": 1, "quote": "NOT PRESENT ANYWHERE"}], "severity": "IMPORTANT"}
         r, data = run_live_grounding(
             {"src.py": "line1\nline2\n"},
             workflow_return={"findings": [f_absent], "d_verdicts": [], "oq_answers": [],
@@ -187,7 +187,7 @@ class TestAssemble(unittest.TestCase):
         # 문자열 axis "3"과 지역화-only why_not_gap이 두 개의 거짓 RED 경로였다.
         f = {"id": "A3-9", "axis": "3", "source": "claude", "status": "refuted",
              "refutation": {"stage": "axis", "gate": "E", "reason": "scope-out"},
-             "evidence": [{"file": "x", "line": 1, "quote": "q"}], "severity": "LOW"}
+             "evidence": [{"file": "x", "line": 1, "quote": "q"}], "severity": "SUGGESTION"}
         r, data = run(
             workflow_return={"findings": [f], "d_verdicts": [], "oq_answers": [],
                              "new_open_questions": [], "axis_failures": [], "degraded_events": []},
