@@ -18,7 +18,7 @@ Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나�
 | `DEVBREW_DISABLE_QG_SECURITY_REVIEWER` | `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER` |
 | `DEVBREW_QG_DISABLE_BRANCH_WORKTREE` | `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE` |
 | `DEVBREW_QG_DISABLE_RUNTIME_SANDBOX` | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX` |
-| `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION` | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_TEST_VALIDATION` |
+| `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION` | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_TEST_VALIDATION` †이 릴리스에서 rename 직후 제거됨 — 아래 Task 26 및 표 뒤 SCOPE_REDIRECT 대비 설명 참조 |
 | `DEVBREW_QG_DISABLE_SPEC_CONFORMANCE` | `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE` |
 | `DEVBREW_QG_DISABLE_CRITIQUE` | `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE` |
 | `DEVBREW_QG_DISABLE_PUBLISH` | `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH` |
@@ -32,6 +32,15 @@ Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나�
 (`DEVBREW_QG_DISABLE_SCOPE_REDIRECT`는 최초 초안에 실렸으나 제거했다 — 그 스위치는 [2.7.0]에서
 이미 제거됐고, 오늘 살아있지 않은 이름을 새 이름으로 "부활"시키는 것으로 잘못 읽혔다. 부재
 검증은 `tests/harness/test_skill_orchestration_behavior.sh:473`가 새 이름으로 여전히 지킨다.)
+
+위 표의 `DEVBREW_QG_DISABLE_RUNTIME_TEST_VALIDATION` 행(†)은 겉보기엔 SCOPE_REDIRECT와 같은
+운명(아래 Task 26이 새 이름 `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_TEST_VALIDATION`을 좀비로
+판정해 제거)이지만 **의도적으로 다르게** 취급했다 — 두 경우가 표에서 다르게 보이는 것은
+누락이 아니라 이 구분 때문이다. SCOPE_REDIRECT는 [2.7.0]에서 이미 제거돼 3.4.0→4.0.0
+업그레이드 사용자에게 살아있던 적이 없어 그 행이 무엇도 가르치지 않았다. 반면
+RUNTIME_TEST_VALIDATION은 **이 릴리스 안에서** rename된 직후 제거된다 — 3.4.0 사용자의
+환경에는 옛 이름이 지금 설정돼 있을 수 있다. 행을 통째로 지우면 "이 변수가 어떻게 됐는지"의
+흔적이 아예 사라지므로, 표에는 남기고 rename→제거 이력만 표시했다. 근거는 아래 Task 26.
 
 전역 `DEVBREW_SKIP_HOOKS`는 정의상 불변. `shared/killswitch/kill_switch_active.py`
 정본(과 이 플러그인의 `scripts/kill_switch_active.py` 물리 사본)의 전역 스위치
@@ -141,7 +150,8 @@ substrate ×3·Law 2 위반 ×2·P21·P17×2·AP2×3)는 전부 대상 원칙이
   `tempfile.TemporaryDirectory()`로 재작성 — 이전엔 `__main__` 블록이 2/5만
   돌렸다). `test_agent_stub_harness.py`는 확인 결과 helper 가 아니라 harness
   자신을 검증하는 진짜 테스트(9 assertion) — 이름이 거짓이 아니었다.
-  quality-gates 수집 수 129 → 158(+29), 리포 전체 python 980 → 1009.
+  quality-gates 수집 수 129 → 163(+34: 위 6개 파일 변환으로 +29, 이 바로 위
+  bullet의 `test_utf8_explicit.py` 신규로 +5), 리포 전체 python 980 → 1014.
 
 ### Fixed (devbrew weight-reduction Task 30)
 - **`encoding="utf-8"` 명시** — non-UTF-8 로케일에서 `read_text`/`write_text`/

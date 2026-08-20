@@ -14,6 +14,20 @@ Provides two helpers:
 
 Used by tests/test_*_behavior.py to verify per-agent output contracts
 without dispatching the real LLM (deterministic, hermetic).
+
+**Scope, stated plainly (devbrew weight-reduction Task 30 fix round 1):**
+each test_*_behavior.py file declares its own frozen YAML literal AND its
+own required_keys/enum expectations, both in the test file itself. Nothing
+in this path reads the live agent definition under plugins/quality-gates/
+agents/*.md — run_agent_stub()'s agent_name parameter is a label only (see
+its docstring below), never a file path. These tests assert that the
+*fixture* satisfies the *schema*; they cannot detect the agent .md file
+drifting away from either one (wording changes, a renamed severity level,
+a dropped required field in the real prompt). That is a deliberate,
+narrow contract, not an oversight — but it does mean "29 tests covering
+adversarial/security-reviewer/runtime-verifier/test-scope-validator"
+should not be read as agent-drift protection. If that coverage is ever
+wanted, it needs a test that actually reads the corresponding agents/*.md.
 """
 from __future__ import annotations
 
