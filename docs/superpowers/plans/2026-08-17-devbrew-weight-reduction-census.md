@@ -389,3 +389,65 @@ grep -oE '^\| [0-9]+ \| `[A-Za-z_][A-Za-z0-9_]*` \((py|sh)\)' "$CENSUS" \
 
 - `면제 술어 양성 대조: 심볼릭 링크 8개 전부 정본으로 해석됨 — 3개 canonical 그룹, None 0건`
 - `무릎 지점 위반 3쌍(파일 3개) — A(정당·미표시) 0 / B(진짜 중복) 3 / C(오탐) 0. Task 35 착수 조건: build_*_codex_prompt.py 트리오의 P21 로더 블록을 추출하거나 예외 문서화 후 착수.`
+
+---
+
+## 완료 측정 (설계 §14) — Task 36
+
+측정 시점 HEAD `778f9d1` (트리 clean) · 2026-08-22 · CI 없음, 전부 로컬 실측.
+before 는 사이클 **직전** 커밋 `975872b`(plan 이 들어오기 전) 에서 같은 명령으로 다시 잰 값이다 —
+브리프에 박힌 before 와 갈리는 두 곳은 표 아래 「before 정정」에 적었다.
+
+| 축 | before | after | 목표 | 달성 |
+|---|---|---|---|---|
+| 정본 트리 줄 수 (archive 제외) | 145,210 | **110,952** | 감소 | ✅ −34,258 / −23.6% |
+| 〃 like-for-like (사이클 산출물 제외) | 145,210 | **101,545** (기록물 9,407 제외) · **98,150** (기록물 + 신규 테스트 3,395 제외) | 감소 | ✅ −30.0% / −32.4% |
+| on-demand 로드 표면 (SKILL+agents+commands) | 6,482 | **5,198** | E의 두 섹션만큼 감소 | ✅ −1,284 / −19.8% (SKILL 4,185→2,901; agents·commands 불변) |
+| 락이 대상 변경 시 선택됨 (.sh / .py / .md) | 0/2 · 0/2 · 0/2 | **2/2 · 2/2 · 2/2** | 2/2 × 3 | ✅ 음성 대조 `docs/git-workflow/pr-process.md` = **0/2** (공허 아님) |
+| `# guards:` 양방향 커버리지 | (장치 없음) | **선언 파일 9개 도출 · 검사 24건 전부 PASS** (7개는 `--emit-scanned` 대조, 2개는 선언-only) | 전량 | ✅ |
+| `/plugin-audit` 셸 테스트 | null | **5/5 플러그인이 `ran:true` + 숫자** (project-init 96 · quality-gates 263 · spec-distill 268 · plugin-audit 256 · agent-transparency 283) | 대상 플러그인 전량 | ✅ |
+| `/plugin-audit project-init` 수집 수 | 0 | **96** (python 95 + 셸 `test_*.sh` 1) | 실제 테스트 수 | ✅ 직접 집계와 일치 |
+| 갈라진 사본 (미배정) | (§미배정) | **0 / 모집단 100** (배정 57 + 명시 유예 43) | **0** | ✅ 행 모양 `{5:31, 8:119}` · mutation 6종 전부 RED |
+| 20줄 동일 블록 (copy-of 미설명) | (Task 34: 3쌍) | **0** — `관련 파일 0 · 위반 쌍 0 · 스캔 445파일` | **0** | ✅ 락 출력도 `445파일 · 창 62,187개` |
+| `marketplace.json` drift | 4 | **0** (5 플러그인 sweep, 실패 0, 출력 3,120줄) | 0 | ✅ |
+| 환경변수 어순 패턴 | 4 | **1** (`DEVBREW_<PLUGIN>_<REST>`) | 1 | ✅ 예외 6건은 전부 비-라이브 — 개명표 옛 이름 4(plugin-audit README) + 픽스처 2 |
+| 좀비 환경변수 | (Task 26) | **0** — 72토큰 전수, 집행 지점 4곳 부재 후보 3건은 전부 doc=0(픽스처 2 + 부재-단언 1) | 0 | ✅ |
+| `.claude/` state 배치 | 5모양 | **1모양** (`state_root()` → `.claude/<plugin>/<sid>/…`) + legacy cleanup 리터럴 5 (삭제 목록 전용) | 1 | ✅ 토큰 136 중 101이 namespaced, 나머지는 harness 소유·플레이스홀더·legacy |
+| severity 어휘 | 2척도 | **1척도** (CRITICAL/IMPORTANT/SUGGESTION) | 1 | ✅ 주석 제외 시 HIGH/MEDIUM/LOW 0 (남은 3회는 전부 옛 척도를 설명하는 주석) |
+| agent `tools:` distinct | **7** (계획서의 `8` 은 오기) | **5** · 순서 1종 | 순서 1 | ✅ 도구 집합 불변, 어순만 통일 |
+| SKILL kill switch 섹션 | 2/8 | **7/8** | 8/8 | ❌ **미달** — `agent-transparency/briefing-current-state` 는 `DEVBREW_` 스위치가 코드 전체에 0건이라 **없는 스위치를 대칭을 위해 짓지 않기로** 한 의도적 결정 (`2d06602` 커밋 본문) |
+| commands `allowed-tools` | 4/7 · 표기 2종 | **4/7 · 표기 1종** | 7/7 · 1종 | ❌ **미달(표기만 달성)** — 없던 3개(`standup`·`plugin-audit`·`interview`)에 새 allowlist 를 넣는 것은 **새 제한**이라 사용자 판단으로 열어 둔 의도적 유보 (`318a471` 커밋 본문) |
+| python 테스트 실행 | 3위치 · 수집 0건 파일 6 | **1위치(`plugins/*/tests`) · 수집 0건 파일 0 / 60 · 합계 1,014** | 전량 통일 | ✅ 유일한 top-level discover 밖 파일 `agent-transparency/tests/oracle/test_add_contract.py` 는 Law 2 신뢰 경계로 문서화된 의도 |
+| 테스트 위치 규약 | 3 (`tests` · `scripts/tests` · `hooks/tests`) | **1** (`tests`) | 1 | ✅ 237경로 전량 |
+| `hooks/` 비-훅 `.py` | 1 (`state_path.py`) | **0** | 0 | ✅ |
+| 파일별 assertion 감소 | — | **0건** (양쪽에 존재하는 152파일 대조 · 총 786 → 1,128) | 어느 파일도 감소 없음 | ✅ before 에만 있던 1파일은 삭제가 아니라 `hooks/tests/smoke.sh` → `tests/smoke.sh` 이동 |
+
+### before 정정 2건
+
+브리프 §14 가 박아 둔 before 중 둘이 `975872b` 재측정과 갈렸다. **후자가 실측이다.**
+
+| 축 | 브리프 before | `975872b` 실측 | 원인 |
+|---|---|---|---|
+| agent `tools:` distinct | 8 | **7** | 계획서 Task 29 축 1 표 자신이 열거한 항목을 세면 2+2+1+1+1 = **7** 이다 (18 agent = 6+8+2+1+1). `8` 은 그 표의 수동 집계 오류이며 트리 상태와 무관 |
+| on-demand 로드 표면 | 6,482 | 6,482 (일치) | 〔참고〕 Task 36 보충이 "사이클 시작"이라 부른 **6,579** 는 실은 **PR4 종료(`2aebbed`)** 값이다 — PR3·PR4 가 kill switch 절·`allowed-tools` 표기로 97줄을 더한 뒤의 수. 사이클 시작은 6,482 |
+
+### 정본 트리 like-for-like 의 계산 근거
+
+`975872b` 트리에는 `docs/archive/` 가 없어 전체 = 정본 = **145,210**(실측 재현). after 는 전체 163,427 = 정본 110,952 + 아카이브 52,475.
+
+| 뺀 것 | 규칙 | 줄 수 |
+|---|---|---|
+| 사이클 기록물 (L1) | `975872b→HEAD` 신규 파일 중 `docs/superpowers/plans/2026-08-17-devbrew-weight-reduction*` + `docs/audits/2026-08-21-skill-split-lock-corpus-shrink.md` | 9,407 |
+| 신규 테스트 (L2 추가분) | 같은 신규 파일 중 경로에 `/tests/` 를 가진 16개 | 3,395 |
+
+〔이 커밋의 영향〕 이 절을 추가하는 커밋이 census 를 62줄 늘리므로 정본 트리는 111,014, L1 은 9,469 이 된다 — **양쪽이 같이 늘어 like-for-like 값(101,545 / 98,150)은 불변**이다.
+
+〔주의〕 계획서가 "plan 5,494줄"이라 적었으나 실측은 **8,452줄** — 5라운드 fix 로 계획서 자신이 자라났다. like-for-like 는 리터럴이 아니라 파일 목록에서 도출한다.
+
+### 남은 것 (설계 §15.1 + 이 사이클이 새로 발견한 것)
+
+설계 §15.1 표가 정본이다 — 여기 복제하지 않는다. **이 태스크가 더하는 것만** 적는다:
+
+1. **SKILL kill switch 7/8 · commands `allowed-tools` 4/7** — 위 표의 미달 두 행. 둘 다 커밋 본문에 근거가 남아 있으나 §15.1 에는 없다. 전자는 *"agent-transparency 에 kill switch 를 도입할 것인가"*, 후자는 *"무제한 command 3개에 allowlist 를 넣을 것인가"* 라는 **사용자 결정**이다.
+2. **`run-own-tests.sh` 의 셸 테스트 수집이 `test_*.sh` 접두에 한정** — `plugins/agent-transparency/tests/ab_gate.sh` 는 실행비트가 있고 `tests/` 에 있으나 수집되지 않는다. 그 파일은 선재 RED 이므로 `/plugin-audit agent-transparency` 는 **283/283 clean** 을 보고한다. 규약(§테스트 위치)이 파일명 접두까지 규정하지 않아 생긴 틈.
+3. **샌드박스 안에서만 나는 실패 2건** — `run-own-tests.sh` 사본에서 quality-gates `test_sandbox_enforced.sh` 가 exit 1, spec-distill python 러너가 exit 1. 둘 다 실제 트리에서는 GREEN 이다(중첩 샌드박스 아티팩트). `own_tests` 의 `passed` 가 환경 때문에 과소 보고된다.
