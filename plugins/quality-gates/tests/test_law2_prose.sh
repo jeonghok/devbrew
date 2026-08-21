@@ -12,9 +12,23 @@ cd "$ROOT" || exit 1
 . "$ROOT/shared/tests/assert.sh"
 
 # AC16 경로 화이트리스트 — 활성 문서만.
+#
+# Task 32(무게 감축): 아래 AC16-1/-2/-3 은 전부 **부재** 검사다 — 코퍼스가 줄어도 RED 가
+# 되지 않고 조용히 약해진다. SKILL.md 의 절차 전문이 `skills/<skill>/references/*.md` 로
+# 분리되기 시작하면서(Task 31 runtime-gate.md · Task 32 finishing.md) `-name 'SKILL.md'`
+# 는 그 분리분을 못 본다. 실측: finishing.md 로 233줄이 빠져나간 뒤에도 이 락은 GREEN 이었다.
+# agent 도구 표면을 서술하는 산문은 절차 전문 쪽으로 따라 이동하므로 정확히 그 자리가
+# 위험하다. references/*.md 를 **도출**해 코퍼스에 넣는다(열거 아님 — 새 파일 자동 포함).
 FILES=(CLAUDE.md docs/plugin-authoring.md)
 while IFS= read -r f; do FILES+=("$f"); done < <(ls plugins/*/README.md 2>/dev/null)
 while IFS= read -r f; do FILES+=("$f"); done < <(find plugins/*/skills -name 'SKILL.md' 2>/dev/null)
+n_ref=0
+while IFS= read -r f; do FILES+=("$f"); n_ref=$((n_ref + 1)); done \
+  < <(find plugins/*/skills -path '*/references/*.md' 2>/dev/null)
+# vacuity: 도출 0건이면 이 락은 분할 이전 범위로 되돌아가면서 GREEN 을 찍는다.
+[ "$n_ref" -ge 1 ] \
+  && ok "AC16: references/*.md ${n_ref}건 도출 (코퍼스 vacuous 아님)" \
+  || no "AC16: skills/*/references/*.md 를 0건 도출했다 — 부재 스캔 범위가 조용히 좁아졌다"
 
 # --- AC16-1: `allowedTools` 리터럴 0건 ---
 # \b 필수: naive grep은 `disallowedTools`의 부분문자열에 매칭돼 이미 clean한 파일에 false-positive.

@@ -3,6 +3,22 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.1.6] — 2026-08-21
+
+Task 32(무게 감축) 파생: `spec-distill` 의 `## 종료` 절차가 `references/finishing.md`
+로 분리되면서 이 플러그인이 소유한 **repo-wide** 부재 락 하나가 조용히 약해지는 것이
+드러나 함께 고쳤다.
+
+**Fixed**
+- `tests/test_law2_prose.sh` — AC16-1/-2/-3 은 전부 절대부재 검사인데 코퍼스가
+  `find plugins/*/skills -name 'SKILL.md'` 였다. `skills/<skill>/references/*.md` 로
+  분리된 절차 전문은 **모든** 플러그인에서 이 스캔 밖이었다 — Task 31 이 만든
+  `quality-pipeline/references/runtime-gate.md`(1,190줄)도 이미 밖에 있었으므로 그
+  잔여 구멍도 여기서 닫힌다. `references/*.md` 를 도출해 코퍼스에 넣고, 도출 0건이면
+  loud FAIL 하는 vacuity 단언을 추가했다. 이빨 실측(차분): `allowedTools` · `실제 키` ·
+  `tool 0개` 를 `spec-distill/.../references/finishing.md` 에 주입하면 **수정 전
+  24/24 GREEN(fail-open 실증) → 수정본 4건 RED**, 제거 후 다시 GREEN.
+
 ## [4.1.5] — 2026-08-21
 
 Task 31 fix round 5(마지막): F1(코퍼스 축소로 무력화된 절대부재 락) 계열의 남은

@@ -11,6 +11,14 @@ set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 CI="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/SKILL.md"
+# Task 32(무게 감축): Step A.5 · Step B 전문이 references/finishing.md 로 분리됐다. 이 스위트의
+# 윈도우 앵커(`### Step A.5` · `#### B-2`)와 전-파일 검사는 **어느 파일에 그 섹션이 있는지**를
+# 알면 안 된다 — 알면 다음 분할 때 또 깨진다. 그래서 스킬 표면을 도출해 하나의 스트림으로 다룬다.
+# (부재 검사에서 특히 중요하다: 코퍼스가 줄어도 부재 락은 RED 가 아니라 **조용히 약해진다**.)
+CI_DIR="$(dirname -- "$CI")"
+CI_FILES=("$CI")
+while IFS= read -r _f; do [ -n "$_f" ] && CI_FILES+=("$_f"); done < <(ls "$CI_DIR"/references/*.md 2>/dev/null)
+ci_cat() { cat "${CI_FILES[@]}"; }
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
@@ -31,7 +39,7 @@ scoped_window() {
     inw && $0 ~ ENVIRON["SW_FRE"] {fence=!fence}
     inw && !fence && $0 ~ ENVIRON["SW_END"] {exit}
     inw
-  ' "$CI"
+  ' "${CI_FILES[@]}"
 }
 window() { scoped_window "$1" '^#{3,4} '; }
 
@@ -105,6 +113,11 @@ strip_trailing_linecomment() {
 }
 
 test -f "$CI" || { no "SKILL 부재"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1; }
+# '참조 파일 0건'을 '문제 없음'으로 읽지 않는다 — 도출이 깨지면 아래 전-파일 검사가 분할
+# 이전 범위로 조용히 되돌아간다.
+[[ "${#CI_FILES[@]}" -ge 2 ]] \
+  && ok "코퍼스: conducting-interview 표면 ${#CI_FILES[@]}개 파일 도출 (vacuous 아님)" \
+  || no "코퍼스: references/*.md 를 0건 도출했다 — 검사 범위가 조용히 좁아졌다"
 
 # --- 윈도우 전제조건 : 코드 펜스 균형 (Task 7 관용구 재사용) -----------------
 # scoped_window()/fence()의 상태 토글은 문서의 ``` 마커가 짝을 이룬다는 전제 위에서만 성립한다.
@@ -116,7 +129,7 @@ test -f "$CI" || { no "SKILL 부재"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 
 # 이 전제조건은 계속 PASS를 냈다). 이 전제조건은 **전역**(윈도우 스코프 아님) — 무관한 섹션의
 # 마커 하나가 빠져도 트립된다(Task 7과 동일한 의도적 coarse-ness: 위장이 아니라 흔한 편집
 # 사고를 잡는 게 목적이라 스코프를 좁히지 않는다).
-n_fence="$(grep -cE "$FENCE_MARKER_RE" "$CI" || true)"
+n_fence="$(ci_cat | grep -cE "$FENCE_MARKER_RE" || true)"
 if [[ "$n_fence" -gt 0 ]] && [[ "$((n_fence % 2))" -eq 0 ]]; then
   ok "펜스 균형: 코드 펜스 마커 ${n_fence}개 — 짝수(균형), 윈도우/펜스 스코프 유효"
 else
@@ -124,7 +137,7 @@ else
 fi
 
 # --- 진입 블록 -------------------------------------------------------------
-grep -qE '^### Step A\.5' "$CI" && ok "Step A.5 헤더 존재" || no "Step A.5 헤더 부재"
+grep -qE '^### Step A\.5' "${CI_FILES[@]}" && ok "Step A.5 헤더 존재" || no "Step A.5 헤더 부재"
 WA5="$(window '^### Step A\.5')"
 grep -qF 'reviewing-brief' <<<"$WA5" && ok "A.5가 reviewing-brief를 지목 (느슨한 substring, defense-in-depth)" || no "A.5에 reviewing-brief 부재"
 # 위 substring 체크는 프로즈 한 줄만으로도, 또는 펜스 밖 아무 데나 같은 리터럴을 흘려놔도
@@ -175,9 +188,9 @@ grep -qE 'state_path\.py.*session-id' <<<"$WA5" \
   && ok "A.5가 파이프라인과 같은 harness_sid 리졸버 사용" || no "A.5의 harness_sid 도출이 리졸버와 불일치"
 
 # --- Step A 게이트·종료 조건 불변 (회귀 락) ---------------------------------
-grep -qF 'check_brief.py' "$CI" && ok "Step A 게이트 보존" || no "check_brief.py 게이트가 사라졌다"
-grep -qF 'floor 5차원' "$CI" && ok "종료 driver(floor 5) 보존" || no "종료 driver 서술 손실"
-grep -qF '# confirmed 0건 — 사용자가 전부 잠정으로 판단' "$CI" \
+grep -qF 'check_brief.py' "${CI_FILES[@]}" && ok "Step A 게이트 보존" || no "check_brief.py 게이트가 사라졌다"
+grep -qF 'floor 5차원' "${CI_FILES[@]}" && ok "종료 driver(floor 5) 보존" || no "종료 driver 서술 손실"
+grep -qF '# confirmed 0건 — 사용자가 전부 잠정으로 판단' "${CI_FILES[@]}" \
   && ok "confirmed 0건 sentinel 보존" || no "sentinel 문구 손실"
 
 # --- Step B 실기 (4 산출물 + degrade) ---------------------------------------
@@ -189,7 +202,7 @@ n_opt="$(grep -cE '^\s*\{label:' <<<"$WB2" || true)"
 for tok in '방향성' 'readback' 'gap' 'degrade'; do
   grep -qF "$tok" <<<"$WB2" && ok "B-2 question에 '$tok' 실림 (느슨한 substring, defense-in-depth)" || no "B-2에 '$tok' 부재"
 done
-grep -qE 'question 텍스트|question 본문' "$CI" \
+grep -qE 'question 텍스트|question 본문' "${CI_FILES[@]}" \
   && ok "degrade가 question 텍스트에 렌더 (프로즈 서술, defense-in-depth)" || no "렌더 위치(question 텍스트) 명시 부재"
 # 위 두 체크는 어휘(prose가 "degrade"·"question 텍스트"를 언급하는지)만 본다 — §5.6/AC15가
 # 요구하는 실제 property는 *배치*(옵션 description이 아니라 question: 문자열 그 자체)다.
@@ -212,12 +225,12 @@ QLINE_CODE="$(strip_trailing_linecomment "$QLINE")"
 grep -qF 'degrade' <<<"$QLINE_CODE" \
   && ok "B-2 question: 라인이 degrade record를 직접 실음 (placement, load-bearing; 트레일링 // 코멘트 제외하고 검사)" \
   || no "B-2 question: 라인(트레일링 // 코멘트 제외)에 degrade 부재 — 렌더가 description 등 다른 곳으로 이동했거나 죽은 // 코멘트일 수 있다"
-grep -qE 'degrade 없음' "$CI" && ok "빈 배열도 명시" || no "빈 배열 명시 부재"
+grep -qE 'degrade 없음' "${CI_FILES[@]}" && ok "빈 배열도 명시" || no "빈 배열 명시 부재"
 
 # --- P21 canonical 토큰 (checker와 producer가 같은 집합) --------------------
-grep -qF '<REDACTED' "$CI" && ok "P21 canonical 토큰 명시" || no "P21 canonical 토큰 부재"
+grep -qF '<REDACTED' "${CI_FILES[@]}" && ok "P21 canonical 토큰 명시" || no "P21 canonical 토큰 부재"
 
 # --- cross-compact / polite stop 가드 불변 ----------------------------------
-grep -qE '턴 종료|다음 턴' "$CI" && ok "cross-compact 가드 보존" || no "cross-compact 가드 손실"
-grep -qF 'polite stop' "$CI" && ok "AP2 가드 보존" || no "AP2 가드 손실"
+grep -qE '턴 종료|다음 턴' "${CI_FILES[@]}" && ok "cross-compact 가드 보존" || no "cross-compact 가드 손실"
+grep -qF 'polite stop' "${CI_FILES[@]}" && ok "AP2 가드 보존" || no "AP2 가드 손실"
 finish

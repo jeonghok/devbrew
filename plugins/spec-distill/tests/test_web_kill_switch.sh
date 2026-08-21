@@ -289,9 +289,41 @@ fi
 #   coverage-mapper dispatch까지 '덮는' 것처럼 보였다). 이제 각 dispatch 지점마다
 #   그 **위쪽 WINDOW줄 안에** 스위치 확인이 있어야 한다.
 GUARD_WINDOW=40
-for sk in "$SD"/skills/*/SKILL.md; do
+# Task 32(무게 감축): 스킬 절차 전문이 `skills/<skill>/references/*.md` 로 분리되기
+# 시작했다(conducting-interview/references/finishing.md). 표면을 SKILL.md 로만 잡으면
+# 아래 두 **부재** 검사(느슨한 참 판정 · 상한 게이트 재도입)가 분리분을 못 본다 —
+# 부재 락은 코퍼스가 줄어도 RED 가 아니라 조용히 약해진다. 그래서 표면을 도출한다.
+# 근접 가드는 파일 안 줄번호로 재므로 파일마다 독립적으로 도는 것이 맞다.
+surfaces=()
+while IFS= read -r _f; do
+  [[ -n "$_f" ]] && surfaces+=("$_f")
+done < <(ls "$SD"/skills/*/SKILL.md "$SD"/skills/*/references/*.md 2>/dev/null)
+# macOS bash 3.2 + `set -u`: 빈 배열에 "${arr[@]}" 를 확장하면 unbound variable 로 죽는다
+# (실측). 글롭이 0건이면 아래 vacuity 단언이 loud FAIL 해야지, 확장이 먼저 죽어서는 안 된다.
+n_surf_ref=0
+for _f in "${surfaces[@]+"${surfaces[@]}"}"; do
+  case "$_f" in */references/*) n_surf_ref=$((n_surf_ref + 1)) ;; esac
+done
+[[ "$n_surf_ref" -ge 1 ]] \
+  && ok "코퍼스: skills/*/references/*.md ${n_surf_ref}건 도출 (vacuous 아님)" \
+  || no "코퍼스: skills/*/references/*.md 를 0건 도출했다 — 부재 스캔 범위가 조용히 좁아졌다"
+
+for sk in "${surfaces[@]+"${surfaces[@]}"}"; do
   [[ -f "$sk" ]] || continue
-  name="$(basename "$(dirname "$sk")")"
+  case "$sk" in
+    */references/*) name="$(basename "$(dirname "$(dirname "$sk")")")/references/$(basename "$sk")" ;;
+    *) name="$(basename "$(dirname "$sk")")" ;;
+  esac
+
+  # 부재 검사는 dispatch 유무와 **무관하게** 표면 전량에서 돈다. dispatch 가 없는 파일에서
+  # `continue` 로 빠지면 그 파일은 두 금지 패턴에 대해 영영 검사되지 않는다(분리된 절차
+  # 전문이 정확히 그런 파일이다).
+  grep -qE 'DEVBREW_SPEC_DISTILL_DISABLE_WEB.*(true|yes|-n |!= *"")' "$sk" \
+    && no "$name: 느슨한 참 판정 — 계약은 정확히 \"1\"이다" \
+    || ok "$name: 참 판정이 \"1\" 한정"
+  grep -qE 'web_budget|SWEEP_CAP|SESSION_CAP' "$sk" \
+    && no "$name: 상한 게이트 재도입" \
+    || ok "$name: 상한 게이트 없음"
 
   # 이 skill이 dispatch하는 web agent의 줄번호를 전부 모은다(접두사 선택적).
   dispatch_lines=""
@@ -323,12 +355,6 @@ for sk in "$SD"/skills/*/SKILL.md; do
   grep -qE "$CHECK" "$sk" \
     && ok "$name: 실행 가능한 스위치 확인 블록 실재" \
     || no "$name: 스위치 확인이 실행 가능한 형태가 아니다(산문만으로는 집행되지 않는다)"
-  grep -qE 'DEVBREW_SPEC_DISTILL_DISABLE_WEB.*(true|yes|-n |!= *"")' "$sk" \
-    && no "$name: 느슨한 참 판정 — 계약은 정확히 \"1\"이다" \
-    || ok "$name: 참 판정이 \"1\" 한정"
-  grep -qE 'web_budget|SWEEP_CAP|SESSION_CAP' "$sk" \
-    && no "$name: 상한 게이트 재도입" \
-    || ok "$name: 상한 게이트 없음"
 done
 
 # ── 스위치가 **소비되는가** (선언만으로는 부족하다) ──────────────────────────

@@ -1,5 +1,61 @@
 # Changelog
 
+## [0.30.0] — 2026-08-21
+
+Task 32(무게 감축): `conducting-interview` SKILL.md의 `## 종료 — brief 작성 + optional
+handoff` 절차 전문(232줄, 분할 전 파일(614줄)의 37.8%)을
+`skills/conducting-interview/references/finishing.md`로 분리했다. SKILL.md에는 같은
+`## 종료` 헤딩 아래 포인터 산문만 남는다 — floor 5차원이 전부 `closed`가 되어 brief
+작성으로 넘어갈 때만 그 파일을 Read 하고, 인터뷰가 진행 중인 동안은 읽지 않는다(조건부
+로드). 이 파일에는 목차도 내부 `](#anchor)` 링크도 없어 깨질 앵커가 없다.
+on-demand 로드 표면(SKILL·agent·command 전량)은 이 분리로 5,406줄 → 5,188줄
+(Δ −218)로 줄었다.
+
+**Added**
+- `skills/conducting-interview/references/finishing.md` — 종료 절차 전문(Step A ·
+  Step A.5 · Step B B-0…B-4). 분할 전 SKILL.md에서 **바이트 그대로** 이동했고 내용
+  변경은 없다(재조립 후 원본과 diff 0줄 — 의도적으로 SKILL.md에 남긴 구분용 빈 줄
+  하나 제외).
+
+**Fixed**
+- **분할로 조용히 약해진 부재 락 3건.** 부재 락("이 문자열이 나타나면 안 된다")은
+  코퍼스가 줄어도 RED가 되지 않고 **조용히 약해진다** — Task 31이 이 방식으로 P21
+  secret 스캔의 범위를 잃었다. 세 락 모두 분리 직후 GREEN이었고, 금지 문자열을
+  `finishing.md`에 주입해 **수정본 RED / 수정 전 GREEN**의 차분으로 fail-open을
+  실증한 뒤 고쳤다. 세 곳 다 열거가 아니라 **도출**(`references/*.md` 글롭)로
+  고쳐 새 참조 파일이 생기면 자동으로 대상이 되게 했고, 도출 0건이면 loud FAIL
+  하는 vacuity 단언을 함께 넣었다.
+  - `tests/test_no_wall_clock.sh` — 순수 전-파일 부재 락. 하드코딩된 3-파일 배열이라
+    분리분을 못 봤다. 하필 종료 절차가 "얼마나 걸렸나"를 다시 재고 싶어지는 가장
+    그럴듯한 자리다. 실측: 주입 후 수정 전 9/9 GREEN → 수정본 2건 RED.
+  - `tests/test_web_kill_switch.sh` — 두 부재 검사(느슨한 참 판정 · 상한 게이트
+    재도입)가 `dispatch_lines` 없으면 `continue`로 빠지는 자리에 있어, dispatch가
+    없는 분리분은 영영 검사되지 않았다. 부재 검사를 `continue` **위로** 끌어올려
+    표면 전량에서 돌게 했다. 실측: 주입 후 수정 전 32/32 GREEN → 수정본 2건 RED.
+  - `plugins/quality-gates/tests/test_law2_prose.sh` — `find plugins/*/skills -name
+    'SKILL.md'` 코퍼스라 **모든** 플러그인의 `references/*.md`를 못 봤다. Task 31이
+    만든 `runtime-gate.md`도 이미 이 락 밖에 있었으므로 그 잔여 구멍도 함께 닫힌다.
+    실측: 주입 후 수정 전 24/24 GREEN → 수정본 4건 RED.
+
+**Changed**
+- `tests/test_conducting_interview_stage.sh` · `tests/test_brief_review_entry.sh` —
+  섹션 윈도우(`#### B-0`…`#### B-3` · `### Step A.5` · `## 종료`)와 전-파일 검사가
+  스킬 표면(SKILL.md + `references/*.md`)을 하나로 보도록 코퍼스를 도출로 바꿨다.
+  줄 번호가 아니라 헤딩 앵커로만 스코프하므로 재조립 헬퍼는 필요하지 않다(아래).
+  `test_conducting_interview_stage.sh`의 부재 7건은 주입 차분으로 이빨을 확인했다
+  (수정 전 7/7 GREEN → 수정본 7/7 RED).
+
+**Notes**
+- **재조립 헬퍼(`reconstruct-skill.sh`)를 쓰지 않았다 — 측정 결과 필요 없었다.**
+  Task 31이 그 헬퍼를 만든 이유는 두 테스트가 섹션 경계를 가로질러 **줄 번호로**
+  순서·거리를 쟀기 때문이다. 이 스킬의 소비자 전량을 훑어 그런 검사를 찾았고,
+  줄 번호 산술은 두 곳뿐이었다: `test_web_kill_switch.sh`의 dispatch↔kill switch
+  근접 검사(`GUARD_WINDOW=40`)는 dispatch 254·269·320행을 가드 245·302·311행과
+  짝지어 **전부 경계(341행) 아래**에 있고, `test_check_verbatim_coverage.sh`의
+  `sed -n "${P21_LINES},+3p"`는 첫 `REDACTED`(63행) 기준이라 63–66행에 머문다.
+  경계를 가로지르는 쌍이 0건이므로 재조립은 불필요하고, 근-중복 66줄 파일을
+  새로 만들지 않았다.
+
 ## [0.29.0] — 2026-08-20 (BREAKING)
 
 Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일. 이
