@@ -35,12 +35,21 @@
 # **앵커 접두사**를 함께 캡처해, 접두사마다 해석 루트가 **정확히 하나**가 되게 한다:
 #
 #   ① `${CLAUDE_PLUGIN_ROOT…}/…`  → 그 SKILL.md 로부터 도출한 플러그인 루트
-#   ② `plugins/<p>/[skills/<s>/]…` → 리포 루트 (쓰인 그대로)
+#   ② `plugins/<p>/…`              → 리포 루트 (쓰인 그대로)
 #   ③ `(../)*references/…`(맨몸 포함) → 그 SKILL.md 자신의 디렉터리 (쓰인 그대로)
+#   ④ 그 밖의 모든 접두사           → **거부(loud FAIL)**. 재해석하지 않는다.
 #
 # **"skill 밑을 먼저 보고 없으면 플러그인 루트를 본다" 식의 폴백은 쓰지 않는다.**
 # 그러면 같은 이름의 파일이 플러그인 레벨에 우연히 있을 때 *진짜로 없는* skill
 # 레벨 대상이 통과한다 — fail-open 이다. 접두사 → 루트가 1:1 이면 그 창이 없다.
+# ④ 가 없으면 그 1:1 주장이 반쪽이 된다(F6) — 열거 밖 접두사가 거부 대신 **절단**돼
+# 조용히 ③ 으로 떨어지기 때문이다.
+#
+# **역방향도 같은 해석기를 쓴다(F5).** 앞 판본의 역방향은 포인터를 `references/…`
+# 접미사로 잘라 비교했다. 그래서 `${CLAUDE_PLUGIN_ROOT}/references/notes.md` 를 가리키는
+# 포인터가 `skills/<s>/references/notes.md` 의 소유 증거로도 인정됐다 — 정방향은 엄격한데
+# 역방향만 느슨한 상태였고, 둘 다 실재하면 skill 레벨 파일이 **아무도 안 가리키는데도**
+# 고아로 안 잡혔다. 지금은 정방향이 만든 `(SKILL.md, 해석된 대상)` **쌍**을 그대로 되쓴다.
 #
 # 대상은 열거가 아니라 git 이 추적하는 SKILL.md 전부에서 **도출**한다 — 새
 # 스킬이나 새 참조 파일이 생겨도 자동으로 대상이 된다. 포인터는 마크다운 링크
@@ -59,10 +68,22 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT" || exit 1
 . "$ROOT/shared/tests/assert.sh"
 
-# 앵커 접두사(①②③)를 **선택적 캡처 그룹**으로 앞에 붙인다. `\{`/`\}` 대신 대괄호
-# 표현(`[$][{]`)을 쓰는 이유: ERE 에서 `{` 는 interval 메타문자라 escape 해석이
-# 구현마다 갈린다. 대괄호는 어느 grep 에서도 리터럴이다(macOS BSD grep 실측).
-REF_RE='([$][{]CLAUDE_PLUGIN_ROOT[^}]*[}]/|plugins/[A-Za-z0-9_.-]+/(skills/[A-Za-z0-9_.-]+/)?|(\.\./)+)?references/[A-Za-z0-9_./-]+\.md'
+# 토큰을 **통째로** 잡는다 — 접두사를 열거해 골라 받지 않는다.
+#
+# 〔fix round 1 / F6〕 앞 판본은 알아보는 접두사만 선택적 그룹으로 열거했다. 그러면
+# 알아보지 못하는 접두사는 **거부되는 게 아니라 잘린다**: 정규식이 `$`/`docs`/`shared`
+# 위치에서 실패하고 문자열 **중간**의 맨몸 `references/…` 로 매치가 시작돼, 그 표기가
+# 조용히 form ③(스킬 디렉터리 상대)으로 재해석된다. `$CLAUDE_PLUGIN_ROOT/references/x.md`
+# (중괄호 없음) · `some/deep/path/references/y.md` 가 전부 그 경로였다. 이 락과 그 설계
+# 노트가 "폴백 없음"이라고 주장하는 바로 그 자리에 **절단형 폴백**이 있었던 셈이다.
+#
+# 그래서 앞쪽 경로 문자를 전부 삼키는 넓은 클래스로 토큰을 통째 잡고, 그 다음
+# **알아보는 형태인지**를 판정한다. 못 알아보면 조용히 재해석하지 않고 loud FAIL 한다.
+# 클래스에서 빼는 문자: 공백 · 백틱 · 괄호 · 부등호 · 따옴표 · `*` · `;` · `,`.
+# 앞의 넷은 마크다운/코드 문맥의 자연 경계이고, `*` 는 `**path**` 볼드 표기가 인식
+# 불가 토큰으로 오인되는 것을 막는다(실측: 그 표기도 맨몸 형태로 정상 추출된다).
+_Q="'"
+REF_RE="[^[:space:]\`()<>\"${_Q}*;,]*references/[A-Za-z0-9_./-]+\\.md"
 
 # `a/b/../c` → `a/c`. 존재하지 않는 경로도 접어야 하므로 `realpath`/`pwd -P` 를
 # 쓰지 않는다. 선두의 `..` 는 접지 않고 남긴다(리포 밖을 가리키는 포인터는 그대로
@@ -112,6 +133,7 @@ ok "pointer: SKILL.md 코퍼스 ${corpus_n}개 도출 (vacuous 아님)"
 
 checked=0
 missing=0
+unknown_form=0
 # 정방향이 실제로 **해석해 낸 대상**의 집합. 역방향(플러그인 레벨 고아 검사)이
 # 이 집합을 그대로 되쓴다 — 두 방향이 같은 해석기를 공유하므로, 접두사 파싱이
 # 깨지면 정방향과 역방향이 **동시에** RED 를 낸다(mutation M7b 실측: 접두사 분기를
@@ -121,6 +143,9 @@ missing=0
 # 코퍼스에는 그 표기가 없어 이 함수를 항등함수로 바꿔도 GREEN 이다(M7a 실측).
 # 이빨은 `../` 포인터가 등장하는 순간 생긴다(M6 로 그 경로를 실측했다).
 RESOLVED=""
+# `(그 포인터를 담은 SKILL.md)::(해석된 대상)` 쌍. 역방향의 **소유** 판정이 이것을
+# 그대로 되쓴다 — 접미사 비교가 아니라 쓰인 그대로의 해석 결과를 본다(F5).
+RESOLVED_PAIRS=""
 
 while IFS= read -r skill_md; do
   [ -n "$skill_md" ] || continue
@@ -129,15 +154,33 @@ while IFS= read -r skill_md; do
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
     checked=$((checked + 1))
-    # 접두사 → 해석 루트는 1:1. 폴백 없음.
+    # 접두사 → 해석 루트는 1:1. 폴백 없음. 알아보지 못하면 **거부**한다(절단 금지).
+    target=""
     case "$ref" in
-      '${CLAUDE_PLUGIN_ROOT'*) target="$plugin_root/${ref#*\}/}" ;;
-      plugins/*)               target="$ref" ;;
-      *)                       target="$skill_dir/$ref" ;;
+      '${CLAUDE_PLUGIN_ROOT'*'}/'*) target="$plugin_root/${ref#*\}/}" ;;
+      plugins/*)                    target="$ref" ;;
+      references/*)                 target="$skill_dir/$ref" ;;
+      *)
+        # `(../)+references/…` 만 상대 형태로 인정한다. `case` 로는 `+` 를 못 쓰므로
+        # 선두 `../` 를 벗겨 나머지가 `references/` 로 시작하는지 본다.
+        _rest="$ref"
+        while [ "${_rest#../}" != "$_rest" ]; do _rest="${_rest#../}"; done
+        case "$_rest" in
+          references/*) target="$skill_dir/$ref" ;;
+        esac
+        ;;
     esac
-    if [ -f "$target" ]; then
+    if [ -z "$target" ]; then
+      # 예: 중괄호 없는 `$CLAUDE_PLUGIN_ROOT/references/x.md` · `docs/…/references/y.md`.
+      # 조용히 스킬 디렉터리 상대로 재해석하지 않는다 — 그것이 이 락이 없다고 주장하는
+      # 폴백이다. 표기를 인식 가능한 세 형태 중 하나로 고쳐야 한다.
+      no "pointer: $skill_md → '$ref' 의 접두사를 알아볼 수 없다 — 인식 형태는 \`\${CLAUDE_PLUGIN_ROOT…}/…\` · \`plugins/<p>/…\` · \`(../)*references/…\` 뿐이다 (조용히 재해석하지 않는다)"
+      unknown_form=$((unknown_form + 1))
+    elif [ -f "$target" ]; then
       ok "pointer: $skill_md → $ref (존재: $target)"
       RESOLVED="$RESOLVED$(norm_path "$target")
+"
+      RESOLVED_PAIRS="$RESOLVED_PAIRS$skill_md::$(norm_path "$target")
 "
     else
       no "pointer: $skill_md → $ref 를 가리키지만 그 경로에 파일이 없다 ($target)"
@@ -150,6 +193,7 @@ if [ "$checked" -eq 0 ]; then
   no "pointer: 코퍼스 ${corpus_n}개 SKILL.md 전체에서 references/*.md 포인터를 0개 발견 — 추출이 실패했다 (0 checked/0 missing 은 '없음'이 아니라 '안 봤다')"
 else
   assert_eq "$missing" "0" "pointer: 대조 ${checked}건 / 소실 ${missing}건"
+  assert_eq "$unknown_form" "0" "pointer: 인식 못 하는 접두사 ${unknown_form}건 (절단-재해석 대신 거부)"
 fi
 
 # ── 역방향(F6): SKILL.md 가 안 가리키는 references/*.md — 고아 ────────────
@@ -194,11 +238,15 @@ while IFS= read -r reffile; do
     */skills/*/references/*)
       skill_dir="${reffile%/references/*}"
       owner_skill="$skill_dir/SKILL.md"
-      want="references/$(basename -- "$reffile")"
-      if [ -f "$owner_skill" ] && grep -oE -- "$REF_RE" "$owner_skill" | sed 's|.*/\(references/\)|\1|' | grep -qxF -- "$want"; then
-        ok "orphan: $reffile ← $owner_skill 에서 가리킴"
+      # F5: 접미사 비교가 아니라 **정방향이 실제로 해석해 낸 쌍**을 본다. 접미사로
+      # 비교하면 `${CLAUDE_PLUGIN_ROOT}/references/notes.md` 포인터가 skill 레벨
+      # `references/notes.md` 의 소유 증거로도 인정돼, 둘 다 실재할 때 skill 레벨
+      # 파일이 아무도 안 가리키는데 고아로 안 잡힌다(정방향은 엄격, 역방향만 느슨).
+      want_pair="$owner_skill::$(norm_path "$reffile")"
+      if printf '%s\n' "$RESOLVED_PAIRS" | grep -qxF -- "$want_pair"; then
+        ok "orphan: $reffile ← $owner_skill 이 이 경로로 해석되는 포인터를 갖는다"
       else
-        no "orphan: $reffile 를 가리키는 SKILL.md 포인터가 없다 (기대: $owner_skill 안의 '$want')"
+        no "orphan: $reffile 를 **이 경로로** 가리키는 $owner_skill 의 포인터가 없다 (접미사만 같은 다른 경로 표기는 소유 증거가 아니다)"
         orphans=$((orphans + 1))
       fi
       ;;

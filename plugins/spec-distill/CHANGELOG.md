@@ -1,5 +1,75 @@
 # Changelog
 
+## [0.32.0] — 2026-08-21
+
+Task 33 fix round 1. 리뷰 판정은 **Spec PASS / Quality FAIL** 이었고, 결함은 리팩터가
+만들어 낸 **산문 계약** 쪽에 몰려 있었다 — 엔지니어링(1:1 접두사 리졸버 · presence/absence
+코퍼스 분리 · 여섯 코퍼스 수리 · 격리 설치 실측)은 독립 재도출로 유지됐다.
+
+**Added**
+- **정본이 각 skill 에 `degrade 채널`의 이름을 요구한다 (F2).** [0.31.0] 의 정본은
+  *"모든 degrade record 를 출력하고 없으면 `degrade 없음`"* 을 계약으로 적었는데, 그 문장은
+  `conducting-interview` 의 메커니즘(`brief_review_degradations` 원장)을 계약으로 승격시킨
+  것이었다. `reviewing-spec` 에는 그런 원장이 없다 — `merge_review` 플래그와 파싱-시점
+  `advisory:` 줄이 있을 뿐이고 게이트 템플릿에는 degrade 슬롯조차 없었다. 그래서 Phase 5 는
+  `codex_degraded: true` 인 라운드에도 `degrade 없음` 을 내거나(사용자에게 리뷰 커버리지에
+  대한 거짓 진술) 방금 따르라고 지시받은 계약을 무시하거나 둘 중 하나였다.
+  정본은 이제 **채널-중립**으로 의무만 정하고(감추지 않는다), 각 skill 이 자기 채널을 이름으로
+  대게 한다. 채널이 없다는 사실 자체가 degrade 이며, 채널을 대지 않은 채 "없음"을 내는 것은
+  금지다. `reviewing-spec` 은 실제 채널(`codex_degraded`·`claude_degraded`·
+  `claude_verdict_unrecoverable` + `advisory:`)을 명시하고 게이트 `question` 에 degrade
+  슬롯을 얻었다. `conducting-interview` 는 `brief_review_degradations` 원장을 이름으로 댄다.
+- **presence 코퍼스 구조적 가드 (F1).** `test_conducting_interview_stage.sh` ·
+  `test_brief_review_entry.sh` 에 "`CI_FILES` 에 이 skill 소유가 아닌 파일이 들어오면 즉시
+  FAIL" 을 넣었다. 〔실측〕 가드 없이 `CI_FILES` 를 `plugins/spec-distill/references/*.md` 까지
+  넓힌 상태에서 `finishing.md` 의 옵션 ① 정지 어휘와 `polite stop` 을 통째로 지워도 두 락이
+  **GREEN** 이었다. 그 편집은 그럴듯하다 — [0.31.0] 이 네 개의 *부재* 코퍼스에 정확히 같은
+  편집을 했기 때문이다. 주석이 아니라 가드여야 하는 이유가 그것이다.
+- **스캔 루트 실재 단언 (F4).** `test_brief_review_meta.sh` · `test_reviewing_spec_design_only.sh`
+  는 `grep -r` 루트에 문자열을 덧붙이기만 했다. 오타·개명이면 *No such file* 이 `2>/dev/null`
+  에 삼켜지고 부재 단언은 좁아진 코퍼스 위에서 통과한다. 〔차분 실측〕 공유 계약 디렉터리를
+  치운 상태에서 **[0.31.0] 판본 GREEN / 이번 판본 RED**.
+
+**Changed**
+- **정본의 「검증」 절이 참인 이유를 다시 적었다 (F1).** [0.31.0] 은 *"이 파일은 앵커의 사본을
+  두지 않는다"* 고 적었으나 **거짓**이었다 — `grep -cE '턴 종료|다음 턴'` = 4 (Step B 표 ① 행 +
+  가드 2 본문). 그 리터럴은 계약의 어휘라 뺄 수 없고, 빼려고 계약을 약하게 쓰는 것이 더 나쁘다.
+  진짜 보호는 자제가 아니라 **코퍼스 경계**(두 측정 스캔이 skill 소유 표면으로 한정)이며,
+  틀린 이유를 적어두면 진짜 위험 경로를 가린다. 이제 그 경계와 위 구조적 가드를 명시한다.
+- **`reviewing-spec` 의 "Step C" 지시대상 모호성 제거 (F3).** 이 SKILL 에는 `### Step C —
+  응답 처리` 가 이미 있는데 [0.31.0] 이 정본의 `## Step C — 두 가드` 를 인접한 두 불릿에서
+  같은 짧은 이름으로 인용했다. 기계적 앵커를 찾는 사람이 정본으로 가서 거기서 리터럴을 보고
+  "공유 앵커"라 결론지어 이 SKILL 의 문구를 지우는 경로가 열린다. 두 인용을 완전한 이름으로
+  적고, 앵커가 사는 곳이 어디인지 명시했다.
+- `finishing.md` B-2 의 *"reviewing-spec Phase 5 Step A와 대칭으로"* 를 정본 `## Step A`
+  인용으로 교체 (F8) — 60줄 위에서 은퇴시킨 skill-대-skill 대칭 모델을 그 문장이 되살리고 있었다.
+
+**Fixed**
+- **[0.31.0] 엔트리의 수 정정 (F7).** "부재 락 **4건**"이라 적고 **다섯**을 나열했다. 옳은 수는
+  **6** 이다(여섯째 `quality-gates/tests/test_law2_prose.sh` 는 그 플러그인 CHANGELOG 에 있다).
+- **[0.31.0] 엔트리의 성격 규정 정정 (F7).** "전부 `skills/*/references/` 까지만 도출하고 있었다"
+  는 **둘에 대해 거짓**이다: `test_brief_review_meta.sh` 는 `grep -rnE … "$SD/scripts" "$SD/skills"`
+  였고 `test_reviewing_spec_design_only.sh` 는 `references/` 글롭이 아예 없는 전-트리 재귀
+  루트였다. 공통점은 글롭의 모양이 아니라 **`skills/` 밖을 못 봤다**는 것이다.
+- **포인터 락: 역방향이 접미사로 소유를 판정하던 것 (F5).** 정방향만 as-written 으로 조이고
+  역방향은 `sed 's|.*/\(references/\)|\1|'` 로 접미사를 잘라 비교했다. 그래서
+  `${CLAUDE_PLUGIN_ROOT}/references/notes.md` 포인터가 `skills/<s>/references/notes.md` 의
+  소유 증거로도 인정됐다 — 동명 파일이 양쪽에 있으면 skill 레벨 파일이 **아무도 안 가리키는데도**
+  고아로 안 잡힌다. 이제 정방향이 만든 `(SKILL.md, 해석된 대상)` **쌍**을 그대로 되쓴다.
+  〔차분 실측〕 그 상황을 구성해 **[0.31.0] 판본 GREEN / 이번 판본 RED**.
+- **포인터 락: 인식 못 하는 접두사가 거부가 아니라 절단됐다 (F6).** 접두사를 열거해 골라 받는
+  정규식은 열거 밖 형태에서 실패한 뒤 문자열 **중간**의 맨몸 `references/…` 에서 매치를 시작해,
+  그 표기를 조용히 "스킬 디렉터리 상대"로 재해석했다 — 헤더와 설계 노트가 "폴백 없음"이라
+  주장하는 자리에 **절단형 폴백**이 있었다. 토큰을 통째로 삼키는 클래스로 잡은 뒤 형태를
+  판정하고, 세 형태 중 어느 것도 아니면 loud FAIL 한다. 〔차분 실측〕 중괄호 없는
+  `$CLAUDE_PLUGIN_ROOT/references/x.md` + 동명 skill 레벨 파일 → **[0.31.0] 판본 GREEN
+  (조용한 재해석) / 이번 판본 RED**. 인식하는 세 형태와 `**볼드**` 표기는 거짓 거부 없음(11/11).
+
+**Docs**
+- `docs/audits/2026-08-21-skill-split-lock-corpus-shrink.md` 에 §8 신설(공유 참조 파일 —
+  처방을 거꾸로 적용하지 않기), §7-3 해소 기록, §7-4 신규 이월 항목
+  (`quality-gates/tests/test_no_secret_prompts.py` 의 한 칸 위 맹점), §6 재도출 실측(21+1) 추가.
+
 ## [0.31.0] — 2026-08-21
 
 Task 33 — `/compact` proceed 게이트 **두 벌의 공통 골격을 한 파일로**. 사용자 요청

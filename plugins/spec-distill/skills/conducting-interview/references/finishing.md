@@ -149,7 +149,7 @@ STATE="$ROOT/<session-id>/state.local.md"
 #### B-2 — 단일 `AskUserQuestion` proceed 게이트 (4옵션, AC2)
 
 게이트 *이전*에 brief 경로 존재를 확인합니다(`[[ -f <brief-path> ]]` — race 방어 경량 가드,
-`AskUserQuestion` 게이트 자체는 아님). 부재 시 reviewing-spec Phase 5 Step A와 대칭으로
+`AskUserQuestion` 게이트 자체는 아님). 부재 시 정본(`proceed-gate.md`)의 `## Step A` 대로
 `/compact`를 노출하지 *않고* loud advisory 후 STOP(brief 는 막 검증됐고 하류·SessionEnd 가 cleanup 을 맡는다 — 설계 §5.3):
 
 > `[spec-distill] brief '<brief-path>' 부재 — 재작성/세션 리셋 필요`
@@ -164,6 +164,11 @@ brief 유효 시 **한 번의** `AskUserQuestion`으로 다음 단계를 제안�
 2. **readback 요약 전문** + gap 목록(*어느 클래스 / 요약의 어느 문장 / payload의 어느 절*).
 3. **미반영 findings** — 있으면 각각 이유와 함께. 저자가 임의로 기각한 것이 아니라 사용자 판정
    대상입니다.
+
+**이 skill 의 degrade 채널** (정본 Step B 가 각 skill 에 이름을 대라고 요구하는 그것):
+state 의 `brief_review_degradations` 원장 + `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1`
+로 파이프라인이 통째로 skip된 경우의 skip record(A.5). `degrade 없음`은 **그 원장을 실제로
+읽었다는 주장**이므로, 원장을 조회하지 않은 채 쓰지 않습니다.
 
 그리고 `question` 텍스트에 **모든 degrade record를 한 줄씩** 싣습니다 — 옵션 description이
 아니라 question 본문이어야 사용자가 옵션을 고르기 *전에* 봅니다. record가 없으면

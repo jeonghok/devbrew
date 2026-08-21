@@ -176,7 +176,19 @@ grep -qF 'unicodedata.normalize("NFC"' "$SD/scripts/check_verbatim_coverage.py" 
 # 한계). 분류 정확성은 V8(사람) 몫 — 기계는 열거만 본다.
 # Task 33: `$SD/references` (플러그인 레벨 공유 계약) 도 스캔 루트다 — skills/ 밖이라
 # 앞 판본의 두 루트로는 안 닿았다. 부재 스캔의 코퍼스는 줄어도 RED 가 되지 않는다.
-E10_HITS="$(grep -rnE '리뷰 라운드 기록이 (있는가|존재)' "$SD/scripts" "$SD/skills" "$SD/references" 2>/dev/null \
+#
+# 〔fix round 1 / F4〕 루트를 문자열로 덧붙이기만 하면 이 수리는 **조용히 되돌아간다**:
+# 오타나 디렉터리 개명이 생겨도 `grep -r` 은 *No such file* 을 stderr 로 내는데 그 stderr 가
+# `2>/dev/null` 로 삼켜지고, 부재 단언은 좁아진 코퍼스 위에서 태연히 통과한다. 배열 원소가
+# **전부 실재**하는지 먼저 확인해 그 경로를 막는다. 배열의 다른 원소(`scripts`·`skills`)에도
+# 같은 보호가 붙는다 — 이 검사는 특정 디렉터리가 아니라 **열거의 정직성**을 잰다.
+E10_ROOTS=("$SD/scripts" "$SD/skills" "$SD/references")
+for _r in "${E10_ROOTS[@]}"; do
+  [[ -d "$_r" ]] \
+    && ok "AC22c: 스캔 루트 실재 — ${_r#"$REPO_ROOT/"}" \
+    || no "AC22c: 스캔 루트 '${_r#"$REPO_ROOT/"}' 부재 — grep -r 이 그 코퍼스를 조용히 건너뛴다(stderr 는 삼켜진다)"
+done
+E10_HITS="$(grep -rnE '리뷰 라운드 기록이 (있는가|존재)' "${E10_ROOTS[@]}" 2>/dev/null \
   | grep -vE '넣지 않|도입하지 않')"
 [[ -z "$E10_HITS" ]] \
   && ok "AC22c: 이빨 없는 기록 검사 부재(서술 언급 제외)" \

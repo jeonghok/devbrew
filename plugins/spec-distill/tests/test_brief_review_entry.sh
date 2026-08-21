@@ -119,6 +119,22 @@ test -f "$CI" || { no "SKILL 부재"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 
   && ok "코퍼스: conducting-interview 표면 ${#CI_FILES[@]}개 파일 도출 (vacuous 아님)" \
   || no "코퍼스: references/*.md 를 0건 도출했다 — 검사 범위가 조용히 좁아졌다"
 
+# ── F1 구조적 가드: presence 코퍼스는 **이 skill 소유 표면**만 담는다 ───────────
+# 이 배열은 존재(presence) 검사가 보는 것이다. 여기에 두 skill 이 **공유**하는
+# 계약 파일(`plugins/<p>/references/*.md`, 예: proceed-gate.md)이 들어오면, 그 파일이
+# 옵션 ① 정지 어휘(`턴 종료`·`다음 턴`)와 `polite stop` 을 계약 자체로서 담고 있으므로
+# **이 skill 이 자기 문구를 통째로 잃어도 스캔이 만족된다.**
+#
+# 그 편집은 그럴듯하다 — 부재 락의 처방("코퍼스를 넓혀 도출로")이 바로 그것이기 때문이다.
+# 그 처방은 *부재* 검사의 것이고, presence 에 적용하면 이빨이 사라진다. 넓히려면
+# 부재 전용 배열 쪽으로 넓혀야 한다. 그래서 여기서 구조적으로 막는다.
+for _f in "${CI_FILES[@]}"; do
+  case "$_f" in
+    */skills/*/SKILL.md|*/skills/*/references/*.md) ;;
+    *) no "코퍼스: CI_FILES 에 이 skill 소유가 아닌 파일이 들어왔다 ($_f) — presence 검사가 공유 계약 파일로 만족될 수 있다. 부재 검사용 코퍼스로 옮겨라(proceed-gate.md 「앵커는 각 skill 에」 절)." ;;
+  esac
+done
+
 # --- 윈도우 전제조건 : 코드 펜스 균형 (Task 7 관용구 재사용) -----------------
 # scoped_window()/fence()의 상태 토글은 문서의 ``` 마커가 짝을 이룬다는 전제 위에서만 성립한다.
 # 마커가 홀수면 토글이 뒤집힌 채로 남아 윈도우가 EOF까지 흘러넘치거나 fence()가 엉뚱한
