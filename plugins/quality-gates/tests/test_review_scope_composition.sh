@@ -4,8 +4,23 @@
 # body-unique 문구를 요구(헤더-satisfiable 함정 회피). 선택 정확성은 게이트하지 않는다(lightness).
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-SKILL="$ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
+SKILL_REAL="$ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
 PASS=0; FAIL=0
+
+# Task 31 fix round 1 (F1): 아래 absent() 검사(0-100/0–100//100/code-simplifier/
+# security-auditor/secret-masking) 는 quality-pipeline 스킬 전체에 대한 비목표
+# 불변식이지 Review gate 섹션에만 국한되지 않는다 — Runtime gate 절차가
+# references/runtime-gate.md 로 옮겨진 뒤에도 "스킬 어디에도 없다"는 계약을
+# 그대로 재려면 분할 전과 동일한 논리적 문서 위에서 돌아야 한다. AC6/AC14의
+# awk 윈도우 검사(Tier A→Tier B, Reviewer composition 섹션)는 전부 Runtime gate
+# (line 748)보다 앞선 섹션만 앵커하므로 재구성에 영향받지 않는다. 재구성 실패는
+# 조용히 원본으로 폴백하지 않고 FAIL 한다.
+. "$ROOT/plugins/quality-gates/tests/lib/reconstruct-skill.sh"
+if ! SKILL="$(reconstruct_skill_md "$SKILL_REAL")"; then
+  echo "FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패 ($SKILL_REAL)"
+  exit 1
+fi
+trap 'rm -f "$SKILL"' EXIT
 has()  { if grep -qF "$2" "$SKILL"; then PASS=$((PASS+1)); echo "  ✓ $1"; else FAIL=$((FAIL+1)); echo "  ✗ FAIL(present): $1 — '$2'"; fi; }
 hasE() { if grep -qE "$2" "$SKILL"; then PASS=$((PASS+1)); echo "  ✓ $1"; else FAIL=$((FAIL+1)); echo "  ✗ FAIL(present): $1"; fi; }
 absent(){ if grep -qF "$2" "$SKILL"; then FAIL=$((FAIL+1)); echo "  ✗ FAIL(absent): $1 — '$2' 잔존"; else PASS=$((PASS+1)); echo "  ✓ $1"; fi; }

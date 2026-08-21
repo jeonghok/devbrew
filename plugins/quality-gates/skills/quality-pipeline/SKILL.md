@@ -755,10 +755,12 @@ this user-consent termination.)
 Runtime 으로 진행하기로 판정된 경우.
 
 ```
-Read plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md
+Read references/runtime-gate.md
 ```
 
-설치본에서는 `${CLAUDE_PLUGIN_ROOT}/skills/quality-pipeline/references/runtime-gate.md` 다.
+경로는 이 SKILL.md 파일 기준 상대경로다 — 레포·설치본 두 레이아웃 모두 이
+SKILL.md와 같은 위치에 `references/runtime-gate.md`가 있으므로 그대로 resolve
+된다([state-file-format](references/state-file-format.md#history)와 같은 관례).
 
 ## Blocked-path routing
 

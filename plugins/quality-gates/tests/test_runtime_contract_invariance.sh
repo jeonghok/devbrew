@@ -5,9 +5,22 @@ set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 WT="$PLUGIN_ROOT/scripts/qg-worktree.sh"
-SKILL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
+SKILL_REAL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+
+# Task 31 fix round 1 (F1): case_no_new_surfaces() 의 verdict 토큰 4종(양의 짝)과
+# PARTIAL/INCONCLUSIVE/DEGRADED_VERDICT 부재(음의 락)는 verdict 가 실제로 만들어지는
+# Runtime gate 절차를 잰다 — 그 절차가 references/runtime-gate.md 로 옮겨진 뒤에도
+# 동일 계약이므로, 분할 전과 동일한 논리적 문서로 재구성해 그 위에서 돈다.
+# 재구성 실패는 조용히 원본으로 폴백하지 않고 FAIL 한다.
+. "$SCRIPT_DIR/lib/reconstruct-skill.sh"
+if ! SKILL="$(reconstruct_skill_md "$SKILL_REAL")"; then
+  echo "FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패 ($SKILL_REAL)"
+  exit 1
+fi
+trap 'rm -f "$SKILL"' EXIT
+
 REPO=""
 
 # T5 + AC7: create-baseline이 merge_base에 detached worktree를 만들고 경로를 emit

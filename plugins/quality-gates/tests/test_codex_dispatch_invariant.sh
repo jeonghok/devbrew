@@ -8,7 +8,20 @@ set -u
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-SKILL="$REPO_ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
+SKILL_REAL="$REPO_ROOT/plugins/quality-gates/skills/quality-pipeline/SKILL.md"
+
+# Task 31 fix round 1 (F1): case 5(c5_bad) 는 pre-2.13.0 codex_manifest 폴백 산문이
+# "스킬 어디에도" 없다는 전량 불변식이다. Runtime gate 절차가
+# references/runtime-gate.md 로 옮겨진 뒤에도 그 산문이 거기서 되살아나면 안 되므로,
+# 분할 전과 동일한 논리적 문서로 재구성해 그 위에서 돈다. case 1-4의 윈도우 검사는
+# 전부 Runtime gate(line 748)보다 앞선 Tier B 섹션만 앵커하므로 영향받지 않는다.
+# 재구성 실패는 조용히 원본으로 폴백하지 않고 FAIL 한다.
+. "$REPO_ROOT/plugins/quality-gates/tests/lib/reconstruct-skill.sh"
+if ! SKILL="$(reconstruct_skill_md "$SKILL_REAL")"; then
+  echo "FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패 ($SKILL_REAL)"
+  exit 1
+fi
+trap 'rm -f "$SKILL"' EXIT
 
 # 1. Tier B codex availability-floor prose present (body-unique anchor).
 if grep -qF 'Tier B — codex (availability-floor' "$SKILL"; then

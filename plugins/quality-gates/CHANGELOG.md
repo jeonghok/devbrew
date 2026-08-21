@@ -3,15 +3,62 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.1.1] — 2026-08-21
+
+Task 31 fix round 1: 리뷰가 F1(load-bearing)·F2·F3·F6을 지적했다. F4는 F1 수정의
+부산물로 해소됨(아래), F5는 스킵.
+
+**Fixed**
+- **F1 — 절대부재 락 4개가 코퍼스 축소로 조용히 무력화됐던 것을 복구.**
+  `## Runtime gate`가 `references/runtime-gate.md`로 옮겨진 뒤, SKILL.md만 보던
+  전량-부재 검사 4개(`tests/test_runner_adapters.sh`의
+  `case_no_reimpl_in_skill`, `tests/test_runtime_contract_invariance.sh`의
+  `case_no_new_surfaces`, `tests/test_review_scope_composition.sh`의 6개
+  `absent()`, `tests/test_codex_dispatch_invariant.sh`의 `case 5`)가 이동된
+  1,190줄을 더 이상 보지 못했다 — 통과는 계속했지만(무언가 있었다면 못 잡았을
+  것) 실제로 막던 문자열은 0개였다(측정치, 오늘 회귀는 아님). 네 파일 모두
+  `reconstruct-skill.sh`로 분할 전과 동일한 논리적 문서를 재구성해 그 위에서
+  돌도록 고쳤다 — 각 파일의 윈도우형 검사(AC6/AC14/Tier B 앵커)는 전부 Runtime
+  gate보다 앞선 섹션만 앵커해 재구성에 영향받지 않음을 확인했다. **13개(보고서
+  집계) + `test_codex_dispatch_invariant.sh`의 stale 문자열 2개 = 실측 15개**
+  금지 문자열 전부를 `references/runtime-gate.md`에 개별 주입 → RED 확인 →
+  제거 → GREEN 확인, 총 15회 mutation으로 이빨을 실측했다(샘플링 없음).
+- **F4 — `test_runtime_contract_invariance.sh`의 verdict 토큰 4종 양의 짝**
+  (`PASS`가 SKILL.md에 1줄만 남아 47줄에서 축소됐던 것)은 F1의
+  `case_no_new_surfaces` 수정으로 함께 해소됨을 확인.
+- **F2 — Runtime gate 포인터의 `Read` 지시문이 레포 레이아웃(cwd=repo root)
+  에서만 resolve됐다.** 펜스 블록을 SKILL.md 기준 상대경로
+  (`Read references/runtime-gate.md`)로 바꿔 레포·설치본 두 레이아웃 모두에서
+  resolve되게 했다 — SKILL.md:552의 `[state-file-format](references/
+  state-file-format.md#history)` 관례를 따름.
+- **F3 — CHANGELOG [4.1.0]이 브리핑 시점의 stale 수치(6,482줄 / 18.4%)를
+  실었다.** 실측치(브리프 저자가 이미 알고 있던 값)로 교체: on-demand 로드
+  표면 6,579줄 → 5,404줄(Δ −1,175), 섹션 비중 1,190/2,079 = 57.2%.
+
+**Added**
+- `shared/tests/test_skill_reference_pointers.sh` — **역방향(F6) 확장.**
+  기존 정방향(포인터→파일 존재) 외에, git-tracked `plugins/*/skills/*/
+  references/*.md` 전부가 자기 소유 SKILL.md로부터 가리켜지는지(고아 없음)를
+  검사한다. `# guards:` 선언에 `plugins/*/skills/*/references/*.md`를 추가하고
+  `--emit-scanned`도 두 코퍼스를 함께 낸다(`test_guards_coverage_bidirectional.sh`
+  로 재확인, 두 글롭 모두 실 코퍼스를 덮음). 코퍼스 0건은 정방향과 동일하게
+  loud FAIL(vacuous 방지). 파일 추가/제거 양방향 mutation으로 이빨을
+  확인했다(RED→복원→GREEN). **알려진 예외 1건**:
+  `references/dependency-check.md`는 이 fix round 이전부터 어떤 SKILL.md도
+  가리키지 않는 기존 고아였다(Preflight 절차가 다시 쓰이며 포인터가 빠진 것으로
+  보임) — 조용히 삭제·재배선하지 않고 `KNOWN_ORPHANS_PENDING_RULING`으로 명시
+  면제한 뒤 fix round 보고서에서 판정을 요청한다. 신규 고아는 이 예외에 가려지지
+  않는다(정확히 이 경로 하나만 문자열 일치).
+
 ## [4.1.0] — 2026-08-21
 
 Task 31(무게 감축): `quality-pipeline` SKILL.md의 `## Runtime gate` 절차 전문(1,190줄,
-파일의 58%)을 `skills/quality-pipeline/references/runtime-gate.md`로 분리했다.
-SKILL.md에는 같은 `## Runtime gate` 헤딩 아래 포인터 산문만 남아 `## Contents`의
-`#runtime-gate` 앵커는 그대로 산다 — Runtime 게이트를 실제로 돌 때만 그 파일을
-Read 하고, `/qg review`처럼 Runtime을 안 도는 실행은 읽지 않는다(조건부 로드).
-on-demand 로드 표면(SKILL 8 + agent 18 + command 7) 6,482줄 중 이 한 섹션이
-1,190줄(18.4%)을 차지했었다.
+분할 전 파일(2,079줄)의 57.2%)을 `skills/quality-pipeline/references/runtime-gate.md`로
+분리했다. SKILL.md에는 같은 `## Runtime gate` 헤딩 아래 포인터 산문만 남아
+`## Contents`의 `#runtime-gate` 앵커는 그대로 산다 — Runtime 게이트를 실제로 돌 때만
+그 파일을 Read 하고, `/qg review`처럼 Runtime을 안 도는 실행은 읽지 않는다(조건부
+로드). on-demand 로드 표면(SKILL 8 + agent 18 + command 7)은 이 분리로 6,579줄 →
+5,404줄(Δ −1,175)로 줄었다.
 
 **Added**
 - `skills/quality-pipeline/references/runtime-gate.md` — Runtime 게이트 Step
