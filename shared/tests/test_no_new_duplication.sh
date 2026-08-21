@@ -82,26 +82,32 @@ with open(sys.argv[3], encoding="utf-8") as fh:
     files = [l.strip() for l in fh if l.strip()]
 
 def symlink_target_of(p):
-    """p 가 심볼릭 링크면 그 대상을 리포 루트 기준 상대 경로로. 아니면 None.
-    심볼릭 링크는 open()/read_text() 가 대상 내용을 투명하게 반환하므로, 마커 기반
-    canonical_of() 만으로는 링크·정본 쌍을 놓친다 — 링크 자체가 곧 "copy-of" 이므로
-    같은 자격으로 취급한다."""
-    pp = pathlib.Path(p)
-    if not pp.is_symlink():
-        return None
+    """**이미 심볼릭 링크로 확인된** p 의 대상을 리포 루트 기준 상대 경로로.
+    해석 실패면 None — 대상 부재는 OSError, 대상이 **리포 밖**이면 relative_to()
+    가 ValueError 다.
+
+    "링크가 아님" 은 이 함수의 반환값에 **없다.** 호출부가 is_symlink() 로 먼저
+    갈라서 부른다 — 두 상태를 같은 None 에 섞으면 "링크인데 해석 실패" 가 마커
+    폴백으로 흘러간다(2026-08-21 리뷰 L1, 실측 재현)."""
     try:
-        target = (pp.parent / os.readlink(p)).resolve()
+        target = (pathlib.Path(p).parent / os.readlink(p)).resolve()
         return str(target.relative_to(ROOT))
     except (OSError, ValueError):
-        return None   # 대상이 없거나 리포 밖. 마커 폴백으로 넘어가지 않는다(심볼릭 링크는 마커를 가질 수 없다). None 이면 면제 대상이 아니다 — 그 상태 자체는 무결성 락이 RED 로 잡는다.
+        return None
 
 def canonical_of(p):
-    """이 파일이 가리키는 정본. 없으면 None. 심볼릭 링크가 마커보다 우선한다
-    — 링크는 애초에 마커를 가질 수 없고, 링크를 read_text() 로 열면 대상의
-    본문이 나오므로 거기서 우연히 마커처럼 보이는 줄을 잘못 집을 수 있다."""
-    link_target = symlink_target_of(p)
-    if link_target is not None:
-        return link_target
+    """이 파일이 가리키는 정본. 없으면 None.
+
+    심볼릭 링크는 **분기 자체가 다르다 — 마커 폴백으로 내려가지 않는다.** 링크는
+    애초에 마커를 가질 수 없는데 open() 은 링크를 투명하게 따라가 **대상**의 앞
+    20줄을 읽는다. 대상이 리포 밖이면 거기서 우연히 마커처럼 보이는 줄이
+    canonical 로 잡히고, 같은 문자열을 얻은 두 링크가 면제 술어 ②로 서로를
+    지운다 — 그 마커의 진위는 아무도 재지 않는다(리포 밖 파일은
+    test_copy_of_contract.sh 코퍼스에도 없다). 그래서 링크는 **해석에 성공했을
+    때만** 면제 자격을 얻고, 실패하면 None 이라 면제 대상이 아니다(fail-closed).
+    그 상태 자체는 무결성 락이 RED 로 잡는다."""
+    if pathlib.Path(p).is_symlink():
+        return symlink_target_of(p)
     try:
         with open(p, encoding="utf-8") as fh:
             for i, line in enumerate(fh):
@@ -112,12 +118,13 @@ def canonical_of(p):
         pass
     return None
 
-canon, body = {}, {}
+canon, body, skipped = {}, {}, []
 for p in files:
     try:
         t = pathlib.Path(p).read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
-        continue          # 바이너리·비-UTF8 은 스캔 대상 밖. 조용히가 아니라 아래에서 센다.
+        skipped.append(p)  # 바이너리·비-UTF8·읽기 불가는 스캔 대상 밖. 조용히가 아니라 아래 SKIPPED 로 센다.
+        continue
     canon[p] = canonical_of(p)
     # 정규화: 공백만인 줄 제거. 그 외 바이트 그대로.
     body[p] = [l for l in t.split("\n") if l.strip()]
@@ -145,20 +152,26 @@ for h, ps in wins.items():
             if not exempt(ps[i], ps[j]):
                 violations[(ps[i], ps[j])].add(h)
 
+print(f"LISTED {len(files)}")
 print(f"SCANNED {len(body)}")
+print(f"SKIPPED {len(skipped)}")
 print(f"WINDOWS {sum(len(v) for v in wins.values())}")
+for p in sorted(skipped):
+    print(f"SKIPPEDFILE {p}")
 for (a, b), hs in sorted(violations.items()):
     print(f"VIOLATION {len(hs)} {a} {b}")
 PY
 )"
 
+listed="$(printf '%s\n' "$OUT" | awk '$1=="LISTED"{print $2}')"
 scanned="$(printf '%s\n' "$OUT" | awk '$1=="SCANNED"{print $2}')"
+skipped="$(printf '%s\n' "$OUT" | awk '$1=="SKIPPED"{print $2}')"
 windows="$(printf '%s\n' "$OUT" | awk '$1=="WINDOWS"{print $2}')"
 
 # 양성(vacuous 아님): 코퍼스를 실제로 읽었는가. 없으면 "위반 0"과 "아무것도 안 봄"이
 # 구별되지 않는다 — git ls-files 글롭이나 제외 규칙이 깨지면 조용히 0 파일을 스캔한다.
 if [ "${scanned:-0}" -ge 50 ]; then
-  ok "20줄 검사: ${scanned}파일 · 창 ${windows}개 스캔 (vacuous 아님)"
+  ok "20줄 검사: ${scanned}파일 스캔(목록 ${listed:-?} · 건너뜀 ${skipped:-?}) · 창 ${windows}개 (vacuous 아님)"
 else
   no "20줄 검사: ${scanned:-0}파일만 스캔 — 코퍼스 도출이 깨졌다. 아래 판정이 무의미하다"
 fi
