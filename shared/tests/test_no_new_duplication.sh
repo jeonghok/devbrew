@@ -63,7 +63,7 @@ fi
 #     죽는다(코퍼스 내용에 따라 `NameError` 또는 `SyntaxError`).
 # 위험 등급은 요란한 크래시가 아니라 **조용한 빈 결과**라, 이 패턴을 다른 데서 만난
 # 사람이 traceback 을 기다리면 알아보지 못한다. 여기서 유일한 탐지 수단은 아래 vacuous
-# 가드(`scanned >= 50`)뿐이었다.
+# 가드다(당시엔 `scanned >= 50` 하나였고, 지금은 ∀-지배관계 + 붕괴 바닥 둘이다).
 # 고침: 코퍼스를 파이프가 아니라 **임시 파일**로 넘겨 stdin 을 히어닥(파이썬 스크립트
 # 본문) 전용으로 남긴다 — bash·zsh 양쪽에서 동일하게 동작한다.
 CORPUS_FILE="$(mktemp -t nnd-corpus-XXXXXX)" || exit 1
@@ -152,10 +152,22 @@ for h, ps in wins.items():
             if not exempt(ps[i], ps[j]):
                 violations[(ps[i], ps[j])].add(h)
 
+def bucket_of(p):
+    """코퍼스 pathspec(`plugins/*` `shared/*`)이 도출하는 **기여 단위**.
+    plugins 는 플러그인마다 하나씩, shared 는 통째로 하나."""
+    parts = p.split("/")
+    if parts[0] == "plugins" and len(parts) > 1:
+        return "plugins/" + parts[1]
+    return parts[0]
+
+buckets = collections.Counter(bucket_of(p) for p in body)
+
 print(f"LISTED {len(files)}")
 print(f"SCANNED {len(body)}")
 print(f"SKIPPED {len(skipped)}")
 print(f"WINDOWS {sum(len(v) for v in wins.values())}")
+for name in sorted(buckets):
+    print(f"BUCKET {buckets[name]} {name}")
 for p in sorted(skipped):
     print(f"SKIPPEDFILE {p}")
 for (a, b), hs in sorted(violations.items()):
@@ -168,10 +180,60 @@ scanned="$(printf '%s\n' "$OUT" | awk '$1=="SCANNED"{print $2}')"
 skipped="$(printf '%s\n' "$OUT" | awk '$1=="SKIPPED"{print $2}')"
 windows="$(printf '%s\n' "$OUT" | awk '$1=="WINDOWS"{print $2}')"
 
-# 양성(vacuous 아님): 코퍼스를 실제로 읽었는가. 없으면 "위반 0"과 "아무것도 안 봄"이
-# 구별되지 않는다 — git ls-files 글롭이나 제외 규칙이 깨지면 조용히 0 파일을 스캔한다.
+# 양성(vacuous 아님) 그 첫째 — **∀-지배관계.** "위반 0"과 "아무것도 안 봄"을 가르는 데
+# 총량 하한 하나로는 모자란다: 하한은 코퍼스의 *붕괴*만 잡고 *축소*는 못 잡는다.
+# 2026-08-21 whole-branch 리뷰가 실측으로 보인 모양이 그것이다 — :46 의 pathspec 을
+# `'plugins/*'` → `'plugins/quality-gates/*'` 로 좁히면 221파일이 남아 어떤 리터럴 하한도
+# 여유롭게 넘는데, 나머지 네 플러그인 전체가 중복 스캔에서 조용히 빠진 채 락은 계속
+# "vacuous 아님" 을 찍는다. 이 리포가 이미 문서화한 실패 클래스 그대로다 —
+# docs/audits/2026-08-21-skill-split-lock-corpus-shrink.md §3 (코퍼스가 줄어도 락은 GREEN).
+# 굳혀 둔 것이 임계값(WINDOW/MIN_CHARS)뿐이었고, 조용한 축소는 임계가 아니라 **코퍼스
+# 도출**에서 일어난다.
+#
+# 그래서 기대치를 리터럴이 아니라 **파일시스템에서 도출**한다: `plugins/*/` 디렉토리
+# **각각**과 `shared` 가 스캔 코퍼스에 **1건 이상** 기여해야 한다(∀). 리터럴 열거를 쓰지
+# 않는 이유는 시간이다 — 내일 생길 플러그인을 오늘 열거할 수 없어 리터럴 목록은 **시간에
+# 대해 fail-open** 이다(형제 락 test_copy_of_contract.sh 가 기대 최소치를 자기 본문에서
+# 도출하는 것과 같은 정신). `shared` 는 조건 없이 기대 목록에 넣는다 — 이 파일이 그 안에
+# 살기 때문에 `shared` 가 코퍼스에서 사라지는 것 자체가 RED 여야 한다.
+#
+# 이 ∀ 가 세는 것은 listing 이 아니라 **실제로 읽힌 파일**(BUCKET 은 SCANNED 에서 나온다).
+# 그래서 "pathspec 이 좁아졌다" 와 "목록엔 있는데 전부 읽기 실패" 가 같은 자리에서 잡힌다.
+expected_buckets="$(
+  for d in "$ROOT"/plugins/*/; do
+    [ -d "$d" ] || continue
+    b="${d%/}"; printf 'plugins/%s\n' "${b##*/}"
+  done
+  printf 'shared\n'
+)"
+n_expected=0; n_present=0; missing=""
+while IFS= read -r b; do
+  [ -n "$b" ] || continue
+  n_expected=$((n_expected+1))
+  if printf '%s\n' "$OUT" \
+     | awk -v want="$b" '$1=="BUCKET"{r=$0; sub(/^BUCKET[ ]+[0-9]+[ ]+/,"",r); if (r==want) f=1} END{exit !f}'
+  then n_present=$((n_present+1))
+  else missing="$missing $b"
+  fi
+done <<EOF
+$expected_buckets
+EOF
+
+if [ -z "$missing" ]; then
+  ok "20줄 검사: ${scanned}파일 스캔(목록 ${listed:-?} · 건너뜀 ${skipped:-?}) · 창 ${windows}개 · 기여 단위 ${n_present}/${n_expected} (vacuous 아님)"
+else
+  no "20줄 검사: 스캔 코퍼스에 한 건도 기여하지 않은 단위가 있다 —${missing}. 코퍼스 도출이 좁혀졌다(기여 ${n_present}/${n_expected} · 스캔 ${scanned:-0}). 아래 판정이 무의미하다"
+fi
+
+# 양성 그 둘째 — 총량 붕괴 바닥. ∀ 와 **직교한다**: ∀ 는 "단위 하나가 통째로 사라졌다"를
+# 잡고, 이 하한은 "단위마다 파일 한둘만 남기고 좁혔다"를 잡는다(예: pathspec 을
+# `'plugins/*/.claude-plugin/*' 'shared/tests/*'` 로 바꾸면 ∀ 는 전부 만족하는데 총량이
+# 한 자리로 떨어진다). 반대로 `plugins/` 가 통째로 비어 ∀ 의 기대 목록이 `shared` 뿐이
+# 되는 퇴화도 이쪽이 잡는다. 그래서 둘을 함께 둔다.
+# 50 은 측정값이 아니라 **붕괴 바닥**이다 — 실측 445 에서 한참 아래에 둬 평범한 증감에
+# 반응하지 않게 한 값이고, 축소를 잡는 것은 이 숫자가 아니라 위의 ∀ 다.
 if [ "${scanned:-0}" -ge 50 ]; then
-  ok "20줄 검사: ${scanned}파일 스캔(목록 ${listed:-?} · 건너뜀 ${skipped:-?}) · 창 ${windows}개 (vacuous 아님)"
+  ok "20줄 검사: 스캔 총량 ${scanned} ≥ 50 (붕괴 바닥)"
 else
   no "20줄 검사: ${scanned:-0}파일만 스캔 — 코퍼스 도출이 깨졌다. 아래 판정이 무의미하다"
 fi
