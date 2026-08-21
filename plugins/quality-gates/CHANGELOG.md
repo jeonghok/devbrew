@@ -3,6 +3,23 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.1.7] — 2026-08-21
+
+Task 32 fix round 1 — 문서만. `tests/test_law2_prose.sh` 의 동작은 무변경.
+
+**Fixed**
+- [4.1.6] 엔트리가 이 락이 새로 덮는 Task 31 잔여를 `runtime-gate.md` 하나로만 적었다.
+  `quality-pipeline/references/state-file-format.md`(78줄)도 똑같이 밖에 있었고 똑같이
+  새로 덮인다 — 수리 후 AC16-1 에 늘어난 새 파일 줄은 1건이 아니라 **3건**이다.
+  새로 덮이는 총 코퍼스는 **1,499줄**이며 전량 clean(28/28).
+
+**Notes**
+- 이 락이 속한 실패 클래스(플러그인 경계를 넘는 repo-wide 부재 스캔)의 **두 번째**
+  인스턴스가 이 플러그인에 하나 더 있다 — `tests/test_governance_no_capability_caps.sh`.
+  그쪽은 코퍼스가 `find plugins -name '*.md'` 라 새 참조 파일을 자동으로 삼켜
+  수리가 필요 없었다(면역은 구성의 결과이지 분석의 결과가 아니다).
+  전체 지도는 `docs/audits/2026-08-21-skill-split-lock-corpus-shrink.md`.
+
 ## [4.1.6] — 2026-08-21
 
 Task 32(무게 감축) 파생: `spec-distill` 의 `## 종료` 절차가 `references/finishing.md`
@@ -13,8 +30,11 @@ Task 32(무게 감축) 파생: `spec-distill` 의 `## 종료` 절차가 `referen
 - `tests/test_law2_prose.sh` — AC16-1/-2/-3 은 전부 절대부재 검사인데 코퍼스가
   `find plugins/*/skills -name 'SKILL.md'` 였다. `skills/<skill>/references/*.md` 로
   분리된 절차 전문은 **모든** 플러그인에서 이 스캔 밖이었다 — Task 31 이 만든
-  `quality-pipeline/references/runtime-gate.md`(1,190줄)도 이미 밖에 있었으므로 그
-  잔여 구멍도 여기서 닫힌다. `references/*.md` 를 도출해 코퍼스에 넣고, 도출 0건이면
+  `quality-pipeline/references/runtime-gate.md`(1,189줄) **와**
+  `quality-pipeline/references/state-file-format.md`(78줄) **둘 다** 이미 밖에 있었으므로
+  그 잔여 구멍도 여기서 닫힌다(수리 후 AC16-1 에 새 파일 줄 3건이 늘어난 것으로 확인).
+  즉 이 수리로 새로 덮이는 코퍼스는 이번 분할분 232줄이 아니라 **1,499줄**이고, 그
+  전량이 clean 이다(28/28) — "잡은 것이 없다"는 주장의 범위가 그만큼 넓다. `references/*.md` 를 도출해 코퍼스에 넣고, 도출 0건이면
   loud FAIL 하는 vacuity 단언을 추가했다. 이빨 실측(차분): `allowedTools` · `실제 키` ·
   `tool 0개` 를 `spec-distill/.../references/finishing.md` 에 주입하면 **수정 전
   24/24 GREEN(fail-open 실증) → 수정본 4건 RED**, 제거 후 다시 GREEN.

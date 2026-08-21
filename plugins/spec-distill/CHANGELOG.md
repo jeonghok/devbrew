@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.30.1] — 2026-08-21
+
+Task 32 fix round 1 — 전부 **문서**다. 코드·락 동작은 무변경(리뷰가 Spec PASS /
+Quality PASS 로 엔지니어링을 독립 재도출로 확인).
+
+**Fixed**
+- **[0.30.0] 엔트리의 overclaim 정정 (F2).** 두 스위트의 섹션 윈도우가 똑같이 위치
+  무관해졌다고 적었으나 사실이 아니다. `test_brief_review_entry.sh` 만 그렇고
+  (`scoped_window()` 가 `"${CI_FILES[@]}"` 위에서 돈다),
+  `test_conducting_interview_stage.sh` 의 다섯 창은 `$FIN` 하드코딩이다. 결과는
+  조용한 구멍이 아니라 시끄러운 false-RED 지만, 산문이 코드보다 강한 주장을 하고
+  있었다. 해당 엔트리를 파일·처방별로 갈라 다시 적었다.
+- **[0.30.0] **Fixed** 헤딩의 undercount 정정 (F3).** "부재 락 3건"으로 읽히지만
+  실제는 **4파일 / 10단언**이다(네 번째가 `test_conducting_interview_stage.sh` 의 7건,
+  같은 파일의 windowed 수리와 묶여 **Changed** 에 있었다).
+- **독자 열거 수 정정 (F1).** 보고서가 12로 적은 것은 **15 + 비독자 1**이 옳다.
+  누락된 넷은 전부 부재 클래스이지만 코퍼스를 `grep -r`·`find` 로 **도출**하므로
+  새 참조 파일을 자동으로 삼킨다 — 오늘 동작상 결과는 없다:
+  `quality-gates/tests/test_governance_no_capability_caps.sh` ·
+  `tests/test_reviewing_spec_design_only.sh` · `tests/test_brief_review_meta.sh` ·
+  `quality-gates/tests/test_codex_runner_no_effort_pin.sh`.
+  반대로 `shared/tests/test_changelog_integrity.sh` 는 **독자가 아니다**(`SKILL.md` 를
+  한 번도 읽지 않는다 — `plugin.json` + `CHANGELOG.md` 만 본다). 버전영향이지
+  코퍼스영향이 아니다.
+  그중 `test_governance_no_capability_caps.sh` 는 구조적으로 중요하다 — [0.30.0] 이
+  "아무도 고려하지 않은 클래스"로 지목한 **플러그인 경계를 넘는 repo-wide 부재 스캔**의
+  **두 번째** 인스턴스다. 그 면역은 분석의 결과가 아니라 **구성의 운**이었다.
+
+**Added**
+- `docs/audits/2026-08-21-skill-split-lock-corpus-shrink.md` (+ `docs/audits/README.md`
+  인덱스 줄) — 이 실패 클래스의 **영구 기록**. 앞선 보고서는 `.superpowers/` 아래
+  git-ignored 라 커밋되지 않아 미래 세션이 **읽을 수 없다**; 아무도 열지 못하는 파일의
+  숫자를 고치는 것은 아무것도 고치지 않는다. 문서가 담는 것: 실패 클래스 · 독자 열거
+  6 도달 경로(`.py`·플러그인 경계 포함) · 면역 조건(도출 vs 열거) · 포인터가 presence
+  락을 header-satisfiable 하게 만드는 **거울 클래스** · 차분 실증의 계측기 위생 2함정 ·
+  이월 미해결 3건.
+  `docs/` 와 `docs/audits/` 는 **어느 플러그인에도 속하지 않는다** — 이 bump 를
+  촉발한 것은 그 문서가 아니라 위 **Fixed** 의 `plugins/spec-distill/CHANGELOG.md`
+  산문 수정이다. 감사 문서 자체는 무-플러그인 자산으로 이 엔트리에 귀속만 시킨다.
+
+**Notes**
+- [0.30.0] 의 "순수 예방적"이라는 자기평가는 **과소 주장**이었다. `test_law2_prose.sh`
+  수리가 새로 덮는 코퍼스는 이번 분할분 232줄이 아니라 Task 31 산출물
+  (`runtime-gate.md` 1,189 + `state-file-format.md` 78)을 더한 **1,499줄**이고, 그
+  전량이 clean 하다(28/28). 참인 주장은 더 강하다 — **새로 덮인 코퍼스 전체에서**
+  어떤 수리된 락도 잡을 것이 없었다.
+- 측정 정정 2건(둘 다 결론 불변): `GUARD_WINDOW` 가드 줄 목록에서 **330** 이 빠져
+  있었다(여전히 < 341, 짝짓기는 `g ≤ d` 만 보므로 무영향). 줄번호 검사 지점은 "정확히
+  두 곳"이 아니라 **셋**이다 — `test_brief_review_entry.sh:172` 의
+  `n5="$(wc -l <<<"$WA5")"; [[ "$n5" -le 30 ]]` 가 창 크기를 재는 줄-거리 검사다.
+  Step A.5 는 분할 전 395–424 로 이동 구간에 통째로 들어 있어 창이 온전히 따라갔고
+  현재 28 ≤ 30 으로 GREEN. Ruling 67 의 "재조립 불필요" 결론은 그대로다.
+
 ## [0.30.0] — 2026-08-21
 
 Task 32(무게 감축): `conducting-interview` SKILL.md의 `## 종료 — brief 작성 + optional
@@ -18,7 +71,9 @@ on-demand 로드 표면(SKILL·agent·command 전량)은 이 분리로 5,406줄 
   하나 제외).
 
 **Fixed**
-- **분할로 조용히 약해진 부재 락 3건.** 부재 락("이 문자열이 나타나면 안 된다")은
+- **분할로 조용히 약해진 부재 락 — 4파일 / 10단언.** (아래 3건 + **Changed** 의
+  `test_conducting_interview_stage.sh` 7단언. 그 7건은 같은 실패 클래스이지만 같은
+  파일의 windowed 수리와 한 덩어리라 Changed 에 적었다.) 부재 락("이 문자열이 나타나면 안 된다")은
   코퍼스가 줄어도 RED가 되지 않고 **조용히 약해진다** — Task 31이 이 방식으로 P21
   secret 스캔의 범위를 잃었다. 세 락 모두 분리 직후 GREEN이었고, 금지 문자열을
   `finishing.md`에 주입해 **수정본 RED / 수정 전 GREEN**의 차분으로 fail-open을
@@ -34,16 +89,24 @@ on-demand 로드 표면(SKILL·agent·command 전량)은 이 분리로 5,406줄 
     표면 전량에서 돌게 했다. 실측: 주입 후 수정 전 32/32 GREEN → 수정본 2건 RED.
   - `plugins/quality-gates/tests/test_law2_prose.sh` — `find plugins/*/skills -name
     'SKILL.md'` 코퍼스라 **모든** 플러그인의 `references/*.md`를 못 봤다. Task 31이
-    만든 `runtime-gate.md`도 이미 이 락 밖에 있었으므로 그 잔여 구멍도 함께 닫힌다.
+    만든 `runtime-gate.md`(1,189줄) **와** `state-file-format.md`(78줄) 둘 다 이미 이 락
+    밖에 있었으므로 그 잔여 구멍도 함께 닫힌다 — 수리 후 AC16-1 에 새 파일 줄이 3건
+    (두 quality-gates 참조 + `finishing.md`) 늘어난 것으로 확인된다.
     실측: 주입 후 수정 전 24/24 GREEN → 수정본 4건 RED.
 
 **Changed**
-- `tests/test_conducting_interview_stage.sh` · `tests/test_brief_review_entry.sh` —
-  섹션 윈도우(`#### B-0`…`#### B-3` · `### Step A.5` · `## 종료`)와 전-파일 검사가
-  스킬 표면(SKILL.md + `references/*.md`)을 하나로 보도록 코퍼스를 도출로 바꿨다.
-  줄 번호가 아니라 헤딩 앵커로만 스코프하므로 재조립 헬퍼는 필요하지 않다(아래).
-  `test_conducting_interview_stage.sh`의 부재 7건은 주입 차분으로 이빨을 확인했다
-  (수정 전 7/7 GREEN → 수정본 7/7 RED).
+- 두 스위트의 **전-파일 검사**(존재·부재 양쪽)는 스킬 표면(SKILL.md + `references/*.md`)을
+  하나로 보도록 코퍼스를 도출로 바꿨다. `test_conducting_interview_stage.sh`의 부재 7건은
+  주입 차분으로 이빨을 확인했다(수정 전 7/7 GREEN → 수정본 7/7 RED).
+- **섹션 윈도우의 처방은 두 파일이 다르다** — 앞선 판본의 이 항목은 둘 다 위치
+  무관해졌다고 적었으나 사실이 아니다:
+  - `tests/test_brief_review_entry.sh` — `scoped_window()`가 `"${CI_FILES[@]}"` 위에서
+    돌아 **위치 무관**이다. `### Step A.5`·`#### B-2`가 어느 파일에 있든 창이 잡힌다.
+  - `tests/test_conducting_interview_stage.sh` — 다섯 창(`#### B-0`…`#### B-3` · `## 종료`,
+    `:57 :72 :92 :113 :208`)은 **`$FIN` 하드코딩**이다. 나중에 `#### B-2`가 제3의 파일로
+    옮겨가면 `b2_block`이 비어 그 assert들이 RED가 된다. 다만 `[[ -f "$FIN" ]]`(`:24`)와
+    `[[ -n "$b2_block" ]]` 빈-창 가드가 있어 **조용한 구멍이 아니라 시끄러운 false-RED**이고,
+    수리는 창 소스 한 줄 교체다. 위치 무관화는 이 사이클 범위 밖으로 남긴다.
 
 **Notes**
 - **재조립 헬퍼(`reconstruct-skill.sh`)를 쓰지 않았다 — 측정 결과 필요 없었다.**
