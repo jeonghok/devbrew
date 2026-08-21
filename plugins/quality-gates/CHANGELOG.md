@@ -3,7 +3,35 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [4.1.1] — 2026-08-21
+## [4.1.2] — 2026-08-21
+
+Task 31 fix round 2: 라운드 1이 판정을 요청한 채 `KNOWN_ORPHANS_PENDING_RULING`으로
+면제해뒀던 고아 1건에 대한 판정과 그 실행.
+
+**Removed**
+- **`references/dependency-check.md` 삭제.** 이 파일은 죽은 산문이 아니라 **능력
+  억제**였다 — 1번 항목이 `pr-review-toolkit` 미설치 시 Review 게이트 전체를
+  SKIP으로 표시하라고 지시하는데, 현재 SKILL의 Tier A floor는
+  `quality-gates:security-reviewer` + `quality-gates:adversarial`(외부 의존성이
+  전혀 없는 플러그인 자체 agent)이라 이 절차를 되살리면 선택적 의존성 부재를
+  근거로 플러그인 자신의 보장된 능력을 지우게 된다. `753c9e2`(v2.0.0 SKILL
+  재작성)에서 포인터가 빠지며 **이 fix round 이전부터** 도달 불가능했다 — 어떤
+  SKILL.md도 가리키지 않았고 실행 경로 어디서도 Read되지 않았다. 이번 삭제로
+  없어지는 살아있는 기능은 없다: 이미 죽어 있던 절차의 사체를 치운 것뿐이다.
+  `docs/archive/audits/2026-08-02-harness-capability-suppression-census.md:76`
+  (`QGSKILL-02`)이 이미 활성 억제로 catalogue해뒀던 항목과 일치.
+- **`README.md`의 `references/` 트리에서 `dependency-check.md` 항목 제거.**
+  삭제된 정의를 계속 인용하는 죽은 참조를 남기지 않기 위함.
+
+**Changed**
+- **`shared/tests/test_skill_reference_pointers.sh` — `KNOWN_ORPHANS_PENDING_RULING`
+  면제 메커니즘 전체 제거.** 빈 예외 목록도 위험하긴 마찬가지다 — 다음 고아가
+  생겼을 때 이 목록에 한 줄 추가하는 것이 이 락이 막으려는 바로 그 결정이기
+  때문이다. 판정이 났으므로 예외가 아니라 메커니즘 자체를 지운다. 제거 후
+  synthetic orphan 추가/제거로 역방향 검사 이빨을 재확인했다(RED → 복원 →
+  GREEN) — 면제가 없는 상태에서도 신규 고아를 여전히 잡는다.
+
+
 
 Task 31 fix round 1: 리뷰가 F1(load-bearing)·F2·F3·F6을 지적했다. F4는 F1 수정의
 부산물로 해소됨(아래), F5는 스킵.

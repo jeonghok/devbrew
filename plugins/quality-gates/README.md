@@ -135,7 +135,6 @@ quality-gates/
 │   ├── quality-pipeline/
 │   │   ├── SKILL.md         # 단일 게이트 실행기
 │   │   └── references/
-│   │       ├── dependency-check.md   # 사전 의존성 체크
 │   │       └── state-file-format.md  # 파이프라인 state 파일 포맷
 │   └── publishing-pr-understanding/
 │       └── SKILL.md         # /qg-publish orchestrator — gh를 가진 유일 컴포넌트 (cost_class: variable)

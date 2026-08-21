@@ -113,25 +113,11 @@ if [ "$ref_corpus_n" -lt 1 ]; then
 fi
 ok "orphan: references/*.md 코퍼스 ${ref_corpus_n}개 도출 (vacuous 아님)"
 
-# 알려진 기존 고아 — 이 fix round(Task 31 fix round 1, F6) 이전부터 있었고,
-# 이 락이 생기기 전엔 아무 테스트도 안 봤다. 삭제할지(죽은 절차) 되살릴지
-# (Preflight 에 포인터 복원) 는 콘텐츠 판단이라 여기서 결정하지 않는다 —
-# 지시("발견하면 조용히 지우지 말고 보고 후 판정 대기")대로 정확히 이 경로
-# 하나만 면제하고, 신규 고아는 하나도 가리지 않는다. 판정이 나면 이 예외를
-# 지우는 것이 그 판정의 일부다.
-KNOWN_ORPHANS_PENDING_RULING=" plugins/quality-gates/skills/quality-pipeline/references/dependency-check.md "
-
 ref_checked=0
 orphans=0
 while IFS= read -r reffile; do
   [ -n "$reffile" ] || continue
   ref_checked=$((ref_checked + 1))
-  case "$KNOWN_ORPHANS_PENDING_RULING" in
-    *" $reffile "*)
-      ok "orphan: $reffile — 알려진 기존 고아(면제, 판정 대기 — Task 31 fix round 1 F6 보고 참조)"
-      continue
-      ;;
-  esac
   skill_dir="${reffile%/references/*}"
   owner_skill="$skill_dir/SKILL.md"
   want="references/$(basename -- "$reffile")"
@@ -146,7 +132,7 @@ done < <(printf '%s\n' "$REF_CORPUS")
 if [ "$ref_checked" -eq 0 ]; then
   no "orphan: 코퍼스 ${ref_corpus_n}개 references/*.md 전체에서 0개를 확인했다 — 루프가 실패했다"
 else
-  assert_eq "$orphans" "0" "orphan: references 파일 ${ref_checked}건 중 미참조(고아) ${orphans}건 (알려진 예외 제외)"
+  assert_eq "$orphans" "0" "orphan: references 파일 ${ref_checked}건 중 미참조(고아) ${orphans}건"
 fi
 
 finish
