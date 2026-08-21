@@ -13,7 +13,7 @@ Task 35 Step 0 — P21 프리앰블 로더 4벌을 `shared/codex/codex_prompt_co
   완전히 같은 블록이 `copy-of` 로 설명되지 않으면 RED). 위 통합 대상을 적발한 스캐너라
   같은 릴리스에 기록한다. `# guards: plugins/** shared/**` 로 다섯 플러그인 전체를
   지키며, `[0.32.4]` 의 귀속 관례에 따라 이 릴리스가 노트를 쓴 두 플러그인 엔트리에 함께
-  적는다. 계약·면제 술어·∀ vacuous 가드의 상세는 quality-gates CHANGELOG `[4.1.10]`
+  적는다. 계약·면제 술어·vacuous 가드(단위별 등식)의 상세는 quality-gates CHANGELOG `[4.1.10]`
   과 같다(같은 파일, 두 기록 자리).
 
 **Changed**
