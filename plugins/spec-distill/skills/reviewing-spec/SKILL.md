@@ -229,7 +229,7 @@ AskUserQuestion({
 (이 문서에도 `### Step C — 응답 처리` 가 따로 있다 — 이름이 겹치므로 아래 인용은 **어느 문서의 어느 헤딩**인지 전부 완전한 이름으로 적는다.)
 
 - **AP2 (verifiable, AC11)** — approve(①/②) 인데 narrate 만 하고 **Approve handoff sequence** 호출/다음 phase 진입을 skip 하면 polite stop 이다. Phase 5 를 *종료*하는 모든 경로는 위 게이트(①~④)를 거치거나, 게이트를 거치지 않는 예외 경로(Step A 의 `spec_path` 부재 · kill switch)면 명시적 advisory 단락을 동반해야 한다 — 게이트-less silent 종료 금지.
-- **AC19 실측 근거** — 2026-05-29 본 design 세션에서 "handoff"라 말하고 compact 전에 plan 을 그대로 써버린 실패가 이 가드의 출처다. 옵션 ① 의 정지 요건·다음 턴 진입 조건은 **이 문서 `### Step C — 응답 처리` 의 ①** 에 인라인으로 있다 — **기계적 검증 앵커가 사는 곳이 거기다.** 정본에도 같은 어휘가 있지만 그것은 계약 서술이지 이 skill 의 앵커가 아니며, 두 측정 스캔의 코퍼스는 skill 소유 표면으로 한정돼 있다(정본 「앵커는 각 skill 에」 절). 그러므로 이 ① 블록의 문구를 "정본에 있으니 중복"이라며 지우면 이 skill 의 앵커가 0 이 된다.
+- **AC19 실측 근거** — 2026-05-29 본 design 세션에서 "handoff"라 말하고 compact 전에 plan 을 그대로 써버린 실패가 이 가드의 출처다. 옵션 ① 의 정지 요건·다음 턴 진입 조건은 **이 문서 `### Step C — 응답 처리` 의 ①** 에 인라인으로 있다 — **기계적 검증 앵커가 사는 곳이 거기다.** 정본에도 같은 어휘가 있지만 그것은 계약 서술이지 이 skill 의 앵커가 아니며, 이 계약의 앵커를 재는 스캔은 **전부** 코퍼스를 skill 소유 표면으로 한정한다(정본 「앵커는 각 skill 에」 절). 그러므로 이 ① 블록의 문구를 "정본에 있으니 중복"이라며 지우면 이 skill 의 앵커가 0 이 된다.
 - **AC8 경계** (round-2 advisory 반영) — AC8 '추가 `AskUserQuestion` 없음'은 *approve 옵션이 최종 확정된 그 어시스턴트 응답 턴*에 한정한다 (Phase 5 내 revise/interview 루프의 다른 턴이 아님 — 그 턴들은 본래 질문을 띄운다). 다음 턴에 진입한 `writing-plans` 가 자체 실행-방식 선택 게이트를 띄우는 것은 별개 skill scope 이므로 AC8 해당 없음.
 
 ## Approve handoff sequence (①/② 공통)

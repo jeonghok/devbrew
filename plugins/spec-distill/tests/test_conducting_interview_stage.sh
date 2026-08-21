@@ -50,12 +50,21 @@ ci_cat_all() { cat "${CI_ALL[@]}"; }
 # 그 편집은 그럴듯하다 — 부재 락의 처방("코퍼스를 넓혀 도출로")이 바로 그것이기 때문이다.
 # 그 처방은 *부재* 검사의 것이고, presence 에 적용하면 이빨이 사라진다. 넓히려면
 # 부재 전용 배열 쪽으로 넓혀야 한다. 그래서 여기서 구조적으로 막는다.
+#
+# 통과 시에도 **반드시 한 줄을 낸다.** 실패 분기에서만 말하는 가드는 깨져도 출력이
+# 그대로라 "아무것도 안 하면서 GREEN" 을 구별할 수 없다 — 이 라운드 이전 판본이 정확히
+# 그랬고(단언 수·출력이 가드 유무와 동일), 감사문서 §8 이 기록한 계측기 고장 클래스다.
+_own=0; _foreign=0
 for _f in "${CI_FILES[@]}"; do
   case "$_f" in
-    */skills/*/SKILL.md|*/skills/*/references/*.md) ;;
-    *) no "코퍼스: CI_FILES 에 이 skill 소유가 아닌 파일이 들어왔다 ($_f) — presence 검사가 공유 계약 파일로 만족될 수 있다. 부재 검사용 코퍼스로 옮겨라(proceed-gate.md 「앵커는 각 skill 에」 절)." ;;
+    */skills/*/SKILL.md|*/skills/*/references/*.md) _own=$((_own + 1)) ;;
+    *) no "코퍼스: CI_FILES 에 이 skill 소유가 아닌 파일이 들어왔다 ($_f) — presence 검사가 공유 계약 파일로 만족될 수 있다. 부재 검사용 코퍼스로 옮겨라(proceed-gate.md 「앵커는 각 skill 에」 절)."
+       _foreign=$((_foreign + 1)) ;;
   esac
 done
+[ "$_foreign" -eq 0 ] \
+  && ok "코퍼스: presence 대상 ${_own}개가 전부 이 skill 소유 표면 (공유 계약 파일은 코퍼스 밖)" \
+  || no "코퍼스: presence 대상에 skill 소유 밖 파일 ${_foreign}건"
 # 플러그인 레벨 도출. 0 자체는 정당한 상태지만, 디렉터리가 **있는데** 0이면 글롭이 깨진
 # 것이다 — CI_ALL 이 CI_FILES 로 조용히 축소되고 아래 부재 검사가 그만큼 약해진다.
 if [[ -d "$PLUGIN_REF_DIR" ]]; then
@@ -344,6 +353,10 @@ grep -q 'interview_round >= 2\|interview_round>=2' "${CI_ALL[@]}" \
 # v0.23.0: 은퇴한 payload 좌표(§8/§9) 잔존 0 — 새 payload는 §0–§7 8섹션뿐이다.
 # §8/§9로 보내는 지시는 존재하지 않는 섹션을 만들어 게이트를 RED로 만든다(부분 sweep 방지 락).
 # `§8.2`처럼 뒤에 `.`나 숫자가 오는 것은 설계 문서 §-참조라 제외한다.
+# 〔주의〕 CI_ALL 에는 플러그인 레벨 공유 계약(proceed-gate.md)이 들어 있고, 그 파일은
+# **다른 문서의** 절 번호를 인용할 수 있다 — 이 검사는 그것을 payload 좌표와 구별하지
+# 못한다(실측: 감사문서 `§8` 인용 하나로 발화). 거짓 RED 지만 시끄러우므로 안전하다.
+# 공유 계약에서는 절을 번호가 아니라 **제목**으로 인용하는 것이 회피책이다.
 retired_secs="$(grep -nE '§[89]([^.0-9]|$)' "${CI_ALL[@]}" || true)"
 [[ -z "$retired_secs" ]] \
   && ok "V11: 은퇴 payload 좌표(§8/§9) 잔존 0" \
