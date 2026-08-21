@@ -3,6 +3,64 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.1.5] — 2026-08-21
+
+Task 31 fix round 5(마지막): F1(코퍼스 축소로 무력화된 절대부재 락) 계열의 남은
+인스턴스 정리 + 라운드 1 이 실은 로드 표면 수치 정정. 라운드 1 보고서는 영향
+집합을 "정확히 4개"라고 적었는데, 실제로는 **6개**였다(아래 재도출).
+
+**Fixed**
+- **F1 5번째 인스턴스 — `tests/test_scout_codex_integration.sh`.** `SKILL.md` 를
+  raw 로 읽어 절대부재 2건을 검사한다: `subagent_type="quality-gates:scout"`
+  (T3-1 마이그레이션 회귀 락, `:52`)와 `#### Phase 1 (unified dispatch)`
+  (스테일 헤딩 가드, `:67`). 분리 후 두 검사가 지키는 범위는 2,079줄 중 906줄로
+  줄어 있었다 — 하필 `Agent()` 디스패치 블록이 정밀하게 규정된 곳이 옮겨간
+  Runtime gate 절차라, 재도입된 scout 디스패치가 착지할 **가장 그럴듯한 자리**가
+  검사 밖이었다. `reconstruct-skill.sh` 로 분할 전 논리 문서를 재구성해 그 위에서
+  돌도록 고쳤다. 두 문자열을 `references/runtime-gate.md` 에 개별 주입해 이빨을
+  실측했다: **수정본 RED / 라운드 4 원본 GREEN**(fail-open 실증), 제거 후 해시
+  일치까지 확인.
+- **F1 6번째 인스턴스 — `tests/test_no_secret_prompts.py`(P21 secret 가드).**
+  같은 모양의 절대부재 스캔인데 아무도 세지 않았다. Runtime 게이트가 실제
+  서비스를 부팅하는 절차라 `.env`·DB_URL·API 키를 사용자에게 물어보라는 지시가
+  새로 들어갈 가장 그럴듯한 자리가 정확히 분리된 파일 쪽이다. 코퍼스를
+  `skills/*/references/*.md` **글롭으로 도출**해 넣었다(열거 아님 — 새 참조
+  파일이 생겨도 자동 대상). 글롭이 0건이면 조용히 좁아지므로 같은 테스트 안에
+  vacuity 단언을 넣었다. 이빨 실측: secret 유도 문장을 `runtime-gate.md` 에
+  주입 → **수정본 RED / 라운드 4 원본 GREEN**, 제거 후 GREEN.
+- **`[4.1.0]` 항목의 로드 표면 수치 정정 — 5,404 → 5,406, Δ −1,175 → −1,173.**
+  라운드 1 이 실은 값은 `SKILL.md` = 904줄(= `987e1ce` 시점)을 전제했는데, **같은
+  라운드의 F2 포인터 편집(`687847d`)이 906줄로 늘려 쓰는 순간 스테일**이 됐다 —
+  F3 결함(브리핑 시점 수치를 실은 것)의 2줄짜리 재발이다. 실측으로 재확인:
+  로드 표면(SKILL 8 + agent 18 + command 7) = 5,406줄, 분할 전 6,579줄.
+  `[4.1.1]` 의 F3 서술이 인용한 같은 수치도 함께 고쳤다(둘이 어긋나면 다음
+  독자가 어느 쪽을 믿을지 알 수 없다).
+
+**Noted (영향 집합 재도출 · 의도적으로 넓히지 않은 검사 2건)**
+- `plugins/quality-gates/tests/` 전체에서 `quality-pipeline/SKILL.md` 를 raw 로
+  읽는 파일을 전수 열거해 **절대부재 / 존재 / 경계창**으로 분류했다. 코퍼스가
+  줄면 존재·경계창 검사는 **더 엄격**해지므로(못 찾으면 시끄럽게 RED) 문제는
+  절대부재뿐이다. 전량 절대부재는 6개 파일이고, 그중 **2개는 넓히면 안 된다**:
+  - `test_skill_bash_allowlist_narrow.sh:8` (`Bash(*)` 부재) — 이 grep 은 파일
+    전체를 훑지만 **주장은 frontmatter 소유**다. 도구 권한은 `SKILL.md` 의 YAML
+    frontmatter 에서만 발효되고 참조 문서의 같은 텍스트는 아무것도 grant 하지
+    않는다(`runtime-gate.md` 의 `allowed-tools` 2회는 frontmatter 를 **가리키는
+    산문**이다). 재구성하면 권한과 무관한 코퍼스를 들여올 뿐이다. 제외 유지.
+  - `test_skill_codex_skip_prose.sh` AC20 (silent 사유 2종이 visible 배너로
+    안 나옴) — 주제 어휘(`skip_reason`·`kill_switch`·`inside_codex_sandbox`)가
+    Review 게이트의 codex skip 정책 표에 속하고 `runtime-gate.md` 에는 0회다.
+    반면 그 파일에는 `[quality-gates]` 배너가 12회, kill switch 언급이 8회 있어
+    **넓히면 정당한 Runtime 배너가 codex 정책 위반으로 잡히는 거짓 락**이 된다.
+    참 락을 거짓 락으로 바꾸지 않기 위해 넓히지 않았다.
+
+**Docs**
+- `.superpowers/sdd/.../task-31-report.md`(라운드 1–3 보고서)에 정정 고지 추가.
+  그 문서는 라운드 3 이 "self-introduced bug 를 잡아 고쳤다"고 적고 헤딩 목록
+  출력을 정합성의 근거로 인용했는데, 그 출력은 실은 결함의 증거였다. 또한
+  "three fix rounds 로 완료, open item 없음"으로 닫혀 있어 미래 세션이 닫힌
+  태스크로 읽는다. 원 서술은 고치지 않고 두 지점에 인라인 마커 + 말미 정정 절을
+  붙였다(라운드 4·5 보고서로 포인터).
+
 ## [4.1.4] — 2026-08-21
 
 Task 31 fix round 4: 라운드 2가 CHANGELOG 에서 지운 `[4.1.1]` 헤딩 복구 + 그 결함
@@ -131,7 +189,10 @@ Task 31 fix round 1: 리뷰가 F1(load-bearing)·F2·F3·F6을 지적했다. F4�
   state-file-format.md#history)` 관례를 따름.
 - **F3 — CHANGELOG [4.1.0]이 브리핑 시점의 stale 수치(6,482줄 / 18.4%)를
   실었다.** 실측치(브리프 저자가 이미 알고 있던 값)로 교체: on-demand 로드
-  표면 6,579줄 → 5,404줄(Δ −1,175), 섹션 비중 1,190/2,079 = 57.2%.
+  표면 6,579줄 → 5,406줄(Δ −1,173), 섹션 비중 1,190/2,079 = 57.2%.
+  (라운드 1 이 실은 5,404/−1,175 는 SKILL.md=904줄, 즉 `987e1ce` 시점 값을
+  전제했다. 같은 커밋 `687847d` 의 F2 포인터 편집이 906줄로 늘려 **쓰는 순간
+  스테일**이 됐다 — F3 결함의 2줄짜리 재발. 라운드 5 에서 실측 정정.)
 
 **Added**
 - `shared/tests/test_skill_reference_pointers.sh` — **역방향(F6) 확장.**
@@ -159,7 +220,7 @@ Task 31(무게 감축): `quality-pipeline` SKILL.md의 `## Runtime gate` 절차 
 `## Contents`의 `#runtime-gate` 앵커는 그대로 산다 — Runtime 게이트를 실제로 돌 때만
 그 파일을 Read 하고, `/qg review`처럼 Runtime을 안 도는 실행은 읽지 않는다(조건부
 로드). on-demand 로드 표면(SKILL 8 + agent 18 + command 7)은 이 분리로 6,579줄 →
-5,404줄(Δ −1,175)로 줄었다.
+5,406줄(Δ −1,173)로 줄었다.
 
 **Added**
 - `skills/quality-pipeline/references/runtime-gate.md` — Runtime 게이트 Step

@@ -12,7 +12,26 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SCOUT_MD="$PLUGIN_ROOT/agents/scout.md"
 SCOUT_PY="$PLUGIN_ROOT/scripts/scout.py"
-SKILL_MD="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
+SKILL_MD_REAL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
+
+# Task 31 fix round 5 — F1 계열의 5번째 인스턴스. 아래 두 **절대부재** 검사
+#   · `subagent_type="quality-gates:scout"`  (T3-1 마이그레이션 회귀 락, :52)
+#   · `#### Phase 1 (unified dispatch)`      (스테일 헤딩 가드, :67)
+# 는 SKILL.md 가 파이프라인 전문이라는 전제 위에 있었다. `## Runtime gate` 절차가
+# references/runtime-gate.md 로 옮겨진 뒤 두 검사가 실제로 지키는 범위는
+# 2,079줄 중 906줄로 줄었다 — 그런데 `Agent()` 디스패치 블록이 정밀하게 규정된
+# 곳이 바로 그 Runtime gate 절차다. 즉 재도입된 scout 디스패치가 착지할 가장
+# 그럴듯한 자리가 검사 밖에 있고, 그래도 부재 검사는 PASS 를 찍는다(fail-open).
+# 그래서 분할 전과 동일한 논리적 문서로 재구성해 그 위에서 돈다. 재구성 실패는
+# 조용히 원본으로 폴백하지 않고 FAIL 한다 — 폴백하면 이 fail-open 이 그대로
+# 되살아난다. 같은 파일의 정방향(존재) 검사들은 코퍼스가 넓어져도 판정이
+# 바뀌지 않는다(좁은 코퍼스에서 찾혔으면 넓은 코퍼스에서도 찾힌다).
+. "$SCRIPT_DIR/lib/reconstruct-skill.sh"
+if ! SKILL_MD="$(reconstruct_skill_md "$SKILL_MD_REAL")"; then
+  echo "FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패 ($SKILL_MD_REAL)"
+  exit 1
+fi
+trap 'rm -f "$SKILL_MD"' EXIT
 
 pass=0; fail=0
 check_true() {

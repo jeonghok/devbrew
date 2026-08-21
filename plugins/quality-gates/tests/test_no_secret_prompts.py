@@ -12,10 +12,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 # Files where AskUserQuestion options are defined or instructed.
+#
+# Task 31 fix round 5 (F1 계열): 이 스캔은 **절대부재** 검사다 — SKILL.md 전량에
+# secret 유도 프롬프트가 없음을 잰다. `## Runtime gate` 절차가
+# skills/quality-pipeline/references/runtime-gate.md 로 분리된 뒤, 이 P21 가드가
+# 실제로 보는 범위는 2,079줄 중 906줄로 줄었다. 하필 Runtime 게이트가 실제
+# 서비스를 부팅하는 절차라 `.env` · DB_URL · API 키를 사용자에게 물어보라는
+# 지시가 새로 들어갈 **가장 그럴듯한 자리**가 검사 밖으로 나가 있었다.
+# 그래서 references/*.md 를 **열거가 아니라 도출**해 코퍼스에 넣는다 — 새 참조
+# 파일이 생겨도 자동으로 대상이 된다.
+_REFERENCE_DOCS = sorted(ROOT.glob("skills/*/references/*.md"))
+
 TARGETS = [
     ROOT / "skills/quality-pipeline/SKILL.md",
     ROOT / "agents/runtime-verifier.md",
-]
+] + _REFERENCE_DOCS
 
 # Patterns that suggest secret-value extraction.
 # These are heuristics: a free-text "input X" near a secret-like keyword is
@@ -36,6 +47,12 @@ NEGATION_HINT = re.compile(
 
 class TestNoSecretPrompts(unittest.TestCase):
     def test_no_imperative_secret_extraction(self):
+        # vacuity: 글롭이 아무것도 못 맞추면 이 스캔은 분할 이전 범위로 조용히
+        # 되돌아가면서도 GREEN 을 찍는다 — '0건 검사'를 '문제 없음'으로 읽지 않는다.
+        self.assertGreater(
+            len(_REFERENCE_DOCS), 0,
+            "skills/*/references/*.md 를 0건 도출했다 — secret 스캔 코퍼스가 "
+            "조용히 좁아졌다 (글롭이 깨졌거나 참조 파일이 전부 사라졌다)")
         offenders = []
         for path in TARGETS:
             if not path.exists():
