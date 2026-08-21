@@ -49,7 +49,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 **v0.12.0**: drafting-spec 제거 + reviewing-spec design-mode 전용. interview는 brief까지 단독 완결.
 
-**v0.13.0**: interview→brainstorming Step B를 `/compact` proceed 게이트(reviewing-spec Phase 5 대칭)로 재작성.
+**v0.13.0**: interview→brainstorming Step B를 `/compact` proceed 게이트(reviewing-spec Phase 5 대칭)로 재작성. — **v0.31.0에서 그 "대칭"(독립 저술 두 벌)이 하나의 공유 계약 `references/proceed-gate.md`로 합쳐졌다.**
 
 **v0.14.0–v0.18.0**: 리뷰 재발동을 막는 방어층 3종이 순차로 쌓였다 — 문서별 억제 집합, approve 시 기록 순서 교정, 문서-키 진행중 락. 셋 다 훅이 자기가 만든 재발동을 자기가 막는 내부 하니스였고 **v0.25.0 에서 원인과 함께 삭제**됐다(상세는 CHANGELOG).
 
@@ -111,7 +111,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 ### Anti-pattern 회피
 
 - **AP3 (Self-approval)** — writer/reviewer 물리적 분리 (frontmatter scoping).
-- **AP2 (Polite stop)** — Phase 5 approve tail = proceed 게이트(AskUserQuestion) → handoff sequence (spec_path 검증 + 세션 cleanup). 게이트를 skip한 narrate-only 종료 금지. cross-compact 조기 진행(옵션 ① 노출 후 같은 턴 writing-plans 직진)도 게이트 P17 우회의 대칭 실패로 금지 (v0.11.0 AC19). interview→brainstorming Step B도 대칭 proceed 게이트(**4옵션**: ①/compact 후 brainstorming / ②바로 brainstorming / ③확정 목록 수정 / ④brief만 종료 — ③ 추가는 v0.23.0) — 같은 두 가드(AP2 + cross-compact AC19/AC21) 적용, 전용 handoff 스크립트를 호출하지 않음(brief는 막 검증됨, 하류/SessionEnd가 cleanup) (v0.13.0).
+- **AP2 (Polite stop)** — **정본은 `references/proceed-gate.md`** (v0.31.0). 두 proceed 게이트(reviewing-spec Phase 5 · conducting-interview 종료 Step B)가 그 파일의 골격·두 가드·예외 경로를 공유하며, 각 skill 은 자기 어휘(옵션 라벨 · verbatim `/compact` 템플릿 · 고유 스텝)만 인라인으로 갖는다. 아래는 그 계약의 **요약**이지 별개 저술이 아니다 — 계약이 바뀌면 정본을 고치고 여기를 따라 고친다. Phase 5 approve tail = proceed 게이트(AskUserQuestion) → handoff sequence (spec_path 검증 + 세션 cleanup). 게이트를 skip한 narrate-only 종료 금지. cross-compact 조기 진행(옵션 ① 노출 후 같은 턴 writing-plans 직진)도 게이트 P17 우회의 대칭 실패로 금지 (v0.11.0 AC19). interview→brainstorming Step B의 **4옵션**: ①/compact 후 brainstorming / ②바로 brainstorming / ③확정 목록 수정 / ④brief만 종료 (③ 추가는 v0.23.0) — 전용 handoff 스크립트를 호출하지 않음(brief는 막 검증됨, 하류/SessionEnd가 cleanup) (v0.13.0).
 - **AP5 (Trivia ceremony)** — `/interview` first-step trivia escape (5 패턴).
 - **AP9 (Subagent spray)** — agent 4종(spec-reviewer/steelman-builder/coverage-mapper/blind-spot-prober), coverage-mapper C11 rate-limit + blind-spot-prober fan-out 1.
 - **P11 (Cross-Model Adversarial)** — sub-agent reviewer adversarial review + **`steelman-builder` 의심 게이트(v0.12.0)**: 의심 방향은 웹근거 기반 대안 steelman을 통과해야 brief에 실린다.

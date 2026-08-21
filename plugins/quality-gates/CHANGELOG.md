@@ -3,6 +3,319 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.1.9] — 2026-08-21
+
+Task 33 fix round 4 — `tests/lib/reconstruct-skill.sh` 하드닝. shipping 동작 무변경.
+
+**Fixed**
+- **분할 수리 자신이 다음 분할을 숨겼다.** 이 헬퍼는 **하드코딩된 한 섹션**
+  (`## Runtime gate`)만 되접고 그 헤딩이 없을 때만 시끄럽게 죽는다.
+  `quality-pipeline/SKILL.md` 가 **또** 쪼개지면(아직 906줄) 재구성은 **여전히 성공**하고
+  **일곱** 소비자에게 새 섹션이 조용히 빠진 문서를 넘긴다 — 모든 소비자의
+  `if ! reconstruct_skill_md` 가드는 "성공"을 보고한다. 이 브랜치의 헤드라인 실패 클래스가
+  그것을 막으려고 만든 수리 뒤에 숨는 구조였다.
+  스플라이스 후 **되접히지 않은 조건부-로드 포인터**가 남았는지 검사하고 남으면 loud FAIL 한다.
+  〔차분〕 2차 분할을 시뮬레이션(새 `Read references/new-gate.md` 포인터 주입) →
+  **앞 판본 SUCCESS(조용) / 이번 판본 FAIL**, 소비자도 그 실패를 그대로 표시.
+- **술어를 "references 토큰 잔존"으로 두지 않았다** — 그러면 오늘 당장 거짓 RED 다.
+  재구성 출력에는 `[state-file-format](references/state-file-format.md#history)` 같은
+  **인라인 상호참조 링크**가 정당하게 남는다(실측: 재구성본 552행, 유일한 잔존 토큰).
+  판정 대상은 이 리포가 조건부 로드에 쓰는 관용구 — 자기 줄에 홀로 선 `Read <…references/x.md>`
+  (실측 4곳: quality-pipeline · conducting-interview · reviewing-spec).
+- 헤더의 소비자 목록을 **예시로 명시**했다. 둘만 적혀 있었으나 실제 소비자는 **7개**다 —
+  낡은 열거는 "여기 없으니 무관하다"로 읽힌다. 도출 명령(`grep -rl reconstruct_skill_md`)을
+  함께 적었다.
+
+## [4.1.8] — 2026-08-21
+
+Task 33 — `tests/test_law2_prose.sh` 코퍼스만. 이 플러그인의 shipping 동작은 무변경.
+
+**Fixed**
+- **AC16 부재 스캔이 플러그인 레벨 `plugins/*/references/*.md` 를 못 봤다.** 이 락은
+  플러그인 경계를 넘는 repo-wide 부재 스캔이라(Task 32 가 지목한 가장 놓치기 쉬운 클래스),
+  spec-distill 이 두 skill 의 공유 계약을 `plugins/spec-distill/references/proceed-gate.md`
+  에 두자마자 그 자리가 스캔 밖이 됐다 — agent 도구 표면 산문은 공유 계약 쪽으로도 따라
+  이동하므로 정확히 그 자리가 위험하다. `find plugins/*/references -name '*.md'` 도출을
+  더했다. 〔실측〕 `allowedTools` 를 그 파일에 주입하면 **수정 전 GREEN / 수정본 RED**.
+- vacuity 를 합집합 하나로 두면 플러그인 레벨 글롭이 깨져도 `skills/` 쪽 도출로 통과한다.
+  `plugins/*/references` 디렉터리가 하나라도 있는데 `.md` 도출이 0이면 따로 loud FAIL 한다.
+
+## [4.1.7] — 2026-08-21
+
+Task 32 fix round 1 — 문서만. `tests/test_law2_prose.sh` 의 동작은 무변경.
+
+**Fixed**
+- [4.1.6] 엔트리가 이 락이 새로 덮는 Task 31 잔여를 `runtime-gate.md` 하나로만 적었다.
+  `quality-pipeline/references/state-file-format.md`(78줄)도 똑같이 밖에 있었고 똑같이
+  새로 덮인다 — 수리 후 AC16-1 에 늘어난 새 파일 줄은 1건이 아니라 **3건**이다.
+  새로 덮이는 총 코퍼스는 **1,499줄**이며 전량 clean(28/28).
+
+**Notes**
+- 이 락이 속한 실패 클래스(플러그인 경계를 넘는 repo-wide 부재 스캔)의 **두 번째**
+  인스턴스가 이 플러그인에 하나 더 있다 — `tests/test_governance_no_capability_caps.sh`.
+  그쪽은 코퍼스가 `find plugins -name '*.md'` 라 새 참조 파일을 자동으로 삼켜
+  수리가 필요 없었다(면역은 구성의 결과이지 분석의 결과가 아니다).
+  전체 지도는 `docs/audits/2026-08-21-skill-split-lock-corpus-shrink.md`.
+
+## [4.1.6] — 2026-08-21
+
+Task 32(무게 감축) 파생: `spec-distill` 의 `## 종료` 절차가 `references/finishing.md`
+로 분리되면서 이 플러그인이 소유한 **repo-wide** 부재 락 하나가 조용히 약해지는 것이
+드러나 함께 고쳤다.
+
+**Fixed**
+- `tests/test_law2_prose.sh` — AC16-1/-2/-3 은 전부 절대부재 검사인데 코퍼스가
+  `find plugins/*/skills -name 'SKILL.md'` 였다. `skills/<skill>/references/*.md` 로
+  분리된 절차 전문은 **모든** 플러그인에서 이 스캔 밖이었다 — Task 31 이 만든
+  `quality-pipeline/references/runtime-gate.md`(1,189줄) **와**
+  `quality-pipeline/references/state-file-format.md`(78줄) **둘 다** 이미 밖에 있었으므로
+  그 잔여 구멍도 여기서 닫힌다(수리 후 AC16-1 에 새 파일 줄 3건이 늘어난 것으로 확인).
+  즉 이 수리로 새로 덮이는 코퍼스는 이번 분할분 232줄이 아니라 **1,499줄**이고, 그
+  전량이 clean 이다(28/28) — "잡은 것이 없다"는 주장의 범위가 그만큼 넓다. `references/*.md` 를 도출해 코퍼스에 넣고, 도출 0건이면
+  loud FAIL 하는 vacuity 단언을 추가했다. 이빨 실측(차분): `allowedTools` · `실제 키` ·
+  `tool 0개` 를 `spec-distill/.../references/finishing.md` 에 주입하면 **수정 전
+  24/24 GREEN(fail-open 실증) → 수정본 4건 RED**, 제거 후 다시 GREEN.
+
+## [4.1.5] — 2026-08-21
+
+Task 31 fix round 5(마지막): F1(코퍼스 축소로 무력화된 절대부재 락) 계열의 남은
+인스턴스 정리 + 라운드 1 이 실은 로드 표면 수치 정정. 라운드 1 보고서는 영향
+집합을 "정확히 4개"라고 적었는데, 실제로는 **6개**였다(아래 재도출).
+
+**Fixed**
+- **F1 5번째 인스턴스 — `tests/test_scout_codex_integration.sh`.** `SKILL.md` 를
+  raw 로 읽어 절대부재 2건을 검사한다: `subagent_type="quality-gates:scout"`
+  (T3-1 마이그레이션 회귀 락, `:52`)와 `#### Phase 1 (unified dispatch)`
+  (스테일 헤딩 가드, `:67`). 분리 후 두 검사가 지키는 범위는 2,079줄 중 906줄로
+  줄어 있었다 — 하필 `Agent()` 디스패치 블록이 정밀하게 규정된 곳이 옮겨간
+  Runtime gate 절차라, 재도입된 scout 디스패치가 착지할 **가장 그럴듯한 자리**가
+  검사 밖이었다. `reconstruct-skill.sh` 로 분할 전 논리 문서를 재구성해 그 위에서
+  돌도록 고쳤다. 두 문자열을 `references/runtime-gate.md` 에 개별 주입해 이빨을
+  실측했다: **수정본 RED / 라운드 4 원본 GREEN**(fail-open 실증), 제거 후 해시
+  일치까지 확인.
+- **F1 6번째 인스턴스 — `tests/test_no_secret_prompts.py`(P21 secret 가드).**
+  같은 모양의 절대부재 스캔인데 아무도 세지 않았다. Runtime 게이트가 실제
+  서비스를 부팅하는 절차라 `.env`·DB_URL·API 키를 사용자에게 물어보라는 지시가
+  새로 들어갈 가장 그럴듯한 자리가 정확히 분리된 파일 쪽이다. 코퍼스를
+  `skills/*/references/*.md` **글롭으로 도출**해 넣었다(열거 아님 — 새 참조
+  파일이 생겨도 자동 대상). 글롭이 0건이면 조용히 좁아지므로 같은 테스트 안에
+  vacuity 단언을 넣었다. 이빨 실측: secret 유도 문장을 `runtime-gate.md` 에
+  주입 → **수정본 RED / 라운드 4 원본 GREEN**, 제거 후 GREEN.
+- **`[4.1.0]` 항목의 로드 표면 수치 정정 — 5,404 → 5,406, Δ −1,175 → −1,173.**
+  라운드 1 이 실은 값은 `SKILL.md` = 904줄(= `987e1ce` 시점)을 전제했는데, **같은
+  라운드의 F2 포인터 편집(`687847d`)이 906줄로 늘려 쓰는 순간 스테일**이 됐다 —
+  F3 결함(브리핑 시점 수치를 실은 것)의 2줄짜리 재발이다. 실측으로 재확인:
+  로드 표면(SKILL 8 + agent 18 + command 7) = 5,406줄, 분할 전 6,579줄.
+  `[4.1.1]` 의 F3 서술이 인용한 같은 수치도 함께 고쳤다(둘이 어긋나면 다음
+  독자가 어느 쪽을 믿을지 알 수 없다).
+
+**Noted (영향 집합 재도출 · 의도적으로 넓히지 않은 검사 2건)**
+- `plugins/quality-gates/tests/` 전체에서 `quality-pipeline/SKILL.md` 를 raw 로
+  읽는 파일을 전수 열거해 **절대부재 / 존재 / 경계창**으로 분류했다. 코퍼스가
+  줄면 존재·경계창 검사는 **더 엄격**해지므로(못 찾으면 시끄럽게 RED) 문제는
+  절대부재뿐이다. 전량 절대부재는 6개 파일이고, 그중 **2개는 넓히면 안 된다**:
+  - `test_skill_bash_allowlist_narrow.sh:8` (`Bash(*)` 부재) — 이 grep 은 파일
+    전체를 훑지만 **주장은 frontmatter 소유**다. 도구 권한은 `SKILL.md` 의 YAML
+    frontmatter 에서만 발효되고 참조 문서의 같은 텍스트는 아무것도 grant 하지
+    않는다(`runtime-gate.md` 의 `allowed-tools` 2회는 frontmatter 를 **가리키는
+    산문**이다). 재구성하면 권한과 무관한 코퍼스를 들여올 뿐이다. 제외 유지.
+  - `test_skill_codex_skip_prose.sh` AC20 (silent 사유 2종이 visible 배너로
+    안 나옴) — 주제 어휘(`skip_reason`·`kill_switch`·`inside_codex_sandbox`)가
+    Review 게이트의 codex skip 정책 표에 속하고 `runtime-gate.md` 에는 0회다.
+    반면 그 파일에는 `[quality-gates]` 배너가 12회, kill switch 언급이 8회 있어
+    **넓히면 정당한 Runtime 배너가 codex 정책 위반으로 잡히는 거짓 락**이 된다.
+    참 락을 거짓 락으로 바꾸지 않기 위해 넓히지 않았다.
+
+**Docs**
+- `.superpowers/sdd/.../task-31-report.md`(라운드 1–3 보고서)에 정정 고지 추가.
+  그 문서는 라운드 3 이 "self-introduced bug 를 잡아 고쳤다"고 적고 헤딩 목록
+  출력을 정합성의 근거로 인용했는데, 그 출력은 실은 결함의 증거였다. 또한
+  "three fix rounds 로 완료, open item 없음"으로 닫혀 있어 미래 세션이 닫힌
+  태스크로 읽는다. 원 서술은 고치지 않고 두 지점에 인라인 마커 + 말미 정정 절을
+  붙였다(라운드 4·5 보고서로 포인터).
+
+## [4.1.4] — 2026-08-21
+
+Task 31 fix round 4: 라운드 2가 CHANGELOG 에서 지운 `[4.1.1]` 헤딩 복구 + 그 결함
+계열을 재는 락 신설. 라운드 3 의 보고는 이 결함을 "잡아서 고쳤다"고 적었지만
+실제로는 손상된 버전을 잘못 짚었고, 손상은 트리에 그대로 살아 있었다.
+
+**Fixed**
+- **`## [4.1.1] — 2026-08-21` 헤딩 복구.** `f68d253`(라운드 2)이 새 섹션을 위에
+  끼우는 대신 `[4.1.1]` 헤딩을 **제자리에서 `[4.1.2]` 로 덮어썼다.** 그래서
+  라운드 1 의 본문 전체(`**Fixed**` F1/F4/F2/F3 + `**Added**` F6)가 `[4.1.2]`
+  섹션 안으로 흡수돼, 이 CHANGELOG 는 3일 동안 (a) 4.1.1 이 존재한 적 없고
+  (b) 4.1.2 가 라운드 1 의 일까지 했다고 서술했다. 게다가 그 합쳐진 섹션은
+  **자기모순**이었다 — 라운드 2 쪽 절반은 `KNOWN_ORPHANS_PENDING_RULING` 을
+  "메커니즘 자체를 제거했다"고 하고, 흡수된 라운드 1 쪽 절반은 "그것으로 면제해
+  두고 판정을 요청한다"고 한다. 한 릴리스 노트 안에서 한 메커니즘이 존재하면서
+  존재하지 않았다. 복구된 `[4.1.1]` 본문은 `687847d` 의 원본과 **바이트 동일**
+  하다(47줄 diff 무).
+- **`[4.1.1]` 의 열린 약속에 종결 포인터 추가.** 그 섹션의 "판정을 요청한다"는
+  `[4.1.2]` 가 이미 해소했다. CHANGELOG 항목은 *그 릴리스가 무엇을 했는지*를
+  적는 것이므로 4.1.1 시점에 참이었던 서술 자체는 그대로 두고, 여전히 열려
+  있는 것처럼 읽히지 않도록 `→ [4.1.2] 에서 판정 완료` 한 줄만 덧붙였다.
+
+**Added**
+- `shared/tests/test_changelog_integrity.sh` — 플러그인 CHANGELOG ↔ `plugin.json`
+  구조 정합 락. `git ls-files 'plugins/*'` 로 플러그인 집합을 **도출**해(열거
+  아님) 넷을 잰다: **C1** v>=1.0.0 이면 CHANGELOG 필수·v<1.0.0 이면 선택
+  (`plugin-audit` 0.6.0 이 후자) · **C2** 맨 위 헤딩 == `plugin.json` ·
+  **C3** 헤딩 순감소 · **C4** 헤딩 형식(`## [x.y.z] — <꼬리>`, 꼬리가 숫자로
+  시작하면 유효한 `YYYY-MM-DD`). vacuity 3층: 플러그인 0개 / CHANGELOG 0개 /
+  헤딩 0개는 전부 loud FAIL 이다 — `0 checked / 0 problems` 는 "문제 없음"이
+  아니라 "안 봤다". 이빨은 mutation 13회로 실측했다(형식 표기·값·날짜를
+  맨앞·중간·맨끝 세 위치에서 · 순감소 위반 · `plugin.json` 양방향 불일치 ·
+  버전 추출 실패 · 헤딩 0개 · 격리 리포에서 C1 과 vacuity 2층, control 은 GREEN).
+
+**Noted (의도적으로 넣지 않은 검사)**
+- **건너뛴 버전 검사는 넣지 않았다 — 그래서 이 락은 위 `[4.1.1]` 결함을 못
+  잡는다.** 그 결함을 실제로 잡는 불변식은 "한 CHANGELOG 안에 건너뛴 버전이
+  없다" 하나뿐이다(C2·C3·C4 는 결함 당일 전부 통과했다: 4.1.2 == 4.1.2 ·
+  4.1.3 > 4.1.2 > 4.1.0 · 형식 전부 적합). 그런데 **전수 측정 결과 이 리포는
+  그 불변식을 지키지 않는다.** 4.1.1 복구 후에도 갭이 둘 남고 둘 다 정당하다 —
+  둘 다 실제로 배포됐지만 릴리스 노트를 안 쓴 버전이다: `project-init` 1.7.1
+  (`883cc0d`, description 압축 doc-only bump — `[1.7.2]` 본문에 그 사실이 명시돼
+  있다)과 `spec-distill` 0.11.1(`cd02494`, description 영어 번역 + cache key
+  무효화 — 아무 주석도 없다). 넣으려면 예외 목록이 필요한데, 바로 세 커밋 전
+  `[4.1.2]` 가 같은 태스크에서 정확히 그 이유로 `KNOWN_ORPHANS_PENDING_RULING`
+  예외 메커니즘을 지웠다. 코퍼스를 락에 맞춰 고치는 것(두 항목 소급 backfill 또는
+  주석 부착) 역시 불변식을 **만들어내는** 것이지 측정하는 것이 아니다. 거짓
+  불변식을 박아 넣은 락보다 정직한 공백이 낫다 — 측정과 근거는 락 파일 머리에
+  남겼다(Law 3, 재발견 방지).
+
+## [4.1.3] — 2026-08-21
+
+Task 31 fix round 3: 라운드 2가 `dependency-check.md`를 지우며 README `references/`
+트리 항목도 지웠지만, 같은 라운드가 만든 `runtime-gate.md`(라운드 1, `[4.1.0]`)는
+그 트리에 애초에 추가된 적이 없었다 — 라운드 1 자신의 커밋이 남긴 drift.
+
+**Fixed**
+- `README.md`의 `## 구조` 트리에 `references/runtime-gate.md` 항목 추가(`state-file-
+  format.md`와 함께 알파벳순, 주석 칸 정렬 맞춤). 이제 트리가 디스크의
+  `references/` 두 파일(`runtime-gate.md`, `state-file-format.md`)과 다시 일치한다.
+
+**Noted (no lock added)**
+- README `## 구조` 트리를 디스크와 일반적으로 대조하는 락은 없다 — 확인 결과
+  `test_readme_scope_reconcile.sh`와 `test_impact_runtime_docs.sh`의
+  `case_readme_component_tree`는 둘 다 과거 특정 태스크가 고정한 이름 목록만
+  검사하고(fan-out 산문 재도입 감지, impact-driven-runtime 신규 스크립트 5종),
+  `references/*.md`를 `git ls-files`로 열거해 트리와 대조하지는 않는다. 의도적으로
+  락을 추가하지 않았다 — README 트리는 예시용 산문이고, 이를 잠그는 것은 문서
+  관례에 대한 하니스 무게이기 때문(요청에 따른 명시적 scope 밖 처리).
+
+## [4.1.2] — 2026-08-21
+
+Task 31 fix round 2: 라운드 1이 판정을 요청한 채 `KNOWN_ORPHANS_PENDING_RULING`으로
+면제해뒀던 고아 1건에 대한 판정과 그 실행.
+
+**Removed**
+- **`references/dependency-check.md` 삭제.** 이 파일은 죽은 산문이 아니라 **능력
+  억제**였다 — 1번 항목이 `pr-review-toolkit` 미설치 시 Review 게이트 전체를
+  SKIP으로 표시하라고 지시하는데, 현재 SKILL의 Tier A floor는
+  `quality-gates:security-reviewer` + `quality-gates:adversarial`(외부 의존성이
+  전혀 없는 플러그인 자체 agent)이라 이 절차를 되살리면 선택적 의존성 부재를
+  근거로 플러그인 자신의 보장된 능력을 지우게 된다. `753c9e2`(v2.0.0 SKILL
+  재작성)에서 포인터가 빠지며 **이 fix round 이전부터** 도달 불가능했다 — 어떤
+  SKILL.md도 가리키지 않았고 실행 경로 어디서도 Read되지 않았다. 이번 삭제로
+  없어지는 살아있는 기능은 없다: 이미 죽어 있던 절차의 사체를 치운 것뿐이다.
+  `docs/archive/audits/2026-08-02-harness-capability-suppression-census.md:76`
+  (`QGSKILL-02`)이 이미 활성 억제로 catalogue해뒀던 항목과 일치.
+- **`README.md`의 `references/` 트리에서 `dependency-check.md` 항목 제거.**
+  삭제된 정의를 계속 인용하는 죽은 참조를 남기지 않기 위함.
+
+**Changed**
+- **`shared/tests/test_skill_reference_pointers.sh` — `KNOWN_ORPHANS_PENDING_RULING`
+  면제 메커니즘 전체 제거.** 빈 예외 목록도 위험하긴 마찬가지다 — 다음 고아가
+  생겼을 때 이 목록에 한 줄 추가하는 것이 이 락이 막으려는 바로 그 결정이기
+  때문이다. 판정이 났으므로 예외가 아니라 메커니즘 자체를 지운다. 제거 후
+  synthetic orphan 추가/제거로 역방향 검사 이빨을 재확인했다(RED → 복원 →
+  GREEN) — 면제가 없는 상태에서도 신규 고아를 여전히 잡는다.
+
+## [4.1.1] — 2026-08-21
+
+Task 31 fix round 1: 리뷰가 F1(load-bearing)·F2·F3·F6을 지적했다. F4는 F1 수정의
+부산물로 해소됨(아래), F5는 스킵.
+
+**Fixed**
+- **F1 — 절대부재 락 4개가 코퍼스 축소로 조용히 무력화됐던 것을 복구.**
+  `## Runtime gate`가 `references/runtime-gate.md`로 옮겨진 뒤, SKILL.md만 보던
+  전량-부재 검사 4개(`tests/test_runner_adapters.sh`의
+  `case_no_reimpl_in_skill`, `tests/test_runtime_contract_invariance.sh`의
+  `case_no_new_surfaces`, `tests/test_review_scope_composition.sh`의 6개
+  `absent()`, `tests/test_codex_dispatch_invariant.sh`의 `case 5`)가 이동된
+  1,190줄을 더 이상 보지 못했다 — 통과는 계속했지만(무언가 있었다면 못 잡았을
+  것) 실제로 막던 문자열은 0개였다(측정치, 오늘 회귀는 아님). 네 파일 모두
+  `reconstruct-skill.sh`로 분할 전과 동일한 논리적 문서를 재구성해 그 위에서
+  돌도록 고쳤다 — 각 파일의 윈도우형 검사(AC6/AC14/Tier B 앵커)는 전부 Runtime
+  gate보다 앞선 섹션만 앵커해 재구성에 영향받지 않음을 확인했다. **13개(보고서
+  집계) + `test_codex_dispatch_invariant.sh`의 stale 문자열 2개 = 실측 15개**
+  금지 문자열 전부를 `references/runtime-gate.md`에 개별 주입 → RED 확인 →
+  제거 → GREEN 확인, 총 15회 mutation으로 이빨을 실측했다(샘플링 없음).
+- **F4 — `test_runtime_contract_invariance.sh`의 verdict 토큰 4종 양의 짝**
+  (`PASS`가 SKILL.md에 1줄만 남아 47줄에서 축소됐던 것)은 F1의
+  `case_no_new_surfaces` 수정으로 함께 해소됨을 확인.
+- **F2 — Runtime gate 포인터의 `Read` 지시문이 레포 레이아웃(cwd=repo root)
+  에서만 resolve됐다.** 펜스 블록을 SKILL.md 기준 상대경로
+  (`Read references/runtime-gate.md`)로 바꿔 레포·설치본 두 레이아웃 모두에서
+  resolve되게 했다 — SKILL.md:552의 `[state-file-format](references/
+  state-file-format.md#history)` 관례를 따름.
+- **F3 — CHANGELOG [4.1.0]이 브리핑 시점의 stale 수치(6,482줄 / 18.4%)를
+  실었다.** 실측치(브리프 저자가 이미 알고 있던 값)로 교체: on-demand 로드
+  표면 6,579줄 → 5,406줄(Δ −1,173), 섹션 비중 1,190/2,079 = 57.2%.
+  (라운드 1 이 실은 5,404/−1,175 는 SKILL.md=904줄, 즉 `987e1ce` 시점 값을
+  전제했다. 같은 커밋 `687847d` 의 F2 포인터 편집이 906줄로 늘려 **쓰는 순간
+  스테일**이 됐다 — F3 결함의 2줄짜리 재발. 라운드 5 에서 실측 정정.)
+
+**Added**
+- `shared/tests/test_skill_reference_pointers.sh` — **역방향(F6) 확장.**
+  기존 정방향(포인터→파일 존재) 외에, git-tracked `plugins/*/skills/*/
+  references/*.md` 전부가 자기 소유 SKILL.md로부터 가리켜지는지(고아 없음)를
+  검사한다. `# guards:` 선언에 `plugins/*/skills/*/references/*.md`를 추가하고
+  `--emit-scanned`도 두 코퍼스를 함께 낸다(`test_guards_coverage_bidirectional.sh`
+  로 재확인, 두 글롭 모두 실 코퍼스를 덮음). 코퍼스 0건은 정방향과 동일하게
+  loud FAIL(vacuous 방지). 파일 추가/제거 양방향 mutation으로 이빨을
+  확인했다(RED→복원→GREEN). **알려진 예외 1건**:
+  `references/dependency-check.md`는 이 fix round 이전부터 어떤 SKILL.md도
+  가리키지 않는 기존 고아였다(Preflight 절차가 다시 쓰이며 포인터가 빠진 것으로
+  보임) — 조용히 삭제·재배선하지 않고 `KNOWN_ORPHANS_PENDING_RULING`으로 명시
+  면제한 뒤 fix round 보고서에서 판정을 요청한다. 신규 고아는 이 예외에 가려지지
+  않는다(정확히 이 경로 하나만 문자열 일치).
+  **→ `[4.1.2]`에서 판정 완료**: 그 릴리스가 `references/dependency-check.md` 를
+  삭제하고 `KNOWN_ORPHANS_PENDING_RULING` 메커니즘 자체를 제거했다 — 이 면제도,
+  위 판정 요청도 더 이상 열려 있지 않다.
+
+## [4.1.0] — 2026-08-21
+
+Task 31(무게 감축): `quality-pipeline` SKILL.md의 `## Runtime gate` 절차 전문(1,190줄,
+분할 전 파일(2,079줄)의 57.2%)을 `skills/quality-pipeline/references/runtime-gate.md`로
+분리했다. SKILL.md에는 같은 `## Runtime gate` 헤딩 아래 포인터 산문만 남아
+`## Contents`의 `#runtime-gate` 앵커는 그대로 산다 — Runtime 게이트를 실제로 돌 때만
+그 파일을 Read 하고, `/qg review`처럼 Runtime을 안 도는 실행은 읽지 않는다(조건부
+로드). on-demand 로드 표면(SKILL 8 + agent 18 + command 7)은 이 분리로 6,579줄 →
+5,406줄(Δ −1,173)로 줄었다.
+
+**Added**
+- `skills/quality-pipeline/references/runtime-gate.md` — Runtime 게이트 Step
+  R-init..R9 절차 전문(분할 전 SKILL.md에서 그대로 이동, 내용 변경 없음).
+- `tests/lib/reconstruct-skill.sh` — SKILL.md 포인터 자리에 참조 파일을 되접어
+  분할 전과 줄 단위로 동일한 논리적 문서를 재구성하는 테스트 헬퍼. 줄 번호·
+  섹션 윈도우로 Runtime 절차를 검증하던 기존 테스트들이 이것을 쓴다.
+- `shared/tests/test_skill_reference_pointers.sh` — 모든 `plugins/*/skills/*/
+  SKILL.md`가 가리키는 `references/*.md` 포인터가 실제로 존재하는지 검증하는
+  신규 락. 참조 파일이 나중에 삭제·개명되면 SKILL.md가 존재하지 않는 파일을
+  가리키게 되는 fail-open을 막는다. mutation(참조 파일 임시 rename)으로 이빨을
+  확인했다(RED→복원→GREEN).
+
+**Fixed**
+- `tests/harness/test_skill_orchestration_behavior.sh` · `tests/
+  test_runtime_verdict_precedence.sh` — 위 분할로 Runtime 절차의 앵커 문자열이
+  SKILL.md에서 사라져 새 RED가 될 뻔한 것을, `reconstruct-skill.sh`로 SKILL.md를
+  분할 전과 동일한 논리적 문서로 재구성해 읽도록 고쳤다(검사 로직 자체는
+  불변). 재구성 실패는 원본 SKILL.md로 조용히 폴백하지 않고 FAIL한다 — 폴백하면
+  Runtime 관련 검사 전부가 포인터 산문 몇 줄만 보고 앵커 소실로 전량 FAIL 하거나
+  창이 비어 음의 락이 vacuous 통과한다.
+
 ## [4.0.0] — 2026-08-20 (BREAKING)
 
 Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일 — 축약

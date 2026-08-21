@@ -5,11 +5,24 @@ set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 RTS="$PLUGIN_ROOT/scripts/run-test-selection.sh"
-SKILL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
+SKILL_REAL="$PLUGIN_ROOT/skills/quality-pipeline/SKILL.md"
 
 TAB=$'\t'
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+
+# Task 31 fix round 1 (F1): case_no_reimpl_in_skill() 은 SKILL.md 에 러너 감지 표
+# (devDependencies/pytest.ini/Cargo.toml/go.mod)가 재구현되지 않았는지 잰다. 그
+# 감지 로직(R1a)이 있던 Runtime gate 절차가 references/runtime-gate.md 로 옮겨진
+# 뒤에도 "스킬 어디에도 재구현이 없다"는 취지는 그대로이므로, 분할 전과 동일한
+# 논리적 문서로 재구성해 그 위에서 돈다. 재구성 실패는 조용히 원본으로 폴백하지
+# 않고 FAIL 한다.
+. "$SCRIPT_DIR/lib/reconstruct-skill.sh"
+if ! SKILL="$(reconstruct_skill_md "$SKILL_REAL")"; then
+  echo "FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패 ($SKILL_REAL)"
+  exit 1
+fi
+trap 'rm -f "$SKILL"' EXIT
 W=""
 # setup_cmd_of <worktree> — detect 출력에서 setup_cmd 값만 뽑는다
 setup_cmd_of_tree() { bash "$RTS" detect "$1" | awk '$1 == "setup_cmd:" { $1=""; sub(/^ /,""); print }'; }

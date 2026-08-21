@@ -67,7 +67,7 @@ Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md
 - **Trivia ceremony** — 한 문장 diff에 full pipeline 실행 (Anthropic *Best Practices*).
 - **Subagent spray** — 선언 없는 fan-out. 비용과 fan-out을 선언하지 않고 대규모로 퍼뜨리는 것이 anti-pattern이다 (규모 자체가 아니라 선언 없음이).
 - **Unbounded autonomy** — max-iter count, repeat 감지, 사용자-override kill switch 없는 루프.
-- **Polite handoff** — brainstorming/spec-distill review-approved 후 다음 단계를 narrate만 하고 spec-distill reviewing-spec Phase 5의 `AskUserQuestion` proceed 게이트를 띄우지 않음. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 봉쇄 장치 — 게이트를 skip한 narrate-only 종료가 polite-stop의 한 종류 (AP2 variant). 대칭으로, 옵션 ①(/compact 후 writing-plans) 선택 시 /compact 노출 후 같은 턴에 writing-plans로 직진하는 cross-compact 조기 진행도 게이트 P17 우회의 대칭 실패로 금지 (AP2 variant, spec-distill v0.11.0 AC19).
+- **Polite handoff** — brainstorming/spec-distill review-approved 후 다음 단계를 narrate만 하고 spec-distill 의 `AskUserQuestion` proceed 게이트를 띄우지 않음. 이 게이트는 `reviewing-spec` Phase 5 와 `conducting-interview` 종료 Step B **양쪽**에 있고, 둘은 같은 계약(`plugins/spec-distill/references/proceed-gate.md`)을 공유한다 — 정본은 그 파일이다. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 봉쇄 장치 — 게이트를 skip한 narrate-only 종료가 polite-stop의 한 종류 (AP2 variant). 대칭으로, 옵션 ①(/compact 후 writing-plans) 선택 시 /compact 노출 후 같은 턴에 writing-plans로 직진하는 cross-compact 조기 진행도 게이트 P17 우회의 대칭 실패로 금지 (AP2 variant, spec-distill v0.11.0 AC19).
 
 **버그가 리뷰를 탈출하면**, 해결책은 잡았어야 할 reviewer persona 파일을 편집하는 것 — 코드만 패치하는 게 아님. 그 commit이 compounding 이벤트 (Law 3).
 

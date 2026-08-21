@@ -1,5 +1,431 @@
 # Changelog
 
+## [0.32.4] — 2026-08-21
+
+Task 33 fix round 5 (마지막). 한 항목 — fix round 4 가 만든 **단일 실패 지점**에 짝을 붙인다.
+
+**귀속**: 새 파일 둘은 `shared/tests/` 에 있어 어느 플러그인 소유도 아니다. 이 리포의
+선례(`shared/tests/test_skill_reference_pointers.sh` 를 Task 31 이 quality-gates 엔트리로,
+Task 33 이 spec-distill 엔트리로 적은 것)를 따라 **그 이빨을 쓰는 락이 사는 플러그인**에
+귀속한다 — 세 소비자가 전부 spec-distill 이므로 여기다.
+
+**Added**
+- **`shared/tests/test_presence_corpus_behavior.sh`** (14 단언) — `presence_corpus.sh` 의
+  **행동**을 고정한다. fix round 4 가 24줄 중복을 지우면서 세 락의 이빨을 헬퍼 한 파일로
+  모았고, 그 한 곳이 조용히 무력화되면 **세 락이 동시에** 이빨을 잃는다. 헬퍼는 라이브러리라
+  `# guards:` 도 `--emit-scanned` 도 없다 — `assert.sh` 와 같은 상황이고 이 리포는 그것을
+  `test_assert_behavior.sh` 로 답했다. 이 파일이 그 짝이며 같은 관례를 따른다(자체
+  `t_ok`/`t_no` 카운터 · 픽스처 probe · rc 로 판정 관측 · `--emit-scanned` 응답).
+  - **(1) 분류기 판정** — 소유 두 모양 통과(양의 짝) · **플러그인 레벨 공유 계약 거절**
+    (대상은 열거 아닌 `git ls-files` 도출 + 도출 0건이면 loud FAIL) · 혼합 코퍼스는
+    한 건만 소유 밖이어도 실패 · `plugins/` 밖 경로 거절.
+  - **(2) 세 소비자를 실제로 돌려** 헬퍼 판정 줄이 나오는지와 코퍼스 크기(구조적 하한 2)를
+    읽는다. 소비자의 GREEN/RED 자체는 보지 않는다 — 다른 이유로 RED 인 소비자와 묶지 않기 위해.
+  - **(3) 채택자 락의 격리 불변식**을 **산술**로 잰다: Σ(채택자별 자기-파일 수) = 전체
+    코퍼스 크기. 루프가 합집합을 넘기면 Σ = 채택자수 × 전체 가 되어 어긋난다.
+  - (2)·(3)은 fix round 4 에서 **한 번 손으로 돌린 통제**다 — 매 실행마다 돌게 옮겼다.
+
+**Fixed**
+- **`presence_corpus.sh` 가 빈 코퍼스를 조용히 통과시켰다.** `own=0 foreign=0` 에 `ok` 를
+  냈다〔실측: `rc=0`, *"presence 대상 0개가 전부 skill 소유 표면"*〕. 소비자의 도출이 깨져
+  0건이 되면 그 스위트의 존재 검사가 **전부 vacuous** 해지는데 이 가드가 그 위에 초록을
+  찍는다 — 세 락이 동시에 이빨을 잃는 바로 그 경로이고, 헬퍼가 그것을 감춰 준다.
+  이제 시끄럽게 실패한다. 이 결함은 **행동 락을 쓰다가** 드러났다.
+
+**Docs**
+- `test_skill_reference_pointers.sh` 주석에 **자기 보증 금지가 막지 못하는 것**을 적었다:
+  identity 만 막고 A→B/B→A **상호 보증**은 막지 않는다. skill 레벨은 소유 SKILL.md 를
+  계속 요구하므로 이 구멍은 **플러그인 레벨 파일이 둘 이상**이어야 열린다(오늘 1개).
+  둘째를 추가하는 사람이 서 있을 자리에 뒀다.
+
+**양성 통제 4종** (전부 리포 원래 경로에서, 기대 방향으로 떨어진 것만으로는 증거가 아님)
+- 분류기 반전(플러그인 레벨을 소유로) → 거절·혼합 두 단언 RED.
+- 빈-코퍼스 수리 되돌리기 → vacuity 단언만 RED.
+- 헬퍼의 판정 줄 제거 → (2) 섹션 4건 RED(세 소비자 전부 + 하한).
+- 채택자 루프 격리 파괴 → (3) 산술 RED(**합 6 ≠ 전체 3** = 채택자 2 × 파일 3).
+- 복원 → 14/14 GREEN, 두 파일 해시 일치.
+
+## [0.32.3] — 2026-08-21
+
+Task 33 fix round 4 (PR5 출하 전 마지막). 전-브랜치 seam 리뷰 = **merge 안전**.
+이 라운드는 그 리뷰가 지목한 **브랜치가 만든 seam 결함 둘**을 닫는다.
+
+**Fixed**
+- **포인터 락이 자기 유일한 실사례를 안 보고 있었다 (seam).** Task 31 이 그 락을 쓸 때
+  `references/*.md` 는 **잎**이었다 — 가리켜지기만 했다. Task 33 이 그 전제를 깼다:
+  `conducting-interview` 는 공유 계약을 자기 SKILL.md 가 아니라 `references/finishing.md`
+  에서 가리킨다. 정방향 코퍼스는 `SKILL.md` 뿐이라 **그 포인터를 한 번도 열지 않았다.**
+  같은 브랜치의 `test_proceed_gate_adopters.sh` 는 반대로 그 자리를 **의도적으로** 포인터
+  출처로 인정한다 — 두 락이 서로 모순인 채 출하됐다.
+  - 정방향 fail-open: 세 번째 skill 이 자기 `references/*.md` 에서만, 오타로 가리키면
+    포인터 락은 침묵(파일을 안 연다)하고 채택자 락도 침묵(오타라 채택자로 안 세어 ≥2 하한
+    유지)한다. 런타임에 없는 경로를 Read 하고 공유 계약이 조용히 사라진다.
+    〔차분〕 `finishing.md` 에 오타 포인터 주입 → **c8e6869 GREEN / 이번 RED**.
+  - 역방향 false-RED: 플러그인 레벨 정본을 SKILL.md 포인터 **하나**가 지탱해, 그쪽 표기가
+    바뀌면 `finishing.md` 가 여전히 가리키는데 "고아"가 된다.
+    〔차분〕 그 상황 구성 → **c8e6869 RED(거짓 고아) / 이번 GREEN**.
+  - 수리: 정방향 출처를 **SKILL.md ∪ 모든 references/*.md** 로 넓혔다. 넓힌 대가로 생기는
+    유일한 새 구멍(어떤 파일이 출처이자 대상)은 **자기 보증 금지**로 막는다 — 자기 자신을
+    가리키는 포인터는 소유 증거로 기록하지 않고 loud FAIL 한다(mutation 실증).
+    `plugin_root` 도출도 두 모양 다 맞게 일반화했다(`${x%/skills/*}` 는 플러그인 레벨
+    출처에서 경로 전체를 돌려준다).
+- **중복 제거가 산출물인 태스크가 24줄 바이트-동일 중복을 만들었다.** `d7356ea` 가
+  `test_brief_review_entry.sh` 와 `test_conducting_interview_stage.sh` 에 같은 가드 블록을
+  복제했고, 한 라운드 뒤 "통과 시 침묵" 결함을 **양쪽에 따로** 고쳐야 했다.
+  `copy-of` 마커는 **전체 파일** 사본을 다루는 메커니즘이라 조각에는 맞지 않는다 —
+  그래서 마킹이 아니라 **추출**했다: `shared/tests/presence_corpus.sh` 의
+  `assert_presence_corpus_skill_owned`. 세 소비자(위 둘 + `test_proceed_gate_adopters.sh`
+  의 모양 가드)가 한 벌을 공유한다. 〔통제〕 헬퍼의 `ok` 를 지우면 **세 소비자 전부** 단언
+  −1, 소유 패턴을 깨뜨리면 **세 소비자 전부** RED — 사본이 아니라 실제로 그것을 쓴다.
+
+**Docs**
+- 감사문서 §6 표: **「면역(도출)」이 판정이 아니라 그날의 관측**임을 경고로 못 박고
+  **「측정 시점」열**을 추가했다. 두 행(`test_reviewing_spec_design_only.sh` ·
+  `test_brief_review_meta.sh`)이 「면역」으로 적혀 있었지만 실제로는 **열거된 `grep -r` 루트**
+  였고 Task 33 이 둘 다 손수리했다 — §3 이 "absence 만 수리 대상"이라 말하므로 낡은
+  「면역」칸은 다음 사람에게 **건너뛰라고 지시한다.** 상속-대신-도출을 막으려 쓴 문서가
+  정확히 그 상속을 부르는 열을 갖고 있었다. 이 브랜치가 만든 독자
+  (`test_proceed_gate_adopters.sh`)와 라이브러리(`reconstruct-skill.sh`)도 표에 넣었다.
+- 감사문서 §7-6: 거부 표면을 **전수 프로브로 재측정**했다. 앞 판본이 적은 "외부 URL 인용"만이
+  아니라 **포인터 의도가 있는 표기 둘**(`./references/x.md` · 백틱 없는 표 셀)도 거부된다 —
+  즉 "인용을 포인터로 오해한다"가 아니라 "인식 형태 열거가 좁다"가 옳은 서술이고, 앞 판본이
+  유일한 처방으로 적은 "URL 스킴 배제"는 그 두 행을 못 덮는다. 표로 적고 선택지를 넷으로 넓혔다.
+- 감사문서 **§7-7** 신설: 계약의 **요약본**(`spec-distill/README.md` · `CLAUDE.md`)이
+  자제(自制)만으로 지켜진다. §8 이 기록한 *"자제 규칙은 지켜지지 않는다"* 가 그대로 적용되며
+  근거는 이 태스크 자신의 초고다. 발동 조건 + 왜 지금 술어를 만들지 않는지 + 가장 그럴듯한
+  좁은 술어를 적었다.
+
+## [0.32.2] — 2026-08-21
+
+Task 33 fix round 3 (마지막). 스코프 재리뷰는 **모든 지적 반영 / load-bearing 신규 없음**
+이었고, 남은 다섯은 전부 문서 정합 또는 한 줄 위생이다. 하나는 계측기 결함이었다.
+
+**Fixed**
+- **정본이 자기 측정자 인벤토리를 낡은 채로 뒀다.** round 2 가 세 번째 측정 스캔
+  (`test_proceed_gate_adopters.sh`)을 추가하고 「검증」 1항에서 이름까지 댔으면서,
+  「앵커는 각 skill 에」 절은 여전히 **"두 측정 스캔"** 을 열거하고 "두 테스트 / 두 presence
+  검사 / 두 락" 으로 이어갔다. `reviewing-spec/SKILL.md` 도 같은 문장을 안고 있었다.
+  **F1 의 결함이 F1 의 수리 안에서 재발한 것** — 부정확한 자기 서술이 하필 진짜 위험이
+  있는 자리에 서 있다. 규칙을 **개수 없는 한 문장**("이 계약의 앵커를 재는 스캔은 전부
+  코퍼스를 그 skill 소유 표면으로 한정한다")으로 바꾸고 목록은 예시로 격하했다 — 넷째가
+  생겨도 고칠 필요가 없다.
+- **정본이 자기 앵커 리터럴을 하나 적게 셌다.** "위 Step B 표의 ① 행과 가드 2 본문"이라
+  적었으나 실측 3줄(**25 · 60 · 78**)이고 78 은 그 문단이 설명하는 「검증」 절 안이다.
+  목록을 고치되 **개수를 세지 말라**는 지시를 함께 넣었다 — 그 수는 안전과 무관하고
+  (안전은 코퍼스 경계가 지탱한다) 이 목록이 정확히 유지된다는 보장이 없다(실제로 낡았다).
+- **[0.32.1] 의 P5 통제 수치 정정.** *"정본에서 4줄을 세어 만족"* 이라 적었다. 재측정하면
+  **3줄**(+ `polite stop` 5줄)이다. 〔경위〕 그 4 는 측정 시점(`d7356ea`)에는 **맞았다** —
+  round 2 자신이 「검증」 1항을 다시 쓰면서 `다음 턴` 이 줄바꿈 경계에 걸려 4→3 이 됐다.
+  즉 전사(轉寫) 오류가 아니라 **내 편집이 내 측정을 낡게 만든** 경우다. 그래도 지금은
+  틀린 수이므로 정정하고, 이빨을 증명하는 통제 행이라 재측정으로 갈음했다.
+- **round 1 의 F1 가드 둘이 통과 시 침묵했다.** `test_conducting_interview_stage.sh` ·
+  `test_brief_review_entry.sh` 의 가드는 `*)` 분기에서만 `no` 를 불렀다. 〔실측〕 가드를
+  통째로 제거해도 단언 수·출력이 **완전히 동일**(92/36 → 92/36) — 감사문서 「계측기」 절이
+  기록한 *"아무것도 안 하면서 GREEN"* 클래스다. round 2 의 같은 가드는 통과 시 `ok` 를
+  낸다. 둘을 거기에 맞췄고, 이제 가드를 제거하면 93→92 · 37→36 으로 **관측된다**.
+
+**Added**
+- **채택자마다 `degrade 채널` 절의 존재를 잰다.** 정본 Step B 의 의무 중 **라벨**
+  (이름 붙은 절이 있는가)은 채널 *형태*를 건드리지 않고 한 줄로 잴 수 있다 —
+  `grep -cF 'degrade 채널'`. 계약이 두려워한 실패(새 채택자가 "해당 없음"으로 넘김)를
+  정확히 그것이 잡는다. 통제: 한쪽 절 삭제 → 그 채택자만 RED(다른 쪽 GREEN) · 양쪽 삭제 →
+  RED 2 (정본이 같은 라벨을 2줄 담고 있으나 **코퍼스 밖이라 구제하지 못한다**).
+
+**Docs**
+- 감사문서 §7-5 를 **형태 검증**으로 좁혔다. 앞 판본은 "의무 전체가 기계화 불가"라 적었는데
+  그 사유(형태가 skill 마다 다르다)는 형태에만 해당했다 — **연기의 사유가 연기의 범위보다
+  좁으면 그 차이만큼 공짜로 미뤄진다**는 교훈을 항목에 적었다.
+- 감사문서 **§7-6** 신설: 포인터 락의 접두사 거부가 **리포 전역**이고 산문이 방아쇠라,
+  미래 SKILL.md 가 포인터 의도 없이 `…/references/*.md` 를 담은 외부 URL 을 인용만 해도
+  공유 락이 RED 가 된다. 발동 조건 + 선택지 셋(가장 좁은 것은 URL 스킴 배제).
+- `test_proceed_gate_adopters.sh` 주석: 채택자 하한은 **개수이지 구성원이 아니다**
+  (오늘 치환이 RED 인 것은 대체 후보에 앵커가 없어서인 **우연**) · 도출은 리터럴 등장을
+  셀 뿐이라 HTML 주석·예시 언급도 채택자로 등록된다(거짓 RED, fail-closed).
+- `test_brief_review_entry.sh` 의 `CI_FILES` 정의부(:20)에 가드로 가는 포인터 한 줄 —
+  가드와 그 근거가 110줄 아래에 있어, 넓히려는 사람이 서는 자리에서는 안 보였다.
+- `test_conducting_interview_stage.sh` 의 §8/§9 잔존 검사 옆에 주의 한 줄: `CI_ALL` 에 든
+  공유 계약은 **다른 문서의** 절 번호를 인용할 수 있고 이 검사는 그것을 payload 좌표와
+  구별하지 못한다(실측: 감사문서 `§8` 인용 하나로 발화 — 이번 라운드에 실제로 밟았다).
+  공유 계약에서는 절을 번호가 아니라 제목으로 인용하는 것이 회피책이다.
+
+## [0.32.1] — 2026-08-21
+
+Task 33 fix round 2 — 한 항목. `proceed-gate.md` 와 `reviewing-spec/SKILL.md` 가 **존재하지
+않는 락을 인용**하고 있었다.
+
+**Fixed**
+- **`reviewing-spec` 표면의 기계적 앵커를 아무도 재지 않았다.** 정본 「검증」 절은
+  *"**각 skill 표면에** 정지 어휘가 실재하는지를 grep 이 잰다"* 고 적고,
+  `reviewing-spec/SKILL.md` 의 AC19 불릿은 *"기계적 검증 앵커가 사는 곳이 거기다"* 라고
+  한 걸음 더 나간다. 〔실측〕 `턴 종료|다음 턴` 을 재는 단언은 리포 전체에 둘뿐이고
+  (`test_conducting_interview_stage.sh` 의 `ci_cat` · `test_brief_review_entry.sh` 의
+  `CI_FILES`) **둘 다 conducting-interview 표면만 본다.** 계약을 통일해 놓고 이행 검증은
+  한쪽에만 있었다 — 삭제된 규칙이 아니라 **처음부터 없던 규칙을 인용하는** 형태다.
+  주장을 약화하는 대신 **참으로 만들었다**: 두 게이트를 같은 방식으로 잰다.
+
+**Added**
+- **`tests/test_proceed_gate_adopters.sh`** — 공통 계약의 **채택자 대칭** 락.
+  채택자를 열거하지 않고 **정본을 가리키는 포인터에서 도출**하고(세 번째 skill 이 채택하면
+  자동으로 같은 요구를 받는다), 채택자마다 **자기 표면**에서 가드 2 기계적 앵커(정지 어휘)와
+  가드 1 앵커(polite stop)를 잰다. 기존 `reviewing-spec` 테스트에 끼워 넣지 않은 이유는
+  그러면 같은 검사가 두 벌 독립 저술되고 스코프 규칙이 갈라지기 때문이다 — **이 결함을 만든
+  바로 그 구조**다.
+  - **F1 위험이 여기에도 그대로 적용된다**: 정본은 앵커 리터럴을 계약 어휘로 담고 있어,
+    코퍼스에 들어오면 채택 skill 이 문구를 다 잃어도 GREEN 이 된다. 〔실증〕 정본을 코퍼스에
+    넣고 구조적 가드를 뺀 변형에서 `reviewing-spec` 의 정지 어휘·polite stop 을 통째로
+    지워도 **GREEN**(정본에서 4줄을 세어 만족) / 스코프 복원 시 **RED 2건**.
+    그래서 코퍼스는 채택자 소유 표면으로만 구성하고, 구조적 가드 두 개(모양 검사 + 정본
+    이름 검사)로 그 편집을 막는다.
+  - **채택자 하한이 1 이 아니라 2 인 이유**: 이 파일이 플러그인 레벨에 사는 근거가 "두 skill 이
+    공유한다"이다. 1 로 떨어지면 정상 상태가 아니라 **한쪽이 조용히 이탈**한 것이고, 이탈한
+    skill 은 그 순간 측정 밖으로 나간다 — 코퍼스 축소가 vacuity(≥1)를 통과하는 바로 그 모양.
+    숫자를 박은 것이 아니라 **파일의 배치 근거**에서 도출한 하한이다.
+  - 양성 통제 7종: 단언 7건이 실제로 실행·계수됨(도달성) · `reviewing-spec` 정지 어휘만 제거
+    → 그 줄만 RED, interview 는 GREEN(채택자별 스코프 실증) · polite stop 만 제거 → 가드 1 만
+    RED · 포인터 제거 → 채택자 1 → 하한 RED · 위 fail-open 차분 · 복원 GREEN + 해시 일치.
+
+**Docs**
+- 정본 「검증」 1항이 **재는 주체를 이름으로** 댄다(주장에서 확인 가능한 사실로).
+- 감사문서 §7-5 신설 — 공유 계약의 **degrade 채널 의무**는 아직 산문일 뿐이고, 기계화는
+  **세 번째 채택자**가 나와야 형태가 생긴다. 발동 조건과 "오늘 만들지 않는 이유"를 적었다.
+- 포인터 락 주석에 리졸버 form ②(`plugins/<p>/…`)가 오늘 **살아 있는 인스턴스 0** 이고
+  합성 케이스로만 검증됐음을 기록(코퍼스가 아니라 갈래이므로 vacuity 대상 아님).
+
+## [0.32.0] — 2026-08-21
+
+Task 33 fix round 1. 리뷰 판정은 **Spec PASS / Quality FAIL** 이었고, 결함은 리팩터가
+만들어 낸 **산문 계약** 쪽에 몰려 있었다 — 엔지니어링(1:1 접두사 리졸버 · presence/absence
+코퍼스 분리 · 여섯 코퍼스 수리 · 격리 설치 실측)은 독립 재도출로 유지됐다.
+
+**Added**
+- **정본이 각 skill 에 `degrade 채널`의 이름을 요구한다 (F2).** [0.31.0] 의 정본은
+  *"모든 degrade record 를 출력하고 없으면 `degrade 없음`"* 을 계약으로 적었는데, 그 문장은
+  `conducting-interview` 의 메커니즘(`brief_review_degradations` 원장)을 계약으로 승격시킨
+  것이었다. `reviewing-spec` 에는 그런 원장이 없다 — `merge_review` 플래그와 파싱-시점
+  `advisory:` 줄이 있을 뿐이고 게이트 템플릿에는 degrade 슬롯조차 없었다. 그래서 Phase 5 는
+  `codex_degraded: true` 인 라운드에도 `degrade 없음` 을 내거나(사용자에게 리뷰 커버리지에
+  대한 거짓 진술) 방금 따르라고 지시받은 계약을 무시하거나 둘 중 하나였다.
+  정본은 이제 **채널-중립**으로 의무만 정하고(감추지 않는다), 각 skill 이 자기 채널을 이름으로
+  대게 한다. 채널이 없다는 사실 자체가 degrade 이며, 채널을 대지 않은 채 "없음"을 내는 것은
+  금지다. `reviewing-spec` 은 실제 채널(`codex_degraded`·`claude_degraded`·
+  `claude_verdict_unrecoverable` + `advisory:`)을 명시하고 게이트 `question` 에 degrade
+  슬롯을 얻었다. `conducting-interview` 는 `brief_review_degradations` 원장을 이름으로 댄다.
+- **presence 코퍼스 구조적 가드 (F1).** `test_conducting_interview_stage.sh` ·
+  `test_brief_review_entry.sh` 에 "`CI_FILES` 에 이 skill 소유가 아닌 파일이 들어오면 즉시
+  FAIL" 을 넣었다. 〔실측〕 가드 없이 `CI_FILES` 를 `plugins/spec-distill/references/*.md` 까지
+  넓힌 상태에서 `finishing.md` 의 옵션 ① 정지 어휘와 `polite stop` 을 통째로 지워도 두 락이
+  **GREEN** 이었다. 그 편집은 그럴듯하다 — [0.31.0] 이 네 개의 *부재* 코퍼스에 정확히 같은
+  편집을 했기 때문이다. 주석이 아니라 가드여야 하는 이유가 그것이다.
+- **스캔 루트 실재 단언 (F4).** `test_brief_review_meta.sh` · `test_reviewing_spec_design_only.sh`
+  는 `grep -r` 루트에 문자열을 덧붙이기만 했다. 오타·개명이면 *No such file* 이 `2>/dev/null`
+  에 삼켜지고 부재 단언은 좁아진 코퍼스 위에서 통과한다. 〔차분 실측〕 공유 계약 디렉터리를
+  치운 상태에서 **[0.31.0] 판본 GREEN / 이번 판본 RED**.
+
+**Changed**
+- **정본의 「검증」 절이 참인 이유를 다시 적었다 (F1).** [0.31.0] 은 *"이 파일은 앵커의 사본을
+  두지 않는다"* 고 적었으나 **거짓**이었다 — `grep -cE '턴 종료|다음 턴'` = 4 (Step B 표 ① 행 +
+  가드 2 본문). 그 리터럴은 계약의 어휘라 뺄 수 없고, 빼려고 계약을 약하게 쓰는 것이 더 나쁘다.
+  진짜 보호는 자제가 아니라 **코퍼스 경계**(두 측정 스캔이 skill 소유 표면으로 한정)이며,
+  틀린 이유를 적어두면 진짜 위험 경로를 가린다. 이제 그 경계와 위 구조적 가드를 명시한다.
+- **`reviewing-spec` 의 "Step C" 지시대상 모호성 제거 (F3).** 이 SKILL 에는 `### Step C —
+  응답 처리` 가 이미 있는데 [0.31.0] 이 정본의 `## Step C — 두 가드` 를 인접한 두 불릿에서
+  같은 짧은 이름으로 인용했다. 기계적 앵커를 찾는 사람이 정본으로 가서 거기서 리터럴을 보고
+  "공유 앵커"라 결론지어 이 SKILL 의 문구를 지우는 경로가 열린다. 두 인용을 완전한 이름으로
+  적고, 앵커가 사는 곳이 어디인지 명시했다.
+- `finishing.md` B-2 의 *"reviewing-spec Phase 5 Step A와 대칭으로"* 를 정본 `## Step A`
+  인용으로 교체 (F8) — 60줄 위에서 은퇴시킨 skill-대-skill 대칭 모델을 그 문장이 되살리고 있었다.
+
+**Fixed**
+- **[0.31.0] 엔트리의 수 정정 (F7).** "부재 락 **4건**"이라 적고 **다섯**을 나열했다. 옳은 수는
+  **6** 이다(여섯째 `quality-gates/tests/test_law2_prose.sh` 는 그 플러그인 CHANGELOG 에 있다).
+- **[0.31.0] 엔트리의 성격 규정 정정 (F7).** "전부 `skills/*/references/` 까지만 도출하고 있었다"
+  는 **둘에 대해 거짓**이다: `test_brief_review_meta.sh` 는 `grep -rnE … "$SD/scripts" "$SD/skills"`
+  였고 `test_reviewing_spec_design_only.sh` 는 `references/` 글롭이 아예 없는 전-트리 재귀
+  루트였다. 공통점은 글롭의 모양이 아니라 **`skills/` 밖을 못 봤다**는 것이다.
+- **포인터 락: 역방향이 접미사로 소유를 판정하던 것 (F5).** 정방향만 as-written 으로 조이고
+  역방향은 `sed 's|.*/\(references/\)|\1|'` 로 접미사를 잘라 비교했다. 그래서
+  `${CLAUDE_PLUGIN_ROOT}/references/notes.md` 포인터가 `skills/<s>/references/notes.md` 의
+  소유 증거로도 인정됐다 — 동명 파일이 양쪽에 있으면 skill 레벨 파일이 **아무도 안 가리키는데도**
+  고아로 안 잡힌다. 이제 정방향이 만든 `(SKILL.md, 해석된 대상)` **쌍**을 그대로 되쓴다.
+  〔차분 실측〕 그 상황을 구성해 **[0.31.0] 판본 GREEN / 이번 판본 RED**.
+- **포인터 락: 인식 못 하는 접두사가 거부가 아니라 절단됐다 (F6).** 접두사를 열거해 골라 받는
+  정규식은 열거 밖 형태에서 실패한 뒤 문자열 **중간**의 맨몸 `references/…` 에서 매치를 시작해,
+  그 표기를 조용히 "스킬 디렉터리 상대"로 재해석했다 — 헤더와 설계 노트가 "폴백 없음"이라
+  주장하는 자리에 **절단형 폴백**이 있었다. 토큰을 통째로 삼키는 클래스로 잡은 뒤 형태를
+  판정하고, 세 형태 중 어느 것도 아니면 loud FAIL 한다. 〔차분 실측〕 중괄호 없는
+  `$CLAUDE_PLUGIN_ROOT/references/x.md` + 동명 skill 레벨 파일 → **[0.31.0] 판본 GREEN
+  (조용한 재해석) / 이번 판본 RED**. 인식하는 세 형태와 `**볼드**` 표기는 거짓 거부 없음(11/11).
+
+**Docs**
+- `docs/audits/2026-08-21-skill-split-lock-corpus-shrink.md` 에 §8 신설(공유 참조 파일 —
+  처방을 거꾸로 적용하지 않기), §7-3 해소 기록, §7-4 신규 이월 항목
+  (`quality-gates/tests/test_no_secret_prompts.py` 의 한 칸 위 맹점), §6 재도출 실측(21+1) 추가.
+
+## [0.31.0] — 2026-08-21
+
+Task 33 — `/compact` proceed 게이트 **두 벌의 공통 골격을 한 파일로**. 사용자 요청
+*"저장소 전반의 `/compact` 방식을 점검하고 일관된 형태로 통일해"* 의 마지막 축이다.
+
+**Added**
+- **`references/proceed-gate.md` (플러그인 레벨, 71줄).** `reviewing-spec` Phase 5 와
+  `conducting-interview` 종료 Step B 가 공유하는 **골격 · 두 가드 · 예외 경로**의 정본.
+  두 skill 이 공유하므로 어느 skill 밑에도 두지 않았다 — 이 리포의 첫
+  `plugins/<p>/references/` 파일이다.
+  〔격리 설치 실측〕 이 모양이 실제로 배포되는지 재봤다(`CLAUDE_CONFIG_DIR=<tmp>` 로
+  사용자 `~/.claude` 격리 증명 후 `plugin marketplace add` + `plugin install`).
+  설치본 `…/spec-distill/0.31.0/references/proceed-gate.md` 로 **그대로 실린다** —
+  `${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md` 포인터가 설치본에서 resolve 된다.
+  플러그인 루트의 새 디렉터리가 설치에서 누락될 가능성은 측정으로 배제됐다.
+
+**Changed**
+- **두 게이트가 자기 어휘만 인라인으로 남긴다.** 각 skill 에 남은 것: 정본을 가리키는
+  `Read` 포인터 · 자기 어휘의 `AskUserQuestion` 옵션 라벨 · verbatim `/compact` 템플릿 ·
+  skill 고유 스텝(interview 의 B-0 확정 후보·재제시 상한, reviewing-spec 의 `spec_path`
+  선검증·AC8 경계). 옵션 ① 의 정지 문구(`턴 종료`·`다음 턴`)는 **각 skill 에 그대로 남는다**
+  — 기계적 검증 앵커가 거기 살고, 정본이 그 리터럴을 복사하면 자기 인용이 락을 먹는다.
+- `conducting-interview/references/finishing.md` 의 Step B 머리에서 *"같은 두 가드를
+  interview 어휘로 **독립 저술**합니다"* 를 삭제 — 더 이상 참이 아니다.
+- **`tests/test_conducting_interview_stage.sh` 의 코퍼스를 presence/absence 로 분리.**
+  `CI_FILES`(이 skill 자신의 표면)는 **존재** 검사용, `CI_ALL`(+ 플러그인 레벨 정본)은
+  **부재** 검사용. 공유 파일을 존재 검사에 넣으면 "이 skill 이 자기 어휘를 잃었다"를
+  공유 파일이 대신 만족시킨다(§4 거울 클래스).
+
+**Fixed**
+- **부재 락 4건이 플러그인 레벨 `references/` 를 못 보고 조용히 약해지는 것을 차단.**
+  전부 `skills/*/references/` 까지만 도출하고 있었다 — 한 칸 위는 밖이었다. 금지 토큰을
+  정본 파일에 주입해 **수정 전 GREEN(fail-open 실증) / 수정본 RED** 차분으로 각각 실증했다:
+  `tests/test_no_wall_clock.sh`(`wall_clock_started_at`) ·
+  `tests/test_web_kill_switch.sh`(`SWEEP_CAP`) ·
+  `tests/test_conducting_interview_stage.sh`(`breadth-keeper`) ·
+  `tests/test_brief_review_meta.sh`(E10 스캔 루트) ·
+  `tests/test_reviewing_spec_design_only.sh`(F9-D 스캔 루트, `drafting-spec`).
+  합집합 vacuity 만으로는 부족하다 — 플러그인 레벨 글롭이 깨져도 `skills/` 쪽 도출로
+  통과하기 때문에, **디렉터리가 있는데 도출이 0이면** 따로 loud FAIL 한다(기대값
+  하드코딩 없이 디렉터리 실재라는 독립 신호에서 도출).
+
+**Docs**
+- `README.md` AP2 항목이 두 가드를 **세 번째로 저술**하고 있었다 — 정본 포인터를 달고
+  "아래는 요약이지 별개 저술이 아니다"를 명시. v0.13.0 항목에도 통합 사실을 덧붙였다.
+
+## [0.30.1] — 2026-08-21
+
+Task 32 fix round 1 — 전부 **문서**다. 코드·락 동작은 무변경(리뷰가 Spec PASS /
+Quality PASS 로 엔지니어링을 독립 재도출로 확인).
+
+**Fixed**
+- **[0.30.0] 엔트리의 overclaim 정정 (F2).** 두 스위트의 섹션 윈도우가 똑같이 위치
+  무관해졌다고 적었으나 사실이 아니다. `test_brief_review_entry.sh` 만 그렇고
+  (`scoped_window()` 가 `"${CI_FILES[@]}"` 위에서 돈다),
+  `test_conducting_interview_stage.sh` 의 다섯 창은 `$FIN` 하드코딩이다. 결과는
+  조용한 구멍이 아니라 시끄러운 false-RED 지만, 산문이 코드보다 강한 주장을 하고
+  있었다. 해당 엔트리를 파일·처방별로 갈라 다시 적었다.
+- **[0.30.0] **Fixed** 헤딩의 undercount 정정 (F3).** "부재 락 3건"으로 읽히지만
+  실제는 **4파일 / 10단언**이다(네 번째가 `test_conducting_interview_stage.sh` 의 7건,
+  같은 파일의 windowed 수리와 묶여 **Changed** 에 있었다).
+- **독자 열거 수 정정 (F1).** 보고서가 12로 적은 것은 **15 + 비독자 1**이 옳다.
+  누락된 넷은 전부 부재 클래스이지만 코퍼스를 `grep -r`·`find` 로 **도출**하므로
+  새 참조 파일을 자동으로 삼킨다 — 오늘 동작상 결과는 없다:
+  `quality-gates/tests/test_governance_no_capability_caps.sh` ·
+  `tests/test_reviewing_spec_design_only.sh` · `tests/test_brief_review_meta.sh` ·
+  `quality-gates/tests/test_codex_runner_no_effort_pin.sh`.
+  반대로 `shared/tests/test_changelog_integrity.sh` 는 **독자가 아니다**(`SKILL.md` 를
+  한 번도 읽지 않는다 — `plugin.json` + `CHANGELOG.md` 만 본다). 버전영향이지
+  코퍼스영향이 아니다.
+  그중 `test_governance_no_capability_caps.sh` 는 구조적으로 중요하다 — [0.30.0] 이
+  "아무도 고려하지 않은 클래스"로 지목한 **플러그인 경계를 넘는 repo-wide 부재 스캔**의
+  **두 번째** 인스턴스다. 그 면역은 분석의 결과가 아니라 **구성의 운**이었다.
+
+**Added**
+- `docs/audits/2026-08-21-skill-split-lock-corpus-shrink.md` (+ `docs/audits/README.md`
+  인덱스 줄) — 이 실패 클래스의 **영구 기록**. 앞선 보고서는 `.superpowers/` 아래
+  git-ignored 라 커밋되지 않아 미래 세션이 **읽을 수 없다**; 아무도 열지 못하는 파일의
+  숫자를 고치는 것은 아무것도 고치지 않는다. 문서가 담는 것: 실패 클래스 · 독자 열거
+  6 도달 경로(`.py`·플러그인 경계 포함) · 면역 조건(도출 vs 열거) · 포인터가 presence
+  락을 header-satisfiable 하게 만드는 **거울 클래스** · 차분 실증의 계측기 위생 2함정 ·
+  이월 미해결 3건.
+  `docs/` 와 `docs/audits/` 는 **어느 플러그인에도 속하지 않는다** — 이 bump 를
+  촉발한 것은 그 문서가 아니라 위 **Fixed** 의 `plugins/spec-distill/CHANGELOG.md`
+  산문 수정이다. 감사 문서 자체는 무-플러그인 자산으로 이 엔트리에 귀속만 시킨다.
+
+**Notes**
+- [0.30.0] 의 "순수 예방적"이라는 자기평가는 **과소 주장**이었다. `test_law2_prose.sh`
+  수리가 새로 덮는 코퍼스는 이번 분할분 232줄이 아니라 Task 31 산출물
+  (`runtime-gate.md` 1,189 + `state-file-format.md` 78)을 더한 **1,499줄**이고, 그
+  전량이 clean 하다(28/28). 참인 주장은 더 강하다 — **새로 덮인 코퍼스 전체에서**
+  어떤 수리된 락도 잡을 것이 없었다.
+- 측정 정정 2건(둘 다 결론 불변): `GUARD_WINDOW` 가드 줄 목록에서 **330** 이 빠져
+  있었다(여전히 < 341, 짝짓기는 `g ≤ d` 만 보므로 무영향). 줄번호 검사 지점은 "정확히
+  두 곳"이 아니라 **셋**이다 — `test_brief_review_entry.sh:172` 의
+  `n5="$(wc -l <<<"$WA5")"; [[ "$n5" -le 30 ]]` 가 창 크기를 재는 줄-거리 검사다.
+  Step A.5 는 분할 전 395–424 로 이동 구간에 통째로 들어 있어 창이 온전히 따라갔고
+  현재 28 ≤ 30 으로 GREEN. Ruling 67 의 "재조립 불필요" 결론은 그대로다.
+
+## [0.30.0] — 2026-08-21
+
+Task 32(무게 감축): `conducting-interview` SKILL.md의 `## 종료 — brief 작성 + optional
+handoff` 절차 전문(232줄, 분할 전 파일(614줄)의 37.8%)을
+`skills/conducting-interview/references/finishing.md`로 분리했다. SKILL.md에는 같은
+`## 종료` 헤딩 아래 포인터 산문만 남는다 — floor 5차원이 전부 `closed`가 되어 brief
+작성으로 넘어갈 때만 그 파일을 Read 하고, 인터뷰가 진행 중인 동안은 읽지 않는다(조건부
+로드). 이 파일에는 목차도 내부 `](#anchor)` 링크도 없어 깨질 앵커가 없다.
+on-demand 로드 표면(SKILL·agent·command 전량)은 이 분리로 5,406줄 → 5,188줄
+(Δ −218)로 줄었다.
+
+**Added**
+- `skills/conducting-interview/references/finishing.md` — 종료 절차 전문(Step A ·
+  Step A.5 · Step B B-0…B-4). 분할 전 SKILL.md에서 **바이트 그대로** 이동했고 내용
+  변경은 없다(재조립 후 원본과 diff 0줄 — 의도적으로 SKILL.md에 남긴 구분용 빈 줄
+  하나 제외).
+
+**Fixed**
+- **분할로 조용히 약해진 부재 락 — 4파일 / 10단언.** (아래 3건 + **Changed** 의
+  `test_conducting_interview_stage.sh` 7단언. 그 7건은 같은 실패 클래스이지만 같은
+  파일의 windowed 수리와 한 덩어리라 Changed 에 적었다.) 부재 락("이 문자열이 나타나면 안 된다")은
+  코퍼스가 줄어도 RED가 되지 않고 **조용히 약해진다** — Task 31이 이 방식으로 P21
+  secret 스캔의 범위를 잃었다. 세 락 모두 분리 직후 GREEN이었고, 금지 문자열을
+  `finishing.md`에 주입해 **수정본 RED / 수정 전 GREEN**의 차분으로 fail-open을
+  실증한 뒤 고쳤다. 세 곳 다 열거가 아니라 **도출**(`references/*.md` 글롭)로
+  고쳐 새 참조 파일이 생기면 자동으로 대상이 되게 했고, 도출 0건이면 loud FAIL
+  하는 vacuity 단언을 함께 넣었다.
+  - `tests/test_no_wall_clock.sh` — 순수 전-파일 부재 락. 하드코딩된 3-파일 배열이라
+    분리분을 못 봤다. 하필 종료 절차가 "얼마나 걸렸나"를 다시 재고 싶어지는 가장
+    그럴듯한 자리다. 실측: 주입 후 수정 전 9/9 GREEN → 수정본 2건 RED.
+  - `tests/test_web_kill_switch.sh` — 두 부재 검사(느슨한 참 판정 · 상한 게이트
+    재도입)가 `dispatch_lines` 없으면 `continue`로 빠지는 자리에 있어, dispatch가
+    없는 분리분은 영영 검사되지 않았다. 부재 검사를 `continue` **위로** 끌어올려
+    표면 전량에서 돌게 했다. 실측: 주입 후 수정 전 32/32 GREEN → 수정본 2건 RED.
+  - `plugins/quality-gates/tests/test_law2_prose.sh` — `find plugins/*/skills -name
+    'SKILL.md'` 코퍼스라 **모든** 플러그인의 `references/*.md`를 못 봤다. Task 31이
+    만든 `runtime-gate.md`(1,189줄) **와** `state-file-format.md`(78줄) 둘 다 이미 이 락
+    밖에 있었으므로 그 잔여 구멍도 함께 닫힌다 — 수리 후 AC16-1 에 새 파일 줄이 3건
+    (두 quality-gates 참조 + `finishing.md`) 늘어난 것으로 확인된다.
+    실측: 주입 후 수정 전 24/24 GREEN → 수정본 4건 RED.
+
+**Changed**
+- 두 스위트의 **전-파일 검사**(존재·부재 양쪽)는 스킬 표면(SKILL.md + `references/*.md`)을
+  하나로 보도록 코퍼스를 도출로 바꿨다. `test_conducting_interview_stage.sh`의 부재 7건은
+  주입 차분으로 이빨을 확인했다(수정 전 7/7 GREEN → 수정본 7/7 RED).
+- **섹션 윈도우의 처방은 두 파일이 다르다** — 앞선 판본의 이 항목은 둘 다 위치
+  무관해졌다고 적었으나 사실이 아니다:
+  - `tests/test_brief_review_entry.sh` — `scoped_window()`가 `"${CI_FILES[@]}"` 위에서
+    돌아 **위치 무관**이다. `### Step A.5`·`#### B-2`가 어느 파일에 있든 창이 잡힌다.
+  - `tests/test_conducting_interview_stage.sh` — 다섯 창(`#### B-0`…`#### B-3` · `## 종료`,
+    `:57 :72 :92 :113 :208`)은 **`$FIN` 하드코딩**이다. 나중에 `#### B-2`가 제3의 파일로
+    옮겨가면 `b2_block`이 비어 그 assert들이 RED가 된다. 다만 `[[ -f "$FIN" ]]`(`:24`)와
+    `[[ -n "$b2_block" ]]` 빈-창 가드가 있어 **조용한 구멍이 아니라 시끄러운 false-RED**이고,
+    수리는 창 소스 한 줄 교체다. 위치 무관화는 이 사이클 범위 밖으로 남긴다.
+
+**Notes**
+- **재조립 헬퍼(`reconstruct-skill.sh`)를 쓰지 않았다 — 측정 결과 필요 없었다.**
+  Task 31이 그 헬퍼를 만든 이유는 두 테스트가 섹션 경계를 가로질러 **줄 번호로**
+  순서·거리를 쟀기 때문이다. 이 스킬의 소비자 전량을 훑어 그런 검사를 찾았고,
+  줄 번호 산술은 두 곳뿐이었다: `test_web_kill_switch.sh`의 dispatch↔kill switch
+  근접 검사(`GUARD_WINDOW=40`)는 dispatch 254·269·320행을 가드 245·302·311행과
+  짝지어 **전부 경계(341행) 아래**에 있고, `test_check_verbatim_coverage.sh`의
+  `sed -n "${P21_LINES},+3p"`는 첫 `REDACTED`(63행) 기준이라 63–66행에 머문다.
+  경계를 가로지르는 쌍이 0건이므로 재조립은 불필요하고, 근-중복 66줄 파일을
+  새로 만들지 않았다.
+
 ## [0.29.0] — 2026-08-20 (BREAKING)
 
 Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일. 이

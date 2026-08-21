@@ -4,9 +4,60 @@ set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SKILL="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/SKILL.md"
+# Task 32(무게 감축): `## 종료` 절차 전문이 references/finishing.md 로 분리됐다. 이 스위트의
+# 전-파일 검사(존재·**부재** 양쪽)가 보는 범위는 614줄 중 396줄로 줄었다 — 부재 락은 코퍼스가
+# 줄어도 RED 가 되지 않고 **조용히 약해진다**(Task 31 이 정확히 이 방식으로 P21 스캔을 잃었다).
+# 그래서 스킬의 표면을 **열거가 아니라 도출**해 한 덩어리로 다룬다: 새 참조 파일이 생겨도
+# 자동으로 대상이 된다. 섹션 윈도우(B-0…B-3·종료)는 그 섹션이 실제로 사는 $FIN 에서 뜬다.
+FIN_DIR="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/references"
+FIN="$FIN_DIR/finishing.md"
+CI_FILES=("$SKILL")
+while IFS= read -r _f; do [ -n "$_f" ] && CI_FILES+=("$_f"); done < <(ls "$FIN_DIR"/*.md 2>/dev/null)
+# Task 33: 두 skill 이 **공유**하는 절차(proceed 게이트 공통 계약)는 어느 skill 밑도 아닌
+# 플러그인 레벨 `plugins/spec-distill/references/*.md` 로 갔다. 그 자리는 이 스킬의 표면
+# 이면서(포인터로 가리키고 Read 하므로) 위 두 글롭 어디에도 안 든다.
+#
+# 두 배열을 나눈다:
+#  - `CI_FILES`  = 이 skill **자신의** 표면. **존재(presence)** 검사는 여기서만 재야 한다 —
+#    공유 계약 파일까지 넣으면 "이 skill 이 자기 어휘를 잃었다"를 공유 파일이 대신 만족시킨다
+#    (§4 거울 클래스: 포인터/공유 파일이 presence 락을 header-satisfiable 하게 만든다).
+#  - `CI_ALL`    = 자신의 표면 + 공유 계약. **부재(absence)** 검사는 여기서 재야 한다 —
+#    금지 토큰이 공유 파일로 새 들어오는 것을 놓치면 락이 조용히 약해진다.
+PLUGIN_REF_DIR="$REPO_ROOT/plugins/spec-distill/references"
+CI_ALL=("${CI_FILES[@]}")
+n_plugin_ref=0
+while IFS= read -r _f; do
+  [ -n "$_f" ] || continue
+  CI_ALL+=("$_f"); n_plugin_ref=$((n_plugin_ref + 1))
+done < <(ls "$PLUGIN_REF_DIR"/*.md 2>/dev/null)
+ci_cat_all() { cat "${CI_ALL[@]}"; }
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
-has() { grep -qiE "$1" "$SKILL" && ok "$2" || no "$2"; }
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/presence_corpus.sh"
+
+# vacuity: 도출이 SKILL.md 하나만 남기면 이 스위트의 부재 락은 분할 이전 범위로 조용히
+# 되돌아가면서 GREEN 을 찍는다. '참조 파일 0건'을 '문제 없음'으로 읽지 않는다.
+[[ "${#CI_FILES[@]}" -ge 2 ]] \
+  && ok "코퍼스: conducting-interview 표면 ${#CI_FILES[@]}개 파일 도출 (vacuous 아님)" \
+  || no "코퍼스: references/*.md 를 0건 도출했다 — 전-파일 검사 범위가 조용히 좁아졌다"
+[[ -f "$FIN" ]] && ok "코퍼스: references/finishing.md 실재" || no "코퍼스: references/finishing.md 부재"
+
+# presence 코퍼스 소유 규칙 — 공용 단언(`shared/tests/presence_corpus.sh`).
+# 이 계약을 재는 스캔은 전부 같은 규칙을 지고, 그래서 사본이 아니라 한 벌이다
+# (감사문서 「공유 참조 파일」 절 · 정본 「앵커는 각 skill 에」 절).
+assert_presence_corpus_skill_owned "CI_FILES" "${CI_FILES[@]}"
+# 플러그인 레벨 도출. 0 자체는 정당한 상태지만, 디렉터리가 **있는데** 0이면 글롭이 깨진
+# 것이다 — CI_ALL 이 CI_FILES 로 조용히 축소되고 아래 부재 검사가 그만큼 약해진다.
+if [[ -d "$PLUGIN_REF_DIR" ]]; then
+  [[ "$n_plugin_ref" -ge 1 ]] \
+    && ok "코퍼스: 플러그인 레벨 references/*.md ${n_plugin_ref}건 도출 (부재 검사 범위)" \
+    || no "코퍼스: $PLUGIN_REF_DIR 는 있는데 도출이 0건 — 부재 검사 범위가 조용히 좁아졌다"
+fi
+
+# 존재·부재 검사는 **스킬 표면 전체**를 본다 (분할 전 단일 파일과 같은 의미).
+has() { grep -qiE "$1" "${CI_FILES[@]}" && ok "$2" || no "$2"; }
+# 여러 파일을 합친 스트림 — `grep -c` 는 파일마다 한 줄을 내므로 합산에는 쓸 수 없다.
+ci_cat() { cat "${CI_FILES[@]}"; }
 
 grep -q '^cost_class: variable$' "$SKILL" && ok "cost_class: variable" || no "cost_class not variable"
 
@@ -34,7 +85,7 @@ has 'optional|선택' "brainstorming invoke is optional"
 # 매치돼서, B-1 블록을 통째로 지워도 B-4 줄이 남아 green이었다(header-satisfiable). 그래서
 # B-0/B-2/B-3에 이미 쓰는 awk 윈도우 방식으로 **그 블록 안에서만** 찾고, 헤더가 아니라
 # 본문에만 있는 문구(`crash·spec-mode fallback`)를 함께 요구한다.
-b1_block="$(awk '/^#### B-1/{f=1;print;next} /^#### /{f=0} f' "$SKILL")"
+b1_block="$(awk '/^#### B-1/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
 { printf '%s' "$b1_block" | grep -qE 'superpowers.*(부재|없).*advisory|advisory.*superpowers' \
     && printf '%s' "$b1_block" | grep -qF 'crash·spec-mode fallback'; } \
   && ok "AC13: superpowers-absent loud advisory (B-1 블록 스코프)" \
@@ -49,7 +100,7 @@ b1_block="$(awk '/^#### B-1/{f=1;print;next} /^#### /{f=0} f' "$SKILL")"
 # 라벨은 grep -qE가 아니라 **grep -qF**로 잡는다: 한국어 조사와 마크다운 백틱이 정규식
 # 경계를 조용히 깨뜨린 전례가 이 파일 안에 이미 있다(아래 강등 프로즈 락 주석 참조).
 # 헤더-satisfiable 회피: B-2 헤더에 `AskUserQuestion`이 있으므로 여는 괄호까지 요구한다.
-b2_block="$(awk '/^#### B-2/{f=1;print;next} /^#### /{f=0} f' "$SKILL")"
+b2_block="$(awk '/^#### B-2/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
 { [[ -n "$b2_block" ]] && grep -qF 'AskUserQuestion(' <<<"$b2_block"; } \
   && ok "AC20: Step B proceed 게이트가 AskUserQuestion 호출 (B-2 스코프)" \
   || no "AC20: B-2 블록에 AskUserQuestion( 호출이 없다"
@@ -69,7 +120,7 @@ grep -qF 'brief만 종료' <<<"$b2_block" \
 has '/compact interview brief at' "AC20: verbatim /compact 명령 노출"
 
 # AC2: 재제시 상한 + 초과 시 강등 + 고정 advisory 문자열 (Unbounded-autonomy 가드)
-b0_block="$(awk '/^#### B-0/{f=1;print;next} /^#### /{f=0} f' "$SKILL")"
+b0_block="$(awk '/^#### B-0/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
 { [[ -n "$b0_block" ]] && grep -q 'confirm_repost_count' <<<"$b0_block"; } \
   && ok "AC2: 재제시 카운터가 state에 기록됨 (프로즈 self-tracking 아님)" \
   || no "AC2: confirm_repost_count가 B-0 블록에 없다"
@@ -90,7 +141,7 @@ grep -qE '제외한 것도|제외 항목' <<<"$b0_block" \
   || no "AC2: 제외 항목 제시 요구가 없다"
 
 # AC3: C4 재결정 프로토콜이 **양쪽 경로**의 호출 프롬프트에 실린다
-b3_block="$(awk '/^#### B-3/{f=1;print;next} /^#### /{f=0} f' "$SKILL")"
+b3_block="$(awk '/^#### B-3/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
 # B-3 전체에서 count>=2를 세면 "①에 두 문장, ②에 0"도 통과한다 — AC3의 계약은 개수가 아니라
 # **경로별 존재**다. 각 옵션 bullet을 자기 윈도우로 잘라 양쪽에 각각 >=1을 요구한다.
 b3_opt1="$(awk '/^- \*\*① /{f=1} /^- \*\*② /{f=0} f' <<<"$b3_block")"
@@ -109,7 +160,7 @@ grep -qE '호출 프롬프트|invocation prompt' <<<"$b3_block" \
   || no "C5: 규약이 brief에 실리지 않는다는 명시가 없다"
 
 # AC21(i) mechanical only — review layer (ii) coexistence judgment = spec-reviewer persona
-cc=$(grep -cE "턴 종료|다음 턴" "$SKILL"); [[ "$cc" -ge 1 ]] \
+cc=$(ci_cat | grep -cE "턴 종료|다음 턴"); [[ "$cc" -ge 1 ]] \
   && ok "AC21(i): cross-compact stop wording present (lines=$cc)" \
   || no "AC21(i): cross-compact stop wording absent"
 
@@ -117,7 +168,7 @@ has 'polite[- ]?stop|narrate.*금지|silent 종료 금지' "AC22: AP2 polite-sto
 
 has 'state_path\.py state-root|Bash.*state|state.*Bash' "PN1: state-write-via-Bash contract"
 
-grep -q 'drafting-spec' "$SKILL" && no "AC10: drafting-spec still referenced" || ok "AC10: no drafting-spec reference"
+grep -q 'drafting-spec' "${CI_ALL[@]}" && no "AC10: drafting-spec still referenced" || ok "AC10: no drafting-spec reference"
 
 # --- v0.22.0: 커버리지 상태 스키마 + 마이그레이션 (AC1/AC5) ---
 has 'coverage:' "AC1: coverage ledger in state schema"
@@ -129,7 +180,7 @@ has 'coverage_mapper_last_probe' "AC1: orchestration.coverage_mapper_last_probe 
 # AC1: 기존 필드 보존
 has 'non_user_streak' "AC1: non_user_streak retained"
 # AC1: 라운드별 잠금 producer 제거 — pending_locked_decisions는 사라지고 user_statements가 대체
-grep -q 'pending_locked_decisions' "$SKILL" \
+grep -q 'pending_locked_decisions' "${CI_ALL[@]}" \
   && no "AC1: pending_locked_decisions가 SKILL에 잔존 (라운드별 잠금 producer)" \
   || ok "AC1: pending_locked_decisions 제거됨"
 has 'user_statements' "AC1: user_statements가 state 스키마에 존재"
@@ -185,7 +236,7 @@ grep -qi 'increment 실패' <<<"$backstop_block" \
   && ok "C5: increment-fail loud advisory present (scoped to probe 백스톱)" \
   || no "C5: increment-fail loud advisory present (scoped to probe 백스톱)"
 # 종료 로직에 interview_round 잔존 0 (AC9/V7b)
-term_block="$(awk '/^## 종료/{f=1} f&&/^## [^종]/{exit} f' "$SKILL")"
+term_block="$(awk '/^## 종료/{f=1} f&&/^## [^종]/{exit} f' "$FIN")"
 grep -q 'interview_round' <<<"$term_block" \
   && no "AC9/V7b: interview_round in termination block" \
   || ok "AC9/V7b: no interview_round in termination logic"
@@ -276,26 +327,30 @@ grep -qE '병렬.{0,8}금지|투기적.{0,8}금지' <<<"$r3_block" \
   || ok "E10: R3 dispatch에 병렬 금지 문구 없음 (scoped to R3)"
 
 # C45 interview_round>=2 트리거가 제거됐는지 (AC7)
-grep -q 'interview_round >= 2\|interview_round>=2' "$SKILL" \
+grep -q 'interview_round >= 2\|interview_round>=2' "${CI_ALL[@]}" \
   && no "AC7: C45 interview_round>=2 trigger still present" \
   || ok "AC7: interview_round>=2 dispatch trigger replaced by C11"
 
 # v0.23.0: 은퇴한 payload 좌표(§8/§9) 잔존 0 — 새 payload는 §0–§7 8섹션뿐이다.
 # §8/§9로 보내는 지시는 존재하지 않는 섹션을 만들어 게이트를 RED로 만든다(부분 sweep 방지 락).
 # `§8.2`처럼 뒤에 `.`나 숫자가 오는 것은 설계 문서 §-참조라 제외한다.
-retired_secs="$(grep -nE '§[89]([^.0-9]|$)' "$SKILL" || true)"
+# 〔주의〕 CI_ALL 에는 플러그인 레벨 공유 계약(proceed-gate.md)이 들어 있고, 그 파일은
+# **다른 문서의** 절 번호를 인용할 수 있다 — 이 검사는 그것을 payload 좌표와 구별하지
+# 못한다(실측: 감사문서 `§8` 인용 하나로 발화). 거짓 RED 지만 시끄러우므로 안전하다.
+# 공유 계약에서는 절을 번호가 아니라 **제목**으로 인용하는 것이 회피책이다.
+retired_secs="$(grep -nE '§[89]([^.0-9]|$)' "${CI_ALL[@]}" || true)"
 [[ -z "$retired_secs" ]] \
   && ok "V11: 은퇴 payload 좌표(§8/§9) 잔존 0" \
   || { no "V11: 은퇴 payload 좌표(§8/§9)가 SKILL에 잔존:"; printf '%s\n' "$retired_secs"; }
 
 # breadth-keeper 용어 잔존 0 (SKILL 본문, AC7/V7a)
-grep -qi 'breadth-keeper\|breadth_keeper' "$SKILL" \
+grep -qi 'breadth-keeper\|breadth_keeper' "${CI_ALL[@]}" \
   && no "V7a: breadth-keeper term remains in SKILL" \
   || ok "V7a: breadth-keeper term removed from SKILL"
 
 # interview_round confinement — migration section only (SHARP, Task 9 V9)
 mig_ir_count="$(awk '/^## In-flight state migration/{f=1;print;next} /^## /{f=0} f' "$SKILL" | grep -c interview_round)"
-total_ir_count="$(grep -c interview_round "$SKILL")"
+total_ir_count="$(ci_cat_all | grep -c interview_round)"
 [[ "$mig_ir_count" -eq "$total_ir_count" ]] \
   && ok "V9: interview_round confined to migration section (mig=$mig_ir_count total=$total_ir_count)" \
   || no "V9: interview_round confined to migration section (mig=$mig_ir_count total=$total_ir_count)"

@@ -16,9 +16,20 @@
 
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-SKILL_MD="$(cd -- "$SCRIPT_DIR/../.." && pwd)/skills/quality-pipeline/SKILL.md"
+SKILL_MD_REAL="$(cd -- "$SCRIPT_DIR/../.." && pwd)/skills/quality-pipeline/SKILL.md"
 
-test -f "$SKILL_MD" || { echo "FAIL: SKILL.md not found at $SKILL_MD"; exit 1; }
+test -f "$SKILL_MD_REAL" || { echo "FAIL: SKILL.md not found at $SKILL_MD_REAL"; exit 1; }
+
+# Task 31(무게 감축): Runtime gate 절차 전문이 references/runtime-gate.md 로 분리됐다.
+# 이 파일의 모든 검사는 원래 단일 SKILL.md 를 줄 번호로 분석하도록 설계됐으므로,
+# 분할 전과 동일한 논리적 문서를 재구성해 그 위에서 돈다 — 그래야 R-init..R9 앵커가
+# 여전히 잡힌다. 재구성 실패(포인터 소실 등)는 조용히 원본으로 폴백하지 않고 FAIL 한다.
+. "$SCRIPT_DIR/../lib/reconstruct-skill.sh"
+if ! SKILL_MD="$(reconstruct_skill_md "$SKILL_MD_REAL")"; then
+  echo "FAIL: SKILL.md ↔ references/runtime-gate.md 재구성 실패 (아래 모든 검사가 공허해질 것을 막기 위해 중단)"
+  exit 1
+fi
+trap 'rm -f "$SKILL_MD"' EXIT
 
 fail=0
 
