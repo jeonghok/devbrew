@@ -3,6 +3,26 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.1.3] — 2026-08-21
+
+Task 31 fix round 3: 라운드 2가 `dependency-check.md`를 지우며 README `references/`
+트리 항목도 지웠지만, 같은 라운드가 만든 `runtime-gate.md`(라운드 1, `[4.1.0]`)는
+그 트리에 애초에 추가된 적이 없었다 — 라운드 1 자신의 커밋이 남긴 drift.
+
+**Fixed**
+- `README.md`의 `## 구조` 트리에 `references/runtime-gate.md` 항목 추가(`state-file-
+  format.md`와 함께 알파벳순, 주석 칸 정렬 맞춤). 이제 트리가 디스크의
+  `references/` 두 파일(`runtime-gate.md`, `state-file-format.md`)과 다시 일치한다.
+
+**Noted (no lock added)**
+- README `## 구조` 트리를 디스크와 일반적으로 대조하는 락은 없다 — 확인 결과
+  `test_readme_scope_reconcile.sh`와 `test_impact_runtime_docs.sh`의
+  `case_readme_component_tree`는 둘 다 과거 특정 태스크가 고정한 이름 목록만
+  검사하고(fan-out 산문 재도입 감지, impact-driven-runtime 신규 스크립트 5종),
+  `references/*.md`를 `git ls-files`로 열거해 트리와 대조하지는 않는다. 의도적으로
+  락을 추가하지 않았다 — README 트리는 예시용 산문이고, 이를 잠그는 것은 문서
+  관례에 대한 하니스 무게이기 때문(요청에 따른 명시적 scope 밖 처리).
+
 ## [4.1.2] — 2026-08-21
 
 Task 31 fix round 2: 라운드 1이 판정을 요청한 채 `KNOWN_ORPHANS_PENDING_RULING`으로
