@@ -38,6 +38,14 @@ assert_presence_corpus_skill_owned() {
          foreign=$((foreign + 1)) ;;
     esac
   done
+  # **빈 코퍼스는 통과가 아니라 실패다.** 앞 판본은 `own=0 foreign=0` 에 `ok` 를 냈다
+  # 〔실측〕 — 소비자의 도출이 깨져 0건이 되면 그 스위트의 존재 검사가 **전부 vacuous**
+  # 해지는데, 이 가드는 "전부 skill 소유 표면"이라며 초록을 찍는다. 세 락이 동시에
+  # 이빨을 잃는 경로이고, 이 헬퍼가 그것을 감춰 준다. 0 은 시끄럽게 답한다.
+  if [ "$#" -eq 0 ] || [ "$((own + foreign))" -eq 0 ]; then
+    no "코퍼스: ${label} 이 비어 있다 — 도출이 0건이면 이 스위트의 존재 검사가 전부 vacuous 하다 ('소유 밖 0건'을 '문제 없음'으로 읽지 않는다)"
+    return
+  fi
   if [ "$foreign" -eq 0 ]; then
     ok "코퍼스: ${label} 의 presence 대상 ${own}개가 전부 skill 소유 표면 (공유 계약 파일은 코퍼스 밖)"
   else
