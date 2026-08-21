@@ -22,13 +22,27 @@ cd "$ROOT" || exit 1
 FILES=(CLAUDE.md docs/plugin-authoring.md)
 while IFS= read -r f; do FILES+=("$f"); done < <(ls plugins/*/README.md 2>/dev/null)
 while IFS= read -r f; do FILES+=("$f"); done < <(find plugins/*/skills -name 'SKILL.md' 2>/dev/null)
+# Task 33: 두 skill 이 **공유**하는 참조 파일은 어느 skill 밑도 아닌 플러그인 레벨
+# `plugins/<p>/references/*.md` 에 산다(spec-distill 의 proceed-gate.md). agent 도구 표면
+# 산문은 공유 계약 쪽으로도 따라 이동하므로 그 자리도 코퍼스에 든다.
 n_ref=0
 while IFS= read -r f; do FILES+=("$f"); n_ref=$((n_ref + 1)); done \
   < <(find plugins/*/skills -path '*/references/*.md' 2>/dev/null)
+n_pref=0
+while IFS= read -r f; do FILES+=("$f"); n_pref=$((n_pref + 1)); done \
+  < <(find plugins/*/references -name '*.md' 2>/dev/null)
 # vacuity: 도출 0건이면 이 락은 분할 이전 범위로 되돌아가면서 GREEN 을 찍는다.
-[ "$n_ref" -ge 1 ] \
-  && ok "AC16: references/*.md ${n_ref}건 도출 (코퍼스 vacuous 아님)" \
-  || no "AC16: skills/*/references/*.md 를 0건 도출했다 — 부재 스캔 범위가 조용히 좁아졌다"
+[ "$((n_ref + n_pref))" -ge 1 ] \
+  && ok "AC16: references/*.md $((n_ref + n_pref))건 도출 (그중 플러그인 레벨 ${n_pref}건, 코퍼스 vacuous 아님)" \
+  || no "AC16: references/*.md 를 0건 도출했다 — 부재 스캔 범위가 조용히 좁아졌다"
+# 플러그인 레벨 디렉터리가 하나라도 있는데 도출이 0이면 글롭이 깨진 것이다 — 합집합
+# vacuity 는 skills/ 쪽 도출로 통과해 버리므로 여기서 따로 잡는다(기대값 하드코딩 없이
+# 디렉터리 실재라는 독립 신호에서 도출).
+n_pdir=0
+for d in plugins/*/references; do [ -d "$d" ] && n_pdir=$((n_pdir + 1)); done
+if [ "$n_pdir" -ge 1 ] && [ "$n_pref" -lt 1 ]; then
+  no "AC16: plugins/*/references 디렉터리가 ${n_pdir}개 있는데 .md 도출이 0건 — 글롭이 깨졌다"
+fi
 
 # --- AC16-1: `allowedTools` 리터럴 0건 ---
 # \b 필수: naive grep은 `disallowedTools`의 부분문자열에 매칭돼 이미 clean한 파일에 false-positive.

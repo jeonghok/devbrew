@@ -26,8 +26,9 @@ grep -q 'drafting-spec' "$SKILL" \
 
 # F9-D: scan agents/ + templates/ too — the exact dirs this PR cleaned of
 # drafting-spec/Mode-B refs (spec-reviewer persona, spec-template comment).
+# Task 33: `$PLUGIN/references` (플러그인 레벨 공유 계약, skills/ 밖) 도 스캔 루트다.
 COUNT=$(grep -rl 'drafting-spec' "$PLUGIN/skills" "$PLUGIN/hooks" "$PLUGIN/commands" \
-  "$PLUGIN/agents" "$PLUGIN/templates" 2>/dev/null | wc -l | tr -d ' ')
+  "$PLUGIN/agents" "$PLUGIN/templates" "$PLUGIN/references" 2>/dev/null | wc -l | tr -d ' ')
 [[ "$COUNT" == "0" ]] && ok "AC10/F9-D: 0 drafting-spec refs in skills/hooks/commands/agents/templates" \
   || no "AC10/F9-D: $COUNT drafting-spec refs remain"
 [[ ! -d "$PLUGIN/skills/drafting-spec" ]] && ok "drafting-spec/ directory removed" \

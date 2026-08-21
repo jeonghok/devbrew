@@ -177,9 +177,15 @@ Claude의 `Stagnation_signal: true`는 **보조 신호**로 남는다(유일 트
 
 ## Phase 5 Human Gate — proceed 게이트
 
-### Step A — spec_path 선검증 (게이트 *이전* 필수)
+**공통 계약(순서 · 두 가드 · 예외 경로)의 정본은 아래 파일**이다 — `conducting-interview` 종료 Step B 와 같은 골격이라 한 곳에만 산다(둘이 공유하므로 어느 skill 밑도 아닌 플러그인 루트). Phase 5 진입 시 읽고 따르며, 아래에는 이 skill 의 어휘만 남는다.
 
-`current_spec`(= spec_path)이 working-tree에 존재하는지 먼저 확인. 부재 시(예: 삭제된 worktree 경로) **proceed 게이트를 띄우지 말고** loud advisory + 사용자에게 재선택/리셋 요청, handoff 진행 금지:
+```
+Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
+```
+
+### Step A — spec_path 선검증 (정본 Step A, 이 skill 의 advisory 문면)
+
+`current_spec`(= spec_path)이 working-tree에 있는지 먼저 확인한다(예: 삭제된 worktree 경로가 부재 사유). 부재 시 이 문면 그대로:
 
 > `[spec-distill] current_spec '<path>' 부재 (working-tree에 없음) — stale state. current_spec 재선택 또는 세션 리셋 필요. handoff 진행 안 함.`
 
@@ -214,13 +220,13 @@ AskUserQuestion({
 - **③ 수정 필요**: 후속 `AskUserQuestion`으로 분기 — "revise per review" → 메인 agent가 design.md 직접 수정 후 reviewing-spec 재진입; "more interview" → conducting-interview (state phase=1 reset); "edit myself" → 사용자 편집 후 reviewing-spec 재진입.
 - **④ 멈춤**: state 보존하고 종료. **상태 조작 없음** — 이 문서의 pending 은 Step 1 에서 이미 제거됐고, 원장에는 verdict 시점에 이미 기록됐다(§5.2). 그 세션에서 자동 재발동은 없다. 재개는 사용자 요청 시 skill 수동 호출로 한다(D2·NG1).
 
-### polite stop 금지 (AP2 — verifiable, AC11)
+### 두 가드 — polite stop 금지 (AP2) · cross-compact 조기 진행 금지 (AC19)
 
-approve(①/②) 선택 후 "approved!"만 narrate하고 Approve handoff sequence 호출/다음 phase 진입을 skip하는 것은 **polite stop**. Phase 5를 *종료*하는 모든 경로는 (a) 위 proceed 게이트 제시를 거치거나(①/②/③/④), (b) 게이트를 거치지 않는 예외 경로(Step A spec_path 부재, kill switch)는 명시적 advisory 단락을 동반해야 한다 — 게이트-less silent 종료 금지. (게이트는 사용자가 redirect 가능한 approval gate이므로 P17 주권에 기여하며 polite-stop이 아니다 — 철학 §AP2.)
+전문은 정본의 `## Step C`. 여기 남는 것은 이 skill 어휘로만 성립하는 셋이다.
 
-### cross-compact 조기 진행 금지 (AC19 — polite stop의 *반대* 실패 모드, verifiable)
-
-옵션 ① 선택 시 `/compact`를 노출한 *직후* 같은 턴에서 `writing-plans`로 직진하는 것은 금지. compact가 무거운 plan-write *뒤에* 오면 context 위생 이점이 사라져 옵션 ①이 무의미해진다 (2026-05-29 본 design 세션에서 실측된 실패: "handoff"라 말하고 compact 전에 plan을 그대로 써버림). 다음 턴 진입은 *사용자 트리거*(예: `/compact write plan` 인자)로만 일어나며 모델 자동 진입이 아니다(NG4·P17). polite stop이 "진행해야 할 때 멈춤"이라면 이것은 "멈춰야 할 때 진행" — 두 방향 모두 게이트의 사용자-주권(P17)을 우회한다. **verifiable (두-레이어, AC11 선례)**: (i) `grep -cE "턴 종료|다음 턴"` ≥ 1, **AND** (ii) 옵션 ① 서술 *블록 안에서* 'turn-ending(STOP)' + 'writing-plans 같은 턴 호출 금지' + '다음 턴 = 사용자 트리거'가 *함께* 명시됐음을 리뷰에서 확인 (grep 단독은 두 문구의 같은-블록 공존을 보장 못 하므로 — false-positive: '턴 종료' 문구와 '같은 턴 호출' 문구가 떨어져 공존해도 통과 — 공존·정합 판정은 리뷰 레이어 담당; mechanical 한계는 AC11과 동일 수준 인정). 옵션 ②는 이 정지 요건의 *명시적 예외*(compact 없이 즉시 writing-plans). **AC8 경계** (round-2 advisory 반영): AC8 '추가 AskUserQuestion 없음'은 *approve 옵션이 최종 확정된 그 어시스턴트 응답 턴*에 한정한다 (Phase 5 내 revise/interview 루프의 다른 턴이 아님 — 그 턴들은 본래 질문을 띄움). 다음 턴에 진입한 writing-plans가 자체 실행-방식 선택 게이트를 띄우는 것은 별개 skill scope이므로 AC8 해당 없음.
+- **AP2 (verifiable, AC11)** — approve(①/②) 인데 narrate 만 하고 **Approve handoff sequence** 호출/다음 phase 진입을 skip 하면 polite stop 이다. Phase 5 를 *종료*하는 모든 경로는 위 게이트(①~④)를 거치거나, 게이트를 거치지 않는 예외 경로(Step A 의 `spec_path` 부재 · kill switch)면 명시적 advisory 단락을 동반해야 한다 — 게이트-less silent 종료 금지.
+- **AC19 실측 근거** — 2026-05-29 본 design 세션에서 "handoff"라 말하고 compact 전에 plan 을 그대로 써버린 실패가 이 가드의 출처다. 옵션 ① 의 정지 요건·다음 턴 진입 조건은 위 Step C ① 에 인라인으로 있다(기계적 검증 앵커가 거기 산다).
+- **AC8 경계** (round-2 advisory 반영) — AC8 '추가 `AskUserQuestion` 없음'은 *approve 옵션이 최종 확정된 그 어시스턴트 응답 턴*에 한정한다 (Phase 5 내 revise/interview 루프의 다른 턴이 아님 — 그 턴들은 본래 질문을 띄운다). 다음 턴에 진입한 `writing-plans` 가 자체 실행-방식 선택 게이트를 띄우는 것은 별개 skill scope 이므로 AC8 해당 없음.
 
 ## Approve handoff sequence (①/② 공통)
 

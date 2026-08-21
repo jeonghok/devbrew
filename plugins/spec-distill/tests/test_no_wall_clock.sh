@@ -25,10 +25,17 @@ SURFACES=(
   "$PLUGIN_ROOT/skills/reviewing-spec/SKILL.md"
   "$PLUGIN_ROOT/README.md"
 )
+#
+# Task 33: 두 skill 이 공유하는 참조 파일은 어느 skill 밑도 아닌 **플러그인 레벨**
+# `plugins/<p>/references/*.md` 에 산다(proceed-gate.md). `skills/*/references/` 글롭만
+# 두면 그 자리가 다시 스캔 밖이다 — 같은 실패의 한 칸 위 버전이다.
 DERIVED=()
+n_plugin_ref=0
 while IFS= read -r _f; do
-  [[ -n "$_f" ]] && DERIVED+=("$_f")
-done < <(ls "$PLUGIN_ROOT"/skills/*/references/*.md 2>/dev/null)
+  [[ -n "$_f" ]] || continue
+  DERIVED+=("$_f")
+  case "$_f" in */skills/*/references/*) ;; *) n_plugin_ref=$((n_plugin_ref + 1)) ;; esac
+done < <(ls "$PLUGIN_ROOT"/skills/*/references/*.md "$PLUGIN_ROOT"/references/*.md 2>/dev/null)
 SURFACES+=("${DERIVED[@]+"${DERIVED[@]}"}")
 
 # 금지 토큰 (재도입 방지).
@@ -45,9 +52,16 @@ echo "=== interview wall-clock removal regression lock ==="
 # vacuity: 도출이 0건이면 이 락은 분할 이전 범위로 조용히 되돌아가면서 GREEN 을 찍는다.
 # '참조 파일 없음'과 '글롭이 깨졌음'은 여기서 구별되지 않으므로 둘 다 loud FAIL 한다.
 if [[ "${#DERIVED[@]}" -ge 1 ]]; then
-  ok "코퍼스: references/*.md ${#DERIVED[@]}건 도출 (vacuous 아님)"
+  ok "코퍼스: references/*.md ${#DERIVED[@]}건 도출 (그중 플러그인 레벨 ${n_plugin_ref}건, vacuous 아님)"
 else
-  no "코퍼스: skills/*/references/*.md 를 0건 도출했다 — 스캔 범위가 조용히 좁아졌다"
+  no "코퍼스: references/*.md 를 0건 도출했다 — 스캔 범위가 조용히 좁아졌다"
+fi
+# 플러그인 레벨 개수 0 자체는 정당한 상태다(그런 파일이 없는 리포). 하지만 디렉터리가
+# **있는데** 0건이면 글롭이 깨진 것이다 — 합집합이 비지 않아 위 vacuity 는 통과하므로
+# 여기서 따로 잡지 않으면 조용히 좁아진다. 기대값을 하드코딩하지 않고 디렉터리 실재라는
+# 독립 신호에서 도출한다.
+if [[ -d "$PLUGIN_ROOT/references" && "$n_plugin_ref" -lt 1 ]]; then
+  no "코퍼스: $PLUGIN_ROOT/references 는 있는데 도출이 0건 — 플러그인 레벨 글롭이 깨졌다"
 fi
 
 for surface in "${SURFACES[@]}"; do

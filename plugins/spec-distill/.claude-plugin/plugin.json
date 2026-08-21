@@ -1,7 +1,7 @@
 {
   "name": "spec-distill",
   "description": "A strong problem-space interview stage (meta-prompting + web research + adversarial steelman) that produces a superpowers-brainstorming-ready interview brief; design docs reviewed by a physically-separated Law 2 reviewer. A devbrew Laws 1+2 instantiation.",
-  "version": "0.30.1",
+  "version": "0.31.0",
   "author": {
     "name": "jeonghokim"
   }

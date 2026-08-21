@@ -294,19 +294,29 @@ GUARD_WINDOW=40
 # 아래 두 **부재** 검사(느슨한 참 판정 · 상한 게이트 재도입)가 분리분을 못 본다 —
 # 부재 락은 코퍼스가 줄어도 RED 가 아니라 조용히 약해진다. 그래서 표면을 도출한다.
 # 근접 가드는 파일 안 줄번호로 재므로 파일마다 독립적으로 도는 것이 맞다.
+# Task 33: 두 skill 이 공유하는 절차는 **플러그인 레벨** `$SD/references/*.md` 로 간다
+# (proceed-gate.md). `skills/*/references/` 만 도출하면 그 자리가 다시 밖이다.
 surfaces=()
 while IFS= read -r _f; do
   [[ -n "$_f" ]] && surfaces+=("$_f")
-done < <(ls "$SD"/skills/*/SKILL.md "$SD"/skills/*/references/*.md 2>/dev/null)
+done < <(ls "$SD"/skills/*/SKILL.md "$SD"/skills/*/references/*.md "$SD"/references/*.md 2>/dev/null)
 # macOS bash 3.2 + `set -u`: 빈 배열에 "${arr[@]}" 를 확장하면 unbound variable 로 죽는다
 # (실측). 글롭이 0건이면 아래 vacuity 단언이 loud FAIL 해야지, 확장이 먼저 죽어서는 안 된다.
 n_surf_ref=0
+n_plugin_ref=0
 for _f in "${surfaces[@]+"${surfaces[@]}"}"; do
-  case "$_f" in */references/*) n_surf_ref=$((n_surf_ref + 1)) ;; esac
+  case "$_f" in
+    */skills/*/references/*) n_surf_ref=$((n_surf_ref + 1)) ;;
+    */references/*)          n_surf_ref=$((n_surf_ref + 1)); n_plugin_ref=$((n_plugin_ref + 1)) ;;
+  esac
 done
 [[ "$n_surf_ref" -ge 1 ]] \
-  && ok "코퍼스: skills/*/references/*.md ${n_surf_ref}건 도출 (vacuous 아님)" \
-  || no "코퍼스: skills/*/references/*.md 를 0건 도출했다 — 부재 스캔 범위가 조용히 좁아졌다"
+  && ok "코퍼스: references/*.md ${n_surf_ref}건 도출 (그중 플러그인 레벨 ${n_plugin_ref}건, vacuous 아님)" \
+  || no "코퍼스: references/*.md 를 0건 도출했다 — 부재 스캔 범위가 조용히 좁아졌다"
+# 디렉터리가 있는데 0건이면 글롭이 깨진 것이다(합집합 vacuity 는 통과해 조용히 지나간다).
+if [[ -d "$SD/references" && "$n_plugin_ref" -lt 1 ]]; then
+  no "코퍼스: $SD/references 는 있는데 도출이 0건 — 플러그인 레벨 글롭이 깨졌다"
+fi
 
 for sk in "${surfaces[@]+"${surfaces[@]}"}"; do
   [[ -f "$sk" ]] || continue

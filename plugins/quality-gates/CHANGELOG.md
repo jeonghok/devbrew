@@ -3,6 +3,20 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.1.8] — 2026-08-21
+
+Task 33 — `tests/test_law2_prose.sh` 코퍼스만. 이 플러그인의 shipping 동작은 무변경.
+
+**Fixed**
+- **AC16 부재 스캔이 플러그인 레벨 `plugins/*/references/*.md` 를 못 봤다.** 이 락은
+  플러그인 경계를 넘는 repo-wide 부재 스캔이라(Task 32 가 지목한 가장 놓치기 쉬운 클래스),
+  spec-distill 이 두 skill 의 공유 계약을 `plugins/spec-distill/references/proceed-gate.md`
+  에 두자마자 그 자리가 스캔 밖이 됐다 — agent 도구 표면 산문은 공유 계약 쪽으로도 따라
+  이동하므로 정확히 그 자리가 위험하다. `find plugins/*/references -name '*.md'` 도출을
+  더했다. 〔실측〕 `allowedTools` 를 그 파일에 주입하면 **수정 전 GREEN / 수정본 RED**.
+- vacuity 를 합집합 하나로 두면 플러그인 레벨 글롭이 깨져도 `skills/` 쪽 도출로 통과한다.
+  `plugins/*/references` 디렉터리가 하나라도 있는데 `.md` 도출이 0이면 따로 loud FAIL 한다.
+
 ## [4.1.7] — 2026-08-21
 
 Task 32 fix round 1 — 문서만. `tests/test_law2_prose.sh` 의 동작은 무변경.

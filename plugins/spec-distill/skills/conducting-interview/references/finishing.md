@@ -87,9 +87,21 @@ Skill spec-distill:reviewing-brief $PAYLOAD $CODEX_DIR_YAML $CODEX_FID_YAML
 brief는 **단독 완결 terminal 산출물**입니다(NG7 — handoff는 강제가 아니라 사용자 선택).
 Step B는 단일 책임 단위입니다: *brief가 완결되면 다음 stage(brainstorming 해답공간) 진입
 방식을 사용자에게 제안한다.* 입력 = 완결·`check_brief.py` 검증된 brief 경로 + superpowers
-가용성. 이 핸드오프는 `reviewing-spec` Phase 5의 `/compact` proceed 게이트와 **대칭**입니다 —
-같은 두 가드(AP2 + cross-compact)를 interview 어휘로 독립 저술합니다(상세 모델:
-`skills/reviewing-spec/SKILL.md` Phase 5).
+가용성.
+
+**이 게이트의 공통 계약(순서 · 두 가드 · 예외 경로)은 `${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md` 에 있습니다.**
+`reviewing-spec` Phase 5 의 `/compact` proceed 게이트와 **같은 골격**이며, 두 벌을 독립 저술하던
+것을 그 파일로 모았습니다 — 한쪽만 고치면 다른 쪽이 조용히 갈라지기 때문입니다. Step B 에
+실제로 진입할 때 읽고 그대로 따릅니다. 아래에는 이 skill 의 **어휘**(확정 후보 제시 · 옵션 라벨 ·
+verbatim `/compact` 템플릿 · superpowers 가용성 분기)만 남습니다.
+
+```
+Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
+```
+
+플러그인 레벨 경로입니다 — 이 파일 옆이 아니라 플러그인 루트 아래
+(`plugins/spec-distill/references/proceed-gate.md`)에 있습니다. 두 skill 이 공유하므로 어느
+skill 밑에도 두지 않았습니다.
 
 #### B-0 — 확정 후보 제시 (게이트에 흡수, AC2)
 
@@ -214,19 +226,16 @@ AskUserQuestion({
 
 #### B-4 — 두 가드 (load-bearing)
 
-- **AP2 polite-stop 금지**: ①/② 선택 후 "brief 완결!"만 narrate하고 게이트 제시/Skill 호출을
-  skip하는 것은 **polite stop** — 금지. Step B를 *종료*하는 모든 경로는 (a) 위 proceed 게이트를
-  거치거나(①/②/③/④), (b) 게이트를 거치지 않는 예외(superpowers 부재)는 명시적 advisory 단락을
-  동반해야 한다 — 게이트-less **silent 종료 금지**. (게이트는 사용자가 redirect 가능한 approval
-  gate이므로 P17 주권에 기여, polite-stop 아님 — 철학 §AP2.)
+두 가드의 **전문은 `proceed-gate.md` 의 `## Step C`** 입니다(Step B 머리의 포인터).
+여기 남는 것은 이 skill 의 어휘로만 성립하는 두 문장입니다:
 
-- **cross-compact 조기진행 금지 (reviewing-spec AC19 대칭)**: 옵션 ① 선택 시 `/compact`를 노출한 *직후*
-  같은 턴에서 `brainstorming`으로 직진하는 것은 금지. compact가 무거운 작업 *뒤에* 오면 context
-  위생 이점이 사라져 옵션 ①이 무의미해진다(reviewing-spec AC19에서 실측된 실패 패턴의 대칭).
-  **다음 턴** 진입은 *사용자 트리거*(B-3 ①의 정규 문구: compact 뒤에 붙인 진행 인자 예 `/compact
-  write design`, 또는 명시적 진행 요청)로만 일어나며 모델 자동 진입이 아니다(NG4·P17). polite
-  stop이 "진행해야 할 때 멈춤"이라면 이것은 "멈춰야 할 때 진행" — 두 방향 모두 게이트의
-  사용자-주권(P17)을 우회한다. 옵션 ②는 이 정지 요건의 *명시적 예외*(compact 없이 즉시
-  brainstorming).
+- **AP2 polite-stop 금지**: ①/② 선택 후 "brief 완결!"만 narrate 하고 게이트 제시/`Skill
+  superpowers:brainstorming` 호출을 skip 하는 것은 **polite stop** — 금지. Step B 를 *종료*하는
+  모든 경로는 (a) 위 proceed 게이트를 거치거나(①/②/③/④), (b) 게이트를 거치지 않는 예외
+  (superpowers 부재 — B-1)면 명시적 advisory 단락을 동반해야 한다 — 게이트-less **silent 종료
+  금지**.
+- **cross-compact 조기진행 금지**: 옵션 ① 의 정지 요건과 다음 턴 진입 조건은 B-3 ① 에 인라인으로
+  있습니다(그것이 이 skill 의 실행형이자 기계적 검증 앵커입니다). 옵션 ② 는 그 정지 요건의
+  *명시적 예외*(compact 없이 즉시 brainstorming)이며, B-3 ② 가 그렇게 적고 있습니다.
 
 이 stage는 brief까지로 종료됩니다. handoff를 *강제하지 않습니다*(NG7).

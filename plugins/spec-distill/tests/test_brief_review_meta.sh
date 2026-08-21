@@ -174,7 +174,9 @@ grep -qF 'unicodedata.normalize("NFC"' "$SD/scripts/check_verbatim_coverage.py" 
 # 부정하는 어구(넣지 않/도입하지 않)만 남긴다 — 검사 대상 자신이 그 어구까지 함께
 # 조작하지 않는 한 통과 조건을 못 바꾼다는 뜻은 아니다(§6.3의 T-lock 계열과 같은
 # 한계). 분류 정확성은 V8(사람) 몫 — 기계는 열거만 본다.
-E10_HITS="$(grep -rnE '리뷰 라운드 기록이 (있는가|존재)' "$SD/scripts" "$SD/skills" 2>/dev/null \
+# Task 33: `$SD/references` (플러그인 레벨 공유 계약) 도 스캔 루트다 — skills/ 밖이라
+# 앞 판본의 두 루트로는 안 닿았다. 부재 스캔의 코퍼스는 줄어도 RED 가 되지 않는다.
+E10_HITS="$(grep -rnE '리뷰 라운드 기록이 (있는가|존재)' "$SD/scripts" "$SD/skills" "$SD/references" 2>/dev/null \
   | grep -vE '넣지 않|도입하지 않')"
 [[ -z "$E10_HITS" ]] \
   && ok "AC22c: 이빨 없는 기록 검사 부재(서술 언급 제외)" \

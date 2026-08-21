@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.31.0] — 2026-08-21
+
+Task 33 — `/compact` proceed 게이트 **두 벌의 공통 골격을 한 파일로**. 사용자 요청
+*"저장소 전반의 `/compact` 방식을 점검하고 일관된 형태로 통일해"* 의 마지막 축이다.
+
+**Added**
+- **`references/proceed-gate.md` (플러그인 레벨, 71줄).** `reviewing-spec` Phase 5 와
+  `conducting-interview` 종료 Step B 가 공유하는 **골격 · 두 가드 · 예외 경로**의 정본.
+  두 skill 이 공유하므로 어느 skill 밑에도 두지 않았다 — 이 리포의 첫
+  `plugins/<p>/references/` 파일이다.
+  〔격리 설치 실측〕 이 모양이 실제로 배포되는지 재봤다(`CLAUDE_CONFIG_DIR=<tmp>` 로
+  사용자 `~/.claude` 격리 증명 후 `plugin marketplace add` + `plugin install`).
+  설치본 `…/spec-distill/0.31.0/references/proceed-gate.md` 로 **그대로 실린다** —
+  `${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md` 포인터가 설치본에서 resolve 된다.
+  플러그인 루트의 새 디렉터리가 설치에서 누락될 가능성은 측정으로 배제됐다.
+
+**Changed**
+- **두 게이트가 자기 어휘만 인라인으로 남긴다.** 각 skill 에 남은 것: 정본을 가리키는
+  `Read` 포인터 · 자기 어휘의 `AskUserQuestion` 옵션 라벨 · verbatim `/compact` 템플릿 ·
+  skill 고유 스텝(interview 의 B-0 확정 후보·재제시 상한, reviewing-spec 의 `spec_path`
+  선검증·AC8 경계). 옵션 ① 의 정지 문구(`턴 종료`·`다음 턴`)는 **각 skill 에 그대로 남는다**
+  — 기계적 검증 앵커가 거기 살고, 정본이 그 리터럴을 복사하면 자기 인용이 락을 먹는다.
+- `conducting-interview/references/finishing.md` 의 Step B 머리에서 *"같은 두 가드를
+  interview 어휘로 **독립 저술**합니다"* 를 삭제 — 더 이상 참이 아니다.
+- **`tests/test_conducting_interview_stage.sh` 의 코퍼스를 presence/absence 로 분리.**
+  `CI_FILES`(이 skill 자신의 표면)는 **존재** 검사용, `CI_ALL`(+ 플러그인 레벨 정본)은
+  **부재** 검사용. 공유 파일을 존재 검사에 넣으면 "이 skill 이 자기 어휘를 잃었다"를
+  공유 파일이 대신 만족시킨다(§4 거울 클래스).
+
+**Fixed**
+- **부재 락 4건이 플러그인 레벨 `references/` 를 못 보고 조용히 약해지는 것을 차단.**
+  전부 `skills/*/references/` 까지만 도출하고 있었다 — 한 칸 위는 밖이었다. 금지 토큰을
+  정본 파일에 주입해 **수정 전 GREEN(fail-open 실증) / 수정본 RED** 차분으로 각각 실증했다:
+  `tests/test_no_wall_clock.sh`(`wall_clock_started_at`) ·
+  `tests/test_web_kill_switch.sh`(`SWEEP_CAP`) ·
+  `tests/test_conducting_interview_stage.sh`(`breadth-keeper`) ·
+  `tests/test_brief_review_meta.sh`(E10 스캔 루트) ·
+  `tests/test_reviewing_spec_design_only.sh`(F9-D 스캔 루트, `drafting-spec`).
+  합집합 vacuity 만으로는 부족하다 — 플러그인 레벨 글롭이 깨져도 `skills/` 쪽 도출로
+  통과하기 때문에, **디렉터리가 있는데 도출이 0이면** 따로 loud FAIL 한다(기대값
+  하드코딩 없이 디렉터리 실재라는 독립 신호에서 도출).
+
+**Docs**
+- `README.md` AP2 항목이 두 가드를 **세 번째로 저술**하고 있었다 — 정본 포인터를 달고
+  "아래는 요약이지 별개 저술이 아니다"를 명시. v0.13.0 항목에도 통합 사실을 덧붙였다.
+
 ## [0.30.1] — 2026-08-21
 
 Task 32 fix round 1 — 전부 **문서**다. 코드·락 동작은 무변경(리뷰가 Spec PASS /

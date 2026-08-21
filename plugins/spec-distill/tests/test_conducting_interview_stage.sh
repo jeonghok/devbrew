@@ -13,6 +13,24 @@ FIN_DIR="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/references"
 FIN="$FIN_DIR/finishing.md"
 CI_FILES=("$SKILL")
 while IFS= read -r _f; do [ -n "$_f" ] && CI_FILES+=("$_f"); done < <(ls "$FIN_DIR"/*.md 2>/dev/null)
+# Task 33: 두 skill 이 **공유**하는 절차(proceed 게이트 공통 계약)는 어느 skill 밑도 아닌
+# 플러그인 레벨 `plugins/spec-distill/references/*.md` 로 갔다. 그 자리는 이 스킬의 표면
+# 이면서(포인터로 가리키고 Read 하므로) 위 두 글롭 어디에도 안 든다.
+#
+# 두 배열을 나눈다:
+#  - `CI_FILES`  = 이 skill **자신의** 표면. **존재(presence)** 검사는 여기서만 재야 한다 —
+#    공유 계약 파일까지 넣으면 "이 skill 이 자기 어휘를 잃었다"를 공유 파일이 대신 만족시킨다
+#    (§4 거울 클래스: 포인터/공유 파일이 presence 락을 header-satisfiable 하게 만든다).
+#  - `CI_ALL`    = 자신의 표면 + 공유 계약. **부재(absence)** 검사는 여기서 재야 한다 —
+#    금지 토큰이 공유 파일로 새 들어오는 것을 놓치면 락이 조용히 약해진다.
+PLUGIN_REF_DIR="$REPO_ROOT/plugins/spec-distill/references"
+CI_ALL=("${CI_FILES[@]}")
+n_plugin_ref=0
+while IFS= read -r _f; do
+  [ -n "$_f" ] || continue
+  CI_ALL+=("$_f"); n_plugin_ref=$((n_plugin_ref + 1))
+done < <(ls "$PLUGIN_REF_DIR"/*.md 2>/dev/null)
+ci_cat_all() { cat "${CI_ALL[@]}"; }
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
@@ -22,6 +40,13 @@ while IFS= read -r _f; do [ -n "$_f" ] && CI_FILES+=("$_f"); done < <(ls "$FIN_D
   && ok "코퍼스: conducting-interview 표면 ${#CI_FILES[@]}개 파일 도출 (vacuous 아님)" \
   || no "코퍼스: references/*.md 를 0건 도출했다 — 전-파일 검사 범위가 조용히 좁아졌다"
 [[ -f "$FIN" ]] && ok "코퍼스: references/finishing.md 실재" || no "코퍼스: references/finishing.md 부재"
+# 플러그인 레벨 도출. 0 자체는 정당한 상태지만, 디렉터리가 **있는데** 0이면 글롭이 깨진
+# 것이다 — CI_ALL 이 CI_FILES 로 조용히 축소되고 아래 부재 검사가 그만큼 약해진다.
+if [[ -d "$PLUGIN_REF_DIR" ]]; then
+  [[ "$n_plugin_ref" -ge 1 ]] \
+    && ok "코퍼스: 플러그인 레벨 references/*.md ${n_plugin_ref}건 도출 (부재 검사 범위)" \
+    || no "코퍼스: $PLUGIN_REF_DIR 는 있는데 도출이 0건 — 부재 검사 범위가 조용히 좁아졌다"
+fi
 
 # 존재·부재 검사는 **스킬 표면 전체**를 본다 (분할 전 단일 파일과 같은 의미).
 has() { grep -qiE "$1" "${CI_FILES[@]}" && ok "$2" || no "$2"; }
@@ -137,7 +162,7 @@ has 'polite[- ]?stop|narrate.*금지|silent 종료 금지' "AC22: AP2 polite-sto
 
 has 'state_path\.py state-root|Bash.*state|state.*Bash' "PN1: state-write-via-Bash contract"
 
-grep -q 'drafting-spec' "${CI_FILES[@]}" && no "AC10: drafting-spec still referenced" || ok "AC10: no drafting-spec reference"
+grep -q 'drafting-spec' "${CI_ALL[@]}" && no "AC10: drafting-spec still referenced" || ok "AC10: no drafting-spec reference"
 
 # --- v0.22.0: 커버리지 상태 스키마 + 마이그레이션 (AC1/AC5) ---
 has 'coverage:' "AC1: coverage ledger in state schema"
@@ -149,7 +174,7 @@ has 'coverage_mapper_last_probe' "AC1: orchestration.coverage_mapper_last_probe 
 # AC1: 기존 필드 보존
 has 'non_user_streak' "AC1: non_user_streak retained"
 # AC1: 라운드별 잠금 producer 제거 — pending_locked_decisions는 사라지고 user_statements가 대체
-grep -q 'pending_locked_decisions' "${CI_FILES[@]}" \
+grep -q 'pending_locked_decisions' "${CI_ALL[@]}" \
   && no "AC1: pending_locked_decisions가 SKILL에 잔존 (라운드별 잠금 producer)" \
   || ok "AC1: pending_locked_decisions 제거됨"
 has 'user_statements' "AC1: user_statements가 state 스키마에 존재"
@@ -296,26 +321,26 @@ grep -qE '병렬.{0,8}금지|투기적.{0,8}금지' <<<"$r3_block" \
   || ok "E10: R3 dispatch에 병렬 금지 문구 없음 (scoped to R3)"
 
 # C45 interview_round>=2 트리거가 제거됐는지 (AC7)
-grep -q 'interview_round >= 2\|interview_round>=2' "${CI_FILES[@]}" \
+grep -q 'interview_round >= 2\|interview_round>=2' "${CI_ALL[@]}" \
   && no "AC7: C45 interview_round>=2 trigger still present" \
   || ok "AC7: interview_round>=2 dispatch trigger replaced by C11"
 
 # v0.23.0: 은퇴한 payload 좌표(§8/§9) 잔존 0 — 새 payload는 §0–§7 8섹션뿐이다.
 # §8/§9로 보내는 지시는 존재하지 않는 섹션을 만들어 게이트를 RED로 만든다(부분 sweep 방지 락).
 # `§8.2`처럼 뒤에 `.`나 숫자가 오는 것은 설계 문서 §-참조라 제외한다.
-retired_secs="$(grep -nE '§[89]([^.0-9]|$)' "${CI_FILES[@]}" || true)"
+retired_secs="$(grep -nE '§[89]([^.0-9]|$)' "${CI_ALL[@]}" || true)"
 [[ -z "$retired_secs" ]] \
   && ok "V11: 은퇴 payload 좌표(§8/§9) 잔존 0" \
   || { no "V11: 은퇴 payload 좌표(§8/§9)가 SKILL에 잔존:"; printf '%s\n' "$retired_secs"; }
 
 # breadth-keeper 용어 잔존 0 (SKILL 본문, AC7/V7a)
-grep -qi 'breadth-keeper\|breadth_keeper' "${CI_FILES[@]}" \
+grep -qi 'breadth-keeper\|breadth_keeper' "${CI_ALL[@]}" \
   && no "V7a: breadth-keeper term remains in SKILL" \
   || ok "V7a: breadth-keeper term removed from SKILL"
 
 # interview_round confinement — migration section only (SHARP, Task 9 V9)
 mig_ir_count="$(awk '/^## In-flight state migration/{f=1;print;next} /^## /{f=0} f' "$SKILL" | grep -c interview_round)"
-total_ir_count="$(ci_cat | grep -c interview_round)"
+total_ir_count="$(ci_cat_all | grep -c interview_round)"
 [[ "$mig_ir_count" -eq "$total_ir_count" ]] \
   && ok "V9: interview_round confined to migration section (mig=$mig_ir_count total=$total_ir_count)" \
   || no "V9: interview_round confined to migration section (mig=$mig_ir_count total=$total_ir_count)"

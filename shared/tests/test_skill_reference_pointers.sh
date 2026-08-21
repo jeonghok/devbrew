@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/*/skills/*/SKILL.md plugins/*/skills/*/references/*.md
+# guards: plugins/*/skills/*/SKILL.md plugins/*/skills/*/references/*.md plugins/*/references/*.md
 #
 # 모든 `plugins/*/skills/*/SKILL.md` 가 `references/<file>.md` 형태로 가리키는
 # 경로가 실제로 존재하는가(정방향) — 그리고 그 역방향: 모든 git-tracked
@@ -21,15 +21,34 @@
 # 영구히 실리고, 20줄 중복 락(별건 태스크)의 코퍼스는 `plugins/**` 라서 두
 # 사본 다 "정당하게 있다"로 보여 그 락도 못 잡는다.
 #
+# ── 플러그인 레벨 `references/` (Task 33) ────────────────────────────────────
+# 두 skill 이 공유하는 참조 파일은 어느 skill 밑에도 두지 않는다 — 그 자리가
+# `plugins/<p>/references/<f>.md` 다. 앞 판본은 이 모양을 **양방향 모두** 다루지
+# 못했다:
+#   - 정방향: 매치된 문자열에서 `references/...` **접미사만** 취해 그 포인터를
+#     담은 SKILL.md 의 디렉터리 기준으로 해석했다. 그래서 플러그인 레벨 파일을
+#     가리키는 포인터는 `skills/<s>/references/<f>.md` 를 찾다가 **false-RED**.
+#   - 역방향: 코퍼스가 `plugins/*/skills/*/references/*.md` 뿐이라 플러그인 레벨
+#     파일은 고아 검사에 **아예 보이지 않았다**.
+#
+# 수리 방향은 "접미사를 재해석"이 아니라 **쓰여 있는 그대로 해석**이다. 매치에
+# **앵커 접두사**를 함께 캡처해, 접두사마다 해석 루트가 **정확히 하나**가 되게 한다:
+#
+#   ① `${CLAUDE_PLUGIN_ROOT…}/…`  → 그 SKILL.md 로부터 도출한 플러그인 루트
+#   ② `plugins/<p>/[skills/<s>/]…` → 리포 루트 (쓰인 그대로)
+#   ③ `(../)*references/…`(맨몸 포함) → 그 SKILL.md 자신의 디렉터리 (쓰인 그대로)
+#
+# **"skill 밑을 먼저 보고 없으면 플러그인 루트를 본다" 식의 폴백은 쓰지 않는다.**
+# 그러면 같은 이름의 파일이 플러그인 레벨에 우연히 있을 때 *진짜로 없는* skill
+# 레벨 대상이 통과한다 — fail-open 이다. 접두사 → 루트가 1:1 이면 그 창이 없다.
+#
 # 대상은 열거가 아니라 git 이 추적하는 SKILL.md 전부에서 **도출**한다 — 새
 # 스킬이나 새 참조 파일이 생겨도 자동으로 대상이 된다. 포인터는 마크다운 링크
 # (`[text](references/x.md#anchor)`) · 백틱 코드 스팬(`` `references/x.md` ``) ·
-# 코드블록 안의 전체 경로(`.../skills/<skill>/references/x.md`) ·
+# 코드블록 안의 전체 경로(`plugins/<p>/.../references/x.md`) ·
 # `${CLAUDE_PLUGIN_ROOT}/.../references/x.md` 설치-경로 표기까지 전부 같은 정규식
-# `references/[A-Za-z0-9_./-]+\.md` 로 잡는다 — 문자 클래스가 `` ` ``·`)`·`#`·공백을
-# 포함하지 않으므로 그 문자들에서 자연히 끊긴다. 매치된 접미사를 그 SKILL.md 가
-# 있는 디렉터리 기준 **상대경로**로 재해석해 존재를 검사한다(설치본 접두사가
-# 붙어 있어도 마지막 `references/...` 접미사만 취하므로 무관하다).
+# 하나로 잡는다 — 문자 클래스가 `` ` ``·`)`·`#`·공백을 포함하지 않으므로 그
+# 문자들에서 자연히 끊긴다.
 #
 # `0 checked / 0 missing` 은 "소실 없음"이 아니라 "추출이 아무것도 못 봤다"다 —
 # 코퍼스가 비어있지 않은데 포인터를 하나도 못 찾으면 이 락 자체가 무의미해지므로
@@ -40,14 +59,40 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT" || exit 1
 . "$ROOT/shared/tests/assert.sh"
 
-REF_RE='references/[A-Za-z0-9_./-]+\.md'
+# 앵커 접두사(①②③)를 **선택적 캡처 그룹**으로 앞에 붙인다. `\{`/`\}` 대신 대괄호
+# 표현(`[$][{]`)을 쓰는 이유: ERE 에서 `{` 는 interval 메타문자라 escape 해석이
+# 구현마다 갈린다. 대괄호는 어느 grep 에서도 리터럴이다(macOS BSD grep 실측).
+REF_RE='([$][{]CLAUDE_PLUGIN_ROOT[^}]*[}]/|plugins/[A-Za-z0-9_.-]+/(skills/[A-Za-z0-9_.-]+/)?|(\.\./)+)?references/[A-Za-z0-9_./-]+\.md'
+
+# `a/b/../c` → `a/c`. 존재하지 않는 경로도 접어야 하므로 `realpath`/`pwd -P` 를
+# 쓰지 않는다. 선두의 `..` 는 접지 않고 남긴다(리포 밖을 가리키는 포인터는 그대로
+# 존재 검사에서 떨어져야 한다 — 조용히 리포 안으로 끌어오지 않는다).
+norm_path() {
+  printf '%s\n' "$1" | awk -F/ '{
+    n = 0
+    for (i = 1; i <= NF; i++) {
+      s = $i
+      if (s == "" || s == ".") continue
+      if (s == "..") { if (n > 0 && st[n] != "..") { n--; continue } }
+      st[++n] = s
+    }
+    out = ""
+    for (i = 1; i <= n; i++) out = (i == 1 ? st[i] : out "/" st[i])
+    print out
+  }'
+}
 
 # `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 이 락이
-# 실제로 훑는 두 코퍼스(git 추적 SKILL.md 전부 + git 추적 references/*.md 전부)를
-# 낸다 — 정방향만 읽던 시절과 달리 이제 이 락은 후자도 실제로 읽으므로(F6),
-# 선언(guards: 두 글롭)과 실측이 여기서 같이 맞아야 한다.
+# 실제로 훑는 두 코퍼스(git 추적 SKILL.md 전부 + git 추적 references/*.md 전부 —
+# skill 레벨과 플러그인 레벨 **둘 다**)를 낸다. 선언(guards: 세 글롭)과 실측이
+# 여기서 같이 맞아야 한다.
+#
+# git pathspec 의 `*` 는 `/` 를 넘으므로 `plugins/*/references/*.md` 하나로도 두
+# 모양이 다 잡힌다(실측). 그럼에도 두 pathspec 을 나란히 적는 것은 **의도를
+# 문서화**하기 위해서다 — 그 subtlety 에 조용히 기대지 않는다. `git ls-files` 는
+# 겹치는 pathspec 의 결과를 중복 없이 낸다(실측).
 CORPUS="$(git ls-files -- 'plugins/*/skills/*/SKILL.md')"
-REF_CORPUS="$(git ls-files -- 'plugins/*/skills/*/references/*.md')"
+REF_CORPUS="$(git ls-files -- 'plugins/*/skills/*/references/*.md' 'plugins/*/references/*.md')"
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$CORPUS"
   printf '%s\n' "$REF_CORPUS"
@@ -67,16 +112,33 @@ ok "pointer: SKILL.md 코퍼스 ${corpus_n}개 도출 (vacuous 아님)"
 
 checked=0
 missing=0
+# 정방향이 실제로 **해석해 낸 대상**의 집합. 역방향(플러그인 레벨 고아 검사)이
+# 이 집합을 그대로 되쓴다 — 두 방향이 같은 해석기를 공유하므로, 접두사 파싱이
+# 깨지면 정방향과 역방향이 **동시에** RED 를 낸다(mutation M7b 실측: 접두사 분기를
+# 옛 접미사-only 판본으로 되돌리자 소실 2 + 고아 1).
+#
+# `norm_path` 는 그보다 좁다 — `../` 표기가 실제로 쓰일 때만 발화한다. 현재
+# 코퍼스에는 그 표기가 없어 이 함수를 항등함수로 바꿔도 GREEN 이다(M7a 실측).
+# 이빨은 `../` 포인터가 등장하는 순간 생긴다(M6 로 그 경로를 실측했다).
+RESOLVED=""
 
 while IFS= read -r skill_md; do
   [ -n "$skill_md" ] || continue
   skill_dir="$(dirname -- "$skill_md")"
+  plugin_root="${skill_md%/skills/*}"
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
     checked=$((checked + 1))
-    target="$skill_dir/$ref"
+    # 접두사 → 해석 루트는 1:1. 폴백 없음.
+    case "$ref" in
+      '${CLAUDE_PLUGIN_ROOT'*) target="$plugin_root/${ref#*\}/}" ;;
+      plugins/*)               target="$ref" ;;
+      *)                       target="$skill_dir/$ref" ;;
+    esac
     if [ -f "$target" ]; then
       ok "pointer: $skill_md → $ref (존재: $target)"
+      RESOLVED="$RESOLVED$(norm_path "$target")
+"
     else
       no "pointer: $skill_md → $ref 를 가리키지만 그 경로에 파일이 없다 ($target)"
       missing=$((missing + 1))
@@ -92,41 +154,63 @@ fi
 
 # ── 역방향(F6): SKILL.md 가 안 가리키는 references/*.md — 고아 ────────────
 #
-# 이 락의 REF_RE 는 매치된 문자열에서 "references/" 이전 접두(경로·
-# ${CLAUDE_PLUGIN_ROOT} 등)를 전부 버리므로, 정방향에서 모든 포인터는 이미
-# **그 포인터를 담은 SKILL.md 자신의 디렉터리 기준** `references/<name>.md`
-# 로만 해석된다(위 68-79행). 역방향도 같은 해석을 대칭으로 적용한다 — 어떤
-# references/*.md 파일이 자기 소유 SKILL.md(같은 skills/<skill>/ 디렉터리) 의
-# 포인터 목록 안에 있는가.
+# 모양마다 규칙이 다르다 — 같은 규칙을 억지로 하나로 만들면 둘 중 하나가 느슨해진다.
+#
+#  - **skill 레벨** (`plugins/<p>/skills/<s>/references/<f>.md`): 기존 규칙 그대로,
+#    **자기 소유 SKILL.md**(같은 `skills/<skill>/` 디렉터리)가 그것을 가리켜야 한다.
+#    "다른 스킬이 가리키니 됐다"로 느슨해지지 않게 소유 관계를 유지한다.
+#  - **플러그인 레벨** (`plugins/<p>/references/<f>.md`): 소유 스킬이 정의상 없다.
+#    그래서 정방향이 **실제로 해석해 낸 대상 집합**에 드는지로 판정한다 — 정방향의
+#    정확한 쌍대(dual)이며, 어느 SKILL.md 가 가리키든 한 곳이면 충분하다.
 #
 # 코퍼스 자체가 0 이면(추출 실패든 정말 없든) 아래 대조가 공허해지므로,
 # 정방향과 같은 규율로 무조건 loud FAIL 한다 — "역방향 검사 자체가 vacuous
 # 하다"를 "고아 없음"으로 읽지 않는다.
+#
+# 다만 **플러그인 레벨 개수 0 은 FAIL 하지 않는다.** 그 모양의 파일이 하나도 없는
+# 것은 정당한 상태이며(2026-08-21 이전 리포가 그랬다) 그때는 고아가 될 수 있는
+# 대상 자체가 없다 — 여기서 FAIL 하면 락이 정직한 상태에 RED 를 낸다. 대신 개수를
+# **출력에 남겨** 0 으로 떨어진 것이 조용히 지나가지 않게 한다.
 ref_corpus_n=0
+plugin_level_n=0
 while IFS= read -r f; do
-  [ -n "$f" ] && ref_corpus_n=$((ref_corpus_n + 1))
+  [ -n "$f" ] || continue
+  ref_corpus_n=$((ref_corpus_n + 1))
+  case "$f" in */skills/*/references/*) ;; *) plugin_level_n=$((plugin_level_n + 1)) ;; esac
 done < <(printf '%s\n' "$REF_CORPUS")
 if [ "$ref_corpus_n" -lt 1 ]; then
   no "orphan: git ls-files 가 references/*.md 를 0개 도출했다 — 역방향 검사 자체가 vacuous 하다"
   finish
   exit $?
 fi
-ok "orphan: references/*.md 코퍼스 ${ref_corpus_n}개 도출 (vacuous 아님)"
+ok "orphan: references/*.md 코퍼스 ${ref_corpus_n}개 도출 (그중 플러그인 레벨 ${plugin_level_n}개, vacuous 아님)"
 
 ref_checked=0
 orphans=0
 while IFS= read -r reffile; do
   [ -n "$reffile" ] || continue
   ref_checked=$((ref_checked + 1))
-  skill_dir="${reffile%/references/*}"
-  owner_skill="$skill_dir/SKILL.md"
-  want="references/$(basename -- "$reffile")"
-  if [ -f "$owner_skill" ] && grep -oE -- "$REF_RE" "$owner_skill" | grep -qxF -- "$want"; then
-    ok "orphan: $reffile ← $owner_skill 에서 가리킴"
-  else
-    no "orphan: $reffile 를 가리키는 SKILL.md 포인터가 없다 (기대: $owner_skill 안의 '$want')"
-    orphans=$((orphans + 1))
-  fi
+  case "$reffile" in
+    */skills/*/references/*)
+      skill_dir="${reffile%/references/*}"
+      owner_skill="$skill_dir/SKILL.md"
+      want="references/$(basename -- "$reffile")"
+      if [ -f "$owner_skill" ] && grep -oE -- "$REF_RE" "$owner_skill" | sed 's|.*/\(references/\)|\1|' | grep -qxF -- "$want"; then
+        ok "orphan: $reffile ← $owner_skill 에서 가리킴"
+      else
+        no "orphan: $reffile 를 가리키는 SKILL.md 포인터가 없다 (기대: $owner_skill 안의 '$want')"
+        orphans=$((orphans + 1))
+      fi
+      ;;
+    *)
+      if printf '%s\n' "$RESOLVED" | grep -qxF -- "$(norm_path "$reffile")"; then
+        ok "orphan: $reffile ← 어떤 SKILL.md 포인터가 실제로 이 경로로 해석됨 (플러그인 레벨)"
+      else
+        no "orphan: $reffile (플러그인 레벨) 로 해석되는 SKILL.md 포인터가 없다"
+        orphans=$((orphans + 1))
+      fi
+      ;;
+  esac
 done < <(printf '%s\n' "$REF_CORPUS")
 
 if [ "$ref_checked" -eq 0 ]; then
