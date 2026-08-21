@@ -3,6 +3,28 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.1.11] — 2026-08-22
+
+PR6 whole-branch 리뷰 fix round 1 — 가림을 다시 못 잡는 단언 하나를 판별력 있는 단언으로.
+shipping 동작 무변경(테스트만).
+
+**Fixed**
+- **`tests/test_artifact_codex_reviewer.sh`** — 러너 degrade 를 재는 세 단언이
+  `grep -q "codex_failed: true"` 뿐이었다. 그 문자열은 이 러너의 degrade 사유 **여섯 전부**
+  (`missing_args` · `project_dir_unreachable` · `scratch_uncreatable` ·
+  `prompt_build_failed` · `extract_failed` · `aborted_before_completion`)를 만족하므로,
+  단언은 "degrade 가 났다" 만 말하고 **어느 경로를 탔는지는 재지 않는다**. `[4.1.10]` 이
+  스텁에 `codex_prompt_common.py`·`prompt-preamble.md` 를 깔아 고친 그 가림은, 빌더가
+  형제 의존을 하나 더 얻는 순간 같은 방식으로 **다시** 일어난다 — 빌드가 먼저 죽어
+  `prompt_build_failed` 가 나오는데 판정은 계속 GREEN 이고, 재려던 추출기 가드는 한 번도
+  안 돈다. 이제 세 단언이 `reason:` 을 구별한다(F-D 둘은 `extract_failed`, 인자 검사는
+  `missing_args`). 형제 `tests/test_codex_runner_degrade_contract.sh:90` 이 degrade 고유
+  문구를 단언하는 것과 같은 판별력이다.
+  - 이빨 증명(무변이 양성 대조 12/12 GREEN 포함): 스텁에서 `prompt-preamble.md` 를 빼면
+    RED · `codex_prompt_common.py` 를 빼면 RED(둘 다 OUT 은 `reason: prompt_build_failed`) ·
+    러너의 `emit_fail "missing_args"` 를 다른 사유로 바꾸면 인자 검사 단언이 RED.
+    수정 전에는 세 변이 전부 GREEN 이었다.
+
 ## [4.1.10] — 2026-08-22
 
 Task 35 Step 0 — P21 프리앰블 로더 4벌을 `shared/codex/codex_prompt_common.py` 정본으로
