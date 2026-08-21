@@ -16,6 +16,21 @@ Task 35 Step 0 — P21 프리앰블 로더 4벌을 `shared/codex/codex_prompt_co
   실리지 않는다. 리포에서는 통과하고 **설치본에서만** P21 이 빠진 프롬프트가 나가는,
   관측되지 않는 실패가 된다. `shared/tests/test_copy_of_contract.sh` 축 1c 가 소비자
   4건 전부에 대해 형제 사본 존재 + 링크 없는 일반 파일 트리에서의 import 를 ∀ 로 잰다.
+- **`shared/tests/test_no_new_duplication.sh`** — 새 중복의 **유입**을 막는 락. 20줄 이상
+  완전히 같은 블록이 두 파일에 있는데 `copy-of` 로 설명되지 않으면 RED 다. 위 통합의
+  대상이었던 P21 로더 3쌍을 적발한 것이 이 스캐너이므로 같은 릴리스에 기록한다.
+  `# guards: plugins/** shared/**` — 다섯 플러그인 전체를 지킨다. 파일이 `shared/tests/`
+  에 있어 어느 플러그인 소유도 아니므로 `[0.32.4]` 가 세운 귀속 관례를 따라 **이 릴리스가
+  노트를 쓴 두 플러그인**(quality-gates · spec-distill) 엔트리에 함께 적는다 — 소유의
+  선언이 아니라 기록의 자리다.
+  - 면제 술어는 `copy-of` 마커의 *존재*와 심볼릭 링크만 본다. **실제 동일성은
+    `shared/tests/test_copy_of_contract.sh` 에 위임**하므로 두 락은 같은 코퍼스 도출을
+    쓰고 같은 지점(`/qg` Runtime gate)에서 함께 돈다.
+  - vacuous 가드는 리터럴 하한이 아니라 **∀-지배관계**다: `plugins/*/` 디렉토리 각각과
+    `shared` 가 스캔 코퍼스에 1건 이상 기여해야 한다(기대 목록은 파일시스템에서 도출 —
+    리터럴 열거는 새 플러그인에 대해 시간에 fail-open). 총량 붕괴 바닥이 그 짝이다.
+  - 재지 않는 것: 파일 줄 수 · 파일/폴더 개수 · 유사도 퍼센트. 모듈화는 보안도 정확성도
+    아닌 판단의 영역이라 결정론 게이트를 걸지 않는다. `docs/` 는 코퍼스 밖이다.
 
 **Changed**
 - **`scripts/build_codex_prompt.py` · `scripts/build_artifact_codex_prompt.py`** — stdout
