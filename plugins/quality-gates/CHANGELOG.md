@@ -3,6 +3,79 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.1.11] — 2026-08-22
+
+PR6 whole-branch 리뷰 fix round 1 — 가림을 다시 못 잡는 단언 하나를 판별력 있는 단언으로.
+shipping 동작 무변경(테스트만).
+
+**Fixed**
+- **`tests/test_artifact_codex_reviewer.sh`** — 러너 degrade 를 재는 세 단언이
+  `grep -q "codex_failed: true"` 뿐이었다. 그 문자열은 이 러너의 degrade 사유 **여섯 전부**
+  (`missing_args` · `project_dir_unreachable` · `scratch_uncreatable` ·
+  `prompt_build_failed` · `extract_failed` · `aborted_before_completion`)를 만족하므로,
+  단언은 "degrade 가 났다" 만 말하고 **어느 경로를 탔는지는 재지 않는다**. `[4.1.10]` 이
+  스텁에 `codex_prompt_common.py`·`prompt-preamble.md` 를 깔아 고친 그 가림은, 빌더가
+  형제 의존을 하나 더 얻는 순간 같은 방식으로 **다시** 일어난다 — 빌드가 먼저 죽어
+  `prompt_build_failed` 가 나오는데 판정은 계속 GREEN 이고, 재려던 추출기 가드는 한 번도
+  안 돈다. 이제 세 단언이 `reason:` 을 구별한다(F-D 둘은 `extract_failed`, 인자 검사는
+  `missing_args`). 형제 `tests/test_codex_runner_degrade_contract.sh:90` 이 degrade 고유
+  문구를 단언하는 것과 같은 판별력이다.
+  - 이빨 증명(무변이 양성 대조 12/12 GREEN 포함): 스텁에서 `prompt-preamble.md` 를 빼면
+    RED · `codex_prompt_common.py` 를 빼면 RED(둘 다 OUT 은 `reason: prompt_build_failed`) ·
+    러너의 `emit_fail "missing_args"` 를 다른 사유로 바꾸면 인자 검사 단언이 RED.
+    수정 전에는 세 변이 전부 GREEN 이었다.
+
+## [4.1.10] — 2026-08-22
+
+Task 35 Step 0 — P21 프리앰블 로더 4벌을 `shared/codex/codex_prompt_common.py` 정본으로
+통합. shipping 동작 무변경(네 빌더가 내는 프롬프트 바이트 동일 — 실측).
+
+**Added**
+- **`scripts/codex_prompt_common.py`** — `shared/codex/codex_prompt_common.py` 의 물리
+  사본(`# copy-of:` 마커). **심볼릭 링크가 아닌 이유**: `P21_PREAMBLE_PATH` 가
+  `Path(__file__).resolve().parent` 의 형제를 가리키므로, 링크로 배포하면 `.resolve()` 가
+  링크를 따라가 그 형제가 `shared/codex/` 로 해석된다 — 그리고 `shared/` 는 설치본에
+  실리지 않는다. 리포에서는 통과하고 **설치본에서만** P21 이 빠진 프롬프트가 나가는,
+  관측되지 않는 실패가 된다. `shared/tests/test_copy_of_contract.sh` 축 1c 가 소비자
+  4건 전부에 대해 형제 사본 존재 + 링크 없는 일반 파일 트리에서의 import 를 ∀ 로 잰다.
+- **`shared/tests/test_no_new_duplication.sh`** — 새 중복의 **유입**을 막는 락. 20줄 이상
+  완전히 같은 블록이 두 파일에 있는데 `copy-of` 로 설명되지 않으면 RED 다. 위 통합의
+  대상이었던 P21 로더 3쌍을 적발한 것이 이 스캐너이므로 같은 릴리스에 기록한다.
+  `# guards: plugins/** shared/**` — 다섯 플러그인 전체를 지킨다. 파일이 `shared/tests/`
+  에 있어 어느 플러그인 소유도 아니므로 `[0.32.4]` 가 세운 귀속 관례를 따라 **이 릴리스가
+  노트를 쓴 두 플러그인**(quality-gates · spec-distill) 엔트리에 함께 적는다 — 소유의
+  선언이 아니라 기록의 자리다.
+  - 면제 술어는 `copy-of` 마커의 *존재*와 심볼릭 링크만 본다. **실제 동일성은
+    `shared/tests/test_copy_of_contract.sh` 에 위임**하므로 두 락은 같은 코퍼스 도출을
+    쓰고 같은 지점(`/qg` Runtime gate)에서 함께 돈다.
+  - vacuous 가드는 리터럴 하한이 아니라 **단위별 등식**이다: `plugins/*/` 디렉토리 각각과
+    `shared` 가 코퍼스 목록에 기여한 파일 수가, 그 디렉토리에 대해 따로 돌린
+    `git ls-files` 의 수와 **정확히 같아야** 한다(기대 목록은 파일시스템에서 도출 —
+    리터럴 열거는 새 플러그인에 대해 시간에 fail-open). `≥1` 로는 한 단위만 깊게 파는
+    **부분 축소**를 못 잡는다 — 가장 큰 단위가 203→1 로 무너져도 나머지가 총량을 떠받쳐
+    두 가드가 다 GREEN 이었다(실측). 총량 붕괴 바닥은 목록이 온전한 채 읽기가 무너지는
+    쪽을 맡는 짝이다.
+  - 재지 않는 것: 파일 줄 수 · 파일/폴더 개수 · 유사도 퍼센트. 모듈화는 보안도 정확성도
+    아닌 판단의 영역이라 결정론 게이트를 걸지 않는다. `docs/` 는 코퍼스 밖이다.
+
+**Changed**
+- **`scripts/build_codex_prompt.py` · `scripts/build_artifact_codex_prompt.py`** — stdout
+  인코딩 가드와 P21(신뢰불가 입력 프리앰블) 로더를 형제 사본에서 import 한다. 두 빌더가
+  갖고 있던 그 구간은 spec-distill 의 두 빌더와 **주석까지 바이트 동일**했다(창 20줄·최소
+  200자 스캐너가 3쌍으로 적발). P21 은 **보안 컨트롤**이라 네 벌로 두면 한 곳만 고쳤을 때
+  나머지 셋이 조용히 옛 문구를 계속 내보낸다. `configure_stdout()` 는 import 부수효과가
+  아니라 **명시적 호출**이다 — import 만으로 프로세스 전역 상태가 바뀌면 그 사실이
+  호출부에서 안 보인다.
+
+**Fixed**
+- **`tests/test_codex_runner_degrade_contract.sh`** — 스텁 플러그인 루트(A·D)에
+  `codex_prompt_common.py` 를 함께 깐다. 없으면 빌더가 ImportError 로 죽고 **그 죽음도
+  degrade 로 읽혀**, 이 테스트가 재려던 경로(추출기 실패)와 다른 이유로 GREEN 이 된다.
+- **`tests/test_artifact_codex_reviewer.sh`** — 같은 이유로 두 스텁에
+  `codex_prompt_common.py` 를 깔고, **`prompt-preamble.md` 도 함께 깐다.** 후자는 이
+  통합과 무관하게 통합 **이전부터** 빠져 있었다 — 그 스텁의 빌드는 P21 로더 단계에서 이미
+  죽고 있었고, 죽음이 곧 `codex_failed: true` 라 두 단언이 **가려진 채** 통과했다.
+
 ## [4.1.9] — 2026-08-21
 
 Task 33 fix round 4 — `tests/lib/reconstruct-skill.sh` 하드닝. shipping 동작 무변경.

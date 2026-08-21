@@ -45,7 +45,41 @@ HEAD_WINDOW=20   # 마커는 파일 머리 20줄 안에 있어야 한다
 
 # `--emit-scanned` — Task 6 의 양방향 커버리지 검사가 읽는다. 이 락이 **실제로 읽은**
 # 경로를 낸다. 선언에서 목록을 도출하면 선언의 자기 반복이라 커버리지 증거가 안 된다.
-CORPUS="$(git ls-files -- 'plugins/*' 'shared/*' | grep -vE '/(fixtures|mocks|harness)/')"
+#
+# `--cached --others --exclude-standard` 다 — 형제 락
+# `shared/tests/test_no_new_duplication.sh` 의 `CORPUS=` 도출과 **같은 도출**이어야 한다
+# (줄 번호로 가리키지 않는다 — 그쪽에 줄이 한 줄만 끼어도 좌표가 조용히 썩는다).
+# 〔2026-08-21 PR6 whole-branch 리뷰 L5〕 그 락은 미추적 파일까지 훑으면서 면제 술어는
+# 마커의 *존재*만 보고 **실제 동일성을 이 파일에 위임**한다. 위임처가 추적된 파일만 보면
+# 그 위임은 위임처가 비어 있는 창을 갖는다: 아직 `git add` 하지 않은 파일에 위조
+# `# copy-of:` 마커를 넣으면 그 락은 면제 술어 ②로 지나가고 여기서는 그 파일을 **아예 안
+# 본다**(실측 재현: 미추적 위조 사본 2건 — 새 락 GREEN, 이 락은 파일명조차 출력에 없음).
+# `--others` 를 넣은 이유가 "새 중복은 커밋 전에 잡는다" 였으니 그 창 안에서 위임이
+# 살아 있어야 한다. clean 트리에서는 아무것도 더하지 않는다 — 수정 전후 445 = 445 실측.
+#
+# 같은 파일의 다른 `ls-files` 호출 열셋은 **이 문제를 갖지 않는다**(2026-08-21 전수 측정,
+# 2026-08-22 재측정). 자리는 **줄 번호가 아니라 내용으로** 가리킨다 — 이 주석 블록 자신이
+# 삽입되면서 앞서 적어 둔 좌표 열셋을 한꺼번에 밀어 전부 어긋나게 만든 전례가 있다.
+#  · `SYMLINK_CANONICALS=` 의 `git ls-files -s` 는 `-s` 의 인덱스 모드 비트(`120000`)가
+#    판정 근거라 미추적 항목엔 그 정보가 아예 없다(`-s --others` 를 붙여도 120000 행 8건
+#    그대로). 그리고 이미 인덱스로 후보를 고르고 워킹트리에서 해석한다.
+#  · `actual_plugins=` 는 이미 `git ls-files` 와 워킹트리 글롭(`for p in
+#    plugins/*/scripts/"$base"`)의 **합집합**이다 — 미추적을 덮는다.
+#  · `PLUGIN_PY=` · `git ls-files --error-unmatch -- "$cdir_e/${mod}.py"` ·
+#    `codex-killswitch.conf` 를 세는 heredoc 과 그 짝 `n_detect=` · fail-closed 축이
+#    `detect_codex.sh` 를 도는 heredoc 은 "추적된다 = 설치본에 실린다" 를 **단언의
+#    대상으로** 삼는다(F4/H1: 사본을 untrack 하면 디스크엔 남아도 설치본에는 안 실린다).
+#    여기에 `--others` 를 붙이면 그 단언이 재는 것이 사라진다.
+#  · `refs=` · `SHARED_BASENAMES=` · `CONSUMED_PY=` 와 그 안쪽의 `git ls-files -- '*.py'` ·
+#    형제-∀ 도출이 읽는 `$(git ls-files -- 'shared/*.py')` heredoc · `consumers=` 는
+#    코퍼스가 아니라 **기대를 만드는** 도출원이다. 미추적 임시 파일이 배포 기대를 만들면
+#    안 된다 — fixtures/mocks/harness 를 빼는 것과 같은 이유다.
+# 개수를 내는 열두 자리는 clean 트리에서 `--cached --others --exclude-standard` 유무에
+# 무관하게 같은 결과를 낸다(2026-08-22 재측정 12/12). `--error-unmatch` 자리는 개수가
+# 아니라 **소속 술어**라 이 대조의 대상이 아니다 — 그리고 거기에 `--others` 를 얹으면
+# 미추적 사본까지 "설치본에 실린다" 를 만족시켜, 위 셋째 항이 말한 그 단언이 무너진다.
+CORPUS="$(git ls-files --cached --others --exclude-standard -- 'plugins/*' 'shared/*' \
+  | grep -vE '/(fixtures|mocks|harness)/')"
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$CORPUS"
   exit 0

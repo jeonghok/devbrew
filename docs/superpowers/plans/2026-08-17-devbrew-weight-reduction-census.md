@@ -314,3 +314,140 @@ grep -oE '^\| [0-9]+ \| `[A-Za-z_][A-Za-z0-9_]*` \((py|sh)\)' "$CENSUS" \
 > Task 2 Step 4b 가 이 검사를 원장 작성 시점에 돌리도록 바뀌었다.
 
 (fix round 1: 최초 판은 진짜 사본 25 / 부분 사본 64 / 우연 58 / 템플릿-인스턴스 3이었다. 우연 rows 중 위치란이 "—"이거나 근거가 추측 어휘(판단/추정)였던 항목을 전수 재검증해 11건을 재분류했다(우연→진짜 사본 2건: #58·#74, 우연→부분 사본 9건: #66·#76·#78·#82·#94·#96·#101·#103·#121). 재검증한 우연 행은 약 40행이며 그중 11행이 바뀌고 나머지는 실측 본문 판독으로 우연 판정이 확인됐다 — 상세 근거는 각 행 및 위 §discrepancy 참조.)
+
+---
+
+## 20줄 블록 검사 임계 — 재측정 (PR6, Task 34)
+
+측정 스크립트: 계획서 부록 A.4(`docs/superpowers/plans/2026-08-17-devbrew-weight-reduction.md:8243-8352`)의 코드 펜스를 그대로 `sed`로 추출한 `knee.py`(커밋 안 함, 스크래치에만 존재 — `ast.parse` 로 파싱 확인 후 사용). 코퍼스는 §12.4·Task 35와 같다: `git ls-files`의 `plugins/**`+`shared/**` 중 `/fixtures/`·`/mocks/`·`/harness/` 제외 — **441개 파일** (설계 시점 396개, PR2~PR5로 45개 증가).
+
+### 면제 술어 양성 대조 (필수 선행 단계)
+
+`knee.py`의 `canonical_of()`를 그대로 복사한 별도 probe로 이 리포의 심볼릭 링크 8개(`git ls-files -s | awk '$1=="120000"{print $4}'`) 전부를 개별 확인:
+
+- **8/8이 `None`이 아니었고**, 같은 정본을 가리키는 링크끼리 같은 문자열로 그룹핑됐다 — 3개 canonical 그룹(`shared/codex/detect_codex.sh` ×3, `shared/codex/prompt-preamble.md` ×3, `shared/codex/codex_findings_to_yaml.py` ×2), 표대로.
+- macOS `resolve()`의 `/tmp`→`/private/tmp` 문제는 **이 코퍼스에서는 미발현**이다 — 정본이 전부 리포 안(`shared/codex/`)에 있고 `ROOT`(`/Users/jeonghokim/Downloads/devbrew`) 자체가 `resolve()`해도 자기 자신과 같음을 확인했다(심볼릭 경로 성분 없음).
+- **코퍼스 필터 생존 확인**: `git ls-files | grep -E '^(plugins|shared)/' | grep -vE '/(fixtures|mocks|harness)/' | wc -l` = **441**, `knee.py --summary`의 "스캔 441파일"과 정확히 일치 — 빈 코퍼스 fail-open 아님.
+
+면제 술어 정상 — 이하 숫자는 유효하다.
+
+### Step 1 — 창 크기별 곡선 (min-chars=200 고정)
+
+| 창 | 관련 파일 수 | 위반 쌍 수 | 스캔 파일 |
+|---:|---:|---:|---:|
+| 10 | 36 | 26 | 441 |
+| 12 | 23 | 17 | 441 |
+| 15 | 14 | 10 | 441 |
+| 18 | 7 | 5 | 441 |
+| 20 | 3 | 3 | 441 |
+| 22 | 2 | 1 | 441 |
+| 25 | 2 | 1 | 441 |
+| 30 | 2 | 1 | 441 |
+| 40 | 0 | 0 | 441 |
+
+무릎: **20줄** (설계가 제시한 값과 같다). 단 곡선의 정확한 모양은 설계 서술("15→20 급락, 20→25 유지")과 약간 다르다 — 이번 재측정은 20→22에서 한 번 더 줄고(3→2, 위반 쌍 3→1) 22→30 구간에서 평평(2,2,2)하며, 40에서 0으로 떨어진다. 이 차이는 무릎 선택을 흔들지 않는다: 20에서 오탐이 이미 0이고(아래 Step 3), 22로 올리면 사라지는 것은 오탐이 아니라 **진짜 양성 1쌍**(build_codex_prompt.py가 다른 두 파일과 공유하는 블록의 완전일치 길이가 20~21줄이라 22에서 빠짐)이다 — 브리프 Step 3 규칙("오탐이 있을 때만 올린다")에 따라 20을 유지한다.
+
+### Step 2 — 최소 블록 크기 민감도 (window=20)
+
+| min-chars | 관련 파일 | 위반 쌍 |
+|---:|---:|---:|
+| 100 | 3 | 3 |
+| 150 | 3 | 3 |
+| 200 | 3 | 3 |
+| 300 | 3 | 3 |
+
+민감도 없음 — 100/150/200/300 네 값 모두 동일한 3파일·3쌍. 200을 그대로 쓴다.
+
+### Step 3 — 무릎 지점(window=20, min-chars=200) 상세 — 오탐 여부
+
+`--detail` 전문은 `$SCRATCH/knee-detail-at-knee.md`에 있다(컨트롤러가 직접 읽음). 위반 쌍 3개는 전부 같은 원인의 세 조합(파일 3개가 서로 pairwise로 겹쳐 C(3,2)=3쌍)이다:
+
+| 위반 쌍 | 공유 블록 수 | 분류 | 근거 |
+|---|---:|---|---|
+| `plugins/quality-gates/scripts/build_artifact_codex_prompt.py` ↔ `plugins/spec-distill/scripts/build_spec_codex_prompt.py` | 11 | **B (진짜 새 중복)** | stdout reconfigure guard + `P21_PREAMBLE_PATH`/`P21_MARKER_RE`/`load_p21_preamble()` 함수 전체가 주석까지 바이트 단위로 동일. 우연 아님 — P21(보안 프리앰블 로더)이라는 구체적 목적을 가진 코드 |
+| `plugins/quality-gates/scripts/build_artifact_codex_prompt.py` ↔ `plugins/quality-gates/scripts/build_codex_prompt.py` | 2 | **B** | 위와 같은 블록의 일부(완전일치 구간이 짧아 20줄 창에서는 2블록만 걸림) |
+| `plugins/quality-gates/scripts/build_codex_prompt.py` ↔ `plugins/spec-distill/scripts/build_spec_codex_prompt.py` | 2 | **B** | 위와 같음 |
+
+오탐(C) 0건, 정당·미표시(A) 0건 — **3쌍 전부 B**. 세 파일 중 어느 것도 `copy-of:` 마커나 심볼릭 링크가 없다(첫 20줄 확인). 이미 이 사이클이 같은 패턴(`detect_codex.sh`·`prompt-preamble.md`·`codex_findings_to_yaml.py`)을 `shared/codex/`로 뽑아 심볼릭 링크로 배포한 전례가 있으므로, 이 P21 로더 블록도 같은 방식(`shared/codex/`에 두고 3개 스크립트가 import하거나 심볼릭 링크)으로 통합 가능해 보인다 — 단 `${CLAUDE_PLUGIN_ROOT}`가 런타임에 `shared/`에 도달 못 한다는 기존 주석의 제약(§2.1)이 이 함수 자체(리소스 파일이 아니라 코드)에도 적용되는지는 이 태스크 범위 밖이라 실측하지 않았다 — Task 35가 통합 시 확인해야 한다.
+
+### Task 35 차단요소 해소 (addendum §2)
+
+**배경 재확인**: 설계 시점(396파일 스캔) 측정은 "집합 A" 6쌍이었다 — codex 사본 4쌍(`detect_codex.sh`×3쌍 + `codex_findings_to_yaml.py`×1쌍) + 훅 쌍(`pending-review-reminder.py`↔`review-dispatch.py`) + persona 테스트 쌍(`test_adversarial_persona.sh`↔`test_security_reviewer_persona.sh`). 이 태스크가 현재 트리(441파일)에서 그 6쌍의 현재 상태를 직접 재확인했다:
+
+| 집합 A 행 | 현재 상태 | 확인 방법 |
+|---|---|---|
+| 1–3 (`detect_codex.sh` 3쌍) | **해소** | `git ls-files -s`에서 mode `120000`, `canonical_of`가 8/8 None 아님으로 검증(위 양성 대조) |
+| 4 (`codex_findings_to_yaml.py`) | **해소** | 위와 같음 |
+| 5 (훅 쌍) | **해소** | `pending-review-reminder.py`·`review-dispatch.py` 둘 다 `from hook_common import (...)` 확인(grep) |
+| 6 (persona 쌍) | **해소** | `test_adversarial_persona.sh`·`test_security_reviewer_persona.sh` 둘 다 `. .../shared/tests/assert.sh` source 확인(grep) |
+
+6쌍 전부 해소됐고, 이 태스크가 `knee.py`로 잰 현재 위반은 **그것과 무관한 새 3쌍**(위 build_*_codex_prompt.py 트리오, PR2~PR5 사이 신규 유입)이다.
+
+**PR5 리뷰어의 "약 1,247쌍" 수치와의 차이**: 이 태스크가 잰 3쌍과 자릿수가 다르다. 원인은 **코퍼스와 면제 술어 둘 다 다르다** — 리뷰어는 `docs/superpowers/plans/`를 포함하고 `CHANGELOG`·`docs/archive/`를 뺀 코퍼스를 썼고(§12.4/Task 35 코퍼스와 다름), `copy-of`/심볼릭 링크 면제 술어를 적용하지 않았다(이 태스크의 양성 대조가 확인했듯 그 술어가 없으면 심볼릭 링크 사본군 전체가 "위반"으로 잡혀 숫자가 부푼다). 1,247은 Task 35의 코퍼스·임계를 재지 않은 값이라 Task 35 착수 차단요소로서는 무효다.
+
+**Task 35 착수 조건에 대한 한 문장 판정**: Task 35의 락(§12.4 20줄·200자, 같은 코퍼스·같은 면제 술어)을 **지금 도입하면 위반 3쌍(관련 파일 3개)이 RED로 뜬다. 그 3쌍의 내역은 A(정당·미표시) 0 / B(진짜 새 중복) 3 / C(오탐) 0이며, B 3쌍은 전부 `build_artifact_codex_prompt.py`·`build_codex_prompt.py`·`build_spec_codex_prompt.py` 세 파일에 복제된 동일한 P21 프리앰블 로더 블록 하나에서 나온다.** Task 35는 착수 전(또는 Step 1 직후) 이 블록을 `shared/`로 추출하거나 명시적 예외로 문서화해야 락이 첫 실행부터 RED로 시작하지 않는다.
+
+- `면제 술어 양성 대조: 심볼릭 링크 8개 전부 정본으로 해석됨 — 3개 canonical 그룹, None 0건`
+- `무릎 지점 위반 3쌍(파일 3개) — A(정당·미표시) 0 / B(진짜 중복) 3 / C(오탐) 0. Task 35 착수 조건: build_*_codex_prompt.py 트리오의 P21 로더 블록을 추출하거나 예외 문서화 후 착수.`
+
+---
+
+## 완료 측정 (설계 §14) — Task 36
+
+측정 시점 HEAD `778f9d1` (트리 clean) · 2026-08-22 · CI 없음, 전부 로컬 실측.
+before 는 사이클 **직전** 커밋 `975872b`(plan 이 들어오기 전) 에서 같은 명령으로 다시 잰 값이다 —
+브리프에 박힌 before 와 갈리는 두 곳은 표 아래 「before 정정」에 적었다.
+
+| 축 | before | after | 목표 | 달성 |
+|---|---|---|---|---|
+| 정본 트리 줄 수 (archive 제외) | 145,210 | **110,952** | 감소 | ✅ −34,258 / −23.6% |
+| 〃 like-for-like (사이클 산출물 제외) | 145,210 | **101,545** (기록물 9,407 제외) · **98,150** (기록물 + 신규 테스트 3,395 제외) | 감소 | ✅ −30.0% / −32.4% |
+| on-demand 로드 표면 (SKILL+agents+commands) | 6,482 | **5,198** | E의 두 섹션만큼 감소 | ✅ −1,284 / −19.8% (SKILL 4,185→2,901; agents·commands 불변) |
+| 락이 대상 변경 시 선택됨 (.sh / .py / .md) | 0/2 · 0/2 · 0/2 | **2/2 · 2/2 · 2/2** | 2/2 × 3 | ✅ 음성 대조 `docs/git-workflow/pr-process.md` = **0/2** (공허 아님) |
+| `# guards:` 양방향 커버리지 | (장치 없음) | **선언 파일 9개 도출 · 검사 24건 전부 PASS** (7개는 `--emit-scanned` 대조, 2개는 선언-only) | 전량 | ✅ |
+| `/plugin-audit` 셸 테스트 | null | **5/5 플러그인이 `ran:true` + 숫자** (project-init 96 · quality-gates 263 · spec-distill 268 · plugin-audit 256 · agent-transparency 283) | 대상 플러그인 전량 | ✅ |
+| `/plugin-audit project-init` 수집 수 | 0 | **96** (python 95 + 셸 `test_*.sh` 1) | 실제 테스트 수 | ✅ 직접 집계와 일치 |
+| 갈라진 사본 (미배정) | (§미배정) | **0 / 모집단 100** (배정 57 + 명시 유예 43) | **0** | ✅ 행 모양 `{5:31, 8:119}` · mutation 6종 전부 RED |
+| 20줄 동일 블록 (copy-of 미설명) | (Task 34: 3쌍) | **0** — `관련 파일 0 · 위반 쌍 0 · 스캔 445파일` | **0** | ✅ 락 출력도 `445파일 · 창 62,187개`(측정 시점 `778f9d1` — 락 파일 자신이 코퍼스에 있어 창 수는 그 파일을 고칠 때마다 움직인다). **단 이 0 은 여유가 아니라 임계 2줄 위다** 〔2026-08-22 PR6 리뷰 M1, 재측정〕: w=21·20·19 에서 **0쌍**인데 **w=18 에서 5쌍**이고 그중 3쌍이 이 PR 이 만든 블록(세 빌더가 공유하는 P21 import 서문)이다. "통과가 정답인 검사는 mutation 없이는 이빨을 모른다"는 이 리포의 규칙대로, 이 0 에 붙어야 할 문장은 **"위반 0, 단 최근접 쌍이 18줄"** 이다 — 상세와 그 RED 에 해소 어휘가 없다는 사실은 `docs/audits/2026-08-21-skill-split-lock-corpus-shrink.md` §7-10. |
+| `marketplace.json` drift | 4 | **0** (5 플러그인 sweep, 실패 0, 출력 3,120줄) | 0 | ✅ |
+| 환경변수 어순 패턴 | 4 | **1** (`DEVBREW_<PLUGIN>_<REST>`) | 1 | ✅ 예외 6건은 전부 비-라이브 — 개명표 옛 이름 4(plugin-audit README) + 픽스처 2 |
+| 좀비 환경변수 | (Task 26) | **0** — 72토큰 전수, 집행 지점 4곳 부재 후보 3건은 전부 doc=0(픽스처 2 + 부재-단언 1) | 0 | ✅ |
+| `.claude/` state 배치 | 5모양 | **1모양** (`state_root()` → `.claude/<plugin>/<sid>/…`) + legacy cleanup 리터럴 5 (삭제 목록 전용) | 1 | ✅ 토큰 136 중 101이 namespaced, 나머지는 harness 소유·플레이스홀더·legacy |
+| severity 어휘 | 2척도 | **1척도** (CRITICAL/IMPORTANT/SUGGESTION) | 1 | ✅ 주석 제외 시 HIGH/MEDIUM/LOW 0 (남은 3회는 전부 옛 척도를 설명하는 주석) |
+| agent `tools:` distinct | **7** (계획서의 `8` 은 오기) | **5** · 순서 1종 | 순서 1 | ✅ 도구 집합 불변, 어순만 통일 |
+| SKILL kill switch 섹션 | 2/8 | **7/8** | 8/8 | ❌ **미달** — `agent-transparency/briefing-current-state` 는 `DEVBREW_` 스위치가 코드 전체에 0건이라 **없는 스위치를 대칭을 위해 짓지 않기로** 한 의도적 결정 (`2d06602` 커밋 본문) |
+| commands `allowed-tools` | 4/7 · 표기 2종 | **4/7 · 표기 1종** | 7/7 · 1종 | ❌ **미달(표기만 달성)** — 없던 3개(`standup`·`plugin-audit`·`interview`)에 새 allowlist 를 넣는 것은 **새 제한**이라 사용자 판단으로 열어 둔 의도적 유보 (`318a471` 커밋 본문) |
+| python 테스트 실행 | 3위치 · 수집 0건 파일 6 | **1위치(`plugins/*/tests`) · 수집 0건 파일 0 / 60 · 합계 1,014** | 전량 통일 | ✅ 유일한 top-level discover 밖 파일 `agent-transparency/tests/oracle/test_add_contract.py` 는 Law 2 신뢰 경계로 문서화된 의도 |
+| 테스트 위치 규약 | 3 (`tests` · `scripts/tests` · `hooks/tests`) | **1** (`tests`) | 1 | ✅ 237경로 전량 |
+| `hooks/` 비-훅 `.py` | 1 (`state_path.py`) | **0** | 0 | ✅ |
+| 파일별 assertion 감소 | — | **0건** (양쪽에 존재하는 152파일 대조 · 총 786 → 1,128) | 어느 파일도 감소 없음 | ✅ before 에만 있던 1파일은 삭제가 아니라 `hooks/tests/smoke.sh` → `tests/smoke.sh` 이동 |
+
+### before 정정 2건
+
+브리프 §14 가 박아 둔 before 중 둘이 `975872b` 재측정과 갈렸다. **후자가 실측이다.**
+
+| 축 | 브리프 before | `975872b` 실측 | 원인 |
+|---|---|---|---|
+| agent `tools:` distinct | 8 | **7** | 계획서 Task 29 축 1 표 자신이 열거한 항목을 세면 2+2+1+1+1 = **7** 이다 (18 agent = 6+8+2+1+1). `8` 은 그 표의 수동 집계 오류이며 트리 상태와 무관 |
+| on-demand 로드 표면 | 6,482 | 6,482 (일치) | 〔참고〕 Task 36 보충이 "사이클 시작"이라 부른 **6,579** 는 실은 **PR4 종료(`2aebbed`)** 값이다 — PR3·PR4 가 kill switch 절·`allowed-tools` 표기로 97줄을 더한 뒤의 수. 사이클 시작은 6,482 |
+
+### 정본 트리 like-for-like 의 계산 근거
+
+`975872b` 트리에는 `docs/archive/` 가 없어 전체 = 정본 = **145,210**(실측 재현). after 는 전체 163,427 = 정본 110,952 + 아카이브 52,475.
+
+| 뺀 것 | 규칙 | 줄 수 |
+|---|---|---|
+| 사이클 기록물 (L1) | `975872b→HEAD` 신규 파일 중 `docs/superpowers/plans/2026-08-17-devbrew-weight-reduction*` + `docs/audits/2026-08-21-skill-split-lock-corpus-shrink.md` | 9,407 |
+| 신규 테스트 (L2 추가분) | 같은 신규 파일 중 경로에 `/tests/` 를 가진 16개 | 3,395 |
+
+〔이 커밋의 영향〕 이 절을 추가하는 커밋이 census 를 62줄 늘리므로 정본 트리는 111,014, L1 은 9,469 이 된다 — **양쪽이 같이 늘어 like-for-like 값(101,545 / 98,150)은 불변**이다.
+
+〔주의〕 계획서가 "plan 5,494줄"이라 적었으나 실측은 **8,452줄** — 5라운드 fix 로 계획서 자신이 자라났다. like-for-like 는 리터럴이 아니라 파일 목록에서 도출한다.
+
+### 남은 것 (설계 §15.1 + 이 사이클이 새로 발견한 것)
+
+설계 §15.1 표가 정본이다 — 여기 복제하지 않는다. **이 태스크가 더하는 것만** 적는다:
+
+1. **SKILL kill switch 7/8 · commands `allowed-tools` 4/7** — 위 표의 미달 두 행. 둘 다 커밋 본문에 근거가 남아 있으나 §15.1 에는 없다. 전자는 *"agent-transparency 에 kill switch 를 도입할 것인가"*, 후자는 *"무제한 command 3개에 allowlist 를 넣을 것인가"* 라는 **사용자 결정**이다.
+2. **`run-own-tests.sh` 의 셸 테스트 수집이 `test_*.sh` 접두에 한정** — `plugins/agent-transparency/tests/ab_gate.sh` 는 실행비트가 있고 `tests/` 에 있으나 수집되지 않는다. 그 파일은 선재 RED 이므로 `/plugin-audit agent-transparency` 는 **283/283 clean** 을 보고한다. 규약(§테스트 위치)이 파일명 접두까지 규정하지 않아 생긴 틈.
+3. **샌드박스 안에서만 나는 실패 2건** — `run-own-tests.sh` 사본에서 quality-gates `test_sandbox_enforced.sh` 가 exit 1, spec-distill python 러너가 exit 1. 둘 다 실제 트리에서는 GREEN 이다(중첩 샌드박스 아티팩트). `own_tests` 의 `passed` 가 환경 때문에 과소 보고된다.
