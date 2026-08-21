@@ -186,27 +186,44 @@ Task 32 실측: presence 패턴 16종을 이 방식으로 검사해 **새 decoy 
 
 ★ = 플러그인 경계를 넘는 repo-wide 부재 스캔(가장 놓치기 쉬운 클래스, 알려진 인스턴스 2).
 
-| 파일 | 도달 방식 | 클래스 | 상태 |
-|---|---|---|---|
-| `spec-distill/tests/test_conducting_interview_stage.sh` | 리터럴 | absence 7 + presence + window 11 | Task 32 수리 |
-| `spec-distill/tests/test_brief_review_entry.sh` | 리터럴 | presence + window | Task 32 수리 |
-| `spec-distill/tests/test_no_wall_clock.sh` | **하드코딩 배열** | 순수 absence | Task 32 수리 |
-| `spec-distill/tests/test_web_kill_switch.sh` | 글롭 | absence 2(조기 `continue` 뒤) + 줄번호 근접 | Task 32 수리 |
-| ★ `quality-gates/tests/test_law2_prose.sh` | `find plugins/*/skills` | absence 3그룹 | Task 32 수리 |
-| ★ `quality-gates/tests/test_governance_no_capability_caps.sh` | `find plugins -name '*.md'` | absence | **면역(도출)** |
-| `spec-distill/tests/test_stale_terms.sh` | `find "$SD" -type f` | absence 중심 | **면역(도출)** |
-| `spec-distill/tests/test_reviewing_spec_design_only.sh` | `grep -rl … "$P/skills"` | absence | **면역(도출)** |
-| `spec-distill/tests/test_brief_review_meta.sh` | `grep -rnE … "$SD/skills"` | absence | **면역(도출)** |
-| `quality-gates/tests/test_codex_runner_no_effort_pin.sh` | `plugins/*/` 재귀 | absence | **면역(도출)** |
-| `spec-distill/tests/test_check_verbatim_coverage.sh` | 리터럴 | presence + 줄번호 창 | 무영향 |
-| `spec-distill/tests/test_conducting_interview_internal.sh` | 리터럴 | presence(frontmatter) | 무영향 |
-| `quality-gates/tests/test_codex_gate_observation.sh` | `find plugins/*/skills` | 발견 + ratchet | 무영향(§7-2) |
-| `shared/tests/test_skill_reference_pointers.sh` | `git ls-files` | 양방향 presence | 무영향(§7-3) |
-| `shared/tests/test_copy_of_contract.sh` | `git ls-files plugins/*` | 중복·심링크 도출 | 무영향 |
-| `shared/tests/test_changelog_integrity.sh` | — **SKILL.md 를 읽지 않는다** | **비독자** | 버전영향만 |
+> **⚠ 아래 표의 모든 칸은 「측정 시점」열의 날짜 기준 *관측*이지 판정이 아니다.**
+> 특히 **면역(도출)** 은 *"그날 그 코퍼스가 새 파일을 자동으로 삼켰다"* 는 뜻이고,
+> **다음 추출이 한 칸 더 위로 가면 그대로 깨진다** — 실제로 Task 33 에서 「면역」이던 두
+> 행이 깨져 손수리 대상이 됐다(아래 2026-08-21b 행들). **이 열을 작업 목록으로 읽지 말 것.**
+> §2 대로 매번 다시 도출하고, 그 결과로 이 표를 갱신하라. 갱신하지 않은 칸은 낡은 것이지
+> 참인 것이 아니다.
+
+| 파일 | 도달 방식 | 클래스 | 상태 | 측정 시점 |
+|---|---|---|---|---|
+| `spec-distill/tests/test_conducting_interview_stage.sh` | 리터럴 + `ls` 글롭(skill refs) + 별도 부재 배열(`CI_ALL`, +플러그인 레벨) | absence 6 + presence 다수 + window 12 | Task 32·33 수리 | 2026-08-21b |
+| `spec-distill/tests/test_brief_review_entry.sh` | 리터럴 + `ls` 글롭(skill refs) | presence + window | Task 32·33 수리 | 2026-08-21b |
+| `spec-distill/tests/test_no_wall_clock.sh` | **하드코딩 배열** + `ls` 글롭(skill+플러그인 refs) | 순수 absence | Task 32·33 수리 | 2026-08-21b |
+| `spec-distill/tests/test_web_kill_switch.sh` | `ls` 글롭(skill+플러그인 refs) | absence 2(조기 `continue` 뒤) + 줄번호 근접 | Task 32·33 수리 | 2026-08-21b |
+| ★ `quality-gates/tests/test_law2_prose.sh` | `find plugins/*/skills` + `find plugins/*/references` | absence 3그룹 | Task 32 수리 → **33 에서 재수리** | 2026-08-21b |
+| `spec-distill/tests/test_reviewing_spec_design_only.sh` | **열거된 `grep -r` 루트** (`$P/skills` `hooks` `commands` `agents` `templates` `references`) + 루트 실재 단언 | absence | ~~면역~~ → **Task 33 손수리** | 2026-08-21b |
+| `spec-distill/tests/test_brief_review_meta.sh` | **열거된 `grep -rnE` 루트** (`$SD/scripts` `skills` `references`) + 루트 실재 단언 | absence | ~~면역~~ → **Task 33 손수리** | 2026-08-21b |
+| **`spec-distill/tests/test_proceed_gate_adopters.sh`** (Task 33 신설) | 정본 포인터에서 **채택자 도출**, 채택자별 자기 표면 | presence(앵커·라벨) + 채택자 하한 | Task 33 신설 | 2026-08-21b |
+| `shared/tests/test_skill_reference_pointers.sh` | `git ls-files` (출처 = SKILL.md **∪ references/*.md**) | 양방향 presence | **Task 33 에서 두 번 재작성** (§7-3 해소) | 2026-08-21b |
+| ★ `quality-gates/tests/test_governance_no_capability_caps.sh` | `find plugins -name '*.md'` | absence | 면역(도출) — *그날 기준* | 2026-08-21b |
+| `spec-distill/tests/test_stale_terms.sh` | `find "$SD" -type f` | absence 중심 | 면역(도출) — *그날 기준* | 2026-08-21b |
+| `quality-gates/tests/test_codex_runner_no_effort_pin.sh` | `plugins/*/` 재귀 | absence | 면역(도출) — *그날 기준* | 2026-08-21b |
+| `quality-gates/tests/lib/reconstruct-skill.sh` (라이브러리, 소비자 7) | 리터럴 한 섹션 스플라이스 | 재구성 + 잔존-포인터 단언 | Task 33 하드닝(F4) | 2026-08-21b |
+| `spec-distill/tests/test_check_verbatim_coverage.sh` | 리터럴 | presence + 줄번호 창 | 무영향 | 2026-08-21a |
+| `spec-distill/tests/test_conducting_interview_internal.sh` | 리터럴 | presence(frontmatter) | 무영향 | 2026-08-21a |
+| `quality-gates/tests/test_codex_gate_observation.sh` | `find plugins/*/skills` | 발견 + ratchet | 무영향(§7-2) | 2026-08-21a |
+| `shared/tests/test_copy_of_contract.sh` | `git ls-files plugins/*` | 중복·심링크 도출 | 무영향 | 2026-08-21a |
+| `shared/tests/test_changelog_integrity.sh` | — **SKILL.md 를 읽지 않는다** | **비독자** | 버전영향만 | 2026-08-21a |
 
 마지막 줄을 독자로 세지 말 것 — `plugin.json` + `CHANGELOG.md` 만 읽는다. 분할이 아니라
 **버전 bump** 가 이 락을 건드린다.
+
+〔Task 33 이 이 표에서 배운 것〕 **「면역」은 상태가 아니라 그날의 관측이다.** 두 행
+(`test_reviewing_spec_design_only.sh` · `test_brief_review_meta.sh`)이 「면역(도출)」로
+적혀 있었지만 실제로는 **열거된 `grep -r` 루트**였다 — `skills/` 밖으로 한 칸만 나가도
+못 봤고, Task 33 이 둘 다 손수리했다. §3 이 "absence 만 수리 대상"이라 말하고 이 열이
+작업 목록처럼 읽히므로, 낡은 「면역」칸은 **다음 사람에게 건너뛰라고 지시한다** —
+상속-대신-도출을 막으려고 쓴 문서가 정확히 그 상속을 부르는 열을 갖게 된 셈이다.
+그래서 「측정 시점」열을 붙였다: 갱신되지 않은 칸이 *판정*이 아니라 *낡음*으로 읽히도록.
 
 ## §7 이월된 미해결 항목
 
@@ -312,19 +329,51 @@ Task 33 fix round 1 의 F6 수리는 인식 못 하는 접두사를 **절단하�
 는 **어떤 SKILL.md 든** `references/<name>.md` 로 끝나는 토큰을 만나면 형태를 판정하고, 세
 인식 형태 중 하나가 아니면 FAIL 한다.
 
-그래서 미래의 SKILL.md 가 **포인터 의도가 전혀 없이**
-`https://github.com/<org>/<repo>/blob/main/references/foo.md` 같은 URL 이나 `docs/` 아래
-`/references/` 를 포함하는 경로를 **인용만 해도** 이 공유 락이 리포 전역에서 RED 가 된다.
-그 사람에게는 **자기 편집과 무관해 보이는 RED** 로 나타난다 — 원인이 "포인터 표기 규약"이라는
-것을 헤더를 읽어야 알 수 있다.
+〔2026-08-21 fix round 4 전수 프로브 — 실제 거부 표면은 처음 적은 것보다 넓다〕
+앞 판본은 방아쇠를 *"외부 URL 인용"* 으로 적었다. 실측하면 그것만이 아니고, **포인터 의도가
+있는 표기 둘이 함께 거부된다** — 즉 "인용을 포인터로 오해한다"가 아니라 "인식 형태 열거가
+좁다"가 더 정확한 서술이다.
+
+| 표기 | 거부? | 성격 |
+|---|---|---|
+| `https://…/blob/main/references/foo.md` | **거부** | 인용(포인터 아님) |
+| `docs/foo/references/x.md` | **거부** | 인용(포인터 아님) |
+| `` `./references/x.md` `` | **거부** | **포인터 의도** — 맨몸 `references/x.md` 와 같은 뜻 |
+| `\|references/x.md\|` (백틱 없는 표 셀) | **거부** | **포인터 의도**(표 안의 경로) |
+| `[references/x.md](…)` (링크 *텍스트* 가 경로) | **거부** | 표기 사고 |
+| `` `references/x.md` `` (백틱) · `"references/x.md"` (따옴표) | 통과 | 정상 |
 
 - **오늘 상태**: 살아 있는 인스턴스 0. 헤더가 인식 형태 셋을 명시하고 실패 메시지가 그 셋을
-  그대로 나열하므로, 걸린 사람이 이유를 알 수는 있다.
-- **발동 조건**: 어떤 SKILL.md 가 포인터가 아닌 맥락에서 `…/references/*.md` 문자열을 처음
-  담을 때(외부 URL 인용이 가장 그럴듯하다).
-- **선택지(그때 결정할 것)**: ⑴ URL 스킴(`https://` 등)을 토큰 클래스에서 배제해 인용을
-  포인터로 보지 않기 · ⑵ 거부를 advisory 로 낮추기(fail-open 이므로 비추천) ·
-  ⑶ 그대로 두고 저자에게 표기를 고치게 하기. ⑴ 이 가장 좁은 수정이다.
+  그대로 나열하므로, 걸린 사람이 이유를 알 수는 있다. 방향은 fail-closed 로 옳다.
+- **발동 조건**: 어떤 SKILL.md **또는 references/*.md**(fix round 4 에서 출처가 넓어졌다)가
+  위 표의 "거부" 행에 해당하는 표기를 처음 담을 때.
+- **선택지(그때 결정할 것)**: ⑴ `./` 접두를 form ③ 으로 **인정**(가장 방어하기 쉽다 — 맨몸과
+  의미가 같다) · ⑵ URL 스킴(`https://` 등)을 토큰 클래스에서 배제 · ⑶ 거부를 advisory 로
+  낮추기(fail-open 이므로 비추천) · ⑷ 그대로 두고 저자에게 표기를 고치게 하기.
+  **⑴ 과 ⑵ 는 서로 다른 행을 덮는다** — 앞 판본이 유일한 처방으로 적은 ⑵ 만으로는
+  포인터-의도 두 행이 그대로 남는다.
+
+### §7-7 계약의 **요약본**은 자제(自制)만으로 지켜진다
+
+Task 33 은 정본(`references/proceed-gate.md`)을 만들면서 두 곳의 요약을 남겼다 —
+`spec-distill/README.md`(AP2 항목)과 `CLAUDE.md`(Polite handoff 항목). 둘 다 *"아래는
+요약이지 별개 저술이 아니다 — 계약이 바뀌면 정본을 고치고 여기를 따라 고친다"* 라고
+스스로 적는다. **그 규약을 재는 것은 아무것도 없다.**
+
+이 문서의 「공유 참조 파일」 절이 기록한 교훈이 정확히 여기에 적용된다: *자제 규칙은 지켜지지
+않는다.* 그 절의 근거는 이 태스크 자신의 초고다 — 정본이 *"이 파일은 앵커의 사본을 두지
+않는다"* 고 적은 채 리터럴 넷을 담고 있었다. 같은 저자가 같은 사이클에 같은 종류의 자제
+문장을 두 개 더 쓴 셈이다.
+
+- **오늘 상태**: 두 요약 모두 정본과 정합함을 사람이 읽어 확인했다(fix round 1·3).
+- **발동 조건**: 정본의 옵션 순서·가드 이름·4옵션 라벨 중 하나가 바뀌는 다음 편집.
+  그 편집이 요약 둘을 따라 고치지 않아도 **오늘은 아무 락도 RED 가 되지 않는다.**
+- **왜 지금 만들지 않는가**: 정합 검사의 술어가 자명하지 않다. 요약은 정의상 정본보다
+  짧고 어휘도 다르다(README 는 "4옵션"을 라벨로 나열하고 CLAUDE.md 는 개념만 적는다).
+  "요약이 정본과 일치한다"를 grep 으로 정의하면 요약을 정본의 복사본으로 강제하게 되고,
+  그러면 요약일 이유가 없어진다. **가장 그럴듯한 좁은 술어**: 정본의 옵션 라벨 4종이
+  README 요약에 전부 등장하는가(정본에서 도출, 요약에서 확인) — 라벨은 요약이 실제로
+  나열하는 유일한 구조적 요소다. CLAUDE.md 쪽은 그런 요소가 없어 술어가 없다.
 
 ## §8 공유 참조 파일 — 처방을 거꾸로 적용하지 않기
 

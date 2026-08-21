@@ -23,6 +23,7 @@ while IFS= read -r _f; do [ -n "$_f" ] && CI_FILES+=("$_f"); done < <(ls "$CI_DI
 ci_cat() { cat "${CI_FILES[@]}"; }
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/presence_corpus.sh"
 
 # $1 = 시작 헤더 정규식, $2 = 종료 판단 헤딩 정규식 → fence-aware(Task 7 scoped_window() 재사용):
 # ``` 펜스 안에서는 종료 조건을 무시한다(펜스 안의 컬럼-0 텍스트가 헤딩처럼 보여 조기
@@ -121,30 +122,10 @@ test -f "$CI" || { no "SKILL 부재"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 
   && ok "코퍼스: conducting-interview 표면 ${#CI_FILES[@]}개 파일 도출 (vacuous 아님)" \
   || no "코퍼스: references/*.md 를 0건 도출했다 — 검사 범위가 조용히 좁아졌다"
 
-# ── F1 구조적 가드: presence 코퍼스는 **이 skill 소유 표면**만 담는다 ───────────
-# 이 배열은 존재(presence) 검사가 보는 것이다. 여기에 두 skill 이 **공유**하는
-# 계약 파일(`plugins/<p>/references/*.md`, 예: proceed-gate.md)이 들어오면, 그 파일이
-# 옵션 ① 정지 어휘(`턴 종료`·`다음 턴`)와 `polite stop` 을 계약 자체로서 담고 있으므로
-# **이 skill 이 자기 문구를 통째로 잃어도 스캔이 만족된다.**
-#
-# 그 편집은 그럴듯하다 — 부재 락의 처방("코퍼스를 넓혀 도출로")이 바로 그것이기 때문이다.
-# 그 처방은 *부재* 검사의 것이고, presence 에 적용하면 이빨이 사라진다. 넓히려면
-# 부재 전용 배열 쪽으로 넓혀야 한다. 그래서 여기서 구조적으로 막는다.
-#
-# 통과 시에도 **반드시 한 줄을 낸다.** 실패 분기에서만 말하는 가드는 깨져도 출력이
-# 그대로라 "아무것도 안 하면서 GREEN" 을 구별할 수 없다 — 이 라운드 이전 판본이 정확히
-# 그랬고(단언 수·출력이 가드 유무와 동일), 감사문서 §8 이 기록한 계측기 고장 클래스다.
-_own=0; _foreign=0
-for _f in "${CI_FILES[@]}"; do
-  case "$_f" in
-    */skills/*/SKILL.md|*/skills/*/references/*.md) _own=$((_own + 1)) ;;
-    *) no "코퍼스: CI_FILES 에 이 skill 소유가 아닌 파일이 들어왔다 ($_f) — presence 검사가 공유 계약 파일로 만족될 수 있다. 부재 검사용 코퍼스로 옮겨라(proceed-gate.md 「앵커는 각 skill 에」 절)."
-       _foreign=$((_foreign + 1)) ;;
-  esac
-done
-[ "$_foreign" -eq 0 ] \
-  && ok "코퍼스: presence 대상 ${_own}개가 전부 이 skill 소유 표면 (공유 계약 파일은 코퍼스 밖)" \
-  || no "코퍼스: presence 대상에 skill 소유 밖 파일 ${_foreign}건"
+# presence 코퍼스 소유 규칙 — 공용 단언(`shared/tests/presence_corpus.sh`).
+# 이 계약을 재는 스캔은 전부 같은 규칙을 지고, 그래서 사본이 아니라 한 벌이다
+# (감사문서 「공유 참조 파일」 절 · 정본 「앵커는 각 skill 에」 절).
+assert_presence_corpus_skill_owned "CI_FILES" "${CI_FILES[@]}"
 
 # --- 윈도우 전제조건 : 코드 펜스 균형 (Task 7 관용구 재사용) -----------------
 # scoped_window()/fence()의 상태 토글은 문서의 ``` 마커가 짝을 이룬다는 전제 위에서만 성립한다.

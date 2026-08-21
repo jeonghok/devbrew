@@ -5,9 +5,11 @@
 #
 # 왜 필요한가 (Task 31, 무게 감축): `## Runtime gate` 절차 전문이
 # skills/quality-pipeline/references/runtime-gate.md 로 옮겨지고 SKILL.md 에는
-# 포인터 산문만 남았다. 이 리포의 여러 테스트
-# (tests/harness/test_skill_orchestration_behavior.sh ·
-# tests/test_runtime_verdict_precedence.sh)는 SKILL.md 를 줄 번호·섹션 윈도우로
+# 포인터 산문만 남았다. 이 리포의 여러 테스트(2026-08-21 기준 **7개**가 이 헬퍼를
+# source 한다 — 예: tests/harness/test_skill_orchestration_behavior.sh ·
+# tests/test_runtime_verdict_precedence.sh. **이 둘은 예시이지 목록이 아니다** —
+# 실제 소비자는 `grep -rl reconstruct_skill_md plugins/` 로 도출할 것. 열거한 목록은
+# 낡고, 낡은 목록은 "여기 없으니 무관하다"로 읽힌다)는 SKILL.md 를 줄 번호·섹션 윈도우로
 # 분석해 Runtime 게이트 절차(Step R-init..R9)의 순서·근접성·본문을 검증한다 —
 # 원래 단일 파일이라는 전제 위에서 설계됐다. 파일을 둘로 쪼개면서 그 검사 로직
 # 수십 곳을 전부 다시 쓰는 대신, 검사가 읽을 **논리적으로 재구성된 문서**를
@@ -58,6 +60,30 @@ reconstruct_skill_md() {   # $1 = SKILL.md 절대경로
       }
     }
   ' "$skill" > "$out"; then
+    # ── 스플라이스 후 잔존 포인터 검사 (Task 33 fix round 4, F4) ──────────────
+    #
+    # 위 awk 는 **하드코딩된 한 섹션**(`## Runtime gate`)만 되접고, 그 헤딩이 없을 때만
+    # 시끄럽게 죽는다. quality-pipeline/SKILL.md 가 **또** 쪼개지면(아직 906줄이다)
+    # 재구성은 여전히 성공하고, 일곱 소비자에게 **새 섹션이 조용히 빠진 문서**를 넘긴다 —
+    # 모든 소비자의 `if ! reconstruct_skill_md` 가드는 "성공"을 보고한다. 이 브랜치의
+    # 헤드라인 실패 클래스가, 그것을 막으려고 만든 수리 뒤에 숨는 것이다.
+    #
+    # 판정 술어는 "references 토큰이 남았는가"가 **아니다** — 그러면 오늘 당장 거짓 RED 다.
+    # 재구성 출력에는 `[state-file-format](references/state-file-format.md#history)` 같은
+    # **인라인 상호참조 링크**가 정당하게 남는다(실측: 재구성본 552행). 그것은 되접을
+    # 대상이 아니라 보조 문서 링크다.
+    #
+    # 되접혀야 하는 것은 이 리포가 **조건부 로드 포인터**에 쓰는 관용구다: 자기 줄에 홀로
+    # 선 `Read <…references/x.md>` 지시(quality-pipeline · conducting-interview ·
+    # reviewing-spec 전부 이 형태를 쓴다 — 실측 4곳). 그 줄이 출력에 남았다는 것은 곧
+    # **아직 포인터인 채로 남은 섹션이 있다**는 뜻이다.
+    local leftover
+    leftover="$(grep -nE '^[[:space:]]*Read[[:space:]]+[^[:space:]]*references/[A-Za-z0-9_./-]+\.md' "$out" || true)"
+    if [ -n "$leftover" ]; then
+      printf 'reconstruct-skill.sh: 재구성 후에도 되접히지 않은 조건부-로드 포인터가 남아 있다 — SKILL.md 가 또 분할됐고 이 헬퍼는 한 섹션만 안다:\n%s\n' "$leftover" >&2
+      rm -f "$out"
+      return 1
+    fi
     printf '%s\n' "$out"
     return 0
   fi

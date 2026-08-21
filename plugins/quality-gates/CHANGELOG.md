@@ -3,6 +3,29 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.1.9] — 2026-08-21
+
+Task 33 fix round 4 — `tests/lib/reconstruct-skill.sh` 하드닝. shipping 동작 무변경.
+
+**Fixed**
+- **분할 수리 자신이 다음 분할을 숨겼다.** 이 헬퍼는 **하드코딩된 한 섹션**
+  (`## Runtime gate`)만 되접고 그 헤딩이 없을 때만 시끄럽게 죽는다.
+  `quality-pipeline/SKILL.md` 가 **또** 쪼개지면(아직 906줄) 재구성은 **여전히 성공**하고
+  **일곱** 소비자에게 새 섹션이 조용히 빠진 문서를 넘긴다 — 모든 소비자의
+  `if ! reconstruct_skill_md` 가드는 "성공"을 보고한다. 이 브랜치의 헤드라인 실패 클래스가
+  그것을 막으려고 만든 수리 뒤에 숨는 구조였다.
+  스플라이스 후 **되접히지 않은 조건부-로드 포인터**가 남았는지 검사하고 남으면 loud FAIL 한다.
+  〔차분〕 2차 분할을 시뮬레이션(새 `Read references/new-gate.md` 포인터 주입) →
+  **앞 판본 SUCCESS(조용) / 이번 판본 FAIL**, 소비자도 그 실패를 그대로 표시.
+- **술어를 "references 토큰 잔존"으로 두지 않았다** — 그러면 오늘 당장 거짓 RED 다.
+  재구성 출력에는 `[state-file-format](references/state-file-format.md#history)` 같은
+  **인라인 상호참조 링크**가 정당하게 남는다(실측: 재구성본 552행, 유일한 잔존 토큰).
+  판정 대상은 이 리포가 조건부 로드에 쓰는 관용구 — 자기 줄에 홀로 선 `Read <…references/x.md>`
+  (실측 4곳: quality-pipeline · conducting-interview · reviewing-spec).
+- 헤더의 소비자 목록을 **예시로 명시**했다. 둘만 적혀 있었으나 실제 소비자는 **7개**다 —
+  낡은 열거는 "여기 없으니 무관하다"로 읽힌다. 도출 명령(`grep -rl reconstruct_skill_md`)을
+  함께 적었다.
+
 ## [4.1.8] — 2026-08-21
 
 Task 33 — `tests/test_law2_prose.sh` 코퍼스만. 이 플러그인의 shipping 동작은 무변경.

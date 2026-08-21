@@ -41,6 +41,7 @@ CANON="$SD/references/proceed-gate.md"
 CANON_REF='references/proceed-gate\.md'
 
 . "$REPO_ROOT/shared/tests/assert.sh"
+. "$REPO_ROOT/shared/tests/presence_corpus.sh"
 
 # `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 실제로 훑는 것은
 # 채택자들의 표면뿐이다(정본은 스캔하지 않는다 — 위 스코프 규칙).
@@ -109,18 +110,14 @@ ok "채택자 도출 ${n_adopt}개 (열거 아님 — 정본 포인터에서 도
 #    "이렇게 쓰지 말 것" 예시든 마찬가지다. 그 경우 그 skill 은 채택하지도 않은 계약의
 #    앵커를 요구받아 **거짓 RED** 를 얻는다. fail-closed 방향이고 시끄러우므로 남긴다.
 
-# ── 구조적 가드: 스캔 대상은 채택 skill 소유 파일뿐 ────────────────────────
+# ── 구조적 가드 ① 모양: 스캔 대상은 채택 skill 소유 파일뿐 (공용 단언) ──────
 # 정본(또는 다른 플러그인 레벨 공유 파일)이 여기 섞이면 아래 존재 단언이 그 파일 하나로
 # 만족된다. 그 편집은 그럴듯하므로(부재 락의 처방과 모양이 같다) 주석이 아니라 가드로 막는다.
-outside=0
+SCANNED_ARR=()
 while IFS= read -r f; do
-  [ -n "$f" ] || continue
-  case "$f" in
-    */skills/*/SKILL.md|*/skills/*/references/*.md) ;;
-    *) no "코퍼스: 스캔 대상에 skill 소유가 아닌 파일이 들어왔다 ($f) — 존재 검사가 공유 계약 파일로 만족될 수 있다"; outside=$((outside + 1)) ;;
-  esac
+  [ -n "$f" ] && SCANNED_ARR+=("$f")
 done < <(printf '%s' "$scanned")
-[ "$outside" -eq 0 ] && ok "코퍼스: 스캔 대상 전부가 채택 skill 소유 표면 (정본은 코퍼스 밖)"
+assert_presence_corpus_skill_owned "채택자 표면" "${SCANNED_ARR[@]+"${SCANNED_ARR[@]}"}"
 
 # 정본이 정말 코퍼스 밖인지 이름으로 한 번 더 확인한다 — 위 case 는 *모양*을 보고, 이것은
 # *그 파일*을 본다. 정본이 언젠가 skills/ 아래로 옮겨지면 모양 검사만으로는 못 잡는다.

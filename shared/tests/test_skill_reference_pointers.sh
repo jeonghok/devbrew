@@ -53,8 +53,27 @@
 # 역방향만 느슨한 상태였고, 둘 다 실재하면 skill 레벨 파일이 **아무도 안 가리키는데도**
 # 고아로 안 잡혔다. 지금은 정방향이 만든 `(SKILL.md, 해석된 대상)` **쌍**을 그대로 되쓴다.
 #
-# 대상은 열거가 아니라 git 이 추적하는 SKILL.md 전부에서 **도출**한다 — 새
-# 스킬이나 새 참조 파일이 생겨도 자동으로 대상이 된다. 포인터는 마크다운 링크
+# ── 포인터 **출처**는 SKILL.md 만이 아니다 (Task 33 fix round 4, seam) ──────
+# Task 31 이 이 락을 쓸 때 `references/*.md` 는 **잎(leaf)** 이었다 — 가리켜지기만
+# 하고 가리키지 않았다. Task 33 이 그 전제를 깼다: `conducting-interview` 는 공유
+# 계약을 자기 SKILL.md 가 아니라 `references/finishing.md` 에서 가리킨다.
+# 그래서 이 브랜치는 **유일한 실사례를 이 락이 안 보는 쪽에** 실어 보냈다.
+#
+# 두 방향 모두 결함이었다:
+#  - 정방향 fail-open: 세 번째 skill 이 자기 `references/*.md` 에서만, 그것도 오타로
+#    가리키면 — 이 락은 그 파일을 열지 않아 침묵하고, 채택자 락도 그 skill 을 채택자로
+#    세지 못해(리터럴이 오타라서) ≥2 하한이 그대로 성립해 침묵한다. 런타임에 모델이
+#    없는 경로를 Read 하고 공유 계약이 조용히 사라진다.
+#  - 역방향 false-RED: 플러그인 레벨 정본을 SKILL.md 포인터 **하나**가 지탱하고 있어,
+#    그쪽이 표기를 바꾸면 `finishing.md` 가 여전히 가리키는데도 "고아"라고 낸다.
+#
+# 그래서 정방향 출처를 **SKILL.md ∪ 모든 references/*.md** 로 넓힌다. 포인터는
+# **정당하게 쓰인 자리 어디서든** 검사된다. 넓힌 대가로 하나가 생긴다 — 어떤 파일이
+# 출처이면서 동시에 대상일 수 있다. **자기 자신을 가리키는 포인터는 소유 증거로
+# 기록하지 않고 loud FAIL 한다**(자기 보증 금지).
+#
+# 대상은 열거가 아니라 git 이 추적하는 파일에서 **도출**한다 — 새 스킬이나 새 참조
+# 파일이 생겨도 자동으로 대상이 된다. 포인터는 마크다운 링크
 # (`[text](references/x.md#anchor)`) · 백틱 코드 스팬(`` `references/x.md` ``) ·
 # 코드블록 안의 전체 경로(`plugins/<p>/.../references/x.md`) ·
 # `${CLAUDE_PLUGIN_ROOT}/.../references/x.md` 설치-경로 표기까지 전부 같은 정규식
@@ -116,6 +135,9 @@ norm_path() {
 # 겹치는 pathspec 의 결과를 중복 없이 낸다(실측).
 CORPUS="$(git ls-files -- 'plugins/*/skills/*/SKILL.md')"
 REF_CORPUS="$(git ls-files -- 'plugins/*/skills/*/references/*.md' 'plugins/*/references/*.md')"
+# 포인터 **출처** 코퍼스 = 둘의 합집합. 참조 파일도 포인터를 담을 수 있다(위 헤더).
+SRC_CORPUS="$CORPUS
+$REF_CORPUS"
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$CORPUS"
   printf '%s\n' "$REF_CORPUS"
@@ -126,16 +148,21 @@ corpus_n=0
 while IFS= read -r f; do
   [ -n "$f" ] && corpus_n=$((corpus_n + 1))
 done < <(printf '%s\n' "$CORPUS")
+ref_src_n=0
+while IFS= read -r f; do
+  [ -n "$f" ] && ref_src_n=$((ref_src_n + 1))
+done < <(printf '%s\n' "$REF_CORPUS")
 if [ "$corpus_n" -lt 1 ]; then
   no "pointer: git ls-files 가 SKILL.md 를 0개 도출했다 — 이 검사 자체가 vacuous 하다"
   finish
   exit $?
 fi
-ok "pointer: SKILL.md 코퍼스 ${corpus_n}개 도출 (vacuous 아님)"
+ok "pointer: 출처 코퍼스 $((corpus_n + ref_src_n))개 도출 — SKILL.md ${corpus_n} + references/*.md ${ref_src_n} (vacuous 아님)"
 
 checked=0
 missing=0
 unknown_form=0
+selfref=0
 # 정방향이 실제로 **해석해 낸 대상**의 집합. 역방향(플러그인 레벨 고아 검사)이
 # 이 집합을 그대로 되쓴다 — 두 방향이 같은 해석기를 공유하므로, 접두사 파싱이
 # 깨지면 정방향과 역방향이 **동시에** RED 를 낸다(mutation M7b 실측: 접두사 분기를
@@ -152,7 +179,11 @@ RESOLVED_PAIRS=""
 while IFS= read -r skill_md; do
   [ -n "$skill_md" ] || continue
   skill_dir="$(dirname -- "$skill_md")"
-  plugin_root="${skill_md%/skills/*}"
+  # `${x%/skills/*}` 는 출처가 플러그인 레벨(`plugins/<p>/references/…`)이면 `/skills/`
+  # 가 없어 **경로 전체**를 돌려준다. 출처가 넓어졌으므로 두 모양 다 맞는 도출을 쓴다:
+  # 첫 두 성분이 곧 플러그인 루트다.
+  plugin_root="${skill_md#plugins/}"
+  plugin_root="plugins/${plugin_root%%/*}"
   while IFS= read -r ref; do
     [ -n "$ref" ] || continue
     checked=$((checked + 1))
@@ -178,6 +209,12 @@ while IFS= read -r skill_md; do
       # 폴백이다. 표기를 인식 가능한 세 형태 중 하나로 고쳐야 한다.
       no "pointer: $skill_md → '$ref' 의 접두사를 알아볼 수 없다 — 인식 형태는 \`\${CLAUDE_PLUGIN_ROOT…}/…\` · \`plugins/<p>/…\` · \`(../)*references/…\` 뿐이다 (조용히 재해석하지 않는다)"
       unknown_form=$((unknown_form + 1))
+    elif [ "$(norm_path "$target")" = "$(norm_path "$skill_md")" ]; then
+      # 자기 보증 금지: 출처가 참조 파일까지 넓어지면서 "자기 자신을 가리키는 포인터"가
+      # 문법적으로 가능해졌다. 그것을 소유 증거로 기록하면 어떤 파일이든 한 줄로 고아
+      # 검사를 빠져나간다. 기록하지 않고 시끄럽게 거절한다.
+      no "pointer: $skill_md → $ref 가 **자기 자신**을 가리킨다 — 소유 증거가 될 수 없다(자기 보증)"
+      selfref=$((selfref + 1))
     elif [ -f "$target" ]; then
       ok "pointer: $skill_md → $ref (존재: $target)"
       RESOLVED="$RESOLVED$(norm_path "$target")
@@ -189,13 +226,14 @@ while IFS= read -r skill_md; do
       missing=$((missing + 1))
     fi
   done < <(grep -oE -- "$REF_RE" "$skill_md" | sort -u)
-done < <(printf '%s\n' "$CORPUS")
+done < <(printf '%s\n' "$SRC_CORPUS")
 
 if [ "$checked" -eq 0 ]; then
   no "pointer: 코퍼스 ${corpus_n}개 SKILL.md 전체에서 references/*.md 포인터를 0개 발견 — 추출이 실패했다 (0 checked/0 missing 은 '없음'이 아니라 '안 봤다')"
 else
   assert_eq "$missing" "0" "pointer: 대조 ${checked}건 / 소실 ${missing}건"
   assert_eq "$unknown_form" "0" "pointer: 인식 못 하는 접두사 ${unknown_form}건 (절단-재해석 대신 거부)"
+  assert_eq "$selfref" "0" "pointer: 자기 자신을 가리키는 포인터 ${selfref}건 (자기 보증 금지)"
 fi
 
 # ── 역방향(F6): SKILL.md 가 안 가리키는 references/*.md — 고아 ────────────
@@ -254,9 +292,9 @@ while IFS= read -r reffile; do
       ;;
     *)
       if printf '%s\n' "$RESOLVED" | grep -qxF -- "$(norm_path "$reffile")"; then
-        ok "orphan: $reffile ← 어떤 SKILL.md 포인터가 실제로 이 경로로 해석됨 (플러그인 레벨)"
+        ok "orphan: $reffile ← 어떤 출처(SKILL.md 또는 references/*.md)의 포인터가 실제로 이 경로로 해석됨 (플러그인 레벨)"
       else
-        no "orphan: $reffile (플러그인 레벨) 로 해석되는 SKILL.md 포인터가 없다"
+        no "orphan: $reffile (플러그인 레벨) 로 해석되는 포인터가 어느 출처에도 없다"
         orphans=$((orphans + 1))
       fi
       ;;
