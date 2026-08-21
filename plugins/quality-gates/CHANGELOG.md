@@ -3,6 +3,38 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.1.10] — 2026-08-22
+
+Task 35 Step 0 — P21 프리앰블 로더 4벌을 `shared/codex/codex_prompt_common.py` 정본으로
+통합. shipping 동작 무변경(네 빌더가 내는 프롬프트 바이트 동일 — 실측).
+
+**Added**
+- **`scripts/codex_prompt_common.py`** — `shared/codex/codex_prompt_common.py` 의 물리
+  사본(`# copy-of:` 마커). **심볼릭 링크가 아닌 이유**: `P21_PREAMBLE_PATH` 가
+  `Path(__file__).resolve().parent` 의 형제를 가리키므로, 링크로 배포하면 `.resolve()` 가
+  링크를 따라가 그 형제가 `shared/codex/` 로 해석된다 — 그리고 `shared/` 는 설치본에
+  실리지 않는다. 리포에서는 통과하고 **설치본에서만** P21 이 빠진 프롬프트가 나가는,
+  관측되지 않는 실패가 된다. `shared/tests/test_copy_of_contract.sh` 축 1c 가 소비자
+  4건 전부에 대해 형제 사본 존재 + 링크 없는 일반 파일 트리에서의 import 를 ∀ 로 잰다.
+
+**Changed**
+- **`scripts/build_codex_prompt.py` · `scripts/build_artifact_codex_prompt.py`** — stdout
+  인코딩 가드와 P21(신뢰불가 입력 프리앰블) 로더를 형제 사본에서 import 한다. 두 빌더가
+  갖고 있던 그 구간은 spec-distill 의 두 빌더와 **주석까지 바이트 동일**했다(창 20줄·최소
+  200자 스캐너가 3쌍으로 적발). P21 은 **보안 컨트롤**이라 네 벌로 두면 한 곳만 고쳤을 때
+  나머지 셋이 조용히 옛 문구를 계속 내보낸다. `configure_stdout()` 는 import 부수효과가
+  아니라 **명시적 호출**이다 — import 만으로 프로세스 전역 상태가 바뀌면 그 사실이
+  호출부에서 안 보인다.
+
+**Fixed**
+- **`tests/test_codex_runner_degrade_contract.sh`** — 스텁 플러그인 루트(A·D)에
+  `codex_prompt_common.py` 를 함께 깐다. 없으면 빌더가 ImportError 로 죽고 **그 죽음도
+  degrade 로 읽혀**, 이 테스트가 재려던 경로(추출기 실패)와 다른 이유로 GREEN 이 된다.
+- **`tests/test_artifact_codex_reviewer.sh`** — 같은 이유로 두 스텁에
+  `codex_prompt_common.py` 를 깔고, **`prompt-preamble.md` 도 함께 깐다.** 후자는 이
+  통합과 무관하게 통합 **이전부터** 빠져 있었다 — 그 스텁의 빌드는 P21 로더 단계에서 이미
+  죽고 있었고, 죽음이 곧 `codex_failed: true` 라 두 단언이 **가려진 채** 통과했다.
+
 ## [4.1.9] — 2026-08-21
 
 Task 33 fix round 4 — `tests/lib/reconstruct-skill.sh` 하드닝. shipping 동작 무변경.

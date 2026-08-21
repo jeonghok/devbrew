@@ -10,37 +10,23 @@ Usage: build_artifact_codex_prompt.py <artifact_path>
 from __future__ import annotations
 
 import pathlib
-import re
 import sys
 
-# stdout 인코딩은 프로세스 locale/PYTHONIOENCODING을 따른다(read_text의 명시적
-# encoding="utf-8"과 달리) — 고정하지 않으면 템플릿의 em dash·한국어가 ascii 계열
-# 인코딩에서 UnicodeEncodeError로 프로세스를 죽인다. reconfigure는 TextIOWrapper에만
-# 있고 sys.stdout을 채울 수 있는 모든 객체에 있지는 않으므로 형제 관용구(둘 다
-# plugins/spec-distill/ 하위 — review-dispatch.py 모듈 최상단의 stdin/stdout/stderr
-# reconfigure 루프, check_verbatim_coverage.py의 main()이 쓰는 stdout/stderr guard)와
-# 같이 guard한다. 단 그 둘이 잡는 예외 클래스가 서로 다르다(전자 AttributeError·OSError,
-# 후자 AttributeError·ValueError) — 닫힌 TextIOWrapper는 ValueError를 낸다(실측)로
-# 여기서는 합집합을 잡는다.
-try:
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
-except (AttributeError, OSError, ValueError):
-    pass
+# stdout 인코딩 가드와 P21 프리앰블 로더는 **형제 사본** `codex_prompt_common.py` 가
+# 갖는다(정본 `shared/codex/codex_prompt_common.py`). 네 빌더가 같은 블록을 주석까지
+# 바이트 동일하게 각자 갖고 있었고, P21 은 보안 컨트롤이라 한 곳만 고치면 나머지가
+# 조용히 옛 문구를 계속 내보낸다. 형제 import 는 sys.path[0](= 실행되는 스크립트 자신의
+# 디렉토리)에서 풀린다 — 그래서 배포 지점마다 물리 사본이 있어야 하고, 그 ∀ 계약은
+# shared/tests/test_copy_of_contract.sh 축 1c 가 진다.
+from codex_prompt_common import (
+    P21_PREAMBLE_PATH,
+    configure_stdout,
+    load_p21_preamble,
+)
 
-# P21 프리앰블은 **형제 파일** `scripts/prompt-preamble.md` 에서 읽는다 — 그 경로는
-# `shared/codex/prompt-preamble.md`
-# 를 가리키는 상대 심볼릭 링크이고, 설치 시점에 실제 내용으로 역참조되어 배포 트리 안으로
-# 들어온다(설계 §2.2·§16.1). 런타임에 `shared/` 로 나가지 않는다 — `${CLAUDE_PLUGIN_ROOT}`
-# 에서 그곳은 도달 불가다(§2.1).
-P21_PREAMBLE_PATH = pathlib.Path(__file__).resolve().parent / "prompt-preamble.md"
-P21_MARKER_RE = re.compile(r"^[ \t]*<!--.*-->[ \t]*$")
-
-
-def load_p21_preamble() -> str:
-    """정본을 읽어 HTML 주석 줄을 뺀 본문을 낸다. 실패는 삼키지 않는다 — 보안 컨트롤이라
-    조용히 빠진 프롬프트는 빠졌다는 사실조차 남기지 않는다(호출자가 rc=2 로 죽는다)."""
-    lines = P21_PREAMBLE_PATH.read_text(encoding="utf-8").splitlines()
-    return "\n".join(x for x in lines if not P21_MARKER_RE.match(x)).strip("\n")
+# import 부수효과가 아니라 **명시적 호출**이다 — import 만으로 프로세스 전역 상태가
+# 바뀌면 그 사실이 호출부에서 안 보인다.
+configure_stdout()
 
 
 PROMPT_TEMPLATE = """You are an artifact critic. Review the NON-CODE artifact below for

@@ -54,7 +54,10 @@ mkdir -p "$tmp/root/scripts" "$tmp/bin"
 # `discover-spec.sh` 이 source 하는 `discover_common.sh` 도 형제다 — 빠지면 러너가
 # 조용히 빈 <spec_context> 로 degrade 해, 이 테스트가 재는 경로가 바뀌면서도 GREEN 이
 # 유지된다(실측: spec 해석이 `plugin install incomplete` 로 떨어짐).
-for f in build_codex_prompt.py discover-spec.sh discover_common.sh prompt-preamble.md; do
+# `codex_prompt_common.py` 는 빌더의 **형제 import** 다(stdout 가드 + P21 로더 정본의
+# 사본) — 빠지면 빌더가 ImportError 로 죽고, 그 죽음도 degrade 로 읽혀 이 테스트가
+# 재려던 경로(추출기 실패)와 **다른 이유**로 GREEN 이 된다.
+for f in build_codex_prompt.py codex_prompt_common.py discover-spec.sh discover_common.sh prompt-preamble.md; do
   [ -f "$QG/scripts/$f" ] && cp "$QG/scripts/$f" "$tmp/root/scripts/"
 done
 printf '#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n' > "$tmp/root/scripts/codex_findings_to_yaml.py"
@@ -246,6 +249,7 @@ assert_degrade3 "5러너 C(run_spec_codex_reviewer.sh, stale-시작)" "$c_stale"
 #     지우지만 이 마지막 단계가 그 seed를 다시 비운다). ---
 mkdir -p "$tmp/rootD/scripts"
 cp "$SD/scripts/build_brief_codex_prompt.py" "$tmp/rootD/scripts/"
+cp "$SD/scripts/codex_prompt_common.py" "$tmp/rootD/scripts/"   # 빌더의 형제 import
 cp "$SD/scripts/brief-codex-direction-checklist.md" "$tmp/rootD/scripts/"
 cp "$SD/scripts/brief-codex-fidelity-checklist.md" "$tmp/rootD/scripts/"
 cp "$SD/scripts/prompt-preamble.md" "$tmp/rootD/scripts/"

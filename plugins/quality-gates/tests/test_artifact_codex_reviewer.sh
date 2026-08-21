@@ -90,6 +90,10 @@ fi
 if [ -f "$SCRIPTS/run_artifact_codex_reviewer.sh" ]; then
   stub="$(mktemp -d)"; mkdir -p "$stub/scripts" "$stub/bin"
   cp "$BUILD" "$stub/scripts/build_artifact_codex_prompt.py"
+  # 빌더의 형제 import(stdout 가드 + P21 로더). 빠지면 빌더가 ImportError 로 죽어
+  # 아래 판정이 추출기 실패가 아니라 빌드 실패를 재게 된다.
+  cp "$SCRIPTS/codex_prompt_common.py" "$stub/scripts/codex_prompt_common.py"
+  cp "$SCRIPTS/prompt-preamble.md" "$stub/scripts/prompt-preamble.md"
   printf '#!/usr/bin/env python3\nimport sys\nsys.exit(3)\n' > "$stub/scripts/extract_codex_artifact_yaml.py"
   printf '#!/bin/sh\nexit 0\n' > "$stub/bin/codex"; chmod +x "$stub/bin/codex"
   echo "# artifact" > "$stub/art.md"
@@ -107,6 +111,8 @@ if [ -f "$SCRIPTS/run_artifact_codex_reviewer.sh" ]; then
   # exits nonzero so it can't exercise this branch (codex iter-2 finding).
   stub2="$(mktemp -d)"; mkdir -p "$stub2/scripts" "$stub2/bin"
   cp "$BUILD" "$stub2/scripts/build_artifact_codex_prompt.py"
+  cp "$SCRIPTS/codex_prompt_common.py" "$stub2/scripts/codex_prompt_common.py"
+  cp "$SCRIPTS/prompt-preamble.md" "$stub2/scripts/prompt-preamble.md"
   printf '#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n' > "$stub2/scripts/extract_codex_artifact_yaml.py"
   printf '#!/bin/sh\nexit 0\n' > "$stub2/bin/codex"; chmod +x "$stub2/bin/codex"
   echo "# artifact" > "$stub2/art.md"

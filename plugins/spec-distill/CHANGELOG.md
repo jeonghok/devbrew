@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.32.5] — 2026-08-22
+
+Task 35 Step 0 — P21 프리앰블 로더 4벌을 `shared/codex/codex_prompt_common.py` 정본으로
+통합. shipping 동작 무변경(네 빌더가 내는 프롬프트 바이트 동일 — 실측).
+
+**Added**
+- **`scripts/codex_prompt_common.py`** — `shared/codex/codex_prompt_common.py` 의 물리
+  사본(`# copy-of:` 마커). 심볼릭 링크로 배포하지 않는 이유와 축 1c 의 ∀ 계약은
+  quality-gates CHANGELOG `[4.1.10]` 과 같다(같은 정본의 두 배포 지점).
+
+**Changed**
+- **`scripts/build_spec_codex_prompt.py` · `scripts/build_brief_codex_prompt.py`** — stdout
+  인코딩 가드와 P21(신뢰불가 입력 프리앰블) 로더를 형제 사본에서 import 한다.
+  `build_brief_codex_prompt.py` 는 20줄 스캐너가 적발한 3쌍에 **들어 있지 않았다** —
+  같은 블록을 갖고 있지만 중간에 무관한 주석(`AXES` + §6 근거)이 끼어 20줄 연속이 끊겼기
+  때문이다. 크기 임계 아래에 숨은 같은 보안 컨트롤 사본이므로 함께 통합했다.
+- **`scripts/codex_prompt_common.py` 의 `scripts/prompt-preamble.md` 리터럴은 앵커다** —
+  `test_copy_of_contract.sh` 축 1a 의 참조원 도출이 이 문자열로 배포 지점 플러그인을
+  고른다. 통합 초안이 빌더에서 그 리터럴을 걷어냈을 때 spec-distill 이 도출 3건→2건으로
+  조용히 이탈했고(실측 RED), 정본 주석에 리터럴과 경고를 함께 넣어 복구했다.
+
 ## [0.32.4] — 2026-08-21
 
 Task 33 fix round 5 (마지막). 한 항목 — fix round 4 가 만든 **단일 실패 지점**에 짝을 붙인다.
