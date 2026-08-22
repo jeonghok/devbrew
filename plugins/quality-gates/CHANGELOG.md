@@ -3,6 +3,197 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.2.2] — 2026-08-22
+
+`scripts/codex_prompt_common.py` 의 〔앵커 주의〕 주석 블록을 **제거**한다.
+
+**Changed**
+- `scripts/codex_prompt_common.py` — `scripts/prompt-preamble.md` 리터럴이
+  `shared/tests/test_copy_of_contract.sh` 축 1a 의 참조원 도출 앵커라고 경고하던
+  주석 4줄을 삭제. 그 축이 배포 지점을 **구조(인덱스∪워킹트리의 실재)** 에서
+  도출하도록 바뀌었으므로(감사 §7-8 해소) 이 주석의 존재 이유가 사라졌다 —
+  이제 산문 표기를 바꿔도 실재하는 배포 지점은 감사 집합에서 빠지지 않는다.
+  경고가 지키던 대상이 없어졌는데 경고만 남으면 다음 사람이 없는 제약을 지킨다.
+
+**동작 무변경** — 주석만 지웠고 실행 경로는 그대로다.
+
+## [4.2.1] — 2026-08-22
+
+`DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER` 락에 **이빨을 준다** — v4.2.0 이
+구현한 게이트를 지키는 테스트가 실제로는 아무것도 지키지 않았다.
+
+patch 인 이유: shipping 동작은 한 바이트도 바뀌지 않는다. 바뀐 것은 그 동작을
+재는 **계측기**뿐이다.
+
+### Fixed
+
+- **`test_security_reviewer_kill_switch.sh` 의 GREEN 이 게이트의 존재를 뜻하지
+  않았다.** 세 단언이 전부 **파일 전체 ∃ 카운트**여서, `quality-pipeline/SKILL.md`
+  의 dispatch 게이트 블록을 **통째로 삭제해도 3/3 PASS** 였다(실측). v4.2.0 이 같은
+  커밋에서 추가한 Step 4.5 verdict advisory 와 kill switch 색인이 **decoy 로** 세
+  단언을 모두 만족시켰기 때문이다 — 스위치를 더 잘 문서화할수록 그 스위치를 지키는
+  락이 약해지는 구조였다.
+
+### Added
+
+- **위치 단언(∀).** `subagent_type: "quality-gates:security-reviewer"` dispatch
+  리터럴 **각각**에 대해, 그 **바로 위 창** 안에 게이트 네 조각(env 토큰 ·
+  `IF <ENV>=1` 조건 · loud advisory 배너 원문 · "발행하지 않는다" 지시)이 있는지
+  검사한다. 창은 **파일 구조에서 매번 도출**한다 — 직전 구조 경계(펜스 밖 heading
+  또는 직전 코드펜스 닫힘 중 더 가까운 쪽)부터 dispatch 를 감싼 펜스 시작 직전까지.
+  **리터럴 줄번호를 박지 않는다**(줄번호 인용이 리팩터로 썩은 전례가 있다).
+- **decoy 배제 락 + 양의 짝.** verdict advisory 와 kill switch 색인이 파일에 실재하는지
+  (∃) 확인하고, 동시에 그 두 줄이 **모든 창 밖**인지 검사한다. 창이 decoy 를 삼키면
+  락은 다시 ∃-카운트로 퇴화하므로, 그 퇴화 자체를 RED 로 만든다.
+- **양성 대조 두 개.** dispatch 리터럴이 최소 하나 실재해야 하고(∀ 가 공허하게 통과하는
+  것을 막는다), 창 도출기가 세는 dispatch 수가 `grep` 이 세는 수와 같아야 한다(계측기
+  자기점검).
+
+### Changed
+
+- 헤더가 **이 락이 재지 않는 것**을 명시한다. SKILL.md 는 실행되는 코드가 아니라 모델이
+  읽는 **산문**이므로 이 GREEN 은 *"지시가 dispatch 지점에 서 있다"* 까지이고
+  *"LLM 이 그 지시를 따른다"* 가 아니다. **토큰을 보존한 의미 반전**(IF/ELSE 본문
+  맞바꿈)은 못 잡는다 — 주장이 아니라 mutation 으로 **실측 확인**한 한계다.
+
+기존 세 ∃ 단언은 지우지 않았다. 게이트 위치는 못 보지만 스위치가 문서에서 통째로
+사라지는 경우는 그쪽이 잡는다.
+
+## [4.2.0] — 2026-08-22
+
+기준선 RED 해소 ①/4 — **약속만 있고 집행이 없던 kill switch 를 실제로 구현한다.**
+이 넷 중 유일하게 살아 있는 **보안 컨트롤 결함**이었다.
+
+minor 인 이유: 이 스위치를 켠 run 은 이제 실제로 `security-reviewer` 없이 돈다 —
+전에는 켜도 계속 돌았다. 사용자에게 보이는 동작이 새로 생겼으므로 patch 가 아니다.
+
+### Fixed
+
+- **`DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` 이 아무것도 하지 않았다.**
+  README 가 세 곳(Principles · 디렉토리 트리 주석 · kill switch 표)에서 이 스위치를
+  약속하는데, `plugins/**` · `shared/**` 전체에서 README·CHANGELOG·테스트를 뺀
+  **집행·지시 지점이 0** 이었다. 사용자가 이 스위치를 켜면 security-reviewer 가
+  꺼졌다고 **믿지만 계속 돌았다.** CLAUDE.md 는 *"kill switch는 보안 컨트롤"* 이라고
+  적고 있고, Plugin Shape 는 *"모든 reviewer는 opt-out 가능"* 을 원칙으로 두므로
+  약속을 철회하는 대신 구현한다. (README 가 약속한 kill switch 8개 중 스킬·스크립트가
+  실제로 검사하던 것은 7개였다 — 이제 8/8.)
+
+  구현은 형제 스위치(`DISABLE_CODEX`)와 **동형이되 가시성만 반대**다:
+
+  1. **dispatch 지점의 게이트** — `skills/quality-pipeline/SKILL.md` 의
+     "Tier A — Floor" 절, `security-reviewer` Agent 리터럴을 발행하기 **직전**.
+     스위치가 켜져 있으면 그 리터럴을 발행하지 않고, `adversarial` 과
+     Tier B(codex)·Tier C 는 그대로 fire 한다. `adversarial` 의 `phase1_findings`
+     슬롯에는 실제로 받은 것만 넣는다(없는 리뷰어 몫을 지어내지 않는다).
+  2. **kill switch 색인에 포인터 한 줄** — 같은 SKILL 의 `## kill switch` 절.
+     그 절은 *"각 스위치의 전체 동작은 아래 명시된 스텝/절 본문에 있다(여기서
+     재서술하지 않는다, drift 방지)"* 라고 자기 규약을 적어 두었으므로 **포인터만**
+     넣었다.
+  3. **loud advisory 2단** — dispatch 지점 배너 한 줄 +
+     **Step 4.5 의 판정 표면**에 남는 한 줄. 두 번째가 핵심이다: 배너는 iteration
+     중간, verdict 보다 한참 위에 찍히므로 verdict 로 바로 내려가는 독자(또는
+     `## History` 줄만 읽는 독자)는 결손을 못 본다. Tier A floor 는
+     `security-reviewer + adversarial` 두 명이고 그중 하나가 빠졌으므로, 맨
+     `clean` 은 과대 주장이다 — 기존 "Dropped-finding override"(*"버려진 finding 은
+     해소된 finding 이 아니다"*)와 같은 계열이다. 배너는 스위치가 켜진 **매**
+     iteration 마다 반복한다.
+
+  **형제 `DISABLE_CODEX` 와 달리 loud 인 이유**(SKILL 본문에도 적어 두었다):
+  codex kill switch 는 "Codex skip 안내"의 silent 표에 있다(*"사용자가 직접 껐다.
+  자기가 한 일을 다시 알릴 필요가 없다"*). 그러나 codex 는 Tier B(가용성 floor,
+  다양성 층)이고 `security-reviewer` 는 **Tier A floor 두 명 중 하나**다. floor
+  구성원이 빠지면 그 iteration 의 `clean` 이 **뜻하는 바 자체**가 달라지므로,
+  사용자의 의도적 opt-out 이더라도 판정을 읽는 사람에게 결손이 보여야 한다.
+  두 스위치를 "일관성" 명목으로 같은 취급으로 합치지 말 것.
+
+  **`tests/test_security_reviewer_kill_switch.sh` 는 건드리지 않았다.** 그 테스트가
+  RED 였던 것이 정상이었고 — 구현이 없었으니까 — 구현이 끝나자 GREEN 이 됐다.
+  ⚠ 다만 그 테스트의 단언은 `grep -c '<스위치>' SKILL.md >= 1` 형태라 **색인 한 줄만
+  넣어도 첫 단언이 통과한다**(이 리포에서 관측된 header-satisfiable 함정). 실측으로
+  확인: dispatch 게이트와 verdict 절을 통째로 지우고 색인 줄만 남기면 3개 중 1개만
+  RED 가 된다. 즉 **이 테스트의 GREEN 은 게이트가 dispatch 지점에 있다는 증거가
+  아니다.** 그 사실은 구조로 확인해야 한다 — 게이트는 Tier A 산문과
+  `subagent_type: "quality-gates:security-reviewer"` 리터럴 **사이**에 있다.
+
+### Changed
+
+- **`README.md`** — kill switch 표의 이 항목이 *"다른 3개 phase-1 reviewer는 여전히
+  fire"* 라고 적고 있었다. v2.13.0 의 3-tier 모델(Tier A floor = security-reviewer +
+  adversarial · Tier B codex · Tier C 동적 전문가) 이전 서술이라 stale 했다.
+  구현과 같은 커밋에서 실제 동작(무엇이 계속 fire 하는가 + loud 2단)으로 맞췄다.
+  Principles 줄의 *"Phase 1 always-run reviewer 중 4번째"* 도 같은 이유로 갱신.
+- **`tests/codex-blessed-red.txt`** — 등재 0건이 됐다. 이 원장은 **양방향 래칫**이라
+  (미등재 실패도 RED, 등재됐는데 GREEN 이 된 항목도 RED) kill switch 테스트가
+  GREEN 이 되는 순간 `stale 등재` 로 `test_codex_backward_compat.sh` 가 RED 를 낸다
+  — 실측으로 확인한 뒤 같은 커밋에서 뺐다. 빈 원장은 고장이 아니라 규약
+  (*"목록은 줄어들기만 한다"*)의 도달점이며 메커니즘은 그대로 살아 있다.
+
+## [4.1.13] — 2026-08-22
+
+기준선 RED 해소 ④/4 — codex spike 의 **부재**를 실패가 아니라 SKIPPED 로 낮춘다.
+shipping 동작 무변경(수동 spike + 테스트 하니스만).
+
+**Changed**
+- **`tests/spike/test_codex_json_extraction.sh`** — 결과가 **세 값**이 됐다:
+  `PASS` / `FAIL`(진짜 임계 미달) / `SKIPPED`(codex 를 태울 수 없었다).
+  이 spike 는 실제 codex 호출이 필요하고 그 호출은 계정 상태에 달렸다. 부재를
+  `FAIL`(exit 1)로 렌더하던 앞선 판은 회귀 스위트에 영구 RED 를 하나 만들었고,
+  영구 RED 는 *"선재 RED, 고치지 마라"* 로 분류되어 아무도 읽지 않게 된다 — 이
+  파일이 실제로 겪은 일이다. `SKIPPED` 는 exit 0 이되 **출력에 크게 남긴다**
+  (CLAUDE.md *"Loud logging을 동반한 graceful degradation"*): *"판정하지 않았다"* 를
+  *"통과했다"* 로 렌더하지 않는다.
+  - **가용성 판정은 두 층이다.** ① 정본 `scripts/detect_codex.sh`(설치·인증·버전·
+    kill switch) — 새 감지기를 만들지 않았다. ② **실행 결과** — ①은 모델 설정도
+    사용 한도도 보지 않으므로 한도가 소진된 계정에서도 `codex_available: true` 를
+    낸다. 〔2026-08-22 실측〕 감지는 `true`, 실제 호출은 400
+    (`The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT
+    account.`) 이고 `-m gpt-5.5` 로는 `usage limit … try again at Sep 17th, 2026`.
+    그래서 "감지가 참이면 돈다"고 가정하지 않는다.
+  - **판정 가능(usable) 의 정의**: 그 run 이 `agent_message` 를 하나라도 냈는가.
+    없으면 fence 를 잴 대상 자체가 없는 것이지 *"fence 를 안 냈다"* 가 아니다.
+    이 구분이 결함과 부재를 가른다.
+  - **경계**: `pass >= 2` → PASS. `usable == 3` 이고 `pass < 2` → FAIL(진짜 미달).
+    `usable < 3` 이고 `pass < 2` → SKIPPED — 못 돈 run 은 실패가 아니므로 2/3
+    임계의 분모가 달라졌고, 판정 근거가 없다.
+  - 실패 원문(`turn.failed` → `error` → stderr 순)을 SKIPPED 메시지에 실어 사용자가
+    *왜* 못 돌았는지 보게 한다.
+  - 시나리오 7종 실측: 임계 미달 FAIL(rc=1) · 전부 fence PASS(rc=0) · 에러만 SKIPPED ·
+    kill switch → SKIPPED + **codex 호출 0건** · 1 불가+2 fence → PASS(첫 통과 run 을
+    freeze) · 2 가용(1 fence)+1 불가 → SKIPPED(FAIL 아님) · 3 가용 1 fence → FAIL.
+- **`tests/lib/codex_observation.sh`** — `obs_invoke` 의 spike arm 이 `CODEX_API_KEY=t`
+  를 공급한다. spike 가 이제 `detect_codex.sh` 를 먼저 부르므로, 감지기의 인증 검사가
+  **개발자 머신의 실제 `~/.codex/auth.json` 존재 여부**를 타면 관측이 환경에 따라
+  갈린다(실측: 로그인 없는 환경에서 spike 가 SKIPPED → codex 호출 0건 →
+  `test_codex_invocation_contract.sh` 가 1건 RED). 형제 하니스
+  `test_codex_gate_observation.sh` 의 `run_gate` 가 같은 이유로 이미 같은 값을
+  공급한다. 수정 후 인증 유무 양쪽에서 39/39 GREEN.
+  - `obs_invoke` 의 `case` 라벨은 건드리지 않았다 — `obs_known_candidates()` 가 그
+    라벨에서 후보 목록을 도출하므로 라벨이 바뀌면 커버리지 래칫이 깨진다.
+  - `test_codex_gate_observation.sh` 의 UNGATED 원장 등재는 그대로 유효하다:
+    이 spike 를 부르는 SKILL 은 여전히 없다(마킹된 게이트가 생긴 것이 아니다).
+
+## [4.1.12] — 2026-08-22
+
+기준선 RED 해소 ②/4 — 지키는 대상이 사라진 테스트를 제거한다. shipping 동작 무변경.
+
+**Removed**
+- **`tests/test_consent_marker_write_failure.sh`** — 이 테스트는
+  `skills/quality-pipeline/SKILL.md` 에서 `# QG-CONSENT-MARKER-WRITE` 식별 주석 뒤의
+  fenced bash block 을 추출해 실행하고, 그 블록이 쓰기 실패 시 내던 문구
+  (`could not persist consent (errno`)를 단언했다. **그 마커도 그 문구도 `plugins/**`
+  어디에도 없다.** 소멸 시점은 `753c9e2`
+  (`feat(quality-gates)!: rewrite quality-pipeline SKILL for v2.0.0`) — v2.0.0 재작성이
+  cost-consent 마커 메커니즘 자체를 제거했고, 그것을 지키던 테스트만 남아 그때부터
+  줄곧 RED 였다(`AC11: # QG-CONSENT-MARKER-WRITE block not found in SKILL.md`).
+  도입은 `f1871cd`(AC11, spec `2026-05-14-qg-codex-reviewer-recovery-design.md`).
+  없는 메커니즘을 지키는 테스트는 검증이 아니라 소음이므로 삭제한다 —
+  **검증을 지운 것이 아니라, 지킬 대상이 먼저 사라진 것이다.**
+  - `/qg-publish` 의 consent 게이트는 **다른 메커니즘**이고 무관하다
+    (`skills/publishing-pr-understanding/`). 이 삭제는 거기에 닿지 않는다.
+  - 리포 전체에서 이 AC11 을 참조하는 다른 살아 있는 검증은 없다. 다른 파일들이 쓰는
+    "AC11" 은 각자 다른 spec 의 번호다(branch-worktree AC1–AC11 · publish 억제 AC11 ·
+    `test_diff_test_results.py` 의 8종 귀속 AC11 등) — 번호만 같고 대상이 다르다.
+
 ## [4.1.11] — 2026-08-22
 
 PR6 whole-branch 리뷰 fix round 1 — 가림을 다시 못 잡는 단언 하나를 판별력 있는 단언으로.

@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.32.7] — 2026-08-22
+
+`tests/test_run_spec_codex_reviewer.sh` 의 FAKE_ROOT 를 **설치본 모양**으로 깐다.
+
+**Fixed**
+- FIX1 시나리오의 FAKE_ROOT 는 빌더 하나만 심볼릭 링크하고 형제
+  `codex_prompt_common.py` 를 안 깔았다. 그런데도 통과했다 — CPython 은 링크된
+  스크립트의 `sys.path[0]` 을 realpath 로 잡으므로(3.9.6 실측) 링크된 빌더가 형제를
+  **정본 옆**에서 찾아냈다. 통과하지만 **설치본의 모양을 재고 있지 않았다**(감사 §7-9).
+- 이제 빌더·`codex_prompt_common.py`·`prompt-preamble.md` 를 모두 **물리 사본**으로
+  깐다(설치 시 링크가 역참조되는 실제 배포 모양). 실측: 형제 모듈을 빼면
+  `ModuleNotFoundError`, 프리앰블을 빼면 로더가 **FAKE_ROOT 안의 경로**를 못 찾아
+  실패한다 — 두 형제가 실제로 load-bearing 이 됐다는 증거다(수정 전에는 형제가
+  아예 없어도 GREEN 이었다).
+
+**Added**
+- FAKE_ROOT/scripts 에 심볼릭 링크가 0개인지, 파일이 셋 다 깔렸는지 단언하는 회귀 락.
+  다시 `ln -s` 로 돌아가면 realpath 우회가 되살아나고 사본이 dead weight 가 되는데,
+  그 상태는 조용하다(시나리오는 계속 통과한다). 그래서 모양 자체를 잰다.
+
+**동작 무변경** — 테스트 하니스만 바뀌었고 shipping 코드는 그대로다.
+
+## [0.32.6] — 2026-08-22
+
+`scripts/codex_prompt_common.py` 의 〔앵커 주의〕 주석 블록을 **제거**한다.
+
+**Changed**
+- `scripts/codex_prompt_common.py` — `scripts/prompt-preamble.md` 리터럴이
+  `test_copy_of_contract.sh` 축 1a 의 도출 앵커라고 경고하던 주석 4줄을 삭제.
+- **v0.32.5 의 "이 리터럴은 앵커다" 항목은 이제 유효하지 않다.** 그 축은 배포
+  지점을 구조(인덱스∪워킹트리에 실재하는 `plugins/*/scripts/<파일>`)에서 도출하고
+  산문은 거기에 더하기만 한다 — 빼지 못한다(감사 §7-8 해소). 실측: 같은 리터럴을
+  다시 걷어내도 도출은 3건 그대로이고 락은 GREEN 이다(v0.32.5 때는 3→2 로 줄며 RED).
+
+**동작 무변경** — 주석만 지웠고 실행 경로는 그대로다.
+
 ## [0.32.5] — 2026-08-22
 
 Task 35 Step 0 — P21 프리앰블 로더 4벌을 `shared/codex/codex_prompt_common.py` 정본으로

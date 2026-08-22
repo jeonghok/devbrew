@@ -346,7 +346,36 @@ while IFS= read -r canonical; do
   fi
   base="$(basename -- "$canonical")"
   esc_base="$(printf '%s' "$base" | sed 's/\./\\./g')"
-  # 참조원 도출 — 실제 호출 패턴(scripts/<basename>)을 참조하는 파일. 배포
+
+  # ── 배포 지점 도출: **구조가 주(主)이고 산문은 가산(加算)이다** ─────────
+  # 〔2026-08-22 §7-8〕 앞 판본은 배포 지점 집합을 **산문 리터럴만으로** 도출했다
+  # (`scripts/<basename>` 를 언급하는 파일이 있는 플러그인). 그래서 **정당한 리팩터
+  # 한 번이 감사 대상 하나를 떨어뜨렸다**: P21 로더를 통합하며 빌더 넷에서 그 리터럴을
+  # 걷어내자 `prompt-preamble.md` 의 도출이 3→2 로 줄었고, spec-distill 의 배포 지점이
+  # 감사 밖으로 나갔다(실측). 그때는 다른 축이 같은 지점을 세고 있어 RED 가 났지만,
+  # 그것은 도출이 안전해서가 아니다 — 세는 축이 없는 지점이라면 조용히 빠진다.
+  # 앵커가 **피검자가 쥔 문자열**이면 ∃-존재검사는 그 문자열을 지우는 편집에 진다.
+  #
+  # 그래서 지금은 **인덱스∪워킹트리에 실재하는 배포 지점**이 1차 도출원이다. 산문은
+  # 거기에 더하기만 한다 — 빼지 못한다. 두 방향이 각각 다른 결함을 잡는다:
+  #   · 구조 → 실재하는 배포 지점은 산문이 무슨 표기를 쓰든 **반드시** 검사된다.
+  #     리팩터가 감사 대상을 줄일 수 없다(§7-8 이 요구한 ∀-지배).
+  #   · 산문 → 참조는 하는데 배포 지점이 **없는** 플러그인을 `missing` 으로 잡는다.
+  #     구조 단독으로는 없는 것을 셀 수 없어 이 방향이 사라진다.
+  # 〔실측 2026-08-22〕 이 union 으로 바꿔도 도출 수는 그대로다 —
+  # codex_findings_to_yaml.py 2건 · detect_codex.sh 3건 · prompt-preamble.md 3건.
+  # 값이 안 변한다는 것을 먼저 재고 바꿨다(이 락이 지키는 대상이 바뀌지 않았다).
+
+  # 구조 도출 — 인덱스와 워킹트리를 **따로** 구한다. 아래에서 둘이 갈라졌는지 본다:
+  # untrack 은 인덱스에서만 지우므로 워킹트리 쪽이 남아 두 수가 갈라진다.
+  idx_plugins="$(git ls-files -- "plugins/*/scripts/$base" 2>/dev/null \
+                  | sed -nE 's#^plugins/([^/]+)/.*#\1#p' | sort -u)"
+  wt_plugins="$(for _p in plugins/*/scripts/"$base"; do
+                  { [ -e "$_p" ] || [ -L "$_p" ]; } && printf '%s\n' "$_p"
+                done 2>/dev/null | sed -nE 's#^plugins/([^/]+)/.*#\1#p' | sort -u)"
+  structural_plugins="$(printf '%s\n%s\n' "$idx_plugins" "$wt_plugins" | grep -v '^$' | sort -u || true)"
+
+  # 산문 도출 — 실제 호출 패턴(scripts/<basename>)을 참조하는 파일. 배포
   # 지점 자기 자신(plugins/*/scripts/<basename>)은 도출 대상에서 제외한다 —
   # 그러지 않으면 배포 지점 자신이 스스로를 참조원으로 세어 도출이 순환한다.
   #
@@ -365,7 +394,9 @@ while IFS= read -r canonical; do
             | tr '\n' '\0' \
             | xargs -0 grep -lE "scripts/${esc_base}" 2>/dev/null \
             | grep -vE "^plugins/[^/]+/scripts/${esc_base}\$" || true)"
-  expected_plugins="$(printf '%s\n' "$refs" | sed -nE 's#^plugins/([^/]+)/.*#\1#p' | sort -u)"
+  prose_plugins="$(printf '%s\n' "$refs" | sed -nE 's#^plugins/([^/]+)/.*#\1#p' | sort -u)"
+  expected_plugins="$(printf '%s\n%s\n' "$structural_plugins" "$prose_plugins" \
+                       | grep -v '^$' | sort -u || true)"
 
   # 순환 금지: 정본 자신이 심볼릭 링크이거나 copy-of 마커를 갖지 않는다
   if [ -L "$canonical" ]; then
@@ -415,24 +446,32 @@ PLUGINS
   else
     no "symlink-∀: $canonical 의 배포 지점이 **0건 도출**됐다 — 이 정본은 아무것도 검사되지 않았다. 참조 도출(scripts/${base})이 이 정본에 안 맞거나(예: import 로만 소비되는 모듈) 참조원이 사라졌다"
   fi
-  # 〔2026-08-19 fix round 2b, M4〕 **반대 방향 도미넌스** — 실재하는 배포 지점이 전부
-  # 도출됐는가. 위 ∀ 는 "도출된 자리에 링크가 있는가"만 본다. 도출은 참조원 **파일 수**에
-  # 기대므로, 어떤 플러그인의 유일한 참조가 산문 한 줄이면 그 줄을 고쳐 쓰는 편집만으로
-  # 그 플러그인이 기대 집합에서 **조용히** 빠진다 — 실측: plugin-audit 은
-  # `skills/auditing-plugins/SKILL.md` 한 줄만 기여하고, 그 줄을 바꾸면 심볼릭 링크 ∀ ·
-  # conf 축 · fail-closed(보안) 축에서 함께 이탈한다. 그래서 인덱스(git)와 워킹트리
-  # **양쪽**에 실재하는 `plugins/*/scripts/<basename>` 를 모아 도출이 그것을 덮는지 묻는다.
-  # untrack 은 인덱스에서만 지우므로 워킹트리 쪽이 남아 두 수가 갈라진다.
-  actual_plugins="$( { git ls-files -- "plugins/*/scripts/$base";
-      for p in plugins/*/scripts/"$base"; do
-        { [ -e "$p" ] || [ -L "$p" ]; } && printf '%s\n' "$p"
-      done; } 2>/dev/null | sed -nE 's#^plugins/([^/]+)/.*#\1#p' | sort -u)"
-  n_actual="$(printf '%s\n' "$actual_plugins" | grep -c . || true)"
-  if [ "$n_actual" = "$n_this" ]; then
-    ok "symlink-∀: $canonical — 실재하는 배포 지점 ${n_actual}건이 참조원 도출 ${n_this}건과 같다 (도출이 실재를 덮는다)"
+  # 〔2026-08-19 fix round 2b, M4 → 2026-08-22 §7-8 로 개정〕 **반대 방향 도미넌스** —
+  # 실재하는 배포 지점이 전부 도출됐는가. M4 의 원래 형태는 "실재 수 == 참조원 도출 수"
+  # 였고, 그 등식이 **산문 도출이 실재를 덮는지**를 물었다. 지금은 구조가 1차 도출원이라
+  # 그 등식이 구성상 항상 참이다 — 항상 참인 단언은 이빨의 증거가 아니라 이빨의 부재다.
+  # 그래서 같은 자리에서 **여전히 갈라질 수 있는 것**을 묻는다: 인덱스와 워킹트리다.
+  # `git rm --cached`(untrack)는 인덱스에서만 지우고, 미추적 신규 사본은 워킹트리에만 있다.
+  # 어느 쪽이든 배포되는 것과 리뷰되는 것이 갈린다 — union 도출은 둘 다 감사 대상에
+  # 넣지만(안전), 갈라졌다는 사실 자체는 보고돼야 한다.
+  n_idx="$(printf '%s\n' "$idx_plugins" | grep -c . || true)"
+  n_wt="$(printf '%s\n' "$wt_plugins" | grep -c . || true)"
+  if [ "$idx_plugins" = "$wt_plugins" ]; then
+    ok "symlink-∀: $canonical — 배포 지점이 인덱스(${n_idx}건)와 워킹트리(${n_wt}건)에서 같다"
   else
-    no "symlink-∀: $canonical — 실재하는 배포 지점 ${n_actual}건과 참조원 도출 ${n_this}건이 다르다 — 도출 앵커가 낡았거나(참조 산문이 바뀌었다) 배포 지점이 인덱스에서만 사라졌다"
-    printf '      도출: %s\n      실재: %s\n' "$(printf '%s' "$expected_plugins" | tr '\n' ' ')" "$(printf '%s' "$actual_plugins" | tr '\n' ' ')"
+    no "symlink-∀: $canonical — 배포 지점이 인덱스(${n_idx}건)와 워킹트리(${n_wt}건)에서 갈라졌다 — untrack 되었거나(인덱스에만 없음) 커밋되지 않았다(워킹트리에만 있음)"
+    printf '      인덱스: %s\n      워킹트리: %s\n' "$(printf '%s' "$idx_plugins" | tr '\n' ' ')" "$(printf '%s' "$wt_plugins" | tr '\n' ' ')"
+  fi
+
+  # 산문이 실재를 덮는가 — **advisory 가 아니라 진짜 갈라짐**만 본다. 산문이 실재보다
+  # 넓으면(참조는 있는데 배포 지점이 없다) 위 ∀ 루프가 이미 `missing` 으로 RED 를 냈다.
+  # 산문이 실재보다 **좁은** 것은 이제 결함이 아니다 — 그것이 §7-8 이 고친 것이다.
+  # 다만 조용히 지나가지는 않는다: 좁아진 사실을 출력에 남겨 다음 사람이 본다.
+  n_prose="$(printf '%s\n' "$prose_plugins" | grep -c . || true)"
+  n_struct="$(printf '%s\n' "$structural_plugins" | grep -c . || true)"
+  if [ "$n_prose" -lt "$n_struct" ]; then
+    printf '      〔알림〕 %s — 산문 도출 %s건 < 구조 도출 %s건. 구조가 덮으므로 감사 대상은 줄지 않았다.\n' \
+      "$canonical" "$n_prose" "$n_struct"
   fi
 
   DEP_COUNTS="${DEP_COUNTS}${base} ${n_this}

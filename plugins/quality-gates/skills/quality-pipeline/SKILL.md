@@ -331,6 +331,36 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
    posture (`Read, Grep, Glob`, #104 lock) is unchanged. Both MUST include
    `project_dir: "$project_dir"`:
 
+   **Kill switch — `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`.** Tier A 를
+   *모델이* 스코프 판단으로 뺄 수는 없지만, *사용자는* 끌 수 있다. 이 둘은 다른
+   것이다: 앞은 라우팅 재량이고 뒤는 사용자 소유의 opt-out 이다(CLAUDE.md
+   Plugin Shape — *"모든 reviewer는 opt-out 가능"*, 그리고 *"kill switch는 보안
+   컨트롤"*). 매 iteration, 바로 아래 `security-reviewer` Agent 리터럴을 발행하기
+   **직전에** 이 게이트를 통과시킨다 — 게이트는 여기, dispatch 지점에 선다:
+
+   IF `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`:
+   1. 아래 `quality-gates:security-reviewer` Agent 리터럴을 **발행하지 않는다.**
+      바로 다음의 `quality-gates:adversarial` 리터럴과 Tier B(codex)·Tier C 는
+      **그대로 fire 한다** — 꺼지는 것은 이 하나뿐이다.
+   2. `adversarial` 의 `phase1_findings` 슬롯에는 실제로 받은 것만 넣는다
+      (Tier C + codex). 없는 리뷰어 몫을 있는 것처럼 채우거나 대신 지어내지 않는다.
+   3. **loud advisory** — 이 줄을 사용자에게 그대로 보인다:
+      > `> [quality-gates] security-reviewer disabled via DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1 — 이 iteration 에는 보안 리뷰가 없었다 (Tier A floor 결손).`
+   4. 이 iteration 에 대해 `$security_review_absent = yes` 로 두고 **Step 4.5 의
+      판정 표면까지 들고 간다**(아래 Security-review-absent advisory). 배너 한 줄로
+      끝내면 verdict 만 읽는 사람에게는 결손이 보이지 않는다.
+
+   ELSE: `$security_review_absent = no` — 아래 리터럴을 평소대로 발행한다.
+
+   **왜 codex kill switch 와 달리 loud 인가.** 형제 스위치
+   `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` 은 [Codex skip 안내](#codex-skip-안내)의
+   silent 표에 있다(*"사용자가 직접 껐다. 자기가 한 일을 다시 알릴 필요가 없다"*).
+   여기서는 그 논리를 따르지 않는다 — codex 는 Tier B(가용성 floor, 다양성 층)이고
+   `security-reviewer` 는 **Tier A floor 두 명 중 하나**다. floor 구성원이 빠지면
+   그 iteration 의 `clean` 이 뜻하는 바 자체가 달라지므로, 사용자의 의도적 opt-out
+   이더라도 **판정을 읽는 사람**에게 결손이 보여야 한다. 두 스위치를 "일관성" 명목
+   으로 같은 취급으로 합치지 말 것.
+
 ```
 Agent({
   subagent_type: "quality-gates:security-reviewer",
@@ -525,6 +555,22 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
    생산자만 고치고 소비자를 안 고친 반쪽 수정). A finding that was thrown away is not
    a finding that was cleared. This mirrors the Runtime gate's `indeterminate ≠ clean`
    rule at [Step R4](#runtime-gate).
+
+   **Security-review-absent advisory (applies to EVERY step-4.5 exit path — the
+   `kept > 0` case and BOTH clean sub-cases).** If this iteration set
+   `$security_review_absent == yes` (the Tier A kill switch fired at dispatch), you
+   MUST print this line as part of the verdict surface, immediately after the
+   `## Review gate iter N …` line, before the decision tool:
+   `> [quality-gates] 이 라운드에는 보안 리뷰가 없었다 — security-reviewer 가 DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1 로 꺼져 있었다. 이 verdict 는 "보안 리뷰를 통과했다"를 뜻하지 않는다.`
+   Repeat it every iteration in which the switch was on — it is a property of that
+   iteration's verdict, not a one-time notice.
+
+   Why this is a separate clause from the dispatch-time banner: the banner is
+   emitted mid-iteration, far above the verdict, and a reader who scrolls to the
+   verdict (or reads only the `## History` line) never sees it. Tier A floor is
+   `security-reviewer + adversarial`; with one of the two removed, a bare `clean`
+   over-claims. Same family as the [Dropped-finding override](#review-gate) above —
+   *a finding that was never produced is not a finding that was cleared.*
 
    **Honest-verdict floor (deterministic — both clean sub-cases).** The floor keys
    on two deterministic inputs — `$resolved_scope_file_count` (the step-1 count above)
@@ -876,6 +922,9 @@ State file cleanup is deferred to /cancel-qg or SessionEnd cleanup hook.
   Step P1.
 - `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — Review gate의 codex co-review만 skip한다
   (Claude 리뷰는 정상 진행). Review gate의 "Codex skip 안내".
+- `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` — Review gate Tier A floor의
+  `security-reviewer`만 skip한다. Review gate의 "Tier A — Floor" 절(dispatch 직전
+  게이트 + loud advisory)과 Step 4.5의 "Security-review-absent advisory".
 - `DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1` — Runtime gate의
   test-scope-validator dispatch에 `spec_path: none`을 강제해 spec 기반 ac_coverage를
   끈다(plan 기반 scope만 남는다). Arguments 절.

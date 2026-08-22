@@ -123,7 +123,17 @@ obs_invoke() {
       cp "$cand" "$work/spike/"
       cp "$(dirname "$cand")/spike_prompt.md" "$work/spike/" 2>/dev/null || true
       printf '\n%s\n' "$OBS_SENTINEL" >> "$work/spike/spike_prompt.md"
+      # `CODEX_API_KEY=t` — spike 가 `detect_codex.sh` 로 가용성을 먼저 판정하므로,
+      # 감지기의 인증 검사가 **개발자 머신의 실제 `~/.codex/auth.json` 존재 여부**를
+      # 타면 이 관측이 환경에 따라 갈린다. 로그인 안 된 머신에서는 감지가
+      # `auth_missing` 을 내고 spike 가 SKIPPED 로 빠져 codex 호출이 0건이 되며,
+      # 호출자(test_codex_invocation_contract.sh)는 그것을 "실행했으나 호출이
+      # 관측되지 않았다"로 RED 처리한다(실측: 그 상태로 1건 RED). 형제 하니스
+      # `test_codex_gate_observation.sh` 의 run_gate 가 같은 이유로 이미
+      # `CODEX_API_KEY=t` 를 공급한다 — 같은 값을 여기서도 공급해 관측을 환경에서
+      # 떼어 놓는다. 실제 호출은 여전히 PATH 앞의 mock 이 받는다.
       ( cd "$OBS_REPO" && PATH="$OBS_MOCKBIN:$PATH" CODEX_CAPTURE_DIR="$capture" \
+          CODEX_API_KEY=t \
           bash "$work/spike/$base" ) >/dev/null 2>&1 || rc=$?
       ;;
     *)

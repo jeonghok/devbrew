@@ -8,13 +8,15 @@
 #       그 파일을 고칠 때마다 원시 해시가 바뀐다. 어떤 assert가 실패하는지(문구)는
 #       남으므로 같은 파일이 **다른 이유로** 실패하기 시작하면 해시가 바뀐다.
 #
-# 이 둘은 codex와 무관한 pre-existing red다 (설계 §8.1 범위 밖 — 고치지 말 것).
+# 2026-08-22 현재 **등재 0건**이다. 빈 원장은 고장이 아니라 규약("목록은
+# 줄어들기만 한다")의 도달점이며, 메커니즘은 그대로 살아 있다 — 새 red를 여기
+# 등재하지 않으면 test_codex_backward_compat.sh가 `미등재`로 RED를 낸다.
 #
-# 2026-08-17 devbrew-weight-reduction Task 14: 두 파일이 자체 판정 헬퍼를 지우고
-# shared/tests/assert.sh 정본을 source하며 실패 줄 접두가 `FAIL: `/`✗ FAIL: `에서
-# `  ✗ `로 바뀌었다(브리프 실측: 접두를 grep하는 소비자 0건 — 출력 형식 변경은
-# 안전). 두 실패의 **문구·원인은 불변**(같은 pre-existing red) — 그래서 해시만
-# 갱신한다. 재현: `bash tests/<file>.sh` 로 실패 줄이 기존과 동일한 메시지인지
-# 먼저 확인한 뒤에만 아래 해시를 바꿀 것.
-test_consent_marker_write_failure.sh 9570188161db7b4e49ade31f1fd596d80ea940237a64589233e25a2bc3c757de
-test_security_reviewer_kill_switch.sh 09e3e6d29c124351a9fc175f930e906d0ddbd95565f36d5053291413086e43e9
+# 마지막 두 항목이 빠진 경위 (기준선 RED 4건 해소 사이클):
+#  - consent-marker 판: 그 **테스트 자체가 삭제**됐다. 지키던 메커니즘(SKILL.md의
+#    cost-consent 마커)이 `753c9e2`의 v2.0.0 재작성에서 사라져 테스트만 남아
+#    RED였다. 소비자 루프는 실재하는 파일만 도는지라 등재만 남겨도 조용했겠지만,
+#    대상이 없어진 등재는 같은 커밋에서 지운다.
+#  - security-reviewer kill switch 판: 그 테스트가 **GREEN이 됐다**. 약속만 있고
+#    집행이 없던 kill switch를 실제로 dispatch 지점에 구현했기 때문이다. 등재를
+#    남겨두면 위 양방향 래칫이 `stale 등재`로 RED를 낸다(실측 확인).

@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.2.3] — 2026-08-22
+
+기준선 RED 해소 ③/4 — 테스트가 아닌 것을 `tests/` 밖의 수집 제외 자리로 옮긴다.
+측정 러너 동작 무변경.
+
+**Changed**
+- **`tests/ab_gate.sh` → `tests/harness/ab_gate.sh`** (`git mv`). 이 파일은 테스트가
+  아니라 **AC29 의 A/B 측정 러너**다 — 헤더가 스스로 그렇게 말하고,
+  `AB_MODEL`·`AB_EFFORT`·`AB_JUDGE_MODEL`·`AB_JUDGE_EFFORT` 를 요구하며 없으면
+  `parameter null or not set` 으로 죽는다. 모델을 호출하므로 **비용이 나간다.**
+  회귀 스위트에서 이 파일이 RED 였던 이유는 결함이 아니라 *"env 를 안 줬다"* 였다.
+  - **선례**: `plugins/quality-gates/tests/harness/` 가 같은 이유로 존재한다
+    (`test_skill_orchestration_behavior.sh` · `run_consent_gate.sh`).
+  - **이동 전 실측 — 수집기 세 곳**: ⑴ 회귀 러너는 `*/tests/*.sh` 로 모으고
+    `*harness*` 를 제외한다 → 이동으로 수집 밖. ⑵ `/plugin-audit` 의
+    `run-own-tests.sh` 는 `find … -name 'test_*.sh'` 라 **이동 전에도 이 파일을 못
+    봤고**, 추가로 `*/harness/*` 도 제외한다 → 이동은 그쪽에서 no-op(회귀 없음).
+    ⑶ quality-gates `run-test-selection.sh` 의 셸 어댑터는 **diff 스코프** 러너로
+    `tests/*.sh|*/tests/*.sh` 를 쓰고 `harness/` 를 제외하지 않는다 — 즉 이 파일이
+    diff 에 직접 실릴 때만 돈다. 그 잔여는 기존 선례
+    (`quality-gates/tests/harness/test_skill_orchestration_behavior.sh`)와 **정확히
+    같으며**, env 미설정 시 러너가 첫 줄에서 죽으므로 비용도 나가지 않는다.
+  - 스위트 수집기 **둘 다** `harness/` 를 제외하므로 이동으로 충분하다.
+  - `ROOT` 도출 깊이를 `../../..` → `../../../..` 로 함께 고쳤다(디렉토리가 한 단계
+    깊어졌다). 나머지 경로는 전부 `$ROOT` 에서 파생되므로 무변경.
+  - 경로 리터럴 전수 갱신: `REFERENCE.md` 의 「AC ↔ 검증 산출물」 배정표 + 그 위
+    산출물 정의 문장, `tests/test_ab_runner_contract.py` 의 `RUNNER` 상수.
+    AC47 락(`TestAssignedArtifactsExist`)이 배정 경로의 실재를 재므로 이 셋이
+    어긋나면 즉시 RED 다.
+  - **부수 효과**: `plugins/agent-transparency/tests/` 에 남는 `.sh` 가 0 이 된다.
+    감사 리포트 `docs/audits/2026-08-21-skill-split-lock-corpus-shrink.md` §7-11 이
+    기록한 *"`/plugin-audit` 의 접두 도출이 `ab_gate.sh` 를 못 본다"* 의 실재
+    인스턴스가 1 → 0 이 된다. 그 §7-11 의 도출-술어 결함 **자체는 그대로 남아
+    있다** — 여기서 고친 것은 술어가 아니라, 애초에 테스트가 아닌 파일이 `tests/`
+    최상위에 있던 배치다.
+
 ## [0.2.2] — 2026-08-20
 
 ### Changed

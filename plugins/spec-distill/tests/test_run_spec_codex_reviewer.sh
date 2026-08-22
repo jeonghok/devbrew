@@ -84,7 +84,33 @@ grep -q 'codex_failed: true' "$OUT2" && ok "codex exit1 → codex_failed true" |
 # fails — so codex itself can "succeed" and the conversion step is what breaks.
 FAKE_ROOT="$TMP/fake-plugin-root"
 mkdir -p "$FAKE_ROOT/scripts"
-ln -s "$PLUGIN_ROOT/scripts/build_spec_codex_prompt.py" "$FAKE_ROOT/scripts/build_spec_codex_prompt.py"
+# 〔2026-08-22 감사 §7-9〕 FAKE_ROOT 는 **설치본 모양**으로 깐다 — 심볼릭 링크가 아니라
+# 물리 사본이다. 앞 판본은 빌더 하나만 링크했고 형제 `codex_prompt_common.py` 를 안 깔았다.
+# 그런데도 통과했다: CPython 은 링크된 스크립트의 `sys.path[0]` 을 **realpath 로** 잡으므로
+# (3.9.6 실측) 링크된 빌더가 형제를 *정본 옆* 에서 찾아냈다. 같은 GREEN, 다른 이유 —
+# 설치본에서는 형제가 물리 사본으로 옆에 있어 import 되고, 테스트에서는 realpath 우회로
+# import 됐다. 즉 이 시나리오는 통과하면서 **설치본의 모양을 재고 있지 않았다.**
+# 사본으로 깔면 `sys.path[0]` 이 FAKE_ROOT/scripts 가 되어 형제가 실제로 load-bearing
+# 이 된다(실측: 형제를 빼면 ModuleNotFoundError 로 실패한다).
+# `prompt-preamble.md` 는 리포에서 심볼릭 링크지만 설치 시 역참조되므로 `-L` 로 내용을 깐다
+# (`codex_prompt_common.py` 가 `__file__.resolve().parent` 형제로 읽는다).
+cp "$PLUGIN_ROOT/scripts/build_spec_codex_prompt.py" "$FAKE_ROOT/scripts/build_spec_codex_prompt.py"
+cp "$PLUGIN_ROOT/scripts/codex_prompt_common.py" "$FAKE_ROOT/scripts/codex_prompt_common.py"
+cp -L "$PLUGIN_ROOT/scripts/prompt-preamble.md" "$FAKE_ROOT/scripts/prompt-preamble.md"
+# 회귀 락 — 다시 링크로 돌아가면 realpath 우회가 되살아나고 위 사본들이 dead weight 가
+# 된다. 그 상태는 조용하다(테스트는 계속 통과한다). 그래서 모양 자체를 단언한다.
+_fake_links=0
+_fake_files=0
+for _f in "$FAKE_ROOT"/scripts/*; do
+  [ -L "$_f" ] && _fake_links=$((_fake_links + 1))
+  { [ -e "$_f" ] || [ -L "$_f" ]; } && _fake_files=$((_fake_files + 1))
+done
+[ "$_fake_links" -eq 0 ] \
+  && ok "§7-9: FAKE_ROOT/scripts 에 심볼릭 링크 0개 (sys.path[0] 이 realpath 로 새지 않는다)" \
+  || no "§7-9: FAKE_ROOT/scripts 에 심볼릭 링크가 ${_fake_links}개 있다 — 링크된 스크립트의 sys.path[0] 은 realpath 라, 옆에 깔아둔 형제 사본이 아니라 정본 옆 형제가 import 된다(설치본 모양을 안 재게 된다)"
+[ "$_fake_files" -ge 3 ] \
+  && ok "§7-9: FAKE_ROOT/scripts 에 파일 ${_fake_files}개 (빌더+형제 모듈+프리앰블이 깔렸다)" \
+  || no "§7-9: FAKE_ROOT/scripts 에 파일이 ${_fake_files}개뿐이다 — 설치본이 갖는 형제 파일 하나가 안 깔렸다 (빌더·codex_prompt_common.py·prompt-preamble.md 셋이 필요하다)"
 cat > "$FAKE_ROOT/scripts/codex_findings_to_yaml.py" <<'PY'
 #!/usr/bin/env python3
 import sys
