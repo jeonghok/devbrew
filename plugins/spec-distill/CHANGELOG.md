@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.33.0] — 2026-08-22
+
+interview brief 의 **분량 상한을 제거**한다. 절별 `≤N줄` 예산도, 150줄 트립와이어도,
+그 지표를 계산하던 코드도 없다.
+
+**Removed**
+- `templates/interview-brief-template.md` 의 절별 분량 예산 7개 — §0 `≤15줄` · §1
+  `≤12줄` · §2 `≤30줄` · §3 `≤25줄` · §4 `≤20줄` · §5 `≤25줄` · §7 `≤10줄`(합 137).
+- `scripts/check_brief.py` 의 `LINE_TRIPWIRE = 150` 상수, advisory 분기,
+  `payload_body_lines_excl_verbatim()` 함수, `gate` JSON 의 동명 키, 그리고
+  `metrics` 서브커맨드. `metrics` 는 이제 unknown subcommand 로 rc 64.
+- `tests/test_check_brief.sh` 의 "Task 5: 분량 지표" 블록과 그 블록만 쓰던 픽스처 4개
+  (`interview-brief-over-budget.{md,audit.md}` · `interview-brief-long-verbatim.{md,audit.md}`).
+
+**왜** — 상한의 원래 목적은 "짧게 써라"가 아니라 *"brief 가 해답을 미리 정해버리지
+않게"* 였다(`2026-07-25-spec-distill-brief-format-producer-design.md` §5.3 + 같은
+문서 Implicit context: superpowers 6.2.0 이 `Key Principles` 에서 *"Explore
+alternatives"* 줄을 지워 하류 탐색 지시가 약해졌으므로 brief 의 과잉결정이 더
+해롭다). 줄 수는 그 목적의 **대리 지표**인데 대상을 안 잰다 — 길이 ≠ 과잉결정이고,
+오히려 §3 Open Questions(과잉결정의 정반대 절)를 성실히 채운 brief 가 예산을 태워
+벌을 받는 방향으로 틀렸다. 실측으로도 오발했다: 2026-08-16 인터뷰에서 본문 153줄·
+166줄로 두 번 발화했다
+(`docs/superpowers/interview/2026-08-16-devbrew-weight-reduction-interview.audit.md:131,201`).
+
+과잉결정은 이제 대리 지표가 아니라 **직접 측정기**가 본다 — `brief-readback` 이 묻는
+두 번째 질문이 *"무엇이 확정이고 무엇이 아직 열려 있는가"* 다. 그 리뷰어 3종은
+v0.24.0 에 생겼고 137/150 은 그 앞 버전 v0.23.0 의 산물이라, 대리 지표가 먼저 있었고
+직접 측정기가 나중에 왔다. 게이트 코드 스스로도 *"분량은 목표이지 정확성 조건이
+아니다"* 라고 적어 두고 있었다 — 결정론적 검사의 자리가 아니었다는 뜻이다.
+
+하류에 기계적 한계는 없다: brief 는 `codex exec -`(stdin)로 들어가고 blob·프롬프트
+빌더 어디에도 크기 상한이나 잘림이 없다.
+
+**Changed**
+- 숫자가 대리하던 계약은 **문장으로 남겼다.** §0 머리에 *"이 절은 요약이다 — 본문을
+  여기 옮겨 적는 자리가 아니라, 다음 세션이 여기만 읽고도 방향을 잡을 수 있어야 하는
+  자리다"*. §2 의 *"한 줄이 frontmatter 한 항목의 렌더다"*(bijection B)와 §4 의
+  *"1항목 = 1줄"* 은 분량이 아니라 렌더 계약이라 그대로 둔다. `≤N줄` 이 이 문장들과
+  **같은 괄호 안에** 있었으므로 괄호째 지웠다면 계약도 함께 사라졌을 것이다.
+- `advisories` 채널 자체는 유지. `DEVBREW_SPEC_DISTILL_DISABLE_WEB` 킬 스위치가 같은
+  채널로 강등을 알리며, 그것은 분량과 무관한 graceful degradation 통보다.
+
+**Added**
+- `tests/test_brief_no_length_cap.sh` — 4층 회귀 락. **부재 검사만으로 된 락은 대상
+  파일을 통째로 지워도 통과하므로** 층 1(양성 대조: 템플릿 8섹션 헤더 + `gate()` 존재)이
+  "이 락이 실제로 그 코퍼스를 읽었다"를 먼저 증명한다. 층 2 는 보존 계약 3개를 **섹션
+  윈도우 안에서** 본다(파일 전체 grep 이면 주석이나 다른 절이 대신 만족시킨다). 층 3 은
+  개념 별칭(`최대 N줄` · `N줄 이내`)까지 덮는다 — 식별자만 잠그면 같은 것을 다른
+  이름으로 부른 재삽입이 살아남는다. 층 4 는 grep 이 아니라 실제 호출로 gate JSON 키
+  부재와 `metrics` rc 64 를 잰다.
+- 기존 Task 5 블록을 "고치지" 않고 걷어낸 이유도 같다 — 트립와이어가 없는 지금 거기
+  부정 assertion 만 남기면 무엇을 지워도 통과하는 빈 락이 된다.
+
 ## [0.32.7] — 2026-08-22
 
 `tests/test_run_spec_codex_reviewer.sh` 의 FAKE_ROOT 를 **설치본 모양**으로 깐다.
