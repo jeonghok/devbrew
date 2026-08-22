@@ -39,6 +39,7 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 ### 컴포넌트 격리
 
 - **Scoped agents — default-everything 금지.** 모든 agent는 `tools:` allowlist를 선언한다 (fail-closed — 열거하지 않은 것은 전부 차단). **denylist(`disallowedTools`) 단독 금지**: 공간에 대해 fail-open(열거를 잊은 도구는 허용)이고 **denylist는 시간에 대해 fail-open**이다 — 내일 추가될 도구는 오늘 열거할 수 없다 (`Monitor`가 이름만 다른 셸+네트워크 egress로 그 실증). 역할 프롬프트는 *"You are X. You are responsible for Y. You are NOT responsible for Z."*로 시작. 쓰기 권한이 있는 리뷰어는 Law 2 위반. **agent frontmatter의 실재 필드는 `tools`(allowlist)와 `disallowedTools`(denylist) 둘뿐이다** — 이와 헷갈려 command/skill 계층의 `allowed-tools`(kebab, 실재 키)를 agent에 camelCase로 옮겨 적으면 존재하지 않는 필드가 되어 조용히 무시된다.
+- **Command frontmatter의 `allowed-tools`는 쓰지 않는다.** 2026-08-22 헤드리스 실측 5변형(`--plugin-dir` 격리 플러그인)에서 `["Read"]`로 `Bash`를 빼놓아도 `Bash`가 실행됐고, 스코프 표기(`Bash(<pattern>:*)`)도 범위 밖 명령을 막지 못했다 — **이 계층은 제한이 아니다.** 바로 위 agent의 `tools:`와는 다르다 — 그것은 fail-closed이고 Law 2의 집행 지점이다. 막지 않는 것을 막는다고 믿게 만드는 선언은 없는 것보다 나쁘다.
 - **최소 버전이 선언된 의존성.** `other-plugin:agent-name`을 dispatch하는 플러그인은 README prerequisites에 `other-plugin`을 리스트. Silent coupling은 버그.
 - **모든 skill에 `cost_class` 선언** (`low`|`medium`|`high`|`variable`). `high`는 지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함.
 
