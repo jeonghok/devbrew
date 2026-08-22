@@ -3,6 +3,28 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.1.12] — 2026-08-22
+
+기준선 RED 해소 ②/4 — 지키는 대상이 사라진 테스트를 제거한다. shipping 동작 무변경.
+
+**Removed**
+- **`tests/test_consent_marker_write_failure.sh`** — 이 테스트는
+  `skills/quality-pipeline/SKILL.md` 에서 `# QG-CONSENT-MARKER-WRITE` 식별 주석 뒤의
+  fenced bash block 을 추출해 실행하고, 그 블록이 쓰기 실패 시 내던 문구
+  (`could not persist consent (errno`)를 단언했다. **그 마커도 그 문구도 `plugins/**`
+  어디에도 없다.** 소멸 시점은 `753c9e2`
+  (`feat(quality-gates)!: rewrite quality-pipeline SKILL for v2.0.0`) — v2.0.0 재작성이
+  cost-consent 마커 메커니즘 자체를 제거했고, 그것을 지키던 테스트만 남아 그때부터
+  줄곧 RED 였다(`AC11: # QG-CONSENT-MARKER-WRITE block not found in SKILL.md`).
+  도입은 `f1871cd`(AC11, spec `2026-05-14-qg-codex-reviewer-recovery-design.md`).
+  없는 메커니즘을 지키는 테스트는 검증이 아니라 소음이므로 삭제한다 —
+  **검증을 지운 것이 아니라, 지킬 대상이 먼저 사라진 것이다.**
+  - `/qg-publish` 의 consent 게이트는 **다른 메커니즘**이고 무관하다
+    (`skills/publishing-pr-understanding/`). 이 삭제는 거기에 닿지 않는다.
+  - 리포 전체에서 이 AC11 을 참조하는 다른 살아 있는 검증은 없다. 다른 파일들이 쓰는
+    "AC11" 은 각자 다른 spec 의 번호다(branch-worktree AC1–AC11 · publish 억제 AC11 ·
+    `test_diff_test_results.py` 의 8종 귀속 AC11 등) — 번호만 같고 대상이 다르다.
+
 ## [4.1.11] — 2026-08-22
 
 PR6 whole-branch 리뷰 fix round 1 — 가림을 다시 못 잡는 단언 하나를 판별력 있는 단언으로.
