@@ -463,7 +463,7 @@ Task 35 는 정본 주석에 리터럴 + 〔앵커 주의〕 경고를 남겨 �
 (quality-gates 4.2.2 · spec-distill 0.32.6 으로 bump, spec-distill CHANGELOG 는 v0.32.5 의
 "이 리터럴은 앵커다" 항목이 더 이상 유효하지 않음을 새 엔트리에서 명시.)
 
-### §7-9 `test_run_spec_codex_reviewer.sh` 의 FAKE_ROOT 가 **형제 모듈을 안 깐다**
+### §7-9 〔해소 — Task C〕 `test_run_spec_codex_reviewer.sh` 의 FAKE_ROOT 가 **형제 모듈을 안 깐다**
 
 그 테스트는 `build_spec_codex_prompt.py` **하나만** `FAKE_ROOT/scripts/` 에 심볼릭 링크
 한다. 그런데 그 빌더는 이제 형제 `codex_prompt_common.py` 를 import 한다. **그래도 통과
@@ -480,6 +480,33 @@ Task 35 는 정본 주석에 리터럴 + 〔앵커 주의〕 경고를 남겨 �
   통과하거나, 멀쩡한데 실패한다.
 - **선택지**: ⑴ FAKE_ROOT 에 형제 사본도 함께 깔아 설치본 모양과 일치시키기 ⑵ 그대로 두고
   이 사실을 테스트 헤더에 적기(현재는 어디에도 안 적혀 있다).
+
+〔2026-08-22 Task C 에서 해소〕 선택지 ⑴ 로 갔다. 다만 **형제 사본만 더하는 것으로는
+아무것도 바뀌지 않는다** — 빌더가 링크로 남아 있는 한 `sys.path[0]` 은 계속 realpath 라
+새로 깐 형제는 import 되지 않고 dead weight 가 된다. 그래서 "설치본 모양과 일치"를
+빌더까지 포함해 적용했다: FAKE_ROOT/scripts 에 빌더 · `codex_prompt_common.py` ·
+`prompt-preamble.md` 를 **전부 물리 사본**으로 깐다(설치 시 서브트리 밖 링크가
+역참조되는 실제 배포 모양). `prompt-preamble.md` 는 리포에서 심볼릭 링크라 `cp -L` 로
+내용을 깐다 — `codex_prompt_common.py` 가 `__file__.resolve().parent` 형제로 읽는다.
+
+**요구된 확인 — "형제를 안 깔면 실패하는가"** 〔실측, 이 수정이 무언가를 바꿨다는 증거〕:
+
+| 무엇을 뺐나 | 수정 전(링크 shape) | 수정 후(사본 shape) |
+|---|---|---|
+| `codex_prompt_common.py` | **GREEN** (애초에 안 깔려 있었고 통과했다) | **RED** — `ModuleNotFoundError: No module named 'codex_prompt_common'` |
+| `prompt-preamble.md` | GREEN (정본 옆에서 읽혔다) | **RED** — 로더가 `…/fake-plugin-root/scripts/prompt-preamble.md` 를 못 찾는다 |
+
+두 번째 줄의 경로가 직접 증거다 — 실패 메시지가 정본이 아니라 **FAKE_ROOT 안**을
+가리킨다. realpath 우회가 실제로 끊겼다는 뜻이다. 그러므로 §7-9 는 "우회가 여전히
+성립해 형제 유무가 결과를 안 바꾼다"는 경우가 **아니다.**
+
+**회귀 락도 같이 넣었다.** 다시 `ln -s` 로 돌아가면 우회가 되살아나고 사본들이 조용히
+dead weight 가 된다 — 그 상태에서도 시나리오는 계속 통과하므로 결과만 봐서는 알 수 없다.
+그래서 모양 자체를 단언한다: FAKE_ROOT/scripts 의 심볼릭 링크 수가 0 · 파일이 셋 이상.
+두 단언을 **따로** 둔 이유는 하나로 합치면 실패 줄이 무엇 때문에 빨간지를 못 지목하기
+때문이다(합친 첫 판본이 "링크 0개"라고 쓰면서 파일 수로 실패했다 — 실측). 링크로
+되돌리는 변이 → 링크 단언만 RED, 사본 하나를 빼는 변이 → 파일 수 단언만 RED.
+(spec-distill 0.32.7 로 bump.)
 
 ### §7-10 20줄 블록 락은 **한 줄만 끼우면 통과하는** 사본을 못 본다
 
