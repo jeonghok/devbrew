@@ -98,5 +98,8 @@ Subagent spray — 선언 없는 fan-out. 규모 자체가 아니라 선언 없�
 ### AP16 → CLAUDE.md Forbidden Patterns
 Unbounded autonomy — max-iter 카운트·repeat 감지·사용자-override kill switch 없는 루프 (P18의 anti-corollary).
 
+### AP18 → CLAUDE.md Forbidden Patterns
+Self-narrating artifact — 모델이 읽고 행동하는 산출물(생성 템플릿·룰 파일·프롬프트)이 자기 출처·배경·존재 정당화를 담는 것. 토큰 낭비(P22)이자 의미 왜곡 — 읽는 쪽의 초점이 "무엇을 해야 하나"에서 "이게 왜 있나"로 옮겨가고 정당화가 지시로 오독된다 (P8 최소주의의 산출물 방향).
+
 ### P5 → CLAUDE.md / Filesystem-as-Memory
 상태는 context가 아니라 파일에 산다 — 최소 인덱스만 preload하고 나머지는 Glob/Read/Grep으로 just-in-time 로드한다. stale-index·vector store·RAG 없음. 규칙 정본은 CLAUDE.md.
