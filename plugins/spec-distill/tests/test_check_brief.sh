@@ -589,48 +589,9 @@ python3 "$SCRIPT" gate "$FX/interview-brief-no-attribution.md" >/dev/null 2>&1 \
 python3 "$SCRIPT" gate "$FX/interview-brief-attribution-partial.md" >/dev/null 2>&1 \
   && no "T18: 기호 누락 표기 블록이 통과됨" || ok "T18: 기호 누락 표기 블록 → red"
 
-# --- Task 5: 분량 지표 (AC15, advisory — fail하지 않는다) ---
-
-# T16: 본문 150줄 초과(§6 제외) → **green** + advisory 문자열
-out="$(python3 "$SCRIPT" gate "$FX/interview-brief-over-budget.md" 2>/dev/null)"; rc=$?
-[[ $rc -eq 0 ]] \
-  && ok "T16: 분량 초과는 fail하지 않는다 (advisory)" \
-  || no "T16: 분량 초과가 게이트를 red로 만들었다 (advisory여야 함)"
-printf '%s' "$out" | grep -q 'payload_body_lines_excl_verbatim' \
-  && ok "T16: 게이트가 분량 지표를 출력" || no "T16: 분량 지표 키가 없음"
-printf '%s' "$out" | grep -q '트립와이어 150 초과' \
-  && ok "T16: 150 초과 시 advisory 문자열 출력" || no "T16: advisory 문자열이 없음"
-
-# 정상 brief는 advisory를 내지 않는다 (false-positive 방지)
-python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" 2>/dev/null | grep -q '트립와이어 150 초과' \
-  && no "T16: 예산 이내 brief에 advisory가 붙었다" \
-  || ok "T16: 예산 이내 brief에는 advisory 없음"
-
-# §6 제외 확인: canonical의 지표가 §6 줄 수만큼 부풀지 않았는지 (본문 40줄대여야 한다)
-n="$(python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" 2>/dev/null \
-     | python3 -c 'import json,sys; print(json.load(sys.stdin)["payload_body_lines_excl_verbatim"])')"
-[[ "$n" -lt 60 ]] \
-  && ok "T16: §6 사용자 원문이 계수에서 제외됨 (n=$n)" \
-  || no "T16: §6가 계수에 포함된 것으로 보임 (n=$n)"
-
-# T16/teeth — §6 제외 로직의 mutation lock.
-# 위의 `n < 60`은 이빨이 없다: canonical의 §6은 6줄뿐이라 제외 로직을 통째로 지워도
-# 21→27로 여전히 60 미만이라 0개 assertion이 반전된다(prior 라운드 mutation으로 실측).
-# 그 검사가 증명하는 건 "canonical brief가 작다"이지 "§6이 제외된다"가 아니다.
-#
-# 여기서 잠그는 성질: **원문이 긴 brief는 트립와이어를 건드리면 안 된다.** §6은 분량
-# 무제한이므로, §6이 계수에 들어가면 지표가 모델 프로즈가 아니라 인터뷰 길이를 추적하게
-# 되고 — 정확히 올바르게 행동한 brief에서 advisory가 발화한다(false positive).
-# interview-brief-long-verbatim.md는 §0–§5·§7이 canonical 크기(본문 22줄)인데 §6이
-# 커서 합계는 244줄이다. 제외가 살아 있으면 22 → advisory 없음. 제외를 지우면 244 →
-# 150 초과 → advisory가 붙어 아래 assertion이 뒤집힌다.
-# 수치 리터럴은 일부러 핀하지 않는다 — 픽스처를 조금만 손대도 stale-red가 되는 반면
-# negative-advisory assertion은 소폭 편집에 강건하면서 mutation에는 그대로 반응한다.
-out="$(python3 "$SCRIPT" gate "$FX/interview-brief-long-verbatim.md" 2>&1)"; rc=$?
-[[ $rc -eq 0 ]] \
-  && ok "T16/teeth: 긴 §6 원문 픽스처가 게이트를 통과 (green 전제)" \
-  || no "T16/teeth: 긴 §6 원문 픽스처가 red — 다른 규칙을 위반한다 (전제 붕괴)"
-printf '%s' "$out" | grep -q '트립와이어 150 초과' \
-  && no "T16/teeth: 긴 §6 원문에 advisory가 발화 (§6 제외 로직 회귀)" \
-  || ok "T16/teeth: 긴 §6 원문에도 advisory 없음 (§6 제외가 실제로 동작)"
+# Task 5(분량 지표 / 150줄 트립와이어)는 v0.33.0에서 제거됐다. 분량 상한이 잰 것은
+# 과잉결정이 아니라 부피였고, 그 대리 지표는 §3 Open Questions를 성실히 채운 brief를
+# 벌하는 방향으로 틀렸다. 재삽입 방지 락은 `test_brief_no_length_cap.sh`에 산다 —
+# 여기에 부정 assertion만 남기면 트립와이어가 없는 지금은 무엇을 지워도 통과하는
+# 빈 락이 되기 때문에, 블록을 고치지 않고 통째로 걷어냈다.
 finish

@@ -33,19 +33,17 @@ user_sourced_items:
 
 ## 0. 한눈에
 
-(≤15줄. 무엇 / 왜 / 무엇이 확정 / 무엇이 열려 있음 / 다음 stage. 다음 세션이 여기만 읽고도
- 방향을 잡을 수 있어야 한다.)
+(무엇 / 왜 / 무엇이 확정 / 무엇이 열려 있음 / 다음 stage. **이 절은 요약이다** — 본문을 여기
+ 옮겨 적는 자리가 아니라, 다음 세션이 여기만 읽고도 방향을 잡을 수 있어야 하는 자리다.)
 
 ## 1. Goal · Non-goal
-
-(≤12줄.)
 
 - Goal: ...
 - Non-goal: ...
 
 ## 2. 제약
 
-(≤30줄. 이 절의 진술은 모델이 쓴 요약이다. 원문은 §6, `⟨S<N>⟩`가 그것을 가리킨다.
+(이 절의 진술은 모델이 쓴 요약이다. 원문은 §6, `⟨S<N>⟩`가 그것을 가리킨다.
  한 줄이 frontmatter 한 항목의 렌더다 — id·기호↔`source`·`status`·`⟨S<N>⟩`·statement 문구가
  **전부** 일치해야 한다(bijection B). 한쪽만 고치면 게이트가 red를 낸다.)
 
@@ -56,19 +54,19 @@ user_sourced_items:
 
 ## 3. Open Questions
 
-(≤25줄. 미해결 명시 — "유추 금지". 탐색 대상이므로 앞쪽에 온다.)
+(미해결 명시 — "유추 금지". 탐색 대상이므로 앞쪽에 온다.)
 
 - OQ1: ...
 
 ## 4. External Landscape
 
-(≤20줄. 1항목 = 1줄, **출처 URL 필수** + [취함|피함|중립] + 이유.)
+(1항목 = 1줄, **출처 URL 필수** + [취함|피함|중립] + 이유.)
 
 - ... — https://example.com — [취함] — 이유
 
 ## 5. 기각 · Blind Spots
 
-(≤25줄. `기각` 항목이 0건이면 `- 기각 — N/A — 전부 first-time defend+lock` 한 줄 명시(빈 섹션 금지).
+(`기각` 항목이 0건이면 `- 기각 — N/A — 전부 first-time defend+lock` 한 줄 명시(빈 섹션 금지).
  `verdict:`를 가진 항목은 audit §3의 `ST<N>` 참조가 필수다.)
 
 - 기각 — <시도한 방향> → <버린 이유>
@@ -89,5 +87,5 @@ user_sourced_items:
 
 ## 7. Next Action
 
-(≤10줄. superpowers 있으면: 이 brief를 context로 `superpowers:brainstorming` 호출 → `-design.md`
+(superpowers 있으면: 이 brief를 context로 `superpowers:brainstorming` 호출 → `-design.md`
  → reviewer 검증 → writing-plans. 없으면: 이 brief가 완결 산출물 — 직접 사용.)
