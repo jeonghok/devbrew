@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # test_qg_publish_offer.sh — qg.md post-pipeline publish offer (v2.10.0).
 # Static doc-lock: the offer block, its Skill delegation, the /qg-publish floor,
-# and AskUserQuestion in allowed-tools. Section-scoped + body-unique (teeth).
+# and AskUserQuestion in the offer window. Section-scoped + body-unique (teeth).
+#
+# 2026-08-22: `allowed-tools:` frontmatter key removed repo-wide from commands —
+# 헤드리스 실측 5변형이 그 선언은 아무것도 집행하지 않음을 확정했다(CLAUDE.md
+# 참고). AskUserQuestion 단언 대상을 그 죽은 선언에서 offer 섹션 본문(OFFER 창)
+# 으로 옮긴다.
 set -u
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -9,13 +14,12 @@ CMD="$PLUGIN_ROOT/commands/qg.md"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 test -f "$CMD" || { echo "FAIL: command missing at $CMD"; exit 1; }
 
-# (1) allowed-tools includes AskUserQuestion (offer 발동용).
-AT="$(awk '/^allowed-tools:/{print; exit}' "$CMD")"
-grep -q 'AskUserQuestion' <<<"$AT" && ok "allowed-tools includes AskUserQuestion" || no "AskUserQuestion missing from allowed-tools"
-
 # Section window: '### After the pipeline' 부터 다음 '###'/'##' 헤더 전까지만
-# (body-unique + header-satisfiable trap 회피).
+# (body-unique + header-satisfiable trap 회피). 아래 모든 단언보다 먼저 도출한다.
 OFFER="$(awk '/^### After the pipeline/{f=1;print;next} f&&/^#{2,3} /{exit} f{print}' "$CMD")"
+
+# (1) offer 창이 실제로 AskUserQuestion(...) 호출을 담고 있는가(offer 발동용).
+grep -qF 'AskUserQuestion' <<<"$OFFER" && ok "offer window invokes AskUserQuestion" || no "AskUserQuestion missing from offer window"
 
 # (2) body-unique offer question phrase (헤더에 없음).
 grep -qF 'PR-이해글을 생성해서 게시할까요' <<<"$OFFER" && ok "offer question literal present" || no "offer question literal missing"

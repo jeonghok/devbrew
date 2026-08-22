@@ -5,6 +5,23 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [2.0.1] — 2026-08-22
+
+`commands/project-init.md`의 `allowed-tools:` frontmatter 줄을 제거한다.
+patch인 이유: 이 필드는 애초에 아무 동작도 바꾸지 않았다 — 제거해도 shipping
+동작은 한 바이트도 바뀌지 않는다.
+
+### Removed
+- `commands/project-init.md`의 `allowed-tools: ["Bash", "Read", "Write",
+  "Edit", "Glob", "Grep"]` 줄. 근거(2026-08-22 헤드리스 실측, `--plugin-dir`
+  격리 플러그인, 5변형): `allowed-tools: ["Read"]`로 `Bash`를 빼놓아도 `Bash`가
+  실행됐고, 스코프 표기(`Bash(<pattern>:*)`)도 범위 밖 명령을 막지 못했다 —
+  이 계층은 제한이 아니다. agent frontmatter의 `tools:`(fail-closed, Law 2
+  집행 지점)와는 다른 계층이다(CLAUDE.md에 되돌림 방지 문장 추가).
+
+### 동작 무변경
+command frontmatter의 선언 하나가 사라졌을 뿐, 실행 경로는 그대로다.
+
 ## [2.0.0] — 2026-08-20 (BREAKING)
 
 Task 25(무게 감축): 환경변수 어순을 `DEVBREW_<PLUGIN>_<REST>` 하나로 통일.

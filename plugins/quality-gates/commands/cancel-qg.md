@@ -1,7 +1,6 @@
 ---
 description: "Cancel a quality-gates pipeline session (single-turn execution in v1.32.0; this clears orphan state)"
 argument-hint: "[--gc | --all]"
-allowed-tools: ["Bash(test:*)", "Bash(rm:*)", "Bash(rm -rf:*)", "Bash(find:*)", "Bash(wc:*)", "Read", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/cancel-qg-core.sh:*)", "Bash(python3 ${CLAUDE_PLUGIN_ROOT}/scripts/qg-gc.py:*)", "AskUserQuestion"]
 hide-from-slash-command-tool: "true"
 ---
 

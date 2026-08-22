@@ -1,7 +1,6 @@
 ---
 description: "Run the quality gates pipeline (review → runtime verification)"
 argument-hint: "[critique <path>|review|runtime|both] [branch [<name>]|--paths <glob>...|--reset] [--skip-runtime] [--plan <path>] [--pr-url <url>]"
-allowed-tools: ["Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)", "Bash(rm:*)", "Bash(test:*)", "Agent", "Skill", "Bash", "Read", "Edit", "Write", "Glob", "Grep", "AskUserQuestion"]
 ---
 
 # Quality Gates Pipeline

@@ -3,6 +3,41 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.2.3] — 2026-08-22
+
+Command frontmatter의 `allowed-tools:`를 3개 command(`cancel-qg.md`·`qg.md`·
+`qg-publish.md`)에서 전부 제거한다. patch인 이유: 이 필드는 애초에 아무 동작도
+바꾸지 않았다 — 제거해도 shipping 동작은 한 바이트도 바뀌지 않는다.
+
+**Removed**
+- `commands/{cancel-qg,qg,qg-publish}.md`의 `allowed-tools:` frontmatter 줄.
+  근거(2026-08-22 헤드리스 실측, `--plugin-dir` 격리 플러그인, 5변형): ①
+  `allowed-tools: ["Read"]`로 `Bash`를 빼놓았는데 `Bash`가 실행됨 — fail-closed
+  allowlist라면 불가능한 결과. ② 키 없음(acceptEdits) → Bash 실행. ③
+  `["Bash"]`, 권한 플래그 없음 → Bash 실행. ④ 키 없음, 권한 플래그 없음 →
+  Bash 실행. ⑤ 스코프 표기 `["Bash(echo:*)"]` → `echo`와 범위 밖 명령
+  `ls -d /tmp` 둘 다 실행됨. 이 계층은 제한이 아니다 — agent frontmatter의
+  `tools:`(fail-closed, Law 2 집행 지점)와 혼동하지 말 것(CLAUDE.md에 되돌림
+  방지 문장 추가).
+
+**Changed**
+- `tests/test_qg_publish_command.sh`·`tests/test_qg_publish_offer.sh` — 위
+  제거로 RED가 된 두 단언(`allowed-tools` 선언 **내용** 검사)을 명령 **본문**
+  검사로 전환했다. 선언이 아무것도 집행하지 않는다는 게 이번 실측의 결론이므로
+  선언을 재는 단언은 삭제보다 나쁜 가짜 통과를 남길 뿐이었다.
+  `test_qg_publish_command.sh:11`은 `Skill("quality-gates:
+  publishing-pr-understanding")` 호출 형태를 직접 확인(기존 `:13`의 "이름
+  언급" 검사보다 강함, 중복 아님 — mutation으로 독립성 확인). `:12`는 본문
+  전체에서 `gh` 직접 호출 부재를 워드바운더리+호출-모양 매칭(`\bgh[[:space:](]`)
+  으로 확인 — 기존 로직은 검사 대상(`$AT`)이 빈 문자열이면 영원히 통과하는
+  가짜 단언이었다. `test_qg_publish_offer.sh:14`는 이미 도출돼 있던 offer
+  섹션 창(`### After the pipeline` ~ 다음 헤더) 안에서 `AskUserQuestion`을
+  확인하도록 창 도출 위치를 앞으로 옮겼다. 세 단언 모두 대상 제거 시 RED,
+  `cp -p` 복원 후 GREEN을 mutation으로 확인.
+
+**동작 무변경** — command frontmatter의 선언 하나가 사라지고 그 선언을 재던
+테스트 대상이 본문으로 옮겨졌을 뿐, 실행 경로는 그대로다.
+
 ## [4.2.2] — 2026-08-22
 
 `scripts/codex_prompt_common.py` 의 〔앵커 주의〕 주석 블록을 **제거**한다.

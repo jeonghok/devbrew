@@ -1,7 +1,6 @@
 ---
 description: "Generate a PR-understanding artifact and publish it to the GitHub PR (consent-gated)"
 argument-hint: "[--dry-run]"
-allowed-tools: ["Skill", "Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)"]
 ---
 
 # PR-Understanding Publish
