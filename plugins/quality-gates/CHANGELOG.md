@@ -3,6 +3,48 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.2.1] — 2026-08-22
+
+`DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER` 락에 **이빨을 준다** — v4.2.0 이
+구현한 게이트를 지키는 테스트가 실제로는 아무것도 지키지 않았다.
+
+patch 인 이유: shipping 동작은 한 바이트도 바뀌지 않는다. 바뀐 것은 그 동작을
+재는 **계측기**뿐이다.
+
+### Fixed
+
+- **`test_security_reviewer_kill_switch.sh` 의 GREEN 이 게이트의 존재를 뜻하지
+  않았다.** 세 단언이 전부 **파일 전체 ∃ 카운트**여서, `quality-pipeline/SKILL.md`
+  의 dispatch 게이트 블록을 **통째로 삭제해도 3/3 PASS** 였다(실측). v4.2.0 이 같은
+  커밋에서 추가한 Step 4.5 verdict advisory 와 kill switch 색인이 **decoy 로** 세
+  단언을 모두 만족시켰기 때문이다 — 스위치를 더 잘 문서화할수록 그 스위치를 지키는
+  락이 약해지는 구조였다.
+
+### Added
+
+- **위치 단언(∀).** `subagent_type: "quality-gates:security-reviewer"` dispatch
+  리터럴 **각각**에 대해, 그 **바로 위 창** 안에 게이트 네 조각(env 토큰 ·
+  `IF <ENV>=1` 조건 · loud advisory 배너 원문 · "발행하지 않는다" 지시)이 있는지
+  검사한다. 창은 **파일 구조에서 매번 도출**한다 — 직전 구조 경계(펜스 밖 heading
+  또는 직전 코드펜스 닫힘 중 더 가까운 쪽)부터 dispatch 를 감싼 펜스 시작 직전까지.
+  **리터럴 줄번호를 박지 않는다**(줄번호 인용이 리팩터로 썩은 전례가 있다).
+- **decoy 배제 락 + 양의 짝.** verdict advisory 와 kill switch 색인이 파일에 실재하는지
+  (∃) 확인하고, 동시에 그 두 줄이 **모든 창 밖**인지 검사한다. 창이 decoy 를 삼키면
+  락은 다시 ∃-카운트로 퇴화하므로, 그 퇴화 자체를 RED 로 만든다.
+- **양성 대조 두 개.** dispatch 리터럴이 최소 하나 실재해야 하고(∀ 가 공허하게 통과하는
+  것을 막는다), 창 도출기가 세는 dispatch 수가 `grep` 이 세는 수와 같아야 한다(계측기
+  자기점검).
+
+### Changed
+
+- 헤더가 **이 락이 재지 않는 것**을 명시한다. SKILL.md 는 실행되는 코드가 아니라 모델이
+  읽는 **산문**이므로 이 GREEN 은 *"지시가 dispatch 지점에 서 있다"* 까지이고
+  *"LLM 이 그 지시를 따른다"* 가 아니다. **토큰을 보존한 의미 반전**(IF/ELSE 본문
+  맞바꿈)은 못 잡는다 — 주장이 아니라 mutation 으로 **실측 확인**한 한계다.
+
+기존 세 ∃ 단언은 지우지 않았다. 게이트 위치는 못 보지만 스위치가 문서에서 통째로
+사라지는 경우는 그쪽이 잡는다.
+
 ## [4.2.0] — 2026-08-22
 
 기준선 RED 해소 ①/4 — **약속만 있고 집행이 없던 kill switch 를 실제로 구현한다.**
