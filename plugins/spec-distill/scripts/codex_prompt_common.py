@@ -36,10 +36,6 @@ import sys
 # 를 가리키는 상대 심볼릭 링크이고, 설치 시점에 실제 내용으로 역참조되어 배포 트리 안으로
 # 들어온다(설계 §2.2·§16.1). 런타임에 `shared/` 로 나가지 않는다 — `${CLAUDE_PLUGIN_ROOT}`
 # 에서 그곳은 도달 불가다(§2.1).
-# 〔앵커 주의〕 위 `scripts/prompt-preamble.md` 리터럴은 이 사본이 사는 플러그인을
-# `shared/tests/test_copy_of_contract.sh` 축 1a 의 **참조원 도출**에 넣는 문자열이기도
-# 하다. 표기를 바꾸면 그 플러그인이 심볼릭 링크 ∀ 집합에서 조용히 빠진다(실측: 이
-# 통합이 빌더에서 같은 리터럴을 걷어냈을 때 spec-distill 이 도출 3건→2건으로 이탈했다).
 P21_PREAMBLE_PATH = pathlib.Path(__file__).resolve().parent / "prompt-preamble.md"
 P21_MARKER_RE = re.compile(r"^[ \t]*<!--.*-->[ \t]*$")
 

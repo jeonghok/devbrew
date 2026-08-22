@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.32.6] — 2026-08-22
+
+`scripts/codex_prompt_common.py` 의 〔앵커 주의〕 주석 블록을 **제거**한다.
+
+**Changed**
+- `scripts/codex_prompt_common.py` — `scripts/prompt-preamble.md` 리터럴이
+  `test_copy_of_contract.sh` 축 1a 의 도출 앵커라고 경고하던 주석 4줄을 삭제.
+- **v0.32.5 의 "이 리터럴은 앵커다" 항목은 이제 유효하지 않다.** 그 축은 배포
+  지점을 구조(인덱스∪워킹트리에 실재하는 `plugins/*/scripts/<파일>`)에서 도출하고
+  산문은 거기에 더하기만 한다 — 빼지 못한다(감사 §7-8 해소). 실측: 같은 리터럴을
+  다시 걷어내도 도출은 3건 그대로이고 락은 GREEN 이다(v0.32.5 때는 3→2 로 줄며 RED).
+
+**동작 무변경** — 주석만 지웠고 실행 경로는 그대로다.
+
 ## [0.32.5] — 2026-08-22
 
 Task 35 Step 0 — P21 프리앰블 로더 4벌을 `shared/codex/codex_prompt_common.py` 정본으로

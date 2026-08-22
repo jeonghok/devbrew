@@ -3,6 +3,20 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.2.2] — 2026-08-22
+
+`scripts/codex_prompt_common.py` 의 〔앵커 주의〕 주석 블록을 **제거**한다.
+
+**Changed**
+- `scripts/codex_prompt_common.py` — `scripts/prompt-preamble.md` 리터럴이
+  `shared/tests/test_copy_of_contract.sh` 축 1a 의 참조원 도출 앵커라고 경고하던
+  주석 4줄을 삭제. 그 축이 배포 지점을 **구조(인덱스∪워킹트리의 실재)** 에서
+  도출하도록 바뀌었으므로(감사 §7-8 해소) 이 주석의 존재 이유가 사라졌다 —
+  이제 산문 표기를 바꿔도 실재하는 배포 지점은 감사 집합에서 빠지지 않는다.
+  경고가 지키던 대상이 없어졌는데 경고만 남으면 다음 사람이 없는 제약을 지킨다.
+
+**동작 무변경** — 주석만 지웠고 실행 경로는 그대로다.
+
 ## [4.2.1] — 2026-08-22
 
 `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER` 락에 **이빨을 준다** — v4.2.0 이
