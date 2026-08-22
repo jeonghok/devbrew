@@ -39,7 +39,7 @@ frontmatter `name:` 에서 도출되고, 4표기 통합 정규식이 정확히 1
 
 **plan 으로 넘기는 것 (여기서 정하지 않는다)**
 - 앵커 18개가 실제로 지목할 `.py` 소비자의 **전수 목록**. 아래 §11 이 하한 5개를 이름으로
-  적지만 그것은 하한이며, 목록 확정이 PR3 의 선결 조건이다.
+  적지만 그것은 하한이며, 목록 확정은 **PR0** — PR1 보다 앞선다(§11).
 - 각 dispatch 자리의 `fail-open|closed` 값. §9 의 규칙에서 자리마다 도출한다.
 - 락의 창 크기(현재 40) 를 표기별로 다르게 할지 여부 — §5.2 표기 ④ 항 참조.
 
@@ -172,8 +172,10 @@ frontmatter `name:` 에서 도출되고, 4표기 통합 정규식이 정확히 1
 ## 3. 컴포넌트 A — `shared/adjudication/`
 
 **정본**: `shared/adjudication/adjudication.py`
-**배포**: `plugins/spec-distill/scripts/adjudication.py` · `plugins/quality-gates/scripts/adjudication.py`
-— **형제 사본이며 1행에 `# copy-of: shared/adjudication/adjudication.py` 마커를 갖는다.**
+**배포**: **열거가 아니라 도출이다** — 「PR2 가 전환할 `.py` 소비자가 사는 모든 플러그인」의
+`scripts/adjudication.py`. 현재 하한으로는 `spec-distill`·`quality-gates` 이고 `plugin-audit`
+가 더해질 수 있다(§11 PR0). **형제 사본이며 1행에
+`# copy-of: shared/adjudication/adjudication.py` 마커를 갖는다.**
 이 마커는 장식이 아니라 `test_no_new_duplication.sh` 의 면제 술어 ②(*"양쪽이 같은 정본을
 copy-of 로 가리킨다"*)가 요구하는 것이다. 마커가 없으면 정본과 사본이 20줄 이상 동일 블록으로
 잡혀 그 락이 RED 를 낸다. 기존 사본 전부가 같은 형태다(`plugins/spec-distill/scripts/
@@ -254,7 +256,8 @@ import 할 수 없다. 그 결함(§7 #9)은 개별 패치로 남는다.
 보고 경로를 안 본다. 판정: `git ls-files --error-unmatch <경로>` 가 성공해야 한다.
 
 `disclosure=<리터럴>` 은 **그 처분 결과가 어디에 나타나는지를 가리키는 문자열**이며, 축 C 가
-그 리터럴이 같은 파일에 실재하는지 검사한다. 예: `disclosure=degrade 채널` ·
+그 리터럴이 **모든 앵커 줄을 제외한 본문**에 실재하는지 검사한다(§5.2 — 제외하지 않으면
+검색이 앵커 자신에 걸려 축 C 의 이빨이 0 이다). 예: `disclosure=degrade 채널` ·
 `disclosure=verification_status` · `disclosure=degradedEvents`.
 
 이 요구는 발명이 아니라 `proceed-gate.md:34-41` 의 것을 그대로 가져온 것이다 —
@@ -275,7 +278,7 @@ import 할 수 없다. 그 결함(§7 #9)은 개별 패치로 남는다.
 
 앞선 판본은 *"면제값이 없다"* 라고 썼다. **그것은 축 A 에 대해서만 참이다.**
 
-- **축 A**(앵커 존재)에는 면제값이 없다 — 앵커가 있거나 없다.
+- **축 A**(앵커 귀속, 1:1)에는 면제값이 없다 — 앵커가 있거나 없고, 하나가 둘을 덮을 수 없다.
 - **축 B**(import 교차확인)는 `consumer=` 가 `.py` 인 앵커에만 걸린다. 그러므로
   `orchestrator`/`human`/`.js` 는 **축 B 의 범위 밖**이며, 저자가 값을 그렇게 쓰면 축 B 를
   피한다. 값 자체는 저자가 쓴다.
@@ -335,18 +338,35 @@ C16). 훅을 추가하지 않으므로 새 kill switch 도 없다 — `/qg` 자�
 
 | 축 | 단언 | 적용 대상 | 이빨 |
 |---|---|---|---|
-| **A — 앵커 존재 (∀ 지배)** | 모든 dispatch 줄에 대해 창 40줄 안에 유효 서식의 앵커가 있다 | **18/18** | 새 dispatch 가 처분 없이 들어오면 RED |
-| **B — 소비자 교차확인 (∀)** | `consumer=` 가 `*.py` 인 모든 앵커에 대해, 그 파일이 `adjudication` 을 import 한다 | `.py` 값을 쓴 앵커 | 앵커가 소비자를 지목해 놓고 그 소비자가 회계를 안 하면 RED |
-| **C — 채널 실재 (∀)** | `consumer=` 가 `.js`·`orchestrator`·`human` 인 모든 앵커에 대해 `disclosure=` 가 있고, 그 리터럴이 같은 파일에 실재한다 | 나머지 앵커 | 채널 이름을 안 대거나 가짜 이름을 대면 RED |
+| **A — 앵커 귀속 (1:1)** | ① `앵커 수 == dispatch 수` ② 앵커→dispatch **1:1 매칭**이 존재한다 — 각 앵커는 어떤 dispatch 의 창 40 안이고, **한 앵커는 한 dispatch 에만** 귀속된다 ③ 각 dispatch 줄은 **정확히 한 에이전트**에 귀속된다 | **18/18** | 새 dispatch 가 처분 없이 들어오거나, 앵커 하나로 둘을 덮으려 하면 RED |
+| **B — 소비자 교차확인 (∀)** | `consumer=` 가 `*.py` 인 모든 앵커에 대해, 그 경로가 추적 파일로 실재하고 그 파일이 `adjudication` 을 import 한다 | `.py` 값을 쓴 앵커 | 앵커가 소비자를 지목해 놓고 그 소비자가 회계를 안 하면 RED |
+| **C — 채널 실재 (∀)** | `consumer=` 가 `.js`·`orchestrator`·`human` 인 모든 앵커에 대해 `disclosure=` 가 있고, 그 리터럴이 **모든 앵커 줄을 제외한 본문**에 실재한다 | 나머지 앵커 | 채널 이름을 안 대거나 가짜 이름을 대면 RED |
 
-축 A 는 ∃-존재검사가 아니라 **∀-지배**다. 선례
-`plugins/spec-distill/tests/test_web_kill_switch.sh:350-358` 이 지금은 ∀ 루프이고, ∃ 판본이
-실패했던 기록은 같은 플러그인 `CHANGELOG.md:1198` 에 있다 — 가드 하나가 dispatch 열 개를
-만족시켰다.
+**축 A 는 ∀-지배만으로는 부족하다 — 1:1 이어야 한다.** 선례
+`plugins/spec-distill/tests/test_web_kill_switch.sh:350-358` 은 ∀ 루프이지만 그 술어가
+*"각 dispatch 위 40줄 안에 **가장 가까운** 가드가 있는가"* 라서, **가드 하나가 `[g, g+40]`
+구간의 모든 dispatch 를 만족시킨다.** 이 리포의 실제 배치가 정확히 그 형태다 —
+`quality-pipeline/SKILL.md:366`·`:377`(11줄) · `conducting-interview/SKILL.md:254`·`:269`(15줄) ·
+`audit-workflow.js:18`·`:19`(인접). 앵커를 공유하면 「앵커 18줄」이 집행되지 않을 뿐 아니라,
+**축 B·C 가 앵커를 순회하므로 덮인 쪽 dispatch 의 소비자는 한 번도 교차확인되지 않는다** —
+거짓 `consumer=` 값을 쓸 필요조차 없이 축 B 를 빠져나가는 경로다. `CHANGELOG.md:1198` 이
+기록한 *"가드 하나가 dispatch 열 개를 만족"* 이 40줄 상한만 걸린 채 살아 있었다.
+그래서 등식(①)과 1:1 매칭(②)이 **함께** 있어야 한다 — ①만 있으면 앵커 둘이 한 dispatch 를
+가리키고 다른 하나가 비는 배치가 통과한다.
+
+**단언 ③ 이 경계 규칙(§5.1③)의 진짜 계측기다.** 경계 규칙이 없으면
+`critiquing-artifacts/SKILL.md:194` 한 줄이 `adversarial` 과 `artifact-adversarial` **둘 다**에
+귀속되어 이 단언이 RED 를 낸다. 규칙이 있으면 정확히 하나다(§5.1③ 실측).
 
 **축 B 가 가장 센 이빨이지만 전부를 덮지 않는다.** 축 A 만 있으면 앵커는 주석 한 줄로
 만족된다(`test_web_kill_switch.sh:54` 가 자기 파일에 이 한계를 적어 뒀다). 축 B 는 앵커가
 거짓말을 못 하게 만들지만 `.py` 소비자에만 걸린다. 축 C 는 나머지를 덮되 더 약하다 — §4.2.
+
+**축 C 의 코퍼스에서 앵커 줄을 빼는 것은 선택이 아니라 성립 조건이다.** `disclosure=` 리터럴은
+앵커 줄 자신에 적혀 있고 그 앵커는 검색 대상 파일 안에 있다. 제외하지 않으면 저자가 무엇을
+쓰든 검색이 **자기 자신에 걸려** 항상 GREEN 이고, 축 C 의 이빨은 0 이다. 이 리포가 이미
+이름 붙인 실패(*헤더가 문구를 만족시키면 body 를 삭제해도 GREEN*)와 동형이며, 판정은
+**body-unique** 여야 한다.
 
 **표기 ④의 앵커 거처.** `context: fork` skill 의 dispatch 줄은 YAML frontmatter 안에 있고
 (`plugins/agent-transparency/skills/briefing-current-state/SKILL.md:6`), `**처분** — …` 는
@@ -358,8 +378,14 @@ C16). 훅을 추가하지 않으므로 새 kill switch 도 없다 — `/qg` 자�
 
 - 에이전트 도출이 0 이면 RED (도출이 깨진 것을 「위반 없음」으로 읽지 않는다)
 - dispatch 줄 도출이 0 이면 RED
-- **에이전트 수와 dispatch 줄 수를 둘 다 출력한다.** 총계만 보면 코퍼스 축소가 부분 손실로
-  끝났을 때 발화하지 않는다(§10.2 M7)
+- **락은 아래 여섯을 전부 인쇄한다** — 인쇄와 단언은 다른 것이므로 나눠 적는다:
+  ① 에이전트 수 ② dispatch 줄 수 ③ 앵커 수 ④ **에이전트별 dispatch 수** ⑤ **축별 대상
+  수**(B / C) ⑥ `--emit-scanned` 경로. ④⑤ 가 없으면 green-expected mutation(M9·M10)이
+  관측할 수치를 잃는다 — 통과가 정답인 단언은 모양만으로 이빨을 판별할 수 없다.
+- **단언은 하나다: `dispatch 줄 수 == 앵커 수`**(축 A ①). 구조적 근거가 있다 — 1:1 계약.
+- **`에이전트 수 == dispatch 줄 수` 는 걸지 않는다.** 오늘 18/18 인 것은 에이전트당 dispatch 가
+  우연히 하나여서이고, 한 에이전트를 두 skill 에서 부르는 것은 정당한 편집이다. 등식을 걸면
+  그 편집에 거짓 RED 가 난다. 코퍼스 축소는 이 등식이 아니라 **에이전트별 0건**(§5.1⑤)이 잡는다
 - `--emit-scanned` 는 실제로 훑은 경로를 낸다. 선언에서 목록을 도출하면 자기 반복이라
   커버리지 증거가 되지 않는다
 
@@ -412,7 +438,7 @@ default 다.
 ```
 plugins/*/agents/*.md  ──(frontmatter name:)──►  락 도출 ∀18
                                                     │
-SKILL.md / *.js  ──(4표기 dispatch 줄)──────────────┤ 축 A: 앵커 ∀지배 (18/18)
+SKILL.md / *.js  ──(4표기 dispatch 줄)──────────────┤ 축 A: 앵커 1:1 귀속 (18==18)
       │                                             │
       ├─ consumer=<*.py>  ─────────────────────────►┤ 축 B: 그 파일이 import 하는가
       └─ consumer=orchestrator|human|<*.js>  ──────►┘ 축 C: disclosure 리터럴이 실재하는가
@@ -472,10 +498,14 @@ needs_revise`, `:274`). 다음 소비자가 사람이면서 그 사람이 내용
 - `absorbed` 는 `degraded` 를 올리지 **않는다** (양성 대조: `hold` 는 올린다)
 - `coerced(gate=False)` 는 `degraded` 를 올리지 않고 `gate=True` 는 올린다
 - `uncountable` 은 `unknown_counts` 에 들어가고 `counts` 의 정수에는 안 들어간다
-- `blocks()` 가 `next_consumer` 별로 §9 표와 일치한다
-- **배포 정합성** — 각 `plugins/*/scripts/adjudication.py` 가 존재하고, 1행 `# copy-of:`
-  마커가 정본을 가리키며, 그 줄을 뺀 바이트가 정본과 같다. PR1 에서 축 1c 가 아직 발효하지
-  않으므로(§3) 이 단언이 PR1 의 배포 보호다
+- `blocks()` 가 **degraded 이면 항상 True** 다 — `items` 값과 무관(§9.1). 양성 대조:
+  degraded 가 아니면 False
+- `surfaced()` 가 `items="open"` 에서 held·uncountable 항목을 포함하고 `"closed"` 에서 제외한다
+- **배포 정합성 (∀, 도출 집합 위에서)** — PR0 이 확정한 배포 집합의 **모든** 플러그인에
+  대해 `plugins/<p>/scripts/adjudication.py` 가 존재하고, 1행 `# copy-of:` 마커가 정본을
+  가리키며, 그 줄을 뺀 바이트가 정본과 같다. **실재하는 사본만 순회하면 안 된다** — 그것은
+  ∃-검사라 빠진 자리에 침묵한다. 기대 집합을 먼저 도출하고 그 전부를 검사한다.
+  PR1 에서 축 1c 가 아직 발효하지 않으므로(§3) 이 단언이 PR1 의 배포 보호다
 
 ### 10.2 락 mutation (락이 실제로 무는지)
 
@@ -490,17 +520,21 @@ needs_revise`, `:274`). 다음 소비자가 사람이면서 그 사람이 내용
 | M4 | `merge_brief_review.py` 의 `import adjudication` 삭제 | 축 B RED | 동상 |
 | M5 | 새 agent 정의 + 앵커 없는 dispatch 추가 | 축 A RED | 새 이름이 실패 메시지에 등장 |
 | M6 | agent 정의의 `name:` 을 dispatch 와 다르게 변경 | **§5.1⑤ dispatch-0건 RED** | 그 에이전트 이름 + `0건` |
-| M7 | 코퍼스 글롭을 `skills/` 만으로 축소 | **dispatch 줄 수가 18→15 로 줄어 §5.3 의 «둘 다 출력» 대조가 RED**. vacuity 하한(0)은 발화하지 않는다 | 에이전트 18 vs dispatch 15 불일치 |
+| M7 | 코퍼스 글롭을 `skills/` 만으로 축소 | **§5.1⑤ 에이전트별 dispatch 0건 RED.** `scripts/*.js` 3건이 빠져 `plugin-auditor`·`audit-refuter`·`smoke-probe` 가 0건이 된다. 총계 등식이 아니다 — 앵커도 함께 사라져 `dispatch == 앵커` 는 15/15 로 성립하고, vacuity 하한(0)도 발화하지 않는다 | 그 세 에이전트 이름 + `0건` (§5.3④ 가 인쇄) |
 | M8 | 락 메시지의 `${tot}` → `$tot` (한글 접미) | 락 자기 테스트 RED | 출력에 빈 문자열 |
 | M9 | dispatch 에서 접두사 제거(`"spec-reviewer"`) | **GREEN 이어야 함** (자기면제 봉쇄 확인) | `--emit-scanned` 에 그 파일이 여전히 있고 dispatch 총계가 18 유지 |
 | **M10** | `.py` 앵커 하나를 `consumer=human · disclosure=<실재 리터럴>` 로 교체 | **축 B 를 벗어나 축 C 로 이동 — GREEN 이 예상된다.** 이것은 결함이 아니라 §4.2 가 명시한 면제 경로의 **측정**이다 | 축 B 대상 수가 1 줄고 축 C 대상 수가 1 는다 |
-| **M11** | `disclosure=` 리터럴을 파일에 없는 문자열로 교체 | 축 C RED | 그 리터럴이 실패 메시지에 등장 |
+| **M11** | `disclosure=` 리터럴을 **앵커 줄을 제외한 본문에 없는** 문자열로 교체 | 축 C RED | 그 리터럴이 실패 메시지에 등장. ✎ 앵커 줄 제외 규칙이 **없으면 이 mutation 은 구성 자체가 불가능하다** — 교체하는 순간 그 문자열이 앵커 줄에 존재하게 되므로. M11 이 구성 가능하다는 것이 곧 축 C 가 이빨을 가졌다는 증거다 |
 | **M12** | 비-`.py` 앵커에서 `disclosure=` 통째 삭제 | 축 C RED | 서식 위반 |
-| **M13** | `adversarial` 의 dispatch 줄을 지우고 `artifact-adversarial` 만 남김 | **§5.1③ 경계 규칙 RED** (`adversarial` dispatch 0건) | 경계 규칙이 없으면 GREEN 이 나므로 이 mutation 이 그 규칙의 유일한 계측기 |
+| **M13** | **락 자신의** 경계 규칙(§5.1③)을 제거 | **축 A ③ RED** — `critiquing-artifacts/SKILL.md:194` 가 `adversarial` 과 `artifact-adversarial` **두 에이전트에 동시 귀속** | 그 파일:줄 + 귀속된 에이전트 2개 이름. ✎ 이전 판본은 「`adversarial` 의 dispatch 줄 삭제」였는데 그것은 경계 규칙 없이도 `0건` 으로 RED 가 나므로 **규칙의 유무를 판별하지 못했다** |
+| **M14** | 인접한 두 dispatch(`quality-pipeline/SKILL.md:366`·`:377`)의 앵커 **둘을 하나로 합침** | **축 A ①② RED** — 앵커 수 17 ≠ dispatch 수 18, 그리고 남은 앵커가 두 dispatch 에 매칭될 수 없다 | 앵커 수 vs dispatch 수 + 매칭 실패한 dispatch 의 줄 번호. ✎ 이 mutation 이 없으면 「1:1」이 ∀-지배와 다르다는 주장이 검증되지 않는다 |
 
-**mutation 은 삭제 축만 흔들지 않는다** — M2·M3·M6·M9·M10·M11·M13 은 추가·반전·형태변경이다.
+**mutation 은 삭제 축만 흔들지 않는다** — M2·M3·M6·M9·M10·M11·M13·M14 는 추가·반전·형태변경이고,
+**M13 은 락 자신을 흔든다**(피검자가 아니라 계측기를 변이시키는 유일한 항목).
+
 M9 와 M10 은 **green-expected** 이므로 통과가 정답이다. 그런 assert 는 모양만으로 이빨을
-판별할 수 없으므로, 둘 다 「무엇을 관측해 판정하나」 칸에 **관측 대상 수치**를 적었다.
+판별할 수 없으므로 둘 다 관측 대상 수치를 적었고, **그 수치가 §5.3 의 인쇄 요구 ④⑤ 로
+실제 산출된다** — 인쇄되지 않는 수치를 관측 근거로 적는 것은 관측하지 않는 것과 같다.
 
 ### 10.3 결함 수리 회귀
 
@@ -512,6 +546,7 @@ M9 와 M10 은 **green-expected** 이므로 통과가 정답이다. 그런 asser
 
 | PR | 내용 | 단독 GREEN 근거 |
 |---|---|---|
+| **PR0** (선결) | **`.py` 소비자 전수 목록 확정** — 앵커 18개를 실제로 초안 작성하며 `consumer=` 값을 도출한다. 코드 변경 없음 | PR1 의 배포 집합과 PR2 의 범위가 **둘 다 이 목록에서 나온다**. 목록 없이 PR1 을 치면 배포처를 추측하게 된다 |
 | **PR1** | `shared/adjudication/` 모듈 + 배포 사본(`# copy-of:` 마커) + `test_adjudication_behavior.sh` | 축 1c 는 소비자가 없어 아직 발효하지 않으므로(§3), §10.1 의 **배포 정합성 단언**이 그 자리를 대신한다 |
 | **PR2** | 결함 수리 9건 + **앵커가 지목할 모든 `.py` 소비자를 모듈로 전환** + 회귀 테스트 | 소비자가 생기므로 축 1c 발효. PR3 의 축 B 가 요구할 대상이 전부 이 PR 안에서 충족된다 |
 | **PR3** | 앵커 18줄 + `test_dispatch_disposition.sh`(축 A/B/C) + mutation M1~M13 | 축 B 의 대상이 PR2 에서 이미 전환됐으므로 단독 GREEN |
@@ -522,8 +557,14 @@ M9 와 M10 은 **green-expected** 이므로 통과가 정답이다. 그런 asser
 `synthesize_findings.py` · `synthesize_artifact_findings.py` · `check_qa_ledger.py`. 이 중
 결함이 있는 것은 둘(#1~#8)이고 나머지 셋은 **이미 카운터를 가진 정상 파일의 기계적 전환**이다.
 `plugin-audit` 의 `assemble-audit-data.py`·`check-grounding.py` 가 여기에 더해질 수 있다 —
-**전수 목록 확정이 PR3 의 선결 조건**이며 plan 단계에서 앵커 18개를 실제로 작성하면서
-확정한다(§Handoff 「plan 으로 넘기는 것」).
+**전수 목록 확정은 PR0 이며 PR1 보다 앞선다.**
+
+**왜 PR3 가 아니라 PR0 인가.** PR1 이 배포 사본을 만드는데, 그 배포 집합은
+「PR2 가 전환할 소비자가 사는 모든 플러그인」이다. 목록이 PR3 까지 미정이면 PR1 은 배포처를
+추측하게 되고, PR2 가 `plugin-audit` 소비자를 하나라도 전환하는 순간
+`plugins/plugin-audit/scripts/adjudication.py` 형제 사본이 없어 **축 1c 가 RED** 다.
+그리고 §10.1 의 배포 정합성 단언은 **실재하는 사본만 순회**하므로 없는 사본을 못 잡는다 —
+빠진 자리에 대해 침묵하는 ∃-검사다.
 
 각 PR 은 건드린 플러그인의 `plugin.json` SemVer bump 와 `CHANGELOG.md` 항목을 포함한다.
 `shared/` 는 플러그인이 아니라 bump 대상이 아니지만, 배포 사본을 받는 플러그인은 bump 한다.
@@ -533,12 +574,12 @@ M9 와 M10 은 **green-expected** 이므로 통과가 정답이다. 그런 asser
 | | 위험 | 완화 |
 |---|---|---|
 | R1 | **락이 「모듈을 쓰는가」까지만 재고 「출력을 렌더하는가」는 못 잰다.** `report()` 를 만들고 버려도 GREEN | §10.3 의 결함 회귀가 출력을 직접 본다. 정적 락으로는 여기까지가 한계임을 문면에 적는다 |
-| R2 | **`consumer=` 값이 저자 손에 있다.** `.py` 대신 `orchestrator`/`human` 을 쓰면 축 B 를 벗어난다 — 축 C 는 더 약하다 | §4.2 가 이 사실을 명시하고 M10 이 그것을 **측정**한다. 없앴다고 주장하지 않는다. 값 오용은 사람이 읽는 diff 리뷰가 맡는다 |
+| R2 | **`consumer=` 값이 저자 손에 있다.** `.py` 대신 `orchestrator`/`human` 을 쓰면 축 B 를 벗어난다 — 축 C 는 더 약하다 | §4.2 가 이 사실을 명시하고 M10 이 그것을 **측정**한다(§5.3⑤ 가 그 수치를 인쇄). 없앴다고 주장하지 않는다. 값 오용은 사람이 읽는 diff 리뷰가 맡는다. ✎ 초판에서는 축 C 의 이빨이 **0** 이었다 — `disclosure=` 검색이 앵커 줄 자신에 걸렸기 때문이며, 앵커 줄 제외 규칙(§5.2)이 그것을 고쳤다 |
 | R3 | 모듈이 소비자마다 안 맞아 우회가 생긴다 | 모듈은 **회계만** 하고 출력 서식은 안 건드린다(§3.2). 우회가 생기면 그 자체가 설계 결함 신호 |
 | R4 | Tier C 외부 6종은 계약 밖 | `quality-pipeline/SKILL.md:706` 이 선택을 **model-owned (lightness)** 로 못 박았다. 계약이 구속하는 것은 선택이 아니라 소비 — 그 소비자는 이 리포 소유다 |
 | R5 | 18줄 앵커가 하니스 무게가 된다 | 한 줄씩이다. 다만 앵커 서식 변경은 18곳 재편집이라 서식을 먼저 확정했다 |
 | R6 | `# guards:` 선언이 `*.sh` 에서만 읽힌다 | 락이 `*.sh` 이므로 해당 없음. 단 이 사실이 문서화돼 있지 않아 `docs/` 에 죽은 `# guards:` 2건이 실재한다 — 별건 |
-| **R7** | **#6 의 수리가 자기 인용이 기록한 결함을 닫지 못한다.** `CHANGELOG.md:1634-1638` 은 mixed 라운드에서 `severity: high` finding 이 사라지고 `combined_verdict: approved` 가 남는 것을 실측했는데, 개수를 advisory 에 붙여도 **거짓 approved 는 그대로다**. §9 표가 `merge_review.py` 를 human/fail-open 에 두므로 `blocks()` 도 False | 이 사이클에서 **닫지 않는다.** verdict 규칙 변경은 이 설계 범위 밖이며 별건 원장으로 넘긴다. #6 이 얻는 것은 「몇 개가 사라졌는지 사람이 본다」까지다 |
+| **R7** | **#6 의 수리가 verdict 의미를 바꾼다 — 범위가 커졌다.** `CHANGELOG.md:1634-1638` 이 실측한 거짓 `approved`(mixed 라운드에서 `severity: high` 소실 + `combined_verdict: approved`)는 §9.1 의 「**verdict 는 degraded 이면 언제나 막는다**」로 **닫힌다** — 소실이 degraded 를 세우고 `blocks()` 가 True 이므로 그 라운드는 `approved` 를 낼 수 없다. 그러나 이것은 회계 추가가 아니라 **shipped 파이프라인의 판정 의미 변경**이다 | 앞선 판본은 이 결함을 「닫지 못한다」고 적고 연기했는데, 그 논거가 §Handoff 가 plan 으로 미룬 미정 값(`next_consumer`)에 기대고 있었다 — §9.1 이 그 값을 없애면서 논거도 사라졌다. 지금 필요한 것은 연기가 아니라 **재검증**이다: `merge_review.py` 의 기존 verdict 테스트가 degraded 라운드에서 `approved` 를 기대하는 곳이 있는지 전수 확인하고, 있으면 그 기대가 이 결함의 화석인지 판정한다. PR2 의 작업 항목으로 명시한다 |
 | **R8** | **산문 소비 자리들이 실제로 버리는지 미측정.** 정적 읽기로는 「처분을 안 적었다」까지만 안다 | 앵커가 그 자리들에 처분을 *적게* 만든다. 실제 행동 측정은 skill 실행이 필요하며 이 설계에 없다 |
 | **R9** | **codex 미실행 — 모델 다양성 0.** 이 설계와 그 리뷰가 전부 same-family 다 | 완화 수단 없음. 한도 회복 후 재리뷰가 유일한 경로이며 그때까지 이 문서의 공유-맹점 위험은 열려 있다 |
 
@@ -565,7 +606,7 @@ M9 와 M10 은 **green-expected** 이므로 통과가 정답이다. 그런 asser
 | OQ1 어느 하위에 두나 | `shared/adjudication/` — 새 축. 기존 4축은 소비되는 서브시스템 이름 |
 | OQ2 배포 형태 | 형제 사본 + `# copy-of:` 마커, `plugins/*/scripts/`. 축 1c 는 첫 소비자(PR2)부터 발효 |
 | OQ3 presence/absence 코퍼스 분리 | **부분 답.** 이 락에 한해서는 해소된다 — 코퍼스가 `plugins/**` 구조 규칙이고 정본이 `shared/` 라 공유 계약 파일이 들어올 자리가 구조적으로 없다. 리포 전역의 구조적 가드 문제는 **미해결**(감사 §8) |
-| OQ4 「버린 걸 세는가」를 기계가 어떻게 | **`.py` 소비자는 축 B** 가 import 를 교차확인한다. 나머지는 **축 C** 가 채널 이름의 실재까지만 잰다 — 그 채널이 실제로 읽히는지는 못 잰다(§4.2 · R2) |
+| OQ4 「버린 걸 세는가」를 기계가 어떻게 | **`.py` 소비자는 축 B** 가 경로 실재 + import 를 교차확인한다. 나머지는 **축 C** 가 채널 이름의 실재까지만 잰다(앵커 줄을 제외한 본문에서) — 그 채널이 실제로 *읽히는지*는 못 잰다(§4.2 · R2). 그리고 **축 A 의 1:1 귀속**이 없으면 축 B·C 자체가 앵커 공유로 우회된다(§5.2) |
 | OQ5 생성 시점 독자 경로 | `docs/plugin-authoring.md` 가 `plugin-dev` 를 가리키는 직전 한 줄. `plugin-dev` 자체는 외부 vendoring 이라 편집 불가 |
 | OQ6 결함을 이 사이클에 고치나 | 고친다 — 9건 전부, PR2. 단 #6 의 잔여는 R7 로 남긴다 |
 | OQ7 Tier C 구속 범위 | 소비만. 선택은 model-owned 로 못 박혀 있다 |
