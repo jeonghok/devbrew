@@ -3,6 +3,50 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.1.13] — 2026-08-22
+
+기준선 RED 해소 ④/4 — codex spike 의 **부재**를 실패가 아니라 SKIPPED 로 낮춘다.
+shipping 동작 무변경(수동 spike + 테스트 하니스만).
+
+**Changed**
+- **`tests/spike/test_codex_json_extraction.sh`** — 결과가 **세 값**이 됐다:
+  `PASS` / `FAIL`(진짜 임계 미달) / `SKIPPED`(codex 를 태울 수 없었다).
+  이 spike 는 실제 codex 호출이 필요하고 그 호출은 계정 상태에 달렸다. 부재를
+  `FAIL`(exit 1)로 렌더하던 앞선 판은 회귀 스위트에 영구 RED 를 하나 만들었고,
+  영구 RED 는 *"선재 RED, 고치지 마라"* 로 분류되어 아무도 읽지 않게 된다 — 이
+  파일이 실제로 겪은 일이다. `SKIPPED` 는 exit 0 이되 **출력에 크게 남긴다**
+  (CLAUDE.md *"Loud logging을 동반한 graceful degradation"*): *"판정하지 않았다"* 를
+  *"통과했다"* 로 렌더하지 않는다.
+  - **가용성 판정은 두 층이다.** ① 정본 `scripts/detect_codex.sh`(설치·인증·버전·
+    kill switch) — 새 감지기를 만들지 않았다. ② **실행 결과** — ①은 모델 설정도
+    사용 한도도 보지 않으므로 한도가 소진된 계정에서도 `codex_available: true` 를
+    낸다. 〔2026-08-22 실측〕 감지는 `true`, 실제 호출은 400
+    (`The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT
+    account.`) 이고 `-m gpt-5.5` 로는 `usage limit … try again at Sep 17th, 2026`.
+    그래서 "감지가 참이면 돈다"고 가정하지 않는다.
+  - **판정 가능(usable) 의 정의**: 그 run 이 `agent_message` 를 하나라도 냈는가.
+    없으면 fence 를 잴 대상 자체가 없는 것이지 *"fence 를 안 냈다"* 가 아니다.
+    이 구분이 결함과 부재를 가른다.
+  - **경계**: `pass >= 2` → PASS. `usable == 3` 이고 `pass < 2` → FAIL(진짜 미달).
+    `usable < 3` 이고 `pass < 2` → SKIPPED — 못 돈 run 은 실패가 아니므로 2/3
+    임계의 분모가 달라졌고, 판정 근거가 없다.
+  - 실패 원문(`turn.failed` → `error` → stderr 순)을 SKIPPED 메시지에 실어 사용자가
+    *왜* 못 돌았는지 보게 한다.
+  - 시나리오 7종 실측: 임계 미달 FAIL(rc=1) · 전부 fence PASS(rc=0) · 에러만 SKIPPED ·
+    kill switch → SKIPPED + **codex 호출 0건** · 1 불가+2 fence → PASS(첫 통과 run 을
+    freeze) · 2 가용(1 fence)+1 불가 → SKIPPED(FAIL 아님) · 3 가용 1 fence → FAIL.
+- **`tests/lib/codex_observation.sh`** — `obs_invoke` 의 spike arm 이 `CODEX_API_KEY=t`
+  를 공급한다. spike 가 이제 `detect_codex.sh` 를 먼저 부르므로, 감지기의 인증 검사가
+  **개발자 머신의 실제 `~/.codex/auth.json` 존재 여부**를 타면 관측이 환경에 따라
+  갈린다(실측: 로그인 없는 환경에서 spike 가 SKIPPED → codex 호출 0건 →
+  `test_codex_invocation_contract.sh` 가 1건 RED). 형제 하니스
+  `test_codex_gate_observation.sh` 의 `run_gate` 가 같은 이유로 이미 같은 값을
+  공급한다. 수정 후 인증 유무 양쪽에서 39/39 GREEN.
+  - `obs_invoke` 의 `case` 라벨은 건드리지 않았다 — `obs_known_candidates()` 가 그
+    라벨에서 후보 목록을 도출하므로 라벨이 바뀌면 커버리지 래칫이 깨진다.
+  - `test_codex_gate_observation.sh` 의 UNGATED 원장 등재는 그대로 유효하다:
+    이 spike 를 부르는 SKILL 은 여전히 없다(마킹된 게이트가 생긴 것이 아니다).
+
 ## [4.1.12] — 2026-08-22
 
 기준선 RED 해소 ②/4 — 지키는 대상이 사라진 테스트를 제거한다. shipping 동작 무변경.
