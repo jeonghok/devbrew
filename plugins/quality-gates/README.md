@@ -28,7 +28,7 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **P2 (Categorical signal, no numeric scoring)** (v1.9.0) — `test-scope-validator`는 정확히 4-way enum 분류 (`aligned` / `outdated-suspicion` / `cherry-pick-suspicion` / `unclear`)만 emit. percentage, confidence, X/Y rating 모두 금지. summary의 counter 정수 (`1 aligned, 0 outdated…`) 는 허용. devbrew P2 "수치 스코어링 ban" instantiation.
 - **Law 2 strengthening — model-family separation.** Optional `codex-reviewer` agent (when Codex CLI is detected) runs review in a separate process with a different model family (OpenAI vs Anthropic) and an OS-level read-only sandbox, giving 3-layer reviewer-writer isolation: `disallowedTools` + narrow `Bash` allowlist + `codex -s read-only`.
 - **Law 2 (codex 격리, v1.11.0/v1.12.0 → v2.11.0 정정)** — codex 리뷰의 격리는 **`codex exec -s read-only` OS-level 샌드박스 + 별도 프로세스/모델 패밀리**가 전부다. v1.11.0~v2.10.x의 이 항목은 그 위에 *"frontmatter 키 whitelist"* layer를 얹었다고 기록했으나 **그 layer는 존재한 적이 없다**: (1) 당시 명명된 키는 공식 subagent 규격에 없는 필드라 런타임이 조용히 무시했고, (2) T3-3에서 `codex-reviewer`가 agent → 스크립트(`scripts/run_codex_reviewer.sh`)로 이관돼 frontmatter 자체가 사라졌다 (`tests/test_codex_reviewer_frontmatter.sh`가 agent 파일 **부재**를 assert). 지금 격리를 지탱하는 것은 OS 샌드박스다.
-- **Law 2 (Writer ≠ Reviewer, frontmatter scoping)** (v1.13.0) — `security-reviewer` agent가 `tools: Read, Grep, Glob` fail-closed allowlist 선언. Phase 1 always-run reviewer 중 4번째로 추가되며, kill switch `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`로 사용자가 disable 가능 (Plugin Shape — 모든 reviewer는 opt-out 가능).
+- **Law 2 (Writer ≠ Reviewer, frontmatter scoping)** (v1.13.0) — `security-reviewer` agent가 `tools: Read, Grep, Glob` fail-closed allowlist 선언. Review gate Tier A floor 구성원이며, kill switch `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`로 사용자가 disable 가능 (Plugin Shape — 모든 reviewer는 opt-out 가능). 게이트는 `quality-pipeline` SKILL의 Tier A dispatch 지점에 있다.
 - **Law 3 (Compounding — drift 재발 차단, v1.12.0)** — `hooks/session-start-advisor.py` frontmatter scanner (AC14): SessionStart마다 모든 agent 파일의 frontmatter key를 kebab-case drift 검사. `tests/test_agent_frontmatter_keys.sh` (AC15): repo-wide deny-list bash test — CI에서 C1 종류 (kebab-case 잘못된 키) drift를 자동 차단. 이 두 mechanism이 함께 "리뷰를 탈출한 버그 → reviewer persona 편집 + compounding linter 신설" Law 3 instantiation.
 - **Law 1 — Clarity Before Code (좌표 계약 측면)**: pipeline 의 단일 좌표 `project_dir` 가 SKILL preflight 에서 frozen 되어 모든 subagent / hook / 외부 codex 프로세스에 명시적으로 propagate. cwd 재계산은 frontmatter Forbidden + grep-anchored drift guard 로 mechanically 차단. (v1.14.0)
 - **Law 1 (Clarity Before Code) — `/qg branch <name>` surface** (v1.15.0) — 7개 거절 시나리오(존재하지 않는 브랜치, path traversal, kill switch, idempotent reuse 등)가 `tests/test_branch_worktree.sh` AC1–AC11에 acceptance criteria로 명시. 실패 경로마다 명확한 진단 메시지를 stderr로 출력.
@@ -433,7 +433,7 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 | Env var | 효과 |
 |---|---|
 | `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` | optional `codex-reviewer` 완전 skip (model-family diversity layer off). `scripts/detect_codex.sh`가 우선 검사. |
-| `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` | Phase 1 always-run `security-reviewer` skip. 다른 3개 phase-1 reviewer는 여전히 fire. |
+| `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` | Review gate Tier A floor의 `security-reviewer`만 skip. Tier A의 나머지(`adversarial`)와 Tier B(codex)·Tier C 전문가는 여전히 fire. **loud**: dispatch 지점에서 배너 한 줄, 그리고 그 iteration의 verdict 표면에 *"이 라운드에는 보안 리뷰가 없었다"* 가 함께 남는다 (floor 구성원이 빠지면 `clean`의 의미가 달라지므로 — 형제 `DISABLE_CODEX`가 silent인 것과 의도적으로 다르다). |
 
 **Runtime gate 단위 disable:**
 

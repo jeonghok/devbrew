@@ -3,6 +3,75 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.2.0] — 2026-08-22
+
+기준선 RED 해소 ①/4 — **약속만 있고 집행이 없던 kill switch 를 실제로 구현한다.**
+이 넷 중 유일하게 살아 있는 **보안 컨트롤 결함**이었다.
+
+minor 인 이유: 이 스위치를 켠 run 은 이제 실제로 `security-reviewer` 없이 돈다 —
+전에는 켜도 계속 돌았다. 사용자에게 보이는 동작이 새로 생겼으므로 patch 가 아니다.
+
+### Fixed
+
+- **`DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1` 이 아무것도 하지 않았다.**
+  README 가 세 곳(Principles · 디렉토리 트리 주석 · kill switch 표)에서 이 스위치를
+  약속하는데, `plugins/**` · `shared/**` 전체에서 README·CHANGELOG·테스트를 뺀
+  **집행·지시 지점이 0** 이었다. 사용자가 이 스위치를 켜면 security-reviewer 가
+  꺼졌다고 **믿지만 계속 돌았다.** CLAUDE.md 는 *"kill switch는 보안 컨트롤"* 이라고
+  적고 있고, Plugin Shape 는 *"모든 reviewer는 opt-out 가능"* 을 원칙으로 두므로
+  약속을 철회하는 대신 구현한다. (README 가 약속한 kill switch 8개 중 스킬·스크립트가
+  실제로 검사하던 것은 7개였다 — 이제 8/8.)
+
+  구현은 형제 스위치(`DISABLE_CODEX`)와 **동형이되 가시성만 반대**다:
+
+  1. **dispatch 지점의 게이트** — `skills/quality-pipeline/SKILL.md` 의
+     "Tier A — Floor" 절, `security-reviewer` Agent 리터럴을 발행하기 **직전**.
+     스위치가 켜져 있으면 그 리터럴을 발행하지 않고, `adversarial` 과
+     Tier B(codex)·Tier C 는 그대로 fire 한다. `adversarial` 의 `phase1_findings`
+     슬롯에는 실제로 받은 것만 넣는다(없는 리뷰어 몫을 지어내지 않는다).
+  2. **kill switch 색인에 포인터 한 줄** — 같은 SKILL 의 `## kill switch` 절.
+     그 절은 *"각 스위치의 전체 동작은 아래 명시된 스텝/절 본문에 있다(여기서
+     재서술하지 않는다, drift 방지)"* 라고 자기 규약을 적어 두었으므로 **포인터만**
+     넣었다.
+  3. **loud advisory 2단** — dispatch 지점 배너 한 줄 +
+     **Step 4.5 의 판정 표면**에 남는 한 줄. 두 번째가 핵심이다: 배너는 iteration
+     중간, verdict 보다 한참 위에 찍히므로 verdict 로 바로 내려가는 독자(또는
+     `## History` 줄만 읽는 독자)는 결손을 못 본다. Tier A floor 는
+     `security-reviewer + adversarial` 두 명이고 그중 하나가 빠졌으므로, 맨
+     `clean` 은 과대 주장이다 — 기존 "Dropped-finding override"(*"버려진 finding 은
+     해소된 finding 이 아니다"*)와 같은 계열이다. 배너는 스위치가 켜진 **매**
+     iteration 마다 반복한다.
+
+  **형제 `DISABLE_CODEX` 와 달리 loud 인 이유**(SKILL 본문에도 적어 두었다):
+  codex kill switch 는 "Codex skip 안내"의 silent 표에 있다(*"사용자가 직접 껐다.
+  자기가 한 일을 다시 알릴 필요가 없다"*). 그러나 codex 는 Tier B(가용성 floor,
+  다양성 층)이고 `security-reviewer` 는 **Tier A floor 두 명 중 하나**다. floor
+  구성원이 빠지면 그 iteration 의 `clean` 이 **뜻하는 바 자체**가 달라지므로,
+  사용자의 의도적 opt-out 이더라도 판정을 읽는 사람에게 결손이 보여야 한다.
+  두 스위치를 "일관성" 명목으로 같은 취급으로 합치지 말 것.
+
+  **`tests/test_security_reviewer_kill_switch.sh` 는 건드리지 않았다.** 그 테스트가
+  RED 였던 것이 정상이었고 — 구현이 없었으니까 — 구현이 끝나자 GREEN 이 됐다.
+  ⚠ 다만 그 테스트의 단언은 `grep -c '<스위치>' SKILL.md >= 1` 형태라 **색인 한 줄만
+  넣어도 첫 단언이 통과한다**(이 리포에서 관측된 header-satisfiable 함정). 실측으로
+  확인: dispatch 게이트와 verdict 절을 통째로 지우고 색인 줄만 남기면 3개 중 1개만
+  RED 가 된다. 즉 **이 테스트의 GREEN 은 게이트가 dispatch 지점에 있다는 증거가
+  아니다.** 그 사실은 구조로 확인해야 한다 — 게이트는 Tier A 산문과
+  `subagent_type: "quality-gates:security-reviewer"` 리터럴 **사이**에 있다.
+
+### Changed
+
+- **`README.md`** — kill switch 표의 이 항목이 *"다른 3개 phase-1 reviewer는 여전히
+  fire"* 라고 적고 있었다. v2.13.0 의 3-tier 모델(Tier A floor = security-reviewer +
+  adversarial · Tier B codex · Tier C 동적 전문가) 이전 서술이라 stale 했다.
+  구현과 같은 커밋에서 실제 동작(무엇이 계속 fire 하는가 + loud 2단)으로 맞췄다.
+  Principles 줄의 *"Phase 1 always-run reviewer 중 4번째"* 도 같은 이유로 갱신.
+- **`tests/codex-blessed-red.txt`** — 등재 0건이 됐다. 이 원장은 **양방향 래칫**이라
+  (미등재 실패도 RED, 등재됐는데 GREEN 이 된 항목도 RED) kill switch 테스트가
+  GREEN 이 되는 순간 `stale 등재` 로 `test_codex_backward_compat.sh` 가 RED 를 낸다
+  — 실측으로 확인한 뒤 같은 커밋에서 뺐다. 빈 원장은 고장이 아니라 규약
+  (*"목록은 줄어들기만 한다"*)의 도달점이며 메커니즘은 그대로 살아 있다.
+
 ## [4.1.13] — 2026-08-22
 
 기준선 RED 해소 ④/4 — codex spike 의 **부재**를 실패가 아니라 SKIPPED 로 낮춘다.
