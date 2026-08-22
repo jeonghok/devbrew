@@ -5,6 +5,20 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [2.1.1] — 2026-08-22
+
+`agent-tool-permission.md` 템플릿을 영어로 다시 쓰고 출처·배경 문단을 제거한다.
+
+### Changed
+- 템플릿 언어를 한국어 → 영어로. 이 산출물은 임의의 대상 레포에 떨어져 모델이 읽는
+  생성물이라 이 리포의 Korean-primary doc convention 적용 대상이 아니다. 되돌림을 막기
+  위해 한글 부재를 테스트로 잠갔다.
+
+### Removed
+- 출처 문단(`/project-init` 이 생성했다는 설명)과 배경 문단(하니스가 기본 주입하는
+  문장에 대한 해설). 근거는 CHANGELOG·PR 에 남기고 산출물에는 행동에 필요한 것만 둔다
+  — CLAUDE.md 의 **Self-narrating artifact** 금지 패턴.
+
 ## [2.1.0] — 2026-08-22
 
 `/project-init` 이 선택적으로 `.claude/rules/agent-tool-permission.md` 를 생성한다 —
