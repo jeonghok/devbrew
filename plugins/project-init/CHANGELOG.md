@@ -5,6 +5,28 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [2.1.0] — 2026-08-22
+
+`/project-init` 이 선택적으로 `.claude/rules/agent-tool-permission.md` 를 생성한다 —
+이 리포에서 Agent(subagent) 호출을 매번 승인 없이 허용하는 레포-스코프 규칙 파일.
+minor 인 이유: 새 질문 + 새 산출물이라 surface 가 늘었다.
+
+### Added
+- `templates/shared/agent-tool-permission.md` — 규칙 본문. 허용 범위는 **Agent 만**이며
+  Workflow · deep-research 는 명시적으로 제외한다.
+- `commands/project-init.md` `### Step 3.6` — 허용 여부를 묻는 산문 yes/no 질문. 질문 수는
+  charter Phase 1 의 `≤4개` 한도와 합산하지 않는다(독립 카운트).
+- `commands/project-init.md` `#### 4f` — 허용 시 `.claude/rules/agent-tool-permission.md`
+  생성 + `.gitignore` 에 **그 경로 한 줄만** 추가. `.claude/` 통째 무시는 금지 — 대상 레포가
+  `.claude/settings.json` 등을 추적 중일 수 있다.
+- `tests/test_agent_permission_contract.py` — 템플릿의 범위 제한 문장과 4f 계약의 회귀 락.
+
+### Notes
+- 이 산출물은 `AGENTS.md` 에서 링크하지 않는다. git 제외 파일을 커밋되는 문서가 가리키면
+  docs-lint R6(내부 링크 해석)이 매 `AGENTS.md` 쓰기마다 발화한다.
+- `.claude/rules/*.md` 는 docs-lint 의 검사 대상이 아니다(`hooks/docs-lint.py` 의
+  `TARGET_RELPATHS` + `docs/project/` prefix 밖). 짧은 고정 파일이라 수용한 trade-off.
+
 ## [2.0.1] — 2026-08-22
 
 `commands/project-init.md`의 `allowed-tools:` frontmatter 줄을 제거한다.

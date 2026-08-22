@@ -126,6 +126,14 @@ C-S1 및 C-S3(a)에서 **vision·non-goals·conventions·tech-stack**가 채워�
 
 abort 후에도 Step 4의 git-workflow 파일 생성은 정상 진행한다(부분 산출물 금지 아님 — git-workflow는 charter와 독립). C-S2(완전 헌장 갱신)는 이 게이트 면제.
 
+### Step 3.6: Agent 호출 권한 (선택)
+
+Step 3.5가 모두 끝난 뒤 묻는다. 이 질문 수는 charter Phase 1의 `≤4개` 한도와 **합산하지 않는다**(독립 카운트 — Step 3.5 서두의 직렬화 계약과 같은 규칙).
+
+> "이 리포에서 Claude 가 subagent(Agent 도구)를 **매번 승인 없이** 띄우도록 허용할까요? 허용하면 `.claude/rules/agent-tool-permission.md` 를 만들고 git 추적에서 제외합니다. (기본: 예)"
+
+사용자가 거절하면 4f를 skip한다. 다른 산출물에는 영향이 없다 — 이 질문은 git-workflow·charter와 독립이며, 거절이 run 전체를 abort시키지 않는다.
+
 ### Step 4: 파일 생성
 
 선택된 strategy와 답변을 바탕으로 다음 파일들을 생성한다.
@@ -140,6 +148,7 @@ abort 후에도 Step 4의 git-workflow 파일 생성은 정상 진행한다(부�
 - `${CLAUDE_PLUGIN_ROOT}/templates/shared/commit-conventions.md`
 - `${CLAUDE_PLUGIN_ROOT}/templates/shared/pr-process.md`
 - `${CLAUDE_PLUGIN_ROOT}/templates/shared/claude-md-pointer.md`
+- `${CLAUDE_PLUGIN_ROOT}/templates/shared/agent-tool-permission.md` (Step 3.6에서 허용한 경우에만)
 
 여기서 `<strategy>`는 `github-flow`, `git-flow`, `trunk-based` 중 하나.
 
@@ -208,6 +217,15 @@ placeholder 치환 매핑:
 
 `docs/project/` 디렉토리가 없으면 생성한다. 비-관리 콘텐츠(다른 헤딩·단락·코드 블록)는 모든 state에서 보존한다(기존 4c matrix 정신). `## Project Charter` 요약은 ≤약 25줄로 유지하고 상세는 전부 `docs/project/`로 내린다(C5 — 기존 R1 size 룰 자기 준수).
 
+#### 4f: Agent 호출 권한 파일 (Step 3.6에서 허용한 경우에만)
+
+Step 3.6에서 거절했으면 이 블록 전체를 skip한다.
+
+1. `${CLAUDE_PLUGIN_ROOT}/templates/shared/agent-tool-permission.md`를 읽어 **치환 없이 그대로** `.claude/rules/agent-tool-permission.md`에 쓴다 (이 템플릿에는 placeholder가 없다). `.claude/rules/` 디렉토리가 없으면 생성한다.
+2. 프로젝트 `.gitignore`에 `.claude/rules/agent-tool-permission.md` 한 줄이 없으면 추가한다. **`.claude/` 통째를 무시하지 않는다** — 대상 레포가 `.claude/settings.json` 같은 파일을 추적 중일 수 있고, 통째 무시는 그것을 조용히 떨어뜨린다. `.gitignore`가 없으면 그 한 줄만 담아 새로 만든다.
+
+이 파일은 `AGENTS.md`에서 링크하지 않는다 — git에서 제외되는 파일을 커밋되는 문서가 가리키면 docs-lint R6(내부 링크 해석)이 매 `AGENTS.md` 쓰기마다 발화한다.
+
 ### Step 5: 확인
 
 생성 결과 보고:
@@ -224,6 +242,7 @@ placeholder 치환 매핑:
 > - `docs/project/charter.md` — vision·goals·non-goals·success criteria·personas
 > - `docs/project/conventions.md` — naming·구조·error handling·anti-patterns·build & test
 > - (도메인 용어가 있으면) `docs/project/glossary.md`
+> - (Agent 호출 권한을 허용했으면) `.claude/rules/agent-tool-permission.md` — git 추적 제외
 >
 > `project-init` 플러그인 hook이 브랜치·commit 메시지 + agent-readable docs convention (size, TOC, fenced lang, links, drift) + `## Project Charter` 필수 항목(vision·non-goals·tech-stack)을 자동 검증합니다.
 > AGENTS.md primary 패턴으로 OpenAI Codex, Cursor, Aider 등 16+ 벤더가 동일 파일을 인식합니다.
