@@ -1,10 +1,47 @@
+---
+name: subagent-adjudication-contract
+type: design
+date: 2026-08-22
+interview_brief: docs/superpowers/interview/2026-08-22-subagent-adjudication-contract-interview.md
+interview_audit: docs/superpowers/interview/2026-08-22-subagent-adjudication-contract-interview.audit.md
+next_phase: superpowers:writing-plans
+---
+
 # subagent 판정 계약 — Design
+
+> subagent 의 발견이 소비되는 자리마다 「누가 어떻게 처분하는가」가 갈라져 있다. 처분 어휘를
+> 공통 모듈로 모으고, 모든 dispatch 자리가 자기 처분을 기계 판독 한 줄로 밝히게 하고, 그 둘을
+> 락 하나로 묶는다. **재는 것은 「판정자가 있는가」가 아니라 「판정자가 버린 것을 세는가」다.**
 
 ## Handoff Context
 
-- Interview brief: `docs/superpowers/interview/2026-08-22-subagent-adjudication-contract-interview.md`
-- Interview audit (방향성 D1~D7 전문 · 커버리지 원장): 같은 디렉토리의 `*.audit.md`
-- 착수 시점 HEAD: `ead6835`
+> 이 설계를 처음 보는 사람(또는 `/compact` 후 자기 자신)이 30초에 핵심을 잡게 하는 블록.
+> 대화 컨텍스트를 가정하지 않는다.
+
+**TL;DR** — `shared/adjudication/adjudication.py` 라는 회계 모듈 하나(`수용·기각·보류` +
+흡수·강제·입력실패·원리적 미상), dispatch 자리 18곳에 붙는 기계 판독 앵커 한 줄, 그 둘을
+∀ 로 묶는 락 하나(`shared/tests/test_dispatch_disposition.sh`, 축 A/B/C), 그리고 확인된
+회계 결함 9건 수리. PR 넷. **새 `.md` 정본은 만들지 않는다** — 규정 문면은 `CLAUDE.md` 와
+`docs/plugin-authoring.md` 에 흡수한다.
+
+**이 설계가 서 있는 실측** (HEAD `ead6835`) — agent 정의 18개는 `plugins/*/agents/*.md`
+frontmatter `name:` 에서 도출되고, 4표기 통합 정규식이 정확히 18개 dispatch 줄을 낸다
+(누락 0 · 거짓양성 0, 프로토타입 실행 확인). 그중 **`.py` 소비자를 갖는 것은 소수**이고
+나머지는 orchestrator·human·JS 다 — 이 비대칭이 §5 락의 축을 셋으로 나누는 이유다.
+`shared/` 는 실행 모듈의 자리이며 배포는 `plugins/*/scripts/` 형제 사본 + `# copy-of:`
+마커다. `plugin-dev` 는 이 리포 소유가 아니라 편집할 수 없다.
+
+**암묵 전제 — 이 문서가 참이라고 가정하고 검증하지 않은 것**
+- 산문 소비 자리들이 *실제로* 발견을 버리는지는 skill 을 실행해야 알 수 있어 **미측정**이다.
+  정적 읽기로는 「처분을 안 적었다」까지만 안다.
+- codex co-review 가 이번 사이클에 실행되지 않았다(계정 한도). **모델 다양성 0** 이며,
+  이 리포에서 same-family 공유 맹점의 유일한 backstop 이 빠진 채로 작성·리뷰됐다.
+
+**plan 으로 넘기는 것 (여기서 정하지 않는다)**
+- 앵커 18개가 실제로 지목할 `.py` 소비자의 **전수 목록**. 아래 §11 이 하한 5개를 이름으로
+  적지만 그것은 하한이며, 목록 확정이 PR3 의 선결 조건이다.
+- 각 dispatch 자리의 `fail-open|closed` 값. §9 의 규칙에서 자리마다 도출한다.
+- 락의 창 크기(현재 40) 를 표기별로 다르게 할지 여부 — §5.2 표기 ④ 항 참조.
 
 ## 목차
 
@@ -26,7 +63,7 @@
 
 ## 0. 한눈에
 
-**무엇** — subagent 발견의 처분(`수용·기각·보류`)과 **버린 것의 회계**를 `shared/`의 공통
+**무엇** — subagent 발견의 처분(`수용·기각·보류`)과 **버린 것의 회계**를 `shared/` 의 공통
 파이썬 모듈로 구현하고, 모든 dispatch 자리가 자기 처분을 기계 판독 가능한 한 줄로 밝히게
 하며, 그 두 가지를 락 하나로 묶는다.
 
@@ -62,9 +99,14 @@
 "버린 것을 전부 세라"는 요구는 흡수·강제까지 잡아 진짜 신호를 희석한다. 반대로 아무것도
 요구하지 않으면 소실이 침묵한다. 계약은 **셋을 구별하는 어휘**여야 한다.
 
-네 번째가 있다. **원리적 미상** — `merge_review.py:180-181` 계열에서 sentinel 이 깨지면
-몇 개가 있었는지 알 수 없는 경우가 실재한다. 이때 정직한 출력은 `0` 이 아니라
-「셀 수 없음」이다. `0` 은 거짓 clean 이다.
+네 번째가 있다. **원리적 미상** — `merge_review.py:76-83` 의 세 `return None, True` 경로
+(sentinel 부재 · `JSONDecodeError` · payload 형태 불일치)가 그것이다. 그 지점에는 `issues`
+리스트가 아직 만들어지지도 않았으므로 **몇 개였는지 알 방법이 없다.** 이때 정직한 출력은
+`0` 이 아니라 「셀 수 없음」이다. `0` 은 거짓 clean 이다.
+
+**같은 파일의 `:180-181` 은 이 부류가 아니다** — 거기서는 `findings` 가 이미 누적돼 있어
+버리는 개수를 셀 수 있다. 세지 않을 뿐이다(§7 #2). 두 자리를 뭉개면 `uncountable()` 이
+호출처 없는 API 로 남는다.
 
 ### 1.1 어휘가 네 벌로 갈라져 있다
 
@@ -90,15 +132,36 @@
 ## 2. 접근 — 규정 문서가 아니라 공통 모듈
 
 `shared/` 의 실측 패턴은 **정본 `shared/<축>/<mod>.py` → 배포 `plugins/*/scripts/<mod>.py`
-(형제 사본 또는 심볼릭 링크) → 소비 `from <mod> import <fn>`** 이다. 전부 실행 모듈이고
-규정 문서는 하나도 없다. 유일한 `.md`(`shared/codex/prompt-preamble.md`)조차 규정이 아니라
-스크립트가 읽는 프롬프트 조각이다.
+→ 소비 `from <mod> import <fn>`** 이다. 네 하위축(`codex`·`gc`·`killswitch`·`tests`)은
+전부 *소비되는 서브시스템* 또는 테스트 하네스의 이름이다.
 
-따라서 이 설계는 `shared/` 에 **모듈**을 두고, 규정 문면은 이 리포가 선언한 정책의 소스
-(`CLAUDE.md#plugin-shape` + `docs/plugin-authoring.md`, 후자 `:36` 이 명시)에 흡수시킨다.
+### 2.1 배포 형태 — 왜 심볼릭 링크가 아니라 형제 사본인가
 
-새 `.md` 정본을 만들지 않으므로 배포·심볼릭 링크 문제가 통째로 사라진다. 이것이 없었다면
-아래 셋을 전부 처리해야 했다 (전부 실행으로 확증):
+`shared/README.md:10` 은 **상대 심볼릭 링크를 기본**으로 규정하고 바이트 사본 + `copy-of:`
+마커는 *"링크를 못 쓰는 잔여만"* 이라고 못 박는다. 이 모듈은 그 **잔여 케이스**이며, 근거는
+락 자신의 주석에 이미 적혀 있다 — `test_copy_of_contract.sh:441-443`:
+
+> *"다음 저자가 `scripts/<basename>` 로 **exec 되지 않고 import 되는** 정본을 더하면 정확히
+> 그 상태가 된다 — 참조 도출은 exec 관례 문자열을 찾기 때문이다."*
+
+축 1a(심볼릭 링크 ∀)의 배포 지점 도출은 `scripts/<basename>` 을 **실행**하는 관례 문자열을
+찾는다. 이 모듈은 `import` 로만 소비되므로 그 문자열이 없고, 도출이 0건이 되어 `:447` 이
+*"배포 지점이 **0건 도출**됐다 — 이 정본은 아무것도 검사되지 않았다"* 로 RED 를 낸다.
+**이 문장이 설계에 없으면 README 의 「기본은 링크」를 읽은 구현자가 그 RED 로 걸어 들어간다.**
+
+**`shared/` 에 마크다운이 없는 것은 아니다.** `shared/README.md` 가 있고 load-bearing 이다
+— `test_copy_of_contract.sh:287-291` 의 축 0 이 그 파일의 계약 수 서술을 단언 대상으로 삼는다.
+`shared/codex/prompt-preamble.md` 도 있다(스크립트가 읽는 프롬프트 조각). 따라서
+*"`shared/` 에는 문서가 없다"* 는 이 설계의 근거가 **아니다.**
+
+새 `.md` 정본을 두지 않는 근거는 둘이고, 순서가 중요하다:
+
+1. **사용자 지목** — `shared/` 는 공통 **모듈**을 두는 자리라는 것이 사용자의 정정이다.
+   기존 두 `.md` 는 모듈의 부속(README · 프롬프트 조각)이지 독립 규정이 아니다.
+2. **이 규정의 독자가 런타임이 아니라 저자다.** 저자는 설치본이 아니라 리포를 읽는다.
+   그래서 배포가 필요 없고, 배포하지 않으므로 아래 셋이 성립 자체를 안 한다.
+
+배포했을 경우 걸렸을 것 (전부 가드 함수 실행으로 확증):
 
 | 배치 후보 | 판정 |
 |---|---|
@@ -110,13 +173,23 @@
 
 **정본**: `shared/adjudication/adjudication.py`
 **배포**: `plugins/spec-distill/scripts/adjudication.py` · `plugins/quality-gates/scripts/adjudication.py`
-— 형제 사본. 기존 `shared/tests/test_copy_of_contract.sh` **axis 1c(import 형제 사본 ∀)**
-가 이미 이 계약을 집행하므로 배포용 새 락은 만들지 않는다.
+— **형제 사본이며 1행에 `# copy-of: shared/adjudication/adjudication.py` 마커를 갖는다.**
+이 마커는 장식이 아니라 `test_no_new_duplication.sh` 의 면제 술어 ②(*"양쪽이 같은 정본을
+copy-of 로 가리킨다"*)가 요구하는 것이다. 마커가 없으면 정본과 사본이 20줄 이상 동일 블록으로
+잡혀 그 락이 RED 를 낸다. 기존 사본 전부가 같은 형태다(`plugins/spec-distill/scripts/
+kill_switch_active.py:1`).
+
+**축 1c 는 PR1 시점에 이 정본을 보지 않는다.** `test_copy_of_contract.sh:753` 의 `CONSUMED_PY`
+는 *추적되는 `.py` 가 실제로 import 하는* `shared/*.py` 만 도출한다. 소비자가 아직
+없는 PR1 에서 새 정본은 그 집합 밖이고, 따라서 ∀ 계약이 걸리지 않는다. 축 1c 의 보호는
+**첫 소비자가 생기는 PR2 부터** 발효한다 — PR1 의 배포 정합성은 §10.1 의 모듈 테스트가
+직접 단언한다(§11 참조).
 
 ### 3.1 API
 
 ```python
-L = Ledger(next_consumer="human")        # "human" | "machine"
+L = Ledger(items="open")                  # "open" | "closed" — 앵커의 fail-<open|closed> 와
+                                          # 같은 값. 소비자 신원이 아니라 **방향**이 인자다.
 
 L.accept(item)                            # 수용
 L.reject(item, why)                       # 기각 — 근거 있는 배제
@@ -126,14 +199,19 @@ L.coerced(field, frm, to, gate=False)     # 강제 — gate=True 면 계수     
 L.source_failed(name, why)                # 입력 자체가 죽음                → degraded
 L.uncountable(what, why)                  # 개수를 원리적으로 모름          → degraded
 
-L.report()   # {"counts": {"accepted","rejected","held","absorbed","coerced","sources_failed"},
-             #  "degraded": bool, "unknown_counts": [str], "reasons": [str]}
-L.blocks()   # next_consumer 에서 결정 — §9
+L.report()    # {"counts": {"accepted","rejected","held","absorbed","coerced","sources_failed"},
+              #  "degraded": bool, "unknown_counts": [str], "reasons": [str]}
+L.surfaced()  # items="open"  → 미판정 항목을 라벨과 함께 포함
+              # items="closed" → 제외
+L.blocks()    # **degraded 이면 항상 True.** items 값과 무관 — §9
 ```
 
 `수용·기각·보류` 는 사용자 어휘(브리프 C16)다. 현재 리포는 quality-gates 쪽이
 `confirm/downgrade/reject`, spec-distill 쪽이 무명으로 갈라져 있다. 모듈은 **회계 어휘**를
 통일하고 각 소비자의 **출력 어휘**는 건드리지 않는다.
+
+`uncountable()` 의 첫 호출처는 `merge_review.py:76-83` 의 세 `return None, True` 경로다
+(§1 · §7 #1 주석).
 
 ### 3.2 모듈이 하지 않는 것
 
@@ -147,7 +225,6 @@ L.blocks()   # next_consumer 에서 결정 — §9
 **모듈이 없으면 소비자는 죽는다.** 배포 사본이 빠지면 `from adjudication import Ledger` 가
 `ImportError` 로 즉시 실패한다 — fallback 을 두지 않는다. 회계를 조용히 건너뛰고 「깨끗함」을
 내는 것이 이 설계가 고치려는 바로 그 실패이므로, degrade 가 아니라 crash 가 맞다.
-`test_copy_of_contract.sh` axis 1c 가 배포 누락을 미리 RED 로 잡는다.
 
 **JS 소비자를 덮지 않는다.** `plugin-audit/scripts/audit-workflow.js` 는 이 파이썬 모듈을
 import 할 수 없다. 그 결함(§7 #9)은 개별 패치로 남는다.
@@ -157,23 +234,58 @@ import 할 수 없다. 그 결함(§7 #9)은 개별 패치로 남는다.
 모든 dispatch 자리는 창 40줄 안에 다음 한 줄을 갖는다:
 
 ```
-**처분** — consumer=<경로|human> · fail-<open|closed>
+**처분** — consumer=<값> · fail-<open|closed>[ · disclosure=<리터럴>]
 ```
+
+### 4.1 `consumer=` 는 닫힌 어휘다
+
+네 값만 유효하고, **그 밖의 값은 RED** 다(자유 서술 금지):
+
+| 값 | 뜻 | 추가 의무 |
+|---|---|---|
+| `<경로>.py` | 결정론 파이썬 소비자 | **그 경로가 추적되는 파일로 실재해야 한다** + 축 B 가 그 파일의 import 를 교차확인 |
+| `<경로>.js` | 결정론 JS 소비자 | **경로 실재** + `disclosure=` 필수 |
+| `orchestrator` | 모델이 자기 턴 안에서 처분 | `disclosure=` 필수 |
+| `human` | 사용자에게 직접 올림 | `disclosure=` 필수 |
+
+**경로 실재 요구는 빠뜨리면 안 되는 것이다.** 이것이 없으면
+`consumer=plugins/x/scripts/없는파일.js · disclosure=아무거나` 가 세 축을 전부 통과한다 —
+축 B 는 「그 파일이 import 한다」만 묻고 없는 파일은 순회 대상이 아니며, 축 C 는 리터럴만
+보고 경로를 안 본다. 판정: `git ls-files --error-unmatch <경로>` 가 성공해야 한다.
+
+`disclosure=<리터럴>` 은 **그 처분 결과가 어디에 나타나는지를 가리키는 문자열**이며, 축 C 가
+그 리터럴이 같은 파일에 실재하는지 검사한다. 예: `disclosure=degrade 채널` ·
+`disclosure=verification_status` · `disclosure=degradedEvents`.
+
+이 요구는 발명이 아니라 `proceed-gate.md:34-41` 의 것을 그대로 가져온 것이다 —
+*"각 skill 은 자기 degrade 채널을 자기 어휘 절에 이름으로 명시해야 한다 …
+**채널이 없다는 사실 자체가 degrade 이고 그렇게 출력해야 한다**"*.
 
 예:
 
 ```
 **처분** — consumer=plugins/spec-distill/scripts/merge_brief_review.py · fail-open
-**처분** — consumer=human · fail-open
+**처분** — consumer=orchestrator · fail-open · disclosure=verification_status
+**처분** — consumer=human · fail-open · disclosure=degrade 채널
 ```
 
 산문이 아니라 **기계 판독 필드**다. 산문 파싱은 깨지고, 깨진 파서는 조용히 통과시킨다.
 
-`consumer=` 가 스크립트 경로면 §5 축 B 가 그 파일을 교차 확인한다. `consumer=human` 이면
-다음 소비자가 사람이라는 선언이고 §9 의 fail 방향이 거기서 나온다.
+### 4.2 면제에 대한 정직한 진술
 
-**면제값이 없다.** 앵커는 있거나 없다. `none` 같은 *아무것도 바꾸지 않는 값*이 없으므로
-「준수」와 「무판정」이 구별 불가능해지는 실패 양식이 성립하지 않는다.
+앞선 판본은 *"면제값이 없다"* 라고 썼다. **그것은 축 A 에 대해서만 참이다.**
+
+- **축 A**(앵커 존재)에는 면제값이 없다 — 앵커가 있거나 없다.
+- **축 B**(import 교차확인)는 `consumer=` 가 `.py` 인 앵커에만 걸린다. 그러므로
+  `orchestrator`/`human`/`.js` 는 **축 B 의 범위 밖**이며, 저자가 값을 그렇게 쓰면 축 B 를
+  피한다. 값 자체는 저자가 쓴다.
+- **축 C** 가 그 세 값에 대해 남는 요구다: 채널 이름을 대라, 그리고 그 이름이 실재하라.
+
+축 C 는 축 B 보다 약하다. `disclosure=` 리터럴이 파일에 있다는 것이 그 채널이 실제로
+읽힌다는 증거는 아니다. **그 한계를 §12 R2 에 위험으로 적고 문면에도 적는다** — 값이
+저자 손에 있는 한 축 B 급 이빨은 이 축에서 나오지 않는다. `CHANGELOG.md:1197` 이 기록한
+verifier-steerable anchor 실패가 접두사에서 *값* 으로 자리를 옮긴 형태이며, 이 설계는
+그것을 없앴다고 주장하지 않고 **어디로 옮겼는지 명시**한다.
 
 ## 5. 컴포넌트 C — dispatch 락
 
@@ -189,39 +301,65 @@ C16). 훅을 추가하지 않으므로 새 kill switch 도 없다 — `/qg` 자�
 2. 각 에이전트에 대해 4표기 통합 정규식으로 dispatch 줄을 찾는다.
    **접두사는 선택적** (`(<plugin>:)?<name>`) — 저자가 접두사를 빼서 자기를 감사 대상에서
    제외하는 경로를 봉쇄한다. 이 함정은 실제로 물렸던 것이다
-   (`plugins/spec-distill/CHANGELOG.md:1197`).
-3. 코퍼스는 **구조 규칙**이다: `plugins/*/skills/**` · `plugins/*/commands/**` ·
+   (`plugins/spec-distill/CHANGELOG.md:1197-1198`).
+3. **경계 규칙은 명시한다.** 이름 집합에 포함 관계가 실재한다 —
+   `adversarial` ⊂ `artifact-adversarial`. 표기 ④는 따옴표가 없으므로
+   (`agent: agent-transparency:transcript-reader`) 따옴표를 경계로 쓸 수 없다. 규칙:
+   이름 앞은 **줄머리 · 공백 · 따옴표 · `:` 중 하나**여야 하고, 뒤는 **따옴표 · 공백 ·
+   줄끝 중 하나**여야 한다. `-` 는 경계가 아니다. 이 규칙이 없으면 `adversarial` 의 ∀
+   요구가 `artifact-adversarial` 의 줄로 만족되면서 총계는 18 로 남아 「거짓양성 0」이
+   검증 불가능해진다.
+   ✎ **실측 (양성 + 음성 대조 둘 다)**: 이 경계 규칙을 넣은 도출은 에이전트 18개가 각각
+   **정확히 1건**의 dispatch 를 갖는다(`not-exactly-1 = 0`). 그리고 맨 `adversarial` 로
+   `plugins/quality-gates/skills/critiquing-artifacts/SKILL.md` 를 훑으면 **매치 0** 이다 —
+   `artifact-adversarial` 줄을 먹지 않는다. **음성 대조가 없으면 이 규칙은 검증되지 않는다**:
+   잘못 먹어도 총계는 18 로 남기 때문이다(§10.2 M13 이 이 대조의 회귀 락).
+4. 코퍼스는 **구조 규칙**이다: `plugins/*/skills/**` · `plugins/*/commands/**` ·
    `plugins/*/scripts/*.js` · `plugins/*/hooks/**` 중 `.md`·`.js`. `.py` 는 Agent 도구를
-   호출할 수 없으므로 코퍼스 밖 — 이름 열거가 아니라 성질이다. 이 규칙이
-   `plugin-audit/scripts/check-law2.py` 의 allowlist 리터럴(거짓양성 3건)을 제거한다.
-4. **dispatch 0건인 에이전트는 RED 다.** 죽은 정의이거나 이 락이 모르는 표기이거나 —
+   호출할 수 없으므로 코퍼스 밖 — 이름 열거가 아니라 성질이다.
+   ✎ *부수 효과이지 목적이 아님*: 이 규칙 덕에 `plugin-audit/scripts/check-law2.py` 의
+   에이전트 이름 리터럴(`CANONICAL_HELPERS`/`CANONICAL_SMOKE` :69-75, `agents=[…]`
+   :220-222)이 이 락의 코퍼스에 들어오지 않는다. **그것들은 결함이 아니라 pre-0 Law 2
+   게이트의 allowlist 이며 이 락이 대체하지 않는다** — 어느 PR 도 그 파일을 건드리지 않는다.
+5. **dispatch 0건인 에이전트는 RED 다.** 죽은 정의이거나 이 락이 모르는 표기이거나 —
    둘 다 고쳐야 할 사실이고, 둘 다 조용히 넘기면 안 된다. 현재 18/18 이 dispatch 를 가지므로
    이 바닥은 실재한다. 면제값을 두지 않는다: 수동 호출 전용 에이전트가 나중에 생기면 그것은
    설계 대화이지 억제값이 아니다.
 
-도출을 **표기 열거에서 출발시키지 않는 이유**: 이 인터뷰에서 저자가 두 번 물렸다. 첫 번째는
+도출을 **표기 열거에서 출발시키지 않는 이유**: 이 사이클에서 저자가 두 번 물렸다. 첫 번째는
 `subagent_type` grep 제안(5표기 중 1개 커버), 두 번째는 설계 중 프로토타입이 표기 ②④를
 놓친 것(18 중 16). 열거는 fail-open 이고, 정의 집합에서 출발하면 `0건` 이 답이 되어
 누락이 드러난다.
 
-### 5.2 두 축
+### 5.2 세 축
 
-| 축 | 단언 | 이빨 |
-|---|---|---|
-| **A — 앵커 존재 (∀ 지배)** | 모든 dispatch 줄에 대해 창 40줄 안에 앵커가 있다 | 새 dispatch 가 처분 없이 들어오면 RED |
-| **B — 소비자 교차확인 (∀)** | `consumer=` 가 `*.py` 인 모든 앵커에 대해, 그 파일이 `adjudication` 을 import 한다 | 앵커가 소비자를 지목해 놓고 그 소비자가 회계를 안 하면 RED |
+| 축 | 단언 | 적용 대상 | 이빨 |
+|---|---|---|---|
+| **A — 앵커 존재 (∀ 지배)** | 모든 dispatch 줄에 대해 창 40줄 안에 유효 서식의 앵커가 있다 | **18/18** | 새 dispatch 가 처분 없이 들어오면 RED |
+| **B — 소비자 교차확인 (∀)** | `consumer=` 가 `*.py` 인 모든 앵커에 대해, 그 파일이 `adjudication` 을 import 한다 | `.py` 값을 쓴 앵커 | 앵커가 소비자를 지목해 놓고 그 소비자가 회계를 안 하면 RED |
+| **C — 채널 실재 (∀)** | `consumer=` 가 `.js`·`orchestrator`·`human` 인 모든 앵커에 대해 `disclosure=` 가 있고, 그 리터럴이 같은 파일에 실재한다 | 나머지 앵커 | 채널 이름을 안 대거나 가짜 이름을 대면 RED |
 
-축 A 는 ∃-존재검사가 아니라 **∀-지배**다. `shared/tests/` 의 선례(`test_web_kill_switch.sh:350-358`)가
-∃ 판본에서 실패한 기록을 갖는다 — 가드 하나가 dispatch 열 개를 만족시켰다.
+축 A 는 ∃-존재검사가 아니라 **∀-지배**다. 선례
+`plugins/spec-distill/tests/test_web_kill_switch.sh:350-358` 이 지금은 ∀ 루프이고, ∃ 판본이
+실패했던 기록은 같은 플러그인 `CHANGELOG.md:1198` 에 있다 — 가드 하나가 dispatch 열 개를
+만족시켰다.
 
-**축 B 가 이 설계의 이빨이다.** 축 A 만 있으면 앵커는 주석 한 줄로 만족된다
-(`test_web_kill_switch.sh:54` 가 자기 파일에 이 한계를 적어 뒀다). 축 B 는 앵커가 거짓말을
-못 하게 만든다.
+**축 B 가 가장 센 이빨이지만 전부를 덮지 않는다.** 축 A 만 있으면 앵커는 주석 한 줄로
+만족된다(`test_web_kill_switch.sh:54` 가 자기 파일에 이 한계를 적어 뒀다). 축 B 는 앵커가
+거짓말을 못 하게 만들지만 `.py` 소비자에만 걸린다. 축 C 는 나머지를 덮되 더 약하다 — §4.2.
+
+**표기 ④의 앵커 거처.** `context: fork` skill 의 dispatch 줄은 YAML frontmatter 안에 있고
+(`plugins/agent-transparency/skills/briefing-current-state/SKILL.md:6`), `**처분** — …` 는
+유효한 YAML 이 아니다. 규칙: **표기 ④의 앵커는 frontmatter 닫힘(`---`) 직후 본문 첫
+블록에 둔다.** 그 본문이 fork agent 의 프롬프트 일부가 된다는 부작용은 감수한다 — 한 줄이고,
+그 agent 가 자기 처분 규약을 읽는 것은 해롭지 않다. 창 40줄은 이 배치를 수용한다.
 
 ### 5.3 vacuity 하한
 
 - 에이전트 도출이 0 이면 RED (도출이 깨진 것을 「위반 없음」으로 읽지 않는다)
 - dispatch 줄 도출이 0 이면 RED
+- **에이전트 수와 dispatch 줄 수를 둘 다 출력한다.** 총계만 보면 코퍼스 축소가 부분 손실로
+  끝났을 때 발화하지 않는다(§10.2 M7)
 - `--emit-scanned` 는 실제로 훑은 경로를 낸다. 선언에서 목록을 도출하면 자기 반복이라
   커버리지 증거가 되지 않는다
 
@@ -237,9 +375,10 @@ C16). 훅을 추가하지 않으므로 새 kill switch 도 없다 — `/qg` 자�
 
 **`CLAUDE.md` → Plugin Shape → 컴포넌트 격리** 아래 항목 하나:
 
-> **subagent 발견은 처분을 밝힌다.** 모든 dispatch 자리는 `**처분** — consumer=<경로|human> ·
-> fail-<open|closed>` 한 줄을 갖는다. 판정기가 항목을 버리면 센다 — 셀 수 없으면 「셀 수
-> 없음」을 낸다(침묵과 0 은 다른 사실이다). 회계는 `shared/adjudication/` 이 한다.
+> **subagent 발견은 처분을 밝힌다.** 모든 dispatch 자리는
+> `**처분** — consumer=<경로|orchestrator|human> · fail-<open|closed>[ · disclosure=<리터럴>]`
+> 한 줄을 갖는다. 판정기가 항목을 버리면 센다 — 셀 수 없으면 「셀 수 없음」을 낸다(침묵과
+> 0 은 다른 사실이다). 회계는 `shared/adjudication/` 이 한다.
 > **흡수(dedup)와 강제(coercion)는 소실이 아니다** — 계수하되 degrade 가 아니다.
 > fail 방향은 다음 소비자가 정한다: 기계면 막고, 사람이면 라벨을 붙여 보여준다.
 
@@ -255,12 +394,12 @@ default 다.
 
 | # | 자리 | 성격 | 수리 |
 |---|---|---|---|
-| 1 | `merge_review.py:85-87` | **소실** — 비-dict 원소를 버리고 `return issues, False` 로 「깨끗함」을 단언 | `hold()` + reason. 형제 `merge_brief_review.py:161-176` 이 이미 가진 형태 |
-| 2 | `merge_review.py:180-181` | 사실은 보고(`codex_yaml_malformed`), **개수 미보고** — 그 시점에 `findings` 가 있어 셀 수 있다 | 개수를 advisory 에 포함 |
+| 1 | `merge_review.py:85-87` (+ `:76-83`) | **소실** — 비-dict 원소를 버리고 `return issues, False` 로 「깨끗함」을 단언. 같은 함수의 `:76-83` 은 **원리적 미상** | `:85-87` → `hold()`; `:76-83` → `uncountable()`. 형제 `merge_brief_review.py:161-176` 이 이미 가진 형태 |
+| 2 | `merge_review.py:180-181` | 사실은 보고(`codex_yaml_malformed`), **개수 미보고** — 그 시점에 `findings` 가 누적돼 있어 셀 수 있다 | 개수를 advisory 에 포함 |
 | 3 | `merge_review.py:279-287` | **소실** — 원장 통째(`except: return []`) + `id` 없는 레코드. `main()` 이 결과를 안 본다. 짝 `_write_history` 는 실패 시 advisory 를 낸다(비대칭) | `source_failed()` + `main()` 이 읽어 advisory |
 | 4 | `merge_review.py:263-267` | **강제인데 게이트를 바꿈** — `raised_count 5→0` 이 `>=3` 정체 게이트를 무력화 | `coerced(gate=True)` |
 | 5 | `merge_review.py:326-328` | **소실** — `category`·`target_section` 이 둘 다 빈 codex finding 이 원장에 안 들어감 | `hold()` |
-| 6 | `merge_review.py:489-490` | 입력 zero 화. 사실은 advisory, 개수 없음 — `CHANGELOG.md:1634-1638` 에 `Known gaps` 로 기록된 연기 | 개수 포함 |
+| 6 | `merge_review.py:489-490` | 입력 zero 화. 사실은 advisory, 개수 없음 — `CHANGELOG.md:1634-1638` 에 `Known gaps` 로 기록된 연기 | 개수 포함. **잔여 있음** — §12 R7 |
 | 7 | `synthesize_findings.py:38-39`·`58-60` | **파일 부재를 「경로 없음」과 구별 못 함** → `dropped=0` → `render()` 공지가 영원히 안 켜짐 | `source_failed()` |
 | 8 | `synthesize_findings.py:283-285` | **미판정 finding 을 카운터 없이 keep.** 형제 `synthesize_artifact_findings.py:197` 에는 `unadjudicated += 1` 이 있다 | `hold()` 계수 |
 | 9 | `audit-workflow.js:581-594` | codex 갈래가 `unverified=true` 는 세우면서 `degradedEvent` 를 push 하지 않는다. 구조가 같은 Claude 갈래 `:556-559` 는 push 한다 | 1줄 패치 (JS — 모듈 밖) |
@@ -273,12 +412,13 @@ default 다.
 ```
 plugins/*/agents/*.md  ──(frontmatter name:)──►  락 도출 ∀18
                                                     │
-SKILL.md / *.js  ──(4표기 dispatch 줄)──────────────┤ 축 A: 앵커 ∀지배
+SKILL.md / *.js  ──(4표기 dispatch 줄)──────────────┤ 축 A: 앵커 ∀지배 (18/18)
       │                                             │
-      └─ **처분** — consumer=<경로> · fail-<dir> ────┘ 축 B: 그 경로가 import 하는가
+      ├─ consumer=<*.py>  ─────────────────────────►┤ 축 B: 그 파일이 import 하는가
+      └─ consumer=orchestrator|human|<*.js>  ──────►┘ 축 C: disclosure 리터럴이 실재하는가
                           │
                           ▼
-        plugins/*/scripts/adjudication.py  (형제 사본 ← shared/adjudication/)
+        plugins/*/scripts/adjudication.py  (형제 사본 + # copy-of: ← shared/adjudication/)
                           │
         accept/reject/hold/absorbed/coerced/source_failed/uncountable
                           │
@@ -301,13 +441,26 @@ fail 방향은 저자가 고르는 것이 아니라 **다음 소비자**에서 �
 needs_revise`, `:274`). 다음 소비자가 사람이면서 그 사람이 내용과 차단을 둘 다 필요로 하기
 때문이다.
 
-`Ledger.blocks()` 는 이 표를 코드로 옮긴 것이다:
+### 9.1 방향은 하나가 아니라 둘이다
 
-- `next_consumer="machine"` → `degraded or held > 0` 이면 `True`
-- `next_consumer="human"` → 항상 `False`. 대신 호출자는 `report()` 를 렌더할 의무를 진다
+앞선 판본은 `next_consumer` 하나로 방향을 정했고, 그래서 위 잡종을 **표현할 수 없었다** —
+`human` 이면 `blocks()` 가 항상 `False` 인데 `merge_brief_review.py:274` 는 사람이 다음인데도
+막는다. 실측 세 자리를 다시 보면 방향이 **두 개의 서로 다른 대상**에 걸린다:
 
-**후자가 이 설계의 정직한 한계다.** 락은 정적 검사라 「사람에게 실제로 보여줬는가」를 재지
-못한다. 축 B 는 *모듈을 쓰는가*까지이고 *출력을 렌더하는가*는 아니다. §12 에 위험으로 기록한다.
+| 무엇의 방향인가 | 규칙 | 세 자리 대조 |
+|---|---|---|
+| **항목**(미판정 finding) | 다음이 **기계**(자동 편집)면 `closed`(제외), **사람**이면 `open`(라벨 붙여 표시) | artifact=closed · audit-workflow=open · merge_brief=open |
+| **verdict** | **degraded 이면 언제나 막는다.** 예외 없음 | `converged` 연언 · `⚠ degraded N건` 배너 · `escalates` — 셋 다 |
+
+그래서 모듈의 인자는 소비자 신원이 아니라 **항목 방향** 하나(`items="open"|"closed"`)이고,
+그 값은 앵커의 `fail-<open|closed>` 와 **같은 값**이다. `blocks()` 는 인자를 안 받는다 —
+`degraded` 면 True 다. 이렇게 하면 `consumer=` 의 네 값을 `human|machine` 두 값으로
+매핑할 필요 자체가 사라진다(그 매핑은 `orchestrator` 에서 답이 없었다).
+
+`merge_brief_review.py` 는 이제 표현된다: `items="open"` + degraded → `blocks()` True.
+
+**남는 한계.** 락은 정적 검사라 「사람에게 실제로 보여줬는가」를 재지 못한다. 축 B 는
+*모듈을 쓰는가*까지이고 *출력을 렌더하는가*는 아니다(§12 R1).
 
 ## 10. 검증 계획
 
@@ -320,26 +473,34 @@ needs_revise`, `:274`). 다음 소비자가 사람이면서 그 사람이 내용
 - `coerced(gate=False)` 는 `degraded` 를 올리지 않고 `gate=True` 는 올린다
 - `uncountable` 은 `unknown_counts` 에 들어가고 `counts` 의 정수에는 안 들어간다
 - `blocks()` 가 `next_consumer` 별로 §9 표와 일치한다
+- **배포 정합성** — 각 `plugins/*/scripts/adjudication.py` 가 존재하고, 1행 `# copy-of:`
+  마커가 정본을 가리키며, 그 줄을 뺀 바이트가 정본과 같다. PR1 에서 축 1c 가 아직 발효하지
+  않으므로(§3) 이 단언이 PR1 의 배포 보호다
 
 ### 10.2 락 mutation (락이 실제로 무는지)
 
 각 mutation 은 RED 를 내야 한다. **양성 대조**로 무변경 트리가 GREEN 인 것을 먼저 확인한다
-— 그것 없이는 RED 도 증거가 아니다.
+— 그것 없이는 RED 도 증거가 아니다. `PYTHONDONTWRITEBYTECODE=1` 로 돌린다.
 
-| # | mutation | 기대 |
-|---|---|---|
-| M1 | 임의 dispatch 자리의 앵커 줄 삭제 | 축 A RED |
-| M2 | 앵커의 `fail-open` → `fail-sideways` | 축 A RED |
-| M3 | 앵커의 `consumer=` 를 import 하지 않는 파일로 교체 | 축 B RED |
-| M4 | `merge_brief_review.py` 의 `import adjudication` 삭제 | 축 B RED |
-| M5 | 새 agent 정의 + 앵커 없는 dispatch 추가 | 축 A RED |
-| M6 | agent 정의의 `name:` 을 dispatch 와 다르게 변경 | dispatch 0건 보고 |
-| M7 | 락의 코퍼스 글롭을 `skills/` 만으로 축소 | vacuity 하한 또는 `--emit-scanned` 커버리지 RED |
-| M8 | 락 메시지의 `${tot}` → `$tot` (한글 접미) | 락 자기 테스트 RED |
-| M9 | dispatch 에서 접두사 제거(`"spec-reviewer"`) | 여전히 잡힘 (자기면제 봉쇄 확인) |
+| # | mutation | 기대 | 무엇을 관측해 판정하나 |
+|---|---|---|---|
+| M1 | 임의 dispatch 자리의 앵커 줄 삭제 | 축 A RED | 그 파일:줄이 실패 메시지에 이름으로 등장 |
+| M2 | 앵커의 `fail-open` → `fail-sideways` | 축 A RED | 서식 위반 메시지 |
+| M3 | `consumer=` 를 import 하지 않는 `.py` 파일로 교체 | 축 B RED | 그 경로가 실패 메시지에 등장 |
+| M4 | `merge_brief_review.py` 의 `import adjudication` 삭제 | 축 B RED | 동상 |
+| M5 | 새 agent 정의 + 앵커 없는 dispatch 추가 | 축 A RED | 새 이름이 실패 메시지에 등장 |
+| M6 | agent 정의의 `name:` 을 dispatch 와 다르게 변경 | **§5.1⑤ dispatch-0건 RED** | 그 에이전트 이름 + `0건` |
+| M7 | 코퍼스 글롭을 `skills/` 만으로 축소 | **dispatch 줄 수가 18→15 로 줄어 §5.3 의 «둘 다 출력» 대조가 RED**. vacuity 하한(0)은 발화하지 않는다 | 에이전트 18 vs dispatch 15 불일치 |
+| M8 | 락 메시지의 `${tot}` → `$tot` (한글 접미) | 락 자기 테스트 RED | 출력에 빈 문자열 |
+| M9 | dispatch 에서 접두사 제거(`"spec-reviewer"`) | **GREEN 이어야 함** (자기면제 봉쇄 확인) | `--emit-scanned` 에 그 파일이 여전히 있고 dispatch 총계가 18 유지 |
+| **M10** | `.py` 앵커 하나를 `consumer=human · disclosure=<실재 리터럴>` 로 교체 | **축 B 를 벗어나 축 C 로 이동 — GREEN 이 예상된다.** 이것은 결함이 아니라 §4.2 가 명시한 면제 경로의 **측정**이다 | 축 B 대상 수가 1 줄고 축 C 대상 수가 1 는다 |
+| **M11** | `disclosure=` 리터럴을 파일에 없는 문자열로 교체 | 축 C RED | 그 리터럴이 실패 메시지에 등장 |
+| **M12** | 비-`.py` 앵커에서 `disclosure=` 통째 삭제 | 축 C RED | 서식 위반 |
+| **M13** | `adversarial` 의 dispatch 줄을 지우고 `artifact-adversarial` 만 남김 | **§5.1③ 경계 규칙 RED** (`adversarial` dispatch 0건) | 경계 규칙이 없으면 GREEN 이 나므로 이 mutation 이 그 규칙의 유일한 계측기 |
 
-**mutation 은 삭제 축만 흔들지 않는다** — M2·M3·M6·M9 는 추가·반전·형태변경이다.
-`PYTHONDONTWRITEBYTECODE=1` 로 돌린다(같은 길이 변이가 stale `.pyc` 를 못 넘는 함정).
+**mutation 은 삭제 축만 흔들지 않는다** — M2·M3·M6·M9·M10·M11·M13 은 추가·반전·형태변경이다.
+M9 와 M10 은 **green-expected** 이므로 통과가 정답이다. 그런 assert 는 모양만으로 이빨을
+판별할 수 없으므로, 둘 다 「무엇을 관측해 판정하나」 칸에 **관측 대상 수치**를 적었다.
 
 ### 10.3 결함 수리 회귀
 
@@ -349,12 +510,20 @@ needs_revise`, `:274`). 다음 소비자가 사람이면서 그 사람이 내용
 
 ## 11. PR 분할
 
-| PR | 내용 | 이유 |
+| PR | 내용 | 단독 GREEN 근거 |
 |---|---|---|
-| **PR1** | `shared/adjudication/` 모듈 + 배포 사본 + `test_adjudication_behavior.sh` | 소비자가 없어도 단독으로 GREEN. 리뷰 표면이 작다 |
-| **PR2** | 결함 수리 9건 + 회귀 테스트 | PR1 의 모듈을 첫 적용. 계약과 첫 적용례가 함께 리뷰된다 |
-| **PR3** | 앵커 18줄 + `test_dispatch_disposition.sh` + mutation | 락은 앵커가 다 있어야 GREEN 이라 같은 PR |
+| **PR1** | `shared/adjudication/` 모듈 + 배포 사본(`# copy-of:` 마커) + `test_adjudication_behavior.sh` | 축 1c 는 소비자가 없어 아직 발효하지 않으므로(§3), §10.1 의 **배포 정합성 단언**이 그 자리를 대신한다 |
+| **PR2** | 결함 수리 9건 + **앵커가 지목할 모든 `.py` 소비자를 모듈로 전환** + 회귀 테스트 | 소비자가 생기므로 축 1c 발효. PR3 의 축 B 가 요구할 대상이 전부 이 PR 안에서 충족된다 |
+| **PR3** | 앵커 18줄 + `test_dispatch_disposition.sh`(축 A/B/C) + mutation M1~M13 | 축 B 의 대상이 PR2 에서 이미 전환됐으므로 단독 GREEN |
 | **PR4** | `CLAUDE.md` · `docs/plugin-authoring.md` 문면 | 앞의 것이 실재한 뒤에 문서가 그것을 가리킨다 |
+
+**PR2 의 범위 = 「앵커가 지목할 모든 `.py` 소비자」이지 고정된 숫자가 아니다.** 현재 이름으로
+확인된 하한은 5개다 — `merge_review.py` · `merge_brief_review.py` ·
+`synthesize_findings.py` · `synthesize_artifact_findings.py` · `check_qa_ledger.py`. 이 중
+결함이 있는 것은 둘(#1~#8)이고 나머지 셋은 **이미 카운터를 가진 정상 파일의 기계적 전환**이다.
+`plugin-audit` 의 `assemble-audit-data.py`·`check-grounding.py` 가 여기에 더해질 수 있다 —
+**전수 목록 확정이 PR3 의 선결 조건**이며 plan 단계에서 앵커 18개를 실제로 작성하면서
+확정한다(§Handoff 「plan 으로 넘기는 것」).
 
 각 PR 은 건드린 플러그인의 `plugin.json` SemVer bump 와 `CHANGELOG.md` 항목을 포함한다.
 `shared/` 는 플러그인이 아니라 bump 대상이 아니지만, 배포 사본을 받는 플러그인은 bump 한다.
@@ -364,37 +533,43 @@ needs_revise`, `:274`). 다음 소비자가 사람이면서 그 사람이 내용
 | | 위험 | 완화 |
 |---|---|---|
 | R1 | **락이 「모듈을 쓰는가」까지만 재고 「출력을 렌더하는가」는 못 잰다.** `report()` 를 만들고 버려도 GREEN | §10.3 의 결함 회귀가 출력을 직접 본다. 정적 락으로는 여기까지가 한계임을 문면에 적는다 |
-| R2 | 앵커가 주석·죽은 분기로 만족될 수 있다 | 축 B 가 교차 확인. 그래도 `consumer=` 가 import 만 하고 안 쓰는 경우는 남는다 |
+| R2 | **`consumer=` 값이 저자 손에 있다.** `.py` 대신 `orchestrator`/`human` 을 쓰면 축 B 를 벗어난다 — 축 C 는 더 약하다 | §4.2 가 이 사실을 명시하고 M10 이 그것을 **측정**한다. 없앴다고 주장하지 않는다. 값 오용은 사람이 읽는 diff 리뷰가 맡는다 |
 | R3 | 모듈이 소비자마다 안 맞아 우회가 생긴다 | 모듈은 **회계만** 하고 출력 서식은 안 건드린다(§3.2). 우회가 생기면 그 자체가 설계 결함 신호 |
 | R4 | Tier C 외부 6종은 계약 밖 | `quality-pipeline/SKILL.md:706` 이 선택을 **model-owned (lightness)** 로 못 박았다. 계약이 구속하는 것은 선택이 아니라 소비 — 그 소비자는 이 리포 소유다 |
-| R5 | 18줄 앵커가 하니스 무게가 된다 | 한 줄씩이고 면제값이 없다. 다만 앵커 서식 변경은 18곳 재편집이라 서식을 먼저 확정했다 |
+| R5 | 18줄 앵커가 하니스 무게가 된다 | 한 줄씩이다. 다만 앵커 서식 변경은 18곳 재편집이라 서식을 먼저 확정했다 |
 | R6 | `# guards:` 선언이 `*.sh` 에서만 읽힌다 | 락이 `*.sh` 이므로 해당 없음. 단 이 사실이 문서화돼 있지 않아 `docs/` 에 죽은 `# guards:` 2건이 실재한다 — 별건 |
+| **R7** | **#6 의 수리가 자기 인용이 기록한 결함을 닫지 못한다.** `CHANGELOG.md:1634-1638` 은 mixed 라운드에서 `severity: high` finding 이 사라지고 `combined_verdict: approved` 가 남는 것을 실측했는데, 개수를 advisory 에 붙여도 **거짓 approved 는 그대로다**. §9 표가 `merge_review.py` 를 human/fail-open 에 두므로 `blocks()` 도 False | 이 사이클에서 **닫지 않는다.** verdict 규칙 변경은 이 설계 범위 밖이며 별건 원장으로 넘긴다. #6 이 얻는 것은 「몇 개가 사라졌는지 사람이 본다」까지다 |
+| **R8** | **산문 소비 자리들이 실제로 버리는지 미측정.** 정적 읽기로는 「처분을 안 적었다」까지만 안다 | 앵커가 그 자리들에 처분을 *적게* 만든다. 실제 행동 측정은 skill 실행이 필요하며 이 설계에 없다 |
+| **R9** | **codex 미실행 — 모델 다양성 0.** 이 설계와 그 리뷰가 전부 same-family 다 | 완화 수단 없음. 한도 회복 후 재리뷰가 유일한 경로이며 그때까지 이 문서의 공유-맹점 위험은 열려 있다 |
 
 ## 13. 기각한 대안
 
+「소비자」의 모집단을 먼저 고정한다 — **dispatch 자리 18곳** 중 결정론 `.py` 소비자를 갖는
+것이 하한 5곳, 나머지가 orchestrator·human·JS 다(§11). 아래 표의 수는 전부 이 정의를 쓴다.
+
 | 대안 | 기각 이유 |
 |---|---|
-| `shared/rules/subagent-findings.md` 정본 신설 | 사용자 정정 — `shared/` 는 공통 **모듈** 자리다. 그리고 배포하면 락 3개와 충돌(§2 표) |
+| `shared/rules/subagent-findings.md` 정본 신설 | 사용자 정정 — `shared/` 는 공통 **모듈** 자리다. 그리고 이 규정의 독자가 저자라 배포가 필요 없다(§2) |
 | 통일 필드 스키마 | `proceed-gate.md:34-37` 이 명시적으로 거절. 형제 `_norm_sev` 둘이 반대 방향 기본값을 각자 근거와 함께 가짐 |
 | 「버린 것 전부 세기」 | 흡수·강제·원리적 미상 3종을 잡아 신호를 희석 (§1) |
 | 새 frontmatter 키 `adjudicated_by:` | 런타임이 안 읽는 키. `none` 다수값이 준수와 무판정을 구별 불가능하게 만든다 |
 | 표기법 통일 후 도출 | 5표기 중 3개가 다른 도구 API·다른 계층이거나 model-owned selection 을 파괴해야 통일된다 |
 | agent 정의에서 역방향으로 소비자 찾기 | Tier C 외부 6종은 이 리포에 정의가 0개 |
-| 소비자 실행 관측 락 (fixture in / stdout out) | 진짜 이빨이지만 소비자 8 중 6만 덮고, 그 6은 이미 카운트를 낸다 — 가장 안 아픈 곳에 가장 비싼 도구. §10.3 의 회귀 테스트가 같은 일을 더 싸게 한다 |
-| `test_proceed_gate_adopters.sh` 인스턴스화 | 단언층 전체가 `.md` 표면의 한국어 앵커 grep 이고 구조 가드가 `.py` 경로에 fail-closed RED. 소비자 8/15 가 `.py` |
+| 소비자 실행 관측 락 (fixture in / stdout out) | 진짜 이빨이지만 **`.py` 소비자 하한 5곳**만 덮고 그중 셋은 이미 카운트를 낸다 — 가장 안 아픈 곳에 가장 비싼 도구. §10.3 의 회귀 테스트가 같은 일을 더 싸게 한다 |
+| `test_proceed_gate_adopters.sh` 인스턴스화 | 단언층 전체가 `.md` 표면의 한국어 앵커 grep 이고 구조 가드가 `.py` 경로에 fail-closed RED. 이 축의 소비자 상당수가 `.py` 라 그대로는 못 쓴다 |
 
 ## 14. 브리프 열린 질문 대조
 
 | OQ | 답 |
 |---|---|
 | OQ1 어느 하위에 두나 | `shared/adjudication/` — 새 축. 기존 4축은 소비되는 서브시스템 이름 |
-| OQ2 배포 형태 | 형제 사본, `plugins/*/scripts/`. 기존 axis 1c 가 집행 |
+| OQ2 배포 형태 | 형제 사본 + `# copy-of:` 마커, `plugins/*/scripts/`. 축 1c 는 첫 소비자(PR2)부터 발효 |
 | OQ3 presence/absence 코퍼스 분리 | **부분 답.** 이 락에 한해서는 해소된다 — 코퍼스가 `plugins/**` 구조 규칙이고 정본이 `shared/` 라 공유 계약 파일이 들어올 자리가 구조적으로 없다. 리포 전역의 구조적 가드 문제는 **미해결**(감사 §8) |
-| OQ4 「버린 걸 세는가」를 기계가 어떻게 | 축 B — `consumer=` 가 지목한 파일이 모듈을 import 하는가 |
+| OQ4 「버린 걸 세는가」를 기계가 어떻게 | **`.py` 소비자는 축 B** 가 import 를 교차확인한다. 나머지는 **축 C** 가 채널 이름의 실재까지만 잰다 — 그 채널이 실제로 읽히는지는 못 잰다(§4.2 · R2) |
 | OQ5 생성 시점 독자 경로 | `docs/plugin-authoring.md` 가 `plugin-dev` 를 가리키는 직전 한 줄. `plugin-dev` 자체는 외부 vendoring 이라 편집 불가 |
-| OQ6 결함을 이 사이클에 고치나 | 고친다 — 9건 전부, PR2 |
+| OQ6 결함을 이 사이클에 고치나 | 고친다 — 9건 전부, PR2. 단 #6 의 잔여는 R7 로 남긴다 |
 | OQ7 Tier C 구속 범위 | 소비만. 선택은 model-owned 로 못 박혀 있다 |
 | OQ8 잔여 8건 구분 | 도출을 정의 집합(∀18)에서 출발시켜 잔여 개념이 사라졌다 |
 | OQ9 죽은 참조 제거 | **별건** — `quality-gates:synthesizer` 는 agent 정의가 없어 ∀18 에 안 들어온다 |
-| OQ10 수리 범위 | **사용자가 확정한 것은 8건**이고 #8(`synthesize_findings.py:283-285`)은 설계 중 저자가 추가로 찾은 것이라 **총 9건**. 「무검증 10곳」은 앵커 18줄이 덮는다 |
+| OQ10 수리 범위 | **사용자가 확정한 것은 8건**이고 #8(`synthesize_findings.py:283-285`)은 설계 중 저자가 추가로 찾은 것이라 **총 9건**. 여기에 사용자가 승인한 「`.py` 소비자 전부 모듈 전환」이 더해진다(§11) |
 | OQ11 런타임 seam 재측정 | **미해결** — 방향성 D1. 이 설계는 훅 갈래를 열지 않는다 |
