@@ -66,7 +66,7 @@ Full 카탈로그와 case study: [`docs/philosophy/devbrew-harness-philosophy.md
 - **Self-approval** — 같은 턴의 writer/reviewer (Law 2 위반).
 - **Polite stop** — 긍정적 리뷰 후 다음 액션으로 가지 않고 요약을 narrate. Approval gate와 구분: gate는 사용자가 redirect 가능, polite stop은 acknowledge만 가능.
 - **Trivia ceremony** — 한 문장 diff에 full pipeline 실행 (Anthropic *Best Practices*).
-- **Subagent spray** — 선언 없는 fan-out. 비용과 fan-out을 선언하지 않고 대규모로 퍼뜨리는 것이 anti-pattern이다 (규모 자체가 아니라 선언 없음이).
+- **Subagent spray** — 선언 없는 fan-out. 비용과 fan-out을 선언하지 않고 대규모로 퍼뜨리는 것이 anti-pattern이다 (규모 자체가 아니라 선언 없음이). **Agent(subagent) 호출 자체는 이 리포에서 상시 허용** — 매번 승인을 묻지 않는다 (Opus 5 기본 시스템 프롬프트의 `unless the user requested it` 를 사용자가 상시 요청으로 해제, 2026-08-22). 금지되는 것은 선언 없는 대규모 fan-out 뿐이다. Workflow 와 deep-research 는 범위 밖 — 여전히 명시 요청이 필요하다.
 - **Unbounded autonomy** — max-iter count, repeat 감지, 사용자-override kill switch 없는 루프.
 - **Polite handoff** — brainstorming/spec-distill review-approved 후 다음 단계를 narrate만 하고 spec-distill 의 `AskUserQuestion` proceed 게이트를 띄우지 않음. 이 게이트는 `reviewing-spec` Phase 5 와 `conducting-interview` 종료 Step B **양쪽**에 있고, 둘은 같은 계약(`plugins/spec-distill/references/proceed-gate.md`)을 공유한다 — 정본은 그 파일이다. 게이트는 사용자가 redirect 가능한 approval gate(P17)이자 AP2 봉쇄 장치 — 게이트를 skip한 narrate-only 종료가 polite-stop의 한 종류 (AP2 variant). 대칭으로, 옵션 ①(/compact 후 writing-plans) 선택 시 /compact 노출 후 같은 턴에 writing-plans로 직진하는 cross-compact 조기 진행도 게이트 P17 우회의 대칭 실패로 금지 (AP2 variant, spec-distill v0.11.0 AC19).
 
