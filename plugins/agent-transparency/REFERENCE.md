@@ -67,7 +67,7 @@
 
 ## AC ↔ 검증 산출물
 
-검증 산출물 = `tests/*.py` **와** `tests/ab_gate.sh` · `tests/oracle/`.
+검증 산출물 = `tests/*.py` **와** `tests/harness/ab_gate.sh` · `tests/oracle/`.
 실행 가능한 게이트 스크립트도 센다.
 
 | AC | 검증 산출물 |
@@ -86,7 +86,7 @@
 | AC26 | `tests/test_plugin_contract.py` |
 | AC27 | `tests/test_plugin_contract.py` |
 | AC28 | `tests/test_readability_parity.py` · `tests/test_output_style.py` |
-| AC29 | `tests/ab_gate.sh` · `tests/oracle/` · `tests/ab_judge.py` · `tests/ab_driver.py` · `tests/ab_seal.py` |
+| AC29 | `tests/harness/ab_gate.sh` · `tests/oracle/` · `tests/ab_judge.py` · `tests/ab_driver.py` · `tests/ab_seal.py` |
 | AC31 | `tests/test_output_style.py` |
 | AC32 | `tests/test_ab_runner_contract.py` · `tests/test_plugin_contract.py` |
 | AC33 | `tests/test_plugin_contract.py` |

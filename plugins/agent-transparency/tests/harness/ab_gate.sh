@@ -22,7 +22,11 @@
 set -uo pipefail
 : "${AB_MODEL:?}"; : "${AB_EFFORT:?}"; : "${AB_JUDGE_MODEL:?}"; : "${AB_JUDGE_EFFORT:?}"
 # ★ 대입마다 종료를 확인한다 — 빈 ROOT 가 다음 줄들의 경로를 절대경로로 만든다.
-ROOT="$(cd "$(dirname "$0")/../../.." && pwd)" || exit 1
+# ★ 이 파일은 `tests/harness/` 에 있다 — 회귀 러너·`/plugin-audit` 수집기 둘 다
+#    `harness/` 를 제외하기 때문이다(테스트가 아니라 유료 A/B 측정 러너라서).
+#    그래서 리포 루트까지 **네 단계** 올라간다(tests/harness → tests → 플러그인 →
+#    plugins → 루트). 파일을 다시 옮기면 이 깊이도 같이 고쳐야 한다.
+ROOT="$(cd "$(dirname "$0")/../../../.." && pwd)" || exit 1
 [ -n "$ROOT" ] || { echo "ROOT 해석 실패" >&2; exit 1; }
 PD="$ROOT/plugins/agent-transparency"
 [ -d "$PD" ] || { echo "플러그인 디렉토리 없음: $PD" >&2; exit 1; }

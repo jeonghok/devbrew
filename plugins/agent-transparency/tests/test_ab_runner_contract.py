@@ -149,7 +149,10 @@ class TestRubrics(unittest.TestCase):
             self.assertEqual(len(questions), 4, name)
 
 
-RUNNER = PLUGIN_DIR / "tests" / "ab_gate.sh"
+# `tests/harness/` 에 있다 — 회귀 러너와 `/plugin-audit` 수집기가 둘 다 그 디렉토리를
+# 제외하기 때문이다. 이 파일은 러너를 **실행하지 않고 읽기만** 하므로 위치와 무관하지만,
+# 경로 리터럴이라 이동하면 여기도 같이 고쳐야 한다.
+RUNNER = PLUGIN_DIR / "tests" / "harness" / "ab_gate.sh"
 
 
 def extract_guard(text: str) -> str:
@@ -396,8 +399,9 @@ class TestRunnerContract(unittest.TestCase):
 class TestAssignedArtifactsExist(unittest.TestCase):
     """AC47 의 나머지 절 — 배정된 산출물이 **실제로 존재하는가**.
 
-    Task 9 가 아니라 여기 있는 이유: 이 assertion 의 대상인 `tests/ab_gate.sh` 가
-    이 task 에서 생긴다. Task 9 에 두면 Task 9·10 이 red 로 끝난다.
+    Task 9 가 아니라 여기 있는 이유: 이 assertion 의 대상인 러너(현재
+    `tests/harness/ab_gate.sh`)가 이 task 에서 생긴다. Task 9 에 두면 Task 9·10 이
+    red 로 끝난다.
     """
 
     def test_every_assigned_path_exists(self) -> None:
