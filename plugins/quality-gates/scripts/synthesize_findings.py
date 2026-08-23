@@ -18,24 +18,36 @@ import sys
 import yaml
 from collections import defaultdict
 
+from adjudication import Ledger
+
 
 SEV_ORDER = {"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 2}
 
 
-def load_yaml(path):
+def load_yaml(path, ledger=None):
     """Return `(list, dropped)` — 이 경로도 `_as_list` 초크포인트를 통과한다.
 
     예전에는 여기서만 `or []`로 끝나서 `findings: "CRITICAL: ..."` 같은 스칼라가
     그대로 반환되고 apply_verdicts가 **글자 단위로** 순회했다(문자 하나당 드롭 1건).
     `_as_list`의 docstring이 "ingestion 한 곳에서 타입을 확정한다"고 주장하는데
     정작 주 수집 경로가 그 한 곳을 우회하고 있었다.
+
+    #7 — 「경로 없음」과 「경로는 있는데 파일이 없음」은 다른 사건이다. 전자는
+    이 실행에서 그 소스를 쓰지 않기로 한 것이지 실패가 아니다. 후자는 입력
+    실패다 — 예전엔 둘 다 `([], 0)`으로 합쳐져서, 파일이 사라져도 dropped=0 이라
+    render()의 공지가 영원히 안 켜졌다.
     """
     if not path:
+        # 경로가 아예 없다 — 실패가 아니다. 여기서 source_failed 를 올리면
+        # 정상 실행이 degraded 가 된다.
         return [], 0
     try:
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or []
     except FileNotFoundError:
+        # 경로는 주어졌는데 파일이 없다 — 입력 실패다.
+        if ledger is not None:
+            ledger.source_failed(str(path), "FileNotFoundError", primary=True)
         return [], 0
     if isinstance(data, dict) and "verdicts" in data:
         return _as_list(data.get("verdicts"), "verdicts")
@@ -255,7 +267,7 @@ def promote_new_findings(raw_new, existing):
     return promoted, dropped
 
 
-def apply_verdicts(findings, verdicts):
+def apply_verdicts(findings, verdicts, ledger=None):
     """Apply adversarial verdicts. Returns (out, dropped_malformed).
 
     `dropped`를 세는 이유: 예전에는 non-mapping finding을 맨 `continue`로 버렸다 —
@@ -266,6 +278,10 @@ def apply_verdicts(findings, verdicts):
 
     같은 결함을 adversarial 승격 경로에서는 이미 막아놨었다. 이 함수만 계측
     밖이었다 — 한쪽 출처만 세는 drop 채널은 반쪽짜리 정직성이다.
+
+    #8 — `ledger`가 주어지면 판정이 없는 finding(fail-open으로 keep)을
+    `hold()`로 센다. 이 채널은 위 `dropped`(non-mapping)와 다르다: 건드리지
+    않고 그대로 둔다.
     """
     by_id = {v.get("finding_id"): v for v in verdicts if isinstance(v, dict)}
     out = []
@@ -282,6 +298,11 @@ def apply_verdicts(findings, verdicts):
         f = _normalize_identity(dict(f))
         v = by_id.get(finding_id(f))
         if v is None:
+            # 유지한다(fail-open — 다음 소비자가 사람이다). 다만 «세지 않으면»
+            # 판정이 있었던 것과 구별되지 않는다. 형제
+            # synthesize_artifact_findings.py:197 에 unadjudicated += 1 이 있다.
+            if ledger is not None:
+                ledger.hold(finding_id(f), "adversarial 판정 부재")
             out.append(f)
             continue
         verdict = v.get("verdict", "confirm")
@@ -391,7 +412,7 @@ def _norm_sev(f):
     return "SUGGESTION"
 
 
-def render(findings, suppressed_count, dropped_malformed=0):
+def render(findings, suppressed_count, dropped_malformed=0, held_count=0):
     if not findings:
         # drop 공지는 이 분기에도 반드시 나가야 한다. 예전에는 아래 표-있는
         # 경로에만 있었고, 살아남은 발견이 0이면 여기서 먼저 return해 공지가
@@ -412,6 +433,9 @@ def render(findings, suppressed_count, dropped_malformed=0):
                 "file/severity/summary) — see stderr. "
                 "**이 실행은 clean이 아니다**: 버려진 주장은 심사되지 않았다."
             )
+        if held_count > 0:
+            # 개수만 싣는다 — finding 텍스트·reason 은 여기 들어오지 않는다.
+            out.append(f"미판정 {held_count}건 — adversarial 판정이 없어 유지됐다.")
         return "\n".join(out) + "\n"
 
     counts = {"CRITICAL": 0, "IMPORTANT": 0, "SUGGESTION": 0}
@@ -443,6 +467,9 @@ def render(findings, suppressed_count, dropped_malformed=0):
     )
     if suppressed_count > 0:
         counts_line += f" — {suppressed_count} suppressed (conf <= 4)"
+    if held_count > 0:
+        # 개수만 싣는다 — finding 텍스트·reason 은 여기 들어오지 않는다.
+        counts_line += f" — 미판정 {held_count}건"
 
     out = ["## Review Findings (Synthesized)", "", counts_line, ""]
     out.append("| Sev | Path:Line | Conf | Summary | Source |")
@@ -476,11 +503,14 @@ def main():
     ap.add_argument("--findings", default="")
     args = ap.parse_args()
 
+    ledger = Ledger(items="open")
+
     doc = load_yaml_doc(args.adversarial) if args.adversarial else None
     verdicts, dropped_verdicts = extract_verdicts(doc)
-    raw, dropped_raw = load_yaml(args.findings) if args.findings else ([], 0)
+    raw, dropped_raw = (load_yaml(args.findings, ledger=ledger)
+                        if args.findings else ([], 0))
 
-    findings, dropped_primary = apply_verdicts(raw, verdicts)
+    findings, dropped_primary = apply_verdicts(raw, verdicts, ledger=ledger)
     new_raw, dropped_newlist = extract_new_findings(doc)
     promoted, dropped_promoted = promote_new_findings(new_raw, findings)
     # 모든 출처의 소실을 **한 채널로** 합친다. 하나라도 빠지면 stdout 공지가
@@ -495,7 +525,8 @@ def main():
     kept, suppressed = suppress(findings)
     kept = sort_findings(kept)
 
-    sys.stdout.write(render(kept, len(suppressed), dropped_malformed))
+    held_count = ledger.report()["counts"]["held"]
+    sys.stdout.write(render(kept, len(suppressed), dropped_malformed, held_count))
 
 
 if __name__ == "__main__":
