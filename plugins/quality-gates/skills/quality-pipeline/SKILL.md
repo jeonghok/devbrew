@@ -10,9 +10,8 @@ description: >
   PR-understanding publish continuation — a separate consent-gated step, not a gate.
 cost_class: variable
 allowed-tools:
-  # Group 1 — Preflight scripts (실행 순서: setup → pre-check → trivia)
+  # Group 1 — Preflight scripts (실행 순서: setup → trivia)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/pre-pipeline-check.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh:*)
   # Group 2 — Review gate scripts
@@ -77,7 +76,7 @@ handles deletion.
 이 SKILL은 단일 어시스턴트 턴 안에서 전체 파이프라인을 실행. 섹션 그룹:
 
 1. **Workflow (top-to-bottom on invocation):**
-   - [Preflight](#preflight) — kill switch / setup-qg / pre-pipeline-check
+   - [Preflight](#preflight) — kill switch / setup-qg
    - [Arguments](#arguments) — `/qg` flags 파싱
    - [Dispatch Loop](#dispatch-loop) — two gates serialized in order with per-gate iteration
 2. **Per-gate dispatch logic:**
@@ -134,29 +133,10 @@ Exit non-zero → surface stderr verbatim and abort.
 이번 run의 완료만 반영하도록(SKILL은 `Write`만 있고 삭제 tool이 없어 이 정리는
 스크립트가 담당).
 
-**Step P3 — Pre-pipeline check (scope detection).** Run:
-
-```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/pre-pipeline-check.sh"
-```
-
-The script exits non-zero on hard precondition violations (`no_session_id`,
-`invalid_session_id`) and zero on normal codes. **Non-zero exit must abort
-the pipeline immediately** — surface the script's stderr verbatim and stop.
-Do NOT proceed to the Review gate with degraded state.
-
-On zero exit, parse the `result:` line. Handle every emitted code; unknown
-values are a contract violation, not "treat as fresh":
-
-| `result:` | Meaning | Downstream action |
-|---|---|---|
-| `fresh_start` | First run on this branch | normal — silent |
-| `preserved` | Session file fresh; reuse | normal — silent |
-| `no_session_data` | No prior state | normal — silent |
-| `cleared_branch_mismatch` | HEAD branch changed; state wiped | tell user "branch changed; session scope reset"; do not use prior files.md |
-| `cleared_stale` | Session file aged out; deleted | tell user "stale session data cleared"; do not use prior files.md |
-| `active_resume` | Mid-pipeline resume on same session | continue with existing state |
-| (other) | Unknown — contract violation | abort with stderr verbatim |
+**Preflight 는 P2 에서 끝난다.** v5.0.0 이전의 Step P3는 세션 누적 파일 `files.md`
+의 생애를 관리하던 스크립트를 호출했고, 그 파일이 사라지면서 지울 대상도 알릴
+사실도 남지 않아 은퇴시켰다. SID 존재·패턴 검증은 `setup-qg.sh` 가 P2 에서 같은
+정규식으로 먼저 수행하고 exit 1 하므로, 그 계약은 그대로다.
 
 ## Arguments
 

@@ -14,7 +14,6 @@ PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SETUP="$PLUGIN_DIR/scripts/setup-qg.sh"
 DISCOVER="$PLUGIN_DIR/scripts/discover-plan.sh"
 TRIVIA="$PLUGIN_DIR/scripts/check-trivia.sh"
-PRECHECK="$PLUGIN_DIR/scripts/pre-pipeline-check.sh"
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
@@ -125,15 +124,6 @@ if [[ "$RC" -eq 0 || "$RC" -eq 1 ]]; then
   ok "T3c: check-trivia.sh ran from worktree (rc=$RC)"
 else
   no "T3c: check-trivia.sh unusual rc=$RC, out=$OUT"
-fi
-
-# pre-pipeline-check.sh should not crash; reads `git rev-parse --abbrev-ref HEAD`
-OUT=$(cd "$WT" && HOME="$WT" "$PRECHECK" 2>&1 || true)
-# Script may exit non-zero based on its own logic; we only assert no shell error
-if [[ -n "$OUT" || $? -lt 127 ]]; then
-  ok "T3d: pre-pipeline-check.sh ran from worktree"
-else
-  no "T3d: pre-pipeline-check.sh failed to execute"
 fi
 
 rm -rf "$(dirname "$REPO")"

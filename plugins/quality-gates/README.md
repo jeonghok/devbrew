@@ -475,7 +475,6 @@ state는 Claude Code 세션마다 `.claude/quality-gates/<session-id>/`에 추�
 
 - `pipeline.md` — 파이프라인 frontmatter (status, current_gate, iteration counters) + body (Gate Results, History).
 - `files.md` — 이번 세션에서 편집한 파일들 (`/qg` scope narrowing 용).
-- `branch.md` — 마지막으로 본 git 브랜치 (branch-mismatch 감지 용).
 
 stale sibling 폴더(mtime이 `DEVBREW_QUALITY_GATES_TTL_HOURS`(기본 24h)보다 오래된)는
 `/qg` 또는 `/cancel-qg --gc` 실행 시 garbage-collect됩니다. `SessionStart` hook은
