@@ -82,6 +82,24 @@ L = Ledger(); L.source_failed("codex", "한도 소진", primary=False)
 print(L.report()["degraded"], L.blocks())')"
 assert_eq "$out" "True False" "양성대조(b): 보조 source 실패는 degraded 이되 blocks 아님"
 
+#    혼합 대조 — 주+보조가 «같은 원장에» 함께 들어온 경우. 이것이 없으면
+#    `any`→`all` 한 단어 변이가 14개 단언을 전부 GREEN 으로 남긴다: 원소 하나짜리
+#    리스트에서 두 함수는 구별되지 않는다. 그리고 claude(주)+codex(보조) 동시 실패가
+#    이 모듈이 존재하는 바로 그 경우다.
+out="$(run 'from adjudication import Ledger
+L = Ledger()
+L.source_failed("codex", "한도 소진", primary=False)
+L.source_failed("claude", "파싱 불가", primary=True)
+print(L.blocks())')"
+assert_eq "$out" "True" "혼합 source_failed — 보조가 섞여도 주가 있으면 blocks (any→all 변이 계측기)"
+
+out="$(run 'from adjudication import Ledger
+L = Ledger()
+L.coerced("a", 1, 2, gate=False)
+L.coerced("b", 3, 4, gate=True)
+print(L.report()["degraded"])')"
+assert_eq "$out" "True" "혼합 coerced — 비-gate 가 섞여도 gate 가 있으면 degraded (any→all 변이 계측기)"
+
 # ── 6. surfaced() 의 방향
 out="$(run 'from adjudication import Ledger
 L = Ledger(items="open"); L.hold("h", "왜"); L.uncountable("u", "왜")
