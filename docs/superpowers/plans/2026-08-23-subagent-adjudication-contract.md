@@ -589,7 +589,12 @@ class TestAdjudicationAccounting(unittest.TestCase):
         self.assertIn("adjudication_unknown:", out)
         self.assertIn("claude_issues", out,
                       "무엇을 셀 수 없었는지 이름이 나와야 한다")
-        self.assertNotIn("adjudication_held: 0\nadjudication_unknown: \n", out,
+        # ⚠ 이 음의 단언의 문자열은 «실제 출력 형식과 정확히 같아야» 한다.
+        #   `_yaml_scalar` 를 통과하면 빈 값이 `adjudication_unknown: ""` 로 나오므로
+        #   `adjudication_unknown: \n` 을 찾으면 영원히 만족돼 이빨이 0 이 된다
+        #   (실측: 이 라운드에서 실제로 그렇게 무장해제됐다). 출력 형식을 바꾸는
+        #   편집은 이 문자열도 함께 고친다.
+        self.assertNotIn('adjudication_held: 0\nadjudication_unknown: ""\n', out,
                          "0 으로 뭉개면 거짓 clean 이다")
 
     def test_malformed_codex_yaml_reports_count(self):
@@ -808,10 +813,22 @@ def _sanitize_history_record(rec: dict, ledger: Ledger | None = None) -> dict:
         merged["held"] += r["counts"]["held"]
         merged["unknown"] += r["unknown_counts"]
         merged["reasons"] += r["reasons"]
-    print("adjudication_held: %d" % merged["held"])
-    print("adjudication_unknown: %s" % ",".join(merged["unknown"]))
+    # ⚠ **이 파일의 모든 stdout 은 `_yaml_scalar` 를 거친다.** 거치지 않으면
+    #   codex 가 쓴 `summary` 의 `\n`(`_yaml_unscalar` 가 진짜 개행으로 푼다)이
+    #   두 번째 `combined_verdict:` 줄을 «주입»한다 — SKILL 이 stdout 에서 verdict 를
+    #   읽고 평면 파서가 last-write-wins 라 주입된 값이 이긴다. 실측 재현됨.
+    print("adjudication_held: %s" % _yaml_scalar(merged["held"]))
+    print("adjudication_unknown: %s" % _yaml_scalar(",".join(merged["unknown"])))
     for line in merged["reasons"]:
-        print("adjudication_reasons: %s" % line)
+        print("adjudication_reasons: %s" % _yaml_scalar(line))
+```
+
+**그리고 hold 사유를 만들 때 `str()` 이 아니라 `repr()` 을 쓴다** — `#5`(`:360` 부근)와
+`#6`(`:535` 부근) 둘 다. claude 쪽·history 쪽 hold 는 이미 `repr()` 이고, 그것이
+개행을 무력화하는 지점이다:
+
+```python
+codex_ledger.hold(repr(f.get("summary", ""))[:60], "…")   # str() 이 아니다
 ```
 
 - [ ] **Step 4: 테스트가 통과하는지 확인한다**
