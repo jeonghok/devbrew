@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.34.0] — 2026-08-23
+
+### Added
+- `scripts/adjudication.py` — `shared/adjudication/adjudication.py` 정본을 가리키는 상대 심볼릭 링크. subagent 발견의 처분 회계(`수용·기각·보류` + 흡수·강제·입력실패·원리적 미상). 리포 최초의 import-only `.py` 심볼릭 링크.
+
 ## [0.33.0] — 2026-08-22
 
 interview brief 의 **분량 상한을 제거**한다. 절별 `≤N줄` 예산도, 150줄 트립와이어도,
