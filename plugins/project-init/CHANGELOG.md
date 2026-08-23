@@ -7,12 +7,17 @@
 
 ## [3.0.0] — 2026-08-23
 
+### Added
+- `tests/test_no_write_matcher_hooks.sh` — 이 플러그인의 `PostToolUse` 항목 중 쓰기 도구(`Write`/`Edit`/`MultiEdit`/`NotebookEdit`)에 발화하는 것이 하나도 없음을 잠근다. matcher 부재·빈 문자열도 "전체 도구에 발화"로 취급하고(실측, Claude Code 2.1.239), `Bash` matcher 항목의 생존을 양성 대조로 확인한다.
+
 ### Removed
 - **`hooks/docs-lint.py` (PostToolUse, `matcher: "Write|Edit|MultiEdit"`)** — 쓰기-도구 matcher 는 Bash heredoc·`sed -i` 로 쓴 파일을 보지 못한다. 열거를 고치는 대신 검사 자체를 제거했다(이동 아님). 함께 사라지는 검사: R1 크기 · R2 목차 · R5 코드펜스 언어 · R6 내부 링크 해석 · `CLAUDE.md`↔`AGENTS.md` 포인터 drift · `AGENTS.md` 의 `## Project Charter` 필수 하위항목 무결성. 이것들을 대신 수행하는 훅·테스트·게이트는 리포에 없다.
 - `tests/test_docs_lint.py` — 위 훅의 테스트.
+- `tests/smoke.sh` — 존재 이유가 스스로 밝힌 첫 줄 그대로였다: `# Runs the docs-lint hook against every fixture and asserts expected stdout pattern.` 훅이 사라지며 유일한 소비자를 잃었다.
+- `tests/fixtures/` (19개 파일) — 위 smoke script 의 유일한 소비 대상이던 fixture 트리(happy/violation 케이스 전부).
 
 ### Deprecated
-- kill switch 토큰 `DEVBREW_SKIP_HOOKS=project-init:docs-lint` 은 가리킬 대상을 잃었다. 설정해도 아무 효과가 없다 — 런타임 advisory 는 두지 않는다(대응하는 기능이 옮겨간 것이 아니라 사라졌으므로 조용한 재활성화가 일어날 수 없다).
+- kill switch 토큰 `DEVBREW_SKIP_HOOKS=project-init:docs-lint` 은 가리킬 대상을 잃었다. 설정해도 아무 효과가 없다 — 런타임 advisory 는 두지 않는다(대응하는 기능이 옮겨간 것이 아니라 사라졌으므로 조용한 재활성화가 일어날 수 없다). CLAUDE.md §메타데이터의 one-minor deprecation window 없이 훅과 토큰을 같은 릴리스에서 제거한다 — 근거: `hooks/docs-lint.py` 는 애초부터 non-blocking advisory 전용이었다(자기 docstring "Non-blocking advisory pattern: outputs systemMessage on violation, {} on pass"; `main()`의 모든 반환 경로가 `return 0`; `emit()`이 내보내는 JSON은 `{"systemMessage": ...}` 또는 `{}` 뿐, 차단·거부 필드 없음 — 삭제 직전 파일 `git show d44c56a^:plugins/project-init/hooks/docs-lint.py`로 확인). 이 훅의 제거가 깰 수 있는 것은 advisory 메시지 노출뿐이라, deprecation window 가 보호하려는 대상("작동 중인 동작이 예고 없이 사라짐")이 애초에 존재하지 않는다. **이 근거는 훅이 blocking 이었다면 성립하지 않는다** — 그런 경우 이 문단을 전례로 인용하지 말고 별도 deprecation window를 둘 것.
 
 ### Changed
 - `commands/project-init.md` — 헌장 abort advisory 가 더 이상 "docs-lint 이 사후 플래그합니다"를 약속하지 않는다. `.claude/rules/agent-tool-permission.md` 를 `AGENTS.md` 에서 링크하지 않는 배치 결정은 유지하되, 근거에서 docs-lint R6 참조를 뺐다.
