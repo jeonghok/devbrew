@@ -5,6 +5,27 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [2.2.0] — 2026-08-23
+
+`/project-init` 이 `.claude/rules/agent-tool-permission.md` 를 만들던 경로를 제거한다.
+
+### Removed
+- `templates/shared/agent-tool-permission.md` — 규칙 본문 템플릿.
+- `commands/project-init.md` `### Step 3.6` — Agent 호출 권한을 묻던 질문. `#### 4a` 의
+  해당 템플릿 읽기 항목, `#### 4f` 의 쓰기 블록(`.claude/rules/` 생성 + `.gitignore`
+  한 줄 추가), `### Step 5` 보고의 해당 항목도 함께.
+- `tests/test_agent_permission_contract.py` — 위 계약 전용 회귀 락. 잠글 계약이 사라졌다.
+
+### Notes
+- 제거 이유: Agent 호출 허용은 *작업 환경의 개인 설정*이라 프로젝트 초기화의 산출물이
+  아니다. `/project-init` 이 대상 레포에 git-제외 파일을 만들고 `.gitignore` 까지 편집하는
+  것은 이 커맨드가 약속한 범위(git-workflow 규약 + charter) 밖의 부작용이다.
+- CLAUDE.md 의 one-minor deprecation window 를 거치지 않고 바로 제거했다. 도입(2.1.0)이
+  하루 전이고 이 산출물에 의존하는 다운스트림이 없어 window 가 보호할 대상이 없다는
+  사용자 판단.
+- 이 리포 자체의 Agent 상시 허용 규약(`CLAUDE.md` **Subagent spray** 항목)은 이 변경과
+  무관하게 유지된다 — 그것은 devbrew 의 규약이지 `/project-init` 의 산출물이 아니다.
+
 ## [2.1.1] — 2026-08-22
 
 `agent-tool-permission.md` 템플릿을 영어로 다시 쓰고 출처·배경 문단을 제거한다.
