@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.6.2] — 2026-08-23
+
+### Added
+- dispatch 자리(3곳)에 처분 앵커 — `**처분** — consumer=… · fail-… [· disclosure=…]`. `shared/tests/test_dispatch_disposition.sh` 축 A①②③④·B·C 가 집행한다.
+
 ## [0.6.1] — 2026-08-23
 
 ### Fixed

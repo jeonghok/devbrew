@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.35.1] — 2026-08-23
+
+### Added
+- dispatch 자리(7곳)에 처분 앵커 — `**처분** — consumer=… · fail-… [· disclosure=…]`. `shared/tests/test_dispatch_disposition.sh` 축 A①②③④·B·C 가 집행한다.
+
 ## [0.35.0] — 2026-08-23
 
 새 표면 3개(minor) — `merge_review.py` stdout에 subagent 발견의 처분 회계 채널을 얹는다.
