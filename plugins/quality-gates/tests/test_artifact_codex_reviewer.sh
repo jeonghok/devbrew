@@ -141,5 +141,38 @@ if [ -f "$SCRIPTS/run_artifact_codex_reviewer.sh" ]; then
   rm -rf "$stub2"
 fi
 
+
+# ── FALLBACK: CLAUDE_PLUGIN_ROOT 부재에도 codex 에 도달한다 ───────────────────
+# 이 러너는 스킬의 bash 블록에서 호출된다. 그 환경에 CLAUDE_PLUGIN_ROOT 는 없다
+# (2.1.239 실측) — fallback 이 없으면 `set -u` 아래에서 codex 에 **도달하기 전에**
+# 죽는다. 실패가 loud 하긴 해도 co-review 가 매 라운드 0회가 되므로, 이 러너의
+# 존재 이유(별-계열 모델의 교차 검증)가 통째로 사라진다.
+#
+# **결과로 잰다.** "exit 0 + YAML 존재"는 고장난 러너도 만족한다 — degrade 계약이
+# 정확히 그렇게 설계돼 있기 때문이다. 그 형태의 락은 이빨이 없다. 여기서는 mock
+# codex 를 태워 `codex_failed: false` + 실제 finding 이 나오는지 본다.
+# mutation 2축: (a) `:-` fallback 삭제 → RED  (b) fallback 경로 파손 → RED.
+mkdir -p ""$tmp/fbbin""
+cat > ""$tmp/fbbin"/codex" <<'SH'
+#!/usr/bin/env bash
+cat <<'JSONL'
+{"type":"item.completed","item":{"type":"agent_message","text":"```yaml\nfindings:\n  - category: fallback_probe\n    severity: high\n    summary: FB\n```"}}
+JSONL
+SH
+chmod +x ""$tmp/fbbin"/codex"
+FBOUT=""$tmp/fbbin"/../fallback-out.yaml"; rm -f "$FBOUT"
+( unset CLAUDE_PLUGIN_ROOT; PATH=""$tmp/fbbin":$PATH" bash "$SCRIPTS/run_artifact_codex_reviewer.sh" "$tmp/doc.md" "$tmp" "$FBOUT" ) >/dev/null 2>&1
+if grep -q 'codex_failed: false' "$FBOUT" 2>/dev/null && grep -q 'fallback_probe' "$FBOUT" 2>/dev/null; then
+  ok "FALLBACK: env 부재에도 codex 에 도달해 finding 을 낸다"
+else
+  no "FALLBACK: env 부재에서 codex 에 도달하지 못했다 ($(tr '\n' ' ' < "$FBOUT" 2>/dev/null || echo MISSING))"
+fi
+grep -qE '^PLUGIN_ROOT="\$\{CLAUDE_PLUGIN_ROOT:-' "$SCRIPTS/run_artifact_codex_reviewer.sh" \
+  && ok "FALLBACK: 대입 라인에 fallback 이 있다" \
+  || no "FALLBACK: 대입 라인에 fallback 이 없다 (`set -u` 에서 즉사)"
+grep -qF '"${CLAUDE_PLUGIN_ROOT}/scripts/' "$SCRIPTS/run_artifact_codex_reviewer.sh" \
+  && no "FALLBACK: fallback 을 우회하는 bare 참조가 남아 있다" \
+  || ok "FALLBACK: bare 참조 잔여 없음"
+
 rm -rf "$tmp"
 finish

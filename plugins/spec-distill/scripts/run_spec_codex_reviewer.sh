@@ -25,6 +25,12 @@ DOC_PATH="${1:-}"
 PROJECT_DIR="${2:-}"
 OUTPUT_PATH="${3:-}"
 
+# CLAUDE_PLUGIN_ROOT는 훅 실행에만 주입된다 — 스킬의 bash 블록에는 오지 않는다.
+# fallback 없이 참조하면 `set -u` 아래에서 codex에 **도달하기 전에** 즉사하고,
+# 산출물은 `aborted_before_completion` 이 되어 모델 다양성이 매번 0이 된다.
+# 형제 `run_brief_codex_reviewer.sh`와 같은 철자를 쓴다(세 번째 철자 발명 금지).
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+
 if [[ -z "$OUTPUT_PATH" ]]; then
   echo "usage: run_spec_codex_reviewer.sh <doc_path> <project_dir> <output_yaml_path>" >&2
   exit 2
@@ -134,7 +140,7 @@ STDOUT_FILE="$SCRATCH/codex.jsonl"
 STDERR_FILE="$SCRATCH/codex.stderr"
 
 # Build the design-doc prompt (path-only input — no spec/AC auto-discovery, C3).
-if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_spec_codex_prompt.py" \
+if ! python3 "${PLUGIN_ROOT}/scripts/build_spec_codex_prompt.py" \
        "$DOC_PATH" > "$PROMPT_FILE"; then
   echo 'findings: []' > "$OUTPUT_PATH"
   echo 'meta:' >> "$OUTPUT_PATH"; echo '  codex_failed: true' >> "$OUTPUT_PATH"
@@ -183,7 +189,7 @@ fi
 # final pipeline is otherwise unguarded — a python3/write failure here would
 # abort the script non-zero with NO fallback YAML, breaking the
 # always-exit-0/always-writes-YAML contract.
-if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/codex_findings_to_yaml.py" \
+if ! python3 "${PLUGIN_ROOT}/scripts/codex_findings_to_yaml.py" \
        --stderr-file "$STDERR_FILE" \
        --meta-override-exit-code "$EXIT_CODE" \
        --meta-override-reason "$OVERRIDE_REASON" \

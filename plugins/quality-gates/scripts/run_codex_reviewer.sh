@@ -48,6 +48,12 @@ DIFF_PATH="${1:-}"
 PROJECT_DIR="${2:-}"
 OUTPUT_PATH="${3:-}"
 
+# CLAUDE_PLUGIN_ROOT는 훅 실행에만 주입된다 — 스킬의 bash 블록에는 오지 않는다.
+# fallback 없이 참조하면 `set -u` 아래에서 codex에 **도달하기 전에** 즉사하고,
+# 산출물은 `aborted_before_completion` 이 되어 모델 다양성이 매번 0이 된다.
+# 형제 `run_brief_codex_reviewer.sh`와 같은 철자를 쓴다(세 번째 철자 발명 금지).
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+
 if [[ -z "$OUTPUT_PATH" ]]; then
   echo "[quality-gates] usage: run_codex_reviewer.sh <diff> <project_dir> <output>" >&2
   exit 2
@@ -148,7 +154,7 @@ elif [[ -n "${SPEC_AC_FILE:-}" && -f "${SPEC_AC_FILE}" ]]; then
   SPEC_AC="$SPEC_AC_FILE"
   echo "[quality-gates] codex spec context: using explicit SPEC_AC_FILE=$SPEC_AC_FILE" >&2
 else
-  SPEC_JSON="$(bash "${CLAUDE_PLUGIN_ROOT}/scripts/discover-spec.sh" 2>/dev/null || true)"
+  SPEC_JSON="$(bash "${PLUGIN_ROOT}/scripts/discover-spec.sh" 2>/dev/null || true)"
   if [[ -z "$SPEC_JSON" ]]; then
     echo "[quality-gates] codex spec context: discover-spec.sh produced no output (script missing or crashed? check CLAUDE_PLUGIN_ROOT) — empty <spec_context>." >&2
   else
@@ -174,7 +180,7 @@ else
 fi
 
 # Build prompt (spec AC from resolution above, or empty when /dev/null).
-if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_codex_prompt.py" \
+if ! python3 "${PLUGIN_ROOT}/scripts/build_codex_prompt.py" \
        "$DIFF_PATH" "$SPEC_AC" > "$PROMPT_FILE"; then
   echo '{"codex_failed": true, "reason": "prompt_build_failed"}' > "$OUTPUT_PATH"
   exit 0
@@ -227,7 +233,7 @@ fi
 # (run_artifact_codex_reviewer.sh, run_spec_codex_reviewer.sh)는 이 가드를 이미
 # 갖고 있었고 주석으로 같은 실패를 지목하고 있었다; 여기에만 백포트되지 않았다.
 # `-s` 검사가 별도로 필요한 이유: exit 0 + 빈 출력이 가능하다(파이프 실패, 부분 쓰기).
-if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/codex_findings_to_yaml.py" \
+if ! python3 "${PLUGIN_ROOT}/scripts/codex_findings_to_yaml.py" \
     --stderr-file "$STDERR_FILE" \
     --meta-override-exit-code "$EXIT_CODE" \
     --meta-override-reason "$OVERRIDE_REASON" \
