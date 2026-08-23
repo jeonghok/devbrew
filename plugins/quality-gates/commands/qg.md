@@ -121,8 +121,8 @@ is aborted at a decision point.
 | Command | Effect |
 |---------|--------|
 | `/qg critique <path>` | 비-코드 산출물 비평-수정 루프(별도 skill; 라운드별 커밋; 코드 아님) |
-| `/qg` | Ask gate scope (Review only / both), then run; session-scoped diff |
-| `/qg both` | Full pipeline (both gates), no gate-scope question; session-scoped diff |
+| `/qg` | Ask gate scope (Review only / both), then run; git-derived diff (branch + worktree) |
+| `/qg both` | Full pipeline (both gates), no gate-scope question; git-derived diff (branch + worktree) |
 | `/qg branch` | Ask gate scope, then run; full-branch diff (vs `main`) |
 | `/qg branch <name>` | Ask gate scope, then run against branch `<name>` in isolated worktree |
 | `/qg --paths <glob>...` | Ask gate scope, then run; scope to matched paths |
@@ -140,13 +140,15 @@ is aborted at a decision point.
 | `DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1` | Preserve branch worktree after pipeline completes or is cancelled (default: removed) |
 | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` | Disable the Runtime gate sandbox executor (read-only smoke fallback; verdict capped at SKIP_WITH_EVIDENCE) |
 
-### Scope (default: session)
+### Scope (default: git 변경)
 
-`/qg` reviews files **edited in the current Claude Code session** by default.
-A PostToolUse hook (`post-tool-use-session-tracker.py`) accumulates touched
-files into `.claude/quality-gates/<session-id>/files.md`. The pre-pipeline check
-(`pre-pipeline-check.sh`) clears this file when the branch changes mid-session
-or when 24+ hours pass without activity.
+`/qg` 는 **git 이 보고하는 변경**을 기본 scope 로 리뷰한다 — base 대비 브랜치 diff
+와 worktree 변경의 합집합이며, `scripts/check-review-scope.sh` 가 결정론으로
+산출한다. v5.0.0 이전에는 PostToolUse 훅이 편집 파일을 누적했고, 그래서 Bash
+heredoc·`sed -i` 로 쓴 파일이 scope 에서 조용히 빠졌다. git 도출은 어떤 도구로
+썼든 같은 답을 낸다.
+
+**리포 밖 절대경로 편집은 잡히지 않는다** — `--paths` 로 명시한다.
 
 Override with `/qg branch` (full branch) or `/qg --paths <glob>...` (manual).
 

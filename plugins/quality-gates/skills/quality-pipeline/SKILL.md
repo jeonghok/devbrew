@@ -262,7 +262,7 @@ Iterative fix-loop, `max_review_iterations = 5` (hard-coded constant).
 
 For each iteration N (1..5):
 
-1. Compute diff scope (paths / branch / session — from preflight result). **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> Review scope: session (<COUNT> files edited this session). 전체 PR/브랜치는 /qg branch.` (`<COUNT>` = preflight `files.md` 항목 수). 명시적 `/qg branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/qg branch`는 결정론적 escape hatch로 유지).
+1. Compute diff scope (paths / branch / session — from preflight result). **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> Review scope: session (<COUNT> changed files). 전체 PR/브랜치는 /qg branch.` (`<COUNT>` = `$resolved_scope_file_count` — Step 1b 의 `check-review-scope.sh` 산출값). 명시적 `/qg branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/qg branch`는 결정론적 escape hatch로 유지).
 
 **Step 1b — Changes-exist signal (iteration N=1 only).** Before dispatching the
 scout, run the read-only changes-exist signal **once** and cache it for the rest
@@ -295,7 +295,7 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 > the floor is the integrity half (deterministic).
 
 2. Dispatch the scout: `Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py ...)` — compute its
-   metrics from the review scope you resolved at step 1 (the session `files.md` set, the
+   metrics from the review scope you resolved at step 1 (the git-derived changed-file set, the
    `branch` diff, or the `--paths` globs). Scope is model-owned; there is no cached scope
    variable to thread.
 3. **Compose and dispatch the reviewer set (scope-driven).** You (orchestrator)
@@ -347,7 +347,7 @@ Agent({
   description: "Security review (Review gate iter N)",
   prompt: "Run code-level security review on the current diff.
     project_dir: \"$project_dir\"
-    diff_scope: <the review scope you resolved at step 1: session (files.md set) / branch (git diff vs base) / paths (--paths globs)>
+    diff_scope: <the review scope you resolved at step 1: session (git-derived changed files) / branch (git diff vs base) / paths (--paths globs)>
     plan_path: <path or 'auto'>
     iteration: N
     <…scout-supplied context…>"
@@ -492,12 +492,14 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
 
    **Resolved-scope file count (floor input — reuse, not a new measurement).**
    `$resolved_scope_file_count` = the file count of the scope you resolved at
-   step 1: for `session` it is the same count the v2.5.0 transparency line already
-   surfaced (the `files.md` items); for `branch` it is the cached
-   `$branch_ahead_count`; for `paths` it is the number of `--paths` glob matches you
-   resolved. If this count cannot be determined (e.g. the session `files.md` is
-   unreadable), do NOT silently treat it as 0 — treat the run as `$degraded == yes`
-   for the floor (the ELSE-IF branch below + loud advisory). This is an
+   step 1. All three modes now derive from git, not from an accumulated session
+   file: for the default (`session`) and for `branch` it is the cached
+   `$branch_ahead_count` from `check-review-scope.sh` when the worktree is clean,
+   and that count plus the worktree's own changed files when `$worktree_dirty ==
+   yes`; for `paths` it is the number of `--paths` glob matches you resolved. If
+   this count cannot be determined (e.g. `check-review-scope.sh` reported
+   `degraded: yes`), do NOT silently treat it as 0 — treat the run as `$degraded
+   == yes` for the floor (the ELSE-IF branch below + loud advisory). This is an
    already-known value; do not re-measure (the orchestrator has no raw-git/grep tool).
 
    Three cases:
