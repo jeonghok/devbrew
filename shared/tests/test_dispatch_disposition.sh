@@ -124,6 +124,29 @@ print("PRINT_3_anchors %d" % len(anchors))
 for a in sorted(per_agent):
     print("PRINT_4_per_agent %s %d" % (a, per_agent[a]))
 zero = sorted(a for a in per_agent if per_agent[a] == 0)
+
+# ── 축 A① : 앵커 수 == dispatch 수 (1:1 계약)
+print("AXIS_A1 %d %d" % (len(dispatch), len(anchors)))
+
+# ── 축 A② : 위치 규칙(결정론). 각 dispatch 줄에 대해, 그 **바로 아래**
+#    WINDOW 줄 안의 앵커 중 **그 사이에 다른 dispatch 줄이 없는** 것이 정확히 하나.
+#
+#    「∃ 완전매칭」이 아니라 결정론 배정이다 — 배정 규칙이 없으면 구현할 수
+#    없고, greedy-최근접과 완전매칭은 창이 겹치는 배치에서 정확히 갈린다.
+#
+#    방향이 「아래」인 이유: briefing-current-state/SKILL.md 의 dispatch 는
+#    frontmatter 안 6행이고 `---` 닫힘이 9행이라 «위»에는 아무것도 놓을 수 없다.
+#    「위」로 쓰면 그 파일이 배달 즉시 RED 다.
+a2_fail = []
+for (rel, dl, ag) in dispatch:
+    later_disp = sorted(x for x in per_file_disp.get(rel, []) if x > dl)
+    cut = later_disp[0] if later_disp else 10 ** 9
+    qualifying = [x for x in per_file_anch.get(rel, [])
+                  if dl < x <= dl + WINDOW and x < cut]
+    if len(qualifying) != 1:
+        a2_fail.append("%s:%d(%s)->%d개" % (rel, dl, ag, len(qualifying)))
+print("AXIS_A2_FAIL %s" % "|".join(a2_fail))
+
 print("ZERO_AGENTS %s" % ",".join(zero))
 PY
 rc=$?
@@ -161,6 +184,13 @@ assert_grep "$OUT" '^PRINT_1_agents [0-9]+$'   "인쇄 ① 에이전트 수"
 assert_grep "$OUT" '^PRINT_2_dispatch [0-9]+$' "인쇄 ② dispatch 줄 수"
 assert_grep "$OUT" '^PRINT_3_anchors [0-9]+$'  "인쇄 ③ 앵커 수"
 assert_grep "$OUT" '^PRINT_4_per_agent \S+ [0-9]+$' "인쇄 ④ 에이전트별 dispatch 수"
+
+a1="$(printf '%s\n' "$OUT" | sed -n 's/^AXIS_A1 //p')"
+a1_disp="${a1% *}"; a1_anch="${a1#* }"
+assert_eq "$a1_anch" "$a1_disp" "축 A① 앵커 수(${a1_anch}) == dispatch 수(${a1_disp})"
+
+a2f="$(printf '%s\n' "$OUT" | sed -n 's/^AXIS_A2_FAIL //p')"
+assert_eq "$a2f" "" "축 A② 각 dispatch 아래 창에 자기 앵커가 정확히 하나"
 
 n_scanned="$(bash "$0" --emit-scanned | wc -l | tr -d ' ')"
 if [ "${n_scanned:-0}" -lt 1 ]; then

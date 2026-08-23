@@ -257,6 +257,7 @@ no 이고 기준선 트리도 만들어진다; 그 창을 닫는 결정론 수�
 ```
 Agent({
   subagent_type: "quality-gates:test-scope-validator",
+  // **처분** — consumer=orchestrator · fail-open · disclosure=R2 산문
   description: "Classify scope-relevant test files (Runtime gate)",
   prompt: "Validate test scope against current diff, spec acceptance criteria, and plan items.
     project_dir: \"$project_dir\"
@@ -703,6 +704,7 @@ sandbox discard).
 ```
 Agent({
   subagent_type: "quality-gates:runtime-verifier",
+  // **처분** — consumer=orchestrator · fail-closed · disclosure=baseline_unrunnable
   description: "Runtime verification (Runtime gate, sandbox executor)",
   prompt: "Boot the declared surfaces in the sandbox, drive flows, assert against spec AC, write an evidence-log.
     project_dir: \"$runtime_project_dir\"

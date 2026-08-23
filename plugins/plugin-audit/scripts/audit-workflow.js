@@ -16,7 +16,9 @@ export const meta = {
 // the runtime resolves the plugin's own scoped agents. The spread comes first so agentType
 // cannot be overridden by a caller's opts.
 const auditor = (prompt, opts) => agent(prompt, {...opts, agentType: 'plugin-audit:plugin-auditor'})
+// **처분** — consumer=plugins/plugin-audit/scripts/audit-workflow.js · fail-open · disclosure=degradedEvents
 const refuter = (prompt, opts) => agent(prompt, {...opts, agentType: 'plugin-audit:audit-refuter'})
+// **처분** — consumer=plugins/plugin-audit/scripts/audit-workflow.js · fail-open · disclosure=degradedEvents
 
 // The Workflow tool delivers `args` to the script as a JSON *string* at runtime (verified by an
 // args-diag probe — the tool doc's object-passing does not hold in this harness). Normalize so

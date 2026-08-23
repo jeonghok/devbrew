@@ -62,6 +62,7 @@ dispatch 의 연료는 `pending_review` 다. 진입 시점에 연료를 없애�
    Agent({
      description: "Spec adversarial review",
      subagent_type: "spec-distill:spec-reviewer",
+     // **처분** — consumer=plugins/spec-distill/scripts/merge_review.py · fail-open
      prompt: "Review spec.md at <path>. Previous issue history: <list>. web_disabled: <true|false — true면 WebSearch/WebFetch 사용 금지, 리포 근거만>"
    })
    ```

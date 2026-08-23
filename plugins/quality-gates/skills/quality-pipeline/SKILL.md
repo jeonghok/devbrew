@@ -364,6 +364,7 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 ```
 Agent({
   subagent_type: "quality-gates:security-reviewer",
+  // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-open
   description: "Security review (Review gate iter N)",
   prompt: "Run code-level security review on the current diff.
     project_dir: \"$project_dir\"
@@ -375,6 +376,7 @@ Agent({
 
 Agent({
   subagent_type: "quality-gates:adversarial",
+  // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-open
   description: "Adversarial review of Phase-1 findings (Review gate iter N)",
   prompt: "Re-review findings from Phase-1 reviewers for false positives
     and missed exploit paths.

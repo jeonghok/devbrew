@@ -194,6 +194,7 @@ fi
 Agent({
   description: "Brief direction review",
   subagent_type: "spec-distill:brief-direction-reviewer",
+  // **처분** — consumer=human · fail-open · disclosure=verification_status
   prompt: `Review the interview brief at <PAYLOAD_PATH> for directional soundness.
 Read the repository and search the web. Answer both axis-(b) questions with evidence.
 Every finding must carry exactly one question for the user to decide.
@@ -284,6 +285,7 @@ BLOB="$(python3 "$PR/scripts/build_brief_inline_blob.py" "$PAYLOAD")"; blob_rc=$
 Agent({
   description: "Brief fidelity critic",
   subagent_type: "spec-distill:brief-critic",
+  // **처분** — consumer=plugins/spec-distill/scripts/merge_brief_review.py · fail-open
   prompt: `Review this interview brief for fidelity — did the §2 summary distort,
 drop, or invent what the user said in §6? Check all six categories explicitly.
 Emit **Status:** on its own line, then the brief-critic-issues block.
@@ -437,6 +439,7 @@ BLOB="$(python3 "$PR/scripts/build_brief_inline_blob.py" "$PAYLOAD")"; blob_rc=$
 Agent({
   description: "Brief cold readback",
   subagent_type: "spec-distill:brief-readback",
+  // **처분** — consumer=human · fail-open · disclosure=verification_status
   prompt: `Read this document cold and say back, in plain prose, what you
 understood: what it is trying to do, what is settled and what is still open, and
 what happens next. Nothing else.
