@@ -148,6 +148,50 @@ for (rel, dl, ag) in dispatch:
 print("AXIS_A2_FAIL %s" % "|".join(a2_fail))
 
 print("ZERO_AGENTS %s" % ",".join(zero))
+
+# ── 축 A③ : 각 dispatch 줄은 «정확히 한 에이전트»에 귀속.
+#    이것이 경계 규칙(§5.1③)의 진짜 계측기다 — 규칙이 없으면
+#    critiquing-artifacts/SKILL.md:194 한 줄이 `adversarial` 과
+#    `artifact-adversarial` 둘 다에 귀속되어 여기서 RED 가 난다.
+attrib = {}
+for (rel, dl, ag) in dispatch:
+    attrib.setdefault((rel, dl), []).append(ag)
+a3_fail = ["%s:%d->%s" % (r, l, "+".join(sorted(v)))
+           for ((r, l), v) in sorted(attrib.items()) if len(v) != 1]
+print("AXIS_A3_FAIL %s" % "|".join(a3_fail))
+
+# ── 축 A④ : 서식 + 닫힌 어휘 + 경로 실재. 값 종류와 무관하게 «모든» 앵커에 건다.
+#    A④ 가 없으면 §4.1 의 요구가 집행 자리를 잃는다 —
+#    `consumer=plugins/x/scripts/없는파일.js` + 실재 리터럴이 세 축을 그대로 통과한다.
+FIELD = re.compile(
+    r'^\s*(?:\S+\s+)?\*\*처분\*\*\s+—\s+consumer=(\S+)\s+·\s+fail-(open|closed)'
+    r'(?:\s+·\s+disclosure=(.+?))?\s*$')
+tracked = set(subprocess.run(
+    ["git", "-C", str(REPO), "ls-files"],
+    capture_output=True, text=True, check=True).stdout.splitlines())
+
+parsed = []     # (rel, lineno, consumer, faildir, disclosure)
+a4_fail = []
+for (rel, ln, raw) in anchors:
+    m = FIELD.match(raw)
+    if not m:
+        a4_fail.append("%s:%d 서식 위반" % (rel, ln))
+        continue
+    cons, faildir, disc = m.group(1), m.group(2), m.group(3)
+    if cons in ("orchestrator", "human"):
+        pass
+    elif cons.endswith(".py") or cons.endswith(".js"):
+        if cons not in tracked:
+            a4_fail.append("%s:%d 경로 미실재 consumer=%s" % (rel, ln, cons))
+            continue
+    else:
+        a4_fail.append("%s:%d 닫힌 어휘 밖 consumer=%s" % (rel, ln, cons))
+        continue
+    if not cons.endswith(".py") and disc is None:
+        a4_fail.append("%s:%d disclosure= 누락 (consumer=%s)" % (rel, ln, cons))
+        continue
+    parsed.append((rel, ln, cons, faildir, disc))
+print("AXIS_A4_FAIL %s" % "|".join(a4_fail))
 PY
 rc=$?
 OUT="$(cat "$TMPD/out.txt")"
@@ -198,5 +242,10 @@ if [ "${n_scanned:-0}" -lt 1 ]; then
 else
   ok "인쇄 ⑥ --emit-scanned ${n_scanned}개 경로"
 fi
+
+a3f="$(printf '%s\n' "$OUT" | sed -n 's/^AXIS_A3_FAIL //p')"
+assert_eq "$a3f" "" "축 A③ 각 dispatch 줄이 정확히 한 에이전트에 귀속"
+a4f="$(printf '%s\n' "$OUT" | sed -n 's/^AXIS_A4_FAIL //p')"
+assert_eq "$a4f" "" "축 A④ 서식 + 닫힌 어휘 + 경로 실재"
 
 finish
