@@ -588,7 +588,14 @@ if (codexFindings.length) {
     } else {
       rec.status = 'reported'
       rec.deep_verified = null
-      if (!v) rec.unverified = true
+      if (!v) {
+        // The refuter answered but skipped this finding. Silence is not a verdict.
+        rec.unverified = true
+        degradedEvents.push({
+          what: 'codex finding ' + f.id + ': refuter가 판정을 누락 — 미검증',
+          why: 'refuter 응답에 이 finding_id의 verdict가 없음',
+        })
+      }
     }
     findings.push(rec)
   }

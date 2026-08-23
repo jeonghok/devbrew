@@ -3,6 +3,23 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.3.1] — 2026-08-23
+
+### Fixed
+- `scripts/synthesize_findings.py` — `load_yaml()`이 「경로 없음(정상)」과 「경로는 있는데
+  파일이 없음(입력 실패)」을 구별하지 못해, 파일이 사라져도 `dropped=0`으로 합쳐져 drop 공지가
+  영원히 안 켜지던 것을 `Ledger.source_failed()`로 구별했다. `apply_verdicts()`가 adversarial
+  판정이 없는 finding을 fail-open으로 유지하면서도(다음 소비자가 사람) 세지 않아 미판정 건수가
+  은폐되던 것을 `Ledger.hold()`로 계수 — `render()`의 counts 줄 옆에 "미판정 `<N>`건"으로
+  노출한다(형제 `synthesize_artifact_findings.py`의 `unadjudicated` 계측과 대칭).
+
+### Changed
+- `scripts/synthesize_artifact_findings.py` — `phase_synth`의 인메모리 `unadjudicated` 카운터를
+  shared `Ledger`(`scripts/adjudication.py` 심볼릭 링크)로 전환. 기계적 전환, 새 행동 없음 —
+  `unadjudicated`는 `L.report()["counts"]["held"]`로 파생되고 `continue`는 그대로다(fail-closed
+  제외, AC16). 외부 출력 키(`converged`/`degraded`/`degraded_reason`/`unadjudicated`/`kept_*`)와
+  emitted output은 바이트 단위 불변(3개 시나리오 diff empty로 확인).
+
 ## [4.3.0] — 2026-08-23
 
 ### Added
