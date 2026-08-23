@@ -122,7 +122,7 @@ C-S2(완전 헌장 존재)면 먼저 "헌장을 업데이트할까요?"를 묻�
 
 C-S1 및 C-S3(a)에서 **vision·non-goals·conventions·tech-stack**가 채워질 때까지 진행을 막는다. 각 필수 항목에 대해 빈/무의미 응답이면 AskUserQuestion 재질문을 **최대 3회**까지 한다. 3회 후에도 비면 charter step을 *loud advisory와 함께 abort*한다:
 
-> `[project-init] charter 미완료: <항목> 비어 abort. git-workflow 산출물은 정상 생성되며, docs-lint이 ## Project Charter 미완을 사후 플래그합니다.`
+> `[project-init] charter 미완료: <항목> 비어 abort. git-workflow 산출물은 정상 생성됩니다. 미완 항목의 사후 자동 플래그는 없습니다 — 헌장을 채우려면 /project-init 을 다시 실행하세요.`
 
 abort 후에도 Step 4의 git-workflow 파일 생성은 정상 진행한다(부분 산출물 금지 아님 — git-workflow는 charter와 독립). C-S2(완전 헌장 갱신)는 이 게이트 면제.
 
@@ -224,7 +224,7 @@ Step 3.6에서 거절했으면 이 블록 전체를 skip한다.
 1. `${CLAUDE_PLUGIN_ROOT}/templates/shared/agent-tool-permission.md`를 읽어 **치환 없이 그대로** `.claude/rules/agent-tool-permission.md`에 쓴다 (이 템플릿에는 placeholder가 없다). `.claude/rules/` 디렉토리가 없으면 생성한다.
 2. 프로젝트 `.gitignore`에 `.claude/rules/agent-tool-permission.md` 한 줄이 없으면 추가한다. **`.claude/` 통째를 무시하지 않는다** — 대상 레포가 `.claude/settings.json` 같은 파일을 추적 중일 수 있고, 통째 무시는 그것을 조용히 떨어뜨린다. `.gitignore`가 없으면 그 한 줄만 담아 새로 만든다.
 
-이 파일은 `AGENTS.md`에서 링크하지 않는다 — git에서 제외되는 파일을 커밋되는 문서가 가리키면 docs-lint R6(내부 링크 해석)이 매 `AGENTS.md` 쓰기마다 발화한다.
+이 파일은 `AGENTS.md`에서 링크하지 않는다 — git에서 제외되는 파일을 커밋되는 문서가 가리키면 클론한 사람에게 깨진 링크가 된다.
 
 ### Step 5: 확인
 

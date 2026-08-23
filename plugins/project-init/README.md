@@ -12,18 +12,15 @@ plugins/project-init/
 ├── commands/
 │   └── project-init.md              # /project-init — 인터랙티브 셋업
 ├── hooks/
-│   ├── hooks.json                   # PostToolUse hook 설정 (2개 entry)
-│   ├── post-tool-use.py             # 브랜치(fail-open advisory) + 커밋 검증기 (Bash matcher)
-│   └── docs-lint.py                 # v1.4.0 — agent-readable docs convention 검증 (Write/Edit/MultiEdit matcher)
+│   ├── hooks.json                   # PostToolUse hook 설정 (1개 entry)
+│   └── post-tool-use.py             # 브랜치(fail-open advisory) + 커밋 검증기 (Bash matcher)
 ├── tests/                           # 플러그인 최상위, hooks/의 형제 — 3규약(hooks/tests 포함)을 1종으로 통일
 │   ├── __init__.py
-│   ├── test_docs_lint.py            # 60+ Python stdlib unittest (charter rule 포함)
 │   ├── test_post_tool_use.py        # v1.7.0 — post-tool-use fail-open/F2/main 검증
 │   ├── test_command_contract.py     # v1.7.2 — commands/ 산문 계약 회귀 락 (4c S2a H1, AC21 abort)
 │   ├── test_agent_permission_contract.py  # v2.1.0 — Step 3.6/4f 계약 + 템플릿 범위 제한 락
 │   ├── test_branch_strategy_rebase_clause.sh  # v1.7.3 — AC8e, rebase 무조건 금지 조항 부재 락
-│   ├── smoke.sh                     # V2 자동화 smoke script
-│   └── fixtures/                    # 13개 서브디렉토리 (valid, oversized, drifted, charter_*, ...)
+│   └── test_no_write_matcher_hooks.sh  # PostToolUse에 쓰기-도구(Write/Edit/MultiEdit/NotebookEdit) matcher 부재 회귀 락 (A1–A3)
 └── templates/
     ├── shared/
     │   ├── commit-conventions.md
@@ -86,11 +83,7 @@ plugins/project-init/
 ## 설치된 Hook
 
 - **`PostToolUse` (Bash matcher) — `post-tool-use.py`**: 브랜치 명·커밋 메시지 검증 (advisory, non-blocking). 브랜치 검증은 `docs/git-workflow/branch-strategy.md`의 선언된 전략 패턴을 런타임에 읽어 수행하며, 전략 미선언(파일/`` ```regex `` 블록 부재·malformed·빈 블록·비-UTF-8 파일)이면 GitHub Flow를 단정하지 않고 **loud advisory로 검증을 건너뛴다**(fail-open, v1.7.0). 교정 제안은 활성 패턴에서 파생된 prefix를 제시한다. **왜 hook인가?**: 검증은 모델 attention 여부와 무관하게 모든 Bash invocation에 발화해야 한다. skill은 모델이 invoke하는 단위라 action 레이어에서의 결정적 실행을 보장하지 못함.
-  - Kill switch: `DEVBREW_PROJECT_INIT_DISABLE=1` 또는 `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` (이벤트명 별칭 `project-init:PostToolUse` 도 받는다)
-
-- **`PostToolUse` (Write|Edit|MultiEdit matcher) — `docs-lint.py`**: root context 파일 (CLAUDE.md, AGENTS.md, .claude/CLAUDE.md, .claude/AGENTS.md) **및 `docs/project/*.md` (v1.6.0)**의 agent-readable convention (size ≤200, TOC if >300, fenced code language, internal links resolve, CLAUDE/AGENTS drift) + `AGENTS.md`의 `## Project Charter` 필수 하위항목(vision·non-goals·tech-stack: 존재·비어있지 않음·placeholder 잔존 없음, v1.6.0) 검증. **왜 hook인가?**: Write/Edit이 일어날 때마다 deterministic하게 발화해야 함, advisory only (non-blocking).
-  - Kill switch: `DEVBREW_PROJECT_INIT_DISABLE=1` (전체) 또는 `DEVBREW_SKIP_HOOKS=project-init:docs-lint` (이 hook만). 헌장 검증도 동일 스위치가 커버한다 — 헌장 전용 토큰은 없다.
-  - 두 hook 모두 끄려면: `DEVBREW_SKIP_HOOKS=project-init:post-tool-use,project-init:docs-lint` — 또는 이벤트명 하나로 `DEVBREW_SKIP_HOOKS=project-init:PostToolUse` (둘 다 PostToolUse 훅이다). 이벤트명 별칭은 spec-distill 이 쓰던 형태를 이 플러그인으로 통일한 것이다 — 한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것이 결함이었다.
+  - Kill switch: `DEVBREW_PROJECT_INIT_DISABLE=1` (전체) 또는 `DEVBREW_SKIP_HOOKS=project-init:post-tool-use` — 또는 이벤트명 하나로 `DEVBREW_SKIP_HOOKS=project-init:PostToolUse`. 이벤트명 별칭은 spec-distill 이 쓰던 형태를 이 플러그인으로 통일한 것이다 — 한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것이 결함이었다.
 
 ## 인스턴스화한 원칙
 
@@ -99,7 +92,6 @@ plugins/project-init/
 
 - **Law 3 (Compounding)** — PostToolUse hook이 브랜치 명명과 Conventional Commits 포맷을 지속적으로 강제; 컨벤션 drift를 action 레이어에서 잡음.
 - **Plugin shape — minimal pointer pattern** — CLAUDE.md는 짧은 anchor만 (Git Workflow 요약), 상세는 `docs/git-workflow/`에 거주. CLAUDE.md bloat 방지 + 룰 discoverability 양립.
-- **Law 1 (Clarity Before Code) — v1.4.0** — agent-readable docs convention enforcement (size ≤200, TOC ≥300줄, fenced code language tag, internal links resolve, CLAUDE/AGENTS drift). Anthropic 공식 가이드 + AGENTS.md 오픈 스펙 + Chroma 2025 *Context Rot* / Lost-in-the-Middle / MDEval / MAST 3-source 합의로 도출된 deterministic baseline.
 - **Law 1 (Clarity Before Code) — v1.6.0** — Project Charter가 project-init에 *처음으로* 생기는 clarity 구조 게이트. 최초 실행에서 vision·non-goals·tech-stack·conventions가 채워질 때까지 진행을 막되, 각 항목 최대 3회 재질문 후 loud abort (bounded — Unbounded-autonomy anti-pattern 회피).
 - **Plugin shape — 개인 설정과 팀 규약의 분리 — v2.1.0** — Agent 호출 허용은 *이 작업 환경의 개인 설정*이지 레포의 규약이 아니다. 그래서 커밋되는 `AGENTS.md`가 아니라 git에서 제외되는 `.claude/rules/`에 쓰고, 허용 범위를 Agent로 좁혀 Workflow·deep-research는 제외한다 (Subagent-spray anti-pattern의 선언 의무는 그대로 유효).
 - **Law 3 (Compounding) — v1.6.0** — 헌장이 AGENTS.md 계층에 거주해 매 세션·모든 spec-distill 인터뷰가 자동 상속하는 compounding substrate. 한 번 정의한 프로젝트 불변이 미래 모든 사이클에 discoverable하게 흐른다.

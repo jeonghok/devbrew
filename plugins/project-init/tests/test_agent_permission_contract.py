@@ -132,8 +132,8 @@ class TestCommandContract(unittest.TestCase):
         self.assertIn("통째를 무시하지 않는다", block)
 
     def test_publish_block_forbids_linking_from_agents_md(self) -> None:
-        # A committed doc pointing at a git-excluded file makes docs-lint R6
-        # fire on every AGENTS.md write.
+        # A committed doc pointing at a git-excluded file becomes a broken
+        # link for whoever clones the repo.
         block = section(self.text, "#### 4f:", "### Step 5:")
         block = flat(block)
         self.assertIn("링크하지 않는다", block)
