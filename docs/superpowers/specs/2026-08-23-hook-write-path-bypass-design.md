@@ -601,4 +601,4 @@ acceptEdits` 없이는 편집이 rc 0 으로 조용히 죽으므로 반드시 �
 | 2 | `pre-pipeline-check.sh` 의 staleness anchor — `pipeline.md` 는 같은 스크립트의 C2 race fix 와 충돌한다 (§5 ②) |
 | 3 | project-init 의 은퇴 토큰 advisory 수단 — 남는 훅이 `matcher: "Bash"` 이고 세션 state substrate 가 없다 (§4.6) |
 | 4 | codex 한도 복구(2026-09-17) 후 이 설계와 구현의 재검토 여부 |
-| 5 | `/cancel-review` (§7) — 별도 설계 |
+| 5 | `/cancel-review` (§7) — **별도 설계 문서로, 이 작업의 plan 다음에** (사용자 결정). 그 설계의 첫 질문은 "어떻게 만들까"가 아니라 **"`DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` 보다 무엇을 더 주는가"** 다 — `spec-distill/CHANGELOG.md` 의 v0.25.0 제거 항목이 네 용도를 평가해뒀고 셋은 대상이 소멸했거나 대체재가 지정돼 있다. 답이 안 나오면 결론은 "만들지 않는다" 일 수 있다 |
