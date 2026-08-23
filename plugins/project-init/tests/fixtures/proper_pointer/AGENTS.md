@@ -1,1 +1,0 @@
-# Canonical AGENTS.md
