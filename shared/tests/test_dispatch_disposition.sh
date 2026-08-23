@@ -7,6 +7,12 @@
 # 두 번 물렸다(subagent_type grep 이 5표기 중 1개만 덮은 것, 프로토타입이
 # 표기 ②④를 놓쳐 18 중 16 만 센 것). 에이전트 «정의 집합»(∀)에서 출발하면
 # `0건` 이 답이 되어 누락이 드러난다.
+#
+# 축 C 는 축 B 보다 «약하다». `disclosure=` 리터럴이 파일에 있다는 것이 그
+# 채널이 실제로 읽힌다는 증거는 아니다. 값이 저자 손에 있는 한 축 B 급 이빨은
+# 이 축에서 나오지 않는다 — 이 락은 그것을 없앴다고 주장하지 않고 «어디로
+# 옮겼는지» 밝힌다. `consumer=` 를 `.py` 대신 orchestrator/human 으로 쓰면
+# 축 B 를 벗어나는데, 그 이동은 M10 이 «측정»한다(PRINT_5_axis 수치가 움직인다).
 set -u
 if [ "${1:-}" = "--emit-scanned" ]; then
   # 실제로 훑은 경로를 낸다. 선언에서 목록을 도출하면 자기 반복이라
@@ -192,6 +198,47 @@ for (rel, ln, raw) in anchors:
         continue
     parsed.append((rel, ln, cons, faildir, disc))
 print("AXIS_A4_FAIL %s" % "|".join(a4_fail))
+
+# ── 축 B : consumer= 가 `.py` 인 앵커 — 그 파일이 `adjudication` 을 import 한다.
+#    가장 센 이빨이지만 `.py` 소비자에만 걸린다.
+IMPORT = re.compile(
+    r'^\s*(?:from\s+adjudication\s+import\b|import\s+adjudication\b)', re.M)
+b_targets = [x for x in parsed if x[2].endswith(".py")]
+b_fail = []
+for (rel, ln, cons, _fd, _dc) in b_targets:
+    src = (REPO / cons).read_text(encoding="utf-8")
+    if not IMPORT.search(src):
+        b_fail.append("%s:%d -> %s 가 adjudication 을 import 하지 않는다"
+                      % (rel, ln, cons))
+print("AXIS_B_FAIL %s" % "|".join(b_fail))
+
+# ── 축 C : consumer= 가 `.js`·orchestrator·human 인 앵커 — disclosure= 리터럴이
+#    **그 앵커가 사는 파일의 「앵커-제외 본문」**에 실재한다.
+#
+#    앵커 줄을 빼는 것은 선택이 아니라 «성립 조건»이다. 리터럴은 앵커 줄
+#    자신에 적혀 있고 그 앵커는 검색 대상 파일 안에 있다 — 제외하지 않으면
+#    저자가 무엇을 쓰든 검색이 자기 자신에 걸려 항상 GREEN 이고 이빨이 0 이다.
+#    (「헤더가 문구를 만족시키면 body 를 삭제해도 GREEN」과 동형. 판정은
+#    body-unique 여야 한다.)
+#
+#    코퍼스가 리포 전역도 플러그인 전체도 아니고 «파일 하나»인 이유: 전역이면
+#    예시 리터럴 `degrade 채널` 이 proceed-gate.md:34-41 에 이미 있어 축이
+#    다시 vacuous 해진다.
+c_targets = [x for x in parsed if not x[2].endswith(".py")]
+c_fail = []
+for (rel, ln, cons, _fd, disc) in c_targets:
+    lines = (REPO / rel).read_text(encoding="utf-8").splitlines()
+    anchor_lines = set(per_file_anch.get(rel, []))
+    body = "\n".join(t for (i, t) in enumerate(lines, 1) if i not in anchor_lines)
+    if disc not in body:
+        c_fail.append("%s:%d disclosure=%r 가 앵커-제외 본문에 없다"
+                      % (rel, ln, disc))
+print("AXIS_C_FAIL %s" % "|".join(c_fail))
+
+# ── 인쇄 ⑤ 축별 대상 수. M10(green-expected) 의 관측 근거가 이것이다 —
+#    인쇄되지 않는 수치를 관측 근거로 적는 것은 관측하지 않는 것과 같다.
+print("PRINT_5_axis B %d" % len(b_targets))
+print("PRINT_5_axis C %d" % len(c_targets))
 PY
 rc=$?
 OUT="$(cat "$TMPD/out.txt")"
@@ -247,5 +294,12 @@ a3f="$(printf '%s\n' "$OUT" | sed -n 's/^AXIS_A3_FAIL //p')"
 assert_eq "$a3f" "" "축 A③ 각 dispatch 줄이 정확히 한 에이전트에 귀속"
 a4f="$(printf '%s\n' "$OUT" | sed -n 's/^AXIS_A4_FAIL //p')"
 assert_eq "$a4f" "" "축 A④ 서식 + 닫힌 어휘 + 경로 실재"
+
+bf="$(printf '%s\n' "$OUT" | sed -n 's/^AXIS_B_FAIL //p')"
+assert_eq "$bf" "" "축 B .py 소비자가 adjudication 을 import 한다"
+cf="$(printf '%s\n' "$OUT" | sed -n 's/^AXIS_C_FAIL //p')"
+assert_eq "$cf" "" "축 C disclosure 리터럴이 앵커-제외 본문에 실재한다"
+assert_grep "$OUT" '^PRINT_5_axis B [0-9]+$' "인쇄 ⑤ 축 B 대상 수"
+assert_grep "$OUT" '^PRINT_5_axis C [0-9]+$' "인쇄 ⑤ 축 C 대상 수"
 
 finish
