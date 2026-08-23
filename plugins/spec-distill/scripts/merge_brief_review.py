@@ -251,7 +251,9 @@ def main() -> int:
         advisory.append("[spec-distill v0.24.0] merge_review.py 재사용 import 실패 — "
                         "codex 축을 degraded로 처리한다.")
     else:
-        codex_findings, codex_failed, codex_reason = parse_codex_yaml(args.codex_yaml)
+        # 4번째 반환값(malformed 개수)은 merge_review.py 의 회계 채널 전용 — 이 파일은
+        # 아직 자체 원장을 안 만든다(범위 밖), 이름만 받고 버린다.
+        codex_findings, codex_failed, codex_reason, _codex_malformed_n = parse_codex_yaml(args.codex_yaml)
     codex_verdict = None
     if not codex_failed:
         codex_verdict = derive_codex_verdict(codex_findings) if _REUSE_OK else None

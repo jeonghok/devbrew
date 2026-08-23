@@ -106,9 +106,17 @@ def extract_claude_issues(text: str) -> tuple[list[dict] | None, bool, Ledger]:
 
 
 # --- codex side --------------------------------------------------------------
-def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str]:
+def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str, int]:
     """Line-parse codex_findings_to_yaml.py output (known shape). Returns
-    (findings, codex_failed, reason).
+    (findings, codex_failed, reason, malformed_count).
+
+    `malformed_count`(마커 위반으로 폐기된 finding 개수)는 **out-of-band** 반환값이다
+    — `reason` 문자열에 인코딩하지 않는다. `reason` 은 codex YAML 파일 자신도
+    `meta.reason:` 으로 채울 수 있는 필드라(:183 `reason = _yaml_unscalar(v)`),
+    거기 개수를 실으면 파일이 공급한 임의 문자열과 부딪혀 `int()` 가 크래시하거나
+    (전체가 rc=1·빈 stdout·verdict 소실), 이 함수를 재사용하는 `merge_brief_review.py`
+    가 그 내부 카운트를 사용자 advisory에 그대로 노출한다. `reason` 은 항상 아래
+    고정 리터럴 중 하나(또는 파일이 준 원문)이고, 카운트는 별도 채널로 간다.
 
     Fail-CLOSED (opt-in-to-success). The well-formed producer contract ALWAYS
     emits a `meta:` block carrying `codex_failed: true|false`
@@ -120,7 +128,7 @@ def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str]:
     NO degrade advisory, silently defeating the human-gate backstop that every
     other degrade path raises. Missing file → failed."""
     if not path or not os.path.isfile(path):
-        return [], True, "codex_yaml_missing"
+        return [], True, "codex_yaml_missing", 0
     findings: list[dict] = []
     failed = False
     reason = ""
@@ -135,7 +143,7 @@ def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str]:
         # isfile() passed but the file can't be opened/read (permission /
         # TOCTOU race / vanished) → degrade loudly, never crash the merge with
         # an uncaught OSError (symmetric with load_history's guard).
-        return [], True, "codex_yaml_unreadable"
+        return [], True, "codex_yaml_unreadable", 0
     for raw in lines:
         line = raw.rstrip("\n")
         if line.startswith("findings:"):
@@ -190,9 +198,10 @@ def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str]:
     # untrusted file's content must not feed the verdict or the ledger.
     if not marker_seen or marker_invalid:
         # 셀 수 있다 — findings 가 이미 누적돼 있다. 사실만 보고하고 개수를
-        # 숨기던 것이 결함이었다(#2). 원리적 미상(#1)과 다른 부류다.
-        return [], True, "codex_yaml_malformed:%d" % len(findings)
-    return findings, failed, reason
+        # 숨기던 것이 결함이었다(#2). 원리적 미상(#1)과 다른 부류다. 개수는
+        # `reason` 문자열이 아니라 4번째 반환값으로 — 이유는 함수 docstring.
+        return [], True, "codex_yaml_malformed", len(findings)
+    return findings, failed, reason, 0
 
 
 def _yaml_unscalar(v: str):
@@ -202,10 +211,6 @@ def _yaml_unscalar(v: str):
             return json.loads(v)
         except json.JSONDecodeError:
             return v[1:-1]
-    if len(v) >= 2 and v[0] == "'" and v[-1] == "'":
-        # `_yaml_scalar`(정본 emitter)는 단일 인용부를 내보내지 않는다 — 이 분기는
-        # 사람이 손으로 쓴 YAML(테스트 픽스처 등 known-shape 밖 입력) 대칭 지원용.
-        return v[1:-1]
     return v
 
 
@@ -357,7 +362,11 @@ def build_ledger(claude_issues, codex_findings, claude_degraded, history, codex_
         cat = str(f.get("category", ""))
         sec = str(f.get("target_section", ""))
         if not cat and not sec:
-            codex_ledger.hold(str(f.get("summary", ""))[:60],
+            # repr() — str() 이면 summary 안의 개행이 hold() 사유 문자열에 그대로
+            # 살아, 나중에 stdout 에 쓰일 때 물리적으로 새 줄을 만든다(C1). repr()
+            # 은 개행을 `\n` 두 글자로 escape 해 한 줄을 보장한다 — claude·history
+            # 쪽 hold() 호출과 같은 관례.
+            codex_ledger.hold(repr(f.get("summary", ""))[:60],
                               "category·target_section 둘 다 비어 issue_id 산출 불가")
             continue
         iid = compute_issue_id.compute(cat, sec)
@@ -464,11 +473,7 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--claude-output", required=True)
     p.add_argument("--codex-yaml", required=True)
-    # 필수였던 것을 optional 로 완화 — load_history() 는 이미 빈/None 경로를
-    # 관용한다("주(主) 입력 없음"은 그 자체로 source_failed 사유가 아니다,
-    # 파일이 있는데 못 읽는 것과 다르다). CLI 계약을 넓히지만 verdict 경로는
-    # 건드리지 않는다(기존 호출자는 항상 --history 를 넘긴다).
-    p.add_argument("--history", default=None)
+    p.add_argument("--history", required=True)
     args = p.parse_args()
 
     claude_text = ""
@@ -479,12 +484,9 @@ def main() -> int:
     claude_verdict = extract_claude_verdict(claude_text)
     claude_issues, claude_degraded, claude_ledger = extract_claude_issues(claude_text)
     codex_ledger = Ledger(items="open")
-    codex_findings, codex_failed, codex_reason = parse_codex_yaml(args.codex_yaml)
-    if codex_reason and codex_reason.startswith("codex_yaml_malformed:"):
-        n = int(codex_reason.split(":", 1)[1])
-        for i in range(n):
-            codex_ledger.hold("codex_finding[%d]" % i, "YAML 마커 위반으로 폐기")
-        codex_reason = "codex_yaml_malformed"
+    codex_findings, codex_failed, codex_reason, codex_malformed_n = parse_codex_yaml(args.codex_yaml)
+    for i in range(codex_malformed_n):
+        codex_ledger.hold("codex_finding[%d]" % i, "YAML 마커 위반으로 폐기")
     codex_avail = not codex_failed
     codex_verdict = derive_codex_verdict(codex_findings) if codex_avail else None
 
@@ -532,7 +534,8 @@ def main() -> int:
     else:
         if not codex_avail and codex_findings:
             for f in codex_findings:
-                codex_ledger.hold(str(f.get("summary", ""))[:60],
+                # repr() — 위 build_ledger 안의 같은 패턴과 동일 이유(C1).
+                codex_ledger.hold(repr(f.get("summary", ""))[:60],
                                   "codex 미가용 라운드 — 원장 진입 차단")
         new_history, stagnation = build_ledger(
             claude_issues if not claude_degraded else [],
@@ -540,7 +543,7 @@ def main() -> int:
             claude_degraded, history, codex_ledger,
         )
 
-    if not both_dead and args.history:
+    if not both_dead:
         if not _write_history(args.history, new_history):
             advisory.append(
                 "[spec-distill v0.20.0] issue_history 원장 기록 실패 (OSError) "
@@ -570,10 +573,15 @@ def main() -> int:
         merged["held"] += r["counts"]["held"]
         merged["unknown"] += r["unknown_counts"]
         merged["reasons"] += r["reasons"]
-    print("adjudication_held: %d" % merged["held"])
-    print("adjudication_unknown: %s" % ",".join(merged["unknown"]))
+    # 이 세 줄도 emit() 의 다른 모든 줄과 같은 문 통과: _yaml_scalar 가 없으면
+    # (item 이 이미 repr() 로 개행을 escape 했더라도) `:`·`'`·`"` 등을 담은 사유
+    # 문자열이 raw 로 나가 stdout 을 조작할 수 있다(C1) — untrusted 값이 여기까지
+    # 온 경로가 이미 있는 이상, escape 는 "이 값은 안전하다"는 가정이 아니라
+    # 이 출력 채널 자체의 계약이어야 한다.
+    print(f"adjudication_held: {_yaml_scalar(merged['held'])}")
+    print(f"adjudication_unknown: {_yaml_scalar(','.join(merged['unknown']))}")
     for line in merged["reasons"]:
-        print("adjudication_reasons: %s" % line)
+        print(f"adjudication_reasons: {_yaml_scalar(line)}")
     return 0
 
 
