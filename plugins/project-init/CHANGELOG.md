@@ -5,6 +5,18 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [3.0.0] — 2026-08-23
+
+### Removed
+- **`hooks/docs-lint.py` (PostToolUse, `matcher: "Write|Edit|MultiEdit"`)** — 쓰기-도구 matcher 는 Bash heredoc·`sed -i` 로 쓴 파일을 보지 못한다. 열거를 고치는 대신 검사 자체를 제거했다(이동 아님). 함께 사라지는 검사: R1 크기 · R2 목차 · R5 코드펜스 언어 · R6 내부 링크 해석 · `CLAUDE.md`↔`AGENTS.md` 포인터 drift · `AGENTS.md` 의 `## Project Charter` 필수 하위항목 무결성. 이것들을 대신 수행하는 훅·테스트·게이트는 리포에 없다.
+- `tests/test_docs_lint.py` — 위 훅의 테스트.
+
+### Deprecated
+- kill switch 토큰 `DEVBREW_SKIP_HOOKS=project-init:docs-lint` 은 가리킬 대상을 잃었다. 설정해도 아무 효과가 없다 — 런타임 advisory 는 두지 않는다(대응하는 기능이 옮겨간 것이 아니라 사라졌으므로 조용한 재활성화가 일어날 수 없다).
+
+### Changed
+- `commands/project-init.md` — 헌장 abort advisory 가 더 이상 "docs-lint 이 사후 플래그합니다"를 약속하지 않는다. `.claude/rules/agent-tool-permission.md` 를 `AGENTS.md` 에서 링크하지 않는 배치 결정은 유지하되, 근거에서 docs-lint R6 참조를 뺐다.
+
 ## [2.1.1] — 2026-08-22
 
 `agent-tool-permission.md` 템플릿을 영어로 다시 쓰고 출처·배경 문단을 제거한다.

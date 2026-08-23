@@ -20,7 +20,7 @@ plugins/project-init/
 │   ├── test_command_contract.py     # v1.7.2 — commands/ 산문 계약 회귀 락 (4c S2a H1, AC21 abort)
 │   ├── test_agent_permission_contract.py  # v2.1.0 — Step 3.6/4f 계약 + 템플릿 범위 제한 락
 │   ├── test_branch_strategy_rebase_clause.sh  # v1.7.3 — AC8e, rebase 무조건 금지 조항 부재 락
-│   └── test_no_write_matcher_hooks.sh  # PostToolUse에 쓰기-도구(Write/Edit/MultiEdit/NotebookEdit) matcher 부재 회귀 락 (A1–A3)
+│   └── test_no_write_matcher_hooks.sh  # v3.0.0 — PostToolUse에 쓰기-도구(Write/Edit/MultiEdit/NotebookEdit) matcher 부재 회귀 락 (A1–A3)
 └── templates/
     ├── shared/
     │   ├── commit-conventions.md
