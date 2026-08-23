@@ -147,15 +147,15 @@ def _emit_legacy_v1_advisory(payload: dict, self_sid: str) -> bool:
                 text = ""
             if any(key in text for key in LEGACY_V1_KEYS):
                 sys.stderr.write(
-                    "[quality-gates v1.32.0] Legacy v1.x pipeline state detected "
+                    "[quality-gates] Legacy v1.x pipeline state detected "
                     "in current session. Run `/cancel-qg` to clear before invoking "
-                    "`/qg` (v1.32.0 single-turn pipeline cannot resume v1.x state).\n"
+                    "`/qg` (single-turn pipeline cannot resume v1.x state).\n"
                 )
                 found = True
     # 2. Flat v1.5.0 state files.
     if _legacy_present(payload):
         sys.stderr.write(
-            "[quality-gates v1.32.0] Legacy v1.5.0 flat state files detected. "
+            "[quality-gates] Legacy v1.5.0 flat state files detected. "
             "Run `/qg --reset` or `/cancel-qg` to remove. They will also be "
             "removed automatically on next `/qg` invocation.\n"
         )

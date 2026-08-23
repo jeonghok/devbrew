@@ -162,9 +162,7 @@ class TestQgGc(unittest.TestCase):
         run_gc(self.tmp)
         self.assertFalse(folder.exists(), "TTL 초과 세션 폴더가 수집되지 않음")
 
-    # AC28 — 마커 파일이 `publish-eligible.md` 하나뿐인 세션 폴더도 수집된다
-    # (세션 누적 파일이 v5.0.0에서 은퇴하며 그 컴패니언 파일도 SESSION_MARKERS
-    # 에서 빠졌으므로 이 fixture도 살아있는 마커로 바꿨다).
+    # AC28 — 마커 파일이 `publish-eligible.md` 하나뿐인 세션 폴더도 수집된다.
     def test_session_identified_by_publish_eligible_md(self):
         root = Path(self.tmp)
         folder = root / ".claude" / "quality-gates" / ("sess" + "b" * 8)

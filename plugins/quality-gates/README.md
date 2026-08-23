@@ -88,10 +88,7 @@ quality-gates/
 ├── agents/                 # Gate agent (leaf agent; 파이프라인이 dispatch)
 │   ├── runtime-verifier.md      # Runtime gate Step 3 (sandbox executor — model inherit)
 │   ├── test-scope-validator.md  # Runtime gate Step 2.5 (pre-exec test scope check)
-│   ├── scout.md                 # Review gate Phase 0 — 모델 기반 dispatch planner
 │   ├── adversarial.md           # Review gate Phase 1.5 — false-positive hunter
-│   ├── synthesizer.md           # Review gate Phase 1.6 — finding dedupe/rank
-│   ├── codex-reviewer.md        # Review gate Phase 1 — external OpenAI reviewer (Layer 2/3 isolation)
 │   ├── security-reviewer.md     # Review gate Phase 1 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`
 │   └── pr-understanding-builder.md  # publish 생성기 — model: inherit, tools: Read 1개 (inert·미호출; fail-closed; 쓰기·실행·네트워크·위임 0; 유일 입력 = inlined blob)
 ├── commands/

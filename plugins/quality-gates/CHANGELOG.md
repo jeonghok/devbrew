@@ -3,6 +3,69 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [5.0.0] — 2026-08-23 (BREAKING)
+
+`/qg`의 기본 review scope를 세션이 편집한 파일 누적(`files.md`)에서 git이 보고하는
+변경으로 재정의한다. 발단은 삭제된 `PostToolUse` matcher가 `Edit|Write|MultiEdit`라
+Bash heredoc·`sed -i`로 쓴 파일을 애초에 보지 못했던 결함 — matcher를 넓히는 대신
+그 훅 자체를 제거하고 스코프 도출을 git으로 옮겼다.
+
+### Removed
+- **`hooks/post-tool-use-session-tracker.py`** (PostToolUse, `matcher: "Edit|Write|MultiEdit"`)
+  와 그 산출물 `.claude/quality-gates/<sid>/files.md`. 쓰기-도구 matcher는 Bash
+  heredoc·`sed -i`로 쓴 파일을 보지 못해 `/qg`가 좁은 scope로 돌았다.
+- **`scripts/pre-pipeline-check.sh`**와 `.claude/quality-gates/<sid>/branch.md`.
+  이 스크립트의 삭제 대상은 `files.md` 하나였다 — `pipeline.md`는 항상 같은 세션
+  소유라 C2 가드가 매번 보존하므로, `files.md` 없이는 `cleared_branch_mismatch`·
+  `cleared_stale`이 아무것도 지우지 않고 지웠다고 보고하게 된다. SID 존재·패턴
+  검증은 `setup-qg.sh`가 Preflight P2에서 같은 정규식으로 먼저 수행하고 exit 1 한다.
+- SKILL.md의 Step P3와 결과-코드 표 (`fresh_start`·`preserved`·`no_session_data`·
+  `cleared_branch_mismatch`·`cleared_stale`·`active_resume`). `active_resume`은
+  이 릴리스 이전에도 생산자 없는 유령 행이었다.
+- `tests/test_session_tracker.py` · `tests/test_pre_pipeline_check.sh` — 위 두
+  삭제 대상의 테스트.
+
+### Changed
+- **`/qg` 기본 scope가 "이 세션이 편집한 파일"에서 "git이 보고하는 변경"으로
+  바뀐다** (breaking, 관측 가능한 기본 동작 변경). Bash로 쓴 파일이 이제 잡힌다.
+  세션 중 커밋된 변경은 base 대비 diff가 잡는다. **리포 밖 절대경로 편집은
+  잡히지 않는다** — `--paths`로 명시한다.
+- `$resolved_scope_file_count`의 정의가 `check-review-scope.sh` 산출값이 아니라
+  오케스트레이터가 실제로 resolve·review한 집합의 크기로 재정의됐다 — 이전 정의는
+  그 값과 정직-verdict floor가 비교하는 `$changes_exist`가 항상 같은 소스에서 나와
+  서로 disagree할 수 없게 만들어, floor의 첫 분기를 영원히 도달 불가능하게 했다
+  (리뷰 라운드에서 적발된 CRITICAL 결함). 판정-불가 degrade 분기("조용히 0으로
+  취급하지 말 것")는 그대로 유지된다.
+- `hooks/hooks.json`의 `PostToolUse` 항목이 4개에서 3개로 줄었다 — 위 session-tracker
+  제거 반영. 관련 회귀 락(hooks 항목 수·agents 파일 수 불변식)도 함께 갱신.
+- `hooks/session-start-advisor.py`의 사용자-가시 advisory 메시지에서 `[quality-gates
+  v1.32.0]` 런타임 라벨의 버전 번호를 뺐다(`[quality-gates]`) — 이 태그는 "지금 도는
+  버전"을 present하므로 매 bump마다 값이 거짓이 된다. 같은 파일·플러그인 전역의 다른
+  약 30곳 "vX.Y.Z에서 제거/도입됐다" 류 역사적 서술은 손대지 않았다 — 그 서술은
+  시제가 과거라 bump 뒤에도 참으로 남는다.
+
+### Deprecated
+- kill switch 토큰 `DEVBREW_SKIP_HOOKS=quality-gates:session-tracker`는 가리킬
+  대상을 잃었다.
+- 환경변수 `QG_STALE_HOURS`는 소비자를 잃었다 (`pre-pipeline-check.sh`가 유일한
+  독자였다).
+- 두 토큰 모두 fallback 없이 즉시 대상을 잃는다 — CLAUDE.md 메타데이터의 one-minor
+  deprecation window 규정과 충돌한다. 이 충돌을 다음 조건 아래 수용한다: 이
+  플러그인의 제3자 설치가 현재 없다(devbrew는 아직 마켓플레이스로 배포되기 전이다) —
+  이 값을 실제로 설정해 둔 외부 사용자가 존재하지 않는다. 두 토큰 모두 설정해도
+  조용히 아무 효과가 없을 뿐 에러를 내지 않는다 — 대응하는 기능이 옮겨간 게 아니라
+  사라졌으므로 조용한 재활성화는 일어나지 않는다. **제3자 설치가 생기면 이 근거는
+  바뀐다** — 그때는 알림 없는 즉시 제거가 아니라 최소 one-minor 창을 둔다.
+
+### Notes
+- 완료 오라클(3 용어: `post-tool-use-session-tracker`·`files.md`·`pre-pipeline-check`)은
+  `tests/test_git_derived_scope.sh`·`tests/test_no_write_matcher_hooks.sh`·
+  `tests/test_precheck_retired.sh` 세 파일을 이름으로 제외하고 나머지 전체에서 0
+  히트다. 이 셋은 "빠뜨린" 예외가 아니라 구조적으로 필연인 예외다 — 각각 위 세
+  표면의 **부재**를 assert하는 락이라, 대상 문자열(실패 메시지·grep 대상 리터럴)을
+  자기 본문에 반드시 담는다. 그 문자열이 몸체에 있는 것 자체가 락이 하는 일이므로,
+  다른 살아있는 소비 표면과 같은 기준으로 셀 수 없다.
+
 ## [4.2.3] — 2026-08-22
 
 Command frontmatter의 `allowed-tools:`를 3개 command(`cancel-qg.md`·`qg.md`·

@@ -175,14 +175,10 @@ case_sandbox_guard_frozen() {
 
 # T18 + AC24/AC25/AC26: 훅 항목 수 · 에이전트 파일 수 · verdict 토큰 집합 불변
 #
-# hooks 기대값 4→3 (Task 4, hook-write-path-bypass 플랜): 이 락은 몰래 늘거나
-# 주는 쪽 둘 다 잡는 알람이지, "늘기만 막는" 래칫이 아니다 — 의도적 변경이면
-# 이 숫자를 같은 커밋에서 의식적으로 고치는 게 정확히 이 락이 원하는 동작이다
-# (test_codex_backward_compat.sh 헤더의 "의식적 갱신 강제"와 같은 패턴). 이번
-# 감소는 세션 동안 편집한 파일을 추적하던 PostToolUse 훅 삭제다 — matcher가
-# `Edit|Write|MultiEdit`라 Bash로 쓴 파일(heredoc·`sed -i`)은 애초에 이 훅을
-# 발화시키지 못했다(설계 문서 참고); `/qg` 기본 리뷰 스코프는 이후 태스크에서
-# git-derived 로 재정의된다.
+# 이 락은 몰래 늘거나 주는 쪽 둘 다 잡는 알람이지, "늘기만 막는" 래칫이 아니다 —
+# 의도적 변경이면 이 숫자를 같은 커밋에서 의식적으로 고치는 게 정확히 이 락이
+# 원하는 동작이다(test_codex_backward_compat.sh 헤더의 "의식적 갱신 강제"와
+# 같은 패턴). 현재 값(hooks 3 · agents 7)의 근거는 CHANGELOG 참고.
 case_no_new_surfaces() {
   local hooks agents
   hooks=$(python3 -c "

@@ -45,8 +45,6 @@ SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
 # `runtime-evidence.md`는 Runtime gate의 evidence-log 이름 —
 # agents/runtime-verifier.md:98 및 scripts/detect-runtime.sh:286 이
 # `.claude/quality-gates/<sid>/runtime-evidence.md`에 직접 쓴다(실재 확인됨).
-# 세션 누적 파일(review scope를 담던 컴패니언 파일)은 v5.0.0에서 은퇴하며
-# 목록에서 빠졌다 — 어떤 컴포넌트도 더는 그 이름을 쓰지 않는다.
 # 목록에서 빠진 마커의 오판 방향은 "안 지움"(누수)이라 안전하다 — 반대 방향이 아니다.
 SESSION_MARKERS = ("pipeline.md", "publish-eligible.md", "runtime-evidence.md")
 
