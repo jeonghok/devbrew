@@ -97,8 +97,8 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 **Expected**: `quality-gates.local.md`, `quality-gates-session.local.md`, `quality-gates-branch.local.md`, plus `qg-diff-cache.txt` and `qg-code-paths.tmp` all removed. Message "Quality-gates state cleared."
 
 ### L — `DEVBREW_QUALITY_GATES_DISABLE=1`
-**Run**: set env var, then trigger any Edit/Write tool call AND start a new Claude Code session AND attempt `/qg`.
-**Expected**: PostToolUse session-tracker is no-op (no session file written). SessionStart advisor is silent. `/qg` should also detect the env var (this happens via the setup script and skill check; not yet covered by a test, but the existing kill-switch tests for individual hooks confirm the propagation).
+**Run**: set env var, then run a Bash `gh pr create` command AND start a new Claude Code session AND attempt `/qg`.
+**Expected**: PostToolUse auto-trigger hook is no-op (no `/qg` suggestion after `gh pr create`). SessionStart advisor is silent. `/qg` should also detect the env var (this happens via the setup script and skill check; not yet covered by a test, but the existing kill-switch tests for individual hooks confirm the propagation).
 
 ## Static Wiring Checks (automated)
 

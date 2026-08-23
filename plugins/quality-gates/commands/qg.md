@@ -179,9 +179,8 @@ loop, the pre-redesign behavior):
 | Deep | ~55–75% | ≥200 LOC, new files, config changes (AskUserQuestion gate fires) |
 
 Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable. Set
-`DEVBREW_SKIP_HOOKS=quality-gates:session-tracker` to disable just the
-session-tracker hook (keeps SessionStart advisor active). v1.32.0 has no
-Stop hook.
+`DEVBREW_SKIP_HOOKS=quality-gates:post-tool-use` to disable just the
+auto-trigger hook (keeps SessionStart advisor and SessionEnd cleanup active).
 
 ### Gates
 

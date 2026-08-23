@@ -121,12 +121,22 @@ def _assert_no_side_effect(test: unittest.TestCase, script: str, cwd: str,
             )
 
     elif script == "session-start-advisor.py":
-        # Advisor produces stdout when in-flight state is present.
+        # Advisor writes its advisory to STDERR, not stdout — every write in
+        # this hook goes through sys.stderr.write (see _emit_legacy_v1_advisory).
+        # Checking stdout here is vacuous: it is always empty regardless of the
+        # kill switch, so it can never observe a suppressed advisory. The sanity
+        # check below (_assert_side_effect_happened) already knows this and
+        # checks stderr; this assertion must match it or it observes nothing.
         test.assertEqual(
-            proc.stdout.strip(), "",
-            f"{label}: advisor produced output despite kill switch: {proc.stdout!r}",
+            proc.stderr.strip(), "",
+            f"{label}: advisor produced output despite kill switch: {proc.stderr!r}",
         )
-        # And must not delete or rewrite the state.
+        # And must not delete or rewrite the state. NOTE: unlike the stderr
+        # check above, this clause cannot discriminate kill-switch state on its
+        # own — the advisor is read-only BY DESIGN (CLAUDE.md SessionStart rule),
+        # so it holds whether or not the guard fires. It stays as a real (if
+        # non-discriminating) invariant check, not as evidence the kill switch
+        # itself worked; the stderr assertion above is what carries that claim.
         contents = (qg / "pipeline.md").read_text()
         test.assertEqual(contents, PIPELINE_RUNNING, f"{label}: advisor touched state")
 

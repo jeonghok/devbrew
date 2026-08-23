@@ -76,7 +76,16 @@ case_false_clean_blocked() {
   cd / && rm -rf "$REPO"; unset CLAUDE_CODE_SESSION_ID
 }
 
-# AC7 happy-path: resolved scope >0 → floor returns clean (no false-positive block).
+# AC7 happy-path: resolved scope >0 → floor returns clean (no false-positive block),
+# on a repo where changes genuinely exist (feature ahead of main) — distinct from
+# case_genuine_noop_clean below, which is clean because nothing changed at all.
+# The extra changes_exist/branch_ahead_count checks are load-bearing, not decoration:
+# without them this case would pass verdict=="clean" purely because resolved==1 is a
+# hardcoded literal (floor_verdict only branches away from "clean" when resolved==0),
+# never actually reading $out — i.e. it would stay green even if check-review-scope.sh
+# were broken. Asserting the real script output on this fixture forces the case to
+# observe $out, so it can tell "clean because resolved>0 despite real changes" apart
+# from "clean because there was nothing to see".
 case_scope_present_clean() {
   mk_repo_feature_ahead
   export CLAUDE_CODE_SESSION_ID="fc-files-$$"
@@ -84,8 +93,10 @@ case_scope_present_clean() {
   out=$(bash "$SCRIPT")
   resolved=1   # model-asserted resolved scope (fixture) — see comment above
   verdict=$(floor_verdict "$resolved" "$(field changes_exist "$out")" "$(field degraded "$out")")
-  if [[ "$verdict" == "clean" && "$resolved" -eq 1 ]]; then
-    ok "resolved scope >0 → clean (happy-path, no floor over-fire)"
+  if [[ "$verdict" == "clean" && "$resolved" -eq 1 \
+     && "$(field changes_exist "$out")" == "yes" \
+     && "$(field branch_ahead_count "$out")" == "1" ]]; then
+    ok "resolved scope >0 → clean (happy-path, no floor over-fire; changes_exist genuinely yes on this fixture)"
   else
     no "scope-present clean (resolved=$resolved verdict=$verdict out=$out)"
   fi
