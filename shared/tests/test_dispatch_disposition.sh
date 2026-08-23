@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+# guards: plugins/**
+#
+# 모든 dispatch 자리가 자기 처분을 밝히는지 검사한다.
+#
+# 도출을 «표기 열거»에서 출발시키지 않는다. 열거는 fail-open 이다 — 저자가
+# 두 번 물렸다(subagent_type grep 이 5표기 중 1개만 덮은 것, 프로토타입이
+# 표기 ②④를 놓쳐 18 중 16 만 센 것). 에이전트 «정의 집합»(∀)에서 출발하면
+# `0건` 이 답이 되어 누락이 드러난다.
+set -u
+if [ "${1:-}" = "--emit-scanned" ]; then
+  # 실제로 훑은 경로를 낸다. 선언에서 목록을 도출하면 자기 반복이라
+  # 커버리지 증거가 되지 않는다.
+  REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+  PYTHONDONTWRITEBYTECODE=1 python3 - "$REPO_ROOT" <<'PY'
+import sys
+from pathlib import Path
+repo = Path(sys.argv[1])
+seen = set()
+for pat in ("plugins/*/skills/**/*", "plugins/*/commands/**/*",
+            "plugins/*/scripts/*.js", "plugins/*/hooks/**/*"):
+    for f in repo.glob(pat):
+        if f.is_file() and f.suffix in (".md", ".js"):
+            seen.add(str(f.relative_to(repo)))
+for f in repo.glob("plugins/*/agents/*.md"):
+    seen.add(str(f.relative_to(repo)))
+for p in sorted(seen):
+    print(p)
+PY
+  exit 0
+fi
+HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/assert.sh"
+REPO_ROOT="$(cd "$HERE/../.." && pwd)"
+
+# ── 도출은 파이썬으로 한다 (경계 규칙·창 매칭·앵커 검출이 정규식 무거움).
+#    **heredoc 을 `$( … )` 안에 넣지 않는다.** `OUT="$(python3 - <<'PY' … PY)"` 는
+#    파이썬 본문에 `r'(?=["\'\s,)]|$)'` 같은 `\'` + `)` 조합이 들어오는 순간
+#    `bash -n` 이 `syntax error near unexpected token ')'` 로 죽는다 — bash 의
+#    치환 괄호 매칭 선-스캔이 single-quoted heredoc 본문을 완전히 불투명하게
+#    다루지 않기 때문이다. 목 둘로 확인했다: 같은 구조 + 단순 파이썬은 통과하고,
+#    같은 파이썬 줄 + heredoc 이 치환 밖이면 통과한다 — **교차항일 때만** 터진다.
+#    형제 test_no_new_duplication.sh:82 가 같은 구조를 쓰는 것은 그 본문에 트리거
+#    문자가 없어서이지 구조가 안전해서가 아니다. 파일로 받으면 셸이 파이썬 내용을
+#    아예 안 본다.
+TMPD="$(mktemp -d -t dispdisp-XXXXXX)" || exit 1
+trap 'rm -rf "$TMPD"' EXIT
+PYTHONDONTWRITEBYTECODE=1 python3 - "$REPO_ROOT" > "$TMPD/out.txt" <<'PY'
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+REPO = Path(sys.argv[1])
+WINDOW = 40
+
+# ── 1) 에이전트 집합 (∀) — 정의의 frontmatter `name:` 에서
+agents = {}
+for p in sorted(REPO.glob("plugins/*/agents/*.md")):
+    m = re.search(r'^name:\s*(\S+)\s*$', p.read_text(encoding="utf-8"), re.M)
+    if m:
+        agents[m.group(1)] = str(p.relative_to(REPO))
+
+# ── 2) 코퍼스는 **구조 규칙**이다. `.py` 는 Agent 도구를 호출할 수 없으므로
+#       코퍼스 밖 — 이름 열거가 아니라 성질이다.
+corpus = []
+for pat in ("plugins/*/skills/**/*", "plugins/*/commands/**/*",
+            "plugins/*/scripts/*.js", "plugins/*/hooks/**/*"):
+    for f in REPO.glob(pat):
+        if f.is_file() and f.suffix in (".md", ".js"):
+            corpus.append(f)
+corpus = sorted(set(corpus))
+
+# ── 3) **표기 필터가 이름 매칭보다 먼저** 걸린다. 순서를 뒤집으면 산문 속
+#       영어 단어가 dispatch 로 잡힌다 (실측: critiquing-artifacts/SKILL.md 에서
+#       맨 `adversarial` 이 5줄에 등장하고 전부 산문이다).
+#       **콜론까지 포함**해야 한다. `agentType`(콜론 없음)으로 쓰면
+#       smoke-workflow.js:8 의 주석이 19번째 dispatch 로 잡힌다.
+NOTATION = re.compile(r'subagent_type:|agentType:|Agent\(|^\s*agent:\s')
+
+# 경계 규칙: 이름 앞은 줄머리·공백·따옴표·`:` 중 하나, 뒤는 따옴표·공백·
+# 쉼표·닫는괄호·줄끝 중 하나. `-` 는 경계가 아니다 — 그래야
+# `adversarial` 이 `artifact-adversarial` 을 먹지 않는다.
+# 접두사는 **선택적**이다: 저자가 접두사를 빼서 자기를 감사 대상에서
+# 제외하는 경로를 봉쇄한다 (spec-distill/CHANGELOG.md:1197-1198 의 실패).
+PRE, POST = r'(?:^|[\s"\':])', r'(?=["\'\s,)]|$)'
+
+
+def name_re(n):
+    return re.compile(PRE + r'(?:[A-Za-z0-9_-]+:)?' + re.escape(n) + POST)
+
+
+# ── 4) 앵커 «검출»은 느슨하다 (주석 접두사 허용). 서식 검증은 축 A④ 가 한다.
+#       검출을 서식 정규식으로 하면 서식 위반 앵커가 «아예 검출되지 않아»
+#       A①(17 != 18) 로 RED 가 나고 A④ 를 한 번도 재지 못한다.
+ANCHOR_DETECT = re.compile(r'^\s*(?:\S+\s+)?\*\*처분\*\*\s+—')
+
+dispatch = []   # (relpath, lineno, agent)
+anchors = []    # (relpath, lineno, rawline)
+per_file_disp = {}
+per_file_anch = {}
+
+for f in corpus:
+    rel = str(f.relative_to(REPO))
+    lines = f.read_text(encoding="utf-8").splitlines()
+    for i, line in enumerate(lines, 1):
+        if ANCHOR_DETECT.match(line):
+            anchors.append((rel, i, line))
+            per_file_anch.setdefault(rel, []).append(i)
+        if not NOTATION.search(line):
+            continue
+        for a in agents:
+            if name_re(a).search(line):
+                dispatch.append((rel, i, a))
+                per_file_disp.setdefault(rel, []).append(i)
+
+per_agent = {a: 0 for a in agents}
+for (_r, _l, a) in dispatch:
+    per_agent[a] += 1
+
+print("PRINT_1_agents %d" % len(agents))
+print("PRINT_2_dispatch %d" % len(dispatch))
+print("PRINT_3_anchors %d" % len(anchors))
+for a in sorted(per_agent):
+    print("PRINT_4_per_agent %s %d" % (a, per_agent[a]))
+zero = sorted(a for a in per_agent if per_agent[a] == 0)
+print("ZERO_AGENTS %s" % ",".join(zero))
+PY
+rc=$?
+OUT="$(cat "$TMPD/out.txt")"
+assert_eq "$rc" "0" "도출 스크립트가 정상 종료한다"
+
+n_agents="$(printf '%s\n' "$OUT" | sed -n 's/^PRINT_1_agents //p')"
+n_disp="$(printf '%s\n' "$OUT" | sed -n 's/^PRINT_2_dispatch //p')"
+n_anch="$(printf '%s\n' "$OUT" | sed -n 's/^PRINT_3_anchors //p')"
+zero="$(printf '%s\n' "$OUT" | sed -n 's/^ZERO_AGENTS //p')"
+
+# ── vacuity 하한 — 도출이 깨진 것을 「위반 없음」으로 읽지 않는다.
+#    누산기를 «루프 밖에서» 0 으로 두고 최소치를 단언하므로, 루프를 통째로
+#    지워도 0 이 남아 RED 가 된다 (test_copy_of_contract.sh:916-919 의 형태).
+if [ "${n_agents:-0}" -lt 1 ]; then
+  no "에이전트 도출이 0 — 도출이 깨졌다 (vacuity 하한)"
+else
+  ok "에이전트 ${n_agents}개 도출"
+fi
+if [ "${n_disp:-0}" -lt 1 ]; then
+  no "dispatch 줄 도출이 0 — 도출이 깨졌다 (vacuity 하한)"
+else
+  ok "dispatch 줄 ${n_disp}건 도출"
+fi
+
+# ── §5.1⑤ 에이전트별 dispatch >= 1. 면제값을 두지 않는다.
+#    `에이전트 수 == dispatch 수` 는 «걸지 않는다» — 오늘 18/18 인 것은
+#    에이전트당 dispatch 가 우연히 하나여서이고, 한 에이전트를 두 skill 에서
+#    부르는 것은 정당한 편집이다.
+assert_eq "$zero" "" "dispatch 0건인 에이전트가 없다 (있으면 죽은 정의이거나 락이 모르는 표기다)"
+
+# ── 인쇄 단언 — 여섯 인쇄값이 «실제로 나오는지». 인쇄되지 않는 수치를
+#    관측 근거로 적는 것은 관측하지 않는 것과 같다. 인쇄값마다 계측기가 따로 있다.
+assert_grep "$OUT" '^PRINT_1_agents [0-9]+$'   "인쇄 ① 에이전트 수"
+assert_grep "$OUT" '^PRINT_2_dispatch [0-9]+$' "인쇄 ② dispatch 줄 수"
+assert_grep "$OUT" '^PRINT_3_anchors [0-9]+$'  "인쇄 ③ 앵커 수"
+assert_grep "$OUT" '^PRINT_4_per_agent \S+ [0-9]+$' "인쇄 ④ 에이전트별 dispatch 수"
+
+n_scanned="$(bash "$0" --emit-scanned | wc -l | tr -d ' ')"
+if [ "${n_scanned:-0}" -lt 1 ]; then
+  no "인쇄 ⑥ --emit-scanned 가 빈 목록 — 커버리지 대조 대상이 사라진다"
+else
+  ok "인쇄 ⑥ --emit-scanned ${n_scanned}개 경로"
+fi
+
+finish
