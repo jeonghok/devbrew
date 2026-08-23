@@ -37,7 +37,7 @@ class TestUnadjudicated(unittest.TestCase):
 
     def test_finding_without_verdict_is_counted(self):
         """#8 — 판정이 없는 finding 을 카운터 없이 keep 하던 자리.
-        형제 synthesize_artifact_findings.py:197 에는 unadjudicated += 1 이 있다."""
+        형제 synthesize_artifact_findings.py:199 에는 L.hold(...) 가 있다."""
         L = mod.Ledger(items="open")
         findings = [{"file": "a.py", "line": 1, "title": "t", "severity": "high"}]
         kept, dropped = mod.apply_verdicts(findings, [], ledger=L)
