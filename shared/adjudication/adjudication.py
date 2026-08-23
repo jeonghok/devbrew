@@ -87,7 +87,7 @@ class Ledger:
         return any(gate for (_f, _a, _b, gate) in self._coerced)
 
     def blocks(self):
-        """차단 — 항목이 소실됐거나 그 축의 주(主) 판정자가 죽었을 때만 참.
+        """차단 — 항목이 소실됐거나 셀 수 없거나 그 축의 주(主) 판정자가 죽었을 때만 참.
 
         보조(모델 다양성) 손실은 공시하되 막지 않는다. 무조건 True 로 만들면
         test_merge_review.py:130-135(AC10)·:144-148·:154-158 이 깨진다 —
