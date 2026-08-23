@@ -262,7 +262,7 @@ Iterative fix-loop, `max_review_iterations = 5` (hard-coded constant).
 
 For each iteration N (1..5):
 
-1. Compute diff scope (paths / branch / session — from preflight result). **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> Review scope: session (<COUNT> changed files). 전체 PR/브랜치는 /qg branch.` (`<COUNT>` = `$resolved_scope_file_count` — Step 1b 의 `check-review-scope.sh` 산출값). 명시적 `/qg branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/qg branch`는 결정론적 escape hatch로 유지).
+1. Compute diff scope (paths / branch / session — from preflight result). **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> Review scope: session (<COUNT> changed files). 전체 PR/브랜치는 /qg branch.` (`<COUNT>` = `$resolved_scope_file_count` — 정의는 Step 4.5 "Resolved-scope file count" 참조, `check-review-scope.sh` 산출값이 아니다). 명시적 `/qg branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/qg branch`는 결정론적 escape hatch로 유지).
 
 **Step 1b — Changes-exist signal (iteration N=1 only).** Before dispatching the
 scout, run the read-only changes-exist signal **once** and cache it for the rest
@@ -491,16 +491,23 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
    that stdout — NOT the raw reviewer count.
 
    **Resolved-scope file count (floor input — reuse, not a new measurement).**
-   `$resolved_scope_file_count` = the file count of the scope you resolved at
-   step 1. All three modes now derive from git, not from an accumulated session
-   file: for the default (`session`) and for `branch` it is the cached
-   `$branch_ahead_count` from `check-review-scope.sh` when the worktree is clean,
-   and that count plus the worktree's own changed files when `$worktree_dirty ==
-   yes`; for `paths` it is the number of `--paths` glob matches you resolved. If
-   this count cannot be determined (e.g. `check-review-scope.sh` reported
-   `degraded: yes`), do NOT silently treat it as 0 — treat the run as `$degraded
-   == yes` for the floor (the ELSE-IF branch below + loud advisory). This is an
-   already-known value; do not re-measure (the orchestrator has no raw-git/grep tool).
+   `$resolved_scope_file_count` = the size of the file set you actually resolved
+   and reviewed at step 1 — the same set whose `changed_lines`/`new_files` you
+   fed into `scout.py`. It is **never** copied from `check-review-scope.sh`: for
+   the default (`session`) that set is the git-derived changed-file set (branch
+   diff against base, unioned with the worktree's own changed files); for
+   `branch` it is the branch diff against base; for `paths` it is the number of
+   `--paths` glob matches you resolved. This count and the cached
+   `$changes_exist` below MUST stay independently computed — the floor compares
+   them, and if the count were itself read off `check-review-scope.sh` the two
+   could never disagree, silently disarming the floor for its default mode.
+   If this count cannot be determined (e.g. the same git-sanity failure that
+   makes `check-review-scope.sh` itself report `degraded: yes` — detached HEAD,
+   no base branch, shallow clone), do NOT silently treat it as 0 — treat the run
+   as `$degraded == yes` for the floor (the ELSE-IF branch below + loud
+   advisory). This is an already-known value; do not re-measure (re-deriving it
+   risks landing on an answer that no longer matches the set you actually
+   reviewed).
 
    Three cases:
    - **kept > 0** (the counts line totals ≥ 1 across the three severities) →
