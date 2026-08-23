@@ -204,8 +204,14 @@ grep -rlE 'probe_budget|probe_count|probe_cap|effective_cap|raise-cap|PROBE_CAP|
 
 **스윕 후 oracle 이 0 이 되지 않는다 — 그 잔존을 락으로 못 박는다.** audit `## 2. Budget` 절을
 삭제하지 않으므로 픽스처 안의 문자열이 남는다. 그러면 완료 판정이 *"의도적 잔존"* 과 *"잔존 +
-놓친 1"* 을 구별하지 못한다. 완료 조건을 **"oracle 출력에 `tests/fixtures/` 밖 경로가 0건"**
-이라는 **단측 단언**으로 두고 `test_probe_sweep_residue.sh` 가 그것을 잰다.
+놓친 1"* 을 구별하지 못한다. 완료 조건을 **"oracle 출력에 `tests/fixtures/` 와 `CHANGELOG.md` 밖 경로가 0건"** 이라는
+**단측 단언**으로 두고 `test_probe_sweep_residue.sh` 가 그것을 잰다.
+
+**두 제외에는 각각 이유가 있고, 락 본문에 그 이유를 함께 적는다** — 이유 없는 면제 목록은 그
+질문을 영구히 닫는다. 픽스처는 `## 2. Budget` 절을 남기기로 한 비용 판단의 결과이고,
+`CHANGELOG.md` 는 **지울 수 없는 과거 릴리스 이력**이다. 후자를 빼지 않으면 이 락은 원리적으로
+green 이 될 수 없다 — 그리고 **PR1 자신의 `Removed: probe_budget.py` 엔트리가 락을 RED 로
+만든다.** 락을 만족시키는 커밋이 락을 깨뜨리는 형태다.
 
 집합 일치가 아니라 단측인 이유: 픽스처 61건 중 `state-probe-at-cap.md` 와 `state-probe-within.md`
 둘은 audit 픽스처가 아니라 **삭제 대상 `test_probe_budget.sh` 전용 state 픽스처**라 함께
@@ -282,10 +288,15 @@ framing 에 없는 넷(landscape · steelman · blind-spot premortem · coverage
 `plugins/spec-distill/references/compression.md` 에 둔다. `proceed-gate.md` 와 같은 자리,
 같은 패턴이다 — 채택자를 **열거하지 않고 정본을 가리키는 포인터에서 도출**한다.
 
-**이번 채택자는 `framing-requests` 하나이고, 집행도 seed 에만 걸린다.** `conducting-interview`
-는 이 계약을 **원칙으로 상속하되 게이트로 강제받지 않는다** — brief 재구조화는 별도 설계로
-분리했다(§5.2). 계약 파일은 그 사실을 스스로 적는다: *"오늘 이 계약을 게이트로 집행하는 것은
-seed 뿐이다."*
+**이번 채택자는 `framing-requests` 하나다.** 채택 = *자기 표면에 `references/compression.md`
+포인터를 두는 것* 이고, `conducting-interview` 는 **그 포인터를 두지 않는다.** 두면 도출로
+채택자가 되어 앵커를 강제받는데, brief 는 아직 이 계약을 집행할 수 없으므로 그것은 형제 락이
+자기 주석에서 이름 붙인 *"채택하지도 않은 계약의 앵커를 요구받는 거짓 RED"* 다.
+
+brief 가 이 계약을 "원칙으로 상속" 한다는 말은 **`compression.md` 자신이 적는 문장**이지
+`conducting-interview` 쪽 포인터가 아니다: *"오늘 이 계약을 게이트로 집행하는 것은 seed 뿐이고,
+brief 는 재구조화(별도 설계) 이후에 채택한다."* 채택 여부와 상속 서술을 이렇게 갈라 두면
+채택자 집합이 정확히 하나로 유지된다.
 
 계약:
 
@@ -460,14 +471,16 @@ kill switch)에는 이 규약이 없다. 그리고 `reviewing-spec` 의 Phase 5 
 | `references/compression.md` | 압축 규약(shared). 채택자는 포인터에서 도출. 오늘 집행 대상은 seed 뿐임을 자기 안에 적는다 |
 | `references/trivia-escape.md` | 5패턴 정의를 빼내 두 command 가 포인터로 가리킨다 |
 | `commands/request-framing.md` | kill switch + trivia escape 포인터 + skill 호출. `interview.md`(56줄)와 같은 크기 |
-| `skills/framing-requests/SKILL.md` | 확산 후 압축 절차. `proceed-gate.md`·`compression.md` 채택 |
+| `skills/framing-requests/SKILL.md` | 확산 후 압축 절차. `proceed-gate.md`·`compression.md` 채택. **채택하는 순간 기존 락이 요구하는 앵커 넷을 자기 표면에 가져야 한다** — 정지 어휘(`턴 종료`/`다음 턴`) · `polite stop` 금지 · **degrade 채널**(`framing_degradations`) 이름 · **P23 재결정 규약**. 넷은 `test_proceed_gate_adopters.sh` 가 채택자마다 강제하는 것이고, 이 skill 은 셋째 채택자로 **자동 도출**된다 |
 | `agents/seed-critic.md` | `tools: []`. 초안 + 원문 + 레포 `CLAUDE.md` 전문 inline |
 | `agents/seed-readback.md` | `tools: []`. seed 만. 판정은 사용자 |
 | `templates/interview-seed-template.md` | **예시와 쓰지 말 것.** 양식이 아니다 |
 | `templates/interview-seed-audit-template.md` | 원문 · 질문 전체 · 긴 초안 · 비평과 냉독 · degrade |
 | `scripts/check_seed.py` | 검사 넷(§8.1) — **seed 본문에 대해서는 전부 부재 검사**이고, 원문 보존 하나만 audit 쪽 존재 검사다 |
 | `scripts/build_seed_inline_blob.py` | critic 입력 조립. `build_brief_inline_blob.py` 와 같은 위생 규약(식별자 redact) |
-| `scripts/brief-codex-suppression-checklist.md` | codex 억제 축 체크리스트 — `AXES` 확장의 선결물 |
+| `scripts/run_seed_codex_reviewer.sh` | seed 억제 축 codex 러너. `run_brief_codex_reviewer.sh` 의 골격을 따르되 **brief 러너를 건드리지 않는다**(아래) |
+| `scripts/build_seed_codex_prompt.py` | seed payload 형상의 프롬프트 빌더 |
+| `scripts/seed-codex-suppression-checklist.md` | 억제 축 체크리스트 — C25 의 네 축 |
 | `tests/*` | §8.2 |
 
 `seed-critic` 과 `seed-readback` 을 나눈 것은 도구가 아니라 **입력** 때문이다. critic 은 원문과
@@ -491,10 +504,7 @@ brief 재구조화를 뺐으므로 편집면이 작다. 완결성 oracle 은 §2
 | `tests/test_conducting_interview_stage.sh` | probe 단언 제거(정지 어휘 앵커는 유지) + **floor 탈출구 단언 교체** — 아래 |
 | `templates/interview-audit-template.md` | `## 2. Budget` **본문 교체** — 아래 |
 | `scripts/run_spec_codex_reviewer.sh` | 맨 `${CLAUDE_PLUGIN_ROOT}` 를 형제 파일과 같은 `:-` 유도로 |
-| `scripts/brief_review_state.py` | `--ledger-key` 인자(기본값 유지) + **`AXES` 에 `suppression` 추가** |
-| `scripts/build_brief_codex_prompt.py` | `AXES` 에 `suppression` 추가(argparse `choices`) |
-| `scripts/run_brief_codex_reviewer.sh` | `suppression` 축 배선 |
-| `skills/reviewing-brief/SKILL.md` · `references/finishing.md` | 억제 축 산출물이 사용자에게 닿는 경로 — 아래 |
+| `scripts/brief_review_state.py` | **degrade 원장 writer 를 framing 이 재사용한다.** `--ledger-key` 인자(기본값 `brief_review_degradations` 유지)로 framing 이 `framing_degradations` 에 쓰고, `AXES`(= 원장의 `affected_axis` 닫힌 열거)에 `suppression` 을 더한다. 이 파일 하나만 고친다 |
 | `tests/test_proceed_gate_adopters.sh` | **P23 앵커만** 추가. 멤버십 단언 없음(§8.2) |
 | `README.md` · `CHANGELOG.md` · `plugin.json` | flow · bump |
 
@@ -509,13 +519,20 @@ floor escalation 3옵션(계속 / 박제 / abort)을 잠그는 **유일한 기�
 같으므로, 같은 파일에 **박제 경로 단언을 새로 둔다** — SKILL 표면에 "사용자가 종료를 요청하면
 미충족 floor 를 사용자-승인 박제로 닫는다" 가 실재하는가. 없으면 RED.
 
-**억제 축의 소비자** — `suppression` 을 `AXES` 에 넣는 것만으로는 findings 가 갈 곳이 없다.
-`AXES` 는 **두 곳**에 따로 있고(`build_brief_codex_prompt.py`, `brief_review_state.py`) 둘 다
-고쳐야 하며, `merge_brief_review.py` 는 `fidelity_*`/`critic_*`/`codex_*` 키에 하드코딩이고
-`finishing.md` 의 핸드오프는 YAML 두 개가 고정이다. **이 설계에서 억제 축은 판정에 합류하지
-않는다** — seed 비평자의 codex 업그레이드로만 쓰이고, 그 findings 는 `reviewing-brief` 병합을
-거치지 않고 §2.4 의 억제 리뷰 출력으로 사용자에게 직접 간다. 그래서 `merge_brief_review.py` 와
-핸드오프 인자는 **건드리지 않는다**. 그 사실을 계약으로 적는 것이 위 표의 마지막 두 행이다.
+**억제 축은 brief 파이프라인에 얹지 않고 seed 쪽에 따로 세운다.** 첫 판본은 `suppression` 을
+brief 러너에 배선하려 했는데, 그러면 세 지점의 축 하드코딩(`build_brief_codex_prompt.py` 의
+`AXES` · `run_brief_codex_reviewer.sh` 의 `case … exit 2` · `brief_review_state.py` 의 `AXES`)을
+전부 건드려야 하고, 그중 두 어휘는 **의미가 다르다** — 앞 둘은 *codex 프롬프트 축*(축마다
+체크리스트 파일이 실재해야 한다)이고 셋째는 *degrade 원장의 `affected_axis`*(체크리스트가
+있을 이유가 없다). 게다가 brief 프롬프트 빌더는 **brief payload 형상**을 만드는데 입력은
+seed 다.
+
+그래서 §7.1 이 **seed 전용 러너·빌더·체크리스트 셋**을 새로 만든다. brief 러너·brief 프롬프트
+빌더·`merge_brief_review.py`·`finishing.md` 의 핸드오프 인자는 **하나도 건드리지 않는다.**
+
+**억제 축은 판정에 합류하지 않는다.** seed 비평자의 codex 업그레이드로만 쓰이고, 그 findings 는
+어떤 병합기도 거치지 않고 §2.4 의 억제 리뷰 출력으로 **사용자에게 직접** 간다. codex 가 죽으면
+degrade record 하나가 `framing_degradations` 에 남고 §2.4 의 격리 critic 이 단독으로 돈다.
 
 **최초 요청 원문 보존** — 지금 `finishing.md` 는 §6 를 `user_statements` 에서만 채우고
 `$ARGUMENTS`(최초 요청)는 거기 들어가지 않는다. 게이트 15항 어디에도 원문 보존 요구가 없고,
@@ -568,15 +585,38 @@ seed 에만 걸린다. brief 게이트는 이번에 건드리지 않는다(§5.2
 
 ### 8.2 락과 mutation
 
-| 락 | mutation (이 편집이 RED 를 내야 한다) |
+이 설계가 소유하는 것은 **무엇이 단언되어야 하는가** 다. *어느 테스트가 어느 PR 에서 green
+이어야 하는가* 는 아래 「락 × PR 은 계획이 도출한다」로 넘긴다.
+
+| 락 (신규) | mutation (이 편집이 RED 를 내야 한다) |
 |---|---|
 | `test_check_seed.sh` | 검사 함수 하나를 `check_seed.py` 에서 삭제 → 해당 RED 픽스처가 GREEN 이 되면 락 실패 |
 | `test_seed_one_sentence.sh` | **한 문장뿐인 seed 픽스처(헤딩 0·필드 0)가 통과해야 한다.** `check_seed.py` 에 본문 존재 검사를 **추가**하면 RED |
 | `test_request_framing_command.sh` | trivia escape 포인터 · kill switch · skill dispatch 각각 삭제 |
 | `test_seed_agents.sh` | `tools: []` → `tools: Read` |
-| `test_probe_sweep_residue.sh` | **단측 단언** — oracle 출력에 `tests/fixtures/` 밖 경로가 0건인가. 비-픽스처 파일에 별칭 한 줄을 되살리면 RED. *집합 일치가 아니라 단측인 이유*: `state-probe-at-cap.md`·`state-probe-within.md` 두 픽스처는 삭제 대상 `test_probe_budget.sh` 전용이라 함께 지워지는 것이 옳은데, 집합 일치로 잠그면 그 올바른 정리에 거짓 RED 가 난다 |
-| `test_compression_adopters.sh` | ① 채택자 표면에서 압축 어휘 삭제 ② 정본 `compression.md` 를 presence 코퍼스에 넣기(자기 만족) — 둘 다 RED. **멤버십은 재지 않는다**(아래) |
-| `test_proceed_gate_adopters.sh` | P23 앵커 추가만. 멤버십 단언 없음(아래) |
+| `test_compression_adopters.sh` | ① 채택자 표면에서 압축 어휘 삭제 ② 정본을 presence 코퍼스에 넣기(자기 만족) ③ 유일 채택자가 포인터 상실(하한 1) — 셋 다 RED |
+| **coverage-mapper 바운드 단언(교체)** | `test_conducting_interview_stage.sh` 의 기존 단언이 `probe_count` 단위를 잠근다. PR1 이 그것을 지우므로 **두-필드 바운드에 대한 대체 단언**을 같은 파일에 둔다 — 없으면 그 바운드가 locked 에서 unlocked 로 후퇴한다 |
+| **floor 박제 경로 단언(교체)** | 같은 파일의 probe 백스톱 블록에 있던 3옵션 단언이 함께 지워진다. 대체 단언은 **그 파일 자신의 규칙대로 awk 윈도우로 스코프**해야 한다 — 박제 어휘가 블록 밖에도 선재해서 전-파일 grep 은 teeth 가 0 이다 |
+
+`test_proceed_gate_adopters.sh` 는 **기존 락**이다. P23 앵커 하나만 더하고, `framing-requests`
+가 셋째 채택자로 자동 도출되어 앵커 넷을 요구받는다(§7.1).
+
+#### 락 × PR 은 계획이 도출한다 — 이 문서가 열거하지 않는다
+
+**네 라운드 동안 이 행렬을 손으로 적어 네 번 틀렸다.** 매번 대상만 옮겨 갔다(PR0 → PR1 → PR2 →
+PR3). 열거가 원인이므로 열거를 그만둔다. 이 문서는 **규칙**을 주고, `writing-plans` 가 레포에
+대고 도출한다.
+
+> **각 PR 은 자기가 건드리는 파일 집합 F 를 갖는다. 계획은 `tests/` 를 전수해 F 의 원소를
+> 코퍼스로 삼는 테스트를 도출하고, 그 전부에 대해 그 PR 이 green 인지 확인한다.** 목록을
+> 손으로 적지 않는다 — 손으로 적은 목록이 틀렸다는 것이 네 번 관측됐다.
+
+도출할 때 밟은 함정 둘을 이름으로 남긴다. 계획이 같은 자리를 다시 밟지 않게 한다.
+
+| 함정 | 실측된 형태 |
+|---|---|
+| **완료 oracle 이 자기 자신을 잡는다** | probe 별칭 스윕의 완료 조건을 "`tests/fixtures/` 밖 0건" 으로 두면 `CHANGELOG.md` 의 과거 릴리스 이력에 걸려 **원리적으로 green 이 될 수 없고**, PR1 자신의 `Removed: probe_budget.py` 엔트리가 락을 RED 로 만든다. 이력 파일을 스캔에서 빼되 **왜 뺐는지를 락 본문에 함께 적어라** — 이유 없는 면제 목록은 그 질문을 영구히 닫는다 |
+| **같은 이름의 두 열거가 다른 것을 뜻한다** | `AXES` 가 세 곳에 있는데 `build_brief_codex_prompt.py` 는 *codex 프롬프트 축*(축마다 체크리스트 파일 실재), `run_brief_codex_reviewer.sh` 는 `case … exit 2` 의 *실제 fail-point*, `brief_review_state.py` 는 *degrade 원장의 `affected_axis`* 다. parity 락을 세우기 전에 **두 열거가 같은 것을 뜻하는지 먼저 확인하라** — 아니면 술어 자체가 거짓이다 |
 
 #### 채택자 멤버십 락은 만들지 않는다 — OQ3 은 열린 채로 남긴다
 
@@ -609,7 +649,12 @@ seed 에만 걸린다. brief 게이트는 이번에 건드리지 않는다(§5.2
 green 이 아니다.
 
 `test_compression_adopters.sh` 는 멤버십을 재지 않는다. 채택자별 압축 어휘 존재와 코퍼스
-자기만족 방지만 본다 — 오늘 채택자가 하나뿐이라 개수 하한도 두지 않는다(§4).
+자기만족 방지를 본다.
+
+**단 개수 하한 1 은 둔다.** 두지 않으면 유일한 채택자가 포인터를 잃는 순간 도출 집합이
+공집합이 되고, 채택자별 루프가 0회 돌아 **vacuous GREEN** 이 난다 — 형제 락이 자기 주석에서
+정확히 그 모양을 막으려고 하한을 둔다고 적어 뒀다. 하한 1 은 열거가 아니므로 둘째 채택자가
+생겨도 그대로 작동한다(brief 가 재구조화 이후 채택하면 자동으로 같은 요구를 받는다).
 
 ### 8.3 회귀
 
@@ -625,18 +670,22 @@ brief 재구조화를 뺐으므로 §4 URL 픽스처 59건은 **이번 범위 �
 
 **각 PR 은 단독으로 green 이어야 한다.** 이것이 아래 분해를 정한 유일한 제약이다.
 
-| | 내용 | 새 락 | 버전 |
+| | 내용 | 이 PR 이 새로 넣는 단언 | 버전 |
 |---|---|---|---|
-| **PR0** | P23 신설 — philosophy · CLAUDE.md · `proceed-gate.md` 재결정 규약 승격 · **`reviewing-spec/SKILL.md` 에 그 어휘 추가**(오늘 0건) · 채택자 P23 앵커 | `test_proceed_gate_adopters.sh` P23 앵커 — 채택자 표면에서 그 어휘를 지우면 RED | `0.34.0` |
-| **PR1** | **상한 삭제 + 원문 보존** — `probe_budget.py`·전용 픽스처 제거 · coverage-mapper 바운드를 에피소드 필드 둘로 이식 · 조건 2 유한성 근거 · floor 탈출구 · Budget 본문 교체 · `finishing.md` 원문 보존 · brief `[미평가]` 라벨 판정 | `test_probe_sweep_residue.sh`(단측) + `test_conducting_interview_stage.sh` 의 **floor 박제 경로 단언**(교체) | `0.35.0` |
-| **PR2** | **codex 억제 축** — `brief-codex-suppression-checklist.md` · `AXES` **두 곳** 확장 · 러너 배선 · `run_spec_codex_reviewer.sh` 의 `:-` 유도 | `test_codex_axes_parity.sh` — 두 `AXES` 가 같은 축 집합을 갖고 각 축의 체크리스트 파일이 실재하는가. 한쪽만 확장하면 RED | `0.36.0` |
-| **PR3** | **request-framing 본체** — `compression.md` · `trivia-escape.md` · command · skill · agent 2 · template 2 · `check_seed.py` · blob 빌더 | §8.2 의 seed 락 5종 + `test_compression_adopters.sh` | `0.37.0` |
-| **PR4** | 연결 — R1 재정의 · 탐색 경계 · seed 입력 규약 · `/interview` 조언 · README flow | `test_readme_sync.sh` 갱신 | `0.38.0` |
+| **PR0** | P23 신설 — philosophy · CLAUDE.md · `proceed-gate.md` 재결정 규약 승격 · **`reviewing-spec/SKILL.md` 에 그 어휘 추가**(오늘 0건, 없으면 아래 앵커가 착지 즉시 RED) | 채택자 P23 앵커 | `0.34.0` |
+| **PR1** | **상한 삭제 + 원문 보존** — `probe_budget.py`·전용 픽스처 제거 · coverage-mapper 바운드를 에피소드 필드 둘로 이식 · 조건 2 유한성 근거 · floor 탈출구 · Budget 본문 교체 · `finishing.md` 원문 보존 · brief `[미평가]` 라벨 판정 | coverage-mapper 바운드 단언(교체) · floor 박제 경로 단언(교체, awk 스코프) · probe 잔존 단측 단언 | `0.35.0` |
+| **PR2** | **러너 위생** — `run_spec_codex_reviewer.sh` 의 맨 참조를 형제 파일과 같은 `:-` 유도로 · `brief_review_state.py` 에 `--ledger-key` + `AXES` 에 `suppression` | 러너가 env 없이도 codex 에 닿는가(사유가 `aborted_before_completion` 으로 뭉개지지 않는가) | `0.36.0` |
+| **PR3** | **request-framing 본체** — `compression.md` · `trivia-escape.md` · command · skill(앵커 넷 포함) · agent 2 · template 2 · `check_seed.py` · blob 빌더 · **seed codex 러너·빌더·체크리스트** | §8.2 의 seed 락 5종 + `test_compression_adopters.sh` | `0.37.0` |
+| **PR4** | 연결 — R1 재정의 · 탐색 경계 · seed 입력 규약 · `/interview` 조언 · README flow | 없음(기존 락 갱신만) | `0.38.0` |
 
-**모든 PR 이 자기 새 락을 green 으로 만드는 편집을 포함한다.** 첫 판본은 PR0 이 P23 앵커 락을
-넣으면서 `reviewing-spec/SKILL.md` 편집을 빠뜨려 착지 즉시 RED 였고, PR1·PR2 에는 mutation
-잠긴 락이 하나도 없었다. 락 없는 PR 은 "단독 green" 을 주장할 수 있어도 그 주장을 재는 것이
-없다.
+**"각 PR 단독 green" 은 위 열이 아니라 §8.2 의 도출 규칙이 보장한다.** 새 단언을 적어 두는 것은
+*무엇을 새로 잠그는가* 를 보이기 위해서이고, *그 PR 이 깨뜨릴 수 있는 기존 락*은 열거하지
+않는다 — 계획이 `F → 그 파일을 코퍼스로 삼는 테스트` 로 도출한다. 첫 판본들이 그 목록을 손으로
+적어 네 번 틀렸고, 매번 대상만 옮겨 갔다.
+
+**억제 축이 PR2 에서 PR3 으로 옮겨 간 이유**: seed 전용 러너·빌더·체크리스트로 재설계했으므로
+seed 가 없는 시점에 단독으로 설 수 없다. PR2 에는 brief 러너와 무관하게 옳은 두 가지(러너
+fallback 정정 · 원장 writer 의 재사용 준비)만 남는다.
 
 PR0 이 맨 앞인 이유는 뒤 PR 들이 확정을 재결정하기 때문이다 — 규약이 먼저 서 있어야 그
 재결정들이 규약을 따르는 것이 된다.
@@ -731,7 +780,10 @@ PR0 에서 PR4 까지가 여러 세션에 걸친다. `/compact` 를 지나면 �
 
 ### 계획으로 미루는 것 (writing-plans 소관)
 
+- **락 × PR 행렬** — §8.2 의 도출 규칙대로 `F → 그 파일을 코퍼스로 삼는 테스트` 전수. **이것이
+  계획의 첫 작업이다.** 설계가 네 번 손으로 적어 네 번 틀린 자리이므로, 열거하지 말고 도출하라.
 - 각 PR 안의 커밋 분할과 순서.
 - probe 별칭 스윕의 실제 수행 방법(비-픽스처 10건) — 일괄인지 수동인지.
-- `brief-codex-suppression-checklist.md` 의 실제 체크리스트 문면.
-- §11 의 미해결 넷(인계 규약 · "수정" 의 정의 · seed 대 새 발화 우선순위 · 깎기 기준선)의 착지점.
+- `seed-codex-suppression-checklist.md` 의 실제 체크리스트 문면.
+- floor 박제 단언·coverage-mapper 바운드 단언의 awk 윈도우 경계.
+- §11 의 미해결들의 착지점.
