@@ -188,7 +188,7 @@ done
 
 # --- Test 6: hooks read payload cwd (AST-based, not grep) ---
 T6_FAIL=0
-for hook in post-tool-use-session-tracker.py session-start-advisor.py; do
+for hook in session-start-advisor.py; do
   if ! python3 -c "
 import ast, sys
 tree = ast.parse(open('$PLUGIN_DIR/hooks/$hook').read())
@@ -207,7 +207,7 @@ sys.exit(0 if found else 1)
     no "T6: hooks/$hook does not call .get('cwd') anywhere"
   fi
 done
-[[ "$T6_FAIL" -eq 0 ]] && ok "T6: all 2 hooks read payload cwd (AST verified)"
+[[ "$T6_FAIL" -eq 0 ]] && ok "T6: session-start-advisor.py reads payload cwd (AST verified)"
 
 # --- Test 9: REMOVED — v1.32.0 schema intentionally has no project_dir field ---
 # project_dir is now a per-dispatch runtime parameter threaded by the SKILL

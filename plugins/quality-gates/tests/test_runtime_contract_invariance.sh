@@ -174,6 +174,15 @@ case_sandbox_guard_frozen() {
 }
 
 # T18 + AC24/AC25/AC26: 훅 항목 수 · 에이전트 파일 수 · verdict 토큰 집합 불변
+#
+# hooks 기대값 4→3 (Task 4, hook-write-path-bypass 플랜): 이 락은 몰래 늘거나
+# 주는 쪽 둘 다 잡는 알람이지, "늘기만 막는" 래칫이 아니다 — 의도적 변경이면
+# 이 숫자를 같은 커밋에서 의식적으로 고치는 게 정확히 이 락이 원하는 동작이다
+# (test_codex_backward_compat.sh 헤더의 "의식적 갱신 강제"와 같은 패턴). 이번
+# 감소는 post-tool-use-session-tracker.py PostToolUse 훅 삭제다 — matcher가
+# `Edit|Write|MultiEdit`라 Bash로 쓴 파일(heredoc·`sed -i`)은 애초에 이 훅을
+# 발화시키지 못했다(설계 문서 참고); `/qg` 기본 리뷰 스코프는 이후 태스크에서
+# git-derived 로 재정의된다.
 case_no_new_surfaces() {
   local hooks agents
   hooks=$(python3 -c "
@@ -183,7 +192,7 @@ with open('$PLUGIN_ROOT/hooks/hooks.json', encoding='utf-8') as f:
 print(sum(len(v) for v in d.get('hooks', {}).values()))
 ")
   agents=$(ls "$PLUGIN_ROOT/agents" | wc -l | tr -d ' ')
-  [[ "$hooks" == "4" ]]  && ok "hooks.json 항목 4개 불변" || no "hooks 항목 수 $hooks (기대 4)"
+  [[ "$hooks" == "3" ]]  && ok "hooks.json 항목 3개 불변" || no "hooks 항목 수 $hooks (기대 3)"
   [[ "$agents" == "7" ]] && ok "agents/ 파일 7개 불변"    || no "agents 파일 수 $agents (기대 7)"
   # verdict 토큰은 4종 밖으로 늘지 않는다.
   #

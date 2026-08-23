@@ -34,7 +34,6 @@ HOOKS = PLUGIN_ROOT / "hooks"
 # The skip key is the suffix used in DEVBREW_SKIP_HOOKS=quality-gates:<key>.
 HOOK_CONTRACTS = [
     ("post-tool-use.py", "post-tool-use"),
-    ("post-tool-use-session-tracker.py", "session-tracker"),
     ("session-start-advisor.py", "session-start-advisor"),
     ("session-end-cleanup.py", "session-end-cleanup"),
 ]
@@ -64,12 +63,6 @@ def _payload_for(script: str) -> dict:
             "tool_input": {"command": "gh pr create --title x --body y"},
             "tool_response": {"stdout": "https://github.com/owner/repo/pull/42\n"},
             "cwd": "",  # filled in per test
-        }
-    if script == "post-tool-use-session-tracker.py":
-        return {
-            "session_id": SID,
-            "tool_name": "Edit",
-            "tool_input": {"file_path": "/tmp/regression-killswitch-target.txt"},
         }
     return {"session_id": SID}
 
@@ -127,13 +120,6 @@ def _assert_no_side_effect(test: unittest.TestCase, script: str, cwd: str,
                 f"{label}: post-tool-use injected systemMessage despite kill switch",
             )
 
-    elif script == "post-tool-use-session-tracker.py":
-        files_md = qg / "files.md"
-        test.assertFalse(
-            files_md.exists(),
-            f"{label}: session-tracker created {files_md} despite kill switch",
-        )
-
     elif script == "session-start-advisor.py":
         # Advisor produces stdout when in-flight state is present.
         test.assertEqual(
@@ -155,7 +141,7 @@ def _assert_no_side_effect(test: unittest.TestCase, script: str, cwd: str,
 
 
 class KillSwitchRegressionTest(unittest.TestCase):
-    """Each test runs against all 5 hooks via subTest."""
+    """Most tests below iterate HOOK_CONTRACTS via subTest; a few target one hook directly."""
 
     def setUp(self) -> None:
         self.tmp = tempfile.mkdtemp(prefix="qg-killswitch-")
@@ -303,11 +289,6 @@ class KillSwitchRegressionTest(unittest.TestCase):
             self.assertIn(
                 "systemMessage", proc.stdout,
                 "post-tool-use sanity: should emit systemMessage on `gh pr create`",
-            )
-        elif script == "post-tool-use-session-tracker.py":
-            self.assertTrue(
-                (qg / "files.md").exists(),
-                "session-tracker sanity: should create files.md on Edit",
             )
         elif script == "session-start-advisor.py":
             self.assertNotEqual(
