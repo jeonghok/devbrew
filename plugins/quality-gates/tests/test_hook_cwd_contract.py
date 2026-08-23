@@ -6,7 +6,7 @@ advisor·cleanup) 을 함께 스모크했다. session-tracker 가 삭제되며 �
 (`test_state_file_under_payload_cwd`·`test_relative_file_path_resolves_against_payload_cwd`)
 는 죽지만, 나머지 세 테스트는 여전히 생존한 advisor/cleanup 훅의 payload-cwd
 계약을 잰다 — 그래서 파일 전체가 아니라 그 두 테스트와 그 전용 vehicle
-(`HOOK`/`run_hook`) 만 제거했다(task-4-report.md 참고).
+(`HOOK`/`run_hook`) 만 제거했다.
 """
 import json
 import subprocess

@@ -37,14 +37,14 @@ floor_verdict() {
   fi
 }
 
-# resolved_scope_file_count for SESSION mode (mirror of SKILL §5.3 session derivation:
-# files.md "- <path>" items). The script no longer reads files.md — scope is model-owned —
-# so this derivation lives with the consumer (here, the test).
-session_resolved_count() {
-  local md=".claude/quality-gates/$1/files.md" c=0
-  [[ -f "$md" ]] && c=$(grep -c '^- ' "$md" 2>/dev/null || true)
-  echo "$c"
-}
+# resolved_scope_file_count fixture (mirror of SKILL §5.3 session derivation).
+# There is no on-disk representation of this value in production — SKILL.md's
+# `$resolved_scope_file_count` is a value the MODEL asserts from its own turn's
+# scope resolution and is by design never derived from check-review-scope.sh
+# (the two signals must stay independently computed, or the floor below can
+# never observe a disagreement between them). Each case sets `resolved` as a
+# plain local variable standing in for that model-asserted count, instead of
+# round-tripping it through a file.
 
 # Build a repo with a 'main' base + a 'feature' branch 1 commit ahead.
 # Sets global REPO and leaves CWD inside it (on feature, clean tree).
@@ -64,7 +64,7 @@ case_false_clean_blocked() {
   export CLAUDE_CODE_SESSION_ID="fc-empty-$$"
   local out resolved verdict
   out=$(bash "$SCRIPT")
-  resolved=$(session_resolved_count "$CLAUDE_CODE_SESSION_ID")   # no files.md → 0
+  resolved=0   # model-asserted resolved scope (fixture) — see comment above
   verdict=$(floor_verdict "$resolved" "$(field changes_exist "$out")" "$(field degraded "$out")")
   if [[ "$verdict" == "not_clean" \
      && "$(field changes_exist "$out")" == "yes" \
@@ -80,11 +80,9 @@ case_false_clean_blocked() {
 case_scope_present_clean() {
   mk_repo_feature_ahead
   export CLAUDE_CODE_SESSION_ID="fc-files-$$"
-  mkdir -p ".claude/quality-gates/$CLAUDE_CODE_SESSION_ID"
-  printf '# files\n\n- a.txt\n' > ".claude/quality-gates/$CLAUDE_CODE_SESSION_ID/files.md"
   local out resolved verdict
   out=$(bash "$SCRIPT")
-  resolved=$(session_resolved_count "$CLAUDE_CODE_SESSION_ID")   # 1
+  resolved=1   # model-asserted resolved scope (fixture) — see comment above
   verdict=$(floor_verdict "$resolved" "$(field changes_exist "$out")" "$(field degraded "$out")")
   if [[ "$verdict" == "clean" && "$resolved" -eq 1 ]]; then
     ok "resolved scope >0 → clean (happy-path, no floor over-fire)"
@@ -101,7 +99,7 @@ case_genuine_noop_clean() {
   export CLAUDE_CODE_SESSION_ID="fc-noop-$$"
   local out resolved verdict
   out=$(bash "$SCRIPT")
-  resolved=$(session_resolved_count "$CLAUDE_CODE_SESSION_ID")   # 0
+  resolved=0   # model-asserted resolved scope (fixture) — see comment above
   verdict=$(floor_verdict "$resolved" "$(field changes_exist "$out")" "$(field degraded "$out")")
   if [[ "$verdict" == "clean" && "$(field changes_exist "$out")" == "no" ]]; then
     ok "genuine no-op (no changes) → clean (floor not over-fired)"
@@ -120,7 +118,7 @@ case_degraded_fail_open() {
   export CLAUDE_CODE_SESSION_ID="fc-degraded-$$"
   local out resolved verdict
   out=$(bash "$SCRIPT")
-  resolved=$(session_resolved_count "$CLAUDE_CODE_SESSION_ID")   # 0
+  resolved=0   # model-asserted resolved scope (fixture) — see comment above
   verdict=$(floor_verdict "$resolved" "$(field changes_exist "$out")" "$(field degraded "$out")")
   if [[ "$verdict" == "clean_degraded" && "$(field degraded "$out")" == "yes" ]]; then
     ok "no base branch → degraded → floor fail-open (clean + advisory)"

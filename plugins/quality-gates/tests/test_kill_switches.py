@@ -188,23 +188,27 @@ class KillSwitchRegressionTest(unittest.TestCase):
     def test_per_hook_skip_does_not_cross_contaminate(self) -> None:
         """A longer key must NOT silence a hook whose key is its prefix.
 
-        Previously: `'quality-gates:post-tool-use' in 'quality-gates:post-tool-use-session-tracker'`
-        was True (substring match), so a user setting the longer key by mistake
-        (e.g. typing the script filename) would silently disable post-tool-use.py.
-        Whole-token match closes this hole.
+        `quality-gates:session-start-advisor` (the hook key) is a literal string
+        prefix of `quality-gates:session-start-advisor:frontmatter-scan` (its
+        sub-feature key). With naive substring match,
+        `'quality-gates:session-start-advisor' in 'quality-gates:session-start-advisor:frontmatter-scan'`
+        is True, so a user opting out of only the sub-feature would silently
+        disable the whole hook. Whole-token match closes this hole.
         """
-        # Setup post-tool-use state. Apply SKIP_HOOKS naming the LONGER key.
-        # post-tool-use.py must still emit systemMessage (NOT silenced).
-        _setup_state(self.tmp, "post-tool-use.py")
+        # Setup session-start-advisor state. Apply SKIP_HOOKS naming the LONGER
+        # (sub-feature) key. session-start-advisor.py must still emit its
+        # legacy-state advisory on stderr (NOT silenced).
+        _setup_state(self.tmp, "session-start-advisor.py")
         proc = _run_hook(
-            "post-tool-use.py",
-            _payload_for("post-tool-use.py"),
-            {"DEVBREW_SKIP_HOOKS": "quality-gates:post-tool-use-session-tracker"},
+            "session-start-advisor.py",
+            _payload_for("session-start-advisor.py"),
+            {"DEVBREW_SKIP_HOOKS": "quality-gates:session-start-advisor:frontmatter-scan"},
             self.tmp,
         )
         self.assertIn(
-            "systemMessage", proc.stdout,
-            "post-tool-use was accidentally silenced by a key whose prefix matches it",
+            "Legacy v1.x pipeline state detected", proc.stderr,
+            "session-start-advisor was accidentally silenced by a sub-feature "
+            "key whose prefix matches it",
         )
 
     def test_skill_setup_qg_honors_disable_kill_switch(self) -> None:

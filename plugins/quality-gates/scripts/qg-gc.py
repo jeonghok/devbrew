@@ -41,12 +41,14 @@ SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
 # 마커 기반은 반대로 시간에 fail-closed다 — 새 형제 디렉토리는 자동으로 안전하다.
 # 오판 방향도 옳다: 안 지우는 누수(빈 디렉토리 0바이트)가 살아있는 것을 지우는
 # 것보다 안전하다.
-# `pipeline.md`·`files.md`·`publish-eligible.md`는 SKILL.md가 실제로 쓰는 이름이다.
+# `pipeline.md`·`publish-eligible.md`는 SKILL.md가 실제로 쓰는 이름이다.
 # `runtime-evidence.md`는 Runtime gate의 evidence-log 이름 —
 # agents/runtime-verifier.md:98 및 scripts/detect-runtime.sh:286 이
 # `.claude/quality-gates/<sid>/runtime-evidence.md`에 직접 쓴다(실재 확인됨).
+# 세션 누적 파일(review scope를 담던 컴패니언 파일)은 v5.0.0에서 은퇴하며
+# 목록에서 빠졌다 — 어떤 컴포넌트도 더는 그 이름을 쓰지 않는다.
 # 목록에서 빠진 마커의 오판 방향은 "안 지움"(누수)이라 안전하다 — 반대 방향이 아니다.
-SESSION_MARKERS = ("pipeline.md", "files.md", "publish-eligible.md", "runtime-evidence.md")
+SESSION_MARKERS = ("pipeline.md", "publish-eligible.md", "runtime-evidence.md")
 
 # TTL 계산 · 나이 판정 · 안전 삭제는 `shared/gc/gc_common.py` 정본(형제 사본
 # `scripts/gc_common.py`)이 갖는다. 여기 남는 것은 quality-gates 고유 본문이다 —

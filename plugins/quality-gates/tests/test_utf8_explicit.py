@@ -19,9 +19,9 @@ degrade 가 된다.
   코드의 실제 로케일 의존은 텍스트만 봐서는 안 보인다). 강제로 non-UTF-8 로케일을
   만들고 한국어 내용을 담은 실제 프로덕션 훅을 돌려 살아남는지 잰다.
 
-  ★ Task 4 (session-tracker 훅 제거) 이후 vehicle 정정: 원래 이 클래스는
-  post-tool-use-session-tracker.py 로 write_text/read_text 양쪽을 쟀다. 그 훅이
-  삭제되며 quality-gates 안에 상태를 write 하는 훅이 하나도 남지 않아(post-tool-use.py·
+  ★ Task 4 (편집한 파일을 세션 동안 추적하던 PostToolUse 훅 제거) 이후 vehicle
+  정정: 원래 이 클래스는 그 세션-추적 훅으로 write_text/read_text 양쪽을 쟀다. 그
+  훅이 삭제되며 quality-gates 안에 상태를 write 하는 훅이 하나도 남지 않아(post-tool-use.py·
   session-end-cleanup.py·session-start-advisor.py 모두 write 호출 0건, Task 4 조사)
   write 쪽은 vehicle 을 잃었다 — 이 속성은 현재 quality-gates 안에서 측정 불가능이다.
   read 쪽은 session-start-advisor.py 의 frontmatter-scan(hooks/session-start-advisor.py:92,
@@ -54,7 +54,7 @@ _KNOWN_EXCEPTIONS = {
     # docstring 안의 산문 언급이지 호출이 아니다 (Task 30 axis 2 조사로 확정).
     "plugins/quality-gates/scripts/build_codex_prompt.py": {17},
     # fcntl.flock 전용 락 파일 핸들 — write()/read() 로 텍스트가 한 번도 오가지 않는다.
-    "plugins/quality-gates/scripts/qg-gc.py": {79},
+    "plugins/quality-gates/scripts/qg-gc.py": {81},
     "plugins/spec-distill/scripts/spec-distill-gc.py": {98},
 }
 
@@ -206,10 +206,10 @@ class LocaleRegressionTests(unittest.TestCase):
         경고를 내야 한다 — 조용히 `except (OSError, UnicodeDecodeError): continue`
         로 삼켜지면 스캐너가 fail-open 한다(:109).
 
-        Task 4 로 post-tool-use-session-tracker.py(원래 이 클래스의 vehicle)가
-        삭제되며 write_text 쪽은 quality-gates 안에 남은 vehicle 이 없다 — 이
-        테스트는 read_text 쪽만 재확보한다. write 쪽 커버리지 소실은
-        task-4-report.md 에 기록.
+        Task 4 로 세션 동안 편집한 파일을 추적하던 PostToolUse 훅(원래 이
+        클래스의 vehicle)이 삭제되며 write_text 쪽은 quality-gates 안에 남은
+        vehicle 이 없다 — 이 테스트는 read_text 쪽만 재확보한다. write 쪽
+        커버리지는 다른 vehicle 이 생기기 전까지 이 파일로 측정 불가능하다.
         """
         env = self._non_utf8_open_default_env()
         with tempfile.TemporaryDirectory() as wt_dir:

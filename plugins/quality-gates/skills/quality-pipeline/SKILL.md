@@ -133,10 +133,9 @@ Exit non-zero → surface stderr verbatim and abort.
 이번 run의 완료만 반영하도록(SKILL은 `Write`만 있고 삭제 tool이 없어 이 정리는
 스크립트가 담당).
 
-**Preflight 는 P2 에서 끝난다.** v5.0.0 이전의 Step P3는 세션 누적 파일 `files.md`
-의 생애를 관리하던 스크립트를 호출했고, 그 파일이 사라지면서 지울 대상도 알릴
-사실도 남지 않아 은퇴시켰다. SID 존재·패턴 검증은 `setup-qg.sh` 가 P2 에서 같은
-정규식으로 먼저 수행하고 exit 1 하므로, 그 계약은 그대로다.
+**Preflight 는 P2 에서 끝난다.** SID 존재·패턴 검증은 `setup-qg.sh` 가 P2 에서
+정규식으로 수행하고 exit 1 한다 — Preflight 자신은 별도 SID 검증 스텝을 갖지
+않는다.
 
 ## Arguments
 

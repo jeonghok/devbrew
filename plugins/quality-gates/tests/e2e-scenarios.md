@@ -87,9 +87,9 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 **Run**: `/qg`
 **Expected**: after iteration 2 with identical scout dispatch hash + synthesizer hash, the SKILL surfaces the Gate 2 iter-boundary decision via AskUserQuestion (Retry / Proceed to Gate 3 / Stop) with a repeat-detected note in the prompt, before reaching the hard cap `max_gate2_iterations=5`.
 
-### J — Branch-mismatch mid-session
+### J — Branch switch mid-session
 **Run**: edit a file on `feature/qg-cost-reduction`, then `git checkout main`, then `/qg`.
-**Expected**: pre-pipeline-check.sh reports `result: cleared_branch_mismatch`, both `quality-gates-session.local.md` and `quality-gates.local.md` (if any) are deleted, user is told "branch changed; session scope reset." Pipeline proceeds with full-branch diff (since session data is gone).
+**Expected**: scope is git-derived fresh at invocation time (branch diff against base, unioned with the worktree's own changed files), not cached from a prior turn or session file — `/qg` on `main` reviews `main`'s own diff against its base, not the leftover `feature/qg-cost-reduction` diff. No explicit reset step is needed; there is no session-scope file to go stale.
 
 ### K — `/qg --reset` kill switch
 **Setup**: any active or stale state files in `.claude/`.
@@ -137,7 +137,7 @@ Agents (model + cost_class):
 SKILL cost_class: variable
 plugin.json version: 2.2.x
 Hooks registered:
-  PostToolUse: post-tool-use-session-tracker.py
+  PostToolUse: post-tool-use.py
   SessionStart: session-start-advisor.py
   (v1.32.0 removes the Stop hook — pipeline progression is now in-turn
   AskUserQuestion-driven, not turn-by-turn signal-driven.)
@@ -148,14 +148,14 @@ OK
 
 ## v1.6.0 Scenarios (per-session state)
 
-### V1 — Concurrent sessions stay isolated
+### V1 — Concurrent sessions do not share pipeline state
 
-**Setup**: Two terminal sessions A and B in the same project. Both have valid `CLAUDE_CODE_SESSION_ID` env vars (`$SID_A`, `$SID_B`).
-1. In A: `Edit` `/abs/a.py`. Verify `.claude/quality-gates/$SID_A/files.md` contains `/abs/a.py` only.
-2. In B: `Edit` `/abs/b.py`. Verify `.claude/quality-gates/$SID_B/files.md` contains `/abs/b.py` only.
-3. In A: Run `/qg`. Verify scope = files from A's tracker only.
+**Setup**: Two terminal sessions A and B in the same project (same worktree). Both have valid `CLAUDE_CODE_SESSION_ID` env vars (`$SID_A`, `$SID_B`).
+1. In A: run `/qg`. Verify `.claude/quality-gates/$SID_A/pipeline.md` is created.
+2. In B: run `/qg`. Verify `.claude/quality-gates/$SID_B/pipeline.md` is created, independent of A's.
+3. Review scope itself is git-derived (branch diff against base, unioned with the worktree's own changed files) — since A and B share the same worktree, both sessions resolve the SAME scope from git; there is no per-session file tracker to isolate.
 
-**Pass**: `$SID_A`'s `files.md` has no `/abs/b.py` references and vice versa.
+**Pass**: `$SID_A` and `$SID_B` each have their own `pipeline.md` with independent History/iteration state; neither session's pipeline-state file is touched by the other's run.
 
 ### V2 — Dormant session GC
 

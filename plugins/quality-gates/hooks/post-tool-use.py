@@ -11,9 +11,10 @@ Kill switches (CLAUDE.md "kill switch는 보안 컨트롤"):
   DEVBREW_SKIP_HOOKS=quality-gates:post-tool-use      - skip just this one
   DEVBREW_SKIP_HOOKS=quality-gates:PostToolUse        - skip every PostToolUse hook here
 
-토큰은 **전체 토큰**으로 대조된다(정본 `shared/killswitch/kill_switch_active.py`).
-`quality-gates:post-tool-use-session-tracker` 처럼 더 긴 키를 지목해도 이 훅이
-접두 오매칭으로 함께 꺼지지 않는다.
+토큰은 **전체 토큰**으로 대조된다(정본 `shared/killswitch/kill_switch_active.py`)
+— 부분 문자열 접두 일치로는 이 훅이 다른 키 지정 때 조용히 함께 꺼지지 않는다
+(예: `quality-gates:session-start-advisor`와 `quality-gates:session-start-advisor:frontmatter-scan`처럼
+한쪽이 다른 쪽의 리터럴 접두인 경우도 각각 독립적으로 켜고 끌 수 있다).
 """
 
 import json
