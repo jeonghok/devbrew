@@ -44,6 +44,10 @@ except Exception:  # noqa: BLE001 — import 실패는 codex 축 degrade로 흡�
 # merge_review 재사용과 달리 이 import 는 try 로 감싸지 않는다 — codex 축의 degrade 로
 # 흡수할 수 있는 것이 아니라 emit 자체가 불가능해지기 때문이다(조용한 축소 금지).
 from hook_common import _yaml_scalar  # noqa: E402
+# 발견 처분 회계(Task 6 — shared/adjudication/adjudication.py 심볼릭 링크 경유). Ledger는
+# §9.1 잡종(데이터는 fail-open, verdict는 fail-closed)의 회계만 한다 — escalates(:274)·
+# codex_degraded(:302)가 실제로 평가하는 값은 이 도입으로 바뀌지 않는다(부가, 배선 아님).
+from adjudication import Ledger  # noqa: E402
 
 # 줄 앵커 + 인정 토큰. `**Status:**` 와 `## Status:` 둘 다 받는다(round-4 실측 결함).
 # 산문 속 "Status:"는 잡지 않는다 — 줄 시작 + 열거된 verdict 토큰이 필수다.
@@ -110,7 +114,7 @@ def extract_critic_verdict(text: str) -> tuple[str | None, str | None]:
     return last, None
 
 
-def extract_critic_issues(text: str) -> tuple[list[dict], bool, list[str]]:
+def extract_critic_issues(text: str, ledger: Ledger) -> tuple[list[dict], bool, list[str]]:
     """반환 (issues, malformed, reasons). sentinel 블록 부재/깨짐은 malformed=True.
 
     **원소 단위로도 malformed다** (CR-1). 이전 구현은 non-dict 원소를 조용히
@@ -119,15 +123,18 @@ def extract_critic_issues(text: str) -> tuple[list[dict], bool, list[str]]:
     아무것도 찾지 못했다"* 로 읽혔다. 실행 못 한 검사를 통과한 검사로 기록하는
     것이 정확히 이 spec이 금지하는 것이다(indeterminate ≠ clean).
 
-    판정 규칙:
+    판정 규칙(그리고 그 각각의 Ledger 어휘 — 이 둘을 같은 말로 세면 이 스크립트가
+    존재하는 이유인 구분 자체가 지워진다):
       - 원소가 dict가 아니다 → malformed. 그 원소는 findings로 승격할 수 없으므로
-        버리되, **버렸다는 사실이 reason으로 남는다.**
+        버리되, **버렸다는 사실이 reason으로 남는다.** 이것은 **소실**이다
+        → `ledger.hold(...)`.
       - dict인데 `CRITIC_REQUIRED_FIELDS` 중 하나라도 부재/non-string/공백뿐이다
         → malformed. 단 **record 자체는 findings에 그대로 싣는다** — 부분적으로라도
         읽히는 지적을 버리면 정보 손실이고, malformed 플래그가 이미 escalate를
         만들기 때문에 버려서 얻는 안전은 없다. (공백뿐인 값을 포함하는 이유:
         `emit()`이 빈 값을 아예 출력하지 않아, 빈 `message`는 내용 없는 finding으로
-        렌더돼 같은 "판독 불가를 clean으로" 클래스가 된다.)
+        렌더돼 같은 "판독 불가를 clean으로" 클래스가 된다.) 이것은 **소실이 아니라
+        §9.1 fail-open 데이터 경로**다 → `ledger.accept(it)`.
     """
     # 첫 블록이 아니라 **마지막** 블록을 취한다 — 형제 규칙
     # (`codex_findings_to_yaml.py`: "last block defeats injected earlier blocks")과
@@ -164,6 +171,10 @@ def extract_critic_issues(text: str) -> tuple[list[dict], bool, list[str]]:
             reasons.append(
                 f"critic issues 원소 #{idx}가 record(JSON object)가 아니다 "
                 f"(type: {type(it).__name__}, finding으로 승격 불가)")
+            # 소실 — findings로 승격 못 하고 버려진다. repr()로 담는다: critic
+            # 출력은 LLM 저작이라 str()이면 개행 등이 advisory 줄을 깨뜨릴 수 있다.
+            ledger.hold(repr(it)[:60],
+                        "record(JSON object) 가 아니다 — finding 승격 불가")
             continue
         bad = [k for k in CRITIC_REQUIRED_FIELDS
                if not isinstance(it.get(k), str) or not it.get(k, "").strip()]
@@ -173,6 +184,8 @@ def extract_critic_issues(text: str) -> tuple[list[dict], bool, list[str]]:
                 f"critic issues 원소 #{idx}의 필수 필드가 부재/비문자열/공백: "
                 f"{', '.join(bad)}")
         kept.append(it)
+        # 소실이 아니다 — 필드가 나빠도 record는 그대로 실린다(§9.1 fail-open).
+        ledger.accept(it)
     return kept, malformed, reasons
 
 
@@ -207,6 +220,9 @@ def main() -> int:
     args = p.parse_args()
 
     advisory: list[str] = []
+    # 이 라운드의 처분 회계 — §9.1 잡종(데이터 fail-open + verdict fail-closed)의
+    # 집계. 소비는 파일 끝 `advisory.extend(L.reasons())` 한 곳뿐이다.
+    L = Ledger(items="open")
 
     # --- critic 측 ---------------------------------------------------------
     try:
@@ -217,7 +233,7 @@ def main() -> int:
         advisory.append(f"[spec-distill v0.24.0] critic 출력 읽기 실패: {exc}")
     critic_verdict, critic_verdict_conflict = extract_critic_verdict(critic_text)
     critic_issues, critic_malformed, critic_malformed_reasons = \
-        extract_critic_issues(critic_text)
+        extract_critic_issues(critic_text, L)
     if critic_verdict_conflict:
         advisory.append(
             f"[spec-distill v0.24.0] {critic_verdict_conflict}. "
@@ -238,6 +254,13 @@ def main() -> int:
             advisory.append(
                 "[spec-distill v0.24.0] critic sentinel 블록(`brief-critic-issues`) 부재/깨짐 "
                 "— issues 0건으로 읽지 않는다(indeterminate ≠ clean).")
+        # critic은 이 축의 주(主) 판정자다(:274 escalates가 critic_malformed에도
+        # 반응한다) — 파손을 회계에 남긴다. escalates 자체의 계산은 바뀌지 않는다.
+        L.source_failed(
+            "critic",
+            "; ".join(critic_malformed_reasons) if critic_malformed_reasons
+            else "critic sentinel 블록(`brief-critic-issues`) 부재/깨짐",
+            primary=True)
     for i in critic_issues:
         cat = str(i.get("category", ""))
         if cat not in CRITIC_CATEGORIES:
@@ -247,17 +270,26 @@ def main() -> int:
 
     # --- codex 측 ----------------------------------------------------------
     if not _REUSE_OK:
-        codex_findings, codex_failed, codex_reason = [], True, "merge_review_import_failed"
+        codex_findings, codex_failed, codex_reason, _codex_malformed_n = \
+            [], True, "merge_review_import_failed", 0
         advisory.append("[spec-distill v0.24.0] merge_review.py 재사용 import 실패 — "
                         "codex 축을 degraded로 처리한다.")
     else:
-        # 4번째 반환값(malformed 개수)은 merge_review.py 의 회계 채널 전용 — 이 파일은
-        # 아직 자체 원장을 안 만든다(범위 밖), 이름만 받고 버린다.
+        # 4번째 반환값(malformed 개수) — parse_codex_yaml 이 YAML 마커 위반으로
+        # 폐기한 codex finding 의 실제 개수(원리적 미상이 아니다, len(findings)).
+        # Task 3이 남긴 채널을 여기서 회계한다(Task 6).
         codex_findings, codex_failed, codex_reason, _codex_malformed_n = parse_codex_yaml(args.codex_yaml)
+    for i in range(_codex_malformed_n):
+        # merge_review.py:build_ledger 와 같은 관례 — 폐기된 finding 자체(내용)는
+        # parse_codex_yaml 이 이미 버려 접근 불가하므로 인덱스로 자리표시한다.
+        L.hold("codex_finding[%d]" % i, "YAML 마커 위반으로 폐기")
     codex_verdict = None
     if not codex_failed:
         codex_verdict = derive_codex_verdict(codex_findings) if _REUSE_OK else None
     else:
+        # codex는 모델 다양성 보조다(:302 codex_degraded) — 파손을 공시하되
+        # 차단하지 않는다(primary=False → L.blocks()에 기여하지 않는다).
+        L.source_failed("codex", codex_reason or "unavailable", primary=False)
         advisory.append(
             "[spec-distill v0.24.0] codex 충실도 co-review SKIPPED/FAILED "
             f"(reason: {codex_reason or 'unavailable'}) — Claude-only, 모델 다양성 없음 (degraded).")
@@ -289,6 +321,11 @@ def main() -> int:
         advisory.append(
             "[spec-distill v0.24.0] codex가 critic의 approved를 overturn했다 "
             "(binding — 합집합). codex_isolated: false 라벨을 함께 읽어라.")
+
+    # 회계를 안전 채널로: advisory 는 emit()에서 `_yaml_scalar(a)`로 escape된다
+    # (:199 부근) — 새 top-level 키를 만들지 않고 이 리스트에 얹는 것이 구조적으로
+    # 안전하다(critic 저작 텍스트가 이미 escape되는 채널이라는 뜻).
+    advisory.extend(L.reasons())
 
     sys.stdout.write(emit({
         "fidelity_verdict": fidelity_verdict,
