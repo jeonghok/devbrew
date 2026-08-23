@@ -29,6 +29,8 @@ import sys
 
 import yaml
 
+from adjudication import Ledger
+
 SEV = {"CRITICAL", "IMPORTANT", "SUGGESTION"}
 
 
@@ -190,11 +192,11 @@ def phase_synth(findings_path, adversarial_path):
     by_v = {v.get("finding_key"): v for v in verdicts if isinstance(v, dict)}
 
     kept = []
-    unadjudicated = 0
+    L = Ledger(items="closed")   # 다음 소비자가 기계(자동 편집)다 — 미판정은 제외
     for f in findings:
         v = by_v.get(f["dedup_key"])
         if v is None:
-            unadjudicated += 1          # fail-closed: exclude from kept (AC16)
+            L.hold(f["dedup_key"], "adversarial 판정 부재")   # AC16: kept 에서 제외
             continue
         verdict = str(v.get("verdict", "")).lower()
         if verdict == "reject":
@@ -206,6 +208,7 @@ def phase_synth(findings_path, adversarial_path):
                 f["severity"] = ns
             # missing/invalid new_severity -> keep original severity (fail-closed: don't drop)
         kept.append(f)
+    unadjudicated = L.report()["counts"]["held"]
 
     kept_keys = {f["dedup_key"] for f in kept}
     for nf in new_findings:
