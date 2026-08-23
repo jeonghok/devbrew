@@ -114,6 +114,18 @@ in any per-dispatch block — the reviewer agents declare `project_dir` as a
 required dispatch parameter and forbid `pwd`/`git rev-parse` recomputation
 in their personas.
 
+**Step P0b — Resolve the plugin root.** `CLAUDE_PLUGIN_ROOT` is **not set in the
+Bash tool environment**. Run every script path below with the installed
+plugin-root substituted; when dogfooding inside the devbrew repo that is
+`./plugins/quality-gates`. Self-contained fences derive it in-line:
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+```
+
+Shell state does not carry between Bash calls — every fence that needs `$QG`
+assigns it in that same fence. Do not hoist the assignment.
+
 **Step P1 — Global kill switch.** If `DEVBREW_QUALITY_GATES_DISABLE=1`,
 emit `[quality-gates] disabled via DEVBREW_QUALITY_GATES_DISABLE=1` and
 return immediately. Do NOT call setup-qg.sh or any agent.
@@ -121,7 +133,8 @@ return immediately. Do NOT call setup-qg.sh or any agent.
 **Step P2 — Setup state.** Run:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh" --ensure $ARGUMENTS
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/setup-qg.sh" --ensure $ARGUMENTS
 ```
 
 `setup-qg.sh --ensure` creates the per-session state file
@@ -137,7 +150,8 @@ Exit non-zero → surface stderr verbatim and abort.
 **Step P3 — Pre-pipeline check (scope detection).** Run:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/pre-pipeline-check.sh"
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/pre-pipeline-check.sh"
 ```
 
 The script exits non-zero on hard precondition violations (`no_session_id`,
@@ -230,7 +244,7 @@ AskUserQuestion({
 
 Reached when gate scope = both via the full-pipeline Dispatch Loop (interactive `Run both gates`, or the `gate=both` argument). **Single-gate `/qg runtime` bypasses the Dispatch Loop and runs the equivalent runtime-scope init at the Runtime gate's [Step R5a⁰](#runtime-gate) instead** — so every path that reaches the Runtime gate produces `manifest` / `approved_surfaces` / `block_policy` for R5a³. Decide runtime scope ONCE, but only when there is something risky to decide.
 
-1. Run `${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh` to get the manifest with `requires_decision` flags. This runs whenever gate scope = both — the manifest is also threaded to the Runtime gate's R5a³ dispatch.
+1. Run `scripts/detect-runtime.sh` (plugin root per Step P0b) to get the manifest with `requires_decision` flags. This runs whenever gate scope = both — the manifest is also threaded to the Runtime gate's R5a³ dispatch.
 2. **Gate firing condition (mechanical):** fire an `AskUserQuestion` **only if** the manifest has ≥1 surface with `requires_decision: true` AND no argument already pre-answers the *surface selection*. `gate=both` answers **gate scope only** — it does NOT pre-answer runtime scope, so Decision 2 still fires for `/qg both` when a `requires_decision` surface exists (matching bare `/qg` runtime behavior). Otherwise (no boot surface at all / surface-arg-answered) print a one-line plan and proceed **zero-click** with `approved_surfaces` empty. **Every kind in `runnable_surfaces` now carries `requires_decision: true`** — since v3.0.0 the manifest holds boot surfaces only, and test runners are no longer surfaces at all (they are the orchestrator's, run in R4/R5b outside the verifier's turn). So "zero-click" here means *there was nothing to boot*, not *there were automatic surfaces*.
 3. When firing, confirm in ONE question: **runtime scope** (which `requires_decision` surfaces to opt into) and **block policy** (`stop` / `skip` / `ask`). Record the opted-in surfaces as `approved_surfaces` and the chosen `block_policy`.
 
@@ -269,7 +283,7 @@ Full pipeline mode:
 
 ## Trivia escape
 
-Run `${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh`. Exit code:
+Run `scripts/check-trivia.sh` (plugin root per Step P0b). Exit code:
 - 0 = trivia detected → skip all gates. Print:
   > `Trivia diff — all gates skipped (one-sentence diff per CLAUDE.md trivia escape).`
 - 1 = non-trivia → proceed to the Review gate.
@@ -290,7 +304,8 @@ of this turn (C3 — single call; the cached values are consumed by the
 honest-verdict floor at Step 4.5):
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh"
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/check-review-scope.sh"
 ```
 
 The script takes **no arguments** — scope resolution (what to review) is yours, not
@@ -314,7 +329,7 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 > 4.5 floor enforces this structurally: this norm is the routing half (model-owned),
 > the floor is the integrity half (deterministic).
 
-2. Dispatch the scout: `Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py ...)` — compute its
+2. Dispatch the scout: `Bash(scripts/scout.py ...)` (plugin root per Step P0b) — compute its
    metrics from the review scope you resolved at step 1 (the session `files.md` set, the
    `branch` diff, or the `--paths` globs). Scope is model-owned; there is no cached scope
    variable to thread.
@@ -896,8 +911,9 @@ Build the status rows and render them (deterministic, scannable) — one
 `aborted iter N`, `skipped`, `clean`, `failed`, `SKIP_WITH_EVIDENCE`):
 
 ```bash
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
 printf 'Review gate\t<clean iter N | no scope reviewed (branch <M> ahead) | proceeded-with-findings iter N | aborted iter N | skipped>\nRuntime gate\t<clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>\n' \
-  | ${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py table --title "Quality Gates — Complete"
+  | $QG/scripts/render-terminal.py table --title "Quality Gates — Complete"
 ```
 
 Then print the appended `## History` lines from the state file as an
