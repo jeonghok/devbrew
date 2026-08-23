@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.33.1] — 2026-08-23
+
+`run_spec_codex_reviewer.sh` 가 `CLAUDE_PLUGIN_ROOT` 를 기본값 없이 참조해,
+스킬의 bash 블록에서 호출되면 `set -u` 아래에서 **codex 에 도달하기 전에** 죽던
+결함을 고친다. `reviewing-spec` 의 codex co-review 는 그 경로에서 한 번도 실행되지
+않았고, 산출물은 매번 `aborted_before_completion` 이었다 — 실패는 loud 했지만
+모델 다양성은 상시 0이었다.
+
+**Fixed**
+- `scripts/run_spec_codex_reviewer.sh`: 형제 `run_brief_codex_reviewer.sh` 와 같은
+  `PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"`
+  를 추가하고 내부 참조 2곳을 `${PLUGIN_ROOT}` 로 통일(우회 경로 0).
+
+**Added**
+- `tests/test_run_spec_codex_reviewer.sh`: FALLBACK 회귀 락 — 환경변수를 지우고
+  mock codex 를 태워 `codex_failed: false` + finding 산출을 요구한다. "exit 0 +
+  YAML 존재"로는 고장난 러너도 통과하므로(degrade 계약이 그렇게 설계돼 있다)
+  결과를 잰다. mutation 3축(fallback 삭제 · 경로 파손 · 참조 1곳 되돌림) 전부 RED 확인.
+- `shared/tests/abort_trigger.sh`(신규 공용 모듈)를 사용하도록 ABORT 블록 전환.
+
+**Changed**
+- ABORT 계약 검증의 트리거를 환경변수 제거에서 **SIGTERM** 으로 교체. fallback 이
+  생기면서 예전 트리거는 더 이상 중단을 일으키지 않아, 그대로 두면 assertion 이
+  abort 경로를 한 번도 밟지 않은 채 GREEN 이 된다(2026-08-23 실측). 판정도
+  `codex_failed: true` 에서 `reason: aborted_before_completion` 으로 좁혔다.
+
 ## [0.33.0] — 2026-08-22
 
 interview brief 의 **분량 상한을 제거**한다. 절별 `≤N줄` 예산도, 150줄 트립와이어도,

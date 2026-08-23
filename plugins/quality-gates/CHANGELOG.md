@@ -3,6 +3,34 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.2.4] — 2026-08-23
+
+`run_codex_reviewer.sh` · `run_artifact_codex_reviewer.sh` 가 `CLAUDE_PLUGIN_ROOT` 를
+기본값 없이 참조해, 스킬의 bash 블록에서 호출되면 `set -u` 아래에서 **codex 에
+도달하기 전에** 죽던 결함을 고친다. Review 게이트와 artifact-critique 게이트의
+codex co-review 는 그 경로에서 한 번도 실행되지 않았다 — 이 리포가 공유-맹점의
+유일한 backstop 이라 부르는 축이 상시 0이었다.
+
+**Fixed**
+- `scripts/run_codex_reviewer.sh`(참조 3곳) · `scripts/run_artifact_codex_reviewer.sh`
+  (참조 2곳): 형제 러너와 같은 `PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-...}"` 를 추가하고
+  내부 참조를 `${PLUGIN_ROOT}` 로 통일(우회 경로 0).
+
+**Added**
+- `tests/test_codex_runner_degrade_contract.sh` · `tests/test_artifact_codex_reviewer.sh`:
+  FALLBACK 회귀 락 — 환경변수를 지우고 mock codex 를 태워 `codex_failed: false` +
+  finding 산출을 요구한다. mutation 3축 전부 RED 확인.
+
+**Changed**
+- ABORT 계약 검증의 트리거를 환경변수 제거에서 **SIGTERM**
+  (`shared/tests/abort_trigger.sh`)으로 교체. fallback 이 생기면서 예전 트리거는 더 이상
+  중단을 일으키지 않아, 그대로 두면 5개 assertion 이 abort 경로를 한 번도 밟지 않은 채
+  평범한 degrade 경로로 GREEN 이 된다(2026-08-23 실측). 5/6 판정과 5러너 B·C 판정
+  (빈-시작·stale-시작 **양쪽**)을 `reason: aborted_before_completion` 으로 좁혔다.
+  stale-시작 쪽은 좁히지 않으면 truncate 가 stale 을 무조건 지우고 `codex_failed`
+  가 다른 사유로도 참이 되어, 트리거가 죽어도 통과한다 — 트리거 무력화 실측으로
+  확인하고 닫았다.
+
 ## [4.2.3] — 2026-08-22
 
 Command frontmatter의 `allowed-tools:`를 3개 command(`cancel-qg.md`·`qg.md`·

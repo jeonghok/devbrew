@@ -9,6 +9,7 @@ TMP="$(mktemp -d -t sd-run-codex-XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
+. "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/abort_trigger.sh"
 
 # --- Structural greps (AC5/AC6/OQ2) ---
 grep -q 'discover-spec' "$RUN" \
@@ -162,28 +163,72 @@ rc=$?
   && no "FIX2: output ALSO/instead landed at PROJECT_DIR (should not)" \
   || ok "FIX2: output NOT mis-resolved against PROJECT_DIR"
 
+abort_trigger_sleeping_codex "$TMP/abortbin"
+
 # ── ABORT: 완료 전 중단이 조용히 지나가지 않는다 ─────────────────────────────
-# 트리거는 CLAUDE_PLUGIN_ROOT 미설정(`set -u` 위반) — 이 세션에서 실제로 밟은 조건.
+# 트리거는 SIGTERM 이다(shared/tests/abort_trigger.sh). 예전 트리거는
+# 플러그인 루트 환경변수를 지워 `set -u` 를 위반시키는 것이었는데, 러너가 fallback 을
+# 갖게 되면서 그 조건은 더 이상 중단을 일으키지 않는다 — 트리거를 안 바꾸면 이
+# assertion 은 abort 를 한 번도 밟지 않은 채 다른 degrade 경로로 GREEN 이 된다.
 #
 # **종료 코드로 재지 않는 이유**: 이 스크립트의 계약은 "항상 exit 0 + 항상 YAML"이고,
-# 게다가 bash 3.2.57은 `set -u` abort 시 EXIT 트랩에 `$?`를 0으로 넘긴다 — 종료
-# 코드로는 abort와 정상 종료를 구별할 수 없다(2026-08-04 최소 재현). 계약도 플랫폼도
-# 종료 코드를 신호로 쓸 수 없게 만든다. 그래서 **산출물**을 잰다.
+# 게다가 bash 3.2.57은 abort 시 EXIT 트랩에 `$?`를 0으로 넘긴다 — 종료 코드로는
+# abort와 정상 종료를 구별할 수 없다(2026-08-04 최소 재현). 그래서 **산출물**을 잰다.
+#
+# `reason:` 까지 단언하는 이유: `codex_failed: true` 만 보면 missing_result·
+# no_agent_message 같은 평범한 degrade 로도 통과한다(2026-08-23 실측). 그러면 여기서
+# 재려던 EXIT 트랩은 한 번도 안 돈다.
 ABORTOUT="$TMP/abort-out.yaml"
 rm -f "$ABORTOUT"
-( unset CLAUDE_PLUGIN_ROOT; bash "$RUN" "$DOC" "$FIX2_PROJECT" "$ABORTOUT" ) >/dev/null 2>&1
-if [[ -s "$ABORTOUT" ]] && grep -q 'codex_failed: *true' "$ABORTOUT"; then
-  ok "ABORT: 완료 전 중단이 codex_failed YAML로 표시된다 (부재 아님)"
+if run_until_aborted "$TMP/abortbin" "$RUN" "$DOC" "$FIX2_PROJECT" "$ABORTOUT"; then
+  if [[ -s "$ABORTOUT" ]] && grep -q 'reason: *aborted_before_completion' "$ABORTOUT"; then
+    ok "ABORT: 완료 전 중단이 aborted_before_completion 으로 표시된다"
+  else
+    no "ABORT: 중단이 abort 로 표시되지 않는다 (산출물: $(tr '\n' ' ' < "$ABORTOUT" 2>/dev/null || echo MISSING))"
+  fi
 else
-  no "ABORT: 중단 후 산출물이 없거나 실패 표시가 없다 — 호출자가 읽을 것이 없다"
+  no "ABORT: timeout 바이너리 부재로 트리거를 못 돌렸다 — 이 계약은 이번 실행에서 미검증"
 fi
 
 # stale 재사용 — 더 나쁜 쪽. 이전 run의 결과가 살아남아 이번 라운드 판정으로 쓰이면
 # 조용히 틀린 리뷰를 신뢰하게 된다. 시작 시 truncate가 이것을 막는다.
 STALEOUT="$TMP/stale-out.yaml"
 printf 'findings:\n  - {category: STALE_FROM_PREVIOUS_RUN}\n' > "$STALEOUT"
-( unset CLAUDE_PLUGIN_ROOT; bash "$RUN" "$DOC" "$FIX2_PROJECT" "$STALEOUT" ) >/dev/null 2>&1
+run_until_aborted "$TMP/abortbin" "$RUN" "$DOC" "$FIX2_PROJECT" "$STALEOUT"
 grep -q 'STALE_FROM_PREVIOUS_RUN' "$STALEOUT" \
   && no "ABORT: 이전 run의 stale 산출물이 살아남아 이번 결과로 재사용된다" \
   || ok "ABORT: stale 산출물이 이번 run 결과로 재사용되지 않는다"
+
+# ── FALLBACK: CLAUDE_PLUGIN_ROOT 부재에도 codex 에 도달한다 ───────────────────
+# 이 러너는 스킬의 bash 블록에서 호출된다. 그 환경에 CLAUDE_PLUGIN_ROOT 는 없다
+# (2.1.239 실측) — fallback 이 없으면 `set -u` 아래에서 codex 에 **도달하기 전에**
+# 죽는다. 실패가 loud 하긴 해도 co-review 가 매 라운드 0회가 되므로, 이 러너의
+# 존재 이유(별-계열 모델의 교차 검증)가 통째로 사라진다.
+#
+# **결과로 잰다.** "exit 0 + YAML 존재"는 고장난 러너도 만족한다 — degrade 계약이
+# 정확히 그렇게 설계돼 있기 때문이다. 그 형태의 락은 이빨이 없다. 여기서는 mock
+# codex 를 태워 `codex_failed: false` + 실제 finding 이 나오는지 본다.
+# mutation 2축: (a) `:-` fallback 삭제 → RED  (b) fallback 경로 파손 → RED.
+mkdir -p ""$TMP/fbbin""
+cat > ""$TMP/fbbin"/codex" <<'SH'
+#!/usr/bin/env bash
+cat <<'JSONL'
+{"type":"item.completed","item":{"type":"agent_message","text":"```json\n{\"findings\": [{\"category\": \"fallback_probe\", \"target_section\": \"#fb\", \"severity\": \"high\", \"file\": \"x.py\", \"line\": 1, \"summary\": \"FB\", \"confidence\": 9}]}\n```"}}
+JSONL
+SH
+chmod +x ""$TMP/fbbin"/codex"
+FBOUT=""$TMP/fbbin"/../fallback-out.yaml"; rm -f "$FBOUT"
+( unset CLAUDE_PLUGIN_ROOT; PATH=""$TMP/fbbin":$PATH" bash "$RUN" "$DOC" "$PLUGIN_ROOT" "$FBOUT" ) >/dev/null 2>&1
+if grep -q 'codex_failed: false' "$FBOUT" 2>/dev/null && grep -q 'fallback_probe' "$FBOUT" 2>/dev/null; then
+  ok "FALLBACK: env 부재에도 codex 에 도달해 finding 을 낸다"
+else
+  no "FALLBACK: env 부재에서 codex 에 도달하지 못했다 ($(tr '\n' ' ' < "$FBOUT" 2>/dev/null || echo MISSING))"
+fi
+grep -qE '^PLUGIN_ROOT="\$\{CLAUDE_PLUGIN_ROOT:-' "$RUN" \
+  && ok "FALLBACK: 대입 라인에 fallback 이 있다" \
+  || no "FALLBACK: 대입 라인에 fallback 이 없다 (`set -u` 에서 즉사)"
+grep -qF '"${CLAUDE_PLUGIN_ROOT}/scripts/' "$RUN" \
+  && no "FALLBACK: fallback 을 우회하는 bare 참조가 남아 있다" \
+  || ok "FALLBACK: bare 참조 잔여 없음"
+
 finish
