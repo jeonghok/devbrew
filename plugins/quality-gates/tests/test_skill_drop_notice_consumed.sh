@@ -72,4 +72,55 @@ if [ -n "$producer_phrase" ] && printf '%s' "$window" | grep -qF "$producer_phra
 else
   no "c — 생산자/소비자 문구 불일치 (producer='${producer_phrase:-<none>}')"
 fi
+
+# ── (d) 판정 키가 «인스턴스 리터럴»이 아니라 «공유 마커»인가 ────────────────
+# (a)~(c) 는 통지가 하나뿐이라는 전제 위에 서 있다. 통지가 둘이 되는 순간 그
+# 전제는 열거가 되고, 열거는 시간에 대해 fail-open 이다 — 두 번째 통지
+# (`판정 degrade`, 주 입력 사망)는 `dropped as malformed` 키에 걸리지 않아
+# 같은 반쪽 수정이 대상만 바꿔 재발했다. 그래서 두 통지가 **공유하는 마커**를
+# 판정 키로 쓰는지를 여기서 잰다.
+MARKER='**이 실행은 clean이 아니다**'
+
+# d1 — 두 번째 통지(주 입력 사망)가 그 마커를 실제로 단다.
+out_c="$(python3 "$SCRIPT" --findings "$tmp/never-created.yaml" 2>/dev/null)"
+if printf '%s' "$out_c" | grep -qF "$MARKER"; then
+  ok "d1 — degrade 통지가 공유 마커를 단다"
+else
+  no "d1 — degrade 통지에 공유 마커가 없다"; printf '%s\n' "$out_c" | sed 's/^/      /'
+fi
+
+# d2 — 첫 통지도 **같은** 마커를 단다. 이것이 없으면 «공유»가 성립하지 않고
+#      마커 키잉은 두 번째 통지만 잡는 또 하나의 열거가 된다.
+if printf '%s' "$out_b" | grep -qF "$MARKER"; then
+  ok "d2 — drop 통지도 같은 마커를 단다 (마커가 실제로 공유된다)"
+else
+  no "d2 — 두 통지가 마커를 공유하지 않는다 — 마커 키잉이 성립하지 않는다"
+fi
+
+# d3 — 소비자가 그 마커를 판정 키로 쓴다.
+if printf '%s' "$window" | grep -qF "$MARKER"; then
+  ok "d3 — step 4.5 가 공유 마커를 판정 키로 쓴다"
+else
+  no "d3 — step 4.5 가 인스턴스 리터럴에만 키잉한다 (열거 = fail-open)"
+fi
+
+# d4 — 양성 짝. 통지가 없는 정상 clean 실행에는 마커가 **없어야** 한다.
+#      이걸 안 재면 「항상 not-clean」으로 만들어도 d1~d3 가 통과한다.
+out_clean="$(python3 "$SCRIPT" --findings "$tmp/empty.yaml" 2>/dev/null)"
+if printf '%s' "$out_clean" | grep -qF "$MARKER"; then
+  no "d4 — 정상 clean 출력에 마커가 있다 — 마커가 아무 때나 켜지면 판정 키가 아니다"
+  printf '%s\n' "$out_clean" | sed 's/^/      /'
+else
+  ok "d4 — 정상 clean 출력에는 마커가 없다 (양성 짝)"
+fi
+
+# d5 — 생산자가 내는 마커와 소비자가 찾는 마커가 **같은 바이트**인가.
+#      (c) 와 같은 논거: 둘을 따로 고정하면 한쪽만 바꿔도 양쪽 GREEN 인 채로
+#      seam 이 다시 열린다.
+marker_emitted="$(printf '%s' "$out_c" | grep -oF "$MARKER" | head -1)"
+if [ -n "$marker_emitted" ] && printf '%s' "$window" | grep -qF "$marker_emitted"; then
+  ok "d5 — 생산자 마커와 소비자 마커가 바이트 동일하다"
+else
+  no "d5 — 마커 불일치 (emitted='${marker_emitted:-<none>}')"
+fi
 finish

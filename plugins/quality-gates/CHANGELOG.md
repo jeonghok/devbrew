@@ -3,6 +3,27 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.3.4] — 2026-08-25
+
+### Fixed
+- `skills/quality-pipeline/SKILL.md` step 4.5 — 「Dropped-finding override」가
+  `dropped as malformed` 라는 **한 인스턴스의 리터럴**에 키잉돼 있어, `[4.3.3]` 이 신설한
+  `판정 degrade` 통지가 매칭되지 않았다. 그 클로즈는 *"생산자만 고치고 소비자를 안 고친
+  반쪽 수정"*(2026-08-05 적발) 때문에 만들어진 것인데, 통지가 둘이 되자 **같은 실패가
+  대상만 옮겨 재발**했다. 열거를 도출로 바꾼다: 판정 키를 두 통지가 공유하는 마커
+  `**이 실행은 clean이 아니다**` 로 삼아, 현재의 두 통지와 같은 마커를 쓰는 앞으로의
+  통지까지 자동으로 잡는다. 클로즈 이름은 **Not-clean notice override** 로 넓힌다.
+  개수를 담은 통지(`dropped as malformed`)는 개수와 함께, 개수가 없는 통지
+  (`판정 degrade`)는 그 줄을 verbatim 으로 낸다 — 개수를 지어내지도, 오버라이드를
+  건너뛰지도 않는다. bare `clean` 금지와 「두 clean 하위경우 모두 적용」은 그대로.
+
+### Changed
+- `tests/test_skill_drop_notice_consumed.sh` — 생산자·소비자 seam 락에 축 (d) 5건 추가.
+  기존 (a)~(c) 는 통지가 하나뿐이라는 전제 위에 서 있어 두 번째 통지를 못 본다.
+  (d1) degrade 통지가 마커를 단다 · (d2) drop 통지도 **같은** 마커를 단다(공유 성립) ·
+  (d3) 소비자가 그 마커를 판정 키로 쓴다 · (d4) **양성 짝** — 정상 clean 출력에는 마커가
+  없다 · (d5) 생산자·소비자 마커가 바이트 동일.
+
 ## [4.3.3] — 2026-08-25
 
 ### Fixed
