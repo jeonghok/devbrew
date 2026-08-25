@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.35.2] — 2026-08-25
+
+### Changed
+- `scripts/merge_review.py` — 처분 원장의 degrade 사유를 `adjudication_reasons:` 대신
+  `advisory` 리스트로 보낸다. `skills/reviewing-spec/SKILL.md`의 "그대로 표시"·"degrade
+  없음" 판정은 `advisory` 에만 걸려 있어서, `load_history` 실패는 표시 규칙 없는 키로
+  가고 그 짝 `_write_history` 실패는 `advisory` 로 가는 비대칭이 표시 층에 남아 있었다
+  (설계 §7 #3 이 결함으로 지목한 바로 그 비대칭). 형제 `merge_brief_review.py:325-328`
+  과 같은 선택. 사유는 이제 `emit()` 의 `_yaml_scalar` escape 를 탄다.
+- `skills/reviewing-spec/SKILL.md` — 파싱 키 열거를 실제 stdout 과 맞추고, degrade 사유가
+  `advisory:` 로 온다는 것과 `adjudication_held`/`adjudication_unknown` 이 degrade 의
+  유일한 신호가 될 수 없다는 것을 명시.
+
+### Removed
+- `scripts/merge_review.py` stdout 의 `adjudication_reasons:` 키. `[0.35.0]` 에서 추가돼
+  같은 브랜치 안에서만 존재했고 `main` 에 배포된 적이 없다 — deprecation window 대상 아님.
+  `adjudication_held`/`adjudication_unknown` 두 계수 키는 그대로다.
+
 ## [0.35.1] — 2026-08-23
 
 ### Added

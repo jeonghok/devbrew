@@ -552,6 +552,21 @@ def main() -> int:
 
     codex_findings_display = build_codex_findings_display(codex_findings, codex_avail)
 
+    # 세 원장을 합산한다 — verdict 와 별개 채널.
+    merged = {"held": 0, "unknown": [], "reasons": []}
+    for L in (claude_ledger, codex_ledger, history_ledger):
+        r = L.report()
+        merged["held"] += r["counts"]["held"]
+        merged["unknown"] += r["unknown_counts"]
+        merged["reasons"] += r["reasons"]
+    # degrade 사유는 `advisory` 로 간다. 형제 `merge_brief_review.py:325-328` 과
+    # 같은 선택이고, 여기서는 표시 계약이 이유다: SKILL 의 "그대로 표시"·"degrade
+    # 없음" 판정은 `advisory` 에만 걸려 있다. 별도 키로 내면 `load_history` 실패는
+    # 규칙 없는 키로 가고 그 짝 `_write_history` 실패는 advisory 로 가는 비대칭이
+    # 표시 층에 남는다 — 같은 사건의 두 방향이 다른 가시성을 갖는다는 뜻이다.
+    # 키를 열거하는 판정은 «내일 생길 키»에 대해 fail-open 이기도 하다.
+    advisory.extend(merged["reasons"])
+
     result = {
         "combined_verdict": combined,
         "claude_verdict": claude_verdict,
@@ -566,22 +581,16 @@ def main() -> int:
     }
     sys.stdout.write(emit(result))
 
-    # 세 원장을 합산해 회계를 stdout 에 싣는다 — verdict 와 별개 채널.
-    merged = {"held": 0, "unknown": [], "reasons": []}
-    for L in (claude_ledger, codex_ledger, history_ledger):
-        r = L.report()
-        merged["held"] += r["counts"]["held"]
-        merged["unknown"] += r["unknown_counts"]
-        merged["reasons"] += r["reasons"]
-    # 이 세 줄도 emit() 의 다른 모든 줄과 같은 문 통과: _yaml_scalar 가 없으면
-    # (item 이 이미 repr() 로 개행을 escape 했더라도) `:`·`'`·`"` 등을 담은 사유
-    # 문자열이 raw 로 나가 stdout 을 조작할 수 있다(C1) — untrusted 값이 여기까지
-    # 온 경로가 이미 있는 이상, escape 는 "이 값은 안전하다"는 가정이 아니라
-    # 이 출력 채널 자체의 계약이어야 한다.
+    # 계수 두 줄은 별개 키로 남는다 — 사유가 advisory 에 있으므로 이 둘이 degrade
+    # 의 **유일한** 신호가 되는 경우는 없다(held>0 이면 "보류: …" 사유가, unknown 이
+    # 있으면 "셀 수 없음: …" 사유가 반드시 advisory 에 함께 실린다).
+    # emit() 의 다른 모든 줄과 같은 문을 통과시킨다: `_yaml_scalar` 가 없으면
+    # (item 이 이미 repr() 로 개행을 escape 했더라도) `:`·`'`·`"` 등을 담은 값이
+    # raw 로 나가 stdout 을 조작할 수 있다(C1) — untrusted 값이 여기까지 온 경로가
+    # 이미 있는 이상, escape 는 "이 값은 안전하다"는 가정이 아니라 이 출력 채널
+    # 자체의 계약이어야 한다.
     print(f"adjudication_held: {_yaml_scalar(merged['held'])}")
     print(f"adjudication_unknown: {_yaml_scalar(','.join(merged['unknown']))}")
-    for line in merged["reasons"]:
-        print(f"adjudication_reasons: {_yaml_scalar(line)}")
     return 0
 
 
