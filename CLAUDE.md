@@ -43,8 +43,11 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 - **최소 버전이 선언된 의존성.** `other-plugin:agent-name`을 dispatch하는 플러그인은 README prerequisites에 `other-plugin`을 리스트. Silent coupling은 버그.
 - **모든 skill에 `cost_class` 선언** (`low`|`medium`|`high`|`variable`). `high`는 지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함.
 - **subagent 발견은 처분을 밝힌다.** 모든 dispatch 자리는
-  `**처분** — consumer=<.py|.js 경로|orchestrator|human> · fail-<open|closed>[ · disclosure=<리터럴>]`
-  한 줄을 갖는다(`consumer=` 가 경로면 그 경로가 추적되는 파일로 **실재해야** 한다). 판정기가 항목을 버리면
+  `**처분** — consumer=<같은 플러그인의 .py|.js 경로|orchestrator|human> · fail-<open|closed> · disclosure=<리터럴>`
+  한 줄을 갖는다. `consumer=` 가 경로면 그 경로는 추적되는 파일로 **실재해야** 하고 **앵커가 사는
+  파일과 같은 플러그인**이어야 한다(설치본에서 다른 플러그인의 스크립트는 도달 불가다).
+  `disclosure=` 는 `consumer=` 가 `.py` 경로일 때만 생략한다 — 그때는 그 파일이 회계 모듈을
+  실제로 import 하는지가 대신 검사된다. 그 밖의 소비자에서는 **필수**다. 판정기가 항목을 버리면
   센다 — 셀 수 없으면 「셀 수 없음」을 낸다(침묵과 0 은 다른 사실이다). 회계는
   `shared/adjudication/` 이 한다.
   **흡수(dedup)와 강제(coercion)는 소실이 아니다** — 계수하되 그 자체로 degrade 는 아니다.
