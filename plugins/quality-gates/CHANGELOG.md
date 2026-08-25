@@ -82,6 +82,73 @@
 
 ### Added
 - `scripts/adjudication.py` — `shared/adjudication/adjudication.py` 정본을 가리키는 상대 심볼릭 링크. subagent 발견의 처분 회계(`수용·기각·보류` + 흡수·강제·입력실패·원리적 미상). 리포 최초의 import-only `.py` 심볼릭 링크.
+## [4.2.5] — 2026-08-23
+
+`CLAUDE_PLUGIN_ROOT` 해석의 두 결함을 닫는다. 하나는 테스트 인프라가 워크트리에서
+통째로 눈이 멀던 것, 하나는 스킬의 bash 펜스가 문자 그대로는 실행되지 않던 것.
+
+**Fixed**
+- `tests/lib/extract_codex_invocations.py`: 디렉토리 prune 을 **스캔 root 기준 상대
+  경로**로 판정한다. 절대 경로 성분을 보면 root 의 *조상* 이름까지 걸려, devbrew 의
+  워크트리 관례(`<repo>/.claude/worktrees/<name>`)에서 `.claude` 가 조상으로 잡혀
+  트리 전체가 prune 됐다(수집 0건 vs bash 6건). 그 결과
+  `test_sandbox_enforced.sh` 의 두-수집기 합치 락이 **모든 워크트리에서 상시 RED** 였고,
+  이 리포의 표준 격리 워크플로에서 한 번도 이빨을 쓰지 못했다. root 안쪽의
+  `plugins/<x>/.claude`(실재 3곳)를 거르는 원래 의도는 그대로다.
+
+**Changed**
+- `skills/quality-pipeline/SKILL.md` 에 **Step P0b — Resolve the plugin root** 추가.
+  `CLAUDE_PLUGIN_ROOT` 는 Bash 도구 환경에 없다(command 계층의 `!` 펜스는 하니스가
+  치환하지만 skill 의 지시는 그렇지 않다). 스킬 본문에서 그 변수를 쓰던 곳을 두 갈래로
+  정리했다:
+  - **bash 펜스 25곳**(SKILL.md 5 · `references/runtime-gate.md` 20) — 같은 펜스 안에서
+    `QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"` 를 대입하고 `$QG` 로 참조.
+    펜스마다 반복하는 이유는 Bash 도구가 호출마다 새 셸이라 대입이 넘어가지 않기 때문 —
+    상단 1회 대입은 두 번째 펜스부터 조용히 깨진다.
+  - **산문 인라인 실행 지시 5곳**(`Run \`…/scripts/x.sh\`` 형태 · `critiquing-artifacts`
+    포함) — 변수를 지우고 `scripts/x.sh` + 해석 규칙 포인터로 바꿨다. 펜스가 아니라고
+    실행 지시가 아닌 것은 아니다.
+  frontmatter 의 `Bash(${CLAUDE_PLUGIN_ROOT}/scripts/...)` 는 **건드리지 않는다** —
+  실행 지시가 아니라 권한 패턴이고, 하니스가 그 표기 그대로 매칭한다.
+
+**Added**
+- `tests/test_extract_codex_invocations.sh`: 이 수집기의 첫 전용 테스트. **양방향**
+  으로 잰다 — 조상 `.claude` 는 prune 하지 않고, root 안쪽 `plugins/<x>/.claude` 는
+  여전히 prune 한다. 한 방향만 재면 "`SKIP_DIRS` 에서 `.claude` 삭제"라는 틀린 수정이
+  통과한다(실측: 그 변이는 기존 소비자 락에서 GREEN). mutation 4축 전부 RED 확인.
+- `tests/test_skill_plugin_root_fallback.sh`: **2축**으로 잰다. 축 A 는 bash 펜스가
+  **같은 펜스 안에** fallback 대입을 갖는지(파일 단위로 재면 상단 1회 대입이 통과한다),
+  축 B 는 스킬 본문 전수에 bare 참조가 **한 곳도** 없는지. 축 A 만 두면 산문 인라인
+  지시와 태그 없는 펜스를 쓰는 스킬이 통째로 락 밖에 남는다 — 실측으로 축 B 만 잡는
+  변이가 3건이다. mutation 전부 RED, frontmatter 는 코퍼스에서 제외.
+
+## [4.2.4] — 2026-08-23
+
+`run_codex_reviewer.sh` · `run_artifact_codex_reviewer.sh` 가 `CLAUDE_PLUGIN_ROOT` 를
+기본값 없이 참조해, 스킬의 bash 블록에서 호출되면 `set -u` 아래에서 **codex 에
+도달하기 전에** 죽던 결함을 고친다. Review 게이트와 artifact-critique 게이트의
+codex co-review 는 그 경로에서 한 번도 실행되지 않았다 — 이 리포가 공유-맹점의
+유일한 backstop 이라 부르는 축이 상시 0이었다.
+
+**Fixed**
+- `scripts/run_codex_reviewer.sh`(참조 3곳) · `scripts/run_artifact_codex_reviewer.sh`
+  (참조 2곳): 형제 러너와 같은 `PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-...}"` 를 추가하고
+  내부 참조를 `${PLUGIN_ROOT}` 로 통일(우회 경로 0).
+
+**Added**
+- `tests/test_codex_runner_degrade_contract.sh` · `tests/test_artifact_codex_reviewer.sh`:
+  FALLBACK 회귀 락 — 환경변수를 지우고 mock codex 를 태워 `codex_failed: false` +
+  finding 산출을 요구한다. mutation 3축 전부 RED 확인.
+
+**Changed**
+- ABORT 계약 검증의 트리거를 환경변수 제거에서 **SIGTERM**
+  (`shared/tests/abort_trigger.sh`)으로 교체. fallback 이 생기면서 예전 트리거는 더 이상
+  중단을 일으키지 않아, 그대로 두면 5개 assertion 이 abort 경로를 한 번도 밟지 않은 채
+  평범한 degrade 경로로 GREEN 이 된다(2026-08-23 실측). 5/6 판정과 5러너 B·C 판정
+  (빈-시작·stale-시작 **양쪽**)을 `reason: aborted_before_completion` 으로 좁혔다.
+  stale-시작 쪽은 좁히지 않으면 truncate 가 stale 을 무조건 지우고 `codex_failed`
+  가 다른 사유로도 참이 되어, 트리거가 죽어도 통과한다 — 트리거 무력화 실측으로
+  확인하고 닫았다.
 
 ## [4.2.3] — 2026-08-22
 

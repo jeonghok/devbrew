@@ -35,7 +35,9 @@ allowed-tools:
 산문이 아니라 결정론 헬퍼(§10 스키마 위 순수 함수)가 내리고, 리뷰어는 read-only이며
 수정·커밋은 이 오케스트레이터(writer)만 한다 (Law 2). 라운드마다 git 커밋으로 버저닝.
 
-모든 스크립트는 `${CLAUDE_PLUGIN_ROOT}/scripts/` 하위. 아래 단계를 **순서대로** 실행한다.
+모든 스크립트는 플러그인 루트의 `scripts/` 하위. `CLAUDE_PLUGIN_ROOT` 는 Bash 도구
+환경에 없으므로, 실행할 때 설치된 플러그인 루트로 치환한다 — devbrew 안에서는
+`./plugins/quality-gates`. 아래 단계를 **순서대로** 실행한다.
 
 ## 진입 게이트 (파일 손대기 전)
 

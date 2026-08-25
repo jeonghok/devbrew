@@ -28,4 +28,4 @@
 | `codex/` | codex 가용성 판정 · 출력 변환 · 러너 공통 조각 · P21 프롬프트 프리앰블 |
 | `killswitch/` | kill switch 판정 |
 | `gc/` | TTL-GC 공통 조각 |
-| `tests/` | 판정 헬퍼 + 크로스-플러그인 락 |
+| `tests/` | 판정 헬퍼 · 트리거 모듈(`abort_trigger.sh` — 러너를 SIGTERM 으로 실제 중단시켜 EXIT 트랩 degrade 계약을 잰다) + 크로스-플러그인 락 |
