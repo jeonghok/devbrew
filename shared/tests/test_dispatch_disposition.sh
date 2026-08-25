@@ -199,6 +199,29 @@ for (rel, ln, raw) in anchors:
     parsed.append((rel, ln, cons, faildir, disc))
 print("AXIS_A4_FAIL %s" % "|".join(a4_fail))
 
+# ── 축 A⑤ : consumer= 가 경로면 «앵커가 사는 플러그인»과 같아야 한다.
+#    A④ 는 «어딘가에 실재하는 추적 경로»까지만 요구한다. 그래서 무관한 플러그인의
+#    `.py` 를 가리켜도 A④(실재)와 축 B(그 파일이 adjudication 을 import)를 그대로
+#    통과하고, `.py` 라는 이유로 A④ 의 `disclosure=` 의무까지 면제된다 — 소비자가
+#    거짓인데 세 축이 전부 GREEN 이다 〔실측: smoke-workflow.js:11 의 consumer 를
+#    `plugins/spec-distill/scripts/merge_review.py · fail-closed` 로 바꾸면 17/17〕.
+#    설치본에서 다른 플러그인의 스크립트는 도달조차 불가능하다 — 플러그인 경계가
+#    소비자 주장의 하한이다.
+def _plugin_of(path):
+    parts = path.split("/")
+    return parts[1] if len(parts) > 2 and parts[0] == "plugins" else None
+
+
+a5_targets = [x for x in parsed
+              if x[2].endswith(".py") or x[2].endswith(".js")]
+a5_fail = []
+for (rel, ln, cons, _fd, _dc) in a5_targets:
+    here, there = _plugin_of(rel), _plugin_of(cons)
+    if here is None or there is None or here != there:
+        a5_fail.append("%s:%d consumer=%s 는 다른 플러그인이다 (%s != %s)"
+                       % (rel, ln, cons, there, here))
+print("AXIS_A5_FAIL %s" % "|".join(a5_fail))
+
 # ── 축 B : consumer= 가 `.py` 인 앵커 — 그 파일이 `adjudication` 을 import 한다.
 #    가장 센 이빨이지만 `.py` 소비자에만 걸린다.
 IMPORT = re.compile(
@@ -237,6 +260,7 @@ print("AXIS_C_FAIL %s" % "|".join(c_fail))
 
 # ── 인쇄 ⑤ 축별 대상 수. M10(green-expected) 의 관측 근거가 이것이다 —
 #    인쇄되지 않는 수치를 관측 근거로 적는 것은 관측하지 않는 것과 같다.
+print("PRINT_5_axis A5 %d" % len(a5_targets))
 print("PRINT_5_axis B %d" % len(b_targets))
 print("PRINT_5_axis C %d" % len(c_targets))
 PY
@@ -294,6 +318,14 @@ a3f="$(printf '%s\n' "$OUT" | sed -n 's/^AXIS_A3_FAIL //p')"
 assert_eq "$a3f" "" "축 A③ 각 dispatch 줄이 정확히 한 에이전트에 귀속"
 a4f="$(printf '%s\n' "$OUT" | sed -n 's/^AXIS_A4_FAIL //p')"
 assert_eq "$a4f" "" "축 A④ 서식 + 닫힌 어휘 + 경로 실재"
+a5f="$(printf '%s\n' "$OUT" | sed -n 's/^AXIS_A5_FAIL //p')"
+assert_eq "$a5f" "" "축 A⑤ 경로 consumer 가 앵커와 같은 플러그인"
+n_a5="$(printf '%s\n' "$OUT" | sed -n 's/^PRINT_5_axis A5 //p')"
+if [ "${n_a5:-0}" -lt 1 ]; then
+  no "축 A⑤ 대상이 0 — 경로 consumer 도출이 깨졌다 (vacuity 하한)"
+else
+  ok "인쇄 ⑤ 축 A⑤ 대상 ${n_a5}건"
+fi
 
 bf="$(printf '%s\n' "$OUT" | sed -n 's/^AXIS_B_FAIL //p')"
 assert_eq "$bf" "" "축 B .py 소비자가 adjudication 을 import 한다"
