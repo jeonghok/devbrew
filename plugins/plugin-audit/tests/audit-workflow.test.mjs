@@ -250,3 +250,48 @@ test('row 5 regression — normal surviving IMPORTANT still gets deep_verified:t
   assert.notEqual(f.unverified, true, 'genuinely axis-verified survivor must not be unverified')
   assert.equal(f.deep_verified, true)
 })
+
+// codex 갈래의 «판정 누락» 회계. claude 갈래(:558)와 구조가 같은 두 갈래 중 하나만
+// 침묵했던 것이 원 결함이므로, 한쪽만 잠그면 정확히 같은 방식으로 재발한다.
+const CODEX_FINDING = {
+  id: 'CX-1', axis: 2, title: 'ct', user_harm: 'ch', recommendation: 'cr',
+  counter_argument: 'cc', evidence: [{ file: 'cf', line: 9, quote: 'cq' }],
+  severity: 'IMPORTANT', fix_cost: 'S', fix_cost_rationale: 'x', reference_gap: 'none',
+}
+
+// codex 갈래만 살리는 stub — 감사 축은 발견 0건이라 축 refuter 가 아예 호출되지
+// 않는다(:509 조기 반환). 그래서 degraded_events 에 남는 것은 codex 갈래의 것뿐이다.
+const codexOnlyStub = (mergeVerdicts) => async (prompt, o) => {
+  if (o.phase === '감사') return { findings: [], d_verdicts: [], oq_answers: [], new_open_questions: [] }
+  if (o.phase === '병합') return { verdicts: mergeVerdicts }
+  if (o.phase === '심층검증') return { finding_id: 'CX-1', refuted: false, reason: 'ok' }
+  return { verdicts: [] }
+}
+
+const missedVerdictEvents = (result) =>
+  result.degraded_events.filter((e) => /CX-1/.test(e.what) && /판정을 누락/.test(e.what))
+
+test('결함 #9 — codex 갈래에서 refuter 가 판정을 누락하면 degradedEvents 에 쌓인다', async () => {
+  const args = { target: 'sample', evidencePack: DEFAULT_PACK, codexFindings: [CODEX_FINDING] }
+  // refuter 는 응답했지만 CX-1 에 대한 verdict 가 없다. 침묵은 판정이 아니다.
+  const { result } = await runWorkflow(WF, { args, stubAgent: codexOnlyStub([]) })
+
+  const f = result.findings.find((x) => x.id === 'CX-1')
+  assert.equal(f.source, 'codex')
+  assert.equal(f.unverified, true, '판정 누락 → unverified')
+  assert.equal(missedVerdictEvents(result).length, 1,
+    'codex 갈래의 판정 누락이 degraded_events 로 공시돼야 한다 — ' +
+    '세지 않고 버리면 미검증 발견이 검증된 것으로 읽힌다')
+})
+
+test('결함 #9 양성 짝 — refuter 가 판정하면 그 공시는 나오지 않는다', async () => {
+  // 항상 켜지는 공시는 공시가 아니다. 위 단언이 «판정 누락»을 재는지, 아니면
+  // codexFindings 가 있기만 하면 켜지는지를 이 짝이 가른다.
+  const args = { target: 'sample', evidencePack: DEFAULT_PACK, codexFindings: [CODEX_FINDING] }
+  const verdicts = [{ finding_id: 'CX-1', verdict: 'survives', reason: 'ok' }]
+  const { result } = await runWorkflow(WF, { args, stubAgent: codexOnlyStub(verdicts) })
+
+  const f = result.findings.find((x) => x.id === 'CX-1')
+  assert.notEqual(f.unverified, true, '판정을 받은 finding 은 unverified 가 아니다')
+  assert.equal(missedVerdictEvents(result).length, 0)
+})

@@ -8,6 +8,8 @@ background: false
 disable-model-invocation: false
 ---
 
+**처분** — consumer=human · fail-open · disclosure=blocks:
+
 ## 인벤토리 · 코드 상태
 
 !`python3 "${CLAUDE_PLUGIN_ROOT}/scripts/prepare_standup.py"`

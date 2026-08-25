@@ -1,5 +1,72 @@
 # Changelog
 
+## [0.35.2] — 2026-08-25
+
+### Changed
+- `scripts/merge_review.py` — 처분 원장의 degrade 사유를 `adjudication_reasons:` 대신
+  `advisory` 리스트로 보낸다. `skills/reviewing-spec/SKILL.md`의 "그대로 표시"·"degrade
+  없음" 판정은 `advisory` 에만 걸려 있어서, `load_history` 실패는 표시 규칙 없는 키로
+  가고 그 짝 `_write_history` 실패는 `advisory` 로 가는 비대칭이 표시 층에 남아 있었다
+  (설계 §7 #3 이 결함으로 지목한 바로 그 비대칭). 형제 `merge_brief_review.py:325-328`
+  과 같은 선택. 사유는 이제 `emit()` 의 `_yaml_scalar` escape 를 탄다.
+- `skills/reviewing-spec/SKILL.md` — 파싱 키 열거를 실제 stdout 과 맞추고, degrade 사유가
+  `advisory:` 로 온다는 것과 `adjudication_held`/`adjudication_unknown` 이 degrade 의
+  유일한 신호가 될 수 없다는 것을 명시.
+
+### Removed
+- `scripts/merge_review.py` stdout 의 `adjudication_reasons:` 키. `[0.35.0]` 에서 추가돼
+  같은 브랜치 안에서만 존재했고 `main` 에 배포된 적이 없다 — deprecation window 대상 아님.
+  `adjudication_held`/`adjudication_unknown` 두 계수 키는 그대로다.
+
+## [0.35.1] — 2026-08-23
+
+### Added
+- dispatch 자리(7곳)에 처분 앵커 — `**처분** — consumer=… · fail-… [· disclosure=…]`. `shared/tests/test_dispatch_disposition.sh` 축 A①②③④·B·C 가 집행한다.
+
+## [0.35.0] — 2026-08-23
+
+새 표면 3개(minor) — `merge_review.py` stdout에 subagent 발견의 처분 회계 채널을 얹는다.
+
+### Added
+- `scripts/merge_review.py` stdout에 `adjudication_held` / `adjudication_unknown` /
+  `adjudication_reasons` 세 키 추가 — 판정(verdict)과 별개 채널로 처분 회계(수용/보류/
+  입력실패/원리적 미상/강제)를 싣는다. `skills/reviewing-spec/SKILL.md`가 이 세 키를
+  orchestrator가 파싱하는 stdout 키 목록에 나열.
+
+### Fixed
+- `scripts/merge_review.py`의 회계 결함 6건: ⑴ claude sentinel의 non-dict 원소를 조용히
+  버리던 것을 `hold()`로 계수. ⑵ sentinel 부재·JSONDecodeError·payload 형태 불일치 세 경로를
+  「0건」이 아니라 원리적 미상(`uncountable`)으로 구별 — issues 리스트가 아직 만들어지지
+  않은 지점이라 개수를 알 방법이 없다. ⑶ YAML 마커 위반으로 폐기된 codex finding 개수를
+  `reason` 문자열에 인코딩하지 않고(파일이 공급하는 `meta.reason:`과 충돌해 `int()` 크래시
+  가능) out-of-band 4번째 반환값으로 보고. ⑷ `load_history()`가 원장 전체 손실
+  (OSError/JSONDecodeError/비-list)과 id 없는 레코드를 침묵하지 않고 `source_failed`/`hold`로
+  계수 — 짝 `_write_history`는 실패 시 advisory를 내는데 이쪽만 침묵하던 비대칭을 해소. ⑸
+  `raised_count` 강제 변환(문자열→0)이 `>=3` 정체 게이트를 무력화하는데도 미보고이던 것을
+  `gate=True` 강제로 기록. ⑹ category·target_section이 둘 다 빈 codex finding이 원장에도
+  회계에도 안 잡히던 것을 `hold()`로 계수. 더불어 hold() 사유 문자열을 `str()`로 담으면
+  summary 안의 개행이 stdout에 두 번째 `combined_verdict:` 줄을 주입할 수 있던 경로를
+  `repr()` + `_yaml_scalar` escape로 닫았다(verdict-injection).
+
+### Changed
+- `scripts/merge_brief_review.py`를 shared `Ledger`(`scripts/adjudication.py` 심볼릭 링크)로
+  전환 — critic 축의 비-dict 원소(findings로 승격 못 하는 **소실** → `hold()`)와 필수 필드가
+  나빠도 그대로 싣는 §9.1 fail-open 데이터 경로(소실 아님 → `accept()`)를 서로 다른 Ledger
+  어휘로 구별해 회계한다. codex 축의 malformed 개수도 `merge_review.py`와 같은 관례로
+  `hold()`. 새 top-level 출력 키 없음 — 회계는 이미 escape되는 기존 `advisory` 채널에 얹는다.
+  외부 출력 8개 키와 verdict 경로(`escalates`/`codex_degraded`가 평가하는 표현식) 무변경.
+
+### Known gaps
+- `merge_review.py`의 mixed-round 경로(`codex_failed: true`인 라운드에 findings가 이미
+  파싱돼 있는 경우)는 여전히 그 codex finding **자체**를 원장에서 폐기한다 — 이번 수정으로
+  폐기된 개수는 `adjudication_held`로 계수되지만, finding의 내용(category/severity/summary
+  등)은 복원되지 않는다. `merge_brief_review.py`(brief 경로)는 이미 findings를 보존한 채
+  degrade 마커를 함께 낸다 — 남은 격차는 공유 경로(`merge_review.py`, design-doc 리뷰) 한 곳.
+
+## [0.34.0] — 2026-08-23
+
+### Added
+- `scripts/adjudication.py` — `shared/adjudication/adjudication.py` 정본을 가리키는 상대 심볼릭 링크. subagent 발견의 처분 회계(`수용·기각·보류` + 흡수·강제·입력실패·원리적 미상). 리포 최초의 import-only `.py` 심볼릭 링크.
 ## [0.33.1] — 2026-08-23
 
 `run_spec_codex_reviewer.sh` 가 `CLAUDE_PLUGIN_ROOT` 를 기본값 없이 참조해,

@@ -24,6 +24,7 @@
 
 | | |
 |---|---|
+| `adjudication/` | subagent 발견의 처분 회계 (수용·기각·보류 + 흡수·강제·입력실패·원리적 미상) |
 | `codex/` | codex 가용성 판정 · 출력 변환 · 러너 공통 조각 · P21 프롬프트 프리앰블 |
 | `killswitch/` | kill switch 판정 |
 | `gc/` | TTL-GC 공통 조각 |

@@ -27,6 +27,16 @@ plugins/<your-plugin>/
 - [`plugins/quality-gates/`](../plugins/quality-gates/) — **writer + reviewer + hook 파이프라인**. 2-gate `tools:` allowlist 격리로 Laws 1–2를 embody. `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`를 shipping.
 - [`plugins/project-init/`](../plugins/project-init/) — **git-workflow enforcement**. Compounding hook과 branching-strategy 템플릿으로 Law 3를 embody. `commands/`, `hooks/`, `templates/`를 shipping. `agents/`나 `skills/` 없음 — hooks-and-templates 플러그인도 유효한 형태.
 
+> **새 agent 를 dispatch 하는 자리를 만들면 처분 앵커 한 줄이 함께 온다** —
+> `**처분** — consumer=<같은 플러그인의 .py|.js 경로|orchestrator|human> · fail-<open|closed> · disclosure=<리터럴>`.
+> 그 subagent 가 낸 발견을 누가 어떻게 처분하는지, 그리고 버린 것이 어디에 드러나는지를
+> 밝힌다. `consumer=` 가 경로면 그 경로는 추적되는 파일로 실재해야 하고 앵커가 사는 파일과
+> 같은 플러그인이어야 한다. `disclosure=` 는 `consumer=` 가 `.py` 경로일 때만 생략한다 —
+> 그 밖의 소비자에서 빠뜨리면 락의 축 A④ 가 RED 다.
+> `shared/tests/test_dispatch_disposition.sh` 가 dispatch 와 앵커를 1:1 로 묶고, 그 락은
+> `# guards: plugins/**` 를 선언하므로 `plugins/` 를 건드리는 변경의 Runtime gate 테스트
+> 스코프에 들어온다. 회계 모듈은 `shared/adjudication/`.
+
 **단계별 문법 레퍼런스** — `plugin-dev`(claude-plugins-official)가 Claude Code 컴포넌트 문법을 skill로 shipping한다. 해당 단계에 진입할 때만 로드 — 선행 일괄 로드는 progressive disclosure 위반:
 
 - **설계 (brainstorming)** — `plugin-dev:plugin-structure`. 컴포넌트 타입, `plugin.json` 스키마, 디렉토리 레이아웃. 이 단계에서 필요한 유일한 것.

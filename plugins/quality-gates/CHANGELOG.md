@@ -3,6 +3,85 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.3.5] — 2026-08-25
+
+### Fixed
+- `tests/test_skill_drop_notice_consumed.sh` — `[4.3.4]` 가 추가한 축 (d) 의 판정 검사가
+  **헤더-satisfiable** 이었다. 코퍼스가 step 4.5 창 전체였는데 마커는 「Why this clause
+  exists」 근거 단락에도 인용문으로 등장하므로, 판정 키를 인스턴스 리터럴로 되돌리는
+  변이에서도 그 인용문이 검사를 만족시켜 **11/11 GREEN** 이었다(mutation 으로 적발).
+  코퍼스를 오버라이드 **지시부**(클로즈 제목 ~ 근거 단락 직전)로 좁혀 body-unique 하게
+  만들고, 지시부 앵커 유효성(d0)과 근거 단락이 지시부 **밖**임을 재는 decoy 배제
+  두 건(d3b①②, 인용문 실재를 양성 짝으로)을 함께 건다. d5(바이트 동일)도 같은
+  지시부를 본다.
+
+## [4.3.4] — 2026-08-25
+
+### Fixed
+- `skills/quality-pipeline/SKILL.md` step 4.5 — 「Dropped-finding override」가
+  `dropped as malformed` 라는 **한 인스턴스의 리터럴**에 키잉돼 있어, `[4.3.3]` 이 신설한
+  `판정 degrade` 통지가 매칭되지 않았다. 그 클로즈는 *"생산자만 고치고 소비자를 안 고친
+  반쪽 수정"*(2026-08-05 적발) 때문에 만들어진 것인데, 통지가 둘이 되자 **같은 실패가
+  대상만 옮겨 재발**했다. 열거를 도출로 바꾼다: 판정 키를 두 통지가 공유하는 마커
+  `**이 실행은 clean이 아니다**` 로 삼아, 현재의 두 통지와 같은 마커를 쓰는 앞으로의
+  통지까지 자동으로 잡는다. 클로즈 이름은 **Not-clean notice override** 로 넓힌다.
+  개수를 담은 통지(`dropped as malformed`)는 개수와 함께, 개수가 없는 통지
+  (`판정 degrade`)는 그 줄을 verbatim 으로 낸다 — 개수를 지어내지도, 오버라이드를
+  건너뛰지도 않는다. bare `clean` 금지와 「두 clean 하위경우 모두 적용」은 그대로.
+
+### Changed
+- `tests/test_skill_drop_notice_consumed.sh` — 생산자·소비자 seam 락에 축 (d) 5건 추가.
+  기존 (a)~(c) 는 통지가 하나뿐이라는 전제 위에 서 있어 두 번째 통지를 못 본다.
+  (d1) degrade 통지가 마커를 단다 · (d2) drop 통지도 **같은** 마커를 단다(공유 성립) ·
+  (d3) 소비자가 그 마커를 판정 키로 쓴다 · (d4) **양성 짝** — 정상 clean 출력에는 마커가
+  없다 · (d5) 생산자·소비자 마커가 바이트 동일.
+
+## [4.3.3] — 2026-08-25
+
+### Fixed
+- `scripts/synthesize_findings.py` — 원장의 degrade 공시가 stdout 에 **도달하지 않던** 자리.
+  `main()`이 `report()["counts"]["held"]` 하나만 꺼내 갔고 `degraded`·`reasons`·
+  `sources_failed`는 어디로도 가지 않아, 주(主) 입력 파일이 통째로 죽어도 출력이
+  「깨끗함」과 **바이트 동일**했다(`--findings <없는 경로>` → `No high-confidence
+  findings. 0 low-confidence findings suppressed.` + rc=0). `render()`의 두 갈래
+  (findings 있음 / 없음) 모두에 `판정 degrade` 마커 + `Ledger.reasons()` 한 줄씩을
+  싣는다. 사유 문자열의 item 이름은 리뷰어 저작 YAML 에서 오므로 표 셀과 같은
+  `_cell()` escape 를 통과한다.
+
+### Changed
+- `tests/test_synthesize_findings_adjudication.py` — 원장만 관측하던 회귀 테스트에
+  **stdout 단언**을 추가(`TestOutputSurface` 3건). 결함이 `main()`→`render()` 이음매에
+  있었으므로 `main()`을 실제로 돌려 출력을 본다. 양성 짝(clean 실행에는 공시가 없다)과
+  표-갈래 단언을 함께 건다.
+
+## [4.3.2] — 2026-08-23
+
+### Added
+- dispatch 자리(7곳)에 처분 앵커 — `**처분** — consumer=… · fail-… [· disclosure=…]`. `shared/tests/test_dispatch_disposition.sh` 축 A①②③④·B·C 가 집행한다.
+
+## [4.3.1] — 2026-08-23
+
+### Fixed
+- `scripts/synthesize_findings.py` — `load_yaml()`이 「경로 없음(정상)」과 「경로는 있는데
+  파일이 없음(입력 실패)」을 구별하지 못해 파일이 사라져도 둘 다 `([], 0)`으로 합쳐지던 것을
+  `Ledger.source_failed()`로 구별해 **원장에 기록**한다. 이 릴리스의 범위는 회계까지다 —
+  그 기록이 stdout 공지로 나가는 배선은 없었고, `[4.3.3]`이 그것을 잇는다.
+  `apply_verdicts()`가 adversarial
+  판정이 없는 finding을 fail-open으로 유지하면서도(다음 소비자가 사람) 세지 않아 미판정 건수가
+  은폐되던 것을 `Ledger.hold()`로 계수 — `render()`의 counts 줄 옆에 "미판정 `<N>`건"으로
+  노출한다(형제 `synthesize_artifact_findings.py`의 `unadjudicated` 계측과 대칭).
+
+### Changed
+- `scripts/synthesize_artifact_findings.py` — `phase_synth`의 인메모리 `unadjudicated` 카운터를
+  shared `Ledger`(`scripts/adjudication.py` 심볼릭 링크)로 전환. 기계적 전환, 새 행동 없음 —
+  `unadjudicated`는 `L.report()["counts"]["held"]`로 파생되고 `continue`는 그대로다(fail-closed
+  제외, AC16). 외부 출력 키(`converged`/`degraded`/`degraded_reason`/`unadjudicated`/`kept_*`)와
+  emitted output은 바이트 단위 불변(3개 시나리오 diff empty로 확인).
+
+## [4.3.0] — 2026-08-23
+
+### Added
+- `scripts/adjudication.py` — `shared/adjudication/adjudication.py` 정본을 가리키는 상대 심볼릭 링크. subagent 발견의 처분 회계(`수용·기각·보류` + 흡수·강제·입력실패·원리적 미상). 리포 최초의 import-only `.py` 심볼릭 링크.
 ## [4.2.5] — 2026-08-23
 
 `CLAUDE_PLUGIN_ROOT` 해석의 두 결함을 닫는다. 하나는 테스트 인프라가 워크트리에서

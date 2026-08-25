@@ -379,6 +379,7 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 ```
 Agent({
   subagent_type: "quality-gates:security-reviewer",
+  // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-open
   description: "Security review (Review gate iter N)",
   prompt: "Run code-level security review on the current diff.
     project_dir: \"$project_dir\"
@@ -390,6 +391,7 @@ Agent({
 
 Agent({
   subagent_type: "quality-gates:adversarial",
+  // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-open
   description: "Adversarial review of Phase-1 findings (Review gate iter N)",
   prompt: "Re-review findings from Phase-1 reviewers for false positives
     and missed exploit paths.
@@ -553,13 +555,22 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
      Loop](#dispatch-loop) step 4 (which short-circuits the Runtime gate for the
      review-only path, else runs it).
 
-   **Dropped-finding override (applies to BOTH clean sub-cases, before the floor).**
-   If the captured stdout contains a line matching `dropped as malformed`, you MUST
-   surface that line verbatim **in addition to** the empty-state line, and you MUST
-   NOT print a bare `clean` verdict. Print instead:
-   `## Review gate iter N: not clean — <D> finding(s) dropped as malformed (unjudged).`
-   (`<D>` = the count from that line.) Then continue to step 5's decision tool as if
-   findings remained.
+   **Not-clean notice override (applies to BOTH clean sub-cases, before the floor).**
+   The key is the marker every such notice carries, not any one notice's wording:
+   if the captured stdout contains `**이 실행은 clean이 아니다**` on any line, you MUST
+   surface **every** line carrying it verbatim, **in addition to** the empty-state
+   line, and you MUST NOT print a bare `clean` verdict. Print instead:
+   `## Review gate iter N: not clean — <사유>.`
+   `<사유>` comes from the notice itself, and notices differ in what they carry:
+   - The **Dropped-finding** notice carries a count — it reads
+     `<D> finding(s) dropped as malformed`. Print
+     `<D> finding(s) dropped as malformed (unjudged)`.
+   - A notice with **no count** (e.g. the `판정 degrade` line, which names which
+     input or judgment path failed rather than how many items) has no `<D>` to read.
+     Do NOT invent one and do NOT skip the override — print that notice line
+     **verbatim** as `<사유>`.
+
+   Then continue to step 5's decision tool as if findings remained.
 
    Why this clause exists: the synthesizer emits that notice — whose own text reads
    `**이 실행은 clean이 아니다**` — precisely because a malformed finding may have
@@ -570,6 +581,13 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
    생산자만 고치고 소비자를 안 고친 반쪽 수정). A finding that was thrown away is not
    a finding that was cleared. This mirrors the Runtime gate's `indeterminate ≠ clean`
    rule at [Step R4](#runtime-gate).
+
+   Why the key is the marker and not the notice text: keying on one notice's literal
+   is an enumeration, and an enumeration is fail-open over time — a second notice
+   (`판정 degrade`) was added later and was **not** matched by a `dropped as malformed`
+   key, so the same half-fix reappeared with only the instance changed. Deriving the
+   key from the marker the notices share covers every present and future notice that
+   declares itself not-clean.
 
    **Security-review-absent advisory (applies to EVERY step-4.5 exit path — the
    `kept > 0` case and BOTH clean sub-cases).** If this iteration set
@@ -584,7 +602,7 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
    emitted mid-iteration, far above the verdict, and a reader who scrolls to the
    verdict (or reads only the `## History` line) never sees it. Tier A floor is
    `security-reviewer + adversarial`; with one of the two removed, a bare `clean`
-   over-claims. Same family as the [Dropped-finding override](#review-gate) above —
+   over-claims. Same family as the [Not-clean notice override](#review-gate) above —
    *a finding that was never produced is not a finding that was cleared.*
 
    **Honest-verdict floor (deterministic — both clean sub-cases).** The floor keys
