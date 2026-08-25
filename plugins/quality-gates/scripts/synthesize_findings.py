@@ -412,7 +412,32 @@ def _norm_sev(f):
     return "SUGGESTION"
 
 
-def render(findings, suppressed_count, dropped_malformed=0, held_count=0):
+# degrade 공시의 고정 마커. 소실(`dropped as malformed`)과 **다른 사건**이다:
+# 저쪽은 개별 주장이 버려진 것이고, 이쪽은 판정 «경로» 자체가 온전하지 않았던 것
+# (주 입력 사망·셀 수 없음·게이트를 바꾼 강제). 둘을 한 문구로 합치면 어느 쪽이
+# 났는지 stdout 에서 구별할 수 없다.
+DEGRADE_MARKER = "판정 degrade"
+
+
+def _degrade_block(degraded, degrade_reasons):
+    """degrade 공시 줄들. 사유가 하나도 없어도 degraded 면 머리줄은 나간다.
+
+    사유 문자열은 Ledger 가 만들지만 그 안의 item 이름은 리뷰어 저작 YAML 에서
+    온다(`finding_id` = agent-file-line). 표 셀과 같은 문을 통과시킨다 — 개행이
+    raw 로 나가면 이 블록 아래에 가짜 머리줄을 심을 수 있다.
+    """
+    if not degraded:
+        return []
+    out = [
+        f"{DEGRADE_MARKER} — **이 실행은 clean이 아니다**: "
+        "판정 경로가 온전하지 않았다.",
+    ]
+    out.extend(f"- {_cell(r)}" for r in degrade_reasons)
+    return out
+
+
+def render(findings, suppressed_count, dropped_malformed=0, held_count=0,
+           degraded=False, degrade_reasons=()):
     if not findings:
         # drop 공지는 이 분기에도 반드시 나가야 한다. 예전에는 아래 표-있는
         # 경로에만 있었고, 살아남은 발견이 0이면 여기서 먼저 return해 공지가
@@ -434,8 +459,9 @@ def render(findings, suppressed_count, dropped_malformed=0, held_count=0):
                 "**이 실행은 clean이 아니다**: 버려진 주장은 심사되지 않았다."
             )
         if held_count > 0:
-            # 개수만 싣는다 — finding 텍스트·reason 은 여기 들어오지 않는다.
+            # 이 줄은 개수만 싣는다 — finding summary 는 여기 들어오지 않는다.
             out.append(f"미판정 {held_count}건 — adversarial 판정이 없어 유지됐다.")
+        out.extend(_degrade_block(degraded, degrade_reasons))
         return "\n".join(out) + "\n"
 
     counts = {"CRITICAL": 0, "IMPORTANT": 0, "SUGGESTION": 0}
@@ -468,10 +494,14 @@ def render(findings, suppressed_count, dropped_malformed=0, held_count=0):
     if suppressed_count > 0:
         counts_line += f" — {suppressed_count} suppressed (conf <= 4)"
     if held_count > 0:
-        # 개수만 싣는다 — finding 텍스트·reason 은 여기 들어오지 않는다.
+        # 이 줄은 개수만 싣는다 — finding summary 는 여기 들어오지 않는다.
         counts_line += f" — 미판정 {held_count}건"
 
     out = ["## Review Findings (Synthesized)", "", counts_line, ""]
+    degrade_lines = _degrade_block(degraded, degrade_reasons)
+    if degrade_lines:
+        out.extend(degrade_lines)
+        out.append("")
     out.append("| Sev | Path:Line | Conf | Summary | Source |")
     out.append("|---|---|---|---|---|")
     out.extend(rows)
@@ -525,8 +555,13 @@ def main():
     kept, suppressed = suppress(findings)
     kept = sort_findings(kept)
 
-    held_count = ledger.report()["counts"]["held"]
-    sys.stdout.write(render(kept, len(suppressed), dropped_malformed, held_count))
+    # 원장은 «회계»만 한다 — 읽어서 stdout 에 싣는 것은 이 소비자의 책임이다.
+    # 라운드 4 이전에는 `held` 만 꺼내 갔고 `degraded`/`reasons` 는 어디로도 가지
+    # 않았다: 주 입력이 통째로 죽어도 출력이 clean 과 **바이트 동일**이었다.
+    report = ledger.report()
+    held_count = report["counts"]["held"]
+    sys.stdout.write(render(kept, len(suppressed), dropped_malformed, held_count,
+                            report["degraded"], report["reasons"]))
 
 
 if __name__ == "__main__":
