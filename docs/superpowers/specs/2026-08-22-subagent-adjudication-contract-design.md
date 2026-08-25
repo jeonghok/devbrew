@@ -517,8 +517,8 @@ dispatch 아래에 앵커를 둘 수 있으므로 이 방향이 넷 모두를 �
 **`CLAUDE.md` → Plugin Shape → 컴포넌트 격리** 아래 항목 하나:
 
 > **subagent 발견은 처분을 밝힌다.** 모든 dispatch 자리는
-> `**처분** — consumer=<경로|orchestrator|human> · fail-<open|closed>[ · disclosure=<리터럴>]`
-> 한 줄을 갖는다(`consumer=` 가 경로면 그 경로가 **실재해야** 한다). 판정기가 항목을 버리면
+> `**처분** — consumer=<.py|.js 경로|orchestrator|human> · fail-<open|closed>[ · disclosure=<리터럴>]`
+> 한 줄을 갖는다(`consumer=` 가 경로면 그 경로가 추적되는 파일로 **실재해야** 한다). 판정기가 항목을 버리면
 > 센다 — 셀 수 없으면 「셀 수 없음」을 낸다(침묵과 0 은 다른 사실이다). 회계는
 > `shared/adjudication/` 이 한다.
 > **흡수(dedup)와 강제(coercion)는 소실이 아니다** — 계수하되 그 자체로 degrade 는 아니다.
