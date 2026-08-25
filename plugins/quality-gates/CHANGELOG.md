@@ -3,6 +3,18 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.3.5] — 2026-08-25
+
+### Fixed
+- `tests/test_skill_drop_notice_consumed.sh` — `[4.3.4]` 가 추가한 축 (d) 의 판정 검사가
+  **헤더-satisfiable** 이었다. 코퍼스가 step 4.5 창 전체였는데 마커는 「Why this clause
+  exists」 근거 단락에도 인용문으로 등장하므로, 판정 키를 인스턴스 리터럴로 되돌리는
+  변이에서도 그 인용문이 검사를 만족시켜 **11/11 GREEN** 이었다(mutation 으로 적발).
+  코퍼스를 오버라이드 **지시부**(클로즈 제목 ~ 근거 단락 직전)로 좁혀 body-unique 하게
+  만들고, 지시부 앵커 유효성(d0)과 근거 단락이 지시부 **밖**임을 재는 decoy 배제
+  두 건(d3b①②, 인용문 실재를 양성 짝으로)을 함께 건다. d5(바이트 동일)도 같은
+  지시부를 본다.
+
 ## [4.3.4] — 2026-08-25
 
 ### Fixed

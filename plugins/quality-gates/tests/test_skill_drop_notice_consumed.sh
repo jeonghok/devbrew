@@ -97,11 +97,39 @@ else
   no "d2 — 두 통지가 마커를 공유하지 않는다 — 마커 키잉이 성립하지 않는다"
 fi
 
-# d3 — 소비자가 그 마커를 판정 키로 쓴다.
-if printf '%s' "$window" | grep -qF "$MARKER"; then
-  ok "d3 — step 4.5 가 공유 마커를 판정 키로 쓴다"
+# d3 — 소비자가 그 마커를 **판정 키로** 쓴다.
+#
+# 코퍼스를 step 4.5 창 전체가 아니라 «지시부»로 좁히는 것은 선택이 아니라
+# 성립 조건이다. 마커는 아래 「Why this clause exists」 근거 단락에도 인용문으로
+# 등장한다 — 창 전체를 보면 판정 키를 인스턴스 리터럴로 되돌려도 그 인용문이
+# 검사를 만족시켜 GREEN 이다 〔실측: 되돌림 변이에서 11/11 통과〕. 헤더가 문구를
+# 만족시키면 body 를 삭제해도 GREEN 인 것과 같은 함정이고, 판정은 지시부에
+# unique 해야 한다.
+directive="$(awk '/\*\*Not-clean notice override/,/Why this clause exists/' "$SKILL" | sed '$d')"
+dlines="$(printf '%s' "$directive" | wc -l | tr -d ' ')"
+if [ "${dlines:-0}" -ge 10 ]; then
+  ok "d0 — 오버라이드 지시부 ${dlines}줄 확보 (앵커 유효)"
 else
-  no "d3 — step 4.5 가 인스턴스 리터럴에만 키잉한다 (열거 = fail-open)"
+  no "d0 — 지시부를 못 찾았다(${dlines}줄) — 앵커가 깨졌다, 아래 판정 무의미"
+fi
+if printf '%s' "$directive" | grep -qF "$MARKER"; then
+  ok "d3 — step 4.5 지시부가 공유 마커를 판정 키로 쓴다"
+else
+  no "d3 — 지시부가 인스턴스 리터럴에만 키잉한다 (열거 = fail-open)"
+fi
+
+# d3b — decoy 배제. 근거 단락의 인용문이 지시부 **밖**이어야 d3 가 의미를 갖는다.
+#       음의 검사에는 양의 짝이 필요하다: 인용문이 파일에서 사라지면 「밖」은
+#       공허하게 참이 되므로, 그 인용문이 실재하는지를 먼저 잰다.
+if grep -qF 'whose own text reads' "$SKILL"; then
+  ok "d3b① 근거 단락의 마커 인용문이 파일에 실재 (배제 검사의 양성 짝)"
+else
+  no "d3b① 근거 단락이 사라졌다 — 배제 검사가 공허해진다"
+fi
+if printf '%s' "$directive" | grep -qF 'whose own text reads'; then
+  no "d3b② 지시부가 근거 단락을 삼켰다 — d3 가 인용문으로 만족될 수 있다"
+else
+  ok "d3b② 근거 단락의 인용문은 지시부 밖이다"
 fi
 
 # d4 — 양성 짝. 통지가 없는 정상 clean 실행에는 마커가 **없어야** 한다.
@@ -118,7 +146,7 @@ fi
 #      (c) 와 같은 논거: 둘을 따로 고정하면 한쪽만 바꿔도 양쪽 GREEN 인 채로
 #      seam 이 다시 열린다.
 marker_emitted="$(printf '%s' "$out_c" | grep -oF "$MARKER" | head -1)"
-if [ -n "$marker_emitted" ] && printf '%s' "$window" | grep -qF "$marker_emitted"; then
+if [ -n "$marker_emitted" ] && printf '%s' "$directive" | grep -qF "$marker_emitted"; then
   ok "d5 — 생산자 마커와 소비자 마커가 바이트 동일하다"
 else
   no "d5 — 마커 불일치 (emitted='${marker_emitted:-<none>}')"
