@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.35.3] — 2026-08-25
+
+### Added
+- `tests/test_merge_review_adjudication.py` — degrade 사유가 **`advisory` 채널로**
+  나가는지 잠그는 단언 3건. 계수(`adjudication_held`)와 사유는 다른 채널이라
+  계수만 단언하면 사유 채널을 통째로 끊어도 GREEN 이었다 — 실제로 `advisory.extend`
+  를 지우고 옛 키를 되살렸을 때 전 스위트가 통과했다. 주(主) 입력 실패 케이스는
+  `held` 가 0이라 `advisory` 가 **유일한 신호**이고, 그 자리를 계측기로 삼는다.
+  양성 짝(아무것도 안 버린 실행에는 사유가 없다)을 함께 건다.
+
 ## [0.35.2] — 2026-08-25
 
 ### Changed

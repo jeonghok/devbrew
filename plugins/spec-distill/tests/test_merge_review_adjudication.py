@@ -211,5 +211,57 @@ class TestAdjudicationAccounting(unittest.TestCase):
         self.assertIn("codex_degraded: true", out)
 
 
+    # ── 사유의 «채널» ─────────────────────────────────────────────────
+    #
+    # 계수(`adjudication_held`)와 사유(`reasons`)는 다른 채널이다. 사유는
+    # `advisory` 로 간다 — SKILL 의 "그대로 표시"·"degrade 없음" 판정이 거기에만
+    # 걸려 있기 때문이다. 계수만 단언하면 사유 채널을 통째로 끊어도 GREEN 이다
+    # (whole-branch 재리뷰가 실측으로 그렇게 만들어 보였다).
+
+    def test_source_failure_reason_reaches_advisory(self):
+        """주(主) 입력 실패는 **advisory 로만** 드러난다 — 계수는 0이다.
+
+        `held` 가 0이라 계수 채널은 아무 말도 하지 않는다. `advisory` 를 끊으면
+        이 실패는 어디에도 안 나온다 — 그래서 이 단언이 그 채널의 유일한 계측기다.
+        """
+        out = self._run("**Status:** needs_revise\n" + SENTINEL % '{"issues": []}',
+                        history_text="{ 이건 JSON 이 아니다")
+        self.assertIn("adjudication_held: 0", out,
+                      "계수 채널은 이 사건을 세지 않는다 — 전제 확인")
+        self.assertIn("입력 실패(주): issue_history", out,
+                      "주 입력 실패 사유가 출력에 있어야 한다")
+        adv = out.split("advisory:", 1)[1].split("adjudication_held:", 1)[0]
+        self.assertIn("입력 실패(주): issue_history", adv,
+                      "그 사유는 **advisory 블록 안**에 있어야 한다 — "
+                      "표시 계약이 걸린 채널이 거기뿐이다")
+
+    def test_hold_reasons_reach_advisory(self):
+        """보류 사유도 같은 채널로 간다 — 계수와 «함께».
+
+        위 케이스와 달리 계수도 움직이므로, 둘이 같은 사건을 두 채널로
+        말하는지를 잠근다.
+        """
+        body = ('{"issues": [{"category":"c","target_section":"s",'
+                '"severity":"high","message":"m"}, "쓰레기", 42]}')
+        out = self._run("**Status:** needs_revise\n" + SENTINEL % body)
+        adv = out.split("advisory:", 1)[1].split("adjudication_held:", 1)[0]
+        self.assertIn("보류: '쓰레기'", adv)
+        self.assertIn("보류: 42", adv)
+        self.assertIn("adjudication_held: 2", out, "계수 채널도 함께 움직인다")
+
+    def test_clean_run_puts_no_degrade_reason_in_advisory(self):
+        """양성 짝 — 아무것도 안 버린 실행에는 사유가 없다.
+
+        부재만 재고 존재를 안 재면 「항상 사유를 낸다」로 만들어도 통과한다.
+        codex 부재 advisory 는 이 실행의 정상 요소라 그것만 남아야 한다.
+        """
+        out = self._run("**Status:** approved\n" + SENTINEL % '{"issues": []}')
+        adv = out.split("advisory:", 1)[1].split("adjudication_held:", 1)[0]
+        self.assertNotIn("입력 실패", adv)
+        self.assertNotIn("보류:", adv)
+        self.assertIn("codex co-review degraded", adv,
+                      "codex 부재 advisory 는 남아야 한다 — 블록 자체는 살아 있다")
+
+
 if __name__ == "__main__":
     unittest.main()
