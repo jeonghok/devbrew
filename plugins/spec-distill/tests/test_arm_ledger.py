@@ -535,10 +535,12 @@ class TestPrefixContract(unittest.TestCase):
 
     def test_validator_and_ledger_prefixes_match(self):
         import re as _re
-        src = (PLUGIN_ROOT / "hooks" / "spec-write-validator.py").read_text(
+        # PATH_PREFIX 리터럴은 v0.34.0에서 scripts/resolve_mode.py 로 이동했다
+        # (validator 는 `from resolve_mode import PATH_PREFIX` 로 재-import).
+        src = (PLUGIN_ROOT / "scripts" / "resolve_mode.py").read_text(
             encoding="utf-8")
         m = _re.search(r'^PATH_PREFIX\s*=\s*"([^"]+)"', src, _re.MULTILINE)
-        self.assertIsNotNone(m, msg="validator 의 PATH_PREFIX 리터럴을 못 찾았다")
+        self.assertIsNotNone(m, msg="resolve_mode 의 PATH_PREFIX 리터럴을 못 찾았다")
         assert m is not None
         self.assertEqual(m.group(1), arm_ledger.PREFIX)
 

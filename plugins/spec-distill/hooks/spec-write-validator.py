@@ -47,63 +47,14 @@ SCRIPTS_DIR = SCRIPT_DIR.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 from state_path import state_root as _state_root  # noqa: E402
 from kill_switch_active import kill_switch_active  # noqa: E402
+from resolve_mode import PATH_PREFIX, resolve_mode  # noqa: E402
 PARSE_LIB = SCRIPT_DIR.parent / "scripts" / "parse_spec_structure.py"
 BLACKLIST = SCRIPT_DIR.parent / "scripts" / "ambiguity-blacklist.txt"
-
-PATH_PREFIX = "docs/superpowers/specs/"
 
 # arm_ledger 와 같은 패턴이지만 의도적으로 로컬이다. 이 플러그인은 이미
 # review-dispatch.py·pending-review-reminder.py·arm_ledger.py
 # 세 곳에서 이 정규식을 각자 정의한다 — 새 중복이 아니라 기존 관례.
 PENDING_RE = re.compile(r"^pending_review:\n(?:  [^\n]*\n)*", re.MULTILINE)
-
-
-def _frontmatter_has_locked_decisions(file_path: str) -> bool:
-    """첫 ---...--- frontmatter 블록 안에 locked_decisions 키가 있으면 True.
-
-    body의 locked_decisions 언급은 무시. 닫는 ---가 없는 unclosed frontmatter는
-    유효 블록이 아니므로 False. 읽기/디코드 실패는 False + loud stderr (caller가
-    design으로 매핑)."""
-    try:
-        text = Path(file_path).read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        print(
-            f"[spec-distill] resolve_mode content-peek failed for {file_path}: {exc}",
-            file=sys.stderr,
-        )
-        return False
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return False  # frontmatter 블록 없음
-    block: list[str] = []
-    closed = False
-    for line in lines[1:]:
-        if line.strip() == "---":
-            closed = True
-            break
-        block.append(line)
-    if not closed:
-        return False  # unclosed frontmatter → spec marker로 인정 안 함
-    return any(re.match(r"\s*locked_decisions\s*:", b) for b in block)
-
-
-def resolve_mode(file_path: str) -> Optional[str]:
-    """Return 'spec', 'design', or None (not in scope)."""
-    if PATH_PREFIX not in file_path:
-        return None
-    if not file_path.endswith(".md"):
-        return None
-    if file_path.endswith("-spec.md"):
-        return "spec"
-    design_disabled = (
-        os.environ.get("DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE") == "1"
-    )
-    if file_path.endswith("-design.md"):
-        return None if design_disabled else "design"
-    # suffix 없는 임의 .md — content-aware
-    if _frontmatter_has_locked_decisions(file_path):
-        return "spec"
-    return None if design_disabled else "design"
 
 
 def call_parser(sub: str, *args: str) -> dict:
