@@ -44,10 +44,35 @@ arm_work_init() {  # $1 = mktemp prefix
 }
 
 new_doc() {  # $1 = WORK 기준 상대 경로
+  # **앞 케이스의 문서를 먼저 리포에 넣는다.** dispatch 대상은 세션 상태가 아니라
+  # git 의 dirty 집합에서 오므로, 남겨 두면 앞 케이스의 문서가 뒤 케이스의 **다른
+  # 세션**에서 후보로 잡힌다(원장은 세션별이라 앞 세션의 armed/attempts 가 뒤 세션엔
+  # 없다). 그러면 케이스마다 emit 이 남의 문서로 오염돼 무엇을 재는지 알 수 없다.
+  # 커밋된 문서는 dirty 가 아니라 발견 결과에서 통째로 빠진다.
+  ( cd "$WORK" && git add -A -- docs && git commit -q -m retire-prev ) >/dev/null 2>&1
   mkdir -p "$WORK/$(dirname "$1")"
   cp "$FIX/2026-05-17-test-design.md" "$WORK/$1"
 }
 edit_doc() { printf '\n<!-- edit %s -->\n' "$2" >> "$WORK/$1"; }
+# in-flight 표시의 타임스탬프를 과거로 민다 = TTL(15분) 만료를 시뮬레이션한다.
+# `INFLIGHT_TTL_SEC` 은 환경변수로 못 낮추므로 시간을 기다리는 대신 원장을 늙힌다.
+# 픽스처 조작이지 제품 우회가 아니다 — 훅은 평소대로 자기 판정을 돈다.
+expire_inflight() {  # $1=sid
+  python3 - "$(state_of "$1")" <<'PY'
+import re, sys, pathlib
+p = pathlib.Path(sys.argv[1])
+if p.exists():
+    body = p.read_text(encoding="utf-8")
+    # `inflight_paths:` 블록 **안에서만** 민다. 파일 전체를 훑으면 pending 의
+    # triggered_at 처럼 무관한 타임스탬프까지 늙혀 다른 케이스의 전제를 흔든다.
+    def age(m):
+        return m.group(1) + re.sub(r"(?m)^(  \S+: ).*$",
+                                   r"\g<1>2020-01-01T00:00:00Z", m.group(2))
+    p.write_text(
+        re.sub(r"(?m)^(inflight_paths:\n)((?:  [^\n]+\n)*)", age, body),
+        encoding="utf-8")
+PY
+}
 
 # stdout만 (advisory JSON 검사용)
 run_validator() {  # $1=rel $2=sid [$3=extra env — 단일 KEY=VALUE 토큰]

@@ -61,34 +61,32 @@ else
   note FAIL "T3 실패: out='$all3' state=$( [[ -f "$sf3" ]] && cat "$sf3" || echo '(없음)')"
 fi
 
-# --- T13: 원장이 완료라고 말하는 문서는 stale pending 이 남아 있어도 dispatch 하지 않는다 ---
-# 재현 경로에 디스크 실패가 필요 없다. skill 은 Step 1(strip-pending)과 Step 3
-# (mark-reviewed)을 **분리된 두 bash 블록**으로 실행하고, 둘 다 돌았음을 강제하는 것은
-# 아무것도 없다. Step 1 만 빠지면 pending 이 살아남고, 실제 리뷰는 30초 TTL 을 훨씬
-# 넘기므로 다음 Stop 이 이미 리뷰된 문서에 block 을 다시 낸다 — 이 릴리스가 없애려는
-# 재발동 그 자체다. pending strip 을 유일한 가드로 만든 대가.
+# --- T13: 원장이 완료라고 말하는 문서는 여전히 dirty 해도 dispatch 하지 않는다 ---
+# 연료가 발견으로 바뀌어도 이 성질은 그대로다. 오히려 시험이 세졌다: 예전에는 리뷰가
+# 끝나면 pending(연료)이 사라졌지만, 지금 그 문서는 커밋하기 전까지 **매 턴 다시
+# 발견된다.** 원장의 완료 기록만이 그것을 막는다.
 #
-# 이빨: "emit 없음"만 재면 훅이 죽어도 통과한다(무이빨 no-emit assert). 그래서 **strip
-# 되었는지**를 함께 잰다 — 크래시하면 pending 이 그대로 남으므로 이 쪽이 생존 제어다.
-SID13=t13-stalepending
+# 이빨: "emit 없음"만 재면 훅이 죽어도 통과한다(무이빨 no-emit assert). 그래서 같은
+# 세션에 **미리뷰 문서 하나**를 함께 둔다 — 살아 있는 훅은 같은 턴에 그쪽을 고른다.
+# 침묵이 선택적임을 그것이 증명한다(생존 제어). 정렬상 armed 문서가 앞이므로,
+# 제외된 첫 후보가 뒤의 적격 후보를 가리지 않는다는 것도 함께 잠긴다.
+SID13=t13-armed-veto
 REL13="docs/superpowers/specs/2026-08-01-t13-design.md"
+REL13B="docs/superpowers/specs/2026-08-01-t13b-design.md"
 new_doc "$REL13"
-run_validator "$REL13" "$SID13" >/dev/null
-sf13="$(state_of "$SID13")"
-# 전제 확인 — pending 이 실제로 깔려 있어야 이 테스트가 무언가를 재는 것이다.
-pending_seeded=0
-[[ -f "$sf13" ]] && grep -q '^pending_review:' "$sf13" && pending_seeded=1
-# skill Step 3 만 실행(Step 1 strip-pending 은 건너뛴 상태) — 원장엔 완료, 디스크엔 pending.
+# 두 번째 문서는 new_doc 을 쓰지 않는다 — 그 헬퍼는 앞 문서를 커밋해 발견에서 뺀다.
+cp "$FIX/2026-05-17-test-design.md" "$WORK/$REL13B"
 run_ledger mark-reviewed "$SID13" "$WORK/$REL13" >/dev/null 2>&1
 emit13=$(run_stop "$SID13")
-pending_cleared=0
-grep -q '^pending_review:' "$sf13" || pending_cleared=1
+sf13="$(state_of "$SID13")"
 armed_still=0
-grep -q "$REL13" "$sf13" && armed_still=1
-if [[ $pending_seeded -eq 1 && -z "$emit13" && $pending_cleared -eq 1 && $armed_still -eq 1 ]]; then
-  note PASS "T13: 원장 완료 문서의 stale pending → dispatch 없음 + pending 정리(훅 생존)"
+grep -q "^  - $REL13\$" "$sf13" && armed_still=1
+if [[ $armed_still -eq 1 ]] \
+  && echo "$emit13" | jq -e --arg p "$REL13B" '.reason | contains($p)' >/dev/null 2>&1 \
+  && ! echo "$emit13" | jq -e --arg p "$REL13" '.reason | contains($p)' >/dev/null 2>&1; then
+  note PASS "T13: 원장 완료 문서 → 여전히 dirty 해도 무-dispatch (옆 문서는 정상 dispatch)"
 else
-  note FAIL "T13 실패: seeded=$pending_seeded emit='$emit13' cleared=$pending_cleared armed=$armed_still state=$(cat "$sf13")"
+  note FAIL "T13 실패: emit='$emit13' armed=$armed_still state=$(cat "$sf13")"
 fi
 
 # --- T14: reminder(L4b)도 같은 원장 게이트를 지난다 ---

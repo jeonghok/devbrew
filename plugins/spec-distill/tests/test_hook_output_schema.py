@@ -12,6 +12,7 @@ Run:
 from __future__ import annotations
 
 import ast
+import contextlib
 import json
 import os
 import shutil
@@ -33,8 +34,13 @@ import arm_ledger  # noqa: E402  # pyright: ignore[reportMissingImports]
 
 
 def _make_temp_repo() -> Path:
-    """Create a temp dir initialised as a git repo (state_path needs git)."""
-    tmp = Path(tempfile.mkdtemp(prefix="specdistill-schema-"))
+    """Create a temp dir initialised as a git repo (state_path needs git).
+
+    `resolve()` 로 symlink 를 푼다(macOS `/var` → `/private/var`). 발견은
+    `git rev-parse --show-toplevel` 이 주는 **물리 경로**에 조인해 절대경로를 내므로,
+    풀지 않으면 기대 경로와 emit 된 경로가 문자열로 어긋난다.
+    """
+    tmp = Path(tempfile.mkdtemp(prefix="specdistill-schema-")).resolve()
     subprocess.run(["git", "init", "-q"], cwd=tmp, check=True)
     subprocess.run(["git", "config", "user.email", "t@t.t"], cwd=tmp, check=True)
     subprocess.run(["git", "config", "user.name", "t"], cwd=tmp, check=True)
@@ -73,6 +79,36 @@ def _write_pending_review_state(
     return state_file
 
 
+#: 구조적으로 통과하는 design 문서 본문 (placeholder·ambiguity 없음).
+DESIGN_DOC_BODY = (
+    "# Test Design\n\nContext / Why\n\nGoals\n\nNon-goals\n\n"
+    "Constraints\n\nAcceptance Criteria\n\nFiles\n\nVerification Plan\n\n"
+    "Rejected Alternatives\n\nMetadata\n"
+)
+
+
+def _write_scope_doc(repo: Path, rel: str, *, body: str = DESIGN_DOC_BODY) -> Path:
+    """dirty·untracked 스코프 문서를 만든다 — **dispatch 의 연료**.
+
+    Stop 훅은 상태 파일의 블록이 아니라 `git status` 가 내는 dirty 집합에서 대상을
+    고른다. 그래서 dispatch 경로를 태우려면 리포에 진짜 문서가 있어야 한다.
+    """
+    p = repo / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(body, encoding="utf-8")
+    return p
+
+
+def _write_state(repo: Path, session_id: str, extra: str = "") -> Path:
+    """frontmatter 만 있는 상태 파일(+ 원장 블록). pending 은 싣지 않는다."""
+    state_dir = repo / ".claude" / "spec-distill" / session_id
+    state_dir.mkdir(parents=True, exist_ok=True)
+    state_file = state_dir / "state.local.md"
+    state_file.write_text(
+        f"---\nsession_id: {session_id}\n---\n\n{extra}", encoding="utf-8")
+    return state_file
+
+
 def _run_hook(
     hook_relpath: str, *,
     cwd: Path, env_extra: dict[str, str] | None = None,
@@ -105,13 +141,10 @@ class HookOutputSchemaTestBase(unittest.TestCase):
 class TestReviewDispatchSchema(HookOutputSchemaTestBase):
     """AC1 — review-dispatch.py (Stop hook) output schema."""
 
-    def test_pending_review_emits_decision_block_with_reason(self):
+    def test_discovered_doc_emits_decision_block_with_reason(self):
         session_id = "test-stop-happy"
-        _write_pending_review_state(
-            self.repo, session_id,
-            spec_path="/tmp/some-spec.md", mode="spec",
-            worktree_path="/Users/foo/wt",
-        )
+        doc = _write_scope_doc(
+            self.repo, "docs/superpowers/specs/2026-05-16-happy-design.md")
         result = _run_hook(
             "review-dispatch.py",
             cwd=self.repo,
@@ -123,23 +156,27 @@ class TestReviewDispatchSchema(HookOutputSchemaTestBase):
         self.assertEqual(payload.get("decision"), "block")
         reason = payload.get("reason", "")
         self.assertIn("MANDATORY", reason)
-        self.assertIn("spec path:", reason)
         self.assertIn("mode:", reason)
-        self.assertIn("worktree_path:", reason)
+        # `worktree_path:` 줄은 은퇴했다 — 그 값의 출처는 pending 을 쓰던 훅의 cwd
+        # 였고, 발견이 내는 spec path 가 절대경로라 같은 사실(어느 체크아웃인가)을
+        # 스스로 말한다. 그래서 재는 것은 줄의 존재가 아니라 경로 자체다.
+        self.assertIn(f"spec path: {doc}", reason)
         sysmsg = payload.get("systemMessage", "")
         self.assertTrue(sysmsg, msg="systemMessage missing")
         self.assertLessEqual(len(sysmsg), 120, msg=f"systemMessage too long: {len(sysmsg)}")
         self.assertTrue(sysmsg.startswith("[spec-distill]"))
 
     def test_reason_encoding_safe_with_special_chars(self):
-        """AC1a — special chars in spec path must round-trip via json.loads."""
+        """AC1a — special chars in spec path must round-trip via json.loads.
+
+        경로가 발견에서 오므로 특수문자도 **실재하는 파일명**으로 재야 한다.
+        `git status --porcelain -z` 는 NUL 구분이라 경로를 인용하지 않는다(따옴표
+        인용은 `-z` 없을 때만) — 그래서 이 이름이 파서를 그대로 통과한다.
+        """
         session_id = "test-stop-encoding"
-        special_path = "/tmp/spec dir/with $special `chars`.md"
-        _write_pending_review_state(
-            self.repo, session_id,
-            spec_path=special_path, mode="design",
-            worktree_path="/tmp/wt with space",
-        )
+        doc = _write_scope_doc(
+            self.repo,
+            "docs/superpowers/specs/2026-05-16 with $special `chars`-design.md")
         result = _run_hook(
             "review-dispatch.py",
             cwd=self.repo,
@@ -147,15 +184,14 @@ class TestReviewDispatchSchema(HookOutputSchemaTestBase):
         )
         self.assertEqual(result.returncode, 0)
         payload = json.loads(result.stdout)  # ← round-trip via stdlib json
-        self.assertIn(special_path, payload["reason"])
-        self.assertIn("/tmp/wt with space", payload["reason"])
+        self.assertIn(str(doc), payload["reason"])
 
     def test_rewrite_failure_suppresses_emit(self):
         """AC7.2 — if rewrite_state raises OSError, hook must NOT emit decision:block."""
         session_id = "test-stop-rewrite-fail"
-        state_file = _write_pending_review_state(
-            self.repo, session_id, spec_path="/tmp/x-spec.md", mode="spec",
-        )
+        _write_scope_doc(
+            self.repo, "docs/superpowers/specs/2026-05-16-rofail-design.md")
+        state_file = _write_state(self.repo, session_id)
         # Make state file read-only to force rewrite_state OSError on open(w).
         # File-level chmod is required: parent-dir chmod doesn't block writes
         # to existing owned files. Also chmod the parent so any fallback
@@ -335,16 +371,16 @@ class TestReviewDispatchMandateScope(HookOutputSchemaTestBase):
     IN_SCOPE_DOC = "docs/superpowers/specs/2026-08-06-scope-design.md"
 
     def _dispatch(self, session_id: str, *, spec_path: str, attempts: int | None = None):
-        """Stop 훅을 한 번 돌리고 payload 를 돌려준다. attempts 는 사전 시도 횟수."""
-        state_file = _write_pending_review_state(
-            self.repo, session_id, spec_path=spec_path, mode="design",
-        )
+        """Stop 훅을 한 번 돌리고 payload 를 돌려준다. attempts 는 사전 시도 횟수.
+
+        `spec_path` 는 리포-루트 상대 경로다 — 그 자리에 진짜 문서를 만든다.
+        원장 키는 `canonical_key` 가 내는 접두 이후 substring 이라 상대 경로와 같다.
+        """
+        _write_scope_doc(self.repo, spec_path)
+        extra = ""
         if attempts is not None:
-            state_file.write_text(
-                state_file.read_text(encoding="utf-8")
-                + f"\ndispatch_attempts:\n  {spec_path}: {attempts}\n",
-                encoding="utf-8",
-            )
+            extra = f"dispatch_attempts:\n  {spec_path}: {attempts}\n"
+        _write_state(self.repo, session_id, extra)
         result = _run_hook(
             "review-dispatch.py", cwd=self.repo,
             env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": session_id},
@@ -460,20 +496,35 @@ class TestMandateClaimsAreTrue(HookOutputSchemaTestBase):
         return f.exists() and "pending_review:" in f.read_text(encoding="utf-8")
 
     def test_claim_single_shot_holds(self):
-        """주장 1: "이 mandate는 이번 dispatch 1회에만 유효하다"."""
+        """주장 1: "이 mandate는 이번 dispatch 1회에만 유효하다".
+
+        문서가 그 사이에 달라지지 않았다면 다음 Stop 이 같은 강제를 반복하지 않는다.
+        예전에는 dispatch 가 연료(pending)를 **소진**해서 그것이 성립했다. 지금은
+        문서가 커밋 전까지 매 턴 다시 발견되므로, 성립시키는 것은 dispatch 가 emit
+        **이전에** 찍는 in-flight 표시뿐이다(A12) — 그래서 그 표시의 존재를 함께
+        단언한다. 그것이 mandate 문장이 기대는 "이미 일어난 사실"이다.
+        """
         sid = "test-claim-single"
-        self._run_validator(sid, self._write_doc())
-        self.assertTrue(self._is_armed(sid), msg="전제 실패: 첫 write 가 arm 하지 않았다")
+        doc = self._write_doc()
 
         first = self._run_stop(sid)
-        self.assertIn("block", first.stdout, msg=f"첫 Stop 이 강제하지 않음: {first.stdout!r}")
+        self.assertIn(
+            "block", first.stdout,
+            msg=f"전제 실패: 첫 Stop 이 강제하지 않음: {first.stdout!r} / {first.stderr!r}")
+        self.assertIn(str(doc), json.loads(first.stdout).get("reason", ""),
+                      msg="첫 Stop 이 이 문서를 강제한 것이 아니다")
+        state = (self.repo / ".claude" / "spec-distill" / sid
+                 / "state.local.md").read_text(encoding="utf-8")
+        self.assertIn(
+            f"{self.REL}: ", state.split("inflight_paths:")[-1],
+            msg=f"dispatch 가 in-flight 표시를 남기지 않았다: {state!r}")
 
-        # 재편집 없이 두 번째 Stop — 주장대로면 아무것도 나오면 안 된다.
+        # 문서를 건드리지 않은 채 두 번째 Stop — 주장대로면 아무것도 나오면 안 된다.
         second = self._run_stop(sid)
         self.assertEqual(
             second.stdout.strip(), "",
             msg=(
-                "재편집이 없었는데 두 번째 Stop 이 다시 강제한다 — mandate 는 1회가 "
+                "문서가 그대로인데 두 번째 Stop 이 다시 강제한다 — mandate 는 1회가 "
                 f"아니다: {second.stdout!r}"
             ),
         )
@@ -622,14 +673,18 @@ class TestReviewDispatchOrdering(unittest.TestCase):
         repo = _make_temp_repo()
         try:
             session_id = "test-mock-trace"
-            _write_pending_review_state(
-                repo, session_id, spec_path="/tmp/x-spec.md", mode="spec",
-            )
+            _write_scope_doc(
+                repo, "docs/superpowers/specs/2026-05-16-trace-design.md")
+            _write_state(repo, session_id)
+            # emit 을 삼킨다 — 훅의 block JSON 이 스위트 출력에 섞이면 진짜 실패를
+            # 가린다. `traced_print` 의 계수는 영향받지 않는다: 그것은 `file` 인자를
+            # 보지 sys.stdout 이 무엇인지를 보지 않는다.
             with mock.patch.object(mod, "rewrite_state", traced_rewrite), \
                  mock.patch.object(builtins, "print", traced_print), \
                  mock.patch.dict(os.environ, {
                      "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
                  }), \
+                 contextlib.redirect_stdout(__import__("io").StringIO()), \
                  mock.patch("sys.stdin", new=__import__("io").StringIO("{}")):
                 cwd_before = os.getcwd()
                 try:

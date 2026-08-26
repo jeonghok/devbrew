@@ -4,84 +4,95 @@ set -u -o pipefail
 source "$(dirname "$0")/arm_test_helpers.sh"
 arm_work_init specdistill-armtiming
 
-# --- T6: 진입 시 strip-pending 이 §5.4 5단계(지연 재소비)를 불가능하게 만든다 ---
-# rewrite_state 실패를 주입할 필요가 없다 — pending이 남아 있는 상태를 픽스처로 만들고
-# strip 전후의 Stop 동작 차이를 잰다.
-SID6=t6-strip
+# --- T6: 리뷰가 진행 중인 문서는 다음 Stop 이 다시 강제하지 않는다 (지연 재소비 봉쇄) ---
+# 성질은 §5.4 5단계 그대로다: 이미 착수된 리뷰를 나중의 Stop 이 뒤늦게 또 강제하면
+# 그 라운드가 중복·절단된다. 그 상태를 표현하던 것이 예전엔 진입 strip 이었고 지금은
+# dispatch 가 찍는 in-flight 표시다(A12).
+#
+# **양방향으로 잠근다.** "두 번째 Stop 이 조용하다"만 재면 훅이 그 뒤로 영영 침묵하는
+# 구현도 통과한다. in-flight 를 걷어낸 뒤 다시 강제되는 것까지 재야 침묵의 원인이
+# 그 표시임이 고정된다.
+SID6=t6-inflight
 REL6="docs/superpowers/specs/2026-08-01-t6-design.md"
 new_doc "$REL6"
-run_validator "$REL6" "$SID6" >/dev/null
+emit6a=$(run_stop "$SID6")
 sf6="$(state_of "$SID6")"
-grep -q '^pending_review:' "$sf6" || note FAIL "T6 준비 실패: pending 미생성"
-run_ledger strip-pending "$SID6" "$WORK/$REL6" >/dev/null 2>&1
-emit6=$(run_stop "$SID6")
-if [[ -z "$emit6" ]] && ! grep -q '^pending_review:' "$sf6"; then
-  note PASS "T6: 진입 strip 이후 Stop 재발화 → 무-emit (지연 재소비 봉쇄)"
+emit6b=$(run_stop "$SID6")
+run_ledger clear-inflight "$SID6" "$WORK/$REL6" >/dev/null 2>&1
+emit6c=$(run_stop "$SID6")
+if echo "$emit6a" | jq -e '.decision == "block"' >/dev/null 2>&1 \
+  && grep -qE "^  $REL6: 20[0-9][0-9]-" "$sf6" \
+  && [[ -z "$emit6b" ]] \
+  && echo "$emit6c" | jq -e '.decision == "block"' >/dev/null 2>&1; then
+  note PASS "T6: 리뷰 진행 중 재-Stop → 무-emit, in-flight 해제 후엔 다시 강제"
 else
-  note FAIL "T6 실패: emit='$emit6' state=$(cat "$sf6")"
+  note FAIL "T6 실패: a='$emit6a' b='$emit6b' c='$emit6c' state=$(cat "$sf6")"
 fi
 
-# --- T7: verdict 시 원장 기록 → 키 존재 + 이어지는 편집이 재arm 하지 않는다 ---
+# --- T7: verdict 가 기록된 문서는 이후 편집돼도 다시 강제되지 않는다 ---
+# `mark-reviewed` 는 armed_paths 에 쓰면서 in-flight 표시를 **지운다**. 그래서 이
+# 케이스의 침묵은 T6 의 in-flight 로 설명되지 않는다 — 원인이 armed_paths 하나로
+# 좁혀진다. 그 배제를 실제로 재기 위해 in-flight 부재를 함께 단언한다.
 SID7=t7-verdict
 REL7="docs/superpowers/specs/2026-08-01-t7-design.md"
 new_doc "$REL7"
-run_validator "$REL7" "$SID7" >/dev/null
 run_stop "$SID7" >/dev/null
 run_ledger mark-reviewed "$SID7" "$WORK/$REL7" >/dev/null 2>&1
 sf7="$(state_of "$SID7")"
 edit_doc "$REL7" 2
-run_validator "$REL7" "$SID7" >/dev/null
 emit7=$(run_stop "$SID7")
 if grep -q "^  - $REL7\$" "$sf7" \
-  && ! grep -q '^pending_review:' "$sf7" \
+  && ! grep -qE "^  $REL7: 20[0-9][0-9]-" "$sf7" \
   && [[ -z "$emit7" ]]; then
-  note PASS "T7: mark-reviewed → armed_paths 기록 + 이후 편집 재arm 없음"
+  note PASS "T7: mark-reviewed → armed_paths 기록 + 이후 편집 재dispatch 없음"
 else
   note FAIL "T7 실패: emit='$emit7' state=$(cat "$sf7")"
 fi
 
-# --- T8: verdict 없이 중단된 리뷰는 다음 편집에서 자기치유한다 (T7의 반례) ---
+# --- T8: verdict 없이 중단된 리뷰는 자기치유한다 (T7의 반례) ---
 # 리뷰가 끝나지 않으면 재시도되는 것이 의도된 동작이다 — 재시도가 없으면 그 문서는
-# 유일한 자동 리뷰 기회를 조용히 잃는다.
+# 유일한 자동 리뷰 기회를 조용히 잃는다(under-review, Law 1 이 금지하는 방향).
+#
+# **치유의 계기가 바뀌었다.** 예전에는 "다음 편집"이었다 — 편집이 pending 을 다시
+# 깔았기 때문이다. 지금 그 자리를 지키는 것은 in-flight 표시의 TTL 이다: 리뷰가
+# crash 로 죽으면 표시가 남아 게이트를 닫는데, 만료가 그것을 되열고 그 위의 상한은
+# `DISPATCH_ATTEMPT_CAP` 이 준다(`INFLIGHT_TTL_SEC` 의 계약). 그래서 이 케이스는
+# 편집이 아니라 만료로 치유를 잰다. 성질은 같다: **중단된 리뷰가 그 문서의 자동
+# 리뷰를 영구히 끄지 않는다.**
 SID8=t8-selfheal
 REL8="docs/superpowers/specs/2026-08-01-t8-design.md"
 new_doc "$REL8"
-run_validator "$REL8" "$SID8" >/dev/null
 emit8a=$(run_stop "$SID8")
-# 리뷰가 **시작은 했다** — skill Step 1 의 진입 strip 이 돌았다는 뜻이다. 이 한 줄이 없으면
-# T8 은 "verdict 없는 dispatch 2회"를 잴 뿐 선언한 시나리오("중단된 리뷰의 자기치유")를
-# 재지 못한다.
-#
-# 이 락의 이빨 검증은 arm_ledger.py 의 **CLI `strip-pending` 분기**가 원장에 기록하도록
-# 바꾸는 mutation 으로 한다(= 기록을 verdict 시점에서 skill Step 1 진입 시점으로 되돌리기).
-# strip_pending_file() **내부** write 라인을 때리는 변형을 쓰지 말 것 — 그 라인은 pending 이
-# 남아 있을 때만 도달하는데 Stop 훅의 rewrite_state 가 dispatch 와 같은 write 로 pending 을
-# 이미 지우므로, 이 픽스처 배치에서는 닿지 않아 GREEN 이 난다. 도달 못 한 mutation 을
-# 이빨의 증거로 읽으면 안 된다.
-run_ledger strip-pending "$SID8" "$WORK/$REL8" >/dev/null 2>&1
-# 그리고 verdict 없이 죽었다 — mark-reviewed 를 부르지 않는다.
-edit_doc "$REL8" 2
-run_validator "$REL8" "$SID8" >/dev/null
-emit8b=$(run_stop "$SID8")
+# 그리고 verdict 없이 죽었다 — mark-reviewed 를 부르지 않는다. 표시만 남는다.
 sf8="$(state_of "$SID8")"
+inflight_left=0; grep -qE "^  $REL8: 20[0-9][0-9]-" "$sf8" && inflight_left=1
+expire_inflight "$SID8"
+edit_doc "$REL8" 2
+emit8b=$(run_stop "$SID8")
 if echo "$emit8a" | jq -e '.decision == "block"' >/dev/null 2>&1 \
+  && [[ $inflight_left -eq 1 ]] \
   && echo "$emit8b" | jq -e '.decision == "block"' >/dev/null 2>&1 \
   && ! grep -q '^armed_paths:' "$sf8"; then
-  note PASS "T8: verdict 없는 중단 → 다음 편집이 재arm + 재dispatch (자기치유)"
+  note PASS "T8: verdict 없는 중단 → in-flight 만료 후 재dispatch (자기치유)"
 else
-  note FAIL "T8 실패: emit1='$emit8a' emit2='$emit8b' state=$(cat "$sf8")"
+  note FAIL "T8 실패: emit1='$emit8a' inflight=$inflight_left emit2='$emit8b' state=$(cat "$sf8")"
 fi
 
 # --- T9: G6 상한 (§5.2 상태기계) ---
 # 3회차가 마지막 자동 dispatch이고 그 emit이 상한을 알리는 vehicle이다.
-# "4회차가 억제된다"가 아니다 — 이후 편집은 validator 층에서 pending 자체가 안 생긴다.
+# 마지막 절의 성질: **상한에 닿은 문서는 다시 편집돼도 dispatch 되지 않는다.**
+# 예전에는 validator 층이 pending 을 안 만드는 것으로 그 성질이 성립했고, 지금은
+# dispatch 대상 선택이 `dispatch_attempts` 상한과 `armed_paths` 를 함께 보고 뺀다.
+#
+# 매 라운드 in-flight 를 만료시킨다 — 안 그러면 2·3회차가 A12 의 표시에 막혀
+# G6 상한 자체에 닿지 못한다. 재는 축은 상한이지 in-flight 가 아니다(그쪽은 T6·T8).
 SID9=t9-capped
 REL9="docs/superpowers/specs/2026-08-01-t9-design.md"
 new_doc "$REL9"
 e1=""; e2=""; e3=""
 for i in 1 2 3; do
   edit_doc "$REL9" "$i"
-  run_validator "$REL9" "$SID9" >/dev/null
+  expire_inflight "$SID9"
   case $i in
     1) e1=$(run_stop "$SID9") ;;
     2) e2=$(run_stop "$SID9") ;;
@@ -97,16 +108,15 @@ echo "$e3" | jq -e '.decision == "block"' >/dev/null 2>&1 || cap_ok=0
 echo "$e3" | jq -e '.reason | contains("3회 시도")' >/dev/null 2>&1 || cap_ok=0
 grep -q "^  - $REL9\$" "$sf9" || cap_ok=0
 grep -q "^  $REL9: 3\$" "$sf9" || cap_ok=0
-# 상한 도달 이후의 편집: pending 자체가 생기지 않고 Stop이 볼 것이 없다.
+# 상한 도달 이후의 편집: 문서는 여전히 dirty 라 발견되지만 선택에서 빠진다.
+# in-flight 도 만료시켜, 침묵을 설명할 수 있는 것이 상한뿐이게 만든다.
 edit_doc "$REL9" 4
-out9=$(run_validator "$REL9" "$SID9")
-grep -q '^pending_review:' "$sf9" && cap_ok=0
-echo "$out9" | jq -e '.systemMessage | contains("capped")' >/dev/null 2>&1 || cap_ok=0
+expire_inflight "$SID9"
 [[ -z "$(run_stop "$SID9")" ]] || cap_ok=0
 if [[ $cap_ok -eq 1 ]]; then
-  note PASS "T9: 3회차 emit에 상한 advisory + armed 기록, 이후 편집은 pending 미생성"
+  note PASS "T9: 3회차 emit에 상한 advisory + armed 기록, 상한 이후 편집은 무-dispatch"
 else
-  note FAIL "T9 실패: e1='$e1' e3='$e3' out4='$out9' state=$(cat "$sf9")"
+  note FAIL "T9 실패: e1='$e1' e3='$e3' state=$(cat "$sf9")"
 fi
 
 # --- T10: Stop의 dispatch 단독으로는 원장을 쓰지 않는다 (훅 통합 지점) ---

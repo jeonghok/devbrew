@@ -12,9 +12,10 @@
    TTL 가드보다 **먼저** 돈다(A10) — 가드가 앞이면 dispatch 후 TTL 창 동안 Bash 로
    쓴 깨진 문서의 검증이 통째로 건너뛰어진다. 실패가 하나라도 있으면 그 사유만
    block 으로 나가고 dispatch 는 그 턴에 없다(A11).
-3. **dispatch** — `pending_review:` 블록이 있으면 `reviewing-spec` 을 다음 턴 첫
-   액션으로 강제한다. dispatch 시점에 그 문서를 in-flight 로 표시해(A12) 리뷰가
-   도는 동안 발견 결과에서 빠지게 한다.
+3. **dispatch** — 같은 후보 목록에서 하나를 골라(`select_dispatch_target`)
+   `reviewing-spec` 을 다음 턴 첫 액션으로 강제한다. 반복 억제는 원장이 맡는다:
+   dispatch 시점에 그 문서를 in-flight 로 표시해(A12) 리뷰가 도는 동안 발견
+   결과에서 빠지게 하고, `dispatch_attempts`·`armed_paths` 가 그 위에 상한을 준다.
 
 턴당 검증 상한(`CANDIDATE_CAP`)에는 커서 회전을 얹는다(A13). 정렬이 안정적이라는
 사실 자체가 기아의 원인이므로, 안정 정렬 위에 회전이 없으면 상한을 넘는 dirty
@@ -176,6 +177,68 @@ def select_keys(keys: list[str], cursor: str | None, cap: int) -> tuple[list[str
     return picked, picked[-1]
 
 
+def select_dispatch_target(
+    cands: list[Candidate], body: str, now: datetime,
+) -> Candidate | None:
+    """이 턴에 리뷰를 강제할 문서 하나. 없으면 `None`.
+
+    dispatch 연료가 상태 파일의 블록이던 시절에는 반복 억제가 그 블록의 **소진**에서
+    나왔다. 발견은 무상태라 소진할 것이 없으므로, 억제는 전부 원장의 표시가 맡는다:
+
+    | 제외 사유 | 근거 |
+    |---|---|
+    | `born` | git 이 이미 아는 문서 — 저자가 리포에 넣기로 결정했다 (`is_born`) |
+    | `armed_paths` | "더 이상 dispatch 안 함" (verdict 완료 · G6 상한 도달) |
+    | `dispatch_attempts` ≥ `DISPATCH_ATTEMPT_CAP` | G6 상한 |
+    | `validation_attempts` ≥ `VALIDATION_ATTEMPT_CAP` | A14 의 dispatch 절반 |
+    | in-flight | A12 — 리뷰가 도는 중 |
+    | `resolve_mode` 가 `None` | 리뷰어는 mode 로 라우팅한다 |
+
+    두 상한은 값이 같아도 **별도 상수**를 읽는다 — 그 분리가 설계 §4.4 의 계약이고,
+    합치면 구조 실패 2회 뒤에 리뷰 dispatch 가 1회밖에 남지 않는다.
+
+    마지막 줄(`resolve_mode`)이 kill switch 를 지킨다.
+    `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` 은 design 문서를 `None` 으로
+    떨어뜨리는데, 예전에는 그 판정이 pending 을 만드는 PostToolUse 훅 안에 있어
+    dispatch 가 자동으로 따랐다. 연료가 발견으로 바뀌면 이 훅이 스스로 지켜야 한다 —
+    안 지키면 kill switch 가 말없이 죽는다(CLAUDE.md: kill switch 는 보안 컨트롤).
+
+    제외된 후보에서 멈추지 않고 **목록 끝까지 훑는다**. 멈추면 armed 문서 하나가
+    그 세션의 모든 dispatch 를 조용히 막는다 — 발견 목록은 정렬돼 있어 그 문서가
+    매 턴 같은 자리에 오기 때문이다.
+    """
+    try:
+        import arm_ledger  # pyright: ignore[reportMissingImports]
+    except ImportError as exc:
+        # 방향이 검증 쪽과 같다: 상한을 셀 수 없는 상태에서 dispatch 하면 in-flight
+        # 표시도 못 남기므로 다음 Stop 이 같은 문서를 다시 찾아 상한 없는 block 루프가
+        # 된다(CLAUDE.md: Unbounded autonomy). **import 프로브의 실패 모드만** 잡는다 —
+        # 넓히면 원장 파싱의 진짜 버그가 "조회 실패" 로 둔갑해 게이트가 조용히 꺼진다.
+        print(
+            f"[spec-distill] 원장 조회 실패 (non-fatal, 이번 턴 dispatch 생략): {exc}",
+            file=sys.stderr,
+        )
+        return None
+    armed = set(arm_ledger.armed_keys(body))
+    att = arm_ledger.attempts(body)
+    val = arm_ledger.validation_attempts(body)
+    for c in cands:
+        if c.born:
+            continue
+        if c.key in armed:
+            continue
+        if att.get(c.key, 0) >= arm_ledger.DISPATCH_ATTEMPT_CAP:
+            continue
+        if val.get(c.key, 0) >= arm_ledger.VALIDATION_ATTEMPT_CAP:
+            continue
+        if arm_ledger.is_inflight(body, c.path, now):
+            continue
+        if resolve_mode(c.path) is None:
+            continue
+        return c
+    return None
+
+
 def emit_git_unavailable(state_path: Path, body: str) -> int:
     """A16 — git 불능은 후보 0 과 다르다. 세션당 1회만 알린다 (설계 §4.5)."""
     if GIT_UNAVAILABLE_MARKER in body:
@@ -306,8 +369,8 @@ def main() -> int:
     # block storm 은 이 제외 없이도 묶인다: `record_validation` 이 문서별로 세고
     # `VALIDATION_ATTEMPT_CAP` 이 3 에서 끊는다.
     #
-    # dispatch 쪽의 armed 게이트는 그대로다 — 아래 pending 경로의 `_vetoed` 판정이
-    # 그 자리다. 두 게이트가 이제 서로 다른 술어를 읽는다.
+    # dispatch 쪽의 armed 게이트는 그대로다 — 아래 `select_dispatch_target` 이 그
+    # 자리다. 두 게이트가 이제 서로 다른 술어를 읽는다.
     cursor = read_cursor(body)
     by_key: dict[str, Candidate] = {}
     validation_pool: list[str] = []
@@ -346,13 +409,13 @@ def main() -> int:
             file=sys.stderr,
         )
     if capped:
-        # A14 의 **검증 절반**만 여기서 집행된다. 나머지 절반(상한 도달 문서를 dispatch
-        # 대상에서도 빼기)은 dispatch 대상 선택 술어 자체이므로 그 선택을 만드는 Task
-        # 12b 의 몫이다. 그러니 이 문구도 검증만 주장한다 — 없는 집행을 주장하는 메시지는
-        # 그것만으로 결함이고, 다른 Task 를 기다린다고 참이 되지 않는다.
+        # A14 의 양쪽이 이제 다 집행된다. 검증 절반은 바로 위 루프의 `capped` 이고,
+        # dispatch 절반은 `select_dispatch_target` 의 같은 상한 검사다 — 그래서 이
+        # 문구가 둘을 함께 주장할 수 있다. 한쪽만 있을 때 이 문장을 내면 없는 집행을
+        # 주장하는 것이고, 그것은 그 자체로 결함이다.
         print(
             f"[spec-distill] 구조 검증 상한({val_cap}회)에 닿아 이번 세션에서 "
-            f"자동 구조 검증을 하지 않는 문서: {', '.join(capped)}",
+            f"자동 검증·dispatch 를 하지 않는 문서: {', '.join(capped)}",
             file=sys.stderr,
         )
     picked, next_cursor = select_keys(validation_pool, cursor, CANDIDATE_CAP)
@@ -386,7 +449,7 @@ def main() -> int:
         if reached_cap:
             lines.append(
                 f"[spec-distill] 다음 문서는 구조 검증이 {val_cap}회 실패해 이 세션에서 "
-                f"자동 구조 검증을 중단한다: {', '.join(reached_cap)}. "
+                f"자동 검증·dispatch 를 중단한다: {', '.join(reached_cap)}. "
                 "리뷰가 필요하면 reviewing-spec 을 직접 호출하라."
             )
         body_after = set_cursor(body_after, cursor)
@@ -419,9 +482,12 @@ def main() -> int:
                 f"(non-fatal, 다음 턴이 같은 구간을 다시 본다): {e}",
                 file=sys.stderr,
             )
-    m = PENDING_RE.search(body)
-    if not m:
-        return 0  # no pending dispatch
+    # --- dispatch 대상 선택 (A12·A14·G6) ---
+    # 이미 손에 든 후보 목록에서 고른다 — 발견은 위에서 한 번 했고, 여기서 git 을
+    # 다시 부르면 같은 턴 안에서 두 집합을 보게 된다.
+    cand = select_dispatch_target(cands, body, now)
+    if cand is None:
+        return 0  # 이 턴에 dispatch 할 문서가 없다
     # TTL guard against self-ref cycle
     try:
         ttl_sec = int(os.environ.get("DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC", "30"))
@@ -432,11 +498,19 @@ def main() -> int:
         last = parse_iso(ld.group(1))
         if last and (now - last) < timedelta(seconds=ttl_sec):
             return 0  # within guard window
-    spec_path = m.group("path").strip()
-    mode = m.group("mode").strip()
-    wt = (m.group("wt") or "").strip()
-    # G1 — 원장이 "더 이상 dispatch 안 함"이라고 말하는 문서는 stale pending 이 남아
-    # 있어도 발동하지 않는다. pending 을 유일한 연료로 두면, skill 이 Step 1
+    spec_path = cand.path
+    # 같은 함수를 두 번 부르는 값이다 — `select_dispatch_target` 이 mode 없는 후보를
+    # 이미 걸렀으므로 여기서는 `None` 이 나올 수 없다. 경로에서 도출되는 순수 판정이라
+    # 두 호출의 답이 갈리지 않는다.
+    mode = resolve_mode(spec_path)
+    # G1 — 원장이 "더 이상 dispatch 안 함"이라고 말하는 문서는 발동하지 않는다.
+    # **연료가 발견으로 바뀐 지금 이 판정은 두 번째 게이트다**: 위
+    # `select_dispatch_target` 이 armed 키를 이미 뺐으므로 여기서 `_vetoed` 가 참이
+    # 되는 입력은 없다. 남겨 두는 이유는 아래 sweep — stale pending 을 치우는 일이
+    # 아직 이 자리에 있기 때문이고, 그 계약의 은퇴는 다음 단계의 몫이다.
+    # 아래 문단은 그 sweep 이 왜 여기 있었는지의 기록이다.
+    #
+    # pending 을 유일한 연료로 두면, skill 이 Step 1
     # (strip-pending)과 Step 3(mark-reviewed)을 분리된 두 bash 블록으로 실행한다는
     # 사실만으로 재발동이 되살아난다 — Step 1 이 빠지면 pending 이 남고, 실제 리뷰는
     # 30초 TTL 을 넘기므로 다음 Stop 이 이미 리뷰된 문서에 다시 block 을 낸다.
@@ -504,13 +578,16 @@ def main() -> int:
             f"(non-fatal, G6 상한 미적용): {exc}",
             file=sys.stderr,
         )
+    # `worktree_path:` 줄은 없다. 그 값의 출처는 pending 을 쓰던 PostToolUse 훅의
+    # `os.getcwd()` 였고, 하는 일은 리뷰어에게 "이 문서가 어느 체크아웃에 있는지"를
+    # 알리는 것이었다. 발견이 내는 `spec path` 는 절대경로라 그 사실을 스스로 말한다.
+    # 이 훅의 cwd 로 값을 만들어 넣지 않는다 — 리포 서브디렉터리일 수 있어 worktree
+    # 경로라고 부를 수 없고, 없는 것보다 틀린 것이 나쁘다.
     msg_lines = [
         "MANDATORY: 다음 turn 첫 액션으로 reviewing-spec skill 호출.",
         f"spec path: {spec_path}.",
         f"mode: {mode}.",
     ]
-    if wt:
-        msg_lines.append(f"worktree_path: {wt}.")
     msg_lines.append(
         "호출 skill의 terminal handoff(writing-plans 등)는 review pass 이후로 보류."
     )
@@ -539,8 +616,10 @@ def main() -> int:
         #       기록하므로 **정상 경로**에서는 재편집해도 재발동하지 않는다.
         # 재발동은 (원장 ∧ git ∧ 상한) 세 입력의 함수이고 셋 다 emit 시점에 확정되지
         # 않는다. 훅이 모르는 것을 단정하면 그 문장은 언젠가 거짓이 된다.
-        # 남기는 것은 emit 시점에 **이미 일어난 사실** 하나뿐이다 — rewrite_state 가
-        # 위에서 pending 을 소진했으므로 이 강제는 이번 턴을 넘기지 않는다.
+        # 남기는 것은 emit 시점에 **이미 일어난 사실** 하나뿐이다 — 아래
+        # rewrite_state 가 emit 보다 **먼저** 이 문서를 in-flight 로 찍으므로,
+        # 다음 Stop 의 발견 결과에서 이 문서가 빠진다. 그래서 이 강제는 이번 턴을
+        # 넘기지 않는다. (예전에는 같은 사실이 pending 소진에서 나왔다.)
         msg_lines.append("이 mandate는 이번 dispatch 1회에만 유효하다.")
     msg = " ".join(msg_lines)
     # AC7.1: rewrite BEFORE emit. AC7.2: rewrite-fail → no emit (block storm guard).
