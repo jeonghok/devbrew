@@ -294,10 +294,23 @@ def main() -> int:
     except GitUnavailable as exc:
         print(f"[spec-distill] 스코프 문서 발견 불가 (git): {exc}", file=sys.stderr)
         return emit_git_unavailable(state_path, body)
-    # --- 제외: armed / in-flight / 검증 상한 (A12·A14) ---
+    # --- 검증 후보에서 빼는 것: in-flight · 검증 상한 (A12·A14) ---
+    #
+    # **`armed_paths` 는 여기 없다.** 그 원장의 의미는 "더 이상 **dispatch** 안 함"이고,
+    # 구조 검증은 그것과 다른 게이트(Layer 1)다. 둘을 합치면 이번 세션에 리뷰를 마친
+    # 문서를 Bash 로 깨뜨렸을 때 구조 검증이 다시 발화하지 않는다 — 쓰기 경로가 게이트를
+    # 우회한다는 이 브랜치의 동기가 된 결함이 축소판으로 되살아나고, 방향은 Law 1 이
+    # 금지하는 "리뷰가 덜 되는 쪽"이다. 설계 §9 의 A14 는 **검증 실패 상한**만을 검증
+    # 제외 사유로 든다 — `armed_paths` 는 한 글자도 나오지 않는다.
+    #
+    # block storm 은 이 제외 없이도 묶인다: `record_validation` 이 문서별로 세고
+    # `VALIDATION_ATTEMPT_CAP` 이 3 에서 끊는다.
+    #
+    # dispatch 쪽의 armed 게이트는 그대로다 — 아래 pending 경로의 `_vetoed` 판정이
+    # 그 자리다. 두 게이트가 이제 서로 다른 술어를 읽는다.
     cursor = read_cursor(body)
     by_key: dict[str, Candidate] = {}
-    eligible: list[str] = []
+    validation_pool: list[str] = []
     capped: list[str] = []
     val_cap = 0
     ledger = None
@@ -305,24 +318,21 @@ def main() -> int:
         import arm_ledger  # pyright: ignore[reportMissingImports]
         ledger = arm_ledger
         val_cap = arm_ledger.VALIDATION_ATTEMPT_CAP
-        armed = set(arm_ledger.armed_keys(body))
         val_att = arm_ledger.validation_attempts(body)
         for c in cands:
-            if c.key in armed:
-                continue
             if arm_ledger.is_inflight(body, c.path, now):
                 continue
             if val_att.get(c.key, 0) >= val_cap:
                 capped.append(c.key)
                 continue
             by_key[c.key] = c
-            eligible.append(c.key)
+            validation_pool.append(c.key)
     except Exception as exc:  # noqa: BLE001 — loud degradation
-        # 원장을 못 읽으면 어떤 문서가 이미 리뷰됐는지·상한에 닿았는지 알 수 없다.
-        # 그 상태에서 검증하면 상한 없는 block 루프가 되므로(CLAUDE.md: Unbounded
-        # autonomy) 이번 턴의 검증만 접는다. dispatch 경로는 자기 fail-open 을 갖는다.
+        # 원장을 못 읽으면 어떤 문서가 상한에 닿았는지 알 수 없다. 그 상태에서 검증하면
+        # 상한 없는 block 루프가 되므로(CLAUDE.md: Unbounded autonomy) 이번 턴의 검증만
+        # 접는다. dispatch 경로는 자기 fail-open 을 갖는다.
         ledger = None
-        eligible = []
+        validation_pool = []
         print(
             f"[spec-distill] 원장 조회 실패 (non-fatal, 이번 턴 구조 검증 생략): {exc}",
             file=sys.stderr,
@@ -334,7 +344,7 @@ def main() -> int:
             f"자동 검증·dispatch 를 하지 않는 문서: {', '.join(capped)}",
             file=sys.stderr,
         )
-    picked, next_cursor = select_keys(eligible, cursor, CANDIDATE_CAP)
+    picked, next_cursor = select_keys(validation_pool, cursor, CANDIDATE_CAP)
     if picked:
         cursor = next_cursor
     # --- 구조 검증 (A10 — TTL 가드보다 먼저) ---

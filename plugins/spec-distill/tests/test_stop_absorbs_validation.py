@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -187,6 +188,99 @@ class TestDiscoveryBugIsNotReportedAsGitUnavailable(unittest.TestCase):
             payload.get("systemMessage"), rd.GIT_UNAVAILABLE_ADVISORY,
             msg=f"git 불능 advisory 가 나가지 않았다: {stdout!r}",
         )
+
+
+BROKEN_REL = "docs/superpowers/specs/2026-01-01-armed-design.md"
+
+
+def _repo_with_broken_scope_doc(session_id: str, ledger_block: str) -> Path:
+    """Bash 로 쓴 것과 같은 상태의 깨진 스코프 문서 + 원장 블록 하나를 가진 리포.
+
+    문서는 untracked·dirty·구조 실패(placeholder `TBD`)다 — 어떤 제외도 걸리지
+    않으면 훅은 반드시 구조 block 을 낸다. 그래서 "block 이 나왔는가"가 곧
+    "이 문서가 검증 후보에 들어갔는가"의 관측 가능한 대리값이 된다.
+    """
+    repo = _make_temp_repo()
+    doc = repo / BROKEN_REL
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text("# X\n\n## Goal\n\nTBD 아직.\n", encoding="utf-8")
+    state = repo / ".claude" / "spec-distill" / session_id / "state.local.md"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(
+        f"---\nsession_id: {session_id}\n---\n\n{ledger_block}", encoding="utf-8")
+    return repo
+
+
+def _run_stop(repo: Path, session_id: str) -> subprocess.CompletedProcess:
+    env = {
+        "HOME": os.environ.get("HOME", "/tmp"),
+        "PATH": os.environ["PATH"],
+        "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
+        "DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC": "0",
+    }
+    return subprocess.run(
+        [sys.executable, str(HOOK)], cwd=str(repo), env=env,
+        input="{}", text=True, capture_output=True, timeout=30)
+
+
+class TestValidationExclusionAxes(unittest.TestCase):
+    """어떤 원장이 **구조 검증**을 막고 어떤 것이 못 막는가 — 세 축을 따로 잠근다.
+
+    `armed_paths` 의 의미는 "더 이상 **dispatch** 안 함"이지 "Layer 1 을 끈다"가
+    아니다. 그것을 검증 앞에 두면 이번 세션에 리뷰를 마친 문서를 Bash 로 깨뜨렸을 때
+    구조 검증이 다시 발화하지 않는다 — 쓰기 경로가 게이트를 우회한다는 이 브랜치의
+    동기가 된 결함이 축소판으로 되살아나고, 방향은 Law 1 이 금지하는
+    "리뷰가 덜 되는 쪽"이다. 설계 §9 의 A14 는 **검증 실패 상한**만을 검증 제외
+    사유로 들고 `armed_paths` 를 한 번도 언급하지 않는다.
+
+    **세 케이스가 한 묶음이다.** 첫째(armed 는 통과)만 두면 제외 블록을 통째로
+    지워도 GREEN 이다. 나머지 둘이 그 vacuity 를 막는다 — 막아야 할 두 축은 여전히
+    막는다는 양의 짝.
+    """
+
+    def _stop(self, session_id: str, ledger_block: str):
+        repo = _repo_with_broken_scope_doc(session_id, ledger_block)
+        self.addCleanup(shutil.rmtree, repo, True)
+        r = _run_stop(repo, session_id)
+        self.assertEqual(r.returncode, 0, msg=f"훅이 죽었다: {r.stderr}")
+        return r
+
+    def test_armed_document_is_still_structurally_validated(self):
+        """armed 는 **검증을 막지 않는다** (R50 의 음의 방향)."""
+        r = self._stop(
+            "test-armed-validates", f"armed_paths:\n  - {BROKEN_REL}\n")
+        self.assertTrue(
+            r.stdout.strip(),
+            msg=("리뷰를 마친 문서를 Bash 로 깨뜨렸는데 구조 검증이 침묵했다 — "
+                 f"armed 가 Layer 1 앞을 막고 있다. stderr={r.stderr!r}"))
+        payload = json.loads(r.stdout)
+        self.assertEqual(payload.get("decision"), "block")
+        self.assertIn(
+            BROKEN_REL, payload.get("reason", ""),
+            msg=f"block 은 났으나 그 문서 사유가 아니다: {payload!r}")
+
+    def test_validation_capped_document_is_not_validated(self):
+        """검증 실패 상한에 닿은 문서는 검증도 dispatch 도 없다 (A14, 양의 짝)."""
+        r = self._stop(
+            "test-valcap-silent",
+            f"validation_attempts:\n  {BROKEN_REL}: 3\n")
+        self.assertEqual(
+            r.stdout.strip(), "",
+            msg=f"상한에 닿은 문서가 다시 block 을 냈다 — 무한 루프다: {r.stdout!r}")
+        self.assertIn(
+            "구조 검증 상한", r.stderr,
+            msg=f"상한 제외가 조용히 일어났다 (A14 는 advisory 를 요구한다): {r.stderr!r}")
+
+    def test_inflight_document_is_not_validated(self):
+        """리뷰가 도는 중인 문서는 검증 후보에서 빠진다 (A12, 양의 짝)."""
+        now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        r = self._stop(
+            "test-inflight-silent",
+            f"inflight_paths:\n  {BROKEN_REL}: {now_iso}\n")
+        self.assertEqual(
+            r.stdout.strip(), "",
+            msg=("리뷰 중인 문서에 구조 block 이 나갔다 — 그 라운드를 절단한다: "
+                 f"{r.stdout!r}"))
 
 
 if __name__ == "__main__":
