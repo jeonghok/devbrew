@@ -31,8 +31,13 @@ class TestParseStatusZ(unittest.TestCase):
 
     def test_rename_consumes_orig_path_field(self):
         # rename/copy 항목은 `XY path\0origPath\0` 로 필드가 둘이다. orig 를 레코드로
-        # 소비하면 이후 전체 항목이 한 칸씩 밀린다.
-        raw = b"R  new.md\x00old.md\x00 M after.md\x00"
+        # 소비하지 않으면 이후 전체 항목이 한 칸씩 밀린다. origPath 의 세 번째
+        # 바이트가 공백일 때만 이 실패가 실제로 갈린다 — `f[2:3] != b" "` 가드가
+        # "old.md"(세 번째 바이트 'd') 같은 origPath 는 소비 여부와 무관하게
+        # 우연히 걸러내 버려 두 구현이 같은 결과를 낸다(실측: MUT1 을 삭제 대신
+        # `pass` 로 완화하면 12/12 GREEN — 무이빨). "ol d.md" 처럼 세 번째 바이트를
+        # 공백으로 둬야 소비하지 않는 구현이 그 필드를 phantom 레코드로 읽어낸다.
+        raw = b"R  new.md\x00ol d.md\x00 M after.md\x00"
         self.assertEqual(dc.parse_status_z(raw),
                          [("R ", "new.md"), (" M", "after.md")])
 
