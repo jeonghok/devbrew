@@ -43,13 +43,32 @@ arm_work_init() {  # $1 = mktemp prefix
     && git commit -q --allow-empty -m seed ) || exit 1
 }
 
-new_doc() {  # $1 = WORK 기준 상대 경로
-  # **앞 케이스의 문서를 먼저 리포에 넣는다.** dispatch 대상은 세션 상태가 아니라
-  # git 의 dirty 집합에서 오므로, 남겨 두면 앞 케이스의 문서가 뒤 케이스의 **다른
-  # 세션**에서 후보로 잡힌다(원장은 세션별이라 앞 세션의 armed/attempts 가 뒤 세션엔
-  # 없다). 그러면 케이스마다 emit 이 남의 문서로 오염돼 무엇을 재는지 알 수 없다.
-  # 커밋된 문서는 dirty 가 아니라 발견 결과에서 통째로 빠진다.
+# **앞 케이스의 문서를 리포에 넣어 발견에서 뺀다.** dispatch 대상은 세션 상태가
+# 아니라 git 의 dirty 집합에서 오므로, 남겨 두면 앞 케이스의 문서가 뒤 케이스의
+# **다른 세션**에서 후보로 잡힌다(원장은 세션별이라 앞 세션의 armed/attempts 가 뒤
+# 세션엔 없다). 그러면 케이스마다 emit 이 남의 문서로 오염돼 무엇을 재는지 알 수 없다.
+#
+# **이 함수에 의존하는 케이스**(호출부에 안 적혀 있으므로 여기 적는다):
+# test_arm_ledger_timing.sh 의 T6·T7·T8·T9·T10 전부, test_arm_once.sh 의 T13
+# (양성 짝인 «옆 문서 dispatch» 가 T1·T3 의 문서가 이미 커밋됐음을 전제한다).
+#
+# rc 를 재지 않고 **결과**를 잰다: `git commit` 은 스테이지할 것이 없을 때 정당하게
+# 실패하고(앞 케이스가 스스로 커밋한 경우), `git add -- docs` 는 docs/ 가 아직 없을
+# 때 정당하게 실패한다. 격리가 성립했다는 사실은 그 rc 들이 아니라 "dirty 문서가
+# 남지 않았다" 하나다. 조용히 실패하면 오염된 GREEN 이 돌아오므로 **죽는다**.
+retire_prev_docs() {
+  [[ -d "$WORK/docs" ]] || return 0
   ( cd "$WORK" && git add -A -- docs && git commit -q -m retire-prev ) >/dev/null 2>&1
+  local left
+  left=$(cd "$WORK" && git status --porcelain -- docs)
+  if [[ -n "$left" ]]; then
+    printf 'FATAL: 케이스 격리 실패 — dirty 스코프 문서가 남았다:\n%s\n' "$left" >&2
+    exit 1
+  fi
+}
+
+new_doc() {  # $1 = WORK 기준 상대 경로
+  retire_prev_docs
   mkdir -p "$WORK/$(dirname "$1")"
   cp "$FIX/2026-05-17-test-design.md" "$WORK/$1"
 }

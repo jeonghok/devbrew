@@ -38,8 +38,21 @@ seed_doc() {  # $1 = WORK 기준 상대 경로
 }
 # 앞 케이스의 문서를 커밋해 발견에서 뺀다. 발견은 세션이 아니라 git 을 보므로,
 # 남겨 두면 앞 케이스의 문서가 뒤 케이스의 emit 을 오염시킨다 — 케이스마다 세션
-# id 는 다르지만 리포는 하나다.
-retire_docs() { ( cd "$WORK" && git add -A -- docs && git commit -q -m retire ) >/dev/null 2>&1; }
+# id 는 다르지만 리포는 하나다. **Case 11 이후 모든 케이스가 이 함수에 의존한다.**
+#
+# rc 를 재지 않고 **결과**를 잰다: docs/ 가 아직 없거나 스테이지할 것이 없으면 두
+# 명령은 정당하게 실패한다. 격리가 성립했다는 사실은 "dirty 문서가 남지 않았다"
+# 하나뿐이고, 그것이 조용히 깨지면 오염된 GREEN 이 돌아오므로 여기서 죽는다.
+retire_docs() {
+  [[ -d "$WORK/docs" ]] || return 0
+  ( cd "$WORK" && git add -A -- docs && git commit -q -m retire ) >/dev/null 2>&1
+  local left
+  left=$(cd "$WORK" && git status --porcelain -- docs)
+  if [[ -n "$left" ]]; then
+    printf 'FATAL: 케이스 격리 실패 — dirty 스코프 문서가 남았다:\n%s\n' "$left" >&2
+    exit 1
+  fi
+}
 
 # Case 11: AC11 — 발견된 dirty 스코프 문서 → decision:block emit
 REL11="docs/superpowers/specs/2026-05-16-ac11-design.md"
@@ -184,10 +197,18 @@ setup_state "test-018" "---
 session_id: test-018
 ---
 "
-out=$(run_hook "test-018")
+# **생존 제어**: "emit 이 없다" 만 재면 그 문서가 훅을 죽여도 통과한다(무이빨
+# no-emit assert). rc 와 stderr 를 함께 잡아 침묵이 정상 종료의 침묵임을 고정한다 —
+# 바로 위 Case 12 가 쓰는 것과 같은 형태다. stderr 는 리포 루트에 쓰되 스코프 접두
+# 밖이라 이 파일 자신이 후보가 되지는 않는다.
+err18="$WORK/.err18"
+out=$(cd "$WORK" && DEVBREW_SPEC_DISTILL_SESSION_ID=test-018 \
+  bash -c "echo '{}' | python3 '$HOOK'" 2>"$err18")
+rc=$?
 sf18="$WORK/.claude/spec-distill/test-018/state.local.md"
-[[ -z "$out" ]] \
+[[ $rc -eq 0 ]] && [[ -z "$out" ]] \
+  && ! grep -q 'Traceback' "$err18" \
   && ! grep -q '^dispatch_attempts:' "$sf18" \
-  && ok "스코프 밖 dirty 문서 → 무-dispatch, attempts 미기록" \
-  || no "out-of-scope 문서가 dispatch 됐다 (out='$out')"
+  && ok "스코프 밖 dirty 문서 → rc 0 + 무-dispatch, attempts 미기록 (무-crash)" \
+  || no "out-of-scope 케이스 실패 (rc=$rc out='$out' err='$(cat "$err18")')"
 finish

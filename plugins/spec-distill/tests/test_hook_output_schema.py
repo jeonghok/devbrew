@@ -109,6 +109,20 @@ def _write_state(repo: Path, session_id: str, extra: str = "") -> Path:
     return state_file
 
 
+def _expire_inflight(repo: Path, session_id: str) -> None:
+    """in-flight 표시의 타임스탬프를 과거로 밀어 TTL 만료를 시뮬레이션한다.
+
+    `INFLIGHT_TTL_SEC` 은 환경변수로 못 낮추므로 시간을 기다리는 대신 원장을 늙힌다.
+    쓰기는 원장 자신의 composer(`mark_inflight`)로 한다 — 블록 모양을 테스트가
+    따로 흉내내면 그 흉내가 진짜 모양과 갈리는 날 조용히 무의미해진다.
+    """
+    f = repo / ".claude" / "spec-distill" / session_id / "state.local.md"
+    body = f.read_text(encoding="utf-8")
+    for key in list(arm_ledger.inflight(body)):
+        body = arm_ledger.mark_inflight(body, key, "2020-01-01T00:00:00Z")
+    f.write_text(body, encoding="utf-8")
+
+
 def _run_hook(
     hook_relpath: str, *,
     cwd: Path, env_extra: dict[str, str] | None = None,
@@ -228,7 +242,6 @@ class TestReviewDispatchSchema(HookOutputSchemaTestBase):
         정상 arm한다 (fail-safe = 리뷰가 일어나는 쪽, Law 1)."""
         import importlib.util
         import io
-        import contextlib
         spec_module = importlib.util.spec_from_file_location(
             "spec_write_validator_failopen", HOOKS_DIR / "spec-write-validator.py",
         )
@@ -287,7 +300,6 @@ class TestReviewDispatchSchema(HookOutputSchemaTestBase):
         — 오류 한 줄 없는 under-review(Law 1이 금지하는 방향)."""
         import importlib.util
         import io
-        import contextlib
         spec_module = importlib.util.spec_from_file_location(
             "spec_write_validator_doublepending", HOOKS_DIR / "spec-write-validator.py",
         )
@@ -466,23 +478,12 @@ class TestMandateClaimsAreTrue(HookOutputSchemaTestBase):
         abs_path.write_text(self.DESIGN_BODY + extra, encoding="utf-8")
         return abs_path
 
-    def _run_validator(self, sid: str, abs_path: Path):
-        return _run_hook(
-            "spec-write-validator.py", cwd=self.repo,
-            stdin_payload={
-                "session_id": sid, "hook_event_name": "PostToolUse",
-                "tool_name": "Write", "tool_input": {"file_path": str(abs_path)},
-                "cwd": str(self.repo),
-            },
-            env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": sid},
-        )
-
     def _run_stop(self, sid: str):
-        # TTL 가드를 **끈다**. 이 클래스가 재려는 것은 "pending 소진(단발성)" 이지
+        # TTL 가드를 **끈다**. 이 클래스가 재려는 것은 원장이 만드는 단발성이지
         # "30초 redispatch TTL" 이 아니다. 기본 TTL 로 두면 두 번째 Stop 은 밀리초
-        # 안에 실행되어 TTL 이 먼저 침묵시키고, 그러면 pending 을 아예 소진하지 않게
+        # 안에 실행되어 TTL 이 먼저 침묵시키고, 그러면 in-flight 표시를 아예 안 찍게
         # 망가뜨려도 락이 GREEN 이 된다 — 실제로 mutation N1 이 그렇게 통과했다.
-        # TTL=0 이면 침묵을 설명할 수 있는 것은 pending 소진뿐이다.
+        # TTL=0 이면 침묵을 설명할 수 있는 것은 원장의 표시뿐이다.
         return _run_hook(
             "review-dispatch.py", cwd=self.repo,
             env_extra={
@@ -491,9 +492,9 @@ class TestMandateClaimsAreTrue(HookOutputSchemaTestBase):
             },
         )
 
-    def _is_armed(self, sid: str) -> bool:
-        f = self.repo / ".claude" / "spec-distill" / sid / "state.local.md"
-        return f.exists() and "pending_review:" in f.read_text(encoding="utf-8")
+    def _state(self, sid: str) -> str:
+        return (self.repo / ".claude" / "spec-distill" / sid
+                / "state.local.md").read_text(encoding="utf-8")
 
     def test_claim_single_shot_holds(self):
         """주장 1: "이 mandate는 이번 dispatch 1회에만 유효하다".
@@ -513,10 +514,12 @@ class TestMandateClaimsAreTrue(HookOutputSchemaTestBase):
             msg=f"전제 실패: 첫 Stop 이 강제하지 않음: {first.stdout!r} / {first.stderr!r}")
         self.assertIn(str(doc), json.loads(first.stdout).get("reason", ""),
                       msg="첫 Stop 이 이 문서를 강제한 것이 아니다")
-        state = (self.repo / ".claude" / "spec-distill" / sid
-                 / "state.local.md").read_text(encoding="utf-8")
+        # **원장의 파서로 읽는다.** `state.split("inflight_paths:")[-1]` 은 블록이
+        # 없으면 파일 전체를 돌려주고, `dispatch_attempts` 가 같은 `키: ` 부분문자열을
+        # 담고 있어 표시가 하나도 없어도 통과했다 — 커버리지처럼 읽히는 죽은 단언.
+        state = self._state(sid)
         self.assertIn(
-            f"{self.REL}: ", state.split("inflight_paths:")[-1],
+            self.REL.as_posix(), arm_ledger.inflight(state),
             msg=f"dispatch 가 in-flight 표시를 남기지 않았다: {state!r}")
 
         # 문서를 건드리지 않은 채 두 번째 Stop — 주장대로면 아무것도 나오면 안 된다.
@@ -537,40 +540,73 @@ class TestMandateClaimsAreTrue(HookOutputSchemaTestBase):
             env={"HOME": os.environ.get("HOME", "/tmp"), "PATH": os.environ["PATH"]},
         )
 
-    def test_unreviewed_doc_rearms_on_reedit(self):
-        """미리뷰·미커밋 문서는 재편집 시 재발동한다 (Law 1 게이트 생존)."""
+    def test_unreviewed_doc_rearms_after_inflight_expiry(self):
+        """완료가 기록되지 않은 문서의 게이트는 한 번의 강제로 꺼지지 않는다.
+
+        **재발동의 계기가 바뀌었다.** 예전에는 "재편집"이었다 — 편집이 PostToolUse
+        훅을 태워 연료를 다시 깔았기 때문이다. dirty·untracked 문서를 다시 편집해도
+        git 이 보는 사실은 달라지지 않으므로, 지금 그 자리를 지키는 것은 진행중 표시의
+        TTL 만료다(`INFLIGHT_TTL_SEC` 의 계약). 편집은 시나리오를 알아보게 남겨 두되
+        판정은 **강제가 다시 나가는가**로 한다 — 원장 부기가 아니라 emit 채널이다.
+
+        형제 케이스와 짝이다: 아래는 같은 조건에서 정반대 결과를 낸다.
+        """
         sid = "test-claim-reedit"
-        self._run_validator(sid, self._write_doc())
-        self._run_stop(sid)  # dispatch → pending 소진
-        self.assertFalse(
-            self._is_armed(sid), msg="전제 실패: dispatch 후에도 pending 이 남았다")
+        doc = self._write_doc()
+        first = self._run_stop(sid)
+        self.assertIn("block", first.stdout,
+                      msg=f"전제 실패: 첫 Stop 이 강제하지 않음: {first.stderr!r}")
 
-        self._run_validator(sid, self._write_doc(extra="\n<!-- edit 2 -->\n"))
-        self.assertTrue(
-            self._is_armed(sid),
-            msg="미리뷰 문서를 재편집했는데 재발동하지 않는다 — 게이트가 조용히 꺼졌다",
+        _expire_inflight(self.repo, sid)
+        self._write_doc(extra="\n<!-- edit 2 -->\n")
+        second = self._run_stop(sid)
+        self.assertIn(
+            "block", second.stdout,
+            msg=("완료도 커밋도 되지 않은 문서인데 게이트가 다시 발동하지 않는다 — "
+                 f"한 번의 강제로 조용히 꺼졌다: {second.stdout!r} / {second.stderr!r}"),
         )
+        self.assertIn(str(doc), json.loads(second.stdout).get("reason", ""),
+                      msg="두 번째 강제가 이 문서에 대한 것이 아니다")
+        self.assertNotIn(
+            "armed_paths:", self._state(sid),
+            msg="verdict 가 없었는데 원장에 완료가 기록됐다 — 전제가 깨졌다")
 
-    def test_reviewed_doc_does_NOT_rearm_on_reedit(self):
-        """**리뷰를 마친** 문서는 재편집해도 재발동하지 않는다.
+    def test_reviewed_doc_does_NOT_rearm_after_inflight_expiry(self):
+        """**완료가 기록된** 문서는 같은 조건에서도 다시 강제되지 않는다.
 
-        이 쌍(위 테스트와 함께)이 "재발동은 재편집할 때 일어난다" 류의 **무조건**
-        단정이 왜 불가능한지를 보인다 — 같은 행동(재편집)이 원장 상태에 따라 정반대
-        결과를 낸다. 초판 mandate 가 그 단정을 담았다가 여기 걸렸다.
+        이 쌍(위 테스트와 함께)이 "재발동은 …할 때 일어난다" 류의 **무조건** 단정이
+        왜 불가능한지를 보인다 — 같은 상황(문서는 여전히 dirty, 진행중 표시 없음)이
+        원장 상태에 따라 정반대 결과를 낸다. 초판 mandate 가 그 단정을 담았다가 여기
+        걸렸다.
+
+        `mark-reviewed` 는 완료를 쓰면서 진행중 표시를 **지운다**. 그래서 이 침묵은
+        위 케이스의 TTL 로 설명되지 않는다 — 원인이 완료 기록 하나로 좁혀진다. 그
+        배제를 실제로 재기 위해 진행중 표시의 부재를 함께 단언한다.
         """
         sid = "test-claim-reviewed"
         doc = self._write_doc()
-        self._run_validator(sid, doc)
-        self._run_stop(sid)
+        first = self._run_stop(sid)
+        self.assertIn("block", first.stdout,
+                      msg=f"전제 실패: 첫 Stop 이 강제하지 않음: {first.stderr!r}")
         r = self._mark_reviewed(sid, doc)
-        self.assertEqual(r.returncode, 0, msg=f"전제 실패: mark-reviewed rc={r.returncode} {r.stderr}")
+        self.assertEqual(r.returncode, 0,
+                         msg=f"전제 실패: mark-reviewed rc={r.returncode} {r.stderr}")
 
-        self._run_validator(sid, self._write_doc(extra="\n<!-- edit 2 -->\n"))
-        self.assertFalse(
-            self._is_armed(sid),
+        state = self._state(sid)
+        self.assertIn(self.REL.as_posix(), arm_ledger.armed_keys(state),
+                      msg=f"전제 실패: 완료가 원장에 없다: {state!r}")
+        self.assertNotIn(
+            self.REL.as_posix(), arm_ledger.inflight(state),
+            msg=("진행중 표시가 남아 있다 — 아래 침묵이 완료 기록 때문인지 "
+                 f"표시 때문인지 가를 수 없다: {state!r}"))
+
+        self._write_doc(extra="\n<!-- edit 2 -->\n")
+        second = self._run_stop(sid)
+        self.assertEqual(
+            second.stdout.strip(), "",
             msg=(
-                "리뷰를 마친 문서가 재편집만으로 다시 arm 됐다 — arm-once 가 깨졌거나, "
-                "mandate 에 '재편집하면 재발동' 을 다시 적어도 된다는 뜻이 아니다"
+                "리뷰를 마친 문서가 다시 강제됐다 — arm-once 가 깨졌거나, mandate 에 "
+                f"'재편집하면 재발동' 을 다시 적어도 된다는 뜻이 아니다: {second.stdout!r}"
             ),
         )
 
@@ -790,32 +826,36 @@ class TestKillSwitches(HookOutputSchemaTestBase):
         s = stdout.strip()
         return s == "" or s == "{}"
 
-    def test_global_disable_silences_review_dispatch(self):
-        session_id = "ks-review"
-        _write_pending_review_state(self.repo, session_id, spec_path="/x", mode="spec")
-        result = _run_hook(
-            "review-dispatch.py", cwd=self.repo,
-            env_extra={
-                "DEVBREW_SPEC_DISTILL_DISABLE": "1",
-                "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
-            },
-        )
-        self.assertEqual(result.returncode, 0)
+    def _armed_stop_run(self, session_id: str, env_extra: dict):
+        """**억제할 것이 실제로 있는** 상태에서 Stop 훅을 돌린다.
+
+        후보가 없으면 kill switch 없이도 조용하므로, 문서를 깔지 않은 이 케이스는
+        아무것도 재지 못한다(무엇을 바꿔도 GREEN). 그래서 dirty 스코프 문서를 깔고,
+        **상태 파일이 바이트 단위로 그대로인지**까지 잰다 — 훅이 정말 안 돌았다는
+        증거는 emit 부재가 아니라 발견 커서·in-flight 미기록이다. 이 배치의 양성
+        대조는 형제 케이스 `test_discovered_doc_emits_decision_block_with_reason`
+        (같은 픽스처, kill switch 없음 → block)이다.
+        """
+        _write_scope_doc(
+            self.repo, "docs/superpowers/specs/2026-05-16-killswitch-design.md")
+        state_file = _write_state(self.repo, session_id)
+        before = state_file.read_bytes()
+        env = {"DEVBREW_SPEC_DISTILL_SESSION_ID": session_id}
+        env.update(env_extra)
+        result = _run_hook("review-dispatch.py", cwd=self.repo, env_extra=env)
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
         self.assertTrue(self._empty_or_braces(result.stdout),
-                        msg=f"unexpected output: {result.stdout!r}")
+                        msg=f"kill switch 가 emit 을 막지 못했다: {result.stdout!r}")
+        self.assertEqual(
+            state_file.read_bytes(), before,
+            msg="kill switch 가 걸렸는데 훅이 상태 파일을 건드렸다 — 안 돈 것이 아니다")
+
+    def test_global_disable_silences_review_dispatch(self):
+        self._armed_stop_run("ks-review", {"DEVBREW_SPEC_DISTILL_DISABLE": "1"})
 
     def test_hook_specific_disable_silences_review_dispatch(self):
-        session_id = "ks-review-2"
-        _write_pending_review_state(self.repo, session_id, spec_path="/x", mode="spec")
-        result = _run_hook(
-            "review-dispatch.py", cwd=self.repo,
-            env_extra={
-                "DEVBREW_SKIP_HOOKS": "spec-distill:Stop",
-                "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
-            },
-        )
-        self.assertEqual(result.returncode, 0)
-        self.assertTrue(self._empty_or_braces(result.stdout))
+        self._armed_stop_run(
+            "ks-review-2", {"DEVBREW_SKIP_HOOKS": "spec-distill:Stop"})
 
     def test_global_disable_silences_spec_write_validator(self):
         spec_abs = self.repo / "docs" / "superpowers" / "specs" / "x-design.md"

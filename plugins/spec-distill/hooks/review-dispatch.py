@@ -499,15 +499,28 @@ def main() -> int:
         if last and (now - last) < timedelta(seconds=ttl_sec):
             return 0  # within guard window
     spec_path = cand.path
-    # 같은 함수를 두 번 부르는 값이다 — `select_dispatch_target` 이 mode 없는 후보를
-    # 이미 걸렀으므로 여기서는 `None` 이 나올 수 없다. 경로에서 도출되는 순수 판정이라
-    # 두 호출의 답이 갈리지 않는다.
+    # `select_dispatch_target` 이 이미 부른 함수를 다시 부른다.
+    # **`resolve_mode` 는 순수 함수가 아니다** — 접두 아래의 `.md` 중 `-spec`/`-design`
+    # 접미사가 없는 것은 frontmatter 를 읽어 판정한다. 그러므로 "같은 답이 보장된다"는
+    # 근거는 틀렸다. 실제 근거는 좁다: `None` 을 내는 분기 넷 중 셋(접두 없음 · `.md`
+    # 아님 · `-design.md` + design-mode kill switch)은 경로와 env 에서만 나와 이 프로세스
+    # 안에서 불변이고, 읽기 실패는 `design` 으로 떨어지지 `None` 이 되지 않는다.
+    # 남는 창은 하나뿐이다: 접미사 없는 `.md` 의 frontmatter 가 두 호출 **사이에** 바뀌고
+    # **동시에** design 모드가 꺼져 있을 때. 그 창은 좁히지 않고 열어 둔다(범위 밖).
+    # 비용도 적어 둔다 — 접미사 없는 문서는 dispatch 한 번에 파일을 두 번 읽는다.
     mode = resolve_mode(spec_path)
     # G1 — 원장이 "더 이상 dispatch 안 함"이라고 말하는 문서는 발동하지 않는다.
     # **연료가 발견으로 바뀐 지금 이 판정은 두 번째 게이트다**: 위
     # `select_dispatch_target` 이 armed 키를 이미 뺐으므로 여기서 `_vetoed` 가 참이
     # 되는 입력은 없다. 남겨 두는 이유는 아래 sweep — stale pending 을 치우는 일이
     # 아직 이 자리에 있기 때문이고, 그 계약의 은퇴는 다음 단계의 몫이다.
+    #
+    # **지우는 사람에게**: 이 분기를 위쪽 선택의 대체재로 되살리지 말 것. `_vetoed` 는
+    # 후보 하나를 건너뛰는 판정이 아니라 **그 턴 전체를 끊는 `return 0`** 이다. armed
+    # 검사가 선택에서 빠지면 armed 문서가 정렬상 앞에 오는 순간 옆의 미리뷰 문서가
+    # 그 턴에 통째로 굶는다(측정 확인: 그 변이에서 test_arm_once.sh T13 이 `emit=''`
+    # 로 RED). 대체재는 선택 안의 per-candidate skip 이지 이 자리가 아니다.
+    #
     # 아래 문단은 그 sweep 이 왜 여기 있었는지의 기록이다.
     #
     # pending 을 유일한 연료로 두면, skill 이 Step 1
