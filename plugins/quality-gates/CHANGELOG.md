@@ -36,13 +36,23 @@ Bash heredoc·`sed -i`로 쓴 파일을 애초에 보지 못했던 결함 — ma
   서로 disagree할 수 없게 만들어, floor의 첫 분기를 영원히 도달 불가능하게 했다
   (리뷰 라운드에서 적발된 CRITICAL 결함). 판정-불가 degrade 분기("조용히 0으로
   취급하지 말 것")는 그대로 유지된다.
-- `hooks/hooks.json`의 `PostToolUse` 항목이 4개에서 3개로 줄었다 — 위 session-tracker
-  제거 반영. 관련 회귀 락(hooks 항목 수·agents 파일 수 불변식)도 함께 갱신.
+- `hooks/hooks.json`의 훅 항목 총합(`PostToolUse`+`SessionStart`+`SessionEnd`)이 4개에서
+  3개로 줄었다 — `PostToolUse`가 2개(session-tracker 포함)에서 1개로 줄어든 결과다.
+  관련 회귀 락(hooks 항목 수·agents 파일 수 불변식)도 함께 갱신.
 - `hooks/session-start-advisor.py`의 사용자-가시 advisory 메시지에서 `[quality-gates
   v1.32.0]` 런타임 라벨의 버전 번호를 뺐다(`[quality-gates]`) — 이 태그는 "지금 도는
   버전"을 present하므로 매 bump마다 값이 거짓이 된다. 같은 파일·플러그인 전역의 다른
   약 30곳 "vX.Y.Z에서 제거/도입됐다" 류 역사적 서술은 손대지 않았다 — 그 서술은
   시제가 과거라 bump 뒤에도 참으로 남는다.
+- `skills/quality-pipeline/SKILL.md`·`skills/publishing-pr-understanding/SKILL.md`
+  제목의 버전 라벨을 각각 `v4.1.0`·`v4.0.0`에서 `v5.0.0`으로 갱신 — 이 릴리스의
+  plugin.json major bump에 맞춘다. `tests/harness/test_skill_orchestration_behavior.sh`의
+  SKILL-제목-major 락이 이전에는 `quality-pipeline` 제목 하나만 봐서
+  `publishing-pr-understanding`의 구버전 제목을 잡지 못했다 — 이 플러그인의
+  `skills/*/SKILL.md` 전체를 열거하도록 다시 짰다: 버전을 단 제목은 전부 shipped
+  major와 같아야 하고(버전이 아예 없는 `critiquing-artifacts` 제목은 위반이 아니다),
+  그와 별도로 적어도 하나의 제목은 여전히 shipped major를 달고 있어야 한다(그렇지
+  않으면 첫 조건이 모든 제목에서 버전을 지워도 공허하게 통과한다).
 
 ### Deprecated
 - kill switch 토큰 `DEVBREW_SKIP_HOOKS=quality-gates:session-tracker`는 가리킬

@@ -26,7 +26,7 @@ allowed-tools:
   - Bash(git symbolic-ref:*)
 ---
 
-# PR-Understanding Publish — gh를 가진 유일 orchestrator (v4.0.0)
+# PR-Understanding Publish — gh를 가진 유일 orchestrator (v5.0.0)
 
 You are **publishing-pr-understanding**. You are responsible for orchestrating the
 whole publish flow: 결정론 스크립트로 PR-이해 context를 만들고, de-privileged
