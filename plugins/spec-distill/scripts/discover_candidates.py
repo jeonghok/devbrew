@@ -120,6 +120,19 @@ def discover(cwd: Path | None = None) -> list[Candidate]:
     존재 검사는 `git rev-parse --show-toplevel` 로 얻은 리포 루트에 대고 한다.
     루트 해석 자체가 실패하면 다른 git 실패와 동일하게 GitUnavailable — `cwd` 로
     되돌아가지 않는다. 되돌아가면 바로 그 침묵하는 빈 결과가 재도입된다.
+
+    **`Candidate.path` 는 절대경로다.** git 이 주는 리포-루트 상대 경로를 그대로
+    흘려보내면, 소비자가 그것을 자기 **프로세스 cwd** 에 대고 연다 — 훅의 cwd 가
+    리포 서브디렉터리일 때 발견은 성공하는데 그 뒤의 파일 읽기만 실패한다. 위
+    문단이 `exists` 술어에서 막은 결함과 같은 클래스가 한 층 위에서 재발하는 것이고,
+    이번엔 조용하지도 않다: 읽기 실패가 **날조된 구조 실패 사유**로 바뀌어 상한까지
+    block 을 내고 그 뒤 영영 침묵한다. 어느 방향도 사실이 아니다.
+    루트를 아는 것은 이 함수뿐이므로 조인도 여기서 끝낸다 (소비자마다 반복하면
+    빠뜨리는 소비자가 생긴다).
+
+    키는 영향받지 않는다 — `canonical_key` 는 `find(PREFIX)` 라 절대·상대·워크트리
+    경로를 같은 키로 매핑한다(그 함수의 계약이 명시한다). `resolve_mode` 도
+    `PATH_PREFIX not in file_path` 라는 substring 판정이다.
     """
     start = Path(cwd) if cwd is not None else Path.cwd()
     rp = _run_git(["rev-parse", "--show-toplevel"], start)
@@ -132,5 +145,6 @@ def discover(cwd: Path | None = None) -> list[Candidate]:
     if cp.returncode != 0:
         raise GitUnavailable(cp.stderr.decode("utf-8", "replace").strip()
                              or f"git status rc={cp.returncode}")
-    return candidates_from_records(
+    cands = candidates_from_records(
         parse_status_z(cp.stdout), exists=lambda p: (root / p).exists())
+    return [c._replace(path=str(root / c.path)) for c in cands]

@@ -527,9 +527,22 @@ class TestMandateClaimsAreTrue(HookOutputSchemaTestBase):
 class TestReviewDispatchOrdering(unittest.TestCase):
     """AC7.3 — verify rewrite_state runs BEFORE print(json.dumps(...))."""
 
+    @staticmethod
+    def _is_decision_emit(call) -> bool:
+        """`print(json.dumps({"decision": ...}))` 인가 — stderr 진단과 가른다.
+
+        emit 딕셔너리의 `"decision"` 키 리터럴을 찾는다. 이 구분이 없으면 아래 락은
+        "rewrite 뒤에 **아무 print** 나 오면 통과" 가 되는데, main() 의 print 는 대부분
+        stderr 진단이라 그 조건은 거의 언제나 참이다 — 락이 GREEN 을 유지한 채 변별력만
+        잃는 모양이고, 그 손실은 스위트 diff 에 보이지 않는다.
+        """
+        return any(isinstance(c, ast.Constant) and c.value == "decision"
+                   for c in ast.walk(call))
+
     def _walk_calls_in_order(self, body_nodes, target_names):
         """Yield (lineno, name) for Call nodes whose func.id is in target_names.
 
+        `print` 는 **decision emit 인 것만** 낸다 (`_is_decision_emit`).
         Recurses into FunctionDef body if encountered (handles helper refactor
         per AC7.3.1 commentary)."""
         for node in body_nodes:
@@ -541,7 +554,8 @@ class TestReviewDispatchOrdering(unittest.TestCase):
                 elif isinstance(call.func, ast.Attribute):
                     name = call.func.attr
                 if name in target_names:
-                    yield (node.lineno, name)
+                    if name != "print" or self._is_decision_emit(call):
+                        yield (node.lineno, name)
             if isinstance(node, ast.With):
                 yield from self._walk_calls_in_order(node.body, target_names)
             if isinstance(node, ast.Try):
@@ -566,11 +580,19 @@ class TestReviewDispatchOrdering(unittest.TestCase):
         rewrite_lines = [ln for ln, n in calls if n == "rewrite_state"]
         print_lines = [ln for ln, n in calls if n == "print"]
         self.assertTrue(rewrite_lines, "no rewrite_state call found in main()")
-        self.assertTrue(print_lines, "no print call found in main()")
-        # The final emit print must be after the rewrite_state call.
+        self.assertTrue(
+            print_lines,
+            "main() 에 decision emit 이 없다 — 이 락이 잴 대상 자체가 사라졌다")
+        # 재는 성질은 **상태 write 가 decision emit 보다 앞선다** 이지 "언젠가 print 가
+        # 나온다" 가 아니다. 그래서 `min(rewrite) < max(print)` 가 아니라
+        # `max(rewrite) < max(decision emit)` 이다: 마지막 상태 write 가 마지막 emit
+        # 보다 앞서야 한다. 앞의 형태는 rewrite 뒤에 stderr print 하나만 있어도
+        # 통과하므로, rewrite 를 emit 뒤로 옮기는 변이를 놓친다.
         self.assertLess(
-            min(rewrite_lines), max(print_lines),
-            msg=f"AC7.3.1 violated: rewrite={rewrite_lines}, print={print_lines}",
+            max(rewrite_lines), max(print_lines),
+            msg=(f"AC7.3.1 violated: 상태 write 가 decision emit 뒤에 있다 — "
+                 f"두 번째 Stop 이 stale state 를 읽고 block storm 을 낸다. "
+                 f"rewrite={rewrite_lines}, decision_emit={print_lines}"),
         )
 
     def test_mock_trace_rewrite_before_print(self):

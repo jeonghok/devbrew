@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """Stop 훅 흡수 — A4(import) · A10(순서) · A11(block 단일) · A13(기아 없음) · A16(git 불능)."""
+# 이 박스의 python3 는 3.9 라 `Path | None` 같은 주석이 def 시점에 평가돼 TypeError 를 낸다.
+from __future__ import annotations
+
 import ast
 import contextlib
 import importlib.util
@@ -10,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,9 +38,29 @@ class TestNoParserSubprocess(unittest.TestCase):
                  and isinstance(n.value, ast.Name) and n.value.id == "subprocess"]
         self.assertEqual(calls, [], "review-dispatch.py 에 subprocess 호출이 있다")
 
+    #: `validate_document` 이 실제로 부르는 순수 함수 여섯. 이 집합이 곧 A4 의 내용이다.
+    PARSER_NAMES = frozenset({
+        "find_missing_sections", "load_blacklist", "parse_frontmatter",
+        "scan_ambiguity", "scan_placeholders", "validate_locked_decisions",
+    })
+
     def test_parser_is_imported(self):
-        src = HOOK.read_text(encoding="utf-8")
-        self.assertIn("parse_spec_structure", src)
+        """A4 — 파서를 **import 로** 쓴다. 파싱한 AST 로 잰다.
+
+        원래는 `assertIn("parse_spec_structure", src)` 였다. 그 문자열은 훅 안에
+        두 번 나오는데 하나가 모듈 docstring 이라, **import 를 통째로 지워도 GREEN**
+        이었다(헤더-satisfiable). 이름 여섯 개를 집합으로 요구하면 문서 산문은
+        만족시킬 수 없고, 덤으로 "무엇을 import 하는가"까지 고정된다.
+        """
+        tree = ast.parse(HOOK.read_text(encoding="utf-8"))
+        got = set()
+        for n in ast.walk(tree):
+            if isinstance(n, ast.ImportFrom) and n.module == "parse_spec_structure":
+                got |= {a.name for a in n.names}
+        self.assertEqual(
+            got, set(self.PARSER_NAMES),
+            msg=("review-dispatch.py 가 parse_spec_structure 의 순수 함수를 "
+                 f"import 하지 않는다 (본 것: {sorted(got)})"))
 
     def test_positive_control_discovery_module_may_call_git(self):
         # 양성 대조 — 이 락은 발견 모듈의 git 호출을 금지하지 않는다 (GREEN 이 정답).
@@ -117,7 +141,7 @@ def _make_temp_repo() -> Path:
     return tmp
 
 
-def _drive_main(discover_impl):
+def _drive_main(discover_impl, modules: dict | None = None):
     """`discover` 를 갈아끼우고 `main()` 을 한 번 돌린다 → (예외, stdout).
 
     예외를 잡아 돌려주는 이유는 아래 두 케이스가 **삼켜졌는가**를 서로 반대 방향으로
@@ -129,6 +153,7 @@ def _drive_main(discover_impl):
     raised = None
     try:
         with mock.patch.object(rd, "discover", discover_impl), \
+             mock.patch.dict(sys.modules, modules or {}), \
              mock.patch.dict(os.environ, {
                  "DEVBREW_SPEC_DISTILL_SESSION_ID": "test-absorb-git",
              }), \
@@ -211,15 +236,24 @@ def _repo_with_broken_scope_doc(session_id: str, ledger_block: str) -> Path:
     return repo
 
 
-def _run_stop(repo: Path, session_id: str) -> subprocess.CompletedProcess:
+def _run_stop(repo: Path, session_id: str,
+              cwd: Path | None = None) -> subprocess.CompletedProcess:
+    """훅을 별도 프로세스로 돌린다. `cwd` 를 주면 리포 **하위 디렉터리**에서 돈다.
+
+    깨끗한 env 를 쓰되 `PYTHONDONTWRITEBYTECODE` 는 부모에서 넘긴다(기본 "1").
+    훅 자신은 `__main__` 이라 캐시되지 않지만 그것이 import 하는 `scripts/*.py`
+    다섯은 `scripts/__pycache__/` 에 캐시된다 — 이 하니스로 검증하는 같은-길이
+    변이가 stale `.pyc` 를 만나 거짓 GREEN·거짓 RED 를 낸다.
+    """
     env = {
         "HOME": os.environ.get("HOME", "/tmp"),
         "PATH": os.environ["PATH"],
+        "PYTHONDONTWRITEBYTECODE": os.environ.get("PYTHONDONTWRITEBYTECODE", "1"),
         "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
         "DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC": "0",
     }
     return subprocess.run(
-        [sys.executable, str(HOOK)], cwd=str(repo), env=env,
+        [sys.executable, str(HOOK)], cwd=str(cwd or repo), env=env,
         input="{}", text=True, capture_output=True, timeout=30)
 
 
@@ -281,6 +315,110 @@ class TestValidationExclusionAxes(unittest.TestCase):
             r.stdout.strip(), "",
             msg=("리뷰 중인 문서에 구조 block 이 나갔다 — 그 라운드를 절단한다: "
                  f"{r.stdout!r}"))
+
+
+class TestCandidatePathsSurviveSubdirectoryCwd(unittest.TestCase):
+    """발견이 낸 경로는 훅의 **프로세스 cwd** 와 무관하게 열려야 한다 (FIX 1).
+
+    `git status --porcelain -z` 는 리포-루트 상대 경로를 낸다. 그것을 그대로
+    흘려보내면 훅의 cwd 가 서브디렉터리일 때 발견은 성공하고 `resolve_mode` 도
+    (순수 substring 판정이라) 성공하는데 **파일 읽기만** 실패한다. 그러면
+    `validate_document` 이 "문서를 읽지 못했다" 를 구조 실패 사유로 날조해,
+    멀쩡한 문서에 상한까지 block 을 내고 그 뒤 영영 침묵한다 — 어느 방향도 사실이
+    아니다. `discover()` 가 루트를 조인해 절대경로를 내는 것이 그 계약이다.
+
+    이 케이스는 **사유의 내용**을 잰다. "block 이 났다" 만 재면 날조된 사유로도
+    통과한다 — 정확히 그 결함이 통과한다.
+    """
+
+    def test_reason_is_the_real_defect_not_a_read_failure(self):
+        session_id = "test-subdir-cwd"
+        repo = _repo_with_broken_scope_doc(session_id, "")
+        self.addCleanup(shutil.rmtree, repo, True)
+        deep = repo / "sub" / "deep"
+        deep.mkdir(parents=True)
+
+        r = _run_stop(repo, session_id, cwd=deep)
+        self.assertEqual(r.returncode, 0, msg=f"훅이 죽었다: {r.stderr}")
+        self.assertTrue(
+            r.stdout.strip(),
+            msg=f"서브디렉터리 cwd 에서 구조 검증이 통째로 사라졌다: {r.stderr!r}")
+        reason = json.loads(r.stdout).get("reason", "")
+        self.assertIn(
+            "placeholder hit", reason,
+            msg=f"진짜 구조 실패(TBD)를 사유로 내지 않았다: {reason!r}")
+        self.assertNotIn(
+            "문서를 읽지 못했다", reason,
+            msg=("발견 경로를 프로세스 cwd 에 대고 열었다 — 날조된 구조 실패 사유다: "
+                 f"{reason!r}"))
+
+
+class TestValidationBlockWritesBeforeEmit(unittest.TestCase):
+    """구조-실패 block 도 AC7.1/AC7.2 계약을 진다 (FIX 6).
+
+    이 경로는 dispatch 경로와 **별개로** write-before-print 와 "write 실패 →
+    무-emit" 을 구현한다. AC7.3.1 정적 락은 `rewrite_state` 만 보므로 여기를 못 본다.
+    뒤집으면 `validation_attempts` 를 못 올린 채 매 턴 block 이 나가는 무한 루프가
+    되는데, 그것이 바로 AC7.2 가 쓰여진 이유다.
+    """
+
+    def test_unwritable_state_suppresses_the_block(self):
+        session_id = "test-valblock-rofail"
+        repo = _repo_with_broken_scope_doc(session_id, "")
+        self.addCleanup(shutil.rmtree, repo, True)
+        state = repo / ".claude" / "spec-distill" / session_id / "state.local.md"
+        parent = state.parent
+        orig_state, orig_parent = state.stat().st_mode, parent.stat().st_mode
+        try:
+            os.chmod(state, 0o444)
+            os.chmod(parent, 0o555)
+            r = _run_stop(repo, session_id)
+        finally:
+            os.chmod(parent, orig_parent)
+            os.chmod(state, orig_state)
+
+        self.assertEqual(r.returncode, 0, msg=f"훅이 죽었다: {r.stderr}")
+        self.assertEqual(
+            r.stdout.strip(), "",
+            msg=("카운터를 못 올렸는데 block 을 냈다 — 매 턴 반복되는 무한 루프다: "
+                 f"{r.stdout!r}"))
+        self.assertIn(
+            "구조 검증 기록 실패", r.stderr,
+            msg=f"조용히 삼켰다 (loud 하되 루프하지 않아야 한다): {r.stderr!r}")
+
+
+class TestLedgerBugIsNotSwallowed(unittest.TestCase):
+    """원장 **파싱 버그**가 "조회 실패" 로 둔갑해 Layer 1 을 끄면 안 된다 (FIX 3).
+
+    발견 쪽 except 에 대해 이 리포가 이미 확립한 논거와 같다: 넓힌 except 는
+    게이트를 조용히 끄고, exit 0 의 stderr 는 사용자에게 전달되지 않는다.
+    `arm_ledger` 자체가 없는 경우(import 프로브의 진짜 실패 모드)만 삼킨다.
+
+    짝: 음(파싱 버그는 안 삼킴) + 양(모듈 부재는 삼키고 살아남음).
+    """
+
+    def _drive(self, stub):
+        return _drive_main(lambda *_a, **_k: [], modules={"arm_ledger": stub})
+
+    def test_negative_parse_bug_surfaces(self):
+        stub = types.SimpleNamespace(
+            VALIDATION_ATTEMPT_CAP=3,
+            validation_attempts=lambda _b: (_ for _ in ()).throw(
+                RuntimeError("원장 파서 버그")),
+        )
+        raised, stdout = self._drive(stub)
+        self.assertIsInstance(
+            raised, RuntimeError,
+            msg=("원장 파싱 버그가 삼켜졌다 — except 절이 ImportError 보다 넓다. "
+                 f"stdout={stdout!r}"))
+
+    def test_positive_missing_module_degrades_without_dying(self):
+        raised, stdout = self._drive(None)   # sys.modules[x] = None → ImportError
+        self.assertIsNone(
+            raised, msg=f"arm_ledger 부재가 훅을 죽였다: {raised!r}")
+        self.assertEqual(
+            stdout.strip(), "",
+            msg=f"원장 없이 block 을 냈다 — 상한을 셀 수 없는 상태다: {stdout!r}")
 
 
 if __name__ == "__main__":

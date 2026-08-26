@@ -327,10 +327,18 @@ def main() -> int:
                 continue
             by_key[c.key] = c
             validation_pool.append(c.key)
-    except Exception as exc:  # noqa: BLE001 — loud degradation
-        # 원장을 못 읽으면 어떤 문서가 상한에 닿았는지 알 수 없다. 그 상태에서 검증하면
-        # 상한 없는 block 루프가 되므로(CLAUDE.md: Unbounded autonomy) 이번 턴의 검증만
-        # 접는다. dispatch 경로는 자기 fail-open 을 갖는다.
+    except ImportError as exc:
+        # **import 프로브의 실패 모드만** 잡는다. `Exception` 으로 넓히면
+        # `validation_attempts`·`is_inflight` 안의 진짜 버그가 "원장 조회 실패" 로
+        # 둔갑해 Layer 1 이 그 턴 내내 꺼진다 — 위 발견 except 에 대해 이 파일이
+        # 이미 적어 둔 논거("게이트가 조용히 꺼진다")가 여기에도 그대로 적용되고,
+        # exit 0 의 stderr 는 전달되지 않으므로 사용자는 알 방법이 없다. 원장 파싱
+        # 버그는 크래시로 드러나는 편이 낫다.
+        #
+        # 이 분기 자체는 거의 도달하지 않는다: `discover_candidates` 가 모듈 최상단에서
+        # `arm_ledger` 를 import 하므로, 정말 없다면 훅은 여기 오기 전에 죽는다.
+        # 그래도 남긴다 — 상한을 못 세는 상태에서 검증하면 상한 없는 block 루프가
+        # 되므로(CLAUDE.md: Unbounded autonomy) 이번 턴의 검증만 접는 것이 옳다.
         ledger = None
         validation_pool = []
         print(
@@ -338,10 +346,13 @@ def main() -> int:
             file=sys.stderr,
         )
     if capped:
-        # A14 — 상한에 닿은 문서는 검증도 dispatch 도 하지 않는다. 조용히가 아니다.
+        # A14 의 **검증 절반**만 여기서 집행된다. 나머지 절반(상한 도달 문서를 dispatch
+        # 대상에서도 빼기)은 dispatch 대상 선택 술어 자체이므로 그 선택을 만드는 Task
+        # 12b 의 몫이다. 그러니 이 문구도 검증만 주장한다 — 없는 집행을 주장하는 메시지는
+        # 그것만으로 결함이고, 다른 Task 를 기다린다고 참이 되지 않는다.
         print(
             f"[spec-distill] 구조 검증 상한({val_cap}회)에 닿아 이번 세션에서 "
-            f"자동 검증·dispatch 를 하지 않는 문서: {', '.join(capped)}",
+            f"자동 구조 검증을 하지 않는 문서: {', '.join(capped)}",
             file=sys.stderr,
         )
     picked, next_cursor = select_keys(validation_pool, cursor, CANDIDATE_CAP)
@@ -375,7 +386,7 @@ def main() -> int:
         if reached_cap:
             lines.append(
                 f"[spec-distill] 다음 문서는 구조 검증이 {val_cap}회 실패해 이 세션에서 "
-                f"자동 검증·dispatch 를 중단한다: {', '.join(reached_cap)}. "
+                f"자동 구조 검증을 중단한다: {', '.join(reached_cap)}. "
                 "리뷰가 필요하면 reviewing-spec 을 직접 호출하라."
             )
         body_after = set_cursor(body_after, cursor)
