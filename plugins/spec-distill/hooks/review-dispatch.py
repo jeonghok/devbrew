@@ -1,29 +1,38 @@
 #!/usr/bin/env python3
-"""spec-distill Stop hook — review dispatch enforcer (v0.25.0: dispatch_attempts
-G6 cap via arm_ledger; the review-in-progress lock this file carried since
-v0.18.0 was removed in v0.25.0 — re-dispatch is now guarded twice: pending-strip
-on reviewing-spec entry (연료 제거) and the `armed_paths` gate in main()
-(authoritative veto; 남은 stale pending 은 함께 정리를 **시도**하고 성공 여부를 stderr 로 보고). 진입 strip 하나만으로는 부족했다 —
-skill 이 Step 1 과 Step 3 을 분리된 두 bash 블록으로 실행하므로 Step 1 이 빠지면
-pending 이 살아남는다).
+"""spec-distill Stop hook — 발견 · 구조 검증 · 리뷰 dispatch.
 
-Reads state.local.md for the current session. If `pending_review:` block
-is present AND last_dispatched_at is empty or older than the redispatch TTL,
-emits stdout `{"decision":"block","reason":"...","systemMessage":"..."}` —
-the `decision:"block"` forces Claude Code to continue immediately (no user
-input wait), and `reason` is shown to Claude as a system message so the next
-turn first action becomes the reviewing-spec skill call.
+세 가지를 이 순서로 한다.
+
+1. **발견** — `discover_candidates.discover()` 가 `git status` 하나로 이 리포의
+   dirty·untracked 스코프 문서를 낸다. git 을 쓸 수 없으면 후보 0 과 **구별해서**
+   세션당 1회 advisory 를 내고 그 턴은 아무것도 하지 않는다(A16).
+2. **구조 검증** — 발견된 문서를 `parse_spec_structure` 의 순수 함수로 검사한다.
+   파서를 subprocess 로 부르지 않는다(A4): 훅 timeout 이 10초인데 호출마다
+   `timeout=10` 을 걸면 문서 하나가 느려도 훅 전체가 신호 없이 죽는다. 검증은
+   TTL 가드보다 **먼저** 돈다(A10) — 가드가 앞이면 dispatch 후 TTL 창 동안 Bash 로
+   쓴 깨진 문서의 검증이 통째로 건너뛰어진다. 실패가 하나라도 있으면 그 사유만
+   block 으로 나가고 dispatch 는 그 턴에 없다(A11).
+3. **dispatch** — `pending_review:` 블록이 있으면 `reviewing-spec` 을 다음 턴 첫
+   액션으로 강제한다. dispatch 시점에 그 문서를 in-flight 로 표시해(A12) 리뷰가
+   도는 동안 발견 결과에서 빠지게 한다.
+
+턴당 검증 상한(`CANDIDATE_CAP`)에는 커서 회전을 얹는다(A13). 정렬이 안정적이라는
+사실 자체가 기아의 원인이므로, 안정 정렬 위에 회전이 없으면 상한을 넘는 dirty
+문서의 뒤쪽이 영구히 검증되지 않는다.
 
 Ordering guarantee (AC7.1): `rewrite_state()` must complete (with fsync) BEFORE
 the JSON is printed. Reverse ordering races with a second Stop fire and
 produces a block storm. On rewrite OSError, the hook exits `{}` 0 (no block)
-to preserve the race-free TTL guard (AC7.2) — the L4b UserPromptSubmit
-reminder picks up the missed dispatch on the next user prompt.
+to preserve the race-free TTL guard (AC7.2·A15) — 발견은 무상태이므로 다음 Stop 이
+같은 문서를 다시 찾는다.
 
 Kill switches:
 - DEVBREW_SPEC_DISTILL_DISABLE=1
 - DEVBREW_SKIP_HOOKS=spec-distill:Stop  (or :review-dispatch)
 - DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=<int>  (default 30; self-ref cycle guard)
+
+이 훅의 kill switch 는 발견·검증·dispatch 를 **모두** 지배한다(A18) — 셋이 같은
+프로세스의 한 진입점 뒤에 있기 때문이다.
 """
 from __future__ import annotations
 
@@ -50,14 +59,147 @@ from hook_common import (  # noqa: E402
     parse_iso,
     state_file_for,
 )
+# 구조 검증은 **import 로** 한다 (A4). `cmd_*` CLI 래퍼가 아니라 그 아래의 순수
+# 함수를 직접 부른다 — 래퍼는 호출마다 파일을 자기가 다시 읽으므로 spec 모드에서
+# 같은 파일을 네 번 읽었고, 그 넷이 각각 자기 timeout 을 들고 훅의 timeout 안에
+# 중첩됐다.
+from parse_spec_structure import (  # noqa: E402
+    find_missing_sections, load_blacklist, parse_frontmatter,
+    scan_ambiguity, scan_placeholders, validate_locked_decisions,
+)
+from resolve_mode import resolve_mode  # noqa: E402
+from discover_candidates import Candidate, GitUnavailable, discover  # noqa: E402
 
 # stdin 을 읽기 **전에** 표준 스트림을 UTF-8 로 고정한다. 위 import 들은 stdin 을
 # 건드리지 않으므로 이 자리가 여전히 "첫 문장"이다 (근거는 hook_common 쪽 docstring).
 configure_utf8_streams()
 
+BLACKLIST = SCRIPTS_DIR / "ambiguity-blacklist.txt"
+
+#: 한 턴에 구조 검증하는 문서 수의 상한. 훅 timeout 안에 들어가야 한다.
+#: 상한 단독으로는 기아를 만든다 — `select_keys` 의 회전이 그 짝이다(A13).
+CANDIDATE_CAP = 5
+
+GIT_UNAVAILABLE_ADVISORY = (
+    "[spec-distill] git 을 쓸 수 없어 스코프 문서 발견이 불가능하다 — 이 세션에서는 "
+    "구조 검증도 자동 리뷰 dispatch 도 일어나지 않는다. 리포에서 세션을 열거나 "
+    "reviewing-spec 을 직접 호출하라."
+)
+#: A16 은 advisory 를 **세션당 1회**로 요구한다 — 매 턴 반복하면 무시되는 신호가 된다.
+GIT_UNAVAILABLE_MARKER = "git_unavailable_advised: yes"
+
+#: 발견 커서. 0-indent 스칼라라 `arm_ledger._compose` 의 블록 재조립을 통과해도
+#: 살아남는다(그 함수는 자기가 아는 네 블록만 벗겨 내고 나머지는 `rest` 로 보존한다).
+DISCOVERY_CURSOR_RE = re.compile(r"^discovery_cursor:\s*(.+)$", re.MULTILINE)
+
+
+def read_cursor(body: str) -> str | None:
+    m = DISCOVERY_CURSOR_RE.search(body)
+    return m.group(1).strip() if m else None
+
+
+def set_cursor(body: str, cursor: str | None) -> str:
+    """커서를 멱등 기록 (순수 함수). `None` 은 "바꾸지 않는다"이지 "지운다"가 아니다.
+
+    치환에 lambda 를 쓰는 이유: 커서 값은 **경로**라 백슬래시가 들어올 수 있고,
+    `re.sub` 의 replacement 문자열은 `\\g` 류를 escape 로 해석한다.
+    """
+    if cursor is None:
+        return body
+    line = f"discovery_cursor: {cursor}"
+    if DISCOVERY_CURSOR_RE.search(body):
+        return DISCOVERY_CURSOR_RE.sub(lambda _m: line, body)
+    # 빈 줄로 띄운다 — `arm_ledger._compose` 가 블록을 재조립할 때 쓰는 구분과 같아서,
+    # 다음 원장 write 를 거쳐도 파일 모양이 흔들리지 않는다.
+    return body.rstrip() + f"\n\n{line}\n"
+
+
+def seed_body(body: str, state_path: Path) -> str:
+    """빈 원장에 최소 frontmatter 를 깐다 — `arm_ledger.mark_reviewed` 와 같은 모양."""
+    if body.strip():
+        return body
+    return f"---\nsession_id: {state_path.parent.name}\n---\n\n"
+
+
+def write_state_file(path: Path, body: str) -> None:
+    """AC7.1 — explicit flush + fsync for OS-level durability before any emit."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(body)
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def validate_document(path: str) -> list[str]:
+    """구조 실패 사유 목록. 빈 목록 = 통과. 파서를 subprocess 로 부르지 않는다 (A4)."""
+    mode = resolve_mode(path)
+    if mode is None:
+        return []
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return [f"문서를 읽지 못했다: {exc}"]
+    reasons: list[str] = []
+    if mode == "spec":
+        fm = parse_frontmatter(text)
+        if not fm or "name" not in fm:
+            reasons.append("spec mode: missing or invalid frontmatter")
+        errs = validate_locked_decisions(text)
+        if errs:
+            reasons.append("locked_decisions errors: " + "; ".join(errs))
+        missing = find_missing_sections(text)
+        if missing:
+            reasons.append(f"missing sections: {missing}")
+    for hit in scan_ambiguity(text, load_blacklist(BLACKLIST)):
+        reasons.append(f"ambiguity hit: line {hit['line']} \"{hit['phrase']}\"")
+    if mode == "design":
+        for hit in scan_placeholders(text):
+            reasons.append(f"placeholder hit: {hit['token']} at line {hit['line']}")
+    return reasons
+
+
+def select_keys(keys: list[str], cursor: str | None, cap: int) -> tuple[list[str], str | None]:
+    """정렬된 후보에서 커서 뒤부터 최대 `cap` 개를 고르고 다음 커서를 낸다.
+
+    커서가 없으면 처음부터. 커서가 목록에 없으면(문서가 커밋돼 후보에서 빠졌다)
+    그보다 큰 첫 키부터 — 목록이 바뀌어도 회전이 끊기지 않는다. 끝에 닿으면 감는다.
+    이것이 A13 의 진행 보장이다: 정렬이 안정적이라는 사실 자체가 기아의 원인이므로,
+    안정 정렬 위에 회전을 얹는다.
+    """
+    ordered = sorted(keys)
+    if not ordered:
+        return [], None
+    start = 0
+    if cursor is not None:
+        start = next((i for i, k in enumerate(ordered) if k > cursor), 0)
+    picked = [ordered[(start + i) % len(ordered)] for i in range(min(cap, len(ordered)))]
+    return picked, picked[-1]
+
+
+def emit_git_unavailable(state_path: Path, body: str) -> int:
+    """A16 — git 불능은 후보 0 과 다르다. 세션당 1회만 알린다 (설계 §4.5)."""
+    if GIT_UNAVAILABLE_MARKER in body:
+        return 0
+    try:
+        write_state_file(
+            state_path,
+            seed_body(body, state_path).rstrip() + f"\n{GIT_UNAVAILABLE_MARKER}\n",
+        )
+    except OSError as exc:
+        # 마커를 못 남기면 다음 턴에 같은 advisory 가 다시 나간다. 그 반복은
+        # 조용해지는 것보다 낫다 — A16 이 요구하는 것은 사용자가 **알게** 되는 것이다.
+        print(
+            f"[spec-distill] git-불능 마커 기록 실패 "
+            f"(advisory 가 다음 턴에도 반복된다): {exc}",
+            file=sys.stderr,
+        )
+    print(json.dumps({"systemMessage": GIT_UNAVAILABLE_ADVISORY}), flush=True)
+    return 0
+
 
 def rewrite_state(
     path: Path, body: str, now: datetime, spec_path: str, attempt_n: int,
+    cursor: str | None, inflight_key: str | None,
 ) -> None:
     body = re.sub(
         r"^pending_review:\n(?:  [^\n]*\n)*", "", body, flags=re.MULTILINE
@@ -80,11 +222,21 @@ def rewrite_state(
                 f"(non-fatal, 이번 dispatch에 G6 상한 미적용): {exc}",
                 file=sys.stderr,
             )
-    # AC7.1: explicit flush + fsync for OS-level durability before any emit.
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(body)
-        f.flush()
-        os.fsync(f.fileno())
+    # A12 — in-flight 표시도 **같은 write** 안에서 찍는다. 별도 write 로 가르면 그
+    # 사이에 두 번째 Stop 이 같은 문서를 다시 발견한다(설계 §4.1 이 pending 은퇴로
+    # 잃는 "리뷰 진행 중" 상태의 대체재가 바로 이 표시다).
+    if inflight_key is not None:
+        try:
+            import arm_ledger  # pyright: ignore[reportMissingImports]
+            body = arm_ledger.mark_inflight(body, inflight_key, new_ts)
+        except Exception as exc:  # noqa: BLE001 — loud degradation
+            print(
+                f"[spec-distill] in-flight 표시 실패 "
+                f"(non-fatal, 리뷰 중인 문서가 다시 발견될 수 있다): {exc}",
+                file=sys.stderr,
+            )
+    body = set_cursor(body, cursor)
+    write_state_file(path, body)
 
 
 def main() -> int:
@@ -103,31 +255,149 @@ def main() -> int:
     if session_id is None:
         return 0
     state_path = state_file_for(session_id)
-    if not state_path.exists():
-        return 0
+    # 상태 파일 **부재는 빈 원장**이다. 예전에는 여기서 return 0 했는데, 그때는
+    # `pending_review:` 가 유일한 연료라 파일이 없으면 볼 것이 정말 없었다. 발견은
+    # 상태가 아니라 git 에서 오므로 이제 파일 없이도 돌아야 한다.
+    body = ""
+    if state_path.exists():
+        try:
+            body = state_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            # UnicodeDecodeError 는 ValueError 하위라 OSError 로는 잡히지 않는다 — 좁게
+            # 잡으면 판독 불가 원장이 훅을 traceback 으로 죽여 dispatch 자체가 사라진다
+            # (리뷰를 *덜* 하는 방향, Law 1 이 금지하는 쪽). arm_ledger._read_body 는
+            # 이미 두 예외를 함께 잡는다 — 형제 소비자 정렬.
+            #
+            # rc 0 + 조용함은 답이 아니다. 크래시(rc≠0)는 최소한 사용자에게 보였는데,
+            # exit 0 의 stderr 는 전달되지 않는다 — 판독 불가 파일은 스스로 낫지 않으므로
+            # 이 세션의 리뷰 게이트가 **조용히 영구히** 꺼진다. 그렇다고 `decision:"block"`
+            # 을 낼 수도 없다: block storm 가드(AC7.2)가 기대는 `last_dispatched_at` 이
+            # 바로 그 못 읽는 파일 안에 있어 매 Stop 마다 무한히 block 을 내게 된다.
+            # 그래서 **loud 하되 루프하지 않는** 형태 — systemMessage 만 낸다.
+            print(f"[spec-distill] state read failed (non-fatal): {e}", file=sys.stderr)
+            print(json.dumps({
+                "systemMessage": (
+                    f"[spec-distill] arm-once:state-unreadable — state.local.md 판독 불가로 "
+                    f"자동 리뷰 dispatch 가 중단됐다 "
+                    f"({state_path}). 파일을 복구하거나 reviewing-spec 을 직접 호출하라."
+                ),
+            }), flush=True)
+            return 0
+    now = datetime.now(timezone.utc)
+    # --- 발견 (A16) — git 은 상계, 판정은 canonical_key ---
+    # **`GitUnavailable` 만 잡는다.** 넓히면 발견 모듈의 어떤 결함이든 "git 불능"으로
+    # 둔갑해 게이트가 조용히 꺼진다 — 이 릴리스가 없애려는 "리뷰가 덜 되는 방향"
+    # 그 자체이고, 게다가 사용자가 보는 문구가 사실과 다르다. 발견 모듈의 버그는
+    # 크래시로 보이는 편이 낫다(exit 0 의 stderr 는 전달되지 않는다).
     try:
-        body = state_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as e:
-        # UnicodeDecodeError 는 ValueError 하위라 OSError 로는 잡히지 않는다 — 좁게
-        # 잡으면 판독 불가 원장이 훅을 traceback 으로 죽여 dispatch 자체가 사라진다
-        # (리뷰를 *덜* 하는 방향, Law 1 이 금지하는 쪽). spec-write-validator.py 와
-        # arm_ledger._read_body 는 이미 두 예외를 함께 잡는다 — 형제 소비자 정렬.
-        #
-        # rc 0 + 조용함은 답이 아니다. 크래시(rc≠0)는 최소한 사용자에게 보였는데,
-        # exit 0 의 stderr 는 전달되지 않는다 — 판독 불가 파일은 스스로 낫지 않으므로
-        # 이 세션의 리뷰 게이트가 **조용히 영구히** 꺼진다. 그렇다고 `decision:"block"`
-        # 을 낼 수도 없다: block storm 가드(AC7.2)가 기대는 `last_dispatched_at` 이
-        # 바로 그 못 읽는 파일 안에 있어 매 Stop 마다 무한히 block 을 내게 된다.
-        # 그래서 **loud 하되 루프하지 않는** 형태 — systemMessage 만 낸다.
-        print(f"[spec-distill] state read failed (non-fatal): {e}", file=sys.stderr)
+        cands = discover()
+    except GitUnavailable as exc:
+        print(f"[spec-distill] 스코프 문서 발견 불가 (git): {exc}", file=sys.stderr)
+        return emit_git_unavailable(state_path, body)
+    # --- 제외: armed / in-flight / 검증 상한 (A12·A14) ---
+    cursor = read_cursor(body)
+    by_key: dict[str, Candidate] = {}
+    eligible: list[str] = []
+    capped: list[str] = []
+    val_cap = 0
+    ledger = None
+    try:
+        import arm_ledger  # pyright: ignore[reportMissingImports]
+        ledger = arm_ledger
+        val_cap = arm_ledger.VALIDATION_ATTEMPT_CAP
+        armed = set(arm_ledger.armed_keys(body))
+        val_att = arm_ledger.validation_attempts(body)
+        for c in cands:
+            if c.key in armed:
+                continue
+            if arm_ledger.is_inflight(body, c.path, now):
+                continue
+            if val_att.get(c.key, 0) >= val_cap:
+                capped.append(c.key)
+                continue
+            by_key[c.key] = c
+            eligible.append(c.key)
+    except Exception as exc:  # noqa: BLE001 — loud degradation
+        # 원장을 못 읽으면 어떤 문서가 이미 리뷰됐는지·상한에 닿았는지 알 수 없다.
+        # 그 상태에서 검증하면 상한 없는 block 루프가 되므로(CLAUDE.md: Unbounded
+        # autonomy) 이번 턴의 검증만 접는다. dispatch 경로는 자기 fail-open 을 갖는다.
+        ledger = None
+        eligible = []
+        print(
+            f"[spec-distill] 원장 조회 실패 (non-fatal, 이번 턴 구조 검증 생략): {exc}",
+            file=sys.stderr,
+        )
+    if capped:
+        # A14 — 상한에 닿은 문서는 검증도 dispatch 도 하지 않는다. 조용히가 아니다.
+        print(
+            f"[spec-distill] 구조 검증 상한({val_cap}회)에 닿아 이번 세션에서 "
+            f"자동 검증·dispatch 를 하지 않는 문서: {', '.join(capped)}",
+            file=sys.stderr,
+        )
+    picked, next_cursor = select_keys(eligible, cursor, CANDIDATE_CAP)
+    if picked:
+        cursor = next_cursor
+    # --- 구조 검증 (A10 — TTL 가드보다 먼저) ---
+    failures: list[str] = []
+    reached_cap: list[str] = []
+    # frontmatter 는 **원장 함수를 태우기 전에** 깐다. `record_validation` 은 빈 body 를
+    # 받으면 블록 하나만 있는 body 를 내놓는데, 그건 이미 비어 있지 않아 나중에
+    # seed 해도 늦다 — 다른 writer 가 전부 남기는 `session_id:` 만 이 파일에서 사라진다.
+    body_after = seed_body(body, state_path)
+    if ledger is not None:
+        for key in picked:
+            reasons = validate_document(by_key[key].path)
+            if not reasons:
+                continue
+            failures.append(f"- {key}: " + "; ".join(reasons))
+            n = ledger.next_validation(body_after, key)
+            body_after = ledger.record_validation(body_after, key, n)
+            if n >= val_cap:
+                reached_cap.append(key)
+    if failures:
+        # A11 — 한 턴에 block 은 하나. 구조 실패 사유만 내고 dispatch 는 그 턴에 없다.
+        # 구조가 깨진 문서를 리뷰어에게 보내면 그 라운드는 rereview_count 만 태운다.
+        lines = [
+            "MANDATORY: 다음 turn 첫 액션으로 아래 구조 실패를 고친다. "
+            "고치기 전에는 자동 리뷰 dispatch 가 일어나지 않는다.",
+        ]
+        lines.extend(failures)
+        if reached_cap:
+            lines.append(
+                f"[spec-distill] 다음 문서는 구조 검증이 {val_cap}회 실패해 이 세션에서 "
+                f"자동 검증·dispatch 를 중단한다: {', '.join(reached_cap)}. "
+                "리뷰가 필요하면 reviewing-spec 을 직접 호출하라."
+            )
+        body_after = set_cursor(body_after, cursor)
+        try:
+            write_state_file(state_path, body_after)
+        except OSError as e:
+            # A15 — loud 하되 루프하지 않는다. 카운터를 못 올린 채 block 을 내면
+            # 상한이 영원히 오지 않는다.
+            print(
+                f"[spec-distill] 구조 검증 기록 실패 (non-fatal, block 생략): {e}",
+                file=sys.stderr,
+            )
+            return 0
         print(json.dumps({
-            "systemMessage": (
-                f"[spec-distill] arm-once:state-unreadable — state.local.md 판독 불가로 "
-                f"자동 리뷰 dispatch 가 중단됐다 "
-                f"({state_path}). 파일을 복구하거나 reviewing-spec 을 직접 호출하라."
-            ),
+            "decision": "block",
+            "reason": "\n".join(lines),
+            "systemMessage": "[spec-distill] 스코프 문서 구조 검증 실패 — 이번 turn 은 리뷰 dispatch 없음",
         }), flush=True)
         return 0
+    if picked and cursor != read_cursor(body):
+        # 커서는 **통과했을 때도** 전진해야 한다. 상한을 넘는 dirty 문서가 전부
+        # 통과하면 rewrite 가 한 번도 안 일어나고, 그러면 매 턴 같은 앞쪽 N개만
+        # 다시 검증돼 뒤쪽이 굶는다 — 상한이 만드는 기아 그 자체(A13).
+        try:
+            write_state_file(
+                state_path, set_cursor(seed_body(body, state_path), cursor))
+        except OSError as e:
+            print(
+                f"[spec-distill] 발견 커서 기록 실패 "
+                f"(non-fatal, 다음 턴이 같은 구간을 다시 본다): {e}",
+                file=sys.stderr,
+            )
     m = PENDING_RE.search(body)
     if not m:
         return 0  # no pending dispatch
@@ -136,7 +406,6 @@ def main() -> int:
         ttl_sec = int(os.environ.get("DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC", "30"))
     except ValueError:
         ttl_sec = 30
-    now = datetime.now(timezone.utc)
     ld = LAST_DISPATCHED_RE.search(body)
     if ld:
         last = parse_iso(ld.group(1))
@@ -202,10 +471,12 @@ def main() -> int:
     # print 나중)이 그대로 성립한다 — 반환값 대입으로 바꾸면 그 락이 호출을 못 본다.
     attempt_n = 0
     cap = 0
+    inflight_key = None
     try:
         import arm_ledger  # pyright: ignore[reportMissingImports]
         attempt_n = arm_ledger.next_attempt(body, spec_path)
         cap = arm_ledger.DISPATCH_ATTEMPT_CAP
+        inflight_key = arm_ledger.canonical_key(spec_path)
     except Exception as exc:  # noqa: BLE001 — loud degradation
         print(
             f"[spec-distill] dispatch 시도 카운트 실패 "
@@ -253,13 +524,13 @@ def main() -> int:
     msg = " ".join(msg_lines)
     # AC7.1: rewrite BEFORE emit. AC7.2: rewrite-fail → no emit (block storm guard).
     try:
-        rewrite_state(state_path, body, now, spec_path, attempt_n)
+        rewrite_state(state_path, body, now, spec_path, attempt_n, cursor, inflight_key)
     except OSError as e:
         print(
             f"[spec-distill] state rewrite failed (non-fatal, dispatch suppressed): {e}",
             file=sys.stderr,
         )
-        return 0  # empty stdout, no decision:block — L4b reminder picks up on next prompt
+        return 0  # empty stdout, no decision:block — 발견은 무상태라 다음 Stop 이 다시 찾는다
     print(json.dumps({
         "decision": "block",
         "reason": msg,

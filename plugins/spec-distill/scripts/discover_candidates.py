@@ -21,7 +21,14 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 from arm_ledger import canonical_key  # noqa: E402 # pyright: ignore[reportMissingImports]
 
-#: Stop 훅 전체 timeout 이 10초라 git 호출은 그 절반으로 묶는다 (arm_ledger 와 같은 값).
+#: git 호출 **하나**의 상한 (arm_ledger 와 같은 값).
+#:
+#: "Stop 훅 timeout 10초의 절반" 이라는 초기 근거는 이 모듈에서 성립하지 않는다 —
+#: `discover()` 는 이 상한을 갖는 호출을 **둘** 직렬로 하므로(루트 해석 + status)
+#: 최악에는 발견 혼자 10초를 다 쓴다. 그래도 값을 낮추지 않는다: 이 상한은 예산
+#: 분할이 아니라 **행 걸림(hang) 방지 backstop** 이고, 낮추면 느린 리포에서 정상
+#: git 호출이 `GitUnavailable` 로 오분류돼 게이트가 통째로 꺼진다(A16 advisory 는
+#: 나가지만 그 턴의 검증·dispatch 는 사라진다 — 리뷰를 *덜* 하는 방향).
 GIT_TIMEOUT_SEC = 5
 
 #: rename/copy 항목만 `XY path\0origPath\0` 로 필드가 둘이다.
