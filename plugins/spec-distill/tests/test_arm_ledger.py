@@ -638,5 +638,88 @@ class TestWriteStateRejectsUnencodableValues(unittest.TestCase):
         self.assertIn("pending_review:", written[0].read_text(encoding="utf-8"))
 
 
+class TestInflightLedger(unittest.TestCase):
+    """A12 — 리뷰 진행 중인 문서는 발견 결과에서 제외된다."""
+
+    K = "docs/superpowers/specs/x-design.md"
+    BODY = "---\nsession_id: s\n---\n\n"
+
+    def test_mark_then_read(self):
+        b = arm_ledger.mark_inflight(self.BODY, self.K, "2026-08-23T00:00:00Z")
+        self.assertEqual(arm_ledger.inflight(b), {self.K: "2026-08-23T00:00:00Z"})
+
+    def test_clear_removes_only_that_key(self):
+        b = arm_ledger.mark_inflight(self.BODY, self.K, "2026-08-23T00:00:00Z")
+        b = arm_ledger.mark_inflight(b, self.K.replace("x-", "y-"), "2026-08-23T00:00:00Z")
+        b = arm_ledger.clear_inflight(b, self.K)
+        self.assertEqual(list(arm_ledger.inflight(b)), [self.K.replace("x-", "y-")])
+
+    def test_armed_and_attempts_blocks_survive(self):
+        b = arm_ledger.mark_armed(self.BODY, self.K)
+        b = arm_ledger.record_attempt(b, self.K, 2)
+        b = arm_ledger.mark_inflight(b, self.K, "2026-08-23T00:00:00Z")
+        self.assertIn(self.K, arm_ledger.armed_keys(b))
+        self.assertEqual(arm_ledger.attempts(b)[self.K], 2)
+        self.assertIn(self.K, arm_ledger.inflight(b))
+
+    def test_expired_inflight_is_not_inflight(self):
+        from datetime import datetime, timezone, timedelta
+        t0 = datetime(2026, 8, 23, 0, 0, 0, tzinfo=timezone.utc)
+        b = arm_ledger.mark_inflight(self.BODY, self.K, "2026-08-23T00:00:00Z")
+        self.assertTrue(arm_ledger.is_inflight(b, self.K, t0, 900))
+        self.assertFalse(
+            arm_ledger.is_inflight(b, self.K, t0 + timedelta(seconds=901), 900))
+
+    def test_unparseable_timestamp_is_not_inflight(self):
+        # 판독 불가 타임스탬프로 게이트가 영구히 닫히면 Law 1 이 금지하는 방향
+        # (under-review) 으로 fail 한다. 만료로 읽어 dispatch 쪽으로 연다.
+        from datetime import datetime, timezone
+        b = arm_ledger.mark_inflight(self.BODY, self.K, "not-a-time")
+        self.assertFalse(arm_ledger.is_inflight(
+            b, self.K, datetime(2026, 8, 23, tzinfo=timezone.utc), 900))
+
+    def test_mark_reviewed_clears_inflight(self):
+        d = Path(tempfile.mkdtemp()) / "state.local.md"
+        d.parent.mkdir(parents=True, exist_ok=True)
+        d.write_text(arm_ledger.mark_inflight(self.BODY, self.K, "2026-08-23T00:00:00Z"),
+                     encoding="utf-8")
+        self.assertTrue(arm_ledger.mark_reviewed(d, self.K))
+        b = d.read_text(encoding="utf-8")
+        self.assertIn(self.K, arm_ledger.armed_keys(b))
+        self.assertNotIn(self.K, arm_ledger.inflight(b))
+
+    def test_default_ttl_sec_reaches_the_module_constant(self):
+        # R42 — 리터럴 900을 박지 않는다. `ttl_sec`를 안 넘기고도(기본값 경유)
+        # 실제로 쓰이는 값이 `INFLIGHT_TTL_SEC` 자신인지를 잰다 — reachability, 숫자가
+        # 아니라. 상수를 바꾸면 이 경계도 같이 움직여야 한다.
+        from datetime import datetime, timezone, timedelta
+        t0 = datetime(2026, 8, 23, 0, 0, 0, tzinfo=timezone.utc)
+        b = arm_ledger.mark_inflight(self.BODY, self.K, "2026-08-23T00:00:00Z")
+        ttl = arm_ledger.INFLIGHT_TTL_SEC
+        self.assertTrue(
+            arm_ledger.is_inflight(b, self.K, t0 + timedelta(seconds=ttl - 1)))
+        self.assertFalse(
+            arm_ledger.is_inflight(b, self.K, t0 + timedelta(seconds=ttl + 1)))
+
+
+class TestValidationAttempts(unittest.TestCase):
+    """A14 — 검증 실패 상한. dispatch_attempts 와 **별도** 카운터다."""
+
+    K = "docs/superpowers/specs/x-design.md"
+    BODY = "---\nsession_id: s\n---\n\n"
+
+    def test_separate_from_dispatch_attempts(self):
+        b = arm_ledger.record_validation(self.BODY, self.K, 2)
+        self.assertEqual(arm_ledger.validation_attempts(b)[self.K], 2)
+        self.assertEqual(arm_ledger.attempts(b), {})
+
+    def test_cap_is_three_and_independent(self):
+        self.assertEqual(arm_ledger.VALIDATION_ATTEMPT_CAP, 3)
+        self.assertEqual(arm_ledger.DISPATCH_ATTEMPT_CAP, 3)
+        # 합치면 구조 실패 2회 뒤에 리뷰 dispatch 가 1회밖에 남지 않는다.
+        b = arm_ledger.record_validation(self.BODY, self.K, 3)
+        self.assertEqual(arm_ledger.next_attempt(b, self.K), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

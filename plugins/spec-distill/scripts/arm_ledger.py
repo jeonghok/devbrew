@@ -37,7 +37,7 @@ from state_path import SESSION_PATTERN  # noqa: E402 # pyright: ignore[reportMis
 # `state_file_for` 는 훅과 공유하는 정의다 — 같은 플러그인 안이므로 import 하나로
 # 중복이 소멸한다(설계 §6.1③). 여기서 재-export 되므로 `arm_ledger.state_file_for`
 # 로 부르는 소비자(spec-write-validator.py)는 그대로 동작한다.
-from hook_common import state_file_for  # noqa: E402,F401 # pyright: ignore[reportMissingImports]
+from hook_common import parse_iso, state_file_for  # noqa: E402,F401 # pyright: ignore[reportMissingImports]
 
 PREFIX = "docs/superpowers/specs/"
 
@@ -50,6 +50,17 @@ GIT_TIMEOUT_SEC = 5
 PENDING_RE = re.compile(r"^pending_review:\n(?:  [^\n]*\n)*", re.MULTILINE)
 ARMED_RE = re.compile(r"^armed_paths:\n((?:  - [^\n]+\n)*)", re.MULTILINE)
 ATTEMPTS_RE = re.compile(r"^dispatch_attempts:\n((?:  [^\n]+\n)*)", re.MULTILINE)
+INFLIGHT_RE = re.compile(r"^inflight_paths:\n((?:  [^\n]+\n)*)", re.MULTILINE)
+VALIDATION_RE = re.compile(r"^validation_attempts:\n((?:  [^\n]+\n)*)", re.MULTILINE)
+
+#: 구조 검증 실패의 세션당·문서당 재시도 상한. `DISPATCH_ATTEMPT_CAP` 과 **별도**여야
+#: 한다 — 합치면 구조 실패 2회 뒤에 리뷰 dispatch 가 1회밖에 남지 않는다 (설계 §4.4).
+VALIDATION_ATTEMPT_CAP = 3
+
+#: in-flight 표시의 만료. 리뷰 소요보다 넉넉히 길되 무한은 아니다 — 리뷰가 중간에
+#: 죽으면 이 표시가 남아 게이트를 조용히 닫는데, 그 방향은 Law 1 이 금지하는
+#: under-review 다. 만료 뒤 재-dispatch 는 `DISPATCH_ATTEMPT_CAP` 이 상한을 준다.
+INFLIGHT_TTL_SEC = 900
 
 
 def canonical_key(raw_path: str) -> str | None:
@@ -118,21 +129,49 @@ def armed_keys(body: str) -> list[str]:
     return keys
 
 
-def attempts(body: str) -> dict[str, int]:
-    m = ATTEMPTS_RE.search(body)
-    if not m:
-        return {}
-    out: dict[str, int] = {}
-    for line in m.group(1).splitlines():
+def _parse_kv_lines(block: str) -> dict[str, str]:
+    """`  key: value` 줄들을 dict 로 — 세 원장 블록(attempts·inflight·
+    validation_attempts)이 공유하는 유일한 저수준 파서 (설계 §6.1). 값 변환(정수화 등)은
+    호출부 책임 — 이 함수는 문자열째로만 돌려준다.
+    """
+    out: dict[str, str] = {}
+    for line in block.splitlines():
         ls = line.strip()
         key, sep, val = ls.rpartition(": ")
         if not sep:
             continue
+        out[key.strip()] = val.strip()
+    return out
+
+
+def _parse_int_block(regex: re.Pattern[str], body: str) -> dict[str, int]:
+    m = regex.search(body)
+    if not m:
+        return {}
+    out: dict[str, int] = {}
+    for key, val in _parse_kv_lines(m.group(1)).items():
         try:
-            out[key.strip()] = int(val.strip())
+            out[key] = int(val)
         except ValueError:
             continue
     return out
+
+
+def attempts(body: str) -> dict[str, int]:
+    return _parse_int_block(ATTEMPTS_RE, body)
+
+
+def inflight(body: str) -> dict[str, str]:
+    """key → in-flight 로 마킹된 ISO 타임스탬프 문자열 (A12)."""
+    m = INFLIGHT_RE.search(body)
+    if not m:
+        return {}
+    return _parse_kv_lines(m.group(1))
+
+
+def validation_attempts(body: str) -> dict[str, int]:
+    """구조 검증 실패 카운터 — `attempts`(dispatch_attempts) 와 별도 블록 (A14)."""
+    return _parse_int_block(VALIDATION_RE, body)
 
 
 def _read_body(state_file: Path) -> str | None:
@@ -158,9 +197,26 @@ def _read_body(state_file: Path) -> str | None:
         return None
 
 
-def _compose(body: str, keys: list[str], att: dict[str, int]) -> str:
-    """원장 두 블록을 재조립. 나머지 본문(frontmatter·pending·타임스탬프)은 보존."""
-    rest = ATTEMPTS_RE.sub("", ARMED_RE.sub("", body)).rstrip()
+def _compose(
+    body: str,
+    keys: list[str],
+    att: dict[str, int],
+    infl: dict[str, str] | None = None,
+    val: dict[str, int] | None = None,
+) -> str:
+    """원장 네 블록을 재조립. 나머지 본문(frontmatter·pending·타임스탬프)은 보존.
+
+    `infl`·`val` 은 기본값 `None`(→ `{}`) 을 갖지만, **모든 호출부가 명시적으로
+    채워서 넘긴다** — 그렇지 않으면 body 에 이미 있던 inflight_paths·
+    validation_attempts 블록이 이 함수를 거치는 순간 조용히 사라진다(round-trip 이
+    아니라 삭제가 된다). 기본값은 오직 순수 함수로서의 안전한 시그니처를 위한
+    것이지, "생략해도 된다"는 뜻이 아니다.
+    """
+    infl = infl or {}
+    val = val or {}
+    rest = VALIDATION_RE.sub(
+        "", INFLIGHT_RE.sub("", ATTEMPTS_RE.sub("", ARMED_RE.sub("", body)))
+    ).rstrip()
     parts = [rest] if rest else []
     if keys:
         parts.append(
@@ -169,6 +225,14 @@ def _compose(body: str, keys: list[str], att: dict[str, int]) -> str:
         parts.append(
             "dispatch_attempts:\n"
             + "".join(f"  {k}: {n}\n" for k, n in sorted(att.items())).rstrip())
+    if infl:
+        parts.append(
+            "inflight_paths:\n"
+            + "".join(f"  {k}: {v}\n" for k, v in sorted(infl.items())).rstrip())
+    if val:
+        parts.append(
+            "validation_attempts:\n"
+            + "".join(f"  {k}: {n}\n" for k, n in sorted(val.items())).rstrip())
     return "\n\n".join(parts) + "\n"
 
 
@@ -273,7 +337,7 @@ def mark_armed(body: str, raw_path: str) -> str:
     keys = armed_keys(body)
     if key not in keys:
         keys.append(key)
-    return _compose(body, keys, attempts(body))
+    return _compose(body, keys, attempts(body), inflight(body), validation_attempts(body))
 
 
 def next_attempt(body: str, raw_path: str) -> int:
@@ -301,13 +365,85 @@ def record_attempt(body: str, raw_path: str, n: int) -> str:
     keys = armed_keys(body)
     if n >= DISPATCH_ATTEMPT_CAP and key not in keys:
         keys.append(key)
-    return _compose(body, keys, att)
+    return _compose(body, keys, att, inflight(body), validation_attempts(body))
+
+
+def mark_inflight(body: str, raw_path: str, now_iso: str) -> str:
+    """리뷰 dispatch 직전에 호출 — "지금 이 문서를 리뷰 중" 을 원장에 남긴다 (A12).
+
+    `is_inflight` 가 이 표시를 읽어 발견 결과에서 해당 문서를 제외한다. 리뷰가
+    정상 종료하면 `mark_reviewed` 가 지운다; 비정상 종료(crash)로 남으면 TTL
+    (`INFLIGHT_TTL_SEC`) 이 만료시켜 dispatch 쪽으로 되돌린다.
+    """
+    key = canonical_key(raw_path)
+    if key is None:
+        return body
+    infl = inflight(body)
+    infl[key] = now_iso
+    return _compose(body, armed_keys(body), attempts(body), infl, validation_attempts(body))
+
+
+def clear_inflight(body: str, raw_path: str) -> str:
+    """in-flight 표시를 그 키만 지운다 (다른 블록은 보존, 순수 함수)."""
+    key = canonical_key(raw_path)
+    if key is None:
+        return body
+    infl = inflight(body)
+    if key not in infl:
+        return body
+    del infl[key]
+    return _compose(body, armed_keys(body), attempts(body), infl, validation_attempts(body))
+
+
+def is_inflight(body: str, raw_path: str, now, ttl_sec: int = INFLIGHT_TTL_SEC) -> bool:
+    """리뷰가 지금 이 문서에 대해 진행 중인가 — 발견 단계가 제외 판정에 쓴다 (A12).
+
+    **판독 불가 타임스탬프는 만료로 읽는다**(→ False, dispatch 쪽으로 연다). 손상된
+    원장이 게이트를 영구히 닫으면(under-review) Law 1 이 금지하는 방향이기 때문이다.
+    재-dispatch 의 상한은 `DISPATCH_ATTEMPT_CAP` 이 별도로 준다.
+
+    `ttl_sec` 기본값은 `INFLIGHT_TTL_SEC` — 호출부가 명시하지 않으면 그 상수가
+    실제로 쓰인다(리터럴을 이 함수 안에 다시 박지 않는다).
+    """
+    key = canonical_key(raw_path)
+    if key is None:
+        return False
+    ts = inflight(body).get(key)
+    if ts is None:
+        return False
+    parsed = parse_iso(ts)
+    if parsed is None:
+        return False
+    return (now - parsed).total_seconds() < ttl_sec
+
+
+def next_validation(body: str, raw_path: str) -> int:
+    """이번 구조 검증이 몇 번째 시도인지 (순수 함수). `next_attempt` 와 같은 모양이나
+    `validation_attempts` 블록을 읽는다 — `DISPATCH_ATTEMPT_CAP` 과 별도 카운터(A14)."""
+    key = canonical_key(raw_path)
+    if key is None:
+        return 0
+    return validation_attempts(body).get(key, 0) + 1
+
+
+def record_validation(body: str, raw_path: str, n: int) -> str:
+    """구조 검증 실패 카운터를 기록 (순수 함수). `record_attempt` 와 블록이 다르다 —
+    합치면 구조 실패 2회 뒤에 리뷰 dispatch 가 1회밖에 남지 않는다(설계 §4.4)."""
+    key = canonical_key(raw_path)
+    if key is None or n <= 0:
+        return body
+    val = validation_attempts(body)
+    val[key] = n
+    return _compose(body, armed_keys(body), attempts(body), inflight(body), val)
 
 
 def mark_reviewed(state_file: Path, raw_path: str) -> bool:
-    """verdict 시점 기록: armed_paths 추가 + dispatch_attempts 항목 삭제 (§5.2).
+    """verdict 시점 기록: armed_paths 추가 + dispatch_attempts 항목 삭제 + in-flight
+    표시 제거 (§5.2, A12).
 
     완료된 리뷰는 시도 이력을 남길 이유가 없고, 남기면 다음 계산과 skip_reason에 섞인다.
+    in-flight 표시도 같은 이유로 지운다 — verdict 가 났는데 표시가 남으면 다음
+    발견에서 이 문서가 "리뷰 진행 중"으로 잘못 제외된다.
     """
     key = canonical_key(raw_path)
     if key is None:
@@ -328,9 +464,13 @@ def mark_reviewed(state_file: Path, raw_path: str) -> bool:
         keys.append(key)
     att = attempts(body)
     att.pop(key, None)
+    body = clear_inflight(body, raw_path)
     try:
         state_file.parent.mkdir(parents=True, exist_ok=True)
-        state_file.write_text(_compose(body, keys, att), encoding="utf-8")
+        state_file.write_text(
+            _compose(body, keys, att, inflight(body), validation_attempts(body)),
+            encoding="utf-8",
+        )
     except OSError as exc:
         print(
             f"[spec-distill] arm_ledger: 원장 write 실패 — 리뷰 완료 미기록"
@@ -375,9 +515,38 @@ def strip_pending_file(state_file: Path, raw_path: str) -> bool:
     return True
 
 
+def clear_inflight_file(state_file: Path, raw_path: str) -> bool:
+    """CLI `clear-inflight` 진입점 (파일 I/O). 정상 경로는 `mark_reviewed` 가 이미
+    겸한다 — 이 CLI 는 리뷰가 crash 로 죽어 in-flight 표시만 수동으로 걷어내야 하는
+    복구 경로다. TTL 만료를 기다리지 않고 즉시 게이트를 열고 싶을 때 쓴다.
+    """
+    key = canonical_key(raw_path)
+    if key is None or not state_file.exists():
+        return False
+    body = _read_body(state_file)
+    if body is None:
+        # 다른 read-modify-write 함수들과 같은 이유 — 보존하고 멈춘다.
+        print(
+            "[spec-distill] arm_ledger: 원장 판독 불가 — 파일 보존, in-flight clear 안 함.",
+            file=sys.stderr,
+        )
+        return False
+    if key not in inflight(body):
+        return False
+    try:
+        state_file.write_text(clear_inflight(body, raw_path), encoding="utf-8")
+    except OSError as exc:
+        print(
+            f"[spec-distill] arm_ledger: in-flight clear write 실패: {exc}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
 def _usage() -> int:
     print(
-        "usage: arm_ledger.py {strip-pending|mark-reviewed} <sid> <raw_path>\n"
+        "usage: arm_ledger.py {strip-pending|mark-reviewed|clear-inflight} <sid> <raw_path>\n"
         "       arm_ledger.py check-born <raw_path>",
         file=sys.stderr,
     )
@@ -429,6 +598,9 @@ def main(argv: list[str]) -> int:
 
     if cmd == "strip-pending":
         strip_pending_file(sf, raw_path)
+        return 0
+    if cmd == "clear-inflight":
+        clear_inflight_file(sf, raw_path)
         return 0
     if cmd == "mark-reviewed":
         if not mark_reviewed(sf, raw_path):
