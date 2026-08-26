@@ -17,16 +17,19 @@ REL6="docs/superpowers/specs/2026-08-01-t6-design.md"
 new_doc "$REL6"
 emit6a=$(run_stop "$SID6")
 sf6="$(state_of "$SID6")"
+# **첫 dispatch 직후에** 잰다. 마지막에 재면 emit6c 가 다시 찍은 표시를 보게 되어
+# "첫 dispatch 가 표시를 남긴다"는 사실을 재지 못한다.
+marked6=0; grep -qE "^  $REL6: 20[0-9][0-9]-" "$sf6" && marked6=1
 emit6b=$(run_stop "$SID6")
 run_ledger clear-inflight "$SID6" "$WORK/$REL6" >/dev/null 2>&1
 emit6c=$(run_stop "$SID6")
 if echo "$emit6a" | jq -e '.decision == "block"' >/dev/null 2>&1 \
-  && grep -qE "^  $REL6: 20[0-9][0-9]-" "$sf6" \
+  && [[ $marked6 -eq 1 ]] \
   && [[ -z "$emit6b" ]] \
   && echo "$emit6c" | jq -e '.decision == "block"' >/dev/null 2>&1; then
   note PASS "T6: 리뷰 진행 중 재-Stop → 무-emit, in-flight 해제 후엔 다시 강제"
 else
-  note FAIL "T6 실패: a='$emit6a' b='$emit6b' c='$emit6c' state=$(cat "$sf6")"
+  note FAIL "T6 실패: a='$emit6a' marked=$marked6 b='$emit6b' c='$emit6c' state=$(cat "$sf6")"
 fi
 
 # --- T7: verdict 가 기록된 문서는 이후 편집돼도 다시 강제되지 않는다 ---
