@@ -175,6 +175,42 @@ class TestQgGc(unittest.TestCase):
         run_gc(self.tmp)
         self.assertFalse(folder.exists(), "publish-eligible.md 만 있는 세션 폴더가 수집되지 않음")
 
+    # M2 — 업그레이드 누수. 4.x 가 남긴 폴더는 유일한 파일이 `files.md` 인 경우가
+    # 있다(세션 tracker 가 파일을 적었지만 /qg 를 한 번도 안 돌린 세션). 5.0.0 이
+    # 그 생산자를 지워도 **이미 디스크에 있는 폴더는 남는다** — 어느 마커도 안 맞아
+    # 영원히 회수되지 않는다. 기존 사용자 전원에게 실재하는 누수다.
+    def test_legacy_4x_files_md_folder_collected(self):
+        root = Path(self.tmp)
+        folder = root / ".claude" / "quality-gates" / ("sess" + "c" * 8)
+        folder.mkdir(parents=True)
+        f = folder / "files.md"
+        f.write_text("- a.py\n", encoding="utf-8")
+        old = time.time() - 48 * 3600
+        os.utime(f, (old, old))
+        os.utime(folder, (old, old))
+        run_gc(self.tmp)
+        self.assertFalse(
+            folder.exists(),
+            "4.x 잔여 폴더(files.md 단독)가 회수되지 않는다 — 업그레이드 누수",
+        )
+
+    # 위 회수가 형제 디렉토리까지 넓히지 않았다는 음의 짝: 이름이 세션 패턴을
+    # 만족하고 TTL 도 넘겼지만 마커가 하나도 없는 폴더는 여전히 건드리지 않는다.
+    # (`test_baseline_cache_dir_survives_gc` 는 특정 이름을 재는 반면 이것은
+    # "마커 없음" 이라는 성질 자체를 잰다 — legacy 마커 추가가 식별을
+    # 「아무 폴더나」로 무너뜨리면 여기서 RED 다.)
+    def test_unmarked_sibling_dir_still_survives(self):
+        root = Path(self.tmp)
+        sib = root / ".claude" / "quality-gates" / "someothersibling"
+        sib.mkdir(parents=True)
+        f = sib / "not-a-marker.md"
+        f.write_text("x\n", encoding="utf-8")
+        old = time.time() - 48 * 3600
+        os.utime(f, (old, old))
+        os.utime(sib, (old, old))
+        run_gc(self.tmp)
+        self.assertTrue(f.exists(), "마커 없는 형제 디렉토리가 GC됐다")
+
 
 if __name__ == "__main__":
     unittest.main()

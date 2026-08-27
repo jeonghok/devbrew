@@ -67,6 +67,17 @@ Bash heredoc·`sed -i`로 쓴 파일을 애초에 보지 못했던 결함 — ma
   사라졌으므로 조용한 재활성화는 일어나지 않는다. **제3자 설치가 생기면 이 근거는
   바뀐다** — 그때는 알림 없는 즉시 제거가 아니라 최소 one-minor 창을 둔다.
 
+### Fixed
+- **4.x 잔여 세션 폴더가 영원히 회수되지 않던 누수** (`scripts/qg-gc.py`). 세션
+  tracker 만 돌고 `/qg` 를 한 번도 안 돌린 4.x 세션의 폴더는 유일한 파일이
+  `files.md` 라, 5.0.0 의 마커 목록(`pipeline.md`·`publish-eligible.md`·
+  `runtime-evidence.md`) 어디에도 걸리지 않아 sweep 이 매번 건너뛴다 — 업그레이드하는
+  기존 사용자 **전원**에게 실재하는 누수였다. `LEGACY_SESSION_MARKERS` 를 따로 두어
+  회수한다. 회귀 락: `tests/test_qg_gc.py` —
+  `test_legacy_4x_files_md_folder_collected`(양) +
+  `test_unmarked_sibling_dir_still_survives`(음: 마커 없는 형제 디렉토리는 그대로
+  살아남는다).
+
 ### Notes
 - 완료 오라클(3 용어: `post-tool-use-session-tracker`·`files.md`·`pre-pipeline-check`)은
   `tests/test_git_derived_scope.sh`·`tests/test_no_write_matcher_hooks.sh`·
@@ -75,6 +86,10 @@ Bash heredoc·`sed -i`로 쓴 파일을 애초에 보지 못했던 결함 — ma
   표면의 **부재**를 assert하는 락이라, 대상 문자열(실패 메시지·grep 대상 리터럴)을
   자기 본문에 반드시 담는다. 그 문자열이 몸체에 있는 것 자체가 락이 하는 일이므로,
   다른 살아있는 소비 표면과 같은 기준으로 셀 수 없다.
+- 위 오라클에 **네 번째 예외**가 붙는다: `scripts/qg-gc.py` 와 `tests/test_qg_gc.py`
+  가 `files.md` 를 담는다(위 Fixed 의 4.x 회수). 이것은 살아있는 **소비자** 표면이
+  아니라 **회수 마커**다 — 파일을 열지도 읽지도 않고 폴더를 세션 폴더로 식별하는 데만
+  쓴다. 4.x 잔여가 전부 TTL 을 지나간 뒤 이 마커와 함께 예외도 사라진다.
 
 
 ### Performance

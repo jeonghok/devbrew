@@ -48,6 +48,21 @@ SESSION_PATTERN = re.compile(r"^[A-Za-z0-9_-]{8,}$")
 # 목록에서 빠진 마커의 오판 방향은 "안 지움"(누수)이라 안전하다 — 반대 방향이 아니다.
 SESSION_MARKERS = ("pipeline.md", "publish-eligible.md", "runtime-evidence.md")
 
+# 4.x 가 남긴 폴더는 유일한 파일이 `files.md` 인 경우가 있다 — 세션 tracker 가 편집
+# 파일을 적었지만 `/qg` 를 한 번도 안 돌린 세션이다. 5.0.0 이 그 생산자를 지워도
+# **이미 디스크에 있는 폴더는 남는다**: 위 마커가 하나도 안 맞아 sweep 에서 매번
+# `continue` 되고, 기존 사용자 전원에게 영구 누수가 된다. 회수 마커를 따로 둔다.
+#
+# 이것도 열거지만 CLAUDE.md 가 금하는 열거와 실패 모드가 다르다. 금지되는 열거는
+# **미래**에 대해 fail-open 이다 — 내일 추가될 이름을 오늘 적을 수 없다. 이 목록의
+# 정의역은 **이미 닫힌 과거**다: 4.x 가 만들 수 있었던 산출물 집합은 확정돼 더
+# 늘지 않는다.
+#
+# 이 이름은 소비자가 아니라 **회수 마커**다 — 파일을 열지도, 내용을 읽지도 않고
+# 폴더를 세션 폴더로 식별하는 데만 쓴다(그래서 tracker 부활의 발판이 아니다).
+# 4.x 잔여가 전부 TTL 을 지나간 뒤 지운다.
+LEGACY_SESSION_MARKERS = ("files.md",)
+
 # TTL 계산 · 나이 판정 · 안전 삭제는 `shared/gc/gc_common.py` 정본(형제 사본
 # `scripts/gc_common.py`)이 갖는다. 여기 남는 것은 quality-gates 고유 본문이다 —
 # state root 표기(`ROOT`)와 세션 폴더 **식별**(`SESSION_MARKERS`, 위 주석의 이유).
@@ -57,7 +72,8 @@ SESSION_MARKERS = ("pipeline.md", "publish-eligible.md", "runtime-evidence.md")
 
 def _is_session_folder(folder: Path) -> bool:
     try:
-        return any((folder / name).is_file() for name in SESSION_MARKERS)
+        return any((folder / name).is_file()
+                   for name in SESSION_MARKERS + LEGACY_SESSION_MARKERS)
     except OSError:
         return False
 
