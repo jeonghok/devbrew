@@ -3,6 +3,10 @@
 
 로그 경로는 HOOKPROBE_LOG 로 준다. 없으면 stdout 으로만 낸다.
 사용법은 MEASUREMENT.md 참조.
+
+**경고** — 이 덤프는 훅 payload 를 통째로 적는다. payload 에는 프롬프트·명령줄·파일
+내용이 그대로 들어가 secret 이 섞일 수 있으니, HOOKPROBE_LOG 파일은 절대 커밋하거나
+공유하지 말고 측정이 끝나면 지운다.
 """
 import json
 import os
