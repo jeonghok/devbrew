@@ -60,6 +60,9 @@
 - **Korean-primary** — 주석·문서는 한국어 primary. 영어는 식별자·고유명사·기술어에 한정.
 - **파일 읽기는 명시적 UTF-8** — 생성 파일을 읽는 모든 파이썬 코드는 `encoding="utf-8"` 을 명시한다 (non-UTF-8 locale fail-open 방지).
 - **mutation 실행 환경** — `PYTHONDONTWRITEBYTECODE=1` 로 돌린다. 같은 길이 변이가 stale `.pyc` 를 못 넘어 거짓 GREEN/거짓 RED 를 낸다.
+- **락은 토큰의 «공존»이 아니라 «관계»를 건다.** 서로 다른 `grep -q` 를 `&&` 로 묶은 단언은 그 토큰들이 **같은 구성물 안에** 있다는 것을 재지 않는다 — 절 본문 어디에든 흩어져 있으면 통과한다. 정본은 **한 줄 안에서 관계를 요구하는 단일 정규식**이다. *실측 근거: Task 4 의 Step 5 단언이 `stall_episode` · `coverage_mapper_dispatched_episode` · `!=` 를 각각 grep 했는데, **같은 절에 계획이 직접 넣은 반례 설명문**(`3 != 4`)과 대입문이 셋을 전부 만족시켜 조건식을 지운 mutation 이 거짓 GREEN 을 냈다.* 계획이 그 절에 넣는 산문이 스스로 락을 무력화할 수 있으므로 특히 위험하다.
+  **판별법** — 그 단언을 만족시키는 «가짜» 본문을 한 문장 지어보라. 지어지면 이빨이 없다.
+  **아직 이 형태가 남아 있는 자리**: Task 5 Step 2 의 `exit_block` 3-grep 단언. 그 태스크가 같은 검사를 수행하고, 필요하면 관계형으로 바꾼다.
 - **변이 전에 커밋한다** — `git checkout -- <path>` 는 «마지막 변이»가 아니라 HEAD 로 되돌린다. 커밋하지 않은 채 변이하면 복원이 그 앞의 편집까지 지우고, 복원 후 clean tree 가 성공처럼 보인다. **이미 clean tree 면** `git add -A && git commit` 이 «nothing to commit» 으로 비-zero 를 내는데, 그건 실패가 아니라 *HEAD 가 이미 baseline* 이라는 뜻이다 — 멈추지 말고 그대로 변이로 진행한다. *실측 근거: Task 3 의 브리프는 미커밋 상태를 전제한 stash 레시피를 담았고, 앞 태스크가 이미 커밋돼 있어 그 스텝이 literal no-op 이었다.*
 - **락 메시지의 변수 뒤 한글은 반드시 중괄호** — `printf "${tot}개"`. `"$tot개"` 는 macOS bash 3.2 가 한글 `개` 의 선두 바이트를 변수명에 포함시켜 `set -u` 아래서 죽는다.
 - **파이썬 heredoc 을 `$( … )` 안에 넣지 않는다** — 본문에 `\'` + `)` 조합이 들어오면 `bash -n` 단계에서 죽는다. 정본은 파일로 받는 형태(`python3 - … > "$TMPD/out.txt" <<'PY'`). **모든 shell 편집 뒤 `bash -n` 을 돌린다.**
@@ -570,9 +573,11 @@ coverage-mapper 가 제안한 derived 차원이 원장에 admit 되면 새 focus
 covmap_block="$(awk '/^## coverage-mapper dispatch/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
 # 스코프가 필수다 — `stall_episode` 는 State schema 절에도 등장하므로 전-파일 grep 은
 # 이 절이 통째로 사라져도 satisfied 된다(feedback_grep_lock_header_satisfiable).
-{ grep -q 'coverage_mapper_dispatched_episode' <<<"$covmap_block" \
-  && grep -q 'stall_episode' <<<"$covmap_block" \
-  && grep -qE '!=' <<<"$covmap_block"; } \
+# 세 토큰의 co-occurrence 는 이빨이 없다 — 이 절 본문은 두 필드 이름을 각각 두 번 이상
+# 언급하고(대입문 · 설명문) `!=` 도 반례 설명문(`3 != 4`)에 따로 등장해, **조건식을 지워도**
+# 흩어진 잔여 토큰만으로 세 grep 이 전부 satisfied 된다(실측 — 이 자리에서 거짓 GREEN 이 났다).
+# 관계를 한 줄 안에서 요구한다 — 조건식이 실제로 쓰인 형태와 같다.
+grep -qE 'coverage_mapper_dispatched_episode[^`]*!=[^`]*stall_episode|stall_episode[^`]*!=[^`]*coverage_mapper_dispatched_episode' <<<"$covmap_block" \
   && ok "C11(v0.37.0): 재dispatch 바운드가 두 에피소드 필드의 비교 (scoped to coverage-mapper dispatch)" \
   || no "C11(v0.37.0): 재dispatch 바운드가 두 에피소드 필드의 비교 (scoped to coverage-mapper dispatch)"
 # 조건 2 의 «유한성 근거» — 이것이 없으면 그 조건이 «바운드 밖»인지 «바운드 불필요»인지
