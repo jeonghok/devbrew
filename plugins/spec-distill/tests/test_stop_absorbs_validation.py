@@ -294,16 +294,59 @@ class TestValidationExclusionAxes(unittest.TestCase):
             msg=f"block 은 났으나 그 문서 사유가 아니다: {payload!r}")
 
     def test_validation_capped_document_is_not_validated(self):
-        """검증 실패 상한에 닿은 문서는 검증도 dispatch 도 없다 (A14, 양의 짝)."""
+        """검증 실패 상한에 닿은 문서는 검증도 dispatch 도 없다 (A14, 양의 짝).
+
+        advisory 는 **전달되는 채널**로 나가야 한다. `review-dispatch.py` 는 네 곳에서
+        「exit 0 의 stderr 는 전달되지 않는다」를 근거로 형제 advisory 셋을
+        `systemMessage` 로 내보낸다. 이 advisory 는 그 문서가 이 세션의 Law 1 게이트를
+        **영구히** 벗어난다는 통지라(설계 §4.4: "조용히가 아니라 advisory 와 함께"),
+        stderr 에만 있으면 그 요구가 성립하지 않는다.
+
+        stderr 도 함께 본다 — 채널을 옮기는 것이지 진단 로그를 없애는 것이 아니다.
+        """
         r = self._stop(
             "test-valcap-silent",
             f"validation_attempts:\n  {BROKEN_REL}: 3\n")
-        self.assertEqual(
-            r.stdout.strip(), "",
-            msg=f"상한에 닿은 문서가 다시 block 을 냈다 — 무한 루프다: {r.stdout!r}")
+        self.assertTrue(
+            r.stdout.strip(),
+            msg=("상한 제외가 조용히 일어났다 — stdout 이 비었다. A14 는 advisory 를 "
+                 f"요구하고, exit 0 의 stderr 는 전달되지 않는다: {r.stderr!r}"))
+        payload = json.loads(r.stdout)
+        self.assertNotIn(
+            "decision", payload,
+            msg=f"상한에 닿은 문서가 다시 block 을 냈다 — 무한 루프다: {payload!r}")
+        self.assertIn(
+            "구조 검증 상한", payload.get("systemMessage", ""),
+            msg=("상한 advisory 가 전달되는 채널(systemMessage)에 없다 — 이 브랜치가 "
+                 f"없애려는 «게이트가 조용히 꺼진다» 그 자체다: {payload!r}"))
         self.assertIn(
             "구조 검증 상한", r.stderr,
-            msg=f"상한 제외가 조용히 일어났다 (A14 는 advisory 를 요구한다): {r.stderr!r}")
+            msg=f"진단 로그(stderr)까지 함께 사라졌다: {r.stderr!r}")
+
+    def test_capped_advisory_and_block_share_one_json(self):
+        """상한 advisory 와 구조 block 이 같은 턴에 나도 stdout 은 JSON **하나**다.
+
+        advisory 를 별도 `print(json.dumps(...))` 로 내면 두 JSON 이 이어 붙어 파싱이
+        깨지고, 그러면 block 자체가 조용히 사라진다 — 고치려던 방향의 정반대다.
+        위 케이스(상한 문서가 유일한 후보)만 두면 그 변이가 통과하므로 이 짝이 필요하다.
+        """
+        sid = "test-valcap-with-block"
+        repo = _repo_with_broken_scope_doc(
+            sid, f"validation_attempts:\n  {BROKEN_REL}: 3\n")
+        self.addCleanup(shutil.rmtree, repo, True)
+        other_rel = "docs/superpowers/specs/2026-01-02-other-design.md"
+        (repo / other_rel).write_text(
+            "# Y\n\n## Goal\n\nTBD 아직.\n", encoding="utf-8")
+        r = _run_stop(repo, sid)
+        self.assertEqual(r.returncode, 0, msg=f"훅이 죽었다: {r.stderr}")
+        payload = json.loads(r.stdout)  # 두 JSON 이면 여기서 깨진다
+        self.assertEqual(
+            payload.get("decision"), "block",
+            msg=f"상한 문서 옆의 미검증 문서가 block 을 못 냈다: {payload!r}")
+        self.assertIn(other_rel, payload.get("reason", ""))
+        self.assertIn(
+            "구조 검증 상한", payload.get("systemMessage", ""),
+            msg=f"block 과 함께 나갈 때 상한 advisory 가 사라졌다: {payload!r}")
 
     def test_inflight_document_is_not_validated(self):
         """리뷰가 도는 중인 문서는 검증 후보에서 빠진다 (A12, 양의 짝)."""
@@ -419,6 +462,118 @@ class TestLedgerBugIsNotSwallowed(unittest.TestCase):
         self.assertEqual(
             stdout.strip(), "",
             msg=f"원장 없이 block 을 냈다 — 상한을 셀 수 없는 상태다: {stdout!r}")
+
+
+#: 구조적으로 통과하는 design 문서 — dispatch 경로까지 가야 하므로 구조 실패가 없다.
+GOOD_REL = "docs/superpowers/specs/2026-01-03-good-design.md"
+GOOD_BODY = (
+    "# Good Design\n\nContext / Why\n\nGoals\n\nNon-goals\n\n"
+    "Constraints\n\nAcceptance Criteria\n\nFiles\n\nVerification Plan\n\n"
+    "Rejected Alternatives\n\nMetadata\n"
+)
+
+
+def _repo_with_valid_scope_doc(session_id: str) -> Path:
+    """구조 검증을 통과하는 dirty·untracked 스코프 문서 하나 + 빈 원장."""
+    repo = _make_temp_repo()
+    doc = repo / GOOD_REL
+    doc.parent.mkdir(parents=True, exist_ok=True)
+    doc.write_text(GOOD_BODY, encoding="utf-8")
+    state = repo / ".claude" / "spec-distill" / session_id / "state.local.md"
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(
+        f"---\nsession_id: {session_id}\n---\n\n", encoding="utf-8")
+    return repo
+
+
+class TestLedgerWriteFailureSuppressesDispatch(unittest.TestCase):
+    """원장 **블록 기록** 실패는 block 을 내지 않는다 — 억제자를 못 남겼으므로.
+
+    `dispatch_attempts`(G6 상한)와 `inflight_paths`(발견 제외)가 둘 다 `rewrite_state`
+    의 그 write 뒤에 있다. 발견은 무상태라 소모되는 연료가 없으므로, 기록에 실패한 채
+    block 을 내면 남는 상한은 30초 TTL 하나뿐이고 사람의 턴 간격이 그것을 매번 넘긴다 —
+    상한 없는 block 루프다(CLAUDE.md: Unbounded autonomy).
+
+    **여러 턴을 잰다.** 한 턴만 재면 "이번에 block 을 냈다"만 보이고 그것이 루프인지
+    아닌지는 보이지 않는다. 그리고 두 축(`record_attempt`·`mark_inflight`)을 따로
+    잰다 — 한쪽만 고치면 다른 쪽이 같은 루프를 그대로 낸다.
+
+    양성 대조가 함께 있다: 아무것도 깨뜨리지 않으면 같은 하니스가 block 을 낸다.
+    그것이 없으면 이 락은 "하니스가 애초에 dispatch 에 도달하지 못했다" 와 구별되지
+    않는다.
+    """
+
+    ROUNDS = 4
+
+    def _rounds(self, broken: str = ""):
+        import arm_ledger  # noqa: PLC0415 — scripts/ 는 모듈 상단에서 sys.path 에 있다
+
+        sid = "test-ledger-write-fail"
+        repo = _repo_with_valid_scope_doc(sid)
+        self.addCleanup(shutil.rmtree, repo, True)
+        emits: list[str] = []
+        err = io.StringIO()
+        with contextlib.ExitStack() as stack:
+            if broken:
+                def boom(*_a, **_k):
+                    raise RuntimeError(f"{broken} 원장 블록 조립 버그")
+                stack.enter_context(mock.patch.object(arm_ledger, broken, boom))
+            stack.enter_context(mock.patch.dict(os.environ, {
+                "DEVBREW_SPEC_DISTILL_SESSION_ID": sid,
+                # TTL 을 방정식에서 뺀다 — 남겨 두면 "루프가 아니다" 가 이 픽스처의
+                # TTL 덕인지 원장 억제 덕인지 가려지지 않는다.
+                "DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC": "0",
+            }))
+            stack.enter_context(contextlib.redirect_stderr(err))
+            cwd_before = os.getcwd()
+            try:
+                os.chdir(repo)
+                for _ in range(self.ROUNDS):
+                    out = io.StringIO()
+                    with contextlib.redirect_stdout(out), \
+                            mock.patch("sys.stdin", new=io.StringIO("{}")):
+                        rd.main()
+                    emits.append(out.getvalue().strip())
+            finally:
+                os.chdir(cwd_before)
+        state_file = repo / ".claude" / "spec-distill" / sid / "state.local.md"
+        state = state_file.read_text(encoding="utf-8") if state_file.exists() else ""
+        return emits, state, err.getvalue()
+
+    def test_positive_control_intact_ledger_dispatches(self):
+        """대조군 — 아무것도 안 깨뜨리면 같은 하니스가 block 을 낸다."""
+        emits, state, _err = self._rounds()
+        self.assertTrue(
+            emits[0],
+            msg="대조군이 dispatch 에 도달하지 못했다 — 아래 두 락이 아무것도 못 잰다")
+        self.assertEqual(json.loads(emits[0]).get("decision"), "block")
+        self.assertIn(
+            "inflight_paths", state,
+            msg=f"대조군이 in-flight 표시를 남기지 않았다: {state!r}")
+
+    def _assert_suppressed(self, broken: str):
+        emits, state, err = self._rounds(broken)
+        blocks = [e for e in emits if e and "block" in e]
+        self.assertEqual(
+            blocks, [],
+            msg=(f"{broken} 실패에도 block 이 나갔다 — 억제자를 못 남긴 채 "
+                 f"{self.ROUNDS}턴 중 {len(blocks)}턴이 강제했다. 상한 없는 "
+                 f"block 루프다: {emits!r}"))
+        self.assertNotIn(
+            "dispatch_attempts", state,
+            msg=f"전제 위반: 억제자가 실제로는 기록됐다: {state!r}")
+        self.assertNotIn(
+            "inflight_paths", state,
+            msg=f"전제 위반: 억제자가 실제로는 기록됐다: {state!r}")
+        self.assertIn(
+            "dispatch suppressed", err,
+            msg=f"조용히 접었다 — loud degradation 이 아니다: {err!r}")
+
+    def test_record_attempt_failure_suppresses_the_emit(self):
+        self._assert_suppressed("record_attempt")
+
+    def test_mark_inflight_failure_suppresses_the_emit(self):
+        self._assert_suppressed("mark_inflight")
 
 
 if __name__ == "__main__":

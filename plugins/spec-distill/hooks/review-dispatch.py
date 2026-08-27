@@ -23,9 +23,12 @@
 
 Ordering guarantee (AC7.1): `rewrite_state()` must complete (with fsync) BEFORE
 the JSON is printed. Reverse ordering races with a second Stop fire and
-produces a block storm. On rewrite OSError, the hook exits `{}` 0 (no block)
-to preserve the race-free TTL guard (AC7.2·A15) — 발견은 무상태이므로 다음 Stop 이
-같은 문서를 다시 찾는다.
+produces a block storm. On rewrite failure — `OSError` 든 원장 블록 기록 실패
+(`LedgerWriteError`) 든 — the hook exits `{}` 0 (no block) to preserve the
+race-free TTL guard (AC7.2·A15) — 발견은 무상태이므로 다음 Stop 이 같은 문서를
+다시 찾는다. 둘을 가르지 않는 이유는 잃는 것이 같아서다: 그 write 가 실패하면
+`dispatch_attempts`(G6 상한)도 `inflight_paths`(발견 제외)도 남지 않으므로,
+block 만 내보내면 남는 상한이 30초 TTL 하나뿐인 루프가 된다.
 
 Kill switches:
 - DEVBREW_SPEC_DISTILL_DISABLE=1
@@ -335,6 +338,50 @@ def emit_git_unavailable(state_path: Path, body: str) -> int:
     return 0
 
 
+class LedgerWriteError(Exception):
+    """원장 블록(`dispatch_attempts`·`inflight_paths`)을 body 에 못 찍었다.
+
+    `OSError` 와 **같은 처분**을 받는다: 이번 턴의 dispatch 를 접고 emit 하지 않는다.
+    그 둘이 잃는 것이 같기 때문이다 — 상태 파일에 남는 억제자다. 연료가
+    `pending_review` 이던 시절에는 그 소비가 무조건 일어나 원장 실패의 대가가
+    "dispatch 한 번 더"였지만, 발견이 무상태가 된 지금은 소비할 것이 없다.
+    `dispatch_attempts`(G6 상한)와 `inflight_paths`(발견 제외)가 **둘 다** 이
+    실패 뒤에 있으므로, 그대로 block 을 내면 남는 상한은 30초 TTL 하나뿐이고
+    사람의 턴 간격이 그것을 매번 넘긴다 — 상한 없는 block 루프다
+    (CLAUDE.md: Unbounded autonomy).
+
+    emit 을 접는 것이 안전한 근거는 이 브랜치 자신의 논거다: 발견은 무상태라
+    다음 Stop 이 같은 문서를 다시 찾는다. `select_dispatch_target` 의 원장 조회
+    실패가 이미 같은 논거로 같은 선택(그 턴 dispatch 생략)을 한다.
+    """
+
+
+def with_advisory(payload: dict, advisory: str | None) -> dict:
+    """advisory 를 payload 의 `systemMessage` 에 합친다 (순수 함수).
+
+    **stdout 에 JSON 은 하나뿐이다.** advisory 를 별도 `print(json.dumps(...))` 로
+    내면 그 턴에 block 이 함께 나가는 경우 stdout 에 JSON 두 개가 이어 붙어
+    파싱이 깨지고, 그러면 block 자체가 조용히 사라진다 — 게이트가 꺼지는 방향이다.
+    그래서 합치기는 emit 지점에서 한다.
+    """
+    if advisory is None:
+        return payload
+    existing = payload.get("systemMessage")
+    payload["systemMessage"] = f"{existing}\n{advisory}" if existing else advisory
+    return payload
+
+
+def flush_advisory(advisory: str | None) -> int:
+    """아무것도 emit 하지 않는 턴에서 advisory 만 낸다. 반환값은 훅의 rc.
+
+    `decision` 키가 없으므로 non-blocking 이다 — AC7.3.1 의 AST 락이 재는
+    "decision emit" 도 아니다.
+    """
+    if advisory is not None:
+        print(json.dumps({"systemMessage": advisory}), flush=True)
+    return 0
+
+
 def rewrite_state(
     path: Path, body: str, now: datetime, spec_path: str, attempt_n: int,
     cursor: str | None, inflight_key: str | None,
@@ -357,12 +404,10 @@ def rewrite_state(
         try:
             import arm_ledger  # pyright: ignore[reportMissingImports]
             body = arm_ledger.record_attempt(body, spec_path, attempt_n)
-        except Exception as exc:  # noqa: BLE001 — loud degradation
-            print(
-                f"[spec-distill] dispatch_attempts 기록 실패 "
-                f"(non-fatal, 이번 dispatch에 G6 상한 미적용): {exc}",
-                file=sys.stderr,
-            )
+        except Exception as exc:  # noqa: BLE001 — 처분은 호출자가 (LedgerWriteError)
+            raise LedgerWriteError(
+                f"dispatch_attempts 기록 실패 — G6 상한을 셀 수 없다: {exc}"
+            ) from exc
     # A12 — in-flight 표시도 **같은 write** 안에서 찍는다. 별도 write 로 가르면 그
     # 사이에 두 번째 Stop 이 같은 문서를 다시 발견한다. "리뷰 진행 중"을 상태로
     # 표현하는 유일한 자리가 이 표시다(설계 §4.1).
@@ -370,12 +415,10 @@ def rewrite_state(
         try:
             import arm_ledger  # pyright: ignore[reportMissingImports]
             body = arm_ledger.mark_inflight(body, inflight_key, new_ts)
-        except Exception as exc:  # noqa: BLE001 — loud degradation
-            print(
-                f"[spec-distill] in-flight 표시 실패 "
-                f"(non-fatal, 리뷰 중인 문서가 다시 발견될 수 있다): {exc}",
-                file=sys.stderr,
-            )
+        except Exception as exc:  # noqa: BLE001 — 처분은 호출자가 (LedgerWriteError)
+            raise LedgerWriteError(
+                f"in-flight 표시 실패 — 발견 제외를 남길 수 없다: {exc}"
+            ) from exc
     body = set_cursor(body, cursor)
     write_state_file(path, body)
 
@@ -486,16 +529,27 @@ def main() -> int:
             f"[spec-distill] 원장 조회 실패 (non-fatal, 이번 턴 구조 검증 생략): {exc}",
             file=sys.stderr,
         )
+    capped_advisory: str | None = None
     if capped:
         # A14 의 양쪽이 이제 다 집행된다. 검증 절반은 바로 위 루프의 `capped` 이고,
         # dispatch 절반은 `select_dispatch_target` 의 같은 상한 검사다 — 그래서 이
         # 문구가 둘을 함께 주장할 수 있다. 한쪽만 있을 때 이 문장을 내면 없는 집행을
         # 주장하는 것이고, 그것은 그 자체로 결함이다.
-        print(
+        #
+        # **채널은 stderr 가 아니다.** 이 파일이 네 곳에서 적어 둔 사실 —
+        # exit 0 의 stderr 는 전달되지 않는다 — 이 여기에도 그대로 적용된다. 그리고
+        # 이것은 그 문서가 **이 세션의 Law 1 게이트를 영구히 벗어난다**는 통지라,
+        # 조용하면 설계 §4.4 가 명시적으로 요구하는 것("조용히가 아니라 advisory 와
+        # 함께")이 성립하지 않는다. 같은 턴에 block 이 함께 나갈 수 있으므로 별도
+        # emit 이 아니라 `with_advisory` 로 합쳐 내보낸다 (stdout 의 JSON 은 하나).
+        #
+        # 같은 상한의 **동턴 절반**(`reached_cap`)은 아래 block 의 `reason` 을 타고
+        # 이미 전달된다 — 그쪽은 건드리지 않는다.
+        capped_advisory = (
             f"[spec-distill] 구조 검증 상한({val_cap}회)에 닿아 이번 세션에서 "
-            f"자동 검증·dispatch 를 하지 않는 문서: {', '.join(capped)}",
-            file=sys.stderr,
+            f"자동 검증·dispatch 를 하지 않는 문서: {', '.join(capped)}"
         )
+        print(capped_advisory, file=sys.stderr)
     picked, next_cursor = select_keys(validation_pool, cursor, CANDIDATE_CAP)
     if picked:
         cursor = next_cursor
@@ -540,12 +594,12 @@ def main() -> int:
                 f"[spec-distill] 구조 검증 기록 실패 (non-fatal, block 생략): {e}",
                 file=sys.stderr,
             )
-            return 0
-        print(json.dumps({
+            return flush_advisory(capped_advisory)
+        print(json.dumps(with_advisory({
             "decision": "block",
             "reason": "\n".join(lines),
             "systemMessage": "[spec-distill] 스코프 문서 구조 검증 실패 — 이번 turn 은 리뷰 dispatch 없음",
-        }), flush=True)
+        }, capped_advisory)), flush=True)
         return 0
     if picked and cursor != read_cursor(body):
         # 커서는 **통과했을 때도** 전진해야 한다. 상한을 넘는 dirty 문서가 전부
@@ -589,14 +643,17 @@ def main() -> int:
                 f"(advisory 가 다음 턴에도 반복된다): {exc}",
                 file=sys.stderr,
             )
-        print(json.dumps({"systemMessage": advisory}), flush=True)
+        print(json.dumps(with_advisory(
+            {"systemMessage": advisory}, capped_advisory)), flush=True)
         return 0
     # --- dispatch 대상 선택 (A12·A14·G6) ---
     # 이미 손에 든 후보 목록에서 고른다 — 발견은 위에서 한 번 했고, 여기서 git 을
     # 다시 부르면 같은 턴 안에서 두 집합을 보게 된다.
     cand = select_dispatch_target(cands, body, now)
     if cand is None:
-        return 0  # 이 턴에 dispatch 할 문서가 없다
+        # 이 턴에 dispatch 할 문서가 없다 — 그래도 상한 advisory 는 나가야 한다.
+        # 상한에 닿은 문서가 유일한 후보인 경우가 정확히 이 경로이기 때문이다.
+        return flush_advisory(capped_advisory)
     # TTL guard against self-ref cycle
     try:
         ttl_sec = int(os.environ.get("DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC", "30"))
@@ -606,7 +663,7 @@ def main() -> int:
     if ld:
         last = parse_iso(ld.group(1))
         if last and (now - last) < timedelta(seconds=ttl_sec):
-            return 0  # within guard window
+            return flush_advisory(capped_advisory)  # within guard window
     spec_path = cand.path
     # `select_dispatch_target` 이 이미 부른 함수를 다시 부른다.
     # **`resolve_mode` 는 순수 함수가 아니다** — 접두 아래의 `.md` 중 `-spec`/`-design`
@@ -681,17 +738,21 @@ def main() -> int:
     # AC7.1: rewrite BEFORE emit. AC7.2: rewrite-fail → no emit (block storm guard).
     try:
         rewrite_state(state_path, body, now, spec_path, attempt_n, cursor, inflight_key)
-    except OSError as e:
+    except (OSError, LedgerWriteError) as e:
+        # 두 실패가 같은 처분을 받는 이유는 `LedgerWriteError` 의 docstring 에 있다:
+        # 잃는 것이 같다 — 이 dispatch 를 다시 억제할 수단이다. block 을 그대로 내면
+        # 남는 상한이 30초 TTL 하나뿐이라 사람 턴 간격마다 다시 block 이 나간다.
         print(
             f"[spec-distill] state rewrite failed (non-fatal, dispatch suppressed): {e}",
             file=sys.stderr,
         )
-        return 0  # empty stdout, no decision:block — 발견은 무상태라 다음 Stop 이 다시 찾는다
-    print(json.dumps({
+        # empty stdout, no decision:block — 발견은 무상태라 다음 Stop 이 다시 찾는다
+        return flush_advisory(capped_advisory)
+    print(json.dumps(with_advisory({
         "decision": "block",
         "reason": msg,
         "systemMessage": "[spec-distill] reviewing-spec dispatch enforced for next turn",
-    }), flush=True)
+    }, capped_advisory)), flush=True)
     return 0
 
 

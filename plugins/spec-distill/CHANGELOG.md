@@ -61,6 +61,26 @@
   편집해도 `git status` 가 보고하는 것은 달라지지 않으므로, 재편집은 더 이상 관측 가능한
   트리거가 아니다. 리뷰되지 않은 문서는 이제 **in-flight TTL 만료**(`INFLIGHT_TTL_SEC`, 900초)로
   돌아온다. «파일을 건드려 리뷰어를 다시 부른다»는 이제 그만큼의 기다림이다.
+  **그 창 동안 멈추는 것은 dispatch 뿐이 아니다** — 아래 Known limitations 의 in-flight 항목.
+
+### Fixed
+- **구조 검증 상한 advisory 가 `systemMessage` 로 나간다.** 이전 판은 stderr 에만 냈는데,
+  같은 파일이 네 곳에서 근거로 드는 사실(exit 0 의 stderr 는 전달되지 않는다) 때문에 그것은
+  전달되지 않는 채널이었다 — 형제 advisory 셋(git 불능 · state 판독 실패 · 은퇴 스위치)은
+  이미 `systemMessage` 를 쓴다. 이 통지는 그 문서가 **이 세션의 Law 1 게이트를 영구히
+  벗어난다**는 사실이라 조용하면 설계 §4.4 를 어긴다. 같은 턴에 block 이 함께 나갈 수
+  있으므로 별도 emit 이 아니라 그 JSON 의 `systemMessage` 에 합쳐 낸다(stdout 의 JSON 은
+  하나여야 한다 — 둘이면 파싱이 깨져 block 이 조용히 사라진다). 같은 상한의 **동턴 절반**
+  (`reached_cap`)은 이전부터 block `reason` 을 타고 전달됐고 그대로다.
+- **원장 블록 기록 실패가 block 루프를 만들지 않는다.** `rewrite_state` 의
+  `record_attempt`(G6 상한)·`mark_inflight`(발견 제외) 실패는 이전 판에서 stderr 로 적히고
+  **그대로 block 을 냈다**. 연료가 `pending_review` 이던 시절에는 그 소비가 무조건 일어나
+  대가가 «dispatch 한 번 더» 였지만, 발견이 무상태가 된 뒤로는 소모될 연료가 없고 두 억제자가
+  **둘 다** 그 실패 뒤에 있다 — 남는 상한이 30초 TTL 하나뿐이라 사람의 턴 간격이 그것을 매번
+  넘긴다(재현: 두 함수를 raise 로 갈아끼우고 `main()` 4회 연속 → 4회 모두 `decision: block`).
+  이제 `OSError` 와 **같은 처분**을 받는다: loud 하게 적고 emit 없이 접는다. 안전한 근거는
+  이 릴리스 자신의 논거다 — 발견은 무상태라 다음 Stop 이 같은 문서를 다시 찾는다.
+  `select_dispatch_target` 의 원장 조회 실패가 이미 같은 논거로 같은 선택을 한다.
 
 ### Deprecated
 - kill switch 토큰 `DEVBREW_SKIP_HOOKS=spec-distill:validator` · `spec-distill:PostToolUse` ·
@@ -113,11 +133,29 @@ Bash 5–7 · Write 3), 세 플러그인을 함께 로드, **팔당 2회**. 계�
   이 시나리오의 벽시계는 모델 지연을 재고 있다. 이 수치를 머지 게이트로 쓰지 않는다.
 
 ### Known limitations
+- **in-flight 표시는 dispatch 만이 아니라 구조 검증도 멈춘다 — 최대 900초.** `A12` 와 설계
+  §4.1 은 리뷰 진행 중인 문서를 «발견 결과에서 제외» 하라고 하고, 발견 결과가 곧 검증 후보
+  집합이다. 그래서 dispatch 된 문서는 `INFLIGHT_TTL_SEC`(900초) 또는 verdict 중 먼저 오는
+  것까지 **Layer 1 구조 검증을 받지 않는다 — 어떤 도구로 쓰든**. 창을 여는 조건은 좁다:
+  모델이 dispatch mandate 를 무시해야 하고, 그 문서는 이미 리뷰 큐에 들어가 있다. 구현은
+  명세대로이고 이것은 **명세 쪽 미결**이다 — 좁히려면 발견 제외와 검증 제외를 서로 다른
+  술어로 가르는 설계 변경이 필요하며(armed 게이트를 그렇게 가른 전례가 이 릴리스에 있다),
+  그 판단은 이 릴리스에서 하지 않았다. 다시 열 사람에게 필요한 사실은 이 세 가지다:
+  창의 상한(900초) · 여는 조건(mandate 무시) · 대가(그 문서에 한해 Layer 1 정지).
 - 발견은 훅의 cwd 리포만 본다. 다른 체크아웃의 문서는 `git status` 에 나오지 않는다 — 그
   워크트리에서 세션을 열면 커버된다.
 - git 이 없거나 리포가 아니면 검증·dispatch 가 일어나지 않고 세션당 1회 loud advisory 가 나간다.
 - **이 설계에는 cross-family 리뷰가 없었다.** 설계 리뷰 5라운드가 전부 Claude 단독이었다
   (codex 사용 한도가 2026-09-17 까지 소진). 어떤 종류의 공유-맹점이 남아 있는지 아무도 모른다.
+- **선재 RED 면제 1건** (이 릴리스가 만든 것이 아니고, 이 릴리스가 고치지도 않는다):
+  `tests/test_hook_output_schema.py::TestCrossResolverAdvisory.test_python_and_bash_resolvers_agree`
+  는 **워크트리 안에서만** 돈다(`@unittest.skipUnless`)  — 그리고 워크트리 안에서는 구조적으로
+  항상 실패한다. `scripts/state_path.py` 의 python 해석기는 `git rev-parse --git-common-dir` 로
+  **메인 리포**의 `.claude/spec-distill` 을 가리키는 반면, 테스트가 비교하는 bash 식은
+  `${CLAUDE_PROJECT_DIR:-$PWD}/.claude/spec-distill` 로 워크트리 경로를 그대로 쓴다. 그 클래스의
+  docstring 이 이미 «NG9 … the follow-up unification PR is needed» 라고 적어 둔 기지의 미해결
+  항목이고, 두 훅의 output schema 와는 무관하다(나머지 21개는 통과). 면제 사유를 여기 적는
+  이유: 이유 없는 면제 목록은 그 질문을 영구히 닫는다.
 
 ## [0.35.3] — 2026-08-25
 

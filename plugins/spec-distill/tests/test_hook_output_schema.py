@@ -484,7 +484,14 @@ class TestReviewDispatchOrdering(unittest.TestCase):
 
         `print` 는 **decision emit 인 것만** 낸다 (`_is_decision_emit`).
         Recurses into FunctionDef body if encountered (handles helper refactor
-        per AC7.3.1 commentary)."""
+        per AC7.3.1 commentary).
+
+        재귀 대상은 **문(statement)을 품는 노드 전부**다. 빠뜨린 노드 타입은 이 락을
+        RED 가 아니라 **눈멀게** 만든다: 그 안으로 옮겨진 호출은 `calls` 에서 그냥
+        사라지고, 남은 호출들끼리의 순서는 여전히 성립하므로 스위트는 GREEN 을
+        유지한다. 오늘 `rewrite_state` 도 decision emit 도 루프 안에 없지만, 그
+        사실은 이 락이 아니라 제품 코드의 현재 모양이 지키는 것이다.
+        """
         for node in body_nodes:
             if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
                 call = node.value
@@ -496,16 +503,21 @@ class TestReviewDispatchOrdering(unittest.TestCase):
                 if name in target_names:
                     if name != "print" or self._is_decision_emit(call):
                         yield (node.lineno, name)
-            if isinstance(node, ast.With):
+            if isinstance(node, (ast.With, ast.AsyncWith)):
                 yield from self._walk_calls_in_order(node.body, target_names)
             if isinstance(node, ast.Try):
                 yield from self._walk_calls_in_order(node.body, target_names)
                 for handler in node.handlers:
                     yield from self._walk_calls_in_order(handler.body, target_names)
+                yield from self._walk_calls_in_order(node.orelse, target_names)
+                yield from self._walk_calls_in_order(node.finalbody, target_names)
             if isinstance(node, ast.If):
                 yield from self._walk_calls_in_order(node.body, target_names)
                 yield from self._walk_calls_in_order(node.orelse, target_names)
-            if isinstance(node, ast.FunctionDef):
+            if isinstance(node, (ast.For, ast.AsyncFor, ast.While)):
+                yield from self._walk_calls_in_order(node.body, target_names)
+                yield from self._walk_calls_in_order(node.orelse, target_names)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 yield from self._walk_calls_in_order(node.body, target_names)
 
     def test_ast_rewrite_before_print(self):
