@@ -3,7 +3,7 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [5.0.0] — 2026-08-23 (BREAKING)
+## [5.0.0] — 2026-08-27 (BREAKING)
 
 `/qg`의 기본 review scope를 세션이 편집한 파일 누적(`files.md`)에서 git이 보고하는
 변경으로 재정의한다. 발단은 삭제된 `PostToolUse` matcher가 `Edit|Write|MultiEdit`라
