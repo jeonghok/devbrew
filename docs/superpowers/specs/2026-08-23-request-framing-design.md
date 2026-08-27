@@ -416,7 +416,13 @@ bijection 3종과 `check_verbatim_coverage.py` 가 전부 payload 를 대상으�
 ### 6.1 원칙
 
 devbrew 전체에 적용되는 신규 원칙이다. `docs/philosophy/devbrew-harness-philosophy.md` 에
-다음 형식으로 넣는다.
+넣는다.
+
+> **정정 (P23 자신의 첫 적용, 구현 중 실측)** — 아래 인용의 **본문은 정본**이지만 **감싼 서식은
+> 틀렸다.** 이 설계는 그 파일의 항목 서식을 재보지 않고 단정했고, 실제 관례는 다르다. 넣을 때
+> 서식은 이웃 항목에서 **읽어서** 맞춰라 — 아래 블록을 서식까지 복사하지 말 것.
+> 계획서(`docs/superpowers/plans/2026-08-27-request-framing-phase0.md` Task 1)에 실측한
+> 서식이 있다. 근거: 형식 단정은 산문이라 틀려도 소리가 나지 않는다.
 
 > **P23 — Decisions Stay Refutable**
 > **Law 1 × P17 집행.** 확정된 결정은 재논의 대상이 아니지만 **반증 대상이다.** 앞 단계가 못
