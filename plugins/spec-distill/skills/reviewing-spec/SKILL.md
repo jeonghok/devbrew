@@ -23,7 +23,7 @@ cost_class: medium
    STATE="$ROOT/$harness_sid/state.local.md"   # 훅이 읽는 바로 그 파일
    ```
 
-   `$spec_path` 와 `mode` 는 Stop 훅이 낸 dispatch mandate 가 그대로 싣고 있다(`spec path: …` · `mode: …`). `$STATE` 를 여는 이유는 원장(`armed_paths`·`dispatch_attempts`)이 훅이 읽는 바로 그 파일에 있어야 하기 때문이다 — **read==write 디렉토리 불변식**(스킬의 READ 와 `mark-reviewed` WRITE 가 같은 `$STATE` 를 가리킴)이 깨지면 arm-once 게이트가 훅과 다른 파일을 키잉해 통째로 무의미해진다. mandate 가 없으면 manual override(loud advisory). v0.12.0부터 **design mode 전용**: 11-section/locked_decisions schema 검사는 적용 안 함(brainstorming 자유 형식). 본문의 placeholder/ambiguity/scope-creep/approaches-comparison/isolation/testing/handoff_incomplete만 spec-reviewer 에게 요청.
+   `$spec_path` 와 `mode` 는 Stop 훅이 낸 dispatch mandate 가 그대로 싣고 있다(`spec path: …` · `mode: …`). `$STATE` 를 여는 이유는 원장(`armed_paths`·`dispatch_attempts`·`inflight_paths`)이 훅이 읽는 바로 그 파일에 있어야 하기 때문이다 — **read==write 디렉토리 불변식**(스킬의 READ 와 그 WRITE **전부** — Step 3 의 `mark-reviewed`, Phase 5 종료 자리 두 곳의 `clear-inflight` — 가 같은 `$STATE` 를 가리킴)이 깨지면 arm-once 게이트가 훅과 다른 파일을 키잉해 통째로 무의미해진다. mandate 가 없으면 manual override(loud advisory). v0.12.0부터 **design mode 전용**: 11-section/locked_decisions schema 검사는 적용 안 함(brainstorming 자유 형식). 본문의 placeholder/ambiguity/scope-creep/approaches-comparison/isolation/testing/handoff_incomplete만 spec-reviewer 에게 요청.
 
    **불변식 (hook-facing 상태 vs continuity):** hook-facing 상태(`armed_paths`·`dispatch_attempts`·`inflight_paths`)의 read/write 는 harness sid(`$STATE`); `rereview_count`/`issue_history` continuity 는 이 fix 가 건드리지 않고 harness-sid 로 collapse 하지 않는다.
 
@@ -190,7 +190,7 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" clear-inflight "$harness_sid" "$spec_path"
 ```
 
-지울 표시가 없으면 파일을 쓰지 않는다(idempotent) — 정상 라운드는 Step 3 의 `mark-reviewed` 가 이미 지웠다. `$harness_sid` 가 빈 값이면 상태 파일을 특정할 수 없으므로 호출하지 않고, Step 3 과 같은 사유의 advisory 를 낸다.
+정상 라운드는 Step 3 의 `mark-reviewed` 가 이미 지웠으므로 대개 지울 것이 없다. **이 호출의 rc 를 성공 증거로 읽지 말 것** — CLI 는 지웠든 못 지웠든 항상 exit 0 이고, 「지울 표시가 없었다」와 「스코프 밖 경로·상태 파일 부재로 아무것도 못 했다」가 스킬 입장에서 구별되지 않는다(그 두 갈래는 아무 말도 하지 않는다). 소리를 내는 것은 원장 판독 실패와 write 실패 둘뿐이니, stderr 에 뜬 것이 있으면 그대로 사용자에게 노출한다. `$harness_sid` 가 빈 값이면 상태 파일을 특정할 수 없으므로 호출하지 않고, Step 3 과 같은 사유의 advisory 를 낸다.
 
 ### Step B — 단일 `AskUserQuestion` proceed 게이트 (AC8)
 
@@ -229,7 +229,7 @@ AskUserQuestion({
   python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" clear-inflight "$harness_sid" "$spec_path"
   ```
 
-  정상 라운드는 Step 3 의 `mark-reviewed` 가 이미 지웠으므로 이 호출은 파일을 쓰지 않는다(idempotent). 실제로 지울 것이 남는 경우는 `mark-reviewed` 가 배제된 both-dead 라운드다 — 그때 표시를 두고 나가면 그 문서는 TTL(15분)까지 발견에서 빠져, 사용자가 곧바로 재개하려 해도 다음 편집이 그것을 집어내지 못한다. 자동 재발동 여부 자체는 이 호출이 정하지 않는다 — `armed_paths` 가 정하고, 정상 라운드에서는 이미 기록돼 재발동이 없다. 재개는 사용자 요청 시 skill 수동 호출로 한다(D2·NG1).
+  정상 라운드는 Step 3 의 `mark-reviewed` 가 이미 지웠으므로 대개 지울 것이 없다. Step A 와 같은 이유로 **rc 를 성공 증거로 읽지 않는다** — 항상 exit 0 이고 「지울 게 없었다」와 「못 했다」가 구별되지 않으니, stderr 에 뜬 것만 사용자에게 노출한다. `$harness_sid` 가 빈 값이면 호출하지 않고 Step 3 과 같은 사유의 advisory 를 낸다 — 형제 자리 둘(Step 3 · Step A)이 그 문구를 요구하므로 여기만 침묵하면 그 비대칭이 다음 복사본으로 옮겨간다. 실제로 지울 것이 남는 경우는 `mark-reviewed` 가 배제된 both-dead 라운드다 — 그때 표시를 두고 나가면 그 문서는 TTL(15분)까지 발견에서 빠져, 사용자가 곧바로 재개하려 해도 다음 편집이 그것을 집어내지 못한다. 자동 재발동 여부 자체는 이 호출이 정하지 않는다 — `armed_paths` 가 정하고, 정상 라운드에서는 이미 기록돼 재발동이 없다. 재개는 사용자 요청 시 skill 수동 호출로 한다(D2·NG1).
 
 ### 두 가드 — polite stop 금지 (AP2) · cross-compact 조기 진행 금지 (AC19)
 
