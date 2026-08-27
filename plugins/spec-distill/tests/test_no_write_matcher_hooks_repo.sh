@@ -38,9 +38,13 @@ for p in paths:
             bad.append((p, "<matcher 부재 또는 빈 문자열>"))
         elif WRITE_TOOLS & {x.strip() for x in m.split("|")}:
             bad.append((p, m))
-assert scanned >= 3, f"검사한 파일이 {scanned}개뿐이다 — 정의역이 좁아졌다"
+# 발견한 위반을 **먼저** 인쇄한다. assert 를 앞에 두면 위반과 정의역 축소가 함께
+# 일어났을 때 AssertionError 만 보이고 BAD 줄은 인쇄되기도 전에 죽는다 — 둘 다
+# 사실이면 둘 다 나와야 고칠 것을 한 번에 본다. (EXEMPT 로 가려진 파일의 위반은
+# 정의상 `bad` 에 들어오지 않는다 — 그 축을 잡는 것은 아래 `scanned` 하한이다.)
 for p, m in bad:
     print(f"BAD {p} matcher={m!r}", file=sys.stderr)
+assert scanned >= 3, f"검사한 파일이 {scanned}개뿐이다 — 정의역이 좁아졌다"
 sys.exit(1 if bad else 0)
 PY
 then ok "A1: 리포 전수 — 쓰기-도구 matcher 를 가진 PostToolUse 훅 0개"
