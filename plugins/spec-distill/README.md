@@ -204,8 +204,10 @@ dispatch 뿐입니다. 완전히 clean 한 문서는 발견 자체가 되지 않
 - `DEVBREW_SKIP_HOOKS=spec-distill:PostToolUse` / `:validator` — 구조 검증은 이제 Stop
   훅 안에 있다. 끄려면 `spec-distill:Stop`.
 - `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` / `:reminder` — 재-nag 층 자체가 없다.
-- `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` — 이 스위치가 끄던 것은 validator 의 Layer 2
-  기록이었다. **대체 스위치는 없다** — 위 항목 참조.
+- `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` — 이 스위치가 주던 것은 **구조 검증은 유지한
+  채 자동 리뷰 dispatch 만 중단**이었다. 그 능력에는 **대체 수단이 없다** — 위
+  `spec-distill:Stop` 은 둘을 함께 끄므로 같은 것이 아니다. 되살리는 것은 새 기능
+  작업이다.
 
 ## Prerequisites
 

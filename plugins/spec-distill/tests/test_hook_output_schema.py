@@ -23,6 +23,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+#: 상태 파일에 남는 A19 마커. 제품(`review-dispatch.RETIRED_MARKER`)과 같은 값이어야
+#: 하지만, 훅은 하이픈 든 파일명이라 일반 import 가 안 돼 리터럴로 둔다.
+RETIRED_MARKER_LITERAL = "retired_token_advised: yes"
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 HOOKS_DIR = REPO_ROOT / "plugins" / "spec-distill" / "hooks"
 SCRIPTS_DIR = REPO_ROOT / "plugins" / "spec-distill" / "scripts"
@@ -631,32 +635,35 @@ class TestKillSwitches(HookOutputSchemaTestBase):
         self._armed_stop_run(
             "ks-review-2", {"DEVBREW_SKIP_HOOKS": "spec-distill:Stop"})
 
-class TestRetiredTokenAdvisory(HookOutputSchemaTestBase):
-    """A19 — 은퇴한 kill-switch 토큰을 세션당 1회 공시한다.
+class TestRetiredSwitchAdvisory(HookOutputSchemaTestBase):
+    """A19 — 은퇴한 kill switch 를 세션당 1회 공시한다.
 
-    구조 검증이 v0.34.0 에서 Stop 훅으로 **옮겨왔으므로**, 그 검증을
-    `spec-distill:validator` 로 껐던 사용자는 그것이 말없이 되살아난 것을 보게 된다.
+    v0.34.0 에서 두 훅이 삭제되면서 **세 스위치**가 아무것도 끄지 않게 됐다. 셋 다
+    fail-open 방향으로 죽었다 — 껐다고 믿는 동작이 말없이 되살아난다.
 
-    대조는 `kill_switch_active` 와 **같은 방식**(콤마 분리 + 전체 토큰)이어야 한다.
-    부분 문자열로 재면 방향만 반대인 같은 결함이 생긴다 — 설정하지도 않은 토큰이
-    설정돼 있다고 말하는 advisory. 그래서 초문자열 케이스가 이 클래스에 있다.
+    두 축을 재는 이유는 두 스위치가 **읽히는 방식이 다르기 때문**이다.
+      · `DEVBREW_SKIP_HOOKS` 토큰 — `kill_switch_active` 와 같은 콤마 분리 + 전체
+        토큰. 부분 문자열로 재면 설정하지도 않은 토큰을 설정했다고 말한다
+        (`test_superstring_token_does_not_fire`).
+      · `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW` — 삭제된 validator 가 `== "1"` 로
+        읽었다. "설정만 돼 있으면"으로 재면 `=0` 으로 꺼 둔 사용자에게까지 발화한다
+        (`test_autoreview_var_not_1_does_not_fire`).
     """
 
     SID = "test-retired-token"
     EXACT = "spec-distill:validator"
     SUPERSTRING = "spec-distill:validator-v2"
+    AUTOREVIEW = "DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW"
 
-    def _run(self, skip_hooks: str) -> subprocess.CompletedProcess:
+    def _run_env(self, **env: str) -> subprocess.CompletedProcess:
         _write_scope_doc(
             self.repo, "docs/superpowers/specs/2026-05-16-retired-design.md")
-        return _run_hook(
-            "review-dispatch.py",
-            cwd=self.repo,
-            env_extra={
-                "DEVBREW_SPEC_DISTILL_SESSION_ID": self.SID,
-                "DEVBREW_SKIP_HOOKS": skip_hooks,
-            },
-        )
+        env_extra = {"DEVBREW_SPEC_DISTILL_SESSION_ID": self.SID}
+        env_extra.update(env)
+        return _run_hook("review-dispatch.py", cwd=self.repo, env_extra=env_extra)
+
+    def _run(self, skip_hooks: str) -> subprocess.CompletedProcess:
+        return self._run_env(DEVBREW_SKIP_HOOKS=skip_hooks)
 
     #: 부재 assert 의 앵커는 **ASCII** 여야 한다. 훅은 `json.dumps` 기본값
     #: (ensure_ascii=True)로 내보내므로 한국어는 stdout 에서 \uXXXX 로 이스케이프돼
@@ -678,7 +685,7 @@ class TestRetiredTokenAdvisory(HookOutputSchemaTestBase):
                       msg="대체 토큰을 알려주지 않으면 실행 가능한 문구가 아니다")
         # 강제(block)가 아니라 공시다 — 이 advisory 가 리뷰를 막아서는 안 된다.
         self.assertNotEqual(payload.get("decision"), "block")
-        self.assertIn("retired_token_advised: yes", self._state_body())
+        self.assertIn(RETIRED_MARKER_LITERAL, self._state_body())
 
     def test_superstring_token_does_not_fire(self):
         """`spec-distill:validator-v2` 는 은퇴 토큰이 **아니다**.
@@ -704,6 +711,48 @@ class TestRetiredTokenAdvisory(HookOutputSchemaTestBase):
         self.assertNotIn(self.ADVISORY_ASCII_ANCHOR, second.stdout)
         # 두 번째 턴은 평소대로 dispatch 한다 — 공시가 게이트를 영구히 먹지 않는다.
         self.assertEqual(json.loads(second.stdout).get("decision"), "block")
+
+    # --- 은퇴한 환경변수 축 (R64) ---
+    # `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW` 는 `DEVBREW_SKIP_HOOKS` 토큰이 아니라
+    # 독립 변수라, 토큰 축 케이스가 전부 GREEN 이어도 이 축은 재지 못한다.
+
+    def test_autoreview_var_set_to_1_fires_and_states_capability_is_gone(self):
+        """이 변수를 읽던 훅이 사라졌다는 사실과 **대체재가 없다**는 사실을 함께 낸다.
+
+        대체 스위치를 가리키면 안 된다: 이 변수가 주던 것은 "구조 검증은 유지한 채
+        dispatch 만 중단" 인데 `spec-distill:Stop` 은 둘 다 끈다. 다른 것을 같은
+        것이라 말하는 셈이라 거짓이다.
+        """
+        result = self._run_env(**{self.AUTOREVIEW: "1"})
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        msg = json.loads(result.stdout).get("systemMessage", "")
+        self.assertIn(self.AUTOREVIEW, msg, msg="사용자 자신의 변수를 되읽어 주지 않는다")
+        self.assertIn("대체 수단이 없다", msg,
+                      msg="사라진 능력을 밝히지 않으면 공시가 절반만 참이다")
+        self.assertNotIn(
+            "spec-distill:Stop", msg,
+            msg="없는 대체재를 가리킨다 — Stop 은 구조 검증까지 함께 끈다")
+        self.assertIn(RETIRED_MARKER_LITERAL, self._state_body())
+        # 강제가 아니라 공시다.
+        self.assertNotEqual(json.loads(result.stdout).get("decision"), "block")
+
+    def test_autoreview_var_not_1_does_not_fire(self):
+        """`=0` 은 **끄지 않은** 설정이다 — 삭제된 훅도 `== "1"` 로만 읽었다.
+
+        여기서 발화하면 스위치를 켠 적 없는 사용자에게 "당신의 스위치가 죽었다"고
+        말하게 된다. `test_superstring_token_does_not_fire` 와 같은 클래스의 거짓이다.
+        """
+        for value in ("0", "", "true", "yes"):
+            with self.subTest(value=value):
+                shutil.rmtree(self.repo / ".claude", ignore_errors=True)
+                result = self._run_env(**{self.AUTOREVIEW: value})
+                self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+                self.assertNotIn(self.ADVISORY_ASCII_ANCHOR, result.stdout)
+                self.assertNotIn("retired_token_advised", self._state_body())
+                # 양성 대조 — 훅은 살아 있고 평소 일(dispatch)을 한다.
+                self.assertEqual(
+                    json.loads(result.stdout).get("decision"), "block",
+                    msg="'훅이 죽어서' 조용한 것과 구분되지 않는다")
 
 
 def _in_worktree() -> bool:

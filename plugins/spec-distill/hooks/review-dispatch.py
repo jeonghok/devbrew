@@ -95,22 +95,36 @@ RETIRED_TOKENS = (
     "spec-distill:validator", "spec-distill:PostToolUse",
     "spec-distill:reminder", "spec-distill:UserPromptSubmit",
 )
+#: 같은 릴리스에서 함께 죽은 **환경변수** 스위치. 삭제된 write-time validator 훅만이
+#: 읽었고 지금은 읽는 곳이 없다. `DEVBREW_SKIP_HOOKS` 의 토큰이 아니라 독립 변수이므로
+#: 아래에서 **읽던 방식 그대로** `== "1"` 로 본다.
+RETIRED_AUTOREVIEW_VAR = "DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW"
 #: A19 는 advisory 를 **세션당 1회**로 요구한다 (GIT_UNAVAILABLE_MARKER 와 같은 이유).
 RETIRED_MARKER = "retired_token_advised: yes"
 
 
-def retired_token_advisory(body: str) -> tuple[str, str | None]:
-    """설정된 은퇴 토큰이 있으면 (새 body, advisory) — 세션당 1회.
+def retired_switch_advisory(body: str) -> tuple[str, str | None]:
+    """설정된 은퇴 스위치가 있으면 (새 body, advisory) — 세션당 1회.
+
+    두 축을 본다. 공통 규칙은 **각 스위치를 읽던 방식 그대로 읽는다**이다.
+
+      · `DEVBREW_SKIP_HOOKS` 토큰 넷 — `kill_switch_active` 와 같이 콤마로 쪼개고
+        양끝 공백을 벗긴 뒤 **전체 토큰**으로 맞춘다. 부분 문자열(`t in raw`)로 재면
+        방향만 반대인 같은 결함이 생긴다: `spec-distill:validator-v2` 가 이 advisory
+        를 발화시켜, 설정하지도 않은 토큰이 설정돼 있다고 말하게 된다.
+      · `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW` — 삭제된 validator 가 `== "1"` 로
+        읽었으므로 여기서도 그렇게 읽는다. "설정만 돼 있으면"(`is not None`)으로
+        재거나 위 토큰 집합에 끼워 넣으면 `=0` 으로 **꺼 둔** 사용자에게까지
+        "당신의 스위치가 죽었다"고 말하게 된다.
+
+    kill switch 를 설명하는 문장이 그 kill switch 와 다르게 매칭하면 언젠가 사용자
+    자신의 설정에 대해 거짓을 말한다.
 
     수명 사실만 적는다. "이제 안 걸린다" 같은 집행 공백은 적지 않는다 — 그것은
-    모델이 스스로 리뷰를 면제할 근거가 되어 Law 2 를 뚫는다.
-
-    대조는 `kill_switch_active` **와 같은 방식**이어야 한다: 콤마로 쪼개고 양끝
-    공백을 벗긴 뒤 **전체 토큰**으로 맞춘다. 부분 문자열(`t in raw`)로 재면 방향만
-    반대인 같은 결함이 생긴다 — `DEVBREW_SKIP_HOOKS=spec-distill:validator-v2` 가
-    이 advisory 를 발화시켜, 설정하지도 않은 토큰이 설정돼 있다고 말하게 된다.
-    kill switch 를 설명하는 문장이 그 kill switch 와 다르게 매칭하면 언젠가
-    사용자 자신의 설정에 대해 거짓을 말한다.
+    모델이 스스로 리뷰를 면제할 근거가 되어 Law 2 를 뚫는다. 같은 이유로 **없는
+    대체재를 가리키지도 않는다**: `SKIP_AUTOREVIEW` 가 주던 것("구조 검증은 유지한
+    채 dispatch 만 중단")은 새 설계에 등가물이 없고, `spec-distill:Stop` 을 대안처럼
+    적으면 둘을 다 끄는 스위치를 같은 것이라 말하는 거짓이 된다.
 
     `kill_switch_active` 를 은퇴 쌍마다 부르지 않는 이유: 그 함수는 bool 만 내므로
     **어느 별칭**이 설정됐는지 이름을 댈 수 없다. 사용자 자신의 토큰을 되읽어 주는
@@ -121,14 +135,27 @@ def retired_token_advisory(body: str) -> tuple[str, str | None]:
     raw = os.environ.get("DEVBREW_SKIP_HOOKS", "")
     tokens = {t.strip() for t in raw.split(",") if t.strip()}
     hit = [t for t in RETIRED_TOKENS if t in tokens]
-    if not hit:
+    autoreview_set = os.environ.get(RETIRED_AUTOREVIEW_VAR) == "1"
+    if not hit and not autoreview_set:
         return body, None
+    parts: list[str] = []
+    if hit:
+        parts.append(
+            f"DEVBREW_SKIP_HOOKS 에 은퇴한 토큰이 있다: {', '.join(hit)}. "
+            "v0.34.0 에서 그 훅들이 삭제됐고 구조 검증은 Stop 훅으로 옮겨왔다 — "
+            "이 토큰들은 더 이상 구조 검증을 끄지 않는다. 끄려면 "
+            "DEVBREW_SKIP_HOOKS=spec-distill:Stop 을 쓴다."
+        )
+    if autoreview_set:
+        parts.append(
+            f"{RETIRED_AUTOREVIEW_VAR}=1 이 설정돼 있으나 v0.34.0 에서 이 변수를 "
+            "읽던 훅이 삭제돼 더 이상 아무것도 끄지 않는다. 이 변수가 주던 것 — "
+            "구조 검증은 유지한 채 자동 리뷰 dispatch 만 중단 — 은 이 버전에 "
+            "대체 수단이 없다."
+        )
     return (
         body.rstrip() + f"\n{RETIRED_MARKER}\n",
-        f"[spec-distill] DEVBREW_SKIP_HOOKS 에 은퇴한 토큰이 있다: {', '.join(hit)}. "
-        "v0.34.0 에서 그 훅들이 삭제됐고 구조 검증은 Stop 훅으로 옮겨왔다 — "
-        "이 토큰들은 더 이상 구조 검증을 끄지 않는다. 끄려면 "
-        "DEVBREW_SKIP_HOOKS=spec-distill:Stop 을 쓴다.",
+        "[spec-distill] " + " ".join(parts),
     )
 
 
@@ -533,7 +560,7 @@ def main() -> int:
                 f"(non-fatal, 다음 턴이 같은 구간을 다시 본다): {e}",
                 file=sys.stderr,
             )
-    # --- A19 — 은퇴한 kill-switch 토큰 공시 ---
+    # --- A19 — 은퇴한 kill switch 공시 ---
     # 구조 검증이 이 훅으로 **옮겨왔으므로**, `spec-distill:validator` 로 그 검증을
     # 껐던 사용자는 그것이 말없이 되살아난 것을 보게 된다. project-init 의 은퇴와
     # 다른 점이 이것이다 — 거기서는 사라진 훅이 아무것도 대신하지 않았다.
@@ -549,7 +576,7 @@ def main() -> int:
     #
     # stderr 로 내지 않는 이유는 이 파일이 여러 번 적어 둔 사실 — exit 0 의 stderr 는
     # 사용자에게 전달되지 않는다.
-    body_adv, advisory = retired_token_advisory(
+    body_adv, advisory = retired_switch_advisory(
         set_cursor(seed_body(body, state_path), cursor))
     if advisory is not None:
         try:
@@ -558,7 +585,7 @@ def main() -> int:
             # 마커를 못 남기면 다음 턴에 같은 advisory 가 다시 나간다. 그 반복은
             # 조용해지는 것보다 낫다 — 사용자가 **알게** 되는 것이 목적이다.
             print(
-                f"[spec-distill] 은퇴 토큰 마커 기록 실패 "
+                f"[spec-distill] 은퇴 스위치 마커 기록 실패 "
                 f"(advisory 가 다음 턴에도 반복된다): {exc}",
                 file=sys.stderr,
             )
