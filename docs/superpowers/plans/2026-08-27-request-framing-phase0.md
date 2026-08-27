@@ -52,6 +52,7 @@
 - **`references/*.md` 고아 금지** — `shared/tests/test_skill_reference_pointers.sh` 는 git 추적되는 모든 `references/*.md` 가 가리켜지는지 본다. **포인터 출처 코퍼스는 `plugins/*/skills/*/SKILL.md` ∪ `plugins/*/skills/*/references/*.md` ∪ `plugins/*/references/*.md` 뿐이다 — `commands/*.md` 는 출처가 아니다.** 그리고 접두사는 `${CLAUDE_PLUGIN_ROOT…}/…` · `plugins/<p>/…` · `(../)*references/…` 셋만 인식하며 그 밖은 loud FAIL 이다.
 - **20줄 동일 블록 금지** — `shared/tests/test_no_new_duplication.sh` 는 20줄 이상 완전히 같은 블록이 두 파일에 있으면 `copy-of:` 마커나 심볼릭 링크 없이 RED 를 낸다. 코퍼스는 `plugins/*` · `shared/*` 이고 **아직 커밋하지 않은 새 파일도 포함**한다.
 - **새 락은 `# guards:` + `--emit-scanned`** — `plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh` 가 선언과 실측 스캔 경로의 **양방향** 일치를 잰다. 선언만 있고 `--emit-scanned` 가 없으면 "미지원" 으로 분류되어 선언이 검증되지 않은 채 남는다.
+- **서식은 이 계획서가 아니라 대상 파일에서 읽는다.** 이 계획(과 그 출처인 설계)이 인용한 블록은 **본문이 정본이고 감싼 서식은 아니다.** 넣기 전에 대상 파일을 열어 이웃 항목의 모양을 보고 그것을 따른다. 계획과 파일이 어긋나면 **파일이 이긴다** — 그리고 그 사실을 보고서에 적는다. 근거: Task 1 이 이 규칙 없이 돌아 fix 라운드 하나를 태웠다(설계 §6.1 이 philosophy 항목 서식을 재보지 않고 blockquote 로 단정했고, 실제 관례는 `### P## — Title` 헤딩이었다). **형식 단정은 산문이라 틀려도 소리가 나지 않는다.**
 - **Korean-primary** — 주석·문서는 한국어 primary. 영어는 식별자·고유명사·기술어에 한정.
 - **파일 읽기는 명시적 UTF-8** — 생성 파일을 읽는 모든 파이썬 코드는 `encoding="utf-8"` 을 명시한다 (non-UTF-8 locale fail-open 방지).
 - **mutation 실행 환경** — `PYTHONDONTWRITEBYTECODE=1` 로 돌린다. 같은 길이 변이가 stale `.pyc` 를 못 넘어 거짓 GREEN/거짓 RED 를 낸다.
