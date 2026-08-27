@@ -7,6 +7,9 @@
 #   판정   — "금지 목록에 있는가" 가 아니라 **"쓰기 도구를 전부 배제한다고 증명할 수
 #            있는가"** 를 묻는다. 증명할 수 없으면 막는다. 이유는 아래 python 블록에.
 #
+# **경계** — 이 락이 읽는 것은 각 `hooks.json` 의 `PostToolUse` 항목뿐이라,
+# `PreToolUse`·`Stop` 등 다른 훅 이벤트에 쓰기 도구 matcher 가 들어와도 GREEN 이다.
+#
 # 이 락은 음의 락(“위반 0건”)이라 코퍼스가 비면 공허하게 통과한다. 그래서 양의 짝을
 # 다섯 붙인다: 정의역이 비지 않았다(`assert paths`), **두 glob 이 각각 살아 있다**
 # (`assert EXEMPT <= paths` 가 shared 쪽을, `assert scanned >= 3` 이 plugins 쪽을),
