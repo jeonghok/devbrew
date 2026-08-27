@@ -112,6 +112,34 @@ Bash 5–7 · Write 3), 세 플러그인(`spec-distill`·`quality-gates`·`proje
   두 팔의 범위가 겹치고, 실행 간 산포(≈18 s)가 훅 시간 차이(≈0.37 s)보다 두 자릿수 크다.
   머지 게이트로 쓰지 않는다.
 
+### Known limitations
+면제 사유를 CHANGELOG 에 적는 이유: 이 릴리스의 기준선은 커밋되지 않는 스크래치 파일에
+있었고(계획이 그 파일의 커밋을 금한다), 이유 없는 면제 목록은 그 질문을 영구히 닫는다.
+
+- **선재 RED 2건** — `tests/harness/test_skill_orchestration_behavior.sh` 의 단언 두 개.
+  이 릴리스가 만든 것이 아니고, 이 릴리스가 고치지도 않는다. **확인 방법과 결과**:
+  `origin/main` 의 `plugins/quality-gates/` 를 통째로 꺼내(`git archive`) 그 사본의 같은
+  테스트를 돌렸더니 **같은 두 단언이 같은 이유로 실패**했다 — 즉 테스트와 SKILL 을 둘 다
+  기준선 판본으로 놓아도 빨갛다.
+  - `iter cap near Review gate AskUserQuestion` — 근접도 상한 160 줄에 대해
+    `origin/main` 이 이미 **253**, 이 브랜치가 **262**. 이 릴리스의 SKILL 편집은
+    초과분을 9 줄 늘렸을 뿐 초과 자체를 만들지 않았다. 상한을 다시 올릴지, 아니면
+    「거리」라는 대리 지표를 버리고 소속 섹션으로 잴지는 별도 판단이다.
+  - `R1b→R8 unclaimed 집행 사슬 (집행자가 셀 원본에 닿지 못한다)` — 마찬가지로
+    `origin/main` 에서 실패한다.
+- **`tests/test_codex_backward_compat.sh` 는 이 릴리스의 테스트 실행에서 제외했다.**
+  stdin 을 닫아도 걸려서 rc-137 로 죽는다(실측). 파일은 `origin/main` 과 **바이트 동일**
+  하며(`git diff origin/main..HEAD` 가 이 경로에 대해 비어 있다) 이 릴리스가 건드리지
+  않았다. 원인 규명은 이 릴리스의 범위 밖이고, 그동안 이 파일의 커버리지는 **없는 것으로
+  친다** — 「안 돌렸다」를 「통과했다」로 읽지 말 것.
+- **기준선이 적어 둔 `tests/test_sandbox_enforced.sh` 의 RED 는 더 이상 유효하지 않다.**
+  그 실패는 `tests/lib/extract_codex_invocations.py` 의 prune 판정이 **절대경로 성분**을
+  봐서, `<repo>/.claude/worktrees/<name>/` 아래에서는 모든 파일이 `.claude` 를 성분으로
+  가져 python 수집기가 0건을 내던 워크트리 아티팩트였다. prune 을 **스캔 root 기준 상대
+  경로**로 바꾼 수정이 이 브랜치에 이미 들어와 있고, 워크트리 안에서 15/15 통과를 확인했다.
+  기록으로 남기는 이유: 다음 사람이 스크래치 기준선의 옛 RED 줄을 보고 이미 닫힌 질문을
+  다시 여는 것을 막기 위해서다.
+
 ## [4.3.5] — 2026-08-25
 
 ### Fixed
