@@ -274,7 +274,21 @@ Iterative fix-loop, `max_review_iterations = 5` (hard-coded constant).
 
 For each iteration N (1..5):
 
-1. Compute diff scope (paths / branch / session — from preflight result). **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> Review scope: session (<COUNT> changed files). 전체 PR/브랜치는 /qg branch.` (`<COUNT>` = `$resolved_scope_file_count` — 정의는 Step 4.5 "Resolved-scope file count" 참조, `check-review-scope.sh` 산출값이 아니다). 명시적 `/qg branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/qg branch`는 결정론적 escape hatch로 유지).
+1. **Resolve the review scope** — `paths` / `branch` / `session` (`session` = the default: no `branch` arg, no `--paths`). **There is no preflight scope**; nothing upstream hands you a file set, so you derive it here, from git, every turn:
+
+   ```bash
+   QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"   # plugin root per Step P0b
+   MERGE_BASE=$("$QG/scripts/resolve-baseline.sh" | awk '$1=="merge_base:"{print $2}')
+   git diff --name-only "$MERGE_BASE"..HEAD    # (a) committed on this branch
+   git diff HEAD --name-only                   # (b) tracked, not yet committed
+   git ls-files --others --exclude-standard    # (c) untracked and not ignored
+   ```
+
+   `session` = **(a) ∪ (b) ∪ (c)** · `branch` = **(a)** · `paths` = what the `--paths` globs resolve to. Never re-derive a base yourself — `resolve-baseline.sh` owns it (two consumers on different baselines is the C2 failure), and its `degraded: yes` means the set is undeterminable: carry that to Step 4.5's degraded branch instead of silently calling it 0. The size of the set you end up with is `$resolved_scope_file_count` (Step 4.5) and it is what you feed to `scout.py`.
+
+   **Deriving from git is what makes the scope tool-agnostic** — git reports a changed file the same way whichever tool produced it, so a file written by a Bash heredoc or `sed -i` is in the default scope exactly like one written by `Write` (A20). Never source the scope from a per-session record of "files this turn edited": such a record is produced by a hook keyed on the writing tool's name, so every write outside that name list vanishes from the scope silently — the pre-5.0.0 defect this release removed.
+
+   **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> Review scope: session (<COUNT> changed files). 전체 PR/브랜치는 /qg branch.` (`<COUNT>` = `$resolved_scope_file_count` — 정의는 Step 4.5 "Resolved-scope file count" 참조, `check-review-scope.sh` 산출값이 아니다). 명시적 `/qg branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/qg branch`는 결정론적 escape hatch로 유지).
 
 **Step 1b — Changes-exist signal (iteration N=1 only).** Before dispatching the
 scout, run the read-only changes-exist signal **once** and cache it for the rest
