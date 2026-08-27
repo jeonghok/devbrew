@@ -28,6 +28,8 @@ import compute_issue_id  # noqa: E402  (sibling helper, centralized id — §8)
 # `_yaml_scalar` 는 이 플러그인 안의 세 소비자가 공유한다(여기 · merge_brief_review ·
 # brief_review_state). 같은 플러그인 안이라 import 하나로 중복이 소멸한다(설계 §6.1③).
 from hook_common import _yaml_scalar  # noqa: E402
+# subagent 발견의 처분 회계 (Task 2 — shared/adjudication/adjudication.py 심볼릭 링크).
+from adjudication import Ledger  # noqa: E402
 
 # --- verdict precedence (§7b) ------------------------------------------------
 RANK = {"approved": 0, "needs_revise": 1, "needs_interview": 2}
@@ -67,23 +69,31 @@ def extract_claude_verdict(text: str) -> str | None:
     return None
 
 
-def extract_claude_issues(text: str) -> tuple[list[dict] | None, bool]:
+def extract_claude_issues(text: str) -> tuple[list[dict] | None, bool, Ledger]:
     """Parse the LAST ```spec-review-issues fenced block (anti-injection,
-    symmetric to codex last-fenced-block). Returns (issues, degraded).
+    symmetric to codex last-fenced-block). Returns (issues, degraded, ledger).
     degraded=True when no well-formed sentinel block yields a JSON {issues:[...]}.
+
+    세 `return None, True` 경로는 **원리적 미상**이다 — 그 지점에는 `issues`
+    리스트가 아직 만들어지지 않아 몇 개였는지 알 방법이 없다. 0 은 거짓 clean 이다.
     """
+    L = Ledger(items="open")
     blocks = SENTINEL_RE.findall(text)
     if not blocks:
-        return None, True
+        L.uncountable("claude_issues", "센티널 블록 부재 — 리스트가 만들어지지 않았다")
+        return None, True, L
     try:
         payload = json.loads(blocks[-1])
     except json.JSONDecodeError:
-        return None, True
+        L.uncountable("claude_issues", "JSONDecodeError — 리스트가 만들어지지 않았다")
+        return None, True, L
     if not isinstance(payload, dict) or not isinstance(payload.get("issues"), list):
-        return None, True
+        L.uncountable("claude_issues", "payload 형태 불일치 — 리스트가 만들어지지 않았다")
+        return None, True, L
     issues = []
     for it in payload["issues"]:
         if not isinstance(it, dict):
+            L.hold(repr(it)[:60], "비-dict 원소 — 판정 불가")
             continue
         issues.append({
             "category": str(it.get("category", "")),
@@ -91,13 +101,22 @@ def extract_claude_issues(text: str) -> tuple[list[dict] | None, bool]:
             "severity": str(it.get("severity", "")).lower(),
             "message": str(it.get("message", "")),
         })
-    return issues, False
+        L.accept(issues[-1])
+    return issues, False, L
 
 
 # --- codex side --------------------------------------------------------------
-def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str]:
+def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str, int]:
     """Line-parse codex_findings_to_yaml.py output (known shape). Returns
-    (findings, codex_failed, reason).
+    (findings, codex_failed, reason, malformed_count).
+
+    `malformed_count`(마커 위반으로 폐기된 finding 개수)는 **out-of-band** 반환값이다
+    — `reason` 문자열에 인코딩하지 않는다. `reason` 은 codex YAML 파일 자신도
+    `meta.reason:` 으로 채울 수 있는 필드라(:183 `reason = _yaml_unscalar(v)`),
+    거기 개수를 실으면 파일이 공급한 임의 문자열과 부딪혀 `int()` 가 크래시하거나
+    (전체가 rc=1·빈 stdout·verdict 소실), 이 함수를 재사용하는 `merge_brief_review.py`
+    가 그 내부 카운트를 사용자 advisory에 그대로 노출한다. `reason` 은 항상 아래
+    고정 리터럴 중 하나(또는 파일이 준 원문)이고, 카운트는 별도 채널로 간다.
 
     Fail-CLOSED (opt-in-to-success). The well-formed producer contract ALWAYS
     emits a `meta:` block carrying `codex_failed: true|false`
@@ -109,7 +128,7 @@ def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str]:
     NO degrade advisory, silently defeating the human-gate backstop that every
     other degrade path raises. Missing file → failed."""
     if not path or not os.path.isfile(path):
-        return [], True, "codex_yaml_missing"
+        return [], True, "codex_yaml_missing", 0
     findings: list[dict] = []
     failed = False
     reason = ""
@@ -124,7 +143,7 @@ def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str]:
         # isfile() passed but the file can't be opened/read (permission /
         # TOCTOU race / vanished) → degrade loudly, never crash the merge with
         # an uncaught OSError (symmetric with load_history's guard).
-        return [], True, "codex_yaml_unreadable"
+        return [], True, "codex_yaml_unreadable", 0
     for raw in lines:
         line = raw.rstrip("\n")
         if line.startswith("findings:"):
@@ -178,8 +197,11 @@ def parse_codex_yaml(path: str) -> tuple[list[dict], bool, str]:
     # the file as a clean codex run). Discard any partial findings — an
     # untrusted file's content must not feed the verdict or the ledger.
     if not marker_seen or marker_invalid:
-        return [], True, "codex_yaml_malformed"
-    return findings, failed, reason
+        # 셀 수 있다 — findings 가 이미 누적돼 있다. 사실만 보고하고 개수를
+        # 숨기던 것이 결함이었다(#2). 원리적 미상(#1)과 다른 부류다. 개수는
+        # `reason` 문자열이 아니라 4번째 반환값으로 — 이유는 함수 docstring.
+        return [], True, "codex_yaml_malformed", len(findings)
+    return findings, failed, reason, 0
 
 
 def _yaml_unscalar(v: str):
@@ -253,7 +275,7 @@ def conservative(a: str, b: str) -> str:
     return INV_RANK[max(RANK[a], RANK[b])]
 
 
-def _sanitize_history_record(rec: dict) -> dict:
+def _sanitize_history_record(rec: dict, ledger: Ledger | None = None) -> dict:
     """Coerce a persisted history record so every downstream int() site is
     safe. dismissed_by_user is USER-EDITABLE (P17) — malformed values (e.g.
     null from a hand-edited history file) are plausible. Global Constraint:
@@ -261,30 +283,45 @@ def _sanitize_history_record(rec: dict) -> dict:
     dismissed_by_user already int) round-trip byte-identically."""
     out = dict(rec)
     for key in ("raised_count", "dismissed_by_user"):
+        raw = out.get(key, 0)
         try:
-            out[key] = int(out.get(key, 0))
+            out[key] = int(raw)
         except (TypeError, ValueError):
             out[key] = 0
+            if ledger is not None:
+                # raised_count 5→0 은 `>=3` 정체 게이트를 무력화한다.
+                # 항목이 아니라 «값»의 대체이므로 소실이 아니지만, 게이트를
+                # 바꾸므로 gate=True 다.
+                ledger.coerced(key, raw, 0, gate=(key == "raised_count"))
     if "resolved" in out and not isinstance(out["resolved"], bool):
         out["resolved"] = bool(out["resolved"])
     return out
 
 
-def load_history(path: str) -> list[dict]:
+def load_history(path: str, ledger: Ledger | None = None) -> list[dict]:
+    L = ledger if ledger is not None else Ledger(items="open")
     if not path or not os.path.isfile(path):
         return []
     try:
         with open(path, "r", encoding="utf-8") as fh:
             data = json.load(fh)
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError) as e:
+        # 원장 통째가 사라진다. 짝 `_write_history` 는 실패 시 advisory 를 내는데
+        # 이쪽만 침묵했다(비대칭). 이것은 **주(主)** 입력이다 — 이 원장이 없으면
+        # stagnation 판정이 통째로 근거를 잃는다.
+        L.source_failed("issue_history", "%s: %s" % (type(e).__name__, e), primary=True)
         return []
     ih = data.get("issue_history") if isinstance(data, dict) else None
     if not isinstance(ih, list):
+        L.source_failed("issue_history", "issue_history 가 리스트가 아니다", primary=True)
         return []
-    return [
-        _sanitize_history_record(r) for r in ih
-        if isinstance(r, dict) and "id" in r
-    ]
+    out = []
+    for r in ih:
+        if not isinstance(r, dict) or "id" not in r:
+            L.hold(repr(r)[:60], "id 없는 원장 레코드 — 대조 불가")
+            continue
+        out.append(_sanitize_history_record(r, L))
+    return out
 
 
 def _origin_merge(prior_source: str, this_round: set) -> str:
@@ -299,7 +336,7 @@ def _origin_merge(prior_source: str, this_round: set) -> str:
     return "claude"
 
 
-def build_ledger(claude_issues, codex_findings, claude_degraded, history):
+def build_ledger(claude_issues, codex_findings, claude_degraded, history, codex_ledger):
     """Union-increment ledger + unified-ledger stagnation scan (§8).
 
     - raised_count += 1 per id per ROUND (both reviewers flagging = corroboration,
@@ -325,6 +362,12 @@ def build_ledger(claude_issues, codex_findings, claude_degraded, history):
         cat = str(f.get("category", ""))
         sec = str(f.get("target_section", ""))
         if not cat and not sec:
+            # repr() — str() 이면 summary 안의 개행이 hold() 사유 문자열에 그대로
+            # 살아, 나중에 stdout 에 쓰일 때 물리적으로 새 줄을 만든다(C1). repr()
+            # 은 개행을 `\n` 두 글자로 escape 해 한 줄을 보장한다 — claude·history
+            # 쪽 hold() 호출과 같은 관례.
+            codex_ledger.hold(repr(f.get("summary", ""))[:60],
+                              "category·target_section 둘 다 비어 issue_id 산출 불가")
             continue
         iid = compute_issue_id.compute(cat, sec)
         round_origin.setdefault(iid, set()).add("codex")
@@ -439,8 +482,11 @@ def main() -> int:
             claude_text = fh.read()
 
     claude_verdict = extract_claude_verdict(claude_text)
-    claude_issues, claude_degraded = extract_claude_issues(claude_text)
-    codex_findings, codex_failed, codex_reason = parse_codex_yaml(args.codex_yaml)
+    claude_issues, claude_degraded, claude_ledger = extract_claude_issues(claude_text)
+    codex_ledger = Ledger(items="open")
+    codex_findings, codex_failed, codex_reason, codex_malformed_n = parse_codex_yaml(args.codex_yaml)
+    for i in range(codex_malformed_n):
+        codex_ledger.hold("codex_finding[%d]" % i, "YAML 마커 위반으로 폐기")
     codex_avail = not codex_failed
     codex_verdict = derive_codex_verdict(codex_findings) if codex_avail else None
 
@@ -481,14 +527,20 @@ def main() -> int:
 
     # --- ledger (§8): union-increment + unified-ledger stagnation scan ---
     both_dead = claude_unrecoverable and not codex_avail
-    history = load_history(args.history)
+    history_ledger = Ledger(items="open")
+    history = load_history(args.history, history_ledger)
     if both_dead:
         new_history, stagnation = history, {"per_issue": [], "round_level": "inconclusive"}
     else:
+        if not codex_avail and codex_findings:
+            for f in codex_findings:
+                # repr() — 위 build_ledger 안의 같은 패턴과 동일 이유(C1).
+                codex_ledger.hold(repr(f.get("summary", ""))[:60],
+                                  "codex 미가용 라운드 — 원장 진입 차단")
         new_history, stagnation = build_ledger(
             claude_issues if not claude_degraded else [],
             codex_findings if codex_avail else [],
-            claude_degraded, history,
+            claude_degraded, history, codex_ledger,
         )
 
     if not both_dead:
@@ -499,6 +551,21 @@ def main() -> int:
                 "이번-라운드 stagnation은 stdout에서 여전히 authoritative.")
 
     codex_findings_display = build_codex_findings_display(codex_findings, codex_avail)
+
+    # 세 원장을 합산한다 — verdict 와 별개 채널.
+    merged = {"held": 0, "unknown": [], "reasons": []}
+    for L in (claude_ledger, codex_ledger, history_ledger):
+        r = L.report()
+        merged["held"] += r["counts"]["held"]
+        merged["unknown"] += r["unknown_counts"]
+        merged["reasons"] += r["reasons"]
+    # degrade 사유는 `advisory` 로 간다. 형제 `merge_brief_review.py:325-328` 과
+    # 같은 선택이고, 여기서는 표시 계약이 이유다: SKILL 의 "그대로 표시"·"degrade
+    # 없음" 판정은 `advisory` 에만 걸려 있다. 별도 키로 내면 `load_history` 실패는
+    # 규칙 없는 키로 가고 그 짝 `_write_history` 실패는 advisory 로 가는 비대칭이
+    # 표시 층에 남는다 — 같은 사건의 두 방향이 다른 가시성을 갖는다는 뜻이다.
+    # 키를 열거하는 판정은 «내일 생길 키»에 대해 fail-open 이기도 하다.
+    advisory.extend(merged["reasons"])
 
     result = {
         "combined_verdict": combined,
@@ -513,6 +580,17 @@ def main() -> int:
         "advisory": advisory,
     }
     sys.stdout.write(emit(result))
+
+    # 계수 두 줄은 별개 키로 남는다 — 사유가 advisory 에 있으므로 이 둘이 degrade
+    # 의 **유일한** 신호가 되는 경우는 없다(held>0 이면 "보류: …" 사유가, unknown 이
+    # 있으면 "셀 수 없음: …" 사유가 반드시 advisory 에 함께 실린다).
+    # emit() 의 다른 모든 줄과 같은 문을 통과시킨다: `_yaml_scalar` 가 없으면
+    # (item 이 이미 repr() 로 개행을 escape 했더라도) `:`·`'`·`"` 등을 담은 값이
+    # raw 로 나가 stdout 을 조작할 수 있다(C1) — untrusted 값이 여기까지 온 경로가
+    # 이미 있는 이상, escape 는 "이 값은 안전하다"는 가정이 아니라 이 출력 채널
+    # 자체의 계약이어야 한다.
+    print(f"adjudication_held: {_yaml_scalar(merged['held'])}")
+    print(f"adjudication_unknown: {_yaml_scalar(','.join(merged['unknown']))}")
     return 0
 
 

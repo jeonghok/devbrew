@@ -113,6 +113,18 @@ in any per-dispatch block — the reviewer agents declare `project_dir` as a
 required dispatch parameter and forbid `pwd`/`git rev-parse` recomputation
 in their personas.
 
+**Step P0b — Resolve the plugin root.** `CLAUDE_PLUGIN_ROOT` is **not set in the
+Bash tool environment**. Run every script path below with the installed
+plugin-root substituted; when dogfooding inside the devbrew repo that is
+`./plugins/quality-gates`. Self-contained fences derive it in-line:
+
+```bash
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+```
+
+Shell state does not carry between Bash calls — every fence that needs `$QG`
+assigns it in that same fence. Do not hoist the assignment.
+
 **Step P1 — Global kill switch.** If `DEVBREW_QUALITY_GATES_DISABLE=1`,
 emit `[quality-gates] disabled via DEVBREW_QUALITY_GATES_DISABLE=1` and
 return immediately. Do NOT call setup-qg.sh or any agent.
@@ -120,7 +132,8 @@ return immediately. Do NOT call setup-qg.sh or any agent.
 **Step P2 — Setup state.** Run:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh" --ensure $ARGUMENTS
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/setup-qg.sh" --ensure $ARGUMENTS
 ```
 
 `setup-qg.sh --ensure` creates the per-session state file
@@ -209,7 +222,7 @@ AskUserQuestion({
 
 Reached when gate scope = both via the full-pipeline Dispatch Loop (interactive `Run both gates`, or the `gate=both` argument). **Single-gate `/qg runtime` bypasses the Dispatch Loop and runs the equivalent runtime-scope init at the Runtime gate's [Step R5a⁰](#runtime-gate) instead** — so every path that reaches the Runtime gate produces `manifest` / `approved_surfaces` / `block_policy` for R5a³. Decide runtime scope ONCE, but only when there is something risky to decide.
 
-1. Run `${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh` to get the manifest with `requires_decision` flags. This runs whenever gate scope = both — the manifest is also threaded to the Runtime gate's R5a³ dispatch.
+1. Run `scripts/detect-runtime.sh` (plugin root per Step P0b) to get the manifest with `requires_decision` flags. This runs whenever gate scope = both — the manifest is also threaded to the Runtime gate's R5a³ dispatch.
 2. **Gate firing condition (mechanical):** fire an `AskUserQuestion` **only if** the manifest has ≥1 surface with `requires_decision: true` AND no argument already pre-answers the *surface selection*. `gate=both` answers **gate scope only** — it does NOT pre-answer runtime scope, so Decision 2 still fires for `/qg both` when a `requires_decision` surface exists (matching bare `/qg` runtime behavior). Otherwise (no boot surface at all / surface-arg-answered) print a one-line plan and proceed **zero-click** with `approved_surfaces` empty. **Every kind in `runnable_surfaces` now carries `requires_decision: true`** — since v3.0.0 the manifest holds boot surfaces only, and test runners are no longer surfaces at all (they are the orchestrator's, run in R4/R5b outside the verifier's turn). So "zero-click" here means *there was nothing to boot*, not *there were automatic surfaces*.
 3. When firing, confirm in ONE question: **runtime scope** (which `requires_decision` surfaces to opt into) and **block policy** (`stop` / `skip` / `ask`). Record the opted-in surfaces as `approved_surfaces` and the chosen `block_policy`.
 
@@ -248,7 +261,7 @@ Full pipeline mode:
 
 ## Trivia escape
 
-Run `${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh`. Exit code:
+Run `scripts/check-trivia.sh` (plugin root per Step P0b). Exit code:
 - 0 = trivia detected → skip all gates. Print:
   > `Trivia diff — all gates skipped (one-sentence diff per CLAUDE.md trivia escape).`
 - 1 = non-trivia → proceed to the Review gate.
@@ -269,7 +282,8 @@ of this turn (C3 — single call; the cached values are consumed by the
 honest-verdict floor at Step 4.5):
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh"
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/check-review-scope.sh"
 ```
 
 The script takes **no arguments** — scope resolution (what to review) is yours, not
@@ -293,7 +307,7 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 > 4.5 floor enforces this structurally: this norm is the routing half (model-owned),
 > the floor is the integrity half (deterministic).
 
-2. Dispatch the scout: `Bash(${CLAUDE_PLUGIN_ROOT}/scripts/scout.py ...)` — compute its
+2. Dispatch the scout: `Bash(scripts/scout.py ...)` (plugin root per Step P0b) — compute its
    metrics from the review scope you resolved at step 1 (the git-derived changed-file set, the
    `branch` diff, or the `--paths` globs). Scope is model-owned; there is no cached scope
    variable to thread.
@@ -343,6 +357,7 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 ```
 Agent({
   subagent_type: "quality-gates:security-reviewer",
+  // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-open
   description: "Security review (Review gate iter N)",
   prompt: "Run code-level security review on the current diff.
     project_dir: \"$project_dir\"
@@ -354,6 +369,7 @@ Agent({
 
 Agent({
   subagent_type: "quality-gates:adversarial",
+  // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-open
   description: "Adversarial review of Phase-1 findings (Review gate iter N)",
   prompt: "Re-review findings from Phase-1 reviewers for false positives
     and missed exploit paths.
@@ -526,13 +542,22 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
      Loop](#dispatch-loop) step 4 (which short-circuits the Runtime gate for the
      review-only path, else runs it).
 
-   **Dropped-finding override (applies to BOTH clean sub-cases, before the floor).**
-   If the captured stdout contains a line matching `dropped as malformed`, you MUST
-   surface that line verbatim **in addition to** the empty-state line, and you MUST
-   NOT print a bare `clean` verdict. Print instead:
-   `## Review gate iter N: not clean — <D> finding(s) dropped as malformed (unjudged).`
-   (`<D>` = the count from that line.) Then continue to step 5's decision tool as if
-   findings remained.
+   **Not-clean notice override (applies to BOTH clean sub-cases, before the floor).**
+   The key is the marker every such notice carries, not any one notice's wording:
+   if the captured stdout contains `**이 실행은 clean이 아니다**` on any line, you MUST
+   surface **every** line carrying it verbatim, **in addition to** the empty-state
+   line, and you MUST NOT print a bare `clean` verdict. Print instead:
+   `## Review gate iter N: not clean — <사유>.`
+   `<사유>` comes from the notice itself, and notices differ in what they carry:
+   - The **Dropped-finding** notice carries a count — it reads
+     `<D> finding(s) dropped as malformed`. Print
+     `<D> finding(s) dropped as malformed (unjudged)`.
+   - A notice with **no count** (e.g. the `판정 degrade` line, which names which
+     input or judgment path failed rather than how many items) has no `<D>` to read.
+     Do NOT invent one and do NOT skip the override — print that notice line
+     **verbatim** as `<사유>`.
+
+   Then continue to step 5's decision tool as if findings remained.
 
    Why this clause exists: the synthesizer emits that notice — whose own text reads
    `**이 실행은 clean이 아니다**` — precisely because a malformed finding may have
@@ -543,6 +568,13 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
    생산자만 고치고 소비자를 안 고친 반쪽 수정). A finding that was thrown away is not
    a finding that was cleared. This mirrors the Runtime gate's `indeterminate ≠ clean`
    rule at [Step R4](#runtime-gate).
+
+   Why the key is the marker and not the notice text: keying on one notice's literal
+   is an enumeration, and an enumeration is fail-open over time — a second notice
+   (`판정 degrade`) was added later and was **not** matched by a `dropped as malformed`
+   key, so the same half-fix reappeared with only the instance changed. Deriving the
+   key from the marker the notices share covers every present and future notice that
+   declares itself not-clean.
 
    **Security-review-absent advisory (applies to EVERY step-4.5 exit path — the
    `kept > 0` case and BOTH clean sub-cases).** If this iteration set
@@ -557,7 +589,7 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
    emitted mid-iteration, far above the verdict, and a reader who scrolls to the
    verdict (or reads only the `## History` line) never sees it. Tier A floor is
    `security-reviewer + adversarial`; with one of the two removed, a bare `clean`
-   over-claims. Same family as the [Dropped-finding override](#review-gate) above —
+   over-claims. Same family as the [Not-clean notice override](#review-gate) above —
    *a finding that was never produced is not a finding that was cleared.*
 
    **Honest-verdict floor (deterministic — both clean sub-cases).** The floor keys
@@ -884,8 +916,9 @@ Build the status rows and render them (deterministic, scannable) — one
 `aborted iter N`, `skipped`, `clean`, `failed`, `SKIP_WITH_EVIDENCE`):
 
 ```bash
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
 printf 'Review gate\t<clean iter N | no scope reviewed (branch <M> ahead) | proceeded-with-findings iter N | aborted iter N | skipped>\nRuntime gate\t<clean | failed | SKIP_WITH_EVIDENCE | aborted | skipped>\n' \
-  | ${CLAUDE_PLUGIN_ROOT}/scripts/render-terminal.py table --title "Quality Gates — Complete"
+  | $QG/scripts/render-terminal.py table --title "Quality Gates — Complete"
 ```
 
 Then print the appended `## History` lines from the state file as an

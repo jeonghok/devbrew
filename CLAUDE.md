@@ -42,6 +42,21 @@ GitHub Flow. `main`에서 분기, PR로 merge back. 상세는 `docs/git-workflow
 - **Command frontmatter의 `allowed-tools`는 쓰지 않는다.** 2026-08-22 헤드리스 실측 5변형(`--plugin-dir` 격리 플러그인)에서 `["Read"]`로 `Bash`를 빼놓아도 `Bash`가 실행됐고, 스코프 표기(`Bash(<pattern>:*)`)도 범위 밖 명령을 막지 못했다 — **이 계층은 제한이 아니다.** 바로 위 agent의 `tools:`와는 다르다 — 그것은 fail-closed이고 Law 2의 집행 지점이다. 막지 않는 것을 막는다고 믿게 만드는 선언은 없는 것보다 나쁘다.
 - **최소 버전이 선언된 의존성.** `other-plugin:agent-name`을 dispatch하는 플러그인은 README prerequisites에 `other-plugin`을 리스트. Silent coupling은 버그.
 - **모든 skill에 `cost_class` 선언** (`low`|`medium`|`high`|`variable`). `high`는 지출 전 명시적 `AskUserQuestion` 승인 게이트를 invoke해야 함.
+- **subagent 발견은 처분을 밝힌다.** 모든 dispatch 자리는
+  `**처분** — consumer=<같은 플러그인의 .py|.js 경로|orchestrator|human> · fail-<open|closed> · disclosure=<리터럴>`
+  한 줄을 갖는다. `consumer=` 가 경로면 그 경로는 추적되는 파일로 **실재해야** 하고 **앵커가 사는
+  파일과 같은 플러그인**이어야 한다(설치본에서 다른 플러그인의 스크립트는 도달 불가다).
+  `disclosure=` 는 `consumer=` 가 `.py` 경로일 때만 생략한다 — 그때는 그 파일이 회계 모듈을
+  실제로 import 하는지가 대신 검사된다. 그 밖의 소비자에서는 **필수**다. 판정기가 항목을 버리면
+  센다 — 셀 수 없으면 「셀 수 없음」을 낸다(침묵과 0 은 다른 사실이다). 회계는
+  `shared/adjudication/` 이 한다.
+  **흡수(dedup)와 강제(coercion)는 소실이 아니다** — 계수하되 그 자체로 degrade 는 아니다.
+  다만 **강제가 게이트 판정을 바꾸면**(`gate=True`) degrade 다.
+  **공시와 차단은 다른 술어다**: 무엇이 degrade 든 언제나 드러내되, 막는 것은 **항목이
+  소실됐거나 셀 수 없거나 그 축의 주(主) 판정자가 죽었을 때**다 — 모델 다양성 손실은 공시하고 막지 않는다.
+  미판정 항목의 방향은 다음 소비자가 정한다: 기계면 제외, 사람이면 라벨을 붙여 보여준다.
+  집행은 `shared/tests/test_dispatch_disposition.sh`(축 A①②③④·B·C). **축 C 는 채널 «이름»의
+  실재까지만 재고 그 채널이 실제로 읽히는지는 못 잰다.**
 
 ### 런타임 상태 & 훅
 

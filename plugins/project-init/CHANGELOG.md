@@ -20,7 +20,28 @@
 - kill switch 토큰 `DEVBREW_SKIP_HOOKS=project-init:docs-lint` 은 가리킬 대상을 잃었다. 설정해도 아무 효과가 없다 — 런타임 advisory 는 두지 않는다(대응하는 기능이 옮겨간 것이 아니라 사라졌으므로 조용한 재활성화가 일어날 수 없다). CLAUDE.md §메타데이터의 one-minor deprecation window 없이 훅과 토큰을 같은 릴리스에서 제거한다 — 근거: `hooks/docs-lint.py` 는 애초부터 non-blocking advisory 전용이었다(자기 docstring "Non-blocking advisory pattern: outputs systemMessage on violation, {} on pass"; `main()`의 모든 반환 경로가 `return 0`; `emit()`이 내보내는 JSON은 `{"systemMessage": ...}` 또는 `{}` 뿐, 차단·거부 필드 없음 — 삭제 직전 파일 `git show d44c56a^:plugins/project-init/hooks/docs-lint.py`로 확인). 이 훅의 제거가 깰 수 있는 것은 advisory 메시지 노출뿐이라, deprecation window 가 보호하려는 대상("작동 중인 동작이 예고 없이 사라짐")이 애초에 존재하지 않는다. **이 근거는 훅이 blocking 이었다면 성립하지 않는다** — 그런 경우 이 문단을 전례로 인용하지 말고 별도 deprecation window를 둘 것.
 
 ### Changed
-- `commands/project-init.md` — 헌장 abort advisory 가 더 이상 "docs-lint 이 사후 플래그합니다"를 약속하지 않는다. `.claude/rules/agent-tool-permission.md` 를 `AGENTS.md` 에서 링크하지 않는 배치 결정은 유지하되, 근거에서 docs-lint R6 참조를 뺐다.
+- `commands/project-init.md` — 헌장 abort advisory 가 더 이상 "docs-lint 이 사후 플래그합니다"를 약속하지 않는다. (이 릴리스는 같은 파일의 `#### 4f` 근거에서도 docs-lint R6 참조를 뺐으나, `[2.2.0]` 이 그 블록을 통째로 제거해 남은 대상이 없다.)
+
+## [2.2.0] — 2026-08-23
+
+`/project-init` 이 `.claude/rules/agent-tool-permission.md` 를 만들던 경로를 제거한다.
+
+### Removed
+- `templates/shared/agent-tool-permission.md` — 규칙 본문 템플릿.
+- `commands/project-init.md` `### Step 3.6` — Agent 호출 권한을 묻던 질문. `#### 4a` 의
+  해당 템플릿 읽기 항목, `#### 4f` 의 쓰기 블록(`.claude/rules/` 생성 + `.gitignore`
+  한 줄 추가), `### Step 5` 보고의 해당 항목도 함께.
+- `tests/test_agent_permission_contract.py` — 위 계약 전용 회귀 락. 잠글 계약이 사라졌다.
+
+### Notes
+- 제거 이유: Agent 호출 허용은 *작업 환경의 개인 설정*이라 프로젝트 초기화의 산출물이
+  아니다. `/project-init` 이 대상 레포에 git-제외 파일을 만들고 `.gitignore` 까지 편집하는
+  것은 이 커맨드가 약속한 범위(git-workflow 규약 + charter) 밖의 부작용이다.
+- CLAUDE.md 의 one-minor deprecation window 를 거치지 않고 바로 제거했다. 도입(2.1.0)이
+  하루 전이고 이 산출물에 의존하는 다운스트림이 없어 window 가 보호할 대상이 없다는
+  사용자 판단.
+- 이 리포 자체의 Agent 상시 허용 규약(`CLAUDE.md` **Subagent spray** 항목)은 이 변경과
+  무관하게 유지된다 — 그것은 devbrew 의 규약이지 `/project-init` 의 산출물이 아니다.
 
 ## [2.1.1] — 2026-08-22
 

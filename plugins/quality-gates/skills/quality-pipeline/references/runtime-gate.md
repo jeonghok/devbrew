@@ -181,7 +181,8 @@ git 이다"* 는 *"피검자가 통제하는 코드가 안 돈다"* 와 **같은
 "실패 시 보존"), 위 `echo` 가 그 경로를 사용자에게 알린다. 정리는 `TMPDIR` 수명에 위임.
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/resolve-baseline.sh"
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/resolve-baseline.sh"
 ```
 
 6키(`base` / `base_ref` / `merge_base` / `degraded` / `same_as_head` / `ahead`)를
@@ -223,7 +224,8 @@ no 이고 기준선 트리도 만들어진다; 그 창을 닫는 결정론 수�
 **Step R1a — 러너 어댑터 감지 (HEAD 트리).**
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" detect "$project_dir"
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/run-test-selection.sh" detect "$project_dir"
 ```
 
 감지된 어댑터를 **집합으로** 캡처한다(0개 이상 — 폴리글랏 레포는 복수). 각 어댑터는
@@ -257,6 +259,7 @@ no 이고 기준선 트리도 만들어진다; 그 창을 닫는 결정론 수�
 ```
 Agent({
   subagent_type: "quality-gates:test-scope-validator",
+  // **처분** — consumer=orchestrator · fail-open · disclosure=R2 산문
   description: "Classify scope-relevant test files (Runtime gate)",
   prompt: "Validate test scope against current diff, spec acceptance criteria, and plan items.
     project_dir: \"$project_dir\"
@@ -275,9 +278,10 @@ Agent({
 여기서 손으로 하지 않는다:
 
 ```bash
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
 set -o pipefail
 printf '%s\n' "${candidate_files[@]}" \
-  | "${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" assign "$project_dir" \
+  | "$QG/scripts/run-test-selection.sh" assign "$project_dir" \
     > "$assign_rows_file.part" \
   && mv -f "$assign_rows_file.part" "$assign_rows_file"
 assign_rc=$?
@@ -421,7 +425,8 @@ R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 �
 없으면 여기서 직접 부른다 (이미 allowed-tools 에 있다):
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh"
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/check-review-scope.sh"
 ```
 
 `worktree_dirty` 와 **`degraded` 를 함께** 읽는다. `degraded: yes` 면 그 스크립트는
@@ -446,7 +451,8 @@ R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 �
 ① 캐시 조회 — 어댑터마다:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/baseline-cache.sh" get \
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/baseline-cache.sh" get \
   ".claude/quality-gates/baseline-cache" "$merge_base" "$runner" "${units[@]}"
 ```
 
@@ -471,7 +477,8 @@ R-init 이 `degraded: yes` 를 냈으면 이 스텝 전체를 건너뛰고 R8 �
 ② **기준선 워크트리는 캐시 적중 여부와 무관하게 항상 만든다** (전량 적중이어도):
 
 ```bash
-baseline_wt=$("${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-baseline \
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+baseline_wt=$("$QG/scripts/qg-worktree.sh" create-baseline \
   "$merge_base" "<session-id>") || baseline_wt=""
 ```
 
@@ -528,7 +535,8 @@ diff 가 테스트 인프라 자체를 바꾸는 경우(unittest→pytest 마이
 (/qg iter-5 CRITICAL SR1):
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" probe "$baseline_wt" "$runner"
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/run-test-selection.sh" probe "$baseline_wt" "$runner"
 ```
 
 `baseline_detected` 는 `detect` 의 집합이 아니라 **이 `probe` 가 `usable: yes` 를 낸
@@ -577,7 +585,8 @@ SR1 의 조상이다). `run` 이 관문을 다시 도는 중복은 `setup_cmd` �
 `probe` 도 이미 돌았다):
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" run \
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/run-test-selection.sh" run \
   "$baseline_wt" "$runner" bulk "${miss_units[@]}"
 ```
 
@@ -590,11 +599,12 @@ bulk 가 red 면 실패한 unit 에 대해서만 `per-unit` 으로 재실행한�
 ③ 결과를 **R6 이 읽을 파일에 쓰고**, 캐시에 기록하고, 기준선 워크트리를 폐기한다:
 
 ```bash
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
 printf '%s\n' "${rows[@]}" > "$qg_run_tmp/baseline-$runner.tsv"
-printf '%s\n' "${rows[@]}" | "${CLAUDE_PLUGIN_ROOT}/scripts/baseline-cache.sh" put \
+printf '%s\n' "${rows[@]}" | "$QG/scripts/baseline-cache.sh" put \
   ".claude/quality-gates/baseline-cache" "$merge_base" "$runner"
 if [[ -n "${baseline_wt:-}" && -d "$baseline_wt" ]]; then
-  "${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "$baseline_wt"
+  "$QG/scripts/qg-worktree.sh" remove "$baseline_wt"
 fi
 ```
 
@@ -640,7 +650,7 @@ full-pipeline `Run both gates` / `gate=both` path produced them in
 [Decision 2](#decision-2--runtime-scope--block-policy-conditional). **Single-gate
 `/qg runtime` bypassed the Dispatch Loop, so if `approved_surfaces` / `block_policy`
 are still unset on entry here, produce them now**: run
-`${CLAUDE_PLUGIN_ROOT}/scripts/detect-runtime.sh` to get the `manifest`, then apply
+`scripts/detect-runtime.sh` (plugin root per Step P0b) to get the `manifest`, then apply
 Decision 2's firing logic on the result — fire the runtime-scope `AskUserQuestion`
 only if ≥1 `requires_decision` surface exists and no surface-selection arg
 pre-answers it; otherwise zero-click with **empty** `approved_surfaces` and a default
@@ -659,7 +669,8 @@ already ran (gate scope = both), this step is a no-op.
 a disposable git-worktree:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-sandbox "<session-id>"
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/qg-worktree.sh" create-sandbox "<session-id>"
 ```
 
 - Exit 0 → capture **line 1 = `sandbox_dir`**, **line 2 = `baseline_sha`**, **line 3
@@ -703,6 +714,7 @@ sandbox discard).
 ```
 Agent({
   subagent_type: "quality-gates:runtime-verifier",
+  // **처분** — consumer=orchestrator · fail-closed · disclosure=baseline_unrunnable
   description: "Runtime verification (Runtime gate, sandbox executor)",
   prompt: "Boot the declared surfaces in the sandbox, drive flows, assert against spec AC, write an evidence-log.
     project_dir: \"$runtime_project_dir\"
@@ -744,7 +756,8 @@ verifier 의 dispatch 가 **끝난 뒤**, 먼저 **HEAD 축 전용 트리**를 �
 봉인한 커밋 `B` 다:
 
 ```bash
-head_tree_dir=$("${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-head \
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+head_tree_dir=$("$QG/scripts/qg-worktree.sh" create-head \
   "$baseline_sha" "<session-id>")
 ```
 
@@ -770,7 +783,8 @@ head_tree_dir=$("${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" create-head \
 그다음 어댑터마다 (샌드박스가 있을 때만):
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" run \
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/run-test-selection.sh" run \
   "$head_tree_dir" "$runner" bulk "${units[@]}"
 ```
 
@@ -835,7 +849,8 @@ authoritative 라 verifier 가 만든 상태에서 난 green 이 회귀를 강�
 **Step R6 — 대조 (결정론).** 어댑터마다 한 번씩:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py" \
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/diff-test-results.py" \
   --expected "$qg_run_tmp/expected-$runner.txt" \
   --baseline "$qg_run_tmp/baseline-$runner.tsv" \
   --head "$qg_run_tmp/head-$runner.tsv" \
@@ -858,7 +873,8 @@ authoritative 라 verifier 가 만든 상태에서 난 green 이 회귀를 강�
 확인이 필요하면 소유자에게 직접 물으면 된다 (순수 함수, 트리 불필요):
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" granularity "$runner"
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/run-test-selection.sh" granularity "$runner"
 ```
 
 불일치·미지 러너·소유자 부재는 전부 **exit 4** 다 — "확인할 수 없었다"를 "확인됐다"로
@@ -909,7 +925,8 @@ authoritative 라 verifier 가 만든 상태에서 난 green 이 회귀를 강�
 후보만 **`$head_tree_dir` 에서** 1회 재실행한다:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/run-test-selection.sh" run \
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/run-test-selection.sh" run \
   "$head_tree_dir" "$runner" per-unit "${flaky_candidates[@]}"
 ```
 
@@ -945,7 +962,8 @@ codex).** 그러지 않으면 *"마지막 호출의 결과가 authoritative"* �
 그다음 어댑터 YAML 들을 집계한다:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/diff-test-results.py" --aggregate \
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/diff-test-results.py" --aggregate \
   --expected-adapters "$adapter_count" "$qg_run_tmp"/per-adapter-*.yaml > "$aggregate_yaml"
 ```
 
@@ -962,8 +980,9 @@ stale 파일을 주울 수 없으므로, glob 은 **실제 생산물**을 세게
 까지다):
 
 ```bash
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
 if [[ -n "${head_tree_dir:-}" && -d "$head_tree_dir" ]]; then
-  "${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "$head_tree_dir"
+  "$QG/scripts/qg-worktree.sh" remove "$head_tree_dir"
 fi
 ```
 
@@ -1018,7 +1037,8 @@ R7 은 `sandbox_dir` 만 검사하므로 이 트리가 R6 까지 살아 있어�
 fallback, compute the product-mutation oracle:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" mutation-guard "<sandbox_dir>" "<baseline_sha>" "<snapshot_digest>"
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/qg-worktree.sh" mutation-guard "<sandbox_dir>" "<baseline_sha>" "<snapshot_digest>"
 ```
 
 Read the YAML. **If `forced_downgrade: yes`**, the verdict is capped at FAIL
@@ -1093,7 +1113,8 @@ R6 이 낸 `attribution_status` 를 그대로 `floor:attribution` 의 status 로
 구조 게이트를 돌린다:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/check_qa_ledger.py" \
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/check_qa_ledger.py" \
   --aggregate "$aggregate_yaml" \
   --assign-rows "$assign_rows_file" \
   "$evidence_dir/runtime-evidence.md"
@@ -1185,5 +1206,6 @@ Summary 도 도달했다면 idempotent overwrite 라 무해.
 **Step R9 — Discard the sandbox** (verdict-independent), unless in read-only fallback:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/qg-worktree.sh" remove "<sandbox_dir>"
+QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
+"$QG/scripts/qg-worktree.sh" remove "<sandbox_dir>"
 ```

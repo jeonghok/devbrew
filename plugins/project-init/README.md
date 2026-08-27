@@ -18,15 +18,13 @@ plugins/project-init/
 │   ├── __init__.py
 │   ├── test_post_tool_use.py        # v1.7.0 — post-tool-use fail-open/F2/main 검증
 │   ├── test_command_contract.py     # v1.7.2 — commands/ 산문 계약 회귀 락 (4c S2a H1, AC21 abort)
-│   ├── test_agent_permission_contract.py  # v2.1.0 — Step 3.6/4f 계약 + 템플릿 범위 제한 락
 │   ├── test_branch_strategy_rebase_clause.sh  # v1.7.3 — AC8e, rebase 무조건 금지 조항 부재 락
 │   └── test_no_write_matcher_hooks.sh  # v3.0.0 — PostToolUse에 쓰기-도구(Write/Edit/MultiEdit/NotebookEdit) matcher 부재 회귀 락 (A1–A3)
 └── templates/
     ├── shared/
     │   ├── commit-conventions.md
     │   ├── pr-process.md
-    │   ├── claude-md-pointer.md     # @AGENTS.md 한 줄 thin pointer
-    │   └── agent-tool-permission.md # v2.1.0 — 레포-스코프 Agent 호출 허용 규칙
+    │   └── claude-md-pointer.md     # @AGENTS.md 한 줄 thin pointer
     ├── github-flow/
     │   ├── agents-md-section.md
     │   └── branch-strategy.md
@@ -54,8 +52,7 @@ plugins/project-init/
    - `docs/git-workflow/branch-strategy.md` — 팀의 브랜치 룰
    - `docs/git-workflow/commit-conventions.md` — Conventional Commits 룰
    - `docs/git-workflow/pr-process.md` — PR 템플릿과 리뷰 체크리스트
-5. (v2.1.0) Agent 호출 권한 질문 — 허용하면 `.claude/rules/agent-tool-permission.md`를 만들고 `.gitignore`에 그 경로 한 줄을 추가한다. 거절하면 아무것도 만들지 않으며 다른 산출물에 영향이 없다.
-6. (v1.6.0) charter step — Phase 0가 manifest를 스캔해 tech-stack을 자동 감지하고, Phase 1이 vision·non-goals·conventions·tech-stack 확인을 ≤4개 질문으로 elicit. 결과를 `AGENTS.md ## Project Charter` 요약 + `docs/project/charter.md`·`conventions.md`(+ 조건부 `glossary.md`)로 발행.
+5. (v1.6.0) charter step — Phase 0가 manifest를 스캔해 tech-stack을 자동 감지하고, Phase 1이 vision·non-goals·conventions·tech-stack 확인을 ≤4개 질문으로 elicit. 결과를 `AGENTS.md ## Project Charter` 요약 + `docs/project/charter.md`·`conventions.md`(+ 조건부 `glossary.md`)로 발행.
 
 ## 기능
 
@@ -93,7 +90,6 @@ plugins/project-init/
 - **Law 3 (Compounding)** — PostToolUse hook이 브랜치 명명과 Conventional Commits 포맷을 지속적으로 강제; 컨벤션 drift를 action 레이어에서 잡음.
 - **Plugin shape — minimal pointer pattern** — CLAUDE.md는 짧은 anchor만 (Git Workflow 요약), 상세는 `docs/git-workflow/`에 거주. CLAUDE.md bloat 방지 + 룰 discoverability 양립.
 - **Law 1 (Clarity Before Code) — v1.6.0** — Project Charter가 project-init에 *처음으로* 생기는 clarity 구조 게이트. 최초 실행에서 vision·non-goals·tech-stack·conventions가 채워질 때까지 진행을 막되, 각 항목 최대 3회 재질문 후 loud abort (bounded — Unbounded-autonomy anti-pattern 회피).
-- **Plugin shape — 개인 설정과 팀 규약의 분리 — v2.1.0** — Agent 호출 허용은 *이 작업 환경의 개인 설정*이지 레포의 규약이 아니다. 그래서 커밋되는 `AGENTS.md`가 아니라 git에서 제외되는 `.claude/rules/`에 쓰고, 허용 범위를 Agent로 좁혀 Workflow·deep-research는 제외한다 (Subagent-spray anti-pattern의 선언 의무는 그대로 유효).
 - **Law 3 (Compounding) — v1.6.0** — 헌장이 AGENTS.md 계층에 거주해 매 세션·모든 spec-distill 인터뷰가 자동 상속하는 compounding substrate. 한 번 정의한 프로젝트 불변이 미래 모든 사이클에 discoverable하게 흐른다.
 
 ## 사용

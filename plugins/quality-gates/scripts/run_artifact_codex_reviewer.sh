@@ -22,6 +22,12 @@ ARTIFACT="${1:-}"
 PROJECT_DIR="${2:-}"
 OUT="${3:-}"
 
+# CLAUDE_PLUGIN_ROOT는 훅 실행에만 주입된다 — 스킬의 bash 블록에는 오지 않는다.
+# fallback 없이 참조하면 `set -u` 아래에서 codex에 **도달하기 전에** 즉사하고,
+# 산출물은 `aborted_before_completion` 이 되어 모델 다양성이 매번 0이 된다.
+# 형제 `run_brief_codex_reviewer.sh`와 같은 철자를 쓴다(세 번째 철자 발명 금지).
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+
 # ── B2 (/qg 2026-08-13 whole-branch 리뷰): 인자 검사를 두 축으로 가른다 ─────────
 # 이전 코드는 PROJECT_DIR·OUT 을 한 조건으로 묶고 `emit_fail` 이 `${OUT:-/dev/stdout}`
 # 로 썼다. 그 분기는 아래 guarded truncate 보다 **앞**이라 exit 3 계약 밖이었고,
@@ -99,7 +105,7 @@ PROMPT="$SCRATCH/prompt.md"
 JSONL="$SCRATCH/codex.jsonl"
 ERR="$SCRATCH/codex.stderr"
 
-if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_artifact_codex_prompt.py" "$ARTIFACT" > "$PROMPT" 2>"$ERR"; then
+if ! python3 "${PLUGIN_ROOT}/scripts/build_artifact_codex_prompt.py" "$ARTIFACT" > "$PROMPT" 2>"$ERR"; then
   emit_fail "prompt_build_failed"
   exit 0
 fi
@@ -126,7 +132,7 @@ codex exec - \
 REASON=""
 [ "$EXIT_CODE" -ne 0 ] && REASON=exit_nonzero
 
-if ! python3 "${CLAUDE_PLUGIN_ROOT}/scripts/extract_codex_artifact_yaml.py" \
+if ! python3 "${PLUGIN_ROOT}/scripts/extract_codex_artifact_yaml.py" \
     --meta-override-exit-code "$EXIT_CODE" \
     --meta-override-reason "$REASON" \
     < "$JSONL" > "$OUT" || [ ! -s "$OUT" ]; then

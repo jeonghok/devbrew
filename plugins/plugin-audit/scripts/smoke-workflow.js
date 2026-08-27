@@ -8,6 +8,7 @@ export const meta = {
 // asserts `agent` appears exactly once with agentType 'plugin-audit:smoke-probe'. Spread first so
 // agentType cannot be overridden.
 const probe = (prompt, opts) => agent(prompt, {...opts, agentType: 'plugin-audit:smoke-probe'})
+// **처분** — consumer=orchestrator · fail-closed · disclosure=sentinelPath
 
 // The Workflow tool delivers `args` as a JSON *string* at runtime (same as audit-workflow.js).
 // Without this normalization args.sentinelPath is undefined → the probe writes to a file literally
