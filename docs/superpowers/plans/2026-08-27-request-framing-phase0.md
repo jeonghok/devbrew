@@ -60,7 +60,7 @@
 - **Korean-primary** — 주석·문서는 한국어 primary. 영어는 식별자·고유명사·기술어에 한정.
 - **파일 읽기는 명시적 UTF-8** — 생성 파일을 읽는 모든 파이썬 코드는 `encoding="utf-8"` 을 명시한다 (non-UTF-8 locale fail-open 방지).
 - **mutation 실행 환경** — `PYTHONDONTWRITEBYTECODE=1` 로 돌린다. 같은 길이 변이가 stale `.pyc` 를 못 넘어 거짓 GREEN/거짓 RED 를 낸다.
-- **변이 전에 커밋한다** — `git checkout -- <path>` 는 «마지막 변이»가 아니라 HEAD 로 되돌린다. 커밋하지 않은 채 변이하면 복원이 그 앞의 편집까지 지우고, 복원 후 clean tree 가 성공처럼 보인다.
+- **변이 전에 커밋한다** — `git checkout -- <path>` 는 «마지막 변이»가 아니라 HEAD 로 되돌린다. 커밋하지 않은 채 변이하면 복원이 그 앞의 편집까지 지우고, 복원 후 clean tree 가 성공처럼 보인다. **이미 clean tree 면** `git add -A && git commit` 이 «nothing to commit» 으로 비-zero 를 내는데, 그건 실패가 아니라 *HEAD 가 이미 baseline* 이라는 뜻이다 — 멈추지 말고 그대로 변이로 진행한다. *실측 근거: Task 3 의 브리프는 미커밋 상태를 전제한 stash 레시피를 담았고, 앞 태스크가 이미 커밋돼 있어 그 스텝이 literal no-op 이었다.*
 - **락 메시지의 변수 뒤 한글은 반드시 중괄호** — `printf "${tot}개"`. `"$tot개"` 는 macOS bash 3.2 가 한글 `개` 의 선두 바이트를 변수명에 포함시켜 `set -u` 아래서 죽는다.
 - **파이썬 heredoc 을 `$( … )` 안에 넣지 않는다** — 본문에 `\'` + `)` 조합이 들어오면 `bash -n` 단계에서 죽는다. 정본은 파일로 받는 형태(`python3 - … > "$TMPD/out.txt" <<'PY'`). **모든 shell 편집 뒤 `bash -n` 을 돌린다.**
 - **`shared/` 는 플러그인이 아니다** — bump 대상이 아니고 설치본에 들어가지 않는다.
