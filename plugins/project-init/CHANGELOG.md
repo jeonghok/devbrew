@@ -22,6 +22,26 @@
 ### Changed
 - `commands/project-init.md` — 헌장 abort advisory 가 더 이상 "docs-lint 이 사후 플래그합니다"를 약속하지 않는다. (이 릴리스는 같은 파일의 `#### 4f` 근거에서도 docs-lint R6 참조를 뺐으나, `[2.2.0]` 이 그 블록을 통째로 제거해 남은 대상이 없다.)
 
+
+### Performance
+기준선 `origin/main` **983d7d7** 대 이 브랜치, 같은 시나리오(도구 호출 약 30회 — Read 20 ·
+Bash 5–7 · Write 3), 세 플러그인(`spec-distill`·`quality-gates`·`project-init`)을 함께 로드,
+**팔당 2회**. 계측 래퍼는 스크래치 사본의 `hooks.json` 에만 넣었고 배포본에는 없다
+(설계 §8: `/usr/bin/time -p` 는 stderr 에 쓰는데 spec-distill 의 집행 채널이 stderr 다).
+측정 환경: macOS · Claude Code 2.1.241.
+
+- **없앤 훅:** `hooks/docs-lint.py` 는 Write 3회에 3번 발화해 **99.3 / 99.2 ms** 를 썼다.
+  이 브랜치에서는 그 훅이 없어 **0 ms**.
+- **살아남은 훅의 호출당 비용은 사실상 변하지 않았다** — `PostToolUse:post-tool-use.py`
+  (`Bash` matcher) 26.8 → 28.6 ms/회.
+
+- 세 플러그인 합산 순감은 시나리오당 **−356 ~ −383 ms** 다 (없앤 훅 384.6/398.7 ms −
+  `spec-distill` `Stop` 훅 증가분 28.6/15.6 ms). 자세한 내역은
+  `plugins/spec-distill/CHANGELOG.md` 의 같은 절.
+- **벽시계는 이 변경의 신호가 아니다.** 기준선 73.79/55.89 s, 이 브랜치 54.92/59.24 s —
+  두 팔의 범위가 겹치고, 실행 간 산포(≈18 s)가 훅 시간 차이(≈0.37 s)보다 두 자릿수 크다.
+  머지 게이트로 쓰지 않는다.
+
 ## [2.2.0] — 2026-08-23
 
 `/project-init` 이 `.claude/rules/agent-tool-permission.md` 를 만들던 경로를 제거한다.

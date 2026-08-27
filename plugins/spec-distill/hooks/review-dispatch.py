@@ -88,7 +88,7 @@ GIT_UNAVAILABLE_ADVISORY = (
 #: A16 은 advisory 를 **세션당 1회**로 요구한다 — 매 턴 반복하면 무시되는 신호가 된다.
 GIT_UNAVAILABLE_MARKER = "git_unavailable_advised: yes"
 
-#: v0.34.0 에서 삭제된 두 훅의 kill-switch 토큰. 훅명 별칭과 이벤트명 별칭을 함께
+#: v0.36.0 에서 삭제된 두 훅의 kill-switch 토큰. 훅명 별칭과 이벤트명 별칭을 함께
 #: 담는다 — `kill_switch_active` 가 둘 다 받았으므로 사용자가 어느 쪽을 적었는지
 #: 알 수 없다.
 RETIRED_TOKENS = (
@@ -142,13 +142,13 @@ def retired_switch_advisory(body: str) -> tuple[str, str | None]:
     if hit:
         parts.append(
             f"DEVBREW_SKIP_HOOKS 에 은퇴한 토큰이 있다: {', '.join(hit)}. "
-            "v0.34.0 에서 그 훅들이 삭제됐고 구조 검증은 Stop 훅으로 옮겨왔다 — "
+            "v0.36.0 에서 그 훅들이 삭제됐고 구조 검증은 Stop 훅으로 옮겨왔다 — "
             "이 토큰들은 더 이상 구조 검증을 끄지 않는다. 끄려면 "
             "DEVBREW_SKIP_HOOKS=spec-distill:Stop 을 쓴다."
         )
     if autoreview_set:
         parts.append(
-            f"{RETIRED_AUTOREVIEW_VAR}=1 이 설정돼 있으나 v0.34.0 에서 이 변수를 "
+            f"{RETIRED_AUTOREVIEW_VAR}=1 이 설정돼 있으나 v0.36.0 에서 이 변수를 "
             "읽던 훅이 삭제돼 더 이상 아무것도 끄지 않는다. 이 변수가 주던 것 — "
             "구조 검증은 유지한 채 자동 리뷰 dispatch 만 중단 — 은 이 버전에 "
             "대체 수단이 없다."

@@ -76,6 +76,27 @@ Bash heredoc·`sed -i`로 쓴 파일을 애초에 보지 못했던 결함 — ma
   자기 본문에 반드시 담는다. 그 문자열이 몸체에 있는 것 자체가 락이 하는 일이므로,
   다른 살아있는 소비 표면과 같은 기준으로 셀 수 없다.
 
+
+### Performance
+기준선 `origin/main` **983d7d7** 대 이 브랜치, 같은 시나리오(도구 호출 약 30회 — Read 20 ·
+Bash 5–7 · Write 3), 세 플러그인(`spec-distill`·`quality-gates`·`project-init`)을 함께 로드,
+**팔당 2회**. 계측 래퍼는 스크래치 사본의 `hooks.json` 에만 넣었고 배포본에는 없다
+(설계 §8: `/usr/bin/time -p` 는 stderr 에 쓰는데 spec-distill 의 집행 채널이 stderr 다).
+측정 환경: macOS · Claude Code 2.1.241.
+
+- **없앤 훅:** `hooks/post-tool-use-session-tracker.py` 는 Write 3회에 3번 발화해
+  **91.8 / 90.5 ms** 를 썼다. 이 브랜치에서는 그 훅이 없어 **0 ms**.
+- **살아남은 훅의 호출당 비용은 사실상 변하지 않았다** — `PostToolUse:post-tool-use.py`
+  (`Bash` matcher) 25.9 → 27.6 ms/회, `SessionStart:session-start-advisor.py` 40.5 → 40.5 ms,
+  `SessionEnd:session-end-cleanup.py` 31.6 → 32.0 ms.
+
+- 세 플러그인 합산 순감은 시나리오당 **−356 ~ −383 ms** 다 (없앤 훅 384.6/398.7 ms −
+  `spec-distill` `Stop` 훅 증가분 28.6/15.6 ms). 자세한 내역은
+  `plugins/spec-distill/CHANGELOG.md` 의 같은 절.
+- **벽시계는 이 변경의 신호가 아니다.** 기준선 73.79/55.89 s, 이 브랜치 54.92/59.24 s —
+  두 팔의 범위가 겹치고, 실행 간 산포(≈18 s)가 훅 시간 차이(≈0.37 s)보다 두 자릿수 크다.
+  머지 게이트로 쓰지 않는다.
+
 ## [4.3.5] — 2026-08-25
 
 ### Fixed

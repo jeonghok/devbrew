@@ -5,7 +5,7 @@
 # SKILL을 arm_ledger 세 verb로 재배선하며 소멸했다. 그중 AC12·AC13 두 불변식은
 # 락과 무관하게 아직 살아 있고, AC8-count는 대상이 소멸한 게 아니라 형태만
 # 바뀌었다(3개 trio → mark-reviewed 1개; check-born은 sid를 안 받고, 진입 시점의
-# 상태-정리 verb 는 v0.34.0 에서 그 상태 계약과 함께 은퇴했다)
+# 상태-정리 verb 는 v0.36.0 에서 그 상태 계약과 함께 은퇴했다)
 # — 내용이 살아 있는 불변식을 형태 변화 이유로 버리는 것은 삭제 스윕의 실패 모드다.
 # 파일을 지우는 대신 좁혀서 승계한다.
 set -u -o pipefail
@@ -70,7 +70,7 @@ grep -qF 'continuity read collapse 금지' "$SKILL" \
 # S3 (전 AC8-count 승계 — 형태만 변경): "trio 명령이 전부 $harness_sid로 키잉된다"는
 # 이제 arm_ledger.py의 mark-reviewed 한 verb로 표현된다 (check-born은 sid 인자를 받지
 # 않는다 — approve 시점 조회이지 세션 상태 write가 아님).
-# **정상 경로의 상태 write 는 여전히 이것 하나다.** v0.34.0 이 더한 `clear-inflight` 는
+# **정상 경로의 상태 write 는 여전히 이것 하나다.** v0.36.0 이 더한 `clear-inflight` 는
 # 종료 자리 두 곳(Phase 5 Step A · Step C ④)에서만 도는 복구 verb 라 이 개수에 들어오지
 # 않는다 — 같은 read==write 불변식을 지지만 S9/S10 이 따로 잠근다.
 cnt=$(grep -cE 'arm_ledger\.py" mark-reviewed "\$harness_sid' "$SKILL")
@@ -110,7 +110,7 @@ fi
 # CLAUDE.md 의 graceful-degradation-with-loud-logging 요구다. 조용한 degrade 는
 # 문서가 리뷰 완료로 기록되지 않은 채 넘어간다는 뜻이다.
 #
-# **짝이던 S6 은 v0.34.0 에서 없앴다** — 그것이 잠그던 advisory 는 Step 1 의
+# **짝이던 S6 은 v0.36.0 에서 없앴다** — 그것이 잠그던 advisory 는 Step 1 의
 # 진입-정리 write 가 실패했음을 알리는 문구였는데, 그 write 자체가 은퇴했다(진입 시점의
 # 상태 계약이 통째로 사라졌다). 지금 진입 시점에는 sid 에 의존하는 write 가 없다 —
 # 남은 write 는 Step 3 의 `mark-reviewed`(S7)와 종료 자리의 `clear-inflight`
@@ -140,7 +140,7 @@ else
   ok "S8: SKILL 안에 \$session_id 로 키잉된 arm_ledger 호출이 없다 (S3 의 음의 짝)"
 fi
 
-# S9 (v0.34.0): Phase 5 의 종료 자리 **두 곳 각각**에서 `clear-inflight` 가 호출된다.
+# S9 (v0.36.0): Phase 5 의 종료 자리 **두 곳 각각**에서 `clear-inflight` 가 호출된다.
 # 두 경로(Step A 의 spec_path 부재 · Step C ④ 멈춤)는 Step 3 의 `mark-reviewed` 가
 # 배제된 채로도 도달할 수 있고, 그때 in-flight 표시를 두고 나가면 그 문서는 TTL
 # (900초)까지 발견에서 빠진다. file-wide grep 은 두 호출이 한 자리로 뭉쳐도 통과하므로
@@ -169,7 +169,7 @@ else
 fi
 
 # S11: 빈 `$harness_sid` advisory 가 **형제 세 자리 전부**에 있다.
-# S7 은 Step 3 자리만 잡는다. Step A·Step C 는 v0.34.0 에서 생긴 같은 모양의 호출인데
+# S7 은 Step 3 자리만 잡는다. Step A·Step C 는 v0.36.0 에서 생긴 같은 모양의 호출인데
 # 그 자리엔 락이 없었고, 실제로 Step C 만 이 문구를 빠뜨린 채 머지될 뻔했다.
 # 집행 방향 자체는 이미 fail-closed 다(`SESSION_PATTERN` 이 '' 를 거부해 arm_ledger 가
 # exit 2 + stderr). 여기서 잠그는 것은 **공시**다 — 세 자리 중 하나만 침묵하면 그

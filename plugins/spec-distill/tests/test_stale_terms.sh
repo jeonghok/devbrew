@@ -217,7 +217,7 @@ removed_files=(
   # 승계 없이 삭제돼, 되살아나도 아무것도 잡지 못하는 상태였다.
   'hooks/compact-induction.py'
   'hooks/compact-detect.py'
-  # v0.34.0 — 쓰기-경로 우회 수정. 두 훅은 도구 이름을 matcher 로 열거해서 Bash 로
+  # v0.36.0 — 쓰기-경로 우회 수정. 두 훅은 도구 이름을 matcher 로 열거해서 Bash 로
   # 쓴 문서를 놓쳤고, 그 책임은 Stop 훅의 발견으로 흡수됐다. 되살아나면 같은 구멍이
   # 함께 돌아온다. 각 훅의 전용 테스트도 함께 잠근다 — 훅 없이 테스트만 되살아나면
   # 그 테스트는 존재하지 않는 파일을 실행하며 조용히 통과한다(실측: 그 모양에서
@@ -254,7 +254,7 @@ done
 # (`if c.key in armed:`)에서 쓰는지로 잡는다 — 반환값이 실제로 control flow를 가른다는 증거.
 # 스텁화는 이 락의 범위 밖이다(함수 본문 의미는 grep으로 못 잡는다 — T-lock류의 한계와 같은 이유).
 #
-# 소비 지점이 v0.34.0에서 옮겨왔다: 예전에는 PostToolUse validator가 `arm_ledger.should_arm(...)`
+# 소비 지점이 v0.36.0에서 옮겨왔다: 예전에는 PostToolUse validator가 `arm_ledger.should_arm(...)`
 # 을 `if` 에서 불렀고, 지금은 Stop 훅의 `select_dispatch_target` 이 per-candidate skip 으로
 # 같은 판정을 한다. 이 락이 재는 성질(게이트가 control flow를 실제로 가른다)은 그대로다.
 scan -InE -- '^def armed_keys\(' "$SD/scripts/arm_ledger.py"

@@ -638,7 +638,7 @@ class TestKillSwitches(HookOutputSchemaTestBase):
 class TestRetiredSwitchAdvisory(HookOutputSchemaTestBase):
     """A19 — 은퇴한 kill switch 를 세션당 1회 공시한다.
 
-    v0.34.0 에서 두 훅이 삭제되면서 **세 스위치**가 아무것도 끄지 않게 됐다. 셋 다
+    v0.36.0 에서 두 훅이 삭제되면서 **세 스위치**가 아무것도 끄지 않게 됐다. 셋 다
     fail-open 방향으로 죽었다 — 껐다고 믿는 동작이 말없이 되살아난다.
 
     두 축을 재는 이유는 두 스위치가 **읽히는 방식이 다르기 때문**이다.
@@ -838,7 +838,7 @@ class TestCrossResolverAdvisory(unittest.TestCase):
 class TestInterviewDirectionLayerScope(unittest.TestCase):
     """AC9/V7/C8 — design-doc 판정은 살아남고, interview/ 는 스코프 밖이다.
 
-    드라이버가 v0.34.0 에서 write-time 훅에서 Stop 훅으로 옮겨왔다. 재는 성질은
+    드라이버가 v0.36.0 에서 write-time 훅에서 Stop 훅으로 옮겨왔다. 재는 성질은
     그대로다: 스코프 안 `-design.md` 는 design 모드로 라우팅되고, `interview/` 는
     발견 자체가 되지 않아 리뷰 게이트가 붙지 않는다.
     """

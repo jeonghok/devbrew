@@ -8,7 +8,7 @@ SKILL="$REPO_ROOT/plugins/spec-distill/skills/reviewing-spec/SKILL.md"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # AC5: Step 1 mode branch
-# 첫 대안은 mandate 가 mode 를 싣고 온다는 사실을 잡는다 — 그 채널이 v0.34.0 에서
+# 첫 대안은 mandate 가 mode 를 싣고 온다는 사실을 잡는다 — 그 채널이 v0.36.0 에서
 # 상태 파일 블록에서 Stop mandate 로 바뀌었다.
 grep -qE 'mandate.*mode|mode.*분기.*design' "$SKILL" \
   && grep -qE '11.section|locked_decisions' "$SKILL" \

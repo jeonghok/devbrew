@@ -69,7 +69,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - **Law 1 (Clarity Before Code)** — Plugin의 raison d'être. 인터뷰 → brief → design doc → reviewer → human gate. "spec 이전엔 코딩 안 한다" 강제. (`locked_decisions`는 design doc의 표식이 아니라 그 반대다 — `scripts/resolve_mode.py`가 frontmatter에 이 키를 가진 파일을 **spec** 모드로 분류하고, `-design.md`를 포함한 나머지는 design 모드다.)
 - **Law 1 (Clarity) — 문제공간 게이트 (v0.12.0)** — interview의 5 통과 의례(R1–R5)가 `check_brief.py`로 기계 검증되는 구조 게이트. 약한 방향(무인용 landscape·un-challenged 의심·빈 시행착오)은 brief 종료를 차단.
 - **Law 2 (Writer/Reviewer 분리)** — `tools:` allowlist frontmatter로 spec-reviewer(`Read, Grep, Glob, WebSearch, WebFetch`) + coverage-mapper(`Read, Grep, Glob, WebSearch, WebFetch`) + blind-spot-prober(`Read, Grep, Glob, WebSearch, WebFetch`) agent의 *물리적* 분리. 프롬프트가 아닌 frontmatter scoping이며, **allowlist라 열거되지 않은 쓰기·실행·위임 도구가 자동 차단**된다(denylist는 시간에 대해 fail-open이라 v0.21.0에서 폐기).
-- **Law 2 강화 (v0.3.0, v0.34.0 재배선)** — Writer/Reviewer 분리를 turn-boundary 결정론으로 끌어올림. Stop hook이 턴 경계에서 스코프 문서의 dirty 집합을 **git 에서 직접 발견**해 구조 게이트를 차단(`decision:"block"`)하고, 통과하면 *다음 turn 첫 액션*으로 reviewer dispatch를 강제. 연료가 git 관측이라 **어떤 도구로 썼든**(Write/Edit/Bash/외부 편집기) 게이트를 우회할 수 없다 — 도구 이름을 열거하던 이전 설계의 구멍이 이것이다.
+- **Law 2 강화 (v0.3.0, v0.36.0 재배선)** — Writer/Reviewer 분리를 turn-boundary 결정론으로 끌어올림. Stop hook이 턴 경계에서 스코프 문서의 dirty 집합을 **git 에서 직접 발견**해 구조 게이트를 차단(`decision:"block"`)하고, 통과하면 *다음 turn 첫 액션*으로 reviewer dispatch를 강제. 연료가 git 관측이라 **어떤 도구로 썼든**(Write/Edit/Bash/외부 편집기) 게이트를 우회할 수 없다 — 도구 이름을 열거하던 이전 설계의 구멍이 이것이다.
 - **Law 2 (Writer/Reviewer Never Share a Pass) — infrastructure operability**: spec-reviewer agent의 writer/reviewer 물리 분리가 의미를 가지려면 reviewer dispatch가 Claude context에 *실제로* 도달해야 한다. v0.5.0의 dual-target output fix가 이 baseline을 보장. dispatch가 silent하게 lost되면 reviewer persona 분리 자체가 무의미.
 - **Law 3 (Compounding)** — spec.md 파일 자체가 named, versioned, diff-able artifact (P5). state.local.md 보존 (실패 시) → 디버깅 + future session 추적.
 - **Law 3 (Every Cycle Must Leave the System Smarter)**: v0.5.0 PR이 hook 코드 fix + `tests/test_hook_output_schema.py` 회귀 방지 test + CHANGELOG 명시 + design.md (아카이브됨: `git show pre-slim-archive-2026-07-09:docs/superpowers/specs/2026-05-17-spec-distill-hook-context-injection-design.md`) — 4-layer compounding 흔적. 같은 클래스의 silent-output mistake가 미래에 들어오면 CI에서 즉시 잡힘.
@@ -136,6 +136,30 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 **Output schema (v0.5.0+):** 모든 hook이 *dual-target output* 패턴 — Claude-target field (Stop 은 `decision:"block" + reason`) + `systemMessage` (짧은 흔적, ≤120자, `[spec-distill]` prefix). Claude는 context로 dispatch 메시지를 받고, user는 transcript에서 hook 발화 흔적을 확인 가능. 이전 (`v0.4.0` 이하) 의 `systemMessage`-only 출력은 user transcript에는 보였으나 Claude LLM context로 inject되지 않는 silent failure였음 — `v0.5.0`에서 fix. Reference 패턴: `plugins/quality-gates/hooks/stop-hook.py:845-849`.
 
+### 발견의 한계
+
+- 발견은 **훅이 도는 cwd 의 리포**만 본다. 다른 체크아웃/워크트리의 문서는 그 `git status`
+  에 나오지 않으므로 검증도 dispatch 도 되지 않는다 — 그 워크트리에서 세션을 열면 커버된다.
+- git 을 쓸 수 없거나 리포가 아니면 검증·dispatch 가 일어나지 않고 **세션당 1회** loud
+  advisory 가 나간다. 후보 0 과 구별된다.
+- 턴당 구조 검증은 5개까지다(`CANDIDATE_CAP`). 커서 회전이 기아를 막지만, dirty 문서가
+  5개를 넘으면 dispatch 대상이 **그 턴에 검증되지 않은 문서**일 수 있다 — 좁고 다음 회전이
+  잡는다. `v0.36.0` CHANGELOG 의 해당 BREAKING 항목 참조.
+
+### 행동 케이스 테스트
+
+`tests/test_write_path_behavior.sh` 는 실제 `claude -p` 턴을 돌려 «Bash 로 쓴 문서가 정말
+게이트를 지나는가»를 잰다 — 정적 락이 볼 수 없는 유일한 축이다. API 크레딧을 쓰므로
+**기본은 skip** 이다.
+
+```bash
+DEVBREW_BEHAVIOR_TESTS=1 bash plugins/spec-distill/tests/test_write_path_behavior.sh
+```
+
+스크래치 위치는 `DEVBREW_TEST_TMPDIR` 로 바꾼다. **경로에 `.claude` 가 들어가면 안 된다** —
+Claude Code 가 그 아래 모든 파일을 sensitive file 로 보고 Bash 쓰기를 거부해서 측정이
+성립하지 않는다(테스트가 그 경우 fail-closed 로 거부한다).
+
 ## Kill switches
 
 ### 먼저 — 무엇이 리뷰의 범위를 정하는가
@@ -196,7 +220,7 @@ dispatch 뿐입니다. 완전히 clean 한 문서는 발견 자체가 되지 않
   dispatch 를 0 으로 두고 싶으면 `DEVBREW_SKIP_HOOKS=spec-distill:Stop` 을 쓴다 — 구조
   검증도 함께 꺼진다. 검증만 남기고 dispatch 만 끄는 스위치는 없다.
 
-### 은퇴한 스위치 (v0.34.0)
+### 은퇴한 스위치 (v0.36.0)
 
 `PostToolUse` validator 와 `UserPromptSubmit` reminder 가 삭제되면서 다음 셋이 아무것도
 끄지 않게 됐다. Stop 훅이 세션당 1회 advisory 로 알린다.
