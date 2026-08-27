@@ -48,7 +48,12 @@ else no "A1: 위반 발견 (위 BAD 줄 참조) 또는 정의역이 무너졌다
 fi
 
 # 양성 대조 1 — Bash matcher 는 살아 있다 (GREEN 이 정답, A2).
-N_BASH=$(grep -l '"matcher": "Bash"' plugins/*/hooks/hooks.json 2>/dev/null | wc -l | tr -d ' ')
+# `|| N_BASH=0` 이 없으면 안 된다: grep 은 매치 없음(1)과 자체 실패(≥2)를 둘 다 비-zero
+# 로 내고, `set -e` + `pipefail` 아래에서 이 대입이 스크립트를 그 자리에서 죽인다.
+# 그러면 아래 두 대조는 **실행되지 않은 채** 종료되는데 rc 는 여전히 1 이라 사람 눈에는
+# "락이 잡았다"로 보인다 — 실측으로 확인된 모양이다(Bash matcher 를 전부 rename 한
+# 변이에서 출력이 ✓ 한 줄에서 끊겼다). 개수 0 은 아래 임계값이 판정한다.
+N_BASH=$(grep -l '"matcher": "Bash"' plugins/*/hooks/hooks.json 2>/dev/null | wc -l | tr -d ' ') || N_BASH=0
 [[ "$N_BASH" -ge 2 ]] && ok "양성 대조: Bash matcher 훅 ${N_BASH}개 생존" \
                       || no "양성 대조 실패: Bash matcher 훅이 ${N_BASH}개뿐"
 
