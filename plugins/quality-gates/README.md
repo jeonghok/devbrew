@@ -90,6 +90,8 @@ quality-gates/
 │   ├── test-scope-validator.md  # Runtime gate Step 2.5 (pre-exec test scope check)
 │   ├── adversarial.md           # Review gate Phase 1.5 — false-positive hunter
 │   ├── security-reviewer.md     # Review gate Phase 1 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`
+│   ├── artifact-critic.md       # `/qg critique` 게이트 — inherit-tier critic; 비-코드 산출물의 논리 갭·미기술 전제·불완전·근거 없는 주장·모호성 (read-only)
+│   ├── artifact-adversarial.md  # `/qg critique` 게이트 — inherit-tier 판정자; critic/codex 발견을 confirm/downgrade/reject 하고 놓친 것을 추가 (read-only)
 │   └── pr-understanding-builder.md  # publish 생성기 — model: inherit, tools: Read 1개 (inert·미호출; fail-closed; 쓰기·실행·네트워크·위임 0; 유일 입력 = inlined blob)
 ├── commands/
 │   ├── qg.md               # /qg slash command (--reset, --paths, branch flag 포함)
