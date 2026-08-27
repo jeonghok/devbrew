@@ -655,9 +655,13 @@ class TestRetiredSwitchAdvisory(HookOutputSchemaTestBase):
     SUPERSTRING = "spec-distill:validator-v2"
     AUTOREVIEW = "DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW"
 
-    def _run_env(self, **env: str) -> subprocess.CompletedProcess:
+    #: 구조 검증을 **실패**시키는 본문. design 모드의 placeholder 스캔에 걸린다.
+    BROKEN_DOC_BODY = DESIGN_DOC_BODY + "\nTBD\n"
+
+    def _run_env(self, *, doc_body: str = DESIGN_DOC_BODY, **env: str):
         _write_scope_doc(
-            self.repo, "docs/superpowers/specs/2026-05-16-retired-design.md")
+            self.repo, "docs/superpowers/specs/2026-05-16-retired-design.md",
+            body=doc_body)
         env_extra = {"DEVBREW_SPEC_DISTILL_SESSION_ID": self.SID}
         env_extra.update(env)
         return _run_hook("review-dispatch.py", cwd=self.repo, env_extra=env_extra)
@@ -711,6 +715,37 @@ class TestRetiredSwitchAdvisory(HookOutputSchemaTestBase):
         self.assertNotIn(self.ADVISORY_ASCII_ANCHOR, second.stdout)
         # 두 번째 턴은 평소대로 dispatch 한다 — 공시가 게이트를 영구히 먹지 않는다.
         self.assertEqual(json.loads(second.stdout).get("decision"), "block")
+
+    def test_advisory_is_deferred_when_structural_validation_blocks(self):
+        """**A19 공시가 Layer 1 을 늦추지 않는다** — 자리(구조 검증 뒤)의 락.
+
+        브리프의 원안은 이 공시를 훅 앞머리에서 내고 `return 0` 했다. 그러면 은퇴
+        토큰을 설정해 둔 사용자의 그 턴에 **발견도 구조 검증도 통째로 건너뛰어진다** —
+        세션당 1회뿐이라도 방향이 이 브랜치가 없애려는 그것(게이트가 조용해지는 쪽)
+        이다. 은퇴 *공지*가 그 은퇴로 지키려던 게이트를 끄는 셈이라 자기모순이기도 하다.
+
+        재는 것은 **두 가지가 동시에** 참인가다:
+          · 구조 실패가 있는 턴에는 그 실패가 block 으로 나간다 (게이트가 살아 있다)
+          · 그 턴에 마커가 **타지 않는다** — 공시는 소비된 것이 아니라 연기된 것이다.
+            마커만 타고 공시가 묻히면 사용자는 그 사실을 영영 못 듣는다.
+
+        양성 짝은 `test_exact_token_emits_advisory_naming_it` 이다 — 같은 토큰,
+        구조적으로 통과하는 문서 → 공시가 실제로 나간다. 그 짝이 없으면 이 케이스는
+        "공시가 아예 안 나간다"로도 만족된다.
+        """
+        result = self._run_env(
+            doc_body=self.BROKEN_DOC_BODY, DEVBREW_SKIP_HOOKS=self.EXACT)
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload.get("decision"), "block",
+            msg="은퇴 토큰이 설정된 턴에 구조 검증이 통째로 건너뛰어졌다")
+        self.assertIn("placeholder hit", payload.get("reason", ""),
+                      msg="block 은 났으나 구조 실패 사유가 아니다")
+        self.assertNotIn(self.ADVISORY_ASCII_ANCHOR, result.stdout)
+        self.assertNotIn(
+            RETIRED_MARKER_LITERAL, self._state_body(),
+            msg="공시는 안 나갔는데 마커가 탔다 — 사용자는 이 사실을 영영 못 듣는다")
 
     # --- 은퇴한 환경변수 축 (R64) ---
     # `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW` 는 `DEVBREW_SKIP_HOOKS` 토큰이 아니라
@@ -855,3 +890,7 @@ class TestInterviewDirectionLayerScope(unittest.TestCase):
             cp.stdout.strip(), "", "interview/ path should produce no output")
         self.assertFalse(
             self._state().exists(), "interview/ path must not arm a review")
+
+
+if __name__ == "__main__":
+    unittest.main()

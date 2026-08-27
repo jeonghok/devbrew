@@ -413,7 +413,10 @@ class TestArmedPathsForgeryViaSplitlines(unittest.TestCase):
     전체(VT·FF·FS·GS·RS·NEL·LS·PS)에서 쪼갠다.
 
     이 클래스는 리뷰에서 실제로 제안됐던 "`canonical_key` 를 `\\n\\r\\x00` 로 좁히자"는
-    단순화를 RED 로 만든다. 좁히면 T16 이 막는 위조가 그대로 되열린다.
+    단순화를 RED 로 만든다. 좁히면 아래 두 케이스가 막는 위조가 그대로 되열린다 —
+    **이 클래스가 그 위조의 유일한 락이다.** 예전에는 writer 층(삭제된 write-time
+    validator 훅을 태우던 shell 케이스)이 짝을 이뤘으나 v0.34.0 에서 그 writer 가
+    사라졌다.
     """
 
     def test_splitlines_boundary_cannot_become_a_key(self):
