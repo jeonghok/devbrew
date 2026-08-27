@@ -52,7 +52,7 @@ _KNOWN_EXCEPTIONS = {
     # docstring 안의 산문 언급이지 호출이 아니다 (Task 30 axis 2 조사로 확정).
     "plugins/quality-gates/scripts/build_codex_prompt.py": {17},
     # fcntl.flock 전용 락 파일 핸들 — write()/read() 로 텍스트가 한 번도 오가지 않는다.
-    "plugins/quality-gates/scripts/qg-gc.py": {79},
+    "plugins/quality-gates/scripts/qg-gc.py": {95},
     "plugins/spec-distill/scripts/spec-distill-gc.py": {98},
 }
 
