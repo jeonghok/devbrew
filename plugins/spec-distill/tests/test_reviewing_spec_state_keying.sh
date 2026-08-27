@@ -167,4 +167,22 @@ if grep -qE 'arm_ledger\.py" clear-inflight "\$session_id' "$SKILL"; then
 else
   ok "S10: SKILL 안에 \$session_id 로 키잉된 clear-inflight 가 없다 (S9 의 음의 짝)"
 fi
+
+# S11: 빈 `$harness_sid` advisory 가 **형제 세 자리 전부**에 있다.
+# S7 은 Step 3 자리만 잡는다. Step A·Step C 는 v0.34.0 에서 생긴 같은 모양의 호출인데
+# 그 자리엔 락이 없었고, 실제로 Step C 만 이 문구를 빠뜨린 채 머지될 뻔했다.
+# 집행 방향 자체는 이미 fail-closed 다(`SESSION_PATTERN` 이 '' 를 거부해 arm_ledger 가
+# exit 2 + stderr). 여기서 잠그는 것은 **공시**다 — 세 자리 중 하나만 침묵하면 그
+# 비대칭이 다음 복사본으로 옮겨간다. 그것이 이 결함이 퍼지는 경로다.
+for pair in "Step A:stepA_window" "Step C:stepC_window"; do
+  label="${pair%%:*}"; fn="${pair##*:}"
+  out="$($fn)"
+  if [[ -z "$out" ]]; then
+    no "S11: $label 윈도우가 비었다 — 구조 앵커 파손(통과 아님)"
+  elif grep -qE '\$harness_sid` 가 빈 값이면.*advisory' <<<"$out"; then
+    ok "S11: $label 창에 빈 harness_sid advisory 지시가 있다"
+  else
+    no "S11: $label 창에 빈 harness_sid advisory 지시가 없다 — 형제 자리와 비대칭"
+  fi
+done
 finish
