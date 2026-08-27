@@ -217,6 +217,17 @@ removed_files=(
   # 승계 없이 삭제돼, 되살아나도 아무것도 잡지 못하는 상태였다.
   'hooks/compact-induction.py'
   'hooks/compact-detect.py'
+  # v0.34.0 — 쓰기-경로 우회 수정. 두 훅은 도구 이름을 matcher 로 열거해서 Bash 로
+  # 쓴 문서를 놓쳤고, 그 책임은 Stop 훅의 발견으로 흡수됐다. 되살아나면 같은 구멍이
+  # 함께 돌아온다. 각 훅의 전용 테스트도 함께 잠근다 — 훅 없이 테스트만 되살아나면
+  # 그 테스트는 존재하지 않는 파일을 실행하며 조용히 통과한다(실측: 그 모양에서
+  # `run_validator` 는 rc 도 안 보고 no-op 이 됐다).
+  'hooks/spec-write-validator.py'
+  'hooks/pending-review-reminder.py'
+  'tests/test_spec_write_validator.sh'
+  'tests/test_design_mode_validator.sh'
+  'tests/test_reminder_hook.sh'
+  'tests/test_stale_state_truncate.sh'
 )
 for rf in "${removed_files[@]}"; do
   [[ ! -e "$SD/$rf" ]] \
@@ -226,19 +237,22 @@ done
 
 # --- V11 (v0.25.0): 대체 surface 가 실재한다 (음의 락만 두면 전부 지워도 통과) ---
 # 두 conjunct는 "대체 machinery가 진짜로 있다"는 하나의 주장을 나눠 진다 — 어느 한쪽만으로는
-# 부족하다. (1) 파일 존재만 보면 빈 파일도 통과하므로 arm_ledger.py가 should_arm을 **정의**
-# 하는지(`^def should_arm(`)까지 확인한다. (2) 'should_arm'이라는 bare 토큰 존재만 grep하면
-# 세 가지 거짓양성을 놓친다 — 주석(`# should_arm 대신 항상 arm`), neutered 호출(반환값을
-# 버리는 `arm_ledger.should_arm(...)` 단독 문장), 스텁화된 정의(`should_arm` 이 항상 True를
-# 반환). 앞의 둘은 호출부가 **소비 위치**(`if (not )?arm_ledger\.should_arm\(`)에 있는지로
-# 잡는다 — 반환값이 실제로 control flow를 가른다는 증거. 스텁화는 이 락의 범위 밖이다(함수
-# 본문 의미는 grep으로 못 잡는다 — T-lock류의 한계와 같은 이유).
-scan -InE -- '^def should_arm\(' "$SD/scripts/arm_ledger.py"
+# 부족하다. (1) 파일 존재만 보면 빈 파일도 통과하므로 arm_ledger.py가 원장 reader를 **정의**
+# 하는지(`^def armed_keys(`)까지 확인한다. (2) 'armed_keys'라는 bare 토큰 존재만 grep하면
+# 세 가지 거짓양성을 놓친다 — 주석, neutered 호출(반환값을 버리는 단독 문장), 스텁화된 정의
+# (항상 빈 목록을 반환). 앞의 둘은 Stop 훅의 dispatch 대상 선택이 그 결과를 **소비 위치**
+# (`if c.key in armed:`)에서 쓰는지로 잡는다 — 반환값이 실제로 control flow를 가른다는 증거.
+# 스텁화는 이 락의 범위 밖이다(함수 본문 의미는 grep으로 못 잡는다 — T-lock류의 한계와 같은 이유).
+#
+# 소비 지점이 v0.34.0에서 옮겨왔다: 예전에는 PostToolUse validator가 `arm_ledger.should_arm(...)`
+# 을 `if` 에서 불렀고, 지금은 Stop 훅의 `select_dispatch_target` 이 per-candidate skip 으로
+# 같은 판정을 한다. 이 락이 재는 성질(게이트가 control flow를 실제로 가른다)은 그대로다.
+scan -InE -- '^def armed_keys\(' "$SD/scripts/arm_ledger.py"
 [[ $SCAN_RC -eq 0 ]] \
-  && ok "V11: arm_ledger.py 가 should_arm 을 정의한다" \
-  || no "V11: arm_ledger.py 에 should_arm 정의가 없다 (파일 부재 포함 — 대체 machinery 없음)"
-scan -InE -- 'if (not )?arm_ledger\.should_arm\(' "$SD/hooks/spec-write-validator.py"
+  && ok "V11: arm_ledger.py 가 armed_keys 를 정의한다" \
+  || no "V11: arm_ledger.py 에 armed_keys 정의가 없다 (파일 부재 포함 — 대체 machinery 없음)"
+scan -InE -- 'if c\.key in armed:' "$SD/hooks/review-dispatch.py"
 [[ $SCAN_RC -eq 0 ]] \
-  && ok "V11: validator 가 should_arm 을 소비 위치(if)에서 부른다" \
-  || no "V11: validator 의 should_arm 호출이 소비 위치에 없다 (주석/neutered 호출 의심 — 게이트 증발)"
+  && ok "V11: Stop 훅이 armed 판정을 소비 위치(if)에서 쓴다" \
+  || no "V11: Stop 훅의 armed 판정이 소비 위치에 없다 (주석/neutered 호출 의심 — 게이트 증발)"
 finish

@@ -39,9 +39,8 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
                                        ▼ 산출물 4종 (확정 후보 / 방향성 C4 / readback+gap / 모든 degrade record)
                                        ▼ [Step B proceed 게이트] ①/compact 후 brainstorming · ②바로 brainstorming · ③확정 목록 수정 · ④brief만 종료  (superpowers 있을 때만)
                                    superpowers:brainstorming → -design.md
-                                       ▼ [PostToolUse: design mode → pending_review]  (기존 hook)
                                        ▼ brainstorming user-review 정지 → 턴 경계
-                                       ▼ [Stop: review-dispatch]  (기존 hook)
+                                       ▼ [Stop: 발견 → 구조 검증 → review-dispatch]  (기존 hook)
                                    [3] reviewing-spec → spec-reviewer (Law 2, design-mode only)
                                        ├─ approved → [5] proceed 게이트 → auto re-review, max 5 → writing-plans
                                        └─ needs_revise → brainstorming author 회귀 → 재검증
@@ -67,10 +66,10 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 ### Three Laws
 
-- **Law 1 (Clarity Before Code)** — Plugin의 raison d'être. 인터뷰 → brief → design doc → reviewer → human gate. "spec 이전엔 코딩 안 한다" 강제. (`locked_decisions`는 design doc의 표식이 아니라 그 반대다 — `hooks/spec-write-validator.py`가 frontmatter에 이 키를 가진 파일을 **spec** 모드로 분류하고, `-design.md`를 포함한 나머지는 design 모드다.)
+- **Law 1 (Clarity Before Code)** — Plugin의 raison d'être. 인터뷰 → brief → design doc → reviewer → human gate. "spec 이전엔 코딩 안 한다" 강제. (`locked_decisions`는 design doc의 표식이 아니라 그 반대다 — `scripts/resolve_mode.py`가 frontmatter에 이 키를 가진 파일을 **spec** 모드로 분류하고, `-design.md`를 포함한 나머지는 design 모드다.)
 - **Law 1 (Clarity) — 문제공간 게이트 (v0.12.0)** — interview의 5 통과 의례(R1–R5)가 `check_brief.py`로 기계 검증되는 구조 게이트. 약한 방향(무인용 landscape·un-challenged 의심·빈 시행착오)은 brief 종료를 차단.
 - **Law 2 (Writer/Reviewer 분리)** — `tools:` allowlist frontmatter로 spec-reviewer(`Read, Grep, Glob, WebSearch, WebFetch`) + coverage-mapper(`Read, Grep, Glob, WebSearch, WebFetch`) + blind-spot-prober(`Read, Grep, Glob, WebSearch, WebFetch`) agent의 *물리적* 분리. 프롬프트가 아닌 frontmatter scoping이며, **allowlist라 열거되지 않은 쓰기·실행·위임 도구가 자동 차단**된다(denylist는 시간에 대해 fail-open이라 v0.21.0에서 폐기).
-- **Law 2 강화 (v0.3.0)** — Writer/Reviewer 분리를 turn-boundary 결정론으로 끌어올림. PostToolUse가 spec/design write를 감지해 *해당 turn 안* structural gate를 차단(exit 2)하고, Stop hook이 *다음 turn 첫 액션*으로 reviewer dispatch를 systemMessage 주입으로 강제. file-based ledger (`state.local.md` `pending_review:` block)가 trans-hook coordination을 LLM 의지에서 분리.
+- **Law 2 강화 (v0.3.0, v0.34.0 재배선)** — Writer/Reviewer 분리를 turn-boundary 결정론으로 끌어올림. Stop hook이 턴 경계에서 스코프 문서의 dirty 집합을 **git 에서 직접 발견**해 구조 게이트를 차단(`decision:"block"`)하고, 통과하면 *다음 turn 첫 액션*으로 reviewer dispatch를 강제. 연료가 git 관측이라 **어떤 도구로 썼든**(Write/Edit/Bash/외부 편집기) 게이트를 우회할 수 없다 — 도구 이름을 열거하던 이전 설계의 구멍이 이것이다.
 - **Law 2 (Writer/Reviewer Never Share a Pass) — infrastructure operability**: spec-reviewer agent의 writer/reviewer 물리 분리가 의미를 가지려면 reviewer dispatch가 Claude context에 *실제로* 도달해야 한다. v0.5.0의 dual-target output fix가 이 baseline을 보장. dispatch가 silent하게 lost되면 reviewer persona 분리 자체가 무의미.
 - **Law 3 (Compounding)** — spec.md 파일 자체가 named, versioned, diff-able artifact (P5). state.local.md 보존 (실패 시) → 디버깅 + future session 추적.
 - **Law 3 (Every Cycle Must Leave the System Smarter)**: v0.5.0 PR이 hook 코드 fix + `tests/test_hook_output_schema.py` 회귀 방지 test + CHANGELOG 명시 + design.md (아카이브됨: `git show pre-slim-archive-2026-07-09:docs/superpowers/specs/2026-05-17-spec-distill-hook-context-injection-design.md`) — 4-layer compounding 흔적. 같은 클래스의 silent-output mistake가 미래에 들어오면 CI에서 즉시 잡힘.
@@ -98,7 +97,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - **P18 (Stagnation detection)** — issue `raised_count ≥ 3 unresolved` 시 P18 stagnation 명시 + forced [5] escalate.
 - **P21 (Secret 기록 금지 / untrusted input)** — state.local.md token/key/credential placeholder 치환. **v0.23.0**: `audit_file`은 frontmatter에서 오는 신뢰 경계 밖 입력이므로 basename으로 제한한다(`../`·절대경로·서브경로 전부 거부).
 - **P22 (Cost class)** — 모든 skill cost_class 선언 (conducting-interview: variable / reviewing-spec: medium).
-- **worktree-safe state path (P5·P14)**: state 파일 위치를 `state_path.state_root()`로 단일화하여 worktree 호출 시에도 main repo `.claude/spec-distill/`에만 기록 — `ExitWorktree action: remove` 시 pending_review state silent loss 차단.
+- **worktree-safe state path (P5·P14)**: state 파일 위치를 `state_path.state_root()`로 단일화하여 worktree 호출 시에도 main repo `.claude/spec-distill/`에만 기록 — `ExitWorktree action: remove` 시 원장 state silent loss 차단.
 
 ### Roadmap absorption (C-numbers)
 
@@ -132,12 +131,10 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 | Event | Script | 책임 | 왜 skill이 아닌가 |
 |---|---|---|---|
-| PostToolUse | `hooks/spec-write-validator.py` | `docs/superpowers/specs/` 아래 **모든 `.md`** (sub-folder hierarchy 포함) write 시 (content-aware: frontmatter `locked_decisions` 유무로 spec/design mode) mechanical Layer 1 검증 + `pending_review:` ledger 기록 (v0.3.0). **v0.25.0: arm 직전 `should_arm`(세션 원장 ∧ git 추적 여부) 게이트 — 이미 리뷰됐거나 커밋된 문서는 arm skip(Layer 1 은 불변). skip 사유를 세 가지로 구분해 표시한다.** | spec writer가 *자기 작업을 자기가 검증*하는 회색지대를 file-system level에서 가로채는 것이 Law 2의 가장 강력한 구현. skill은 LLM이 invoke해야 동작하므로 trigger 결정론이 부족함. |
-| Stop | `hooks/review-dispatch.py` | `pending_review:` block 있으면 systemMessage 주입으로 reviewer dispatch 강제 (v0.3.0) **v0.25.0: `dispatch_attempts` 증가 + G6 상한(3회) 도달 시에만 원장 기록 — 정상 dispatch 는 원장을 건드리지 않는다.** | turn boundary는 LLM의 메시지 형식과 무관한 결정론적 지점 — skill로는 hit 불가. |
-| UserPromptSubmit | `hooks/pending-review-reminder.py` | pending_review가 살아있고 TTL 만료 시 mandate 재emit (L4b redundancy). TTL(30s) 가드로 spam 방지. Kill switch: `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` / `:reminder`. **v0.25.0: 원장을 기록하지 않는다 — 재-nag 는 리뷰의 완료가 아니다.** | Stop hook single-shot mandate가 next-turn에서 silent drop될 경우 매 user prompt에 mandate 재emit하는 redundancy layer 필요 — turn boundary 이벤트라 skill로 처리 불가. |
+| Stop | `hooks/review-dispatch.py` | 셋을 이 순서로 한다. **① 발견** — `git status` 하나로 `docs/superpowers/specs/` 아래 dirty·untracked 문서를 찾는다(도구 무관). **② 구조 검증(Layer 1)** — content-aware mode(frontmatter `locked_decisions` 유무)로 검사하고, 실패가 있으면 그 사유만 `decision:"block"` 으로 내고 그 턴에 dispatch 는 없다. **③ dispatch** — 같은 후보에서 하나를 골라 다음 턴 첫 액션으로 `reviewing-spec` 을 강제하고, `dispatch_attempts` 증가 + G6 상한(3회) 도달 시에만 원장에 기록한다. Kill switch: `DEVBREW_SKIP_HOOKS=spec-distill:Stop` / `:review-dispatch` — 이 하나가 셋을 **모두** 지배한다. | turn boundary는 LLM의 메시지 형식과 무관한 결정론적 지점 — skill로는 hit 불가. 발견을 git 에 기대는 것이 핵심이다: 도구 이름(`Write|Edit|MultiEdit`)을 matcher 로 열거하던 이전 설계는 Bash 로 쓴 문서를 통째로 놓쳤다. |
 | SessionEnd | `hooks/session-end-cleanup.py` | deterministic per-session `.claude/spec-distill/<sid>/` cleanup (v0.6.0). polite-stop이나 approve 누락 시에도 cleanup 보장 (4-layer defense의 layer 2). Kill switch: `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` / `:session-end-cleanup`. | Claude lifecycle 이벤트는 hook이 catch해야 함 — skill은 사용자/LLM이 invoke해야 동작. |
 
-**Output schema (v0.5.0+):** 모든 hook이 *dual-target output* 패턴 — Claude-target field (`hookSpecificOutput.additionalContext` for PostToolUse/UserPromptSubmit, `decision:"block" + reason` for Stop) + `systemMessage` (짧은 흔적, ≤120자, `[spec-distill]` prefix). Claude는 context로 dispatch 메시지를 받고, user는 transcript에서 hook 발화 흔적을 확인 가능. 이전 (`v0.4.0` 이하) 의 `systemMessage`-only 출력은 user transcript에는 보였으나 Claude LLM context로 inject되지 않는 silent failure였음 — `v0.5.0`에서 fix. Reference 패턴: `plugins/quality-gates/hooks/stop-hook.py:845-849`.
+**Output schema (v0.5.0+):** 모든 hook이 *dual-target output* 패턴 — Claude-target field (Stop 은 `decision:"block" + reason`) + `systemMessage` (짧은 흔적, ≤120자, `[spec-distill]` prefix). Claude는 context로 dispatch 메시지를 받고, user는 transcript에서 hook 발화 흔적을 확인 가능. 이전 (`v0.4.0` 이하) 의 `systemMessage`-only 출력은 user transcript에는 보였으나 Claude LLM context로 inject되지 않는 silent failure였음 — `v0.5.0`에서 fix. Reference 패턴: `plugins/quality-gates/hooks/stop-hook.py:845-849`.
 
 ## Kill switches
 
@@ -150,16 +147,18 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 | 범위 | 그 범위를 만드는 것 | 재시작 |
 |---|---|---|
-| **이번 dispatch 1회** | mandate 의 **수명 자체가 1회**다 — `rewrite_state()` 가 emit 전에 `pending_review` 를 소진하므로 이 강제는 이번 턴을 넘기지 않는다 | 불필요 |
-| **그 문서의 재발동** | 재발동은 그 문서를 **다시 편집**할 때 일어난다. `should_arm()` 이 git-unknown 을 요구하므로 **커밋된 문서는 원칙적으로 다시 arm 되지 않는다** — 단 `is_born()` 은 git 판정 실패(`ls-files` timeout·rc 128 등)를 전부 arm 쪽으로 fail-open 하므로 이는 보장이 아니다 | 불필요 |
-| 모든 문서, 자동 리뷰만 | `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (Layer 1 구조 검증은 유지) | 필요 |
+| **이번 dispatch 1회** | mandate 의 **수명 자체가 1회**다 — `rewrite_state()` 가 emit **전에** 그 문서를 `inflight_paths` 로 찍으므로 다음 Stop 의 발견 결과에서 빠진다 | 불필요 |
+| **그 문서의 재발동** | 발견은 **매 턴** 돈다 — dirty 한 동안 그 문서는 계속 후보다. 재발동을 막는 것은 편집 여부가 아니라 세 표시다: `inflight_paths`(리뷰 진행 중, TTL 15분) · `armed_paths`(verdict 완료 또는 G6 상한) · git 추적 여부(`c.born`). **커밋하면 그 문서는 다음 턴부터 dispatch 대상에서 빠진다**(구조 검증은 계속 받는다 — 두 게이트는 서로 다른 술어를 읽는다) — 단 `is_born()` 은 git 판정 실패(`ls-files` timeout·rc 128 등)를 전부 arm 쪽으로 fail-open 하므로 이는 보장이 아니다 | 불필요 |
 | 훅 하나 | `DEVBREW_SKIP_HOOKS=spec-distill:Stop` | 필요 |
 | 플러그인 전체 | `DEVBREW_SPEC_DISTILL_DISABLE=1` | 필요 |
 
-**커밋은 이미 걸린 dispatch 를 취소하지 않습니다.** Stop 훅은 pending 을 찾은 뒤
-`armed_paths` 만 조회하고 git 추적 여부를 재검사하지 않으므로, pending 이 생긴 뒤 같은
-턴에 커밋해도 그 dispatch 는 그대로 실행됩니다. 커밋이 영향을 주는 것은 **앞으로의
-arm** 뿐이고, 그마저 위 표의 fail-open 단서가 붙습니다.
+**커밋은 다음 턴부터 그 문서를 dispatch 대상에서 뺍니다.** 발견이 매 턴 git 을 다시
+읽고 선택이 `born` 을 그 자리에서 검사하므로, 연료가 상태 파일의 블록이던 시절과 달리
+"이미 걸린 dispatch" 라는 것이 남지 않습니다. 커밋 뒤에 **다시 편집**하면 그 문서는
+여전히 dirty 라 발견되고 **구조 검증(Layer 1)은 계속 받습니다** — 빠지는 것은 리뷰
+dispatch 뿐입니다. 완전히 clean 한 문서는 발견 자체가 되지 않아 둘 다 받지 않습니다.
+다만 커밋 판정에는 위 표의 fail-open 단서가 그대로 붙습니다 — git 호출이 실패하면
+커밋된 문서도 dispatch 대상으로 남습니다.
 
 원장(`armed_paths`)은 **세션 스코프**입니다. 리뷰를 마쳐도 문서를 커밋하지 않으면 다음
 세션에서 한 번 더 arm 됩니다 — 세션을 넘겨 억제하는 통상적 수단은 커밋이며, approve 시점
@@ -176,12 +175,9 @@ arm** 뿐이고, 그마저 위 표의 fail-open 단서가 붙습니다.
 
 - `DEVBREW_SPEC_DISTILL_DISABLE=1` — plugin 전체 abort, state 보존.
 - `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` (v0.20.0, v0.24.0 확대) — codex 병렬 co-review만 skip. Claude 리뷰는 정상 동작, combined = Claude verdict + loud degrade advisory. 전역 `DEVBREW_SPEC_DISTILL_DISABLE`과 독립. **적용 범위는 두 경로 전부**: (a) design-doc 리뷰(`reviewing-spec`), (b) brief 리뷰(`reviewing-brief`)의 **호출 지점 3곳** — 1-c 방향성 축 · 2-b 충실도 축 · 2-c 충실도 재실행. 게이트는 **호출자 책임**이다 — `detect_codex.sh`가 이 스위치를 `codex_available: false`로 옮기고 세 지점이 같은 `$codex_avail`로 묶이며, 러너(`run_brief_codex_reviewer.sh`)는 이 변수를 보지 않는다. 한 지점이라도 게이트 밖이면 opt-out이 무시된 채 지출이 나가고 `affected_axis: all` degradation record가 거짓이 된다.
-- `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` — UserPromptSubmit hook만 skip.
 - `DEVBREW_SPEC_DISTILL_RHYTHM_GUARD_THRESHOLD=N` — Dialectic Rhythm Guard threshold (default 3).
-- `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` (v0.3.0) — PostToolUse Layer 1 (structural check) 정상 동작, Layer 2 (`pending_review:` ledger 기록) skip. 비상시 reviewer dispatch cost 회피용.
 - `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` (v0.3.0, v0.8.0 확대, v0.8.1 sub-folder 명시) — `design`으로 분류된 모든 `.md` 게이트 해제: `-design.md` suffix 파일 + content-aware 판별로 `design`이 된 임의 `.md` (sub-folder 포함). `locked_decisions`로 `spec` 분류된 파일은 영향 없음. brainstorming 산출물 review를 일시 정지하고 싶을 때.
 - `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=<int>` (v0.3.0) — Stop hook redispatch TTL guard (default 30초). spec self-reference cycle 방지용. plan phase에서 default 값 재검토.
-- `DEVBREW_SKIP_HOOKS=spec-distill:PostToolUse` (alias: `spec-distill:validator`) — PostToolUse hook만 skip.
 - `DEVBREW_SKIP_HOOKS=spec-distill:Stop` (alias: `spec-distill:review-dispatch`) — Stop hook만 skip.
 - `DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd` (alias: `spec-distill:session-end-cleanup`) — SessionEnd cleanup hook만 skip. TTL-GC가 backup으로 작동.
 - `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` — TTL-GC 스크립트(`scripts/spec-distill-gc.py`)만 skip. 훅이 아니지만 지목할 이름을 갖는다 — 그전에는 이 스크립트가 `DEVBREW_SKIP_HOOKS`를 **아예 읽지 않아서**, 그 변수로 껐다고 믿어도 GC는 계속 돌았다.
@@ -197,7 +193,19 @@ arm** 뿐이고, 그마저 위 표의 fail-open 단서가 붙습니다.
   생략이 아니다). 충실도·방향성·냉독 전부 미검증 상태가 게이트 질문에 표시된다.
 - 자동 dispatch 가 G6 상한(3회)에 닿으면 그 문서는 이 세션에서 더 이상 자동으로 리뷰되지
   않는다. 리뷰가 필요하면 `reviewing-spec` skill 을 직접 호출한다. 초안을 오래 다듬는 동안
-  dispatch 를 0 으로 두고 싶으면 `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1`.
+  dispatch 를 0 으로 두고 싶으면 `DEVBREW_SKIP_HOOKS=spec-distill:Stop` 을 쓴다 — 구조
+  검증도 함께 꺼진다. 검증만 남기고 dispatch 만 끄는 스위치는 없다.
+
+### 은퇴한 스위치 (v0.34.0)
+
+`PostToolUse` validator 와 `UserPromptSubmit` reminder 가 삭제되면서 다음 셋이 아무것도
+끄지 않게 됐다. Stop 훅이 세션당 1회 advisory 로 알린다.
+
+- `DEVBREW_SKIP_HOOKS=spec-distill:PostToolUse` / `:validator` — 구조 검증은 이제 Stop
+  훅 안에 있다. 끄려면 `spec-distill:Stop`.
+- `DEVBREW_SKIP_HOOKS=spec-distill:UserPromptSubmit` / `:reminder` — 재-nag 층 자체가 없다.
+- `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` — 이 스위치가 끄던 것은 validator 의 Layer 2
+  기록이었다. **대체 스위치는 없다** — 위 항목 참조.
 
 ## Prerequisites
 

@@ -4,7 +4,8 @@
 # 대상(review_lock.py set/pause, approve_handoff harness_sid 배선)은 Task 6이
 # SKILL을 arm_ledger 세 verb로 재배선하며 소멸했다. 그중 AC12·AC13 두 불변식은
 # 락과 무관하게 아직 살아 있고, AC8-count는 대상이 소멸한 게 아니라 형태만
-# 바뀌었다(3개 trio → strip-pending·mark-reviewed 2개; check-born은 sid를 안 받는다)
+# 바뀌었다(3개 trio → mark-reviewed 1개; check-born은 sid를 안 받고, 진입 시점의
+# 상태-정리 verb 는 v0.34.0 에서 그 상태 계약과 함께 은퇴했다)
 # — 내용이 살아 있는 불변식을 형태 변화 이유로 버리는 것은 삭제 스윕의 실패 모드다.
 # 파일을 지우는 대신 좁혀서 승계한다.
 set -u -o pipefail
@@ -67,21 +68,21 @@ grep -qF 'continuity read collapse 금지' "$SKILL" \
   || no "S2: missing 'continuity read collapse 금지'"
 
 # S3 (전 AC8-count 승계 — 형태만 변경): "trio 명령이 전부 $harness_sid로 키잉된다"는
-# 이제 arm_ledger.py의 strip-pending·mark-reviewed 두 verb로 표현된다
-# (check-born은 sid 인자를 받지 않는다 — approve 시점 조회이지 세션 상태 write가 아님).
-cnt=$(grep -cE 'arm_ledger\.py" (strip-pending|mark-reviewed) "\$harness_sid' "$SKILL")
-[[ "$cnt" -eq 2 ]] \
-  && ok "S3: exactly 2 arm_ledger trio commands key \$harness_sid (got $cnt)" \
-  || no "S3: expected 2 harness_sid-keyed arm_ledger commands, got $cnt"
+# 이제 arm_ledger.py의 mark-reviewed 한 verb로 표현된다 (check-born은 sid 인자를 받지
+# 않는다 — approve 시점 조회이지 세션 상태 write가 아님).
+cnt=$(grep -cE 'arm_ledger\.py" mark-reviewed "\$harness_sid' "$SKILL")
+[[ "$cnt" -eq 1 ]] \
+  && ok "S3: exactly 1 arm_ledger state-write command keys \$harness_sid (got $cnt)" \
+  || no "S3: expected 1 harness_sid-keyed arm_ledger command, got $cnt"
 
 # S4 (신규 teeth): S3의 정규식이 "$session_id"를 쓴 가짜 줄을 배제한다 — S3이
 # 존재만 재고 값을 구분 못 하는 위양성을 봉쇄. production 파일은 건드리지 않고
 # heredoc 프로브 문자열 하나에 같은 grep을 돌려 0건인지만 본다.
 probe=$(cat <<'EOF'
-python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" strip-pending "$session_id" "$spec_path"
+python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" mark-reviewed "$session_id" "$spec_path"
 EOF
 )
-probe_cnt=$(grep -cE 'arm_ledger\.py" (strip-pending|mark-reviewed) "\$harness_sid' <<<"$probe")
+probe_cnt=$(grep -cE 'arm_ledger\.py" mark-reviewed "\$harness_sid' <<<"$probe")
 [[ "$probe_cnt" -eq 0 ]] \
   && ok "S4: S3 정규식이 \$session_id 가짜 줄을 배제한다 (real teeth)" \
   || no "S4: S3 정규식이 \$session_id 가짜 줄까지 매치했다 (got $probe_cnt) — 위양성"
@@ -101,18 +102,16 @@ else
   no "S5: approve 창에 check-born 호출이 없다 — 미커밋 advisory 배선 소실"
 fi
 
-# S6/S7 (전 AC11-a·b 승계): degradation advisory 두 개가 살아 있다.
-# "빈 harness_sid 는 조용히 skip 하지 않고 loud advisory 를 남긴다"는 계약은 리팩터를
-# 살아남았지만(SKILL 에 두 곳) 그 락은 함께 삭제됐다 — 둘 다 mutation 으로 확인된 구멍.
-# CLAUDE.md 의 graceful-degradation-with-loud-logging 요구이고, 조용한 degrade 는
+# S7 (전 AC11-b 승계): degradation advisory 가 살아 있다.
+# "빈 harness_sid 는 조용히 skip 하지 않고 loud advisory 를 남긴다"는 계약이고,
+# CLAUDE.md 의 graceful-degradation-with-loud-logging 요구다. 조용한 degrade 는
 # 문서가 리뷰 완료로 기록되지 않은 채 넘어간다는 뜻이다.
-if [[ -z "$w_out" ]]; then
-  no "S6: Step 1 윈도우가 비었다 — 앵커 파손"
-elif grep -qF 'strip skip' <<<"$w_out"; then
-  ok "S6: Step 1 빈 harness_sid → strip skip advisory 존재 (전 AC11-a)"
-else
-  no "S6: Step 1 strip-skip advisory 소실 — 조용한 degrade"
-fi
+#
+# **짝이던 S6 은 v0.34.0 에서 없앴다** — 그것이 잠그던 advisory 는 Step 1 의
+# 진입-정리 write 가 실패했음을 알리는 문구였는데, 그 write 자체가 은퇴했다(진입 시점의
+# 상태 계약이 통째로 사라졌다). 지금 sid 에 의존하는 write 는 Step 3 의 `mark-reviewed`
+# 하나뿐이고 S7 이 그것을 잠근다. 락을 남기려면 아무 일도 하지 않는 단계를 되살려야
+# 하는데, 그건 락이 제품을 끌고 다니는 것이다.
 
 # S7 은 섹션 윈도우 안에서 잰다 — file-wide grep 이면 리터럴이 SKILL 어디에 있든
 # 통과해, advisory 를 기록 지점 밖으로 옮기는 변경을 못 잡는다(라벨은 "Step 3"라고
@@ -128,10 +127,10 @@ else
 fi
 
 # S8 (S3 의 in-file 음의 짝): S3 은 개수만 세므로, 올바른 `$harness_sid` 줄과 엉뚱한
-# `$session_id` 줄이 함께 있어도 2 를 세어 통과한다. S4 는 heredoc 프로브에 대한
+# `$session_id` 줄이 함께 있어도 개수를 채워 통과한다. S4 는 heredoc 프로브에 대한
 # *정규식 대조군*이지 검사 대상 파일의 속성이 아니다 — 전신 AC8-a/b 는 창 안에서
 # `! grep ... "$session_id"` 를 걸고 있었다.
-if grep -qE 'arm_ledger\.py" (strip-pending|mark-reviewed) "\$session_id' "$SKILL"; then
+if grep -qE 'arm_ledger\.py" mark-reviewed "\$session_id' "$SKILL"; then
   no "S8: SKILL 안에 \$session_id 로 키잉된 arm_ledger 호출이 있다 — read==write 파손"
 else
   ok "S8: SKILL 안에 \$session_id 로 키잉된 arm_ledger 호출이 없다 (S3 의 음의 짝)"

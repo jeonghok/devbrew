@@ -15,7 +15,7 @@ cost_class: medium
 
 ## Steps
 
-1. **Load state.local.md (hook-facing 상태는 harness sid 로 명시 해석)** — 먼저 훅(Stop/UserPromptSubmit/PostToolUse)이 읽는 파일과 *정의상 동일한* harness session id + state root 로 상태 파일을 연다. 훅은 raw sid 가 아니라 `resolve_session_id`(env-first: `DEVBREW_SPEC_DISTILL_SESSION_ID` → `CLAUDE_CODE_SESSION_ID` → payload)를 쓰므로, 스킬도 같은 리졸버를 CLI 로 재사용한다(DRY, C4):
+1. **Load state.local.md (hook-facing 상태는 harness sid 로 명시 해석)** — 먼저 훅(Stop)이 읽는 파일과 *정의상 동일한* harness session id + state root 로 상태 파일을 연다. 훅은 raw sid 가 아니라 `resolve_session_id`(env-first: `DEVBREW_SPEC_DISTILL_SESSION_ID` → `CLAUDE_CODE_SESSION_ID` → payload)를 쓰므로, 스킬도 같은 리졸버를 CLI 로 재사용한다(DRY, C4):
 
    ```bash
    harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" session-id)"
@@ -23,21 +23,13 @@ cost_class: medium
    STATE="$ROOT/$harness_sid/state.local.md"   # 훅이 읽는 바로 그 파일
    ```
 
-   이 `$STATE` 에서 `pending_review:`(→ `spec_path`·`mode`)를 읽는다. PostToolUse `spec-write-validator.py` 가 `pending_review:` 를 **항상 harness-sid 디렉토리**에 기록하므로, **read==write 디렉토리 불변식**(스킬의 pending/spec READ 와 `strip-pending`·`mark-reviewed` WRITE 가 같은 `$STATE` 를 가리킴)이 성립해야 원장(`armed_paths`)과 pending 이 훅이 읽는 바로 그 파일에 기록된다 — 어긋나면 arm-once 게이트가 훅과 다른 파일을 키잉해 통째로 무의미해진다. block 이 없으면 manual override(loud advisory). v0.12.0부터 **design mode 전용**: 11-section/locked_decisions schema 검사는 적용 안 함(brainstorming 자유 형식). 본문의 placeholder/ambiguity/scope-creep/approaches-comparison/isolation/testing/handoff_incomplete만 spec-reviewer 에게 요청.
+   `$spec_path` 와 `mode` 는 Stop 훅이 낸 dispatch mandate 가 그대로 싣고 있다(`spec path: …` · `mode: …`). `$STATE` 를 여는 이유는 원장(`armed_paths`·`dispatch_attempts`)이 훅이 읽는 바로 그 파일에 있어야 하기 때문이다 — **read==write 디렉토리 불변식**(스킬의 READ 와 `mark-reviewed` WRITE 가 같은 `$STATE` 를 가리킴)이 깨지면 arm-once 게이트가 훅과 다른 파일을 키잉해 통째로 무의미해진다. mandate 가 없으면 manual override(loud advisory). v0.12.0부터 **design mode 전용**: 11-section/locked_decisions schema 검사는 적용 안 함(brainstorming 자유 형식). 본문의 placeholder/ambiguity/scope-creep/approaches-comparison/isolation/testing/handoff_incomplete만 spec-reviewer 에게 요청.
 
-   **불변식 (hook-facing 상태 vs continuity):** hook-facing 상태(`pending_review`·`armed_paths`·`dispatch_attempts`)의 read/write 는 harness sid(`$STATE`); `rereview_count`/`issue_history` continuity 는 이 fix 가 건드리지 않고 harness-sid 로 collapse 하지 않는다.
+   **불변식 (hook-facing 상태 vs continuity):** hook-facing 상태(`armed_paths`·`dispatch_attempts`·`inflight_paths`)의 read/write 는 harness sid(`$STATE`); `rereview_count`/`issue_history` continuity 는 이 fix 가 건드리지 않고 harness-sid 로 collapse 하지 않는다.
 
    **continuity read collapse 금지** — `rereview_count`/`issue_history`(아래 Step 5 에서 갱신) continuity 카운터는 인터뷰 선행 시 interview-UUID 파일(`conducting-interview/SKILL.md:35` self-`session_id`, `:41` `rereview_count`, `:43` `issue_history`)에 누적된다. **이 카운터의 읽기(이 Step)·쓰기(Step 5)를 `$harness_sid` 로 옮기지 말 것** — 옮기면 인터뷰-선행 플로우에서 `rereview_count` 가 0 으로 리셋돼 re-review cap(5)/round-level stagnation 조기-exit 가 약화된다. continuity 는 기존 메커니즘대로 읽고 쓴다(N1). 훅은 이 신호를 읽지 않으므로 read==write 불변식 대상이 아니다.
 
-**pending strip (v0.25.0)** — state 로드 직후, `spec-reviewer` dispatch *전에* 이 문서의 pending 을 제거한다 (매 진입 — 최초 + revise 재진입):
-
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" strip-pending "$harness_sid" "$spec_path"
-```
-
-   `$harness_sid` 가 빈 값(env unset → `state_path.py session-id` exit 1)이면 **strip skip** — 조용히 넘어가지 말고 advisory 를 남긴다. pending 이 남아도 Law 1 fail-safe 방향(리뷰 강제)이라 안전하다.
-
-dispatch 의 연료는 `pending_review` 다. 진입 시점에 연료를 없애면 subagent(async) 경계에서 발생하는 메인 `Stop` 이 진행 중인 리뷰를 재강제(중복/절단)할 수 없다 — v0.18.0 이 상태로 표현하던 불변식을 한 줄이 대체한다. 다른 문서의 pending 은 건드리지 않는다(같은-키만 strip). **여기서 원장(`armed_paths`)은 쓰지 않는다** — 진입은 리뷰의 *시작*일 뿐 완료가 아니다(§5.2).
+   **진입 시점에 원장을 쓰지 않는다.** 진행 중인 리뷰가 메인 `Stop` 에 재강제(중복/절단)되지 않는 것은 Stop 훅이 dispatch 와 **같은 write** 안에서 그 문서를 `inflight_paths` 에 찍어 두기 때문이다(A12) — 스킬이 할 일이 없다. 원장 write 는 Step 3 의 `mark-reviewed` 하나뿐이다: 진입은 리뷰의 *시작*일 뿐 완료가 아니다(§5.2).
 
 2. **Dispatch spec-reviewer agent**:
 
@@ -138,7 +130,7 @@ fi
 
    `$harness_sid` 가 빈 값이면 이 기록을 남길 수 없다. 조용히 넘어가지 말고 advisory 를 낸다:
 
-   > `[spec-distill] harness_sid 미해석 — 이 세션의 상태 파일을 특정할 수 없어 리뷰 완료 기록(mark-reviewed)을 남기지 못했다. 같은 문서가 다시 dispatch될 수 있다. 해소: DEVBREW_SPEC_DISTILL_SESSION_ID로 sid를 명시하거나, 이 세션 동안 DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1로 arm을 끈다.`
+   > `[spec-distill] harness_sid 미해석 — 이 세션의 상태 파일을 특정할 수 없어 리뷰 완료 기록(mark-reviewed)을 남기지 못했다. 같은 문서가 다시 dispatch될 수 있다. 해소: DEVBREW_SPEC_DISTILL_SESSION_ID로 sid를 명시하라.`
 4. **Apply routing table** — `combined_verdict`를 그대로 표에 투입한다(표 자체는 불변).
 5. **Ledger는 merge_review가 소유** — `rereview_count += 1`은 기존 continuity 메커니즘대로 갱신. `issue_history`는 merge_review가 `$LEDGER_JSON`에 기록하므로 세션이 손으로 갱신하지 않는다(id/count 전사 금지). 세션은 merge_review가 emit한 `issue_history`를 표시만 한다.
 
@@ -220,7 +212,7 @@ AskUserQuestion({
   → **여기서 턴 종료(STOP). 같은 턴에서 `writing-plans`를 호출하지 말 것** (compact 전 writing-plans 진입 = 옵션 ① 무력화). `Skill superpowers:writing-plans <path>` 진입은 사용자가 `/compact`를 *실제 실행한 다음 턴*에 **사용자 트리거**(예: `/compact write plan`처럼 compact 뒤에 붙인 진행 인자, 또는 명시적 진행 요청)로만 일어난다 — 모델은 다음 턴에 자동 진입하지 *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17). compact된 fresh context에서 plan 작성 (AC19).
 - **② 바로 writing-plans**: Approve handoff sequence 실행 → 즉시 `Skill superpowers:writing-plans <path>` 호출.
 - **③ 수정 필요**: 후속 `AskUserQuestion`으로 분기 — "revise per review" → 메인 agent가 design.md 직접 수정 후 reviewing-spec 재진입; "more interview" → conducting-interview (state phase=1 reset); "edit myself" → 사용자 편집 후 reviewing-spec 재진입.
-- **④ 멈춤**: state 보존하고 종료. **상태 조작 없음** — 이 문서의 pending 은 Step 1 에서 이미 제거됐고, 원장에는 verdict 시점에 이미 기록됐다(§5.2). 그 세션에서 자동 재발동은 없다. 재개는 사용자 요청 시 skill 수동 호출로 한다(D2·NG1).
+- **④ 멈춤**: state 보존하고 종료. **상태 조작 없음** — 원장에는 verdict 시점에 이미 기록됐다(§5.2). 그 세션에서 자동 재발동은 없다. 재개는 사용자 요청 시 skill 수동 호출로 한다(D2·NG1).
 
 ### 두 가드 — polite stop 금지 (AP2) · cross-compact 조기 진행 금지 (AC19)
 

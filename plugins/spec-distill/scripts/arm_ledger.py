@@ -16,7 +16,6 @@ design doc auto-review(Layer 2)를 문서 생애 한 번만 발동시킨다.
 기록하므로 그 층이 필요 없다.
 
 CLI:
-  arm_ledger.py strip-pending <sid> <raw_path>   # reviewing-spec Step 1 진입
   arm_ledger.py mark-reviewed <sid> <raw_path>   # reviewing-spec Step 3 (verdict)
   arm_ledger.py check-born    <raw_path>         # reviewing-spec approve(①/②)
                                                  #   0=git-tracked, 1=미커밋+advisory, 2=usage
@@ -36,7 +35,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from state_path import SESSION_PATTERN  # noqa: E402 # pyright: ignore[reportMissingImports]
 # `state_file_for` 는 훅과 공유하는 정의다 — 같은 플러그인 안이므로 import 하나로
 # 중복이 소멸한다(설계 §6.1③). 여기서 재-export 되므로 `arm_ledger.state_file_for`
-# 로 부르는 소비자(spec-write-validator.py)는 그대로 동작한다.
+# 로 부르는 소비자도 그대로 동작한다.
 from hook_common import parse_iso, state_file_for  # noqa: E402,F401 # pyright: ignore[reportMissingImports]
 
 PREFIX = "docs/superpowers/specs/"
@@ -44,10 +43,9 @@ PREFIX = "docs/superpowers/specs/"
 #: G6 — verdict 없이 끝난 dispatch의 세션당·문서당 재시도 상한 (§5.2 상태기계).
 DISPATCH_ATTEMPT_CAP = 3
 
-#: PostToolUse 훅 전체 timeout이 10초라 git 호출은 그 절반으로 묶는다 (§8).
+#: Stop 훅 전체 timeout이 10초라 git 호출은 그 절반으로 묶는다 (§8).
 GIT_TIMEOUT_SEC = 5
 
-PENDING_RE = re.compile(r"^pending_review:\n(?:  [^\n]*\n)*", re.MULTILINE)
 ARMED_RE = re.compile(r"^armed_paths:\n((?:  - [^\n]+\n)*)", re.MULTILINE)
 ATTEMPTS_RE = re.compile(r"^dispatch_attempts:\n((?:  [^\n]+\n)*)", re.MULTILINE)
 INFLIGHT_RE = re.compile(r"^inflight_paths:\n((?:  [^\n]+\n)*)", re.MULTILINE)
@@ -99,22 +97,6 @@ def canonical_key(raw_path: str) -> str | None:
     if any(c in key for c in "\n\r\t\x00") or not key.isprintable():
         return None
     return key
-
-
-def pending_path(body: str) -> str | None:
-    m = PENDING_RE.search(body)
-    if not m:
-        return None
-    for line in m.group(0).splitlines():
-        ls = line.strip()
-        if ls.startswith("path:"):
-            return ls[len("path:"):].strip()
-    return None
-
-
-def strip_pending(body: str) -> str:
-    """pending_review 블록 제거. 0-indent 원장 블록은 보존."""
-    return PENDING_RE.sub("", body)
 
 
 def armed_keys(body: str) -> list[str]:
@@ -180,10 +162,9 @@ def _read_body(state_file: Path) -> str | None:
     이 구분이 이 모듈의 유일한 비대칭 방어다. 빈 body 로의 degrade 는 *읽기* 술어
     (`is_armed`·`skip_reason`)에는 옳다 — 미기록으로 읽혀 arm 쪽, 안전한 방향이다.
     그러나 같은 값을 read-modify-write 인 `mark_reviewed` 가 "새 세션" 으로 읽으면
-    파일 전체를 덮어써 다른 문서의 `armed_paths` 와 살아있는 `pending_review` 를
-    함께 지운다 — 이 릴리스가 없애려는 재발동 그 자체다. 그래서 읽기 쪽은 호출부에서
-    명시적으로 `or ""` 로 degrade 하고(방향이 코드에 보이게), 쓰기 쪽은 `None` 에서
-    멈춘다. 판독 불가 파일은 보존한다 (CLAUDE.md: 실패 시 디버깅을 위해 보존).
+    파일 전체를 덮어써 다른 문서의 `armed_paths` 를 함께 지운다 — 이 릴리스가
+    없애려는 재발동 그 자체다. 그래서 읽기 쪽은 호출부에서 명시적으로 `or ""` 로
+    degrade 하고(방향이 코드에 보이게), 쓰기 쪽은 `None` 에서 멈춘다. 판독 불가 파일은 보존한다 (CLAUDE.md: 실패 시 디버깅을 위해 보존).
     """
     if not state_file.exists():
         return ""
@@ -204,7 +185,7 @@ def _compose(
     infl: dict[str, str] | None = None,
     val: dict[str, int] | None = None,
 ) -> str:
-    """원장 네 블록을 재조립. 나머지 본문(frontmatter·pending·타임스탬프)은 보존.
+    """원장 네 블록을 재조립. 나머지 본문(frontmatter·타임스탬프·발견 커서)은 보존.
 
     `infl`·`val` 은 기본값 `None`(→ `{}`) 을 갖지만, **모든 호출부가 명시적으로
     채워서 넘긴다** — 그렇지 않으면 body 에 이미 있던 inflight_paths·
@@ -328,8 +309,8 @@ def skip_reason(state_file: Path, raw_path: str) -> str:
 def mark_armed(body: str, raw_path: str) -> str:
     """키를 armed_paths에 멱등 추가해 **문자열로 반환** (파일 write 안 함 — §6 원자성).
 
-    Stop 훅은 G6 상한에 닿는 그 순간에만 pending strip·attempts·armed·타임스탬프를
-    하나의 write로 커밋해야 한다. 여기서 파일을 따로 쓰면 write가 둘로 갈라진다.
+    Stop 훅은 G6 상한에 닿는 그 순간에만 attempts·armed·타임스탬프를 하나의 write로
+    커밋해야 한다. 여기서 파일을 따로 쓰면 write가 둘로 갈라진다.
     """
     key = canonical_key(raw_path)
     if key is None:
@@ -354,8 +335,8 @@ def record_attempt(body: str, raw_path: str, n: int) -> str:
     | dispatch 1·2회차 | attempts 증가 | armed 불변 |
     | dispatch 3회차   | attempts=3    | armed 키 추가 |
 
-    3회차가 마지막 자동 dispatch이고 그 emit이 상한을 알리는 vehicle이다.
-    이후 편집은 validator의 should_arm이 false라 pending 자체가 생기지 않는다.
+    3회차가 마지막 자동 dispatch이고 그 emit이 상한을 알리는 vehicle이다. 이후에는
+    그 키가 `armed_paths`에 있어 `select_dispatch_target`이 후보에서 제외한다.
     """
     key = canonical_key(raw_path)
     if key is None or n <= 0:
@@ -450,7 +431,7 @@ def mark_reviewed(state_file: Path, raw_path: str) -> bool:
         return False
     body = _read_body(state_file)
     if body is None:
-        # 판독 불가 — 덮어쓰면 다른 문서의 원장·pending 이 함께 사라진다. 보존하고 멈춘다.
+        # 판독 불가 — 덮어쓰면 다른 문서의 원장이 함께 사라진다. 보존하고 멈춘다.
         print(
             "[spec-distill] arm_ledger: 원장 판독 불가 — 파일 보존, 리뷰 완료 미기록"
             "(같은 문서가 다시 dispatch될 수 있다).",
@@ -475,40 +456,6 @@ def mark_reviewed(state_file: Path, raw_path: str) -> bool:
         print(
             f"[spec-distill] arm_ledger: 원장 write 실패 — 리뷰 완료 미기록"
             f"(같은 문서가 다시 dispatch될 수 있다): {exc}",
-            file=sys.stderr,
-        )
-        return False
-    return True
-
-
-def strip_pending_file(state_file: Path, raw_path: str) -> bool:
-    """같은 키의 pending만 제거 (다른 문서 pending 보존). 원장은 건드리지 않는다 (§5.4).
-
-    dispatch의 연료는 pending이다. 리뷰 진입 시 연료를 없애면 v0.18.0 락이 상태로
-    표현하던 불변식("이 문서 리뷰 진행 중")을 한 줄로 얻는다. 진입은 리뷰의 시작일
-    뿐 완료가 아니므로 여기서 armed_paths를 쓰면 안 된다.
-    """
-    key = canonical_key(raw_path)
-    if key is None or not state_file.exists():
-        return False
-    body = _read_body(state_file)
-    if body is None:
-        # mark_reviewed 와 같은 이유 — 이것도 read-modify-write 다. 보존하고 멈춘다.
-        print(
-            "[spec-distill] arm_ledger: 원장 판독 불가 — 파일 보존, pending strip 안 함"
-            "(리뷰 중 재dispatch 가능).",
-            file=sys.stderr,
-        )
-        return False
-    pend = pending_path(body)
-    if pend is None or canonical_key(pend) != key:
-        return False
-    try:
-        state_file.write_text(strip_pending(body).rstrip() + "\n", encoding="utf-8")
-    except OSError as exc:
-        print(
-            f"[spec-distill] arm_ledger: pending strip write 실패 "
-            f"(리뷰 중 재dispatch 가능): {exc}",
             file=sys.stderr,
         )
         return False
@@ -546,7 +493,7 @@ def clear_inflight_file(state_file: Path, raw_path: str) -> bool:
 
 def _usage() -> int:
     print(
-        "usage: arm_ledger.py {strip-pending|mark-reviewed|clear-inflight} <sid> <raw_path>\n"
+        "usage: arm_ledger.py {mark-reviewed|clear-inflight} <sid> <raw_path>\n"
         "       arm_ledger.py check-born <raw_path>",
         file=sys.stderr,
     )
@@ -596,9 +543,6 @@ def main(argv: list[str]) -> int:
         return 2
     sf = state_file_for(sid)
 
-    if cmd == "strip-pending":
-        strip_pending_file(sf, raw_path)
-        return 0
     if cmd == "clear-inflight":
         clear_inflight_file(sf, raw_path)
         return 0

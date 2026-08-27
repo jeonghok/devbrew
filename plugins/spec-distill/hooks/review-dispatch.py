@@ -50,11 +50,10 @@ SCRIPTS_DIR = SCRIPT_DIR.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 from state_path import resolve_session_id  # noqa: E402
 from kill_switch_active import kill_switch_active  # noqa: E402
-# 형제 훅(pending-review-reminder.py)과 공유하는 조각 — 같은 플러그인 안이라
-# import 하나로 중복이 소멸한다(설계 §6.1③). 사본이 아니다.
+# `scripts/` 와 공유하는 조각 — 같은 플러그인 안이라 import 하나로 중복이
+# 소멸한다(설계 §6.1③). 사본이 아니다.
 from hook_common import (  # noqa: E402
     LAST_DISPATCHED_RE,
-    PENDING_RE,
     configure_utf8_streams,
     fire_and_forget_gc,
     parse_iso,
@@ -88,6 +87,50 @@ GIT_UNAVAILABLE_ADVISORY = (
 )
 #: A16 은 advisory 를 **세션당 1회**로 요구한다 — 매 턴 반복하면 무시되는 신호가 된다.
 GIT_UNAVAILABLE_MARKER = "git_unavailable_advised: yes"
+
+#: v0.34.0 에서 삭제된 두 훅의 kill-switch 토큰. 훅명 별칭과 이벤트명 별칭을 함께
+#: 담는다 — `kill_switch_active` 가 둘 다 받았으므로 사용자가 어느 쪽을 적었는지
+#: 알 수 없다.
+RETIRED_TOKENS = (
+    "spec-distill:validator", "spec-distill:PostToolUse",
+    "spec-distill:reminder", "spec-distill:UserPromptSubmit",
+)
+#: A19 는 advisory 를 **세션당 1회**로 요구한다 (GIT_UNAVAILABLE_MARKER 와 같은 이유).
+RETIRED_MARKER = "retired_token_advised: yes"
+
+
+def retired_token_advisory(body: str) -> tuple[str, str | None]:
+    """설정된 은퇴 토큰이 있으면 (새 body, advisory) — 세션당 1회.
+
+    수명 사실만 적는다. "이제 안 걸린다" 같은 집행 공백은 적지 않는다 — 그것은
+    모델이 스스로 리뷰를 면제할 근거가 되어 Law 2 를 뚫는다.
+
+    대조는 `kill_switch_active` **와 같은 방식**이어야 한다: 콤마로 쪼개고 양끝
+    공백을 벗긴 뒤 **전체 토큰**으로 맞춘다. 부분 문자열(`t in raw`)로 재면 방향만
+    반대인 같은 결함이 생긴다 — `DEVBREW_SKIP_HOOKS=spec-distill:validator-v2` 가
+    이 advisory 를 발화시켜, 설정하지도 않은 토큰이 설정돼 있다고 말하게 된다.
+    kill switch 를 설명하는 문장이 그 kill switch 와 다르게 매칭하면 언젠가
+    사용자 자신의 설정에 대해 거짓을 말한다.
+
+    `kill_switch_active` 를 은퇴 쌍마다 부르지 않는 이유: 그 함수는 bool 만 내므로
+    **어느 별칭**이 설정됐는지 이름을 댈 수 없다. 사용자 자신의 토큰을 되읽어 주는
+    것이 이 문구를 실행 가능하게 만드는 부분이다.
+    """
+    if RETIRED_MARKER in body:
+        return body, None
+    raw = os.environ.get("DEVBREW_SKIP_HOOKS", "")
+    tokens = {t.strip() for t in raw.split(",") if t.strip()}
+    hit = [t for t in RETIRED_TOKENS if t in tokens]
+    if not hit:
+        return body, None
+    return (
+        body.rstrip() + f"\n{RETIRED_MARKER}\n",
+        f"[spec-distill] DEVBREW_SKIP_HOOKS 에 은퇴한 토큰이 있다: {', '.join(hit)}. "
+        "v0.34.0 에서 그 훅들이 삭제됐고 구조 검증은 Stop 훅으로 옮겨왔다 — "
+        "이 토큰들은 더 이상 구조 검증을 끄지 않는다. 끄려면 "
+        "DEVBREW_SKIP_HOOKS=spec-distill:Stop 을 쓴다.",
+    )
+
 
 #: 발견 커서. 0-indent 스칼라라 `arm_ledger._compose` 의 블록 재조립을 통과해도
 #: 살아남는다(그 함수는 자기가 아는 네 블록만 벗겨 내고 나머지는 `rest` 로 보존한다).
@@ -199,13 +242,18 @@ def select_dispatch_target(
 
     마지막 줄(`resolve_mode`)이 kill switch 를 지킨다.
     `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` 은 design 문서를 `None` 으로
-    떨어뜨리는데, 예전에는 그 판정이 pending 을 만드는 PostToolUse 훅 안에 있어
-    dispatch 가 자동으로 따랐다. 연료가 발견으로 바뀌면 이 훅이 스스로 지켜야 한다 —
+    떨어뜨린다. 그 판정이 dispatch 앞단의 다른 훅에 있던 시절에는 여기서 다시 볼
+    이유가 없었지만, 연료가 발견으로 바뀐 지금은 이 훅이 스스로 지켜야 한다 —
     안 지키면 kill switch 가 말없이 죽는다(CLAUDE.md: kill switch 는 보안 컨트롤).
 
     제외된 후보에서 멈추지 않고 **목록 끝까지 훑는다**. 멈추면 armed 문서 하나가
     그 세션의 모든 dispatch 를 조용히 막는다 — 발견 목록은 정렬돼 있어 그 문서가
     매 턴 같은 자리에 오기 때문이다.
+
+    같은 이유로 armed 검사는 **이 안의 per-candidate skip 이어야 하고**, 선택 밖에서
+    그 턴 전체를 끊는 `return 0` 이면 안 된다. 두 모양은 armed 문서가 하나뿐일 때
+    같은 답을 내지만, 옆에 미리뷰 문서가 있으면 갈린다 — 후자는 그 문서까지 함께
+    굶긴다(측정 확인: 그 변이에서 test_arm_once.sh T13 이 `emit=''` 로 RED).
     """
     try:
         import arm_ledger  # pyright: ignore[reportMissingImports]
@@ -264,17 +312,20 @@ def rewrite_state(
     path: Path, body: str, now: datetime, spec_path: str, attempt_n: int,
     cursor: str | None, inflight_key: str | None,
 ) -> None:
-    body = re.sub(
-        r"^pending_review:\n(?:  [^\n]*\n)*", "", body, flags=re.MULTILINE
-    )
+    # frontmatter 는 **원장 함수를 태우기 전에** 깐다 — 구조 검증 경로가 같은 이유로
+    # 같은 일을 한다. `record_attempt` 는 빈 body 를 받으면 블록 하나만 있는 body 를
+    # 내놓는데, 그건 이미 비어 있지 않아 나중에 seed 해도 늦다. 그러면 이 파일에서만
+    # `session_id:` 가 사라진다 — 다른 writer(구조 검증 · git-불능 · 은퇴 토큰 ·
+    # `arm_ledger.mark_reviewed`)는 전부 남긴다.
+    body = seed_body(body, path)
     new_ts = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     if LAST_DISPATCHED_RE.search(body):
         body = LAST_DISPATCHED_RE.sub(f"last_dispatched_at: {new_ts}", body)
     else:
         body = body.rstrip() + f"\nlast_dispatched_at: {new_ts}\n"
-    # §5.2 — dispatch_attempts 증가는 pending strip·타임스탬프와 **한 write**로
-    # 커밋된다. armed_paths는 G6 상한에 닿는 그 순간에만 record_attempt가 함께 찍고,
-    # 정상 dispatch에서는 원장을 건드리지 않는다(완료 기록 = verdict 시점 mark-reviewed).
+    # §5.2 — dispatch_attempts 증가는 타임스탬프와 **한 write**로 커밋된다.
+    # armed_paths는 G6 상한에 닿는 그 순간에만 record_attempt가 함께 찍고, 정상
+    # dispatch에서는 원장을 건드리지 않는다(완료 기록 = verdict 시점 mark-reviewed).
     if attempt_n > 0:
         try:
             import arm_ledger  # pyright: ignore[reportMissingImports]
@@ -286,8 +337,8 @@ def rewrite_state(
                 file=sys.stderr,
             )
     # A12 — in-flight 표시도 **같은 write** 안에서 찍는다. 별도 write 로 가르면 그
-    # 사이에 두 번째 Stop 이 같은 문서를 다시 발견한다(설계 §4.1 이 pending 은퇴로
-    # 잃는 "리뷰 진행 중" 상태의 대체재가 바로 이 표시다).
+    # 사이에 두 번째 Stop 이 같은 문서를 다시 발견한다. "리뷰 진행 중"을 상태로
+    # 표현하는 유일한 자리가 이 표시다(설계 §4.1).
     if inflight_key is not None:
         try:
             import arm_ledger  # pyright: ignore[reportMissingImports]
@@ -318,9 +369,9 @@ def main() -> int:
     if session_id is None:
         return 0
     state_path = state_file_for(session_id)
-    # 상태 파일 **부재는 빈 원장**이다. 예전에는 여기서 return 0 했는데, 그때는
-    # `pending_review:` 가 유일한 연료라 파일이 없으면 볼 것이 정말 없었다. 발견은
-    # 상태가 아니라 git 에서 오므로 이제 파일 없이도 돌아야 한다.
+    # 상태 파일 **부재는 빈 원장**이다. 연료가 상태 파일의 블록이던 시절에는 파일이
+    # 없으면 볼 것이 정말 없어 여기서 return 0 했다. 발견은 상태가 아니라 git 에서
+    # 오므로 이제 파일 없이도 돌아야 한다.
     body = ""
     if state_path.exists():
         try:
@@ -482,6 +533,37 @@ def main() -> int:
                 f"(non-fatal, 다음 턴이 같은 구간을 다시 본다): {e}",
                 file=sys.stderr,
             )
+    # --- A19 — 은퇴한 kill-switch 토큰 공시 ---
+    # 구조 검증이 이 훅으로 **옮겨왔으므로**, `spec-distill:validator` 로 그 검증을
+    # 껐던 사용자는 그것이 말없이 되살아난 것을 보게 된다. project-init 의 은퇴와
+    # 다른 점이 이것이다 — 거기서는 사라진 훅이 아무것도 대신하지 않았다.
+    #
+    # **자리가 구조 검증 뒤인 것이 요점이다.** git-불능 advisory 처럼 훅 앞머리에서
+    # 내면 그 턴의 Layer 1 이 통째로 건너뛰어진다 — 세션당 1회뿐이라도 방향이
+    # 이 브랜치가 없애려는 그것(게이트가 조용해지는 쪽)이라 안 된다. 여기서는
+    # 검증이 이미 끝났고 통과했으므로 **미루는 것은 dispatch 한 턴뿐**이다.
+    # 구조 실패가 있던 턴에는 위에서 이미 return 했으니 advisory 는 다음 턴을 기다린다.
+    #
+    # 쓰는 body 는 바로 위 커서 write 와 **같은 식**이다 — 다른 식으로 쓰면 방금
+    # 전진시킨 `discovery_cursor` 를 이 write 가 되돌린다.
+    #
+    # stderr 로 내지 않는 이유는 이 파일이 여러 번 적어 둔 사실 — exit 0 의 stderr 는
+    # 사용자에게 전달되지 않는다.
+    body_adv, advisory = retired_token_advisory(
+        set_cursor(seed_body(body, state_path), cursor))
+    if advisory is not None:
+        try:
+            write_state_file(state_path, body_adv)
+        except OSError as exc:
+            # 마커를 못 남기면 다음 턴에 같은 advisory 가 다시 나간다. 그 반복은
+            # 조용해지는 것보다 낫다 — 사용자가 **알게** 되는 것이 목적이다.
+            print(
+                f"[spec-distill] 은퇴 토큰 마커 기록 실패 "
+                f"(advisory 가 다음 턴에도 반복된다): {exc}",
+                file=sys.stderr,
+            )
+        print(json.dumps({"systemMessage": advisory}), flush=True)
+        return 0
     # --- dispatch 대상 선택 (A12·A14·G6) ---
     # 이미 손에 든 후보 목록에서 고른다 — 발견은 위에서 한 번 했고, 여기서 git 을
     # 다시 부르면 같은 턴 안에서 두 집합을 보게 된다.
@@ -509,71 +591,6 @@ def main() -> int:
     # **동시에** design 모드가 꺼져 있을 때. 그 창은 좁히지 않고 열어 둔다(범위 밖).
     # 비용도 적어 둔다 — 접미사 없는 문서는 dispatch 한 번에 파일을 두 번 읽는다.
     mode = resolve_mode(spec_path)
-    # G1 — 원장이 "더 이상 dispatch 안 함"이라고 말하는 문서는 발동하지 않는다.
-    # **연료가 발견으로 바뀐 지금 이 판정은 두 번째 게이트다**: 위
-    # `select_dispatch_target` 이 armed 키를 이미 뺐으므로 여기서 `_vetoed` 가 참이
-    # 되는 입력은 없다. 남겨 두는 이유는 아래 sweep — stale pending 을 치우는 일이
-    # 아직 이 자리에 있기 때문이고, 그 계약의 은퇴는 다음 단계의 몫이다.
-    #
-    # **지우는 사람에게**: 이 분기를 위쪽 선택의 대체재로 되살리지 말 것. `_vetoed` 는
-    # 후보 하나를 건너뛰는 판정이 아니라 **그 턴 전체를 끊는 `return 0`** 이다. armed
-    # 검사가 선택에서 빠지면 armed 문서가 정렬상 앞에 오는 순간 옆의 미리뷰 문서가
-    # 그 턴에 통째로 굶는다(측정 확인: 그 변이에서 test_arm_once.sh T13 이 `emit=''`
-    # 로 RED). 대체재는 선택 안의 per-candidate skip 이지 이 자리가 아니다.
-    #
-    # 아래 문단은 그 sweep 이 왜 여기 있었는지의 기록이다.
-    #
-    # pending 을 유일한 연료로 두면, skill 이 Step 1
-    # (strip-pending)과 Step 3(mark-reviewed)을 분리된 두 bash 블록으로 실행한다는
-    # 사실만으로 재발동이 되살아난다 — Step 1 이 빠지면 pending 이 남고, 실제 리뷰는
-    # 30초 TTL 을 넘기므로 다음 Stop 이 이미 리뷰된 문서에 다시 block 을 낸다.
-    # 여기서 pending 을 치우는 것은 §5.4 의 진입 strip 과 같은 연산이며 armed_paths 는
-    # 건드리지 않는다 — T10(상한 미달 dispatch 단독으로는 Stop 이 원장에 쓰지 않는다)은
-    # 그대로 성립한다.
-    # 조회 실패는 dispatch 쪽으로 fail-open: 리뷰를 덜 하는 방향으로 떨어지지 않는다.
-    # strip 결과는 반드시 확인하고 보고한다 — 판독 불가 원장에서 strip_pending_file 은
-    # False 를 내므로, 결과를 안 보고 "정리했다"고 쓰면 일어나지 않은 일을 주장하게 된다
-    # (이 릴리스가 고치던 바로 그 결함류를 fix 안에서 재생산하는 꼴).
-    _ledger = None  # veto 가 True 면 반드시 bound — 그 불변식을 코드로 보이게 둔다.
-    try:
-        import arm_ledger  # pyright: ignore[reportMissingImports]
-        # 이미 손에 든 `body` 로 판정한다 — `is_armed()` 는 파일을 다시 읽는데,
-        # 그 두 번째 read 가 실패하면 False 로 degrade 해 게이트를 통과시키고,
-        # 훅은 이어서 **첫 번째 스냅샷**(`body`)으로 rewrite_state 를 돌려
-        # 그 사이 바뀐 파일을 옛 내용으로 덮는다(TOCTOU). 순수 함수로 읽으면
-        # 창 자체가 없다.
-        _ledger = arm_ledger
-        _key = arm_ledger.canonical_key(spec_path)
-        _vetoed = _key is not None and _key in arm_ledger.armed_keys(body)
-    except Exception as exc:  # noqa: BLE001 — loud degradation
-        # **조회 실패만** 여기로 온다. fail-open 방향은 dispatch(과리뷰) 가 맞다 —
-        # 원장을 못 읽었다고 리뷰를 건너뛰면 Law 1 게이트가 조용히 꺼진다.
-        print(
-            f"[spec-distill] 원장 조회 실패 (non-fatal, dispatch 계속): {exc}",
-            file=sys.stderr,
-        )
-        _vetoed = False
-    if _vetoed and _ledger is not None:
-        # veto 는 이 시점에 **확정**됐다. 정리(sweep)와 보고는 그 뒤의 부작용이므로
-        # 판정과 같은 try 를 공유하면 안 된다 — 공유하면 sweep 중의 예외가
-        # `except` 로 떨어져 dispatch 경로로 흘러, 원장이 "끝났다"고 못 박은 문서를
-        # 다시 dispatch 한다(이 릴리스가 없애려는 재발동 그 자체). 게다가 그때
-        # 출력되는 문구는 "원장 조회 실패"라 사실과도 다르다 — 조회는 성공했다.
-        try:
-            swept = _ledger.strip_pending_file(state_path, spec_path)
-        except Exception as exc:  # noqa: BLE001 — sweep 실패는 veto 를 뒤집지 않는다
-            swept = False
-            print(
-                f"[spec-distill] stale pending 정리 실패 (veto 유지): {exc}",
-                file=sys.stderr,
-            )
-        tail = "stale pending 정리함" if swept else "stale pending 은 남음"
-        print(
-            f"[spec-distill] '{spec_path}'는 원장에 이미 기록된 문서 — "
-            f"dispatch 생략 (arm-once); {tail}.",
-            file=sys.stderr,
-        )
-        return 0
     # §5.2 — 이번 dispatch의 시도 번호는 rewrite *이전에* 순수 함수로 계산한다.
     # rewrite_state를 bare 표현식 호출로 유지해야 AC7.3.1 AST 락(rewrite 먼저,
     # print 나중)이 그대로 성립한다 — 반환값 대입으로 바꾸면 그 락이 호출을 못 본다.
@@ -591,9 +608,8 @@ def main() -> int:
             f"(non-fatal, G6 상한 미적용): {exc}",
             file=sys.stderr,
         )
-    # `worktree_path:` 줄은 없다. 그 값의 출처는 pending 을 쓰던 PostToolUse 훅의
-    # `os.getcwd()` 였고, 하는 일은 리뷰어에게 "이 문서가 어느 체크아웃에 있는지"를
-    # 알리는 것이었다. 발견이 내는 `spec path` 는 절대경로라 그 사실을 스스로 말한다.
+    # 별도의 체크아웃 경로 줄은 없다. 리뷰어에게 "이 문서가 어느 체크아웃에
+    # 있는지"를 알리는 일은 발견이 내는 절대경로 `spec path` 가 스스로 한다.
     # 이 훅의 cwd 로 값을 만들어 넣지 않는다 — 리포 서브디렉터리일 수 있어 worktree
     # 경로라고 부를 수 없고, 없는 것보다 틀린 것이 나쁘다.
     msg_lines = [
@@ -632,7 +648,7 @@ def main() -> int:
         # 남기는 것은 emit 시점에 **이미 일어난 사실** 하나뿐이다 — 아래
         # rewrite_state 가 emit 보다 **먼저** 이 문서를 in-flight 로 찍으므로,
         # 다음 Stop 의 발견 결과에서 이 문서가 빠진다. 그래서 이 강제는 이번 턴을
-        # 넘기지 않는다. (예전에는 같은 사실이 pending 소진에서 나왔다.)
+        # 넘기지 않는다.
         msg_lines.append("이 mandate는 이번 dispatch 1회에만 유효하다.")
     msg = " ".join(msg_lines)
     # AC7.1: rewrite BEFORE emit. AC7.2: rewrite-fail → no emit (block storm guard).

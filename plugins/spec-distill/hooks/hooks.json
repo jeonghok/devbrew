@@ -1,29 +1,6 @@
 {
-  "description": "spec-distill — UserPromptSubmit reminder, PostToolUse spec/design validator, Stop reviewer-dispatch, SessionEnd cleanup.",
+  "description": "spec-distill — Stop hook (discovery + Layer 1 structural validation + reviewer dispatch), SessionEnd cleanup.",
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/pending-review-reminder.py",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/spec-write-validator.py",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [

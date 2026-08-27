@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # arm-once 테스트 공유 하니스 (v0.25.0).
-# test_arm_once.sh(T1–T3·T13–T19)와 test_arm_ledger_timing.sh(T6–T12)가 source한다.
+# test_arm_once.sh 와 test_arm_ledger_timing.sh 가 source한다.
 # **source 전용** — 이 파일 자체는 테스트가 아니다(이름에 test_ 접두어가 없는 이유).
 #
 # 계약: source하는 쪽이 `set -u -o pipefail`을 먼저 켜고, arm_work_init로 작업 리포를
@@ -16,9 +16,7 @@
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
-VALIDATOR="$SD/hooks/spec-write-validator.py"
 DISPATCH="$SD/hooks/review-dispatch.py"
-REMINDER="$SD/hooks/pending-review-reminder.py"
 LEDGER="$SD/scripts/arm_ledger.py"
 MERGE="$SD/scripts/merge_review.py"
 SKILL="$SD/skills/reviewing-spec/SKILL.md"
@@ -82,8 +80,9 @@ import re, sys, pathlib
 p = pathlib.Path(sys.argv[1])
 if p.exists():
     body = p.read_text(encoding="utf-8")
-    # `inflight_paths:` 블록 **안에서만** 민다. 파일 전체를 훑으면 pending 의
-    # triggered_at 처럼 무관한 타임스탬프까지 늙혀 다른 케이스의 전제를 흔든다.
+    # `inflight_paths:` 블록 **안에서만** 민다. 파일 전체를 훑으면
+    # `last_dispatched_at` 처럼 무관한 타임스탬프까지 늙혀 다른 케이스의 전제를
+    # 흔든다(TTL 가드가 그 값을 읽는다).
     def age(m):
         return m.group(1) + re.sub(r"(?m)^(  \S+: ).*$",
                                    r"\g<1>2020-01-01T00:00:00Z", m.group(2))
@@ -93,26 +92,6 @@ if p.exists():
 PY
 }
 
-# stdout만 (advisory JSON 검사용)
-run_validator() {  # $1=rel $2=sid [$3=extra env — 단일 KEY=VALUE 토큰]
-  local payload; payload=$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$WORK/$1")
-  # $3 를 배열로 감싼다 — unquoted ${3:-} 는 값 안에 공백이 있으면(예: PATH 항목에
-  # 공백 섞인 시스템 경로) word-split 되어 env 가 KEY=VALUE 하나가 아니라 여러
-  # 인자로 오인한다. 빈 배열은 "${extra[@]}" 확장 시 자취 없이 사라져 인자 없이
-  # 호출한 것과 동일하다(set -u 안전 — ${3:-} 기본값이 항상 정의됨).
-  local extra=(); [[ -n "${3:-}" ]] && extra=("$3")
-  # bash 3.2(macOS 기본)에서 `set -u` + 빈 배열 `"${extra[@]}"` 는 unbound-variable
-  # 로 죽는다 — `${extra[@]+"${extra[@]}"}` 로 우회(배열이 비어 있으면 통째로 사라짐).
-  ( cd "$WORK" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$2" ${extra[@]+"${extra[@]}"} \
-      bash -c "echo '$payload' | python3 '$VALIDATOR'" 2>/dev/null )
-}
-# stdout+stderr 합본 (loud degradation 검사용)
-run_validator_all() {  # $1=rel $2=sid [$3=extra env — 단일 KEY=VALUE 토큰]
-  local payload; payload=$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s"}}' "$WORK/$1")
-  local extra=(); [[ -n "${3:-}" ]] && extra=("$3")
-  ( cd "$WORK" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$2" ${extra[@]+"${extra[@]}"} \
-      bash -c "echo '$payload' | python3 '$VALIDATOR'" 2>&1 )
-}
 run_stop() {  # $1=sid
   ( cd "$WORK" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$1" \
       DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0 \
@@ -125,16 +104,6 @@ run_stop_all() {  # $1=sid
   ( cd "$WORK" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$1" \
       DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0 \
       bash -c "echo '{}' | python3 '$DISPATCH'" 2>&1 )
-}
-run_reminder() {  # $1=sid — stdout만
-  ( cd "$WORK" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$1" \
-      DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0 \
-      bash -c "echo '{}' | python3 '$REMINDER'" 2>/dev/null )
-}
-run_reminder_all() {  # $1=sid — stdout+stderr 합본
-  ( cd "$WORK" && env DEVBREW_SPEC_DISTILL_SESSION_ID="$1" \
-      DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC=0 \
-      bash -c "echo '{}' | python3 '$REMINDER'" 2>&1 )
 }
 run_ledger() {  # arm_ledger CLI — cwd가 WORK여야 state_root·git이 이 리포를 본다
   ( cd "$WORK" && python3 "$LEDGER" "$@" )

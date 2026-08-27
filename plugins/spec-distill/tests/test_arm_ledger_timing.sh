@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# T6–T12 — 기록 시점·자기치유·G6 상한·훅 통합·check-born·fail-safe 배제 (v0.25.0).
+# T6–T12 — 기록 시점·자기치유·G6 상한·Stop 통합·check-born·fail-safe 배제 (v0.25.0).
 set -u -o pipefail
 source "$(dirname "$0")/arm_test_helpers.sh"
 arm_work_init specdistill-armtiming
@@ -84,8 +84,8 @@ fi
 # --- T9: G6 상한 (§5.2 상태기계) ---
 # 3회차가 마지막 자동 dispatch이고 그 emit이 상한을 알리는 vehicle이다.
 # 마지막 절의 성질: **상한에 닿은 문서는 다시 편집돼도 dispatch 되지 않는다.**
-# 예전에는 validator 층이 pending 을 안 만드는 것으로 그 성질이 성립했고, 지금은
-# dispatch 대상 선택이 `dispatch_attempts` 상한과 `armed_paths` 를 함께 보고 뺀다.
+# 그 성질은 dispatch 대상 선택이 `dispatch_attempts` 상한과 `armed_paths` 를 함께
+# 보고 후보에서 빼는 것으로 성립한다.
 #
 # 매 라운드 in-flight 를 만료시킨다 — 안 그러면 2·3회차가 A12 의 표시에 막혀
 # G6 상한 자체에 닿지 못한다. 재는 축은 상한이지 in-flight 가 아니다(그쪽은 T6·T8).
@@ -129,7 +129,6 @@ fi
 SID10=t10-noarm
 REL10="docs/superpowers/specs/2026-08-01-t10-design.md"
 new_doc "$REL10"
-run_validator "$REL10" "$SID10" >/dev/null
 run_stop "$SID10" >/dev/null
 sf10="$(state_of "$SID10")"
 if ! grep -q '^armed_paths:' "$sf10" && grep -q "^  $REL10: 1\$" "$sf10"; then

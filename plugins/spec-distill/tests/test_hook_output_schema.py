@@ -51,34 +51,6 @@ def _make_temp_repo() -> Path:
     return tmp
 
 
-def _write_pending_review_state(
-    repo: Path, session_id: str, *, spec_path: str = "/tmp/x-spec.md",
-    mode: str = "spec", worktree_path: str | None = None,
-    triggered_at: str = "2026-05-17T00:00:00Z",
-    last_dispatched_at: str | None = None,
-) -> Path:
-    """Write a state.local.md with a pending_review block."""
-    state_dir = repo / ".claude" / "spec-distill" / session_id
-    state_dir.mkdir(parents=True, exist_ok=True)
-    state_file = state_dir / "state.local.md"
-    block = (
-        f"pending_review:\n"
-        f"  path: {spec_path}\n"
-        f"  mode: {mode}\n"
-    )
-    if worktree_path:
-        block += f"  worktree_path: {worktree_path}\n"
-    block += f"  triggered_at: {triggered_at}\n"
-    tail = ""
-    if last_dispatched_at:
-        tail = f"\nlast_dispatched_at: {last_dispatched_at}\n"
-    state_file.write_text(
-        f"---\nsession_id: {session_id}\n---\n\n{block}{tail}",
-        encoding="utf-8",
-    )
-    return state_file
-
-
 #: 구조적으로 통과하는 design 문서 본문 (placeholder·ambiguity 없음).
 DESIGN_DOC_BODY = (
     "# Test Design\n\nContext / Why\n\nGoals\n\nNon-goals\n\n"
@@ -171,9 +143,9 @@ class TestReviewDispatchSchema(HookOutputSchemaTestBase):
         reason = payload.get("reason", "")
         self.assertIn("MANDATORY", reason)
         self.assertIn("mode:", reason)
-        # `worktree_path:` 줄은 은퇴했다 — 그 값의 출처는 pending 을 쓰던 훅의 cwd
-        # 였고, 발견이 내는 spec path 가 절대경로라 같은 사실(어느 체크아웃인가)을
-        # 스스로 말한다. 그래서 재는 것은 줄의 존재가 아니라 경로 자체다.
+        # 별도의 체크아웃 경로 줄은 없다 — 발견이 내는 spec path 가 절대경로라 같은
+        # 사실(어느 체크아웃인가)을 스스로 말한다. 그래서 재는 것은 줄의 존재가
+        # 아니라 경로 자체다.
         self.assertIn(f"spec path: {doc}", reason)
         sysmsg = payload.get("systemMessage", "")
         self.assertTrue(sysmsg, msg="systemMessage missing")
@@ -236,129 +208,6 @@ class TestReviewDispatchSchema(HookOutputSchemaTestBase):
         # stderr should contain the loud log
         self.assertIn("state rewrite failed", result.stderr)
         self.assertIn("dispatch suppressed", result.stderr)
-
-    def test_arm_gate_import_failure_falls_open_to_arm(self):
-        """`import arm_ledger`가 실패하면(예: 모킹) validator는 게이트를 건너뛰고
-        정상 arm한다 (fail-safe = 리뷰가 일어나는 쪽, Law 1)."""
-        import importlib.util
-        import io
-        spec_module = importlib.util.spec_from_file_location(
-            "spec_write_validator_failopen", HOOKS_DIR / "spec-write-validator.py",
-        )
-        mod = importlib.util.module_from_spec(spec_module)
-        spec_module.loader.exec_module(mod)
-
-        repo = _make_temp_repo()
-        try:
-            session_id = "test-armgate-failopen"
-            rel = "docs/superpowers/specs/2026-01-01-x-design.md"
-            doc = repo / rel
-            doc.parent.mkdir(parents=True, exist_ok=True)
-            doc.write_text(
-                "# Doc\n\n## Goal\n\n한 줄.\n", encoding="utf-8")
-            # 게이트가 살아 있었다면 arm을 막았을 진짜 원장 상태.
-            state_dir = repo / ".claude" / "spec-distill" / session_id
-            state_dir.mkdir(parents=True, exist_ok=True)
-            (state_dir / "state.local.md").write_text(
-                f"---\nsession_id: {session_id}\n---\n\narmed_paths:\n  - {rel}\n",
-                encoding="utf-8",
-            )
-            payload = json.dumps({
-                "tool_name": "Write",
-                "tool_input": {"file_path": str(doc)},
-            })
-            out, err = io.StringIO(), io.StringIO()
-            # sys.modules['arm_ledger'] = None → `import arm_ledger` ImportError.
-            with mock.patch.dict(sys.modules, {"arm_ledger": None}), \
-                 mock.patch.dict(os.environ, {
-                     "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
-                 }), \
-                 mock.patch("sys.stdin", new=io.StringIO(payload)), \
-                 contextlib.redirect_stdout(out), \
-                 contextlib.redirect_stderr(err):
-                cwd_before = os.getcwd()
-                try:
-                    os.chdir(repo)
-                    rc = mod.main()
-                finally:
-                    os.chdir(cwd_before)
-            self.assertEqual(rc, 0)
-            self.assertIn("arm gate failed", err.getvalue())
-            state_body = (state_dir / "state.local.md").read_text(encoding="utf-8")
-            self.assertIn(
-                "pending_review:", state_body,
-                msg="fail-open 시에도 arm(pending_review 기록)해야 함",
-            )
-        finally:
-            shutil.rmtree(repo, ignore_errors=True)
-
-    def test_write_state_collapses_stale_pending_under_arm_gate_import_failure(self):
-        """리뷰 발견 — `import arm_ledger`가 실패해도 write_state는 기존(다른 문서의)
-        pending_review를 무조건 strip해야 한다. strip이 생략되면 블록이 둘 남고,
-        Stop은 `PENDING_RE.search`(첫 매치)로 stale 블록(다른 문서)을 집어 dispatch하며,
-        `rewrite_state`의 전역 `re.sub`가 방금 arm된 문서의 트리거까지 함께 지운다
-        — 오류 한 줄 없는 under-review(Law 1이 금지하는 방향)."""
-        import importlib.util
-        import io
-        spec_module = importlib.util.spec_from_file_location(
-            "spec_write_validator_doublepending", HOOKS_DIR / "spec-write-validator.py",
-        )
-        mod = importlib.util.module_from_spec(spec_module)
-        spec_module.loader.exec_module(mod)
-
-        repo = _make_temp_repo()
-        try:
-            session_id = "test-armgate-doublepending"
-            rel_a = "docs/superpowers/specs/2026-01-01-docA-design.md"
-            rel_b = "docs/superpowers/specs/2026-01-01-docB-design.md"
-            doc_b = repo / rel_b
-            doc_b.parent.mkdir(parents=True, exist_ok=True)
-            doc_b.write_text(
-                "# Doc B\n\n## Goal\n\n한 줄.\n", encoding="utf-8")
-            # 같은 세션 안에 이미 다른 문서(docA)의 미소비 pending_review가 있다 —
-            # 같은 turn에 두 문서를 쓰고 Stop이 아직 안 돈, 정상적인 워크플로우.
-            state_dir = repo / ".claude" / "spec-distill" / session_id
-            state_dir.mkdir(parents=True, exist_ok=True)
-            (state_dir / "state.local.md").write_text(
-                f"---\nsession_id: {session_id}\n---\n\n"
-                f"pending_review:\n  path: {rel_a}\n  mode: design\n"
-                f"  triggered_at: 2026-01-01T00:00:00Z\n",
-                encoding="utf-8",
-            )
-            payload = json.dumps({
-                "tool_name": "Write",
-                "tool_input": {"file_path": str(doc_b)},
-            })
-            out, err = io.StringIO(), io.StringIO()
-            # sys.modules['arm_ledger'] = None → arm 게이트의 `import arm_ledger`도
-            # ImportError. write_state는 이 import에 의존하지 않아야 통과한다.
-            with mock.patch.dict(sys.modules, {"arm_ledger": None}), \
-                 mock.patch.dict(os.environ, {
-                     "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
-                 }), \
-                 mock.patch("sys.stdin", new=io.StringIO(payload)), \
-                 contextlib.redirect_stdout(out), \
-                 contextlib.redirect_stderr(err):
-                cwd_before = os.getcwd()
-                try:
-                    os.chdir(repo)
-                    rc = mod.main()
-                finally:
-                    os.chdir(cwd_before)
-            self.assertEqual(rc, 0)
-            state_body = (state_dir / "state.local.md").read_text(encoding="utf-8")
-            self.assertEqual(
-                state_body.count("pending_review:"), 1,
-                msg=(
-                    "두 블록이 남으면 Stop이 stale 블록(docA)을 소비하고 docB의 "
-                    f"트리거까지 함께 지운다 — state: {state_body!r}"
-                ),
-            )
-            self.assertIn(str(doc_b), state_body, msg="fresh block은 docB여야 함")
-            self.assertNotIn(rel_a, state_body, msg="stale docA 블록이 남아있으면 안 됨")
-        finally:
-            shutil.rmtree(repo, ignore_errors=True)
-
 
 class TestReviewDispatchMandateScope(HookOutputSchemaTestBase):
     """mandate 가 자기 **수명**을 밝히는가, 그리고 두 수명 문장이 상호배타인가.
@@ -543,8 +392,8 @@ class TestMandateClaimsAreTrue(HookOutputSchemaTestBase):
     def test_unreviewed_doc_rearms_after_inflight_expiry(self):
         """완료가 기록되지 않은 문서의 게이트는 한 번의 강제로 꺼지지 않는다.
 
-        **재발동의 계기가 바뀌었다.** 예전에는 "재편집"이었다 — 편집이 PostToolUse
-        훅을 태워 연료를 다시 깔았기 때문이다. dirty·untracked 문서를 다시 편집해도
+        **재발동의 계기가 바뀌었다.** 예전에는 "재편집"이었다 — 편집이 별도의
+        write-time 훅을 태워 연료를 다시 깔았기 때문이다. dirty·untracked 문서를 다시 편집해도
         git 이 보는 사실은 달라지지 않으므로, 지금 그 자리를 지키는 것은 진행중 표시의
         TTL 만료다(`INFLIGHT_TTL_SEC` 의 계약). 편집은 시나리오를 알아보게 남겨 두되
         판정은 **강제가 다시 나가는가**로 한다 — 원장 부기가 아니라 emit 채널이다.
@@ -744,81 +593,6 @@ class TestReviewDispatchOrdering(unittest.TestCase):
         )
 
 
-class TestSpecWriteValidatorSchema(HookOutputSchemaTestBase):
-    """AC2 — spec-write-validator.py advisory branch output schema."""
-
-    def test_design_mode_advisory_emits_additional_context(self):
-        # Create a valid design.md fixture so the validator passes structural
-        # checks and reaches the advisory branch.
-        spec_rel = Path("docs") / "superpowers" / "specs" / "2026-05-17-test-design.md"
-        spec_abs = self.repo / spec_rel
-        spec_abs.parent.mkdir(parents=True, exist_ok=True)
-        spec_abs.write_text(
-            "# Test Design\n\nContext / Why\n\nGoals\n\nNon-goals\n\n"
-            "Constraints\n\nAcceptance Criteria\n\nFiles\n\nVerification Plan\n\n"
-            "Rejected Alternatives\n\nMetadata\n",
-            encoding="utf-8",
-        )
-        stdin_payload = {
-            "session_id": "test-pttu",
-            "hook_event_name": "PostToolUse",
-            "tool_name": "Write",
-            "tool_input": {"file_path": str(spec_abs)},
-            "tool_output": "ok",
-            "cwd": str(self.repo),
-        }
-        result = _run_hook(
-            "spec-write-validator.py",
-            cwd=self.repo, stdin_payload=stdin_payload,
-            env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": "test-pttu"},
-        )
-        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
-        self.assertTrue(result.stdout.strip(), msg="advisory stdout empty")
-        payload = json.loads(result.stdout)
-        hso = payload.get("hookSpecificOutput", {})
-        self.assertEqual(hso.get("hookEventName"), "PostToolUse")
-        ac = hso.get("additionalContext", "")
-        self.assertIn("structural OK", ac)
-        self.assertIn("Reviewer will be dispatched", ac)
-        sysmsg = payload.get("systemMessage", "")
-        self.assertTrue(sysmsg)
-        self.assertLessEqual(len(sysmsg), 120)
-        self.assertTrue(sysmsg.startswith("[spec-distill]"))
-
-
-class TestPendingReviewReminderSchema(HookOutputSchemaTestBase):
-    """AC3 — pending-review-reminder.py output schema."""
-
-    def test_pending_review_past_ttl_emits_reminder_in_additional_context(self):
-        session_id = "test-reminder"
-        # last_dispatched_at older than 30s default TTL.
-        old_ts = "2026-05-16T00:00:00Z"
-        _write_pending_review_state(
-            self.repo, session_id,
-            spec_path="/tmp/x-design.md", mode="design",
-            worktree_path="/tmp/wt",
-            last_dispatched_at=old_ts,
-        )
-        stdin_payload = {"user_prompt": "hi", "session_id": session_id}
-        result = _run_hook(
-            "pending-review-reminder.py",
-            cwd=self.repo, stdin_payload=stdin_payload,
-            env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": session_id},
-        )
-        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
-        self.assertTrue(result.stdout.strip())
-        payload = json.loads(result.stdout)
-        hso = payload.get("hookSpecificOutput", {})
-        self.assertEqual(hso.get("hookEventName"), "UserPromptSubmit")
-        ac = hso.get("additionalContext", "")
-        self.assertIn("REMINDER", ac)
-        self.assertIn("pending_review", ac)
-        self.assertIn("reviewing-spec", ac)
-        sysmsg = payload.get("systemMessage", "")
-        self.assertTrue(sysmsg)
-        self.assertLessEqual(len(sysmsg), 120)
-
-
 class TestKillSwitches(HookOutputSchemaTestBase):
     """AC10/AC11 — DEVBREW_SPEC_DISTILL_DISABLE=1 and DEVBREW_SKIP_HOOKS=spec-distill:<event>."""
 
@@ -857,38 +631,79 @@ class TestKillSwitches(HookOutputSchemaTestBase):
         self._armed_stop_run(
             "ks-review-2", {"DEVBREW_SKIP_HOOKS": "spec-distill:Stop"})
 
-    def test_global_disable_silences_spec_write_validator(self):
-        spec_abs = self.repo / "docs" / "superpowers" / "specs" / "x-design.md"
-        spec_abs.parent.mkdir(parents=True, exist_ok=True)
-        spec_abs.write_text("# x\n", encoding="utf-8")
-        stdin_payload = {
-            "tool_name": "Write",
-            "tool_input": {"file_path": str(spec_abs)},
-            "hook_event_name": "PostToolUse",
-        }
-        result = _run_hook(
-            "spec-write-validator.py", cwd=self.repo, stdin_payload=stdin_payload,
-            env_extra={"DEVBREW_SPEC_DISTILL_DISABLE": "1"},
-        )
-        self.assertEqual(result.returncode, 0)
-        self.assertTrue(self._empty_or_braces(result.stdout))
+class TestRetiredTokenAdvisory(HookOutputSchemaTestBase):
+    """A19 — 은퇴한 kill-switch 토큰을 세션당 1회 공시한다.
 
-    def test_global_disable_silences_pending_review_reminder(self):
-        session_id = "ks-reminder"
-        _write_pending_review_state(
-            self.repo, session_id, spec_path="/x", mode="spec",
-            last_dispatched_at="2026-05-16T00:00:00Z",  # past TTL
-        )
-        result = _run_hook(
-            "pending-review-reminder.py", cwd=self.repo,
-            stdin_payload={"user_prompt": "hi"},
+    구조 검증이 v0.34.0 에서 Stop 훅으로 **옮겨왔으므로**, 그 검증을
+    `spec-distill:validator` 로 껐던 사용자는 그것이 말없이 되살아난 것을 보게 된다.
+
+    대조는 `kill_switch_active` 와 **같은 방식**(콤마 분리 + 전체 토큰)이어야 한다.
+    부분 문자열로 재면 방향만 반대인 같은 결함이 생긴다 — 설정하지도 않은 토큰이
+    설정돼 있다고 말하는 advisory. 그래서 초문자열 케이스가 이 클래스에 있다.
+    """
+
+    SID = "test-retired-token"
+    EXACT = "spec-distill:validator"
+    SUPERSTRING = "spec-distill:validator-v2"
+
+    def _run(self, skip_hooks: str) -> subprocess.CompletedProcess:
+        _write_scope_doc(
+            self.repo, "docs/superpowers/specs/2026-05-16-retired-design.md")
+        return _run_hook(
+            "review-dispatch.py",
+            cwd=self.repo,
             env_extra={
-                "DEVBREW_SPEC_DISTILL_DISABLE": "1",
-                "DEVBREW_SPEC_DISTILL_SESSION_ID": session_id,
+                "DEVBREW_SPEC_DISTILL_SESSION_ID": self.SID,
+                "DEVBREW_SKIP_HOOKS": skip_hooks,
             },
         )
-        self.assertEqual(result.returncode, 0)
-        self.assertTrue(self._empty_or_braces(result.stdout))
+
+    #: 부재 assert 의 앵커는 **ASCII** 여야 한다. 훅은 `json.dumps` 기본값
+    #: (ensure_ascii=True)로 내보내므로 한국어는 stdout 에서 \uXXXX 로 이스케이프돼
+    #: 한국어 grep 은 **절대** 매치하지 않는다 — 그런 assert 는 무엇을 바꿔도 통과한다.
+    #: 이 리터럴은 advisory 문구에만 나온다(다른 emit 경로에는 없다).
+    ADVISORY_ASCII_ANCHOR = "DEVBREW_SKIP_HOOKS"
+
+    def _state_body(self) -> str:
+        f = self.repo / ".claude" / "spec-distill" / self.SID / "state.local.md"
+        return f.read_text(encoding="utf-8") if f.exists() else ""
+
+    def test_exact_token_emits_advisory_naming_it(self):
+        result = self._run(self.EXACT)
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        payload = json.loads(result.stdout)
+        msg = payload.get("systemMessage", "")
+        self.assertIn(self.EXACT, msg, msg="사용자 자신의 토큰을 되읽어 주지 않는다")
+        self.assertIn("DEVBREW_SKIP_HOOKS=spec-distill:Stop", msg,
+                      msg="대체 토큰을 알려주지 않으면 실행 가능한 문구가 아니다")
+        # 강제(block)가 아니라 공시다 — 이 advisory 가 리뷰를 막아서는 안 된다.
+        self.assertNotEqual(payload.get("decision"), "block")
+        self.assertIn("retired_token_advised: yes", self._state_body())
+
+    def test_superstring_token_does_not_fire(self):
+        """`spec-distill:validator-v2` 는 은퇴 토큰이 **아니다**.
+
+        `kill_switch_active` 는 이것으로 훅을 끄지 않는다. advisory 가 여기서 발화하면
+        사용자가 설정하지 않은 것을 설정했다고 말하게 된다.
+        """
+        result = self._run(self.SUPERSTRING)
+        self.assertEqual(result.returncode, 0, msg=f"stderr: {result.stderr}")
+        self.assertNotIn(self.ADVISORY_ASCII_ANCHOR, result.stdout)
+        self.assertNotIn("retired_token_advised", self._state_body())
+        # 양성 대조 — 같은 픽스처에서 훅은 살아 있고 평소 일(dispatch)을 한다.
+        payload = json.loads(result.stdout)
+        self.assertEqual(
+            payload.get("decision"), "block",
+            msg="초문자열 케이스가 '훅이 죽어서' 조용한 것과 구분되지 않는다")
+
+    def test_advisory_is_once_per_session(self):
+        first = self._run(self.EXACT)
+        self.assertIn(
+            self.ADVISORY_ASCII_ANCHOR, json.loads(first.stdout)["systemMessage"])
+        second = self._run(self.EXACT)
+        self.assertNotIn(self.ADVISORY_ASCII_ANCHOR, second.stdout)
+        # 두 번째 턴은 평소대로 dispatch 한다 — 공시가 게이트를 영구히 먹지 않는다.
+        self.assertEqual(json.loads(second.stdout).get("decision"), "block")
 
 
 def _in_worktree() -> bool:
@@ -936,8 +751,15 @@ class TestCrossResolverAdvisory(unittest.TestCase):
         )
 
 
-class TestInterviewDirectionLayerHook(unittest.TestCase):
-    """AC9/V7/C8 — design-doc detection survives; interview/ is out of scope."""
+class TestInterviewDirectionLayerScope(unittest.TestCase):
+    """AC9/V7/C8 — design-doc 판정은 살아남고, interview/ 는 스코프 밖이다.
+
+    드라이버가 v0.34.0 에서 write-time 훅에서 Stop 훅으로 옮겨왔다. 재는 성질은
+    그대로다: 스코프 안 `-design.md` 는 design 모드로 라우팅되고, `interview/` 는
+    발견 자체가 되지 않아 리뷰 게이트가 붙지 않는다.
+    """
+
+    SID = "hooktestsession"
 
     def setUp(self) -> None:
         self.repo = _make_temp_repo()
@@ -945,8 +767,8 @@ class TestInterviewDirectionLayerHook(unittest.TestCase):
     def tearDown(self) -> None:
         shutil.rmtree(self.repo, ignore_errors=True)
 
-    def _post_write(self, rel_path: str) -> subprocess.CompletedProcess:
-        """Simulate a PostToolUse Write of a .md file at rel_path under the temp repo."""
+    def _stop_after_write(self, rel_path: str) -> subprocess.CompletedProcess:
+        """rel_path 에 문서를 만들고(= dirty) Stop 훅을 돌린다."""
         abs_path = self.repo / rel_path
         abs_path.parent.mkdir(parents=True, exist_ok=True)
         abs_path.write_text(
@@ -954,45 +776,33 @@ class TestInterviewDirectionLayerHook(unittest.TestCase):
             encoding="utf-8",
         )
         return _run_hook(
-            "spec-write-validator.py",
+            "review-dispatch.py",
             cwd=self.repo,
-            env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": "hooktestsession"},
-            stdin_payload={
-                "tool_name": "Write",
-                "tool_input": {"file_path": str(abs_path)},
-                "session_id": "hooktestsession",
-            },
+            env_extra={"DEVBREW_SPEC_DISTILL_SESSION_ID": self.SID},
         )
 
+    def _state(self) -> Path:
+        return self.repo / ".claude" / "spec-distill" / self.SID / "state.local.md"
+
     def test_design_doc_under_specs_triggers_design_mode(self) -> None:
-        """AC9: -design.md under specs/ → design mode + pending_review block."""
-        cp = self._post_write(
+        """AC9: specs/ 아래 -design.md → design 모드로 dispatch."""
+        cp = self._stop_after_write(
             "docs/superpowers/specs/2026-05-31-interview-direction-layer-design.md"
         )
         self.assertEqual(cp.returncode, 0, cp.stderr)
         out = json.loads(cp.stdout)
-        self.assertIn("design", out["hookSpecificOutput"]["additionalContext"])
-        state = (
-            self.repo / ".claude" / "spec-distill" / "hooktestsession" / "state.local.md"
-        )
-        self.assertTrue(state.exists(), "pending_review state not written")
-        body = state.read_text(encoding="utf-8")
-        self.assertIn("pending_review:", body)
-        self.assertIn("mode: design", body)
+        self.assertEqual(out.get("decision"), "block")
+        self.assertIn("mode: design", out["reason"])
+        self.assertTrue(self._state().exists(), "dispatch 상태가 기록되지 않았다")
 
     def test_interview_brief_path_is_out_of_scope(self) -> None:
-        """C8: docs/superpowers/interview/ is outside PATH_PREFIX → no review gate."""
-        cp = self._post_write(
+        """C8: docs/superpowers/interview/ 는 PATH_PREFIX 밖 → 리뷰 게이트 없음."""
+        cp = self._stop_after_write(
             "docs/superpowers/interview/2026-05-31-sample-topic-interview.md"
         )
         self.assertEqual(cp.returncode, 0, cp.stderr)
-        # Out of scope → hook exits 0 silently, no additionalContext, no state written.
-        self.assertEqual(cp.stdout.strip(), "", "interview/ path should produce no output")
-        state = (
-            self.repo / ".claude" / "spec-distill" / "hooktestsession" / "state.local.md"
-        )
-        self.assertFalse(state.exists(), "interview/ path must not write pending_review")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        # 스코프 밖 → 후보 0 → emit 없음, 상태 write 없음.
+        self.assertEqual(
+            cp.stdout.strip(), "", "interview/ path should produce no output")
+        self.assertFalse(
+            self._state().exists(), "interview/ path must not arm a review")
