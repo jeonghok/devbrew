@@ -16,7 +16,9 @@ export const meta = {
 // the runtime resolves the plugin's own scoped agents. The spread comes first so agentType
 // cannot be overridden by a caller's opts.
 const auditor = (prompt, opts) => agent(prompt, {...opts, agentType: 'plugin-audit:plugin-auditor'})
+// **처분** — consumer=plugins/plugin-audit/scripts/audit-workflow.js · fail-open · disclosure=degradedEvents
 const refuter = (prompt, opts) => agent(prompt, {...opts, agentType: 'plugin-audit:audit-refuter'})
+// **처분** — consumer=plugins/plugin-audit/scripts/audit-workflow.js · fail-open · disclosure=degradedEvents
 
 // The Workflow tool delivers `args` to the script as a JSON *string* at runtime (verified by an
 // args-diag probe — the tool doc's object-passing does not hold in this harness). Normalize so
@@ -588,7 +590,14 @@ if (codexFindings.length) {
     } else {
       rec.status = 'reported'
       rec.deep_verified = null
-      if (!v) rec.unverified = true
+      if (!v) {
+        // The refuter answered but skipped this finding. Silence is not a verdict.
+        rec.unverified = true
+        degradedEvents.push({
+          what: 'codex finding ' + f.id + ': refuter가 판정을 누락 — 미검증',
+          why: 'refuter 응답에 이 finding_id의 verdict가 없음',
+        })
+      }
     }
     findings.push(rec)
   }

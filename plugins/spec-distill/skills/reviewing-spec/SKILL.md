@@ -62,6 +62,7 @@ dispatch 의 연료는 `pending_review` 다. 진입 시점에 연료를 없애�
    Agent({
      description: "Spec adversarial review",
      subagent_type: "spec-distill:spec-reviewer",
+     // **처분** — consumer=plugins/spec-distill/scripts/merge_review.py · fail-open
      prompt: "Review spec.md at <path>. Previous issue history: <list>. web_disabled: <true|false — true면 WebSearch/WebFetch 사용 금지, 리포 근거만>"
    })
    ```
@@ -120,7 +121,7 @@ fi
    ```
    `$LEDGER_JSON`은 **continuity(interview-UUID) state dir**에 둔다(harness-sid로 collapse 금지 — /compact 넘어 re-review cap/stagnation 보존, N1). merge_review가 read-modify-write하므로 issue_history id/count를 세션이 손으로 전사하지 않는다.
 
-   merge_review stdout(`combined_verdict` / `claude_verdict` / `codex_verdict` / `stagnation` / `codex_degraded` / `claude_degraded` / `claude_verdict_unrecoverable` / `codex_findings` / `advisory`)을 파싱한다. `advisory:` 항목은 사용자에게 **그대로 표시**(degrade 인지 + codex overturn 인지 — combined_verdict가 claude_verdict를 뒤집었을 때 merge_review가 내는 advisory도 여기 포함). `--codex-yaml`이 없거나 codex가 실패했으면 merge_review가 `codex_degraded: true`로 처리한다.
+   merge_review stdout(`combined_verdict` / `claude_verdict` / `codex_verdict` / `stagnation` / `codex_degraded` / `claude_degraded` / `claude_verdict_unrecoverable` / `codex_findings` / `advisory` / `adjudication_held` / `adjudication_unknown` — 뒤 둘은 각각 버린 항목 수 · 셀 수 없는 항목)을 파싱한다. `advisory:` 항목은 사용자에게 **그대로 표시**(degrade 인지 + codex overturn 인지 — combined_verdict가 claude_verdict를 뒤집었을 때 merge_review가 내는 advisory도 여기 포함). **처분 원장의 degrade 사유도 `advisory:` 로 온다** — 보류·셀 수 없음·입력 실패·게이트를 바꾼 강제가 전부 이 한 채널이다. 그래서 `adjudication_held`/`adjudication_unknown` 이 degrade 의 유일한 신호가 되는 경우는 없다(둘 중 하나라도 0 이 아니면 그 사유가 `advisory:` 에 함께 실린다). `--codex-yaml`이 없거나 codex가 실패했으면 merge_review가 `codex_degraded: true`로 처리한다.
 
 4. **blind-across-rounds (AC12, NG6)**: 각 리뷰어에게는 **same-origin history만** 전달한다 — Step 2의 spec-reviewer 프롬프트에는 codex 과거 findings를 넣지 않는다(두 리뷰 pass는 상호 blind). 통합 판정은 merge_review(orchestrator-side)만 수행한다.
 

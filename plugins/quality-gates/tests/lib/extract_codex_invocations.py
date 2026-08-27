@@ -76,7 +76,14 @@ def collect(root: Path) -> list[str]:
     for p in root.rglob("*"):
         if not p.is_file() or p.is_symlink():
             continue
-        if SKIP_DIRS & set(p.parts):
+        # **스캔 root 기준 상대 경로**로만 판정한다. 절대 경로 성분을 보면 root의
+        # *조상*에 있는 디렉토리 이름까지 걸린다 — devbrew의 워크트리 관례가
+        # `<repo>/.claude/worktrees/<name>` 이라 모든 워크트리 실행에서 `.claude`가
+        # 조상으로 걸려 트리 전체가 통째로 prune됐다(python 수집기 0건 vs bash 6건).
+        # 그 결과 아래 standing assertion이 워크트리에서 상시 RED였고, 이 락은 이
+        # 리포의 표준 격리 워크플로에서 한 번도 이빨을 쓰지 못했다(2026-08-23 실측).
+        # root 안쪽의 `plugins/<x>/.claude`(실재 — 3곳)를 거르는 원래 의도는 그대로다.
+        if SKIP_DIRS & set(p.relative_to(root).parts):
             continue
         if has_live_invocation(p):
             out.append(str(p))

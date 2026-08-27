@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.4] — 2026-08-23
+
+### Added
+- dispatch 자리(1곳)에 처분 앵커 — `**처분** — consumer=… · fail-… [· disclosure=…]`. `shared/tests/test_dispatch_disposition.sh` 축 A①②③④·B·C 가 집행한다.
+
 ## [0.2.3] — 2026-08-22
 
 기준선 RED 해소 ③/4 — 테스트가 아닌 것을 `tests/` 밖의 수집 제외 자리로 옮긴다.
