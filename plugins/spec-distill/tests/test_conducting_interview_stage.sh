@@ -249,6 +249,33 @@ grep -qF 'increment "$STATE" ||' <<<"$backstop_block" \
 grep -qi 'increment 실패' <<<"$backstop_block" \
   && ok "C5: increment-fail loud advisory present (scoped to probe 백스톱)" \
   || no "C5: increment-fail loud advisory present (scoped to probe 백스톱)"
+
+# v0.37.0: probe cap 이 사라지면 그 escalation 의 3옵션도 함께 사라진다. 새 탈출구는
+# 발동 조건만 다르고(카운터 → 사용자 발화) 존재해야 하는 것은 같다.
+#
+# **awk 윈도우로 스코프한다** — `박제` 어휘가 이 파일의 다른 절(probe 백스톱 · Step B 게이트
+# 안내 · kill switch)에도 선재하므로 전-파일 grep 은 이 경로가 통째로 사라져도 satisfied 되어
+# teeth 가 0 이다(feedback_grep_lock_header_satisfiable, 같은 파일의 backstop_block 이 같은
+# 이유로 스코프됐다).
+#
+# **토큰 공존이 아니라 관계를 건다** (context §③ — Task4 의 coverage-mapper 락이 같은 형태로
+# 거짓 GREEN 을 냈다: 세 토큰을 각각 독립 grep 하면, 처분(evidence 리터럴)·행선지(§3 이월
+# 문장)를 지우고 산문만 남겨도 트리거·`박제`·`floor` 잔여 토큰이 흩어져 만족된다 — 실측,
+# "사용자가 언제든 종료를 요청할 수 있고 floor 는 박제된다" 한 줄로 충분하다). 그래서 «단락»
+# (빈 줄 경계) 하나로 더 좁힌다: `사용자-승인 박제` 리터럴과 `Open Questions` 행선지가 **같은
+# 단락**에 있는 레코드만 추출하고, 그 단락 안에서 발동조건(사용자 발화)·`evidence`·박제
+# 리터럴·행선지가 전부 있는지를 요구한다. 처분·행선지 문장이 지워지면 그 단락 자체가
+# 더는 `사용자-승인 박제`+`Open Questions` 를 함께 갖지 않으므로 추출이 비고, 이하 4개
+# grep 은 빈 문자열에 대해 전부 실패한다(M5b 가 이 경로를 잰다).
+exit_block="$(awk '/^## 종료 — brief 작성/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
+mech_para="$(awk -v RS='' '/사용자-승인 박제/ && /Open Questions/' <<<"$exit_block")"
+{ [[ -n "$mech_para" ]] \
+  && grep -qE '사용자.*종료를 요청|사용자가 언제든 종료' <<<"$mech_para" \
+  && grep -q 'evidence' <<<"$mech_para" \
+  && grep -q '사용자-승인 박제' <<<"$mech_para" \
+  && grep -qE '§3 Open Questions|## 3\. Open Questions|payload[^.]*Open Questions' <<<"$mech_para"; } \
+  && ok "C1(v0.37.0): floor 탈출구 — 사용자 발화 → 미충족 floor 를 사용자-승인 박제 (단락 단위로 발동조건·evidence·박제·행선지 결속, scoped to 종료)" \
+  || no "C1(v0.37.0): floor 탈출구 — 사용자 발화 → 미충족 floor 를 사용자-승인 박제 (단락 단위로 발동조건·evidence·박제·행선지 결속, scoped to 종료)"
 # 종료 로직에 interview_round 잔존 0 (AC9/V7b)
 term_block="$(awk '/^## 종료/{f=1} f&&/^## [^종]/{exit} f' "$FIN")"
 grep -q 'interview_round' <<<"$term_block" \

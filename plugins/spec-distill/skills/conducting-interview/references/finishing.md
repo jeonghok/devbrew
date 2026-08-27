@@ -13,6 +13,11 @@
 (coverage-mapper·blind-spot-prober는 read-only 제안자, Law 2), state.local.md에 쓰는 동시에
 audit §1 `## Coverage Ledger`에 직렬화합니다.
 
+**사용자-승인 박제로 닫힌 floor** — 사용자가 언제든 종료를 요청해 미충족 floor 가 남을 때,
+`evidence` 가 `사용자-승인 박제` 로 시작하는 차원은 그 내용을 payload `## 3. Open Questions` 에
+한 항목으로 옮긴다. 박제된 차원은 「닫혔다」가 아니라 「사용자가 지금은 안 하기로 했다」이므로,
+다음 단계가 그것을 열린 질문으로 본다.
+
 ### Step A — brief 작성 (terminal 산출물, 2파일)
 
 1. `${CLAUDE_PLUGIN_ROOT}/templates/interview-brief-template.md`로 payload **8-section**

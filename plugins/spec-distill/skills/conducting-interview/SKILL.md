@@ -363,6 +363,17 @@ Law 1급 skepticism 의례입니다(verbatim pass-through로 무력화 방지).
 brief 작성으로 넘어갈 때 그 파일을 Read 로 읽어 그대로 따른다. 인터뷰가 아직 진행 중일 때는
 읽지 않는다 — 이 분리의 목적이 그것이다(조건부 로드).
 
+### 나가는 문은 floor 뒤에만 있지 않다
+
+floor 다섯이 전부 `closed` 여야 종료가 열리지만, **사용자는 언제든 종료를 요청할 수 있다.**
+그때 미충족 floor 는 **사용자-승인 박제**로 닫는다 — 그 차원의 `evidence` 에
+`사용자-승인 박제(@사용자 종료 요청) — §Open Questions 참조` 를 적고, 그 내용을 payload
+§3 Open Questions 로 이월한다. 박제 표식이 원장에 남으므로 silent bypass 가 아니다.
+
+발동 조건이 카운터가 아니라 **사용자 발화**라는 점만 예전 escalation 과 다르다. 상한을
+없애는 것과 탈출구를 없애는 것은 다르다 — 없애는 것은 사용자 질문의 상한이지 나가는 문이
+아니다.
+
 읽어야 하는 조건: `coverage.floor` 의 다섯 차원이 모두 `status: closed`.
 
 ```
