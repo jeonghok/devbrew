@@ -233,6 +233,16 @@ AskUserQuestion({
 - **AC19 실측 근거** — 2026-05-29 본 design 세션에서 "handoff"라 말하고 compact 전에 plan 을 그대로 써버린 실패가 이 가드의 출처다. 옵션 ① 의 정지 요건·다음 턴 진입 조건은 **이 문서 `### Step C — 응답 처리` 의 ①** 에 인라인으로 있다 — **기계적 검증 앵커가 사는 곳이 거기다.** 정본에도 같은 어휘가 있지만 그것은 계약 서술이지 이 skill 의 앵커가 아니며, 이 계약의 앵커를 재는 스캔은 **전부** 코퍼스를 skill 소유 표면으로 한정한다(정본 「앵커는 각 skill 에」 절). 그러므로 이 ① 블록의 문구를 "정본에 있으니 중복"이라며 지우면 이 skill 의 앵커가 0 이 된다.
 - **AC8 경계** (round-2 advisory 반영) — AC8 '추가 `AskUserQuestion` 없음'은 *approve 옵션이 최종 확정된 그 어시스턴트 응답 턴*에 한정한다 (Phase 5 내 revise/interview 루프의 다른 턴이 아님 — 그 턴들은 본래 질문을 띄운다). 다음 턴에 진입한 `writing-plans` 가 자체 실행-방식 선택 게이트를 띄우는 것은 별개 skill scope 이므로 AC8 해당 없음.
 
+### 재결정 규약 (P23) — 이 skill 의 적용
+
+design doc 이 인터뷰가 확정한 항목을 뒤집어야 한다고 판단하면, **근거와 함께 사용자에게
+올린다.** 리뷰어 findings 가 앞 단계의 확정을 겨냥할 때가 그 경로다 — `combined_verdict`
+가 `needs_revise` 이고 그 사유가 인터뷰 확정 항목이면, 저자가 조용히 고치지 않고 Phase 5
+게이트 질문 텍스트에 *원래 / 재결정 / 근거* 를 실어 사용자가 판정하게 한다.
+
+**임의 변경은 금지, 보고 후 재결정은 허용이다.** 정본은
+`${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md` 의 「재결정 규약」 절.
+
 ## Approve handoff sequence (①/② 공통)
 
 approve(①/②) 시 상태 조작은 없다. 이 시점에 남은 유일한 할 일은 **문서가 아직 git 에 없으면 알리는 것**이다:
