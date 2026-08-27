@@ -29,7 +29,7 @@ cost_class: medium
 
    **continuity read collapse 금지** — `rereview_count`/`issue_history`(아래 Step 5 에서 갱신) continuity 카운터는 인터뷰 선행 시 interview-UUID 파일(`conducting-interview/SKILL.md:35` self-`session_id`, `:41` `rereview_count`, `:43` `issue_history`)에 누적된다. **이 카운터의 읽기(이 Step)·쓰기(Step 5)를 `$harness_sid` 로 옮기지 말 것** — 옮기면 인터뷰-선행 플로우에서 `rereview_count` 가 0 으로 리셋돼 re-review cap(5)/round-level stagnation 조기-exit 가 약화된다. continuity 는 기존 메커니즘대로 읽고 쓴다(N1). 훅은 이 신호를 읽지 않으므로 read==write 불변식 대상이 아니다.
 
-   **진입 시점에 원장을 쓰지 않는다.** 진행 중인 리뷰가 메인 `Stop` 에 재강제(중복/절단)되지 않는 것은 Stop 훅이 dispatch 와 **같은 write** 안에서 그 문서를 `inflight_paths` 에 찍어 두기 때문이다(A12) — 스킬이 할 일이 없다. 원장 write 는 Step 3 의 `mark-reviewed` 하나뿐이다: 진입은 리뷰의 *시작*일 뿐 완료가 아니다(§5.2).
+   **진입 시점에 원장을 쓰지 않는다.** 진행 중인 리뷰가 메인 `Stop` 에 재강제(중복/절단)되지 않는 것은 Stop 훅이 dispatch 와 **같은 write** 안에서 그 문서를 `inflight_paths` 에 찍어 두기 때문이다(A12) — 스킬이 할 일이 없다. 이 스킬이 원장을 쓰는 자리는 전부 뒤쪽이다 — Step 3 의 `mark-reviewed`, 그리고 Phase 5 종료 자리 두 곳의 `clear-inflight`: 진입은 리뷰의 *시작*일 뿐 완료가 아니다(§5.2).
 
 2. **Dispatch spec-reviewer agent**:
 
@@ -127,6 +127,8 @@ fi
    python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" mark-reviewed "$harness_sid" "$spec_path"
    ```
 
+   이 한 호출이 **in-flight 표시도 함께 지운다**(A12). verdict 가 났는데 표시가 남으면 다음 발견이 이 문서를 "리뷰 진행 중"으로 잘못 제외한다. 그래서 정상 경로에서는 `clear-inflight` 를 따로 부를 일이 없다 — 그 CLI 는 아래 두 종료 자리(Phase 5 Step A 의 `spec_path` 부재 · Step C ④ 멈춤)의 것이다 — 둘 다 이 기록이 배제된 채 도달할 수 있고, 그러면 표시를 지울 다음 단계가 없다.
+
    **예외 — 실질 리뷰가 0인 라운드에서는 호출하지 않는다.** merge_review 가 `claude_verdict_unrecoverable: true` **이면서** `codex_degraded: true` 인 both-dead fail-safe 분기는 아무도 리뷰하지 않았는데도 `combined_verdict: needs_revise` 를 낸다. 그 값을 원장에 기록하면 "리뷰가 실제로 일어났을 때만 표시된다"는 기록 시점의 근거가 그대로 무너진다. 배제된 라운드는 원장이 비어 다음 편집이 재시도하며, `dispatch_attempts` 는 계속 올라 G6 상한(3)이 결국 멈춘다. merge_review 자신도 이 분기에서 `issue_history` 원장을 갱신하지 않는다 — 같은 규칙의 두 적용이다.
 
    `$harness_sid` 가 빈 값이면 이 기록을 남길 수 없다. 조용히 넘어가지 말고 advisory 를 낸다:
@@ -182,6 +184,14 @@ Read ${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md
 
 > `[spec-distill] current_spec '<path>' 부재 (working-tree에 없음) — stale state. current_spec 재선택 또는 세션 리셋 필요. handoff 진행 안 함.`
 
+그리고 **in-flight 표시를 걷어낸다.** 이 경로는 게이트(Step B)를 띄우지 않고 Phase 5 를 끝내므로 표시를 지울 다음 단계가 없다 — 남겨 두면 TTL(`INFLIGHT_TTL_SEC`, 15분)이 만료시킬 때까지 그 키가 발견 제외로 살아 있다:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" clear-inflight "$harness_sid" "$spec_path"
+```
+
+지울 표시가 없으면 파일을 쓰지 않는다(idempotent) — 정상 라운드는 Step 3 의 `mark-reviewed` 가 이미 지웠다. `$harness_sid` 가 빈 값이면 상태 파일을 특정할 수 없으므로 호출하지 않고, Step 3 과 같은 사유의 advisory 를 낸다.
+
 ### Step B — 단일 `AskUserQuestion` proceed 게이트 (AC8)
 
 spec_path 유효 시, reviewer 결과를 표시하고 **한 번의** `AskUserQuestion`으로 다음 단계를 제안 (approve 후 별도 2차 질문 없음).
@@ -213,7 +223,13 @@ AskUserQuestion({
   → **여기서 턴 종료(STOP). 같은 턴에서 `writing-plans`를 호출하지 말 것** (compact 전 writing-plans 진입 = 옵션 ① 무력화). `Skill superpowers:writing-plans <path>` 진입은 사용자가 `/compact`를 *실제 실행한 다음 턴*에 **사용자 트리거**(예: `/compact write plan`처럼 compact 뒤에 붙인 진행 인자, 또는 명시적 진행 요청)로만 일어난다 — 모델은 다음 턴에 자동 진입하지 *않고* 신호를 기다리며, 사용자가 redirect하면 미진입(NG4·P17). compact된 fresh context에서 plan 작성 (AC19).
 - **② 바로 writing-plans**: Approve handoff sequence 실행 → 즉시 `Skill superpowers:writing-plans <path>` 호출.
 - **③ 수정 필요**: 후속 `AskUserQuestion`으로 분기 — "revise per review" → 메인 agent가 design.md 직접 수정 후 reviewing-spec 재진입; "more interview" → conducting-interview (state phase=1 reset); "edit myself" → 사용자 편집 후 reviewing-spec 재진입.
-- **④ 멈춤**: state 보존하고 종료. **상태 조작 없음** — 원장에는 verdict 시점에 이미 기록됐다(§5.2). 그 세션에서 자동 재발동은 없다. 재개는 사용자 요청 시 skill 수동 호출로 한다(D2·NG1).
+- **④ 멈춤**: state 보존하고 종료. **새 판정은 남기지 않는다** — 원장의 완료 기록은 verdict 시점에 이미 찍혔다(§5.2). 남은 일은 **in-flight 표시를 걷어내는 것** 하나다:
+
+  ```bash
+  python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" clear-inflight "$harness_sid" "$spec_path"
+  ```
+
+  정상 라운드는 Step 3 의 `mark-reviewed` 가 이미 지웠으므로 이 호출은 파일을 쓰지 않는다(idempotent). 실제로 지울 것이 남는 경우는 `mark-reviewed` 가 배제된 both-dead 라운드다 — 그때 표시를 두고 나가면 그 문서는 TTL(15분)까지 발견에서 빠져, 사용자가 곧바로 재개하려 해도 다음 편집이 그것을 집어내지 못한다. 자동 재발동 여부 자체는 이 호출이 정하지 않는다 — `armed_paths` 가 정하고, 정상 라운드에서는 이미 기록돼 재발동이 없다. 재개는 사용자 요청 시 skill 수동 호출로 한다(D2·NG1).
 
 ### 두 가드 — polite stop 금지 (AP2) · cross-compact 조기 진행 금지 (AC19)
 

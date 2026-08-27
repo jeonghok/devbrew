@@ -70,6 +70,9 @@ grep -qF 'continuity read collapse 금지' "$SKILL" \
 # S3 (전 AC8-count 승계 — 형태만 변경): "trio 명령이 전부 $harness_sid로 키잉된다"는
 # 이제 arm_ledger.py의 mark-reviewed 한 verb로 표현된다 (check-born은 sid 인자를 받지
 # 않는다 — approve 시점 조회이지 세션 상태 write가 아님).
+# **정상 경로의 상태 write 는 여전히 이것 하나다.** v0.34.0 이 더한 `clear-inflight` 는
+# 종료 자리 두 곳(Phase 5 Step A · Step C ④)에서만 도는 복구 verb 라 이 개수에 들어오지
+# 않는다 — 같은 read==write 불변식을 지지만 S9/S10 이 따로 잠근다.
 cnt=$(grep -cE 'arm_ledger\.py" mark-reviewed "\$harness_sid' "$SKILL")
 [[ "$cnt" -eq 1 ]] \
   && ok "S3: exactly 1 arm_ledger state-write command keys \$harness_sid (got $cnt)" \
@@ -109,9 +112,10 @@ fi
 #
 # **짝이던 S6 은 v0.34.0 에서 없앴다** — 그것이 잠그던 advisory 는 Step 1 의
 # 진입-정리 write 가 실패했음을 알리는 문구였는데, 그 write 자체가 은퇴했다(진입 시점의
-# 상태 계약이 통째로 사라졌다). 지금 sid 에 의존하는 write 는 Step 3 의 `mark-reviewed`
-# 하나뿐이고 S7 이 그것을 잠근다. 락을 남기려면 아무 일도 하지 않는 단계를 되살려야
-# 하는데, 그건 락이 제품을 끌고 다니는 것이다.
+# 상태 계약이 통째로 사라졌다). 지금 진입 시점에는 sid 에 의존하는 write 가 없다 —
+# 남은 write 는 Step 3 의 `mark-reviewed`(S7)와 종료 자리의 `clear-inflight`
+# (S9/S10)뿐이고, 둘 다 진입이 아니라 종료 쪽이다. 락을 남기려면 아무 일도 하지 않는
+# 단계를 되살려야 하는데, 그건 락이 제품을 끌고 다니는 것이다.
 
 # S7 은 섹션 윈도우 안에서 잰다 — file-wide grep 이면 리터럴이 SKILL 어디에 있든
 # 통과해, advisory 를 기록 지점 밖으로 옮기는 변경을 못 잡는다(라벨은 "Step 3"라고
@@ -134,5 +138,33 @@ if grep -qE 'arm_ledger\.py" mark-reviewed "\$session_id' "$SKILL"; then
   no "S8: SKILL 안에 \$session_id 로 키잉된 arm_ledger 호출이 있다 — read==write 파손"
 else
   ok "S8: SKILL 안에 \$session_id 로 키잉된 arm_ledger 호출이 없다 (S3 의 음의 짝)"
+fi
+
+# S9 (v0.34.0): Phase 5 의 종료 자리 **두 곳 각각**에서 `clear-inflight` 가 호출된다.
+# 두 경로(Step A 의 spec_path 부재 · Step C ④ 멈춤)는 Step 3 의 `mark-reviewed` 가
+# 배제된 채로도 도달할 수 있고, 그때 in-flight 표시를 두고 나가면 그 문서는 TTL
+# (900초)까지 발견에서 빠진다. file-wide grep 은 두 호출이 한 자리로 뭉쳐도 통과하므로
+# **경로별 윈도우**로 잰다 — 이 파일이 S1/S5/S7 에서 쓰는 것과 같은 이유다.
+stepA_window() { bounded_window '^### Step A — spec_path' '^### Step B — 단일'; }
+stepC_window() { bounded_window '^### Step C — 응답 처리' '^### 두 가드'; }
+for pair in "Step A:stepA_window" "Step C:stepC_window"; do
+  label="${pair%%:*}"; fn="${pair##*:}"
+  out="$($fn)"
+  if [[ -z "$out" ]]; then
+    no "S9: $label 윈도우가 비었다 — 구조 앵커 파손(통과 아님)"
+  elif grep -qE 'arm_ledger\.py" clear-inflight "\$harness_sid' <<<"$out"; then
+    ok "S9: $label 창에서 clear-inflight 가 \$harness_sid 로 호출된다"
+  else
+    no "S9: $label 창에 harness_sid-키잉 clear-inflight 호출이 없다 — 표시가 TTL 까지 남는다"
+  fi
+done
+
+# S10 (S9 의 음의 짝): S9 는 존재만 재므로 엉뚱한 sid 로 키잉된 호출이 **함께** 있어도
+# 통과한다. `$session_id` 로 키잉하면 스킬이 훅과 다른 파일의 표시를 지워, 훅이 읽는
+# 원장에는 표시가 그대로 남는다 — 조용한 fail-open 이라 사람 눈엔 성공으로 보인다.
+if grep -qE 'arm_ledger\.py" clear-inflight "\$session_id' "$SKILL"; then
+  no "S10: SKILL 안에 \$session_id 로 키잉된 clear-inflight 가 있다 — read==write 파손"
+else
+  ok "S10: SKILL 안에 \$session_id 로 키잉된 clear-inflight 가 없다 (S9 의 음의 짝)"
 fi
 finish
