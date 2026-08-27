@@ -943,6 +943,27 @@ bash plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh </dev/nul
 ```
 Expected: 셋 다 `Fail: 0`.
 
+- [ ] **Step 7-b: coverage-mapper 바운드 단언을 «판정문의 span» 에 앵커한다 (이월 R-J)**
+
+이 태스크가 probe 백스톱을 지우면 **coverage-mapper 재dispatch 바운드가 그 절의 유일한
+Unbounded-autonomy 가드로 남는다.** 그래서 그 바운드를 재는 단언의 잔여 취약점을 여기서 닫는다.
+
+Task 4 가 만든 단언(`test_conducting_interview_stage.sh` 의 `covmap_block` 검사)은 «관계 전체가
+**어느** 코드 span 에든 존재하는가»만 본다. 그 span 이 **실제 판정문인지**는 안 본다. 실증(Task 4
+재리뷰가 직접 재현): 진짜 조건식을 `OR` 로 defang 한 뒤 같은 절의 산문에 옛 문구를 backtick
+예시로 남겨두면 **스위트 전체가 GREEN** 이다. 이 절은 이미 반례 설명 문단을 갖고 있어 그 형태가
+자연스럽게 생긴다 — 가정이 아니라 이 파일의 실제 모양이다.
+
+검사 대상 span 을 **판정문이 사는 자리**로 좁힌다(예: 직전 줄이 `**redispatch 바운드` 로 시작하는
+단락 안의 span 만). 기존 M5·M6·M7 축은 전부 유지돼야 한다.
+
+mutation 축 하나를 더한다:
+
+```bash
+# M12 미끼 span — 진짜 조건식을 OR 로 defang + 절 안 다른 곳에 옛 문구를 backtick 으로 남긴다
+#      → RED 여야 한다. (Task 4 시점에는 GREEN 이었다.)
+```
+
 - [ ] **Step 8: mutation — 단측 락에 이빨이 있는가**
 
 ```bash
