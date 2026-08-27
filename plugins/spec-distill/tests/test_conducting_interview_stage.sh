@@ -285,14 +285,25 @@ grep -qE '연속 3 probe|no_progress' <<<"$covmap_block" \
   || no "C11: coverage-mapper trigger (3 no-progress probes OR floor first transition)"
 # 스코프가 필수다 — `stall_episode` 는 State schema 절에도 등장하므로 전-파일 grep 은
 # 이 절이 통째로 사라져도 satisfied 된다(feedback_grep_lock_header_satisfiable).
-# 세 토큰의 단순 co-occurrence(각각 grep -q)는 이빨이 없다 — 이 절 본문은 두 필드 이름을
-# 각각 두 번 이상 언급하고(대입문 · 설명문) `!=`도 무관한 예시("3 != 4")에 따로 등장해,
-# 실제 조건식을 지워도(mutation M1) 세 grep이 흩어진 잔여 토큰만으로 전부 satisfied된다
-# (실측). 그래서 **같은 줄**에서 두 필드가 `!=`로 이어지는지를 요구한다 — 조건식이 실제로
-# 쓰인 형태와 같다.
-grep -qE 'coverage_mapper_dispatched_episode[^`]*!=[^`]*stall_episode|stall_episode[^`]*!=[^`]*coverage_mapper_dispatched_episode' <<<"$covmap_block" \
-  && ok "C11(v0.37.0): 재dispatch 바운드가 두 에피소드 필드의 비교 (scoped to coverage-mapper dispatch)" \
-  || no "C11(v0.37.0): 재dispatch 바운드가 두 에피소드 필드의 비교 (scoped to coverage-mapper dispatch)"
+# 토큰 co-occurrence(각각 grep -q)는 이빨이 없다 — 이 절 본문은 두 필드 이름을 두 번
+# 이상 언급하고(대입문 · 설명문) `!=`도 무관한 예시("3 != 4")에 따로 등장해, 조건식을
+# 지워도(mutation M1) 흩어진 잔여 토큰만으로 satisfied된다(실측, fix round 1 이전 실패
+# 모드). **같은 줄에서 `!=`로 이어지는지**만 보는 것도 부족하다 — AND -> OR 재배치는
+# `!=` 페어를 그대로 두고 논리 접속사만 바꾸므로 밀도 게이트(연속 3 probe)가 사라지는데도
+# `!=` 페어 단독 검사는 통과시킨다(fix round 1 Important 1, reviewer 재현). 그래서
+# **관계 전체**(임계값 `no_progress_streak >= 3` · 논리 접속사 `AND` · 비교 `!=` 페어)를
+# 하나의 정규식으로 묶는다.
+#
+# 동시에 줄바꿈에는 관대해야 한다(fix round 1 Minor 1) — 조건식은 backtick 인라인 코드
+# 스팬 하나 안에 있고, 그 안에서 줄이 바뀌어도(rewrap) 의미는 그대로다. 그래서 절 본문을
+# 줄 단위로 grep하지 않고 backtick 페어로 구획을 나눠 **각 코드 스팬 안의 개행만** 공백으로
+# 접는다(그 스팬 밖 줄바꿈은 건드리지 않는다) — 조임(관계 전체)과 관대함(레이아웃)을
+# 맞바꾸지 않는다.
+code_spans="$(awk 'BEGIN{RS="`"} NR%2==0{gsub(/\n/," "); print}' <<<"$covmap_block")"
+{ grep -qE 'no_progress_streak[[:space:]]*>=[[:space:]]*3[[:space:]]+AND[[:space:]]+coverage_mapper_dispatched_episode[[:space:]]*!=[[:space:]]*stall_episode' <<<"$code_spans" \
+  || grep -qE 'coverage_mapper_dispatched_episode[[:space:]]*!=[[:space:]]*stall_episode[[:space:]]+AND[[:space:]]+no_progress_streak[[:space:]]*>=[[:space:]]*3' <<<"$code_spans"; } \
+  && ok "C11(v0.37.0): 재dispatch 바운드가 «임계값 AND 에피소드 비교» 관계 전체 (scoped, rewrap-tolerant)" \
+  || no "C11(v0.37.0): 재dispatch 바운드가 «임계값 AND 에피소드 비교» 관계 전체 (scoped, rewrap-tolerant)"
 # 조건 2 의 «유한성 근거» — 이것이 없으면 그 조건이 «바운드 밖»인지 «바운드 불필요»인지
 # 구별되지 않는다. 지금까지 어디에도 없었다.
 grep -qE 'floor 다섯 차원으로 고정|상한이 5' <<<"$covmap_block" \
