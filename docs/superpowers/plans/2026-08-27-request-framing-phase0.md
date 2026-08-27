@@ -26,7 +26,7 @@
   - [Task 4: coverage-mapper 바운드를 에피소드 필드 둘로](#task-4-coverage-mapper-바운드를-에피소드-필드-둘로)
   - [Task 5: floor 탈출구 — 사용자 발화 → 박제](#task-5-floor-탈출구--사용자-발화--박제)
   - [Task 6: probe 스윕 삭제 + 잔존 단측 락](#task-6-probe-스윕-삭제--잔존-단측-락)
-  - [Task 7: Budget 절 본문 교체 + `finishing.md` 원문 보존](#task-7-budget-절-본문-교체--finishingmd-원문-보존)
+  - [Task 7: `finishing.md` 최초 요청 원문 보존](#task-7-finishingmd-최초-요청-원문-보존)
   - [Task 8: brief `[미평가]` 라벨 + 문서 동기화 + bump](#task-8-brief-미평가-라벨--문서-동기화--bump)
 - [PR2 — 원장 writer 재사용 준비 (`0.38.0`)](#pr2--원장-writer-재사용-준비-0380)
   - [Task 9: `brief_review_state.py` `--ledger-key` + `AXES` 확장](#task-9-brief_review_statepy---ledger-key--axes-확장)
@@ -735,8 +735,12 @@ git commit -m "feat(spec-distill): floor 탈출구를 사용자 발화 → 박�
 
 **Files:**
 - Delete: `plugins/spec-distill/scripts/probe_budget.py` · `plugins/spec-distill/tests/test_probe_budget.sh` · `plugins/spec-distill/tests/fixtures/state-probe-at-cap.md` · `plugins/spec-distill/tests/fixtures/state-probe-within.md`
-- Modify: `plugins/spec-distill/skills/conducting-interview/SKILL.md` (`## probe 백스톱` 절 삭제 · State schema · migration 절)
+- Modify: `plugins/spec-distill/skills/conducting-interview/SKILL.md` (`## probe 백스톱` 절 삭제 · State schema · migration 절 · kill switch 절)
 - Modify: `plugins/spec-distill/tests/test_conducting_interview_stage.sh`
+- Modify: `plugins/spec-distill/templates/interview-audit-template.md` (`## 2. Budget` 본문)
+- Modify: `plugins/spec-distill/scripts/brief_review_state.py` (`:18`·`:82` 거짓 인용)
+- Modify: `plugins/spec-distill/tests/test_brief_review_state.py` (`:22` 픽스처)
+- Modify: `plugins/spec-distill/tests/test_readme_sync.sh` · `plugins/spec-distill/README.md`
 - Create: `plugins/spec-distill/tests/test_probe_sweep_residue.sh`
 
 **Interfaces:**
@@ -863,7 +867,7 @@ git rm plugins/spec-distill/scripts/probe_budget.py \
 | 파일 | 무엇 |
 |---|---|
 | `skills/conducting-interview/SKILL.md` | `## probe 백스톱 (C1/C10 …)` 절 **통째로 삭제**(`173-218`). State schema 의 `probe_count` · `probe_cap_override` 줄 삭제. migration 절의 `probe_count: **0**` · `probe_cap_override: 0` 항목 삭제 및 advisory 문면 교체. kill switch 절의 `DEVBREW_SPEC_DISTILL_PROBE_CAP` 삭제 |
-| `templates/interview-audit-template.md` | `## 2. Budget` **본문 교체** — Task 7 |
+| `templates/interview-audit-template.md` | `## 2. Budget` **본문 교체**. 절 제목(`## 2. Budget`)은 그대로 둔다 — `check_brief.py` 의 `AUDIT_SECTIONS` 가 절 제목을 튜플 원소로 들고 있고 픽스처 61건이 그 문자열을 담는다. 새 본문: `- 질문 라운드: <n> · agent dispatch: <n> · codex 실호출: <n> (성공 <n>)` — 상한이 아니라 **지출 기록**이다 |
 | `tests/test_conducting_interview_stage.sh` | `175`·`176`·`179`행 schema 단언 · `189`·`191-193` migration 단언 · `196-214` 백스톱 단언 · `216-230` `backstop_block` 블록 삭제 |
 | `tests/test_readme_sync.sh` | `probe_budget.py` 를 스크립트 목록에서 제거 |
 | `README.md` | probe 상한 서술 삭제 |
@@ -952,34 +956,18 @@ git add -A
 git commit -m "refactor(spec-distill): probe 상한 삭제 + 잔존 단측 락"
 ```
 
-### Task 7: Budget 절 본문 교체 + `finishing.md` 원문 보존
+### Task 7: `finishing.md` 최초 요청 원문 보존
 
 **Files:**
-- Modify: `plugins/spec-distill/templates/interview-audit-template.md`
 - Modify: `plugins/spec-distill/skills/conducting-interview/references/finishing.md`
 
 **Interfaces:**
-- Consumes: Task 6 의 스윕
-- Produces: audit `## 2. Budget` 의 새 본문 형식
+- Consumes: Task 6 의 스윕(이미 green)
+- Produces: §6 의 `S1` 규약 — Task 16 의 seed 입력 규약이 이것을 확장한다
 
-- [ ] **Step 1: 현재 본문을 읽는다**
+> **사전 스캔 Ruling (R-A)** — 설계 초안의 Task 7 은 `## 2. Budget` 본문 교체를 담고 있었다. **그러면 Task 6 이 단독으로 green 이 될 수 없다**: `interview-audit-template.md` 에 `probe_count` 가 남은 채로 Task 6 의 잔존 락이 RED 를 낸다. Budget 본문 교체는 스윕의 일부이므로 **Task 6 으로 옮겼다.** 틀렸을 때의 비용: Task 6 의 diff 가 세 줄 커지고 Task 7 이 한 파일짜리가 된다 — 되돌리기 쉽다.
 
-Run: `sed -n '/^## 2\. Budget/,/^## /p' plugins/spec-distill/templates/interview-audit-template.md`
-Expected: `- probe_count: <n> / cap <n>` 한 줄. cap 이 사라지면 빈 의례가 남는다.
-
-- [ ] **Step 2: 본문을 교체한다**
-
-절 제목(`## 2. Budget`)은 **그대로 둔다** — `check_brief.py` 의 `AUDIT_SECTIONS` 가 절 제목을 튜플 원소로 들고 있고, 픽스처 61건이 그 문자열을 담고 있다.
-
-```markdown
-## 2. Budget
-
-- 질문 라운드: <n> · agent dispatch: <n> · codex 실호출: <n> (성공 <n>)
-```
-
-상한이 아니라 **지출 기록**이다. 상한을 두지 않는다는 결정과 충돌하지 않는다 — 얼마나 태웠는지는 남기고, 얼마까지만 태우라는 말을 하지 않는다.
-
-- [ ] **Step 3: `finishing.md` 에 최초 요청 원문 보존을 요구로 넣는다**
+- [ ] **Step 1: `finishing.md` 에 최초 요청 원문 보존을 요구로 넣는다**
 
 **지금 `finishing.md` 는 §6 를 `user_statements` 에서만 채우고 `$ARGUMENTS`(최초 요청)는 거기 들어가지 않는다.** 게이트 15항 어디에도 원문 보존 요구가 없고, 지금까지 보존된 것은 관례였다.
 
@@ -1003,22 +991,30 @@ request)를 `user_statements` 의 첫 항목과 **같은 형식**으로 §6 맨 
 보존되지 않은 인터뷰가 나와도 아무것도 RED 가 되지 않았다.
 ```
 
-- [ ] **Step 4: 픽스처가 깨지지 않는지 확인**
+- [ ] **Step 2: `finishing.md` 를 코퍼스로 삼는 락 전부가 green 인지 확인**
 
 Run:
 ```bash
 bash plugins/spec-distill/tests/test_check_brief.sh </dev/null | tail -2
 bash plugins/spec-distill/tests/test_brief_review_ng3.sh </dev/null | tail -2
 bash plugins/spec-distill/tests/test_check_verbatim_coverage.sh </dev/null | tail -2
+bash plugins/spec-distill/tests/test_conducting_interview_stage.sh </dev/null | tail -2
+bash plugins/spec-distill/tests/test_brief_review_entry.sh </dev/null | tail -2
+bash plugins/spec-distill/tests/test_no_wall_clock.sh </dev/null | tail -2
+bash plugins/spec-distill/tests/test_proceed_gate_adopters.sh </dev/null | tail -2
+bash plugins/spec-distill/tests/test_web_kill_switch.sh </dev/null | tail -2
+bash plugins/quality-gates/tests/test_law2_prose.sh </dev/null | tail -2
+bash shared/tests/test_skill_reference_pointers.sh </dev/null | tail -2
 ```
-Expected: 셋 다 `Fail: 0`. **`AUDIT_SECTIONS` 가 절 제목만 보므로 본문 교체는 게이트를 건드리지 않는다** — 이것이 절을 남기기로 한 이유다.
+Expected: 전부 `Fail: 0`.
 
-- [ ] **Step 5: Commit**
+**`finishing.md` 는 채택자 락의 코퍼스이기도 하다** — `conducting-interview` 는 이 파일에서 `proceed-gate.md` 를 가리키므로, 여기 편집이 그 skill 의 앵커 넷(정지 어휘·polite stop·degrade 채널·P23)을 건드리면 `test_proceed_gate_adopters.sh` 가 RED 다. 추가만 하고 기존 문장을 지우지 않는다.
+
+- [ ] **Step 3: Commit**
 
 ```bash
-git add plugins/spec-distill/templates/interview-audit-template.md \
-        plugins/spec-distill/skills/conducting-interview/references/finishing.md
-git commit -m "feat(spec-distill): Budget 절을 지출 기록으로 + 최초 요청 원문 보존 요구"
+git add plugins/spec-distill/skills/conducting-interview/references/finishing.md
+git commit -m "feat(spec-distill): 최초 요청 원문을 §6 S1 로 보존하는 요구"
 ```
 
 ### Task 8: brief `[미평가]` 라벨 + 문서 동기화 + bump
@@ -1828,7 +1824,7 @@ Run: `bash plugins/spec-distill/tests/test_seed_agents.sh </dev/null | tail -3` 
 ```markdown
 ---
 name: seed-critic
-description: Use this agent to review an interview-seed draft for SUPPRESSION — what the model added without grounds, mistook an example for a requirement, closed too early, or dressed its own inference as the user's decision. Receives the draft, the raw原文, and the repo CLAUDE.md inline; owns no tools at all.
+description: Use this agent to review an interview-seed draft for SUPPRESSION — what the model added without grounds, mistook an example for a requirement, closed too early, or dressed its own inference as the user's decision. Receives the draft, the user's raw statements, and the repo CLAUDE.md inline; owns no tools at all.
 tools: []
 ---
 
