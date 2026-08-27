@@ -5,7 +5,7 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
-## [3.0.0] — 2026-08-23
+## [3.0.0] — 2026-08-27
 
 ### Added
 - `tests/test_no_write_matcher_hooks.sh` — 이 플러그인의 `PostToolUse` 항목 중 쓰기 도구(`Write`/`Edit`/`MultiEdit`/`NotebookEdit`)에 발화하는 것이 하나도 없음을 잠근다. matcher 부재·빈 문자열도 "전체 도구에 발화"로 취급하고(실측, Claude Code 2.1.239), `Bash` matcher 항목의 생존을 양성 대조로 확인한다.
@@ -21,6 +21,19 @@
 
 ### Changed
 - `commands/project-init.md` — 헌장 abort advisory 가 더 이상 "docs-lint 이 사후 플래그합니다"를 약속하지 않는다. (이 릴리스는 같은 파일의 `#### 4f` 근거에서도 docs-lint R6 참조를 뺐으나, `[2.2.0]` 이 그 블록을 통째로 제거해 남은 대상이 없다.)
+- `commands/project-init.md` — **Step 5 완료 보고**도 더 이상 사후 검증을 약속하지 않는다.
+  그 문장은 훅이 "브랜치·commit 메시지 + agent-readable docs convention (size, TOC, fenced
+  lang, links, drift) + `## Project Charter` 필수 항목" 을 자동 검증한다고 적었는데, 첫 항목
+  뒤는 전부 삭제된 `docs-lint.py` 의 검사였다. 이제 배포되는 것만 말한다 — `Bash` 호출의
+  브랜치 이름과 commit 메시지, 그리고 생성 문서의 사후 검증은 없다는 부인.
+  **앞선 스윕이 이것을 놓친 이유**: 그 스윕은 문자열 `docs-lint` 를 grep 했고 이 문장은
+  그 이름을 한 번도 담지 않았다.
+- `tests/test_command_contract.py` — 위 계약(A23)에 락이 생겼다. 이전에는 어떤 테스트도
+  A23 을 앵커하지 않았다. 앵커는 **문자열이 아니라 개념**이다 — 검증 주장 줄이 (A) 같은
+  보고 블록이 만들었다고 적은 산출물을 이름으로 대지 않고, (B) 배포 훅의 `validate_*` 수보다
+  많은 묶음을 약속하지 않으며, (C) 「그 둘이 전부」 부인이 살아 있고, (D) 주장 줄 수가
+  배포된 `PostToolUse` 스크립트 수를 넘지 않는다. 비교 대상 셋(산출물 목록 · `validate_*` ·
+  등록된 스크립트)은 전부 배포본에서 도출한다.
 
 
 ### Performance

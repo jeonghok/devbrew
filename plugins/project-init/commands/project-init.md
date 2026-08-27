@@ -225,6 +225,6 @@ placeholder 치환 매핑:
 > - `docs/project/conventions.md` — naming·구조·error handling·anti-patterns·build & test
 > - (도메인 용어가 있으면) `docs/project/glossary.md`
 >
-> `project-init` 플러그인 hook이 브랜치·commit 메시지 + agent-readable docs convention (size, TOC, fenced lang, links, drift) + `## Project Charter` 필수 항목(vision·non-goals·tech-stack)을 자동 검증합니다.
+> `project-init` 플러그인 hook이 `Bash` 호출에서 브랜치 이름과 commit 메시지를 자동 검증합니다. 그 둘이 이 hook이 검사하는 전부입니다 — 위에 생성된 문서의 내용·구조·상호 포인터를 사후에 검증하는 것은 없습니다.
 > AGENTS.md primary 패턴으로 OpenAI Codex, Cursor, Aider 등 16+ 벤더가 동일 파일을 인식합니다.
 > 간결한 git 작업을 위해 `/commit` 또는 `/commit-push-pr` (commit-commands 플러그인) 사용.
