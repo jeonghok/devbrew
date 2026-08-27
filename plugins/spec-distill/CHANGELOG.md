@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.36.0] — 2026-08-27
+
+### Added
+- 재결정 규약(P23)을 `references/proceed-gate.md` 계약의 절로 승격. 확정된 항목은 재논의 대상이 아니지만 **반증 대상**이며, 근거와 사용자 동의가 있으면 피벗할 수 있다.
+- `skills/reviewing-spec/SKILL.md` 에 이 skill 어휘의 재결정 규약 절.
+- `tests/test_proceed_gate_adopters.sh` 에 네 번째 채택자 앵커(P23).
+
 ## [0.35.3] — 2026-08-25
 
 ### Added
