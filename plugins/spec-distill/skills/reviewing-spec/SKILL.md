@@ -235,10 +235,16 @@ AskUserQuestion({
 
 ### 재결정 규약 (P23) — 이 skill 의 적용
 
-design doc 이 인터뷰가 확정한 항목을 뒤집어야 한다고 판단하면, **근거와 함께 사용자에게
-올린다.** 리뷰어 findings 가 앞 단계의 확정을 겨냥할 때가 그 경로다 — `combined_verdict`
-가 `needs_revise` 이고 그 사유가 인터뷰 확정 항목이면, 저자가 조용히 고치지 않고 Phase 5
-게이트 질문 텍스트에 *원래 / 재결정 / 근거* 를 실어 사용자가 판정하게 한다.
+이 skill 의 흐름에서 재결정이 걸리는 자리는 둘이고, 둘 다 위 라우팅 표가 이미 여는
+경로다 — 이 절은 표에 없는 경로를 만들지 않는다.
+
+- **브레인스토밍 author 회귀** (`combined_verdict: needs_revise`, `rereview_count < 5`) —
+  메인 agent가 design.md 를 직접 수정하는 그 라운드. findings 의 사유가 인터뷰가 이미
+  확정한 항목을 겨냥하면 **조용히 덮어쓰지 않는다** — design.md 의 재결정 기록에 *원래 /
+  재결정 후보 / 근거* 를 적어 다음 라운드로 들고 간다.
+- **Phase 5 Human Gate** (`approved` · 표의 `rereview_count >= 5` forced escalate · Re-review
+  cap 절의 stagnation escalate — 이 중 어느 경로로 왔든) — 누적된 재결정 후보를 게이트
+  질문 텍스트에 실어 **사용자가** 판정한다. 확정 항목이 실제로 뒤집히는 자리는 여기뿐이다.
 
 **임의 변경은 금지, 보고 후 재결정은 허용이다.** 정본은
 `${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md` 의 「재결정 규약」 절.
