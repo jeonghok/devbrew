@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
-# A20·A22 — 기본 scope 정의가 git 에서 오고, 판정-불가 degrade 분기가 살아 있다.
+# A22 — 기본 scope 정의가 git 에서 오고, 판정-불가 degrade 분기가 살아 있다.
+#
+# **A20 은 이 파일이 재지 않는다.** 아래 검사는 전부 A22 의 정의 단락만 본다 —
+# 「Bash 로 쓴 파일이 기본 scope 에 들어간다」는 tests/test_a20_tool_agnostic_scope.py
+# 가 잰다(셸-작성 픽스처 + 배포 신호 + 은퇴 산출물 부재).
 #
 # NOTE: 원래 브리프의 다섯 번째 검사(리포 전체 files.md 살아있는 참조 0건)는
 # 이 락에 포함하지 않는다 — 그 검사는 자기 자신의 본문에 있는 'files.md' 리터럴
-# (check #2의 grep 대상 + 실패 메시지)을 스스로 매치해 통과할 수 없고, 리포 전체
-# 스윕(다른 참조 정리)은 별도 task의 소유이기 때문이다.
+# (check #2의 grep 대상 + 실패 메시지)을 스스로 매치해 통과할 수 없기 때문이다.
+# 그 검사는 위 A20 락의 축 3 이 대신 진다: 비교 대상 이름을 자기 본문에 적지 않고
+# scripts/qg-gc.py 의 회수 마커에서 읽어 오므로 자기-매치가 성립하지 않는다.
 #
 # NOTE: check #1 은 원래 "정의가 check-review-scope.sh 를 근거로
 # 든다"였다 — 그런데 그 자체가 CRITICAL 결함이었다. $resolved_scope_file_count 를
