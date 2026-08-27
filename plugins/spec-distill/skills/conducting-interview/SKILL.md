@@ -45,7 +45,8 @@ orchestration:                       # C11/C8 across-resumption 상태 (orchestr
   focused_dimension: null            # 현재 probe 대상 차원 이름 또는 null
   no_progress_streak: 0              # C11 연속 무진전 probe 수; focused 변경·진전 시 0 reset
   blind_spot_dispatched: false       # C8 인터뷰당 1회 보장; 첫 dispatch 시 true
-  coverage_mapper_last_probe: null   # 마지막 coverage-mapper dispatch 시 probe_count (C11 rate-limit)
+  stall_episode: 0                   # streak 이 0 으로 reset 될 때마다 +1. 정체 «구간»의 id
+  coverage_mapper_dispatched_episode: null   # 마지막 dispatch 가 일어난 에피소드 id
 probe_count: 0                       # C10 probe 백스톱 카운터 (probe 제기 *후* +1)
 probe_cap_override: 0                # C1 '계속'이 base cap(12)만큼 raise
 non_user_streak: <int>
@@ -227,10 +228,25 @@ kill switch: `DEVBREW_SPEC_DISTILL_PROBE_CAP=N` 으로 base cap override.
 진전 = status 전이(open→in-progress→closed) 또는 evidence append. `orchestration.no_progress_streak`는
 focused 차원이 바뀌거나 진전 발생 시 0으로 reset.
 
-**redispatch 바운드(Unbounded-autonomy 가드)**: dispatch 시 `orchestration.coverage_mapper_last_probe =
-probe_count` 기록. 재dispatch는 `probe_count - coverage_mapper_last_probe >= 3`일 때만 허용(무진전이
-지속돼도 최소 3 probe 간격 — 레벨-트리거 무한 재dispatch 방지). `coverage_mapper_last_probe == null`이면
-첫 dispatch 허용.
+**redispatch 바운드(Unbounded-autonomy 가드)**: 재dispatch 조건은
+`no_progress_streak >= 3 AND coverage_mapper_dispatched_episode != stall_episode` 다. dispatch
+시 `orchestration.coverage_mapper_dispatched_episode = stall_episode` 를 기록하고,
+`no_progress_streak` 가 0 으로 reset 될 때마다 `stall_episode` 를 +1 한다. 한 정체 구간당
+정확히 1회다.
+
+판정은 **디스크 두 값의 비교**이므로 어느 턴에서든 무상태로 재계산된다 — 그 성질을 잃으면
+판정이 모델의 턴-간 기억에 의존하고, 이 SKILL 이 백스톱에 대해 금지하는 *프로즈
+self-tracking* 이 된다. **streak 값 자체를 저장하지 않는 이유**: streak 3 에서 dispatch(저장
+3) → streak 4 → `3 != 4` → 재dispatch → streak 5 → 재dispatch … 로 레벨-트리거 무한
+재dispatch 가 그대로 살아난다.
+
+**dispatch 조건 2 는 이 바운드의 대상이 아니라 «바운드가 불필요»하다.** floor 차원의 첫
+`open→in-progress` 전이는 대상이 **floor 다섯 차원으로 고정**이므로(derived 차원은 그 조건의
+대상이 아니다) 상한이 5 다. 유한성이 구조에서 나오므로 추가 바운드를 두지 않는다.
+
+**이 바운드가 묶는 것은 «밀도»이지 «총량»이 아니다.** 정체 구간 수에는 상한이 없고,
+coverage-mapper 가 제안한 derived 차원이 원장에 admit 되면 새 focused 대상이 생겨 새 정체
+구간을 낳는 되먹임도 있다. 총량 바운드는 이 판본에 없다(설계 §11 이월).
 
 **Web kill switch (dispatch 직전 확인 — 이 블록에 종속)**: `coverage-mapper`는
 `WebSearch`/`WebFetch`를 보유한다. kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1`이면
@@ -366,7 +382,7 @@ state.local.md 로드 시 **구세션 스키마**(`interview_round` 존재 / `co
 - `coverage.derived`: `[]`.
 - `probe_count`: **0** (interview_round 값 승계 금지 — 라운드 수는 probe 수가 아니다).
 - `probe_cap_override`: `0`.
-- `orchestration`: `{focused_dimension: null, no_progress_streak: 0, blind_spot_dispatched: false, coverage_mapper_last_probe: null}`.
+- `orchestration`: `{focused_dimension: null, no_progress_streak: 0, blind_spot_dispatched: false, stall_episode: 0, coverage_mapper_dispatched_episode: null}`.
 
 기존 필드(`non_user_streak`·`web_*`·`issue_history` 등)는 유지. 구세션의 라운드별 잠금
 레코드 리스트(v0.22.0까지의 잠금 필드)는 승계하지 않고 `user_statements: []`로 fresh
