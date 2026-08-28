@@ -4,7 +4,7 @@
 set -euo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WRITE="$PLUGIN_DIR/hooks/spec-write-validator.py"
+STOP="$PLUGIN_DIR/hooks/review-dispatch.py"
 END="$PLUGIN_DIR/hooks/session-end-cleanup.py"
 
 WORK=$(mktemp -d)
@@ -17,9 +17,11 @@ SID="brainstorm-12345678"
 SPEC="$WORK/docs/superpowers/specs/2026-05-19-test-design.md"
 echo "design body" > "$SPEC"
 
-# (i) Setup — PostToolUse hook writes state.local.md
-printf '{"tool_name":"Write","tool_input":{"file_path":"%s"},"session_id":"%s"}' "$SPEC" "$SID" \
-    | env -u DEVBREW_SPEC_DISTILL_SESSION_ID -u CLAUDE_CODE_SESSION_ID python3 "$WRITE" >/dev/null 2>&1
+# (i) Setup — Stop 훅이 dirty 문서를 발견해 state.local.md 를 쓴다.
+# **sid 는 payload 에서만 온다** — 두 env 를 지우는 것이 이 케이스의 요지다(/interview
+# 없이 들어온 세션은 하니스 payload 의 session_id 밖에 없다).
+printf '{"session_id":"%s"}' "$SID" \
+    | env -u DEVBREW_SPEC_DISTILL_SESSION_ID -u CLAUDE_CODE_SESSION_ID python3 "$STOP" >/dev/null 2>&1
 
 STATE="$WORK/.claude/spec-distill/$SID/state.local.md"
 [[ -f "$STATE" ]] || { echo "[FAIL] case i: state not created"; exit 1; }

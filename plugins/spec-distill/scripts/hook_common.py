@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""spec-distill 훅이 공유하는 조각. **사본이 아니다** — 같은 플러그인 안이므로
-import 하나로 중복이 소멸한다(설계 §6.1③). 배포 경로는 훅과 같은 플러그인 트리라
-`${CLAUDE_PLUGIN_ROOT}/scripts/` 로 함께 실린다. `copy-of` 마커도 사본 동일성 검사도
-붙지 않는다 — 지킬 두 번째 파일이 없다.
+"""spec-distill Stop 훅과 `scripts/` 가 함께 쓰는 조각.
+
+**사본이 아니다** — 같은 플러그인 안이므로 import 하나로 중복이 소멸한다(설계
+§6.1③). 배포 경로는 훅과 같은 플러그인 트리라 `${CLAUDE_PLUGIN_ROOT}/scripts/` 로
+함께 실린다. `copy-of` 마커도 사본 동일성 검사도 붙지 않는다 — 지킬 두 번째
+파일이 없다.
 
 이름이 hook_common 인데 훅이 아닌 소비자도 있다:
 
@@ -31,12 +33,6 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 
 GC_SCRIPT = SCRIPTS_DIR / "spec-distill-gc.py"
 
-PENDING_RE = re.compile(
-    r"^pending_review:\n  path:\s*(?P<path>[^\n]+)\n  mode:\s*(?P<mode>[^\n]+)\n"
-    r"(?:  worktree_path:\s*(?P<wt>[^\n]+)\n)?"
-    r"  triggered_at:\s*(?P<triggered>[^\n]+)\n",
-    re.MULTILINE,
-)
 LAST_DISPATCHED_RE = re.compile(r"^last_dispatched_at:\s*(.+)$", re.MULTILINE)
 
 
@@ -44,10 +40,11 @@ def configure_utf8_streams() -> None:
     """표준 스트림을 UTF-8 로 고정한다 (v0.25.0).
 
     `read_text(encoding="utf-8")` 와 달리 stdin 디코딩은 **프로세스 locale** 을
-    따르므로, LC_ALL=C 환경에서 훅 payload 의 한국어(UserPromptSubmit 의 user prompt,
-    PostToolUse 의 문서 내용)가 UnicodeDecodeError 로 훅을 죽인다 — 이 플러그인이
-    [0.24.4] 에서 이미 겪은 실패다. except 절을 늘려 열거하는 대신 클래스 자체를
-    없앤다 (check_verbatim_coverage.py 와 동일 패턴).
+    따르므로, LC_ALL=C 환경에서 훅 payload 의 한국어가 UnicodeDecodeError 로 훅을
+    죽인다 — 이 플러그인이 [0.24.4] 에서 이미 겪은 실패다. 출력 쪽도 같은 축이다:
+    핀이 없으면 이 모듈의 소비자가 내는 한국어 진단이 ascii 스트림에서 소실된다.
+    except 절을 늘려 열거하는 대신 클래스 자체를 없앤다
+    (check_verbatim_coverage.py 와 동일 패턴).
 
     훅의 **첫 문장**으로 호출해야 한다. stdin 을 읽은 뒤에 부르면 이미 늦다.
     """
@@ -85,13 +82,9 @@ def fire_and_forget_gc() -> None:
 def parse_iso(s) -> Optional[datetime]:
     """`YYYY-MM-DDTHH:MM:SSZ` → tz-aware datetime. 판독 불가면 None.
 
-    두 훅이 갈라진 본문을 갖고 있었다(review-dispatch 10줄 / pending-review-reminder
-    7줄). 실측하면 **모든 문자열 입력에 대해 두 본문의 결과는 같았고**(빈 문자열과
-    `"null"` 은 어느 쪽이든 None — 긴 쪽은 명시 가드로, 짧은 쪽은 strptime 의
-    ValueError 로), 유일한 차이는 비-문자열 입력이었다: 짧은 쪽만 `AttributeError`
-    를 삼켜 None 을 냈다. 즉 짧은 쪽이 오히려 **더** 관대했다. 그래서 한쪽을 정본으로
-    고르지 않고 합집합을 쓴다 — 명시 가드(읽는 사람에게 의도를 보이는 쪽)와 비-문자열
-    관용(훅을 traceback 으로 죽이지 않는 쪽)을 함께 담는다.
+    본문은 갈라져 있던 두 사본의 **합집합**이다 — 명시 가드(읽는 사람에게 의도를
+    보이는 쪽)와 비-문자열 관용(훅을 traceback 으로 죽이지 않는 쪽)을 함께 담는다.
+    한쪽만 고르면 후자를 잃는다: 짧은 쪽만 `AttributeError` 를 삼켜 None 을 냈다.
     """
     try:
         s = s.strip()

@@ -16,7 +16,6 @@ def make_session_dir(cwd, sid):
     folder = Path(cwd) / ".claude" / "quality-gates" / sid
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "pipeline.md").write_text("---\nstatus: gate2_running\n---\n")
-    (folder / "files.md").write_text("- /abs/x.py\n")
     return folder
 
 

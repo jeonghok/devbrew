@@ -172,13 +172,24 @@ assert_line "runtime sandbox kill switch present" "$(first_line 'DEVBREW_QUALITY
 # spec_acceptance_criteria threaded to the verifier.
 assert_line "spec_acceptance_criteria threaded" "$(first_line 'spec_acceptance_criteria')"
 
-# SKILL 제목의 버전이 **shipped major 와 일치**한다.
+# SKILL 제목의 버전이 **shipped major 와 일치**한다 — 이 플러그인의 모든
+# skills/*/SKILL.md 에 대해.
 #
-# 앞 버전은 리터럴 `v2.7.0` 을 핀했다. 그 형태는 두 방향으로 고장 난다: doc-only
-# bump 마다 stale-red 가 되고, 반대로 **핀이 통과하는 한 제목이 몇 세대 뒤처져도
-# 아무도 모른다** — 실제로 플러그인이 3.0.0 인데 제목은 2.7.0 이었고 스위트는
-# full-green 이었다. major 만 재고 minor/patch 는 풀어 둔다: major 는 계약이고
-# minor/patch 는 그렇지 않다 (버전 리터럴 핀 ↔ bump 규칙 충돌).
+# 앞 버전은 quality-pipeline/SKILL.md 제목 하나만 봤다(리터럴 `v2.7.0` 핀의
+# 후신). 이 플러그인엔 SKILL.md 가 셋이다 — quality-pipeline(버전 있음) ·
+# publishing-pr-understanding(버전 있음) · critiquing-artifacts(버전 없음).
+# 한 파일만 보는 락은 나머지 둘에 구조적으로 눈이 멀어, publishing-pr-understanding
+# 이 plugin.json bump 뒤에도 제목에 구버전을 그대로 달고 있는 걸 못 잡았다.
+#
+# 음의 락: 버전을 단 제목은 전부 major 가 shipped 와 같아야 한다. 버전이
+# 아예 없는 제목(critiquing-artifacts)은 위반이 아니다 — 무버전 제목은 애초에
+# stale 해질 수 없는 모양이라 legal 로 둔다(SKILL.md:136 에서 stale 서술을
+# 재버전 대신 삭제로 택한 것과 같은 방향). major 만 재고 minor/patch 는 풀어
+# 둔다: major 는 계약이고 minor/patch 는 그렇지 않다.
+#
+# 양의 락: 음의 락은 제목 전부에서 버전을 지우면 공허하게 통과한다 —
+# "틀린 major 를 단 제목이 없다"가 "버전을 단 제목이 없다"로도 참이 되기
+# 때문이다. 그래서 적어도 하나의 제목은 여전히 shipped major 를 달아야 한다.
 PLUGIN_JSON="$(cd -- "$SCRIPT_DIR/../.." && pwd)/.claude-plugin/plugin.json"
 if [ ! -f "$PLUGIN_JSON" ]; then
   echo "FAIL: plugin.json 부재 ($PLUGIN_JSON) — 아래 major 대조가 공허하다"
@@ -189,8 +200,34 @@ else
     echo "FAIL: plugin.json 에서 major 를 못 읽음 — 아래 major 대조가 공허하다"
     fail=1
   else
-    assert_line "SKILL 제목 major == plugin.json major (v${SHIPPED_MAJOR})" \
-      "$(first_line "^# Quality Gates .*\\(v${SHIPPED_MAJOR}\\.[0-9]+\\.[0-9]+\\)")"
+    SKILLS_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)/skills"
+    wrong_major=""
+    matching_count=0
+    while IFS= read -r skill_file; do
+      title_line="$(grep -m1 '^# ' "$skill_file" || true)"
+      [ -n "$title_line" ] || continue
+      ver="$(printf '%s\n' "$title_line" | sed -n 's/.*(v\([0-9][0-9]*\)\.[0-9][0-9]*\.[0-9][0-9]*).*/\1/p')"
+      [ -n "$ver" ] || continue
+      if [ "$ver" = "$SHIPPED_MAJOR" ]; then
+        matching_count=$((matching_count + 1))
+      else
+        wrong_major="$wrong_major ${skill_file#"$SKILLS_ROOT"/}(v${ver})"
+      fi
+    done < <(find "$SKILLS_ROOT" -maxdepth 2 -name 'SKILL.md' | sort)
+
+    if [ -n "$wrong_major" ]; then
+      echo "FAIL: SKILL 제목 major 불일치 (shipped v${SHIPPED_MAJOR}) —$wrong_major"
+      fail=$((fail + 1))
+    else
+      echo "PASS: SKILL 제목 중 버전을 단 것은 전부 major == plugin.json major (v${SHIPPED_MAJOR})"
+    fi
+
+    if [ "$matching_count" -ge 1 ]; then
+      echo "PASS: SKILL 제목 중 ${matching_count}개가 shipped major(v${SHIPPED_MAJOR}) 명시 (양성 대조 — 전부 무버전이면 공허 통과 방지)"
+    else
+      echo "FAIL: 버전을 단 SKILL 제목이 0개 — 위 음의 락이 공허 통과 중"
+      fail=$((fail + 1))
+    fi
   fi
 fi
 

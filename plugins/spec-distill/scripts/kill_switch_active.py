@@ -47,10 +47,12 @@ def kill_switch_active(plugin: str, hook: str, event: str = "") -> bool:
     if os.environ.get("DEVBREW_" + plugin.upper().replace("-", "_") + "_DISABLE") == "1":
         return True
 
-    # 부분 문자열이 아니라 **전체 토큰**으로 대조한다. `in` 부분 일치를 쓰면
-    # `quality-gates:post-tool-use` 가 `quality-gates:post-tool-use-session-tracker`
-    # 안에 접두로 들어가, 사용자가 긴 쪽을 지목했을 때 짧은 쪽 훅까지 조용히 꺼진다
-    # (quality-gates v1.6.2 가 실제로 겪은 결함).
+    # 부분 문자열이 아니라 **전체 토큰**으로 대조한다. `in` 부분 일치를 쓰면 한
+    # 훅의 키가 다른(서브피처) 키의 리터럴 접두일 때, 사용자가 긴 쪽을 지목해도
+    # 짧은 쪽 훅까지 조용히 함께 꺼진다 (quality-gates v1.6.2 가 실제로 겪은
+    # 결함). 오늘 이 관계를 보여주는 살아있는 예: `quality-gates:session-start-advisor`
+    # 는 `quality-gates:session-start-advisor:frontmatter-scan` 의 리터럴 접두이지만,
+    # 전체 토큰 대조 덕분에 각각 독립적으로 켜고 끌 수 있다.
     skip = os.environ.get("DEVBREW_SKIP_HOOKS", "")
     tokens = {t.strip() for t in skip.split(",") if t.strip()}
 

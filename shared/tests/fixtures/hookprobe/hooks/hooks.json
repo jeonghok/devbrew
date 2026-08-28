@@ -1,0 +1,22 @@
+{
+  "description": "probe",
+  "hooks": {
+    "PostToolUse": [
+      { "hooks": [ { "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/dump.py PostToolUse-NOMATCHER", "timeout": 10 } ] }
+    ],
+    "PostToolBatch": [
+      { "hooks": [ { "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/dump.py PostToolBatch", "timeout": 10 } ] }
+    ],
+    "FileChanged": [
+      { "matcher": "probe_write.txt|probe_bash.txt|sub_bash.txt", "hooks": [ { "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/dump.py FileChanged-FLAT", "timeout": 10 } ] },
+      { "matcher": "docs/superpowers/specs/*.md", "hooks": [ { "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/dump.py FileChanged-NESTED", "timeout": 10 } ] },
+      { "matcher": "*.md", "hooks": [ { "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/dump.py FileChanged-GLOBMD", "timeout": 10 } ] }
+    ],
+    "CwdChanged": [
+      { "hooks": [ { "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/dump.py CwdChanged", "timeout": 10 } ] }
+    ],
+    "SubagentStart": [
+      { "hooks": [ { "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/dump.py SubagentStart", "timeout": 10 } ] }
+    ]
+  }
+}

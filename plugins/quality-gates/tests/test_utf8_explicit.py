@@ -17,8 +17,14 @@ degrade 가 된다.
 
   LocaleRegressionTests — 정적 검사만으로는 부족하다(서브프로세스 안에서 도는
   코드의 실제 로케일 의존은 텍스트만 봐서는 안 보인다). 강제로 non-UTF-8 로케일을
-  만들고 한국어 경로를 담은 실제 프로덕션 훅(post-tool-use-session-tracker.py)을
-  돌려 write_text/read_text 양쪽이 살아남는지 잰다.
+  만들고 한국어 내용을 담은 실제 프로덕션 훅을 돌려 살아남는지 잰다.
+
+  ★ quality-gates 안에 상태를 write 하는 훅이 현재 하나도 없다(post-tool-use.py·
+  session-end-cleanup.py·session-start-advisor.py 모두 write 호출 0건) — write_text
+  쪽은 이 플러그인 안에서 측정할 vehicle 이 없다. read 쪽은 session-start-advisor.py 의
+  frontmatter-scan(hooks/session-start-advisor.py:92,
+  `agent_file.read_text(encoding="utf-8")`)으로 재확보했다 — 한국어 내용을 담은
+  agent frontmatter 파일이 non-UTF-8 로케일 아래서도 읽혀 경고를 내는지로 잰다.
 
   ★ `LC_ALL=C`·`LANG=C` 만으로는 로케일이 안 바뀐다 — 이 macOS 파이썬은 PEP 538/540
   coercion 으로 C/POSIX 로케일을 조용히 UTF-8 로 승격시킨다(`locale.getpreferredencoding()`
@@ -39,14 +45,14 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 PLUGIN_ROOT = pathlib.Path(__file__).resolve().parents[1]
-TRACKER_HOOK = PLUGIN_ROOT / "hooks" / "post-tool-use-session-tracker.py"
+ADVISOR_HOOK = PLUGIN_ROOT / "hooks" / "session-start-advisor.py"
 
 # 이미 확인한 예외 셋 — 셋 다 실제 텍스트를 읽거나 쓰지 않아 encoding 이 의미가 없다.
 _KNOWN_EXCEPTIONS = {
     # docstring 안의 산문 언급이지 호출이 아니다 (Task 30 axis 2 조사로 확정).
     "plugins/quality-gates/scripts/build_codex_prompt.py": {17},
     # fcntl.flock 전용 락 파일 핸들 — write()/read() 로 텍스트가 한 번도 오가지 않는다.
-    "plugins/quality-gates/scripts/qg-gc.py": {79},
+    "plugins/quality-gates/scripts/qg-gc.py": {95},
     "plugins/spec-distill/scripts/spec-distill-gc.py": {98},
 }
 
@@ -191,46 +197,38 @@ class LocaleRegressionTests(unittest.TestCase):
         self.assertNotIn("UTF", pref.upper(), pref)
         self.assertIn("UTF", stdin_enc.upper(), stdin_enc)
 
-    def test_session_tracker_survives_non_utf8_locale_with_korean_path(self):
-        """post-tool-use-session-tracker.py 는 한국어 파일 경로를 상태 파일에
-        쓰고(write_text) 또 그 위에 새 항목을 병합하려고 다시 읽는다(read_text) —
-        두 지점 모두 Task 30 axis 2 가 고친 자리다. non-UTF-8 기본 인코딩
-        아래서도 두 지점 다 살아남아야 한다.
+    def test_session_start_advisor_survives_non_utf8_locale_with_korean_content(self):
+        """session-start-advisor.py 의 frontmatter-scan 은 plugins/*/agents/*.md 를
+        `read_text(encoding="utf-8")` 로 읽는다(hooks/session-start-advisor.py:92).
+        그 파일이 한국어 본문을 담고 있어도 non-UTF-8 기본 인코딩 아래서 살아남아
+        경고를 내야 한다 — 조용히 `except (OSError, UnicodeDecodeError): continue`
+        로 삼켜지면 스캐너가 fail-open 한다(:109).
+
+        quality-gates 안에 상태를 write 하는 훅이 현재 하나도 없어 write_text
+        쪽은 vehicle 이 없다 — 이 테스트는 read_text 쪽만 잰다. write 쪽
+        커버리지는 새 vehicle 이 생기기 전까지 이 파일로 측정 불가능하다.
         """
         env = self._non_utf8_open_default_env()
         with tempfile.TemporaryDirectory() as wt_dir:
-            sid = "locale-regression-01"
-            first = "/abs/설계/파일.py"
-            second = "/abs/설계/두번째파일.py"
-
-            def run(file_path):
-                payload = {
-                    "cwd": wt_dir,
-                    "session_id": sid,
-                    "tool_name": "Edit",
-                    "tool_input": {"file_path": file_path},
-                }
-                return subprocess.run(
-                    ["python3", str(TRACKER_HOOK)],
-                    input=json.dumps(payload, ensure_ascii=False),
-                    capture_output=True, text=True, encoding="utf-8",
-                    cwd=wt_dir, env=env, timeout=10,
-                )
-
-            proc1 = run(first)
-            self.assertEqual(proc1.returncode, 0, proc1.stderr)
-            state_file = pathlib.Path(wt_dir) / ".claude" / "quality-gates" / sid / "files.md"
-            self.assertTrue(state_file.exists())
-            content = state_file.read_text(encoding="utf-8")
-            self.assertIn(first, content)
-
-            # 두 번째 호출은 _read_existing() 이 방금 쓴 한국어 상태를 다시
-            # 읽어 병합해야 한다 — read_text() 지점의 실제 teeth.
-            proc2 = run(second)
-            self.assertEqual(proc2.returncode, 0, proc2.stderr)
-            merged = state_file.read_text(encoding="utf-8")
-            self.assertIn(first, merged, "첫 항목이 병합 과정에서 소실됐다")
-            self.assertIn(second, merged)
+            agent_dir = pathlib.Path(wt_dir) / "plugins" / "설계-플러그인" / "agents"
+            agent_dir.mkdir(parents=True)
+            (agent_dir / "테스트.md").write_text(
+                "---\nname: test\nallowedTools: [Read]\n---\n본문: 한국어 내용 확인용.\n",
+                encoding="utf-8",
+            )
+            payload = {"cwd": wt_dir, "session_id": "locale-regression-advisor-01"}
+            proc = subprocess.run(
+                ["python3", str(ADVISOR_HOOK)],
+                input=json.dumps(payload, ensure_ascii=False),
+                capture_output=True, text=True, encoding="utf-8",
+                cwd=wt_dir, env=env, timeout=10,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn(
+                "allowedTools", proc.stderr,
+                "non-UTF-8 로케일에서 한국어 agent 파일 read_text 가 조용히 실패"
+                f"(또는 삼켜짐)했다: stderr={proc.stderr!r}",
+            )
 
 
 if __name__ == "__main__":

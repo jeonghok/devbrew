@@ -1,16 +1,7 @@
 {
-  "description": "Quality Gates v1.32.0 — PostToolUse session-tracker for /qg scope + SessionStart legacy-state advisor + SessionEnd cleanup. Pipeline progression managed in-turn by the quality-pipeline SKILL.",
+  "description": "Quality Gates v5.0.0 — PostToolUse Bash-command validator + SessionStart legacy-state advisor + SessionEnd cleanup. Review scope is derived from git, not from an accumulated session file.",
   "hooks": {
     "PostToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use-session-tracker.py"
-          }
-        ]
-      },
       {
         "matcher": "Bash",
         "hooks": [

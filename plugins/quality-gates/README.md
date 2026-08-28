@@ -88,11 +88,10 @@ quality-gates/
 ├── agents/                 # Gate agent (leaf agent; 파이프라인이 dispatch)
 │   ├── runtime-verifier.md      # Runtime gate Step 3 (sandbox executor — model inherit)
 │   ├── test-scope-validator.md  # Runtime gate Step 2.5 (pre-exec test scope check)
-│   ├── scout.md                 # Review gate Phase 0 — 모델 기반 dispatch planner
 │   ├── adversarial.md           # Review gate Phase 1.5 — false-positive hunter
-│   ├── synthesizer.md           # Review gate Phase 1.6 — finding dedupe/rank
-│   ├── codex-reviewer.md        # Review gate Phase 1 — external OpenAI reviewer (Layer 2/3 isolation)
 │   ├── security-reviewer.md     # Review gate Phase 1 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`
+│   ├── artifact-critic.md       # `/qg critique` 게이트 — inherit-tier critic; 비-코드 산출물의 논리 갭·미기술 전제·불완전·근거 없는 주장·모호성 (read-only)
+│   ├── artifact-adversarial.md  # `/qg critique` 게이트 — inherit-tier 판정자; critic/codex 발견을 confirm/downgrade/reject 하고 놓친 것을 추가 (read-only)
 │   └── pr-understanding-builder.md  # publish 생성기 — model: inherit, tools: Read 1개 (inert·미호출; fail-closed; 쓰기·실행·네트워크·위임 0; 유일 입력 = inlined blob)
 ├── commands/
 │   ├── qg.md               # /qg slash command (--reset, --paths, branch flag 포함)
@@ -100,13 +99,11 @@ quality-gates/
 │   └── cancel-qg.md        # /cancel-qg command
 ├── hooks/
 │   ├── hooks.json                            # Hook 설정
-│   ├── post-tool-use-session-tracker.py      # 세션 동안 편집한 파일 추적
 │   ├── post-tool-use.py                      # PostToolUse(Bash) — auto-trigger 감지기; publish sentinel 존재 시 재유도 억제(AC11)
 │   ├── session-start-advisor.py              # in-flight 파이프라인 read-only advisor
 │   └── session-end-cleanup.py                # 정상 종료 시 현재 세션 폴더 제거
 ├── scripts/
 │   ├── setup-qg.sh                           # 파이프라인 초기화
-│   ├── pre-pipeline-check.sh                 # in-skill 세션 라이프사이클 체크
 │   ├── check-trivia.sh                       # Trivia escape 감지기
 │   ├── filter-docs.sh                        # 코드 reviewer용 docs path 필터
 │   ├── discover-plan.sh                      # Plan 파일 우선순위 탐색 (Runtime gate test-scope-validator)
@@ -146,7 +143,6 @@ quality-gates/
 
 | Hook | 이벤트 | 변경? | 왜 hook인가 (skill이 아닌)? |
 |---|---|---|---|
-| `post-tool-use-session-tracker.py` | PostToolUse(Edit/Write/MultiEdit) | 예 (세션 파일) | 모든 파일 mutation을 결정적으로 관찰해야 함; hook만 가능. |
 | `post-tool-use.py` | PostToolUse(Bash) | 아니오 — read-only | commit/PR Bash 활동을 감지해 `/qg` 제안; 현재 세션 scope. `/qg-publish`는 `pr-create.sh`로 PR을 만들어 hook의 `gh pr create` 커맨드 매칭에 애초에 안 걸린다; 추가로 publish sentinel `publish-active.md`가 있으면 (직접 `gh pr create` 경로에서도) 억제한다(AC11, defense-in-depth) — publish와 review 두 표면이 서로 훈수 두지 않게. |
 | `session-start-advisor.py` | SessionStart | **아니오 — read-only advisor** | mutation 없이 in-flight 파이프라인 알림 (CLAUDE.md hook coexistence 룰). |
 | `session-end-cleanup.py` | SessionEnd | 예 (자기 세션 폴더 제거) | 정상 종료 시 per-session 정리; crash 시 TTL sweep으로 fallback. |
@@ -253,7 +249,7 @@ anti-corollary(subagent spray) instantiation은 **transparency 라인(매 iter �
 │   setup-qg.sh --ensure  (creates .claude/quality-gates/<sid>/...)     │
 │       │                                                               │
 │       ▼                                                               │
-│   SKILL preflight  (kill switch, pre-pipeline-check)                  │
+│   SKILL preflight  (kill switch)                                      │
 │       │                                                               │
 │       ▼                                                               │
 │   trivia escape? ─── yes ──▶ "Trivia diff — all gates skipped"        │
@@ -408,7 +404,6 @@ plan과 달리 **legacy-global 소스는 없습니다** — spec은 프로젝트
 ### Tuning knobs
 
 - `MAX_REVIEW_ITERATIONS`: 5 (Review gate 내부 review-fix 사이클 수)
-- `QG_STALE_HOURS`: 24 (`pre-pipeline-check.sh`의 세션 파일 staleness 기준)
 - `DEVBREW_QUALITY_GATES_TTL_HOURS`: 24 (sibling 세션 폴더 TTL; 더 오래된 폴더는 `/qg` 또는 `/cancel-qg --gc`에서 GC)
 - `DEVBREW_QUALITY_GATES_GC_VERBOSE`: unset (`1`로 설정 시 GC sweep 진단을 stderr로)
 - `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS`: 3 (`0..10`, Runtime gate NEEDS_RESOLUTION mid-run 루프 cap)
@@ -453,19 +448,18 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | Hook 키 | 위치 | 기능 |
 |---|---|---|
-| `quality-gates:session-tracker` | `hooks/post-tool-use-session-tracker.py` | PostToolUse(Edit/Write/MultiEdit) — 편집된 파일을 `files.md`에 기록 |
 | `quality-gates:post-tool-use` | `hooks/post-tool-use.py` | PostToolUse(Bash) — `gh pr create` 직후 `/qg` 시작 안내 (publish sentinel 존재 시 억제) |
 | `quality-gates:session-start-advisor` | `hooks/session-start-advisor.py` | SessionStart — stale state 안내 (read-only) |
 | `quality-gates:session-start-advisor:frontmatter-scan` | 위 hook의 sub-feature | Plugin 전체 agent frontmatter drift 스캔만 disable |
 | `quality-gates:session-end-cleanup` | `hooks/session-end-cleanup.py` | SessionEnd — 현재 세션 폴더 cleanup |
 | `quality-gates:qg-gc` | `scripts/qg-gc.py` | TTL-GC 스크립트. 훅이 아니지만 지목할 이름을 갖는다 — 그전에는 전역 스위치 하나뿐이라 "이 GC만 끈다"가 불가능했다 |
 
-훅 키에 더해 **이벤트명 별칭**도 받는다 — `quality-gates:PostToolUse`(session-tracker + post-tool-use
-둘 다) · `quality-gates:SessionStart` · `quality-gates:SessionEnd`. spec-distill 훅이 쓰던 형태를
+훅 키에 더해 **이벤트명 별칭**도 받는다 — `quality-gates:PostToolUse`(post-tool-use) ·
+`quality-gates:SessionStart` · `quality-gates:SessionEnd`. spec-distill 훅이 쓰던 형태를
 전 플러그인으로 통일한 것이다(한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것이
 결함이고, kill switch 는 보안 컨트롤이라 그 결함의 방향이 fail-open 이다). 대조는 **전체 토큰**이라
-`quality-gates:post-tool-use-session-tracker` 같은 더 긴 키가 `quality-gates:post-tool-use` 를
-접두 오매칭으로 함께 끄지 않는다.
+`quality-gates:session-start-advisor:frontmatter-scan` 같은 더 긴 키가 `quality-gates:session-start-advisor`
+를 접두 오매칭으로 함께 끄지 않는다.
 
 (`MAX_TOTAL_ITERATIONS`와 cross-gate restart 루프는 v1.5.0에서 제거됨.)
 
@@ -474,8 +468,9 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 state는 Claude Code 세션마다 `.claude/quality-gates/<session-id>/`에 추적됩니다:
 
 - `pipeline.md` — 파이프라인 frontmatter (status, current_gate, iteration counters) + body (Gate Results, History).
-- `files.md` — 이번 세션에서 편집한 파일들 (`/qg` scope narrowing 용).
-- `branch.md` — 마지막으로 본 git 브랜치 (branch-mismatch 감지 용).
+
+Review scope 자체는 세션 state 로 추적되지 않는다 — `/qg` 매 턴 git 에서 직접
+도출된다(branch diff against base, worktree 자체 변경분과 union).
 
 stale sibling 폴더(mtime이 `DEVBREW_QUALITY_GATES_TTL_HOURS`(기본 24h)보다 오래된)는
 `/qg` 또는 `/cancel-qg --gc` 실행 시 garbage-collect됩니다. `SessionStart` hook은

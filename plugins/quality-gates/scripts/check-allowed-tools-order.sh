@@ -12,7 +12,6 @@ SKILL="$ROOT/quality-gates/skills/quality-pipeline/SKILL.md"
 EXPECTED_ORDER=(
   # Group 1 — Preflight scripts
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)'
-  'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/pre-pipeline-check.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh:*)'
   'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh:*)'
   # Group 2 — Review gate scripts

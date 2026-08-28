@@ -16,7 +16,7 @@ HOOK = Path(__file__).resolve().parent.parent / "hooks" / "post-tool-use.py"
 # The hook filename has a hyphen, so it is not importable by name. Load it via
 # importlib (side-effect-free: post-tool-use.py guards execution behind
 # `if __name__ == "__main__":`) so tests couple to the REAL functions/constants
-# rather than parallel literal copies. Mirrors test_docs_lint.py.
+# rather than parallel literal copies.
 _spec = importlib.util.spec_from_file_location("post_tool_use_hook", HOOK)
 assert _spec is not None and _spec.loader is not None, f"could not load hook module from {HOOK}"
 _hook = importlib.util.module_from_spec(_spec)

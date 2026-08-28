@@ -34,7 +34,6 @@ HOOKS = PLUGIN_ROOT / "hooks"
 # The skip key is the suffix used in DEVBREW_SKIP_HOOKS=quality-gates:<key>.
 HOOK_CONTRACTS = [
     ("post-tool-use.py", "post-tool-use"),
-    ("post-tool-use-session-tracker.py", "session-tracker"),
     ("session-start-advisor.py", "session-start-advisor"),
     ("session-end-cleanup.py", "session-end-cleanup"),
 ]
@@ -64,12 +63,6 @@ def _payload_for(script: str) -> dict:
             "tool_input": {"command": "gh pr create --title x --body y"},
             "tool_response": {"stdout": "https://github.com/owner/repo/pull/42\n"},
             "cwd": "",  # filled in per test
-        }
-    if script == "post-tool-use-session-tracker.py":
-        return {
-            "session_id": SID,
-            "tool_name": "Edit",
-            "tool_input": {"file_path": "/tmp/regression-killswitch-target.txt"},
         }
     return {"session_id": SID}
 
@@ -127,20 +120,23 @@ def _assert_no_side_effect(test: unittest.TestCase, script: str, cwd: str,
                 f"{label}: post-tool-use injected systemMessage despite kill switch",
             )
 
-    elif script == "post-tool-use-session-tracker.py":
-        files_md = qg / "files.md"
-        test.assertFalse(
-            files_md.exists(),
-            f"{label}: session-tracker created {files_md} despite kill switch",
-        )
-
     elif script == "session-start-advisor.py":
-        # Advisor produces stdout when in-flight state is present.
+        # Advisor writes its advisory to STDERR, not stdout — every write in
+        # this hook goes through sys.stderr.write (see _emit_legacy_v1_advisory).
+        # Checking stdout here is vacuous: it is always empty regardless of the
+        # kill switch, so it can never observe a suppressed advisory. The sanity
+        # check below (_assert_side_effect_happened) already knows this and
+        # checks stderr; this assertion must match it or it observes nothing.
         test.assertEqual(
-            proc.stdout.strip(), "",
-            f"{label}: advisor produced output despite kill switch: {proc.stdout!r}",
+            proc.stderr.strip(), "",
+            f"{label}: advisor produced output despite kill switch: {proc.stderr!r}",
         )
-        # And must not delete or rewrite the state.
+        # And must not delete or rewrite the state. NOTE: unlike the stderr
+        # check above, this clause cannot discriminate kill-switch state on its
+        # own — the advisor is read-only BY DESIGN (CLAUDE.md SessionStart rule),
+        # so it holds whether or not the guard fires. It stays as a real (if
+        # non-discriminating) invariant check, not as evidence the kill switch
+        # itself worked; the stderr assertion above is what carries that claim.
         contents = (qg / "pipeline.md").read_text()
         test.assertEqual(contents, PIPELINE_RUNNING, f"{label}: advisor touched state")
 
@@ -155,7 +151,7 @@ def _assert_no_side_effect(test: unittest.TestCase, script: str, cwd: str,
 
 
 class KillSwitchRegressionTest(unittest.TestCase):
-    """Each test runs against all 5 hooks via subTest."""
+    """Most tests below iterate HOOK_CONTRACTS via subTest; a few target one hook directly."""
 
     def setUp(self) -> None:
         self.tmp = tempfile.mkdtemp(prefix="qg-killswitch-")
@@ -202,23 +198,27 @@ class KillSwitchRegressionTest(unittest.TestCase):
     def test_per_hook_skip_does_not_cross_contaminate(self) -> None:
         """A longer key must NOT silence a hook whose key is its prefix.
 
-        Previously: `'quality-gates:post-tool-use' in 'quality-gates:post-tool-use-session-tracker'`
-        was True (substring match), so a user setting the longer key by mistake
-        (e.g. typing the script filename) would silently disable post-tool-use.py.
-        Whole-token match closes this hole.
+        `quality-gates:session-start-advisor` (the hook key) is a literal string
+        prefix of `quality-gates:session-start-advisor:frontmatter-scan` (its
+        sub-feature key). With naive substring match,
+        `'quality-gates:session-start-advisor' in 'quality-gates:session-start-advisor:frontmatter-scan'`
+        is True, so a user opting out of only the sub-feature would silently
+        disable the whole hook. Whole-token match closes this hole.
         """
-        # Setup post-tool-use state. Apply SKIP_HOOKS naming the LONGER key.
-        # post-tool-use.py must still emit systemMessage (NOT silenced).
-        _setup_state(self.tmp, "post-tool-use.py")
+        # Setup session-start-advisor state. Apply SKIP_HOOKS naming the LONGER
+        # (sub-feature) key. session-start-advisor.py must still emit its
+        # legacy-state advisory on stderr (NOT silenced).
+        _setup_state(self.tmp, "session-start-advisor.py")
         proc = _run_hook(
-            "post-tool-use.py",
-            _payload_for("post-tool-use.py"),
-            {"DEVBREW_SKIP_HOOKS": "quality-gates:post-tool-use-session-tracker"},
+            "session-start-advisor.py",
+            _payload_for("session-start-advisor.py"),
+            {"DEVBREW_SKIP_HOOKS": "quality-gates:session-start-advisor:frontmatter-scan"},
             self.tmp,
         )
         self.assertIn(
-            "systemMessage", proc.stdout,
-            "post-tool-use was accidentally silenced by a key whose prefix matches it",
+            "Legacy v1.x pipeline state detected", proc.stderr,
+            "session-start-advisor was accidentally silenced by a sub-feature "
+            "key whose prefix matches it",
         )
 
     def test_skill_setup_qg_honors_disable_kill_switch(self) -> None:
@@ -303,11 +303,6 @@ class KillSwitchRegressionTest(unittest.TestCase):
             self.assertIn(
                 "systemMessage", proc.stdout,
                 "post-tool-use sanity: should emit systemMessage on `gh pr create`",
-            )
-        elif script == "post-tool-use-session-tracker.py":
-            self.assertTrue(
-                (qg / "files.md").exists(),
-                "session-tracker sanity: should create files.md on Edit",
             )
         elif script == "session-start-advisor.py":
             self.assertNotEqual(

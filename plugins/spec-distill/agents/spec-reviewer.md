@@ -31,7 +31,7 @@ Law 1 구조 게이트(`check_brief.py`) 위에서 그것을 돌립니다. 여�
 
 ## Input
 
-- spec/design 파일 경로 — `docs/superpowers/specs/` hierarchy 안의 임의 `.md` (sub-folder 포함). 입력 파일 mode는 dispatcher의 `pending_review.mode` (또는 prompt의 `mode:`) 필드로 전달됨; suffix(`-spec.md`/`-design.md`) 없이 frontmatter `locked_decisions:` 유무로 분류된 파일도 정상 입력.
+- spec/design 파일 경로 — `docs/superpowers/specs/` hierarchy 안의 임의 `.md` (sub-folder 포함). 입력 파일 mode는 dispatcher 가 prompt 의 `mode:` 필드로 전달함; suffix(`-spec.md`/`-design.md`) 없이 frontmatter `locked_decisions:` 유무로 분류된 파일도 정상 입력.
 - (선택) 이전 review history — 같은 issue ID 추적용
 - **spec.md frontmatter의 `locked_decisions:` 리스트** (Read tool로 추출, C1 + G3) — locked decisions 매핑(개념적 판단용, sentinel JSON에는 emit 안 함) 판단에 사용. design.md는 통상 이 키가 없어 매핑이 공집합.
 
@@ -57,8 +57,8 @@ Law 1 구조 게이트(`check_brief.py`) 위에서 그것을 돌립니다. 여�
 다음 중 어느 하나라도 충족하면 design mode 분기 적용 (v0.8.1: scope 일반화):
 
 - 입력 파일이 `*-design.md` suffix
-- 입력 파일이 suffix 없는 `.md`이고 frontmatter `locked_decisions` 키 부재로 content-aware 판별이 design (`hooks/spec-write-validator.py:resolve_mode` 규칙)
-- dispatcher가 `pending_review.mode: design` (또는 prompt에 `mode: design`)을 명시
+- 입력 파일이 suffix 없는 `.md`이고 frontmatter `locked_decisions` 키 부재로 content-aware 판별이 design (`scripts/resolve_mode.py` 규칙)
+- dispatcher가 prompt에 `mode: design`을 명시
 
 위 어느 하나라도 충족 시:
 

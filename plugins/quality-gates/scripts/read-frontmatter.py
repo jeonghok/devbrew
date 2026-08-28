@@ -6,7 +6,7 @@ Stdout: value (without surrounding quotes; \\" / \\\\ escape 해제), 또는
         key 부재 시 빈 줄.
 Exit: 0 on success (key 부재도 success), 1 on file/parse error.
 
-v1.32.3 MED-3: 3 call site (pre-pipeline-check.sh × 2, cancel-qg-core.sh × 1)
+v1.32.3 MED-3: 1 call site (cancel-qg-core.sh)
 의 `awk -F'"'` 패턴을 대체. escape-aware regex로 embedded quote 처리.
 """
 from __future__ import annotations
