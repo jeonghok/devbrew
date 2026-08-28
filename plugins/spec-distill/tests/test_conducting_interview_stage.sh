@@ -502,25 +502,51 @@ grep -qF '원문 보존은 **관례가 아니라 요구**입니다' <<<"$stepa_f
 # fix round 2: 재리뷰가 `SKILL.md:146`의 `+ 1 + (...)`를 `+ 1 - (...)`로 딱 한 글자
 # 바꿔 스위트를 93/93 GREEN인 채로 통과시켰다 — N이 원문 있을 때 0(무효 `S0`)이 되는
 # 부호 반전인데도, 조건절 안의 단어("최초 요청 원문 있으면 1, 없으면 0")는 그대로라
-# round 1의 리터럴이 못 잡았다. **단어가 아니라 공식을 걸어야 한다** — 이 리포에서
-# 세 번째로 겪는 실패 모양(coverage-mapper 바운드·floor escape hatch에 이어)이라
-# discipline을 하나 더한다: **연산자(공식 쪽 `+`, 산문 쪽 "더해")를 조건절과 같은
-# 리터럴 안에 결속**한다. SKILL.md 쪽은 `+ 1 + (최초...`처럼 그 조건절 **바로 앞**의
-# `+`까지 리터럴에 포함시켜, 그 `+`가 `-`로 바뀌면 리터럴 자체가 깨지게 한다.
-# finishing.md 쪽은 대응하는 연산자가 기호가 아니라 동사("...을 더해")이므로 그 동사를
-# 조건절과 같은 문장 리터럴에 묶는다 — "더해"가 "빼"로 바뀌는 것이 산문 쪽의 부호 반전과
-# 같은 모양이다. 두 파일에 **핵심 조건절은 동일**하게("최초 요청 원문 있으면 1, 없으면
-# 0") 유지해 교차-파일 결속(한쪽만 값이 바뀌면 그 파일만 깨짐)은 그대로 두고, 그 조건절을
-# 감싸는 **연산자까지 포함한 더 넓은 리터럴**로 대체한다. `stmt_block`(SKILL.md
-# `## 사용자 발화 기록` 스코프, :435 기존 변수 재사용)과 `stepa_flat`(finishing.md
-# Step A 스코프, 위에서 이미 rewrap-tolerant하게 접어둔 변수)로 양쪽을 각각 잠근다.
-grep -qF '+ 1 + (최초 요청 원문 있으면 1, 없으면 0' <<<"$stmt_block" \
-  && ok "R-M: SKILL.md 번호 공식이 원문 유무 오프셋을 +로 반영 (부호까지 결속)" \
-  || no "R-M: SKILL.md id 공식에 '+ 1 + (최초 요청 원문 있으면 1, 없으면 0'이 없다 (부호 반전 포함)"
+# round 1의 리터럴이 못 잡았다. round 2는 조건절 바로 앞의 `+`까지 리터럴에 넣어 그
+# 부호 반전을 잡았지만, 그래도 **부분 문자열 검사**였다 — round 3에서 재리뷰가 세
+# 우회를 더 찾았다: ①`+ (...)` 뒤에 `) - 1`을 **덧붙이면** 잠근 부분 문자열은 그대로
+# 남은 채 식 전체 값이 바뀐다, ②잠근 부분 **밖**에 있는 base term
+# `user_statements.length`를 `confirmed.length`로 바꿔도 무관하다, ③finishing.md의
+# "더해" 뒤에 "다시 1을 뺀 뒤"를 끼워 넣어도 잠근 리터럴은 그 안에 여전히 prefix로
+# 들어있다. 셋 다 같은 메커니즘이다: **부분 문자열 존재 검사는 그 주위에 무엇을
+# 덧붙여도 살아남는다.** 공식의 의미는 표현식 전체에 있지 조각 하나에 있지 않다.
+#
+# 이 단언이 주장하는 것(한 문장): SKILL.md의 id 공식 주석과 finishing.md의 대응
+# 절이 각각 정본(base term·양쪽 연산자·조건절 두 분기·식의 시작과 끝)과 **처음부터
+# 끝까지 정확히 일치**해야 한다 — 무엇을 지우든 뒤집든 옆에 덧붙이든 그 일치가 깨진다.
+# 그 문장이 이름 붙이는 요소를 전부 셌다: base term(`user_statements.length`) ·
+# 연산자1(`+`, length와 1을 잇는다) · 상수(`1`) · 연산자2(`+`, 조건절을 잇는다) ·
+# 여는 괄호 · 조건절 분기A(`최초 요청 원문 있으면 1`) · 분기B(`없으면 0`) · 닫는
+# 괄호 · 식의 시작(`# N =`)과 끝(마지막 `)`) — finishing.md 쪽은 연산자가 동사
+# ("더해")이고 분기 둘은 같고 식의 끝은 "합의합니다"(그 다음 오는 `(`가 화살표 밖의
+# 부연 설명을 여는 괄호라 경계로 쓴다).
+#
+# **부분 문자열이 아니라 전체 일치**로 건다: 그 줄/절을 정확히 뽑아 공백만 정규화한
+# 뒤 정본 문자열과 `==`로 비교한다. 이러면 위 세 우회 전부와 부호 반전·조건절 반전이
+# 전부 잡힌다 — 어디를 지우든 뒤집든 옆에 붙이든 전체 문자열이 달라진다. **공식에는
+# 의미보존 관용을 안 준다**(코디네이터 판단, round 3): 공식의 정확한 텍스트가 계약이고
+# 재작성은 조용히 통과가 아니라 눈에 띄어 재승인받아야 한다 — 리라이트 관용은 공식을
+# 감싸는 **산문**에만 남는다(rewrap·문단 순서 교체·yaml 블록 위치 이동은 여전히 green).
+# `stmt_block`(SKILL.md `## 사용자 발화 기록` 스코프, :435 기존 변수 재사용)에서
+# `id: S<N>` 줄을 골라 첫 `#` 뒤를 취하고, `stepa_flat`(finishing.md Step A 스코프,
+# 위에서 이미 flatten+squeeze한 변수)에서 "최초 요청 원문 있으면"부터 다음 `(` 직전까지를
+# 취한다 — 둘 다 공백만 trim/squeeze하고 그 외엔 손대지 않는다.
+skill_formula_line="$(grep 'id: S<N>' <<<"$stmt_block" | head -1)"
+skill_formula_comment="${skill_formula_line#*#}"
+skill_formula_comment="$(printf '%s' "$skill_formula_comment" | tr -s ' ')"
+skill_formula_comment="$(printf '%s' "$skill_formula_comment" | sed -e 's/^ *//' -e 's/ *$//')"
+skill_formula_canon='N = user_statements.length + 1 + (최초 요청 원문 있으면 1, 없으면 0 — finishing.md S1 예약과 합의)'
+[[ "$skill_formula_comment" == "$skill_formula_canon" ]] \
+  && ok "R-M: SKILL.md id 공식이 정본과 end-to-end 일치 (부분 추가·삽입도 잡음)" \
+  || no "R-M: SKILL.md id 공식이 정본과 다르다 (got: [$skill_formula_comment])"
 
-grep -qF '최초 요청 원문 있으면 1, 없으면 0 을 더해' <<<"$stepa_flat" \
-  && ok "R-M: finishing.md 가 오프셋을 '더해'로 명시 (연산자까지 결속, 한 문장)" \
-  || no "R-M: finishing.md 에 '최초 요청 원문 있으면 1, 없으면 0 을 더해'가 없다 — 연산자가 조건절과 결속되지 않았다"
+fin_formula_raw="${stepa_flat#*최초 요청 원문 있으면}"
+fin_formula_clause="최초 요청 원문 있으면${fin_formula_raw%%(*}"
+fin_formula_clause="$(printf '%s' "$fin_formula_clause" | sed -e 's/[[:space:]]*$//')"
+fin_formula_canon='최초 요청 원문 있으면 1, 없으면 0 을 더해 SKILL.md `사용자 발화 기록`의 번호 공식과 합의합니다'
+[[ "$fin_formula_clause" == "$fin_formula_canon" ]] \
+  && ok "R-M: finishing.md 오프셋 절이 정본과 end-to-end 일치 (부분 추가·삽입도 잡음)" \
+  || no "R-M: finishing.md 오프셋 절이 정본과 다르다 (got: [$fin_formula_clause])"
 
 grep -qF '`S1`이 아니라 `S2`부터 시작합니다' <<<"$stepa_flat" \
   && ok "R-M: 원문 있으면 user_statements id가 S1이 아니라 S2부터 시작한다는 명시 (한 문장 결속)" \
