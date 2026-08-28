@@ -42,6 +42,7 @@ CANON_REF='references/proceed-gate\.md'
 
 . "$REPO_ROOT/shared/tests/assert.sh"
 . "$REPO_ROOT/shared/tests/presence_corpus.sh"
+. "$REPO_ROOT/shared/tests/adopter_derivation.sh"
 
 # `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 실제로 훑는 것은
 # 채택자들의 표면뿐이다(정본은 스캔하지 않는다 — 위 스코프 규칙).
@@ -54,33 +55,15 @@ emit_only=0
 # ── 채택자 도출 ─────────────────────────────────────────────────────────────
 # "정본을 가리키는 포인터가 그 skill 표면 어딘가에 있는가." reviewing-spec 은 SKILL.md 에서,
 # conducting-interview 는 references/finishing.md 에서 가리킨다 — 그래서 둘 다 본다.
-adopters=""
-scanned=""
-for skill_dir in "$SD"/skills/*/; do
-  [ -d "$skill_dir" ] || continue
-  surface=""
-  for f in "$skill_dir"SKILL.md "$skill_dir"references/*.md; do
-    [ -f "$f" ] || continue
-    surface="$surface$f
-"
-  done
-  [ -n "$surface" ] || continue
-  hit=0
-  while IFS= read -r f; do
-    [ -n "$f" ] || continue
-    grep -qE -- "$CANON_REF" "$f" && { hit=1; break; }
-  done < <(printf '%s' "$surface")
-  if [ "$hit" -eq 1 ]; then
-    adopters="$adopters${skill_dir%/}
-"
-    scanned="$scanned$surface"
-  fi
-done
-
-if [ "$emit_only" -eq 1 ]; then
-  printf '%s' "$scanned" | sed "s|^$REPO_ROOT/||"
-  exit 0
-fi
+#
+# 도출 로직 자체는 `shared/tests/adopter_derivation.sh` 정본으로 옮겼다(Task 10,
+# request-framing phase0) — `test_compression_adopters.sh` 가 같은 골격을 두 번째로
+# 쓰게 되면서 인라인 버전이 그 파일과 28줄 바이트 동일 블록을 만들어
+# `test_no_new_duplication.sh` 를 RED 로 냈다. `emit_only=1` 이면 이 호출이 emit 하고
+# exit 한다 — 아래로 돌아오지 않는다.
+derive_reference_adopters "$SD" "$CANON_REF" "$REPO_ROOT" "$emit_only"
+adopters="$ADOPTERS"
+scanned="$SCANNED"
 
 n_adopt=0
 while IFS= read -r a; do [ -n "$a" ] && n_adopt=$((n_adopt + 1)); done < <(printf '%s' "$adopters")
