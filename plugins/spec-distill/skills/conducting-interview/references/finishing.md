@@ -33,6 +33,18 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    **이 시점의 `status`는 전부 `provisional`입니다** — `confirmed`는 Step B-0의 사용자 확인
    으로만 발생합니다. 모델 추론은 이 리스트에 넣지 말고 본문에 ✎ 프로즈로 씁니다.
    `user_statements`의 발화 전부를 payload §6에 **전문 보존**하고 `S<N>` 앵커를 답니다.
+   **최초 요청 원문은 `S1`이다.** `$ARGUMENTS`(사용자가 `/interview`에 함께 넘긴 rough
+   request)를 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다:
+   ```yaml
+   - id: S1
+     source: verbatim
+     round: 0
+     text: "<$ARGUMENTS 원문 그대로>"    # P21 secret placeholder 치환 적용
+   ```
+   비어 있으면(인자 없이 호출) `S1`을 만들지 않고 `S2`부터 시작하지 않습니다 — 번호는
+   `user_statements`의 순서를 따르고, 최초 요청이 없으면 첫 사용자 답변이 `S1`입니다.
+   원문 보존은 **관례가 아니라 요구**입니다 — 게이트 15항 어디에도 이 요구가 없어서,
+   보존되지 않은 인터뷰가 나와도 지금까지 아무것도 red가 되지 않았습니다.
    구조상 이 시점의 `confirmed`는 **항상 0건**이므로, frontmatter에 sentinel 한 줄
    (`# confirmed 0건 — 사용자가 전부 잠정으로 판단`)을 **반드시** 함께 씁니다 — 템플릿이
    `user_sourced_items:` 블록 첫 줄로 상속시키는 그 줄입니다. 이 줄이 sentinel로 인정되려면

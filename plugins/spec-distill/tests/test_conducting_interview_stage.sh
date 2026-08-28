@@ -449,4 +449,44 @@ for a in blind-spot-prober steelman-builder coverage-mapper; do
     && no "AC13: agents/$a.md가 locked_directions를 참조" \
     || ok "AC13: agents/$a.md에 locked_directions 없음"
 done
+
+# --- Task 7 (R-L): §6 최초 요청 원문(S1) 보존 — 요구 산문에 기계 단언을 붙인다 ---
+# 컨트롤러 진단(task-7-context.md §②): Task 7 브리프 Step 1은 "이건 요구다"라는 산문
+# 한 문단만 finishing.md에 추가하고, 그 실재를 재는 단언은 어디에도 추가하지 않는다.
+# 그대로 두면 다음 편집이 이 문단을 지워도 아무것도 red가 되지 않는다 — 브리프가 스스로
+# 진단한 상태가 그대로 유지된다. Task 4/5가 겪은 실패(요구되는 토큰을 각각
+# `grep -q A && grep -q B`로 독립 검사 → 절 어디에 흩어져 있어도 만족)를 피하려면
+# **토큰 공존이 아니라 문장 단위 exact 리터럴**을 걸어야 한다: 부분 삭제·재배치가 그
+# 리터럴 중 하나를 반드시 깨뜨리므로, 개별 grep으로는 나올 수 없는 관계(같은 문장 안의
+# S1/$ARGUMENTS/§6, 같은 문장 안의 빈 인자/S1 미생성/S2 유지)가 결속된다. rewrap(줄바꿈
+# 위치 이동)에는 관대해야 하므로 개행을 공백으로 접고 연속 공백(list-item 들여쓰기가
+# 만드는 것 포함)을 하나로 줄인 뒤 비교한다 — 레이아웃이 아니라 단어 순서만 본다.
+#
+# 자기검증(가짜 본문 시도, task-7-report.md에 기록): 요구 토큰들을 절 여기저기에 흩어
+# 놓은 본문(Task4/5 실패 재현)은 아래 네 리터럴 중 어느 것도 만들지 못해 전부 실패한다
+# — 결속이 실제로 걸려 있다는 뜻이다. 반대로, 이 네 리터럴을 부정 문맥으로 감싼 본문
+# ("...은 폐기되었다", "...따르지 마세요")은 grep -qF로는 걸러지지 않는다 — 이건 이
+# 파일의 다른 모든 리터럴 락(예: 'AskUserQuestion(', '확정하고 /compact 후
+# brainstorming')이 공유하는 한계이지 이 단언만의 결함이 아니다. 부정 어휘 블랙리스트로
+# 막는 것은 whack-a-mole이므로(대상만 바뀌며 재발) 시도하지 않는다 — 의미 차원의 적대적
+# 재작성은 이 리포에서 Law 1 구조 게이트가 아니라 별도의 adversarial/codex 리뷰가 잡는다.
+stepa_block="$(awk '/^### Step A — brief 작성/{f=1;print;next} /^### /{f=0} f' "$FIN")"
+stepa_flat="$(tr '\n' ' ' <<<"$stepa_block" | tr -s ' ')"
+
+grep -qF '**최초 요청 원문은 `S1`이다.**' <<<"$stepa_flat" \
+  && ok "R-L: S1 = 최초 요청 원문 정의 (Step A 스코프, exact literal)" \
+  || no "R-L: 'S1 = 최초 요청 원문' 정의 문장이 Step A 에 없다"
+
+grep -qF '`$ARGUMENTS`(사용자가 `/interview`에 함께 넘긴 rough request)를 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다' <<<"$stepa_flat" \
+  && ok "R-L: \$ARGUMENTS → S1 형식 → §6 배치 지시 (한 문장 결속)" \
+  || no "R-L: \$ARGUMENTS 를 §6 맨 앞에 S1 형식으로 넣으라는 지시가 한 문장으로 없다"
+
+grep -qF '비어 있으면(인자 없이 호출) `S1`을 만들지 않고 `S2`부터 시작하지 않습니다' <<<"$stepa_flat" \
+  && ok "R-L: 빈 \$ARGUMENTS 시 S1 미생성 + S2 번호 유지 규칙 (한 문장 결속)" \
+  || no "R-L: 빈 인자 규칙(S1 미생성·S2부터 시작 안 함)이 한 문장으로 없다"
+
+grep -qF '원문 보존은 **관례가 아니라 요구**입니다' <<<"$stepa_flat" \
+  && ok "R-L: 원문 보존이 관례가 아니라 요구라는 선언" \
+  || no "R-L: 원문 보존 = 관례 아닌 요구 선언이 없다"
+
 finish
