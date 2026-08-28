@@ -983,7 +983,10 @@ bash "$T" </dev/null | grep -c '✗'
 git checkout -- "$T" plugins/spec-distill/README.md
 
 # M9 양성 대조 하한 — 별칭 정규식을 깨뜨린다 → «잔존 0» 이 아니라 RED 여야 한다
-sed -i '' "s/ALIAS_RE='probe_budget/ALIAS_RE='zzz_no_such_token/" "$T"
+#   **대안 하나만 바꾸면 아무것도 안 깨진다** — `ALIAS_RE` 는 `|` 로 이어진 일곱 대안이고,
+#   첫 대안(`probe_budget`)만 바꿔도 나머지 여섯이 같은 파일들을 그대로 잡는다. 그러면 이
+#   변이는 no-op 이고 M9 가 재는 것이 없다. **값 전체를 매칭 안 되는 토큰으로 바꾼다.**
+sed -i '' "s/^ALIAS_RE=.*/ALIAS_RE='zzz_no_such_token'/" "$T"
 bash "$T" </dev/null | grep '양성 대조' | grep -c '✗'
 git checkout -- "$T"
 ```
