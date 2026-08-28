@@ -60,6 +60,11 @@ obs_setup "$SCRATCH"
 UNGATED_run_codex_reviewer_sh='quality-pipeline/SKILL.md 이 산문 게이트 — 이 사이클 범위 밖 (설계 §10 미해결 1)'
 UNGATED_run_artifact_codex_reviewer_sh='critiquing-artifacts/SKILL.md 이 산문 게이트 — 이 사이클 범위 밖 (설계 §10 미해결 1)'
 UNGATED_test_codex_json_extraction_sh='수동 spike — 어떤 SKILL도 부르지 않는다'
+# Task 14 — 러너·빌더·체크리스트·축 락만 이 태스크의 범위다. framing-requests/SKILL.md
+# 는 아직 이 러너를 dispatch하지 않는다(SKILL.md:83-127이 seed-critic/seed-readback
+# 두 Agent()만 부르고, codex 억제 축 dispatch는 없다 — 실측 확인). 배선(마킹된
+# codex-gate 블록 삽입)은 후속 태스크의 몫이다.
+UNGATED_run_seed_codex_reviewer_sh='framing-requests/SKILL.md 가 아직 이 러너를 dispatch하지 않는다 — 배선은 후속 태스크'
 ungated_key() { printf 'UNGATED_%s' "$(printf '%s' "$1" | tr '.-' '__')"; }
 
 # ── 마킹된 게이트 블록 수집 ──────────────────────────────────────────────────

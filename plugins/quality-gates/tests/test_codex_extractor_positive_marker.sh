@@ -62,12 +62,9 @@ if len(runners) < 3:
          "— 도출 경로가 깨졌을 수 있다, 아래 판정은 무의미")
 
 # ── 2. 각 러너의 종단 추출기 도출 ───────────────────────────────────────────────
-extractors = {}  # resolved_path -> [runner, ...] (진단용)
-derive_failed = []
-for r in runners:
-    with open(r, encoding="utf-8") as fh:
-        lines = fh.read().splitlines()
-    found_path = None
+def scan_for_override_call(lines):
+    """override-exit-code 플래그를 동반한 python3 호출 블록에서 대상 .py 를
+    찾는다. 못 찾으면 None."""
     i = 0
     while i < len(lines):
         ln = lines[i]
@@ -83,11 +80,32 @@ for r in runners:
                 blk.append(lines[j])
             blocktext = "\n".join(x for x in blk if not x.strip().startswith("#"))
             if OVERRIDE_FLAG in blocktext:
-                found_path = m.group(1)
-                break
+                return m.group(1)
             i = j + 1
             continue
         i += 1
+    return None
+
+
+extractors = {}  # resolved_path -> [runner, ...] (진단용)
+derive_failed = []
+for r in runners:
+    with open(r, encoding="utf-8") as fh:
+        lines = fh.read().splitlines()
+    found_path = scan_for_override_call(lines)
+    # 러너가 직접 부르지 않고 **소싱하는 공유 파일**(runner_common.sh, Task 14
+    # `codex_extract_or_fallback`)에 있을 수 있다 — 그 호출을 정본으로 올린 것도
+    # "다른 파일을 부른다"는 사실이지 추출기가 사라진 게 아니다. 리터럴 이름으로
+    # 하나만 골라 예외 취급하지 않는다: 러너가 스스로 "runner_common.sh" 를
+    # 언급하면(현재 유일한 sourcing 관용구) **같은 디렉토리의 그 이름 파일**을
+    # 같은 스캐너로 한 번 더 본다 — 향후 다른 러너가 같은 관용구를 쓰면 이 폴백이
+    # 이름을 몰라도 그대로 적용된다.
+    if not found_path and "runner_common.sh" in "\n".join(lines):
+        common = os.path.join(os.path.dirname(r), "runner_common.sh")
+        if os.path.isfile(common):
+            with open(common, encoding="utf-8") as fh:
+                common_lines = fh.read().splitlines()
+            found_path = scan_for_override_call(common_lines)
     if not found_path:
         derive_failed.append(r)
         continue
