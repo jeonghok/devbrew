@@ -16,9 +16,8 @@ argument-hint: "[raw request / 생각 / 대화 / 자료]"
 ## Step 2: trivia escape
 
 5 패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 에 있습니다. 그 파일을
-읽고 `$ARGUMENTS` 를 대조하십시오. 해당하면 그 파일의 안내 문면을 이 명령의 어휘로
-출력하고 진행하지 않습니다 — 그 파일의 예시 트리거 문구(`force interview`)는
-`/interview` 용이므로 그대로 복사하지 말고 `force request-framing` 으로 바꿔 씁니다.
+읽고 `$ARGUMENTS` 를 대조하십시오. 해당하면 그 파일의 안내 문면을 `<command>` =
+`request-framing` 으로 채워 출력하고 진행하지 않습니다.
 
 ## Step 3: 회의 진입
 

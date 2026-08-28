@@ -53,7 +53,7 @@ skill 에 옵니다. 5패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-
 Agent({ description: "Seed suppression critique", subagent_type: "spec-distill:seed-critic",
         prompt: `초안 · 원문 · 레포 CLAUDE.md 를 전문 inline 으로 받는다. 네 축만 본다.
 <draft>${BLOB}</draft>` })
-// **처분** — consumer=orchestrator · fail-open · disclosure=framing_degradations
+// **처분** — consumer=human · fail-open · disclosure=framing_degradations
 ```
 
 **뺄셈 검사입니다.** 「좋은 프롬프트냐」는 묻지 않습니다 — 그건 취향이고 비평자에게는
@@ -65,12 +65,13 @@ Agent({ description: "Seed suppression critique", subagent_type: "spec-distill:s
 Agent({ description: "Seed cold readback", subagent_type: "spec-distill:seed-readback",
         prompt: `아래 seed 만 읽고 «내가 이해한 것은 이것이다» 를 산문으로 말하라.
 <seed>${SEED}</seed>` })
-// **처분** — consumer=orchestrator · fail-open · disclosure=framing_degradations
+// **처분** — consumer=human · fail-open · disclosure=framing_degradations
 ```
 
 **싱크됐는지는 사용자가 읽고 판정합니다.** 에이전트가 통과·미달을 내면 어긋남의 감각이
-사용자에게 오지 않습니다. 두 dispatch 의 raw 출력은 orchestrator 가 읽어 아래
-`framing_degradations` 원장에 옮기고, 최종적으로 그 원장을 통해 사용자에게 갑니다.
+사용자에게 오지 않습니다. 두 dispatch 의 raw 출력은 **사용자에게 직접** 갑니다 —
+orchestrator 는 그것을 아래 `framing_degradations` 원장에 옮겨 적을 뿐, 판정하거나
+병합하지 않습니다.
 
 ## degrade 채널
 
