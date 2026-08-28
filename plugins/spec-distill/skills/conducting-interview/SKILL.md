@@ -143,7 +143,7 @@ STATE="$ROOT/<session-id>/state.local.md"
 | sub-agent ambiguity 답안 | c | ✅ ONLY IF 사용자 confirm — **confirm 발화**를 기록 | `verbatim` |
 
 ```yaml
-- id: S<N>                 # N = user_statements.length + 1
+- id: S<N>                 # N = user_statements.length + 1 + (최초 요청 원문 있으면 1, 없으면 0 — finishing.md S1 예약과 합의)
   source: verbatim         # verbatim(발화 그대로) | chosen(고른 선택지 라벨 + 요지)
   round: <int>
   text: "<사용자가 실제로 한 말>"    # P21 secret placeholder 치환 적용

@@ -489,4 +489,30 @@ grep -qF '원문 보존은 **관례가 아니라 요구**입니다' <<<"$stepa_f
   && ok "R-L: 원문 보존이 관례가 아니라 요구라는 선언" \
   || no "R-L: 원문 보존 = 관례 아닌 요구 선언이 없다"
 
+# --- Task 7 fix round 1 (R-M): S1 예약과 user_statements 번호 공식의 교차-파일 정합 ---
+# 리뷰가 잡은 모순: finishing.md는 최초 요청 원문을 S1로 예약하지만, SKILL.md:146의
+# id 공식은 그 예약을 모른 채 항상 `N = user_statements.length + 1`을 썼다. 원문이 있는
+# (보통) 케이스에서 이러면 payload §6에 S1 앵커가 두 번 나와 `check_verbatim_coverage.py`의
+# 앵커 중복 검사(:223-228, StructuralViolation)가 red를 내거나, 중복을 피해 앵커를
+# 옮기면 state의 S1(첫 실제 답변)과 payload의 S1(원문)이 서로 다른 텍스트로 비교되는
+# id-matching 루프(:287-322)에서 not_contained가 뜬다 — 둘 다 오늘은 통과하는 게이트가
+# 깨지는 결과다. 고친 공식: 원문이 있으면 오프셋 +1(user_statements 번호가 S2부터
+# 시작). 두 파일에 **동일 리터럴** "최초 요청 원문 있으면 1, 없으면 0"을 박아 결속한다
+# — 어느 한쪽이 이 리터럴을 잃거나 다른 숫자로 바꾸면(두 문서가 서로 다른 말을 하게
+# 되면) 그 파일 쪽의 grep -qF만 깨진다. `stmt_block`(SKILL.md `## 사용자 발화 기록`
+# 스코프, :435 기존 변수 재사용)과 `stepa_flat`(finishing.md Step A 스코프, 위에서 이미
+# rewrap-tolerant하게 접어둔 변수)로 양쪽을 각각 잠근다 — 새 변수를 만들지 않고 이
+# 파일이 이미 쓰는 스코프를 그대로 재사용한다.
+grep -qF '최초 요청 원문 있으면 1, 없으면 0' <<<"$stmt_block" \
+  && ok "R-M: SKILL.md 번호 공식이 원문 유무 오프셋을 반영 (사용자 발화 기록 스코프)" \
+  || no "R-M: SKILL.md id 공식에 원문 유무 오프셋(최초 요청 원문 있으면 1, 없으면 0)이 없다"
+
+grep -qF '최초 요청 원문 있으면 1, 없으면 0' <<<"$stepa_flat" \
+  && ok "R-M: finishing.md 가 SKILL.md 와 같은 오프셋 리터럴로 합의 (Step A 스코프)" \
+  || no "R-M: finishing.md 에 SKILL.md 와 같은 오프셋 리터럴이 없다 — 두 문서가 갈라질 수 있다"
+
+grep -qF '`S1`이 아니라 `S2`부터 시작합니다' <<<"$stepa_flat" \
+  && ok "R-M: 원문 있으면 user_statements id가 S1이 아니라 S2부터 시작한다는 명시 (한 문장 결속)" \
+  || no "R-M: 원문 있음 케이스의 S2 시작 규칙이 finishing.md에 한 문장으로 명시되지 않았다"
+
 finish
