@@ -2393,6 +2393,60 @@ git add plugins/spec-distill/scripts/run_seed_codex_reviewer.sh \
 git commit -m "feat(spec-distill): seed 억제 축 codex 러너·빌더·체크리스트"
 ```
 
+### Task 14b: seed codex 러너를 skill 에 배선 (이월 R-M)
+
+**Files:**
+- Modify: `plugins/spec-distill/skills/framing-requests/SKILL.md`
+- Modify: `plugins/spec-distill/tests/test_web_kill_switch.sh` 또는 새 게이트 락
+
+**Interfaces:**
+- Consumes: Task 14 의 `run_seed_codex_reviewer.sh suppression <seed> <cwd> <out.yaml>`
+- Produces: 없음 (PR3 의 마지막 기능 조각)
+
+> **왜 이 태스크가 계획에 «없었나»** — Task 14 가 러너·빌더 둘·체크리스트 ~390줄을 만드는데
+> **어느 태스크도 그것을 부르지 않는다.** 계획을 전수하면 `run_seed_codex_reviewer.sh` 는
+> Task 14 자신의 Files·Interfaces·락에만 나오고, Task 15 는 `plugin.json`·`CHANGELOG.md`·
+> `README.md` 만, Task 16 은 PR4 다. 그런데 `framing-requests/SKILL.md:82-83` 은 이미
+> 「codex 가 죽으면 record 하나가 남고 격리 critic 이 단독으로 돕니다」라고 **약속**하고
+> `:126` 은 **일어나지 않는 호출의 kill switch** 를 문서화한다 — 산문이 없는 동작을 말한다.
+> 그리고 이 기능의 최초 요청이 명시적으로 「codex 도 메타프롬프트를 도출하는 과정에
+> 활용되게」였다. **아무도 안 부르는 러너는 그것을 이행하지 않는다.**
+>
+> **왜 Task 15 에 얹지 않나** — 배선은 `detect_codex.sh` 게이트 + kill switch `if` + 블롭 조립
+> + `rc == 3` 시 잔존물 `rm -f` + `framing_degradations` 기록이다. 버전-bump 태스크에 얹을
+> 크기가 아니고, 섞으면 「각 PR 단독 green」 검증에서 무엇이 깨뜨렸는지 가려진다.
+
+- [ ] **Step 1: 게이트를 형제와 같은 리터럴 형태로 쓴다**
+
+`reviewing-brief`·`reviewing-spec` 의 `<!-- codex-gate:begin runner=… -->` 블록이 정본이다.
+**조건을 산문으로 적지 않는다** — 과거에 「`codex_avail=true` 일 때만」이라고 문장으로 적고
+bash 펜스는 무조건 실행되게 둔 판본이 있었다. kill switch 는 P21 보안 컨트롤이라 그 상태는
+「껐다고 믿게만」 만든다.
+
+- [ ] **Step 2: `rc == 3` 잔존물 처리**
+
+러너는 out_yaml 을 못 쓰면 exit 3 으로 죽는다. 그때 **직전 라운드의 YAML(양성 `codex_failed:
+false` 포함)이 이번 판정으로 읽힌다** — 호출자가 `rm -f` 해야 한다. 형제 둘이 그렇게 한다.
+
+- [ ] **Step 3: degrade 기록**
+
+`brief_review_state.py degrade-append … --ledger-key framing_degradations --axis suppression`.
+Task 9 가 그 CLI 를 만들었다.
+
+- [ ] **Step 4: 게이트가 실제로 게이트인지 재는 락**
+
+**「스위치를 켰는데 호출이 나갔다」를 잡아야 한다.** 리터럴 존재가 아니라 **분기 안에 있는지**를
+잰다 — `test_web_kill_switch.sh` 의 형제 패턴을 따르되, 그 파일이 웹 스위치를 재는 것과
+이 축이 다르다는 점을 확인하고 붙일 자리를 정한다.
+
+- [ ] **Step 5: UNGATED 원장 정리**
+
+`plugins/quality-gates/tests/test_codex_gate_observation.sh` 의 UNGATED 항목이 사유로
+「배선은 후속 태스크」를 가리킨다. 이 태스크가 그 후속이므로 **항목을 뺀다** — ratchet 은
+줄어들기만 해야 하는데, 줄일 주체가 없으면 그 사유는 영구 면제가 된다.
+
+- [ ] **Step 6: 로컬 커밋** (bump 없음 — PR3 의 `0.39.0` 은 Task 15)
+
 ### Task 15: mutation 전수 + bump
 
 **Files:**
