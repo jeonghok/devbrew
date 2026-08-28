@@ -12,30 +12,45 @@
 # `disallowedTools` 단독은 금지다 — 공간에 대해서도 시간에 대해서도 fail-open 이다
 # (내일 추가될 도구는 오늘 열거할 수 없다).
 #
-# ── 관계 축 2 (fix round 3 — 쌍 결속) — dispatch 창의 <태그>${변수} 쌍 ==
-#    description 선언 ────────────────────────────────────────────────────
+# ── 관계 축 2 (fix round 4 — 펜스별 결속) — 매 dispatch 펜스가 «단독으로» <태그>${변수}
+#    쌍을 description 선언과 일치시킨다 ────────────────────────────────────────
 # 도구 표면이 0 이어도 SKILL.md 의 dispatch 프롬프트가 description 이 약속하지 않은
-# 것을 인라인하면 격리는 여전히 샌다. round 2 는 **태그 이름의 집합**만 대조했는데
-# 그것으로는 부족했다 — `<seed>${BLOB}</seed>` 처럼 태그 이름은 옳고 안에 바인딩된
-# **변수만 바뀐** 편집이 그 축을 그대로 통과했다(실측, round 2 self-defeat). 그것은
-# 다른 결함이 아니라 **같은 결함이 올바른 라벨을 쓴 것**이다 — `seed-readback` 이
-# 초안을 받으면, 그것이 `<draft>` 태그로 왔든 이름만 `<seed>` 로 바꿔 왔든 냉독의
-# 전제(seed 하나만으로 무엇을 이해했나)는 똑같이 무너진다. 그래서 이 축은 이제
-# «태그 이름」이 아니라 «태그+그 안에 바로 이어지는 변수» **쌍**을 건다.
+# 것을 인라인하면 격리는 여전히 샌다. round 2 는 태그 **이름**의 집합만, round 3 는
+# 태그+변수 **쌍**을 걸었지만, 그 agent 이름을 언급하는 펜스가 여럿이면 **합집합**으로
+# 재비교했다 — 재리뷰가 실측으로 뚫었다: 죽은/예시 펜스가 옳은 쌍을 갖고 있으면, 진짜
+# dispatch 펜스가 태그 없이 `${BLOB}` 를 맨몸으로 흘려도 합집합에는 결손이 안 보인다.
+# 이제 그 agent 이름을 언급하는 **펜스마다 독립적으로** 자기 쌍 집합이 선언과 정확히
+# 일치해야 한다 — 한 펜스라도 어긋나면 그 펜스가 RED 를 낸다. 합집합은 개별 펜스의
+# 결손을 가릴 수 있지만 펜스별 결속은 가릴 수 없다.
 #
-# **도출, 하드코딩 아님.** description 의 백틱 리터럴이 이제 쌍 전체를 담는다
-# (`<draft>${BLOB}</draft>`, `<seed>${SEED}</seed>`) — 태그 이름을 도출했던 것과 같은
-# 방법으로 쌍도 그대로 뽑는다. 백틱 밖 `<example>` 은 뒤에 `${...}` 인터폴레이션이
-# 오지 않으므로 쌍 정규식 자체가 걸러낸다(백틱 경계는 여기서부터는 방어의 전부가
-# 아니라 이중 방어일 뿐이다).
+# **"진짜 dispatch 냐 예시냐"를 가르는 별도 규칙을 두지 않았다.** 그 이름 뒤에
+# `subagent_type: "spec-distill:<name>"` 리터럴을 쓰는 순간 이 리포의 기존 관례
+# (`shared/tests/test_dispatch_disposition.sh` 의 NOTATION 정규식)가 이미 그 줄을
+# dispatch 로 세고 앵커(`// **처분** —`)까지 요구한다. 이 락이 별도 구분 규칙을 새로
+# 만들면 그 규칙 자체가 다음 우회 표적이 된다(예: "펜스 앞에 `// 예시` 주석이 있으면
+# 면제"라고 하면 그 주석 한 줄이 새 우회다). 대신 기존 락이 이미 강제하는 정의를 그대로
+# 물려받는다 — 그 리터럴을 쓰면 dispatch 로 취급되고, dispatch 로 취급되면 이 축도
+# 검사한다. 새 구분자를 발명하지 않는 것이 우회 표면을 늘리지 않는 길이다.
 #
-# **이 축이 못 보는 것 (여기 명시한다).** 이것은 **정적 텍스트 대조**다.
-# `<seed>${SEED}</seed>` 에서 태그·변수 «이름» 이 둘 다 옳아도, `SEED` 라는 변수가
-# 이 dispatch 지점 «위» 어딘가에서 실제로 무엇에 할당됐는지는 안 본다 — 예를 들어
-# 위에 `const SEED = BLOB` 같은 대입이 있다면 이름은 전부 맞는데 값은 초안이다.
-# 그것은 데이터 흐름이고, 텍스트 대조가 볼 수 있는 범위 밖이다. 이 락의 보장은
-# 「선언된 채널과 실제로 인라인된 채널의 (이름, 변수-토큰) 쌍이 같다」까지이고, 그
-# 변수-토큰이 실행 시점에 무엇을 담을지까지는 보장하지 않는다.
+# **도출, 하드코딩 아님.** description 의 백틱 리터럴이 쌍 전체를 담는다
+# (`<draft>${BLOB}</draft>`, `<seed>${SEED}</seed>`) — 쌍을 도출했던 것과 같은 방법으로
+# 펜스마다 뽑아 대조한다. 태그의 `>` 와 `${` 사이 공백은 **허용**한다(`<draft>
+# ${BLOB}</draft>` 같은 의미보존 재서식이 거짓 RED 를 내던 round 3 의 과잉엄격을
+# 없앴다) — 조여야 하는 것은 쌍의 «관계»지 서식의 «인접성»이 아니다.
+#
+# **이 축이 못 보는 것 (여기 명시한다 — round 4 재리뷰가 찾은 것 포함).** 이것은
+# **정적 텍스트 대조**다. 두 가지가 범위 밖이다:
+#  1. **데이터 흐름** — `<seed>${SEED}</seed>` 에서 태그·변수 «이름」이 둘 다 옳아도,
+#     `SEED` 가 이 dispatch 지점 «위» 어딘가에서 실제로 무엇에 할당됐는지는 안 본다
+#     (예: `const SEED = BLOB`). 실행 시점 값을 추적하려면 데이터-흐름 분석이 필요하고
+#     텍스트 대조는 그 종류의 사실을 볼 수 없다.
+#  2. **펜스 표기 자체를 벗어난 은폐** — 이 락은 "그 agent 이름을 언급하는 모든
+#     ```javascript 펜스"를 스캔 대상으로 삼는다. 리포의 dispatch-notation 관례를
+#     벗어나는 표기(```javascript 가 아닌 다른 펜스 언어 태그, 또는 코드펜스 밖 산문
+#     언급)로 실제 dispatch 를 감추면 이 락도, 리포의 다른 dispatch 회계 락도 그것을
+#     dispatch 로 보지 않는다 — 이것은 이 축 하나의 한계가 아니라 리포 전체의 dispatch
+#     정의가 서식 규약(````javascript` 펜스 + 리터럴 `subagent_type:`)에 묶여 있다는
+#     사실의 귀결이다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
@@ -49,15 +64,17 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   exit 0
 fi
 
-# extract_dispatch_window <agent-name> → SKILL.md 안에서 그 agent 를 dispatch 하는
-#   ```javascript 펜스 하나의 전체 텍스트. 오늘 실측으로 dispatch 서식은 항상
-#   그 펜스 하나(펜스당 dispatch 1건) — 여러 dispatch 가 한 펜스에 있으면 이 함수는
-#   구분하지 않고 펜스 전체를 반환한다(이 태스크 범위에서는 무해, 1:1 이므로).
-extract_dispatch_window() {
+# extract_dispatch_windows <agent-name> → 그 agent 를 이름으로 언급하는 ```javascript
+#   펜스 «전부」를, 펜스마다 하나씩, 사람이 읽을 수 있는 경계 마커 줄로 나눠 낸다.
+#   round 3 까지는 매칭 펜스 전체를 하나의 버퍼로 합쳐 냈다 — 죽은 펜스가 진짜 펜스의
+#   결손을 가렸다(round 4 재리뷰 실측). 이제 펜스를 독립 단위로 낸다. 경계는 raw
+#   바이트(0x1E 등)가 아니라 평범한 텍스트 줄이다 — awk 구현마다 `\x` 이스케이프
+#   지원이 갈리는 위험을 피하고, bash 쪽도 일반 `read` 로 그대로 나눌 수 있다.
+extract_dispatch_windows() {
   awk -v pat="\"spec-distill:$1\"" '
     /^```javascript[[:space:]]*$/ { buf=""; capturing=1; next }
     capturing && /^```[[:space:]]*$/ {
-      if (index(buf, pat) > 0) printf "%s", buf
+      if (index(buf, pat) > 0) { printf "%s", buf; print "@@FENCE_BOUNDARY_4f9c2a@@" }
       capturing=0; next
     }
     capturing { buf = buf $0 "\n" }
@@ -70,6 +87,10 @@ set_diff() {
     printf '%s\n' "$2" | grep -qxF -- "$line" || printf '%s\n' "$line"
   done
 }
+
+# 태그 바로 뒤(공백 허용) `${변수}` 인접 쌍 → "태그=변수" 로 정규화.
+PAIR_RE='<[a-zA-Z_][a-zA-Z0-9_]*>[[:space:]]*\$\{[A-Za-z_][A-Za-z0-9_]*\}'
+PAIR_SED='s/^<([a-zA-Z_][a-zA-Z0-9_]*)>[[:space:]]*\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/\1=\2/'
 
 n=0
 for a in seed-critic seed-readback; do
@@ -109,32 +130,40 @@ for a in seed-critic seed-readback; do
     no "$a: 어떤 SKILL.md 도 subagent_type: \"spec-distill:$a\" 를 dispatch 하지 않는다 — description 이 가리킬 대상이 없다"
   fi
 
-  # ── 관계 축 2: dispatch 창의 (태그,변수) 쌍 == description 선언 쌍. 도출(하드코딩
-  # 아님) — frontmatter 안 백틱 리터럴(`<draft>${BLOB}</draft>` 등)에서 뽑는다. 이
-  # 축이 못 보는 것(변수 값의 데이터 흐름)은 파일 머리 "관계 축 2" 절에 명시했다.
-  PAIR_RE='<[a-zA-Z_][a-zA-Z0-9_]*>\$\{[A-Za-z_][A-Za-z0-9_]*\}'
-  PAIR_SED='s/^<([a-zA-Z_][a-zA-Z0-9_]*)>\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/\1=\2/'
+  # ── 관계 축 2: agent 를 언급하는 펜스 «각각」이 자기 (태그,변수) 쌍을 description
+  # 선언과 정확히 일치시켜야 한다(round 4 — 펜스별 결속, 합집합 아님).
   expected="$(printf '%s\n' "$fm" | grep -oE "$PAIR_RE" | sed -E "$PAIR_SED" | sort -u)"
   n_expected="$(printf '%s\n' "$expected" | grep -c . || true)"
   if [ "$n_expected" -lt 1 ]; then
     no "$a: description 에서 <태그>\${변수} 쌍 선언을 하나도 도출 못 함 — 이 축이 vacuous 하다"
   else
     ok "$a: description 에서 쌍 선언 ${n_expected}개 도출 — {$(printf '%s' "$expected" | tr '\n' ' ')}"
-    window="$(extract_dispatch_window "$a")"
-    if [ -z "$window" ]; then
-      no "$a: SKILL.md 에서 dispatch 창(\`\`\`javascript 펜스)을 못 찾았다"
+    windows_raw="$(extract_dispatch_windows "$a")"
+    if [ -z "$windows_raw" ]; then
+      no "$a: SKILL.md 에서 dispatch 펜스(\`\`\`javascript)를 못 찾았다"
     else
-      actual="$(printf '%s' "$window" | grep -oE "$PAIR_RE" | sed -E "$PAIR_SED" | sort -u)"
-      extra="$(set_diff "$actual" "$expected")"
-      missing="$(set_diff "$expected" "$actual")"
-      if [ -z "$extra" ] && [ -z "$missing" ]; then
-        ok "$a: dispatch 창의 (태그,변수) 쌍이 description 선언과 정확히 일치 — {$(printf '%s' "$actual" | tr '\n' ' ')}"
-      else
-        [ -n "$extra" ] \
-          && no "$a: 창에 선언 밖 쌍 — $(printf '%s' "$extra" | tr '\n' ' ')(격리가 샌다 — 이 채널이나 그 값이 description 약속과 다르다)"
-        [ -n "$missing" ] \
-          && no "$a: 선언된 쌍이 창에 없음 — $(printf '%s' "$missing" | tr '\n' ' ')(계약 불일치 — description 이 약속한 채널·값을 실제로는 그대로 안 준다)"
-      fi
+      fence_n=0
+      buf=""
+      while IFS= read -r line || [ -n "$line" ]; do
+        if [ "$line" = "@@FENCE_BOUNDARY_4f9c2a@@" ]; then
+          fence_n=$((fence_n + 1))
+          actual="$(printf '%s' "$buf" | grep -oE "$PAIR_RE" | sed -E "$PAIR_SED" | sort -u)"
+          extra="$(set_diff "$actual" "$expected")"
+          missing="$(set_diff "$expected" "$actual")"
+          if [ -z "$extra" ] && [ -z "$missing" ]; then
+            ok "$a: 펜스 #${fence_n} 의 (태그,변수) 쌍이 description 선언과 정확히 일치 — {$(printf '%s' "$actual" | tr '\n' ' ')}"
+          else
+            [ -n "$extra" ] \
+              && no "$a: 펜스 #${fence_n} 에 선언 밖 쌍 — $(printf '%s' "$extra" | tr '\n' ' ')(격리가 샌다 — 이 채널이나 그 값이 description 약속과 다르다)"
+            [ -n "$missing" ] \
+              && no "$a: 펜스 #${fence_n} 에 선언된 쌍 없음 — $(printf '%s' "$missing" | tr '\n' ' ')(계약 불일치 — 이 펜스 «단독으로» description 이 약속한 채널·값을 그대로 안 준다)"
+          fi
+          buf=""
+        else
+          buf="$buf$line"$'\n'
+        fi
+      done <<< "$windows_raw"
+      [ "$fence_n" -ge 1 ] || no "$a: 펜스 분리 도출이 0건 — extract_dispatch_windows 가 깨졌다"
     fi
   fi
 done
