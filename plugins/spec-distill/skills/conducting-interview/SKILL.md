@@ -187,8 +187,8 @@ focused 차원이 바뀌거나 진전 발생 시 0으로 reset.
 정확히 1회다.
 
 판정은 **디스크 두 값의 비교**이므로 어느 턴에서든 무상태로 재계산된다 — 그 성질을 잃으면
-판정이 모델의 턴-간 기억에 의존하고, 이 SKILL 이 백스톱에 대해 금지하는 *프로즈
-self-tracking* 이 된다. **streak 값 자체를 저장하지 않는 이유**: streak 3 에서 dispatch(저장
+판정이 모델의 턴-간 기억에 의존하는 *프로즈 self-tracking*이 되어, 이 문단이 세운 기계적
+bound 자체가 무너진다. **streak 값 자체를 저장하지 않는 이유**: streak 3 에서 dispatch(저장
 3) → streak 4 → `3 != 4` → 재dispatch → streak 5 → 재dispatch … 로 레벨-트리거 무한
 재dispatch 가 그대로 살아난다.
 

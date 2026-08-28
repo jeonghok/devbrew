@@ -92,11 +92,12 @@ b1_block="$(awk '/^#### B-1/{f=1;print;next} /^#### /{f=0} f' "$FIN")"
   || no "AC13: B-1 블록 안에 graceful-degradation 지시가 없다"
 
 # --- v0.23.0: 확정 확인을 흡수한 단일 proceed 게이트 (AC2/AC3) ---
-# 이 게이트를 전-파일 grep으로 잠그면 이빨이 0이다. 'AskUserQuestion'은 probe 백스톱 C1
-# escalation에도 등장하고(이 스위트가 아래 :~176 주석에서 이미 지적한 함정 — 거기선
-# backstop_block으로 스코프해 해결했다), 옵션 라벨 4종은 B-3의 bullet 제목이 verbatim
-# 반복하므로 각각 2~3회 등장한다. 실측: B-2의 AskUserQuestion({…}) 블록을 통째로 지워도
-# 5건 전부 GREEN이었다. → "#### B-2" 블록으로 스코프한다.
+# 이 게이트를 전-파일 grep으로 잠그면 이빨이 0이다. `finishing.md` 안에서만도
+# 'AskUserQuestion'이 B-0 프로즈 안내·B-2 헤더·게이트-아님 가드 안내·실제 호출까지
+# 다섯 곳에 등장한다(Task 6 실측 — 옛 probe 상한 절이 근거였던 이전 사례는 그 절 삭제로
+# 함께 없어졌다). 옵션 라벨 4종은 B-3의 bullet 제목이 verbatim 반복하므로 각각 2~3회
+# 등장한다. 실측: B-2의 AskUserQuestion({…}) 블록을 통째로 지워도 5건 전부 GREEN이었다.
+# → "#### B-2" 블록으로 스코프한다.
 # 라벨은 grep -qE가 아니라 **grep -qF**로 잡는다: 한국어 조사와 마크다운 백틱이 정규식
 # 경계를 조용히 깨뜨린 전례가 이 파일 안에 이미 있다(아래 강등 프로즈 락 주석 참조).
 # 헤더-satisfiable 회피: B-2 헤더에 `AskUserQuestion`이 있으므로 여는 괄호까지 요구한다.
@@ -227,10 +228,10 @@ has '8-section|8-섹션|8 섹션' "AC10: Step A가 8섹션 템플릿을 참조"
 #
 # **awk 윈도우로 스코프한다** — `박제` 어휘가 이 파일의 다른 절(Step B 게이트 안내 ·
 # kill switch)에도 선재하므로 전-파일 grep 은 이 경로가 통째로 사라져도 satisfied 되어
-# teeth 가 0 이다(feedback_grep_lock_header_satisfiable). probe 백스톱 절은 Task 6 이
-# 지워 더는 존재하지 않으므로 선재 목록에서 뺐다 — 지운 절을 계속 인용하면 거짓 인용이
-# 된다(같은 이유로 이 스위트 자신이 그 절을 스코프하던 backstop_block 정의·단언도 함께
-# 지웠다).
+# teeth 가 0 이다(feedback_grep_lock_header_satisfiable). 옛 probe 상한 escalation
+# 절은 Task 6 이 지워 더는 존재하지 않으므로 선재 목록에서 뺐다 — 지운 절을 계속
+# 인용하면 거짓 인용이 된다(같은 이유로 이 스위트 자신이 그 절을 스코프하던 변수·단언도
+# 함께 지웠다).
 #
 # **토큰 공존이 아니라 관계를 건다** (context §③ — Task4 의 coverage-mapper 락이 같은 형태로
 # 거짓 GREEN 을 냈다: 세 토큰을 각각 독립 grep 하면, 처분(evidence 리터럴)·행선지(§3 이월
@@ -324,6 +325,16 @@ grep -qE '연속 3 probe|no_progress' <<<"$covmap_block" \
 # 단락**(직전 줄이 `**redispatch 바운드`로 시작하는 문단, 빈 줄 경계)으로 먼저 좁히고,
 # 그 문단 안의 backtick 스팬에서만 관계를 찾는다 — 절 전체의 다른 문단에 있는 스팬은
 # 후보에서 아예 빠진다.
+#
+# **이 앵커의 대가(fix round 1, 리뷰 Minor 3)**: `^\*\*redispatch 바운드`는 위치
+# 의존적이다 — 그 문단 **맨 앞**에 `**redispatch 바운드`가 와야 한다. 의미를 안 바꾸는
+# 편집(예: 그 문단 앞에 안내 문장 한 줄을 새로 끼워 넣는 것)도 그 문단을 더는 이
+# 리터럴로 시작하지 않게 만들면 `judgment_para`가 비어 거짓 RED가 난다(실측 확인 —
+# `**redispatch 바운드(...)**: 재dispatch 조건은` 앞에 무해한 한 줄을 넣자 이 assert가
+# 즉시 RED). 이전 태스크(Task 4)와 같은 교훈이다 — **의미를 결속하고 레이아웃엔
+# 관대해야** 하는데, 이 앵커는 그 문단의 **첫 줄 위치**라는 레이아웃에 결속돼 있다.
+# 지금은 이 문단이 그렇게 편집될 계획이 없어 위험을 감수하지만, 이 문단을 다시 만지는
+# 사람은 이 앵커가 「문단 시작」을 본다는 것을 알아야 한다.
 judgment_para="$(awk -v RS='' '/^\*\*redispatch 바운드/' <<<"$covmap_block")"
 code_spans="$(awk 'BEGIN{RS="`"} NR%2==0{gsub(/\n/," "); print}' <<<"$judgment_para")"
 { grep -qE 'no_progress_streak[[:space:]]*>=[[:space:]]*3[[:space:]]+AND[[:space:]]+coverage_mapper_dispatched_episode[[:space:]]*!=[[:space:]]*stall_episode' <<<"$code_spans" \
