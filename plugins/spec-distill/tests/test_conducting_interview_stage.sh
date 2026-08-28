@@ -528,49 +528,104 @@ grep -qF '원문 보존은 **관례가 아니라 요구**입니다' <<<"$stepa_f
 # 재작성은 조용히 통과가 아니라 눈에 띄어 재승인받아야 한다 — 리라이트 관용은 공식을
 # 감싸는 **산문**에만 남는다(rewrap·문단 순서 교체·yaml 블록 위치 이동은 여전히 green).
 # fix round 4: round 3 의 「전체 표현식 일치」는 스코프 안의 **첫 매치 하나만** 뽑아
-# 비교했다(`grep … | head -1`, `${stepa_flat#*최초 요청 원문 있으면}` 둘 다 첫 출현을
-# 취한다). 그래서 정본 텍스트를 진짜 규칙 **앞자리에** 심어두고 뒤의 진짜를 고치면
-# 추출기가 미끼를 읽고 두 파일 모두 GREEN 을 유지한다 — 재리뷰가 실측으로 재현했다.
-# 「첫 매치가 이긴다」는 **문서가 그 규칙을 진술하는가**를 묻는 자리에서 틀린 추출이다.
-# 그래서 존재가 아니라 **개수까지** 건다: 앵커는 스코프 안에 **정확히 한 번**만 나와야
-# 하고, 그 유일한 출현이 정본과 일치해야 한다. 두 번째 출현은 그 자체로 결함이다 —
-# 두 번 진술된 규칙은 자기 자신과 어긋날 수 있으므로, 미끼든 무해해 보이는 복사본이든
-# 같은 이유로 red 다. 개수가 1 이면 「첫 매치」와 「그 매치」가 같아져 위치 의존이
-# 사라지므로 `head -1` 은 없앤다. 스코프 자체를 복제하는 우회(같은 헤딩을 하나 더 만들어
-# awk 윈도우를 두 덩어리로 만드는 것)도 같은 개수로 잡힌다 — 두 블록이 한 텍스트로 접히며
-# 앵커가 2가 된다. 개수 0(앵커 자체가 사라짐)도 red 다 — 진공 통과를 막는 하한이다.
+# 비교했다(`grep … | head -1`, prefix-strip 둘 다 첫 출현을 취한다). 그래서 정본 텍스트를
+# 진짜 규칙 **앞자리에** 심어두고 뒤의 진짜를 고치면 추출기가 미끼를 읽고 두 파일 모두
+# GREEN 을 유지한다. round 4 는 그것을 「스코프 안에 정확히 한 번」으로 답했다 — 여전히
+# **∃ 질문**이었고, 그 스코프를 **헤딩에서** 뽑았다.
 #
-# **공시 — 이 단언이 못 잡는 것**: 정본을 그대로 둔 채 그 **뒤에** 그것을 부정하는 문장을
-# 덧붙이는 우회(「정정: 실제로는 오프셋을 더하지 않는다」)는 잡히지 않는다. 추출이 정본
-# 절에서 끝나므로 그 뒤의 산문은 읽히지 않는다. 부정문이 앵커 문구를 다시 쓰면 개수가 2가
-# 돼 red 가 되지만, 앵커를 피해 쓴 부정문은 보이지 않는다 — **부분 커버리지다.** 이건 이
-# 파일의 리터럴 락 전체가 공유하는 성질이고(R-L 4종·`AskUserQuestion(`·'확정하고 /compact
-# 후 brainstorming' 전부 같다), 부정 어휘 블랙리스트는 대상만 옮겨 재발하는 whack-a-mole
-# 이라 만들지 않는다 — 의미 차원의 적대적 재작성은 grep 락이 아니라 adversarial/codex
-# 리뷰가 잡는 층이다. 여기서는 **막지 않고 드러낸다**.
+# fix round 5: 그 스코프가 뚫렸다. 진짜 헤딩을 매치 밖으로 **개명**해 그 아래에 뒤집힌
+# 규칙을 두고 원래 헤딩 이름으로 미끼 섹션을 심으면, awk 윈도우가 **날조된 본문**을 읽어
+# 93/93 GREEN 이 된다. 네 라운드가 한 뿌리를 공유한다: **단언이 ∃ 를 묻고, 어디를 볼지를
+# 피검자가 정한다.** 헤딩은 재는 대상 안의 텍스트일 뿐이라, 피검자가 쥔 것은 피검자가
+# 위조한다. 그래서 층을 하나 더 올리지 않고 **질문을 바꾼다**:
 #
-# 추출: `stmt_block`(SKILL.md `## 사용자 발화 기록` 스코프, :435 기존 변수 재사용)에서
-# `id: S<N>` 줄을 골라 첫 `#` 뒤를 취하고, `stepa_flat`(finishing.md Step A 스코프,
-# 위에서 이미 flatten+squeeze한 변수)에서 "최초 요청 원문 있으면"부터 다음 `(` 직전까지를
-# 취한다 — 둘 다 공백만 trim/squeeze하고 그 외엔 손대지 않는다.
-skill_anchor_n="$(grep -oF 'id: S<N>' <<<"$stmt_block" | wc -l | tr -d ' ')"
-skill_formula_line="$(grep -F 'id: S<N>' <<<"$stmt_block")"
-skill_formula_comment="${skill_formula_line#*#}"
-skill_formula_comment="$(printf '%s' "$skill_formula_comment" | tr '\n' ' ' | tr -s ' ')"
-skill_formula_comment="$(printf '%s' "$skill_formula_comment" | sed -e 's/^ *//' -e 's/ *$//')"
+#  · 영역을 헤딩이 아니라 **파일 전체**로 잡는다 — 경계가 피검자의 텍스트에서 나오지 않는다.
+#  · 그 안에서 **이 규칙을 진술한다면 반드시 지니는 내용 표지**로 자리를 고른다(의도적으로
+#    느슨하게). SKILL.md: `user_statements.length`(base term) · `id: S<N>`(레코드 앵커) ·
+#    `최초 요청 원문`(오프셋 조건) 중 **하나라도** 가진 줄. finishing.md: `최초 요청 원문
+#    (있|없)으면` 스팬(분기 어휘 어느 쪽이 앞에 와도 걸리도록) + `번호 공식과 합의` 스팬.
+#  · 그 자리 **전부**(∀)가 정본과 공백 정규화 후 처음부터 끝까지 일치해야 한다. 「하나가
+#    일치한다」가 아니다. 개수의 상·하한(정확히 1)을 같은 술어에 함께 건다 — 0 은 진공
+#    통과를 막는 하한이고, 2 는 「두 번 진술된 규칙은 자기 자신과 어긋날 수 있다」를
+#    결함으로 센다.
+#
+# 이러면 round 4 의 우회가 자기 전제 위에서 죽는다: 날조된 미끼도 표지를 가지고, 개명된
+# 헤딩 아래의 뒤집힌 진짜도 표지를 가진다 → 자리 2 곳, 그중 하나가 정본과 불일치 → RED.
+# 헤딩 게임이 무의미해지는 이유는 헤딩이 더는 하중을 받지 않기 때문이다.
+#
+# 표지의 비용은 재고 골랐다(오늘 이 두 파일에서): SKILL.md 세 표지의 **합집합 = 1 줄**
+# (공식 그 줄), finishing.md 앵커 = 1 스팬 · `번호 공식과 합의` = 1 스팬. 규칙 진술이
+# 아닌 정당한 줄은 하나도 걸리지 않는다. 한 단계 더 넓힌 `최초 요청 원문`(단독)은
+# finishing.md 의 「최초 요청 원문은 `S1`이다」까지 잡아 **너무 넓다** — 그래서 분기
+# 어휘까지 붙여 **내용으로** 좁혔다(헤딩으로 좁히지 않았다).
+#
+# **공시 — 이 단언이 못 잡는 것** (전부 실측한 것만 적는다):
+#  (a) 정본을 그대로 둔 채 **표지를 피해** 그것을 부정하는 문장을 뒤에 덧붙이는 것
+#      (「정정: 실제로는 오프셋을 적용하지 않는다」) — GREEN 이다. 부정문이 앵커 어휘를
+#      다시 쓰면 자리가 2 가 돼 RED 이므로 이 축은 **부분 커버리지**다.
+#  (b) 더 나쁜 쪽: 진짜 자리의 규칙을 **표지 없는 다른 말로** 뒤집어 쓰고(「이 예약을
+#      반영하지 않고 언제나 `S1`부터 시작합니다」) 정본 사본을 미끼로 심는 것 — 표지를
+#      가진 자리가 미끼 하나뿐이라 자리 1 · 정본 일치로 **GREEN 이다**. SKILL.md 에서
+#      실측했고, finishing.md 에서는 미끼가 **문단 통째의 정본 사본**일 때 GREEN 이다
+#      (미끼가 부분 사본이면 아래 R-M 세 번째의 존재 검사가 부수적으로 잡는다 — 이
+#      단언이 잡는 게 아니다). 내용으로 자리를 고르는 검사는 그 내용을 하나도 공유하지
+#      않는 재진술을 원리상 볼 수 없다 — 이 접근의 경계이지, 층을 더 올려 없앨 수 있는
+#      결함이 아니다. (a) 와 (b) 는 같은 계열이다: 이 파일이 규칙을 두 번 말하고 그
+#      둘이 서로 어긋나는데 어긋난 쪽이 표지를 안 쓰는 경우.
+#  (c) 파일 전체를 영역으로 삼는 것은 **이 두 단언뿐**이다. 바로 아래 R-M 세 번째와 위의
+#      R-L 4 종은 여전히 `stepa_flat`(헤딩 파생 스코프) 위의 **존재 검사**다 — 실측:
+#      진짜 Step A 절을 통째로 복사해 원래 헤딩 이름의 미끼 섹션으로 심고 진짜를 개명해
+#      규칙을 뒤집으면, round 4 의 테스트 파일에서 **93/93 GREEN**(R-L 4 종 포함 전부
+#      통과)이다. 헤딩 위조 앞에서 그들은 이빨이 없고, 이 라운드의 두 단언만 그것을 잡는다.
+# 부정 어휘 블랙리스트는 만들지 않는다: 대상만 옮겨 재발하는 whack-a-mole 이고(내일 쓰일
+# 부정 표현은 오늘 열거할 수 없다 — denylist 의 시간 fail-open), 이 파일에 이미 있는
+# 정당한 부정문(「…승격시키지 않습니다」)을 오탐한다. 의미 차원의 적대적 재작성은 grep
+# 락이 아니라 adversarial/codex 리뷰가 잡는 층이다. 여기서는 **막지 않고 드러낸다**.
+#
+# 추출: SKILL.md 는 파일 전체에서 표지 합집합에 걸린 **줄**을 세고, 각 줄의 첫 `#` 뒤를
+# 공백 정규화해 정본과 비교한다. finishing.md 는 파일 전체를 한 줄로 접고(rewrap 관용 —
+# 앵커 문구 한가운데를 가르는 줄바꿈도 통과해야 한다) 앵커 스팬을 **전부 순회**하며 각
+# 스팬에서 다음 `(` 직전까지를 정본과 비교한다. 둘 다 공백만 trim/squeeze 하고 그 외엔
+# 손대지 않는다. **공식에는 의미보존 관용을 안 준다**(코디네이터 판단, round 3 · round 5
+# 유지) — 리라이트 관용은 공식을 감싸는 **산문**에만 남는다(rewrap · 문장 순서 교체 ·
+# yaml 예시 블록 위치 이동은 여전히 green).
+skill_rule_marks='user_statements\.length|id: S<N>|최초 요청 원문'
 skill_formula_canon='N = user_statements.length + 1 + (최초 요청 원문 있으면 1, 없으면 0 — finishing.md S1 예약과 합의)'
-{ [[ "$skill_anchor_n" -eq 1 ]] && [[ "$skill_formula_comment" == "$skill_formula_canon" ]]; } \
-  && ok "R-M: SKILL.md id 공식이 스코프 안에 정확히 1회 + 정본과 end-to-end 일치" \
-  || no "R-M: SKILL.md id 공식이 «스코프 안 1회 + 정본 일치»를 깬다 (n=$skill_anchor_n got: [$skill_formula_comment])"
+skill_rule_lines="$(grep -E "$skill_rule_marks" "$SKILL")"
+skill_rule_n=0; skill_rule_bad=0; skill_rule_got=''
+while IFS= read -r _ln; do
+  [ -n "$_ln" ] || continue
+  skill_rule_n=$((skill_rule_n + 1))
+  _b="${_ln#*#}"
+  _b="$(printf '%s' "$_b" | tr -s ' ' | sed -e 's/^ *//' -e 's/ *$//')"
+  if [ "$_b" != "$skill_formula_canon" ]; then
+    skill_rule_bad=$((skill_rule_bad + 1)); skill_rule_got="$_b"
+  fi
+done <<< "$skill_rule_lines"
+{ [ "$skill_rule_n" -eq 1 ] && [ "$skill_rule_bad" -eq 0 ]; } \
+  && ok "R-M: SKILL.md 파일 전체에서 번호 규칙 표지를 가진 자리가 1곳 + 그 전부가 정본과 일치" \
+  || no "R-M: SKILL.md 번호 규칙이 «파일 전체 1곳 + 전부 정본 일치»를 깬다 (자리=$skill_rule_n 불일치=$skill_rule_bad got: [$skill_rule_got])"
 
-fin_anchor_n="$(grep -oF '최초 요청 원문 있으면' <<<"$stepa_flat" | wc -l | tr -d ' ')"
-fin_formula_raw="${stepa_flat#*최초 요청 원문 있으면}"
-fin_formula_clause="최초 요청 원문 있으면${fin_formula_raw%%(*}"
-fin_formula_clause="$(printf '%s' "$fin_formula_clause" | sed -e 's/[[:space:]]*$//')"
+fin_flat="$(tr '\n' ' ' < "$FIN" | tr -s ' ')"
+fin_rule_re='최초 요청 원문 (있|없)으면'
 fin_formula_canon='최초 요청 원문 있으면 1, 없으면 0 을 더해 SKILL.md `사용자 발화 기록`의 번호 공식과 합의합니다'
-{ [[ "$fin_anchor_n" -eq 1 ]] && [[ "$fin_formula_clause" == "$fin_formula_canon" ]]; } \
-  && ok "R-M: finishing.md 오프셋 절이 Step A 안에 정확히 1회 + 정본과 end-to-end 일치" \
-  || no "R-M: finishing.md 오프셋 절이 «Step A 안 1회 + 정본 일치»를 깬다 (n=$fin_anchor_n got: [$fin_formula_clause])"
+fin_rule_n=0; fin_rule_bad=0; fin_rule_got=''
+_rest="$fin_flat"
+while :; do
+  _hit="$(printf '%s' "$_rest" | grep -oE "$fin_rule_re" | head -1)"
+  [ -n "$_hit" ] || break
+  _rest="${_rest#*"$_hit"}"
+  fin_rule_n=$((fin_rule_n + 1))
+  _c="$_hit${_rest%%(*}"
+  _c="$(printf '%s' "$_c" | sed -e 's/[[:space:]]*$//')"
+  if [ "$_c" != "$fin_formula_canon" ]; then
+    fin_rule_bad=$((fin_rule_bad + 1)); fin_rule_got="$_c"
+  fi
+done
+fin_xref_n="$(printf '%s' "$fin_flat" | grep -oF '번호 공식과 합의' | grep -c .)"
+{ [ "$fin_rule_n" -eq 1 ] && [ "$fin_rule_bad" -eq 0 ] && [ "$fin_xref_n" -eq 1 ]; } \
+  && ok "R-M: finishing.md 파일 전체에서 오프셋 규칙 표지를 가진 자리가 1곳 + 그 전부가 정본과 일치" \
+  || no "R-M: finishing.md 오프셋 규칙이 «파일 전체 1곳 + 전부 정본 일치»를 깬다 (자리=$fin_rule_n 불일치=$fin_rule_bad 교차참조=$fin_xref_n got: [$fin_rule_got])"
 
 grep -qF '`S1`이 아니라 `S2`부터 시작합니다' <<<"$stepa_flat" \
   && ok "R-M: 원문 있으면 user_statements id가 S1이 아니라 S2부터 시작한다는 명시 (한 문장 결속)" \
