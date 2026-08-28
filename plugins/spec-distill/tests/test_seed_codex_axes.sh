@@ -111,6 +111,17 @@ fi
 # 산출물을 조작해도 codex 를 안 불렀으면 sentinel 이 없다. mock 이 sentinel 을
 # 쓰는 시점은 JSONL 을 내기 **전**이라, 그 뒤 추출 단계가 어떻게 실패해도
 # "codex 가 불렸다"는 사실 자체는 남는다.
+#
+# **정직한 경계 (fix round 2, 컨트롤러 지시로 여기서 멈춘다).** sentinel 은
+# "codex 가 호출됐는가"만 잰다 — "그 호출의 **출력이 실제로 쓰였는가**"는
+# 못 잰다. 실측 확인: codex 를 그대로 부르되(sentinel 이 남는다) 그 응답을
+# 버리고 별도의 조작된 YAML(예: `reason: fabricated_but_codex_was_called` —
+# `runner_incomplete` 와 다른 문자열)을 직접 써버리는 러너도 이 락을 14/14
+# GREEN으로 통과한다. codex 호출 자체가 부수효과(과금·요청 로그)라는 사실이
+# 이 갭의 실제 방어선이다 — 이 락은 그것까지는 재지 않는다. 이 축에서 더 쫓지
+# 않는다: 다음 갭도 같은 자리(산출물이 실제 codex 응답에서 파생됐는지 자체를
+# 증명하는 것 — 예: 응답 바이트에 서명을 심고 산출물에서 그 서명을 찾는 것)로
+# 계속 옮겨갈 수 있고, 그 추적은 이 락의 범위를 벗어난다.
 RUNBIN="$(mktemp -d -t sd-seed-axes-bin-XXXXXX)" || RUNBIN=""
 if [ -z "$RUNBIN" ]; then
   no "mock codex bindir 생성 실패 — 아래 러너 실행 검증을 건너뛴다"
