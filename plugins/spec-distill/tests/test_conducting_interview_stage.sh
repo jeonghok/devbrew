@@ -265,17 +265,32 @@ grep -qi 'increment 실패' <<<"$backstop_block" \
 # (빈 줄 경계) 하나로 더 좁힌다: `사용자-승인 박제` 리터럴과 `Open Questions` 행선지가 **같은
 # 단락**에 있는 레코드만 추출하고, 그 단락 안에서 발동조건(사용자 발화)·`evidence`·박제
 # 리터럴·행선지가 전부 있는지를 요구한다. 처분·행선지 문장이 지워지면 그 단락 자체가
-# 더는 `사용자-승인 박제`+`Open Questions` 를 함께 갖지 않으므로 추출이 비고, 이하 4개
-# grep 은 빈 문자열에 대해 전부 실패한다(M5b 가 이 경로를 잰다).
+# 더는 `사용자-승인 박제`+`Open Questions` 를 함께 갖지 않으므로 추출이 비고, 이하 grep 은
+# 빈 문자열에 대해 전부 실패한다(M5b 가 이 경로를 잰다).
+#
+# **fix round 1**: 위 관계만으로는 "…§3 Open Questions 얘기는 다음에 한다" 처럼 행선지
+# 리터럴만 인용하고 실제로 옮기지 않는 적대적 한 문장에 뚫린다(reviewer 재현) — `이월`류
+# 이관 동사 없이 리터럴만 나열해도 «단락 하나» 조건은 만족되기 때문이다. 그래서 행선지를
+# «단락» 이 아니라 **그 리터럴을 담은 문장 하나**(마침표 경계, 개행은 접어 문장이 줄바꿈에
+# 끊기지 않게 한다)로 더 좁히고, 그 **같은 문장 안에서** 이관 동사(이월/옮기다/넘기다)를
+# 요구한다 — 리터럴과 동사가 다른 문장에 따로 있으면(예: 딴 문단의 "…이월한다"가 무관한
+# 문맥) 문장 경계가 그 결속을 끊는다.
 exit_block="$(awk '/^## 종료 — brief 작성/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
 mech_para="$(awk -v RS='' '/사용자-승인 박제/ && /Open Questions/' <<<"$exit_block")"
+mech_flat="$(tr '\n' ' ' <<<"$mech_para")"
+dest_sentence="$(grep -oE '[^.]*Open Questions[^.]*\.' <<<"$mech_flat" | head -1)"
+# 트리거는 `mech_para`(처분·행선지가 사는 단락)가 아니라 `exit_block`(절 전체)에 건다 — 트리거
+# 문장을 그 단락 안에 강제하면 "트리거를 별도 단락으로 뗀다" 같은 의미 보존 리라이트가 거짓
+# RED가 된다(fix round1에서 실측). exit_block 자체가 이미 "## 종료" 하나로 좁혀져 있어
+# 트리거 어휘가 무관한 절과 섞일 위험은 없다.
 { [[ -n "$mech_para" ]] \
-  && grep -qE '사용자.*종료를 요청|사용자가 언제든 종료' <<<"$mech_para" \
+  && grep -qE '사용자.*종료를 요청|사용자가 언제든 종료' <<<"$exit_block" \
   && grep -q 'evidence' <<<"$mech_para" \
   && grep -q '사용자-승인 박제' <<<"$mech_para" \
-  && grep -qE '§3 Open Questions|## 3\. Open Questions|payload[^.]*Open Questions' <<<"$mech_para"; } \
-  && ok "C1(v0.37.0): floor 탈출구 — 사용자 발화 → 미충족 floor 를 사용자-승인 박제 (단락 단위로 발동조건·evidence·박제·행선지 결속, scoped to 종료)" \
-  || no "C1(v0.37.0): floor 탈출구 — 사용자 발화 → 미충족 floor 를 사용자-승인 박제 (단락 단위로 발동조건·evidence·박제·행선지 결속, scoped to 종료)"
+  && grep -qE '§3 Open Questions|## 3\. Open Questions|payload[^.]*Open Questions' <<<"$dest_sentence" \
+  && grep -qE '이월|옮긴다|옮긴|넘긴다' <<<"$dest_sentence"; } \
+  && ok "C1(v0.37.0): floor 탈출구 — 사용자 발화 → 미충족 floor 를 사용자-승인 박제 (트리거는 절 전체, 처분·행선지·이관동사는 단락·문장으로 결속, scoped to 종료)" \
+  || no "C1(v0.37.0): floor 탈출구 — 사용자 발화 → 미충족 floor 를 사용자-승인 박제 (트리거는 절 전체, 처분·행선지·이관동사는 단락·문장으로 결속, scoped to 종료)"
 # 종료 로직에 interview_round 잔존 0 (AC9/V7b)
 term_block="$(awk '/^## 종료/{f=1} f&&/^## [^종]/{exit} f' "$FIN")"
 grep -q 'interview_round' <<<"$term_block" \
