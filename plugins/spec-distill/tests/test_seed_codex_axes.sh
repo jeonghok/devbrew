@@ -101,12 +101,24 @@ fi
 # (`reason: runner_incomplete`)에서 벗어나는지 잰다. 정적 검사 ①은 case
 # 라벨의 존재만 재므로 러너를 4줄짜리 decoy(라벨만 있고 그 뒤로 아무 것도
 # 안 함)로 바꿔도 통과한다 — 실행 결과로 판정을 옮긴다.
+#
+# fix round 2 (Important 3 잔여) — 위 "선-기록 값에서 벗어났는가"만으로는
+# **산출물의 출처**를 못 잰다. 리뷰어 재현: case 라벨만 받고 빌더도 codex도
+# 전혀 안 부른 채 `findings: []` + `codex_failed: false` + 그럴듯한 reason을
+# 직접 써버리는 러너가 이 검사를 그대로 통과했다(13/13 GREEN) — "값이
+# runner_incomplete 가 아니다"는 "codex 가 실제로 호출됐다"의 증거가 아니다.
+# 그래서 mock codex 자신이 **자기 호출 여부를 기록**하게 한다(sentinel 파일) —
+# 산출물을 조작해도 codex 를 안 불렀으면 sentinel 이 없다. mock 이 sentinel 을
+# 쓰는 시점은 JSONL 을 내기 **전**이라, 그 뒤 추출 단계가 어떻게 실패해도
+# "codex 가 불렸다"는 사실 자체는 남는다.
 RUNBIN="$(mktemp -d -t sd-seed-axes-bin-XXXXXX)" || RUNBIN=""
 if [ -z "$RUNBIN" ]; then
   no "mock codex bindir 생성 실패 — 아래 러너 실행 검증을 건너뛴다"
 else
+  SENTINEL="$RUNBIN/codex.invoked"
   cat > "$RUNBIN/codex" <<'MOCKEOF'
 #!/usr/bin/env bash
+[ -n "${CODEX_MOCK_SENTINEL:-}" ] && : > "$CODEX_MOCK_SENTINEL"
 cat <<'JSONL'
 {"type":"item.completed","item":{"type":"agent_message","text":"```json\n{\"findings\": []}\n```"}}
 JSONL
@@ -118,9 +130,9 @@ MOCKEOF
   if [ -z "$RPAY" ] || [ -z "$ROUT" ]; then
     no "러너 실행 스크래치 생성 실패 — 아래 검증을 건너뛴다"
   else
-    rm -f "$ROUT"
+    rm -f "$ROUT" "$SENTINEL"
     printf '## 초안\n\n로그인이 가끔 실패한다.\n' > "$RPAY"
-    PATH="$RUNBIN:$PATH" CLAUDE_PLUGIN_ROOT="$ROOT/plugins/spec-distill" \
+    PATH="$RUNBIN:$PATH" CLAUDE_PLUGIN_ROOT="$ROOT/plugins/spec-distill" CODEX_MOCK_SENTINEL="$SENTINEL" \
       bash "$S/run_seed_codex_reviewer.sh" suppression "$RPAY" "$ROOT" "$ROUT" >/dev/null 2>&1
     if [ ! -s "$ROUT" ]; then
       no "러너 실행 후 산출물이 없거나 비었다 — fail-closed 계약 위반이거나 러너가 실질적으로 아무 것도 안 한다"
@@ -129,7 +141,10 @@ MOCKEOF
     else
       ok "러너가 mock codex로 실제로 끝까지 진행됐다(선-기록 값에서 벗어남)"
     fi
-    rm -f "$RPAY" "$ROUT"
+    [ -f "$SENTINEL" ] \
+      && ok "mock codex가 실제로 호출됐다(sentinel 실재) — 산출물이 codex 실행 없이 조작되지 않았다" \
+      || no "mock codex가 호출되지 않았다(sentinel 부재) — 산출물이 codex 없이 조작됐을 수 있다"
+    rm -f "$RPAY" "$ROUT" "$SENTINEL"
   fi
   rm -rf "$RUNBIN"
 fi
