@@ -59,6 +59,7 @@
   **세 축 전부 산문이라 틀려도 소리가 나지 않는다.** 락은 자기 regex 밖을 못 보므로 이 오류들은 리뷰어의 눈이 유일한 그물이다.
 - **Korean-primary** — 주석·문서는 한국어 primary. 영어는 식별자·고유명사·기술어에 한정.
 - **파일 읽기는 명시적 UTF-8** — 생성 파일을 읽는 모든 파이썬 코드는 `encoding="utf-8"` 을 명시한다 (non-UTF-8 locale fail-open 방지).
+- **실패 마커는 텍스트 «앞»에 온다 — `'<본문>.*✗'` 는 절대 매치되지 않는다.** `shared/tests/assert.sh` 의 `no()` 는 `printf '  ✗ %s\n'` 이다. 그래서 특정 단언만 세려고 `grep -c '<라벨>.*✗'` 라고 쓰면 **언제나 0** 이고, 그 0 이 「그 단언이 안 죽었다」로 읽힌다 — 거짓 GREEN 이다. 정본은 `grep '<라벨>' | grep -c '✗'` (또는 `grep -cE '✗.*<라벨>'`). *실측 근거: Task 5 의 M6 계수식이 이 버그를 갖고 있었고, 구현자가 옛 기대값을 맞추려고 정본 문서를 편집하던 원인이 그 잘못된 눈금이었다.* 라벨 없는 `grep -c '✗'` (전체 실패 수)는 이 버그가 없다 — 다만 **어느 단언이 죽었는지를 못 가린다.**
 - **mutation 실행 환경** — `PYTHONDONTWRITEBYTECODE=1` 로 돌린다. 같은 길이 변이가 stale `.pyc` 를 못 넘어 거짓 GREEN/거짓 RED 를 낸다.
 - **락은 토큰의 «공존»이 아니라 «관계»를 건다.** 서로 다른 `grep -q` 를 `&&` 로 묶은 단언은 그 토큰들이 **같은 구성물 안에** 있다는 것을 재지 않는다 — 절 본문 어디에든 흩어져 있으면 통과한다. 정본은 **한 줄 안에서 관계를 요구하는 단일 정규식**이다. *실측 근거: Task 4 의 Step 5 단언이 `stall_episode` · `coverage_mapper_dispatched_episode` · `!=` 를 각각 grep 했는데, **같은 절에 계획이 직접 넣은 반례 설명문**(`3 != 4`)과 대입문이 셋을 전부 만족시켜 조건식을 지운 mutation 이 거짓 GREEN 을 냈다.* 계획이 그 절에 넣는 산문이 스스로 락을 무력화할 수 있으므로 특히 위험하다.
   **판별법** — 그 단언을 만족시키는 «가짜» 본문을 한 문장 지어보라. 지어지면 이빨이 없다.
@@ -735,7 +736,7 @@ git checkout -- "$SK"
 #     GREEN 이면 스코프가 이빨의 출처임이 증명된다. 확인 후 즉시 되돌린다.
 sed -i '' 's/<<<"\$exit_block"/"${CI_ALL[@]}"/g' "$T"
 awk '/^### 나가는 문은 floor 뒤에만/{skip=1} /^## /{skip=0} !skip' "$SK" > /tmp/m6 && cp /tmp/m6 "$SK"
-bash "$T" </dev/null | grep -c 'floor 탈출구.*✗'
+bash "$T" </dev/null | grep 'floor 탈출구' | grep -c '✗'
 git checkout -- "$SK" "$T"
 ```
 Expected: M5 는 `✗` 1건 이상, M6 는 `0`(전-파일이면 안 잡힌다). **M6 가 0 이 아니면 스코프가 이빨의 출처가 아니므로 다른 어휘를 골라야 한다.**
@@ -983,7 +984,7 @@ git checkout -- "$T" plugins/spec-distill/README.md
 
 # M9 양성 대조 하한 — 별칭 정규식을 깨뜨린다 → «잔존 0» 이 아니라 RED 여야 한다
 sed -i '' "s/ALIAS_RE='probe_budget/ALIAS_RE='zzz_no_such_token/" "$T"
-bash "$T" </dev/null | grep -c '양성 대조.*✗'
+bash "$T" </dev/null | grep '양성 대조' | grep -c '✗'
 git checkout -- "$T"
 ```
 Expected: M7 은 `✗` ≥1, M8 은 `0`(제외가 이빨을 먹는다는 증명), M9 는 `1`. **M9 가 0 이면 정규식이 깨져도 「잔존 0」으로 읽히는 fail-open 이다.**
