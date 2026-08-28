@@ -527,26 +527,50 @@ grep -qF '원문 보존은 **관례가 아니라 요구**입니다' <<<"$stepa_f
 # 의미보존 관용을 안 준다**(코디네이터 판단, round 3): 공식의 정확한 텍스트가 계약이고
 # 재작성은 조용히 통과가 아니라 눈에 띄어 재승인받아야 한다 — 리라이트 관용은 공식을
 # 감싸는 **산문**에만 남는다(rewrap·문단 순서 교체·yaml 블록 위치 이동은 여전히 green).
-# `stmt_block`(SKILL.md `## 사용자 발화 기록` 스코프, :435 기존 변수 재사용)에서
+# fix round 4: round 3 의 「전체 표현식 일치」는 스코프 안의 **첫 매치 하나만** 뽑아
+# 비교했다(`grep … | head -1`, `${stepa_flat#*최초 요청 원문 있으면}` 둘 다 첫 출현을
+# 취한다). 그래서 정본 텍스트를 진짜 규칙 **앞자리에** 심어두고 뒤의 진짜를 고치면
+# 추출기가 미끼를 읽고 두 파일 모두 GREEN 을 유지한다 — 재리뷰가 실측으로 재현했다.
+# 「첫 매치가 이긴다」는 **문서가 그 규칙을 진술하는가**를 묻는 자리에서 틀린 추출이다.
+# 그래서 존재가 아니라 **개수까지** 건다: 앵커는 스코프 안에 **정확히 한 번**만 나와야
+# 하고, 그 유일한 출현이 정본과 일치해야 한다. 두 번째 출현은 그 자체로 결함이다 —
+# 두 번 진술된 규칙은 자기 자신과 어긋날 수 있으므로, 미끼든 무해해 보이는 복사본이든
+# 같은 이유로 red 다. 개수가 1 이면 「첫 매치」와 「그 매치」가 같아져 위치 의존이
+# 사라지므로 `head -1` 은 없앤다. 스코프 자체를 복제하는 우회(같은 헤딩을 하나 더 만들어
+# awk 윈도우를 두 덩어리로 만드는 것)도 같은 개수로 잡힌다 — 두 블록이 한 텍스트로 접히며
+# 앵커가 2가 된다. 개수 0(앵커 자체가 사라짐)도 red 다 — 진공 통과를 막는 하한이다.
+#
+# **공시 — 이 단언이 못 잡는 것**: 정본을 그대로 둔 채 그 **뒤에** 그것을 부정하는 문장을
+# 덧붙이는 우회(「정정: 실제로는 오프셋을 더하지 않는다」)는 잡히지 않는다. 추출이 정본
+# 절에서 끝나므로 그 뒤의 산문은 읽히지 않는다. 부정문이 앵커 문구를 다시 쓰면 개수가 2가
+# 돼 red 가 되지만, 앵커를 피해 쓴 부정문은 보이지 않는다 — **부분 커버리지다.** 이건 이
+# 파일의 리터럴 락 전체가 공유하는 성질이고(R-L 4종·`AskUserQuestion(`·'확정하고 /compact
+# 후 brainstorming' 전부 같다), 부정 어휘 블랙리스트는 대상만 옮겨 재발하는 whack-a-mole
+# 이라 만들지 않는다 — 의미 차원의 적대적 재작성은 grep 락이 아니라 adversarial/codex
+# 리뷰가 잡는 층이다. 여기서는 **막지 않고 드러낸다**.
+#
+# 추출: `stmt_block`(SKILL.md `## 사용자 발화 기록` 스코프, :435 기존 변수 재사용)에서
 # `id: S<N>` 줄을 골라 첫 `#` 뒤를 취하고, `stepa_flat`(finishing.md Step A 스코프,
 # 위에서 이미 flatten+squeeze한 변수)에서 "최초 요청 원문 있으면"부터 다음 `(` 직전까지를
 # 취한다 — 둘 다 공백만 trim/squeeze하고 그 외엔 손대지 않는다.
-skill_formula_line="$(grep 'id: S<N>' <<<"$stmt_block" | head -1)"
+skill_anchor_n="$(grep -oF 'id: S<N>' <<<"$stmt_block" | wc -l | tr -d ' ')"
+skill_formula_line="$(grep -F 'id: S<N>' <<<"$stmt_block")"
 skill_formula_comment="${skill_formula_line#*#}"
-skill_formula_comment="$(printf '%s' "$skill_formula_comment" | tr -s ' ')"
+skill_formula_comment="$(printf '%s' "$skill_formula_comment" | tr '\n' ' ' | tr -s ' ')"
 skill_formula_comment="$(printf '%s' "$skill_formula_comment" | sed -e 's/^ *//' -e 's/ *$//')"
 skill_formula_canon='N = user_statements.length + 1 + (최초 요청 원문 있으면 1, 없으면 0 — finishing.md S1 예약과 합의)'
-[[ "$skill_formula_comment" == "$skill_formula_canon" ]] \
-  && ok "R-M: SKILL.md id 공식이 정본과 end-to-end 일치 (부분 추가·삽입도 잡음)" \
-  || no "R-M: SKILL.md id 공식이 정본과 다르다 (got: [$skill_formula_comment])"
+{ [[ "$skill_anchor_n" -eq 1 ]] && [[ "$skill_formula_comment" == "$skill_formula_canon" ]]; } \
+  && ok "R-M: SKILL.md id 공식이 스코프 안에 정확히 1회 + 정본과 end-to-end 일치" \
+  || no "R-M: SKILL.md id 공식이 «스코프 안 1회 + 정본 일치»를 깬다 (n=$skill_anchor_n got: [$skill_formula_comment])"
 
+fin_anchor_n="$(grep -oF '최초 요청 원문 있으면' <<<"$stepa_flat" | wc -l | tr -d ' ')"
 fin_formula_raw="${stepa_flat#*최초 요청 원문 있으면}"
 fin_formula_clause="최초 요청 원문 있으면${fin_formula_raw%%(*}"
 fin_formula_clause="$(printf '%s' "$fin_formula_clause" | sed -e 's/[[:space:]]*$//')"
 fin_formula_canon='최초 요청 원문 있으면 1, 없으면 0 을 더해 SKILL.md `사용자 발화 기록`의 번호 공식과 합의합니다'
-[[ "$fin_formula_clause" == "$fin_formula_canon" ]] \
-  && ok "R-M: finishing.md 오프셋 절이 정본과 end-to-end 일치 (부분 추가·삽입도 잡음)" \
-  || no "R-M: finishing.md 오프셋 절이 정본과 다르다 (got: [$fin_formula_clause])"
+{ [[ "$fin_anchor_n" -eq 1 ]] && [[ "$fin_formula_clause" == "$fin_formula_canon" ]]; } \
+  && ok "R-M: finishing.md 오프셋 절이 Step A 안에 정확히 1회 + 정본과 end-to-end 일치" \
+  || no "R-M: finishing.md 오프셋 절이 «Step A 안 1회 + 정본 일치»를 깬다 (n=$fin_anchor_n got: [$fin_formula_clause])"
 
 grep -qF '`S1`이 아니라 `S2`부터 시작합니다' <<<"$stepa_flat" \
   && ok "R-M: 원문 있으면 user_statements id가 S1이 아니라 S2부터 시작한다는 명시 (한 문장 결속)" \
