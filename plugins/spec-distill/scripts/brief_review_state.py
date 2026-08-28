@@ -15,8 +15,10 @@
   - **상한 불변식**: 어떤 전이도 2를 초과시키지 않는다. 따라서 3 이상은 도달 불가능한
     손상 상태이며 **2로 clamp + advisory**한다(escalate로 수렴 — 덜 진행하는 쪽이 안전).
 
-fail-closed 규율은 `probe_budget.py`와 동일하다: state가 unreadable/absent이면
-mutating 서브커맨드는 exit 1이고, 카운터 라인을 silent-create하지 않는다(`init`만 생성).
+fail-closed 규율: state가 unreadable/absent이면 silent-create 하지 않고 exit 1 + JSON 으로
+사유를 낸다. 「기록이 없다」와 「degrade 가 없다」는 다른 사실이므로, 쓰기 실패를 조용히
+삼키면 원장이 비어 있는 것이 «깨끗함»으로 읽힌다. mutating 서브커맨드는 카운터 라인을
+silent-create하지 않는다(`init`만 생성).
 같은 규율이 **존재하지만 값이 비어 있는 라인**(`key:` 뒤 같은 줄에 내용이 없는 malformed
 상태)에도 적용된다 — absent(라인 자체가 없음, `migrated` + in-memory default)와는 다른
 사실이므로 default로 조용히 승격하지 않고 raise한다(`parse()`/`_set_scalar()` 참고).
@@ -79,8 +81,8 @@ def _frontmatter_bounds(text: str) -> tuple[int, int]:
 def parse(text: str) -> dict:
     """세 키를 읽는다. **부재**는 default + `migrated` 열거(쓰지 않는다) — §5.7 migration
     계약. **존재하지만 값이 비어 있음**(콜론 뒤 같은 줄에 내용이 없음)은 부재와 다른 사실이며
-    fail-closed다(ValueError) — probe_budget.py의 '존재하지만 비-정수 → ValueError' 규율과
-    동일: malformed 입력을 조용히 '예산 내'/default로 읽으면 안 된다. 특히 brief_critic_rounds가
+    fail-closed다(ValueError) — 존재하지만 비-정수인 값은 0 으로 강등하지 않는다. 강등하면
+    손상된 원장이 정상 원장과 구별되지 않는다. 특히 brief_critic_rounds가
     비어 있는데 0으로 읽으면 escalate 루프-가드 방향으로 fail-OPEN(실제로는 알 수 없는 상태인데
     재dispatch를 계속 허용)이 되므로 반드시 raise한다.
 

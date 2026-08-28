@@ -172,8 +172,6 @@ grep -q 'drafting-spec' "${CI_ALL[@]}" && no "AC10: drafting-spec still referenc
 
 # --- v0.22.0: 커버리지 상태 스키마 + 마이그레이션 (AC1/AC5) ---
 has 'coverage:' "AC1: coverage ledger in state schema"
-has 'probe_count' "AC1: probe_count counter in state schema"
-has 'probe_cap_override' "AC1: probe_cap_override in state schema"
 has 'no_progress_streak' "AC1: orchestration.no_progress_streak in schema"
 has 'blind_spot_dispatched' "AC1: orchestration.blind_spot_dispatched in schema"
 # v0.37.0: probe 카운터를 지우면서 coverage-mapper 재dispatch 바운드가 함께 사라지지
@@ -191,25 +189,23 @@ grep -q 'pending_locked_decisions' "${CI_ALL[@]}" \
 has 'user_statements' "AC1: user_statements가 state 스키마에 존재"
 # AC5: 마이그레이션 — 구세션 감지 + fresh seed + advisory
 has 'coverage.*부재|coverage 부재|interview_round.*존재' "AC5: legacy detection (interview_round present / coverage absent)"
-has 'state schema migration.*coverage|coverage/probe_count added' "AC5: migration advisory wording"
+has 'state schema migration.*coverage' "AC5: migration advisory wording"
 mig_block="$(awk '/^## In-flight state migration/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
-{ grep -qi 'probe_count' <<<"$mig_block" && grep -qiE '승계 금지|라운드 수는 probe 수가 아니' <<<"$mig_block"; } \
-  && ok "AC5: probe_count seeded fresh (not from interview_round)" \
-  || no "AC5: probe_count seeded fresh (not from interview_round)"
 # v0.37.0(R-I): migration 절도 orchestration 열거를 담고 있다 — 필드 교체를 소유한
-# 태스크가 그 필드의 모든 자리를 책임진다. 음의 단언만 쓰지 않는다: `! grep -q
-# 'coverage_mapper_last_probe'` 단독은 mig_block 이 통째로 사라져도 통과한다(부재 락은
-# 대상을 지우면 항상 만족된다). 양의 두 grep 이 그 공허참을 막는다.
-{ grep -q 'stall_episode' <<<"$mig_block" \
-  && grep -q 'coverage_mapper_dispatched_episode' <<<"$mig_block" \
-  && ! grep -q 'coverage_mapper_last_probe' <<<"$mig_block"; } \
-  && ok "AC5(v0.37.0): migration 절의 orchestration 열거가 에피소드 필드 둘 (구 필드 없음)" \
-  || no "AC5(v0.37.0): migration 절의 orchestration 열거가 에피소드 필드 둘 (구 필드 없음)"
+# 태스크가 그 필드의 모든 자리를 책임진다. Task 6(probe 스윕)이 옛 단일 필드 리터럴을
+# 이 파일에서 지우면서, 그 리터럴로 부재를 확인하던 이 assertion도 함께 다시 써야 했다
+# (그 리터럴 자체가 probe 계열 별칭 oracle에 걸린다 — 남기면 잔존 락이 이 파일을 영구히
+# residue로 본다). 음의 grep 대신 **정확히 일치**하는 전체 열거 리터럴을 요구한다 —
+# 에피소드 필드 둘로 정확히 끝나는 열거만 통과하므로 옛 필드가 끼어들거나(추가) 대체돼도
+# (치환) 이 리터럴과 달라져 RED다. 부분 토큰 공존이 아니라 **열거 전체의 동일성**이 이빨이다.
+{ grep -qF '`orchestration`: `{focused_dimension: null, no_progress_streak: 0, blind_spot_dispatched: false, stall_episode: 0, coverage_mapper_dispatched_episode: null}`' <<<"$mig_block"; } \
+  && ok "AC5(v0.37.0): migration 절의 orchestration 열거가 정확히 에피소드 필드 둘로 끝난다 (구 단일 필드 없음)" \
+  || no "AC5(v0.37.0): migration 절의 orchestration 열거가 정확히 에피소드 필드 둘로 끝난다 (구 단일 필드 없음)"
 
-# Unbounded-autonomy backstop fail-open fix: migration must persist BEFORE the first probe/
-# increment — probe_budget.py's increment/raise-cap fail-closed (exit 1) when the counter
-# line is absent, and never silent-create it (GC-race safety). Deferring persistence to "the
-# next explicit state write" leaves probe_count off disk while the backstop is bypassed.
+# Unbounded-autonomy backstop fail-open fix: migration must persist BEFORE the first probe.
+# Deferring persistence to "the next explicit state write" leaves coverage/orchestration
+# fields off disk while the coverage-mapper redispatch bound (episode-field comparison,
+# scoped assertion below) reads them.
 grep -qE '첫 probe.*먼저' <<<"$mig_block" \
   && ok "AC5/backstop: migration persists before first probe (scoped to In-flight state migration)" \
   || no "AC5/backstop: migration persists before first probe (scoped to In-flight state migration)"
@@ -221,42 +217,20 @@ grep -q 'interview_round' <<<"$schema_block" \
   && no "V7b: interview_round still an active schema field" \
   || ok "V7b: interview_round removed from active state schema"
 
-# --- v0.22.0: 커버리지 종료 루프 + probe 백스톱 (G1/AC2/AC4/C1/C10) ---
-has 'probe_budget\.py' "AC4: probe backstop calls probe_budget.py"
-has 'probe_budget\.py"? check' "C10: check gate before posing a probe"
-has 'probe_budget\.py"? increment' "C10: increment after posing a probe"
-has 'probe_budget\.py"? raise-cap' "C1: raise-cap on '계속' escalation"
+# --- v0.22.0: 커버리지 종료 루프 (G1/AC2) ---
 has 'floor.*(closed|전부.*closed|모두.*closed)' "G1/AC2: termination = floor all closed"
 has 'Coverage Ledger' "AC2/C9: brief Coverage Ledger serialization"
 has '8-section|8-섹션|8 섹션' "AC10: Step A가 8섹션 템플릿을 참조"
 
-# AskUserQuestion 및 3옵션 어휘(박제/abort/계속)는 이미 Step B 핸드오프 게이트·kill switch
-# 안내에도 등장 — 전-파일 grep은 새 probe 백스톱 섹션이 없어도 satisfied돼 teeth가 없다
-# (feedback_grep_lock_header_satisfiable). "## probe 백스톱" 섹션으로 스코프.
-backstop_block="$(awk '/^## probe 백스톱/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
-grep -qi 'AskUserQuestion' <<<"$backstop_block" \
-  && ok "AC4: cap escalation uses AskUserQuestion (scoped to probe 백스톱)" \
-  || no "AC4: cap escalation uses AskUserQuestion (scoped to probe 백스톱)"
-{ grep -q '계속' <<<"$backstop_block" && grep -qi '박제' <<<"$backstop_block" && grep -qi 'abort' <<<"$backstop_block"; } \
-  && ok "C1: 3-option escalation semantics (계속/박제/abort, scoped to probe 백스톱)" \
-  || no "C1: 3-option escalation semantics (계속/박제/abort, scoped to probe 백스톱)"
-# C5 fail-open fix: 소비자가 increment의 fail-closed exit(1)를 반드시 확인해야 한다(web_budget:270
-# 과 대칭). bare `increment "$STATE"`(exit 무시)면 카운터 부재 시 전진 못해 check가 영원히 통과 →
-# 백스톱 무력(fail-open). teeth: 가드를 bare increment로 되돌리면 grep -F가 RED. "## probe 백스톱" 스코프.
-grep -qF 'increment "$STATE" ||' <<<"$backstop_block" \
-  && ok "C5: probe increment exit is checked (|| guard, scoped to probe 백스톱)" \
-  || no "C5: probe increment exit is checked (|| guard, scoped to probe 백스톱)"
-grep -qi 'increment 실패' <<<"$backstop_block" \
-  && ok "C5: increment-fail loud advisory present (scoped to probe 백스톱)" \
-  || no "C5: increment-fail loud advisory present (scoped to probe 백스톱)"
-
 # v0.37.0: probe cap 이 사라지면 그 escalation 의 3옵션도 함께 사라진다. 새 탈출구는
 # 발동 조건만 다르고(카운터 → 사용자 발화) 존재해야 하는 것은 같다.
 #
-# **awk 윈도우로 스코프한다** — `박제` 어휘가 이 파일의 다른 절(probe 백스톱 · Step B 게이트
-# 안내 · kill switch)에도 선재하므로 전-파일 grep 은 이 경로가 통째로 사라져도 satisfied 되어
-# teeth 가 0 이다(feedback_grep_lock_header_satisfiable, 같은 파일의 backstop_block 이 같은
-# 이유로 스코프됐다).
+# **awk 윈도우로 스코프한다** — `박제` 어휘가 이 파일의 다른 절(Step B 게이트 안내 ·
+# kill switch)에도 선재하므로 전-파일 grep 은 이 경로가 통째로 사라져도 satisfied 되어
+# teeth 가 0 이다(feedback_grep_lock_header_satisfiable). probe 백스톱 절은 Task 6 이
+# 지워 더는 존재하지 않으므로 선재 목록에서 뺐다 — 지운 절을 계속 인용하면 거짓 인용이
+# 된다(같은 이유로 이 스위트 자신이 그 절을 스코프하던 backstop_block 정의·단언도 함께
+# 지웠다).
 #
 # **토큰 공존이 아니라 관계를 건다** (context §③ — Task4 의 coverage-mapper 락이 같은 형태로
 # 거짓 GREEN 을 냈다: 세 토큰을 각각 독립 grep 하면, 처분(evidence 리터럴)·행선지(§3 이월
@@ -341,11 +315,21 @@ grep -qE '연속 3 probe|no_progress' <<<"$covmap_block" \
 # 줄 단위로 grep하지 않고 backtick 페어로 구획을 나눠 **각 코드 스팬 안의 개행만** 공백으로
 # 접는다(그 스팬 밖 줄바꿈은 건드리지 않는다) — 조임(관계 전체)과 관대함(레이아웃)을
 # 맞바꾸지 않는다.
-code_spans="$(awk 'BEGIN{RS="`"} NR%2==0{gsub(/\n/," "); print}' <<<"$covmap_block")"
+#
+# Task 6(R-J 이월): 위 code_spans는 **절 전체**에서 backtick 스팬을 모으므로 «관계가 어느
+# 스팬에든 존재하는가»만 본다 — 그 스팬이 **실제 판정문인지**는 안 본다. 실증(reviewer
+# 재현): 진짜 조건식을 `AND`→`OR`로 defang하고, 절 안 다른 곳(예: 반례 설명 문단)에 옛
+# AND 문구를 backtick 예시로 남겨두면 이 절이 이미 반례 설명 문단을 갖고 있어 그 미끼가
+# 자연스럽게 생기고, 스위트 전체가 GREEN이 된다(M12). 그래서 검사 대상을 **판정문이 사는
+# 단락**(직전 줄이 `**redispatch 바운드`로 시작하는 문단, 빈 줄 경계)으로 먼저 좁히고,
+# 그 문단 안의 backtick 스팬에서만 관계를 찾는다 — 절 전체의 다른 문단에 있는 스팬은
+# 후보에서 아예 빠진다.
+judgment_para="$(awk -v RS='' '/^\*\*redispatch 바운드/' <<<"$covmap_block")"
+code_spans="$(awk 'BEGIN{RS="`"} NR%2==0{gsub(/\n/," "); print}' <<<"$judgment_para")"
 { grep -qE 'no_progress_streak[[:space:]]*>=[[:space:]]*3[[:space:]]+AND[[:space:]]+coverage_mapper_dispatched_episode[[:space:]]*!=[[:space:]]*stall_episode' <<<"$code_spans" \
   || grep -qE 'coverage_mapper_dispatched_episode[[:space:]]*!=[[:space:]]*stall_episode[[:space:]]+AND[[:space:]]+no_progress_streak[[:space:]]*>=[[:space:]]*3' <<<"$code_spans"; } \
-  && ok "C11(v0.37.0): 재dispatch 바운드가 «임계값 AND 에피소드 비교» 관계 전체 (scoped, rewrap-tolerant)" \
-  || no "C11(v0.37.0): 재dispatch 바운드가 «임계값 AND 에피소드 비교» 관계 전체 (scoped, rewrap-tolerant)"
+  && ok "C11(v0.37.0): 재dispatch 바운드가 «임계값 AND 에피소드 비교» 관계 전체 (판정문 단락에 앵커, rewrap-tolerant)" \
+  || no "C11(v0.37.0): 재dispatch 바운드가 «임계값 AND 에피소드 비교» 관계 전체 (판정문 단락에 앵커, rewrap-tolerant)"
 # 조건 2 의 «유한성 근거» — 이것이 없으면 그 조건이 «바운드 밖»인지 «바운드 불필요»인지
 # 구별되지 않는다. 지금까지 어디에도 없었다.
 grep -qE 'floor 다섯 차원으로 고정|상한이 5' <<<"$covmap_block" \

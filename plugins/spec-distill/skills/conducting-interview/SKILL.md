@@ -47,8 +47,6 @@ orchestration:                       # C11/C8 across-resumption 상태 (orchestr
   blind_spot_dispatched: false       # C8 인터뷰당 1회 보장; 첫 dispatch 시 true
   stall_episode: 0                   # streak 이 0 으로 reset 될 때마다 +1. 정체 «구간»의 id
   coverage_mapper_dispatched_episode: null   # 마지막 dispatch 가 일어난 에피소드 id
-probe_count: 0                       # C10 probe 백스톱 카운터 (probe 제기 *후* +1)
-probe_cap_override: 0                # C1 '계속'이 base cap(12)만큼 raise
 non_user_streak: <int>
 rereview_count: 0
 trivia_escape_armed: false
@@ -170,52 +168,6 @@ STATE="$ROOT/<session-id>/state.local.md"
 `non_user_streak >= DEVBREW_SPEC_DISTILL_RHYTHM_GUARD_THRESHOLD` (default 3) 도달 시:
 
 → 다음 probe의 질문은 **반드시 (b) judgment path** (사용자에게 직접 질문)로 라우팅. 강제.
-
-## probe 백스톱 (C1/C10 — Unbounded-autonomy 가드)
-
-floor 미충족이면 종료가 막히므로 probe가 무한히 돌 수 있다. `probe_budget.py`가 이를 기계적으로
-bound한다(프로즈 self-tracking 금지). **원자성**: probe(= (b)/(d)-path 질문 1회)를 조립하기
-*전에* `check`(gate)를 호출하고, 질문을 실제로 제기한 *후에만* `increment`한다.
-
-```bash
-ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/state_path.py" state-root)"
-STATE="$ROOT/<session-id>/state.local.md"
-# 1) probe 조립 전 gate (check가 유일한 gate — C10)
-if python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" check "$STATE"; then
-  # gate 통과 → (b)/(d) 질문을 실제로 제기하고 답을 받는다
-  # <질문 제기 + 답 수신>
-  # 2) 질문을 제기한 *후에만* increment (phantom 증가 없음 — C10 원자성)
-  #    increment는 fail-closed(exit 1: 카운터 부재/malformed/state unwritable)다. 그 exit를
-  #    반드시 확인한다 — 무시하면 카운터가 전진하지 않아 check가 영원히 통과하고
-  #    백스톱이 조용히 무력화된다(fail-open, Unbounded-autonomy Forbidden Pattern).
-  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/probe_budget.py" increment "$STATE" || {
-    echo "[spec-distill] probe_count increment 실패 — 백스톱 무력화 위험(카운터 부재/malformed/state unwritable). 자동 진행 중단, 상태 재영속화(마이그레이션 persist) 또는 세션 확인 후 재시도." >&2
-    # blocked check와 동일하게 fail-closed 취급 — 다음 probe를 제기하지 말고 아래 C1 escalation으로.
-  }
-else
-  # probe_count >= effective_cap & floor 미충족 → 질문 미제기(increment 안 함),
-  # 아래 C1 escalation(AskUserQuestion 3옵션)으로.
-  :
-fi
-```
-
-`check`가 non-zero(`probe_count ≥ effective_cap`) & floor 미충족이면 **C1 escalation**을 발화한다
-(`AskUserQuestion`, 3옵션):
-
-- **① 계속**: `probe_budget.py raise-cap "$STATE"` — `probe_cap_override`를 base cap(12)만큼 올려
-  `effective_cap = base + override`로 상향(persist) 후 진행.
-- **② 박제 후 종료**: 미충족 floor 행을 `status: closed` + evidence `사용자-승인 박제(@probe N) —
-  §Open Questions 참조`로 기록하고 그 내용을 payload §3 Open Questions로 이동 → 종료 게이트 통과(floor
-  closed)하되 박제 표식이 원장에 가시적(silent bypass 아님).
-- **③ abort**: brief 미작성, state 보존.
-
-`increment`는 질문 제기 후에만 호출돼 phantom 증가가 없다(gate에서 막힌 probe는 카운트 안 됨).
-`increment`는 gate하지 않는다 — gating은 오직 `check`(C10 원자성). 단 `increment`의 exit는
-반드시 확인한다: fail-closed(exit 1) 시 카운터가 디스크에 전진하지 못한 것이므로 자동으로 다음
-probe를 제기하지 말고 fail-closed로 처리한다(위 `|| {…}` 가드). 이 exit를
-버리면 백스톱이 조용히 무력화된다.
-
-kill switch: `DEVBREW_SPEC_DISTILL_PROBE_CAP=N` 으로 base cap override.
 
 ## coverage-mapper dispatch (C11)
 
@@ -391,8 +343,6 @@ state.local.md 로드 시 **구세션 스키마**(`interview_round` 존재 / `co
 - `coverage.floor`의 5개 차원(root_problem/landscape/skepticism/blind_spot/open_questions) 전부
   `{status: open, evidence: ""}`로 seed.
 - `coverage.derived`: `[]`.
-- `probe_count`: **0** (interview_round 값 승계 금지 — 라운드 수는 probe 수가 아니다).
-- `probe_cap_override`: `0`.
 - `orchestration`: `{focused_dimension: null, no_progress_streak: 0, blind_spot_dispatched: false, stall_episode: 0, coverage_mapper_dispatched_episode: null}`.
 
 기존 필드(`non_user_streak`·`web_*`·`issue_history` 등)는 유지. 구세션의 라운드별 잠금
@@ -400,20 +350,23 @@ state.local.md 로드 시 **구세션 스키마**(`interview_round` 존재 / `co
 seed합니다 — 잠금 레코드를 발화 레코드로 승격하면 판정이 없던 척하는 잠금이 그대로
 넘어옵니다.
 
-**영속화 시점**: 승격된 스키마는 재개된 세션의 첫 액션으로, 첫 probe나 `probe_budget.py increment`/`raise-cap` 호출보다 먼저 Bash 전체-frontmatter write로 즉시 디스크에 반영한다(PN1 state write contract). 이 write는 "다음 명시적 state write"를 기다리지 않는다 — 연기가 아니라 resume 직후 1회다.
+**영속화 시점**: 승격된 스키마는 재개된 세션의 첫 액션으로, 첫 probe보다 먼저 Bash
+전체-frontmatter write로 즉시 디스크에 반영한다(PN1 state write contract). 이 write는
+"다음 명시적 state write"를 기다리지 않는다 — 연기가 아니라 resume 직후 1회다.
 
-근거: `increment`/`raise-cap`은 카운터 라인이 부재하면 fail-closed(exit 1, silent-create
-금지)이므로, 이 write 없이는 `probe_count`가 디스크에 없는 채로 첫 probe가 발생해 백스톱이
-무력화된다.
+근거: coverage-mapper 재dispatch 바운드(`## coverage-mapper dispatch`)는 `orchestration`의
+두 에피소드 필드(`stall_episode`·`coverage_mapper_dispatched_episode`)를 디스크에서 직접
+비교한다 — 이 write 없이는 그 필드들이 디스크에 없는 채로 첫 probe가 발생해 판정이 무상태
+재계산 전제를 잃는다.
 
-이 write는 신규 필드(coverage/probe_count/probe_cap_override/orchestration)만 추가하는
-forward promotion이며 backward-rewrite가 아니다 — `interview_round`는 이 write에서 자연
-소멸하되 다른 기존 필드는 고치지 않는다. backward-rewrite 금지·P14 실패-상태 보존과
-무충돌: 이것은 성공적 resume의 promotion write이지 실패-상태 mutation이 아니다.
+이 write는 신규 필드(coverage/orchestration)만 추가하는 forward promotion이며
+backward-rewrite가 아니다 — `interview_round`는 이 write에서 자연 소멸하되 다른 기존
+필드는 고치지 않는다. backward-rewrite 금지·P14 실패-상태 보존과 무충돌: 이것은 성공적
+resume의 promotion write이지 실패-상태 mutation이 아니다.
 
 사용자에게 advisory 한 줄 출력:
 ```
-[spec-distill v0.22.0] state schema migration: coverage/probe_count added (interview_round retired).
+[spec-distill v0.37.0] state schema migration: coverage/orchestration added (probe counters retired).
 ```
 
 자동 promote 실패 시(파일 corruption 등) → "구세션 in-flight state 호환 실패 — 세션 재시작 권장"
