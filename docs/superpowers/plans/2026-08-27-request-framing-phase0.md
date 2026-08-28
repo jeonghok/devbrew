@@ -965,6 +965,13 @@ mutation 축 하나를 더한다:
 #      → RED 여야 한다. (Task 4 시점에는 GREEN 이었다.)
 ```
 
+> **착지본은 이 초안과 다르다 (Task 6 실행 기록).** 실행 중 리뷰가 세 가지를 요구했고
+> 락이 그만큼 자랐다 — ① 개념명 근접 스캔(`CONCEPT_RE`) 추가 ② 자기지시 제외를 `all_hits` 와
+> vacuity 하한 **양쪽**에 ③ 「이 oracle 이 못 보는 것」에 *줄을 떼어 쓰거나 다른 말로 바꿔 쓴
+> 부활은 못 본다* 는 잔여 축 공시. **정본은 이제 초안이 아니라 파일**
+> (`plugins/spec-distill/tests/test_probe_sweep_residue.sh`)이다 — 재실행할 때 이 초안을
+> 그대로 덮어쓰지 말 것.
+
 - [ ] **Step 8: mutation — 단측 락에 이빨이 있는가**
 
 ```bash
@@ -1108,6 +1115,25 @@ Expected: 순수 `[미평가]` **4건** + 합성 `[중립·미평가]` 1건 (202
 ### Added
 - `finishing.md` 에 최초 요청 원문(`$ARGUMENTS`)을 §6 `S1` 로 보존하는 요구. 지금까지는 관례였다.
 - `tests/test_probe_sweep_residue.sh` — 스윕 완결성의 단측 단언.
+```
+
+- [ ] **Step 4-b: 잔존 락의 양성 대조를 «계열별»로 쪼갠다 (이월 R-K)**
+
+Task 6 이 만든 `plugins/spec-distill/tests/test_probe_sweep_residue.sh` 는 두 정규식
+(식별자 열거 `ALIAS_RE` · 개념명 근접 `CONCEPT_RE`)을 합친 `SCAN_RE` 하나로 스캔하고,
+**양성 대조도 그 합본 하나만 깨뜨린다.** 그래서 한쪽만 깨지면(오타 하나면 충분하다) 다른
+쪽이 여전히 잡아 양성 대조가 통과하고, **깨진 계열의 파손이 조용히 지나간다.**
+실측(Task 6 재리뷰): `ALIAS_RE` 만 깨뜨려도 GREEN 이다.
+
+양성 대조를 **계열마다 하나씩** 둔다 — `ALIAS_RE` 만 깨뜨린 케이스와 `CONCEPT_RE` 만
+깨뜨린 케이스가 **각각** RED 를 내야 한다. 이것은 "부재 락엔 양의 짝이 필요하다"의
+두 번째 층이다: 짝이 하나뿐이면 **합집합**만 지키고 각 항은 안 지킨다.
+
+mutation 축 둘:
+
+```bash
+# M13 — ALIAS_RE 만 매칭 안 되는 토큰으로 치환 → RED 여야 한다
+# M14 — CONCEPT_RE 만 매칭 안 되는 토큰으로 치환 → RED 여야 한다
 ```
 
 - [ ] **Step 5: PR1 전수 확인**
