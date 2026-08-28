@@ -194,6 +194,77 @@ class TestDegradationRecord(Base):
         rc, _, _ = self.append(status="retried")
         self.assertNotEqual(rc, 0)
 
+    def test_suppression_is_a_valid_axis(self):
+        """AXES에 suppression이 없으면 seed 억제 축의 degrade를 기록할 수 없다.
+
+        brief 원안은 `import_module("plugins.spec-distill.scripts...".replace("-", "_"))`로
+        상수를 직접 봤지만, 디렉토리가 하이픈(`spec-distill`)이라 그 치환이 만드는
+        `plugins.spec_distill...` 경로는 존재하지 않아 ModuleNotFoundError가 난다. 이 파일의
+        다른 모든 테스트처럼 subprocess CLI로 확인한다 — suppression이 실제로 쓸 수 있는
+        축인지는 `degrade-append --axis suppression`의 rc로 드러난다."""
+        rc, out, _ = self.append(axis="suppression")
+        self.assertEqual(rc, 0, f"suppression 축이 CLI에서 거부됐다: {out}")
+
+
+class TestLedgerKeyOverride(Base):
+    """--ledger-key — 두 번째 파이프라인(PR3 framing-requests)이 같은 writer를 자기 원장에
+    쓰게 한다. 기본 원장(brief_review_degradations)과 새 원장(framing_degradations)이
+    서로를 오염시키지 않아야 하고, 오타 키는 조용히 새 원장을 만들지 않고 거부돼야 한다."""
+
+    def setUp(self):
+        super().setUp()
+        run("init", str(self.state))
+        # init은 표준 3키만 만든다 — framing_degradations는 PR3 SKILL이 자기 state에
+        # 직접 심는 자리라, 여기서는 그 계약을 픽스처로 흉내낸다. typo_degradations도
+        # 일부러 실재하는 라인으로 심는다 — 그래야 "오타 거부"가 검증이 실제로 막는 것이지
+        # "그 줄이 우연히 없어서" 통과하는 별개 fail-closed 경로의 부수효과가 아님을 확인한다.
+        t = self.state_text().replace(
+            "brief_review_degradations: []",
+            "brief_review_degradations: []\nframing_degradations: []\n"
+            "typo_degradations: []")
+        self.state.write_text(t, encoding="utf-8")
+
+    def append(self, ledger_key, component="critic", axis="suppression",
+               status="degraded", reason="codex 미가동"):
+        return run("degrade-append", str(self.state), "--component", component,
+                   "--reason", reason, "--axis", axis, "--status", status,
+                   "--ledger-key", ledger_key)
+
+    def test_ledger_key_override_writes_to_named_key(self):
+        """--ledger-key가 주어지면 그 키에 append한다(기본값은 불변)."""
+        rc, _, _ = self.append("framing_degradations")
+        self.assertEqual(rc, 0)
+        text = self.state_text()
+        self.assertIn("framing_degradations:", text)
+        self.assertIn("suppression", text)
+        # 기본 키는 건드리지 않는다 — 두 원장이 서로를 오염시키지 않는다.
+        self.assertNotIn("suppression", text.split("brief_review_degradations:")[1]
+                         .split("framing_degradations:")[0])
+
+    def test_unknown_ledger_key_is_rejected(self):
+        """임의 키 생성 금지 — 오타가 조용히 새 원장을 만들면 아무도 안 읽는다."""
+        rc, _, _ = self.append("typo_degradations")
+        self.assertEqual(rc, 1)
+
+    def test_get_with_ledger_key_reads_matching_ledger_not_default(self):
+        """근본 해소의 증거 — write가 새 키로 갔다면 같은 키를 넘긴 get이 그것을 봐야 하고,
+        키 없는 기본 get(브리프 원장)에는 새지 않아야 한다. 쓰기만 파라미터화하고 읽기가
+        KEY_DEGRADE에 남으면 여기서 RED가 난다(§task-9-context.md ③)."""
+        rc, _, _ = self.append("framing_degradations")
+        self.assertEqual(rc, 0)
+        rc, out, _ = run("get", str(self.state), "--ledger-key", "framing_degradations")
+        self.assertEqual(rc, 0)
+        framing = json.loads(out)["brief_review_degradations"]
+        self.assertEqual([r["component"] for r in framing], ["critic"],
+                         "framing_degradations로 쓴 record를 같은 키로 get이 못 읽었다")
+        default = json.loads(run("get", str(self.state))[1])["brief_review_degradations"]
+        self.assertEqual(default, [], "기본 get이 framing 원장의 record를 흡수했다(오염)")
+
+    def test_get_rejects_unknown_ledger_key(self):
+        """읽기 쪽도 닫힌 열거다 — 오타 키로 get하면 빈 리스트가 아니라 실패해야 한다."""
+        rc, _, _ = run("get", str(self.state), "--ledger-key", "typo_degradations")
+        self.assertEqual(rc, 1)
+
 
 class TestBlankValueNewlineHazard(Base):
     """`\\s*`가 콜론 뒤에서 `\\n`을 삼켜 다음 줄의 내용을 이 라인의 값으로 오인하는 클래스의

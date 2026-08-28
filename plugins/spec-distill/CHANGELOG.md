@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.38.0] — 2026-08-28
+
+### Added
+- `scripts/brief_review_state.py`에 `--ledger-key`(닫힌 열거: `brief_review_degradations`·
+  `framing_degradations`, `get`·`degrade-append` 양쪽). 다른 파이프라인이 같은 writer로
+  자기 원장에 쓴다 — 읽기·쓰기·기본값이 `LEDGER_KEYS` 하나를 거친다(리터럴 산개 금지).
+- `AXES`에 `suppression` — seed 억제 축의 degrade record를 위한 `affected_axis` 값.
+
 ## [0.37.0] — 2026-08-28
 
 ### Removed
