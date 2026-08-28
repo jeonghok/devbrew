@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""interview-seed 게이트 — 넷.
+"""interview-seed 게이트 — 다섯.
 
-**seed 본문에 대해서는 전부 부재 검사다.** 존재 검사를 추가하지 않는다: 그것이 payload 를
-양식으로 만들고, 양식이 내용을 미리 판 구멍 모양으로 강제한다 — 이 단계가 막으라고
-만들어진 실패가 그것이다. `tests/test_seed_one_sentence.sh` 가 이 금지를 산문이 아니라
-동작으로 잡는다.
+**seed 본문에 대한 슬롯 존재 검사는 없다.** 답-슬롯 헤딩·태그·URL 셋은 부재 검사다 — 슬롯
+존재 검사를 추가하지 않는다: 그것이 payload 를 양식으로 만들고, 양식이 내용을 미리 판 구멍
+모양으로 강제한다 — 이 단계가 막으라고 만들어진 실패가 그것이다. `tests/test_seed_one_sentence.sh`
+가 이 금지를 산문이 아니라 동작으로 잡는다.
+
+**예외가 하나 있다** — 본문이 비어 있지 않다는 검사(check 0)는 존재 검사이지만 **슬롯이
+아니라 파일 전체에 대한 것**이라 같은 금지에 걸리지 않는다: 빈 파일을 통과시키면 나머지
+세 부재 검사가 전부 vacuous 해진다(부재 검사는 대상이 없으면 항상 만족되므로). 이
+구분(슬롯 vs 파일 전체)이 이 게이트의 경계다 — 슬롯 하나의 존재를 요구하는 검사(특정
+헤딩·특정 필드·최소 길이·최소 절 개수·특정 리터럴 등)는 여전히 금지 위반이고
+`test_seed_one_sentence.sh` 가 그런 추가에는 RED 를 낸다.
 
 audit 쪽 존재 검사는 **원문 보존 하나뿐**이다. 그것은 payload 가 아니라 확산물의 보관소라
 같은 논리가 적용되지 않는다.
-
-빈 seed·공백만 있는 seed 는 아래 세 body 검사를 전부 «만족»시킨다 — 부재 검사는 대상이
-없으면 항상 만족되기 때문이다(부재-only 설계의 고유한 성질이지 결함이 아니다). 그것을
-막는 것은 body 검사의 몫이 아니라 audit 쪽 원문 보존 검사의 몫이다.
 """
 from __future__ import annotations
 
@@ -44,6 +47,11 @@ def gate(seed_path: pathlib.Path, audit_path: pathlib.Path | None) -> list:
 
     body = body_of(text)
 
+    # 0. 본문이 비어 있지 않다 — 유일한 seed 본문 «존재» 검사이고, 슬롯이 아니라
+    #    파일 전체에 대한 것이다. 빈 파일을 통과시키면 나머지 셋이 전부 vacuous 하다.
+    if not body.strip():
+        problems.append("seed 본문이 비어 있다")
+
     # 1. 답-슬롯 헤딩 부재
     for m in ANSWER_SLOT_RE.finditer(body):
         problems.append(f"답-슬롯 헤딩: {m.group(0).strip()!r} — seed 는 공간을 닫지 않는다")
@@ -58,7 +66,8 @@ def gate(seed_path: pathlib.Path, audit_path: pathlib.Path | None) -> list:
     for m in URL_RE.finditer(body):
         problems.append(f"URL: {m.group(0)!r} — 링크로 나르지 말고 말로 옮겨 적는다")
 
-    # 4. 원문 보존 (audit 쪽 «존재» 검사) — 이 게이트에서 유일한 존재 검사다.
+    # 4. 원문 보존 (audit 쪽 «존재» 검사) — 슬롯 존재 검사로는 유일하다
+    #    (파일-전체 검사인 0번과는 범주가 다르다).
     if audit_path is None:
         problems.append("audit 경로가 주어지지 않았다 — 원문 보존을 확인할 수 없다")
     else:
