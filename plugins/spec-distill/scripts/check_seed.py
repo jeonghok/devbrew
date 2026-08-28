@@ -22,6 +22,7 @@ import argparse
 import pathlib
 import re
 import sys
+import unicodedata
 
 # 답-슬롯 헤딩 — 이 넷은 «공간을 닫는» 산출물의 표지다. seed 는 질문을 닫지 않는다.
 ANSWER_SLOT_RE = re.compile(
@@ -30,6 +31,27 @@ ANSWER_SLOT_RE = re.compile(
 TAG_RE = re.compile(r'\[(open|추론|외부)\s*:')
 URL_RE = re.compile(r'https?://')
 FRONTMATTER_RE = re.compile(r'\A---\n.*?\n---\n', re.S)
+
+# check 0(파일 전체 비어있음)이 «비어있음»으로 볼 유니코드 카테고리. 셋을 넣었고 이유는
+# 셋 다 같다 — **화면에 아무 것도 그리지 않는다**:
+#   Cc(제어문자, 개행·탭 등)  Cf(서식문자, BOM U+FEFF·zero-width space U+200B 등 —
+#   `str.isspace()` 가 공백으로 안 쳐서 `.strip()` 이 놓치는 정확한 틈새였다)
+#   Zs/Zl/Zp(공백·줄·문단 분리자, `.strip()` 이 이미 잡던 부분집합 — 명시적으로 포함해
+#   `.strip()` 의 동작에 암묵적으로 기대지 않는다)
+# **뺀 것**: 구두점(P*)·기호(S*)·문자(L*)·숫자(N*)·결합기호(M*) — 이들은 전부 화면에 뭔가를
+# 그린다(구두점만 있는 seed, 예: "??")도 사람이 실제로 쓴 짧은 질문이다 — 존재로 인정해야
+# 한다. Co(사용자 정의)·Cs(서로게이트)·Cn(미할당)은 넣지 않았다 — Co 는 폰트에 따라 실제
+# 아이콘 글리프로 렌더될 수 있어 "안 보인다"고 단정할 수 없고, Cs 는 올바른 UTF-8 텍스트에는
+# 애초에 나타나지 않는다(단독 서로게이트는 인코딩이 안 됨 — `read_text(encoding="utf-8")`
+# 단계에서 이미 걸러진다).
+_INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Zs", "Zl", "Zp"})
+
+
+def visible_content(text: str) -> str:
+    """«내용 없음» 카테고리를 걷어낸 나머지. 남는 게 없으면 사람이 읽을 것이 없다는 뜻이고,
+    그건 특정 문자 두 개(BOM·zero-width space)를 아는 것과 다른 얘기다 — 다음에 나올
+    invisible 문자도 같은 카테고리면 자동으로 잡힌다."""
+    return "".join(ch for ch in text if unicodedata.category(ch) not in _INVISIBLE_CATEGORIES)
 
 
 def body_of(text: str) -> str:
@@ -49,8 +71,11 @@ def gate(seed_path: pathlib.Path, audit_path: pathlib.Path | None) -> list:
 
     # 0. 본문이 비어 있지 않다 — 유일한 seed 본문 «존재» 검사이고, 슬롯이 아니라
     #    파일 전체에 대한 것이다. 빈 파일을 통과시키면 나머지 셋이 전부 vacuous 하다.
-    if not body.strip():
-        problems.append("seed 본문이 비어 있다")
+    #    «비어있음» 판정은 문자 단위가 아니라 카테고리 단위다(`visible_content` 위 주석) —
+    #    BOM(U+FEFF)·zero-width space(U+200B) 처럼 `.strip()` 이 공백으로 안 쳐서 놓치는
+    #    Cf 문자, 그리고 그 사촌들까지 한 번에 잡는다. 구두점만 있는 seed 는 여전히 통과한다.
+    if not visible_content(body):
+        problems.append("seed 본문이 비어 있다 (또는 사람이 읽을 수 없는 문자뿐이다)")
 
     # 1. 답-슬롯 헤딩 부재
     for m in ANSWER_SLOT_RE.finditer(body):
