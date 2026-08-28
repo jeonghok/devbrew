@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.37.0] — 2026-08-28
+
+### Removed
+- `scripts/probe_budget.py` 와 그 전용 테스트·픽스처(`tests/test_probe_budget.sh`,
+  `tests/fixtures/state-probe-at-cap.md`, `tests/fixtures/state-probe-within.md`). 인터뷰
+  질문·라운드에 상한을 두지 않는다 — 질문 루프는 매 반복마다 사용자가 답해야 돌므로 묶을
+  자율이 없다.
+- `DEVBREW_SPEC_DISTILL_PROBE_CAP` kill switch (대상이 사라졌다).
+- `skills/conducting-interview/SKILL.md`의 `## probe 백스톱 (C1/C10 …)` 절과
+  `probe_count`/`probe_cap_override` state 필드 — 아래 coverage-mapper 재dispatch
+  바운드가 이 카운터를 대체한다.
+
+### Changed
+- coverage-mapper 재dispatch 바운드를 `probe_count` 단위에서 **에피소드 필드 둘**
+  (`orchestration.stall_episode` · `orchestration.coverage_mapper_dispatched_episode`)로
+  이식. 재dispatch 조건은 `no_progress_streak >= 3 AND coverage_mapper_dispatched_episode
+  != stall_episode` — 판정은 여전히 디스크 두 값의 비교(무상태)이고 한 정체 구간당
+  정확히 1회다. 회귀락을 토큰 공존이 아니라 이 AND 관계 전체에 걸도록 강화했다
+  (리뷰가 `AND`→`OR` 반전을 놓치던 결함 1건을 실측 적발).
+- floor 탈출구의 발동 조건이 카운터에서 **사용자 발화**로. 사용자가 언제든 종료를
+  요청하면 미충족 floor 는 사용자-승인 박제로 닫고(`evidence` 에 `사용자-승인 박제(@사용자
+  종료 요청)` 기록) payload §3 Open Questions 로 이월한다. 박제 표식이 원장에 남으므로
+  silent bypass 가 아니다.
+- audit `## 2. Budget` 절의 본문이 상한 서술에서 **지출 기록**(`질문 라운드: <n> · agent
+  dispatch: <n> · codex 실호출: <n> (성공 <n>)`)으로.
+- `skills/conducting-interview/SKILL.md`의 `S<N>` id 번호 공식이 최초 요청 원문(`S1`)
+  예약을 반영 — 원문이 있으면 `user_statements` 는 `S2`부터, 없으면 `S1`부터 시작한다.
+  이 정합이 없으면 payload §6 에 `S1` 앵커가 중복되거나 payload·state 의 `S1`이 서로
+  다른 텍스트를 가리켜 `check_verbatim_coverage.py`가 red 를 낸다(§6 원문 완전성 검사).
+
+### Added
+- `finishing.md`에 최초 요청 원문(`$ARGUMENTS`)을 §6 `S1`로 보존하는 요구. 지금까지는
+  관례였고 게이트 15항 어디에도 이 요구가 없어 원문이 보존되지 않은 인터뷰도 통과했다.
+  `test_conducting_interview_stage.sh`에 이 요구와 번호 공식 정합을 파일 전체·내용
+  표지 위 **∀**(모든 매치가 정본과 일치)로 결속하는 단언을 추가하고,
+  `test_check_verbatim_coverage.sh`에 영구 픽스처 2쌍(정상 공식 / 구-공식 회귀)을 넣었다.
+- `tests/test_probe_sweep_residue.sh` — probe 어휘 스윕 완결성의 단측 단언. 식별자 열거
+  (`ALIAS_RE`)뿐 아니라 개념명 근접 스캔(`CONCEPT_RE` — "probe 상한"이 다른 이름으로
+  재작성되는 것에 대한 좁은 방어)까지 스캔하고, 세 예외(`tests/fixtures/` ·
+  `CHANGELOG.md` · 이 파일 자신)의 자기지시를 제외한다. 양성 대조를 계열별(별칭/개념
+  각각)로 분리해 — 합본 하나만 걸던 대조는 한쪽 계열만 깨져도 통과했다(실측:
+  `ALIAS_RE`만 깨도 GREEN) — 두 계열이 각자 이빨을 갖게 했다.
+
 ## [0.36.0] — 2026-08-27
 
 ### Added

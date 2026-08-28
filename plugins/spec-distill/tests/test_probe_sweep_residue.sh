@@ -107,12 +107,26 @@ ok "코퍼스 ${corpus_n}개 파일 (vacuous 아님)"
 # 안에 그대로 있으므로, 자신을 포함하면 어떤 깨진 정규식(예: 존재하지 않는 토큰
 # 하나)도 "1건"으로 살아있는 척한다 — 양성 대조 자체가 자기지시로 무력화된다
 # (잔존 계산과 같은 함정, M9 실증).
-all_hits="$(git grep -lE "$SCAN_RE" -- "$SCOPE" | grep -v "$SELF" | wc -l | tr -d ' ')"
-if [ "${all_hits:-0}" -lt 1 ]; then
-  no "양성 대조: 별칭·개념이 리포 어디에도 0건 — 정규식이 깨졌다 (스윕 완벽과 구별 불가)"
+#
+# --- Step 4-b (R-K, 계열별 분리): 합본 SCAN_RE 하나로만 재면 한쪽 계열이 죽어도 다른
+# 계열이 건수를 채워 통과한다 — 실측: `ALIAS_RE`만 매칭 안 되는 토큰으로 바꿔도(예:
+# 오타 하나) 이 대조는 GREEN 이었다(CONCEPT_RE 가 CHANGELOG.md 의 "probe 백스톱" 한
+# 줄을 여전히 잡아 all_hits >= 1 을 만족시켰기 때문). 부재 락엔 양의 짝이 필요하다의
+# 두 번째 층 — 짝이 하나뿐이면 합집합만 지키고 각 항은 안 지킨다. 그래서 계열마다
+# 따로 재고, 자기지시 제외(`$SELF`)는 두 계열 모두에서 유지한다.
+alias_hits="$(git grep -lE "$ALIAS_RE" -- "$SCOPE" | grep -v "$SELF" | wc -l | tr -d ' ')"
+if [ "${alias_hits:-0}" -lt 1 ]; then
+  no "양성 대조: ALIAS_RE 가 리포 어디에도 0건 — 식별자 정규식이 깨졌다"
   finish; exit $?
 fi
-ok "양성 대조: 별칭·개념 총 ${all_hits}건 (정규식 살아 있음)"
+ok "양성 대조: ALIAS_RE ${alias_hits}건 (정규식 살아 있음)"
+
+concept_hits="$(git grep -lE "$CONCEPT_RE" -- "$SCOPE" | grep -v "$SELF" | wc -l | tr -d ' ')"
+if [ "${concept_hits:-0}" -lt 1 ]; then
+  no "양성 대조: CONCEPT_RE 가 리포 어디에도 0건 — 개념명 근접 정규식이 깨졌다"
+  finish; exit $?
+fi
+ok "양성 대조: CONCEPT_RE ${concept_hits}건 (정규식 살아 있음)"
 
 residue="$(git grep -lE "$SCAN_RE" -- "$SCOPE" \
   | grep -v 'tests/fixtures/' | grep -v 'CHANGELOG\.md$' \

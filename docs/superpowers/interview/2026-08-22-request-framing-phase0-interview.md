@@ -237,7 +237,7 @@ user_sourced_items:
 
 - OQ2: trivia escape 소유권. 5패턴 판정이 `commands/interview.md` Step 2 에만 있는데, `/request-framing` 이 앞에 서면 escape 없이 시작하거나 로직이 두 벌로 갈라진다. C9(좁히지 않음)로 `/interview` 가 그대로 남으므로 이 갈림은 그대로 미해결이다.
 - OQ3: `tests/test_proceed_gate_adopters.sh` 의 이빨 보존. 하한이 *개수*이지 *구성원*이 아니어서, request-framing 이 게이트 어휘를 갖는 순간 현재의 치환-RED 가 소멸할 수 있다.
-- OQ5: profile 공통 계약의 구체적 형태 — adapter 가 무엇을 공유하고 무엇을 갈아끼우는가. "복제하지 말라"는 요구는 **C24 로 원장에 있으나**(다른 항목과 같이 `provisional`) 계약의 모양은 미정. §4 의 Prompty·POML·spec-kit 을 먼저 평가한다(미평가 상태로 §4 에 올라 있음).
+- OQ5: profile 공통 계약의 구체적 형태 — adapter 가 무엇을 공유하고 무엇을 갈아끼우는가. "복제하지 말라"는 요구는 **C24 로 원장에 있으나**(다른 항목과 같이 `provisional`) 계약의 모양은 미정. 기성 답 후보 둘 — Prompty 파일 포맷(YAML frontmatter(model·inputs·outputs·tools) + markdown body, https://prompty.ai/core-concepts/file-format/)과 microsoft/poml(`<role>`·`<task>`·`<example>` 의미 컴포넌트, https://github.com/microsoft/poml) — 을 먼저 평가한다(판정 근거 없어 §4 에서 이관). spec-kit(§4)은 C2·OQ12 관련 판정을 이미 마쳐 이 후보에서 제외.
 - OQ6: "확정되지 않은 핵심 가정"의 정의. 어떤 `open` 항목이 진행을 막는 *core* 인가 — C2 로 별도 슬롯을 못 만들게 됐으므로 라벨만으로 판정해야 한다.
 - OQ7: degrade 채널 명명. 실측 확인 — `shared/codex/codex_findings_to_yaml.py:56-58` 이 `quota|billing|subscription` 을 `AUTH_ERROR_RE` 에 넣어 **한도 소진을 인증 오류로 분류**한다. 또한 러너가 모델을 핀하지 않아 이 계정에서는 한도와 무관하게 기본 모델이 400 을 받는다. 두 원인이 `exit_nonzero` 하나로 뭉개진다. 어느 층까지 이름을 붙일지 미정.
 - OQ8: `Phase 0` 번호 표기. README 의 `[0]` 은 trivia escape 가 점유, `[4]` 는 미사용.
@@ -268,11 +268,9 @@ user_sourced_items:
 - 프롬프트 압축의 정보 손실 — https://arxiv.org/html/2503.19114 — [피함] — 복잡·다단계 태스크에서 압축이 실질 손실을 낸다. "compact" 요구의 상한선.
 - LLM judge 의 탐지 실패와 verbosity bias — https://arxiv.org/pdf/2606.10315 — [피함] — 비평자가 누락을 인지조차 못 하는 실패가 다수. C3 의 codex 비평자가 "선택지 조기 닫힘"을 못 보는 이유와 같은 뿌리.
 - LLM-as-a-Judge 편향 정량화 — https://llm-judge-bias.github.io/ — [피함] — 과잉결정을 잡으라는 리뷰어가 길이에 보상을 줄 수 있다.
-- LLMs Get Lost In Multi-Turn Conversation — https://arxiv.org/abs/2505.06120 — [중립·미평가] — 완전 명세를 여러 턴에 쪼개 주면 평균 39% 성능 저하, 처방은 "필요한 정보를 하나의 프롬프트로 통합". 방향성 리뷰(D2)가 이 단계의 진짜 정당화일 수 있다고 지적한 근거. OQ11 에서 판정.
-- GitHub Spec Kit — https://github.com/github/spec-kit — [미평가] — `/speckit.specify` 가 거친 요청을 스펙으로 바꾸고 모호한 지점을 본문 **인라인 `[NEEDS CLARIFICATION: …]` 마커**로 표시. C2("별도 섹션으로 모으지 않는다")와 같은 규약의 shipped 구현체.
-- spec-kit `/clarify` 워크플로 — https://deepwiki.com/github/spec-kit/5-spec-driven-development-workflow — [미평가] — 질문 **최대 5개**·마커 **최대 3개** 상한. 원문의 "질문 수를 목표로 삼지 말라"(무상한)와 정반대 처방이며 §4 의 Cooper(fluid gate) 항목과는 같은 방향. OQ12 와 맞물린다.
-- Prompty 파일 포맷 — https://prompty.ai/core-concepts/file-format/ — [미평가] — YAML frontmatter(model·inputs·outputs·tools) + markdown body 의 이식 가능한 프롬프트 자산 포맷. OQ5("무엇을 공유하고 무엇을 갈아끼우는가")와 C1(소비자 중립 스키마)의 기성 답 후보.
-- microsoft/poml — https://github.com/microsoft/poml — [미평가] — `<role>`·`<task>`·`<example>` 의미 컴포넌트로 프롬프트를 모듈화. adapter 별 로직 복제를 피하라는 요구의 또 다른 기성 형태.
+- LLMs Get Lost In Multi-Turn Conversation — https://arxiv.org/abs/2505.06120 — [중립] — 완전 명세를 여러 턴에 쪼개 주면 평균 39% 성능 저하, 처방은 "필요한 정보를 하나의 프롬프트로 통합". 방향성 리뷰(D2)가 이 단계의 진짜 정당화일 수 있다고 지적한 근거. OQ11 에서 판정.
+- GitHub Spec Kit — https://github.com/github/spec-kit — [취함] — `/speckit.specify` 가 거친 요청을 스펙으로 바꾸고 모호한 지점을 본문 **인라인 `[NEEDS CLARIFICATION: …]` 마커**로 표시. C2("별도 섹션으로 모으지 않는다")와 같은 규약의 shipped 구현체 — C2 판정을 뒷받침하는 선례.
+- spec-kit `/clarify` 워크플로 — https://deepwiki.com/github/spec-kit/5-spec-driven-development-workflow — [피함] — 질문 **최대 5개**·마커 **최대 3개** 상한. 원문의 "질문 수를 목표로 삼지 말라"(무상한, C21)와 정반대 처방이라 채택하지 않았다. §4 의 Cooper(fluid gate) 항목과는 같은 방향이나 수치 상한 자체는 피함. OQ12 와 맞물린다.
 
 ## 5. 기각 · Blind Spots
 
