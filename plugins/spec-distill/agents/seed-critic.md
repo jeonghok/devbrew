@@ -5,7 +5,7 @@ description: >
   model added without grounds, mistook an example for a requirement, closed too
   early, or dressed its own inference as the user's decision. Receives the draft,
   the user's raw statements, and the repo CLAUDE.md inline, bundled as a single
-  `<draft>` block; owns no tools at all.
+  `<draft>${BLOB}</draft>` block; owns no tools at all.
 
   <example>Context: framing-requests 확산이 끝나고 압축 전 억제 리뷰 단계에 이르렀다.
   user: "억제 리뷰 돌려줘"

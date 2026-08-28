@@ -5,7 +5,7 @@ description: >
   it understood — what work is being handed off, what the direction is, and what
   the sender cares about. A synchronization measurement, not a review: it is given
   no criteria, no schema, and nothing but the seed itself, inlined as a single
-  `<seed>` block.
+  `<seed>${SEED}</seed>` block.
 
   <example>Context: framing-requests 압축이 끝나 seed 초안이 완성됐다.
   user: "냉독 돌려줘"

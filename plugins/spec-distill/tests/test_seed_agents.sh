@@ -12,15 +12,30 @@
 # `disallowedTools` 단독은 금지다 — 공간에 대해서도 시간에 대해서도 fail-open 이다
 # (내일 추가될 도구는 오늘 열거할 수 없다).
 #
-# ── 관계 축 2 (fix round 2) — dispatch 창의 입력 태그 == description 선언 ──────
+# ── 관계 축 2 (fix round 3 — 쌍 결속) — dispatch 창의 <태그>${변수} 쌍 ==
+#    description 선언 ────────────────────────────────────────────────────
 # 도구 표면이 0 이어도 SKILL.md 의 dispatch 프롬프트가 description 이 약속하지 않은
-# 것을 인라인하면 격리는 여전히 샌다 — `seed-readback` 이 «seed 만» 이라고 선언해놓고
-# 실제로는 초안까지 받으면, 냉독이 재려는 것(seed 하나만으로 무엇을 이해했나)이 더 이상
-# 성립하지 않는다. 이 축은 SKILL.md 의 dispatch 창 안 `<태그>` 집합을 description 이
-# 백틱으로 선언한 `<태그>` 집합과 대조한다 — **하드코딩하지 않는다**: description 자체가
-# 태그 리터럴을 담고(`<draft>`/`<seed>`), 이 락은 그것을 frontmatter 에서 직접 도출한다.
-# 백틱으로 감싼 것만 태그 선언으로 센다 — description 은 구조 마크업으로 `<example>` 도
-# 담고 있어서, 감싸지 않은 `<[a-z]+>` 를 전부 태그로 읽으면 그것까지 선언으로 오인한다.
+# 것을 인라인하면 격리는 여전히 샌다. round 2 는 **태그 이름의 집합**만 대조했는데
+# 그것으로는 부족했다 — `<seed>${BLOB}</seed>` 처럼 태그 이름은 옳고 안에 바인딩된
+# **변수만 바뀐** 편집이 그 축을 그대로 통과했다(실측, round 2 self-defeat). 그것은
+# 다른 결함이 아니라 **같은 결함이 올바른 라벨을 쓴 것**이다 — `seed-readback` 이
+# 초안을 받으면, 그것이 `<draft>` 태그로 왔든 이름만 `<seed>` 로 바꿔 왔든 냉독의
+# 전제(seed 하나만으로 무엇을 이해했나)는 똑같이 무너진다. 그래서 이 축은 이제
+# «태그 이름」이 아니라 «태그+그 안에 바로 이어지는 변수» **쌍**을 건다.
+#
+# **도출, 하드코딩 아님.** description 의 백틱 리터럴이 이제 쌍 전체를 담는다
+# (`<draft>${BLOB}</draft>`, `<seed>${SEED}</seed>`) — 태그 이름을 도출했던 것과 같은
+# 방법으로 쌍도 그대로 뽑는다. 백틱 밖 `<example>` 은 뒤에 `${...}` 인터폴레이션이
+# 오지 않으므로 쌍 정규식 자체가 걸러낸다(백틱 경계는 여기서부터는 방어의 전부가
+# 아니라 이중 방어일 뿐이다).
+#
+# **이 축이 못 보는 것 (여기 명시한다).** 이것은 **정적 텍스트 대조**다.
+# `<seed>${SEED}</seed>` 에서 태그·변수 «이름» 이 둘 다 옳아도, `SEED` 라는 변수가
+# 이 dispatch 지점 «위» 어딘가에서 실제로 무엇에 할당됐는지는 안 본다 — 예를 들어
+# 위에 `const SEED = BLOB` 같은 대입이 있다면 이름은 전부 맞는데 값은 초안이다.
+# 그것은 데이터 흐름이고, 텍스트 대조가 볼 수 있는 범위 밖이다. 이 락의 보장은
+# 「선언된 채널과 실제로 인라인된 채널의 (이름, 변수-토큰) 쌍이 같다」까지이고, 그
+# 변수-토큰이 실행 시점에 무엇을 담을지까지는 보장하지 않는다.
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 . "$ROOT/shared/tests/assert.sh"
@@ -94,28 +109,31 @@ for a in seed-critic seed-readback; do
     no "$a: 어떤 SKILL.md 도 subagent_type: \"spec-distill:$a\" 를 dispatch 하지 않는다 — description 이 가리킬 대상이 없다"
   fi
 
-  # ── 관계 축 2: dispatch 창의 실제 입력 태그 == description 선언 태그. 도출(하드코딩
-  # 아님) — frontmatter 안 백틱-태그 리터럴(`<draft>`/`<seed>`)에서 뽑는다.
-  expected="$(printf '%s\n' "$fm" | grep -oE '`<[a-zA-Z_][a-zA-Z0-9_]*>`' | sed -e 's/^`<//' -e 's/>`$//' | sort -u)"
+  # ── 관계 축 2: dispatch 창의 (태그,변수) 쌍 == description 선언 쌍. 도출(하드코딩
+  # 아님) — frontmatter 안 백틱 리터럴(`<draft>${BLOB}</draft>` 등)에서 뽑는다. 이
+  # 축이 못 보는 것(변수 값의 데이터 흐름)은 파일 머리 "관계 축 2" 절에 명시했다.
+  PAIR_RE='<[a-zA-Z_][a-zA-Z0-9_]*>\$\{[A-Za-z_][A-Za-z0-9_]*\}'
+  PAIR_SED='s/^<([a-zA-Z_][a-zA-Z0-9_]*)>\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/\1=\2/'
+  expected="$(printf '%s\n' "$fm" | grep -oE "$PAIR_RE" | sed -E "$PAIR_SED" | sort -u)"
   n_expected="$(printf '%s\n' "$expected" | grep -c . || true)"
   if [ "$n_expected" -lt 1 ]; then
-    no "$a: description 에서 백틱-태그 선언을 하나도 도출 못 함 — 이 축이 vacuous 하다"
+    no "$a: description 에서 <태그>\${변수} 쌍 선언을 하나도 도출 못 함 — 이 축이 vacuous 하다"
   else
-    ok "$a: description 에서 태그 선언 ${n_expected}개 도출 — {$(printf '%s' "$expected" | tr '\n' ' ')}"
+    ok "$a: description 에서 쌍 선언 ${n_expected}개 도출 — {$(printf '%s' "$expected" | tr '\n' ' ')}"
     window="$(extract_dispatch_window "$a")"
     if [ -z "$window" ]; then
       no "$a: SKILL.md 에서 dispatch 창(\`\`\`javascript 펜스)을 못 찾았다"
     else
-      actual="$(printf '%s' "$window" | grep -oE '<[a-zA-Z_][a-zA-Z0-9_]*>' | sed -e 's/^<//' -e 's/>$//' | sort -u)"
+      actual="$(printf '%s' "$window" | grep -oE "$PAIR_RE" | sed -E "$PAIR_SED" | sort -u)"
       extra="$(set_diff "$actual" "$expected")"
       missing="$(set_diff "$expected" "$actual")"
       if [ -z "$extra" ] && [ -z "$missing" ]; then
-        ok "$a: dispatch 창의 입력 태그가 description 선언과 정확히 일치 — {$(printf '%s' "$actual" | tr '\n' ' ')}"
+        ok "$a: dispatch 창의 (태그,변수) 쌍이 description 선언과 정확히 일치 — {$(printf '%s' "$actual" | tr '\n' ' ')}"
       else
         [ -n "$extra" ] \
-          && no "$a: 창에 선언 밖 태그 — $(printf '%s' "$extra" | tr '\n' ' ')(격리가 샌다 — description 이 약속 안 한 입력을 실제로 받는다)"
+          && no "$a: 창에 선언 밖 쌍 — $(printf '%s' "$extra" | tr '\n' ' ')(격리가 샌다 — 이 채널이나 그 값이 description 약속과 다르다)"
         [ -n "$missing" ] \
-          && no "$a: 선언된 태그가 창에 없음 — $(printf '%s' "$missing" | tr '\n' ' ')(계약 불일치 — description 이 약속한 것을 실제로는 안 준다)"
+          && no "$a: 선언된 쌍이 창에 없음 — $(printf '%s' "$missing" | tr '\n' ' ')(계약 불일치 — description 이 약속한 채널·값을 실제로는 그대로 안 준다)"
       fi
     fi
   fi
