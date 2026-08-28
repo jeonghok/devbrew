@@ -1,3 +1,5 @@
+AXIS-MARKER: seed-suppression-axis-only
+
 # seed 억제 축 — codex 체크리스트
 
 당신은 `interview-seed` 초안에서 **빼야 할 것**을 찾는다. 좋은 프롬프트인지 판정하지 않는다.

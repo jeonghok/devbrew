@@ -52,4 +52,86 @@ n="$(wc -l < "$cl" | tr -d ' ')"
 [ "${n:-0}" -ge 10 ] && ok "체크리스트 ${n}줄 (vacuous 아님)" \
                      || no "체크리스트가 ${n}줄뿐 — 축 검사가 공허하다"
 
+# ── fix round 1 (Important 3) ────────────────────────────────────────────────
+# 위 ①~⑤는 전부 **정적** grep이다 — 세 파일이 "이 단어를 담고 있다"만 재고,
+# 러너가 실제로 codex를 부르는지·빌더가 실제로 checklist 내용을 프롬프트에
+# 옮기는지는 아무것도 재지 않는다. 리뷰가 실측으로 보였다: 세 파일을 전부 속이
+# 빈 decoy(4줄 case문 하나 · 주석 한 줄 · 리터럴만 나열한 11줄)로 바꿔도 위
+# 여덟 assertion이 8/8 GREEN이었다. 형제 test_brief_codex_axes.sh는 처음부터
+# 이 함정을 피한다 — body-unique 마커를 체크리스트에 심고, 빌더를 **실행**해
+# 그 마커가 출력에 실제로 실리는지 보고, 러너도 mock codex로 **실행**해 계약을
+# 확인한다. 아래는 같은 원리를 이 축(하나뿐인 suppression)에 맞춰 좁힌 것이다.
+MK='AXIS-MARKER: seed-suppression-axis-only'
+
+[ "$(grep -cF "$MK" "$cl")" = "1" ] && ok "체크리스트에 body-unique 마커 1회 실재" \
+                                     || no "체크리스트 마커가 없거나 중복"
+
+# 형제 brief 체크리스트로 마커가 새면 축 귀속이 흐려진다(교차 오염 부재 확인).
+leaked=0
+for other in "$S"/brief-codex-*-checklist.md; do
+  [ -f "$other" ] || continue
+  grep -qF "$MK" "$other" && leaked=$((leaked + 1))
+done
+[ "$leaked" -eq 0 ] && ok "형제 brief 체크리스트에 seed 마커 오염 없음" \
+                     || no "형제 brief 체크리스트 ${leaked}곳에 seed 마커가 새어 있다"
+
+# 빌더를 실제로 실행해 마커 + payload 본문이 출력에 실리는가 — 정적 grep이
+# 아니라 실행 관측. 빌더가 checklist를 무시하고 다른 텍스트를 내도(또는 빌더
+# 자체가 decoy라 출력이 비어도) 위 정적 검사는 못 잡지만 이건 잡는다.
+PAY="$(mktemp -t sd-seed-axes-payload-XXXXXX)" || PAY=""
+if [ -z "$PAY" ]; then
+  no "payload 임시파일 생성 실패 — 아래 빌더 실행 검증을 건너뛴다"
+else
+  printf '## 초안\n\nSEED_AXES_LOCK_PAYLOAD_MARKER 로그인이 가끔 실패한다.\n' > "$PAY"
+  builder_out="$(cd "$S" && python3 build_seed_codex_prompt.py --axis suppression "$PAY" 2>/dev/null)" || builder_out=""
+  if [ -z "$builder_out" ]; then
+    no "빌더 실행 출력이 비었다 — --axis suppression 이 프롬프트를 못 낸다"
+  else
+    grep -qF "$MK" <<<"$builder_out" \
+      && ok "빌더 실행 출력에 checklist 마커 실재(실행 관측)" \
+      || no "빌더 실행 출력에 checklist 마커가 없다 — checklist 내용이 실제로 프롬프트에 안 실린다"
+    grep -qF "SEED_AXES_LOCK_PAYLOAD_MARKER" <<<"$builder_out" \
+      && ok "빌더 실행 출력에 payload 본문 실재" \
+      || no "빌더 실행 출력에 payload 본문이 없다 — 위 마커 판정이 무의미하다"
+  fi
+  rm -f "$PAY"
+fi
+
+# 러너를 mock codex로 실제로 한 번 실행해, 해피 패스가 선-기록 값
+# (`reason: runner_incomplete`)에서 벗어나는지 잰다. 정적 검사 ①은 case
+# 라벨의 존재만 재므로 러너를 4줄짜리 decoy(라벨만 있고 그 뒤로 아무 것도
+# 안 함)로 바꿔도 통과한다 — 실행 결과로 판정을 옮긴다.
+RUNBIN="$(mktemp -d -t sd-seed-axes-bin-XXXXXX)" || RUNBIN=""
+if [ -z "$RUNBIN" ]; then
+  no "mock codex bindir 생성 실패 — 아래 러너 실행 검증을 건너뛴다"
+else
+  cat > "$RUNBIN/codex" <<'MOCKEOF'
+#!/usr/bin/env bash
+cat <<'JSONL'
+{"type":"item.completed","item":{"type":"agent_message","text":"```json\n{\"findings\": []}\n```"}}
+JSONL
+exit 0
+MOCKEOF
+  chmod +x "$RUNBIN/codex"
+  RPAY="$(mktemp -t sd-seed-axes-runpayload-XXXXXX)" || RPAY=""
+  ROUT="$(mktemp -t sd-seed-axes-runout-XXXXXX)" || ROUT=""
+  if [ -z "$RPAY" ] || [ -z "$ROUT" ]; then
+    no "러너 실행 스크래치 생성 실패 — 아래 검증을 건너뛴다"
+  else
+    rm -f "$ROUT"
+    printf '## 초안\n\n로그인이 가끔 실패한다.\n' > "$RPAY"
+    PATH="$RUNBIN:$PATH" CLAUDE_PLUGIN_ROOT="$ROOT/plugins/spec-distill" \
+      bash "$S/run_seed_codex_reviewer.sh" suppression "$RPAY" "$ROOT" "$ROUT" >/dev/null 2>&1
+    if [ ! -s "$ROUT" ]; then
+      no "러너 실행 후 산출물이 없거나 비었다 — fail-closed 계약 위반이거나 러너가 실질적으로 아무 것도 안 한다"
+    elif grep -q 'reason: runner_incomplete' "$ROUT"; then
+      no "러너가 선-기록 값(runner_incomplete)에서 벗어나지 못했다 — 실행이 끝까지 진행되지 않았다"
+    else
+      ok "러너가 mock codex로 실제로 끝까지 진행됐다(선-기록 값에서 벗어남)"
+    fi
+    rm -f "$RPAY" "$ROUT"
+  fi
+  rm -rf "$RUNBIN"
+fi
+
 finish
