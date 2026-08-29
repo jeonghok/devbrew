@@ -3,6 +3,27 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [4.3.6] — 2026-08-29
+
+### Fixed
+- `tests/test_codex_extractor_positive_marker.sh` — 종단 추출기 도출이 러너 텍스트에
+  `runner_common.sh` 문자열이 **등장하기만 해도**(source 줄·주석) 폴백을 인정했다. 러너가
+  그 파일이 정의한 함수를 실제로 **호출**하지 않아도 통과해, 종단 python3 호출 블록을
+  지워도(진짜 결함) `_RUNNER_COMMON=".../runner_common.sh"` 대입 줄 하나 때문에 여전히
+  GREEN이었다. 재는 것을 "파일이 언급되는가"에서 "그 파일이 정의하는 함수를 러너가 실제로
+  호출하는가"로 바꿨다.
+
+### Changed
+- `scripts/runner_common.sh` — 셋째 러너(`run_seed_codex_reviewer.sh`, spec-distill)가
+  형제 둘과 같은 fail-closed 산출물 tail을 쓰도록 `codex_extract_or_fallback` 함수를
+  정본(`shared/codex/runner_common.sh`)에 얹었다. 이 파일은 그 정본의 copy-of 사본이라
+  같이 갱신됐다 — `quality-gates` 자신의 러너(`run_codex_reviewer.sh`)는 이 함수를 호출하지
+  않는다.
+- `tests/lib/codex_observation.sh` · `tests/test_codex_gate_observation.sh` ·
+  `tests/test_codex_prompt_untrusted_clause.sh` — spec-distill의 새 seed 억제 축
+  러너(`run_seed_codex_reviewer.sh`)와 프롬프트 빌더(`build_seed_codex_prompt.py`)를
+  기존 관측 하니스와 감지기-부재 stderr 분류에 등록했다.
+
 ## [4.3.5] — 2026-08-25
 
 ### Fixed

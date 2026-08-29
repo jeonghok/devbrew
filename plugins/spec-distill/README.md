@@ -21,9 +21,17 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 `conducting-interview` skill이 4-block format ("현재 이해 / 막힌 결정 / 추천 답안 / 질문")으로 첫 round를 시작합니다.
 
-## Flow (v0.24.0)
+## Flow (v0.39.0)
 
 ```
+/request-framing ─→ [Phase 0] framing-requests — 확산 후 압축
+                                       · 확산 — 원문 보존 → 레포 읽기 → 질문 라운드 (상한 없음)
+                                       · 압축 — check_seed.py 게이트 (Law 1, 넷 모두 부재 검사)
+                                       · 검증 — 억제 축(seed-critic 격리 + codex, model diversity)
+                                                · 냉독 축(seed-readback)
+                                       ▼ [확정 — proceed 게이트] ①/compact 후 /interview · ②바로 /interview · ③수정 필요 · ④멈춤
+                                   interview-seed → docs/superpowers/interview/   ← 문서가 아니라 다음 세션 첫 턴에 붙여넣는 메시지
+                                       ▼ (새 세션 첫 턴에 붙여넣기)
 /interview ─→ [0] Trivia escape ─→ [1] Interview (문제공간 stage)
                                        · 4-block Socratic + 4-path (web=path(a))
                                        · R1 Reframe / R2 Landscape / R3 Steelman / R4 Tried&Discarded / R5 OQ
@@ -60,6 +68,8 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 **v0.24.0**: 구조 게이트를 통과한 interview brief에 **Law 2 분리 리뷰**(`reviewing-brief`)를 얹었다. 방향성(`brief-direction-reviewer` + codex #1, 보고만) → 충실도(`brief-critic` 격리 + codex #2, fail-closed 합집합) → 냉독(`brief-readback`, advisory) 3단계이고, `check_verbatim_coverage.py`가 진입 첫 액션으로 §6 원문 완전성을 state 원장과 대조한다. 리뷰어 셋은 전부 fail-closed `tools:` allowlist이며 `brief-critic`·`brief-readback`은 payload를 경로가 아니라 전문 inline으로 받는다. 모든 degradation은 `brief_review_degradations` 원장 + Step B 게이트 질문 텍스트로 표면화된다 — 돌지 못한 검사가 통과한 검사로 집계되지 않는다.
 
 **v0.25.0**: design 문서를 편집할 때마다 리뷰가 재발동하던 원인 자체를 없앴다 — `scripts/arm_ledger.py`가 문서 생애 단 한 번만 arm하는 `arm-once` 게이트를 구현하고(세션 원장 `armed_paths` ∧ git 추적 여부로 판정), v0.14.0–v0.18.0에 쌓였던 방어층 3종(억제 집합·순서 교정·진행중 락)이 근거를 잃어 함께 삭제됐다.
+
+**v0.39.0**: 파이프라인 맨 앞에 **Phase 0** `/request-framing`(skill: `framing-requests`)을 신설. 사용자의 의도·steering·방향·goal을 확산(원문 보존 → 레포 읽기 → 질문 라운드) 후 압축해, 새 세션 첫 턴에 그대로 붙여넣는 메시지 `interview-seed`로 만든다 — 산출물은 문서가 아니라 메시지다. 검증은 억제 축(`seed-critic` 격리 critic + codex, 셋째 담당)과 냉독 축(`seed-readback`)으로 나뉘고 판정은 사용자가 한다. `references/compression.md`(압축 규약)·`references/trivia-escape.md`(5패턴 정본, 두 command와 공유)를 채택하고, 확정 단계는 공유 계약 `references/proceed-gate.md`의 재결정 규약(P23)을 따른다.
 
 ## Principles Instantiated
 
@@ -98,6 +108,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - **P18 (Stagnation detection)** — issue `raised_count ≥ 3 unresolved` 시 P18 stagnation 명시 + forced [5] escalate.
 - **P21 (Secret 기록 금지 / untrusted input)** — state.local.md token/key/credential placeholder 치환. **v0.23.0**: `audit_file`은 frontmatter에서 오는 신뢰 경계 밖 입력이므로 basename으로 제한한다(`../`·절대경로·서브경로 전부 거부).
 - **P22 (Cost class)** — 모든 skill cost_class 선언 (conducting-interview: variable / reviewing-spec: medium).
+- **P23 (Decisions Stay Refutable)** — `framing-requests`의 「재결정 규약」 절(정본은 `references/proceed-gate.md`)이 확산에서 확정된 것을 압축 단계가 뒤집을 때 임의 변경이 아니라 근거 제시 + 사용자 동의 + audit *원래/재결정/근거* 세 칸 기록을 강제한다.
 - **worktree-safe state path (P5·P14)**: state 파일 위치를 `state_path.state_root()`로 단일화하여 worktree 호출 시에도 main repo `.claude/spec-distill/`에만 기록 — `ExitWorktree action: remove` 시 pending_review state silent loss 차단.
 
 ### Roadmap absorption (C-numbers)

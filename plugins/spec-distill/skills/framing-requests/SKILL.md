@@ -58,7 +58,7 @@ skill 에 옵니다. 5패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-
 | audit (`$AUDIT`) | `docs/superpowers/interview/` | `## 확산` 1번부터 — append-only |
 | interview-seed (`$SEED`) | 〃 | 압축 직후 — **게이트 직전 구조 검사보다 먼저** |
 | 억제 축 작업 파일 둘 (`$PAYLOAD` · `$CODEX_YAML`) | 아래 `$SEED_DIR` | 검증 라운드마다 |
-| 두 문서의 이름을 붙드는 `interview-basename` | 〃 | 아래 블록을 처음 돌릴 때 |
+| 두 문서의 이름을 붙드는 `interview-basename` | 〃 | 아래 블록에서 `TOPIC` 자리표가 실값으로 치환된 실행 — 자리표가 그대로면 만들지 않는다 |
 | 세션 디렉토리 `$SEED_DIR` 자체 | `.claude/spec-distill/<session-id>/` | 〃 |
 
 **audit 과 seed 는 시점이 다르지만, 둘 다 승인 «전»에 디스크에 있어야 합니다.** audit 은

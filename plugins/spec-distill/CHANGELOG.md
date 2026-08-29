@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.39.0] — 2026-08-29
+
+### Added
+- **`/request-framing` — 파이프라인 Phase 0.** 사용자의 의도·steering·방향·goal을 싱크해
+  새 세션의 첫 턴 메시지 `interview-seed`로 압축한다. 산출물은 문서가 아니라 **붙여넣는
+  메시지**이며 절·라벨·태그·URL이 없다.
+- `skills/framing-requests/` — 확산 후 압축 절차. `proceed-gate.md`·`compression.md`·
+  `trivia-escape.md` 채택.
+- `agents/seed-critic.md` · `agents/seed-readback.md` — 둘 다 `tools: []`. critic은 억제
+  네 축, readback은 냉독이며 **판정은 사용자가 한다**.
+- `references/compression.md` — 압축 규약 공유 계약. **오늘 게이트로 집행하는 것은
+  seed뿐**이고 brief는 재구조화 이후에 채택한다.
+- `references/trivia-escape.md` — 5패턴 정의 정본. 두 command와 `framing-requests`가
+  가리킨다.
+- `scripts/check_seed.py` — 게이트 넷. seed 본문에 대해서는 **전부 부재 검사**다.
+- seed 억제 축 codex 러너·빌더·체크리스트(`run_seed_codex_reviewer.sh`·
+  `build_seed_codex_prompt.py`·`seed-codex-suppression-checklist.md`)가
+  `framing-requests` skill의 게이트 블록에 배선되어 실제로 호출된다.
+  `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1`이 호출자 책임으로 그 호출을 막고, 러너가
+  산출물을 못 쓰고 죽으면(`exit 3`) 직전 라운드 잔존물을 지운다. 억제 findings는 어떤
+  병합기도 거치지 않고 사용자에게 직접 간다.
+
+### Fixed
+- `skills/framing-requests/SKILL.md` — `interview-basename` 파일이 생기는 시점 서술을
+  실제 조건(블록의 `TOPIC` 자리표가 실값으로 치환된 실행)에 맞췄다. 자리표가 그대로면
+  블록이 돌아도 파일을 만들지 않고 advisory만 낸다.
+
 ## [0.38.0] — 2026-08-28
 
 ### Added
