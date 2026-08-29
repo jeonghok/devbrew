@@ -60,39 +60,47 @@ SCRATCH="$(mktemp -d -t sd-seed-gate-XXXXXX)" || { no "scratch 생성 실패"; f
 trap 'rm -rf "$SCRATCH"' EXIT
 
 # ── 1) 마킹된 게이트 블록을 잘라낸다 ─────────────────────────────────────────
-# 형제 하니스와 같은 절단 규약(마커 사이의 bash 펜스 하나). 스코프를 이 블록으로
+# 형제 하니스와 같은 절단 규약(마커 사이의 펜스 하나). 스코프를 이 블록으로
 # 좁히는 것이 요점이다 — 파일 전체 grep 은 다른 절의 어휘로 만족된다.
 GATE="$SCRATCH/gate.sh"
+# 펜스 여는 줄은 **언어표기와 들여쓰기에 무관하게** 본다(아래 세 추출기 공통).
+# `/^```bash$/` 로 앵커하던 판본은 마커 «사이»의 ` ```sh ` 펜스도 들여쓴 펜스도 못 봤고,
+# 그 상태에서 아래 판정 전부가 그 펜스를 지나쳤다 — 세 추출기가 동시에 장님이었다(실측).
+# 여닫이는 **닫는 규칙을 먼저** 두어 토글로 판정한다: 일반화한 여는 정규식은 닫는 줄
+# (` ``` `)에도 매치하므로, 여는 규칙을 먼저 두면 펜스가 영영 안 닫힌다.
 awk '
   /codex-gate:begin[[:space:]]+runner=run_seed_codex_reviewer\.sh/ {ing=1; next}
   /codex-gate:end/ {ing=0}
-  ing && /^```bash$/ {inb=1; next}
-  ing && inb && /^```$/ {inb=0; next}
+  ing && inb && /^[[:space:]]*```[[:space:]]*$/ {inb=0; next}
+  ing && !inb && /^[[:space:]]*```/ {inb=1; next}
   ing && inb {print}
 ' "$SKILL" > "$GATE"
 if [ ! -s "$GATE" ]; then
-  no "게이트 블록을 잘라내지 못했다 — 마커가 없거나 bash 펜스가 비었다. 아래 판정은 전부 무의미하다"
+  no "게이트 블록을 잘라내지 못했다 — 마커가 없거나 펜스가 비었다. 아래 판정은 전부 무의미하다"
   finish; exit $?
 fi
 ok "게이트 블록 절단 $(grep -c . "$GATE")줄 (vacuous 아님)"
 
-# ── 1) 마커 사이의 bash 펜스가 «정확히 하나»인가 ─────────────────────────────
+# ── 1) 마커 사이의 펜스가 «정확히 하나»인가 ─────────────────────────────
 # 이 추출기(형제 하네스의 것과 같다)는 마커 사이의 모든 펜스를 **하나의 스크립트로
 # 이어 붙여** 돌린다. 그런데 `Bash` 도구는 펜스를 **별개의 셸**로 돌린다. 펜스가 둘
 # 이상이면 그 두 모델이 갈라지고, 아래 판정 전부가 «실제로 도는 것»이 아니라 «이어
 # 붙인 가상의 스크립트»를 잰다. 그 상태에서 판정·노출을 둘째 펜스로 옮기면 이 락도
 # 형제도 GREEN 인 채로 잔존이 샌다(실측).
 # 펜스가 하나면 이어붙임 == 실제이므로 두 모델이 일치한다 — 그 조건을 여기서 건다.
+# 여는 펜스만 센다(닫는 줄은 토글이 흡수한다) — 일반화한 정규식은 여닫이를 구별하지
+# 못하므로 그냥 세면 정상 본문에서도 2 가 나온다.
 NFENCE="$(awk '
   /codex-gate:begin[[:space:]]+runner=run_seed_codex_reviewer\.sh/ {ing=1; next}
   /codex-gate:end/ {ing=0}
-  ing && /^```bash$/ {n++}
+  ing && inb && /^[[:space:]]*```[[:space:]]*$/ {inb=0; next}
+  ing && !inb && /^[[:space:]]*```/ {n++; inb=1; next}
   END {print n+0}
 ' "$SKILL")"
 if [ "$NFENCE" = "1" ]; then
-  ok "1: 마커 사이의 bash 펜스가 정확히 하나 — 추출기의 이어붙임 모델이 실행 모델과 일치한다"
+  ok "1: 마커 사이의 펜스가 정확히 하나 — 추출기의 이어붙임 모델이 실행 모델과 일치한다 (언어표기·들여쓰기 무관하게 센다)"
 else
-  no "1: 마커 사이의 bash 펜스가 ${NFENCE}개다 — 추출기는 이어 붙이고 Bash 도구는 별개 셸로 돌리므로 아래 판정은 실제로 도는 것을 재지 않는다 (블록을 쪼개려면 이 락부터 다시 설계해야 한다)"
+  no "1: 마커 사이의 펜스가 ${NFENCE}개다 (언어표기·들여쓰기 무관하게 센다) — 추출기는 이어 붙이고 Bash 도구는 별개 셸로 돌리므로 아래 판정은 실제로 도는 것을 재지 않는다 (블록을 쪼개려면 이 락부터 다시 설계해야 한다)"
 fi
 
 # ── 0) 클리어가 블록의 «첫 실행 줄»인가 ──────────────────────────────────────
@@ -363,13 +371,13 @@ STATE_FENCE="$SCRATCH/state.sh"
 awk '
   /^## 상태$/ {ins=1; next}
   ins && /^## / {ins=0}
-  ins && /^```bash$/ {inb=1; next}
-  ins && inb && /^```$/ {inb=0; ins=0; next}
+  ins && inb && /^[[:space:]]*```[[:space:]]*$/ {inb=0; ins=0; next}
+  ins && !inb && /^[[:space:]]*```/ {inb=1; next}
   ins && inb {print}
 ' "$SKILL" > "$STATE_FENCE"
 ADVISORY="$(awk '
-  /^```bash$/ {inb=1; next}
-  inb && /^```$/ {inb=0; next}
+  inb && /^[[:space:]]*```[[:space:]]*$/ {inb=0; next}
+  !inb && /^[[:space:]]*```/ {inb=1; next}
   inb && /echo/ && /「## 상태」/ {print}
 ' "$SKILL")"
 adv_n="$(printf '%s\n' "$ADVISORY" | grep -c '「## 상태」')"
@@ -401,19 +409,20 @@ fi
 # 안 넘어가고, 넘어가는 것은 디스크의 파일뿐이기 때문이다. 그래서 두 번째 독자를
 # 금지하면 그 부류가 닫힌다: 오늘 없는 분기가 내일 생겨도, 그 분기가 게이트 블록 안에
 # 있으면 클리어 뒤이므로 안전하고, 밖에 있으면 이 단언이 RED 다.
-# 산문과 주석은 자유다 — 재는 것은 **bash 펜스 안에서 실행되는** 줄뿐이고, 대입
+# 산문과 주석은 자유다 — 재는 것은 **펜스 안에서 실행되는** 줄뿐이고(언어표기·들여쓰기
+# 무관하게 펜스로 센다), 대입
 # (`CODEX_YAML=`)은 독자가 아니므로 `## 상태` 의 도출은 걸리지 않는다.
 OUTSIDE_READS="$(awk '
   /codex-gate:begin/ {ing=1}
   /codex-gate:end/   {ing=0; next}
-  /^```bash$/ {inb=1; next}
-  inb && /^```$/ {inb=0; next}
+  inb && /^[[:space:]]*```[[:space:]]*$/ {inb=0; next}
+  !inb && /^[[:space:]]*```/ {inb=1; next}
   inb && !ing {printf "%d:%s\n", FNR, $0}
 ' "$SKILL" | grep 'CODEX_YAML' \
   | grep -vE '^[0-9]+:[[:space:]]*CODEX_YAML=' \
   | grep -vE '^[0-9]+:[[:space:]]*#')"
 if [ -z "$OUTSIDE_READS" ]; then
-  ok "S: 게이트 블록 밖의 bash 펜스에 \$CODEX_YAML 독자가 없다 (도출: 두 번째 독자만이 잔존을 만들 수 있다)"
+  ok "S: 게이트 블록 밖의 어느 펜스에도 \$CODEX_YAML 독자가 없다 (도출: 두 번째 독자만이 잔존을 만들 수 있다)"
 else
   no "S: 게이트 블록 밖에서 \$CODEX_YAML 을 읽는 줄이 있다 — 그 펜스는 자기가 만들지 않은 파일을 읽는다: $(printf '%s' "$OUTSIDE_READS" | tr '\n' ' ')"
 fi

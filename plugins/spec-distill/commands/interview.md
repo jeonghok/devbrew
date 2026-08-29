@@ -26,6 +26,10 @@ argument-hint: "[rough request]"
 
 ## Step 2.5: seed 아닌 입력에 대한 조언 (차단 아님)
 
+Phase 0 을 거친 세션은 이 command 를 `/interview <seed 파일 전문>` 으로 부릅니다 —
+seed 는 별도 채널이 아니라 `$ARGUMENTS` 로 옵니다. 그래서 `$ARGUMENTS` 의 frontmatter 에
+`type: interview-seed` 가 있으면 이 안내는 나가지 않습니다.
+
 `$ARGUMENTS` 가 `interview-seed` 가 아니면 한 줄 안내를 낸다 — **막지 않는다.**
 
 > 💡 `/request-framing` 을 먼저 거치면 첫 턴이 정리된 상태로 시작합니다. 지금 그대로
@@ -43,7 +47,7 @@ Skill conducting-interview $ARGUMENTS
 
 ## Arguments
 
-`$ARGUMENTS` — 사용자가 `/interview`에 함께 넘긴 rough request. 비어 있으면 `conducting-interview`가 첫 질문 ("어떤 것을 만들고 싶으신가요?")으로 시작.
+`$ARGUMENTS` — 사용자가 `/interview`에 함께 넘긴 rough request, **또는 Phase 0 이 만든 `interview-seed` 파일 전문**(frontmatter 포함). 비어 있으면 `conducting-interview`가 첫 질문 ("어떤 것을 만들고 싶으신가요?")으로 시작.
 
 ## 다음 단계
 

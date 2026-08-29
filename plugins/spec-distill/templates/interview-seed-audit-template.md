@@ -8,9 +8,9 @@ source: spec-distill framing-requests
 
 # <Topic> — Interview Seed Audit
 
-> 순수 텔레메트리 — 다음 세션의 첫 턴에 붙여넣는 것은 payload(seed)이고, 여기에는
-> 확산·압축이 어떻게 진행됐는지의 과정 기록만 남는다. payload 의 `audit_file` 이 이
-> 파일을 가리킨다.
+> 순수 텔레메트리 — 다음 세션의 첫 턴에 붙여넣는 것은 payload(seed) 파일 전문이고,
+> 여기에는 확산·압축이 어떻게 진행됐는지의 과정 기록만 남는다. payload 의 `audit_file`
+> 이 이 파일을 가리킨다.
 
 ## 1. 원문
 
@@ -28,7 +28,7 @@ source: spec-distill framing-requests
 
 ## 3. 긴 초안
 
-(압축 전 긴 초안 — 크게 그린 다음 깎아낸 원본. `docs/` 에는 나가지 않고 이 절에만 남는다.)
+(압축 전 긴 초안 — 크게 그린 다음 깎아낸 원본. **seed 로는** 나가지 않고 이 절에만 남는다.)
 
 ## 4. 비평과 냉독
 

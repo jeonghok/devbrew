@@ -2,15 +2,17 @@
 name: framing-requests
 description: >
   Phase 0 회의 skill. `/request-framing` 이 trivia escape 를 통과시킨 요청을 받아
-  확산(원문 보존 → 레포 읽기 → 질문 라운드) 후 압축해, 새 세션 첫 턴에 붙여넣는
-  `interview-seed` 메시지를 만든다. 산출물은 문서가 아니라 다음 세션의 첫 턴이다.
-cost_class: medium
+  확산(원문 보존 → 레포 읽기 → 질문 라운드) 후 압축해, 새 세션 첫 턴에
+  `/interview` 의 인자로 붙여넣는 `interview-seed` 메시지를 만든다. 산출물은 문서가
+  아니라 다음 세션의 첫 턴이다.
+cost_class: variable
 ---
 
 # Framing Requests — Phase 0
 
 당신은 파이프라인 맨 앞의 **회의**를 진행 중입니다. 산출물은 문서가 아니라 **새 세션의 첫
-턴에 그대로 붙여넣는 메시지**입니다.
+턴에 그대로 붙여넣는 메시지**입니다. 그 첫 턴이 어떤 모양인지는 `## 확정 — proceed 게이트`
+의 「호출 모양」 절 한 곳이 정합니다 — 다른 절은 그것을 다시 정하지 않고 가리킵니다.
 
 **진입 선결조건** — `/request-framing` command 가 trivia escape 를 통과시킨 요청만 이
 skill 에 옵니다. 5패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md`.
@@ -25,7 +27,9 @@ skill 에 옵니다. 5패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-
 
 **방식은 확산 후 압축** — 긴 초안을 먼저 쓰고 **그 다음 깎습니다.** 처음부터 짧게 쓰지
 않습니다. 크게 그린 다음 깎아낸 것이 처음부터 짧게 쓴 것보다 더 많은 것을 고려합니다.
-긴 초안은 세션 state 에만 살고, `docs/` 에 나가는 것은 깎은 것뿐입니다.
+긴 초안은 `$AUDIT` 의 `## 3. 긴 초안` 절에 남고, **seed 로 나가는 것은 깎은 것뿐**입니다
+(`## 상태` 표에 그 행이 있습니다). 세션 state 에 두지 않는 이유는 TTL-GC 가 기본 24시간에
+그 폴더를 통째로 걷기 때문입니다 — 압축이 무엇을 떨어뜨렸는지는 그보다 오래 남아야 합니다.
 
 ## 확산
 
@@ -49,6 +53,28 @@ skill 에 옵니다. 5패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-
 **질문에도 라운드에도 분량에도 상한이 없습니다.** 질문 루프는 매 반복마다 사용자가
 답해야 돌고 사용자가 그 루프의 시계입니다 — 자율이 없으므로 묶을 자율도 없습니다.
 
+### 탐색 경계 — 레포는 읽되 웹은 보지 않습니다
+
+**이 단계는 레포는 읽되 웹은 보지 않습니다** (does not — cannot 이 아닙니다. skill 계층에는
+도구를 막을 수단이 없고, `allowed-tools` 는 제한이 아닙니다. 이 경계를 지키는 것은 이 문장과
+그것을 읽는 쪽입니다). framing 의 공백은 바깥에서 찾지 않고 **사용자에게 물어서** 메웁니다.
+
+바깥에서 찾는 것은 다음 단계(interview)의 R&R 입니다 — landscape · steelman · blind-spot
+premortem · coverage-mapper 넷이 거기 있는 장치이고, 이 skill 에는 그 넷 중 아무것도
+없습니다. **질문 라우팅**: 답을 사용자만 알 수 있으면 여기서 묻고, 사용자 밖에서 찾아야
+하면 다음 단계로 넘깁니다. 같은 주제도 이 기준으로 갈립니다.
+
+이 경계는 소비자 쪽(`conducting-interview` 의 R2 「탐색 경계」)에도 같은 문장으로 적혀
+있습니다. 두 곳에 있는 이유는 중복이 아니라 **제약당하는 쪽이 그 제약을 받은 적이 있어야**
+하기 때문입니다 — 한 skill 이 다른 skill 에 대해서만 적어 두면, 제약당하는 쪽을 고치는
+사람은 그것을 읽지 않습니다.
+
+**언젠가 이 단계에 웹 탐색을 더한다면**, 그 자리에서 kill switch
+`DEVBREW_SPEC_DISTILL_DISABLE_WEB` 를 **매 호출 직전에** 확인해야 합니다(세션 시작에
+캐시하지 않습니다). 지금 이 skill 의 `## kill switch` 목록에 그 스위치가 없는 이유는
+탐색이 없기 때문이지 면제받아서가 아닙니다 — 없는 스위치를 미리 적으면 죽은 스위치가
+산 것으로 읽힙니다.
+
 ## 상태
 
 **이 skill 이 만드는 것의 전부입니다** — 다른 절은 이 목록을 다시 세지 않습니다.
@@ -56,16 +82,18 @@ skill 에 옵니다. 5패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-
 | 만드는 것 | 어디에 | 언제 |
 |---|---|---|
 | audit (`$AUDIT`) | `docs/superpowers/interview/` | `## 확산` 1번부터 — append-only |
+| 긴 초안 | `$AUDIT` 의 `## 3. 긴 초안` 절 | 압축 **직전** — 깎기 전에 여기 먼저 쓴다 |
 | interview-seed (`$SEED`) | 〃 | 압축 직후 — **게이트 직전 구조 검사보다 먼저** |
 | 억제 축 작업 파일 둘 (`$PAYLOAD` · `$CODEX_YAML`) | 아래 `$SEED_DIR` | 검증 라운드마다 |
 | 두 문서의 이름을 붙드는 `interview-basename` | 〃 | 아래 블록에서 `TOPIC` 자리표가 실값으로 치환된 실행 — 자리표가 그대로면 만들지 않는다 |
-| 세션 디렉토리 `$SEED_DIR` 자체 | `.claude/spec-distill/<session-id>/` | 〃 |
+| 세션 디렉토리 `$SEED_DIR` 자체 | `.claude/spec-distill/<session-id>/` | `sid` 가 실값이고 `mkdir` 이 성공했을 때만 — 실패하면 위 두 줄의 세 파일을 아예 만들지 않는다 |
 
 **audit 과 seed 는 시점이 다르지만, 둘 다 승인 «전»에 디스크에 있어야 합니다.** audit 은
 확산 첫 항목부터, seed 는 압축 직후입니다 — 게이트 직전의 `check_seed.py` 가 둘 다
 디스크에서 읽고, proceed 게이트 공통 계약의 Step A 도 대상 문서가 working-tree 에 없으면
 게이트를 **띄우지 않습니다**. 승인 이후에 일어나는 것은 파일 쓰기가 아니라 **handoff**
-입니다 — seed 본문을 다음 세션 첫 턴에 붙여넣는 것.
+입니다 — seed 파일을 다음 세션의 첫 턴에 붙여넣는 것이고, 그 턴의 모양은
+`## 확정 — proceed 게이트` 의 「호출 모양」 절이 정합니다.
 
 **만들지 않는 것: `state.local.md`.** degrade 원장은 그 **기존** 파일 안에 살고, 없으면
 없는 채로 갑니다(§`degrade 채널` 의 `no-state-in-phase-0`).
@@ -79,11 +107,25 @@ STATE="$ROOT/$sid/state.local.md"
 # 재도출해도 같은 파일을 가리켜야 하기 때문이다. `mktemp` 은 `$$`(PID) 와 **같은 결함**
 # 이다: Bash 도구는 호출마다 새 셸이라 그 값이 소멸하고 **재발견이 불가능**하다.
 # 세션 «디렉토리»는 만들어도 된다 — state.local.md 를 만드는 것과 다른 일이다.
-SEED_DIR="$ROOT/${sid:-nosid}"
-mkdir -p "$SEED_DIR" 2>/dev/null || SEED_DIR="${TMPDIR:-/tmp}/spec-distill-${sid:-nosid}"
-mkdir -p "$SEED_DIR" 2>/dev/null
-PAYLOAD="$SEED_DIR/seed-suppression-bundle.md"
-CODEX_YAML="$SEED_DIR/seed-suppression-codex.yaml"
+#
+# **가드가 하나인 것이 요점이다.** `sid` 가 실값이고 `mkdir` 이 성공한 경우에만 아래
+# 세 경로가 생긴다. `state_path.py` 는 GC 의 세션 이름 필터와 **같은 정규식**을 통과한
+# 값만 stdout 으로 내주므로(안 통과하면 exit 1 + 빈 stdout), 이 한 조건이 «플러그인
+# 네임스페이스 안»과 «TTL-GC 사정거리 안»을 동시에 보장한다. 네임스페이스 밖으로 나가는
+# fallback 을 두지 않는 이유가 그것이다: `/tmp` 로 새면 두 보장이 함께 깨지고, 그
+# 파일들은 사용자의 원문과 레포 `CLAUDE.md` 를 담은 채 아무도 걷지 않는 자리에 남는다.
+SEED_DIR=""
+[ -n "$sid" ] && mkdir -p "$ROOT/$sid" 2>/dev/null && SEED_DIR="$ROOT/$sid"
+PAYLOAD=""
+CODEX_YAML=""
+NAME_FILE=""
+if [ -n "$SEED_DIR" ]; then
+  PAYLOAD="$SEED_DIR/seed-suppression-bundle.md"
+  CODEX_YAML="$SEED_DIR/seed-suppression-codex.yaml"
+  NAME_FILE="$SEED_DIR/interview-basename"
+else
+  echo "[spec-distill] 세션 디렉토리를 못 만들었다 (sid='${sid:-}' ROOT='$ROOT') — 억제 축 작업 파일 둘과 이름 파일을 만들지 않는다. 플러그인 네임스페이스 밖에는 쓰지 않기 때문이다. 아래 가드들이 이름을 대고 멈춘다." >&2
+fi
 # 두 산출 문서. 이름은 **첫 라운드에 한 번** 정하고 이후 라운드는 되찾는다 — 그래서
 # 이 블록을 다시 돌리면 같은 두 경로가 나온다. 이름을 기억에서 다시 대는 판본은
 # `mktemp` 과 같은 결함이다: 다음 셸이 같은 값을 다시 만들 수 있어야 한다.
@@ -91,10 +133,9 @@ CODEX_YAML="$SEED_DIR/seed-suppression-codex.yaml"
 # 않는다** — 고정해 버리면 자리표가 파일명에 박히고, 그 뒤로는 「이 블록을 다시
 # 돌려라」가 바로 그 박제를 되풀이하는 행동이 된다.
 TOPIC="<kebab-topic>"
-NAME_FILE="$SEED_DIR/interview-basename"
 case "$TOPIC" in
   ""|*"<"*|*">"*|*/*) : ;;
-  *) [ -s "$NAME_FILE" ] || printf '%s-%s-interview\n' "$(date +%F)" "$TOPIC" > "$NAME_FILE" ;;
+  *) [ -n "$NAME_FILE" ] && { [ -s "$NAME_FILE" ] || printf '%s-%s-interview\n' "$(date +%F)" "$TOPIC" > "$NAME_FILE"; } ;;
 esac
 # 이름이 성하지 않으면 두 경로를 **만들지 않는다.** 반쯤 만들어진 경로
 # (`docs/superpowers/interview/.audit.md`)는 아래 가드들의 `-z` 검사를 통과해 조용히
@@ -102,10 +143,11 @@ esac
 # 이름을 대고 멈춘다.
 AUDIT=""
 SEED=""
-IV_NAME="$(head -n 1 "$NAME_FILE" 2>/dev/null)"
+IV_NAME=""
+[ -n "$NAME_FILE" ] && IV_NAME="$(head -n 1 "$NAME_FILE" 2>/dev/null)"
 case "$IV_NAME" in
   ""|*/*|*"<"*|*">"*)
-    echo "[spec-distill] 인터뷰 문서 이름을 못 구했다 (IV_NAME='$IV_NAME'). 이 블록의 TOPIC 을 요청 주제(kebab-case)로 바꿔 다시 돌려라. 자리표가 이미 이름에 박혔으면 rm -f '$NAME_FILE' 로 지운 뒤 다시 돌려라 — 그 파일이 이름의 유일한 출처이므로 지우면 되돌아간다." >&2 ;;
+    echo "[spec-distill] 인터뷰 문서 이름을 못 구했다 (IV_NAME='$IV_NAME' NAME_FILE='$NAME_FILE'). NAME_FILE 이 비었으면 원인은 위 세션 디렉토리이고 그쪽 advisory 를 보라. 비어 있지 않으면 이 블록의 TOPIC 을 요청 주제(kebab-case)로 바꿔 다시 돌려라. 자리표가 이미 이름에 박혔으면 rm -f '$NAME_FILE' 로 지운 뒤 다시 돌려라 — 그 파일이 이름의 유일한 출처이므로 지우면 되돌아간다." >&2 ;;
   *)
     AUDIT="docs/superpowers/interview/$IV_NAME.audit.md"
     SEED="docs/superpowers/interview/$IV_NAME.md" ;;
@@ -124,6 +166,15 @@ fi
 `mktemp` 으로 만들면 다음 `Bash` 호출이 그 파일을 다시 찾지 못하고, `$CODEX_YAML` 을
 읽어야 하는 하류 단계가 통째로 수행 불가능해집니다.
 
+**실행 모양 — 아래 펜스들은 이 블록과 «같은 `Bash` 호출» 안에서 돕니다.** 이 블록을 그
+펜스 **앞에 그대로 이어 붙여** 한 번에 넘깁니다. 펜스마다 따로 호출하는 것이 `Bash` 도구의
+기본 동작이고, 그렇게 하면 이 블록이 대입한 값이 다음 호출에 **하나도 넘어가지 않습니다** —
+넘어가는 것은 디스크의 파일뿐입니다(이 skill 이 그 사실을 위에서 `mktemp` 의 결함으로 이미
+적었습니다). 값이 비면 `$PAYLOAD`·`$CODEX_YAML`·`$SEED` 가 전부 빈 문자열이 되어 억제
+리뷰어 둘과 codex 와 냉독이 **한꺼번에 skip** 됩니다. 아래 가드들의 advisory 가 「먼저
+돌려라」가 아니라 「앞에 이어 붙여라」라고 쓰는 이유가 그것입니다 — 별개 호출로 다시 돌리면
+같은 빈 상태가 그대로 재생산됩니다.
+
 `--ledger-key framing_degradations` 는 표준 3키에 **더해** 이 원장 줄을 심습니다(치환이
 아닙니다 — brief 파이프라인의 원장은 그대로 남습니다). 이 호출이 없으면 뒤의
 `degrade-append` 가 「라인 부재」로 죽습니다 — 닫힌 열거에 이름이 있다는 것과 그 원장에
@@ -141,14 +192,17 @@ fi
 씁니다. 조립이 두 곳에 있으면 한쪽만 고쳐질 때 두 리뷰어가 서로 다른 재료를 보게 되고,
 그 어긋남은 findings 가 갈릴 때까지 드러나지 않습니다.
 
-경로는 `## 상태` 에서 이미 도출했습니다. 여기서 새로 만들지 않습니다.
+경로는 `## 상태` 에서 이미 도출했습니다. 여기서 새로 만들지 않습니다 — 대신 그 블록을
+**이 펜스 앞에 이어 붙여 같은 `Bash` 호출 안에서** 함께 돌립니다.
 
 ```bash
-# 게이트 쪽과 같은 가드다. 이 펜스가 `## 상태` 없이 새 셸에서 돌면 네 변수가 다 비는데,
-# 가드가 없으면 `: No such file or directory` 로 죽어 **어느 변수가 비었는지도, 어느
-# 블록을 다시 돌려야 하는지도** 말하지 않는다. 관측값을 실어 이름을 댄다.
+# 게이트 쪽과 같은 가드다. 이 펜스를 `## 상태` 없이 **별개 `Bash` 호출로** 돌리면 네
+# 변수가 다 빈다 — 그것이 도구의 기본 동작이다. 가드가 없으면 `: No such file or
+# directory` 로 죽어 **어느 변수가 비었는지도, 무엇을 고쳐야 하는지도** 말하지 않는다.
+# 관측값을 실어 이름을 대고, 처방은 「다시 돌려라」가 아니라 「앞에 이어 붙여라」다 —
+# 별개 호출로 다시 돌리면 같은 빈 상태가 재생산된다.
 if [[ -z "${SD:-}" || -z "${SEED:-}" || -z "${AUDIT:-}" || -z "${PAYLOAD:-}" ]]; then
-  echo "[spec-distill] 재료 조립 입력 부재 — SD='${SD:-}' SEED='${SEED:-}' AUDIT='${AUDIT:-}' PAYLOAD='${PAYLOAD:-}'. 「## 상태」 블록을 먼저 돌려라. 번들이 없으면 두 담당 모두 돌리지 않는다." >&2
+  echo "[spec-distill] 재료 조립 입력 부재 — SD='${SD:-}' SEED='${SEED:-}' AUDIT='${AUDIT:-}' PAYLOAD='${PAYLOAD:-}'. 「## 상태」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 함께 돌려라(따로 돌리면 같은 빈 상태가 그대로 나온다). 번들이 없으면 두 담당 모두 돌리지 않는다." >&2
   blob_rc=2
 else
   python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED" "$AUDIT" CLAUDE.md > "$PAYLOAD"; blob_rc=$?
@@ -173,7 +227,7 @@ fi
 Agent({ description: "Seed suppression critique", subagent_type: "spec-distill:seed-critic",
         prompt: `초안 · 원문 · 레포 CLAUDE.md 를 전문 inline 으로 받는다. 네 축만 본다.
 <draft>${BLOB}</draft>` })
-// **처분** — consumer=human · fail-open · disclosure=framing_degradations
+// **처분** — consumer=human · fail-open · disclosure=proceed 게이트 질문 텍스트
 ```
 
 `${BLOB}` 은 위 조립 블록이 `cat` 으로 낸 출력 그대로입니다 — 요약하거나 다시 조립하지
@@ -212,12 +266,17 @@ Agent({ description: "Seed suppression critique", subagent_type: "spec-distill:s
 일치합니다. 쪼개고 판정·노출을 뒤 펜스로 옮기면 하니스에는 아무 변화가 없는데 실제로는
 지난 라운드 산출물이 다시 새어 나옵니다.
 
-`tests/test_seed_gate_wiring.sh` 가 **동작으로 잡는 것은 둘**입니다 — 마커 사이의 bash
-펜스가 하나가 아닌 것, 그리고 게이트 블록 밖 bash 펜스에 `$CODEX_YAML` 을 그 이름 그대로
-읽는 줄이 있는 것. **잡지 못하는 것**도 적어 둡니다(전부 실측): 경로를 조각으로 재조립해
-읽기 · 글롭으로 읽기 · ` ```sh ` 처럼 다른 언어표기를 단 펜스 · 들여쓴 펜스 · bash 가
-아니라 산문으로 「그 파일을 읽어라」라고 시키기. 어휘로 닫히는 것들이 아니므로 이 다섯은
-**락이 아니라 규율로** 지킵니다.
+`tests/test_seed_gate_wiring.sh` 의 판정은 **대부분 동작**입니다 — 잘라낸 블록을 stub 러너
+위에서 실제로 돌리고, stub 이 받은 argv · 산출물 파일의 생사 · 블록의 stdout 을 봅니다.
+그 락에서 **순수하게 정적인 텍스트 검사는 둘뿐**입니다: 마커 사이의 펜스가 하나인가,
+그리고 게이트 블록 밖 펜스에 `$CODEX_YAML` 독자가 있는가. 그 둘은 동작으로는 잴 수 없는
+것(내일 생길 분기의 자리)을 재기 때문에 정적인 것이 맞습니다.
+
+**잡지 못하는 것**도 적어 둡니다(전부 실측): 경로를 조각으로 재조립해 읽기 · 글롭으로
+읽기 · bash 가 아니라 산문으로 「그 파일을 읽어라」라고 시키기. 이 **셋**은 어휘로 닫히지
+않으므로 **락이 아니라 규율로** 지킵니다. ` ```sh ` 처럼 다른 언어표기를 단 펜스와 들여쓴
+펜스는 이 목록에서 **빠졌습니다** — 그 락의 추출기들이 펜스 여는 줄을 언어표기·들여쓰기와
+무관하게 보므로 둘 다 RED 가 됩니다.
 
 <!-- codex-gate:begin runner=run_seed_codex_reviewer.sh -->
 ```bash
@@ -237,11 +296,12 @@ skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
 # 없으면 감지기 자체가 안 돈 것이다(끊긴 심볼릭 링크·빈 stdout) — 「codex 가 없다」와
 # 구별해서 적는다. 뭉개면 사용자가 이유 없는 SKIPPED 만 본다.
 if [[ -z "$codex_avail" ]]; then skip_reason="detector_not_runnable"; fi
-# 두 경로는 `## 상태` 가 도출한다. 이 블록이 그 도출 없이 새 셸에서 돌면 값이 비고,
-# 그대로 두면 러너가 빈 경로를 받아 payload_missing 으로 **조용히** degrade 한다 —
-# 침묵이 결함이다. 여기서 잡아 소리를 내고 가용 판정을 덮어쓴다.
+# 두 경로는 `## 상태` 가 도출한다. 이 블록을 그 도출 없이 **별개 `Bash` 호출로** 돌리면
+# 값이 비고(도구의 기본 동작이다), 그대로 두면 러너가 빈 경로를 받아 payload_missing 으로
+# **조용히** degrade 한다 — 침묵이 결함이다. 여기서 잡아 소리를 내고 가용 판정을 덮어쓴다.
+# 처방은 「앞에 이어 붙여라」다: 별개 호출로 다시 돌려도 같은 빈 상태가 재생산된다.
 if [[ -z "${PAYLOAD:-}" || -z "${CODEX_YAML:-}" ]]; then
-  echo "[spec-distill] codex 억제 게이트 입력 부재 — PAYLOAD='${PAYLOAD:-}' CODEX_YAML='${CODEX_YAML:-}'. 「## 상태」 블록을 먼저 돌려 두 경로를 도출해라. 이 라운드의 억제 축은 codex 없이 간다." >&2
+  echo "[spec-distill] codex 억제 게이트 입력 부재 — PAYLOAD='${PAYLOAD:-}' CODEX_YAML='${CODEX_YAML:-}'. 「## 상태」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 함께 돌려 두 경로를 도출해라(따로 돌리면 같은 빈 상태가 그대로 나온다). 이 라운드의 억제 축은 codex 없이 간다." >&2
   codex_avail=""; skip_reason="gate_inputs_missing"
 fi
 if [[ "$codex_avail" == "true" ]]; then
@@ -279,11 +339,33 @@ cat "${CODEX_YAML:-}" 2>/dev/null || echo "(codex 산출물 없음)"
 
 ### 냉독
 
+경로는 `## 상태` 가 이미 도출했습니다. 아래 펜스는 그 블록이 대입한 `$SEED` 를 소비하므로
+`## 상태` 블록을 **이 펜스 앞에 이어 붙여 같은 `Bash` 호출 안에서** 함께 돌립니다.
+
+```bash
+if [[ -z "${SEED:-}" ]]; then
+  echo "[spec-distill] 냉독 입력 부재 — SEED='${SEED:-}'. 「## 상태」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 함께 돌려라. 이 라운드의 냉독 축은 돌지 않는다." >&2
+  seed_text_rc=2
+else
+  cat "$SEED"; seed_text_rc=$?
+fi
+```
+
+**이 `cat` 이 `${SEED_TEXT}` 의 출처입니다.** 블록의 출력에 seed 전문이 그대로 나오고, 아래
+dispatch 는 그 출력을 인라인합니다. 경로를 넘기는 선택지는 없습니다 — `seed-readback` 은
+`tools: []` 이라 파일을 열 도구가 물리적으로 없고, 파일명을 받으면 **아무 내용도 못 읽은
+채로** 냉독이 도는 무의미한 실행이 됩니다. `$SEED` 는 이 skill 에서 **경로**이고
+`${SEED_TEXT}` 가 **내용**입니다 — 억제 축의 `$PAYLOAD`(경로) / `${BLOB}`(내용) 과 같은
+쌍이며, 두 이름을 섞지 않습니다.
+
+`seed_text_rc` 가 0 이 아니면 냉독을 **돌리지 않고**, 그 사실을 `## degrade 채널` 의 냉독
+행으로 남깁니다.
+
 ```javascript
 Agent({ description: "Seed cold readback", subagent_type: "spec-distill:seed-readback",
         prompt: `아래 seed 만 읽고 «내가 이해한 것은 이것이다» 를 산문으로 말하라.
-<seed>${SEED}</seed>` })
-// **처분** — consumer=human · fail-open · disclosure=framing_degradations
+<seed>${SEED_TEXT}</seed>` })
+// **처분** — consumer=human · fail-open · disclosure=proceed 게이트 질문 텍스트
 ```
 
 **싱크됐는지는 사용자가 읽고 판정합니다.** 에이전트가 통과·미달을 내면 어긋남의 감각이
@@ -311,10 +393,14 @@ degrade 는 **채널 둘**로 나갑니다. 하나는 없을 수 있고 하나�
 skill 의 범위 밖이므로, 그 갭을 이 이름으로 부르고 게이트 텍스트가 그 사실을 말합니다.
 
 **딸린 상호작용 하나** — `## 상태` 가 `$SEED_DIR` 을 만들므로, 원래 세션 디렉토리가 없었을
-세션에도 디렉토리와 파일 둘이 생깁니다. 그 둘은 `gc_common.py` 의 TTL-GC 관할에 들어갑니다:
-폴더 나이가 **직속 파일들의 최신 mtime** 으로 계산되므로 이 두 파일이 그 나이를 정하고,
-TTL(기본 24시간, env override) 을 넘기면 폴더가 통째로 걷힙니다. 결함으로 실증된 것은
-아니지만 배선 이전에는 없던 상호작용이라 여기 적어 둡니다.
+세션에도 디렉토리와 파일 둘이 생깁니다. 그 둘은 `gc_common.py` 의 TTL-GC 관할에 들어갑니다 —
+**관할 밖에 놓이는 분기가 없기 때문**입니다: 그 블록의 단일 가드가 `sid` 실값과 `mkdir`
+성공을 함께 요구하고, `state_path.py` 가 GC 의 세션 이름 필터와 같은 정규식을 통과한 값만
+내주므로, **이 파일들이 존재한다는 것 자체가 GC 가 걷는 자리에 있다는 뜻**입니다(그 조건이
+깨지면 파일이 만들어지지 않고 advisory 만 납니다). 폴더 나이가 **직속 파일들의 최신 mtime**
+으로 계산되므로 이 두 파일이 그 나이를 정하고, TTL(기본 24시간, env override) 을 넘기면
+폴더가 통째로 걷힙니다. 결함으로 실증된 것은 아니지만 배선 이전에는 없던 상호작용이라 여기
+적어 둡니다.
 
 codex 가 죽으면 record 하나가 남고 격리 critic 이 단독으로 돕니다. **억제 축은 판정에
 합류하지 않습니다** — findings 는 어떤 병합기도 거치지 않고 사용자에게 직접 갑니다.
@@ -348,12 +434,54 @@ suppression` 은 세 경우 모두 같고 갈리는 것은 `--status` 와 `--rea
 `codex_avail` 은 pre-flight **부재**만 잡고, 표 아래 칸은 러너 자체의 **런타임 실패**라
 서로 다른 사실입니다.
 
+**냉독 축도 죽을 수 있고, 죽으면 여기 보입니다.** 그 축의 입력은 `${SEED_TEXT}` 이고 그
+출처는 `### 냉독` 의 `cat "$SEED"` 입니다 — `$SEED` 가 비면 냉독은 아무 내용도 없이 돌게
+되므로 **돌리지 않습니다**. 그 record 는 아래 한 행입니다:
+
+| 관측 | `--component` · `--axis` | `--status` | `--reason` |
+|---|---|---|---|
+| `seed_text_rc` 가 0 이 아니다 | `readback` · `readback` | `unavailable` | 냉독 입력 부재 — 관측한 `$SEED` 값과 `seed_text_rc` |
+
+억제 축이 죽어도 격리 critic 이 남지만 **냉독 축에는 남는 담당이 없습니다** — 담당이 하나
+뿐인 축이라 통째로 없어집니다. 그래서 이 행은 「모델 다양성 손실」이 아니라 **축 소실**이고,
+게이트 질문 텍스트에도 그렇게 씁니다.
+
 ## 확정 — proceed 게이트
 
 공통 계약의 정본은 `${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md` 입니다. 4옵션
 게이트를 띄우고, 게이트 질문 텍스트에 degrade 를 **하나도 빠뜨리지 않고** 싣습니다.
 seed 파일은 이 게이트 **이전에** 디스크에 있어야 합니다 — 아래 구조 검사도, 공통 계약의
 Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아니라 handoff 입니다.
+
+### 호출 모양 — 이 파이프라인에서 여기가 정본이다
+
+**다음 세션의 첫 턴은 `/interview <seed 파일 전문>` 한 줄입니다** — `<…>` 자리에 `$SEED`
+파일을 **frontmatter 세 줄까지 그대로** 붙여넣습니다. seed 를 앞 턴에 따로 붙여넣고 다음
+턴에 `/interview` 만 치는 두 단계가 아닙니다.
+
+전문을 인자로 넣는 것은 서식 취향이 아닙니다 — **소비자 쪽 계약이 전부 `$ARGUMENTS` 에
+키잉돼 있습니다.** 인자가 비면 셋이 함께 조용히 실패합니다:
+
+- `conducting-interview` 의 종료 절차가 「인자 없이 호출되면 `S1` 을 만들지 않는다」이므로
+  **사용자가 방금 확정한 요청이 brief §6 에 보존되지 않습니다.**
+- `conducting-interview` 의 seed 입력 규약(그 안의 재결정 P23 포함)이 발동할 입력을 못
+  받습니다.
+- `/interview` 가 방금 Phase 0 을 거친 사용자에게 「`/request-framing` 을 먼저 거치면…」
+  조언을 내고, 인터뷰가 「어떤 것을 만들고 싶으신가요?」로 시작합니다.
+
+**frontmatter 를 떼지 않는 이유**: `type: interview-seed` 줄이 소비자가 seed 를 알아보는
+유일한 표지입니다. 본문은 라벨 없는 산문이라 그것만으로는 seed 인지 아닌지 구별되지
+않습니다. `check_seed.py` 와 억제 번들 조립기가 **본문만** 보는 것은 별개 사실입니다 —
+그 둘은 사람이 읽는 메시지를 재고, frontmatter 는 하니스용 메타데이터입니다.
+
+게이트의 네 옵션은 이 모양을 그대로 씁니다 — ①/② 의 「다음 단계」가 이것입니다:
+
+| # | 이 skill 의 옵션 |
+|---|---|
+| ① | `/compact` 후 `/interview <seed 전문>` (권장) — verbatim `/compact` 명령을 노출하고 **턴 종료** |
+| ② | 바로 `/interview <seed 전문>` — compact 없이 즉시 진행 |
+| ③ | 수정 필요 — 압축을 다시 깎고 이 게이트로 돌아옵니다 |
+| ④ | 멈춤 — seed 와 audit 을 남기고 종료 |
 
 게이트를 띄우기 **직전에** 구조 검사를 돌립니다:
 

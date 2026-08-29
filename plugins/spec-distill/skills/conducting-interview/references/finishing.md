@@ -34,7 +34,9 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    으로만 발생합니다. 모델 추론은 이 리스트에 넣지 말고 본문에 ✎ 프로즈로 씁니다.
    `user_statements`의 발화 전부를 payload §6에 **전문 보존**하고 `S<N>` 앵커를 답니다.
    **최초 요청 원문은 `S1`이다.** `$ARGUMENTS`(사용자가 `/interview`에 함께 넘긴 rough
-   request)를 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다:
+   request)를 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다.
+   Phase 0 을 거친 세션에서는 그 `$ARGUMENTS` 가 `interview-seed` 파일 전문이고, 그때도
+   같은 규칙이 그대로 적용됩니다:
    ```yaml
    - id: S1
      source: verbatim

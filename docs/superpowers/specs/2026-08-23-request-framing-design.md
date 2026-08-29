@@ -337,6 +337,12 @@ brief 는 재구조화(별도 설계) 이후에 채택한다."* 채택 여부와
 **메시지다.** 절도 라벨도 태그도 URL 도 없다. frontmatter 세 줄은 하니스용이고, **첫 턴에
 붙여넣는 것은 본문**이다.
 
+> **정정 (2026-08-29)** — 첫 턴에 붙여넣는 것은 **파일 전문**(frontmatter 포함)이다. 소비자
+> 계약이 전부 `$ARGUMENTS` 에 키잉돼 있고 `type: interview-seed` 줄이 seed 를 알아보는 유일한
+> 표지라, 본문만 넘기면 `S1` 보존·seed 규약·조언 억제 셋이 함께 조용히 실패한다. 위 문장이
+> 옳게 남는 부분은 **게이트와 억제 번들이 재는 대상**이 본문이라는 것뿐이다. 호출 모양의
+> 정본은 `framing-requests` SKILL 의 「호출 모양」 절.
+
 ```markdown
 ---
 type: interview-seed
@@ -482,7 +488,7 @@ kill switch)에는 이 규약이 없다. 그리고 `reviewing-spec` 의 Phase 5 
 | `agents/seed-readback.md` | `tools: []`. seed 만. 판정은 사용자 |
 | `templates/interview-seed-template.md` | **예시와 쓰지 말 것.** 양식이 아니다 |
 | `templates/interview-seed-audit-template.md` | 원문 · 질문 전체 · 긴 초안 · 비평과 냉독 · degrade |
-| `scripts/check_seed.py` | 검사 넷(§8.1) — **seed 본문에 대해서는 전부 부재 검사**이고, 원문 보존 하나만 audit 쪽 존재 검사다 |
+| `scripts/check_seed.py` | 검사 넷(§8.1) — **seed 본문에 대해서는 전부 부재 검사**이고, 원문 보존 하나만 audit 쪽 존재 검사다 〔**정정 2026-08-29**: 다섯이다 — §8.1 의 정정 참조〕 |
 | `scripts/build_seed_inline_blob.py` | critic 입력 조립. `build_brief_inline_blob.py` 와 같은 위생 규약(식별자 redact) |
 | `scripts/run_seed_codex_reviewer.sh` | seed 억제 축 codex 러너. `run_brief_codex_reviewer.sh` 의 골격을 따르되 **brief 러너를 건드리지 않는다**(아래) |
 | `scripts/build_seed_codex_prompt.py` | seed payload 형상의 프롬프트 빌더 |
@@ -577,6 +583,13 @@ seed 에만 걸린다. brief 게이트는 이번에 건드리지 않는다(§5.2
 | 부재 검사 | 답-슬롯 헤딩 · 태그 · URL |
 
 `check_seed.py` 가 재는 넷:
+
+> **정정 (2026-08-29)** — 구현은 **다섯**이다. 아래 넷에 더해 **seed 본문 전체가 비어 있지
+> 않은지** 보는 검사(check 0)가 있고, 그것은 부재 검사가 아니라 **파일-전체 존재 검사**다
+> (금지 대상인 «슬롯» 존재 검사와는 범주가 다르다 — 빈 파일을 통과시키면 아래 부재 검사 셋이
+> 전부 vacuous 해지므로 필요하다). 바로 위 표의 「존재 검사: 없음(본문이 비어 있지 않음만)」
+> 칸이 그 검사를 이미 인정하고 있었고, 이 열거만 낡아 있었다. §7 의 같은 「넷」 표기도 같은
+> 정정을 받는다.
 
 1. **원문 보존** — audit 원문 절이 존재하고 비어 있지 않다.
 2. **답-슬롯 헤딩 부재** — 미해결 질문 목록 · 대안 목록 · 인수 조건 초안 · 기각 목록에 해당하는

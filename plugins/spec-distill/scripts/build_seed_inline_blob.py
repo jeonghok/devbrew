@@ -38,8 +38,9 @@ RAW_TEXT_SECTION_RE = re.compile(r'^##\s*1\.\s*원문\s*$(.*?)(?=^##\s|\Z)', re.
 
 
 def seed_body(text: str) -> str:
-    """frontmatter 를 뺀 seed 본문. 첫 턴에 실제로 붙여넣는 것이 본문이므로
-    리뷰 대상도 본문이어야 한다(check_seed.py 의 body_of() 와 같은 이유)."""
+    """frontmatter 를 뺀 seed 본문. frontmatter 세 줄은 하니스용 메타데이터이고
+    비평자가 읽고 판정할 것은 사람이 읽는 메시지이므로, 리뷰 대상도 본문이어야
+    한다(check_seed.py 의 body_of() 와 같은 이유)."""
     return FRONTMATTER_RE.sub("", text, count=1)
 
 

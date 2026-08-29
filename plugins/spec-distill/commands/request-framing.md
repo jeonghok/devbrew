@@ -1,5 +1,5 @@
 ---
-description: 파이프라인 맨 앞의 회의 — 사용자의 의도·steering·방향·goal 을 싱크해 새 세션의 첫 턴 메시지 `interview-seed` 로 압축한다.
+description: 파이프라인 맨 앞의 회의 — 사용자의 의도·steering·방향·goal 을 싱크해 새 세션 첫 턴의 `/interview` 인자로 붙여넣을 `interview-seed` 로 압축한다.
 argument-hint: "[raw request / 생각 / 대화 / 자료]"
 ---
 
@@ -35,5 +35,7 @@ Skill framing-requests $ARGUMENTS
 ## 다음 단계
 
 skill 이 확산 후 압축을 거쳐 `interview-seed` 를 `docs/superpowers/interview/` 에
-만듭니다. 그 seed 는 **새 세션의 첫 턴에 붙여넣는 메시지**이고, 그 세션이
-`/interview` 로 Phase 1 을 시작합니다.
+만듭니다. 그 seed 는 **새 세션의 첫 턴에 붙여넣는 메시지**이고, 그 첫 턴은
+`/interview <seed 파일 전문>` 한 줄입니다 — frontmatter 세 줄까지 그대로 인자로
+넣습니다. 이 모양의 정본과 그렇게 정한 이유는 `framing-requests` skill 의
+`## 확정 — proceed 게이트` 안 「호출 모양」 절에 있습니다. 여기서 다시 정하지 않습니다.
