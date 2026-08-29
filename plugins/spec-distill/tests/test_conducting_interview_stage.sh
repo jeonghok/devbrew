@@ -632,15 +632,34 @@ grep -qF '`S1`이 아니라 `S2`부터 시작합니다' <<<"$stepa_flat" \
   && ok "R-M: 원문 있으면 user_statements id가 S1이 아니라 S2부터 시작한다는 명시 (한 문장 결속)" \
   || no "R-M: 원문 있음 케이스의 S2 시작 규칙이 finishing.md에 한 문장으로 명시되지 않았다"
 
-# --- v0.40.0: R1 재정의 + 탐색 경계 (5 통과 의례 절 스코프 — 헤더-satisfiable 회피) ---
+# --- v0.40.0: R1 재정의 (5 통과 의례 절 스코프 — 헤더-satisfiable 회피) ---
 rites_block="$(awk '/^## 5 통과 의례/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
 grep -q 'Problem Reframe' <<<"$rites_block" \
   && ok "R1(v0.40.0): Problem Reframe 으로 재정의 (scoped to 5 통과 의례)" \
   || no "R1(v0.40.0): Problem Reframe 으로 재정의 (scoped to 5 통과 의례)"
-# 경계 — framing 의 탐색은 «사용자 머릿속», interview 의 탐색은 «문제 공간». 이 문장이
-# 없으면 두 단계의 질문이 어느 쪽 것인지 실행 시점에 판정 불가다.
-grep -qE 'framing.*웹|웹.*framing|사용자 머릿속|문제 공간' <<<"$rites_block" \
-  && ok "R2(v0.40.0): 탐색 경계 명시" || no "R2(v0.40.0): 탐색 경계 명시"
+
+# --- v0.40.0: 탐색 경계 (### R2 절 스코프 — rites_block 보다 좁다: R1/R3 텍스트로부터
+# 오는 우연한 co-occurrence 를 배제) ---
+# 경계 — framing 의 탐색은 사용자에게 물어서 메우고, 바깥을 보는 것은 interview 의 R&R
+# 이다. 이 문장이 없으면 두 단계의 질문이 어느 쪽 것인지 실행 시점에 판정 불가다.
+#
+# 원래 판본(`framing.*웹|웹.*framing|...`)은 두 결함이 있었다(실측, fix round):
+#  1. rewrap 브리틀 — grep 은 줄 단위로 매칭하므로, 의미를 안 바꾸는 rewrap(«request-framing
+#     은 / 웹은» 사이에 개행이 끼는 것)이 `framing`과 `웹`을 다른 물리 줄로 갈라 거짓 RED를
+#     냈다. 이 파일의 다른 스코프드 단언들과 같은 관용(개행 접기)을 준다.
+#  2. 극성(polarity) 없음 — `framing.*웹`은 «framing 근처에 웹이 있다»만 재고 부정인지
+#     긍정인지 안 잰다. "request-framing 도 웹을 함께 조사한다"처럼 **뒤집은** 문장도 같은
+#     토큰 순서를 만족해 거짓 GREEN 을 낼 수 있었다.
+# 고침: ① 절 스코프를 `### R2 — 웹 Landscape`(rites_block 전체가 아니라)로 좁히고 개행을
+# 공백으로 접어 rewrap 관용을 준다. ② `웹` 뒤 20자 이내에 부정 어간 `보지 않`을 직접
+# 요구해 극성을 고정한다(어미 변화 — 보지 않는다/보지 않고/보지 않으며 — 는 어간 매치로
+# 흡수). `framing` 언급은 별도로 요구해 이 절이 애초에 request-framing 얘기를 하고 있는지
+# 확인한다.
+r2_block="$(awk '/^### R2 — 웹 Landscape/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$SKILL")"
+r2_flat="$(tr '\n' ' ' <<<"$r2_block" | tr -s ' ')"
+{ grep -qE 'framing' <<<"$r2_flat" && grep -qE '웹[^.]{0,20}보지 않' <<<"$r2_flat"; } \
+  && ok "R2(v0.40.0): 탐색 경계 명시 (### R2 스코프, rewrap-tolerant, 극성 고정)" \
+  || no "R2(v0.40.0): 탐색 경계 명시 (### R2 스코프, rewrap-tolerant, 극성 고정)"
 
 # --- v0.40.0: seed 입력 규약 (scoped — 헤더-satisfiable 회피 + rewrap 관용) ---
 seed_block="$(awk '/^## seed 를 입력으로 받았을 때/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
