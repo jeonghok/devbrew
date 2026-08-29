@@ -315,6 +315,46 @@ else
   fi
 fi
 
+# ── H2) 처방이 참인가 ────────────────────────────────────────────────────────
+# 이름을 대는 것만으로는 처방이 참이 되지 않는다. advisory 가 「「## 상태」 블록을 다시
+# 돌려라」고 말하면서 그 블록이 **대입하지 않는** 변수를 대면, 사용자는 시킨 대로 하고도
+# 같은 자리에 선다 — H 는 이름의 실재만 보므로 그 상태를 GREEN 으로 통과시킨다.
+# 여기서는 문구가 아니라 **관계**를 잰다: 처방 advisory 가 대는 이름 ⊆ 그 블록의 대입.
+# ∀ 로 적혀 있어 오늘 없는 세 번째 advisory 도 생기는 순간 이 판정에 들어온다.
+STATE_FENCE="$SCRATCH/state.sh"
+awk '
+  /^## 상태$/ {ins=1; next}
+  ins && /^## / {ins=0}
+  ins && /^```bash$/ {inb=1; next}
+  ins && inb && /^```$/ {inb=0; ins=0; next}
+  ins && inb {print}
+' "$SKILL" > "$STATE_FENCE"
+ADVISORY="$(awk '
+  /^```bash$/ {inb=1; next}
+  inb && /^```$/ {inb=0; next}
+  inb && /echo/ && /「## 상태」/ {print}
+' "$SKILL")"
+adv_n="$(printf '%s\n' "$ADVISORY" | grep -c '「## 상태」')"
+if [ ! -s "$STATE_FENCE" ] || [ "$adv_n" -lt 1 ]; then
+  no "H2: 「## 상태」 펜스나 그 블록을 처방하는 advisory(${adv_n}줄)를 못 찾았다 — 아래 판정은 무의미하다"
+else
+  h2_bad=""; h2_n=0
+  # `tr -d` 를 쓰지 않는다 — SET 안의 `:-}` 가 «범위»로 해석돼 대문자를 통째로 지운다
+  # (실측: 변수 이름이 전부 `-` 하나로 뭉개졌다).
+  for v in $(printf '%s\n' "$ADVISORY" | grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*:-\}' \
+             | sed -E 's/^\$\{//; s/:-\}$//' | sort -u); do
+    h2_n=$((h2_n+1))
+    grep -qE "^${v}=" "$STATE_FENCE" || h2_bad="$h2_bad $v"
+  done
+  if [ "$h2_n" -eq 0 ]; then
+    no "H2: 처방 advisory ${adv_n}줄에서 변수 이름을 하나도 못 뽑았다 — 판정할 대상이 없으므로 이 단언은 공허하다 (advisory 가 관측값을 안 싣거나 추출이 깨졌다)"
+  elif [ -z "$h2_bad" ]; then
+    ok "H2: 처방 advisory ${adv_n}줄이 대는 변수 ${h2_n}개를 「## 상태」 블록이 전부 대입한다 (처방이 참이다)"
+  else
+    no "H2: 「## 상태」 를 돌리라고 처방하면서 그 블록이 대입하지 않는 변수를 댄다 —$h2_bad (사용자는 시킨 대로 하고도 같은 자리에 선다)"
+  fi
+fi
+
 # ── S) 유일한 독자 — 이 축의 판정·노출은 게이트 블록 «안»에서만 일어난다 ────
 # 여기가 이 파일에서 **∀ 로 적힌 유일한 단언**이고, 아래 R 이 열거로 닫는 것을 도출로
 # 닫는 자리다. 잔존이 새는 조건은 한 가지다: **어떤 실행이 자기가 만들지 않은
@@ -323,15 +363,17 @@ fi
 # 안 넘어가고, 넘어가는 것은 디스크의 파일뿐이기 때문이다. 그래서 두 번째 독자를
 # 금지하면 그 부류가 닫힌다: 오늘 없는 분기가 내일 생겨도, 그 분기가 게이트 블록 안에
 # 있으면 클리어 뒤이므로 안전하고, 밖에 있으면 이 단언이 RED 다.
-# 산문은 자유다 — 재는 것은 **bash 펜스 안**의 줄뿐이고, 대입(`CODEX_YAML=`)은 독자가
-# 아니므로 `## 상태` 의 도출은 걸리지 않는다.
+# 산문과 주석은 자유다 — 재는 것은 **bash 펜스 안에서 실행되는** 줄뿐이고, 대입
+# (`CODEX_YAML=`)은 독자가 아니므로 `## 상태` 의 도출은 걸리지 않는다.
 OUTSIDE_READS="$(awk '
   /codex-gate:begin/ {ing=1}
   /codex-gate:end/   {ing=0; next}
   /^```bash$/ {inb=1; next}
   inb && /^```$/ {inb=0; next}
   inb && !ing {printf "%d:%s\n", FNR, $0}
-' "$SKILL" | grep 'CODEX_YAML' | grep -vE '^[0-9]+:[[:space:]]*CODEX_YAML=')"
+' "$SKILL" | grep 'CODEX_YAML' \
+  | grep -vE '^[0-9]+:[[:space:]]*CODEX_YAML=' \
+  | grep -vE '^[0-9]+:[[:space:]]*#')"
 if [ -z "$OUTSIDE_READS" ]; then
   ok "S: 게이트 블록 밖의 bash 펜스에 \$CODEX_YAML 독자가 없다 (도출: 두 번째 독자만이 잔존을 만들 수 있다)"
 else
