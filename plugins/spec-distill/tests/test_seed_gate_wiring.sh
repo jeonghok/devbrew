@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/framing-requests/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf
+# guards: plugins/spec-distill/skills/framing-requests/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf plugins/spec-distill/scripts/build_seed_inline_blob.py
 #
 # framing-requests 의 codex 게이트를 **잘라내 실행**해, 그 블록이 러너와 맺는 관계를 잰다.
 #
@@ -46,6 +46,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/skills/framing-requests/SKILL.md"
   echo "plugins/spec-distill/scripts/detect_codex.sh"
   echo "plugins/spec-distill/scripts/codex-killswitch.conf"
+  echo "plugins/spec-distill/scripts/build_seed_inline_blob.py"
   exit 0
 fi
 
@@ -224,5 +225,75 @@ for slot in PAYLOAD CODEX_YAML; do
     no "E($slot): 입력 부재를 알리는 줄이 관측값을 안 싣는다 — 일반 SKIPPED 문구는 사유 코드만 주고 «어느 입력이 비었는지»도 «무엇을 고쳐야 하는지»도 말하지 않는다"
   fi
 done
+
+# ── F/G) 문서가 약속한 두 동작에 실행 경로가 있는가 ─────────────────────────
+# 게이트 바깥의 두 펜스다. 둘 다 «파일에만 쓰고 아무것도 출력하지 않으면» 문서의 주장이
+# 수행 불가능해지는 자리이고, 형제 하니스는 마커 사이만 실행하므로 여기를 보지 않는다.
+#   · 「번들은 한 번만 조립하고 두 담당이 나눠 씁니다」 — seed-critic 은 `tools: []` 라
+#     파일을 못 읽는다. 번들이 **stdout 으로 나와야** `${BLOB}` 에 인라인할 것이 생긴다.
+#   · degrade 표 셋째 행과 「codex 의 raw findings 도 사용자에게 갑니다」 — 게이트는
+#     파일에만 쓰므로, 그 파일을 읽어 내는 펜스가 없으면 둘 다 도달 경로가 없다.
+section_fence() {   # $1 = "### <제목>" — 그 절의 첫 bash 펜스 본문
+  awk -v want="$1" '
+    $0 == want {ins=1; next}
+    ins && /^### / {ins=0}
+    ins && /^```bash$/ {inb=1; next}
+    ins && inb && /^```$/ {inb=0; ins=0; next}
+    ins && inb {print}
+  ' "$SKILL"
+}
+
+ASM="$SCRATCH/assemble.sh"
+section_fence '### 재료 조립' > "$ASM"
+if [ ! -s "$ASM" ]; then
+  no "「재료 조립」 절의 bash 펜스를 못 찾았다 — 아래 F 판정은 무의미하다"
+else
+  FX="$SCRATCH/fx"; mkdir -p "$FX"
+  printf -- '---\nk: v\n---\n\n초안 본문 SEEDBODY_7a1.\n' > "$FX/seed.md"
+  printf -- '## 1. 원문\n\n사용자 원문 RAWSTMT_7a1.\n\n## 2. 질문 전체\n\n(없음)\n' > "$FX/audit.md"
+  printf -- '# CLAUDE.md\n\n레포 규칙 REPORULE_7a1.\n' > "$FX/CLAUDE.md"
+  ASM_OUT="$( cd "$FX" && env SD="$ROOT/plugins/spec-distill" \
+      SEED="$FX/seed.md" AUDIT="$FX/audit.md" PAYLOAD="$FX/bundle.md" \
+      bash "$ASM" 2>"$FX/asm.stderr" )"
+  # 세 재료가 전부 stdout 에 있는가. 파일에만 쓰고 끝나면(리뷰어 실측: stdout 0 바이트)
+  # 여기가 비어 `${BLOB}` 에 인라인할 것이 없다.
+  if printf '%s' "$ASM_OUT" | grep -q SEEDBODY_7a1 \
+     && printf '%s' "$ASM_OUT" | grep -q RAWSTMT_7a1 \
+     && printf '%s' "$ASM_OUT" | grep -q REPORULE_7a1; then
+    ok "F: 조립 블록이 번들 세 재료를 stdout 으로 낸다 (\${BLOB} 에 인라인할 것이 실재)"
+  else
+    no "F: 조립 블록의 stdout 에 번들이 없다 — seed-critic 은 tools: [] 라 파일을 못 읽으므로 \${BLOB} 에 넣을 것이 아무 데도 없다"
+  fi
+  # 「한 파일, 두 전달 방식」 — critic 이 받는 것과 codex 가 받는 것이 같은 내용인가.
+  if [ -s "$FX/bundle.md" ] && [ "$ASM_OUT" = "$(cat "$FX/bundle.md")" ]; then
+    ok "F: stdout 과 \$PAYLOAD 파일 내용이 같다 (두 담당이 같은 재료를 본다)"
+  else
+    no "F: stdout 과 \$PAYLOAD 파일이 다르다 — 두 담당이 다른 번들을 본다"
+  fi
+fi
+
+RD="$SCRATCH/readback.sh"
+section_fence '### codex 산출물 읽기' > "$RD"
+if [ ! -s "$RD" ]; then
+  no "「codex 산출물 읽기」 절의 bash 펜스를 못 찾았다 — 아래 G 판정은 무의미하다"
+else
+  GX="$SCRATCH/gx"; mkdir -p "$GX"
+  printf 'findings:\n  - category: premature_closure\n    summary: FINDING_7a1\nmeta:\n  codex_failed: false\n' > "$GX/ok.yaml"
+  G_OK="$( env CODEX_YAML="$GX/ok.yaml" bash "$RD" 2>/dev/null )"
+  if printf '%s' "$G_OK" | grep -q 'codex_status: ok' \
+     && printf '%s' "$G_OK" | grep -q FINDING_7a1; then
+    ok "G: 양성 마커 산출물 → codex_status: ok + raw findings 가 출력된다"
+  else
+    no "G: 양성 마커 산출물인데 상태나 raw findings 가 출력에 없다 — 사용자에게 갈 경로가 없다"
+  fi
+  # 부재를 「정상」으로 읽지 않는다. `codex_failed: true` 의 «부재»만 보는 fail-open 판본이
+  # 정확히 여기서 갈린다.
+  G_MISS="$( env CODEX_YAML="$GX/none.yaml" bash "$RD" 2>/dev/null )"
+  if printf '%s' "$G_MISS" | grep -q 'codex_status: degraded'; then
+    ok "G: 산출물 부재 → codex_status: degraded (부재를 정상으로 읽지 않는다)"
+  else
+    no "G: 산출물이 없는데 degraded 가 아니다 — 양성 마커 요구가 아니라 fail-open 술어다"
+  fi
+fi
 
 finish

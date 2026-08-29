@@ -29,9 +29,14 @@ skill 에 옵니다. 5패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-
 
 ## 확산
 
-1. **원문 보존** — 사용자가 준 원문(요청·생각·대화 로그·자료)을 세션 state 에 그대로
-   옮겨 적습니다. 지금 요약하지 않습니다 — 압축은 나중 단계이고, 지금 요약하면 압축이
-   무엇을 떨어뜨렸는지 audit 이 못 남깁니다.
+1. **원문 보존** — 사용자가 준 원문(요청·생각·대화 로그·자료)을 **`$AUDIT` 파일의
+   `## 1. 원문` 절**에 그대로 옮겨 적습니다(append-only — 이후 라운드의 원문도 요약하지
+   않고 계속 덧붙입니다). 이 skill 이 만드는 파일은 그 audit 과 seed 둘뿐이고,
+   `.claude/spec-distill/<session-id>/state.local.md` 는 여기서 만들지 않습니다 —
+   `## 상태` 의 원장이 그 파일에 살고, 없을 수 있습니다. 지금 요약하지 않습니다 —
+   압축은 나중 단계이고, 지금 요약하면 압축이 무엇을 떨어뜨렸는지 audit 이 못 남깁니다.
+   `## 1. 원문` 이라는 헤딩은 장식이 아닙니다: `build_seed_inline_blob.py` 가 그 절을
+   정규식으로 잘라 억제 리뷰 번들에 싣습니다.
 2. **레포 읽기** — 관련 코드 · `CLAUDE.md` · `AGENTS.md` · 기존 설계 문서를 읽습니다.
    다음 세션이 이미 아는 것(상시 규칙)은 압축 단계에서 깎일 대상이므로 지금 확인해 둡니다.
 3. **질문을 한꺼번에** — 라운드마다 질문 하나씩 흩뿌리지 않고, 그 라운드에 필요한
@@ -52,13 +57,29 @@ degrade 원장은 **기존** state 파일 안에 삽니다. 이 skill 은 state 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
 sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""
-STATE="$(python3 "$SD/scripts/state_path.py" state-root)/$sid/state.local.md"
+ROOT="$(python3 "$SD/scripts/state_path.py" state-root)"
+STATE="$ROOT/$sid/state.local.md"
+# 억제 축의 두 작업 파일. 경로는 **세션의 순수 함수**여야 한다 — 어느 블록이 언제
+# 재도출해도 같은 파일을 가리켜야 하기 때문이다. `mktemp` 은 `$$`(PID) 와 **같은 결함**
+# 이다: Bash 도구는 호출마다 새 셸이라 그 값이 소멸하고 **재발견이 불가능**하다.
+# 세션 «디렉토리»는 만들어도 된다 — state.local.md 를 만드는 것과 다른 일이다.
+SEED_DIR="$ROOT/${sid:-nosid}"
+mkdir -p "$SEED_DIR" 2>/dev/null || SEED_DIR="${TMPDIR:-/tmp}/spec-distill-${sid:-nosid}"
+mkdir -p "$SEED_DIR" 2>/dev/null
+PAYLOAD="$SEED_DIR/seed-suppression-bundle.md"
+CODEX_YAML="$SEED_DIR/seed-suppression-codex.yaml"
 if [ -n "$sid" ] && [ -f "$STATE" ]; then
   python3 "$SD/scripts/brief_review_state.py" init "$STATE" --ledger-key framing_degradations; ledger_rc=$?
 else
   ledger_rc=1
 fi
 ```
+
+**이 블록이 경로의 유일한 도출 지점입니다.** `$SD`·`$sid`·`$ROOT`·`$STATE`·`$SEED_DIR`·
+`$PAYLOAD`·`$CODEX_YAML` 은 전부 환경의 순수 함수이므로, 셸이 바뀌었으면 **이 블록을
+다시 돌려** 같은 값을 얻습니다. 아래 어느 블록도 이 값들을 새로 만들지 않습니다 —
+`mktemp` 으로 만들면 다음 `Bash` 호출이 그 파일을 다시 찾지 못하고, `$CODEX_YAML` 을
+읽어야 하는 하류 단계가 통째로 수행 불가능해집니다.
 
 `--ledger-key framing_degradations` 는 표준 3키에 **더해** 이 원장 줄을 심습니다(치환이
 아닙니다 — brief 파이프라인의 원장은 그대로 남습니다). 이 호출이 없으면 뒤의
@@ -77,19 +98,23 @@ fi
 씁니다. 조립이 두 곳에 있으면 한쪽만 고쳐질 때 두 리뷰어가 서로 다른 재료를 보게 되고,
 그 어긋남은 findings 가 갈릴 때까지 드러나지 않습니다.
 
+경로는 `## 상태` 에서 이미 도출했습니다. 여기서 새로 만들지 않습니다.
+
 ```bash
-SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
-PAYLOAD="$(mktemp -t sd-seed-blob-XXXXXX)"
-CODEX_YAML="$(mktemp -t sd-seed-codex-XXXXXX)"
 python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED" "$AUDIT" CLAUDE.md > "$PAYLOAD"; blob_rc=$?
+[ "$blob_rc" -eq 0 ] && cat "$PAYLOAD"
 ```
+
+**마지막 `cat` 이 `${BLOB}` 의 출처입니다.** 이 블록의 출력에 번들 전문이 그대로 나오고,
+아래 critic dispatch 는 그 출력을 인라인합니다. 경로를 넘기는 선택지는 없습니다 —
+`seed-critic` 은 `tools: []` 이라 파일을 읽을 도구가 물리적으로 없습니다. codex 는 같은
+파일을 `$PAYLOAD` 인자로 받습니다: **한 파일, 두 전달 방식.** `cat` 이 없으면 두 담당이
+같은 번들을 본다는 이 절의 주장에 수행 경로가 없어집니다(조립기 stdout 은 파일로
+리다이렉트되므로 그것만으로는 아무 데도 안 보입니다).
 
 `blob_rc` 가 0 이 아니면 번들이 없는 것이므로 **두 담당 모두** 돌리지 않고, 그 사실을
 `component: pipeline` · `affected_axis: suppression` · `verification_status: unavailable`
 로 남깁니다.
-
-아래 codex 게이트 블록은 **이 블록과 같은 `Bash` 호출**에서 이어서 돌립니다 — `Bash`
-도구는 호출마다 새 셸이라 `$PAYLOAD`·`$CODEX_YAML` 은 다음 호출에 남지 않습니다.
 
 ### 억제 리뷰 — 격리 critic
 
@@ -100,8 +125,9 @@ Agent({ description: "Seed suppression critique", subagent_type: "spec-distill:s
 // **처분** — consumer=human · fail-open · disclosure=framing_degradations
 ```
 
-`${BLOB}` 은 위에서 조립한 `$PAYLOAD` 의 내용입니다 — codex 가 파일로 받는 것과 같은
-번들을 인라인으로 넘깁니다.
+`${BLOB}` 은 위 조립 블록이 `cat` 으로 낸 출력 그대로입니다 — 요약하거나 다시 조립하지
+않습니다. 그것이 codex 가 `$PAYLOAD` 로 받는 파일과 같은 내용이라는 것이 「두 담당이 같은
+재료를 본다」의 전부입니다.
 
 **뺄셈 검사입니다.** 「좋은 프롬프트냐」는 묻지 않습니다 — 그건 취향이고 비평자에게는
 사용자의 도메인 지식이 없습니다.
@@ -126,18 +152,19 @@ skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
 # 없으면 감지기 자체가 안 돈 것이다(끊긴 심볼릭 링크·빈 stdout) — 「codex 가 없다」와
 # 구별해서 적는다. 뭉개면 사용자가 이유 없는 SKIPPED 만 본다.
 if [[ -z "$codex_avail" ]]; then skip_reason="detector_not_runnable"; fi
-# 「재료 조립」과 이 블록이 다른 Bash 호출로 갈라지면 두 변수가 소멸한다. 그대로 두면
-# 러너가 빈 경로를 받아 payload_missing 으로 **조용히** degrade 한다 — 침묵이 결함이다.
-# 여기서 잡아 소리를 내고 가용 판정을 덮어쓴다.
+# 두 경로는 `## 상태` 가 도출한다. 이 블록이 그 도출 없이 새 셸에서 돌면 값이 비고,
+# 그대로 두면 러너가 빈 경로를 받아 payload_missing 으로 **조용히** degrade 한다 —
+# 침묵이 결함이다. 여기서 잡아 소리를 내고 가용 판정을 덮어쓴다.
 if [[ -z "${PAYLOAD:-}" || -z "${CODEX_YAML:-}" ]]; then
-  echo "[spec-distill] codex 억제 게이트 입력 부재 — PAYLOAD='${PAYLOAD:-}' CODEX_YAML='${CODEX_YAML:-}'. 「재료 조립」 블록을 같은 Bash 호출에서 먼저 돌려라. 이 라운드의 억제 축은 codex 없이 간다." >&2
+  echo "[spec-distill] codex 억제 게이트 입력 부재 — PAYLOAD='${PAYLOAD:-}' CODEX_YAML='${CODEX_YAML:-}'. 「## 상태」 블록을 먼저 돌려 두 경로를 도출해라. 이 라운드의 억제 축은 codex 없이 간다." >&2
   codex_avail=""; skip_reason="gate_inputs_missing"
 fi
 if [[ "$codex_avail" == "true" ]]; then
   bash "$SD/scripts/run_seed_codex_reviewer.sh" suppression "$PAYLOAD" "$(pwd)" "$CODEX_YAML"; runner_rc=$?
-  # exit 3 은 「산출물 자체를 못 썼다」이다. 그때 직전 라운드 YAML 이 디스크에 그대로
-  # 남아 이번 라운드 판정으로 읽히는데, 그 파일은 양성 마커(codex_failed: false)를
-  # 달고 있을 수 있어 「이번에 codex 가 정상이었다」로 읽힌다. 지운다.
+  # exit 3 은 「산출물 자체를 못 썼다」이다. 이 경로는 세션의 순수 함수라 **라운드마다
+  # 같은 파일**이므로, 그때 직전 라운드 YAML 이 디스크에 그대로 남아 이번 라운드 판정으로
+  # 읽힌다 — 그 파일은 양성 마커(codex_failed: false)를 달고 있을 수 있어 「이번에 codex 가
+  # 정상이었다」로 읽힌다. 지운다.
   if [[ "$runner_rc" -eq 3 ]]; then rm -f "$CODEX_YAML"; fi
 else
   echo "[spec-distill] codex 억제 co-review SKIPPED (reason: ${skip_reason:-unknown}) — 격리 critic 단독, 이 축에 모델 다양성이 없었다 (degraded)." >&2
@@ -146,10 +173,29 @@ fi
 <!-- codex-gate:end -->
 
 **축은 죽지 않습니다** — 격리 critic 이 남습니다. 위 stderr advisory 는 사용자에게 그대로
-노출하고, 같은 사실을 아래 `framing_degradations` 원장에도 남깁니다.
+노출하고, 원장이 살아 있으면(`ledger_rc == 0`) 같은 사실을 `framing_degradations` 에도
+남깁니다. 원장이 없으면 그 사실은 proceed 게이트 질문 텍스트로만 갑니다(§`degrade 채널`).
 
-codex 의 raw findings 도 격리 critic 의 것과 **나란히** 사용자에게 갑니다 — 병합기가
-없고 판정도 없습니다(§`degrade 채널`).
+### codex 산출물 읽기
+
+게이트는 파일에만 씁니다 — 아무것도 출력하지 않습니다. 그 파일을 **여기서 읽어야**
+degrade 판정과 findings 노출이 일어납니다. 경로는 `## 상태` 에서 도출한 것 그대로이고,
+셸이 바뀌었으면 그 블록을 다시 돌려 같은 값을 얻습니다.
+
+```bash
+if [ -s "$CODEX_YAML" ] && grep -q 'codex_failed: false' "$CODEX_YAML"; then
+  codex_status=ok
+else
+  codex_status=degraded
+fi
+echo "codex_status: $codex_status"
+cat "$CODEX_YAML" 2>/dev/null || echo "(codex 산출물 없음)"
+```
+
+`codex_status` 가 degrade 표 셋째 행의 입력입니다 — **성공 마커 양성 요구**를 여기서 한 번
+계산하고, 파일 부재 · 0바이트 · 잘림 · `codex_failed: true` 가 전부 같은 `degraded` 로
+떨어집니다. `cat` 출력의 `findings:` 항목이 codex 의 raw findings 이고, 격리 critic 의 것과
+**나란히** 사용자에게 갑니다 — 병합기가 없고 판정도 없습니다(§`degrade 채널`).
 
 ### 냉독
 
@@ -161,9 +207,9 @@ Agent({ description: "Seed cold readback", subagent_type: "spec-distill:seed-rea
 ```
 
 **싱크됐는지는 사용자가 읽고 판정합니다.** 에이전트가 통과·미달을 내면 어긋남의 감각이
-사용자에게 오지 않습니다. 세 리뷰(격리 critic · codex · 냉독)의 raw 출력은 **사용자에게 직접** 갑니다 —
-orchestrator 는 그것을 아래 `framing_degradations` 원장에 옮겨 적을 뿐, 판정하거나
-병합하지 않습니다.
+사용자에게 오지 않습니다. 세 리뷰(격리 critic · codex · 냉독)의 raw 출력은 **사용자에게
+직접** 갑니다 — orchestrator 는 판정하지도 병합하지도 않습니다. degrade 가 있으면 그것은
+`## degrade 채널` 의 채널 둘로 나갑니다(원장은 있을 때만, 게이트 텍스트는 항상).
 
 ## degrade 채널
 
