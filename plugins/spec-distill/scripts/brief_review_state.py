@@ -192,6 +192,8 @@ def _set_scalar(text: str, key: str, value) -> str:
 
 # --- 서브커맨드 --------------------------------------------------------------
 def cmd_init(args) -> int:
+    if args.ledger_key not in LEDGER_KEYS:
+        return _fail(f"ledger-key가 닫힌 열거 밖: {args.ledger_key!r}")
     path = Path(args.state)
     try:
         text = _read(path)
@@ -203,8 +205,15 @@ def cmd_init(args) -> int:
         return _fail(f"malformed: {exc}")
     added = []
     inject = ""
-    for key, default in ((KEY_STAGE, "direction"), (KEY_ROUNDS, "0"),
-                         (KEY_DEGRADE, "[]")):
+    # `--ledger-key`는 **추가**다(치환이 아니다). 기본 원장은 어느 파이프라인의 state에서든
+    # 표준 3키의 일부로 남고, 두 번째 파이프라인은 자기 원장 줄을 하나 더 얻는다. 치환으로
+    # 만들면 brief 쪽 state에서 기본 원장이 사라져 그 파이프라인의 degrade가 통째로 죽는다.
+    # 기본값으로 부르면 튜플이 지금까지와 **바이트 동일**하다 — reviewing-brief의 "키 3개"가
+    # 참으로 남는 것이 이 설계의 요구다.
+    keys = [(KEY_STAGE, "direction"), (KEY_ROUNDS, "0"), (KEY_DEGRADE, "[]")]
+    if args.ledger_key != KEY_DEGRADE:
+        keys.append((args.ledger_key, "[]"))
+    for key, default in keys:
         if not re.search(rf"^{key}[ \t]*:", text, re.MULTILINE):
             inject += f"{key}: {default}\n"
             added.append(key)
@@ -350,12 +359,18 @@ def cmd_degrade_append(args) -> int:
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="brief_review_state.py")
     sub = p.add_subparsers(dest="cmd", required=True)
-    for name, fn in (("init", cmd_init),
-                     ("can-redispatch", cmd_can_redispatch),
+    for name, fn in (("can-redispatch", cmd_can_redispatch),
                      ("bump-critic-round", cmd_bump)):
         sp = sub.add_parser(name)
         sp.add_argument("state")
         sp.set_defaults(fn=fn)
+    sp = sub.add_parser("init")
+    sp.add_argument("state")
+    # get/degrade-append와 같은 이유로 choices=를 안 쓴다(닫힌 열거 위반은 exit 2가 아니라
+    # exit 1 + {"ok": false, "reason": …}이어야 소비자가 rc로 원인을 가른다).
+    sp.add_argument("--ledger-key", default=KEY_DEGRADE,
+                    help="이 원장 줄도 함께 심는다(LEDGER_KEYS). 기본값이면 표준 3키만")
+    sp.set_defaults(fn=cmd_init)
     sp = sub.add_parser("get")
     sp.add_argument("state")
     # choices= 를 안 쓴다 — argparse가 invalid choice에 exit 2를 내는데, 이 스크립트의

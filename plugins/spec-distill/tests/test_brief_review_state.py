@@ -407,3 +407,71 @@ class TestDegradationLedgerValueValidation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestInitLedgerKey(Base):
+    """`init --ledger-key` — 두 번째 파이프라인(framing-requests)이 자기 원장 줄을
+    갖게 한다.
+
+    이 옵션이 없던 판에서는 이런 상태였다: `framing_degradations`가 `LEDGER_KEYS`
+    안에는 있는데 그 줄을 심는 코드가 어디에도 없어서, `degrade-append
+    --ledger-key framing_degradations`가 항상 `"…라인 부재 — init을 먼저
+    실행하라"`로 죽었다. 닫힌 열거에 이름이 있다는 것과 그 원장에 쓸 수 있다는 것은
+    다른 사실이다.
+
+    **기본값 경로는 바뀌면 안 된다.** brief 파이프라인의 SKILL 이 「키 3개」라고
+    적고 있으므로, 인자 없는 `init`이 네 번째 줄을 심으면 그 문장이 거짓이 된다."""
+
+    def test_default_init_does_not_plant_the_second_ledger(self):
+        rc, _, _ = run("init", str(self.state))
+        self.assertEqual(rc, 0)
+        self.assertNotIn("framing_degradations", self.state_text(),
+                         "인자 없는 init이 두 번째 원장을 심었다 — brief SKILL의 「키 3개」가 거짓이 된다")
+
+    def test_ledger_key_plants_that_ledger_line(self):
+        rc, out, _ = run("init", str(self.state), "--ledger-key", "framing_degradations")
+        self.assertEqual(rc, 0)
+        self.assertIn("framing_degradations: []", self.state_text())
+        self.assertIn("framing_degradations", json.loads(out)["added"])
+
+    def test_ledger_key_keeps_the_standard_three(self):
+        """**추가**이지 치환이 아니다 — 기본 원장이 사라지면 brief 쪽 degrade가 통째로 죽는다."""
+        run("init", str(self.state), "--ledger-key", "framing_degradations")
+        t = self.state_text()
+        self.assertIn("brief_review_stage: direction", t)
+        self.assertIn("brief_critic_rounds: 0", t)
+        self.assertIn("brief_review_degradations: []", t)
+
+    def test_ledger_key_init_is_idempotent(self):
+        run("init", str(self.state), "--ledger-key", "framing_degradations")
+        t = self.state_text()
+        rc, _, _ = run("init", str(self.state), "--ledger-key", "framing_degradations")
+        self.assertEqual(rc, 0)
+        self.assertEqual(t.count("framing_degradations"),
+                         self.state_text().count("framing_degradations"),
+                         "재호출이 원장 줄을 중복 추가했다")
+
+    def test_unknown_ledger_key_is_rejected(self):
+        """오타가 조용히 새 원장을 만들면 아무도 안 읽는다 — get/degrade-append와 같은 규율."""
+        rc, out, _ = run("init", str(self.state), "--ledger-key", "typo_degradations")
+        self.assertEqual(rc, 1)
+        self.assertNotIn("typo_degradations", self.state_text())
+
+    def test_append_works_after_ledger_key_init_without_hand_editing(self):
+        """C2 의 근본 해소 증거 — 픽스처를 손으로 고치지 않고 init → append 가 이어진다.
+
+        이 테스트만이 「이름이 열거에 있다」가 아니라 「그 원장에 실제로 쓸 수 있다」를
+        잰다. 다른 단언들은 줄의 존재만 본다."""
+        rc, _, _ = run("init", str(self.state), "--ledger-key", "framing_degradations")
+        self.assertEqual(rc, 0)
+        rc, out, _ = run("degrade-append", str(self.state),
+                         "--component", "codex", "--reason", "codex 미가용: kill_switch",
+                         "--axis", "suppression", "--status", "skipped",
+                         "--ledger-key", "framing_degradations")
+        self.assertEqual(rc, 0, f"init 직후 append가 실패했다: {out}")
+        rc, out, _ = run("get", str(self.state), "--ledger-key", "framing_degradations")
+        self.assertEqual(rc, 0)
+        recs = json.loads(out)["brief_review_degradations"]
+        self.assertEqual([r["component"] for r in recs], ["codex"])
+        default = json.loads(run("get", str(self.state))[1])["brief_review_degradations"]
+        self.assertEqual(default, [], "기본 원장이 framing record를 흡수했다(오염)")

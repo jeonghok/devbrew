@@ -11,12 +11,6 @@ statements, and the repo CLAUDE.md inline, bundled as a single
 critic · codex)에 각각 따로 있으면 한쪽만 고쳐질 때 두 리뷰어가 다른 재료를 보는
 drift 가 생긴다.
 
-**지금 이 파일을 부르는 곳은 없다.** framing-requests/SKILL.md 는 아직 이 블롭을
-자기 프롬프트에 인라인으로 직접 구성한다(seed-critic dispatch, SKILL.md:52-57) —
-그 dispatch 를 이 스크립트로 옮기는 배선은 이 태스크의 범위 밖이다(러너를
-framing-requests/SKILL.md 에 연결하는 것 자체가 후속 태스크). 지금은 구조만 갖춘
-독립 유틸리티다.
-
 세 재료는 **명시적 파일 경로**로만 받는다(argv 인라인 금지 — 형제 프롬프트
 빌더들과 같은 injection-안전 관용구). 자동 유추(예: seed frontmatter 의
 `audit_file:` 필드를 따라가기)는 하지 않는다 — 유추가 실패했을 때의 침묵이

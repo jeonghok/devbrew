@@ -45,6 +45,28 @@ skill 에 옵니다. 5패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-
 **질문에도 라운드에도 분량에도 상한이 없습니다.** 질문 루프는 매 반복마다 사용자가
 답해야 돌고 사용자가 그 루프의 시계입니다 — 자율이 없으므로 묶을 자율도 없습니다.
 
+## 상태
+
+degrade 원장은 **기존** state 파일 안에 삽니다. 이 skill 은 state 파일을 만들지 않습니다.
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+sid="$(python3 "$SD/scripts/state_path.py" session-id)" || sid=""
+STATE="$(python3 "$SD/scripts/state_path.py" state-root)/$sid/state.local.md"
+if [ -n "$sid" ] && [ -f "$STATE" ]; then
+  python3 "$SD/scripts/brief_review_state.py" init "$STATE" --ledger-key framing_degradations; ledger_rc=$?
+else
+  ledger_rc=1
+fi
+```
+
+`--ledger-key framing_degradations` 는 표준 3키에 **더해** 이 원장 줄을 심습니다(치환이
+아닙니다 — brief 파이프라인의 원장은 그대로 남습니다). 이 호출이 없으면 뒤의
+`degrade-append` 가 「라인 부재」로 죽습니다 — 닫힌 열거에 이름이 있다는 것과 그 원장에
+쓸 수 있다는 것은 다른 사실입니다.
+
+`ledger_rc` 가 0 이 아니면 원장 없이 진행합니다. 그 처리는 `## degrade 채널` 에 있습니다.
+
 ## 검증
 
 억제 축의 담당은 **둘**입니다 — 격리 critic 과 codex. 냉독은 별개 축입니다.
@@ -104,6 +126,13 @@ skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
 # 없으면 감지기 자체가 안 돈 것이다(끊긴 심볼릭 링크·빈 stdout) — 「codex 가 없다」와
 # 구별해서 적는다. 뭉개면 사용자가 이유 없는 SKIPPED 만 본다.
 if [[ -z "$codex_avail" ]]; then skip_reason="detector_not_runnable"; fi
+# 「재료 조립」과 이 블록이 다른 Bash 호출로 갈라지면 두 변수가 소멸한다. 그대로 두면
+# 러너가 빈 경로를 받아 payload_missing 으로 **조용히** degrade 한다 — 침묵이 결함이다.
+# 여기서 잡아 소리를 내고 가용 판정을 덮어쓴다.
+if [[ -z "${PAYLOAD:-}" || -z "${CODEX_YAML:-}" ]]; then
+  echo "[spec-distill] codex 억제 게이트 입력 부재 — PAYLOAD='${PAYLOAD:-}' CODEX_YAML='${CODEX_YAML:-}'. 「재료 조립」 블록을 같은 Bash 호출에서 먼저 돌려라. 이 라운드의 억제 축은 codex 없이 간다." >&2
+  codex_avail=""; skip_reason="gate_inputs_missing"
+fi
 if [[ "$codex_avail" == "true" ]]; then
   bash "$SD/scripts/run_seed_codex_reviewer.sh" suppression "$PAYLOAD" "$(pwd)" "$CODEX_YAML"; runner_rc=$?
   # exit 3 은 「산출물 자체를 못 썼다」이다. 그때 직전 라운드 YAML 이 디스크에 그대로
@@ -138,21 +167,39 @@ orchestrator 는 그것을 아래 `framing_degradations` 원장에 옮겨 적을
 
 ## degrade 채널
 
-이 skill 의 **degrade 채널**은 state 의 `framing_degradations` 원장입니다. 기록은
-`brief_review_state.py degrade-append … --ledger-key framing_degradations --axis suppression`
-으로 하고, **원장에 못 쓰면 그 사실 자체를 게이트 질문 텍스트에 한 줄로 싣습니다** —
-기록이 없는 것과 degrade 가 없는 것은 다른 사실입니다.
+degrade 는 **채널 둘**로 나갑니다. 하나는 없을 수 있고 하나는 항상 있습니다.
+
+1. **원장** — state 의 `framing_degradations`. **`ledger_rc` 가 0 일 때만 존재합니다.**
+   기록은 `brief_review_state.py degrade-append "$STATE" --ledger-key framing_degradations …`
+   이고, 매 호출의 종료 코드를 그 자리에서 잡습니다.
+2. **proceed 게이트 질문 텍스트** — 항상 있습니다. 원장이 없거나(`ledger_rc != 0`) 개별
+   `degrade-append` 가 실패하면 **이쪽이 유일한 채널**이고, 그때는 「원장에 기록하지
+   못했다」는 사실 자체를 한 줄로 함께 싣습니다.
+
+**기록이 없는 것과 degrade 가 없는 것은 다른 사실입니다.** 게이트 텍스트에서 둘을
+구별해 씁니다 — 원장이 없는 세션에 「degrade 없음」이라고 쓰지 않습니다.
+
+**남은 갭 — `no-state-in-phase-0`.** `request-framing` 은 인터뷰 이전이라 state 파일이
+아예 없는 세션이 **정상**입니다. 그 세션에서 원장은 구조적으로 부재하고 채널 2 만
+남습니다. state 파일을 새로 만드는 설계(어디에 · 어떤 frontmatter 로 · 누가 지우나)는 이
+skill 의 범위 밖이므로, 그 갭을 이 이름으로 부르고 게이트 텍스트가 그 사실을 말합니다.
 
 codex 가 죽으면 record 하나가 남고 격리 critic 이 단독으로 돕니다. **억제 축은 판정에
 합류하지 않습니다** — findings 는 어떤 병합기도 거치지 않고 사용자에게 직접 갑니다.
 
 codex 축의 record 는 게이트 블록이 낸 값으로 정합니다. `--component codex --axis
-suppression` 은 두 경우 모두 같고 갈리는 것은 `--status` 와 `--reason` 입니다:
+suppression` 은 세 경우 모두 같고 갈리는 것은 `--status` 와 `--reason` 입니다.
+**위에서부터 먼저 맞는 행**을 씁니다:
 
 | 관측 | `--status` | `--reason` |
 |---|---|---|
+| `skip_reason` 이 `gate_inputs_missing` | `unavailable` | 게이트 입력 부재 — 「재료 조립」이 같은 Bash 호출에서 돌지 않았다 |
 | `codex_avail` 이 `true` 가 아니다 | `skipped` | `$skip_reason` 값 그대로 |
 | `codex_avail` 이 `true` 였는데 `$CODEX_YAML` 에 `codex_failed: false` 가 없다 | `degraded` | `$runner_rc` + 관측한 사실(파일 부재·0바이트·잘림·`true`) |
+
+첫 행이 둘째 행보다 먼저인 이유: 게이트 입력 부재는 `codex_avail` 을 덮어써서 둘째 행에도
+맞지만, 그것은 환경 사실이 아니라 **배선 결함**입니다. `skipped` 로 적으면 사용자가
+「codex 가 없는 환경이었구나」로 읽습니다.
 
 `$CODEX_YAML` 은 **성공 마커 양성 요구**로 읽습니다 — `codex_failed: false` 가 **있어야**
 정상입니다. 「`codex_failed: true` 가 없는지」만 보면 그 술어에 fail-closed 보수가 없어
