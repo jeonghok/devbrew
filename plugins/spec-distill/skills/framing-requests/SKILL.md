@@ -31,8 +31,8 @@ skill 에 옵니다. 5패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-
 
 1. **원문 보존** — 사용자가 준 원문(요청·생각·대화 로그·자료)을 **`$AUDIT` 파일의
    `## 1. 원문` 절**에 그대로 옮겨 적습니다(append-only — 이후 라운드의 원문도 요약하지
-   않고 계속 덧붙입니다). 이 skill 이 **무엇을 만들고 무엇을 만들지 않는지**는
-   `## 상태` 한 곳에 있습니다 — 여기서 다시 세지 않습니다. 지금 요약하지 않습니다 —
+   않고 계속 덧붙입니다). `$AUDIT` 경로와 이 skill 이 **무엇을 만들고 무엇을 만들지
+   않는지**는 `## 상태` 한 곳에 있습니다 — 여기서 다시 세지 않습니다. 지금 요약하지 않습니다 —
    압축은 나중 단계이고, 지금 요약하면 압축이 무엇을 떨어뜨렸는지 audit 이 못 남깁니다.
    `## 1. 원문` 이라는 헤딩은 장식이 아닙니다: `build_seed_inline_blob.py` 가 그 절을
    정규식으로 잘라 억제 리뷰 번들에 싣습니다.
@@ -53,11 +53,17 @@ skill 에 옵니다. 5패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-
 
 **이 skill 이 만드는 것의 전부입니다** — 다른 절은 이 목록을 다시 세지 않습니다.
 
-| 만드는 것 | 어디에 |
-|---|---|
-| interview-seed (`$SEED`) · audit (`$AUDIT`) | `docs/superpowers/interview/` — **proceed 승인 이후에만** |
-| 억제 축 작업 파일 둘 (`$PAYLOAD` · `$CODEX_YAML`) | 아래 `$SEED_DIR` |
-| 세션 디렉토리 `$SEED_DIR` 자체 | `.claude/spec-distill/<session-id>/` |
+| 만드는 것 | 어디에 | 언제 |
+|---|---|---|
+| audit (`$AUDIT`) | `docs/superpowers/interview/` | `## 확산` 1번부터 — append-only |
+| interview-seed (`$SEED`) | 〃 | **proceed 승인 이후에만** |
+| 억제 축 작업 파일 둘 (`$PAYLOAD` · `$CODEX_YAML`) | 아래 `$SEED_DIR` | 검증 라운드마다 |
+| 두 문서의 이름을 붙드는 `interview-basename` | 〃 | 아래 블록을 처음 돌릴 때 |
+| 세션 디렉토리 `$SEED_DIR` 자체 | `.claude/spec-distill/<session-id>/` | 〃 |
+
+**audit 과 seed 는 시점이 다릅니다.** audit 은 확산 첫 항목부터 쓰이고 proceed 게이트
+직전의 `check_seed.py` 가 그것을 읽습니다 — 승인 전에 이미 있어야 합니다. `docs/` 에
+승인 이후에만 나가는 것은 **seed 쪽뿐**입니다.
 
 **만들지 않는 것: `state.local.md`.** degrade 원장은 그 **기존** 파일 안에 살고, 없으면
 없는 채로 갑니다(§`degrade 채널` 의 `no-state-in-phase-0`).
@@ -76,6 +82,15 @@ mkdir -p "$SEED_DIR" 2>/dev/null || SEED_DIR="${TMPDIR:-/tmp}/spec-distill-${sid
 mkdir -p "$SEED_DIR" 2>/dev/null
 PAYLOAD="$SEED_DIR/seed-suppression-bundle.md"
 CODEX_YAML="$SEED_DIR/seed-suppression-codex.yaml"
+# 두 산출 문서. 이름은 **첫 라운드에 한 번** 정하고 이후 라운드는 되찾는다 — 그래서
+# 이 블록을 다시 돌리면 같은 두 경로가 나온다. 이름을 기억에서 다시 대는 판본은
+# `mktemp` 과 같은 결함이다: 다음 셸이 같은 값을 다시 만들 수 있어야 한다.
+# `<kebab-topic>` 을 요청의 주제로 바꿔 쓴다 — 그대로 두면 파일 이름에 그대로 들어간다.
+NAME_FILE="$SEED_DIR/interview-basename"
+[ -s "$NAME_FILE" ] || printf '%s-%s-interview\n' "$(date +%F)" "<kebab-topic>" > "$NAME_FILE"
+BASE="docs/superpowers/interview/$(head -n 1 "$NAME_FILE")"
+AUDIT="$BASE.audit.md"
+SEED="$BASE.md"
 if [ -n "$sid" ] && [ -f "$STATE" ]; then
   python3 "$SD/scripts/brief_review_state.py" init "$STATE" --ledger-key framing_degradations; ledger_rc=$?
 else
@@ -84,8 +99,9 @@ fi
 ```
 
 **이 블록이 경로의 유일한 도출 지점입니다.** `$SD`·`$sid`·`$ROOT`·`$STATE`·`$SEED_DIR`·
-`$PAYLOAD`·`$CODEX_YAML` 은 전부 환경의 순수 함수이므로, 셸이 바뀌었으면 **이 블록을
-다시 돌려** 같은 값을 얻습니다. 아래 어느 블록도 이 값들을 새로 만들지 않습니다 —
+`$PAYLOAD`·`$CODEX_YAML`·`$AUDIT`·`$SEED` 은 전부 환경과 `$SEED_DIR` 의 순수 함수이므로,
+셸이 바뀌었으면 **이 블록을 다시 돌려** 같은 값을 얻습니다. 아래 어느 블록도 이 값들을
+새로 만들지 않습니다 —
 `mktemp` 으로 만들면 다음 `Bash` 호출이 그 파일을 다시 찾지 못하고, `$CODEX_YAML` 을
 읽어야 하는 하류 단계가 통째로 수행 불가능해집니다.
 
@@ -158,6 +174,22 @@ Agent({ description: "Seed suppression critique", subagent_type: "spec-distill:s
 `if` 가 아예 없었습니다. kill switch 는 P21 보안 컨트롤이라 그 상태는 「껐다고 믿게만」
 만듭니다.
 
+**이 축의 전부가 한 실행입니다** — 감지 · 게이트 · 호출 · 판정 · 노출이 한 블록에
+있습니다. 쪼개면 안 됩니다. 판정과 노출이 다른 `Bash` 호출로 가면 그 호출은
+`$CODEX_YAML` 을 **다시 도출해서** 읽는데, 그 자리에 있는 파일이 이번 라운드 것이라는
+근거가 그 호출에는 없습니다 — 지난 라운드 파일도 `codex_failed: false` 를 달고 있으므로
+낡은 성공과 신선한 성공이 같은 모양입니다.
+
+**한 블록 안에서는 그 상태가 만들어질 수 없고, 그것이 규율이 아니라 형태에서 도출됩니다.**
+블록은 진입부에서 그 경로를 지우고 마지막에 **같은 실행의 같은 바인딩**으로 읽습니다.
+그 둘 사이에 무엇을 새로 넣든 — 오늘 없는 분기를 포함해 — 그 사이에서 그 파일을 만들 수
+있는 것은 이 실행뿐입니다. 경로가 비어 있으면 클리어도 읽기도 **같은 빈 값**에 대한
+no-op 이라 `degraded` 로 떨어집니다: 한쪽만 건너뛰는 상태가 없습니다.
+
+**그러므로 `$CODEX_YAML` 을 읽는 곳은 이 블록 하나뿐입니다.** 다른 절에 그 파일을 읽는
+펜스를 추가하지 마십시오 — `tests/test_seed_gate_wiring.sh` 가 그 금지를 동작으로
+잡습니다.
+
 <!-- codex-gate:begin runner=run_seed_codex_reviewer.sh -->
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
@@ -175,11 +207,12 @@ if [[ -z "${PAYLOAD:-}" || -z "${CODEX_YAML:-}" ]]; then
   echo "[spec-distill] codex 억제 게이트 입력 부재 — PAYLOAD='${PAYLOAD:-}' CODEX_YAML='${CODEX_YAML:-}'. 「## 상태」 블록을 먼저 돌려 두 경로를 도출해라. 이 라운드의 억제 축은 codex 없이 간다." >&2
   codex_avail=""; skip_reason="gate_inputs_missing"
 fi
-# **이 라운드의 산출물만 이번 판정에 쓰이게 한다.** 경로가 세션의 순수 함수라 라운드마다
-# 같은 파일이고, 지우지 않으면 직전 라운드 YAML 이 그대로 남는다 — 그 파일은 양성 마커를
-# 달고 있을 수 있어 skip 분기(kill switch 포함)와 3 이 아닌 실패 rc 에서 「이번 라운드
-# codex 가 정상이었다」로 읽힌다. 아래 분기 **전에**, 분기와 무관하게 지운다:
-# 그래야 「파일이 있다」가 곧 「이번 라운드에 러너가 썼다」가 된다.
+# ── 진입 클리어 — 아래 «전부»가 이 실행의 산출물이 되게 한다 ────────────────
+# 경로가 세션의 순수 함수라 라운드마다 같은 파일이고, 지우지 않으면 직전 라운드 YAML 이
+# 그대로 남는다 — 그 파일은 양성 마커를 달고 있을 수 있어 skip 분기(kill switch 포함)와
+# 3 이 아닌 실패 rc 에서 「이번 라운드 codex 가 정상이었다」로 읽힌다. 분기 **전에**,
+# 분기와 무관하게 지운다. 이 줄과 블록 끝의 읽기가 한 쌍이다: 그 사이에 분기를 몇 개
+# 넣든 「파일이 있다」는 곧 「이 실행이 썼다」다. 한쪽만 옮기면 그 쌍이 깨진다.
 [[ -n "${CODEX_YAML:-}" ]] && rm -f "$CODEX_YAML"
 if [[ "$codex_avail" == "true" ]]; then
   bash "$SD/scripts/run_seed_codex_reviewer.sh" suppression "$PAYLOAD" "$(pwd)" "$CODEX_YAML"; runner_rc=$?
@@ -191,6 +224,18 @@ if [[ "$codex_avail" == "true" ]]; then
 else
   echo "[spec-distill] codex 억제 co-review SKIPPED (reason: ${skip_reason:-unknown}) — 격리 critic 단독, 이 축에 모델 다양성이 없었다 (degraded)." >&2
 fi
+# ── 판정과 노출 — 진입 클리어의 짝. 같은 실행, 같은 바인딩 ──────────────────
+# 러너는 파일에만 쓴다. 그 파일을 여기서 읽어야 degrade 판정과 findings 노출이 일어난다.
+# **성공 마커 양성 요구**로 읽는다 — 파일 부재·0바이트·잘림·`codex_failed: true` 가 전부
+# 같은 degraded 로 떨어진다. 경로가 비면 `[ -s "" ]` 도 `cat ""` 도 실패하므로 위 클리어와
+# 같은 no-op 이 되고, 어느 경우에도 판정 한 줄은 나온다.
+if [ -s "${CODEX_YAML:-}" ] && grep -q 'codex_failed: false' "${CODEX_YAML:-}"; then
+  codex_status=ok
+else
+  codex_status=degraded
+fi
+echo "codex_status: $codex_status"
+cat "${CODEX_YAML:-}" 2>/dev/null || echo "(codex 산출물 없음)"
 ```
 <!-- codex-gate:end -->
 
@@ -198,26 +243,9 @@ fi
 노출하고, 원장이 살아 있으면(`ledger_rc == 0`) 같은 사실을 `framing_degradations` 에도
 남깁니다. 원장이 없으면 그 사실은 proceed 게이트 질문 텍스트로만 갑니다(§`degrade 채널`).
 
-### codex 산출물 읽기
-
-게이트는 파일에만 씁니다 — 아무것도 출력하지 않습니다. 그 파일을 **여기서 읽어야**
-degrade 판정과 findings 노출이 일어납니다. 경로는 `## 상태` 에서 도출한 것 그대로이고,
-셸이 바뀌었으면 그 블록을 다시 돌려 같은 값을 얻습니다.
-
-```bash
-if [ -s "$CODEX_YAML" ] && grep -q 'codex_failed: false' "$CODEX_YAML"; then
-  codex_status=ok
-else
-  codex_status=degraded
-fi
-echo "codex_status: $codex_status"
-cat "$CODEX_YAML" 2>/dev/null || echo "(codex 산출물 없음)"
-```
-
-`codex_status` 가 degrade 표 셋째 행의 입력입니다 — **성공 마커 양성 요구**를 여기서 한 번
-계산하고, 파일 부재 · 0바이트 · 잘림 · `codex_failed: true` 가 전부 같은 `degraded` 로
-떨어집니다. `cat` 출력의 `findings:` 항목이 codex 의 raw findings 이고, 격리 critic 의 것과
-**나란히** 사용자에게 갑니다 — 병합기가 없고 판정도 없습니다(§`degrade 채널`).
+블록의 stdout 이 사용자가 보는 전부입니다. `codex_status` 가 degrade 표 셋째 행의
+입력이고, `cat` 출력의 `findings:` 항목이 codex 의 raw findings 이며 격리 critic 의 것과
+**나란히** 갑니다 — 병합기가 없고 판정도 없습니다(§`degrade 채널`).
 
 ### 냉독
 
@@ -281,11 +309,11 @@ suppression` 은 세 경우 모두 같고 갈리는 것은 `--status` 와 `--rea
 
 **직전 라운드 잔존은 이 술어가 못 가릅니다.** 지난 라운드의 파일도 `codex_failed: false`
 를 달고 있을 수 있고, 그러면 양성 요구는 만족됩니다 — 신선한 성공과 낡은 성공이 이
-술어에게는 같은 모양입니다. 그것을 막는 것은 게이트 진입부의 **사전 클리어**입니다:
-분기 전에 `$CODEX_YAML` 을 지우므로 **「파일이 있다」가 곧 「이번 라운드에 러너가 썼다」**
-가 됩니다. 두 장치가 각각 다른 것을 막습니다 — 술어는 *이번 라운드의 실패*를, 사전
-클리어는 *지난 라운드의 성공*을. 경로가 `mktemp` 이던 판에서는 잔존이 물리적으로
-불가능해 이 문장이 공허하게 참이었고, 경로를 안정시킨 순간 사전 클리어가 필요해졌습니다.
+술어에게는 같은 모양입니다. 그것을 막는 것은 술어가 아니라 **블록의 형태**입니다:
+진입 클리어와 마지막 읽기가 한 실행 안에 있으므로 술어가 보는 파일은 그 실행이 만든
+것뿐입니다. 두 장치가 각각 다른 것을 막습니다 — 술어는 *이 실행의 실패*를, 클리어-읽기
+쌍은 *다른 실행의 성공*을. 이 축의 판정과 노출을 게이트 블록 밖으로 옮기면 그 쌍이
+깨지고, 술어 혼자서는 낡은 성공을 가릴 수 없습니다.
 
 `codex_avail` 은 pre-flight **부재**만 잡고, 표 아래 칸은 러너 자체의 **런타임 실패**라
 서로 다른 사실입니다.

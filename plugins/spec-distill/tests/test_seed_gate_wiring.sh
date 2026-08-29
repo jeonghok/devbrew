@@ -22,6 +22,10 @@
 #   · kill switch 경로의 **stderr** — 형제는 감지기-부재 시나리오에서만 stderr 를 본다.
 #   · 게이트 입력(`$PAYLOAD`·`$CODEX_YAML`)이 비었을 때 시끄러운가 — 형제는 그 둘을 항상
 #     공급하므로 이 상태를 만들지조차 않는다.
+#   · **블록의 stdout** — 형제는 stdout 을 `/dev/null` 로 버리고 호출 수만 센다. 사용자가
+#     보는 것은 stdout 이므로, 판정·노출이 사라져도 형제는 GREEN 이다.
+#   · **자기가 만들지 않은 산출물을 읽지 않는가**(S·R). 호출 수로는 「게이트가 정확히
+#     동작했다」와 구별이 안 된다 — kill switch 경로가 정확히 그 모양이다.
 #
 # 축 리터럴(`suppression`)만 예외적으로 남겼다. 오늘은 형제도 잡지만 그것은 **러너의
 # `case` 가 다른 축을 exit 2 로 거절하기 때문**이지(실측 rc=2) 게이트 계약 때문이 아니다.
@@ -143,6 +147,7 @@ run_case() {
   CASE_SENTINEL="$CASE_DIR/runner.invoked"
   CASE_ARGV="$CASE_DIR/argv.txt"
   CASE_STDERR="$CASE_DIR/stderr.txt"
+  CASE_STDOUT="$CASE_DIR/stdout.txt"
   printf '## 초안\n\n조립된 번들.\n' > "$CASE_PAYLOAD"
   # 직전 라운드 잔존물 — **양성 마커를 달고 있다.** 지워지지 않으면 이번 라운드가
   # 「codex 정상」으로 읽힌다.
@@ -156,9 +161,13 @@ run_case() {
       SEED_STUB_RC="$rc" SEED_STUB_WRITE="$write" \
       SEED_STUB_SENTINEL="$CASE_SENTINEL" SEED_STUB_ARGV="$CASE_ARGV" \
       HOME="$CASE_DIR/home" CODEX_API_KEY=t \
-      bash "$GATE" ) >/dev/null 2>"$CASE_STDERR"
+      bash "$GATE" ) >"$CASE_STDOUT" 2>"$CASE_STDERR"
 }
 argv_line() { sed -n "${1}p" "$CASE_ARGV" 2>/dev/null; }
+# 사용자가 보는 판정 줄. **정확히 하나**여야 한다 — 0 이면 그 경로에 노출이 없는 것이고
+# (분기 하나가 조용히 빠져나갔다), 2 이상이면 어느 것이 이 실행의 판정인지 알 수 없다.
+verdict_lines() { grep -c '^codex_status: ' "$CASE_STDOUT" 2>/dev/null || echo 0; }
+verdict_value() { sed -n 's/^codex_status: //p' "$CASE_STDOUT" 2>/dev/null | head -n 1; }
 
 # 입력-부재 advisory 가 **그 자리에서** 나왔는지. 사유 코드(`gate_inputs_missing`)로
 # 앵커하면 안 된다 — 게이트의 일반 `else` 문구가 `SKIPPED (reason: <사유>)` 로 그 토큰을
@@ -187,6 +196,15 @@ if [ -f "$CASE_YAML" ] && grep -q 'reason: stub_fresh' "$CASE_YAML"; then
   ok "A: 러너가 쓴 산출물이 살아남았다 (rm 이 무조건이 아니다)"
 else
   no "A: 러너가 쓴 산출물이 사라졌거나 갱신되지 않았다 — 정상 라운드의 codex 판정이 버려진다"
+fi
+# 양성 짝의 나머지 절반 — **정상 라운드는 통과해야 한다.** 아래 R 이 「낡은 것이 안 나온다」
+# 만 재면 판정·노출을 통째로 지운 판본이 전부 GREEN 이다. 여기서 그 방향을 막는다:
+# 이 블록의 stdout 에 판정 한 줄(`ok`)과 **이 실행의** findings 가 함께 나와야 한다.
+if [ "$(verdict_lines)" = "1" ] && [ "$(verdict_value)" = "ok" ] \
+   && grep -q 'reason: stub_fresh' "$CASE_STDOUT"; then
+  ok "A: 정상 라운드의 stdout 이 판정 한 줄(ok) + 이 실행의 raw findings 를 낸다"
+else
+  no "A: 정상 라운드인데 stdout 의 판정 줄이 $(verdict_lines)개('$(verdict_value)')이거나 이 실행의 findings 가 없다 — 사용자에게 갈 경로가 없다"
 fi
 # 입력이 멀쩡한 라운드에서 입력-부재 advisory 가 나오면 그 가드는 항상 발화하는 것이고,
 # 아래 E 판정은 아무것도 재지 않는다(계측기 양성 대조).
@@ -237,13 +255,10 @@ for slot in PAYLOAD CODEX_YAML; do
   fi
 done
 
-# ── F/G) 문서가 약속한 두 동작에 실행 경로가 있는가 ─────────────────────────
-# 게이트 바깥의 두 펜스다. 둘 다 «파일에만 쓰고 아무것도 출력하지 않으면» 문서의 주장이
-# 수행 불가능해지는 자리이고, 형제 하니스는 마커 사이만 실행하므로 여기를 보지 않는다.
-#   · 「번들은 한 번만 조립하고 두 담당이 나눠 씁니다」 — seed-critic 은 `tools: []` 라
-#     파일을 못 읽는다. 번들이 **stdout 으로 나와야** `${BLOB}` 에 인라인할 것이 생긴다.
-#   · degrade 표 셋째 행과 「codex 의 raw findings 도 사용자에게 갑니다」 — 게이트는
-#     파일에만 쓰므로, 그 파일을 읽어 내는 펜스가 없으면 둘 다 도달 경로가 없다.
+# ── F/H) 조립 펜스 — 문서가 약속한 동작에 실행 경로가 있는가 ────────────────
+# 게이트 바깥의 펜스이고, 형제 하니스는 마커 사이만 실행하므로 여기를 보지 않는다.
+# 「번들은 한 번만 조립하고 두 담당이 나눠 씁니다」 — seed-critic 은 `tools: []` 라 파일을
+# 못 읽는다. 번들이 **stdout 으로 나와야** `${BLOB}` 에 인라인할 것이 생긴다.
 section_fence() {   # $1 = "### <제목>" — 그 절의 첫 bash 펜스 본문
   awk -v want="$1" '
     $0 == want {ins=1; next}
@@ -300,59 +315,58 @@ else
   fi
 fi
 
-RD="$SCRATCH/readback.sh"
-section_fence '### codex 산출물 읽기' > "$RD"
-if [ ! -s "$RD" ]; then
-  no "「codex 산출물 읽기」 절의 bash 펜스를 못 찾았다 — 아래 G 판정은 무의미하다"
+# ── S) 유일한 독자 — 이 축의 판정·노출은 게이트 블록 «안»에서만 일어난다 ────
+# 여기가 이 파일에서 **∀ 로 적힌 유일한 단언**이고, 아래 R 이 열거로 닫는 것을 도출로
+# 닫는 자리다. 잔존이 새는 조건은 한 가지다: **어떤 실행이 자기가 만들지 않은
+# `$CODEX_YAML` 을 읽는 것.** 진입 클리어와 읽기가 한 블록에 있으면 그 상태를 만들 수
+# 있는 것은 «다른 블록의 두 번째 독자»뿐이다 — Bash 도구는 호출마다 새 셸이라 변수는
+# 안 넘어가고, 넘어가는 것은 디스크의 파일뿐이기 때문이다. 그래서 두 번째 독자를
+# 금지하면 그 부류가 닫힌다: 오늘 없는 분기가 내일 생겨도, 그 분기가 게이트 블록 안에
+# 있으면 클리어 뒤이므로 안전하고, 밖에 있으면 이 단언이 RED 다.
+# 산문은 자유다 — 재는 것은 **bash 펜스 안**의 줄뿐이고, 대입(`CODEX_YAML=`)은 독자가
+# 아니므로 `## 상태` 의 도출은 걸리지 않는다.
+OUTSIDE_READS="$(awk '
+  /codex-gate:begin/ {ing=1}
+  /codex-gate:end/   {ing=0; next}
+  /^```bash$/ {inb=1; next}
+  inb && /^```$/ {inb=0; next}
+  inb && !ing {printf "%d:%s\n", FNR, $0}
+' "$SKILL" | grep 'CODEX_YAML' | grep -vE '^[0-9]+:[[:space:]]*CODEX_YAML=')"
+if [ -z "$OUTSIDE_READS" ]; then
+  ok "S: 게이트 블록 밖의 bash 펜스에 \$CODEX_YAML 독자가 없다 (도출: 두 번째 독자만이 잔존을 만들 수 있다)"
 else
-  GX="$SCRATCH/gx"; mkdir -p "$GX"
-  printf 'findings:\n  - category: premature_closure\n    summary: FINDING_7a1\nmeta:\n  codex_failed: false\n' > "$GX/ok.yaml"
-  G_OK="$( env CODEX_YAML="$GX/ok.yaml" bash "$RD" 2>/dev/null )"
-  if printf '%s' "$G_OK" | grep -q 'codex_status: ok' \
-     && printf '%s' "$G_OK" | grep -q FINDING_7a1; then
-    ok "G: 양성 마커 산출물 → codex_status: ok + raw findings 가 출력된다"
-  else
-    no "G: 양성 마커 산출물인데 상태나 raw findings 가 출력에 없다 — 사용자에게 갈 경로가 없다"
-  fi
-  # 부재를 「정상」으로 읽지 않는다. `codex_failed: true` 의 «부재»만 보는 fail-open 판본이
-  # 정확히 여기서 갈린다.
-  G_MISS="$( env CODEX_YAML="$GX/none.yaml" bash "$RD" 2>/dev/null )"
-  if printf '%s' "$G_MISS" | grep -q 'codex_status: degraded'; then
-    ok "G: 산출물 부재 → codex_status: degraded (부재를 정상으로 읽지 않는다)"
-  else
-    no "G: 산출물이 없는데 degraded 가 아니다 — 양성 마커 요구가 아니라 fail-open 술어다"
-  fi
+  no "S: 게이트 블록 밖에서 \$CODEX_YAML 을 읽는 줄이 있다 — 그 펜스는 자기가 만들지 않은 파일을 읽는다: $(printf '%s' "$OUTSIDE_READS" | tr '\n' ' ')"
 fi
 
 # ── R) 잔존물 — 지난 라운드의 성공이 이번 라운드 것으로 나오지 않는가 ────────
-# 경로가 세션의 순수 함수가 된 뒤 **가능해진** 실패다. `mktemp` 이던 판에서는 경로가
-# 매번 달라 잔존이 물리적으로 불가능했고, 그래서 이 축을 재는 단언이 없었다.
-# 게이트만 보면 안 된다 — 사용자가 보는 것은 **읽기 펜스의 출력**이므로 둘을 이어서 잰다.
-# 대표 발동 경로가 kill switch 다: 스위치를 켠 사용자가 지난 라운드 codex 결과를 본다.
-if [ ! -s "$RD" ]; then
-  no "R: 읽기 펜스가 없어 잔존 축을 잴 수 없다"
-else
-  # $1=라벨 $2=stub rc $3=설명 $4..=추가 env
-  residue_case() {
-    local label="$1" rc="$2" desc="$3"; shift 3
-    run_case "$label" "$rc" 0 @ @ "$@"
-    local rb; rb="$( env CODEX_YAML="$CASE_YAML" bash "$RD" 2>/dev/null )"
-    if printf '%s' "$rb" | grep -q STALE_ROUND1_zz9; then
-      no "R($desc): 지난 라운드 findings 가 이번 라운드 출력에 나온다 — 사용자가 읽는 쪽이 틀린 쪽이다"
-    else
-      ok "R($desc): 지난 라운드 findings 가 이번 라운드 출력에 없다"
-    fi
-    if printf '%s' "$rb" | grep -q 'codex_status: degraded'; then
-      ok "R($desc): codex_status 가 degraded — 원장 행과 사용자가 보는 것이 어긋나지 않는다"
-    else
-      no "R($desc): codex 가 안 돌았는데 codex_status 가 degraded 가 아니다 (fail-open)"
-    fi
-  }
-  # ① skip 분기 — 게이트는 «정확히» 동작한다(호출 0회). 그런데도 잔존이 새면 그 축은
-  #    호출 수로는 보이지 않는다. 형제 하니스가 이 자리를 못 보는 이유가 그것이다.
-  residue_case stale-kill 0 "kill switch" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1
-  # ② `3` 이 아닌 non-zero rc — rc==3 의 rm 이 덮지 못하는 실패 경로 전부의 대표.
-  residue_case stale-rc1 1 "runner_rc=1"
-fi
+# 위 S 가 부류를, 여기가 대표 경로들을 잰다. 사용자가 보는 것은 **블록의 stdout** 이므로
+# 그것을 직접 판정한다. 잔존 픽스처는 `run_case` 가 매번 심는다(양성 마커 + 식별 문자열).
+# $1=라벨 $2=stub rc $3=선-기록 $4=CODEX_YAML 덮어쓰기 $5=설명 $6..=추가 env
+residue_case() {
+  local label="$1" rc="$2" seed="$3" yml_ov="$4" desc="$5"; shift 5
+  run_case "$label" "$rc" 0 @ "$yml_ov" "$@"
+  if grep -q STALE_ROUND1_zz9 "$CASE_STDOUT"; then
+    no "R($desc): 지난 라운드 findings 가 이번 라운드 출력에 나온다 — 사용자가 읽는 쪽이 틀린 쪽이다"
+  else
+    ok "R($desc): 지난 라운드 findings 가 이번 라운드 출력에 없다"
+  fi
+  if [ "$(verdict_lines)" = "1" ] && [ "$(verdict_value)" = "degraded" ]; then
+    ok "R($desc): 판정 줄이 정확히 하나이고 degraded — 원장 행과 사용자가 보는 것이 어긋나지 않는다"
+  else
+    no "R($desc): 판정 줄이 $(verdict_lines)개('$(verdict_value)') — codex 가 안 돌았는데 degraded 한 줄이 아니다"
+  fi
+}
+# ① skip 분기 — 게이트는 «정확히» 동작한다(호출 0회). 그런데도 잔존이 새면 그 축은
+#    호출 수로는 보이지 않는다. 형제 하니스가 이 자리를 못 보는 이유가 그것이다.
+residue_case stale-kill 0 0 @ "kill switch" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1
+# ② 러너가 선-기록 husk 를 남기고 exit 3 — rm 이 husk 를 치우고 잔존도 없어야 한다.
+residue_case stale-rc3 3 1 @ "runner_rc=3"
+# ③④ `3` 이 아닌 non-zero rc — rc==3 의 rm 이 덮지 못하는 실패 경로들.
+residue_case stale-rc1  1 0 @ "runner_rc=1"
+residue_case stale-rc90 90 0 @ "runner_rc=90"
+# ⑤ 게이트 입력 부재 — 블록이 «경로 없이» 도는 분기. 클리어도 읽기도 같은 빈 값에 대한
+#    no-op 이어야 하고, 그런데도 판정 한 줄은 나와야 한다. 판정·노출이 이 블록 밖에
+#    있으면 그 바깥 블록은 경로를 다시 도출해 지난 라운드 파일을 읽는다(S 가 그 부류).
+residue_case stale-noinput 0 0 "" "게이트 입력 부재"
 
 finish
