@@ -83,6 +83,10 @@ cat > "$PROOT/scripts/run_seed_codex_reviewer.sh" <<'STUBEOF'
 set -u
 : > "$SEED_STUB_SENTINEL"
 for a in "$@"; do printf '%s\n' "$a"; done > "$SEED_STUB_ARGV"
+# 러너의 선-기록(seed_failclosed) 흉내 — 진입 즉시 fail-closed husk 를 쓴다.
+if [ "${SEED_STUB_SEED:-0}" = "1" ] && [ -n "${4:-}" ]; then
+  printf 'findings: []\nmeta:\n  codex_failed: true\n  reason: runner_incomplete\n' > "$4"
+fi
 if [ "${SEED_STUB_WRITE:-0}" = "1" ] && [ -n "${4:-}" ]; then
   printf 'findings: []\nmeta:\n  codex_failed: false\n  reason: stub_fresh\n' > "$4"
 fi
@@ -118,7 +122,11 @@ case "$resolved" in
 esac
 
 # ── 3) 시나리오 러너 ─────────────────────────────────────────────────────────
-STALE='findings: []
+# 직전 라운드 산출물 — **양성 마커**를 달고 있고, 출력에서 식별 가능한 문자열을 갖는다.
+# 「이번 라운드 것으로 내놓지 않는다」를 재려면 그 문자열이 출력에 없어야 한다.
+STALE='findings:
+  - category: premature_closure
+    summary: STALE_ROUND1_zz9
 meta:
   codex_failed: false
   reason: previous_round
@@ -189,10 +197,13 @@ else
 fi
 
 # ── B) 가용 + 러너가 산출물을 못 써서 exit 3 ────────────────────────────────
-run_case rc3 3 0 @ @
+# stub 이 선-기록 husk 를 쓰고 rc=3 으로 죽는다. **이 seed 가 없으면 이 단언은 아무것도
+# 재지 않는다** — 게이트 진입부의 사전 클리어가 이미 파일을 치워서, `rm` 을 지워도 통과한다
+# (실측으로 확인한 뒤 이 형태로 고쳤다). husk 가 있어야 `rm` 이 유일한 제거자가 된다.
+run_case rc3 3 0 @ @ SEED_STUB_SEED=1
 [ -f "$CASE_SENTINEL" ] || no "B: 러너가 실행되지 않았다 — rc=3 경로를 잴 수 없다"
 if [ -e "$CASE_YAML" ]; then
-  no "B: 러너가 exit 3 인데 직전 라운드 산출물이 그대로 남았다 — 그 양성 마커가 이번 라운드 판정으로 읽힌다"
+  no "B: 러너가 exit 3 인데 그 라운드의 선-기록 husk 가 남았다 — 호출자가 지워야 한다(러너 계약)"
 else
   ok "B: 러너 exit 3 → 러너가 받은 바로 그 산출물 경로가 제거됐다"
 fi
@@ -270,6 +281,23 @@ else
   else
     no "F: stdout 과 \$PAYLOAD 파일이 다르다 — 두 담당이 다른 번들을 본다"
   fi
+  # H) 조립 쪽 가드 — 게이트 쪽 E 와 대칭이다. 입력 없이 돌면 `: No such file or
+  #    directory` 로 죽는 대신 **어느 변수가 비었는지** 이름을 대야 한다. 위 F 두 단언이
+  #    이 가드의 양성 짝이다: 가드가 무조건 발화하면 조립이 안 돌아 F 가 RED 가 된다.
+  # **네 변수를 한꺼번에 비우면 안 된다** — 그러면 하나만 검사하는 가드도 통과한다
+  # (실측: `SD` 만 검사하도록 좁힌 변이가 GREEN 이었다). 하나씩 비워서 `||` 의 폭을 잰다.
+  h_bad=""
+  for v in SD SEED AUDIT PAYLOAD; do
+    ( cd "$FX" && env SD="$ROOT/plugins/spec-distill" SEED="$FX/seed.md" \
+        AUDIT="$FX/audit.md" PAYLOAD="$FX/bundle.md" "$v=" bash "$ASM" ) \
+        >/dev/null 2>"$FX/bare.$v.stderr"
+    grep -q "$v='" "$FX/bare.$v.stderr" 2>/dev/null || h_bad="$h_bad $v"
+  done
+  if [ -z "$h_bad" ]; then
+    ok "H: 네 변수 각각을 비웠을 때 조립 블록이 그 변수를 이름과 관측값으로 댄다"
+  else
+    no "H: 조립 블록이 이 변수의 부재를 이름 없이 넘긴다 —$h_bad (어느 변수가 비었는지도, 어느 블록을 다시 돌려야 하는지도 알 수 없다)"
+  fi
 fi
 
 RD="$SCRATCH/readback.sh"
@@ -294,6 +322,37 @@ else
   else
     no "G: 산출물이 없는데 degraded 가 아니다 — 양성 마커 요구가 아니라 fail-open 술어다"
   fi
+fi
+
+# ── R) 잔존물 — 지난 라운드의 성공이 이번 라운드 것으로 나오지 않는가 ────────
+# 경로가 세션의 순수 함수가 된 뒤 **가능해진** 실패다. `mktemp` 이던 판에서는 경로가
+# 매번 달라 잔존이 물리적으로 불가능했고, 그래서 이 축을 재는 단언이 없었다.
+# 게이트만 보면 안 된다 — 사용자가 보는 것은 **읽기 펜스의 출력**이므로 둘을 이어서 잰다.
+# 대표 발동 경로가 kill switch 다: 스위치를 켠 사용자가 지난 라운드 codex 결과를 본다.
+if [ ! -s "$RD" ]; then
+  no "R: 읽기 펜스가 없어 잔존 축을 잴 수 없다"
+else
+  # $1=라벨 $2=stub rc $3=설명 $4..=추가 env
+  residue_case() {
+    local label="$1" rc="$2" desc="$3"; shift 3
+    run_case "$label" "$rc" 0 @ @ "$@"
+    local rb; rb="$( env CODEX_YAML="$CASE_YAML" bash "$RD" 2>/dev/null )"
+    if printf '%s' "$rb" | grep -q STALE_ROUND1_zz9; then
+      no "R($desc): 지난 라운드 findings 가 이번 라운드 출력에 나온다 — 사용자가 읽는 쪽이 틀린 쪽이다"
+    else
+      ok "R($desc): 지난 라운드 findings 가 이번 라운드 출력에 없다"
+    fi
+    if printf '%s' "$rb" | grep -q 'codex_status: degraded'; then
+      ok "R($desc): codex_status 가 degraded — 원장 행과 사용자가 보는 것이 어긋나지 않는다"
+    else
+      no "R($desc): codex 가 안 돌았는데 codex_status 가 degraded 가 아니다 (fail-open)"
+    fi
+  }
+  # ① skip 분기 — 게이트는 «정확히» 동작한다(호출 0회). 그런데도 잔존이 새면 그 축은
+  #    호출 수로는 보이지 않는다. 형제 하니스가 이 자리를 못 보는 이유가 그것이다.
+  residue_case stale-kill 0 "kill switch" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1
+  # ② `3` 이 아닌 non-zero rc — rc==3 의 rm 이 덮지 못하는 실패 경로 전부의 대표.
+  residue_case stale-rc1 1 "runner_rc=1"
 fi
 
 finish

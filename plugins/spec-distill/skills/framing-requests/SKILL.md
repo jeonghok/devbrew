@@ -31,9 +31,8 @@ skill 에 옵니다. 5패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-
 
 1. **원문 보존** — 사용자가 준 원문(요청·생각·대화 로그·자료)을 **`$AUDIT` 파일의
    `## 1. 원문` 절**에 그대로 옮겨 적습니다(append-only — 이후 라운드의 원문도 요약하지
-   않고 계속 덧붙입니다). 이 skill 이 만드는 파일은 그 audit 과 seed 둘뿐이고,
-   `.claude/spec-distill/<session-id>/state.local.md` 는 여기서 만들지 않습니다 —
-   `## 상태` 의 원장이 그 파일에 살고, 없을 수 있습니다. 지금 요약하지 않습니다 —
+   않고 계속 덧붙입니다). 이 skill 이 **무엇을 만들고 무엇을 만들지 않는지**는
+   `## 상태` 한 곳에 있습니다 — 여기서 다시 세지 않습니다. 지금 요약하지 않습니다 —
    압축은 나중 단계이고, 지금 요약하면 압축이 무엇을 떨어뜨렸는지 audit 이 못 남깁니다.
    `## 1. 원문` 이라는 헤딩은 장식이 아닙니다: `build_seed_inline_blob.py` 가 그 절을
    정규식으로 잘라 억제 리뷰 번들에 싣습니다.
@@ -52,7 +51,16 @@ skill 에 옵니다. 5패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-
 
 ## 상태
 
-degrade 원장은 **기존** state 파일 안에 삽니다. 이 skill 은 state 파일을 만들지 않습니다.
+**이 skill 이 만드는 것의 전부입니다** — 다른 절은 이 목록을 다시 세지 않습니다.
+
+| 만드는 것 | 어디에 |
+|---|---|
+| interview-seed (`$SEED`) · audit (`$AUDIT`) | `docs/superpowers/interview/` — **proceed 승인 이후에만** |
+| 억제 축 작업 파일 둘 (`$PAYLOAD` · `$CODEX_YAML`) | 아래 `$SEED_DIR` |
+| 세션 디렉토리 `$SEED_DIR` 자체 | `.claude/spec-distill/<session-id>/` |
+
+**만들지 않는 것: `state.local.md`.** degrade 원장은 그 **기존** 파일 안에 살고, 없으면
+없는 채로 갑니다(§`degrade 채널` 의 `no-state-in-phase-0`).
 
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
@@ -101,8 +109,16 @@ fi
 경로는 `## 상태` 에서 이미 도출했습니다. 여기서 새로 만들지 않습니다.
 
 ```bash
-python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED" "$AUDIT" CLAUDE.md > "$PAYLOAD"; blob_rc=$?
-[ "$blob_rc" -eq 0 ] && cat "$PAYLOAD"
+# 게이트 쪽과 같은 가드다. 이 펜스가 `## 상태` 없이 새 셸에서 돌면 네 변수가 다 비는데,
+# 가드가 없으면 `: No such file or directory` 로 죽어 **어느 변수가 비었는지도, 어느
+# 블록을 다시 돌려야 하는지도** 말하지 않는다. 관측값을 실어 이름을 댄다.
+if [[ -z "${SD:-}" || -z "${SEED:-}" || -z "${AUDIT:-}" || -z "${PAYLOAD:-}" ]]; then
+  echo "[spec-distill] 재료 조립 입력 부재 — SD='${SD:-}' SEED='${SEED:-}' AUDIT='${AUDIT:-}' PAYLOAD='${PAYLOAD:-}'. 「## 상태」 블록을 먼저 돌려라. 번들이 없으면 두 담당 모두 돌리지 않는다." >&2
+  blob_rc=2
+else
+  python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED" "$AUDIT" CLAUDE.md > "$PAYLOAD"; blob_rc=$?
+  [ "$blob_rc" -eq 0 ] && cat "$PAYLOAD"
+fi
 ```
 
 **마지막 `cat` 이 `${BLOB}` 의 출처입니다.** 이 블록의 출력에 번들 전문이 그대로 나오고,
@@ -159,6 +175,12 @@ if [[ -z "${PAYLOAD:-}" || -z "${CODEX_YAML:-}" ]]; then
   echo "[spec-distill] codex 억제 게이트 입력 부재 — PAYLOAD='${PAYLOAD:-}' CODEX_YAML='${CODEX_YAML:-}'. 「## 상태」 블록을 먼저 돌려 두 경로를 도출해라. 이 라운드의 억제 축은 codex 없이 간다." >&2
   codex_avail=""; skip_reason="gate_inputs_missing"
 fi
+# **이 라운드의 산출물만 이번 판정에 쓰이게 한다.** 경로가 세션의 순수 함수라 라운드마다
+# 같은 파일이고, 지우지 않으면 직전 라운드 YAML 이 그대로 남는다 — 그 파일은 양성 마커를
+# 달고 있을 수 있어 skip 분기(kill switch 포함)와 3 이 아닌 실패 rc 에서 「이번 라운드
+# codex 가 정상이었다」로 읽힌다. 아래 분기 **전에**, 분기와 무관하게 지운다:
+# 그래야 「파일이 있다」가 곧 「이번 라운드에 러너가 썼다」가 된다.
+[[ -n "${CODEX_YAML:-}" ]] && rm -f "$CODEX_YAML"
 if [[ "$codex_avail" == "true" ]]; then
   bash "$SD/scripts/run_seed_codex_reviewer.sh" suppression "$PAYLOAD" "$(pwd)" "$CODEX_YAML"; runner_rc=$?
   # exit 3 은 「산출물 자체를 못 썼다」이다. 이 경로는 세션의 순수 함수라 **라운드마다
@@ -230,6 +252,12 @@ degrade 는 **채널 둘**로 나갑니다. 하나는 없을 수 있고 하나�
 남습니다. state 파일을 새로 만드는 설계(어디에 · 어떤 frontmatter 로 · 누가 지우나)는 이
 skill 의 범위 밖이므로, 그 갭을 이 이름으로 부르고 게이트 텍스트가 그 사실을 말합니다.
 
+**딸린 상호작용 하나** — `## 상태` 가 `$SEED_DIR` 을 만들므로, 원래 세션 디렉토리가 없었을
+세션에도 디렉토리와 파일 둘이 생깁니다. 그 둘은 `gc_common.py` 의 TTL-GC 관할에 들어갑니다:
+폴더 나이가 **직속 파일들의 최신 mtime** 으로 계산되므로 이 두 파일이 그 나이를 정하고,
+TTL(기본 24시간, env override) 을 넘기면 폴더가 통째로 걷힙니다. 결함으로 실증된 것은
+아니지만 배선 이전에는 없던 상호작용이라 여기 적어 둡니다.
+
 codex 가 죽으면 record 하나가 남고 격리 critic 이 단독으로 돕니다. **억제 축은 판정에
 합류하지 않습니다** — findings 는 어떤 병합기도 거치지 않고 사용자에게 직접 갑니다.
 
@@ -239,7 +267,7 @@ suppression` 은 세 경우 모두 같고 갈리는 것은 `--status` 와 `--rea
 
 | 관측 | `--status` | `--reason` |
 |---|---|---|
-| `skip_reason` 이 `gate_inputs_missing` | `unavailable` | 게이트 입력 부재 — 「재료 조립」이 같은 Bash 호출에서 돌지 않았다 |
+| `skip_reason` 이 `gate_inputs_missing` | `unavailable` | 게이트 입력 부재 — 「`## 상태`」가 돌지 않아 `$PAYLOAD`·`$CODEX_YAML` 이 비었다 |
 | `codex_avail` 이 `true` 가 아니다 | `skipped` | `$skip_reason` 값 그대로 |
 | `codex_avail` 이 `true` 였는데 `$CODEX_YAML` 에 `codex_failed: false` 가 없다 | `degraded` | `$runner_rc` + 관측한 사실(파일 부재·0바이트·잘림·`true`) |
 
@@ -249,8 +277,18 @@ suppression` 은 세 경우 모두 같고 갈리는 것은 `--status` 와 `--rea
 
 `$CODEX_YAML` 은 **성공 마커 양성 요구**로 읽습니다 — `codex_failed: false` 가 **있어야**
 정상입니다. 「`codex_failed: true` 가 없는지」만 보면 그 술어에 fail-closed 보수가 없어
-파일 부재·0바이트·직전 라운드 잔존이 전부 「정상」으로 읽힙니다. `codex_avail` 은
-pre-flight **부재**만 잡고, 아래 칸은 러너 자체의 **런타임 실패**라 서로 다른 사실입니다.
+파일 부재·0바이트·잘림이 전부 「정상」으로 읽힙니다.
+
+**직전 라운드 잔존은 이 술어가 못 가릅니다.** 지난 라운드의 파일도 `codex_failed: false`
+를 달고 있을 수 있고, 그러면 양성 요구는 만족됩니다 — 신선한 성공과 낡은 성공이 이
+술어에게는 같은 모양입니다. 그것을 막는 것은 게이트 진입부의 **사전 클리어**입니다:
+분기 전에 `$CODEX_YAML` 을 지우므로 **「파일이 있다」가 곧 「이번 라운드에 러너가 썼다」**
+가 됩니다. 두 장치가 각각 다른 것을 막습니다 — 술어는 *이번 라운드의 실패*를, 사전
+클리어는 *지난 라운드의 성공*을. 경로가 `mktemp` 이던 판에서는 잔존이 물리적으로
+불가능해 이 문장이 공허하게 참이었고, 경로를 안정시킨 순간 사전 클리어가 필요해졌습니다.
+
+`codex_avail` 은 pre-flight **부재**만 잡고, 표 아래 칸은 러너 자체의 **런타임 실패**라
+서로 다른 사실입니다.
 
 ## 확정 — proceed 게이트
 
