@@ -56,14 +56,16 @@ skill 에 옵니다. 5패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-
 | 만드는 것 | 어디에 | 언제 |
 |---|---|---|
 | audit (`$AUDIT`) | `docs/superpowers/interview/` | `## 확산` 1번부터 — append-only |
-| interview-seed (`$SEED`) | 〃 | **proceed 승인 이후에만** |
+| interview-seed (`$SEED`) | 〃 | 압축 직후 — **게이트 직전 구조 검사보다 먼저** |
 | 억제 축 작업 파일 둘 (`$PAYLOAD` · `$CODEX_YAML`) | 아래 `$SEED_DIR` | 검증 라운드마다 |
 | 두 문서의 이름을 붙드는 `interview-basename` | 〃 | 아래 블록을 처음 돌릴 때 |
 | 세션 디렉토리 `$SEED_DIR` 자체 | `.claude/spec-distill/<session-id>/` | 〃 |
 
-**audit 과 seed 는 시점이 다릅니다.** audit 은 확산 첫 항목부터 쓰이고 proceed 게이트
-직전의 `check_seed.py` 가 그것을 읽습니다 — 승인 전에 이미 있어야 합니다. `docs/` 에
-승인 이후에만 나가는 것은 **seed 쪽뿐**입니다.
+**audit 과 seed 는 시점이 다르지만, 둘 다 승인 «전»에 디스크에 있어야 합니다.** audit 은
+확산 첫 항목부터, seed 는 압축 직후입니다 — 게이트 직전의 `check_seed.py` 가 둘 다
+디스크에서 읽고, proceed 게이트 공통 계약의 Step A 도 대상 문서가 working-tree 에 없으면
+게이트를 **띄우지 않습니다**. 승인 이후에 일어나는 것은 파일 쓰기가 아니라 **handoff**
+입니다 — seed 본문을 다음 세션 첫 턴에 붙여넣는 것.
 
 **만들지 않는 것: `state.local.md`.** degrade 원장은 그 **기존** 파일 안에 살고, 없으면
 없는 채로 갑니다(§`degrade 채널` 의 `no-state-in-phase-0`).
@@ -85,12 +87,29 @@ CODEX_YAML="$SEED_DIR/seed-suppression-codex.yaml"
 # 두 산출 문서. 이름은 **첫 라운드에 한 번** 정하고 이후 라운드는 되찾는다 — 그래서
 # 이 블록을 다시 돌리면 같은 두 경로가 나온다. 이름을 기억에서 다시 대는 판본은
 # `mktemp` 과 같은 결함이다: 다음 셸이 같은 값을 다시 만들 수 있어야 한다.
-# `<kebab-topic>` 을 요청의 주제로 바꿔 쓴다 — 그대로 두면 파일 이름에 그대로 들어간다.
+# `TOPIC` 을 요청의 주제(kebab-case)로 바꿔 쓴다. **바꾸기 전에는 이름을 고정하지
+# 않는다** — 고정해 버리면 자리표가 파일명에 박히고, 그 뒤로는 「이 블록을 다시
+# 돌려라」가 바로 그 박제를 되풀이하는 행동이 된다.
+TOPIC="<kebab-topic>"
 NAME_FILE="$SEED_DIR/interview-basename"
-[ -s "$NAME_FILE" ] || printf '%s-%s-interview\n' "$(date +%F)" "<kebab-topic>" > "$NAME_FILE"
-BASE="docs/superpowers/interview/$(head -n 1 "$NAME_FILE")"
-AUDIT="$BASE.audit.md"
-SEED="$BASE.md"
+case "$TOPIC" in
+  ""|*"<"*|*">"*|*/*) : ;;
+  *) [ -s "$NAME_FILE" ] || printf '%s-%s-interview\n' "$(date +%F)" "$TOPIC" > "$NAME_FILE" ;;
+esac
+# 이름이 성하지 않으면 두 경로를 **만들지 않는다.** 반쯤 만들어진 경로
+# (`docs/superpowers/interview/.audit.md`)는 아래 가드들의 `-z` 검사를 통과해 조용히
+# 틀린 파일을 가리킨다 — 시끄럽게 틀리는 것보다 그쪽이 나쁘다. 비워 두면 가드가
+# 이름을 대고 멈춘다.
+AUDIT=""
+SEED=""
+IV_NAME="$(head -n 1 "$NAME_FILE" 2>/dev/null)"
+case "$IV_NAME" in
+  ""|*/*|*"<"*|*">"*)
+    echo "[spec-distill] 인터뷰 문서 이름을 못 구했다 (IV_NAME='$IV_NAME'). 이 블록의 TOPIC 을 요청 주제(kebab-case)로 바꿔 다시 돌려라. 자리표가 이미 이름에 박혔으면 rm -f '$NAME_FILE' 로 지운 뒤 다시 돌려라 — 그 파일이 이름의 유일한 출처이므로 지우면 되돌아간다." >&2 ;;
+  *)
+    AUDIT="docs/superpowers/interview/$IV_NAME.audit.md"
+    SEED="docs/superpowers/interview/$IV_NAME.md" ;;
+esac
 if [ -n "$sid" ] && [ -f "$STATE" ]; then
   python3 "$SD/scripts/brief_review_state.py" init "$STATE" --ledger-key framing_degradations; ledger_rc=$?
 else
@@ -188,8 +207,17 @@ Agent({ description: "Seed suppression critique", subagent_type: "spec-distill:s
 한쪽만 건너뛰는 상태가 없습니다.
 
 **그러므로 `$CODEX_YAML` 을 읽는 곳은 이 블록 하나뿐입니다.** 다른 절에 그 파일을 읽는
-펜스를 추가하지 마십시오 — `tests/test_seed_gate_wiring.sh` 가 그 금지를 동작으로
-잡습니다.
+펜스를 추가하지 마십시오. 그리고 **이 블록을 두 펜스로 쪼개지 마십시오** — 마커 사이가
+한 펜스일 때만 하니스의 이어붙임 모델이 `Bash` 도구의 실행 모델(펜스마다 새 셸)과
+일치합니다. 쪼개고 판정·노출을 뒤 펜스로 옮기면 하니스에는 아무 변화가 없는데 실제로는
+지난 라운드 산출물이 다시 새어 나옵니다.
+
+`tests/test_seed_gate_wiring.sh` 가 **동작으로 잡는 것은 둘**입니다 — 마커 사이의 bash
+펜스가 하나가 아닌 것, 그리고 게이트 블록 밖 bash 펜스에 `$CODEX_YAML` 을 그 이름 그대로
+읽는 줄이 있는 것. **잡지 못하는 것**도 적어 둡니다(전부 실측): 경로를 조각으로 재조립해
+읽기 · 글롭으로 읽기 · ` ```sh ` 처럼 다른 언어표기를 단 펜스 · 들여쓴 펜스 · bash 가
+아니라 산문으로 「그 파일을 읽어라」라고 시키기. 어휘로 닫히는 것들이 아니므로 이 다섯은
+**락이 아니라 규율로** 지킵니다.
 
 <!-- codex-gate:begin runner=run_seed_codex_reviewer.sh -->
 ```bash
@@ -324,7 +352,8 @@ suppression` 은 세 경우 모두 같고 갈리는 것은 `--status` 와 `--rea
 
 공통 계약의 정본은 `${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md` 입니다. 4옵션
 게이트를 띄우고, 게이트 질문 텍스트에 degrade 를 **하나도 빠뜨리지 않고** 싣습니다.
-**승인 이후에만** seed 파일이 `docs/` 에 쓰입니다.
+seed 파일은 이 게이트 **이전에** 디스크에 있어야 합니다 — 아래 구조 검사도, 공통 계약의
+Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아니라 handoff 입니다.
 
 게이트를 띄우기 **직전에** 구조 검사를 돌립니다:
 

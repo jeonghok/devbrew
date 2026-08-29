@@ -76,6 +76,25 @@ if [ ! -s "$GATE" ]; then
 fi
 ok "게이트 블록 절단 $(grep -c . "$GATE")줄 (vacuous 아님)"
 
+# ── 1) 마커 사이의 bash 펜스가 «정확히 하나»인가 ─────────────────────────────
+# 이 추출기(형제 하네스의 것과 같다)는 마커 사이의 모든 펜스를 **하나의 스크립트로
+# 이어 붙여** 돌린다. 그런데 `Bash` 도구는 펜스를 **별개의 셸**로 돌린다. 펜스가 둘
+# 이상이면 그 두 모델이 갈라지고, 아래 판정 전부가 «실제로 도는 것»이 아니라 «이어
+# 붙인 가상의 스크립트»를 잰다. 그 상태에서 판정·노출을 둘째 펜스로 옮기면 이 락도
+# 형제도 GREEN 인 채로 잔존이 샌다(실측).
+# 펜스가 하나면 이어붙임 == 실제이므로 두 모델이 일치한다 — 그 조건을 여기서 건다.
+NFENCE="$(awk '
+  /codex-gate:begin[[:space:]]+runner=run_seed_codex_reviewer\.sh/ {ing=1; next}
+  /codex-gate:end/ {ing=0}
+  ing && /^```bash$/ {n++}
+  END {print n+0}
+' "$SKILL")"
+if [ "$NFENCE" = "1" ]; then
+  ok "1: 마커 사이의 bash 펜스가 정확히 하나 — 추출기의 이어붙임 모델이 실행 모델과 일치한다"
+else
+  no "1: 마커 사이의 bash 펜스가 ${NFENCE}개다 — 추출기는 이어 붙이고 Bash 도구는 별개 셸로 돌리므로 아래 판정은 실제로 도는 것을 재지 않는다 (블록을 쪼개려면 이 락부터 다시 설계해야 한다)"
+fi
+
 # ── 0) 클리어가 블록의 «첫 실행 줄»인가 ──────────────────────────────────────
 # 위치가 계약이다. 클리어 «앞»에 줄이 하나라도 설 수 있으면 그 자리는 자기가 만들지
 # 않은 파일을 읽는 분기가 언젠가 들어설 자리다 — 아래 R 은 그 분기가 실제로 생기기
@@ -181,7 +200,11 @@ run_case() {
 argv_line() { sed -n "${1}p" "$CASE_ARGV" 2>/dev/null; }
 # 사용자가 보는 판정 줄. **정확히 하나**여야 한다 — 0 이면 그 경로에 노출이 없는 것이고
 # (분기 하나가 조용히 빠져나갔다), 2 이상이면 어느 것이 이 실행의 판정인지 알 수 없다.
-verdict_lines() { grep -c '^codex_status: ' "$CASE_STDOUT" 2>/dev/null || echo 0; }
+# `grep -c` 는 미매치일 때 `0` 을 **출력하고도** exit 1 이다 — `|| echo 0` 을 붙이면 둘 다
+# 발화해 실패 메시지가 `0\n0` 으로 나온다. 값을 받아 두고 빈 경우(파일 부재)만 채운다.
+verdict_lines() {
+  local n; n="$(grep -c '^codex_status: ' "$CASE_STDOUT" 2>/dev/null)"; printf '%s' "${n:-0}"
+}
 verdict_value() { sed -n 's/^codex_status: //p' "$CASE_STDOUT" 2>/dev/null | head -n 1; }
 
 # 입력-부재 advisory 가 **그 자리에서** 나왔는지. 사유 코드(`gate_inputs_missing`)로
