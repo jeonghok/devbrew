@@ -181,10 +181,11 @@ Agent({ description: "Seed suppression critique", subagent_type: "spec-distill:s
 낡은 성공과 신선한 성공이 같은 모양입니다.
 
 **한 블록 안에서는 그 상태가 만들어질 수 없고, 그것이 규율이 아니라 형태에서 도출됩니다.**
-블록은 진입부에서 그 경로를 지우고 마지막에 **같은 실행의 같은 바인딩**으로 읽습니다.
+블록의 **첫 줄**이 그 경로를 지우고 **마지막 줄**이 같은 실행의 같은 바인딩으로 읽습니다.
 그 둘 사이에 무엇을 새로 넣든 — 오늘 없는 분기를 포함해 — 그 사이에서 그 파일을 만들 수
-있는 것은 이 실행뿐입니다. 경로가 비어 있으면 클리어도 읽기도 **같은 빈 값**에 대한
-no-op 이라 `degraded` 로 떨어집니다: 한쪽만 건너뛰는 상태가 없습니다.
+있는 것은 이 실행뿐입니다. 클리어가 첫 줄이므로 그 **앞**에도 자리가 없습니다. 경로가
+비어 있으면 클리어도 읽기도 **같은 빈 값**에 대한 no-op 이라 `degraded` 로 떨어집니다:
+한쪽만 건너뛰는 상태가 없습니다.
 
 **그러므로 `$CODEX_YAML` 을 읽는 곳은 이 블록 하나뿐입니다.** 다른 절에 그 파일을 읽는
 펜스를 추가하지 마십시오 — `tests/test_seed_gate_wiring.sh` 가 그 금지를 동작으로
@@ -192,6 +193,14 @@ no-op 이라 `degraded` 로 떨어집니다: 한쪽만 건너뛰는 상태가 �
 
 <!-- codex-gate:begin runner=run_seed_codex_reviewer.sh -->
 ```bash
+# ── 진입 클리어 — 블록의 «첫 줄» ────────────────────────────────────────────
+# 첫 줄인 것이 요점이다: 이 앞에는 어떤 분기도 들어갈 자리가 없다. 경로가 세션의 순수
+# 함수라 라운드마다 같은 파일이고, 지우지 않으면 직전 라운드 YAML 이 그대로 남는다 —
+# 그 파일은 양성 마커를 달고 있을 수 있어 skip 분기(kill switch 포함)와 3 이 아닌 실패
+# rc 에서 「이번 라운드 codex 가 정상이었다」로 읽힌다. 이 줄과 블록 «끝»의 읽기가 한
+# 쌍이고, 그 사이에 무엇을 몇 개 넣든 읽기가 보는 파일은 이 실행이 만든 것이다.
+# 한쪽을 옮기면 그 쌍이 깨진다.
+[[ -n "${CODEX_YAML:-}" ]] && rm -f "$CODEX_YAML"
 SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
 DETECT_OUT="$(bash "$SD/scripts/detect_codex.sh")"
 codex_avail="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^codex_available: //p')"
@@ -207,13 +216,6 @@ if [[ -z "${PAYLOAD:-}" || -z "${CODEX_YAML:-}" ]]; then
   echo "[spec-distill] codex 억제 게이트 입력 부재 — PAYLOAD='${PAYLOAD:-}' CODEX_YAML='${CODEX_YAML:-}'. 「## 상태」 블록을 먼저 돌려 두 경로를 도출해라. 이 라운드의 억제 축은 codex 없이 간다." >&2
   codex_avail=""; skip_reason="gate_inputs_missing"
 fi
-# ── 진입 클리어 — 아래 «전부»가 이 실행의 산출물이 되게 한다 ────────────────
-# 경로가 세션의 순수 함수라 라운드마다 같은 파일이고, 지우지 않으면 직전 라운드 YAML 이
-# 그대로 남는다 — 그 파일은 양성 마커를 달고 있을 수 있어 skip 분기(kill switch 포함)와
-# 3 이 아닌 실패 rc 에서 「이번 라운드 codex 가 정상이었다」로 읽힌다. 분기 **전에**,
-# 분기와 무관하게 지운다. 이 줄과 블록 끝의 읽기가 한 쌍이다: 그 사이에 분기를 몇 개
-# 넣든 「파일이 있다」는 곧 「이 실행이 썼다」다. 한쪽만 옮기면 그 쌍이 깨진다.
-[[ -n "${CODEX_YAML:-}" ]] && rm -f "$CODEX_YAML"
 if [[ "$codex_avail" == "true" ]]; then
   bash "$SD/scripts/run_seed_codex_reviewer.sh" suppression "$PAYLOAD" "$(pwd)" "$CODEX_YAML"; runner_rc=$?
   # exit 3 은 「산출물 자체를 못 썼다」이다. 이 경로는 세션의 순수 함수라 **라운드마다
