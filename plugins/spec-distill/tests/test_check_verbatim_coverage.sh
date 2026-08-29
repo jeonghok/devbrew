@@ -342,6 +342,25 @@ rc="$(rc_of "$FX/brief-verbatim-ok.md" "$tmpe")"
   || no "C4: 빈 원장이 exit $rc — 원장을 비우는 것만으로 L1·L2가 조용히 우회된다"
 rm -f "$tmpe"
 
+# --- C5(Task 7 fix round 2) : 최초 요청 원문(S1) 예약 — 원문 있는 정상 케이스가
+# end-to-end로 clean임을 실제 스크립트로 고정한다. finishing.md는 원문을 §6 앞에 S1로
+# 예약하고 SKILL.md `사용자 발화 기록`의 id 공식은 그 예약을 반영해 오프셋 +1을 적용한다
+# (원문 있으면 user_statements가 S2부터 시작). payload에는 원문(S1)이 있지만 state의
+# `user_statements`에는 없다(원문은 매 round 사용자 발화가 아니므로 append 대상이 아니다)
+# — 그래서 이 스크립트는 원문 자체를 판정하지 않고, state가 실제로 아는 S2·S3만 대조한다.
+rc="$(rc_of "$FX/brief-verbatim-original-request.md" "$FX/state-verbatim-original-request.md")"
+[[ "$rc" == "0" ]] \
+  && ok "C5: 원문 있음 + 오프셋 적용(S2부터) → exit 0 (S1 예약과 정합)" \
+  || no "C5: 원문 있는 정상 케이스가 exit $rc — 오프셋 없이는 이 케이스가 clean이 아니다"
+
+# C5 회귀: 오프셋을 적용하지 않은(고치기 전) state — 첫 실제 답변이 S1을 자칭하면
+# payload의 S1(원문)과 대조돼 not_contained, 그 뒤로 밀린 S2도 함께 어긋난다. 이 fixture는
+# Task 7 fix round 1에서 스크래치로 1회 실행하고 지운 시나리오 B를 영구 회귀로 고정한다.
+rc="$(rc_of "$FX/brief-verbatim-original-request.md" "$FX/state-verbatim-original-request-old-formula.md")"
+[[ "$rc" == "1" ]] \
+  && ok "C5 회귀: 오프셋 없는 옛 공식(첫 답변=S1) → exit 1 (S1은 원문 텍스트라 불일치)" \
+  || no "C5 회귀: 오프셋 없는 옛 공식이 exit $rc — 번호 드리프트가 조용히 통과한다"
+
 # --- usage -----------------------------------------------------------------
 python3 "$SCRIPT" >/dev/null 2>&1; rc=$?
 [[ "$rc" != "0" && "$rc" != "1" ]] && ok "인자 부족 → non-zero이며 1이 아님 (rc=$rc)" \

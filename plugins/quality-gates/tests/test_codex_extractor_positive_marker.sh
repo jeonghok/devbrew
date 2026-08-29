@@ -62,12 +62,9 @@ if len(runners) < 3:
          "— 도출 경로가 깨졌을 수 있다, 아래 판정은 무의미")
 
 # ── 2. 각 러너의 종단 추출기 도출 ───────────────────────────────────────────────
-extractors = {}  # resolved_path -> [runner, ...] (진단용)
-derive_failed = []
-for r in runners:
-    with open(r, encoding="utf-8") as fh:
-        lines = fh.read().splitlines()
-    found_path = None
+def scan_for_override_call(lines):
+    """override-exit-code 플래그를 동반한 python3 호출 블록에서 대상 .py 를
+    찾는다. 못 찾으면 None."""
     i = 0
     while i < len(lines):
         ln = lines[i]
@@ -83,11 +80,81 @@ for r in runners:
                 blk.append(lines[j])
             blocktext = "\n".join(x for x in blk if not x.strip().startswith("#"))
             if OVERRIDE_FLAG in blocktext:
-                found_path = m.group(1)
-                break
+                return m.group(1)
             i = j + 1
             continue
         i += 1
+    return None
+
+
+# fix round 1 (Critical 1) — 러너가 종단 추출을 **소싱하는 공유 파일에 위임**할
+# 수 있다(runner_common.sh, Task 14 `codex_extract_or_fallback`). 최초 구현은
+# 러너 텍스트에 문자열 "runner_common.sh"가 **등장하는지**만 봤는데, 그 술어는
+# 파일을 "언급"만 해도(예: source 줄, 주석) 참이 된다 — 러너가 그 파일 안의
+# 어떤 함수도 실제로 **호출하지 않아도** 폴백이 발동해, run_brief_codex_reviewer.sh
+# 처럼 자기 안에 종단 python3 호출을 직접 갖는 러너에서 그 블록을 지워도(진짜
+# 결함) `_RUNNER_COMMON=".../runner_common.sh"` 대입 줄 하나 때문에 여전히
+# GREEN이 나왔다(리뷰 실측 재현, Critical 1). 재는 것을 "파일이 언급되는가"에서
+# "그 파일이 정의하는 **함수를 러너가 실제로 호출하는가**"로 바꾼다.
+FUNC_DEF_RE = re.compile(r'^([A-Za-z_][A-Za-z0-9_]*)\(\)\s*\{')
+
+
+def common_functions(common_lines):
+    """runner_common.sh 안에서 정의된 함수 이름 -> 그 본문(줄 리스트). 이
+    파일의 함수는 전부 들여쓰기 없는 `name() {` 로 열고 들여쓰기 없는 `}` 로
+    닫는 관용구를 쓴다(실측) — 그 관용구로 본문 경계를 찾는다."""
+    funcs = {}
+    i = 0
+    while i < len(common_lines):
+        m = FUNC_DEF_RE.match(common_lines[i])
+        if m:
+            name = m.group(1)
+            body = []
+            j = i + 1
+            while j < len(common_lines) and common_lines[j] != "}":
+                body.append(common_lines[j])
+                j += 1
+            funcs[name] = body
+            i = j + 1
+            continue
+        i += 1
+    return funcs
+
+
+def called_function_names(lines, names):
+    """`names` 중 러너가 **호출**(정의가 아니라 실행 위치)하는 것의 부분집합.
+    비-주석 줄이 (선행 공백 이후) 그 이름으로 시작하고 그 뒤가 공백·따옴표·
+    줄끝이어야 호출로 센다 — 문자열 리터럴 안이나 trap 인자 문자열 중간에
+    있는 이름은 줄 **머리**가 아니므로 잡히지 않는다(예: `_degrade_if_empty`가
+    trap의 작은따옴표 문자열 중간에 있는 것)."""
+    called = set()
+    for ln in lines:
+        if ln.strip().startswith("#"):
+            continue
+        for name in names:
+            if re.match(r'^\s*' + re.escape(name) + r'(?:[\s"]|$)', ln):
+                called.add(name)
+    return called
+
+
+extractors = {}  # resolved_path -> [runner, ...] (진단용)
+derive_failed = []
+for r in runners:
+    with open(r, encoding="utf-8") as fh:
+        lines = fh.read().splitlines()
+    found_path = scan_for_override_call(lines)
+    if not found_path:
+        common = os.path.join(os.path.dirname(r), "runner_common.sh")
+        if os.path.isfile(common):
+            with open(common, encoding="utf-8") as fh:
+                common_lines = fh.read().splitlines()
+            funcs = common_functions(common_lines)
+            if funcs:
+                for name in called_function_names(lines, funcs.keys()):
+                    candidate = scan_for_override_call(funcs[name])
+                    if candidate:
+                        found_path = candidate
+                        break
     if not found_path:
         derive_failed.append(r)
         continue

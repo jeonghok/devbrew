@@ -25,7 +25,7 @@ source: spec-distill conducting-interview v0.23.0
 
 ## 2. Budget
 
-- probe_count: <n> / cap <n>
+- 질문 라운드: <n> · agent dispatch: <n> · codex 실호출: <n> (성공 <n>)
 
 ## 3. Steelman 원문
 

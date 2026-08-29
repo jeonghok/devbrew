@@ -103,3 +103,39 @@ write_failclosed() {
     return 1
   }
 }
+
+# codex_extract_or_fallback <stdout_file> <stderr_file> <exit_code> <output_path> <emit_keys> <plugin_root>
+# codex_findings_to_yaml.py 를 표준 인자(override-exit-code·override-reason 유도
+# 포함)로 부른다. 실패하면(추출기 자체가 비-0 으로 죽으면) **아무것도 쓰지 않고
+# 실패로 반환한다** — output_path 를 그다음 어떻게 채울지(즉시 exit 0 인
+# emit_fallback 호출인지, 인라인 echo 넷인지)는 호출자마다 다르므로 호출자 몫으로
+# 남긴다. 이 함수가 그 exit 까지 가지면 형제 러너 셋의 서로 다른 실패 처리 모양을
+# 강제로 통일하게 된다.
+#
+# 세 번째 러너(run_seed_codex_reviewer.sh, Task 14)가 형제 둘과 이 tail 을
+# 바이트-동일하게 써서 `shared/tests/test_no_new_duplication.sh` 의 20줄 창에
+# 걸린 것을 해소하며 정본화됐다.
+#
+# **`codex exec ...` 호출 자체는 여기 넣지 않는다.** 넣으면 이 정본의 배포
+# 사본(`plugins/*/scripts/runner_common.sh`)이 `codex_candidates()`
+# (`plugins/quality-gates/tests/lib/codex_observation.sh`) 스캔에 "새 러너"로
+# 잡히는데, 그 스캐너는 실행 가능한 진입점을 기대한다(`obs_invoke` 의 case 표) —
+# 라이브러리 파일은 그 표에 없어 관측 락 여럿(test_sandbox_enforced.sh ·
+# test_codex_invocation_contract.sh · test_web_kill_switch.sh)이 "실행할 방법이
+# 없다"로 조용히 깨진다. 그래서 codex 호출 플래그(`-s read-only` · `-C` · `--json`
+# · web 인자)는 각 러너 파일에 리터럴로 남기고, 여기서는 그 뒤(override_reason
+# 유도 + 추출)만 정본화한다.
+codex_extract_or_fallback() {
+  local stdout_file="$1" stderr_file="$2" exit_code="$3" output_path="$4" \
+        emit_keys="$5" plugin_root="$6"
+  local override_reason=""
+  if [ "$exit_code" -ne 0 ]; then
+    override_reason=exit_nonzero
+  fi
+  python3 "$plugin_root/scripts/codex_findings_to_yaml.py" \
+      --stderr-file "$stderr_file" \
+      --meta-override-exit-code "$exit_code" \
+      --meta-override-reason "$override_reason" \
+      --emit-keys "$emit_keys" \
+      < "$stdout_file" > "$output_path"
+}

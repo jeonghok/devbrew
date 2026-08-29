@@ -241,6 +241,22 @@ AskUserQuestion({
 - **AC19 실측 근거** — 2026-05-29 본 design 세션에서 "handoff"라 말하고 compact 전에 plan 을 그대로 써버린 실패가 이 가드의 출처다. 옵션 ① 의 정지 요건·다음 턴 진입 조건은 **이 문서 `### Step C — 응답 처리` 의 ①** 에 인라인으로 있다 — **기계적 검증 앵커가 사는 곳이 거기다.** 정본에도 같은 어휘가 있지만 그것은 계약 서술이지 이 skill 의 앵커가 아니며, 이 계약의 앵커를 재는 스캔은 **전부** 코퍼스를 skill 소유 표면으로 한정한다(정본 「앵커는 각 skill 에」 절). 그러므로 이 ① 블록의 문구를 "정본에 있으니 중복"이라며 지우면 이 skill 의 앵커가 0 이 된다.
 - **AC8 경계** (round-2 advisory 반영) — AC8 '추가 `AskUserQuestion` 없음'은 *approve 옵션이 최종 확정된 그 어시스턴트 응답 턴*에 한정한다 (Phase 5 내 revise/interview 루프의 다른 턴이 아님 — 그 턴들은 본래 질문을 띄운다). 다음 턴에 진입한 `writing-plans` 가 자체 실행-방식 선택 게이트를 띄우는 것은 별개 skill scope 이므로 AC8 해당 없음.
 
+### 재결정 규약 (P23) — 이 skill 의 적용
+
+이 skill 의 흐름에서 재결정이 걸리는 자리는 둘이고, 둘 다 위 라우팅 표가 이미 여는
+경로다 — 이 절은 표에 없는 경로를 만들지 않는다.
+
+- **브레인스토밍 author 회귀** (`combined_verdict: needs_revise`, `rereview_count < 5`) —
+  메인 agent가 design.md 를 직접 수정하는 그 라운드. findings 의 사유가 인터뷰가 이미
+  확정한 항목을 겨냥하면 **조용히 덮어쓰지 않는다** — design.md 의 재결정 기록에 *원래 /
+  재결정 후보 / 근거* 를 적어 다음 라운드로 들고 간다.
+- **Phase 5 Human Gate** (`approved` · 표의 `rereview_count >= 5` forced escalate · Re-review
+  cap 절의 stagnation escalate — 이 중 어느 경로로 왔든) — 누적된 재결정 후보를 게이트
+  질문 텍스트에 실어 **사용자가** 판정한다. 확정 항목이 실제로 뒤집히는 자리는 여기뿐이다.
+
+**임의 변경은 금지, 보고 후 재결정은 허용이다.** 정본은
+`${CLAUDE_PLUGIN_ROOT}/references/proceed-gate.md` 의 「재결정 규약」 절.
+
 ## Approve handoff sequence (①/② 공통)
 
 approve(①/②) 시 상태 조작은 없다. 이 시점에 남은 유일한 할 일은 **문서가 아직 git 에 없으면 알리는 것**이다:

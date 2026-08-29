@@ -304,7 +304,7 @@ for i in "${!GATED_RUNNER[@]}"; do
       # (`quality-pipeline/SKILL.md:386-388`이 나머지 두 산문 게이트의 리터럴화가
       # "이 사이클 범위 밖"이라고 적어 뒀다 — 즉 이 목록은 언젠가 반드시 자란다.)
       case "$label" in
-        auditing-plugins|reviewing-spec)
+        auditing-plugins|reviewing-spec|framing-requests)
           if grep -q 'detector_not_runnable' "$NODETECT_CAP.stderr" 2>/dev/null; then
             ok "$label: 감지기 부재 → codex 0회 + stderr에 detector_not_runnable (loud-failure 확인)"
           else

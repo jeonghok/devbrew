@@ -17,8 +17,9 @@
 # 검사가 두 벌 독립 저술되고(interview 쪽 하나 + reviewing-spec 쪽 하나) 스코프 규칙이
 # 서로 다른 채로 자유롭게 갈라진다 — **이 결함을 만든 바로 그 구조**다. Task 33 의 산출물이
 # "두 게이트가 한 계약을 공유한다"이므로, 그 계약의 이행 검증도 하나여야 하고 대상은
-# **열거가 아니라 도출**이어야 한다. 아래는 채택자를 포인터에서 도출한다 — 세 번째 skill 이
-# 정본을 채택하면 자동으로 같은 요구를 받는다.
+# **열거가 아니라 도출**이어야 한다. 아래는 채택자를 포인터에서 도출하고, 거기에 **정본이
+# 이름을 대는 skill** 을 합집합으로 더한다 — 세 번째 skill 이 정본을 채택하면 자동으로 같은
+# 요구를 받고, 포인터를 지워도 정본이 이름을 대는 한 대상에서 빠지지 않는다.
 #
 # interview 쪽은 자기 stage 테스트에도 같은 단언이 있다(AC21(i)/AC22). 중복이지만 출처가
 # 다르다 — 그쪽은 *그 stage 의 계약*을, 여기는 *공유 계약의 채택자 대칭*을 잰다. 어느 한쪽이
@@ -42,6 +43,7 @@ CANON_REF='references/proceed-gate\.md'
 
 . "$REPO_ROOT/shared/tests/assert.sh"
 . "$REPO_ROOT/shared/tests/presence_corpus.sh"
+. "$REPO_ROOT/shared/tests/adopter_derivation.sh"
 
 # `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 실제로 훑는 것은
 # 채택자들의 표면뿐이다(정본은 스캔하지 않는다 — 위 스코프 규칙).
@@ -54,42 +56,67 @@ emit_only=0
 # ── 채택자 도출 ─────────────────────────────────────────────────────────────
 # "정본을 가리키는 포인터가 그 skill 표면 어딘가에 있는가." reviewing-spec 은 SKILL.md 에서,
 # conducting-interview 는 references/finishing.md 에서 가리킨다 — 그래서 둘 다 본다.
-adopters=""
-scanned=""
+#
+# 도출 로직 자체는 `shared/tests/adopter_derivation.sh` 정본으로 옮겼다 —
+# `test_compression_adopters.sh` 가 같은 골격을 두 번째로 쓰게 되면서 인라인 버전이 그
+# 파일과 28줄 바이트 동일 블록을 만들어 `test_no_new_duplication.sh` 를 RED 로 냈다.
+#
+# **emit 을 이 파일이 한다**(형제 락과 다른 점): 아래 합집합까지 계산한 뒤여야 emit 이
+# 실제로 스캔하는 집합과 일치한다. 그래서 헬퍼는 `0` 으로 부르고 emit 은 합집합 뒤에서
+# 한다.
+derive_reference_adopters "$SD" "$CANON_REF" "$REPO_ROOT" 0
+adopters="$ADOPTERS"
+scanned="$SCANNED"
+
+# ── 대상 = {포인터에서 도출한 채택자} ∪ {정본이 이름을 대는 skill} ──────────
+# 포인터 하나에만 걸린 도출은 **피검자가 자기를 측정 밖으로 빼낼 수 있다**: 리뷰어가
+# `reviewing-spec/SKILL.md` 의 정본 포인터 둘을 지우고 돌리자 15/15 가 11/11 GREEN 이
+# 됐다 — 그 skill 의 앵커 단언 넷이 RED 도 아니고 «그냥 사라졌다». 아래 하한 2 는 그
+# 상태를 못 잡는다: 남은 채택자가 여전히 둘이기 때문이다(하한은 개수이지 구성원이 아니다).
+#
+# 그래서 두 번째 방향을 더한다: **정본 본문이 이름을 대는 skill.** 그 앵커는 피검자가
+# 아니라 정본이 쥐고 있어서, 포인터를 지워도 대상에서 빠지지 않는다. 이것도 열거가
+# 아니다 — 후보는 `skills/*/` 라는 **구조**에서 나오고 어느 것이 대상인지는 정본 본문이
+# 정한다. 세 번째 skill 이 계약을 채택하고 정본이 그것을 이름 대면 자동으로 들어온다.
+canon_named=0
 for skill_dir in "$SD"/skills/*/; do
   [ -d "$skill_dir" ] || continue
-  surface=""
+  sname="$(basename -- "${skill_dir%/}")"
+  grep -qF -- "$sname" "$CANON" || continue
+  printf '%s' "$adopters" | grep -qxF -- "${skill_dir%/}" && continue
+  canon_named=$((canon_named + 1))
+  adopters="$adopters${skill_dir%/}
+"
   for f in "$skill_dir"SKILL.md "$skill_dir"references/*.md; do
-    [ -f "$f" ] || continue
-    surface="$surface$f
+    [ -f "$f" ] && scanned="$scanned$f
 "
   done
-  [ -n "$surface" ] || continue
-  hit=0
-  while IFS= read -r f; do
-    [ -n "$f" ] || continue
-    grep -qE -- "$CANON_REF" "$f" && { hit=1; break; }
-  done < <(printf '%s' "$surface")
-  if [ "$hit" -eq 1 ]; then
-    adopters="$adopters${skill_dir%/}
-"
-    scanned="$scanned$surface"
-  fi
 done
-
+# `--emit-scanned` 는 **합집합 뒤**에 낸다 — 실제로 훑는 것과 같아야 한다. 이 분기가
+# 단언보다 «앞»인 것도 계약이다: emit 은 경로만 내야 하고, `ok` 한 줄이 섞이면 그것을
+# 읽는 쪽이 경로로 오해한다(실측: 단언을 앞에 두자 `✓ …` 줄이 경로 목록에 섞였다).
 if [ "$emit_only" -eq 1 ]; then
   printf '%s' "$scanned" | sed "s|^$REPO_ROOT/||"
   exit 0
 fi
 
+[ "$canon_named" -eq 0 ] \
+  && ok "합집합: 정본이 이름 대는 skill 중 포인터 도출에 없던 것 0개 (두 방향이 오늘 일치)" \
+  || ok "합집합: 포인터를 안 가졌지만 정본이 이름을 대는 skill ${canon_named}개를 대상에 더했다"
+
 n_adopt=0
 while IFS= read -r a; do [ -n "$a" ] && n_adopt=$((n_adopt + 1)); done < <(printf '%s' "$adopters")
-# 하한이 1 이 아니라 **2** 인 이유: 이 파일이 플러그인 레벨에 사는 근거가 "두 skill 이
-# 공유한다"이기 때문이다(Task 33). 채택자가 1 로 떨어지면 그것은 정상 상태가 아니라
-# **한쪽이 조용히 이탈했다**는 뜻이고, 이탈한 skill 은 그 순간 이 스위트의 측정 밖으로
-# 나간다 — 코퍼스 축소가 vacuity 검사(≥1)를 통과해 버리는 바로 그 모양이다. 채택자가
-# 정말 하나뿐이라면 공유 파일일 이유가 없으므로 그 skill 밑으로 옮겨야 한다.
-# 기대값을 숫자로 박는 것이 아니라 **파일의 배치 근거**에서 도출한 하한이다.
+# 하한이 1 이 아니라 **2** 인 이유: 이 파일이 플러그인 레벨에 사는 근거가 "여러 skill 이
+# 공유한다"이기 때문이다. 대상이 1 로 떨어지면 그것은 정상 상태가 아니라 **공유가 끝났다**
+# 는 뜻이고, 그때는 정본을 그 skill 밑으로 옮겨야 한다. 기대값을 숫자로 박는 것이 아니라
+# **파일의 배치 근거**에서 도출한 하한이다.
+#
+# **이 하한이 잡는 것과 못 잡는 것을 지금 실제로 잡는 것으로 다시 쓴다.** 하한은
+# 개수(cardinality)이지 구성원(membership)이 아니므로, 한 skill 이 포인터를 잃고 다른
+# skill 이 얻으면 수는 그대로다. 그 치환을 잡는 것은 하한이 아니라 **위 합집합**이다 —
+# 정본이 이름을 대는 skill 은 포인터와 무관하게 대상에 남으므로, 포인터를 지우는 편집은
+# 그 skill 의 앵커 단언을 사라지게 하는 대신 그대로 돌게 한다(앵커가 실제로 없으면 RED).
+# 정본이 이름을 대지 «않는» skill 은 여전히 자기 포인터에만 걸려 있다.
 if [ "$n_adopt" -lt 2 ]; then
   no "채택자 도출 ${n_adopt}개 — 플러그인 레벨 공유 계약인데 채택자가 2 미만이다. 한쪽이 조용히 포인터를 잃었거나(그 skill 이 측정 밖으로 나간다), 애초에 공유가 아니라면 정본을 그 skill 밑으로 옮겨야 한다"
   finish; exit $?
@@ -98,13 +125,14 @@ ok "채택자 도출 ${n_adopt}개 (열거 아님 — 정본 포인터에서 도
 
 # ── 이 도출이 재지 **못하는** 것 (알려진 채, 의도적으로 남긴다) ─────────────
 #
-# 1. **하한은 개수(cardinality)이지 구성원(membership)이 아니다.** 진짜 채택자가 포인터를
-#    잃고 같은 변경에서 **다른 skill 이 포인터를 얻으면** `n_adopt` 는 2 그대로다. 오늘
-#    그 치환이 RED 가 나는 것은 **우연**이다 — 유일한 대체 후보 `reviewing-brief/SKILL.md`
-#    가 `턴 종료|다음 턴` 을 0줄 갖고 있어 아래 가드 2 단언이 대신 발화한다. 구성원을 못
-#    박으려면 이름을 열거해야 하는데, 그것은 이 설계가 일부러 피한 바로 그 열거다
-#    (열거는 세 번째 채택자를 자동으로 못 삼킨다). 개수 하한 + 채택자별 앵커 단언의
-#    조합으로 남긴다.
+# 1. **정본이 이름을 대지 않는 skill 은 여전히 자기 포인터에만 걸려 있다.** 합집합의
+#    두 번째 방향은 정본 본문이 정하므로, 정본이 한 번도 이름을 대지 않은 채택자는
+#    포인터를 지우는 것만으로 대상에서 빠진다. 오늘 그런 채택자는 `framing-requests`
+#    였는데, 이 wave 에서 정본이 그것을 이름 대게 고쳐 셋 다 두 방향에 걸린다 — 즉
+#    **이 갭은 오늘 비어 있고, 넷째 채택자가 생기면 다시 열린다.** 넷째를 정본이 이름
+#    대게 하는 것이 그때의 수정이다.
+# 1b. **판정은 리터럴 등장이다.** 정본이 어떤 skill 이름을 «쓰지 말라는 예시»로 적어도
+#    그 skill 은 대상이 된다. fail-closed 방향(있는 앵커를 요구)이고 시끄러우므로 남긴다.
 # 2. **도출은 리터럴 등장을 셀 뿐 "의도"를 못 읽는다.** skill 표면 어디든
 #    `references/proceed-gate.md` 라는 문자열이 있으면 채택자로 등록된다 — HTML 주석 안이든
 #    "이렇게 쓰지 말 것" 예시든 마찬가지다. 그 경우 그 skill 은 채택하지도 않은 계약의
@@ -163,6 +191,17 @@ while IFS= read -r skill_dir; do
   [ "$dc" -ge 1 ] \
     && ok "$name: Step B degrade 채널을 이름으로 댔다 — ${dc}줄" \
     || no "$name: Step B 가 요구하는 degrade 채널 절이 자기 표면에 없다 — 채널이 없다는 사실 자체가 degrade 이므로 '해당 없음'으로 넘길 수 없다"
+
+  # P23: 각 채택자가 자기 표면에 **재결정 규약**을 갖는가.
+  #
+  # 정본(`proceed-gate.md`)에도 같은 어휘가 있지만 그것은 계약 서술이지 이 skill 의
+  # 앵커가 아니다 — 위 코퍼스 규칙(정본은 스캔 대상 아님)이 그대로 적용된다.
+  # 재는 것은 «규약을 자기 어휘로 적었는가» 이지 그 문면이 무엇인가가 아니다.
+  # 앞 단계의 확정이 하류에서 반증됐을 때 피벗 경로가 그 skill 에 있는지가 요구다.
+  rc="$(cat "${files[@]}" | grep -cE '재결정|반증')"
+  [ "$rc" -ge 1 ] \
+    && ok "$name: P23 재결정 규약 앵커 실재 — ${rc}줄" \
+    || no "$name: P23 재결정 규약이 자기 표면에 없다 — 앞 단계의 확정을 뒤집을 근거가 생겨도 이 skill 에는 올릴 자리가 없다"
 done < <(printf '%s' "$adopters")
 
 finish

@@ -88,6 +88,11 @@ else
       run_spec_codex_reviewer.sh) echo on ;;
       run_brief_codex_reviewer.sh) echo on ;;
       run_audit_codex_reviewer.sh) echo on ;;
+      # Task 14 — 억제 축 네 항목은 초안을 원문·레포 CLAUDE.md 하나와만 대조한다
+      # (direction/spec 리뷰와 달리 외부 prior-art 대조가 필요 없다). 그래서
+      # 형제들과 달리 항상 off — 켤 수도, kill switch로 끌 수도 없는 리터럴이다
+      # (run_seed_codex_reviewer.sh 자체에 켤 대상이 없다).
+      run_seed_codex_reviewer.sh) echo off ;;
       test_codex_json_extraction.sh) echo off ;;
       *) echo '' ;;
     esac

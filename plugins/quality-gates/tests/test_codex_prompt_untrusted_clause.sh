@@ -82,7 +82,7 @@ builder_source_path() {
   case "$1" in
     build_codex_prompt.py|build_artifact_codex_prompt.py)
       echo "$ROOT/plugins/quality-gates/scripts/$1" ;;
-    build_spec_codex_prompt.py|build_brief_codex_prompt.py)
+    build_spec_codex_prompt.py|build_brief_codex_prompt.py|build_seed_codex_prompt.py)
       echo "$ROOT/plugins/spec-distill/scripts/$1" ;;
     *)
       return 1 ;;
@@ -112,6 +112,11 @@ emit() {
       $py "$ROOT/plugins/spec-distill/scripts/$builder" "$TMP/in.md" ;;
     build_brief_codex_prompt.py)
       $py "$ROOT/plugins/spec-distill/scripts/$builder" --axis "$axis" "$TMP/in.md" ;;
+    build_seed_codex_prompt.py)
+      # brief 와 달리 AXES 는 "suppression" 하나뿐이라(Task 14) 브리프처럼 소스에서
+      # 축 목록을 도출하지 않는다 — build_spec_codex_prompt.py 와 같은 급의
+      # 단일-인자 하드코딩이면 충분하다(형제 셋 중 브리프만 축이 둘이라 예외였다).
+      $py "$ROOT/plugins/spec-distill/scripts/$builder" --axis suppression "$TMP/in.md" ;;
     *)
       return 1 ;;
   esac

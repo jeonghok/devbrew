@@ -1,5 +1,112 @@
 # Changelog
 
+## [0.41.0] — 2026-08-29
+
+### Changed
+- 인터뷰 R1 이 `Reframe (메타 프롬프트)` 에서 **`Problem Reframe`** 으로. 「받은 요청 재구성」은 `request-framing` 이 하고, 여기서는 **seed 가 가리키는 작업 뒤의 진짜 문제**를 재구성한다. 명칭 변경이 아니라 R&R 이동이다.
+- `commands/interview.md` 의 trivia 5패턴이 `references/trivia-escape.md` 포인터로.
+
+### Added
+- `conducting-interview` 에 seed 입력 규약. seed 본문은 §6 `S1` 이 되고, 인터뷰 중 사용자가 seed 를 뒤집으면 **새 발화가 이기며** 그 재결정이 §5 에 기록된다(P23).
+- `/interview` 가 seed 아닌 입력에 조언 한 줄을 낸다 — **차단하지 않는다**(호환 유지).
+
+### 검증 경계 — 이 판본에서 실제로 관측한 것
+
+- **진짜 codex 바이너리를 태운 실행은 이 판본에 0회다**(한도 소진). v0.39.0 이 seed codex
+  러너를 「배선되어 실제로 호출된다」고 쓴 것은 **배선의 계약**을 서술한 것이고, 관측으로
+  확인된 것은 셋이다: ① 게이트 블록을 잘라내 stub/mock 위에서 돌렸을 때 **mock 이 실제로
+  호출됐고**(sentinel 실재) 그 argv 가 계약대로였다는 것, ② kill switch · 감지기 부재 ·
+  `exit 3` · 게이트 입력 부재 각 경로의 fail-closed 처리가 관측된 사후상태와 일치한다는
+  것, ③ 산출물 판정이 성공 마커 **양성 요구**로 돈다는 것. **모델 다양성이 실제로 확보되는지는
+  한도가 풀린 뒤 실호출로 확인해야 한다** — 지금까지의 GREEN 은 그 사실의 증거가 아니다.
+
+## [0.40.0] — 2026-08-29
+
+### Added
+- **`/request-framing` — 파이프라인 Phase 0.** 사용자의 의도·steering·방향·goal을 싱크해
+  새 세션의 첫 턴 메시지 `interview-seed`로 압축한다. 산출물은 문서가 아니라 **붙여넣는
+  메시지**이며 절·라벨·태그·URL이 없다.
+- `skills/framing-requests/` — 확산 후 압축 절차. `proceed-gate.md`·`compression.md`·
+  `trivia-escape.md` 채택.
+- `agents/seed-critic.md` · `agents/seed-readback.md` — 둘 다 `tools: []`. critic은 억제
+  네 축, readback은 냉독이며 **판정은 사용자가 한다**.
+- `references/compression.md` — 압축 규약 공유 계약. **오늘 게이트로 집행하는 것은
+  seed뿐**이고 brief는 재구조화 이후에 채택한다.
+- `references/trivia-escape.md` — 5패턴 정의 정본. `commands/request-framing.md`와
+  `framing-requests`가 가리킨다(`commands/interview.md`는 아직 자기 인라인 사본을 쓴다).
+- `scripts/check_seed.py` — 게이트 다섯: seed 본문 슬롯 부재 검사 셋(답-슬롯 헤딩·태그·
+  URL) + 본문 전체가 비어 있지 않은지 보는 파일-전체 존재 검사 하나(check 0) + audit 쪽
+  `## 1. 원문` 절 존재 검사 하나. seed 본문에 대한 **슬롯** 존재 검사는 없다.
+- seed 억제 축 codex 러너·빌더·체크리스트(`run_seed_codex_reviewer.sh`·
+  `build_seed_codex_prompt.py`·`seed-codex-suppression-checklist.md`)가
+  `framing-requests` skill의 게이트 블록에 배선되어 실제로 호출된다.
+  `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1`이 호출자 책임으로 그 호출을 막고, 러너가
+  산출물을 못 쓰고 죽으면(`exit 3`) 직전 라운드 잔존물을 지운다. 억제 findings는 어떤
+  병합기도 거치지 않고 사용자에게 직접 간다.
+
+### Fixed
+- `skills/framing-requests/SKILL.md` — `interview-basename` 파일이 생기는 시점 서술을
+  실제 조건(블록의 `TOPIC` 자리표가 실값으로 치환된 실행)에 맞췄다. 자리표가 그대로면
+  블록이 돌아도 파일을 만들지 않고 advisory만 낸다.
+
+## [0.39.0] — 2026-08-28
+
+### Added
+- `scripts/brief_review_state.py`에 `--ledger-key`(닫힌 열거: `brief_review_degradations`·
+  `framing_degradations`, `get`·`degrade-append` 양쪽). 다른 파이프라인이 같은 writer로
+  자기 원장에 쓴다 — 읽기·쓰기·기본값이 `LEDGER_KEYS` 하나를 거친다(리터럴 산개 금지).
+- `AXES`에 `suppression` — seed 억제 축의 degrade record를 위한 `affected_axis` 값.
+
+## [0.38.0] — 2026-08-28
+
+### Removed
+- `scripts/probe_budget.py` 와 그 전용 테스트·픽스처(`tests/test_probe_budget.sh`,
+  `tests/fixtures/state-probe-at-cap.md`, `tests/fixtures/state-probe-within.md`). 인터뷰
+  질문·라운드에 상한을 두지 않는다 — 질문 루프는 매 반복마다 사용자가 답해야 돌므로 묶을
+  자율이 없다.
+- `DEVBREW_SPEC_DISTILL_PROBE_CAP` kill switch (대상이 사라졌다).
+- `skills/conducting-interview/SKILL.md`의 `## probe 백스톱 (C1/C10 …)` 절과
+  `probe_count`/`probe_cap_override` state 필드 — 아래 coverage-mapper 재dispatch
+  바운드가 이 카운터를 대체한다.
+
+### Changed
+- coverage-mapper 재dispatch 바운드를 `probe_count` 단위에서 **에피소드 필드 둘**
+  (`orchestration.stall_episode` · `orchestration.coverage_mapper_dispatched_episode`)로
+  이식. 재dispatch 조건은 `no_progress_streak >= 3 AND coverage_mapper_dispatched_episode
+  != stall_episode` — 판정은 여전히 디스크 두 값의 비교(무상태)이고 한 정체 구간당
+  정확히 1회다. 회귀락을 토큰 공존이 아니라 이 AND 관계 전체에 걸도록 강화했다
+  (리뷰가 `AND`→`OR` 반전을 놓치던 결함 1건을 실측 적발).
+- floor 탈출구의 발동 조건이 카운터에서 **사용자 발화**로. 사용자가 언제든 종료를
+  요청하면 미충족 floor 는 사용자-승인 박제로 닫고(`evidence` 에 `사용자-승인 박제(@사용자
+  종료 요청)` 기록) payload §3 Open Questions 로 이월한다. 박제 표식이 원장에 남으므로
+  silent bypass 가 아니다.
+- audit `## 2. Budget` 절의 본문이 상한 서술에서 **지출 기록**(`질문 라운드: <n> · agent
+  dispatch: <n> · codex 실호출: <n> (성공 <n>)`)으로.
+- `skills/conducting-interview/SKILL.md`의 `S<N>` id 번호 공식이 최초 요청 원문(`S1`)
+  예약을 반영 — 원문이 있으면 `user_statements` 는 `S2`부터, 없으면 `S1`부터 시작한다.
+  이 정합이 없으면 payload §6 에 `S1` 앵커가 중복되거나 payload·state 의 `S1`이 서로
+  다른 텍스트를 가리켜 `check_verbatim_coverage.py`가 red 를 낸다(§6 원문 완전성 검사).
+
+### Added
+- `finishing.md`에 최초 요청 원문(`$ARGUMENTS`)을 §6 `S1`로 보존하는 요구. 지금까지는
+  관례였고 게이트 15항 어디에도 이 요구가 없어 원문이 보존되지 않은 인터뷰도 통과했다.
+  `test_conducting_interview_stage.sh`에 이 요구와 번호 공식 정합을 파일 전체·내용
+  표지 위 **∀**(모든 매치가 정본과 일치)로 결속하는 단언을 추가하고,
+  `test_check_verbatim_coverage.sh`에 영구 픽스처 2쌍(정상 공식 / 구-공식 회귀)을 넣었다.
+- `tests/test_probe_sweep_residue.sh` — probe 어휘 스윕 완결성의 단측 단언. 식별자 열거
+  (`ALIAS_RE`)뿐 아니라 개념명 근접 스캔(`CONCEPT_RE` — "probe 상한"이 다른 이름으로
+  재작성되는 것에 대한 좁은 방어)까지 스캔하고, 세 예외(`tests/fixtures/` ·
+  `CHANGELOG.md` · 이 파일 자신)의 자기지시를 제외한다. 양성 대조를 계열별(별칭/개념
+  각각)로 분리해 — 합본 하나만 걸던 대조는 한쪽 계열만 깨져도 통과했다(실측:
+  `ALIAS_RE`만 깨도 GREEN) — 두 계열이 각자 이빨을 갖게 했다.
+
+## [0.37.0] — 2026-08-27
+
+### Added
+- 재결정 규약(P23)을 `references/proceed-gate.md` 계약의 절로 승격. 확정된 항목은 재논의 대상이 아니지만 **반증 대상**이며, 근거와 사용자 동의가 있으면 피벗할 수 있다.
+- `skills/reviewing-spec/SKILL.md` 에 이 skill 어휘의 재결정 규약 절.
+- `tests/test_proceed_gate_adopters.sh` 에 네 번째 채택자 앵커(P23).
+
 ## [0.36.0] — 2026-08-27
 
 게이트의 연료를 «어떤 도구가 돌았나»에서 «git 이 무엇을 dirty 로 보나»로 바꾼다.
