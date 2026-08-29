@@ -47,7 +47,29 @@ skill 에 옵니다. 5패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-
 
 ## 검증
 
-### 억제 리뷰
+억제 축의 담당은 **둘**입니다 — 격리 critic 과 codex. 냉독은 별개 축입니다.
+
+### 재료 조립
+
+번들(초안 · 사용자 원문 · 레포 `CLAUDE.md`)은 **한 번만** 조립하고 두 담당이 나눠
+씁니다. 조립이 두 곳에 있으면 한쪽만 고쳐질 때 두 리뷰어가 서로 다른 재료를 보게 되고,
+그 어긋남은 findings 가 갈릴 때까지 드러나지 않습니다.
+
+```bash
+SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+PAYLOAD="$(mktemp -t sd-seed-blob-XXXXXX)"
+CODEX_YAML="$(mktemp -t sd-seed-codex-XXXXXX)"
+python3 "$SD/scripts/build_seed_inline_blob.py" "$SEED" "$AUDIT" CLAUDE.md > "$PAYLOAD"; blob_rc=$?
+```
+
+`blob_rc` 가 0 이 아니면 번들이 없는 것이므로 **두 담당 모두** 돌리지 않고, 그 사실을
+`component: pipeline` · `affected_axis: suppression` · `verification_status: unavailable`
+로 남깁니다.
+
+아래 codex 게이트 블록은 **이 블록과 같은 `Bash` 호출**에서 이어서 돌립니다 — `Bash`
+도구는 호출마다 새 셸이라 `$PAYLOAD`·`$CODEX_YAML` 은 다음 호출에 남지 않습니다.
+
+### 억제 리뷰 — 격리 critic
 
 ```javascript
 Agent({ description: "Seed suppression critique", subagent_type: "spec-distill:seed-critic",
@@ -56,8 +78,49 @@ Agent({ description: "Seed suppression critique", subagent_type: "spec-distill:s
 // **처분** — consumer=human · fail-open · disclosure=framing_degradations
 ```
 
+`${BLOB}` 은 위에서 조립한 `$PAYLOAD` 의 내용입니다 — codex 가 파일로 받는 것과 같은
+번들을 인라인으로 넘깁니다.
+
 **뺄셈 검사입니다.** 「좋은 프롬프트냐」는 묻지 않습니다 — 그건 취향이고 비평자에게는
 사용자의 도메인 지식이 없습니다.
+
+### 억제 리뷰 — codex
+
+억제 축의 **세 번째 담당**입니다. 러너는 `DEVBREW_SPEC_DISTILL_DISABLE_CODEX` 를 스스로
+보지 않습니다 — 게이트는 **호출자 책임**이고 그 호출자가 여기입니다.
+
+조건을 **산문으로 적지 않습니다.** 문장으로 「가용할 때만」이라 적고 bash 펜스는 무조건
+실행되게 둔 판본이 형제 skill 에 실제로 있었고, 그 파일에는 `codex_avail` 을 검사하는
+`if` 가 아예 없었습니다. kill switch 는 P21 보안 컨트롤이라 그 상태는 「껐다고 믿게만」
+만듭니다.
+
+<!-- codex-gate:begin runner=run_seed_codex_reviewer.sh -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+DETECT_OUT="$(bash "$SD/scripts/detect_codex.sh")"
+codex_avail="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^codex_available: //p')"
+skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
+# 정상 실행된 감지기는 false 일 때도 `codex_available:` 줄을 내고 exit 0 한다. 그 줄이
+# 없으면 감지기 자체가 안 돈 것이다(끊긴 심볼릭 링크·빈 stdout) — 「codex 가 없다」와
+# 구별해서 적는다. 뭉개면 사용자가 이유 없는 SKIPPED 만 본다.
+if [[ -z "$codex_avail" ]]; then skip_reason="detector_not_runnable"; fi
+if [[ "$codex_avail" == "true" ]]; then
+  bash "$SD/scripts/run_seed_codex_reviewer.sh" suppression "$PAYLOAD" "$(pwd)" "$CODEX_YAML"; runner_rc=$?
+  # exit 3 은 「산출물 자체를 못 썼다」이다. 그때 직전 라운드 YAML 이 디스크에 그대로
+  # 남아 이번 라운드 판정으로 읽히는데, 그 파일은 양성 마커(codex_failed: false)를
+  # 달고 있을 수 있어 「이번에 codex 가 정상이었다」로 읽힌다. 지운다.
+  if [[ "$runner_rc" -eq 3 ]]; then rm -f "$CODEX_YAML"; fi
+else
+  echo "[spec-distill] codex 억제 co-review SKIPPED (reason: ${skip_reason:-unknown}) — 격리 critic 단독, 이 축에 모델 다양성이 없었다 (degraded)." >&2
+fi
+```
+<!-- codex-gate:end -->
+
+**축은 죽지 않습니다** — 격리 critic 이 남습니다. 위 stderr advisory 는 사용자에게 그대로
+노출하고, 같은 사실을 아래 `framing_degradations` 원장에도 남깁니다.
+
+codex 의 raw findings 도 격리 critic 의 것과 **나란히** 사용자에게 갑니다 — 병합기가
+없고 판정도 없습니다(§`degrade 채널`).
 
 ### 냉독
 
@@ -69,7 +132,7 @@ Agent({ description: "Seed cold readback", subagent_type: "spec-distill:seed-rea
 ```
 
 **싱크됐는지는 사용자가 읽고 판정합니다.** 에이전트가 통과·미달을 내면 어긋남의 감각이
-사용자에게 오지 않습니다. 두 dispatch 의 raw 출력은 **사용자에게 직접** 갑니다 —
+사용자에게 오지 않습니다. 세 리뷰(격리 critic · codex · 냉독)의 raw 출력은 **사용자에게 직접** 갑니다 —
 orchestrator 는 그것을 아래 `framing_degradations` 원장에 옮겨 적을 뿐, 판정하거나
 병합하지 않습니다.
 
@@ -82,6 +145,19 @@ orchestrator 는 그것을 아래 `framing_degradations` 원장에 옮겨 적을
 
 codex 가 죽으면 record 하나가 남고 격리 critic 이 단독으로 돕니다. **억제 축은 판정에
 합류하지 않습니다** — findings 는 어떤 병합기도 거치지 않고 사용자에게 직접 갑니다.
+
+codex 축의 record 는 게이트 블록이 낸 값으로 정합니다. `--component codex --axis
+suppression` 은 두 경우 모두 같고 갈리는 것은 `--status` 와 `--reason` 입니다:
+
+| 관측 | `--status` | `--reason` |
+|---|---|---|
+| `codex_avail` 이 `true` 가 아니다 | `skipped` | `$skip_reason` 값 그대로 |
+| `codex_avail` 이 `true` 였는데 `$CODEX_YAML` 에 `codex_failed: false` 가 없다 | `degraded` | `$runner_rc` + 관측한 사실(파일 부재·0바이트·잘림·`true`) |
+
+`$CODEX_YAML` 은 **성공 마커 양성 요구**로 읽습니다 — `codex_failed: false` 가 **있어야**
+정상입니다. 「`codex_failed: true` 가 없는지」만 보면 그 술어에 fail-closed 보수가 없어
+파일 부재·0바이트·직전 라운드 잔존이 전부 「정상」으로 읽힙니다. `codex_avail` 은
+pre-flight **부재**만 잡고, 아래 칸은 러너 자체의 **런타임 실패**라 서로 다른 사실입니다.
 
 ## 확정 — proceed 게이트
 

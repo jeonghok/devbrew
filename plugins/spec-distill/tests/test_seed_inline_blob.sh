@@ -4,9 +4,10 @@
 # build_seed_inline_blob.py 를 실행 기반으로 검증한다(fix round 1, Important 4).
 # 이 스크립트는 seed-critic.md 가 문서화한 `<draft>${BLOB}</draft>` 의 **안쪽
 # 내용**을 조립한다 — 초안(frontmatter 제외) + audit `## 1. 원문` + 레포 CLAUDE.md
-# 세 재료를 하나로 묶는다. Task 14 시점에 아직 아무도 이 스크립트를 부르지
-# 않는다(framing-requests/SKILL.md 배선은 후속 태스크) — 그래도 구조는 지금
-# 실행으로 증명한다. 형제 build_brief_inline_blob.py 의 관용구(정상 경로 · 재료별
+# 세 재료를 하나로 묶는다. 소비자는 framing-requests/SKILL.md 의 「재료 조립」
+# 블록이고, 그 블록이 만든 번들을 격리 critic 과 codex 러너가 나눠 쓴다 — 조립이
+# 한 곳인 것이 두 리뷰어가 같은 재료를 본다는 근거다. 이 파일은 그 조립기의 계약을
+# 소비자와 무관하게 실행으로 못 박는다. 형제 build_brief_inline_blob.py 의 관용구(정상 경로 · 재료별
 # 부재 exit 2 · 조용한 결측 금지 · mutation)를 이 스크립트의 실제 계약(redaction이
 # 아니라 3-재료 조립)에 맞춰 적용한다.
 set -u -o pipefail
