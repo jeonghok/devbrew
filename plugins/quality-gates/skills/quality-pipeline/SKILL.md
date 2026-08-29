@@ -10,9 +10,8 @@ description: >
   PR-understanding publish continuation — a separate consent-gated step, not a gate.
 cost_class: variable
 allowed-tools:
-  # Group 1 — Preflight scripts (실행 순서: setup → pre-check → trivia)
+  # Group 1 — Preflight scripts (실행 순서: setup → trivia)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)
-  - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/pre-pipeline-check.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-trivia.sh:*)
   - Bash(${CLAUDE_PLUGIN_ROOT}/scripts/check-review-scope.sh:*)
   # Group 2 — Review gate scripts
@@ -57,7 +56,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v4.1.0)
+# Quality Gates — In-Turn Orchestrator (v5.0.0)
 
 You are running the **full quality-gates pipeline** in a single assistant
 turn. You dispatch up to two gates serially in order (Runtime gate only when selected). At decision points
@@ -77,7 +76,7 @@ handles deletion.
 이 SKILL은 단일 어시스턴트 턴 안에서 전체 파이프라인을 실행. 섹션 그룹:
 
 1. **Workflow (top-to-bottom on invocation):**
-   - [Preflight](#preflight) — kill switch / setup-qg / pre-pipeline-check
+   - [Preflight](#preflight) — kill switch / setup-qg
    - [Arguments](#arguments) — `/qg` flags 파싱
    - [Dispatch Loop](#dispatch-loop) — two gates serialized in order with per-gate iteration
 2. **Per-gate dispatch logic:**
@@ -147,30 +146,9 @@ Exit non-zero → surface stderr verbatim and abort.
 이번 run의 완료만 반영하도록(SKILL은 `Write`만 있고 삭제 tool이 없어 이 정리는
 스크립트가 담당).
 
-**Step P3 — Pre-pipeline check (scope detection).** Run:
-
-```bash
-QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
-"$QG/scripts/pre-pipeline-check.sh"
-```
-
-The script exits non-zero on hard precondition violations (`no_session_id`,
-`invalid_session_id`) and zero on normal codes. **Non-zero exit must abort
-the pipeline immediately** — surface the script's stderr verbatim and stop.
-Do NOT proceed to the Review gate with degraded state.
-
-On zero exit, parse the `result:` line. Handle every emitted code; unknown
-values are a contract violation, not "treat as fresh":
-
-| `result:` | Meaning | Downstream action |
-|---|---|---|
-| `fresh_start` | First run on this branch | normal — silent |
-| `preserved` | Session file fresh; reuse | normal — silent |
-| `no_session_data` | No prior state | normal — silent |
-| `cleared_branch_mismatch` | HEAD branch changed; state wiped | tell user "branch changed; session scope reset"; do not use prior files.md |
-| `cleared_stale` | Session file aged out; deleted | tell user "stale session data cleared"; do not use prior files.md |
-| `active_resume` | Mid-pipeline resume on same session | continue with existing state |
-| (other) | Unknown — contract violation | abort with stderr verbatim |
+**Preflight 는 P2 에서 끝난다.** SID 존재·패턴 검증은 `setup-qg.sh` 가 P2 에서
+정규식으로 수행하고 exit 1 한다 — Preflight 자신은 별도 SID 검증 스텝을 갖지
+않는다.
 
 ## Arguments
 
@@ -296,7 +274,21 @@ Iterative fix-loop, `max_review_iterations = 5` (hard-coded constant).
 
 For each iteration N (1..5):
 
-1. Compute diff scope (paths / branch / session — from preflight result). **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> Review scope: session (<COUNT> files edited this session). 전체 PR/브랜치는 /qg branch.` (`<COUNT>` = preflight `files.md` 항목 수). 명시적 `/qg branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/qg branch`는 결정론적 escape hatch로 유지).
+1. **Resolve the review scope** — `paths` / `branch` / `session` (`session` = the default: no `branch` arg, no `--paths`). **There is no preflight scope**; nothing upstream hands you a file set, so you derive it here, from git, every turn:
+
+   ```bash
+   QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"   # plugin root per Step P0b
+   MERGE_BASE=$("$QG/scripts/resolve-baseline.sh" | awk '$1=="merge_base:"{print $2}')
+   git diff --name-only "$MERGE_BASE"..HEAD    # (a) committed on this branch
+   git diff HEAD --name-only                   # (b) tracked, not yet committed
+   git ls-files --others --exclude-standard    # (c) untracked and not ignored
+   ```
+
+   `session` = **(a) ∪ (b) ∪ (c)** · `branch` = **(a)** · `paths` = what the `--paths` globs resolve to. Never re-derive a base yourself — `resolve-baseline.sh` owns it (two consumers on different baselines is the C2 failure), and its `degraded: yes` means the set is undeterminable: carry that to Step 4.5's degraded branch instead of silently calling it 0. The size of the set you end up with is `$resolved_scope_file_count` (Step 4.5) and it is what you feed to `scout.py`.
+
+   **Deriving from git is what makes the scope tool-agnostic** — git reports a changed file the same way whichever tool produced it, so a file written by a Bash heredoc or `sed -i` is in the default scope exactly like one written by `Write` (A20). Never source the scope from a per-session record of "files this turn edited": such a record is produced by a hook keyed on the writing tool's name, so every write outside that name list vanishes from the scope silently — the pre-5.0.0 defect this release removed.
+
+   **Scope transparency (P8 determinism-economy):** iteration N=1에서, 스코프가 *암묵 default(session)* 로 — 즉 `branch`/`--paths` arg 없이 — 풀렸다면 사용자-가시 한 줄을 출력한다: `> Review scope: session (<COUNT> changed files). 전체 PR/브랜치는 /qg branch.` (`<COUNT>` = `$resolved_scope_file_count` — 정의는 Step 4.5 "Resolved-scope file count" 참조, `check-review-scope.sh` 산출값이 아니다). 명시적 `/qg branch`·`--paths`는 사용자가 scope를 이미 골랐으므로 출력하지 않는다. 이는 결정론 가드가 **아니다** — git 비교·차단 로직 없이 "scope가 암묵 session인가?"만 본다. 자연어로 표현된 scope 의도(예: "전체 PR", "지금 브랜치")는 별도 토큰 parser 없이 모델이 자유롭게 해석해 branch scope로 라우팅한다 (non-load-bearing routing은 모델 신뢰; `/qg branch`는 결정론적 escape hatch로 유지).
 
 **Step 1b — Changes-exist signal (iteration N=1 only).** Before dispatching the
 scout, run the read-only changes-exist signal **once** and cache it for the rest
@@ -330,7 +322,7 @@ Run this signal check ONLY in iteration N=1; iterations 2–5 reuse the cached v
 > the floor is the integrity half (deterministic).
 
 2. Dispatch the scout: `Bash(scripts/scout.py ...)` (plugin root per Step P0b) — compute its
-   metrics from the review scope you resolved at step 1 (the session `files.md` set, the
+   metrics from the review scope you resolved at step 1 (the git-derived changed-file set, the
    `branch` diff, or the `--paths` globs). Scope is model-owned; there is no cached scope
    variable to thread.
 3. **Compose and dispatch the reviewer set (scope-driven).** You (orchestrator)
@@ -383,7 +375,7 @@ Agent({
   description: "Security review (Review gate iter N)",
   prompt: "Run code-level security review on the current diff.
     project_dir: \"$project_dir\"
-    diff_scope: <the review scope you resolved at step 1: session (files.md set) / branch (git diff vs base) / paths (--paths globs)>
+    diff_scope: <the review scope you resolved at step 1: session (git-derived changed files) / branch (git diff vs base) / paths (--paths globs)>
     plan_path: <path or 'auto'>
     iteration: N
     <…scout-supplied context…>"
@@ -528,14 +520,23 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
    that stdout — NOT the raw reviewer count.
 
    **Resolved-scope file count (floor input — reuse, not a new measurement).**
-   `$resolved_scope_file_count` = the file count of the scope you resolved at
-   step 1: for `session` it is the same count the v2.5.0 transparency line already
-   surfaced (the `files.md` items); for `branch` it is the cached
-   `$branch_ahead_count`; for `paths` it is the number of `--paths` glob matches you
-   resolved. If this count cannot be determined (e.g. the session `files.md` is
-   unreadable), do NOT silently treat it as 0 — treat the run as `$degraded == yes`
-   for the floor (the ELSE-IF branch below + loud advisory). This is an
-   already-known value; do not re-measure (the orchestrator has no raw-git/grep tool).
+   `$resolved_scope_file_count` = the size of the file set you actually resolved
+   and reviewed at step 1 — the same set whose `changed_lines`/`new_files` you
+   fed into `scout.py`. It is **never** copied from `check-review-scope.sh`: for
+   the default (`session`) that set is the git-derived changed-file set (branch
+   diff against base, unioned with the worktree's own changed files); for
+   `branch` it is the branch diff against base; for `paths` it is the number of
+   `--paths` glob matches you resolved. This count and the cached
+   `$changes_exist` below MUST stay independently computed — the floor compares
+   them, and if the count were itself read off `check-review-scope.sh` the two
+   could never disagree, silently disarming the floor for its default mode.
+   If this count cannot be determined (e.g. the same git-sanity failure that
+   makes `check-review-scope.sh` itself report `degraded: yes` — detached HEAD,
+   no base branch, shallow clone), do NOT silently treat it as 0 — treat the run
+   as `$degraded == yes` for the floor (the ELSE-IF branch below + loud
+   advisory). This is an already-known value; do not re-measure (re-deriving it
+   risks landing on an answer that no longer matches the set you actually
+   reviewed).
 
    Three cases:
    - **kept > 0** (the counts line totals ≥ 1 across the three severities) →

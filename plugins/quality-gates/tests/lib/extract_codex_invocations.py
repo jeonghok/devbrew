@@ -68,8 +68,8 @@ def collect(root: Path) -> list[str]:
     # SKIP_DIRS는 그대로 둔다 — bash 쪽도 이 디렉토리들을 명시적으로 거르진
     # 않지만(`.git`은 plugins/ 아래 있을 수 없고, `node_modules`·`__pycache__`는
     # 이 리포에 없음을 확인함), `.claude/`는 각 플러그인의 git-ignore된 세션
-    # 상태 디렉토리(수백 개의 `files.md`)라 소스가 아니다 — 실측으로 그 안에
-    # codex invoke 패턴이 없음을 확인했다. 만약 미래에 그 가정이 깨지면(즉
+    # 상태 디렉토리(수백 개의 per-session state 파일)라 소스가 아니다 — 실측으로
+    # 그 안에 codex invoke 패턴이 없음을 확인했다. 만약 미래에 그 가정이 깨지면(즉
     # `.claude/` 안에 실제 invocation이 생기면) 두 수집기의 standing assertion이
     # 곧바로 이 괴리를 RED로 잡는다 — 조용히 통과하지 않는다.
     out = []

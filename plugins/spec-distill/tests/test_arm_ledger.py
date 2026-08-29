@@ -108,15 +108,6 @@ class TestLedgerBody(unittest.TestCase):
         self.assertEqual(arm_ledger.armed_keys(body), [SPEC])
         self.assertEqual(arm_ledger.attempts(body), {OTHER: 1})
 
-    def test_strip_pending_preserves_ledger_blocks(self):
-        body = arm_ledger.mark_armed(HEAD, SPEC)
-        body = body.rstrip() + (
-            f"\n\npending_review:\n  path: {SPEC}\n  mode: design\n"
-            "  triggered_at: 2026-08-01T00:00:00Z\n")
-        stripped = arm_ledger.strip_pending(body)
-        self.assertNotIn("pending_review:", stripped)
-        self.assertEqual(arm_ledger.armed_keys(stripped), [SPEC])
-
 
 class TestIsBorn(unittest.TestCase):
     def setUp(self):
@@ -238,35 +229,15 @@ class TestFileLevelWrites(unittest.TestCase):
         self.state.write_text(HEAD, encoding="utf-8")
         self.assertFalse(arm_ledger.mark_reviewed(self.state, "/tmp/z.md"))
 
-    def test_strip_pending_file_only_touches_same_key(self):
-        body = HEAD + (
-            f"pending_review:\n  path: {OTHER}\n  mode: design\n"
-            "  triggered_at: 2026-08-01T00:00:00Z\n")
-        self.state.write_text(body, encoding="utf-8")
-        self.assertFalse(arm_ledger.strip_pending_file(self.state, SPEC))
-        self.assertIn("pending_review:", self.state.read_text(encoding="utf-8"))
-        self.assertTrue(arm_ledger.strip_pending_file(self.state, OTHER))
-        self.assertNotIn("pending_review:", self.state.read_text(encoding="utf-8"))
-
-    def test_strip_pending_file_does_not_touch_ledger(self):
-        body = arm_ledger.mark_armed(HEAD, OTHER).rstrip() + (
-            f"\n\npending_review:\n  path: {SPEC}\n  mode: design\n"
-            "  triggered_at: 2026-08-01T00:00:00Z\n")
-        self.state.write_text(body, encoding="utf-8")
-        arm_ledger.strip_pending_file(self.state, SPEC)
-        self.assertEqual(
-            arm_ledger.armed_keys(self.state.read_text(encoding="utf-8")), [OTHER])
-
 
 class TestMarkReviewedPreservesUnreadableState(unittest.TestCase):
     """판독 실패한 원장은 덮어쓰지 않는다 — 부재(초기화 가능)와 판독불가(보존)를 가른다.
 
     `_read_body` 의 빈-body degrade 는 *읽기* 술어(`is_armed`)에는 옳다(미기록 → arm,
     안전한 방향). 같은 값을 read-modify-write 인 `mark_reviewed` 가 "새 세션" 으로 읽으면
-    파일 전체를 덮어써, 다른 문서의 `armed_paths` 와 살아있는 `pending_review` 가 함께
+    파일 전체를 덮어써, **다른 문서**의 `armed_paths` 와 `dispatch_attempts` 가 함께
     사라진다 — 이 릴리스가 제거하려는 재발동 그 자체이며 CLAUDE.md 의 "실패 시 디버깅을
-    위해 보존" 위반이다. 같은 상황을 `spec-write-validator.write_state` 는 이미 보존으로
-    처리한다.
+    위해 보존" 위반이다.
     """
 
     def setUp(self):
@@ -280,14 +251,13 @@ class TestMarkReviewedPreservesUnreadableState(unittest.TestCase):
         shutil.rmtree(self.repo, ignore_errors=True)
 
     def test_unreadable_state_is_preserved_not_overwritten(self):
-        # 다른 문서(OTHER)의 원장 + SPEC 의 살아있는 pending 이 담긴 파일이 깨졌다.
-        good = arm_ledger.mark_armed(HEAD, OTHER).rstrip() + (
-            f"\n\npending_review:\n  path: {SPEC}\n  mode: design\n"
-            "  triggered_at: 2026-08-01T00:00:00Z\n")
+        # 다른 문서(OTHER)의 armed 기록 + SPEC 의 진행 중인 시도 횟수가 담긴 파일이 깨졌다.
+        good = arm_ledger.record_attempt(
+            arm_ledger.mark_armed(HEAD, OTHER), SPEC, 2)
         raw = good.encode("utf-8") + b"\xff"
         self.state.write_bytes(raw)
         self.assertFalse(arm_ledger.mark_reviewed(self.state, SPEC))
-        # 바이트 단위 보존 — OTHER 의 원장도 SPEC 의 pending 도 살아있어야 한다.
+        # 바이트 단위 보존 — OTHER 의 armed 도 SPEC 의 attempts 도 살아있어야 한다.
         self.assertEqual(self.state.read_bytes(), raw)
 
     def test_unreadable_state_write_failure_is_loud(self):
@@ -401,9 +371,10 @@ class TestArmLedgerCLIRejects(unittest.TestCase):
         self.assertIn("session_id rejected", cp.stderr)
         self.assertTrue(self._no_state_written())
 
-    def test_strip_pending_rejects_bad_sid_too(self):
-        # 두 subcommand 가 같은 guard 를 공유한다 — 한쪽만 검증하면 비대칭이 새로 생긴다.
-        cp = self._run("strip-pending", "../../../etc", SPEC)
+    def test_clear_inflight_rejects_bad_sid_too(self):
+        # sid 를 받는 두 subcommand 가 같은 guard 를 공유한다 — 한쪽만 검증하면
+        # 비대칭이 새로 생긴다.
+        cp = self._run("clear-inflight", "../../../etc", SPEC)
         self.assertEqual(cp.returncode, 2)
         self.assertIn("session_id rejected", cp.stderr)
         self.assertTrue(self._no_state_written())
@@ -442,7 +413,10 @@ class TestArmedPathsForgeryViaSplitlines(unittest.TestCase):
     전체(VT·FF·FS·GS·RS·NEL·LS·PS)에서 쪼갠다.
 
     이 클래스는 리뷰에서 실제로 제안됐던 "`canonical_key` 를 `\\n\\r\\x00` 로 좁히자"는
-    단순화를 RED 로 만든다. 좁히면 T16 이 막는 위조가 그대로 되열린다.
+    단순화를 RED 로 만든다. 좁히면 아래 두 케이스가 막는 위조가 그대로 되열린다 —
+    **이 클래스가 그 위조의 유일한 락이다.** 예전에는 writer 층(삭제된 write-time
+    validator 훅을 태우던 shell 케이스)이 짝을 이뤘으나 v0.36.0 에서 그 writer 가
+    사라졌다.
     """
 
     def test_splitlines_boundary_cannot_become_a_key(self):
@@ -525,117 +499,107 @@ class TestIsBornCrossCheckout(unittest.TestCase):
 
 
 class TestPrefixContract(unittest.TestCase):
-    """validator 의 `PATH_PREFIX` 와 원장의 `PREFIX` 는 같아야 한다.
+    """`resolve_mode` 의 `PATH_PREFIX` 와 원장의 `PREFIX` 는 같아야 한다.
 
-    `spec-write-validator.unkeyable()` 는 이 등식에 기대어 `canonical_key` 의 `None` 을
-    "제어문자" 로만 해석한다. 등식이 깨지면 그 `None` 에 "스코프 밖" 이 섞여 들어가,
-    스코프 밖 문서의 pending 기록이 조용히 죽는다(= 리뷰 미발동, Law 1 위반 방향).
-    두 파일에 리터럴이 따로 있으므로 락이 없으면 한쪽만 바뀌어도 아무도 모른다.
+    Stop 훅은 두 리터럴을 **함께** 쓴다: 발견은 `canonical_key`(→ `PREFIX`)로 후보
+    키를 만들고, dispatch 는 `resolve_mode`(→ `PATH_PREFIX`)로 리뷰어 라우팅 모드를
+    정한다. 등식이 깨지면 한쪽이 스코프 안이라 부르는 문서를 다른 쪽이 스코프 밖으로
+    떨어뜨려, 발견은 됐는데 `mode is None` 이라 영원히 dispatch 되지 않는 문서가
+    생긴다(= 리뷰 미발동, Law 1 위반 방향). 두 파일에 리터럴이 따로 있으므로 락이
+    없으면 한쪽만 바뀌어도 아무도 모른다.
     """
 
-    def test_validator_and_ledger_prefixes_match(self):
+    def test_resolve_mode_and_ledger_prefixes_match(self):
         import re as _re
-        src = (PLUGIN_ROOT / "hooks" / "spec-write-validator.py").read_text(
+        src = (PLUGIN_ROOT / "scripts" / "resolve_mode.py").read_text(
             encoding="utf-8")
         m = _re.search(r'^PATH_PREFIX\s*=\s*"([^"]+)"', src, _re.MULTILINE)
-        self.assertIsNotNone(m, msg="validator 의 PATH_PREFIX 리터럴을 못 찾았다")
+        self.assertIsNotNone(m, msg="resolve_mode 의 PATH_PREFIX 리터럴을 못 찾았다")
         assert m is not None
         self.assertEqual(m.group(1), arm_ledger.PREFIX)
 
 
-class TestStripPendingPreservesUnreadableState(unittest.TestCase):
-    """`mark_reviewed` 와 대칭 — 판독 실패한 원장은 `strip_pending_file` 도 덮지 않는다.
+class TestInflightLedger(unittest.TestCase):
+    """A12 — 리뷰 진행 중인 문서는 발견 결과에서 제외된다."""
 
-    이 분기는 훅 경로에서 도달 불가능하다(두 훅이 자기 `read_text` 실패에서 먼저
-    return 한다). 모듈 docstring 이 이 쌍을 "유일한 비대칭 방어" 라 부르는데, 락은
-    `mark_reviewed` 쪽에만 있었다 — 삭제해도 전 스위트가 GREEN 이었다.
-    """
+    K = "docs/superpowers/specs/x-design.md"
+    BODY = "---\nsession_id: s\n---\n\n"
 
-    def setUp(self):
-        self.repo = _make_repo()
-        self.cwd = os.getcwd()
-        os.chdir(self.repo)
-        self.state = self.repo / "state.local.md"
+    def test_mark_then_read(self):
+        b = arm_ledger.mark_inflight(self.BODY, self.K, "2026-08-23T00:00:00Z")
+        self.assertEqual(arm_ledger.inflight(b), {self.K: "2026-08-23T00:00:00Z"})
 
-    def tearDown(self):
-        os.chdir(self.cwd)
-        shutil.rmtree(self.repo, ignore_errors=True)
+    def test_clear_removes_only_that_key(self):
+        b = arm_ledger.mark_inflight(self.BODY, self.K, "2026-08-23T00:00:00Z")
+        b = arm_ledger.mark_inflight(b, self.K.replace("x-", "y-"), "2026-08-23T00:00:00Z")
+        b = arm_ledger.clear_inflight(b, self.K)
+        self.assertEqual(list(arm_ledger.inflight(b)), [self.K.replace("x-", "y-")])
 
-    def test_unreadable_state_is_preserved(self):
-        good = arm_ledger.mark_armed(HEAD, OTHER).rstrip() + (
-            f"\n\npending_review:\n  path: {SPEC}\n  mode: design\n"
-            "  triggered_at: 2026-08-01T00:00:00Z\n")
-        raw = good.encode("utf-8") + b"\xff"
-        self.state.write_bytes(raw)
-        with _capture_stderr() as err:
-            self.assertFalse(arm_ledger.strip_pending_file(self.state, SPEC))
-        self.assertEqual(self.state.read_bytes(), raw)
-        self.assertIn("보존", err.getvalue())
+    def test_armed_and_attempts_blocks_survive(self):
+        b = arm_ledger.mark_armed(self.BODY, self.K)
+        b = arm_ledger.record_attempt(b, self.K, 2)
+        b = arm_ledger.mark_inflight(b, self.K, "2026-08-23T00:00:00Z")
+        self.assertIn(self.K, arm_ledger.armed_keys(b))
+        self.assertEqual(arm_ledger.attempts(b)[self.K], 2)
+        self.assertIn(self.K, arm_ledger.inflight(b))
 
-    def test_readable_state_still_strips(self):
-        # 과잉 교정 방지 — 정상 파일에서는 여전히 pending 을 지운다.
-        body = HEAD + (f"pending_review:\n  path: {SPEC}\n  mode: design\n"
-                       "  triggered_at: 2026-08-01T00:00:00Z\n")
-        self.state.write_text(body, encoding="utf-8")
-        self.assertTrue(arm_ledger.strip_pending_file(self.state, SPEC))
-        self.assertNotIn("pending_review:",
-                         self.state.read_text(encoding="utf-8"))
+    def test_expired_inflight_is_not_inflight(self):
+        from datetime import datetime, timezone, timedelta
+        t0 = datetime(2026, 8, 23, 0, 0, 0, tzinfo=timezone.utc)
+        b = arm_ledger.mark_inflight(self.BODY, self.K, "2026-08-23T00:00:00Z")
+        self.assertTrue(arm_ledger.is_inflight(b, self.K, t0, 900))
+        self.assertFalse(
+            arm_ledger.is_inflight(b, self.K, t0 + timedelta(seconds=901), 900))
+
+    def test_unparseable_timestamp_is_not_inflight(self):
+        # 판독 불가 타임스탬프로 게이트가 영구히 닫히면 Law 1 이 금지하는 방향
+        # (under-review) 으로 fail 한다. 만료로 읽어 dispatch 쪽으로 연다.
+        from datetime import datetime, timezone
+        b = arm_ledger.mark_inflight(self.BODY, self.K, "not-a-time")
+        self.assertFalse(arm_ledger.is_inflight(
+            b, self.K, datetime(2026, 8, 23, tzinfo=timezone.utc), 900))
+
+    def test_mark_reviewed_clears_inflight(self):
+        d = Path(tempfile.mkdtemp()) / "state.local.md"
+        d.parent.mkdir(parents=True, exist_ok=True)
+        d.write_text(arm_ledger.mark_inflight(self.BODY, self.K, "2026-08-23T00:00:00Z"),
+                     encoding="utf-8")
+        self.assertTrue(arm_ledger.mark_reviewed(d, self.K))
+        b = d.read_text(encoding="utf-8")
+        self.assertIn(self.K, arm_ledger.armed_keys(b))
+        self.assertNotIn(self.K, arm_ledger.inflight(b))
+
+    def test_default_ttl_sec_reaches_the_module_constant(self):
+        # R42 — 리터럴 900을 박지 않는다. `ttl_sec`를 안 넘기고도(기본값 경유)
+        # 실제로 쓰이는 값이 `INFLIGHT_TTL_SEC` 자신인지를 잰다 — reachability, 숫자가
+        # 아니라. 상수를 바꾸면 이 경계도 같이 움직여야 한다.
+        from datetime import datetime, timezone, timedelta
+        t0 = datetime(2026, 8, 23, 0, 0, 0, tzinfo=timezone.utc)
+        b = arm_ledger.mark_inflight(self.BODY, self.K, "2026-08-23T00:00:00Z")
+        ttl = arm_ledger.INFLIGHT_TTL_SEC
+        self.assertTrue(
+            arm_ledger.is_inflight(b, self.K, t0 + timedelta(seconds=ttl - 1)))
+        self.assertFalse(
+            arm_ledger.is_inflight(b, self.K, t0 + timedelta(seconds=ttl + 1)))
 
 
-def _load_validator():
-    """하이픈이 든 파일명이라 일반 import 가 안 된다 — 경로로 로드한다."""
-    import importlib.util
-    path = PLUGIN_ROOT / "hooks" / "spec-write-validator.py"
-    spec = importlib.util.spec_from_file_location("spec_write_validator", path)
-    assert spec is not None and spec.loader is not None
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+class TestValidationAttempts(unittest.TestCase):
+    """A14 — 검증 실패 상한. dispatch_attempts 와 **별도** 카운터다."""
 
+    K = "docs/superpowers/specs/x-design.md"
+    BODY = "---\nsession_id: s\n---\n\n"
 
-class TestWriteStateRejectsUnencodableValues(unittest.TestCase):
-    """인코딩 불가 상태 값은 **쓰기 전에** 거부한다.
+    def test_separate_from_dispatch_attempts(self):
+        b = arm_ledger.record_validation(self.BODY, self.K, 2)
+        self.assertEqual(arm_ledger.validation_attempts(b)[self.K], 2)
+        self.assertEqual(arm_ledger.attempts(b), {})
 
-    `os.getcwd()` 는 디코딩 불가 바이트를 surrogateescape(U+DC80–U+DCFF 대역)로 담아
-    돌려줄 수 있다. 그런 문자열은 줄 경계가 정상이라 `splitlines()` 검사를 통과하지만
-    `write_text(encoding="utf-8")` 에서 `UnicodeEncodeError` 를 던진다 — 그건
-    `ValueError` 하위이지 **`OSError` 가 아니므로** 호출부의
-    `except (PermissionError, OSError)` 를 그대로 통과해 훅을 죽인다. 이 플러그인이
-    읽기 쪽에서 이미 겪은 `UnicodeDecodeError` ⊄ `OSError` 의 쓰기 쪽 쌍이다.
-
-    **왜 e2e 가 아니라 유닛인가:** 실제 트리거(비-UTF8 이름의 cwd)는 macOS APFS 가
-    그런 이름 자체를 거부해 만들 수 없다(측정 확인). Linux ext4 에서는 만들어진다.
-    못 만드는 픽스처를 흉내내 초록을 내는 대신 계약을 함수 인자 층에서 직접 잰다.
-    """
-
-    def setUp(self):
-        self.repo = _make_repo()
-        self.cwd = os.getcwd()
-        os.chdir(self.repo)
-        os.environ["CLAUDE_PROJECT_DIR"] = str(self.repo)
-        self.v = _load_validator()
-
-    def tearDown(self):
-        os.chdir(self.cwd)
-        os.environ.pop("CLAUDE_PROJECT_DIR", None)
-        shutil.rmtree(self.repo, ignore_errors=True)
-
-    def test_surrogate_worktree_path_is_refused_not_raised(self):
-        bad = "/tmp/wt/" + chr(0xDCFF)   # surrogateescape 로 담긴 비-UTF8 바이트
-        with _capture_stderr() as err:
-            reason = self.v.write_state("enc-sid-0001", SPEC, "design", bad)
-        self.assertEqual(reason, "unsafe-state-value")
-        self.assertIn("UTF-8", err.getvalue())
-        # 거부는 조용해선 안 되고, 상태 파일도 만들어지면 안 된다.
-        self.assertEqual(list(self.repo.rglob("state.local.md")), [])
-
-    def test_clean_values_still_record(self):
-        # 과잉 교정 방지 — 정상 값은 여전히 기록된다(None = 성공).
-        self.assertIsNone(
-            self.v.write_state("enc-sid-0002", SPEC, "design", "/tmp/wt"))
-        written = list(self.repo.rglob("state.local.md"))
-        self.assertEqual(len(written), 1)
-        self.assertIn("pending_review:", written[0].read_text(encoding="utf-8"))
+    def test_cap_is_three_and_independent(self):
+        self.assertEqual(arm_ledger.VALIDATION_ATTEMPT_CAP, 3)
+        self.assertEqual(arm_ledger.DISPATCH_ATTEMPT_CAP, 3)
+        # 합치면 구조 실패 2회 뒤에 리뷰 dispatch 가 1회밖에 남지 않는다.
+        b = arm_ledger.record_validation(self.BODY, self.K, 3)
+        self.assertEqual(arm_ledger.next_attempt(b, self.K), 1)
 
 
 if __name__ == "__main__":

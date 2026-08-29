@@ -64,9 +64,10 @@ The following v1.x fields are **no longer written or read**:
 | `available_plugins` | SKILL re-derives inline (cheap). |
 | `project_dir` | Derived from `pwd` at SKILL preflight (single-turn invariant). |
 
-Companion files in the same folder (`files.md` for session-scope tracking,
-`branch.md` for branch-mismatch detection) follow the same per-session
-lifecycle and are unchanged from v1.x.
+Companion files in the same folder (`publish-eligible.md`, `runtime-evidence.md`)
+follow the same per-session lifecycle. Review scope itself is no longer
+tracked in a companion file — it is git-derived each turn (see
+[`SKILL.md` Step 1](../SKILL.md)).
 
 ## Lifecycle
 

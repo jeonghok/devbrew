@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke test for post-tool-use-session-tracker payload cwd handling."""
+"""Smoke test for session-start-advisor / session-end-cleanup payload cwd handling."""
 import json
 import subprocess
 import tempfile
@@ -7,63 +7,11 @@ import unittest
 from pathlib import Path
 
 PLUGIN_DIR = Path(__file__).resolve().parent.parent
-HOOK = PLUGIN_DIR / "hooks" / "post-tool-use-session-tracker.py"
 ADVISOR_HOOK = PLUGIN_DIR / "hooks" / "session-start-advisor.py"
 CLEANUP_HOOK = PLUGIN_DIR / "hooks" / "session-end-cleanup.py"
 
 
-def run_hook(payload: dict, process_cwd: str) -> int:
-    proc = subprocess.run(
-        ["python3", str(HOOK)],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        cwd=process_cwd,
-        timeout=10,
-    )
-    return proc.returncode
-
-
 class HookCwdContractTests(unittest.TestCase):
-    def test_state_file_under_payload_cwd(self):
-        """State write goes under payload cwd, not process cwd."""
-        with tempfile.TemporaryDirectory() as wt_dir, tempfile.TemporaryDirectory() as proc_dir:
-            sid = "tracker-test-01"
-            payload = {
-                "cwd": wt_dir,
-                "session_id": sid,
-                "tool_name": "Edit",
-                "tool_input": {"file_path": "/some/absolute/foo.py"},
-            }
-            rc = run_hook(payload, proc_dir)
-            self.assertEqual(rc, 0)
-            state_file = Path(wt_dir) / ".claude" / "quality-gates" / sid / "files.md"
-            self.assertTrue(state_file.exists(), f"State not written under payload cwd: {state_file}")
-            proc_state = Path(proc_dir) / ".claude" / "quality-gates" / sid / "files.md"
-            self.assertFalse(proc_state.exists(), f"Process-cwd leakage: {proc_state}")
-
-    def test_relative_file_path_resolves_against_payload_cwd(self):
-        """Relative file_path resolves against payload cwd, not process cwd."""
-        with tempfile.TemporaryDirectory() as wt_dir, tempfile.TemporaryDirectory() as proc_dir:
-            sid = "tracker-test-02"
-            # Write a file inside wt_dir so resolve doesn't go to /
-            (Path(wt_dir) / "subdir").mkdir()
-            (Path(wt_dir) / "subdir" / "rel.py").write_text("x = 1", encoding="utf-8")
-            payload = {
-                "cwd": wt_dir,
-                "session_id": sid,
-                "tool_name": "Edit",
-                "tool_input": {"file_path": "subdir/rel.py"},
-            }
-            rc = run_hook(payload, proc_dir)
-            self.assertEqual(rc, 0)
-            state_file = Path(wt_dir) / ".claude" / "quality-gates" / sid / "files.md"
-            content = state_file.read_text(encoding="utf-8")
-            expected_abs = str(Path(wt_dir) / "subdir" / "rel.py")
-            # On macOS, /var ↔ /private/var symlink may differ; use resolve to compare
-            self.assertIn(str(Path(expected_abs).resolve()), content,
-                         f"Expected resolved {expected_abs} in state; got:\n{content}")
-
     def test_session_start_advisor_uses_payload_cwd(self):
         """advisor scans plugins/*/agents/*.md relative to payload cwd."""
         with tempfile.TemporaryDirectory() as tmp_dir:

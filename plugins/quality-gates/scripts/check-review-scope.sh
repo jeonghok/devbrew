@@ -41,8 +41,18 @@ merge_base=$(_rb_field merge_base)
 [[ -n "$base" && -n "$merge_base" && "$merge_base" != "-" ]] || emit_degraded
 
 # branch_ahead_count is a CHANGED-FILE count (NOT a commit count): the number of
-# files differing between merge_base and HEAD. The SKILL's branch-mode
-# resolved_scope_file_count reuses this value. Capture via a DIRECT assignment (not a
+# files differing between merge_base and HEAD.
+#
+# This value MUST NOT become the SKILL's $resolved_scope_file_count. That equation was
+# a CRITICAL caught in review (CHANGELOG [5.0.0] "Changed"; SKILL Step 4.5
+# "Resolved-scope file count"): the honest-verdict floor keys on
+# `resolved_scope_file_count == 0 AND changes_exist == yes`, so if the count were read
+# off THIS script both operands would share one source, could never disagree, and the
+# floor's first branch would be unreachable — disarmed for the default mode. The two
+# operands stay independently computed: this script emits changes_exist; the count is
+# the size of the file set the orchestrator actually resolved and reviewed at Step 1.
+#
+# Capture via a DIRECT assignment (not a
 # `git … | wc -l` pipe, whose exit status is wc's, swallowing git's) so a query failure
 # fails OPEN to degraded — consistent with the C2 contract above. A silently-swallowed
 # git error here would yield branch_ahead_count=0 + degraded=no = a FALSE-CLEAN, the

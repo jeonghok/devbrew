@@ -7,7 +7,7 @@ import sys, tempfile, os, io, contextlib
 from pathlib import Path
 import importlib.util
 spec = importlib.util.spec_from_file_location(
-    "v", "plugins/spec-distill/hooks/spec-write-validator.py")
+    "v", "plugins/spec-distill/scripts/resolve_mode.py")
 v = importlib.util.module_from_spec(spec); spec.loader.exec_module(v)
 
 base = Path(tempfile.mkdtemp()) / "docs" / "superpowers" / "specs"

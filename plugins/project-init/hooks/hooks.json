@@ -1,5 +1,5 @@
 {
-  "description": "project-init - validates branch naming, commit messages, and agent-readable docs conventions",
+  "description": "project-init - validates branch naming and commit messages on Bash tool calls",
   "hooks": {
     "PostToolUse": [
       {
@@ -8,16 +8,6 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use.py",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/docs-lint.py",
             "timeout": 10
           }
         ]

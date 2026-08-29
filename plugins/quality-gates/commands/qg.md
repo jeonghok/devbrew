@@ -121,8 +121,8 @@ is aborted at a decision point.
 | Command | Effect |
 |---------|--------|
 | `/qg critique <path>` | 비-코드 산출물 비평-수정 루프(별도 skill; 라운드별 커밋; 코드 아님) |
-| `/qg` | Ask gate scope (Review only / both), then run; session-scoped diff |
-| `/qg both` | Full pipeline (both gates), no gate-scope question; session-scoped diff |
+| `/qg` | Ask gate scope (Review only / both), then run; git-derived diff (branch + worktree) |
+| `/qg both` | Full pipeline (both gates), no gate-scope question; git-derived diff (branch + worktree) |
 | `/qg branch` | Ask gate scope, then run; full-branch diff (vs `main`) |
 | `/qg branch <name>` | Ask gate scope, then run against branch `<name>` in isolated worktree |
 | `/qg --paths <glob>...` | Ask gate scope, then run; scope to matched paths |
@@ -140,13 +140,17 @@ is aborted at a decision point.
 | `DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1` | Preserve branch worktree after pipeline completes or is cancelled (default: removed) |
 | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` | Disable the Runtime gate sandbox executor (read-only smoke fallback; verdict capped at SKIP_WITH_EVIDENCE) |
 
-### Scope (default: session)
+### Scope (default: git 변경)
 
-`/qg` reviews files **edited in the current Claude Code session** by default.
-A PostToolUse hook (`post-tool-use-session-tracker.py`) accumulates touched
-files into `.claude/quality-gates/<session-id>/files.md`. The pre-pipeline check
-(`pre-pipeline-check.sh`) clears this file when the branch changes mid-session
-or when 24+ hours pass without activity.
+`/qg` 는 **git 이 보고하는 변경**을 기본 scope 로 리뷰한다 — base 대비 브랜치 diff
+와 worktree 변경의 합집합이며, 오케스트레이터가 그 집합을 직접 resolve 해 리뷰
+scope 로 쓴다(`scripts/check-review-scope.sh` 의 산출값이 **아니다** — 그 스크립트는
+독립적인 `changes_exist` 교차검증 신호만 결정론으로 공급하고, resolved scope 와
+같은 소스로 합쳐지면 정직-verdict floor 의 비교가 무력화된다). v5.0.0 이전에는
+PostToolUse 훅이 편집 파일을 누적했고, 그래서 Bash heredoc·`sed -i` 로 쓴 파일이
+scope 에서 조용히 빠졌다. git 도출은 어떤 도구로 썼든 같은 답을 낸다.
+
+**리포 밖 절대경로 편집은 잡히지 않는다** — `--paths` 로 명시한다.
 
 Override with `/qg branch` (full branch) or `/qg --paths <glob>...` (manual).
 
@@ -175,9 +179,8 @@ loop, the pre-redesign behavior):
 | Deep | ~55–75% | ≥200 LOC, new files, config changes (AskUserQuestion gate fires) |
 
 Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable. Set
-`DEVBREW_SKIP_HOOKS=quality-gates:session-tracker` to disable just the
-session-tracker hook (keeps SessionStart advisor active). v1.32.0 has no
-Stop hook.
+`DEVBREW_SKIP_HOOKS=quality-gates:post-tool-use` to disable just the
+auto-trigger hook (keeps SessionStart advisor and SessionEnd cleanup active).
 
 ### Gates
 

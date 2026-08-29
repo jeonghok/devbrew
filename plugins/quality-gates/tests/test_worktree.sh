@@ -14,7 +14,6 @@ PLUGIN_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SETUP="$PLUGIN_DIR/scripts/setup-qg.sh"
 DISCOVER="$PLUGIN_DIR/scripts/discover-plan.sh"
 TRIVIA="$PLUGIN_DIR/scripts/check-trivia.sh"
-PRECHECK="$PLUGIN_DIR/scripts/pre-pipeline-check.sh"
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
@@ -127,15 +126,6 @@ else
   no "T3c: check-trivia.sh unusual rc=$RC, out=$OUT"
 fi
 
-# pre-pipeline-check.sh should not crash; reads `git rev-parse --abbrev-ref HEAD`
-OUT=$(cd "$WT" && HOME="$WT" "$PRECHECK" 2>&1 || true)
-# Script may exit non-zero based on its own logic; we only assert no shell error
-if [[ -n "$OUT" || $? -lt 127 ]]; then
-  ok "T3d: pre-pipeline-check.sh ran from worktree"
-else
-  no "T3d: pre-pipeline-check.sh failed to execute"
-fi
-
 rm -rf "$(dirname "$REPO")"
 
 # --- Test 4: .git in worktree is a file (gitdir pointer), not a directory ---
@@ -188,7 +178,7 @@ done
 
 # --- Test 6: hooks read payload cwd (AST-based, not grep) ---
 T6_FAIL=0
-for hook in post-tool-use-session-tracker.py session-start-advisor.py; do
+for hook in session-start-advisor.py; do
   if ! python3 -c "
 import ast, sys
 tree = ast.parse(open('$PLUGIN_DIR/hooks/$hook').read())
@@ -207,7 +197,7 @@ sys.exit(0 if found else 1)
     no "T6: hooks/$hook does not call .get('cwd') anywhere"
   fi
 done
-[[ "$T6_FAIL" -eq 0 ]] && ok "T6: all 2 hooks read payload cwd (AST verified)"
+[[ "$T6_FAIL" -eq 0 ]] && ok "T6: session-start-advisor.py reads payload cwd (AST verified)"
 
 # --- Test 9: REMOVED — v1.32.0 schema intentionally has no project_dir field ---
 # project_dir is now a per-dispatch runtime parameter threaded by the SKILL

@@ -3,7 +3,7 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [4.4.0] — 2026-08-29
+## [5.1.0] — 2026-08-29
 
 ### Changed
 - `scripts/runner_common.sh` — 셋째 러너(`run_seed_codex_reviewer.sh`, spec-distill)가
@@ -26,6 +26,143 @@
   지워도(진짜 결함) `_RUNNER_COMMON=".../runner_common.sh"` 대입 줄 하나 때문에 여전히
   GREEN이었다. 재는 것을 "파일이 언급되는가"에서 "그 파일이 정의하는 함수를 러너가 실제로
   호출하는가"로 바꿨다.
+
+## [5.0.0] — 2026-08-27 (BREAKING)
+
+`/qg`의 기본 review scope를 세션이 편집한 파일 누적(`files.md`)에서 git이 보고하는
+변경으로 재정의한다. 발단은 삭제된 `PostToolUse` matcher가 `Edit|Write|MultiEdit`라
+Bash heredoc·`sed -i`로 쓴 파일을 애초에 보지 못했던 결함 — matcher를 넓히는 대신
+그 훅 자체를 제거하고 스코프 도출을 git으로 옮겼다.
+
+### Removed
+- **`hooks/post-tool-use-session-tracker.py`** (PostToolUse, `matcher: "Edit|Write|MultiEdit"`)
+  와 그 산출물 `.claude/quality-gates/<sid>/files.md`. 쓰기-도구 matcher는 Bash
+  heredoc·`sed -i`로 쓴 파일을 보지 못해 `/qg`가 좁은 scope로 돌았다.
+- **`scripts/pre-pipeline-check.sh`**와 `.claude/quality-gates/<sid>/branch.md`.
+  이 스크립트의 삭제 대상은 `files.md` 하나였다 — `pipeline.md`는 항상 같은 세션
+  소유라 C2 가드가 매번 보존하므로, `files.md` 없이는 `cleared_branch_mismatch`·
+  `cleared_stale`이 아무것도 지우지 않고 지웠다고 보고하게 된다. SID 존재·패턴
+  검증은 `setup-qg.sh`가 Preflight P2에서 같은 정규식으로 먼저 수행하고 exit 1 한다.
+- SKILL.md의 Step P3와 결과-코드 표 (`fresh_start`·`preserved`·`no_session_data`·
+  `cleared_branch_mismatch`·`cleared_stale`·`active_resume`). `active_resume`은
+  이 릴리스 이전에도 생산자 없는 유령 행이었다.
+- `tests/test_session_tracker.py` · `tests/test_pre_pipeline_check.sh` — 위 두
+  삭제 대상의 테스트.
+
+### Changed
+- **`/qg` 기본 scope가 "이 세션이 편집한 파일"에서 "git이 보고하는 변경"으로
+  바뀐다** (breaking, 관측 가능한 기본 동작 변경). Bash로 쓴 파일이 이제 잡힌다.
+  세션 중 커밋된 변경은 base 대비 diff가 잡는다. **리포 밖 절대경로 편집은
+  잡히지 않는다** — `--paths`로 명시한다.
+- `$resolved_scope_file_count`의 정의가 `check-review-scope.sh` 산출값이 아니라
+  오케스트레이터가 실제로 resolve·review한 집합의 크기로 재정의됐다 — 이전 정의는
+  그 값과 정직-verdict floor가 비교하는 `$changes_exist`가 항상 같은 소스에서 나와
+  서로 disagree할 수 없게 만들어, floor의 첫 분기를 영원히 도달 불가능하게 했다
+  (리뷰 라운드에서 적발된 CRITICAL 결함). 판정-불가 degrade 분기("조용히 0으로
+  취급하지 말 것")는 그대로 유지된다.
+- `hooks/hooks.json`의 훅 항목 총합(`PostToolUse`+`SessionStart`+`SessionEnd`)이 4개에서
+  3개로 줄었다 — `PostToolUse`가 2개(session-tracker 포함)에서 1개로 줄어든 결과다.
+  관련 회귀 락(hooks 항목 수·agents 파일 수 불변식)도 함께 갱신.
+- `hooks/session-start-advisor.py`의 사용자-가시 advisory 메시지에서 `[quality-gates
+  v1.32.0]` 런타임 라벨의 버전 번호를 뺐다(`[quality-gates]`) — 이 태그는 "지금 도는
+  버전"을 present하므로 매 bump마다 값이 거짓이 된다. 같은 파일·플러그인 전역의 다른
+  약 30곳 "vX.Y.Z에서 제거/도입됐다" 류 역사적 서술은 손대지 않았다 — 그 서술은
+  시제가 과거라 bump 뒤에도 참으로 남는다.
+- `skills/quality-pipeline/SKILL.md`·`skills/publishing-pr-understanding/SKILL.md`
+  제목의 버전 라벨을 각각 `v4.1.0`·`v4.0.0`에서 `v5.0.0`으로 갱신 — 이 릴리스의
+  plugin.json major bump에 맞춘다. `tests/harness/test_skill_orchestration_behavior.sh`의
+  SKILL-제목-major 락이 이전에는 `quality-pipeline` 제목 하나만 봐서
+  `publishing-pr-understanding`의 구버전 제목을 잡지 못했다 — 이 플러그인의
+  `skills/*/SKILL.md` 전체를 열거하도록 다시 짰다: 버전을 단 제목은 전부 shipped
+  major와 같아야 하고(버전이 아예 없는 `critiquing-artifacts` 제목은 위반이 아니다),
+  그와 별도로 적어도 하나의 제목은 여전히 shipped major를 달고 있어야 한다(그렇지
+  않으면 첫 조건이 모든 제목에서 버전을 지워도 공허하게 통과한다).
+
+### Deprecated
+- kill switch 토큰 `DEVBREW_SKIP_HOOKS=quality-gates:session-tracker`는 가리킬
+  대상을 잃었다.
+- 환경변수 `QG_STALE_HOURS`는 소비자를 잃었다 (`pre-pipeline-check.sh`가 유일한
+  독자였다).
+- 두 토큰 모두 fallback 없이 즉시 대상을 잃는다 — CLAUDE.md 메타데이터의 one-minor
+  deprecation window 규정과 충돌한다. 이 충돌을 다음 조건 아래 수용한다: 이
+  플러그인의 제3자 설치가 현재 없다(devbrew는 아직 마켓플레이스로 배포되기 전이다) —
+  이 값을 실제로 설정해 둔 외부 사용자가 존재하지 않는다. 두 토큰 모두 설정해도
+  조용히 아무 효과가 없을 뿐 에러를 내지 않는다 — 대응하는 기능이 옮겨간 게 아니라
+  사라졌으므로 조용한 재활성화는 일어나지 않는다. **제3자 설치가 생기면 이 근거는
+  바뀐다** — 그때는 알림 없는 즉시 제거가 아니라 최소 one-minor 창을 둔다.
+
+### Fixed
+- **4.x 잔여 세션 폴더가 영원히 회수되지 않던 누수** (`scripts/qg-gc.py`). 세션
+  tracker 만 돌고 `/qg` 를 한 번도 안 돌린 4.x 세션의 폴더는 유일한 파일이
+  `files.md` 라, 5.0.0 의 마커 목록(`pipeline.md`·`publish-eligible.md`·
+  `runtime-evidence.md`) 어디에도 걸리지 않아 sweep 이 매번 건너뛴다 — 업그레이드하는
+  기존 사용자 **전원**에게 실재하는 누수였다. `LEGACY_SESSION_MARKERS` 를 따로 두어
+  회수한다. 회귀 락: `tests/test_qg_gc.py` —
+  `test_legacy_4x_files_md_folder_collected`(양) +
+  `test_unmarked_sibling_dir_still_survives`(음: 마커 없는 형제 디렉토리는 그대로
+  살아남는다).
+
+### Notes
+- 완료 오라클(3 용어: `post-tool-use-session-tracker`·`files.md`·`pre-pipeline-check`)은
+  `tests/test_git_derived_scope.sh`·`tests/test_no_write_matcher_hooks.sh`·
+  `tests/test_precheck_retired.sh` 세 파일을 이름으로 제외하고 나머지 전체에서 0
+  히트다. 이 셋은 "빠뜨린" 예외가 아니라 구조적으로 필연인 예외다 — 각각 위 세
+  표면의 **부재**를 assert하는 락이라, 대상 문자열(실패 메시지·grep 대상 리터럴)을
+  자기 본문에 반드시 담는다. 그 문자열이 몸체에 있는 것 자체가 락이 하는 일이므로,
+  다른 살아있는 소비 표면과 같은 기준으로 셀 수 없다.
+- 위 오라클에 **네 번째 예외**가 붙는다: `scripts/qg-gc.py` 와 `tests/test_qg_gc.py`
+  가 `files.md` 를 담는다(위 Fixed 의 4.x 회수). 이것은 살아있는 **소비자** 표면이
+  아니라 **회수 마커**다 — 파일을 열지도 읽지도 않고 폴더를 세션 폴더로 식별하는 데만
+  쓴다. 4.x 잔여가 전부 TTL 을 지나간 뒤 이 마커와 함께 예외도 사라진다.
+
+
+### Performance
+기준선 `origin/main` **983d7d7** 대 이 브랜치, 같은 시나리오(도구 호출 약 30회 — Read 20 ·
+Bash 5–7 · Write 3), 세 플러그인(`spec-distill`·`quality-gates`·`project-init`)을 함께 로드,
+**팔당 2회**. 계측 래퍼는 스크래치 사본의 `hooks.json` 에만 넣었고 배포본에는 없다
+(설계 §8: `/usr/bin/time -p` 는 stderr 에 쓰는데 spec-distill 의 집행 채널이 stderr 다).
+측정 환경: macOS · Claude Code 2.1.241.
+
+- **없앤 훅:** `hooks/post-tool-use-session-tracker.py` 는 Write 3회에 3번 발화해
+  **91.8 / 90.5 ms** 를 썼다. 이 브랜치에서는 그 훅이 없어 **0 ms**.
+- **살아남은 훅의 호출당 비용은 사실상 변하지 않았다** — `PostToolUse:post-tool-use.py`
+  (`Bash` matcher) 25.9 → 27.6 ms/회, `SessionStart:session-start-advisor.py` 40.5 → 40.5 ms,
+  `SessionEnd:session-end-cleanup.py` 31.6 → 32.0 ms.
+
+- 세 플러그인 합산 순감은 시나리오당 **−356 ~ −383 ms** 다 (없앤 훅 384.6/398.7 ms −
+  `spec-distill` `Stop` 훅 증가분 28.6/15.6 ms). 자세한 내역은
+  `plugins/spec-distill/CHANGELOG.md` 의 같은 절.
+- **벽시계는 이 변경의 신호가 아니다.** 기준선 73.79/55.89 s, 이 브랜치 54.92/59.24 s —
+  두 팔의 범위가 겹치고, 실행 간 산포(≈18 s)가 훅 시간 차이(≈0.37 s)보다 두 자릿수 크다.
+  머지 게이트로 쓰지 않는다.
+
+### Known limitations
+면제 사유를 CHANGELOG 에 적는 이유: 이 릴리스의 기준선은 커밋되지 않는 스크래치 파일에
+있었고(계획이 그 파일의 커밋을 금한다), 이유 없는 면제 목록은 그 질문을 영구히 닫는다.
+
+- **선재 RED 2건** — `tests/harness/test_skill_orchestration_behavior.sh` 의 단언 두 개.
+  이 릴리스가 만든 것이 아니고, 이 릴리스가 고치지도 않는다. **확인 방법과 결과**:
+  `origin/main` 의 `plugins/quality-gates/` 를 통째로 꺼내(`git archive`) 그 사본의 같은
+  테스트를 돌렸더니 **같은 두 단언이 같은 이유로 실패**했다 — 즉 테스트와 SKILL 을 둘 다
+  기준선 판본으로 놓아도 빨갛다.
+  - `iter cap near Review gate AskUserQuestion` — 근접도 상한 160 줄에 대해
+    `origin/main` 이 이미 **253**, 이 브랜치가 **262**. 이 릴리스의 SKILL 편집은
+    초과분을 9 줄 늘렸을 뿐 초과 자체를 만들지 않았다. 상한을 다시 올릴지, 아니면
+    「거리」라는 대리 지표를 버리고 소속 섹션으로 잴지는 별도 판단이다.
+  - `R1b→R8 unclaimed 집행 사슬 (집행자가 셀 원본에 닿지 못한다)` — 마찬가지로
+    `origin/main` 에서 실패한다.
+- **`tests/test_codex_backward_compat.sh` 는 이 릴리스의 테스트 실행에서 제외했다.**
+  stdin 을 닫아도 걸려서 rc-137 로 죽는다(실측). 파일은 `origin/main` 과 **바이트 동일**
+  하며(`git diff origin/main..HEAD` 가 이 경로에 대해 비어 있다) 이 릴리스가 건드리지
+  않았다. 원인 규명은 이 릴리스의 범위 밖이고, 그동안 이 파일의 커버리지는 **없는 것으로
+  친다** — 「안 돌렸다」를 「통과했다」로 읽지 말 것.
+- **기준선이 적어 둔 `tests/test_sandbox_enforced.sh` 의 RED 는 더 이상 유효하지 않다.**
+  그 실패는 `tests/lib/extract_codex_invocations.py` 의 prune 판정이 **절대경로 성분**을
+  봐서, `<repo>/.claude/worktrees/<name>/` 아래에서는 모든 파일이 `.claude` 를 성분으로
+  가져 python 수집기가 0건을 내던 워크트리 아티팩트였다. prune 을 **스캔 root 기준 상대
+  경로**로 바꾼 수정이 이 브랜치에 이미 들어와 있고, 워크트리 안에서 15/15 통과를 확인했다.
+  기록으로 남기는 이유: 다음 사람이 스크래치 기준선의 옛 RED 줄을 보고 이미 닫힌 질문을
+  다시 여는 것을 막기 위해서다.
 
 ## [4.3.5] — 2026-08-25
 

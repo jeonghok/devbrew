@@ -176,12 +176,12 @@ grep -q 'drafting-spec' "${CI_ALL[@]}" && no "AC10: drafting-spec still referenc
 has 'coverage:' "AC1: coverage ledger in state schema"
 has 'no_progress_streak' "AC1: orchestration.no_progress_streak in schema"
 has 'blind_spot_dispatched' "AC1: orchestration.blind_spot_dispatched in schema"
-# v0.37.0: probe 카운터를 지우면서 coverage-mapper 재dispatch 바운드가 함께 사라지지
+# v0.38.0: probe 카운터를 지우면서 coverage-mapper 재dispatch 바운드가 함께 사라지지
 # 않게 «에피소드» 단위로 이식한다. 재는 것은 **두 디스크 값의 비교**가 유지되는가다 —
 # 값 하나(streak)를 저장하면 streak 3 에서 dispatch(저장 3) → 4 → `3 != 4` → 재dispatch
 # → 5 → … 로 레벨-트리거 무한 재dispatch 가 되살아난다(현행 바운드가 명시적으로 막는 것).
-has 'stall_episode' "C11(v0.37.0): orchestration.stall_episode in schema"
-has 'coverage_mapper_dispatched_episode' "C11(v0.37.0): orchestration.coverage_mapper_dispatched_episode in schema"
+has 'stall_episode' "C11(v0.38.0): orchestration.stall_episode in schema"
+has 'coverage_mapper_dispatched_episode' "C11(v0.38.0): orchestration.coverage_mapper_dispatched_episode in schema"
 # AC1: 기존 필드 보존
 has 'non_user_streak' "AC1: non_user_streak retained"
 # AC1: 라운드별 잠금 producer 제거 — pending_locked_decisions는 사라지고 user_statements가 대체
@@ -193,7 +193,7 @@ has 'user_statements' "AC1: user_statements가 state 스키마에 존재"
 has 'coverage.*부재|coverage 부재|interview_round.*존재' "AC5: legacy detection (interview_round present / coverage absent)"
 has 'state schema migration.*coverage' "AC5: migration advisory wording"
 mig_block="$(awk '/^## In-flight state migration/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
-# v0.37.0(R-I): migration 절도 orchestration 열거를 담고 있다 — 필드 교체를 소유한
+# v0.38.0(R-I): migration 절도 orchestration 열거를 담고 있다 — 필드 교체를 소유한
 # 태스크가 그 필드의 모든 자리를 책임진다. Task 6(probe 스윕)이 옛 단일 필드 리터럴을
 # 이 파일에서 지우면서, 그 리터럴로 부재를 확인하던 이 assertion도 함께 다시 써야 했다
 # (그 리터럴 자체가 probe 계열 별칭 oracle에 걸린다 — 남기면 잔존 락이 이 파일을 영구히
@@ -201,8 +201,8 @@ mig_block="$(awk '/^## In-flight state migration/{f=1;print;next} /^## /{f=0} f'
 # 에피소드 필드 둘로 정확히 끝나는 열거만 통과하므로 옛 필드가 끼어들거나(추가) 대체돼도
 # (치환) 이 리터럴과 달라져 RED다. 부분 토큰 공존이 아니라 **열거 전체의 동일성**이 이빨이다.
 { grep -qF '`orchestration`: `{focused_dimension: null, no_progress_streak: 0, blind_spot_dispatched: false, stall_episode: 0, coverage_mapper_dispatched_episode: null}`' <<<"$mig_block"; } \
-  && ok "AC5(v0.37.0): migration 절의 orchestration 열거가 정확히 에피소드 필드 둘로 끝난다 (구 단일 필드 없음)" \
-  || no "AC5(v0.37.0): migration 절의 orchestration 열거가 정확히 에피소드 필드 둘로 끝난다 (구 단일 필드 없음)"
+  && ok "AC5(v0.38.0): migration 절의 orchestration 열거가 정확히 에피소드 필드 둘로 끝난다 (구 단일 필드 없음)" \
+  || no "AC5(v0.38.0): migration 절의 orchestration 열거가 정확히 에피소드 필드 둘로 끝난다 (구 단일 필드 없음)"
 
 # Unbounded-autonomy backstop fail-open fix: migration must persist BEFORE the first probe.
 # Deferring persistence to "the next explicit state write" leaves coverage/orchestration
@@ -224,7 +224,7 @@ has 'floor.*(closed|전부.*closed|모두.*closed)' "G1/AC2: termination = floor
 has 'Coverage Ledger' "AC2/C9: brief Coverage Ledger serialization"
 has '8-section|8-섹션|8 섹션' "AC10: Step A가 8섹션 템플릿을 참조"
 
-# v0.37.0: probe cap 이 사라지면 그 escalation 의 3옵션도 함께 사라진다. 새 탈출구는
+# v0.38.0: probe cap 이 사라지면 그 escalation 의 3옵션도 함께 사라진다. 새 탈출구는
 # 발동 조건만 다르고(카운터 → 사용자 발화) 존재해야 하는 것은 같다.
 #
 # **awk 윈도우로 스코프한다** — `박제` 어휘가 이 파일의 다른 절(Step B 게이트 안내 ·
@@ -282,8 +282,8 @@ dest_sentence="$(grep -oE '[^.]*Open Questions[^.]*\.' <<<"$mech_flat" | head -1
   && grep -q '사용자-승인 박제' <<<"$mech_para" \
   && grep -qE '§3 Open Questions|## 3\. Open Questions|payload[^.]*Open Questions' <<<"$dest_sentence" \
   && grep -qE '이월|옮긴다|옮긴|넘긴다' <<<"$dest_sentence"; } \
-  && ok "C1(v0.37.0): floor 탈출구 — 사용자 발화 → 미충족 floor 를 사용자-승인 박제 (트리거는 절 전체, 처분·행선지·이관동사는 단락·문장으로 결속, scoped to 종료)" \
-  || no "C1(v0.37.0): floor 탈출구 — 사용자 발화 → 미충족 floor 를 사용자-승인 박제 (트리거는 절 전체, 처분·행선지·이관동사는 단락·문장으로 결속, scoped to 종료)"
+  && ok "C1(v0.38.0): floor 탈출구 — 사용자 발화 → 미충족 floor 를 사용자-승인 박제 (트리거는 절 전체, 처분·행선지·이관동사는 단락·문장으로 결속, scoped to 종료)" \
+  || no "C1(v0.38.0): floor 탈출구 — 사용자 발화 → 미충족 floor 를 사용자-승인 박제 (트리거는 절 전체, 처분·행선지·이관동사는 단락·문장으로 결속, scoped to 종료)"
 # 종료 로직에 interview_round 잔존 0 (AC9/V7b)
 term_block="$(awk '/^## 종료/{f=1} f&&/^## [^종]/{exit} f' "$FIN")"
 grep -q 'interview_round' <<<"$term_block" \
@@ -357,13 +357,13 @@ judgment_para="$(awk -v RS='' '/^\*\*redispatch 바운드/' <<<"$covmap_block")"
 code_spans="$(awk 'BEGIN{RS="`"} NR%2==0{gsub(/\n/," "); print}' <<<"$judgment_para")"
 { grep -qE 'no_progress_streak[[:space:]]*>=[[:space:]]*3[[:space:]]+AND[[:space:]]+coverage_mapper_dispatched_episode[[:space:]]*!=[[:space:]]*stall_episode' <<<"$code_spans" \
   || grep -qE 'coverage_mapper_dispatched_episode[[:space:]]*!=[[:space:]]*stall_episode[[:space:]]+AND[[:space:]]+no_progress_streak[[:space:]]*>=[[:space:]]*3' <<<"$code_spans"; } \
-  && ok "C11(v0.37.0): 재dispatch 바운드가 «임계값 AND 에피소드 비교» 관계 전체 (판정문 단락에 앵커, rewrap-tolerant)" \
-  || no "C11(v0.37.0): 재dispatch 바운드가 «임계값 AND 에피소드 비교» 관계 전체 (판정문 단락에 앵커, rewrap-tolerant)"
+  && ok "C11(v0.38.0): 재dispatch 바운드가 «임계값 AND 에피소드 비교» 관계 전체 (판정문 단락에 앵커, rewrap-tolerant)" \
+  || no "C11(v0.38.0): 재dispatch 바운드가 «임계값 AND 에피소드 비교» 관계 전체 (판정문 단락에 앵커, rewrap-tolerant)"
 # 조건 2 의 «유한성 근거» — 이것이 없으면 그 조건이 «바운드 밖»인지 «바운드 불필요»인지
 # 구별되지 않는다. 지금까지 어디에도 없었다.
 grep -qE 'floor 다섯 차원으로 고정|상한이 5' <<<"$covmap_block" \
-  && ok "C11(v0.37.0): 조건 2 의 유한성 근거 명시" \
-  || no "C11(v0.37.0): 조건 2 의 유한성 근거 명시"
+  && ok "C11(v0.38.0): 조건 2 의 유한성 근거 명시" \
+  || no "C11(v0.38.0): 조건 2 의 유한성 근거 명시"
 grep -q 'advisory' <<<"$covmap_block" \
   && ok "C11: coverage-mapper output is advisory (orchestrator admits)" \
   || no "C11: coverage-mapper output is advisory (orchestrator admits)"
@@ -649,7 +649,7 @@ grep -qF '`S1`이 아니라 `S2`부터 시작합니다' <<<"$stepa_flat" \
   && ok "R-M: 원문 있으면 user_statements id가 S1이 아니라 S2부터 시작한다는 명시 (한 문장 결속)" \
   || no "R-M: 원문 있음 케이스의 S2 시작 규칙이 finishing.md에 한 문장으로 명시되지 않았다"
 
-# --- v0.40.0: R1 재정의 (5 통과 의례 절 스코프 — 헤더-satisfiable 회피) ---
+# --- v0.41.0: R1 재정의 (5 통과 의례 절 스코프 — 헤더-satisfiable 회피) ---
 rites_block="$(awk '/^## 5 통과 의례/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
 
 # CHANGELOG 가 「명칭 변경이 아니라 R&R 이동이다」라고 말하는 실체(«seed 가 가리키는 작업
@@ -662,10 +662,10 @@ r1_row="$(grep -E '^\|[[:space:]]*R1[[:space:]]*\|' "$SKILL")"
     && grep -qF 'Problem Reframe' <<<"$r1_row" \
     && grep -qF '작업 뒤의 진짜 문제' <<<"$r1_row" \
     && grep -qF '되풀이하는 것은 통과가 아니다' <<<"$r1_row"; } \
-  && ok "R1(v0.40.0): 라벨 + R&R 이동 실체(작업 뒤의 진짜 문제 / seed 반복 불허)가 R1 행 하나에 결속" \
-  || no "R1(v0.40.0): R1 행에 라벨과 R&R 이동 실체가 함께 있지 않다"
+  && ok "R1(v0.41.0): 라벨 + R&R 이동 실체(작업 뒤의 진짜 문제 / seed 반복 불허)가 R1 행 하나에 결속" \
+  || no "R1(v0.41.0): R1 행에 라벨과 R&R 이동 실체가 함께 있지 않다"
 
-# --- v0.40.0: 탐색 경계 (### R2 절 스코프 — rites_block 보다 좁다: R1/R3 텍스트로부터
+# --- v0.41.0: 탐색 경계 (### R2 절 스코프 — rites_block 보다 좁다: R1/R3 텍스트로부터
 # 오는 우연한 co-occurrence 를 배제) ---
 # 경계 — framing 의 탐색은 사용자에게 물어서 메우고, 바깥을 보는 것은 interview 의 R&R
 # 이다. 이 문장이 없으면 두 단계의 질문이 어느 쪽 것인지 실행 시점에 판정 불가다.
@@ -687,23 +687,23 @@ r1_row="$(grep -E '^\|[[:space:]]*R1[[:space:]]*\|' "$SKILL")"
 r2_block="$(awk '/^### R2 — 웹 Landscape/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$SKILL")"
 r2_flat="$(tr '\n' ' ' <<<"$r2_block" | tr -s ' ')"
 grep -qE 'request-framing[^.]{0,60}웹[^.]{0,20}보지 않' <<<"$r2_flat" \
-  && ok "R2(v0.40.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)" \
-  || no "R2(v0.40.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)"
+  && ok "R2(v0.41.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)" \
+  || no "R2(v0.41.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)"
 
-# --- v0.40.0: seed 입력 규약 (scoped — 헤더-satisfiable 회피 + rewrap 관용) ---
+# --- v0.41.0: seed 입력 규약 (scoped — 헤더-satisfiable 회피 + rewrap 관용) ---
 seed_block="$(awk '/^## seed 를 입력으로 받았을 때/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
 seed_flat="$(tr '\n' ' ' <<<"$seed_block" | tr -s ' ')"
 # 리터럴은 finishing.md 의 S1 규약("<$ARGUMENTS 원문 그대로>", frontmatter 포함)과 같은
 # 값을 요구한다 — "seed 본문 전체"라는 표현은 frontmatter 제외로 읽힐 수 있어 규약과 갈린다.
 { [[ -n "$seed_block" ]] && grep -qF '§6 `S1` 은 `$ARGUMENTS` 원문 그대로다' <<<"$seed_flat"; } \
-  && ok "v0.40.0: seed 본문이 §6 S1 이 된다 (finishing.md S1 규약과 같은 값)" \
-  || no "v0.40.0: seed 본문 = §6 S1 규약이 없다"
+  && ok "v0.41.0: seed 본문이 §6 S1 이 된다 (finishing.md S1 규약과 같은 값)" \
+  || no "v0.41.0: seed 본문 = §6 S1 규약이 없다"
 grep -qF 'type: interview-seed' <<<"$seed_flat" \
-  && ok "v0.40.0: seed frontmatter 태그(type: interview-seed) 인식" \
-  || no "v0.40.0: type: interview-seed 인식 규약이 없다"
+  && ok "v0.41.0: seed frontmatter 태그(type: interview-seed) 인식" \
+  || no "v0.41.0: type: interview-seed 인식 규약이 없다"
 grep -qE '새 발화가 *이긴다' <<<"$seed_flat" \
-  && ok "v0.40.0: seed 확정을 뒤집는 새 발화가 우선 (P23)" \
-  || no "v0.40.0: 새 발화 우선 규칙이 없다"
+  && ok "v0.41.0: seed 확정을 뒤집는 새 발화가 우선 (P23)" \
+  || no "v0.41.0: 새 발화 우선 규칙이 없다"
 
 # §5·기각·원래.*재결정.*근거 를 절 전체에서 각각 독립으로 요구하면, 다섯 토큰이 서로
 # 무관한 문장에 흩어져 있어도, 심지어 규칙이 부정형으로 뒤집혀(「…남기지 않는다」) 있어도
@@ -712,32 +712,32 @@ grep -qE '새 발화가 *이긴다' <<<"$seed_flat" \
 # 요구해 극성을 고정한다 — 부정형 `남기지 않는다`의 어간은 `남기지`로 철자가 달라(긴다
 # vs 기지) 오탐하지 않는다.
 grep -qE '§5[^.]{0,20}기각[^.]{0,20}원래[^.]{0,20}재결정[^.]{0,20}근거[^.]{0,25}남긴다' <<<"$seed_flat" \
-  && ok "v0.40.0: 뒤집힘 기록이 §5 기각에 원래/재결정/근거로 남는다 (한 구간 결속, 긍정 극성)" \
-  || no "v0.40.0: 뒤집힘 기록 위치·형태가 한 구간으로 결속되지 않았다"
+  && ok "v0.41.0: 뒤집힘 기록이 §5 기각에 원래/재결정/근거로 남는다 (한 구간 결속, 긍정 극성)" \
+  || no "v0.41.0: 뒤집힘 기록 위치·형태가 한 구간으로 결속되지 않았다"
 grep -qF '조용히 덮어쓰지 않는다' <<<"$seed_flat" \
-  && ok "v0.40.0: 조용한 덮어쓰기 금지 명시" \
-  || no "v0.40.0: 조용한 덮어쓰기 금지 명시가 없다"
+  && ok "v0.41.0: 조용한 덮어쓰기 금지 명시" \
+  || no "v0.41.0: 조용한 덮어쓰기 금지 명시가 없다"
 grep -qE '차단.{0,4}않는다|막지 않는다' <<<"$seed_flat" \
-  && ok "v0.40.0: seed 아닌 입력도 받되 차단하지 않음 명시 (SKILL 쪽)" \
-  || no "v0.40.0: seed 아닌 입력 비차단 명시가 없다 (SKILL 쪽)"
+  && ok "v0.41.0: seed 아닌 입력도 받되 차단하지 않음 명시 (SKILL 쪽)" \
+  || no "v0.41.0: seed 아닌 입력 비차단 명시가 없다 (SKILL 쪽)"
 
-# --- v0.40.0: commands/interview.md — trivia 포인터 전환 + Step 2.5 비차단 조언 ---
+# --- v0.41.0: commands/interview.md — trivia 포인터 전환 + Step 2.5 비차단 조언 ---
 grep -qE 'references/trivia-escape\.md' "$CMD" \
-  && ok "v0.40.0: /interview 가 trivia-escape.md 정본을 가리킨다" \
-  || no "v0.40.0: /interview 에 trivia-escape.md 포인터가 없다"
+  && ok "v0.41.0: /interview 가 trivia-escape.md 정본을 가리킨다" \
+  || no "v0.41.0: /interview 에 trivia-escape.md 포인터가 없다"
 # 정본과의 분기 방지 — request-framing.md 의 동형 검사(test_request_framing_command.sh)와
 # 대칭이다. 5패턴 본문이 이 파일에 다시 복제되면 정본이 바뀌어도 이 사본은 안 바뀐다.
 cmd_pattern_dup="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 식별자|<10 토큰)' "$CMD")"
 [[ "$cmd_pattern_dup" -eq 0 ]] \
-  && ok "v0.40.0: /interview 에 5패턴 본문이 복제되지 않았다 (정본만)" \
-  || no "v0.40.0: /interview 에 5패턴 본문이 복제돼 있다 (${cmd_pattern_dup}줄) — 정본과 갈라진다"
+  && ok "v0.41.0: /interview 에 5패턴 본문이 복제되지 않았다 (정본만)" \
+  || no "v0.41.0: /interview 에 5패턴 본문이 복제돼 있다 (${cmd_pattern_dup}줄) — 정본과 갈라진다"
 step2_block="$(awk '/^## Step 2: /{f=1;print;next} /^## /{f=0} f' "$CMD")"
 step2_flat="$(tr '\n' ' ' <<<"$step2_block" | tr -s ' ')"
 step25_block="$(awk '/^## Step 2\.5/{f=1;print;next} /^## /{f=0} f' "$CMD")"
 step25_flat="$(tr '\n' ' ' <<<"$step25_block" | tr -s ' ')"
 { [[ -n "$step25_block" ]] && grep -qF '막지 않는다' <<<"$step25_flat"; } \
-  && ok "v0.40.0: Step 2.5 조언이 명시적으로 비차단 선언" \
-  || no "v0.40.0: Step 2.5 에 비차단 선언이 없다"
+  && ok "v0.41.0: Step 2.5 조언이 명시적으로 비차단 선언" \
+  || no "v0.41.0: Step 2.5 에 비차단 선언이 없다"
 
 # 양성 검사(Step 2 블록에 정지 문구가 실재하는가)와 부재 검사(Step 2.5 가 그 문구를
 # 재사용하지 않는가)가 **같은 리터럴을 각자 손으로 다시 쓰면**, 그 둘을 묶는 것이
@@ -753,16 +753,16 @@ step25_flat="$(tr '\n' ' ' <<<"$step25_block" | tr -s ' ')"
 # dispatch 줄이 **실재해야** 흐름이 실제로 이어진다(부재 검사만으로는 이 절반을 못 잡는다).
 step2_stop_phrase='인터뷰를 시작하지 않습니다'
 grep -qF "$step2_stop_phrase" <<<"$step2_flat" \
-  && ok "v0.40.0: Step 2 의 정지 문구가 Step 2 블록에 실재한다 (아래 가드의 리터럴이 살아있음)" \
-  || no "v0.40.0: Step 2 블록에서 정지 문구를 찾지 못했다 — 아래 Step 2.5 가드가 죽은 키를 겨눈다"
+  && ok "v0.41.0: Step 2 의 정지 문구가 Step 2 블록에 실재한다 (아래 가드의 리터럴이 살아있음)" \
+  || no "v0.41.0: Step 2 블록에서 정지 문구를 찾지 못했다 — 아래 Step 2.5 가드가 죽은 키를 겨눈다"
 grep -qF "$step2_stop_phrase" <<<"$step25_flat" \
-  && no "v0.40.0: Step 2.5 가 Step 2 자신의 정지 문구를 재사용한다 — 비차단 산문과 모순" \
-  || ok "v0.40.0: Step 2.5 에 Step 2 의 정지 문구가 없다 (Step 3 로 흐름 지속)"
+  && no "v0.41.0: Step 2.5 가 Step 2 자신의 정지 문구를 재사용한다 — 비차단 산문과 모순" \
+  || ok "v0.41.0: Step 2.5 에 Step 2 의 정지 문구가 없다 (Step 3 로 흐름 지속)"
 grep -qF 'Skill conducting-interview' "$CMD" \
-  && ok "v0.40.0: Step 3 dispatch 줄이 실재한다 (흐름이 실제로 이어짐)" \
-  || no "v0.40.0: Step 3 dispatch 줄이 없다 — «막지 않는다» 의 흐름-도달 절반이 무방비"
+  && ok "v0.41.0: Step 3 dispatch 줄이 실재한다 (흐름이 실제로 이어짐)" \
+  || no "v0.41.0: Step 3 dispatch 줄이 없다 — «막지 않는다» 의 흐름-도달 절반이 무방비"
 grep -qF 'request-framing' <<<"$step25_flat" \
-  && ok "v0.40.0: Step 2.5 가 /request-framing 을 안내" \
-  || no "v0.40.0: Step 2.5 안내문에 /request-framing 언급이 없다"
+  && ok "v0.41.0: Step 2.5 가 /request-framing 을 안내" \
+  || no "v0.41.0: Step 2.5 안내문에 /request-framing 언급이 없다"
 
 finish

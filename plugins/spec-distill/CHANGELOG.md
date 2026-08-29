@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.40.0] — 2026-08-29
+## [0.41.0] — 2026-08-29
 
 ### Changed
 - 인터뷰 R1 이 `Reframe (메타 프롬프트)` 에서 **`Problem Reframe`** 으로. 「받은 요청 재구성」은 `request-framing` 이 하고, 여기서는 **seed 가 가리키는 작업 뒤의 진짜 문제**를 재구성한다. 명칭 변경이 아니라 R&R 이동이다.
@@ -20,7 +20,7 @@
   것, ③ 산출물 판정이 성공 마커 **양성 요구**로 돈다는 것. **모델 다양성이 실제로 확보되는지는
   한도가 풀린 뒤 실호출로 확인해야 한다** — 지금까지의 GREEN 은 그 사실의 증거가 아니다.
 
-## [0.39.0] — 2026-08-29
+## [0.40.0] — 2026-08-29
 
 ### Added
 - **`/request-framing` — 파이프라인 Phase 0.** 사용자의 의도·steering·방향·goal을 싱크해
@@ -49,7 +49,7 @@
   실제 조건(블록의 `TOPIC` 자리표가 실값으로 치환된 실행)에 맞췄다. 자리표가 그대로면
   블록이 돌아도 파일을 만들지 않고 advisory만 낸다.
 
-## [0.38.0] — 2026-08-28
+## [0.39.0] — 2026-08-28
 
 ### Added
 - `scripts/brief_review_state.py`에 `--ledger-key`(닫힌 열거: `brief_review_degradations`·
@@ -57,7 +57,7 @@
   자기 원장에 쓴다 — 읽기·쓰기·기본값이 `LEDGER_KEYS` 하나를 거친다(리터럴 산개 금지).
 - `AXES`에 `suppression` — seed 억제 축의 degrade record를 위한 `affected_axis` 값.
 
-## [0.37.0] — 2026-08-28
+## [0.38.0] — 2026-08-28
 
 ### Removed
 - `scripts/probe_budget.py` 와 그 전용 테스트·픽스처(`tests/test_probe_budget.sh`,
@@ -100,12 +100,169 @@
   각각)로 분리해 — 합본 하나만 걸던 대조는 한쪽 계열만 깨져도 통과했다(실측:
   `ALIAS_RE`만 깨도 GREEN) — 두 계열이 각자 이빨을 갖게 했다.
 
-## [0.36.0] — 2026-08-27
+## [0.37.0] — 2026-08-27
 
 ### Added
 - 재결정 규약(P23)을 `references/proceed-gate.md` 계약의 절로 승격. 확정된 항목은 재논의 대상이 아니지만 **반증 대상**이며, 근거와 사용자 동의가 있으면 피벗할 수 있다.
 - `skills/reviewing-spec/SKILL.md` 에 이 skill 어휘의 재결정 규약 절.
 - `tests/test_proceed_gate_adopters.sh` 에 네 번째 채택자 앵커(P23).
+
+## [0.36.0] — 2026-08-27
+
+게이트의 연료를 «어떤 도구가 돌았나»에서 «git 이 무엇을 dirty 로 보나»로 바꾼다.
+쓰기-도구 matcher 가 만들던 우회가 사라져, Bash heredoc·`sed -i`·외부 편집기로 쓴
+스코프 문서도 턴 끝에 구조 검증과 리뷰 dispatch 를 지난다.
+
+### Removed
+- **`hooks/spec-write-validator.py` (PostToolUse, `matcher: "Write|Edit|MultiEdit"`)** — 쓰기-도구
+  matcher 는 Bash heredoc·`sed -i` 로 쓴 파일을 보지 못한다. 이 리포에서 실제로 발생했다:
+  세션 지시가 Bash 쓰기를 요구했고 `docs/superpowers/specs/` 문서 3개가 Law 1 게이트를 한
+  번도 통과하지 않은 채 커밋됐다. kill switch 는 켜지지 않았다 — 게이트는 꺼졌다고 **말하지
+  않고** 꺼졌다.
+- **`hooks/pending-review-reminder.py` (UserPromptSubmit)** — `pending_review:` 만 소비했다.
+  그 계약이 은퇴하면서 함께 사라진다. 그 훅이 `PENDING_RE` 검사 **이전에** 돌던 두 가지는
+  인계를 확인했다: `fire_and_forget_gc()` 는 `review-dispatch.py` 가 같은 자리에서 이미
+  부르고(Stop 은 매 턴 돌아 빈도가 같거나 높다), state 판독 실패 advisory 는 같은 훅이 같은
+  조건에서 낸다.
+- `pending_review:` 상태 블록 · `arm_ledger.strip_pending`·`strip_pending_file` ·
+  CLI `strip-pending` · `hook_common.PENDING_RE`
+- `tests/{test_spec_write_validator.sh,test_design_mode_validator.sh,test_reminder_hook.sh,test_stale_state_truncate.sh}`
+- **`DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1`** — 이 변수를 읽던 유일한 지점(위 write-time
+  validator)이 사라져 더 이상 아무것도 끄지 않는다. **지정 대체재는 없다** — 이 변수가 주던
+  능력 자체가 이 릴리스에서 사라졌다(아래 Changed 의 첫 BREAKING 항목).
+
+### Added
+- **`scripts/discover_candidates.py`** — 스코프 문서 발견. `git status` 에 **pathspec 을 주지
+  않고** dirty 집합 전체를 상계로 받은 뒤 `arm_ledger.canonical_key` 로 좁힌다. wildmatch 를
+  방정식에서 빼므로, 판본 4·5 가 연속으로 낸 pathspec 결함이 재발할 수 없다.
+- 원장 블록 `inflight_paths:` (TTL `INFLIGHT_TTL_SEC` = 900초) 와 `validation_attempts:`
+  (상한 3, `dispatch_attempts` 와 **별도**). CLI `clear-inflight`.
+- `scripts/resolve_mode.py` — 삭제되는 훅에서 동작 무변경으로 옮겨왔다.
+- `tests/test_write_path_behavior.sh` — 실제 `claude -p` 턴으로 A7·A8·A9·A18 을 잰다. 정적
+  락이 볼 수 없는 «훅이 정말 발화하는가»만 여기서 잰다. API 크레딧을 쓰므로 기본은 skip 이고
+  `DEVBREW_BEHAVIOR_TESTS=1` 일 때만 돈다.
+
+### Changed
+- **`Stop` 훅(`review-dispatch.py`)이 발견·Layer 1 구조 검증·리뷰 dispatch 를 모두 수행한다.**
+  구조 검증은 파서를 `subprocess` 로 부르지 않고 import 한다 — 훅 timeout 이 10초인데
+  `call_parser` 가 호출마다 `timeout=10` 을 걸어 중첩 timeout 을 만들던 구조가 사라진다.
+  순서는 구조 검증 → TTL 가드 → dispatch 로 고정되며, 구조 실패가 있으면 그 사유만 block 으로
+  나가고 dispatch 는 그 턴에 없다.
+- 턴당 검증 문서 상한 5(`CANDIDATE_CAP`). 정렬이 안정적이라는 사실 자체가 기아의 원인이므로
+  그 위에 **커서 회전**을 얹는다. 실측(문서 7개·3턴): 1턴 doc1–5 → 2턴 doc6·doc7·doc1–3 →
+  2턴째에 7개 전부가 최소 1회 검증된다. 회전을 제거한 변이에서는 doc6·doc7 이 영구히 굶는다.
+- 훅이 4개에서 2개(`Stop`·`SessionEnd`)로 줄었다. **신규 훅 0개.**
+- `agents/spec-reviewer.md` — 삭제된 경로(`hooks/spec-write-validator.py:resolve_mode`)와 은퇴한
+  `pending_review.mode` 계약의 **인용만** 갱신했다(각각 `scripts/resolve_mode.py` 와 prompt 의
+  `mode:` 로). 리뷰 규칙·임계·판정 기준은 한 줄도 건드리지 않았다.
+- **BREAKING — «구조 검증(Layer 1)은 유지한 채 자동 리뷰 dispatch 만 중단» 능력이 사라졌다.**
+  등가 스위치가 없다 — `DEVBREW_SKIP_HOOKS=spec-distill:Stop` 은 발견·구조 검증·dispatch 셋을
+  **함께** 끈다(셋이 한 훅의 한 진입점 뒤에 있다). 그 능력의 복원은 이 릴리스의 범위 밖이며
+  신규 기능 작업이다.
+- **BREAKING — dispatch 가 더 이상 «그 문서가 구조 검증을 통과했다»를 함의하지 않는다.**
+  검증은 상한 5의 회전 창을 훑고, dispatch 선택은 후보 목록을 **0번부터** 훑는다. 두 술어가
+  다르므로 dirty 문서가 5개를 넘으면 어긋날 수 있다 — 실측: 커서가 앞쪽을 지난 뒤 정렬상 맨
+  앞에 오는 문서가 새로 dirty 가 되면, 그 문서는 검증 창 밖인 채로 dispatch 된다. 좁고
+  자기교정적이지만(다음 회전이 잡는다) 변경 전의 불변식은 사라졌다.
+- **BREAKING — «재편집하면 재발동» 트리거가 은퇴했다.** 이미 dirty 인 untracked 문서를 다시
+  편집해도 `git status` 가 보고하는 것은 달라지지 않으므로, 재편집은 더 이상 관측 가능한
+  트리거가 아니다. 리뷰되지 않은 문서는 이제 **in-flight TTL 만료**(`INFLIGHT_TTL_SEC`, 900초)로
+  돌아온다. «파일을 건드려 리뷰어를 다시 부른다»는 이제 그만큼의 기다림이다.
+  **그 창 동안 멈추는 것은 dispatch 뿐이 아니다** — 아래 Known limitations 의 in-flight 항목.
+
+### Fixed
+- **구조 검증 상한 advisory 가 `systemMessage` 로 나간다.** 이전 판은 stderr 에만 냈는데,
+  같은 파일이 네 곳에서 근거로 드는 사실(exit 0 의 stderr 는 전달되지 않는다) 때문에 그것은
+  전달되지 않는 채널이었다 — 형제 advisory 셋(git 불능 · state 판독 실패 · 은퇴 스위치)은
+  이미 `systemMessage` 를 쓴다. 이 통지는 그 문서가 **이 세션의 Law 1 게이트를 영구히
+  벗어난다**는 사실이라 조용하면 설계 §4.4 를 어긴다. 같은 턴에 block 이 함께 나갈 수
+  있으므로 별도 emit 이 아니라 그 JSON 의 `systemMessage` 에 합쳐 낸다(stdout 의 JSON 은
+  하나여야 한다 — 둘이면 파싱이 깨져 block 이 조용히 사라진다). 같은 상한의 **동턴 절반**
+  (`reached_cap`)은 이전부터 block `reason` 을 타고 전달됐고 그대로다.
+- **원장 블록 기록 실패가 block 루프를 만들지 않는다.** `rewrite_state` 의
+  `record_attempt`(G6 상한)·`mark_inflight`(발견 제외) 실패는 이전 판에서 stderr 로 적히고
+  **그대로 block 을 냈다**. 연료가 `pending_review` 이던 시절에는 그 소비가 무조건 일어나
+  대가가 «dispatch 한 번 더» 였지만, 발견이 무상태가 된 뒤로는 소모될 연료가 없고 두 억제자가
+  **둘 다** 그 실패 뒤에 있다 — 남는 상한이 30초 TTL 하나뿐이라 사람의 턴 간격이 그것을 매번
+  넘긴다(재현: 두 함수를 raise 로 갈아끼우고 `main()` 4회 연속 → 4회 모두 `decision: block`).
+  이제 `OSError` 와 **같은 처분**을 받는다: loud 하게 적고 emit 없이 접는다. 안전한 근거는
+  이 릴리스 자신의 논거다 — 발견은 무상태라 다음 Stop 이 같은 문서를 다시 찾는다.
+  `select_dispatch_target` 의 원장 조회 실패가 이미 같은 논거로 같은 선택을 한다.
+
+### Deprecated
+- kill switch 토큰 `DEVBREW_SKIP_HOOKS=spec-distill:validator` · `spec-distill:PostToolUse` ·
+  `spec-distill:reminder` · `spec-distill:UserPromptSubmit` 은 가리킬 대상을 잃었다.
+  **구조 검증이 `Stop` 훅으로 옮겨왔으므로 이 토큰들로 껐던 사용자는 검증이 말없이 되살아난
+  것을 보게 된다** — `review-dispatch.py` 가 세션당 1회 그 사실을 알린다.
+  가장 가까운 스위치는 `DEVBREW_SKIP_HOOKS=spec-distill:Stop` 이지만 **등가 대체재가 아니라
+  더 넓다.** `:validator`/`:PostToolUse` 는 write-time 훅 하나만 껐고 dispatch 는 그때
+  `Stop` 훅에 있어 계속 돌았다 — 즉 그 토큰들도 «검증만 끄기»였다. `:Stop` 은 발견·검증·
+  dispatch 를 함께 끈다. 바로 아래 `SKIP_AUTOREVIEW` 항목과 **같은 종류의 비대칭**이며,
+  차이는 이쪽엔 그나마 더 넓은 스위치라도 있다는 것뿐이다.
+- `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1` 도 같은 릴리스에서 죽었으나 **대체재가 지정되지
+  않는다** — 위 Removed 를 보라. `spec-distill:Stop` 을 대체재로 적지 않는 이유는 그것이 둘을
+  함께 끄기 때문이다. 같은 것이라고 적으면 거짓이 된다.
+
+### Security
+- 은퇴한 kill switch 다섯(`spec-distill:PostToolUse`/`:validator`,
+  `spec-distill:UserPromptSubmit`/`:reminder`, `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW=1`)을
+  Stop 훅이 **세션당 1회** 공시한다. 전부 fail-open 방향으로 죽었다 — 껐다고 믿는 동작이
+  말없이 되살아나므로, 침묵은 kill switch 를 보안 컨트롤로 다루는 CLAUDE.md 조항과 어긋난다.
+  각 스위치는 **원래 읽히던 방식 그대로** 대조한다(토큰은 콤마 분리 + 전체 토큰, 환경변수는
+  `== "1"`) — 다르게 매칭하면 공시가 사용자 자신의 설정에 대해 거짓을 말한다. 공시는 **구조
+  검증 뒤·dispatch 앞**에서 나가므로 Layer 1 을 늦추지 않는다.
+
+### Performance
+기준선 `origin/main` **983d7d7** 대 이 브랜치, 같은 시나리오(도구 호출 약 30회 — Read 20 ·
+Bash 5–7 · Write 3), 세 플러그인을 함께 로드, **팔당 2회**. 계측 래퍼는 스크래치 사본에만
+넣었고 배포본에는 없다. 측정 환경: macOS · Claude Code 2.1.241.
+
+- **없앤 훅의 비용 (Write 3회 + 프롬프트 1회 — 두 팔에서 동일):** 기준선 **384.6 / 398.7 ms**,
+  이 브랜치 **0 ms**. 내역 — `spec-write-validator.py` ×3 = 110.4/121.3 ms,
+  `pending-review-reminder.py` ×1 = 83.1/87.6 ms, quality-gates
+  `post-tool-use-session-tracker.py` ×3 = 91.8/90.5 ms, project-init `docs-lint.py` ×3 =
+  99.3/99.2 ms.
+- **늘어난 것:** `Stop:review-dispatch.py` 가 발견·검증을 흡수해 80.5/84.6 ms → 109.1/100.2 ms
+  (**+15.6 ~ +28.6 ms**). **이 증가분은 잡음과 분리되지 않는다** — 이 브랜치가 건드리지도
+  않은 `spec-distill SessionEnd:session-end-cleanup.py` 가 **같은 팔 안에서** 65.6 → 43.7 ms
+  (21.9 ms) 흔들렸다. 프로세스 기동 잡음이 증가분과 같은 자릿수라는 뜻이므로, 위 두 수를
+  «Stop 훅이 정확히 그만큼 느려졌다»로 읽으면 안 된다. 아래 순감이 견고한 이유는 반대다 —
+  없앤 385~399 ms 가 이 잡음보다 한 자릿수 크다.
+- **시나리오당 순감 −356 ~ −383 ms.** 설계 §8 의 예측(≈244 ms)보다 크고, 격차(140~155 ms)의
+  원인은 **둘**이다. ① 예측이 `pending-review-reminder.py` 를 실측값 부재로 제외했다
+  (83.1/87.6 ms). ② **쓰기 훅 3개만 따로 봐도 예측이 낮았다** — 설계는 Write 1회당
+  31.6+23.6+26.2 = **81.4 ms** 를 가정했는데 실측은 **≈100 ms/회**(3회 합 301.5/311.0 ms 대
+  예측 244.2 ms)였다. 추정치를 다시 세울 사람에게는 ②가 ①보다 이월 가치가 크다 — ①은
+  이 릴리스에서 사라지는 항목이고, ②는 훅 프로세스 기동 비용 자체의 보정값이다.
+  비교군이 기준선보다 크지 않으므로 설계 §8 이 요구한 역행 advisory 는 해당 없음.
+- **벽시계는 이 변경의 신호가 아니다.** 기준선 73.79/55.89 s, 이 브랜치 54.92/59.24 s — 두 팔의
+  범위가 겹친다. 실행 간 벽시계 산포(≈18 s)가 훅 시간 차이(≈0.37 s)보다 두 자릿수 크므로,
+  이 시나리오의 벽시계는 모델 지연을 재고 있다. 이 수치를 머지 게이트로 쓰지 않는다.
+
+### Known limitations
+- **in-flight 표시는 dispatch 만이 아니라 구조 검증도 멈춘다 — 최대 900초.** `A12` 와 설계
+  §4.1 은 리뷰 진행 중인 문서를 «발견 결과에서 제외» 하라고 하고, 발견 결과가 곧 검증 후보
+  집합이다. 그래서 dispatch 된 문서는 `INFLIGHT_TTL_SEC`(900초) 또는 verdict 중 먼저 오는
+  것까지 **Layer 1 구조 검증을 받지 않는다 — 어떤 도구로 쓰든**. 창을 여는 조건은 좁다:
+  모델이 dispatch mandate 를 무시해야 하고, 그 문서는 이미 리뷰 큐에 들어가 있다. 구현은
+  명세대로이고 이것은 **명세 쪽 미결**이다 — 좁히려면 발견 제외와 검증 제외를 서로 다른
+  술어로 가르는 설계 변경이 필요하며(armed 게이트를 그렇게 가른 전례가 이 릴리스에 있다),
+  그 판단은 이 릴리스에서 하지 않았다. 다시 열 사람에게 필요한 사실은 이 세 가지다:
+  창의 상한(900초) · 여는 조건(mandate 무시) · 대가(그 문서에 한해 Layer 1 정지).
+- 발견은 훅의 cwd 리포만 본다. 다른 체크아웃의 문서는 `git status` 에 나오지 않는다 — 그
+  워크트리에서 세션을 열면 커버된다.
+- git 이 없거나 리포가 아니면 검증·dispatch 가 일어나지 않고 세션당 1회 loud advisory 가 나간다.
+- **이 설계에는 cross-family 리뷰가 없었다.** 설계 리뷰 5라운드가 전부 Claude 단독이었다
+  (codex 사용 한도가 2026-09-17 까지 소진). 어떤 종류의 공유-맹점이 남아 있는지 아무도 모른다.
+- **선재 RED 면제 1건** (이 릴리스가 만든 것이 아니고, 이 릴리스가 고치지도 않는다):
+  `tests/test_hook_output_schema.py::TestCrossResolverAdvisory.test_python_and_bash_resolvers_agree`
+  는 **워크트리 안에서만** 돈다(`@unittest.skipUnless`)  — 그리고 워크트리 안에서는 구조적으로
+  항상 실패한다. `scripts/state_path.py` 의 python 해석기는 `git rev-parse --git-common-dir` 로
+  **메인 리포**의 `.claude/spec-distill` 을 가리키는 반면, 테스트가 비교하는 bash 식은
+  `${CLAUDE_PROJECT_DIR:-$PWD}/.claude/spec-distill` 로 워크트리 경로를 그대로 쓴다. 그 클래스의
+  docstring 이 이미 «NG9 … the follow-up unification PR is needed» 라고 적어 둔 기지의 미해결
+  항목이고, 두 훅의 output schema 와는 무관하다(나머지 21개는 통과). 면제 사유를 여기 적는
+  이유: 이유 없는 면제 목록은 그 질문을 영구히 닫는다.
 
 ## [0.35.3] — 2026-08-25
 

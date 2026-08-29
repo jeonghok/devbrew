@@ -394,7 +394,7 @@ resume의 promotion write이지 실패-상태 mutation이 아니다.
 
 사용자에게 advisory 한 줄 출력:
 ```
-[spec-distill v0.37.0] state schema migration: coverage/orchestration added (probe counters retired).
+[spec-distill v0.38.0] state schema migration: coverage/orchestration added (probe counters retired).
 ```
 
 자동 promote 실패 시(파일 corruption 등) → "구세션 in-flight state 호환 실패 — 세션 재시작 권장"
