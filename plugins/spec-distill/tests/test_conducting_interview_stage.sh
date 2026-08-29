@@ -641,7 +641,7 @@ rites_block="$(awk '/^## 5 통과 의례/{f=1;print;next} /^## /{f=0} f' "$SKILL
 # 이동이다」라고 말하는 바로 그 실체(«seed 가 가리키는 작업 뒤의 진짜 문제» · «seed 의
 # 문장을 되풀이하는 것은 통과가 아니다»)가 무방비였다. 고침: 세 사실을 **R1 표 행 하나**
 # (물리적으로 한 줄)에서 함께 요구한다 — 관계는 "같은 행".
-r1_row="$(grep -E '^\| R1 \|' "$SKILL")"
+r1_row="$(grep -E '^\|[[:space:]]*R1[[:space:]]*\|' "$SKILL")"
 { [[ -n "$r1_row" ]] \
     && grep -qF 'Problem Reframe' <<<"$r1_row" \
     && grep -qF '작업 뒤의 진짜 문제' <<<"$r1_row" \
