@@ -26,7 +26,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 ```
 /request-framing ─→ [Phase 0] framing-requests — 확산 후 압축
                                        · 확산 — 원문 보존 → 레포 읽기 → 질문 라운드 (상한 없음)
-                                       · 압축 — check_seed.py 게이트 (Law 1, 넷 모두 부재 검사)
+                                       · 압축 — check_seed.py 게이트 다섯 (Law 1)
                                        · 검증 — 억제 축(seed-critic 격리 + codex, model diversity)
                                                 · 냉독 축(seed-readback)
                                        ▼ [확정 — proceed 게이트] ①/compact 후 /interview · ②바로 /interview · ③수정 필요 · ④멈춤
@@ -69,7 +69,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 
 **v0.25.0**: design 문서를 편집할 때마다 리뷰가 재발동하던 원인 자체를 없앴다 — `scripts/arm_ledger.py`가 문서 생애 단 한 번만 arm하는 `arm-once` 게이트를 구현하고(세션 원장 `armed_paths` ∧ git 추적 여부로 판정), v0.14.0–v0.18.0에 쌓였던 방어층 3종(억제 집합·순서 교정·진행중 락)이 근거를 잃어 함께 삭제됐다.
 
-**v0.39.0**: 파이프라인 맨 앞에 **Phase 0** `/request-framing`(skill: `framing-requests`)을 신설. 사용자의 의도·steering·방향·goal을 확산(원문 보존 → 레포 읽기 → 질문 라운드) 후 압축해, 새 세션 첫 턴에 그대로 붙여넣는 메시지 `interview-seed`로 만든다 — 산출물은 문서가 아니라 메시지다. 검증은 억제 축(`seed-critic` 격리 critic + codex, 셋째 담당)과 냉독 축(`seed-readback`)으로 나뉘고 판정은 사용자가 한다. `references/compression.md`(압축 규약)·`references/trivia-escape.md`(5패턴 정본, 두 command와 공유)를 채택하고, 확정 단계는 공유 계약 `references/proceed-gate.md`의 재결정 규약(P23)을 따른다.
+**v0.39.0**: 파이프라인 맨 앞에 **Phase 0** `/request-framing`(skill: `framing-requests`)을 신설. 사용자의 의도·steering·방향·goal을 확산(원문 보존 → 레포 읽기 → 질문 라운드) 후 압축해, 새 세션 첫 턴에 그대로 붙여넣는 메시지 `interview-seed`로 만든다 — 산출물은 문서가 아니라 메시지다. 검증은 억제 축(`seed-critic` 격리 critic + codex, 셋째 담당)과 냉독 축(`seed-readback`)으로 나뉘고 판정은 사용자가 한다. `references/compression.md`(압축 규약)·`references/trivia-escape.md`(5패턴 정본, `/request-framing`이 가리킨다)를 채택하고, 확정 단계는 공유 계약 `references/proceed-gate.md`의 재결정 규약(P23)을 따른다.
 
 ## Principles Instantiated
 

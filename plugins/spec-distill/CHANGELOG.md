@@ -12,9 +12,11 @@
   네 축, readback은 냉독이며 **판정은 사용자가 한다**.
 - `references/compression.md` — 압축 규약 공유 계약. **오늘 게이트로 집행하는 것은
   seed뿐**이고 brief는 재구조화 이후에 채택한다.
-- `references/trivia-escape.md` — 5패턴 정의 정본. 두 command와 `framing-requests`가
-  가리킨다.
-- `scripts/check_seed.py` — 게이트 넷. seed 본문에 대해서는 **전부 부재 검사**다.
+- `references/trivia-escape.md` — 5패턴 정의 정본. `commands/request-framing.md`와
+  `framing-requests`가 가리킨다(`commands/interview.md`는 아직 자기 인라인 사본을 쓴다).
+- `scripts/check_seed.py` — 게이트 다섯: seed 본문 슬롯 부재 검사 셋(답-슬롯 헤딩·태그·
+  URL) + 본문 전체가 비어 있지 않은지 보는 파일-전체 존재 검사 하나(check 0) + audit 쪽
+  `## 1. 원문` 절 존재 검사 하나. seed 본문에 대한 **슬롯** 존재 검사는 없다.
 - seed 억제 축 codex 러너·빌더·체크리스트(`run_seed_codex_reviewer.sh`·
   `build_seed_codex_prompt.py`·`seed-codex-suppression-checklist.md`)가
   `framing-requests` skill의 게이트 블록에 배선되어 실제로 호출된다.
