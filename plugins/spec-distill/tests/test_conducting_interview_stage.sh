@@ -4,6 +4,7 @@ set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SKILL="$REPO_ROOT/plugins/spec-distill/skills/conducting-interview/SKILL.md"
+CMD="$REPO_ROOT/plugins/spec-distill/commands/interview.md"
 # Task 32(무게 감축): `## 종료` 절차 전문이 references/finishing.md 로 분리됐다. 이 스위트의
 # 전-파일 검사(존재·**부재** 양쪽)가 보는 범위는 614줄 중 396줄로 줄었다 — 부재 락은 코퍼스가
 # 줄어도 RED 가 되지 않고 **조용히 약해진다**(Task 31 이 정확히 이 방식으로 P21 스캔을 잃었다).
@@ -630,5 +631,64 @@ fin_xref_n="$(printf '%s' "$fin_flat" | grep -oF '번호 공식과 합의' | gre
 grep -qF '`S1`이 아니라 `S2`부터 시작합니다' <<<"$stepa_flat" \
   && ok "R-M: 원문 있으면 user_statements id가 S1이 아니라 S2부터 시작한다는 명시 (한 문장 결속)" \
   || no "R-M: 원문 있음 케이스의 S2 시작 규칙이 finishing.md에 한 문장으로 명시되지 않았다"
+
+# --- v0.40.0: R1 재정의 + 탐색 경계 (5 통과 의례 절 스코프 — 헤더-satisfiable 회피) ---
+rites_block="$(awk '/^## 5 통과 의례/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
+grep -q 'Problem Reframe' <<<"$rites_block" \
+  && ok "R1(v0.40.0): Problem Reframe 으로 재정의 (scoped to 5 통과 의례)" \
+  || no "R1(v0.40.0): Problem Reframe 으로 재정의 (scoped to 5 통과 의례)"
+# 경계 — framing 의 탐색은 «사용자 머릿속», interview 의 탐색은 «문제 공간». 이 문장이
+# 없으면 두 단계의 질문이 어느 쪽 것인지 실행 시점에 판정 불가다.
+grep -qE 'framing.*웹|웹.*framing|사용자 머릿속|문제 공간' <<<"$rites_block" \
+  && ok "R2(v0.40.0): 탐색 경계 명시" || no "R2(v0.40.0): 탐색 경계 명시"
+
+# --- v0.40.0: seed 입력 규약 (scoped — 헤더-satisfiable 회피 + rewrap 관용) ---
+seed_block="$(awk '/^## seed 를 입력으로 받았을 때/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
+seed_flat="$(tr '\n' ' ' <<<"$seed_block" | tr -s ' ')"
+{ [[ -n "$seed_block" ]] && grep -qF '§6 `S1` 은 seed 본문 전체' <<<"$seed_flat"; } \
+  && ok "v0.40.0: seed 본문이 §6 S1 이 된다" \
+  || no "v0.40.0: seed 본문 = §6 S1 규약이 없다"
+grep -qF 'type: interview-seed' <<<"$seed_flat" \
+  && ok "v0.40.0: seed frontmatter 태그(type: interview-seed) 인식" \
+  || no "v0.40.0: type: interview-seed 인식 규약이 없다"
+grep -qE '새 발화가 *이긴다' <<<"$seed_flat" \
+  && ok "v0.40.0: seed 확정을 뒤집는 새 발화가 우선 (P23)" \
+  || no "v0.40.0: 새 발화 우선 규칙이 없다"
+{ grep -qF '§5' <<<"$seed_flat" && grep -qF '기각' <<<"$seed_flat" \
+    && grep -qE '원래.*재결정.*근거' <<<"$seed_flat"; } \
+  && ok "v0.40.0: 뒤집힘 기록이 §5 기각에 원래/재결정/근거 형태로 남는다" \
+  || no "v0.40.0: 뒤집힘 기록 위치·형태가 없다"
+grep -qF '조용히 덮어쓰지 않는다' <<<"$seed_flat" \
+  && ok "v0.40.0: 조용한 덮어쓰기 금지 명시" \
+  || no "v0.40.0: 조용한 덮어쓰기 금지 명시가 없다"
+grep -qE '차단.{0,4}않는다|막지 않는다' <<<"$seed_flat" \
+  && ok "v0.40.0: seed 아닌 입력도 받되 차단하지 않음 명시 (SKILL 쪽)" \
+  || no "v0.40.0: seed 아닌 입력 비차단 명시가 없다 (SKILL 쪽)"
+
+# --- v0.40.0: commands/interview.md — trivia 포인터 전환 + Step 2.5 비차단 조언 ---
+grep -qE 'references/trivia-escape\.md' "$CMD" \
+  && ok "v0.40.0: /interview 가 trivia-escape.md 정본을 가리킨다" \
+  || no "v0.40.0: /interview 에 trivia-escape.md 포인터가 없다"
+# 정본과의 분기 방지 — request-framing.md 의 동형 검사(test_request_framing_command.sh)와
+# 대칭이다. 5패턴 본문이 이 파일에 다시 복제되면 정본이 바뀌어도 이 사본은 안 바뀐다.
+cmd_pattern_dup="$(grep -cE '^[0-9]\. \*\*(Typo|주석-only|formatting|단일 식별자|<10 토큰)' "$CMD")"
+[[ "$cmd_pattern_dup" -eq 0 ]] \
+  && ok "v0.40.0: /interview 에 5패턴 본문이 복제되지 않았다 (정본만)" \
+  || no "v0.40.0: /interview 에 5패턴 본문이 복제돼 있다 (${cmd_pattern_dup}줄) — 정본과 갈라진다"
+step25_block="$(awk '/^## Step 2\.5/{f=1;print;next} /^## /{f=0} f' "$CMD")"
+step25_flat="$(tr '\n' ' ' <<<"$step25_block" | tr -s ' ')"
+{ [[ -n "$step25_block" ]] && grep -qF '막지 않는다' <<<"$step25_flat"; } \
+  && ok "v0.40.0: Step 2.5 조언이 명시적으로 비차단 선언" \
+  || no "v0.40.0: Step 2.5 에 비차단 선언이 없다"
+# 「차단하지 않는다」는 산문일 뿐 동작이 아니다 — 실제로 안 막는다는 것은 이 블록 안에
+# END 지시(다른 모든 차단 경로가 쓰는 리터럴, 위 Step 2 트리거 문구 참조)가 없다는
+# 것으로 잰다. Step 2.5 가 END 로 끝나면 산문과 동작이 모순인데 이 산문 단독 검사로는
+# 안 잡힌다.
+grep -qE 'END' <<<"$step25_flat" \
+  && no "v0.40.0: Step 2.5 에 END 종료 지시가 있다 — 비차단 산문과 모순" \
+  || ok "v0.40.0: Step 2.5 에 END 종료 지시가 없다 (Step 3 로 흐름 지속)"
+grep -qF 'request-framing' <<<"$step25_flat" \
+  && ok "v0.40.0: Step 2.5 가 /request-framing 을 안내" \
+  || no "v0.40.0: Step 2.5 안내문에 /request-framing 언급이 없다"
 
 finish

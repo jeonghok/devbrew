@@ -257,13 +257,20 @@ brief 작성(+ optional brainstorming invoke)은 다음 5 의례를 **모두 통
 
 | # | 의례 | 통과 기준 | 메커니즘 |
 |---|---|---|---|
-| R1 | **Reframe (메타 프롬프트)** | 받은 요청을 재구성한 한 문장 문제정의 + 진짜 goal. | (d) ontological 5-type (ESSENCE/ROOT_CAUSE/...) → payload §0 한눈에(스냅샷) + §1 Goal · Non-goal(진짜 goal) |
+| R1 | **Problem Reframe** | seed 가 가리키는 **작업 뒤의 진짜 문제**를 재구성한 한 문장 문제정의 + 진짜 goal. seed 의 문장을 되풀이하는 것은 통과가 아니다. | (d) ontological 5-type → payload §0 · §1 |
 | R2 | **Landscape 수집** | web sweep ≥1회, prior-art/대안이 **인용과 함께** 표면화. | path(a) 확장 → payload §4 External Landscape |
 | R3 | **Skepticism 통과** | 의심 triggered 방향이 모두 steelman 후 *방어 또는 전환*. un-challenged 의심 방향은 확정 후보가 될 수 없다. | steelman-builder dispatch → payload §5의 **`verdict:` 항목** |
 | R4 | **시행착오 기록** | steelman switch된 방향 **또는** 사용자가 명시적으로 폐기한 방향이 *이유와 함께* 기록. 0건이면 `- 기각 — N/A — 전부 first-time defend+lock` 한 줄 명시(빈 섹션 금지). | payload §5의 **`기각` 항목** |
 | R5 | **Open Questions 박제** | 미해결 명시("유추 금지"). | payload §3 Open Questions |
 
 ### R2 — 웹 Landscape
+
+**탐색 경계** — `request-framing` 은 **레포는 읽되 웹은 보지 않는다.** framing 의 공백은
+사용자에게 물어서 메운다. 바깥에서 찾는 것은 이 단계(interview)의 R&R 이다 — landscape ·
+steelman · blind-spot premortem · coverage-mapper 넷이 전부 그 장치다.
+
+**질문 라우팅** — 답을 사용자만 알 수 있으면 framing, 사용자 밖에서 찾아야 하면 interview.
+같은 주제도 이 기준으로 갈린다.
 
 토픽이 잡히면(round 1–2) landscape sweep을 수행합니다. 각 web 검색 *직전에* kill switch를
 확인합니다(세션 시작 시 캐시하지 않고 매 호출 직전 재평가):
@@ -308,6 +315,20 @@ skepticism 형식 검사는 web-disabled 시 수동 판단으로 위임).
 **Law 2 경계**: steelman 게이트는 Law 2 분리 메커니즘이 *아닙니다* — Law 2 분리 reviewer는
 오직 design doc(brainstorming `-design.md`)에만 적용됩니다. steelman은 문제공간 품질을 끌어올리는
 Law 1급 skepticism 의례입니다(verbatim pass-through로 무력화 방지).
+
+## seed 를 입력으로 받았을 때
+
+`$ARGUMENTS` 가 `type: interview-seed` frontmatter 를 가진 문서(또는 그 본문)면, 그것은
+**Phase 0 에서 사용자가 확정한 메시지**다.
+
+- **§6 `S1` 은 seed 본문 전체**다. 그것이 이 세션의 최초 사용자 발화다.
+- **seed 에는 태그가 없다.** `confirmed`/`inferred`/`open` 구분을 seed 에서 읽으려 하지
+  말 것 — Phase 0 이 전문을 사용자 확정으로 만들었으므로 전부 사용자 결정이다.
+- **seed 를 뒤집을 수 있다**(P23). 인터뷰 중 사용자가 seed 의 확정을 뒤집으면 **새 발화가
+  이긴다** — 그리고 그 뒤집음을 §6 에 새 `S<N>` 으로 추가하고 §5 `기각` 에 *원래 /
+  재결정 / 근거* 로 남긴다. 조용히 덮어쓰지 않는다.
+- **seed 가 아닌 입력도 그대로 받는다.** `/interview` 는 호환을 유지한다 — 조언 한 줄을
+  내되 **차단하지 않는다**.
 
 ## 종료 — brief 작성 + optional handoff
 

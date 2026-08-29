@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.40.0] — 2026-08-29
+
+### Changed
+- 인터뷰 R1 이 `Reframe (메타 프롬프트)` 에서 **`Problem Reframe`** 으로. 「받은 요청 재구성」은 `request-framing` 이 하고, 여기서는 **seed 가 가리키는 작업 뒤의 진짜 문제**를 재구성한다. 명칭 변경이 아니라 R&R 이동이다.
+- `commands/interview.md` 의 trivia 5패턴이 `references/trivia-escape.md` 포인터로.
+
+### Added
+- `conducting-interview` 에 seed 입력 규약. seed 본문은 §6 `S1` 이 되고, 인터뷰 중 사용자가 seed 를 뒤집으면 **새 발화가 이기며** 그 재결정이 §5 에 기록된다(P23).
+- `/interview` 가 seed 아닌 입력에 조언 한 줄을 낸다 — **차단하지 않는다**(호환 유지).
+
 ## [0.39.0] — 2026-08-29
 
 ### Added

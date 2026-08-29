@@ -20,20 +20,16 @@ argument-hint: "[rough request]"
 
 ## Step 2: Trivia Escape Check (AP4 회피, AC10)
 
-`$ARGUMENTS`가 다음 5 패턴 중 하나에 해당하는지 확인:
+5 패턴 정의는 `${CLAUDE_PLUGIN_ROOT}/references/trivia-escape.md` 에 있습니다. 그 파일을
+읽고 `$ARGUMENTS` 를 대조하십시오. 해당하면 그 파일의 안내 문면을 `<command>` = `interview`
+으로 채워 출력하고 인터뷰를 시작하지 않습니다.
 
-1. **Typo 1줄 수정** — 예: "fix typo on line 3", "오타 고쳐줘"
-2. **주석-only diff** — 예: "add a comment explaining X"
-3. **formatting** — 예: "reformat foo.py", "indentation 맞춰줘". 파일 수는 기준이 아니다.
-4. **단일 식별자 rename** — 예: "rename `bar` to `baz`". 파일 수는 기준이 아니다 — 판정 기준은 **한 문장으로 설명 가능한가**이다(philosophy P12). *의미가 바뀌는 rename(공개 API·직렬화 키 등)은 파일이 하나여도 trivia 아님.*
-5. **<10 토큰 + 명백히 안전한 syntactic action 동사** — 예: "fix typo", "add semicolon", "remove blank line". *다음 경우는 trivia 아님: (a) destructive 동사 `drop`/`truncate`/`reset`/`force-push` 등이 system noun (`table`/`branch`/`production`/`deployment`) 과 결합, (b) `delete`/`remove` + system noun (e.g., "remove auth middleware", "delete user table"). 의미론적 삭제는 syntactic 삭제와 구분.*
+## Step 2.5: seed 아닌 입력에 대한 조언 (차단 아님)
 
-해당하면 다음 메시지를 출력하고 인터뷰를 시작하지 마십시오:
+`$ARGUMENTS` 가 `interview-seed` 가 아니면 한 줄 안내를 낸다 — **막지 않는다.**
 
-> ⚠ 이 요청은 trivia 패턴(<해당 패턴 이름>)으로 보입니다. 인터뷰 게이트를 우회해서 직접 처리할 수 있습니다.
-> 그래도 인터뷰를 진행하시려면 명시적으로 "force interview" 또는 더 자세한 컨텍스트를 알려주세요.
-
-→ END (사용자 후속 입력 대기).
+> 💡 `/request-framing` 을 먼저 거치면 첫 턴이 정리된 상태로 시작합니다. 지금 그대로
+> 진행해도 됩니다.
 
 ## Step 3: 인터뷰 진입
 
