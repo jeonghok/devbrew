@@ -321,9 +321,13 @@ Law 1급 skepticism 의례입니다(verbatim pass-through로 무력화 방지).
 `$ARGUMENTS` 가 `type: interview-seed` frontmatter 를 가진 문서(또는 그 본문)면, 그것은
 **Phase 0 에서 사용자가 확정한 메시지**다.
 
-- **§6 `S1` 은 seed 본문 전체**다. 그것이 이 세션의 최초 사용자 발화다.
-- **seed 에는 태그가 없다.** `confirmed`/`inferred`/`open` 구분을 seed 에서 읽으려 하지
-  말 것 — Phase 0 이 전문을 사용자 확정으로 만들었으므로 전부 사용자 결정이다.
+- **§6 `S1` 은 `$ARGUMENTS` 원문 그대로다**(frontmatter 포함) — `finishing.md` 의 S1
+  규약과 같은 값이다. 그것이 이 세션의 최초 사용자 발화다.
+- **seed 에는 태그가 없다.** seed 게이트가 막는 `[open:`/`[추론:`/`[외부:` 구분을 seed
+  에서 읽으려 하지 말 것 — Phase 0 이 전문을 사용자 확정으로 만들었으므로 전부 사용자
+  **출처**(provenance)다. 이것은 출처일 뿐 **상태**(status)가 아니다 — `status` 는
+  하류 규약대로 전부 `provisional` 로 시작하고, `confirmed` 로의 전이는 오직 Step B-0
+  사용자 확인에서만 일어난다.
 - **seed 를 뒤집을 수 있다**(P23). 인터뷰 중 사용자가 seed 의 확정을 뒤집으면 **새 발화가
   이긴다** — 그리고 그 뒤집음을 §6 에 새 `S<N>` 으로 추가하고 §5 `기각` 에 *원래 /
   재결정 / 근거* 로 남긴다. 조용히 덮어쓰지 않는다.

@@ -634,38 +634,57 @@ grep -qF '`S1`이 아니라 `S2`부터 시작합니다' <<<"$stepa_flat" \
 
 # --- v0.40.0: R1 재정의 (5 통과 의례 절 스코프 — 헤더-satisfiable 회피) ---
 rites_block="$(awk '/^## 5 통과 의례/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
-grep -q 'Problem Reframe' <<<"$rites_block" \
-  && ok "R1(v0.40.0): Problem Reframe 으로 재정의 (scoped to 5 통과 의례)" \
-  || no "R1(v0.40.0): Problem Reframe 으로 재정의 (scoped to 5 통과 의례)"
+
+# I1 (fix round 1): 라벨(`Problem Reframe`)만 재고 통과 기준 산문은 rites_block 안 어디에도
+# 결속하지 않았다 — 통과 기준을 과제 이전 문구로 되돌려도(라벨은 그대로 둔 채) 라벨 단독
+# 검사는 여전히 green 이었다(리뷰어 실측, Δ −103). CHANGELOG 가 「명칭 변경이 아니라 R&R
+# 이동이다」라고 말하는 바로 그 실체(«seed 가 가리키는 작업 뒤의 진짜 문제» · «seed 의
+# 문장을 되풀이하는 것은 통과가 아니다»)가 무방비였다. 고침: 세 사실을 **R1 표 행 하나**
+# (물리적으로 한 줄)에서 함께 요구한다 — 관계는 "같은 행".
+r1_row="$(grep -E '^\| R1 \|' "$SKILL")"
+{ [[ -n "$r1_row" ]] \
+    && grep -qF 'Problem Reframe' <<<"$r1_row" \
+    && grep -qF '작업 뒤의 진짜 문제' <<<"$r1_row" \
+    && grep -qF '되풀이하는 것은 통과가 아니다' <<<"$r1_row"; } \
+  && ok "R1(v0.40.0): 라벨 + R&R 이동 실체(작업 뒤의 진짜 문제 / seed 반복 불허)가 R1 행 하나에 결속" \
+  || no "R1(v0.40.0): R1 행에 라벨과 R&R 이동 실체가 함께 있지 않다"
 
 # --- v0.40.0: 탐색 경계 (### R2 절 스코프 — rites_block 보다 좁다: R1/R3 텍스트로부터
 # 오는 우연한 co-occurrence 를 배제) ---
 # 경계 — framing 의 탐색은 사용자에게 물어서 메우고, 바깥을 보는 것은 interview 의 R&R
 # 이다. 이 문장이 없으면 두 단계의 질문이 어느 쪽 것인지 실행 시점에 판정 불가다.
 #
-# 원래 판본(`framing.*웹|웹.*framing|...`)은 두 결함이 있었다(실측, fix round):
+# 원래 판본(`framing.*웹|웹.*framing|...`)은 두 결함이 있었다:
 #  1. rewrap 브리틀 — grep 은 줄 단위로 매칭하므로, 의미를 안 바꾸는 rewrap(«request-framing
 #     은 / 웹은» 사이에 개행이 끼는 것)이 `framing`과 `웹`을 다른 물리 줄로 갈라 거짓 RED를
 #     냈다. 이 파일의 다른 스코프드 단언들과 같은 관용(개행 접기)을 준다.
 #  2. 극성(polarity) 없음 — `framing.*웹`은 «framing 근처에 웹이 있다»만 재고 부정인지
 #     긍정인지 안 잰다. "request-framing 도 웹을 함께 조사한다"처럼 **뒤집은** 문장도 같은
 #     토큰 순서를 만족해 거짓 GREEN 을 낼 수 있었다.
+# I2 (fix round 1): 위 고침도 여전히 «framing» 존재와 «웹...보지 않» 존재를 **서로
+# 독립적으로** 요구했다 — 절 안 어디든 각자 있으면 통과였다. 그래서 경계 문단을 통째로
+# 지우고, `framing` 을 공급하는 질문 라우팅 문단만 남긴 채 interview 자신의 (그 자체는
+# 정당한) 웹 kill switch 문장을 하나 더하면, request-framing 의 경계 주장이 완전히 사라진
+# 채로도 green 이었다(리뷰어 실측, Δ −215) — `### R2` 는 interview 자신의 웹 kill switch
+# 가 문서화되는 바로 그 자리라 이 미끼가 자연스러웠다.
 # 고침: ① 절 스코프를 `### R2 — 웹 Landscape`(rites_block 전체가 아니라)로 좁히고 개행을
-# 공백으로 접어 rewrap 관용을 준다. ② `웹` 뒤 20자 이내에 부정 어간 `보지 않`을 직접
-# 요구해 극성을 고정한다(어미 변화 — 보지 않는다/보지 않고/보지 않으며 — 는 어간 매치로
-# 흡수). `framing` 언급은 별도로 요구해 이 절이 애초에 request-framing 얘기를 하고 있는지
-# 확인한다.
+# 공백으로 접어 rewrap 관용을 준다. ② `request-framing` 뒤 60자 이내에 `웹`, 그 뒤 20자
+# 이내에 부정 어간 `보지 않`을 **하나의 연속 구간**으로 요구한다(어미 변화 — 보지
+# 않는다/보지 않고/보지 않으며 — 는 어간 매치로 흡수) — 관계는 "같은 절" 이 아니라
+# "같은 문장".
 r2_block="$(awk '/^### R2 — 웹 Landscape/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$SKILL")"
 r2_flat="$(tr '\n' ' ' <<<"$r2_block" | tr -s ' ')"
-{ grep -qE 'framing' <<<"$r2_flat" && grep -qE '웹[^.]{0,20}보지 않' <<<"$r2_flat"; } \
-  && ok "R2(v0.40.0): 탐색 경계 명시 (### R2 스코프, rewrap-tolerant, 극성 고정)" \
-  || no "R2(v0.40.0): 탐색 경계 명시 (### R2 스코프, rewrap-tolerant, 극성 고정)"
+grep -qE 'request-framing.{0,60}웹[^.]{0,20}보지 않' <<<"$r2_flat" \
+  && ok "R2(v0.40.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)" \
+  || no "R2(v0.40.0): 탐색 경계 명시 (request-framing…웹…보지 않, 한 문장 결속, rewrap-tolerant)"
 
 # --- v0.40.0: seed 입력 규약 (scoped — 헤더-satisfiable 회피 + rewrap 관용) ---
 seed_block="$(awk '/^## seed 를 입력으로 받았을 때/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
 seed_flat="$(tr '\n' ' ' <<<"$seed_block" | tr -s ' ')"
-{ [[ -n "$seed_block" ]] && grep -qF '§6 `S1` 은 seed 본문 전체' <<<"$seed_flat"; } \
-  && ok "v0.40.0: seed 본문이 §6 S1 이 된다" \
+# M7(fix round 1): 리터럴이 finishing.md 의 S1 규약("<$ARGUMENTS 원문 그대로>", frontmatter
+# 포함)과 맞춰졌다 — "seed 본문 전체"는 frontmatter 제외로 읽힐 수 있어 문구만 갈렸다.
+{ [[ -n "$seed_block" ]] && grep -qF '§6 `S1` 은 `$ARGUMENTS` 원문 그대로다' <<<"$seed_flat"; } \
+  && ok "v0.40.0: seed 본문이 §6 S1 이 된다 (finishing.md S1 규약과 같은 값)" \
   || no "v0.40.0: seed 본문 = §6 S1 규약이 없다"
 grep -qF 'type: interview-seed' <<<"$seed_flat" \
   && ok "v0.40.0: seed frontmatter 태그(type: interview-seed) 인식" \
@@ -673,10 +692,17 @@ grep -qF 'type: interview-seed' <<<"$seed_flat" \
 grep -qE '새 발화가 *이긴다' <<<"$seed_flat" \
   && ok "v0.40.0: seed 확정을 뒤집는 새 발화가 우선 (P23)" \
   || no "v0.40.0: 새 발화 우선 규칙이 없다"
-{ grep -qF '§5' <<<"$seed_flat" && grep -qF '기각' <<<"$seed_flat" \
-    && grep -qE '원래.*재결정.*근거' <<<"$seed_flat"; } \
-  && ok "v0.40.0: 뒤집힘 기록이 §5 기각에 원래/재결정/근거 형태로 남는다" \
-  || no "v0.40.0: 뒤집힘 기록 위치·형태가 없다"
+
+# I4 (fix round 1): §5·기각·원래.*재결정.*근거 세 grep 이 seed_flat 안 **어디든** 각자
+# 있으면 통과였다 — R2 가 방금 고친 것과 같은 결함류(독립 토큰 vs 관계). 규칙을 부정형으로
+# 뒤집어도(「…남기지 않는다」, 리뷰어 실측 Δ −47) green 이었고(다섯 토큰이 여전히 다
+# 있으므로), 다섯 토큰을 무관한 문장에 흩뿌리고 기록 규칙 자체를 없애도(Δ +12) green
+# 이었다. 고침: 여섯 요소(§5·기각·원래·재결정·근거·긍정 동사 `남긴다`)를 **하나의 연속
+# 구간**으로 묶는다. `남긴다`(현재형)를 마지막에 요구해 극성을 고정한다 — 부정형
+# `남기지 않는다`의 어간은 `남기지`로 철자가 달라(긴다 vs 기지) 오탐하지 않는다.
+grep -qE '§5[^.]{0,20}기각[^.]{0,20}원래[^.]{0,20}재결정[^.]{0,20}근거[^.]{0,25}남긴다' <<<"$seed_flat" \
+  && ok "v0.40.0: 뒤집힘 기록이 §5 기각에 원래/재결정/근거로 남는다 (한 구간 결속, 긍정 극성)" \
+  || no "v0.40.0: 뒤집힘 기록 위치·형태가 한 구간으로 결속되지 않았다"
 grep -qF '조용히 덮어쓰지 않는다' <<<"$seed_flat" \
   && ok "v0.40.0: 조용한 덮어쓰기 금지 명시" \
   || no "v0.40.0: 조용한 덮어쓰기 금지 명시가 없다"
@@ -699,13 +725,27 @@ step25_flat="$(tr '\n' ' ' <<<"$step25_block" | tr -s ' ')"
 { [[ -n "$step25_block" ]] && grep -qF '막지 않는다' <<<"$step25_flat"; } \
   && ok "v0.40.0: Step 2.5 조언이 명시적으로 비차단 선언" \
   || no "v0.40.0: Step 2.5 에 비차단 선언이 없다"
-# 「차단하지 않는다」는 산문일 뿐 동작이 아니다 — 실제로 안 막는다는 것은 이 블록 안에
-# END 지시(다른 모든 차단 경로가 쓰는 리터럴, 위 Step 2 트리거 문구 참조)가 없다는
-# 것으로 잰다. Step 2.5 가 END 로 끝나면 산문과 동작이 모순인데 이 산문 단독 검사로는
-# 안 잡힌다.
-grep -qE 'END' <<<"$step25_flat" \
-  && no "v0.40.0: Step 2.5 에 END 종료 지시가 있다 — 비차단 산문과 모순" \
-  || ok "v0.40.0: Step 2.5 에 END 종료 지시가 없다 (Step 3 로 흐름 지속)"
+
+# I3 (fix round 1): 이 diff 자신이 이 파일에서 유일한 `END` 리터럴을 지웠다(Step 2 는 이제
+# trivia-escape.md 포인터일 뿐이고, `END` 는 그 참조 파일에만 산다) — 그래서 아래 「END
+# 없음」 검사는 이 파일 안에서 **항상 참인 죽은 키**였다. 옛 주석("END 지시, 다른 모든
+# 차단 경로가 쓰는 리터럴")도 그래서 거짓 인용이었다 — END 는 더 이상 이 파일의 다른
+# 차단 경로가 쓰는 리터럴이 아니다. Step 2.5 뒤에 Step 2 **자신이 지금 쓰는** 한국어 정지
+# 문구("...인터뷰를 시작하지 않습니다")를 그대로 옮겨 붙이면 세 단언 모두 green 인데
+# 실제로는 막힌다(리뷰어 실측, Δ +103) — 그리고 Step 3 dispatch 줄을 통째로 지워도
+# (Δ −90) green 이다: 「막지 않는다」의 다른 절반(흐름이 실제로 Step 3 에 도달하는가)을
+# 아무 것도 재지 않았다.
+#
+# 고침 — 관계를 두 갈래로 다시 묶는다. ① 아래 리터럴은 Step 2 블록이 **지금** 실제로
+# 쓰는 정지 문구를 그대로 옮긴 것이다 — Step 2 의 문구가 바뀌면 이 리터럴도 함께
+# 갱신해야 한다(그러지 않으면 이 검사가 다시 죽은 키가 된다 — I3 재발 방지 주석).
+# ② Step 3 dispatch 줄이 **실재하는가**(부재 검사만으로는 못 잡던 절반)를 별도로 요구한다.
+grep -qF '인터뷰를 시작하지 않습니다' <<<"$step25_flat" \
+  && no "v0.40.0: Step 2.5 가 Step 2 자신의 정지 문구를 재사용한다 — 비차단 산문과 모순" \
+  || ok "v0.40.0: Step 2.5 에 Step 2 의 정지 문구가 없다 (Step 3 로 흐름 지속)"
+grep -qF 'Skill conducting-interview' "$CMD" \
+  && ok "v0.40.0: Step 3 dispatch 줄이 실재한다 (흐름이 실제로 이어짐)" \
+  || no "v0.40.0: Step 3 dispatch 줄이 없다 — «막지 않는다» 의 흐름-도달 절반이 무방비"
 grep -qF 'request-framing' <<<"$step25_flat" \
   && ok "v0.40.0: Step 2.5 가 /request-framing 을 안내" \
   || no "v0.40.0: Step 2.5 안내문에 /request-framing 언급이 없다"
