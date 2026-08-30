@@ -65,28 +65,53 @@ printf '%s' "$out" | grep -qx '<<<AUDIT-VERBATIM>>>' \
 # 그대로 GREEN이었다. 키 목록은 스크립트에서 **동적으로** 가져온다 — 여기 이름을
 # 다시 나열하면 나중에 네 번째 키가 추가돼도 이 테스트가 그 키를 못 보고 계속
 # 통과한다(닫으려는 gap과 같은 모양).
-redact_pairs="$(python3 - "$B" "$FX/interview-brief-valid.md" <<'PY'
+# 순수하게 `mod.REDACT_KEYS`에서 "검사할 키 목록"을 읽으면 자기참조가 된다 — `name`을
+# REDACT_KEYS에서 지우면 이 목록도 `name`을 잃어 그 키를 그냥 건너뛴다(실측: round 1
+# mutation에서 audit_file 드랍만 T8/T9 곁다리로 잡히고 name·created_at 드랍은 GREEN으로
+# 샜다). 그래서 "검사 대상 3키"는 태스크 인터페이스 계약(frontmatter 3키 redact:
+# audit_file·name·created_at)에 고정하고, `mod.REDACT_KEYS`는 그 고정 집합과의
+# **집합 동치**만 확인한다 — 키가 빠지면 물론, 나중에 넷째 키가 늘어도(coverage가
+# 조용히 늘어나는 대신) 즉시 실패해 테스트 갱신을 강제한다. 값(원본 문자열)만 fixture에서
+# 동적으로 읽는다 — 값을 하드코딩하면 fixture가 바뀔 때 이 테스트가 따라가지 못한다.
+redact_report="$(python3 - "$B" "$FX/interview-brief-valid.md" <<'PY'
 import importlib.util, re, sys
 script, payload_path = sys.argv[1], sys.argv[2]
 spec = importlib.util.spec_from_file_location("brief_bundle_mod", script)
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
+
+EXPECTED = ("audit_file", "name", "created_at")  # task-9 브리프 §interface 3키 계약
+actual = tuple(mod.REDACT_KEYS)
+missing = [k for k in EXPECTED if k not in actual]
+extra = [k for k in actual if k not in EXPECTED]
+if missing:
+    print(f"MISSING\t{','.join(missing)}")
+if extra:
+    print(f"EXTRA\t{','.join(extra)}")
+
 text = open(payload_path, encoding="utf-8").read()
-for k in mod.REDACT_KEYS:
+for k in EXPECTED:
     m = re.search(rf"(?m)^{re.escape(k)}\s*:\s*(\S.*)$", text)
     if m:
-        print(f"{k}\t{m.group(1).strip()}")
+        print(f"PAIR\t{k}\t{m.group(1).strip()}")
 PY
 )"
-[[ -n "$redact_pairs" ]] || no "T12: REDACT_KEYS 원본값을 fixture에서 못 찾았다 (테스트 자체가 무력화)"
-while IFS=$'\t' read -r key val; do
-  [[ -z "$key" ]] && continue
+missing_line="$(grep '^MISSING' <<<"$redact_report" || true)"
+[[ -z "$missing_line" ]] && ok "T12: REDACT_KEYS 가 필수 3키를 전부 포함한다" \
+  || no "T12: REDACT_KEYS 에서 빠졌다 — ${missing_line#MISSING$'\t'}"
+extra_line="$(grep '^EXTRA' <<<"$redact_report" || true)"
+[[ -z "$extra_line" ]] && ok "T12: REDACT_KEYS 가 예상한 3키와 정확히 일치한다" \
+  || no "T12: REDACT_KEYS 에 예상 밖 키가 있다 — ${extra_line#EXTRA$'\t'} (이 테스트를 갱신해야 한다)"
+n_pairs="$(grep -cF $'PAIR\t' <<<"$redact_report" || true)"
+[[ "$n_pairs" -eq 3 ]] || no "T12: fixture에서 원본값을 못 찾은 필수 키가 있다 (테스트 자체가 무력화)"
+while IFS=$'\t' read -r tag key val; do
+  [[ "$tag" == "PAIR" ]] || continue
   printf '%s' "$out" | grep -qF -- "$val" \
     && no "T12: ${key} 원본값('${val}')이 번들에 남아 있다 (redact 안 됨)" \
     || ok "T12: ${key} 원본값이 번들에서 사라졌다"
   printf '%s' "$out" | grep -qE "^${key}:[[:space:]]*<redacted>\$" \
     && ok "T12: ${key}: <redacted> 형태로 치환됐다" \
     || no "T12: ${key} 가 <redacted> 형태로 치환되지 않았다"
-done <<< "$redact_pairs"
+done <<< "$redact_report"
 
 exit $fail
