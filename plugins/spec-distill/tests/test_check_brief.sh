@@ -611,4 +611,29 @@ for sec in 6; do
     || no "U2-T2: audit §${sec} 제거가 안 잡힌다 — AUDIT_SECTIONS 확장에 이빨이 없다"
 done
 
+# --- U2-T3: N1b 등식 + bijection C 합집합 -----------------------------------
+# N1b 위쪽: payload §6 에 S2 가 있으면 red
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-payload-s2.md" 2>&1)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'payload §6'; } \
+  && ok "U2-T3: payload §6 에 S2 → red (N1b 위쪽)" \
+  || no "U2-T3: payload §6 의 S2 가 안 잡힌다"
+
+# N1b 아래쪽: payload §6 을 비우면 red — 등식 술어는 스스로 양성이다
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-payload-empty-sec6.md" 2>&1)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'payload §6'; } \
+  && ok "U2-T3: payload §6 을 비우면 red (N1b 아래쪽)" \
+  || no "U2-T3: 빈 payload §6 이 통과한다 — ⊆ 로 썼는가"
+
+# 항목 0건: #5 가 공허한 유일한 상태. N1b 만이 막는다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-zero-items.md" 2>&1)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'payload §6'; } \
+  && ok "U2-T3: 항목 0건 + 빈 §6 → red (N1b)" \
+  || no "U2-T3: 항목 0건에서 빈 §6 이 통과한다"
+
+# 합집합: audit §6 의 S5 를 지우면 그 id 를 쓰는 항목이 dangling
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-audit-drop-s5.md" 2>&1)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'bijection C'; } \
+  && ok "U2-T3: audit §6 에서 앵커 삭제 → red (#5 합집합)" \
+  || no "U2-T3: bijection C 가 audit 쪽을 안 본다"
+
 finish

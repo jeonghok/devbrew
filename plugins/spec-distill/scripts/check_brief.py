@@ -444,15 +444,36 @@ def verbatim_anchors(text: str) -> set:
     return set(S_ANCHOR_RE.findall(_section_text(text, "6", "사용자 원문")))
 
 
-def bijection_c_errors(text: str) -> list[str]:
+def payload_verbatim_is_s1_only(payload_text: str) -> bool:
+    """N1b — payload §6의 앵커 집합이 **정확히** {"S1"}인가 (v0.43.0).
+
+    `⊆ {"S1"}`이 아니라 `== {"S1"}`이다. ⊆로 쓰면 빈 §6이 통과하고, 그때
+    이를 잡아 줄 것으로 기대할 bijection C는 **항목이 0건인 payload에서 공허하다**
+    (`evidence`는 필수 필드라 항목이 있으면 순회가 비지 않지만, 항목 0건이면
+    루프가 아예 돌지 않는다). 등식이 그 구멍을 닫는다.
+
+    등식 술어라 **스스로 양성이다** — §6을 통째로 지워도 이 검사가 직접 red를 낸다.
+    이 자리를 bijection C에 귀속시키면 틀린 귀속이 되고, 잘못 귀속된 RED는
+    통과보다 나쁘다.
+    """
+    return verbatim_anchors(payload_text) != {"S1"}
+
+
+def bijection_c_errors(payload_text: str, audit_text: str) -> list[str]:
     """bijection C — 모든 evidence: S<N>이 §6에서 해석된다 (AC6).
 
-    한계: 이 검사는 인용된 S<N>의 **존재**만 본다. 요약이 그 원문을 실제로 뒷받침하는지
-    (의미적 정합)는 기계 검증하지 않는다 — V9 수동 spot-check가 그 갭을 맡는다.
-    역방향(모든 S<N>이 인용될 것)은 요구하지 않는다: 제약으로 승격되지 않은 발화가 있다.
+    v0.43.0: 앵커 집합이 payload §6 **∪** audit §6이다. `S1`은 payload에,
+    `S2` 이상은 audit에 살므로 한쪽만 보면 반대쪽 전량이 "없는 앵커"가 된다.
+
+    **단방향이다.** 인용된 S<N>의 *존재*만 본다 — 모든 앵커가 인용될 것은
+    요구하지 않는다. 그 역방향을 넣으면 audit §6 전량이 인용 의무로 끌려온다.
+    "bijection이니 양방향이겠지"로 구현하면 안 된다.
+
+    한계: 요약이 그 원문을 실제로 뒷받침하는지(의미적 정합)는 기계 검증하지 않는다 —
+    V9 수동 spot-check가 그 갭을 맡는다.
     """
-    anchors = verbatim_anchors(text)
-    items, _ = parse_user_sourced_items(_frontmatter(text))
+    anchors = verbatim_anchors(payload_text) | verbatim_anchors(audit_text)
+    items, _ = parse_user_sourced_items(_frontmatter(payload_text))
     errs = []
     for it in items:
         ev = it.get("evidence")
@@ -726,10 +747,10 @@ def gate(path: Path) -> int:
     if confirmed_zero_unsentineled(text):
         failures.append("confirmed 0건인데 명시 sentinel 없음 (확인 게이트 우회 신호)")
     sec6_absent = any(m.startswith("6.") for m in miss)
-    if not sec6_absent:
-        ce = bijection_c_errors(text)
-        if ce:
-            failures.append(f"bijection C (evidence→§6): {ce}")
+    if not sec6_absent and payload_verbatim_is_s1_only(text):
+        failures.append(
+            f"payload §6 앵커가 {{'S1'}}이 아니다: {sorted(verbatim_anchors(text))} "
+            "(S1만 payload에, 나머지 전량은 audit §6에)")
 
     sec2_absent = any(m.startswith("2.") for m in miss)
     if not sec2_absent:
@@ -761,6 +782,10 @@ def gate(path: Path) -> int:
             pair = audit_pairing_errors(fm, audit_text, path.name)
             if pair:
                 failures.append(f"audit pairing: {pair}")
+            if not sec6_absent:
+                ce = bijection_c_errors(text, audit_text)
+                if ce:
+                    failures.append(f"bijection C (evidence→§6): {ce}")
             audit_sec6_absent = any(m.startswith("6.") for m in amiss)
             if not audit_sec6_absent and attribution_block_missing(audit_text):
                 failures.append("audit §6 출처 표기 블록 부재 (🗣·☑·✎ 세 기호를 모두 담은 인용 줄 필요)")
@@ -859,8 +884,20 @@ def main(argv: list[str]) -> int:
         print(json.dumps({"errors": frontmatter_errors(text)}, ensure_ascii=False))
         return 0
     if sub == "items":
+        # bijection_c_errors는 v0.43.0부터 2인자다(payload ∪ audit 앵커) — gate()와
+        # 같은 방식으로 audit을 해석해 넘긴다. **빈 리스트로 떨어뜨리지 않는다** — audit을
+        # 못 열었다는 사실과 「위반 없음」은 다른 사실이고, `[]`로 내면 이 표면을 읽는
+        # 쪽이 audit 미해석을 통과로 오독한다.
+        audit_path, audit_err = resolve_audit(path, _frontmatter(text))
+        if audit_err:
+            bij_c = [f"audit 해석 실패 — bijection C 판정 불가: {audit_err}"]
+        else:
+            try:
+                bij_c = bijection_c_errors(text, audit_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError) as exc:
+                bij_c = [f"audit unreadable — bijection C 판정 불가: {exc}"]
         print(json.dumps({"errors": user_sourced_errors(text),
-                          "bijection_c": bijection_c_errors(text),
+                          "bijection_c": bij_c,
                           "bijection_b": bijection_b_errors(text)}, ensure_ascii=False))
         return 0
     print(f"unknown subcommand: {sub}", file=sys.stderr)

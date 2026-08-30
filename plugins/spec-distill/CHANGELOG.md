@@ -22,6 +22,34 @@
   것을 막기 위해 예시 `D2`의 evidence를 `S1`로 바꿨다(payload §6에 실재하는 유일한
   앵커). `S2` 이상 원문을 근거로 삼는 실제 제약의 bijection C 재해석(양쪽 파일의
   합집합 대조)은 하류 Task가 맡는다.
+- **N1b 신설 — `payload_verbatim_is_s1_only()`가 payload §6 앵커 집합이 정확히
+  `{"S1"}`인지 등식으로 확인한다.** `⊆`가 아니라 `==`다 — `⊆`로 쓰면 빈 §6이
+  통과하는데, `user_sourced_items`가 0건인 payload에서는 bijection C의 순회 자체가
+  비어 그 구멍을 대신 막아주지 못한다(등식 술어가 스스로 양성인 이유). `gate()`는
+  `sec6_absent` 가드 아래 이 검사를 새로 배선했다.
+- **`bijection_c_errors()`가 2인자(`payload_text, audit_text`)로 바뀌었다** — 앵커
+  집합이 이제 payload §6 ∪ audit §6이다(`S1`은 payload에, `S2` 이상은 audit에 살므로
+  한쪽만 보면 반대쪽 인용 전량이 dangling으로 오탐된다). 단방향은 유지 — 인용된
+  `evidence: S<N>`의 존재만 확인하고 역방향(모든 앵커가 인용될 것)은 요구하지 않는다.
+  `gate()`의 호출 자리를 audit 해석 블록 안(`pair` 검사 뒤)으로 옮겨 audit 텍스트를
+  받을 수 있게 했고, `items` 서브커맨드(`main()`)도 같은 시그니처 변경의 소비자라
+  `gate()`와 같은 방식(`resolve_audit` → 실패 시 판정-불가 문구, 성공 시 두 텍스트로
+  호출)으로 함께 고쳤다 — 안 그러면 옛 1인자 호출이 `TypeError`로 죽는다.
+- **픽스처 4쌍 추가** — `interview-brief-payload-s2`(N1b 위쪽: payload §6에 `S2`가
+  남아있으면 red), `interview-brief-payload-empty-sec6`(N1b 아래쪽: 빈 §6도 red),
+  `interview-brief-zero-items`(`user_sourced_items: []` + §2 항목 불릿 제거 +
+  frontmatter AC12 sentinel 보존 — bijection C가 공허해지는 유일한 상태에서 N1b가
+  단독 방어선임을 확인), `interview-brief-audit-drop-s5`(payload에 `evidence: S5`
+  항목을 추가하고 audit §6에는 `S2`만 실어 `S5`를 dangling으로 남김 — 합집합 해석의
+  audit 쪽이 실제로 읽힘을 확인). 넷 다 hand-add한 audit §6(헤딩 + 출처 표기 블록)을
+  가진다 — 그렇지 않으면 전부 `missing audit sections`로만 red가 나 자신이 시험하려는
+  축을 재지 못한다.
+- **부수 수정: `interview-brief-payload-attr-missing.md`에서 payload §6의 `S2` 항목을
+  뺐다(`S1`만 남김).** 이 fixture는 U2-T2(payload attribution 무관 확인)가 `rc==0`을
+  요구하는데, valid.md에서 파생된 payload §6이 원래 `{S1, S2}`를 그대로 갖고 있어
+  N1b 신설과 충돌해 `rc==0` 단언이 회귀했다(`git diff` 전/후로 확인). audit
+  사이드카가 이미 `S2`를 §6에 갖고 있어 `D2.evidence: S2`는 union으로 계속 해석된다
+  — attribution 무관성이라는 이 fixture의 원래 취지는 그대로다.
 
 ### Known gap (하류 Task로 이관)
 
@@ -43,6 +71,15 @@
   3개 fixture(`interview-brief-audit-attr-missing`·`payload-attr-missing`·
   `audit-no-sec6`)는 의도적으로 깨진 대조군이라 그 일괄 이관의 대상이 아니며 이미
   audit §6을 갖는다.
+
+  **N1b 신설로 이 공백의 모양이 하나 더 늘었다.** `test_brief_no_statement_cap.sh`의
+  L3가 파생하는 `interview-brief-long.*`는 `interview-brief-valid.md`의 payload §6을
+  그대로 물려받으므로(`{S1, S2}`, 아직 미이관) N1b도 함께 걸린다 — 실패 메시지가
+  `missing audit sections`만이 아니라 `payload §6 앵커가 {'S1'}이 아니다`까지
+  두 항목이 된다. 위 12개(`test_check_brief.sh`)와 L3(`test_brief_no_statement_cap.sh`)
+  모두 rc-only 단언이라 개수·판정 자체는 안 바뀐다 — 실패 메시지에 이유가 하나 더
+  실릴 뿐이다. 일괄 이관이 두 축(audit §6 부재, payload의 `S2` 잔존)을 함께
+  정리해야 이 공백이 완전히 닫힌다.
 
 - **이관 시 보존해야 할 carry-forward — T18이 지금 틀린 이유로 green이다.**
   `test_check_brief.sh`의 T18 두 단언("표기 블록 부재 → red", "기호 누락 표기 블록 →
