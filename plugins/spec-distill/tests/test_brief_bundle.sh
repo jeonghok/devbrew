@@ -32,4 +32,20 @@ python3 "$B" "$FX/interview-brief-valid.md" "$FX/brief-verbatim-audit-no-sec6.au
 python3 "$B" "$FX/interview-brief-valid.md" "$FX/interview-brief-valid.audit.md" >/dev/null 2>&1
 [[ $? -ne 3 ]] && ok "T8: 정상 동작이 exit 3 이 아니다 (위생 스캔 범위 한정)" \
   || no "T8: audit 내용까지 스캔해 매번 exit 3"
+
+# T9: T8은 vacuous하다 — 두 fixture 어디에도 `.audit.md` 문자열이 없어서, 스캔 범위를
+# 번들 전체로 넓혀도(mutation으로 확인) T8은 여전히 통과한다. 스캔 범위 요구를 실제로
+# 거는 양성 대조: audit §6 원문 **안에** `.audit.md` 꼴 문자열을 심어 넣고, payload
+# 쪽엔 없게 한다. payload만 스캔하면 rc 0, 번들 전체를 스캔하면 rc 3이어야 한다.
+tmp_audit="$(mktemp)" || exit 1
+sed 's/"인증 뷰는 일단 빼고 갑시다"/"stray-note.audit.md 참고하고 인증 뷰는 일단 빼고 갑시다"/' \
+  "$FX/interview-brief-valid.audit.md" > "$tmp_audit"
+grep -qF '.audit.md' "$tmp_audit" || { no "T9: 픽스처 치환이 적용되지 않았다 (vacuous 방지 실패)"; }
+out9="$(python3 "$B" "$FX/interview-brief-valid.md" "$tmp_audit" 2>&1)"; rc9=$?
+[[ $rc9 -eq 0 ]] && ok "T9: audit §6 원문 안의 '.audit.md'는 위생 스캔 대상이 아니다 (rc 0)" \
+  || no "T9: audit 쪽 '.audit.md'가 rc $rc9 를 냈다 — 스캔이 payload 밖까지 샜다"
+printf '%s' "$out9" | grep -qF 'stray-note.audit.md' \
+  && ok "T9: 그 원문은 그대로 실렸다 (지우지 않았다)" || no "T9: 원문이 사라졌다"
+rm -f "$tmp_audit"
+
 exit $fail
