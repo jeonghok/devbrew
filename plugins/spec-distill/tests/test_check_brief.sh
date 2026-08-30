@@ -431,14 +431,6 @@ python3 "$SCRIPT" gate "$FX/interview-brief-evidence-dangling.md" >/dev/null 2>&
   && no "T22: dangling evidence가 통과됨 (bijection C 미집행)" \
   || ok "T22: dangling evidence → red (bijection C)"
 
-# T23: statement 161자 → red / 160자 → green (hard cap)
-python3 "$SCRIPT" gate "$FX/interview-brief-statement-161.md" >/dev/null 2>&1 \
-  && no "T23: 161자 statement가 통과됨 (cap이 hard가 아님)" \
-  || ok "T23: 161자 statement → red"
-python3 "$SCRIPT" gate "$FX/interview-brief-statement-160.md" >/dev/null 2>&1 \
-  && ok "T23: 160자 statement → green (경계 포함)" \
-  || no "T23: 160자는 통과해야 한다 (off-by-one)"
-
 # T14: confirmed 0건 + sentinel 없음 → red / 있음 → green
 python3 "$SCRIPT" gate "$FX/interview-brief-confirmed-zero.md" >/dev/null 2>&1 \
   && no "T14: confirmed 0건 + sentinel 없음이 통과됨 (확인 게이트 우회)" \

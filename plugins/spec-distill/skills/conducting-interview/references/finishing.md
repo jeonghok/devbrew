@@ -29,7 +29,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
      `session_id`(기존 spec-distill 세션 재사용), `audit_file`(audit의 **basename만** —
      경로 구분자가 들어가면 게이트가 거부합니다), `user_sourced_items[]`.
 3. **`user_sourced_items` 직렬화**: state의 `user_statements`를 훑어 제약으로 승격할 항목을
-   고르고, 각각에 id·`source`·`statement`(160자 이내)·`evidence`(그 발화의 `S<N>`)를 붙입니다.
+   고르고, 각각에 id·`source`·`statement`·`evidence`(그 발화의 `S<N>`)를 붙입니다.
    **이 시점의 `status`는 전부 `provisional`입니다** — `confirmed`는 Step B-0의 사용자 확인
    으로만 발생합니다. 모델 추론은 이 리스트에 넣지 말고 본문에 ✎ 프로즈로 씁니다.
    `user_statements`의 발화 전부를 payload §6에 **전문 보존**하고 `S<N>` 앵커를 답니다.

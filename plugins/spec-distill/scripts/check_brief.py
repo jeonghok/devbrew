@@ -304,7 +304,6 @@ def audit_pairing_errors(payload_fm: str, audit_text: str, payload_name: str) ->
 VALID_SOURCES = ("verbatim", "chosen")
 VALID_STATUSES = ("confirmed", "provisional", "open")
 REQUIRED_ITEM_FIELDS = ("id", "source", "status", "statement", "evidence")
-STATEMENT_MAX = 160
 # AC12 sentinel — 축자 형태는 `# confirmed 0건 — 사용자가 전부 잠정으로 판단` 한 줄이다.
 # **substring 검사를 쓰면 안 된다**: 템플릿이 이 문자열을 *사용법 안내 주석 안에* 그대로
 # 인쇄하므로(`#   # confirmed 0건 — …`), 템플릿을 복사해 만든 brief는 sentinel을 실제로
@@ -419,9 +418,6 @@ def user_sourced_errors(text: str) -> list[str]:
         st = it.get("status")
         if st and st not in VALID_STATUSES:
             errs.append(f"{iid}: status {st!r} not in {VALID_STATUSES}")
-        stmt = it.get("statement") or ""
-        if len(stmt) > STATEMENT_MAX:
-            errs.append(f"{iid}: statement {len(stmt)}자 > {STATEMENT_MAX} (hard cap)")
         ev = it.get("evidence") or ""
         if ev and not EVIDENCE_RE.match(ev):
             errs.append(f"{iid}: evidence {ev!r} is not S<N>")

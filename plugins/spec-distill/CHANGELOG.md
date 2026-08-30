@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.42.0] — 2026-08-31
+
+### Removed
+- `STATEMENT_MAX = 160` 상한과 그 전 표현을 지운다 — `check_brief.py` 의 게이트 검사,
+  `finishing.md` 의 「160자 이내」지시, 픽스처 2쌍(`interview-brief-statement-160/161`
+  및 각 audit)과 그것을 소비하던 `test_check_brief.sh` T23 단언. 상한이 잰 것은
+  과잉결정이 아니라 부피였다 — 과잉결정은 대리 지표가 아니라 brief-readback 이 직접 잰다.
+  삭제 전 양성 대조를 기록했다: `interview-brief-statement-161.md` 가 변경 전
+  `rc=1` · `"C1: statement 161자 > 160 (hard cap)"` 이었다. 회귀 락
+  `test_brief_no_statement_cap.sh` 는 3층(양성 대조 → 부재 → 행동)으로 재발을 막는다.
+
 ## [0.41.0] — 2026-08-29
 
 ### Changed
