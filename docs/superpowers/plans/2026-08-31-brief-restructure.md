@@ -243,7 +243,7 @@ Create: `plugins/spec-distill/tests/test_brief_no_statement_cap.sh`
 set -u
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
-SCRIPT="$SD/scripts/check_brief.py"
+SCRIPT="$REPO_ROOT/plugins/spec-distill/scripts/check_brief.py"
 FIN="$SD/skills/conducting-interview/references/finishing.md"
 fail=0
 ok()  { printf '  ok  %s\n' "$1"; }
@@ -817,7 +817,7 @@ Expected: **여전히 `rc=1`** 이고 failure 가 `payload §6 앵커가 {'S1'}�
 - Modify: `plugins/spec-distill/scripts/check_verbatim_coverage.py` (docstring · `parse_payload_section6` · `run` · `main`)
 - Modify: `plugins/spec-distill/skills/reviewing-brief/SKILL.md:136`, `:337` (호출부 둘)
 - Modify: `plugins/spec-distill/tests/test_reviewing_brief_skill.sh:315` (호출 라인 정규식 락)
-- Test: `plugins/spec-distill/tests/test_check_verbatim_coverage.sh`
+- Test: `plugins/spec-distill/tests/test_check_verbatim_coverage.sh` — **기존 `"$SCRIPT"` 호출 10건이 전부 2인자다**(도출 실측). I2 대로 전부 3인자로 간다; 하나라도 남으면 그 케이스는 usage(64)로 죽는다. 이 파일이 정의하는 변수는 `REPO_ROOT`·`SCRIPT`·`FX` 뿐이다 — `$PY`·`$SD` 는 **없다**
 
 **Interfaces:**
 - Consumes: Task 2 의 audit §6 절.
@@ -833,23 +833,23 @@ Append to `plugins/spec-distill/tests/test_check_verbatim_coverage.sh`:
 ```bash
 # --- U2-T4: 코퍼스 합집합 --------------------------------------------------
 # S1 은 payload, S2+ 는 audit. 한쪽만 보면 반대쪽 전량이 missing 이 된다.
-"$PY" "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" \
+python3 "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" \
       "$FX/brief-verbatim-ok.audit.md" >/dev/null 2>&1; rc=$?
 [[ "$rc" == "0" ]] && ok "U2-T4: 합집합 정상 경로 exit 0" || no "U2-T4: 합집합 정상 경로가 exit $rc"
 
 # audit 을 안 주면 usage — 유추하지 않는다
-"$PY" "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" >/dev/null 2>&1; rc=$?
+python3 "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" >/dev/null 2>&1; rc=$?
 [[ "$rc" == "64" ]] && ok "U2-T4: audit 인자 없으면 usage(64) — stem 유추 없음" \
   || no "U2-T4: 2인자 호출이 exit $rc — 유추로 audit 을 찾고 있는가"
 
 # 같은 앵커가 양쪽에 있으면 append-only 위반 (구조 위반 exit 1)
-"$PY" "$SCRIPT" "$FX/brief-verbatim-dup-across.md" "$FX/state-verbatim-ok.md" \
+python3 "$SCRIPT" "$FX/brief-verbatim-dup-across.md" "$FX/state-verbatim-ok.md" \
       "$FX/brief-verbatim-dup-across.audit.md" >/dev/null 2>&1; rc=$?
 [[ "$rc" == "1" ]] && ok "U2-T4: S5 가 payload·audit 양쪽 → exit 1 (합집합 위 append-only)" \
   || no "U2-T4: 교차 중복 앵커가 exit $rc — 집행이 합집합 위에서 안 돈다"
 
 # 한쪽 절 부재는 조용한 코퍼스 축소가 아니다
-"$PY" "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" \
+python3 "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" \
       "$FX/brief-verbatim-audit-no-sec6.audit.md" >/dev/null 2>&1; rc=$?
 [[ "$rc" == "3" ]] && ok "U2-T4: audit §6 부재 → exit 3 (검사 불가, 조용한 통과 아님)" \
   || no "U2-T4: audit §6 이 없는데 exit $rc — 축소된 코퍼스로 '완전성 통과'를 냈는가"
@@ -1477,7 +1477,7 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-url-in-s1.md" 2>&1)"; rc=$?
   || { printf '%s\n' "$out"; no "U3-T8: §6 예외가 없다 — L2 와 동시 만족 불가능해진다"; }
 
 # 같은 픽스처가 verbatim 검사와도 동시 만족돼야 한다 (이 예외의 존재 이유)
-python3 "$SD/scripts/check_verbatim_coverage.py" "$FX/interview-brief-url-in-s1.md" \
+python3 "$REPO_ROOT/plugins/spec-distill/scripts/check_verbatim_coverage.py" "$FX/interview-brief-url-in-s1.md" \
   "$FX/state-url-in-s1.md" "$FX/interview-brief-url-in-s1.audit.md" >/dev/null 2>&1
 [[ $? -eq 0 ]] && ok "U3-T8: 같은 픽스처가 verbatim exit 0 (N1a 예외 ↔ L2 동시 만족)" \
   || no "U3-T8: N1a 예외와 L2 가 동시 만족되지 않는다 — 예외의 존재 이유가 무너졌다"
@@ -1598,7 +1598,7 @@ WEB_DISABLED_ADVISORY = (
 # stderr)까지 세어 **공시와 완화를 혼동한다** — 공시는 완화가 아니다. 재야 하는 것은
 # 「어느 함수가 verdict 를 바꾸는가」이므로 지점을 대조한다(양성 + 음성 짝).
 body_of() { awk -v f="$1" '$0 ~ "^def "f"\\(" {p=1;next} p && /^def |^[A-Z_]+ = / {exit} p' \
-  "$SD/scripts/check_brief.py"; }
+  "$REPO_ROOT/plugins/spec-distill/scripts/check_brief.py"; }
 printf '%s' "$(body_of landscape_present)" | grep -q '_web_disabled()' \
   && ok "U3-T8(양성): landscape_present 가 _web_disabled() 를 부른다 — 완화되는 그 하나" \
   || no "U3-T8(양성): 조임이 사라졌다 — sentinel 구멍이 무조건 열려 있다"
