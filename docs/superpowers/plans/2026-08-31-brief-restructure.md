@@ -495,13 +495,15 @@ cd /Users/jeonghokim/Downloads/devbrew/plugins/spec-distill/tests/fixtures
 for n in audit-attr-missing payload-attr-missing audit-no-sec6; do
   cp interview-brief-valid.md "interview-brief-$n.md"
   cp interview-brief-valid.audit.md "interview-brief-$n.audit.md"
-  # frontmatter 의 audit_file 과 audit 의 payload 를 새 이름으로 맞춘다 (audit_pairing_errors)
+  # frontmatter 의 audit_file 과 audit 의 payload 를 새 이름으로 맞춘다 (audit_pairing_errors).
+  # **`.audit.md` 까지 적는다** — resolve_audit() 이 `payload.stem + ".audit.md"` 와 정확히
+  # 대조하므로 `.audit` 로 끝나면 픽스처가 «의도한 축이 아닌» audit 해석 실패로 red 가 된다.
   python3 - "$n" <<'PY'
 import pathlib, re, sys
 n = sys.argv[1]
 p = pathlib.Path(f"interview-brief-{n}.md")
 a = pathlib.Path(f"interview-brief-{n}.audit.md")
-p.write_text(re.sub(r'(?m)^audit_file:.*$', f'audit_file: interview-brief-{n}.audit',
+p.write_text(re.sub(r'(?m)^audit_file:.*$', f'audit_file: interview-brief-{n}.audit.md',
                     p.read_text(encoding='utf-8')), encoding='utf-8')
 a.write_text(re.sub(r'(?m)^payload:.*$', f'payload: interview-brief-{n}.md',
                     a.read_text(encoding='utf-8')), encoding='utf-8')
@@ -681,7 +683,7 @@ t = re.sub(r'(?ms)^user_sourced_items:.*?(?=^\w|^---)', 'user_sourced_items: []\
 t = re.sub(r'(?m)^[-*] [🗣☑✎] (confirmed|provisional) \*\*[A-Z]\d+\*\* .*$\n', '', t)
 # §6 을 헤딩만 남기고 비운다
 t = re.sub(r'(?ms)(^## 6\. 사용자 원문\n).*?(?=^## 7\.)', r'\1\n', t)
-t = re.sub(r'(?m)^audit_file:.*$', 'audit_file: interview-brief-zero-items.audit', t)
+t = re.sub(r'(?m)^audit_file:.*$', 'audit_file: interview-brief-zero-items.audit.md', t)
 pathlib.Path('interview-brief-zero-items.md').write_text(t, encoding='utf-8')
 a = pathlib.Path('interview-brief-valid.audit.md').read_text(encoding='utf-8')
 a = re.sub(r'(?m)^payload:.*$', 'payload: interview-brief-zero-items.md', a)
