@@ -93,6 +93,7 @@ AUDIT_SECTIONS = [
     ("3", "Steelman 원문"),
     ("4", "게이트 실행 기록"),
     ("5", "프로세스 로그"),
+    ("6", "사용자 원문"),
 ]
 
 FLOOR_KEYS = ["root_problem", "landscape", "skepticism", "blind_spot", "open_questions"]
@@ -583,12 +584,12 @@ def bijection_a_errors(payload_text: str, audit_text: str) -> list[str]:
     return errs
 
 
-def attribution_block_missing(text: str) -> bool:
-    """§6 상단 2줄 출처 표기 블록 존재 검사 (AC5/C3).
+def attribution_block_missing(audit_text: str) -> bool:
+    """audit §6 상단 출처 표기 블록 존재 검사 (AC5/C3 — v0.43.0에서 payload→audit 이사).
 
-    템플릿이 상속시키지만 개별 brief에서 지워질 수 있으므로 게이트가 확인한다.
+    템플릿이 상속시키지만 개별 audit에서 지워질 수 있으므로 게이트가 확인한다.
     """
-    for ln in _section_text(text, "6", "사용자 원문").splitlines():
+    for ln in _section_text(audit_text, "6", "사용자 원문").splitlines():
         if ln.lstrip().startswith(">") and all(m in ln for m in ATTRIBUTION_MARKERS):
             return False
     return True
@@ -729,8 +730,6 @@ def gate(path: Path) -> int:
         ce = bijection_c_errors(text)
         if ce:
             failures.append(f"bijection C (evidence→§6): {ce}")
-    if not sec6_absent and attribution_block_missing(text):
-        failures.append("§6 출처 표기 블록 부재 (🗣·☑·✎ 세 기호를 모두 담은 인용 줄 필요)")
 
     sec2_absent = any(m.startswith("2.") for m in miss)
     if not sec2_absent:
@@ -762,6 +761,9 @@ def gate(path: Path) -> int:
             pair = audit_pairing_errors(fm, audit_text, path.name)
             if pair:
                 failures.append(f"audit pairing: {pair}")
+            audit_sec6_absent = any(m.startswith("6.") for m in amiss)
+            if not audit_sec6_absent and attribution_block_missing(audit_text):
+                failures.append("audit §6 출처 표기 블록 부재 (🗣·☑·✎ 세 기호를 모두 담은 인용 줄 필요)")
             if not sec5_absent and not any(m.startswith("3.") for m in amiss):
                 ae = bijection_a_errors(text, audit_text)
                 if ae:

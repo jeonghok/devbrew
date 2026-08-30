@@ -586,4 +586,29 @@ python3 "$SCRIPT" gate "$FX/interview-brief-attribution-partial.md" >/dev/null 2
 # 벌하는 방향으로 틀렸다. 재삽입 방지 락은 `test_brief_no_length_cap.sh`에 산다 —
 # 여기에 부정 assertion만 남기면 트립와이어가 없는 지금은 무엇을 지워도 통과하는
 # 빈 락이 되기 때문에, 블록을 고치지 않고 통째로 걷어냈다.
+
+# --- U2-T2: audit 절 확장 + attribution 이사 --------------------------------
+# 이사 후: payload §6 에 블록이 없어도 통과, audit §6 에 없으면 red.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-audit-attr-missing.md" 2>&1)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '출처 표기 블록 부재'; } \
+  && ok "U2-T2: audit §6 에 출처 표기 블록이 없으면 red" \
+  || no "U2-T2: attribution 이사가 audit 을 대상으로 안 잡는다"
+
+# **rc 로 판정한다. 문면 grep 의 부정형을 쓰지 않는다.** 이 이사는 실패 메시지를
+# `audit §6 출처 표기 블록 부재` 로 바꾸는데, 그 문자열은 옛 문면을 **부분문자열로 포함**한다 —
+# `grep -q '출처 표기 블록 부재'` 의 부정형으로 쓰면 audit 쪽 실패가 payload 쪽 실패로 오독되고,
+# 반대로 문면을 더 고치면 조용히 GREEN 이 된다. 부정형 문면 앵커는 두 방향 모두로 거짓말한다.
+python3 "$SCRIPT" gate "$FX/interview-brief-payload-attr-missing.md" >/dev/null 2>&1
+[[ $? -eq 0 ]] \
+  && ok "U2-T2: payload §6 에 블록이 없어도 게이트 통과 (검사 대상이 아니다)" \
+  || { python3 "$SCRIPT" gate "$FX/interview-brief-payload-attr-missing.md" 2>&1 | head -2
+       no "U2-T2: payload §6 이 여전히 attribution 검사 대상이다 (이사 실패)"; }
+
+for sec in 6; do
+  out="$(python3 "$SCRIPT" gate "$FX/interview-brief-audit-no-sec${sec}.md" 2>&1)"; rc=$?
+  { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'missing audit sections'; } \
+    && ok "U2-T2: audit §${sec} 헤딩 제거 → red (#9)" \
+    || no "U2-T2: audit §${sec} 제거가 안 잡힌다 — AUDIT_SECTIONS 확장에 이빨이 없다"
+done
+
 finish

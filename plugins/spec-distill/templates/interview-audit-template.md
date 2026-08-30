@@ -55,3 +55,14 @@ source: spec-distill conducting-interview v0.23.0
 - 냉독: gap <n>건 (<G1..G5 중 어느 클래스>)
 - degrade: <component:reason 한 줄씩 | 없음>
 - 격리: zero-tool probe <ZERO_TOOL_OK|ZERO_TOOL_UNAVAILABLE> — `codex_isolated: false`
+
+## 6. 사용자 원문
+
+(`S1`을 제외한 발화 전량. **append-only** — `S<N>` 항목 추가만 허용하고 기존 항목 본문은
+ 바꾸지 않는다(P21 placeholder 치환만 예외). 요약·재서술·발췌 금지.
+ `check_verbatim_coverage.py`가 state 원장과 대조하는 대상이 이 절이다.)
+
+> **출처 표기** — 🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론
+
+- **S\<N\>** ☑ 선택 (\<무엇에 대한 선택\>):
+  > "..."

@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.43.0] — 2026-08-31
+
+### Changed
+
+- **`AUDIT_SECTIONS`에 `("6", "사용자 원문")`을 뒤에 덧붙였다** — audit 사이드카가 이제
+  6절 계약이다. 게이트가 audit §6 헤딩 부재를 `missing audit sections`로 red 처리한다.
+- **`attribution_block_missing`의 검사 대상이 payload §6에서 audit §6으로 이사했다** —
+  brief 재구조화(§7.1)의 첫 단계로, `S1`을 제외한 사용자 원문 전량이 audit으로 옮겨가는
+  하류 작업(별도 Task)의 선행 조건이다. 시그니처는 여전히 `(str) -> bool`이지만 인자
+  이름을 `audit_text`로 바꿔 의미 변화를 드러냈다. `gate()`의 검사 배선도 payload 텍스트
+  블록에서 audit 텍스트 블록(`amiss` 계산 다음, `pair` 검사 뒤)으로 옮기고, audit §6이
+  통째로 없는 경우(#9가 이미 그 red를 낸 경우)와 중복 보고되지 않도록
+  `audit_sec6_absent` 가드를 추가했다.
+- **두 템플릿을 갱신했다** — `interview-audit-template.md`에 `## 6. 사용자 원문`
+  절(append-only, `S1` 제외 전량, 출처 표기 블록 포함)을 §5 뒤에 추가했고,
+  `interview-brief-template.md` §6은 `S1` 최초 요청 하나만 남기고 출처 표기 블록을
+  지웠다(그 검사가 audit으로 이사했으므로). payload §6이 `S1`만 남으면서 예시
+  `user_sourced_items`의 `D2.evidence`가 더 이상 payload §6에서 해석되지 않는
+  `S2`를 참조하고 있었다(bijection C) — 출하 템플릿 자체가 자기 게이트에 걸리는
+  것을 막기 위해 예시 `D2`의 evidence를 `S1`로 바꿨다(payload §6에 실재하는 유일한
+  앵커). `S2` 이상 원문을 근거로 삼는 실제 제약의 bijection C 재해석(양쪽 파일의
+  합집합 대조)은 하류 Task가 맡는다.
+
+### Known gap (하류 Task로 이관)
+
+- 이 변경 시점에는 audit §6이 아직 기존 fixture 74건에 채워지지 않았다 — 이 하나의
+  값이 늘면서 그 사이드카들이 이제 `missing audit sections: ['6. 사용자 원문']`로
+  red를 낸다. `test_check_brief.sh` 자체가 이 fixture들(특히
+  `interview-brief-valid.audit.md`)에 의존하는 T15/T19/AC8/C9/T12/T14/T17/T21/R1/VS16
+  등 12개 기존 단언에서 그 여파로 실패한다 — 검사 로직의 결함이 아니라, `S1` 제외
+  전량을 audit §6으로 채우는 하류의 일괄 이관(다른 Task, `move-verbatim.py`)이 아직
+  실행되지 않은 데서 오는 예상된 공백이다. 이번 유닛이 손으로 만든 3개 fixture
+  (`interview-brief-audit-attr-missing`·`payload-attr-missing`·`audit-no-sec6`)는
+  의도적으로 깨진 대조군이라 그 일괄 이관의 대상이 아니며 이미 audit §6을 갖는다.
+
 ## [0.42.0] — 2026-08-31
 
 ### Removed
