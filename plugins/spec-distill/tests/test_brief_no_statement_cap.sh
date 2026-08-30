@@ -34,13 +34,20 @@ grep -qE '160자|≤ *160|160 ?자 이내' "$FIN" \
   && no "L2: finishing.md 에 상한 지시 잔존" || ok "L2: finishing.md 상한 지시 제거됨"
 
 # --- 층 3 : 행동 — 긴 statement 가 실제로 통과한다 ------------------------
+# rc(종료 코드)로 판정한다, 메시지 리터럴이 아니라. 'hard cap' grep 만으로는 이 층이
+# 사실상 L2의 중복이라 — 이름을 바꿔 재도입된 상한(예: "too long")은 게이트를 실제로
+# 계속 거부시키면서도 grep을 피해간다(mutation 실증, CHANGELOG 참고). rc==0 요구는
+# "어떤 이름으로도 재도입되지 않았다"를 잡는다 — 진짜 행동 검사.
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 LONG="$(python3 -c "print('가' * 200)")"
 python3 - "$SD" "$TMP" "$LONG" <<'PY'
 import pathlib, re, sys
 sd, tmp, long_stmt = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
 src = sd / "tests/fixtures/interview-brief-valid.md"
+src_audit = sd / "tests/fixtures/interview-brief-valid.audit.md"
 dst = tmp / "interview-brief-long.md"
+dst_audit = tmp / "interview-brief-long.audit.md"
+
 text = src.read_text(encoding="utf-8")
 # frontmatter 의 첫 statement(C1)와 §2 본문의 같은 항목(C1)을 함께 늘린다 (bijection B).
 # 한쪽만 늘리면 bijection_b_errors 가 "body statement != frontmatter statement"로
@@ -56,14 +63,40 @@ text = re.sub(
     lambda m: m.group(1) + long_stmt + m.group(2),
     text, count=1,
 )
+# audit_file 은 payload stem 에서 유도된다 (resolve_audit: <stem>.audit.md) — 새 파일명
+# (interview-brief-long.md)에 맞춰 이 필드도 같이 갱신하지 않으면 이 파생 fixture는
+# "audit_file is not this payload's sidecar" 로 상한과 무관한 이유로 항상 red가 나서
+# rc==0 단언이 무의미해진다.
+text = re.sub(
+    r'(?m)^(audit_file:\s*).*$',
+    lambda m: m.group(1) + dst_audit.name,
+    text, count=1,
+)
 dst.write_text(text, encoding="utf-8")
+
+# audit 쪽 sidecar도 함께 파생한다 — audit_pairing_errors가 audit frontmatter의 `payload:`
+# 역참조를 payload_name과 대조하므로, 원본 audit을 그대로 복사만 하면 "audit payload
+# 'interview-brief-valid.md' != 'interview-brief-long.md'"로 역시 상한과 무관한 red가 난다.
+audit_text = src_audit.read_text(encoding="utf-8")
+audit_text = re.sub(
+    r'(?m)^(payload:\s*).*$',
+    lambda m: m.group(1) + dst.name,
+    audit_text, count=1,
+)
+dst_audit.write_text(audit_text, encoding="utf-8")
 PY
 # 이 층은 fixture 형태에 의존하므로, 파일이 안 만들어졌으면 침묵하지 않는다.
-if [[ -f "$TMP/interview-brief-long.md" ]]; then
-  out="$(python3 "$SCRIPT" gate "$TMP/interview-brief-long.md" 2>&1)"
+if [[ -f "$TMP/interview-brief-long.md" && -f "$TMP/interview-brief-long.audit.md" ]]; then
+  out="$(python3 "$SCRIPT" gate "$TMP/interview-brief-long.md" 2>&1)"; rc=$?
+  if [[ $rc -eq 0 ]]; then
+    ok "L3: 200자 statement 가 상한에 안 걸린다 (rc=0)"
+  else
+    no "L3: 200자 statement 가 여전히 상한에 걸린다 (rc=$rc): $out"
+  fi
+  # 메시지 단언도 보조로 남긴다 — rc가 진단이 필요할 때 원인을 즉시 보여준다.
   printf '%s' "$out" | grep -q 'hard cap' \
-    && no "L3: 200자 statement 가 여전히 상한에 걸린다" \
-    || ok "L3: 200자 statement 가 상한에 안 걸린다"
+    && no "L3/message: 'hard cap' 리터럴이 여전히 나온다" \
+    || ok "L3/message: 'hard cap' 리터럴 없음"
 else
   no "L3: 테스트 픽스처 생성 실패 — 이 층은 아무것도 재지 않았다"
 fi
