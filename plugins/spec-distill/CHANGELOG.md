@@ -121,6 +121,12 @@
   그대로 보존해야 한다** — 안 그러면 T18은 영원히 통과하되 아무것도 재지 않는
   빈 락이 된다.
 
+- **`test_reviewing_brief_skill.sh`의 AC1 check_verbatim_coverage.py 콜사이트 락(grep count 오라클)에
+  알려진 한계 — 변수로 우회한 호출(예: `CVC="python3 $PR/scripts/check_verbatim_coverage.py"` 뒤
+  `$CVC ...`)은 두 카운트 모두에서 보이지 않아 등식이 공허하게 성립한다. 고치지 않는다 — 데이터
+  흐름 추적은 grep count와 질적으로 다른 도구고 콜사이트 2개짜리 점검에 과하다(락 자신의 주석에도
+  같은 한계가 적혀 있다).
+
 ## [0.42.0] — 2026-08-31
 
 ### Removed

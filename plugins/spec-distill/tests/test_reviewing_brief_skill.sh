@@ -325,11 +325,54 @@ fi
 # `"$PR/scripts/check_verbatim_coverage.py"`와 `$PR/scripts/check_verbatim_coverage.py`
 # (따옴표 없이) 둘 다 유효한 호출로 받아들이고, 후자로 쓰인 진짜 콜사이트가 있으면 앞은
 # 강제로 한쪽 철자만 요구하다 그 라인을 두 카운트 모두에서 못 세어(TOTAL에서도 빠짐)
-# 등식이 우연히 맞아버린다 — 이번 라운드가 실제로 잡은 결함이다. `^[[:space:]]*python3 `
+# 등식이 우연히 맞아버린다 — round 2 가 실제로 잡은 결함이다. `^[[:space:]]*python3 `
 # 줄-시작 앵커는 **좁힌 채로 둔다** — 이게 산문·주석을 코퍼스 밖에 두는 부분이고 이미
 # 검증됐다; 앞으로도 넓히지 말 것. 두 카운트는 `$CVC_PATH_RE`로 경로 앵커를 공유한다 —
 # 따로 벌리면 한쪽만 넓히거나 좁혀 등식이 왜곡될 수 있다.
-ALL_SKILL_BASH="$(fence "$(cat "$SKILL")")"
+#
+# round 3 — 연속줄(`\` line continuation)은 **정규식이 개행을 허용하게** 고치지 않고
+# **코퍼스를 만드는 단계에서** bash가 실제로 실행하는 모양으로 합친다. 이 파일이 이미
+# `merge_brief_review.py` 호출에 그 서식을 쓰므로(누군가 재포맷할 개연성) 3인자를 그
+# 서식으로 쓰면 여전히 정확한 호출인데도 등식이 깨져 "2인자로 되돌아갔다"는 오분류를
+# 냈다 — round 2 의 부재(found none) 오분류와 같은 결함 종류다. 순서가 핵심이다:
+# fence_all()(주석을 **아직 벗기지 않은** 펜스 본문)로 물리적 인접성이 살아있는 스트림을
+# 만들고, join_cont()로 그 위에서 `\`를 이은 뒤에야 strip_comments()로 `#` 줄을 뺀다.
+# 반대로 하면(먼저 주석을 지우고 나중에 합치면) 지워진 주석 줄이 있던 자리로 무관한
+# 두 줄이 잘못 이어붙는다(그 줄 하나가 실제로는 이어지지 않았는데도). join_cont()는
+# 이어지는 줄의 들여쓰기를 지우고 이음매에 공백 정확히 1개를 넣어 — 그래서 아래 두
+# 정규식은 이어붙은 뒤에도 여전히 공백 1개를 기대하는 채로 안전하다(정규식 자체는
+# round 2 이후 손대지 않았다). 이 `fence_all`/`join_cont`/`strip_comments`는 이
+# 단언 전용 지역 헬퍼다 — 공유 `fence()`(다른 락들이 쓴다)는 건드리지 않는다.
+#
+# **알려진 한계(고치지 않는다)** — 변수로 우회한 호출은 grep count가 못 본다. 예:
+# `CVC="python3 $PR/scripts/check_verbatim_coverage.py"` 뒤에 `$CVC "$PAYLOAD" "$STATE"
+# "$AUDIT"`처럼 부르면 그 콜사이트는 두 카운트 모두에서 아예 안 보여 등식이 1==1로
+# 공허하게 성립하고, 나중에 그 변수 호출에서 인자를 하나 빼도 절대 안 걸린다. 이 파일이
+# 이미 형제 스크립트에 그 모양을 쓰고 있어서(`BRS="python3 $PR/scripts/brief_review_state.py"`)
+# 가상의 걱정이 아니다 — DRY 리팩터가 그대로 들여올 수 있다. 고치지 않는 이유: 변수 대입을
+# 뚫어보려면 데이터 흐름 추적이 필요한데, 그건 grep count와는 질적으로 다른 도구고 콜사이트
+# 2개짜리 점검에 비해 과하다. grep 오라클은 식별자와 주변 텍스트를 재지 의미를 재지
+# 않는다 — 그 천장은 실재하고 이 단언은 거기 닿았다. 이 패턴들을 다시 만질 사람은
+# 간접 참조(변수 우회)를 다음에 살펴야 할 모양으로 알아두라.
+fence_all() { awk '/^```bash$/{f=1;next} /^```$/{f=0;next} f' <<<"$1"; }
+join_cont() {
+  # 주석 줄(`#`로 시작)은 이어붙이는 원천이 될 수 없다 — 실제 bash에서 `# ... \\`는
+  # 다음 줄을 이어붙이지 않는다(주석은 물리적 줄 끝까지고, 그 안의 `\\`는 그냥 텍스트다).
+  # 이 가드가 없으면 주석 줄에 우연히 달린 trailing backslash가 다음의 **진짜** 호출
+  # 줄을 통째로 삼켜 strip_comments()가 그 합쳐진 줄째로 버린다 — 실행 라인이 조용히
+  # 사라지는 것이다("주석 위로 다음 줄이 끌려온다"는 경우).
+  awk '
+    {
+      if ($0 !~ /^[[:space:]]*#/ && sub(/\\$/, "")) {
+        gsub(/[[:space:]]+$/, "", $0); partial = partial $0 " "; next
+      }
+      gsub(/^[[:space:]]+/, "", $0); print partial $0; partial = ""
+    }
+    END { if (partial != "") print partial }
+  ' <<<"$1"
+}
+strip_comments() { grep -v '^[[:space:]]*#' <<<"$1"; }
+ALL_SKILL_BASH="$(strip_comments "$(join_cont "$(fence_all "$(cat "$SKILL")")")")"
 CVC_PATH_RE='"?\$PR/scripts/check_verbatim_coverage\.py"?'
 CVC_TOTAL="$(grep -cE '^[[:space:]]*python3 '"$CVC_PATH_RE"'([[:space:]]|$)' <<<"$ALL_SKILL_BASH")"
 CVC_3ARG="$(grep -cE '^[[:space:]]*python3 '"$CVC_PATH_RE"' "\$PAYLOAD" "\$STATE" "\$AUDIT"' <<<"$ALL_SKILL_BASH")"
