@@ -679,7 +679,8 @@ t = re.sub(r'(?ms)^user_sourced_items:.*?(?=^\w|^---)', 'user_sourced_items: []\
 # **§2 본문의 항목 불릿도 함께 비운다.** bijection B 가 본문 ↔ frontmatter 를 대조하므로
 # 한쪽만 비우면 N1b 가 아니라 B 가 red 를 내고, 이 픽스처가 아무것도 시험하지 못한다.
 # 본문 형태는 `- 🗣 confirmed **C1** — <statement> ⟨S1⟩` 다. `✎` 추론 줄과 sentinel
-# 산문은 남긴다 — confirmed_zero_unsentineled 가 그것을 요구한다.
+# 줄은 남긴다. **sentinel 은 §2 본문이 아니라 frontmatter 에 산다** —
+# confirmed_zero_unsentineled 는 `_frontmatter(text)` 를 읽는다(Task 3 구현자가 실측).
 t = re.sub(r'(?m)^[-*] [🗣☑✎] (confirmed|provisional) \*\*[A-Z]\d+\*\* .*$\n', '', t)
 # §6 을 헤딩만 남기고 비운다
 t = re.sub(r'(?ms)(^## 6\. 사용자 원문\n).*?(?=^## 7\.)', r'\1\n', t)
@@ -690,7 +691,7 @@ a = re.sub(r'(?m)^payload:.*$', 'payload: interview-brief-zero-items.md', a)
 pathlib.Path('interview-brief-zero-items.audit.md').write_text(a, encoding='utf-8')
 PY
 ```
-그다음 `confirmed_zero_unsentineled` 를 만족시키는 sentinel 문구가 §2 에 남아 있는지 확인한다 — 없으면 게이트가 **다른 이유로** red 를 내고 이 픽스처는 N1b 를 시험하지 못한다. `python3 ../../scripts/check_brief.py gate interview-brief-zero-items.md` 로 실제 failure 목록을 읽어 확인한다.
+그다음 `confirmed_zero_unsentineled` 를 만족시키는 sentinel 이 **frontmatter 에** 남아 있는지 확인한다 — 없으면 게이트가 **다른 이유로** red 를 내고 이 픽스처는 N1b 를 시험하지 못한다. `python3 ../../scripts/check_brief.py gate interview-brief-zero-items.md` 로 실제 failure 목록을 읽어 확인한다.
 
 나머지 셋(`payload-s2` · `payload-empty-sec6` · `audit-drop-s5`)은 Task 2 Step 3 과 같은 관용구로 `interview-brief-valid` 쌍에서 파생한다.
 
