@@ -68,6 +68,18 @@
   setext underline이 아님을 잠근다 — T10/T11은 라벨 자기 줄만 보고 구조적으로 이 결함을
   못 본다.
 
+### Known gap (task-10, Step 10 mutation row 6)
+
+- **"번들을 한 번만 조립한다"는 SKILL.md의 규범 문장에 대응하는 기계 락이 없다.** 실측:
+  2-b에 `build_brief_bundle.py "$PAYLOAD" "$AUDIT" > "$BUNDLE"` 재조립 호출을 하나 더
+  삽입해도(2-a가 이미 만든 `$BUNDLE`을 codex 직전에 다시 덮어쓰는 모양) `test_reviewing_brief_skill.sh`·
+  `.claude/check-regression.sh`(83개 파일 전수) 어디도 RED가 나지 않았다 — critic과 codex가
+  "두 번 조립된 서로 다른 바이트"를 볼 수 있는 경로가 텍스트로는 검출되지 않는다는 뜻이다.
+  기존 U4 락(`n_bundle == n_fid` 개수 대조)은 codex 호출이 `"$BUNDLE"`을 인자로 받는지만
+  보고, 그 인자가 가리키는 파일이 critic이 본 것과 **같은 조립 결과**인지는 보지 못한다 —
+  텍스트 정적 분석으로는 "같은 변수 이름"과 "같은 바이트"를 구분할 수 없다. 실제 봉쇄는
+  현재 산문 규약(2-a에서 한 번만 조립하고 이후 블록은 재도출하지 않는다)에 의존한다.
+
 ## [0.44.0] — 2026-08-31
 
 ### Changed
