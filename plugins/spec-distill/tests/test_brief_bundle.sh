@@ -127,14 +127,23 @@ line_after() {  # $1 = 정확히 일치할 라벨 라인
 is_setext_underline() {
   [[ "$1" =~ ^-+[[:space:]]*$ ]] || [[ "$1" =~ ^=+[[:space:]]*$ ]]
 }
+# F5 (task-10 fix round 1): `line_after()`가 빈 문자열을 낼 때 — 라벨이 아예 없거나
+# 라벨이 마지막 줄인 경우 둘 다 — `is_setext_underline ""`는 false(`-+`/`=+`는 1개
+# 이상을 요구)라서 그대로 두면 "ok"로 읽힌다. T2/T3/T10/T11이 라벨 부재를 따로 잡지만,
+# 이 락 자신은 그것에 기대지 않고 스스로 자기 앵커를 읽었다는 양성 대조를 가져야 한다
+# (부재 검사가 코퍼스를 실제로 읽었다는 증거 없이 통과하는 것은 이 리포가 반복 학습한 결함).
 next_payload="$(line_after '<<<PAYLOAD>>>')"
-if is_setext_underline "$next_payload"; then
+if ! printf '%s' "$out" | grep -qx '<<<PAYLOAD>>>'; then
+  no "T13: PAYLOAD 라벨을 찾지 못해 다음 줄을 확인할 수 없다 (앵커 부재 — vacuous pass 방지)"
+elif is_setext_underline "$next_payload"; then
   no "T13: PAYLOAD 라벨 다음 줄이 '${next_payload}' — setext heading으로 승격될 수 있다"
 else
   ok "T13: PAYLOAD 라벨 다음 줄이 setext underline이 아니다 (헤딩 승격 없음)"
 fi
 next_audit="$(line_after '<<<AUDIT-VERBATIM>>>')"
-if is_setext_underline "$next_audit"; then
+if ! printf '%s' "$out" | grep -qx '<<<AUDIT-VERBATIM>>>'; then
+  no "T14: AUDIT-VERBATIM 라벨을 찾지 못해 다음 줄을 확인할 수 없다 (앵커 부재 — vacuous pass 방지)"
+elif is_setext_underline "$next_audit"; then
   no "T14: AUDIT-VERBATIM 라벨 다음 줄이 '${next_audit}' — setext heading으로 승격될 수 있다"
 else
   ok "T14: AUDIT-VERBATIM 라벨 다음 줄이 setext underline이 아니다 (헤딩 승격 없음)"

@@ -182,6 +182,20 @@ CR="$SD/agents/brief-critic.md"
 for cat in distortion omission insertion provenance_mislabel authority_syntax evidence_unsupported; do
   grep -qF "$cat" "$CR" && ok "critic: category '$cat' 명시" || no "critic: category '$cat' 누락"
 done
+# F3 (task-10 fix round 1, security) — critic agent 정의에 비신뢰-verbatim 경계 문장이
+# 있어야 한다. build_brief_codex_prompt.py(codex 축)는 이미 갖고 있지만, critic은
+# SKILL.md의 Agent() 호출로 dispatch되고 이 에이전트 정의 파일 자체가 그 경계를 명시하지
+# 않으면 이 축에는 injection 경계가 아예 없다 — merge_brief_review.py:88 이 기록한 대로
+# 번들 도입으로 주입 표면이 payload §6의 S1 1건에서 audit §6 전량으로 늘었는데도 그렇다.
+grep -qE '비신뢰' "$CR" \
+  && ok "F3: critic agent 정의에 비신뢰-verbatim 경계 문장 실재" \
+  || no "F3: critic agent 정의에 비신뢰-verbatim 경계 문장이 없다 — injection 경계 없이 원문을 받는다"
+# 경계 문장이 실제로 라벨 토큰(무엇이 비신뢰인지)에 근접해 있는지도 본다 — '비신뢰'가
+# 문서 어딘가에 있기만 한 것과, 그 문장이 실제로 라벨 토큰을 지목하는 것은 다른 사실이다.
+grep -qE '<<<AUDIT-VERBATIM>>>.{0,80}비신뢰|비신뢰.{0,80}<<<AUDIT-VERBATIM>>>' "$CR" \
+  && ok "F3: 그 경계 문장이 실제로 라벨 토큰(무엇이 비신뢰인지)을 지목한다" \
+  || no "F3: 비신뢰 언급은 있지만 라벨 토큰과 근접하게 묶여 있지 않다 — 무엇이 비신뢰인지 불명확"
+
 # critic 프롬프트에 payload 경로/디렉토리가 실리지 않는다 (AC2의 정적 절)
 grep -qF "docs/superpowers/interview/" "$CR" \
   && no "AC2: critic 프롬프트에 interview 디렉토리 문자열" || ok "AC2: critic에 interview 디렉토리 없음"
