@@ -47,6 +47,27 @@
   `git diff --stat` 으로 실변경 확인 후 새 L2 템플릿 행이 RED. (2) 템플릿 파일을
   통째로 비움 → L1 템플릿 행이 RED(부재 검사가 빈 파일에도 통과하는 공허함이 아님을
   확인). 둘 다 복원 후 `git status --porcelain plugins/spec-distill` 깨끗함.
+- **템플릿 L2 부재 행은 리터럴 grep 이라 다른 어휘의 상한을 놓친다 — `# max 160 chars,
+  strictly enforced` 처럼 영어로, 다른 표현으로 다시 써넣으면 옛 L2 는 GREEN 을 냈다**
+  (재리뷰 실증). `id`/`P21` 같은 값이 그 줄에 정당하게 들어 있어 숫자 기반 검사는
+  오탐하고, 상한 어휘를 두 언어로 열거하는 것도 조용히 낡는 추측이다 — 이 저장소는
+  이미 이 한계를 판정해 뒀다(`test_probe_sweep_residue.sh`): grep 오라클은 식별자와
+  인접 단어를 재지 의미를 재지 않으며, 그 너머를 지키는 것은 락이 아니라 리뷰의 일이다.
+  그래서 `templates/interview-brief-template.md` 의 C1 `statement:` 주석 **한 줄만**
+  부재가 아니라 **정확한 등가**로 고정했다 — `# 모델이 쓴 요약. P21 secret placeholder
+  치환` 과 정확히 같아야 하고, 그 줄에 무엇을 덧붙이든(어떤 언어의 상한이든, 숫자든)
+  등가가 깨져 red 가 된다. 앵커는 파일 위치(20행)나 "첫 statement: 매치"가 아니라
+  `id: C1` 항목 다음에 나오는 첫 statement: 줄이다 — 파일에 statement: 가 둘(C1/D2)
+  있고 주석은 C1 쪽에만 있어, 위치나 순서에 기대면 그 순서·개수가 바뀔 때 엉뚱한 줄을
+  잰다. mutation 4종으로 검증(각각 `git diff --stat` 으로 실변경 확인 후 실행,
+  복원 후 `git status --porcelain plugins/spec-distill` 깨끗함 확인): (1) 옛 한국어
+  cap 절 재삽입 → RED. (2) 다른 숫자·영어 cap(`# max 200 chars, strictly enforced`)
+  재삽입 → RED — 이것이 옛 L2 가 놓치던 바로 그 경우다. (3) 주석 전체 삭제(값만
+  bare) → RED. (4) 템플릿 전체를 비움 → L1 템플릿 행 RED(round 2와 동일, 재확인).
+  **이 등가 행이 못 미치는 것**: C1 statement 주석 한 줄 밖에서 상한이 재도입되거나
+  (예: D2 statement 주석, 혹은 이 파일 밖 다른 모델-지시 채널), 이 락이 안 읽는 완전히
+  다른 경로로 모델에게 상한이 재학습되는 경우는 여전히 이 락의 사각지대다 — 그 너머는
+  리뷰가 계속 맡는다.
 
 ## [0.41.0] — 2026-08-29
 

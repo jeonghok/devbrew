@@ -46,6 +46,31 @@ grep -qE '160자|≤ *160|160 ?자 이내' "$FIN" \
 grep -qE '160자|hard cap' "$TPL" \
   && no "L2: 템플릿에 상한 지시 잔존" || ok "L2: 템플릿 상한 지시 제거됨"
 
+# --- 층 2/equality : 템플릿 C1 statement 주석을 정확히 고정한다 ------------
+# 바로 위 부재 검사는 우리가 이미 아는 상한 어휘(`160자`/`hard cap`)만 잡는다 — 이
+# 저장소는 grep 오라클의 한계를 이미 판정해 뒀다(test_probe_sweep_residue.sh): grep은
+# 식별자와 인접 단어를 재지, 의미를 재지 않는다. `# max 200 chars, strictly enforced`
+# 처럼 다른 언어·다른 숫자·다른 표현으로 재도입된 상한은 그 어휘를 모르므로 통과한다.
+# 이 줄은 매 인터뷰가 brief를 쓸 때 실제로 읽는 살아있는 저작 지시문이라 — **부재가
+# 아니라 정확한 등가**로 고정해 둔다: 이 줄에 무엇을 덧붙이든(어떤 언어의 상한이든,
+# 숫자든) 등가가 깨져 red가 된다. 프로즈 위의 부재 검사는 재표현 방법을 전부 열거할
+# 수 없다는 것이 이 저장소의 판단이고, 그 너머를 지키는 것은 락이 아니라 리뷰의 일이다
+# — 그래서 이 한 줄만은 예외적으로 등가로 못박아 리뷰 부담을 덜어낸다.
+#
+# 앵커는 파일의 "첫 statement: 매치"가 아니라 `id: C1` 항목 **다음에** 나오는 첫
+# statement: 줄이다. 파일에는 statement: 가 둘(C1/D2) 있고 주석은 C1 쪽에만 있다 —
+# 위치(20행)나 등장 순서에 기대면 두 줄의 순서·개수가 바뀔 때 엉뚱한 줄을 잴 수 있다.
+c1_stmt_line="$(awk '/id: *C1/{f=1; next} f && /statement:/{print; exit}' "$TPL")"
+c1_comment="$(printf '%s' "$c1_stmt_line" | grep -oE '#.*$')"
+EXPECTED_C1_COMMENT='# 모델이 쓴 요약. P21 secret placeholder 치환'
+if [[ -z "$c1_stmt_line" ]]; then
+  no "L2/equality: 템플릿에서 C1 statement 줄을 못 찾았다 — 구조가 바뀌었다"
+elif [[ "$c1_comment" == "$EXPECTED_C1_COMMENT" ]]; then
+  ok "L2/equality: 템플릿 C1 statement 주석이 pinned 값과 정확히 일치한다"
+else
+  no "L2/equality: 템플릿 C1 statement 주석이 바뀌었다 — 실제: [$c1_comment] 기대: [$EXPECTED_C1_COMMENT]"
+fi
+
 # --- 층 3 : 행동 — 긴 statement 가 실제로 통과한다 ------------------------
 # rc(종료 코드)로 판정한다, 메시지 리터럴이 아니라. 'hard cap' grep 만으로는 이 층이
 # 사실상 L2의 중복이라 — 이름을 바꿔 재도입된 상한(예: "too long")은 게이트를 실제로
