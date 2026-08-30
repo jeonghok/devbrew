@@ -312,9 +312,21 @@ else
 fi
 
 # --- AC1 : 파이프라인 순서 + 진입 첫 액션 ------------------------------------
-grep -qE '^[[:space:]]*python3 "\$PR/scripts/check_verbatim_coverage\.py" "\$PAYLOAD" "\$STATE" "\$AUDIT"' "$SKILL" \
-  && ok "AC1: 완전성 검사 실행 라인 실재 (3인자 — audit 유추 없음)" \
-  || no "AC1: check_verbatim_coverage.py 3인자 호출 라인 부재 (2인자면 audit 이 코퍼스에서 빠진다)"
+# 존재(∃)가 아니라 지배(∀)를 건다: 스킬 전체(진입 첫 액션 + 2-c 재실행, 두 콜사이트)의
+# "실행되는"(펜스 안, `#` 주석 아닌) check_verbatim_coverage.py 호출 라인 수와 그중
+# 3인자(PAYLOAD STATE AUDIT) 호출 라인 수가 **같아야** 등식이 성립한다 — 콜사이트 하나만
+# 2인자로 되돌아가도 두 수가 벌어져 잡힌다(기존 단일 `grep -qE` 존재 검사는 *어딘가* 3인자
+# 라인이 있기만 하면 통과해, 다른 콜사이트가 2인자로 되돌아가도 green이었다 — 그 갭이 usage(64)
+# 로 파이프라인 중간에만 드러났다). `-gt 0`은 두 수가 우연히 똑같이 0이 되는(호출 자체가
+# 사라지는) vacuous-pass를 막는 양성 대조 — 등식만으로는 "0 == 0"도 통과해버린다. 콜사이트
+# 개수(현재 2)는 하드코딩하지 않는다 — 나중에 콜사이트가 하나 더 생기면 리터럴 상수는 그
+# 신규 라인을 검사 밖에 두거나 스퓨리어스 red를 낸다; 두 수 다 파일에서 직접 도출한다.
+ALL_SKILL_BASH="$(fence "$(cat "$SKILL")")"
+CVC_TOTAL="$(grep -cE '^[[:space:]]*python3 "\$PR/scripts/check_verbatim_coverage\.py"' <<<"$ALL_SKILL_BASH")"
+CVC_3ARG="$(grep -cE '^[[:space:]]*python3 "\$PR/scripts/check_verbatim_coverage\.py" "\$PAYLOAD" "\$STATE" "\$AUDIT"' <<<"$ALL_SKILL_BASH")"
+[[ "$CVC_TOTAL" -gt 0 && "$CVC_TOTAL" -eq "$CVC_3ARG" ]] \
+  && ok "AC1: check_verbatim_coverage.py 실행 라인 전부(${CVC_TOTAL}건) 3인자 — audit 유추 없음" \
+  || no "AC1: check_verbatim_coverage.py 호출 ${CVC_TOTAL}건 중 3인자는 ${CVC_3ARG}건 — 2인자로 되돌아간 콜사이트가 있다(usage(64)로 중간에만 드러난다)"
 grep -qE '첫 액션' "$SKILL" && ok "AC1: 진입 첫 액션 명시" || no "AC1: 첫 액션 명시 부재"
 
 # --- /qg iter-1 CRITICAL(증폭기) : rc 표 row 0이 advisories를 라우팅한다 -----

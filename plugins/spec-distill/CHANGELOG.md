@@ -51,6 +51,35 @@
   사이드카가 이미 `S2`를 §6에 갖고 있어 `D2.evidence: S2`는 union으로 계속 해석된다
   — attribution 무관성이라는 이 fixture의 원래 취지는 그대로다.
 
+- **`check_verbatim_coverage.py`가 3인자(`<payload> <state.local.md> <audit>`)로
+  바뀌었다** — `parse_payload_section6`을 `parse_section6(text, label)`로 개명해
+  payload·audit 양쪽에서 재사용하고, `parse_section6_union()`을 신설해 `S1`(payload)
+  ∪ `S2` 이상(audit)을 대조 코퍼스로 합친다. 한쪽 §6이 없으면 조용한 코퍼스 축소가
+  아니라 그대로 `ParseError`(호출자가 exit 3으로 매핑)를 낸다 — 부분 코퍼스로
+  "완전성 통과"를 내지 않는다. 같은 앵커가 payload·audit 양쪽에 있으면
+  append-only 위반(exit 1)이다 — 오늘 payload 내부 중복이 구조 위반인 것과 같은
+  이유이며, 집행이 이제 합집합 위에서 돈다. audit 경로는 **호출자가 명시**한다 —
+  `check_brief.py`의 `resolve_audit()`처럼 payload 파일명에서 유도하지 않는다(그
+  유도는 남의 audit 채택을 거절하는 목적이고, 여기는 반대로 무엇을 재료로 쓸지
+  유추가 실패했을 때 조용한 것이 더 나쁘다).
+- **`reviewing-brief` SKILL.md의 두 실행 라인**(진입 첫 액션, 2-c 충실도 재실행)이
+  `"$AUDIT"`를 세 번째 인자로 넘긴다. `$AUDIT`은 `$PAYLOAD`와 같은 층의 호출자
+  공급 입력이라 `## 상태`의 캐스팅 목록에 추가했다(스킬 자신이 정의하지 않는다).
+  `test_reviewing_brief_skill.sh`의 AC1 호출-라인 락도 2인자 접두 일치만으로는
+  3인자 호출을 구분 못 해(끝 앵커가 없어 부분 일치로 계속 통과) 3인자 전체를
+  요구하도록 좁혔다.
+- **`test_check_verbatim_coverage.sh`가 U2-T4(합집합) 4단언을 추가하고 기존
+  invocation을 전부 3인자로 이관했다.** `brief-verbatim-*` 12종 fixture에 audit
+  사이드카를 새로 만들었다(payload §6에서 `S1`을 제외한 전량을 떼어 옮김 — 아래
+  "Known gap"의 74+개 `interview-brief-*` legacy fixture와는 다른 파일군이라 그
+  일괄 이관 대상이 아니다). S2 이상을 겨냥하던 mutation 락(T2 절단 3종)은 대상이
+  audit 파일로 옮겨간 것을 따라 mutation 지점도 audit 사본으로 옮겼다 — payload는
+  그대로 두고 audit만 mutate해도 union 위에서 여전히 위반이 잡히는지가 이 락의
+  이빨이다. 교차 파일 중복 앵커(`brief-verbatim-dup-across.{md,audit.md}`)와 audit
+  §6 부재(`brief-verbatim-audit-no-sec6.audit.md`) 전용 fixture 2종을 손으로
+  추가했다. 사이드카 생성에 쓴 변환 스크립트(`mk-sidecar.py`)는 일회용이라
+  리포에 남기지 않았다(git-ignored `.claude/` 하위, 설계 §7.2).
+
 ### Known gap (하류 Task로 이관)
 
 - 이 변경 시점에는 audit §6이 아직 기존 fixture 74건에 채워지지 않았다 — 이 하나의
@@ -91,34 +120,6 @@
   갖춘 §6을 넣지 말고 출처 표기 블록이 빠진 상태(missing-attribution 성질)를
   그대로 보존해야 한다** — 안 그러면 T18은 영원히 통과하되 아무것도 재지 않는
   빈 락이 된다.
-- **`check_verbatim_coverage.py`가 3인자(`<payload> <state.local.md> <audit>`)로
-  바뀌었다** — `parse_payload_section6`을 `parse_section6(text, label)`로 개명해
-  payload·audit 양쪽에서 재사용하고, `parse_section6_union()`을 신설해 `S1`(payload)
-  ∪ `S2` 이상(audit)을 대조 코퍼스로 합친다. 한쪽 §6이 없으면 조용한 코퍼스 축소가
-  아니라 그대로 `ParseError`(호출자가 exit 3으로 매핑)를 낸다 — 부분 코퍼스로
-  "완전성 통과"를 내지 않는다. 같은 앵커가 payload·audit 양쪽에 있으면
-  append-only 위반(exit 1)이다 — 오늘 payload 내부 중복이 구조 위반인 것과 같은
-  이유이며, 집행이 이제 합집합 위에서 돈다. audit 경로는 **호출자가 명시**한다 —
-  `check_brief.py`의 `resolve_audit()`처럼 payload 파일명에서 유도하지 않는다(그
-  유도는 남의 audit 채택을 거절하는 목적이고, 여기는 반대로 무엇을 재료로 쓸지
-  유추가 실패했을 때 조용한 것이 더 나쁘다).
-- **`reviewing-brief` SKILL.md의 두 실행 라인**(진입 첫 액션, 2-c 충실도 재실행)이
-  `"$AUDIT"`를 세 번째 인자로 넘긴다. `$AUDIT`은 `$PAYLOAD`와 같은 층의 호출자
-  공급 입력이라 `## 상태`의 캐스팅 목록에 추가했다(스킬 자신이 정의하지 않는다).
-  `test_reviewing_brief_skill.sh`의 AC1 호출-라인 락도 2인자 접두 일치만으로는
-  3인자 호출을 구분 못 해(끝 앵커가 없어 부분 일치로 계속 통과) 3인자 전체를
-  요구하도록 좁혔다.
-- **`test_check_verbatim_coverage.sh`가 U2-T4(합집합) 4단언을 추가하고 기존
-  invocation을 전부 3인자로 이관했다.** `brief-verbatim-*` 12종 fixture에 audit
-  사이드카를 새로 만들었다(payload §6에서 `S1`을 제외한 전량을 떼어 옮김 — 위
-  "Known gap"의 74+개 `interview-brief-*` legacy fixture와는 다른 파일군이라 그
-  일괄 이관 대상이 아니다). S2 이상을 겨냥하던 mutation 락(T2 절단 3종)은 대상이
-  audit 파일로 옮겨간 것을 따라 mutation 지점도 audit 사본으로 옮겼다 — payload는
-  그대로 두고 audit만 mutate해도 union 위에서 여전히 위반이 잡히는지가 이 락의
-  이빨이다. 교차 파일 중복 앵커(`brief-verbatim-dup-across.{md,audit.md}`)와 audit
-  §6 부재(`brief-verbatim-audit-no-sec6.audit.md`) 전용 fixture 2종을 손으로
-  추가했다. 사이드카 생성에 쓴 변환 스크립트(`mk-sidecar.py`)는 일회용이라
-  리포에 남기지 않았다(git-ignored `.claude/` 하위, 설계 §7.2).
 
 ## [0.42.0] — 2026-08-31
 
