@@ -42,7 +42,7 @@ lines = p.read_text(encoding="utf-8").splitlines(True)
 p.write_text("".join(l for l in lines if l.strip() != f"## {hdr}"), encoding="utf-8")
 PY
   # exit code만 보면 13개 섹션-헤더 규칙 전부가 잠금 없이 산다: SECTIONS에서 항목을
-  # 통째로 지워도 landscape_uncited/skepticism_malformed 등 다른 §5 소비자가 여전히
+  # 통째로 지워도 landscape_unkeyed/skepticism_malformed 등 다른 §5 소비자가 여전히
   # red를 내 exit code가 안 흔들린다(리뷰 발견). 메시지가 그 헤더 문자열을 실제로
   # 담고 있는지까지 확인해야 "이 규칙이 이 헤더를 잡는다"는 주장에 이빨이 생긴다.
   out="$(python3 "$SCRIPT" gate "$TMPD/p.md" 2>/dev/null)"; rc=$?
