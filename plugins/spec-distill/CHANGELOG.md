@@ -48,37 +48,72 @@
   N2 단독 red), `interview-brief-dup-key`(두 §4 항목이 같은 키를 쓰고 audit §7엔
   1건만 선언 → GREEN, 집합 포함이 개수 결속이 아님을 증명). 셋 다 `interview-brief-valid`
   쌍에서 파생했고, 각각 정확히 한 축에서만 실패(혹은 통과)하도록 확인했다.
-
-### Known gap
-
-- **이 단위는 payload 67개 fixture + 템플릿 밖 여러 러너 픽스처를 의도적으로 RED로
-  남긴다.** #13이 URL 대신 «출처키»를 요구하게 되면서, 아직 URL만 갖고 «키»가 없는
-  기존 §4 항목 전량이 `unkeyed landscape entries`로 막힌다. 일괄 변환(URL → «키» +
-  audit §7 선언)은 다음 Task(N1a — payload에서 외부 URL 축출)의 Step 0가 맡는다.
-  `bash .claude/check-regression.sh` 기준 `test_check_brief.sh`(13개 assertion) ·
-  `test_brief_no_statement_cap.sh`(L3 1개, `interview-brief-valid.md` 파생 픽스처가
-  같은 원인으로 cascade)가 NOT-CLEAN이며, 이 RED는 그 하나의 원인으로 전량 귀속된다
-  (개별 확인 완료 — task-7-report.md 참고).
-- **task-7-brief.md Step 1의 네 번째 U3-T7 단언은 문면 그대로 구현할 수 없다.**
-  `interview-brief-no-landscape.md`(§4 항목 1건, URL도 «키»도 없음)에 대해
-  `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 gate`가 rc=0을 내야 한다고 적혀 있는데, 바로 위
-  기존 락("무인용 landscape가 종료를 차단 (R2/AC4)")이 **같은 파일**에 대해 web ON일
-  때 rc≠0을 요구하고, `landscape_unkeyed`는 web 상태와 무관하게 동일하게 판정한다
-  (설계상 의도 — 완화하지 않는다). 즉 이 미변경 픽스처의 `gate()`는 어떤
-  `DEVBREW_SPEC_DISTILL_DISABLE_WEB` 값에서도 GREEN이 될 수 없다 — «키»를 채우면 두
-  락 다 GREEN이 되어 기존 락이 지키던 R2/AC4가 깨진다. N2가 "kill switch 코드 없이도
-  구조적으로 통과한다"는 청구 자체는 참이므로, 테스트를 `landscape_keys_declared()`
-  직접 호출로 격리해 검증했다(`gate()`를 거치지 않음 — #13과의 혼선을 없앤다).
-- **`WEB_DISABLED_ADVISORY`의 공시 문면이 이제 절반만 참이다.** 이 문면은 여전히
-  "§4 출처 URL 인용 요구 + §5 verdict URL 요구가 완화됨"이라고 적는다. §5 절반(`skepticism_malformed`의
-  URL 요구)은 지금도 참이지만, §4 절반은 이 커밋으로 거짓이 됐다 — `landscape_unkeyed`(#13)는
-  더 이상 kill switch로 완화되지 않고, `landscape-keys` 서브커맨드도 그 상태에서 advisory를
-  내지 않는다(§4 관련 부분만 낡았다). 이 문면 자체를 지금 고치면 절반만 고쳐진 — 그리고 그래서
-  더 헷갈리는 — 문구를 남기게 되므로, 완전한 교정(실제 완화 범위 "하나"만 말하도록 재작성)은
-  다음 Task(N1a)의 Step 5가 명시적으로 맡는다. kill switch는 보안 컨트롤이고 그 공시가 실제
-  완화 범위와 어긋나는 상태를 침묵시키는 것 자체가 결함이므로(CLAUDE.md loud-degradation
-  원칙 — 이 파일의 R10/R12 락 주석이 이미 같은 근거를 든다), 다음 세션이 코드를 다시 스캔하지
-  않고도 이 사실을 여기서 찾게 남긴다.
+- **N1a 신설 — `payload_url_free(text)`.** payload에서 §6 사용자 원문을 뺀 나머지에
+  외부 URL(`https?://`)이 0개인지 본다(부재 술어). §6이 예외인 이유는 편의가 아니다 —
+  사용자가 자기 요청에 직접 쓴 URL을 지우는 것은 압축이 아니라 원문 훼손이고, 지우면
+  `check_verbatim_coverage.py`의 L2(정규화 후 containment)가 `not_contained`로 exit 1을
+  내 게이트가 **동시 만족 불가능**해진다. 이 검사의 이빨은 그 자신 안에 없다 — 대상 절을
+  통째로 지우면 공허하게 통과하므로 `find_missing_sections`(§4/§5 헤딩 삭제) ·
+  `landscape_present`(§4 항목 전부 삭제) · `tried_discarded_ok`(§5 항목 전부 삭제) 셋이
+  삭제 우회로를 막아야 이빨을 갖는다(세 검사 전부 확인 완료). web kill switch로 완화하지
+  않는다 — 웹이 꺼져도 payload에 URL을 넣을 이유가 생기지 않는다.
+- **payload §4·§5 fixture 일괄 변환 — URL → «출처키», 짝은 audit §7로.** 일회용
+  변환기(`.claude/urls-to-keys.py`, 커밋 대상 아님)로 payload 69개의 §4·§5 URL을
+  걷어냈다: §4는 기존 키가 없으면 도메인에서 유도한 «키»를 삽입하고 그 짝을 같은
+  stem의 audit §7에 append, 기존 키가 있으면 URL만 지우고 키·audit 선언은 그대로
+  둔다(멱등, 남의 판단 없이 내용 기반). §5는 URL만 지운다 — §5는 애초에 «키» 요구가
+  없고(#13/N2는 §4 전용), `skepticism_malformed`가 URL 제거 후 남는 텍스트를
+  statement로 재므로 §5에 키 텍스트를 끼워 넣으면 라벨 없는 줄의 "statement<10c"
+  판정을 우연히 반증할 위험이 있다 — 그 위험을 §5 키 삽입 자체를 안 하는 것으로
+  구조적으로 없앴다. **순서가 결과를 바꾼다(Ruling F2)**: 일괄 변환을 먼저 하고 나서
+  §0(b)의 의도적으로 깨진 픽스처를 그 위에 만들었다 — 거꾸로 하면 일괄 변환이
+  `url-in-sec4` 픽스처의 URL까지 지워 N1a 첫 단언이 거짓 GREEN이 된다.
+- **변환에서 손대지 않은 두 픽스처 — 리즈닝으로 찾음, 목록을 베끼지 않음.**
+  (1) `interview-brief-unkeyed-entry.md`는 §4 항목 하나가 무키임을 시험하는 유일한
+  픽스처다(U3-T7) — 일괄 변환이 순진하게 «키»를 붙이면 이 assertion이 거짓 GREEN이
+  된다는 것을 실행으로 확인한 뒤, 그 파일만 URL을 지우되 키는 붙이지 않고 audit §7
+  선언도 원복했다(N1a는 만족, #13은 여전히 red). (2) `interview-brief-web-disabled.md`는
+  URL이 원래 하나도 없어 변환기가 자연히 no-op이지만, "여기에 «키»를 손으로 붙여
+  AC8을 고치자"는 유혹이 F8("web 켜짐에서 무키 §4 항목은 red")을 거짓 GREEN으로
+  만든다는 것을 실행으로 확인했다 — v0.44.0 이후 이 두 락(F8·AC8)은 같은 파일로
+  동시에 만족될 수 없는 서로 다른 조건이 됐으므로(#13이 web 무관 ∀가 됐고 skepticism의
+  URL 요구도 없어져, 이 파일의 gate() 결과가 web 상태와 완전히 무관해졌다), AC8을
+  이 파일이 아니라 실제로 남은 유일한 완화 지점(sentinel-only.md, #12)으로 재배선해
+  둘을 함께 지켰다.
+- **`landscape_present`(#12) sentinel 경로를 `_web_disabled()`로 좁혔다.** v0.44.0
+  이전까지는 §4 본문에 "생략" 한 단어만 있어도 True였고 URL 요구가 그것을 덮어
+  무해했다 — N1a 체제에서는 이것이 **N1a의 공허 우회로를 여는 유일한 문**이 된다(§4에
+  "생략"만 쓰면 URL도 «키»도 없는 payload가 통과한다). 이제 web이 실제로 꺼져 있을
+  때만 sentinel이 유효하고, 켜져 있으면 항목 없음과 동일하게 취급한다. **내구성
+  대가**: 이 함수가 처음으로 환경변수에 의존한다 — web-off로 저술된 brief가 다른
+  세션에서 그 변수 없이 재게이트되면 RED가 된다. 그래서 audit 템플릿 `## 4. 게이트
+  실행 기록`에 `web: <enabled|disabled>` 칸을 추가해, 저술 시점의 환경을 아티팩트가
+  나르게 했다.
+- **`skepticism_malformed`(§5)에서 URL 요구를 지웠다.** `require_url`·`has_url`·
+  `no-url` 세 갈래를 제거 — payload 외부 URL은 이제 N1a가 §6 예외 하나만 두고 전면
+  금지하므로, 이 함수가 §5 항목에서 URL 유무를 스스로 요구/거부할 이유가 없다.
+  `verdict:`·statement·ST 참조 요구는 그대로 남는다. URL을 먼저 벗겨낸 뒤 ST<N>을
+  찾는 방어(`ln_no_url`)도 남긴다 — URL 요구와 무관하게, 우연히 낀 phantom ST 참조를
+  막는 별개의 defense다. **양성 대조**: §5 verdict 항목에서 URL을 빼면 GREEN이지만
+  같은 줄에서 `verdict:` 절까지 빼면(그 줄이 더 이상 verdict 항목으로 안 보여
+  audit §3의 ST 선언이 orphan이 된다) bijection A가 여전히 RED를 낸다 — 두 assertion을
+  짝으로 뒀다(T11/no-url).
+- **`WEB_DISABLED_ADVISORY` 문면을 실제 완화 범위로 재작성했다.** 이전 문면은
+  "§4 출처 URL 인용 요구 + §5 verdict URL 요구가 완화됨"이라 적었는데, 이 커밋 이후
+  그 둘 다 존재하지 않는다(§4는 키 요구로 바뀌어 완화되지 않고, §5 URL 요구는
+  방금 지웠다). 완화되는 것은 `landscape_present`(#12)의 sentinel 경로 **하나**뿐이라고
+  정확히 적었다. `main()`의 서브커맨드별 kill-switch advisory 분기(`skepticism` 전용)도
+  지웠다 — 이제 kill switch로 완화되는 단독 서브커맨드가 하나도 없다(유일한 완화
+  지점은 `gate()` 내부에만 있다). **양성/음성 대조 락**: `landscape_present`만
+  `_web_disabled()`를 부르고 `landscape_unkeyed`·`skepticism_malformed`·
+  `payload_url_free`는 부르지 않는다는 것을 함수 본문 도려내기로 확인한다(개수가
+  아니라 함수별 호출 지점 — advisory *배출*과 실제 *완화*를 혼동하지 않는다).
+- **fixture 6건 추가(U3-T8)** — `interview-brief-url-in-sec4`(§4에 키+URL 동시 →
+  N1a 단독 red), `interview-brief-url-in-s1` + `.audit.md` + `state-url-in-s1`(§6 S1
+  안의 URL → GREEN, 같은 URL을 §4로 옮기면 RED — N1a §6 예외와 L2 동시 만족 확인),
+  `interview-brief-no-sec4`/`sec4-header-only`/`sec5-no-entries`(N1a의 세 삭제
+  우회로 각각 단독 red), `interview-brief-sentinel-only`(§4 "생략" 한 단어만 —
+  web ON red / web OFF green).
 
 ## [0.43.0] — 2026-08-31
 

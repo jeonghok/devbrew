@@ -47,3 +47,6 @@ source: spec-distill conducting-interview v0.23.0
 ## 7. 확산 원자료
 
 - «example» — https://example.com — 픽스처용 선언
+- «nextjs-docs» — https://nextjs.org/docs/app — 픽스처 일괄 변환(urls-to-keys, N1a Step 0)
+- «jasonformat» — https://jasonformat.com/islands-architecture/ — 픽스처 일괄 변환(urls-to-keys, N1a Step 0)
+- «vercel-docs» — https://vercel.com/docs/functions — 픽스처 일괄 변환(urls-to-keys, N1a Step 0)

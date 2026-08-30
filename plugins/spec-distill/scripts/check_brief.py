@@ -28,9 +28,11 @@ Spec B AC17).
 몫이다(Spec B AC16 · E12).
 
 PN4: the steelman "verbatim" guarantee is checked by substring containment — each
-§5 기각 `verdict:` entry must contain >=1 URL + a >=10-char statement + a valid
-verdict — NOT exact-string match (avoids flakiness). Whether the steelman is a
-genuine counter-argument is not machine-checked at all (모델 + 독립 adversary의 몫).
+§5 기각 `verdict:` entry must contain a >=10-char statement + a valid verdict + a
+`ST<N>` 참조 — NOT exact-string match (avoids flakiness). v0.44.0부터 URL 요구는
+없다(N1a가 payload 외부 URL을 §6 예외만 두고 전면 금지하므로 여기서 따로 요구할
+이유가 없다). Whether the steelman is a genuine counter-argument is not
+machine-checked at all (모델 + 독립 adversary의 몫).
 
 CLI subcommands (all print JSON):
   check_brief.py sections <payload>            → {"missing": [...]}        (AC4)
@@ -55,16 +57,18 @@ from pathlib import Path
 
 
 WEB_DISABLED_ADVISORY = (
-    "[spec-distill] web 비활성(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1) — "
-    "§4 출처 URL 인용 요구 + §5 verdict URL 요구가 완화됨 (degraded)"
+    "[spec-distill] DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 — 이 게이트 실행에서 완화된 것은 "
+    "**하나**다: §4 External Landscape가 항목 없이 web-disabled sentinel로 만족될 수 있다. "
+    "payload 외부 URL 금지(N1a)·§4 «출처키» 요구(#13)·audit §7 결속(N2)은 완화되지 않는다."
 )
 
 
 def _web_disabled() -> bool:
-    """Graceful degradation (선재 동작 — 이 spec에 대응 AC 없음, T17이 검증): when web
-    research is killed, URLs cannot be obtained, so the gate relaxes the citation
-    requirement on §3/§4 (the SKILL's R2/R3 web-absent clauses). The judgment of
-    whether the (URL-less) skepticism is genuine stays manual."""
+    """Graceful degradation — v0.44.0 N1a 이후 이 스위치가 완화하는 것은 정확히 **하나**,
+    `landscape_present`의 §4 sentinel 경로(#12)뿐이다. §4 «출처키» 요구(#13)·§5 verdict
+    형식(URL 요구는 이 커밋에서 지웠다)·payload 외부 URL 금지(N1a)·audit §7 결속(N2)은
+    이 스위치로 완화되지 않는다 — 웹이 꺼져 있어도 출처를 말로 댈 수 있고, payload에
+    URL을 넣을 이유가 web 상태와 무관하게 생기지 않는다."""
     return os.environ.get("DEVBREW_SPEC_DISTILL_DISABLE_WEB") == "1"
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
@@ -551,6 +555,45 @@ def bijection_b_errors(text: str) -> list[str]:
 SOURCE_KEY_RE = re.compile(r"«([^»]+)»")
 
 
+def _body_excluding_section6(text: str) -> str:
+    """payload 본문에서 §6 사용자 원문을 뺀 것 — N1a의 코퍼스.
+
+    §6이 예외인 이유는 편의가 아니다. URL을 깎는 근거("링크가 권위로 읽혀 하류를
+    끌고 간다")는 **모델이 web sweep으로 가져온 링크**를 겨눈다. 사용자가 자기
+    요청에 직접 쓴 URL은 사용자가 하류에 전하려 한 것이고, 지우는 것은 압축이
+    아니라 원문 훼손이다. 게다가 지우면 게이트가 **동시 만족 불가능**해진다 —
+    `check_verbatim_coverage.py`의 `normalize()`가 맨 URL을 안 벗기므로 L2가
+    `not_contained`로 exit 1을 낸다. 유일한 탈출로인 P21 치환은 보안 컨트롤을
+    URL 세탁에 쓰는 것이고 그 statement의 L2를 advisory로 강등시킨다.
+    """
+    body = _body(text)
+    m = re.search(r"^##\s+6\.\s+사용자 원문\b", body, re.MULTILINE)
+    if not m:
+        return body
+    rest = body[m.end():]
+    nxt = re.search(r"^##\s+\d+\.", rest, re.MULTILINE)
+    return body[: m.start()] + (rest[nxt.start():] if nxt else "")
+
+
+def payload_url_free(text: str) -> list[str]:
+    """N1a — 모델이 저술한 payload 부분에 외부 URL(`https?://`)이 0개인가.
+
+    **부재 술어다.** 대상 절을 통째로 지우면 공허하게 통과하므로, 이 검사의 이빨은
+    이 함수 안에 없다 — #1 `find_missing_sections`(§4 절 삭제) · #12
+    `landscape_present`(§4 항목 전부 삭제) · #15 `tried_discarded_ok`(§5 항목 전부
+    삭제) 셋이 삭제 우회로를 막아야 이빨을 갖는다. "이 검사는 약하니 지우자" 류
+    리팩터가 이 배치에서 특히 위험하다.
+
+    **web kill switch로 완화하지 않는다.** 웹이 꺼졌다고 payload에 URL을 넣을 이유가
+    생기지 않는다 — 완화할 대상이 애초에 없다(`check_seed.py`의 같은 주석).
+
+    리포 내부 `file:line` 참조는 대상이 아니다 — 외부 권위가 아니라 고칠 대상을
+    가리키는 손가락이고, 하류가 실제로 열어야 하는 것이다.
+    """
+    return [ln.strip() for ln in _body_excluding_section6(text).splitlines()
+            if URL_RE.search(ln)]
+
+
 def landscape_unkeyed(text: str) -> list[str]:
     """#13 — §4 항목마다 «출처키»가 있는가. **∀다**(v0.44.0에서 URL→키로 술어 교체).
 
@@ -590,12 +633,24 @@ def landscape_keys_declared(payload_text: str, audit_text: str) -> list[str]:
 
 
 def landscape_present(text: str) -> bool:
-    """§4 External Landscape must carry >=1 entry, OR an explicit web-disabled
-    sentinel (graceful degradation). Header presence alone is not research (F3)."""
+    """§4는 항목 ≥1을 갖거나, **web이 실제로 꺼져 있을 때만** sentinel로 대신한다.
+
+    v0.44.0 이전까지는 §4 본문에 "생략" 한 단어만 있어도 True였고 URL 요구가 그것을
+    덮어서 무해했다 — 이제 N1a(§4/§5 URL 전면 금지) 체제에서는 이것이 **N1a의 공허
+    우회로를 여는 유일한 문**이 된다(§4에 "생략"만 쓰면 URL도 «출처키»도 없는 payload가
+    통과한다). 그래서 sentinel 경로를 `_web_disabled()`로 좁혔다 — web이 실제로 꺼져
+    있을 때만 sentinel이 유효하고, 켜져 있으면 sentinel 문구도 항목 없음과 동일하게
+    취급된다(F3 — 헤더/문구 존재가 조사를 대신하지 않는다).
+
+    **내구성 대가**: 이 함수가 처음으로 환경변수에 의존한다. web-off로 저술된 brief가
+    다른 세션에서 그 변수 없이 게이트를 다시 타면 RED가 된다. audit `## 4. 게이트 실행
+    기록`에 web-disabled 사유 칸을 둔 것은 그래서다 — 저술 시점의 환경을 아티팩트가
+    날라, 나중 실행이 자기 환경으로 남의 brief를 판정하지 않게 한다.
+    """
     sec = _section_text(text, "4", "External Landscape").strip()
     if not sec:
         return False
-    if re.search(r"\bN/?A\b|비활성|생략|web[ -]?disabled", sec, re.IGNORECASE):
+    if _web_disabled() and re.search(r"\bN/?A\b|비활성|생략|web[ -]?disabled", sec, re.IGNORECASE):
         return True
     return bool(_entry_lines(sec))
 
@@ -652,32 +707,34 @@ def attribution_block_missing(audit_text: str) -> bool:
 
 
 def skepticism_malformed(text: str) -> list[str]:
-    """§5의 `verdict:` 항목 형식 검사. PN4: 정확한 문자열 일치가 아니라 containment."""
-    require_url = not _web_disabled()
+    """§5의 `verdict:` 항목 형식 검사. PN4: 정확한 문자열 일치가 아니라 containment.
+
+    v0.44.0 N1a: URL 요구를 지웠다 — payload 외부 URL은 이제 N1a(`payload_url_free`)가
+    §6 예외 하나만 두고 전면 금지하므로, 이 함수가 §5 항목에서 URL 유무를 스스로
+    요구/거부할 이유가 없다(있으면 N1a가 별도로, 그리고 이 함수와 무관하게 red를 낸다).
+    `verdict:`·`statement`·ST 참조 요구는 그대로 남는다 — web kill switch는 이 셋 중
+    무엇도 완화하지 않는다(완화 대상이 URL 요구였는데 그게 없어졌다).
+    """
     bad: list[str] = []
     for ln in section5_entries(text):
         if "verdict:" not in ln:
             continue
-        has_url = bool(URL_RE.search(ln))
         has_verdict = bool(re.search(r"verdict:\s*(?:%s)\b" % "|".join(VALID_VERDICTS),
                                      ln, re.IGNORECASE))
-        # URL을 먼저 벗겨낸 뒤 ST<N>을 찾는다 — 안 그러면 URL 경로 조각에 우연히 낀
-        # word-bounded ST<N>(예: `/ST9/`)이 실제 참조인 양 요구를 충족시켜버린다.
+        # URL을 먼저 벗겨낸 뒤 ST<N>을 찾는다 — URL 요구는 지웠지만 이 방어는 남긴다:
+        # payload에 URL이 남아 있으면(N1a가 별도로 잡는다) 그 경로 조각에 우연히 낀
+        # word-bounded ST<N>(예: `/ST9/`)이 실제 참조인 양 요구를 충족시키는 것을 막는다.
         ln_no_url = URL_RE.sub("", ln)
         has_st = bool(ST_REF_RE.search(ln_no_url))
         stripped = _strip_bullet(VERDICT_CLAUSE_RE.sub("", ST_REF_RE.sub("", ln_no_url))).strip()
         has_stmt = len(stripped) >= 10
-        if not (has_verdict and has_stmt and has_st and (has_url or not require_url)):
+        if not (has_verdict and has_stmt and has_st):
             miss = []
             if not has_stmt:
                 miss.append("statement<10c")
-            if require_url and not has_url:
-                miss.append("no-url")
             if not has_verdict:
                 miss.append("no-verdict")
             if not has_st:
-                # web kill switch는 URL 요구만 완화한다 — ST 참조는 파일-축 drift-guard라
-                # 웹 가용성과 무관하다.
                 miss.append("no-ST-ref")
             bad.append(f"{ln[:60]} :: {','.join(miss)}")
     return bad
@@ -836,6 +893,9 @@ def gate(path: Path) -> int:
     sec4_absent = any(m.startswith("4.") for m in miss)
     if not sec4_absent and not landscape_present(text):
         failures.append("External Landscape empty (no entries and no web-disabled sentinel)")
+    urls = payload_url_free(text)
+    if urls:
+        failures.append(f"payload에 외부 URL {len(urls)}건 (§6 사용자 원문 제외): {urls[:3]}")
     unk = landscape_unkeyed(text)
     if unk:
         failures.append(f"unkeyed landscape entries: {len(unk)}")
@@ -854,11 +914,11 @@ def gate(path: Path) -> int:
 
     ok = not failures
     advisories: list[str] = []
-    # 킬 스위치가 verdict를 뒤집었으면 **반드시** 말한다. `_web_disabled()`는 §4 인용 요구와 §5
-    # verdict URL 요구를 동시에 완화해 같은 brief를 red에서 green으로 바꾸는데, 지금까지 stdout·
-    # stderr 어디에도 흔적이 없었다 — 이전 세션에서 export한 env가 남아 있으면 이후 모든 brief가
-    # 이유 없이 통과한다. CLAUDE.md는 graceful degradation에 loud logging을 요구한다. 이 PR이
-    # 추가한 advisories 채널이 바로 그 자리다.
+    # 킬 스위치가 verdict를 뒤집을 수 있으면 **반드시** 말한다. v0.44.0 N1a 이후
+    # `_web_disabled()`가 완화하는 것은 `landscape_present`의 §4 sentinel 경로(#12) 하나
+    # 뿐이지만, 그 하나조차 흔적 없이 완화되면 이전 세션에서 export한 env가 남아 있을 때
+    # 이후 모든 brief가 이유 없이 통과한다. CLAUDE.md는 graceful degradation에 loud
+    # logging을 요구한다. advisories 채널이 그 자리다.
     if _web_disabled():
         advisories.append(WEB_DISABLED_ADVISORY)
     for a in advisories:
@@ -873,14 +933,11 @@ def main(argv: list[str]) -> int:
         print("usage: check_brief.py <subcommand> <brief.md>", file=sys.stderr)
         return 64
     sub, path = argv[1], Path(argv[2])
-    # `gate`는 advisories JSON으로 알리고, `_web_disabled()`가 결과를 바꾸는 **나머지**
-    # 서브커맨드는 stderr로 알린다. 한쪽만 loud하면 다른 쪽을 쓰는 사람은 완화된 결과를
-    # 완화된 줄 모른 채 받는다 — 킬 스위치는 보안 컨트롤이고 침묵은 그 자체가 결함이다.
-    # landscape-keys(`landscape_unkeyed`)는 v0.44.0부터 더 이상 kill switch로 완화되지
-    # 않는다 — 웹이 꺼져도 출처를 말로 댈 수 있어 이 목록에서 뺀다. skepticism은 아직
-    # §5 verdict의 URL 요구를 갖고 있어(다음 단위가 지운다) 남긴다.
-    if sub == "skepticism" and _web_disabled():
-        print(WEB_DISABLED_ADVISORY, file=sys.stderr)
+    # v0.44.0 N1a: `skepticism`(§5 URL 요구)도 지워 kill switch로 완화되는 **단독
+    # 서브커맨드가 이제 하나도 없다** — `landscape-keys`는 앞선 #13 개명에서, `skepticism`은
+    # 이 커밋에서 빠졌다. 남은 유일한 완화 지점은 `gate()` 내부의 `landscape_present`
+    # (#12 sentinel 경로)뿐이고, `gate`는 이미 advisories JSON으로 그것을 알린다 —
+    # 별도 서브커맨드 stderr 알림이 더는 필요 없다(알릴 완화가 없다).
     if sub == "gate":
         return gate(path)
     try:

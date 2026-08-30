@@ -63,7 +63,7 @@ user_sourced_items:
 (1항목 = 1줄, **«출처키» 필수** + [취함|피함|중립] + 이유. 그 키가 가리키는 원자료
  URL은 audit `## 7. 확산 원자료`에 선언한다 — payload에는 키만 남는다.)
 
-- ... «example» — https://example.com — [취함] — 이유
+- ... «example» — [취함] — 이유
 
 ## 5. 기각 · Blind Spots
 
@@ -71,7 +71,7 @@ user_sourced_items:
  `verdict:`를 가진 항목은 audit §3의 `ST<N>` 참조가 필수다.)
 
 - 기각 — <시도한 방향> → <버린 이유>
-- 기각 — <시도한 방향> → <버린 이유> — https://evidence.example — verdict: defended — ST1
+- 기각 — <시도한 방향> → <버린 이유> — verdict: defended — ST1
 - 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>
 
 ## 6. 사용자 원문

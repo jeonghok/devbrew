@@ -38,7 +38,7 @@ source: spec-distill conducting-interview v0.23.0
 
 ## 4. 게이트 실행 기록
 
-- check_brief.py gate — <pass|fail> (<YYYY-MM-DD>)
+- check_brief.py gate — <pass|fail> (<YYYY-MM-DD>) — web: <enabled|disabled>
 - check_verbatim_coverage.py — <exit 0|1|3|4> (<YYYY-MM-DD>)
 
 ## 5. 프로세스 로그

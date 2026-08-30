@@ -43,13 +43,13 @@ TTFP를 줄이는 것이 진짜 목표다. SPA 전환은 수단이었지 목표�
 
 ## 4. External Landscape
 
-- Next.js app-router SSR — https://nextjs.org/docs/app — [취함] — 데이터 형태와 부합
+- Next.js app-router SSR «nextjs-docs» — [취함] — 데이터 형태와 부합
 
 ## 5. 기각 · Blind Spots
 
 - 기각 — 전체 클라이언트 SPA → cold load에서 TTFP 회귀
-- 기각 — islands architecture 우선 도입 → https://jasonformat.com/islands-architecture/ — verdict: defended — ST1
-- 위험 — 숨은 가정 | SSR 호스트가 항상 저지연: cold start 시 TTFP 역전 — https://vercel.com/docs/functions
+- 기각 — islands architecture 우선 도입 — verdict: defended — ST1
+- 위험 — 숨은 가정 | SSR 호스트가 항상 저지연: cold start 시 TTFP 역전
 
 ## 6. 사용자 원문
 - **S1** 🗣 최초 요청:

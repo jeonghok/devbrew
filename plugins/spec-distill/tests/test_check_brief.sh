@@ -143,10 +143,12 @@ python3 "$SCRIPT" gate "$FX/interview-brief-unchallenged.md" >/dev/null 2>&1 \
   && no "형식 미달 verdict 항목이 통과됨 (R3/AC5)" \
   || ok "형식 미달 verdict 항목이 종료를 차단 (R3/AC5)"
 
-# PN4: containment 검사가 누락 URL을 지목
-python3 "$SCRIPT" skepticism "$FX/interview-brief-unchallenged.md" 2>/dev/null | grep -q 'no-url' \
-  && ok "PN4: skepticism containment가 누락 URL을 플래그" \
-  || no "PN4: skepticism containment가 누락 URL을 못 잡음"
+# PN4: containment 검사가 형식 미달을 지목한다. v0.44.0 N1a에서 URL 요구를
+# 지웠으므로(payload 외부 URL은 이제 N1a가 전면 금지한다) 이 fixture(`verdict:` 뒤
+# 유효 단어 없음)의 결손은 더 이상 no-url이 아니라 no-verdict다.
+python3 "$SCRIPT" skepticism "$FX/interview-brief-unchallenged.md" 2>/dev/null | grep -q 'no-verdict' \
+  && ok "PN4: skepticism containment가 형식 미달(no-verdict)을 플래그" \
+  || no "PN4: skepticism containment가 형식 미달을 못 잡음"
 
 # AC2: 섹션 부재 → red
 python3 "$SCRIPT" gate "$FX/interview-brief-missing-section.md" >/dev/null 2>&1 \
@@ -179,13 +181,23 @@ python3 "$SCRIPT" gate "$FX/interview-brief-bad-frontmatter.md" >/dev/null 2>&1 
   && no "F9-A: 잘못된 frontmatter가 통과됨 (AC1)" \
   || ok "F9-A: 잘못된 frontmatter가 종료를 차단 (AC1)"
 
-# F8/AC8: web 켜짐 → URL 없는 §4/§5는 red / kill switch → 완화
+# F8: web 켜짐 → 무키 §4 항목은 여전히 red. #13(landscape_unkeyed, ∀)은 web 상태와
+# 무관하므로 `interview-brief-web-disabled.md`(§4 항목에 URL도 «키»도 없음)를 여기서
+# **고치면 안 된다** — 고치면(«키»를 붙이면) #13이 web 무관하게 항상 통과하게 되고,
+# 그때 skepticism도 이미 URL 요구가 없으므로(v0.44.0 N1a) 이 fixture는 web 상태와
+# 무관하게 **항상 green**이 돼 이 F8 자체가 거짓이 된다(반증: 로컬에서 «키» 삽입 실험
+# → F8/AC8 동시 만족 불가능해짐을 확인했다). 그래서 이 fixture는 그대로 둔다.
 python3 "$SCRIPT" gate "$FX/interview-brief-web-disabled.md" >/dev/null 2>&1 \
-  && no "F8: web 켜짐 상태에서 URL 없는 항목이 통과됨" \
-  || ok "F8: web 켜짐 상태에서 URL 없는 항목이 차단됨"
-DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-web-disabled.md" >/dev/null 2>&1 \
-  && ok "AC8: web 비활성 시 URL 요구 완화" \
-  || no "AC8: web 비활성 시 URL 요구가 완화돼야 한다"
+  && no "F8: web 켜짐 상태에서 무키 §4 항목이 통과됨" \
+  || ok "F8: web 켜짐 상태에서 무키 §4 항목이 차단됨 (#13, web 무관 불변)"
+
+# AC8: v0.44.0 이후 유일한 완화 대상은 #12(landscape_present)의 sentinel 경로뿐이다 —
+# §4 인용/URL 요구도, §5 verdict URL 요구도 더는 존재하지 않아 완화할 게 없다. 그래서
+# AC8은 web-disabled.md가 아니라 그 실제 완화 경로를 시험하는 sentinel-only.md로 확인한다
+# (U3-T8 블록과 같은 사실을 다른 이름 아래 한 번 더 고정 — AC8은 역사적 라벨로 남긴다).
+DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-sentinel-only.md" >/dev/null 2>&1 \
+  && ok "AC8: web 비활성 시 §4 sentinel 경로가 완화된다 (#12, 유일한 완화)" \
+  || no "AC8: web 비활성 시 sentinel 경로가 완화돼야 한다"
 
 # AC10 / C9: Coverage Ledger는 audit에서 검증된다
 python3 "$SCRIPT" gate "$FX/interview-brief-floor-open.md" >/dev/null 2>&1 \
@@ -349,10 +361,12 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-borrowed-audit.md" 2>/dev/nul
 # 이전 세션의 export가 셸에 남아 있으면 이후 모든 brief가 이유 없이 통과한다. 두 방향을 다
 # 확인해야 이빨이 있다: 켜져 있을 때 나오고, **꺼져 있을 때는 안 나온다**(negative half —
 # 없으면 advisory를 무조건 붙이는 구현도 통과한다).
+# v0.44.0: 문면이 바뀌어 'web 비활성' 리터럴이 더는 안 나온다(Step 5) — 새 문면에
+# 안정적으로 남는 표현('완화된 것은')으로 앵커를 옮긴다.
 out_off="$(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-no-landscape.md" 2>/dev/null)"
 out_on="$(python3 "$SCRIPT" gate "$FX/interview-brief-valid.md" 2>/dev/null)"
-{ printf '%s' "$out_off" | grep -q 'web 비활성' \
-    && ! printf '%s' "$out_on" | grep -q 'web 비활성'; } \
+{ printf '%s' "$out_off" | grep -q '완화된 것은' \
+    && ! printf '%s' "$out_on" | grep -q '완화된 것은'; } \
   && ok "R10: web 킬 스위치가 verdict를 완화하면 advisory로 알린다 (양방향)" \
   || no "R10: web 킬 스위치 완화가 조용하거나, 꺼져 있을 때도 advisory가 나온다"
 
@@ -366,20 +380,17 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-copied-audit.md" 2>/dev/null)
   && ok "R11: 유도 경로에 복사된 남의 audit 내용 → red (payload 역참조)" \
   || no "R11: 남의 audit 내용을 sidecar 자리에 복사해 통과했다"
 
-# R12: `gate` 말고 `_web_disabled()`가 결과를 바꾸는 다른 서브커맨드도 완화를 알려야 한다.
-# stdout은 JSON 계약이므로 advisory는 **stderr**로 간다 — 여기 섞이면 소비자 파싱이 깨진다.
-# 양방향: 꺼져 있을 때 나오고, 켜져 있을 때는 안 나온다.
-# v0.44.0: `landscape-keys`(구 landscape-citations)는 더 이상 이 목록에 없다 —
-# `landscape_unkeyed`가 kill switch로 완화되지 않기 때문이다(#13). 이 락은 이제
-# **남은 유일한 소비자** `skepticism`으로 같은 계약을 확인한다.
-err_off="$(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" skepticism "$FX/interview-brief-no-landscape.md" 2>&1 1>/dev/null)"
-err_on="$(python3 "$SCRIPT" skepticism "$FX/interview-brief-no-landscape.md" 2>&1 1>/dev/null)"
-out_off="$(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" skepticism "$FX/interview-brief-no-landscape.md" 2>/dev/null)"
-{ printf '%s' "$err_off" | grep -q 'web 비활성' \
-    && ! printf '%s' "$err_on" | grep -q 'web 비활성' \
-    && printf '%s' "$out_off" | grep -q '^{'; } \
-  && ok "R12: 단독 서브커맨드도 web 완화를 stderr로 알린다 (stdout JSON 무오염)" \
-  || no "R12: 단독 서브커맨드가 조용히 완화되거나 advisory가 stdout을 오염시켰다"
+# R12: v0.44.0 N1a 이후 `skepticism`도 §5 URL 요구를 잃어(이 커밋) kill switch로
+# 완화되는 **단독 서브커맨드가 이제 하나도 없다** — `landscape-keys`는 앞선 #13
+# 개명에서, `skepticism`은 이 커밋에서 빠졌다(main()의 서브커맨드별 advisory 분기를
+# 통째로 지웠다). 유일한 완화 지점은 `gate()` 내부 `landscape_present`(#12)뿐이고
+# 그건 이미 R10이 확인한다. 여기서는 skepticism 단독 호출이 이제 **kill switch와
+# 무관**함을 확인한다 — 두 실행의 출력이 같고, 어느 쪽도 advisory를 내지 않는다.
+out_off="$(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" skepticism "$FX/interview-brief-no-landscape.md" 2>&1)"
+out_on="$(python3 "$SCRIPT" skepticism "$FX/interview-brief-no-landscape.md" 2>&1)"
+{ [[ "$out_off" == "$out_on" ]] && ! printf '%s' "$out_off" | grep -q '완화된 것은'; } \
+  && ok "R12: skepticism 단독 호출은 더 이상 kill switch에 좌우되지 않는다 (URL 요구 삭제)" \
+  || no "R12: skepticism이 여전히 kill switch로 완화되거나 침묵 완화가 남아 있다"
 
 # R13: 같은 쌍에 대해 `gate`와 `coverage`가 같은 답을 내야 한다. `coverage`는 페어링을 건너뛰어
 # gate가 거부하는 쌍을 {"failures": []}로 답했다 — 두 진입점이 같은 질문에 다른 답을 내면 느슨한
@@ -555,11 +566,30 @@ python3 "$SCRIPT" gate "$FX/interview-brief-steelman-empty.md" >/dev/null 2>&1 \
   && ok "T12: steelman 양쪽 공집합은 sentinel 없이 green (R4 sentinel과 다른 조건)" \
   || no "T12: steelman 공집합은 sentinel을 요구받지 않는다"
 
-# T11: verdict 항목 결손 → red ×4
-for v in no-url no-token short no-st; do
+# T11: verdict 항목 결손 → red ×3 (no-token/short/no-st — 이 셋은 URL과 무관한 결손이다)
+for v in no-token short no-st; do
   python3 "$SCRIPT" gate "$FX/interview-brief-verdict-$v.md" >/dev/null 2>&1 \
     && no "T11/$v: 결손 verdict 항목이 통과됨" || ok "T11/$v: 결손 verdict 항목 → red"
 done
+
+# T11/no-url: v0.44.0 N1a 이후 §5 verdict 항목에서 URL 제거는 GREEN이어야 한다(§4·§5
+# URL 요구를 지웠다 — payload 외부 URL은 N1a가 §6 예외 하나만 두고 전면 금지하고, 그건
+# 여기서 무관하다). **양성 대조 없는 GREEN-기대 assertion은 죽은 락과 구분이 안 되므로**
+# (설계 §7.1), 같은 줄에서 `verdict:` 절까지 지우면 여전히 red임을 함께 확인한다 — 이번엔
+# skepticism_malformed가 아니라 bijection A가 잡는다: 그 줄이 더 이상 verdict 항목으로
+# 안 보이므로 audit §3의 ST1이 orphan(판정 없는 steelman)이 된다.
+python3 "$SCRIPT" gate "$FX/interview-brief-verdict-no-url.md" >/dev/null 2>&1 \
+  && ok "T11/no-url(양성): §5 verdict 항목에서 URL만 제거 → green (URL 요구 삭제)" \
+  || no "T11/no-url(양성): URL 없는 verdict 항목이 여전히 막힌다 — URL 요구가 안 지워짐"
+cp "$FX/interview-brief-verdict-no-url.md" "$TMPD/vnu.md"
+cp "$FX/interview-brief-verdict-no-url.audit.md" "$TMPD/vnu.audit.md"
+sed -i.bak 's|^audit_file:.*|audit_file: vnu.audit.md|' "$TMPD/vnu.md"
+sed -i.bak 's| → verdict: defended — ST1| → ST1|' "$TMPD/vnu.md"
+rm -f "$TMPD/vnu.md.bak"
+out="$(python3 "$SCRIPT" gate "$TMPD/vnu.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '판정 없는 steelman'; } \
+  && ok "T11/no-url(음성): 같은 줄에서 verdict: 절까지 지우면 여전히 red (bijection A)" \
+  || no "T11/no-url(음성): verdict: 제거가 조용히 통과했다 — 양성만으론 죽은 락과 구분 안 됨"
 
 # FIX4 (리뷰 라운드): URL 경로 조각에 우연히 낀 word-bounded ST<N>(예: `/ST9/`)는
 # 실제 참조로 치지 않는다 — has_st/refs 모두 URL을 먼저 벗겨낸 뒤 계산해야 한다.
@@ -681,5 +711,49 @@ print(cb.landscape_keys_declared(payload, audit))
 [[ "$n2_out" == "[]" ]] \
   && ok "U3-T7: web-off 실제 형상 → N2 는 공집합 ⊆ 무엇이든으로 자체 통과 (kill switch 코드 불필요)" \
   || no "U3-T7: web-off 가 red — N2 가 구조적 면제를 못 한다 ($n2_out)"
+
+# --- U3-T8: N1a 부재 축 + §6 예외 ------------------------------------------
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-url-in-sec4.md" 2>&1)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '외부 URL'; } \
+  && ok "U3-T8: payload §4 에 URL → red (N1a)" || no "U3-T8: 부재 축이 안 문다"
+
+# §6 S1 안의 URL 은 예외다 — 사용자가 자기 요청에 쓴 것이다
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-url-in-s1.md" 2>&1)"; rc=$?
+[[ $rc -eq 0 ]] && ok "U3-T8: §6 S1 안의 URL → GREEN (§2.3 축 2 예외)" \
+  || { printf '%s\n' "$out"; no "U3-T8: §6 예외가 없다 — L2 와 동시 만족 불가능해진다"; }
+
+# 같은 픽스처가 verbatim 검사와도 동시 만족돼야 한다 (이 예외의 존재 이유)
+python3 "$REPO_ROOT/plugins/spec-distill/scripts/check_verbatim_coverage.py" "$FX/interview-brief-url-in-s1.md" \
+  "$FX/state-url-in-s1.md" "$FX/interview-brief-url-in-s1.audit.md" >/dev/null 2>&1
+[[ $? -eq 0 ]] && ok "U3-T8: 같은 픽스처가 verbatim exit 0 (N1a 예외 ↔ L2 동시 만족)" \
+  || no "U3-T8: N1a 예외와 L2 가 동시 만족되지 않는다 — 예외의 존재 이유가 무너졌다"
+
+# 삭제 우회로 셋 (N1a 의 이빨은 N1a 안에 없다)
+for fx in no-sec4 sec4-header-only sec5-no-entries; do
+  python3 "$SCRIPT" gate "$FX/interview-brief-$fx.md" >/dev/null 2>&1
+  [[ $? -ne 0 ]] && ok "U3-T8: 우회 $fx → red" || no "U3-T8: 우회 $fx 가 통과 — N1a 가 공허해진다"
+done
+
+# sentinel 조임: web ON 에서 「생략」 한 단어만은 안 된다
+python3 "$SCRIPT" gate "$FX/interview-brief-sentinel-only.md" >/dev/null 2>&1
+[[ $? -ne 0 ]] && ok "U3-T8: web ON + sentinel only → red (#12 조임)" \
+  || no "U3-T8: sentinel 구멍이 열려 있다 — N1a 의 공허 우회로"
+DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-sentinel-only.md" >/dev/null 2>&1
+[[ $? -eq 0 ]] && ok "U3-T8: web OFF + sentinel only → GREEN (정당한 degrade 를 막지 않는다)" \
+  || no "U3-T8: 조임이 정당한 degrade 까지 막는다"
+
+# U3-T8(양성/음성): _web_disabled() 를 실제로 부르는 함수가 landscape_present 하나뿐인가.
+# 개수(grep -c)는 advisory 배출까지 세어 공시와 완화를 혼동하므로, 함수 본문만 도려내
+# 지점을 대조한다 (양성 + 음성 짝 — 그래야 "아무것도 안 걸림"으로 통과하는 죽은 락이 아니다).
+body_of() { awk -v f="$1" '$0 ~ "^def "f"\\(" {p=1;next} p && /^def |^[A-Z_]+ = / {exit} p' \
+  "$REPO_ROOT/plugins/spec-distill/scripts/check_brief.py"; }
+printf '%s' "$(body_of landscape_present)" | grep -q '_web_disabled()' \
+  && ok "U3-T8(양성): landscape_present 가 _web_disabled() 를 부른다 — 완화되는 그 하나" \
+  || no "U3-T8(양성): 조임이 사라졌다 — sentinel 구멍이 무조건 열려 있다"
+for fn in landscape_unkeyed skepticism_malformed payload_url_free; do
+  printf '%s' "$(body_of $fn)" | grep -q '_web_disabled()' \
+    && no "U3-T8(음성): $fn 이 여전히 _web_disabled() 로 완화된다 — 공시가 「하나」라고 말하는데 거짓" \
+    || ok "U3-T8(음성): $fn 은 완화되지 않는다"
+done
 
 finish
