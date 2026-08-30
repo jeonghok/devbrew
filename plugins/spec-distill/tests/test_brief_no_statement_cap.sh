@@ -13,6 +13,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
 SCRIPT="$SD/scripts/check_brief.py"
 FIN="$SD/skills/conducting-interview/references/finishing.md"
+TPL="$SD/templates/interview-brief-template.md"
 fail=0
 ok()  { printf '  ok  %s\n' "$1"; }
 no()  { printf '  NO  %s\n' "$1"; fail=1; }
@@ -24,6 +25,13 @@ grep -q 'def user_sourced_errors' "$SCRIPT" \
 grep -qF 'user_statements' "$FIN" \
   && ok "L1: finishing.md 를 실제로 읽었다" \
   || no "L1: finishing.md 코퍼스를 못 읽었다"
+# 앵커는 `next_phase: superpowers:brainstorming` — 이 템플릿에 고유하고 안정적인 줄이며,
+# 아래 L2 가 찾는 상한 리터럴(`160자`/`hard cap`)과 같은 줄이 아니다. 같은 줄이면 파일을
+# 통째로 비웠을 때 L1 과 L2 가 같은 원인으로 동시에 (NO/ok) 반응해 양성 대조가 아무것도
+# 증명하지 못한다.
+grep -qF 'next_phase: superpowers:brainstorming' "$TPL" \
+  && ok "L1: 템플릿(interview-brief-template.md)을 실제로 읽었다" \
+  || no "L1: 템플릿 코퍼스를 못 읽었다"
 
 # --- 층 2 : 부재 — 상한의 모든 표현이 사라졌다 -----------------------------
 grep -q 'STATEMENT_MAX' "$SCRIPT" \
@@ -32,6 +40,11 @@ grep -qE '160자|hard cap' "$SCRIPT" \
   && no "L2: 상한 메시지 잔존" || ok "L2: 상한 메시지 제거됨"
 grep -qE '160자|≤ *160|160 ?자 이내' "$FIN" \
   && no "L2: finishing.md 에 상한 지시 잔존" || ok "L2: finishing.md 상한 지시 제거됨"
+# 출하 템플릿(interview-brief-template.md)이 매 인터뷰가 실제로 읽는 살아있는 소스다
+# (finishing.md Step A가 이 파일을 지정) — 이 코퍼스를 안 보면 락은 자신이 지운 지시를
+# 이 파일이 도로 가르치고 있어도 GREEN을 낸다.
+grep -qE '160자|hard cap' "$TPL" \
+  && no "L2: 템플릿에 상한 지시 잔존" || ok "L2: 템플릿 상한 지시 제거됨"
 
 # --- 층 3 : 행동 — 긴 statement 가 실제로 통과한다 ------------------------
 # rc(종료 코드)로 판정한다, 메시지 리터럴이 아니라. 'hard cap' grep 만으로는 이 층이

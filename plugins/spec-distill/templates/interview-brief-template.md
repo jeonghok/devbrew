@@ -17,7 +17,7 @@ user_sourced_items:
   - id: C1
     source: verbatim          # verbatim(발화 그대로) | chosen(선택지 선택)
     status: provisional       # confirmed | provisional | open
-    statement: "<C1 제약 한 줄>"   # 160자 이내(hard) — 모델이 쓴 요약. P21 secret placeholder 치환
+    statement: "<C1 제약 한 줄>"   # 모델이 쓴 요약. P21 secret placeholder 치환
     evidence: S1              # §6의 어느 발화에서 나왔는가 — 필수
   - id: D2
     source: chosen

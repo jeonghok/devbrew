@@ -31,6 +31,22 @@
   (`errs.append(f"{iid}: id 형식`)은 현재 `check_brief.py` 에 존재하지 않아 최초
   실행은 무변경 no-op 이었다(diff 없음) — anchor 를 `ev = it.get("evidence")` 줄로
   교체해 실제 변경을 확인한 뒤 재실행했다.
+- **출하 템플릿(`templates/interview-brief-template.md:20`)이 상한을 도로 가르치고
+  있었다.** `finishing.md` Step A가 이 템플릿을 매 인터뷰가 읽는 살아있는 소스로
+  지정하므로, 코드에서 지운 `STATEMENT_MAX` 를 이 파일의 주석(`# 160자 이내(hard) —
+  ...`)이 모든 미래 brief 작성에 재교육하고 있었다 — 브리프의 "Files to Modify" 목록
+  누락. `160자 이내(hard) — ` 절만 제거했고 나머지 주석(모델이 쓴 요약이라는 것,
+  P21 secret placeholder 치환)은 그대로 남겼다 — 그 부분은 여전히 유효하다. 이 편집이
+  템플릿 자신의 `check_brief.py gate` rc(=1, `audit_file` sidecar 불일치 — 상한과
+  무관한 기존 사유)와 T-TPL 스위트 결과를 바꾸지 않음을 확인했다.
+  `test_brief_no_statement_cap.sh` 의 코퍼스도 넓혔다 — 이전에는 `check_brief.py`
+  와 `finishing.md` 만 읽어 이 템플릿 잔존을 못 봤다(재실행해도 GREEN 이었다). L1 에
+  템플릿 전용 양성 대조 행(`next_phase: superpowers:brainstorming` 앵커 — L2 가 찾는
+  상한 리터럴과 다른 줄이라 둘이 같은 원인으로 동시에 반응하지 않는다)을, L2 에 템플릿
+  상한 부재 행을 추가했다. mutation 으로 검증: (1) 템플릿에 cap 절을 재삽입 →
+  `git diff --stat` 으로 실변경 확인 후 새 L2 템플릿 행이 RED. (2) 템플릿 파일을
+  통째로 비움 → L1 템플릿 행이 RED(부재 검사가 빈 파일에도 통과하는 공허함이 아님을
+  확인). 둘 다 복원 후 `git status --porcelain plugins/spec-distill` 깨끗함.
 
 ## [0.41.0] — 2026-08-29
 
