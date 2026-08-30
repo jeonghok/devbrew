@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Spec B T1·T2·T3·T4·T19·T20·T31(행위) — check_verbatim_coverage.py.
 # AC10(L1) · AC11(L2 + P21 강등 + N1–N5 순서 + NFC) · AC12(exit 1/3/4 분리 + 예외 계약) · AC14(부분)
+# v0.43.0(U2-T4) — payload §6엔 S1만, audit §6엔 S2 이상. 스크립트는 3인자
+# (payload state audit)를 받고 합집합 위에서 판정한다. rc_of/json_of도 3인자다.
 # Run: bash plugins/spec-distill/tests/test_check_verbatim_coverage.sh
 set -u -o pipefail
 
@@ -9,37 +11,39 @@ SCRIPT="$REPO_ROOT/plugins/spec-distill/scripts/check_verbatim_coverage.py"
 FX="$REPO_ROOT/plugins/spec-distill/tests/fixtures"
 
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
-rc_of() { python3 "$SCRIPT" "$1" "$2" >/dev/null 2>&1; echo $?; }
-json_of() { python3 "$SCRIPT" "$1" "$2" 2>/dev/null; }
+rc_of() { python3 "$SCRIPT" "$1" "$2" "$3" >/dev/null 2>&1; echo $?; }
+json_of() { python3 "$SCRIPT" "$1" "$2" "$3" 2>/dev/null; }
 
 test -f "$SCRIPT" || { no "스크립트 부재: $SCRIPT"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1; }
 
 # --- 정상 경로 -------------------------------------------------------------
-[[ "$(rc_of "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md")" == "0" ]] \
+[[ "$(rc_of "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-ok.audit.md")" == "0" ]] \
   && ok "정상 fixture → exit 0" || no "정상 fixture가 exit 0이 아님"
 
 # --- T1 / AC10 : L1 ---------------------------------------------------------
-rc="$(rc_of "$FX/brief-verbatim-missing-anchor.md" "$FX/state-verbatim-ok.md")"
+rc="$(rc_of "$FX/brief-verbatim-missing-anchor.md" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-missing-anchor.audit.md")"
 [[ "$rc" == "1" ]] && ok "T1: S<N> 앵커 누락 → exit 1" || no "T1: 앵커 누락이 exit 1이 아님 (rc=$rc)"
 # json_of의 스크립트는 위반 시 exit 1을 낸다; `set -o pipefail` 하에서 `cmd | grep` 형태로
 # 바로 연결하면 파이프 전체 상태가 grep(성공)이 아니라 cmd(1)로 오염돼 항상 FAIL로 오분류된다.
 # 변수 캡처 후 grep해 파이프를 피한다.
-out="$(json_of "$FX/brief-verbatim-missing-anchor.md" "$FX/state-verbatim-ok.md")"
+out="$(json_of "$FX/brief-verbatim-missing-anchor.md" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-missing-anchor.audit.md")"
 grep -q '"missing_ids": \["S2"\]' <<<"$out" \
   && ok "T1: missing_ids에 S2" || no "T1: missing_ids가 S2를 담지 않음"
 
 # --- T2 / AC11·AC14 : L2 ----------------------------------------------------
-rc="$(rc_of "$FX/brief-verbatim-summarized.md" "$FX/state-verbatim-ok.md")"
+rc="$(rc_of "$FX/brief-verbatim-summarized.md" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-summarized.audit.md")"
 [[ "$rc" == "1" ]] && ok "T2: 요약 치환 → exit 1" || no "T2: 요약 치환이 exit 1이 아님 (rc=$rc)"
 # (동일 pipefail 회피 — 위 T1 주석 참조)
-out="$(json_of "$FX/brief-verbatim-summarized.md" "$FX/state-verbatim-ok.md")"
+out="$(json_of "$FX/brief-verbatim-summarized.md" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-summarized.audit.md")"
 grep -q '"not_contained": \["S2"\]' <<<"$out" \
   && ok "T2: not_contained에 S2" || no "T2: not_contained가 S2를 담지 않음"
 
-# --- T2 mutation: 맨앞·중간·맨끝 3곳 절단이 모두 red ------------------------
+# --- T2 mutation: 맨앞·중간·맨끝 3곳 절단이 모두 red (v0.43.0: S2 본문은 audit 쪽) ---
+# S2 본문이 §6 합집합에서 payload가 아니라 audit으로 옮겨갔다. payload(S1만)는 그대로 두고
+# audit 사본만 절단한다 — 그래도 절단이 union 위에서 여전히 red를 내는지가 이 락의 이빨이다.
 for cut in head mid tail; do
-  tmpb="$(mktemp)" || exit 1
-  python3 - "$FX/brief-verbatim-ok.md" "$tmpb" "$cut" <<'PY'
+  tmpa="$(mktemp)" || exit 1
+  python3 - "$FX/brief-verbatim-ok.audit.md" "$tmpa" "$cut" <<'PY'
 import sys
 src, dst, where = sys.argv[1], sys.argv[2], sys.argv[3]
 t = open(src, encoding="utf-8").read()
@@ -50,19 +54,19 @@ new = {"head": '"에이전트 + codex, 계약별 분리"',
 assert old in t, "fixture drift: 대상 문장을 찾지 못함"
 open(dst, "w", encoding="utf-8").write(t.replace(old, new))
 PY
-  rc="$(rc_of "$tmpb" "$FX/state-verbatim-ok.md")"
-  [[ "$rc" == "1" ]] && ok "T2 mutation($cut): 부분 절단 → exit 1" \
+  rc="$(rc_of "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" "$tmpa")"
+  [[ "$rc" == "1" ]] && ok "T2 mutation($cut): 부분 절단(audit 쪽 S2) → exit 1" \
                      || no "T2 mutation($cut): 절단이 통과했다 (rc=$rc)"
-  rm -f "$tmpb"
+  rm -f "$tmpa"
 done
 
 # --- T31(행위) N1↔N3 순서: 멀티라인 인용이 통과해야 한다 --------------------
-rc="$(rc_of "$FX/brief-verbatim-multiline.md" "$FX/state-verbatim-multiline.md")"
+rc="$(rc_of "$FX/brief-verbatim-multiline.md" "$FX/state-verbatim-multiline.md" "$FX/brief-verbatim-multiline.audit.md")"
 [[ "$rc" == "0" ]] && ok "T31: 멀티라인 인용 → exit 0 (N1이 N3보다 먼저)" \
                    || no "T31: 멀티라인 인용이 red — N3가 N1보다 먼저 적용된 징후 (rc=$rc)"
 
 # --- T31(행위) NFC: 전각/기호는 접히지 않는다 (NFKC면 잘못 통과) ------------
-rc="$(rc_of "$FX/brief-verbatim-nfkc.md" "$FX/state-verbatim-nfkc.md")"
+rc="$(rc_of "$FX/brief-verbatim-nfkc.md" "$FX/state-verbatim-nfkc.md" "$FX/brief-verbatim-nfkc.audit.md")"
 [[ "$rc" == "1" ]] && ok "T31: ①↔1 불일치 → exit 1 (NFC 유지)" \
                    || no "T31: ①↔1이 통과했다 — NFKC 징후 (rc=$rc)"
 
@@ -71,7 +75,7 @@ rc="$(rc_of "$FX/brief-verbatim-nfkc.md" "$FX/state-verbatim-nfkc.md")"
 # 여기서는 advisory 문구가 **어느 쪽 때문인지**를 말하는지만 본다(사용자가 Step B에서
 # 원인을 구분할 수 있어야 한다).
 for pair in placeholder placeholder-payload-only placeholder-state-only; do
-  out="$(json_of "$FX/brief-verbatim-$pair.md" "$FX/state-verbatim-$pair.md")"
+  out="$(json_of "$FX/brief-verbatim-$pair.md" "$FX/state-verbatim-$pair.md" "$FX/brief-verbatim-$pair.audit.md")"
   grep -qE 'P21 placeholder 관여\((양쪽|state|payload)\)' <<<"$out" \
     && ok "T3($pair): advisory가 관여 측(양쪽/state/payload)을 지목" \
     || no "T3($pair): advisory가 어느 쪽 때문인지 말하지 않는다"
@@ -80,11 +84,12 @@ done
 # --- T3 mutation: 양쪽 모두에서 placeholder 토큰 제거 → red 승격 ------------
 # (state만 벗기면 payload의 bare <REDACTED>가 독자적으로 매치해 OR가 절대 red로
 # 못 넘어간다 — 양쪽을 다 벗겨야 "제거하면 실제로 escalate한다"는 이빨이 성립한다.)
+# S1은 payload에 그대로 있으므로(v0.43.0에도 옮겨가지 않음) payload 쪽 mutation은 그대로다.
 tmps="$(mktemp)" || exit 1
 tmpb="$(mktemp)" || exit 1
 sed 's/<REDACTED:api-key>/plainsecret/' "$FX/state-verbatim-placeholder.md" > "$tmps"
 sed 's/<REDACTED>/unknown-value/' "$FX/brief-verbatim-placeholder.md" > "$tmpb"
-rc="$(rc_of "$tmpb" "$tmps")"
+rc="$(rc_of "$tmpb" "$tmps" "$FX/brief-verbatim-placeholder.audit.md")"
 [[ "$rc" == "1" ]] && ok "T3 mutation: 양쪽 토큰 제거 → advisory가 red로 승격" \
                    || no "T3 mutation: 양쪽에서 토큰을 제거해도 통과했다 (rc=$rc)"
 rm -f "$tmps" "$tmpb"
@@ -129,20 +134,20 @@ sys.exit(0 if mod["P21_PLACEHOLDER_RE"].search(os.environ["TOK"]) else 1)
 PY
 
 # --- T4 · T19 / AC12 : exit 1 ≠ exit 3 -------------------------------------
-rc3="$(rc_of "$FX/brief-verbatim-ok.md" "$FX/nonexistent-state-file.md")"
+rc3="$(rc_of "$FX/brief-verbatim-ok.md" "$FX/nonexistent-state-file.md" "$FX/brief-verbatim-ok.audit.md")"
 [[ "$rc3" == "3" ]] && ok "T4: state 부재 → exit 3" || no "T4: state 부재가 exit 3이 아님 (rc=$rc3)"
-rc1="$(rc_of "$FX/brief-verbatim-summarized.md" "$FX/state-verbatim-ok.md")"
+rc1="$(rc_of "$FX/brief-verbatim-summarized.md" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-summarized.audit.md")"
 [[ "$rc1" != "$rc3" ]] && ok "T19: 위반($rc1) ≠ 검사불가($rc3)" \
                        || no "T19: 두 실패가 같은 코드다 — 호출자가 차단과 degrade를 구분 못 함"
 [[ "$rc1" != "0" && "$rc3" != "0" ]] && ok "T19: 둘 다 non-zero" || no "T19: 실패가 0을 낸다"
 # (동일 pipefail 회피 — 위 T1 주석 참조: 이 호출은 exit 3을 낸다)
-out="$(python3 "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/nonexistent-state-file.md" 2>/dev/null)"
+out="$(python3 "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/nonexistent-state-file.md" "$FX/brief-verbatim-ok.audit.md" 2>/dev/null)"
 grep -q '"advisories"' <<<"$out" \
   && ok "T4: 검사불가에도 JSON + advisory (조용한 통과 없음)" || no "T4: 검사불가에 advisory 없음"
 
 # --- 빈 state 파일도 검사불가(3)로 --------------------------------------
 tmpe="$(mktemp)" || exit 1; : > "$tmpe"
-rc="$(rc_of "$FX/brief-verbatim-ok.md" "$tmpe")"
+rc="$(rc_of "$FX/brief-verbatim-ok.md" "$tmpe" "$FX/brief-verbatim-ok.audit.md")"
 [[ "$rc" == "3" ]] && ok "T4: 빈 state → exit 3" || no "T4: 빈 state가 exit 3이 아님 (rc=$rc)"
 rm -f "$tmpe"
 
@@ -151,6 +156,7 @@ rm -f "$tmpe"
 # 않았는데 호출자는 0을 "위반 없음"으로 매핑했다. 각 케이스는 payload 쪽에 실제 왜곡
 # (S1 본문이 state의 text와 완전히 다름)을 함께 심어, 검사가 *돌기만 했다면* exit 1이
 # 났어야 하는 입력이다 — 그래야 "0이 아니다"가 아니라 "검사가 눈감았다"를 잡는다.
+# audit 인자는 mal_payload가 S1만 선언하므로(S2+ 없음) 무관한 ok.audit.md로 채운다.
 mal_payload="$(mktemp)" || exit 1
 cat > "$mal_payload" <<'MALP'
 ---
@@ -174,7 +180,7 @@ for case in missing-text no-id empty-text normalized-empty; do
     empty-text)       printf -- '---\nuser_statements:\n  - id: S1\n    text: ""\n---\n' > "$tmpm" ;;
     normalized-empty) printf -- '---\nuser_statements:\n  - id: S1\n    text: "**"\n---\n' > "$tmpm" ;;
   esac
-  rc="$(rc_of "$mal_payload" "$tmpm")"
+  rc="$(rc_of "$mal_payload" "$tmpm" "$FX/brief-verbatim-ok.audit.md")"
   [[ "$rc" == "3" ]] && ok "A2($case): 판독 불가 원장 → exit 3 (검사불가)" \
                      || no "A2($case): exit 3이 아님 (rc=$rc) — 대조되지 않은 statement가 clean으로 집계된다"
   rm -f "$tmpm"
@@ -183,7 +189,7 @@ done
 # 이게 없으면 위 셋은 "무엇을 넣어도 3"이라는 이빨 없는 assert와 구별되지 않는다.
 tmpok="$(mktemp)" || exit 1
 printf -- '---\nuser_statements:\n  - id: S1\n    text: "원문 그대로의 문장"\n---\n' > "$tmpok"
-rc="$(rc_of "$mal_payload" "$tmpok")"
+rc="$(rc_of "$mal_payload" "$tmpok" "$FX/brief-verbatim-ok.audit.md")"
 [[ "$rc" == "1" ]] && ok "A2(통제): 정상 원장 + 같은 왜곡 payload → exit 1 (위반)" \
                    || no "A2(통제): 정상 원장이 exit 1을 내지 않는다 (rc=$rc) — 위 exit 3들이 무조건 3인 것과 구별 불가"
 rm -f "$tmpok" "$mal_payload"
@@ -191,7 +197,7 @@ rm -f "$tmpok" "$mal_payload"
 # --- §6 섹션 부재 → 검사불가(3). 구조는 check_brief.py 소관 --------------
 tmpn="$(mktemp)" || exit 1
 awk '!/^## 6\./{print} /^## 6\./{skip=1} skip&&/^## 7\./{skip=0;print}' "$FX/brief-verbatim-ok.md" > "$tmpn"
-rc="$(rc_of "$tmpn" "$FX/state-verbatim-ok.md")"
+rc="$(rc_of "$tmpn" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-ok.audit.md")"
 [[ "$rc" == "3" ]] && ok "§6 부재 → exit 3 (위반 아님)" || no "§6 부재가 exit 3이 아님 (rc=$rc)"
 rm -f "$tmpn"
 
@@ -207,9 +213,9 @@ spec.loader.exec_module(mod)
 def boom(*a, **k):
     raise RuntimeError("injected")
 mod.run = boom
-sys.exit(mod.main(["cvc", sys.argv[2], sys.argv[3]]))
+sys.exit(mod.main(["cvc", sys.argv[2], sys.argv[3], sys.argv[4]]))
 PY
-python3 "$tmpd/inject.py" "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" >/dev/null 2>&1
+python3 "$tmpd/inject.py" "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-ok.audit.md" >/dev/null 2>&1
 rc=$?
 [[ "$rc" == "4" ]] && ok "T20: 주입된 예외 → exit 4 (1이 아님)" \
                    || no "T20: 주입된 예외가 exit $rc — 예외가 '위반 발견'으로 오분류된다"
@@ -228,27 +234,28 @@ rm -rf "$tmpd"
 
 # --- C1 : P21 관여 → 절대 clean이 아니다 ------------------------------------
 for pair in placeholder placeholder-payload-only placeholder-state-only; do
-  rc="$(rc_of "$FX/brief-verbatim-$pair.md" "$FX/state-verbatim-$pair.md")"
+  rc="$(rc_of "$FX/brief-verbatim-$pair.md" "$FX/state-verbatim-$pair.md" "$FX/brief-verbatim-$pair.audit.md")"
   [[ "$rc" == "3" ]] \
     && ok "C1($pair): P21 관여 → exit 3 (검사 불가, record 의무)" \
     || no "C1($pair): exit $rc — 0이면 조용한 통과, 1이면 정당한 redaction 오차단"
-  out="$(json_of "$FX/brief-verbatim-$pair.md" "$FX/state-verbatim-$pair.md")"
+  out="$(json_of "$FX/brief-verbatim-$pair.md" "$FX/state-verbatim-$pair.md" "$FX/brief-verbatim-$pair.audit.md")"
   grep -q 'P21' <<<"$out" \
     && ok "C1($pair): advisory가 P21 관여를 명시" \
     || no "C1($pair): 어느 쪽 때문에 검사 불가인지 advisory에 없다"
 done
 
 # 세탁 시도(의미 반전 + 토큰) — 통과(0)해서는 안 된다.
-rc="$(rc_of "$FX/brief-verbatim-p21-laundering.md" "$FX/state-verbatim-ok.md")"
+rc="$(rc_of "$FX/brief-verbatim-p21-laundering.md" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-p21-laundering.audit.md")"
 [[ "$rc" != "0" ]] \
   && ok "C1 세탁(변조): exit $rc — clean이 아니다" \
   || no "C1 세탁(변조): exit 0 — 토큰 하나로 §6을 다시 써도 통과한다"
 
 # **누락** 세탁 — iter-2가 적발한 경로. 한 단어만 남기고 나머지를 토큰으로 덮는다.
+# S1은 payload에 그대로 있으므로 대상 문장은 여전히 payload 안에서 찾는다.
 tmpo="$(mktemp)" || exit 1
 sed 's|> "브리프에 리뷰를 붙이고 싶다"|> "브리프에 <REDACTED:rest>"|' \
     "$FX/brief-verbatim-ok.md" > "$tmpo"
-rc="$(rc_of "$tmpo" "$FX/state-verbatim-ok.md")"
+rc="$(rc_of "$tmpo" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-ok.audit.md")"
 [[ "$rc" != "0" ]] \
   && ok "C1 세탁(누락): exit $rc — 원문 대부분을 토큰으로 지워도 clean이 아니다" \
   || no "C1 세탁(누락): exit 0 — 완전성 검사가 완전성을 검사하지 않는다"
@@ -257,7 +264,7 @@ rm -f "$tmpo"
 # 본문이 통째로 placeholder — 대조할 리터럴이 0인데 clean이면 총체적 소거가 통과한다.
 tmpw="$(mktemp)" || exit 1
 sed 's|> "브리프에 리뷰를 붙이고 싶다"|> "<REDACTED:whole>"|' "$FX/brief-verbatim-ok.md" > "$tmpw"
-rc="$(rc_of "$tmpw" "$FX/state-verbatim-ok.md")"
+rc="$(rc_of "$tmpw" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-ok.audit.md")"
 [[ "$rc" != "0" ]] \
   && ok "C1 총체 소거: exit $rc — 본문이 토큰뿐이어도 clean이 아니다" \
   || no "C1 총체 소거: exit 0 — 문장 전체를 지우고 통과한다"
@@ -267,7 +274,7 @@ rm -f "$tmpw"
 tmps="$(mktemp)" || exit 1
 sed 's|> "브리프에 리뷰를 붙이고 싶다"|> "브리프에 <REDACTED:x> 붙이고 싶다" (맥락: 1라운드)|' \
     "$FX/brief-verbatim-ok.md" > "$tmps"
-rc="$(rc_of "$tmps" "$FX/state-verbatim-ok.md")"
+rc="$(rc_of "$tmps" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-ok.audit.md")"
 [[ "$rc" != "1" ]] \
   && ok "C1 오차단 방지: 맥락이 덧붙은 payload가 위반으로 잡히지 않음 (exit $rc)" \
   || no "C1 오차단 방지: 정당한 superset payload를 위반으로 차단했다"
@@ -295,7 +302,8 @@ MUTEOF
 mutres="$(python3 "$MUT_PY" "$SCRIPT" "$tmpm")"
 if [[ "$mutres" == "MUTATED" ]]; then
   python3 "$tmpm" "$FX/brief-verbatim-placeholder-payload-only.md" \
-                  "$FX/state-verbatim-placeholder-payload-only.md" >/dev/null 2>&1
+                  "$FX/state-verbatim-placeholder-payload-only.md" \
+                  "$FX/brief-verbatim-placeholder-payload-only.audit.md" >/dev/null 2>&1
   rcm=$?
   [[ "$rcm" == "0" ]] \
     && ok "C1 mutation: 강등 플래그 제거 → exit 0(조용한 통과) 재현, 락에 이빨 있음" \
@@ -306,7 +314,7 @@ fi
 rm -f "$tmpm" "$MUT_PY"
 
 # --- C2 : §6 앵커 중복은 '검사 불가(3)'가 아니라 위반(1) --------------------
-rc="$(rc_of "$FX/brief-verbatim-dup-anchor.md" "$FX/state-verbatim-ok.md")"
+rc="$(rc_of "$FX/brief-verbatim-dup-anchor.md" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-dup-anchor.audit.md")"
 [[ "$rc" == "1" ]] \
   && ok "C2: §6 앵커 중복 → exit 1 (전 statement skip 아님)" \
   || no "C2: 앵커 중복이 exit $rc — 한 줄 중복으로 완전성 게이트 전체가 꺼진다"
@@ -314,21 +322,44 @@ rc="$(rc_of "$FX/brief-verbatim-dup-anchor.md" "$FX/state-verbatim-ok.md")"
 # C2 순서: state가 판독 불가여도 payload의 구조 위반이 선점당하면 안 된다(iter-2 적발).
 tmpb="$(mktemp)" || exit 1
 grep -v 'user_statements:' "$FX/state-verbatim-ok.md" | grep -v '^- id:\|^  source:\|^  round:\|^  text:' > "$tmpb"
-rc="$(rc_of "$FX/brief-verbatim-dup-anchor.md" "$tmpb")"
+rc="$(rc_of "$FX/brief-verbatim-dup-anchor.md" "$tmpb" "$FX/brief-verbatim-dup-anchor.audit.md")"
 [[ "$rc" == "1" ]] \
   && ok "C2 순서: state 판독 실패가 구조 위반을 선점하지 않음" \
   || no "C2 순서: exit $rc — state에서 키 하나만 빼면 hard block이 soft continue로 되돌아간다"
 rm -f "$tmpb"
 
+# --- U2-T4: 코퍼스 합집합 --------------------------------------------------
+# S1 은 payload, S2+ 는 audit. 한쪽만 보면 반대쪽 전량이 missing 이 된다.
+python3 "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" \
+      "$FX/brief-verbatim-ok.audit.md" >/dev/null 2>&1; rc=$?
+[[ "$rc" == "0" ]] && ok "U2-T4: 합집합 정상 경로 exit 0" || no "U2-T4: 합집합 정상 경로가 exit $rc"
+
+# audit 을 안 주면 usage — 유추하지 않는다
+python3 "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" >/dev/null 2>&1; rc=$?
+[[ "$rc" == "64" ]] && ok "U2-T4: audit 인자 없으면 usage(64) — stem 유추 없음" \
+  || no "U2-T4: 2인자 호출이 exit $rc — 유추로 audit 을 찾고 있는가"
+
+# 같은 앵커가 양쪽에 있으면 append-only 위반 (구조 위반 exit 1)
+python3 "$SCRIPT" "$FX/brief-verbatim-dup-across.md" "$FX/state-verbatim-ok.md" \
+      "$FX/brief-verbatim-dup-across.audit.md" >/dev/null 2>&1; rc=$?
+[[ "$rc" == "1" ]] && ok "U2-T4: S5 가 payload·audit 양쪽 → exit 1 (합집합 위 append-only)" \
+  || no "U2-T4: 교차 중복 앵커가 exit $rc — 집행이 합집합 위에서 안 돈다"
+
+# 한쪽 절 부재는 조용한 코퍼스 축소가 아니다
+python3 "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" \
+      "$FX/brief-verbatim-audit-no-sec6.audit.md" >/dev/null 2>&1; rc=$?
+[[ "$rc" == "3" ]] && ok "U2-T4: audit §6 부재 → exit 3 (검사 불가, 조용한 통과 아님)" \
+  || no "U2-T4: audit §6 이 없는데 exit $rc — 축소된 코퍼스로 '완전성 통과'를 냈는가"
+
 # --- C3 : 확정 위반이 뒤 항목의 불확정에 밀려 강등되지 않는다 ---------------
-rc="$(rc_of "$FX/brief-verbatim-mixed.md" "$FX/state-verbatim-mixed.md")"
+rc="$(rc_of "$FX/brief-verbatim-mixed.md" "$FX/state-verbatim-mixed.md" "$FX/brief-verbatim-mixed.audit.md")"
 [[ "$rc" == "1" ]] \
   && ok "C3: 위반(S1) + 불확정(S2) 혼합 → exit 1 (위반이 불확정보다 우선)" \
   || no "C3: 혼합 케이스가 exit $rc — 확정 위반이 강등돼 차단되지 않는다"
-out="$(json_of "$FX/brief-verbatim-mixed.md" "$FX/state-verbatim-mixed.md")"
+out="$(json_of "$FX/brief-verbatim-mixed.md" "$FX/state-verbatim-mixed.md" "$FX/brief-verbatim-mixed.audit.md")"
 grep -q '"not_contained": \["S1"\]' <<<"$out" \
   && ok "C3: 강등 대신 S1 위반이 보존됨" || no "C3: S1 위반이 결과에서 사라졌다"
-rc="$(rc_of "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-mixed.md")"
+rc="$(rc_of "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-mixed.md" "$FX/brief-verbatim-ok.audit.md")"
 [[ "$rc" == "3" ]] \
   && ok "C3 대칭: 불확정만 → 여전히 exit 3 (위반으로 과승격하지 않음)" \
   || no "C3 대칭: 불확정 단독이 exit $rc — 과승격은 정상 brief를 차단한다"
@@ -336,7 +367,7 @@ rc="$(rc_of "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-mixed.md")"
 # --- C4(iter-2) : 빈 원장은 '전건 검증 완료'가 아니다 -----------------------
 tmpe="$(mktemp)" || exit 1
 printf -- '---\nsession_id: 11111111-1111-1111-1111-111111111111\nphase: 1\nuser_statements: []\n---\n\nbody\n' > "$tmpe"
-rc="$(rc_of "$FX/brief-verbatim-ok.md" "$tmpe")"
+rc="$(rc_of "$FX/brief-verbatim-ok.md" "$tmpe" "$FX/brief-verbatim-ok.audit.md")"
 [[ "$rc" == "3" ]] \
   && ok "C4: user_statements 0건 → exit 3 (빈 전칭명제는 clean이 아니다)" \
   || no "C4: 빈 원장이 exit $rc — 원장을 비우는 것만으로 L1·L2가 조용히 우회된다"
@@ -348,7 +379,8 @@ rm -f "$tmpe"
 # (원문 있으면 user_statements가 S2부터 시작). payload에는 원문(S1)이 있지만 state의
 # `user_statements`에는 없다(원문은 매 round 사용자 발화가 아니므로 append 대상이 아니다)
 # — 그래서 이 스크립트는 원문 자체를 판정하지 않고, state가 실제로 아는 S2·S3만 대조한다.
-rc="$(rc_of "$FX/brief-verbatim-original-request.md" "$FX/state-verbatim-original-request.md")"
+# v0.43.0: S2·S3는 이제 audit 쪽에 산다(원문 S1만 payload 잔류).
+rc="$(rc_of "$FX/brief-verbatim-original-request.md" "$FX/state-verbatim-original-request.md" "$FX/brief-verbatim-original-request.audit.md")"
 [[ "$rc" == "0" ]] \
   && ok "C5: 원문 있음 + 오프셋 적용(S2부터) → exit 0 (S1 예약과 정합)" \
   || no "C5: 원문 있는 정상 케이스가 exit $rc — 오프셋 없이는 이 케이스가 clean이 아니다"
@@ -356,7 +388,7 @@ rc="$(rc_of "$FX/brief-verbatim-original-request.md" "$FX/state-verbatim-origina
 # C5 회귀: 오프셋을 적용하지 않은(고치기 전) state — 첫 실제 답변이 S1을 자칭하면
 # payload의 S1(원문)과 대조돼 not_contained, 그 뒤로 밀린 S2도 함께 어긋난다. 이 fixture는
 # Task 7 fix round 1에서 스크래치로 1회 실행하고 지운 시나리오 B를 영구 회귀로 고정한다.
-rc="$(rc_of "$FX/brief-verbatim-original-request.md" "$FX/state-verbatim-original-request-old-formula.md")"
+rc="$(rc_of "$FX/brief-verbatim-original-request.md" "$FX/state-verbatim-original-request-old-formula.md" "$FX/brief-verbatim-original-request.audit.md")"
 [[ "$rc" == "1" ]] \
   && ok "C5 회귀: 오프셋 없는 옛 공식(첫 답변=S1) → exit 1 (S1은 원문 텍스트라 불일치)" \
   || no "C5 회귀: 오프셋 없는 옛 공식이 exit $rc — 번호 드리프트가 조용히 통과한다"

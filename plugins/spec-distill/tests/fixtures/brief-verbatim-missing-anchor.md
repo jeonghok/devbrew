@@ -18,10 +18,8 @@ user_sourced_items:
 # Verbatim OK — Interview Brief
 
 ## 6. 사용자 원문
-
 - **S1** 🗣 최초 요청:
   > "브리프에 리뷰를 붙이고 싶다"
-
 ## 7. Next Action
 
 - 없음

@@ -59,7 +59,7 @@ AskUserQuestion({
 
 ## 상태
 
-state는 새 파일을 만들지 않고 기존 `.claude/spec-distill/<session-id>/state.local.md`에 키 3개를 씁니다. 훅이 읽는 파일과 **같은 리졸버**로 경로를 구합니다. `$STATE`를 zero-tool 선결 조건보다 먼저 정의하는 이유는 하나뿐입니다 — 아래 probe 실패 분기가 `$STATE`에 쓰므로 그 값이 먼저 있어야 합니다(이 문서 전체가 위에서 아래로 그대로 실행 가능하다는 주장은 아닙니다: `$PAYLOAD`·`$CODEX_DIR_YAML`·`$CODEX_FID_YAML`은 이 skill이 정의하지 않는 입력이고, 호출자 `conducting-interview`가 진입 시점에 이미 쥐고 넘기는 값입니다):
+state는 새 파일을 만들지 않고 기존 `.claude/spec-distill/<session-id>/state.local.md`에 키 3개를 씁니다. 훅이 읽는 파일과 **같은 리졸버**로 경로를 구합니다. `$STATE`를 zero-tool 선결 조건보다 먼저 정의하는 이유는 하나뿐입니다 — 아래 probe 실패 분기가 `$STATE`에 쓰므로 그 값이 먼저 있어야 합니다(이 문서 전체가 위에서 아래로 그대로 실행 가능하다는 주장은 아닙니다: `$PAYLOAD`·`$AUDIT`·`$CODEX_DIR_YAML`·`$CODEX_FID_YAML`은 이 skill이 정의하지 않는 입력이고, 호출자 `conducting-interview`가 진입 시점에 이미 쥐고 넘기는 값입니다. `$AUDIT`은 payload의 audit sidecar 경로 — v0.43.0부터 §6 원문이 payload(`S1`)와 audit(`S2` 이상)에 나뉘어 살아서, 완전성 검사가 두 파일을 모두 읽어야 합니다):
 
 ```bash
 PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
@@ -133,7 +133,7 @@ $BRS degrade-append "$STATE" --component readback --axis readback \
 ## 진입 첫 액션 — 원문 완전성 (§6 ↔ state 원장)
 
 ```bash
-python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE"; rc=$?
+python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE" "$AUDIT"; rc=$?
 ```
 
 파이프를 걸지 마세요 — `| tail`을 붙이면 `$?`가 파이프 마지막 명령의 코드가 되어 죽은 스크립트가 성공으로 읽힙니다(리포 실측).
@@ -334,7 +334,7 @@ if [[ "$gate_rc" -ne 0 ]]; then
   exit 1
 fi
 # (2) §6에 S<N>을 추가한 라운드면 원문 완전성도 재실행 (진입 첫 액션과 같은 규칙)
-python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE"; vc_rc=$?
+python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE" "$AUDIT"; vc_rc=$?
 # 차단 행은 **실행형**이어야 한다. 대입만 하고 흘려보내면 서술만 차단이고 실행은 통과다 —
 # 바로 위 gate_rc가 같은 이유로 실행형 if를 갖는다. 확정 §6 원문 위반이 여기서 안 멈추면
 # can-redispatch → bump → 재리뷰로 흘러가 approved가 날 수 있다.

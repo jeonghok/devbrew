@@ -18,12 +18,8 @@ user_sourced_items:
 # Verbatim OK — Interview Brief
 
 ## 6. 사용자 원문
-
 - **S1** 🗣 최초 요청:
   > "브리프에 리뷰를 붙이고 싶다"
-- **S2** ☑ 선택 (리뷰 역할 배치):
-  > "3 에이전트로 분리"
-
 ## 7. Next Action
 
 - 없음

@@ -312,8 +312,9 @@ else
 fi
 
 # --- AC1 : 파이프라인 순서 + 진입 첫 액션 ------------------------------------
-grep -qE '^[[:space:]]*python3 "\$PR/scripts/check_verbatim_coverage\.py" "\$PAYLOAD" "\$STATE"' "$SKILL" \
-  && ok "AC1: 완전성 검사 실행 라인 실재 (줄-시작 앵커)" || no "AC1: check_verbatim_coverage.py 호출 라인 부재 (산문 참조는 검사를 돌리지 않는다)"
+grep -qE '^[[:space:]]*python3 "\$PR/scripts/check_verbatim_coverage\.py" "\$PAYLOAD" "\$STATE" "\$AUDIT"' "$SKILL" \
+  && ok "AC1: 완전성 검사 실행 라인 실재 (3인자 — audit 유추 없음)" \
+  || no "AC1: check_verbatim_coverage.py 3인자 호출 라인 부재 (2인자면 audit 이 코퍼스에서 빠진다)"
 grep -qE '첫 액션' "$SKILL" && ok "AC1: 진입 첫 액션 명시" || no "AC1: 첫 액션 명시 부재"
 
 # --- /qg iter-1 CRITICAL(증폭기) : rc 표 row 0이 advisories를 라우팅한다 -----
