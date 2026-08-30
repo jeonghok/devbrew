@@ -48,4 +48,45 @@ printf '%s' "$out9" | grep -qF 'stray-note.audit.md' \
   && ok "T9: 그 원문은 그대로 실렸다 (지우지 않았다)" || no "T9: 원문이 사라졌다"
 rm -f "$tmp_audit"
 
+# T10/T11: 라벨은 헤딩이 아니다 — **모양**을 검사한다. -F 부분문자열 검사는
+# `## <<<PAYLOAD>>>`처럼 헤딩으로 승격돼도 토큰만 있으면 통과해버린다(review round 1
+# 이 실제로 이 mutation 으로 T2/T3를 속였다). 라인 전체를 정확히 매치(`grep -qx`)해
+# `#`이 앞에 붙으면 실패하게 한다 — 토큰이 아니라 그 토큰이 사는 라인의 모양을 본다.
+printf '%s' "$out" | grep -qx '<<<PAYLOAD>>>' \
+  && ok "T10: PAYLOAD 라벨 라인이 헤딩이 아니다 (라인 전체 일치)" \
+  || no "T10: PAYLOAD 라벨이 헤딩으로 승격됐거나 라인이 다르다"
+printf '%s' "$out" | grep -qx '<<<AUDIT-VERBATIM>>>' \
+  && ok "T11: AUDIT-VERBATIM 라벨 라인이 헤딩이 아니다 (라인 전체 일치)" \
+  || no "T11: AUDIT-VERBATIM 라벨이 헤딩으로 승격됐거나 라인이 다르다"
+
+# T12: 세 redact 키 전부가 실제로 치환됐는지 검사한다. `audit_file`은 우연히 그 값이
+# `.audit.md` 꼴이라 위생 스캔(T8/T9)이 곁다리로 잡아주지만 `name`·`created_at`은
+# 아무 것도 안 본다 — REDACT_KEYS에서 하나만 지워도(review round 1 mutation) 스위트가
+# 그대로 GREEN이었다. 키 목록은 스크립트에서 **동적으로** 가져온다 — 여기 이름을
+# 다시 나열하면 나중에 네 번째 키가 추가돼도 이 테스트가 그 키를 못 보고 계속
+# 통과한다(닫으려는 gap과 같은 모양).
+redact_pairs="$(python3 - "$B" "$FX/interview-brief-valid.md" <<'PY'
+import importlib.util, re, sys
+script, payload_path = sys.argv[1], sys.argv[2]
+spec = importlib.util.spec_from_file_location("brief_bundle_mod", script)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+text = open(payload_path, encoding="utf-8").read()
+for k in mod.REDACT_KEYS:
+    m = re.search(rf"(?m)^{re.escape(k)}\s*:\s*(\S.*)$", text)
+    if m:
+        print(f"{k}\t{m.group(1).strip()}")
+PY
+)"
+[[ -n "$redact_pairs" ]] || no "T12: REDACT_KEYS 원본값을 fixture에서 못 찾았다 (테스트 자체가 무력화)"
+while IFS=$'\t' read -r key val; do
+  [[ -z "$key" ]] && continue
+  printf '%s' "$out" | grep -qF -- "$val" \
+    && no "T12: ${key} 원본값('${val}')이 번들에 남아 있다 (redact 안 됨)" \
+    || ok "T12: ${key} 원본값이 번들에서 사라졌다"
+  printf '%s' "$out" | grep -qE "^${key}:[[:space:]]*<redacted>\$" \
+    && ok "T12: ${key}: <redacted> 형태로 치환됐다" \
+    || no "T12: ${key} 가 <redacted> 형태로 치환되지 않았다"
+done <<< "$redact_pairs"
+
 exit $fail
