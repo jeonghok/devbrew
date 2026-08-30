@@ -35,6 +35,21 @@ SECTION6_RE = re.compile(r"(?m)^##\s+6\.\s+사용자 원문[^\n]*$")
 NEXT_SECTION_RE = re.compile(r"(?m)^##\s+\d+\.")
 AUDIT_NAME_RE = re.compile(r"\S*\.audit\.md\b")
 
+# 번들 안에서 비신뢰 verbatim이 "여기서부터 시작한다"고 알리는 두 리터럴 표지 — 이 번들을
+# 프롬프트에 그대로 inline하는 소비자(agents/brief-critic.md의 dispatch 지시문)는 반드시
+# **둘 다** 이름으로 가리켜야 한다. 하나만 가리키면 다른 쪽 원문에는 injection 경계가
+# 없어진다(task-10 fix round 2 실측 — 라벨 토큰만 가리키고 payload 쪽 §6은 빠뜨린 결함).
+#
+# 왜 이 둘인가: `<<<PAYLOAD>>>` 다음에 실리는 payload 본문은 자신의 `## 6. 사용자 원문`
+# 절(S1)을 **바이트 그대로** 담고 있다 — redact_frontmatter()는 frontmatter 세 키만
+# 건드리고 body는 손대지 않는다(위 모듈 docstring의 "실린 audit §6의 절 헤딩은 벗긴다 —
+# 안 벗기면 payload의 같은 헤딩과 바이트 동일해진다"는 대칭으로, payload 쪽 헤딩은 애초에
+# 벗길 대상이 아니라 그대로 남는다). audit_verbatim()이 만드는 두 번째 블록(S2 이상)은
+# `<<<AUDIT-VERBATIM>>>` 라벨이 표지한다. 이 튜플이 정본이다 — 번들 포맷이 바뀌어 세
+# 번째 위치가 생기면 여기만 늘리면 되고, 소비자 쪽 문면이 그 표지를 놓치면
+# test_brief_agents.sh의 cross-check 락이 잡는다.
+UNTRUSTED_VERBATIM_MARKERS = ("## 6. 사용자 원문", "<<<AUDIT-VERBATIM>>>")
+
 
 def redact_frontmatter(text: str) -> str:
     for k in REDACT_KEYS:
@@ -59,8 +74,9 @@ def assemble(payload_text: str, verbatim: str) -> str:
     # 이 파일이 막으려는 바로 그 헤딩-충돌이 라벨 도입 자체로 재발한다. 빈 줄은 앞
     # 텍스트를 단락 나머지와 분리해 setext 후보에서 제외시킨다(CommonMark: setext
     # underline은 바로 앞 줄이 같은 단락에 속할 때만 성립).
+    _, audit_label = UNTRUSTED_VERBATIM_MARKERS  # 소비자 계약과 실제 출력을 한 값으로 묶는다
     return (f"<<<PAYLOAD>>>\n\n{redact_frontmatter(payload_text).strip()}\n\n"
-            f"<<<AUDIT-VERBATIM>>>\n\n{verbatim}\n")
+            f"{audit_label}\n\n{verbatim}\n")
 
 
 def main() -> int:

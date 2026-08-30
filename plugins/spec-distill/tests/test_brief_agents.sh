@@ -182,19 +182,75 @@ CR="$SD/agents/brief-critic.md"
 for cat in distortion omission insertion provenance_mislabel authority_syntax evidence_unsupported; do
   grep -qF "$cat" "$CR" && ok "critic: category '$cat' 명시" || no "critic: category '$cat' 누락"
 done
-# F3 (task-10 fix round 1, security) — critic agent 정의에 비신뢰-verbatim 경계 문장이
-# 있어야 한다. build_brief_codex_prompt.py(codex 축)는 이미 갖고 있지만, critic은
-# SKILL.md의 Agent() 호출로 dispatch되고 이 에이전트 정의 파일 자체가 그 경계를 명시하지
-# 않으면 이 축에는 injection 경계가 아예 없다 — merge_brief_review.py:88 이 기록한 대로
-# 번들 도입으로 주입 표면이 payload §6의 S1 1건에서 audit §6 전량으로 늘었는데도 그렇다.
-grep -qE '비신뢰' "$CR" \
-  && ok "F3: critic agent 정의에 비신뢰-verbatim 경계 문장 실재" \
-  || no "F3: critic agent 정의에 비신뢰-verbatim 경계 문장이 없다 — injection 경계 없이 원문을 받는다"
-# 경계 문장이 실제로 라벨 토큰(무엇이 비신뢰인지)에 근접해 있는지도 본다 — '비신뢰'가
-# 문서 어딘가에 있기만 한 것과, 그 문장이 실제로 라벨 토큰을 지목하는 것은 다른 사실이다.
-grep -qE '<<<AUDIT-VERBATIM>>>.{0,80}비신뢰|비신뢰.{0,80}<<<AUDIT-VERBATIM>>>' "$CR" \
-  && ok "F3: 그 경계 문장이 실제로 라벨 토큰(무엇이 비신뢰인지)을 지목한다" \
-  || no "F3: 비신뢰 언급은 있지만 라벨 토큰과 근접하게 묶여 있지 않다 — 무엇이 비신뢰인지 불명확"
+# F3 (task-10 fix round 2, security) — round 1's lock only required '비신뢰' to sit near
+# ONE label (<<<AUDIT-VERBATIM>>>). The bundle critic actually receives has **two**
+# untrusted-verbatim locations — payload's own `## 6. 사용자 원문` (S1, carried through
+# byte-for-byte since redact_frontmatter() only touches frontmatter) and the
+# `<<<AUDIT-VERBATIM>>>` block (S2+) — and wording that names only one of the two
+# satisfied round 1's lock while leaving the other location's injection boundary gone
+# (round-2 finding: exactly the wording shipped in 024bc9a).
+#
+# The set of locations is **derived from the producer**, not handed to this test as a
+# list: build_brief_bundle.py now exports `UNTRUSTED_VERBATIM_MARKERS`, the tuple its own
+# assemble() actually uses to emit the audit label (single source of truth — changing the
+# constant changes the real bundle bytes, so this isn't a parallel literal that can drift
+# silently). We still pin an EXPECTED contract here (same idiom as T12's REDACT_KEYS
+# cross-check in test_brief_bundle.sh) and verify it against the module in **both**
+# directions (missing / extra) — so a change to the module's real marker set is caught
+# even if nobody remembers to update this test.
+#
+# Coverage is checked against **paragraphs containing '비신뢰'** specifically (not "does
+# the marker appear anywhere in the file" — `<<<AUDIT-VERBATIM>>>` already appears
+# elsewhere as a "Ground truth" pointer with no security framing, so a bare substring
+# check would be satisfied without ever calling that block untrusted). This does NOT read
+# its checklist out of brief-critic.md — the EXPECTED contract and coverage logic live
+# entirely in this test and in the producer module, so a change to brief-critic.md's
+# prose is exactly what this lock can detect.
+F3_REPORT="$(python3 - "$SD/scripts/build_brief_bundle.py" "$CR" <<'PYEOF'
+import importlib.util, re, sys
+
+bundle_script, critic_path = sys.argv[1], sys.argv[2]
+spec = importlib.util.spec_from_file_location("brief_bundle_mod", bundle_script)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+EXPECTED = ("## 6. 사용자 원문", "<<<AUDIT-VERBATIM>>>")  # task-10 fix round 2 contract:
+# the two locations the bundle actually carries untrusted verbatim under.
+actual = tuple(mod.UNTRUSTED_VERBATIM_MARKERS)
+missing = [m for m in EXPECTED if m not in actual]
+extra = [m for m in actual if m not in EXPECTED]
+if missing:
+    print("MISSING\t" + ",".join(missing))
+if extra:
+    print("EXTRA\t" + ",".join(extra))
+
+critic_text = open(critic_path, encoding="utf-8").read()
+paragraphs = re.split(r"\n\s*\n", critic_text)
+untrusted_paragraphs = [p for p in paragraphs if "비신뢰" in p]
+if not untrusted_paragraphs:
+    print("NO_BOUNDARY_PARAGRAPH")
+for marker in EXPECTED:
+    covered = any(marker in p for p in untrusted_paragraphs)
+    print(("COVERED" if covered else "UNCOVERED") + "\t" + marker)
+PYEOF
+)"
+missing_line="$(grep '^MISSING' <<<"$F3_REPORT" || true)"
+[[ -z "$missing_line" ]] && ok "F3: UNTRUSTED_VERBATIM_MARKERS 계약이 필수 2곳을 전부 포함한다" \
+  || no "F3: build_brief_bundle.py의 UNTRUSTED_VERBATIM_MARKERS 에서 빠졌다 — ${missing_line#MISSING$'\t'}"
+extra_line="$(grep '^EXTRA' <<<"$F3_REPORT" || true)"
+[[ -z "$extra_line" ]] && ok "F3: UNTRUSTED_VERBATIM_MARKERS 계약이 예상한 2곳과 정확히 일치한다" \
+  || no "F3: UNTRUSTED_VERBATIM_MARKERS 에 예상 밖 표지가 있다 — ${extra_line#EXTRA$'\t'} (이 테스트를 갱신해야 한다)"
+if grep -q '^NO_BOUNDARY_PARAGRAPH' <<<"$F3_REPORT"; then
+  no "F3: critic agent 정의 어디에도 '비신뢰' 문단이 없다 — injection 경계 자체가 없다"
+else
+  ok "F3: critic agent 정의에 '비신뢰' 문단이 실재한다"
+fi
+while IFS=$'\t' read -r tag marker; do
+  case "$tag" in
+    COVERED)   ok "F3: 비신뢰 문단이 '${marker}' 위치를 지목한다" ;;
+    UNCOVERED) no "F3: 비신뢰 문단이 '${marker}' 위치를 지목하지 않는다 — 그 원문에는 injection 경계가 없다" ;;
+  esac
+done <<< "$F3_REPORT"
 
 # critic 프롬프트에 payload 경로/디렉토리가 실리지 않는다 (AC2의 정적 절)
 grep -qF "docs/superpowers/interview/" "$CR" \
