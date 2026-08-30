@@ -595,6 +595,13 @@ out="$(python3 "$SCRIPT" gate "$TMPD/vnu.md" 2>/dev/null)"; rc=$?
 # 실제 참조로 치지 않는다 — has_st/refs 모두 URL을 먼저 벗겨낸 뒤 계산해야 한다.
 # exit code만으론 부족(bijection A가 phantom ref를 orphan으로 잡아 우연히 red가 될 수
 # 있음) — skepticism 서브커맨드 출력에서 no-ST-ref 태그를 직접 확인한다(message teeth).
+# **N1a round 1 수정**: 이 픽스처는 payload §4·§5 URL 일괄 변환에서 §5 URL이 함께
+# 지워지는 바람에 phantom ST9 자체가 사라져 잠시 무이빨이 됐었다(리뷰가 실행으로
+# 적발) — URL을 복원해 되살렸다. 그 결과 §5에 URL이 남아 N1a(payload_url_free)도
+# **함께** 발화한다(의도된 결과, url-in-sec4/url-in-s1과 같은 예외 취급) — 그래서
+# gate 단언은 이제 malformed §5 verdict entries뿐 아니라 payload 외부 URL 사유로도
+# red이고, 두 사유는 서로 독립적이다(하나를 mutation으로 꺼도 다른 하나가 여전히
+# red를 낸다 — U3-T8 이미 N1a 단독을 확인했으므로 여기서는 skepticism 반쪽만 잰다).
 skep="$(python3 "$SCRIPT" skepticism "$FX/interview-brief-verdict-st-in-url.md" 2>/dev/null)"
 printf '%s' "$skep" | grep -q 'no-ST-ref' \
   && ok "FIX4: URL 안 phantom ST9는 ST 요구를 충족시키지 못함 (no-ST-ref)" \
@@ -602,6 +609,17 @@ printf '%s' "$skep" | grep -q 'no-ST-ref' \
 python3 "$SCRIPT" gate "$FX/interview-brief-verdict-st-in-url.md" >/dev/null 2>&1 \
   && no "FIX4: URL 안 phantom ST9 픽스처가 게이트를 통과함" \
   || ok "FIX4: URL 안 phantom ST9 픽스처 → red"
+
+# FIX4-bis (sweep 발견): bijection_a_errors(check_brief.py:688)도 ST<N>을 찾기 전에
+# URL을 벗겨낸다 — skepticism_malformed와 같은 방어를 다른 소비자에서 반복한 것이다.
+# 위 FIX4의 gate 단언은 exit code만 보므로 이 defense를 안 껐어도 다른 사유(malformed
+# §5 verdict entries)로 이미 red라 이 결함을 못 잡는다(sweep 실행 실증: 688을
+# 무력화해도 123/123 그대로 GREEN). message teeth로 직접 잡는다 — phantom ST9가
+# "판정 없는 steelman"으로 오탐되면 안 된다.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-verdict-st-in-url.md" 2>/dev/null)"
+printf '%s' "$out" | grep -q 'ST9: payload §5가 참조하지만' \
+  && no "FIX4-bis: bijection A가 URL 안 phantom ST9를 판정 없는 steelman으로 오탐" \
+  || ok "FIX4-bis: bijection A도 URL 안 phantom ST9를 참조로 안 본다"
 
 # T17: web 비활성 시 §4·§5 URL 요구 완화 (기존 graceful degradation 선례 유지)
 DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-verdict-no-url.md" >/dev/null 2>&1 \
