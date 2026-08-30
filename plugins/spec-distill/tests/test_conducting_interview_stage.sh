@@ -765,4 +765,22 @@ grep -qF 'request-framing' <<<"$step25_flat" \
   && ok "v0.41.0: Step 2.5 가 /request-framing 을 안내" \
   || no "v0.41.0: Step 2.5 안내문에 /request-framing 언급이 없다"
 
+# --- U2-T6: 원문 거처 (finishing.md) ---------------------------------------
+# 이 규칙에는 §N 도 절 제목도 개명 식별자도 없어 도출 ①–④ 가 못 잡는다.
+# 그래서 락이 유일한 발견 경로다. 양성 짝을 함께 둔다 — 부재 검사만으로 된 락은
+# 대상 파일을 통째로 지워도 통과한다.
+grep -qF 'user_statements' "$FIN" \
+  && ok "U2-T6(양성): finishing.md 를 실제로 읽었다" \
+  || no "U2-T6(양성): 코퍼스를 못 읽었다 — 아래 둘은 공허하다"
+# "audit §6" 만으로는 body-unique 하지 않다 — 이 절 아래 게이트-집행 서술 문장도
+# 독립적으로 "audit §6"를 담고 있어서, 이 지시 문장만 지워도 그 다른 문장이 이 grep을
+# 계속 만족시킨다(실측: 이 지시 문장을 통째로 지우고 돌려봤더니 이 단언이 조용히 계속
+# green이었다). 그래서 이 문장에서만 나는 복합 리터럴로 좁힌다.
+grep -qF '전량은 **audit §6**에' "$FIN" \
+  && ok "U2-T6: 원문의 거처가 audit §6 으로 지시된다" \
+  || no "U2-T6: finishing.md 가 원문을 audit §6 에 두라고 지시하지 않는다"
+grep -qE '발화 전부를 payload §6|전부를 payload §6 에' "$FIN" \
+  && no "U2-T6: 「전부를 payload §6 에」 옛 지시 잔존" \
+  || ok "U2-T6: 옛 거처 지시 제거됨"
+
 finish

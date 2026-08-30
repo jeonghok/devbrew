@@ -32,7 +32,8 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    고르고, 각각에 id·`source`·`statement`·`evidence`(그 발화의 `S<N>`)를 붙입니다.
    **이 시점의 `status`는 전부 `provisional`입니다** — `confirmed`는 Step B-0의 사용자 확인
    으로만 발생합니다. 모델 추론은 이 리스트에 넣지 말고 본문에 ✎ 프로즈로 씁니다.
-   `user_statements`의 발화 전부를 payload §6에 **전문 보존**하고 `S<N>` 앵커를 답니다.
+   `S1`만 payload §6에 남고, `user_statements`의 나머지 발화 전량은 **audit §6**에
+   **전문 보존**(append-only)하며 각각 `S<N>` 앵커를 답니다.
    **최초 요청 원문은 `S1`이다.** `$ARGUMENTS`(사용자가 `/interview`에 함께 넘긴 rough
    request)를 `user_statements`의 첫 항목과 **같은 형식**으로 §6 맨 앞에 넣습니다.
    Phase 0 을 거친 세션에서는 그 `$ARGUMENTS` 가 `interview-seed` 파일 전문이고, 그때도
@@ -50,8 +51,9 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
    `check_verbatim_coverage.py`의 앵커 중복·포함 검사가 red를 냅니다).
    비어 있으면(인자 없이 호출) `S1`을 만들지 않고 `S2`부터 시작하지 않습니다 — 번호는
    `user_statements`의 순서를 따르고, 최초 요청이 없으면 첫 사용자 답변이 `S1`입니다.
-   원문 보존은 **관례가 아니라 요구**입니다 — 게이트 15항 어디에도 이 요구가 없어서,
-   보존되지 않은 인터뷰가 나와도 지금까지 아무것도 red가 되지 않았습니다.
+   원문 보존은 **관례가 아니라 요구**입니다 — `S1`은 N1b가 payload §6 앵커 집합(`{S1}`)으로
+   못박지만, 나머지 발화 전량이 실제로 **audit §6**로 옮겨졌는가는 게이트 16항 어디에도
+   없어서, 누락된 인터뷰가 나와도 지금까지 아무것도 red가 되지 않았습니다.
    구조상 이 시점의 `confirmed`는 **항상 0건**이므로, frontmatter에 sentinel 한 줄
    (`# confirmed 0건 — 사용자가 전부 잠정으로 판단`)을 **반드시** 함께 씁니다 — 템플릿이
    `user_sourced_items:` 블록 첫 줄로 상속시키는 그 줄입니다. 이 줄이 sentinel로 인정되려면
@@ -230,7 +232,7 @@ AskUserQuestion({
   brief 재저장 → `check_brief.py gate` 재실행(통과 확인) → 아래 verbatim `/compact` 명령을
   *그대로 보이게* 노출 + "compact 후 brainstorming 진입 준비됨" 안내:
 
-  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 §0 한눈에, §2 제약, §3 Open Questions, §6 사용자 원문), audit 파일 경로 참조, **그리고 아래 '재결정 규약' 문장**을 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. 재결정 규약: confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 다음 단계: Skill superpowers:brainstorming <brief-path>.`
+  > `/compact interview brief at <brief-path> 보존 — brief 본문(특히 §0 한눈에, §2 제약, §3 Open Questions, §6 사용자 원문 중 `S1`), audit 파일 경로 참조, **그리고 아래 '재결정 규약' 문장**을 유지하고, round-by-round 인터뷰 대화·web sweep 원문·steelman 중간 추론은 drop. 재결정 규약: confirmed 항목은 근거 있으면 보고 후 재결정 가능하고 임의 변경은 금지다. 다음 단계: Skill superpowers:brainstorming <brief-path>.`
 
   → **여기서 턴 종료(STOP). 같은 턴에서 `brainstorming`을 호출하지 말 것**(compact 전
   brainstorming 진입 = 옵션 ① 무력화). `Skill superpowers:brainstorming <brief-path>` 진입은

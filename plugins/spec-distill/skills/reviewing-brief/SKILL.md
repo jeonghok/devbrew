@@ -130,7 +130,7 @@ $BRS degrade-append "$STATE" --component readback --axis readback \
 
 그리고 **D2(payload 파일 하나만 받는다는 구조 조건) 미충족을 조용히 넘기지 않고** C4 경로로 사용자에게 보고합니다(Step B 게이트 question 텍스트).
 
-## 진입 첫 액션 — 원문 완전성 (§6 ↔ state 원장)
+## 진입 첫 액션 — 원문 완전성 (payload §6 ∪ audit §6 ↔ state 원장)
 
 ```bash
 python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE" "$AUDIT"; rc=$?
@@ -141,7 +141,7 @@ python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE" "$AUDIT"; r
 | rc | 뜻 | 동작 |
 |---|---|---|
 | `0` | 위반 없음 | 1단계로. **단 `advisories`가 비어 있지 않으면** 그 줄들을 record(`component: verbatim_coverage`, `affected_axis: completeness`, `verification_status: degraded`)로 남기고 Step B에 함께 올립니다 |
-| `exit 1` | 위반 발견(`missing_ids`/`not_contained`) | **차단.** §6를 보완(추가만 — 아래 append-only)하고 `check_brief.py gate` → 이 검사를 **재실행**. 리뷰 단계로 넘어가지 않습니다 |
+| `exit 1` | 위반 발견(`missing_ids`/`not_contained`) | **차단.** audit §6를 보완(추가만 — 아래 append-only, payload §6은 `S1`으로 불변)하고 `check_brief.py gate` → 이 검사를 **재실행**. 리뷰 단계로 넘어가지 않습니다 |
 | `exit 1` + `not_contained: ["§6"]` | **구조 위반** (§6 `S<N>` 앵커 중복) | **차단.** append로는 고칠 수 없습니다 — 잘못 추가된 중복 항목을 **제거**해야 합니다(중복 자체가 append-only 위반이고, 남겨두면 어느 쪽이 원문인지 확정되지 않습니다) |
 | `exit 3` | 검사 불가(파일 부재·파싱 실패) | degrade 후 계속 + record(`component: verbatim_coverage`, `affected_axis: completeness`, `verification_status: skipped`) |
 | `exit 4` | 내부 오류 | `3`과 동일 처리 + 오류 전문을 `--reason`에 |
@@ -157,9 +157,10 @@ python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE" "$AUDIT"; r
 |---|---|
 | §0 / §1 / §3 / §4 / §5 / §7 | 자유 수정 |
 | §2 제약 | 자유 수정 — **단 frontmatter `user_sourced_items`와 동시**(bijection B가 statement 내용까지 대조하므로 한쪽만 고치면 게이트 red) |
-| **§6 사용자 원문** | **append-only.** `S<N>` 항목 **추가**만 허용, 기존 항목 본문 변경 금지(P21 placeholder 치환만 예외) |
+| **payload §6 사용자 원문 (`S1`)** | **불변.** 본문 변경 금지(P21 placeholder 치환만 예외). 추가도 금지 — 앵커 집합이 `{S1}`로 고정이다(N1b) |
+| **audit §6 사용자 원문 (`S2`+)** | **append-only.** `S<N>` 항목 **추가**만 허용, 기존 항목 본문 변경 금지 |
 
-§6를 자유롭게 고칠 수 있으면 *critic이 지적 → 원문을 지적에 맞게 고쳐 통과* 라는 laundering이 열립니다. 추가는 덮어쓰기가 아니므로 provenance가 온전히 남습니다.
+관할은 §6 전체가 audit으로 옮겨간 것이 아니라 `S1` 잔류 예외를 따라 **분할**됩니다 — payload 표의 행을 지우지 않는 이유이기도 합니다. audit §6를 자유롭게 고칠 수 있으면 *critic이 지적 → 원문을 지적에 맞게 고쳐 통과* 라는 laundering이 열립니다. 추가는 덮어쓰기가 아니므로 provenance가 온전히 남습니다. payload §6의 「기존 항목 본문 변경 금지」는 그보다 강한 요구(불변)이고, 관할을 통째로 audit으로 옮기면 이 가드가 규범 차원에서도 사라집니다.
 
 **저자는 어느 리뷰어의 finding도 임의로 기각하지 못합니다.** 미반영 findings는 **이유와 함께 Step B 게이트에서 사용자에게 올립니다**(P17) — 저자의 자기승인 경로를 차단합니다.
 
@@ -259,7 +260,7 @@ codex 부재 시 loud advisory:
 사용자가 방향을 뒤집으면(C4 재결정):
 
 1. `user_sourced_items`의 해당 항목 `status` 변경 또는 항목 교체.
-2. 그 **결정 발화를 §6에 새 `S<N>`으로 추가**합니다(기존 항목 수정이 아닙니다). state의 `user_statements`에도 append되므로 다음 완전성 검사가 대조 대상으로 삼습니다.
+2. 그 **결정 발화를 audit §6에 새 `S<N>`으로 추가**합니다(기존 항목 수정이 아니고, payload §6은 `S1`으로 불변입니다). state의 `user_statements`에도 append되므로 다음 완전성 검사가 대조 대상으로 삼습니다.
 3. 뒤집힌 방향은 §5 `기각` 항목에 *무엇을 왜 버렸는지* 로 남깁니다 — **증거 문장**이며 권위 문장이 아닙니다(C5).
 4. payload 재저장 → `check_brief.py gate` 재실행 → `check_verbatim_coverage.py` 재실행.
 
@@ -411,10 +412,11 @@ fi
 | | 행위 |
 |---|---|
 | ✅ | §0·§1·§2·§3·§4·§5·§7 수정 (§2는 frontmatter와 동시) |
-| ✅ | §6에 `S<N>` **추가** |
+| ✅ | **audit §6**(별도 사이드카 파일)에 `S<N>` **추가** |
 | ✅ | 미반영 findings를 **이유와 함께** Step B로 이월 |
 | ❌ | finding 임의 기각 |
-| ❌ | §6 기존 항목 본문 변경 |
+| ❌ | payload §6(`S1`) 변경 또는 추가 |
+| ❌ | audit §6 기존 항목 본문 변경 |
 | ❌ | 상한을 넘긴 추가 재dispatch |
 
 **충실도에 라운드 루프를 두지 않는 이유**: `reviewing-spec`의 라운드 루프 + cap 5는 design doc 리뷰가 *설계 결함*을 찾는 반복 개선이라 정당합니다. 충실도는 *"§2 요약이 §6 원문을 왜곡했나"* 라는 좁고 거의 기계적인 축이라 반복 수렴 대상이 아닙니다 — 루프는 trivia ceremony입니다.

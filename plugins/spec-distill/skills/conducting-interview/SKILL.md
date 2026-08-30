@@ -61,7 +61,7 @@ State body: 각 round의 4-block 출력 + 사용자 답변 + (있다면) coverag
 **Secret 기록 금지** (P21): 사용자 답변에 token/key/credential 패턴 감지 시 placeholder로 치환 후
 기록합니다. **치환 토큰은 `<REDACTED>` 또는 `<REDACTED:라벨>` 형태**로 씁니다(다른 허용 형태:
 `<SECRET:...>` · `<TOKEN:...>` · `<KEY:...>` · `<CREDENTIAL:...>` · `<PLACEHOLDER:...>`).
-`check_verbatim_coverage.py`가 §6 원문 대조에서 **이 토큰 집합**을 보고 L2를 advisory로 강등하므로,
+`check_verbatim_coverage.py`가 payload §6 ∪ audit §6 원문 대조에서 **이 토큰 집합**을 보고 L2를 advisory로 강등하므로,
 다른 형태로 치환하면 정당한 치환이 red로 잡혀 사용자가 Step B에서 판정해야 합니다(fail-closed 방향).
 
 ### State write contract (PN1 — worktree-safe)
@@ -332,8 +332,9 @@ frontmatter 줄이 seed 를 알아보는 유일한 표지다 — 본문만 오�
   하류 규약대로 전부 `provisional` 로 시작하고, `confirmed` 로의 전이는 오직 Step B-0
   사용자 확인에서만 일어난다.
 - **seed 를 뒤집을 수 있다**(P23). 인터뷰 중 사용자가 seed 의 확정을 뒤집으면 **새 발화가
-  이긴다** — 그리고 그 뒤집음을 §6 에 새 `S<N>` 으로 추가하고 §5 `기각` 에 *원래 /
-  재결정 / 근거* 로 남긴다. 조용히 덮어쓰지 않는다.
+  이긴다** — 그리고 그 뒤집음을 **audit §6** 에 새 `S<N>` 으로 추가하고(payload §6은 `S1`
+  으로 불변이므로 새 앵커는 audit에만 붙는다) §5 `기각` 에 *원래 / 재결정 / 근거* 로 남긴다.
+  조용히 덮어쓰지 않는다.
 - **seed 가 아닌 입력도 그대로 받는다.** `/interview` 는 호환을 유지한다 — 조언 한 줄을
   내되 **차단하지 않는다**.
 
