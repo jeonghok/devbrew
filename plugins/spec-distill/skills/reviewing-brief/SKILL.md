@@ -297,8 +297,9 @@ Agent({
   subagent_type: "spec-distill:brief-critic",
   // **처분** — consumer=plugins/spec-distill/scripts/merge_brief_review.py · fail-open
   prompt: `Review this interview brief for fidelity — did the §2 summary distort,
-drop, or invent what the user said in §6? Check all six categories explicitly.
-Emit **Status:** on its own line, then the brief-critic-issues block.
+drop, or invent what the user said in the block after <<<AUDIT-VERBATIM>>>?
+Check all six categories explicitly. Emit **Status:** on its own line, then the
+brief-critic-issues block.
 
 <brief>
 ${BLOB}

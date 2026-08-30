@@ -648,6 +648,27 @@ n_fid="$(grep -cE 'run_brief_codex_reviewer\.sh" fidelity' "$SKILL")"
   && ok "U4: fidelity codex 호출 $n_fid 개가 전부 번들을 받는다" \
   || no "U4: fidelity 호출 $n_fid 개 중 $n_bundle 개만 번들 — 재리뷰가 원문 없는 payload 를 본다"
 
+# --- F2 (task-10 fix round 1) : 번들 조립은 2-a~2-b 구간에서 정확히 1회 --------
+# 결함: "한 번만 조립한다"는 SKILL.md의 규범 문장에 대응하는 기계 락이 없었다 — 2-b에
+# 번들 재조립 호출을 하나 더 넣어도(critic이 본 것과 codex가 보는 것이 서로 다른 바이트일
+# 수 있는 모양) 전체 스위트가 green이었다(2026-08-31 mutation 실측). 이 파일이 이미
+# n_bundle/n_fid에 쓰는 것과 같은 실행-라인 앵커(주석·산문은 걸리지 않는다)로 조립
+# 호출 자체를 센다.
+#
+# 스코프는 **전체 파일이 아니라 2-a~2-b 구간**으로 좁힌다(2-c 헤더 직전에서 끊는다).
+# 이유: 2-c는 fresh critic 재dispatch를 "2-a 블록 그대로"라는 **참조**로만 서술하므로
+# 오늘은 리터럴 조립 호출이 파일 전체에 정확히 1개(2-a)뿐이지만, 그 참조를 나중에
+# 실제 리터럴 재조립 호출로 펼쳐 쓰는 것은 **정당한 설계**다(수정된 payload/audit에서
+# 다시 조립해야 한다는 요구와 정합) — 그 경우 전체-파일 `== 1`은 정당한 변경에 거짓
+# RED를 낸다. 반면 2-a~2-b 구간 안에서는 같은 라운드 안에서 같은 두 소비자
+# (critic·codex #2 최초 실행)가 같은 바이트를 봐야 한다는 불변식이 **항상** 참이어야
+# 하므로, 그 구간에 대해서만 `== 1`을 무조건 강제한다.
+W_2A2B="$(scoped_window '^### 2-a\.' '^### 2-c\.')"
+n_assembly_2a2b="$(grep -cE '^[[:space:]]*python3 "\$PR/scripts/build_brief_bundle\.py"' <<<"$W_2A2B")"
+[[ "$n_assembly_2a2b" -eq 1 ]] \
+  && ok "F2: 2-a~2-b 구간에 번들 조립 호출이 정확히 1회 (critic·codex #2가 같은 바이트를 본다)" \
+  || no "F2: 2-a~2-b 구간의 번들 조립 호출이 ${n_assembly_2a2b}회 — critic과 codex #2가 서로 다른 바이트를 볼 수 있다"
+
 # 냉독은 payload-only 여야 한다 (반대 방향 락 — 양성 짝)
 W_RB="$(scoped_window '^### 3-a\.' '^#')"
 printf '%s' "$W_RB" | grep -qF 'build_brief_inline_blob.py' \
@@ -665,5 +686,19 @@ grep -qF '<<<AUDIT-VERBATIM>>>' "$SD/agents/brief-critic.md" \
 grep -qE 'G1[–-]G6 .*0건' "$SKILL" \
   && ok "U4: G6 이 성공 조건에 포함됐다" \
   || no "U4: G6 을 표에만 더하고 성공 조건은 G1–G5 — 관측돼도 아무것도 안 막는다"
+
+# --- F1 (task-10 fix round 1) : 2-a dispatch 프롬프트가 라벨 토큰을 가리킨다 -----
+# 결함: 체크리스트·agent 정의는 라벨 토큰으로 갱신됐는데, critic을 실제로 dispatch하는
+# Agent() 프롬프트 문자열(SKILL.md 자체, 2-a) 은 손대지 않아 "...said in §6?"를 그대로
+# 남기고 있었다 — critic이 받는 번들 바이트는 맞지만, dispatch 프롬프트가 지목하는 절은
+# audit_verbatim()이 헤딩을 벗겨 이제 번들에 하나뿐인 payload 쪽 `## 6. 사용자 원문`
+# (S1 하나)이었다. $W2A 는 위 T8 블록에서 이미 도출된 윈도우를 재사용한다(같은 스크립트
+# 실행 안에서 셸 변수가 살아 있다 — 다시 awk 를 돌릴 필요 없다).
+printf '%s' "$W2A" | grep -qF '<<<AUDIT-VERBATIM>>>' \
+  && ok "F1: 2-a dispatch 프롬프트가 라벨 토큰을 가리킨다" \
+  || no "F1: 2-a dispatch 프롬프트가 라벨 토큰을 가리키지 않는다 — 체크리스트만 고치고 이 프롬프트는 안 고쳤다"
+printf '%s' "$W2A" | grep -qE 'said in §6' \
+  && no "F1: 2-a dispatch 프롬프트가 여전히 헤딩 리터럴(§6)을 가리킨다 — 번들엔 그 헤딩이 payload 쪽 S1 하나뿐이다" \
+  || ok "F1: 2-a dispatch 프롬프트에 §6 헤딩 리터럴이 없다"
 
 finish
