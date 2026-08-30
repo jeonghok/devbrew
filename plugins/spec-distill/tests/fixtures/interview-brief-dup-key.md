@@ -5,7 +5,7 @@ created_at: 2026-07-26
 session_id: testsession01
 source: spec-distill conducting-interview v0.23.0
 next_phase: superpowers:brainstorming
-audit_file: interview-brief-star-bullet-uncited.audit.md
+audit_file: interview-brief-dup-key.audit.md
 user_sourced_items:
   - id: C1
     source: verbatim
@@ -45,9 +45,8 @@ TTFP를 줄이는 것이 진짜 목표다. SPA 전환은 수단이었지 목표�
 
 ## 4. External Landscape
 
-* 출처 없는 주장 — 근거 표시 없음
-
 - Next.js app-router SSR «nextjs-docs» — https://nextjs.org/docs/app — [취함] — 데이터 형태와 부합
+- Next.js 캐싱 가이드 «nextjs-docs» — https://nextjs.org/docs/caching — [취함] — 같은 출처 재인용
 
 ## 5. 기각 · Blind Spots
 

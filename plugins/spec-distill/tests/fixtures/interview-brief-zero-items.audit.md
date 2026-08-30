@@ -43,3 +43,7 @@ source: spec-distill conducting-interview v0.23.0
 ## 6. 사용자 원문
 
 > **출처 표기** — 🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론
+
+## 7. 확산 원자료
+
+- «example» — https://example.com — 픽스처용 선언

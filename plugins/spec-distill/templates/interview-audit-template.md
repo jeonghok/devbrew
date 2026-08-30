@@ -66,3 +66,11 @@ source: spec-distill conducting-interview v0.23.0
 
 - **S\<N\>** ☑ 선택 (\<무엇에 대한 선택\>):
   > "..."
+
+## 7. 확산 원자료
+
+(payload §4가 쓴 «출처키» 마다 원자료 URL을 여기 선언한다. 집합 포함 검사(N2)이므로
+ 개수·순서는 무관 — payload가 쓴 키가 이 목록에 있기만 하면 된다. 두 payload 항목이
+ 같은 키를 써도 여기는 한 번만 선언하면 된다.)
+
+- «example» — https://example.com — 무엇을 확인했나

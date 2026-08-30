@@ -46,3 +46,7 @@ source: spec-distill conducting-interview v0.23.0
 
 - **S2** ☑ 선택 (캐시 범위):
   > "인증 뷰는 일단 빼고 갑시다"
+
+## 7. 확산 원자료
+
+- «nextjs-docs» — https://nextjs.org/docs/app — Next.js 공식 문서

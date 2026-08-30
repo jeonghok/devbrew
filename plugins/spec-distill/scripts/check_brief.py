@@ -5,7 +5,7 @@
 AC4/AC5/AC6/AC7/AC9/AC10/AC11/AC12/AC15. 이 파일의 AC 번호는 **그 spec의 §6 표**를
 가리킨다 — 옛 spec의 번호를 물려 쓰면 같은 숫자가 다른 뜻을 가리켜 traceability가 거짓이
 된다(design doc Rejected Alternatives의 "AC↔T/V 편도 참조" 클래스). 이 spec에 대응 AC가
-없는 검사(§4 인용 요구, `type`/`next_phase` 규약 등)는 AC 번호를 붙이지 않는다.
+없는 검사(§4 «출처키» 요구, `type`/`next_phase` 규약 등)는 AC 번호를 붙이지 않는다.
 
 The Law 1 termination gate for the conducting-interview problem-space stage,
 made mechanical. conducting-interview runs `check_brief.py gate <payload>` before
@@ -34,7 +34,7 @@ genuine counter-argument is not machine-checked at all (모델 + 독립 adversar
 
 CLI subcommands (all print JSON):
   check_brief.py sections <payload>            → {"missing": [...]}        (AC4)
-  check_brief.py landscape-citations <payload> → {"uncited": [...]}        (§4 인용 요구)
+  check_brief.py landscape-keys <payload>      → {"unkeyed": [...]}        (§4 «출처키» 요구)
   check_brief.py skepticism <payload>          → {"malformed": [...]}      (AC11)
   check_brief.py tried-discarded <payload>     → {"ok": bool}              (AC11, R4 이관)
   check_brief.py coverage <payload>            → {"failures": [...]}       (AC10, audit §1 해석)
@@ -94,6 +94,7 @@ AUDIT_SECTIONS = [
     ("4", "게이트 실행 기록"),
     ("5", "프로세스 로그"),
     ("6", "사용자 원문"),
+    ("7", "확산 원자료"),
 ]
 
 FLOOR_KEYS = ["root_problem", "landscape", "skepticism", "blind_spot", "open_questions"]
@@ -133,7 +134,7 @@ def _section_text(text: str, num: str, title: str) -> str:
 # 불릿 문자는 `-`와 `*`를 **둘 다** 받는다 — §2 본문을 읽는 `BODY_ITEM_RE`(`^\s*[-*]\s+`)와 반드시
 # 같은 관례여야 한다. 같은 아티팩트를 두 규칙이 서로 다른 관례로 읽으면 불릿 한 글자로 검사를
 # 우회할 수 있다: `- 인용된 항목` 하나와 `* 출처 없는 주장` 하나를 §4에 두면 `landscape_present`는
-# 하이픈 항목으로 만족되고 `landscape_uncited`는 애스터리스크 항목을 아예 못 봐서, R2의 "출처 URL
+# 하이픈 항목으로 만족되고 `landscape_unkeyed`는 애스터리스크 항목을 아예 못 봐서, R2의 "출처 «키»
 # 필수"가 통째로 통과한다(리뷰 실증: 같은 줄을 `-`로 쓰면 red, `*`로 쓰면 green).
 ENTRY_BULLET_RE = re.compile(r"^\s*[-*]\s")
 
@@ -547,11 +548,45 @@ def bijection_b_errors(text: str) -> list[str]:
     return errs
 
 
-def landscape_uncited(text: str) -> list[str]:
-    if _web_disabled():
-        return []  # web off → no URLs obtainable; citation requirement relaxed
+SOURCE_KEY_RE = re.compile(r"«([^»]+)»")
+
+
+def landscape_unkeyed(text: str) -> list[str]:
+    """#13 — §4 항목마다 «출처키»가 있는가. **∀다**(v0.44.0에서 URL→키로 술어 교체).
+
+    URL 요구는 audit으로 갔지만 **∀는 payload에 남는다.** 둘을 그대로 맞바꾸면
+    인용 없는 §4 항목 여덟 개 + audit URL 한 개가 통과한다 — 강도 하락이다.
+    audit으로 가는 것은 URL이라는 **술어뿐**이고, 그 술어는 ∃로 약해진다.
+
+    **web kill switch로 완화하지 않는다.** 웹이 꺼져도 출처를 말로 댈 수 있다.
+    web-off brief는 §4에 순회할 항목이 없어 공허하게 통과하는 것이 옳다 —
+    조사하지 않았으면 인용할 것도 없다.
+    """
     sec = _section_text(text, "4", "External Landscape")
-    return [ln for ln in _entry_lines(sec) if not URL_RE.search(ln)]
+    return [ln for ln in _entry_lines(sec) if not SOURCE_KEY_RE.search(ln)]
+
+
+def landscape_keys_declared(payload_text: str, audit_text: str) -> list[str]:
+    """N2 — payload §4의 «출처키» 집합 ⊆ audit §7이 선언한 키 집합 (v0.44.0).
+
+    **개수가 아니라 집합이다.** 개수는 세 번 틀린다: web-off brief(§4에 항목 1건,
+    §7에 0건)가 `1 ≤ 0`으로 red · 두 §4 항목이 같은 출처를 인용하면 `2 ≤ 1`로 red ·
+    §7이 sweep을 산문 전문으로 적으면 「항목」의 계수 단위가 미정이라 집행 불가.
+    집합이면 셋 다 통과한다. `bijection_a_errors`가 같은 판단을 이미 했다.
+
+    **조건부다.** 「audit §7이 비어 있지 않다」로 두면 갓 만든 audit도 웹이 꺼진
+    audit도 red가 된다. payload가 landscape를 실었다는 사실을 조건으로 건다 —
+    키가 없으면 공집합 ⊆ 무엇이든으로 자동 만족되므로 kill switch 코드가 필요 없다.
+
+    **이것이 보장하지 않는 것**: 어느 키가 어느 원자료인가. 키를 지어내도 통과한다
+    (설계 §10). 그 해석까지 묶는 것은 §3.4 ①의 교차 bijection이고 기각됐다.
+    """
+    want = {m.group(1).strip()
+            for ln in _entry_lines(_section_text(payload_text, "4", "External Landscape"))
+            for m in SOURCE_KEY_RE.finditer(ln)}
+    have = {m.group(1).strip()
+            for m in SOURCE_KEY_RE.finditer(_section_text(audit_text, "7", "확산 원자료"))}
+    return sorted(want - have)
 
 
 def landscape_present(text: str) -> bool:
@@ -793,13 +828,17 @@ def gate(path: Path) -> int:
                 ae = bijection_a_errors(text, audit_text)
                 if ae:
                     failures.append(f"bijection A (payload §5↔audit §3): {ae}")
+            if not any(m.startswith("7.") for m in amiss):
+                nk = landscape_keys_declared(text, audit_text)
+                if nk:
+                    failures.append(f"landscape keys not declared in audit §7: {nk}")
 
     sec4_absent = any(m.startswith("4.") for m in miss)
     if not sec4_absent and not landscape_present(text):
         failures.append("External Landscape empty (no entries and no web-disabled sentinel)")
-    unc = landscape_uncited(text)
-    if unc:
-        failures.append(f"uncited landscape entries: {len(unc)}")
+    unk = landscape_unkeyed(text)
+    if unk:
+        failures.append(f"unkeyed landscape entries: {len(unk)}")
     mal = skepticism_malformed(text)
     if mal:
         failures.append(f"malformed §5 verdict entries: {len(mal)}")
@@ -837,7 +876,10 @@ def main(argv: list[str]) -> int:
     # `gate`는 advisories JSON으로 알리고, `_web_disabled()`가 결과를 바꾸는 **나머지**
     # 서브커맨드는 stderr로 알린다. 한쪽만 loud하면 다른 쪽을 쓰는 사람은 완화된 결과를
     # 완화된 줄 모른 채 받는다 — 킬 스위치는 보안 컨트롤이고 침묵은 그 자체가 결함이다.
-    if sub in ("landscape-citations", "skepticism") and _web_disabled():
+    # landscape-keys(`landscape_unkeyed`)는 v0.44.0부터 더 이상 kill switch로 완화되지
+    # 않는다 — 웹이 꺼져도 출처를 말로 댈 수 있어 이 목록에서 뺀다. skepticism은 아직
+    # §5 verdict의 URL 요구를 갖고 있어(다음 단위가 지운다) 남긴다.
+    if sub == "skepticism" and _web_disabled():
         print(WEB_DISABLED_ADVISORY, file=sys.stderr)
     if sub == "gate":
         return gate(path)
@@ -849,8 +891,8 @@ def main(argv: list[str]) -> int:
     if sub == "sections":
         print(json.dumps({"missing": find_missing_sections(text)}, ensure_ascii=False))
         return 0
-    if sub == "landscape-citations":
-        print(json.dumps({"uncited": landscape_uncited(text)}, ensure_ascii=False))
+    if sub == "landscape-keys":
+        print(json.dumps({"unkeyed": landscape_unkeyed(text)}, ensure_ascii=False))
         return 0
     if sub == "skepticism":
         print(json.dumps({"malformed": skepticism_malformed(text)}, ensure_ascii=False))

@@ -240,14 +240,18 @@ out="$(python3 "$SCRIPT" gate "$TMPD/not-a-file.md" 2>/dev/null)"; rc=$?
   || no "F8: gate가 읽을 수 없는 audit에 fail-closed여야 한다"
 rmdir "$TMPD/not-a-file.audit.md" 2>/dev/null || true
 
-# F13: 불릿 문자 비대칭으로 R2(출처 URL 필수)를 우회할 수 없다.
-# `_entry_lines`가 `- `만 받고 `BODY_ITEM_RE`는 `[-*]`를 받던 시절, §4에 인용된 `-` 항목 하나와
-# 인용 없는 `*` 항목 하나를 두면 landscape_present는 만족되고 landscape_uncited는 `*`를 못 봐서
-# 게이트가 green이었다. fixture는 valid와 **한 줄만** 다르므로 red 이유가 하나로 고정된다.
+# F13: 불릿 문자 비대칭으로 #13(§4 «출처키» 필수, ∀)을 우회할 수 없다.
+# `_entry_lines`가 `- `만 받고 `BODY_ITEM_RE`는 `[-*]`를 받던 시절, §4에 키 있는 `-` 항목 하나와
+# 키 없는 `*` 항목 하나를 두면 landscape_present는 만족되고 landscape_unkeyed는 `*`를 못 봐서
+# 게이트가 green이었다. v0.44.0의 개명(`landscape_uncited`→`landscape_unkeyed`)으로 이 락의
+# 실패 문구가 바뀌었다 — 옛 문구 'uncited landscape'를 그대로 두면 문구가 조용히 GREEN이 되고
+# (더 이상 안 나오는 문자열을 찾으니), 대신 URL만 지워 옛 술어로 되돌리면 검사 대상이 아닌
+# 것을 재검사하게 된다. fixture의 `-` 항목에 «키»를 붙이고 audit §7에 그 키를 선언해
+# «키»만 있으면 통과함을 먼저 확정한 뒤, `*` 항목만 무키로 남겨 red 이유를 하나로 고정한다.
 out="$(python3 "$SCRIPT" gate "$FX/interview-brief-star-bullet-uncited.md" 2>/dev/null)"; rc=$?
-{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'uncited landscape'; } \
-  && ok "F13: '*' 불릿 uncited 항목도 R2에 걸린다" \
-  || no "F13: '*' 불릿으로 출처 URL 요구가 우회됐다"
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'unkeyed landscape'; } \
+  && ok "F13: '*' 불릿 unkeyed 항목도 #13에 걸린다" \
+  || no "F13: '*' 불릿으로 «출처키» 요구가 우회됐다"
 
 # F1: payload는 **다른 인터뷰의 audit**을 채택할 수 없다 (Coverage Ledger 차용 봉쇄).
 # fixture는 valid와 session_id 한 줄만 다르고 가리키는 audit은 완전히 유효하다 — 그래서 red 이유가
@@ -365,9 +369,12 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-copied-audit.md" 2>/dev/null)
 # R12: `gate` 말고 `_web_disabled()`가 결과를 바꾸는 다른 서브커맨드도 완화를 알려야 한다.
 # stdout은 JSON 계약이므로 advisory는 **stderr**로 간다 — 여기 섞이면 소비자 파싱이 깨진다.
 # 양방향: 꺼져 있을 때 나오고, 켜져 있을 때는 안 나온다.
-err_off="$(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" landscape-citations "$FX/interview-brief-no-landscape.md" 2>&1 1>/dev/null)"
-err_on="$(python3 "$SCRIPT" landscape-citations "$FX/interview-brief-no-landscape.md" 2>&1 1>/dev/null)"
-out_off="$(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" landscape-citations "$FX/interview-brief-no-landscape.md" 2>/dev/null)"
+# v0.44.0: `landscape-keys`(구 landscape-citations)는 더 이상 이 목록에 없다 —
+# `landscape_unkeyed`가 kill switch로 완화되지 않기 때문이다(#13). 이 락은 이제
+# **남은 유일한 소비자** `skepticism`으로 같은 계약을 확인한다.
+err_off="$(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" skepticism "$FX/interview-brief-no-landscape.md" 2>&1 1>/dev/null)"
+err_on="$(python3 "$SCRIPT" skepticism "$FX/interview-brief-no-landscape.md" 2>&1 1>/dev/null)"
+out_off="$(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" skepticism "$FX/interview-brief-no-landscape.md" 2>/dev/null)"
 { printf '%s' "$err_off" | grep -q 'web 비활성' \
     && ! printf '%s' "$err_on" | grep -q 'web 비활성' \
     && printf '%s' "$out_off" | grep -q '^{'; } \
@@ -635,5 +642,44 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-audit-drop-s5.md" 2>&1)"; rc=
 { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'bijection C'; } \
   && ok "U2-T3: audit §6 에서 앵커 삭제 → red (#5 합집합)" \
   || no "U2-T3: bijection C 가 audit 쪽을 안 본다"
+
+# --- U3-T7: «출처키» ∀ + audit §7 키 집합 포함 ------------------------------
+# #13: landscape_uncited → landscape_unkeyed 술어 교체. URL 요구는 audit으로 갔지만
+# ∀(§4 항목마다 무언가 필수)는 payload에 남는다 — 이번엔 URL이 아니라 «출처키».
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-unkeyed-entry.md" 2>&1)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'unkeyed landscape'; } \
+  && ok "U3-T7: §4 항목 하나에 «키» 없음 → red (#13, ∀ 보존)" \
+  || no "U3-T7: ∀ 가 payload 에 안 남았다"
+
+# N2: payload §4 의 «키» 집합이 audit §7 이 선언한 집합에 포함되지 않으면 red.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-key-undeclared.md" 2>&1)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'landscape keys'; } \
+  && ok "U3-T7: audit §7 에 없는 키 → red (N2)" \
+  || no "U3-T7: N2 가 키 집합 포함을 안 본다"
+
+# 집합이라 중복이 접힌다 — 두 §4 항목이 같은 키, audit §7 에 1건.
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-dup-key.md" 2>/dev/null)"; rc=$?
+[[ $rc -eq 0 ]] && ok "U3-T7: 같은 키를 쓰는 두 항목 → GREEN (개수가 아니라 집합)" \
+  || { printf '%s\n' "$out"; no "U3-T7: 중복 키가 red — 개수 결속으로 구현했는가"; }
+
+# web-off 실제 형상(리포 픽스처 interview-brief-no-landscape.md — §4 항목 1건에 URL도
+# «키»도 없음): N2(landscape_keys_declared) 가 kill switch 코드 없이도 공집합 ⊆ 무엇이든으로
+# 자체 통과하는지를 **N2 하나만** 물어야 한다. 이 픽스처를 `gate`로 물으면 #13
+# (landscape_unkeyed, ∀, web 무관 — 방금 위 블록이 그 요구를 확인했다)이 **같은 무키
+# 항목**에서 독립적으로 발화한다 — 그리고 그 발화는 옳다: 이 fixture는 위쪽 "무인용
+# landscape가 종료를 차단 (R2/AC4)" 락이 web ON에서 지금도 지키는 바로 그 red다. `gate`로
+# 물으면 두 검사가 뒤섞여 N2 하나만의 속성을 잴 수 없고, 게다가 어떤 env 값을 넣어도
+# #13이 항상 발화하므로 이 조합의 `gate`는 **어떤 env에서도 GREEN이 될 수 없다** — 그래서
+# N2 함수를 직접 호출해 격리한다(양성 대조는 위 "key-undeclared" 블록 — N2가 실제로
+# non-empty를 낼 수 있음을 이미 보였다).
+n2_out="$(PYTHONPATH="$REPO_ROOT/plugins/spec-distill/scripts" python3 -c '
+import sys, check_brief as cb
+payload = open(sys.argv[1], encoding="utf-8").read()
+audit = open(sys.argv[2], encoding="utf-8").read()
+print(cb.landscape_keys_declared(payload, audit))
+' "$FX/interview-brief-no-landscape.md" "$FX/interview-brief-no-landscape.audit.md" 2>&1)"
+[[ "$n2_out" == "[]" ]] \
+  && ok "U3-T7: web-off 실제 형상 → N2 는 공집합 ⊆ 무엇이든으로 자체 통과 (kill switch 코드 불필요)" \
+  || no "U3-T7: web-off 가 red — N2 가 구조적 면제를 못 한다 ($n2_out)"
 
 finish

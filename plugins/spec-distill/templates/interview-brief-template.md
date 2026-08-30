@@ -60,9 +60,10 @@ user_sourced_items:
 
 ## 4. External Landscape
 
-(1항목 = 1줄, **출처 URL 필수** + [취함|피함|중립] + 이유.)
+(1항목 = 1줄, **«출처키» 필수** + [취함|피함|중립] + 이유. 그 키가 가리키는 원자료
+ URL은 audit `## 7. 확산 원자료`에 선언한다 — payload에는 키만 남는다.)
 
-- ... — https://example.com — [취함] — 이유
+- ... «example» — https://example.com — [취함] — 이유
 
 ## 5. 기각 · Blind Spots
 

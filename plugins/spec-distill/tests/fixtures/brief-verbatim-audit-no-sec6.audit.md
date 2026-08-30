@@ -36,3 +36,7 @@ U2-T4 전용 fixture다. audit 파일 자체는 존재하고 읽히지만 `## 6.
 ## 5. 프로세스 로그
 
 - round 1: (b) — fixture
+
+## 7. 확산 원자료
+
+- «example» — https://example.com — 픽스처용 선언

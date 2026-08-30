@@ -40,3 +40,7 @@ source: spec-distill conducting-interview v0.43.0
   > "브리프에 리뷰를 붙이고 싶다"
 - **S3** ☑ 선택 (리뷰 역할 배치):
   > "3 에이전트 + codex, 계약별 분리"
+
+## 7. 확산 원자료
+
+- «example» — https://example.com — 픽스처용 선언

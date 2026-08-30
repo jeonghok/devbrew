@@ -1,6 +1,6 @@
 ---
 type: interview-audit
-payload: interview-brief-item-bad-status.md
+payload: interview-brief-dup-key.md
 created_at: 2026-07-26
 session_id: testsession01
 source: spec-distill conducting-interview v0.23.0
@@ -49,4 +49,4 @@ source: spec-distill conducting-interview v0.23.0
 
 ## 7. 확산 원자료
 
-- «example» — https://example.com — 픽스처용 선언
+- «nextjs-docs» — https://nextjs.org/docs/app — Next.js 공식 문서

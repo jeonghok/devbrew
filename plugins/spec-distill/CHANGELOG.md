@@ -1,5 +1,75 @@
 # Changelog
 
+## [0.44.0] — 2026-08-31
+
+### Changed
+
+- **`landscape_uncited` → `landscape_unkeyed`(#13) — §4 술어를 URL 인용에서 «출처키»로
+  바꿨다, ∀는 유지.** URL을 요구하는 것과 «출처키»를 요구하는 것은 다른 강도다 — 그대로
+  맞바꾸면 인용 없는 §4 항목 여덟 개 + audit에 URL 한 개가 통과해버려 강도가 내려간다.
+  그래서 URL이라는 **술어만** audit 쪽(N2)으로 가고, ∀(§4 항목마다 무언가 필수)는
+  payload에 그대로 남는다 — 새 정규식 `SOURCE_KEY_RE = re.compile(r"«([^»]+)»")`가
+  그 무언가를 정의한다. **web kill switch로 완화하지 않는다** — 웹이 꺼져도 출처를
+  말로 댈 수 있고, web-off brief는 §4에 순회할 항목이 없어 공허하게 통과하는 것이
+  옳다(조사하지 않았으면 인용할 것도 없다). 그래서 이 함수의 `_web_disabled()` 조기
+  반환을 지웠다.
+- **N2 신설 — `landscape_keys_declared(payload_text, audit_text)`.** payload §4가 쓴
+  «출처키» 집합이 audit `## 7. 확산 원자료`가 선언한 키 집합에 포함되는지를 확인한다.
+  **개수가 아니라 집합이다** — 개수 결속은 세 가지로 틀린다: web-off brief(§4 항목
+  1건, §7 0건)가 `1 ≤ 0`으로 red · 두 §4 항목이 같은 출처를 인용하면 `2 ≤ 1`로 red ·
+  §7을 산문 전문으로 적으면 "항목"의 계수 단위가 미정이라 집행 불가. 집합이면 셋
+  다 통과한다. **조건부다** — audit §7 헤딩 자체가 없으면(이미 `missing audit
+  sections`가 잡는다) 건너뛴다. payload가 «출처키»를 하나도 안 썼으면 공집합이
+  무엇의 부분집합이든 자동 만족되므로 kill switch 코드가 필요 없다. **보장하지
+  않는 것**: 어느 키가 어느 원자료를 가리키는지(키를 지어내도 통과한다) — 그 해석까지
+  묶는 교차 bijection은 설계 단계에서 검토 후 기각됐다.
+- **`AUDIT_SECTIONS`에 `("7", "확산 원자료")`를 뒤에 덧붙였다.**
+- **CLI 서브커맨드 개명 — `landscape-citations` → `landscape-keys`, JSON 키
+  `"uncited"` → `"unkeyed"`.** 개명은 함수 하나가 아니라 CLI 표면 전체다 — 이 서브
+  커맨드를 web 킬 스위치 완화 목록(`main()`의 `sub in (...)` 분기)에서도 뺐다:
+  `landscape_unkeyed`가 더 이상 web 상태에 좌우되지 않으므로 완화할 대상이 없다.
+  `skepticism`은 아직 §5 verdict의 URL 요구를 갖고 있어(다음 단위가 지운다) 그
+  목록에 남긴다. 서브커맨드가 이름은 "citations"인데 실제로는 키를 재는 상태로
+  남으면 그 출력을 읽는 쪽을 오도하므로, 남은 옛 이름 참조(테스트 R12의 직접 호출
+  포함)를 전수 스윕해 함께 고쳤다.
+- **두 템플릿을 갱신했다** — `interview-brief-template.md` §4 설명을 "출처 URL
+  필수"에서 "«출처키» 필수"로 바꾸고 예시 항목에 `«example»`을 추가했다(원자료
+  URL은 audit §7이 나른다는 설명과 함께). `interview-audit-template.md`에
+  `## 7. 확산 원자료` 절을 신설하고 같은 `«example»` 키를 선언해, 출하 템플릿
+  쌍이 새 #13·N2 둘 다에서 자기 게이트를 통과하게 했다(T-TPL 락 유지).
+- **F13 락을 새 술어로 갱신했다** — 옛 실패 문구 `'uncited landscape'`는 개명으로
+  더 이상 나오지 않아 그대로 두면 조용히 GREEN이 된다. grep 문자열을
+  `'unkeyed landscape'`로 바꾸고, 픽스처 `interview-brief-star-bullet-uncited.md`의
+  `-` 항목에 «키»를 붙여(그리고 audit §7에 그 키를 선언해) #13·N2 둘 다에서
+  무결함을 먼저 확정한 뒤, `*` 항목만 무키로 남겨 red 이유를 불릿 비대칭
+  하나로 고정했다.
+- **픽스처 3건 추가** — `interview-brief-unkeyed-entry`(§4 항목 하나가 무키 → #13
+  단독 red), `interview-brief-key-undeclared`(payload가 쓴 키가 audit §7에 없음 →
+  N2 단독 red), `interview-brief-dup-key`(두 §4 항목이 같은 키를 쓰고 audit §7엔
+  1건만 선언 → GREEN, 집합 포함이 개수 결속이 아님을 증명). 셋 다 `interview-brief-valid`
+  쌍에서 파생했고, 각각 정확히 한 축에서만 실패(혹은 통과)하도록 확인했다.
+
+### Known gap
+
+- **이 단위는 payload 67개 fixture + 템플릿 밖 여러 러너 픽스처를 의도적으로 RED로
+  남긴다.** #13이 URL 대신 «출처키»를 요구하게 되면서, 아직 URL만 갖고 «키»가 없는
+  기존 §4 항목 전량이 `unkeyed landscape entries`로 막힌다. 일괄 변환(URL → «키» +
+  audit §7 선언)은 다음 Task(N1a — payload에서 외부 URL 축출)의 Step 0가 맡는다.
+  `bash .claude/check-regression.sh` 기준 `test_check_brief.sh`(13개 assertion) ·
+  `test_brief_no_statement_cap.sh`(L3 1개, `interview-brief-valid.md` 파생 픽스처가
+  같은 원인으로 cascade)가 NOT-CLEAN이며, 이 RED는 그 하나의 원인으로 전량 귀속된다
+  (개별 확인 완료 — task-7-report.md 참고).
+- **task-7-brief.md Step 1의 네 번째 U3-T7 단언은 문면 그대로 구현할 수 없다.**
+  `interview-brief-no-landscape.md`(§4 항목 1건, URL도 «키»도 없음)에 대해
+  `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 gate`가 rc=0을 내야 한다고 적혀 있는데, 바로 위
+  기존 락("무인용 landscape가 종료를 차단 (R2/AC4)")이 **같은 파일**에 대해 web ON일
+  때 rc≠0을 요구하고, `landscape_unkeyed`는 web 상태와 무관하게 동일하게 판정한다
+  (설계상 의도 — 완화하지 않는다). 즉 이 미변경 픽스처의 `gate()`는 어떤
+  `DEVBREW_SPEC_DISTILL_DISABLE_WEB` 값에서도 GREEN이 될 수 없다 — «키»를 채우면 두
+  락 다 GREEN이 되어 기존 락이 지키던 R2/AC4가 깨진다. N2가 "kill switch 코드 없이도
+  구조적으로 통과한다"는 청구 자체는 참이므로, 테스트를 `landscape_keys_declared()`
+  직접 호출로 격리해 검증했다(`gate()`를 거치지 않음 — #13과의 혼선을 없앤다).
+
 ## [0.43.0] — 2026-08-31
 
 ### Changed
