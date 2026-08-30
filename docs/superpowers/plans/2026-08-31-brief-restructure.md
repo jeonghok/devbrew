@@ -284,6 +284,11 @@ if [[ -f "$TMP/interview-brief-long.md" ]]; then
   printf '%s' "$out" | grep -q 'hard cap' \
     && no "L3: 200자 statement 가 여전히 상한에 걸린다" \
     || ok "L3: 200자 statement 가 상한에 안 걸린다"
+```
+> **이 L3 는 출하되지 않았다.** 이 문면 앵커가 「개명한 상한」을 못 잡는 것을 mutation 이
+> 반증해서, 실제로는 **rc 앵커**로 바뀌어 착지했다(fix round 1). 여기 남긴 이유는 그것이
+> 무엇에서 무엇으로 바뀌었는지가 이 계획을 읽는 다음 사람에게 필요하기 때문이다.
+```bash
 else
   no "L3: 테스트 픽스처 생성 실패 — 이 층은 아무것도 재지 않았다"
 fi
@@ -462,10 +467,15 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-audit-attr-missing.md" 2>&1)"
   && ok "U2-T2: audit §6 에 출처 표기 블록이 없으면 red" \
   || no "U2-T2: attribution 이사가 audit 을 대상으로 안 잡는다"
 
-out="$(python3 "$SCRIPT" gate "$FX/interview-brief-payload-attr-missing.md" 2>&1)"; rc=$?
-printf '%s' "$out" | grep -q '출처 표기 블록 부재' \
-  && no "U2-T2: payload §6 이 여전히 attribution 검사 대상이다 (이사 실패)" \
-  || ok "U2-T2: payload §6 은 attribution 검사 대상이 아니다"
+# **rc 로 판정한다. 문면 grep 의 부정형을 쓰지 않는다.** 이 이사는 실패 메시지를
+# `audit §6 출처 표기 블록 부재` 로 바꾸는데, 그 문자열은 옛 문면을 **부분문자열로 포함**한다 —
+# `grep -q '출처 표기 블록 부재'` 의 부정형으로 쓰면 audit 쪽 실패가 payload 쪽 실패로 오독되고,
+# 반대로 문면을 더 고치면 조용히 GREEN 이 된다. 부정형 문면 앵커는 두 방향 모두로 거짓말한다.
+python3 "$SCRIPT" gate "$FX/interview-brief-payload-attr-missing.md" >/dev/null 2>&1
+[[ $? -eq 0 ]] \
+  && ok "U2-T2: payload §6 에 블록이 없어도 게이트 통과 (검사 대상이 아니다)" \
+  || { python3 "$SCRIPT" gate "$FX/interview-brief-payload-attr-missing.md" 2>&1 | head -2
+       no "U2-T2: payload §6 이 여전히 attribution 검사 대상이다 (이사 실패)"; }
 
 for sec in 6; do
   out="$(python3 "$SCRIPT" gate "$FX/interview-brief-audit-no-sec${sec}.md" 2>&1)"; rc=$?
@@ -1468,7 +1478,7 @@ audit `## 7. 확산 원자료` 에 append 한다. **§6 은 건드리지 않는�
 ```bash
 # --- U3-T8: N1a 부재 축 + §6 예외 ------------------------------------------
 out="$(python3 "$SCRIPT" gate "$FX/interview-brief-url-in-sec4.md" 2>&1)"; rc=$?
-{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'external URL'; } \
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '외부 URL'; } \
   && ok "U3-T8: payload §4 에 URL → red (N1a)" || no "U3-T8: 부재 축이 안 문다"
 
 # §6 S1 안의 URL 은 예외다 — 사용자가 자기 요청에 쓴 것이다
