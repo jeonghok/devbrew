@@ -68,17 +68,19 @@
   setext underline이 아님을 잠근다 — T10/T11은 라벨 자기 줄만 보고 구조적으로 이 결함을
   못 본다.
 
-### Known gap (task-10, Step 10 mutation row 6)
-
-- **"번들을 한 번만 조립한다"는 SKILL.md의 규범 문장에 대응하는 기계 락이 없다.** 실측:
-  2-b에 `build_brief_bundle.py "$PAYLOAD" "$AUDIT" > "$BUNDLE"` 재조립 호출을 하나 더
-  삽입해도(2-a가 이미 만든 `$BUNDLE`을 codex 직전에 다시 덮어쓰는 모양) `test_reviewing_brief_skill.sh`·
-  `.claude/check-regression.sh`(83개 파일 전수) 어디도 RED가 나지 않았다 — critic과 codex가
-  "두 번 조립된 서로 다른 바이트"를 볼 수 있는 경로가 텍스트로는 검출되지 않는다는 뜻이다.
-  기존 U4 락(`n_bundle == n_fid` 개수 대조)은 codex 호출이 `"$BUNDLE"`을 인자로 받는지만
-  보고, 그 인자가 가리키는 파일이 critic이 본 것과 **같은 조립 결과**인지는 보지 못한다 —
-  텍스트 정적 분석으로는 "같은 변수 이름"과 "같은 바이트"를 구분할 수 없다. 실제 봉쇄는
-  현재 산문 규약(2-a에서 한 번만 조립하고 이후 블록은 재도출하지 않는다)에 의존한다.
+**(task-10 fix round 1, F2)** 위 문단이 "known gap"으로 적어둔 것은 오판이었다 —
+`n_bundle == n_fid`(codex 호출이 `"$BUNDLE"`을 인자로 받는지)와는 다른 축의 락이 실제로
+가능했다: 조립 호출 자체를 실행-라인 앵커로 세면 된다(`grep -cE '^[[:space:]]*python3
+"\$PR/scripts/build_brief_bundle\.py"'`, 이 파일이 이미 `n_bundle`/`n_fid`에 쓰는 것과
+같은 관용구). `test_reviewing_brief_skill.sh`에 **F2** 락을 추가했다 — 스코프는 전체
+파일이 아니라 **2-a~2-b 구간**(2-c 헤더 직전에서 끊는다): 2-c의 fresh critic 재dispatch는
+오늘 "2-a 블록 그대로"라는 참조뿐이라 리터럴 조립 호출이 파일 전체에 1개뿐이지만, 그
+참조를 나중에 명시적 리터럴 재조립으로 펼쳐 쓰는 것은 정당한 설계 변경이다(수정된
+payload/audit에서 다시 조립해야 하므로) — 전체-파일 `== 1`은 그 정당한 변경에 거짓 RED를
+낸다. 2-a~2-b 구간 안에서는 "같은 라운드의 critic·codex #1가 같은 바이트를 본다"는
+불변식이 항상 참이어야 하므로 그 구간에 대해서만 `== 1`을 무조건 강제한다. 위에서
+재현한 mutation(2-b에 재조립 호출 삽입)으로 이 락이 RED(count 2)를 내는 것을 실측
+확인했다.
 
 ## [0.44.0] — 2026-08-31
 
