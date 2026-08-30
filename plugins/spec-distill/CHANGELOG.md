@@ -11,6 +11,23 @@
   `rc=1` · `"C1: statement 161자 > 160 (hard cap)"` 이었다. 회귀 락
   `test_brief_no_statement_cap.sh` 는 3층(양성 대조 → 부재 → 행동)으로 재발을 막는다.
 
+### 검증 경계 — mutation 이 드러낸 gap
+
+- **L3(행동 층)는 메시지 리터럴에 고정돼 있다, 진짜 행동(rc/pass)이 아니라.** mutation
+  축 (c)(이름만 바꿔 상한을 되살림 — `if len(stmt) > 160: errs.append(f"{iid}: too long")`)
+  를 적용하면 게이트는 실제로 200자 statement 를 거부한다(`rc=1`,
+  `"user_sourced_items: ['C1: too long']"`) — 즉 상한 **행동**은 되살아났다. 그런데
+  L3 는 `grep -q 'hard cap'` 로 **그 문구만** 찾으므로 "too long" 은 못 잡고 `ok`(안 걸림)
+  를 낸다. L3 는 이름을 이미 아는 리네임(`STATEMENT_MAX`, "160자", "hard cap")만
+  잡고, **완전히 새 메시지로 재도입된 길이 상한은 못 잡는다.** 이 gap 은 이번 단위의
+  회귀 목적(구 상한 재발 방지)에는 영향이 없다 — L2 가 정확히 그 리터럴들을 잠그기
+  때문이다. 하지만 "L3 = 행동 층"이라는 이름과 실제 구현(문자열 앵커)이 어긋난다는
+  점은 기록해 둔다. mutation (a)/(b) 는 각각 `git diff --stat` 으로 실제 코드 변경을
+  확인한 뒤 기대대로 rc=1(L1 NO / L2 NO) 을 냈다 — 브리프가 준 (c) 의 원래 anchor
+  문자열(`errs.append(f"{iid}: id 형식`)은 현재 `check_brief.py` 에 존재하지 않아
+  최초 실행은 무변경 no-op 이었다(diff 없음) — anchor 를 `ev = it.get("evidence")`
+  줄로 교체해 실제 변경을 확인한 뒤 재실행했다.
+
 ## [0.41.0] — 2026-08-29
 
 ### Changed
