@@ -274,13 +274,22 @@ python3 "$PR/scripts/brief_review_state.py" set-stage "$STATE" fidelity
 
 ### 2-a. critic dispatch 블록
 
-프롬프트에 **payload 전문을 inline**합니다. 경로를 주지 않습니다 — 이 축은 문서 **내부 대조**이고 외부 정보가 오염원입니다. blob은 빌더가 만듭니다(frontmatter의 `audit_file`·`name`·`created_at` 세 값을 `<redacted>`로):
+프롬프트에 **번들 전문을 inline**합니다 — payload(§2 요약)와 audit §6(비신뢰 원문) 둘 다,
+`build_brief_bundle.py`가 조립한 한 문서입니다. 경로를 주지 않습니다 — 이 축은 문서 **내부
+대조**이고 외부 정보가 오염원입니다. 번들은 **한 번만** 조립해 세션 디렉토리의 파일로
+남깁니다(`.claude/spec-distill/<session-id>/`, P13 — git-ignored, 번들은 비신뢰 verbatim을
+담으므로 그 밖에 두지 않습니다) — 아래 codex 러너(2-b·2-c)도 **같은 파일**을 받아야 하기
+때문입니다. 두 번 돌리면 사이에 payload가 바뀌었을 때 두 소비자가 다른 바이트를 보게 됩니다:
 
 ```bash
-BLOB="$(python3 "$PR/scripts/build_brief_inline_blob.py" "$PAYLOAD")"; blob_rc=$?
+BUNDLE="$ROOT/$harness_sid/brief-bundle.md"
+python3 "$PR/scripts/build_brief_bundle.py" "$PAYLOAD" "$AUDIT" > "$BUNDLE"; blob_rc=$?
+BLOB="$(cat "$BUNDLE")"
 ```
 
-`blob_rc == 2`면 payload가 없거나 사용법 오류·읽기 실패(비-UTF-8·권한)입니다 — 빈 `<brief>`로 critic을 dispatch하면 indeterminate를 clean으로 오독하는 fail-open이므로 **critic을 dispatch하지 않습니다.** record(`component: critic`, `affected_axis: fidelity`, `verification_status: unavailable`)를 남기고 Step B로 조기 보고합니다. `blob_rc == 3`이면 본문에 위생 미달 잔존이 있다는 뜻입니다 — 원문 보존이 우선이라 지우지 않고 record(`component: critic`, `affected_axis: fidelity`, `verification_status: degraded`)를 남기고 계속합니다. **`0`·`3`이 아닌 그 외 non-zero는 `2`와 동일하게 취급합니다 — dispatch하지 않습니다**(표에 없는 코드를 "계속"으로 흘리면 `${BLOB}`이 빈 문자열인 채 프롬프트에 보간돼 critic이 빈 문서를 리뷰하고 "왜곡 없음"을 보고합니다; indeterminate ≠ clean).
+`brief-critic`은 프롬프트에 보간되는 **문자열**(`$BLOB`)을 받고, `run_brief_codex_reviewer.sh`는 `[[ -f ... ]]`로 **실재 파일 경로**(`$BUNDLE`)를 요구합니다 — 그래서 조립은 파일로 한 번 하고 두 소비자가 각자의 모양으로 그 결과를 나눠 가집니다.
+
+`blob_rc == 2`면 payload·audit이 없거나 사용법 오류·읽기 실패(비-UTF-8·권한)·**audit에 `## 6. 사용자 원문` 절이 없음**입니다 — 빈 `<brief>`로 critic을 dispatch하면 indeterminate를 clean으로 오독하는 fail-open이므로 **critic을 dispatch하지 않습니다.** record(`component: critic`, `affected_axis: fidelity`, `verification_status: unavailable`)를 남기고 Step B로 조기 보고합니다. `blob_rc == 3`이면 번들의 **payload 부분**에 위생 미달 잔존(audit 파일명)이 있다는 뜻입니다 — 원문 보존이 우선이라 지우지 않고 record(`component: critic`, `affected_axis: fidelity`, `verification_status: degraded`)를 남기고 계속합니다. **`0`·`3`이 아닌 그 외 non-zero는 `2`와 동일하게 취급합니다 — dispatch하지 않습니다**(표에 없는 코드를 "계속"으로 흘리면 `${BLOB}`이 빈 문자열인 채 프롬프트에 보간돼 critic이 빈 문서를 리뷰하고 "왜곡 없음"을 보고합니다; indeterminate ≠ clean).
 
 ```javascript
 Agent({
@@ -303,13 +312,15 @@ critic의 raw 출력을 **요약·바꿔쓰기 없이 그대로** `CRITIC_OUT="$
 
 ```bash
 if [[ "${codex_avail:-}" == "true" ]]; then
-  bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$PAYLOAD" "$(pwd)" "$CODEX_FID_YAML"
+  bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$BUNDLE" "$(pwd)" "$CODEX_FID_YAML"
 else
   : # skip — 1-c의 affected_axis: all record가 이 축까지 덮는다(중복 record 없음)
 fi
 python3 "$PR/scripts/merge_brief_review.py" \
     --critic-output "$CRITIC_OUT" --codex-yaml "${CODEX_FID_YAML:-/nonexistent}"
 ```
+
+codex #2는 **번들**(`$BUNDLE`)을 받습니다 — critic과 같은 재료입니다. `$PAYLOAD` 그대로 받는 direction 축(1-c)과 여기가 갈리는 지점입니다: direction 리뷰어는 도구를 갖고 스스로 audit을 열 수 있지만, codex 러너는 파일 하나만 받으므로 원문 없이 왜곡을 판정시키면 "왜곡 없음"이 공허하게 나옵니다(2-a와 같은 이유).
 
 **병합은 skip 라운드에도 그대로 돕니다.** codex YAML이 없으면 병합이 `codex_degraded: true` + advisory로 그 부재를 loud하게 보고하고, critic 판정이 살아 있으면 `approved`를 막지 않습니다(양쪽 판정 불가일 때만 escalate). 그래서 게이트를 건다고 kill switch가 강제 수정 루프로 바뀌지 않습니다.
 
@@ -348,10 +359,12 @@ CAN_OUT="$ROOT/$harness_sid/brief-can-redispatch.json"
 python3 "$PR/scripts/brief_review_state.py" can-redispatch "$STATE" > "$CAN_OUT"; can=$?
 if [[ "$can" -eq 0 ]]; then
   python3 "$PR/scripts/brief_review_state.py" bump-critic-round "$STATE"   # 재dispatch 허용된 시점에만 +1
-  # ... fresh critic 재dispatch (2-a 블록 그대로, $CRITIC_OUT 덮어쓰기)
+  # ... fresh critic 재dispatch (2-a 블록 그대로, $CRITIC_OUT 덮어쓰기) — 이 재실행이 $BUNDLE도
+  # 함께 재조립한다(build_brief_bundle.py를 다시 부르므로). codex #2가 아래에서 그 갱신된
+  # $BUNDLE을 받는 것은 이 재조립의 결과이지 별도 단계가 아니다.
   # (3) codex #2도 **수정된 바이트**에 다시 돌린 뒤 재병합한다 — 게이트 통과 후, 이 분기 안에서만
   if [[ "${codex_avail:-}" == "true" ]]; then
-    bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$PAYLOAD" "$(pwd)" "$CODEX_FID_YAML"; runner_rc=$?
+    bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$BUNDLE" "$(pwd)" "$CODEX_FID_YAML"; runner_rc=$?
     if [[ "$runner_rc" -eq 3 ]]; then rm -f "$CODEX_FID_YAML"; fi   # stale 잔존 방지 (위 1-c와 같은 이유)
   else
     : # skip — 1-c의 affected_axis: all record가 이 라운드까지 덮는다
@@ -386,7 +399,7 @@ fi
 
 **(1) 구조 게이트는 경고가 아니라 차단입니다.** `gate_rc != 0`이면 블록이 `exit 1`로 **거기서 멈춥니다** — 뒤의 `check_verbatim_coverage.py`·`can-redispatch`·`bump-critic-round`·재dispatch가 하나도 실행되지 않습니다. 이유를 변수에만 담고 흘려보내면 서술만 차단이고 실행은 통과입니다(이 파일의 이전 판이 정확히 그 shape이었고, 대입한 변수를 읽는 곳이 리포 전체에 0곳이었습니다). 충실도 수정이 만든 frontmatter·섹션 구조 위반은 **새로 생긴 Law 1 실패**이고, 그것을 안고 진행하면 Step B는 *"구조 게이트가 통과했다"* 를 거짓으로 보고하게 됩니다. 게이트가 초록이 된 뒤 이 블록을 처음부터 다시 탑니다. `vc_rc`는 진입 첫 액션과 **같은 표**(`0` 진행 / `1` 차단 / `3`·`4`·그 외 non-zero는 degrade 후 계속 + record)로 처리합니다.
 
-**(3) codex #2 재실행이 필수인 이유.** 충실도 verdict는 critic과 codex findings의 **fail-closed 합집합**입니다. 두 입력이 서로 다른 버전의 문서에서 나오면 그 합집합은 어느 한 버전에 대해서도 완전하지 않습니다 — 합집합이 주는 보장 자체가 사라집니다. 그리고 codex는 binding이므로, 수정이 새로 만든 왜곡을 codex가 보지 못한 채 승인이 나올 수 있습니다. 재실행 비용은 이미 재dispatch 상한 2가 묶고 있으므로 무한 루프가 되지 않습니다(critic·codex 각각 최대 3회 = 최초 1 + 재2). `$CRITIC_OUT`·`$CODEX_FID_YAML`은 라운드마다 **덮어씁니다** — 이전 라운드의 산출이 남으면 그게 곧 stale입니다. 재실행 라운드에도 2-b의 `codex_degraded` record 규칙이 그대로 적용됩니다. 그리고 이 재실행도 **2-b와 같은 `$codex_avail` 게이트 안**에 있습니다 — 게이트 없이 돌면 사용자 opt-out이 하필 재실행 경로로 새어나가고, 라운드마다 외부 모델 지출이 반복됩니다.
+**(3) codex #2 재실행이 필수인 이유.** 충실도 verdict는 critic과 codex findings의 **fail-closed 합집합**입니다. 두 입력이 서로 다른 버전의 문서에서 나오면 그 합집합은 어느 한 버전에 대해서도 완전하지 않습니다 — 합집합이 주는 보장 자체가 사라집니다. 그리고 codex는 binding이므로, 수정이 새로 만든 왜곡을 codex가 보지 못한 채 승인이 나올 수 있습니다. 재실행 비용은 이미 재dispatch 상한 2가 묶고 있으므로 무한 루프가 되지 않습니다(critic·codex 각각 최대 3회 = 최초 1 + 재2). `$CRITIC_OUT`·`$CODEX_FID_YAML`·`$BUNDLE`은 라운드마다 **덮어씁니다** — 이전 라운드의 산출이 남으면 그게 곧 stale입니다. 재실행 라운드에도 2-b의 `codex_degraded` record 규칙이 그대로 적용됩니다. 그리고 이 재실행도 **2-b와 같은 `$codex_avail` 게이트 안**에 있습니다 — 게이트 없이 돌면 사용자 opt-out이 하필 재실행 경로로 새어나가고, 라운드마다 외부 모델 지출이 반복됩니다.
 
 `can == 0`일 때만 카운터를 올리고 재dispatch합니다 — 분기를 주석 하나로 서술하지 않고 `if`로 명시하는 이유는, escalate 경로에서 실수로 카운터가 한 번 더 올라가는 shape을 애초에 봉쇄하기 위해서입니다(clamp가 상한 초과는 막아도, 게이트를 거치지 않고 bump가 실행되는 모양 자체는 AC13이 load-bearing으로 보는 지점입니다).
 
@@ -458,7 +471,7 @@ ${BLOB}
 
 ### 3-b. gap 대조 (요약 ↔ payload)
 
-받은 산문 요약을 payload의 §0/§1/§2/§3/§7과 대조해 gap을 분류합니다. **닫힌 다섯 클래스**입니다:
+받은 산문 요약을 payload의 §0/§1/§2/§3/§7과 대조해 gap을 분류합니다. **닫힌 여섯 클래스**입니다:
 
 | # | gap 클래스 | 판정 |
 |---|---|---|
@@ -467,14 +480,16 @@ ${BLOB}
 | G3 | **최상위 제약 누락** — 최상위 항목의 내용이 요약에 없음 | 해당 id의 내용이 요약에 부재 |
 | G4 | **Goal ↔ Non-goal 반전** — §1의 Non-goal을 goal로(또는 역) 요약 | 방향이 뒤집힌 서술 존재 |
 | G5 | **다음 행동 오독** — §7 Next Action과 다른 다음 단계를 서술 | 요약의 next step ≠ §7 |
+| G6 | **상태 표기와 본문 서술의 불일치** — 같은 항목을 frontmatter/표가 한쪽으로, 본문 산문이 다른 쪽으로 말해 독자가 어느 쪽이 참인지 정하지 못함 | 요약이 두 서술 중 한쪽만 담고, 나머지 한쪽이 payload에 그대로 있음 |
 
-**성공 조건**: G1–G5 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 Step B 게이트에 **세 조각**으로 올립니다 — *어느 클래스 / 요약의 어느 문장 / payload의 어느 절*.
+**성공 조건**: G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 Step B 게이트에 **세 조각**으로 올립니다 — *어느 클래스 / 요약의 어느 문장 / payload의 어느 절*.
 
 3-a에서 `blob_rc == 3`이었던 라운드는 redaction되지 않은 audit 파일명이 본문에 그대로 남아 있었다는 뜻입니다 — 냉독 에이전트가 문서 메타데이터(파일명 규약)까지 함께 봤을 수 있으므로, 그 라운드의 gap 판정은 **신뢰도 하향**으로 읽습니다(zero-tool 격리 미보장 분기와 동일한 원인의 신뢰도 저하).
 
 **이 판정은 advisory입니다** — pass/fail이 파이프라인을 차단하지 않고 사용자가 최종 판정합니다. 프레시 에이전트는 *잘못 재구성된* payload도 정확히 요약할 수 있습니다 — 원래 의도와 비교할 독립 ground truth가 없으므로 hard verdict로 쓰면 false block이 납니다.
 
-여섯 번째 클래스가 실제로 관측되면 **여기에 추가하는 것이 compounding 이벤트**입니다(Law 3).
+G6은 이 설계의 리뷰 8라운드에서 반복 관측된 것을 여기에 추가한 것입니다(task-10, Law 3
+compounding). **일곱 번째** 클래스가 실제로 관측되면 같은 방식으로 여기에 추가합니다.
 
 ## Step B로 전달
 

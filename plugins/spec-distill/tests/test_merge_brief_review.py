@@ -348,8 +348,9 @@ class TestFirstMatchParsingIsFailOpen(unittest.TestCase):
     `**Status:** Approved` / `**Status:** Issues Found` 두 줄이 **디코이로** 들어
     있다. critic이 자기 형식을 복창하면 그 복창이 실제 판정보다 앞서 잡힌다.
 
-    게다가 brief 본문(§6 사용자 원문 = 비신뢰 verbatim)이 critic 프롬프트에 그대로
-    inline되므로, 원문에 심어둔 디코이가 그대로 주입 표면이 된다.
+    게다가 사용자 원문(v0.45.0부터 번들의 audit §6 전량 = 비신뢰 verbatim, 이전엔 payload
+    §6의 `S1` 하나)이 critic 프롬프트에 그대로 inline되므로, 원문에 심어둔 디코이가 그대로
+    주입 표면이 된다.
 
     계약: 값이 서로 다른 Status 줄이 둘 이상이면 **판정 불가 → fail-closed**
     (`needs_revise`)이고 그 사실이 advisory로 남는다. 값이 모두 같으면 그 값을 쓴다.
@@ -427,7 +428,8 @@ class TestVerdictReachabilityAndSentinelMultiplicity(unittest.TestCase):
         self.assertIn("Status", joined, "충돌 사실이 advisory로 올라오지 않는다")
 
     def test_multiple_sentinel_blocks_are_malformed_not_silently_last(self):
-        # §6(비신뢰 원문)이 프롬프트에 inline되므로 뒤에 붙은 블록이 권위를 갖는 것 자체가
+        # 사용자 원문(v0.45.0부터 번들의 audit §6 전량, 이전엔 payload §6의 `S1` 하나 —
+        # 비신뢰 verbatim)이 프롬프트에 inline되므로 뒤에 붙은 블록이 권위를 갖는 것 자체가
         # 주입 표면이다. 마지막을 채택하되 판독 불가로 표시해 escalate를 만든다.
         text = ("**Status:** Approved\n\n"
                 "```brief-critic-issues\n{\"issues\": []}\n```\n\n"

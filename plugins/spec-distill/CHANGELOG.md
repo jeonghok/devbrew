@@ -25,7 +25,48 @@
   내용을 의도적으로 싣게 됐으므로 전체를 스캔하면 정상 동작이 매번 exit 3을 낸다.
 - **`test_brief_bundle.sh` 신설 (T1–T8).** 라벨 존재(T2/T3)와 실린 내용(T5)을 분리해
   검사한다 — 라벨만 있고 원문이 비어도 통과하는 락은 이 실패를 못 잡는다. T4는
-  `## 6. 사용자 원문` 헤딩이 번들에 최대 1개임을 세어 확인(동명 헤딩 충돌 재발 방지).
+  `## 6. 사용자 원문` 헤딩이 번들에 최대 1개임을 세어 확인(동명 헤딩 충돌 재반생 방지).
+- **번들이 리뷰 층에 배선됐다 (task-10) — 세 축이 셋으로 갈린다.** `reviewing-brief`
+  SKILL의 critic dispatch(2-a)와 fidelity codex 호출 두 곳(2-b 최초 · 2-c 재실행)이
+  이제 `build_brief_bundle.py`가 만든 번들(payload + audit §6 전량)을 받는다 — direction
+  축(1-c)과 readback(3-a)은 `$PAYLOAD` 그대로 유지한다(direction은 도구로 스스로 audit을
+  열 수 있고, readback은 하류가 실제로 받는 문서의 읽힘을 재야 하므로 번들을 주면 안
+  된다). 번들은 세션 디렉토리에 **한 번만** 조립해 critic(문자열 보간)과 codex 러너(파일
+  경로)가 같은 바이트를 나눠 갖는다.
+- **`brief-codex-fidelity-checklist.md`·`agents/brief-critic.md`가 라벨 토큰을 가리킨다.**
+  두 파일이 헤딩 리터럴 `§6 사용자 원문`을 ground truth로 지목하던 것을 `<<<AUDIT-VERBATIM>>>`
+  다음 블록으로 바꿨다 — 번들에 audit §6을 실어도 지시문이 여전히 payload의 `S1` 하나만
+  가리키면 codex·critic이 원문 전량을 못 보고 판정한다.
+- **`build_brief_codex_prompt.py`의 비신뢰-verbatim 경계 문장이 두 축을 함께 덮는다.**
+  direction 축은 payload(`## 6. 사용자 원문`)를, fidelity 축은 번들(`<<<AUDIT-VERBATIM>>>`)을
+  받으므로 한쪽 위치만 가리키면 다른 축에서 injection 경계 표시가 사라진다.
+  `merge_brief_review.py`·`test_merge_brief_review.py`의 같은 취지 주석도 주입 표면이
+  "payload §6의 `S1` 1건"에서 "번들의 audit §6 전량"으로 늘어난 사실을 반영해 갱신했다.
+- **`build_brief_inline_blob.py`가 readback 전용으로 재서술됐다.** docstring의 "충실도
+  판정은 body §2 ↔ §6 대조"는 번들 도입 이후 거짓이다 — 이 blob의 유일한 소비자는 이제
+  냉독이다. `tests/test_brief_inline_blob.sh`의 T24(§6 원문·헤딩 보존)는 변경 없이 GREEN을
+  유지한다(축 분리의 양성 대조).
+- **G6 gap 클래스 추가 (Law 3 compounding).** 냉독 3-b의 다섯 클래스에 *"상태 표기와 본문
+  서술의 불일치"*를 더했다 — 이 설계의 리뷰 8라운드에서 반복 관측됐다. 성공 조건도
+  `G1–G5 전부 0건`에서 `G1–G6 전부 0건`으로 함께 고쳤다(안 고치면 새 클래스가 관측돼도
+  아무것도 안 막는다).
+- **`test_reviewing_brief_skill.sh`에 U4 계약 락 4건 추가.** fidelity codex 호출 개수와
+  번들 인자 개수의 등식(하나라도 payload면 fail-open 재발) · 냉독의 payload-only 유지
+  (반대 방향 양성 짝) · 체크리스트·critic 정의의 라벨 토큰 참조 · G6의 성공 조건 포함.
+  기존 T8·BLOB(2-a/3-a) 락도 2-a가 이제 `build_brief_bundle.py`를 호출하는 사실에 맞춰
+  갱신했다(BLOB 루프는 섹션별로 다른 빌더 호출 패턴을 요구하도록 분기했다 — 한 정규식으로
+  두 섹션을 함께 검사하면 한쪽 빌더 호출이 사라져도 다른 쪽 매치로 조용히 통과한다).
+
+### Fixed
+
+- **`build_brief_bundle.py`의 setext heading 충돌 (task-9 재리뷰 결함).** `assemble()`이
+  라벨 다음 줄에 payload의 frontmatter `---`를 바로 이어 붙였다 — CommonMark는 단락 바로
+  다음 줄이 전부 `-`(또는 `=`)면 그 단락을 setext heading으로 승격시키므로, 모든 호출에서
+  `<<<PAYLOAD>>>` 라벨이 `<h2>`가 되어 `## 6. 사용자 원문`과 같은 헤딩 네임스페이스에
+  들어갔다 — 이 파일이 막으려던 헤딩 충돌이 라벨 도입 자체로 재발하는 경로였다. 각 라벨
+  다음에 빈 줄을 둬서 고쳤다. `test_brief_bundle.sh`에 T13/T14를 추가해 라벨 **다음 줄**이
+  setext underline이 아님을 잠근다 — T10/T11은 라벨 자기 줄만 보고 구조적으로 이 결함을
+  못 본다.
 
 ## [0.44.0] — 2026-08-31
 

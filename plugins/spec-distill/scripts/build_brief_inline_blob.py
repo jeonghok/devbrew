@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""build_brief_inline_blob.py — critic·readback에 inline될 payload blob (Spec B AC2/AC3).
+"""build_brief_inline_blob.py — **brief-readback 전용** payload blob.
 
-`brief-critic`과 `brief-readback`은 payload를 **경로가 아니라 전문 inline**으로 받는다.
-그때 frontmatter의 세 값 — `audit_file` · `name` · `created_at` — 을 `<redacted>`로
-바꾼다. 셋을 잃어도 손실이 없다: 충실도 판정은 body §2 ↔ §6 대조이고 frontmatter ↔ body
-일치는 게이트의 bijection B가 기계 보장하며, 주제는 본문 H1 제목에 남아 readback의 냉독에도
-지장이 없다.
+v0.45.0에서 충실도 축이 `build_brief_bundle.py`로 갈라졌다(payload + audit §6을 조립해
+`brief-critic`과 codex #2가 받는다). 이 파일은 계약이 바뀌지 않았고 소비자가 하나로
+줄었다 — 냉독이 재는 것은 *하류가 실제로 받는 문서*의 읽힘이므로 payload-only가 맞다.
+번들을 주면 냉독이 하류가 절대 보지 않을 것을 읽는다.
+
+`brief-readback`은 payload를 **경로가 아니라 전문 inline**으로 받는다. 그때 frontmatter의
+세 값 — `audit_file` · `name` · `created_at` — 을 `<redacted>`로 바꾼다. 셋을 잃어도
+손실이 없다: 주제는 본문 H1 제목에 남아 냉독에 지장이 없고, frontmatter ↔ body 일치는
+게이트의 bijection B가 기계 보장한다.
 
 **이것은 보장이 아니라 위생 조치다** (spec §5.1.1 "층 1"). 격리는 도구 표면(zero-tool)으로
 성립하거나 성립하지 않는다. redaction은 실패 분기에서 *쉬운 길*을 없애는 것이고, 통과
@@ -14,8 +18,8 @@
 `audit_file`을 redact해도 `name` + `created_at`으로 `<date>-<topic>-interview.audit.md`를
 **재구성**할 수 있으므로 세 값을 함께 지운다(round-1 리뷰가 적발한 경로).
 
-§6 사용자 원문은 **절대 건드리지 않는다.** 본문이 audit 파일명을 언급하면 원문 보존이
-이기고 **exit 3**으로 알린다 — 호출자가 degradation record를 남기고 계속한다.
+§6 사용자 원문(payload의 `S1`)은 **절대 건드리지 않는다.** 본문이 audit 파일명을 언급하면
+원문 보존이 이기고 **exit 3**으로 알린다 — 호출자가 degradation record를 남기고 계속한다.
 
 exit: 0 깨끗한 redaction / 3 본문에 audit 파일명 잔존(위생 미달) / 2 usage·파일 부재·읽기 실패
      (비-UTF-8·권한). **1은 절대 내지 않는다** — 호출자 표가 0/2/3만 라우팅하므로
@@ -82,9 +86,11 @@ def main(argv: list[str]) -> int:
     blob = redact_frontmatter(text)
     sys.stdout.write(blob)
     if AUDIT_SUFFIX_RE.search(blob):
-        print("[spec-distill v0.24.0] blob 본문에 audit 파일명이 남아 있다 — §6 원문 보존이 "
-              "우선이므로 지우지 않았다. 격리 위생 미달을 degradation record로 남겨라 "
-              "(component: critic, verification_status: degraded).", file=sys.stderr)
+        print("[spec-distill v0.45.0] blob 본문에 audit 파일명이 남아 있다 — §6 원문 보존이 "
+              "우선이므로 지우지 않았다. 이 블롭의 유일한 소비자는 readback이다(v0.45.0부터 "
+              "critic은 build_brief_bundle.py의 번들을 받는다) — 냉독 gap 판정을 신뢰도 "
+              "하향으로 읽어라 (component: readback, verification_status: degraded).",
+              file=sys.stderr)
         return 3
     return 0
 

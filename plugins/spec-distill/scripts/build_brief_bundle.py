@@ -53,8 +53,14 @@ def audit_verbatim(audit_text: str):
 
 
 def assemble(payload_text: str, verbatim: str) -> str:
-    return (f"<<<PAYLOAD>>>\n{redact_frontmatter(payload_text).strip()}\n\n"
-            f"<<<AUDIT-VERBATIM>>>\n{verbatim}\n")
+    # 라벨 다음 줄에 **빈 줄**을 둔다(task-10 fix). payload는 frontmatter `---`로
+    # 시작하므로, 라벨 바로 다음 줄이 그 `---`이면 CommonMark가 라벨 텍스트를 setext
+    # h2(`<h2>`)로 승격시킨다 — `## 6. 사용자 원문`과 같은 헤딩 네임스페이스에 들어가
+    # 이 파일이 막으려는 바로 그 헤딩-충돌이 라벨 도입 자체로 재발한다. 빈 줄은 앞
+    # 텍스트를 단락 나머지와 분리해 setext 후보에서 제외시킨다(CommonMark: setext
+    # underline은 바로 앞 줄이 같은 단락에 속할 때만 성립).
+    return (f"<<<PAYLOAD>>>\n\n{redact_frontmatter(payload_text).strip()}\n\n"
+            f"<<<AUDIT-VERBATIM>>>\n\n{verbatim}\n")
 
 
 def main() -> int:

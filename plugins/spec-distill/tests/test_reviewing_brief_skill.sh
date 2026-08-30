@@ -127,8 +127,11 @@ has "$W2A" 'docs/superpowers/interview/' \
 # 아래 두 assert는 **실행 라인 앵커**다. 순수 substring(`has`)은 같은 문구를 품은 산문
 # 한 줄로 satisfiable하고, 이 파일의 fence()는 `#` 주석만 거른다 — 실측된 데코이 클래스다
 # (bash 펜스 안 산문 / javascript 펜스 안 산문 둘 다). CR-3 assert가 이미 쓰는 관용구를 따른다.
-grep -qE '^[[:space:]]*BLOB="\$\(python3 "\$PR/scripts/build_brief_inline_blob\.py" ' <<<"$W2A" \
-  && ok "T8: critic 블록이 inline blob 빌더를 실행 라인으로 호출 (줄-시작 앵커)" || no "T8: blob 빌더 호출 라인 부재 (같은 문구의 산문으로는 만족되지 않는다)"
+# task-10: 2-a는 이제 build_brief_bundle.py로 번들(payload + audit §6)을 조립한다 —
+# build_brief_inline_blob.py는 3-a(readback) 전용으로 옮겨갔다(BLOB($sec) 루프가 그
+# 축을 이미 따로 확인한다, 아래).
+grep -qE '^[[:space:]]*python3 "\$PR/scripts/build_brief_bundle\.py" "\$PAYLOAD" "\$AUDIT" > "\$BUNDLE"' <<<"$W2A" \
+  && ok "T8: critic 블록이 번들 빌더를 실행 라인으로 호출 (줄-시작 앵커)" || no "T8: 번들 빌더 호출 라인 부재 (같은 문구의 산문으로는 만족되지 않는다)"
 grep -qE '^[[:space:]]*subagent_type: "spec-distill:brief-critic"' <<<"$W2A" \
   && ok "T8: critic 블록이 brief-critic을 dispatch 라인으로 지목 (줄-시작 앵커)" || no "T8: brief-critic dispatch 라인 부재"
 
@@ -414,12 +417,21 @@ has "$W_ENTRY" '구조 위반' \
 # 전체파일 `grep -c == 2`는 **한 섹션에 둘 다 넣어도** 통과한다(iter-2가 mutation으로
 # 실증: readback 절의 catch-all을 지우고 critic 절에 복제 → 122/122 green). 각 dispatch
 # 지점의 **자기 윈도우 안에서** 확인한다.
+# task-10: 2-a는 이제 build_brief_bundle.py(번들: payload + audit §6)를 받고, 3-a는
+# 그대로 build_brief_inline_blob.py(payload-only)를 받는다 — 두 축이 갈리므로 섹션마다
+# 다른 빌더 호출 패턴을 요구한다. 한 정규식(alternation)으로 두 섹션을 함께 검사하면
+# 한쪽 빌더 호출이 사라져도 다른 쪽 매치로 조용히 통과한다(이 파일의 다른 축별-카운트
+# 락들과 같은 이유 — "축마다 센다" 관용구).
 for sec in '2-a' '3-a'; do
   W_BLOB="$(scoped_window "^### ${sec}\\." '^#{1,3} ')"
   minlines "$W_BLOB" 6 \
     && ok "BLOB($sec): 윈도우 확보" \
     || no "BLOB($sec): 윈도우가 비었다 — 아래 assert가 vacuous하다"
-  grep -qE '^[[:space:]]*BLOB="\$\(python3 "\$PR/scripts/build_brief_inline_blob\.py" ' <<<"$W_BLOB" \
+  case "$sec" in
+    2-a) BUILDER_RE='^[[:space:]]*python3 "\$PR/scripts/build_brief_bundle\.py" ' ;;
+    3-a) BUILDER_RE='^[[:space:]]*BLOB="\$\(python3 "\$PR/scripts/build_brief_inline_blob\.py" ' ;;
+  esac
+  grep -qE "$BUILDER_RE" <<<"$W_BLOB" \
     && ok "BLOB($sec): blob 빌더 호출이 이 윈도우 안에 실재" \
     || no "BLOB($sec): 이 dispatch 지점에 blob 빌더 호출이 없다"
   has "$W_BLOB" '그 외 non-zero는 `2`와 동일하게 취급' \
@@ -623,4 +635,35 @@ grep -qE '^[[:space:]]*if grep -q .\\?"escalate": true' <<<"$W2C_BASH" \
 grep -qE '^[[:space:]]*python3 "\$PR/scripts/brief_review_state\.py" can-redispatch "\$STATE" > "\$CAN_OUT"' <<<"$W2C_BASH" \
   && ok "A4: can-redispatch stdout을 파일로 잡아 분기 근거로 쓴다" \
   || no "A4: can-redispatch stdout을 잡지 않는다 — escalate 키를 읽을 경로가 없다"
+
+# --- U4 (task-10) : 번들을 받는 축이 셋으로 갈린다 --------------------------
+# 충실도(critic·codex 2회)는 번들, direction·readback은 payload 그대로 — 축이 하나라도
+# 잘못 갈리면 재리뷰 라운드의 codex가 원문 없는 payload를 계속 받거나(fail-open), 냉독이
+# 하류가 절대 보지 않는 문서를 재게 된다(측정 무의미).
+
+# 번들을 받는 축이 전부 번들을 받는가 — 하나라도 payload 면 fail-open 이 되살아난다
+n_bundle="$(grep -cE 'run_brief_codex_reviewer\.sh" fidelity "\$BUNDLE"' "$SKILL")"
+n_fid="$(grep -cE 'run_brief_codex_reviewer\.sh" fidelity' "$SKILL")"
+[[ "$n_bundle" -eq "$n_fid" && "$n_fid" -ge 1 ]] \
+  && ok "U4: fidelity codex 호출 $n_fid 개가 전부 번들을 받는다" \
+  || no "U4: fidelity 호출 $n_fid 개 중 $n_bundle 개만 번들 — 재리뷰가 원문 없는 payload 를 본다"
+
+# 냉독은 payload-only 여야 한다 (반대 방향 락 — 양성 짝)
+W_RB="$(scoped_window '^### 3-a\.' '^#')"
+printf '%s' "$W_RB" | grep -qF 'build_brief_inline_blob.py' \
+  && ok "U4: 냉독은 payload-only blob 을 유지한다" \
+  || no "U4: 냉독이 번들을 받는다 — 하류가 안 보는 문서를 재게 된다"
+
+# 지시문이 라벨 토큰을 축자로 가리키는가
+grep -qF '<<<AUDIT-VERBATIM>>>' "$SD/scripts/brief-codex-fidelity-checklist.md" \
+  && ok "U4: fidelity 체크리스트가 라벨 토큰을 가리킨다" \
+  || no "U4: 체크리스트가 여전히 헤딩 리터럴을 가리킨다 — 번들을 줘도 지시가 안 옮겨간다"
+grep -qF '<<<AUDIT-VERBATIM>>>' "$SD/agents/brief-critic.md" \
+  && ok "U4: critic agent 정의가 라벨 토큰을 가리킨다" || no "U4: critic 지시문 미갱신"
+
+# G6 이 성공 조건 안에 있는가
+grep -qE 'G1[–-]G6 .*0건' "$SKILL" \
+  && ok "U4: G6 이 성공 조건에 포함됐다" \
+  || no "U4: G6 을 표에만 더하고 성공 조건은 G1–G5 — 관측돼도 아무것도 안 막는다"
+
 finish

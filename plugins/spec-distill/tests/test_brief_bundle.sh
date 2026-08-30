@@ -114,4 +114,30 @@ while IFS=$'\t' read -r tag key val; do
     || no "T12: ${key} 가 <redacted> 형태로 치환되지 않았다"
 done <<< "$redact_report"
 
+# T13/T14 (task-10 fix, decision 3): 라벨 **다음 줄**이 setext underline(`---`/`===`)이면
+# CommonMark가 라벨 라인 자체를 setext heading(`<h2>`/`<h1>`)으로 승격시킨다 — payload가
+# `---` frontmatter로 시작하므로, 라벨과 payload 사이에 빈 줄이 없으면 라벨이 `## 6. 사용자
+# 원문`과 같은 헤딩 네임스페이스에 들어간다(이 파일이 막으려는 헤딩-충돌이 라벨 도입 자체로
+# 재발하는 경로). T10/T11은 라벨 **자기 줄**만 보고 구조적으로 다음 줄을 못 본다 — 이 락은
+# 그 사각을 정확히 겨눈다. 문면(산문 리라이팅)으로는 만족시킬 수 없다: 실제 바이트가
+# 라벨 다음에 빈 줄을 두는지를 본다.
+line_after() {  # $1 = 정확히 일치할 라벨 라인
+  awk -v label="$1" 'found{print; exit} $0==label{found=1}' <<<"$out"
+}
+is_setext_underline() {
+  [[ "$1" =~ ^-+[[:space:]]*$ ]] || [[ "$1" =~ ^=+[[:space:]]*$ ]]
+}
+next_payload="$(line_after '<<<PAYLOAD>>>')"
+if is_setext_underline "$next_payload"; then
+  no "T13: PAYLOAD 라벨 다음 줄이 '${next_payload}' — setext heading으로 승격될 수 있다"
+else
+  ok "T13: PAYLOAD 라벨 다음 줄이 setext underline이 아니다 (헤딩 승격 없음)"
+fi
+next_audit="$(line_after '<<<AUDIT-VERBATIM>>>')"
+if is_setext_underline "$next_audit"; then
+  no "T14: AUDIT-VERBATIM 라벨 다음 줄이 '${next_audit}' — setext heading으로 승격될 수 있다"
+else
+  ok "T14: AUDIT-VERBATIM 라벨 다음 줄이 setext underline이 아니다 (헤딩 승격 없음)"
+fi
+
 exit $fail
