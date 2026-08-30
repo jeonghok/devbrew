@@ -271,7 +271,7 @@ LONG="$(python3 -c "print('가' * 200)")"
 python3 - "$SD" "$TMP" "$LONG" <<'PY'
 import pathlib, re, sys
 sd, tmp, long_stmt = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), sys.argv[3]
-src = sd / "tests/fixtures/interview-brief-ok.md"
+src = sd / "tests/fixtures/interview-brief-valid.md"
 dst = tmp / "interview-brief-long.md"
 text = src.read_text(encoding="utf-8")
 # frontmatter 의 첫 statement 와 §2 본문의 같은 항목을 함께 늘린다 (bijection B).
@@ -438,14 +438,14 @@ Run:
 cd /Users/jeonghokim/Downloads/devbrew
 python3 - <<'PY'
 import pathlib, re
-src = pathlib.Path('plugins/spec-distill/tests/fixtures/interview-brief-ok.md')
+src = pathlib.Path('plugins/spec-distill/tests/fixtures/interview-brief-valid.md')
 dst = pathlib.Path('/tmp/attr-before.md')
 t = src.read_text(encoding='utf-8')
 t = re.sub(r'(?m)^>\s*\*\*출처 표기\*\*.*$\n?', '', t)
 dst.write_text(t, encoding='utf-8')
 PY
 # 사이드카를 옆에 둔다 — resolve_audit 이 stem 유도이므로
-cp plugins/spec-distill/tests/fixtures/interview-brief-ok.audit.md /tmp/attr-before.audit.md
+cp plugins/spec-distill/tests/fixtures/interview-brief-valid.audit.md /tmp/attr-before.audit.md
 python3 plugins/spec-distill/scripts/check_brief.py gate /tmp/attr-before.md; echo "rc=$?"
 ```
 Expected: `rc=1`, `failures` 에 `§6 출처 표기 블록 부재` 가 있다. **이 출력을 기록한다.**
@@ -479,12 +479,12 @@ done
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/plugins/spec-distill/tests/fixtures
-# 셋 다 interview-brief-ok 쌍에서 파생한다. 아래 Task 5 의 변환 스크립트가 74건을 옮긴 뒤에
+# 셋 다 interview-brief-valid 쌍에서 파생한다. 아래 Task 5 의 변환 스크립트가 74건을 옮긴 뒤에
 # 만드는 것이 아니라, 이 Task 안에서 손으로 만든다 — 이 셋은 「의도적으로 깨진」 형태라
 # 기계 변환의 대상이 아니다.
 for n in audit-attr-missing payload-attr-missing audit-no-sec6; do
-  cp interview-brief-ok.md "interview-brief-$n.md"
-  cp interview-brief-ok.audit.md "interview-brief-$n.audit.md"
+  cp interview-brief-valid.md "interview-brief-$n.md"
+  cp interview-brief-valid.audit.md "interview-brief-$n.audit.md"
   # frontmatter 의 audit_file 과 audit 의 payload 를 새 이름으로 맞춘다 (audit_pairing_errors)
   python3 - "$n" <<'PY'
 import pathlib, re, sys
@@ -660,22 +660,27 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-audit-drop-s5.md" 2>&1)"; rc=
 cd /Users/jeonghokim/Downloads/devbrew/plugins/spec-distill/tests/fixtures
 python3 - <<'PY'
 import pathlib, re
-src = pathlib.Path('interview-brief-ok.md')
+src = pathlib.Path('interview-brief-valid.md')
 t = src.read_text(encoding='utf-8')
-# frontmatter: user_sourced_items 를 빈 리스트로. sentinel 은 §2 본문에 남긴다.
+# frontmatter: user_sourced_items 를 빈 리스트로.
 t = re.sub(r'(?ms)^user_sourced_items:.*?(?=^\w|^---)', 'user_sourced_items: []\n', t)
+# **§2 본문의 항목 불릿도 함께 비운다.** bijection B 가 본문 ↔ frontmatter 를 대조하므로
+# 한쪽만 비우면 N1b 가 아니라 B 가 red 를 내고, 이 픽스처가 아무것도 시험하지 못한다.
+# 본문 형태는 `- 🗣 confirmed **C1** — <statement> ⟨S1⟩` 다. `✎` 추론 줄과 sentinel
+# 산문은 남긴다 — confirmed_zero_unsentineled 가 그것을 요구한다.
+t = re.sub(r'(?m)^[-*] [🗣☑✎] (confirmed|provisional) \*\*[A-Z]\d+\*\* .*$\n', '', t)
 # §6 을 헤딩만 남기고 비운다
 t = re.sub(r'(?ms)(^## 6\. 사용자 원문\n).*?(?=^## 7\.)', r'\1\n', t)
 t = re.sub(r'(?m)^audit_file:.*$', 'audit_file: interview-brief-zero-items.audit', t)
 pathlib.Path('interview-brief-zero-items.md').write_text(t, encoding='utf-8')
-a = pathlib.Path('interview-brief-ok.audit.md').read_text(encoding='utf-8')
+a = pathlib.Path('interview-brief-valid.audit.md').read_text(encoding='utf-8')
 a = re.sub(r'(?m)^payload:.*$', 'payload: interview-brief-zero-items.md', a)
 pathlib.Path('interview-brief-zero-items.audit.md').write_text(a, encoding='utf-8')
 PY
 ```
 그다음 `confirmed_zero_unsentineled` 를 만족시키는 sentinel 문구가 §2 에 남아 있는지 확인한다 — 없으면 게이트가 **다른 이유로** red 를 내고 이 픽스처는 N1b 를 시험하지 못한다. `python3 ../../scripts/check_brief.py gate interview-brief-zero-items.md` 로 실제 failure 목록을 읽어 확인한다.
 
-나머지 셋(`payload-s2` · `payload-empty-sec6` · `audit-drop-s5`)은 Task 2 Step 3 과 같은 관용구로 `interview-brief-ok` 쌍에서 파생한다.
+나머지 셋(`payload-s2` · `payload-empty-sec6` · `audit-drop-s5`)은 Task 2 Step 3 과 같은 관용구로 `interview-brief-valid` 쌍에서 파생한다.
 
 - [ ] **Step 3: RED 확인**
 
@@ -800,45 +805,29 @@ Append to `plugins/spec-distill/tests/test_check_verbatim_coverage.sh`:
 ```bash
 # --- U2-T4: 코퍼스 합집합 --------------------------------------------------
 # S1 은 payload, S2+ 는 audit. 한쪽만 보면 반대쪽 전량이 missing 이 된다.
-"$PY" "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.local.md" \
+"$PY" "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" \
       "$FX/brief-verbatim-ok.audit.md" >/dev/null 2>&1; rc=$?
 [[ "$rc" == "0" ]] && ok "U2-T4: 합집합 정상 경로 exit 0" || no "U2-T4: 합집합 정상 경로가 exit $rc"
 
 # audit 을 안 주면 usage — 유추하지 않는다
-"$PY" "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.local.md" >/dev/null 2>&1; rc=$?
+"$PY" "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" >/dev/null 2>&1; rc=$?
 [[ "$rc" == "64" ]] && ok "U2-T4: audit 인자 없으면 usage(64) — stem 유추 없음" \
   || no "U2-T4: 2인자 호출이 exit $rc — 유추로 audit 을 찾고 있는가"
 
 # 같은 앵커가 양쪽에 있으면 append-only 위반 (구조 위반 exit 1)
-"$PY" "$SCRIPT" "$FX/brief-verbatim-dup-across.md" "$FX/state-verbatim-ok.local.md" \
+"$PY" "$SCRIPT" "$FX/brief-verbatim-dup-across.md" "$FX/state-verbatim-ok.md" \
       "$FX/brief-verbatim-dup-across.audit.md" >/dev/null 2>&1; rc=$?
 [[ "$rc" == "1" ]] && ok "U2-T4: S5 가 payload·audit 양쪽 → exit 1 (합집합 위 append-only)" \
   || no "U2-T4: 교차 중복 앵커가 exit $rc — 집행이 합집합 위에서 안 돈다"
 
 # 한쪽 절 부재는 조용한 코퍼스 축소가 아니다
-"$PY" "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.local.md" \
+"$PY" "$SCRIPT" "$FX/brief-verbatim-ok.md" "$FX/state-verbatim-ok.md" \
       "$FX/brief-verbatim-audit-no-sec6.audit.md" >/dev/null 2>&1; rc=$?
 [[ "$rc" == "3" ]] && ok "U2-T4: audit §6 부재 → exit 3 (검사 불가, 조용한 통과 아님)" \
   || no "U2-T4: audit §6 이 없는데 exit $rc — 축소된 코퍼스로 '완전성 통과'를 냈는가"
 ```
 
-- [ ] **Step 2: 픽스처를 만든다**
-
-`brief-verbatim-*` 계열 12건은 사이드카가 없다(도출 실측). 이 Task 가 그것을 만든다:
-
-```bash
-cd /Users/jeonghokim/Downloads/devbrew/plugins/spec-distill/tests/fixtures
-for f in brief-verbatim-missing-anchor brief-verbatim-mixed brief-verbatim-dup-anchor \
-         brief-verbatim-placeholder brief-verbatim-p21-laundering brief-verbatim-multiline \
-         brief-verbatim-placeholder-state-only brief-verbatim-ok brief-verbatim-summarized \
-         brief-verbatim-placeholder-payload-only brief-verbatim-original-request \
-         brief-verbatim-nfkc; do
-  python3 ../../../../.claude/mk-sidecar.py "$f"   # Step 3 이 만드는 스크립트
-done
-```
-그리고 교차 중복용 `brief-verbatim-dup-across.{md,audit.md}` 와 audit §6 부재용 `brief-verbatim-audit-no-sec6.audit.md` 를 손으로 만든다.
-
-- [ ] **Step 3: 사이드카 생성기(일회용)**
+- [ ] **Step 2: 사이드카 생성기(일회용) — 먼저 만든다**
 
 Create: `.claude/mk-sidecar.py` (git-ignored, 리포에 남기지 않는다)
 
@@ -917,6 +906,22 @@ if __name__ == "__main__":
 ```
 
 **이 스크립트는 리포에 남기지 않는다**(설계 §7.2 — 변환 스크립트는 일회용).
+
+- [ ] **Step 3: 사이드카 12건을 만든다**
+
+`brief-verbatim-*` 계열 12건은 사이드카가 없다(도출 실측). 이 Task 가 그것을 만든다:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew/plugins/spec-distill/tests/fixtures
+for f in brief-verbatim-missing-anchor brief-verbatim-mixed brief-verbatim-dup-anchor \
+         brief-verbatim-placeholder brief-verbatim-p21-laundering brief-verbatim-multiline \
+         brief-verbatim-placeholder-state-only brief-verbatim-ok brief-verbatim-summarized \
+         brief-verbatim-placeholder-payload-only brief-verbatim-original-request \
+         brief-verbatim-nfkc; do
+  python3 ../../../../.claude/mk-sidecar.py "$f"   # Step 2 가 만든 스크립트
+done
+```
+그리고 교차 중복용 `brief-verbatim-dup-across.{md,audit.md}` 와 audit §6 부재용 `brief-verbatim-audit-no-sec6.audit.md` 를 손으로 만든다.
 
 - [ ] **Step 4: RED 확인**
 
@@ -1279,7 +1284,7 @@ DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-n
 
 - [ ] **Step 2: 픽스처 셋 + audit §7**
 
-`interview-brief-no-landscape.md` 는 **리포에 이미 있다**(도출 실측 — `:48` 에 URL 없는 §4 항목). 나머지 셋을 `interview-brief-ok` 쌍에서 파생한다. 모든 audit 픽스처에 §7 을 더한다:
+`interview-brief-no-landscape.md` 는 **리포에 이미 있다**(도출 실측 — `:48` 에 URL 없는 §4 항목). 나머지 셋을 `interview-brief-valid` 쌍에서 파생한다. 모든 audit 픽스처에 §7 을 더한다:
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/plugins/spec-distill/tests/fixtures
@@ -1397,6 +1402,39 @@ python3 plugins/spec-distill/scripts/check_brief.py gate \
 **Interfaces:**
 - Produces: `payload_url_free(text: str) -> list[str]` — 외부 URL 을 담은 줄들. **코퍼스는 payload 에서 §6 을 뺀 나머지.**
 
+- [ ] **Step 0: 픽스처 지형을 먼저 만든다 (Ruling F2)**
+
+**일괄 변환이 먼저, 의도적으로 깨진 픽스처가 나중이다.** 순서를 뒤집으면 §4 URL→키 일괄 변환이
+N1a 시험용 픽스처(`url-in-sec4`)의 URL 까지 지워 Step 1 의 첫 단언이 **거짓 GREEN** 이 된다.
+「의도적으로 깨진 것을 변환에서 제외한다」로 풀지 않는다 — 그것은 판단 기반 제외이고, 이 리포가
+다섯 층에 걸쳐 지운 바로 그 동작이다.
+
+(a) 일괄 변환 — 74건의 §4·§5 URL 을 «키» 로, 그 짝을 audit §7 에:
+
+```bash
+cd /Users/jeonghokim/Downloads/devbrew/plugins/spec-distill/tests/fixtures
+python3 ../../../../.claude/urls-to-keys.py $(grep -rlF '## 4. External Landscape' . --include='*.md' | grep -v '\.audit\.md$')
+```
+
+Create: `.claude/urls-to-keys.py` — §4·§5 의 각 항목 줄에서 `https?://\S+` 를 찾아 ① 그 URL 을
+지우고 ② 도메인에서 키를 만들어 `«key»` 를 항목에 삽입하고 ③ 그 `«key» — <URL>` 짝을 같은 stem 의
+audit `## 7. 확산 원자료` 에 append 한다. **§6 은 건드리지 않는다.** 이미 «키» 가 있으면 skip(멱등).
+
+(b) 그다음 시험용 픽스처를 만든다 — 전부 `interview-brief-valid` 쌍에서 파생하고, 각각 **한 축만**
+깬다:
+
+| 픽스처 | 무엇을 깨나 |
+|---|---|
+| `interview-brief-url-in-sec4.md` | §4 항목에 `https://example.com` 을 되돌린다 |
+| `interview-brief-url-in-s1.md` + `.audit.md` + `state-url-in-s1.md` | §6 `S1` 본문에 맨 URL. state 원장의 `text` 에도 **같은 URL 을 담는다** — 이 픽스처의 존재 이유가 N1a 예외와 L2 의 동시 만족이라 state 쪽이 없으면 세 번째 단언이 아무것도 안 잰다 |
+| `interview-brief-no-sec4.md` | `## 4.` 헤딩 통째 삭제 |
+| `interview-brief-sec4-header-only.md` | 헤딩만 두고 항목 전부 삭제 |
+| `interview-brief-sec5-no-entries.md` | §5 기각 항목 전부 삭제(N/A sentinel 없이) |
+| `interview-brief-sentinel-only.md` | §4 본문을 「생략」 한 단어로 |
+
+(c) 각 픽스처가 **의도한 한 축으로만** 실패하는지 확인한다 — `gate` 를 돌려 `failures` 목록을
+읽는다. 두 축이 함께 실패하면 그 픽스처는 자기 축을 시험하지 못한다.
+
 - [ ] **Step 1: 테스트를 먼저 쓴다**
 
 ```bash
@@ -1412,7 +1450,7 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-url-in-s1.md" 2>&1)"; rc=$?
 
 # 같은 픽스처가 verbatim 검사와도 동시 만족돼야 한다 (이 예외의 존재 이유)
 python3 "$SD/scripts/check_verbatim_coverage.py" "$FX/interview-brief-url-in-s1.md" \
-  "$FX/state-url-in-s1.local.md" "$FX/interview-brief-url-in-s1.audit.md" >/dev/null 2>&1
+  "$FX/state-url-in-s1.md" "$FX/interview-brief-url-in-s1.audit.md" >/dev/null 2>&1
 [[ $? -eq 0 ]] && ok "U3-T8: 같은 픽스처가 verbatim exit 0 (N1a 예외 ↔ L2 동시 만족)" \
   || no "U3-T8: N1a 예외와 L2 가 동시 만족되지 않는다 — 예외의 존재 이유가 무너졌다"
 
@@ -1473,6 +1511,15 @@ def payload_url_free(text: str) -> list[str]:
             if URL_RE.search(ln)]
 ```
 
+그리고 **`gate()` 에 배선한다** — 정의만 하고 배선을 빠뜨리면 N1a 가 아무것도 막지 않는다.
+`landscape_unkeyed` 호출 바로 앞에 둔다:
+
+```python
+    urls = payload_url_free(text)
+    if urls:
+        failures.append(f"payload에 외부 URL {len(urls)}건 (§6 사용자 원문 제외): {urls[:3]}")
+```
+
 - [ ] **Step 3: `landscape_present` sentinel 조임**
 
 ```python
@@ -1519,10 +1566,19 @@ WEB_DISABLED_ADVISORY = (
 
 **양성 대조 락을 함께 둔다:**
 ```bash
-# 소비자를 하나 더 만들면 공시 문면과 어긋난다 — 그것을 재는 락
-n=$(grep -c '_web_disabled()' "$SD/scripts/check_brief.py")
-[[ "$n" -le 2 ]] && ok "U3-T8: _web_disabled() 소비자 ≤2 (정의 1 + landscape_present 1)" \
-  || no "U3-T8: _web_disabled() 소비자가 $n 개 — 공시 문면이 「하나」라고 말하는데 실장이 다르다"
+# **개수를 세지 않는다.** `grep -c` 는 advisory 배출(`gate()` 의 advisories · 서브커맨드
+# stderr)까지 세어 **공시와 완화를 혼동한다** — 공시는 완화가 아니다. 재야 하는 것은
+# 「어느 함수가 verdict 를 바꾸는가」이므로 지점을 대조한다(양성 + 음성 짝).
+body_of() { awk -v f="$1" '$0 ~ "^def "f"\\(" {p=1;next} p && /^def |^[A-Z_]+ = / {exit} p' \
+  "$SD/scripts/check_brief.py"; }
+printf '%s' "$(body_of landscape_present)" | grep -q '_web_disabled()' \
+  && ok "U3-T8(양성): landscape_present 가 _web_disabled() 를 부른다 — 완화되는 그 하나" \
+  || no "U3-T8(양성): 조임이 사라졌다 — sentinel 구멍이 무조건 열려 있다"
+for fn in landscape_unkeyed skepticism_malformed payload_url_free; do
+  printf '%s' "$(body_of $fn)" | grep -q '_web_disabled()' \
+    && no "U3-T8(음성): $fn 이 여전히 _web_disabled() 로 완화된다 — 공시가 「하나」라고 말하는데 거짓" \
+    || ok "U3-T8(음성): $fn 은 완화되지 않는다"
+done
 ```
 
 - [ ] **Step 6: audit 템플릿 §4 에 web-disabled 사유 칸**
@@ -1534,16 +1590,19 @@ n=$(grep -c '_web_disabled()' "$SD/scripts/check_brief.py")
 - check_verbatim_coverage.py — <exit 0|1|3|4> (<YYYY-MM-DD>)
 ```
 
-- [ ] **Step 7: 픽스처 74건의 §4·§5 변환**
+- [ ] **Step 7: 변환 결과를 검수한다**
+
+변환 자체는 Step 0 (a) 가 이미 했다(Ruling F2 — 순서가 결과를 바꾼다). 여기서는 검수만 한다:
 
 ```bash
 cd /Users/jeonghokim/Downloads/devbrew/plugins/spec-distill/tests/fixtures
-python3 ../../../../.claude/urls-to-keys.py $(grep -rlF '## 4. External Landscape' . --include='*.md' | grep -v '\.audit\.md$')
+# 의도적으로 URL 을 남긴 픽스처 말고 payload 에 URL 이 남아 있으면 안 된다
+grep -rlE 'https?://' . --include='*.md' | grep -v '\.audit\.md$'
+# §4 항목마다 «키» 가 있는가
+python3 ../../scripts/check_brief.py landscape-keys interview-brief-valid.md
 ```
-
-Create: `.claude/urls-to-keys.py` — §4·§5 의 각 항목 줄에서 `https?://\S+` 를 찾아 ① 그 URL 을 지우고 ② 도메인에서 키를 만들어 `«key»` 를 항목 앞부분에 삽입하고 ③ 그 `«key» — <URL>` 짝을 같은 stem 의 audit `## 7. 확산 원자료` 에 append 한다. **§6 은 건드리지 않는다.** 멱등이어야 한다(이미 «키» 가 있으면 skip).
-
-**의도적으로 깨진 픽스처는 제외한다** — `interview-brief-url-in-sec4.md`(N1a 시험용) 같은 것. 파일명 접두 목록으로 제외하지 말고, 변환 후 `git diff` 로 확인한다.
+첫 명령의 출력은 **Step 0 (b) 가 의도적으로 만든 것과 정확히 일치**해야 한다. 그 밖의 파일이
+나오면 변환이 그 파일을 건너뛴 것이다.
 
 - [ ] **Step 8: I9 + I8 + bump + 커밋**
 
@@ -1620,7 +1679,7 @@ B="$SD/scripts/build_brief_bundle.py"
 FX="$SD/tests/fixtures"
 fail=0; ok(){ printf '  ok  %s\n' "$1"; }; no(){ printf '  NO  %s\n' "$1"; fail=1; }
 
-out="$(python3 "$B" "$FX/interview-brief-ok.md" "$FX/interview-brief-ok.audit.md" 2>&1)"; rc=$?
+out="$(python3 "$B" "$FX/interview-brief-valid.md" "$FX/interview-brief-valid.audit.md" 2>&1)"; rc=$?
 [[ $rc -eq 0 ]] && ok "T1: 정상 경로 rc 0" || no "T1: 정상 경로 rc $rc"
 printf '%s' "$out" | grep -qF '<<<PAYLOAD>>>' && ok "T2: PAYLOAD 라벨" || no "T2: PAYLOAD 라벨 부재"
 printf '%s' "$out" | grep -qF '<<<AUDIT-VERBATIM>>>' && ok "T3: AUDIT-VERBATIM 라벨" || no "T3: 라벨 부재"
@@ -1636,14 +1695,14 @@ printf '%s' "$out" | grep -qE '\*\*S[2-9][0-9]*\*\*' \
   && ok "T5: audit §6 항목이 번들에 실렸다" || no "T5: 라벨만 있고 원문이 없다"
 
 # rc 2 : audit 을 안 주면
-python3 "$B" "$FX/interview-brief-ok.md" >/dev/null 2>&1
+python3 "$B" "$FX/interview-brief-valid.md" >/dev/null 2>&1
 [[ $? -eq 2 ]] && ok "T6: audit 인자 없음 → rc 2" || no "T6: audit 없이 조립했다 (fail-open)"
 # rc 2 : audit 에 §6 이 없으면
-python3 "$B" "$FX/interview-brief-ok.md" "$FX/brief-verbatim-audit-no-sec6.audit.md" >/dev/null 2>&1
+python3 "$B" "$FX/interview-brief-valid.md" "$FX/brief-verbatim-audit-no-sec6.audit.md" >/dev/null 2>&1
 [[ $? -eq 2 ]] && ok "T7: audit §6 부재 → rc 2 (무디스패치)" \
   || no "T7: 원문 없이 조립했다 — 「왜곡 없음」이 나오는 경로"
 # rc 3 : 위생 스캔은 payload 부분에만
-python3 "$B" "$FX/interview-brief-ok.md" "$FX/interview-brief-ok.audit.md" >/dev/null 2>&1
+python3 "$B" "$FX/interview-brief-valid.md" "$FX/interview-brief-valid.audit.md" >/dev/null 2>&1
 [[ $? -ne 3 ]] && ok "T8: 정상 동작이 exit 3 이 아니다 (위생 스캔 범위 한정)" \
   || no "T8: audit 내용까지 스캔해 매번 exit 3"
 exit $fail
@@ -2020,14 +2079,7 @@ Run: `bash plugins/spec-distill/tests/test_compression_adopters.sh && bash .clau
 | `build_brief_bundle.py <payload> <audit>` | Task 9 | Task 10 Step 2·3 |
 | `$BUNDLE` (셸 변수) | Task 10 Step 2 | Task 10 Step 3 — **같은 Bash 호출 안에서** 쓴다. `Bash` 도구는 호출마다 새 셸이라 변수가 소멸하므로, 두 dispatch 가 다른 블록이면 **파일 경로를 재도출**한다(`$ROOT/$harness_sid/brief-bundle.md` — 세션의 순수 함수) |
 
-**`payload_url_free` 의 `gate()` 배선이 Task 8 에 Step 으로 없다** — Step 2 가 함수만 정의한다. 배선을 여기 명시한다:
-
-```python
-    urls = payload_url_free(text)
-    if urls:
-        failures.append(f"payload에 외부 URL {len(urls)}건 (§6 사용자 원문 제외): {urls[:3]}")
-```
-`gate()` 의 `landscape_unkeyed` 호출 바로 앞에 둔다.
+**`payload_url_free` 의 `gate()` 배선이 처음 쓸 때 Task 8 에 없었다** — Step 2 가 함수만 정의했다. 실행 전 선행 스캔이 이것을 Ruling F4 로 잡아 **Task 8 Step 2 안으로 옮겼다.** 여기서는 그 사실만 기록한다 — 요구를 두 곳에 적으면 갈라진다.
 
 ---
 
