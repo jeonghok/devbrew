@@ -321,12 +321,25 @@ fi
 # 사라지는) vacuous-pass를 막는 양성 대조 — 등식만으로는 "0 == 0"도 통과해버린다. 콜사이트
 # 개수(현재 2)는 하드코딩하지 않는다 — 나중에 콜사이트가 하나 더 생기면 리터럴 상수는 그
 # 신규 라인을 검사 밖에 두거나 스퓨리어스 red를 낸다; 두 수 다 파일에서 직접 도출한다.
+# 경로 세그먼트(`"?\$PR/scripts/...\.py"?`)는 따옴표를 **선택**으로 둔다 — 셸은
+# `"$PR/scripts/check_verbatim_coverage.py"`와 `$PR/scripts/check_verbatim_coverage.py`
+# (따옴표 없이) 둘 다 유효한 호출로 받아들이고, 후자로 쓰인 진짜 콜사이트가 있으면 앞은
+# 강제로 한쪽 철자만 요구하다 그 라인을 두 카운트 모두에서 못 세어(TOTAL에서도 빠짐)
+# 등식이 우연히 맞아버린다 — 이번 라운드가 실제로 잡은 결함이다. `^[[:space:]]*python3 `
+# 줄-시작 앵커는 **좁힌 채로 둔다** — 이게 산문·주석을 코퍼스 밖에 두는 부분이고 이미
+# 검증됐다; 앞으로도 넓히지 말 것. 두 카운트는 `$CVC_PATH_RE`로 경로 앵커를 공유한다 —
+# 따로 벌리면 한쪽만 넓히거나 좁혀 등식이 왜곡될 수 있다.
 ALL_SKILL_BASH="$(fence "$(cat "$SKILL")")"
-CVC_TOTAL="$(grep -cE '^[[:space:]]*python3 "\$PR/scripts/check_verbatim_coverage\.py"' <<<"$ALL_SKILL_BASH")"
-CVC_3ARG="$(grep -cE '^[[:space:]]*python3 "\$PR/scripts/check_verbatim_coverage\.py" "\$PAYLOAD" "\$STATE" "\$AUDIT"' <<<"$ALL_SKILL_BASH")"
-[[ "$CVC_TOTAL" -gt 0 && "$CVC_TOTAL" -eq "$CVC_3ARG" ]] \
-  && ok "AC1: check_verbatim_coverage.py 실행 라인 전부(${CVC_TOTAL}건) 3인자 — audit 유추 없음" \
-  || no "AC1: check_verbatim_coverage.py 호출 ${CVC_TOTAL}건 중 3인자는 ${CVC_3ARG}건 — 2인자로 되돌아간 콜사이트가 있다(usage(64)로 중간에만 드러난다)"
+CVC_PATH_RE='"?\$PR/scripts/check_verbatim_coverage\.py"?'
+CVC_TOTAL="$(grep -cE '^[[:space:]]*python3 '"$CVC_PATH_RE"'([[:space:]]|$)' <<<"$ALL_SKILL_BASH")"
+CVC_3ARG="$(grep -cE '^[[:space:]]*python3 '"$CVC_PATH_RE"' "\$PAYLOAD" "\$STATE" "\$AUDIT"' <<<"$ALL_SKILL_BASH")"
+if [[ "$CVC_TOTAL" -gt 0 && "$CVC_TOTAL" -eq "$CVC_3ARG" ]]; then
+  ok "AC1: check_verbatim_coverage.py 실행 라인 전부(${CVC_TOTAL}건) 3인자 — audit 유추 없음"
+elif [[ "$CVC_TOTAL" -eq 0 ]]; then
+  no "AC1: check_verbatim_coverage.py 실행 호출을 스킬에서 하나도 찾지 못했다 — 콜사이트가 지워졌거나 이름이 바뀌었다(2인자 회귀가 아니라 부재)"
+else
+  no "AC1: check_verbatim_coverage.py 호출 ${CVC_TOTAL}건 중 3인자는 ${CVC_3ARG}건 — 2인자로 되돌아간 콜사이트가 있다(usage(64)로 중간에만 드러난다)"
+fi
 grep -qE '첫 액션' "$SKILL" && ok "AC1: 진입 첫 액션 명시" || no "AC1: 첫 액션 명시 부재"
 
 # --- /qg iter-1 CRITICAL(증폭기) : rc 표 row 0이 advisories를 라우팅한다 -----
