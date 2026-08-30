@@ -79,47 +79,34 @@
   §6 부재(`brief-verbatim-audit-no-sec6.audit.md`) 전용 fixture 2종을 손으로
   추가했다. 사이드카 생성에 쓴 변환 스크립트(`mk-sidecar.py`)는 일회용이라
   리포에 남기지 않았다(git-ignored `.claude/` 하위, 설계 §7.2).
+- **일괄 이관 완료 — 아래 "Known gap"이 닫혔다.** `interview-brief-*` payload
+  62건(§6에 `S2` 이상을 지녔던 63건 중 `interview-brief-payload-s2`는 N1b 위반을
+  영구히 유지해야 하는 대조군이라 제외)의 payload §6을 `S1`만 남도록 줄이고, 그
+  §2 앵커 순회 중 이미 자기 §6을 가진 3개 사이드카(`audit-attr-missing`·
+  `payload-attr-missing`·`audit-no-sec6`)와 audit_file 자체가 없는 3개
+  (`borrowed-audit`·`dup-auditfile`·`empty-auditfile`)를 제외한 나머지 사이드카에
+  `S2` 이상을 옮겨 실었다. `interview-brief-audit-no-sec6.audit.md`는 payload만
+  줄이고 audit은 손대지 않았다 — `## 6.` 헤딩 자체가 없는 것이 그 fixture의
+  존재 이유라, 헤딩을 새로 붙이면 결함이 지워진다. `interview-brief-no-attribution`·
+  `interview-brief-attribution-partial`은 표준 출처 표기 블록을 합성하지 않고
+  기존 payload가 갖고 있던 (없거나 부분적인) 표기 줄을 그대로 이사시켜, T18이
+  attribution 검사 자체에서 red가 나는지 확인했다(이전엔 `missing audit sections`가
+  먼저 걸려 우연히 green이었다 — 확인: `check_brief.py gate` 단독 실행으로 두
+  fixture 모두 실패 사유가 `출처 표기 블록 부재`로 바뀐 것을 확인). 변환은
+  일회용 `.claude/move-verbatim.py`(git-ignored, 리포에 남기지 않음)로 했다 —
+  Task 4의 `mk-sidecar.py`가 가졌던 결함(`split_section6()`이 §6 부재 시 2-tuple,
+  존재 시 3-tuple을 반환해 3-value unpack과 arity가 어긋남 — 이 태스크의 62건
+  전량이 §6을 이미 갖고 있어 그 경로가 실제로 발동하지는 않았다)을 고쳐 항상
+  3-tuple을 반환하도록 했다.
 
-### Known gap (하류 Task로 이관)
+### Known gap (하류 Task로 이관) — RESOLVED (이 유닛에서 닫힘)
 
-- 이 변경 시점에는 audit §6이 아직 기존 fixture 74건에 채워지지 않았다 — 이 하나의
-  값이 늘면서 그 사이드카들이 이제 `missing audit sections: ['6. 사용자 원문']`로
-  red를 낸다. 같은 원인 하나가 **테스트 파일 2개**를 건드린다:
-  - `test_check_brief.sh` — `interview-brief-valid.audit.md` 등에 의존하는
-    T15/T19/AC8/C9/T12/T14/T14-anchoring/T17/T21/R1/VS16/`audit_file 인라인 주석`
-    12개 기존 단언.
-  - `test_brief_no_statement_cap.sh` — Task 1이 만든 락. 그 L3 행이
-    `interview-brief-valid.md`/`.audit.md`에서 임시 파생 fixture(`interview-brief-long.*`)를
-    만드는데, 원본 audit이 다른 모든 legacy 사이드카와 똑같이 §6이 없어 파생본도
-    §6이 없다 — "200자 statement가 상한에 안 걸린다(rc=0)" 단언 1건이 같은 이유로
-    반드시 같이 regress한다.
-
-  두 파일 다 검사 로직의 결함이 아니다 — `S1` 제외 전량을 audit §6으로 채우는
-  하류의 일괄 이관(다른 Task, `move-verbatim.py`)이 아직 실행되지 않은 데서 오는
-  예상된 공백이며, 그 일괄 이관이 두 파일을 함께 닫는다. 이번 유닛이 손으로 만든
-  3개 fixture(`interview-brief-audit-attr-missing`·`payload-attr-missing`·
-  `audit-no-sec6`)는 의도적으로 깨진 대조군이라 그 일괄 이관의 대상이 아니며 이미
-  audit §6을 갖는다.
-
-  **N1b 신설로 이 공백의 모양이 하나 더 늘었다.** `test_brief_no_statement_cap.sh`의
-  L3가 파생하는 `interview-brief-long.*`는 `interview-brief-valid.md`의 payload §6을
-  그대로 물려받으므로(`{S1, S2}`, 아직 미이관) N1b도 함께 걸린다 — 실패 메시지가
-  `missing audit sections`만이 아니라 `payload §6 앵커가 {'S1'}이 아니다`까지
-  두 항목이 된다. 위 12개(`test_check_brief.sh`)와 L3(`test_brief_no_statement_cap.sh`)
-  모두 rc-only 단언이라 개수·판정 자체는 안 바뀐다 — 실패 메시지에 이유가 하나 더
-  실릴 뿐이다. 일괄 이관이 두 축(audit §6 부재, payload의 `S2` 잔존)을 함께
-  정리해야 이 공백이 완전히 닫힌다.
-
-- **이관 시 보존해야 할 carry-forward — T18이 지금 틀린 이유로 green이다.**
-  `test_check_brief.sh`의 T18 두 단언("표기 블록 부재 → red", "기호 누락 표기 블록 →
-  red")은 각각 `interview-brief-no-attribution.md`·`interview-brief-attribution-partial.md`를
-  쓰는데, 이 fixture들의 audit 사이드카도 다른 legacy 사이드카와 똑같이 §6이 아직
-  없다. 그래서 지금은 attribution 검사가 실행되기도 전에 `missing audit sections`로
-  먼저 걸려 red가 나고, rc-only 단언 방식은 두 원인을 구분하지 못해 우연히 계속
-  green으로 보인다. **하류의 일괄 이관이 이 두 사이드카에 §6을 채울 때, 형태만
-  갖춘 §6을 넣지 말고 출처 표기 블록이 빠진 상태(missing-attribution 성질)를
-  그대로 보존해야 한다** — 안 그러면 T18은 영원히 통과하되 아무것도 재지 않는
-  빈 락이 된다.
+- 이 절이 서술하던 두 공백(`interview-brief-*` legacy fixture 74건의 audit §6
+  부재로 인한 `test_check_brief.sh` 12건 + `test_brief_no_statement_cap.sh` L3의
+  regress, 그리고 T18 두 단언이 잘못된 이유로 green이던 문제)은 바로 위 "일괄 이관
+  완료" 항목이 닫혔다. `bash .claude/check-regression.sh` 재확인: `NOT-CLEAN` 없음,
+  82개 파일 검사, `test_check_brief.sh` 106/106·`test_brief_no_statement_cap.sh`
+  전 단언 green.
 
 - **`test_reviewing_brief_skill.sh`의 AC1 check_verbatim_coverage.py 콜사이트 락(grep count 오라클)에
   알려진 한계 — 변수로 우회한 호출(예: `CVC="python3 $PR/scripts/check_verbatim_coverage.py"` 뒤

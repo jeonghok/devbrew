@@ -52,14 +52,8 @@ TTFP를 줄이는 것이 진짜 목표다. SPA 전환은 수단이었지 목표�
 - 위험 — 숨은 가정 | SSR 호스트가 항상 저지연: cold start 시 TTFP 역전 — https://vercel.com/docs/functions
 
 ## 6. 사용자 원문
-
-> **출처 표기** — 🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론
-
 - **S1** 🗣 최초 요청:
   > "대시보드가 너무 느려요. 서버에서 그려주면 안 되나요?"
-- **S2** ☑ 선택 (캐시 범위):
-  > "인증 뷰는 일단 빼고 갑시다"
-
 ## 7. Next Action
 
 superpowers 있으면 이 brief를 context로 brainstorming 호출 → -design.md → reviewer → writing-plans.

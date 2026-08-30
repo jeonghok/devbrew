@@ -38,3 +38,10 @@ source: spec-distill conducting-interview v0.23.0
 - round 1: (d) ontological — ESSENCE로 진짜 목표 재구성
 - round 2: (a) landscape sweep — Next.js SSR
 - round 3: (b) judgment — 캐시 범위 선택
+
+## 6. 사용자 원문
+
+> **출처 표기** — 🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론
+
+- **S2** ☑ 선택 (캐시 범위):
+  > "인증 뷰는 일단 빼고 갑시다"
