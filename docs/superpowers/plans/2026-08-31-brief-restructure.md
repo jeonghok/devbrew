@@ -610,7 +610,7 @@ Expected: U2-T2 세 단언 `ok`. **템플릿 게이트 결과는 예측하지 �
 ### Task 3: N1b 신설과 bijection C 교차화
 
 **Files:**
-- Modify: `plugins/spec-distill/scripts/check_brief.py:440-464` (`verbatim_anchors` · `bijection_c_errors`), `gate()`
+- Modify: `plugins/spec-distill/scripts/check_brief.py` — `verbatim_anchors` · `bijection_c_errors` · `gate()` 배선 · **`items` 서브커맨드**(`main()` 안, 오늘 `bijection_c_errors(text)` 를 1인자로 부른다)
 - Test: `plugins/spec-distill/tests/test_check_brief.sh`
 - Create: `plugins/spec-distill/tests/fixtures/interview-brief-zero-items.md` + `.audit.md`
 
@@ -755,6 +755,34 @@ def payload_verbatim_is_s1_only(payload_text: str) -> bool:
 ```
 
 **audit 을 못 열면 bijection C 를 돌리지 않는다** — 이미 `audit: <err>` 로 red 이고, 빈 문자열로 돌리면 모든 `S2`+ 인용이 dangling 으로 보고돼 한 결함이 수십 줄이 된다.
+
+**그리고 `items` 서브커맨드를 함께 고친다 (I2 — 시그니처와 그 호출 지점 전부는 한 단위다).**
+`check_brief.py` 는 **검사마다 서브커맨드를 갖는** CLI 표면이라 거의 모든 검사 함수에 호출부가
+둘이다 — `gate()` 와 `main()` 안의 그 검사 서브커맨드. `items` 는 오늘 `bijection_c_errors(text)` 를
+**1인자로** 부르므로 그대로 두면 **TypeError** 다. 이 서브커맨드는 리포에 소비자가 없지만(도출로
+확인) 출하되는 표면이라 죽은 채 두지 않는다. `gate()` 와 **같은 방식으로** audit 을 해석해 넘긴다:
+
+```python
+    if sub == "items":
+        fm = FRONTMATTER_RE.match(text)
+        audit_path, audit_err = resolve_audit(path, fm.group(0) if fm else "")
+        if audit_err:
+            bij_c = [f"audit 해석 실패 — bijection C 판정 불가: {audit_err}"]
+        else:
+            try:
+                bij_c = bijection_c_errors(text, audit_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError) as exc:
+                bij_c = [f"audit unreadable — bijection C 판정 불가: {exc}"]
+        print(json.dumps({"errors": user_sourced_errors(text),
+                          "bijection_c": bij_c,
+                          "bijection_b": bijection_b_errors(text)}, ensure_ascii=False))
+        return 0
+```
+
+**빈 리스트로 떨어뜨리지 않는다** — 판정 불가와 「위반 없음」은 다른 사실이고, `[]` 로 내면
+이 표면을 읽는 쪽이 audit 을 못 연 것을 통과로 읽는다. 실제 `FRONTMATTER_RE`·`resolve_audit`
+의 시그니처는 `gate()` 가 쓰는 형태에 맞춘다 — **줄번호가 아니라 심볼로 찾아 그 자리를 그대로
+본뜬다.**
 
 - [ ] **Step 7: GREEN 확인**
 
