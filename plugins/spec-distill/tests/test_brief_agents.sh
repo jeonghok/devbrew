@@ -301,6 +301,39 @@ for label, blocks in GT_SITES:
     for marker in EXPECTED:
         covered = bool(cands) and all(marker in b for b in cands)
         print(("GT_COVERED" if covered else "GT_UNCOVERED") + "\t" + label + "\t" + marker)
+
+# ── F15 — 축 정의 불릿도 코퍼스를 두 위치로 말한다 ────────────────────────────
+# F14 의 코퍼스는 「ground truth 를 말하면서 표지를 하나라도 대는 문단」이다. 그래서
+# **피검자가 그 코퍼스에서 스스로 빠져나갈 수 있었다**: `omission` 불릿을 「the
+# <<<AUDIT-VERBATIM>>> block 에서 빠진 것」으로 되돌리면 그 문단은 ground truth 라는
+# 어구를 잃어 후보에서 탈락하고, 스위트는 90/90 초록을 유지한다(실측). 대상은 문면이
+# 아니라 **구조**에서 도출한다 — 여섯 축 정의 불릿을 리터럴 집합으로 못 박고 판다.
+CATEGORIES = ("authority_syntax", "distortion", "evidence_unsupported",
+              "insertion", "omission", "provenance_mislabel")
+checklist_text = open(checklist_path, encoding="utf-8").read()
+bullets = {}
+for part in re.split(r"(?m)^(?=- `[a-z_]+` —)", checklist_text):
+    m = re.match(r"- `([a-z_]+)` —", part)
+    if m:
+        bullets[m.group(1)] = part.split("\n\n", 1)[0]
+print("CATSET\t" + ",".join(sorted(bullets)))
+# 리터럴 집합과의 대조는 셸이 한다 — 여기서 CATEGORIES 와 비교하면 기대값이 피검자
+# 파일과 같은 층에 있게 된다. 이 튜플은 순서 고정용 주석 역할만 한다.
+assert isinstance(CATEGORIES, tuple)
+# ① 어느 축 정의도 두 위치 중 **한쪽만** 이름으로 대지 않는다.
+for cat in sorted(bullets):
+    named = [m for m in EXPECTED if m in bullets[cat]]
+    if named and len(named) != len(EXPECTED):
+        print("BULLETSUBSET\t" + cat + "\t" + ",".join(named))
+# ② `omission` 은 자기 코퍼스를 **말해야** 한다. 다른 다섯 축은 `S<N>` 앵커를 따라가므로
+#    위치와 무관하지만(앵커는 어느 쪽에 살든 해석된다), omission 은 「무엇이 빠졌나」라
+#    코퍼스 **전체**를 훑어야 답이 나온다 — 범위를 안 말하면 한쪽만 읽고 「빠진 것 없음」이
+#    나온다. 말하는 방법은 둘 중 하나: 두 표지를 다 이름으로 대거나, 위 문단이 두 위치로
+#    정의한 ground truth 라는 용어에 위임하거나.
+om = bullets.get("omission", "")
+DEFER = re.compile(r"ground[\s\-]+truth", re.IGNORECASE)
+stated = bool(om) and (all(m in om for m in EXPECTED) or bool(DEFER.search(om)))
+print("OMISSION_CORPUS\t" + ("STATED" if stated else "UNSTATED"))
 PYEOF
 )"
 F3_RC=$?
@@ -331,7 +364,23 @@ gt_rows="$(grep -cE '^GT_(UN)?COVERED'$'\t' <<<"$F3_REPORT" || true)"
 [[ "$gt_rows" -eq 8 ]] \
   && ok "F14(양성대조): ground truth 행이 정확히 8다 (4 자리 × 2 위치)" \
   || no "F14(양성대조): ground truth 행이 8이 아니라 $gt_rows — 리포트가 비었거나 잘렸다(F14 단언 소실)"
+# F15 행도 리터럴로 못 박는다 — 추출기가 죽으면 아래 세 단언이 조용히 사라진다.
+f15_rows="$(grep -cE '^(CATSET|OMISSION_CORPUS)'$'\t' <<<"$F3_REPORT" || true)"
+[[ "$f15_rows" -eq 2 ]] \
+  && ok "F15(양성대조): 축 정의 행이 정확히 2다 (CATSET + OMISSION_CORPUS)" \
+  || no "F15(양성대조): 축 정의 행이 2가 아니라 $f15_rows — 리포트가 비었거나 잘렸다(F15 단언 소실)"
 rm -f "$F3_ERR"
+catset_line="$(grep "^CATSET" <<<"$F3_REPORT" | cut -f2- || true)"
+[[ "$catset_line" == "authority_syntax,distortion,evidence_unsupported,insertion,omission,provenance_mislabel" ]] \
+  && ok "F15: 체크리스트가 여섯 축 정의 불릿을 그대로 갖는다" \
+  || no "F15: 축 정의 불릿 집합이 바뀌었다 — [$catset_line] (락의 대상이 옮겨갔다)"
+subset_line="$(grep "^BULLETSUBSET" <<<"$F3_REPORT" || true)"
+[[ -z "$subset_line" ]] \
+  && ok "F15: 어느 축 정의도 비신뢰 원문 두 위치 중 한쪽만 대지 않는다" \
+  || no "F15: 축 정의가 두 위치 중 한쪽만 이름으로 댄다 — [$subset_line] (반대쪽 원문이 그 축의 코퍼스 밖)"
+grep -q "^OMISSION_CORPUS"$'\t'"STATED" <<<"$F3_REPORT" \
+  && ok "F15: omission 축이 자기 코퍼스를 말한다 (두 위치 열거 또는 ground truth 위임)" \
+  || no "F15: omission 축이 코퍼스를 안 말한다 — 한쪽만 읽고 「빠진 것 없음」이 나온다 (S1 증거 항목 4건이 판정 밖)"
 missing_line="$(grep '^MISSING' <<<"$F3_REPORT" || true)"
 [[ -z "$missing_line" ]] && ok "F3: UNTRUSTED_VERBATIM_MARKERS 계약이 필수 2곳을 전부 포함한다" \
   || no "F3: build_brief_bundle.py의 UNTRUSTED_VERBATIM_MARKERS 에서 빠졌다 — ${missing_line#MISSING$'\t'}"

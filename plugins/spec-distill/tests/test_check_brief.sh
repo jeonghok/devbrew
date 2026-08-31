@@ -880,4 +880,250 @@ for fn in landscape_unkeyed skepticism_malformed payload_url_free; do
     || ok "U3-T8(음성): $fn 은 완화되지 않는다"
 done
 
+# ── N1c — §6 경계 유일성 (v0.46.0) ──────────────────────────────────────────
+# N1a 의 코퍼스(「payload 에서 §6 을 뺀 나머지」)와 N1b 의 코퍼스(「payload §6」)는 서로의
+# 여집합이다. 그래서 둘 다 **§6 이 어디부터 어디까지인지가 유일할 때만** 정의된다. 헤딩이
+# 둘이면 두 검사는 「첫 번째」를 골라야 하고, 그 선택은 곧 저자가 옮길 수 있는 경계가 된다.
+#
+# 축은 「두 번째 §6 헤딩이 **어디에** 놓이는가」다. 값 하나만 케이스로 잡으면 락이 그 자리에만
+# 이빨을 갖는다 — v0.44.0 이 «펜스 안» 가짜 헤딩만 닫고 «펜스 밖»을 열어 둔 것이 정확히 그
+# 실패였다(실측: §4 꼬리 rc 0). 그래서 축의 값들을 데이터로 돌린다:
+#   frontmatter · §4 꼬리(펜스 밖) · 펜스 안 · audit 파일
+# 각 값마다 **양성 짝**을 함께 돌린다 — 주입한 줄에서 `##` 만 무력화한 판본이 green 이어야
+# 그 red 의 원인이 그 헤딩임이 증명된다(주입 자체가 다른 검사를 깨서 나는 red 와 구분).
+N1C_ERR="$(mktemp -t sdN1cerr)"
+N1C_MANIFEST="$(python3 - "$FX" "$TMPD" 2>"$N1C_ERR" <<'PY'
+import pathlib, re, sys
+
+fx, tmpd = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+BASE_P = (fx / "interview-brief-valid.md").read_text(encoding="utf-8")
+BASE_A = (fx / "interview-brief-valid.audit.md").read_text(encoding="utf-8")
+HEAD = "## 6. 사용자 원문"
+# 중화판: `##` 를 지워 헤딩이 아니게 만든다. 나머지 바이트는 armed 판과 같다.
+DEAD = "neutralized 6. 사용자 원문"
+
+
+def at_frontmatter(text, line):
+    m = re.search(r"(?m)^source:[^\n]*\n", text)
+    assert m, "frontmatter source 줄 부재 — 픽스처가 바뀌었다"
+    return text[:m.end()] + line + "\n" + text[m.end():]
+
+
+def at_section4_tail(text, line):
+    m = re.search(r"(?m)^- Next\.js app-router SSR[^\n]*\n", text)
+    assert m, "§4 항목 줄 부재 — 픽스처가 바뀌었다"
+    return text[:m.end()] + "\n" + line + "\n" + text[m.end():]
+
+
+def in_fence(text, line):
+    m = re.search(r"(?m)^##\s+4\.\s+External Landscape[^\n]*\n", text)
+    assert m, "§4 헤딩 부재 — 픽스처가 바뀌었다"
+    return text[:m.end()] + "\n```text\n" + line + "\n```\n" + text[m.end():]
+
+
+def audit_in_fence(text, line):
+    i = text.index(HEAD)
+    return text[:i] + "```text\n" + line + "\n```\n\n" + text[i:]
+
+
+CASES = [
+    ("n1c-fm", "payload frontmatter 안", at_frontmatter, None),
+    ("n1c-s4", "payload §4 꼬리 (펜스 밖)", at_section4_tail, None),
+    ("n1c-fence", "payload §4 의 펜스 안", in_fence, None),
+    ("n1c-audit", "audit 의 펜스 안", None, audit_in_fence),
+]
+rows = []
+for stem, label, pay_fn, aud_fn in CASES:
+    for state, line in (("ARMED", HEAD), ("NEUTRAL", DEAD)):
+        s = stem + "-" + state.lower()
+        pay = BASE_P.replace("audit_file: interview-brief-valid.audit.md",
+                             "audit_file: " + s + ".audit.md")
+        aud = BASE_A.replace("interview-brief-valid.md", s + ".md")
+        if pay_fn is not None:
+            pay = pay_fn(pay, line)
+        if aud_fn is not None:
+            aud = aud_fn(aud, line)
+        (tmpd / (s + ".md")).write_text(pay, encoding="utf-8")
+        (tmpd / (s + ".audit.md")).write_text(aud, encoding="utf-8")
+        rows.append("\t".join((s, state, label)))
+print("\n".join(rows))
+PY
+)"
+n1c_rc=$?
+[[ "$n1c_rc" -eq 0 ]] \
+  && ok "N1c(양성): 케이스 생성기가 정상 종료했다 (rc=0)" \
+  || no "N1c(양성): 케이스 생성기가 rc=$n1c_rc 로 죽었다 — 아래 N1c 단언은 무의미하다: $(tr '\n' ' ' < "$N1C_ERR" | tail -c 200)"
+rm -f "$N1C_ERR"
+# 행 수는 **리터럴 8** 이다 (축 4값 × {armed, 중화}). 생성기에서 유도하면 CASES 가 빈
+# 목록이 되는 변형에서 `0 == 0` 으로 다시 공허해진다 — 피검자에서 기대값을 끌어오는 실패형.
+n1c_rows="$(grep -cE '^n1c-' <<<"$N1C_MANIFEST" || true)"
+[[ "$n1c_rows" -eq 8 ]] \
+  && ok "N1c(양성): 케이스가 정확히 8건이다 (축 4값 × 2)" \
+  || no "N1c(양성): 케이스가 8건이 아니라 $n1c_rows — 리포트가 비었거나 잘렸다(N1c 단언 소실)"
+while IFS=$'\t' read -r stem state label; do
+  [[ -n "${stem:-}" ]] || continue
+  out="$(python3 "$SCRIPT" gate "$TMPD/$stem.md" 2>&1)"; rc=$?
+  case "$state" in
+    ARMED)
+      { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '§6 사용자 원문 헤딩이'; } \
+        && ok "N1c: 두 번째 §6 헤딩이 $label → red" \
+        || no "N1c: 두 번째 §6 헤딩이 $label 인데 그 원인으로 red 가 안 난다 — 경계를 저자가 옮길 수 있다: $out" ;;
+    NEUTRAL)
+      [[ $rc -eq 0 ]] \
+        && ok "N1c(양성짝): $label 에서 헤딩만 무력화하면 green — red 의 원인이 그 헤딩이다" \
+        || no "N1c(양성짝): $label 의 중화판이 red — 이 케이스의 red 는 §6 중복이 원인이 아니다: $out" ;;
+  esac
+done <<< "$N1C_MANIFEST"
+
+# N1a 의 fail-closed 폴백 — 경계가 비유일하면 코퍼스에서 **한 글자도 빼지 않는다**.
+# N1c 를 지워도 C 통로가 다시 열리지 않게 하는 두 번째 방벽이다. 부재 술어라 양성 짝을
+# 함께 단언한다(중화판에서는 §6 이 실제로 빠져야 한다 — 안 빠지면 이 단언은 「아무것도
+# 안 읽었다」와 구별되지 않는다).
+N1CF_ERR="$(mktemp -t sdN1cferr)"
+n1c_fallback="$(python3 - "$SCRIPT" "$TMPD/n1c-s4-armed.md" "$TMPD/n1c-s4-neutral.md" 2>"$N1CF_ERR" <<'PY'
+import importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location("cb_n1c", sys.argv[1])
+cb = importlib.util.module_from_spec(spec); spec.loader.exec_module(cb)
+armed = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+neutral = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
+print(("YES\t" if cb._payload_excluding_section6(armed) == armed else "NO\t")
+      + "경계 비유일이면 N1a 코퍼스가 payload 전문 그대로다 (fail-closed)")
+print(("YES\t" if len(cb._payload_excluding_section6(neutral)) < len(neutral) else "NO\t")
+      + "경계 유일이면 N1a 코퍼스에서 §6 이 실제로 빠진다 (양성 짝)")
+PY
+)"
+n1cf_rc=$?
+[[ "$n1cf_rc" -eq 0 ]] \
+  && ok "N1c(폴백/양성): 코퍼스 추출기가 정상 종료했다 (rc=0)" \
+  || no "N1c(폴백/양성): 코퍼스 추출기가 rc=$n1cf_rc 로 죽었다: $(tr '\n' ' ' < "$N1CF_ERR" | tail -c 200)"
+rm -f "$N1CF_ERR"
+n1cf_rows="$(grep -cE '^(YES|NO)'$'\t' <<<"$n1c_fallback" || true)"
+[[ "$n1cf_rows" -eq 2 ]] \
+  && ok "N1c(폴백/양성): 단언이 정확히 2행이다" \
+  || no "N1c(폴백/양성): 단언이 2행이 아니라 $n1cf_rows — 리포트가 비었거나 잘렸다"
+while IFS=$'\t' read -r tag name; do
+  case "$tag" in
+    YES) ok "N1c(폴백): $name" ;;
+    NO)  no "N1c(폴백): $name — 폴백이 사라졌다" ;;
+  esac
+done <<< "$n1c_fallback"
+
+# ── N1b 의 코퍼스는 **출하되는 바이트**다 (v0.46.0) ─────────────────────────
+# 결함: N1b 가 `_body()` 를 경유해 §6 을 찾았다. `_body()` 는 펜스를 벗기므로 payload §6
+# **안**의 펜스에 `- **S5**` 를 적으면 앵커 집합이 `{S1}` 으로 계산돼 등식이 만족되는데,
+# 그 줄은 payload 에 그대로 남아 번들에 실려 충실도 리뷰어에게 원문으로 나갔다(실측 rc 0).
+# 축은 「앵커가 어떤 표기 안에 있는가」다 — 펜스 안 / 펜스 밖 둘 다 같은 판정이어야 한다.
+for variant in fenced plain; do
+  cp "$FX/interview-brief-valid.md" "$TMPD/n1b-$variant.md"
+  cp "$FX/interview-brief-valid.audit.md" "$TMPD/n1b-$variant.audit.md"
+  python3 - "$TMPD/n1b-$variant.md" "$variant" <<'PY'
+import pathlib, sys
+p, variant = pathlib.Path(sys.argv[1]), sys.argv[2]
+t = p.read_text(encoding="utf-8")
+t = t.replace("audit_file: interview-brief-valid.audit.md",
+              "audit_file: " + p.stem + ".audit.md")
+i = t.index("## 7. Next Action")
+body = "- **S5** 🗣 몰래 실린 원문:\n  > \"게이트엔 안 보이고 하류엔 보인다\"\n"
+blk = ("```\n" + body + "```\n") if variant == "fenced" else body
+p.write_text(t[:i] + blk + t[i:], encoding="utf-8")
+PY
+  sed -i.bak "s|^payload:.*|payload: n1b-$variant.md|" "$TMPD/n1b-$variant.audit.md"
+  rm -f "$TMPD/n1b-$variant.audit.md.bak"
+  out="$(python3 "$SCRIPT" gate "$TMPD/n1b-$variant.md" 2>&1)"; rc=$?
+  { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q "'S5'"; } \
+    && ok "N1b: payload §6 의 $variant 앵커 S5 → red (코퍼스가 출하 바이트다)" \
+    || no "N1b: payload §6 의 $variant 앵커 S5 가 안 잡힌다 — 코퍼스가 하류보다 적게 본다: $out"
+done
+# 양성 짝 — 같은 펜스에서 **앵커 줄만** 빼면 green. red 의 원인이 「펜스가 있다」가 아니라
+# 「§6 이 S1 아닌 앵커를 준다」임을 가른다.
+cp "$FX/interview-brief-valid.md" "$TMPD/n1b-noanchor.md"
+cp "$FX/interview-brief-valid.audit.md" "$TMPD/n1b-noanchor.audit.md"
+python3 - "$TMPD/n1b-noanchor.md" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1]); t = p.read_text(encoding="utf-8")
+t = t.replace("audit_file: interview-brief-valid.audit.md",
+              "audit_file: n1b-noanchor.audit.md")
+i = t.index("## 7. Next Action")
+p.write_text(t[:i] + "```\n앵커가 아닌 예시 줄\n```\n" + t[i:], encoding="utf-8")
+PY
+sed -i.bak "s|^payload:.*|payload: n1b-noanchor.md|" "$TMPD/n1b-noanchor.audit.md"
+rm -f "$TMPD/n1b-noanchor.audit.md.bak"
+python3 "$SCRIPT" gate "$TMPD/n1b-noanchor.md" >/dev/null 2>&1 \
+  && ok "N1b(양성짝): §6 안 펜스에 앵커가 없으면 green — 펜스 자체가 red 의 원인이 아니다" \
+  || no "N1b(양성짝): 앵커 없는 펜스가 red — 위 두 red 는 S5 가 원인이 아니다"
+
+# ── 코퍼스 분리의 기계 집행 (v0.46.0, `_body()` docstring 의 참) ─────────────
+# `_body()` docstring 은 「payload §6 을 경계로 쓰는 검사(N1a·N1b)는 이 코퍼스를 쓰지
+# 않는다」고 **사실을 서술한다**. 산문은 틀려도 소리를 안 내므로 호출 그래프로 집행한다.
+# 셸 본문 추출기는 조용히 깨지므로 `ast` 로 판다.
+#
+# **양성 대조가 핵심이다**: 같은 분석기가 `_body()` 를 실제로 쓰는 함수(#13
+# `landscape_unkeyed`)에서는 HIT 을 내야 한다. 안 그러면 「금지 호출을 못 찾았다」와
+# 「분석기가 아무것도 안 봤다」가 구별되지 않는다.
+AST_ERR="$(mktemp -t sdASTerr)"
+ast_report="$(python3 - "$SCRIPT" 2>"$AST_ERR" <<'PY'
+import ast, sys
+
+tree = ast.parse(open(sys.argv[1], encoding="utf-8").read())
+funcs = {n.name: n for n in ast.walk(tree)
+         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+
+
+def direct(name):
+    node = funcs.get(name)
+    if node is None:
+        return None
+    return {c.func.id for c in ast.walk(node)
+            if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)}
+
+
+def reach(root):
+    seen, stack = set(), [root]
+    while stack:
+        cur = stack.pop()
+        for c in (direct(cur) or set()):
+            if c not in seen:
+                seen.add(c)
+                stack.append(c)
+    return seen
+
+
+FORBIDDEN = ("_body", "_section_text")
+for root in ("payload_url_free", "payload_verbatim_is_s1_only"):
+    if root not in funcs:
+        print("MISSING\t" + root)
+        continue
+    r = reach(root)
+    hits = [f for f in FORBIDDEN if f in r]
+    print("FORBID\t" + root + "\t" + (",".join(hits) if hits else "CLEAN"))
+    print("REACH\t" + root + "\t"
+          + ("YES" if "payload_section6_span" in r else "NO"))
+ctrl = reach("landscape_unkeyed")
+print("CTRL\t" + ("YES" if any(f in ctrl for f in FORBIDDEN) else "NO"))
+PY
+)"
+ast_rc=$?
+[[ "$ast_rc" -eq 0 ]] \
+  && ok "코퍼스분리(양성): 호출그래프 분석기가 정상 종료했다 (rc=0)" \
+  || no "코퍼스분리(양성): 분석기가 rc=$ast_rc 로 죽었다 — 아래 단언은 무의미하다: $(tr '\n' ' ' < "$AST_ERR" | tail -c 200)"
+rm -f "$AST_ERR"
+ast_rows="$(grep -cE '^(FORBID|REACH|CTRL|MISSING)'$'\t' <<<"$ast_report" || true)"
+[[ "$ast_rows" -eq 5 ]] \
+  && ok "코퍼스분리(양성): 리포트가 정확히 5행이다 (2 루트 × 2 + 대조 1)" \
+  || no "코퍼스분리(양성): 리포트가 5행이 아니라 $ast_rows — 비었거나 잘렸다(단언 소실)"
+while IFS=$'\t' read -r tag a b; do
+  case "$tag" in
+    MISSING) no "코퍼스분리: 함수 $a 가 없다 — 락의 대상이 사라졌다" ;;
+    FORBID)  [[ "$b" == "CLEAN" ]] \
+               && ok "코퍼스분리: $a 는 _body()/_section_text() 에 도달하지 않는다" \
+               || no "코퍼스분리: $a 가 $b 에 도달한다 — 벗겨진 바이트를 못 보면서 하류엔 실린다 (_body docstring 이 거짓)" ;;
+    REACH)   [[ "$b" == "YES" ]] \
+               && ok "코퍼스분리(양성): $a 가 payload_section6_span 을 실제로 경유한다" \
+               || no "코퍼스분리(양성): $a 가 공유 §6 경계를 안 쓴다 — 위 CLEAN 은 「아무것도 안 봤다」일 수 있다" ;;
+    CTRL)    [[ "$a" == "YES" ]] \
+               && ok "코퍼스분리(대조): 같은 분석기가 landscape_unkeyed 의 _body() 사용은 잡는다" \
+               || no "코퍼스분리(대조): 분석기가 알려진 _body() 사용조차 못 잡는다 — 계측기가 고장났다" ;;
+  esac
+done <<< "$ast_report"
+
 finish
