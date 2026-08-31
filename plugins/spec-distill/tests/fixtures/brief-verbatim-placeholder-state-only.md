@@ -17,10 +17,8 @@ user_sourced_items:
 # Verbatim Placeholder State-Only — Interview Brief
 
 ## 6. 사용자 원문
-
 - **S1** 🗣 최초 요청:
   > "토큰은 알 수 없다"
-
 ## 7. Next Action
 
 - 없음

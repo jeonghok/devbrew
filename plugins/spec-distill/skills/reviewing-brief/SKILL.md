@@ -59,7 +59,7 @@ AskUserQuestion({
 
 ## 상태
 
-state는 새 파일을 만들지 않고 기존 `.claude/spec-distill/<session-id>/state.local.md`에 키 3개를 씁니다. 훅이 읽는 파일과 **같은 리졸버**로 경로를 구합니다. `$STATE`를 zero-tool 선결 조건보다 먼저 정의하는 이유는 하나뿐입니다 — 아래 probe 실패 분기가 `$STATE`에 쓰므로 그 값이 먼저 있어야 합니다(이 문서 전체가 위에서 아래로 그대로 실행 가능하다는 주장은 아닙니다: `$PAYLOAD`·`$CODEX_DIR_YAML`·`$CODEX_FID_YAML`은 이 skill이 정의하지 않는 입력이고, 호출자 `conducting-interview`가 진입 시점에 이미 쥐고 넘기는 값입니다):
+state는 새 파일을 만들지 않고 기존 `.claude/spec-distill/<session-id>/state.local.md`에 키 3개를 씁니다. 훅이 읽는 파일과 **같은 리졸버**로 경로를 구합니다. `$STATE`를 zero-tool 선결 조건보다 먼저 정의하는 이유는 하나뿐입니다 — 아래 probe 실패 분기가 `$STATE`에 쓰므로 그 값이 먼저 있어야 합니다(이 문서 전체가 위에서 아래로 그대로 실행 가능하다는 주장은 아닙니다: `$PAYLOAD`·`$AUDIT`·`$CODEX_DIR_YAML`·`$CODEX_FID_YAML`은 이 skill이 정의하지 않는 입력이고, 호출자 `conducting-interview`가 진입 시점에 이미 쥐고 넘기는 값입니다. `$AUDIT`은 payload의 audit sidecar 경로 — v0.43.0부터 §6 원문이 payload(`S1`)와 audit(`S2` 이상)에 나뉘어 살아서, 완전성 검사가 두 파일을 모두 읽어야 합니다):
 
 ```bash
 PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
@@ -130,10 +130,10 @@ $BRS degrade-append "$STATE" --component readback --axis readback \
 
 그리고 **D2(payload 파일 하나만 받는다는 구조 조건) 미충족을 조용히 넘기지 않고** C4 경로로 사용자에게 보고합니다(Step B 게이트 question 텍스트).
 
-## 진입 첫 액션 — 원문 완전성 (§6 ↔ state 원장)
+## 진입 첫 액션 — 원문 완전성 (payload §6 ∪ audit §6 ↔ state 원장)
 
 ```bash
-python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE"; rc=$?
+python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE" "$AUDIT"; rc=$?
 ```
 
 파이프를 걸지 마세요 — `| tail`을 붙이면 `$?`가 파이프 마지막 명령의 코드가 되어 죽은 스크립트가 성공으로 읽힙니다(리포 실측).
@@ -141,7 +141,7 @@ python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE"; rc=$?
 | rc | 뜻 | 동작 |
 |---|---|---|
 | `0` | 위반 없음 | 1단계로. **단 `advisories`가 비어 있지 않으면** 그 줄들을 record(`component: verbatim_coverage`, `affected_axis: completeness`, `verification_status: degraded`)로 남기고 Step B에 함께 올립니다 |
-| `exit 1` | 위반 발견(`missing_ids`/`not_contained`) | **차단.** §6를 보완(추가만 — 아래 append-only)하고 `check_brief.py gate` → 이 검사를 **재실행**. 리뷰 단계로 넘어가지 않습니다 |
+| `exit 1` | 위반 발견(`missing_ids`/`not_contained`) | **차단.** audit §6를 보완(추가만 — 아래 append-only, payload §6은 `S1`으로 불변)하고 `check_brief.py gate` → 이 검사를 **재실행**. 리뷰 단계로 넘어가지 않습니다 |
 | `exit 1` + `not_contained: ["§6"]` | **구조 위반** (§6 `S<N>` 앵커 중복) | **차단.** append로는 고칠 수 없습니다 — 잘못 추가된 중복 항목을 **제거**해야 합니다(중복 자체가 append-only 위반이고, 남겨두면 어느 쪽이 원문인지 확정되지 않습니다) |
 | `exit 3` | 검사 불가(파일 부재·파싱 실패) | degrade 후 계속 + record(`component: verbatim_coverage`, `affected_axis: completeness`, `verification_status: skipped`) |
 | `exit 4` | 내부 오류 | `3`과 동일 처리 + 오류 전문을 `--reason`에 |
@@ -157,9 +157,10 @@ python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE"; rc=$?
 |---|---|
 | §0 / §1 / §3 / §4 / §5 / §7 | 자유 수정 |
 | §2 제약 | 자유 수정 — **단 frontmatter `user_sourced_items`와 동시**(bijection B가 statement 내용까지 대조하므로 한쪽만 고치면 게이트 red) |
-| **§6 사용자 원문** | **append-only.** `S<N>` 항목 **추가**만 허용, 기존 항목 본문 변경 금지(P21 placeholder 치환만 예외) |
+| **payload §6 사용자 원문 (`S1`)** | **불변.** 본문 변경 금지(P21 placeholder 치환만 예외). 추가도 금지 — 앵커 집합이 `{S1}`로 고정이다(N1b) |
+| **audit §6 사용자 원문 (`S2`+)** | **append-only.** `S<N>` 항목 **추가**만 허용, 기존 항목 본문 변경 금지 |
 
-§6를 자유롭게 고칠 수 있으면 *critic이 지적 → 원문을 지적에 맞게 고쳐 통과* 라는 laundering이 열립니다. 추가는 덮어쓰기가 아니므로 provenance가 온전히 남습니다.
+관할은 §6 전체가 audit으로 옮겨간 것이 아니라 `S1` 잔류 예외를 따라 **분할**됩니다 — payload 표의 행을 지우지 않는 이유이기도 합니다. audit §6를 자유롭게 고칠 수 있으면 *critic이 지적 → 원문을 지적에 맞게 고쳐 통과* 라는 laundering이 열립니다. 추가는 덮어쓰기가 아니므로 provenance가 온전히 남습니다. payload §6의 「기존 항목 본문 변경 금지」는 그보다 강한 요구(불변)이고, 관할을 통째로 audit으로 옮기면 이 가드가 규범 차원에서도 사라집니다.
 
 **저자는 어느 리뷰어의 finding도 임의로 기각하지 못합니다.** 미반영 findings는 **이유와 함께 Step B 게이트에서 사용자에게 올립니다**(P17) — 저자의 자기승인 경로를 차단합니다.
 
@@ -259,7 +260,7 @@ codex 부재 시 loud advisory:
 사용자가 방향을 뒤집으면(C4 재결정):
 
 1. `user_sourced_items`의 해당 항목 `status` 변경 또는 항목 교체.
-2. 그 **결정 발화를 §6에 새 `S<N>`으로 추가**합니다(기존 항목 수정이 아닙니다). state의 `user_statements`에도 append되므로 다음 완전성 검사가 대조 대상으로 삼습니다.
+2. 그 **결정 발화를 audit §6에 새 `S<N>`으로 추가**합니다(기존 항목 수정이 아니고, payload §6은 `S1`으로 불변입니다). state의 `user_statements`에도 append되므로 다음 완전성 검사가 대조 대상으로 삼습니다.
 3. 뒤집힌 방향은 §5 `기각` 항목에 *무엇을 왜 버렸는지* 로 남깁니다 — **증거 문장**이며 권위 문장이 아닙니다(C5).
 4. payload 재저장 → `check_brief.py gate` 재실행 → `check_verbatim_coverage.py` 재실행.
 
@@ -273,13 +274,32 @@ python3 "$PR/scripts/brief_review_state.py" set-stage "$STATE" fidelity
 
 ### 2-a. critic dispatch 블록
 
-프롬프트에 **payload 전문을 inline**합니다. 경로를 주지 않습니다 — 이 축은 문서 **내부 대조**이고 외부 정보가 오염원입니다. blob은 빌더가 만듭니다(frontmatter의 `audit_file`·`name`·`created_at` 세 값을 `<redacted>`로):
+프롬프트에 **번들 전문을 inline**합니다 — payload(§2 요약)와 audit §6(비신뢰 원문) 둘 다,
+`build_brief_bundle.py`가 조립한 한 문서입니다. 경로를 주지 않습니다 — 이 축은 문서 **내부
+대조**이고 외부 정보가 오염원입니다. 번들은 **한 번만** 조립해 세션 디렉토리의 파일로
+남깁니다(`.claude/spec-distill/<session-id>/`, P13 — git-ignored, 번들은 비신뢰 verbatim을
+담으므로 그 밖에 두지 않습니다) — 아래 codex 러너(2-b·2-c)도 **같은 파일**을 받아야 하기
+때문입니다. 두 번 돌리면 사이에 payload가 바뀌었을 때 두 소비자가 다른 바이트를 보게 됩니다:
 
 ```bash
-BLOB="$(python3 "$PR/scripts/build_brief_inline_blob.py" "$PAYLOAD")"; blob_rc=$?
+# 구조 게이트가 **번들보다 먼저** 돕니다. 이 skill 은 model-invocable 이라 호출자를 거치지
+# 않고 바로 들어올 수 있고, 그때까지 이 파일 안에서 게이트가 도는 유일한 자리는 2-c(수정
+# 후 재실행)였습니다 — 즉 **첫 번들은 게이트를 통과한 적 없는 payload 로 조립될 수 있었고**,
+# 그러면 번들에 실리는 audit 원문의 §6 경계·신원이 아무에게도 검증되지 않은 채 충실도
+# 리뷰어에게 ground truth 로 나갑니다. 값싸고 결정론적이므로 매 진입에서 돕니다.
+python3 "$PR/scripts/check_brief.py" gate "$PAYLOAD"; entry_gate_rc=$?
+if [[ "$entry_gate_rc" -ne 0 ]]; then
+  echo "[spec-distill] 구조 게이트 미통과 — 리뷰를 시작하지 않는다 (Law 1). 위 failures 를 고치고 다시 진입하라. 게이트를 통과하지 않은 payload 로 번들을 조립하면, 검증되지 않은 audit 원문이 충실도 리뷰어에게 ground truth 로 나간다." >&2
+  exit 1
+fi
+BUNDLE="$ROOT/$harness_sid/brief-bundle.md"
+python3 "$PR/scripts/build_brief_bundle.py" "$PAYLOAD" "$AUDIT" > "$BUNDLE"; blob_rc=$?
+BLOB="$(cat "$BUNDLE")"
 ```
 
-`blob_rc == 2`면 payload가 없거나 사용법 오류·읽기 실패(비-UTF-8·권한)입니다 — 빈 `<brief>`로 critic을 dispatch하면 indeterminate를 clean으로 오독하는 fail-open이므로 **critic을 dispatch하지 않습니다.** record(`component: critic`, `affected_axis: fidelity`, `verification_status: unavailable`)를 남기고 Step B로 조기 보고합니다. `blob_rc == 3`이면 본문에 위생 미달 잔존이 있다는 뜻입니다 — 원문 보존이 우선이라 지우지 않고 record(`component: critic`, `affected_axis: fidelity`, `verification_status: degraded`)를 남기고 계속합니다. **`0`·`3`이 아닌 그 외 non-zero는 `2`와 동일하게 취급합니다 — dispatch하지 않습니다**(표에 없는 코드를 "계속"으로 흘리면 `${BLOB}`이 빈 문자열인 채 프롬프트에 보간돼 critic이 빈 문서를 리뷰하고 "왜곡 없음"을 보고합니다; indeterminate ≠ clean).
+`brief-critic`은 프롬프트에 보간되는 **문자열**(`$BLOB`)을 받고, `run_brief_codex_reviewer.sh`는 `[[ -f ... ]]`로 **실재 파일 경로**(`$BUNDLE`)를 요구합니다 — 그래서 조립은 파일로 한 번 하고 두 소비자가 각자의 모양으로 그 결과를 나눠 가집니다.
+
+`blob_rc == 2`면 payload·audit이 없거나 사용법 오류·읽기 실패(비-UTF-8·권한)·**audit에 `## 6. 사용자 원문` 절이 없음**입니다 — 빈 `<brief>`로 critic을 dispatch하면 indeterminate를 clean으로 오독하는 fail-open이므로 **critic을 dispatch하지 않습니다.** record(`component: critic`, `affected_axis: fidelity`, `verification_status: unavailable`)를 남기고 Step B로 조기 보고합니다. `blob_rc == 3`이면 번들의 **payload 부분**에 위생 미달 잔존(audit 파일명)이 있다는 뜻입니다 — 원문 보존이 우선이라 지우지 않고 record(`component: critic`, `affected_axis: fidelity`, `verification_status: degraded`)를 남기고 계속합니다. **`0`·`3`이 아닌 그 외 non-zero는 `2`와 동일하게 취급합니다 — dispatch하지 않습니다**(표에 없는 코드를 "계속"으로 흘리면 `${BLOB}`이 빈 문자열인 채 프롬프트에 보간돼 critic이 빈 문서를 리뷰하고 "왜곡 없음"을 보고합니다; indeterminate ≠ clean).
 
 ```javascript
 Agent({
@@ -287,8 +307,11 @@ Agent({
   subagent_type: "spec-distill:brief-critic",
   // **처분** — consumer=plugins/spec-distill/scripts/merge_brief_review.py · fail-open
   prompt: `Review this interview brief for fidelity — did the §2 summary distort,
-drop, or invent what the user said in §6? Check all six categories explicitly.
-Emit **Status:** on its own line, then the brief-critic-issues block.
+drop, or invent what the user actually said? The ground truth is in **two** places
+in the document below and both count: the payload's own \`## 6. 사용자 원문\` section
+(the original request, S1) and the block after <<<AUDIT-VERBATIM>>> (S2 and up).
+Check all six categories explicitly. Emit **Status:** on its own line, then the
+brief-critic-issues block.
 
 <brief>
 ${BLOB}
@@ -302,13 +325,15 @@ critic의 raw 출력을 **요약·바꿔쓰기 없이 그대로** `CRITIC_OUT="$
 
 ```bash
 if [[ "${codex_avail:-}" == "true" ]]; then
-  bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$PAYLOAD" "$(pwd)" "$CODEX_FID_YAML"
+  bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$BUNDLE" "$(pwd)" "$CODEX_FID_YAML"
 else
   : # skip — 1-c의 affected_axis: all record가 이 축까지 덮는다(중복 record 없음)
 fi
 python3 "$PR/scripts/merge_brief_review.py" \
     --critic-output "$CRITIC_OUT" --codex-yaml "${CODEX_FID_YAML:-/nonexistent}"
 ```
+
+codex #2는 **번들**(`$BUNDLE`)을 받습니다 — critic과 같은 재료입니다. `$PAYLOAD` 그대로 받는 direction 축(1-c)과 여기가 갈리는 지점입니다: direction 리뷰어는 도구를 갖고 스스로 audit을 열 수 있지만, codex 러너는 파일 하나만 받으므로 원문 없이 왜곡을 판정시키면 "왜곡 없음"이 공허하게 나옵니다(2-a와 같은 이유).
 
 **병합은 skip 라운드에도 그대로 돕니다.** codex YAML이 없으면 병합이 `codex_degraded: true` + advisory로 그 부재를 loud하게 보고하고, critic 판정이 살아 있으면 `approved`를 막지 않습니다(양쪽 판정 불가일 때만 escalate). 그래서 게이트를 건다고 kill switch가 강제 수정 루프로 바뀌지 않습니다.
 
@@ -334,7 +359,7 @@ if [[ "$gate_rc" -ne 0 ]]; then
   exit 1
 fi
 # (2) §6에 S<N>을 추가한 라운드면 원문 완전성도 재실행 (진입 첫 액션과 같은 규칙)
-python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE"; vc_rc=$?
+python3 "$PR/scripts/check_verbatim_coverage.py" "$PAYLOAD" "$STATE" "$AUDIT"; vc_rc=$?
 # 차단 행은 **실행형**이어야 한다. 대입만 하고 흘려보내면 서술만 차단이고 실행은 통과다 —
 # 바로 위 gate_rc가 같은 이유로 실행형 if를 갖는다. 확정 §6 원문 위반이 여기서 안 멈추면
 # can-redispatch → bump → 재리뷰로 흘러가 approved가 날 수 있다.
@@ -347,10 +372,12 @@ CAN_OUT="$ROOT/$harness_sid/brief-can-redispatch.json"
 python3 "$PR/scripts/brief_review_state.py" can-redispatch "$STATE" > "$CAN_OUT"; can=$?
 if [[ "$can" -eq 0 ]]; then
   python3 "$PR/scripts/brief_review_state.py" bump-critic-round "$STATE"   # 재dispatch 허용된 시점에만 +1
-  # ... fresh critic 재dispatch (2-a 블록 그대로, $CRITIC_OUT 덮어쓰기)
+  # ... fresh critic 재dispatch (2-a 블록 그대로, $CRITIC_OUT 덮어쓰기) — 이 재실행이 $BUNDLE도
+  # 함께 재조립한다(build_brief_bundle.py를 다시 부르므로). codex #2가 아래에서 그 갱신된
+  # $BUNDLE을 받는 것은 이 재조립의 결과이지 별도 단계가 아니다.
   # (3) codex #2도 **수정된 바이트**에 다시 돌린 뒤 재병합한다 — 게이트 통과 후, 이 분기 안에서만
   if [[ "${codex_avail:-}" == "true" ]]; then
-    bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$PAYLOAD" "$(pwd)" "$CODEX_FID_YAML"; runner_rc=$?
+    bash "$PR/scripts/run_brief_codex_reviewer.sh" fidelity "$BUNDLE" "$(pwd)" "$CODEX_FID_YAML"; runner_rc=$?
     if [[ "$runner_rc" -eq 3 ]]; then rm -f "$CODEX_FID_YAML"; fi   # stale 잔존 방지 (위 1-c와 같은 이유)
   else
     : # skip — 1-c의 affected_axis: all record가 이 라운드까지 덮는다
@@ -385,7 +412,7 @@ fi
 
 **(1) 구조 게이트는 경고가 아니라 차단입니다.** `gate_rc != 0`이면 블록이 `exit 1`로 **거기서 멈춥니다** — 뒤의 `check_verbatim_coverage.py`·`can-redispatch`·`bump-critic-round`·재dispatch가 하나도 실행되지 않습니다. 이유를 변수에만 담고 흘려보내면 서술만 차단이고 실행은 통과입니다(이 파일의 이전 판이 정확히 그 shape이었고, 대입한 변수를 읽는 곳이 리포 전체에 0곳이었습니다). 충실도 수정이 만든 frontmatter·섹션 구조 위반은 **새로 생긴 Law 1 실패**이고, 그것을 안고 진행하면 Step B는 *"구조 게이트가 통과했다"* 를 거짓으로 보고하게 됩니다. 게이트가 초록이 된 뒤 이 블록을 처음부터 다시 탑니다. `vc_rc`는 진입 첫 액션과 **같은 표**(`0` 진행 / `1` 차단 / `3`·`4`·그 외 non-zero는 degrade 후 계속 + record)로 처리합니다.
 
-**(3) codex #2 재실행이 필수인 이유.** 충실도 verdict는 critic과 codex findings의 **fail-closed 합집합**입니다. 두 입력이 서로 다른 버전의 문서에서 나오면 그 합집합은 어느 한 버전에 대해서도 완전하지 않습니다 — 합집합이 주는 보장 자체가 사라집니다. 그리고 codex는 binding이므로, 수정이 새로 만든 왜곡을 codex가 보지 못한 채 승인이 나올 수 있습니다. 재실행 비용은 이미 재dispatch 상한 2가 묶고 있으므로 무한 루프가 되지 않습니다(critic·codex 각각 최대 3회 = 최초 1 + 재2). `$CRITIC_OUT`·`$CODEX_FID_YAML`은 라운드마다 **덮어씁니다** — 이전 라운드의 산출이 남으면 그게 곧 stale입니다. 재실행 라운드에도 2-b의 `codex_degraded` record 규칙이 그대로 적용됩니다. 그리고 이 재실행도 **2-b와 같은 `$codex_avail` 게이트 안**에 있습니다 — 게이트 없이 돌면 사용자 opt-out이 하필 재실행 경로로 새어나가고, 라운드마다 외부 모델 지출이 반복됩니다.
+**(3) codex #2 재실행이 필수인 이유.** 충실도 verdict는 critic과 codex findings의 **fail-closed 합집합**입니다. 두 입력이 서로 다른 버전의 문서에서 나오면 그 합집합은 어느 한 버전에 대해서도 완전하지 않습니다 — 합집합이 주는 보장 자체가 사라집니다. 그리고 codex는 binding이므로, 수정이 새로 만든 왜곡을 codex가 보지 못한 채 승인이 나올 수 있습니다. 재실행 비용은 이미 재dispatch 상한 2가 묶고 있으므로 무한 루프가 되지 않습니다(critic·codex 각각 최대 3회 = 최초 1 + 재2). `$CRITIC_OUT`·`$CODEX_FID_YAML`·`$BUNDLE`은 라운드마다 **덮어씁니다** — 이전 라운드의 산출이 남으면 그게 곧 stale입니다. 재실행 라운드에도 2-b의 `codex_degraded` record 규칙이 그대로 적용됩니다. 그리고 이 재실행도 **2-b와 같은 `$codex_avail` 게이트 안**에 있습니다 — 게이트 없이 돌면 사용자 opt-out이 하필 재실행 경로로 새어나가고, 라운드마다 외부 모델 지출이 반복됩니다.
 
 `can == 0`일 때만 카운터를 올리고 재dispatch합니다 — 분기를 주석 하나로 서술하지 않고 `if`로 명시하는 이유는, escalate 경로에서 실수로 카운터가 한 번 더 올라가는 shape을 애초에 봉쇄하기 위해서입니다(clamp가 상한 초과는 막아도, 게이트를 거치지 않고 bump가 실행되는 모양 자체는 AC13이 load-bearing으로 보는 지점입니다).
 
@@ -411,10 +438,11 @@ fi
 | | 행위 |
 |---|---|
 | ✅ | §0·§1·§2·§3·§4·§5·§7 수정 (§2는 frontmatter와 동시) |
-| ✅ | §6에 `S<N>` **추가** |
+| ✅ | **audit §6**(별도 사이드카 파일)에 `S<N>` **추가** |
 | ✅ | 미반영 findings를 **이유와 함께** Step B로 이월 |
 | ❌ | finding 임의 기각 |
-| ❌ | §6 기존 항목 본문 변경 |
+| ❌ | payload §6(`S1`) 변경 또는 추가 |
+| ❌ | audit §6 기존 항목 본문 변경 |
 | ❌ | 상한을 넘긴 추가 재dispatch |
 
 **충실도에 라운드 루프를 두지 않는 이유**: `reviewing-spec`의 라운드 루프 + cap 5는 design doc 리뷰가 *설계 결함*을 찾는 반복 개선이라 정당합니다. 충실도는 *"§2 요약이 §6 원문을 왜곡했나"* 라는 좁고 거의 기계적인 축이라 반복 수렴 대상이 아닙니다 — 루프는 trivia ceremony입니다.
@@ -456,7 +484,7 @@ ${BLOB}
 
 ### 3-b. gap 대조 (요약 ↔ payload)
 
-받은 산문 요약을 payload의 §0/§1/§2/§3/§7과 대조해 gap을 분류합니다. **닫힌 다섯 클래스**입니다:
+받은 산문 요약을 payload의 §0/§1/§2/§3/§7과 대조해 gap을 분류합니다. **닫힌 여섯 클래스**입니다:
 
 | # | gap 클래스 | 판정 |
 |---|---|---|
@@ -465,14 +493,16 @@ ${BLOB}
 | G3 | **최상위 제약 누락** — 최상위 항목의 내용이 요약에 없음 | 해당 id의 내용이 요약에 부재 |
 | G4 | **Goal ↔ Non-goal 반전** — §1의 Non-goal을 goal로(또는 역) 요약 | 방향이 뒤집힌 서술 존재 |
 | G5 | **다음 행동 오독** — §7 Next Action과 다른 다음 단계를 서술 | 요약의 next step ≠ §7 |
+| G6 | **상태 표기와 본문 서술의 불일치** — 같은 항목을 frontmatter/표가 한쪽으로, 본문 산문이 다른 쪽으로 말해 독자가 어느 쪽이 참인지 정하지 못함 | 요약이 두 서술 중 한쪽만 담고, 나머지 한쪽이 payload에 그대로 있음 |
 
-**성공 조건**: G1–G5 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 Step B 게이트에 **세 조각**으로 올립니다 — *어느 클래스 / 요약의 어느 문장 / payload의 어느 절*.
+**성공 조건**: G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 Step B 게이트에 **세 조각**으로 올립니다 — *어느 클래스 / 요약의 어느 문장 / payload의 어느 절*.
 
 3-a에서 `blob_rc == 3`이었던 라운드는 redaction되지 않은 audit 파일명이 본문에 그대로 남아 있었다는 뜻입니다 — 냉독 에이전트가 문서 메타데이터(파일명 규약)까지 함께 봤을 수 있으므로, 그 라운드의 gap 판정은 **신뢰도 하향**으로 읽습니다(zero-tool 격리 미보장 분기와 동일한 원인의 신뢰도 저하).
 
 **이 판정은 advisory입니다** — pass/fail이 파이프라인을 차단하지 않고 사용자가 최종 판정합니다. 프레시 에이전트는 *잘못 재구성된* payload도 정확히 요약할 수 있습니다 — 원래 의도와 비교할 독립 ground truth가 없으므로 hard verdict로 쓰면 false block이 납니다.
 
-여섯 번째 클래스가 실제로 관측되면 **여기에 추가하는 것이 compounding 이벤트**입니다(Law 3).
+G6은 이 설계의 리뷰 8라운드에서 반복 관측된 것을 여기에 추가한 것입니다(task-10, Law 3
+compounding). **일곱 번째** 클래스가 실제로 관측되면 같은 방식으로 여기에 추가합니다.
 
 ## Step B로 전달
 

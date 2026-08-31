@@ -39,11 +39,11 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
                                    interview brief (payload + audit) → docs/superpowers/interview/   ← terminal 산출물
                                        ▼ [Step A.5]  ※ 구조 게이트를 통과했을 뿐 아직 분리 리뷰 전
                                    [2] reviewing-brief (Law 2 분리 리뷰, cost_class: high 승인 게이트)
-                                       │  진입 첫 액션: check_verbatim_coverage.py (§6 원문 ↔ state 원장)
+                                       │  진입 첫 액션: check_verbatim_coverage.py (payload §6 ∪ audit §6 ↔ state 원장)
                                        ├─ 1단계 방향성  brief-direction-reviewer + codex #1  (보고만, 병합 없음)
                                        ├─ 2단계 충실도  brief-critic(격리) + codex #2  fail-closed 합집합
                                        │                needs_revise → 수정 → fresh 재리뷰 (재dispatch 상한 2)
-                                       └─ 3단계 냉독    brief-readback  (advisory, G1–G5 gap)
+                                       └─ 3단계 냉독    brief-readback  (advisory, G1–G6 gap)
                                        ▼ 산출물 4종 (확정 후보 / 방향성 C4 / readback+gap / 모든 degrade record)
                                        ▼ [Step B proceed 게이트] ①/compact 후 brainstorming · ②바로 brainstorming · ③확정 목록 수정 · ④brief만 종료  (superpowers 있을 때만)
                                    superpowers:brainstorming → -design.md
@@ -90,14 +90,14 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - **Law 1 fail-safe + Law 2 (v0.25.0)** — arm 판정(`scripts/arm_ledger.py`)의 어떤 실패(원장 read 불능, git 불능·리포 밖, 모듈 부재)도 **arm 쪽으로 fail-open** 한다(over-review > under-review). 예외는 `session_id` 미해석 하나 — 그것은 판정 신호가 아니라 상태를 어디에 쓸지 정하는 주소라, 미해석 상태의 arm 은 원장 없는 pending 을 만들어 fail-open 의 취지와 반대 결과가 된다. **`armed_paths`("더 이상 dispatch 안 함") 기록자는 둘뿐이다** — verdict 가 나온 리뷰(완료) 와 G6 상한(3회)에 닿은 Stop 훅(포기). 어느 쪽도 문서를 쓴 턴이 아니므로, writer 가 자기 리뷰를 **영구히** 억제할 물리적 경로가 없다.
   **v0.36.0 에서 좁아진 것**: "정상 dispatch 는 원장을 건드리지 않는다"는 더 이상 상태 파일 전체에 대해 참이 아니다. 정상 dispatch 는 `armed_paths` 는 그대로 두지만 `inflight_paths` 와 `dispatch_attempts` 를 **쓴다**(`hooks/review-dispatch.py` 의 `rewrite_state`). 그래서 Law 2 의 보증은 «영구 억제 불가»로 읽어야 하고, «턴이 상태를 안 건드린다»로 읽으면 안 된다.
   **그 대가로 생긴 창**: 문서를 쓴 그 턴의 Stop 훅이 남기는 in-flight 표시가 그 문서를 발견에서 `INFLIGHT_TTL_SEC`(900초) 동안 빼낸다. 발견 결과가 곧 **구조 검증 후보 집합**이므로 그 창 동안 멈추는 것은 재-dispatch 만이 아니다 — 그 문서는 **Layer 1 구조 검증도 받지 않는다(어떤 도구로 쓰든)**. 리뷰가 verdict 없이 끝나면 둘 다 그 시간만큼(최대 900초) 늦어진다. 창을 여는 조건은 좁다: 모델이 dispatch mandate 를 무시해야 하고, 그 문서는 이미 리뷰 큐에 들어가 있다. 구현은 설계 §4.1·A12(«발견 결과에서 제외»)를 그대로 따른 것이라 이것은 구현 결함이 아니라 **명세 쪽 미결**이다 — 좁히려면 발견 제외와 검증 제외를 서로 다른 술어로 가르는 설계 변경이 필요하고(armed 게이트를 그렇게 가른 전례가 v0.36.0 에 있다), 그 판단은 아직 하지 않았다.
-- **Law 1 (Clarity) — 핸드오프 게이트 (v0.23.0)** — brief 구조 게이트가 **2파일 fail-closed**로 확장. payload frontmatter `audit_file`(basename만, traversal 거부)로 audit을 해석하고, 못 열면 payload-only로 degrade하지 않고 red를 낸다. `user_sourced_items` 스키마 + 세 bijection(A: payload §5 ↔ audit §3 / B: body §2 ↔ frontmatter — statement 내용까지 / C: `evidence: S<N>` → §6)이 라벨과 내용이 어긋나는 drift를 기계로 잡는다.
+- **Law 1 (Clarity) — 핸드오프 게이트 (v0.23.0)** — brief 구조 게이트가 **2파일 fail-closed**로 확장. payload frontmatter `audit_file`(basename만, traversal 거부)로 audit을 해석하고, 못 열면 payload-only로 degrade하지 않고 red를 낸다. `user_sourced_items` 스키마 + 세 bijection(A: payload §5 ↔ audit §3 / B: body §2 ↔ frontmatter — statement 내용까지 / C: `evidence: S<N>` → payload §6 ∪ audit §6)이 라벨과 내용이 어긋나는 drift를 기계로 잡는다.
 - **P17 (User sovereignty) — 확정 권한 반환 (v0.23.0)** — 라운드마다 결정을 잠그던 producer를 제거하고 `status: confirmed`를 **종료 시 사용자 일괄 확인**으로만 발생시킨다. 확인은 새 의례가 아니라 기존 proceed 게이트에 흡수돼 상호작용이 1회로 유지된다(trivia ceremony 회피). 재제시에는 상한 2회가 있고 초과 시 전 항목이 `provisional`로 강등된다 — **덜 잠그는 쪽이 안전한 방향**(Unbounded-autonomy 가드).
 - **Law 2 (brief, v0.24.0)** — 3중 분리: (a) 신규 에이전트 3개 전부 fail-closed `tools:`
   allowlist(쓰기·실행·위임 0개), (b) **입력 격리** — `brief-critic`·`brief-readback`은 payload
   전문을 inline으로만 받고 경로를 갖지 않으며, zero-tool probe 통과 시 `tools: []`로 도달 경로가
   물리적으로 없다(실패 시 verdict를 advisory로 내리고 D2 미충족을 사용자에게 보고), (c) **수정 후
   fresh critic 재리뷰 1회 필수** — writer가 자기 수정을 승인하는 경로를 차단한다(상한 2).
-- **Law 3 (brief, v0.24.0)** — `brief-critic`의 `category` 6종과 readback gap 클래스 G1–G5가
+- **Law 3 (brief, v0.24.0)** — `brief-critic`의 `category` 6종과 readback gap 클래스 G1–G6가
   compounding substrate다. 리뷰가 놓친 결함류가 나오면 그 열거와 체크리스트를 편집하는 것이
   compounding 이벤트다(persona = 보안-민감 코드).
 

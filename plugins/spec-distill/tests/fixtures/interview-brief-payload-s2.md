@@ -5,12 +5,12 @@ created_at: 2026-07-26
 session_id: testsession01
 source: spec-distill conducting-interview v0.23.0
 next_phase: superpowers:brainstorming
-audit_file: interview-brief-statement-160.audit.md
+audit_file: interview-brief-payload-s2.audit.md
 user_sourced_items:
   - id: C1
     source: verbatim
     status: confirmed
-    statement: "대시보드는 SSR로 렌더한다. 가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가"
+    statement: "대시보드는 SSR로 렌더한다"
     evidence: S1
   - id: D2
     source: chosen
@@ -34,7 +34,7 @@ TTFP를 줄이는 것이 진짜 목표다. SPA 전환은 수단이었지 목표�
 
 이 절의 진술은 모델이 쓴 요약이다. 원문은 §6, `⟨S<N>⟩`가 그것을 가리킨다.
 
-- 🗣 confirmed **C1** — 대시보드는 SSR로 렌더한다. 가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가가 ⟨S1⟩
+- 🗣 confirmed **C1** — 대시보드는 SSR로 렌더한다 ⟨S1⟩
 - ☑ provisional **D2** — 캐시 계층은 인증 뷰까지 확장하지 않는다 ⟨S2⟩
 
 ✎ 렌더링 전략 선택이 이 토픽의 축으로 보인다 (모델 추론).
@@ -45,13 +45,13 @@ TTFP를 줄이는 것이 진짜 목표다. SPA 전환은 수단이었지 목표�
 
 ## 4. External Landscape
 
-- Next.js app-router SSR — https://nextjs.org/docs/app — [취함] — 데이터 형태와 부합
+- Next.js app-router SSR «nextjs-docs» — [취함] — 데이터 형태와 부합
 
 ## 5. 기각 · Blind Spots
 
 - 기각 — 전체 클라이언트 SPA → cold load에서 TTFP 회귀
-- 기각 — islands architecture 우선 도입 → https://jasonformat.com/islands-architecture/ — verdict: defended — ST1
-- 위험 — 숨은 가정 | SSR 호스트가 항상 저지연: cold start 시 TTFP 역전 — https://vercel.com/docs/functions
+- 기각 — islands architecture 우선 도입 — verdict: defended — ST1
+- 위험 — 숨은 가정 | SSR 호스트가 항상 저지연: cold start 시 TTFP 역전
 
 ## 6. 사용자 원문
 

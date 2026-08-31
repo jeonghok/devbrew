@@ -17,13 +17,13 @@ user_sourced_items:
   - id: C1
     source: verbatim          # verbatim(발화 그대로) | chosen(선택지 선택)
     status: provisional       # confirmed | provisional | open
-    statement: "<C1 제약 한 줄>"   # 160자 이내(hard) — 모델이 쓴 요약. P21 secret placeholder 치환
-    evidence: S1              # §6의 어느 발화에서 나왔는가 — 필수
+    statement: "<C1 제약 한 줄>"   # 모델이 쓴 요약. P21 secret placeholder 치환
+    evidence: S1              # 원문 §6(payload 또는 audit)의 어느 발화에서 나왔는가 — 필수
   - id: D2
     source: chosen
     status: provisional
     statement: "<D2 제약 한 줄>"
-    evidence: S2
+    evidence: S1              # payload §6엔 S1만 산다 — S2 이상 원문의 evidence는 audit §6 이관
 ---
 
 # <Topic> — Interview Brief
@@ -43,12 +43,13 @@ user_sourced_items:
 
 ## 2. 제약
 
-(이 절의 진술은 모델이 쓴 요약이다. 원문은 §6, `⟨S<N>⟩`가 그것을 가리킨다.
+(이 절의 진술은 모델이 쓴 요약이다. 원문은 payload §6(S1)과 audit §6(S2 이상)에 나뉘어
+ 있고, `⟨S<N>⟩`가 그중 하나를 가리킨다.
  한 줄이 frontmatter 한 항목의 렌더다 — id·기호↔`source`·`status`·`⟨S<N>⟩`·statement 문구가
  **전부** 일치해야 한다(bijection B). 한쪽만 고치면 게이트가 red를 낸다.)
 
 - 🗣 provisional **C1** — <C1 제약 한 줄> ⟨S1⟩
-- ☑ provisional **D2** — <D2 제약 한 줄> ⟨S2⟩
+- ☑ provisional **D2** — <D2 제약 한 줄> ⟨S1⟩
 
 ✎ (모델 추론은 이 프로즈 형식으로만. frontmatter 계약 밖이라 게이트 대상이 아니다.)
 
@@ -60,9 +61,10 @@ user_sourced_items:
 
 ## 4. External Landscape
 
-(1항목 = 1줄, **출처 URL 필수** + [취함|피함|중립] + 이유.)
+(1항목 = 1줄, **«출처키» 필수** + [취함|피함|중립] + 이유. 그 키가 가리키는 원자료
+ URL은 audit `## 7. 확산 원자료`에 선언한다 — payload에는 키만 남는다.)
 
-- ... — https://example.com — [취함] — 이유
+- ... «example» — [취함] — 이유
 
 ## 5. 기각 · Blind Spots
 
@@ -70,19 +72,16 @@ user_sourced_items:
  `verdict:`를 가진 항목은 audit §3의 `ST<N>` 참조가 필수다.)
 
 - 기각 — <시도한 방향> → <버린 이유>
-- 기각 — <시도한 방향> → <버린 이유> — https://evidence.example — verdict: defended — ST1
+- 기각 — <시도한 방향> → <버린 이유> — verdict: defended — ST1
 - 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>
 
 ## 6. 사용자 원문
 
-(분량 무제한 — **전문 보존**. 허용 변환은 P21 placeholder 치환·앞뒤 공백 정리·인용 블록 래핑뿐이며
- 요약·재서술·발췌는 금지. 각 항목이 `S<N>` 앵커를 제공한다.)
-
-> **출처 표기** — 🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론
+(**`S1` 최초 요청 원문 하나만** 여기 남는다 — 나머지 발화 전량은 audit `## 6. 사용자 원문`에
+ append-only로 보존한다. 허용 변환은 P21 placeholder 치환·앞뒤 공백 정리·인용 블록 래핑뿐이며
+ 요약·재서술·발췌는 금지.)
 
 - **S1** 🗣 최초 요청:
-  > "..."
-- **S2** ☑ 선택 (<무엇에 대한 선택>):
   > "..."
 
 ## 7. Next Action

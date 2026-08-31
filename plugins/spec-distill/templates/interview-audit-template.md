@@ -38,7 +38,7 @@ source: spec-distill conducting-interview v0.23.0
 
 ## 4. 게이트 실행 기록
 
-- check_brief.py gate — <pass|fail> (<YYYY-MM-DD>)
+- check_brief.py gate — <pass|fail> (<YYYY-MM-DD>) — web: <enabled|disabled>
 - check_verbatim_coverage.py — <exit 0|1|3|4> (<YYYY-MM-DD>)
 
 ## 5. 프로세스 로그
@@ -52,6 +52,25 @@ source: spec-distill conducting-interview v0.23.0
 
 - 방향성: Claude <n>건 / codex <n>건 — 사용자 재결정 <n>건
 - 충실도 기록(게이트 아님, 마지막 관측 verdict만 기재): <approved|needs_revise|advisory> — critic <n>건 / codex <n>건 — 재라운드 <n>/2
-- 냉독: gap <n>건 (<G1..G5 중 어느 클래스>)
+- 냉독: gap <n>건 (<G1..G6 중 어느 클래스>)
 - degrade: <component:reason 한 줄씩 | 없음>
 - 격리: zero-tool probe <ZERO_TOOL_OK|ZERO_TOOL_UNAVAILABLE> — `codex_isolated: false`
+
+## 6. 사용자 원문
+
+(`S1`을 제외한 발화 전량. **append-only** — `S<N>` 항목 추가만 허용하고 기존 항목 본문은
+ 바꾸지 않는다(P21 placeholder 치환만 예외). 요약·재서술·발췌 금지.
+ `check_verbatim_coverage.py`가 state 원장과 대조하는 대상이 이 절이다.)
+
+> **출처 표기** — 🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론
+
+- **S\<N\>** ☑ 선택 (\<무엇에 대한 선택\>):
+  > "..."
+
+## 7. 확산 원자료
+
+(payload §4가 쓴 «출처키» 마다 원자료 URL을 여기 선언한다. 집합 포함 검사(N2)이므로
+ 개수·순서는 무관 — payload가 쓴 키가 이 목록에 있기만 하면 된다. 두 payload 항목이
+ 같은 키를 써도 여기는 한 번만 선언하면 된다.)
+
+- «example» — https://example.com — 무엇을 확인했나

@@ -17,11 +17,9 @@ user_sourced_items:
 # Verbatim Multiline — Interview Brief
 
 ## 6. 사용자 원문
-
 - **S1** 🗣 최초 요청:
   > "첫 줄이다
   > 둘째 줄이다"
-
 ## 7. Next Action
 
 - 없음

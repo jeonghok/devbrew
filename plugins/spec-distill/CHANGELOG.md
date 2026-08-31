@@ -1,5 +1,788 @@
 # Changelog
 
+## [0.47.0] — 2026-08-31
+
+### Fixed
+
+- **§6 경계를 세 소비자가 각자 계산하던 것을 한 곳으로 모았다 — `scripts/section6.py` 신설.**
+  v0.46.0 은 §6 의 **시작** 좌표만 못 박았는데, §6 은 (시작, 종결) 두 좌표를 갖고 세 소비자의
+  종결 규칙이 서로 달랐다: 게이트는 펜스 **밖** `^##\s+\d+\.` · `build_brief_bundle.py`는
+  **원문** `^##\s+\d+\.` · `check_verbatim_coverage.py`는 **원문** `^##\s`. 그래서 audit §6
+  **안**에 **펜스로 감싼** `## 7.` 한 줄을 두면 게이트는 rc 0 인데 번들은 거기서 잘렸다 —
+  실측 두 형태: ① 삭제형 — `<<<AUDIT-VERBATIM>>>` 블록이 **비고**(진짜 `S2`+ 전량 소실)
+  ② 위조형 — 그 자리에 심은 `S2` 가 ground truth 로 실리고 진짜는 사라진다. v0.46.0 이 닫은
+  audit-펜스 공격(F)과 **바이트 단위로 같은 결함**이 종결 좌표에서 재발한 것이다.
+  **「종결도 못 박는다」로 고치지 않았다** — 그러면 세 번째 좌표에서 또 난다. 술어를 올렸다:
+  **§6 은 모든 소비자에게 같은 영역으로 해석돼야 한다.** 구현은 계산기를 셋에서 하나로 줄이는
+  것이고(어긋남이 「지금 없다」가 아니라 **생길 자리가 없다**), 판정은 **가장 관대한 읽기와
+  가장 엄격한 읽기가 일치하는가** 한 술어다 — 두 극단은 위 표의 실제 소비자 규칙에서 뽑았지,
+  손으로 고르지 않았다. 시작 후보는 **제목을 요구하지 않는다**(`^##\s*6\.`) — 요구하면
+  `## 6. 참고 자료` 같은 줄이 후보에서 빠지는데, 옛 `check_verbatim_coverage.SECTION6_RE`는
+  실제로 그런 줄을 §6 시작으로 골랐다. 죽은 경계 계산기(`_first_unfenced`·`_fence_spans`·
+  `PAYLOAD_SECTION6_RE`·`ANY_SECTION_HEADING_RE`)는 걷어냈다 — 남겨 두면 다음 사람이 그것을
+  다시 쓴다.
+- **`build_brief_bundle.py`가 게이트가 축복한 audit 을 싣는다 (신원 결속).** 게이트는
+  `resolve_audit(payload)` = `<stem>.audit.md` 를 검사하는데 빌더는 호출자가 준 `$AUDIT` 를
+  읽었고, **둘을 묶는 것이 아무것도 없었다** — `reviewing-brief` SKILL 은 `$AUDIT` 를
+  「호출자가 넘기는 값」이라 적고, 그 호출자(`finishing.md` Step A.5)는 세 변수를 넘기는데
+  그중에 `$AUDIT` 가 없다. 실측: 게이트가 `I.audit.md` 로 통과시킨 payload 로 빌더에 전혀
+  다른 파일을 넘기면 위조 원문이 ground truth 로 rc 0 에 실린다. 빌더가 이제 조립 **전에**
+  `check_brief.resolve_audit()` 로 payload 가 선언한 sidecar 를 구해 인자와 대조하고, 다르면
+  rc 2·무조립이다. **경로를 유추하지 않는다는 원칙은 그대로다** — 호출자는 여전히 명시해야
+  하고, 빌더는 그 명시가 게이트의 해석과 다를 때 **거절**한다(`resolve_audit` 자신이
+  「찾는 것이 아니라 고르지 못하게 거절하는 것」이라 적은 그 층).
+- **`reviewing-brief` 가 첫 번들 조립 전에 구조 게이트를 돌린다 (순서 결속).** 이 skill 은
+  model-invocable 이고 description 이 직접 진입을 초대하는데, 파일 안에서 게이트가 도는
+  유일한 자리는 2-c(충실도 수정 **후** 재실행)였다 — 진입 첫 액션은 강등 가능한
+  `check_verbatim_coverage.py` 이고, 유일한 사전 게이트는 **다른 skill**
+  (`conducting-interview/references/finishing.md`)에 있다. 즉 이 skill 로 직접 들어오면
+  **첫 번들이 게이트를 통과한 적 없는 payload 로 조립됐다.** 2-a 조립 블록 머리에서 게이트를
+  돌리고 미통과면 진입 자체를 중단한다.
+- **충실도 축 `omission` 정의의 코퍼스 검사가 어구 검사였다 (v0.46.0 F15 ②의 결함).**
+  「`ground truth` 라는 어구가 있으면 두 위치에 위임한 것으로 본다」였는데, 그것은 범위가
+  아니라 어구를 쟀다 — 「something load-bearing in the **audit** ground truth …」로 고쳐 쓰면
+  형용사 하나로 코퍼스가 절반이 되는데 어구는 그대로라 **rc 0 · 94/94** 였다(실측). 위임
+  분기를 없애고 **두 표지 리터럴의 동시 존재**를 요구한다 — 형용사로는 만족시킬 수 없다.
+  체크리스트의 `omission` 불릿도 두 위치를 직접 열거하도록 고쳤다.
+
+### Added
+
+- **`test_check_brief.sh` — §6 단일화 파생 락.** 소비자 목록을 손으로 적지 않는다:
+  `scripts/*.py` 의 `re.compile` 문자열 리터럴을 `ast` 로 전수 수집해 「`##` 헤딩 마커를
+  실제로 소비하는」 패턴(프로브 매치가 `end>=3` — 주석 패턴 `^\s*#` 는 `end==1` 로 걸러진다)을
+  고르고, 그런 패턴이 `section6.py` **밖**에 있으면 red. 새 소비자가 자기 규칙을 들고
+  나타나는 순간 걸린다. **계측기 대조**를 함께 돌린다 — 같은 탐지기를 stray 를 심은 합성
+  소스에 돌려 실제로 잡는지 확인한다(없으면 「밖에 없다」와 「탐지기가 안 봤다」가 구별되지
+  않는다). 파싱 실패 파일도 red 로 낸다(코퍼스 누락 = 침묵).
+- **`test_check_brief.sh` — 3소비자 행동 대조 락.** 같은 문서에서 세 소비자의 §6 답을
+  나란히 놓고 **셋이 같은지**만 본다(어느 답이 옳은지는 판정하지 않는다 — 피검자에서
+  기대값을 끌어오지 않기 위해). 정상 문서의 공통 답이 비면 등식이 「셋 다 아무것도 못 봤다」로
+  공허해지므로 그 경우를 따로 red 로 낸다.
+- **`test_check_brief.sh` — N1c 축을 종결 좌표까지 넓혔다.** 케이스 8 → **12**(시작 4값 +
+  종결 2값, 각각 armed/중화 짝). 중화판은 주입한 줄에서 헤딩 표기만 없앤 것이라, red 의 원인이
+  그 줄임을 증명한다.
+- **`test_check_brief.sh` — 경계 매처 관대함 락(양성 5 + 음성 6).** v0.46.0 의 mutation 은
+  펜스 축만 흔들어 **제목 축이 열려 있었다** — 매처에 제목을 요구하도록 좁혀도 157/157 이었다.
+  좁히는 변이(제목 요구)와 넓히는 변이(`## 16.` 까지 매치) 양쪽이 물린다.
+- **`test_brief_bundle.sh` — T15 신원 결속 락 · T16 종결 좌표 락.** T15 는 **내용이 아니라
+  신원**을 잰다: 바이트가 같은 audit 을 다른 이름으로 넘기면 rc 2, 올바른 이름이면 rc 0
+  (양성 짝이 없으면 「항상 거절」인 빌더도 통과한다). T16 은 거절 시 **아무것도 내보내지
+  않음**까지 단언한다 — 빈 ground truth 로 「왜곡 없음」이 나오는 경로가 이 결함의 본체였다.
+- **`test_reviewing_brief_skill.sh` — ORD 순서 락.** 문면이 아니라 **위치**를 잰다: SKILL 의
+  bash 라인을 순서대로 놓고 첫 `check_brief.py gate` 인덱스 < 첫 `build_brief_bundle.py`
+  인덱스. 두 앵커의 실재를 먼저 단언해 부등식이 공허해지지 않게 한다.
+
+### Changed
+
+- **`check_verbatim_coverage.py` 의 §6 경계 모호는 `ParseError`(검사 불가, exit 3)가 아니라
+  `StructuralViolation`(위반, exit 1)이다.** 「어느 §6 을 봤어야 하는지 모른다」를 검사 불가로
+  내리면 전 statement 의 L1·L2 가 조용히 skip 된다.
+
+### Known gaps
+
+이 릴리스가 닫지 못한 것. **이 절이 이 사실들이 살아남는 유일한 자리다** —
+`.superpowers/sdd/` 는 `.gitignore` 가 `*` 라 프로젝트 종료 시 사라진다.
+
+- **G — `landscape_unkeyed`(#13)의 펜스 코퍼스 구멍. 열려 있다.** §4 항목을 ```펜스``` 안에
+  적으면 「항목마다 «출처키»」 ∀ 를 통과하는데 그 주장은 payload 에 그대로 실려 나간다.
+  재현: `interview-brief-valid.md` §4 항목 줄 **뒤에** 펜스 블록을 넣고 그 안에
+  `- 출처 없는 landscape 주장 — [취함] — 근거 없음` 한 줄 → `gate` **rc 0**,
+  `landscape-keys` → `{"unkeyed": []}`. §6 계열(N1a/N1b)과 **같은 결함 계열**(검사의 코퍼스가
+  출하되는 텍스트를 조용히 제외)이지만 다른 검사다. 안 닫은 이유: `_body()` 의 펜스 스트립은
+  **존재 검사에서는 의도된 엄격함**(F4 — 펜스 안 헤딩으로 절 존재를 만족시키는 우회 차단)이라,
+  「펜스 안 항목이 저술된 주장인가 예시인가」는 이 수정이 혼자 내릴 판단이 아니다.
+- **`check_verbatim_coverage.py` 는 여전히 게이트보다 **먼저** 돈다.** v0.47.0 이 닫은 것은
+  「게이트 → 첫 번들」 순서이고, `reviewing-brief` 의 **진입 첫 액션**은 그대로 완전성
+  검사다. 즉 그 스크립트는 아직 게이트를 통과하지 않은 payload 를 볼 수 있다. 보안 관련
+  순서(검증되지 않은 원문이 ground truth 로 나가는 경로)는 닫혔고, 남은 것은 강등 가능한
+  advisory 검사가 미검증 문서에서 혼란스러운 메시지를 낼 수 있다는 것이다.
+- **존재 기반 락은 부정문을 못 잡는다.** F15 ②는 `omission` 불릿이 두 표지를 **둘 다** 담을
+  것을 요구하는데, 둘을 다 적고 「두 번째는 무시하라」를 덧붙인 문면은 통과한다. 문면의
+  의미를 기계로 재는 방법이 이 층에 없다.
+- **`section6.py` 는 형제 모듈 import 다.** 스크립트 하나만 다른 디렉토리로 복사해 돌리면
+  `ModuleNotFoundError` 로 죽는다(fail-closed이지만, 변이 하니스처럼 파일을 옮겨 돌리는
+  관행은 sibling 을 함께 옮겨야 한다 — `test_check_verbatim_coverage.sh` C1 을 그렇게 고쳤다).
+- **§6 «내부» 위조는 아직 열려 있다 (선재).** audit §6 **안에** 백틱 펜스를 두고 그 안에
+  `- **S9** …` 를 적으면 `gate` **rc 0** 이고 번들이 그것을 `<<<AUDIT-VERBATIM>>>` 안에
+  ground truth 로 싣는다. `check_verbatim_coverage` 도 못 잡는다 — L1 이 「state ⊆ items」라
+  **추가된** 발화는 정의상 위반이 아니다. 경계 불변식은 §6 이 *어디서 시작해 어디서 끝나는지*를
+  못 박지, 그 **안**에 무엇이 들어오는지는 재지 않는다. `51312e6` 에서도 동일하게 재현된다.
+- **`~~~` 물결 펜스는 두 읽기 모두 펜스로 보지 않는다 (선재).** audit §6 안에 `~~~` 로 감싼
+  `## 7.` 을 두면 관대·엄격 두 읽기가 **함께** 거기서 자르므로 「유일하게 해석된다」가 참이 되고,
+  그 뒤의 `S<N>` 이 번들에서 조용히 사라진다. 실측에서 게이트가 빨간 경우가 있으나 그것은
+  **N2 가 §7 이 비었음을 우연히 눈치챈 것**이지 경계 검사가 잡은 것이 아니다 — 그 backstop 이
+  걸리지 않는 배치에서는 통과한다.
+- **「§6 이 모든 소비자에게 한 영역으로 확정된다」는 출하 코드에 대해 아직 참이 아니다.**
+  `ast` 도출 락이 수확하는 것은 **모듈 수준 `re.compile(<문자열 리터럴>)`** 뿐인데,
+  `check_brief.py` 의 `_section_text` 는 f-string + `re.search` 로 §6 경계를 계산해 수확에
+  잡히지 않고, 그 함수를 쓰는 `verbatim_anchors()` 가 살아 있는 audit §6 소비자다. TRI 락도
+  준수 경로인 `payload_verbatim_anchors` 만 비교하고 발산하는 `verbatim_anchors` 는 안 본다.
+- **ORD 락은 «텍스트»를 묶지 «효과»를 묶지 않는다.** 게이트 호출을 실행 없는 `echo` 로
+  바꿔도 통과한다(호출을 통째로 지우면 잡힌다). 순서는 지켜지되 그 게이트가 실제로 도는지는
+  이 락이 재지 않는다.
+- **codex co-reviewer 가 이 작업 전체에서 사용 불가였다(한도 소진, 호출 0회).** 설계 8라운드와
+  v0.46.0·v0.47.0 두 릴리스 전부가 **단일 모델 계열**의 판단이다. 이 리포 이력상 단일 계열이
+  가장 자주 놓치는 것이 fail-open·조용한-0건 계열이고, 이 두 릴리스가 고친 결함이 정확히 그
+  계열이다. 여기 적힌 판단들은 증명이 아니라 표본으로 읽어야 한다.
+
+## [0.46.0] — 2026-08-31
+
+### Fixed
+
+- **N1c 신설 — payload·audit의 §6 헤딩 유일성을 불변식으로 못 박았다 (선재 갭 C).**
+  N1a의 코퍼스는 「payload에서 §6을 뺀 나머지」이고 N1b의 코퍼스는 「payload §6」이다 —
+  **둘은 서로의 여집합이라 §6 경계가 유일할 때만 정의된다.** 게이트는 그 유일성을 한
+  번도 단언하지 않았고, 그래서 두 검사는 「첫 번째 §6 헤딩」을 골라야 했다. 그 선택이
+  곧 **저자가 옮길 수 있는 경계**였다. 실측 셋(전부 `9698670`에서 rc 0) — ① §4 꼬리에
+  펜스 **없는** 두 번째 `## 6. 사용자 원문` + 그 아래 URL → 통과 · ② 같은 줄을
+  **frontmatter 안**에 → v0.44.0이 닫은 frontmatter 인라인-주석 통로가 그대로 다시 열림 ·
+  ③ **audit**에 펜스 안 가짜 `## 6.`을 진짜 앞에 두면 `build_brief_bundle.py`가 펜스를
+  무시하고 첫 헤딩부터를 원문 블록으로 실어, 충실도 리뷰어가 받는 ground truth가
+  **위조본으로 통째 교체**된다(진짜 `S2`+는 아예 도달하지 않는다). ③은 PR이 적은 두
+  선재 갭 어느 쪽도 아니다.
+  **「첫 번째를 고르는 규칙」을 고치는 방향으로는 닫히지 않는다 — 고르는 행위 자체가
+  구멍이다.** 유일성 위반을 red로 내고, 경계가 비유일하면 N1a는 **한 글자도 빼지 않는다**
+  (fail-closed 두 번째 방벽 — N1c를 지워도 ①·②가 다시 열리지 않는다). 유일성은 §6을
+  실제로 잘라 쓰는 **가장 관대한 소비자**의 매처(`^##\s*6\.`, 펜스 무시 —
+  `check_verbatim_coverage.py:parse_section6`)로 판정한다. 좁은 매처로 물으면 「이 문서의
+  §6은 하나다」가 참인 채로 다른 소비자는 다른 절을 §6으로 읽는 상태가 통과한다.
+  경계가 비유일하면 N1b·bijection C는 묻지 않는다 — 그 상태의 앵커 집합은 공집합이라
+  「앵커가 없다」는 **원인과 어긋난 red**가 되고, 저자를 엉뚱한 수정으로 보낸다.
+- **N1b의 코퍼스를 `_body()`에서 payload 원문 §6 span으로 옮겼다 (선재 갭 D).**
+  `_body()`는 펜스를 벗기므로 payload §6 **안**의 펜스에 `- **S5**`를 적으면 앵커 집합이
+  `{"S1"}`으로 계산돼 등식이 만족됐는데(실측 rc 0), 그 줄은 payload에 그대로 남아 번들에
+  실려 충실도 리뷰어에게 **원문으로** 나갔다. C와 같은 결함 계열이다 — 검사의 코퍼스가
+  하류로 출하되는 텍스트를 조용히 제외한다. N1a와 N1b는 이제
+  `payload_section6_span()`이 **원문 위에서** 잡은 **하나의** 경계를 공유한다. audit 쪽
+  앵커(`verbatim_anchors`, bijection C의 우변)는 그대로 `_body()` 코퍼스를 쓴다 — 그쪽은
+  존재 검사이고 이 릴리스의 갭이 아니다. 두 함수의 docstring이 어느 쪽이 무엇인지 적는다.
+- **`_body()` docstring의 거짓 문장을 사실로 교정했다 (갭 B).** *"부재 검사(N1a)는 이
+  코퍼스를 쓰면 안 된다"*는 N1b에 대해 거짓이었다 — N1b가 정확히 그 코퍼스를 쓰고 있었다.
+  위 D 수정이 그 상태를 끝냈으므로, docstring은 **지금 사실인 것**을 적는다: 「payload
+  §6을 경계로 쓰는 검사(N1a·N1b)는 이 코퍼스를 쓰지 않는다」. 산문은 틀려도 소리를
+  안 내므로 `ast` 호출그래프 락으로 집행한다(아래).
+- **충실도 축의 `omission` 정의가 락 밖이었다 (갭 A).** F14의 코퍼스는 「ground truth를
+  말하면서 표지를 하나라도 대는 문단」이라 **피검자가 스스로 빠져나갈 수 있었다** —
+  `omission` 불릿을 「`<<<AUDIT-VERBATIM>>>` 블록에서 빠진 것」으로 되돌리면 그 문단은
+  *ground truth*라는 어구를 잃어 후보에서 탈락하고 스위트는 90/90 초록을 유지한다(실측).
+  출하된 dogfood payload에 `evidence: S1` 항목이 4건이라 가정이 아니다.
+
+### Added
+
+- **`test_check_brief.sh` — N1c 락(축 4값 × 양성 짝 8케이스).** 축은 「두 번째 §6 헤딩이
+  **어디에** 놓이는가」다: frontmatter · §4 꼬리(펜스 밖) · 펜스 안 · audit 파일. 값 하나만
+  잡으면 락이 그 자리에만 이빨을 갖는다 — v0.44.0이 «펜스 안»만 닫고 «펜스 밖»을 열어 둔
+  것이 정확히 그 실패였다. 각 값마다 **중화판**(주입한 줄에서 `##`만 없앤 판본)이 green임을
+  함께 단언한다 — 그래야 red의 원인이 그 헤딩임이 증명된다. 케이스 생성기 rc + 행 수
+  **리터럴 8**로 「추출기가 죽어 단언이 조용히 사라지는」 실패형을 막는다. fail-closed
+  폴백은 유닛으로 직접 단언한다(비유일 → 코퍼스 == 전문 · 유일 → 코퍼스 < 전문, 양성 짝).
+- **`test_check_brief.sh` — N1b 락(펜스 안/밖 두 표기 + 양성 짝).** 같은 `S5` 앵커가 펜스
+  안이든 밖이든 같은 판정이어야 한다. 양성 짝은 **앵커 줄만 뺀 같은 펜스**가 green임을
+  단언한다 — red의 원인이 「펜스가 있다」가 아니라 「§6이 `S1` 아닌 앵커를 준다」임을 가른다.
+- **`test_check_brief.sh` — 코퍼스 분리의 기계 집행(`ast` 호출그래프).** N1a·N1b 두 루트에서
+  `_body`/`_section_text`로 가는 경로가 없음을 단언한다. 셸 본문 추출기는 조용히 깨지므로
+  `ast.parse`로 판다. **양성 대조가 핵심이다** — 같은 분석기가 `_body()`를 실제로 쓰는
+  `landscape_unkeyed`에서는 HIT을 내야 한다(안 그러면 「금지 호출을 못 찾았다」와 「분석기가
+  아무것도 안 봤다」가 구별되지 않는다). 두 루트가 `payload_section6_span`을 실제로
+  경유하는지도 함께 단언한다. 행 수 리터럴 5.
+- **`test_brief_agents.sh` — F15 락(축 정의 불릿).** 대상을 문면이 아니라 **구조**에서
+  도출한다: 여섯 축 정의 불릿을 `- \`<name>\` —` 경계로 잘라 내고, ① 어느 축 정의도 비신뢰
+  원문 두 위치 중 **한쪽만** 이름으로 대지 않는다(∀) · ② `omission`은 자기 코퍼스를
+  **말해야 한다** — 두 표지를 다 열거하거나, 위 문단이 두 위치로 정의한 *ground truth*라는
+  용어에 위임하거나. 다른 다섯 축은 `S<N>` 앵커를 따라가므로 위치와 무관하지만, omission은
+  「무엇이 빠졌나」라 코퍼스 **전체**를 훑어야 답이 나온다 — 범위를 안 말하면 한쪽만 읽고
+  「빠진 것 없음」이 나온다. 불릿 이름 집합은 셸이 리터럴로 대조하고(기대값을 피검자와 같은
+  층에 두지 않는다), 행 수 리터럴 2로 추출기 사망을 가른다.
+
+### Known gaps
+
+- **G — `landscape_unkeyed`(#13)의 펜스 코퍼스 구멍.** 이 릴리스가 찾았고 닫지 않았다.
+  §4 항목을 펜스 안에 적으면 «출처키» ∀ 를 통과하는데 그 주장은 payload 에 실려 나간다.
+  재현·판단 근거는 `0.47.0` 의 Known gaps 에 적었다(거기서도 열려 있다).
+- **§6 경계의 «종결» 좌표는 이 릴리스에서 못 박히지 않았다.** N1c 는 시작 좌표만 봤고,
+  audit §6 안의 **펜스로 감싼** `## 7.` 로 같은 공격이 그대로 들어왔다 — `0.47.0` 이 닫았다.
+- **게이트가 축복한 audit 과 번들이 싣는 audit 을 묶는 것이 없었다** — `0.47.0` 이 닫았다.
+- **codex co-reviewer 사용 불가(한도 소진).** 이 릴리스의 모든 판단이 단일 모델 계열이다.
+
+## [0.45.0] — 2026-08-31
+
+### Added
+
+- **`build_brief_bundle.py` 신설 — 충실도 축 두 리뷰어가 공유하는 번들 (payload + audit
+  §6).** 앞선 두 단위가 사용자 원문·외부 URL을 payload에서 audit 사이드카로 옮기면서,
+  §2 요약이 §6 원문을 왜곡했는지 판정하는 충실도 리뷰어들이 payload만 읽어서는 대조할
+  원본을 잃었다 — 원문 없이 왜곡을 물으면 "왜곡 없음"이 공허하게 나온다. 이 스크립트가
+  그 원문을 되돌려준다. 형제 `build_seed_inline_blob.py`의 구조(명시 경로 → 라벨 붙은
+  조립 → stdout)를 이식했지만, 실패 정책은 반대다 — 형제는 원문 절이 없으면 stderr
+  경고 후 그대로 조립하고(fail-open), 여기서는 exit 2·무출력·무디스패치다.
+- **라벨은 마크다운 헤딩이 아니다 — `<<<PAYLOAD>>>` / `<<<AUDIT-VERBATIM>>>`.** payload의
+  `## 6. 사용자 원문`과 audit의 동명 절을 그냥 이어 붙이면 "§6을 보라"는 하류 지시가
+  먼저 나오는 payload 쪽(원문 한 항목뿐)에 걸린다 — 이 태스크가 막으려는 공허 리뷰가
+  수정 안에서 재발하는 경우다. audit 쪽 절 헤딩은 실을 때 벗긴다(안 벗기면 payload의
+  헤딩과 바이트 동일해 라벨을 붙여도 소용없다).
+  audit 경로는 인자로만 받는다(유추 금지) — 게이트의 `resolve_audit()`이 stem을
+  유도하는 것과는 층이 다르다(그건 찾기가 아니라 payload의 자기-선언 audit을 못
+  바꾸게 하는 거절이다).
+- **rc 표.** `0` 정상 dispatch · `2` payload/audit 부재·읽기 실패·audit §6 없음(전부
+  무디스패치, 무출력) · `3` 위생 미달(번들 payload 부분에 `.audit.md` 문자열 잔존 —
+  degrade 기록 후 dispatch). 위생 스캔은 **payload 부분에만** 건다 — 번들이 audit
+  내용을 의도적으로 싣게 됐으므로 전체를 스캔하면 정상 동작이 매번 exit 3을 낸다.
+- **`test_brief_bundle.sh` 신설 (T1–T8).** 라벨 존재(T2/T3)와 실린 내용(T5)을 분리해
+  검사한다 — 라벨만 있고 원문이 비어도 통과하는 락은 이 실패를 못 잡는다. T4는
+  `## 6. 사용자 원문` 헤딩이 번들에 최대 1개임을 세어 확인(동명 헤딩 충돌 재발 방지).
+- **번들이 리뷰 층에 배선됐다 (task-10) — 세 축이 셋으로 갈린다.** `reviewing-brief`
+  SKILL의 critic dispatch(2-a)와 fidelity codex 호출 두 곳(2-b 최초 · 2-c 재실행)이
+  이제 `build_brief_bundle.py`가 만든 번들(payload + audit §6 전량)을 받는다 — direction
+  축(1-c)과 readback(3-a)은 `$PAYLOAD` 그대로 유지한다(direction은 도구로 스스로 audit을
+  열 수 있고, readback은 하류가 실제로 받는 문서의 읽힘을 재야 하므로 번들을 주면 안
+  된다). 번들은 세션 디렉토리에 **한 번만** 조립해 critic(문자열 보간)과 codex 러너(파일
+  경로)가 같은 바이트를 나눠 갖는다.
+- **`brief-codex-fidelity-checklist.md`·`agents/brief-critic.md`가 라벨 토큰을 가리킨다.**
+  두 파일이 헤딩 리터럴 `§6 사용자 원문`을 ground truth로 지목하던 것을 `<<<AUDIT-VERBATIM>>>`
+  다음 블록으로 바꿨다 — 번들에 audit §6을 실어도 지시문이 여전히 payload의 `S1` 하나만
+  가리키면 codex·critic이 원문 전량을 못 보고 판정한다.
+- **`build_brief_codex_prompt.py`의 비신뢰-verbatim 경계 문장이 두 축을 함께 덮는다.**
+  direction 축은 payload(`## 6. 사용자 원문`)를, fidelity 축은 번들(`<<<AUDIT-VERBATIM>>>`)을
+  받으므로 한쪽 위치만 가리키면 다른 축에서 injection 경계 표시가 사라진다.
+  `merge_brief_review.py`·`test_merge_brief_review.py`의 같은 취지 주석도 주입 표면이
+  "payload §6의 `S1` 1건"에서 "번들의 audit §6 전량"으로 늘어난 사실을 반영해 갱신했다.
+- **`build_brief_inline_blob.py`가 readback 전용으로 재서술됐다.** docstring의 "충실도
+  판정은 body §2 ↔ §6 대조"는 번들 도입 이후 거짓이다 — 이 blob의 유일한 소비자는 이제
+  냉독이다. `tests/test_brief_inline_blob.sh`의 T24(§6 원문·헤딩 보존)는 변경 없이 GREEN을
+  유지한다(축 분리의 양성 대조).
+- **G6 gap 클래스 추가 (Law 3 compounding).** 냉독 3-b의 다섯 클래스에 *"상태 표기와 본문
+  서술의 불일치"*를 더했다 — 이 설계의 리뷰 8라운드에서 반복 관측됐다. 성공 조건도
+  `G1–G5 전부 0건`에서 `G1–G6 전부 0건`으로 함께 고쳤다(안 고치면 새 클래스가 관측돼도
+  아무것도 안 막는다).
+- **`test_reviewing_brief_skill.sh`에 U4 계약 락 4건 추가.** fidelity codex 호출 개수와
+  번들 인자 개수의 등식(하나라도 payload면 fail-open 재발) · 냉독의 payload-only 유지
+  (반대 방향 양성 짝) · 체크리스트·critic 정의의 라벨 토큰 참조 · G6의 성공 조건 포함.
+  기존 T8·BLOB(2-a/3-a) 락도 2-a가 이제 `build_brief_bundle.py`를 호출하는 사실에 맞춰
+  갱신했다(BLOB 루프는 섹션별로 다른 빌더 호출 패턴을 요구하도록 분기했다 — 한 정규식으로
+  두 섹션을 함께 검사하면 한쪽 빌더 호출이 사라져도 다른 쪽 매치로 조용히 통과한다).
+- **`references/compression.md`의 예약 해소 (task-12) — brief도 이 계약을 게이트로
+  집행한다.** U1–U5(이 릴리스)가 실제로 landing시킨 것을 정본이 뒤늦게 인정한다:
+  payload 외부 URL 금지(N1a) · §6은 `S1`만(N1b) · landscape 원자료는 audit 결속(N2).
+  집행 지점만 seed(`check_seed.py`)와 brief(`check_brief.py`)가 다르다. 절 구조 분기
+  (seed는 메시지형·brief는 문서형)와 "원문·근거·전량을 payload에 요구하지 않는다"는
+  불변은 그대로 둔다 — 바뀌는 것은 어느 쪽이 게이트로 강제받는가뿐이다.
+- **`test_compression_adopters.sh`의 채택자 도출이 `conducting-interview`로 확장.**
+  `references/finishing.md`에 압축 규약 포인터 + 확산-후-압축 어휘를 추가해
+  `conducting-interview`도 도출 대상(2개)이 됐다 — 채택자 도출은 열거가 아니라 정본
+  포인터에서 나오므로, 추가하지 않으면 정본의 새 문구("brief도 집행한다")와 락이 실제로
+  재는 집합이 어긋난다. guards 선언에 `plugins/spec-distill/skills/*/references/*.md`를
+  되돌리고(fix round 1이 예고한 대로), "오늘 집행 대상은 seed 하나뿐"이라던 주석의
+  stale 주장을 갱신했다.
+  **fix round 3 (코디네이터 오버룰) — 하한을 1에서 2로 올렸다.** 실측: `finishing.md`의
+  포인터+어휘 문장 두 줄을 지우면 도출이 2→1이 되는데, 하한 1에서는 그래도 통과했다
+  (rc=0, silently green) — brief가 채택자 집합에서 조용히 빠져도 이 락은 몰랐다. 정본의
+  새 heading("seed와 brief 둘 다 게이트로 집행한다")이 세우는 대칭 주장을 하한 1은
+  지키지 못하므로, 형제 락(`test_proceed_gate_adopters.sh`)과 같은 근거로 하한을 2로
+  맞췄다. 대안(리터럴 EXPECTED 튜플을 박고 `test_brief_agents.sh` F3처럼 missing/extra
+  양방향 대조)은 검토 후 채택하지 않았다 — "extra"도 실패시키면 정당한 셋째 채택자가
+  생길 때마다 이 테스트를 손으로 고쳐야 하는 열거 락이 되어, 이 파일 자신이 선언하는
+  "열거가 아니라 도출" 원칙과 충돌한다. 잔여 위험(구성원 치환 — 하나가 빠지고 무관한
+  셋째가 우연히 채워지면 개수 2는 그대로라 하한이 못 잡는다)은 주석에 명시적으로
+  남겼다 — 형제 락은 같은 간극을 "정본이 이름을 대는 skill을 합집합으로 더하는" 방식으로
+  닫았지만, `compression.md`는 skill 디렉터리 이름을 한 번도 쓰지 않는 문서라 이번
+  fix round 범위로 그 편집을 옮기지 않았다.
+
+### Fixed
+
+- **`build_brief_bundle.py`의 setext heading 충돌 (task-9 재리뷰 결함).** `assemble()`이
+  라벨 다음 줄에 payload의 frontmatter `---`를 바로 이어 붙였다 — CommonMark는 단락 바로
+  다음 줄이 전부 `-`(또는 `=`)면 그 단락을 setext heading으로 승격시키므로, 모든 호출에서
+  `<<<PAYLOAD>>>` 라벨이 `<h2>`가 되어 `## 6. 사용자 원문`과 같은 헤딩 네임스페이스에
+  들어갔다 — 이 파일이 막으려던 헤딩 충돌이 라벨 도입 자체로 재발하는 경로였다. 각 라벨
+  다음에 빈 줄을 둬서 고쳤다. `test_brief_bundle.sh`에 T13/T14를 추가해 라벨 **다음 줄**이
+  setext underline이 아님을 잠근다 — T10/T11은 라벨 자기 줄만 보고 구조적으로 이 결함을
+  못 본다.
+
+**(task-10 fix round 1, F2)** 위 문단이 "known gap"으로 적어둔 것은 오판이었다 —
+`n_bundle == n_fid`(codex 호출이 `"$BUNDLE"`을 인자로 받는지)와는 다른 축의 락이 실제로
+가능했다: 조립 호출 자체를 실행-라인 앵커로 세면 된다(`grep -cE '^[[:space:]]*python3
+"\$PR/scripts/build_brief_bundle\.py"'`, 이 파일이 이미 `n_bundle`/`n_fid`에 쓰는 것과
+같은 관용구). `test_reviewing_brief_skill.sh`에 **F2** 락을 추가했다 — 스코프는 전체
+파일이 아니라 **2-a~2-b 구간**(2-c 헤더 직전에서 끊는다): 2-c의 fresh critic 재dispatch는
+오늘 "2-a 블록 그대로"라는 참조뿐이라 리터럴 조립 호출이 파일 전체에 1개뿐이지만, 그
+참조를 나중에 명시적 리터럴 재조립으로 펼쳐 쓰는 것은 정당한 설계 변경이다(수정된
+payload/audit에서 다시 조립해야 하므로) — 전체-파일 `== 1`은 그 정당한 변경에 거짓 RED를
+낸다. 2-a~2-b 구간 안에서는 "같은 라운드의 critic·codex #1가 같은 바이트를 본다"는
+불변식이 항상 참이어야 하므로 그 구간에 대해서만 `== 1`을 무조건 강제한다. 위에서
+재현한 mutation(2-b에 재조립 호출 삽입)으로 이 락이 RED(count 2)를 내는 것을 실측
+확인했다.
+
+**(최종 whole-branch 리뷰 fix, I3)** `test_brief_agents.sh`의 **F3** 락이 **대상이
+개명되면 공허하게 초록**이었다. `build_brief_bundle.py`의 `UNTRUSTED_VERBATIM_MARKERS`를
+다른 이름으로 바꾸면(정의 + 유일 사용처, 2 insertions / 2 deletions) 임베디드 python이
+`AttributeError`로 죽고 트레이스백은 stderr로 가 `$F3_REPORT`가 빈 문자열이 된다. 그러면
+`^MISSING`·`^EXTRA`·`^NO_BOUNDARY_PARAGRAPH` 세 grep이 전부 「없어야 할 것이 없다」로
+통과하고, `COVERED` 행을 순회하는 while 루프는 한 번도 돌지 않아 단언 2개가 **조용히
+사라진다** — 스위트는 rc 0·77/77(기준선 79/79)을 냈다. 남은 세 줄은 존재하지 않는 상수에
+대해 *"계약이 필수 2곳을 전부 포함한다"*고 **적극적으로 성공을 주장**하고 있었다. 형제 락
+T12(`test_brief_bundle.sh`의 `n_pairs -eq 3`)가 같은 함정을 이미 행 수 리터럴로 막고
+있었고 F3는 그 관용구를 베끼면서 이 가드만 빠뜨렸다. 추출기 rc를 붙잡고 커버리지 행 수를
+**리터럴 2**로 못 박았다(`len(EXPECTED)`로 유도하면 빈 튜플 변형에서 `0 == 0`으로 다시
+공허해진다). 실측: 개명 mutation → exit 1, 복원 → exit 0.
+
+**(최종 whole-branch 리뷰 fix, I1)** **N1a의 코퍼스가 설계 §2.3보다 좁았고, 외부 URL이
+열거되지 않은 문 둘로 빠져나갔다.** `_body_excluding_section6()`이 `_body()` 위에 얹혀
+있어 실제 코퍼스는 「payload − §6」이 아니라 「payload − §6 − frontmatter − 펜스」였다.
+실측 — payload §4의 ```펜스``` 안 `https://` 2건이 `{"pass": true}` rc 0이고 펜스 두 줄만
+지우면 `payload에 외부 URL 2건` rc 1 · frontmatter `statement:` 뒤 인라인 주석의 URL도
+같은 방식으로 통과. 둘 다 하류로 나가는 문서에 **축자로 살아남는다** — N1a가 막으려는
+바로 그 해다. §3.2의 탈출로 표는 **삭제** 3종만 열거했고 이 둘은 표에 없었다. `_body()`는
+존재 검사들이 계속 쓰므로 **전역으로 고치지 않고**, N1a 전용 코퍼스
+`_payload_excluding_section6()`를 원문 위에 세웠다(두 코퍼스가 공존하는 값은 양쪽
+docstring에 어느 쪽이 무엇이고 왜인지를 적어 치른다). §6 경계는 **펜스 밖 헤딩**으로만
+찾는다 — 안 그러면 펜스 안 가짜 `## 6. 사용자 원문`이 그 지점부터 다음 `## N.`까지를
+코퍼스에서 잘라내, 두 문을 닫으면서 같은 모양의 세 번째 문을 여는 꼴이 된다. 락은
+`test_check_brief.sh`의 **U3-T8c**: 세 문 각각 → red + **코퍼스 구성 5행 양성 대조**
+(§6 헤딩이 원본에 있다/코퍼스에서 빠졌다/§6 본문 첫 줄이 빠졌다/frontmatter를 담는다/
+펜스를 담는다) + 추출기 rc + 행 수 리터럴 5. 부재 술어의 초록은 그 자체로 증거가 아니다 —
+「URL을 못 찾았다」와 「아무것도 안 읽었다」를 이 다섯 행이 가른다. 기존 픽스처는 하나도
+편집하지 않았다(변형은 TMPD에서 `interview-brief-valid.md`로부터 만든다).
+
+**(최종 whole-branch 리뷰 fix, I2)** **충실도 축이 명시한 ground truth 코퍼스가 `S1`을
+빼고 있었다.** `agents/brief-critic.md`의 본문과 frontmatter `description`·
+`scripts/brief-codex-fidelity-checklist.md`·`reviewing-brief` SKILL의 2-a dispatch
+프롬프트 **넷**이 코퍼스를 `<<<AUDIT-VERBATIM>>>` 다음 블록 **하나**로 지목했는데, `build_brief_bundle.py`는 payload §6(`S1`, 바이트
+그대로)을 그 라벨 **앞에** 싣는다. 출하된 dogfood payload만 해도 `evidence:`가 `S1`인
+항목이 4건이고 두 템플릿의 예시 항목도 `S1`에 앵커하므로, 그 항목들의 `distortion`·
+`evidence_unsupported` 판정이 「대조할 원문이 코퍼스 밖」인 채로 났다. 비대칭이 신호였다 —
+F3는 *비신뢰 경계* 문장에 두 위치를 강제하는데 *ground truth* 문장에는 아무 강제가 없었다.
+네 자리를 두 위치를 함께 이름으로 대도록 고치고(체크리스트의 `omission`·
+`evidence_unsupported` 정의에 박혀 있던 한 위치 고정도 함께 풀었다), **F14** 락을
+`test_brief_agents.sh`에 추가했다 — F3와 같은 산출자 상수에서 파생한다. 술어는 **∀**다:
+*위치를 하나라도 이름으로 대는* ground-truth 문단은 두 곳을 전부 대야 한다(∃로 두면 같은
+파일의 다른 문단이 정작 깨진 문장을 대신 만족시킨다). 후보 0은 red라 `all([])`의 공허
+참이 막힌다. 산문 앵커로 잡히지 않는 두 자리는 **구조로** 잘라낸다 — 2-a dispatch는
+`subagent_type` 리터럴을 감싸는 `Agent({ … })` 호출로, frontmatter `description`은 `---`
+구분자로(이 자리는 'ground truth'라는 어구를 지우기만 하면 산문 앵커 밖으로 빠져나갔다 —
+실측으로 확인하고 네 번째 자리로 승격했다). 행 수는 리터럴 8(4 자리 × 2 위치). 실측: 네
+자리 각각을 한 위치로 되돌리는 mutation 4종 + dispatch 앵커 개명 + 산출자 상수 개명, 전부
+exit 1.
+
+**(최종 whole-branch 리뷰 fix, M1)** **G6가 `SKILL.md` 안에서만 살았다.**
+`templates/interview-audit-template.md`의 냉독 행은 `<G1..G5 중 어느 클래스>`,
+`README.md`는 두 자리 다 `G1–G5` — G6 관측을 적을 칸이 출하 템플릿에 없으면 그 클래스는
+실무에서 존재하지 않는 것과 같다. 세 파일을 맞추고, `test_reviewing_brief_skill.sh`에
+**M1** 락을 더했다: 상한 값을 세 파일에서 각각 읽고 **셋이 같다**는 관계를 단언한다
+(기대값을 피검자에서 끌어오지 않는다). 관계만 두면 셋이 함께 사라질 때 공허해지므로 표에서
+도출한 상한의 하한 6과 파일당 범위 표기 ≥1을 함께 못 박았다. README의 bare `G6`(리뷰
+dispatch 상한 — 다른 네임스페이스)와 섞이지 않도록 **범위 표기**만 센다.
+
+**(최종 whole-branch 리뷰 fix, M2)** `templates/interview-brief-template.md`의 §2 헤더
+주석이 *"원문은 §6"*, frontmatter 주석이 *"§6의 어느 발화에서 나왔는가"*로 남아 있었다 —
+같은 파일 다른 줄이 *"payload §6엔 S1만 산다"*로 이미 옳게 적고 있었으므로 앞선 산문
+스윕이 이 두 자리만 놓친 것이다. 원문이 payload §6(`S1`)과 audit §6(`S2` 이상)에 나뉜다는
+사실로 고쳤다.
+
+**(최종 whole-branch 리뷰 fix, M3)** `test_check_brief.sh`의 **T17 앞 절반**을 걷어냈다 —
+web 비활성이 §4/§5의 URL 요구를 완화하는지 재던 단언인데, v0.44.0이 그 요구를 지운 뒤로
+**web ON에서도 그대로 green**이라 kill switch에 대해 아무것도 재지 않았다. 지운 자리에
+그 사실을 적어 둔다(삭제된 규칙이 거짓 인용을 남기지 않도록). ST 참조 요구가 완화되지
+않음을 재는 뒷 절반은 살아 있으므로 그대로 둔다.
+
+### Known gaps
+
+**PR #136이 표로 적은 갭 A–D 넷은 `0.46.0`에서 닫혔다** — A·B는 이 브랜치의 것이고,
+C·D는 **이 브랜치 이전부터 열려 있던 선재 갭**이다(이 브랜치가 닫은 것은 같은 계열의
+«펜스» 변종 하나였다). 아래 둘은 여전히 열려 있다.
+
+- **dogfood 이관은 브리프 1쌍뿐이다 — `docs/superpowers/interview/`의 나머지 3쌍은
+  구 포맷 그대로 남는다(task-11).** 근거: `check_brief.py gate` 호출 지점 셋(SKILL 훅·
+  명령·테스트 스위트) 전부가 「방금 쓴 파일」만 대상으로 하고, 옛 brief를 다시 게이트에
+  태우는 경로가 리포 안에 없다. **대가** — 누군가 옛 brief 3쌍 중 하나에 `check_brief.py
+  gate`를 손으로 걸면 §6 앵커·URL·«키» 축에서 **원인 불명 RED**를 만난다. 이 문단이 그
+  판단의 소재다.
+- **선재 결함 4건 — 이 릴리스가 만든 것도, 고친 것도 아니다(task-8 스윕, `check_brief.py`).**
+  `ST_REF_RE.sub`(statement-length 계산, `skepticism_malformed` 내부, G) · `_strip_bullet()`
+  호출(`coverage_ledger_failures`, audit §1 행 파싱, I) · `_entry_lines()`의 맨 `-`/`*`
+  단독 줄 제외(J) · 같은 statement-length 계산 안의 `_strip_bullet()` 서브스텝(K, 위
+  `ST_REF_RE`와 분리했을 때) 넷 다, 그 결함을 드러낼 fixture가 리포에 없어 **관측
+  불가능**하다(무결함이 아니라 무증거) — 스윕 당시 URL/N1a 내용과 무관하다고 판단해
+  fixture를 새로 만들지 않았다. **선재·범위 밖** — 이 릴리스가 만든 것도 고친 것도
+  아니다. 다음에 이 근방을 건드리는 사람이 "왜 안 고쳤나"를 묻지 않도록 여기 남긴다 —
+  이 결정을 낳은 스크래치 워크스페이스가 프로젝트 종료 시 삭제되므로 이 CHANGELOG가
+  이 사실이 살아남는 유일한 자리다.
+
+## [0.44.0] — 2026-08-31
+
+### Changed
+
+- **`landscape_uncited` → `landscape_unkeyed`(#13) — §4 술어를 URL 인용에서 «출처키»로
+  바꿨다, ∀는 유지.** URL을 요구하는 것과 «출처키»를 요구하는 것은 다른 강도다 — 그대로
+  맞바꾸면 인용 없는 §4 항목 여덟 개 + audit에 URL 한 개가 통과해버려 강도가 내려간다.
+  그래서 URL이라는 **술어만** audit 쪽(N2)으로 가고, ∀(§4 항목마다 무언가 필수)는
+  payload에 그대로 남는다 — 새 정규식 `SOURCE_KEY_RE = re.compile(r"«([^»]+)»")`가
+  그 무언가를 정의한다. **web kill switch로 완화하지 않는다** — 웹이 꺼져도 출처를
+  말로 댈 수 있고, web-off brief는 §4에 순회할 항목이 없어 공허하게 통과하는 것이
+  옳다(조사하지 않았으면 인용할 것도 없다). 그래서 이 함수의 `_web_disabled()` 조기
+  반환을 지웠다.
+- **N2 신설 — `landscape_keys_declared(payload_text, audit_text)`.** payload §4가 쓴
+  «출처키» 집합이 audit `## 7. 확산 원자료`가 선언한 키 집합에 포함되는지를 확인한다.
+  **개수가 아니라 집합이다** — 개수 결속은 세 가지로 틀린다: web-off brief(§4 항목
+  1건, §7 0건)가 `1 ≤ 0`으로 red · 두 §4 항목이 같은 출처를 인용하면 `2 ≤ 1`로 red ·
+  §7을 산문 전문으로 적으면 "항목"의 계수 단위가 미정이라 집행 불가. 집합이면 셋
+  다 통과한다. **조건부다** — audit §7 헤딩 자체가 없으면(이미 `missing audit
+  sections`가 잡는다) 건너뛴다. payload가 «출처키»를 하나도 안 썼으면 공집합이
+  무엇의 부분집합이든 자동 만족되므로 kill switch 코드가 필요 없다. **보장하지
+  않는 것**: 어느 키가 어느 원자료를 가리키는지(키를 지어내도 통과한다) — 그 해석까지
+  묶는 교차 bijection은 설계 단계에서 검토 후 기각됐다.
+- **`AUDIT_SECTIONS`에 `("7", "확산 원자료")`를 뒤에 덧붙였다.**
+- **CLI 서브커맨드 개명 — `landscape-citations` → `landscape-keys`, JSON 키
+  `"uncited"` → `"unkeyed"`.** 개명은 함수 하나가 아니라 CLI 표면 전체다 — 이 서브
+  커맨드를 web 킬 스위치 완화 목록(`main()`의 `sub in (...)` 분기)에서도 뺐다:
+  `landscape_unkeyed`가 더 이상 web 상태에 좌우되지 않으므로 완화할 대상이 없다.
+  `skepticism`은 아직 §5 verdict의 URL 요구를 갖고 있어(다음 단위가 지운다) 그
+  목록에 남긴다. 서브커맨드가 이름은 "citations"인데 실제로는 키를 재는 상태로
+  남으면 그 출력을 읽는 쪽을 오도하므로, 남은 옛 이름 참조(테스트 R12의 직접 호출
+  포함)를 전수 스윕해 함께 고쳤다.
+- **두 템플릿을 갱신했다** — `interview-brief-template.md` §4 설명을 "출처 URL
+  필수"에서 "«출처키» 필수"로 바꾸고 예시 항목에 `«example»`을 추가했다(원자료
+  URL은 audit §7이 나른다는 설명과 함께). `interview-audit-template.md`에
+  `## 7. 확산 원자료` 절을 신설하고 같은 `«example»` 키를 선언해, 출하 템플릿
+  쌍이 새 #13·N2 둘 다에서 자기 게이트를 통과하게 했다(T-TPL 락 유지).
+- **F13 락을 새 술어로 갱신했다** — 옛 실패 문구 `'uncited landscape'`는 개명으로
+  더 이상 나오지 않아 그대로 두면 조용히 GREEN이 된다. grep 문자열을
+  `'unkeyed landscape'`로 바꾸고, 픽스처 `interview-brief-star-bullet-uncited.md`의
+  `-` 항목에 «키»를 붙여(그리고 audit §7에 그 키를 선언해) #13·N2 둘 다에서
+  무결함을 먼저 확정한 뒤, `*` 항목만 무키로 남겨 red 이유를 불릿 비대칭
+  하나로 고정했다.
+- **픽스처 3건 추가** — `interview-brief-unkeyed-entry`(§4 항목 하나가 무키 → #13
+  단독 red), `interview-brief-key-undeclared`(payload가 쓴 키가 audit §7에 없음 →
+  N2 단독 red), `interview-brief-dup-key`(두 §4 항목이 같은 키를 쓰고 audit §7엔
+  1건만 선언 → GREEN, 집합 포함이 개수 결속이 아님을 증명). 셋 다 `interview-brief-valid`
+  쌍에서 파생했고, 각각 정확히 한 축에서만 실패(혹은 통과)하도록 확인했다.
+- **N1a 신설 — `payload_url_free(text)`.** payload에서 §6 사용자 원문을 뺀 나머지에
+  외부 URL(`https?://`)이 0개인지 본다(부재 술어). §6이 예외인 이유는 편의가 아니다 —
+  사용자가 자기 요청에 직접 쓴 URL을 지우는 것은 압축이 아니라 원문 훼손이고, 지우면
+  `check_verbatim_coverage.py`의 L2(정규화 후 containment)가 `not_contained`로 exit 1을
+  내 게이트가 **동시 만족 불가능**해진다. 이 검사의 이빨은 그 자신 안에 없다 — 대상 절을
+  통째로 지우면 공허하게 통과하므로 `find_missing_sections`(§4/§5 헤딩 삭제) ·
+  `landscape_present`(§4 항목 전부 삭제) · `tried_discarded_ok`(§5 항목 전부 삭제) 셋이
+  삭제 우회로를 막아야 이빨을 갖는다(세 검사 전부 확인 완료). web kill switch로 완화하지
+  않는다 — 웹이 꺼져도 payload에 URL을 넣을 이유가 생기지 않는다.
+- **payload §4·§5 fixture 일괄 변환 — URL → «출처키», 짝은 audit §7로.** 일회용
+  변환기(`.claude/urls-to-keys.py`, 커밋 대상 아님)로 payload 69개의 §4·§5 URL을
+  걷어냈다: §4는 기존 키가 없으면 도메인에서 유도한 «키»를 삽입하고 그 짝을 같은
+  stem의 audit §7에 append, 기존 키가 있으면 URL만 지우고 키·audit 선언은 그대로
+  둔다(멱등, 남의 판단 없이 내용 기반). §5는 URL만 지운다 — §5는 애초에 «키» 요구가
+  없고(#13/N2는 §4 전용), `skepticism_malformed`가 URL 제거 후 남는 텍스트를
+  statement로 재므로 §5에 키 텍스트를 끼워 넣으면 라벨 없는 줄의 "statement<10c"
+  판정을 우연히 반증할 위험이 있다 — 그 위험을 §5 키 삽입 자체를 안 하는 것으로
+  구조적으로 없앴다. **순서가 결과를 바꾼다(Ruling F2)**: 일괄 변환을 먼저 하고 나서
+  §0(b)의 의도적으로 깨진 픽스처를 그 위에 만들었다 — 거꾸로 하면 일괄 변환이
+  `url-in-sec4` 픽스처의 URL까지 지워 N1a 첫 단언이 거짓 GREEN이 된다.
+- **변환에서 손대지 않은 두 픽스처 — 리즈닝으로 찾음, 목록을 베끼지 않음.**
+  (1) `interview-brief-unkeyed-entry.md`는 §4 항목 하나가 무키임을 시험하는 유일한
+  픽스처다(U3-T7) — 일괄 변환이 순진하게 «키»를 붙이면 이 assertion이 거짓 GREEN이
+  된다는 것을 실행으로 확인한 뒤, 그 파일만 URL을 지우되 키는 붙이지 않고 audit §7
+  선언도 원복했다(N1a는 만족, #13은 여전히 red). (2) `interview-brief-web-disabled.md`는
+  URL이 원래 하나도 없어 변환기가 자연히 no-op이지만, "여기에 «키»를 손으로 붙여
+  AC8을 고치자"는 유혹이 F8("web 켜짐에서 무키 §4 항목은 red")을 거짓 GREEN으로
+  만든다는 것을 실행으로 확인했다 — v0.44.0 이후 이 두 락(F8·AC8)은 같은 파일로
+  동시에 만족될 수 없는 서로 다른 조건이 됐으므로(#13이 web 무관 ∀가 됐고 skepticism의
+  URL 요구도 없어져, 이 파일의 gate() 결과가 web 상태와 완전히 무관해졌다), AC8을
+  이 파일이 아니라 실제로 남은 유일한 완화 지점(sentinel-only.md, #12)으로 재배선해
+  둘을 함께 지켰다.
+- **`landscape_present`(#12) sentinel 경로를 `_web_disabled()`로 좁혔다.** v0.44.0
+  이전까지는 §4 본문에 "생략" 한 단어만 있어도 True였고 URL 요구가 그것을 덮어
+  무해했다 — N1a 체제에서는 이것이 **N1a의 공허 우회로를 여는 유일한 문**이 된다(§4에
+  "생략"만 쓰면 URL도 «키»도 없는 payload가 통과한다). 이제 web이 실제로 꺼져 있을
+  때만 sentinel이 유효하고, 켜져 있으면 항목 없음과 동일하게 취급한다. **내구성
+  대가**: 이 함수가 처음으로 환경변수에 의존한다 — web-off로 저술된 brief가 다른
+  세션에서 그 변수 없이 재게이트되면 RED가 된다. 그래서 audit 템플릿 `## 4. 게이트
+  실행 기록`에 `web: <enabled|disabled>` 칸을 추가해, 저술 시점의 환경을 아티팩트가
+  나르게 했다.
+- **`skepticism_malformed`(§5)에서 URL 요구를 지웠다.** `require_url`·`has_url`·
+  `no-url` 세 갈래를 제거 — payload 외부 URL은 이제 N1a가 §6 예외 하나만 두고 전면
+  금지하므로, 이 함수가 §5 항목에서 URL 유무를 스스로 요구/거부할 이유가 없다.
+  `verdict:`·statement·ST 참조 요구는 그대로 남는다. URL을 먼저 벗겨낸 뒤 ST<N>을
+  찾는 방어(`ln_no_url`)도 남긴다 — URL 요구와 무관하게, 우연히 낀 phantom ST 참조를
+  막는 별개의 defense다. **양성 대조**: §5 verdict 항목에서 URL을 빼면 GREEN이지만
+  같은 줄에서 `verdict:` 절까지 빼면(그 줄이 더 이상 verdict 항목으로 안 보여
+  audit §3의 ST 선언이 orphan이 된다) bijection A가 여전히 RED를 낸다 — 두 assertion을
+  짝으로 뒀다(T11/no-url).
+- **`WEB_DISABLED_ADVISORY` 문면을 실제 완화 범위로 재작성했다.** 이전 문면은
+  "§4 출처 URL 인용 요구 + §5 verdict URL 요구가 완화됨"이라 적었는데, 이 커밋 이후
+  그 둘 다 존재하지 않는다(§4는 키 요구로 바뀌어 완화되지 않고, §5 URL 요구는
+  방금 지웠다). 완화되는 것은 `landscape_present`(#12)의 sentinel 경로 **하나**뿐이라고
+  정확히 적었다. `main()`의 서브커맨드별 kill-switch advisory 분기(`skepticism` 전용)도
+  지웠다 — 이제 kill switch로 완화되는 단독 서브커맨드가 하나도 없다(유일한 완화
+  지점은 `gate()` 내부에만 있다). **양성/음성 대조 락**: `landscape_present`만
+  `_web_disabled()`를 부르고 `landscape_unkeyed`·`skepticism_malformed`·
+  `payload_url_free`는 부르지 않는다는 것을 함수 본문 도려내기로 확인한다(개수가
+  아니라 함수별 호출 지점 — advisory *배출*과 실제 *완화*를 혼동하지 않는다).
+- **fixture 6건 추가(U3-T8)** — `interview-brief-url-in-sec4`(§4에 키+URL 동시 →
+  N1a 단독 red), `interview-brief-url-in-s1` + `.audit.md` + `state-url-in-s1`(§6 S1
+  안의 URL → GREEN, 같은 URL을 §4로 옮기면 RED — N1a §6 예외와 L2 동시 만족 확인),
+  `interview-brief-no-sec4`/`sec4-header-only`/`sec5-no-entries`(N1a의 세 삭제
+  우회로 각각 단독 red), `interview-brief-sentinel-only`(§4 "생략" 한 단어만 —
+  web ON red / web OFF green).
+
+## [0.43.0] — 2026-08-31
+
+### Changed
+
+- **`AUDIT_SECTIONS`에 `("6", "사용자 원문")`을 뒤에 덧붙였다** — audit 사이드카가 이제
+  6절 계약이다. 게이트가 audit §6 헤딩 부재를 `missing audit sections`로 red 처리한다.
+- **`attribution_block_missing`의 검사 대상이 payload §6에서 audit §6으로 이사했다** —
+  brief 재구조화(§7.1)의 첫 단계로, `S1`을 제외한 사용자 원문 전량이 audit으로 옮겨가는
+  하류 작업(별도 Task)의 선행 조건이다. 시그니처는 여전히 `(str) -> bool`이지만 인자
+  이름을 `audit_text`로 바꿔 의미 변화를 드러냈다. `gate()`의 검사 배선도 payload 텍스트
+  블록에서 audit 텍스트 블록(`amiss` 계산 다음, `pair` 검사 뒤)으로 옮기고, audit §6이
+  통째로 없는 경우(#9가 이미 그 red를 낸 경우)와 중복 보고되지 않도록
+  `audit_sec6_absent` 가드를 추가했다.
+- **두 템플릿을 갱신했다** — `interview-audit-template.md`에 `## 6. 사용자 원문`
+  절(append-only, `S1` 제외 전량, 출처 표기 블록 포함)을 §5 뒤에 추가했고,
+  `interview-brief-template.md` §6은 `S1` 최초 요청 하나만 남기고 출처 표기 블록을
+  지웠다(그 검사가 audit으로 이사했으므로). payload §6이 `S1`만 남으면서 예시
+  `user_sourced_items`의 `D2.evidence`가 더 이상 payload §6에서 해석되지 않는
+  `S2`를 참조하고 있었다(bijection C) — 출하 템플릿 자체가 자기 게이트에 걸리는
+  것을 막기 위해 예시 `D2`의 evidence를 `S1`로 바꿨다(payload §6에 실재하는 유일한
+  앵커). `S2` 이상 원문을 근거로 삼는 실제 제약의 bijection C 재해석(양쪽 파일의
+  합집합 대조)은 하류 Task가 맡는다.
+- **N1b 신설 — `payload_verbatim_is_s1_only()`가 payload §6 앵커 집합이 정확히
+  `{"S1"}`인지 등식으로 확인한다.** `⊆`가 아니라 `==`다 — `⊆`로 쓰면 빈 §6이
+  통과하는데, `user_sourced_items`가 0건인 payload에서는 bijection C의 순회 자체가
+  비어 그 구멍을 대신 막아주지 못한다(등식 술어가 스스로 양성인 이유). `gate()`는
+  `sec6_absent` 가드 아래 이 검사를 새로 배선했다.
+- **`bijection_c_errors()`가 2인자(`payload_text, audit_text`)로 바뀌었다** — 앵커
+  집합이 이제 payload §6 ∪ audit §6이다(`S1`은 payload에, `S2` 이상은 audit에 살므로
+  한쪽만 보면 반대쪽 인용 전량이 dangling으로 오탐된다). 단방향은 유지 — 인용된
+  `evidence: S<N>`의 존재만 확인하고 역방향(모든 앵커가 인용될 것)은 요구하지 않는다.
+  `gate()`의 호출 자리를 audit 해석 블록 안(`pair` 검사 뒤)으로 옮겨 audit 텍스트를
+  받을 수 있게 했고, `items` 서브커맨드(`main()`)도 같은 시그니처 변경의 소비자라
+  `gate()`와 같은 방식(`resolve_audit` → 실패 시 판정-불가 문구, 성공 시 두 텍스트로
+  호출)으로 함께 고쳤다 — 안 그러면 옛 1인자 호출이 `TypeError`로 죽는다.
+- **픽스처 4쌍 추가** — `interview-brief-payload-s2`(N1b 위쪽: payload §6에 `S2`가
+  남아있으면 red), `interview-brief-payload-empty-sec6`(N1b 아래쪽: 빈 §6도 red),
+  `interview-brief-zero-items`(`user_sourced_items: []` + §2 항목 불릿 제거 +
+  frontmatter AC12 sentinel 보존 — bijection C가 공허해지는 유일한 상태에서 N1b가
+  단독 방어선임을 확인), `interview-brief-audit-drop-s5`(payload에 `evidence: S5`
+  항목을 추가하고 audit §6에는 `S2`만 실어 `S5`를 dangling으로 남김 — 합집합 해석의
+  audit 쪽이 실제로 읽힘을 확인). 넷 다 hand-add한 audit §6(헤딩 + 출처 표기 블록)을
+  가진다 — 그렇지 않으면 전부 `missing audit sections`로만 red가 나 자신이 시험하려는
+  축을 재지 못한다.
+- **부수 수정: `interview-brief-payload-attr-missing.md`에서 payload §6의 `S2` 항목을
+  뺐다(`S1`만 남김).** 이 fixture는 U2-T2(payload attribution 무관 확인)가 `rc==0`을
+  요구하는데, valid.md에서 파생된 payload §6이 원래 `{S1, S2}`를 그대로 갖고 있어
+  N1b 신설과 충돌해 `rc==0` 단언이 회귀했다(`git diff` 전/후로 확인). audit
+  사이드카가 이미 `S2`를 §6에 갖고 있어 `D2.evidence: S2`는 union으로 계속 해석된다
+  — attribution 무관성이라는 이 fixture의 원래 취지는 그대로다.
+
+- **`check_verbatim_coverage.py`가 3인자(`<payload> <state.local.md> <audit>`)로
+  바뀌었다** — `parse_payload_section6`을 `parse_section6(text, label)`로 개명해
+  payload·audit 양쪽에서 재사용하고, `parse_section6_union()`을 신설해 `S1`(payload)
+  ∪ `S2` 이상(audit)을 대조 코퍼스로 합친다. 한쪽 §6이 없으면 조용한 코퍼스 축소가
+  아니라 그대로 `ParseError`(호출자가 exit 3으로 매핑)를 낸다 — 부분 코퍼스로
+  "완전성 통과"를 내지 않는다. 같은 앵커가 payload·audit 양쪽에 있으면
+  append-only 위반(exit 1)이다 — 오늘 payload 내부 중복이 구조 위반인 것과 같은
+  이유이며, 집행이 이제 합집합 위에서 돈다. audit 경로는 **호출자가 명시**한다 —
+  `check_brief.py`의 `resolve_audit()`처럼 payload 파일명에서 유도하지 않는다(그
+  유도는 남의 audit 채택을 거절하는 목적이고, 여기는 반대로 무엇을 재료로 쓸지
+  유추가 실패했을 때 조용한 것이 더 나쁘다).
+- **`reviewing-brief` SKILL.md의 두 실행 라인**(진입 첫 액션, 2-c 충실도 재실행)이
+  `"$AUDIT"`를 세 번째 인자로 넘긴다. `$AUDIT`은 `$PAYLOAD`와 같은 층의 호출자
+  공급 입력이라 `## 상태`의 캐스팅 목록에 추가했다(스킬 자신이 정의하지 않는다).
+  `test_reviewing_brief_skill.sh`의 AC1 호출-라인 락도 2인자 접두 일치만으로는
+  3인자 호출을 구분 못 해(끝 앵커가 없어 부분 일치로 계속 통과) 3인자 전체를
+  요구하도록 좁혔다.
+- **`test_check_verbatim_coverage.sh`가 U2-T4(합집합) 4단언을 추가하고 기존
+  invocation을 전부 3인자로 이관했다.** `brief-verbatim-*` 12종 fixture에 audit
+  사이드카를 새로 만들었다(payload §6에서 `S1`을 제외한 전량을 떼어 옮김 — 아래
+  "Known gap"의 74+개 `interview-brief-*` legacy fixture와는 다른 파일군이라 그
+  일괄 이관 대상이 아니다). S2 이상을 겨냥하던 mutation 락(T2 절단 3종)은 대상이
+  audit 파일로 옮겨간 것을 따라 mutation 지점도 audit 사본으로 옮겼다 — payload는
+  그대로 두고 audit만 mutate해도 union 위에서 여전히 위반이 잡히는지가 이 락의
+  이빨이다. 교차 파일 중복 앵커(`brief-verbatim-dup-across.{md,audit.md}`)와 audit
+  §6 부재(`brief-verbatim-audit-no-sec6.audit.md`) 전용 fixture 2종을 손으로
+  추가했다. 사이드카 생성에 쓴 변환 스크립트(`mk-sidecar.py`)는 일회용이라
+  리포에 남기지 않았다(git-ignored `.claude/` 하위, 설계 §7.2).
+- **일괄 이관 완료 — 아래 "Known gap"이 닫혔다.** `interview-brief-*` payload
+  62건(§6에 `S2` 이상을 지녔던 63건 중 `interview-brief-payload-s2`는 N1b 위반을
+  영구히 유지해야 하는 대조군이라 제외)의 payload §6을 `S1`만 남도록 줄이고, 그
+  §2 앵커 순회 중 이미 자기 §6을 가진 3개 사이드카(`audit-attr-missing`·
+  `payload-attr-missing`·`audit-no-sec6`)와 audit_file 자체가 없는 3개
+  (`borrowed-audit`·`dup-auditfile`·`empty-auditfile`)를 제외한 나머지 사이드카에
+  `S2` 이상을 옮겨 실었다. `interview-brief-audit-no-sec6.audit.md`는 payload만
+  줄이고 audit은 손대지 않았다 — `## 6.` 헤딩 자체가 없는 것이 그 fixture의
+  존재 이유라, 헤딩을 새로 붙이면 결함이 지워진다. `interview-brief-no-attribution`·
+  `interview-brief-attribution-partial`은 표준 출처 표기 블록을 합성하지 않고
+  기존 payload가 갖고 있던 (없거나 부분적인) 표기 줄을 그대로 이사시켜, T18이
+  attribution 검사 자체에서 red가 나는지 확인했다(이전엔 `missing audit sections`가
+  먼저 걸려 우연히 green이었다 — 확인: `check_brief.py gate` 단독 실행으로 두
+  fixture 모두 실패 사유가 `출처 표기 블록 부재`로 바뀐 것을 확인). 변환은
+  일회용 `.claude/move-verbatim.py`(git-ignored, 리포에 남기지 않음)로 했다 —
+  Task 4의 `mk-sidecar.py`가 가졌던 결함(`split_section6()`이 §6 부재 시 2-tuple,
+  존재 시 3-tuple을 반환해 3-value unpack과 arity가 어긋남 — 이 태스크의 62건
+  전량이 §6을 이미 갖고 있어 그 경로가 실제로 발동하지는 않았다)을 고쳐 항상
+  3-tuple을 반환하도록 했다.
+
+### Known gap (하류 Task로 이관) — RESOLVED (이 유닛에서 닫힘)
+
+- 이 절이 서술하던 두 공백(`interview-brief-*` legacy fixture 74건의 audit §6
+  부재로 인한 `test_check_brief.sh` 12건 + `test_brief_no_statement_cap.sh` L3의
+  regress, 그리고 T18 두 단언이 잘못된 이유로 green이던 문제)은 바로 위 "일괄 이관
+  완료" 항목이 닫혔다. `bash .claude/check-regression.sh` 재확인: `NOT-CLEAN` 없음,
+  82개 파일 검사, `test_check_brief.sh` 106/106·`test_brief_no_statement_cap.sh`
+  전 단언 green.
+
+- **`test_reviewing_brief_skill.sh`의 AC1 check_verbatim_coverage.py 콜사이트 락(grep count 오라클)에
+  알려진 한계 — 변수로 우회한 호출(예: `CVC="python3 $PR/scripts/check_verbatim_coverage.py"` 뒤
+  `$CVC ...`)은 두 카운트 모두에서 보이지 않아 등식이 공허하게 성립한다. 고치지 않는다 — 데이터
+  흐름 추적은 grep count와 질적으로 다른 도구고 콜사이트 2개짜리 점검에 과하다(락 자신의 주석에도
+  같은 한계가 적혀 있다).
+
+### Changed (Task 6 — 원문 거처를 서술하는 산문 정정)
+
+코드·픽스처 이관(Task 2–5)이 끝난 뒤에도, 인터뷰를 실제로 작성하는 모델이 읽는 산문
+쪽에는 「사용자 원문 전량이 payload §6에 있다」는 옛 서술이 남아 있었다 — 그대로 두면
+그 문면을 따라 쓴 brief가 N1b에 즉시 걸린다.
+
+- **`finishing.md` 세 문장**: ① `user_sourced_items` 직렬화 절의 원문 거처 지시를
+  「`S1`만 payload §6에, 나머지 전량은 audit §6에 전문 보존(append-only)」으로 고쳤다.
+  ② 「원문 보존은 관례가 아니라 요구」 서술의 게이트 항목 수를 15→16(N1b 신설 1건)으로
+  갱신하고, 대상을 「원문 보존 전반」에서 「나머지 발화가 실제로 audit §6로 옮겨졌는가」로
+  좁혔다 — N1b가 `S1`의 payload 잔류는 이미 못박으므로, 게이트가 여전히 못 잡는 것은
+  전량 이관 여부뿐이다(설계 §10 넷째 gap, 아래 "Known gaps" 참조). ③ `/compact` 보존
+  리터럴의 「§6 사용자 원문」을 「§6 사용자 원문 중 `S1`」으로 좁혔다 — payload §6엔
+  이제 `S1`만 산다.
+  `S1`의 배치·번호 공식을 지시하는 문장(`$ARGUMENTS` → `S1` → §6 맨 앞)은 그대로
+  뒀다 — `S1`이 payload 잔류 예외이므로 여전히 참이고, 이를 리터럴로 잠근 기존 락도
+  그대로 옳다.
+- **신규 락 `U2-T6`** (`test_conducting_interview_stage.sh`) — 위 ①의 규칙에는 §번호도
+  절 제목도 개명 식별자도 없어 이 스위트의 도출 규칙(①–④)이 못 잡는다. 양성 대조
+  (`user_statements` 리터럴로 코퍼스를 실제로 읽었음을 먼저 확인) + 목적지 존재
+  (`audit §6`) + 옛 지시 부재, 세 단언 구조다. **1차 버전은 목적지 존재 단언을 그냥
+  `audit §6`로 앵커했다가, 실제로 ①의 문장을 통째로 지우고 돌려본 결과 조용히 green을
+  유지하는 것을 확인했다** — 바로 아래 ②의 게이트-집행 서술 문장이 독립적으로
+  `audit §6`를 담고 있어(body-unique 위반), ①만 지워도 이 단언이 그 문장으로 계속
+  만족됐다. 복합 리터럴 `전량은 **audit §6**에`(①에서만 나는 문구)로 좁혀 고쳤다 —
+  같은 자리에 두 grep 앵커가 겹치면 한쪽이 죽어도 안 잡히는, 이 리포가 반복해 겪은
+  락 실패 클래스의 실측 사례다.
+- **`reviewing-brief/SKILL.md` 넷** — (a) `## 수정 권한` 표의 `§6 사용자 원문` 단일 행을
+  `payload §6 사용자 원문 (S1)`(불변, 추가도 금지 — 앵커 집합이 `{S1}`로 고정, N1b) /
+  `audit §6 사용자 원문 (S2+)`(append-only, 기존과 동일)로 분할했다 — 관할은 「전량
+  이동」이 아니라 「`S1` 잔류 예외를 따라가는 분할」이고, payload 행의 「기존 항목 본문
+  변경 금지」가 설계 §2.3·§10이 기록한 URL 통로를 막는 유일한 장치라 지우지 않았다.
+  (b) 방향성 재결정 절차(1-d)의 「그 결정 발화를 §6에 새 `S<N>`으로 추가」의 목적지를
+  `audit §6`로 좁혔다. (c) 「진입 첫 액션」헤더를 `(payload §6 ∪ audit §6 ↔ state
+  원장)`으로, rc=1 행의 「§6를 보완」을 `audit §6를 보완(payload §6은 S1으로 불변)`으로
+  명시했다. (d) 「orchestrator의 허용 행위 — 닫힌 열거」표에 `audit §6에 S<N> 추가`를
+  명시로 올리고(전에는 `§6`로만 적혀 있어 payload/audit 어느 파일인지 불명), 금지 행도
+  `payload §6(S1) 변경 또는 추가` / `audit §6 기존 항목 본문 변경` 둘로 나눴다 — 닫힌
+  열거라 audit 파일 편집이 목록에 없으면 새 append 흐름이 규약상 금지된 채 남는다.
+- **`conducting-interview/SKILL.md` 둘** — P21 placeholder 문면의 「§6 원문 대조」를
+  「payload §6 ∪ audit §6 원문 대조」로, seed 재결정(P23) 절의 「그 뒤집음을 §6에 새
+  `S<N>`으로 추가」를 `audit §6`로 좁혔다(payload §6은 `S1`으로 불변이므로 새 앵커는
+  audit에만 붙는다).
+- **`README.md` 둘** — 파이프라인 다이어그램의 「진입 첫 액션: check_verbatim_coverage.py
+  (§6 원문 ↔ state 원장)」을 `(payload §6 ∪ audit §6 ↔ state 원장)`으로, Law 1 핸드오프
+  게이트 서술의 bijection C 대상 「`evidence: S<N>` → §6」을 `payload §6 ∪ audit §6`으로
+  갱신했다.
+- **`framing-requests/SKILL.md:466`은 확인만 하고 고치지 않았다** — 「사용자가 방금
+  확정한 요청이 brief §6에 보존되지 않습니다」는 `$ARGUMENTS`가 **비었을 때**의 실패
+  서술이다. 그 경우 `finishing.md`의 규약대로 `S1` 자체가 생성되지 않으므로(인자 없이
+  호출되면 `S1`을 만들지 않는다), 원문이 payload/audit 어느 쪽에도 들어가지 않는다는
+  주장은 이관과 무관하게 그대로 참이다. 근거 없는 편집을 넣지 않는다 — 다음 세션이
+  "왜 바뀌었나"를 묻게 만들 뿐이다.
+
+### Known gaps (Task 6 — mutation 실측, 설계 §7.1/§10)
+
+설계 §7.1의 U2 mutation 표 중 GREEN이 기대인 행은 락이 아니라 구조적 구멍의 실재를
+고정하는 행이다. 실측 결과를 여기 기록한다 — 기록하지 않으면 다음 세션이 이것을
+결함으로 오인해 "고치려" 든다.
+
+- **payload §6 `S1`에 문장을 덧붙이면 게이트가 통과한다.** `check_verbatim_coverage.py`의
+  L2는 containment(포함) 검사라 초과분을 막지 않는다 — `S1`의 본문이 사용자가 실제로
+  말하지 않은 텍스트를 흡수할 수 있다(설계 §2.3·§10이 기록한 통로). `reviewing-brief`
+  수정 권한 표의 「payload §6(S1) 변경 또는 추가 금지」는 이 구멍에 대한 **규범적**
+  가드일 뿐 기계 집행은 아니다 — 삭제·변형은 L2가 잡지만(§6 `S1`에서 문장을 지우면
+  RED) 첨가는 잡지 못한다.
+- **모든 `user_sourced_items` 항목이 `evidence: S1`만 인용하는 brief에서 audit §6의
+  `S2` 이상 앵커를 전부 비워도 `check_brief.py gate`가 통과한다.** bijection C는
+  *인용된* 앵커의 존재만 확인하는 단방향 검사라, 아무도 인용하지 않는 원문이 실제로
+  audit으로 옮겨졌는지는 게이트 시점에 검증되지 않는다(설계 §10 넷째 gap). 이
+  불변식은 `check_verbatim_coverage.py`(L1, `reviewing-brief` 진입 첫 액션)가 게이트
+  **밖**에서 채운다 — 같은 조건에서 L1은 여전히 `missing_ids`로 RED를 낸다(실측
+  확인, `check_brief.py`의 bijection C를 무력화해도 L1은 독립적으로 RED).
+- (참고, gap은 아니고 이관 완료의 확인) **audit §6에서 출처 표기 블록(`🗣·☑·✎`)을
+  지우면 RED지만, 같은 블록을 payload §6에서 지우는 것은 지금은 no-op이다** —
+  `attribution_block_missing()`이 `audit_text`만 읽으므로(v0.43.0 이관), payload §6엔
+  애초에 그 블록이 존재하지 않는다(이관 전 상태의 양성 대조는 Task 2 Step 1 기록).
+
+## [0.42.0] — 2026-08-31
+
+### Removed
+- `STATEMENT_MAX = 160` 상한과 그 전 표현을 지운다 — `check_brief.py` 의 게이트 검사,
+  `finishing.md` 의 「160자 이내」지시, 픽스처 2쌍(`interview-brief-statement-160/161`
+  및 각 audit)과 그것을 소비하던 `test_check_brief.sh` T23 단언. 상한이 잰 것은
+  과잉결정이 아니라 부피였다 — 과잉결정은 대리 지표가 아니라 brief-readback 이 직접 잰다.
+  삭제 전 양성 대조를 기록했다: `interview-brief-statement-161.md` 가 변경 전
+  `rc=1` · `"C1: statement 161자 > 160 (hard cap)"` 이었다. 회귀 락
+  `test_brief_no_statement_cap.sh` 는 3층(양성 대조 → 부재 → 행동)으로 재발을 막는다.
+
+### Fixed
+
+- **`test_brief_no_statement_cap.sh` L3 를 메시지 리터럴 앵커에서 rc(종료 코드) 앵커로
+  바꿨다.** mutation 축 (c)(이름만 바꿔 상한을 되살림 —
+  `if len(stmt) > 160: errs.append(f"{iid}: too long")`)로 처음 드러난 gap: 이
+  mutation 을 적용하면 게이트는 실제로 200자 statement 를 거부하는데(`rc=1`,
+  `"user_sourced_items: ['C1: too long']"`), 옛 L3 는 `grep -q 'hard cap'` 로 **그
+  문구만** 찾아 "too long" 은 못 잡고 `ok`(안 걸림)를 냈다 — L3 가 사실상 L2(리터럴
+  부재 검사)의 중복이었다. 지금은 파생 fixture 의 `audit_file`/`payload` 역참조를
+  새 파일명에 맞춰 함께 갱신해(사이드카 짝을 완성해) 게이트가 그 fixture 에 대해
+  `rc==0`·`"pass": true`·무-failures 를 내는 것을 cap 제거 후의 유일하게 옳은 결과로
+  확정했고, L3 는 이제 `rc == 0`(그 어떤 이름의 상한도 재도입되지 않았다)을 1차
+  단언으로, `hard cap` 리터럴 grep 을 진단용 보조 단언으로 둔다. 재검증: 같은
+  mutation(`ev = it.get("evidence")` 앵커, `git diff --stat` 으로 실제 3줄 삽입
+  확인)을 다시 적용하자 L3 가 이번엔 RED(`rc=1`)를 냈다 — 리네임을 실제로 잡는다.
+  mutation (a)/(b) 는 각각 `git diff --stat` 으로 실제 코드 변경을 확인한 뒤 기대대로
+  rc=1(L1 NO / L2 NO) 을 냈다 — 브리프가 준 (c) 의 원래 anchor 문자열
+  (`errs.append(f"{iid}: id 형식`)은 현재 `check_brief.py` 에 존재하지 않아 최초
+  실행은 무변경 no-op 이었다(diff 없음) — anchor 를 `ev = it.get("evidence")` 줄로
+  교체해 실제 변경을 확인한 뒤 재실행했다.
+- **출하 템플릿(`templates/interview-brief-template.md:20`)이 상한을 도로 가르치고
+  있었다.** `finishing.md` Step A가 이 템플릿을 매 인터뷰가 읽는 살아있는 소스로
+  지정하므로, 코드에서 지운 `STATEMENT_MAX` 를 이 파일의 주석(`# 160자 이내(hard) —
+  ...`)이 모든 미래 brief 작성에 재교육하고 있었다 — 브리프의 "Files to Modify" 목록
+  누락. `160자 이내(hard) — ` 절만 제거했고 나머지 주석(모델이 쓴 요약이라는 것,
+  P21 secret placeholder 치환)은 그대로 남겼다 — 그 부분은 여전히 유효하다. 이 편집이
+  템플릿 자신의 `check_brief.py gate` rc(=1, `audit_file` sidecar 불일치 — 상한과
+  무관한 기존 사유)와 T-TPL 스위트 결과를 바꾸지 않음을 확인했다.
+  `test_brief_no_statement_cap.sh` 의 코퍼스도 넓혔다 — 이전에는 `check_brief.py`
+  와 `finishing.md` 만 읽어 이 템플릿 잔존을 못 봤다(재실행해도 GREEN 이었다). L1 에
+  템플릿 전용 양성 대조 행(`next_phase: superpowers:brainstorming` 앵커 — L2 가 찾는
+  상한 리터럴과 다른 줄이라 둘이 같은 원인으로 동시에 반응하지 않는다)을, L2 에 템플릿
+  상한 부재 행을 추가했다. mutation 으로 검증: (1) 템플릿에 cap 절을 재삽입 →
+  `git diff --stat` 으로 실변경 확인 후 새 L2 템플릿 행이 RED. (2) 템플릿 파일을
+  통째로 비움 → L1 템플릿 행이 RED(부재 검사가 빈 파일에도 통과하는 공허함이 아님을
+  확인). 둘 다 복원 후 `git status --porcelain plugins/spec-distill` 깨끗함.
+- **템플릿 L2 부재 행은 리터럴 grep 이라 다른 어휘의 상한을 놓친다 — `# max 160 chars,
+  strictly enforced` 처럼 영어로, 다른 표현으로 다시 써넣으면 옛 L2 는 GREEN 을 냈다**
+  (재리뷰 실증). `id`/`P21` 같은 값이 그 줄에 정당하게 들어 있어 숫자 기반 검사는
+  오탐하고, 상한 어휘를 두 언어로 열거하는 것도 조용히 낡는 추측이다 — 이 저장소는
+  이미 이 한계를 판정해 뒀다(`test_probe_sweep_residue.sh`): grep 오라클은 식별자와
+  인접 단어를 재지 의미를 재지 않으며, 그 너머를 지키는 것은 락이 아니라 리뷰의 일이다.
+  그래서 `templates/interview-brief-template.md` 의 C1 `statement:` 주석 **한 줄만**
+  부재가 아니라 **정확한 등가**로 고정했다 — `# 모델이 쓴 요약. P21 secret placeholder
+  치환` 과 정확히 같아야 하고, 그 줄에 무엇을 덧붙이든(어떤 언어의 상한이든, 숫자든)
+  등가가 깨져 red 가 된다. 앵커는 파일 위치(20행)나 "첫 statement: 매치"가 아니라
+  `id: C1` 항목 다음에 나오는 첫 statement: 줄이다 — 파일에 statement: 가 둘(C1/D2)
+  있고 주석은 C1 쪽에만 있어, 위치나 순서에 기대면 그 순서·개수가 바뀔 때 엉뚱한 줄을
+  잰다. mutation 4종으로 검증(각각 `git diff --stat` 으로 실변경 확인 후 실행,
+  복원 후 `git status --porcelain plugins/spec-distill` 깨끗함 확인): (1) 옛 한국어
+  cap 절 재삽입 → RED. (2) 다른 숫자·영어 cap(`# max 200 chars, strictly enforced`)
+  재삽입 → RED — 이것이 옛 L2 가 놓치던 바로 그 경우다. (3) 주석 전체 삭제(값만
+  bare) → RED. (4) 템플릿 전체를 비움 → L1 템플릿 행 RED(round 2와 동일, 재확인).
+  **이 등가 행이 못 미치는 것**: C1 statement 주석 한 줄 밖에서 상한이 재도입되거나
+  (예: D2 statement 주석, 혹은 이 파일 밖 다른 모델-지시 채널), 이 락이 안 읽는 완전히
+  다른 경로로 모델에게 상한이 재학습되는 경우는 여전히 이 락의 사각지대다 — 그 너머는
+  리뷰가 계속 맡는다.
+
 ## [0.41.0] — 2026-08-29
 
 ### Changed

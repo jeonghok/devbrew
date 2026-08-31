@@ -182,6 +182,232 @@ CR="$SD/agents/brief-critic.md"
 for cat in distortion omission insertion provenance_mislabel authority_syntax evidence_unsupported; do
   grep -qF "$cat" "$CR" && ok "critic: category '$cat' 명시" || no "critic: category '$cat' 누락"
 done
+# F3 (task-10 fix round 2, security) — round 1's lock only required '비신뢰' to sit near
+# ONE label (<<<AUDIT-VERBATIM>>>). The bundle critic actually receives has **two**
+# untrusted-verbatim locations — payload's own `## 6. 사용자 원문` (S1, carried through
+# byte-for-byte since redact_frontmatter() only touches frontmatter) and the
+# `<<<AUDIT-VERBATIM>>>` block (S2+) — and wording that names only one of the two
+# satisfied round 1's lock while leaving the other location's injection boundary gone
+# (round-2 finding: exactly the wording shipped in 024bc9a).
+#
+# The set of locations is **derived from the producer**, not handed to this test as a
+# list: build_brief_bundle.py now exports `UNTRUSTED_VERBATIM_MARKERS`, the tuple its own
+# assemble() actually uses to emit the audit label (single source of truth — changing the
+# constant changes the real bundle bytes, so this isn't a parallel literal that can drift
+# silently). We still pin an EXPECTED contract here (same idiom as T12's REDACT_KEYS
+# cross-check in test_brief_bundle.sh) and verify it against the module in **both**
+# directions (missing / extra) — so a change to the module's real marker set is caught
+# even if nobody remembers to update this test.
+#
+# Coverage is checked against **paragraphs containing '비신뢰'** specifically (not "does
+# the marker appear anywhere in the file" — `<<<AUDIT-VERBATIM>>>` already appears
+# elsewhere as a "Ground truth" pointer with no security framing, so a bare substring
+# check would be satisfied without ever calling that block untrusted). This does NOT read
+# its checklist out of brief-critic.md — the EXPECTED contract and coverage logic live
+# entirely in this test and in the producer module, so a change to brief-critic.md's
+# prose is exactly what this lock can detect.
+#
+# 이 리포트는 **양성 대조를 달고** 읽는다 — 아래 "F3(양성대조)" 블록 참조. 리포트가
+# 비면 grep 기반 단언 셋이 전부 「금지 태그 없음」으로 통과하고 COVERED 순회는 아예
+# 돌지 않아, 요구가 깨진 채로 스위트가 초록을 낸다.
+#
+# F14 (최종 리뷰 I2) — 같은 두 위치를 **ground truth** 문장도 이름으로 대야 한다.
+# 비대칭이 결함의 신호였다: F3 는 *비신뢰 경계* 문장에 두 곳을 강제하는데, *ground
+# truth* 문장에는 아무 강제가 없어 네 지시 자리(critic 정의 · critic frontmatter
+# description · codex 체크리스트 · 2-a dispatch 프롬프트)가 전부 `<<<AUDIT-VERBATIM>>>` 한 곳만 지목하고 있었다.
+# 그런데 번들의 payload 부분은 `## 6. 사용자 원문`(S1)을 그 라벨 **앞에** 싣는다 —
+# 출하된 dogfood payload 만 해도 `evidence: S1` 항목이 4건이라, 그 항목들에 대한
+# distortion·evidence_unsupported 판정이 「대조할 원문이 코퍼스 밖」인 채로 났다.
+# 세 자리는 같은 EXPECTED 튜플(= 산출자 상수)에서 파생된다.
+F3_ERR="$(mktemp -t sdF3err)"
+F3_REPORT="$(python3 - "$SD/scripts/build_brief_bundle.py" "$CR" \
+    "$SD/scripts/brief-codex-fidelity-checklist.md" "$SKILL_BRIEF" 2>"$F3_ERR" <<'PYEOF'
+import importlib.util, re, sys
+
+bundle_script, critic_path, checklist_path, skill_path = sys.argv[1:5]
+spec = importlib.util.spec_from_file_location("brief_bundle_mod", bundle_script)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+EXPECTED = ("## 6. 사용자 원문", "<<<AUDIT-VERBATIM>>>")  # task-10 fix round 2 contract:
+# the two locations the bundle actually carries untrusted verbatim under.
+actual = tuple(mod.UNTRUSTED_VERBATIM_MARKERS)
+missing = [m for m in EXPECTED if m not in actual]
+extra = [m for m in actual if m not in EXPECTED]
+if missing:
+    print("MISSING\t" + ",".join(missing))
+if extra:
+    print("EXTRA\t" + ",".join(extra))
+
+def paras(path):
+    return re.split(r"\n\s*\n", open(path, encoding="utf-8").read())
+
+
+critic_paras = paras(critic_path)
+untrusted_paragraphs = [p for p in critic_paras if "비신뢰" in p]
+if not untrusted_paragraphs:
+    print("NO_BOUNDARY_PARAGRAPH")
+for marker in EXPECTED:
+    covered = any(marker in p for p in untrusted_paragraphs)
+    print(("COVERED" if covered else "UNCOVERED") + "\t" + marker)
+
+# ── F14 — ground truth 문장도 두 위치를 이름으로 댄다 ────────────────────────
+GT_ANCHOR = re.compile(r"ground\s+truth", re.IGNORECASE)
+
+
+def frontmatter_block(path):
+    """agent 파일의 frontmatter 를 **구분자로** 잘라낸다.
+
+    description 은 이 리뷰의 코퍼스를 말하는 네 번째 지시 자리인데, 산문 앵커
+    ('ground truth')로는 잡히지 않는다 — 그 어구를 지우기만 하면 검사 밖으로
+    빠져나간다(실측). frontmatter 경계는 문면이 아니라 구조다.
+    """
+    text = open(path, encoding="utf-8").read()
+    if not text.startswith("---\n"):
+        return []
+    end = text.find("\n---\n", 4)
+    return [] if end < 0 else [text[4:end]]
+
+
+def dispatch_block(path):
+    """SKILL.md 의 2-a critic dispatch 를 **구조로** 잘라낸다.
+
+    산문 문단을 앵커로 잡으면 그 파일 다른 곳의 'ground truth' 문단(3-b readback
+    설명)이 대신 검사를 만족시킬 수 있다. subagent_type 리터럴을 감싸는 Agent({ …
+    }) 호출만 본다 — dispatch 가 사라지거나 개명되면 빈 목록이 되어 red 다.
+    """
+    text = open(path, encoding="utf-8").read()
+    i = text.find('subagent_type: "spec-distill:brief-critic"')
+    if i < 0:
+        return []
+    start, end = text.rfind("Agent({", 0, i), text.find("\n})", i)
+    if start < 0 or end < 0:
+        return []
+    return [text[start:end]]
+
+
+GT_SITES = (
+    ("critic 정의", [p for p in critic_paras if GT_ANCHOR.search(p)]),
+    ("critic description", frontmatter_block(critic_path)),
+    ("codex 체크리스트", [p for p in paras(checklist_path) if GT_ANCHOR.search(p)]),
+    ("2-a dispatch", dispatch_block(skill_path)),
+)
+for label, blocks in GT_SITES:
+    # 술어는 ∀다: **위치를 하나라도 이름으로 대는** ground-truth 문단은 두 곳을
+    # 전부 대야 한다. ∃(`any`)로 두면 같은 파일의 다른 ground-truth 문단이 정작
+    # 깨진 문장을 대신 만족시킬 수 있다. 후보가 0이면 그 자리는 위치를 아예 안
+    # 대는 것이므로 red다 — `all([])`의 공허 참을 이 guard가 막는다.
+    cands = [b for b in blocks if any(m in b for m in EXPECTED)]
+    for marker in EXPECTED:
+        covered = bool(cands) and all(marker in b for b in cands)
+        print(("GT_COVERED" if covered else "GT_UNCOVERED") + "\t" + label + "\t" + marker)
+
+# ── F15 — 축 정의 불릿도 코퍼스를 두 위치로 말한다 ────────────────────────────
+# F14 의 코퍼스는 「ground truth 를 말하면서 표지를 하나라도 대는 문단」이다. 그래서
+# **피검자가 그 코퍼스에서 스스로 빠져나갈 수 있었다**: `omission` 불릿을 「the
+# <<<AUDIT-VERBATIM>>> block 에서 빠진 것」으로 되돌리면 그 문단은 ground truth 라는
+# 어구를 잃어 후보에서 탈락하고, 스위트는 90/90 초록을 유지한다(실측). 대상은 문면이
+# 아니라 **구조**에서 도출한다 — 여섯 축 정의 불릿을 리터럴 집합으로 못 박고 판다.
+CATEGORIES = ("authority_syntax", "distortion", "evidence_unsupported",
+              "insertion", "omission", "provenance_mislabel")
+checklist_text = open(checklist_path, encoding="utf-8").read()
+bullets = {}
+for part in re.split(r"(?m)^(?=- `[a-z_]+` —)", checklist_text):
+    m = re.match(r"- `([a-z_]+)` —", part)
+    if m:
+        bullets[m.group(1)] = part.split("\n\n", 1)[0]
+print("CATSET\t" + ",".join(sorted(bullets)))
+# 리터럴 집합과의 대조는 셸이 한다 — 여기서 CATEGORIES 와 비교하면 기대값이 피검자
+# 파일과 같은 층에 있게 된다. 이 튜플은 순서 고정용 주석 역할만 한다.
+assert isinstance(CATEGORIES, tuple)
+# ① 어느 축 정의도 두 위치 중 **한쪽만** 이름으로 대지 않는다.
+for cat in sorted(bullets):
+    named = [m for m in EXPECTED if m in bullets[cat]]
+    if named and len(named) != len(EXPECTED):
+        print("BULLETSUBSET\t" + cat + "\t" + ",".join(named))
+# ② `omission` 은 두 표지를 **직접 열거해야** 한다. 다른 다섯 축은 `S<N>` 앵커를 따라가므로
+#    위치와 무관하지만(앵커는 어느 쪽에 살든 해석된다), omission 은 「무엇이 빠졌나」라
+#    코퍼스 **전체**를 훑어야 답이 나온다 — 범위를 안 말하면 한쪽만 읽고 「빠진 것 없음」이
+#    나온다.
+#
+#    **위임(«ground truth» 라는 어구에 기대기)은 더 이상 인정하지 않는다.** 앞 판본은
+#    `/ground[\s-]+truth/i` 의 **존재**를 위임으로 셌는데 그것은 범위 검사가 아니라 어구
+#    검사였다: 「something load-bearing in the **audit** ground truth …」로 고쳐 쓰면 형용사
+#    하나로 코퍼스가 절반이 되는데 어구는 그대로라 rc 0 · 94/94 였다(실측). 표지 리터럴
+#    **둘의 동시 존재**는 그 형용사로 만족시킬 수 없다.
+#
+#    **남는 잔여를 숨기지 않는다**: 존재 기반 검사는 부정문을 못 잡는다 — 두 표지를 다 적고
+#    「두 번째는 무시하라」를 덧붙이는 문면은 이 락을 통과한다(CHANGELOG known gap).
+om = bullets.get("omission", "")
+stated = bool(om) and all(m in om for m in EXPECTED)
+print("OMISSION_CORPUS\t" + ("STATED" if stated else "UNSTATED"))
+PYEOF
+)"
+F3_RC=$?
+# ── F3(양성대조) — 「리포트가 있다」를 먼저 증명한다 ────────────────────────────
+# 부재 술어만으로 짜인 락은 **대상이 사라지면 공허하게 통과한다.** 실측: 리뷰어가
+# build_brief_bundle.py 의 `UNTRUSTED_VERBATIM_MARKERS` 를 다른 이름으로 rename하자
+# (정의 + 유일 사용처, 2 insertions / 2 deletions) 위 블록이 AttributeError로 죽어
+# 트레이스백은 stderr 로 가고 `$F3_REPORT` 는 **빈 문자열**이 됐다. 그러자
+#   · `^MISSING` 없음 → ok        · `^EXTRA` 없음 → ok
+#   · `^NO_BOUNDARY_PARAGRAPH` 없음 → ok  (셋 다 「없어야 할 것이 없다」로 통과)
+#   · COVERED 순회는 한 번도 돌지 않아 단언 2개가 **조용히 사라졌다**
+# 스위트는 rc 0 · 77/77 을 냈다 — 기준선 79/79 와의 차이는 총계뿐이라 초록만 보면
+# 안 보인다. 형제 락 T12(test_brief_bundle.sh 의 `n_pairs -eq 3`)는 같은 함정을
+# 행 수 리터럴로 이미 막고 있었고, F3 는 그 관용구를 베끼면서 이 가드만 빠뜨렸다.
+#
+# 행 수는 **리터럴 2** 로 못 박는다. `len(EXPECTED)` 로 유도하면 EXPECTED 가 빈
+# 튜플이 되는 변형에서 `0 == 0` 으로 다시 공허해진다(피검자에서 기대값을 끌어오는
+# 바로 그 실패형). 계약이 세 곳으로 늘면 위 EXPECTED 와 이 숫자를 **함께** 고친다.
+[[ "$F3_RC" -eq 0 ]] \
+  && ok "F3(양성대조): 계약 추출기가 정상 종료했다 (rc=0)" \
+  || no "F3(양성대조): 계약 추출기가 rc=$F3_RC 로 죽었다 — 아래 F3 단언들은 무의미하다: $(tr '\n' ' ' < "$F3_ERR" | tail -c 200)"
+f3_rows="$(grep -cE '^(COVERED|UNCOVERED)'$'\t' <<<"$F3_REPORT" || true)"
+[[ "$f3_rows" -eq 2 ]] \
+  && ok "F3(양성대조): 커버리지 행이 정확히 2다 (단언이 실재한다)" \
+  || no "F3(양성대조): 커버리지 행이 2가 아니라 $f3_rows — 리포트가 비었거나 잘렸다(F3 단언 소실)"
+# 4 지시 자리 × 2 위치 = 8. 여기도 리터럴이다(같은 이유 — 위 주석 참조).
+gt_rows="$(grep -cE '^GT_(UN)?COVERED'$'\t' <<<"$F3_REPORT" || true)"
+[[ "$gt_rows" -eq 8 ]] \
+  && ok "F14(양성대조): ground truth 행이 정확히 8다 (4 자리 × 2 위치)" \
+  || no "F14(양성대조): ground truth 행이 8이 아니라 $gt_rows — 리포트가 비었거나 잘렸다(F14 단언 소실)"
+# F15 행도 리터럴로 못 박는다 — 추출기가 죽으면 아래 세 단언이 조용히 사라진다.
+f15_rows="$(grep -cE '^(CATSET|OMISSION_CORPUS)'$'\t' <<<"$F3_REPORT" || true)"
+[[ "$f15_rows" -eq 2 ]] \
+  && ok "F15(양성대조): 축 정의 행이 정확히 2다 (CATSET + OMISSION_CORPUS)" \
+  || no "F15(양성대조): 축 정의 행이 2가 아니라 $f15_rows — 리포트가 비었거나 잘렸다(F15 단언 소실)"
+rm -f "$F3_ERR"
+catset_line="$(grep "^CATSET" <<<"$F3_REPORT" | cut -f2- || true)"
+[[ "$catset_line" == "authority_syntax,distortion,evidence_unsupported,insertion,omission,provenance_mislabel" ]] \
+  && ok "F15: 체크리스트가 여섯 축 정의 불릿을 그대로 갖는다" \
+  || no "F15: 축 정의 불릿 집합이 바뀌었다 — [$catset_line] (락의 대상이 옮겨갔다)"
+subset_line="$(grep "^BULLETSUBSET" <<<"$F3_REPORT" || true)"
+[[ -z "$subset_line" ]] \
+  && ok "F15: 어느 축 정의도 비신뢰 원문 두 위치 중 한쪽만 대지 않는다" \
+  || no "F15: 축 정의가 두 위치 중 한쪽만 이름으로 댄다 — [$subset_line] (반대쪽 원문이 그 축의 코퍼스 밖)"
+grep -q "^OMISSION_CORPUS"$'\t'"STATED" <<<"$F3_REPORT" \
+  && ok "F15: omission 축이 자기 코퍼스를 말한다 (두 위치 열거 또는 ground truth 위임)" \
+  || no "F15: omission 축이 코퍼스를 안 말한다 — 한쪽만 읽고 「빠진 것 없음」이 나온다 (S1 증거 항목 4건이 판정 밖)"
+missing_line="$(grep '^MISSING' <<<"$F3_REPORT" || true)"
+[[ -z "$missing_line" ]] && ok "F3: UNTRUSTED_VERBATIM_MARKERS 계약이 필수 2곳을 전부 포함한다" \
+  || no "F3: build_brief_bundle.py의 UNTRUSTED_VERBATIM_MARKERS 에서 빠졌다 — ${missing_line#MISSING$'\t'}"
+extra_line="$(grep '^EXTRA' <<<"$F3_REPORT" || true)"
+[[ -z "$extra_line" ]] && ok "F3: UNTRUSTED_VERBATIM_MARKERS 계약이 예상한 2곳과 정확히 일치한다" \
+  || no "F3: UNTRUSTED_VERBATIM_MARKERS 에 예상 밖 표지가 있다 — ${extra_line#EXTRA$'\t'} (이 테스트를 갱신해야 한다)"
+if grep -q '^NO_BOUNDARY_PARAGRAPH' <<<"$F3_REPORT"; then
+  no "F3: critic agent 정의 어디에도 '비신뢰' 문단이 없다 — injection 경계 자체가 없다"
+else
+  ok "F3: critic agent 정의에 '비신뢰' 문단이 실재한다"
+fi
+while IFS=$'\t' read -r tag marker extra_field; do
+  case "$tag" in
+    COVERED)   ok "F3: 비신뢰 문단이 '${marker}' 위치를 지목한다" ;;
+    UNCOVERED) no "F3: 비신뢰 문단이 '${marker}' 위치를 지목하지 않는다 — 그 원문에는 injection 경계가 없다" ;;
+    GT_COVERED)   ok "F14: ${marker}의 ground truth 문장이 '${extra_field}' 위치를 지목한다" ;;
+    GT_UNCOVERED) no "F14: ${marker}의 ground truth 문장이 '${extra_field}' 위치를 지목하지 않는다 — 그 위치의 원문은 판정 코퍼스 밖이다" ;;
+  esac
+done <<< "$F3_REPORT"
+
 # critic 프롬프트에 payload 경로/디렉토리가 실리지 않는다 (AC2의 정적 절)
 grep -qF "docs/superpowers/interview/" "$CR" \
   && no "AC2: critic 프롬프트에 interview 디렉토리 문자열" || ok "AC2: critic에 interview 디렉토리 없음"

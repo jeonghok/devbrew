@@ -5,7 +5,7 @@
 AC4/AC5/AC6/AC7/AC9/AC10/AC11/AC12/AC15. 이 파일의 AC 번호는 **그 spec의 §6 표**를
 가리킨다 — 옛 spec의 번호를 물려 쓰면 같은 숫자가 다른 뜻을 가리켜 traceability가 거짓이
 된다(design doc Rejected Alternatives의 "AC↔T/V 편도 참조" 클래스). 이 spec에 대응 AC가
-없는 검사(§4 인용 요구, `type`/`next_phase` 규약 등)는 AC 번호를 붙이지 않는다.
+없는 검사(§4 «출처키» 요구, `type`/`next_phase` 규약 등)는 AC 번호를 붙이지 않는다.
 
 The Law 1 termination gate for the conducting-interview problem-space stage,
 made mechanical. conducting-interview runs `check_brief.py gate <payload>` before
@@ -28,13 +28,15 @@ Spec B AC17).
 몫이다(Spec B AC16 · E12).
 
 PN4: the steelman "verbatim" guarantee is checked by substring containment — each
-§5 기각 `verdict:` entry must contain >=1 URL + a >=10-char statement + a valid
-verdict — NOT exact-string match (avoids flakiness). Whether the steelman is a
-genuine counter-argument is not machine-checked at all (모델 + 독립 adversary의 몫).
+§5 기각 `verdict:` entry must contain a >=10-char statement + a valid verdict + a
+`ST<N>` 참조 — NOT exact-string match (avoids flakiness). v0.44.0부터 URL 요구는
+없다(N1a가 payload 외부 URL을 §6 예외만 두고 전면 금지하므로 여기서 따로 요구할
+이유가 없다). Whether the steelman is a genuine counter-argument is not
+machine-checked at all (모델 + 독립 adversary의 몫).
 
 CLI subcommands (all print JSON):
   check_brief.py sections <payload>            → {"missing": [...]}        (AC4)
-  check_brief.py landscape-citations <payload> → {"uncited": [...]}        (§4 인용 요구)
+  check_brief.py landscape-keys <payload>      → {"unkeyed": [...]}        (§4 «출처키» 요구)
   check_brief.py skepticism <payload>          → {"malformed": [...]}      (AC11)
   check_brief.py tried-discarded <payload>     → {"ok": bool}              (AC11, R4 이관)
   check_brief.py coverage <payload>            → {"failures": [...]}       (AC10, audit §1 해석)
@@ -53,18 +55,30 @@ import re
 import sys
 from pathlib import Path
 
+# §6 경계는 이 리포에서 한 곳에서만 계산된다 — `scripts/section6.py`. 세 소비자(이 게이트 ·
+# `build_brief_bundle.py` · `check_verbatim_coverage.py`)가 각자 정규식을 갖던 동안 셋의
+# 시작·종결 규칙이 서로 달랐고, 그 어긋남 하나하나가 통로였다(v0.47.0). sys.path 보정은
+# importlib 로 이 파일을 직접 로드하는 테스트 경로 때문이다 — 스크립트로 실행될 때는
+# sys.path[0] 이 이미 이 디렉토리다.
+_SCRIPTS_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+import section6  # noqa: E402
+
 
 WEB_DISABLED_ADVISORY = (
-    "[spec-distill] web 비활성(DEVBREW_SPEC_DISTILL_DISABLE_WEB=1) — "
-    "§4 출처 URL 인용 요구 + §5 verdict URL 요구가 완화됨 (degraded)"
+    "[spec-distill] DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 — 이 게이트 실행에서 완화된 것은 "
+    "**하나**다: §4 External Landscape가 항목 없이 web-disabled sentinel로 만족될 수 있다. "
+    "payload 외부 URL 금지(N1a)·§4 «출처키» 요구(#13)·audit §7 결속(N2)은 완화되지 않는다."
 )
 
 
 def _web_disabled() -> bool:
-    """Graceful degradation (선재 동작 — 이 spec에 대응 AC 없음, T17이 검증): when web
-    research is killed, URLs cannot be obtained, so the gate relaxes the citation
-    requirement on §3/§4 (the SKILL's R2/R3 web-absent clauses). The judgment of
-    whether the (URL-less) skepticism is genuine stays manual."""
+    """Graceful degradation — v0.44.0 N1a 이후 이 스위치가 완화하는 것은 정확히 **하나**,
+    `landscape_present`의 §4 sentinel 경로(#12)뿐이다. §4 «출처키» 요구(#13)·§5 verdict
+    형식(URL 요구는 이 커밋에서 지웠다)·payload 외부 URL 금지(N1a)·audit §7 결속(N2)은
+    이 스위치로 완화되지 않는다 — 웹이 꺼져 있어도 출처를 말로 댈 수 있고, payload에
+    URL을 넣을 이유가 web 상태와 무관하게 생기지 않는다."""
     return os.environ.get("DEVBREW_SPEC_DISTILL_DISABLE_WEB") == "1"
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
@@ -93,15 +107,65 @@ AUDIT_SECTIONS = [
     ("3", "Steelman 원문"),
     ("4", "게이트 실행 기록"),
     ("5", "프로세스 로그"),
+    ("6", "사용자 원문"),
+    ("7", "확산 원자료"),
 ]
 
 FLOOR_KEYS = ["root_problem", "landscape", "skepticism", "blind_spot", "open_questions"]
 
 
 def _body(text: str) -> str:
+    """**존재 검사용 코퍼스** — frontmatter와 펜스를 벗긴 산문 본문.
+
+    이 게이트에는 코퍼스가 **둘** 있다. 이쪽은 「무엇이 있는가」를 묻는 검사들
+    (#1 절 존재·#12 §4 항목·#14 §5 verdict·#15 기각 항목 …)이 쓴다. 그 검사들에
+    프론트매터와 펜스를 벗기는 것이 맞다 — frontmatter는 절이 아니고, 펜스 안 예시는
+    저술된 내용이 아니라 예시라서 ``` 안에 헤딩을 적어 절 존재를 만족시키는 우회를
+    막아야 한다(F4).
+
+    **payload §6을 경계로 쓰는 검사(N1a·N1b)는 이 코퍼스를 쓰지 않는다.** 여기서
+    벗겨낸 것이 그대로 하류 문서에 실려 나가므로, 벗김은 존재 검사에서는 엄격함이지만
+    그 둘에서는 **구멍**이다 — N1a는 벗겨진 펜스·frontmatter 안의 URL을 못 봤고(v0.44.0
+    수정), N1b는 payload §6 안 펜스에 적힌 `- **S5**`를 못 봤다(v0.46.0 수정 — 그 줄은
+    게이트에만 안 보였을 뿐 번들에 실려 충실도 리뷰어에게 원문으로 나갔다). 둘은
+    `payload_section6_span()`이 **원문 위에서** 잡은 하나의 §6 경계를 공유한다.
+
+    이 문단은 규범이 아니라 **사실 서술이다** — `test_check_brief.sh`가 두 검사의 호출
+    그래프를 `ast`로 훑어 `_body`/`_section_text` 도달을 금지한다. 문장이 참이 아니게
+    되면 그 락이 red를 낸다.
+    """
     m = FRONTMATTER_RE.match(text)
     body = text[m.end():] if m else text
     return FENCE_RE.sub("", body)
+
+
+def section6_ambiguous(text: str) -> list:
+    """N1c — §6 이 **모든 소비자에게 같은 영역**으로 해석되지 않는 이유들 (v0.47.0).
+
+    판정은 `section6.ambiguities()` 가 한다. 이 게이트가 자기 정규식으로 다시 계산하면
+    「게이트가 보는 §6」과 「번들·완전성 검사가 싣는 §6」이 다시 갈릴 수 있다 — 그 갈라짐이
+    바로 이 검사가 막는 대상이므로, 검사 자신이 그것을 재생산하면 안 된다.
+
+    **두 좌표를 함께 본다.** v0.46.0 은 시작 좌표만 못 박았고, 종결 좌표로 같은 공격이
+    그대로 들어왔다 — audit §6 안에 **펜스로 감싼** `## 7.` 을 두면 게이트는 조용한데
+    번들의 `<<<AUDIT-VERBATIM>>>` 블록이 비거나 위조본으로 바뀐다(실측 rc 0, 두 형태).
+    「시작도 못 박고 종결도 못 박는다」가 아니라 **「두 극단의 읽기가 일치하는가」** 한
+    술어다 — 그래야 세 번째 좌표가 나와도 같은 술어가 덮는다.
+
+    payload 와 audit **양쪽**에 건다.
+    """
+    return section6.ambiguities(text)
+
+
+def payload_section6_span(text: str):
+    """payload **원문**에서 §6 절의 `(start, end)` — 유일하게 해석될 때만. 아니면 None.
+
+    N1a 와 N1b 가 공유하는 **단 하나의** 경계이고, 그 하나를 `section6.py` 에서 받는다.
+    None 을 fail-closed 로 읽는다 — 호출부가 §6 을 하나도 빼지 않으므로(= 코퍼스 최대),
+    이 함수가 무력화돼도 N1a 는 침묵하지 않고 더 많이 문다.
+    """
+    sp = section6.span(text)
+    return None if sp is None else (sp[0], sp[2])
 
 
 def find_missing_sections(text: str, sections: list = SECTIONS) -> list[str]:
@@ -132,7 +196,7 @@ def _section_text(text: str, num: str, title: str) -> str:
 # 불릿 문자는 `-`와 `*`를 **둘 다** 받는다 — §2 본문을 읽는 `BODY_ITEM_RE`(`^\s*[-*]\s+`)와 반드시
 # 같은 관례여야 한다. 같은 아티팩트를 두 규칙이 서로 다른 관례로 읽으면 불릿 한 글자로 검사를
 # 우회할 수 있다: `- 인용된 항목` 하나와 `* 출처 없는 주장` 하나를 §4에 두면 `landscape_present`는
-# 하이픈 항목으로 만족되고 `landscape_uncited`는 애스터리스크 항목을 아예 못 봐서, R2의 "출처 URL
+# 하이픈 항목으로 만족되고 `landscape_unkeyed`는 애스터리스크 항목을 아예 못 봐서, R2의 "출처 «키»
 # 필수"가 통째로 통과한다(리뷰 실증: 같은 줄을 `-`로 쓰면 red, `*`로 쓰면 green).
 ENTRY_BULLET_RE = re.compile(r"^\s*[-*]\s")
 
@@ -304,7 +368,6 @@ def audit_pairing_errors(payload_fm: str, audit_text: str, payload_name: str) ->
 VALID_SOURCES = ("verbatim", "chosen")
 VALID_STATUSES = ("confirmed", "provisional", "open")
 REQUIRED_ITEM_FIELDS = ("id", "source", "status", "statement", "evidence")
-STATEMENT_MAX = 160
 # AC12 sentinel — 축자 형태는 `# confirmed 0건 — 사용자가 전부 잠정으로 판단` 한 줄이다.
 # **substring 검사를 쓰면 안 된다**: 템플릿이 이 문자열을 *사용법 안내 주석 안에* 그대로
 # 인쇄하므로(`#   # confirmed 0건 — …`), 템플릿을 복사해 만든 brief는 sentinel을 실제로
@@ -419,9 +482,6 @@ def user_sourced_errors(text: str) -> list[str]:
         st = it.get("status")
         if st and st not in VALID_STATUSES:
             errs.append(f"{iid}: status {st!r} not in {VALID_STATUSES}")
-        stmt = it.get("statement") or ""
-        if len(stmt) > STATEMENT_MAX:
-            errs.append(f"{iid}: statement {len(stmt)}자 > {STATEMENT_MAX} (hard cap)")
         ev = it.get("evidence") or ""
         if ev and not EVIDENCE_RE.match(ev):
             errs.append(f"{iid}: evidence {ev!r} is not S<N>")
@@ -443,19 +503,66 @@ S_ANCHOR_RE = re.compile(r"^\s*[-*]\s+\*\*(S\d+)\*\*", re.MULTILINE)
 
 
 def verbatim_anchors(text: str) -> set:
-    """§6 사용자 원문이 제공하는 S<N> 앵커 집합."""
+    """**audit** §6이 제공하는 S<N> 앵커 집합 (`_body()` 코퍼스 — 존재 검사용).
+
+    payload에는 쓰지 않는다. payload용은 `payload_verbatim_anchors()`이고, 그쪽은
+    원문 span 위에서 센다 — 이 함수의 코퍼스로 payload §6을 세면 §6 안 펜스에 적힌
+    앵커가 게이트에만 안 보인 채 하류로 출하된다(v0.46.0에서 고친 결함).
+    """
     return set(S_ANCHOR_RE.findall(_section_text(text, "6", "사용자 원문")))
 
 
-def bijection_c_errors(text: str) -> list[str]:
+def payload_verbatim_anchors(payload_text: str) -> set:
+    """payload §6이 제공하는 S<N> 앵커 집합 — **원문 span 위에서** (v0.46.0).
+
+    코퍼스는 `payload_section6_span()`이 자른 payload 원문 조각이다. 펜스를 벗기지
+    않는 것이 요점이다: 펜스 안 `- **S5**` 줄은 payload 안에 그대로 남아 번들에 실려
+    충실도 리뷰어에게 **원문으로** 보인다. 게이트만 그것을 못 보는 상태가 정확히
+    N1b가 막으려던 것이다.
+
+    경계가 유일하지 않거나 §6이 없으면 공집합 — N1b의 등식(`!= {"S1"}`)이 그 자리에서
+    red를 내므로 침묵하지 않는다.
+    """
+    span = payload_section6_span(payload_text)
+    if span is None:
+        return set()
+    return set(S_ANCHOR_RE.findall(payload_text[span[0]:span[1]]))
+
+
+def payload_verbatim_is_s1_only(payload_text: str) -> bool:
+    """N1b — payload §6의 앵커 집합이 **정확히** {"S1"}인가 (v0.43.0).
+
+    `⊆ {"S1"}`이 아니라 `== {"S1"}`이다. ⊆로 쓰면 빈 §6이 통과하고, 그때
+    이를 잡아 줄 것으로 기대할 bijection C는 **항목이 0건인 payload에서 공허하다**
+    (`evidence`는 필수 필드라 항목이 있으면 순회가 비지 않지만, 항목 0건이면
+    루프가 아예 돌지 않는다). 등식이 그 구멍을 닫는다.
+
+    등식 술어라 **스스로 양성이다** — §6을 통째로 지워도 이 검사가 직접 red를 낸다.
+    이 자리를 bijection C에 귀속시키면 틀린 귀속이 되고, 잘못 귀속된 RED는
+    통과보다 나쁘다.
+
+    v0.46.0: 코퍼스가 `_body()`에서 **payload 원문 §6 span**으로 바뀌었다. `_body()`는
+    펜스를 벗기므로 §6 안 펜스에 `- **S5**`를 적으면 앵커 집합이 `{"S1"}`으로 계산돼
+    등식이 만족되는데, 그 줄은 payload에 그대로 남아 하류로 나갔다.
+    """
+    return payload_verbatim_anchors(payload_text) != {"S1"}
+
+
+def bijection_c_errors(payload_text: str, audit_text: str) -> list[str]:
     """bijection C — 모든 evidence: S<N>이 §6에서 해석된다 (AC6).
 
-    한계: 이 검사는 인용된 S<N>의 **존재**만 본다. 요약이 그 원문을 실제로 뒷받침하는지
-    (의미적 정합)는 기계 검증하지 않는다 — V9 수동 spot-check가 그 갭을 맡는다.
-    역방향(모든 S<N>이 인용될 것)은 요구하지 않는다: 제약으로 승격되지 않은 발화가 있다.
+    v0.43.0: 앵커 집합이 payload §6 **∪** audit §6이다. `S1`은 payload에,
+    `S2` 이상은 audit에 살므로 한쪽만 보면 반대쪽 전량이 "없는 앵커"가 된다.
+
+    **단방향이다.** 인용된 S<N>의 *존재*만 본다 — 모든 앵커가 인용될 것은
+    요구하지 않는다. 그 역방향을 넣으면 audit §6 전량이 인용 의무로 끌려온다.
+    "bijection이니 양방향이겠지"로 구현하면 안 된다.
+
+    한계: 요약이 그 원문을 실제로 뒷받침하는지(의미적 정합)는 기계 검증하지 않는다 —
+    V9 수동 spot-check가 그 갭을 맡는다.
     """
-    anchors = verbatim_anchors(text)
-    items, _ = parse_user_sourced_items(_frontmatter(text))
+    anchors = payload_verbatim_anchors(payload_text) | verbatim_anchors(audit_text)
+    items, _ = parse_user_sourced_items(_frontmatter(payload_text))
     errs = []
     for it in items:
         ev = it.get("evidence")
@@ -529,20 +636,123 @@ def bijection_b_errors(text: str) -> list[str]:
     return errs
 
 
-def landscape_uncited(text: str) -> list[str]:
-    if _web_disabled():
-        return []  # web off → no URLs obtainable; citation requirement relaxed
+SOURCE_KEY_RE = re.compile(r"«([^»]+)»")
+
+
+def _payload_excluding_section6(text: str) -> str:
+    """**부재 검사용 코퍼스(N1a)** — payload **전문**에서 §6 사용자 원문만 뺀 것.
+
+    설계 §2.3이 못 박은 코퍼스가 그대로다: 「payload 에서 §6 을 뺀 나머지」. 빼는
+    것은 §6 **하나뿐**이다 — frontmatter도 펜스도 빼지 않는다.
+
+    **`_body()`를 쓰지 않는 것이 이 함수의 요점이다.** `_body()`는 존재 검사용이라
+    frontmatter와 펜스(`FENCE_RE`)를 벗기는데, N1a에서 그 벗김은 엄격함이 아니라
+    구멍이다: 벗겨진 바이트는 하류로 나가는 문서에 **그대로 살아 있다**. 실측된
+    두 통로 — ① payload §4 안 ```펜스```에 URL 2건 → `{"pass": true}` rc 0, 펜스
+    두 줄만 지우면 `payload에 외부 URL 2건` rc 1. ② frontmatter `statement:` 뒤
+    인라인 주석의 URL → 같은 방식으로 통과. 둘 다 N1a가 막으려는 바로 그 해다.
+    두 코퍼스가 공존하는 값은 이 주석과 `_body()`의 짝 주석으로 치른다.
+
+    §6이 예외인 이유는 편의가 아니다. URL을 깎는 근거("링크가 권위로 읽혀 하류를
+    끌고 간다")는 **모델이 web sweep으로 가져온 링크**를 겨눈다. 사용자가 자기
+    요청에 직접 쓴 URL은 사용자가 하류에 전하려 한 것이고, 지우는 것은 압축이
+    아니라 원문 훼손이다. 게다가 지우면 게이트가 **동시 만족 불가능**해진다 —
+    `check_verbatim_coverage.py`의 `normalize()`가 맨 URL을 안 벗기므로 L2가
+    `not_contained`로 exit 1을 낸다. 유일한 탈출로인 P21 치환은 보안 컨트롤을
+    URL 세탁에 쓰는 것이고 그 statement의 L2를 advisory로 강등시킨다.
+
+    **경계는 고르지 않고 `payload_section6_span()`에서 받는다.** 이 함수가 스스로
+    「첫 §6 헤딩」을 골랐을 때가 실측 통로였다 — 저자가 §4 꼬리나 frontmatter에 두 번째
+    `## 6. 사용자 원문`을 적으면 그 지점부터 다음 `## N.`까지가 코퍼스에서 잘려 나갔다.
+    span이 None이면(경계 부재·비유일) **한 글자도 빼지 않는다** — 부재 검사의 코퍼스를
+    의심스러울 때 넓히는 것이 fail-closed이고, §6 안의 정당한 URL이 red를 받는 대가는
+    그 문서가 이미 N1c로 red라는 사실 앞에서 무해하다.
+    """
+    span = payload_section6_span(text)
+    if span is None:
+        return text
+    return text[: span[0]] + text[span[1]:]
+
+
+def payload_url_free(text: str) -> list[str]:
+    """N1a — payload에서 §6을 뺀 나머지 **전부**에 외부 URL(`https?://`)이 0개인가.
+
+    코퍼스는 `_payload_excluding_section6()` — frontmatter와 펜스를 **포함한다**.
+    존재 검사들이 쓰는 `_body()`와는 다른 코퍼스다(각 함수의 주석 참조).
+
+    **부재 술어다.** 대상 절을 통째로 지우면 공허하게 통과하므로, 이 검사의 이빨은
+    이 함수 안에 없다 — #1 `find_missing_sections`(§4 절 삭제) · #12
+    `landscape_present`(§4 항목 전부 삭제) · #15 `tried_discarded_ok`(§5 항목 전부
+    삭제) 셋이 삭제 우회로를 막아야 이빨을 갖는다. "이 검사는 약하니 지우자" 류
+    리팩터가 이 배치에서 특히 위험하다.
+
+    **web kill switch로 완화하지 않는다.** 웹이 꺼졌다고 payload에 URL을 넣을 이유가
+    생기지 않는다 — 완화할 대상이 애초에 없다(`check_seed.py`의 같은 주석).
+
+    리포 내부 `file:line` 참조는 대상이 아니다 — 외부 권위가 아니라 고칠 대상을
+    가리키는 손가락이고, 하류가 실제로 열어야 하는 것이다.
+    """
+    return [ln.strip() for ln in _payload_excluding_section6(text).splitlines()
+            if URL_RE.search(ln)]
+
+
+def landscape_unkeyed(text: str) -> list[str]:
+    """#13 — §4 항목마다 «출처키»가 있는가. **∀다**(v0.44.0에서 URL→키로 술어 교체).
+
+    URL 요구는 audit으로 갔지만 **∀는 payload에 남는다.** 둘을 그대로 맞바꾸면
+    인용 없는 §4 항목 여덟 개 + audit URL 한 개가 통과한다 — 강도 하락이다.
+    audit으로 가는 것은 URL이라는 **술어뿐**이고, 그 술어는 ∃로 약해진다.
+
+    **web kill switch로 완화하지 않는다.** 웹이 꺼져도 출처를 말로 댈 수 있다.
+    web-off brief는 §4에 순회할 항목이 없어 공허하게 통과하는 것이 옳다 —
+    조사하지 않았으면 인용할 것도 없다.
+    """
     sec = _section_text(text, "4", "External Landscape")
-    return [ln for ln in _entry_lines(sec) if not URL_RE.search(ln)]
+    return [ln for ln in _entry_lines(sec) if not SOURCE_KEY_RE.search(ln)]
+
+
+def landscape_keys_declared(payload_text: str, audit_text: str) -> list[str]:
+    """N2 — payload §4의 «출처키» 집합 ⊆ audit §7이 선언한 키 집합 (v0.44.0).
+
+    **개수가 아니라 집합이다.** 개수는 세 번 틀린다: web-off brief(§4에 항목 1건,
+    §7에 0건)가 `1 ≤ 0`으로 red · 두 §4 항목이 같은 출처를 인용하면 `2 ≤ 1`로 red ·
+    §7이 sweep을 산문 전문으로 적으면 「항목」의 계수 단위가 미정이라 집행 불가.
+    집합이면 셋 다 통과한다. `bijection_a_errors`가 같은 판단을 이미 했다.
+
+    **조건부다.** 「audit §7이 비어 있지 않다」로 두면 갓 만든 audit도 웹이 꺼진
+    audit도 red가 된다. payload가 landscape를 실었다는 사실을 조건으로 건다 —
+    키가 없으면 공집합 ⊆ 무엇이든으로 자동 만족되므로 kill switch 코드가 필요 없다.
+
+    **이것이 보장하지 않는 것**: 어느 키가 어느 원자료인가. 키를 지어내도 통과한다
+    (설계 §10). 그 해석까지 묶는 것은 §3.4 ①의 교차 bijection이고 기각됐다.
+    """
+    want = {m.group(1).strip()
+            for ln in _entry_lines(_section_text(payload_text, "4", "External Landscape"))
+            for m in SOURCE_KEY_RE.finditer(ln)}
+    have = {m.group(1).strip()
+            for m in SOURCE_KEY_RE.finditer(_section_text(audit_text, "7", "확산 원자료"))}
+    return sorted(want - have)
 
 
 def landscape_present(text: str) -> bool:
-    """§4 External Landscape must carry >=1 entry, OR an explicit web-disabled
-    sentinel (graceful degradation). Header presence alone is not research (F3)."""
+    """§4는 항목 ≥1을 갖거나, **web이 실제로 꺼져 있을 때만** sentinel로 대신한다.
+
+    v0.44.0 이전까지는 §4 본문에 "생략" 한 단어만 있어도 True였고 URL 요구가 그것을
+    덮어서 무해했다 — 이제 N1a(§4/§5 URL 전면 금지) 체제에서는 이것이 **N1a의 공허
+    우회로를 여는 유일한 문**이 된다(§4에 "생략"만 쓰면 URL도 «출처키»도 없는 payload가
+    통과한다). 그래서 sentinel 경로를 `_web_disabled()`로 좁혔다 — web이 실제로 꺼져
+    있을 때만 sentinel이 유효하고, 켜져 있으면 sentinel 문구도 항목 없음과 동일하게
+    취급된다(F3 — 헤더/문구 존재가 조사를 대신하지 않는다).
+
+    **내구성 대가**: 이 함수가 처음으로 환경변수에 의존한다. web-off로 저술된 brief가
+    다른 세션에서 그 변수 없이 게이트를 다시 타면 RED가 된다. audit `## 4. 게이트 실행
+    기록`에 web-disabled 사유 칸을 둔 것은 그래서다 — 저술 시점의 환경을 아티팩트가
+    날라, 나중 실행이 자기 환경으로 남의 brief를 판정하지 않게 한다.
+    """
     sec = _section_text(text, "4", "External Landscape").strip()
     if not sec:
         return False
-    if re.search(r"\bN/?A\b|비활성|생략|web[ -]?disabled", sec, re.IGNORECASE):
+    if _web_disabled() and re.search(r"\bN/?A\b|비활성|생략|web[ -]?disabled", sec, re.IGNORECASE):
         return True
     return bool(_entry_lines(sec))
 
@@ -587,44 +797,46 @@ def bijection_a_errors(payload_text: str, audit_text: str) -> list[str]:
     return errs
 
 
-def attribution_block_missing(text: str) -> bool:
-    """§6 상단 2줄 출처 표기 블록 존재 검사 (AC5/C3).
+def attribution_block_missing(audit_text: str) -> bool:
+    """audit §6 상단 출처 표기 블록 존재 검사 (AC5/C3 — v0.43.0에서 payload→audit 이사).
 
-    템플릿이 상속시키지만 개별 brief에서 지워질 수 있으므로 게이트가 확인한다.
+    템플릿이 상속시키지만 개별 audit에서 지워질 수 있으므로 게이트가 확인한다.
     """
-    for ln in _section_text(text, "6", "사용자 원문").splitlines():
+    for ln in _section_text(audit_text, "6", "사용자 원문").splitlines():
         if ln.lstrip().startswith(">") and all(m in ln for m in ATTRIBUTION_MARKERS):
             return False
     return True
 
 
 def skepticism_malformed(text: str) -> list[str]:
-    """§5의 `verdict:` 항목 형식 검사. PN4: 정확한 문자열 일치가 아니라 containment."""
-    require_url = not _web_disabled()
+    """§5의 `verdict:` 항목 형식 검사. PN4: 정확한 문자열 일치가 아니라 containment.
+
+    v0.44.0 N1a: URL 요구를 지웠다 — payload 외부 URL은 이제 N1a(`payload_url_free`)가
+    §6 예외 하나만 두고 전면 금지하므로, 이 함수가 §5 항목에서 URL 유무를 스스로
+    요구/거부할 이유가 없다(있으면 N1a가 별도로, 그리고 이 함수와 무관하게 red를 낸다).
+    `verdict:`·`statement`·ST 참조 요구는 그대로 남는다 — web kill switch는 이 셋 중
+    무엇도 완화하지 않는다(완화 대상이 URL 요구였는데 그게 없어졌다).
+    """
     bad: list[str] = []
     for ln in section5_entries(text):
         if "verdict:" not in ln:
             continue
-        has_url = bool(URL_RE.search(ln))
         has_verdict = bool(re.search(r"verdict:\s*(?:%s)\b" % "|".join(VALID_VERDICTS),
                                      ln, re.IGNORECASE))
-        # URL을 먼저 벗겨낸 뒤 ST<N>을 찾는다 — 안 그러면 URL 경로 조각에 우연히 낀
-        # word-bounded ST<N>(예: `/ST9/`)이 실제 참조인 양 요구를 충족시켜버린다.
+        # URL을 먼저 벗겨낸 뒤 ST<N>을 찾는다 — URL 요구는 지웠지만 이 방어는 남긴다:
+        # payload에 URL이 남아 있으면(N1a가 별도로 잡는다) 그 경로 조각에 우연히 낀
+        # word-bounded ST<N>(예: `/ST9/`)이 실제 참조인 양 요구를 충족시키는 것을 막는다.
         ln_no_url = URL_RE.sub("", ln)
         has_st = bool(ST_REF_RE.search(ln_no_url))
         stripped = _strip_bullet(VERDICT_CLAUSE_RE.sub("", ST_REF_RE.sub("", ln_no_url))).strip()
         has_stmt = len(stripped) >= 10
-        if not (has_verdict and has_stmt and has_st and (has_url or not require_url)):
+        if not (has_verdict and has_stmt and has_st):
             miss = []
             if not has_stmt:
                 miss.append("statement<10c")
-            if require_url and not has_url:
-                miss.append("no-url")
             if not has_verdict:
                 miss.append("no-verdict")
             if not has_st:
-                # web kill switch는 URL 요구만 완화한다 — ST 참조는 파일-축 drift-guard라
-                # 웹 가용성과 무관하다.
                 miss.append("no-ST-ref")
             bad.append(f"{ln[:60]} :: {','.join(miss)}")
     return bad
@@ -728,13 +940,22 @@ def gate(path: Path) -> int:
         failures.append(f"user_sourced_items: {ue}")
     if confirmed_zero_unsentineled(text):
         failures.append("confirmed 0건인데 명시 sentinel 없음 (확인 게이트 우회 신호)")
+    # N1c — §6 경계 유일성. N1a("§6을 뺀 나머지")와 N1b("§6")는 서로의 여집합이라
+    # 경계가 유일할 때만 정의된다. 여기서 red를 내지 않으면 두 검사가 각자 첫 헤딩을
+    # 골라야 하고, 그 선택이 저자가 옮길 수 있는 경계가 된다.
+    sec6_dup = section6_ambiguous(text)
+    if sec6_dup:
+        failures.append(
+            "payload §6 경계가 유일하게 해석되지 않는다 — " + " · ".join(sec6_dup)
+            + " (「payload에서 §6을 뺀 나머지」(N1a)도 「payload §6」(N1b)도 정의되지 않는다)")
     sec6_absent = any(m.startswith("6.") for m in miss)
-    if not sec6_absent:
-        ce = bijection_c_errors(text)
-        if ce:
-            failures.append(f"bijection C (evidence→§6): {ce}")
-    if not sec6_absent and attribution_block_missing(text):
-        failures.append("§6 출처 표기 블록 부재 (🗣·☑·✎ 세 기호를 모두 담은 인용 줄 필요)")
+    # 경계가 비유일하면 N1b·bijection C를 묻지 않는다 — 그 상태의 앵커 집합은 공집합이라
+    # "앵커가 없다"는 **원인과 어긋난 red**가 되고, 저자는 §6에 앵커를 더 넣으려 든다.
+    if not sec6_absent and not sec6_dup and payload_verbatim_is_s1_only(text):
+        failures.append(
+            f"payload §6 앵커가 {{'S1'}}이 아니다: "
+            f"{sorted(payload_verbatim_anchors(text))} "
+            "(S1만 payload에, 나머지 전량은 audit §6에)")
 
     sec2_absent = any(m.startswith("2.") for m in miss)
     if not sec2_absent:
@@ -766,17 +987,39 @@ def gate(path: Path) -> int:
             pair = audit_pairing_errors(fm, audit_text, path.name)
             if pair:
                 failures.append(f"audit pairing: {pair}")
+            # audit §6도 유일해야 한다 — build_brief_bundle.py가 펜스를 무시하고 **첫**
+            # `## 6.`부터를 원문 블록으로 실으므로, 앞선 가짜 헤딩 하나면 충실도 리뷰어가
+            # 받는 ground truth가 통째로 바뀐다(게이트는 조용하다).
+            audit_sec6_dup = section6_ambiguous(audit_text)
+            if audit_sec6_dup:
+                failures.append(
+                    "audit §6 경계가 유일하게 해석되지 않는다 — " + " · ".join(audit_sec6_dup)
+                    + " (번들 빌더가 이 경계로 ground truth를 싣는다)")
+            if not sec6_absent and not sec6_dup and not audit_sec6_dup:
+                ce = bijection_c_errors(text, audit_text)
+                if ce:
+                    failures.append(f"bijection C (evidence→§6): {ce}")
+            audit_sec6_absent = any(m.startswith("6.") for m in amiss)
+            if not audit_sec6_absent and attribution_block_missing(audit_text):
+                failures.append("audit §6 출처 표기 블록 부재 (🗣·☑·✎ 세 기호를 모두 담은 인용 줄 필요)")
             if not sec5_absent and not any(m.startswith("3.") for m in amiss):
                 ae = bijection_a_errors(text, audit_text)
                 if ae:
                     failures.append(f"bijection A (payload §5↔audit §3): {ae}")
+            if not any(m.startswith("7.") for m in amiss):
+                nk = landscape_keys_declared(text, audit_text)
+                if nk:
+                    failures.append(f"landscape keys not declared in audit §7: {nk}")
 
     sec4_absent = any(m.startswith("4.") for m in miss)
     if not sec4_absent and not landscape_present(text):
         failures.append("External Landscape empty (no entries and no web-disabled sentinel)")
-    unc = landscape_uncited(text)
-    if unc:
-        failures.append(f"uncited landscape entries: {len(unc)}")
+    urls = payload_url_free(text)
+    if urls:
+        failures.append(f"payload에 외부 URL {len(urls)}건 (§6 사용자 원문 제외): {urls[:3]}")
+    unk = landscape_unkeyed(text)
+    if unk:
+        failures.append(f"unkeyed landscape entries: {len(unk)}")
     mal = skepticism_malformed(text)
     if mal:
         failures.append(f"malformed §5 verdict entries: {len(mal)}")
@@ -792,11 +1035,11 @@ def gate(path: Path) -> int:
 
     ok = not failures
     advisories: list[str] = []
-    # 킬 스위치가 verdict를 뒤집었으면 **반드시** 말한다. `_web_disabled()`는 §4 인용 요구와 §5
-    # verdict URL 요구를 동시에 완화해 같은 brief를 red에서 green으로 바꾸는데, 지금까지 stdout·
-    # stderr 어디에도 흔적이 없었다 — 이전 세션에서 export한 env가 남아 있으면 이후 모든 brief가
-    # 이유 없이 통과한다. CLAUDE.md는 graceful degradation에 loud logging을 요구한다. 이 PR이
-    # 추가한 advisories 채널이 바로 그 자리다.
+    # 킬 스위치가 verdict를 뒤집을 수 있으면 **반드시** 말한다. v0.44.0 N1a 이후
+    # `_web_disabled()`가 완화하는 것은 `landscape_present`의 §4 sentinel 경로(#12) 하나
+    # 뿐이지만, 그 하나조차 흔적 없이 완화되면 이전 세션에서 export한 env가 남아 있을 때
+    # 이후 모든 brief가 이유 없이 통과한다. CLAUDE.md는 graceful degradation에 loud
+    # logging을 요구한다. advisories 채널이 그 자리다.
     if _web_disabled():
         advisories.append(WEB_DISABLED_ADVISORY)
     for a in advisories:
@@ -811,11 +1054,11 @@ def main(argv: list[str]) -> int:
         print("usage: check_brief.py <subcommand> <brief.md>", file=sys.stderr)
         return 64
     sub, path = argv[1], Path(argv[2])
-    # `gate`는 advisories JSON으로 알리고, `_web_disabled()`가 결과를 바꾸는 **나머지**
-    # 서브커맨드는 stderr로 알린다. 한쪽만 loud하면 다른 쪽을 쓰는 사람은 완화된 결과를
-    # 완화된 줄 모른 채 받는다 — 킬 스위치는 보안 컨트롤이고 침묵은 그 자체가 결함이다.
-    if sub in ("landscape-citations", "skepticism") and _web_disabled():
-        print(WEB_DISABLED_ADVISORY, file=sys.stderr)
+    # v0.44.0 N1a: `skepticism`(§5 URL 요구)도 지워 kill switch로 완화되는 **단독
+    # 서브커맨드가 이제 하나도 없다** — `landscape-keys`는 앞선 #13 개명에서, `skepticism`은
+    # 이 커밋에서 빠졌다. 남은 유일한 완화 지점은 `gate()` 내부의 `landscape_present`
+    # (#12 sentinel 경로)뿐이고, `gate`는 이미 advisories JSON으로 그것을 알린다 —
+    # 별도 서브커맨드 stderr 알림이 더는 필요 없다(알릴 완화가 없다).
     if sub == "gate":
         return gate(path)
     try:
@@ -826,8 +1069,8 @@ def main(argv: list[str]) -> int:
     if sub == "sections":
         print(json.dumps({"missing": find_missing_sections(text)}, ensure_ascii=False))
         return 0
-    if sub == "landscape-citations":
-        print(json.dumps({"uncited": landscape_uncited(text)}, ensure_ascii=False))
+    if sub == "landscape-keys":
+        print(json.dumps({"unkeyed": landscape_unkeyed(text)}, ensure_ascii=False))
         return 0
     if sub == "skepticism":
         print(json.dumps({"malformed": skepticism_malformed(text)}, ensure_ascii=False))
@@ -861,8 +1104,20 @@ def main(argv: list[str]) -> int:
         print(json.dumps({"errors": frontmatter_errors(text)}, ensure_ascii=False))
         return 0
     if sub == "items":
+        # bijection_c_errors는 v0.43.0부터 2인자다(payload ∪ audit 앵커) — gate()와
+        # 같은 방식으로 audit을 해석해 넘긴다. **빈 리스트로 떨어뜨리지 않는다** — audit을
+        # 못 열었다는 사실과 「위반 없음」은 다른 사실이고, `[]`로 내면 이 표면을 읽는
+        # 쪽이 audit 미해석을 통과로 오독한다.
+        audit_path, audit_err = resolve_audit(path, _frontmatter(text))
+        if audit_err:
+            bij_c = [f"audit 해석 실패 — bijection C 판정 불가: {audit_err}"]
+        else:
+            try:
+                bij_c = bijection_c_errors(text, audit_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError) as exc:
+                bij_c = [f"audit unreadable — bijection C 판정 불가: {exc}"]
         print(json.dumps({"errors": user_sourced_errors(text),
-                          "bijection_c": bijection_c_errors(text),
+                          "bijection_c": bij_c,
                           "bijection_b": bijection_b_errors(text)}, ensure_ascii=False))
         return 0
     print(f"unknown subcommand: {sub}", file=sys.stderr)

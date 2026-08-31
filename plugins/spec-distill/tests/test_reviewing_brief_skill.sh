@@ -127,8 +127,11 @@ has "$W2A" 'docs/superpowers/interview/' \
 # 아래 두 assert는 **실행 라인 앵커**다. 순수 substring(`has`)은 같은 문구를 품은 산문
 # 한 줄로 satisfiable하고, 이 파일의 fence()는 `#` 주석만 거른다 — 실측된 데코이 클래스다
 # (bash 펜스 안 산문 / javascript 펜스 안 산문 둘 다). CR-3 assert가 이미 쓰는 관용구를 따른다.
-grep -qE '^[[:space:]]*BLOB="\$\(python3 "\$PR/scripts/build_brief_inline_blob\.py" ' <<<"$W2A" \
-  && ok "T8: critic 블록이 inline blob 빌더를 실행 라인으로 호출 (줄-시작 앵커)" || no "T8: blob 빌더 호출 라인 부재 (같은 문구의 산문으로는 만족되지 않는다)"
+# task-10: 2-a는 이제 build_brief_bundle.py로 번들(payload + audit §6)을 조립한다 —
+# build_brief_inline_blob.py는 3-a(readback) 전용으로 옮겨갔다(BLOB($sec) 루프가 그
+# 축을 이미 따로 확인한다, 아래).
+grep -qE '^[[:space:]]*python3 "\$PR/scripts/build_brief_bundle\.py" "\$PAYLOAD" "\$AUDIT" > "\$BUNDLE"' <<<"$W2A" \
+  && ok "T8: critic 블록이 번들 빌더를 실행 라인으로 호출 (줄-시작 앵커)" || no "T8: 번들 빌더 호출 라인 부재 (같은 문구의 산문으로는 만족되지 않는다)"
 grep -qE '^[[:space:]]*subagent_type: "spec-distill:brief-critic"' <<<"$W2A" \
   && ok "T8: critic 블록이 brief-critic을 dispatch 라인으로 지목 (줄-시작 앵커)" || no "T8: brief-critic dispatch 라인 부재"
 
@@ -312,8 +315,77 @@ else
 fi
 
 # --- AC1 : 파이프라인 순서 + 진입 첫 액션 ------------------------------------
-grep -qE '^[[:space:]]*python3 "\$PR/scripts/check_verbatim_coverage\.py" "\$PAYLOAD" "\$STATE"' "$SKILL" \
-  && ok "AC1: 완전성 검사 실행 라인 실재 (줄-시작 앵커)" || no "AC1: check_verbatim_coverage.py 호출 라인 부재 (산문 참조는 검사를 돌리지 않는다)"
+# 존재(∃)가 아니라 지배(∀)를 건다: 스킬 전체(진입 첫 액션 + 2-c 재실행, 두 콜사이트)의
+# "실행되는"(펜스 안, `#` 주석 아닌) check_verbatim_coverage.py 호출 라인 수와 그중
+# 3인자(PAYLOAD STATE AUDIT) 호출 라인 수가 **같아야** 등식이 성립한다 — 콜사이트 하나만
+# 2인자로 되돌아가도 두 수가 벌어져 잡힌다(기존 단일 `grep -qE` 존재 검사는 *어딘가* 3인자
+# 라인이 있기만 하면 통과해, 다른 콜사이트가 2인자로 되돌아가도 green이었다 — 그 갭이 usage(64)
+# 로 파이프라인 중간에만 드러났다). `-gt 0`은 두 수가 우연히 똑같이 0이 되는(호출 자체가
+# 사라지는) vacuous-pass를 막는 양성 대조 — 등식만으로는 "0 == 0"도 통과해버린다. 콜사이트
+# 개수(현재 2)는 하드코딩하지 않는다 — 나중에 콜사이트가 하나 더 생기면 리터럴 상수는 그
+# 신규 라인을 검사 밖에 두거나 스퓨리어스 red를 낸다; 두 수 다 파일에서 직접 도출한다.
+# 경로 세그먼트(`"?\$PR/scripts/...\.py"?`)는 따옴표를 **선택**으로 둔다 — 셸은
+# `"$PR/scripts/check_verbatim_coverage.py"`와 `$PR/scripts/check_verbatim_coverage.py`
+# (따옴표 없이) 둘 다 유효한 호출로 받아들이고, 후자로 쓰인 진짜 콜사이트가 있으면 앞은
+# 강제로 한쪽 철자만 요구하다 그 라인을 두 카운트 모두에서 못 세어(TOTAL에서도 빠짐)
+# 등식이 우연히 맞아버린다 — round 2 가 실제로 잡은 결함이다. `^[[:space:]]*python3 `
+# 줄-시작 앵커는 **좁힌 채로 둔다** — 이게 산문·주석을 코퍼스 밖에 두는 부분이고 이미
+# 검증됐다; 앞으로도 넓히지 말 것. 두 카운트는 `$CVC_PATH_RE`로 경로 앵커를 공유한다 —
+# 따로 벌리면 한쪽만 넓히거나 좁혀 등식이 왜곡될 수 있다.
+#
+# round 3 — 연속줄(`\` line continuation)은 **정규식이 개행을 허용하게** 고치지 않고
+# **코퍼스를 만드는 단계에서** bash가 실제로 실행하는 모양으로 합친다. 이 파일이 이미
+# `merge_brief_review.py` 호출에 그 서식을 쓰므로(누군가 재포맷할 개연성) 3인자를 그
+# 서식으로 쓰면 여전히 정확한 호출인데도 등식이 깨져 "2인자로 되돌아갔다"는 오분류를
+# 냈다 — round 2 의 부재(found none) 오분류와 같은 결함 종류다. 순서가 핵심이다:
+# fence_all()(주석을 **아직 벗기지 않은** 펜스 본문)로 물리적 인접성이 살아있는 스트림을
+# 만들고, join_cont()로 그 위에서 `\`를 이은 뒤에야 strip_comments()로 `#` 줄을 뺀다.
+# 반대로 하면(먼저 주석을 지우고 나중에 합치면) 지워진 주석 줄이 있던 자리로 무관한
+# 두 줄이 잘못 이어붙는다(그 줄 하나가 실제로는 이어지지 않았는데도). join_cont()는
+# 이어지는 줄의 들여쓰기를 지우고 이음매에 공백 정확히 1개를 넣어 — 그래서 아래 두
+# 정규식은 이어붙은 뒤에도 여전히 공백 1개를 기대하는 채로 안전하다(정규식 자체는
+# round 2 이후 손대지 않았다). 이 `fence_all`/`join_cont`/`strip_comments`는 이
+# 단언 전용 지역 헬퍼다 — 공유 `fence()`(다른 락들이 쓴다)는 건드리지 않는다.
+#
+# **알려진 한계(고치지 않는다)** — 변수로 우회한 호출은 grep count가 못 본다. 예:
+# `CVC="python3 $PR/scripts/check_verbatim_coverage.py"` 뒤에 `$CVC "$PAYLOAD" "$STATE"
+# "$AUDIT"`처럼 부르면 그 콜사이트는 두 카운트 모두에서 아예 안 보여 등식이 1==1로
+# 공허하게 성립하고, 나중에 그 변수 호출에서 인자를 하나 빼도 절대 안 걸린다. 이 파일이
+# 이미 형제 스크립트에 그 모양을 쓰고 있어서(`BRS="python3 $PR/scripts/brief_review_state.py"`)
+# 가상의 걱정이 아니다 — DRY 리팩터가 그대로 들여올 수 있다. 고치지 않는 이유: 변수 대입을
+# 뚫어보려면 데이터 흐름 추적이 필요한데, 그건 grep count와는 질적으로 다른 도구고 콜사이트
+# 2개짜리 점검에 비해 과하다. grep 오라클은 식별자와 주변 텍스트를 재지 의미를 재지
+# 않는다 — 그 천장은 실재하고 이 단언은 거기 닿았다. 이 패턴들을 다시 만질 사람은
+# 간접 참조(변수 우회)를 다음에 살펴야 할 모양으로 알아두라.
+fence_all() { awk '/^```bash$/{f=1;next} /^```$/{f=0;next} f' <<<"$1"; }
+join_cont() {
+  # 주석 줄(`#`로 시작)은 이어붙이는 원천이 될 수 없다 — 실제 bash에서 `# ... \\`는
+  # 다음 줄을 이어붙이지 않는다(주석은 물리적 줄 끝까지고, 그 안의 `\\`는 그냥 텍스트다).
+  # 이 가드가 없으면 주석 줄에 우연히 달린 trailing backslash가 다음의 **진짜** 호출
+  # 줄을 통째로 삼켜 strip_comments()가 그 합쳐진 줄째로 버린다 — 실행 라인이 조용히
+  # 사라지는 것이다("주석 위로 다음 줄이 끌려온다"는 경우).
+  awk '
+    {
+      if ($0 !~ /^[[:space:]]*#/ && sub(/\\$/, "")) {
+        gsub(/[[:space:]]+$/, "", $0); partial = partial $0 " "; next
+      }
+      gsub(/^[[:space:]]+/, "", $0); print partial $0; partial = ""
+    }
+    END { if (partial != "") print partial }
+  ' <<<"$1"
+}
+strip_comments() { grep -v '^[[:space:]]*#' <<<"$1"; }
+ALL_SKILL_BASH="$(strip_comments "$(join_cont "$(fence_all "$(cat "$SKILL")")")")"
+CVC_PATH_RE='"?\$PR/scripts/check_verbatim_coverage\.py"?'
+CVC_TOTAL="$(grep -cE '^[[:space:]]*python3 '"$CVC_PATH_RE"'([[:space:]]|$)' <<<"$ALL_SKILL_BASH")"
+CVC_3ARG="$(grep -cE '^[[:space:]]*python3 '"$CVC_PATH_RE"' "\$PAYLOAD" "\$STATE" "\$AUDIT"' <<<"$ALL_SKILL_BASH")"
+if [[ "$CVC_TOTAL" -gt 0 && "$CVC_TOTAL" -eq "$CVC_3ARG" ]]; then
+  ok "AC1: check_verbatim_coverage.py 실행 라인 전부(${CVC_TOTAL}건) 3인자 — audit 유추 없음"
+elif [[ "$CVC_TOTAL" -eq 0 ]]; then
+  no "AC1: check_verbatim_coverage.py 실행 호출을 스킬에서 하나도 찾지 못했다 — 콜사이트가 지워졌거나 이름이 바뀌었다(2인자 회귀가 아니라 부재)"
+else
+  no "AC1: check_verbatim_coverage.py 호출 ${CVC_TOTAL}건 중 3인자는 ${CVC_3ARG}건 — 2인자로 되돌아간 콜사이트가 있다(usage(64)로 중간에만 드러난다)"
+fi
 grep -qE '첫 액션' "$SKILL" && ok "AC1: 진입 첫 액션 명시" || no "AC1: 첫 액션 명시 부재"
 
 # --- /qg iter-1 CRITICAL(증폭기) : rc 표 row 0이 advisories를 라우팅한다 -----
@@ -345,12 +417,21 @@ has "$W_ENTRY" '구조 위반' \
 # 전체파일 `grep -c == 2`는 **한 섹션에 둘 다 넣어도** 통과한다(iter-2가 mutation으로
 # 실증: readback 절의 catch-all을 지우고 critic 절에 복제 → 122/122 green). 각 dispatch
 # 지점의 **자기 윈도우 안에서** 확인한다.
+# task-10: 2-a는 이제 build_brief_bundle.py(번들: payload + audit §6)를 받고, 3-a는
+# 그대로 build_brief_inline_blob.py(payload-only)를 받는다 — 두 축이 갈리므로 섹션마다
+# 다른 빌더 호출 패턴을 요구한다. 한 정규식(alternation)으로 두 섹션을 함께 검사하면
+# 한쪽 빌더 호출이 사라져도 다른 쪽 매치로 조용히 통과한다(이 파일의 다른 축별-카운트
+# 락들과 같은 이유 — "축마다 센다" 관용구).
 for sec in '2-a' '3-a'; do
   W_BLOB="$(scoped_window "^### ${sec}\\." '^#{1,3} ')"
   minlines "$W_BLOB" 6 \
     && ok "BLOB($sec): 윈도우 확보" \
     || no "BLOB($sec): 윈도우가 비었다 — 아래 assert가 vacuous하다"
-  grep -qE '^[[:space:]]*BLOB="\$\(python3 "\$PR/scripts/build_brief_inline_blob\.py" ' <<<"$W_BLOB" \
+  case "$sec" in
+    2-a) BUILDER_RE='^[[:space:]]*python3 "\$PR/scripts/build_brief_bundle\.py" ' ;;
+    3-a) BUILDER_RE='^[[:space:]]*BLOB="\$\(python3 "\$PR/scripts/build_brief_inline_blob\.py" ' ;;
+  esac
+  grep -qE "$BUILDER_RE" <<<"$W_BLOB" \
     && ok "BLOB($sec): blob 빌더 호출이 이 윈도우 안에 실재" \
     || no "BLOB($sec): 이 dispatch 지점에 blob 빌더 호출이 없다"
   has "$W_BLOB" '그 외 non-zero는 `2`와 동일하게 취급' \
@@ -554,4 +635,170 @@ grep -qE '^[[:space:]]*if grep -q .\\?"escalate": true' <<<"$W2C_BASH" \
 grep -qE '^[[:space:]]*python3 "\$PR/scripts/brief_review_state\.py" can-redispatch "\$STATE" > "\$CAN_OUT"' <<<"$W2C_BASH" \
   && ok "A4: can-redispatch stdout을 파일로 잡아 분기 근거로 쓴다" \
   || no "A4: can-redispatch stdout을 잡지 않는다 — escalate 키를 읽을 경로가 없다"
+
+# --- U4 (task-10) : 번들을 받는 축이 셋으로 갈린다 --------------------------
+# 충실도(critic·codex 2회)는 번들, direction·readback은 payload 그대로 — 축이 하나라도
+# 잘못 갈리면 재리뷰 라운드의 codex가 원문 없는 payload를 계속 받거나(fail-open), 냉독이
+# 하류가 절대 보지 않는 문서를 재게 된다(측정 무의미).
+
+# 번들을 받는 축이 전부 번들을 받는가 — 하나라도 payload 면 fail-open 이 되살아난다
+n_bundle="$(grep -cE 'run_brief_codex_reviewer\.sh" fidelity "\$BUNDLE"' "$SKILL")"
+n_fid="$(grep -cE 'run_brief_codex_reviewer\.sh" fidelity' "$SKILL")"
+[[ "$n_bundle" -eq "$n_fid" && "$n_fid" -ge 1 ]] \
+  && ok "U4: fidelity codex 호출 $n_fid 개가 전부 번들을 받는다" \
+  || no "U4: fidelity 호출 $n_fid 개 중 $n_bundle 개만 번들 — 재리뷰가 원문 없는 payload 를 본다"
+
+# --- F2 (task-10 fix round 1) : 번들 조립은 2-a~2-b 구간에서 정확히 1회 --------
+# 결함: "한 번만 조립한다"는 SKILL.md의 규범 문장에 대응하는 기계 락이 없었다 — 2-b에
+# 번들 재조립 호출을 하나 더 넣어도(critic이 본 것과 codex가 보는 것이 서로 다른 바이트일
+# 수 있는 모양) 전체 스위트가 green이었다(2026-08-31 mutation 실측). 이 파일이 이미
+# n_bundle/n_fid에 쓰는 것과 같은 실행-라인 앵커(주석·산문은 걸리지 않는다)로 조립
+# 호출 자체를 센다.
+#
+# 스코프는 **전체 파일이 아니라 2-a~2-b 구간**으로 좁힌다(2-c 헤더 직전에서 끊는다).
+# 이유: 2-c는 fresh critic 재dispatch를 "2-a 블록 그대로"라는 **참조**로만 서술하므로
+# 오늘은 리터럴 조립 호출이 파일 전체에 정확히 1개(2-a)뿐이지만, 그 참조를 나중에
+# 실제 리터럴 재조립 호출로 펼쳐 쓰는 것은 **정당한 설계**다(수정된 payload/audit에서
+# 다시 조립해야 한다는 요구와 정합) — 그 경우 전체-파일 `== 1`은 정당한 변경에 거짓
+# RED를 낸다. 반면 2-a~2-b 구간 안에서는 같은 라운드 안에서 같은 두 소비자
+# (critic·codex #2 최초 실행)가 같은 바이트를 봐야 한다는 불변식이 **항상** 참이어야
+# 하므로, 그 구간에 대해서만 `== 1`을 무조건 강제한다.
+W_2A2B="$(scoped_window '^### 2-a\.' '^### 2-c\.')"
+n_assembly_2a2b="$(grep -cE '^[[:space:]]*python3 "\$PR/scripts/build_brief_bundle\.py"' <<<"$W_2A2B")"
+[[ "$n_assembly_2a2b" -eq 1 ]] \
+  && ok "F2: 2-a~2-b 구간에 번들 조립 호출이 정확히 1회 (critic·codex #2가 같은 바이트를 본다)" \
+  || no "F2: 2-a~2-b 구간의 번들 조립 호출이 ${n_assembly_2a2b}회 — critic과 codex #2가 서로 다른 바이트를 볼 수 있다"
+
+# 냉독은 payload-only 여야 한다 (반대 방향 락 — 양성 짝)
+W_RB="$(scoped_window '^### 3-a\.' '^#')"
+printf '%s' "$W_RB" | grep -qF 'build_brief_inline_blob.py' \
+  && ok "U4: 냉독은 payload-only blob 을 유지한다" \
+  || no "U4: 냉독이 번들을 받는다 — 하류가 안 보는 문서를 재게 된다"
+
+# 지시문이 라벨 토큰을 축자로 가리키는가
+grep -qF '<<<AUDIT-VERBATIM>>>' "$SD/scripts/brief-codex-fidelity-checklist.md" \
+  && ok "U4: fidelity 체크리스트가 라벨 토큰을 가리킨다" \
+  || no "U4: 체크리스트가 여전히 헤딩 리터럴을 가리킨다 — 번들을 줘도 지시가 안 옮겨간다"
+grep -qF '<<<AUDIT-VERBATIM>>>' "$SD/agents/brief-critic.md" \
+  && ok "U4: critic agent 정의가 라벨 토큰을 가리킨다" || no "U4: critic 지시문 미갱신"
+
+# G6 이 성공 조건 안에 있는가
+grep -qE 'G1[–-]G6 .*0건' "$SKILL" \
+  && ok "U4: G6 이 성공 조건에 포함됐다" \
+  || no "U4: G6 을 표에만 더하고 성공 조건은 G1–G5 — 관측돼도 아무것도 안 막는다"
+
+# M1 (최종 리뷰): G6 이 SKILL 안에서만 살고 **출하되는 두 표면**에는 없었다 —
+# 감사 템플릿의 냉독 행은 `<G1..G5 중 어느 클래스>`, README 는 두 자리 다 G1–G5.
+# G6 관측을 적을 칸이 템플릿에 없으면 그 클래스는 실무에서 존재하지 않는 것과 같다.
+# 상한 값은 세 파일에서 각각 **읽고**, 단언하는 것은 그 셋이 **같다**는 관계다
+# (기대값을 피검자에서 끌어오지 않는다). 관계만 두면 셋이 함께 사라지는 변형에서
+# 공허해지므로 ① 표에서 도출한 상한의 하한 6 과 ② 파일당 범위 표기 ≥1 을 함께 못 박는다.
+# README 의 bare `G6`(리뷰 dispatch 상한, 다른 네임스페이스)와 섞이지 않도록 **범위
+# 표기**(`G1..G<N>` / `G1–G<N>`)만 센다.
+GAP_ERR="$(mktemp -t sdGaperr)"
+gap_report="$(python3 - "$SKILL" "$SD/templates/interview-audit-template.md" "$SD/README.md" \
+    2>"$GAP_ERR" <<'PY'
+import re, sys
+
+CLASS_ROW = re.compile(r"(?m)^\|\s*G(\d+)\s*\|")
+RANGE = re.compile(r"G1\s*(?:\.\.|[–-])\s*G(\d+)")
+classes = [int(n) for n in CLASS_ROW.findall(open(sys.argv[1], encoding="utf-8").read())]
+top = max(classes) if classes else 0
+print("TOP\t%d" % top)
+for label, path in zip(("SKILL", "audit-template", "README"), sys.argv[1:4]):
+    ns = [int(n) for n in RANGE.findall(open(path, encoding="utf-8").read())]
+    state = "OK" if ns and all(n == top for n in ns) else "BAD"
+    print("RANGE\t%s\t%d\t%s" % (label, len(ns), state))
+PY
+)"
+gap_rc=$?
+[[ "$gap_rc" -eq 0 ]] \
+  && ok "M1(양성대조): gap 클래스 추출기가 정상 종료했다 (rc=0)" \
+  || no "M1(양성대조): gap 클래스 추출기가 rc=$gap_rc 로 죽었다 — 아래 단언은 무의미하다: $(tr '\n' ' ' < "$GAP_ERR" | tail -c 200)"
+rm -f "$GAP_ERR"
+gap_top="$(grep '^TOP'$'\t' <<<"$gap_report" | cut -f2)"
+{ [[ "$gap_top" =~ ^[0-9]+$ ]] && [[ "$gap_top" -ge 6 ]]; } \
+  && ok "M1(양성대조): SKILL gap 클래스 표의 상한이 $gap_top (≥6)" \
+  || no "M1(양성대조): SKILL gap 클래스 표에서 상한을 못 읽었다 ('$gap_top') — 관계 단언이 공허해진다"
+gap_rows="$(grep -c '^RANGE'$'\t' <<<"$gap_report" || true)"
+[[ "$gap_rows" -eq 3 ]] \
+  && ok "M1(양성대조): 범위 표기 검사가 정확히 3파일이다" \
+  || no "M1(양성대조): 범위 표기 검사가 3파일이 아니라 $gap_rows — 리포트가 비었거나 잘렸다(단언 소실)"
+while IFS=$'\t' read -r tag label cnt state; do
+  [[ "$tag" == "RANGE" ]] || continue
+  [[ "$state" == "OK" ]] \
+    && ok "M1: ${label} 의 gap 범위 표기 ${cnt}건이 전부 G1–G${gap_top}" \
+    || no "M1: ${label} 의 gap 범위 표기(${cnt}건)가 G1–G${gap_top} 과 어긋난다 — 새 클래스를 적을 칸이 없다"
+done <<< "$gap_report"
+
+# --- F1 (task-10 fix round 1) : 2-a dispatch 프롬프트가 라벨 토큰을 가리킨다 -----
+# 결함: 체크리스트·agent 정의는 라벨 토큰으로 갱신됐는데, critic을 실제로 dispatch하는
+# Agent() 프롬프트 문자열(SKILL.md 자체, 2-a) 은 손대지 않아 "...said in §6?"를 그대로
+# 남기고 있었다 — critic이 받는 번들 바이트는 맞지만, dispatch 프롬프트가 지목하는 절은
+# audit_verbatim()이 헤딩을 벗겨 이제 번들에 하나뿐인 payload 쪽 `## 6. 사용자 원문`
+# (S1 하나)이었다. $W2A 는 위 T8 블록에서 이미 도출된 윈도우를 재사용한다(같은 스크립트
+# 실행 안에서 셸 변수가 살아 있다 — 다시 awk 를 돌릴 필요 없다).
+printf '%s' "$W2A" | grep -qF '<<<AUDIT-VERBATIM>>>' \
+  && ok "F1: 2-a dispatch 프롬프트가 라벨 토큰을 가리킨다" \
+  || no "F1: 2-a dispatch 프롬프트가 라벨 토큰을 가리키지 않는다 — 체크리스트만 고치고 이 프롬프트는 안 고쳤다"
+printf '%s' "$W2A" | grep -qE 'said in §6' \
+  && no "F1: 2-a dispatch 프롬프트가 여전히 헤딩 리터럴(§6)을 가리킨다 — 번들엔 그 헤딩이 payload 쪽 S1 하나뿐이다" \
+  || ok "F1: 2-a dispatch 프롬프트에 §6 헤딩 리터럴이 없다"
+
+# ── ORD: 구조 게이트가 첫 번들보다 먼저 돈다 (v0.47.0) ──────────────────────
+# 이 skill 은 model-invocable 이고 description 이 직접 진입을 초대한다. 그런데 이 파일 안에서
+# `check_brief.py gate` 가 도는 유일한 자리는 2-c(충실도 수정 후 재실행)였고, 진입 첫 액션은
+# `check_verbatim_coverage.py`(강등 가능한 entry check)였다 — 즉 **첫 번들은 게이트를 통과한
+# 적 없는 payload 로 조립될 수 있었다.** 유일한 사전 게이트는 다른 skill
+# (`conducting-interview/references/finishing.md`)에 있어서, 이 skill 로 직접 들어오면 없다.
+#
+# 락은 **문면이 아니라 위치**를 잰다: 이 파일의 bash 라인들을 순서대로 놓고, 첫
+# `check_brief.py gate` 의 인덱스가 첫 `build_brief_bundle.py` 의 인덱스보다 앞인가.
+# 두 앵커가 **둘 다 실재**함을 먼저 단언한다 — 하나라도 없으면 부등식이 공허하다.
+ORD_ERR="$(mktemp -t sdOrderr)"
+ord_report="$(python3 - "$SKILL" 2>"$ORD_ERR" <<'PY'
+import pathlib, re, sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+# 펜스 안 bash 라인만, 등장 순서대로. 주석은 뺀다(주석에 적은 호출은 실행이 아니다).
+# 리터럴 백틱을 이 블록 안에 적지 않는다 — 여기는 $( ) 안의 heredoc 이라, 세 겹 백틱이
+# 백틱 명령치환을 열어 셸 파싱이 통째로 깨진다(리포 실측 footgun; 이 주석을 쓰다가 두 번
+# 재현했다). 그래서 코드도 주석도 chr(96) 으로만 말한다.
+FENCE = chr(96) * 3
+lines, inside = [], False
+for ln in text.splitlines():
+    if ln.startswith(FENCE):
+        inside = not inside
+        continue
+    if inside and not re.match(r"^\s*#", ln):
+        lines.append(ln)
+
+GATE = re.compile(r'check_brief\.py"?\s+gate')
+BUNDLE = re.compile(r'build_brief_bundle\.py')
+gate_at = next((i for i, ln in enumerate(lines) if GATE.search(ln)), -1)
+bundle_at = next((i for i, ln in enumerate(lines) if BUNDLE.search(ln)), -1)
+print("ANCHOR\tgate\t%d" % gate_at)
+print("ANCHOR\tbundle\t%d" % bundle_at)
+print("ORDER\t%s" % ("OK" if 0 <= gate_at < bundle_at else "BAD"))
+PY
+)"
+ord_rc=$?
+[[ "$ord_rc" -eq 0 ]] \
+  && ok "ORD(양성): 순서 추출기가 정상 종료했다 (rc=0)" \
+  || no "ORD(양성): 추출기가 rc=$ord_rc 로 죽었다 — 아래 단언은 무의미하다: $(tr '\n' ' ' < "$ORD_ERR" | tail -c 200)"
+rm -f "$ORD_ERR"
+ord_rows="$(grep -c '^ANCHOR' <<<"$ord_report" || true)"
+[[ "$ord_rows" -eq 2 ]] \
+  && ok "ORD(양성): 앵커 행이 정확히 2다" \
+  || no "ORD(양성): 앵커 행이 2가 아니라 $ord_rows — 리포트가 비었거나 잘렸다(단언 소실)"
+while IFS="$(printf '\t')" read -r _t name idx; do
+  [[ "$_t" == "ANCHOR" ]] || continue
+  [[ "${idx:-'-1'}" -ge 0 ]] \
+    && ok "ORD(양성): '$name' 호출이 SKILL bash 에 실재한다 (index $idx)" \
+    || no "ORD(양성): '$name' 호출을 못 찾았다 — 아래 순서 단언이 공허하다"
+done <<< "$ord_report"
+grep -q '^ORDER'"$(printf '\t')"'OK' <<<"$ord_report" \
+  && ok "ORD: 구조 게이트가 첫 번들 조립보다 먼저 돈다" \
+  || no "ORD: 첫 번들이 게이트보다 먼저 조립된다 — 검증되지 않은 audit 원문이 충실도 리뷰어에게 ground truth 로 나간다"
+
 finish

@@ -17,10 +17,8 @@ user_sourced_items:
 # Verbatim NFKC — Interview Brief
 
 ## 6. 사용자 원문
-
 - **S1** 🗣 최초 요청:
   > "항목 1 을 지운다"
-
 ## 7. Next Action
 
 - 없음

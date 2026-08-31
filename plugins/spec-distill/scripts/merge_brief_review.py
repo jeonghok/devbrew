@@ -85,8 +85,10 @@ def extract_critic_verdict(text: str) -> tuple[str | None, str | None]:
 
     `search()`(첫 매치)를 쓰지 않는다. `agents/brief-critic.md`의 출력 형식 절에는
     리터럴 `**Status:** Approved` / `**Status:** Issues Found`가 **디코이로** 들어
-    있고, brief 본문(§6 사용자 원문 = 비신뢰 verbatim)이 critic 프롬프트에 그대로
-    inline되므로 원문에 심긴 문자열도 같은 표면이다. 첫 매치를 취하면 복창·주입이
+    있고, 사용자 원문(v0.45.0부터 payload §6의 `S1` 하나가 아니라
+    `build_brief_bundle.py`가 실은 audit §6 전량 = 비신뢰 verbatim)이 critic
+    프롬프트에 그대로 inline되므로 원문에 심긴 문자열도 같은 표면이다 — 번들 도입
+    전엔 주입 표면이 항목 1건이었지만 지금은 전량이다. 첫 매치를 취하면 복창·주입이
     실제 판정보다 앞서 잡힌다.
 
     형제 규칙과 정렬한다 — `codex_findings_to_yaml.py`는 `matches[-1]`을 쓰며
@@ -145,9 +147,11 @@ def extract_critic_issues(text: str, ledger: Ledger) -> tuple[list[dict], bool, 
         return [], True, []
     m = matches[-1]
     if len(matches) > 1:
-        # 마지막을 채택하되(형제 규칙) **조용히 넘어가지 않는다.** brief 본문(§6 = 비신뢰
-        # verbatim)이 critic 프롬프트에 inline되므로, 뒤에 붙은 블록이 권위를 갖는다는 사실
-        # 자체가 주입 표면이다. 다중 블록은 판독 불가로 표시해 escalate를 만든다.
+        # 마지막을 채택하되(형제 규칙) **조용히 넘어가지 않는다.** 사용자 원문(v0.45.0부터
+        # 번들의 audit §6 전량 = 비신뢰 verbatim, 이전엔 payload §6의 `S1` 하나)이 critic
+        # 프롬프트에 inline되므로, 뒤에 붙은 블록이 권위를 갖는다는 사실 자체가 주입 표면이다
+        # — 원문 항목이 늘어난 만큼 표면도 늘었다. 다중 블록은 판독 불가로 표시해 escalate를
+        # 만든다.
         extra_reason = (f"sentinel 블록 {len(matches)}개 — 어느 것이 리뷰어의 실제 출력인지 "
                         "확정 불가(마지막 블록을 채택했으나 그대로 신뢰하지 않는다)")
     else:

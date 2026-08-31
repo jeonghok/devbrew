@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
-"""spec-distill — payload §6 원문 완전성 검사 (Spec B AC10/AC11/AC12/AC14).
+"""spec-distill — payload/audit §6 원문 완전성 검사 (Spec B AC10/AC11/AC12/AC14).
 
-payload(§6 사용자 원문)와 state.local.md(`user_statements` 원장)를 대조한다.
-`check_brief.py`와 달리 **두 파일**을 읽는다 — 우회에 양쪽 조작이 필요하므로 이빨이
+payload(§6 `S1`)와 audit(§6 `S2` 이상)의 합집합을 state.local.md(`user_statements`
+원장)와 대조한다. v0.43.0부터 §6 원문 자체가 payload·audit 두 파일에 나뉘어 산다 —
+`S1`은 payload에, `S2` 이상은 audit에(설계 §2 「payload/audit 분리」). 그래서 이
+스크립트는 **세 파일**을 읽는다 — 우회에 세 곳 모두의 조작이 필요하므로 이빨이
 있다(spec §6.3). 게이트를 분리해 둔 덕에 `check_brief.py`의 "brief 파일만 읽는다"
 불변식이 유지된다(AC16 · E12 · E11).
+
+audit 경로는 호출자가 **명시**해야 한다(3번째 CLI 인자) — payload 파일명이나
+frontmatter에서 유도하지 않는다. `check_brief.py`의 `resolve_audit()`이 stem을
+유도하는 것은 payload가 남의 audit을 자기 것이라 부르지 못하게 **거절**하는 것이고,
+여기서는 그 반대다 — 무엇을 대조 재료로 쓸지 유추가 실패하면 조용하고, 잘못된
+재료로 검증을 태우는 것이 아예 안 하는 것보다 나쁘다(아래 `main()` 참조).
 
   L1: state `user_statements[].id` ⊆ payload §6 `**S<N>**` 앵커 집합.  위반 → red
   L2: 정규화 후 payload §6 항목 본문이 state `text`를 **포함**하는가.   위반 → red
@@ -47,14 +55,20 @@ import sys
 import unicodedata
 from pathlib import Path
 
+# §6 경계는 이 파일이 계산하지 않는다 — `scripts/section6.py` 한 곳이다. 이 파일의 옛
+# 종결 규칙(`^##\s`)은 게이트(`^##\s+\d+\.`, 펜스 밖)보다 이르게 끊어, 같은 문서가 두
+# 소비자에게 다른 §6 을 갖게 했다(v0.47.0).
+_SCRIPTS_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+import section6  # noqa: E402
+
 EXIT_OK = 0
 EXIT_VIOLATION = 1
 EXIT_INDETERMINATE = 3
 EXIT_INTERNAL = 4
 EXIT_USAGE = 64
 
-SECTION6_RE = re.compile(r"^##\s*6\.", re.MULTILINE)
-NEXT_SECTION_RE = re.compile(r"^##\s", re.MULTILINE)
 ITEM_RE = re.compile(r"^\s*[-*]\s+\*\*(S\d+)\*\*(.*)$")
 # P21 canonical placeholder 토큰 (conducting-interview SKILL.md의 P21 줄과 같은 집합).
 # 라벨 문자류는 `[\w.-]` — 파이썬 3에서 `\w`는 유니코드 인식이라 `[A-Za-z0-9_]`에
@@ -203,15 +217,21 @@ def parse_user_statements(fm: str) -> list[dict]:
     return items
 
 
-def parse_payload_section6(text: str) -> dict[str, str]:
-    """payload §6의 `**S<N>**` 항목 → 본문 매핑. 본문은 헤더 줄 *다음* 줄들이다
-    (헤더 줄은 출처 표기이고 원문이 아니다). 다음 줄이 없으면 헤더의 `:` 뒤를 쓴다."""
-    m = SECTION6_RE.search(text)
-    if not m:
-        raise ParseError("payload에 '## 6.' 섹션이 없다")
-    rest = text[m.end():]
-    nxt = NEXT_SECTION_RE.search(rest)
-    body = rest[: nxt.start()] if nxt else rest
+def parse_section6(text: str, label: str) -> dict[str, str]:
+    """`## 6.` 의 `**S<N>**` 항목 → 본문 매핑. 본문은 헤더 줄 *다음* 줄들이다
+    (헤더 줄은 출처 표기이고 원문이 아니다). 다음 줄이 없으면 헤더의 `:` 뒤를 쓴다.
+
+    v0.43.0: payload와 audit 양쪽에 쓰인다. `label`은 오류 메시지 전용이다 —
+    "어느 문서의 §6이 없는가"가 안 보이면 호출자가 잘못된 파일을 고친다.
+    """
+    body = section6.body(text)
+    if body is None:
+        amb = section6.ambiguities(text)
+        if amb:
+            # 부재가 아니라 **구조 위반**이다 — 「검사 불가(3)」로 내리면 어느 §6 을 봤어야
+            # 하는지 아무도 모른 채 전 statement 의 L1·L2 가 skip 된다.
+            raise StructuralViolation(f"{label} §6 경계가 유일하지 않다 — {amb[0]}")
+        raise ParseError(f"{label}에 '## 6.' 섹션이 없다")
     bodies: dict[str, list[str]] = {}
     heads: dict[str, str] = {}
     order: list[str] = []
@@ -225,7 +245,7 @@ def parse_payload_section6(text: str) -> dict[str, str]:
                 # set()으로 모아 중복을 **아예 보지 않으므로**, 여기서 3(검사 불가)으로
                 # 내면 그 사실을 아무도 잡지 못한 채 전 statement의 L1·L2가 skip된다.
                 # 중복 앵커는 판독 실패가 아니라 append-only 규칙의 구조적 위반이다.
-                raise StructuralViolation(f"payload §6에 {cur} 앵커가 중복 — append-only 위반")
+                raise StructuralViolation(f"{label} §6에 {cur} 앵커가 중복 — append-only 위반")
             bodies[cur] = []
             heads[cur] = m2.group(2)
             order.append(cur)
@@ -242,7 +262,29 @@ def parse_payload_section6(text: str) -> dict[str, str]:
     return out
 
 
-def run(payload_path: Path, state_path: Path) -> tuple[int, dict]:
+def parse_section6_union(payload_text: str, audit_text: str) -> dict[str, str]:
+    """payload §6 ∪ audit §6. `S1`은 payload에, `S2` 이상은 audit에 산다.
+
+    한쪽 절 부재를 **조용한 코퍼스 축소로 처리하지 않는다** — 그러면
+    "원문 완전성 통과"가 거짓이 된다. 양쪽 다 ParseError를 그대로 올린다
+    (호출자가 exit 3으로 바꾼다 — 검사 불가는 위반이 아니지만 통과도 아니다).
+
+    같은 앵커가 양쪽에 있으면 **append-only 위반**이다. 오늘 payload 안의 중복이
+    구조 위반인 것과 같은 이유이며, 코퍼스가 합집합이 됐으므로 집행도 합집합
+    위에서 돈다 — 안 그러면 규범만 audit으로 가고 기계 집행은 payload에 남는다.
+    """
+    pay = parse_section6(payload_text, "payload")
+    aud = parse_section6(audit_text, "audit")
+    both = sorted(set(pay) & set(aud))
+    if both:
+        raise StructuralViolation(
+            f"{', '.join(both)} 앵커가 payload §6과 audit §6 양쪽에 — append-only 위반")
+    merged = dict(pay)
+    merged.update(aud)
+    return merged
+
+
+def run(payload_path: Path, state_path: Path, audit_path: Path) -> tuple[int, dict]:
     result: dict = {"missing_ids": [], "not_contained": [], "advisories": []}
     try:
         payload_text = payload_path.read_text(encoding="utf-8")
@@ -255,10 +297,16 @@ def run(payload_path: Path, state_path: Path) -> tuple[int, dict]:
         result["advisories"].append(f"검사 불가 — state unreadable: {exc}")
         return EXIT_INDETERMINATE, result
     try:
-        # payload를 **먼저** 판다. 순서를 뒤집으면 state의 ParseError가 payload의
-        # StructuralViolation을 선점해, state에서 키 하나만 빼는 것으로 구조 위반(차단)이
-        # 검사 불가(계속)로 되돌아간다 — state는 저자가 쓰는 git-ignored 파일이다.
-        items = parse_payload_section6(payload_text)
+        audit_text = audit_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        result["advisories"].append(f"검사 불가 — audit unreadable: {exc}")
+        return EXIT_INDETERMINATE, result
+    try:
+        # payload(+audit)를 **먼저** 판다. 순서를 뒤집으면 state의 ParseError가
+        # payload의 StructuralViolation을 선점해, state에서 키 하나만 빼는 것으로 구조
+        # 위반(차단)이 검사 불가(계속)로 되돌아간다 — state는 저자가 쓰는 git-ignored
+        # 파일이다.
+        items = parse_section6_union(payload_text, audit_text)
         statements = parse_user_statements(_frontmatter(state_text))
     except StructuralViolation as exc:
         result["not_contained"].append("§6")
@@ -337,12 +385,12 @@ def main(argv: list[str]) -> int:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, ValueError):
             pass
-    if len(argv) != 3:
-        print("usage: check_verbatim_coverage.py <payload> <state.local.md>",
+    if len(argv) != 4:
+        print("usage: check_verbatim_coverage.py <payload> <state.local.md> <audit>",
               file=sys.stderr)
         return EXIT_USAGE
     try:
-        code, result = run(Path(argv[1]), Path(argv[2]))
+        code, result = run(Path(argv[1]), Path(argv[2]), Path(argv[3]))
     except Exception as exc:  # noqa: BLE001 — 계약: 어떤 예외도 exit 4 (1로 새지 않는다)
         print(json.dumps({"missing_ids": [], "not_contained": [],
                           "advisories": [f"내부 오류: {type(exc).__name__}: {exc}"]},

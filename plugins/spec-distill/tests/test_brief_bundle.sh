@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+set -u
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+SD="$REPO_ROOT/plugins/spec-distill"
+B="$SD/scripts/build_brief_bundle.py"
+FX="$SD/tests/fixtures"
+fail=0; ok(){ printf '  ok  %s\n' "$1"; }; no(){ printf '  NO  %s\n' "$1"; fail=1; }
+
+out="$(python3 "$B" "$FX/interview-brief-valid.md" "$FX/interview-brief-valid.audit.md" 2>&1)"; rc=$?
+[[ $rc -eq 0 ]] && ok "T1: 정상 경로 rc 0" || no "T1: 정상 경로 rc $rc"
+printf '%s' "$out" | grep -qF '<<<PAYLOAD>>>' && ok "T2: PAYLOAD 라벨" || no "T2: PAYLOAD 라벨 부재"
+printf '%s' "$out" | grep -qF '<<<AUDIT-VERBATIM>>>' && ok "T3: AUDIT-VERBATIM 라벨" || no "T3: 라벨 부재"
+
+# (ㄴ) 실린 절의 내부 헤딩은 벗긴다 — 안 벗기면 `## 6. 사용자 원문` 이 번들에 둘이 되고
+# 「§6 을 보라」는 지시가 먼저 나오는 payload(S1 하나)에 걸린다. 이 절이 닫으려는 fail-open 이다.
+n="$(printf '%s' "$out" | grep -cF '## 6. 사용자 원문')"
+[[ "$n" -le 1 ]] && ok "T4: 번들에 §6 헤딩이 최대 1개 (동명 충돌 없음)" \
+  || no "T4: §6 헤딩이 $n 개 — audit 절 헤딩을 안 벗겼다"
+
+# audit §6 의 S2+ 가 실제로 실렸다 (양성 대조 — 라벨만 있고 내용이 비면 무의미)
+printf '%s' "$out" | grep -qE '\*\*S[2-9][0-9]*\*\*' \
+  && ok "T5: audit §6 항목이 번들에 실렸다" || no "T5: 라벨만 있고 원문이 없다"
+
+# rc 2 : audit 을 안 주면
+python3 "$B" "$FX/interview-brief-valid.md" >/dev/null 2>&1
+[[ $? -eq 2 ]] && ok "T6: audit 인자 없음 → rc 2" || no "T6: audit 없이 조립했다 (fail-open)"
+# rc 2 : audit 에 §6 이 없으면.
+# **쌍의 이름을 맞춘다.** v0.47.0 이 「게이트가 축복한 audit == 빌더가 읽는 audit」을 결속한
+# 뒤로, 다른 인터뷰의 audit 파일을 그냥 넘기면 rc 2 가 **신원 불일치**로 난다 — 그러면 이
+# 단언은 §6 부재를 재는 것을 그만두고 「원문 없이 조립했다」를 영영 못 잡는다(같은 rc 를
+# 다른 이유로 받는 위양성). 그래서 stem 이 맞는 쌍을 임시 디렉토리에 세운다.
+T7D="$(mktemp -d)" || exit 1
+cp "$FX/interview-brief-valid.md" "$T7D/interview-brief-valid.md"
+# 번호까지 바꾼다. 제목만 바꾸면 §6 은 **여전히 있다** — 경계 매처는 제목을 요구하지 않고
+# (요구하면 `## 6. 참고 자료` 같은 줄이 후보에서 빠져 통로가 된다), 그래서 제목 치환은
+# 「절이 없다」를 만들지 못한다. 이 한 줄이 T7 을 다른 이유로 초록이 되게 할 뻔했다.
+sed 's|^## 6\. 사용자 원문|## 9. 지운 절|' "$FX/interview-brief-valid.audit.md" \
+  > "$T7D/interview-brief-valid.audit.md"
+grep -qE '^##[[:space:]]*6\.' "$T7D/interview-brief-valid.audit.md" \
+  && no "T7(양성): §6 제거가 적용되지 않았다 — 아래 rc 2 는 §6 부재의 증거가 아니다" \
+  || ok "T7(양성): 픽스처에서 audit §6 이 실제로 사라졌다"
+python3 "$B" "$T7D/interview-brief-valid.md" "$T7D/interview-brief-valid.audit.md" >/dev/null 2>&1
+[[ $? -eq 2 ]] && ok "T7: audit §6 부재 → rc 2 (무디스패치)" \
+  || no "T7: 원문 없이 조립했다 — 「왜곡 없음」이 나오는 경로"
+rm -rf "$T7D"
+# rc 3 : 위생 스캔은 payload 부분에만
+python3 "$B" "$FX/interview-brief-valid.md" "$FX/interview-brief-valid.audit.md" >/dev/null 2>&1
+[[ $? -ne 3 ]] && ok "T8: 정상 동작이 exit 3 이 아니다 (위생 스캔 범위 한정)" \
+  || no "T8: audit 내용까지 스캔해 매번 exit 3"
+
+# T9: T8은 vacuous하다 — 두 fixture 어디에도 `.audit.md` 문자열이 없어서, 스캔 범위를
+# 번들 전체로 넓혀도(mutation으로 확인) T8은 여전히 통과한다. 스캔 범위 요구를 실제로
+# 거는 양성 대조: audit §6 원문 **안에** `.audit.md` 꼴 문자열을 심어 넣고, payload
+# 쪽엔 없게 한다. payload만 스캔하면 rc 0, 번들 전체를 스캔하면 rc 3이어야 한다.
+# 이 쌍도 stem 을 맞춰 세운다(T7 과 같은 이유 — 신원 결속). 재는 것은 위생 스캔의 범위이지
+# 임의 경로 수용이 아니므로, 이름을 맞춘다고 이 단언이 약해지지 않는다.
+T9D="$(mktemp -d)" || exit 1
+cp "$FX/interview-brief-valid.md" "$T9D/interview-brief-valid.md"
+tmp_audit="$T9D/interview-brief-valid.audit.md"
+sed 's/"인증 뷰는 일단 빼고 갑시다"/"stray-note.audit.md 참고하고 인증 뷰는 일단 빼고 갑시다"/' \
+  "$FX/interview-brief-valid.audit.md" > "$tmp_audit"
+grep -qF '.audit.md' "$tmp_audit" || { no "T9: 픽스처 치환이 적용되지 않았다 (vacuous 방지 실패)"; }
+out9="$(python3 "$B" "$T9D/interview-brief-valid.md" "$tmp_audit" 2>&1)"; rc9=$?
+[[ $rc9 -eq 0 ]] && ok "T9: audit §6 원문 안의 '.audit.md'는 위생 스캔 대상이 아니다 (rc 0)" \
+  || no "T9: audit 쪽 '.audit.md'가 rc $rc9 를 냈다 — 스캔이 payload 밖까지 샜다"
+printf '%s' "$out9" | grep -qF 'stray-note.audit.md' \
+  && ok "T9: 그 원문은 그대로 실렸다 (지우지 않았다)" || no "T9: 원문이 사라졌다"
+rm -rf "$T9D"
+
+# T10/T11: 라벨은 헤딩이 아니다 — **모양**을 검사한다. -F 부분문자열 검사는
+# `## <<<PAYLOAD>>>`처럼 헤딩으로 승격돼도 토큰만 있으면 통과해버린다(review round 1
+# 이 실제로 이 mutation 으로 T2/T3를 속였다). 라인 전체를 정확히 매치(`grep -qx`)해
+# `#`이 앞에 붙으면 실패하게 한다 — 토큰이 아니라 그 토큰이 사는 라인의 모양을 본다.
+printf '%s' "$out" | grep -qx '<<<PAYLOAD>>>' \
+  && ok "T10: PAYLOAD 라벨 라인이 헤딩이 아니다 (라인 전체 일치)" \
+  || no "T10: PAYLOAD 라벨이 헤딩으로 승격됐거나 라인이 다르다"
+printf '%s' "$out" | grep -qx '<<<AUDIT-VERBATIM>>>' \
+  && ok "T11: AUDIT-VERBATIM 라벨 라인이 헤딩이 아니다 (라인 전체 일치)" \
+  || no "T11: AUDIT-VERBATIM 라벨이 헤딩으로 승격됐거나 라인이 다르다"
+
+# T12: 세 redact 키 전부가 실제로 치환됐는지 검사한다. `audit_file`은 우연히 그 값이
+# `.audit.md` 꼴이라 위생 스캔(T8/T9)이 곁다리로 잡아주지만 `name`·`created_at`은
+# 아무 것도 안 본다 — REDACT_KEYS에서 하나만 지워도(review round 1 mutation) 스위트가
+# 그대로 GREEN이었다. 키 목록은 스크립트에서 **동적으로** 가져온다 — 여기 이름을
+# 다시 나열하면 나중에 네 번째 키가 추가돼도 이 테스트가 그 키를 못 보고 계속
+# 통과한다(닫으려는 gap과 같은 모양).
+# 순수하게 `mod.REDACT_KEYS`에서 "검사할 키 목록"을 읽으면 자기참조가 된다 — `name`을
+# REDACT_KEYS에서 지우면 이 목록도 `name`을 잃어 그 키를 그냥 건너뛴다(실측: round 1
+# mutation에서 audit_file 드랍만 T8/T9 곁다리로 잡히고 name·created_at 드랍은 GREEN으로
+# 샜다). 그래서 "검사 대상 3키"는 태스크 인터페이스 계약(frontmatter 3키 redact:
+# audit_file·name·created_at)에 고정하고, `mod.REDACT_KEYS`는 그 고정 집합과의
+# **집합 동치**만 확인한다 — 키가 빠지면 물론, 나중에 넷째 키가 늘어도(coverage가
+# 조용히 늘어나는 대신) 즉시 실패해 테스트 갱신을 강제한다. 값(원본 문자열)만 fixture에서
+# 동적으로 읽는다 — 값을 하드코딩하면 fixture가 바뀔 때 이 테스트가 따라가지 못한다.
+redact_report="$(python3 - "$B" "$FX/interview-brief-valid.md" <<'PY'
+import importlib.util, re, sys
+script, payload_path = sys.argv[1], sys.argv[2]
+spec = importlib.util.spec_from_file_location("brief_bundle_mod", script)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+EXPECTED = ("audit_file", "name", "created_at")  # task-9 브리프 §interface 3키 계약
+actual = tuple(mod.REDACT_KEYS)
+missing = [k for k in EXPECTED if k not in actual]
+extra = [k for k in actual if k not in EXPECTED]
+if missing:
+    print(f"MISSING\t{','.join(missing)}")
+if extra:
+    print(f"EXTRA\t{','.join(extra)}")
+
+text = open(payload_path, encoding="utf-8").read()
+for k in EXPECTED:
+    m = re.search(rf"(?m)^{re.escape(k)}\s*:\s*(\S.*)$", text)
+    if m:
+        print(f"PAIR\t{k}\t{m.group(1).strip()}")
+PY
+)"
+missing_line="$(grep '^MISSING' <<<"$redact_report" || true)"
+[[ -z "$missing_line" ]] && ok "T12: REDACT_KEYS 가 필수 3키를 전부 포함한다" \
+  || no "T12: REDACT_KEYS 에서 빠졌다 — ${missing_line#MISSING$'\t'}"
+extra_line="$(grep '^EXTRA' <<<"$redact_report" || true)"
+[[ -z "$extra_line" ]] && ok "T12: REDACT_KEYS 가 예상한 3키와 정확히 일치한다" \
+  || no "T12: REDACT_KEYS 에 예상 밖 키가 있다 — ${extra_line#EXTRA$'\t'} (이 테스트를 갱신해야 한다)"
+n_pairs="$(grep -cF $'PAIR\t' <<<"$redact_report" || true)"
+[[ "$n_pairs" -eq 3 ]] || no "T12: fixture에서 원본값을 못 찾은 필수 키가 있다 (테스트 자체가 무력화)"
+while IFS=$'\t' read -r tag key val; do
+  [[ "$tag" == "PAIR" ]] || continue
+  printf '%s' "$out" | grep -qF -- "$val" \
+    && no "T12: ${key} 원본값('${val}')이 번들에 남아 있다 (redact 안 됨)" \
+    || ok "T12: ${key} 원본값이 번들에서 사라졌다"
+  printf '%s' "$out" | grep -qE "^${key}:[[:space:]]*<redacted>\$" \
+    && ok "T12: ${key}: <redacted> 형태로 치환됐다" \
+    || no "T12: ${key} 가 <redacted> 형태로 치환되지 않았다"
+done <<< "$redact_report"
+
+# T13/T14 (task-10 fix, decision 3): 라벨 **다음 줄**이 setext underline(`---`/`===`)이면
+# CommonMark가 라벨 라인 자체를 setext heading(`<h2>`/`<h1>`)으로 승격시킨다 — payload가
+# `---` frontmatter로 시작하므로, 라벨과 payload 사이에 빈 줄이 없으면 라벨이 `## 6. 사용자
+# 원문`과 같은 헤딩 네임스페이스에 들어간다(이 파일이 막으려는 헤딩-충돌이 라벨 도입 자체로
+# 재발하는 경로). T10/T11은 라벨 **자기 줄**만 보고 구조적으로 다음 줄을 못 본다 — 이 락은
+# 그 사각을 정확히 겨눈다. 문면(산문 리라이팅)으로는 만족시킬 수 없다: 실제 바이트가
+# 라벨 다음에 빈 줄을 두는지를 본다.
+line_after() {  # $1 = 정확히 일치할 라벨 라인
+  awk -v label="$1" 'found{print; exit} $0==label{found=1}' <<<"$out"
+}
+is_setext_underline() {
+  [[ "$1" =~ ^-+[[:space:]]*$ ]] || [[ "$1" =~ ^=+[[:space:]]*$ ]]
+}
+# F5 (task-10 fix round 1): `line_after()`가 빈 문자열을 낼 때 — 라벨이 아예 없거나
+# 라벨이 마지막 줄인 경우 둘 다 — `is_setext_underline ""`는 false(`-+`/`=+`는 1개
+# 이상을 요구)라서 그대로 두면 "ok"로 읽힌다. T2/T3/T10/T11이 라벨 부재를 따로 잡지만,
+# 이 락 자신은 그것에 기대지 않고 스스로 자기 앵커를 읽었다는 양성 대조를 가져야 한다
+# (부재 검사가 코퍼스를 실제로 읽었다는 증거 없이 통과하는 것은 이 리포가 반복 학습한 결함).
+next_payload="$(line_after '<<<PAYLOAD>>>')"
+if ! printf '%s' "$out" | grep -qx '<<<PAYLOAD>>>'; then
+  no "T13: PAYLOAD 라벨을 찾지 못해 다음 줄을 확인할 수 없다 (앵커 부재 — vacuous pass 방지)"
+elif is_setext_underline "$next_payload"; then
+  no "T13: PAYLOAD 라벨 다음 줄이 '${next_payload}' — setext heading으로 승격될 수 있다"
+else
+  ok "T13: PAYLOAD 라벨 다음 줄이 setext underline이 아니다 (헤딩 승격 없음)"
+fi
+next_audit="$(line_after '<<<AUDIT-VERBATIM>>>')"
+if ! printf '%s' "$out" | grep -qx '<<<AUDIT-VERBATIM>>>'; then
+  no "T14: AUDIT-VERBATIM 라벨을 찾지 못해 다음 줄을 확인할 수 없다 (앵커 부재 — vacuous pass 방지)"
+elif is_setext_underline "$next_audit"; then
+  no "T14: AUDIT-VERBATIM 라벨 다음 줄이 '${next_audit}' — setext heading으로 승격될 수 있다"
+else
+  ok "T14: AUDIT-VERBATIM 라벨 다음 줄이 setext underline이 아니다 (헤딩 승격 없음)"
+fi
+
+# ── T15: audit 신원 결속 (v0.47.0) ──────────────────────────────────────────
+# 게이트는 `resolve_audit(payload)` = `<stem>.audit.md` 를 검사하고, 이 빌더는 인자로 받은
+# 파일을 싣는다. 둘을 묶는 것이 아무것도 없었다 — 실측: 게이트가 `I.audit.md` 로 통과시킨
+# payload 로 빌더에 전혀 다른 파일을 넘기면 위조 원문이 ground truth 로 실린다(rc 0).
+# **내용이 아니라 신원을 잰다**: 같은 바이트를 다른 이름으로 넘기면 거절돼야 하고(음성),
+# 올바른 이름이면 통과해야 한다(양성). 양성 짝이 없으면 「항상 rc 2」인 빌더도 통과한다.
+T15D="$(mktemp -d)" || exit 1
+cp "$FX/interview-brief-valid.md" "$T15D/interview-brief-valid.md"
+cp "$FX/interview-brief-valid.audit.md" "$T15D/interview-brief-valid.audit.md"
+cp "$FX/interview-brief-valid.audit.md" "$T15D/somebody-else.audit.md"   # 바이트 동일, 이름만 다름
+python3 "$B" "$T15D/interview-brief-valid.md" "$T15D/interview-brief-valid.audit.md" >/dev/null 2>&1
+[[ $? -eq 0 ]] && ok "T15(양성): payload 가 선언한 sidecar 를 넘기면 조립된다 (rc 0)" \
+  || no "T15(양성): 정상 쌍이 거절됐다 — 아래 음성 단언은 「항상 거절」과 구별되지 않는다"
+t15err="$(python3 "$B" "$T15D/interview-brief-valid.md" "$T15D/somebody-else.audit.md" 2>&1 >/dev/null)"
+t15rc=$?
+{ [[ $t15rc -eq 2 ]] && printf '%s' "$t15err" | grep -q '신원 불일치'; } \
+  && ok "T15: 바이트가 같아도 이름이 다르면 rc 2 — 게이트가 본 파일과 싣는 파일이 결속된다" \
+  || no "T15: 게이트가 검사하지 않은 audit 을 rc $t15rc 로 실었다 — 신원 결속이 없다: $t15err"
+rm -rf "$T15D"
+
+# ── T16: §6 종결 좌표 (v0.47.0) ─────────────────────────────────────────────
+# audit §6 **안**에 펜스로 감싼 `## 7.` 을 두면, 옛 `NEXT_SECTION_RE`(원문·펜스 무시)가
+# 거기서 잘라 이 블록이 **비었다**(원문 전량 소실). 게이트는 rc 0 이었다. 지금은 경계가
+# 유일하게 해석되지 않으므로 **조립하지 않는다** — 「모르겠다」를 「비었다」로 바꾸지 않는다.
+T16D="$(mktemp -d)" || exit 1
+cp "$FX/interview-brief-valid.md" "$T16D/interview-brief-valid.md"
+python3 - "$FX/interview-brief-valid.audit.md" "$T16D/interview-brief-valid.audit.md" <<'PY'
+import pathlib, re, sys
+src, dst = map(pathlib.Path, sys.argv[1:3])
+t = src.read_text(encoding="utf-8")
+m = re.search(r"(?m)^##\s+6\.\s+사용자 원문[^\n]*\n", t)
+assert m, "audit §6 헤딩 부재 — 픽스처가 바뀌었다"
+dst.write_text(t[:m.end()] + "```text\n## 7. camouflage\n```\n" + t[m.end():], encoding="utf-8")
+PY
+grep -qF '## 7. camouflage' "$T16D/interview-brief-valid.audit.md" \
+  && ok "T16(양성): 위장 종결 줄이 픽스처에 실제로 심겼다" \
+  || no "T16(양성): 주입이 적용되지 않았다 — 아래 rc 2 는 이 공격의 증거가 아니다"
+t16out="$(python3 "$B" "$T16D/interview-brief-valid.md" "$T16D/interview-brief-valid.audit.md" 2>/dev/null)"
+t16rc=$?
+[[ $t16rc -eq 2 ]] \
+  && ok "T16: §6 안 펜스 `## 7.` → rc 2 (무디스패치)" \
+  || no "T16: rc $t16rc 로 조립했다 — 종결 좌표로 원문이 잘려 나간다"
+printf '%s' "$t16out" | grep -qE '\*\*S[2-9]' \
+  && no "T16: 거절했다면서 원문을 내보냈다" \
+  || ok "T16: 거절 시 아무것도 내보내지 않는다 (빈 ground truth 로 「왜곡 없음」이 나오는 경로 차단)"
+rm -rf "$T16D"
+
+exit $fail
