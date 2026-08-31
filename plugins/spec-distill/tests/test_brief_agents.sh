@@ -213,8 +213,8 @@ done
 #
 # F14 (최종 리뷰 I2) — 같은 두 위치를 **ground truth** 문장도 이름으로 대야 한다.
 # 비대칭이 결함의 신호였다: F3 는 *비신뢰 경계* 문장에 두 곳을 강제하는데, *ground
-# truth* 문장에는 아무 강제가 없어 세 지시 자리(critic 정의 · codex 체크리스트 ·
-# 2-a dispatch 프롬프트)가 전부 `<<<AUDIT-VERBATIM>>>` 한 곳만 지목하고 있었다.
+# truth* 문장에는 아무 강제가 없어 네 지시 자리(critic 정의 · critic frontmatter
+# description · codex 체크리스트 · 2-a dispatch 프롬프트)가 전부 `<<<AUDIT-VERBATIM>>>` 한 곳만 지목하고 있었다.
 # 그런데 번들의 payload 부분은 `## 6. 사용자 원문`(S1)을 그 라벨 **앞에** 싣는다 —
 # 출하된 dogfood payload 만 해도 `evidence: S1` 항목이 4건이라, 그 항목들에 대한
 # distortion·evidence_unsupported 판정이 「대조할 원문이 코퍼스 밖」인 채로 났다.
@@ -255,6 +255,20 @@ for marker in EXPECTED:
 GT_ANCHOR = re.compile(r"ground\s+truth", re.IGNORECASE)
 
 
+def frontmatter_block(path):
+    """agent 파일의 frontmatter 를 **구분자로** 잘라낸다.
+
+    description 은 이 리뷰의 코퍼스를 말하는 네 번째 지시 자리인데, 산문 앵커
+    ('ground truth')로는 잡히지 않는다 — 그 어구를 지우기만 하면 검사 밖으로
+    빠져나간다(실측). frontmatter 경계는 문면이 아니라 구조다.
+    """
+    text = open(path, encoding="utf-8").read()
+    if not text.startswith("---\n"):
+        return []
+    end = text.find("\n---\n", 4)
+    return [] if end < 0 else [text[4:end]]
+
+
 def dispatch_block(path):
     """SKILL.md 의 2-a critic dispatch 를 **구조로** 잘라낸다.
 
@@ -274,6 +288,7 @@ def dispatch_block(path):
 
 GT_SITES = (
     ("critic 정의", [p for p in critic_paras if GT_ANCHOR.search(p)]),
+    ("critic description", frontmatter_block(critic_path)),
     ("codex 체크리스트", [p for p in paras(checklist_path) if GT_ANCHOR.search(p)]),
     ("2-a dispatch", dispatch_block(skill_path)),
 )
@@ -311,11 +326,11 @@ f3_rows="$(grep -cE '^(COVERED|UNCOVERED)'$'\t' <<<"$F3_REPORT" || true)"
 [[ "$f3_rows" -eq 2 ]] \
   && ok "F3(양성대조): 커버리지 행이 정확히 2다 (단언이 실재한다)" \
   || no "F3(양성대조): 커버리지 행이 2가 아니라 $f3_rows — 리포트가 비었거나 잘렸다(F3 단언 소실)"
-# 3 지시 자리 × 2 위치 = 6. 여기도 리터럴이다(같은 이유 — 위 주석 참조).
+# 4 지시 자리 × 2 위치 = 8. 여기도 리터럴이다(같은 이유 — 위 주석 참조).
 gt_rows="$(grep -cE '^GT_(UN)?COVERED'$'\t' <<<"$F3_REPORT" || true)"
-[[ "$gt_rows" -eq 6 ]] \
-  && ok "F14(양성대조): ground truth 행이 정확히 6다 (3 자리 × 2 위치)" \
-  || no "F14(양성대조): ground truth 행이 6이 아니라 $gt_rows — 리포트가 비었거나 잘렸다(F14 단언 소실)"
+[[ "$gt_rows" -eq 8 ]] \
+  && ok "F14(양성대조): ground truth 행이 정확히 8다 (4 자리 × 2 위치)" \
+  || no "F14(양성대조): ground truth 행이 8이 아니라 $gt_rows — 리포트가 비었거나 잘렸다(F14 단언 소실)"
 rm -f "$F3_ERR"
 missing_line="$(grep '^MISSING' <<<"$F3_REPORT" || true)"
 [[ -z "$missing_line" ]] && ok "F3: UNTRUSTED_VERBATIM_MARKERS 계약이 필수 2곳을 전부 포함한다" \
