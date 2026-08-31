@@ -210,11 +210,21 @@ done
 # 이 리포트는 **양성 대조를 달고** 읽는다 — 아래 "F3(양성대조)" 블록 참조. 리포트가
 # 비면 grep 기반 단언 셋이 전부 「금지 태그 없음」으로 통과하고 COVERED 순회는 아예
 # 돌지 않아, 요구가 깨진 채로 스위트가 초록을 낸다.
+#
+# F14 (최종 리뷰 I2) — 같은 두 위치를 **ground truth** 문장도 이름으로 대야 한다.
+# 비대칭이 결함의 신호였다: F3 는 *비신뢰 경계* 문장에 두 곳을 강제하는데, *ground
+# truth* 문장에는 아무 강제가 없어 세 지시 자리(critic 정의 · codex 체크리스트 ·
+# 2-a dispatch 프롬프트)가 전부 `<<<AUDIT-VERBATIM>>>` 한 곳만 지목하고 있었다.
+# 그런데 번들의 payload 부분은 `## 6. 사용자 원문`(S1)을 그 라벨 **앞에** 싣는다 —
+# 출하된 dogfood payload 만 해도 `evidence: S1` 항목이 4건이라, 그 항목들에 대한
+# distortion·evidence_unsupported 판정이 「대조할 원문이 코퍼스 밖」인 채로 났다.
+# 세 자리는 같은 EXPECTED 튜플(= 산출자 상수)에서 파생된다.
 F3_ERR="$(mktemp -t sdF3err)"
-F3_REPORT="$(python3 - "$SD/scripts/build_brief_bundle.py" "$CR" 2>"$F3_ERR" <<'PYEOF'
+F3_REPORT="$(python3 - "$SD/scripts/build_brief_bundle.py" "$CR" \
+    "$SD/scripts/brief-codex-fidelity-checklist.md" "$SKILL_BRIEF" 2>"$F3_ERR" <<'PYEOF'
 import importlib.util, re, sys
 
-bundle_script, critic_path = sys.argv[1], sys.argv[2]
+bundle_script, critic_path, checklist_path, skill_path = sys.argv[1:5]
 spec = importlib.util.spec_from_file_location("brief_bundle_mod", bundle_script)
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
@@ -229,14 +239,48 @@ if missing:
 if extra:
     print("EXTRA\t" + ",".join(extra))
 
-critic_text = open(critic_path, encoding="utf-8").read()
-paragraphs = re.split(r"\n\s*\n", critic_text)
-untrusted_paragraphs = [p for p in paragraphs if "비신뢰" in p]
+def paras(path):
+    return re.split(r"\n\s*\n", open(path, encoding="utf-8").read())
+
+
+critic_paras = paras(critic_path)
+untrusted_paragraphs = [p for p in critic_paras if "비신뢰" in p]
 if not untrusted_paragraphs:
     print("NO_BOUNDARY_PARAGRAPH")
 for marker in EXPECTED:
     covered = any(marker in p for p in untrusted_paragraphs)
     print(("COVERED" if covered else "UNCOVERED") + "\t" + marker)
+
+# ── F14 — ground truth 문장도 두 위치를 이름으로 댄다 ────────────────────────
+GT_ANCHOR = re.compile(r"ground\s+truth", re.IGNORECASE)
+
+
+def dispatch_block(path):
+    """SKILL.md 의 2-a critic dispatch 를 **구조로** 잘라낸다.
+
+    산문 문단을 앵커로 잡으면 그 파일 다른 곳의 'ground truth' 문단(3-b readback
+    설명)이 대신 검사를 만족시킬 수 있다. subagent_type 리터럴을 감싸는 Agent({ …
+    }) 호출만 본다 — dispatch 가 사라지거나 개명되면 빈 목록이 되어 red 다.
+    """
+    text = open(path, encoding="utf-8").read()
+    i = text.find('subagent_type: "spec-distill:brief-critic"')
+    if i < 0:
+        return []
+    start, end = text.rfind("Agent({", 0, i), text.find("\n})", i)
+    if start < 0 or end < 0:
+        return []
+    return [text[start:end]]
+
+
+GT_SITES = (
+    ("critic 정의", [p for p in critic_paras if GT_ANCHOR.search(p)]),
+    ("codex 체크리스트", [p for p in paras(checklist_path) if GT_ANCHOR.search(p)]),
+    ("2-a dispatch", dispatch_block(skill_path)),
+)
+for label, blocks in GT_SITES:
+    for marker in EXPECTED:
+        covered = any(marker in b for b in blocks)
+        print(("GT_COVERED" if covered else "GT_UNCOVERED") + "\t" + label + "\t" + marker)
 PYEOF
 )"
 F3_RC=$?
@@ -262,6 +306,11 @@ f3_rows="$(grep -cE '^(COVERED|UNCOVERED)'$'\t' <<<"$F3_REPORT" || true)"
 [[ "$f3_rows" -eq 2 ]] \
   && ok "F3(양성대조): 커버리지 행이 정확히 2다 (단언이 실재한다)" \
   || no "F3(양성대조): 커버리지 행이 2가 아니라 $f3_rows — 리포트가 비었거나 잘렸다(F3 단언 소실)"
+# 3 지시 자리 × 2 위치 = 6. 여기도 리터럴이다(같은 이유 — 위 주석 참조).
+gt_rows="$(grep -cE '^GT_(UN)?COVERED'$'\t' <<<"$F3_REPORT" || true)"
+[[ "$gt_rows" -eq 6 ]] \
+  && ok "F14(양성대조): ground truth 행이 정확히 6다 (3 자리 × 2 위치)" \
+  || no "F14(양성대조): ground truth 행이 6이 아니라 $gt_rows — 리포트가 비었거나 잘렸다(F14 단언 소실)"
 rm -f "$F3_ERR"
 missing_line="$(grep '^MISSING' <<<"$F3_REPORT" || true)"
 [[ -z "$missing_line" ]] && ok "F3: UNTRUSTED_VERBATIM_MARKERS 계약이 필수 2곳을 전부 포함한다" \
@@ -274,10 +323,12 @@ if grep -q '^NO_BOUNDARY_PARAGRAPH' <<<"$F3_REPORT"; then
 else
   ok "F3: critic agent 정의에 '비신뢰' 문단이 실재한다"
 fi
-while IFS=$'\t' read -r tag marker; do
+while IFS=$'\t' read -r tag marker extra_field; do
   case "$tag" in
     COVERED)   ok "F3: 비신뢰 문단이 '${marker}' 위치를 지목한다" ;;
     UNCOVERED) no "F3: 비신뢰 문단이 '${marker}' 위치를 지목하지 않는다 — 그 원문에는 injection 경계가 없다" ;;
+    GT_COVERED)   ok "F14: ${marker}의 ground truth 문장이 '${extra_field}' 위치를 지목한다" ;;
+    GT_UNCOVERED) no "F14: ${marker}의 ground truth 문장이 '${extra_field}' 위치를 지목하지 않는다 — 그 위치의 원문은 판정 코퍼스 밖이다" ;;
   esac
 done <<< "$F3_REPORT"
 

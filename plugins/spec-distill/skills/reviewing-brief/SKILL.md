@@ -297,7 +297,9 @@ Agent({
   subagent_type: "spec-distill:brief-critic",
   // **처분** — consumer=plugins/spec-distill/scripts/merge_brief_review.py · fail-open
   prompt: `Review this interview brief for fidelity — did the §2 summary distort,
-drop, or invent what the user said in the block after <<<AUDIT-VERBATIM>>>?
+drop, or invent what the user actually said? The ground truth is in **two** places
+in the document below and both count: the payload's own \`## 6. 사용자 원문\` section
+(the original request, S1) and the block after <<<AUDIT-VERBATIM>>> (S2 and up).
 Check all six categories explicitly. Emit **Status:** on its own line, then the
 brief-critic-issues block.
 
