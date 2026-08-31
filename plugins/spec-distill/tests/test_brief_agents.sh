@@ -325,14 +325,21 @@ for cat in sorted(bullets):
     named = [m for m in EXPECTED if m in bullets[cat]]
     if named and len(named) != len(EXPECTED):
         print("BULLETSUBSET\t" + cat + "\t" + ",".join(named))
-# ② `omission` 은 자기 코퍼스를 **말해야** 한다. 다른 다섯 축은 `S<N>` 앵커를 따라가므로
+# ② `omission` 은 두 표지를 **직접 열거해야** 한다. 다른 다섯 축은 `S<N>` 앵커를 따라가므로
 #    위치와 무관하지만(앵커는 어느 쪽에 살든 해석된다), omission 은 「무엇이 빠졌나」라
 #    코퍼스 **전체**를 훑어야 답이 나온다 — 범위를 안 말하면 한쪽만 읽고 「빠진 것 없음」이
-#    나온다. 말하는 방법은 둘 중 하나: 두 표지를 다 이름으로 대거나, 위 문단이 두 위치로
-#    정의한 ground truth 라는 용어에 위임하거나.
+#    나온다.
+#
+#    **위임(«ground truth» 라는 어구에 기대기)은 더 이상 인정하지 않는다.** 앞 판본은
+#    `/ground[\s-]+truth/i` 의 **존재**를 위임으로 셌는데 그것은 범위 검사가 아니라 어구
+#    검사였다: 「something load-bearing in the **audit** ground truth …」로 고쳐 쓰면 형용사
+#    하나로 코퍼스가 절반이 되는데 어구는 그대로라 rc 0 · 94/94 였다(실측). 표지 리터럴
+#    **둘의 동시 존재**는 그 형용사로 만족시킬 수 없다.
+#
+#    **남는 잔여를 숨기지 않는다**: 존재 기반 검사는 부정문을 못 잡는다 — 두 표지를 다 적고
+#    「두 번째는 무시하라」를 덧붙이는 문면은 이 락을 통과한다(CHANGELOG known gap).
 om = bullets.get("omission", "")
-DEFER = re.compile(r"ground[\s\-]+truth", re.IGNORECASE)
-stated = bool(om) and (all(m in om for m in EXPECTED) or bool(DEFER.search(om)))
+stated = bool(om) and all(m in om for m in EXPECTED)
 print("OMISSION_CORPUS\t" + ("STATED" if stated else "UNSTATED"))
 PYEOF
 )"

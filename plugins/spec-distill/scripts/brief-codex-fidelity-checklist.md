@@ -17,8 +17,11 @@ Compare them.
 Check EACH of these six categories explicitly and report per-category:
 
 - `distortion` — a §2 statement changes the meaning of the `S<N>` original it cites.
-- `omission` — something load-bearing in the ground truth (either location) is missing
-  from §2.
+- `omission` — something load-bearing is missing from §2. Scan **both** ground-truth
+  locations for this one: the payload's `## 6. 사용자 원문` section and the
+  `<<<AUDIT-VERBATIM>>>` block. Every other category follows an `S<N>` anchor to its
+  original; this one has no anchor to follow, so reading half the corpus silently
+  yields "nothing missing".
 - `insertion` — a constraint appears in §2 that the user never said.
 - `provenance_mislabel` — the 🗣 (user said) / ☑ (user chose) / ✎ (model inferred)
   marker, or `source: verbatim|chosen`, is wrong for that item.

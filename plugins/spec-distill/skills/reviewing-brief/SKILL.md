@@ -282,6 +282,16 @@ python3 "$PR/scripts/brief_review_state.py" set-stage "$STATE" fidelity
 때문입니다. 두 번 돌리면 사이에 payload가 바뀌었을 때 두 소비자가 다른 바이트를 보게 됩니다:
 
 ```bash
+# 구조 게이트가 **번들보다 먼저** 돕니다. 이 skill 은 model-invocable 이라 호출자를 거치지
+# 않고 바로 들어올 수 있고, 그때까지 이 파일 안에서 게이트가 도는 유일한 자리는 2-c(수정
+# 후 재실행)였습니다 — 즉 **첫 번들은 게이트를 통과한 적 없는 payload 로 조립될 수 있었고**,
+# 그러면 번들에 실리는 audit 원문의 §6 경계·신원이 아무에게도 검증되지 않은 채 충실도
+# 리뷰어에게 ground truth 로 나갑니다. 값싸고 결정론적이므로 매 진입에서 돕니다.
+python3 "$PR/scripts/check_brief.py" gate "$PAYLOAD"; entry_gate_rc=$?
+if [[ "$entry_gate_rc" -ne 0 ]]; then
+  echo "[spec-distill] 구조 게이트 미통과 — 리뷰를 시작하지 않는다 (Law 1). 위 failures 를 고치고 다시 진입하라. 게이트를 통과하지 않은 payload 로 번들을 조립하면, 검증되지 않은 audit 원문이 충실도 리뷰어에게 ground truth 로 나간다." >&2
+  exit 1
+fi
 BUNDLE="$ROOT/$harness_sid/brief-bundle.md"
 python3 "$PR/scripts/build_brief_bundle.py" "$PAYLOAD" "$AUDIT" > "$BUNDLE"; blob_rc=$?
 BLOB="$(cat "$BUNDLE")"

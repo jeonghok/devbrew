@@ -889,6 +889,10 @@ done
 # 이빨을 갖는다 — v0.44.0 이 «펜스 안» 가짜 헤딩만 닫고 «펜스 밖»을 열어 둔 것이 정확히 그
 # 실패였다(실측: §4 꼬리 rc 0). 그래서 축의 값들을 데이터로 돌린다:
 #   frontmatter · §4 꼬리(펜스 밖) · 펜스 안 · audit 파일
+# **그리고 축은 하나가 아니라 둘이다.** §6 은 (시작, 종결) 두 좌표를 갖고, v0.46.0 은 시작만
+# 못 박아 종결 좌표로 같은 공격이 그대로 들어왔다 — audit §6 안에 **펜스로 감싼** `## 7.` 을
+# 두면 게이트는 rc 0 인데 번들의 `<<<AUDIT-VERBATIM>>>` 이 비거나 위조본으로 바뀐다.
+# 그래서 종결 좌표의 값들도 같은 표에서 돈다.
 # 각 값마다 **양성 짝**을 함께 돌린다 — 주입한 줄에서 `##` 만 무력화한 판본이 green 이어야
 # 그 red 의 원인이 그 헤딩임이 증명된다(주입 자체가 다른 검사를 깨서 나는 red 와 구분).
 N1C_ERR="$(mktemp -t sdN1cerr)"
@@ -926,15 +930,33 @@ def audit_in_fence(text, line):
     return text[:i] + "```text\n" + line + "\n```\n\n" + text[i:]
 
 
+def payload_sec6_fenced_end(text, line):
+    m = re.search(r"(?m)^##\s+6\.\s+사용자 원문[^\n]*\n", text)
+    assert m, "payload §6 헤딩 부재 — 픽스처가 바뀌었다"
+    return text[:m.end()] + "```text\n" + line + "\n```\n" + text[m.end():]
+
+
+def audit_sec6_fenced_end(text, line):
+    m = re.search(r"(?m)^##\s+6\.\s+사용자 원문[^\n]*\n", text)
+    assert m, "audit §6 헤딩 부재 — 픽스처가 바뀌었다"
+    return text[:m.end()] + "```text\n" + line + "\n```\n" + text[m.end():]
+
+
+END = "## 7. 위장 종결"          # 종결 후보로 읽히는 줄
+END_DEAD = "위장 아님 7. 종결"    # 같은 자리, 헤딩이 아닌 줄
+
+# (stem, label, payload 주입기, audit 주입기, armed 줄, 중화 줄)
 CASES = [
-    ("n1c-fm", "payload frontmatter 안", at_frontmatter, None),
-    ("n1c-s4", "payload §4 꼬리 (펜스 밖)", at_section4_tail, None),
-    ("n1c-fence", "payload §4 의 펜스 안", in_fence, None),
-    ("n1c-audit", "audit 의 펜스 안", None, audit_in_fence),
+    ("n1c-fm", "시작: payload frontmatter 안", at_frontmatter, None, HEAD, DEAD),
+    ("n1c-s4", "시작: payload §4 꼬리 (펜스 밖)", at_section4_tail, None, HEAD, DEAD),
+    ("n1c-fence", "시작: payload §4 의 펜스 안", in_fence, None, HEAD, DEAD),
+    ("n1c-audit", "시작: audit 의 펜스 안", None, audit_in_fence, HEAD, DEAD),
+    ("n1c-pend", "종결: payload §6 안의 펜스 `## 7.`", payload_sec6_fenced_end, None, END, END_DEAD),
+    ("n1c-aend", "종결: audit §6 안의 펜스 `## 7.`", None, audit_sec6_fenced_end, END, END_DEAD),
 ]
 rows = []
-for stem, label, pay_fn, aud_fn in CASES:
-    for state, line in (("ARMED", HEAD), ("NEUTRAL", DEAD)):
+for stem, label, pay_fn, aud_fn, armed_line, dead_line in CASES:
+    for state, line in (("ARMED", armed_line), ("NEUTRAL", dead_line)):
         s = stem + "-" + state.lower()
         pay = BASE_P.replace("audit_file: interview-brief-valid.audit.md",
                              "audit_file: " + s + ".audit.md")
@@ -957,17 +979,17 @@ rm -f "$N1C_ERR"
 # 행 수는 **리터럴 8** 이다 (축 4값 × {armed, 중화}). 생성기에서 유도하면 CASES 가 빈
 # 목록이 되는 변형에서 `0 == 0` 으로 다시 공허해진다 — 피검자에서 기대값을 끌어오는 실패형.
 n1c_rows="$(grep -cE '^n1c-' <<<"$N1C_MANIFEST" || true)"
-[[ "$n1c_rows" -eq 8 ]] \
-  && ok "N1c(양성): 케이스가 정확히 8건이다 (축 4값 × 2)" \
-  || no "N1c(양성): 케이스가 8건이 아니라 $n1c_rows — 리포트가 비었거나 잘렸다(N1c 단언 소실)"
+[[ "$n1c_rows" -eq 12 ]] \
+  && ok "N1c(양성): 케이스가 정확히 12건이다 (시작 4값 + 종결 2값, 각 × 2)" \
+  || no "N1c(양성): 케이스가 12건이 아니라 $n1c_rows — 리포트가 비었거나 잘렸다(N1c 단언 소실)"
 while IFS=$'\t' read -r stem state label; do
   [[ -n "${stem:-}" ]] || continue
   out="$(python3 "$SCRIPT" gate "$TMPD/$stem.md" 2>&1)"; rc=$?
   case "$state" in
     ARMED)
-      { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '§6 사용자 원문 헤딩이'; } \
-        && ok "N1c: 두 번째 §6 헤딩이 $label → red" \
-        || no "N1c: 두 번째 §6 헤딩이 $label 인데 그 원인으로 red 가 안 난다 — 경계를 저자가 옮길 수 있다: $out" ;;
+      { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '§6 경계가 유일하게 해석되지 않는다'; } \
+        && ok "N1c: $label → red" \
+        || no "N1c: $label 인데 그 원인으로 red 가 안 난다 — 경계를 저자가 옮길 수 있다: $out" ;;
     NEUTRAL)
       [[ $rc -eq 0 ]] \
         && ok "N1c(양성짝): $label 에서 헤딩만 무력화하면 green — red 의 원인이 그 헤딩이다" \
@@ -1125,5 +1147,190 @@ while IFS=$'\t' read -r tag a b; do
                || no "코퍼스분리(대조): 분석기가 알려진 _body() 사용조차 못 잡는다 — 계측기가 고장났다" ;;
   esac
 done <<< "$ast_report"
+
+# ── §6 경계는 한 곳에서만 계산된다 (v0.47.0) ────────────────────────────────
+# v0.46.0 은 §6 의 **시작** 좌표를 못 박았는데, 세 소비자가 각자 **종결** 규칙을 갖고 있었고
+# 셋이 서로 달랐다 — 게이트는 펜스 밖 `^##\s+\d+\.`, 번들은 원문 `^##\s+\d+\.`, 완전성
+# 검사는 원문 `^##\s`. audit §6 안에 펜스로 감싼 `## 7.` 하나면 게이트가 조용한 채 번들이
+# 거기서 잘렸다(실측 rc 0 — 원문 전량 소실 / 위조본 탑재 두 형태).
+#
+# 「종결도 못 박는다」로 고치면 세 번째 좌표에서 같은 일이 또 난다. 그래서 술어를 올렸다 —
+# **§6 은 모든 소비자에게 같은 영역으로 해석돼야 한다.** 구현은 계산기를 하나로 줄이는
+# 것이고, 이 락은 그 「하나」가 실제로 하나인지를 **소비자 목록을 손으로 적지 않고** 판다.
+#
+# ① 파생 — `scripts/*.py` 의 `re.compile` 문자열 리터럴을 `ast` 로 전수 수집해 「`##` 헤딩
+#    마커를 실제로 소비하는」 것(프로브 매치가 end>=3)을 고른다. 주석 패턴(`^\s*#`, end==1)은
+#    그 기준으로 걸러진다. 그런 패턴이 `section6.py` **밖**에 있으면 red.
+# ② 계측기 대조 — 같은 탐지기를 stray 를 심은 **합성 소스**에 돌려 실제로 잡는지 본다.
+#    없으면 「밖에 없다」와 「탐지기가 아무것도 안 봤다」가 구별되지 않는다.
+S6_ERR="$(mktemp -t sdS6err)"
+s6_report="$(python3 - "$REPO_ROOT/plugins/spec-distill/scripts" 2>"$S6_ERR" <<'PY'
+import ast, pathlib, re, sys
+
+PROBE = "## 6. 사용자 원문"
+
+
+def heading_patterns(source: str, label: str):
+    """`##` 헤딩 마커를 실제로 소비하는 `re.compile` 리터럴들."""
+    out = []
+    for node in ast.walk(ast.parse(source)):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "compile" and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)):
+            continue
+        pat = node.args[0].value
+        try:
+            rx = re.compile(pat, re.MULTILINE)
+        except re.error:
+            continue
+        m = rx.match(PROBE)
+        if m and m.end() >= 3:
+            out.append((label, pat))
+    return out
+
+
+CONTROL_SRC = (
+    "import re\n"
+    "STRAY = re.compile(r'(?m)^##[ ]+6[.]')\n"
+    "COMMENT = re.compile(r'^[ ]*#')\n"
+)
+ctrl = heading_patterns(CONTROL_SRC, "control")
+print("CTRL\t" + ("YES" if len(ctrl) == 1 else "NO(%d)" % len(ctrl)))
+
+scripts = pathlib.Path(sys.argv[1])
+hits = []
+for f in sorted(scripts.glob("*.py")):
+    if f.is_symlink():
+        continue
+    try:
+        hits += heading_patterns(f.read_text(encoding="utf-8"), f.name)
+    except SyntaxError as exc:
+        print("PARSEFAIL\t%s\t%s" % (f.name, exc))
+print("HITS\t%d" % len(hits))
+for label, pat in hits:
+    print(("OWNED\t" if label == "section6.py" else "STRAY\t") + label + "\t" + pat)
+PY
+)"
+s6_rc=$?
+[[ "$s6_rc" -eq 0 ]] \
+  && ok "§6단일화(양성): 파생 탐지기가 정상 종료했다 (rc=0)" \
+  || no "§6단일화(양성): 탐지기가 rc=$s6_rc 로 죽었다 — 아래 단언은 무의미하다: $(tr '\n' ' ' < "$S6_ERR" | tail -c 200)"
+rm -f "$S6_ERR"
+grep -q "^CTRL$(printf '\t')YES" <<<"$s6_report" \
+  && ok "§6단일화(대조): 탐지기가 합성 stray 를 잡고 주석 패턴은 안 잡는다" \
+  || no "§6단일화(대조): 탐지기가 계측을 못 한다 — 「밖에 없다」가 「안 봤다」와 구별되지 않는다"
+s6_hits="$(grep '^HITS' <<<"$s6_report" | cut -f2)"
+[[ "${s6_hits:-0}" -ge 3 ]] \
+  && ok "§6단일화(양성): 헤딩 소비 패턴을 $s6_hits 개 찾았다 (탐지기가 실제로 읽었다)" \
+  || no "§6단일화(양성): 헤딩 소비 패턴이 ${s6_hits:-0} 개 — 코퍼스를 못 읽었다(공허 통과)"
+s6_stray="$(grep '^STRAY' <<<"$s6_report" || true)"
+[[ -z "$s6_stray" ]] \
+  && ok "§6단일화: §6 경계를 계산하는 정규식이 section6.py 밖에 없다" \
+  || no "§6단일화: section6.py 밖에서 §6 경계를 다시 계산한다 — [$s6_stray] (소비자마다 다른 §6 을 갖는 상태의 재발)"
+grep -q '^PARSEFAIL' <<<"$s6_report" \
+  && no "§6단일화: 파싱 실패한 스크립트가 있다 — 그 파일은 이 락의 코퍼스 밖이다" \
+  || ok "§6단일화: scripts/*.py 전부가 파싱됐다 (코퍼스 누락 없음)"
+
+# ── 세 소비자가 같은 문서에서 같은 §6 을 본다 (행동 대조) ───────────────────
+# 위 락이 「계산기가 하나」를 보장한다면, 이것은 그 하나가 **실제로 같은 답**을 주는지 잰다.
+# 어느 답이 옳은지는 판정하지 않는다(피검자에서 기대값을 끌어오지 않는다) — 셋이 같은지만
+# 본다. 다만 정상 문서의 공통 답이 비면 등식이 「셋 다 아무것도 못 봤다」로 공허해지므로,
+# 그 경우를 따로 red 로 낸다.
+TRI_ERR="$(mktemp -t sdTrierr)"
+tri_report="$(python3 - "$REPO_ROOT/plugins/spec-distill/scripts" "$FX" 2>"$TRI_ERR" <<'PY'
+import importlib.util, pathlib, re, sys
+
+scripts, fx = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+sys.path.insert(0, str(scripts))
+
+
+def load(name):
+    spec = importlib.util.spec_from_file_location("tri_" + name, scripts / (name + ".py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+cb, bb, cvc = load("check_brief"), load("build_brief_bundle"), load("check_verbatim_coverage")
+base = (fx / "interview-brief-valid.audit.md").read_text(encoding="utf-8")
+head = re.search(r"(?m)^##\s+6\.\s+사용자 원문[^\n]*\n", base)
+assert head, "audit §6 헤딩 부재 — 픽스처가 바뀌었다"
+
+DOCS = [
+    ("normal", base),
+    ("fenced-end", base[:head.end()] + "```text\n## 7. camouflage\n```\n" + base[head.end():]),
+    ("fake-start", base[:head.start()] + "## 6. camouflage\n- **S9** x\n" + base[head.start():]),
+]
+for label, doc in DOCS:
+    a = None if cb.payload_section6_span(doc) is None else sorted(cb.payload_verbatim_anchors(doc))
+    b = bb.audit_verbatim(doc)
+    b = None if b is None else sorted(set(cb.S_ANCHOR_RE.findall(b)))
+    try:
+        c = sorted(cvc.parse_section6(doc, "x"))
+    except Exception:
+        c = None
+    print("TRI\t%s\t%s\t%s" % (label, "SAME" if a == b == c else "SPLIT", a))
+PY
+)"
+tri_rc=$?
+[[ "$tri_rc" -eq 0 ]] \
+  && ok "§6합치(양성): 3소비자 대조기가 정상 종료했다 (rc=0)" \
+  || no "§6합치(양성): 대조기가 rc=$tri_rc 로 죽었다: $(tr '\n' ' ' < "$TRI_ERR" | tail -c 300)"
+rm -f "$TRI_ERR"
+tri_rows="$(grep -c '^TRI' <<<"$tri_report" || true)"
+[[ "$tri_rows" -eq 3 ]] \
+  && ok "§6합치(양성): 대조 행이 정확히 3이다" \
+  || no "§6합치(양성): 대조 행이 3이 아니라 $tri_rows — 리포트가 비었거나 잘렸다(단언 소실)"
+while IFS="$(printf '\t')" read -r _tag label verdict answer; do
+  [[ -n "${label:-}" ]] || continue
+  [[ "$verdict" == "SAME" ]] \
+    && ok "§6합치: [$label] 세 소비자가 같은 §6 을 본다 ($answer)" \
+    || no "§6합치: [$label] 소비자마다 다른 §6 을 본다 — 게이트가 축복한 것이 아닌 것이 하류로 나간다"
+done <<< "$tri_report"
+tri_normal="$(grep '^TRI' <<<"$tri_report" | grep 'normal' | cut -f4)"
+[[ "$tri_normal" == \[*\'S*\]* ]] \
+  && ok "§6합치(양성): 정상 문서의 공통 답이 비어 있지 않다 ($tri_normal)" \
+  || no "§6합치(양성): 정상 문서의 공통 답이 [$tri_normal] — 등식이 공허하게 성립했다"
+
+# ── 경계 매처의 관대함 ──────────────────────────────────────────────────────
+# `START_RE` 에 제목을 요구하면 `## 6. 참고 자료` 같은 줄이 시작 후보에서 빠진다. 그 줄은
+# 사람에게도 「6번 절」로 읽히고, 예전 `check_verbatim_coverage.SECTION6_RE` 는 실제로 그것을
+# §6 시작으로 골랐다 — 좁히면 「모호(red)」가 「조용한 불일치」로 되돌아간다. v0.46.0 의
+# mutation 은 펜스 축만 흔들어 이 제목 축이 열려 있었다(실측: 제목을 요구하도록 좁혀도 157/157).
+# **양성(매치해야) + 음성(매치하면 안 됨) 짝**이라 넓히는 방향의 변이도 잡힌다.
+SR_ERR="$(mktemp -t sdSRerr)"
+sr_report="$(python3 - "$REPO_ROOT/plugins/spec-distill/scripts" 2>"$SR_ERR" <<'PY'
+import importlib.util, pathlib, sys
+scripts = pathlib.Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("sr_section6", scripts / "section6.py")
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+MUST = ["## 6.", "##6.", "## 6. 사용자 원문", "## 6. 참고 자료", "##  6.  아무 제목"]
+MUSTNOT = ["### 6.", "## 16.", "  ## 6.", "# 6.", "## 6", "##a6."]
+for s in MUST:
+    print("MUST\t%s\t%s" % ("HIT" if mod.START_RE.search(s) else "MISS", s))
+for s in MUSTNOT:
+    print("MUSTNOT\t%s\t%s" % ("HIT" if mod.START_RE.search(s) else "MISS", s))
+PY
+)"
+sr_rc=$?
+[[ "$sr_rc" -eq 0 ]] \
+  && ok "경계관대함(양성): 매처 프로브가 정상 종료했다 (rc=0)" \
+  || no "경계관대함(양성): 프로브가 rc=$sr_rc 로 죽었다: $(tr '\n' ' ' < "$SR_ERR" | tail -c 200)"
+rm -f "$SR_ERR"
+sr_rows="$(grep -cE '^(MUST|MUSTNOT)' <<<"$sr_report" || true)"
+[[ "$sr_rows" -eq 11 ]] \
+  && ok "경계관대함(양성): 프로브 행이 정확히 11이다 (양성 5 + 음성 6)" \
+  || no "경계관대함(양성): 프로브 행이 11이 아니라 $sr_rows — 비었거나 잘렸다(단언 소실)"
+while IFS="$(printf '\t')" read -r kind got form; do
+  [[ -n "${kind:-}" ]] || continue
+  case "$kind$got" in
+    MUSTHIT)     ok "경계관대함: START_RE 가 [$form] 를 시작 후보로 본다" ;;
+    MUSTMISS)    no "경계관대함: START_RE 가 [$form] 를 놓친다 — 좁히면 「모호」가 「조용한 불일치」로 되돌아간다" ;;
+    MUSTNOTMISS) ok "경계관대함: START_RE 가 [$form] 를 시작 후보로 보지 않는다" ;;
+    MUSTNOTHIT)  no "경계관대함: START_RE 가 [$form] 까지 잡는다 — 넓히면 정상 문서가 모호로 red" ;;
+  esac
+done <<< "$sr_report"
 
 finish

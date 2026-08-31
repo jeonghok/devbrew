@@ -745,4 +745,60 @@ printf '%s' "$W2A" | grep -qE 'said in §6' \
   && no "F1: 2-a dispatch 프롬프트가 여전히 헤딩 리터럴(§6)을 가리킨다 — 번들엔 그 헤딩이 payload 쪽 S1 하나뿐이다" \
   || ok "F1: 2-a dispatch 프롬프트에 §6 헤딩 리터럴이 없다"
 
+# ── ORD: 구조 게이트가 첫 번들보다 먼저 돈다 (v0.47.0) ──────────────────────
+# 이 skill 은 model-invocable 이고 description 이 직접 진입을 초대한다. 그런데 이 파일 안에서
+# `check_brief.py gate` 가 도는 유일한 자리는 2-c(충실도 수정 후 재실행)였고, 진입 첫 액션은
+# `check_verbatim_coverage.py`(강등 가능한 entry check)였다 — 즉 **첫 번들은 게이트를 통과한
+# 적 없는 payload 로 조립될 수 있었다.** 유일한 사전 게이트는 다른 skill
+# (`conducting-interview/references/finishing.md`)에 있어서, 이 skill 로 직접 들어오면 없다.
+#
+# 락은 **문면이 아니라 위치**를 잰다: 이 파일의 bash 라인들을 순서대로 놓고, 첫
+# `check_brief.py gate` 의 인덱스가 첫 `build_brief_bundle.py` 의 인덱스보다 앞인가.
+# 두 앵커가 **둘 다 실재**함을 먼저 단언한다 — 하나라도 없으면 부등식이 공허하다.
+ORD_ERR="$(mktemp -t sdOrderr)"
+ord_report="$(python3 - "$SKILL" 2>"$ORD_ERR" <<'PY'
+import pathlib, re, sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+# 펜스 안 bash 라인만, 등장 순서대로. 주석은 뺀다(주석에 적은 호출은 실행이 아니다).
+# 리터럴 백틱을 이 블록 안에 적지 않는다 — 여기는 $( ) 안의 heredoc 이라, 세 겹 백틱이
+# 백틱 명령치환을 열어 셸 파싱이 통째로 깨진다(리포 실측 footgun; 이 주석을 쓰다가 두 번
+# 재현했다). 그래서 코드도 주석도 chr(96) 으로만 말한다.
+FENCE = chr(96) * 3
+lines, inside = [], False
+for ln in text.splitlines():
+    if ln.startswith(FENCE):
+        inside = not inside
+        continue
+    if inside and not re.match(r"^\s*#", ln):
+        lines.append(ln)
+
+GATE = re.compile(r'check_brief\.py"?\s+gate')
+BUNDLE = re.compile(r'build_brief_bundle\.py')
+gate_at = next((i for i, ln in enumerate(lines) if GATE.search(ln)), -1)
+bundle_at = next((i for i, ln in enumerate(lines) if BUNDLE.search(ln)), -1)
+print("ANCHOR\tgate\t%d" % gate_at)
+print("ANCHOR\tbundle\t%d" % bundle_at)
+print("ORDER\t%s" % ("OK" if 0 <= gate_at < bundle_at else "BAD"))
+PY
+)"
+ord_rc=$?
+[[ "$ord_rc" -eq 0 ]] \
+  && ok "ORD(양성): 순서 추출기가 정상 종료했다 (rc=0)" \
+  || no "ORD(양성): 추출기가 rc=$ord_rc 로 죽었다 — 아래 단언은 무의미하다: $(tr '\n' ' ' < "$ORD_ERR" | tail -c 200)"
+rm -f "$ORD_ERR"
+ord_rows="$(grep -c '^ANCHOR' <<<"$ord_report" || true)"
+[[ "$ord_rows" -eq 2 ]] \
+  && ok "ORD(양성): 앵커 행이 정확히 2다" \
+  || no "ORD(양성): 앵커 행이 2가 아니라 $ord_rows — 리포트가 비었거나 잘렸다(단언 소실)"
+while IFS="$(printf '\t')" read -r _t name idx; do
+  [[ "$_t" == "ANCHOR" ]] || continue
+  [[ "${idx:-'-1'}" -ge 0 ]] \
+    && ok "ORD(양성): '$name' 호출이 SKILL bash 에 실재한다 (index $idx)" \
+    || no "ORD(양성): '$name' 호출을 못 찾았다 — 아래 순서 단언이 공허하다"
+done <<< "$ord_report"
+grep -q '^ORDER'"$(printf '\t')"'OK' <<<"$ord_report" \
+  && ok "ORD: 구조 게이트가 첫 번들 조립보다 먼저 돈다" \
+  || no "ORD: 첫 번들이 게이트보다 먼저 조립된다 — 검증되지 않은 audit 원문이 충실도 리뷰어에게 ground truth 로 나간다"
+
 finish

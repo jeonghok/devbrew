@@ -55,14 +55,20 @@ import sys
 import unicodedata
 from pathlib import Path
 
+# §6 경계는 이 파일이 계산하지 않는다 — `scripts/section6.py` 한 곳이다. 이 파일의 옛
+# 종결 규칙(`^##\s`)은 게이트(`^##\s+\d+\.`, 펜스 밖)보다 이르게 끊어, 같은 문서가 두
+# 소비자에게 다른 §6 을 갖게 했다(v0.47.0).
+_SCRIPTS_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+import section6  # noqa: E402
+
 EXIT_OK = 0
 EXIT_VIOLATION = 1
 EXIT_INDETERMINATE = 3
 EXIT_INTERNAL = 4
 EXIT_USAGE = 64
 
-SECTION6_RE = re.compile(r"^##\s*6\.", re.MULTILINE)
-NEXT_SECTION_RE = re.compile(r"^##\s", re.MULTILINE)
 ITEM_RE = re.compile(r"^\s*[-*]\s+\*\*(S\d+)\*\*(.*)$")
 # P21 canonical placeholder 토큰 (conducting-interview SKILL.md의 P21 줄과 같은 집합).
 # 라벨 문자류는 `[\w.-]` — 파이썬 3에서 `\w`는 유니코드 인식이라 `[A-Za-z0-9_]`에
@@ -218,12 +224,14 @@ def parse_section6(text: str, label: str) -> dict[str, str]:
     v0.43.0: payload와 audit 양쪽에 쓰인다. `label`은 오류 메시지 전용이다 —
     "어느 문서의 §6이 없는가"가 안 보이면 호출자가 잘못된 파일을 고친다.
     """
-    m = SECTION6_RE.search(text)
-    if not m:
+    body = section6.body(text)
+    if body is None:
+        amb = section6.ambiguities(text)
+        if amb:
+            # 부재가 아니라 **구조 위반**이다 — 「검사 불가(3)」로 내리면 어느 §6 을 봤어야
+            # 하는지 아무도 모른 채 전 statement 의 L1·L2 가 skip 된다.
+            raise StructuralViolation(f"{label} §6 경계가 유일하지 않다 — {amb[0]}")
         raise ParseError(f"{label}에 '## 6.' 섹션이 없다")
-    rest = text[m.end():]
-    nxt = NEXT_SECTION_RE.search(rest)
-    body = rest[: nxt.start()] if nxt else rest
     bodies: dict[str, list[str]] = {}
     heads: dict[str, str] = {}
     order: list[str] = []

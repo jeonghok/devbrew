@@ -30,9 +30,16 @@ import pathlib
 import re
 import sys
 
+# §6 경계는 이 파일이 계산하지 않는다 — `scripts/section6.py` 한 곳이다. 이 파일이 자기
+# 정규식을 갖던 동안 게이트와 종결 규칙이 달라, audit §6 안의 **펜스로 감싼** `## 7.` 하나로
+# 이 블록이 비거나(원문 전량 소실) 위조본으로 바뀌는데 게이트는 rc 0 이었다(v0.47.0 실측).
+_SCRIPTS_DIR = str(pathlib.Path(__file__).resolve().parent)
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+import section6  # noqa: E402
+import check_brief  # noqa: E402  — audit 신원 결속(아래 `blessed_audit`)
+
 REDACT_KEYS = ("audit_file", "name", "created_at")
-SECTION6_RE = re.compile(r"(?m)^##\s+6\.\s+사용자 원문[^\n]*$")
-NEXT_SECTION_RE = re.compile(r"(?m)^##\s+\d+\.")
 AUDIT_NAME_RE = re.compile(r"\S*\.audit\.md\b")
 
 # 번들 안에서 비신뢰 verbatim이 "여기서부터 시작한다"고 알리는 두 리터럴 표지 — 이 번들을
@@ -58,13 +65,27 @@ def redact_frontmatter(text: str) -> str:
 
 
 def audit_verbatim(audit_text: str):
-    """audit §6의 **항목만** 반환한다 (절 헤딩 제외). 절이 없으면 None."""
-    m = SECTION6_RE.search(audit_text)
-    if not m:
-        return None
-    rest = audit_text[m.end():]
-    nxt = NEXT_SECTION_RE.search(rest)
-    return (rest[: nxt.start()] if nxt else rest).strip()
+    """audit §6의 **항목만** 반환한다 (절 헤딩 제외). 절이 없거나 **모호하면** None.
+
+    모호(경계가 읽는 규칙마다 다름)를 None 으로 내리는 것이 요점이다 — 예전에는 이 함수가
+    자기 규칙으로 어딘가를 잘라 **무언가를 실었고**, 그 무언가가 게이트가 본 것과 달랐다.
+    「모르겠다」를 「비었다」로 바꾸지 않는다: 호출자가 rc 2·무디스패치로 받는다.
+    """
+    return None if (b := section6.body(audit_text)) is None else b.strip()
+
+
+def blessed_audit(payload_path: pathlib.Path, payload_text: str):
+    """게이트가 축복한 audit 경로. 규칙을 복제하지 않고 게이트에서 **가져온다**.
+
+    이 함수가 없으면 「게이트가 검사한 파일」과 「이 빌더가 싣는 파일」을 묶는 것이 아무것도
+    없다 — 실측(v0.47.0): 게이트가 `I.audit.md` 를 통과시킨 payload 로 빌더에 전혀 다른
+    `OTHER.audit.md` 를 넘기면 위조 원문이 그대로 ground truth 로 실린다(rc 0).
+
+    **경로를 유추하지 않는다는 원칙은 유지한다.** 호출자는 여전히 audit 을 명시해야 하고,
+    이 함수는 그 명시가 게이트의 해석과 **다를 때 거절**한다 — `resolve_audit()` 자신이
+    「찾는 것이 아니라 고르지 못하게 거절하는 것」이라 적은 그 층이다.
+    """
+    return check_brief.resolve_audit(payload_path, check_brief._frontmatter(payload_text))
 
 
 def assemble(payload_text: str, verbatim: str) -> str:
@@ -96,11 +117,23 @@ def main() -> int:
     except (OSError, UnicodeDecodeError) as exc:
         print(f"읽기 실패: {exc}", file=sys.stderr)
         return 2
+    # 신원 결속을 **조립 전에** 건다 — 뒤에 걸면 잘못된 재료로 이미 조립한 뒤가 된다.
+    blessed, blessed_err = blessed_audit(paths["payload_file"], payload_text)
+    if blessed_err is not None:
+        print(f"payload가 자기 audit을 해석하지 못한다: {blessed_err} — "
+              "게이트가 축복한 파일을 특정할 수 없으면 조립하지 않는다.", file=sys.stderr)
+        return 2
+    if blessed.resolve() != paths["audit_file"].resolve():
+        print(f"audit 신원 불일치: 넘겨받은 {paths['audit_file']} vs "
+              f"payload가 선언하고 게이트가 검사한 {blessed} — 게이트가 보지 않은 원문을 "
+              "ground truth로 실을 수 없다.", file=sys.stderr)
+        return 2
     verbatim = audit_verbatim(audit_text)
     if verbatim is None:
-        print(f"{paths['audit_file']} 에 `## 6. 사용자 원문` 절이 없다 — "
-              "원문 없이 충실도를 물으면 「왜곡 없음」이 나온다. 조립하지 않는다.",
-              file=sys.stderr)
+        why = section6.ambiguities(audit_text) or ["`## 6. 사용자 원문` 절이 없다"]
+        print(f"{paths['audit_file']} — {why[0]}. "
+              "원문 없이(또는 어느 원문인지 모른 채) 충실도를 물으면 「왜곡 없음」이 "
+              "나온다. 조립하지 않는다.", file=sys.stderr)
         return 2
     redacted_payload = redact_frontmatter(payload_text)
     sys.stdout.write(assemble(payload_text, verbatim))

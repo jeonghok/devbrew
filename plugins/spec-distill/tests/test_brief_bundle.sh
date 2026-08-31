@@ -24,10 +24,25 @@ printf '%s' "$out" | grep -qE '\*\*S[2-9][0-9]*\*\*' \
 # rc 2 : audit 을 안 주면
 python3 "$B" "$FX/interview-brief-valid.md" >/dev/null 2>&1
 [[ $? -eq 2 ]] && ok "T6: audit 인자 없음 → rc 2" || no "T6: audit 없이 조립했다 (fail-open)"
-# rc 2 : audit 에 §6 이 없으면
-python3 "$B" "$FX/interview-brief-valid.md" "$FX/brief-verbatim-audit-no-sec6.audit.md" >/dev/null 2>&1
+# rc 2 : audit 에 §6 이 없으면.
+# **쌍의 이름을 맞춘다.** v0.47.0 이 「게이트가 축복한 audit == 빌더가 읽는 audit」을 결속한
+# 뒤로, 다른 인터뷰의 audit 파일을 그냥 넘기면 rc 2 가 **신원 불일치**로 난다 — 그러면 이
+# 단언은 §6 부재를 재는 것을 그만두고 「원문 없이 조립했다」를 영영 못 잡는다(같은 rc 를
+# 다른 이유로 받는 위양성). 그래서 stem 이 맞는 쌍을 임시 디렉토리에 세운다.
+T7D="$(mktemp -d)" || exit 1
+cp "$FX/interview-brief-valid.md" "$T7D/interview-brief-valid.md"
+# 번호까지 바꾼다. 제목만 바꾸면 §6 은 **여전히 있다** — 경계 매처는 제목을 요구하지 않고
+# (요구하면 `## 6. 참고 자료` 같은 줄이 후보에서 빠져 통로가 된다), 그래서 제목 치환은
+# 「절이 없다」를 만들지 못한다. 이 한 줄이 T7 을 다른 이유로 초록이 되게 할 뻔했다.
+sed 's|^## 6\. 사용자 원문|## 9. 지운 절|' "$FX/interview-brief-valid.audit.md" \
+  > "$T7D/interview-brief-valid.audit.md"
+grep -qE '^##[[:space:]]*6\.' "$T7D/interview-brief-valid.audit.md" \
+  && no "T7(양성): §6 제거가 적용되지 않았다 — 아래 rc 2 는 §6 부재의 증거가 아니다" \
+  || ok "T7(양성): 픽스처에서 audit §6 이 실제로 사라졌다"
+python3 "$B" "$T7D/interview-brief-valid.md" "$T7D/interview-brief-valid.audit.md" >/dev/null 2>&1
 [[ $? -eq 2 ]] && ok "T7: audit §6 부재 → rc 2 (무디스패치)" \
   || no "T7: 원문 없이 조립했다 — 「왜곡 없음」이 나오는 경로"
+rm -rf "$T7D"
 # rc 3 : 위생 스캔은 payload 부분에만
 python3 "$B" "$FX/interview-brief-valid.md" "$FX/interview-brief-valid.audit.md" >/dev/null 2>&1
 [[ $? -ne 3 ]] && ok "T8: 정상 동작이 exit 3 이 아니다 (위생 스캔 범위 한정)" \
@@ -37,16 +52,20 @@ python3 "$B" "$FX/interview-brief-valid.md" "$FX/interview-brief-valid.audit.md"
 # 번들 전체로 넓혀도(mutation으로 확인) T8은 여전히 통과한다. 스캔 범위 요구를 실제로
 # 거는 양성 대조: audit §6 원문 **안에** `.audit.md` 꼴 문자열을 심어 넣고, payload
 # 쪽엔 없게 한다. payload만 스캔하면 rc 0, 번들 전체를 스캔하면 rc 3이어야 한다.
-tmp_audit="$(mktemp)" || exit 1
+# 이 쌍도 stem 을 맞춰 세운다(T7 과 같은 이유 — 신원 결속). 재는 것은 위생 스캔의 범위이지
+# 임의 경로 수용이 아니므로, 이름을 맞춘다고 이 단언이 약해지지 않는다.
+T9D="$(mktemp -d)" || exit 1
+cp "$FX/interview-brief-valid.md" "$T9D/interview-brief-valid.md"
+tmp_audit="$T9D/interview-brief-valid.audit.md"
 sed 's/"인증 뷰는 일단 빼고 갑시다"/"stray-note.audit.md 참고하고 인증 뷰는 일단 빼고 갑시다"/' \
   "$FX/interview-brief-valid.audit.md" > "$tmp_audit"
 grep -qF '.audit.md' "$tmp_audit" || { no "T9: 픽스처 치환이 적용되지 않았다 (vacuous 방지 실패)"; }
-out9="$(python3 "$B" "$FX/interview-brief-valid.md" "$tmp_audit" 2>&1)"; rc9=$?
+out9="$(python3 "$B" "$T9D/interview-brief-valid.md" "$tmp_audit" 2>&1)"; rc9=$?
 [[ $rc9 -eq 0 ]] && ok "T9: audit §6 원문 안의 '.audit.md'는 위생 스캔 대상이 아니다 (rc 0)" \
   || no "T9: audit 쪽 '.audit.md'가 rc $rc9 를 냈다 — 스캔이 payload 밖까지 샜다"
 printf '%s' "$out9" | grep -qF 'stray-note.audit.md' \
   && ok "T9: 그 원문은 그대로 실렸다 (지우지 않았다)" || no "T9: 원문이 사라졌다"
-rm -f "$tmp_audit"
+rm -rf "$T9D"
 
 # T10/T11: 라벨은 헤딩이 아니다 — **모양**을 검사한다. -F 부분문자열 검사는
 # `## <<<PAYLOAD>>>`처럼 헤딩으로 승격돼도 토큰만 있으면 통과해버린다(review round 1
@@ -148,5 +167,52 @@ elif is_setext_underline "$next_audit"; then
 else
   ok "T14: AUDIT-VERBATIM 라벨 다음 줄이 setext underline이 아니다 (헤딩 승격 없음)"
 fi
+
+# ── T15: audit 신원 결속 (v0.47.0) ──────────────────────────────────────────
+# 게이트는 `resolve_audit(payload)` = `<stem>.audit.md` 를 검사하고, 이 빌더는 인자로 받은
+# 파일을 싣는다. 둘을 묶는 것이 아무것도 없었다 — 실측: 게이트가 `I.audit.md` 로 통과시킨
+# payload 로 빌더에 전혀 다른 파일을 넘기면 위조 원문이 ground truth 로 실린다(rc 0).
+# **내용이 아니라 신원을 잰다**: 같은 바이트를 다른 이름으로 넘기면 거절돼야 하고(음성),
+# 올바른 이름이면 통과해야 한다(양성). 양성 짝이 없으면 「항상 rc 2」인 빌더도 통과한다.
+T15D="$(mktemp -d)" || exit 1
+cp "$FX/interview-brief-valid.md" "$T15D/interview-brief-valid.md"
+cp "$FX/interview-brief-valid.audit.md" "$T15D/interview-brief-valid.audit.md"
+cp "$FX/interview-brief-valid.audit.md" "$T15D/somebody-else.audit.md"   # 바이트 동일, 이름만 다름
+python3 "$B" "$T15D/interview-brief-valid.md" "$T15D/interview-brief-valid.audit.md" >/dev/null 2>&1
+[[ $? -eq 0 ]] && ok "T15(양성): payload 가 선언한 sidecar 를 넘기면 조립된다 (rc 0)" \
+  || no "T15(양성): 정상 쌍이 거절됐다 — 아래 음성 단언은 「항상 거절」과 구별되지 않는다"
+t15err="$(python3 "$B" "$T15D/interview-brief-valid.md" "$T15D/somebody-else.audit.md" 2>&1 >/dev/null)"
+t15rc=$?
+{ [[ $t15rc -eq 2 ]] && printf '%s' "$t15err" | grep -q '신원 불일치'; } \
+  && ok "T15: 바이트가 같아도 이름이 다르면 rc 2 — 게이트가 본 파일과 싣는 파일이 결속된다" \
+  || no "T15: 게이트가 검사하지 않은 audit 을 rc $t15rc 로 실었다 — 신원 결속이 없다: $t15err"
+rm -rf "$T15D"
+
+# ── T16: §6 종결 좌표 (v0.47.0) ─────────────────────────────────────────────
+# audit §6 **안**에 펜스로 감싼 `## 7.` 을 두면, 옛 `NEXT_SECTION_RE`(원문·펜스 무시)가
+# 거기서 잘라 이 블록이 **비었다**(원문 전량 소실). 게이트는 rc 0 이었다. 지금은 경계가
+# 유일하게 해석되지 않으므로 **조립하지 않는다** — 「모르겠다」를 「비었다」로 바꾸지 않는다.
+T16D="$(mktemp -d)" || exit 1
+cp "$FX/interview-brief-valid.md" "$T16D/interview-brief-valid.md"
+python3 - "$FX/interview-brief-valid.audit.md" "$T16D/interview-brief-valid.audit.md" <<'PY'
+import pathlib, re, sys
+src, dst = map(pathlib.Path, sys.argv[1:3])
+t = src.read_text(encoding="utf-8")
+m = re.search(r"(?m)^##\s+6\.\s+사용자 원문[^\n]*\n", t)
+assert m, "audit §6 헤딩 부재 — 픽스처가 바뀌었다"
+dst.write_text(t[:m.end()] + "```text\n## 7. camouflage\n```\n" + t[m.end():], encoding="utf-8")
+PY
+grep -qF '## 7. camouflage' "$T16D/interview-brief-valid.audit.md" \
+  && ok "T16(양성): 위장 종결 줄이 픽스처에 실제로 심겼다" \
+  || no "T16(양성): 주입이 적용되지 않았다 — 아래 rc 2 는 이 공격의 증거가 아니다"
+t16out="$(python3 "$B" "$T16D/interview-brief-valid.md" "$T16D/interview-brief-valid.audit.md" 2>/dev/null)"
+t16rc=$?
+[[ $t16rc -eq 2 ]] \
+  && ok "T16: §6 안 펜스 `## 7.` → rc 2 (무디스패치)" \
+  || no "T16: rc $t16rc 로 조립했다 — 종결 좌표로 원문이 잘려 나간다"
+printf '%s' "$t16out" | grep -qE '\*\*S[2-9]' \
+  && no "T16: 거절했다면서 원문을 내보냈다" \
+  || ok "T16: 거절 시 아무것도 내보내지 않는다 (빈 ground truth 로 「왜곡 없음」이 나오는 경로 차단)"
+rm -rf "$T16D"
 
 exit $fail

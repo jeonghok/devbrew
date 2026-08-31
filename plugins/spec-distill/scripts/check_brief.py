@@ -55,6 +55,16 @@ import re
 import sys
 from pathlib import Path
 
+# §6 경계는 이 리포에서 한 곳에서만 계산된다 — `scripts/section6.py`. 세 소비자(이 게이트 ·
+# `build_brief_bundle.py` · `check_verbatim_coverage.py`)가 각자 정규식을 갖던 동안 셋의
+# 시작·종결 규칙이 서로 달랐고, 그 어긋남 하나하나가 통로였다(v0.47.0). sys.path 보정은
+# importlib 로 이 파일을 직접 로드하는 테스트 경로 때문이다 — 스크립트로 실행될 때는
+# sys.path[0] 이 이미 이 디렉토리다.
+_SCRIPTS_DIR = str(Path(__file__).resolve().parent)
+if _SCRIPTS_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPTS_DIR)
+import section6  # noqa: E402
+
 
 WEB_DISABLED_ADVISORY = (
     "[spec-distill] DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 — 이 게이트 실행에서 완화된 것은 "
@@ -129,88 +139,33 @@ def _body(text: str) -> str:
     return FENCE_RE.sub("", body)
 
 
-def _fence_spans(text: str) -> list:
-    return [(m.start(), m.end()) for m in FENCE_RE.finditer(text)]
-
-
-def _first_unfenced(pattern, text: str, pos: int = 0):
-    """`pattern`의 첫 매치 중 펜스 **밖**에 있는 것. 없으면 None.
-
-    §6 경계를 원문에서 직접 찾을 때 필요하다 — 펜스 안에 `## 6. 사용자 원문`을
-    적어 두면 그 지점부터 다음 `## N.`까지가 코퍼스에서 잘려 나가, 부재 검사를
-    피하는 새 통로가 열린다.
-    """
-    spans = _fence_spans(text)
-    for m in pattern.finditer(text, pos):
-        if not any(s <= m.start() < e for s, e in spans):
-            return m
-    return None
-
-
-PAYLOAD_SECTION6_RE = re.compile(r"(?m)^##\s+6\.\s+사용자 원문\b")
-ANY_SECTION_HEADING_RE = re.compile(r"(?m)^##\s+\d+\.")
-
-# 「§6 헤딩으로 읽힐 수 있는 줄」 — 유일성 판정 전용. **가장 관대한 소비자에서 도출한다.**
-# 이 문서의 §6을 실제로 잘라 쓰는 소비자가 셋이고 셋의 매처가 다르다:
-#   · 이 파일 `_section_text` — `_body()`(frontmatter·펜스 제거) 위, 제목 요구
-#   · `check_verbatim_coverage.py:parse_section6` — **원문 위, 펜스 무시**, `^##\s*6\.`
-#     (제목을 요구하지 않는다)
-#   · `build_brief_bundle.py:audit_verbatim` — **원문 위, 펜스 무시**, 제목 요구
-# 「경계가 유일한가」는 이 중 **가장 많이 매치하는 매처**로 물어야 한다. 좁은 매처로 물으면
-# 「이 문서의 §6은 하나다」가 참인 채로 다른 소비자는 다른 절을 §6으로 읽는 상태가 통과한다.
-# 넓은 쪽으로 틀리면 red가 하나 더 날 뿐이고, 좁은 쪽으로 틀리면 통로가 열린다.
-SECTION6_HEADING_ANY_RE = re.compile(r"(?m)^##\s*6\.")
-
-
-def section6_heading_lines(text: str) -> list:
-    """§6 헤딩으로 읽힐 수 있는 줄의 1-기반 줄번호 전부 — **펜스 안도 센다**."""
-    return [text.count("\n", 0, m.start()) + 1
-            for m in SECTION6_HEADING_ANY_RE.finditer(text)]
-
-
 def section6_ambiguous(text: str) -> list:
-    """N1c — §6 헤딩이 둘 이상이면 그 줄번호들, 아니면 빈 목록.
+    """N1c — §6 이 **모든 소비자에게 같은 영역**으로 해석되지 않는 이유들 (v0.47.0).
 
-    **이 검사가 있는 이유는 다른 두 검사의 코퍼스 정의 때문이다.** N1a의 코퍼스는
-    「payload에서 §6을 뺀 나머지」이고 N1b의 코퍼스는 「payload §6」이다 — 둘은 서로의
-    여집합이라 §6이 어디부터 어디까지인지가 **유일하게** 정해질 때만 정의된다. 헤딩이
-    둘이면 두 검사는 「첫 번째」를 골라야 하는데, 그 선택이 곧 **저자가 옮길 수 있는
-    경계**가 된다. 실측 둘 — ① §4 꼬리에 두 번째 `## 6. 사용자 원문`을 적고 그 아래
-    URL을 두면 N1a의 코퍼스가 거기서 잘려 URL이 검사 밖으로 나간다(rc 0). ② 같은 줄을
-    frontmatter 안에 적으면 frontmatter 전체가 코퍼스에서 빠진다(rc 0) — v0.44.0이
-    닫은 frontmatter 인라인-주석 통로가 그대로 다시 열린다.
+    판정은 `section6.ambiguities()` 가 한다. 이 게이트가 자기 정규식으로 다시 계산하면
+    「게이트가 보는 §6」과 「번들·완전성 검사가 싣는 §6」이 다시 갈릴 수 있다 — 그 갈라짐이
+    바로 이 검사가 막는 대상이므로, 검사 자신이 그것을 재생산하면 안 된다.
 
-    그래서 「첫 번째를 고르는 규칙」을 고치는 것으로는 닫히지 않는다. **고르는 행위
-    자체가 구멍**이므로 유일성을 불변식으로 못 박고 위반을 red로 낸다.
+    **두 좌표를 함께 본다.** v0.46.0 은 시작 좌표만 못 박았고, 종결 좌표로 같은 공격이
+    그대로 들어왔다 — audit §6 안에 **펜스로 감싼** `## 7.` 을 두면 게이트는 조용한데
+    번들의 `<<<AUDIT-VERBATIM>>>` 블록이 비거나 위조본으로 바뀐다(실측 rc 0, 두 형태).
+    「시작도 못 박고 종결도 못 박는다」가 아니라 **「두 극단의 읽기가 일치하는가」** 한
+    술어다 — 그래야 세 번째 좌표가 나와도 같은 술어가 덮는다.
 
-    payload와 audit **양쪽**에 건다. audit §6도 유일해야 한다 — `build_brief_bundle.py`가
-    펜스를 무시하고 **첫** `## 6.`부터를 원문 블록으로 실으므로, 앞선 가짜 헤딩 하나면
-    충실도 리뷰어가 받는 ground truth가 통째로 바뀐다.
+    payload 와 audit **양쪽**에 건다.
     """
-    lines = section6_heading_lines(text)
-    return lines if len(lines) > 1 else []
+    return section6.ambiguities(text)
 
 
 def payload_section6_span(text: str):
-    """payload **원문**에서 §6 절의 `[start, end)` — 경계가 유일할 때만. 아니면 None.
+    """payload **원문**에서 §6 절의 `(start, end)` — 유일하게 해석될 때만. 아니면 None.
 
-    N1a와 N1b가 공유하는 **단 하나의** 경계다. 두 검사가 각자 §6을 찾으면 한쪽만 고쳐질
-    때 「§6 안」과 「§6 밖」이 겹치거나 벌어진다 — 실제로 벌어져 있었다: N1b는 `_body()`
-    위에서 §6을 찾아 payload §6 안 펜스의 `- **S5**`를 못 봤고, 그 줄은 그대로 출하됐다.
-
-    **원문 좌표로 계산한다.** `_body()`가 벗긴 텍스트 위에서 잡은 span은 원문을 자를 수
-    없고, 그 벗김 자체가 위 결함의 원인이다.
-
-    None을 fail-closed로 읽는다 — 호출부가 §6을 하나도 빼지 않으므로(= 코퍼스 최대),
-    이 함수가 무력화돼도 N1a는 침묵하지 않고 더 많이 문다.
+    N1a 와 N1b 가 공유하는 **단 하나의** 경계이고, 그 하나를 `section6.py` 에서 받는다.
+    None 을 fail-closed 로 읽는다 — 호출부가 §6 을 하나도 빼지 않으므로(= 코퍼스 최대),
+    이 함수가 무력화돼도 N1a 는 침묵하지 않고 더 많이 문다.
     """
-    if section6_ambiguous(text):
-        return None
-    m = _first_unfenced(PAYLOAD_SECTION6_RE, text)
-    if m is None:
-        return None
-    nxt = _first_unfenced(ANY_SECTION_HEADING_RE, text, m.end())
-    return (m.start(), nxt.start() if nxt else len(text))
+    sp = section6.span(text)
+    return None if sp is None else (sp[0], sp[2])
 
 
 def find_missing_sections(text: str, sections: list = SECTIONS) -> list[str]:
@@ -991,9 +946,8 @@ def gate(path: Path) -> int:
     sec6_dup = section6_ambiguous(text)
     if sec6_dup:
         failures.append(
-            f"payload에 §6 사용자 원문 헤딩이 {len(sec6_dup)}개다 (줄 {sec6_dup}) — "
-            "경계가 유일하지 않으면 「payload에서 §6을 뺀 나머지」(N1a)도 "
-            "「payload §6」(N1b)도 정의되지 않는다")
+            "payload §6 경계가 유일하게 해석되지 않는다 — " + " · ".join(sec6_dup)
+            + " (「payload에서 §6을 뺀 나머지」(N1a)도 「payload §6」(N1b)도 정의되지 않는다)")
     sec6_absent = any(m.startswith("6.") for m in miss)
     # 경계가 비유일하면 N1b·bijection C를 묻지 않는다 — 그 상태의 앵커 집합은 공집합이라
     # "앵커가 없다"는 **원인과 어긋난 red**가 되고, 저자는 §6에 앵커를 더 넣으려 든다.
@@ -1039,8 +993,8 @@ def gate(path: Path) -> int:
             audit_sec6_dup = section6_ambiguous(audit_text)
             if audit_sec6_dup:
                 failures.append(
-                    f"audit에 §6 사용자 원문 헤딩이 {len(audit_sec6_dup)}개다 "
-                    f"(줄 {audit_sec6_dup}) — 번들 빌더가 첫 헤딩부터를 원문 블록으로 싣는다")
+                    "audit §6 경계가 유일하게 해석되지 않는다 — " + " · ".join(audit_sec6_dup)
+                    + " (번들 빌더가 이 경계로 ground truth를 싣는다)")
             if not sec6_absent and not sec6_dup and not audit_sec6_dup:
                 ce = bijection_c_errors(text, audit_text)
                 if ce:

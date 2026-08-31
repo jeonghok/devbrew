@@ -283,7 +283,14 @@ rm -f "$tmps"
 # C1 mutation: P21 분기의 강등 플래그만 제거한다. (def rename은 NameError→exit 4를 내는데
 # 그건 "세탁이 통과했다"가 아니라 "스크립트가 죽었다"이고, `!= 1` 같은 단방향 assert는 그것을
 # 통과로 오독한다 — iter-2가 이 위양성을 적발했다. mutation은 **정확한 기대값**을 요구한다.)
-tmpm="$(mktemp)" || exit 1
+# 변이본은 **디렉토리**에 세우고 sibling `section6.py` 를 함께 옮긴다. v0.47.0 부터 §6 경계는
+# `scripts/section6.py` 한 곳이고, 이 스크립트는 그것을 형제 모듈로 import 한다 — 파일 하나만
+# 떼어 /tmp 에 두고 돌리면 `ModuleNotFoundError` 로 죽어 rc 1 이 나고, 그 1 은 「세탁이
+# 차단됐다」가 아니라 「스크립트가 죽었다」다(아래 단언이 요구하는 정확한 기대값 0 과 다르므로
+# 이 위양성은 red 로 드러났다 — 단방향 assert 였다면 조용히 통과했을 자리).
+MUTD="$(mktemp -d)" || exit 1
+tmpm="$MUTD/check_verbatim_coverage.py"
+cp "$(dirname "$SCRIPT")/section6.py" "$MUTD/section6.py"
 MUT_PY="$(mktemp)" || exit 1
 cat > "$MUT_PY" <<'MUTEOF'
 import re, sys
@@ -311,7 +318,7 @@ if [[ "$mutres" == "MUTATED" ]]; then
 else
   no "C1 mutation: 치환 대상을 못 찾았다 ($mutres) — 락이 vacuous하다"
 fi
-rm -f "$tmpm" "$MUT_PY"
+rm -rf "$MUTD"; rm -f "$MUT_PY"
 
 # --- C2 : §6 앵커 중복은 '검사 불가(3)'가 아니라 위반(1) --------------------
 rc="$(rc_of "$FX/brief-verbatim-dup-anchor.md" "$FX/state-verbatim-ok.md" "$FX/brief-verbatim-dup-anchor.audit.md")"
