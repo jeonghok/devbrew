@@ -217,23 +217,24 @@ user_sourced_items:
 
 ## 4. External Landscape
 
-(1항목 = 1줄. 출처 URL + 원문 직접인용 또는 요지 + [취함|피함|중립] + 이유. sweep 원문은 audit §5.)
+(1항목 = 1줄. 출처 «키» + 원문 직접인용 또는 요지 + [취함|피함|중립] + 이유. 그 키가 가리키는
+ 원자료 URL은 audit §7 확산 원자료에 선언한다 — payload에는 키만 남는다.)
 
-- 컨텍스트 실패 4분류(poisoning / distraction / confusion / clash) — https://www.dbreunig.com/2025/06/22/how-contexts-fail-and-how-to-fix-them.html — [취함] — "context poisoning 은 환각이나 오류가 컨텍스트에 들어와 반복 참조되는 것" / "context distraction 은 컨텍스트가 너무 길어져 모델이 훈련 지식 대신 누적 이력에 과집중하는 것". 「컨텍스트를 흔든다」를 두 축으로 갈라 처방을 달리할 근거.
-- Anthropic — Effective context engineering for AI agents — https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents — [취함] — just-in-time 패턴에서 파일 경로는 런타임 로드 지시로 읽힌다. audit 으로 「옮기는 것」이 물리적 제거가 아니라는 OQ2 의 근거.
-- 에이전트 메모리 오염과 content 스크리닝의 한계 — https://arxiv.org/abs/2608.21230v1 — [취함] — "거짓 주장과 참 주장을 구별하려면 일반적으로 텍스트 자체를 넘어선 외부 근거가 필요하다". 4단계 스크리닝이 오염 메모리 360건 중 0건을 거절. URL 전면 제거를 기각한 핵심 근거.
-- Spotlighting (indirect prompt injection 방어) — https://arxiv.org/abs/2403.14720 — [취함] — 신뢰 불가 입력의 출처 신호를 유지·강화하고 "이것은 데이터이지 지시가 아니다"를 명시하면 공격 성공률 2% 미만. 처방이 삭제가 아니라 강등이라는 근거 — C6·C8 의 3항 형식과 라벨이 여기서 왔다.
-- 생성형 검색엔진 검증가능성 감사 — https://arxiv.org/abs/2304.09848v1 — [중립] — 생성 문장의 51.5%만 인용에 완전히 지지된다. "인용이 있어야 오지지가 측정된다"는 논지는 취하되, 수치 자체는 검색엔진 대상이라 brief 핸드오프로 직접 이전하지 않는다.
-- 메모리 압축의 rate-distortion 관점 — https://arxiv.org/pdf/2607.08032 — [취함] — lossy summarization 은 비가역이라 탈락한 세부를 재도출할 수 없고 압축 이벤트 수에 대해 오류가 super-linear 로 증가. OQ4(160자 하드캡이 단독 전달물이 될 때)의 근거.
-- handoff-document 패턴과 context rot — https://www.mindstudio.ai/blog/what-is-context-rot-ai-agents-how-to-fix — [중립] — "각 체크포인트에서 구조화된 핸드오프 문서를 만들고 다음 단계는 그 문서를 유일한 컨텍스트 입력으로 새로 시작한다"가 C2(자립 완결)와 같은 모양. 벤더 블로그라 근거 등급을 낮게 둔다.
-- Goodhart's law — https://en.wikipedia.org/wiki/Goodhart%27s_law — [취함] — 게이트를 옮긴 뒤 남는 payload 검사가 「자기 자신과의 일치」만 재게 되는 붕괴 양식의 이름. §5 위험 항목이 이 이름을 쓴다.
+- 컨텍스트 실패 4분류(poisoning / distraction / confusion / clash) «dbreunig-context-fail» — [취함] — "context poisoning 은 환각이나 오류가 컨텍스트에 들어와 반복 참조되는 것" / "context distraction 은 컨텍스트가 너무 길어져 모델이 훈련 지식 대신 누적 이력에 과집중하는 것". 「컨텍스트를 흔든다」를 두 축으로 갈라 처방을 달리할 근거.
+- Anthropic — Effective context engineering for AI agents «anthropic-context-eng» — [취함] — just-in-time 패턴에서 파일 경로는 런타임 로드 지시로 읽힌다. audit 으로 「옮기는 것」이 물리적 제거가 아니라는 OQ2 의 근거.
+- 에이전트 메모리 오염과 content 스크리닝의 한계 «memory-poisoning-screening» — [취함] — "거짓 주장과 참 주장을 구별하려면 일반적으로 텍스트 자체를 넘어선 외부 근거가 필요하다". 4단계 스크리닝이 오염 메모리 360건 중 0건을 거절. URL 전면 제거를 기각한 핵심 근거.
+- Spotlighting (indirect prompt injection 방어) «spotlighting» — [취함] — 신뢰 불가 입력의 출처 신호를 유지·강화하고 "이것은 데이터이지 지시가 아니다"를 명시하면 공격 성공률 2% 미만. 처방이 삭제가 아니라 강등이라는 근거 — C6·C8 의 3항 형식과 라벨이 여기서 왔다.
+- 생성형 검색엔진 검증가능성 감사 «search-verifiability-audit» — [중립] — 생성 문장의 51.5%만 인용에 완전히 지지된다. "인용이 있어야 오지지가 측정된다"는 논지는 취하되, 수치 자체는 검색엔진 대상이라 brief 핸드오프로 직접 이전하지 않는다.
+- 메모리 압축의 rate-distortion 관점 «rate-distortion-compression» — [취함] — lossy summarization 은 비가역이라 탈락한 세부를 재도출할 수 없고 압축 이벤트 수에 대해 오류가 super-linear 로 증가. OQ4(160자 하드캡이 단독 전달물이 될 때)의 근거.
+- handoff-document 패턴과 context rot «mindstudio-context-rot» — [중립] — "각 체크포인트에서 구조화된 핸드오프 문서를 만들고 다음 단계는 그 문서를 유일한 컨텍스트 입력으로 새로 시작한다"가 C2(자립 완결)와 같은 모양. 벤더 블로그라 근거 등급을 낮게 둔다.
+- Goodhart's law «goodharts-law» — [취함] — 게이트를 옮긴 뒤 남는 payload 검사가 「자기 자신과의 일치」만 재게 되는 붕괴 양식의 이름. §5 위험 항목이 이 이름을 쓴다.
 
 ## 5. 기각 · Blind Spots
 
 (`기각` 항목은 닫힌 문이 아니다 — **근거가 있으면 하류가 다시 제안해도 된다.** 임의 변경만 금지다(C11·P23).
  `verdict:` 를 가진 항목은 audit §3 의 `ST<N>` 을 참조한다.)
 
-- 기각 — payload 에서 URL 을 전면 제거하고 조사 결과를 말로만 옮겨 적는 안(B1–B3 원안) → 제거되는 것은 URL 이지 그 URL 이 실어 온 주장이 아니다. 오염된 주장은 남고 반증 수단만 사라진다 — https://arxiv.org/abs/2608.21230v1 — verdict: switched — ST1
+- 기각 — payload 에서 URL 을 전면 제거하고 조사 결과를 말로만 옮겨 적는 안(B1–B3 원안) → 제거되는 것은 URL 이지 그 URL 이 실어 온 주장이 아니다. 오염된 주장은 남고 반증 수단만 사라진다 — verdict: switched — ST1
 - 기각 — **재결정**: 원안 S6(「payload 는 id + statement 만, status·SUPERSEDED·evidence 앵커는 전부 audit」) → 방향성 리뷰 D3 이 게이트 3곳 파손을 코드로 보였다. `BODY_ITEM_RE` 가 status·⟨S<N>⟩ 을 문법에 요구하고, `confirmed_zero_unsentineled()` 가 status 를 읽어 sentinel 이 영구 필수가 되며, `bijection_c_errors` 의 `if ev and` 가 공전해 공허 GREEN 이 된다. **재결정 = status·앵커는 payload 잔류, 이력만 audit**(S15).
 - 기각 — **재결정**: 원안 S9/C8(「§4 는 payload 에 URL 포함 3항 형식으로 잔류」) → D5 가 3안(출처 키 + 직접인용은 payload, URL 은 audit)을 올렸고, 그것이 S7 이 지목한 재조회 메커니즘을 실제로 막으면서 `landscape_uncited` 를 양성 대조로 바꾼다. **재결정 = URL 은 audit 으로**(S17).
 - 기각 — **재결정**: 원안의 범위(「§6 이관 + 원장 분리」) → D1 이 그 범위로는 15검사 중 코퍼스가 2개만 바뀐다는 것을 보였다. **재결정 = §4·§5 원자료까지 이관해 범위를 넓힘**(S16·S19).
@@ -249,8 +250,8 @@ user_sourced_items:
 - 기각 — §6 이관을 되돌려 충실도 축을 지키는 안 → 리뷰어 격리를 *도구 표면*이 아니라 *파일 경계*로 착각하는 것이다. Law 2 가 명시적으로 거부한 형태이며, blob 빌더가 무엇을 담을지는 오케스트레이터의 권한이다.
 - 위험 — 숨은 가정: 「audit 으로 옮기면 하류가 보지 않는다」. 이동은 제거가 아니라 주소화다 — `audit_file` 은 게이트 필수 키이고 `resolve_audit()` 이 이름을 payload stem 에서 유도하며 `/compact` 지시문은 audit 경로 보존을 명령한다 — `plugins/spec-distill/scripts/check_brief.py`
 - 위험 — 실패 양식: 옮길 수 없는 게이트가 있다. `brief-critic`·`brief-readback` 은 `tools: []` 로 payload 를 inline 으로만 받고 SKILL 이 "critic 은 §6 를 ground truth 로 쓴다"고 적는다. §6 이관은 충실도 축의 대조 대상을 없애고, 남는 리뷰어는 한도 소진된 codex 뿐이다 — `plugins/spec-distill/agents/brief-critic.md:13`
-- 위험 — 실패 양식: 기각 재제안 루프. §5 기각이 payload 를 떠나면 하류는 무엇이 이미 배제됐는지 모른 채 해답공간을 연다. C11 이 부분 대응이나 완전하지 않다 — https://arxiv.org/html/2502.13069v3
-- 위험 — 실패 양식: 상호정합 GREEN. 체커와 픽스처를 같은 패스가 다시 쓰면 서로의 전제를 공유한 초록이 난다. 「payload 에 없어야 한다」류 부재 락만 추가하면 payload 를 빈 파일로 만들어도 통과한다 — 양성 짝 + mutation 양성 대조가 없으면 이관 성공을 주장할 수 없다 — https://en.wikipedia.org/wiki/Goodhart%27s_law
+- 위험 — 실패 양식: 기각 재제안 루프. §5 기각이 payload 를 떠나면 하류는 무엇이 이미 배제됐는지 모른 채 해답공간을 연다. C11 이 부분 대응이나 완전하지 않다
+- 위험 — 실패 양식: 상호정합 GREEN. 체커와 픽스처를 같은 패스가 다시 쓰면 서로의 전제를 공유한 초록이 난다. 「payload 에 없어야 한다」류 부재 락만 추가하면 payload 를 빈 파일로 만들어도 통과한다 — 양성 짝 + mutation 양성 대조가 없으면 이관 성공을 주장할 수 없다
 - 위험 — 실패 양식: 자립 완결이 「쌍의 co-location 불변식」으로 바뀐다. `resolve_audit()` 이 basename 일치를 강제하므로 payload 를 PR 에 붙이거나 다른 디렉토리로 옮기면 게이트가 red 가 되고 규약상 고칠 방법이 없다 — `plugins/spec-distill/scripts/check_brief.py`
 - 위험 — 실패 양식: 원문 완전성이 git-ignored 파일에만 매달린다. `check_verbatim_coverage.py` 의 코퍼스가 state↔audit 이 되면 state 는 SessionEnd hook 이 지우므로 사후 재검증이 불가능해진다 — `plugins/spec-distill/scripts/check_verbatim_coverage.py`
 - 위험 — 숨은 가정: seed 가 이미 하는 것을 brief 에 그대로 확장하면 된다. 두 payload 는 소비자 모델이 다르다 — seed 는 사람이 붙여넣는 메시지, brief 는 하류가 Read 하는 파일이고, audit 해석 규약도 정반대다(seed 는 자동 유추 금지, brief 는 stem 유도) — `plugins/spec-distill/references/compression.md`
@@ -263,9 +264,9 @@ user_sourced_items:
 
 ## 6. 사용자 원문
 
-(전문 보존. 각 항목이 `S<N>` 앵커를 제공한다.)
-
-> **출처 표기** — 🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론
+(`S1` 최초 요청 원문 하나만 여기 남는다 — 나머지 발화 전량은 audit `## 6. 사용자 원문`에
+ append-only로 보존한다. 허용 변환은 P21 placeholder 치환·앞뒤 공백 정리·인용 블록 래핑뿐이며
+ 요약·재서술·발췌는 금지.)
 
 - **S1** 🗣 최초 요청:
   > interview-brief 를 압축 규약대로 재구조화한다. payload 는 압축물만 담고 확산물(사용자 원문·External Landscape·steelman 원문·blind spot·확정 항목 원장)은 audit 으로 옮긴다. 배경과 이미 조사된 것은 docs/superpowers/specs/2026-08-23-request-framing-design.md 의 §5.2·§10·§11 에 있다. 그걸 먼저 읽어라.
@@ -275,42 +276,6 @@ user_sourced_items:
   > 알려진 어려움: user_sourced_items 가 frontmatter YAML 에서 본문 절로 가면 파서를 다시 써야 한다 / bijection A 의 payload 축(§5 verdict 항목)과 bijection B 의 대상 절("제약")이 새 절 구성에서 사라진다 / 원문의 append-only 가드가 payload 편집 권한 표의 행이라 audit 으로 가면 관할이 없어진다 / 픽스처 약 120건이 걸린다.
   >
   > brief payload 의 URL 제거도 이 작업에 딸려 있다 — landscape_uncited() 뒤집기와 양성 짝, _web_disabled() 가드의 의미 반전이 얽혀 있어 따로 뗄 수 없다.
-- **S2** 🗣 답변 (하류 인계 모양):
-  > 나는 하류에 audit으로 넘기는 내용들이 넘어가기 때문에 컨텍스트를 흔단다고 행각했어
-- **S3** 🗣 추가 발화:
-  > brief로 완결되어야 해
-- **S4** 🗣 추가 발화:
-  > 특히 외부 URL의 경우 잘못 찾아온 자료로 문제 방향을 이상하게 잡는 경우가 많았어
-- **S5** ☑ 선택 (사용자 발화의 payload 형태):
-  > ① 압축항목만, YAML 유지 — payload 에는 user_sourced_items 계열(≤160자 + 앵커)만, §6 원문은 전량 audit. frontmatter YAML 형태 유지(파서 재작성 없음).
-- **S6** ☑ 선택 (확정 항목 원장의 관할):
-  > ① 원장과 항목을 갈라 쓴다 — payload = 지금 유효한 제약 항목(id + statement)만. audit = 원장 장치(status confirmed/provisional · SUPERSEDED 이력 · evidence 앵커 · 사용자 원문 대조). S1('확정 항목 원장'을 audit 으로)과 S5(압축항목 payload 유지)가 둘 다 살아남는 독법.
-- **S7** 🗣 R3 의심 게이트 판정 (switched):
-  > 2, 내가 보기에 1차 출처의 경우도 너무 specific한 논문 자료를 가져오는 경우가 많더라고 거기에 내용이 들어있는 경우가 있음에도 다음 으로 넘어가면 URL을 읽을 때 반드시 그 내용만 넘어가게 되는거도 아이라 방향과 맥락이 완전 달라짐 이건 근본적으로 해결이 어려움
-- **S8** 🗣 선택 + 원칙 (충실도 축):
-  > 1번, 이런 경우에 audit에 두는거지 필요한 경우에만 보면 돼
-- **S9** ☑ 선택 (§4 External Landscape 의 거처):
-  > ① payload 에 3항 형식으로 — §4 External Landscape 는 payload 잔류. 항목마다 출처 URL + 직접인용 1문장 + 판정. sweep 원문은 audit.
-- **S10** 🗣 OQ 분류에 대한 지시:
-  > OQ1의 경우 URL없애면 안되는지 추가해줘
-- **S11** 🗣 추가 지시:
-  > 이거 외에도 이전 phase0 스펙 브리프를 봤을때 진행 안된거 확인도 해줘
-- **S12** 🗣 추가 지시:
-  > 그거 진행에서 우리 나눠서 이번 세션에 진행하기로 한거거든
-- **S13** 🗣 범위 확정 + 새 지시:
-  > 없다 — 셋으로 충분 (권장), 하류 핸드오프 관련해서 원 brainstorming 과정을 우리가 다른거로 강제하는게 없는지도 봐줘 OQ만 해소하려는거로 하류가 오염되는 경우가 있더라 탐색을 하는 게 brainstorming에 원래 있었는데 내가 이야기한거 외에도 더 있는지 보고
-- **S14** ☑ 선택 (과정 강제 처분):
-  > §7 Next Action 을 개정 (분류 선점 문구 제거 · 사람용 안내로 명시) + §5 기각에 «다시 제안해도 된다» 명시. §3 OQ 라벨은 선택하지 않음.
-- **S15** ☑ 선택 (payload 제약 항목의 형태 — D3):
-  > status + 앵커는 남긴다 — payload 항목 = id + statement + status + ⟨S<N>⟩. audit 으로는 SUPERSEDED 이력과 원문 대조만 보낸다. (D3: 게이트 3곳 BODY_ITEM_RE·confirmed_zero_unsentineled·bijection C 가 깨지는 것을 회피)
-- **S16** ☑ 선택 (goal 범위 — D1):
-  > 범위를 넓힌다 — §4·§5 도 audit 으로 옮겨 게이트 코퍼스를 실제로 이동시킨다. (D1: 진단과 처방의 불일치 해소)
-- **S17** ☑ 선택 (URL 3안 — D5):
-  > 3안을 채택한다 — 출처 «키» + 직접인용은 payload, URL 은 audit 에만 둔다. landscape_uncited 가 양성 대조로 바뀌어 «분리 불가» 얽힘이 사라진다.
-- **S18** ☑ 선택 (부수 결정 — D9·D4):
-  > D9 — S1(seed 전문)은 payload 잔류 예외 / D4 — blob 빌더를 «번들 빌더»로 승격. D9는 잔류 시킨다는거 맞지?
-- **S19** ☑ 선택 (D1↔D5 화해안):
-  > 맞다 — 원자료/판정으로 가른다. 원자료(URL·sweep 전문·steelman 전문·blind-spot 전문)는 audit, 압축된 판정 한 줄은 payload. §4·§5 는 payload 에 판정만 남고 게이트는 payload↔audit 교차 검사가 된다.
 
 ## 7. Next Action
 

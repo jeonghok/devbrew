@@ -108,3 +108,63 @@ source: spec-distill conducting-interview v0.41.0
 - 확정 반영: 21건 `provisional` → `confirmed`. C20·C21 은 `open` 유지(§5 에서 반증·해소된 전제라 확정 대상이 아니다).
 - AC12 sentinel `# confirmed 0건 — 사용자가 전부 잠정으로 판단` 은 같은 write 에서 삭제. §0 의 「전부 provisional」 서술도 함께 동기화 — 확정 반영이 그 문장을 거짓으로 만들었다.
 - **확정은 봉인이 아니다**(P23): 근거가 있으면 하류가 보고 후 재결정 가능, 임의 변경만 금지.
+
+## 6. 사용자 원문
+
+(`S1`을 제외한 발화 전량. **append-only** — `S<N>` 항목 추가만 허용하고 기존 항목 본문은
+ 바꾸지 않는다(P21 placeholder 치환만 예외). 요약·재서술·발췌 금지.
+ `check_verbatim_coverage.py`가 state 원장과 대조하는 대상이 이 절이다.)
+
+> **출처 표기** — 🗣 사용자 발화 · ☑ 사용자 선택 · ✎ 모델 추론
+
+- **S2** 🗣 답변 (하류 인계 모양):
+  > 나는 하류에 audit으로 넘기는 내용들이 넘어가기 때문에 컨텍스트를 흔단다고 행각했어
+- **S3** 🗣 추가 발화:
+  > brief로 완결되어야 해
+- **S4** 🗣 추가 발화:
+  > 특히 외부 URL의 경우 잘못 찾아온 자료로 문제 방향을 이상하게 잡는 경우가 많았어
+- **S5** ☑ 선택 (사용자 발화의 payload 형태):
+  > ① 압축항목만, YAML 유지 — payload 에는 user_sourced_items 계열(≤160자 + 앵커)만, §6 원문은 전량 audit. frontmatter YAML 형태 유지(파서 재작성 없음).
+- **S6** ☑ 선택 (확정 항목 원장의 관할):
+  > ① 원장과 항목을 갈라 쓴다 — payload = 지금 유효한 제약 항목(id + statement)만. audit = 원장 장치(status confirmed/provisional · SUPERSEDED 이력 · evidence 앵커 · 사용자 원문 대조). S1('확정 항목 원장'을 audit 으로)과 S5(압축항목 payload 유지)가 둘 다 살아남는 독법.
+- **S7** 🗣 R3 의심 게이트 판정 (switched):
+  > 2, 내가 보기에 1차 출처의 경우도 너무 specific한 논문 자료를 가져오는 경우가 많더라고 거기에 내용이 들어있는 경우가 있음에도 다음 으로 넘어가면 URL을 읽을 때 반드시 그 내용만 넘어가게 되는거도 아이라 방향과 맥락이 완전 달라짐 이건 근본적으로 해결이 어려움
+- **S8** 🗣 선택 + 원칙 (충실도 축):
+  > 1번, 이런 경우에 audit에 두는거지 필요한 경우에만 보면 돼
+- **S9** ☑ 선택 (§4 External Landscape 의 거처):
+  > ① payload 에 3항 형식으로 — §4 External Landscape 는 payload 잔류. 항목마다 출처 URL + 직접인용 1문장 + 판정. sweep 원문은 audit.
+- **S10** 🗣 OQ 분류에 대한 지시:
+  > OQ1의 경우 URL없애면 안되는지 추가해줘
+- **S11** 🗣 추가 지시:
+  > 이거 외에도 이전 phase0 스펙 브리프를 봤을때 진행 안된거 확인도 해줘
+- **S12** 🗣 추가 지시:
+  > 그거 진행에서 우리 나눠서 이번 세션에 진행하기로 한거거든
+- **S13** 🗣 범위 확정 + 새 지시:
+  > 없다 — 셋으로 충분 (권장), 하류 핸드오프 관련해서 원 brainstorming 과정을 우리가 다른거로 강제하는게 없는지도 봐줘 OQ만 해소하려는거로 하류가 오염되는 경우가 있더라 탐색을 하는 게 brainstorming에 원래 있었는데 내가 이야기한거 외에도 더 있는지 보고
+- **S14** ☑ 선택 (과정 강제 처분):
+  > §7 Next Action 을 개정 (분류 선점 문구 제거 · 사람용 안내로 명시) + §5 기각에 «다시 제안해도 된다» 명시. §3 OQ 라벨은 선택하지 않음.
+- **S15** ☑ 선택 (payload 제약 항목의 형태 — D3):
+  > status + 앵커는 남긴다 — payload 항목 = id + statement + status + ⟨S<N>⟩. audit 으로는 SUPERSEDED 이력과 원문 대조만 보낸다. (D3: 게이트 3곳 BODY_ITEM_RE·confirmed_zero_unsentineled·bijection C 가 깨지는 것을 회피)
+- **S16** ☑ 선택 (goal 범위 — D1):
+  > 범위를 넓힌다 — §4·§5 도 audit 으로 옮겨 게이트 코퍼스를 실제로 이동시킨다. (D1: 진단과 처방의 불일치 해소)
+- **S17** ☑ 선택 (URL 3안 — D5):
+  > 3안을 채택한다 — 출처 «키» + 직접인용은 payload, URL 은 audit 에만 둔다. landscape_uncited 가 양성 대조로 바뀌어 «분리 불가» 얽힘이 사라진다.
+- **S18** ☑ 선택 (부수 결정 — D9·D4):
+  > D9 — S1(seed 전문)은 payload 잔류 예외 / D4 — blob 빌더를 «번들 빌더»로 승격. D9는 잔류 시킨다는거 맞지?
+- **S19** ☑ 선택 (D1↔D5 화해안):
+  > 맞다 — 원자료/판정으로 가른다. 원자료(URL·sweep 전문·steelman 전문·blind-spot 전문)는 audit, 압축된 판정 한 줄은 payload. §4·§5 는 payload 에 판정만 남고 게이트는 payload↔audit 교차 검사가 된다.
+
+## 7. 확산 원자료
+
+(payload §4가 쓴 «출처키» 마다 원자료 URL을 여기 선언한다. 집합 포함 검사(N2)이므로
+ 개수·순서는 무관 — payload가 쓴 키가 이 목록에 있기만 하면 된다.)
+
+- «dbreunig-context-fail» — https://www.dbreunig.com/2025/06/22/how-contexts-fail-and-how-to-fix-them.html — 컨텍스트 실패 4분류(poisoning / distraction / confusion / clash)
+- «anthropic-context-eng» — https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents — just-in-time 컨텍스트 패턴이 파일 경로를 런타임 로드 지시로 읽는다는 근거
+- «memory-poisoning-screening» — https://arxiv.org/abs/2608.21230v1 — 에이전트 메모리 오염과 content 스크리닝의 한계(§3 ST1 evidence 9건 중 하나와 동일 URL)
+- «spotlighting» — https://arxiv.org/abs/2403.14720 — indirect prompt injection 방어(Spotlighting) — 삭제가 아니라 강등이라는 처방의 근거
+- «search-verifiability-audit» — https://arxiv.org/abs/2304.09848v1 — 생성형 검색엔진 검증가능성 감사(생성 문장 51.5%만 인용에 완전히 지지)
+- «rate-distortion-compression» — https://arxiv.org/pdf/2607.08032 — 메모리 압축의 rate-distortion 관점(lossy summarization 은 비가역)
+- «mindstudio-context-rot» — https://www.mindstudio.ai/blog/what-is-context-rot-ai-agents-how-to-fix — handoff-document 패턴과 context rot
+- «goodharts-law» — https://en.wikipedia.org/wiki/Goodhart%27s_law — Goodhart's law(§4·§5 위험 항목이 공유 인용)
+- «rejection-reproposal-risk» — https://arxiv.org/html/2502.13069v3 — §5 위험 항목(기각 재제안 루프)의 근거. §4 키가 아니다 — §5는 원칙상 URL만 제거하고 키를 삽입하지 않는다(Task 8 결정, CHANGELOG 0.44.0)

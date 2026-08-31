@@ -82,6 +82,25 @@ payload/audit에서 다시 조립해야 하므로) — 전체-파일 `== 1`은 �
 재현한 mutation(2-b에 재조립 호출 삽입)으로 이 락이 RED(count 2)를 내는 것을 실측
 확인했다.
 
+### Known gaps
+
+- **dogfood 이관은 브리프 1쌍뿐이다 — `docs/superpowers/interview/`의 나머지 3쌍은
+  구 포맷 그대로 남는다(task-11).** 근거: `check_brief.py gate` 호출 지점 셋(SKILL 훅·
+  명령·테스트 스위트) 전부가 「방금 쓴 파일」만 대상으로 하고, 옛 brief를 다시 게이트에
+  태우는 경로가 리포 안에 없다. **대가** — 누군가 옛 brief 3쌍 중 하나에 `check_brief.py
+  gate`를 손으로 걸면 §6 앵커·URL·«키» 축에서 **원인 불명 RED**를 만난다. 이 문단이 그
+  판단의 소재다.
+- **선재 결함 4건 — 이 릴리스가 만든 것도, 고친 것도 아니다(task-8 스윕, `check_brief.py`).**
+  `ST_REF_RE.sub`(statement-length 계산, `skepticism_malformed` 내부, G) · `_strip_bullet()`
+  호출(`coverage_ledger_failures`, audit §1 행 파싱, I) · `_entry_lines()`의 맨 `-`/`*`
+  단독 줄 제외(J) · 같은 statement-length 계산 안의 `_strip_bullet()` 서브스텝(K, 위
+  `ST_REF_RE`와 분리했을 때) 넷 다, 그 결함을 드러낼 fixture가 리포에 없어 **관측
+  불가능**하다(무결함이 아니라 무증거) — 스윕 당시 URL/N1a 내용과 무관하다고 판단해
+  fixture를 새로 만들지 않았다. **선재·범위 밖** — 이 릴리스가 만든 것도 고친 것도
+  아니다. 다음에 이 근방을 건드리는 사람이 "왜 안 고쳤나"를 묻지 않도록 여기 남긴다 —
+  이 결정을 낳은 스크래치 워크스페이스가 프로젝트 종료 시 삭제되므로 이 CHANGELOG가
+  이 사실이 살아남는 유일한 자리다.
+
 ## [0.44.0] — 2026-08-31
 
 ### Changed
