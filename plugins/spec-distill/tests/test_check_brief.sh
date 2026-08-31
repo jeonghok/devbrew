@@ -752,6 +752,112 @@ for fx in no-sec4 sec4-header-only sec5-no-entries; do
   [[ $? -ne 0 ]] && ok "U3-T8: 우회 $fx → red" || no "U3-T8: 우회 $fx 가 통과 — N1a 가 공허해진다"
 done
 
+# --- U3-T8c: N1a 의 코퍼스는 payload **전문** − §6 다 (최종 리뷰 I1) -----------
+# 설계 §2.3 이 못 박은 코퍼스는 「payload 에서 §6 을 뺀 나머지」인데, 구현이
+# `_body()` 위에 얹혀 있어 실제로는 **frontmatter 와 펜스까지 뺀 것**이었다.
+# 벗겨진 바이트는 하류 문서에 그대로 실려 나가므로 그 벗김은 두 개의 문이었다
+# (실측: 펜스 안 URL 2건 → `{"pass": true}` rc 0 / frontmatter 인라인 주석의 URL →
+# 같은 방식으로 통과). §3.2 의 탈출로 표는 **삭제** 3종만 열거했고 이 둘은 없었다.
+#
+# 픽스처는 리포에 새로 두지 않고 `interview-brief-valid.md` 를 TMPD 에서 변형한다 —
+# 변형 지점이 단언 바로 옆에 보이고, 기존 픽스처가 무엇에 기대는지 건드리지 않는다.
+n1a_case() {  # $1 = TMPD 안 stem
+  cp "$FX/interview-brief-valid.md" "$TMPD/$1.md"
+  cp "$FX/interview-brief-valid.audit.md" "$TMPD/$1.audit.md"
+  sed -i.bak "s|^audit_file:.*|audit_file: $1.audit.md|" "$TMPD/$1.md"; rm -f "$TMPD/$1.md.bak"
+}
+
+n1a_case urlfence
+python3 - "$TMPD/urlfence.md" <<'PY'
+import pathlib, re, sys
+p = pathlib.Path(sys.argv[1]); t = p.read_text(encoding="utf-8")
+m = re.search(r"(?m)^##\s+4\.\s+External Landscape[^\n]*\n", t)
+assert m, "§4 헤딩 부재 — 픽스처가 바뀌었다"
+p.write_text(t[:m.end()] + "\n```text\nhttps://fence.example.com/a\n```\n" + t[m.end():],
+             encoding="utf-8")
+PY
+out="$(python3 "$SCRIPT" gate "$TMPD/urlfence.md" 2>&1)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '외부 URL'; } \
+  && ok "U3-T8c: 펜스 안 URL → red (코퍼스가 펜스를 벗기지 않는다)" \
+  || no "U3-T8c: 펜스 안 URL 이 통과 — N1a 가 _body() 의 펜스 스트립을 물려받았다"
+
+n1a_case urlfm
+python3 - "$TMPD/urlfm.md" <<'PY'
+import pathlib, re, sys
+p = pathlib.Path(sys.argv[1]); t = p.read_text(encoding="utf-8")
+t2, n = re.subn(r'(?m)^(\s*statement:\s*"[^"]*")\s*$', r"\1   # https://fm.example.com/x",
+                t, count=1)
+assert n == 1, "frontmatter statement 줄 부재 — 픽스처가 바뀌었다"
+p.write_text(t2, encoding="utf-8")
+PY
+out="$(python3 "$SCRIPT" gate "$TMPD/urlfm.md" 2>&1)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '외부 URL'; } \
+  && ok "U3-T8c: frontmatter 주석의 URL → red (코퍼스가 frontmatter 를 벗기지 않는다)" \
+  || no "U3-T8c: frontmatter URL 이 통과 — N1a 가 _body() 의 frontmatter 스트립을 물려받았다"
+
+# §6 경계를 **펜스 밖 헤딩**으로만 찾는가. 안 그러면 위 둘을 닫으면서 같은 모양의
+# 새 문을 연다 — 펜스 안에 가짜 `## 6.` 을 적으면 거기부터 다음 `## N.` 까지가
+# 코퍼스에서 잘려 나간다.
+n1a_case urlfakes6
+python3 - "$TMPD/urlfakes6.md" <<'PY'
+import pathlib, re, sys
+p = pathlib.Path(sys.argv[1]); t = p.read_text(encoding="utf-8")
+m = re.search(r"(?m)^##\s+4\.\s+External Landscape[^\n]*\n", t)
+assert m, "§4 헤딩 부재 — 픽스처가 바뀌었다"
+inj = "\n```text\n## 6. 사용자 원문\n```\n\n위장 경계 뒤: https://fake.example.com/x\n"
+p.write_text(t[:m.end()] + inj + t[m.end():], encoding="utf-8")
+PY
+out="$(python3 "$SCRIPT" gate "$TMPD/urlfakes6.md" 2>&1)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '외부 URL'; } \
+  && ok "U3-T8c: 펜스 안 가짜 §6 헤딩은 경계가 아니다 → red" \
+  || no "U3-T8c: 펜스 안 가짜 §6 이 코퍼스를 잘라냈다 — 새 탈출로"
+
+# 양성 대조 — 「URL 을 못 찾았다」와 「아무것도 안 읽었다」를 가른다.
+# 부재 술어의 초록은 그 자체로는 증거가 아니다: 코퍼스가 빈 문자열이어도 위 세
+# 단언은 전부 초록이 된다(그리고 실제 brief 는 전부 통과한다). 그래서 코퍼스의
+# **구성**을 직접 단언한다 — 무엇이 들어 있고 무엇이 빠졌는지. 이름(§6 헤딩·
+# frontmatter 키·펜스 토큰)은 여기 계약으로 고정하고, §6 본문 첫 줄만 픽스처에서
+# 값으로 읽는다. 행 수는 리터럴 5 로 못 박는다 — 추출기가 죽으면 리포트가 비고
+# while 루프가 아예 안 돌아 단언이 조용히 사라진다(F3 에서 실측된 실패형).
+N1A_ERR="$(mktemp -t sdN1aerr)"
+corpus_report="$(python3 - "$SCRIPT" "$TMPD/urlfence.md" 2>"$N1A_ERR" <<'PY'
+import importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location("cb_n1a", sys.argv[1])
+cb = importlib.util.module_from_spec(spec); spec.loader.exec_module(cb)
+raw = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+corpus = cb._payload_excluding_section6(raw)
+S6 = "## 6. 사용자 원문"
+tail = [ln for ln in raw.split(S6, 1)[-1].splitlines() if ln.strip()] if S6 in raw else []
+s6_first = tail[0] if tail else ""
+
+
+def row(cond, name):
+    print(("YES\t" if cond else "NO\t") + name)
+
+
+row(S6 in raw, "원본에 §6 헤딩이 있다 (제외가 공허하지 않다)")
+row(S6 not in corpus, "코퍼스에서 §6 헤딩이 빠졌다")
+row(bool(s6_first) and s6_first not in corpus, "코퍼스에서 §6 본문 첫 줄이 빠졌다")
+row("user_sourced_items" in corpus, "코퍼스가 frontmatter 를 담는다")
+row(chr(96) * 3 + "text" in corpus, "코퍼스가 펜스 블록을 담는다")
+PY
+)"
+corpus_rc=$?
+[[ "$corpus_rc" -eq 0 ]] \
+  && ok "U3-T8c(양성): 코퍼스 추출기가 정상 종료했다 (rc=0)" \
+  || no "U3-T8c(양성): 코퍼스 추출기가 rc=$corpus_rc 로 죽었다 — 아래 단언은 무의미하다: $(tr '\n' ' ' < "$N1A_ERR" | tail -c 200)"
+n1a_rows="$(grep -cE '^(YES|NO)'$'\t' <<<"$corpus_report" || true)"
+[[ "$n1a_rows" -eq 5 ]] \
+  && ok "U3-T8c(양성): 구성 단언이 정확히 5행이다" \
+  || no "U3-T8c(양성): 구성 단언이 5행이 아니라 $n1a_rows — 리포트가 비었거나 잘렸다(단언 소실)"
+rm -f "$N1A_ERR"
+while IFS=$'\t' read -r tag name; do
+  case "$tag" in
+    YES) ok "U3-T8c(양성): $name" ;;
+    NO)  no "U3-T8c(양성): $name — 코퍼스가 설계 §2.3 과 다르다" ;;
+  esac
+done <<< "$corpus_report"
+
 # sentinel 조임: web ON 에서 「생략」 한 단어만은 안 된다
 python3 "$SCRIPT" gate "$FX/interview-brief-sentinel-only.md" >/dev/null 2>&1
 [[ $? -ne 0 ]] && ok "U3-T8: web ON + sentinel only → red (#12 조임)" \

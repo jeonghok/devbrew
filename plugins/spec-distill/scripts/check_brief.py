@@ -105,9 +105,39 @@ FLOOR_KEYS = ["root_problem", "landscape", "skepticism", "blind_spot", "open_que
 
 
 def _body(text: str) -> str:
+    """**존재 검사용 코퍼스** — frontmatter와 펜스를 벗긴 산문 본문.
+
+    이 게이트에는 코퍼스가 **둘** 있다. 이쪽은 「무엇이 있는가」를 묻는 검사들
+    (#1 절 존재·#12 §4 항목·#14 §5 verdict·#15 기각 항목 …)이 쓴다. 그 검사들에
+    프론트매터와 펜스를 벗기는 것이 맞다 — frontmatter는 절이 아니고, 펜스 안 예시는
+    저술된 내용이 아니라 예시라서 ``` 안에 헤딩을 적어 절 존재를 만족시키는 우회를
+    막아야 한다(F4).
+
+    **부재 검사(N1a)는 이 코퍼스를 쓰면 안 된다.** 여기서 벗겨낸 것이 그대로 하류
+    문서에 실려 나가므로, 벗김은 존재 검사에서는 엄격함이지만 부재 검사에서는
+    **구멍**이다. N1a의 코퍼스는 `_payload_excluding_section6()`이다.
+    """
     m = FRONTMATTER_RE.match(text)
     body = text[m.end():] if m else text
     return FENCE_RE.sub("", body)
+
+
+def _fence_spans(text: str) -> list:
+    return [(m.start(), m.end()) for m in FENCE_RE.finditer(text)]
+
+
+def _first_unfenced(pattern, text: str, pos: int = 0):
+    """`pattern`의 첫 매치 중 펜스 **밖**에 있는 것. 없으면 None.
+
+    §6 경계를 원문에서 직접 찾을 때 필요하다 — 펜스 안에 `## 6. 사용자 원문`을
+    적어 두면 그 지점부터 다음 `## N.`까지가 코퍼스에서 잘려 나가, 부재 검사를
+    피하는 새 통로가 열린다.
+    """
+    spans = _fence_spans(text)
+    for m in pattern.finditer(text, pos):
+        if not any(s <= m.start() < e for s, e in spans):
+            return m
+    return None
 
 
 def find_missing_sections(text: str, sections: list = SECTIONS) -> list[str]:
@@ -555,8 +585,23 @@ def bijection_b_errors(text: str) -> list[str]:
 SOURCE_KEY_RE = re.compile(r"«([^»]+)»")
 
 
-def _body_excluding_section6(text: str) -> str:
-    """payload 본문에서 §6 사용자 원문을 뺀 것 — N1a의 코퍼스.
+PAYLOAD_SECTION6_RE = re.compile(r"(?m)^##\s+6\.\s+사용자 원문\b")
+ANY_SECTION_HEADING_RE = re.compile(r"(?m)^##\s+\d+\.")
+
+
+def _payload_excluding_section6(text: str) -> str:
+    """**부재 검사용 코퍼스(N1a)** — payload **전문**에서 §6 사용자 원문만 뺀 것.
+
+    설계 §2.3이 못 박은 코퍼스가 그대로다: 「payload 에서 §6 을 뺀 나머지」. 빼는
+    것은 §6 **하나뿐**이다 — frontmatter도 펜스도 빼지 않는다.
+
+    **`_body()`를 쓰지 않는 것이 이 함수의 요점이다.** `_body()`는 존재 검사용이라
+    frontmatter와 펜스(`FENCE_RE`)를 벗기는데, N1a에서 그 벗김은 엄격함이 아니라
+    구멍이다: 벗겨진 바이트는 하류로 나가는 문서에 **그대로 살아 있다**. 실측된
+    두 통로 — ① payload §4 안 ```펜스```에 URL 2건 → `{"pass": true}` rc 0, 펜스
+    두 줄만 지우면 `payload에 외부 URL 2건` rc 1. ② frontmatter `statement:` 뒤
+    인라인 주석의 URL → 같은 방식으로 통과. 둘 다 N1a가 막으려는 바로 그 해다.
+    두 코퍼스가 공존하는 값은 이 주석과 `_body()`의 짝 주석으로 치른다.
 
     §6이 예외인 이유는 편의가 아니다. URL을 깎는 근거("링크가 권위로 읽혀 하류를
     끌고 간다")는 **모델이 web sweep으로 가져온 링크**를 겨눈다. 사용자가 자기
@@ -565,18 +610,23 @@ def _body_excluding_section6(text: str) -> str:
     `check_verbatim_coverage.py`의 `normalize()`가 맨 URL을 안 벗기므로 L2가
     `not_contained`로 exit 1을 낸다. 유일한 탈출로인 P21 치환은 보안 컨트롤을
     URL 세탁에 쓰는 것이고 그 statement의 L2를 advisory로 강등시킨다.
+
+    §6 경계는 **펜스 밖 헤딩**으로만 찾는다. 펜스 안 `## 6. 사용자 원문`을 경계로
+    인정하면, 그 가짜 헤딩부터 다음 `## N.`까지가 코퍼스에서 잘려 나가 위 ①을
+    닫으면서 같은 모양의 새 통로를 여는 꼴이 된다.
     """
-    body = _body(text)
-    m = re.search(r"^##\s+6\.\s+사용자 원문\b", body, re.MULTILINE)
-    if not m:
-        return body
-    rest = body[m.end():]
-    nxt = re.search(r"^##\s+\d+\.", rest, re.MULTILINE)
-    return body[: m.start()] + (rest[nxt.start():] if nxt else "")
+    m = _first_unfenced(PAYLOAD_SECTION6_RE, text)
+    if m is None:
+        return text
+    nxt = _first_unfenced(ANY_SECTION_HEADING_RE, text, m.end())
+    return text[: m.start()] + (text[nxt.start():] if nxt else "")
 
 
 def payload_url_free(text: str) -> list[str]:
-    """N1a — 모델이 저술한 payload 부분에 외부 URL(`https?://`)이 0개인가.
+    """N1a — payload에서 §6을 뺀 나머지 **전부**에 외부 URL(`https?://`)이 0개인가.
+
+    코퍼스는 `_payload_excluding_section6()` — frontmatter와 펜스를 **포함한다**.
+    존재 검사들이 쓰는 `_body()`와는 다른 코퍼스다(각 함수의 주석 참조).
 
     **부재 술어다.** 대상 절을 통째로 지우면 공허하게 통과하므로, 이 검사의 이빨은
     이 함수 안에 없다 — #1 `find_missing_sections`(§4 절 삭제) · #12
@@ -590,7 +640,7 @@ def payload_url_free(text: str) -> list[str]:
     리포 내부 `file:line` 참조는 대상이 아니다 — 외부 권위가 아니라 고칠 대상을
     가리키는 손가락이고, 하류가 실제로 열어야 하는 것이다.
     """
-    return [ln.strip() for ln in _body_excluding_section6(text).splitlines()
+    return [ln.strip() for ln in _payload_excluding_section6(text).splitlines()
             if URL_RE.search(ln)]
 
 
