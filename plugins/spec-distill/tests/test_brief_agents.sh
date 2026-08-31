@@ -278,8 +278,13 @@ GT_SITES = (
     ("2-a dispatch", dispatch_block(skill_path)),
 )
 for label, blocks in GT_SITES:
+    # 술어는 ∀다: **위치를 하나라도 이름으로 대는** ground-truth 문단은 두 곳을
+    # 전부 대야 한다. ∃(`any`)로 두면 같은 파일의 다른 ground-truth 문단이 정작
+    # 깨진 문장을 대신 만족시킬 수 있다. 후보가 0이면 그 자리는 위치를 아예 안
+    # 대는 것이므로 red다 — `all([])`의 공허 참을 이 guard가 막는다.
+    cands = [b for b in blocks if any(m in b for m in EXPECTED)]
     for marker in EXPECTED:
-        covered = any(marker in b for b in blocks)
+        covered = bool(cands) and all(marker in b for b in cands)
         print(("GT_COVERED" if covered else "GT_UNCOVERED") + "\t" + label + "\t" + marker)
 PYEOF
 )"

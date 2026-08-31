@@ -3,7 +3,8 @@ name: brief-critic
 description: >
   Use this agent to review an interview brief for FIDELITY — whether the model's
   §2 제약 summary distorted, dropped, or invented what the user actually said (the
-  block after `<<<AUDIT-VERBATIM>>>`). Receives the brief inline; owns no path and no external evidence.
+  payload's own `## 6. 사용자 원문` section AND the block after `<<<AUDIT-VERBATIM>>>` —
+  both are ground truth). Receives the brief inline; owns no path and no external evidence.
   Emits **Status:** + a `brief-critic-issues` sentinel JSON block. Physically
   blocked from editing files (Law 2 frontmatter scoping).
 
