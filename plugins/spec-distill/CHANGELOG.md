@@ -140,20 +140,24 @@ docstring에 어느 쪽이 무엇이고 왜인지를 적어 치른다). §6 경�
 편집하지 않았다(변형은 TMPD에서 `interview-brief-valid.md`로부터 만든다).
 
 **(최종 whole-branch 리뷰 fix, I2)** **충실도 축이 명시한 ground truth 코퍼스가 `S1`을
-빼고 있었다.** `agents/brief-critic.md`·`scripts/brief-codex-fidelity-checklist.md`·
-`reviewing-brief` SKILL의 2-a dispatch 프롬프트 셋이 코퍼스를 `<<<AUDIT-VERBATIM>>>`
-다음 블록 **하나**로 지목했는데, `build_brief_bundle.py`는 payload §6(`S1`, 바이트
+빼고 있었다.** `agents/brief-critic.md`의 본문과 frontmatter `description`·
+`scripts/brief-codex-fidelity-checklist.md`·`reviewing-brief` SKILL의 2-a dispatch
+프롬프트 **넷**이 코퍼스를 `<<<AUDIT-VERBATIM>>>` 다음 블록 **하나**로 지목했는데, `build_brief_bundle.py`는 payload §6(`S1`, 바이트
 그대로)을 그 라벨 **앞에** 싣는다. 출하된 dogfood payload만 해도 `evidence:`가 `S1`인
 항목이 4건이고 두 템플릿의 예시 항목도 `S1`에 앵커하므로, 그 항목들의 `distortion`·
 `evidence_unsupported` 판정이 「대조할 원문이 코퍼스 밖」인 채로 났다. 비대칭이 신호였다 —
 F3는 *비신뢰 경계* 문장에 두 위치를 강제하는데 *ground truth* 문장에는 아무 강제가 없었다.
-세 자리를 두 위치를 함께 이름으로 대도록 고치고(체크리스트의 `omission`·
+네 자리를 두 위치를 함께 이름으로 대도록 고치고(체크리스트의 `omission`·
 `evidence_unsupported` 정의에 박혀 있던 한 위치 고정도 함께 풀었다), **F14** 락을
-`test_brief_agents.sh`에 추가했다 — F3와 같은 산출자 상수에서 파생하고, 2-a dispatch는
-산문 앵커가 아니라 `subagent_type` 리터럴을 감싸는 `Agent({ … })` 호출을 **구조로**
-잘라낸다(같은 파일 다른 곳의 'ground truth' 문단이 대신 만족시키지 못하게). 행 수는
-리터럴 6(3 자리 × 2 위치). 실측: 세 자리 각각을 한 위치로 되돌리는 mutation 3종 + dispatch
-앵커 개명 + 산출자 상수 개명, 전부 exit 1.
+`test_brief_agents.sh`에 추가했다 — F3와 같은 산출자 상수에서 파생한다. 술어는 **∀**다:
+*위치를 하나라도 이름으로 대는* ground-truth 문단은 두 곳을 전부 대야 한다(∃로 두면 같은
+파일의 다른 문단이 정작 깨진 문장을 대신 만족시킨다). 후보 0은 red라 `all([])`의 공허
+참이 막힌다. 산문 앵커로 잡히지 않는 두 자리는 **구조로** 잘라낸다 — 2-a dispatch는
+`subagent_type` 리터럴을 감싸는 `Agent({ … })` 호출로, frontmatter `description`은 `---`
+구분자로(이 자리는 'ground truth'라는 어구를 지우기만 하면 산문 앵커 밖으로 빠져나갔다 —
+실측으로 확인하고 네 번째 자리로 승격했다). 행 수는 리터럴 8(4 자리 × 2 위치). 실측: 네
+자리 각각을 한 위치로 되돌리는 mutation 4종 + dispatch 앵커 개명 + 산출자 상수 개명, 전부
+exit 1.
 
 **(최종 whole-branch 리뷰 fix, M1)** **G6가 `SKILL.md` 안에서만 살았다.**
 `templates/interview-audit-template.md`의 냉독 행은 `<G1..G5 중 어느 클래스>`,
