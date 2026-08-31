@@ -206,7 +206,12 @@ done
 # its checklist out of brief-critic.md — the EXPECTED contract and coverage logic live
 # entirely in this test and in the producer module, so a change to brief-critic.md's
 # prose is exactly what this lock can detect.
-F3_REPORT="$(python3 - "$SD/scripts/build_brief_bundle.py" "$CR" <<'PYEOF'
+#
+# 이 리포트는 **양성 대조를 달고** 읽는다 — 아래 "F3(양성대조)" 블록 참조. 리포트가
+# 비면 grep 기반 단언 셋이 전부 「금지 태그 없음」으로 통과하고 COVERED 순회는 아예
+# 돌지 않아, 요구가 깨진 채로 스위트가 초록을 낸다.
+F3_ERR="$(mktemp -t sdF3err)"
+F3_REPORT="$(python3 - "$SD/scripts/build_brief_bundle.py" "$CR" 2>"$F3_ERR" <<'PYEOF'
 import importlib.util, re, sys
 
 bundle_script, critic_path = sys.argv[1], sys.argv[2]
@@ -234,6 +239,30 @@ for marker in EXPECTED:
     print(("COVERED" if covered else "UNCOVERED") + "\t" + marker)
 PYEOF
 )"
+F3_RC=$?
+# ── F3(양성대조) — 「리포트가 있다」를 먼저 증명한다 ────────────────────────────
+# 부재 술어만으로 짜인 락은 **대상이 사라지면 공허하게 통과한다.** 실측: 리뷰어가
+# build_brief_bundle.py 의 `UNTRUSTED_VERBATIM_MARKERS` 를 다른 이름으로 rename하자
+# (정의 + 유일 사용처, 2 insertions / 2 deletions) 위 블록이 AttributeError로 죽어
+# 트레이스백은 stderr 로 가고 `$F3_REPORT` 는 **빈 문자열**이 됐다. 그러자
+#   · `^MISSING` 없음 → ok        · `^EXTRA` 없음 → ok
+#   · `^NO_BOUNDARY_PARAGRAPH` 없음 → ok  (셋 다 「없어야 할 것이 없다」로 통과)
+#   · COVERED 순회는 한 번도 돌지 않아 단언 2개가 **조용히 사라졌다**
+# 스위트는 rc 0 · 77/77 을 냈다 — 기준선 79/79 와의 차이는 총계뿐이라 초록만 보면
+# 안 보인다. 형제 락 T12(test_brief_bundle.sh 의 `n_pairs -eq 3`)는 같은 함정을
+# 행 수 리터럴로 이미 막고 있었고, F3 는 그 관용구를 베끼면서 이 가드만 빠뜨렸다.
+#
+# 행 수는 **리터럴 2** 로 못 박는다. `len(EXPECTED)` 로 유도하면 EXPECTED 가 빈
+# 튜플이 되는 변형에서 `0 == 0` 으로 다시 공허해진다(피검자에서 기대값을 끌어오는
+# 바로 그 실패형). 계약이 세 곳으로 늘면 위 EXPECTED 와 이 숫자를 **함께** 고친다.
+[[ "$F3_RC" -eq 0 ]] \
+  && ok "F3(양성대조): 계약 추출기가 정상 종료했다 (rc=0)" \
+  || no "F3(양성대조): 계약 추출기가 rc=$F3_RC 로 죽었다 — 아래 F3 단언들은 무의미하다: $(tr '\n' ' ' < "$F3_ERR" | tail -c 200)"
+f3_rows="$(grep -cE '^(COVERED|UNCOVERED)'$'\t' <<<"$F3_REPORT" || true)"
+[[ "$f3_rows" -eq 2 ]] \
+  && ok "F3(양성대조): 커버리지 행이 정확히 2다 (단언이 실재한다)" \
+  || no "F3(양성대조): 커버리지 행이 2가 아니라 $f3_rows — 리포트가 비었거나 잘렸다(F3 단언 소실)"
+rm -f "$F3_ERR"
 missing_line="$(grep '^MISSING' <<<"$F3_REPORT" || true)"
 [[ -z "$missing_line" ]] && ok "F3: UNTRUSTED_VERBATIM_MARKERS 계약이 필수 2곳을 전부 포함한다" \
   || no "F3: build_brief_bundle.py의 UNTRUSTED_VERBATIM_MARKERS 에서 빠졌다 — ${missing_line#MISSING$'\t'}"
