@@ -56,6 +56,19 @@
   기존 T8·BLOB(2-a/3-a) 락도 2-a가 이제 `build_brief_bundle.py`를 호출하는 사실에 맞춰
   갱신했다(BLOB 루프는 섹션별로 다른 빌더 호출 패턴을 요구하도록 분기했다 — 한 정규식으로
   두 섹션을 함께 검사하면 한쪽 빌더 호출이 사라져도 다른 쪽 매치로 조용히 통과한다).
+- **`references/compression.md`의 예약 해소 (task-12) — brief도 이 계약을 게이트로
+  집행한다.** U1–U5(이 릴리스)가 실제로 landing시킨 것을 정본이 뒤늦게 인정한다:
+  payload 외부 URL 금지(N1a) · §6은 `S1`만(N1b) · landscape 원자료는 audit 결속(N2).
+  집행 지점만 seed(`check_seed.py`)와 brief(`check_brief.py`)가 다르다. 절 구조 분기
+  (seed는 메시지형·brief는 문서형)와 "원문·근거·전량을 payload에 요구하지 않는다"는
+  불변은 그대로 둔다 — 바뀌는 것은 어느 쪽이 게이트로 강제받는가뿐이다.
+- **`test_compression_adopters.sh`의 채택자 도출이 `conducting-interview`로 확장.**
+  `references/finishing.md`에 압축 규약 포인터 + 확산-후-압축 어휘를 추가해
+  `conducting-interview`도 도출 대상(2개)이 됐다 — 채택자 도출은 열거가 아니라 정본
+  포인터에서 나오므로, 추가하지 않으면 정본의 새 문구("brief도 집행한다")와 락이 실제로
+  재는 집합이 어긋난다. guards 선언에 `plugins/spec-distill/skills/*/references/*.md`를
+  되돌리고(fix round 1이 예고한 대로), 하한 1을 유지하는 근거와 "오늘 집행 대상은 seed
+  하나뿐"이라던 주석의 stale 주장을 함께 갱신했다.
 
 ### Fixed
 

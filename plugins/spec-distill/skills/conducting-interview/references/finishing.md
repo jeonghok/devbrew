@@ -1,5 +1,9 @@
 ## 종료 — brief 작성 + optional handoff
 
+이 stage 전체가 **확산**이고(라운드 질문·landscape sweep·steelman·blind-spot premortem), Step A 는 그 결과를 **압축**해 payload 로 내보낸다 — 압축 규약 정본은 `${CLAUDE_PLUGIN_ROOT}/references/compression.md` 다. 남기는 불변량은 의도·steering·방향·goal 넷, 나머지 원자료(질문 라운드 전문·landscape 원문·steelman 중간 추론)는 audit 에 남는다.
+
+오늘부터 `interview-brief` 도 이 규약을 **게이트로 집행**한다 — payload 외부 URL 금지(N1a) · §6 은 `S1` 만(N1b) · landscape 원자료는 audit 결속(N2). 집행 지점만 seed 와 다르다: seed 는 `check_seed.py`, brief 는 아래 Step A ⑤ 의 `check_brief.py`.
+
 종료 driver는 **커버리지 원장의 floor 5차원이 전부 `closed`** 인 것이다(고정 라운드 수 아님, G1).
 다음을 모두 만족하면 brief를 작성합니다:
 

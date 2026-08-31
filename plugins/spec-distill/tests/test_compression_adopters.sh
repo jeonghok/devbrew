@@ -1,30 +1,34 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/*/SKILL.md
+# guards: plugins/spec-distill/skills/*/SKILL.md plugins/spec-distill/skills/*/references/*.md
 #
 # 압축 규약의 **채택자 대칭** — `references/compression.md` 를 채택한 skill 이 자기 표면에
 # 압축 어휘를 갖는가. `test_proceed_gate_adopters.sh` 와 같은 골격이되 하한이 다르다.
 #
-# ── guards 선언에 `references/*.md` 글롭이 없는 이유 (fix round 1) ─────────
-# 스캔 로직(아래 `derive_reference_adopters`)은 여전히 각 채택자의 `references/*.md`
-# 까지 본다 — **동적으로**, 채택자가 그 디렉터리를 가지면. 이 파일 상단의 `# guards:`
-# 는 그 동적 스캔이 아니라 `test_guards_coverage_bidirectional.sh` 가 재는 **정적
-# 선언**이고, 그 락은 각 글롭이 오늘의 `--emit-scanned` 출력을 실제로 덮는지 잰다.
-# 오늘 유일한 채택자 `framing-requests` 는 `references/` 디렉터리가 없어
-# `--emit-scanned` 가 `SKILL.md` 한 줄만 낸다 — `references/*.md` 글롭을 선언에 남기면
-# 아무것도 안 덮는 글롭(「선언이 넓다」)으로 RED 가 난다〔실측, fix round 1〕. 둘째
-# 채택자가 `references/` 를 가지면 `--emit-scanned` 가 그 경로를 내고, 그 경로가
-# **이 선언 밖**이 되어 반대 방향(「선언이 좁다」)이 RED 를 낸다 — 그때 이 글롭을
-# 되돌리는 것이 맞는 수정이다. 지금 되돌리지 않는 것은 태만이 아니라 오늘 존재하지
-# 않는 표면을 선언하지 않는 것이다.
+# ── guards 선언에 `references/*.md` 글롭이 있는 이유 (fix round 2 — Task 12) ──
+# 스캔 로직(아래 `derive_reference_adopters`)은 각 채택자의 `references/*.md` 까지 본다
+# — **동적으로**, 채택자가 그 디렉터리를 가지면. 이 파일 상단의 `# guards:` 는 그 동적
+# 스캔이 아니라 `test_guards_coverage_bidirectional.sh` 가 재는 **정적 선언**이고, 그
+# 락은 각 글롭이 오늘의 `--emit-scanned` 출력을 실제로 덮는지 잰다. round 1 시점엔
+# 유일한 채택자 `framing-requests` 가 `references/` 디렉터리를 갖지 않아 `--emit-scanned`
+# 가 `SKILL.md` 한 줄만 냈고, 그때 `references/*.md` 글롭을 선언에 남기면 아무것도 안
+# 덮는 글롭(「선언이 넓다」)으로 RED 가 났다〔실측, fix round 1〕. 둘째 채택자
+# `conducting-interview` 가 brief 를 이 계약의 게이트 집행자로 채택하면서(Task 12,
+# `references/finishing.md` 경유) `--emit-scanned` 가 그 경로를 냈고, 그 경로가 옛
+# 선언 밖이 되어 반대 방향(「선언이 좁다」)이 RED 를 냈다〔실측, fix round 2〕 — 이
+# 문단이 예고한 그 시점이 왔으므로 글롭을 되돌린다.
 #
-# ── 하한이 2 가 아니라 1 인 이유 ────────────────────────────────────────────
+# ── 하한이 여전히 1 인 이유 (fix round 2 — Task 12) ────────────────────────
 # 형제 락의 하한 2 는 «두 skill 이 공유하니까 플러그인 레벨에 있다»는 배치 근거에서
-# 나온다. 이 계약은 다르다 — **오늘 집행 대상은 seed 하나뿐**이고 brief 는 재구조화
-# 이후에 채택한다(정본 자신이 그렇게 적는다). 하한 2 를 두면 정직한 상태에 RED 가 난다.
+# 나온다. 이 계약은 그 근거를 옮기지 않는다 — 채택자 수를 하한에 못박으면 그 자체가
+# 열거이고, 어느 한쪽이 포인터를 잃어 채택자가 하나로 줄어드는 순간 정직한 상태에
+# RED 가 난다. 오늘은 seed(`framing-requests`)와 brief(`conducting-interview`) 둘 다
+# 이 계약을 게이트로 집행한다(집행 지점만 다르다 — 정본 `references/compression.md`
+# 「seed 와 brief 둘 다 이 계약을 게이트로 집행한다」절 참고). 채택자 수가 둘로
+# 늘었다고 하한을 그 수에 맞춰 올리지 않는다.
 #
-# **그래도 하한 1 은 둔다.** 두지 않으면 유일한 채택자가 포인터를 잃는 순간 도출 집합이
+# **하한 1 은 그대로 둔다.** 두지 않으면 유일한 채택자가 포인터를 잃는 순간 도출 집합이
 # 공집합이 되고 채택자별 루프가 0회 돌아 **vacuous GREEN** 이다. 하한 1 은 열거가
-# 아니므로 둘째 채택자가 생겨도 그대로 작동한다.
+# 아니므로 채택자 수가 늘거나 줄어도 그대로 작동한다.
 #
 # ── 코퍼스 스코프 ───────────────────────────────────────────────────────────
 # **정본을 코퍼스에 넣지 않는다.** 정본은 계약을 서술하느라 앵커 어휘를 그대로 담고
