@@ -18,7 +18,7 @@ user_sourced_items:
     source: verbatim          # verbatim(발화 그대로) | chosen(선택지 선택)
     status: provisional       # confirmed | provisional | open
     statement: "<C1 제약 한 줄>"   # 모델이 쓴 요약. P21 secret placeholder 치환
-    evidence: S1              # §6의 어느 발화에서 나왔는가 — 필수
+    evidence: S1              # 원문 §6(payload 또는 audit)의 어느 발화에서 나왔는가 — 필수
   - id: D2
     source: chosen
     status: provisional
@@ -43,7 +43,8 @@ user_sourced_items:
 
 ## 2. 제약
 
-(이 절의 진술은 모델이 쓴 요약이다. 원문은 §6, `⟨S<N>⟩`가 그것을 가리킨다.
+(이 절의 진술은 모델이 쓴 요약이다. 원문은 payload §6(S1)과 audit §6(S2 이상)에 나뉘어
+ 있고, `⟨S<N>⟩`가 그중 하나를 가리킨다.
  한 줄이 frontmatter 한 항목의 렌더다 — id·기호↔`source`·`status`·`⟨S<N>⟩`·statement 문구가
  **전부** 일치해야 한다(bijection B). 한쪽만 고치면 게이트가 red를 낸다.)
 

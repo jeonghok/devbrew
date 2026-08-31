@@ -43,7 +43,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
                                        ├─ 1단계 방향성  brief-direction-reviewer + codex #1  (보고만, 병합 없음)
                                        ├─ 2단계 충실도  brief-critic(격리) + codex #2  fail-closed 합집합
                                        │                needs_revise → 수정 → fresh 재리뷰 (재dispatch 상한 2)
-                                       └─ 3단계 냉독    brief-readback  (advisory, G1–G5 gap)
+                                       └─ 3단계 냉독    brief-readback  (advisory, G1–G6 gap)
                                        ▼ 산출물 4종 (확정 후보 / 방향성 C4 / readback+gap / 모든 degrade record)
                                        ▼ [Step B proceed 게이트] ①/compact 후 brainstorming · ②바로 brainstorming · ③확정 목록 수정 · ④brief만 종료  (superpowers 있을 때만)
                                    superpowers:brainstorming → -design.md
@@ -97,7 +97,7 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
   전문을 inline으로만 받고 경로를 갖지 않으며, zero-tool probe 통과 시 `tools: []`로 도달 경로가
   물리적으로 없다(실패 시 verdict를 advisory로 내리고 D2 미충족을 사용자에게 보고), (c) **수정 후
   fresh critic 재리뷰 1회 필수** — writer가 자기 수정을 승인하는 경로를 차단한다(상한 2).
-- **Law 3 (brief, v0.24.0)** — `brief-critic`의 `category` 6종과 readback gap 클래스 G1–G5가
+- **Law 3 (brief, v0.24.0)** — `brief-critic`의 `category` 6종과 readback gap 클래스 G1–G6가
   compounding substrate다. 리뷰가 놓친 결함류가 나오면 그 열거와 체크리스트를 편집하는 것이
   compounding 이벤트다(persona = 보안-민감 코드).
 

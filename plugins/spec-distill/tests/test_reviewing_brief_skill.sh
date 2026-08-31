@@ -687,6 +687,50 @@ grep -qE 'G1[–-]G6 .*0건' "$SKILL" \
   && ok "U4: G6 이 성공 조건에 포함됐다" \
   || no "U4: G6 을 표에만 더하고 성공 조건은 G1–G5 — 관측돼도 아무것도 안 막는다"
 
+# M1 (최종 리뷰): G6 이 SKILL 안에서만 살고 **출하되는 두 표면**에는 없었다 —
+# 감사 템플릿의 냉독 행은 `<G1..G5 중 어느 클래스>`, README 는 두 자리 다 G1–G5.
+# G6 관측을 적을 칸이 템플릿에 없으면 그 클래스는 실무에서 존재하지 않는 것과 같다.
+# 상한 값은 세 파일에서 각각 **읽고**, 단언하는 것은 그 셋이 **같다**는 관계다
+# (기대값을 피검자에서 끌어오지 않는다). 관계만 두면 셋이 함께 사라지는 변형에서
+# 공허해지므로 ① 표에서 도출한 상한의 하한 6 과 ② 파일당 범위 표기 ≥1 을 함께 못 박는다.
+# README 의 bare `G6`(리뷰 dispatch 상한, 다른 네임스페이스)와 섞이지 않도록 **범위
+# 표기**(`G1..G<N>` / `G1–G<N>`)만 센다.
+GAP_ERR="$(mktemp -t sdGaperr)"
+gap_report="$(python3 - "$SKILL" "$SD/templates/interview-audit-template.md" "$SD/README.md" \
+    2>"$GAP_ERR" <<'PY'
+import re, sys
+
+CLASS_ROW = re.compile(r"(?m)^\|\s*G(\d+)\s*\|")
+RANGE = re.compile(r"G1\s*(?:\.\.|[–-])\s*G(\d+)")
+classes = [int(n) for n in CLASS_ROW.findall(open(sys.argv[1], encoding="utf-8").read())]
+top = max(classes) if classes else 0
+print("TOP\t%d" % top)
+for label, path in zip(("SKILL", "audit-template", "README"), sys.argv[1:4]):
+    ns = [int(n) for n in RANGE.findall(open(path, encoding="utf-8").read())]
+    state = "OK" if ns and all(n == top for n in ns) else "BAD"
+    print("RANGE\t%s\t%d\t%s" % (label, len(ns), state))
+PY
+)"
+gap_rc=$?
+[[ "$gap_rc" -eq 0 ]] \
+  && ok "M1(양성대조): gap 클래스 추출기가 정상 종료했다 (rc=0)" \
+  || no "M1(양성대조): gap 클래스 추출기가 rc=$gap_rc 로 죽었다 — 아래 단언은 무의미하다: $(tr '\n' ' ' < "$GAP_ERR" | tail -c 200)"
+rm -f "$GAP_ERR"
+gap_top="$(grep '^TOP'$'\t' <<<"$gap_report" | cut -f2)"
+{ [[ "$gap_top" =~ ^[0-9]+$ ]] && [[ "$gap_top" -ge 6 ]]; } \
+  && ok "M1(양성대조): SKILL gap 클래스 표의 상한이 $gap_top (≥6)" \
+  || no "M1(양성대조): SKILL gap 클래스 표에서 상한을 못 읽었다 ('$gap_top') — 관계 단언이 공허해진다"
+gap_rows="$(grep -c '^RANGE'$'\t' <<<"$gap_report" || true)"
+[[ "$gap_rows" -eq 3 ]] \
+  && ok "M1(양성대조): 범위 표기 검사가 정확히 3파일이다" \
+  || no "M1(양성대조): 범위 표기 검사가 3파일이 아니라 $gap_rows — 리포트가 비었거나 잘렸다(단언 소실)"
+while IFS=$'\t' read -r tag label cnt state; do
+  [[ "$tag" == "RANGE" ]] || continue
+  [[ "$state" == "OK" ]] \
+    && ok "M1: ${label} 의 gap 범위 표기 ${cnt}건이 전부 G1–G${gap_top}" \
+    || no "M1: ${label} 의 gap 범위 표기(${cnt}건)가 G1–G${gap_top} 과 어긋난다 — 새 클래스를 적을 칸이 없다"
+done <<< "$gap_report"
+
 # --- F1 (task-10 fix round 1) : 2-a dispatch 프롬프트가 라벨 토큰을 가리킨다 -----
 # 결함: 체크리스트·agent 정의는 라벨 토큰으로 갱신됐는데, critic을 실제로 dispatch하는
 # Agent() 프롬프트 문자열(SKILL.md 자체, 2-a) 은 손대지 않아 "...said in §6?"를 그대로

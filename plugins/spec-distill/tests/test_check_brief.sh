@@ -621,11 +621,11 @@ printf '%s' "$out" | grep -q 'ST9: payload §5가 참조하지만' \
   && no "FIX4-bis: bijection A가 URL 안 phantom ST9를 판정 없는 steelman으로 오탐" \
   || ok "FIX4-bis: bijection A도 URL 안 phantom ST9를 참조로 안 본다"
 
-# T17: web 비활성 시 §4·§5 URL 요구 완화 (기존 graceful degradation 선례 유지)
-DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-verdict-no-url.md" >/dev/null 2>&1 \
-  && ok "T17: web 비활성 시 URL 없는 verdict 항목 → green (AC8/AC11)" \
-  || no "T17: web 비활성 시 URL 요구가 완화돼야 한다"
-# ...단 ST 참조 요구는 완화되지 않는다 (web과 무관한 파일-축 drift-guard)
+# T17: web kill switch 는 ST 참조 요구를 완화하지 않는다 (web과 무관한 파일-축 drift-guard).
+# 이 자리에 있던 앞 절반(「web 비활성 시 §4·§5 URL 없는 verdict 항목 → green」)은
+# v0.44.0 이 그 URL 요구를 지운 뒤로 **아무것도 재지 않았다** — web ON 에서도 같은
+# 픽스처가 green 이라 kill switch 와 무관했고, 「완화가 산다」는 거짓 인용만 남겼다.
+# 지운 이유를 여기 적어 둔다(다시 넣으면 그때는 실재하는 요구를 짚어야 한다).
 DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-verdict-no-st.md" >/dev/null 2>&1 \
   && no "T17: web 비활성이 ST 참조 요구까지 완화시켰다 (과잉 완화)" \
   || ok "T17: web 비활성이어도 ST 참조는 계속 요구됨"

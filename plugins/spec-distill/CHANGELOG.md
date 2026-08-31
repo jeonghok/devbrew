@@ -108,6 +108,74 @@ payload/audit에서 다시 조립해야 하므로) — 전체-파일 `== 1`은 �
 재현한 mutation(2-b에 재조립 호출 삽입)으로 이 락이 RED(count 2)를 내는 것을 실측
 확인했다.
 
+**(최종 whole-branch 리뷰 fix, I3)** `test_brief_agents.sh`의 **F3** 락이 **대상이
+개명되면 공허하게 초록**이었다. `build_brief_bundle.py`의 `UNTRUSTED_VERBATIM_MARKERS`를
+다른 이름으로 바꾸면(정의 + 유일 사용처, 2 insertions / 2 deletions) 임베디드 python이
+`AttributeError`로 죽고 트레이스백은 stderr로 가 `$F3_REPORT`가 빈 문자열이 된다. 그러면
+`^MISSING`·`^EXTRA`·`^NO_BOUNDARY_PARAGRAPH` 세 grep이 전부 「없어야 할 것이 없다」로
+통과하고, `COVERED` 행을 순회하는 while 루프는 한 번도 돌지 않아 단언 2개가 **조용히
+사라진다** — 스위트는 rc 0·77/77(기준선 79/79)을 냈다. 남은 세 줄은 존재하지 않는 상수에
+대해 *"계약이 필수 2곳을 전부 포함한다"*고 **적극적으로 성공을 주장**하고 있었다. 형제 락
+T12(`test_brief_bundle.sh`의 `n_pairs -eq 3`)가 같은 함정을 이미 행 수 리터럴로 막고
+있었고 F3는 그 관용구를 베끼면서 이 가드만 빠뜨렸다. 추출기 rc를 붙잡고 커버리지 행 수를
+**리터럴 2**로 못 박았다(`len(EXPECTED)`로 유도하면 빈 튜플 변형에서 `0 == 0`으로 다시
+공허해진다). 실측: 개명 mutation → exit 1, 복원 → exit 0.
+
+**(최종 whole-branch 리뷰 fix, I1)** **N1a의 코퍼스가 설계 §2.3보다 좁았고, 외부 URL이
+열거되지 않은 문 둘로 빠져나갔다.** `_body_excluding_section6()`이 `_body()` 위에 얹혀
+있어 실제 코퍼스는 「payload − §6」이 아니라 「payload − §6 − frontmatter − 펜스」였다.
+실측 — payload §4의 ```펜스``` 안 `https://` 2건이 `{"pass": true}` rc 0이고 펜스 두 줄만
+지우면 `payload에 외부 URL 2건` rc 1 · frontmatter `statement:` 뒤 인라인 주석의 URL도
+같은 방식으로 통과. 둘 다 하류로 나가는 문서에 **축자로 살아남는다** — N1a가 막으려는
+바로 그 해다. §3.2의 탈출로 표는 **삭제** 3종만 열거했고 이 둘은 표에 없었다. `_body()`는
+존재 검사들이 계속 쓰므로 **전역으로 고치지 않고**, N1a 전용 코퍼스
+`_payload_excluding_section6()`를 원문 위에 세웠다(두 코퍼스가 공존하는 값은 양쪽
+docstring에 어느 쪽이 무엇이고 왜인지를 적어 치른다). §6 경계는 **펜스 밖 헤딩**으로만
+찾는다 — 안 그러면 펜스 안 가짜 `## 6. 사용자 원문`이 그 지점부터 다음 `## N.`까지를
+코퍼스에서 잘라내, 두 문을 닫으면서 같은 모양의 세 번째 문을 여는 꼴이 된다. 락은
+`test_check_brief.sh`의 **U3-T8c**: 세 문 각각 → red + **코퍼스 구성 5행 양성 대조**
+(§6 헤딩이 원본에 있다/코퍼스에서 빠졌다/§6 본문 첫 줄이 빠졌다/frontmatter를 담는다/
+펜스를 담는다) + 추출기 rc + 행 수 리터럴 5. 부재 술어의 초록은 그 자체로 증거가 아니다 —
+「URL을 못 찾았다」와 「아무것도 안 읽었다」를 이 다섯 행이 가른다. 기존 픽스처는 하나도
+편집하지 않았다(변형은 TMPD에서 `interview-brief-valid.md`로부터 만든다).
+
+**(최종 whole-branch 리뷰 fix, I2)** **충실도 축이 명시한 ground truth 코퍼스가 `S1`을
+빼고 있었다.** `agents/brief-critic.md`·`scripts/brief-codex-fidelity-checklist.md`·
+`reviewing-brief` SKILL의 2-a dispatch 프롬프트 셋이 코퍼스를 `<<<AUDIT-VERBATIM>>>`
+다음 블록 **하나**로 지목했는데, `build_brief_bundle.py`는 payload §6(`S1`, 바이트
+그대로)을 그 라벨 **앞에** 싣는다. 출하된 dogfood payload만 해도 `evidence:`가 `S1`인
+항목이 4건이고 두 템플릿의 예시 항목도 `S1`에 앵커하므로, 그 항목들의 `distortion`·
+`evidence_unsupported` 판정이 「대조할 원문이 코퍼스 밖」인 채로 났다. 비대칭이 신호였다 —
+F3는 *비신뢰 경계* 문장에 두 위치를 강제하는데 *ground truth* 문장에는 아무 강제가 없었다.
+세 자리를 두 위치를 함께 이름으로 대도록 고치고(체크리스트의 `omission`·
+`evidence_unsupported` 정의에 박혀 있던 한 위치 고정도 함께 풀었다), **F14** 락을
+`test_brief_agents.sh`에 추가했다 — F3와 같은 산출자 상수에서 파생하고, 2-a dispatch는
+산문 앵커가 아니라 `subagent_type` 리터럴을 감싸는 `Agent({ … })` 호출을 **구조로**
+잘라낸다(같은 파일 다른 곳의 'ground truth' 문단이 대신 만족시키지 못하게). 행 수는
+리터럴 6(3 자리 × 2 위치). 실측: 세 자리 각각을 한 위치로 되돌리는 mutation 3종 + dispatch
+앵커 개명 + 산출자 상수 개명, 전부 exit 1.
+
+**(최종 whole-branch 리뷰 fix, M1)** **G6가 `SKILL.md` 안에서만 살았다.**
+`templates/interview-audit-template.md`의 냉독 행은 `<G1..G5 중 어느 클래스>`,
+`README.md`는 두 자리 다 `G1–G5` — G6 관측을 적을 칸이 출하 템플릿에 없으면 그 클래스는
+실무에서 존재하지 않는 것과 같다. 세 파일을 맞추고, `test_reviewing_brief_skill.sh`에
+**M1** 락을 더했다: 상한 값을 세 파일에서 각각 읽고 **셋이 같다**는 관계를 단언한다
+(기대값을 피검자에서 끌어오지 않는다). 관계만 두면 셋이 함께 사라질 때 공허해지므로 표에서
+도출한 상한의 하한 6과 파일당 범위 표기 ≥1을 함께 못 박았다. README의 bare `G6`(리뷰
+dispatch 상한 — 다른 네임스페이스)와 섞이지 않도록 **범위 표기**만 센다.
+
+**(최종 whole-branch 리뷰 fix, M2)** `templates/interview-brief-template.md`의 §2 헤더
+주석이 *"원문은 §6"*, frontmatter 주석이 *"§6의 어느 발화에서 나왔는가"*로 남아 있었다 —
+같은 파일 다른 줄이 *"payload §6엔 S1만 산다"*로 이미 옳게 적고 있었으므로 앞선 산문
+스윕이 이 두 자리만 놓친 것이다. 원문이 payload §6(`S1`)과 audit §6(`S2` 이상)에 나뉜다는
+사실로 고쳤다.
+
+**(최종 whole-branch 리뷰 fix, M3)** `test_check_brief.sh`의 **T17 앞 절반**을 걷어냈다 —
+web 비활성이 §4/§5의 URL 요구를 완화하는지 재던 단언인데, v0.44.0이 그 요구를 지운 뒤로
+**web ON에서도 그대로 green**이라 kill switch에 대해 아무것도 재지 않았다. 지운 자리에
+그 사실을 적어 둔다(삭제된 규칙이 거짓 인용을 남기지 않도록). ST 참조 요구가 완화되지
+않음을 재는 뒷 절반은 살아 있으므로 그대로 둔다.
+
 ### Known gaps
 
 - **dogfood 이관은 브리프 1쌍뿐이다 — `docs/superpowers/interview/`의 나머지 3쌍은
