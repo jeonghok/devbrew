@@ -309,6 +309,11 @@ Step 5 의 미배선 목록에서, **설계 T1 표(이 계획의 Task 8·9)가 �
 |---|---|---|
 | 제자리 변형 루프 — 출력 컬렉션이 없고 원소를 수정만 한다 (`synthesize_artifact_findings.py:146` 의 `for f in findings: f.setdefault(...)`) | ⑴ | 버려지는 항목이 없으므로 처분할 대상이 없다 |
 | 순수 집계 루프 — `continue` 가 「이 원소는 이 집계에 안 들어간다」이지 항목 소실이 아님 | ⑴ | 같음 |
+| **선택 루프** — 출력이 컬렉션이 아니라 «단일 선택»(`for c in cands: … return c`)이거나, 걸러진 원소가 «별도 컬렉션에 수집»된다 | ⑴ | 버려지는 항목이 없다. 후보는 다음 호출에 다시 평가되거나 다른 리스트에 살아 있다 |
+
+**세 번째 형태는 착수 전 pre-flight 가 실측으로 찾았다.** Task 11 이 훅을 ㉮ 에 넣으면 `review-dispatch.py` 의 버리는 분기 **10자리**가 L1 의 대상이 되는데(`continue` 9 + 루프 내 `return` 1), Task 11 이 배선하는 것은 2자리이고 **그 둘은 이 루프들 안에 있지도 않다**. 세 루프를 읽은 결과 열 자리 모두 항목이 소실되지 않는다 — 자세한 근거는 `.superpowers/sdd/2026-09-03-adjudication-topology/progress.md` 의 R1.
+
+**그 열 중 둘(`:308`·`:310` 의 상한 도달 분기)은 다툼의 여지가 있다** — 규칙 억제(`suppressed()`)로 볼 수도 있다. 면제로 두되 그 사실을 baseline 문서에 적는다.
 
 **인용 없는 항목은 넣지 않는다** — 넣으면 Task 3 의 락이 RED 를 낸다. 그것이 이 규칙의 이빨이다.
 
@@ -2654,6 +2659,14 @@ grep -c '"decision": "block"' plugins/spec-distill/hooks/review-dispatch.py
 
 기대 셋: ㉮ 가 **4 → 5**(훅이 들어왔다) · 새 테스트 `Fail: 0` · 차단 자리 **2**.
 **㉮ 가 5가 된 것만으로 통과로 읽지 않는다**(설계 M3) — 세 번째 명령이 두 자리를 확인하고 두 번째 명령이 각 자리의 처분 호출을 확인한다.
+
+**L1 은 이 파일에서 열 자리를 새로 요구한다** — 이 Task 가 배선하는 둘은 그 열에 «포함되지 않는다»(두 `decision:"block"` 은 루프 안이 아니다). 착수 전 pre-flight 가 세 루프를 읽고 열 자리 전부 항목이 소실되지 않음을 확인했다(R1 판정). Task 1 Step 6 의 면제 절차를 그대로 적용한다:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 /tmp/adjtopo/run_scan.py | grep 'review-dispatch'
+```
+
+나온 자리를 `check_wiring.EXEMPT` 에 **선택 루프** 형태의 C6⑴ 인용과 함께 등재한다. 등재 후 L1 이 GREEN 이어야 한다. **`:308`·`:310`(상한 도달)은 규칙 억제로 볼 여지가 있다** — 면제로 두되 그 사실을 baseline 문서에 적어 최종 리뷰가 보게 한다.
 
 - [ ] **Step 9: bump + CHANGELOG + 커밋**
 
