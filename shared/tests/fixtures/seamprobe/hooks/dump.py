@@ -14,4 +14,13 @@ tok = os.environ.get("SEAMPROBE_TOKEN", "")
 emit = os.environ.get("SEAMPROBE_EMIT_" + label.replace("-", "_"), "")
 if emit == "stdout" and tok:
     sys.stdout.write("INJ-" + label + "-" + tok + "\n")
+# json_ac: the documented JSON channel — hookSpecificOutput.additionalContext.
+# Separate from `stdout` on purpose: exit-0 stdout and this field are different
+# contracts and a probe that conflates them cannot tell which one carried.
+if emit == "json_ac" and tok:
+    ev = os.environ.get("SEAMPROBE_EVENT_" + label.replace("-", "_"), "PostToolUse")
+    sys.stdout.write(json.dumps({
+        "hookSpecificOutput": {"hookEventName": ev,
+                               "additionalContext": "INJ-" + label + "-" + tok}
+    }) + "\n")
 sys.exit(0)

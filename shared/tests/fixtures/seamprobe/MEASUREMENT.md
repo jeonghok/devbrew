@@ -1,4 +1,4 @@
-# seamprobe — 이음매 채널 실측 (claude 2.1.252, 헤드리스 `claude -p`)
+# seamprobe — 이음매 채널 실측 (claude 2.1.252 / M6 은 2.1.258, 헤드리스 `claude -p`)
 
 `hookprobe` 의 형제. 그쪽은 도구 이벤트를, 이쪽은 **이음매 채널**(턴·압축·커맨드 확장)을 잰다.
 
@@ -11,15 +11,28 @@
 | M3 | 압축 사슬 | `/compact` → `PreCompact{trigger:manual}` → 압축 → `SessionStart{source:compact}` + `PostCompact{trigger:manual}`. 세 stdout 이 **전부 압축을 넘어 모델 도달 3/3** |
 | M4 | `UserPromptExpansion` | 발화. matcher=`command_name` 정확 필터(`seamprobe:ping` matcher 는 `echoscan` 에 안 걸림). payload = `command_name`·`command_source:plugin`·`expansion_type:slash_command`. stdout→모델 **1/1** |
 | M5 | 번들 이벤트 레지스트리 | 34개. `PreCompact` payload 에 `custom_instructions` 필드 실재 |
+| M6 | `PostToolUse`(matcher `Bash`) 의 `hookSpecificOutput.additionalContext` | **메인 대화 모델에 도달 1/1.** 난수 카나리를 `additionalContext` 에**만** 싣고(`stdout` 미사용) 도구 호출 뒤에 물었더니 모델이 그대로 에코했다. payload 키 = `tool_name`·`tool_input`·`tool_response`·`tool_use_id`·`permission_mode`·`effort`·`prompt_id`·`duration_ms`·`session_id`·`cwd`·`transcript_path` |
 
-**분기 판정:** COMPACT_CHANNEL_OK · UPE_CHANNEL_OK · FILECHANGED_UNCONFIRMED
+**분기 판정:** COMPACT_CHANNEL_OK · UPE_CHANNEL_OK · **PTU_AC_CHANNEL_OK** · FILECHANGED_UNCONFIRMED
+
+**M6 이 왜 별도 모드인가** — `dump.py` 의 `stdout` 과 `json_ac` 는 **다른 계약**이다. 한 프로브가
+둘을 함께 내면 카나리가 도착했을 때 어느 쪽이 날랐는지 갈리지 않는다. M6 은 `json_ac` 만 켜고
+쟀으므로 도착의 원인이 `additionalContext` 로 확정된다.
+
+**matcher 가 중요한 이유** — 이 리포의 선행 설계문서(`docs/superpowers/specs/2026-08-05-agent-transparency-design.md:361`)
+는 같은 이벤트를 ✅ 로 적되 **matcher `Agent` 한정**으로 썼다. M6 은 matcher **`Bash`** 로 쟀다 —
+`quality-gates`·`project-init` 두 훅이 실제로 쓰는 matcher 다.
 
 ## 확인 못 한 것 (부재 증명 아님)
 
 - `FileChanged` 0회의 원인 — 헤드리스에서 watcher 미기동인지, 에이전트 자신의 편집이 watch 대상이 아닌지 **미분리**.
 - 대화형(TUI) 미측정. 전부 `claude -p`.
-- 빈도 미측정 — M2 의 `source` 필터만 여러 번, 나머지는 변형당 1회.
+- 빈도 미측정 — M2 의 `source` 필터만 여러 번, 나머지는 변형당 1회. **M6 도 1회다.**
 - `PostCompact` 는 레지스트리가 *"stdout shown to user"* 라 적었는데 **모델이 카나리를 에코했다.** 어느 쪽이 계약인지 미확정.
+- M6 에서 모델이 낸 **출처 서술**("`PostToolUse:Bash` 훅 블록으로 도착했다")은 자기보고다. 단단한
+  사실은 **난수 토큰이 컨텍스트에 있었다**는 것 하나이고, 그 문자열을 낸 것은 그 훅뿐이다.
+- M6 은 `systemMessage` 를 **함께 내지 않았다** — 「사람 채널로 보낸 것을 모델이 못 본다」는 반대
+  방향의 명제는 이 픽스처가 아직 안 쟀다.
 
 ## 재현하는 법
 
@@ -56,6 +69,15 @@ printf '%s' 'Output every INJ- token in your context prefixed with ECHOTOKEN: , 
 # --- M4: 커맨드 확장 ---
 export SEAMPROBE_EMIT_UPE_nomatcher=stdout
 printf '%s' '/seamprobe:echoscan' | claude -p --plugin-dir "$PROBE"
+
+# --- M6: PostToolUse(matcher Bash) 의 additionalContext 도달 ---
+# `stdout` 이 아니라 `json_ac` 만 켠다 — 도착의 원인을 채널 하나로 확정하기 위해서다.
+export SEAMPROBE_EMIT_PTU_bash=json_ac
+printf '%s' 'Do these two steps in order, then stop.
+1. Use the Bash tool to run exactly: echo probe-step-one
+2. AFTER that command has completed, scan your context and output every token that begins with INJ- , each on its own line prefixed with ECHOTOKEN: . If there are none, output exactly NOCANARY.' \
+  | claude -p --plugin-dir "$PROBE" --permission-mode acceptEdits \
+      --output-format stream-json --verbose
 
 python3 -c 'import json,sys
 for ln in open(sys.argv[1],encoding="utf-8"):
