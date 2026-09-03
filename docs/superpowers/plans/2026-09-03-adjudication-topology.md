@@ -96,7 +96,7 @@ merge_brief_review.py             10        2      182                          
 | `plugins/quality-gates/scripts/synthesize_findings.py` | T1-1·2·3·4·8·9·10·12 |
 | `plugins/quality-gates/scripts/synthesize_artifact_findings.py` | T1-5·6·7·11 |
 | `plugins/spec-distill/hooks/review-dispatch.py` | T5-1·2 |
-| `plugins/quality-gates/skills/quality-pipeline/SKILL.md` | T4-1 (`:511` 의 stale 이름) |
+| `plugins/quality-gates/skills/quality-pipeline/SKILL.md` | T4-1 (`:505` 의 stale 이름) |
 | `plugins/spec-distill/skills/reviewing-spec/SKILL.md` | `:116` 의 merge_review 출력 키 열거 (L2 가 카운트를 실으면 깨진다) |
 | `plugins/*/agents/*.md` (20개) | `input_slots:` 선언 (PR3) |
 | `plugins/*/skills/**/SKILL.md` 의 dispatch 자리 | 슬롯 표기 (PR3) |
@@ -1344,7 +1344,7 @@ git commit -m "test(adjudication): L4 역할 선언 락 — codex 러너가 처�
 
 **요구** — 문서가 백틱으로 감싸 부르는 `<plugin>:<name>` 은 전부 실재하는 정의(agent · skill · command)를 가져야 한다.
 
-**순서가 이 Task 의 전부다.** 이 락은 stale 이름(`quality-pipeline/SKILL.md:511` 의 `quality-gates:synthesizer` — `37ea0d7` 이 정의를 지우고 스크립트로 옮겼다)이 **아직 살아 있는 지금** 들어가야 RED 가 나고, 그 RED 가 이빨의 증거다. Task 12 가 그 이름을 지우면 GREEN 이 된다(M4).
+**순서가 이 Task 의 전부다.** 이 락은 stale 이름(`quality-pipeline/SKILL.md:505` 의 `quality-gates:synthesizer` — `37ea0d7` 이 정의를 지우고 스크립트로 옮겼다)이 **아직 살아 있는 지금** 들어가야 RED 가 나고, 그 RED 가 이빨의 증거다. Task 12 가 그 이름을 지우면 GREEN 이 된다(M4).
 
 **U4 의 결정 — 기존 필터를 빼지 않고 두 번째 코퍼스를 더한다.** 설계 §6 이 넘긴 실측 제약은 이것이다: `shared/tests/test_dispatch_disposition.sh:80-84` 가 *"표기 필터를 이름 매칭보다 먼저 걸지 않으면 산문 속 영어 단어가 dispatch 로 잡힌다"* 를 기록했고(맨 `adversarial` 이 `critiquing-artifacts/SKILL.md` 의 5줄에 등장하며 전부 산문), T4-2 는 산문을 봐야 하므로 그 필터와 정면충돌한다. **직교로 푼다** — 백틱 + 콜론이라는 두 조건을 동시에 요구하면 맨 영어 단어는 애초에 걸리지 않는다. 기존 락의 `NOTATION` 은 손대지 않는다.
 
@@ -1640,7 +1640,7 @@ bash shared/tests/test_dispatch_name_defined.sh 2>&1 | tail -30
 grep -n 'quality-gates:synthesizer' plugins/quality-gates/skills/quality-pipeline/SKILL.md
 ```
 
-기대: fixture 셋 **PASS**, `dangling=0` **FAIL** 이고 매달림 목록이 **정확히 한 줄** — `plugins/quality-gates/skills/quality-pipeline/SKILL.md:511 quality-gates:synthesizer`.
+기대: fixture 셋 **PASS**, `dangling=0` **FAIL** 이고 매달림 목록이 **정확히 한 줄** — `plugins/quality-gates/skills/quality-pipeline/SKILL.md:505 quality-gates:synthesizer`.
 
 **둘 이상 나오면 정의 집합이 빠뜨린 네임스페이스가 있다는 뜻이다.** 착수 시점 실측: `killswitch_keys()` 가 호출부 **9곳에서 키 14개**를 내고, 두 README 가 문서화한 kill switch 키 **9개를 전부 덮는다**. 그 도출이 깨지면 그 일곱 줄이 매달림으로 돌아온다 — 그때는 코퍼스를 좁히지 말고 **왜 호출부에서 안 나오는지**를 본다. 그것이 이 축의 이빨이다.
 
@@ -2753,7 +2753,7 @@ git ls-files -s plugins/*/scripts/render_disposition.py
 
 - [ ] **Step 4: `render()` 를 고친다**
 
-`synthesize_findings.py` — `render` 시그니처와 `:490-504`:
+`synthesize_findings.py` — `render` 시그니처와 `:490-504`(**Task 8 이 이 파일을 편집한 뒤라 이 숫자는 반드시 밀려 있다** — `grep -n 'def render' plugins/quality-gates/scripts/synthesize_findings.py` 로 재도출하라):
 
 ```python
 def render(kept, suppressed_count, dropped_malformed, report, held_classes):
@@ -2828,7 +2828,7 @@ from render_disposition import disposition_report   # 상단 import
 
 `merged` 에 `report`·`held_by_class` 를 싣는 것은 병합 함수의 몫이다. `codex_ledger`·`history_ledger` 둘이 있으므로(`:486`·`:530`) **합쳐서 하나로 보고한다** — 각각 따로 내면 소비자가 둘을 더해야 하고, 더하는 자리가 새 결함 지점이 된다.
 
-**`merge_brief_review.py`** — 같은 키 셋, 같은 루프. 이 파일도 원장을 셋 만든다(`:180`·`:192`·`:289` 근방의 처분 호출) — 확인해서 전부 합친다.
+**`merge_brief_review.py`** — 같은 키 셋, 같은 루프. **원장은 하나다**(`:228`, `Ledger(items="open")`) — 처분 호출이 셋일 뿐이다(`:262` `source_failed` · `:288` `hold` · `:295` `source_failed`). 합칠 대상이 없으니 그 하나의 `report()` 를 그대로 낸다. 이 파일은 **오늘 `adjudication_*` 키를 하나도 내지 않는다** — 형제 파일과 달리 전부 신규다. 줄번호는 `grep -n 'Ledger(' plugins/spec-distill/scripts/merge_brief_review.py` 로 재도출한다(main 의 `9fd71c7` 이 이미 한 번 밀었다).
 
 - [ ] **Step 6: `reviewing-spec/SKILL.md:116` 의 키 열거를 갱신한다**
 
@@ -2869,10 +2869,10 @@ git commit -m "feat(adjudication): 처분 두 줄을 소비자 넷에 실는다 
 
 | # | 자리 | 무엇 |
 |---|---|---|
-| T5-1 | `review-dispatch.py:598-602` (`decision:"block"` — 구조 검증 실패) | 차단 사실과 사유를 원장 어휘로 |
-| T5-2 | `review-dispatch.py:751-755` (`decision:"block"` — 다음 턴 dispatch 강제) | 같음 |
+| T5-1 | `review-dispatch.py:605-609` (`decision:"block"` — 구조 검증 실패) | 차단 사실과 사유를 원장 어휘로 |
+| T5-2 | `review-dispatch.py:758-762` (`decision:"block"` — 다음 턴 dispatch 강제) | 같음 |
 
-**공시 채널은 `reason` 이다.** 그 두 자리는 이미 `decision`·`reason`·`systemMessage` **세 키**를 낸다(F3). 입력 인터뷰 `:515-520` 이 카나리로 실측했다 — `systemMessage` **0/14 도달** · `additionalContext` 8/8 · 차단 결정에 딸린 `reason` **7/7**. `additionalContext` 는 쓰지 않는다(brief OQ26 의 폭주 실측 대상). **영속 기록은 `write_state_file()`**(`:198-204`).
+**공시 채널은 `reason` 이다.** 그 두 자리는 이미 `decision`·`reason`·`systemMessage` **세 키**를 낸다(F3). 입력 인터뷰 `:515-520` 이 카나리로 실측했다 — `systemMessage` **0/14 도달** · `additionalContext` 8/8 · 차단 결정에 딸린 `reason` **7/7**. `additionalContext` 는 쓰지 않는다(brief OQ26 의 폭주 실측 대상). **영속 기록은 `write_state_file()`**(`:204`).
 
 **U3 의 결정 — 이 `reason` 기록이 회계 요건을 충족한다.** 근거: CLAUDE.md 의 계약이 *"무엇이 degrade 든 언제나 드러내되, 막는 것은 …"* 이고 이 자리는 **이미 막고 있다**. 남은 요구는 공시이고 `reason` 이 7/7 로 도달한다. 원장 객체는 프로세스와 함께 사라지므로 **`reasons()` 의 줄을 `reason` 에 실어 보내는 것으로 회계가 «완료»된다** — 이 사실을 코드 주석에 적는다.
 
@@ -2893,10 +2893,13 @@ Task 1 Step 9 가 형제 세션의 편집 범위를 적었다. **확인과 편�
 git fetch origin
 git log --oneline origin/main -3
 git diff --stat origin/main -- plugins/spec-distill/hooks/review-dispatch.py
-sed -n '596,604p' plugins/spec-distill/hooks/review-dispatch.py
-sed -n '749,757p' plugins/spec-distill/hooks/review-dispatch.py
+grep -n '"decision": "block"' plugins/spec-distill/hooks/review-dispatch.py
+sed -n '603,611p' plugins/spec-distill/hooks/review-dispatch.py
+sed -n '756,764p' plugins/spec-distill/hooks/review-dispatch.py
 ```
 
+
+**줄번호를 그대로 믿지 말 것.** 위 표의 `:605`·`:758`·`:204` 는 이 계획을 쓴 시점(merge `832e9be` 직후)의 값이다. 착수 시점의 진짜 자리는 위 `grep -n` 출력이 정한다 — 두 값이 다르면 **grep 이 맞고 표가 틀렸다**. 이 파일은 이미 한 번 병합으로 +7 밀렸다.
 **두 `decision:"block"` 분기가 그대로 있는지 눈으로 확인한다.** 줄번호가 움직였으면 그 줄번호를 쓰고, 분기 자체가 사라졌으면 **여기서 멈추고 보고한다**(설계 §7 의 재설계 조건).
 
 - [ ] **Step 2: 실패하는 테스트를 쓴다**
@@ -2964,7 +2967,7 @@ bash plugins/spec-distill/tests/test_review_dispatch_disposition.sh 2>&1 | tail 
 from adjudication import Ledger  # noqa: E402
 ```
 
-그리고 `write_state_file`(`:198`) 근처에 헬퍼 하나:
+그리고 `write_state_file`(`:204`) 근처에 헬퍼 하나:
 
 ```python
 def _block_with_ledger(payload: dict, ledger: Ledger, advisory) -> int:
@@ -2982,7 +2985,7 @@ def _block_with_ledger(payload: dict, ledger: Ledger, advisory) -> int:
     return 0
 ```
 
-- [ ] **Step 5: T5-1 — 구조 검증 실패 자리 (`:598-602`)**
+- [ ] **Step 5: T5-1 — 구조 검증 실패 자리 (`:605-609`)**
 
 ```python
         L = Ledger(items="closed")   # 다음 소비자가 기계(다음 턴의 dispatch)다
@@ -2997,7 +3000,7 @@ def _block_with_ledger(payload: dict, ledger: Ledger, advisory) -> int:
 
 **`for line in lines:` 가 루프다** — 훅이 ㉮ 에 들어오면 L1 이 이 파일의 모든 `for` 문을 보므로 이 루프도 대상이 되고, 처분 호출이 같은 분기 안에 있어 통과한다. 설계 §7 이 지적한 「공허한 GREEN」이 여기서 닫힌다.
 
-- [ ] **Step 6: T5-2 — dispatch 강제 자리 (`:751-755`)**
+- [ ] **Step 6: T5-2 — dispatch 강제 자리 (`:758-762`)**
 
 ```python
     L = Ledger(items="closed")
@@ -3035,7 +3038,9 @@ grep -c '"decision": "block"' plugins/spec-distill/hooks/review-dispatch.py
 **L1 은 이 파일에서 열 자리를 새로 요구한다** — 이 Task 가 배선하는 둘은 그 열에 «포함되지 않는다»(두 `decision:"block"` 은 루프 안이 아니다). 착수 전 pre-flight 가 세 루프를 읽고 열 자리 전부 항목이 소실되지 않음을 확인했다(R1 판정). Task 1 Step 6 의 면제 절차를 그대로 적용한다:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python3 /tmp/adjtopo/run_scan.py | grep 'review-dispatch'
+PYTHONDONTWRITEBYTECODE=1 python3 \
+  shared/tests/fixtures/adjudication/run_wiring_scan.py "$PWD" \
+  | grep 'review-dispatch'
 ```
 
 나온 자리를 `check_wiring.EXEMPT` 에 **선택 루프** 형태의 C6⑴ 인용과 함께 등재한다. 등재 후 L1 이 GREEN 이어야 한다. **`:308`·`:310`(상한 도달)은 규칙 억제로 볼 여지가 있다** — 면제로 두되 그 사실을 baseline 문서에 적어 최종 리뷰가 보게 한다.
@@ -3053,10 +3058,12 @@ git commit -m "feat(spec-distill): 훅의 차단 결정 두 자리를 원장에 
 
 ### Task 12: T4-1 — stale 이름 제거 + §4.4 기존 락 갱신
 
-**T4-1 은 긴급하지 않다.** `quality-pipeline/SKILL.md:511` 이 *"Dispatch `quality-gates:synthesizer` **(or local synthesize_findings.py)**"* 로 적고 **괄호 안이 이미 탈출구다**. 값은 T4-2(Task 6)가 다음 stale 을 잡는 데 있다 — 이 Task 는 그 락을 GREEN 으로 만든다(M4).
+**T4-1 은 긴급하지 않다.** `quality-pipeline/SKILL.md:505` 이 *"Dispatch `quality-gates:synthesizer` **(or local synthesize_findings.py)**"* 로 적고 **괄호 안이 이미 탈출구다**. 값은 T4-2(Task 6)가 다음 stale 을 잡는 데 있다 — 이 Task 는 그 락을 GREEN 으로 만든다(M4).
 
 **Files:**
-- Modify: `plugins/quality-gates/skills/quality-pipeline/SKILL.md:511`
+- Modify: `plugins/quality-gates/skills/quality-pipeline/SKILL.md:505`
+
+**줄번호는 착수 시점에 재도출한다** — `grep -rn 'quality-gates:synthesizer' plugins/` 가 정본이다. 위 `:505` 는 merge `832e9be` 직후의 값이고, 이 파일은 이미 `:511` 에서 밀렸다.
 - Modify: `plugins/quality-gates/tests/test_skill_drop_notice_consumed.sh` (§4.4 — **약화 금지**)
 - Modify: `plugins/quality-gates/.claude-plugin/plugin.json` · `CHANGELOG.md`
 
@@ -3065,7 +3072,7 @@ git commit -m "feat(spec-distill): 훅의 차단 결정 두 자리를 원장에 
 
 - [ ] **Step 1: stale 이름을 지운다**
 
-`:511` 을 이렇게 바꾼다:
+`:505` 를 이렇게 바꾼다:
 
 ```markdown
 4. Run `synthesize_findings.py` (`${CLAUDE_PLUGIN_ROOT}/scripts/`)
