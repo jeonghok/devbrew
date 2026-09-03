@@ -306,5 +306,28 @@ out="$(python3 "$S" --phase synth --findings "$tmp/none_merged.yaml" --adversari
 echo "$out" | grep -q "degraded: true" && echo "$out" | grep -q "converged: false" \
   && ok "non-mapping new_findings ELEMENT degrades (fail-closed)" || no "scalar new_findings element must degrade ($out)"
 
+note "── 처분 회계 (T1-B)"
+cat > "$tmp/afind.yaml" <<'YAML'
+findings:
+  - {agent: critic, target_anchor: "#a", severity: CRITICAL, summary: kept, dedup_key: k1}
+  - {agent: critic, target_anchor: "#b", severity: IMPORTANT, summary: rejected, dedup_key: k2}
+  - {agent: critic, target_anchor: "#c", severity: IMPORTANT, summary: 판정없음, dedup_key: k3}
+sources_failed: 1
+YAML
+cat > "$tmp/aadv.yaml" <<'YAML'
+verdicts:
+  - {finding_key: k1, verdict: confirm}
+  - {finding_key: k2, verdict: reject}
+new_findings:
+  - "형태 불량"
+  - {agent: adv, target_anchor: "#a", severity: IMPORTANT, summary: dup, dedup_key: k1}
+YAML
+OUT="$(PYTHONDONTWRITEBYTECODE=1 python3 "$S" --phase synth \
+        --findings "$tmp/afind.yaml" --adversarial "$tmp/aadv.yaml" 2>&1)"
+assert_grep "$OUT" 'rejected: *[1-9]'  "기각이 원장에 실린다"
+assert_grep "$OUT" 'held: *[1-9]'      "판정자 부재가 원장에 실린다"
+assert_grep "$OUT" 'absorbed: *[1-9]'  "kept_keys 중복 흡수가 세어진다"
+assert_grep "$OUT" 'sources_failed: *[1-9]' "입력 실패가 원장에 실린다"
+
 rm -rf "$tmp"
 finish

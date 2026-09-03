@@ -95,17 +95,21 @@ def _is_findings_doc(doc):
     return isinstance(doc, dict) and isinstance(doc.get("findings"), list)
 
 
-def phase_key(paths):
+def phase_key(paths, ledger=None):
     by_key = {}
     sources_failed = 0
     for p in paths:
         doc = _load(p)
         if not _is_findings_doc(doc):
             sources_failed += 1  # __ERR__/None/scalar/wrong-schema: count the loss, never a silent 0-findings
+            if ledger is not None:
+                ledger.source_failed(str(p), "findings 문서가 아니다", primary=False)
             continue
         for f in _findings_of(doc):
             if not isinstance(f, dict):
                 sources_failed += 1  # a malformed (non-mapping) finding entry is a lost finding, not a silent skip
+                if ledger is not None:
+                    ledger.hold(repr(f)[:60], "항목 파손: not a mapping")
                 continue
             g = dict(f)
             g["severity"] = _norm_sev(g)
@@ -154,6 +158,15 @@ def phase_synth(findings_path, adversarial_path):
         findings_load_failed = True
         sources_failed = 0
 
+    L = Ledger(items="closed")   # 다음 소비자가 기계(자동 편집)다 — 미판정은 제외
+    if findings_load_failed:
+        # primary=True — 주 입력이 통째로 죽었으면 «아무도 안 봤다».
+        L.source_failed(str(findings_path or "<no --findings>"),
+                        "findings 문서 로드 실패", primary=True)
+    if sources_failed > 0:
+        L.source_failed("phase_key merge", "%d건 소실" % sources_failed,
+                        primary=False)
+
     adv_doc = _load(adversarial_path) if adversarial_path else None
     adv_parse_failed = adv_doc == "__ERR__" or adv_doc is None
     adv_schema_failed = False
@@ -192,7 +205,6 @@ def phase_synth(findings_path, adversarial_path):
     by_v = {v.get("finding_key"): v for v in verdicts if isinstance(v, dict)}
 
     kept = []
-    L = Ledger(items="closed")   # 다음 소비자가 기계(자동 편집)다 — 미판정은 제외
     for f in findings:
         v = by_v.get(f["dedup_key"])
         if v is None:
@@ -200,6 +212,7 @@ def phase_synth(findings_path, adversarial_path):
             continue
         verdict = str(v.get("verdict", "")).lower()
         if verdict == "reject":
+            L.reject(f["dedup_key"], "adversarial 기각")
             continue
         if verdict == "downgrade":
             ns = str(v.get("new_severity", "")).upper()
@@ -207,17 +220,20 @@ def phase_synth(findings_path, adversarial_path):
                 f = dict(f)
                 f["severity"] = ns
             # missing/invalid new_severity -> keep original severity (fail-closed: don't drop)
+        L.accept(f["dedup_key"])
         kept.append(f)
     unadjudicated = L.report()["counts"]["held"]
 
     kept_keys = {f["dedup_key"] for f in kept}
     for nf in new_findings:
         if not isinstance(nf, dict):
+            L.hold(repr(nf)[:60], "항목 파손: not a mapping")
             continue
         g = dict(nf)
         g["severity"] = _norm_sev(g)
         g["dedup_key"] = dedup_key(g)
         if g["dedup_key"] in kept_keys:
+            L.absorbed(g["dedup_key"], g["dedup_key"])
             continue
         kept_keys.add(g["dedup_key"])
         kept.append(g)
@@ -233,6 +249,10 @@ def phase_synth(findings_path, adversarial_path):
     # failure, or a lossy phase-key merge (sources_failed>0) must each independently
     # force degraded=true — none of them may silently read as a genuine clean round.
     degraded = adv_degraded or findings_load_failed or (sources_failed > 0)
+    # 원장이 독립으로 계산한 degrade. 위 4값 어휘는 소비자 계약이라 유지하고,
+    # 원장은 «더해서» 낸다 — 둘이 갈리면 그 자체가 회귀 신호다.
+    ledger_report = L.report()
+    ledger_degraded = ledger_report["degraded"]
     if adv_degraded:
         degraded_reason = "adversarial"
     elif findings_load_failed:
@@ -264,6 +284,7 @@ def phase_synth(findings_path, adversarial_path):
         "kept_important": imp,
         "kept_suggestion": sug,
         "stagnation_keys": ",".join(skeys),
+        "ledger": dict(ledger_report["counts"], degraded=ledger_degraded),
         "kept": [
             {k: f.get(k) for k in ("category", "target_anchor", "target_lines",
                                    "severity", "summary", "proposed_fix", "dedup_key")

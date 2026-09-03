@@ -3,6 +3,16 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.3.0] — 2026-09-04
+
+### Changed
+- `synthesize_artifact_findings.py` 의 버리는 자리(T1-B) 다섯 곳이 원장 처분을 부른다: `phase_key` 의 소스 실패 둘(`source_failed`)·`phase_synth` 의 항목 처분 넷(기각·판정자 부재·수용·흡수). `L` 생성을 `phase_synth` 앞쪽으로 당겨 findings-load 실패·`sources_failed` 누적도 같은 원장에 `source_failed`로 싣는다.
+- `phase_synth` 출력 dict 에 `ledger:` 블록(원장 `counts` + 원장 자체 `degraded`)을 더한다 — 기존 `degraded`/`degraded_reason` 닫힌 어휘 4값(`adversarial`·`findings_load`·`sources_failed`·`none`)은 소비자 계약이라 유지, 원장은 병행 공시.
+- `phase_key(paths, ledger=None)` — `sources_failed` 카운터는 유지, 원장 호출을 더한다(생산만, 이 Task 의 소비자는 아직 없음).
+
+### Fixed
+- `:199` 의 `hold` 사유(`"adversarial 판정 부재"`)는 의도적으로 변경하지 않는다 — `held_by_class()` 의 「판정자 부재」 접두에 걸리지 않고 「기타」로 분류된다.
+
 ## [6.2.1] — 2026-09-04
 
 ### Fixed
