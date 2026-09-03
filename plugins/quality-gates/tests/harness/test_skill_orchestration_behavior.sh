@@ -535,6 +535,33 @@ done
 # contract. Keeping both here and there would drift as soon as either wording
 # changes — so this block does not survive, it moves whole. ---
 
+# --- NG6 (restored, independent — fix round R11) ---
+# 이 검사는 원래 "v2.10.0 publish-eligible sentinel wiring" 블록 안에서 fs_start/
+# fs_end 를 그 블록의 다른 sentinel 서브체크와 공유하고 있었다. sentinel 배선이
+# 통째로 삭제되면서 이 검사도 함께 사라졌다 — sentinel 과는 무관한 검사였는데
+# 변수 재사용으로만 묶여 있었다. 자기 변수(ng6_block)로 독립 도출해 되살린다:
+# 다른 섹션이 지워져도 이 검사는 죽지 않는다.
+#
+# allowed-tools: 키부터, 다음 top-level frontmatter 키(들여쓰기 없고 '-'로도
+# 시작하지 않는 줄) 또는 frontmatter 닫는 '---' 중 먼저 오는 것 앞까지를 뽑는다.
+ng6_block="$(awk '/^allowed-tools:/{f=1;next} f&&/^---$/{exit} f&&/^[^ -]/{exit} f{print}' "$SKILL_MD")"
+
+# 양성 증인 먼저 — 도출한 블록이 비어 있지 않고, 알려진 항목(setup-qg.sh 진입점)을
+# 담는다. 이게 없으면 앵커가 죽어 $ng6_block 이 빈 문자열이 될 때 아래 부재
+# 단언이 공허참으로 통과한다.
+if [[ -n "$ng6_block" ]] && grep -qF 'Bash(${CLAUDE_PLUGIN_ROOT}/scripts/setup-qg.sh:*)' <<<"$ng6_block"; then
+  echo "PASS: NG6 양성 증인 — allowed-tools 블록 도출 유효(setup-qg.sh 항목 확인)"
+else
+  echo "FAIL: NG6 양성 증인 실패 — allowed-tools 블록 도출이 비었거나 앵커가 죽음"; fail=$((fail+1))
+fi
+
+# 부재 — allowed-tools 에 standalone `Skill` 항목이 없다 (no skill-nesting).
+if grep -qE '^[[:space:]]*-[[:space:]]*Skill[[:space:]]*$' <<<"$ng6_block"; then
+  echo "FAIL: quality-pipeline allowed-tools contains Skill (NG6 violation)"; fail=$((fail+1))
+else
+  echo "PASS: quality-pipeline allowed-tools has no Skill (NG6)"
+fi
+
 # ── T48 / AC51: 스텝 락 이전 + 기존 로직 7종이 전부 새 자리를 갖는다 ──
 # 자리 없는 기존 로직은 삭제가 아니라 누락이다. 7종을 이름으로 센다.
 echo "== 락 이전 검사"
