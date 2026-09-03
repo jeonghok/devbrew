@@ -7,6 +7,15 @@
 네임스페이스가 실재하고, 그 실재를 «호출부에서 도출»하면 새 이빨이 생기기
 때문이다: 문서화됐는데 어떤 호출부도 안 받는 키는 fail-open 결함이다.
 
+**넷을 어디서나 합치지는 않는다.** kill switch 키는 `README.md` 에서만
+인정한다 — 그 키는 README 가 문서화하고, dispatch 는 skill·command·agent 에서
+일어난다. 평면으로 합치면 저자가 훅 이름을 skill 로 착각해 쓴 dispatch 가
+조용히 해소된다(실측: 도출된 14키 중 8개가 agent·skill·command 가 아니다).
+
+**이 분리가 못 막는 것** — README 안에 잘못 쓰인 dispatch 참조는 여전히
+가려진다. README 는 dispatch 하지 않고 문서화한다는 전제 위에 선 대가이고,
+실측으로 재현된다.
+
 기존 dispatch 락의 표기 필터(subagent_type:|agentType:|Agent\\(|^\\s*agent:)를
 «빼지 않는다». 그 필터는 산문 속 맨 영어 단어가 dispatch 로 잡히는 것을 막고
 있고 그 필요는 실측으로 기록돼 있다(test_dispatch_disposition.sh:80-84).
