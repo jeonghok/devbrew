@@ -2804,6 +2804,38 @@ from render_disposition import disposition_report   # 상단 import
 
 **`Ledger(items="closed")` 라 `surfaced()` 를 부르지 않는다** — 빈 리스트를 반환한다(`adjudication.py:136-138`). 설계 §3.1 이 철회한 그 자리다.
 
+**그리고 `phase_key` 의 원장을 실제로 만든다.** Task 9 가 `phase_key(paths, ledger=None)`
+의 입력 실패 두 자리를 배선했지만 유일한 호출부 `main()` 의 `phase_key(args.findings)` 가
+원장을 넘기지 않는다 — `ledger=None` 이라 `if ledger is not None` 가드 안쪽이 **영영 안
+돈다**. 배선이 있는데 실행되지 않는 상태다. Task 8 에는 이 자리가 있었고(A9 「main 에서
+계산기를 흘린다」) Task 9 브리프에는 대응 Step 이 없다 — 계획의 누락이다.
+
+`main()` 의 key 분기에서 원장을 만들어 넘기고, 그 처분을 **stderr 로** 낸다:
+
+```python
+        L = Ledger(items="open")   # key 단계의 다음 소비자는 사람이다 — 미판정은 라벨을 달아 보인다
+        phase_key(args.findings, ledger=L)
+        for line in disposition_lines(L.report()):
+            sys.stderr.write(line + "\n")
+```
+
+**stdout 이 아니라 stderr 인 이유** — key 단계의 stdout 은 `phase_synth` 가 다시 읽는
+findings 문서다. 거기에 키를 더하면 `_is_findings_doc` 의 스키마 판정과 그 문서를 못
+박는 기존 단언들을 건드린다. 회계는 사람에게 보이면 되고, 이 리포의 「loud logging」
+관용구가 그 채널이다. `items="open"` 인 것은 `phase_synth`(`items="closed"`)와 다르다 —
+그쪽 소비자는 자동 편집(기계)이고 이쪽은 사람이다.
+
+확인:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 plugins/quality-gates/scripts/synthesize_artifact_findings.py \
+  --phase key --findings /nonexistent.yaml 2>&1 >/dev/null | head -5
+```
+
+기대: 입력 실패가 처분 줄로 stderr 에 **보인다**. 오늘은 아무것도 안 나온다 — 그것이
+배선이 죽어 있다는 증거다. 고친 뒤 나오는지 확인하고, 나오지 않으면 원장을 안 넘긴
+것이다.
+
 **`merge_review.py`** — `:592-593` 이 이미 두 키를 낸다. 나머지를 **같은 자리에** 더한다:
 
 ```python
