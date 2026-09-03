@@ -6,23 +6,11 @@ set -u -o pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 SD="$REPO_ROOT/plugins/spec-distill"
-AUDIT="$REPO_ROOT/docs/audits/2026-07-27-spec-distill-zero-tool-probe.md"
-ISOLATED=("brief-critic" "brief-readback")
 ALL=("brief-critic" "brief-readback" "brief-direction-reviewer")
 
 SKILL_BRIEF="$SD/skills/reviewing-brief/SKILL.md"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 fm_of() { awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$1"; }
-
-# probe 판정을 읽는다 — 없으면 fail-closed (구현 진행 금지 신호)
-test -f "$AUDIT" || { no "probe 감사 문서 부재: $AUDIT (AC2b — probe 미실행)"; \
-  echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"; exit 1; }
-VERDICT="$(grep -m1 '^\*\*분기 판정:\*\*' "$AUDIT" | sed 's/^\*\*분기 판정:\*\*[[:space:]]*//' | tr -d '[:space:]')"
-case "$VERDICT" in
-  ZERO_TOOL_OK|ZERO_TOOL_UNAVAILABLE) ok "probe 판정 인식: $VERDICT" ;;
-  *) no "probe 판정을 읽을 수 없다 (값: '$VERDICT')"; \
-     echo "Total: $((pass+fail)) | Pass: $pass | Fail: $fail"; exit 1 ;;
-esac
 
 for a in "${ALL[@]}"; do
   f="$SD/agents/$a.md"
@@ -96,17 +84,48 @@ for a in "${ALL[@]}"; do
     && ok "$a: cost_class 선언" || no "$a: cost_class 없음"
 done
 
-# probe 판정에 따른 격리 에이전트의 tools: 정합
-for a in "${ISOLATED[@]}"; do
-  FM="$(fm_of "$SD/agents/$a.md")"
-  if [[ "$VERDICT" == "ZERO_TOOL_OK" ]]; then
-    grep -qE '^tools: \[\]$' <<<"$FM" \
-      && ok "$a: tools: [] (probe 통과 분기)" || no "$a: probe 통과인데 tools: [] 가 아님"
-  else
-    grep -qE '^tools: Read$' <<<"$FM" \
-      && ok "$a: tools: Read (probe 실패 분기 — inert)" || no "$a: probe 실패인데 tools: Read 가 아님"
-  fi
-done
+# --- L : 격리 집합 등식 (N5) ------------------------------------------------
+# 스캔한 집합 == 리터럴 이름 목록. **선택자를 술어와 같은 값으로 두지 않는다**:
+# 대상을 `tools: []` 에서 도출하면 `tools: Read` 로 넓히는 변이가 대상 집합을
+# 벗어나 락이 공허참으로 통과한다(∀x∈{x:P(x)}. P(x)).
+#
+# 우변이 리터럴이므로 세 방향이 전부 잡힌다:
+#   하나를 넓힘   → 좌변이 셋으로 줄어 ≠  → RED
+#   다섯째 추가   → 좌변이 다섯으로 늘어 ≠ → RED
+#   넷을 동시에   → 좌변이 공집합 ≠        → RED
+# 세 번째가 잡히므로 "각 원소가 tools: [] 이다" 는 별도 락이 **논리적으로
+# 잉여**다 — 등식이 그것을 함의한다. 잉여를 필요하다고 적으면 다음 저자가
+# 등식 쪽을 지운다.
+#
+# 표기 변형은 형제 락 test_seed_agents.sh:131 을 물려받아 `[]` 와 `[ ]` 를
+# 둘 다 빈 리스트로 읽는다.
+EXPECTED_ISOLATED="brief-critic
+brief-readback
+seed-critic
+seed-readback"
+
+scan_zero_tool_agents() {
+  # $1 = agents 디렉토리. 빈 리스트를 선언한 파일의 basename(확장자 제거)을
+  # 정렬해서 낸다.
+  local dir="$1" f base fm tl
+  for f in "$dir"/*.md; do
+    [ -e "$f" ] || continue
+    base="$(basename "$f" .md)"
+    fm="$(awk 'NR==1&&/^---/{f=1;next} f&&/^---/{exit} f' "$f")"
+    tl="$(printf '%s\n' "$fm" | sed -n 's/^tools:[[:space:]]*//p' | head -1)"
+    tl="${tl%"${tl##*[![:space:]]}"}"   # 트레일링 공백 제거
+    case "$tl" in
+      "[]"|"[ ]") printf '%s\n' "$base" ;;
+    esac
+  done | sort
+}
+
+ACTUAL_ISOLATED="$(scan_zero_tool_agents "$SD/agents")"
+if [ "$ACTUAL_ISOLATED" = "$(printf '%s\n' "$EXPECTED_ISOLATED" | sort)" ]; then
+  ok "L: tools 빈 리스트 집합 == 리터럴 목록 (전수)"
+else
+  no "L: 격리 집합 불일치. 스캔=[$(printf '%s' "$ACTUAL_ISOLATED" | tr '\n' ' ')] 기대=[$(printf '%s' "$EXPECTED_ISOLATED" | tr '\n' ' ')]"
+fi
 
 # 방향성 리뷰어는 분기 무관 — 웹·repo 도구 둘 다, Bash는 없다 (T21)
 FM="$(fm_of "$SD/agents/brief-direction-reviewer.md")"

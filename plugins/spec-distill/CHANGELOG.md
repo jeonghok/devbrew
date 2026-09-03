@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.48.0] — 2026-09-03
+
+### Fixed
+
+- **`reviewing-brief`가 더 이상 배포 단위 밖 파일(`docs/audits/2026-07-27-spec-distill-zero-tool-probe.md`)을
+  실행 시점 선결조건으로 읽지 않는다.** 그 파일은 플러그인 배포 단위 밖이라 devbrew 리포 밖
+  사용자에게는 존재하지 않았고, fail-closed가 곧 100% 차단이었다. 판정이 이미 `ZERO_TOOL_OK`
+  였으므로 오늘 도는 갈래(`tools: []`)만 남기고 probe 이진 분기 자체를 지웠다 — 완화가 아니라
+  유지다. 감사 문서(`docs/audits/2026-07-27-...md`)는 근거 기록으로 남긴다 — 지우는 것은
+  그것을 실행 시점에 읽던 코드이지 기록이 아니다.
+- `test_brief_agents.sh`의 probe 판정 판독 + 분기별 `tools:` 대조를 **집합 등식 L**로
+  올렸다: 스캔한 `tools: []` 집합 == 리터럴 이름 넷(`brief-critic`·`brief-readback`·
+  `seed-critic`·`seed-readback`). 대상을 `tools: []`에서 도출하면 하나를 넓히는 변이가
+  대상 집합을 벗어나 공허참으로 통과하므로, 우변을 리터럴로 고정했다. 신규
+  `test_brief_review_no_external_precondition.sh`(B1)가 감사 문서 없는 임시 루트에서
+  격리 락이 실제로 돌고 통과함을 양성 증인으로 확인한다.
+- `merge_brief_review.py`·`README.md`·`build_brief_inline_blob.py`의 조건부 서술("zero-tool
+  probe 통과 분기에서만 차단" / "실패 분기·통과 분기")을 무조건 서술로 고쳤다 — 분기 자체가
+  사라져 조건부 문장이 자기 코드의 반대를 주장하고 있었다.
+
+### Removed
+
+- `reviewing-brief/SKILL.md`의 `## zero-tool 격리 선결 조건` 절(probe 통과/실패 두 갈래 +
+  실패 분기의 degrade record 2건). `test_reviewing_brief_skill.sh`의 T23 probe 이진 분기
+  검사. `test_brief_review_state.py`의 probe 실패 2-record 전제 테스트.
+  `test_brief_review_meta.sh`·`interview-audit-template.md`의 `zero-tool` 항목.
+
 ## [0.47.0] — 2026-08-31
 
 ### Fixed

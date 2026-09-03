@@ -158,36 +158,6 @@ for tok in 'G1' 'gap 클래스' '미결을 확정으로'; do
                     || ok "T30: readback 블록에 '$tok' 부재"
 done
 
-# --- T23 / AC2b · AC7 : probe 이진 분기 -------------------------------------
-for tok in 'P1' 'P2' 'P3' 'canary' 'census' 'ZERO_TOOL_OK' 'ZERO_TOOL_UNAVAILABLE'; do
-  grep -qF "$tok" "$SKILL" && ok "T23: probe 요소 '$tok' 열거" || no "T23: probe 요소 '$tok' 누락"
-done
-grep -qE 'probe (미실행|를 실행하지 않은).*진행(하지 않|을 금지)' "$SKILL" \
-  && ok "T23: probe 미실행 시 진행 금지 서술" || no "T23: probe 미실행 금지 서술 부재"
-WFAIL="$(scoped_window '^#### probe 실패 분기' '^#{1,4} ')"
-minlines "$WFAIL" 9 && ok "T23: '#### probe 실패 분기' 윈도우 충분히 존재 (>=9줄)" || no "T23: 실패 분기 윈도우가 비었거나 너무 짧다 (예상 밖 조기 절단 — 부차적 defense-in-depth, 주 방어는 scoped_window())"
-has "$WFAIL" 'hard gate' && no "T23: 실패 분기에 'hard gate' 문구 (주장 > 보장)" \
-                         || ok "T23: 실패 분기에 'hard gate' 문구 부재"
-has "$WFAIL" 'advisory' && ok "T23: 실패 분기가 advisory 강등" || no "T23: advisory 강등 부재"
-has "$WFAIL" 'D2' && ok "T23: 실패 분기가 D2 미충족 보고" || no "T23: D2 미충족 보고 부재"
-WFAIL_BASH="$(fence "$WFAIL")"
-# 실행 라인 앵커. 이전 계약은 substring이었고, 두 호출 라인을 같은 문구를 실은 산문
-# ("이 분기에서는 --component critic 으로 record를 남깁니다")으로 바꿔도 88/88 green이었다 —
-# 실측. fence()가 거르는 것은 `#` 주석뿐이라 펜스 안 산문은 그대로 통과한다.
-DEGRADE_RE='^[[:space:]]*\$BRS degrade-append "\$STATE" --component '
-grep -qE "${DEGRADE_RE}critic" <<<"$WFAIL_BASH" && ok "T23: 실패 분기 record — critic (실행 라인, 줄-시작 앵커)" || no "T23: critic record 호출 라인 부재 (산문으로는 만족되지 않는다)"
-grep -qE "${DEGRADE_RE}readback" <<<"$WFAIL_BASH" && ok "T23: 실패 분기 record — readback (2건, 실행 라인)" \
-                                  || no "T23: readback record 호출 라인 부재 (냉독 신뢰도 하향 신호 없음)"
-WOK="$(scoped_window '^#### probe 통과 분기' '^#{1,4} ')"
-# WOK에는 minlines 가드를 두지 않는다 — 자연 크기가 이미 2줄(빈 줄 + 문장 1개)이라 truncation을
-# 걸러낼 여유 임계값이 존재하지 않는다(2로 잡아도 절단된 필러가 그대로 통과함, 직접 확인함).
-# 이 윈도우의 유일한 assert가 POSITIVE('hard gate' 존재)이므로 truncation은 그 자체로 이미 걸린다
-# (문장이 잘려나가면 'hard gate' 부재로 자연히 fail). W3A처럼 assert가 전부 negative인 윈도우는
-# 절단이 곧 vacuous PASS였지만, 그건 지금 살아있는 취약점이 아니다: 펜스 안 컬럼-0 헤딩 모양의
-# 절단은 scoped_window()가 구조적으로 막고, 남은 하나(펜스 불균형으로 인한 EOF 흘러넘침)는 위의
-# 펜스 균형 assert가 잡는다. 여기 minlines를 두지 않는 근거는 여전히 '자연 크기 2줄'뿐이다.
-has "$WOK" 'hard gate' && ok "T23: 통과 분기가 hard gate" || no "T23: 통과 분기에 hard gate 부재"
-
 # --- T22 / AC15 : degradation record ----------------------------------------
 grep -qF 'brief_review_degradations' "$SKILL" \
   && ok "T22: state 키 brief_review_degradations" || no "T22: state 키 부재"
