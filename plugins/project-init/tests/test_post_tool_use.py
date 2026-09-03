@@ -260,8 +260,13 @@ class F2SuggestionTest(_ProjectDirTestCase):
         self.assertIn("release", msg)
         self.assertIn("hotfix", msg)
         self.assertNotIn("feature/hotfix-login", msg)   # no hardcoded feature/ suggestion
-        self.assertIn("<prefix>/hotfix-login", model)    # placeholder, not a single prefix — lives in the model half (cmd)
         self.assertIn("Allowed prefixes: feature, fix, release, hotfix", msg)  # body-unique teeth (not header-satisfiable)
+        # model half must be self-contained: a runnable command (derived prefix, not a
+        # placeholder) plus the full prefix list — never a dangling <prefix>/"above" pointer
+        self.assertIn("git branch -m feature/hotfix-login", model)
+        self.assertIn("Allowed prefixes: feature, fix, release, hotfix", model)
+        self.assertNotIn("<prefix>", model)
+        self.assertNotIn("above", model.lower())
 
     def test_exotic_pattern_degrades_to_doc(self):
         write_strategy(self.tmp, r"^feature-.*$")  # literal prefix -> exotic -> []
@@ -347,6 +352,12 @@ class ChannelSplit(unittest.TestCase):
             self.assertEqual(data.get("hookSpecificOutput", {}).get("hookEventName"),
                              "PostToolUse")
             self.assertIn("git branch -m", ac, "수정 명령이 모델 채널에 없다")
+            self.assertIn("Allowed prefixes: feature, fix, release, hotfix", ac,
+                          "허용 prefix 목록이 모델 채널 자체에 없다 — 모델이 못 보는 사람 채널을 가리킨다")
+            self.assertNotIn("<prefix>", ac,
+                             "모델 채널에 미치환 <prefix> placeholder가 남아 있다")
+            self.assertNotIn("above", ac.lower(),
+                             "모델 채널이 자신은 못 보는 '위' 콘텐츠를 가리킨다")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

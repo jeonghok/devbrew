@@ -6,7 +6,13 @@ Validates two things on Bash tool use:
    the branch name against the pattern in docs/git-workflow/branch-strategy.md.
 2. Commit message — detects git commit -m and validates Conventional Commits format.
 
-Both validators emit non-blocking warnings via systemMessage.
+Both validators are non-blocking. Each emits a human-facing warning on
+systemMessage; the branch validator additionally emits a self-contained,
+runnable fix command on hookSpecificOutput.additionalContext (the model
+channel) when one exists. The commit validator never emits a model-channel
+command — a rewritten commit message re-matches COMMIT_MSG_RE and would
+re-fire on the retry without bound, so its suggestion stays on the human
+channel only.
 
 Kill switches:
   DEVBREW_PROJECT_INIT_DISABLE=1                 - disables this hook entirely
@@ -135,7 +141,10 @@ def validate_branch(command):
     prefixes = derive_prefixes(pattern)
     if prefixes:
         hint = f"Allowed prefixes: {', '.join(prefixes)}"
-        cmd = f"Rename with: git branch -m <prefix>/{name_part}   (choose a prefix above)"
+        cmd = (
+            f"Rename the branch: git branch -m {prefixes[0]}/{name_part}\n"
+            f"Allowed prefixes: {', '.join(prefixes)} — use whichever fits this change."
+        )
     else:  # exotic regex → NO feature/ hardcode
         hint = "See docs/git-workflow/branch-strategy.md for allowed prefixes."
         cmd = None

@@ -37,7 +37,7 @@
 ### 유지 (혼동 방지)
 
 - `publish-active.md` 는 **삭제 대상이 아니다** — 이름이 비슷하지만 생산자
-  (`publishing-pr-understanding/SKILL.md:206`)와 소비자(`hooks/post-tool-use.py:62-68`)가
+  (`publishing-pr-understanding/SKILL.md:205`)와 소비자(`hooks/post-tool-use.py:62-68`)가
   둘 다 살아 있고, `/qg-publish` 가 만든 PR 에 파이프라인이 되따라붙는 것을 막는다.
 - kill switch `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH` 는 **사라지지 않는다.** 진짜
   집행은 최내부 네트워크 sink 둘(`scripts/comment-upsert.py:77` ·
@@ -51,6 +51,11 @@
   정반대를 지시해 이번 범위에서 뺐다(사용자 판정) — `state-file-format.md:67`
   자신이 "follow the same per-session lifecycle" 로 sentinel 의 존속을 전제하고
   있었다. 무해하지만 사문이며, 그 작업이 끝난 뒤 어느 쪽이 정리할지는 미정이다.
+- `tests/test_qg_gc.py:165-176` 의 `test_session_identified_by_publish_eligible_md` 도
+  같은 죽은 참조를 든다 — 픽스처가 `publish-eligible.md` 를 손으로 만들어 GC 가
+  그 마커만으로도 세션 폴더를 수집하는지 본다(AC28). 생산자가 없으니 실제로는
+  발화하지 않는 경로지만, 픽스처가 직접 파일을 만들어 놓기 때문에 계속 green으로
+  남는다. 테스트는 무해하므로 손대지 않았다.
 
 ## [5.1.0] — 2026-08-29
 

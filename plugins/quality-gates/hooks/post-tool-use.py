@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """PostToolUse hook for quality-gates plugin.
 
-Detects when `gh pr create` succeeds and injects a system message
-to trigger the quality pipeline. Self-session scope: checks only
+Detects when `gh pr create` succeeds and emits two channels to trigger
+the quality pipeline: a human-facing fact on systemMessage and the
+model-facing setup + Skill-invoke instruction on
+hookSpecificOutput.additionalContext. Self-session scope: checks only
 `.claude/quality-gates/<session-id>/pipeline.md` for the active flag.
 Passes --session-id explicitly to setup-qg.sh in case env var is unset.
 
