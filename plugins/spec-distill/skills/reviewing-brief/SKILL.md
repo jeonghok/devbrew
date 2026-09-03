@@ -105,8 +105,8 @@ Step B로 전달할 때는 `get`의 `brief_review_degradations`와 `$DEGRADE_FAL
 ## 격리 — 충실도 리뷰어의 도구 표면
 
 `brief-critic`·`brief-readback`은 `tools: []`이라 audit 도달 경로가 물리적으로 없습니다.
-집행은 `tests/test_brief_agents.sh`의 집합 등식이 합니다 — 이 skill은 실행 시점에 어떤
-외부 기록도 읽지 않습니다.
+집행은 `tests/test_brief_agents.sh`의 집합 등식이 합니다 — 이 skill은 실행 시점에 배포
+단위 밖의 기록을 읽지 않습니다.
 
 충실도 verdict는 **hard gate**입니다 — `fidelity_verdict: needs_revise`면 3단계로
 넘어가지 않고 수정 경로를 탑니다. D2 충족.

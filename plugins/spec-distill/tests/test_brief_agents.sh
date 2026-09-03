@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Spec B T7 (+ T21의 Bash 부재 절) — 신규 3 에이전트 도구·모델 표면 락.
-# AC4(쓰기·실행·위임 도구 0) · AC5(model: inherit) · AC2b(probe 판정과 tools: 정합)
+# AC4(쓰기·실행·위임 도구 0) · AC5(model: inherit) · N5(격리 집합 등식 L —
+# tools: [] 스캔 집합 == 리터럴 이름 넷)
 # Run: bash plugins/spec-distill/tests/test_brief_agents.sh
 set -u -o pipefail
 

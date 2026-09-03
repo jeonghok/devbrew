@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Spec B T8·T9·T14·T17·T21·T22·T23·T25·T28·T30 — reviewing-brief SKILL 계약 락.
-# AC2(critic 경로 미제공) · AC3(readback 무스키마) · AC2b(probe 이진 분기) · AC7b(기각 금지)
+# Spec B T8·T9·T14·T17·T21·T22·T25·T28·T30 — reviewing-brief SKILL 계약 락.
+# AC2(critic 경로 미제공) · AC3(readback 무스키마) · AC7b(기각 금지)
 # AC13(전이 표) · AC15(degradation record) · AC18(kill switch) · AC21(cost_class high + 게이트)
 # AC22b(단일 호출 상한 0) · AC24(웹 예산) · AC25(G1–G5)
 # 모든 블록 스코프 assert는 awk 윈도우로 걸린다 — 헤더 만족(header-satisfiable) 방지.
