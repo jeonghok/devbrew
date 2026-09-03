@@ -6,8 +6,9 @@ description: >
   or "is my PR ready to merge". Dispatches up to two gates (review, then
   optionally runtime verification) serially; progression and fix-loop decisions
   surface to the user via AskUserQuestion. A gate argument (`/qg both|review|runtime`)
-  sets the scope. On non-aborted completion the command layer offers an opt-in
-  PR-understanding publish continuation — a separate consent-gated step, not a gate.
+  sets the scope. On non-aborted completion the pipeline simply ends; publishing
+  a PR-understanding comment is a separate explicit step (`/qg-publish`) — not a
+  gate, and not an automatic continuation.
 cost_class: variable
 allowed-tools:
   # Group 1 — Preflight scripts (실행 순서: setup → trivia)
