@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-sys.path.insert(0, str(root / "shared" / "adjudication"))
+sys.path.insert(0, str(root / "tools" / "adjudication"))
 from check_wiring import (  # noqa: E402
     EXEMPT, comprehension_count, derive_consumers, scan)
 

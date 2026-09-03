@@ -27,6 +27,10 @@ assert_contains "$PROBE" "nested_if=1" \
   "바깥 분기의 처분 호출로 만족되지 않는다 — 안쪽을 «길이»가 아니라 포함 관계로 고른다"
 assert_contains "$PROBE" "nested_loop_rows=1" \
   "중첩 루프 안의 한 문장을 한 번만 센다 (이중 계상 회귀 — M8 의 면제 크기를 부풀린다)"
+assert_contains "$PROBE" "except_guard=0" \
+  "같은 except 본문의 처분 호출을 통과시킨다 — 분기 컨테이너는 If 뿐 아니라 Try/except 다"
+assert_contains "$PROBE" "while_boundary_rows=0" \
+  "while 안의 버리는 분기를 바깥 for 의 인구로 잘못 귀속하지 않는다 (while 경계 회귀)"
 
 note "── 모집단 도출 (㉮) — 두 경로를 따로 기록한다"
 PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_wiring_scan.py" \

@@ -284,10 +284,10 @@ ast.For/AsyncFor 문 39
 의 R1. **그 열 중 둘(`:308`·`:310` 의 상한 도달 분기)은 다툼의 여지가 있다** — 규칙 억제
 (`suppressed()`)로 볼 수도 있다. Task 11 이 착수할 때 이 문서를 다시 확인해 결정한다.
 
-## 면제 후보 — 오늘 ㉮ 네 파일의 미배선 15자리 중 T1 이 안 덮는 자리 (Step 6)
+## 면제 후보 — 오늘 ㉮ 네 파일의 미배선 14자리 중 T1 이 안 덮는 자리 (Step 6)
 
 **분류 근거.** 설계 §3 의 T1 표(이 계획의 Task 8·9)가 배선을 약속하는 자리를 뺐다.
-`synthesize_artifact_findings.py` 의 6자리는 전부 T1 이 덮는다 — `105`·`109`·`109` 는 T1-11
+`synthesize_artifact_findings.py` 의 5자리는 전부 T1 이 덮는다 — `105`·`109` 는 T1-11
 (`source_failed`, `phase_key` 의 `sources_failed` 카운터가 그 자리), `203`은 T1-5(`reject`),
 `216`은 T1-6(`hold`), `221`은 T1-7(`absorbed`). `synthesize_findings.py` 의 `233`·`239`는
 T1-4(`dropped_promoted`), `295`는 T1-2, `310`은 T1-1이 덮는다. 남는 것은 아래 다섯.

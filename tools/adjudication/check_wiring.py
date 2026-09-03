@@ -45,25 +45,36 @@ def _parent_map(tree):
 def _enclosing_loop(node, parents):
     """`node` 를 감싸는 가장 안쪽 for 문. 없으면 None.
 
-    함수 경계를 넘지 않는다 — 중첩 함수 안의 return 은 바깥 루프의 버리는
-    분기가 아니다.
+    함수 경계와 while 경계를 넘지 않는다 — 중첩 함수 안의 return 은 바깥
+    루프의 버리는 분기가 아니고, for 안에 중첩된 while 의 continue/break 도
+    그 while 소속이지 바깥 for 의 인구가 아니다(while 자체는 이 판정기의
+    대상이 아니므로 그런 노드는 어느 for 에도 귀속되지 않는다 — 조용히
+    제외된다. 함수 경계와 같은 종류의 fail-closed 다).
     """
     cur = parents.get(node)
     while cur is not None:
         if isinstance(cur, (ast.For, ast.AsyncFor)):
             return cur
-        if isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        if isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda,
+                            ast.While)):
             return None
         cur = parents.get(cur)
     return None
 
 
 def _enclosing_branch(loop, target, parents):
-    """`target` 을 감싸는 가장 안쪽 If 본문. 없으면 None.
+    """`target` 을 감싸는 가장 안쪽 분기 본문. 없으면 None.
 
-    부모 사슬을 «올라가서» 첫 If 를 만난다 — 포함 관계 그 자체다. 본문의
-    «길이»를 안쪽의 대리 지표로 쓰면 안 된다: 그 둘은 같지 않고, 바깥 분기가
-    더 짧으면 거기 있는 무관한 처분 호출이 이 분기를 guarded 로 만든다.
+    분기 컨테이너는 `If.body`/`If.orelse` 뿐 아니라 `Try.body`(try 본문)·
+    `Try.orelse`(else)·`Try.finalbody`(finally)·`ExceptHandler.body`(except
+    본문)도 같은 자격으로 포함한다 — try/except 도 배선 태스크들에서 실제로
+    쓰는 처분 형태이고, 안쪽 except 본문에 처분 호출이 있는데 If 만 인식하면
+    「배선 안 됨」이라는 거짓 신호가 난다.
+
+    부모 사슬을 «올라가서» 첫 분기 컨테이너를 만난다 — 포함 관계 그 자체다.
+    본문의 «길이»를 안쪽의 대리 지표로 쓰면 안 된다: 그 둘은 같지 않고, 바깥
+    분기가 더 짧으면 거기 있는 무관한 처분 호출이 이 분기를 guarded 로
+    만든다.
     """
     node = target
     while node is not loop:
@@ -75,6 +86,16 @@ def _enclosing_branch(loop, target, parents):
                 return parent.body
             if any(child is node for child in parent.orelse):
                 return parent.orelse
+        elif isinstance(parent, ast.Try):
+            if any(child is node for child in parent.body):
+                return parent.body
+            if any(child is node for child in parent.orelse):
+                return parent.orelse
+            if any(child is node for child in parent.finalbody):
+                return parent.finalbody
+        elif isinstance(parent, ast.ExceptHandler):
+            if any(child is node for child in parent.body):
+                return parent.body
         node = parent
     return None
 
