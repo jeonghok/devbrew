@@ -906,8 +906,6 @@ def frontmatter_errors(text: str) -> list[str]:
     errs: list[str] = []
     if not re.search(r"^type:\s*interview-brief\s*$", fm, re.MULTILINE):
         errs.append("type != interview-brief")
-    if not re.search(r"^next_phase:\s*superpowers:brainstorming\s*$", fm, re.MULTILINE):
-        errs.append("next_phase != superpowers:brainstorming")
     # 실제 오류를 그대로 싣는다 — 어떤 오류든 "key absent"로 뭉개면 중복 키가 부재로 보고돼
     # 원인과 증상이 어긋난다(중복 2건인데 "없다"고 말하면 사용자는 키를 하나 더 추가한다).
     _af_err = frontmatter_value("audit_file", fm)[1]

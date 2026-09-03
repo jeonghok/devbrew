@@ -19,6 +19,13 @@
 - `merge_brief_review.py`·`README.md`·`build_brief_inline_blob.py`의 조건부 서술("zero-tool
   probe 통과 분기에서만 차단" / "실패 분기·통과 분기")을 무조건 서술로 고쳤다 — 분기 자체가
   사라져 조건부 문장이 자기 코드의 반대를 주장하고 있었다.
+- `check_brief.py`의 `frontmatter_errors()`가 더 이상 `next_phase` 값을 판정하지 않는다.
+  `next_phase: superpowers:brainstorming` 정확 일치를 요구해, superpowers 미설치 사용자에게
+  구조 게이트가 통과 불가였다. 이 필드를 읽는 런타임 소비자는 0이다(템플릿·픽스처·이
+  게이트뿐). 필드 자체는 템플릿에 정보성 메타데이터로 남긴다 —
+  `test_brief_no_statement_cap.sh`가 그 줄을 앵커로 쓴다. 신규
+  `test_check_brief_frontmatter.py`가 `next_phase` 축의 무판정과 나머지 축(`type`·
+  `audit_file`·`user_sourced_items`)의 판정 유지를 함께 확인한다.
 
 ### Removed
 
