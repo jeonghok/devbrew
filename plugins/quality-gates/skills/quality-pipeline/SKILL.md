@@ -6,8 +6,9 @@ description: >
   or "is my PR ready to merge". Dispatches up to two gates (review, then
   optionally runtime verification) serially; progression and fix-loop decisions
   surface to the user via AskUserQuestion. A gate argument (`/qg both|review|runtime`)
-  sets the scope. On non-aborted completion the command layer offers an opt-in
-  PR-understanding publish continuation — a separate consent-gated step, not a gate.
+  sets the scope. On non-aborted completion the pipeline simply ends; publishing
+  a PR-understanding comment is a separate explicit step (`/qg-publish`) — not a
+  gate, and not an automatic continuation.
 cost_class: variable
 allowed-tools:
   # Group 1 — Preflight scripts (실행 순서: setup → trivia)
@@ -56,7 +57,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v5.0.0)
+# Quality Gates — In-Turn Orchestrator (v6.0.0)
 
 You are running the **full quality-gates pipeline** in a single assistant
 turn. You dispatch up to two gates serially in order (Runtime gate only when selected). At decision points
@@ -90,7 +91,6 @@ handles deletion.
    - [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision)
 4. **Output templates** (verbatim, field substitution):
    - Review / Runtime result templates
-   - [Publish-eligible sentinel](#publish-eligible-sentinel) — fail-safe write contract shared by Final Summary + Runtime R8
    - Final summary template
    - [kill switch](#kill-switch) — DEVBREW_QUALITY_GATES_DISABLE* 색인, 각 스위치가 실제로 검사되는 스텝으로 포인터만
    - [Rules](#rules) — Law 2 invariants, state file invariants
@@ -139,12 +139,6 @@ QG="${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}"
 `setup-qg.sh --ensure` creates the per-session state file
 (`.claude/quality-gates/<sid>/pipeline.md`) with minimal v1.32.0 schema.
 Exit non-zero → surface stderr verbatim and abort.
-
-`setup-qg.sh --ensure`는 또한 이번 run 시작 시 stale
-`.claude/quality-gates/<sid>/publish-eligible.md`를 지운다(매 호출, `--ensure`
-조기 exit 앞) — [Publish-eligible sentinel](#publish-eligible-sentinel)이 항상
-이번 run의 완료만 반영하도록(SKILL은 `Write`만 있고 삭제 tool이 없어 이 정리는
-스크립트가 담당).
 
 **Preflight 는 P2 에서 끝난다.** SID 존재·패턴 검증은 `setup-qg.sh` 가 P2 에서
 정규식으로 수행하고 exit 1 한다 — Preflight 자신은 별도 SID 검증 스텝을 갖지
@@ -897,31 +891,6 @@ Branch:
 - **Skip with evidence** → record SKIP_WITH_EVIDENCE and continue.
 - **Stop** → final summary aborted at the Runtime gate.
 
-## Publish-eligible sentinel
-
-비중단 완료 시, 커맨드 계층이 읽을 fail-safe sentinel을 `Write`한다. **두 종결
-지점**(Final Summary, Runtime R8)이 이 포맷을 공유한다 — 재정의 말고 여기를 참조.
-
-- **경로:** `.claude/quality-gates/<sid>/publish-eligible.md` (`<sid>` =
-  `$CLAUDE_CODE_SESSION_ID`, state file과 동일). setup-qg.sh가 Preflight마다
-  stale 사본을 지우므로(Preflight P2), 이 파일의 존재 = **이번 run**의 비중단 완료.
-- **내용 (정확히 2줄):**
-  ```
-  <!-- qg-publish-eligible:v1 -->
-  verdict: <terminal 게이트 verdict 토큰>
-  ```
-  1번째 줄은 고정 마커(커맨드의 유효성 검사). `<verdict>`는 방금 렌더한 terminal
-  게이트 토큰(`clean` / `proceeded-with-findings iter N` / `failed` /
-  `SKIP_WITH_EVIDENCE` / `no scope reviewed …`)을 그대로 — offer 문구에 삽입된다.
-- **disposition 가드 (§5-A):** `## Final Summary`는 게이트별 셀을 독립 렌더한다
-  (`Review gate\t<token>` / `Runtime gate\t<token>`). **disposition = `aborted`
-  iff 어느 한 셀 token이 리터럴 `aborted`로 시작**(Review `aborted iter N` /
-  Runtime `aborted`). disposition = aborted면 **sentinel을 쓰지 않는다.** 그 외
-  (clean/proceeded-with-findings/failed/skipped/SKIP_WITH_EVIDENCE)는 non-aborted
-  → 쓴다.
-- **Write는 idempotent** — 같은 경로 overwrite. 한 실행이 Final Summary와 R8에
-  모두 도달해도 동일 sentinel을 다시 쓸 뿐(무해).
-
 ## Final Summary
 
 Build the status rows and render them (deterministic, scannable) — one
@@ -937,14 +906,6 @@ printf 'Review gate\t<clean iter N | no scope reviewed (branch <M> ahead) | proc
 
 Then print the appended `## History` lines from the state file as an
 indented tree beneath the table.
-
-**Publish-eligible sentinel (non-aborted completion only).** 위 두 게이트 셀
-token을 검사한다. **어느 셀이든 리터럴 `aborted`로 시작하면 disposition =
-aborted → sentinel을 쓰지 않는다**(사용자 Stop). 그 외에는
-`.claude/quality-gates/<sid>/publish-eligible.md`에 [Publish-eligible
-sentinel](#publish-eligible-sentinel) 포맷으로 `Write`한다 — `<verdict>`는 이
-요약의 terminal 게이트 token(Runtime을 돌렸으면 Runtime 셀, review-only면
-Review 셀). 이 Write가 커맨드 계층 offer를 arm한다.
 
 State file cleanup is deferred to /cancel-qg or SessionEnd cleanup hook.
 

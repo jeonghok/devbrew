@@ -40,5 +40,32 @@ class PublishSuppression(unittest.TestCase):
             self.assertIn("systemMessage", out, "without sentinel the /qg suggestion should fire")
 
 
+class ChannelSplit(unittest.TestCase):
+    """MU1·MU2 — 모델용 지시는 additionalContext, 사람용 사실은 systemMessage."""
+
+    def test_model_instruction_goes_to_additional_context(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = run_hook(d)
+            hso = out.get("hookSpecificOutput", {})
+            self.assertEqual(hso.get("hookEventName"), "PostToolUse")
+            ac = hso.get("additionalContext", "")
+            self.assertIn("setup-qg.sh", ac, "기동 명령이 모델 채널에 없다")
+            self.assertIn("quality-gates:quality-pipeline", ac,
+                          "skill 호출 지시가 모델 채널에 없다")
+
+    def test_human_fact_stays_in_system_message(self):
+        with tempfile.TemporaryDirectory() as d:
+            sm = run_hook(d).get("systemMessage", "")
+            self.assertIn("https://github.com/o/r/pull/42", sm,
+                          "PR 사실이 사람 채널에 없다")
+
+    def test_system_message_is_not_an_instruction_dump(self):
+        """MU1 의 역방향: 기동 지시가 systemMessage 로 되돌아가면 RED."""
+        with tempfile.TemporaryDirectory() as d:
+            sm = run_hook(d).get("systemMessage", "")
+            self.assertNotIn("setup-qg.sh", sm,
+                             "기동 명령이 사람 채널에 남아 있다 — 채널이 갈리지 않았다")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -165,15 +165,6 @@ class TestDegradationRecord(Base):
         self.assertEqual([r["component"] for r in recs], ["codex", "critic"],
                          "append가 기존 record를 덮어썼다")
 
-    def test_probe_failure_writes_two_records(self):
-        # spec §5.6: zero-tool probe 실패는 critic AND readback 2건이다.
-        self.append(component="critic", axis="fidelity", status="degraded",
-                    reason="zero-tool 불가 — 격리 미보장")
-        self.append(component="readback", axis="readback", status="degraded",
-                    reason="zero-tool 불가 — 격리 미보장")
-        recs = json.loads(run("get", str(self.state))[1])["brief_review_degradations"]
-        self.assertEqual({r["component"] for r in recs}, {"critic", "readback"})
-
     def test_reason_with_colon_and_quotes_roundtrips(self):
         nasty = 'exit 4: RuntimeError("boom") — #1'
         self.append(reason=nasty)

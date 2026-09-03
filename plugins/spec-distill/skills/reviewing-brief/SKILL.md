@@ -59,7 +59,7 @@ AskUserQuestion({
 
 ## 상태
 
-state는 새 파일을 만들지 않고 기존 `.claude/spec-distill/<session-id>/state.local.md`에 키 3개를 씁니다. 훅이 읽는 파일과 **같은 리졸버**로 경로를 구합니다. `$STATE`를 zero-tool 선결 조건보다 먼저 정의하는 이유는 하나뿐입니다 — 아래 probe 실패 분기가 `$STATE`에 쓰므로 그 값이 먼저 있어야 합니다(이 문서 전체가 위에서 아래로 그대로 실행 가능하다는 주장은 아닙니다: `$PAYLOAD`·`$AUDIT`·`$CODEX_DIR_YAML`·`$CODEX_FID_YAML`은 이 skill이 정의하지 않는 입력이고, 호출자 `conducting-interview`가 진입 시점에 이미 쥐고 넘기는 값입니다. `$AUDIT`은 payload의 audit sidecar 경로 — v0.43.0부터 §6 원문이 payload(`S1`)와 audit(`S2` 이상)에 나뉘어 살아서, 완전성 검사가 두 파일을 모두 읽어야 합니다):
+state는 새 파일을 만들지 않고 기존 `.claude/spec-distill/<session-id>/state.local.md`에 키 3개를 씁니다. 훅이 읽는 파일과 **같은 리졸버**로 경로를 구합니다. `$STATE`를 이 절에서 먼저 정의하는 이유는 아래 degrade 기록 경로(`brief_review_state.py`)가 그 값을 쓰기 때문입니다(이 문서 전체가 위에서 아래로 그대로 실행 가능하다는 주장은 아닙니다: `$PAYLOAD`·`$AUDIT`·`$CODEX_DIR_YAML`·`$CODEX_FID_YAML`은 이 skill이 정의하지 않는 입력이고, 호출자 `conducting-interview`가 진입 시점에 이미 쥐고 넘기는 값입니다. `$AUDIT`은 payload의 audit sidecar 경로 — v0.43.0부터 §6 원문이 payload(`S1`)와 audit(`S2` 이상)에 나뉘어 살아서, 완전성 검사가 두 파일을 모두 읽어야 합니다):
 
 ```bash
 PR="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
@@ -102,33 +102,14 @@ python3 "$PR/scripts/brief_review_state.py" init "$STATE"; init_rc=$?   # 키 3�
 
 Step B로 전달할 때는 `get`의 `brief_review_degradations`와 `$DEGRADE_FALLBACK_FILE`의 줄들을 **합쳐서** 싣습니다. `get` 자체가 실패하면(`ok: false`) 원장 쪽은 비어 있는 것이 아니라 **알 수 없는** 것이므로, `degrade 없음`이라고 쓰지 않고 그 사실을 한 줄로 명시합니다.
 
-## zero-tool 격리 선결 조건
+## 격리 — 충실도 리뷰어의 도구 표면
 
-`brief-critic`·`brief-readback`의 격리는 **도구 표면으로 성립하거나 성립하지 않습니다.** 판정은 `docs/audits/2026-07-27-spec-distill-zero-tool-probe.md`의 `**분기 판정:**` 한 줄입니다. 그 파일이 없거나 판정을 읽을 수 없으면 **파이프라인을 시작하지 않습니다** — probe 미실행 상태로 구현·실행을 진행하지 않습니다(AC2b).
+`brief-critic`·`brief-readback`은 `tools: []`이라 audit 도달 경로가 물리적으로 없습니다.
+집행은 `tests/test_brief_agents.sh`의 집합 등식이 합니다 — 이 skill은 실행 시점에 배포
+단위 밖의 기록을 읽지 않습니다.
 
-probe는 세 조건을 **적대적으로** 확인한 것입니다: **P1** agent 정의가 resolve·dispatch된다 · **P2** 알려진 canary 파일을 읽으라는 명시적 지시에 도구 호출이 불가·거부된다 · **P3** 트랜스크립트 census로 실제 도구 목록이 빈 것을 확인(자기보고 불신). P1만 통과한 것은 *"로드됐다"* 이지 *"도구가 없다"* 가 아닙니다.
-
-#### probe 통과 분기 (`ZERO_TOOL_OK`)
-
-critic·readback이 `tools: []`이므로 audit 도달 경로가 물리적으로 없습니다. 충실도 verdict는 **hard gate**입니다 — `fidelity_verdict: needs_revise`면 3단계로 넘어가지 않고 수정 경로를 탑니다. D2 충족.
-
-#### probe 실패 분기 (`ZERO_TOOL_UNAVAILABLE`)
-
-critic·readback이 `tools: Read`를 유지하므로 격리가 **보장되지 않습니다.** 그러면 충실도 verdict를 **advisory**로 내립니다 — findings를 Step B에 올리고 사용자가 판정하며, 파이프라인을 자동 차단하지 않습니다. 독립성이 보장되지 않는 리뷰어의 판정으로 차단하면 담보하는 것이 없는데 담보하는 척하는 것입니다.
-
-이 분기에서는 아래 두 호출로 **record 2건**을 남깁니다(양쪽 도구가 함께 되돌아가므로 냉독의 *순진함* 전제도 같은 원인으로 훼손됩니다 — gap 판정을 그만큼 낮게 읽어야 합니다):
-
-```bash
-BRS="python3 $PR/scripts/brief_review_state.py"
-$BRS degrade-append "$STATE" --component critic   --axis fidelity \
-    --status degraded --reason "zero-tool 불가 — 격리 미보장" \
-    || echo "- (state 기록 실패) component=critic axis=fidelity status=degraded reason=zero-tool 불가 — 격리 미보장" >> "$DEGRADE_FALLBACK_FILE"
-$BRS degrade-append "$STATE" --component readback --axis readback \
-    --status degraded --reason "zero-tool 불가 — 격리 미보장" \
-    || echo "- (state 기록 실패) component=readback axis=readback status=degraded reason=zero-tool 불가 — 격리 미보장" >> "$DEGRADE_FALLBACK_FILE"
-```
-
-그리고 **D2(payload 파일 하나만 받는다는 구조 조건) 미충족을 조용히 넘기지 않고** C4 경로로 사용자에게 보고합니다(Step B 게이트 question 텍스트).
+충실도 verdict는 **hard gate**입니다 — `fidelity_verdict: needs_revise`면 3단계로
+넘어가지 않고 수정 경로를 탑니다. D2 충족.
 
 ## 진입 첫 액션 — 원문 완전성 (payload §6 ∪ audit §6 ↔ state 원장)
 
@@ -497,7 +478,7 @@ ${BLOB}
 
 **성공 조건**: G1–G6 **전부 0건**이면 readback pass. 1건 이상이면 그 항목을 Step B 게이트에 **세 조각**으로 올립니다 — *어느 클래스 / 요약의 어느 문장 / payload의 어느 절*.
 
-3-a에서 `blob_rc == 3`이었던 라운드는 redaction되지 않은 audit 파일명이 본문에 그대로 남아 있었다는 뜻입니다 — 냉독 에이전트가 문서 메타데이터(파일명 규약)까지 함께 봤을 수 있으므로, 그 라운드의 gap 판정은 **신뢰도 하향**으로 읽습니다(zero-tool 격리 미보장 분기와 동일한 원인의 신뢰도 저하).
+3-a에서 `blob_rc == 3`이었던 라운드는 redaction되지 않은 audit 파일명이 본문에 그대로 남아 있었다는 뜻입니다 — 냉독 에이전트가 문서 메타데이터(파일명 규약)까지 함께 봤을 수 있으므로, 그 라운드의 gap 판정은 **신뢰도 하향**으로 읽습니다(격리 전제가 훼손된 라운드의 신뢰도 저하).
 
 **이 판정은 advisory입니다** — pass/fail이 파이프라인을 차단하지 않고 사용자가 최종 판정합니다. 프레시 에이전트는 *잘못 재구성된* payload도 정확히 요약할 수 있습니다 — 원래 의도와 비교할 독립 ground truth가 없으므로 hard verdict로 쓰면 false block이 납니다.
 

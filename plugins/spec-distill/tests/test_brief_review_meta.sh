@@ -106,7 +106,7 @@ n_brief="$(grep -cF 'brief' "$HOOKS/hooks.json" || true)"
 test -f "$SPEC" && ok "T29: spec 문서 실재" || no "T29: spec 문서 부재: $SPEC"
 T63="$(awk '/^### 6\.3/{inw=1; next} inw && /^#{2,3} /{exit} inw' "$SPEC")"
 [[ -n "$T63" ]] && ok "T29: spec §6.3 열거표 실재" || no "T29: §6.3 표 부재"
-for chk in 'check_verbatim_coverage' 'zero-tool probe' 'merge_brief_review' 'T-lock'; do
+for chk in 'check_verbatim_coverage' 'merge_brief_review' 'T-lock'; do
   grep -qF "$chk" <<<"$T63" && ok "T29: 열거표에 '$chk'" || no "T29: 열거표에 '$chk' 누락"
 done
 grep -qF '누가' <<<"$T63" && ok "T29: '누가 쓰는가' 열 존재" || no "T29: '누가 쓰는가' 열 부재"
@@ -126,7 +126,7 @@ done
 # 잡을 수단이 0이었다. 아래가 실제 열거 대조다.
 #
 # 판정 대상 = 파이프라인이 **게이트 결정이나 degrade 강등에 쓰는** 결정론 체크.
-DET_CHECKS="check_brief.py check_verbatim_coverage zero-tool merge_brief_review T-lock build_brief_inline_blob brief_review_state"
+DET_CHECKS="check_brief.py check_verbatim_coverage merge_brief_review T-lock build_brief_inline_blob brief_review_state"
 # 아래 둘은 shipping에 실재하지만 §6.3 표에 **행이 없다**. design doc 수정은 사람 몫이라
 # (이 사이클에서 문서는 read-only) 여기에 이름을 박아 gap을 greppable·강제 가능하게 만든다:
 #   - build_brief_inline_blob.py : 본문 audit 파일명 잔존 → exit 3 (호출자가 degrade 기록)

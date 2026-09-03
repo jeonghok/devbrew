@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """PostToolUse hook for quality-gates plugin.
 
-Detects when `gh pr create` succeeds and injects a system message
-to trigger the quality pipeline. Self-session scope: checks only
+Detects when `gh pr create` succeeds and emits two channels to trigger
+the quality pipeline: a human-facing fact on systemMessage and the
+model-facing setup + Skill-invoke instruction on
+hookSpecificOutput.additionalContext. Self-session scope: checks only
 `.claude/quality-gates/<session-id>/pipeline.md` for the active flag.
 Passes --session-id explicitly to setup-qg.sh in case env var is unset.
 
@@ -81,14 +83,22 @@ def main():
     plugin_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     setup_script = os.path.join(plugin_root, "scripts", "setup-qg.sh")
 
+    # 채널 분리 (N1): 사람에게는 사실을, 모델에게는 지시를 — **둘 다** 낸다.
+    # `systemMessage` 는 사용자 표시용이고, 모델 컨텍스트에 주입되는 필드는
+    # `hookSpecificOutput.additionalContext` 다. 한쪽으로 옮기면 다른 쪽 수신자를
+    # 잃는다 — 지시가 사람 채널에만 있으면 강제처럼 보이는 서술이 된다.
     result = {
-        "systemMessage": (
-            f"Quality Gates: PR created at {pr_url}. "
-            "You MUST now initialize the quality-gates pipeline. "
-            f'Run: Bash("{setup_script} --session-id {session_id} --pr-url {pr_url}") '
-            "Then invoke Skill(\"quality-gates:quality-pipeline\") "
-            "to begin the pipeline (Review gate → Runtime gate)."
-        )
+        "systemMessage": f"Quality Gates: PR created at {pr_url}.",
+        "hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": (
+                f"Quality Gates: a PR was created at {pr_url}. "
+                "You MUST now initialize the quality-gates pipeline. "
+                f'Run: Bash("{setup_script} --session-id {session_id} --pr-url {pr_url}") '
+                'Then invoke Skill("quality-gates:quality-pipeline") '
+                "to begin the pipeline (Review gate → Runtime gate)."
+            ),
+        },
     }
 
     print(json.dumps(result))

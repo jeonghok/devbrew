@@ -94,9 +94,9 @@ Law 1 구조 게이트입니다. brief는 단독 완결 산출물이며, superpo
 - **P17 (User sovereignty) — 확정 권한 반환 (v0.23.0)** — 라운드마다 결정을 잠그던 producer를 제거하고 `status: confirmed`를 **종료 시 사용자 일괄 확인**으로만 발생시킨다. 확인은 새 의례가 아니라 기존 proceed 게이트에 흡수돼 상호작용이 1회로 유지된다(trivia ceremony 회피). 재제시에는 상한 2회가 있고 초과 시 전 항목이 `provisional`로 강등된다 — **덜 잠그는 쪽이 안전한 방향**(Unbounded-autonomy 가드).
 - **Law 2 (brief, v0.24.0)** — 3중 분리: (a) 신규 에이전트 3개 전부 fail-closed `tools:`
   allowlist(쓰기·실행·위임 0개), (b) **입력 격리** — `brief-critic`·`brief-readback`은 payload
-  전문을 inline으로만 받고 경로를 갖지 않으며, zero-tool probe 통과 시 `tools: []`로 도달 경로가
-  물리적으로 없다(실패 시 verdict를 advisory로 내리고 D2 미충족을 사용자에게 보고), (c) **수정 후
-  fresh critic 재리뷰 1회 필수** — writer가 자기 수정을 승인하는 경로를 차단한다(상한 2).
+  전문을 inline으로만 받고 경로를 갖지 않으며, `tools: []`로 도달 경로가 물리적으로 없다,
+  (c) **수정 후 fresh critic 재리뷰 1회 필수** — writer가 자기 수정을 승인하는 경로를
+  차단한다(상한 2).
 - **Law 3 (brief, v0.24.0)** — `brief-critic`의 `category` 6종과 readback gap 클래스 G1–G6가
   compounding substrate다. 리뷰가 놓친 결함류가 나오면 그 열거와 체크리스트를 편집하는 것이
   compounding 이벤트다(persona = 보안-민감 코드).

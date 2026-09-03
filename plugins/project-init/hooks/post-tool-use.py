@@ -6,7 +6,13 @@ Validates two things on Bash tool use:
    the branch name against the pattern in docs/git-workflow/branch-strategy.md.
 2. Commit message — detects git commit -m and validates Conventional Commits format.
 
-Both validators emit non-blocking warnings via systemMessage.
+Both validators are non-blocking. Each emits a human-facing warning on
+systemMessage; the branch validator additionally emits a self-contained,
+runnable fix command on hookSpecificOutput.additionalContext (the model
+channel) when one exists. The commit validator never emits a model-channel
+command — a rewritten commit message re-matches COMMIT_MSG_RE and would
+re-fire on the retry without bound, so its suggestion stays on the human
+channel only.
 
 Kill switches:
   DEVBREW_PROJECT_INIT_DISABLE=1                 - disables this hook entirely
@@ -124,7 +130,8 @@ def validate_branch(command):
         return (
             "project-init: no valid branch-naming pattern found in "
             "docs/git-workflow/branch-strategy.md — skipping branch-name "
-            "validation (fail-open)."
+            "validation (fail-open).",
+            None,  # 모델이 할 일이 없다 — 수정할 대상 자체가 없는 경고다
         )
     if pattern.match(branch_name):
         return None
@@ -134,7 +141,10 @@ def validate_branch(command):
     prefixes = derive_prefixes(pattern)
     if prefixes:
         hint = f"Allowed prefixes: {', '.join(prefixes)}"
-        cmd = f"Rename with: git branch -m <prefix>/{name_part}   (choose a prefix above)"
+        cmd = (
+            f"Rename the branch: git branch -m {prefixes[0]}/{name_part}\n"
+            f"Allowed prefixes: {', '.join(prefixes)} — use whichever fits this change."
+        )
     else:  # exotic regex → NO feature/ hardcode
         hint = "See docs/git-workflow/branch-strategy.md for allowed prefixes."
         cmd = None
@@ -144,9 +154,10 @@ def validate_branch(command):
         f"Expected pattern: {pattern.pattern}",
         hint,
     ]
-    if cmd:
-        lines.append(cmd)
-    return "\n".join(lines)
+    # 사람은 「무엇이 왜 틀렸나」를, 모델은 「무엇을 실행하나」를 받는다 (N1).
+    # cmd 가 None 인 exotic-regex 경로에서는 모델 몫이 비고, main() 이
+    # hookSpecificOutput 자체를 내지 않는다.
+    return "\n".join(lines), cmd
 
 
 def validate_commit(command):
@@ -173,11 +184,16 @@ def validate_commit(command):
 
     suggested_type = guess_commit_type(first_line)
 
+    # 모델 몫은 의도적으로 비어 있다. 이 제안(메시지 재작성)은 고친 메시지로
+    # 다시 커밋하면 COMMIT_MSG_RE(:33)에 **재발동**한다 — 브랜치 개명과 달리
+    # 구조적 상한이 없다. C16 이 새 강제에 폭주 방지를 요구하는데 이 설계는
+    # 가드를 만들지 않기로 했으므로, 비대칭을 숨기지 않고 사람 채널에 남긴다.
     return (
         f"project-init: Commit message does not follow Conventional Commits format.\n"
         f"Expected: <type>(<scope>): <description>\n"
         f"Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert\n"
-        f"Suggested: {suggested_type}: {first_line}"
+        f"Suggested: {suggested_type}: {first_line}",
+        None,
     )
 
 
@@ -206,12 +222,21 @@ def main():
 
     # Run BOTH validators (no short-circuit): a branch warning must not
     # suppress commit validation on compound commands (§5.5).
-    warnings = [w for w in (validate_branch(command), validate_commit(command)) if w]
+    results = [r for r in (validate_branch(command), validate_commit(command)) if r]
+    human = [h for h, _m in results if h]
+    model = [m for _h, m in results if m]
 
-    if warnings:
-        print(json.dumps({"systemMessage": "\n\n".join(warnings)}))
-    else:
-        print(json.dumps({}))
+    out = {}
+    if human:
+        out["systemMessage"] = "\n\n".join(human)
+    if model:
+        # 모델이 읽는 채널 (N1). 사람 채널과 **함께** 나간다 — 어느 한쪽으로
+        # 옮기면 다른 쪽 수신자를 잃는다.
+        out["hookSpecificOutput"] = {
+            "hookEventName": "PostToolUse",
+            "additionalContext": "\n\n".join(model),
+        }
+    print(json.dumps(out))
 
     sys.exit(0)
 
