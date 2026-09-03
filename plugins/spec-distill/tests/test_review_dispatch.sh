@@ -211,4 +211,44 @@ sf18="$WORK/.claude/spec-distill/test-018/state.local.md"
   && ! grep -q '^dispatch_attempts:' "$sf18" \
   && ok "스코프 밖 dirty 문서 → rc 0 + 무-dispatch, attempts 미기록 (무-crash)" \
   || no "out-of-scope 케이스 실패 (rc=$rc out='$out' err='$(cat "$err18")')"
+
+# --- MU9 : 목적지 이름이 한 자리에서 온다 -----------------------------------
+# 삭제 변이로는 이빨을 못 잰다 — 상수를 지우면 import 에러로 전부 죽으므로
+# "함께 죽었다" 가 "한 자리에서 온다" 의 증거가 되지 못한다. **값 변경 변이**가
+# 잡히도록, 판정 가능한 단언으로 못 박는다.
+# $HOOK 은 :5 에서 이미 세워져 있다 (재정의하지 않는다).
+CONST_VAL="$(sed -n 's/^REVIEW_SKILL[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$HOOK" | head -1)"
+[ -n "$CONST_VAL" ] && ok "MU9: 모듈 상수 REVIEW_SKILL 선언" \
+  || no "MU9: REVIEW_SKILL 상수가 없다 — 목적지가 여전히 흩어져 있다"
+
+# 모듈 docstring(첫 """ 블록)은 대상에서 뺀다: f-string 이 될 수 없어 손 갱신으로
+# 남는다(설계 §5.2). 그래서 docstring 을 지난 뒤부터 센다.
+BODY="$(awk 'BEGIN{d=0} /^"""/{d++; next} d>=2' "$HOOK")"
+
+# ⒞ 양성 증인 — 보간 자체가 실제로 있다. 재도출(⒜)·핀(⒝) 두 부재 단언보다
+# **먼저** 둔다: 이게 없으면 여섯 메시지를 통째로 지워도 두 부재 단언은
+# 검사할 대상이 사라져 공허하게 통과한다(무이빨).
+INTERP_HITS="$(grep -c '{REVIEW_SKILL}' <<<"$BODY")"
+[ "$INTERP_HITS" -ge 1 ] && ok "MU9⒞: 본문에 {REVIEW_SKILL} 보간이 ${INTERP_HITS}건 있다 (양성 증인)" \
+  || no "MU9⒞: 본문에 {REVIEW_SKILL} 보간이 0건 — 앵커가 죽었다"
+
+# ⒜ 재도출 — 본문에 **현재** 상수 값의 벌거벗은 사본이 없다 (상수 선언 줄
+# 제외). 상수를 오늘 값으로 다시 읽어 대조하므로 정당한 rename 에는 자동으로
+# 따라간다. 하지만 이 형태만으로는 구멍이 있다: 상수 값을 바꾼 뒤 한 자리가
+# **보간에 실패해 옛 이름을 그대로 하드코드로** 들고 있으면, 그 자리는 재도출된
+# 새 키의 매치 후보가 애초에 아니라서 이 단언을 통과한다 (MU9b 가 실증).
+STRAY_CURRENT="$(grep -n "$CONST_VAL" <<<"$BODY" | grep -v 'REVIEW_SKILL[[:space:]]*=' || true)"
+[ -z "$STRAY_CURRENT" ] && ok "MU9⒜: 목적지 리터럴(현재 상수 값)이 본문에 없다 (전부 상수 경유)" \
+  || { no "MU9⒜: 현재 상수 값을 경유하지 않는 목적지 리터럴이 남아 있다"; printf '%s\n' "$STRAY_CURRENT"; }
+
+# ⒝ 핀 — 본문에 **오늘의 이름**("reviewing-spec")의 벌거벗은 사본이 없다
+# (상수 선언 줄 제외 — 상수 값이 바뀌어도 그 줄은 "reviewing-spec" 을
+# 부분문자열로 포함할 수 있으므로 REVIEW_SKILL[[:space:]]*= 로 여전히
+# 걸러낸다). ⒜ 의 구멍을 메우는 짝이다: 보간에 실패한 자리는 옛 이름을 그대로
+# 들고 있으므로 이 핀에 걸린다. 정당한 rename 때는 이 리터럴도 함께 갱신한다
+# — 락이 깨지는 것 자체가 "이름이 바뀌었다"는 신호이므로 의도된 마찰이다.
+STRAY_PINNED="$(grep -n 'reviewing-spec' <<<"$BODY" | grep -v 'REVIEW_SKILL[[:space:]]*=' || true)"
+[ -z "$STRAY_PINNED" ] && ok "MU9⒝: 핀한 이름 'reviewing-spec' 의 벌거벗은 사본이 본문에 없다" \
+  || { no "MU9⒝: 핀한 이름 'reviewing-spec' 의 벌거벗은 사본이 남아 있다 (보간 실패)"; printf '%s\n' "$STRAY_PINNED"; }
+
 finish

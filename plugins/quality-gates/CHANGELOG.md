@@ -3,7 +3,7 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
-## [5.2.0] — 2026-09-03
+## [6.1.0] — 2026-09-03
 
 ### Added
 - `Ledger.suppressed(item, why)` — 규칙 억제를 기각과 분리된 칸으로 센다. 차단도 degrade 도 아니다.
@@ -11,6 +11,60 @@
 
 ### Changed
 - `report()["counts"]` 에 `suppressed` 추가 (여섯 → 일곱).
+
+## [6.0.0] — 2026-09-03
+
+### Removed
+
+- **파이프라인 완료 후 자동 발행 offer 와 그 sentinel `publish-eligible.md`.**
+  `publish-eligible.md` 를 쓰는 곳이 둘(Final Summary · Runtime R8), 읽는 곳이
+  하나(offer)였다. 읽는 하나를 지우면 소비자가 0 이 되므로 생산도 지운다 —
+  아무도 읽지 않는 파일을 계속 쓰는 것이 Law 3 이 이름 붙인 theater 다.
+  함께 사라지는 것: `commands/qg.md` 의 offer 절과 Quick Reference 의 자동 offer
+  행 · `SKILL.md` 의 sentinel 절·목차·두 쓰기 지점 · `runtime-gate.md` 의 R8
+  쓰기 · `setup-qg.sh` 의 stale 청소 두 곳 · `tests/test_qg_publish_offer.sh` ·
+  `test_setup_qg.sh` Case 7·8 · `test_skill_orchestration_behavior.sh` 의 배선 락.
+
+  **deprecation window 없이 제거한다.** CLAUDE.md 는 제거 전 one-minor 창을
+  요구하지만, 창이 보호하는 대상은 *작동 중인 동작을 잃고 대안이 없는 사용자*다.
+  대체 경로 `/qg-publish` 가 이미 출하돼 동일 기능을 제공하고 사라지는 것은 자동
+  «제안» 뿐이라 그런 사용자가 존재하지 않는다. **`project-init` v2.2.0 전례를
+  인용하지 않는다** — 그 CHANGELOG 이 스스로 *"이 근거는 훅이 blocking 이었다면
+  성립하지 않는다"* 고 적었고 offer 는 사용자 상호작용이라 그 단서에 걸린다.
+  위 근거는 그것과 다른 근거(대체 경로의 선출하)이며 새로 세운 것이다.
+
+### Changed
+
+- **`hooks/post-tool-use.py` 가 모델용 지시와 사람용 사실을 두 채널로 나눠 낸다.**
+  기동 지시("You MUST now initialize …")가 `systemMessage` 하나로만 나갔다. 그
+  필드는 번들 문서가 *"Display a message to the user"* 로 적은 사람 채널이고,
+  모델 컨텍스트 주입은 `hookSpecificOutput.additionalContext` 다. **옮기지 않고
+  둘 다 낸다** — `additionalContext` 의 도달은 실측했으나(`shared/tests/fixtures/
+  seamprobe/` 의 `MEAS-M6`) 「사람 채널로 보낸 것을 모델이 못 본다」는 반대 명제는
+  재지 않았다. 옮기면 그 미측정 명제에 베팅하면서 사람 수신자를 확실히 잃는다.
+
+### 유지 (혼동 방지)
+
+- `publish-active.md` 는 **삭제 대상이 아니다** — 이름이 비슷하지만 생산자
+  (`publishing-pr-understanding/SKILL.md:205`)와 소비자(`hooks/post-tool-use.py:62-68`)가
+  둘 다 살아 있고, `/qg-publish` 가 만든 PR 에 파이프라인이 되따라붙는 것을 막는다.
+- kill switch `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH` 는 **사라지지 않는다.** 진짜
+  집행은 최내부 네트워크 sink 둘(`scripts/comment-upsert.py:77` ·
+  `scripts/pr-create.sh:17`)이고, 사라지는 것은 offer 계층의 중복 확인 한 겹뿐이다.
+
+### Known gaps
+
+- `scripts/qg-gc.py:49` 의 `SESSION_MARKERS` 와
+  `skills/quality-pipeline/references/state-file-format.md:67` 의 companion-file
+  서술이 **생산자 없는 참조**로 남는다. 진행 중인 별개 작업이 그 두 파일에 대해
+  정반대를 지시해 이번 범위에서 뺐다(사용자 판정) — `state-file-format.md:67`
+  자신이 "follow the same per-session lifecycle" 로 sentinel 의 존속을 전제하고
+  있었다. 무해하지만 사문이며, 그 작업이 끝난 뒤 어느 쪽이 정리할지는 미정이다.
+- `tests/test_qg_gc.py:165-176` 의 `test_session_identified_by_publish_eligible_md` 도
+  같은 죽은 참조를 든다 — 픽스처가 `publish-eligible.md` 를 손으로 만들어 GC 가
+  그 마커만으로도 세션 폴더를 수집하는지 본다(AC28). 생산자가 없으니 실제로는
+  발화하지 않는 경로지만, 픽스처가 직접 파일을 만들어 놓기 때문에 계속 green으로
+  남는다. 테스트는 무해하므로 손대지 않았다.
 
 ## [5.1.0] — 2026-08-29
 

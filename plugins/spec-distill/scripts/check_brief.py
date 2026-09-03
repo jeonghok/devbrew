@@ -5,7 +5,7 @@
 AC4/AC5/AC6/AC7/AC9/AC10/AC11/AC12/AC15. 이 파일의 AC 번호는 **그 spec의 §6 표**를
 가리킨다 — 옛 spec의 번호를 물려 쓰면 같은 숫자가 다른 뜻을 가리켜 traceability가 거짓이
 된다(design doc Rejected Alternatives의 "AC↔T/V 편도 참조" 클래스). 이 spec에 대응 AC가
-없는 검사(§4 «출처키» 요구, `type`/`next_phase` 규약 등)는 AC 번호를 붙이지 않는다.
+없는 검사(§4 «출처키» 요구, `type` 규약 등)는 AC 번호를 붙이지 않는다.
 
 The Law 1 termination gate for the conducting-interview problem-space stage,
 made mechanical. conducting-interview runs `check_brief.py gate <payload>` before
@@ -906,8 +906,6 @@ def frontmatter_errors(text: str) -> list[str]:
     errs: list[str] = []
     if not re.search(r"^type:\s*interview-brief\s*$", fm, re.MULTILINE):
         errs.append("type != interview-brief")
-    if not re.search(r"^next_phase:\s*superpowers:brainstorming\s*$", fm, re.MULTILINE):
-        errs.append("next_phase != superpowers:brainstorming")
     # 실제 오류를 그대로 싣는다 — 어떤 오류든 "key absent"로 뭉개면 중복 키가 부재로 보고돼
     # 원인과 증상이 어긋난다(중복 2건인데 "없다"고 말하면 사용자는 키를 하나 더 추가한다).
     _af_err = frontmatter_value("audit_file", fm)[1]

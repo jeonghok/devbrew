@@ -17,9 +17,8 @@
     needs_revise + advisory로 사람에게 올린다. (round-4 실측: 리뷰어가 `**Status:**` 대신
     `## Status:`로 내 verdict가 소실됐고, codex가 살아 있어 fail-safe로 흡수됐다.)
 
-이 verdict가 파이프라인을 **차단**하는 것은 zero-tool probe 통과 분기에서만이다. 실패
-분기에서는 같은 needs_revise가 advisory로 Step B 게이트에 올라간다(AC2b) — 그 분기 판정은
-`reviewing-brief`가 하고 이 스크립트는 하지 않는다.
+이 verdict는 무조건 파이프라인을 **차단**한다 — needs_revise면 3단계로 넘어가지 않고
+수정 경로를 탄다. 그 판정은 `reviewing-brief`가 하고 이 스크립트는 하지 않는다.
 
 Usage: merge_brief_review.py --critic-output <file> [--codex-yaml <file>]
 """

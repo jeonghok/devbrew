@@ -70,51 +70,13 @@ when both gates are selected, the Runtime gate — surfacing decision points
 via AskUserQuestion. No further commands are needed unless the pipeline
 is aborted at a decision point.
 
-### After the pipeline: publish offer
+### After the pipeline
 
-파이프라인 스킬(`Skill("quality-gates:quality-pipeline")`)이 종료해 제어가 이
-커맨드로 돌아오면, 아래를 **순서대로** 수행한다. 이는 게이트가 아니라 게이트
-**뒤에** 얹힌 opt-in 연속이다 — verdict·pass/fail에 영향 없음.
+파이프라인 스킬이 종료해 제어가 이 커맨드로 돌아오면 아래 한 줄을 출력하고
+끝낸다. **자동 offer 를 띄우지 않는다** — 이어서 게시할지는 사용자가 다음 턴에
+정한다.
 
-<!-- 이 "예" 분기의 Skill 호출은 commands/qg-publish.md의 dispatch와 동일 호출.
-     두 call site가 drift하지 않도록 함께 수정할 것 (Law 3 위생). -->
-
-1. **Kill switch.** `DEVBREW_QUALITY_GATES_DISABLE=1`(전역) 또는
-   `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`(publish 전용) 중 **어느 하나라도** 설정돼
-   있으면 offer를 건너뛴다 — 전역 kill 시 `setup-qg.sh`는 자신의 global-kill
-   체크에서 즉시 exit해 stale-sentinel 삭제(더 뒤 단계)까지 도달하지 못하므로,
-   이전 같은-세션 실행의 sentinel이 남아있을 수 있다; offer도 publish-전용
-   switch만 보면 이를 놓친다(kill switch = security control, CLAUDE.md). 설정된
-   쪽에 맞춰 한 줄만 출력하고 종료:
-   - `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1` → `> [quality-gates] publish offer disabled via DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`
-   - `DEVBREW_QUALITY_GATES_DISABLE=1` → `> [quality-gates] publish offer skipped: quality-gates globally disabled (DEVBREW_QUALITY_GATES_DISABLE=1).`
-2. **Eligibility (fail-safe — default no-offer).** 아래 둘이 **모두** 참이 아니면
-   offer 없이 조용히 종료(비완료/abort/trivia는 sentinel 부재 → 여기서 걸림):
-   - `test -f ".claude/quality-gates/$CLAUDE_CODE_SESSION_ID/publish-eligible.md"` 성공, **그리고**
-   - 그 파일 1번째 줄이 정확히 `<!-- qg-publish-eligible:v1 -->` (마커 유효).
-3. **Offer.** sentinel의 `verdict:` 줄 값을 `<verdict>`로 읽어(파싱 실패 시 `완료`
-   로 대체) 아래 `AskUserQuestion`을 발동한다:
-
-   ```
-   AskUserQuestion({ questions: [{
-     question: "게이트 완료 (<verdict>) — 이 브랜치의 PR-이해글을 생성해서 게시할까요? (게시 전 미리보기 + 별도 동의가 있습니다.)",
-     header: "PR 이해글",
-     options: [
-       {label: "예, 이어서 생성·게시", description: "publishing-pr-understanding skill 실행 — 미리보기·secret-scan·동의 게이트를 거쳐 게시."},
-       {label: "아니오",              description: "여기서 종료. 나중에 /qg-publish로 따로 실행할 수 있습니다."}
-     ], multiSelect: false }]})
-   ```
-
-   - **"예, 이어서 생성·게시"** → `Skill("quality-gates:publishing-pr-understanding")`
-     를 인자 없이 호출(= 게시 경로). 이후는 그 skill이 소유: Preflight → Build →
-     Generate → Scan(FAIL-CLOSED) → Preview → **Consent(informed)** → Publish →
-     Report. offer는 GitHub write를 pre-consent하지 **않는다** — 그 skill의
-     informed-consent 게이트가 반드시 다시 fire한다(2차 touchpoint).
-   - **"아니오"** → 종료.
-   - **graceful floor (관측 가능한 Skill 에러에 한함).** post-pipeline 단계가
-     **실행은 됐으나** 위 `Skill(...)` 호출이 관측 가능하게 에러(스킬 부재·
-     invocation 실패)하면, crash하지 말고 정확히 한 줄 출력한다:
-     `> 이어서 게시하려면: /qg-publish` (누락 capability는 downgrade, crash 아님).
+> 이어서 PR 이해글을 게시하려면: `/qg-publish`
 
 ### Quick Reference
 
@@ -135,7 +97,6 @@ is aborted at a decision point.
 | `/qg --pr-url <url>` | Specify PR URL |
 | `/cancel-qg` | Cancel active pipeline |
 | `/qg-publish [--dry-run]` | Generate + publish a PR-understanding comment (separate skill; consent-gated; not a gate) |
-| (완료 후 자동) | 비중단 완료 시 "PR-이해글 이어서 게시?" opt-in offer (consent-gated; 게이트 아님; `DEVBREW_QUALITY_GATES_DISABLE_PUBLISH=1`로 끔) |
 | `DEVBREW_QUALITY_GATES_DISABLE_BRANCH_WORKTREE=1` | Disable `/qg branch <name>` auto-worktree mode |
 | `DEVBREW_QUALITY_GATES_KEEP_WORKTREE=1` | Preserve branch worktree after pipeline completes or is cancelled (default: removed) |
 | `DEVBREW_QUALITY_GATES_DISABLE_RUNTIME_SANDBOX=1` | Disable the Runtime gate sandbox executor (read-only smoke fallback; verdict capped at SKIP_WITH_EVIDENCE) |

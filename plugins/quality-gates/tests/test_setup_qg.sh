@@ -104,47 +104,4 @@ assert "'/qg both --skip-runtime' banner honors precedence (no contradictory ski
 assert "'/qg runtime --skip-runtime' banner notes precedence" "grep -qi 'gate=runtime wins' out3"
 cd / && rm -rf "$TMPDIR"
 
-# --- Case 7: stale publish-eligible.md deletion (v2.10.0) ---
-# setup-qg.sh must delete a prior run's publish-eligible sentinel on EVERY
-# invocation (incl. --ensure with an existing state file), so a second /qg
-# run in the same session cannot inherit a stale offer.
-TMPDIR=$(mktemp -d); cd "$TMPDIR"
-SID="test-stale-$$"
-unset CLAUDE_CODE_SESSION_ID
-SID_DIR=".claude/quality-gates/$SID"
-mkdir -p "$SID_DIR"
-# Simulate a completed prior run: state file present (triggers --ensure
-# early-exit) AND a stale publish-eligible sentinel present.
-printf '%s\n' '---' "session_id: \"$SID\"" '---' > "$SID_DIR/pipeline.md"
-printf '%s\n' '<!-- qg-publish-eligible:v1 -->' 'verdict: clean' > "$SID_DIR/publish-eligible.md"
-# Guard against a vacuous green (codex): prove the fixture EXISTS before the
-# command, so the "absent after" assertion cannot pass merely because the
-# fixture write silently failed. Also capture + assert the exit status, so a
-# crash before the deletion cannot masquerade as a successful cleanup.
-assert "Case 7 fixture: stale sentinel present before setup-qg" "test -e '$SID_DIR/publish-eligible.md'"
-CLAUDE_CODE_SESSION_ID="$SID" "$SCRIPT" --ensure >/dev/null 2>&1; ec7=$?
-assert "setup-qg --ensure exits 0 on the --ensure early-exit path" "test '$ec7' -eq 0"
-assert "setup-qg --ensure deletes stale publish-eligible.md even past the early-exit" "test ! -e '$SID_DIR/publish-eligible.md'"
-cd / && rm -rf "$TMPDIR"
-
-# --- Case 8: global-kill clears stale publish-eligible.md (v2.10.0 S1 backstop) ---
-# The DEVBREW_QUALITY_GATES_DISABLE early-exit is UPSTREAM of the arg-parsed
-# sentinel cleanup, so without a dedicated backstop a stale sentinel would
-# survive a globally-disabled invocation — leaving the qg.md offer's global-kill
-# guard as prose-only enforcement of a security control (CLAUDE.md: kill switch
-# = 보안 컨트롤). setup-qg.sh must clear the session's stale sentinel inside the
-# global-kill branch (keyed off CLAUDE_CODE_SESSION_ID) and still exit non-zero.
-# This is the behavioral teeth for that backstop: delete the cleanup → RED.
-TMPDIR=$(mktemp -d); cd "$TMPDIR"
-SID="test-globalkill-$$"
-unset CLAUDE_CODE_SESSION_ID
-SID_DIR=".claude/quality-gates/$SID"
-mkdir -p "$SID_DIR"
-printf '%s\n' '<!-- qg-publish-eligible:v1 -->' 'verdict: clean' > "$SID_DIR/publish-eligible.md"
-assert "Case 8 fixture: stale sentinel present before global-kill invocation" "test -e '$SID_DIR/publish-eligible.md'"
-DEVBREW_QUALITY_GATES_DISABLE=1 CLAUDE_CODE_SESSION_ID="$SID" "$SCRIPT" --ensure >/dev/null 2>&1; ec8=$?
-assert "global-kill invocation exits non-zero (pipeline disabled)" "test '$ec8' -ne 0"
-assert "global-kill clears stale publish-eligible.md (structural backstop, not prose-only)" "test ! -e '$SID_DIR/publish-eligible.md'"
-cd / && rm -rf "$TMPDIR"
-
 finish

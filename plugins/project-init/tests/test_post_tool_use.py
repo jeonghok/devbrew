@@ -84,7 +84,7 @@ class F1FailOpenTest(_ProjectDirTestCase):
     def test_file_absent_fails_open(self):
         # No strategy file written under self.tmp.
         self.assertIsNone(_hook.get_branch_pattern())
-        msg = _hook.validate_branch("git checkout -b release/x")
+        msg, _model = _hook.validate_branch("git checkout -b release/x")
         self.assertIsNotNone(msg)
         self.assertIn("fail-open", msg)
         self.assertIn("skipping", msg)
@@ -92,24 +92,24 @@ class F1FailOpenTest(_ProjectDirTestCase):
     def test_regexless_file_fails_open(self):
         write_strategy(self.tmp, None)
         self.assertIsNone(_hook.get_branch_pattern())
-        self.assertIn("fail-open", _hook.validate_branch("git checkout -b release/x"))
+        self.assertIn("fail-open", _hook.validate_branch("git checkout -b release/x")[0])
 
     def test_malformed_regex_fails_open(self):
         write_strategy(self.tmp, "^(feature|fix")  # unbalanced paren -> re.error
         self.assertIsNone(_hook.get_branch_pattern())
-        self.assertIn("fail-open", _hook.validate_branch("git checkout -b whatever"))
+        self.assertIn("fail-open", _hook.validate_branch("git checkout -b whatever")[0])
 
     def test_empty_regex_fence_fails_open(self):
         write_strategy(self.tmp, "")  # ```regex\n\n``` -> search regex can't capture
         self.assertIsNone(_hook.get_branch_pattern())
-        self.assertIn("fail-open", _hook.validate_branch("git checkout -b release/x"))
+        self.assertIn("fail-open", _hook.validate_branch("git checkout -b release/x")[0])
 
     def test_whitespace_only_regex_fence_fails_open(self):
         # ```regex\n   \n``` -> captures "   " -> .strip() empty -> guard -> None.
         # Must NOT become re.compile("") which would silently pass EVERY branch.
         write_strategy(self.tmp, "   ")
         self.assertIsNone(_hook.get_branch_pattern())
-        msg = _hook.validate_branch("git checkout -b anything-goes")
+        msg, _model = _hook.validate_branch("git checkout -b anything-goes")
         self.assertIsNotNone(msg)  # not silent pass-all
         self.assertIn("fail-open", msg)
 
@@ -130,7 +130,7 @@ class F1FailOpenTest(_ProjectDirTestCase):
         dst.mkdir(parents=True, exist_ok=True)
         (dst / "branch-strategy.md").write_bytes(b"\xff\xfe\x00\x81\x82 not-utf8 \x9c")
         self.assertIsNone(_hook.get_branch_pattern())  # no UnicodeDecodeError crash
-        msg = _hook.validate_branch("git checkout -b release/x")
+        msg, _model = _hook.validate_branch("git checkout -b release/x")
         self.assertIsNotNone(msg)
         self.assertIn("fail-open", msg)
         # main() must still exit 0 AND still run commit validation (not aborted mid-tuple)
@@ -191,7 +191,7 @@ class PreservedBehaviorTest(_ProjectDirTestCase):
         self.assertIsNone(_hook.validate_commit('git commit -m "feat: add thing"'))
 
     def test_non_conventional_commit_flagged(self):
-        msg = _hook.validate_commit('git commit -m "add thing"')
+        msg, _model = _hook.validate_commit('git commit -m "add thing"')
         self.assertIsNotNone(msg)
         self.assertIn("Conventional Commits", msg)
 
@@ -255,17 +255,22 @@ class F2SuggestionTest(_ProjectDirTestCase):
 
     def test_gitflow_violation_lists_derived_prefixes_no_feature_hardcode(self):
         write_strategy(self.tmp, r"^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$")
-        msg = _hook.validate_branch("git checkout -b hotfix-login")
+        msg, model = _hook.validate_branch("git checkout -b hotfix-login")
         self.assertIsNotNone(msg)
         self.assertIn("release", msg)
         self.assertIn("hotfix", msg)
         self.assertNotIn("feature/hotfix-login", msg)   # no hardcoded feature/ suggestion
-        self.assertIn("<prefix>/hotfix-login", msg)      # placeholder, not a single prefix
         self.assertIn("Allowed prefixes: feature, fix, release, hotfix", msg)  # body-unique teeth (not header-satisfiable)
+        # model half must be self-contained: a runnable command (derived prefix, not a
+        # placeholder) plus the full prefix list — never a dangling <prefix>/"above" pointer
+        self.assertIn("git branch -m feature/hotfix-login", model)
+        self.assertIn("Allowed prefixes: feature, fix, release, hotfix", model)
+        self.assertNotIn("<prefix>", model)
+        self.assertNotIn("above", model.lower())
 
     def test_exotic_pattern_degrades_to_doc(self):
         write_strategy(self.tmp, r"^feature-.*$")  # literal prefix -> exotic -> []
-        msg = _hook.validate_branch("git checkout -b bad")
+        msg, _model = _hook.validate_branch("git checkout -b bad")
         self.assertIsNotNone(msg)
         self.assertNotIn("git branch -m", msg)  # cmd is None for exotic
         self.assertIn("docs/git-workflow/branch-strategy.md", msg)
@@ -324,6 +329,80 @@ class MainDoubleValidationTest(unittest.TestCase):
             out, rc = run_hook(payload, cwd=tmp)
             self.assertEqual(out.strip(), "{}")
             self.assertEqual(rc, 0)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+class ChannelSplit(unittest.TestCase):
+    """MU3·MU4 — 브랜치 수정 명령은 모델 채널로, 커밋 경고는 사람 채널에 남는다."""
+
+    def _branch_violation(self, tmp):
+        write_strategy(tmp, r"^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$")
+        payload = {"tool_name": "Bash",
+                   "tool_input": {"command": "git checkout -b BadName"}}
+        out, rc = run_hook(payload, cwd=tmp)
+        self.assertEqual(rc, 0)
+        return json.loads(out)
+
+    def test_branch_fix_command_goes_to_model_channel(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            data = self._branch_violation(tmp)
+            ac = data.get("hookSpecificOutput", {}).get("additionalContext", "")
+            self.assertEqual(data.get("hookSpecificOutput", {}).get("hookEventName"),
+                             "PostToolUse")
+            self.assertIn("git branch -m", ac, "수정 명령이 모델 채널에 없다")
+            self.assertIn("Allowed prefixes: feature, fix, release, hotfix", ac,
+                          "허용 prefix 목록이 모델 채널 자체에 없다 — 모델이 못 보는 사람 채널을 가리킨다")
+            self.assertNotIn("<prefix>", ac,
+                             "모델 채널에 미치환 <prefix> placeholder가 남아 있다")
+            self.assertNotIn("above", ac.lower(),
+                             "모델 채널이 자신은 못 보는 '위' 콘텐츠를 가리킨다")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_branch_fact_and_hint_stay_human(self):
+        """양성 증인 — 사람 채널이 여전히 사실과 기대 패턴을 싣는다."""
+        tmp = tempfile.mkdtemp()
+        try:
+            data = self._branch_violation(tmp)
+            sm = data.get("systemMessage", "")
+            self.assertIn("does not follow naming convention", sm)
+            self.assertIn("Expected pattern:", sm)
+            self.assertIn("Allowed prefixes: feature, fix, release, hotfix", sm)
+            self.assertNotIn("git branch -m", sm,
+                             "수정 명령이 사람 채널에 남아 있다 — 채널이 갈리지 않았다")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_commit_warning_stays_in_system_message(self):
+        """MU4 — 커밋 경고는 자기 정규식에 재발동하므로 모델 채널로 보내지 않는다."""
+        tmp = tempfile.mkdtemp()
+        try:
+            write_strategy(tmp, r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
+            payload = {"tool_name": "Bash",
+                       "tool_input": {"command": 'git commit -m "add thing"'}}
+            out, rc = run_hook(payload, cwd=tmp)
+            self.assertEqual(rc, 0)
+            data = json.loads(out)
+            sm = data.get("systemMessage", "")
+            self.assertIn("Conventional Commits", sm)
+            self.assertIn("Suggested: feat: add thing", sm)
+            ac = data.get("hookSpecificOutput", {}).get("additionalContext", "")
+            self.assertNotIn("Conventional Commits", ac,
+                             "커밋 경고가 모델 채널로 갔다 — 재진입 비대칭이 깨졌다")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_clean_command_emits_neither_channel(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            write_strategy(tmp, r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
+            payload = {"tool_name": "Bash",
+                       "tool_input": {"command": "git checkout -b feature/ok"}}
+            out, rc = run_hook(payload, cwd=tmp)
+            self.assertEqual(rc, 0)
+            self.assertEqual(json.loads(out), {})
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

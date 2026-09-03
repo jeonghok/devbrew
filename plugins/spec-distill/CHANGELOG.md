@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.48.0] — 2026-09-03
+## [0.49.0] — 2026-09-03
 
 ### Added
 - `Ledger.suppressed(item, why)` — 규칙 억제를 기각과 분리된 칸으로 센다. 차단도 degrade 도 아니다.
@@ -8,6 +8,97 @@
 
 ### Changed
 - `report()["counts"]` 에 `suppressed` 추가 (여섯 → 일곱).
+
+## [0.48.0] — 2026-09-03
+
+### Fixed
+
+- **`reviewing-brief`가 더 이상 배포 단위 밖 파일(`docs/audits/2026-07-27-spec-distill-zero-tool-probe.md`)을
+  실행 시점 선결조건으로 읽지 않는다.** 그 파일은 플러그인 배포 단위 밖이라 devbrew 리포 밖
+  사용자에게는 존재하지 않았고, fail-closed가 곧 100% 차단이었다. 판정이 이미 `ZERO_TOOL_OK`
+  였으므로 오늘 도는 갈래(`tools: []`)만 남기고 probe 이진 분기 자체를 지웠다 — 완화가 아니라
+  유지다. 감사 문서(`docs/audits/2026-07-27-...md`)는 근거 기록으로 남긴다 — 지우는 것은
+  그것을 실행 시점에 읽던 코드이지 기록이 아니다.
+- `test_brief_agents.sh`의 probe 판정 판독 + 분기별 `tools:` 대조를 **집합 등식 L**로
+  올렸다: 스캔한 `tools: []` 집합 == 리터럴 이름 넷(`brief-critic`·`brief-readback`·
+  `seed-critic`·`seed-readback`). 대상을 `tools: []`에서 도출하면 하나를 넓히는 변이가
+  대상 집합을 벗어나 공허참으로 통과하므로, 우변을 리터럴로 고정했다. 신규
+  `test_brief_review_no_external_precondition.sh`(B1)가 감사 문서 없는 임시 루트에서
+  격리 락이 실제로 돌고 통과함을 양성 증인으로 확인한다.
+- `merge_brief_review.py`·`README.md`·`build_brief_inline_blob.py`의 조건부 서술("zero-tool
+  probe 통과 분기에서만 차단" / "실패 분기·통과 분기")을 무조건 서술로 고쳤다 — 분기 자체가
+  사라져 조건부 문장이 자기 코드의 반대를 주장하고 있었다.
+- `check_brief.py`의 `frontmatter_errors()`가 더 이상 `next_phase` 값을 판정하지 않는다.
+  `next_phase: superpowers:brainstorming` 정확 일치를 요구해, superpowers 미설치 사용자에게
+  구조 게이트가 통과 불가였다. 이 필드를 읽는 런타임 소비자는 0이다(템플릿·픽스처·이
+  게이트뿐). 필드 자체는 템플릿에 정보성 메타데이터로 남긴다 —
+  `test_brief_no_statement_cap.sh`가 그 줄을 앵커로 쓴다. 신규
+  `test_check_brief_frontmatter.py`가 `next_phase` 축의 무판정과 나머지 축(`type`·
+  `audit_file`·`user_sourced_items`)의 판정 유지를 함께 확인한다.
+- **`/compact` 안내에서 확인되지 않는 도착 주장을 걷어냈다.** "compact 후 brainstorming
+  진입 준비됨"은 압축 뒤의 상태에 대한 주장인데 아무도 확인하지 않는다. 사람이 다음 턴에
+  무엇을 하는지로 바꿨다 — 이 자리의 유일한 운반자가 사람임을 숨기지 않는 문면이다.
+  인터뷰가 확정한 C12(PreCompact matcher=manual 신설)를 재결정했다 — 이 리포에
+  PreCompact/PostCompact 훅이 0개라 채널 선택이 아니라 신설이고 brief의 Non-goal이
+  막으며, `finishing.md:243-244`가 이미 사람을 유일 트리거로 적고 있어 철회할 자동
+  이어짐 약속이 애초에 없었다. 측정(`MEASUREMENT.md`의 `COMPACT_CHANNEL_OK`)은 원안을
+  지지했다 — 기각 근거는 "되지 않는다"가 아니라 "새로 만들 값어치가 없다"다.
+  `<brief-path>` 치환 지시를 더했으나 락은 없다(Known gaps 참고).
+- **핸드오프가 네 인자를 넘긴다.** `finishing.md:101`이 `$PAYLOAD`·`$AUDIT`·
+  `$CODEX_DIR_YAML`·`$CODEX_FID_YAML` 넷 중 셋만 넘겨 `$AUDIT`가 빠졌다. 조용히 죽지는
+  않지만 두 소비자가 함께 무너진다 — `build_brief_bundle.py`가 rc 2로 충실도 리뷰를
+  통째 skip하고, `check_verbatim_coverage.py`의 §6 원문 완전성 결정론 검사가 같은 빈
+  값으로 깨진다. `test_brief_review_entry.sh:172`·`:190`의 락이 결함을 **요구**하고
+  있었으므로(세 변수만 순회·세 할당만 확인) 같은 커밋에서 넷으로 고쳤다. 앞선 논거
+  하나도 철회했다 — brief §6 S1이 "v0.47.0이 빌더 쪽에서 스스로 구하게 고쳤다"고
+  적었으나 코드는 반대다: `build_brief_bundle.py:106`이 audit을 위치 인자로 요구한다.
+  v0.47.0이 더한 것은 자기 도출이 아니라 신원 대조였다.
+
+### Changed
+
+- `hooks/review-dispatch.py`의 목적지 skill 이름이 **모듈 상수 한 자리**에서 온다.
+  런타임 메시지 6곳이 각자 `"reviewing-spec"`을 리터럴로 들고 있었다. 상수는
+  `hook_common.py`가 아니라 이 파일에 둔다 — 소비자가 이 파일 하나뿐이다. 락은
+  「런타임 메시지 전부가 상수 값을 포함한다」로 세웠다 — 삭제 변이로는 이빨을 못 잰다
+  (상수를 지우면 import 에러로 전부 죽어 "함께 죽었다"가 "한 자리에서 온다"의 증거가
+  되지 못한다), 그래서 값 변경 변이로 잡는 형태다. 그 락 자신도 구멍이 있었다 —
+  재도출한 현재 상수 값으로 grep했기 때문에, 상수를 바꾸고 한 자리만 옛 리터럴로
+  되돌리는 보간-실패 변이(MU9b)에서 grep 키가 새 이름이라 그 자리가 애초에 매치
+  후보가 아니어서 GREEN으로 통과했다. 재도출 키(현재 값의 벌거벗은 사본)와 핀한
+  리터럴(보간 실패 포착) 둘 다 두어 고쳤고, 보간 자체의 양성 증인도 앞에 세웠다 —
+  없으면 런타임 메시지를 통째로 지워도 부재 단언 둘이 공허하게 통과한다.
+
+### Known gaps
+
+- `hooks/review-dispatch.py:16`의 모듈 docstring은 목적지 skill 이름을 리터럴로
+  적는다 — f-string이 될 수 없어 손 갱신으로 남고, 상수 값과 갈리는 드리프트를 잡는
+  자리가 없다.
+- `/compact` 템플릿의 `<brief-path>` 치환에는 **기계가 없다** — 모델이 사용자에게
+  보여준 텍스트를 읽는 훅이 리포에 없다. 이번 작업이 검사와 함께 완료를 주장하는
+  아홉 자리 중 이 한 조각만 검사 없이 남아, 완료 주장이 아홉이 아니라 **여덟**이다.
+- 병합 완료로 판정한 형제 설계 문서(`docs/superpowers/specs/2026-08-05-...design.md`
+  등, 머지 시점에 실재 확인된 것들)는 제거된 zero-tool probe 분기를 여전히 살아 있는
+  것으로 서술한다 — 머지된 설계 문서는 그 순간의 기록이라 의도적으로 다시 쓰지
+  않았다.
+- `shared/tests/assert.sh`에는 `pass`/`fail` 카운터가 없다(`_ASSERT_PASS`/
+  `_ASSERT_FAIL`만 있다). 그런데도 `set -u -o pipefail` 아래서 `$((pass+fail))`을
+  참조하는 조기 종료 관용구가 이 파일을 source하는 여러 테스트에 남아 있다
+  (`plugins/spec-distill/tests/test_brief_codex_axes.sh:21`·
+  `test_handoff_design_mode.sh:29` 등). **직접 재현**: 같은 참조라도 구문 위치에
+  따라 결과가 갈린다 — `test_handoff_design_mode.sh:29`처럼 `if [[ -z … ]]; then
+  …; fi` 블록 **안**에서 걸리면 `set -u`의 unbound-variable abort가 **exit 0** 로
+  관측된다(동형 스크립트로 rc=0 실측) — 진짜 실패를 안은 실행이 rc만 보는 상위
+  러너(`run-baseline.sh` 포함)에 PASS 로 잡힌다. `test_brief_codex_axes.sh:21`처럼
+  최상위 `||` 형태로 걸리면 rc=1 로 죽어 이쪽은 여전히 FAIL 로 잡힌다(메시지만
+  깨진다). 같은 결함이 구문 위치에 따라 fail-open 과 fail-closed 로 갈리는 것이다.
+  이번 범위 밖 — 별도 수정이 필요하다.
+
+### Removed
+
+- `reviewing-brief/SKILL.md`의 `## zero-tool 격리 선결 조건` 절(probe 통과/실패 두 갈래 +
+  실패 분기의 degrade record 2건). `test_reviewing_brief_skill.sh`의 T23 probe 이진 분기
+  검사. `test_brief_review_state.py`의 probe 실패 2-record 전제 테스트.
+  `test_brief_review_meta.sh`·`interview-audit-template.md`의 `zero-tool` 항목.
 
 ## [0.47.0] — 2026-08-31
 

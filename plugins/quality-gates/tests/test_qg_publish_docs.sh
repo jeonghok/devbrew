@@ -30,12 +30,17 @@ grep -qiE 'deterministic envelope|model-authored|모델 저술' "$PLUGIN_ROOT/RE
 grep -qF '/qg-publish' "$PLUGIN_ROOT/commands/qg.md" \
   && ok "qg.md cross-refs /qg-publish" || no "no /qg-publish cross-ref"
 
-# NG5 reconciliation: command-layer opt-in offer는 있으나 자동 실행 아님.
+# NG5 reconciliation (v6.0.0): 자동 offer 는 철회됐고 발행 경로는 명시 실행 하나다.
+# 양성 증인 먼저 — 살아남은 경로가 실제로 문서화돼 있는가.
+grep -qF '/qg-publish' "$README" \
+  && ok "README documents the explicit publish path" || no "README lost the /qg-publish path"
+grep -qF '/qg-publish' "$PLUGIN_ROOT/skills/publishing-pr-understanding/SKILL.md" \
+  && ok "publish SKILL documents the explicit publish path" || no "publish SKILL lost the /qg-publish path"
+# 그다음 부재 — 철회된 자동 offer 서술이 남아 있지 않은가.
 grep -qF 'command-layer opt-in offer' "$README" \
-  && ok "README reconciles NG5 to command-layer opt-in offer" \
-  || no "README NG5 reconciliation phrase missing"
+  && no "README still describes the withdrawn command-layer offer" || ok "README free of the withdrawn offer"
 grep -qF 'command-layer opt-in offer' "$PLUGIN_ROOT/skills/publishing-pr-understanding/SKILL.md" \
-  && ok "publish SKILL reconciles NG5" || no "publish SKILL NG5 phrase missing"
+  && no "publish SKILL still describes the withdrawn command-layer offer" || ok "publish SKILL free of the withdrawn offer"
 # 유지 불변식: '세 번째 게이트' 부정 + gh 게이트 부재는 남아 있어야.
 grep -qF '세 번째 게이트가 아니다' "$README" \
   && ok "README keeps 'not a third gate'" || no "third-gate framing lost"

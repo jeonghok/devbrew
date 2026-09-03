@@ -152,8 +152,8 @@ grep -qF 'reviewing-brief' <<<"$WA5" && ok "A.5가 reviewing-brief를 지목 (�
 # satisfiable하다 — fix round 1 리뷰가 mutation으로 실증(invocation 라인을 지우고 "위 형식
 # 참고용" 데코이로 치환해도, 또는 "이전 형식 참고" 펜스를 따로 추가해도 계속 PASS). load-bearing
 # lock은 (a) 실제 invocation directive가 사는 bare ``` 펜스 내부(주석 제외)를 지목하고,
-# (b) 그 안의 라인이 $PAYLOAD·$CODEX_DIR_YAML·$CODEX_FID_YAML 세 핸드오프 변수를 실제로
-# 실어 나르는지까지 확인한다 — "Skill spec-distill:reviewing-brief"라는 문자열만 있고 세
+# (b) 그 안의 라인이 $PAYLOAD·$AUDIT·$CODEX_DIR_YAML·$CODEX_FID_YAML 네 핸드오프 변수를 실제로
+# 실어 나르는지까지 확인한다 — "Skill spec-distill:reviewing-brief"라는 문자열만 있고 네
 # 변수를 나르지 않는 장식용 데코이 라인(예: "위 형식 참고용" 주석)은 이 조건에서 걸러진다.
 # anchor는 들여쓰기·"- " 불릿을 허용한다(무해한 리포맷이 col-0 강제로 false-fail하지 않게 —
 # 펜스 경계가 lock을 정직하게 만드는 것이지 column 0이 아니다).
@@ -169,7 +169,7 @@ INVOKE_LINE="$(grep -E '^[[:space:]]*-?[[:space:]]*Skill spec-distill:reviewing-
 # fence()가 전체-라인 주석만 거르는 것과 같은 구분을 트레일링 "#"까지 확장한다 —
 # 같은 따옴표-상태 스캐너를 마커만 바꿔 재사용한다(두 번째 스트리퍼를 쓰지 않는다).
 INVOKE_CODE="$(strip_trailing_linecomment "$INVOKE_LINE" '#')"
-for handoff_var in '$PAYLOAD' '$CODEX_DIR_YAML' '$CODEX_FID_YAML'; do
+for handoff_var in '$PAYLOAD' '$AUDIT' '$CODEX_DIR_YAML' '$CODEX_FID_YAML'; do
   grep -qF "$handoff_var" <<<"$INVOKE_CODE" \
     && ok "invocation 라인이 ${handoff_var} 전달 (트레일링 # 코멘트 제외하고 검사)" \
     || no "invocation 라인(코멘트 제외)에 ${handoff_var} 부재 — 주석에만 적혀 있으면 호출은 인자 없이 나간다"
@@ -183,11 +183,11 @@ for tok in 'brief-critic' 'merge_brief_review' 'check_verbatim_coverage' 'G1'; d
   grep -qF "$tok" <<<"$WA5" && no "A.5가 파이프라인 내부('$tok')를 복제" || ok "A.5에 '$tok' 없음 (복제 아님)"
 done
 
-# --- 핸드오프 변수 3종 (Task 7 cross-task obligation) -----------------------
-# reviewing-brief SKILL.md 상태 섹션은 $PAYLOAD·$CODEX_DIR_YAML·$CODEX_FID_YAML을
+# --- 핸드오프 변수 4종 (Task 7 cross-task obligation) -----------------------
+# reviewing-brief SKILL.md 상태 섹션은 $PAYLOAD·$AUDIT·$CODEX_DIR_YAML·$CODEX_FID_YAML을
 # "호출자가 진입 시점에 이미 쥐고 넘기는 값"이라 주장한다 — conducting-interview가
-# 실제로 이 세 값을 세우지 않으면 그 주장은 overclaim이 된다(V1 cross-task 요건).
-for var in 'PAYLOAD=' 'CODEX_DIR_YAML=' 'CODEX_FID_YAML='; do
+# 실제로 이 네 값을 세우지 않으면 그 주장은 overclaim이 된다(V1 cross-task 요건).
+for var in 'PAYLOAD=' 'AUDIT=' 'CODEX_DIR_YAML=' 'CODEX_FID_YAML='; do
   grep -qF "$var" <<<"$WA5" && ok "A.5가 ${var%=} 값을 확립" || no "A.5에 ${var%=} 확립 부재"
 done
 grep -qE 'state_path\.py.*state-root' <<<"$WA5" \

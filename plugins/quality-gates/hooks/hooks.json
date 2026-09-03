@@ -1,5 +1,5 @@
 {
-  "description": "Quality Gates v5.0.0 — PostToolUse Bash-command validator + SessionStart legacy-state advisor + SessionEnd cleanup. Review scope is derived from git, not from an accumulated session file.",
+  "description": "Quality Gates v6.0.0 — PostToolUse Bash-command validator + SessionStart legacy-state advisor + SessionEnd cleanup. Review scope is derived from git, not from an accumulated session file.",
   "hooks": {
     "PostToolUse": [
       {
