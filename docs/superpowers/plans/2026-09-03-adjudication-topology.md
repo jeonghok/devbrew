@@ -14,7 +14,7 @@
 
 설계와 리포 규약에서 그대로 옮긴다. **모든 Task 의 요구사항에 이 절이 암묵적으로 포함된다.**
 
-- **버전 bump** — `plugins/<name>/` 를 건드리는 모든 커밋에 같은 커밋 안에서 SemVer bump. 현재 `quality-gates` = `5.1.0`, `spec-distill` = `0.47.0`. 파일은 `plugins/<name>/.claude-plugin/plugin.json` (루트가 아니다). v1.0.0 이상이면 `CHANGELOG.md` 항목도 같은 커밋에.
+- **버전 bump** — `plugins/<name>/` 를 건드리는 모든 커밋에 같은 커밋 안에서 SemVer bump. **착수 시점은 `5.1.0`/`0.47.0` 이었으나 PR1 직전 `origin/main` 병합(`832e9be`)으로 출발점이 바뀌었다 — 현재 `quality-gates` = `6.1.0`, `spec-distill` = `0.49.0`.** main 이 qg 를 major(6.0.0)로 올렸고, sd 는 «내 bump 와 같은 번호»(0.48.0)를 써서 충돌 없이 내 것을 삼켰다 — 0.49.0 으로 복원했다. 아래 Task 들의 번호는 이 출발점 위에서 오른다. 파일은 `plugins/<name>/.claude-plugin/plugin.json` (루트가 아니다). v1.0.0 이상이면 `CHANGELOG.md` 항목도 같은 커밋에.
 - **`shared/` 는 플러그인이 아니다** — 그 자체로는 bump 대상이 아니지만, `shared/adjudication/adjudication.py` 는 `plugins/quality-gates/scripts/adjudication.py` 와 `plugins/spec-distill/scripts/adjudication.py` 로 **심볼릭 링크(git mode 120000)** 되어 있으므로 그것을 고치면 **두 플러그인 다 bump** 한다.
 - **커밋 메시지** — Conventional Commits (`<type>(<scope>): <설명>`). 브랜치는 이미 `feature/adjudication-topology-unification`.
 - **문서 언어** — 한국어 primary. 영어는 식별자·고유명사·원문 인용·자연스러운 한국어 대응이 없는 기술어(`frontmatter`·`hook`·`subagent` 등)에 한정.
@@ -2419,10 +2419,10 @@ bash plugins/quality-gates/tests/test_synthesize_disposition.sh 2>&1 | tail -12
 
 여섯 단언 중 「배관 손실」·「수용」 등은 **Task 10 이 렌더를 붙이기 전까지 여전히 FAIL** 이다 — 이 Task 는 생산만 한다. 그 사실을 커밋 메시지에 적는다.
 
-`plugins/quality-gates/.claude-plugin/plugin.json` → `5.3.0`, CHANGELOG:
+`plugins/quality-gates/.claude-plugin/plugin.json` → `6.2.0`, CHANGELOG:
 
 ```markdown
-## [5.3.0] — 2026-09-03
+## [6.2.0] — 2026-09-03
 
 ### Changed
 - `synthesize_findings.py` 의 버리는 자리 전부가 원장 처분을 부른다 — 기각·보류·흡수·억제·강제·입력 실패, 그리고 수용.
@@ -2435,7 +2435,7 @@ bash plugins/quality-gates/tests/test_synthesize_disposition.sh 2>&1 | tail -12
 
 ```bash
 git add plugins/quality-gates/scripts/synthesize_findings.py plugins/quality-gates/tests/test_synthesize_disposition.sh plugins/quality-gates/.claude-plugin/plugin.json plugins/quality-gates/CHANGELOG.md
-git commit -m "feat(quality-gates): synthesize_findings 의 버리는 자리를 원장에 배선 (v5.3.0)"
+git commit -m "feat(quality-gates): synthesize_findings 의 버리는 자리를 원장에 배선 (v6.2.0)"
 ```
 
 ---
@@ -2599,11 +2599,11 @@ bash shared/tests/test_adjudication_wiring.sh 2>&1 | grep -c 'synthesize_artifac
 
 - [ ] **Step 8: bump + CHANGELOG + 커밋**
 
-`plugin.json` → `5.4.0`. CHANGELOG 에 `## [5.4.0]` 항목. 커밋:
+`plugin.json` → `6.3.0`. CHANGELOG 에 `## [6.3.0]` 항목. 커밋:
 
 ```bash
 git add plugins/quality-gates/scripts/synthesize_artifact_findings.py plugins/quality-gates/tests/test_synthesize_artifact_findings.sh plugins/quality-gates/.claude-plugin/plugin.json plugins/quality-gates/CHANGELOG.md
-git commit -m "feat(quality-gates): synthesize_artifact_findings 의 버리는 자리를 원장에 배선 (v5.4.0)"
+git commit -m "feat(quality-gates): synthesize_artifact_findings 의 버리는 자리를 원장에 배선 (v6.3.0)"
 ```
 
 ---
@@ -2854,11 +2854,11 @@ bash plugins/quality-gates/tests/test_synthesize_disposition.sh 2>&1 | tail -12
 
 - [ ] **Step 8: bump + CHANGELOG + 커밋**
 
-두 플러그인 다 건드렸다 — `quality-gates` → `5.5.0`, `spec-distill` → `0.49.0`.
+두 플러그인 다 건드렸다 — `quality-gates` → `6.4.0`, `spec-distill` → `0.50.0`.
 
 ```bash
 git add shared/adjudication/render_disposition.py plugins/quality-gates/scripts/ plugins/spec-distill/scripts/ plugins/spec-distill/skills/reviewing-spec/SKILL.md plugins/quality-gates/.claude-plugin/plugin.json plugins/spec-distill/.claude-plugin/plugin.json plugins/quality-gates/CHANGELOG.md plugins/spec-distill/CHANGELOG.md
-git commit -m "feat(adjudication): 처분 두 줄을 소비자 넷에 실는다 (qg v5.5.0, sd v0.49.0)"
+git commit -m "feat(adjudication): 처분 두 줄을 소비자 넷에 실는다 (qg v6.4.0, sd v0.50.0)"
 ```
 
 ---
@@ -3042,11 +3042,11 @@ PYTHONDONTWRITEBYTECODE=1 python3 /tmp/adjtopo/run_scan.py | grep 'review-dispat
 
 - [ ] **Step 9: bump + CHANGELOG + 커밋**
 
-`spec-distill` → `0.50.0`.
+`spec-distill` → `0.51.0`.
 
 ```bash
 git add plugins/spec-distill/hooks/review-dispatch.py plugins/spec-distill/tests/test_review_dispatch_disposition.sh plugins/spec-distill/.claude-plugin/plugin.json plugins/spec-distill/CHANGELOG.md
-git commit -m "feat(spec-distill): 훅의 차단 결정 두 자리를 원장에 배선 (v0.50.0)"
+git commit -m "feat(spec-distill): 훅의 차단 결정 두 자리를 원장에 배선 (v0.51.0)"
 ```
 
 ---
@@ -3111,11 +3111,11 @@ bash plugins/quality-gates/tests/test_synthesize_promoted_findings.sh 2>&1 | tai
 
 - [ ] **Step 5: bump + CHANGELOG + 커밋 + PR2**
 
-`quality-gates` → `5.6.0`.
+`quality-gates` → `6.5.0`.
 
 ```bash
 git add plugins/quality-gates/skills/quality-pipeline/SKILL.md plugins/quality-gates/tests/ plugins/quality-gates/.claude-plugin/plugin.json plugins/quality-gates/CHANGELOG.md
-git commit -m "fix(quality-gates): stale agent 이름 제거 — 정의는 37ea0d7 이 스크립트로 옮겼다 (v5.6.0)"
+git commit -m "fix(quality-gates): stale agent 이름 제거 — 정의는 37ea0d7 이 스크립트로 옮겼다 (v6.5.0)"
 git push
 ```
 
