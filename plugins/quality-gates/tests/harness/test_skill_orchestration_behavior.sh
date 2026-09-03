@@ -535,78 +535,8 @@ done
 # contract. Keeping both here and there would drift as soon as either wording
 # changes — so this block does not survive, it moves whole. ---
 
-# --- v2.10.0 publish-eligible sentinel wiring ---
-
-# (a) allowed-tools must NOT contain a standalone `Skill` entry (NG6 — no
-# skill-nesting). The block-end guard explicitly stops at the frontmatter's
-# closing `---` line (a naive `/^[^ -]/` end-pattern would NOT match `---`
-# itself, since `-` is excluded from that class too — it happens to stop one
-# line later at the first `# ` heading in THIS file, but that's incidental,
-# not guaranteed; an explicit `^---$` exit makes the bound correct on its own
-# terms regardless of what follows the frontmatter).
-if awk '/^allowed-tools:/{f=1;next} f&&/^---$/{exit} f&&/^[^ -]/{f=0} f' "$SKILL_MD" | grep -qE '^[[:space:]]*-[[:space:]]*Skill[[:space:]]*$'; then
-  echo "FAIL: quality-pipeline allowed-tools contains Skill (NG6 violation)"; fail=$((fail+1))
-else
-  echo "PASS: quality-pipeline allowed-tools has no Skill (NG6)"
-fi
-
-# (b) Final Summary section writes the sentinel (body-unique literal in section window).
-fs_start="$(first_line '^## Final Summary')"
-fs_end="$(first_line_after '^## ' "$fs_start")"
-if awk -v s="$fs_start" -v e="$fs_end" 'NR>s && NR<e' "$SKILL_MD" | grep -qF 'publish-eligible.md'; then
-  echo "PASS: Final Summary wires publish-eligible.md write (line window $fs_start..$fs_end)"
-else
-  echo "FAIL: Final Summary missing publish-eligible.md write"; fail=$((fail+1))
-fi
-
-# (c) Runtime gate R8 (formerly R6 — outcome routing + publish sentinel;
-# "Step R6" is now the diff-test-results.py comparison step and its own
-# section-window swallows R7-R9 looking for a `^## ` boundary, measured:
-# old anchor='Step R6' found the *comparison* step at line 900, whose window
-# runs to 1073 and still finds publish-eligible.md inside R8 — a vacuous
-# pass) wires the sentinel too (single-gate /qg runtime bypasses Final
-# Summary). Anchored on the line-start bold heading, NOT the bare label, for
-# the same reason as the R5a¹/R5a⁰ locks above.
-r8_start="$(first_line '^[*][*]Step R8')"
-# Guard the degenerate case explicitly: if the R8 heading is gone, $r8_start
-# is 0 and the window becomes "line 1 .. first `## ` heading in the whole
-# file" — a narrow but UNRELATED window near the top of the file that
-# happens (today) not to contain 'publish-eligible.md', so it would fail for
-# the wrong reason (lucky miss, not a designed check) rather than a clear one.
-if [[ "$r8_start" -gt 0 ]]; then
-  r8_end="$(first_line_after '^## ' "$r8_start")"
-  if awk -v s="$r8_start" -v e="$r8_end" 'NR>s && NR<e' "$SKILL_MD" | grep -qF 'publish-eligible.md'; then
-    echo "PASS: Runtime R8 wires publish-eligible.md write (line window $r8_start..$r8_end)"
-  else
-    echo "FAIL: Runtime R8 missing publish-eligible.md write"; fail=$((fail+1))
-  fi
-else
-  echo "FAIL: Runtime R8 missing publish-eligible.md write (Step R8 heading not found)"
-  fail=$((fail+1))
-fi
-
-# (d) The write is guarded by a non-aborted disposition — SECTION-SCOPED to the
-# Final Summary window ($fs_start/$fs_end from (b) above), NOT a whole-file
-# grep. '쓰지 않는다' (Korean "does not write") appears at TWO sites: the
-# canonical "## Publish-eligible sentinel" subsection (an EARLIER section,
-# outside this window) AND the Final-Summary wiring paragraph (inside this
-# window). A whole-file grep stays GREEN even if the Final-Summary guard
-# sentence is deleted (leaving only the canonical copy + the write) —
-# under-locking this load-bearing fail-safe guard (the repo's
-# grep_lock_header_satisfiable trap: the guard phrase is header-adjacent-but-
-# body text, so a header-satisfiable whole-file grep doesn't prove the
-# per-site guard survives). Scoping to the Final Summary window means
-# deleting ITS guard sentence fails this assertion independently of the
-# canonical copy elsewhere.
-if awk -v s="$fs_start" -v e="$fs_end" 'NR>s && NR<e' "$SKILL_MD" | grep -qF 'disposition' && \
-   awk -v s="$fs_start" -v e="$fs_end" 'NR>s && NR<e' "$SKILL_MD" | grep -qF '쓰지 않는다'; then
-  echo "PASS: Final Summary sentinel write guarded by non-aborted disposition (in-window)"
-else
-  echo "FAIL: Final Summary sentinel write missing non-aborted disposition guard (in-window)"; fail=$((fail+1))
-fi
-
-# ── T48 / AC51: 스텝 락 이전 + 기존 로직 8종이 전부 새 자리를 갖는다 ──
-# 자리 없는 기존 로직은 삭제가 아니라 누락이다. 8종을 이름으로 센다.
+# ── T48 / AC51: 스텝 락 이전 + 기존 로직 7종이 전부 새 자리를 갖는다 ──
+# 자리 없는 기존 로직은 삭제가 아니라 누락이다. 7종을 이름으로 센다.
 echo "== 락 이전 검사"
 legacy_logic=(
   'detect-runtime.sh'                       # 매니페스트
@@ -616,7 +546,6 @@ legacy_logic=(
   'spec_acceptance_criteria'                # spec AC 수집
   'quality-gates:runtime-verifier'          # verifier dispatch
   'mutation-guard'                          # Law 2 오라클
-  'publish-eligible.md'                     # publish sentinel
 )
 missing_logic=0
 for lg in "${legacy_logic[@]}"; do
@@ -625,7 +554,7 @@ for lg in "${legacy_logic[@]}"; do
     missing_logic=$((missing_logic + 1))
   fi
 done
-[[ $missing_logic -eq 0 ]] && echo "PASS: 기존 로직 8종 전부 새 자리에 존재" || fail=$((fail + 1))
+[[ $missing_logic -eq 0 ]] && echo "PASS: 기존 로직 7종 전부 새 자리에 존재" || fail=$((fail + 1))
 
 # ── /qg iter-1 (pr-test-analyzer, mutation 실측): 신규 스크립트 **배선** 락 ──────
 # 실측된 구멍: SKILL.md 에서 다섯 신규 스크립트의 호출 지점 10곳을 **전부 삭제**해도

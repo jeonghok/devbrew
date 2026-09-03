@@ -1194,15 +1194,6 @@ verdict 결정:
 - **SKIP_WITH_EVIDENCE** → print evidence (원장 포함); continue.
 - **NEEDS_RESOLUTION** → invoke [Runtime NEEDS_RESOLUTION decision](#runtime-needs_resolution-decision).
 
-**Publish-eligible sentinel (single-gate `/qg runtime` — non-aborted terminal
-only).** `/qg runtime` 은 Dispatch Loop 를 우회하므로 Final Summary 기록 지점에
-도달하지 않을 수 있다. R8 이 **비중단 terminal**(clean / `forced_downgrade: yes` /
-FAIL / SKIP_WITH_EVIDENCE)로 종결하면 여기서
-`.claude/quality-gates/<sid>/publish-eligible.md` 에 [Publish-eligible
-sentinel](#publish-eligible-sentinel)을 `Write` 한다(`<verdict>` = 그 R8 verdict
-token). **NEEDS_RESOLUTION → Stop 및 사용자 Stop 경로에서는 쓰지 않는다.** Final
-Summary 도 도달했다면 idempotent overwrite 라 무해.
-
 **Step R9 — Discard the sandbox** (verdict-independent), unless in read-only fallback:
 
 ```bash
