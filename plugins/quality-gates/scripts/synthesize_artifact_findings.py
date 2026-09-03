@@ -208,7 +208,7 @@ def phase_synth(findings_path, adversarial_path):
     for f in findings:
         v = by_v.get(f["dedup_key"])
         if v is None:
-            L.hold(f["dedup_key"], "adversarial 판정 부재")   # AC16: kept 에서 제외
+            L.hold(f["dedup_key"], "판정자 부재: adversarial 판정 없음")   # AC16: kept 에서 제외
             continue
         verdict = str(v.get("verdict", "")).lower()
         if verdict == "reject":

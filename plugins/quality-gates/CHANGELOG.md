@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.3.2] — 2026-09-04
+
+### Fixed
+- `phase_synth` 의 미판정 `hold` 사유(`:211`)를 `"adversarial 판정 부재"` → `"판정자 부재: adversarial 판정 없음"`로 바꾼다 — `_HOLD_CLASSES`의 「판정자 부재」 접두와 일치시켜 `held_by_class()`가 「기타」 대신 올바른 칸으로 분류하게 한다. Task 2 의 정본 fixture(`shared/tests/fixtures/adjudication/probe_held_class.py:6`)가 이미 이 문자열을 기준으로 분류기를 세웠다. 주석(`# AC16: kept 에서 제외`)은 그대로. 스위트 단언은 `held` 총계만 보고 사유 문자열은 보지 않아 스위트 diff 로는 안 보이는 변경이라, 양성/음성 대조 프로브로 분류가 실제로 바뀌었음을 별도 확인했다.
+
 ## [6.3.1] — 2026-09-04
 
 ### Fixed
