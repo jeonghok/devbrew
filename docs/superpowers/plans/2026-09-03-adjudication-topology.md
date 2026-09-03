@@ -2555,7 +2555,9 @@ def disposition_lines(report, held_classes):
     비어 있지 않다 — 회계 모듈이 아니라 소비자가 내는 것이 계약이다.
     """
     c = report["counts"]
-    unknown = report.get("unknown_counts") or []
+    # `.get()` 이 아니라 첨자다 — 이 키는 `report()` 가 항상 낸다. 없으면
+    # 회계 계약이 깨진 것이고, 조용한 `[]` 보다 KeyError 가 정직하다.
+    unknown = report["unknown_counts"]
 
     line1 = ("**처분:** 수용 %d · 기각 %d · 억제 %d · 흡수 %d · 미판정 %d"
              "     (차단 아님)"
@@ -2568,6 +2570,13 @@ def disposition_lines(report, held_classes):
              % (plumbing, len(unknown), "예" if report["degraded"] else "아니오"))
 
     advisories = []
+    # `held` 는 «분해해서» 싣는다 — 세 클래스가 두 칸에 나뉘어 들어간다.
+    # 그 분해가 무손실인지 여기서 «읽어» 확인한다: 갈리면 두 칸의 합이 실제
+    # 보류 건수와 달라지고, 그 차이는 어느 칸에도 안 남는다.
+    if sum(held_classes.values()) != c["held"]:
+        advisories.append(
+            "[adjudication] hold 분류 합 %d ≠ held 총계 %d — 렌더가 항목을 잃는다."
+            % (sum(held_classes.values()), c["held"]))
     if held_classes["기타"] > 0:
         advisories.append(
             "[adjudication] hold 사유 %d건이 알려진 접두(「판정자 부재: 」·"
@@ -2601,7 +2610,23 @@ def disposition_report(report, held_classes):
 
 **`(차단: 예/아니오)` 가 `report["degraded"]` 를 읽는 이유** — `blocks()` 는 원장 객체의 메서드이고 `report()` 는 dict 다. 소비자가 원장 객체를 안 들고 다녀도 되게 dict 만으로 만든다. `degraded` 는 `blocks()` 를 포함하되 더 넓다(`_degraded():100-103`) — **더 넓은 쪽을 쓴다**: 공시는 언제나, 차단은 좁게.
 
-- [ ] **Step 2: 배포 링크를 만든다**
+**`disposition_lines` 가 `held` 와 `unknown_counts` 를 «직접» 읽는 이유** — 앞 판본은 `held` 를 전혀 안 읽고(분류로만 렌더) `unknown_counts` 를 `.get()` 으로 받았다. 그러면 L2 의 폐포 규칙 아래에서 이 함수만 쓰는 소비자가 그 둘의 소비를 **형제 함수(`disposition_report`)에게서 빌려온다** — Task 4 재리뷰가 그 누수를 구체적으로 실증했다. 위 둘은 그 빌림을 없애면서 **각자 실질도 갖는다**: 분해가 무손실인지 재는 가드와, 계약 위반을 조용히 삼키지 않는 첨자.
+
+- [ ] **Step 2: L2 락 헤더에 폐포 누수를 명시한다**
+
+Task 4 가 L2 의 코퍼스를 「소비자 파일 + 그것이 import 하는 `shared/adjudication/` 모듈들」로 넓혔다. 그 확장의 대가가 이 Task 에서 처음 **구체화**되므로 여기서 적는다. `shared/tests/test_adjudication_consumed.sh` 의 헤더 주석에 한 문단을 더한다:
+
+```bash
+# 폐포는 «파일 단위»다 — 호출 그래프를 안 본다. 공유 모듈의 어떤 함수가 키를
+# 읽으면, 그 파일에서 «무엇이든» import 하는 소비자 전부가 그 키를 소비한
+# 것으로 세어진다. 그 소비자가 실제로 부르는 함수가 그 키를 안 만져도 그렇다.
+# 좁히려면 함수 단위 도달성 분석이 필요하고 그것은 또 하나의 오라클이다 —
+# 이 락은 그것을 갖지 않는다고 밝힌다.
+```
+
+**이 문단을 「나중에」로 미루지 않는다** — 미루면 다음 독자가 「폐포로 인정됨」을 「이 소비자가 이 키를 만진다」로 읽는다.
+
+- [ ] **Step 3: 배포 링크를 만든다**
 
 `adjudication.py` 와 같은 방식으로 두 플러그인에 심볼릭 링크를 건다:
 
@@ -2614,7 +2639,7 @@ git ls-files -s plugins/*/scripts/render_disposition.py
 
 **`git ls-files -s` 가 `120000` 을 내는지 확인한다** — `100644` 면 링크가 아니라 사본이 커밋된 것이고, 그러면 한 벌만 둔다는 이 Task 의 전제가 무너진다.
 
-- [ ] **Step 3: `render()` 를 고친다**
+- [ ] **Step 4: `render()` 를 고친다**
 
 `synthesize_findings.py` — `render` 시그니처와 `:490-504`:
 
@@ -2652,7 +2677,7 @@ from render_disposition import disposition_lines
                             report, ledger.held_by_class()))
 ```
 
-- [ ] **Step 4: 나머지 소비자 셋**
+- [ ] **Step 5: 나머지 소비자 셋**
 
 **`synthesize_artifact_findings.py`** — YAML 출력이므로 두 줄이 아니라 dict 를 낸다. `phase_synth` 의 출력 dict 에 블록 하나를 더한다. **기존 `degraded`·`degraded_reason` 4값 어휘는 그대로 둔다**(§4.4):
 
@@ -2693,7 +2718,7 @@ from render_disposition import disposition_report   # 상단 import
 
 **`merge_brief_review.py`** — 같은 키 셋, 같은 루프. 이 파일도 원장을 셋 만든다(`:180`·`:192`·`:289` 근방의 처분 호출) — 확인해서 전부 합친다.
 
-- [ ] **Step 5: `reviewing-spec/SKILL.md:116` 의 키 열거를 갱신한다**
+- [ ] **Step 6: `reviewing-spec/SKILL.md:116` 의 키 열거를 갱신한다**
 
 그 줄이 merge_review stdout 의 키를 열거하고 있어 L2 가 카운트를 실으면 부정확해진다. 새 키 여섯을 더하고, **「뒤 둘은 각각 버린 항목 수 · 셀 수 없는 항목」 서술을 새 목록에 맞게 고친다.**
 
@@ -2704,7 +2729,7 @@ grep -rn 'adjudication_held' plugins/spec-distill/ | grep -v CHANGELOG
 
 **두 번째 명령이 중요하다** — 그 키를 파싱하는 자리가 SKILL.md 말고 또 있으면 함께 고친다.
 
-- [ ] **Step 6: L2 와 Task 8 의 테스트를 GREEN 으로**
+- [ ] **Step 7: L2 와 Task 8 의 테스트를 GREEN 으로**
 
 ```bash
 bash shared/tests/test_adjudication_consumed.sh 2>&1 | tail -20
@@ -2715,7 +2740,7 @@ bash plugins/quality-gates/tests/test_synthesize_disposition.sh 2>&1 | tail -12
 
 **L2 가 여전히 RED 면 어느 키가 남았는지 목록에 나온다** — `UNCONSUMED <파일>: <키들>`.
 
-- [ ] **Step 7: bump + CHANGELOG + 커밋**
+- [ ] **Step 8: bump + CHANGELOG + 커밋**
 
 두 플러그인 다 건드렸다 — `quality-gates` → `5.5.0`, `spec-distill` → `0.49.0`.
 
