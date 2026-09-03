@@ -328,5 +328,71 @@ class MainDoubleValidationTest(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class ChannelSplit(unittest.TestCase):
+    """MU3·MU4 — 브랜치 수정 명령은 모델 채널로, 커밋 경고는 사람 채널에 남는다."""
+
+    def _branch_violation(self, tmp):
+        write_strategy(tmp, r"^(feature|fix|release|hotfix)/[a-z0-9][a-z0-9.-]*$")
+        payload = {"tool_name": "Bash",
+                   "tool_input": {"command": "git checkout -b BadName"}}
+        out, rc = run_hook(payload, cwd=tmp)
+        self.assertEqual(rc, 0)
+        return json.loads(out)
+
+    def test_branch_fix_command_goes_to_model_channel(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            data = self._branch_violation(tmp)
+            ac = data.get("hookSpecificOutput", {}).get("additionalContext", "")
+            self.assertEqual(data.get("hookSpecificOutput", {}).get("hookEventName"),
+                             "PostToolUse")
+            self.assertIn("git branch -m", ac, "수정 명령이 모델 채널에 없다")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_branch_fact_and_hint_stay_human(self):
+        """양성 증인 — 사람 채널이 여전히 사실과 기대 패턴을 싣는다."""
+        tmp = tempfile.mkdtemp()
+        try:
+            data = self._branch_violation(tmp)
+            sm = data.get("systemMessage", "")
+            self.assertIn("does not follow naming convention", sm)
+            self.assertIn("Expected pattern:", sm)
+            self.assertIn("Allowed prefixes: feature, fix, release, hotfix", sm)
+            self.assertNotIn("git branch -m", sm,
+                             "수정 명령이 사람 채널에 남아 있다 — 채널이 갈리지 않았다")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_commit_warning_stays_in_system_message(self):
+        """MU4 — 커밋 경고는 자기 정규식에 재발동하므로 모델 채널로 보내지 않는다."""
+        tmp = tempfile.mkdtemp()
+        try:
+            write_strategy(tmp, r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
+            payload = {"tool_name": "Bash",
+                       "tool_input": {"command": 'git commit -m "add thing"'}}
+            out, rc = run_hook(payload, cwd=tmp)
+            data = json.loads(out)
+            sm = data.get("systemMessage", "")
+            self.assertIn("Conventional Commits", sm)
+            self.assertIn("Suggested: feat: add thing", sm)
+            ac = data.get("hookSpecificOutput", {}).get("additionalContext", "")
+            self.assertNotIn("Conventional Commits", ac,
+                             "커밋 경고가 모델 채널로 갔다 — 재진입 비대칭이 깨졌다")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_clean_command_emits_neither_channel(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            write_strategy(tmp, r"^(feature|fix)/[a-z0-9][a-z0-9.-]*$")
+            payload = {"tool_name": "Bash",
+                       "tool_input": {"command": "git checkout -b feature/ok"}}
+            out, rc = run_hook(payload, cwd=tmp)
+            self.assertEqual(json.loads(out), {})
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()
