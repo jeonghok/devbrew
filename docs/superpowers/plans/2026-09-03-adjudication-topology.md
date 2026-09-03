@@ -1925,9 +1925,15 @@ note "── 선언 부재"
 nodecl="$(printf '%s\n' "$OUT" | sed -n 's/^no_declaration=//p')"
 assert_eq "$nodecl" "0" "모든 agent 가 input_slots 를 선언한다"
 
-note "── 일치와 종류"
+note "── 일치와 종류 — 먼저 이 축이 무언가를 재는지 밝힌다"
+ndecl="$(printf '%s\n' "$OUT" | sed -n 's/^declared=//p')"
+if [ "${ndecl:-0}" -gt 0 ] 2>/dev/null; then
+  ok "슬롯을 선언한 agent $ndecl 개 — (a)/(b) 축이 겨눌 대상이 있다"
+else
+  no "슬롯을 선언한 agent 가 0 이다 — 아래 (a)/(b) 단언은 오늘 «아무것도 재지 않는다». 통과해도 증거가 아니다"
+fi
 nprob="$(printf '%s\n' "$OUT" | sed -n 's/^problems_other=//p')"
-assert_eq "$nprob" "0" "선언 ↔ 전달 일치, 금지 종류 없음"
+assert_eq "$nprob" "0" "선언 ↔ 전달 일치, 금지 종류 없음 (선언한 $ndecl 개 위에서)"
 printf '%s\n' "$OUT" | sed -n 's/^  PROBLEM //p' | while IFS= read -r l; do
   note "      $l"
 done
@@ -1962,6 +1968,9 @@ print("agents=%d" % len(defs))
 probs = check_slots.check(str(root))
 kinds = Counter(p[0] for p in probs)
 print("no_declaration=%d" % kinds.get("no_declaration", 0))
+# (a)/(b) 축이 «실제로 겨눈» 모집단. 선언이 0이면 그 두 축은 오늘 아무것도
+# 재지 않는다 — 그 사실이 `problems_other=0` 뒤에 숨으면 안 된다.
+print("declared=%d" % len([1 for v in defs.values() if v["slots"] is not None]))
 print("problems_other=%d" % (len(probs) - kinds.get("no_declaration", 0)))
 for p in probs:
     if p[0] != "no_declaration":
@@ -1979,7 +1988,11 @@ chmod +x shared/tests/test_agent_input_slots.sh
 bash shared/tests/test_agent_input_slots.sh 2>&1 | tail -40
 ```
 
-기대: fixture 다섯 **PASS**, `agents=20` **PASS**, `no_declaration=0` **FAIL** (18 이 나온다 — 설계 §4.3 의 「20 중 18은 슬롯 선언 자체가 없다」), 나머지 문제 목록도 **FAIL**.
+기대: fixture 다섯 **PASS**, `agents=20` **PASS**, `no_declaration=0` **FAIL — 20 이 나온다**, 헛돎 가드 **FAIL**(`declared=0`).
+
+**설계의 「20 중 18」은 다른 것을 세고 있었다.** 그 2는 `input_slots:` 를 가진 agent 가 아니라, **dispatch 자리에 (태그,변수) 쌍이 있어 프로토타입 락(`test_seed_agents.sh:119-123`)이 검사하는** 두 seed agent 다. 이 계획이 도입하는 frontmatter 키는 오늘 **아무도 갖고 있지 않다** — 실측 0/20. 프로토타입은 문법의 «출처»이지 선언의 실재가 아니다.
+
+**`problems_other` 가 오늘 통과하는 것은 정상이고, 그래서 헛돎 가드가 필요하다.** 선언이 0이면 (a)/(b) 축은 겨눌 대상이 없어 공허하게 0을 낸다. 그 사실이 `0` 뒤에 숨으면 다음 독자가 「일치 검사가 통과했다」로 읽는다 — 이 리포의 `presence_corpus.sh:41-45` 가 같은 이유로 빈 코퍼스를 실패로 만든다.
 
 - [ ] **Step 5: P1 의 결과를 반영한다**
 
