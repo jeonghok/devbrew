@@ -1290,16 +1290,29 @@ fi
 
 while IFS= read -r rel; do
   [ -n "$rel" ] || continue
-  f="$REPO_ROOT/$rel"
+  # 도출기는 «절대» 경로를 낸다(`"$REPO_ROOT/plugins"` 로 호출하므로).
+  # `$REPO_ROOT/` 를 다시 붙이면 전부 「파일 없음」으로 떨어져 아래 세 축이
+  # 통째로 안 돈다 — 시끄러운 RED 가 조용한 vacuous 로 바뀐다.
+  f="$rel"
   base="$(basename "$rel")"
   if [ ! -f "$f" ]; then no "$base: 도출된 경로가 실재하지 않는다"; continue; fi
-  body="$(cat "$f")"
-  assert_grep "$body" 'consumer=' \
-    "$base: consumer= 를 밝힌다 (누가 이 판정을 읽는가)"
-  assert_grep "$body" 'fail-(open|closed)' \
-    "$base: fail-open/fail-closed 를 밝힌다 (죽었을 때 어느 쪽으로 기우는가)"
-  assert_grep "$body" 'disclosure=' \
-    "$base: disclosure= 를 밝힌다 (어느 채널로 드러나는가)"
+
+  # **파일 본문이 아니라 «앵커 줄»에서 찾는다.** 본문 전체를 보면 산문이
+  # 검사를 만족시킨다 — 실측: 여섯 중 셋이 에러 메시지와 설명 주석에
+  # `fail-closed` 를 담고 있어 그 축이 «선언과 무관하게» 통과했다. 그러면
+  # 나중에 진짜 선언을 넣었다 지워도 그 셋은 계속 초록이다(이빨 0).
+  anchor="$(grep -F '**처분**' "$f" || true)"
+  if [ -n "$anchor" ]; then
+    ok "$base: 처분 앵커가 있다"
+  else
+    no "$base: 처분 앵커(\`**처분** — …\`)가 없다 — 아래 세 축은 빈 줄을 검사한다"
+  fi
+  assert_grep "$anchor" 'consumer=' \
+    "$base: 앵커가 consumer= 를 밝힌다 (누가 이 판정을 읽는가)"
+  assert_grep "$anchor" 'fail-(open|closed)' \
+    "$base: 앵커가 fail-open/fail-closed 를 밝힌다 (죽었을 때 어느 쪽으로 기우는가)"
+  assert_grep "$anchor" 'disclosure=' \
+    "$base: 앵커가 disclosure= 를 밝힌다 (어느 채널로 드러나는가)"
 done < "$TMPD/runners.txt"
 
 finish
@@ -1312,7 +1325,9 @@ chmod +x shared/tests/test_runner_disposition.sh
 bash shared/tests/test_runner_disposition.sh 2>&1 | tail -30
 ```
 
-기대: 도출 6개 **PASS**, 후처리 **PASS**, 각 러너의 세 단언 **전부 FAIL** — 6 × 3 = 18 FAIL. 설계 §4 의 「RED — 6/6 없음」과 일치한다.
+기대: 도출 6개 **PASS**, 후처리 **PASS**, 각 러너의 **네** 단언(앵커 존재 + 세 필드) **전부 FAIL** — 6 × 4 = **24 FAIL**. 설계 §4 의 「RED — 6/6 없음」과 일치한다.
+
+**18이 아니라 24인 이유, 그리고 왜 앵커 줄로 좁혔는가** — 앞 판본은 파일 «본문»에서 세 문자열을 찾았다. 그러면 여섯 중 셋이 통과했는데, 그 셋의 `fail-closed` 는 전부 에러 메시지와 설명 주석이었다(`run_artifact_codex_reviewer.sh:47`·`:95` · `run_seed_codex_reviewer.sh:11`·`:81` · `run_brief_codex_reviewer.sh:10`·`:70`). **선언과 무관하게 통과하는 축은 이빨이 0이다** — 나중에 진짜 선언을 지워도 그 셋은 초록이다. 앵커 줄로 좁히면 검사 대상이 저자가 그 목적으로 쓴 한 줄뿐이라 그 우회가 닫힌다.
 
 **도출이 6이 아니면 멈춘다** — Task 1 Step 3 이 7 → 6 을 확인했으므로 다르면 그 사이에 무언가 바뀐 것이다.
 
