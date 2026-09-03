@@ -16,6 +16,9 @@ print("agents=%d" % len(defs))
 probs = check_slots.check(str(root))
 kinds = Counter(p[0] for p in probs)
 print("no_declaration=%d" % kinds.get("no_declaration", 0))
+# (a)/(b) 축이 «실제로 겨눈» 모집단. 선언이 0이면 그 두 축은 오늘 아무것도
+# 재지 않는다 — 그 사실이 `problems_other=0` 뒤에 숨으면 안 된다.
+print("declared=%d" % len([1 for v in defs.values() if v["slots"] is not None]))
 print("problems_other=%d" % (len(probs) - kinds.get("no_declaration", 0)))
 for p in probs:
     if p[0] != "no_declaration":

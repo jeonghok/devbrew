@@ -42,9 +42,15 @@ note "── 선언 부재"
 nodecl="$(printf '%s\n' "$OUT" | sed -n 's/^no_declaration=//p')"
 assert_eq "$nodecl" "0" "모든 agent 가 input_slots 를 선언한다"
 
-note "── 일치와 종류"
+note "── 일치와 종류 — 먼저 이 축이 무언가를 재는지 밝힌다"
+ndecl="$(printf '%s\n' "$OUT" | sed -n 's/^declared=//p')"
+if [ "${ndecl:-0}" -gt 0 ] 2>/dev/null; then
+  ok "슬롯을 선언한 agent $ndecl 개 — (a)/(b) 축이 겨눌 대상이 있다"
+else
+  no "슬롯을 선언한 agent 가 0 이다 — 아래 (a)/(b) 단언은 오늘 «아무것도 재지 않는다». 통과해도 증거가 아니다"
+fi
 nprob="$(printf '%s\n' "$OUT" | sed -n 's/^problems_other=//p')"
-assert_eq "$nprob" "0" "선언 ↔ 전달 일치, 금지 종류 없음"
+assert_eq "$nprob" "0" "선언 ↔ 전달 일치, 금지 종류 없음 (선언한 $ndecl 개 위에서)"
 printf '%s\n' "$OUT" | sed -n 's/^  PROBLEM //p' | while IFS= read -r l; do
   note "      $l"
 done
