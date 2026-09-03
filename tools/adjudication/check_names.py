@@ -20,6 +20,11 @@ from pathlib import Path
 
 # 이력 문서는 과거 이름을 legitimately 담는다. 지운 이름을 CHANGELOG 가
 # 말하지 못하게 되면 그것이야말로 이력의 소실이다.
+#
+# **오늘은 비활성이다** — 아래 `references()` 의 글롭 넷(skills/·commands/·
+# agents/·README.md)이 플러그인 루트의 `CHANGELOG.md` 에 닿지 않는다. 글롭을
+# 넓히는 날을 위한 가드로 남긴다. 죽은 코드처럼 보이지만 «지금 닿지 않을 뿐»
+# 이라는 사실을 여기 적어 둔다.
 EXEMPT_FILES = ("CHANGELOG.md",)
 
 # 백틱 안, `<plugin>:<name>` 꼴. 양쪽 다 kebab-case 만.
@@ -66,10 +71,22 @@ def killswitch_keys(repo_root):
     return out
 
 
-def defined(repo_root):
-    """실재하는 `<plugin>:<name>` 전부 — agent · skill · command · kill switch 키."""
+def defined(repo_root, allow_killswitch=False):
+    """실재하는 `<plugin>:<name>` — agent · skill · command (+선택적으로 kill switch 키).
+
+    `allow_killswitch` 는 **참조가 사는 파일 종류**가 정한다. kill switch 키는
+    README 가 문서화하는 것이고, dispatch 는 skill·command·agent 에서 일어난다.
+    네 네임스페이스를 어디서나 평면으로 합치면 **가림**이 생긴다 — 저자가 훅
+    이름을 skill 이름으로 착각해 `Dispatch `<plugin>:<hook>`` 라고 써도 조용히
+    해소된다. 실측: 도출된 키 14개 중 **8개가 agent·skill·command 가 전혀 아닌**
+    실재 문자열이다.
+
+    문맥을 «동사»(`Dispatch` 등)로 가르지 않는다 — 키 이름 자체에 `dispatch` 가
+    든 것이 있어(`spec-distill:review-dispatch`) 그 매칭이 자기 자신을 문맥으로
+    오인한다. 파일 종류는 그 함정이 없다.
+    """
     repo = Path(repo_root)
-    out = set(killswitch_keys(repo_root))
+    out = set(killswitch_keys(repo_root)) if allow_killswitch else set()
     for pdir in sorted(repo.glob("plugins/*")):
         if not pdir.is_dir():
             continue
@@ -113,5 +130,12 @@ def references(repo_root):
 
 
 def dangling(repo_root):
-    known = defined(repo_root)
-    return [r for r in references(repo_root) if r[2] not in known]
+    """참조가 사는 파일 종류에 따라 정의 집합을 달리 적용한다."""
+    strict = defined(repo_root, allow_killswitch=False)
+    loose = defined(repo_root, allow_killswitch=True)
+    out = []
+    for (path, line, tok) in references(repo_root):
+        known = loose if Path(path).name == "README.md" else strict
+        if tok not in known:
+            out.append((path, line, tok))
+    return out
