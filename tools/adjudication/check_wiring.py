@@ -25,6 +25,11 @@ DISCARD_NODES = (ast.Continue, ast.Break, ast.Return)
 # 비어 있는 것이 이 락이 오늘 RED 인 이유의 일부다.
 EXEMPT = {
     # ("plugins/.../foo.py", 146): "C6(1) 제자리 변형 루프 — 버려지는 항목이 없다",
+    ("plugins/quality-gates/scripts/synthesize_findings.py", 358):
+        "C6(1) — dedup() 의 이 continue 는 `promoted` 항목을 그룹핑에서만 "
+        "제외한다. 항목 자체는 이 loop 이전에 계산된 `passthrough` 리스트에 "
+        "이미 담겨 있고 함수 반환값(`deduped + passthrough`)에 그대로 "
+        "살아남는다 — 버려지는 항목이 없다.",
 }
 
 

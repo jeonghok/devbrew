@@ -3,6 +3,16 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.2.0] — 2026-09-03
+
+### Changed
+- `synthesize_findings.py` 의 버리는 자리 전부가 원장 처분을 부른다 — 기각·보류·흡수·억제·강제·입력 실패, 그리고 수용.
+- `_as_list` 가 계산기 인자를 받는다: 컨테이너 카운터 셋(`dropped_raw`·`dropped_verdicts`·`dropped_newlist`)이 한 자리를 지나므로 그곳 하나가 셋을 덮는다.
+- `hold()` 사유에 접두 둘(`판정자 부재: ` / `항목 파손: `)을 통일 — `held_by_class()` 가 그것으로 분류한다.
+
+### Fixed
+- 기존 `dropped_*` 카운터는 유지된다. 원장은 더하기이지 대체가 아니다.
+
 ## [6.1.0] — 2026-09-03
 
 ### Added
