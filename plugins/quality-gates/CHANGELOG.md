@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.2.1] — 2026-09-04
+
+### Fixed
+- `codex-blessed-red.txt` 에 `test_synthesize_disposition.sh` 를 등재 — 6.2.0 이 넣은 그 테스트는 여섯 단언 중 다섯이 `render()` 의 원장 소비(다음 Task 몫)를 기다리는 설계상 RED 라, 등재 없이는 `test_codex_backward_compat.sh` 가 "미등재"로 실패했다. 이 등재는 `render()` 가 배선되는 순간 양방향 래칫이 "stale 등재"로 지우라고 요구한다 — 풍경이 될 수 없다.
+
 ## [6.2.0] — 2026-09-03
 
 ### Changed
