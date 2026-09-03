@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.48.0] — 2026-09-03
+
+### Added
+- `Ledger.suppressed(item, why)` — 규칙 억제를 기각과 분리된 칸으로 센다. 차단도 degrade 도 아니다.
+- `Ledger.held_by_class()` — `hold()` 사유의 접두별 개수. 미지 접두는 「기타」로 세어 합이 `held` 총계와 항상 일치한다.
+
+### Changed
+- `report()["counts"]` 에 `suppressed` 추가 (여섯 → 일곱).
+
 ## [0.47.0] — 2026-08-31
 
 ### Fixed
