@@ -4,7 +4,7 @@
 
 **Goal:** 판정 항목이 버려질 때 `Ledger` 메서드를 반드시 부르게 배선하고, 그것을 부르는지 검사하는 락 넷을 두되 검사 대상을 목록이 아니라 구조에서 도출한다.
 
-**Architecture:** 회계 어휘(`shared/adjudication/adjudication.py`)는 이미 완성돼 있고 배선과 소비가 절반이다. 세 층으로 작업한다 — ⑴ `shared/` 의 어휘를 둘 확장(`suppressed()`·`held_by_class()`) ⑵ 락 다섯을 `shared/tests/` 에 신설, 모집단은 전부 구조 도출(파일 glob·frontmatter `name:`·기존 도출기 출력) ⑶ 소비자 넷과 훅 하나를 배선. 락이 먼저 들어가고(PR1, 전부 RED) 배선이 그것을 GREEN 으로 만든다(PR2). AST 판정 로직은 셸이 아니라 `shared/adjudication/check_*.py` 에 두고 셸 락은 그것을 호출만 한다.
+**Architecture:** 회계 어휘(`shared/adjudication/adjudication.py`)는 이미 완성돼 있고 배선과 소비가 절반이다. 세 층으로 작업한다 — ⑴ `shared/` 의 어휘를 둘 확장(`suppressed()`·`held_by_class()`) ⑵ 락 다섯을 `shared/tests/` 에 신설, 모집단은 전부 구조 도출(파일 glob·frontmatter `name:`·기존 도출기 출력) ⑶ 소비자 넷과 훅 하나를 배선. 락이 먼저 들어가고(PR1, 전부 RED) 배선이 그것을 GREEN 으로 만든다(PR2). AST 판정 로직은 셸이 아니라 `tools/adjudication/check_*.py` 에 두고 셸 락은 그것을 호출만 한다.
 
 **Tech Stack:** Python 3(표준 라이브러리 `ast` 만 — 서드파티 없음) · bash 3.2 호환 셸 테스트(`shared/tests/assert.sh` 헬퍼) · YAML(`pyyaml`, 기존 의존)
 
@@ -64,7 +64,11 @@ merge_brief_review.py             10        2      182                          
 
 ## File Structure
 
-**신설 — `shared/adjudication/`** (판정 로직. 셸이 아니라 파이썬. 각각 fixture 로 단위 테스트 가능)
+**신설 — `tools/adjudication/`** (판정 로직. 셸이 아니라 파이썬. 각각 fixture 로 단위 테스트 가능)
+
+**왜 `shared/` 가 아닌가 — 실측으로 정해졌다.** 이 리포에서 `shared/*.py` 는 「플러그인에 심볼릭 링크로 배포되는 정본」을 뜻하고, `test_copy_of_contract.sh:920-935` 가 그 뜻을 ∀ 로 집행한다: **`shared/` 아래의 import 되는 파이썬 모듈은 `plugins/` 안에 소비자가 있어야 한다.** 판정기는 리포 전용이라 배포 소비자가 0건이고, `shared/adjudication/` 에 두면 그 락이 RED 가 된다(Task 3 에서 실제로 발생). 오늘 `shared/*.py` 중 fixtures 를 뺀 전부(`adjudication`·codex 셋·`gc_common`·`kill_switch_active`)가 배포된다 — 판정기가 첫 예외다.
+
+이 이동으로 `shared/adjudication/` 은 **배포되는 것만** 갖게 된다 — 이전보다 강한 불변식이다.
 
 | 파일 | 책임 |
 |---|---|
@@ -97,7 +101,7 @@ merge_brief_review.py             10        2      182                          
 | `plugins/*/agents/*.md` (20개) | `input_slots:` 선언 (PR3) |
 | `plugins/*/skills/**/SKILL.md` 의 dispatch 자리 | 슬롯 표기 (PR3) |
 
-**경계** — 판정기는 `shared/adjudication/` 에, 락은 `shared/tests/` 에. 락은 판정기를 **호출만** 한다. 이유는 둘: ⑴ 판정기를 fixture 로 단위 테스트할 수 있어야 M6 의 변이가 「락이 죽었나」와 「판정기가 죽었나」를 구별한다 ⑵ 셸 안의 파이썬 heredoc 이 이 리포에서 **다섯 번 조용히 깨진 기록**이 있다.
+**경계** — 판정기는 `tools/adjudication/` 에(배포 안 함), 배포되는 공유 코드는 `shared/adjudication/` 에, 락은 `shared/tests/` 에. 락은 판정기를 **호출만** 한다. 이유는 둘: ⑴ 판정기를 fixture 로 단위 테스트할 수 있어야 M6 의 변이가 「락이 죽었나」와 「판정기가 죽었나」를 구별한다 ⑵ 셸 안의 파이썬 heredoc 이 이 리포에서 **다섯 번 조용히 깨진 기록**이 있다.
 
 ---
 
@@ -115,7 +119,7 @@ merge_brief_review.py             10        2      182                          
 
 **Files:**
 - Create: `docs/superpowers/plans/2026-09-03-adjudication-topology-baseline.md`
-- Create: `shared/adjudication/check_wiring.py` (초안 — Task 3 이 락으로 감싼다)
+- Create: `tools/adjudication/check_wiring.py` (초안 — Task 3 이 락으로 감싼다)
 
 **Interfaces:**
 - Produces: `check_wiring.py` 의 `scan(paths) -> list[dict]` — 각 dict 는 `{"file": str, "line": int, "kind": "continue"|"break"|"return", "func": str, "guarded": bool}`. Task 3 의 락과 Task 8·9 의 배선이 이 함수의 출력을 오라클로 쓴다.
@@ -183,7 +187,7 @@ cat /tmp/adjtopo/codex-runners.txt
 
 - [ ] **Step 4: P3 — L1 판정기 초안을 쓴다**
 
-`shared/adjudication/check_wiring.py`:
+`tools/adjudication/check_wiring.py`:
 
 ```python
 # -*- coding: utf-8 -*-
@@ -280,7 +284,7 @@ def comprehension_count(paths):
 
 ```python
 import sys
-sys.path.insert(0, 'shared/adjudication')
+sys.path.insert(0, 'tools/adjudication')
 from check_wiring import scan, comprehension_count
 
 FILES = ['plugins/quality-gates/scripts/synthesize_findings.py',
@@ -353,7 +357,7 @@ baseline 문서에 「내가 만질 자리 = `:598-602`·`:751-755` 의 두 `dec
 - [ ] **Step 10: 커밋**
 
 ```bash
-git add docs/superpowers/plans/2026-09-03-adjudication-topology.md docs/superpowers/plans/2026-09-03-adjudication-topology-baseline.md shared/adjudication/check_wiring.py
+git add docs/superpowers/plans/2026-09-03-adjudication-topology.md docs/superpowers/plans/2026-09-03-adjudication-topology-baseline.md tools/adjudication/check_wiring.py
 git commit -m "chore(adjudication): 착수 baseline 과 L1 판정기 초안 — P1~P6"
 ```
 
@@ -563,7 +567,7 @@ git commit -m "feat(adjudication): 억제 칸과 hold 분류를 어휘에 더한
 
 **Files:**
 - Create: `shared/tests/test_adjudication_wiring.sh`
-- Modify: `shared/adjudication/check_wiring.py` (면제 상수 + `derive_consumers()` 추가)
+- Modify: `tools/adjudication/check_wiring.py` (면제 상수 + `derive_consumers()` 추가)
 - Create: `shared/tests/fixtures/adjudication/wiring_bad.py` · `wiring_good.py` · `wiring_exempt.py`
 
 **Interfaces:**
@@ -702,7 +706,7 @@ def f(groups, ledger):
 
 - [ ] **Step 3: 판정기에 면제 상수와 도출을 더한다**
 
-`shared/adjudication/check_wiring.py` 상단, `DISCARD_NODES` 다음:
+`tools/adjudication/check_wiring.py` 상단, `DISCARD_NODES` 다음:
 
 ```python
 # 면제는 «이 파일»에 산다 — 피검자 파일이 아니라. 각 값은 설계 §8 의 C6 조건
@@ -894,7 +898,7 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-sys.path.insert(0, str(root / "shared" / "adjudication"))
+sys.path.insert(0, str(root / "tools" / "adjudication"))
 from check_wiring import scan  # noqa: E402
 
 FX = root / "shared" / "tests" / "fixtures" / "adjudication"
@@ -915,7 +919,7 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-sys.path.insert(0, str(root / "shared" / "adjudication"))
+sys.path.insert(0, str(root / "tools" / "adjudication"))
 from check_wiring import (  # noqa: E402
     EXEMPT, comprehension_count, derive_consumers, scan)
 
@@ -965,7 +969,7 @@ bash shared/tests/test_adjudication_wiring.sh 2>&1 | tail -40
 - [ ] **Step 8: 커밋**
 
 ```bash
-git add shared/tests/test_adjudication_wiring.sh shared/tests/fixtures/adjudication/ shared/adjudication/check_wiring.py
+git add shared/tests/test_adjudication_wiring.sh shared/tests/fixtures/adjudication/ tools/adjudication/check_wiring.py
 git commit -m "test(adjudication): L1 배선 락 — 버리는 분기가 처분을 부르는지 (RED)"
 ```
 
@@ -980,7 +984,7 @@ git commit -m "test(adjudication): L1 배선 락 — 버리는 분기가 처분�
 **오늘 RED 인 근거** — 프로덕션이 읽는 것은 `held` 하나다(`synthesize_findings.py:562` · `synthesize_artifact_findings.py:211` · `merge_review.py:559` 근방). Task 2 가 `suppressed` 를 더했으므로 이제 카운트는 **일곱**이고 미소비는 여섯이다.
 
 **Files:**
-- Create: `shared/adjudication/check_consumed.py`
+- Create: `tools/adjudication/check_consumed.py`
 - Create: `shared/tests/test_adjudication_consumed.sh`
 - Create: `shared/tests/fixtures/adjudication/consumed_partial.py` · `consumed_full.py`
 
@@ -991,7 +995,7 @@ git commit -m "test(adjudication): L1 배선 락 — 버리는 분기가 처분�
 
 - [ ] **Step 1: 판정기를 쓴다**
 
-`shared/adjudication/check_consumed.py`:
+`tools/adjudication/check_consumed.py`:
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1115,7 +1119,7 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-sys.path.insert(0, str(root / "shared" / "adjudication"))
+sys.path.insert(0, str(root / "tools" / "adjudication"))
 from check_consumed import missing, required_keys  # noqa: E402
 from check_wiring import derive_consumers  # noqa: E402
 
@@ -1150,7 +1154,7 @@ bash shared/tests/test_adjudication_consumed.sh 2>&1 | tail -30
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add shared/adjudication/check_consumed.py shared/tests/test_adjudication_consumed.sh shared/tests/fixtures/adjudication/
+git add tools/adjudication/check_consumed.py shared/tests/test_adjudication_consumed.sh shared/tests/fixtures/adjudication/
 git commit -m "test(adjudication): L2 소비 락 — 낸 카운트를 읽는지 (RED)"
 ```
 
@@ -1266,7 +1270,7 @@ git commit -m "test(adjudication): L4 역할 선언 락 — codex 러너가 처�
 **U4 의 결정 — 기존 필터를 빼지 않고 두 번째 코퍼스를 더한다.** 설계 §6 이 넘긴 실측 제약은 이것이다: `shared/tests/test_dispatch_disposition.sh:80-84` 가 *"표기 필터를 이름 매칭보다 먼저 걸지 않으면 산문 속 영어 단어가 dispatch 로 잡힌다"* 를 기록했고(맨 `adversarial` 이 `critiquing-artifacts/SKILL.md` 의 5줄에 등장하며 전부 산문), T4-2 는 산문을 봐야 하므로 그 필터와 정면충돌한다. **직교로 푼다** — 백틱 + 콜론이라는 두 조건을 동시에 요구하면 맨 영어 단어는 애초에 걸리지 않는다. 기존 락의 `NOTATION` 은 손대지 않는다.
 
 **Files:**
-- Create: `shared/adjudication/check_names.py`
+- Create: `tools/adjudication/check_names.py`
 - Create: `shared/tests/test_dispatch_name_defined.sh`
 - Create: `shared/tests/fixtures/adjudication/names_stale.md` · `names_ok.md` · `names_prose.md`
 
@@ -1277,7 +1281,7 @@ git commit -m "test(adjudication): L4 역할 선언 락 — codex 러너가 처�
 
 - [ ] **Step 1: 판정기를 쓴다**
 
-`shared/adjudication/check_names.py`:
+`tools/adjudication/check_names.py`:
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1442,7 +1446,7 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
-sys.path.insert(0, str(root / "shared" / "adjudication"))
+sys.path.insert(0, str(root / "tools" / "adjudication"))
 import check_names  # noqa: E402
 
 FX = root / "shared" / "tests" / "fixtures" / "adjudication"
@@ -1482,7 +1486,7 @@ grep -n 'quality-gates:synthesizer' plugins/quality-gates/skills/quality-pipelin
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add shared/adjudication/check_names.py shared/tests/test_dispatch_name_defined.sh shared/tests/fixtures/adjudication/
+git add tools/adjudication/check_names.py shared/tests/test_dispatch_name_defined.sh shared/tests/fixtures/adjudication/
 git commit -m "test(adjudication): T4-2 참조 이름 락 — 지워진 정의를 가리키는 이름 (RED)"
 ```
 
@@ -1514,7 +1518,7 @@ input_slots:
 **(b)의 이빨과 그 한계.** 선언값 판정만 하면 저자가 `kind` 를 거짓으로 적어 빠져나간다. 보조 축으로 **변수명 휴리스틱**을 둔다 — 변수명에 `VERDICT`·`SCORE`·`RANK`·`SEVERITY` 가 들어가면 그 슬롯의 `kind:` 는 금지 셋 중 하나여야 하고, 그러면 면제 등재가 강제된다. **완전한 ∀-지배관계가 아니다** — 저자가 이름도 kind 도 함께 속이면 통과한다. 이것을 락 주석에 적는다.
 
 **Files:**
-- Create: `shared/adjudication/check_slots.py`
+- Create: `tools/adjudication/check_slots.py`
 - Create: `shared/tests/test_agent_input_slots.sh`
 - Create: `shared/tests/fixtures/adjudication/slots_*.md` (5개)
 
@@ -1526,7 +1530,7 @@ input_slots:
 
 - [ ] **Step 1: 판정기를 쓴다**
 
-`shared/adjudication/check_slots.py`:
+`tools/adjudication/check_slots.py`:
 
 ```python
 # -*- coding: utf-8 -*-
@@ -1817,7 +1821,7 @@ from collections import Counter
 from pathlib import Path
 
 root = Path(sys.argv[1])
-sys.path.insert(0, str(root / "shared" / "adjudication"))
+sys.path.insert(0, str(root / "tools" / "adjudication"))
 import check_slots  # noqa: E402
 
 FX = root / "shared" / "tests" / "fixtures" / "adjudication"
@@ -1856,7 +1860,7 @@ Task 1 Step 8 이 `test_seed_agents.sh` 와의 충돌을 찾았으면, 그 자�
 - [ ] **Step 6: 커밋**
 
 ```bash
-git add shared/adjudication/check_slots.py shared/tests/test_agent_input_slots.sh shared/tests/fixtures/adjudication/
+git add tools/adjudication/check_slots.py shared/tests/test_agent_input_slots.sh shared/tests/fixtures/adjudication/
 git commit -m "test(adjudication): L3 입력 선언 락 — 선언·전달 일치와 금지 종류 (RED)"
 ```
 
@@ -3125,7 +3129,7 @@ Task 1 Step 8 이 예측한 충돌이 여기서 실현된다. **L3 를 빼지 �
 
 ```bash
 git diff --name-only origin/main | cut -d/ -f2 | sort -u
-git add plugins/ shared/adjudication/check_slots.py
+git add plugins/ tools/adjudication/check_slots.py
 git commit -m "feat(adjudication): 에이전트 스무 개의 입력 슬롯 선언 — L3 GREEN"
 git push
 ```
