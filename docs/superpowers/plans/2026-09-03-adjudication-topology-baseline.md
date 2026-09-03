@@ -214,13 +214,18 @@ plugins/spec-distill/scripts/run_spec_codex_reviewer.sh
 ## P3 — L1 정밀 판정기 census (Step 5)
 
 `shared/adjudication/check_wiring.py` 를 초안대로 작성(브리프 원문 그대로, 자체 수정 없음)하고
-㉮ 네 파일에 `scan()`·`comprehension_count()` 를 돌렸다.
+㉮ 네 파일에 `scan()`·`comprehension_count()` 를 돌렸다. **이 절은 Task 3 이 갱신했다** — 초안
+판정기에 결함이 둘 있었다: `_enclosing_branch` 가 「가장 안쪽」을 `len(body)` 최솟값으로
+근사해 바깥 분기가 더 짧으면 무관한 처분 호출이 안쪽 `continue` 를 guarded 로 오판하고,
+`scan()` 이 `for loop in loops: for n in ast.walk(loop)` 로 루프마다 하위를 훑어 중첩 루프
+안의 한 문장을 두 번 셌다. Task 3 이 둘 다 부모 사슬을 직접 올라가는 방식으로 교체했다
+(`shared/adjudication/check_wiring.py` 의 `_parent_map`·`_enclosing_loop`·`_enclosing_branch`).
+아래는 **교체 후** 값이다.
 
 ```
 파일                                줄     kind     func                          guarded
 synthesize_artifact_findings.py    105    continue phase_key                    False
-synthesize_artifact_findings.py    109    continue phase_key                    False   (첫 루프 귀속)
-synthesize_artifact_findings.py    109    continue phase_key                    False   (안쪽 루프 귀속 — 같은 문장이 두 for 문에 이중 계상)
+synthesize_artifact_findings.py    109    continue phase_key                    False
 synthesize_artifact_findings.py    200    continue phase_synth                  True
 synthesize_artifact_findings.py    203    continue phase_synth                  False
 synthesize_artifact_findings.py    216    continue phase_synth                  False
@@ -240,20 +245,26 @@ merge_review.py                    268    continue build_codex_findings_display 
 merge_review.py                    322    continue load_history                 True
 merge_review.py                    371    continue build_ledger                 True
 ---
-버리는 분기 21 (continue 20 · break 0 · return 1) 중 미배선 15
+버리는 분기 20 (continue 19 · break 0 · return 1) 중 미배선 14
 ast.For/AsyncFor 문 39
 컴프리헨션 내포 28
 ```
 
 **계획(F5) 대비 정합성 확인.** 계획의 F5 는 인접-휴리스미틱으로 「미배선 약 13자리」를
-추정했고 스스로 「오라클이 아니다」라고 적었다. 이 정밀 스캔(guarded 판정을 `_enclosing_branch`
-로 계산)은 **15**를 낸다 — 차이 2는 ⑴ `synthesize_artifact_findings.py:109` 가 중첩 루프 둘에
-각각 귀속돼 이중 계상되는 것 하나, ⑵ `merge_review.py:227` 의 루프 내 `return` (휴리스틱은
-`continue` 만 셌다) 하나다. `for`문 39·컴프리헨션 28·`continue` 20·`break` 0·루프 내 `return`
+추정했고 스스로 「오라클이 아니다」라고 적었다. 이 정밀 스캔(guarded 판정을 부모 사슬로
+계산)은 **14**를 낸다 — 차이 1은 `merge_review.py:227` 의 루프 내 `return`(휴리스틱은
+`continue` 만 셌다)이다. `for`문 39·컴프리헨션 28·`continue` 19·`break` 0·루프 내 `return`
 1·파일별 `continue` 줄번호(`synthesize_findings` 233 239 295 307 310 333 ·
-`synthesize_artifact_findings` 105 109 109 200 203 216 221 · `merge_review` 97 153 158 268
+`synthesize_artifact_findings` 105 109 200 203 216 221 · `merge_review` 97 153 158 268
 322 371 · `merge_brief_review` 182) 는 착수 전 별도로 실측된 값과 **완전히 일치** — 구현이
 맞다는 교차 확증이다.
+
+**초안 판정기(교체 전) 값과의 차이.** 초안은 버리는 분기 **21**·미배선 **15** 를 냈다 —
+`synthesize_artifact_findings.py:109` 가 중첩 루프 둘에 각각 귀속돼 이중 계상된 행 하나가
+그 차이의 전부다(면제 키가 `(파일, 줄)` 이라 기능상 깨지지는 않지만 M8 이 재는 면제 목록
+크기가 부풀려진다). Task 3 이 교체한 판정기로 재실행하면 그 이중 계상이 사라져 **20 / 14**
+가 된다. 이 문서가 P3 의 유일한 기준점이다 — M10 이하가 이 절을 인용할 때는 20 / 14 를
+쓴다.
 
 ## 면제 후보 — 형태 셋 (Step 6)
 
