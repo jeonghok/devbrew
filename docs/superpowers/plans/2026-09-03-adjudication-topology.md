@@ -1372,6 +1372,15 @@ git commit -m "test(adjudication): L4 역할 선언 락 — codex 러너가 처�
 네임스페이스가 실재하고, 그 실재를 «호출부에서 도출»하면 새 이빨이 생기기
 때문이다: 문서화됐는데 어떤 호출부도 안 받는 키는 fail-open 결함이다.
 
+**넷을 어디서나 합치지는 않는다.** kill switch 키는 `README.md` 에서만
+인정한다 — 그 키는 README 가 문서화하고, dispatch 는 skill·command·agent 에서
+일어난다. 평면으로 합치면 저자가 훅 이름을 skill 로 착각해 쓴 dispatch 가
+조용히 해소된다(실측: 도출된 14키 중 8개가 agent·skill·command 가 아니다).
+
+**이 분리가 못 막는 것** — README 안에 잘못 쓰인 dispatch 참조는 여전히
+가려진다. README 는 dispatch 하지 않고 문서화한다는 전제 위에 선 대가이고,
+실측으로 재현된다.
+
 기존 dispatch 락의 표기 필터(subagent_type:|agentType:|Agent\\(|^\\s*agent:)를
 «빼지 않는다». 그 필터는 산문 속 맨 영어 단어가 dispatch 로 잡히는 것을 막고
 있고 그 필요는 실측으로 기록돼 있다(test_dispatch_disposition.sh:80-84).
@@ -3551,6 +3560,7 @@ git branch --show-current
 | 8 | **L3(b)는 이름과 `kind` 를 «함께» 속이면 통과한다** | 선언값 판정 + 변수명 휴리스틱이 전부. 완전한 ∀-지배관계가 아니다 |
 | 9 | **축 A⑤** — `test_dispatch_disposition.sh` 는 코드가 7축, 문서가 6축이고 mutation 검증 0건 | 설계가 이월한 gap. 이 계획이 건드리지 않는다 |
 | 10 | **정적 검사의 절대 경계** — 이름을 문자열 연결로 쪼개면 이 리포의 락도 새 락도 침묵한다 | 설계 §10 |
+| 12 | **T4-2 는 README 안의 잘못된 dispatch 참조를 못 본다** | kill switch 키를 README 에서만 인정하는 대가. 그 분리가 없으면 반대로 skill·command·agent 안의 훅-이름 dispatch 가 가려진다 — 둘 중 하나를 골라야 하고, dispatch 가 실제로 사는 쪽을 지켰다. 재리뷰가 두 방향 다 재현 |
 | 11 | **방향성 리뷰의 미반영 지적 — brief §3 의 OQ11~OQ19 아홉 건** | 축 교체가 단독 저자 preprint 하나에 기댄다. 설계 §8 의 C3·C5 행이 이것을 근거로 배치 변경을 보류한다 |
 
 ---
