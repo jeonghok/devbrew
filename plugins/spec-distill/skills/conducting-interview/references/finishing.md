@@ -87,21 +87,22 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 받지 않았습니다. 여기서 `reviewing-brief` skill로 넘깁니다 — 축은 둘(충실도·방향성), 담당은
 셋 + codex이며, 절차는 그 skill이 소유합니다(여기에 복제하지 않습니다).
 
-핸드오프 변수 3개를 그 skill과 같은 리졸버로 세팅합니다(state 배치 규약 정합, PN1):
+핸드오프 변수 4개를 그 skill과 같은 리졸버로 세팅합니다(state 배치 규약 정합, PN1):
 
 ```bash
 ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/state_path.py" state-root)"
 harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT}/scripts/state_path.py" session-id)"
 PAYLOAD="docs/superpowers/interview/<file>"          # Step A가 방금 쓰고 검증한 경로
+AUDIT="${PAYLOAD%.md}.audit.md"                      # payload 의 audit sidecar (§6 S2+ 원문)
 CODEX_DIR_YAML="$ROOT/$harness_sid/codex-direction.yaml"
 CODEX_FID_YAML="$ROOT/$harness_sid/codex-fidelity.yaml"
 ```
 
 ```
-Skill spec-distill:reviewing-brief $PAYLOAD $CODEX_DIR_YAML $CODEX_FID_YAML
+Skill spec-distill:reviewing-brief $PAYLOAD $AUDIT $CODEX_DIR_YAML $CODEX_FID_YAML
 ```
 
-세 인자는 **주석이 아니라 호출 라인 위에** 있어야 합니다 — `reviewing-brief`는 이 값들을 스스로 정의하지 않는다고 명시하므로, `#` 뒤에만 적혀 있으면 호출은 인자 없이 나가고 callee는 정의되지 않은 변수를 쥡니다.
+네 인자는 **주석이 아니라 호출 라인 위에** 있어야 합니다 — `reviewing-brief`는 이 값들을 스스로 정의하지 않는다고 명시하므로, `#` 뒤에만 적혀 있으면 호출은 인자 없이 나가고 callee는 정의되지 않은 변수를 쥡니다.
 
 - 그 skill이 `cost_class: high` 진입 승인 게이트를 띄웁니다(모델 호출 하한 5 · 상한 9).
 - `DEVBREW_SPEC_DISTILL_DISABLE_BRIEF_REVIEW=1`이면 파이프라인이 전체 skip되고 skip record가
