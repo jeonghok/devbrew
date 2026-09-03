@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.3.1] — 2026-09-04
+
+### Fixed
+- `test_synthesize_artifact_findings.sh` 의 「처분 회계 (T1-B)」 fixture — `absorbed` 단언이 리터럴 `dedup_key` 오버라이드에 의존해 실제로는 흡수를 유발하지 못했다(:234 의 `new_findings` 경로는 echo 된 dedup_key 를 신뢰하지 않고 `category`+`target_anchor`+`summary` 로 항상 재계산한다 — adversarial 이 echo 한 값을 믿지 않는 방어이지 버그가 아니다). kept finding 의 리터럴 `dedup_key` 를 제거해 내용 기반 해시를 쓰게 하고, `new_findings` 항목을 같은 `target_anchor`/`summary`(카테고리 없음도 동일)로 맞춰 **내용으로** 충돌시켰다 — 33/33 GREEN. 프로덕션 로직은 변경하지 않았다(`:151`의 `setdefault`와 `:234`의 무조건 재계산은 `phase_key` 가 만든 merged doc 경로에서 항상 같은 값을 내므로 동형이고, 차이는 손으로 쓴 fixture 에서만 드러난다). `codex-blessed-red.txt` 는 건드리지 않는다 — 이 RED 는 설계상이 아니라 fixture 결함이었다.
+
 ## [6.3.0] — 2026-09-04
 
 ### Changed

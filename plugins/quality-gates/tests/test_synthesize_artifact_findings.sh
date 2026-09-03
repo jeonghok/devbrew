@@ -307,20 +307,29 @@ echo "$out" | grep -q "degraded: true" && echo "$out" | grep -q "converged: fals
   && ok "non-mapping new_findings ELEMENT degrades (fail-closed)" || no "scalar new_findings element must degrade ($out)"
 
 note "── 처분 회계 (T1-B)"
-cat > "$tmp/afind.yaml" <<'YAML'
+# kept finding 은 리터럴 dedup_key 를 빼서 :151 의 setdefault 가 내용(category+target_anchor+
+# summary)에서 해시를 만들게 한다. :234(new_findings)는 echo 된 dedup_key 를 신뢰하지 않고
+# 항상 그 셋을 재계산하므로, 아래 new_findings 항목이 같은 target_anchor/summary(카테고리
+# 없음도 동일)를 가져야 «내용으로» 충돌해 실제 absorbed 흡수가 일어난다 — 수정 라운드 1
+# (판정 ①): 리터럴 dedup_key 로 맞추려던 원래 fixture 는 :234 의 방어적 재계산과 만나
+# 절대 충돌하지 않았다.
+AKEY="$(python3 -c "import hashlib
+def n(s):return ' '.join(str(s).strip().lower().split())
+raw=''+chr(0)+n('#a')+chr(0)+n('kept');print(hashlib.sha1(raw.encode()).hexdigest()[:12])")"
+cat > "$tmp/afind.yaml" <<YAML
 findings:
-  - {agent: critic, target_anchor: "#a", severity: CRITICAL, summary: kept, dedup_key: k1}
+  - {agent: critic, target_anchor: "#a", severity: CRITICAL, summary: kept}
   - {agent: critic, target_anchor: "#b", severity: IMPORTANT, summary: rejected, dedup_key: k2}
   - {agent: critic, target_anchor: "#c", severity: IMPORTANT, summary: 판정없음, dedup_key: k3}
 sources_failed: 1
 YAML
-cat > "$tmp/aadv.yaml" <<'YAML'
+cat > "$tmp/aadv.yaml" <<YAML
 verdicts:
-  - {finding_key: k1, verdict: confirm}
+  - {finding_key: "$AKEY", verdict: confirm}
   - {finding_key: k2, verdict: reject}
 new_findings:
   - "형태 불량"
-  - {agent: adv, target_anchor: "#a", severity: IMPORTANT, summary: dup, dedup_key: k1}
+  - {agent: adv, target_anchor: "#a", severity: IMPORTANT, summary: kept}  # category(없음)+target_anchor+summary 가 위 kept finding 과 같아 해시 충돌 -> absorbed
 YAML
 OUT="$(PYTHONDONTWRITEBYTECODE=1 python3 "$S" --phase synth \
         --findings "$tmp/afind.yaml" --adversarial "$tmp/aadv.yaml" 2>&1)"
