@@ -211,4 +211,30 @@ sf18="$WORK/.claude/spec-distill/test-018/state.local.md"
   && ! grep -q '^dispatch_attempts:' "$sf18" \
   && ok "스코프 밖 dirty 문서 → rc 0 + 무-dispatch, attempts 미기록 (무-crash)" \
   || no "out-of-scope 케이스 실패 (rc=$rc out='$out' err='$(cat "$err18")')"
+
+# --- MU9 : 목적지 이름이 한 자리에서 온다 -----------------------------------
+# 삭제 변이로는 이빨을 못 잰다 — 상수를 지우면 import 에러로 전부 죽으므로
+# "함께 죽었다" 가 "한 자리에서 온다" 의 증거가 되지 못한다. **값 변경 변이**가
+# 잡히도록, 판정 가능한 단언으로 못 박는다:
+#   "런타임 메시지 전부가 상수 값을 포함한다."
+# 리터럴이 남은 자리가 있으면 상수 값을 바꿨을 때 그 자리에서 실패한다.
+# $HOOK 은 :5 에서 이미 세워져 있다 (재정의하지 않는다).
+CONST_VAL="$(sed -n 's/^REVIEW_SKILL[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$HOOK" | head -1)"
+[ -n "$CONST_VAL" ] && ok "MU9: 모듈 상수 REVIEW_SKILL 선언" \
+  || no "MU9: REVIEW_SKILL 상수가 없다 — 목적지가 여전히 흩어져 있다"
+
+# 양성 증인 — 런타임 메시지가 실제로 존재한다 (0건이면 아래 부재가 공허참).
+# 모듈 docstring(첫 """ 블록)은 대상에서 뺀다: f-string 이 될 수 없어 손 갱신으로
+# 남는다(설계 §5.2). 그래서 docstring 을 지난 뒤부터 센다.
+BODY="$(awk 'BEGIN{d=0} /^"""/{d++; next} d>=2' "$HOOK")"
+MSG_HITS="$(grep -c "$CONST_VAL" <<<"$BODY")"
+[ "$MSG_HITS" -ge 1 ] && ok "MU9 양성 증인: 본문에 목적지 언급 ${MSG_HITS}건" \
+  || no "MU9: 본문에 목적지 언급이 0건 — 앵커가 죽었다"
+
+# 부재 — 본문의 목적지 언급 중 **상수를 경유하지 않는 리터럴**이 없다.
+# 상수 선언 줄 자신은 제외한다.
+STRAY="$(grep -n "$CONST_VAL" <<<"$BODY" | grep -v 'REVIEW_SKILL[[:space:]]*=' || true)"
+[ -z "$STRAY" ] && ok "MU9: 목적지 리터럴이 본문에 없다 (전부 상수 경유)" \
+  || { no "MU9: 상수를 경유하지 않는 목적지 리터럴이 남아 있다"; printf '%s\n' "$STRAY"; }
+
 finish

@@ -77,6 +77,12 @@ from discover_candidates import Candidate, GitUnavailable, discover  # noqa: E40
 # 건드리지 않으므로 이 자리가 여전히 "첫 문장"이다 (근거는 hook_common 쪽 docstring).
 configure_utf8_streams()
 
+# 이 훅이 모델에게 지시하는 **목적지 skill 의 이름**. 아래 런타임 메시지 전부가
+# 이 값을 보간한다 — 이름이 바뀌면 여기 한 줄만 바뀐다.
+# 모듈 docstring 은 f-string 이 될 수 없어 이 상수를 쓰지 못한다. 이름을 바꾸면
+# docstring 도 손으로 갱신할 것 (그 드리프트를 잡는 락은 없다).
+REVIEW_SKILL = "reviewing-spec"
+
 BLACKLIST = SCRIPTS_DIR / "ambiguity-blacklist.txt"
 
 #: 한 턴에 구조 검증하는 문서 수의 상한. 훅 timeout 안에 들어가야 한다.
@@ -86,7 +92,7 @@ CANDIDATE_CAP = 5
 GIT_UNAVAILABLE_ADVISORY = (
     "[spec-distill] git 을 쓸 수 없어 스코프 문서 발견이 불가능하다 — 이 세션에서는 "
     "구조 검증도 자동 리뷰 dispatch 도 일어나지 않는다. 리포에서 세션을 열거나 "
-    "reviewing-spec 을 직접 호출하라."
+    f"{REVIEW_SKILL} 을 직접 호출하라."
 )
 #: A16 은 advisory 를 **세션당 1회**로 요구한다 — 매 턴 반복하면 무시되는 신호가 된다.
 GIT_UNAVAILABLE_MARKER = "git_unavailable_advised: yes"
@@ -463,7 +469,7 @@ def main() -> int:
                 "systemMessage": (
                     f"[spec-distill] arm-once:state-unreadable — state.local.md 판독 불가로 "
                     f"자동 리뷰 dispatch 가 중단됐다 "
-                    f"({state_path}). 파일을 복구하거나 reviewing-spec 을 직접 호출하라."
+                    f"({state_path}). 파일을 복구하거나 {REVIEW_SKILL} 을 직접 호출하라."
                 ),
             }), flush=True)
             return 0
@@ -582,7 +588,7 @@ def main() -> int:
             lines.append(
                 f"[spec-distill] 다음 문서는 구조 검증이 {val_cap}회 실패해 이 세션에서 "
                 f"자동 검증·dispatch 를 중단한다: {', '.join(reached_cap)}. "
-                "리뷰가 필요하면 reviewing-spec 을 직접 호출하라."
+                f"리뷰가 필요하면 {REVIEW_SKILL} 을 직접 호출하라."
             )
         body_after = set_cursor(body_after, cursor)
         try:
@@ -697,7 +703,7 @@ def main() -> int:
     # 이 훅의 cwd 로 값을 만들어 넣지 않는다 — 리포 서브디렉터리일 수 있어 worktree
     # 경로라고 부를 수 없고, 없는 것보다 틀린 것이 나쁘다.
     msg_lines = [
-        "MANDATORY: 다음 turn 첫 액션으로 reviewing-spec skill 호출.",
+        f"MANDATORY: 다음 turn 첫 액션으로 {REVIEW_SKILL} skill 호출.",
         f"spec path: {spec_path}.",
         f"mode: {mode}.",
     ]
@@ -718,7 +724,7 @@ def main() -> int:
     if cap and attempt_n >= cap:
         msg_lines.append(
             f"[spec-distill] '{spec_path}' 리뷰가 {cap}회 시도됐으나 verdict 없이 "
-            "끝났다 — 자동 dispatch를 중단한다. 리뷰가 필요하면 reviewing-spec을 "
+            f"끝났다 — 자동 dispatch를 중단한다. 리뷰가 필요하면 {REVIEW_SKILL}을 "
             "직접 호출하라."
         )
     else:
@@ -751,7 +757,7 @@ def main() -> int:
     print(json.dumps(with_advisory({
         "decision": "block",
         "reason": msg,
-        "systemMessage": "[spec-distill] reviewing-spec dispatch enforced for next turn",
+        "systemMessage": f"[spec-distill] {REVIEW_SKILL} dispatch enforced for next turn",
     }, capped_advisory)), flush=True)
     return 0
 
