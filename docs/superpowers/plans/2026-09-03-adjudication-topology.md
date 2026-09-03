@@ -1009,6 +1009,7 @@ git commit -m "test(adjudication): L1 배선 락 — 버리는 분기가 처분�
 """
 import ast
 import io
+from pathlib import Path
 
 
 def required_keys(repo_root):
@@ -1020,24 +1021,64 @@ def required_keys(repo_root):
     return sorted(rep["counts"].keys()) + ["unknown_counts"]
 
 
-def _string_keys(tree):
-    """첨자(`x["k"]`)와 딕셔너리 리터럴 키로 «쓰인» 문자열만."""
+def _shared_modules(repo_root):
+    """`shared/adjudication/` 에 실재하는 모듈 이름 → 경로."""
+    d = Path(repo_root) / "shared" / "adjudication"
+    return {p.stem: str(p) for p in d.glob("*.py")}
+
+
+def _closure(path, repo_root):
+    """소비자 파일 **+ 그 파일이 import 하는 `shared/adjudication/` 모듈들**.
+
+    카운트를 이름으로 부르는 자리가 소비자 파일이 아니라 «공유 렌더 모듈»에
+    있을 수 있다 — 네 소비자가 같은 두 줄을 내려고 그 모듈을 두는 것이 이
+    설계의 요점이다(§5). 파일 하나만 보면 **설계를 따르는 것이 곧 락 위반**이
+    된다.
+    """
+    tree = ast.parse(io.open(path, encoding="utf-8").read())
+    shared = _shared_modules(repo_root)
+    out = [path]
+    for n in ast.walk(tree):
+        mods = []
+        if isinstance(n, ast.ImportFrom) and n.module:
+            mods.append(n.module.split(".")[-1])
+        elif isinstance(n, ast.Import):
+            mods += [a.name.split(".")[-1] for a in n.names]
+        for m in mods:
+            if m in shared and shared[m] not in out:
+                out.append(shared[m])
+    return out
+
+
+def _consumed_names(tree):
+    """키가 «읽힌» 자리 — 첨자 슬라이스와 튜플/리스트/집합 원소.
+
+    딕셔너리 리터럴의 «키»는 세지 «않는다». 그것은 원장을 읽는 자리가 아니라
+    출력을 만드는 자리라, 같은 이름의 무관한 지역 변수가 우연히 락을 만족시킨다
+    — 실측: `synthesize_artifact_findings.py:131` 의 지역 카운터
+    `"sources_failed": sources_failed` 가 원장의 그 칸을 읽는 것으로 세어졌다
+    (그 파일의 `Ledger` 는 `source_failed()` 를 부른 적이 없다).
+
+    튜플/리스트/집합 원소를 세는 이유는 반대쪽이다: 키 여섯을 루프로 도는 자리
+    (`for _k in ("accepted", …)`)가 실제 소비인데 첨자만 보면 안 잡힌다.
+    """
     found = set()
     for n in ast.walk(tree):
         if isinstance(n, ast.Subscript):
             s = n.slice
             if isinstance(s, ast.Constant) and isinstance(s.value, str):
                 found.add(s.value)
-        elif isinstance(n, ast.Dict):
-            for k in n.keys:
-                if isinstance(k, ast.Constant) and isinstance(k.value, str):
-                    found.add(k.value)
+        elif isinstance(n, (ast.Tuple, ast.List, ast.Set)):
+            for e in n.elts:
+                if isinstance(e, ast.Constant) and isinstance(e.value, str):
+                    found.add(e.value)
     return found
 
 
-def missing(path, keys):
-    tree = ast.parse(io.open(path, encoding="utf-8").read())
-    found = _string_keys(tree)
+def missing(path, keys, repo_root):
+    found = set()
+    for f in _closure(path, repo_root):
+        found |= _consumed_names(ast.parse(io.open(f, encoding="utf-8").read()))
     return [k for k in keys if k not in found]
 ```
 
@@ -1049,6 +1090,14 @@ def missing(path, keys):
 def emit(report):
     # `held` 만 읽는다 — 오늘의 프로덕션과 같은 모양
     return "held=%d" % report["counts"]["held"]
+```
+
+`shared/tests/fixtures/adjudication/consumed_dictkey.py` — **오검출 회귀**:
+
+```python
+def emit(sources_failed, accepted):
+    # 원장과 무관한 지역 카운터를 출력 dict 로 «만든다». 읽는 것이 아니다.
+    return {"sources_failed": sources_failed, "accepted": accepted}
 ```
 
 `shared/tests/fixtures/adjudication/consumed_full.py`:
@@ -1074,6 +1123,14 @@ def emit(report):
 #
 # 요구 키는 Ledger 자신에게서 도출한다 — 여기 열거하면 어휘가 늘어도 락이
 # 조용하고, 그 침묵이 이 락이 막으려는 바로 그것이다.
+#
+# 코퍼스는 소비자 파일 «하나»가 아니라 그 파일 + 그것이 import 하는
+# `shared/adjudication/` 모듈들이다. 네 소비자가 같은 두 줄을 내려고 공유 렌더
+# 모듈을 두는 것이 설계라, 파일 하나만 보면 설계를 따르는 것이 곧 위반이 된다.
+#
+# **이 락이 못 보는 것**: 키 이름이 렌더 코드에 «적혀 있다»는 것이지 그 값이
+# 사용자 화면까지 «간다»는 것이 아니다. 후자는 결정론 fixture 의 처분 행렬과
+# 라이브 렌더 1회가 잰다(설계 M11·M12).
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
@@ -1090,6 +1147,8 @@ note "$OUT"
 note "── 판정기 자체 (fixture)"
 assert_contains "$OUT" "fx_partial_missing=7" "held 만 읽는 소비자에서 나머지 일곱을 찾아낸다"
 assert_contains "$OUT" "fx_full_missing=0"    "전부 읽는 소비자는 통과한다"
+assert_contains "$OUT" "fx_dictkey_missing=8" \
+  "딕셔너리 리터럴 «키»는 소비가 아니다 — 같은 이름의 무관한 지역 변수가 락을 만족시키지 않는다"
 
 note "── 요구 키가 Ledger 에서 도출된다"
 nkeys="$(printf '%s\n' "$OUT" | sed -n 's/^keys=//p')"
@@ -1128,14 +1187,19 @@ keys = required_keys(str(root))
 print("keys=%d" % len(keys))
 print("  KEYS %s" % ", ".join(keys))
 
-print("fx_partial_missing=%d" % len(missing(str(FX / "consumed_partial.py"), keys)))
-print("fx_full_missing=%d" % len(missing(str(FX / "consumed_full.py"), keys)))
+print("fx_partial_missing=%d"
+      % len(missing(str(FX / "consumed_partial.py"), keys, str(root))))
+print("fx_full_missing=%d"
+      % len(missing(str(FX / "consumed_full.py"), keys, str(root))))
+# 오검출 회귀 — 딕셔너리 리터럴 «키»만으로는 만족되지 않는다.
+print("fx_dictkey_missing=%d"
+      % len(missing(str(FX / "consumed_dictkey.py"), keys, str(root))))
 
 union, _, _ = derive_consumers(str(root))
 print("consumers=%d" % len(union))
 total = 0
 for rel in union:
-    miss = missing(str(root / rel), keys)
+    miss = missing(str(root / rel), keys, str(root))
     total += len(miss)
     if miss:
         print("  UNCONSUMED %s: %s" % (rel, ", ".join(miss)))
@@ -2462,7 +2526,9 @@ git commit -m "feat(quality-gates): synthesize_artifact_findings 의 버리는 �
 **Interfaces:**
 - Consumes: Task 2 의 `held_by_class()` · Task 8·9 의 배선
 - Produces: `render(kept, suppressed_count, dropped_malformed, report, held_classes)` — **시그니처 변경**. 오늘의 `held_count`·`degraded`·`degrade_reasons` 셋을 `report` dict 하나로 대체한다
-- Produces: `_disposition_lines(report, held_classes) -> list[str]` — 두 줄을 만드는 순수 함수. 네 소비자가 공유한다
+- Produces: `disposition_lines(report, held_classes) -> (str, str, list[str])` — 마크다운 두 줄과 advisory. `synthesize_findings.py` 가 쓴다
+- Produces: `disposition_report(report, held_classes) -> dict` — 구조화 출력용. 카운트를 **이름으로 편다**. `synthesize_artifact_findings.py`·`merge_review.py`·`merge_brief_review.py` 가 쓴다.
+  **두 함수가 필요한 이유** — 마크다운 소비자와 YAML/키=값 소비자의 출력 모양이 다르다. 그런데 «키 이름을 한 벌만 적는다」는 요구는 같다: 통째 dict 를 넘기면 소비자 코드에 이름이 안 나타나고, 어휘가 늘어도 그 소비자가 조용하다(L2 가 막으려는 침묵)
 
 - [ ] **Step 1: 두 줄을 만드는 순수 함수를 `shared/` 에 둔다**
 
@@ -2508,6 +2574,29 @@ def disposition_lines(report, held_classes):
             "「항목 파손: 」)에 안 걸린다 — 배관 칸에 실었으나 분류되지 않았다."
             % held_classes["기타"])
     return line1, line2, advisories
+
+
+def disposition_report(report, held_classes):
+    """구조화된 출력(YAML·키=값)을 내는 소비자용 — 칸을 «이름으로» 편다.
+
+    `report["counts"]` 를 통째로 넘기지 않는다. 통째로 넘기면 소비자 코드에
+    카운트 이름이 한 번도 안 나타나고, 그러면 어휘가 늘어도 그 소비자는
+    조용하다 — 그것이 L2 가 막으려는 침묵이다. 여기 한 벌만 편다.
+    """
+    c = report["counts"]
+    return {
+        "accepted": c["accepted"],
+        "rejected": c["rejected"],
+        "held": c["held"],
+        "absorbed": c["absorbed"],
+        "coerced": c["coerced"],
+        "sources_failed": c["sources_failed"],
+        "suppressed": c["suppressed"],
+        "unknown_counts": report["unknown_counts"],
+        "held_by_class": dict(held_classes),
+        "degraded": report["degraded"],
+        "reasons": report["reasons"],
+    }
 ```
 
 **`(차단: 예/아니오)` 가 `report["degraded"]` 를 읽는 이유** — `blocks()` 는 원장 객체의 메서드이고 `report()` 는 dict 다. 소비자가 원장 객체를 안 들고 다녀도 되게 dict 만으로 만든다. `degraded` 는 `blocks()` 를 포함하되 더 넓다(`_degraded():100-103`) — **더 넓은 쪽을 쓴다**: 공시는 언제나, 차단은 좁게.
@@ -2568,15 +2657,12 @@ from render_disposition import disposition_lines
 **`synthesize_artifact_findings.py`** — YAML 출력이므로 두 줄이 아니라 dict 를 낸다. `phase_synth` 의 출력 dict 에 블록 하나를 더한다. **기존 `degraded`·`degraded_reason` 4값 어휘는 그대로 둔다**(§4.4):
 
 ```python
-    rep = L.report()
-    out["adjudication"] = {
-        "counts": rep["counts"],
-        "held_by_class": L.held_by_class(),
-        "unknown_counts": rep["unknown_counts"],
-        "degraded": rep["degraded"],
-        "reasons": rep["reasons"],
-    }
+from render_disposition import disposition_report   # 상단 import
+
+    out["adjudication"] = disposition_report(L.report(), L.held_by_class())
 ```
+
+**`rep["counts"]` 를 통째로 싣지 않는다.** 통째로 넘기면 이 파일에 카운트 이름이 한 번도 안 나타나고, 어휘가 늘어도 이 소비자는 조용하다. 공유 헬퍼가 이름을 한 벌 펴고 이 파일은 그것을 import 한다 — L2 의 코퍼스가 그 import 를 따라간다.
 
 **`Ledger(items="closed")` 라 `surfaced()` 를 부르지 않는다** — 빈 리스트를 반환한다(`adjudication.py:136-138`). 설계 §3.1 이 철회한 그 자리다.
 
@@ -2586,17 +2672,22 @@ from render_disposition import disposition_lines
     print(f"adjudication_held: {_yaml_scalar(merged['held'])}")
     print(f"adjudication_unknown: {_yaml_scalar(','.join(merged['unknown']))}")
     # L2 가 요구하는 나머지 — 카운트가 «전부» 출력에 실려야 한다.
-    _c = merged["report"]["counts"]
-    for _k in ("accepted", "rejected", "absorbed", "coerced",
-               "sources_failed", "suppressed"):
-        print(f"adjudication_{_k}: {_yaml_scalar(_c[_k])}")
+    # 키 목록을 여기 다시 적지 않는다: 공유 헬퍼가 한 벌 펴고 이 자리는 그것을
+    # 돈다. 손으로 적으면 어휘가 늘어도 이 소비자가 조용하다.
+    for _k, _v in disposition_report(merged["report"],
+                                     merged["held_by_class"]).items():
+        if _k in ("reasons", "held_by_class"):
+            continue                      # 아래에서 따로 편다
+        print(f"adjudication_{_k}: {_yaml_scalar(_v)}")
     _hc = merged["held_by_class"]
     print(f"adjudication_held_unadjudicated: {_yaml_scalar(_hc['판정자 부재'])}")
     print(f"adjudication_held_malformed: {_yaml_scalar(_hc['항목 파손'])}")
     print(f"adjudication_held_other: {_yaml_scalar(_hc['기타'])}")
 ```
 
-**키 이름을 `for` 루프로 만드는 이유** — 여섯 개를 손으로 적으면 `Ledger` 에 카운트가 늘어도 이 자리가 조용하다. 그것이 L2 가 막으려는 바로 그 모양이다. **단 이 루프 자체가 L1 의 대상이 된다** — `continue` 가 없으므로 통과한다.
+상단에 `from render_disposition import disposition_report`.
+
+**이 루프의 `continue` 는 L1 의 대상이다** — `merge_review.py` 는 ㉮ 소비자이고 L1 은 그 파일의 모든 `for` 문을 본다. 두 키를 아래에서 따로 펴는 것이지 «버리는» 것이 아니므로, Task 3 이 확정한 **선택 루프** 형태다(C6⑴). 락이 걸면 `EXEMPT` 에 그 인용과 함께 등재한다.
 
 `merged` 에 `report`·`held_by_class` 를 싣는 것은 병합 함수의 몫이다. `codex_ledger`·`history_ledger` 둘이 있으므로(`:486`·`:530`) **합쳐서 하나로 보고한다** — 각각 따로 내면 소비자가 둘을 더해야 하고, 더하는 자리가 새 결함 지점이 된다.
 
