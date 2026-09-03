@@ -46,20 +46,29 @@ fi
 
 while IFS= read -r rel; do
   [ -n "$rel" ] || continue
-  # 도출기는 넘겨받은 root 인자의 형태를 그대로 돌려준다(`str(Path(root).rglob(...))`).
-  # 위에서 `$REPO_ROOT/plugins`(절대경로)로 호출했으므로 `$rel`은 이미 절대경로다 —
-  # 여기서 $REPO_ROOT 를 다시 붙이면 존재하지 않는 이중 경로가 되어 «파일 없음»으로
-  # 오분류되고 세 처분 단언까지 못 간다(실측: 2026-09-03, 6×path-not-found ≠ 18×disposition-fail).
+  # 도출기는 «절대» 경로를 낸다(`"$REPO_ROOT/plugins"` 로 호출하므로).
+  # `$REPO_ROOT/` 를 다시 붙이면 전부 「파일 없음」으로 떨어져 아래 세 축이
+  # 통째로 안 돈다 — 시끄러운 RED 가 조용한 vacuous 로 바뀐다.
   f="$rel"
   base="$(basename "$rel")"
   if [ ! -f "$f" ]; then no "$base: 도출된 경로가 실재하지 않는다"; continue; fi
-  body="$(cat "$f")"
-  assert_grep "$body" 'consumer=' \
-    "$base: consumer= 를 밝힌다 (누가 이 판정을 읽는가)"
-  assert_grep "$body" 'fail-(open|closed)' \
-    "$base: fail-open/fail-closed 를 밝힌다 (죽었을 때 어느 쪽으로 기우는가)"
-  assert_grep "$body" 'disclosure=' \
-    "$base: disclosure= 를 밝힌다 (어느 채널로 드러나는가)"
+
+  # **파일 본문이 아니라 «앵커 줄»에서 찾는다.** 본문 전체를 보면 산문이
+  # 검사를 만족시킨다 — 실측: 여섯 중 셋이 에러 메시지와 설명 주석에
+  # `fail-closed` 를 담고 있어 그 축이 «선언과 무관하게» 통과했다. 그러면
+  # 나중에 진짜 선언을 넣었다 지워도 그 셋은 계속 초록이다(이빨 0).
+  anchor="$(grep -F '**처분**' "$f" || true)"
+  if [ -n "$anchor" ]; then
+    ok "$base: 처분 앵커가 있다"
+  else
+    no "$base: 처분 앵커(\`**처분** — …\`)가 없다 — 아래 세 축은 빈 줄을 검사한다"
+  fi
+  assert_grep "$anchor" 'consumer=' \
+    "$base: 앵커가 consumer= 를 밝힌다 (누가 이 판정을 읽는가)"
+  assert_grep "$anchor" 'fail-(open|closed)' \
+    "$base: 앵커가 fail-open/fail-closed 를 밝힌다 (죽었을 때 어느 쪽으로 기우는가)"
+  assert_grep "$anchor" 'disclosure=' \
+    "$base: 앵커가 disclosure= 를 밝힌다 (어느 채널로 드러나는가)"
 done < "$TMPD/runners.txt"
 
 finish
