@@ -571,7 +571,136 @@ git commit -m "feat(adjudication): 억제 칸과 hold 분류를 어휘에 더한
 - Produces: `check_wiring.py` 의 `derive_consumers(repo_root) -> tuple[list[str], list[str], list[str]]` — `(합집합, import경로, 앵커경로)` **셋**을 낸다. 합집합만 반환하면 M7 이 요구하는 「두 경로를 따로 기록」을 할 수 없다. 소비자 둘(`run_wiring_scan.py`·`run_consumed.py`)이 `union, by_import, by_anchor = …` 로 언패킹한다. ㉮ 를 **두 경로의 합집합**으로 도출. ⑴ `plugins/*/scripts/*.py` + `plugins/*/hooks/*.py` 중 `adjudication` 을 import 하는 것 ∪ ⑵ 처분 앵커의 `consumer=<path>.py` 가 지목한 것. Task 11(T5)이 훅을 배선하면 이 함수가 4 → 5 를 낸다
 - Produces: `check_wiring.py` 의 `EXEMPT: dict[(file, line), str]` — 값은 C6 인용 문자열. **키가 아니라 값의 유무가 락의 이빨이다**
 
-- [ ] **Step 1: 판정기에 면제 상수와 도출을 더한다**
+- [ ] **Step 1: 판정기의 결함 둘을 먼저 고친다 — 대리지표를 포함 관계로 교체**
+
+Task 1 의 초안은 이 계획의 코드 블록과 바이트 동일하고, **그 코드에 결함이 둘 있다.** 둘 다 「포함 관계」를 값싼 대리 지표로 근사한 결과이고, 부모 사슬을 실제로 올라가는 한 번의 교체가 둘을 함께 없앤다.
+
+| # | 결함 | 실증 |
+|---|---|---|
+| ① | `_enclosing_branch` 의 docstring 은 「가장 «안쪽»」을 고른다고 적는데 코드는 **`len(body)` 가 가장 짧은 것**을 고른다. 바깥 분기의 문장 수가 더 적으면 그것이 뽑히고, 그 바깥 분기에 있는 **무관한 처분 호출**이 안쪽 조건으로 한 번 더 걸린 `continue` 를 guarded 로 만든다 | Task 1 리뷰가 반례를 구성해 재현. 오늘의 네 파일은 guarded 행 여섯이 전부 단층 `if: <처분>; continue` 라 census 수치는 영향 없음 |
+| ② | `scan()` 이 `for loop in loops: for n in ast.walk(loop)` 라 **중첩 루프 안의 버리는 분기를 두 번 센다** | Task 1 의 baseline 이 `synthesize_artifact_findings.py:109` 를 두 행으로 기록. 면제 키가 `(파일, 줄)` 이라 기능은 안 깨지지만 **M8 이 재는 면제 목록 크기가 부풀려진다** |
+
+`_enclosing_branch` 와 `scan` 을 아래로 **교체**한다(헬퍼 둘 추가):
+
+```python
+def _parent_map(tree):
+    parents = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[child] = node
+    return parents
+
+
+def _enclosing_loop(node, parents):
+    """`node` 를 감싸는 가장 안쪽 for 문. 없으면 None.
+
+    함수 경계를 넘지 않는다 — 중첩 함수 안의 return 은 바깥 루프의 버리는
+    분기가 아니다.
+    """
+    cur = parents.get(node)
+    while cur is not None:
+        if isinstance(cur, (ast.For, ast.AsyncFor)):
+            return cur
+        if isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            return None
+        cur = parents.get(cur)
+    return None
+
+
+def _enclosing_branch(loop, target, parents):
+    """`target` 을 감싸는 가장 안쪽 If 본문. 없으면 None.
+
+    부모 사슬을 «올라가서» 첫 If 를 만난다 — 포함 관계 그 자체다. 본문의
+    «길이»를 안쪽의 대리 지표로 쓰면 안 된다: 그 둘은 같지 않고, 바깥 분기가
+    더 짧으면 거기 있는 무관한 처분 호출이 이 분기를 guarded 로 만든다.
+    """
+    node = target
+    while node is not loop:
+        parent = parents.get(node)
+        if parent is None:
+            return None
+        if isinstance(parent, ast.If):
+            if any(child is node for child in parent.body):
+                return parent.body
+            if any(child is node for child in parent.orelse):
+                return parent.orelse
+        node = parent
+    return None
+
+
+def scan(paths):
+    """버리는 분기 전수. 각 항목은 guarded 여부를 함께 낸다.
+
+    분기 «노드»에서 출발한다 — 루프에서 출발해 하위를 훑으면 중첩 루프 안의
+    한 문장이 바깥·안쪽 양쪽에 귀속돼 두 번 세어진다.
+    """
+    out = []
+    for path in paths:
+        tree = ast.parse(io.open(path, encoding="utf-8").read())
+        parents = _parent_map(tree)
+        for n in ast.walk(tree):
+            if not isinstance(n, DISCARD_NODES):
+                continue
+            loop = _enclosing_loop(n, parents)
+            if loop is None:
+                continue
+            branch = _enclosing_branch(loop, n, parents)
+            # 분기를 못 찾으면 루프 본문 전체로 넓히지 «않는다» — 그것이
+            # 루프 최상위의 맨 continue 를 guarded 로 읽는 fail-open 이다.
+            scope = branch if branch is not None else [n]
+            out.append({
+                "file": path,
+                "line": n.lineno,
+                "kind": type(n).__name__.lower(),
+                "func": _func_of(tree, n),
+                "guarded": any(_disposition_calls(s) for s in scope),
+            })
+    return out
+```
+
+**census 수치가 바뀐다.** Task 1 은 버리는 분기 **21** · 미배선 **15** 를 기록했는데, 그 21에는 `:109` 의 이중 계상 하나가 들어 있다. 교체 후 기대치는 **20 / 14** 다. 다시 돌려 확인하고 **baseline 문서의 P3 절을 갱신한다** — 갱신하지 않으면 M10 이 대조할 기준점이 두 값으로 갈린다.
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 /tmp/adjtopo/run_scan.py
+```
+
+- [ ] **Step 2: 결함 둘에 대한 fixture 를 «먼저» 만든다**
+
+고친 코드가 실제로 그 둘을 막는지 재는 fixture 가 없으면 이 교체는 주장일 뿐이다.
+
+`shared/tests/fixtures/adjudication/wiring_nested_if.py` — 결함 ① 의 회귀:
+
+```python
+def f(items, ledger):
+    out = []
+    for it in items:
+        if it.get("outer"):
+            ledger.accept(it)     # 안쪽 if 의 형제가 아니라 «바깥» 분기에 있다
+            if it.get("inner"):
+                a = 1
+                b = 2
+                c = 3
+                continue          # 안쪽 조건으로 한 번 더 걸렸다 — 잡혀야 한다
+        out.append(it)
+    return out
+```
+
+바깥 분기는 문장 둘(`accept` 호출 + `If`), 안쪽 분기는 문장 넷(`a`·`b`·`c`·`continue`). **길이로 고르면 바깥이 이겨서 guarded=True 가 된다.** 포함 관계로 고르면 안쪽이 뽑혀 `guarded=False` 다.
+
+`shared/tests/fixtures/adjudication/wiring_nested_loop.py` — 결함 ② 의 회귀:
+
+```python
+def f(groups, ledger):
+    out = []
+    for g in groups:
+        for it in g:
+            if not isinstance(it, dict):
+                continue          # 이 «한» 문장이 한 번만 세어져야 한다
+            out.append(it)
+    return out
+```
+
+- [ ] **Step 3: 판정기에 면제 상수와 도출을 더한다**
 
 `shared/adjudication/check_wiring.py` 상단, `DISCARD_NODES` 다음:
 
@@ -633,7 +762,7 @@ def derive_consumers(repo_root):
 
 **심볼릭 링크를 건너뛰는 이유** — `plugins/*/scripts/adjudication.py` 는 `shared/` 의 링크다. 세면 소비자가 자기 자신이 된다.
 
-- [ ] **Step 2: 판정기의 단위 fixture 셋을 쓴다**
+- [ ] **Step 4: 판정기의 단위 fixture 셋을 쓴다**
 
 이 fixture 들이 M6 에서 「락이 죽었나」와 「판정기가 죽었나」를 가른다.
 
@@ -678,7 +807,7 @@ def f(items, ledger):
 
 **`wiring_farguard.py` 가 이 판정기의 가장 중요한 단언이다** — 설계 F2 의 프로브가 정확히 여기서 fail-open 이었다(분기를 못 찾으면 scope 를 루프 본문 전체로 넓혀 무관한 처분 호출이 이 `continue` 를 guarded 로 만들었다).
 
-- [ ] **Step 3: 락을 쓴다**
+- [ ] **Step 5: 락을 쓴다**
 
 `shared/tests/test_adjudication_wiring.sh`:
 
@@ -708,6 +837,10 @@ PROBE="$(cat "$TMPD/probe.txt")"
 assert_contains "$PROBE" "bad=1"      "무방비 continue 를 잡는다"
 assert_contains "$PROBE" "good=0"     "같은 분기의 처분 호출을 통과시킨다"
 assert_contains "$PROBE" "farguard=1" "다른 분기의 처분 호출로 만족되지 않는다 (fail-open 회귀)"
+assert_contains "$PROBE" "nested_if=1" \
+  "바깥 분기의 처분 호출로 만족되지 않는다 — 안쪽을 «길이»가 아니라 포함 관계로 고른다"
+assert_contains "$PROBE" "nested_loop_rows=1" \
+  "중첩 루프 안의 한 문장을 한 번만 센다 (이중 계상 회귀 — M8 의 면제 크기를 부풀린다)"
 
 note "── 모집단 도출 (㉮) — 두 경로를 따로 기록한다"
 PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_wiring_scan.py" \
@@ -752,7 +885,7 @@ fi
 finish
 ```
 
-- [ ] **Step 4: 락이 부르는 프로브 둘을 쓴다**
+- [ ] **Step 6: 락이 부르는 프로브 둘을 쓴다**
 
 `shared/tests/fixtures/adjudication/run_wiring_probe.py`:
 
@@ -765,9 +898,14 @@ sys.path.insert(0, str(root / "shared" / "adjudication"))
 from check_wiring import scan  # noqa: E402
 
 FX = root / "shared" / "tests" / "fixtures" / "adjudication"
-for name in ("bad", "good", "farguard"):
+for name in ("bad", "good", "farguard", "nested_if"):
     rows = scan([str(FX / ("wiring_%s.py" % name))])
     print("%s=%d" % (name, len([r for r in rows if not r["guarded"]])))
+
+# 이중 계상은 「미배선 수」가 아니라 «행 수»로 잰다 — 두 번 세어도 둘 다
+# 미배선이면 앞의 지표로는 안 보인다.
+print("nested_loop_rows=%d"
+      % len(scan([str(FX / "wiring_nested_loop.py")])))
 ```
 
 `shared/tests/fixtures/adjudication/run_wiring_scan.py`:
@@ -808,7 +946,7 @@ print("exempt_uncited=%d" % len([v for v in EXEMPT.values()
 print("comprehensions=%d" % comprehension_count(abs_paths))
 ```
 
-- [ ] **Step 5: RED 를 확인한다 — 그리고 «어떤» RED 인지 확인한다**
+- [ ] **Step 7: RED 를 확인한다 — 그리고 «어떤» RED 인지 확인한다**
 
 ```bash
 chmod +x shared/tests/test_adjudication_wiring.sh
@@ -824,7 +962,7 @@ bash shared/tests/test_adjudication_wiring.sh 2>&1 | tail -40
 
 **fixture 셋이 FAIL 이면 배선이 아니라 판정기가 문제다.** 그때는 여기서 멈추고 판정기를 고친다 — 그것을 가르는 것이 이 fixture 의 존재 이유다.
 
-- [ ] **Step 6: 커밋**
+- [ ] **Step 8: 커밋**
 
 ```bash
 git add shared/tests/test_adjudication_wiring.sh shared/tests/fixtures/adjudication/ shared/adjudication/check_wiring.py
