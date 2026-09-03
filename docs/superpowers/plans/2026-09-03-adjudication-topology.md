@@ -2632,7 +2632,8 @@ git commit -m "feat(quality-gates): synthesize_artifact_findings 의 버리는 �
 - Modify: `plugins/quality-gates/scripts/synthesize_findings.py` (`render` · `main`)
 - Modify: `plugins/quality-gates/scripts/synthesize_artifact_findings.py` (출력 dict)
 - Modify: `plugins/spec-distill/scripts/merge_review.py` · `merge_brief_review.py` (stdout 키)
-- Modify: `plugins/spec-distill/skills/reviewing-spec/SKILL.md:116` (키 열거 — L2 가 카운트를 실으면 깨진다)
+- Modify: `plugins/spec-distill/skills/reviewing-spec/SKILL.md:116`
+- Modify: `plugins/quality-gates/tests/codex-blessed-red.txt` (Task 8 이 등재한 줄을 지운다 — Step 7) (키 열거 — L2 가 카운트를 실으면 깨진다)
 - Test: `plugins/quality-gates/tests/test_synthesize_disposition.sh` (Task 8 이 만든 것 — 여기서 GREEN 이 된다)
 
 **Interfaces:**
@@ -2851,6 +2852,21 @@ bash plugins/quality-gates/tests/test_synthesize_disposition.sh 2>&1 | tail -12
 기대: 둘 다 `Fail: 0`.
 
 **L2 가 여전히 RED 면 어느 키가 남았는지 목록에 나온다** — `UNCONSUMED <파일>: <키들>`.
+
+**그리고 같은 커밋에서 `plugins/quality-gates/tests/codex-blessed-red.txt` 의
+`test_synthesize_disposition.sh` 줄을 «지운다»** (사유 주석까지 함께). 그 파일은
+「검토를 마친 red」 원장이고, `test_codex_backward_compat.sh` 가 그것을 **양방향**
+으로 읽는다 — 미등재 RED 도 잡고, **등재됐는데 GREEN 이 된 항목도 잡는다**. Task 8
+이 그 테스트를 설계상 RED 로 넣으면서 등재했으므로, 이 Step 이 그것을 GREEN 으로
+만드는 순간 등재가 `stale 등재` 로 바뀐다. 지우지 않으면 이 Task 가 자기 Step 7 을
+통과시키는 바로 그 행위로 다른 락을 깨뜨린다.
+
+```bash
+bash plugins/quality-gates/tests/test_codex_backward_compat.sh 2>&1 | tail -6
+```
+
+기대: `Total: 4, pass: 4, fail: 0` 이고 PASS 줄의 `등재된 red:` 가 **` 없음`** 으로
+돌아온다. 원장은 다시 0건이 되고, 그것이 그 파일 헤더가 적은 도달점이다.
 
 - [ ] **Step 8: bump + CHANGELOG + 커밋**
 
