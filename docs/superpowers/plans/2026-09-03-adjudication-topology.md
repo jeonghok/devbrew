@@ -2276,18 +2276,20 @@ git commit -m "feat(quality-gates): synthesize_findings 의 버리는 자리를 
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다**
 
-`plugins/quality-gates/tests/test_synthesize_artifact_findings.sh` 의 `finish` 앞에 추가:
+`plugins/quality-gates/tests/test_synthesize_artifact_findings.sh` 의 `finish` 앞에 추가.
+
+**그 파일의 관용구를 쓴다 — 새로 정의하지 않는다.** 그 스위트는 `:4` 에서 `S="plugins/quality-gates/scripts/synthesize_artifact_findings.py"`, `:6` 에서 `tmp="$(mktemp -d)"` 를 이미 잡아 두고 `trap` 정리는 두지 않는다. 형제 락들이 쓰는 `SCRIPT`/`TMPD` 대문자 이름은 **이 파일에 없다** — 그 이름으로 쓰면 `set -u` 아래에서 unbound variable 로 죽는다.
 
 ```bash
 note "── 처분 회계 (T1-B)"
-cat > "$TMPD/afind.yaml" <<'YAML'
+cat > "$tmp/afind.yaml" <<'YAML'
 findings:
   - {agent: critic, target_anchor: "#a", severity: CRITICAL, summary: kept, dedup_key: k1}
   - {agent: critic, target_anchor: "#b", severity: IMPORTANT, summary: rejected, dedup_key: k2}
   - {agent: critic, target_anchor: "#c", severity: IMPORTANT, summary: 판정없음, dedup_key: k3}
 sources_failed: 1
 YAML
-cat > "$TMPD/aadv.yaml" <<'YAML'
+cat > "$tmp/aadv.yaml" <<'YAML'
 verdicts:
   - {finding_key: k1, verdict: confirm}
   - {finding_key: k2, verdict: reject}
@@ -2295,8 +2297,8 @@ new_findings:
   - "형태 불량"
   - {agent: adv, target_anchor: "#a", severity: IMPORTANT, summary: dup, dedup_key: k1}
 YAML
-OUT="$(PYTHONDONTWRITEBYTECODE=1 python3 "$SCRIPT" synth \
-        --findings "$TMPD/afind.yaml" --adversarial "$TMPD/aadv.yaml" 2>&1)"
+OUT="$(PYTHONDONTWRITEBYTECODE=1 python3 "$S" --phase synth \
+        --findings "$tmp/afind.yaml" --adversarial "$tmp/aadv.yaml" 2>&1)"
 assert_grep "$OUT" 'rejected: *[1-9]'  "기각이 원장에 실린다"
 assert_grep "$OUT" 'held: *[1-9]'      "판정자 부재가 원장에 실린다"
 assert_grep "$OUT" 'absorbed: *[1-9]'  "kept_keys 중복 흡수가 세어진다"
