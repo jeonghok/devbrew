@@ -3197,6 +3197,108 @@ PR2 본문에 **네 락의 전이**를 적는다:
 
 ## PR3 — 선언 마이그레이션 (L4·L3 을 GREEN 으로)
 
+### Task 12b: 새 락 여섯의 `--emit-scanned` — 커버리지 계약을 지킨다
+
+**Files:**
+- Modify: `shared/tests/test_adjudication_wiring.sh` · `test_adjudication_consumed.sh` · `test_agent_input_slots.sh` · `test_runner_disposition.sh` · `test_dispatch_name_defined.sh`
+- Modify: `plugins/quality-gates/tests/test_synthesize_disposition.sh`
+- Modify: `plugins/quality-gates/tests/codex-blessed-red.txt` (필요하면 — 아래 Step 5)
+
+**Interfaces:**
+- Consumes: `test_guards_coverage_bidirectional.sh` 의 계약 — `# guards:` 선언을 가진 테스트는 `--emit-scanned` 로 «실제로 읽은 경로»를 내고, 그 집합과 선언 글롭이 **서로를 덮어야** 한다.
+- Produces: 없음 (이 Task 는 기존 계약을 충족시킬 뿐 새 표면을 만들지 않는다)
+
+**왜 이 Task 가 있는가.** Task 10 이 L2 를 GREEN 으로 만든 순간
+`test_guards_coverage_bidirectional.sh` 가 RED 로 드러났다. 그 락은 대상을 열거하지
+않고 **도출**한다 — 첫 30줄에 `# guards:` 가 있는 모든 `tests/*.sh` 가 자동으로
+대상이다. 이 브랜치가 만든 여섯 파일이 전부 그 선언을 갖고 있으면서
+`--emit-scanned` 를 구현하지 않았다.
+
+**지금 보이는 것은 둘뿐이고, 그것이 함정이다.** 나머지 넷은 «자기가 아직 RED 라서»
+가려져 있다 — 락이 실패하면 그 출력이 스캔 경로로 파싱되지 않는다. Task 13·14 가
+L3·L4 를 GREEN 으로 만들면 같은 놀람이 두 번 더 온다. 그래서 **보이는 둘만 고치지
+않고 여섯 전부**를 한 단위로 다룬다.
+
+- [ ] **Step 1: 오늘의 실패를 먼저 기록한다 (양성 대조의 «전»)**
+
+```bash
+bash plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh 2>&1 | grep '✗'
+bash plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh 2>&1 | tail -2
+```
+
+실패 «줄 전부»와 총계를 보고서에 적는다. rc 만 적지 마라 — 이미 RED 인 파일 안의
+새 실패는 rc 로 안 보인다.
+
+- [ ] **Step 2: 계약의 정본을 읽는다**
+
+```bash
+sed -n '1,25p' plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh
+grep -n -B3 -A8 -- '--emit-scanned' shared/tests/test_skill_reference_pointers.sh
+```
+
+`test_skill_reference_pointers.sh` 가 **모범 사례**다 — 코퍼스를 변수로 한 번
+계산하고, `if [ "${1:-}" = "--emit-scanned" ]; then printf '%s\n' "$CORPUS"; exit 0; fi`
+로 그것을 그대로 낸 뒤, **같은 변수**로 본 검사를 돈다. 코퍼스를 두 번 계산하면
+낸 것과 읽은 것이 갈라져 이 락이 재는 바로 그 성질이 무너진다.
+
+- [ ] **Step 3: 여섯 파일 각각에 `--emit-scanned` 를 붙인다**
+
+파일마다 「실제로 읽는 경로 집합」이 다르다. **선언에서 도출하지 마라** — 그러면
+선언의 자기 반복이고, 그 락의 헤더가 그것을 명시적으로 금지한다. 각 락이 이미
+코퍼스를 계산하는 자리를 찾아 그 값을 내라.
+
+판정기가 파이썬인 락(`test_adjudication_wiring.sh` 등)은 코퍼스가 파이썬 쪽에서
+도출된다 — 그 도출을 셸로 다시 구현하지 말고, 판정기에 경로 목록만 내는 모드를
+두거나 이미 있는 러너를 쓴다. **다시 구현하면 두 도출이 갈라진다.**
+
+- [ ] **Step 4: `# guards:` 선언을 실측에 맞춘다**
+
+양방향이므로 두 방향 다 고칠 수 있다:
+- **선언 밖 경로가 있다**(선언이 좁다) → 선언 글롭을 넓힌다.
+- **아무것도 안 덮는 글롭이 있다**(선언이 넓다) → 그 글롭을 지운다.
+
+**선언을 `plugins/** shared/**` 처럼 뭉뚱그려 넓히지 마라** — 그러면 이 락의 다른
+방향(선언 ⊃ 실제)이 무의미해진다. 실제로 읽는 것과 같은 모양으로 적는다.
+
+- [ ] **Step 5: 두 락이 함께 GREEN 인지 확인한다**
+
+```bash
+bash plugins/quality-gates/tests/test_guards_coverage_bidirectional.sh 2>&1 | tail -2
+bash plugins/quality-gates/tests/test_codex_backward_compat.sh 2>&1 | tail -4
+```
+
+기대: 앞은 `Fail: 0`, 뒤는 `Total: 4, pass: 4, fail: 0` 이고 PASS 줄의 `등재된 red:`
+가 ` 없음`.
+
+**여섯 락 자신이 여전히 제 일을 하는지도 확인한다** — `--emit-scanned` 를 붙이면서
+본 검사 경로를 건드렸을 수 있다:
+
+```bash
+for t in shared/tests/test_adjudication_wiring.sh \
+         shared/tests/test_adjudication_consumed.sh \
+         shared/tests/test_agent_input_slots.sh \
+         shared/tests/test_runner_disposition.sh \
+         shared/tests/test_dispatch_name_defined.sh \
+         plugins/quality-gates/tests/test_synthesize_disposition.sh; do
+  printf '%-56s ' "$t"; bash "$t" >/dev/null 2>&1; echo "rc=$?"
+done
+```
+
+기대: 이 Task **직전과 같은 rc 표**. 하나라도 바뀌면 `--emit-scanned` 추가가 본
+검사를 건드린 것이다 — 그것을 보고한다.
+
+- [ ] **Step 6: bump + CHANGELOG + 커밋**
+
+`shared/tests/` 다섯을 건드리므로 **두 플러그인 다** bump 한다(그 락들이 두
+플러그인의 파일을 검사한다). `quality-gates` 와 `spec-distill` 각각 patch 를 올리고
+같은 커밋에 CHANGELOG 항목.
+
+```bash
+git commit -m "test(adjudication): 새 락 여섯에 --emit-scanned — 커버리지 계약 충족"
+```
+
+---
+
 ### Task 13: L4 — codex 러너 여섯에 처분 선언
 
 **요구** — ㉯ 의 여섯 러너가 `consumer=` · `fail-open|fail-closed` · `disclosure=` 를 밝힌다.
