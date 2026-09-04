@@ -590,6 +590,7 @@ def main() -> int:
         cursor = next_cursor
     # --- 구조 검증 (A10 — TTL 가드보다 먼저) ---
     failures: list[str] = []
+    failed_keys: list[str] = []   # 회계 대상 — «문서» 단위, 메시지 줄 단위가 아니다
     reached_cap: list[str] = []
     # frontmatter 는 **원장 함수를 태우기 전에** 깐다. `record_validation` 은 빈 body 를
     # 받으면 블록 하나만 있는 body 를 내놓는데, 그건 이미 비어 있지 않아 나중에
@@ -601,6 +602,7 @@ def main() -> int:
             if not reasons:
                 continue
             failures.append(f"- {key}: " + "; ".join(reasons))
+            failed_keys.append(key)
             n = ledger.next_validation(body_after, key)
             body_after = ledger.record_validation(body_after, key, n)
             if n >= val_cap:
@@ -631,8 +633,16 @@ def main() -> int:
             )
             return flush_advisory(capped_advisory)
         L = Ledger(items="closed")   # 다음 소비자가 기계(다음 턴의 dispatch)다
-        for line in lines:
-            L.hold(line[:60], "항목 파손: 스코프 문서 구조 검증 실패")
+        # Task 11 수정 라운드 3 — `lines`(안내 헤더 + 실패 문서 + 상한 안내)가
+        # 아니라 `failed_keys`(실패한 «문서» 자체)를 돈다. `lines` 를 돌던 최초
+        # 판은 자기 안내 헤더 줄까지 보류 항목으로 셌다 — 문서가 하나만 실패해도
+        # 미판정이 2로 나오는 값이 틀린 공시였다(오케스트레이터 실측 적발).
+        # `reached_cap` 은 따로 hold() 하지 않는다 — 그 문서들은 이미 위에서
+        # `failed_keys` 에 들어 있으므로 또 세면 이중 계수다. 상한 도달이 구조
+        # 검증 실패와 다른 사건이라 별도 칸(예: `suppressed()`)이 필요한지는
+        # 열린 질문으로 남긴다(보고서 참조) — 여기서 새 처분을 발명하지 않는다.
+        for key in failed_keys:
+            L.hold(key, "항목 파손: 스코프 문서 구조 검증 실패")
         return _block_with_ledger({
             "decision": "block",
             "reason": "\n".join(lines),

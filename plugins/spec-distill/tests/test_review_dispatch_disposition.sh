@@ -95,4 +95,45 @@ else
   no "배치 위반 — MANDATORY(${MANDATORY_POS:-?}) 가 처분 줄(${DISP_POS:-?}) 보다 앞이 아니다"
 fi
 
+# ── 실행 절 2 — T5-1(구조 검증 실패) : 실패 문서 «수» == 원장이 센 항목 수 ──
+# Task 11 수정 라운드 3 — 오케스트레이터가 실측 적발: 최초 판은
+# `for line in lines: L.hold(line[:60], ...)` 로 «메시지 줄»(안내 헤더 +
+# 실패 문서 + 상한 안내)을 돌아, 실패 문서가 N개여도 hold() 가 N+1(헤더
+# 포함) 또는 N+2(헤더+상한 안내 포함)회 불렸다. 실패 문서가 하나면 이
+# off-by-one 이 안 보이므로(1개 vs 2개 구별이 안 됨) 여기서는 반드시
+# **둘 이상** 실패시킨다.
+#
+# 채널 note: 이 항목들은 hold() 사유가 "항목 파손:" 접두라
+# disposition_lines() 의 **배관 손실**(line2) 칸에 실린다 — "미판정"
+# (line1) 이 아니다. "미판정" 은 "판정자 부재" 접두 전용 칸이라 T5-2(위
+# 실행 절 1) 에서만 움직인다. 오케스트레이터의 라운드 3 지시문은 이 칸을
+# "미판정" 으로 불렀으나 실제 필드는 "배관 손실" 이다 — 보고서에 그 사실을
+# 적었다(측정 대상은 동일: hold() 호출 수 == 실패 문서 수).
+WORK2=$(mktemp -d -t revdispdisp2-XXXXXX) || exit 1
+WORK2=$(cd "$WORK2" && pwd -P) || exit 1
+trap 'rm -rf "$WORK" "$WORK2"' EXIT
+( cd "$WORK2" && git init -q && git config user.email t@t.t && git config user.name t \
+  && git commit -q --allow-empty -m seed ) >/dev/null
+RELA2="docs/superpowers/specs/2026-05-17-disp-fail-a-spec.md"
+RELB2="docs/superpowers/specs/2026-05-17-disp-fail-b-spec.md"
+mkdir -p "$WORK2/$(dirname "$RELA2")"
+printf '# A — frontmatter 없음\n\n본문 A.\n' > "$WORK2/$RELA2"
+printf '# B — frontmatter 없음\n\n본문 B.\n' > "$WORK2/$RELB2"
+mkdir -p "$WORK2/.claude/spec-distill/disp-probe-fail-sid"
+cat > "$WORK2/.claude/spec-distill/disp-probe-fail-sid/state.local.md" <<'EOF'
+---
+session_id: disp-probe-fail-sid
+---
+EOF
+OUT2="$(cd "$WORK2" && DEVBREW_SPEC_DISTILL_SESSION_ID=disp-probe-fail-sid \
+  python3 "$HOOK" </dev/null 2>/dev/null)"
+REASON2="$(printf '%s' "$OUT2" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("reason",""))' 2>/dev/null)"
+PLUMBING2="$(printf '%s' "$REASON2" | python3 -c '
+import re, sys
+m = re.search(r"\*\*배관 손실:\*\* (\d+)", sys.stdin.read())
+print(m.group(1) if m else "-1")
+')"
+assert_eq "$PLUMBING2" "2" \
+  "실패 문서 2개 → 배관 손실 정확히 2 (안내 헤더·상한 안내를 항목으로 잘못 세지 않는다)"
+
 finish
