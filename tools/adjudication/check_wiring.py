@@ -399,6 +399,32 @@ def scan(paths):
     return out
 
 
+def stale_exempt(repo_root):
+    """`EXEMPT` 의 (경로, 줄번호) 키가 현재 트리에서 «실제 버리는 분기»를 가리키는지.
+
+    면제는 (경로, 줄번호) 로만 찾으므로, 그 자리 «위»에 코드가 늘면 키가
+    조용히 어긋난다 — Task 11b 가 실증했다: 앞선 두 커밋이
+    `select_dispatch_target()` 위에 코드를 늘려 그 함수 전체가 +13/+14 줄
+    밀렸고, 원래 자리를 가리키던 열 개의 키가 통째로 낡았다.
+
+    두 방향의 위험이 다르다. 낡은 키가 «아무것도» 안 가리키면(파일 삭제·줄
+    범위 밖) 그 자리는 배선 락에서 미배선으로 다시 잡혀 시끄럽게 실패한다
+    (Task 11b 가 그렇게 알아챘다). 밀린 줄이 «다른» 버리는 분기의 줄번호와
+    우연히 겹치면 그 엉뚱한 자리가 검사 없이 조용히 면제된다 — 이 함수는
+    그 조용한 쪽을 소리 나게 만든다.
+
+    `scan()` 을 재사용한다(재도출 아님) — "실제 버리는 분기"의 정의가 배선
+    락 본체와 갈리면 이 검사 자체가 새 진실을 만든다.
+    """
+    repo = Path(repo_root)
+    files = sorted({rel for (rel, _line) in EXEMPT})
+    abs_paths = [str(repo / rel) for rel in files if (repo / rel).is_file()]
+    rows = scan(abs_paths) if abs_paths else []
+    discard_lines = {(str(Path(r["file"]).relative_to(repo)), r["line"])
+                      for r in rows}
+    return [k for k in EXEMPT if k not in discard_lines]
+
+
 def comprehension_count(paths):
     """컴프리헨션 내포 수 — 요구가 아니라 회귀 축이다."""
     total = 0

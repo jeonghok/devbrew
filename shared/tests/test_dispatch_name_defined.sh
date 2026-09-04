@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
-# guards: plugins/*/skills/**/*.md plugins/*/commands/**/*.md plugins/*/agents/*.md
+# guards: plugins/*/skills/**/*.md plugins/*/commands/*.md plugins/*/agents/*.md plugins/*/README.md
+#
+# `commands/*.md` — 단일 `*` 다(`**` 아님). 이 락이 실제로 읽는 명령 파일은
+# 전부 flat(`commands/<name>.md`) 인데, `# guards:` 를 소비하는 bash `case`
+# 패턴에서 `**` 는 인접한 리터럴 `/` 를 요구해 flat 경로를 구조적으로 못
+# 맞춘다 — `*` 는 이미 `/` 를 넘으므로(기존 test_skill_reference_pointers.sh
+# 관례) flat·중첩 양쪽을 다 잡는다. 파이썬 쪽 `check_names._REF_GLOBS` 는
+# `**` 그대로 둔다(pathlib 의 `**` 는 zero-or-more 라 flat 도 이미 맞는다) —
+# 어긋나는 쪽은 이 bash 선언뿐이었다.
+# `README.md` — `check_names.references()` 가 넷째 글롭으로 읽는다(kill
+# switch 키 문서화 대응) — 기존 선언에 빠져 있었다.
 #
 # 백틱으로 불린 `<plugin>:<name>` 이 실재 정의를 갖는지 검사한다.
 #
@@ -13,6 +23,15 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
+
+# `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 코퍼스
+# 도출은 run_names.py 안에 산다(판정기가 파이썬) — 같은 러너를 `--emit-scanned`
+# 모드로 부른다.
+if [ "${1:-}" = "--emit-scanned" ]; then
+  PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_names.py" \
+    "$REPO_ROOT" --emit-scanned
+  exit 0
+fi
 
 TMPD="$(mktemp -d -t dispname-XXXXXX)" || exit 1
 trap 'rm -rf "$TMPD"' EXIT

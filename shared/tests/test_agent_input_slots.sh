@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
-# guards: plugins/*/agents/*.md plugins/*/skills/**/*.md
+# guards: plugins/*/agents/*.md plugins/*/skills/**/*.md plugins/*/commands/*.md
+#
+# `commands/*.md` — 단일 `*` 다(`**` 아님). 이 파일들은 전부 flat(`commands/<name>.md`,
+# 하위 디렉터리 없음)이고, `# guards:` 를 소비하는 bash `case` 패턴은 리터럴
+# `/` 를 요구한다 — `commands/**/*.md` 는 flat 경로를 «구조적으로» 못 맞춘다
+# (`**` 가 인접한 `/` 두 개를 강제하지만 candidate 에 그만큼의 `/` 가 없다).
+# 반면 `*` 는 bash case 에서 이미 `/` 를 넘으므로(test_skill_reference_pointers.sh
+# 의 기존 관례와 동일) flat·중첩 양쪽을 다 잡는다. `check_slots.dispatch_pairs()`
+# 자신은 파이썬 `**` 글롭(zero-or-more 디렉터리)이라 flat 을 이미 잘 읽는다 —
+# 어긋나는 쪽은 이 bash 선언뿐이다.
 #
 # agent 가 «선언한» 입력과 dispatch 가 «전달하는» 것이 맞는지, 그리고 선언된
 # 종류가 금지 어휘가 아닌지 검사한다.
@@ -14,6 +23,15 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
+
+# `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 코퍼스
+# 도출은 run_slots.py 안에 산다(판정기가 파이썬) — 같은 러너를 `--emit-scanned`
+# 모드로 부른다.
+if [ "${1:-}" = "--emit-scanned" ]; then
+  PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_slots.py" \
+    "$REPO_ROOT" --emit-scanned
+  exit 0
+fi
 
 TMPD="$(mktemp -d -t slots-XXXXXX)" || exit 1
 trap 'rm -rf "$TMPD"' EXIT

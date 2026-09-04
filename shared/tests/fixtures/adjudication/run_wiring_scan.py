@@ -4,7 +4,8 @@ from pathlib import Path
 root = Path(sys.argv[1])
 sys.path.insert(0, str(root / "tools" / "adjudication"))
 from check_wiring import (  # noqa: E402
-    EXEMPT, TERMINAL_CONSUMERS, comprehension_count, derive_consumers, scan)
+    EXEMPT, TERMINAL_CONSUMERS, comprehension_count, derive_consumers, scan,
+    stale_exempt)
 
 union, by_import, by_anchor = derive_consumers(str(root))
 print("union=%d" % len(union))
@@ -44,3 +45,10 @@ print("terminal_total=%d" % len(TERMINAL_CONSUMERS))
 print("terminal_uncited=%d" % len([v for v in TERMINAL_CONSUMERS.values()
                                    if "C6" not in str(v)]))
 print("comprehensions=%d" % comprehension_count(abs_paths))
+
+# Task 12b Step 4d — 낡은 (경로, 줄번호) 면제 키가 조용히 다른 버리는 분기를
+# 가리는 구멍을 소리 나게 만든다(Task 11b 실증).
+stale = stale_exempt(str(root))
+print("exempt_stale=%d" % len(stale))
+for (rel, line) in stale:
+    print("  STALE_EXEMPT %s:%d" % (rel, line))

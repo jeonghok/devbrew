@@ -39,6 +39,12 @@ EXEMPT_FILES = ("CHANGELOG.md",)
 # 백틱 안, `<plugin>:<name>` 꼴. 양쪽 다 kebab-case 만.
 _REF_RE = re.compile(r'`([a-z][a-z0-9-]*):([a-z][a-z0-9-]*)`')
 
+# `references()` 가 실제로 여는 코퍼스 — README.md 포함 넷. `scanned_paths()`
+# 가 같은 튜플을 재사용한다(재도출 아님) — `--emit-scanned` 가 이 함수와
+# 다른 글롭을 내면 낸 것과 읽은 것이 갈린다.
+_REF_GLOBS = ("plugins/*/skills/**/*.md", "plugins/*/commands/**/*.md",
+              "plugins/*/agents/*.md", "plugins/*/README.md")
+
 
 def _is_killswitch_call(func):
     if isinstance(func, ast.Name):
@@ -125,8 +131,7 @@ def references(repo_root):
     repo = Path(repo_root)
     plugins = _plugins(repo_root)
     out = []
-    for pat in ("plugins/*/skills/**/*.md", "plugins/*/commands/**/*.md",
-                "plugins/*/agents/*.md", "plugins/*/README.md"):
+    for pat in _REF_GLOBS:
         for f in sorted(repo.glob(pat)):
             if not f.is_file() or f.name in EXEMPT_FILES:
                 continue
@@ -136,6 +141,26 @@ def references(repo_root):
                     if m.group(1) in plugins:
                         out.append((rel, i, "%s:%s" % (m.group(1), m.group(2))))
     return out
+
+
+def scanned_paths(repo_root):
+    """`--emit-scanned` 코퍼스 — `references()` 가 실제로 여는 파일 전부
+    (참조가 0건이어도 글롭에 매칭돼 `read_text()` 가 불린 파일은 포함한다).
+    `defined()` 의 agents/*.md 글롭은 `_REF_GLOBS` 안에 이미 있다(동일
+    패턴) — 따로 더하지 않는다.
+
+    `defined(allow_killswitch=True)` 가 여는 `plugins/*/**/*.py` (README 의
+    kill switch 키 도출)는 이 코퍼스에 «넣지 않는다» — 그것은 이 락의 주
+    모집단(백틱 참조 문서)이 아니라 반대편 «정의» 축의 보조 네임스페이스이고,
+    포함하면 이 락의 `# guards:` 가 사실상 plugins 전체 .py 파일로 넓어져
+    `compute-test-scope-candidates.sh` 의 테스트-스코프 선택 정밀도를 죽인다."""
+    repo = Path(repo_root)
+    out = set()
+    for pat in _REF_GLOBS:
+        for f in repo.glob(pat):
+            if f.is_file():
+                out.add(str(f.relative_to(repo)))
+    return sorted(out)
 
 
 def dangling(repo_root):

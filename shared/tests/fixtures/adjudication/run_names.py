@@ -5,6 +5,11 @@ root = Path(sys.argv[1])
 sys.path.insert(0, str(root / "tools" / "adjudication"))
 import check_names  # noqa: E402
 
+if len(sys.argv) > 2 and sys.argv[2] == "--emit-scanned":
+    for p in check_names.scanned_paths(str(root)):
+        print(p)
+    sys.exit(0)
+
 FX = root / "shared" / "tests" / "fixtures" / "adjudication"
 known = check_names.defined(str(root))
 print("defined=%d" % len(known))

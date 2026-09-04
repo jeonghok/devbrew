@@ -25,6 +25,13 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 HOOK="$REPO_ROOT/plugins/spec-distill/hooks/review-dispatch.py"
 
+# `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 코퍼스는
+# 파일 하나(위 HOOK)다 — 도출이 아니라 상수이므로 같은 변수를 그대로 낸다.
+if [ "${1:-}" = "--emit-scanned" ]; then
+  printf '%s\n' "${HOOK#"$REPO_ROOT"/}"
+  exit 0
+fi
+
 BODY="$(cat "$HOOK")"
 
 assert_grep "$BODY" 'from adjudication import Ledger' \

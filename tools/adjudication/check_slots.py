@@ -58,6 +58,13 @@ def agents(repo_root):
     return out
 
 
+# dispatch 자리를 찾는 코퍼스 — skill·command 의 md 전부. 특정 SKILL 하나로
+# 좁히지 않는다(좁히면 다른 파일의 dispatch 가 영원히 안 보인다). `scanned_paths()`
+# 가 같은 튜플을 재사용한다 — `--emit-scanned` 가 이 함수와 다른 글롭을 내면
+# 낸 것과 읽은 것이 갈린다.
+_DISPATCH_GLOBS = ("plugins/*/skills/**/*.md", "plugins/*/commands/**/*.md")
+
+
 def dispatch_pairs(repo_root):
     """dispatch 자리가 실제로 전달하는 (태그, 변수) 쌍.
 
@@ -66,7 +73,7 @@ def dispatch_pairs(repo_root):
     """
     repo = Path(repo_root)
     out = {}
-    for pat in ("plugins/*/skills/**/*.md", "plugins/*/commands/**/*.md"):
+    for pat in _DISPATCH_GLOBS:
         for f in sorted(repo.glob(pat)):
             if not f.is_file():
                 continue
@@ -154,3 +161,19 @@ def check(repo_root):
 
 def uncited_exemptions():
     return [k for k, v in EXEMPT_SLOTS.items() if "C6" not in str(v)]
+
+
+def scanned_paths(repo_root):
+    """`--emit-scanned` 코퍼스 — `agents()` 와 `dispatch_pairs()` 가 실제로
+    도는 파일 전부의 합집합(참조가 0건이어도 글롭에 매칭돼 읽힌 파일은
+    포함한다). 같은 글롭 소스를 재사용한다(재도출 아님)."""
+    repo = Path(repo_root)
+    out = set()
+    for f in repo.glob("plugins/*/agents/*.md"):
+        if f.is_file():
+            out.add(str(f.relative_to(repo)))
+    for pat in _DISPATCH_GLOBS:
+        for f in repo.glob(pat):
+            if f.is_file():
+                out.add(str(f.relative_to(repo)))
+    return sorted(out)

@@ -3,6 +3,12 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.5.2] — 2026-09-04
+
+### Fixed
+- **새 락 여섯(+발견된 일곱째)에 `--emit-scanned` 를 구현 — `test_guards_coverage_bidirectional.sh` 커버리지 계약 충족(adjudication-topology Task 12b).** v6.4.1 Known gaps 가 남긴 `test_synthesize_disposition.sh` 의 미구현을 포함해, 이 브랜치가 만든 `# guards:` 선언 보유 셸 락 전부가 `--emit-scanned` 를 구현하지 않은 채 남아 있었다 — 미구현이면 그 락은 자기 전체 출력(PASS/FAIL 텍스트)을 "스캔된 경로"로 잘못 파싱당해 시끄러운 오탐을 냈다. `plugins/quality-gates/tests/test_synthesize_disposition.sh` 는 이미 상수인 스크립트 경로 하나를 그대로 낸다. **브리프가 지정하지 않은 일곱째** `plugins/spec-distill/tests/test_review_dispatch_disposition.sh`(Task 11 산출물)도 같은 결함 signature 를 가져 함께 고쳤다 — Fail:0 도달에 필수였다(상세: spec-distill 쪽 CHANGELOG).
+- **`shared/tests/test_adjudication_wiring.sh` — `check_wiring.py` 에 `stale_exempt()` 신설, `EXEMPT` 의 (경로, 줄번호) drift 를 소리 나게 만든다(Task 11b 가 실증한 조용한 구멍).** 낡은 키가 아무것도 안 가리키면 배선 락이 이미 시끄럽게 잡지만, 밀린 줄이 «다른» 버리는 분기와 우연히 겹치면 검사 없이 조용히 면제됐다 — `exempt_stale` 축을 추가해 0 을 단언한다. 양성 대조(면제 항목 하나의 줄번호를 import 줄로 바꿔 RED 확인 후 원복)로 이빨을 확인.
+
 ## [6.5.1] — 2026-09-04
 
 ### Fixed

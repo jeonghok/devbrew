@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/*/scripts/*.py plugins/*/hooks/*.py
+# guards: plugins/*/scripts/*.py plugins/*/hooks/*.py shared/adjudication/*.py
 #
 # 원장이 «낸» 카운트를 소비자가 «읽는지» 검사한다.
 #
@@ -23,6 +23,15 @@ set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
+
+# `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 코퍼스
+# 도출은 run_consumed.py 안에 산다(판정기가 파이썬) — 셸에서 다시 구현하지
+# 않고 같은 러너를 `--emit-scanned` 모드로 부른다.
+if [ "${1:-}" = "--emit-scanned" ]; then
+  PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_consumed.py" \
+    "$REPO_ROOT" --emit-scanned
+  exit 0
+fi
 
 TMPD="$(mktemp -d -t adjcons-XXXXXX)" || exit 1
 trap 'rm -rf "$TMPD"' EXIT

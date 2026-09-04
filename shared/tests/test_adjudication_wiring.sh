@@ -16,6 +16,23 @@ REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 TMPD="$(mktemp -d -t adjwire-XXXXXX)" || exit 1
 trap 'rm -rf "$TMPD"' EXIT
 
+# 모집단(㉮) 계산을 먼저 한다 — probe 절보다 앞이다. `--emit-scanned` 가
+# probe(판정기 자기 검증용 fixture, 실제 코퍼스와 무관)까지 돌 필요가 없게
+# 하기 위해서다. `$SCAN` 은 여기서 «한 번» 계산되고, emit 경로와 본 검사
+# 경로가 이 같은 변수를 그대로 재사용한다 — 두 번 계산하면 낸 것과 읽은
+# 것이 갈린다.
+PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_wiring_scan.py" \
+  "$REPO_ROOT" > "$TMPD/scan.txt" 2>&1
+SCAN="$(cat "$TMPD/scan.txt")"
+
+# `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 진단
+# note 를 찍기 «전에» 끊는다 — 안 그러면 그 노이즈 줄까지 "스캔된 경로"로
+# 오인돼 커버리지 판정이 오염된다.
+if [ "${1:-}" = "--emit-scanned" ]; then
+  printf '%s\n' "$SCAN" | sed -n 's/^  CONSUMER //p'
+  exit 0
+fi
+
 note "── 판정기 자체 (fixture) — 락이 죽었나와 판정기가 죽었나를 가른다"
 PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_wiring_probe.py" \
   "$REPO_ROOT" > "$TMPD/probe.txt" 2>&1
@@ -33,9 +50,6 @@ assert_contains "$PROBE" "while_boundary_rows=0" \
   "while 안의 버리는 분기를 바깥 for 의 인구로 잘못 귀속하지 않는다 (while 경계 회귀)"
 
 note "── 모집단 도출 (㉮) — 두 경로를 따로 기록한다"
-PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_wiring_scan.py" \
-  "$REPO_ROOT" > "$TMPD/scan.txt" 2>&1
-SCAN="$(cat "$TMPD/scan.txt")"
 note "$SCAN"
 
 n_union="$(printf '%s\n' "$SCAN"  | sed -n 's/^union=//p')"
@@ -105,6 +119,13 @@ uncited="$(printf '%s\n' "$SCAN" | sed -n 's/^exempt_uncited=//p')"
 exempt_n="$(printf '%s\n' "$SCAN" | sed -n 's/^exempt_total=//p')"
 assert_eq "$uncited" "0" "C6 인용 없는 면제 항목 0 (인용 없는 면제는 그냥 구멍이다)"
 note "      면제 목록 크기: $exempt_n  ← M8 이 이 수의 증가를 본다"
+
+note "── 면제 키의 신선도 — 낡은 (경로, 줄번호) 가 다른 버리는 분기를 조용히 가리는가"
+exempt_stale="$(printf '%s\n' "$SCAN" | sed -n 's/^exempt_stale=//p')"
+assert_eq "$exempt_stale" "0" "모든 면제 키가 현재 트리에서 실제 버리는 분기를 가리킨다 (Task 11b 가 실증한 drift 구멍)"
+printf '%s\n' "$SCAN" | sed -n 's/^  STALE_EXEMPT //p' | while IFS= read -r l; do
+  note "      낡은 면제: $l"
+done
 
 note "── 컴프리헨션 회귀 축 — 요구가 아니라 baseline"
 comp="$(printf '%s\n' "$SCAN" | sed -n 's/^comprehensions=//p')"

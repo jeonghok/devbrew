@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.5] — 2026-09-04
+
+### Fixed
+- **새 락 여섯(+발견된 일곱째)에 `--emit-scanned` 구현 — `test_guards_coverage_bidirectional.sh` 커버리지 계약 충족(adjudication-topology Task 12b, `shared/tests/` 다섯 개가 quality-gates·spec-distill 두 플러그인 파일을 함께 검사해 두 플러그인 다 bump).** `plugins/spec-distill/tests/test_review_dispatch_disposition.sh` — 브리프가 지정한 여섯에는 없었지만(Task 11 산출물, 계획 작성 시점 이후 등장) 같은 결함 signature(`--emit-scanned` 미구현 → 자기 전체 PASS/FAIL 출력이 "스캔된 경로"로 오파싱)를 가져 함께 고쳤다 — 코퍼스가 상수(`review-dispatch.py` 하나)라 그대로 낸다.
+- **`shared/tests/test_adjudication_consumed.sh` — 코퍼스에 `shared/adjudication/*.py` 를 더한다(`check_consumed.py` 의 `_closure()` 가 실제로 여는 파일).** `# guards:` 를 `plugins/*/scripts/*.py plugins/*/hooks/*.py` 에서 `shared/adjudication/*.py` 추가로 넓혔다 — 소비자 5개 전부가 `adjudication.py`·`render_disposition.py` 를 import 해 closure 에 들어오는 것을 실측 확인.
+- **`shared/tests/test_agent_input_slots.sh`·`test_dispatch_name_defined.sh` — `commands/**/*.md` 를 `commands/*.md` 로 교정.** `# guards:` 를 소비하는 bash `case` 패턴에서 `**` 는 인접한 리터럴 `/` 를 요구하는데, 실제 명령 파일은 전부 flat(`commands/<name>.md`, 하위 디렉터리 없음)이라 `**` 버전은 구조적으로 아무것도 못 덮는다(`plugins/quality-gates/scripts/compute-test-scope-candidates.sh` 도 같은 bash case 매칭을 실제 테스트-스코프 선택에 쓴다 — 이 오탈자는 커버리지 락뿐 아니라 그 선택 정밀도의 실사용 버그였다). `test_dispatch_name_defined.sh` 는 `plugins/*/README.md` 도 추가(`check_names.references()` 가 이미 읽고 있었으나 선언에 빠져 있었다).
+
 ## [0.51.4] — 2026-09-04
 
 ### Fixed

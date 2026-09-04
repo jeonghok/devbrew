@@ -6,6 +6,11 @@ root = Path(sys.argv[1])
 sys.path.insert(0, str(root / "tools" / "adjudication"))
 import check_slots  # noqa: E402
 
+if len(sys.argv) > 2 and sys.argv[2] == "--emit-scanned":
+    for p in check_slots.scanned_paths(str(root)):
+        print(p)
+    sys.exit(0)
+
 FX = root / "shared" / "tests" / "fixtures" / "adjudication"
 for name in ("match", "undeclared", "undelivered", "forbidden", "suspectvar"):
     probs = check_slots.check(str(FX / ("slots_%s" % name)))

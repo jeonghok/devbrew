@@ -8,6 +8,14 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 SCRIPT="$REPO_ROOT/plugins/quality-gates/scripts/synthesize_findings.py"
 
+# `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 이 락의
+# 코퍼스는 처음부터 파일 «하나»다(위 SCRIPT) — 도출이 아니라 상수이므로 다시
+# 계산할 것이 없다. 같은 변수를 그대로 낸다.
+if [ "${1:-}" = "--emit-scanned" ]; then
+  printf '%s\n' "${SCRIPT#"$REPO_ROOT"/}"
+  exit 0
+fi
+
 TMPD="$(mktemp -d -t qgdisp-XXXXXX)" || exit 1
 trap 'rm -rf "$TMPD"' EXIT
 

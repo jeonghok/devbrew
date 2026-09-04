@@ -26,6 +26,19 @@ trap 'rm -rf "$TMPD"' EXIT
 PYTHONDONTWRITEBYTECODE=1 python3 "$EXTRACT" "$REPO_ROOT/plugins" > "$TMPD/all.txt" 2>&1
 grep '/scripts/' "$TMPD/all.txt" > "$TMPD/runners.txt" || true
 
+# `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 코퍼스는
+# 위에서 이미 만든 runners.txt(도출기 + /scripts/ 후처리, ㉯) 다 — 다시
+# 도출하지 않고 같은 파일을 그대로 낸다. 절대경로 → repo-relative 변환만
+# 한다(선언 글롭이 repo-relative 라 매칭시키려면 필요) — 이것은 재도출이
+# 아니라 서식 변환이다.
+if [ "${1:-}" = "--emit-scanned" ]; then
+  while IFS= read -r abs; do
+    [ -n "$abs" ] || continue
+    printf '%s\n' "${abs#"$REPO_ROOT"/}"
+  done < "$TMPD/runners.txt"
+  exit 0
+fi
+
 n_all="$(wc -l < "$TMPD/all.txt" | tr -d ' ')"
 n_run="$(wc -l < "$TMPD/runners.txt" | tr -d ' ')"
 note "도출기 출력 $n_all → /scripts/ 후처리 후 $n_run"
