@@ -3,6 +3,22 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.6.2] — 2026-09-04
+
+### Fixed
+- **Task 14 수정 라운드 2 — `test_critiquing_artifacts_skill.sh:154-155`(F-G
+  TOCTOU/symlink-escape 방어 락)가 v6.6.0 의 dispatch 재태깅으로 어두워져 있었다
+  (Critical, 코디네이터 리뷰가 잡고 독립 재현).** critic·adversarial dispatch 의
+  `artifact_path: <canonical>` 을 `<artifact_path>${CANONICAL_PATH}</artifact_path>`
+  로 바꾼 것(v6.6.0, L3 슬롯 태깅)이 이 락의 정확-리터럴 grep 을 0건으로 만들어
+  FAIL 이었다. 보안 성질(E2c 가 얼린 canonical 이 여전히 dispatch 에 실리는가)은
+  변하지 않았음을 SKILL.md 프로즈(E2c 절)와 var 이름(CANONICAL_PATH) 둘 다로
+  확인 — 락의 패턴만 새 표기의 **정확 전체 문자열**로 갱신했다(개수 하한 그대로
+  `-ge 2`). 느슨화가 아니라는 것은 raw-`<path>` 되돌리기 양성 대조로 확인
+  (카운트 락 + drift 락 둘 다 RED, 원복 후 클린). 이 결함은 브리프가 지정한 락
+  목록에도, 이전 라운드의 검증 패스에도 없었다 — `test_codex_backward_compat.sh`
+  가 돌리는 qg 전량 스위트(117개)로만 잡혔다.
+
 ## [6.6.1] — 2026-09-04
 
 ### Fixed
