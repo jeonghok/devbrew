@@ -3,6 +3,32 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.5.5] — 2026-09-04
+
+### Fixed
+- **`shared/tests/test_runner_disposition.sh`(codex 러너 처분 락)의 세 `assert_grep`
+  이 `consumer=`·`fail-`·`disclosure=` **문자열의 존재**만 쟀지 값의 **참·거짓**은
+  재지 않았다 — Task 13 수정 라운드 1에서 `run_audit_codex_reviewer.sh`의
+  `consumer=orchestrator`가 거짓(실제 소비자는 같은 플러그인의 `.py`)이었는데도
+  이 락은 GREEN이었다(adjudication-topology Task 13 수정 라운드 2). `shared/tests/`에
+  있어 플러그인 자체는 아니지만 이 락의 코퍼스(`guards: plugins/*/scripts/*codex*.sh`)에
+  이 플러그인 몫 러너 둘(`run_codex_reviewer.sh`·`run_artifact_codex_reviewer.sh`)이
+  있어 bump(plugin-audit·spec-distill도 각자 몫 러너 때문에 동시 bump).
+  `consumer=` 값이 경로 모양(`/` 포함 또는 `.py`/`.js` 로 끝남)이면 ⑴ `git ls-files`
+  스냅샷 정확일치로 **추적된 파일인지**(단순 `[ -f ]`는 미추적 잔여 파일도 통과시킨다)
+  ⑵ 경로의 `plugins/<name>` 세그먼트가 **앵커가 사는 플러그인과 같은지**(설치본에서
+  다른 플러그인의 스크립트는 도달 불가라는 CLAUDE.md 규칙의 근거)를 잰다. 값이
+  `orchestrator`/`human`(그 밖의 비-경로 값 포함)이면 참·거짓을 구조적으로 못 재므로
+  `unverifiable_consumer=N`으로 개수를 낸다(조용히 건너뛰지 않는다 — 셀 수 없으면
+  셀 수 없음을 낸다는 이 리포의 규약). 형제 `test_dispatch_disposition.sh`의 축
+  A④/A⑤가 같은 규칙을 이미 인라인 python으로 구현하지만, 이 락은 순수 bash 라
+  로직을 그대로 복사하지 않고 **같은 판정을 이 락의 언어로 독립 구현**했다 — 두
+  구현이 코드를 공유하지 않는 이유(단일 인라인 스크립트 vs 순수 bash, 언어 전환
+  없이는 나눌 자리가 없음)를 락 헤더 주석에 남겼다.
+  양성 대조 넷(⒜ 부재 경로 ⒝ 다른 플러그인 경로 ⒞ 추적 안 된 파일 ⒟
+  `unverifiable_consumer` 증가)으로 이빨을 확인 — 상세는
+  `.superpowers/sdd/2026-09-03-adjudication-topology/task-13-report.md` §10.
+
 ## [6.5.4] — 2026-09-04
 
 ### Fixed

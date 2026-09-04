@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.51.8] — 2026-09-04
+
+### Fixed
+- **`shared/tests/test_runner_disposition.sh`(codex 러너 처분 락)가 `consumer=` 값의
+  참·거짓을 재지 못했다(adjudication-topology Task 13 수정 라운드 2).** 상세는
+  quality-gates 쪽 `CHANGELOG.md` v6.5.5 참조 — `shared/tests/` 공유 파일이라 이
+  락의 코퍼스(`guards: plugins/*/scripts/*codex*.sh`)에 러너가 있는 세 플러그인
+  (plugin-audit·quality-gates·spec-distill, 이 플러그인 몫은
+  `run_brief_codex_reviewer.sh`·`run_seed_codex_reviewer.sh`·
+  `run_spec_codex_reviewer.sh` 셋) 모두 함께 bump. 요약: `consumer=`가 경로 모양이면
+  `git ls-files` 정확일치로 추적 여부 + `plugins/<name>` 세그먼트로 동일-플러그인
+  여부를 검사하고, `orchestrator`/`human`은 `unverifiable_consumer=N`으로 개수만
+  낸다.
+
 ## [0.51.7] — 2026-09-04
 
 ### Fixed

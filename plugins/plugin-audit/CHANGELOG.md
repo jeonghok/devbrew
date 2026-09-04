@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.3] — 2026-09-04
+
+### Fixed
+- **`shared/tests/test_runner_disposition.sh`(codex 러너 처분 락)가 `consumer=`
+  값의 참·거짓을 재지 못했다 — Task 13 수정 라운드 1이 이 플러그인 몫 러너에서
+  실제로 그 구멍에 빠졌던 자리(adjudication-topology Task 13 수정 라운드 2).**
+  `shared/tests/`에 있어 플러그인 자체는 아니지만 이 락의 코퍼스(`guards:
+  plugins/*/scripts/*codex*.sh`)에 이 플러그인의 `run_audit_codex_reviewer.sh`가
+  있어 함께 bump — 상세는 `shared/tests/test_runner_disposition.sh` 수정 내용
+  참조(quality-gates·spec-distill CHANGELOG에도 같은 설명이 반복 기록됨, 셋 다
+  이 락의 코퍼스에 러너가 있다).
+
 ## [0.7.2] — 2026-09-04
 
 ### Fixed
