@@ -1,31 +1,46 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/skills/*/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md plugins/quality-gates/.claude-plugin/plugin.json plugins/quality-gates/agents/security-reviewer.md plugins/quality-gates/agents/adversarial.md
+# guards: plugins/quality-gates/skills/*/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md plugins/quality-gates/.claude-plugin/plugin.json plugins/quality-gates/agents/security-reviewer.md plugins/quality-gates/agents/adversarial.md plugins/quality-gates/tests/lib/reconstruct-skill.sh
 # test_skill_orchestration_behavior.sh — protocol-shape test for SKILL.md.
 #
 # 위 `# guards:` 는 이 파일이 실제로 여는 것에서 도출했다(R2, adjudication-topology
 # Task 15c) — quality-pipeline/SKILL.md 는 `plugins/quality-gates/skills/*/SKILL.md`
 # 로 잡히고(case 에서 `*` 는 `/` 를 넘으므로 다른 skill 의 SKILL.md 도 함께 잡힌다 —
-# :254-287 의 major-버전 대조가 그 전량을 읽는다), references/runtime-gate.md 는
+# :274-307 의 major-버전 대조가 그 전량을 읽는다), references/runtime-gate.md 는
 # reconstruct-skill.sh 가 SKILL.md 포인터 자리에 되접어 넣는 그 파일(스플라이스
 # 지점은 reconstruct-skill.sh:41 — :27 은 그 파일의 usage 주석일 뿐이다), plugin.json
-# 은 :254 의 major 판독 대상, security-reviewer.md·adversarial.md 는 :441-449 의
-# verifier-writable 페르소나 검사 대상이다. **이 줄번호는 이 커밋(수정 라운드 1)
-# 시점 기준이다** — m1 정정: 라운드 1 이전 판은 자기 헤더가 넣은 +10줄을 반영 안 한
-# 편집-전 번호(:193 등)를 인용했다. 이 주석 블록 자체가 이후 더 늘어나면 같은
+# 은 :274 의 major 판독 대상, security-reviewer.md·adversarial.md 는 :483-491 의
+# verifier-writable 페르소나 검사 대상이다. **이 줄번호는 이 커밋(수정 라운드 2)
+# 시점 기준이다** — m1 정정(라운드 1): 자기 헤더가 넣은 줄을 반영 안 한 편집-전
+# 번호(:193 등)를 인용한 적이 있었다. 이 주석 블록 자체가 이후 더 늘어나면 같은
 # drift 가 반복될 수 있으니, 줄번호를 믿기 전에 `grep -n '^PLUGIN_JSON=\|^AGENTS_DIR='`
 # 로 먼저 재확인할 것.
 #
-# **다섯 밖의 파일은 이 스크립트가 열지 않는 것으로, 아래 다섯 변수(SCRIPT_DIR·
-# SKILL_MD_REAL·PLUGIN_JSON·SKILLS_ROOT·AGENTS_DIR)의 모든 사용처를 직접 정독해
-# 확인했다** — 자동화된 grep 전수 검사가 아니다(수정 라운드 1, I3 정정: 이전 판이
-# "전수 확인"의 근거로 인용한 `grep -n '"\$[A-Za-z_]*\(_DIR\|_MD\|_JSON\|_ROOT\)"'`
-# 는 변수 뒤에 닫는 따옴표가 바로 안 붙는 줄을 구조적으로 놓친다 — 이 파일 자신의
-# `. "$SCRIPT_DIR/../lib/reconstruct-skill.sh"` 줄이 그 예다: `_DIR` 접미사 뒤에
-# `/../lib/reconstruct-skill.sh"` 가 더 있어 그 정규식이 "닫는 따옴표 직전"으로
-# 못 박은 자리에 안 걸린다. `reconstruct-skill.sh` 자신은 이 다섯짜리 목록 밖의
-# 새 코퍼스를 열지 않는 스플라이서-라이브러리라 결론(다섯 밖은 안 읽는다)은 안
-# 바뀌지만, "이 정규식이 그것을 증명한다"는 서술은 거짓이었다 — 정규식을 인용하지
-# 않고 수동 정독 사실만 남긴다).
+# **수정 라운드 2, N3 — `tests/lib/reconstruct-skill.sh` 자신도 여섯 번째 코퍼스로
+# 편입했다.** 이 락의 **모든** 단언이 읽는 문서(`$SKILL_MD`)를 만드는 게 이
+# 라이브러리인데, 지금까지 `# guards:`에도 `--emit-scanned`에도 없었다 —
+# `reconstruct-skill.sh` 만 고쳐도(예: 스플라이스 헤딩 매칭이 깨져도) 이 락이
+# 후보에 안 뽑혔다(`tests/` 하위라 CHANGED_TESTS 로는 들어오지만, 실행하면 함수
+# 정의뿐이라 no-op — R2·R3·F6 과 정확히 같은 부류). **판정: `.` (source) 는 "읽는
+# 것"에 해당한다** — bash 가 그 파일의 바이트를 읽고 해석하는 것은 `cat`/`grep`
+# 으로 여는 것과 다르지 않다. 리디렉션 감사(`grep -n '\. "\$SCRIPT_DIR'`)로
+# `source` 호출이 :88 하나뿐임을 재확인했다(주석 :23 의 같은 문자열 언급은
+# 호출이 아니다). `# guards:`·`--emit-scanned` 양쪽에 여섯 번째로 추가했다.
+# 양성 대조: `compute-test-scope-candidates.sh` 에 이 파일을 건드리는 실제 diff
+# 를 먹이면 이 락이 후보에 뜬다(수정 전엔 안 떴다), `test_guards_coverage_
+# bidirectional.sh` 는 이 락 몫이 6/6·전체 105/105 GREEN.
+#
+# **여섯 밖의 파일은 이 스크립트가 열지 않는 것으로, 아래 다섯 변수(SCRIPT_DIR·
+# SKILL_MD_REAL·PLUGIN_JSON·SKILLS_ROOT·AGENTS_DIR) + reconstruct-skill.sh 의
+# `source` 한 자리의 모든 사용처를 직접 정독해 확인했다** — 자동화된 grep 전수
+# 검사가 아니다(수정 라운드 1, I3 정정: 이전 판이 "전수 확인"의 근거로 인용한
+# `grep -n '"\$[A-Za-z_]*\(_DIR\|_MD\|_JSON\|_ROOT\)"'` 는 변수 뒤에 닫는 따옴표가
+# 바로 안 붙는 줄을 구조적으로 놓친다 — 이 파일 자신의 `. "$SCRIPT_DIR/../lib/
+# reconstruct-skill.sh"` 줄이 그 예다: `_DIR` 접미사 뒤에 `/../lib/reconstruct-
+# skill.sh"` 가 더 있어 그 정규식이 "닫는 따옴표 직전"으로 못 박은 자리에 안
+# 걸린다. `reconstruct-skill.sh` 자신은(N3 로 이제 그 여섯 안에 스스로 포함되고)
+# 그 여섯 밖의 새 코퍼스를 열지 않는 스플라이서-라이브러리라 결론(여섯 밖은 안
+# 읽는다)은 안 바뀌지만, "이 정규식이 그것을 증명한다"는 서술은 거짓이었다 —
+# 정규식을 인용하지 않고 수동 정독 사실만 남긴다).
 #
 # `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다(수정 라운드 1,
 # C1). **원래 이 값을 가로채지 않았다** — `--emit-scanned` 로 부르면 스위트 전체가
@@ -35,17 +50,21 @@
 # 의 `|| [ -z "$scanned" ]` 가 "미지원"으로 읽었기 때문이다 — 그 rc≠0 은 이 브랜치
 # 소유가 아니라서, 그것이 언젠가 고쳐져 rc=0 이 되면 `scanned` 에 123줄의 단언
 # 텍스트가 담겨 방향 A(선언 밖 123건)·방향 B(5/5 글롭이 아무것도 안 덮음)가 +6
-# 거짓 FAIL 을 낸다(리뷰어가 rc 만 0 으로 둔 사본 트리에서 직접 재현). **선택:
-# 실제로 읽는 다섯 경로를 낸다** — `test_guards_coverage_bidirectional.sh:23` 의
-# `[ "${1:-}" = "--emit-scanned" ] && exit 0`(빈 응답)는 이 자리의 선례가 «아니다».
-# 그 파일은 "guards 선언을 가진 파일 전부를 스캔하는 락"이라 자기 자신을 그 스캔
-# 대상에 넣으면 자기재귀로 멈추고(빈 응답이 사실과 일치 — 그 검사기 자신은 아무
-# 경로도 스캔하지 않는다), 이 파일은 자기 자신을 스캔하는 게 «아니라» SKILL.md
-# 5종 + plugin.json + 페르소나 둘을 읽을 뿐이다 — 빈 응답을 내면 그 사실이 사라져
-# 방향 A/B 가 이 락을 영원히 "미지원"으로만 본다. 아래에서 그 다섯(SKILLS_ROOT 의
-# 동적 find 로 나오는 SKILL.md 전량 + 나머지 넷)을 낸다 — 본 실행이 읽는 것과
-# 같은 명령(`find "$SKILLS_ROOT" -maxdepth 2 -name 'SKILL.md'`)을 재사용해
-# 드리프트 여지를 없앴다.
+# 거짓 FAIL 을 낸다 — **재리뷰가 88b0b0c 판에 이 반사실을 직접 적용해 재현**:
+# emit 123줄·커버리지 락 방향 A 1 FAIL + 방향 B 5 FAIL, 총 Fail 6. **선택: 실제로
+# 읽는 경로를 낸다** — `test_guards_coverage_bidirectional.sh:23` 의 `[ "${1:-}"
+# = "--emit-scanned" ] && exit 0`(빈 응답)는 이 자리의 선례가 «아니다». 그 파일은
+# "guards 선언을 가진 파일 전부를 스캔하는 락"이라 자기 자신을 그 스캔 대상에
+# 넣으면 자기재귀로 멈추고(빈 응답이 사실과 일치 — 그 검사기 자신은 아무 경로도
+# 스캔하지 않는다), 이 파일은 자기 자신을 스캔하는 게 «아니라» SKILL.md 5종 +
+# plugin.json + 페르소나 둘 + reconstruct-skill.sh(N3) 를 읽을 뿐이다 — 빈 응답을
+# 내면 그 사실이 사라져 방향 A/B 가 이 락을 영원히 "미지원"으로만 본다. 아래에서
+# 그 여섯(SKILLS_ROOT 의 동적 find 로 나오는 SKILL.md 전량 + 나머지 넷)을 낸다 —
+# 본 실행이 읽는 것과 같은 명령(`find "$SKILLS_ROOT" -maxdepth 2 -name
+# 'SKILL.md'`)을 재사용해 드리프트 여지를 없앴다. **PATH shim 계측으로도 확증**
+# (재리뷰) — `runtime-gate.md` 는 awk `getline` 내부 읽기라 이 emit 목록에 인자로는
+# 안 나타나지만 실제로 읽히므로, 위 6경로는 과대 신고가 아니라 실제로 읽는 것과
+# 정확히 일치한다.
 if [ "${1:-}" = "--emit-scanned" ]; then
   _SOB_SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
   _SOB_QG_ROOT="$(cd -- "$_SOB_SCRIPT_DIR/../.." && pwd)"
@@ -55,7 +74,8 @@ if [ "${1:-}" = "--emit-scanned" ]; then
     "$_SOB_REL/skills/quality-pipeline/references/runtime-gate.md" \
     "$_SOB_REL/.claude-plugin/plugin.json" \
     "$_SOB_REL/agents/security-reviewer.md" \
-    "$_SOB_REL/agents/adversarial.md"
+    "$_SOB_REL/agents/adversarial.md" \
+    "$_SOB_REL/tests/lib/reconstruct-skill.sh"
   find "$_SOB_QG_ROOT/skills" -maxdepth 2 -name 'SKILL.md' | sort | while IFS= read -r _sob_f; do
     printf '%s\n' "${_sob_f#"$_SOB_REPO_ROOT"/}"
   done
@@ -330,32 +350,54 @@ assert_line "fallback caps at SKIP_WITH_EVIDENCE"    "$(first_line 'SKIP_WITH_EV
 # I-B: the R3 dispatch project_dir must NOT hardcode sandbox_dir (use runtime_project_dir).
 # v6.6.0 (L3 slot tagging) retagged the dispatch prompt from `project_dir: "$runtime_project_dir"`
 # to the `<tag>${VAR}</tag>` slot idiom — `project_dir: <project_dir>${RUNTIME_PROJECT_DIR}</project_dir>`.
-# The property this guards (key `project_dir:` bound, on the same literal, to the
-# runtime_project_dir value — never a hardcoded sandbox_dir) is unchanged; only the
-# notation is. Match the new notation's exact full literal (fixed-string), same
-# specificity as before: key name + value bound together, not "value appears somewhere".
 #
-# 수정 라운드 1, I1 정정 — 위 두 문장("never a hardcoded sandbox_dir", "v6.6.2 와
-# 같은 수리 형태")은 그 아래 PASS-only grep 하나만으로는 거짓이었다: 그 grep 은
-# **재구성 문서 전체에 대한 ∃-검사**라, 실제 dispatch 를 `${SANDBOX_DIR}` 로
-# 하드코딩하고 문서 아무 곳에나 올바른 리터럴을 담은 산문 한 줄만 추가해도
-# PASS 였다(리뷰어 변이로 확증). v6.6.2 선례(test_critiquing_artifacts_skill.sh:
-# 161-166)는 양의 개수 확인에 **음의 짝**(옛/틀린 리터럴의 부재)을 붙여 이 구멍을
-# 닫는데, 이 자리엔 그 짝이 없었다 — "같은 수리 형태"라는 문장 자체가 거짓이었다.
-# 아래 음의 짝을 붙여 그 문장들을 참으로 만든다(⒜, 코디네이터 권고 선택 — 오탐
-# 검토: `${SANDBOX_DIR}` 리터럴은 이 리포 어디에도 정당한 용도로 등장하지 않는다
-# (runtime-gate.md 밖의 다른 SKILL 도 이 슬롯 이름을 안 씀) 이므로 새 오탐 없음).
+# 수정 라운드 1, I1 최초 정정 — 아래 grep 하나만으로는 "never a hardcoded sandbox_dir"
+# 가 거짓이었다: **재구성 문서 전체에 대한 ∃-검사**라, 실제 dispatch 를 `${SANDBOX_DIR}`
+# 로 하드코딩하고 문서 아무 곳에나 올바른 리터럴을 담은 산문 한 줄만 추가해도 PASS
+# 였다(리뷰어 변이로 확증). 아래 음의 짝(정확히 그 `${SANDBOX_DIR}` 리터럴의 부재)을
+# 추가했다.
 #
-# m2 (기록, 미수정 — 코디네이터 판정 대기) — `grep -qF` 는 이 리터럴 전체를
-# **바이트 그대로** 요구한다. `project_dir:` 뒤 공백이 하나에서 둘로만 바뀌어도
-# (또는 개행이 섞여도) 이 두 grep 모두 매치를 잃어 **거짓 RED**(성질은 안 깨졌는데
-# FAIL)가 난다 — 옛 ERE(`[[:space:]]*"\$runtime_project_dir`)는 공백 개수를
-# 허용했었다. v6.6.2 선례(test_critiquing_artifacts_skill.sh:161-166)도 같은
-# `grep -cF`/`grep -qF` 전체-리터럴 모양이라 이 취약성은 이 리포가 이미 수용한
-# trade-off 와 같은 종류다 — 그래서 지금 고치지 않는다. 고친다면
-# `grep -qE 'project_dir:[[:space:]]+<project_dir>\$\{RUNTIME_PROJECT_DIR\}</project_dir>'`
+# 수정 라운드 2, N1 정정 — 라운드 1은 그 음의 짝이 "never a hardcoded sandbox_dir"
+# 문장을 **참으로 만든다**고 적었다. 그것도 거짓이었다 — 재리뷰 실측: (a) decoy +
+# `project_dir:` 뒤 공백 두 개 + `${SANDBOX_DIR}`, (b) decoy + 전혀 다른 변수명
+# `${QG_SANDBOX}` 하드코딩, 둘 다 이 grep 쌍을 우회한다(신규 FAIL 0). 이 음의 짝이
+# 실제로 보장하는 것은 **"정확히 그 `${SANDBOX_DIR}` 슬롯 리터럴(그 공백 폭 그대로)이
+# 없다"**뿐이다 — sandbox_dir 하드코딩 «일반»의 부재가 아니다.
+#
+# **진짜 ∀ 보장은 이 grep 이 아니라 다른 축에 산다.** `tools/adjudication/
+# check_slots.py` 의 `var_mismatch` 축(`shared/tests/test_agent_input_slots.sh`
+# 가 돌린다)이 `runtime-verifier` agent 의 `input_slots` 선언(`agents/runtime-
+# verifier.md`: tag=project_dir, var=RUNTIME_PROJECT_DIR)과 dispatch 의 실제
+# `<tag>${VAR}</tag>` 쌍을 **파싱해서** 대조한다 — 표기(공백 폭·변수명)에 무관하게
+# 선언과 다른 값이면 agent 이름과 file:line 을 대며 RED 를 낸다. 위 두 우회를 그대로
+# `test_agent_input_slots.sh` 에 걸면 둘 다
+# `PROBLEM var_mismatch quality-gates:runtime-verifier @ .../runtime-gate.md:716
+# <project_dir> 선언=RUNTIME_PROJECT_DIR 전달=<SANDBOX_DIR|QG_SANDBOX>` 로 잡힌다
+# (12/12 → 11/12, 재현 확인). **그러니 성질은 지켜지고 있고, 지키는 것이 이 grep 이
+# 아니다** — 아래 grep 쌍은 지우지 않는다(정확한 리터럴 회귀를 싸게 잡는 두 번째
+# 증인으로는 여전히 유효하다), 다만 그 한계를 위에 적었다. **검토하고 버린 대안**:
+# 음의 짝을 "올바른 값 외 모든 슬롯 값 금지"로 일반화하는 것 — `check_slots.py` 의
+# `var_mismatch` 가 이미 정확히 그것을 하므로(위 실측), 불완전한 두 번째 구현을
+# 더하는 것일 뿐이라 하지 않았다.
+#
+# m2 (기록, 미수정 — 코디네이터 판정 유지) — 두 grep 은 리터럴 전체를 **바이트
+# 그대로** 요구한다. `project_dir:` 뒤 공백이 하나에서 둘로만 바뀌어도(또는 개행이
+# 섞여도) **양의 검사**(RUNTIME_PROJECT_DIR 존재 확인)는 매치를 잃어 **거짓
+# RED**(성질은 안 깨졌는데 FAIL, 소리 남)를 낸다 — 옛 ERE(`[[:space:]]*"\$
+# runtime_project_dir`)는 공백 개수를 허용했었다. **수정 라운드 2, N2 정정 — 같은
+# 공백-폭 변화가 음의 짝에는 반대 방향으로 작동한다.** `${SANDBOX_DIR}` 하드코딩이
+# 실재해도 공백 폭이 바뀌면 음의 짝의 `grep -qF` 도 매치를 잃어 **fail-open**(위반이
+# 그대로인데 조용히 PASS, 침묵)한다 — N1 우회 (a)가 바로 이 경로다. 양의 검사는
+# 소리 나는 방향(거짓 RED)으로, 음의 짝은 침묵하는 방향(fail-open)으로 — **반대
+# 방향**으로 깨진다는 것이 이전 판(라운드 1)이 숨긴 절반이다. v6.6.2 선례
+# (test_critiquing_artifacts_skill.sh:161-166)도 같은 `grep -cF`/`grep -qF`
+# 전체-리터럴 모양이라 이 취약성은 이 리포가 이미 수용한 trade-off 와 같은
+# 종류이고, 거짓 RED 축은 소리가 나며, fail-open 축의 실제 안전망은 바로 위
+# `var_mismatch`(표기 무관)라는 것 — 이 둘을 근거로 코드는 고치지 않는다. 고칠
+# 경우의 대안: `grep -qE 'project_dir:[[:space:]]+<project_dir>\$\{RUNTIME_PROJECT_DIR\}</project_dir>'`
 # 식으로 공백 축만 느슨화하되 키·태그·변수·닫는 태그는 여전히 전부 리터럴로
-# 못박아야 한다(약화 금지, R1 규칙과 동일).
+# 못박아야 한다(약화 금지, R1 규칙과 동일) — 양쪽 grep 모두에 같은 완화를 적용해야
+# 위 fail-open 비대칭도 함께 닫힌다.
 if grep -qF 'project_dir: <project_dir>${RUNTIME_PROJECT_DIR}</project_dir>' "$SKILL_MD"; then
   echo "PASS: R3 dispatch uses runtime_project_dir"
 else

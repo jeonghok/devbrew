@@ -3,6 +3,51 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.1.2] — 2026-09-05
+
+### Fixed
+
+- **Task 15c 수정 라운드 2 (N1, Important) — 라운드 1이 I1 의 음의 짝을
+  「참으로 만든다」고 적은 것 자체가 거짓이었다.** 재리뷰 실측: decoy +
+  `project_dir:` 뒤 공백 두 개 + `${SANDBOX_DIR}`, decoy + 전혀 다른 변수명
+  `${QG_SANDBOX}` 하드코딩 — 둘 다 음의 짝을 우회한다(신규 FAIL 0, 코디네이터가
+  재현). 그런데 그 두 우회를 `tools/adjudication/check_slots.py` 의
+  `var_mismatch` 축(`shared/tests/test_agent_input_slots.sh` 가 돌린다)이
+  agent 이름과 file:line 을 대며 잡는 것도 함께 확인했다(12/12 → 11/12, 두
+  변이 각각 재현) — 그 축은 `runtime-verifier` 의 `input_slots` 선언과 dispatch
+  를 **파싱해서** 대조하므로 표기(공백 폭·변수명)에 무관하다. **주장을 낮췄다**:
+  "never a hardcoded sandbox_dir" 대신 "이 grep 쌍이 보장하는 것은 정확히 그
+  `${SANDBOX_DIR}` 슬롯 리터럴(그 공백 폭 그대로)의 부재뿐"으로, "참으로
+  만든다"는 문장은 지웠다. 진짜 ∀ 보장이 사는 곳(`var_mismatch` 축)을 명시.
+  음의 짝 자체는 지우지 않았다 — 정확한 리터럴 회귀를 싸게 잡는 두 번째 증인으로
+  여전히 유효하다(해롭지 않음). 검토하고 버린 대안(음의 짝을 "올바른 값 외
+  전부 금지"로 일반화)은 `var_mismatch` 가 이미 그것을 하므로 불완전한 두 번째
+  구현이 될 뿐이라 채택하지 않았다.
+- **Task 15c 수정 라운드 2 (N2, Minor) — m2 의 기록이 리스크의 절반을 숨기고
+  있었다.** "이 두 grep **모두** 매치를 잃어 거짓 RED" 라는 문장은 새 음의
+  짝에는 틀렸다 — 같은 공백-폭 변화(하나→둘)에서 양의 검사는 소리 나는 방향
+  (거짓 RED)으로, 음의 짝은 **침묵하는 방향**(fail-open — 위반이 그대로인데
+  조용히 PASS, N1 우회 (a)가 이 경로)으로 **반대로** 깨진다는 것을 적었다.
+  m2 를 코드로 고치지 않는 판정은 유지(v6.6.2 선례와의 일관성 + 거짓 RED 축은
+  소리가 나며 fail-open 축의 실제 안전망은 `var_mismatch` 라는 근거).
+- **Task 15c 수정 라운드 2 (N3, Important) — 재리뷰가 범위 밖으로 올린 같은
+  부류 하나.** `plugins/quality-gates/tests/lib/reconstruct-skill.sh` 는 이
+  락의 모든 단언이 읽는 문서(`$SKILL_MD`)를 만드는 load-bearing 의존인데
+  `# guards:`에도 `--emit-scanned`에도 없었다(R2·R3·F6 과 정확히 같은 부류).
+  `.`(source) 는 "읽는 것"에 해당한다고 판정 — bash 가 그 파일의 바이트를
+  읽고 해석하는 것은 `cat`/`grep` 으로 여는 것과 다르지 않다. 리디렉션 감사로
+  `source` 호출이 :88 하나뿐임을 재확인 후 `# guards:`·`--emit-scanned` 양쪽에
+  여섯 번째 경로로 추가. 양성 대조: 프로덕션 매처에 이 파일을 건드리는 실제
+  diff 를 먹이면 이제 이 락이 후보에 뜬다(수정 전엔 안 떴다), `test_guards_
+  coverage_bidirectional.sh` 는 이 락 몫 7/7·전체 105/105 GREEN.
+- **재리뷰가 C1 의 양성 대조를 독립 재현했다** — `88b0b0c`(라운드 1 이전) 판에
+  코디네이터의 반사실(emit 미가로채기 유지)을 직접 적용하니 emit 이 123줄을
+  뿜고 `test_guards_coverage_bidirectional.sh` 가 Fail 6(방향 A 1 + B 5)을
+  냈다 — 라운드 1 의 수정이 그 지뢰를 정확히 없앴다는 것과, emit 하는 6경로가
+  「실제로 읽는 것」과 정확히 일치한다는 것(PATH shim 계측, runtime-gate.md 의
+  awk `getline` 내부 읽기까지 포함해 과대 신고 아님)을 재리뷰가 별도로 확증했다
+  — 이 절 자체는 코드 변경이 아니라 검증 기록.
+
 ## [7.1.1] — 2026-09-05
 
 ### Fixed
