@@ -72,6 +72,7 @@ from parse_spec_structure import (  # noqa: E402
 )
 from resolve_mode import resolve_mode  # noqa: E402
 from discover_candidates import Candidate, GitUnavailable, discover  # noqa: E402
+from adjudication import Ledger  # noqa: E402
 
 # stdin 을 읽기 **전에** 표준 스트림을 UTF-8 로 고정한다. 위 import 들은 stdin 을
 # 건드리지 않으므로 이 자리가 여전히 "첫 문장"이다 (근거는 hook_common 쪽 docstring).
@@ -208,6 +209,21 @@ def write_state_file(path: Path, body: str) -> None:
         f.write(body)
         f.flush()
         os.fsync(f.fileno())
+
+
+def _block_with_ledger(payload: dict, ledger: Ledger, advisory) -> int:
+    """차단 결정에 원장 사유를 «reason 으로» 실어 낸다.
+
+    원장 객체는 이 프로세스와 함께 사라진다. `reasons()` 의 줄을 reason 에
+    실어 보내는 것이 이 층의 회계 완료 조건이다 — 그 필드가 모델에 도달하는
+    유일한 채널이기 때문이다(카나리: systemMessage 0/14 · reason 7/7).
+    """
+    lines = ledger.reasons()
+    if lines:
+        payload["reason"] = (payload.get("reason", "")
+                             + "\n\n[처분] " + " · ".join(lines))
+    print(json.dumps(with_advisory(payload, advisory)), flush=True)
+    return 0
 
 
 def validate_document(path: str) -> list[str]:
@@ -601,12 +617,14 @@ def main() -> int:
                 file=sys.stderr,
             )
             return flush_advisory(capped_advisory)
-        print(json.dumps(with_advisory({
+        L = Ledger(items="closed")   # 다음 소비자가 기계(다음 턴의 dispatch)다
+        for line in lines:
+            L.hold(line[:60], "항목 파손: 스코프 문서 구조 검증 실패")
+        return _block_with_ledger({
             "decision": "block",
             "reason": "\n".join(lines),
             "systemMessage": "[spec-distill] 스코프 문서 구조 검증 실패 — 이번 turn 은 리뷰 dispatch 없음",
-        }, capped_advisory)), flush=True)
-        return 0
+        }, L, capped_advisory)
     if picked and cursor != read_cursor(body):
         # 커서는 **통과했을 때도** 전진해야 한다. 상한을 넘는 dirty 문서가 전부
         # 통과하면 rewrite 가 한 번도 안 일어나고, 그러면 매 턴 같은 앞쪽 N개만
@@ -754,12 +772,18 @@ def main() -> int:
         )
         # empty stdout, no decision:block — 발견은 무상태라 다음 Stop 이 다시 찾는다
         return flush_advisory(capped_advisory)
-    print(json.dumps(with_advisory({
+    # 브리프는 이 자리의 항목 이름으로 `picked` 를 썼으나, `picked` 는 위 구조
+    # 검증 단계(:575)의 지역 변수로 이 지점까지 스코프는 살아 있어도 값은
+    # "이번 턴에 구조 검증한 후보 키 목록"이지 지금 dispatch 를 강제하는
+    # 대상이 아니다 — 라벨이 엉뚱한 문서를 가리킨다. 실제로 강제되는 항목은
+    # 위에서 고른 `cand`(Candidate) 이므로 그 `.path` 를 쓴다.
+    L = Ledger(items="closed")
+    L.hold(str(cand.path), "판정자 부재: 리뷰가 아직 안 돌았다 — 다음 턴에 강제한다")
+    return _block_with_ledger({
         "decision": "block",
         "reason": msg,
         "systemMessage": f"[spec-distill] {REVIEW_SKILL} dispatch enforced for next turn",
-    }, capped_advisory)), flush=True)
-    return 0
+    }, L, capped_advisory)
 
 
 if __name__ == "__main__":

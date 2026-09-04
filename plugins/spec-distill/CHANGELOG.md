@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.51.0] — 2026-09-04
+
+### Added
+- **훅(`review-dispatch.py`)의 차단 결정 두 자리가 원장 어휘로 자기 처분을 밝힌다(T5, adjudication-topology Task 11).** `from adjudication import Ledger`를 더해 이 훅이 처음으로 회계 소비자(㉮)에 들어온다. 구조 검증 실패 자리(구 `:605`대, 재도출 `:621`대)는 실패한 문서마다 `L.hold(line[:60], "항목 파손: 스코프 문서 구조 검증 실패")`를, 다음 턴 dispatch 강제 자리(구 `:758`대, 재도출 `:774`대)는 `L.hold(str(cand.path), "판정자 부재: 리뷰가 아직 안 돌았다 — 다음 턴에 강제한다")`를 부른다. 새 헬퍼 `_block_with_ledger()`가 `ledger.reasons()`의 줄을 `reason` 필드에 실어 낸다 — **채널은 `reason`이다.** 같은 두 자리가 이미 내는 `systemMessage`는 인터뷰 카나리 실측(14개 중 0개 모델 도달) 때문에 쓰지 않는다; `reason`은 차단 결정에 딸릴 때 7/7 도달한다. 원장 객체는 프로세스와 함께 사라지므로 `reasons()`의 줄을 `reason`에 실어 보내는 것으로 이 층의 회계가 완료된다(코드 주석에 근거 기록).
+- `plugins/spec-distill/tests/test_review_dispatch_disposition.sh` — 두 차단 자리 각각이 처분 호출(`hold`/`reject`/`source_failed`/`uncountable`)을 갖는지, `reasons()`를 읽는지, 그 사유를 `systemMessage`가 아니라 `reason`에 싣는지를 검사한다.
+- `tools/adjudication/check_wiring.py`의 `EXEMPT`에 `review-dispatch.py`의 열 자리(㉮ 편입으로 새로 대상이 된 `select_dispatch_target()`의 선택 루프 7곳 + `main()`의 검증 대상 선별 루프 3곳)를 C6⑴ 인용과 함께 등재. 근거는 코드를 읽고 확인했다: `discover()`가 매 Stop마다 git status로 무상태 재스캔하므로 이번 턴에 선택되지 않은 후보는 다음 턴에 다시 나타난다 — 소실 개념 자체가 성립하지 않는다.
+
+### Known gaps
+- **T5-1·T5-2가 배선한 `Ledger` import가 `shared/tests/test_adjudication_wiring.sh`의 import·앵커 대칭 축(㉮ 두 도출 경로가 같은 개수여야 한다)을 깬다.** `by_import`는 5(review-dispatch.py 포함)인데 `by_anchor`는 4로 그대로다 — 어떤 skill/command/agent 문서도 `consumer=review-dispatch.py`를 인용하지 않는다. 이 훅은 스킬이 dispatch한 subagent 결과를 받아 회계하는 소비자가 아니라 자기 자신의 `decision:"block"` 판단을 직접 회계하는 종단(terminal) 소비자라, 기존 앵커 대칭 검사가 전제하는 "모든 import 소비자는 어딘가 `consumer=`로 인용된다"는 가정이 이 범주(훅)에는 처음부터 성립하지 않을 수 있다. `derive_consumers()`/`test_adjudication_wiring.sh`를 훅과 스크립트 두 범주로 나눌지는 설계 판단이 필요해 이번 Task(T5, 파일 범위: 훅 + 새 테스트 + plugin.json/CHANGELOG)에서는 고치지 않았다 — 다음 리뷰가 볼 것.
+- **`tools/adjudication/check_wiring.py`의 EXEMPT `:533`(검증 상한 도달 스킵)은 경계 사례다.** 항목(`c.key`)은 `capped`→`capped_advisory`를 타고 실제로 이번 턴 JSON 출력의 `systemMessage`에 실리므로 C6⑴(대응물 없음)로 면제했지만, 바로 이 Task가 옆 두 `decision:"block"` 자리에서 실측한 사실 — `systemMessage`는 모델 컨텍스트 도달 카나리 0/14 — 이 이 채널에도 적용될 가능성이 있다. 소실은 아니나 채널 효과가 의심되는 자리라 규칙 억제(`suppressed()`)로 재분류할 후보로 남긴다.
+
 ## [0.50.1] — 2026-09-04
 
 ### Changed

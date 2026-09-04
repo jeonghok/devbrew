@@ -23,6 +23,45 @@ DISCARD_NODES = (ast.Continue, ast.Break, ast.Return)
 #
 # Task 1 Step 6 이 이 목록의 초기 내용을 정한다. 착수 시점에는 비어 있다 —
 # 비어 있는 것이 이 락이 오늘 RED 인 이유의 일부다.
+
+# Task 11 (T5) — 훅에 `from adjudication import Ledger` 를 더하면서
+# review-dispatch.py 가 처음으로 ㉮(회계 소비자)에 들어왔다. 이 파일의 다른
+# for 문 열 자리가 그 순간 새로 이 락의 대상이 된다 — 이번 Task 가 배선한 두
+# `decision:"block"` 자리(T5-1·T5-2)는 루프 «안»이 아니라서 이 열에 포함되지
+# 않는다. 남은 열 자리는 전부 `select_dispatch_target()`(다음 턴에 dispatch할
+# 문서 하나를 고르는 선택 루프)와 `main()` 의 검증 대상 선별 루프에 있다 —
+# 신고된 발견물을 판정하는 자리가 아니라 "이번 턴에 무엇을 처리할지" 고르는
+# 스케줄링 루프다.
+#
+# 근거(코드를 직접 읽고 확인 — 선재 판정을 그대로 받아 적지 않았다): 이 파일의
+# 모듈 docstring 과 `discover_candidates.py` 의 모듈 docstring 이 함께 명시하듯
+# "발견은 무상태"다 — 매 Stop 마다 `git status` 로 후보 전체를 다시 낸다.
+# 그러므로 이번 턴에 선택되지 않은 후보는 «사라지는» 것이 아니라 다음 Stop 의
+# 후보 목록에 그대로 다시 나타난다. 소실이라는 개념 자체가 성립하지 않는다
+# (C6(1)) — "판정자가 처리하지 못해 항목이 사라졌다"는 전제가 스케줄링 루프에는
+# 적용되지 않는다.
+_T5_SELECT_LOOP = (
+    "C6(1) — select_dispatch_target() 의 선택 루프(cands 를 훑어 dispatch 대상 "
+    "하나를 고른다). discover()가 매 Stop마다 git status 로 후보 전체를 무상태 "
+    "재스캔하므로, 이번 턴에 고르지 못한 후보는 사라지지 않고 다음 Stop 의 "
+    "후보 목록에 그대로 다시 나타난다. 이 루프는 신고된 발견물을 판정하는 "
+    "자리가 아니라 '이번 턴에 dispatch할 문서 하나'를 고르는 스케줄링이다 — "
+    "회계가 대응할 처분 대상(accountable finding) 자체가 없다."
+)
+_T5_MAIN_VALIDATION_LOOP_INFLIGHT = (
+    "C6(1) — main() 의 검증 대상 선별 루프(cands 를 훑어 validation_pool 을 "
+    "만든다). is_inflight 는 arm_ledger.is_inflight(body, c.path, now) 로 매 "
+    "Stop 마다 새로 계산되는 상태다 — 지금 다른 리뷰가 도는 문서를 이번 턴의 "
+    "구조 검증에서만 뺀다. 리뷰가 끝나면 다음 Stop 에서 다시 후보가 되므로 "
+    "영구 소실이 아니다."
+)
+_T5_MAIN_VALIDATION_LOOP_SUCCESS = (
+    "C6(1) — main() 의 구조 검증 루프(`for key in picked`). `reasons` 가 "
+    "빈 목록이면 그 문서는 구조 검증을 통과했다는 뜻이라 애초에 판정할 "
+    "실패가 없다 — hold/reject 할 대상이 없는 성공 케이스에는 대응하는 "
+    "처분 개념이 없다."
+)
+
 EXEMPT = {
     # ("plugins/.../foo.py", 146): "C6(1) 제자리 변형 루프 — 버려지는 항목이 없다",
     # Task 10 이 파일 상단에 `from render_disposition import disposition_lines`
@@ -55,6 +94,48 @@ EXEMPT = {
         "\"reasons\" 는 이 loop 이전에 이미 `advisory.extend(L.reasons())`(:334) "
         "로, \"held_by_class\" 는 loop 직후 세 줄(held_unadjudicated/"
         "held_malformed/held_other)로 각각 실린다 — 버려지는 항목이 없다.",
+
+    # Task 11 (T5) — select_dispatch_target() 의 선택 루프 7 자리. 위
+    # `_T5_SELECT_LOOP` 의 근거를 그대로 공유한다(동일 루프, 서로 다른 필터
+    # 조건일 뿐). :338 은 그 루프의 `return c` — 첫 적격 후보를 찾고 순회를
+    # 멈추는 것도 같은 이유로 소실이 아니다(discover()가 다음 Stop 에 나머지
+    # 후보를 다시 낸다).
+    ("plugins/spec-distill/hooks/review-dispatch.py", 327): _T5_SELECT_LOOP,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 329): _T5_SELECT_LOOP,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 331): _T5_SELECT_LOOP,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 333): _T5_SELECT_LOOP,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 335): _T5_SELECT_LOOP,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 337): _T5_SELECT_LOOP,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 338): _T5_SELECT_LOOP,
+
+    # Task 11 (T5) — main() 의 검증 대상 선별 루프. :530 은 in-flight 스킵
+    # (다른 리뷰가 도는 중 — 끝나면 다음 Stop 에 다시 후보가 된다).
+    ("plugins/spec-distill/hooks/review-dispatch.py", 530):
+        _T5_MAIN_VALIDATION_LOOP_INFLIGHT,
+
+    # Task 11 (T5) — **경계 사례, 최종 리뷰가 다시 볼 것.** :533 은 검증 상한
+    # (VALIDATION_ATTEMPT_CAP) 도달 스킵이다. `capped.append(c.key)` 가 바로
+    # 위 같은 분기에서 먼저 실행되므로 항목 자체는 사라지지 않고 `capped` →
+    # `capped_advisory` 를 타고 이번 턴의 JSON 출력 `systemMessage` 필드에
+    # 실제로 실린다(추적: :554,570-574,619,627,671,680,690,774,786) — 그래서
+    # C6(1)(대응물 없음)이 아니라 이미 다른 채널로 실린다는 논거로 면제한다.
+    # 다만 이 Task(T5) 가 바로 옆 두 `decision:"block"` 자리에서 확인한 사실—
+    # `systemMessage` 는 모델 컨텍스트에 카나리 14개 중 0개 도달— 이 이 채널
+    # 에도 그대로 적용될 가능성이 있다. 즉 "실려는 있으나 그 채널이 모델에
+    # 도달하는지는 검증되지 않았다." 규칙 억제(`suppressed()`)로 다시 봐야
+    # 할 수 있는 자리라 baseline 문서에 남기고 최종 리뷰로 넘긴다.
+    ("plugins/spec-distill/hooks/review-dispatch.py", 533):
+        "C6(1)(경계) — 검증 상한 도달 스킵. `capped.append(c.key)` 가 같은 "
+        "분기에서 continue 이전에 실행돼 항목이 `capped`→`capped_advisory`로 "
+        "이 턴의 systemMessage 에 실린다(코드 추적 완료) — 그러나 이 Task 가 "
+        "같은 파일의 decision:block 두 자리에서 실측한 바 systemMessage 는 "
+        "모델 도달 카나리 0/14 다. 소실은 아니나 채널 효과가 의심되는 경계 "
+        "사례 — 최종 리뷰가 재검토할 것(규칙 억제 재분류 후보).",
+
+    # Task 11 (T5) — main() 의 구조 검증 루프. :589 는 `reasons` 가 빈
+    # 성공 케이스 — 판정할 실패 자체가 없다.
+    ("plugins/spec-distill/hooks/review-dispatch.py", 589):
+        _T5_MAIN_VALIDATION_LOOP_SUCCESS,
 }
 
 
