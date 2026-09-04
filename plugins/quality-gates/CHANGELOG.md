@@ -3,6 +3,21 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.0.1] — 2026-09-04
+
+### Changed
+
+- **dispatch 시점 `model` 인자 규약을 「하위 tier override 금지」에서 「오케스트레이터 재량, 판정·측정 agent 제외」로.**
+  frontmatter 는 전부 `model: inherit` 그대로다(스윕 락 `test_agent_model_inherit_sweep.sh` 무변경).
+  바뀐 것은 `scripts/experiment-model-override.md` 의 「현재 규약」 문장과 `docs/plugin-authoring.md` 의
+  규약 조항뿐 — 세션 모델이 opus 외(Fable·sonnet)로 다양해지면서, 프로브·생성기(`smoke-probe`·
+  `transcript-reader`·`pr-understanding-builder` 류)에는 오케스트레이터가 상황에 맞는 티어를 고를 수
+  있게 열었다. 출력이 게이트 판정(verdict·findings)이나 측정(readback)에 들어가는 agent 는 여전히
+  인자를 넘기지 않는다 — writer 가 자기 리뷰어의 티어를 고르는 구조는 Law 2 의 취지와 충돌한다.
+  adversarial 의 집행 락(`test_adversarial_model_consistency.sh` §2)은 그대로다.
+  검토했다 폐기한 대안: 전 agent `model: opus` 고정 — Fable 세션에서 리뷰어 20개가 writer 보다
+  한 단계 약해지는, 원 규약이 막으려던 방향을 만든다.
+
 ## [6.0.0] — 2026-09-03
 
 ### Removed
