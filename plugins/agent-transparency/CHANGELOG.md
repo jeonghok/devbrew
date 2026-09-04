@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.0] — 2026-09-04
+
+### Added
+- **transcript-reader 에 frontmatter `input_slots:` 선언 — L3(adjudication-topology
+  Task 14).** dispatch 는 `briefing-current-state/SKILL.md` 의 frontmatter
+  `context: fork` + `agent:` 필드가 만든다 — `Agent({subagent_type: "..."})` JS
+  펜스가 아니라 skill 본문 전체가 그대로 프롬프트가 되는 harness 기능이라,
+  `shared/tests/test_agent_input_slots.sh` 의 `.md`-only dispatch 코퍼스(`subagent_type:`
+  펜스 스캔)가 이 채널 자체를 구조적으로 못 본다 — 슬롯 `optional: true`(미전달이
+  아니라 관찰 불가).
+
 ## [0.2.4] — 2026-08-23
 
 ### Added

@@ -3,6 +3,41 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.6.0] — 2026-09-04
+
+### Added
+- **agent 7개(security-reviewer·adversarial·artifact-critic·artifact-adversarial·
+  test-scope-validator·runtime-verifier·pr-understanding-builder)에 frontmatter
+  `input_slots:` 선언 — L3(adjudication-topology Task 14).** 각 agent 가 dispatch
+  로 실제로 받는 (태그, 변수, `kind`) 삼중항을 선언하고, `shared/tests/test_agent_input_slots.sh`
+  가 그 선언과 SKILL 의 실제 dispatch 표기(`<tag>${VAR}</tag>`)가 일치하는지 +
+  선언된 `kind` 가 금지 어휘(`prior_verdict`/`score`/`orchestrator_framing`)가
+  아닌지를 잰다.
+- `tools/adjudication/check_slots.py` `EXEMPT_SLOTS` 에
+  `("quality-gates:adversarial", "phase1_findings")` ·
+  `("quality-gates:artifact-adversarial", "merged_findings")` 등재(C6(1)) —
+  Phase 1/2 findings·병합 findings 를 verdict 하는 것 자체가 두 agent 의
+  과업이라 대응물이 없다.
+
+### Fixed
+- **security-reviewer/adversarial 의 dispatch 프롬프트(quality-pipeline/SKILL.md)가
+  두 `Agent()` 호출을 펜스 하나에 담고 있어, 펜스-단위 dispatch 스캐너가 두
+  번째 호출(`adversarial`)의 태그를 첫 번째(`security-reviewer`)에게 귀속시켰다.**
+  펜스를 분리했다 — 펜스는 언제나 독립 dispatch 여야 한다는 판정기의 불변식.
+- security-reviewer/adversarial(persona 의 `filtered_diff`) ·
+  test-scope-validator(persona 의 "## Current Diff section") 가 자신의 Input
+  절에 문서화한 필드를 dispatch 프롬프트가 실제로는 보여주지 않고 있었다 —
+  세 dispatch 자리 모두에 그 필드를 명시적으로 채웠다(선언·문서·dispatch 삼자
+  불일치 해소, over-broad `optional: true` 로 덮지 않았다 — 실제로 상시 전달되는
+  입력이다).
+- runtime-verifier 의 persona 가 `plan_path` 를 Input 으로 문서화했으나
+  runtime-gate.md 의 dispatch 에는 없었다 — 함께 채움.
+- publishing-pr-understanding/SKILL.md 의 `Agent("quality-gates:pr-understanding-builder",
+  <blob inlined>)` 위치인자 표기를 이 리포 전역의 캐노니컬
+  `Agent({subagent_type: "...", prompt: ...})` 펜스로 승격 — 기존 표기는
+  `_SUBAGENT_RE`/`_PAIR_RE` 어느 쪽에도 안 걸려 dispatch 코퍼스에서 구조적으로
+  안 보이는 자리였다.
+
 ## [6.5.5] — 2026-09-04
 
 ### Fixed

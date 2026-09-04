@@ -1,6 +1,25 @@
 # Changelog
 
-## [0.51.8] — 2026-09-04
+## [0.52.0] — 2026-09-04
+
+### Added
+- **agent 9개 전부(seed-readback·seed-critic·brief-critic·brief-readback·
+  spec-reviewer·brief-direction-reviewer·coverage-mapper·blind-spot-prober·
+  steelman-builder)에 frontmatter `input_slots:` 선언 — L3(adjudication-topology
+  Task 14, 전량 GREEN).** 각 agent 가 dispatch 로 실제로 받는 (태그, 변수, `kind`)
+  삼중항을 선언하고, `shared/tests/test_agent_input_slots.sh` 가 선언과 SKILL 의
+  실제 dispatch 표기(`<tag>${VAR}</tag>`)가 일치하는지 + 선언된 `kind` 가 금지
+  어휘(`prior_verdict`/`score`/`orchestrator_framing`)가 아닌지를 잰다.
+  spec-reviewer 의 `issue_history` 는 **같은 spec 의 과거 라운드 이력**이라
+  `same_origin_history` — Law 2 가 막는 "다른 리뷰어의 판정"과는 다른 축이다.
+
+### Fixed
+- reviewing-spec/SKILL.md 의 spec-reviewer dispatch 펜스와
+  conducting-interview/SKILL.md 의 steelman-builder dispatch 펜스가 3-space
+  들여쓰기(번호 목록 continuation)였다 — `test_agent_input_slots.sh` 의 fence
+  스캐너(`re.match(r'^```')`, 줄 시작 앵커)가 들여쓰인 펜스의 시작 자체를 못 봐서
+  두 dispatch 자리가 통째로 관측 밖에 있었다. 들여쓰기를 제거해 dispatch 코퍼스에
+  실재하게 했다 — 내용은 무변경.
 
 ### Fixed
 - **`shared/tests/test_runner_disposition.sh`(codex 러너 처분 락)가 `consumer=` 값의

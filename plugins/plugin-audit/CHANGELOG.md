@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.0] — 2026-09-04
+
+### Added
+- **agent 3개(plugin-auditor·audit-refuter·smoke-probe)에 frontmatter
+  `input_slots:` 선언 — L3(adjudication-topology Task 14).** 셋 다 dispatch 가
+  `audit-workflow.js`/`smoke-workflow.js` 의 `agent(prompt, {agentType})` JS
+  호출이라 `shared/tests/test_agent_input_slots.sh` 의 `.md`-only dispatch
+  코퍼스(`subagent_type: "..."` 펜스 스캔)가 이 dispatch 자리 자체를 구조적으로
+  못 본다 — 그래서 슬롯 전부 `optional: true` (미전달이 아니라 관찰 불가라는
+  뜻, 각 파일에 주석으로 남김). `audit-refuter` 의 `findings` 는 `plugin-auditor`
+  의 raw 감사 findings 를 반박하는 것 자체가 과업이라 `kind: prior_verdict` +
+  `tools/adjudication/check_slots.py` 의 기존 `EXEMPT_SLOTS` placeholder(C6(1))를
+  실제 태그명으로 채워 사용.
+
 ## [0.7.3] — 2026-09-04
 
 ### Fixed
