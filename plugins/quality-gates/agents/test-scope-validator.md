@@ -4,6 +4,24 @@ model: inherit
 cost_class: low
 color: yellow
 tools: Read, Grep, Glob
+input_slots:
+  - tag: project_dir
+    var: PROJECT_DIR
+    kind: task
+  - tag: spec_path
+    var: SPEC_PATH
+    kind: task
+    optional: true
+  - tag: plan_path
+    var: PLAN_PATH
+    kind: task
+    optional: true
+  - tag: candidate_test_files
+    var: CANDIDATE_TEST_FILES
+    kind: task
+  - tag: diff
+    var: FILTERED_DIFF
+    kind: artifact
 description: >
   Light-weight pre-execution check (Runtime gate Step 2.5 of the quality-gates
   pipeline) that classifies each scope-relevant test file as

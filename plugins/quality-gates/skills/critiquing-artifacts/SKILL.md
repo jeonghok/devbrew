@@ -138,7 +138,7 @@ Agent({
   subagent_type: "quality-gates:artifact-critic",
   // **처분** — consumer=plugins/quality-gates/scripts/synthesize_artifact_findings.py · fail-closed
   description: "Artifact critique round N",
-  prompt: "project_dir: <project_dir>\nartifact_path: <canonical>\n현재 커밋된 산출물을 비평하고 §10 Finding YAML을 emit하라."
+  prompt: "project_dir: <project_dir>${PROJECT_DIR}</project_dir>\nartifact_path: <artifact_path>${CANONICAL_PATH}</artifact_path>\n현재 커밋된 산출물을 비평하고 §10 Finding YAML을 emit하라."
 })
 ```
 
@@ -197,7 +197,7 @@ Agent({
   subagent_type: "quality-gates:artifact-adversarial",
   // **처분** — consumer=plugins/quality-gates/scripts/synthesize_artifact_findings.py · fail-closed
   description: "Artifact adversarial review round N",
-  prompt: "project_dir: <project_dir>\nartifact_path: <canonical>\n다음은 병합된 keyed findings(merged.yaml)이다 — 각 finding의 dedup_key를 finding_key로 echo하며 §10 verdict(confirm/downgrade/reject)를 매겨라:\n<merged.yaml 전체 내용을 여기 inline>"
+  prompt: "project_dir: <project_dir>${PROJECT_DIR}</project_dir>\nartifact_path: <artifact_path>${CANONICAL_PATH}</artifact_path>\n다음은 병합된 keyed findings(merged.yaml)이다 — 각 finding의 dedup_key를 finding_key로 echo하며 §10 verdict(confirm/downgrade/reject)를 매겨라:\n<merged_findings>${MERGED_FINDINGS}</merged_findings>"
 })
 ```
 

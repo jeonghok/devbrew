@@ -19,8 +19,14 @@ FORBIDDEN_KINDS = ("prior_verdict", "score", "orchestrator_framing")
 # 앞 판정을 반박하는 것이 과업인 agent 는 prior_verdict 를 «받아야» 한다.
 # 각 값은 C6 조건을 인용한다 — 인용 없는 항목은 호출자가 RED 로 만든다.
 EXEMPT_SLOTS = {
-    # ("quality-gates:adversarial", "verdicts"):
-    #     "C6(1) 앞 판정을 반박하는 것이 이 agent 의 과업이다 — 대응물이 없다",
+    ("quality-gates:adversarial", "phase1_findings"):
+        "C6(1) Phase 1/2 리뷰어의 findings 를 verdict(confirm/downgrade/reject)하는 것이 "
+        "이 agent 의 과업이다 — 대응물이 없다",
+    ("quality-gates:artifact-adversarial", "merged_findings"):
+        "C6(1) artifact-critic(+codex) 의 merged findings 를 verdict 하는 것이 이 agent 의 "
+        "과업이다 — 대응물이 없다",
+    ("plugin-audit:audit-refuter", "findings"):
+        "C6(1) 감사 findings 를 반박하는 것이 과업이다",
 }
 
 # 변수명이 판정·점수를 시사하면 kind 가 금지 셋 중 하나여야 한다.

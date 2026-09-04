@@ -262,10 +262,12 @@ Agent({
   // **처분** — consumer=orchestrator · fail-open · disclosure=R2 산문
   description: "Classify scope-relevant test files (Runtime gate)",
   prompt: "Validate test scope against current diff, spec acceptance criteria, and plan items.
-    project_dir: \"$project_dir\"
-    spec_path: <path or 'auto'; pass 'none' if DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1>
-    plan_path: <path or 'auto'>
-    candidate_test_files: <compute-test-scope-candidates.sh 출력>"
+    project_dir: <project_dir>${PROJECT_DIR}</project_dir>
+    spec_path: <spec_path>${SPEC_PATH}</spec_path> (path or 'auto'; pass 'none' if DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1)
+    plan_path: <plan_path>${PLAN_PATH}</plan_path> (path or 'auto')
+    candidate_test_files: <candidate_test_files>${CANDIDATE_TEST_FILES}</candidate_test_files> (compute-test-scope-candidates.sh 출력)
+    ## Current Diff
+    <diff>${FILTERED_DIFF}</diff>"
 })
 ```
 

@@ -5,6 +5,22 @@ model: inherit
 color: purple
 cost_class: medium
 tools: Read, Grep, Glob
+input_slots:
+  - tag: project_dir
+    var: PROJECT_DIR
+    kind: task
+  - tag: diff_scope
+    var: DIFF_SCOPE
+    kind: task
+  - tag: plan_path
+    var: PLAN_PATH
+    kind: task
+  - tag: iteration
+    var: ITERATION
+    kind: task
+  - tag: filtered_diff
+    var: FILTERED_DIFF
+    kind: artifact
 ---
 
 You are **security-reviewer**, the code-level security specialist for the Review gate Phase 1.

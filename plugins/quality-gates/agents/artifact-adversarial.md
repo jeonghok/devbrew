@@ -5,6 +5,16 @@ model: inherit
 color: blue
 cost_class: variable
 tools: Read, Grep, Glob
+input_slots:
+  - tag: project_dir
+    var: PROJECT_DIR
+    kind: task
+  - tag: artifact_path
+    var: CANONICAL_PATH
+    kind: task
+  - tag: merged_findings
+    var: MERGED_FINDINGS
+    kind: prior_verdict
 ---
 
 You are **Artifact Adversarial**, the false-positive hunter for the

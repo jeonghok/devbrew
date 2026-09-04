@@ -368,22 +368,25 @@ Agent({
   // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-open
   description: "Security review (Review gate iter N)",
   prompt: "Run code-level security review on the current diff.
-    project_dir: \"$project_dir\"
-    diff_scope: <the review scope you resolved at step 1: session (git-derived changed files) / branch (git diff vs base) / paths (--paths globs)>
-    plan_path: <path or 'auto'>
-    iteration: N
-    <…scout-supplied context…>"
+    project_dir: <project_dir>${PROJECT_DIR}</project_dir>
+    diff_scope: <diff_scope>${DIFF_SCOPE}</diff_scope> (session (git-derived changed files) / branch (git diff vs base) / paths (--paths globs) — the review scope you resolved at step 1)
+    plan_path: <plan_path>${PLAN_PATH}</plan_path> (path or 'auto')
+    iteration: <iteration>${ITERATION}</iteration>
+    filtered_diff: <filtered_diff>${FILTERED_DIFF}</filtered_diff> (unified diff computed from the resolved review scope, documentation paths excluded)"
 })
+```
 
+```
 Agent({
   subagent_type: "quality-gates:adversarial",
   // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-open
   description: "Adversarial review of Phase-1 findings (Review gate iter N)",
   prompt: "Re-review findings from Phase-1 reviewers for false positives
     and missed exploit paths.
-    project_dir: \"$project_dir\"
-    phase1_findings: <yaml from security-reviewer + Tier C specialists + codex>
-    iteration: N"
+    project_dir: <project_dir>${PROJECT_DIR}</project_dir>
+    phase1_findings: <phase1_findings>${PHASE1_FINDINGS}</phase1_findings> (yaml from security-reviewer + Tier C specialists + codex)
+    filtered_diff: <filtered_diff>${FILTERED_DIFF}</filtered_diff> (so you can verify findings against actual code)
+    iteration: <iteration>${ITERATION}</iteration>"
 })
 ```
 

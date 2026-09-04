@@ -5,6 +5,19 @@ model: inherit
 color: orange
 cost_class: low
 tools: Read, Grep, Glob
+input_slots:
+  - tag: project_dir
+    var: PROJECT_DIR
+    kind: task
+  - tag: phase1_findings
+    var: PHASE1_FINDINGS
+    kind: prior_verdict
+  - tag: filtered_diff
+    var: FILTERED_DIFF
+    kind: artifact
+  - tag: iteration
+    var: ITERATION
+    kind: task
 ---
 
 You are **Adversarial**, the false-positive hunter for the Review gate.

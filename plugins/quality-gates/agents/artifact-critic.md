@@ -5,6 +5,13 @@ model: inherit
 color: cyan
 cost_class: variable
 tools: Read, Grep, Glob
+input_slots:
+  - tag: project_dir
+    var: PROJECT_DIR
+    kind: task
+  - tag: artifact_path
+    var: CANONICAL_PATH
+    kind: task
 ---
 
 You are **Artifact Critic**, the critique gate for the `/qg critique` non-code
