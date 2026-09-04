@@ -13,11 +13,38 @@ from pathlib import Path
 
 import yaml
 
+from cite import uncited
+
 ALLOWED_KINDS = ("task", "artifact", "same_origin_history", "repo_context")
 FORBIDDEN_KINDS = ("prior_verdict", "score", "orchestrator_framing")
 
 # 앞 판정을 반박하는 것이 과업인 agent 는 prior_verdict 를 «받아야» 한다.
 # 각 값은 C6 조건을 인용한다 — 인용 없는 항목은 호출자가 RED 로 만든다.
+#
+# ── `orchestrator_framing` 축 전수 스윕 (최종 리뷰 K3) ────────────────────
+# Task 14 의 스윕은 `prior_verdict` 축만 돌았고 이 축은 안 돌았다. 열거가
+# 아니라 도출로 다시 훑는다 — 20 개 agent 의 선언 슬롯 «전부»에 대해 그
+# dispatch 자리가 싣는 값의 «출처»를 읽고 다섯으로 나눈다:
+#   ⓐ 경로·enum·기계 계산 리터럴 → `task`
+#   ⓑ 리뷰 대상 원문 또는 스크립트가 만든 blob → `artifact`
+#   ⓒ 같은 출처의 과거 findings·이력 → `same_origin_history`
+#   ⓓ 리포 규약·설계 문서 → `repo_context`
+#   ⓔ **오케스트레이터가 직접 쓴 산문 종합** → `orchestrator_framing`(금지)
+# ⓔ 에 해당하는 것은 «하나»였다 — `blind-spot-prober.framing`. 판정 근거:
+#   · `steelman-builder.direction`/`trigger` — 지목됐으나 ⓔ 가 아니다.
+#     `direction` 은 «사용자가 고른 방향»의 재진술(과업의 대상)이고,
+#     `trigger` 는 게이트를 발동시킨 네 값 중 하나를 대는 enum 이다
+#     (landscape 모순 / anti-pattern / 제약 충돌 / neglect). 둘 다 이 agent 가
+#     내야 할 «대안»에 대한 오케스트레이터의 기대가 아니다 → ⓐ.
+#   · `coverage-mapper.ledger_state` — 원장 «상태»의 요약이지 판단이 아니다 → ⓐ.
+#   · `pr-understanding-builder.context` — `build-pr-context` 가 만든 blob → ⓑ.
+#   · `transcript-reader.inventory` — `prepare_standup.py` 출력 → ⓐ.
+#   · `plugin-auditor.axis_task`/`candidate_clues` — `audit-workflow.js` 의
+#     CONTRACT 가 *"나는 이 단서들이 참인지 거짓인지 말하지 않는다"* 로
+#     판단 배제를 명시한다 → ⓐ/ⓒ.
+#   · `runtime-verifier.spec_acceptance_criteria` — spec 에서 뽑은 {ac_id,text} → ⓑ.
+#   · brief/seed 계열 넷(`brief`/`document`/`draft`/`seed`) — 원문 인라인 → ⓑ.
+# 남은 슬롯은 전부 경로·반복자·enum 이다.
 EXEMPT_SLOTS = {
     ("quality-gates:adversarial", "phase1_findings"):
         "C6(1) Phase 1/2 리뷰어의 findings 를 verdict(confirm/downgrade/reject)하는 것이 "
@@ -25,9 +52,31 @@ EXEMPT_SLOTS = {
     ("quality-gates:artifact-adversarial", "merged_findings"):
         "C6(1) artifact-critic(+codex) 의 merged findings 를 verdict 하는 것이 이 agent 의 "
         "과업이다 — 대응물이 없다",
+    # 최종 리뷰 A/m1 — 조인 인용 검사가 이 사유를 「너무 얇다」로 잡았다.
+    # 이전 문구("감사 findings 를 반박하는 것이 과업이다")는 «어느 조건인가»만
+    # 있고 «왜 그 조건에 해당하는가»가 없었다. 형제 둘과 같은 수준으로 적는다.
     ("plugin-audit:audit-refuter", "findings"):
-        "C6(1) 감사 findings 를 반박하는 것이 과업이다",
+        "C6(1) plugin-auditor 가 낸 감사 findings 를 반박(refute)해 살아남는 "
+        "것만 남기는 것이 이 agent 의 유일한 과업이다 — 앞 판정을 안 받으면 "
+        "반박할 대상 자체가 없어 대응물이 원리적으로 없다. 오염 위험은 "
+        "audit-workflow.js 의 CONTRACT 가 「나는 이 단서들이 참인지 거짓인지 "
+        "말하지 않는다」로 사전 판정을 빼서 낮춘다.",
+    ("spec-distill:blind-spot-prober", "framing"):
+        "C6(1) 이 agent 의 과업은 «지금의 framing 에 대한» 적대적 premortem "
+        "이다 — 프로브의 대상이 정의상 오케스트레이터가 재구성한 그 framing "
+        "이라 대응물이 없다. 다른 값(사용자 §6 원문)을 넣으면 프로버가 자기 "
+        "framing 을 새로 세우고 그것을 치게 되어, 이 agent 가 존재하는 이유"
+        "(인터뷰 턴이 «자기» 전제에 눈먼 자리를 찾는다)를 잃는다. 잔여 "
+        "위험은 남는다 — 재구성이 이미 잃은 것은 프로버도 못 본다. 그 "
+        "축은 이 락이 아니라 reviewing-brief 의 충실도 단계가 §6 원문 대비로 "
+        "따로 잰다(brief-critic).",
 }
+
+# 면제 «크기»의 회귀 축 — L1 의 `EXEMPT_BASELINE` 과 같은 규율(최종 리뷰 A/m2
+# 를 두 등록부에 대칭으로 적용한다. 한쪽에만 두면 다음 우회가 안 걸린 쪽으로
+# 간다 — Task 11b Step 4b 가 고친 비대칭과 같은 모양이다). 전부 면제로 넣으면
+# L3(b)가 장식이 되는 것이 설계 M8 이 이 수를 재는 이유다.
+EXEMPT_SLOTS_BASELINE = 4
 
 # 변수명이 판정·점수를 시사하면 kind 가 금지 셋 중 하나여야 한다.
 # 그러면 면제 등재가 강제되고, 등재는 C6 인용을 요구한다.
@@ -185,7 +234,12 @@ def check(repo_root):
 
 
 def uncited_exemptions():
-    return [k for k, v in EXEMPT_SLOTS.items() if "C6" not in str(v)]
+    """사유가 실질을 갖추지 못한 면제 항목 — 호출자가 RED 로 만든다.
+
+    판정은 `cite.uncited()` 하나가 진다(L1 과 공용) — 리터럴 `"C6"` 두 글자면
+    만족하던 이 자리의 규율이 L1 과 갈리는 것을 막는다(최종 리뷰 A/m1).
+    """
+    return uncited(EXEMPT_SLOTS)
 
 
 def multi_agent_fences(repo_root):

@@ -3,6 +3,102 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.2.0] — 2026-09-05
+
+### Fixed
+
+- **면제 키가 «자리»만 쥐고 «정체»를 안 쥐어, 조건만 바꾼 분기가 면제를 상속했다
+  (최종 리뷰 K1, Critical).** `tools/adjudication/check_wiring.py` 의 `stale_exempt()`
+  docstring 은 「낡은 키가 다른 버리는 분기와 겹치면 그 엉뚱한 자리가 조용히 면제된다
+  — 이 함수는 그 조용한 쪽을 소리 나게 만든다」고 선언했는데, 구현은
+  `[k for k in EXEMPT if k not in discard_lines]` 로 **키가 아무 버리는 분기도 안
+  가리킬 때만** 냈다(docstring 자신이 「이미 시끄럽다」고 적은 쪽). 실측 재현:
+  `synthesize_findings.py` 의 `if f.get("promoted"):` 를 **줄 수를 보존한 채**
+  `if f.get("promoted") or _norm_sev(f) == "info":` 로 바꾸면 info 심각도 발견이
+  회계 없이 통째로 버려지는데 락 넷(`test_adjudication_wiring.sh` 15/15 ·
+  `test_adjudication_consumed.sh` 6/6 · `test_synthesize_disposition.sh` 11/11 ·
+  `test_synthesize_findings.sh` 19/19)이 전부 GREEN 이었다.
+  **고침**: 면제 키를 `(경로, 줄, 정체)` 3-튜플로 바꿨다. 정체 =
+  `"<kind> in <func> @ <guard>"` 이고 `guard` 는 그 분기를 성립시키는 조건의 원문
+  (`ast.unparse`)이다(새 `exempt_key()`, `_enclosing_branch()` 가 본문과 정체를 한 번의
+  상승으로 함께 낸다). 해시가 아니라 원문을 쓴 이유: 면제 표를 읽는 사람이 파일을 열지
+  않고 무엇이 면제됐는지 본다. **양성 대조**(위 「줄 수 보존 + 조건만 확장」 변이):
+  이제 같은 락이 2건 RED — `exempt_stale=1`(어긋난 키를 이름과 함께) + `unwired=1`
+  (그 자리가 면제를 상속하지 못해 미배선으로 재등장, 음/양의 짝). 정상 트리에서 면제
+  17 개는 전부 유효하다(오탐 0).
+- **`test-scope-validator` 에 untrusted-input 조항이 없었다 (최종 리뷰 K2, 보안).**
+  이 브랜치의 슬롯 재태깅이 `skills/quality-pipeline/references/runtime-gate.md` 의
+  그 dispatch 에 `<diff>${FILTERED_DIFF}</diff>` 를 **추가**했는데(`origin/main` 엔 없던
+  필드) 조항 수는 `security-reviewer` 6 · `adversarial` 2 · `test-scope-validator`
+  **0** 이었다. 형제 문구를 베끼지 않고 이 agent 가 실제로 받는 입력에 맞춰 썼다 —
+  `filtered_diff` 뿐 아니라 **`candidate_test_files` 가 가리켜 `Read` 로 여는 파일들의
+  내용과 경로도 attacker-influenced** 라는 점, 주입된 지시를 `evidence` 에 그대로
+  인용해 두 번째 배달을 만들지 말라는 점을 명시. 회귀: `tests/test_test_scope_validator_frontmatter.sh`
+  에 형제 락과 같은 «섹션 윈도우» 스코프 단언 3(본문 규범 + 자기 입력 두 슬롯 지목)
+  — 절을 통째로 지우면 3건 RED(실측).
+
+### Changed
+
+- **락 셋의 통과 메시지가 실제로 잰 것보다 넓었다 (최종 리뷰 K4).**
+  - **L2**(`test_adjudication_consumed.sh` · `tools/adjudication/check_consumed.py`) —
+    `unconsumed_total=0` 은 소비자 다섯에 대한 다섯 개의 독립 사실이 아니다. 실측(이제
+    락이 매 실행마다 `OWNFILE`/`SHARED` 줄로 다시 낸다): 자기 파일만으로 여덟 키를 다
+    읽는 소비자는 `merge_review.py` 하나(8/8)이고 나머지 넷은 0/8·0/8·1/8·2/8 이며,
+    다섯 전부가 `shared/adjudication/render_disposition.py` 를 import 하고 **그 한
+    파일이 혼자 8/8 을 덮는다.** 헤더·통과 메시지에 그 수치를 넣었다.
+  - **L3**(`shared/tests/test_agent_input_slots.sh`) — 축 (a)는 agent 20 개 중 **16**
+    개만 잰다. 넷(`transcript-reader`·`audit-refuter`·`plugin-auditor`·`smoke-probe`)은
+    dispatch 가 Workflow JS 나 skill frontmatter 의 `context: fork` 라 `.md` 코퍼스에
+    구조적으로 안 보인다. `declared=N` 옆에 `measured=`/`unmeasured=` 를 내고 못 잰
+    agent 의 이름을 댄다(셀 수 없으면 셀 수 없음을 낸다).
+  - **L4**(`shared/tests/test_runner_disposition.sh`) — `/scripts/` 후처리가 모집단을
+    조용히 좁혀 다른 디렉터리(`plugins/*/lib/` 등)의 codex 러너가 **앵커 없이
+    통과**했고, vacuity 가드 `n_all > n_run` 이 그 버림을 «성공»으로 읽었다(많이 버릴수록
+    초록). 후처리를 **명시 제외 하나**(사유와 함께: `tests/spike/test_codex_json_extraction.sh`)
+    로 바꾸고 나머지는 전부 모집단에 넣는다. 새 축 둘: 「조용히 버려진 항목 0」(도출 −
+    명시 제외 = 모집단, 등식) · 「명시 제외가 실제로 1건 이상 걸렀다」(죽은 선언 방지).
+    `/scripts/` 밖은 세어서 이름을 댄다. **양성 대조**: `plugins/quality-gates/lib/` 에
+    앵커 없는 러너를 심으면 이름이 나오며 4건 RED(이전 판본에선 조용히 사라졌다).
+- **「모든 자리」주장을 실측으로 좁혔다 (최종 리뷰 K5).** `plugins/*/{skills,commands,agents}/**.md`
+  의 처분 앵커 17 개 중 `consumer=` 가 `.py` 경로인 것은 **6** 이고 나머지 11
+  (`human` 6 · `orchestrator` 5)은 L1·L2 모집단 «밖»이다(65%). 그 11 에 대한 집행은
+  축 C 의 `disclosure=` 리터럴 실재뿐이며 그 축은 채널 «이름»의 실재까지만 잰다.
+  v7.1.0 항목과 `test_adjudication_wiring.sh` 헤더에 이 수치를 적었다.
+- **면제 사유의 실질 검사를 조였다 (A/m1).** 리터럴 `"C6"` 두 글자면 만족하던 검사를
+  「C6(1)/C6(2) 조건 번호 + 본문 40자」로 바꿨다. 판정은 새 `tools/adjudication/cite.py`
+  하나가 지고 L1·L3 가 함께 쓴다 — 같은 요구가 두 등록부에서 다른 엄격도로 걸리던
+  비대칭(Task 11b Step 4b 가 한 번 고쳤다)이 술어를 베끼면 재발한다. 이 조임이
+  기존 면제 하나(`plugin-audit:audit-refuter.findings`)의 얇은 사유를 즉시 잡았다.
+- **면제 «크기»에 기계 baseline 을 붙였다 (A/m2).** 컴프리헨션에는 `COMP_BASELINE` 하드
+  단언이 있는데 면제는 `note` 로만 냈다 — 배선을 면제로 갈아 끼우는 우회가 조용했다.
+  `check_wiring.EXEMPT_BASELINE=17` · `check_slots.EXEMPT_SLOTS_BASELINE=4`.
+  양성 대조: 18 번째 항목을 넣으면 RED(실측).
+- **L1 헤더가 종류 정합의 검증자로 단일 락을 지목했다 (A/m3).** 실제로는 소비자마다
+  자기 처분 행렬 테스트가 있다 — 넷을 전부 인용한다.
+- **L4 가 실패 자리를 `basename` 으로만 이름 댔다 (A/m4).** 형제 넷과 같이
+  `file:line` 으로 바꿨다(앵커가 없으면 `:0` — 그 자체가 「앵커 없음」의 표기).
+- **`_IMPORT_RE` 에 단어 경계가 없어 `import adjudicationXX` 도 매칭했다 (A/m6).**
+  소비자 모집단을 그 정규식이 정하므로 오탐 하나가 ㉮ 를 늘려 다른 락의 코퍼스까지
+  흔든다. `\b` 둘을 넣었다.
+- **`quality-pipeline/SKILL.md` 가 `project_dir:` 계약의 «틀린 락»을 가리켰다 (B/M-5).**
+  「harness 테스트가 10줄 이내로 검증한다」는 거짓이다(그 줄을 지워도 실패 수 무변경).
+  진짜 집행자는 이 브랜치가 만든 `shared/tests/test_agent_input_slots.sh` 의
+  `undelivered` 축이며, 그것은 파싱 대조라 표기(공백 폭·변수명)에 둔감하다.
+- **줄번호 인용을 앵커·심볼 인용으로 (최종 리뷰 K7).** 이 브랜치가 `adjudication.py` 에
+  31줄을 더해 자기 설계문서의 인용들을 밀어냈다(순수 self-shift — `origin/main` 기준으로는
+  전부 옳았다). 이 부류의 네 번째 재발이라 번호를 다시 매기지 않고 **심볼/앵커로**
+  바꿨다: `security-reviewer` 의 `description` 이 가리키던 `adversarial.md:22-30` →
+  「`## Inputs` 절」, `test_skill_orchestration_behavior.sh` 의 `:88`/`:23` →
+  `. "$SCRIPT_DIR/../lib/reconstruct-skill.sh"` 호출 줄(그 사본이 이 CHANGELOG 에도
+  있어 함께 고쳤다), `test_guards_coverage_bidirectional.sh:74` → 「`--emit-scanned`
+  미지원」 분기, `adjudication.py:{59-64,96-98,99-102,110,136-138}` →
+  `coerced()`/`blocks()`/`_degraded()`/`reasons()`/`surfaced()`.
+
+### Note
+
+이 절은 whole-branch 리뷰 셋의 findings 를 한 파로 닫은 기록이다. 각 항목은 「변이 →
+RED 확인 → 원복 → GREEN 확인」 삼단을 거쳤다.
+
 ## [7.1.2] — 2026-09-05
 
 ### Fixed
@@ -36,7 +132,8 @@
   `# guards:`에도 `--emit-scanned`에도 없었다(R2·R3·F6 과 정확히 같은 부류).
   `.`(source) 는 "읽는 것"에 해당한다고 판정 — bash 가 그 파일의 바이트를
   읽고 해석하는 것은 `cat`/`grep` 으로 여는 것과 다르지 않다. 리디렉션 감사로
-  `source` 호출이 :88 하나뿐임을 재확인 후 `# guards:`·`--emit-scanned` 양쪽에
+  `source` 호출이 `. "$SCRIPT_DIR/../lib/reconstruct-skill.sh"` 한 줄뿐임을
+  재확인 후 `# guards:`·`--emit-scanned` 양쪽에
   여섯 번째 경로로 추가. 양성 대조: 프로덕션 매처에 이 파일을 건드리는 실제
   diff 를 먹이면 이제 이 락이 후보에 뜬다(수정 전엔 안 떴다), `test_guards_
   coverage_bidirectional.sh` 는 이 락 몫 7/7·전체 105/105 GREEN.
@@ -110,8 +207,15 @@
 
 ### Added
 
-- **처분 회계(`Ledger`)를 리뷰 findings 가 버려지는 모든 자리에 배선하고, 그 배선을
-  락 다섯으로 강제한다.** 새 판정기는 `tools/adjudication/` 에 산다 —
+- **처분 회계(`Ledger`)를 리뷰 findings 가 버려지는 자리에 배선하고, 그 배선을
+  락 다섯으로 강제한다.** **강제의 실측 범위**(「모든 자리」가 아니다): L1·L2 의
+  모집단은 `Ledger` 를 import 하는 `.py` 소비자 다섯 + `consumer=<.py 경로>` 앵커다.
+  `plugins/*/{skills,commands,agents}/**.md` 의 처분 앵커 17 개 중 `consumer=` 가
+  `.py` 경로인 것은 **6** 뿐이고 나머지 11(`human` 6 · `orchestrator` 5)은 L1·L2
+  «밖»이다 — 그 11 에 대한 집행은 `test_dispatch_disposition.sh` 축 C 의
+  `disclosure=` 리터럴 실재뿐이며, 그 축은 채널 «이름»의 실재까지만 재고 그
+  채널이 실제로 읽히는지는 못 잰다(CLAUDE.md 가 그 한계를 규정한다).
+  새 판정기는 `tools/adjudication/` 에 산다 —
   `check_wiring.py`(버리는 분기가 같은 분기에 처분 호출을 갖는가) ·
   `check_consumed.py`(원장 키를 소비자가 실제로 읽는가) ·
   `check_slots.py`(agent 가 «선언한» 입력과 dispatch 가 «전달하는» 것의 일치, 그리고

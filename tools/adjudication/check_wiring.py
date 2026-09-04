@@ -96,7 +96,8 @@ EXEMPT = {
     # ("plugins/.../foo.py", 146): "C6(1) 제자리 변형 루프 — 버려지는 항목이 없다",
     # Task 10 이 파일 상단에 `from render_disposition import disposition_lines`
     # 를 더해 이 줄이 358→359 로 밀렸다 — 인용 자체는 무변경(내용은 그대로다).
-    ("plugins/quality-gates/scripts/synthesize_findings.py", 359):
+    ("plugins/quality-gates/scripts/synthesize_findings.py", 359,
+     "continue in dedup @ if f.get('promoted')"):
         "C6(1) — dedup() 의 이 continue 는 `promoted` 항목을 그룹핑에서만 "
         "제외한다. 항목 자체는 이 loop 이전에 계산된 `passthrough` 리스트에 "
         "이미 담겨 있고 함수 반환값(`deduped + passthrough`)에 그대로 "
@@ -105,9 +106,11 @@ EXEMPT = {
     # 루프. `continue` 는 "reasons"·"held_by_class" 두 키를 이 loop 에서만
     # 제외한다 — 둘 다 다른 자리에서 이미/따로 실린다: "reasons" 는 이 loop
     # «이전»에 이미 `advisory.extend(merged["reasons"])`로 advisory 채널에
-    # 실렸고, "held_by_class" 는 loop 직후(:619-621) 세 줄로 분해돼 실린다.
+    # 실렸고, "held_by_class" 는 loop 직후 세 줄(`adjudication_held_unadjudicated`/
+    # `_malformed`/`_other`)로 분해돼 실린다.
     # 버려지는 항목이 없다(C6(1)).
-    ("plugins/spec-distill/scripts/merge_review.py", 618):
+    ("plugins/spec-distill/scripts/merge_review.py", 618,
+     "continue in main @ if _k in ('reasons', 'held_by_class')"):
         "C6(1) — disposition_report().items() 를 도는 이 continue 는 "
         "\"reasons\"·\"held_by_class\" 두 키를 이 loop 에서만 제외한다. "
         "\"reasons\" 는 이 loop 이전에 이미 advisory 채널로, \"held_by_class\" "
@@ -118,7 +121,8 @@ EXEMPT = {
     # 제외 사유는 동일하다: "reasons" 는 이 loop 이전에 이미
     # `advisory.extend(L.reasons())`(:334)로, "held_by_class" 는 loop 직후
     # 세 줄로 각각 실린다 — 버려지는 항목이 없다.
-    ("plugins/spec-distill/scripts/merge_brief_review.py", 363):
+    ("plugins/spec-distill/scripts/merge_brief_review.py", 363,
+     "continue in main @ if _k in ('reasons', 'held_by_class')"):
         "C6(1) — disposition_report().items() 를 도는 이 continue 는 "
         "\"reasons\"·\"held_by_class\" 두 키를 이 loop 에서만 제외한다. "
         "\"reasons\" 는 이 loop 이전에 이미 `advisory.extend(L.reasons())`(:334) "
@@ -140,20 +144,28 @@ EXEMPT = {
     # `return c` — 첫 적격 후보를 찾고 순회를 멈추는 것도 `_T5_SELECT_LOOP` 와
     # 같은 이유로 소실이 아니다(discover()가 다음 Stop 에 나머지 후보를 다시
     # 낸다).
-    ("plugins/spec-distill/hooks/review-dispatch.py", 340): _T5_SELECT_LOOP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 342): _T5_SELECT_LOOP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 344):
+    ("plugins/spec-distill/hooks/review-dispatch.py", 340,
+     'continue in select_dispatch_target @ if c.born'): _T5_SELECT_LOOP,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 342,
+     'continue in select_dispatch_target @ if c.key in armed'): _T5_SELECT_LOOP,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 344,
+     'continue in select_dispatch_target @ if att.get(c.key, 0) >= arm_ledger.DISPATCH_ATTEMPT_CAP'):
         _T5_SELECT_LOOP_DISPATCH_CAP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 346):
+    ("plugins/spec-distill/hooks/review-dispatch.py", 346,
+     'continue in select_dispatch_target @ if val.get(c.key, 0) >= arm_ledger.VALIDATION_ATTEMPT_CAP'):
         _T5_SELECT_LOOP_VALIDATION_CAP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 348): _T5_SELECT_LOOP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 350): _T5_SELECT_LOOP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 351): _T5_SELECT_LOOP,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 348,
+     'continue in select_dispatch_target @ if arm_ledger.is_inflight(body, c.path, now)'): _T5_SELECT_LOOP,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 350,
+     'continue in select_dispatch_target @ if resolve_mode(c.path) is None'): _T5_SELECT_LOOP,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 351,
+     'return in select_dispatch_target @ <bare>'): _T5_SELECT_LOOP,
 
     # Task 11 (T5) — main() 의 검증 대상 선별 루프. :543(구 :530) 은 in-flight
     # 스킵(다른 리뷰가 도는 중 — 끝나면 다음 Stop 에 다시 후보가 된다). 줄번호는
     # Task 11b 가 위와 같은 +13 drift 로 교정(사유·판정 무변경).
-    ("plugins/spec-distill/hooks/review-dispatch.py", 543):
+    ("plugins/spec-distill/hooks/review-dispatch.py", 543,
+     'continue in main @ if arm_ledger.is_inflight(body, c.path, now)'):
         _T5_MAIN_VALIDATION_LOOP_INFLIGHT,
 
     # Task 11 수정 라운드 1 — 최초 사유가 범주 착오였다(오케스트레이터 지적).
@@ -182,7 +194,8 @@ EXEMPT = {
     # (상한값)이 정한 배제이지 판정자의 판단이 아니라는 점에서 `suppressed()`
     # 의 정의("규칙 억제 — 판정자의 판단이 아니라 규칙(임계값)이 정한 배제")
     # 와 정확히 들어맞아 보이기 때문이다.
-    ("plugins/spec-distill/hooks/review-dispatch.py", 546):
+    ("plugins/spec-distill/hooks/review-dispatch.py", 546,
+     'continue in main @ if val_att.get(c.key, 0) >= val_cap'):
         "C6(1) — 검증 상한 도달 스킵. `capped.append(c.key)` 가 같은 분기에서 "
         "continue 이전에 실행돼 항목이 `capped`→`capped_advisory`로 이 턴의 "
         "systemMessage 에 실린다(코드 추적 완료). systemMessage 는 사람의 "
@@ -196,7 +209,8 @@ EXEMPT = {
     # 성공 케이스 — 판정할 실패 자체가 없다. 줄번호는 Task 11b 가 +14 drift 로
     # 교정(사유·판정 무변경 — 이 지점은 :546 보다 아래라 6d87b2c 의
     # `failed_keys` 삽입 한 줄이 더 얹혀 +14).
-    ("plugins/spec-distill/hooks/review-dispatch.py", 603):
+    ("plugins/spec-distill/hooks/review-dispatch.py", 603,
+     'continue in main @ if not reasons'):
         _T5_MAIN_VALIDATION_LOOP_SUCCESS,
 
     # Task 11b Step 1~3 — 계획이 배정하지 않았던 네 자리(merge_review.py).
@@ -213,13 +227,15 @@ EXEMPT = {
     # 증거를 담고 있다: `meta:` 전환 **이전에** `if cur: findings.append(cur)`
     # 로 그때까지 누적된 finding 을 먼저 보존한 뒤에 continue 한다 — 소실
     # 방지가 코드에 명시적으로 있다.
-    ("plugins/spec-distill/scripts/merge_review.py", 155):
+    ("plugins/spec-distill/scripts/merge_review.py", 155,
+     "continue in parse_codex_yaml @ if line.startswith('findings:')"):
         "C6(1) — parse_codex_yaml() 의 `for raw in lines:` 는 codex YAML 의 "
         "«텍스트 줄»을 도는 라인 파서다(findings 리스트가 아니다). 이 "
         "continue 는 `findings:` 섹션 헤더 줄을 만났을 때 상태 전이만 하고 "
         "다음 줄로 넘어간다 — 헤더 줄 자체는 finding 이 아니라 버릴 항목이 "
         "없다.",
-    ("plugins/spec-distill/scripts/merge_review.py", 160):
+    ("plugins/spec-distill/scripts/merge_review.py", 160,
+     "continue in parse_codex_yaml @ if line.startswith('meta:')"):
         "C6(1) — 같은 라인 파서, `meta:` 섹션 헤더. `if cur: findings.append("
         "cur)` 가 continue **이전**에 실행돼 그때까지 누적된 finding 을 먼저 "
         "보존한다 — 헤더 줄 자체는 finding 이 아니고, 진행 중이던 finding 도 "
@@ -235,7 +251,8 @@ EXEMPT = {
     # 리스트를 돈다. 즉 이 fold 가 일찍 멈춰도 "판정에 영향을 주는 값"은
     # 동일하고(max 류 단조 집계라 나머지를 봐도 결론이 안 바뀐다), 개별
     # finding 의 회계는 이미 다른 자리(:363)가 맡는다.
-    ("plugins/spec-distill/scripts/merge_review.py", 229):
+    ("plugins/spec-distill/scripts/merge_review.py", 229,
+     'return in derive_codex_verdict @ if sev in CODEX_SEVERITY_REVISE or sev not in CODEX_SEVERITY_KNOWN'):
         "C6(1) — derive_codex_verdict() 의 fold 조기 종료. `codex_findings` "
         "전체는 이 함수와 무관하게 build_ledger() 의 `for f in codex_findings:` "
         "(:363, 이미 배선 — :371-373 에서 codex_ledger.hold() 뒤 continue) 가 "
@@ -250,7 +267,8 @@ EXEMPT = {
     # 생성되고 dict 항목 대입(`cur[k] = v`)만 받는다 — 코드 어디에도 `cur` 를
     # dict 아닌 값으로 덮어쓰는 경로가 없다(코드 확인 완료). 배선하면 Task 10
     # 의 `phase_key` 와 같은 죽은 코드가 된다.
-    ("plugins/spec-distill/scripts/merge_review.py", 270):
+    ("plugins/spec-distill/scripts/merge_review.py", 270,
+     'continue in build_codex_findings_display @ if not isinstance(f, dict)'):
         "C6(1) — 도달 불가능한 방어. 유일한 호출자 main():555 는 parse_codex_"
         "yaml():489 의 반환값을 변형 없이 그대로 넘기고, 그 함수의 `findings` "
         "는 `cur = {}` 로만 생성돼 dict 항목 대입만 받는다 — 비-dict 원소를 "
@@ -324,7 +342,7 @@ def _enclosing_loop(node, parents):
 
 
 def _enclosing_branch(loop, target, parents):
-    """`target` 을 감싸는 가장 안쪽 분기 본문. 없으면 None.
+    """`target` 을 감싸는 가장 안쪽 분기의 «본문»과 «정체». `(body, guard)`.
 
     분기 컨테이너는 `If.body`/`If.orelse` 뿐 아니라 `Try.body`(try 본문)·
     `Try.orelse`(else)·`Try.finalbody`(finally)·`ExceptHandler.body`(except
@@ -336,29 +354,41 @@ def _enclosing_branch(loop, target, parents):
     본문의 «길이»를 안쪽의 대리 지표로 쓰면 안 된다: 그 둘은 같지 않고, 바깥
     분기가 더 짧으면 거기 있는 무관한 처분 호출이 이 분기를 guarded 로
     만든다.
+
+    **`guard` 는 그 분기를 성립시키는 조건의 원문**(`ast.unparse`)이다 —
+    면제 키가 줄번호만으로는 «자리»를 가리킬 뿐 «무엇을 면제했는지»를
+    가리키지 못하기 때문이다(`stale_exempt()` 참조). 본문과 정체를 한 번의
+    상승으로 «함께» 낸다 — 두 함수로 나누면 두 순회의 분기 선택이 갈리는
+    순간 면제가 엉뚱한 조건에 붙는다.
+
+    분기 컨테이너가 없으면(루프 본문 최상단의 맨 `continue`/`return`)
+    `(None, "<bare>")` — 자리 자체는 실재하므로 정체도 실재한다.
     """
     node = target
     while node is not loop:
         parent = parents.get(node)
         if parent is None:
-            return None
+            return None, "<bare>"
         if isinstance(parent, ast.If):
+            test = ast.unparse(parent.test)
             if any(child is node for child in parent.body):
-                return parent.body
+                return parent.body, "if " + test
             if any(child is node for child in parent.orelse):
-                return parent.orelse
+                return parent.orelse, "else-of if " + test
         elif isinstance(parent, ast.Try):
             if any(child is node for child in parent.body):
-                return parent.body
+                return parent.body, "try-body"
             if any(child is node for child in parent.orelse):
-                return parent.orelse
+                return parent.orelse, "try-else"
             if any(child is node for child in parent.finalbody):
-                return parent.finalbody
+                return parent.finalbody, "try-finally"
         elif isinstance(parent, ast.ExceptHandler):
             if any(child is node for child in parent.body):
-                return parent.body
+                return (parent.body,
+                        "except " + (ast.unparse(parent.type)
+                                     if parent.type else ""))
         node = parent
-    return None
+    return None, "<bare>"
 
 
 def _func_of(tree, node):
@@ -385,7 +415,7 @@ def scan(paths):
             loop = _enclosing_loop(n, parents)
             if loop is None:
                 continue
-            branch = _enclosing_branch(loop, n, parents)
+            branch, guard = _enclosing_branch(loop, n, parents)
             # 분기를 못 찾으면 루프 본문 전체로 넓히지 «않는다» — 그것이
             # 루프 최상위의 맨 continue 를 guarded 로 읽는 fail-open 이다.
             scope = branch if branch is not None else [n]
@@ -394,35 +424,63 @@ def scan(paths):
                 "line": n.lineno,
                 "kind": type(n).__name__.lower(),
                 "func": _func_of(tree, n),
+                "guard": guard,
                 "guarded": any(_disposition_calls(s) for s in scope),
             })
     return out
 
 
+def exempt_key(rel, row):
+    """면제 키 — `(경로, 줄, 정체)`. 정체 = `<kind> in <func> @ <guard>`.
+
+    **줄번호만으로는 «자리»를 가리킬 뿐 «무엇을 면제했는지»를 못 가리킨다.**
+    사유는 언제나 그 분기가 «어떤 조건에서 무엇을 버리는가»에 대한 진술인데,
+    키가 자리만 쥐고 있으면 그 자리의 조건이 바뀌어도(줄 수만 보존되면)
+    면제가 새 조건에 그대로 상속된다 — 사유는 이미 거짓인데 락은 조용하다.
+
+    그래서 세 성분을 함께 묶는다: `kind`(무엇으로 버리는가) · `func`(어디서) ·
+    `guard`(어떤 조건에서). 셋 중 하나라도 바뀌면 키가 어긋나 `stale_exempt()`
+    가 이름을 대고, 같은 행이 `unwired` 로도 다시 나온다(양의 짝).
+
+    정체를 해시가 아니라 «원문»으로 둔다 — 면제 표를 읽는 사람이 파일을 열지
+    않고도 무엇이 면제됐는지 본다. 조건이 정당하게 바뀌면 키를 갱신해야 하고,
+    그 갱신이 곧 사유 재검증이다(이 락이 요구하는 churn 이지 비용이 아니다).
+    """
+    return (rel, row["line"],
+            "%s in %s @ %s" % (row["kind"], row["func"], row["guard"]))
+
+
 def stale_exempt(repo_root):
-    """`EXEMPT` 의 (경로, 줄번호) 키가 현재 트리에서 «실제 버리는 분기»를 가리키는지.
+    """`EXEMPT` 의 키가 현재 트리에서 «자기가 면제한 바로 그 분기»를 가리키는지.
 
-    면제는 (경로, 줄번호) 로만 찾으므로, 그 자리 «위»에 코드가 늘면 키가
-    조용히 어긋난다 — Task 11b 가 실증했다: 앞선 두 커밋이
-    `select_dispatch_target()` 위에 코드를 늘려 그 함수 전체가 +13/+14 줄
-    밀렸고, 원래 자리를 가리키던 열 개의 키가 통째로 낡았다.
+    면제 키는 자리(경로·줄)와 정체(`kind`·`func`·`guard`)를 함께 쥔다
+    (`exempt_key()`). 이 함수는 그 키 전체를 현재 트리에서 도출한 키 집합과
+    대조해, 어긋난 것을 이름을 대어 낸다.
 
-    두 방향의 위험이 다르다. 낡은 키가 «아무것도» 안 가리키면(파일 삭제·줄
-    범위 밖) 그 자리는 배선 락에서 미배선으로 다시 잡혀 시끄럽게 실패한다
-    (Task 11b 가 그렇게 알아챘다). 밀린 줄이 «다른» 버리는 분기의 줄번호와
-    우연히 겹치면 그 엉뚱한 자리가 검사 없이 조용히 면제된다 — 이 함수는
-    그 조용한 쪽을 소리 나게 만든다.
+    **두 방향의 위험이 있고 둘 다 이 검사가 잡는다.**
+
+    ⑴ 자리가 어긋남 — 그 자리 «위»에 코드가 늘면 키가 밀린다. Task 11b 가
+    실증했다: 앞선 두 커밋이 `select_dispatch_target()` 위에 코드를 늘려 그
+    함수가 +13/+14 줄 밀렸고 열 개의 키가 통째로 낡았다. 밀린 줄이 아무것도
+    안 가리키면 배선 락이 미배선으로 다시 잡아 시끄럽게 실패하지만, 다른
+    버리는 분기의 줄번호와 겹치면 그 엉뚱한 자리가 조용히 면제된다.
+
+    ⑵ **자리는 그대로인데 분기가 다른 것이 됨** — 줄 수를 바꾸지 않고 조건만
+    넓히면(`if f.get("promoted"):` → `if f.get("promoted") or …:`) 그 자리는
+    여전히 버리는 분기라서 «자리»만 보는 검사는 통과한다. 그런데 그 면제의
+    사유(「버려지는 항목이 없다」)는 이미 거짓이다 — 새 조건이 버리는 항목은
+    회계 없이 사라진다. 최종 리뷰가 이 구멍을 실측했다(락 넷 전부 GREEN).
+    키에 `guard` 를 넣는 이유가 정확히 이것이다.
 
     `scan()` 을 재사용한다(재도출 아님) — "실제 버리는 분기"의 정의가 배선
     락 본체와 갈리면 이 검사 자체가 새 진실을 만든다.
     """
     repo = Path(repo_root)
-    files = sorted({rel for (rel, _line) in EXEMPT})
+    files = sorted({rel for (rel, _line, _id) in EXEMPT})
     abs_paths = [str(repo / rel) for rel in files if (repo / rel).is_file()]
     rows = scan(abs_paths) if abs_paths else []
-    discard_lines = {(str(Path(r["file"]).relative_to(repo)), r["line"])
-                      for r in rows}
-    return [k for k in EXEMPT if k not in discard_lines]
+    live = {exempt_key(str(Path(r["file"]).relative_to(repo)), r) for r in rows}
+    return [k for k in EXEMPT if k not in live]
 
 
 def comprehension_count(paths):
@@ -440,9 +498,28 @@ def comprehension_count(paths):
 import re
 from pathlib import Path
 
-_IMPORT_RE = re.compile(r'^\s*(?:from\s+adjudication\s+import|import\s+adjudication)',
-                        re.M)
+# `\b` 두 개 — 없으면 `import adjudicationXX` 도, `from adjudication_shim
+# import` 도 매칭한다(최종 리뷰 A/m6). 소비자 모집단은 이 정규식이 정하므로
+# 오탐 하나가 ㉮ 를 한 파일 늘려 다른 락의 코퍼스까지 흔든다.
+_IMPORT_RE = re.compile(
+    r'^\s*(?:from\s+adjudication\b\s+import|import\s+adjudication\b)', re.M)
 _ANCHOR_RE = re.compile(r'consumer=([^\s·]+\.py)')
+
+# 면제 인용의 «실질» 판정은 `cite.py` 하나가 진다 — L3(`check_slots`)가 같은
+# 요구를 지므로 술어를 베끼면 다음 조임이 한쪽에만 닿는다(최종 리뷰 A/m1).
+from cite import cited as _cited, uncited  # noqa: E402
+
+
+def uncited_exemptions():
+    """사유가 실질을 갖추지 못한 `EXEMPT` 항목 — 호출자가 RED 로 만든다."""
+    return uncited(EXEMPT)
+
+
+# 면제 «크기»의 회귀 축. 컴프리헨션이 `COMP_BASELINE` 을 갖는 것과 같은 이유다
+# — 배선을 면제로 갈아 끼우는 우회가 조용하지 않게(최종 리뷰 A/m2). `note` 로만
+# 내던 값에 기계 단언을 붙인다. 줄이는 것은 자유, 늘리려면 이 수를 올리는
+# 커밋이 이유를 함께 적어야 한다.
+EXEMPT_BASELINE = 17
 
 
 def derive_consumers(repo_root):

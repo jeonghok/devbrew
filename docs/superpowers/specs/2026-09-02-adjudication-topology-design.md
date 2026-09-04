@@ -202,8 +202,9 @@ M7 이 두 값을 따로 기록한다.
 지시해 §5 의 칸이 영구히 0이 될 뻔했다(리뷰어 둘이 독립 지적). `held_by_class()` 가 `hold` 만
 분류하므로 파손도 `hold` 여야 한다. `source_failed` 는 **소스 전체가 죽은** 자리에만 쓴다.
 
-**T1-10 은 신설이 아니라 확장이다** — `_norm_sev`(`:386-412`)가 네 곳에서 불려 그 안에 넣으면 네 번
-세어진다. 입력 직후 정규화 패스는 `_normalize_identity`(`:149`)로 **이미 존재한다.**
+**T1-10 은 신설이 아니라 확장이다** — `synthesize_findings.py` 의 `_norm_sev()` 가 네 곳에서 불려 그
+안에 넣으면 네 번 세어진다. 입력 직후 정규화 패스는 같은 파일의 `_normalize_identity()` 로 **이미
+존재한다.**
 
 **T1-12 — `held_by_class()`.** `reasons()` 는 평면 문자열이고 `held` 는 int 하나라 클래스별 개수를
 산문 재파싱 없이 못 얻는다. 접두 둘(`"판정자 부재: "` / `"항목 파손: "`)을 확정하고 접두별 카운트를
@@ -211,9 +212,9 @@ M7 이 두 값을 따로 기록한다.
 
 ### 3.1 철회한 것 둘
 
-- **`surfaced()` 배선** — `adjudication.py:136-138` 이 `items == "closed"` 에서 빈 리스트를 반환하고
-  배선 대상(`synthesize_artifact_findings.py:195`)이 정확히 그 모드다.
-- **`hold` → `source_failed(primary=False)` 재배치** — `adjudication.py:96-98` 의 첫 항이
+- **`surfaced()` 배선** — `adjudication.py` 의 `surfaced()` 가 `items == "closed"` 에서 빈 리스트를
+  반환하고, 배선 대상(`synthesize_artifact_findings.py` 의 `Ledger(items="closed")`)이 정확히 그 모드다.
+- **`hold` → `source_failed(primary=False)` 재배치** — `adjudication.py` 의 `blocks()` 첫 항이
   `bool(self._held)` 라 옮기면 `blocks()` 가 꺼진다. CLAUDE.md 의 차단 술어와 충돌한다.
 
 ## 4. 작업 T2 — 락 넷
@@ -308,7 +309,7 @@ L3(a)는 **선언과 전달의 일치**일 뿐 *무엇을 선언해도 되는가
 | **배관 손실** | `sources_failed` · `held_by_class()["항목 파손"]` · `coerced` · **`unknown_counts`(셀 수 없음)** | `blocks()` 가 정한다 |
 
 **`unknown_counts` 를 뺐다가 되돌렸다.** 그것은 `report()["counts"]` 에 없지만 `blocks()` 의 세 항
-중 하나다(`adjudication.py:96-98`). 빼면 **uncountable 로 차단된 실행이 어느 칸에도 숫자를 안
+중 하나다(`adjudication.py` 의 `blocks()`). 빼면 **uncountable 로 차단된 실행이 어느 칸에도 숫자를 안
 남긴다.** 그래서 별도 항목으로 싣는다.
 
 **`coerced` 는 `blocks()` 가 읽지 않는다**(확인함) — 칸에는 싣되 차단에 기여하지 않는다.

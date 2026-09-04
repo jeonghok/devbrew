@@ -2362,7 +2362,7 @@ def _normalize_identity(f, ledger=None):
         if ledger is not None and raw != new:
             # gate=False — 이 강제는 게이트 판정을 바꾸지 않는다(정체성 필드의
             # 표기만 바꾼다). gate=True 는 `>=3` 같은 임계 비교를 무력화하는
-            # 대체에만 쓴다(adjudication.py:59-64).
+            # 대체에만 쓴다(adjudication.py 의 coerced()).
             ledger.coerced(key, raw, new, gate=False)
         f[key] = new
     return f
@@ -2624,7 +2624,7 @@ git commit -m "feat(quality-gates): synthesize_artifact_findings 의 버리는 �
 | **배관 손실** | `sources_failed` · `held_by_class()["항목 파손"]` · `held_by_class()["기타"]` · `coerced` · **`unknown_counts`(셀 수 없음)** | `blocks()` 가 정한다 |
 
 **세 가지를 명시한다.**
-⑴ **`unknown_counts` 는 `report()["counts"]` 에 없다** — 그런데 `blocks()` 의 세 항 중 하나다(`adjudication.py:96-98`). 빼면 **`uncountable` 로 차단된 실행이 어느 칸에도 숫자를 안 남긴다**. 별도 항목으로 싣는다.
+⑴ **`unknown_counts` 는 `report()["counts"]` 에 없다** — 그런데 `blocks()` 의 세 항 중 하나다(`adjudication.py` 의 `blocks()`). 빼면 **`uncountable` 로 차단된 실행이 어느 칸에도 숫자를 안 남긴다**. 별도 항목으로 싣는다.
 ⑵ **`coerced` 는 `blocks()` 가 읽지 않는다**(확인함, `:96-98`). 칸에는 싣되 차단에 기여하지 않는다. 칸의 합계와 차단이 같은 집합이 아니므로 `(차단)`/`(차단 아님)` 을 리터럴로 붙인다.
 ⑶ **`held_by_class()["기타"]` 를 배관 칸에 넣는 것이 U4 의 결정이다.** 미지 접두를 어느 칸에도 안 넣으면 두 칸의 합이 `held` 총계와 갈라지고 그 차이가 조용히 사라진다.
 
@@ -2802,7 +2802,7 @@ from render_disposition import disposition_report   # 상단 import
 
 **`rep["counts"]` 를 통째로 싣지 않는다.** 통째로 넘기면 이 파일에 카운트 이름이 한 번도 안 나타나고, 어휘가 늘어도 이 소비자는 조용하다. 공유 헬퍼가 이름을 한 벌 펴고 이 파일은 그것을 import 한다 — L2 의 코퍼스가 그 import 를 따라간다.
 
-**`Ledger(items="closed")` 라 `surfaced()` 를 부르지 않는다** — 빈 리스트를 반환한다(`adjudication.py:136-138`). 설계 §3.1 이 철회한 그 자리다.
+**`Ledger(items="closed")` 라 `surfaced()` 를 부르지 않는다** — 빈 리스트를 반환한다(`adjudication.py` 의 `surfaced()`). 설계 §3.1 이 철회한 그 자리다.
 
 **그리고 `phase_key` 의 원장을 실제로 만든다.** Task 9 가 `phase_key(paths, ledger=None)`
 의 입력 실패 두 자리를 배선했지만 유일한 호출부 `main()` 의 `phase_key(args.findings)` 가

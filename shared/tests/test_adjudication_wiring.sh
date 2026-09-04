@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/*/scripts/*.py plugins/*/hooks/*.py tools/adjudication/check_wiring.py shared/tests/fixtures/adjudication/run_wiring_scan.py shared/tests/fixtures/adjudication/run_wiring_probe.py
+# guards: plugins/*/scripts/*.py plugins/*/hooks/*.py tools/adjudication/check_wiring.py tools/adjudication/cite.py shared/tests/fixtures/adjudication/run_wiring_scan.py shared/tests/fixtures/adjudication/run_wiring_probe.py
 #
 # 수정 라운드 1 (F6) — 판정기 자신(`tools/adjudication/check_wiring.py`)이
 # 이 락의 `# guards:` 에 없었다. 27개 선언 전수 확인 결과 `tools/adjudication/`
@@ -24,8 +24,20 @@
 # baseline 으로 못 박는다 — 버리기를 그 형태로 옮기는 우회가 조용하지 않게.
 #
 # 이 락은 처분의 «유무»를 재고 «종류」는 재지 않는다. reject 를 accept 로
-# 바꾸면 통과한다 — 종류의 정합은 처분 행렬 테스트
-# (quality-gates/tests/test_synthesize_disposition.sh) 가 잰다.
+# 바꾸면 통과한다 — 종류의 정합은 소비자마다 자기 처분 행렬 테스트가 잰다:
+# `quality-gates/tests/test_synthesize_disposition.sh`(synthesize_findings.py) ·
+# `quality-gates/tests/test_synthesize_artifact_adjudication.py` ·
+# `spec-distill/tests/test_merge_review_adjudication.py` ·
+# `spec-distill/tests/test_merge_brief_adjudication.py`.
+# 단일 락을 지목하면 그 하나가 덮지 않는 소비자 넷이 조용해진다(최종 리뷰 A/m3).
+#
+# **모집단의 범위 — 「모든 자리」가 아니다.** 이 락(과 L2)이 겨누는 것은
+# `Ledger` 를 import 하는 `.py` 소비자와 `consumer=<.py 경로>` 앵커뿐이다.
+# 실측: `plugins/*/{skills,commands,agents}/**.md` 의 처분 앵커 17 개 중
+# `consumer=` 가 `.py` 경로인 것은 **6**, 나머지 11 은 `human` 6 · `orchestrator`
+# 5 로 이 락 «밖»이다(65%). 그 11 에 대한 집행은 `test_dispatch_disposition.sh`
+# 축 C 의 `disclosure=` 리터럴 실재뿐이고, 그 축은 채널 «이름»의 실재까지만
+# 재고 그 채널이 실제로 읽히는지는 못 잰다(CLAUDE.md 가 그 한계를 규정한다).
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
@@ -49,6 +61,7 @@ SCAN="$(cat "$TMPD/scan.txt")"
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$SCAN" | sed -n 's/^  CONSUMER //p'
   printf '%s\n' "tools/adjudication/check_wiring.py"
+  printf '%s\n' "tools/adjudication/cite.py"
   printf '%s\n' "shared/tests/fixtures/adjudication/run_wiring_scan.py"
   printf '%s\n' "shared/tests/fixtures/adjudication/run_wiring_probe.py"
   exit 0
@@ -135,15 +148,26 @@ printf '%s\n' "$SCAN" | sed -n 's/^  UNWIRED //p' | while IFS= read -r l; do
   note "      미배선: $l"
 done
 
-note "── 면제 — 각 항목이 C6 조건을 인용한다"
+note "── 면제 — 각 항목이 C6 조건 «번호»와 최소 분량을 갖는다"
 uncited="$(printf '%s\n' "$SCAN" | sed -n 's/^exempt_uncited=//p')"
 exempt_n="$(printf '%s\n' "$SCAN" | sed -n 's/^exempt_total=//p')"
-assert_eq "$uncited" "0" "C6 인용 없는 면제 항목 0 (인용 없는 면제는 그냥 구멍이다)"
-note "      면제 목록 크기: $exempt_n  ← M8 이 이 수의 증가를 본다"
+exempt_base="$(printf '%s\n' "$SCAN" | sed -n 's/^exempt_baseline=//p')"
+assert_eq "$uncited" "0" "실질 없는 면제 사유 0 (C6(1)/C6(2) 번호 + 본문 40자 — 리터럴 \"C6\" 두 글자로는 만족되지 않는다)"
 
-note "── 면제 키의 신선도 — 낡은 (경로, 줄번호) 가 다른 버리는 분기를 조용히 가리는가"
+# 면제 «크기»의 기계 축. 이전엔 note 로만 냈다 — 컴프리헨션에는 하드 baseline
+# 이 있는데 면제에는 없어서, 배선을 면제로 갈아 끼우는 우회가 조용했다.
+if [ "${exempt_n:-0}" -le "${exempt_base:-0}" ] 2>/dev/null; then
+  ok "면제 목록 $exempt_n <= baseline $exempt_base"
+else
+  no "면제 목록이 $exempt_n 로 늘었다 (baseline $exempt_base) — 배선이 면제로 옮겨갔을 수 있다. 늘린 커밋이 check_wiring.EXEMPT_BASELINE 을 올리고 이유를 적어라"
+fi
+
+note "── 면제 키의 신선도 — 키가 «자기가 면제한 그 분기»를 가리키는가"
+# 키는 (경로, 줄, 정체) 다. 정체 = kind·func·guard(분기 조건 원문). 자리가
+# 밀려도, 자리는 그대로인데 조건만 바뀌어도 여기서 어긋난다 — 후자가 최종
+# 리뷰가 실측한 구멍이다(줄 수를 보존한 채 조건만 넓히면 락 넷 전부 GREEN).
 exempt_stale="$(printf '%s\n' "$SCAN" | sed -n 's/^exempt_stale=//p')"
-assert_eq "$exempt_stale" "0" "모든 면제 키가 현재 트리에서 실제 버리는 분기를 가리킨다 (Task 11b 가 실증한 drift 구멍)"
+assert_eq "$exempt_stale" "0" "모든 면제 키가 현재 트리의 «같은 정체»의 버리는 분기를 가리킨다 (자리 drift + 조건 변형 양쪽)"
 printf '%s\n' "$SCAN" | sed -n 's/^  STALE_EXEMPT //p' | while IFS= read -r l; do
   note "      낡은 면제: $l"
 done

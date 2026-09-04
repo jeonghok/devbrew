@@ -70,6 +70,15 @@ fallback 창을 둔다.
   프롬프트가 아니라 frontmatter scoping. `check-law2.py` 정적 게이트 + smoke가 런타임 실증.
 - **Law 3 (Every Cycle Leaves the System Smarter)** — 감사 결과는 `docs/audits/<date>-<target>-audit.*`로
   커밋되고 인덱스(`docs/audits/README.md`)에서 검색 가능. journal.jsonl이 named/diff-able history.
+- **Law 2 (입력 오염 차단) — `input_slots`** — agent 셋이 frontmatter 에 받는 입력의 `tag`/`var`/`kind`
+  를 선언한다. `audit-refuter.findings` 는 금지 종류 `prior_verdict` 이며 `tools/adjudication/check_slots.py`
+  의 `EXEMPT_SLOTS` 에 C6 인용과 함께 등재돼 있다(반박이 과업이라 대응물이 없다). 집행은
+  `shared/tests/test_agent_input_slots.sh`. **범위 한계**: 이 플러그인의 dispatch 는 `audit-workflow.js`
+  의 `agent(prompt, {agentType})` 라 그 락의 `.md` dispatch 코퍼스에 «안 보인다» — 셋 다 축 (a)의
+  `unmeasured` 로 세어져 이름이 나오고, 슬롯의 `optional: true` 가 그 미관측을 미전달과 가르는 장치다.
+- **Law 3 (Compounding) — 처분 앵커** — codex co-audit 러너(`scripts/run_audit_codex_reviewer.sh`)가
+  `**처분**` 앵커로 소비자·fail-정책·공시 채널을 밝히고 `shared/tests/test_runner_disposition.sh` 가
+  그 값의 참·거짓(추적된 파일인가, 같은 플러그인인가)까지 잰다.
 
 ### KEEP-12 원칙
 - **P11 (모델 다양성)** — codex(다른 모델 패밀리)가 blind 독립 co-audit; union-for-recall +

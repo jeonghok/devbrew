@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.53.0] — 2026-09-05
+
+### Changed
+
+- **`blind-spot-prober.framing` 의 `kind` 를 정직하게 고쳤다 (최종 리뷰 K3).**
+  `artifact` 로 선언돼 있었으나 `conducting-interview/SKILL.md` 가 그 슬롯에 싣는 값은
+  **오케스트레이터가 직접 쓴 재구성 요약**(「지금까지의 framing(재구성된 문제정의 +
+  사용자 제약 요지)」)이라 금지 종류 `orchestrator_framing` 이다 — 선언이 그 사실을
+  가려 `tools/adjudication/check_slots.py` 의 (b) 축을 우회하고 있었다.
+  `kind: orchestrator_framing` 으로 바꾸고 `EXEMPT_SLOTS` 에 **C6(1) 인용과 함께**
+  등재했다(구조가 같은 `adversarial.phase1_findings` 의 선례). 사유: 이 agent 의 과업이
+  「지금의 framing 에 대한」 premortem 이라 프로브의 대상이 정의상 그 재구성 자체다 —
+  다른 값을 넣으면 프로버가 자기 framing 을 새로 세우고 그것을 치게 되어 이 agent 가
+  존재하는 이유를 잃는다. **잔여 위험은 남긴다**: 재구성이 이미 잃은 것은 프로버도 못
+  본다 — 그 축은 `reviewing-brief` 의 충실도 단계가 §6 원문 대비로 따로 잰다.
+  양성 대조: 면제를 지우면 `test_agent_input_slots.sh` 가
+  `PROBLEM forbidden_kind spec-distill:blind-spot-prober … kind=orchestrator_framing`
+  으로 RED(실측).
+- **같은 축을 전수로 다시 훑었다.** Task 14 의 스윕은 `prior_verdict` 축만 돌았고
+  `orchestrator_framing` 축은 안 돌았다. 20 개 agent 의 선언 슬롯 전부에 대해 dispatch
+  가 싣는 값의 «출처»를 읽어 다섯으로 분류한 결과 이 축에 걸리는 것은 **하나**뿐이었다.
+  지목됐던 `steelman-builder.direction`/`trigger` 는 ⓐ(과업의 대상·enum)로 판정 —
+  `direction` 은 사용자가 고른 방향의 재진술이고 `trigger` 는 게이트를 발동시킨 네 값
+  중 하나를 대는 enum 이라, 둘 다 「agent 가 내야 할 대안에 대한 오케스트레이터의
+  기대」가 아니다. 도출 근거는 `check_slots.py` 의 `EXEMPT_SLOTS` 위 주석에 남겼다.
+
+### Fixed
+
+- **줄번호 인용을 심볼 인용으로 (최종 리뷰 K7).** `tests/test_merge_brief_adjudication.py`
+  의 `shared/adjudication/adjudication.py:110` → `reasons()`. 이 브랜치가 그 파일에
+  31줄을 더해 밀린 자리다(순수 self-shift).
+- **README 의 「Principles Instantiated」에 이 사이클의 instantiation 이 없었다
+  (최종 리뷰 K6b).** `처분`·`adjudication`·`Ledger`·`input_slots` 를 전수 grep 하면
+  히트 0 이었다 — Law 3 의 discoverability 요구를 못 채운다. 처분 회계와 `input_slots`
+  두 줄을 더하고, 각각의 **범위 한계**(축 C 는 채널 이름의 실재까지만 잰다)를 함께 적었다.
+
 ## [0.52.4] — 2026-09-05
 
 ### Fixed

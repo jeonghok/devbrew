@@ -168,7 +168,7 @@ def _normalize_identity(f, ledger=None):
         if ledger is not None and raw != new:
             # gate=False — 이 강제는 게이트 판정을 바꾸지 않는다(정체성 필드의
             # 표기만 바꾼다). gate=True 는 `>=3` 같은 임계 비교를 무력화하는
-            # 대체에만 쓴다(adjudication.py:59-64).
+            # 대체에만 쓴다(adjudication.py 의 coerced()).
             ledger.coerced(key, raw, new, gate=False)
         f[key] = new
     return f

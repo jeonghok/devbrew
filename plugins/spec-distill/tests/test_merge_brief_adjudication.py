@@ -126,7 +126,7 @@ class TestExists(unittest.TestCase):
 class TestDroppedElementIsHeld(unittest.TestCase):
     """`:162-167` — 비-dict 원소는 findings 로 승격 못 하고 버려진다. 이것이 «소실»
     이고, Ledger 의 `hold()` 로 회계돼야 한다 — Ledger.reasons() 는 "보류: <item> —
-    <why>" 형태를 낸다(shared/adjudication/adjudication.py:110)."""
+    <why>" 형태를 낸다(shared/adjudication/adjudication.py 의 reasons())."""
 
     def test_advisory_carries_ledger_hold_line_for_dropped_element(self):
         _, out, err = run(CRITIC_NON_DICT, CODEX_CLEAN)

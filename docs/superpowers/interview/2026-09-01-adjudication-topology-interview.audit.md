@@ -304,7 +304,7 @@ L.blocks() 에 기여하지 않는다)"* 이고, 충실도는 verdict 병합이 
 
 ## 7. 자기 정정 (라운드 2) — 「죽은 표면 넷」은 부정확하다
 
-`adjudication.py:99-102` 를 다시 읽었다. **`blocks()` 는 죽지 않았다** — `_degraded()` 가
+`adjudication.py` 의 `blocks()`·`_degraded()` 를 다시 읽었다. **`blocks()` 는 죽지 않았다** — `_degraded()` 가
 그것을 첫 항으로 호출하고(`:101`), `_degraded()` 는 `report()["degraded"]` 를 만들며,
 `report()` 는 프로덕션 호출자 3개를 갖는다. 그러므로 `blocks()` 는 **degrade 플래그의
 하중을 받는 술어**다. 그 함수의 docstring 이 이미 그렇게 적어 뒀다 — *"무조건 True 로

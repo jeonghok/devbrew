@@ -23,8 +23,9 @@
 # 정의뿐이라 no-op — R2·R3·F6 과 정확히 같은 부류). **판정: `.` (source) 는 "읽는
 # 것"에 해당한다** — bash 가 그 파일의 바이트를 읽고 해석하는 것은 `cat`/`grep`
 # 으로 여는 것과 다르지 않다. 리디렉션 감사(`grep -n '\. "\$SCRIPT_DIR'`)로
-# `source` 호출이 :88 하나뿐임을 재확인했다(주석 :23 의 같은 문자열 언급은
-# 호출이 아니다). `# guards:`·`--emit-scanned` 양쪽에 여섯 번째로 추가했다.
+# `source` 호출이 `. "$SCRIPT_DIR/../lib/reconstruct-skill.sh"` 한 줄뿐임을
+# 재확인했다(같은 문자열이 이 파일 상단 주석에도 한 번 나오지만 그것은 호출이
+# 아니다). **줄번호로 적지 않는다** — 이 헤더가 늘 때마다 그 인용이 밀린다. `# guards:`·`--emit-scanned` 양쪽에 여섯 번째로 추가했다.
 # 양성 대조: `compute-test-scope-candidates.sh` 에 이 파일을 건드리는 실제 diff
 # 를 먹이면 이 락이 후보에 뜬다(수정 전엔 안 떴다), `test_guards_coverage_
 # bidirectional.sh` 는 이 락 몫이 6/6·전체 105/105 GREEN.
@@ -46,7 +47,7 @@
 # C1). **원래 이 값을 가로채지 않았다** — `--emit-scanned` 로 부르면 스위트 전체가
 # 그대로 돌아 PASS/FAIL 123줄을 stdout 에 뿜었다. 오늘 그게 무해했던 유일한 이유는
 # 이 파일이 코퍼스로 갖는 선재 RED 둘(iter cap 근접성·R1b→R8, 이 브랜치가 만든 것도
-# 건드릴 것도 아니다) 때문에 rc≠0 이라 `test_guards_coverage_bidirectional.sh:74`
+# 건드릴 것도 아니다) 때문에 rc≠0 이라 `test_guards_coverage_bidirectional.sh` 의 「`--emit-scanned` 미지원」 분기
 # 의 `|| [ -z "$scanned" ]` 가 "미지원"으로 읽었기 때문이다 — 그 rc≠0 은 이 브랜치
 # 소유가 아니라서, 그것이 언젠가 고쳐져 rc=0 이 되면 `scanned` 에 123줄의 단언
 # 텍스트가 담겨 방향 A(선언 밖 123건)·방향 B(5/5 글롭이 아무것도 안 덮음)가 +6

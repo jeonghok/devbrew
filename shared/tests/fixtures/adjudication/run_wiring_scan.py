@@ -4,8 +4,8 @@ from pathlib import Path
 root = Path(sys.argv[1])
 sys.path.insert(0, str(root / "tools" / "adjudication"))
 from check_wiring import (  # noqa: E402
-    EXEMPT, TERMINAL_CONSUMERS, comprehension_count, derive_consumers, scan,
-    stale_exempt)
+    EXEMPT, EXEMPT_BASELINE, TERMINAL_CONSUMERS, _cited, comprehension_count,
+    derive_consumers, exempt_key, scan, stale_exempt, uncited_exemptions)
 
 union, by_import, by_anchor = derive_consumers(str(root))
 print("union=%d" % len(union))
@@ -29,26 +29,30 @@ for r in rows:
     rel = str(Path(r["file"]).relative_to(root))
     if r["guarded"]:
         continue
-    if (rel, r["line"]) in EXEMPT:
+    # 면제 키는 자리 + 정체다 — 줄 수를 보존한 채 조건만 바꾼 분기는 여기서
+    # 면제를 «상속하지 못하고» 미배선으로 다시 나온다(stale_exempt 의 양의 짝).
+    if exempt_key(rel, r) in EXEMPT:
         continue
-    unwired.append((rel, r["line"], r["kind"], r["func"]))
+    unwired.append((rel, r["line"], r["kind"], r["func"], r["guard"]))
 print("unwired=%d" % len(unwired))
-for (rel, line, kind, func) in unwired:
-    print("  UNWIRED %s:%d %s in %s" % (rel, line, kind, func))
+for (rel, line, kind, func, guard) in unwired:
+    print("  UNWIRED %s:%d %s in %s @ %s" % (rel, line, kind, func, guard))
 
 print("exempt_total=%d" % len(EXEMPT))
-print("exempt_uncited=%d" % len([v for v in EXEMPT.values()
-                                 if "C6" not in str(v)]))
+print("exempt_baseline=%d" % EXEMPT_BASELINE)
+print("exempt_uncited=%d" % len(uncited_exemptions()))
 print("terminal_total=%d" % len(TERMINAL_CONSUMERS))
-# Task 11b Step 4b — EXEMPT 와 같은 규율(값에 리터럴 "C6" 요구)로 맞췄다.
-# 이전엔 빈 문자열만 아니면 통과해 그럴듯한 비-C6 변명도 조용히 통과했다.
-print("terminal_uncited=%d" % len([v for v in TERMINAL_CONSUMERS.values()
-                                   if "C6" not in str(v)]))
+# Task 11b Step 4b — EXEMPT 와 같은 규율로 맞췄다. 이전엔 빈 문자열만
+# 아니면 통과해 그럴듯한 비-C6 변명도 조용히 통과했다. 최종 리뷰(A/m1) —
+# 리터럴 "C6" 두 글자면 만족하던 것을 `_cited()` 로 조인다.
+print("terminal_uncited=%d"
+      % len([v for v in TERMINAL_CONSUMERS.values() if not _cited(v)]))
 print("comprehensions=%d" % comprehension_count(abs_paths))
 
-# Task 12b Step 4d — 낡은 (경로, 줄번호) 면제 키가 조용히 다른 버리는 분기를
-# 가리는 구멍을 소리 나게 만든다(Task 11b 실증).
+# Task 12b Step 4d — 낡은 면제 키가 조용히 다른 버리는 분기를 가리는 구멍을
+# 소리 나게 만든다(Task 11b 실증). 최종 리뷰(K1) — 키가 «정체»까지 쥐므로
+# 줄 수를 보존한 채 조건만 바꾼 분기도 여기서 어긋난다.
 stale = stale_exempt(str(root))
 print("exempt_stale=%d" % len(stale))
-for (rel, line) in stale:
-    print("  STALE_EXEMPT %s:%d" % (rel, line))
+for (rel, line, ident) in stale:
+    print("  STALE_EXEMPT %s:%d %s" % (rel, line, ident))

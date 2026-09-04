@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/*/agents/*.md plugins/*/skills/**/*.md plugins/*/commands/*.md tools/adjudication/check_slots.py shared/tests/fixtures/adjudication/run_slots.py
+# guards: plugins/*/agents/*.md plugins/*/skills/**/*.md plugins/*/commands/*.md tools/adjudication/check_slots.py tools/adjudication/cite.py shared/tests/fixtures/adjudication/run_slots.py
 #
 # 수정 라운드 1 (F6) — 판정기 자신을 declare 한다. `fixtures/adjudication/
 # run_slots.py` 가 `import check_slots` 하므로 이 락이 그 코퍼스다(도출은
@@ -41,6 +41,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_slots.py" \
     "$REPO_ROOT" --emit-scanned
   printf '%s\n' "tools/adjudication/check_slots.py"
+  printf '%s\n' "tools/adjudication/cite.py"
   printf '%s\n' "shared/tests/fixtures/adjudication/run_slots.py"
   exit 0
 fi
@@ -80,8 +81,27 @@ if [ "${ndecl:-0}" -gt 0 ] 2>/dev/null; then
 else
   no "슬롯을 선언한 agent 가 0 이다 — 아래 (a)/(b) 단언은 오늘 «아무것도 재지 않는다». 통과해도 증거가 아니다"
 fi
+
+# 축 (a)가 «잰» 수와 «못 잰» 수를 함께 낸다. `declared=N` 만 내면 그 N 이
+# 대조된 수로 읽힌다 — 실제로는 dispatch 가 Workflow JS 나 `context: fork` 에
+# 있는 agent 가 `.md` 코퍼스에 안 보여 선언·전달 대조가 «없다». 셀 수 없으면
+# 셀 수 없음을 낸다(최종 리뷰 K4b).
+nmeas="$(printf '%s\n' "$OUT" | sed -n 's/^measured=//p')"
+nunmeas="$(printf '%s\n' "$OUT" | sed -n 's/^unmeasured=//p')"
+note "      축 (a) 대조: measured=$nmeas · unmeasured=$nunmeas (선언 $ndecl 개 중)"
+printf '%s\n' "$OUT" | sed -n 's/^  UNMEASURED //p' | while IFS= read -r l; do
+  note "      못 잼(.md dispatch 코퍼스 밖): $l"
+done
+# 0 이 아니라는 것 자체는 실패가 아니다. 실패는 «전부» 못 재는 것 — 그때
+# `problems_other=0` 은 아무것도 재지 않은 0 이다.
+if [ "${nmeas:-0}" -gt 0 ] 2>/dev/null; then
+  ok "축 (a)가 실제로 대조한 agent $nmeas 개 (0 이 아니다 — 아래 단언이 공허하지 않다)"
+else
+  no "축 (a)가 대조한 agent 가 0 이다 — dispatch 코퍼스 스캔이 깨졌다. 아래 problems_other=0 은 증거가 아니다"
+fi
+
 nprob="$(printf '%s\n' "$OUT" | sed -n 's/^problems_other=//p')"
-assert_eq "$nprob" "0" "선언 ↔ 전달 일치, 금지 종류 없음 (선언한 $ndecl 개 위에서)"
+assert_eq "$nprob" "0" "선언 ↔ 전달 일치, 금지 종류 없음 (선언 $ndecl · 그중 축 (a) 대조 $nmeas)"
 printf '%s\n' "$OUT" | sed -n 's/^  PROBLEM //p' | while IFS= read -r l; do
   note "      $l"
 done
@@ -89,8 +109,13 @@ done
 note "── 면제"
 unc="$(printf '%s\n' "$OUT" | sed -n 's/^exempt_uncited=//p')"
 nex="$(printf '%s\n' "$OUT" | sed -n 's/^exempt_total=//p')"
-assert_eq "$unc" "0" "C6 인용 없는 면제 항목 0"
-note "      면제 목록 크기: $nex  ← M8 이 이 수의 증가를 본다"
+exbase="$(printf '%s\n' "$OUT" | sed -n 's/^exempt_baseline=//p')"
+assert_eq "$unc" "0" "실질 없는 면제 사유 0 (C6(1)/C6(2) 번호 + 본문 40자 — L1 과 같은 술어: tools/adjudication/cite.py)"
+if [ "${nex:-0}" -le "${exbase:-0}" ] 2>/dev/null; then
+  ok "면제 목록 $nex <= baseline $exbase"
+else
+  no "면제 목록이 $nex 로 늘었다 (baseline $exbase) — 전부 면제로 넣으면 (b) 축이 장식이 된다. 늘린 커밋이 check_slots.EXEMPT_SLOTS_BASELINE 을 올리고 이유를 적어라"
+fi
 
 note "── 다중-agent 펜스 (수정 라운드 1, 코디네이터 판정 ⒞)"
 nma="$(printf '%s\n' "$OUT" | sed -n 's/^multi_agent_fences=//p')"

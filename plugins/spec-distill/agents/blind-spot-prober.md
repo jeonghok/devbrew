@@ -7,7 +7,7 @@ tools: Read, Grep, Glob, WebSearch, WebFetch
 input_slots:
   - tag: framing
     var: FRAMING
-    kind: artifact
+    kind: orchestrator_framing
 description: >
   Use this agent once per spec-distill interview to run an adversarial premortem on
   the current problem framing — surfacing hidden assumptions and failure modes the

@@ -28,6 +28,16 @@
 # 것으로 세어진다. 그 소비자가 실제로 부르는 함수가 그 키를 안 만져도 그렇다.
 # 좁히려면 함수 단위 도달성 분석이 필요하고 그것은 또 하나의 오라클이다 —
 # 이 락은 그것을 갖지 않는다고 밝힌다.
+#
+# **그래서 `unconsumed_total=0` 이 실제로 무엇에 대한 단언인지 수치로 밝힌다**
+# (최종 리뷰 K4a). 실측(이 락이 매 실행마다 `OWNFILE`·`SHARED` 줄로 다시 낸다):
+# 소비자 다섯 중 «자기 파일만으로» 여덟 키를 다 읽는 것은 `merge_review.py`
+# **하나**뿐이고(8/8), 나머지 넷은 0/8·0/8·1/8·2/8 이다. 다섯 «전부»가
+# `shared/adjudication/render_disposition.py` 를 import 하고 그 한 파일이 혼자
+# 8/8 을 덮는다. 즉 이 락의 통과는 다섯 개의 독립 증거가 아니라 **한 파일에
+# 대한 단언 + 그 파일을 import 한다는 사실의 복제 넷**이다. 이 락이 지키는
+# 것은 「공유 렌더 모듈이 여덟 키를 계속 부른다 + 소비자가 그것을 계속
+# import 한다」이지 「소비자 다섯이 각자 여덟 키를 읽는다」가 아니다.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
@@ -75,6 +85,14 @@ else
   no "소비자 도출이 0 이다 — 락이 vacuous 하다"
 fi
 unconsumed="$(printf '%s\n' "$OUT" | sed -n 's/^unconsumed_total=//p')"
-assert_eq "$unconsumed" "0" "모든 소비자가 모든 카운트를 읽는다"
+selfsuf="$(printf '%s\n' "$OUT" | sed -n 's/^self_sufficient=//p')"
+assert_eq "$unconsumed" "0" \
+  "모든 소비자의 «폐포»가 모든 카운트를 읽는다 (소비자 $nfiles · 그중 자기 파일만으로 전부 읽는 것은 $selfsuf — 나머지는 공유 렌더 모듈 경유다)"
+printf '%s\n' "$OUT" | sed -n 's/^  OWNFILE //p' | while IFS= read -r l; do
+  note "      자기 파일 단독: $l"
+done
+printf '%s\n' "$OUT" | sed -n 's/^  SHARED //p' | while IFS= read -r l; do
+  note "      공유 모듈: $l"
+done
 
 finish

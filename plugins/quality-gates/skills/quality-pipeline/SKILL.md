@@ -793,9 +793,18 @@ the persona. Any dispatch of these agents MUST thread the preflight-frozen
 The contract is verified by:
 - runtime: agent personas reject prompts missing `project_dir:` (see
   `plugins/quality-gates/agents/*.md` frontmatter)
-- static: `tests/harness/test_skill_orchestration_behavior.sh` asserts
-  every `subagent_type: "<agent>"` block in this SKILL has a
-  `project_dir:` line within 10 lines (AC1, AC6 protocol-shape)
+- static: `shared/tests/test_agent_input_slots.sh` — it parses each agent's
+  frontmatter `input_slots:` and the dispatch fences in this SKILL, and
+  reports `PROBLEM undelivered` when a declared non-optional slot (such as
+  `project_dir`) has no dispatch delivering it. Being a parse-and-compare,
+  it is insensitive to spelling (space width, variable name) — which a
+  proximity grep is not.
+
+  *(An earlier revision of this paragraph named
+  `tests/harness/test_skill_orchestration_behavior.sh` as the enforcer of a
+  "`project_dir:` within 10 lines" rule. That was false — deleting the line
+  left that lock's failure count unchanged. The measured enforcer is the one
+  above.)*
 
 ## Review max-iter decision
 

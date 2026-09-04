@@ -4,7 +4,9 @@
 # 외부 모델 판정자(codex 러너)가 자기 처분을 밝히는지 검사한다.
 #
 # 모집단은 신설하지 않는다 — 리포에 도출기가 이미 있고 standing assertion 에
-# 묶여 있다. 그 도구를 «고치지 않고» 출력에 /scripts/ 후처리만 건다.
+# 묶여 있다. 그 도구를 «고치지 않고» 출력에서 **명시 제외된 것만** 뺀다.
+# 이전 판본은 여기에 `grep '/scripts/'` 를 걸었고, 그것이 걸러낸 것을 세지도
+# 이름을 대지도 않아 다른 디렉터리의 러너가 앵커 없이 통과했다(최종 리뷰 K4c).
 #
 # 이 축은 약하다. `disclosure=` 리터럴이 파일에 있다는 것이 그 채널이 실제로
 # 읽힌다는 증거는 아니다 — 값이 저자 손에 있는 한 이 축에서 그 이상은 나오지
@@ -42,13 +44,49 @@ TMPD="$(mktemp -d -t rundisp-XXXXXX)" || exit 1
 trap 'rm -rf "$TMPD"' EXIT
 
 PYTHONDONTWRITEBYTECODE=1 python3 "$EXTRACT" "$REPO_ROOT/plugins" > "$TMPD/all.txt" 2>&1
-grep '/scripts/' "$TMPD/all.txt" > "$TMPD/runners.txt" || true
+
+# ── 모집단 = 도출 전체 − «명시 제외». 이전엔 `grep '/scripts/'` 였다 ──────
+# 그 후처리는 «걸러낸 것을 세지도 이름을 대지도 않았고», 그래서 `plugins/*/lib/`
+# 같은 다른 자리에 놓인 codex 러너가 앵커 없이 통과했다. 게다가 vacuity 가드
+# (`n_all > n_run`)가 그 버림을 «성공»으로 읽었다 — 많이 버릴수록 초록이었다
+# (최종 리뷰 K4c). 이제 제외는 «열거된 하나»뿐이고 나머지는 무엇이 어디에
+# 있든 전부 모집단에 든다. `/scripts/` 밖이면 세어서 이름을 댄다(공시).
+#
+# 각 항목은 사유를 갖는다:
+#   · plugins/quality-gates/tests/spike/test_codex_json_extraction.sh —
+#     러너가 아니라 «러너를 시험하는 spike 테스트»다. 실제 codex 를 호출하고
+#     자기 fixture 를 덮어쓰므로 프로덕션 판정 경로가 아니다. 처분 앵커를
+#     요구할 dispatch 자리 자체가 없다.
+EXCLUDED_DECL='plugins/quality-gates/tests/spike/test_codex_json_extraction.sh'
+read -r -a excluded_globs <<< "$EXCLUDED_DECL"
+
+: > "$TMPD/runners.txt"
+: > "$TMPD/excluded.txt"
+: > "$TMPD/outside.txt"
+while IFS= read -r abs; do
+  [ -n "$abs" ] || continue
+  rel_repo="${abs#"$REPO_ROOT"/}"
+  hit=0
+  for e in "${excluded_globs[@]}"; do
+    [ "$rel_repo" = "$e" ] && { hit=1; break; }
+  done
+  if [ "$hit" -eq 1 ]; then
+    printf '%s\n' "$rel_repo" >> "$TMPD/excluded.txt"
+    continue
+  fi
+  printf '%s\n' "$abs" >> "$TMPD/runners.txt"
+  case "$rel_repo" in
+    */scripts/*) ;;
+    *) printf '%s\n' "$rel_repo" >> "$TMPD/outside.txt" ;;
+  esac
+done < "$TMPD/all.txt"
 
 # `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 코퍼스는
-# 위에서 이미 만든 runners.txt(도출기 + /scripts/ 후처리, ㉯) 다 — 다시
-# 도출하지 않고 같은 파일을 그대로 낸다. 절대경로 → repo-relative 변환만
-# 한다(선언 글롭이 repo-relative 라 매칭시키려면 필요) — 이것은 재도출이
-# 아니라 서식 변환이다.
+# 위에서 이미 만든 runners.txt(도출기 − 명시 제외, ㉯) 다 — 다시 도출하지
+# 않고 같은 파일을 그대로 낸다. 절대경로 → repo-relative 변환만 한다(선언
+# 글롭이 repo-relative 라 매칭시키려면 필요) — 이것은 재도출이 아니라 서식
+# 변환이다. 모집단이 `/scripts/` 밖으로 넓어지면 이 락의 `# guards:` 선언도
+# 같이 넓혀야 한다 — 그 불일치는 저 양방향 검사가 잡는다(의도된 시끄러움).
 if [ "${1:-}" = "--emit-scanned" ]; then
   while IFS= read -r abs; do
     [ -n "$abs" ] || continue
@@ -59,20 +97,44 @@ fi
 
 n_all="$(wc -l < "$TMPD/all.txt" | tr -d ' ')"
 n_run="$(wc -l < "$TMPD/runners.txt" | tr -d ' ')"
-note "도출기 출력 $n_all → /scripts/ 후처리 후 $n_run"
+n_exc="$(wc -l < "$TMPD/excluded.txt" | tr -d ' ')"
+n_out="$(wc -l < "$TMPD/outside.txt" | tr -d ' ')"
+note "도출기 출력 $n_all → 명시 제외 $n_exc → 모집단 $n_run (그중 /scripts/ 밖 $n_out)"
 
 # 0 은 통과가 아니라 실패다.
 if [ "${n_run:-0}" -gt 0 ] 2>/dev/null; then
   ok "㉯ 도출 $n_run 개 (0 이 아니다 — 락이 vacuous 하지 않다)"
 else
-  no "㉯ 도출이 0 이다 — 도출기 출력이나 후처리가 깨졌다. 이 락의 모든 단언이 공허하다"
+  no "㉯ 도출이 0 이다 — 도출기 출력이나 모집단 계산이 깨졌다. 이 락의 모든 단언이 공허하다"
 fi
 
-# 후처리가 실제로 무언가를 걸러냈는지 — 안 걸러내면 후처리가 죽은 것이다.
-if [ "${n_all:-0}" -gt "${n_run:-0}" ] 2>/dev/null; then
-  ok "/scripts/ 후처리가 $((n_all - n_run)) 개를 걸러냈다 (spike/ 등)"
+# 조용히 사라진 것이 없는가. 이전 vacuity 가드(`n_all > n_run`)는 이것의
+# «반대»를 재고 있었다 — 버려진 게 있어야 통과였다. 이제는 도출된 것 중
+# 명시 제외를 뺀 전부가 모집단이어야 한다(등식). 하나라도 어긋나면 어딘가에서
+# 조용히 버려졌다는 뜻이다.
+if [ "$((n_all - n_exc))" -eq "${n_run:-0}" ] 2>/dev/null; then
+  ok "조용히 버려진 항목 0 (도출 $n_all − 명시 제외 $n_exc = 모집단 $n_run)"
 else
-  no "후처리가 아무것도 안 걸러냈다 — 도출기 출력이 바뀌었거나 필터가 죽었다"
+  no "도출 $n_all − 명시 제외 $n_exc ≠ 모집단 $n_run — 어딘가에서 조용히 버려졌다"
+fi
+
+# 명시 제외가 «살아 있는가». 대상이 사라졌는데 선언만 남으면 그건 죽은
+# 필터다(이전 후처리 가드가 잡으려던 것 — 방향만 바로잡아 여기 남긴다).
+for e in "${excluded_globs[@]}"; do
+  if grep -Fxq "$e" "$TMPD/excluded.txt"; then
+    ok "명시 제외 '$e' 가 실제로 1건 이상 걸렀다 (죽은 선언이 아니다)"
+  else
+    no "명시 제외 '$e' 가 아무것도 안 걸렀다 — 대상이 이동·삭제됐다. 선언을 지우거나 갱신하라"
+  fi
+done
+
+# `/scripts/` 밖은 «세어서 이름을 댄다». 버리지 않는다 — 아래 축들이 그대로
+# 적용된다(그 자리에 놓인 러너가 앵커 없이 통과하던 것이 K4c 의 결함이다).
+if [ "${n_out:-0}" -gt 0 ] 2>/dev/null; then
+  note "      /scripts/ 밖 $n_out 건 — 모집단에 포함해 아래 축을 그대로 적용한다:"
+  while IFS= read -r l; do
+    [ -n "$l" ] && note "        $l"
+  done < "$TMPD/outside.txt"
 fi
 
 # consumer= 경로 검증에 쓸 tracked-files 스냅샷 — `git ls-files --error-unmatch` 를
@@ -88,9 +150,13 @@ while IFS= read -r rel; do
   # `$REPO_ROOT/` 를 다시 붙이면 전부 「파일 없음」으로 떨어져 아래 세 축이
   # 통째로 안 돈다 — 시끄러운 RED 가 조용한 vacuous 로 바뀐다.
   f="$rel"
-  base="$(basename "$rel")"
-  if [ ! -f "$f" ]; then no "$base: 도출된 경로가 실재하지 않는다"; continue; fi
   rel_repo="${rel#"$REPO_ROOT"/}"
+  if [ ! -f "$f" ]; then no "$rel_repo: 도출된 경로가 실재하지 않는다"; continue; fi
+  # 실패 자리는 `file:line` 으로 이름 댄다 — basename 만으로는 같은 이름의
+  # 다른 파일과 구분이 안 되고, 형제 락 넷이 이미 `file:line` 이다(A/m4).
+  # 앵커가 없으면 줄이 없으므로 `:0` — 그 자체가 「앵커 없음」의 표기다.
+  anchor_ln="$(grep -n -F '**처분**' "$f" | head -1 | cut -d: -f1)"
+  base="$rel_repo:${anchor_ln:-0}"
 
   # **파일 본문이 아니라 «앵커 줄»에서 찾는다.** 본문 전체를 보면 산문이
   # 검사를 만족시킨다 — 실측: 여섯 중 셋이 에러 메시지와 설명 주석에

@@ -28,6 +28,18 @@ print("no_declaration=%d" % kinds.get("no_declaration", 0))
 # (a)/(b) 축이 «실제로 겨눈» 모집단. 선언이 0이면 그 두 축은 오늘 아무것도
 # 재지 않는다 — 그 사실이 `problems_other=0` 뒤에 숨으면 안 된다.
 print("declared=%d" % len([1 for v in defs.values() if v["slots"] is not None]))
+
+# 최종 리뷰 K4b — `declared=N` 은 «선언한» 수이지 축 (a)가 «잰» 수가 아니다.
+# dispatch 자리가 Workflow JS(`agent(prompt, {agentType})`)나 skill frontmatter
+# 의 `context: fork` 에 있는 agent 는 `.md` dispatch 코퍼스에 «구조적으로»
+# 안 보인다 — 그 agent 에서는 선언과 전달을 대조할 대상이 애초에 없다.
+# 셀 수 없으면 셀 수 없음을 낸다(리포 규약: 침묵과 0 은 다른 사실이다).
+pairs, _m = check_slots.dispatch_pairs(str(root))
+unmeasured = sorted(k for k in defs if not pairs.get(k))
+print("measured=%d" % (len(defs) - len(unmeasured)))
+print("unmeasured=%d" % len(unmeasured))
+for k in unmeasured:
+    print("  UNMEASURED %s (%s)" % (k, defs[k]["path"]))
 print("problems_other=%d" % (len(probs) - kinds.get("no_declaration", 0)))
 # Task 15 수정 라운드 1 (F4) — no_declaration 도 이름을 댄다. 예전엔 이 루프가
 # no_declaration 을 걸러내 개수(`no_declaration=N`)만 오르고 어느 agent 인지
@@ -37,6 +49,7 @@ print("problems_other=%d" % (len(probs) - kinds.get("no_declaration", 0)))
 for p in probs:
     print("  PROBLEM %s %s @ %s %s" % p)
 print("exempt_total=%d" % len(check_slots.EXEMPT_SLOTS))
+print("exempt_baseline=%d" % check_slots.EXEMPT_SLOTS_BASELINE)
 print("exempt_uncited=%d" % len(check_slots.uncited_exemptions()))
 
 # 펜스 하나에 subagent_type 이 둘 이상이면 `_harvest()` 가 어느 쪽에도 태그를

@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.8.2] — 2026-09-05
+
+### Fixed
+
+- **README 의 「Principles Instantiated」에 이 사이클의 instantiation 이 없었다
+  (최종 리뷰 K6b).** `처분`·`adjudication`·`Ledger`·`input_slots` 를 전수 grep 하면
+  히트 0 이었다. `input_slots`(agent 셋 + `audit-refuter.findings` 의 C6 면제)와
+  codex 러너의 `**처분**` 앵커 두 줄을 더했다. **범위 한계를 함께 적었다**: 이
+  플러그인의 dispatch 는 `audit-workflow.js` 의 `agent(prompt, {agentType})` 라
+  `shared/tests/test_agent_input_slots.sh` 의 `.md` dispatch 코퍼스에 «안 보이고»,
+  셋 다 그 락의 새 `unmeasured` 축으로 세어져 이름이 나온다.
+- **원장 정정 — `optional: true` 는 이 플러그인의 agent 셋에서 «무동작이 아니다».**
+  SDD 원장이 「`optional: true` 는 판정기가 정적 텍스트만 보므로 무동작」이라고
+  일반화해 적었는데, dispatch 가 `.md` 코퍼스 밖인 이 셋에서는 **유일한 침묵
+  장치**다 — `smoke-probe.md` 에서 그 한 줄만 지우면 `PROBLEM undelivered` 로 즉시
+  RED 가 된다(실측). 원장을 정정했다.
+
 ## [0.8.1] — 2026-09-04
 
 ### Fixed

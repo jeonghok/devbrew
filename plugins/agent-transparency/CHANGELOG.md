@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.2] — 2026-09-05
+
+### Fixed
+
+- **README 의 「Principles Instantiated」에 이 사이클의 instantiation 이 없었다
+  (최종 리뷰 K6b).** `처분`·`adjudication`·`Ledger`·`input_slots` 를 전수 grep 하면
+  히트 0 이었다. `transcript-reader` 의 `input_slots` 한 줄을 더하면서 **범위 한계**를
+  함께 적었다: 이 agent 의 dispatch 는 skill frontmatter 의 `context: fork` 라
+  `shared/tests/test_agent_input_slots.sh` 의 `.md` dispatch 코퍼스에 «안 보이고»,
+  그 락의 새 `unmeasured` 축이 이름을 댄다. 슬롯의 `optional: true` 가 그 미관측을
+  미전달과 가르는 **유일한 장치**이며(그 한 줄을 지우면 락이 `undelivered` 로 RED),
+  SDD 원장이 그것을 「무동작」으로 적었던 것을 정정했다.
+
 ## [0.3.1] — 2026-09-04
 
 ### Fixed
