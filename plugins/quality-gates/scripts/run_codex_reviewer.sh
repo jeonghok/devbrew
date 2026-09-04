@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 # run_codex_reviewer.sh — independent codex review subprocess (T3-3 refactor).
+#
+# **처분** — consumer=orchestrator · fail-open · disclosure=banner
+#
+# fail-open 인 이유: quality-pipeline/SKILL.md 를 실행하는 오케스트레이터가 산출물
+# YAML을 직접 읽어 codex_failed/exit_code/reason 순으로 판정한다(합쳐지는 python
+# 스크립트는 없음 — synthesize_findings.py 는 이미 병합된 findings 블롭을 받는다).
+# Tier B: "codex is unavailable이면 continue without it — scope does not change
+# this" — floor(A, security-reviewer 등)가 이 축의 주 판정자이고 codex 는 모델
+# 다양성 보조다. 죽으면 "이 리뷰에는 모델 다양성이 없었다 (degraded)" 배너로
+# 공시하고 막지 않는다.
+#
 # Replaces agent dispatch (agents/codex-reviewer.md) with a script invocation.
 # Layer 1 isolation (was: frontmatter disallowedTools) is now provided by
 # SKILL.md narrow Bash allowlist (this script path only).

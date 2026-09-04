@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.1] — 2026-09-04
+
+### Fixed
+- **`scripts/run_audit_codex_reviewer.sh` 가 자기 처분(누가 산출물을 읽는가·죽었을 때
+  막는가 공시하는가·어느 채널로 드러나는가)을 밝히지 않고 있었다 — `shared/tests/test_runner_disposition.sh`
+  (adjudication-topology Task 13) 가 26 단언 중 24 를 RED 로 잡았다.** 여섯 codex 러너 중
+  이 플러그인 몫 하나에 `**처분**` 앵커를 추가: `consumer=orchestrator`(산출물
+  `$CODEX_JSON` 을 `auditing-plugins/SKILL.md` 를 실행하는 오케스트레이터가 직접 읽어
+  `findings` 는 `audit-workflow.js` 의 `codexFindings` 인자로, `d_verdicts`/`oq_answers`/
+  `new_open_questions` 는 `assemble-audit-data.py` 의 `--codex-side` 로 나눠 넘긴다 — 두
+  스크립트 중 어느 쪽도 이 파일을 직접 열지 않는다) · `fail-open`(codex 가 죽어도 나머지
+  5축 감사(auditor+refuter)는 계속되고 `meta.codex.ran=false` + stderr 배너로만 공시된다
+  — 이 축의 주 판정자가 아니라 모델 다양성 보조다) · `disclosure=meta.codex`.
+
 ## [0.7.0] — 2026-09-03
 
 ### Added

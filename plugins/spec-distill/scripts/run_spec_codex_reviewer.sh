@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 # run_spec_codex_reviewer.sh — independent codex review of a DESIGN DOC.
+#
+# **처분** — consumer=plugins/spec-distill/scripts/merge_review.py · fail-open · disclosure=advisory
+#
+# fail-open 인 이유: 산출물은 reviewing-spec/SKILL.md 가
+# `merge_review.py --claude-output ... --codex-yaml <out_yaml>`로 직접 넘긴다
+# (같은 플러그인 .py). codex가 죽어도 Claude 리뷰는 이미 돌았다. 이 축의 주
+# 판정자가 아니라 모델 다양성 보조다 — 죽으면 `codex_degraded: true` +
+# advisory[]로 공시하되 막지 않는다(combined_verdict는 claude_verdict를 그대로 쓴다).
+#
 # spec-distill design §6 #3. Unlike qg's run_codex_reviewer.sh, this NEVER
 # performs script-internal spec/AC auto-discovery (C3: the reviewed doc lives
 # under docs/superpowers/specs/, so AC auto-injection would feed the doc its

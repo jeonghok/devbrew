@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 # run_audit_codex_reviewer.sh — plugin-audit blind co-audit의 codex 실행 러너.
 #
+# **처분** — consumer=orchestrator · fail-open · disclosure=meta.codex
+#
+# fail-open 인 이유: 산출물($CODEX_JSON)은 auditing-plugins/SKILL.md 를 실행하는
+# 오케스트레이터가 직접 읽어 `findings`는 audit-workflow.js 의 codexFindings 인자로,
+# `d_verdicts`/`oq_answers`/`new_open_questions`는 assemble-audit-data.py 의
+# --codex-side 로 나눠 넘긴다 — 두 스크립트 중 어느 쪽도 이 파일을 직접 열지 않으므로
+# consumer 는 orchestrator다. codex_avail=false 여도 나머지 5축 감사(auditor+refuter)는
+# 그대로 돌고 `meta.codex.ran=false` + stderr 배너로만 공시한다 — 이 축의 주 판정자가
+# 아니라 모델 다양성 보조다.
+#
 # 이 스크립트가 있기 전까지 plugin-audit은 codex를 **산문 지시로** 불렀고
 # (`skills/auditing-plugins/SKILL.md:92`), 그래서 여섯 가지가 동시에 비어 있었다:
 # 가용성 확인 · codex 전용 kill switch · `-C` · `--json` · stdin 규약 · 층④ 추출기.

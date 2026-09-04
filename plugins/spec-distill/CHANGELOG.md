@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.51.7] — 2026-09-04
+
+### Fixed
+- **codex 러너 셋(`run_brief_codex_reviewer.sh`·`run_seed_codex_reviewer.sh`·
+  `run_spec_codex_reviewer.sh`)이 자기 처분을 밝히지 않고 있었다 —
+  `shared/tests/test_runner_disposition.sh`(adjudication-topology Task 13) 가 여섯
+  러너 26 단언 중 24 를 RED 로 잡았다(이 플러그인 몫 셋 포함, 나머지 셋은
+  quality-gates·plugin-audit 쪽 CHANGELOG 참조).** 도출은 그 락의
+  `# guards: plugins/*/scripts/*codex*.sh` 코퍼스에서 직접 했다(스크래치 파일 아님).
+  각 러너 상단에 `**처분** — consumer=<...> · fail-<open|closed> · disclosure=<리터럴>`
+  앵커를 추가했다.
+  - `run_brief_codex_reviewer.sh`: `consumer=plugins/spec-distill/scripts/merge_brief_review.py`
+    (충실도 축 — `reviewing-brief/SKILL.md` 가 `--codex-yaml` 로 직접 넘긴다) ·
+    `fail-open`(`merge_brief_review.py` 자신의 주석대로 "codex는 모델 다양성 보조다 —
+    파손을 공시하되 차단하지 않는다(primary=False)": critic 판정이 살아 있으면 codex
+    실패가 approved 를 막지 않고 `advisory[]` 로만 공시된다. 방향성 축은 병합기가 없어
+    SKILL.md 게이트 블록이 직접 읽어 나란히 보여준다 — 두 축 모두 codex 는 주 판정자가
+    아니다) · `disclosure=advisory`.
+  - `run_seed_codex_reviewer.sh`: `consumer=orchestrator`(이 축엔 병합기가 없다 —
+    `framing-requests/SKILL.md` 의 codex-gate 블록 자신이 `$CODEX_YAML` 을 유일하게
+    읽어 `codex_status` 를 echo 하고 격리 critic 의 findings 와 나란히 보여준다) ·
+    `fail-open`(codex 가 죽어도 격리 critic 이 남는다) ·
+    `disclosure=framing_degradations`.
+  - `run_spec_codex_reviewer.sh`: `consumer=plugins/spec-distill/scripts/merge_review.py`
+    (`reviewing-spec/SKILL.md` 가 `--codex-yaml` 로 직접 넘긴다) · `fail-open`(codex 가
+    죽어도 Claude 리뷰는 이미 돌았다 — `codex_degraded: true` + `advisory[]` 로 공시하되
+    `combined_verdict` 는 `claude_verdict` 를 그대로 쓴다) · `disclosure=advisory`.
+  - 기존 `shared/tests/test_dispatch_disposition.sh`(Task 5 산출물, Agent()/subagent
+    dispatch 축) 는 19/19 Pass 로 무변경 — 이번 앵커는 다른 락(`test_runner_disposition.sh`)
+    의 코퍼스(bash 코덱스 러너 스크립트)를 대상으로 한다.
+
 ## [0.51.6] — 2026-09-04
 
 ### Fixed

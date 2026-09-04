@@ -3,6 +3,30 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.5.4] — 2026-09-04
+
+### Fixed
+- **codex 러너 둘(`run_codex_reviewer.sh`·`run_artifact_codex_reviewer.sh`)이 자기 처분을
+  밝히지 않고 있었다 — `shared/tests/test_runner_disposition.sh`(adjudication-topology
+  Task 13) 가 여섯 러너 26 단언 중 24 를 RED 로 잡았다(이 플러그인 몫 둘 포함).** 도출은
+  그 락의 `# guards: plugins/*/scripts/*codex*.sh` 코퍼스에서 직접 했다(스크래치 파일
+  아님) — `run_audit_codex_reviewer.sh`(plugin-audit) · `run_artifact_codex_reviewer.sh`·
+  `run_codex_reviewer.sh`(quality-gates, 이 항목) · `run_brief_codex_reviewer.sh`·
+  `run_seed_codex_reviewer.sh`·`run_spec_codex_reviewer.sh`(spec-distill) 여섯. 각 러너
+  상단에 `**처분** — consumer=<...> · fail-<open|closed> · disclosure=<리터럴>` 앵커를
+  추가했다.
+  - `run_codex_reviewer.sh`: `consumer=orchestrator`(quality-pipeline/SKILL.md 를 실행하는
+    오케스트레이터가 산출물 YAML 을 직접 읽어 판정한다 — `synthesize_findings.py` 는 이미
+    병합된 findings 블롭을 받을 뿐 이 파일을 직접 열지 않는다) · `fail-open`(Tier B: codex
+    미가용이면 그대로 continue — floor 리뷰어가 이 축의 주 판정자다) · `disclosure=banner`.
+  - `run_artifact_codex_reviewer.sh`: `consumer=plugins/quality-gates/scripts/synthesize_artifact_findings.py`
+    (`critiquing-artifacts/SKILL.md` 가 `--findings codex.yaml` 로 직접 넘긴다, 같은 플러그인
+    .py) · `fail-open`(codex 실패 시 codex.yaml 은 병합에서 제외되고 inherit-tier critic
+    단독으로 계속된다) · `disclosure=banner`.
+  - 기존 `shared/tests/test_dispatch_disposition.sh`(Task 5 산출물, Agent()/subagent dispatch
+    축) 는 19/19 Pass 로 무변경 — 이번 앵커는 다른 락(`test_runner_disposition.sh`)의
+    코퍼스(bash 코덱스 러너 스크립트)를 대상으로 한다.
+
 ## [6.5.3] — 2026-09-04
 
 ### Fixed

@@ -1,5 +1,17 @@
 #!/usr/bin/env bash
 # run_brief_codex_reviewer.sh — independent codex review of an interview BRIEF.
+#
+# **처분** — consumer=plugins/spec-distill/scripts/merge_brief_review.py · fail-open · disclosure=advisory
+#
+# fail-open 인 이유: 충실도(fidelity) 축에서 산출물은 reviewing-brief/SKILL.md 가
+# `merge_brief_review.py --critic-output ... --codex-yaml <out_yaml>`로 직접
+# 넘긴다(같은 플러그인 .py). merge_brief_review.py 자신의 주석대로 "codex는
+# 모델 다양성 보조다 — 파손을 공시하되 차단하지 않는다(primary=False →
+# L.blocks()에 기여하지 않는다)": critic 판정이 살아 있으면 codex 실패가
+# approved를 막지 않고 advisory[]로만 공시된다. (방향성 축은 병합기가 없어
+# SKILL.md 게이트 블록이 직접 읽어 나란히 보여준다 — 두 축 모두 codex는
+# 주 판정자가 아니다.)
+#
 # spec-distill Spec B §5.7 · AC6 · AC20. codex 호출은 **이 파일 1곳**이고 축은 인자다
 # (축별 복제 = 플래그·샌드박스·에러 처리 중복 → 한쪽만 고치는 drift).
 #

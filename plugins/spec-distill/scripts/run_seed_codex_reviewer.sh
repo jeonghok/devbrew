@@ -4,6 +4,14 @@
 # design doc — the third of this shape (형제: run_brief_codex_reviewer.sh ·
 # run_spec_codex_reviewer.sh). codex 호출은 이 파일 1곳이고 축은 인자다.
 #
+# **처분** — consumer=orchestrator · fail-open · disclosure=framing_degradations
+#
+# fail-open 인 이유: 이 축엔 병합기가 없다("병합기가 없고 판정도 없습니다") —
+# framing-requests/SKILL.md 의 codex-gate 블록 자신이 `$CODEX_YAML`을 유일하게
+# 읽어 `codex_status`를 echo 하고 격리 critic의 findings와 나란히 보여준다(consumer
+# 는 그 블록을 실행하는 오케스트레이터). codex가 죽어도 격리 critic이 남는다 —
+# 원장이 살아 있으면 `framing_degradations`에 공시할 뿐 이 축을 막지 않는다.
+#
 # Usage:  run_seed_codex_reviewer.sh <axis: suppression> <payload> <project_dir> <out_yaml>
 #
 # 계약(형제와 동일 — census #24·#125): 정상·실패 어느 경로에서도 exit 0 이고
