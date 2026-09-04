@@ -54,28 +54,33 @@ _T5_SELECT_LOOP = (
 # record_attempt()/validation 기록이 세션에 걸쳐 영속시키므로, 한 번 상한에
 # 닿으면 그 후보는 이 특정 검사를 다음 Stop 에도 계속 다시 통과 못 한다(코드
 # 확인: record_attempt() 는 attempts 가 DISPATCH_ATTEMPT_CAP 에 닿는 바로 그
-# write 에서 armed_paths 에도 같이 추가한다 — arm_ledger.py:347). 결론(배선
+# write 에서 armed_paths 에도 같이 추가한다 — arm_ledger.py 의
+# record_attempt()). 결론(배선
 # 불필요)은 그대로다: 소실이 없다는 근거가 "다시 보인다"가 아니라 "이미
 # 한 번 공시됐다"로 바뀔 뿐이다.
 _T5_SELECT_LOOP_DISPATCH_CAP = (
     "C6(1) — select_dispatch_target() 의 DISPATCH_ATTEMPT_CAP 스킵. 위 "
     "_T5_SELECT_LOOP 의 '다음 Stop 에 다시 나타난다'는 이 필터에는 거짓이다 "
-    "— record_attempt()(arm_ledger.py:347)가 attempts 를 상한에 올리는 그 "
+    "— record_attempt()(arm_ledger.py)가 attempts 를 상한에 올리는 그 "
     "write 에서 armed_paths 에도 같이 추가하므로, 이후 Stop 에서 그 후보는 "
     "(이 검사가 아니라) 위 armed 검사에서 먼저 걸린다. 진짜 근거: 상한 도달 "
     "사실은 상한에 닿던 바로 그 dispatch 시도에서 이미 한 번 공시됐다 — "
-    "review-dispatch.py:765-770 의 mandate 메시지(「…자동 dispatch를 "
-    "중단한다」). 이후의 조용한 스킵은 새 소실이 아니라 이미 공시된 상태를 "
+    "review-dispatch.py 의 dispatch 상한 mandate 메시지(「…자동 dispatch를 "
+    "중단한다」 — `if cap and attempt_n >= cap:` 분기가 조립한다). 이후의 "
+    "조용한 스킵은 새 소실이 아니라 이미 공시된 상태를 "
     "다시 지나가는 것이다."
 )
 _T5_SELECT_LOOP_VALIDATION_CAP = (
     "C6(1) — select_dispatch_target() 의 VALIDATION_ATTEMPT_CAP 스킵. 같은 "
     "이유로 _T5_SELECT_LOOP 의 '다시 나타난다' 근거는 이 필터에도 거짓이다. "
-    "진짜 근거: 같은 상한·같은 카운터를 main() 의 검증 대상 선별 루프 "
-    "(:544-546)가 이 함수 호출보다 **앞서** 같은 Stop 안에서 이미 검사해 "
-    "capped_advisory(:583-587)를 만들어 두고, 그 값은 select_dispatch_target() "
-    "이 무엇을 고르든 상관없이 with_advisory 로 이 턴의 출력에 실린다(flush "
-    "지점: :634·:650·:694·:703·:713·:797·:809). 이 자리의 스킵은 같은 Stop "
+    "진짜 근거: 같은 상한·같은 카운터를 main() 의 검증 대상 선별 루프"
+    "(`val_att.get(c.key, 0) >= val_cap` 분기)가 이 함수 호출보다 **앞서** "
+    "같은 Stop 안에서 이미 검사해 `capped_advisory` 를 만들어 두고, 그 값은 "
+    "select_dispatch_target() 이 무엇을 고르든 상관없이 with_advisory 로 이 "
+    "턴의 출력에 실린다(flush 지점 일곱 — `flush_advisory(capped_advisory)` "
+    "넷 · `_block_with_ledger(…, capped_advisory)` 둘 · "
+    "`with_advisory({\"systemMessage\": …}, capped_advisory)` 하나). 이 "
+    "자리의 스킵은 같은 Stop "
     "안에서 이미 공시된 사실을 다시 지나가는 것이지 새 소실이 아니다."
 )
 _T5_MAIN_VALIDATION_LOOP_INFLIGHT = (
@@ -119,13 +124,13 @@ EXEMPT = {
     # Task 10 수정 라운드 1 — merge_brief_review.py 가 형제 merge_review.py 와
     # 같은 편평화 루프를 쓴다. 원장이 하나뿐이라 합산이 없다는 점만 다르고
     # 제외 사유는 동일하다: "reasons" 는 이 loop 이전에 이미
-    # `advisory.extend(L.reasons())`(:334)로, "held_by_class" 는 loop 직후
+    # `advisory.extend(L.reasons())` 로, "held_by_class" 는 loop 직후
     # 세 줄로 각각 실린다 — 버려지는 항목이 없다.
     ("plugins/spec-distill/scripts/merge_brief_review.py", 363,
      "continue in main @ if _k in ('reasons', 'held_by_class')"):
         "C6(1) — disposition_report().items() 를 도는 이 continue 는 "
         "\"reasons\"·\"held_by_class\" 두 키를 이 loop 에서만 제외한다. "
-        "\"reasons\" 는 이 loop 이전에 이미 `advisory.extend(L.reasons())`(:334) "
+        "\"reasons\" 는 이 loop 이전에 이미 `advisory.extend(L.reasons())` "
         "로, \"held_by_class\" 는 loop 직후 세 줄(held_unadjudicated/"
         "held_malformed/held_other)로 각각 실린다 — 버려지는 항목이 없다.",
 
@@ -143,13 +148,13 @@ EXEMPT = {
     # 다른 점이 하나 있다 — 키가 «정체»(kind·func·guard)를 함께 쥐게 된 뒤라
     # 락이 열 자리를 **이름과 함께** 냈고, 갱신을 «정체가 같은 행 찾기»로
     # 기계적으로 할 수 있었다(줄번호를 손으로 세지 않았다). 판정·사유는 무변경.
-    # :340~342·:348~351 다섯 자리는 `_T5_SELECT_LOOP` 를 그대로 공유한다(born·
-    # armed·is_inflight·resolve_mode 넷은 실제로 매 Stop 재계산되는 상태다).
-    # :344·:346 (DISPATCH_ATTEMPT_CAP·VALIDATION_ATTEMPT_CAP) 은 그 공유 근거가
-    # 거짓이라 위 두 전용 상수로 분리했다(Step 4c). :351 은 그 루프의
-    # `return c` — 첫 적격 후보를 찾고 순회를 멈추는 것도 `_T5_SELECT_LOOP` 와
-    # 같은 이유로 소실이 아니다(discover()가 다음 Stop 에 나머지 후보를 다시
-    # 낸다).
+    # 일곱 중 다섯(`c.born` · `c.key in armed` · `is_inflight(...)` ·
+    # `resolve_mode(...) is None` · 루프 끝의 `return c`)은 `_T5_SELECT_LOOP` 를
+    # 그대로 공유한다(앞 넷은 실제로 매 Stop 재계산되는 상태다). 두 상한 분기
+    # (`DISPATCH_ATTEMPT_CAP`·`VALIDATION_ATTEMPT_CAP`)는 그 공유 근거가 거짓
+    # 이라 위 두 전용 상수로 분리했다(Step 4c). `return c` — 첫 적격 후보를
+    # 찾고 순회를 멈추는 것도 `_T5_SELECT_LOOP` 와 같은 이유로 소실이 아니다
+    # (discover()가 다음 Stop 에 나머지 후보를 다시 낸다).
     ("plugins/spec-distill/hooks/review-dispatch.py", 357,
      'continue in select_dispatch_target @ if c.born'): _T5_SELECT_LOOP,
     ("plugins/spec-distill/hooks/review-dispatch.py", 359,
@@ -167,21 +172,21 @@ EXEMPT = {
     ("plugins/spec-distill/hooks/review-dispatch.py", 368,
      'return in select_dispatch_target @ <bare>'): _T5_SELECT_LOOP,
 
-    # Task 11 (T5) — main() 의 검증 대상 선별 루프. :543(구 :530) 은 in-flight
-    # 스킵(다른 리뷰가 도는 중 — 끝나면 다음 Stop 에 다시 후보가 된다). 줄번호는
-    # Task 11b 가 위와 같은 +13 drift 로 교정(사유·판정 무변경).
+    # Task 11 (T5) — main() 의 검증 대상 선별 루프. `is_inflight(...)` 분기는
+    # in-flight 스킵(다른 리뷰가 도는 중 — 끝나면 다음 Stop 에 다시 후보가
+    # 된다). Task 11b 가 위와 같은 drift 로 자리를 교정했다(사유·판정 무변경).
     ("plugins/spec-distill/hooks/review-dispatch.py", 560,
      'continue in main @ if arm_ledger.is_inflight(body, c.path, now)'):
         _T5_MAIN_VALIDATION_LOOP_INFLIGHT,
 
     # Task 11 수정 라운드 1 — 최초 사유가 범주 착오였다(오케스트레이터 지적).
-    # Task 11b — 줄번호를 :533→:546 으로 교정(위와 같은 +13 drift, 판정·본문
-    # 논거는 무변경 — 내부 인용 줄번호만 현재 파일에 맞게 다시 잡는다).
-    # :546 은 검증 상한(VALIDATION_ATTEMPT_CAP) 도달 스킵이다. `capped.append(
+    # Task 11b — 그 자리를 교정했다(위와 같은 drift, 판정·본문 논거는 무변경).
+    # 이 자리는 검증 상한(VALIDATION_ATTEMPT_CAP) 도달 스킵이다. `capped.append(
     # c.key)` 가 바로 위 같은 분기에서 continue 이전에 실행되므로 항목 자체는
     # 사라지지 않고 `capped` → `capped_advisory` 를 타고 이번 턴의 JSON 출력
-    # `systemMessage` 필드에 실제로 실린다(추적: :567 정의·:583-587 조립·flush
-    # 지점 :634,650,694,703,713,797,809).
+    # `systemMessage` 필드에 실제로 실린다(추적: `capped_advisory` 의 선언·조립과
+    # 그 값을 태우는 flush 지점 일곱 — 위 `_T5_SELECT_LOOP_VALIDATION_CAP` 이
+    # 그 일곱을 형태로 열거한다).
     #
     # 최초 판정은 여기서 "systemMessage 가 모델 도달 카나리 0/14 라 채널
     # 효과가 의심된다"고 적었으나 **그건 범주 착오다.** CLAUDE.md 의 계약:
@@ -189,7 +194,7 @@ EXEMPT = {
     # 라벨을 붙여 보여준다." `systemMessage` 는 **사람의 터미널**에 뜨는
     # 채널이지 모델 컨텍스트에 주입되는 채널이 아니다 — T5-1·T5-2 가 채널을
     # `reason` 으로 정한 이유는 그 두 자리의 소비자가 **모델**(다음 턴
-    # dispatch 판단)이기 때문이었다. 이 자리(:546)의 소비자는 사람이다 —
+    # dispatch 판단)이기 때문이었다. 이 자리의 소비자는 사람이다 —
     # "자동 검증·dispatch 를 하지 않는 문서가 있다"는 사실은 세션을 보는
     # 사람에게 알리는 것이지 모델에게 강제할 대상이 아니다. 그러므로 모델
     # 미도달은 결함이 아니라 이 채널의 **설계대로**다 — 소실도 아니고 채널
@@ -211,10 +216,10 @@ EXEMPT = {
         "(규칙 억제 `suppressed()` 재분류 후보 — 판단이 아니라 상한값이 "
         "정한 배제라는 점에서).",
 
-    # Task 11 (T5) — main() 의 구조 검증 루프. :603(구 :589) 는 `reasons` 가 빈
-    # 성공 케이스 — 판정할 실패 자체가 없다. 줄번호는 Task 11b 가 +14 drift 로
-    # 교정(사유·판정 무변경 — 이 지점은 :546 보다 아래라 6d87b2c 의
-    # `failed_keys` 삽입 한 줄이 더 얹혀 +14).
+    # Task 11 (T5) — main() 의 구조 검증 루프. `if not reasons` 분기는 `reasons`
+    # 가 빈 성공 케이스 — 판정할 실패 자체가 없다. Task 11b 가 자리를 교정했다
+    # (사유·판정 무변경 — 이 지점은 위 검증 상한 스킵보다 아래라 6d87b2c 의
+    # `failed_keys` 삽입 한 줄이 더 얹혔다).
     ("plugins/spec-distill/hooks/review-dispatch.py", 620,
      'continue in main @ if not reasons'):
         _T5_MAIN_VALIDATION_LOOP_SUCCESS,
@@ -225,11 +230,11 @@ EXEMPT = {
     # 자리마다 다르다(보고서 `.superpowers/sdd/2026-09-03-adjudication-topology/
     # task-11b-report.md` 에 각 자리의 세 질문 답변).
     #
-    # :155·:160 — parse_codex_yaml() 의 `for raw in lines:` 는 codex YAML
+    # 헤더 두 자리 — parse_codex_yaml() 의 `for raw in lines:` 는 codex YAML
     # 파일의 «텍스트 줄» 을 도는 라인 파서 루프다. 원소는 판정 항목(finding)
     # 이 아니라 원문 줄이고, 두 continue 는 YAML 섹션 헤더(`findings:`·
     # `meta:`) 를 만났을 때 상태 전이만 하고 다음 줄로 넘어간다 — 그 줄
-    # 자체가 finding 이 아니므로 버릴 항목이 없다. :160 은 오히려 반대
+    # 자체가 finding 이 아니므로 버릴 항목이 없다. `meta:` 쪽은 오히려 반대
     # 증거를 담고 있다: `meta:` 전환 **이전에** `if cur: findings.append(cur)`
     # 로 그때까지 누적된 finding 을 먼저 보존한 뒤에 continue 한다 — 소실
     # 방지가 코드에 명시적으로 있다.
@@ -246,37 +251,37 @@ EXEMPT = {
         "cur)` 가 continue **이전**에 실행돼 그때까지 누적된 finding 을 먼저 "
         "보존한다 — 헤더 줄 자체는 finding 이 아니고, 진행 중이던 finding 도 "
         "소실되지 않는다.",
-    # :229 — derive_codex_verdict() 는 `codex_findings` 전체에 대한 단일
+    # fold 조기 종료 — derive_codex_verdict() 는 `codex_findings` 전체에 대한 단일
     # 집계값(verdict 문자열)을 접는(fold) 함수다. 첫 escalating finding 에서
     # `return "needs_revise"` 로 끊지만, 순회를 멈춘다고 나머지 finding 이
     # 파이프라인에서 사라지지 않는다 — 호출자가 들고 있는 같은 `codex_findings`
     # 리스트가 이 함수와 무관하게 build_ledger() 의 `for f in codex_findings:`
-    # (:363, 이미 배선됨 — :373 에서 codex_ledger.hold() 뒤 continue) 로 전수
+    # (이미 배선됨 — codex_ledger.hold() 뒤 continue) 로 전수
     # 다시 돌며, category·target_section 둘 다 없는 원소는 거기서 hold() 된다.
     # 표시 채널(build_codex_findings_display)도 이 함수와 별개로 같은 전체
     # 리스트를 돈다. 즉 이 fold 가 일찍 멈춰도 "판정에 영향을 주는 값"은
     # 동일하고(max 류 단조 집계라 나머지를 봐도 결론이 안 바뀐다), 개별
-    # finding 의 회계는 이미 다른 자리(:363)가 맡는다.
+    # finding 의 회계는 이미 build_ledger() 의 그 루프가 맡는다.
     ("plugins/spec-distill/scripts/merge_review.py", 229,
      'return in derive_codex_verdict @ if sev in CODEX_SEVERITY_REVISE or sev not in CODEX_SEVERITY_KNOWN'):
         "C6(1) — derive_codex_verdict() 의 fold 조기 종료. `codex_findings` "
         "전체는 이 함수와 무관하게 build_ledger() 의 `for f in codex_findings:` "
-        "(:363, 이미 배선 — :371-373 에서 codex_ledger.hold() 뒤 continue) 가 "
+        "(이미 배선 — codex_ledger.hold() 뒤 continue) 가 "
         "전수 다시 돌아 개별 회계하고, build_codex_findings_display() 도 같은 "
         "전체 리스트를 별도로 순회해 표시한다 — 이 fold 가 멈춰도 미방문 "
         "finding 이 파이프라인에서 사라지지 않는다. 결론(needs_revise)도 "
         "단조 집계라 나머지를 마저 봐도 바뀌지 않는다.",
-    # :270 — build_codex_findings_display() 의 `if not isinstance(f, dict):
-    # continue` 는 도달 불가능한 방어다. 이 함수의 유일한 호출자(main():555)는
-    # 항상 parse_codex_yaml() 의 반환값을 그대로 넘기고(:489→:555, 사이에
+    # 도달 불가능한 방어 — build_codex_findings_display() 의
+    # `if not isinstance(f, dict): continue`. 이 함수의 유일한 호출자 main() 은
+    # 항상 parse_codex_yaml() 의 반환값을 그대로 넘기고(그 둘 사이에
     # 변형 없음), parse_codex_yaml() 의 `findings` 리스트는 `cur = {}` 로만
     # 생성되고 dict 항목 대입(`cur[k] = v`)만 받는다 — 코드 어디에도 `cur` 를
     # dict 아닌 값으로 덮어쓰는 경로가 없다(코드 확인 완료). 배선하면 Task 10
     # 의 `phase_key` 와 같은 죽은 코드가 된다.
     ("plugins/spec-distill/scripts/merge_review.py", 270,
      'continue in build_codex_findings_display @ if not isinstance(f, dict)'):
-        "C6(1) — 도달 불가능한 방어. 유일한 호출자 main():555 는 parse_codex_"
-        "yaml():489 의 반환값을 변형 없이 그대로 넘기고, 그 함수의 `findings` "
+        "C6(1) — 도달 불가능한 방어. 유일한 호출자 main() 은 parse_codex_"
+        "yaml() 의 반환값을 변형 없이 그대로 넘기고, 그 함수의 `findings` "
         "는 `cur = {}` 로만 생성돼 dict 항목 대입만 받는다 — 비-dict 원소를 "
         "만드는 경로가 코드에 없다(확인 완료). 배선하면 죽은 코드다(Task 10 "
         "의 `phase_key` 와 같은 함정).",
@@ -513,7 +518,7 @@ _ANCHOR_RE = re.compile(r'consumer=([^\s·]+\.py)')
 
 # 면제 인용의 «실질» 판정은 `cite.py` 하나가 진다 — L3(`check_slots`)가 같은
 # 요구를 지므로 술어를 베끼면 다음 조임이 한쪽에만 닿는다(최종 리뷰 A/m1).
-from cite import cited as _cited, uncited  # noqa: E402
+from cite import uncited  # noqa: E402
 
 
 def uncited_exemptions():

@@ -4,8 +4,11 @@ from pathlib import Path
 root = Path(sys.argv[1])
 sys.path.insert(0, str(root / "tools" / "adjudication"))
 from check_wiring import (  # noqa: E402
-    EXEMPT, EXEMPT_BASELINE, TERMINAL_CONSUMERS, _cited, comprehension_count,
+    EXEMPT, EXEMPT_BASELINE, TERMINAL_CONSUMERS, comprehension_count,
     derive_consumers, exempt_key, scan, stale_exempt, uncited_exemptions)
+# 인용 실질 판정은 `cite.py` 가 원천이다 — check_wiring 을 경유해 «재수출»
+# 받으면 그 파일에서 쓰이지 않는 별칭이 남아 죽은 import 처럼 보인다.
+from cite import cited  # noqa: E402
 
 union, by_import, by_anchor = derive_consumers(str(root))
 print("union=%d" % len(union))
@@ -44,9 +47,9 @@ print("exempt_uncited=%d" % len(uncited_exemptions()))
 print("terminal_total=%d" % len(TERMINAL_CONSUMERS))
 # Task 11b Step 4b — EXEMPT 와 같은 규율로 맞췄다. 이전엔 빈 문자열만
 # 아니면 통과해 그럴듯한 비-C6 변명도 조용히 통과했다. 최종 리뷰(A/m1) —
-# 리터럴 "C6" 두 글자면 만족하던 것을 `_cited()` 로 조인다.
+# 리터럴 "C6" 두 글자면 만족하던 것을 `cite.cited()` 로 조인다.
 print("terminal_uncited=%d"
-      % len([v for v in TERMINAL_CONSUMERS.values() if not _cited(v)]))
+      % len([v for v in TERMINAL_CONSUMERS.values() if not cited(v)]))
 print("comprehensions=%d" % comprehension_count(abs_paths))
 
 # Task 12b Step 4d — 낡은 면제 키가 조용히 다른 버리는 분기를 가리는 구멍을

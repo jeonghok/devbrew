@@ -1,7 +1,8 @@
 """decision:"block" dict 리터럴 수와 처분 메서드 호출 수를 ast 로 센다.
 
 Task 15 수정 라운드 1 (F1) — grep -c 기반 카운트(`\\.(hold|reject|...)\\(`)가
-review-dispatch.py:222 의 설명 주석 안 `` `L.reject(...)` `` 텍스트를 실제
+review-dispatch.py 의 `_block_with_ledger()` docstring 안 `` `L.reject(...)` ``
+텍스트를 실제
 호출로 오인해, 진짜 처분 호출 하나가 지워져도 ndisp 가 줄지 않았다(Task 15
 변이 μ11 이 실측). ast 는 실제 `ast.Call`/`ast.Dict` 노드만 보므로 주석·
 문자열 리터럴은 원리적으로 셀 수 없다.

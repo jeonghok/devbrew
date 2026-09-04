@@ -18,7 +18,8 @@
 
 기존 dispatch 락의 표기 필터(subagent_type:|agentType:|Agent\\(|^\\s*agent:)를
 «빼지 않는다». 그 필터는 산문 속 맨 영어 단어가 dispatch 로 잡히는 것을 막고
-있고 그 필요는 실측으로 기록돼 있다(test_dispatch_disposition.sh:80-84).
+있고 그 필요는 실측으로 기록돼 있다
+(test_dispatch_disposition.sh 의 `NOTATION` 정규식 바로 위 주석).
 
 여기서는 «백틱 + 콜론» 두 조건을 동시에 요구한다. 맨 단어는 둘 다 없으므로
 그 필터와 겹치지 않는다 — 우회가 아니라 직교다.

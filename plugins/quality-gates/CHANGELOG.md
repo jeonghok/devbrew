@@ -3,6 +3,61 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.2.1] — 2026-09-05
+
+### Fixed
+
+- **판정기 코퍼스의 `:NNN` 인용을 전수로 앵커·심볼 인용으로 바꿨다 — 이 부류의
+  다섯 번째 재발이자 K1 의 재검증 경로가 걸린 자리다 (최종 수정 라운드 3, D1).**
+  라운드 2 의 R-A 가 `review-dispatch.py` 의 `_block_with_ledger()` docstring 을
+  늘려 그 아래 전부가 +17 밀렸다. 그때 `EXEMPT` **키**는 정체 대조로 기계
+  갱신했지만 같은 파일의 면제 **사유 문자열과 주석 안 줄번호**는 그대로 남아,
+  주석이 옛 번호를 가리키고 바로 아래 키는 새 번호를 갖는 **자기모순** 상태가
+  됐다. 가장 나쁜 자리: `_T5_SELECT_LOOP_DISPATCH_CAP` 의 근거 인용
+  `review-dispatch.py:765-770` 이 지금은 **다른 mandate 블록**을 가리킨다 —
+  이 면제를 재검증하려는 다음 리뷰어가 「상한 도달 사실이 이미 공시됐다」의
+  근거가 아니라 엉뚱한 메시지를 읽게 된다. **K1 의 설계 전제가 「키 갱신 =
+  사유 재검증」이므로, 재검증 경로가 깨진 채로는 그 Critical 수정이 반쪽이다.**
+  **도출로 훑었다** — `tools/adjudication/` · `shared/tests/fixtures/adjudication/`
+  의 파일 25 개에서 주석·문자열 안 인용 **51 개**를 뽑아 실제 내용과 대조했고
+  (경로 명시형 + 문맥이 대상을 정하는 맨 `:NNN` 양쪽), **어긋난 것 16 · 지금은
+  옳으나 같은 함정인 것 12** 를 전부 심볼·앵커·원문 인용으로 바꿨다. 남은
+  인용 **0**. 번호를 다시 매기지 않았다 — 다섯 번 재발한 이유가 그것이다.
+  주요 형태: `review-dispatch.py:765-770` → 「dispatch 상한 mandate 메시지
+  (`if cap and attempt_n >= cap:` 분기)」 · `:544-546`/`:583-587` →
+  「`val_att.get(c.key, 0) >= val_cap` 분기」/「`capped_advisory`」 ·
+  flush 지점 일곱 개의 번호 나열 → 「`flush_advisory(capped_advisory)` 넷 ·
+  `_block_with_ledger(…, capped_advisory)` 둘 ·
+  `with_advisory({"systemMessage": …}, capped_advisory)` 하나」 ·
+  `:340~351` 일곱 자리 → 각 분기의 guard 식 · `synthesize_artifact_findings.py:131`
+  → 「`"sources_failed": sources_failed` 필드」 · `check_slots.py:142` →
+  「`no_declaration` problem 튜플」 · `test_dispatch_disposition.sh:80-84` →
+  「`NOTATION` 정규식 바로 위 주석」.
+  **편집 후 자기 대조도 돌렸다**(이 편집 자신이 파일을 늘려 또 밀 수 있다) —
+  같은 census 재실행 결과 인용 0, 그리고 이 코퍼스의 파일을 `:NNN` 으로
+  가리키는 리포 내 다른 자리는 과거 릴리스 노트 둘뿐이다(아래 Note).
+
+### Changed
+
+- **`check_wiring.py` 의 `from cite import cited as _cited` 는 죽은 import 가
+  아니라 «재수출» 이었다.** 그 파일 안에서는 안 쓰이지만
+  `shared/tests/fixtures/adjudication/run_wiring_scan.py` 가 **check_wiring 을
+  경유해** 그것을 import 해 `terminal_uncited` 를 계산한다 — 그냥 지웠으면
+  러너가 `ImportError` 로 죽었다. 별칭을 지우는 대신 **소비자를 원천으로
+  옮겼다**: `run_wiring_scan.py` 가 `from cite import cited` 로 직접 받고,
+  `check_wiring.py` 는 `from cite import uncited` 만 남긴다. 판정 로직·단언·
+  면제 판정은 무변경(락 다섯 전부 GREEN 유지).
+
+### Note
+
+이 절은 인용 교정이다 — **런타임 동작을 바꾸지 않았다.** 락의 단언, 판정 로직,
+면제 «판정» 은 무변경이고 다섯 락(16/6/14/35/6)이 그대로 GREEN 이다.
+
+바꾸지 않은 것: 이 CHANGELOG 의 **과거 릴리스 절** 안에 있는 `run_slots.py:32-36`
+· `tools/adjudication/check_slots.py:142` 두 인용. 그 절이 기록하는 시점에는
+참이었고, 릴리스 노트는 날짜와 버전이 박힌 시점 기록이라 지금 번호를 고치면
+기록 자체가 거짓이 된다(K7 에서 audits·interview 문서에 적용한 것과 같은 기준).
+
 ## [7.2.0] — 2026-09-05
 
 ### Fixed

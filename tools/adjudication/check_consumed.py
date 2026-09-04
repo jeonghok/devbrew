@@ -65,8 +65,9 @@ def _consumed_names(tree):
 
     딕셔너리 리터럴의 «키»는 세지 «않는다». 그것은 원장을 읽는 자리가 아니라
     출력을 만드는 자리라, 같은 이름의 무관한 지역 변수가 우연히 락을 만족시킨다
-    — 실측: `synthesize_artifact_findings.py:131` 의 지역 카운터
-    `"sources_failed": sources_failed` 가 원장의 그 칸을 읽는 것으로 세어졌다
+    — 실측: `synthesize_artifact_findings.py` 의 지역 카운터
+    `"sources_failed": sources_failed`(그 파일이 조립하는 merged doc 의 필드)가
+    원장의 그 칸을 읽는 것으로 세어졌다
     (그 파일의 `Ledger` 는 `source_failed()` 를 부른 적이 없다).
 
     튜플/리스트/집합 원소를 세는 이유는 반대쪽이다: 키 여섯을 루프로 도는 자리
