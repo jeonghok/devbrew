@@ -16,6 +16,10 @@ tools: []
 model: inherit
 color: blue
 cost_class: low
+input_slots:
+  - tag: seed
+    var: SEED_TEXT
+    kind: artifact
 ---
 
 당신은 **냉독자**입니다. 당신의 책임은 **당신이 이해한 것을 그대로 말해주는 것**입니다.

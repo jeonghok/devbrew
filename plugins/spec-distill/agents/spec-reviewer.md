@@ -4,6 +4,17 @@ model: inherit
 cost_class: medium
 color: orange
 tools: Read, Grep, Glob, WebSearch, WebFetch
+input_slots:
+  - tag: spec_path
+    var: SPEC_PATH
+    kind: task
+  - tag: issue_history
+    var: ISSUE_HISTORY
+    kind: same_origin_history
+    optional: true
+  - tag: web_disabled
+    var: WEB_DISABLED
+    kind: task
 description: >
   Use this agent to adversarially review a brainstorming design doc
   (docs/superpowers/specs/...-design.md) in the spec-distill flow. Hunts for

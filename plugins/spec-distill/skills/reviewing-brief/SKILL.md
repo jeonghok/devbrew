@@ -177,7 +177,7 @@ Agent({
   description: "Brief direction review",
   subagent_type: "spec-distill:brief-direction-reviewer",
   // **처분** — consumer=human · fail-open · disclosure=verification_status
-  prompt: `Review the interview brief at <PAYLOAD_PATH> for directional soundness.
+  prompt: `Review the interview brief at <brief_path>${PAYLOAD_PATH}</brief_path> for directional soundness.
 Read the repository and search the web. Answer both axis-(b) questions with evidence.
 Every finding must carry exactly one question for the user to decide.
 <kill switch 활성 시: "Do not use the web this run — answer from the repository and the brief alone.">`

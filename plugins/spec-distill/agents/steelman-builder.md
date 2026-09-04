@@ -4,6 +4,13 @@ model: inherit
 cost_class: variable
 color: red
 tools: Read, Grep, Glob, WebSearch, WebFetch
+input_slots:
+  - tag: direction
+    var: SUSPECT_DIRECTION
+    kind: task
+  - tag: trigger
+    var: TRIGGER
+    kind: task
 description: >
   Use this agent during a spec-distill interview when a direction is suspect
   (landscape contradiction / known anti-pattern / conflict with a stated user constraint /

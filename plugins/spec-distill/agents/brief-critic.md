@@ -15,6 +15,10 @@ tools: []
 model: inherit
 color: red
 cost_class: medium
+input_slots:
+  - tag: brief
+    var: BLOB
+    kind: artifact
 ---
 
 # brief-critic (Law 2 — fidelity axis)
