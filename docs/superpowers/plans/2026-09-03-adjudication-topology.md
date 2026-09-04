@@ -3035,10 +3035,25 @@ def _block_with_ledger(payload: dict, ledger: Ledger, advisory) -> int:
 
 - [ ] **Step 5: T5-1 — 구조 검증 실패 자리 (`:605-609`)**
 
+보류 항목은 **실패한 문서**다. 위 검증 루프가 `failures.append(...)` 하는 자리에
+`key` 가 있으니 그 키들을 함께 모아 두고, 문서 하나당 `hold()` 한 번을 부른다.
+
+**`for line in lines:` 로 돌지 마라.** `lines` 는 `[MANDATORY 안내 헤더] + failures +
+[상한 도달 안내]` 이므로 그렇게 돌면 **원장이 자기 메시지의 헤더 줄을 보류된 항목으로
+센다** — 실패 문서 N 개에 `미판정 N+1` 이 나간다. 이 계획의 앞 판이 정확히 그 코드를
+실었고, 이유가 나쁜 종류였다: **락이 이 파일에서 `for` 문을 보게 하려고 루프 «모양»을
+맞춘 것**이다. 락을 통과시키려 코드 모양을 정하면 그 코드는 락은 넘고 사실은 틀린다 —
+이 브랜치가 없애려는 바로 그것이다. 배선 락은 이 파일의 **다른** 루프들로 이미 이
+파일을 본다.
+
+`reached_cap` 문서는 이미 `failures` 에 들어 있다. **따로 또 `hold()` 하면 이중
+계수다.** 상한 도달이 별도 칸(규칙 억제 `suppressed()`)을 가져야 하는지는 열린 질문이고,
+같은 파일 `:533` 면제가 그 축을 이미 짚어 뒀다 — **여기서 발명하지 말고 보고한다.**
+
 ```python
         L = Ledger(items="closed")   # 다음 소비자가 기계(다음 턴의 dispatch)다
-        for line in lines:
-            L.hold(line[:60], "항목 파손: 스코프 문서 구조 검증 실패")
+        for key in failed_keys:      # 메시지 줄이 아니라 «문서»를 센다
+            L.hold(key, "항목 파손: 스코프 문서 구조 검증 실패")
         return _block_with_ledger({
             "decision": "block",
             "reason": "\n".join(lines),
@@ -3046,13 +3061,18 @@ def _block_with_ledger(payload: dict, ledger: Ledger, advisory) -> int:
         }, L, capped_advisory)
 ```
 
-**`for line in lines:` 가 루프다** — 훅이 ㉮ 에 들어오면 L1 이 이 파일의 모든 `for` 문을 보므로 이 루프도 대상이 되고, 처분 호출이 같은 분기 안에 있어 통과한다. 설계 §7 이 지적한 「공허한 GREEN」이 여기서 닫힌다.
+**양성 대조 — 실패 문서가 «둘 이상»인 상황으로 재라.** 하나로는 off-by-one 이 안
+보인다. 그리고 이 성질(실패 문서 수 == `미판정` 수)을 테스트에 못 박고, 그 단언에도
+수를 하나 틀리게 만드는 변이를 태워라.
 
 - [ ] **Step 6: T5-2 — dispatch 강제 자리 (`:758-762`)**
 
 ```python
     L = Ledger(items="closed")
-    L.hold(str(picked), "판정자 부재: 리뷰가 아직 안 돌았다 — 다음 턴에 강제한다")
+    L.hold(str(cand.path), "판정자 부재: 리뷰가 아직 안 돌았다 — 다음 턴에 강제한다")
+    # 항목 이름은 `cand.path` 다. `picked`(:271-272·:575)는 「이번 턴에 구조
+    # 검증한 후보 «키 목록»」으로 이 지점까지 스코프는 살아 있지만 값이 다르다 —
+    # 라벨이 엉뚱한 문서를 가리켜도 값이 있으니 조용히 지나간다.
     return _block_with_ledger({
         "decision": "block",
         "reason": msg,
@@ -3101,6 +3121,131 @@ PYTHONDONTWRITEBYTECODE=1 python3 \
 git add plugins/spec-distill/hooks/review-dispatch.py plugins/spec-distill/tests/test_review_dispatch_disposition.sh plugins/spec-distill/.claude-plugin/plugin.json plugins/spec-distill/CHANGELOG.md
 git commit -m "feat(spec-distill): 훅의 차단 결정 두 자리를 원장에 배선 (v0.51.0)"
 ```
+
+---
+
+### Task 11b: `merge_review.py` 의 네 자리 — 계획이 빠뜨린 것
+
+**Files:**
+- Modify: `plugins/spec-distill/scripts/merge_review.py` (배선이 필요한 자리만)
+- Modify: `tools/adjudication/check_wiring.py` (면제가 맞는 자리)
+- Modify: `plugins/spec-distill/.claude-plugin/plugin.json` · `CHANGELOG.md`
+
+**Interfaces:**
+- Consumes: `Ledger` — 이 파일은 이미 원장 넷을 만든다(`:80`·`:302`·`:486`·`:530`)
+- Produces: 없음
+
+**왜 이 Task 가 있는가.** PR1 의 배선 baseline 은 미배선 **14** 였다. T1-A 가 다섯,
+T1-B 가 다섯을 닫아 **넷이 남는데, 계획의 어느 Task 도 그 넷을 다루지 않는다.**
+그러므로 배선 락의 대표 단언(「버리는 분기 전부가 같은 분기에 처분 호출을 갖는다」)은
+이 계획으로는 **원리적으로 GREEN 이 될 수 없었다.** 14 를 세어 놓고 10 만 배정한
+것을 아무도 눈치채지 못했다.
+
+남은 넷:
+
+| 자리 | 함수 | 첫 읽기 (검증 대상이지 결론이 아니다) |
+|---|---|---|
+| `:155` | `parse_codex_yaml` | 텍스트 «줄»을 도는 파서 루프. `findings:` 헤더에서 `continue` — 구조 마커이지 판정 항목이 아니다 |
+| `:160` | `parse_codex_yaml` | 같음 — `meta:` 헤더 |
+| `:229` | `derive_codex_verdict` | 집계 fold 의 조기 `return`. 첫 escalating finding 에서 끊는다 — 나머지는 «버려지는» 것이 아니라 판정에 무관해진다 |
+| `:270` | `build_codex_findings_display` | `if not isinstance(f, dict): continue` — **유일하게 항목을 버리는 모양**. 다만 그 항목이 도달 가능한지부터 확인해야 한다 |
+
+**이미 확인된 사실 하나** — `parse_codex_yaml` 은 마커 위반으로 폐기한 finding 개수를
+`codex_malformed_n` 으로 **out-of-band 반환**하고, `main()` 이 `:490-491` 에서 그것을
+`codex_ledger.hold(...)` 로 바꾼다. 즉 **회계는 있는데 버리는 «자리»에 없다.** 배선 락은
+구조만 보므로 그것을 볼 수 없다. 이것이 면제 사유의 한 형태다(`:533` 면제가 같은 모양이다).
+
+- [ ] **Step 1: 네 자리를 각각 읽고 «배선이냐 면제냐»를 정한다**
+
+```bash
+sed -n '145,165p' plugins/spec-distill/scripts/merge_review.py
+sed -n '219,232p' plugins/spec-distill/scripts/merge_review.py
+sed -n '254,274p' plugins/spec-distill/scripts/merge_review.py
+sed -n '486,495p' plugins/spec-distill/scripts/merge_review.py
+```
+
+위 표의 「첫 읽기」는 **가설이지 결론이 아니다.** 각 자리에 대해 답할 것:
+⑴ 이 루프의 원소는 **판정 항목**인가, 아니면 텍스트 줄·구조 마커 같은 다른 것인가?
+⑵ 원소가 이 분기에서 끝나면 **출력 어디에도 안 실리는가**, 아니면 다른 경로로 실리는가?
+⑶ 다른 자리에서 이미 회계되는가? 그렇다면 그 자리를 **줄번호로** 지목하라.
+
+**표와 다른 결론이 나오면 그것을 따르고 보고서에 근거를 적어라.** 표가 틀린 것이다.
+
+- [ ] **Step 2: `:270` 의 도달 가능성을 «실제로» 판정한다**
+
+`build_codex_findings_display` 는 `codex_findings` 를 도는데, 그것은 `parse_codex_yaml`
+이 만든다. 그 파서가 dict 아닌 원소를 만들 수 있는가? 코드로 답하라 — 만들 수 없다면
+이 `continue` 는 **발동 불가능한 방어**이고, 배선하면 죽은 코드가 된다(앞 Task 에서
+`phase_key` 의 죽은 배선이 정확히 그 문제였다). 만들 수 있다면 **배선한다.**
+
+- [ ] **Step 3: 배선이 필요한 자리를 배선한다**
+
+`hold()` 를 쓸 때 **사유에 반드시 접두를 붙인다** — `"항목 파손: "` 또는
+`"판정자 부재: "`. `held_by_class()` 가 접두로 분류하고, 접두를 빼면 조용히 「기타」로
+떨어진다. **그 차이는 테스트로 안 보인다**(테스트들이 `held` 총계만 본다).
+
+어느 원장을 쓸지는 스코프가 정한다 — 이 파일은 원장을 넷 만든다. 함수가 원장을 안
+받으면 **인자로 받게 하고 호출부에서 넘겨라**. 넘기지 않으면 배선이 죽는다.
+
+- [ ] **Step 4: 면제가 맞는 자리를 등재한다**
+
+`tools/adjudication/check_wiring.py` 의 `EXEMPT` 에. **각 항목은 C6 두 조건 중 하나를
+인용한다** — C6⑴ 대응물이 원리적으로 없음 · C6⑵ 측정된 이유. **인용 없으면 그 자체로
+RED.** 사유에 Step 1 ⑶ 에서 지목한 **줄번호**를 넣어라 — 「다른 자리에서 회계된다」는
+주장은 그 자리를 대야 검증 가능하다.
+
+- [ ] **Step 4b: 두 등록부의 인용 규율을 대칭으로 맞춘다 (Task 11 리뷰가 잡은 것)**
+
+`EXEMPT` 의 인용 검사는 값에 리터럴 `"C6"` 이 들어 있는지를 본다. 그런데 같은 파일의
+`TERMINAL_CONSUMERS` 검사는 **빈 문자열만 아니면 통과**한다. CLAUDE.md 의 요구
+(「면제는 락의 상수에 산다 … 인용이 없으면 RED」)는 두 등록부에 똑같이 걸리는데,
+지금은 한쪽만 기계적으로 강제된다 — 그럴듯한 비-C6 변명이 조용히 통과한다.
+
+`TERMINAL_CONSUMERS` 의 검사도 `EXEMPT` 와 **같은 규율**로 맞춘다(값에 `"C6"` 요구).
+현재 유일한 항목은 실질이 C6⑴ 이므로 사유 문자열에 그 인용을 명시적으로 넣으면 된다.
+
+**양성 대조**: 그 항목의 사유에서 `C6` 만 빼고 나머지 문장은 남긴 채 락이 RED 가
+되는지 확인한다(빈 문자열로 지우면 옛 검사도 잡으므로 **강화됐다는 증거가 안 된다**).
+확인 후 원복하고 `git status --short` 로 깨끗함을 확인한다.
+
+- [ ] **Step 4c: `_T5_SELECT_LOOP` 면제 사유의 부정확한 문장을 고친다 (Task 11 리뷰가 잡은 것)**
+
+그 사유는 「다음 Stop 의 후보 목록에 그대로 다시 나타난다」로 적혀 있는데, 그것은
+`select_dispatch_target()` 안의 **영속 상태 필터 둘**(`DISPATCH_ATTEMPT_CAP` ·
+`VALIDATION_ATTEMPT_CAP`)에는 거짓이다 — 상한에 닿으면 카운터가 영속돼 그 후보는
+다음 Stop 에 **다시 나타나지 않는다**. 진짜 근거는 다른 것이다: 상한 도달 사실은
+**상한에 닿던 그 dispatch 시도에서 이미 한 번 공시**됐고(`review-dispatch.py` 의
+`msg_lines` 에 「자동 dispatch를 중단한다」가 실린다), 이후 Stop 의 조용한 건너뜀은
+새 소실이 아니라 **이미 공시된 상태를 다시 지나가는 것**이다.
+
+결론(배선 불필요)은 그대로다. **사유만** 정확한 것으로 바꾼다 — 면제 사유는 다음
+사람이 기대는 문장이고, 틀린 문장은 소리를 내지 않는다. 공시가 실제로 일어나는
+자리를 **줄번호로** 지목하라.
+
+- [ ] **Step 5: 배선 락이 GREEN 인지 확인한다**
+
+```bash
+bash shared/tests/test_adjudication_wiring.sh 2>&1 | tail -8
+bash plugins/spec-distill/tests/test_merge_review.py 2>/dev/null ||   PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/spec-distill/tests -p 'test_merge_review*.py' 2>&1 | tail -5
+bash plugins/spec-distill/tests/test_reviewing_spec_skill.sh 2>&1 | tail -3
+```
+
+기대: 배선 락 **`Fail: 0`** — 이 브랜치에서 처음이다. 그리고 `merge_review.py` 의
+기존 테스트가 **하나도 안 깨져야 한다**.
+
+**`Fail: 0` 이 안 되면 남은 자리를 이름으로 보고하라** — 억지로 면제해서 0 을 만들지 마라.
+
+- [ ] **Step 6: 양성 대조 — 면제가 진짜 이빨을 갖는지**
+
+새로 등재한 면제 하나를 **일시 삭제**하고 배선 락이 그 자리를 **이름으로** 대며 RED 가
+되는지 확인한다. 그리고 **원복하고 `git status --short` 로 깨끗함을 확인**한다.
+변이 전에 커밋돼 있어야 한다 — `git checkout --` 는 「내 마지막 변이」가 아니라 HEAD 로
+되돌린다.
+
+- [ ] **Step 7: bump + CHANGELOG + 커밋**
+
+`spec-distill` 을 patch 올리고 같은 커밋에 CHANGELOG. `tools/` 만 고쳤어도 그 판정기가
+두 플러그인의 파일을 검사하므로 `quality-gates` 도 patch 올린다.
 
 ---
 
