@@ -34,6 +34,8 @@
   두 dispatch 자리가 통째로 관측 밖에 있었다. 들여쓰기를 제거해 dispatch 코퍼스에
   실재하게 했다 — 내용은 무변경.
 
+## [0.51.8] — 2026-09-04
+
 ### Fixed
 - **`shared/tests/test_runner_disposition.sh`(codex 러너 처분 락)가 `consumer=` 값의
   참·거짓을 재지 못했다(adjudication-topology Task 13 수정 라운드 2).** 상세는

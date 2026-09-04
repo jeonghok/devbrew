@@ -146,13 +146,20 @@ fi
 # F-G completion (iter-2 re-review): ALL THREE reviewer dispatches must thread the
 # E2c-frozen <canonical>, NEVER raw `artifact_path: <path>`. The adversarial dispatch
 # was the drift caught in re-review (critic/codex were threaded, adversarial was not).
-# critic + adversarial thread `artifact_path: <canonical>`; codex threads <canonical>
-# as run_artifact_codex_reviewer.sh's first arg. (git commit/change-signal keep the
-# tracked <path> — those are NOT `artifact_path:` prompt fields, so the raw-path check
-# below is specific to reviewer reads.) Mutation proof: reverting any reviewer
-# dispatch to `artifact_path: <path>` reddens the raw-path check (and drops the count).
-canon_n="$(grep -cF 'artifact_path: <canonical>' "$S")"
-[ "$canon_n" -ge 2 ] && ok "critic + adversarial thread artifact_path: <canonical> (F-G, count=$canon_n)" || no "expected >=2 artifact_path: <canonical> (got $canon_n)"
+# critic + adversarial thread `artifact_path: <artifact_path>${CANONICAL_PATH}</artifact_path>`
+# (L3 adjudication-topology Task 14 wrapped the E2c `canonical` value in the
+# `<tag>${VAR}</tag>` slot-declaration convention — the var name CANONICAL_PATH still
+# names the E2c-frozen canonical, not a different value; the literal below is the exact
+# tagged form, at least as specific as the old bare `<canonical>` placeholder it
+# replaces since it also pins the tag name and the `${VAR}` wrapper). codex threads
+# <canonical> as run_artifact_codex_reviewer.sh's first arg (untouched by that
+# retagging — that call site is a bash script arg, not an Agent() prompt field). (git
+# commit/change-signal keep the tracked <path> — those are NOT `artifact_path:` prompt
+# fields, so the raw-path check below is specific to reviewer reads.) Mutation proof:
+# reverting any reviewer dispatch to `artifact_path: <path>` reddens the raw-path check
+# (and drops the count).
+canon_n="$(grep -cF 'artifact_path: <artifact_path>${CANONICAL_PATH}</artifact_path>' "$S")"
+[ "$canon_n" -ge 2 ] && ok "critic + adversarial thread artifact_path: <artifact_path>\${CANONICAL_PATH}</artifact_path> (F-G, count=$canon_n)" || no "expected >=2 artifact_path: <artifact_path>\${CANONICAL_PATH}</artifact_path> (got $canon_n)"
 if grep -qF 'artifact_path: <path>' "$S"; then
   no "a reviewer dispatch still threads raw artifact_path: <path> (F-G drift)"
 else
