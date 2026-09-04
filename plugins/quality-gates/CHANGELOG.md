@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.4.3] — 2026-09-04
+
+### Fixed
+- **`tools/adjudication/check_wiring.py`의 `EXEMPT`/`TERMINAL_CONSUMERS` 교정(adjudication-topology Task 11b)** — 이 락은 quality-gates 소유 파일도 검사하므로 함께 bump한다. 상세는 `plugins/spec-distill/CHANGELOG.md` v0.51.4 참조: 계획이 배정하지 않았던 `merge_review.py` 네 자리를 면제로 정리해 배선 락이 이 브랜치에서 처음 `Fail: 0`에 도달, `review-dispatch.py` 항목 10개의 줄번호 drift 교정, `_T5_SELECT_LOOP` 사유 오류 둘 수정, `EXEMPT`/`TERMINAL_CONSUMERS` C6 인용 검사 대칭화. quality-gates 소유 파일(`synthesize_findings.py`·`synthesize_artifact_findings.py`)은 이번 변경 대상이 아니다 — 영향은 락 자체의 정밀도뿐, 이 플러그인의 런타임 동작 변경 없음.
+
 ## [6.4.2] — 2026-09-04
 
 ### Fixed

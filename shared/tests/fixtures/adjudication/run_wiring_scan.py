@@ -39,6 +39,8 @@ print("exempt_total=%d" % len(EXEMPT))
 print("exempt_uncited=%d" % len([v for v in EXEMPT.values()
                                  if "C6" not in str(v)]))
 print("terminal_total=%d" % len(TERMINAL_CONSUMERS))
+# Task 11b Step 4b — EXEMPT 와 같은 규율(값에 리터럴 "C6" 요구)로 맞췄다.
+# 이전엔 빈 문자열만 아니면 통과해 그럴듯한 비-C6 변명도 조용히 통과했다.
 print("terminal_uncited=%d" % len([v for v in TERMINAL_CONSUMERS.values()
-                                   if not str(v).strip()]))
+                                   if "C6" not in str(v)]))
 print("comprehensions=%d" % comprehension_count(abs_paths))

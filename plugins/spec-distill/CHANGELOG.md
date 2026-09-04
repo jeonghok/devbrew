@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.51.4] — 2026-09-04
+
+### Fixed
+- **배선 락(`shared/tests/test_adjudication_wiring.sh`)이 이 브랜치에서 처음으로 `Fail: 0` — 계획이 배정하지 않았던 네 자리(Task 11b, `merge_review.py`).** PR1 배선 baseline=미배선 14, 앞 Task 열이 review-dispatch.py 쪽 10을 닫았다고 전제했으나 계획의 어느 Task 도 `merge_review.py`의 남은 4자리(`:155`·`:160`·`:229`·`:270`)를 배정하지 않아 대표 단언이 원리적으로 GREEN이 될 수 없었다. 넷을 코드로 검증해 전부 **배선 불필요**로 판정(면제): `:155`·`:160`(`parse_codex_yaml`)은 codex YAML 파일의 텍스트 줄을 도는 라인 파서의 섹션 헤더 전이일 뿐 판정 항목이 아니다(`:160`은 오히려 `meta:` 전환 전에 `findings.append(cur)`로 진행 중이던 finding을 먼저 보존한다); `:229`(`derive_codex_verdict`)의 fold 조기 `return`은 `codex_findings` 전체가 이 함수와 무관하게 `build_ledger()`의 `for f in codex_findings:`(`:363`, 이미 배선됨)로 전수 재순회되고 표시 채널도 별도로 전체를 순회하므로 소실이 아니다; `:270`(`build_codex_findings_display`)의 `isinstance` 방어는 유일한 호출자(`main():555`)가 `parse_codex_yaml()`의 반환값을 변형 없이 넘기고 그 함수의 `findings`가 dict 항목만 생성하므로 도달 불가능하다(배선하면 Task 10의 `phase_key`와 같은 죽은 코드가 된다). `tools/adjudication/check_wiring.py`의 `EXEMPT`에 C6⑴ 인용과 함께 등재.
+- **`EXEMPT`의 `review-dispatch.py` 항목 10개가 줄번호 drift로 stale — 배선 락이 이미 승인된 자리를 "미배선"으로 오탐지하고 있었다.** v0.51.2/v0.51.3(`07c9991`·`6d87b2c`)가 `select_dispatch_target()`보다 앞선 코드(`_block_with_ledger` 재작성 + import 한 줄)를 늘려 그 함수 전체가 +13(이후 구간은 +14)줄 밀렸는데, `EXEMPT`는 (파일, 줄번호) 키라 이동에 조용히 stale해졌다 — Task 11b 실측(스캔 unwired=14, 브리프 전제=4)이 적발. 코드·판정은 무변경, 10개 키의 줄번호만 현재 위치(`:340`·`:342`·`:344`·`:346`·`:348`·`:350`·`:351`·`:543`·`:546`·`:603`)로 교정하고 내부 인용 줄번호(`capped_advisory` flush 지점 등)도 함께 갱신했다.
+- **`_T5_SELECT_LOOP` 면제 사유의 "다음 Stop 후보 목록에 다시 나타난다"가 두 영속-상태 필터(`DISPATCH_ATTEMPT_CAP`·`VALIDATION_ATTEMPT_CAP`)에는 거짓이었다(Task 11 리뷰가 잡은 것).** `arm_ledger.record_attempt()`가 상한 도달과 같은 write에서 `armed_paths`에도 추가하므로, 그 두 필터는 다음 Stop에 재통과하지 않는다. 결론(배선 불필요)은 그대로 두고 사유를 진짜 근거로 교체 — 상한 도달 사실은 상한에 닿던 그 dispatch 시도에서 이미 공시됐다(`DISPATCH_ATTEMPT_CAP`: `review-dispatch.py:765-770`의 mandate 메시지, `VALIDATION_ATTEMPT_CAP`: 같은 Stop 안에서 `main()`의 검증 대상 선별 루프가 만드는 `capped_advisory`). 전용 상수 `_T5_SELECT_LOOP_DISPATCH_CAP`·`_T5_SELECT_LOOP_VALIDATION_CAP` 신설.
+- **`EXEMPT`와 `TERMINAL_CONSUMERS`의 C6 인용 검사가 비대칭이었다(Task 11 리뷰가 잡은 것).** `run_wiring_scan.py`의 `exempt_uncited`는 값에 리터럴 `"C6"`가 있는지 보는데 `terminal_uncited`는 빈 문자열만 아니면 통과했다 — 같은 CLAUDE.md 요구가 두 등록부에서 다른 엄격도로 걸렸다. `terminal_uncited`를 `EXEMPT`와 같은 `"C6" not in str(v)` 규율로 맞추고 `TERMINAL_CONSUMERS`의 유일한 항목에 C6⑴ 인용을 명시했다. 양성 대조: 그 항목에서 `C6`만 지우고 나머지 문장을 남긴 채 `terminal_uncited=1`로 RED가 되는지 확인 후 원복.
+
 ## [0.51.3] — 2026-09-04
 
 ### Fixed
