@@ -3,6 +3,34 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.6.1] — 2026-09-04
+
+### Fixed
+- **Task 14 수정 라운드 1 — `tools/adjudication/check_slots.py`(L3 판정기) 의
+  dispatch 펜스 스캐너가 «인스턴스가 아니라 부류»로 고쳐졌다.** 코디네이터가
+  v6.6.0 의 보고 둘을 검토하고 지시:
+  - 펜스 감지가 `^```` (줄 시작 열 0) 이라 번호 목록 continuation 처럼 들여쓴
+    dispatch 펜스는 **구조적으로 영원히 안 보였다** — v6.6.0 은 그 인스턴스
+    둘(spec-distill 의 spec-reviewer·steelman-builder dispatch)의 들여쓰기를
+    풀어 우회했을 뿐, 부류는 그대로였다. `^\s*```` 로 고쳐 들여쓴 펜스도 열고
+    닫게 하고, 두 문서의 들여쓰기를 **원복**했다(스캐너가 보므로 문서를 도구에
+    맞출 필요가 없어짐) — 원복 후 L3 재확인 GREEN.
+  - `_harvest()`가 `_SUBAGENT_RE.search()`(첫 매치만) 를 써서, 펜스 하나에
+    subagent_type 이 둘(security-reviewer+adversarial) 이면 뒤의 태그를 앞
+    agent 에게 조용히 잘못 귀속시켰다. `.findall()`로 세어 둘 이상이면 **어느
+    쪽에도 귀속하지 않고** `multi_agent_fences` 목록(file:line + count)에
+    기록한다 — 이 리포 규약("셀 수 없으면 셀 수 없음을 낸다")대로 침묵과 0 을
+    구분.
+  - `test_agent_input_slots.sh` 에 `multi_agent_fences==0` assertion +
+    판정기 자체 fixture(`slots_multiagent`) 추가. 양성 대조 셋 확인:
+    (구) 스캐너로는 들여쓴 정상 dispatch 가 4건 허위 `undelivered` 를 냈고,
+    (신) 스캐너는 0건; 들여쓴 채로 슬롯 하나를 지우면 여전히 정확히 그
+    file:line 을 지목하는 `undeclared` 를 낸다; 두 `Agent()` 호출을 일시
+    병합하면 `multi_agent_fences=1` 이 `quality-pipeline/SKILL.md:365 agents=2`
+    를 이름 댄다. 이 판정기는 4개 플러그인의 agent 정의를 검사하는 공유
+    파일이라 관련 플러그인 전부(agent-transparency·plugin-audit·spec-distill)
+    함께 bump.
+
 ## [6.6.0] — 2026-09-04
 
 ### Added

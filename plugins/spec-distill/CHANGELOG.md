@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.52.1] — 2026-09-04
+
+### Fixed
+- **Task 14 수정 라운드 1** — `tools/adjudication/check_slots.py` 의 dispatch 펜스
+  스캐너가 들여쓴 펜스(`^\s*```` 로 수정)를 이제 보고, 펜스 하나에 subagent_type
+  둘 이상이면 세어서 드러낸다(`multi_agent_fences`). 이 판정기는 여러 플러그인의
+  agent 정의(`plugins/*/agents/*.md`)를 검사하는 공유 파일이라 이 브랜치의 선례대로
+  agent-transparency·plugin-audit·quality-gates·spec-distill 을 함께 bump(상세는
+  quality-gates CHANGELOG v6.6.1 참조). 이 플러그인 몫으로 v0.52.0 이 남긴
+  reviewing-spec/SKILL.md·conducting-interview/SKILL.md 의 두 dispatch 펜스
+  들여쓰기를 **원복**했다 — 스캐너가 이제 들여쓴 펜스를 읽으므로 문서를 도구
+  사정에 맞춰 바꿔 둘 필요가 없어졌다.
+
 ## [0.52.0] — 2026-09-04
 
 ### Added

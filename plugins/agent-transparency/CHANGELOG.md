@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.1] — 2026-09-04
+
+### Fixed
+- **Task 14 수정 라운드 1** — `tools/adjudication/check_slots.py`(L3 판정기,
+  `plugins/*/agents/*.md` 전부를 검사)의 dispatch 펜스 스캐너가 들여쓴 펜스를
+  구조적으로 못 보고, 한 펜스에 subagent_type 둘이면 조용히 첫 번째로만
+  귀속하던 결함을 고쳤다 — 상세는 quality-gates CHANGELOG v6.6.1 참조. 이
+  플러그인은 이 판정기의 검사 대상(transcript-reader)이라 선례대로 함께
+  bump. 이 라운드에서 이 플러그인의 파일 자체는 변경 없음.
+
 ## [0.3.0] — 2026-09-04
 
 ### Added
