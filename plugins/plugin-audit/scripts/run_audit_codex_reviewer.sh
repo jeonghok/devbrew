@@ -1,13 +1,23 @@
 #!/usr/bin/env bash
 # run_audit_codex_reviewer.sh — plugin-audit blind co-audit의 codex 실행 러너.
 #
-# **처분** — consumer=orchestrator · fail-open · disclosure=meta.codex
+# **처분** — consumer=plugins/plugin-audit/scripts/assemble-audit-data.py · fail-open · disclosure=meta.codex
 #
-# fail-open 인 이유: 산출물($CODEX_JSON)은 auditing-plugins/SKILL.md 를 실행하는
-# 오케스트레이터가 직접 읽어 `findings`는 audit-workflow.js 의 codexFindings 인자로,
-# `d_verdicts`/`oq_answers`/`new_open_questions`는 assemble-audit-data.py 의
-# --codex-side 로 나눠 넘긴다 — 두 스크립트 중 어느 쪽도 이 파일을 직접 열지 않으므로
-# consumer 는 orchestrator다. codex_avail=false 여도 나머지 5축 감사(auditor+refuter)는
+# 소비자가 둘이다(codex_audit_to_json.py 자기 docstring: "소비자가 둘이다 —
+# findings는 audit-workflow.js의 codexFindings로, 나머지 셋은
+# assemble-audit-data.py --codex-side로 간다"). 이 앵커는 파일을 **실제로 여는**
+# 쪽을 consumer로 쓴다 — assemble-audit-data.py:233의 `load(a.codex_side)`가
+# `Path(p).read_text()`로 $CODEX_JSON을 직접 read한다. audit-workflow.js는
+# 오케스트레이터가 파싱해 만든 codexFindings 인자를 받을 뿐 이 파일을 열지 않는다
+# (auditing-plugins/SKILL.md:137 표: "post-1에서 --codex-side <codex.json>으로
+# 넘긴다"). 나머지 한 채널(findings → audit-workflow.js)은 여기 산문으로만 남긴다
+# — 형제 run_brief_codex_reviewer.sh가 direction/fidelity 두 축을 같은 방식으로
+# 처리한 선례를 따른다.
+#
+# fail-open 인 이유: emit_degrade()(아래)가 codex 실패 시에도 빈 컬렉션의 유효한
+# JSON(findings:[]·d_verdicts:[]·oq_answers:[]·new_open_questions:[])을
+# $CODEX_JSON에 쓰므로 assemble-audit-data.py의 --codex-side가 그것을 읽어도
+# 하류가 막히지 않는다. codex_avail=false 여도 나머지 5축 감사(auditor+refuter)는
 # 그대로 돌고 `meta.codex.ran=false` + stderr 배너로만 공시한다 — 이 축의 주 판정자가
 # 아니라 모델 다양성 보조다.
 #

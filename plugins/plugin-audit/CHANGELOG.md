@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.7.2] — 2026-09-04
+
+### Fixed
+- **v0.7.1 이 낸 `consumer=orchestrator` 선언이 거짓이었다 — 리뷰가 Critical 로 잡았다
+  (Task 13 수정 라운드 1).** `run_audit_codex_reviewer.sh` 의 산출물(`$CODEX_JSON`)을
+  같은 플러그인의 `.py` 가 **직접 여는** 자리가 실재했다:
+  `assemble-audit-data.py:233` 의 `load(a.codex_side)`(= `Path(p).read_text()`)가 그
+  경로를 직접 read 한다 — `codex_audit_to_json.py` 자기 docstring("소비자가 둘이다 …
+  나머지 셋은 `assemble-audit-data.py --codex-side`로 간다")과
+  `auditing-plugins/SKILL.md:137` 표가 이미 이 사실을 적어 두고 있었는데, v0.7.1 이
+  그 인용 바로 옆에서 반대 결론(`orchestrator`)을 냈다. `consumer=` 를
+  `plugins/plugin-audit/scripts/assemble-audit-data.py` 로 교정 — 다른 채널
+  (`findings` → `audit-workflow.js`, 오케스트레이터가 파싱해 넘길 뿐 파일을 직접
+  열지 않는 쪽)은 앵커 산문에 부기만 한다(형제 `run_brief_codex_reviewer.sh` 가
+  두 축을 같은 방식으로 처리한 선례). `fail-open`/`disclosure=meta.codex` 는
+  리뷰가 독립 확인해 무변경 — `emit_degrade()` 가 실패 시에도 빈 컬렉션의 유효
+  JSON 을 쓰므로 `assemble-audit-data.py` 의 `--codex-side` 가 그것을 읽어도
+  하류가 막히지 않는다. `shared/tests/test_runner_disposition.sh` 는 이 경로의
+  참·거짓을 구조적으로 재지 못해(존재+동일-플러그인만 검사) v0.7.1 도 GREEN 이었다
+  — 락이 못 잡는 부류였고, 사람 리뷰가 코드 인용 셋으로 잡았다.
+
 ## [0.7.1] — 2026-09-04
 
 ### Fixed
