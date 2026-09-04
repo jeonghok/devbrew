@@ -5,6 +5,13 @@ tools: Read, Grep, Glob, WebSearch, WebFetch
 model: inherit
 color: yellow
 cost_class: low
+# smoke-workflow.js 의 JS dispatch (agent(prompt, {agentType})) — `.md`-only dispatch
+# 코퍼스가 구조적으로 못 보는 자리. optional: true 는 미전달이 아니라 관찰 불가.
+input_slots:
+  - tag: task
+    var: TASK_TEXT
+    kind: task
+    optional: true
 ---
 
 You are **smoke-probe**, a capability probe.

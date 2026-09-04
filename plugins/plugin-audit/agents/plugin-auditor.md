@@ -5,6 +5,28 @@ tools: Read, Grep, Glob, WebSearch, WebFetch
 model: inherit
 color: cyan
 cost_class: medium
+# input_slots 는 audit-workflow.js (Workflow 스크립트) 가 build 하는 CONTRACT 프롬프트를
+# 관찰한 것이다 — `Agent({subagent_type: "..."})` 펜스가 아니라 `agent(prompt, {agentType})`
+# JS 호출이라 test_agent_input_slots.sh 의 `.md`-only dispatch 코퍼스가 이 dispatch 자리
+# 자체를 구조적으로 못 본다(CLAUDE.md 축 C 한계와 같은 종류 — 채널 실재까지만 잰다). 그래서
+# 넷 다 optional: true — 미전달이 아니라 관찰 불가.
+input_slots:
+  - tag: axis_task
+    var: AXIS_TASK
+    kind: task
+    optional: true
+  - tag: evidence_pack
+    var: EVIDENCE_PACK
+    kind: artifact
+    optional: true
+  - tag: candidate_clues
+    var: CANDIDATE_CLUES
+    kind: same_origin_history
+    optional: true
+  - tag: reference_corpus
+    var: REFERENCE_CORPUS
+    kind: repo_context
+    optional: true
 ---
 
 You are **plugin-auditor**, a single-axis auditor in a read-only plugin audit.
