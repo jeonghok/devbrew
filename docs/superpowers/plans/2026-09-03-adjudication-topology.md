@@ -3227,7 +3227,8 @@ RED.** 사유에 Step 1 ⑶ 에서 지목한 **줄번호**를 넣어라 — 「�
 ```bash
 bash shared/tests/test_adjudication_wiring.sh 2>&1 | tail -8
 bash plugins/spec-distill/tests/test_merge_review.py 2>/dev/null ||   PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s plugins/spec-distill/tests -p 'test_merge_review*.py' 2>&1 | tail -5
-bash plugins/spec-distill/tests/test_reviewing_spec_skill.sh 2>&1 | tail -3
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
+  -s plugins/spec-distill/tests -p 'test_merge_review*.py' 2>&1 | tail -3
 ```
 
 기대: 배선 락 **`Fail: 0`** — 이 브랜치에서 처음이다. 그리고 `merge_review.py` 의
@@ -3404,6 +3405,33 @@ grep -n -B3 -A8 -- '--emit-scanned' shared/tests/test_skill_reference_pointers.s
 
 **선언을 `plugins/** shared/**` 처럼 뭉뚱그려 넓히지 마라** — 그러면 이 락의 다른
 방향(선언 ⊃ 실제)이 무의미해진다. 실제로 읽는 것과 같은 모양으로 적는다.
+
+- [ ] **Step 4d: 낡은 면제 키를 «소리 나게» 만든다 (Task 11b 가 실증한 구멍)**
+
+`EXEMPT` 는 `(경로, 줄번호)` 로 키잉된다. 그래서 **면제된 자리 «위»에 코드가 늘면 키가
+조용히 어긋난다.** Task 11b 가 실측했다 — 앞 두 커밋이 `select_dispatch_target()` 위에
+코드를 늘려 그 함수가 +13/+14 밀렸고, `review-dispatch.py` 의 면제 **열 개**가 통째로
+낡았다.
+
+**두 방향의 위험이 다르다:**
+- **큰 소리로 실패하는 쪽** — 낡은 키가 아무것도 안 가리키면 그 자리가 미배선으로
+  다시 잡혀 락이 RED 다. Task 11b 가 그렇게 알아챘다.
+- **조용한 쪽** — 밀린 키가 «다른» 버리는 자리의 줄번호와 우연히 겹치면 **그 자리가
+  검사도 없이 면제된다.** 아무 소리도 안 난다. 이게 진짜 구멍이다.
+
+조용한 쪽을 소리 나게 만든다. 판정기에 검사 하나를 더한다: **`EXEMPT` 의 모든 키가
+현재 트리에서 «실제 버리는 분기»를 가리켜야 한다.** 가리키는 줄이 버리는 분기가 아니면
+그 항목은 낡은 것이고 **RED** 다. 실패 메시지에 그 키를 **경로:줄로 이름 대라.**
+
+락 스크립트에도 그 수를 노출한다(`exempt_stale=N`), 그리고 `0` 을 단언한다.
+
+**양성 대조**: 면제 항목 하나의 줄번호를 **버리는 분기가 아닌 줄**(예: `import` 줄)로
+바꿔 그 검사가 RED 가 되고 그 키를 이름으로 대는지 확인한다. 원복 후
+`git status --short` 로 깨끗함 확인. **변이 전에 커밋돼 있어야 한다.**
+
+**키의 «모양» 자체는 이 Task 에서 바꾸지 않는다** — 내용 해시 키 같은 재설계는 면제
+17개를 전부 재검증해야 하고, 그 판단은 최종 리뷰가 한다. 여기서는 조용한 방향을
+소리 나게 만드는 것까지다.
 
 - [ ] **Step 5: 두 락이 함께 GREEN 인지 확인한다**
 
