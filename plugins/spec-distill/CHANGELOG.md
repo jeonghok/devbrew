@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.50.0] — 2026-09-04
+
+### Added
+- `plugins/spec-distill/scripts/render_disposition.py` — `shared/adjudication/render_disposition.py`로 가는 git 심볼릭 링크(mode 120000, `adjudication.py`와 같은 방식). `disposition_lines()`/`disposition_report()` 두 함수를 quality-gates와 공유한다.
+
+### Changed
+- `merge_review.py`가 세 원장(claude·codex·history)의 `report()`/`held_by_class()`를 합산해 `disposition_report()`로 이름을 편 뒤, 기존 `adjudication_held`/`adjudication_unknown` 두 키 뒤에 `adjudication_accepted`/`adjudication_rejected`/`adjudication_absorbed`/`adjudication_coerced`/`adjudication_sources_failed`/`adjudication_suppressed`/`adjudication_unknown_counts`/`adjudication_degraded`/`adjudication_held_unadjudicated`/`adjudication_held_malformed`/`adjudication_held_other`를 stdout에 더한다. 카운트 이름을 손으로 다시 적지 않는다 — 공유 헬퍼가 편 dict 를 루프로 돈다(L2 코퍼스가 그 import를 따라간다). `reviewing-spec/SKILL.md:116`의 키 열거를 새 키 전부를 반영하도록 갱신.
+
+### Known gaps
+- **`merge_brief_review.py`는 이 릴리스에서 `adjudication_*` 키를 하나도 내지 않는다** — 형제 `merge_review.py`와 달리 오늘 하나도 없어 전부 신규였는데, 그대로 추가하면 두 기존 락이 깨진다: (1) `test_merge_brief_adjudication.py::TestExternalKeysUnchanged::test_top_level_keys_are_exactly_the_declared_set`(2026-08-23, `7e6ad51`)가 top-level 키를 정확히 8개로 고정하고 "새 top-level 키를 추가하지 않는다 — 회계는 이미 escape되는 `advisory`에만 싣는다"를 명시적으로 선언한다. (2) `test_merge_brief_review.py::test_garbled_differs_materially_from_control`가 clean 라운드의 `advisory == []`를 고정한다 — disposition 두 줄을 advisory에 무조건 추가해도 이 락이 깨진다. 두 락 모두 이 브랜치 이전부터 있던 계약이라 판정 없이 넘어가지 않았다. 이 파일이 남아 있는 한 `shared/tests/test_adjudication_consumed.sh`(L2)는 이 파일에 대해 8개 키 전부 미소비로 RED다.
+
 ## [0.49.0] — 2026-09-03
 
 ### Added

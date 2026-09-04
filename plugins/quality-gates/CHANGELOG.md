@@ -3,6 +3,21 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.4.0] — 2026-09-04
+
+### Added
+- `shared/adjudication/render_disposition.py` — `disposition_lines(report, held_classes)`(마크다운 두 줄 + advisory)와 `disposition_report(report, held_classes)`(구조화 dict, 카운트를 이름으로 편다). `Ledger.report()`/`held_by_class()`가 쓰는 원장을 「처분:」·「배관 손실:」 두 줄로 렌더하는 유일한 자리 — 소비자 넷(`synthesize_findings.py`·`synthesize_artifact_findings.py`·spec-distill의 `merge_review.py`·`merge_brief_review.py`)이 사본 없이 공유한다. `plugins/quality-gates/scripts/render_disposition.py`는 이 파일로 가는 git 심볼릭 링크(mode 120000, `adjudication.py`와 같은 방식).
+
+### Changed
+- `synthesize_findings.py`의 `render()` 시그니처를 `render(kept, suppressed_count, dropped_malformed, report, held_classes)`로 바꾼다 — 기존 `held_count`/`degraded`/`degrade_reasons` 세 개별 인자를 원장 `report` dict + `held_classes` dict 로 대체. `main()`이 `ledger.held_by_class()`를 넘긴다. 두 렌더 갈래(빈 findings·표 렌더) 모두 `disposition_lines()`의 두 줄(「처분:」·「배관 손실:」)을 싣고, 반환된 advisory(hold 분류 무손실성 위반 시)는 stderr로 낸다.
+- `synthesize_artifact_findings.py`의 `phase_synth` 출력 dict에 `adjudication` 블록을 더한다(`disposition_report(L.report(), L.held_by_class())`) — 기존 `degraded`/`degraded_reason` 4값 어휘(`adversarial`/`findings_load`/`sources_failed`/`none`)는 그대로 둔다.
+
+### Fixed
+- **`phase_key`의 원장이 죽어 있었다.** Task 9(v6.3.0)가 `phase_key(paths, ledger=None)`의 입력 실패 두 자리를 배선했지만 유일한 호출부 `main()`의 `phase_key(args.findings)`가 원장을 넘기지 않아 `if ledger is not None` 가드 안쪽이 영영 안 돌았다 — 배선이 있는데 실행되지 않는 상태. `main()`의 key 분기가 `Ledger(items="open")`을 만들어 넘기고, 처분 두 줄을 **stderr**로 낸다(stdout은 `phase_synth`가 다시 읽는 findings 문서라 건드리면 `_is_findings_doc` 스키마 판정을 깬다). 확인: `--findings /nonexistent.yaml` 실행 시 이전엔 stderr가 0바이트였고, 지금은 「배관 손실」 처분 줄이 보인다.
+
+### Known gaps
+- **`test_synthesize_disposition.sh`의 6번째 단언("배관 손실 [1-9]")이 여전히 FAIL이다(5/6 GREEN).** §5 목표 모양과 이 릴리스의 `disposition_lines()` line2는 `"**배관 손실:** %d ..."` 형식(`손실` 바로 뒤에 `:**` — 공백이 아니다)인데, 테스트의 grep 패턴은 `손실` 바로 뒤에 **공백** + 숫자를 요구한다. 이 어긋남은 계획 문서(`docs/superpowers/plans/2026-09-03-adjudication-topology.md:2183`·`:2682`)에도 동일하게 존재해 — 브리프의 오탈자가 아니라 계획 단계부터의 서식/테스트 불일치다. 렌더 서식(§5 예시)과 테스트 정규식 중 어느 쪽을 고칠지는 판정이 필요해 고치지 않고 남긴다. 이 때문에 `plugins/quality-gates/tests/codex-blessed-red.txt`의 `test_synthesize_disposition.sh` 등재도 지우지 않았다 — 지우면 `test_codex_backward_compat.sh`가 「미등재」로 실패하고, 그대로 둬도 실패 신호(1/6 PASS)가 바뀌어 「해시불일치」로 실패한다. 어느 쪽이든 RED이므로 원장을 조용히 다시 축복(re-bless)하지 않고 해시 불일치 상태로 남겨 다음 판정을 기다린다.
+
 ## [6.3.2] — 2026-09-04
 
 ### Fixed

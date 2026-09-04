@@ -65,7 +65,10 @@ note "      면제 목록 크기: $exempt_n  ← M8 이 이 수의 증가를 본
 
 note "── 컴프리헨션 회귀 축 — 요구가 아니라 baseline"
 comp="$(printf '%s\n' "$SCAN" | sed -n 's/^comprehensions=//p')"
-COMP_BASELINE=28   # Task 1 F5 census. 늘면 그 커밋에 이유가 있어야 한다.
+COMP_BASELINE=29   # Task 1 F5 census 28 + Task 10 이 1 늘림 — merge_review.py
+                   # `merged["report"]["counts"]`를 만드는 `{k: 0 for k in
+                   # _MERGED_COUNT_KEYS}`. 항목을 버리는 자리가 아니라 값 0
+                   # 으로 카운터를 초기화하는 자리라 처분 호출이 필요 없다.
 if [ "${comp:-0}" -le "$COMP_BASELINE" ] 2>/dev/null; then
   ok "컴프리헨션 내포 $comp <= baseline $COMP_BASELINE"
 else

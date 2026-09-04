@@ -25,11 +25,25 @@ DISCARD_NODES = (ast.Continue, ast.Break, ast.Return)
 # 비어 있는 것이 이 락이 오늘 RED 인 이유의 일부다.
 EXEMPT = {
     # ("plugins/.../foo.py", 146): "C6(1) 제자리 변형 루프 — 버려지는 항목이 없다",
-    ("plugins/quality-gates/scripts/synthesize_findings.py", 358):
+    # Task 10 이 파일 상단에 `from render_disposition import disposition_lines`
+    # 를 더해 이 줄이 358→359 로 밀렸다 — 인용 자체는 무변경(내용은 그대로다).
+    ("plugins/quality-gates/scripts/synthesize_findings.py", 359):
         "C6(1) — dedup() 의 이 continue 는 `promoted` 항목을 그룹핑에서만 "
         "제외한다. 항목 자체는 이 loop 이전에 계산된 `passthrough` 리스트에 "
         "이미 담겨 있고 함수 반환값(`deduped + passthrough`)에 그대로 "
         "살아남는다 — 버려지는 항목이 없다.",
+    # Task 10 — merge_review.py 의 `disposition_report()` 결과를 이름별로 펴는
+    # 루프. `continue` 는 "reasons"·"held_by_class" 두 키를 이 loop 에서만
+    # 제외한다 — 둘 다 다른 자리에서 이미/따로 실린다: "reasons" 는 이 loop
+    # «이전»에 이미 `advisory.extend(merged["reasons"])`로 advisory 채널에
+    # 실렸고, "held_by_class" 는 loop 직후(:619-621) 세 줄로 분해돼 실린다.
+    # 버려지는 항목이 없다(C6(1)).
+    ("plugins/spec-distill/scripts/merge_review.py", 618):
+        "C6(1) — disposition_report().items() 를 도는 이 continue 는 "
+        "\"reasons\"·\"held_by_class\" 두 키를 이 loop 에서만 제외한다. "
+        "\"reasons\" 는 이 loop 이전에 이미 advisory 채널로, \"held_by_class\" "
+        "는 loop 직후 세 줄(held_unadjudicated/held_malformed/held_other)로 "
+        "각각 실린다 — 버려지는 항목이 없다.",
 }
 
 

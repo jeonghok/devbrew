@@ -19,6 +19,7 @@ import yaml
 from collections import defaultdict
 
 from adjudication import Ledger
+from render_disposition import disposition_lines
 
 
 SEV_ORDER = {"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 2}
@@ -469,8 +470,8 @@ def _degrade_block(degraded, degrade_reasons):
     return out
 
 
-def render(findings, suppressed_count, dropped_malformed=0, held_count=0,
-           degraded=False, degrade_reasons=()):
+def render(kept, suppressed_count, dropped_malformed, report, held_classes):
+    findings = kept
     if not findings:
         # drop 공지는 이 분기에도 반드시 나가야 한다. 예전에는 아래 표-있는
         # 경로에만 있었고, 살아남은 발견이 0이면 여기서 먼저 return해 공지가
@@ -478,11 +479,15 @@ def render(findings, suppressed_count, dropped_malformed=0, held_count=0,
         # SKILL은 stdout만 읽어 counts=0을 보고 `## Review gate: clean`을
         # 찍었다 — 버려진 CRITICAL 주장이 **깨끗함으로 렌더**됐다는 뜻이다
         # (2026-08-04 재현, exit 0). 소실을 stdout에서 볼 수 있게 만든다.
+        disp_line, plumb_line, advisories = disposition_lines(report, held_classes)
+        for a in advisories:
+            print(a, file=sys.stderr)
         out = [
             "## Review Findings (Synthesized)",
             "",
             f"No high-confidence findings. {suppressed_count} low-confidence "
             "findings suppressed.",
+            disp_line, plumb_line,
         ]
         if dropped_malformed > 0:
             out.append(
@@ -491,10 +496,7 @@ def render(findings, suppressed_count, dropped_malformed=0, held_count=0,
                 "file/severity/summary) — see stderr. "
                 "**이 실행은 clean이 아니다**: 버려진 주장은 심사되지 않았다."
             )
-        if held_count > 0:
-            # 이 줄은 개수만 싣는다 — finding summary 는 여기 들어오지 않는다.
-            out.append(f"미판정 {held_count}건 — adversarial 판정이 없어 유지됐다.")
-        out.extend(_degrade_block(degraded, degrade_reasons))
+        out.extend(_degrade_block(report["degraded"], report["reasons"]))
         return "\n".join(out) + "\n"
 
     counts = {"CRITICAL": 0, "IMPORTANT": 0, "SUGGESTION": 0}
@@ -526,12 +528,14 @@ def render(findings, suppressed_count, dropped_malformed=0, held_count=0,
     )
     if suppressed_count > 0:
         counts_line += f" — {suppressed_count} suppressed (conf <= 4)"
-    if held_count > 0:
-        # 이 줄은 개수만 싣는다 — finding summary 는 여기 들어오지 않는다.
-        counts_line += f" — 미판정 {held_count}건"
 
-    out = ["## Review Findings (Synthesized)", "", counts_line, ""]
-    degrade_lines = _degrade_block(degraded, degrade_reasons)
+    disp_line, plumb_line, advisories = disposition_lines(report, held_classes)
+    for a in advisories:
+        print(a, file=sys.stderr)
+
+    out = ["## Review Findings (Synthesized)", "", counts_line,
+           disp_line, plumb_line, ""]
+    degrade_lines = _degrade_block(report["degraded"], report["reasons"])
     if degrade_lines:
         out.extend(degrade_lines)
         out.append("")
@@ -593,9 +597,8 @@ def main():
     # 라운드 4 이전에는 `held` 만 꺼내 갔고 `degraded`/`reasons` 는 어디로도 가지
     # 않았다: 주 입력이 통째로 죽어도 출력이 clean 과 **바이트 동일**이었다.
     report = ledger.report()
-    held_count = report["counts"]["held"]
-    sys.stdout.write(render(kept, len(suppressed), dropped_malformed, held_count,
-                            report["degraded"], report["reasons"]))
+    sys.stdout.write(render(kept, len(suppressed), dropped_malformed,
+                            report, ledger.held_by_class()))
 
 
 if __name__ == "__main__":

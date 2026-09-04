@@ -30,6 +30,7 @@ import sys
 import yaml
 
 from adjudication import Ledger
+from render_disposition import disposition_lines, disposition_report
 
 SEV = {"CRITICAL", "IMPORTANT", "SUGGESTION"}
 
@@ -285,6 +286,7 @@ def phase_synth(findings_path, adversarial_path):
         "kept_suggestion": sug,
         "stagnation_keys": ",".join(skeys),
         "ledger": dict(ledger_report["counts"], degraded=ledger_degraded),
+        "adjudication": disposition_report(L.report(), L.held_by_class()),
         "kept": [
             {k: f.get(k) for k in ("category", "target_anchor", "target_lines",
                                    "severity", "summary", "proposed_fix", "dedup_key")
@@ -302,7 +304,19 @@ def main():
     ap.add_argument("--adversarial", default="")
     args = ap.parse_args()
     if args.phase == "key":
-        phase_key(args.findings)
+        # `phase_key`의 입력 실패 배선(Task 9)은 `ledger` 인자를 받아야 도는데,
+        # 이 호출부가 여태 `ledger=None`으로 불러 가드 안쪽이 영영 안 돌았다
+        # (Task 9 브리프의 누락 — Task 10 이 메운다). key 단계의 다음 소비자는
+        # 사람이다 — 미판정은 라벨을 달아 stderr 로 보인다(items="open").
+        L = Ledger(items="open")
+        phase_key(args.findings, ledger=L)
+        disp_line, plumb_line, advisories = disposition_lines(
+            L.report(), L.held_by_class())
+        # stdout 이 아니라 stderr 다 — key 단계의 stdout 은 phase_synth 가 다시
+        # 읽는 findings 문서라, 거기에 키를 더하면 `_is_findings_doc` 스키마
+        # 판정을 건드린다.
+        for line in (disp_line, plumb_line, *advisories):
+            sys.stderr.write(line + "\n")
     else:
         findings_path = args.findings[0] if args.findings else ""
         phase_synth(findings_path, args.adversarial)
