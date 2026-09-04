@@ -73,6 +73,7 @@ from parse_spec_structure import (  # noqa: E402
 from resolve_mode import resolve_mode  # noqa: E402
 from discover_candidates import Candidate, GitUnavailable, discover  # noqa: E402
 from adjudication import Ledger  # noqa: E402
+from render_disposition import disposition_lines  # noqa: E402
 
 # stdin 을 읽기 **전에** 표준 스트림을 UTF-8 로 고정한다. 위 import 들은 stdin 을
 # 건드리지 않으므로 이 자리가 여전히 "첫 문장"이다 (근거는 hook_common 쪽 docstring).
@@ -212,16 +213,28 @@ def write_state_file(path: Path, body: str) -> None:
 
 
 def _block_with_ledger(payload: dict, ledger: Ledger, advisory) -> int:
-    """차단 결정에 원장 사유를 «reason 으로» 실어 낸다.
+    """차단 결정에 원장의 처분을 «reason 뒤에» 실어 낸다.
 
-    원장 객체는 이 프로세스와 함께 사라진다. `reasons()` 의 줄을 reason 에
-    실어 보내는 것이 이 층의 회계 완료 조건이다 — 그 필드가 모델에 도달하는
-    유일한 채널이기 때문이다(카나리: systemMessage 0/14 · reason 7/7).
+    Task 11 수정 라운드 2 — `reasons()`만 쓰던 최초 판을 되돌린다.
+    `reasons()`(adjudication.py:136-149)가 내는 것은 `held`·`unknown`·
+    `sources_failed`·`coerced(gate=True)` 넷뿐이다. `accepted`/`rejected`/
+    `absorbed`/`suppressed` 는 한 줄도 안 낸다 — 오늘 이 훅이 `hold()`만
+    불러 우연히 전부 덮일 뿐, 누가 `L.reject(...)` 하나만 더해도 공시가
+    조용히 사라진다(L2 소비 락이 실측한 공백). 그래서 원장 `report()` 전체를
+    공유 렌더러 `disposition_lines()`(다른 소비자 넷과 같은 벌)로 낸다 — 키
+    이름을 손으로 다시 적지 않는다.
+
+    **배치가 계약이다.** 이 훅의 `reason`은 모델을 «움직이는» 지시문이다
+    (카나리 7/7 도달) — 지시문을 앞에 두고 처분 줄을 **뒤에** 붙인다. 회계를
+    앞에 붙이면 지시가 처분 텍스트에 묻혀 다음 턴 강제력이 떨어진다.
     """
-    lines = ledger.reasons()
-    if lines:
-        payload["reason"] = (payload.get("reason", "")
-                             + "\n\n[처분] " + " · ".join(lines))
+    report = ledger.report()
+    held_classes = ledger.held_by_class()
+    disp_line, plumb_line, advisories = disposition_lines(report, held_classes)
+    tail = "\n\n" + disp_line + "\n" + plumb_line
+    if advisories:
+        tail += "\n" + "\n".join(advisories)
+    payload["reason"] = payload.get("reason", "") + tail
     print(json.dumps(with_advisory(payload, advisory)), flush=True)
     return 0
 

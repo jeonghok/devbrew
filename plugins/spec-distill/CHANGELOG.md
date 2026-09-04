@@ -1,6 +1,9 @@
 # Changelog
 
-## [0.51.1] — 2026-09-04
+## [0.51.2] — 2026-09-04
+
+### Fixed
+- **훅의 차단 결정 두 자리가 소비 락(L2)을 다시 침묵시키고 있었다 — `reasons()` 대신 공유 렌더러로 바꾼다.** 전량 회귀 스윕이 `shared/tests/test_adjudication_consumed.sh`를 다시 RED(`unconsumed_total=8`)로 잡았다. `_block_with_ledger()`가 `ledger.reasons()`(`shared/adjudication/adjudication.py:136-149`)만 읽었는데, 그 함수는 `held`·`unknown`·`sources_failed`·`coerced(gate=True)` 넷만 낸다 — `accepted`/`rejected`/`absorbed`/`suppressed`는 한 줄도 안 낸다. 오늘 이 훅이 `hold()`만 불러 우연히 전부 덮였을 뿐, 앞으로 이 훅에 `L.reject(...)` 하나만 늘어도 공시가 조용히 사라지는 구조였다("오늘은 맞고 내일은 침묵"). `_block_with_ledger()`가 이제 원장 `report()`/`held_by_class()`를 공유 렌더러 `disposition_lines(report, held_classes)`(`shared/adjudication/render_disposition.py`, 소비자 넷이 이미 쓰는 것)로 낸다 — 카운트 이름을 손으로 다시 적지 않는다. **배치가 계약이다**: 이 훅의 `reason`은 모델을 움직이는 지시문(카나리 7/7 도달)이므로 지시문을 먼저 두고 처분 두 줄(+advisory)을 **뒤에** 붙인다. `plugins/spec-distill/tests/test_review_dispatch_disposition.sh`에 실행 절을 더해 실제 `decision:"block"`을 발생시켜 `reason`이 "MANDATORY..." 뒤에 "**처분:**"/"**배관 손실:**" 줄을 순서대로 담는지, `systemMessage`에는 처분 줄이 새지 않는지를 직접 검증한다 — 이전 판의 `assert_grep 'reasons\(\)'`는 구현이 바뀐 뒤에도 이 테스트 파일 자신의 설명 주석이 그 문자열을 우연히 담고 있어 계속 GREEN이었다(값싼 검사였다는 신호). 기존 `.reason` 내용을 못박는 두 테스트(`test_review_dispatch.sh` Case 11·17, `test_review_dispatch_design_mandate.sh` AC2·AC12)는 이 변경으로 깨지지 않는다 — 처분 줄을 기존 지시문 **뒤에 추가만** 하므로 `contains(...)` 단언이 그대로 성립한다(16/16 GREEN 확인).
 
 ### Fixed
 - **v0.51.0 Known gaps 둘 중 하나 — `:533` 면제 사유가 범주 착오였다.** 최초 사유는 "`systemMessage`는 모델 도달 카나리 0/14라 채널 효과가 의심된다"였다 — 그러나 `systemMessage`는 애초에 **사람의 터미널** 채널이지 모델 컨텍스트 채널이 아니다(CLAUDE.md: "미판정 항목의 방향은 다음 소비자가 정한다: 기계면 제외, 사람이면 라벨을 붙여 보여준다"). T5-1·T5-2가 채널을 `reason`으로 정한 이유는 그 두 자리의 소비자가 **모델**(다음 턴 dispatch 판단)이었기 때문이고, `:533`의 소비자는 **사람**(세션을 보는 사람에게 "자동 검증을 안 하는 문서가 있다"고 알리는 것)이다 — 모델 미도달은 이 채널의 설계이지 결함이 아니다. `tools/adjudication/check_wiring.py`의 `EXEMPT[:533]` 사유를 다시 썼다. **면제 자체(C6⑴)와 "최종 리뷰 재검토" 표시는 그대로 유지** — 이 스킵이 규칙(상한값)이 정한 배제라는 점에서 `suppressed()` 재분류 후보라는 열린 질문은 남아 있다.
