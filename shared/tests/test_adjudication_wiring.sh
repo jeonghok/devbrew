@@ -8,6 +8,10 @@
 #
 # 컴프리헨션은 요구 대상이 아니다(표현식에 문장을 못 넣는다). 대신 개수를
 # baseline 으로 못 박는다 — 버리기를 그 형태로 옮기는 우회가 조용하지 않게.
+#
+# 이 락은 처분의 «유무»를 재고 «종류」는 재지 않는다. reject 를 accept 로
+# 바꾸면 통과한다 — 종류의 정합은 처분 행렬 테스트
+# (quality-gates/tests/test_synthesize_disposition.sh) 가 잰다.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
