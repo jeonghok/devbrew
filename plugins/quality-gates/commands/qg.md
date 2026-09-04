@@ -139,9 +139,7 @@ loop, the pre-redesign behavior):
 | Standard | ~30–45% | 50–199 LOC or multi-file simple |
 | Deep | ~55–75% | ≥200 LOC, new files, config changes (AskUserQuestion gate fires) |
 
-Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable. Set
-`DEVBREW_SKIP_HOOKS=quality-gates:post-tool-use` to disable just the
-auto-trigger hook (keeps SessionStart advisor and SessionEnd cleanup active).
+Set `DEVBREW_QUALITY_GATES_DISABLE=1` to globally disable.
 
 ### Gates
 

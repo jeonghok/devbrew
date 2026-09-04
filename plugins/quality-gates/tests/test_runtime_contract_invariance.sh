@@ -188,7 +188,8 @@ with open('$PLUGIN_ROOT/hooks/hooks.json', encoding='utf-8') as f:
 print(sum(len(v) for v in d.get('hooks', {}).values()))
 ")
   agents=$(ls "$PLUGIN_ROOT/agents" | wc -l | tr -d ' ')
-  [[ "$hooks" == "3" ]]  && ok "hooks.json 항목 3개 불변" || no "hooks 항목 수 $hooks (기대 3)"
+  # v7.0.0: PostToolUse(pr-create 자동 트리거) 제거로 3 → 2. 늘어난 방향만이 새 표면이다.
+  [[ "$hooks" == "2" ]]  && ok "hooks.json 항목 2개 불변" || no "hooks 항목 수 $hooks (기대 2)"
   [[ "$agents" == "7" ]] && ok "agents/ 파일 7개 불변"    || no "agents 파일 수 $agents (기대 7)"
   # verdict 토큰은 4종 밖으로 늘지 않는다.
   #

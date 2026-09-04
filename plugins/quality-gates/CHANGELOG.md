@@ -3,6 +3,72 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.1.0] — 2026-09-05
+
+### Added
+
+- **처분 회계(`Ledger`)를 리뷰 findings 가 버려지는 모든 자리에 배선하고, 그 배선을
+  락 다섯으로 강제한다.** 새 판정기는 `tools/adjudication/` 에 산다 —
+  `check_wiring.py`(버리는 분기가 같은 분기에 처분 호출을 갖는가) ·
+  `check_consumed.py`(원장 키를 소비자가 실제로 읽는가) ·
+  `check_slots.py`(agent 가 «선언한» 입력과 dispatch 가 «전달하는» 것의 일치, 그리고
+  선언된 종류가 금지 어휘가 아닌지) · `check_names.py`(dispatch 이름이 실재하는가).
+  락은 `shared/tests/test_adjudication_{wiring,consumed}.sh` ·
+  `test_agent_input_slots.sh` · `test_runner_disposition.sh` ·
+  `test_dispatch_name_defined.sh`.
+- `shared/adjudication/render_disposition.py` — 처분 두 줄(「처분:」·「배관 손실:」)을
+  렌더하는 유일한 자리. 소비자 넷이 심볼릭 링크로 공유한다.
+- agent 20 개가 `input_slots:` 를 선언한다(tag·var·kind). 금지 종류
+  (`prior_verdict`·`score`·`orchestrator_framing`)는 C6 인용과 함께 면제 등재를
+  요구한다.
+- 러너 여섯이 `**처분**` 앵커로 소비자·fail-정책·공시 채널을 밝힌다.
+
+### Fixed
+
+- `synthesize_findings.py` 의 **두 렌더 분기 모두** 처분 두 줄을 싣는다. 이전에는
+  `kept>0` 분기만 잠겨 있어, 「clean」을 찍는 빈-findings 분기에서 배관 손실이
+  소실돼도 어떤 락도 소리를 내지 않았다.
+- `synthesize_artifact_findings.py` 의 `key` 단계 렌더에 값 수준 커버리지를 준다.
+- `phase_key` 의 원장이 죽어 있던 것(배선은 있는데 호출부가 `ledger=None`)을 살린다.
+- L3 슬롯 재태깅이 어둡게 만든 `test_skill_orchestration_behavior.sh` 의 R3
+  dispatch 감시를 복구한다(성질은 무변경, 감시만 복구).
+
+### Note
+
+이 브랜치는 `6daba33`(당시 quality-gates v6.0.0)에서 갈라져 작업 중 6.1.0~6.6.5 로
+올렸다. 그 사이 `main` 이 v7.0.0(breaking)으로 갔으므로 병합 시 7.1.0 으로 맞춘다.
+아래 6.x 절들은 이 작업의 단계별 기록이며 «7.0.0 이후»에 작성됐다.
+
+## [7.0.0] — 2026-09-04 (BREAKING)
+
+`gh pr create` 직후 `/qg` 파이프라인을 자동 기동하던 PostToolUse 훅을 제거한다. 파이프라인은
+이제 `/qg` 로만 시작한다 — PR 을 여는 행위가 리뷰를 강제하지 않는다. 훅의 존재 이유가
+그 트리거 하나였고, 끄려면 셸마다 `DEVBREW_SKIP_HOOKS` 를 유지해야 해서(원격 세션에서는
+새는 fail-open) 기본-off 대신 삭제했다. 선례는 v5.0.0 의 session-tracker 훅 즉시 제거.
+
+### Removed
+
+- **`hooks/post-tool-use.py`** (PostToolUse, `matcher: "Bash"`)와 `hooks.json` 의 PostToolUse 블록.
+  `gh pr create` 출력의 PR URL 을 보면 `setup-qg.sh --pr-url` 실행 + `quality-pipeline` 호출을
+  모델 채널로 지시하던 훅. kill switch 키 `quality-gates:post-tool-use` 와 이벤트명 별칭
+  `quality-gates:PostToolUse` 도 함께 사라진다.
+- **publish sentinel `.claude/quality-gates/<sid>/publish-active.md`** — `publishing-pr-understanding`
+  이 `pr-create.sh` 전에 쓰던 표식(AC11). 유일한 소비자가 위 훅이라 훅 없이는 아무도 읽지 않는
+  파일이었다. SKILL 의 「PR 부재」 분기는 이제 `pr-create.sh` 한 단계다.
+- `tests/test_hook_publish_suppression.py` — 훅 전용 테스트(대상 부재).
+
+### Changed
+
+- `tests/test_no_write_matcher_hooks.sh`: 양성 대조 A2 를 「Bash matcher 항목 생존」에서
+  「PostToolUse 항목 0개」로 뒤집고 A4(`post-tool-use.py` 부재)를 추가. A1(쓰기-도구 matcher 없음)은
+  리스트가 비면 공허참이라 A2 가 그 양성 짝이다 — hooks.json 에 PostToolUse 항목을 하나라도
+  되살리면 RED (변이로 확인).
+- `tests/test_qg_publish_handoff.sh` (6): sentinel 생산자·소비자 「생존」 검사를 생산자 「부재」 검사로 반전.
+- `tests/test_runtime_contract_invariance.sh`: hooks.json 항목 수 핀 3 → 2.
+- `tests/test_kill_switches.py`: 훅 계약 목록에서 `post-tool-use` 항목과 그 payload·단언 분기 제거.
+- `README.md`·`commands/qg.md`·`tests/e2e-scenarios.md`: 훅·kill switch 키·시나리오 L 의 해당 서술 제거.
+- `setup-qg.sh --pr-url` / `/qg --pr-url` 과 `scripts/pr-create.sh` 는 그대로다 — 훅과 무관한 사용자 표면.
+
 ## [6.6.5] — 2026-09-05
 
 ### Fixed
@@ -372,6 +438,20 @@
 
 ### Changed
 - `report()["counts"]` 에 `suppressed` 추가 (여섯 → 일곱).
+## [6.0.1] — 2026-09-04
+
+### Changed
+
+- **dispatch 시점 `model` 인자 규약을 「하위 tier override 금지」에서 「오케스트레이터 재량, 판정·측정 agent 제외」로.**
+  frontmatter 는 전부 `model: inherit` 그대로다(스윕 락 `test_agent_model_inherit_sweep.sh` 무변경).
+  바뀐 것은 `scripts/experiment-model-override.md` 의 「현재 규약」 문장과 `docs/plugin-authoring.md` 의
+  규약 조항뿐 — 세션 모델이 opus 외(Fable·sonnet)로 다양해지면서, 프로브·생성기(`smoke-probe`·
+  `transcript-reader`·`pr-understanding-builder` 류)에는 오케스트레이터가 상황에 맞는 티어를 고를 수
+  있게 열었다. 출력이 게이트 판정(verdict·findings)이나 측정(readback)에 들어가는 agent 는 여전히
+  인자를 넘기지 않는다 — writer 가 자기 리뷰어의 티어를 고르는 구조는 Law 2 의 취지와 충돌한다.
+  adversarial 의 집행 락(`test_adversarial_model_consistency.sh` §2)은 그대로다.
+  검토했다 폐기한 대안: 전 agent `model: opus` 고정 — Fable 세션에서 리뷰어 20개가 writer 보다
+  한 단계 약해지는, 원 규약이 막으려던 방향을 만든다.
 
 ## [6.0.0] — 2026-09-03
 

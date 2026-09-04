@@ -5,6 +5,13 @@
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 기준으로 하고,
 이 프로젝트는 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 따릅니다.
 
+## [3.1.1] — 2026-09-04
+
+### Changed
+
+- `README.md` 「다른 플러그인과 함께 동작」의 quality-gates 항목을 정정 — PR 생성 자동 트리거는
+  quality-gates v7.0.0 에서 제거됐고, 파이프라인은 `/qg` 로 수동 기동한다.
+
 ## [3.1.0] — 2026-09-03
 
 ### Changed

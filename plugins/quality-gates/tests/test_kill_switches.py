@@ -33,7 +33,6 @@ HOOKS = PLUGIN_ROOT / "hooks"
 # Each hook contract: (script, per-hook skip key).
 # The skip key is the suffix used in DEVBREW_SKIP_HOOKS=quality-gates:<key>.
 HOOK_CONTRACTS = [
-    ("post-tool-use.py", "post-tool-use"),
     ("session-start-advisor.py", "session-start-advisor"),
     ("session-end-cleanup.py", "session-end-cleanup"),
 ]
@@ -56,14 +55,6 @@ def _qg_dir(cwd: str) -> Path:
 
 def _payload_for(script: str) -> dict:
     """Payload that — without a kill switch — would cause the hook to act."""
-    if script == "post-tool-use.py":
-        return {
-            "session_id": SID,
-            "tool_name": "Bash",
-            "tool_input": {"command": "gh pr create --title x --body y"},
-            "tool_response": {"stdout": "https://github.com/owner/repo/pull/42\n"},
-            "cwd": "",  # filled in per test
-        }
     return {"session_id": SID}
 
 
@@ -107,20 +98,7 @@ def _assert_no_side_effect(test: unittest.TestCase, script: str, cwd: str,
 
     qg = _qg_dir(cwd)
 
-    if script == "post-tool-use.py":
-        # Must not emit a systemMessage trigger.
-        out = proc.stdout.strip()
-        if out:
-            try:
-                parsed = json.loads(out)
-            except json.JSONDecodeError:
-                test.fail(f"{label}: post-tool-use produced non-JSON stdout: {out!r}")
-            test.assertNotIn(
-                "systemMessage", parsed,
-                f"{label}: post-tool-use injected systemMessage despite kill switch",
-            )
-
-    elif script == "session-start-advisor.py":
+    if script == "session-start-advisor.py":
         # Advisor writes its advisory to STDERR, not stdout — every write in
         # this hook goes through sys.stderr.write (see _emit_legacy_v1_advisory).
         # Checking stdout here is vacuous: it is always empty regardless of the
@@ -299,12 +277,7 @@ class KillSwitchRegressionTest(unittest.TestCase):
     def _assert_side_effect_happened(self, script: str, cwd: str,
                                      proc: subprocess.CompletedProcess) -> None:
         qg = _qg_dir(cwd)
-        if script == "post-tool-use.py":
-            self.assertIn(
-                "systemMessage", proc.stdout,
-                "post-tool-use sanity: should emit systemMessage on `gh pr create`",
-            )
-        elif script == "session-start-advisor.py":
+        if script == "session-start-advisor.py":
             self.assertNotEqual(
                 proc.stderr.strip(), "",
                 "advisor sanity: should produce stderr advisory for legacy state "

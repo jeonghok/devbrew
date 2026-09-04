@@ -19,8 +19,8 @@ degrade 가 된다.
   코드의 실제 로케일 의존은 텍스트만 봐서는 안 보인다). 강제로 non-UTF-8 로케일을
   만들고 한국어 내용을 담은 실제 프로덕션 훅을 돌려 살아남는지 잰다.
 
-  ★ quality-gates 안에 상태를 write 하는 훅이 현재 하나도 없다(post-tool-use.py·
-  session-end-cleanup.py·session-start-advisor.py 모두 write 호출 0건) — write_text
+  ★ quality-gates 안에 상태를 write 하는 훅이 현재 하나도 없다(session-end-cleanup.py·
+  session-start-advisor.py 모두 write 호출 0건) — write_text
   쪽은 이 플러그인 안에서 측정할 vehicle 이 없다. read 쪽은 session-start-advisor.py 의
   frontmatter-scan(hooks/session-start-advisor.py:92,
   `agent_file.read_text(encoding="utf-8")`)으로 재확보했다 — 한국어 내용을 담은
