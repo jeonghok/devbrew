@@ -3,6 +3,64 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.1.1] — 2026-09-05
+
+### Fixed
+
+- **Task 15c 수정 라운드 1 (C1, Critical) — 이 브랜치가 방금 심은 지뢰.**
+  R2 로 `# guards:` 를 넣은 `test_skill_orchestration_behavior.sh` 가
+  `--emit-scanned` 인자를 가로채지 않고 있었다 — 그 인자를 받으면 정상 스위트
+  전체가 그대로 돌아 PASS/FAIL 123줄을 stdout 에 뿜었다. 오늘 무해했던 유일한
+  이유는 이 파일의 선재 RED 둘(iter cap 근접성·R1b→R8, 이 브랜치가 만든 것도
+  건드릴 것도 아니다) 때문에 rc≠0 이라 `test_guards_coverage_bidirectional.sh`
+  가 "미지원"으로 읽었기 때문이다 — 그 rc≠0 은 이 브랜치 소유가 아니라서, 언젠가
+  고쳐지면 방향 A·B 가 +6 거짓 FAIL 을 낸다(리뷰어가 사본 트리에서 rc=0 반사실로
+  실증). `test_guards_coverage_bidirectional.sh:23` 의 자기재귀 회피용 빈 응답은
+  이 자리의 선례가 «아니다»(그 파일은 자기 자신을 스캔 못 하는 게 사실이라
+  빈 응답이 정직하지만, 이 파일은 자기 자신을 스캔하는 게 아니다) — 대신
+  실제로 읽는 다섯 경로(SKILL.md 3종을 내는 동적 `find` 재사용 + plugin.json +
+  페르소나 둘)를 낸다. 양성 대조: 선재 RED 를 임시로 만족시킨 사본에서도
+  `--emit-scanned` 는 여전히 rc=0·같은 7줄, `test_guards_coverage_
+  bidirectional.sh` 도 여전히 GREEN(104/104, 이 락 몫 6/6 포함).
+- **Task 15c 수정 라운드 1 (I1, Important) — R3 dispatch 락이 ∃-검사인데 주석은
+  ∀("never a hardcoded sandbox_dir")를 주장했다.** 리뷰어 변이(dispatch 를
+  `${SANDBOX_DIR}` 로 하드코딩 + 문서 아무 데나 올바른 리터럴을 담은 decoy 산문
+  한 줄 추가)가 기존 PASS-only grep 을 통과시켰다 — v6.6.2 선례(critiquing-
+  artifacts 락)가 이미 쓰는 양의 개수 + 음의 짝 모양과 실제로는 달랐다는 뜻.
+  `project_dir: <project_dir>${SANDBOX_DIR}</project_dir>` 부재를 확인하는
+  음의 짝을 추가해 그 주장을 참으로 만들었다. 양성 대조: 리뷰어와 같은 decoy
+  변이를 재현하면 새 음의 짝만 RED(옛 ∃-체크는 여전히 속아서 PASS), 원복 후
+  GREEN.
+- **Task 15c 수정 라운드 1 (I2, Important) — R5 가 `test_synthesize_
+  disposition.sh` 에서 걷어낸 무조건 단정("선언 ⊇ 실제는 무해")을 같은 커밋이
+  형제 파일 `test_synthesize_artifact_findings.sh` 에 다시 심었다.** 두 파일이
+  서로를 인용하면 다음 사람이 어느 쪽을 읽느냐로 답이 갈린다 — 인용을 끊고
+  올바른 조건(방향 B 는 스캔 결과 0건 글롭을 FAIL 시킨다, 지금 무해한 것은
+  quality-gates 사본이 최소 1건을 맞기 때문)을 두 파일 모두에 직접 적었다.
+- **Task 15c 수정 라운드 1 (I3, Important) — R2 의 "다섯 밖은 안 읽는다" 전수
+  확인 근거로 인용한 grep 이 불건전했다.** `grep -n '"\$[A-Za-z_]*\(_DIR\|_MD
+  \|_JSON\|_ROOT\)"'` 는 변수 뒤에 닫는 따옴표가 바로 안 붙는 줄(이 파일 자신의
+  `. "$SCRIPT_DIR/../lib/reconstruct-skill.sh"`)을 구조적으로 놓친다. 결론
+  (다섯 밖은 안 읽는다)은 안 바뀌지만 — reconstruct-skill.sh 는 그 다섯짜리
+  목록 밖의 새 코퍼스를 열지 않는 스플라이서일 뿐이다 — "이 정규식이 증명한다"는
+  서술은 거짓이었다. 정규식을 인용하지 않고 수동 정독 사실만 남겼다.
+- **SKILL 제목 major 불일치(병합이 가져온 것, 이 브랜치가 7.1.x 를 출하하므로
+  같이 고친다) — `quality-pipeline/SKILL.md`·`publishing-pr-understanding/
+  SKILL.md` 의 제목이 `(v6.0.0)` 인 채 plugin.json 이 v7 로 올라 있었다.** 두
+  제목의 major 만 `(v7.0.0)` 으로 맞췄다(의미 변경 없음) — `test_skill_
+  orchestration_behavior.sh` 의 major-불일치 락 + "버전 단 제목 0개" 공허-방지
+  락 둘 다 GREEN 으로 복귀(merge 가 만든 4 FAIL → 선재 RED 2 만 남음).
+
+### Recorded (not fixed — coordinator to adjudicate)
+
+- **m1** — 위 주석들이 인용하는 줄번호(`:254`·`:441` 등)는 **이 커밋 시점 기준**이다.
+  이 헤더 주석 블록 자체가 다음에 또 늘어나면 같은 drift 가 재발할 수 있다 —
+  믿기 전에 `grep -n '^PLUGIN_JSON=\|^AGENTS_DIR='` 로 재확인할 것.
+- **m2** — I1 의 새 음의 짝을 포함해 이 파일의 `project_dir` 관련 `grep -qF` 들은
+  전체-리터럴 고정이라 `project_dir:` 뒤 공백 개수가 바뀌면(옛 ERE 는 허용했다)
+  거짓 RED 를 낸다. v6.6.2 선례와 같은 trade-off 라 지금은 고치지 않았다 — 고칠
+  경우의 대안 정규식을 주석에 남겨 뒀다.
+
 ## [7.1.0] — 2026-09-05
 
 ### Added

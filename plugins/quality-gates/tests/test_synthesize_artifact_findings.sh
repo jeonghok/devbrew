@@ -9,8 +9,17 @@
 # `sys.path[0]` 이 스크립트 자신의 디렉터리라, 파이썬이 실제로 여는 sibling 은
 # `plugins/quality-gates/scripts/` 안의 심볼릭 링크 둘뿐이다(quality-gates 에만
 # 존재 — spec-distill 쪽에는 이 스크립트의 사본이 없다). `plugins/*/scripts/…`
-# 글롭은 test_synthesize_disposition.sh(F3/m1) 와 같은 이유로 fail-safe 하게 넓힌다
-# (선언 ⊇ 실제는 무해) — `--emit-scanned` 는 반대로 실제로 여는 다섯 경로만 낸다.
+# 글롭은 test_synthesize_disposition.sh(F3) 와 같은 이유로 spec-distill 쪽
+# 심볼릭 링크 사본까지 fail-safe 하게 넓힌다 — 다만 "선언 ⊇ 실제는 무해"가 이
+# 리포의 무조건 규약은 «아니다»(수정 라운드 1, I2 — R5 가 test_synthesize_
+# disposition.sh 에서 정정한 바로 그 문장을 이 파일도 조건 없이 반복하고 있었다.
+# 서로 다른 두 파일이 진실 여부를 서로에게 미루면 다음 사람이 어느 쪽을 읽느냐로
+# 답이 갈리므로, 인용하지 않고 같은 조건을 여기 직접 적는다): `test_guards_
+# coverage_bidirectional.sh` 의 방향 B 는 스캔 결과를 하나도 안 덮는 글롭을
+# FAIL 시킨다. 이 글롭이 지금 무해한 것은 quality-gates 쪽 사본(스캔 목록
+# 안)에도 걸려 최소 1건을 맞기 때문이지, 초과분 자체가 면제돼서가 아니다 —
+# 스캔 목록 밖만 가리키는 글롭을 추가하면 방향 B 가 FAIL 한다. `--emit-scanned`
+# 는 그와 별개로 실제로 여는 다섯 경로만 낸다.
 set -u
 
 if [ "${1:-}" = "--emit-scanned" ]; then
