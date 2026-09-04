@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.5.3] — 2026-09-04
+
+### Fixed
+- **`check_names.scanned_paths()` 가 kill-switch 파이썬 코퍼스를 빼고 있었다 — `dangling()` 이 그것을 실제로 소비하는데(adjudication-topology Task 12b 수정 라운드 1, 리뷰 Critical 하나).** v6.5.2 판은 「포함하면 plugins 전체 .py(155~161개)로 넓어져 `compute-test-scope-candidates.sh` 의 선택 정밀도를 죽인다」며 `killswitch_keys()` 가 여는 `plugins/*/**/*.py` 코퍼스를 `scanned_paths()` 에서 뺐다. 그 근거가 틀렸다 — `kill_switch_active()` 를 실제로 호출하는 파일은 8개뿐이고 전부 `plugins/*/hooks/*.py`·`plugins/*/scripts/*.py` 안에 있으며, 그 두 글롭은 이미 같은 커밋에서 `test_adjudication_wiring.sh`·`test_adjudication_consumed.sh` 가 선언으로 쓰고 있다 — catch-all 이 아니다. `tools/adjudication/check_names.py` 에 `_KILLSWITCH_GLOB` 상수를 신설해 `killswitch_keys()` 와 `scanned_paths()` 가 **같은 상수**를 쓰게 묶었다(한쪽만 바뀌는 일이 구조적으로 불가능) — 판정기 자신의 스캔 범위(`plugins/*/**/*.py`, 실측 155개, 6개 심볼릭 링크 제외)는 좁히지 않았다(좁히면 판정기 동작이 바뀌고 열거가 된다). `shared/tests/test_dispatch_name_defined.sh` 의 `# guards:` 에 그 코퍼스의 bash-safe 형태 `plugins/*/*.py`(단일 `*` — `**` 는 bash case 에서 인접 리터럴 `/` 를 요구해 실측 확인 없이 쓰면 구조적으로 어긋날 수 있다)를 추가. 양성 대조: kill-switch 코퍼스 안이지만 `plugins/*/scripts/*.py`·`plugins/*/hooks/*.py` 어느 쪽에도 안 걸리는 파일(`plugins/agent-transparency/tests/ab_driver.py`)을 변경해 `compute-test-scope-candidates.sh` 를 실제로 돌려, 수정 전엔 이 락이 후보로 안 뽑히고 수정 후엔 뽑히는 것을 확인(상세: `.superpowers/sdd/2026-09-03-adjudication-topology/task-12b-report.md`).
+
 ## [6.5.2] — 2026-09-04
 
 ### Fixed

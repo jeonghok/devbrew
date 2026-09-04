@@ -45,6 +45,17 @@ _REF_RE = re.compile(r'`([a-z][a-z0-9-]*):([a-z][a-z0-9-]*)`')
 _REF_GLOBS = ("plugins/*/skills/**/*.md", "plugins/*/commands/**/*.md",
               "plugins/*/agents/*.md", "plugins/*/README.md")
 
+# `killswitch_keys()` 가 실제로 여는 코퍼스. `scanned_paths()` 가 같은
+# 문자열을 재사용한다 — 하나의 상수로 묶는 이유는 두 함수가 «따로» 자기
+# 글롭을 들고 있으면 한쪽만 바뀌어 갈릴 수 있기 때문이다(Task 12b 수정
+# 라운드 1 리뷰가 지적한 것 — scanned_paths() 가 이 코퍼스를 아예 빼고
+# 있었는데, dangling() 이 실제로 이 코퍼스를 소비한다: killswitch_keys() 의
+# 결과가 defined(allow_killswitch=True) 를 거쳐 README 참조 판정에 쓰인다).
+# 판정기의 스캔 «범위»는 좁히지 않는다 — 오늘 열거된 8개 호출부가 전부
+# hooks/scripts 아래 있다고 해서 글롭을 그 두 디렉터리로 좁히면, 내일 다른
+# 위치에 kill switch 호출이 생겨도 판정기가 조용히 못 본다.
+_KILLSWITCH_GLOB = "plugins/*/**/*.py"
+
 
 def _is_killswitch_call(func):
     if isinstance(func, ast.Name):
@@ -66,7 +77,7 @@ def killswitch_keys(repo_root):
     실측으로 기록한다 — `spec-distill-gc.py` 가 그 변수를 아예 안 읽었다.
     """
     out = set()
-    for f in sorted(Path(repo_root).glob("plugins/*/**/*.py")):
+    for f in sorted(Path(repo_root).glob(_KILLSWITCH_GLOB)):
         if f.is_symlink() or not f.is_file():
             continue
         try:
@@ -144,22 +155,37 @@ def references(repo_root):
 
 
 def scanned_paths(repo_root):
-    """`--emit-scanned` 코퍼스 — `references()` 가 실제로 여는 파일 전부
-    (참조가 0건이어도 글롭에 매칭돼 `read_text()` 가 불린 파일은 포함한다).
-    `defined()` 의 agents/*.md 글롭은 `_REF_GLOBS` 안에 이미 있다(동일
-    패턴) — 따로 더하지 않는다.
+    """`--emit-scanned` 코퍼스 — `references()` 와 `killswitch_keys()` 가
+    실제로 여는 파일 전부(참조/호출이 0건이어도 글롭에 매칭돼 `read_text()`
+    가 불린 파일은 포함한다). `defined()` 의 agents/*.md 글롭은 `_REF_GLOBS`
+    안에 이미 있다(동일 패턴) — 따로 더하지 않는다.
 
-    `defined(allow_killswitch=True)` 가 여는 `plugins/*/**/*.py` (README 의
-    kill switch 키 도출)는 이 코퍼스에 «넣지 않는다» — 그것은 이 락의 주
-    모집단(백틱 참조 문서)이 아니라 반대편 «정의» 축의 보조 네임스페이스이고,
-    포함하면 이 락의 `# guards:` 가 사실상 plugins 전체 .py 파일로 넓어져
-    `compute-test-scope-candidates.sh` 의 테스트-스코프 선택 정밀도를 죽인다."""
+    `_KILLSWITCH_GLOB`(`plugins/*/**/*.py`, 실측 155개 — 글롭 자체는 161개를
+    매칭하지만 6개는 심볼릭 링크라 `killswitch_keys()`·이 함수 둘 다 같은
+    필터로 뺀다, 2026-09-04) 는
+    **포함한다** — 이전 판(Task 12b 1라운드)은 이것을 "이 락의 주 모집단이
+    아닌 보조 네임스페이스"라며 뺐는데, 그 판단이 틀렸다: `dangling()` 이
+    README 참조에 대해 `defined(allow_killswitch=True)` 를 쓰고, 그 함수가
+    `killswitch_keys()` 를 실제로 호출해 이 코퍼스를 소비한다 — 이 파일들이
+    바뀌면 `dangling` 판정이 실제로 바뀐다. "포함하면 plugins 전체 .py 로
+    넓어져 정밀도를 죽인다"는 우려도 근거가 약하다: `kill_switch_active()`
+    를 실제로 «호출»하는 파일은 8개뿐이고(실측) 전부 `plugins/*/hooks/*.py`
+    또는 `plugins/*/scripts/*.py` 안에 있다 — 이미 다른 두 락
+    (`test_adjudication_wiring.sh`·`test_adjudication_consumed.sh`) 이
+    같은 두 글롭을 선언으로 쓰고 있어 catch-all 이 아니다. 그럼에도 «판정기
+    자신»의 스캔 글롭은 그 두 디렉터리로 좁히지 않는다 — 좁히면 판정기의
+    동작이 바뀌고(열거의 함정: 내일 다른 위치에 kill switch 호출이 생기면
+    조용히 못 본다), 넓은 선언은 그것이 참이면 결함이 아니다."""
     repo = Path(repo_root)
     out = set()
     for pat in _REF_GLOBS:
         for f in repo.glob(pat):
             if f.is_file():
                 out.add(str(f.relative_to(repo)))
+    for f in repo.glob(_KILLSWITCH_GLOB):
+        if f.is_symlink() or not f.is_file():
+            continue
+        out.add(str(f.relative_to(repo)))
     return sorted(out)
 
 

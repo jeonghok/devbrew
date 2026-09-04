@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.51.6] — 2026-09-04
+
+### Fixed
+- **`tools/adjudication/check_names.py` 의 `scanned_paths()` 가 `dangling()` 이 실제로 소비하는 kill-switch 코퍼스를 빠뜨리고 있었다(adjudication-topology Task 12b 수정 라운드 1, 리뷰 Critical).** 상세는 quality-gates 쪽 `CHANGELOG.md` v6.5.3 참조 — `shared/tests/`·`tools/adjudication/` 공유 파일이라 두 플러그인 다 bump. 요약: `_KILLSWITCH_GLOB` 상수를 신설해 `killswitch_keys()`·`scanned_paths()` 가 같은 글롭(`plugins/*/**/*.py`)을 쓰게 묶었고, `test_dispatch_name_defined.sh` 의 `# guards:` 에 그 bash-safe 형태(`plugins/*/*.py`)를 추가했다. 판정기의 실제 스캔 범위는 좁히지 않았다.
+
 ## [0.51.5] — 2026-09-04
 
 ### Fixed

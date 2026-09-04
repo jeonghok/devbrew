@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/*/skills/**/*.md plugins/*/commands/*.md plugins/*/agents/*.md plugins/*/README.md
+# guards: plugins/*/skills/**/*.md plugins/*/commands/*.md plugins/*/agents/*.md plugins/*/README.md plugins/*/*.py
 #
 # `commands/*.md` — 단일 `*` 다(`**` 아님). 이 락이 실제로 읽는 명령 파일은
 # 전부 flat(`commands/<name>.md`) 인데, `# guards:` 를 소비하는 bash `case`
@@ -10,6 +10,16 @@
 # 어긋나는 쪽은 이 bash 선언뿐이었다.
 # `README.md` — `check_names.references()` 가 넷째 글롭으로 읽는다(kill
 # switch 키 문서화 대응) — 기존 선언에 빠져 있었다.
+# `plugins/*/*.py` — `check_names._KILLSWITCH_GLOB`(`plugins/*/**/*.py`,
+# pathlib) 를 bash case 로 옮긴 것. 여기도 단일 `*` 다 — 그 파이썬 글롭은
+# 실측 155개 중 상당수가 flat(`plugins/<name>/<file>.py`, 예:
+# `plugins/*/scripts/kill_switch_active.py`)가 아니라 최소 1단 이상
+# 중첩이라 bash `**` 로도 대부분 맞지만, 단일 `*` 로 통일해 향후 flat 파일이
+# 생겨도 어긋나지 않게 한다(실측: `plugins/*/*.py` 가 155개 전부를 덮는다 —
+# `/tmp/checkpyglob.sh` 로 확인). `killswitch_keys()` 가 실제로 여는 코퍼스라
+# `scanned_paths()` 도 이제 이것을 낸다 — 이전 판은 "정밀도를 죽인다"며
+# 뺐으나, `dangling()` 이 이 코퍼스를 실제로 소비해(README 참조 판정에
+# `defined(allow_killswitch=True)` 를 통해) 판정이 바뀔 수 있었다.
 #
 # 백틱으로 불린 `<plugin>:<name>` 이 실재 정의를 갖는지 검사한다.
 #
