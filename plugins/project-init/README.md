@@ -75,7 +75,7 @@ plugins/project-init/
 다른 플러그인과 함께 동작:
 - **commit-commands**: `/commit`과 `/commit-push-pr`이 CLAUDE.md 룰을 읽어 메시지 포맷 적용
 - **superpowers**: `using-git-worktrees`가 `docs/`의 브랜치 명명 컨벤션을 따름
-- **quality-gates**: PR 생성 시 quality 파이프라인 자동 트리거
+- **quality-gates**: `/qg` 로 리뷰·런타임 파이프라인을 수동 기동 (PR 생성 자동 트리거는 quality-gates v7.0.0 에서 제거)
 
 ## 설치된 Hook
 

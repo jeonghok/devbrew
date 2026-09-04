@@ -1,17 +1,6 @@
 {
-  "description": "Quality Gates v6.0.0 — PostToolUse Bash-command validator + SessionStart legacy-state advisor + SessionEnd cleanup. Review scope is derived from git, not from an accumulated session file.",
+  "description": "Quality Gates v7.0.0 — SessionStart legacy-state advisor + SessionEnd cleanup. Review scope is derived from git, not from an accumulated session file; the pipeline is started only by /qg.",
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use.py"
-          }
-        ]
-      }
-    ],
     "SessionStart": [
       {
         "hooks": [

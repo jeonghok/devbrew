@@ -99,7 +99,6 @@ quality-gates/
 │   └── cancel-qg.md        # /cancel-qg command
 ├── hooks/
 │   ├── hooks.json                            # Hook 설정
-│   ├── post-tool-use.py                      # PostToolUse(Bash) — auto-trigger 감지기; publish sentinel 존재 시 재유도 억제(AC11)
 │   ├── session-start-advisor.py              # in-flight 파이프라인 read-only advisor
 │   └── session-end-cleanup.py                # 정상 종료 시 현재 세션 폴더 제거
 ├── scripts/
@@ -143,7 +142,6 @@ quality-gates/
 
 | Hook | 이벤트 | 변경? | 왜 hook인가 (skill이 아닌)? |
 |---|---|---|---|
-| `post-tool-use.py` | PostToolUse(Bash) | 아니오 — read-only | commit/PR Bash 활동을 감지해 `/qg` 제안; 현재 세션 scope. `/qg-publish`는 `pr-create.sh`로 PR을 만들어 hook의 `gh pr create` 커맨드 매칭에 애초에 안 걸린다; 추가로 publish sentinel `publish-active.md`가 있으면 (직접 `gh pr create` 경로에서도) 억제한다(AC11, defense-in-depth) — publish와 review 두 표면이 서로 훈수 두지 않게. |
 | `session-start-advisor.py` | SessionStart | **아니오 — read-only advisor** | mutation 없이 in-flight 파이프라인 알림 (CLAUDE.md hook coexistence 룰). |
 | `session-end-cleanup.py` | SessionEnd | 예 (자기 세션 폴더 제거) | 정상 종료 시 per-session 정리; crash 시 TTL sweep으로 fallback. |
 
@@ -448,14 +446,12 @@ CLAUDE.md Plugin Shape: *"kill switch는 보안 컨트롤"*. 모든 component �
 
 | Hook 키 | 위치 | 기능 |
 |---|---|---|
-| `quality-gates:post-tool-use` | `hooks/post-tool-use.py` | PostToolUse(Bash) — `gh pr create` 직후 `/qg` 시작 안내 (publish sentinel 존재 시 억제) |
 | `quality-gates:session-start-advisor` | `hooks/session-start-advisor.py` | SessionStart — stale state 안내 (read-only) |
 | `quality-gates:session-start-advisor:frontmatter-scan` | 위 hook의 sub-feature | Plugin 전체 agent frontmatter drift 스캔만 disable |
 | `quality-gates:session-end-cleanup` | `hooks/session-end-cleanup.py` | SessionEnd — 현재 세션 폴더 cleanup |
 | `quality-gates:qg-gc` | `scripts/qg-gc.py` | TTL-GC 스크립트. 훅이 아니지만 지목할 이름을 갖는다 — 그전에는 전역 스위치 하나뿐이라 "이 GC만 끈다"가 불가능했다 |
 
-훅 키에 더해 **이벤트명 별칭**도 받는다 — `quality-gates:PostToolUse`(post-tool-use) ·
-`quality-gates:SessionStart` · `quality-gates:SessionEnd`. spec-distill 훅이 쓰던 형태를
+훅 키에 더해 **이벤트명 별칭**도 받는다 — `quality-gates:SessionStart` · `quality-gates:SessionEnd`. spec-distill 훅이 쓰던 형태를
 전 플러그인으로 통일한 것이다(한 플러그인에서 배운 형태가 다른 곳에서 조용히 안 먹는 것이
 결함이고, kill switch 는 보안 컨트롤이라 그 결함의 방향이 fail-open 이다). 대조는 **전체 토큰**이라
 `quality-gates:session-start-advisor:frontmatter-scan` 같은 더 긴 키가 `quality-gates:session-start-advisor`

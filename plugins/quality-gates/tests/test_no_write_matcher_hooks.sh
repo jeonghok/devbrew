@@ -24,16 +24,20 @@ if bad:
     for m, e in bad:
         print(f"BAD matcher={m!r} entry={e}", file=sys.stderr)
     sys.exit(1)
-# 양성 대조: Bash matcher 는 위반이 아니다 — 하나는 남아 있어야 한다 (A2).
-if not any(e.get("matcher") == "Bash" for e in entries):
-    print("Bash matcher 항목이 사라졌다 — 양성 대조 실패", file=sys.stderr)
+# A2 (v7.0.0): PostToolUse 항목은 **하나도 없다** — `gh pr create` 자동 트리거 훅을 제거했고
+# 다른 PostToolUse 훅은 없다. 위 A1 은 리스트가 비면 공허참이라, 이 검사가 그 양성 짝이다
+# (항목을 하나라도 되살리면 RED).
+if entries:
+    print(f"PostToolUse 항목이 되살아났다: {entries}", file=sys.stderr)
     sys.exit(1)
 PY
-then ok "A1/A2: quality-gates PostToolUse 에 쓰기-도구 matcher 없음 + Bash 항목 생존"; else no "A1/A2 위반"; fi
+then ok "A1/A2: quality-gates 에 PostToolUse 훅 없음"; else no "A1/A2 위반"; fi
 
 # 음의 짝 — 삭제된 훅 파일이 실제로 없다. 양의 짝(matcher 검사)은 hooks.json 만 보므로
 # 파일이 남아 있어도 통과한다. 이 검사를 지우면 그 사실이 안 보인다.
 [[ ! -e plugins/quality-gates/hooks/post-tool-use-session-tracker.py ]] \
   && ok "A3: session-tracker 부재" || no "A3: session-tracker 가 남아 있다"
+[[ ! -e plugins/quality-gates/hooks/post-tool-use.py ]] \
+  && ok "A4: pr-create 자동 트리거 훅 부재 (v7.0.0)" || no "A4: post-tool-use.py 가 남아 있다"
 
 exit $FAIL
