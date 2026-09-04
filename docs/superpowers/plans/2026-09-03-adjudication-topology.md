@@ -3269,9 +3269,17 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover \
 `:505` 를 이렇게 바꾼다:
 
 ```markdown
-4. Run `synthesize_findings.py` (`${CLAUDE_PLUGIN_ROOT}/scripts/`)
+4. Run `synthesize_findings.py` (`${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}/scripts/`)
    to consolidate findings. **Capture the script's complete stdout** — the
 ```
+
+**fallback 형태를 반드시 쓴다.** `test_skill_plugin_root_fallback.sh` 의 축 B 는
+**본문 전수**로 bare `${CLAUDE_PLUGIN_ROOT}` 가 한 곳도 없어야 한다고 요구한다 —
+그 락의 헤더가 이유를 적고 있다: *「실행 지시는 펜스 밖에도 있다」*. 산문 인라인도
+모델이 읽고 실행하는 지시라서, fallback 없이 두면 그 변수가 안 잡히는 맥락에서
+조용히 빈 경로가 된다. 이 계획의 앞 판이 bare 형태를 시켰고 그대로 옮긴 커밋이
+그 락을 깼다(실측). 형태는 같은 파일의 `:122`·`:135`·`:274`·`:293` 과 글자 그대로
+같게 쓴다 — 새로 만들지 않는다.
 
 `quality-gates:synthesizer` agent 는 `37ea0d7 refactor(quality-gates): synthesizer agent → script (T3-2, v1.28.0)` 이 정의를 지우고 스크립트로 옮겼다. 괄호 안의 대안이 유일한 실체이므로 **괄호를 본문으로 승격한다.**
 
