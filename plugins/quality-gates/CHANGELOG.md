@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.5.1] — 2026-09-04
+
+### Fixed
+- **Task 12 수정 라운드 1 — `quality-pipeline/SKILL.md:505`의 새 문구가 `test_skill_plugin_root_fallback.sh` 축 B(본문 bare 참조 전수)를 깼다.** v6.5.0이 그 줄에 쓴 `` `${CLAUDE_PLUGIN_ROOT}/scripts/` ``가 bash 펜스 밖 산문 인라인이라 fallback 없는 bare 참조로 잡혔다 — `CLAUDE_PLUGIN_ROOT`가 안 잡히는 맥락에서 조용히 빈 경로가 될 수 있었다. 같은 파일이 이미 쓰는 fallback 형태(`:122`·`:135`·`:274`·`:293`)와 글자 그대로 같게 `${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}/scripts/`로 교체. `test_skill_plugin_root_fallback.sh` Total 4/Pass 4/Fail 0으로 GREEN, `test_dispatch_name_defined.sh`(Task 12의 본 산출물)는 GREEN 유지.
+
 ## [6.5.0] — 2026-09-04
 
 ### Fixed

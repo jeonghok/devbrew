@@ -502,7 +502,7 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
    gate** (lightness) — fan-out is bounded by the rubric's natural signal-binding, the
    transparency line above, and the recomputed max fan-out declared in the README.
    (A repo-wide `fan-out ≥5` hard-review gate was **removed** from CLAUDE.md and the philosophy doc by the harness-capability-suppression sweep — it is no longer a backstop and must not be cited as one.)
-4. Run `synthesize_findings.py` (`${CLAUDE_PLUGIN_ROOT}/scripts/`)
+4. Run `synthesize_findings.py` (`${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}/scripts/`)
    to consolidate findings. **Capture the script's complete stdout** — the
    synthesized Markdown block (counts line + findings table + suggested-fixes
    list, or the empty-state line). You surface this verbatim in step 4.5; do
