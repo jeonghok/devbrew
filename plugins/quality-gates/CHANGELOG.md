@@ -3,6 +3,36 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.0.0] — 2026-09-04 (BREAKING)
+
+`gh pr create` 직후 `/qg` 파이프라인을 자동 기동하던 PostToolUse 훅을 제거한다. 파이프라인은
+이제 `/qg` 로만 시작한다 — PR 을 여는 행위가 리뷰를 강제하지 않는다. 훅의 존재 이유가
+그 트리거 하나였고, 끄려면 셸마다 `DEVBREW_SKIP_HOOKS` 를 유지해야 해서(원격 세션에서는
+새는 fail-open) 기본-off 대신 삭제했다. 선례는 v5.0.0 의 session-tracker 훅 즉시 제거.
+
+### Removed
+
+- **`hooks/post-tool-use.py`** (PostToolUse, `matcher: "Bash"`)와 `hooks.json` 의 PostToolUse 블록.
+  `gh pr create` 출력의 PR URL 을 보면 `setup-qg.sh --pr-url` 실행 + `quality-pipeline` 호출을
+  모델 채널로 지시하던 훅. kill switch 키 `quality-gates:post-tool-use` 와 이벤트명 별칭
+  `quality-gates:PostToolUse` 도 함께 사라진다.
+- **publish sentinel `.claude/quality-gates/<sid>/publish-active.md`** — `publishing-pr-understanding`
+  이 `pr-create.sh` 전에 쓰던 표식(AC11). 유일한 소비자가 위 훅이라 훅 없이는 아무도 읽지 않는
+  파일이었다. SKILL 의 「PR 부재」 분기는 이제 `pr-create.sh` 한 단계다.
+- `tests/test_hook_publish_suppression.py` — 훅 전용 테스트(대상 부재).
+
+### Changed
+
+- `tests/test_no_write_matcher_hooks.sh`: 양성 대조 A2 를 「Bash matcher 항목 생존」에서
+  「PostToolUse 항목 0개」로 뒤집고 A4(`post-tool-use.py` 부재)를 추가. A1(쓰기-도구 matcher 없음)은
+  리스트가 비면 공허참이라 A2 가 그 양성 짝이다 — hooks.json 에 PostToolUse 항목을 하나라도
+  되살리면 RED (변이로 확인).
+- `tests/test_qg_publish_handoff.sh` (6): sentinel 생산자·소비자 「생존」 검사를 생산자 「부재」 검사로 반전.
+- `tests/test_runtime_contract_invariance.sh`: hooks.json 항목 수 핀 3 → 2.
+- `tests/test_kill_switches.py`: 훅 계약 목록에서 `post-tool-use` 항목과 그 payload·단언 분기 제거.
+- `README.md`·`commands/qg.md`·`tests/e2e-scenarios.md`: 훅·kill switch 키·시나리오 L 의 해당 서술 제거.
+- `setup-qg.sh --pr-url` / `/qg --pr-url` 과 `scripts/pr-create.sh` 는 그대로다 — 훅과 무관한 사용자 표면.
+
 ## [6.0.1] — 2026-09-04
 
 ### Changed

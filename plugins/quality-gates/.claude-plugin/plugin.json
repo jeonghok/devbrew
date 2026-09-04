@@ -1,7 +1,7 @@
 {
   "name": "quality-gates",
   "description": "2-gate quality verification pipeline (review + runtime) with multi-plugin review delegation, plus a separate consent-gated PR-understanding generate/publish surface (not a gate). Invoke manually via /qg or /qg-publish.",
-  "version": "6.0.1",
+  "version": "7.0.0",
   "author": {
     "name": "jeonghokim"
   }

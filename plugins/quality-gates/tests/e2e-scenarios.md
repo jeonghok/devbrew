@@ -97,8 +97,8 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 **Expected**: `quality-gates.local.md`, `quality-gates-session.local.md`, `quality-gates-branch.local.md`, plus `qg-diff-cache.txt` and `qg-code-paths.tmp` all removed. Message "Quality-gates state cleared."
 
 ### L — `DEVBREW_QUALITY_GATES_DISABLE=1`
-**Run**: set env var, then run a Bash `gh pr create` command AND start a new Claude Code session AND attempt `/qg`.
-**Expected**: PostToolUse auto-trigger hook is no-op (no `/qg` suggestion after `gh pr create`). SessionStart advisor is silent. `/qg` should also detect the env var (this happens via the setup script and skill check; not yet covered by a test, but the existing kill-switch tests for individual hooks confirm the propagation).
+**Run**: set env var, then start a new Claude Code session AND attempt `/qg`.
+**Expected**: SessionStart advisor is silent. `/qg` should also detect the env var (this happens via the setup script and skill check; not yet covered by a test, but the existing kill-switch tests for individual hooks confirm the propagation).
 
 ## Static Wiring Checks (automated)
 
@@ -137,7 +137,6 @@ Agents (model + cost_class):
 SKILL cost_class: variable
 plugin.json version: 2.2.x
 Hooks registered:
-  PostToolUse: post-tool-use.py
   SessionStart: session-start-advisor.py
   (v1.32.0 removes the Stop hook — pipeline progression is now in-turn
   AskUserQuestion-driven, not turn-by-turn signal-driven.)

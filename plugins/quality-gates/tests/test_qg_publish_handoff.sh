@@ -59,12 +59,9 @@ grep -qF 'publish-eligible' <<<"$R8" \
   && no "B3b: Runtime R8 이 여전히 sentinel 을 쓴다" \
   || ok "B3b: Runtime R8 이 sentinel 을 쓰지 않음"
 
-# (6) publish-active.md 는 **유지**다 — 이 테스트가 엉뚱한 표식을 지우게 만들지
-#     않도록 그 생산자·소비자가 살아 있음을 양성으로 확인한다.
-grep -qF 'publish-active.md' "$PLUGIN_ROOT/hooks/post-tool-use.py" \
-  && ok "publish-active.md 소비자 생존 (지우면 안 되는 쪽)" \
-  || no "publish-active.md 소비자가 사라졌다 — 엉뚱한 표식을 지웠다"
+# (6) publish-active.md 는 v7.0.0 에서 소비자(`hooks/post-tool-use.py`)와 함께 제거됐다 —
+#     생산자가 되살아나면 아무도 읽지 않는 표식을 쓰는 것이다.
 grep -qF 'publish-active.md' "$PLUGIN_ROOT/skills/publishing-pr-understanding/SKILL.md" \
-  && ok "publish-active.md 생산자 생존" \
-  || no "publish-active.md 생산자가 사라졌다 — 엉뚱한 표식을 지웠다"
+  && no "publish-active.md 생산자가 되살아났다 — 소비자 훅은 v7.0.0 에서 제거됐다" \
+  || ok "publish-active.md 생산자 부재 (소비자 없음)"
 finish
