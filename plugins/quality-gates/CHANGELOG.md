@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.5.0] — 2026-09-04
+
+### Fixed
+- **`quality-pipeline/SKILL.md` step 4의 죽은 dispatch 이름 제거(adjudication-topology Task 12, T4-1).** `Dispatch \`quality-gates:synthesizer\` (or local synthesize_findings.py)`가 `37ea0d7`(synthesizer agent → script, v1.28.0)로 정의가 지워진 뒤에도 본문에 남아 있었다 — 괄호 안의 대안만 유일한 실체였다. `Run \`synthesize_findings.py\` (\`${CLAUDE_PLUGIN_ROOT}/scripts/\`)`로 괄호 안 대안을 본문으로 승격. `shared/tests/test_dispatch_name_defined.sh`(백틱으로 불린 `<plugin>:<name>` 이 실재 정의를 갖는지 역방향으로 검사)가 이 자리를 `dangling=1`로 잡고 있었고, 이 수정으로 `dangling=0`이 됐다 — 이 락이 처음으로 GREEN(Total 6, Pass 6, Fail 0).
+
 ## [6.4.3] — 2026-09-04
 
 ### Fixed
