@@ -16,6 +16,10 @@ for name in ("match", "undeclared", "undelivered", "forbidden", "suspectvar"):
     probs = check_slots.check(str(FX / ("slots_%s" % name)))
     print("fx_%s=%d" % (name, len(probs)))
 
+# 펜스 하나에 subagent_type 둘(`fx:a`·`fx:b`) — 조용한 첫-매치 귀속 대신 세어서
+# 드러내는지의 판정기 자체 검증(수정 라운드 1).
+print("fx_multiagent=%d" % len(check_slots.multi_agent_fences(str(FX / "slots_multiagent"))))
+
 defs = check_slots.agents(str(root))
 print("agents=%d" % len(defs))
 probs = check_slots.check(str(root))
@@ -30,3 +34,11 @@ for p in probs:
         print("  PROBLEM %s %s @ %s %s" % p)
 print("exempt_total=%d" % len(check_slots.EXEMPT_SLOTS))
 print("exempt_uncited=%d" % len(check_slots.uncited_exemptions()))
+
+# 펜스 하나에 subagent_type 이 둘 이상이면 `_harvest()` 가 어느 쪽에도 태그를
+# 귀속하지 않는다(조용한 오귀속 방지) — 그 사실 자체를 셀 수 있게 낸다(수정
+# 라운드 1, 코디네이터 판정 ⒞). 0 이면 침묵이 아니라 "0 이라고 쟀다"는 뜻이다.
+multi = check_slots.multi_agent_fences(str(root))
+print("multi_agent_fences=%d" % len(multi))
+for (rel, line, count) in multi:
+    print("  MULTI_AGENT_FENCE %s:%d agents=%d" % (rel, line, count))

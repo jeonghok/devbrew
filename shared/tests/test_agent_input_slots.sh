@@ -47,6 +47,7 @@ assert_contains "$OUT" "fx_undeclared=1"      "선언 없는 태그의 전달을
 assert_contains "$OUT" "fx_undelivered=1"     "필수 선언의 미전달을 잡는다"
 assert_contains "$OUT" "fx_forbidden=1"       "금지 종류를 잡는다"
 assert_contains "$OUT" "fx_suspectvar=1"      "이름은 판정인데 kind 가 무해한 슬롯을 잡는다 (b 의 보조 축)"
+assert_contains "$OUT" "fx_multiagent=1"      "펜스 하나에 subagent_type 둘 — 조용히 첫 번째로 귀속하지 않고 센다"
 
 note "── 모집단 (㉰)"
 nag="$(printf '%s\n' "$OUT" | sed -n 's/^agents=//p')"
@@ -78,5 +79,12 @@ unc="$(printf '%s\n' "$OUT" | sed -n 's/^exempt_uncited=//p')"
 nex="$(printf '%s\n' "$OUT" | sed -n 's/^exempt_total=//p')"
 assert_eq "$unc" "0" "C6 인용 없는 면제 항목 0"
 note "      면제 목록 크기: $nex  ← M8 이 이 수의 증가를 본다"
+
+note "── 다중-agent 펜스 (수정 라운드 1, 코디네이터 판정 ⒞)"
+nma="$(printf '%s\n' "$OUT" | sed -n 's/^multi_agent_fences=//p')"
+assert_eq "$nma" "0" "펜스 하나당 subagent_type 하나 (둘 이상이면 이름을 댄다, 조용히 첫 번째로 안 붙인다)"
+printf '%s\n' "$OUT" | sed -n 's/^  MULTI_AGENT_FENCE //p' | while IFS= read -r l; do
+  note "      $l"
+done
 
 finish

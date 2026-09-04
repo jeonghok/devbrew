@@ -72,13 +72,17 @@ _DISPATCH_GLOBS = ("plugins/*/skills/**/*.md", "plugins/*/commands/**/*.md")
 
 
 def dispatch_pairs(repo_root):
-    """dispatch 자리가 실제로 전달하는 (태그, 변수) 쌍.
+    """dispatch 자리가 실제로 전달하는 (태그, 변수) 쌍 + 다중-agent 펜스 목록.
 
     코퍼스는 skill·command 의 md 전부다. 특정 SKILL 하나로 좁히지 않는다 —
     좁히면 다른 파일의 dispatch 가 영원히 안 보인다.
+
+    반환은 `(pairs, multi)` 2-tuple — `multi` 는 subagent_type 이 둘 이상인
+    펜스의 `(rel, start_line, count)` 목록(수정 라운드 1, 코디네이터 판정 ⒞).
     """
     repo = Path(repo_root)
     out = {}
+    multi = []
     for pat in _DISPATCH_GLOBS:
         for f in sorted(repo.glob(pat)):
             if not f.is_file():
@@ -87,25 +91,40 @@ def dispatch_pairs(repo_root):
             lines = f.read_text(encoding="utf-8").splitlines()
             # 펜스 단위로 자른다 — 펜스마다 독립 dispatch 다. 합치면 죽은
             # 펜스가 살아 있는 펜스의 결손을 가린다.
+            #
+            # `^\s*```` — 들여쓴 펜스(번호 목록 continuation 등)도 열고 닫는다.
+            # 이 방향(들여쓰기 허용)이 안전한 이유: 펜스 *안* 콘텐츠에 줄 시작
+            # 들여쓴 백틱 세 개가 우연히 있으면 그 펜스가 "쪼개질" 수 있다(안쪽
+            # 줄이 닫힘으로 오인됨) — 하지만 쪼개짐은 각 조각이 독립 dispatch 로
+            # 재해석될 뿐이라 문제가 있으면 undeclared/undelivered/no_declaration
+            # 으로 *드러난다*. 반대 방향(들여쓴 펜스를 계속 무시)은 펜스 전체가
+            # 통째로 사라져 dispatch 자리가 아예 없는 것처럼 보인다 — 이 파일의
+            # 기존 주석("합치면 죽은 펜스가 산 펜스의 결손을 가린다")과 같은
+            # 방향의 판단: 쪼개짐(과다 관측) > 실종(과소 관측, 침묵).
             buf, start, inside = [], 0, False
             for i, line in enumerate(lines, 1):
-                if re.match(r'^```', line):
+                if re.match(r'^\s*```', line):
                     if inside:
-                        _harvest("\n".join(buf), rel, start, out)
+                        _harvest("\n".join(buf), rel, start, out, multi)
                         buf, inside = [], False
                     else:
                         inside, start = True, i
                     continue
                 if inside:
                     buf.append(line)
-    return out
+    return out, multi
 
 
-def _harvest(block, rel, line, out):
-    m = _SUBAGENT_RE.search(block)
-    if not m:
+def _harvest(block, rel, line, out, multi):
+    matches = _SUBAGENT_RE.findall(block)
+    if not matches:
         return
-    key = m.group(1)
+    if len(matches) > 1:
+        # 조용히 첫 번째로 귀속하지 않는다 — 세어서 이름을 대고, 어느 쪽에도
+        # 태그를 붙이지 않는다(잘못된 단일 귀속보다 미귀속이 정직하다).
+        multi.append((rel, line, len(matches)))
+        return
+    key = matches[0]
     out.setdefault(key, [])
     for p in _PAIR_RE.finditer(block):
         out[key].append((p.group(1), p.group(2), rel, line))
@@ -114,7 +133,7 @@ def _harvest(block, rel, line, out):
 def check(repo_root):
     """(a) 일치 · (b) 금지 종류. 위반 목록을 낸다."""
     defs = agents(repo_root)
-    pairs = dispatch_pairs(repo_root)
+    pairs, _multi = dispatch_pairs(repo_root)
     problems = []
 
     for key, info in sorted(defs.items()):
@@ -167,6 +186,14 @@ def check(repo_root):
 
 def uncited_exemptions():
     return [k for k, v in EXEMPT_SLOTS.items() if "C6" not in str(v)]
+
+
+def multi_agent_fences(repo_root):
+    """펜스 하나에 `subagent_type` 이 둘 이상인 자리 — `(rel, start_line, count)`
+    목록. 조용히 첫 매치로 귀속하지 않기 위해 존재한다(수정 라운드 1) — 셀 수
+    없으면 셀 수 없음을 내고, 셀 수 있으면 이름(file:line)을 댄다."""
+    _pairs, multi = dispatch_pairs(repo_root)
+    return multi
 
 
 def scanned_paths(repo_root):

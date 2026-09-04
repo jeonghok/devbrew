@@ -50,16 +50,16 @@ cost_class: medium
    fi
    ```
 
-```
-Agent({
-  description: "Spec adversarial review",
-  subagent_type: "spec-distill:spec-reviewer",
-  // **처분** — consumer=plugins/spec-distill/scripts/merge_review.py · fail-open
-  prompt: "Review spec.md at <path>: <spec_path>${SPEC_PATH}</spec_path>
-    Previous issue history (same spec, prior rounds): <issue_history>${ISSUE_HISTORY}</issue_history>
-    web_disabled (true면 WebSearch/WebFetch 사용 금지, 리포 근거만): <web_disabled>${WEB_DISABLED}</web_disabled>"
-})
-```
+   ```
+   Agent({
+     description: "Spec adversarial review",
+     subagent_type: "spec-distill:spec-reviewer",
+     // **처분** — consumer=plugins/spec-distill/scripts/merge_review.py · fail-open
+     prompt: "Review spec.md at <path>: <spec_path>${SPEC_PATH}</spec_path>
+       Previous issue history (same spec, prior rounds): <issue_history>${ISSUE_HISTORY}</issue_history>
+       web_disabled (true면 WebSearch/WebFetch 사용 금지, 리포 근거만): <web_disabled>${WEB_DISABLED}</web_disabled>"
+   })
+   ```
 
 ### Step 2.5 — codex 병렬 co-review + 결정론 병합 (v0.20.0)
 
