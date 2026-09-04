@@ -137,6 +137,12 @@ EXEMPT = {
     # 로만 面제를 찾으므로 줄 이동은 그 자체로 락을 무력화한다(발견: Task 11b
     # 스캔 실측, unwired=14 인데 브리프 전제는 4). 아래 7 줄을 현재 위치로
     # 갱신한다 — 코드·판정은 무변경, 줄번호만 교정.
+    #
+    # 최종 수정 라운드 2 — 같은 drift 가 «한 번 더» 일어났다(+17): R-A 가
+    # `_block_with_ledger()` 의 docstring 을 늘려 그 아래 전부가 밀렸다. 이번엔
+    # 다른 점이 하나 있다 — 키가 «정체»(kind·func·guard)를 함께 쥐게 된 뒤라
+    # 락이 열 자리를 **이름과 함께** 냈고, 갱신을 «정체가 같은 행 찾기»로
+    # 기계적으로 할 수 있었다(줄번호를 손으로 세지 않았다). 판정·사유는 무변경.
     # :340~342·:348~351 다섯 자리는 `_T5_SELECT_LOOP` 를 그대로 공유한다(born·
     # armed·is_inflight·resolve_mode 넷은 실제로 매 Stop 재계산되는 상태다).
     # :344·:346 (DISPATCH_ATTEMPT_CAP·VALIDATION_ATTEMPT_CAP) 은 그 공유 근거가
@@ -144,27 +150,27 @@ EXEMPT = {
     # `return c` — 첫 적격 후보를 찾고 순회를 멈추는 것도 `_T5_SELECT_LOOP` 와
     # 같은 이유로 소실이 아니다(discover()가 다음 Stop 에 나머지 후보를 다시
     # 낸다).
-    ("plugins/spec-distill/hooks/review-dispatch.py", 340,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 357,
      'continue in select_dispatch_target @ if c.born'): _T5_SELECT_LOOP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 342,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 359,
      'continue in select_dispatch_target @ if c.key in armed'): _T5_SELECT_LOOP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 344,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 361,
      'continue in select_dispatch_target @ if att.get(c.key, 0) >= arm_ledger.DISPATCH_ATTEMPT_CAP'):
         _T5_SELECT_LOOP_DISPATCH_CAP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 346,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 363,
      'continue in select_dispatch_target @ if val.get(c.key, 0) >= arm_ledger.VALIDATION_ATTEMPT_CAP'):
         _T5_SELECT_LOOP_VALIDATION_CAP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 348,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 365,
      'continue in select_dispatch_target @ if arm_ledger.is_inflight(body, c.path, now)'): _T5_SELECT_LOOP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 350,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 367,
      'continue in select_dispatch_target @ if resolve_mode(c.path) is None'): _T5_SELECT_LOOP,
-    ("plugins/spec-distill/hooks/review-dispatch.py", 351,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 368,
      'return in select_dispatch_target @ <bare>'): _T5_SELECT_LOOP,
 
     # Task 11 (T5) — main() 의 검증 대상 선별 루프. :543(구 :530) 은 in-flight
     # 스킵(다른 리뷰가 도는 중 — 끝나면 다음 Stop 에 다시 후보가 된다). 줄번호는
     # Task 11b 가 위와 같은 +13 drift 로 교정(사유·판정 무변경).
-    ("plugins/spec-distill/hooks/review-dispatch.py", 543,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 560,
      'continue in main @ if arm_ledger.is_inflight(body, c.path, now)'):
         _T5_MAIN_VALIDATION_LOOP_INFLIGHT,
 
@@ -194,7 +200,7 @@ EXEMPT = {
     # (상한값)이 정한 배제이지 판정자의 판단이 아니라는 점에서 `suppressed()`
     # 의 정의("규칙 억제 — 판정자의 판단이 아니라 규칙(임계값)이 정한 배제")
     # 와 정확히 들어맞아 보이기 때문이다.
-    ("plugins/spec-distill/hooks/review-dispatch.py", 546,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 563,
      'continue in main @ if val_att.get(c.key, 0) >= val_cap'):
         "C6(1) — 검증 상한 도달 스킵. `capped.append(c.key)` 가 같은 분기에서 "
         "continue 이전에 실행돼 항목이 `capped`→`capped_advisory`로 이 턴의 "
@@ -209,7 +215,7 @@ EXEMPT = {
     # 성공 케이스 — 판정할 실패 자체가 없다. 줄번호는 Task 11b 가 +14 drift 로
     # 교정(사유·판정 무변경 — 이 지점은 :546 보다 아래라 6d87b2c 의
     # `failed_keys` 삽입 한 줄이 더 얹혀 +14).
-    ("plugins/spec-distill/hooks/review-dispatch.py", 603,
+    ("plugins/spec-distill/hooks/review-dispatch.py", 620,
      'continue in main @ if not reasons'):
         _T5_MAIN_VALIDATION_LOOP_SUCCESS,
 

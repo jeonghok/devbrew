@@ -148,15 +148,35 @@ print(m.group(1) if m else "-1")
 assert_eq "$UNADJ1" "1" \
   "T5-2 dispatch 강제 1건 → 미판정 정확히 1 (라벨이 아니라 값)"
 
-# 배치 — 지시문이 처분 줄보다 «먼저» 나온다. 앞뒤가 바뀌면 지시가 처분
-# 텍스트에 묻혀 다음 턴 강제력이 떨어진다(오케스트레이터 지적).
+# 배치 — 처분 줄이 «먼저», MANDATORY 지시문이 «뒤»에 온다.
+#
+# **이 단언은 반전됐다(최종 수정 라운드 2). 다시 뒤집지 마라 — 이유가 있다.**
+# 원래 이 자리는 정반대("MANDATORY 가 처분 줄보다 앞")를 단언했다. 근거는 배치
+# 선호였다: 지시문이 처분 텍스트에 묻히면 다음 턴 강제력이 떨어진다는 것.
+# 그 배치가 **선재 락 하나를 깼다** —
+# `plugins/spec-distill/tests/test_hook_output_schema.py` 의
+# `test_normal_dispatch_states_mandate_lifetime` 은
+# `reason.rstrip().endswith(EXPECTED_TAIL)` 로 mandate 가 **수명 문장으로 끝날
+# 것**을 요구한다. 꼬리에 무엇을 붙이든 깨진다(실측: origin/main 실패 1건 →
+# 이 브랜치 3건, 그중 둘이 회귀).
+#
+# **왜 그쪽이 이기는가**: 그 `endswith` 형태는 «측정된 두 번의 실패»에서
+# 의도적으로 골라진 구조적 가드다 — mandate 뒤에 재발동 조건을 덧붙이려는
+# 시도가 두 번 있었고 두 번 다 거짓이었다(커밋 단정 → git fail-open ·
+# 재편집 단정 → mark_reviewed 경로). 그래서 「무엇이 참인가」라는 의미 판단을
+# 버리고 「꼬리에 아무것도 붙지 않는다」는 형태를 택했다. 이쪽의 근거는 실패
+# 측정이 아니라 선호다. **두 락이 충돌하면 측정된 실패가 뒤에 있는 쪽이 이긴다.**
+#
+# 그래서 공시를 지우는 대신 **자리를 앞으로 옮겼다** — 두 성질(공시가 모델
+# 채널에 실린다 · mandate 가 수명 문장으로 끝난다)이 둘 다 산다. 이 단언은
+# 그 새 배치를 잠근다.
 MANDATORY_POS="$(printf '%s' "$REASON" | grep -bo 'MANDATORY' | head -1 | cut -d: -f1)"
 DISP_POS="$(printf '%s' "$REASON" | grep -bo '\*\*처분:\*\*' | head -1 | cut -d: -f1)"
 if [ -n "${MANDATORY_POS:-}" ] && [ -n "${DISP_POS:-}" ] \
-   && [ "$MANDATORY_POS" -lt "$DISP_POS" ] 2>/dev/null; then
-  ok "배치 — MANDATORY 지시문이 처분 줄보다 앞에 온다"
+   && [ "$DISP_POS" -lt "$MANDATORY_POS" ] 2>/dev/null; then
+  ok "배치 — 처분 줄이 MANDATORY 지시문보다 앞에 온다 (reason 은 mandate 수명 문장으로 끝난다)"
 else
-  no "배치 위반 — MANDATORY(${MANDATORY_POS:-?}) 가 처분 줄(${DISP_POS:-?}) 보다 앞이 아니다"
+  no "배치 위반 — 처분 줄(${DISP_POS:-?}) 이 MANDATORY(${MANDATORY_POS:-?}) 보다 앞이 아니다. 꼬리에 붙이면 test_hook_output_schema.py 의 endswith 락이 깨진다"
 fi
 
 # ── 실행 절 2 — T5-1(구조 검증 실패) : 실패 문서 «수» == 원장이 센 항목 수 ──

@@ -213,7 +213,7 @@ def write_state_file(path: Path, body: str) -> None:
 
 
 def _block_with_ledger(payload: dict, ledger: Ledger, advisory) -> int:
-    """차단 결정에 원장의 처분을 «reason 뒤에» 실어 낸다.
+    """차단 결정에 원장의 처분을 «reason 앞에» 실어 낸다.
 
     Task 11 수정 라운드 2 — `reasons()`만 쓰던 최초 판을 되돌린다.
     `reasons()`(adjudication.py:136-149)가 내는 것은 `held`·`unknown`·
@@ -224,17 +224,34 @@ def _block_with_ledger(payload: dict, ledger: Ledger, advisory) -> int:
     공유 렌더러 `disposition_lines()`(다른 소비자 넷과 같은 벌)로 낸다 — 키
     이름을 손으로 다시 적지 않는다.
 
-    **배치가 계약이다.** 이 훅의 `reason`은 모델을 «움직이는» 지시문이다
-    (카나리 7/7 도달) — 지시문을 앞에 두고 처분 줄을 **뒤에** 붙인다. 회계를
-    앞에 붙이면 지시가 처분 텍스트에 묻혀 다음 턴 강제력이 떨어진다.
+    **배치가 계약이다 — 그리고 그 계약을 «앞»으로 뒤집었다.**
+    최초 판은 처분 줄을 `reason` 뒤에 붙였다(근거: 지시문이 처분 텍스트에 묻히면
+    다음 턴 강제력이 떨어진다). 그 배치가 **선재 락 하나를 깼다** —
+    `tests/test_hook_output_schema.py` 의 `test_normal_dispatch_states_mandate_lifetime`
+    은 `reason.rstrip().endswith(EXPECTED_TAIL)` 로 mandate 가 **수명 문장으로
+    끝날 것**을 요구한다. 뒤에 무엇을 붙이든 깨진다.
+
+    **왜 그쪽이 이기는가**: 그 락의 형태(`endswith`)는 «측정된 두 번의 실패»에서
+    의도적으로 골라진 것이다 — 재발동 조건을 덧붙이려는 시도가 두 번 있었고 두
+    번 다 거짓이었다(커밋 단정 → git fail-open · 재편집 단정 → mark_reviewed
+    경로). 그래서 「무엇이 참인가」라는 의미 판단을 버리고 「꼬리에 아무것도
+    붙지 않는다」는 구조적 형태를 택했다. 이쪽의 배치 근거는 실패 측정이 아니라
+    선호다. 충돌하면 측정된 실패가 뒤에 있는 쪽이 이긴다.
+
+    검토하고 버린 대안 ⑴ 그 락을 「미래형 단정만 금지」로 좁히기 — 두 번 틀린
+    바로 그 의미 판단을 되살린다. ⑵ 처분을 `systemMessage` 로 옮기기 — 그 채널은
+    모델 도달 0/14 로 측정됐다(Task 11). 공시가 사라진다.
+
+    비용: 모델이 지시문 앞에 회계 두 줄을 먼저 읽는다. 두 줄이다.
     """
     report = ledger.report()
     held_classes = ledger.held_by_class()
     disp_line, plumb_line, advisories = disposition_lines(report, held_classes)
-    tail = "\n\n" + disp_line + "\n" + plumb_line
+    head = disp_line + "\n" + plumb_line
     if advisories:
-        tail += "\n" + "\n".join(advisories)
-    payload["reason"] = payload.get("reason", "") + tail
+        head += "\n" + "\n".join(advisories)
+    # 지시문이 «끝»에 온다 — `reason` 은 mandate 의 수명 문장으로 끝나야 한다.
+    payload["reason"] = head + "\n\n" + payload.get("reason", "")
     print(json.dumps(with_advisory(payload, advisory)), flush=True)
     return 0
 

@@ -1,5 +1,64 @@
 # Changelog
 
+## [0.53.1] — 2026-09-05
+
+### Fixed
+
+- **이 브랜치가 선재 락 하나를 깨뜨렸다 — mandate 의 꼬리를 잘랐다 (최종 수정
+  라운드 2, R-A).** `hooks/review-dispatch.py` 의 `_block_with_ledger()` 가 처분
+  두 줄을 `reason` **뒤**에 붙이면서,
+  `tests/test_hook_output_schema.py::test_normal_dispatch_states_mandate_lifetime`
+  이 요구하는 `reason.rstrip().endswith("이 mandate는 이번 dispatch 1회에만 유효하다.")`
+  가 깨졌다. 실측 대조: 같은 파일이 `origin/main` 에서 **1 failure**, 이 브랜치
+  HEAD 에서 **3 failures** — 둘이 회귀였다.
+  **고침**: 처분 두 줄(+advisory)을 `reason` **앞**으로 옮긴다. `reason` 은 다시
+  수명 문장으로 끝나고, 공시는 모델 채널에 그대로 남는다.
+  **왜 그쪽이 이기는가**: `endswith` 형태는 «측정된 두 번의 실패»에서 의도적으로
+  골라진 구조적 가드다 — mandate 뒤에 재발동 조건을 덧붙이려는 시도가 두 번 있었고
+  두 번 다 거짓이었다(커밋 단정 → git fail-open · 재편집 단정 → mark_reviewed 경로).
+  그래서 의미 판단을 버리고 「꼬리에 아무것도 붙지 않는다」는 형태를 택했다. 이
+  브랜치의 배치 단언은 실패 측정이 아니라 선호에서 나왔다 — **충돌하면 측정된
+  실패가 뒤에 있는 쪽이 이긴다.**
+  **버린 대안**: ⑴ 선재 락을 「미래형 단정만 금지」로 좁히기 — 두 번 틀린 그 의미
+  판단을 되살린다. ⑵ 처분을 `systemMessage` 로 옮기기 — 그 채널은 모델 도달
+  **0/14** 로 측정됐다(Task 11). 공시가 사라진다.
+  **비용**: 모델이 지시문 앞에 회계 두 줄을 먼저 읽는다(두 줄).
+  이 브랜치가 넣은 반대 방향 단언(`tests/test_review_dispatch_disposition.sh` 의
+  「MANDATORY 가 처분 줄보다 앞」)을 **반전**시키고, 그 자리에 **왜 반전했는지**를
+  적었다 — 다음 사람이 다시 뒤집지 않도록.
+
+- **이 브랜치가 기존 락 하나를 «공허»하게 만들었다 (최종 수정 라운드 2, R-B).**
+  decision emit 이 `main()` 의 bare `print(json.dumps({"decision": ...}))` 에서
+  `_block_with_ledger()` 로 옮겨가자, `main()` 의 문(statement)만 훑던
+  `test_ast_rewrite_before_print` 의 AST 스캐너가 아무 emit 도 못 찾았다. **그 락은
+  정직했다** — 통과하지 않고 「내가 잴 대상이 사라졌다」로 실패했다.
+  **복구(약화 아님)**: 스캐너가 **도출**로 emit 을 따라간다. 헬퍼 «이름»을
+  하드코딩하지 않는다 — ⑴ 이 모듈이 정의한 함수 호출이면 그 본문을 호출 자리에
+  펼치고(재귀 가드), ⑵ decision 성(性)을 호출 «인자»에서 전파한다(헬퍼 안의 print 는
+  `{"decision": …}` 리터럴을 자기 안에 갖지 않는다 — 그 리터럴은 호출 자리에 있다),
+  ⑶ `file=` 키워드가 붙은 print(=stderr 진단)는 계속 제외한다. 문 «타입»도 열거하지
+  않는다 — `return helper({...})` 처럼 `ast.Expr` 이 아닌 자리로 옮겨간 것이 정확히
+  이 락을 눈멀게 한 변화다. 순서 비교는 **줄번호가 아니라 이벤트 순서**로 한다(펼친
+  헬퍼는 호출 자리보다 «위»에 정의돼 있어 줄번호가 거꾸로 돈다).
+  등가 확인: 같은 스캐너를 `origin/main` 판 훅에 돌리면 이벤트 모양이 동일하다
+  (emit 2 · rewrite 1, 같은 순서) — 복구이지 완화가 아니다.
+  「도달 못 했다」는 실패 메시지도 「통과시키지 마라」로 강화했다.
+
+- **위 R-A 가 `check_wiring.py` 의 면제 키 열 개를 밀었다 — 락이 잡았고, 정체로
+  다시 못 박았다.** `_block_with_ledger()` 의 docstring 이 늘면서 그 아래
+  `review-dispatch.py` 의 버리는 분기 열 자리가 +17 줄 이동했다. 같은 파가 조금
+  전에 넣은 3-튜플 키(`(경로, 줄, 정체)`)가 그것을 **미배선 10 + 낡은 면제 10**
+  으로 이름과 함께 냈고, 정체(`kind`·`func`·`guard`)가 같은 행을 찾는 방식으로
+  **줄번호만** 기계 갱신했다(판정·사유 무변경 — 손으로 세지 않았다). 이 사건 자체를
+  `check_wiring.py` 의 해당 주석 블록에 기록했다.
+
+### Note
+
+세 양성 대조 전건 확인 — ⑴ 처분 줄을 다시 꼬리로 → `test_hook_output_schema.py`
+RED(2건) · ⑵ 처분 두 줄을 아예 삭제 → `test_review_dispatch_disposition.sh`
+RED(5건) · ⑶ `rewrite_state` 를 emit 뒤로 → `test_ast_rewrite_before_print` RED
+(+형제 락 둘도 함께). 셋 다 원복 후 GREEN.
+
 ## [0.53.0] — 2026-09-05
 
 ### Changed
