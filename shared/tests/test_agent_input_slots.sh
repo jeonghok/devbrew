@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# guards: plugins/*/agents/*.md plugins/*/skills/**/*.md plugins/*/commands/*.md
+# guards: plugins/*/agents/*.md plugins/*/skills/**/*.md plugins/*/commands/*.md tools/adjudication/check_slots.py
+#
+# 수정 라운드 1 (F6) — 판정기 자신을 declare 한다. `fixtures/adjudication/
+# run_slots.py` 가 `import check_slots` 하므로 이 락이 그 코퍼스다(도출은
+# import 로).
 #
 # `commands/*.md` — 단일 `*` 다(`**` 아님). 이 파일들은 전부 flat(`commands/<name>.md`,
 # 하위 디렉터리 없음)이고, `# guards:` 를 소비하는 bash `case` 패턴은 리터럴
@@ -30,6 +34,7 @@ REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 if [ "${1:-}" = "--emit-scanned" ]; then
   PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_slots.py" \
     "$REPO_ROOT" --emit-scanned
+  printf '%s\n' "tools/adjudication/check_slots.py"
   exit 0
 fi
 

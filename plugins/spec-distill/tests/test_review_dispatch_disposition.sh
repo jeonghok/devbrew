@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/hooks/review-dispatch.py
+# guards: plugins/spec-distill/hooks/review-dispatch.py tools/adjudication/check_wiring.py
 #
 # 훅의 차단 결정 두 자리가 자기 처분을 원장 어휘로 밝히는지 검사한다.
 #
@@ -19,16 +19,32 @@
 # 정체). 그래서 구조 검사에 더해 훅을 **실제로 실행**해 JSON 출력을 보는
 # 절을 둔다 — 이것만이 "정말 disposition_lines() 가 불려 reason 에 실렸다"
 # 를 증명한다.
+#
+# Task 15 수정 라운드 1 (F1·F2) — 위 "구조 검사"·"실행 절" 둘 다 결손이
+# 실측됐다(변이 μ11):
+#  F1) 정적 카운트가 `grep -c '\.(hold|reject|...)\('` 였다 — review-dispatch.py:222
+#      의 설명 주석 안 `` `L.reject(...)` `` 텍스트가 정규식을 그대로 만족시켜,
+#      진짜 호출(:804 `L.hold(...)`) 하나가 지워져도 카운트가 안 줄었다(2→2).
+#      `shared/tests/fixtures/adjudication/run_block_disposition_count.py` 로
+#      옮겨 ast 로 센다 — 주석·문자열 리터럴은 원리적으로 안 잡힌다.
+#  F2) 실행 절이 `**처분:**` 라벨의 «존재»만 grep 했다. `disposition_lines()`
+#      는 원장이 비어도 라벨을 무조건 찍으므로, 위 :804 호출을 지워도
+#      "미판정 0" 인 채로 라벨은 그대로 나와 통과했다. 아래에 「미판정 1」
+#      값 자체를 재는 절을 추가한다(T5-1 이 이미 하던 배관 손실 값 검사와
+#      같은 방식).
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/../../../shared/tests/assert.sh"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 HOOK="$REPO_ROOT/plugins/spec-distill/hooks/review-dispatch.py"
+COUNTER="$REPO_ROOT/shared/tests/fixtures/adjudication/run_block_disposition_count.py"
 
 # `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 코퍼스는
-# 파일 하나(위 HOOK)다 — 도출이 아니라 상수이므로 같은 변수를 그대로 낸다.
+# 상수다: 훅 자신 + F1 이 새로 도입한 ast 카운터가 실제로 import 하는
+# `tools/adjudication/check_wiring.py`(처분 메서드 어휘 `DISPOSITION` 의 정본).
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "${HOOK#"$REPO_ROOT"/}"
+  PYTHONDONTWRITEBYTECODE=1 python3 "$COUNTER" "$REPO_ROOT" --emit-scanned
   exit 0
 fi
 
@@ -39,15 +55,24 @@ assert_grep "$BODY" 'from adjudication import Ledger' \
 assert_grep "$BODY" 'from render_disposition import disposition_lines' \
   "훅이 공유 렌더러를 import 한다 (키 이름을 손으로 다시 적지 않는다)"
 
-# 차단 결정 자리마다 처분 호출이 있는지. 자리 «수»에서 출발한다 —
-# 하나를 배선하고 다른 하나를 잊는 것이 이 검사가 막는 것이다.
-nblock="$(printf '%s\n' "$BODY" | grep -c '"decision": "block"')"
-ndisp="$(printf '%s\n' "$BODY" | grep -cE '\.(hold|reject|source_failed|uncountable)\(')"
-note "차단 결정 $nblock 자리 · 처분 호출 $ndisp 건"
+# 차단 결정 자리마다 처분 호출이 있는지 — ast 기반(F1). 자리 «수»에서
+# 출발한다 — 하나를 배선하고 다른 하나를 잊는 것이 이 검사가 막는 것이다.
+COUNT_OUT="$(PYTHONDONTWRITEBYTECODE=1 python3 "$COUNTER" "$REPO_ROOT" "$HOOK")"
+note "$COUNT_OUT"
+
+note "── 판정기 자체 (fixture) — decoy 주석에 안 속는지 먼저 확인한다"
+assert_contains "$COUNT_OUT" "fx_good_ndisp=1" \
+  "같은 파일의 진짜 호출 하나는 정상적으로 센다"
+assert_contains "$COUNT_OUT" "fx_decoy_ndisp=0" \
+  "설명 주석 속 문자열(review-dispatch.py:222 실측 패턴)은 호출로 안 센다"
+
+nblock="$(printf '%s\n' "$COUNT_OUT" | sed -n 's/^target_nblock=//p')"
+ndisp="$(printf '%s\n' "$COUNT_OUT" | sed -n 's/^target_ndisp=//p')"
+note "차단 결정 $nblock 자리 · 처분 호출 $ndisp 건 (ast 기반)"
 if [ "${nblock:-0}" -gt 0 ] 2>/dev/null; then
   ok "차단 결정 $nblock 자리 (0 이 아니다)"
 else
-  no "차단 결정이 0 이다 — grep 이 깨졌거나 분기가 사라졌다. 이 검사가 공허하다"
+  no "차단 결정이 0 이다 — ast 파싱이 깨졌거나 분기가 사라졌다. 이 검사가 공허하다"
 fi
 if [ "${ndisp:-0}" -ge "${nblock:-0}" ] 2>/dev/null; then
   ok "처분 호출 $ndisp >= 차단 자리 $nblock"
@@ -90,6 +115,20 @@ assert_grep "$REASON" '\*\*배관 손실:\*\*' \
   "실제 block 의 reason 에 배관 손실 줄이 실제로 실린다"
 assert_not_grep "$SYSMSG" '\*\*처분:\*\*' \
   "systemMessage 에는 처분 줄이 안 실린다 (사람 채널·모델 채널을 계속 분리한다)"
+
+# F2 (수정 라운드 1) — 라벨의 «존재» 가 아니라 «값» 을 잰다.
+# `disposition_lines()` 는 원장이 비어도 `**처분:**` 라벨을 무조건 찍으므로,
+# 위 assert_grep 셋은 :804 의 `L.hold(str(cand.path), ...)` 를 지워도 전부
+# 통과했다(미판정이 0 으로 찍혀도 라벨 자체는 그대로 나오므로) — 변이 μ11 실측.
+# 이 시나리오(T5-2, 후보 문서 하나)는 그 한 번의 hold() 로 미판정이 정확히
+# 1 이어야 한다.
+UNADJ1="$(printf '%s' "$REASON" | python3 -c '
+import re, sys
+m = re.search(r"미판정 (\d+)", sys.stdin.read())
+print(m.group(1) if m else "-1")
+')"
+assert_eq "$UNADJ1" "1" \
+  "T5-2 dispatch 강제 1건 → 미판정 정확히 1 (라벨이 아니라 값)"
 
 # 배치 — 지시문이 처분 줄보다 «먼저» 나온다. 앞뒤가 바뀌면 지시가 처분
 # 텍스트에 묻혀 다음 턴 강제력이 떨어진다(오케스트레이터 지적).

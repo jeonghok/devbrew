@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
-# guards: plugins/quality-gates/scripts/synthesize_findings.py
+# guards: plugins/quality-gates/scripts/synthesize_findings.py shared/adjudication/adjudication.py shared/adjudication/render_disposition.py plugins/*/scripts/adjudication.py plugins/*/scripts/render_disposition.py
 #
 # 처분 여섯 종류가 각각 최소 1건씩 세어지는지 결정론 fixture 로 검사한다.
+#
+# 수정 라운드 1 (F3) — 원래 선언은 SCRIPT 하나뿐이었다. 이 스크립트가
+# `from adjudication import Ledger` · `from render_disposition import
+# disposition_lines` 로 실제 렌더·회계를 수행하므로(§ 아래 여섯 assert_grep
+# 이 그 렌더의 «값»을 직접 검사한다), 그 두 모듈이 이 락이 실제로 지키는
+# 것이다. `shared/adjudication/*.py` 를 고친 diff 는 거기서 나타나고(git
+# blob 이 그 경로에 산다), `plugins/*/scripts/{adjudication,render_disposition}.py`
+# 는 그 두 파일의 배포 심볼릭 링크 사본이다(`git ls-files -s` mode 120000,
+# quality-gates·spec-distill 둘 다) — 사본 자체가 재구성되는 드문 경우까지
+# 같은 코퍼스로 선언한다.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/../../../shared/tests/assert.sh"
@@ -9,10 +19,21 @@ REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 SCRIPT="$REPO_ROOT/plugins/quality-gates/scripts/synthesize_findings.py"
 
 # `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 이 락의
-# 코퍼스는 처음부터 파일 «하나»다(위 SCRIPT) — 도출이 아니라 상수이므로 다시
-# 계산할 것이 없다. 같은 변수를 그대로 낸다.
+# 코퍼스는 상수다(도출이 아니다) — 위 `# guards:` 와 같은 일곱 경로를 그대로
+# 낸다. 실행 시 파이썬이 실제로 여는 파일은 심볼릭 링크 쪽(SCRIPT 와 같은
+# 디렉터리의 sibling import) 이지만, 내용이 갈리는 원본은 `shared/adjudication/`
+# 쪽이라 둘 다 낸다 — 어느 쪽이 바뀌어도 이 락의 여섯 assert_grep 값이
+# 달라질 수 있다는 것이 이 락이 실제로 의존하는 사실이다.
 if [ "${1:-}" = "--emit-scanned" ]; then
-  printf '%s\n' "${SCRIPT#"$REPO_ROOT"/}"
+  cat <<'SCANNED'
+plugins/quality-gates/scripts/synthesize_findings.py
+shared/adjudication/adjudication.py
+shared/adjudication/render_disposition.py
+plugins/quality-gates/scripts/adjudication.py
+plugins/spec-distill/scripts/adjudication.py
+plugins/quality-gates/scripts/render_disposition.py
+plugins/spec-distill/scripts/render_disposition.py
+SCANNED
   exit 0
 fi
 

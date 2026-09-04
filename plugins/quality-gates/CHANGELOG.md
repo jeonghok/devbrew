@@ -3,6 +3,32 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.6.3] — 2026-09-04
+
+### Fixed
+- **Task 15 수정 라운드 1 — `test_synthesize_disposition.sh` 의 `# guards:`
+  가 `synthesize_findings.py` 하나만 선언해 자기가 실제로 지키는 것보다
+  좁았다(Important, 코디네이터가 재현: μ3 상태로 돌리면 6/6 → 0/6).** 이
+  스크립트는 `adjudication.py`·`render_disposition.py` 를 import 해서
+  회계·렌더 «값»을 직접 검사하므로(여섯 `assert_grep` 이 라벨이 아니라
+  카운트를 잰다) 둘 다 실제 코퍼스다. `# guards:` 를 그 두 모듈의 실 파일
+  (`shared/adjudication/*.py`) + 배포 심볼릭 링크 사본(`plugins/*/scripts/
+  {adjudication,render_disposition}.py`, quality-gates·spec-distill 둘 다
+  mode 120000)까지 넓혔다 — 어느 쪽이 바뀌어도 이 락이 이제 선택된다.
+  `--emit-scanned` 도 같은 일곱 경로를 내도록 맞춰 `test_guards_coverage_
+  bidirectional.sh` 의 선언⊆⊇실제 양방향이 그대로 성립한다(80→86 건 유지
+  GREEN).
+- **`test_skill_drop_notice_consumed.sh` 의 b1·c 두 단언이 근거 단락의
+  decoy 인용으로 만족되고 있었다(Minor, 코디네이터 지목 — b1; 같은 원인을
+  c 에서도 발견해 함께 닫음).** `quality-pipeline/SKILL.md` 의 "Not-clean
+  notice override" 지시 문단을 통째로 지워도(Task 15 μ12) 뒤따르는 "Why the
+  key is the marker" 근거 단락이 같은 문자열(`dropped as malformed`)을
+  예시로 다시 인용해 b1·c 가 GREEN 으로 남았다. 두 단언 모두 이미 있던
+  `$directive`(지시 문단만 뽑는 awk 범위, d0/d3 가 쓰던 것) 로 코퍼스를
+  좁혀 body-unique 하게 만들었다 — `$window`(step 4.5 섹션 전체) 대신
+  `$directive` 를 검사 대상으로 쓴다. 양성 대조: 같은 μ12 를 다시 걸면
+  이제 b1·c 둘 다 RED (Fail 4→6), 원복 후 14/14 GREEN.
+
 ## [6.6.2] — 2026-09-04
 
 ### Fixed

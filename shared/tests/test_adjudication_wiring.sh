@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
-# guards: plugins/*/scripts/*.py plugins/*/hooks/*.py
+# guards: plugins/*/scripts/*.py plugins/*/hooks/*.py tools/adjudication/check_wiring.py
+#
+# 수정 라운드 1 (F6) — 판정기 자신(`tools/adjudication/check_wiring.py`)이
+# 이 락의 `# guards:` 에 없었다. 27개 선언 전수 확인 결과 `tools/adjudication/`
+# 는 «어떤» 락에도 없었다 — 판정기를 약화시켜도 그 사실을 잡는 락이
+# 선택되지 않는다는 뜻이다. 도출은 열거가 아니라 import: 이 락이 실행하는
+# `fixtures/adjudication/run_wiring_scan.py`·`run_wiring_probe.py` 둘 다
+# `from check_wiring import ...` 를 쓴다 — 그래서 이 판정기가 여기 산다.
 #
 # 버리는 분기가 자기 처분을 부르는지 검사한다.
 #
@@ -34,6 +41,7 @@ SCAN="$(cat "$TMPD/scan.txt")"
 # 오인돼 커버리지 판정이 오염된다.
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$SCAN" | sed -n 's/^  CONSUMER //p'
+  printf '%s\n' "tools/adjudication/check_wiring.py"
   exit 0
 fi
 

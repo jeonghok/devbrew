@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# guards: plugins/*/skills/**/*.md plugins/*/commands/*.md plugins/*/agents/*.md plugins/*/README.md plugins/*/*.py
+# guards: plugins/*/skills/**/*.md plugins/*/commands/*.md plugins/*/agents/*.md plugins/*/README.md plugins/*/*.py tools/adjudication/check_names.py
+#
+# 수정 라운드 1 (F6) — 판정기 자신을 declare 한다. `fixtures/adjudication/
+# run_names.py` 가 `import check_names` 하므로 이 락이 그 코퍼스다(도출은
+# import 로, 27개 `# guards:` 선언 전수를 손으로 세지 않는다).
 #
 # `commands/*.md` — 단일 `*` 다(`**` 아님). 이 락이 실제로 읽는 명령 파일은
 # 전부 flat(`commands/<name>.md`) 인데, `# guards:` 를 소비하는 bash `case`
@@ -40,6 +44,7 @@ REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 if [ "${1:-}" = "--emit-scanned" ]; then
   PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_names.py" \
     "$REPO_ROOT" --emit-scanned
+  printf '%s\n' "tools/adjudication/check_names.py"
   exit 0
 fi
 

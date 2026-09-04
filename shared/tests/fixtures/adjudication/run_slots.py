@@ -29,9 +29,13 @@ print("no_declaration=%d" % kinds.get("no_declaration", 0))
 # 재지 않는다 — 그 사실이 `problems_other=0` 뒤에 숨으면 안 된다.
 print("declared=%d" % len([1 for v in defs.values() if v["slots"] is not None]))
 print("problems_other=%d" % (len(probs) - kinds.get("no_declaration", 0)))
+# Task 15 수정 라운드 1 (F4) — no_declaration 도 이름을 댄다. 예전엔 이 루프가
+# no_declaration 을 걸러내 개수(`no_declaration=N`)만 오르고 어느 agent 인지
+# 아무 데도 안 남았다(check_slots.py:142 의 problem 튜플엔 이미 `info["path"]`
+# 가 실려 있었다 — 흘리는 쪽은 이 print 루프였다). 다른 축과 같은 "PROBLEM"
+# 형식으로 낸다.
 for p in probs:
-    if p[0] != "no_declaration":
-        print("  PROBLEM %s %s @ %s %s" % p)
+    print("  PROBLEM %s %s @ %s %s" % p)
 print("exempt_total=%d" % len(check_slots.EXEMPT_SLOTS))
 print("exempt_uncited=%d" % len(check_slots.uncited_exemptions()))
 

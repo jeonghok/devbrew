@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.52.3] — 2026-09-04
+
+### Fixed
+- **Task 15 수정 라운드 1 (F1, Critical) — `test_review_dispatch_disposition.sh`
+  의 정적 카운트 절이 `grep -c '\.(hold|reject|source_failed|uncountable)\('`
+  였다.** `review-dispatch.py:222` 의 설명 주석 안 리터럴 `` `L.reject(...)` ``
+  텍스트가 이 정규식을 그대로 만족시켜, 진짜 처분 호출(:804 의
+  `L.hold(str(cand.path), ...)`) 하나가 지워져도 카운트가 2→2 로 안 줄었다
+  (코디네이터가 9개 락 전수로 재현: 변이 후에도 9/9 rc=0). `shared/tests/
+  fixtures/adjudication/run_block_disposition_count.py` 신설 — `ast` 로
+  `ast.Call`(func.attr in `tools/adjudication/check_wiring.DISPOSITION`) 과
+  `ast.Dict`(`"decision": "block"`) 만 센다(주석·문자열 리터럴은 원리적으로
+  안 잡힘). decoy fixture(`block_disposition_decoy.py`, 위 :222 패턴 재현)
+  로 계측기 자신도 검증한다 — grep 기반이면 ndisp=1(오검출), ast 기반은
+  ndisp=0(정답).
+- **Task 15 수정 라운드 1 (F2, Critical) — 같은 파일 실행 절이 `**처분:**`
+  라벨의 «존재»만 grep 했다.** `disposition_lines()` 는 원장이 비어도 그
+  라벨을 무조건 찍으므로, 위 :804 호출을 지우면 "미판정 0" 이 찍혀도
+  `assert_grep '\*\*처분:\*\*'` 는 통과했다. T5-1(구조 검증 실패 경로)이
+  이미 하던 것과 같은 방식으로 T5-2(dispatch 강제 경로)에도 「미판정」
+  «값»(정규식으로 추출) 을 `assert_eq` 로 재는 절을 추가 — 후보 문서 1건 →
+  미판정 정확히 1.
+- **양성 대조 (F1+F2)** — 두 수정 전: 위 :804 삭제(Task 15 μ11) 시 11/11
+  GREEN(무검출). 수정 후 같은 삭제: F1 이 "차단 자리 2 중 1 곳이 처분을 안
+  부른다" 로, F2 가 "미판정 1" 기대·"0" 실제로 각각 RED (12/14, 새 항목
+  포함 14 개 중 2 개 실패). 원복 후 14/14 GREEN.
+- **Task 15 수정 라운드 1 (F6, Important) — `tools/adjudication/` 아래 판정기
+  넷(check_wiring/consumed/slots/names)이 `# guards:` 선언 27개 어디에도
+  없었다.** 판정기를 약화시켜도 그 사실을 재는 락이 CI 선택에서 빠질 수
+  있었다는 뜻이다. `fixtures/adjudication/run_*.py` 의 실제 import(`from
+  check_wiring import ...` 등, 열거가 아니라 소스 grep 으로 도출)를 따라
+  `test_review_dispatch_disposition.sh`(check_wiring, F1 신설분) ·
+  `shared/tests/test_adjudication_wiring.sh`(check_wiring) 가 자기 판정기를
+  declare 하도록 고쳤다. `test_adjudication_consumed.sh`·`test_agent_input_
+  slots.sh`·`test_dispatch_name_defined.sh` 세 개는 shared/tests/ 소속이라
+  이 플러그인 버전과 무관 — quality-gates CHANGELOG 가 아니라 여기 함께
+  적는 이유는 이 라운드가 하나의 수정 커밋이기 때문이다(코드 변경 자체는
+  플러그인 파일 밖).
+
 ## [0.52.2] — 2026-09-04
 
 ### Fixed
