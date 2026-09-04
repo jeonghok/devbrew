@@ -3,6 +3,11 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.4.2] — 2026-09-04
+
+### Fixed
+- **`shared/tests/test_adjudication_wiring.sh`의 import·앵커 대칭 축을 개수 비교에서 집합 비교로 강화(adjudication-topology Task 11 수정 라운드 1).** 이 락은 `plugins/*/scripts/*.py`·`plugins/*/hooks/*.py`(quality-gates 포함)를 검사하므로 quality-gates도 함께 bump한다. 상세는 `plugins/spec-distill/CHANGELOG.md` v0.51.1 참조 — `tools/adjudication/check_wiring.py`에 `TERMINAL_CONSUMERS` 상수 신설, `shared/tests/fixtures/adjudication/run_wiring_scan.py`가 `IMPORT`/`ANCHOR`/`TERMINAL` 세 집합을 새로 출력. quality-gates 소유 파일(`synthesize_findings.py`·`synthesize_artifact_findings.py`)은 이미 앵커를 갖고 있어 `TERMINAL_CONSUMERS`에 새로 오르지 않았다 — 영향은 락 자체의 정밀도 향상뿐, 이 플러그인의 런타임 동작 변경 없음.
+
 ## [6.4.1] — 2026-09-04
 
 ### Fixed

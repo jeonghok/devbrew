@@ -113,29 +113,65 @@ EXEMPT = {
     ("plugins/spec-distill/hooks/review-dispatch.py", 530):
         _T5_MAIN_VALIDATION_LOOP_INFLIGHT,
 
-    # Task 11 (T5) — **경계 사례, 최종 리뷰가 다시 볼 것.** :533 은 검증 상한
-    # (VALIDATION_ATTEMPT_CAP) 도달 스킵이다. `capped.append(c.key)` 가 바로
-    # 위 같은 분기에서 먼저 실행되므로 항목 자체는 사라지지 않고 `capped` →
-    # `capped_advisory` 를 타고 이번 턴의 JSON 출력 `systemMessage` 필드에
-    # 실제로 실린다(추적: :554,570-574,619,627,671,680,690,774,786) — 그래서
-    # C6(1)(대응물 없음)이 아니라 이미 다른 채널로 실린다는 논거로 면제한다.
-    # 다만 이 Task(T5) 가 바로 옆 두 `decision:"block"` 자리에서 확인한 사실—
-    # `systemMessage` 는 모델 컨텍스트에 카나리 14개 중 0개 도달— 이 이 채널
-    # 에도 그대로 적용될 가능성이 있다. 즉 "실려는 있으나 그 채널이 모델에
-    # 도달하는지는 검증되지 않았다." 규칙 억제(`suppressed()`)로 다시 봐야
-    # 할 수 있는 자리라 baseline 문서에 남기고 최종 리뷰로 넘긴다.
+    # Task 11 수정 라운드 1 — 최초 사유가 범주 착오였다(오케스트레이터 지적).
+    # :533 은 검증 상한(VALIDATION_ATTEMPT_CAP) 도달 스킵이다. `capped.append(
+    # c.key)` 가 바로 위 같은 분기에서 continue 이전에 실행되므로 항목 자체는
+    # 사라지지 않고 `capped` → `capped_advisory` 를 타고 이번 턴의 JSON 출력
+    # `systemMessage` 필드에 실제로 실린다(추적: :554,570-574,619,627,671,680,
+    # 690,774,786).
+    #
+    # 최초 판정은 여기서 "systemMessage 가 모델 도달 카나리 0/14 라 채널
+    # 효과가 의심된다"고 적었으나 **그건 범주 착오다.** CLAUDE.md 의 계약:
+    # "미판정 항목의 방향은 다음 소비자가 정한다: 기계면 제외, 사람이면
+    # 라벨을 붙여 보여준다." `systemMessage` 는 **사람의 터미널**에 뜨는
+    # 채널이지 모델 컨텍스트에 주입되는 채널이 아니다 — T5-1·T5-2 가 채널을
+    # `reason` 으로 정한 이유는 그 두 자리의 소비자가 **모델**(다음 턴
+    # dispatch 판단)이기 때문이었다. 이 자리(:533)의 소비자는 사람이다 —
+    # "자동 검증·dispatch 를 하지 않는 문서가 있다"는 사실은 세션을 보는
+    # 사람에게 알리는 것이지 모델에게 강제할 대상이 아니다. 그러므로 모델
+    # 미도달은 결함이 아니라 이 채널의 **설계대로**다 — 소실도 아니고 채널
+    # 결함도 아니다(C6(1)).
+    #
+    # 그래도 면제 표시는 "최종 리뷰 재검토" 를 남긴다 — 규칙 억제
+    # (`suppressed()`)로 재분류할지는 여전히 열린 질문이다: 이 스킵은 규칙
+    # (상한값)이 정한 배제이지 판정자의 판단이 아니라는 점에서 `suppressed()`
+    # 의 정의("규칙 억제 — 판정자의 판단이 아니라 규칙(임계값)이 정한 배제")
+    # 와 정확히 들어맞아 보이기 때문이다.
     ("plugins/spec-distill/hooks/review-dispatch.py", 533):
-        "C6(1)(경계) — 검증 상한 도달 스킵. `capped.append(c.key)` 가 같은 "
-        "분기에서 continue 이전에 실행돼 항목이 `capped`→`capped_advisory`로 "
-        "이 턴의 systemMessage 에 실린다(코드 추적 완료) — 그러나 이 Task 가 "
-        "같은 파일의 decision:block 두 자리에서 실측한 바 systemMessage 는 "
-        "모델 도달 카나리 0/14 다. 소실은 아니나 채널 효과가 의심되는 경계 "
-        "사례 — 최종 리뷰가 재검토할 것(규칙 억제 재분류 후보).",
+        "C6(1) — 검증 상한 도달 스킵. `capped.append(c.key)` 가 같은 분기에서 "
+        "continue 이전에 실행돼 항목이 `capped`→`capped_advisory`로 이 턴의 "
+        "systemMessage 에 실린다(코드 추적 완료). systemMessage 는 사람의 "
+        "터미널에 뜨는 채널이다(CLAUDE.md: 미판정 항목은 사람이면 라벨을 "
+        "붙여 보여준다) — 이 자리의 소비자는 사람이고, 모델 컨텍스트 카나리 "
+        "0/14 는 이 채널의 설계이지 소실이 아니다. 최종 리뷰가 재검토할 것 "
+        "(규칙 억제 `suppressed()` 재분류 후보 — 판단이 아니라 상한값이 "
+        "정한 배제라는 점에서).",
 
     # Task 11 (T5) — main() 의 구조 검증 루프. :589 는 `reasons` 가 빈
     # 성공 케이스 — 판정할 실패 자체가 없다.
     ("plugins/spec-distill/hooks/review-dispatch.py", 589):
         _T5_MAIN_VALIDATION_LOOP_SUCCESS,
+}
+
+# Task 11 수정 라운드 1 — `derive_consumers()` 의 import·앵커 대칭 가정이
+# 깨지는 자리를 명시적으로 등재한다. 그 가정("원장을 import 하는 파일은
+# 전부 어딘가 dispatch 자리에서 `consumer=` 로 불린다")은 PR1 이 넣은 것이고
+# review-dispatch.py 가 그 반례다: 앵커(`consumer=`)는 skill/command/agent
+# 문서가 "이 subagent 의 발견물을 이 스크립트가 판정한다"고 선언하는 자리인데,
+# 훅은 subagent dispatch 결과를 받는 소비자가 아니라 **그 자신이** 직접
+# `decision:"block"` 으로 차단/통과를 정하는 **종단(terminal) 결정자**다 —
+# 이름 붙일 dispatch 자리 자체가 없다. 없는 자리를 만들어 붙이면 그건 허구다.
+#
+# `EXEMPT` 와 같은 규율: 사유 없는 항목(빈 문자열)은 그 자체로 RED —
+# `test_adjudication_wiring.sh` 의 `terminal_uncited` 축이 잡는다.
+TERMINAL_CONSUMERS = {
+    "plugins/spec-distill/hooks/review-dispatch.py":
+        "종단 결정자 — subagent findings 를 판정해 넘기는 소비자가 아니라 "
+        "이 파일 스스로 두 `decision:\"block\"` 자리(T5-1 구조 검증 실패 · "
+        "T5-2 dispatch 강제)에서 차단/통과를 정한다. 이 훅을 부르는 어떤 "
+        "skill/command/agent 문서에도 「이 스크립트가 판정한다」고 선언할 "
+        "dispatch 자리가 없다 — Stop 이벤트가 훅을 직접 실행하지, markdown "
+        "이 subagent 로 dispatch 하는 형태가 아니다.",
 }
 
 

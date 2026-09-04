@@ -39,8 +39,6 @@ SCAN="$(cat "$TMPD/scan.txt")"
 note "$SCAN"
 
 n_union="$(printf '%s\n' "$SCAN"  | sed -n 's/^union=//p')"
-n_import="$(printf '%s\n' "$SCAN" | sed -n 's/^import=//p')"
-n_anchor="$(printf '%s\n' "$SCAN" | sed -n 's/^anchor=//p')"
 
 # 0 은 통과가 아니라 실패다 — 도출이 깨지면 이 락 전체가 vacuous 해진다.
 if [ "${n_union:-0}" -gt 0 ] 2>/dev/null; then
@@ -48,7 +46,52 @@ if [ "${n_union:-0}" -gt 0 ] 2>/dev/null; then
 else
   no "㉮ 도출이 0 이다 — glob 이나 앵커 스캔이 깨졌다. 이 락의 모든 단언이 공허하다"
 fi
-assert_eq "$n_import" "$n_anchor" "㉮ 의 두 경로(import·앵커)가 같은 수를 낸다 — 갈리면 회귀 신호다"
+# 개수만 비교하면 대리지표다 — 한 파일이 import 에서 빠지고 «무관한» 다른
+# 파일이 anchor 에 들어오면 개수는 같아 그대로 통과한다(이 브랜치가 계속
+# 잡아낸 결함 모양). 집합으로 비교한다. `_missing_from A B` = A 의 원소 중
+# B 에 없는 것들, 줄 단위(공백 항목은 버린다).
+_missing_from() {
+  comm -23 <(printf '%s\n' "$1" | sed '/^$/d' | sort -u) \
+           <(printf '%s\n' "$2" | sed '/^$/d' | sort -u)
+}
+
+IMPORT_LIST="$(printf '%s\n' "$SCAN" | sed -n 's/^  IMPORT //p')"
+ANCHOR_LIST="$(printf '%s\n' "$SCAN" | sed -n 's/^  ANCHOR //p')"
+TERMINAL_LIST="$(printf '%s\n' "$SCAN" | sed -n 's/^  TERMINAL //p')"
+
+# 단언 1 — ANCHOR ⊆ IMPORT, 예외 없음. dispatch 자리가 「이 파일이
+# 회계한다」고 consumer= 로 선언했는데 그 파일이 원장을 import 조차 안 하면
+# 그건 거짓 선언이다.
+anchor_orphans="$(_missing_from "$ANCHOR_LIST" "$IMPORT_LIST")"
+if [ -z "$anchor_orphans" ]; then
+  ok "ANCHOR ⊆ IMPORT — consumer= 로 불린 파일은 전부 실제로 원장을 import 한다"
+else
+  no "ANCHOR ⊆ IMPORT 위반 — consumer= 로 불렸으나 import 하지 않는(거짓 선언) 경로가 있다"
+  printf '%s\n' "$anchor_orphans" | while IFS= read -r l; do
+    note "      거짓 선언: $l"
+  done
+fi
+
+# 단언 2 — (IMPORT \ ANCHOR) ⊆ TERMINAL_CONSUMERS. import 하는데 앵커가
+# 없는 파일은 전부 check_wiring.TERMINAL_CONSUMERS 에 사유와 함께 등재돼
+# 있어야 한다 — 등재되지 않은 것은 「왜 앵커가 없는지 아무도 설명하지
+# 않은 소비자」다.
+import_minus_anchor="$(_missing_from "$IMPORT_LIST" "$ANCHOR_LIST")"
+unlisted_terminal="$(_missing_from "$import_minus_anchor" "$TERMINAL_LIST")"
+if [ -z "$unlisted_terminal" ]; then
+  ok "(IMPORT \\ ANCHOR) ⊆ TERMINAL_CONSUMERS — 앵커 없는 import 전부가 종단 소비자로 등재돼 있다"
+else
+  no "(IMPORT \\ ANCHOR) ⊆ TERMINAL_CONSUMERS 위반 — 앵커도 없고 종단 소비자로도 등재 안 된 경로가 있다"
+  printf '%s\n' "$unlisted_terminal" | while IFS= read -r l; do
+    note "      미등재: $l"
+  done
+fi
+
+note "── TERMINAL_CONSUMERS — 각 항목이 사유를 갖는다"
+term_uncited="$(printf '%s\n' "$SCAN" | sed -n 's/^terminal_uncited=//p')"
+term_n="$(printf '%s\n' "$SCAN" | sed -n 's/^terminal_total=//p')"
+assert_eq "$term_uncited" "0" "사유 없는 TERMINAL_CONSUMERS 항목 0 (사유 없는 등재는 그냥 구멍이다)"
+note "      TERMINAL_CONSUMERS 크기: $term_n"
 
 note "── 배선 — 미배선 자리 0"
 unwired="$(printf '%s\n' "$SCAN" | sed -n 's/^unwired=//p')"

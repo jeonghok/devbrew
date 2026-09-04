@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.51.1] — 2026-09-04
+
+### Fixed
+- **v0.51.0 Known gaps 둘 중 하나 — `:533` 면제 사유가 범주 착오였다.** 최초 사유는 "`systemMessage`는 모델 도달 카나리 0/14라 채널 효과가 의심된다"였다 — 그러나 `systemMessage`는 애초에 **사람의 터미널** 채널이지 모델 컨텍스트 채널이 아니다(CLAUDE.md: "미판정 항목의 방향은 다음 소비자가 정한다: 기계면 제외, 사람이면 라벨을 붙여 보여준다"). T5-1·T5-2가 채널을 `reason`으로 정한 이유는 그 두 자리의 소비자가 **모델**(다음 턴 dispatch 판단)이었기 때문이고, `:533`의 소비자는 **사람**(세션을 보는 사람에게 "자동 검증을 안 하는 문서가 있다"고 알리는 것)이다 — 모델 미도달은 이 채널의 설계이지 결함이 아니다. `tools/adjudication/check_wiring.py`의 `EXEMPT[:533]` 사유를 다시 썼다. **면제 자체(C6⑴)와 "최종 리뷰 재검토" 표시는 그대로 유지** — 이 스킵이 규칙(상한값)이 정한 배제라는 점에서 `suppressed()` 재분류 후보라는 열린 질문은 남아 있다.
+- **v0.51.0 Known gaps 둘 중 다른 하나 — import·앵커 대칭 락을 개수 비교에서 집합 비교로 강화.** `shared/tests/test_adjudication_wiring.sh`의 `assert_eq "$n_import" "$n_anchor"`(개수만 비교)는 대리지표였다 — 한 파일이 import에서 빠지고 무관한 다른 파일이 anchor에 들어와도 개수가 같으면 그대로 통과한다. 두 단언으로 교체: **① `ANCHOR ⊆ IMPORT` (예외 없음)** — dispatch 자리가 `consumer=`로 선언한 파일이 실제로 원장을 import하지 않으면 거짓 선언이다. **② `(IMPORT \ ANCHOR) ⊆ TERMINAL_CONSUMERS`** — 앵커 없이 import만 하는 파일은 새 상수 `tools/adjudication/check_wiring.py::TERMINAL_CONSUMERS`(`EXEMPT`와 같은 규율: 사유 없는 항목은 그 자체로 RED)에 "왜 dispatch 앵커를 가질 수 없는가"를 사유와 함께 등재해야 한다. `review-dispatch.py`를 등재 — 종단(terminal) 결정자라 이름 붙일 dispatch 자리가 원리적으로 없다(subagent findings를 판정하는 소비자가 아니라 자기 자신의 `decision:"block"`을 직접 정한다). `shared/tests/fixtures/adjudication/run_wiring_scan.py`가 `IMPORT`/`ANCHOR`/`TERMINAL` 세 목록(집합)과 `terminal_total`/`terminal_uncited`를 새로 낸다.
+
 ## [0.51.0] — 2026-09-04
 
 ### Added
