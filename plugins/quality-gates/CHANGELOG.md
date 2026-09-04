@@ -3,6 +3,60 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.6.5] — 2026-09-05
+
+### Fixed
+- **Task 15c (R1, Critical) — 이 브랜치의 L3 슬롯 재태깅(v6.6.0)이
+  `test_skill_orchestration_behavior.sh`(:270)의 R3(runtime-verifier) dispatch
+  `project_dir` 회귀 감시를 어둡게 했다.** 옛 패턴 `project_dir:[[:space:]]*
+  \?"\$runtime_project_dir` 은 `references/runtime-gate.md:722` 가
+  `project_dir: <project_dir>${RUNTIME_PROJECT_DIR}</project_dir>` 로 바뀐
+  뒤에도 그대로 남아 있어 0건 매칭·FAIL 이었다(HEAD 실패 3건 — 선재 RED
+  둘은 무관, iter cap·R1b→R8). 지키려는 성질(그 dispatch 가 `sandbox_dir`
+  하드코딩이 아니라 `runtime_project_dir` 값을 쓴다)은 안 깨졌으므로 새
+  표기의 **정확 전체 리터럴**(`grep -qF`)로 패턴만 갱신했다 — v6.6.2 가
+  `artifact_path` 락에 쓴 것과 같은 수리 형태. 양성 대조: 그 자리를
+  `<project_dir>${SANDBOX_DIR}</project_dir>` 로 바꾸면 RED(3건), 원복하면
+  다시 2건(선재 RED 만).
+- **Task 15c (R2, Important) — 위 락을 가진 `test_skill_orchestration_
+  behavior.sh` 에 `# guards:` 선언이 아예 없었다.** 그래서 SKILL.md·
+  runtime-gate.md 를 편집해도 이 락이 `compute-test-scope-candidates.sh` 의
+  후보에 안 들었다 — R1 회귀가 이 브랜치 내내 안 보인 이유. 이 파일이
+  실제로 여는 다섯 자리(quality-pipeline 외 모든 `skills/*/SKILL.md`,
+  `references/runtime-gate.md`, `.claude-plugin/plugin.json`,
+  `agents/security-reviewer.md`·`agents/adversarial.md`)에서 도출해
+  선언했다. 프로덕션 매처(`read -r -a` + 따옴표 `case`)를 직접 돌려 다섯
+  글롭이 의도한 파일에 정확히 매칭함을 확인하고, `runtime-gate.md` 를
+  건드리는 실제 diff 로 `compute-test-scope-candidates.sh` 가 이 락을
+  후보로 내는 것까지 end-to-end 로 확인했다.
+  `test_guards_coverage_bidirectional.sh` 는 93/93 GREEN 유지(이 파일은
+  `--emit-scanned` 미지원이라 방향 A/B 대상 밖, "미지원" 으로만 집계).
+- **Task 15c (R3, Important) — `synthesize_artifact_findings.py` 의 `key`
+  단계(:311-319, stderr 처분 두 줄)가 방금 고친 Critical(R1)과 같은
+  부류(두 렌더 분기 중 한쪽만 값으로 잠김)를, 다른 파일에서 반복했다.**
+  `test_synthesize_artifact_findings.sh` 는 `# guards:` 선언이 전혀 없었고
+  (선언 부재는 test_synthesize_disposition.sh 의 F3 과 같은 결함이 이
+  네 번째 소비자에도 있었다는 뜻), 「처분 회계 (T1-B)」절은 `--phase synth`
+  의 YAML 원장만 재고 `--phase key` 의 stderr 렌더는 한 번도 안 쟀다.
+  `# guards:` 선언(F3/m1 과 같은 다섯 경로, `--emit-scanned` 도 구현)을
+  더하고, 「처분 회계 (T1-C, key 단계)」절을 신설 — 실패 소스(findings
+  문서 아님) 1건 + 파손 항목(non-dict) 1건을 넣어 미판정(key 단계엔
+  「판정자 부재」 hold 가 원리적으로 없어 항상 0) · 배관 손실(항목 파손
+  1 + source_failed 1 = 2) · 차단(예) 을 값으로 못박았다. 양성 대조: :318의
+  stderr 기록 루프를 지우면 신설 세 단언 전부 RED(36→33 GREEN, 3 Fail),
+  원복 후 36/36 GREEN.
+- **Task 15c (R4, Minor) — CHANGELOG `[6.6.4]` 의 F4 항목(:49-56)이 파일만
+  지목하고 F4 자신이 무엇을 고쳤는지는 적지 않았다(실체는 `run_slots.py:
+  32-36` 소스 주석에만 있었다).** 형제 항목 F1·F2·F6(spec-distill
+  CHANGELOG) 처럼 결함을 서술하는 문장을 그 항목 안에 보탰다 — 기존
+  절은 그대로 두고 제자리 교체하지 않았다.
+- **Task 15c (R5, Minor) — `test_synthesize_disposition.sh:20-24` 근처의
+  "선언 ⊇ 실제는 무해하다"는 서술이 이 리포의 무조건 규약처럼 읽혔다.**
+  `test_guards_coverage_bidirectional.sh` 의 방향 B 는 스캔 결과를 하나도
+  안 덮는 글롭을 명시적으로 FAIL 시키므로, 그 서술대로면 방향 B 를 깨는
+  확장까지 허가하는 셈이 된다. 지금 그 글롭이 무해한 진짜 이유(quality-gates
+  쪽 사본에도 걸려 최소 1건은 맞기 때문)로 문장을 고쳤다 — 코드 변경 없음.
+
 ## [6.6.4] — 2026-09-05
 
 ### Fixed
@@ -53,6 +107,17 @@
   일관성을 맞춰 여기 기록한다. I1(수정 라운드 2, 상세는 spec-distill
   CHANGELOG)이 이 부류를 마저 닫으면서 `run_slots.py` 자신도
   `test_agent_input_slots.sh` 의 `# guards:`/`--emit-scanned` 에 편입했다.
+  **F4 자신이 고친 결함(R4, adjudication-topology Task 15c) — 이 파일만
+  지목하고 무엇을 고쳤는지는 여태 어느 CHANGELOG 에도 없었다, 실체는
+  소스 주석(`run_slots.py:32-36`)에만 있었다.** `check_slots.check()` 는
+  `no_declaration` 위반마다 이미 agent 이름(`info["path"]`)을 튜플에 실어
+  냈는데(`tools/adjudication/check_slots.py:142`), `run_slots.py` 의 출력
+  루프가 그 축만 걸러내 `no_declaration=%d` 로 **개수만** 올리고 어느
+  agent 인지는 아무 데도 안 남겼다 — `undeclared`/`undelivered` 등 다른
+  축은 전부 이름을 대는데 이 축만 침묵했다. 정보(`info["path"]`)는 이미
+  있었고 흘리는 쪽은 print 루프였다 — 그 필터를 제거해 `no_declaration`
+  도 다른 축과 같은 `PROBLEM <kind> <key> @ <path> <detail>` 형식으로
+  agent 이름을 대게 했다.
 
 ## [6.6.3] — 2026-09-04
 

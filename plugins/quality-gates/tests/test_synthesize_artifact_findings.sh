@@ -1,6 +1,28 @@
 #!/usr/bin/env bash
+# guards: plugins/quality-gates/scripts/synthesize_artifact_findings.py shared/adjudication/adjudication.py shared/adjudication/render_disposition.py plugins/*/scripts/adjudication.py plugins/*/scripts/render_disposition.py
 # T5/AC6/AC16/AC20 — artifact synthesizer: key(dedup) + synth(verdict/kept/converge/degrade).
+#
+# R2/R3 (adjudication-topology Task 15c) — 이 파일은 `# guards:` 선언이 전혀 없었다.
+# `synthesize_artifact_findings.py` 는 `from adjudication import Ledger` ·
+# `from render_disposition import disposition_lines, disposition_report` 로
+# 실제 회계·렌더를 수행하고(아래 T1-B·T1-C 가 그 렌더의 «값»을 직접 검사한다) —
+# `sys.path[0]` 이 스크립트 자신의 디렉터리라, 파이썬이 실제로 여는 sibling 은
+# `plugins/quality-gates/scripts/` 안의 심볼릭 링크 둘뿐이다(quality-gates 에만
+# 존재 — spec-distill 쪽에는 이 스크립트의 사본이 없다). `plugins/*/scripts/…`
+# 글롭은 test_synthesize_disposition.sh(F3/m1) 와 같은 이유로 fail-safe 하게 넓힌다
+# (선언 ⊇ 실제는 무해) — `--emit-scanned` 는 반대로 실제로 여는 다섯 경로만 낸다.
 set -u
+
+if [ "${1:-}" = "--emit-scanned" ]; then
+  cat <<'SCANNED'
+plugins/quality-gates/scripts/synthesize_artifact_findings.py
+shared/adjudication/adjudication.py
+shared/adjudication/render_disposition.py
+plugins/quality-gates/scripts/adjudication.py
+plugins/quality-gates/scripts/render_disposition.py
+SCANNED
+  exit 0
+fi
 S="plugins/quality-gates/scripts/synthesize_artifact_findings.py"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 tmp="$(mktemp -d)"
@@ -337,6 +359,35 @@ assert_grep "$OUT" 'rejected: *[1-9]'  "기각이 원장에 실린다"
 assert_grep "$OUT" 'held: *[1-9]'      "판정자 부재가 원장에 실린다"
 assert_grep "$OUT" 'absorbed: *[1-9]'  "kept_keys 중복 흡수가 세어진다"
 assert_grep "$OUT" 'sources_failed: *[1-9]' "입력 실패가 원장에 실린다"
+
+note "── 처분 회계 (T1-C, key 단계)"
+# R3 (adjudication-topology Task 15c) — 위 T1-B 는 `--phase synth` 의 원장(YAML
+# stdout, disposition_report())만 값으로 잰다. `main()` 의 `key` 분기(:299-317)가
+# `disposition_lines()` 로 stderr 에 내는 처분 두 줄(**처분:**/**배관 손실:**)은
+# 이 파일 어디서도 검사되지 않았다 — 두 렌더 분기 중 한쪽만 잠겨 있던 Critical
+# (synth 의 :482 clean 분기)과 같은 부류, `key`/`synth` 축으로 다른 자리다.
+# 실패 소스(findings 문서 아님 — codex_failed 뿐인 dict) 하나 + 파손 항목
+# (findings 리스트 안의 non-dict 스칼라) 하나를 넣어 :113 의 hold("항목 파손: …")
+# 와 :107 의 source_failed 를 함께 태운다. key 단계엔 "판정자 부재" hold 가
+# 원리적으로 없으므로(그 축은 synth 의 verdict 적용 몫) 미판정은 항상 0 —
+# 이것도 값으로 못박아, 두 렌더 분기가 서로 다른 신뢰 축을 잰다는 것을 드러낸다.
+cat > "$tmp/keybad_source.yaml" <<'YAML'
+codex_failed: true
+YAML
+cat > "$tmp/keybad_entry.yaml" <<'YAML'
+findings:
+  - {agent: critic, category: logic, target_anchor: "#k", severity: CRITICAL, summary: kept}
+  - "malformed scalar entry, not a mapping"
+YAML
+KEY_ERR="$(PYTHONDONTWRITEBYTECODE=1 python3 "$S" --phase key \
+        --findings "$tmp/keybad_source.yaml" --findings "$tmp/keybad_entry.yaml" \
+        2>&1 >/dev/null)"
+assert_grep "$KEY_ERR" '\*\*처분:\*\*.*미판정 0' \
+  "key 단계 처분줄 — 미판정 0(판정자 부재 클래스는 key 단계에 없다)"
+assert_grep "$KEY_ERR" '\*\*배관 손실:\*\* 2 ' \
+  "key 단계 배관줄 — 값 2(항목 파손 1 + source_failed 1)"
+assert_grep "$KEY_ERR" '차단: 예' \
+  "key 단계 배관줄 — held 가 비지 않았으니 degraded(차단: 예)"
 
 rm -rf "$tmp"
 finish

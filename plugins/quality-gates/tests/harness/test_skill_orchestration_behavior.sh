@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
+# guards: plugins/quality-gates/skills/*/SKILL.md plugins/quality-gates/skills/quality-pipeline/references/runtime-gate.md plugins/quality-gates/.claude-plugin/plugin.json plugins/quality-gates/agents/security-reviewer.md plugins/quality-gates/agents/adversarial.md
 # test_skill_orchestration_behavior.sh — protocol-shape test for SKILL.md.
+#
+# 위 `# guards:` 는 이 파일이 실제로 여는 것에서 도출했다(R2, adjudication-topology
+# Task 15c) — quality-pipeline/SKILL.md 는 `plugins/quality-gates/skills/*/SKILL.md`
+# 로 잡히고(case 에서 `*` 는 `/` 를 넘으므로 다른 skill 의 SKILL.md 도 함께 잡힌다 —
+# :193-226 의 major-버전 대조가 그 전량을 읽는다), references/runtime-gate.md 는
+# reconstruct-skill.sh(:27) 가 SKILL.md 포인터 자리에 되접어 넣는 그 파일,
+# plugin.json 은 :193 의 major 판독 대상, security-reviewer.md·adversarial.md 는
+# :352-360 의 verifier-writable 페르소나 검사 대상이다. 이 다섯 밖의 파일은 이
+# 스크립트가 열지 않는다(전수 확인: `grep -n '"\$[A-Za-z_]*\(_DIR\|_MD\|_JSON\|_ROOT\)"'`).
 #
 # Asserts the prompt-defined orchestration protocol exists in SKILL.md with
 # expected ordering, proximity, and section membership. Does NOT execute
@@ -267,7 +277,13 @@ assert_line "R7 never-PASS for indeterminate guard"   "$(first_line_after 'indet
 assert_line "runtime_project_dir variable used"      "$(first_line 'runtime_project_dir')"
 assert_line "fallback caps at SKIP_WITH_EVIDENCE"    "$(first_line 'SKIP_WITH_EVIDENCE.*never PASS|never PASS.*SKIP_WITH_EVIDENCE')"
 # I-B: the R3 dispatch project_dir must NOT hardcode sandbox_dir (use runtime_project_dir).
-if grep -qE 'project_dir:[[:space:]]*\\?"\$runtime_project_dir' "$SKILL_MD"; then
+# v6.6.0 (L3 slot tagging) retagged the dispatch prompt from `project_dir: "$runtime_project_dir"`
+# to the `<tag>${VAR}</tag>` slot idiom — `project_dir: <project_dir>${RUNTIME_PROJECT_DIR}</project_dir>`.
+# The property this guards (key `project_dir:` bound, on the same literal, to the
+# runtime_project_dir value — never a hardcoded sandbox_dir) is unchanged; only the
+# notation is. Match the new notation's exact full literal (fixed-string), same
+# specificity as before: key name + value bound together, not "value appears somewhere".
+if grep -qF 'project_dir: <project_dir>${RUNTIME_PROJECT_DIR}</project_dir>' "$SKILL_MD"; then
   echo "PASS: R3 dispatch uses runtime_project_dir"
 else
   echo "FAIL: R3 dispatch does not use runtime_project_dir"

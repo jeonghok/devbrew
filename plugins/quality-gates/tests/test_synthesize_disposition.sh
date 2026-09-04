@@ -20,9 +20,14 @@ SCRIPT="$REPO_ROOT/plugins/quality-gates/scripts/synthesize_findings.py"
 
 # `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 이 락의
 # 코퍼스는 상수다(도출이 아니다). `# guards:` 는 `plugins/*/scripts/…` 글롭으로
-# spec-distill 쪽 심볼릭 링크 사본도 fail-safe 하게(선언 ⊇ 실제, 넓어도 무해)
-# 덮지만, `--emit-scanned` 는 다르다 — 그 값은 "선언 ⊇ 실제"의 **실제** 쪽이라
-# 넓히면 안 된다(수정 라운드 2, m1). `SCRIPT` 는 오직
+# spec-distill 쪽 심볼릭 링크 사본까지 덮는다 — 그러나 "선언 ⊇ 실제는 무해"가
+# 이 리포의 무조건 규약은 «아니다»(R5, adjudication-topology Task 15c 정정):
+# `test_guards_coverage_bidirectional.sh` 의 방향 B 는 스캔 결과를 하나도 안
+# 덮는 글롭을 명시적으로 FAIL 시킨다. 이 글롭이 지금 무해한 것은 quality-gates
+# 쪽 사본(스캔 목록 안)에도 걸려 최소 1건을 맞기 때문이지, 초과분 자체가
+# 면제돼서가 아니다 — 스캔 목록 밖만 가리키는 글롭을 추가하면 방향 B 가 FAIL
+# 한다. `--emit-scanned` 는 그와 별개다 — 그 값은 "선언 ⊇ 실제"의 **실제**
+# 쪽이라 넓히면 안 된다(수정 라운드 2, m1). `SCRIPT` 는 오직
 # `plugins/quality-gates/scripts/synthesize_findings.py` 하나이고, 파이썬이
 # import 로 실제로 여는 sibling 은 **그 디렉터리 안**의 심볼릭 링크뿐이다
 # (`sys.path[0]` 는 스크립트 자신의 디렉터리) — `plugins/spec-distill/scripts/`
