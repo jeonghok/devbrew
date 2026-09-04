@@ -47,6 +47,8 @@ from hook_common import _yaml_scalar  # noqa: E402
 # §9.1 잡종(데이터는 fail-open, verdict는 fail-closed)의 회계만 한다 — escalates(:274)·
 # codex_degraded(:302)가 실제로 평가하는 값은 이 도입으로 바뀌지 않는다(부가, 배선 아님).
 from adjudication import Ledger  # noqa: E402
+# 처분 두 줄의 공유 렌더 (Task 10 — shared/adjudication/render_disposition.py 심볼릭 링크).
+from render_disposition import disposition_report  # noqa: E402
 
 # 줄 앵커 + 인정 토큰. `**Status:**` 와 `## Status:` 둘 다 받는다(round-4 실측 결함).
 # 산문 속 "Status:"는 잡지 않는다 — 줄 시작 + 열거된 verdict 토큰이 필수다.
@@ -224,7 +226,8 @@ def main() -> int:
 
     advisory: list[str] = []
     # 이 라운드의 처분 회계 — §9.1 잡종(데이터 fail-open + verdict fail-closed)의
-    # 집계. 소비는 파일 끝 `advisory.extend(L.reasons())` 한 곳뿐이다.
+    # 집계. 산문 사유는 `advisory.extend(L.reasons())`(:334)로, 카운트는 파일
+    # 끝 `adjudication_*` stdout 키(Task 10 수정 라운드 1)로 각각 소비된다.
     L = Ledger(items="open")
 
     # --- critic 측 ---------------------------------------------------------
@@ -345,6 +348,23 @@ def main() -> int:
         "fidelity_findings": findings,
         "advisory": advisory,
     }))
+
+    # 형제 merge_review.py 와 같은 자리·같은 접두(adjudication_*) — L2 가 요구하는
+    # 카운트 전부를 stdout 에 싣는다. 원장은 하나(:228)라 형제처럼 셋을 합칠 필요가
+    # 없다 — 그 하나의 report()/held_by_class() 를 그대로 낸다.
+    report = L.report()
+    held_classes = L.held_by_class()
+    print(f"adjudication_held: {_yaml_scalar(report['counts']['held'])}")
+    print(f"adjudication_unknown: {_yaml_scalar(','.join(report['unknown_counts']))}")
+    # 카운트 이름을 여기 다시 적지 않는다: 공유 헬퍼가 한 벌 펴고 이 자리는 그것을
+    # 돈다. 손으로 적으면 어휘가 늘어도 이 소비자가 조용하다.
+    for _k, _v in disposition_report(report, held_classes).items():
+        if _k in ("reasons", "held_by_class"):
+            continue                      # 아래에서 따로 편다
+        print(f"adjudication_{_k}: {_yaml_scalar(_v)}")
+    print(f"adjudication_held_unadjudicated: {_yaml_scalar(held_classes['판정자 부재'])}")
+    print(f"adjudication_held_malformed: {_yaml_scalar(held_classes['항목 파손'])}")
+    print(f"adjudication_held_other: {_yaml_scalar(held_classes['기타'])}")
     return 0
 
 

@@ -40,6 +40,6 @@ assert_grep "$OUT" '기각 [1-9]'      "기각이 세어진다 (reject)"
 assert_grep "$OUT" '억제 [1-9]'      "억제가 세어진다 (suppressed — D4)"
 assert_grep "$OUT" '흡수 [1-9]'      "흡수가 세어진다 (absorbed — dedup)"
 assert_grep "$OUT" '미판정 [1-9]'    "판정자 부재가 세어진다 (hold)"
-assert_grep "$OUT" '배관 손실 [1-9]' "항목 파손 + 입력 실패가 배관 칸으로 간다"
+assert_grep "$OUT" '\*\*배관 손실:\*\* [1-9]' "항목 파손 + 입력 실패가 배관 칸으로 간다"
 
 finish

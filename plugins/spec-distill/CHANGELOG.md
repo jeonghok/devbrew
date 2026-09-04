@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.50.1] — 2026-09-04
+
+### Changed
+- **`merge_brief_review.py`가 형제 `merge_review.py`와 같은 모양으로 처분 회계를 stdout에 낸다(v0.50.0 Known gaps 해소, Task 10 수정 라운드 1).** 원장이 하나(`Ledger(items="open")`, `:228`)뿐이라 형제처럼 셋을 합칠 필요는 없다 — 그 하나의 `report()`/`held_by_class()`를 `disposition_report()`로 이름을 펴 `adjudication_held`/`adjudication_unknown`(기존 두 키) 뒤에 나머지 열한 개(`adjudication_accepted`/`rejected`/`absorbed`/`coerced`/`sources_failed`/`suppressed`/`unknown_counts`/`degraded`/`held_unadjudicated`/`held_malformed`/`held_other`)를 더한다. `reviewing-brief/SKILL.md:323`의 키 열거를 갱신 — 형제 `reviewing-spec/SKILL.md:116`만 갱신돼 있던 비대칭을 없앤다.
+- **락 우회가 아니라 락 갱신.** `test_merge_brief_adjudication.py::TestExternalKeysUnchanged::test_top_level_keys_are_exactly_the_declared_set`(2026-08-23, `7e6ad51`)이 top-level 키를 정확히 8개로 고정하던 것은 «신규 키 금지»가 아니라 «선언 없는 신규 키 금지»(신중함 게이트)였다 — `DECLARED_KEYS`에 새 키 13개를 리터럴로 추가하고 `assertEqual`은 그대로 유지해(부분집합 검사로 바꾸지 않음) 그 계약을 21개로 다시 선언했다. `test_garbled_differs_materially_from_control`(clean 라운드 `advisory == []` 고정)은 실측으로 **깨지지 않았다** — 새 키는 전부 top-level이지 `advisory` 항목이 아니고, `disposition_report()`가 내는 `reasons`/`held_by_class`는 루프가 건너뛴다. `test_merge_brief*.py` 40/40 GREEN(직접 확인).
+
 ## [0.50.0] — 2026-09-04
 
 ### Added

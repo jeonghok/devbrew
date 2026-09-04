@@ -3,6 +3,15 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.4.1] — 2026-09-04
+
+### Fixed
+- **`test_synthesize_disposition.sh`의 6번째 단언을 고쳤다(v6.4.0 Known gaps 해소, Task 10 수정 라운드 1).** 고칠 것은 렌더 서식이 아니라 단언이었다 — `line1`(`**처분:** 수용 N · 기각 N · …`)이 굵은 도입 라벨 + 맨 항목 구조이듯 `line2`도 같은 모양이라, "배관 손실"은 그 줄의 **도입 라벨**이지 맨 항목이 아니다. 단언을 `'배관 손실 [1-9]'`에서 `'\*\*배관 손실:\*\* [1-9]'`(라벨 전체를 앞뒤 굵음까지 고정)로 넓혔다 — 느슨한 부분 매치가 아니라 서식이 다시 바뀌면 알아채도록 라벨 전체를 못박았다. 계획 문서(`docs/superpowers/plans/2026-09-03-adjudication-topology.md:2183`)의 같은 줄도 같은 패턴으로 갱신 — 다음에 이 계획에서 브리프를 다시 뽑는 사람이 같은 함정에 빠지지 않도록. 6/6 GREEN 확인 후 `codex-blessed-red.txt`의 `test_synthesize_disposition.sh` 등재(사유 주석 포함)를 지웠다 — 양방향 래칫이 요구하는 그대로.
+- **`merge_brief_review.py`가 형제 `merge_review.py`와 같은 처분 회계를 stdout에 낸다(v6.4.0 Known gaps 해소).** `plugins/spec-distill/CHANGELOG.md` v0.50.1 참조.
+
+### Known gaps
+- **`test_guards_coverage_bidirectional.sh`가 새로 RED다 — 이 릴리스가 원인이 아니라 이 릴리스가 벗긴 pre-existing 결함이다.** `test_synthesize_disposition.sh`는 Task 8 원 커밋(`c3980fc`, 2026-09-04)부터 `--emit-scanned`를 구현한 적이 없다(직접 확인: `git show c3980fc:...test_synthesize_disposition.sh | grep emit-scanned` → 무출력). `test_codex_backward_compat.sh`의 "Running existing qg test suite..." 스텝이 이전에는 `test_synthesize_disposition.sh` 자신의 해시불일치를 먼저 보고했고, 그것이 GREEN이 된 지금은 그 뒤에 가려져 있던 `test_guards_coverage_bidirectional.sh`의 「미등재」실패가 처음 드러났다. `test_synthesize_disposition.sh`에 `--emit-scanned` 지원을 추가하는 것은 이 Task 의 범위 밖이라 고치지 않는다.
+
 ## [6.4.0] — 2026-09-04
 
 ### Added

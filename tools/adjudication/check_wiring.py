@@ -44,6 +44,17 @@ EXEMPT = {
         "\"reasons\" 는 이 loop 이전에 이미 advisory 채널로, \"held_by_class\" "
         "는 loop 직후 세 줄(held_unadjudicated/held_malformed/held_other)로 "
         "각각 실린다 — 버려지는 항목이 없다.",
+    # Task 10 수정 라운드 1 — merge_brief_review.py 가 형제 merge_review.py 와
+    # 같은 편평화 루프를 쓴다. 원장이 하나뿐이라 합산이 없다는 점만 다르고
+    # 제외 사유는 동일하다: "reasons" 는 이 loop 이전에 이미
+    # `advisory.extend(L.reasons())`(:334)로, "held_by_class" 는 loop 직후
+    # 세 줄로 각각 실린다 — 버려지는 항목이 없다.
+    ("plugins/spec-distill/scripts/merge_brief_review.py", 363):
+        "C6(1) — disposition_report().items() 를 도는 이 continue 는 "
+        "\"reasons\"·\"held_by_class\" 두 키를 이 loop 에서만 제외한다. "
+        "\"reasons\" 는 이 loop 이전에 이미 `advisory.extend(L.reasons())`(:334) "
+        "로, \"held_by_class\" 는 loop 직후 세 줄(held_unadjudicated/"
+        "held_malformed/held_other)로 각각 실린다 — 버려지는 항목이 없다.",
 }
 
 

@@ -21,12 +21,16 @@
 #    집행이 없던 kill switch를 실제로 dispatch 지점에 구현했기 때문이다. 등재를
 #    남겨두면 위 양방향 래칫이 `stale 등재`로 RED를 낸다(실측 확인).
 #
-# 2026-09-04 등재 (adjudication-topology PR2 Task 8 수정 라운드 1) —
-# test_synthesize_disposition.sh: Task 8 이 synthesize_findings.py 의 버리는
-# 자리를 원장(Ledger)에 배선했지만, 여섯 단언 중 다섯(수용·기각·억제·흡수·
-# 배관 손실)은 원장 카운트를 stdout 에 실어 보이는 render() 배선을 기다린다
-# (Task 10 의 몫 — T1-A 는 생산만, T1-B 가 소비). 그래서 이 테스트는 오늘
-# 설계상 RED(1/6 PASS)이고, 그 RED 는 검토를 마친 상태다. Task 10 이 render()
-# 를 배선하는 순간 이 테스트는 GREEN 이 되며, 그 순간 위 양방향 래칫이 이 줄을
-# `stale 등재`로 잡아 지우라고 요구한다 — Task 10 커밋에서 이 줄을 지울 것.
-test_synthesize_disposition.sh 7b0867e7f61d91bb36aa27897dc1efd774d2607808ccfaf80a58cc4abb68894e
+# test_synthesize_disposition.sh 판이 빠진 경위 (2026-09-04 등재 → 2026-09-04
+# 지움, adjudication-topology PR2 Task 8→10 수정 라운드 1, 위 사이클과 별개):
+# Task 8 이 원장 배선을 마친 뒤 여섯 단언 중 다섯이 render() 소비를 기다리는
+# 설계상 RED로 등재됐다. Task 10 이 render()를 배선했으나 마지막 한 단언
+# ("배관 손실 [1-9]")의 grep 패턴이 실제 렌더 서식("**배관 손실:** N" — 라벨과
+# 콜론+볼드가 숫자 앞에 온다)과 애초에 맞을 수 없었다(계획 문서
+# 2026-09-03-adjudication-topology.md 작성 단계부터의 불일치, distillation
+# 오탈자가 아님). 고칠 것은 렌더 서식이 아니라 단언이었다 — line1(`**처분:**
+# 수용 N · …`)과 대칭으로 line2 도 굵은 도입 라벨 + 맨 항목 구조이므로, 단언을
+# 라벨 전체(`**배관 손실:**`)까지 고정하도록 넓혔다(수정 라운드 1). 6/6
+# GREEN이 되어 등재를 지운다 — 위 양방향 래칫이 그것을 요구한다.
+#
+# 2026-09-04 현재 **등재 0건**이다.
