@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# guards: plugins/*/scripts/*.py plugins/*/hooks/*.py shared/adjudication/*.py tools/adjudication/check_consumed.py tools/adjudication/check_wiring.py
+# guards: plugins/*/scripts/*.py plugins/*/hooks/*.py shared/adjudication/*.py tools/adjudication/check_consumed.py tools/adjudication/check_wiring.py shared/tests/fixtures/adjudication/run_consumed.py
 #
 # 수정 라운드 1 (F6) — 판정기 자신을 declare 한다. `fixtures/adjudication/
 # run_consumed.py` 가 `from check_consumed import ...` 와 `from check_wiring
 # import derive_consumers` 둘 다 쓰므로(소비자 모집단을 배선 판정기에서
 # 빌린다) 이 락의 코퍼스는 둘이다 — import 로 도출했지 손으로 고르지 않았다.
+#
+# 수정 라운드 2 (I1) — `run_consumed.py` 자신(그 두 판정기를 «부르는» 러너)
+# 은 F6 이후에도 빠져 있었다. F4 의 실제 결함 자리(러너의 print 루프)와
+# 같은 종류 — 이 락이 유일한 소비자이므로 여기 편입한다.
 #
 # 원장이 «낸» 카운트를 소비자가 «읽는지» 검사한다.
 #
@@ -37,6 +41,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
     "$REPO_ROOT" --emit-scanned
   printf '%s\n' "tools/adjudication/check_consumed.py"
   printf '%s\n' "tools/adjudication/check_wiring.py"
+  printf '%s\n' "shared/tests/fixtures/adjudication/run_consumed.py"
   exit 0
 fi
 

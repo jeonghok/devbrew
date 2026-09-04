@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.52.4] — 2026-09-05
+
+### Fixed
+- **Task 15 수정 라운드 2 (I1, Important) — F6 이 닫았다고 주장한 부류가
+  판정기를 «부르는» 러너 자신에서 다시 열려 있었다.** F6 은
+  `tools/adjudication/check_*.py`(락이 import 하는 대상) 넷을 `# guards:`
+  에 편입했지만, F4 의 실제 결함 자리는 `check_slots.py` 가 아니라 그것을
+  «부르는» `shared/tests/fixtures/adjudication/run_slots.py` 의 print
+  루프였고 — 그 러너를 코퍼스로 갖는 락은 하나도 없었다. F1 이 새로 만든
+  `run_block_disposition_count.py` 도 같은 무방비 상태로 태어났다. F6 과
+  정확히 같은 도출(열거가 아니라 그 `.sh` 가 실제로 실행하는 러너 파일명을
+  찾아서)로 다섯 러너를 각자의 유일한 소비자 락에 편입했다:
+  `run_block_disposition_count.py` → `test_review_dispatch_disposition.sh`
+  (이 플러그인), `run_wiring_scan.py`/`run_wiring_probe.py` →
+  `test_adjudication_wiring.sh`, `run_consumed.py` →
+  `test_adjudication_consumed.sh`, `run_slots.py` →
+  `test_agent_input_slots.sh`, `run_names.py` → `test_dispatch_name_defined.sh`
+  (뒤 넷은 `shared/tests/`, 이 플러그인 버전과 무관하지만 같은 커밋이라
+  여기 함께 기록 — F4 도 같은 이유로 quality-gates CHANGELOG 에 소급
+  기록했다, m3). `--emit-scanned` 도 맞춰 갱신 —
+  `test_guards_coverage_bidirectional.sh` 92/92 GREEN 유지.
+- **Task 15 수정 라운드 2 (I2, Important) — `test_review_dispatch_disposition.sh`
+  의 T5-2(dispatch 강제) 값 검사가 후보 문서를 «하나만» 놓아 「0 vs 1」은
+  갈라도 「1 vs N」은 못 갈랐다.** 같은 파일 :148-150 의 형제 절(T5-1)이
+  이미 경고하는 off-by-one 함정 — 실패 문서가 하나면 "메시지 줄마다 부른다"
+  류 회귀가 안 보여 T5-1 은 그래서 실패 문서를 둘 쓰는데 T5-2 는 하나였다.
+  후보 문서를 둘로 늘리고 "후보 수와 무관하게 미판정은 정확히 1"(dispatch
+  는 여전히 한 턴에 하나만 고른다, A11)을 못박았다. 양성 대조: `L.hold()`
+  를 선택된 후보 하나가 아니라 «모든 후보»에 대해 부르도록 되돌리는
+  회귀를 주입하면(후보 1개였다면 이 값이 우연히 1 이라 안 보였을 시나리오)
+  이제 미판정=2 로 RED — 후보 1개 상태에서는 이 회귀가 구조적으로 안 보임을
+  먼저 확인한 뒤 후보 2개로 고쳐서 다시 걸었다. 원복 후 14/14 GREEN.
+
 ## [0.52.3] — 2026-09-04
 
 ### Fixed

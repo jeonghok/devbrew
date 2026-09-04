@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/*/scripts/*.py plugins/*/hooks/*.py tools/adjudication/check_wiring.py
+# guards: plugins/*/scripts/*.py plugins/*/hooks/*.py tools/adjudication/check_wiring.py shared/tests/fixtures/adjudication/run_wiring_scan.py shared/tests/fixtures/adjudication/run_wiring_probe.py
 #
 # 수정 라운드 1 (F6) — 판정기 자신(`tools/adjudication/check_wiring.py`)이
 # 이 락의 `# guards:` 에 없었다. 27개 선언 전수 확인 결과 `tools/adjudication/`
@@ -7,6 +7,13 @@
 # 선택되지 않는다는 뜻이다. 도출은 열거가 아니라 import: 이 락이 실행하는
 # `fixtures/adjudication/run_wiring_scan.py`·`run_wiring_probe.py` 둘 다
 # `from check_wiring import ...` 를 쓴다 — 그래서 이 판정기가 여기 산다.
+#
+# 수정 라운드 2 (I1) — F6 은 `check_wiring.py`(락이 import 하는 대상) 만 덮고
+# 그것을 «부르는» `run_wiring_scan.py`/`run_wiring_probe.py` 자신은 안
+# 덮었다. F4 의 실제 결함이 `check_slots.py` 가 아니라 `run_slots.py` 의
+# print 루프에 있었던 것과 같은 자리 — 러너 스크립트 자체가 무방비였다.
+# 이 두 파일을 그 러너를 실제로 실행하는 이 락 하나에 편입한다(다른 락은
+# 이 러너를 안 부르므로 여기가 유일한 소비자).
 #
 # 버리는 분기가 자기 처분을 부르는지 검사한다.
 #
@@ -42,6 +49,8 @@ SCAN="$(cat "$TMPD/scan.txt")"
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "$SCAN" | sed -n 's/^  CONSUMER //p'
   printf '%s\n' "tools/adjudication/check_wiring.py"
+  printf '%s\n' "shared/tests/fixtures/adjudication/run_wiring_scan.py"
+  printf '%s\n' "shared/tests/fixtures/adjudication/run_wiring_probe.py"
   exit 0
 fi
 

@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# guards: plugins/*/skills/**/*.md plugins/*/commands/*.md plugins/*/agents/*.md plugins/*/README.md plugins/*/*.py tools/adjudication/check_names.py
+# guards: plugins/*/skills/**/*.md plugins/*/commands/*.md plugins/*/agents/*.md plugins/*/README.md plugins/*/*.py tools/adjudication/check_names.py shared/tests/fixtures/adjudication/run_names.py
 #
 # 수정 라운드 1 (F6) — 판정기 자신을 declare 한다. `fixtures/adjudication/
 # run_names.py` 가 `import check_names` 하므로 이 락이 그 코퍼스다(도출은
 # import 로, 27개 `# guards:` 선언 전수를 손으로 세지 않는다).
+#
+# 수정 라운드 2 (I1) — `run_names.py` 자신(러너)도 편입한다. F4 의 실제
+# 결함이 check_*.py 가 아니라 그것을 부르는 러너의 print 루프에 있었던
+# 것과 같은 자리라, F6 이 check_names.py 만 덮고 이 러너를 무방비로 남겼다.
 #
 # `commands/*.md` — 단일 `*` 다(`**` 아님). 이 락이 실제로 읽는 명령 파일은
 # 전부 flat(`commands/<name>.md`) 인데, `# guards:` 를 소비하는 bash `case`
@@ -45,6 +49,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_names.py" \
     "$REPO_ROOT" --emit-scanned
   printf '%s\n' "tools/adjudication/check_names.py"
+  printf '%s\n' "shared/tests/fixtures/adjudication/run_names.py"
   exit 0
 fi
 

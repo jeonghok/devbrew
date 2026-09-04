@@ -79,6 +79,22 @@
   않았다.
 - **락을 고치지 않았다** — 브리프 지시대로 원인만 특정해 보고한다.
 
+**수정 라운드 2 정정 (C1) — 위 "시도했으면 같은 결과였을 것이다"는 예측이지
+측정이 아니었다, 그리고 그 예측의 실제 뜻은 "볼 것 없다"가 아니라 "여기가
+열려 있다"였다.** 코디네이터가 직접 재현: `render()` 에는 `disposition_lines()`
+호출이 정확히 둘뿐이다(:482 findings 가 빈 clean 분기, :532 kept>0 분기 —
+`main()` 은 `render()` 를 한 번만 부르므로 제3의 자리는 없다, 도출로 확인).
+`test_synthesize_disposition.sh` 의 여섯 assert_grep 은 findings.yaml 이
+실채택 항목을 남겨 **:532 분기만** 태웠다 — :482(clean) 분기에서 `plumb_line`
+을 지우면 이 파일을 코퍼스로 갖는 락 8개 전부 GREEN, 같은 제거를 :532 에서
+하면 5/6 RED(양성 대조). 즉 두 렌더 분기 중 하나만 잠겨 있었고, 잠기지 않은
+쪽이 하필 "배관 손실이 사라져도 화면은 clean 으로 읽히는" 가장 위험한
+자리였다. `test_synthesize_disposition.sh` 에 :482 분기 전용 fixture(malformed
++ 미판정 + 억제 + 기각을 함께 내는 kept=0 시나리오)와 값 검사 넷을 추가해
+닫았다 — 두 분기 각각을 지우는 양성 대조로 확인(각각 RED, 원복 후 GREEN).
+상세: `plugins/quality-gates/tests/test_synthesize_disposition.sh` 의
+"clean(kept=0) 렌더 분기" 절.
+
 ### μ11 — 가장 중대한 발견: `review-dispatch.py` 의 mandate-block 경로에서 처분 호출을 지워도 어떤 락도 못 잡는다
 
 `L.hold(str(cand.path), ...)` (T5-2, dispatch 강제 block 직전 처분 호출)를

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/hooks/review-dispatch.py tools/adjudication/check_wiring.py
+# guards: plugins/spec-distill/hooks/review-dispatch.py tools/adjudication/check_wiring.py shared/tests/fixtures/adjudication/run_block_disposition_count.py
 #
 # 훅의 차단 결정 두 자리가 자기 처분을 원장 어휘로 밝히는지 검사한다.
 #
@@ -32,6 +32,16 @@
 #      "미판정 0" 인 채로 라벨은 그대로 나와 통과했다. 아래에 「미판정 1」
 #      값 자체를 재는 절을 추가한다(T5-1 이 이미 하던 배관 손실 값 검사와
 #      같은 방식).
+#
+# Task 15 수정 라운드 2 (I1·I2):
+#  I1) F6 은 `check_wiring.py`(F1 의 카운터가 import 하는 대상) 만 코퍼스에
+#      넣고, «부르는» `run_block_disposition_count.py` 자신은 무방비로
+#      남겼다 — F4 의 실제 결함(러너의 print 루프)과 같은 자리를 이 라운드가
+#      새로 하나 더 열었다는 뜻이다. 그 러너를 이 락(유일한 소비자)에 편입.
+#  I2) F2 의 「미판정 1」 값 검사가 후보 문서를 «하나만» 놓아 「1 vs N」을
+#      못 갈랐다(:148-150 의 형제 절이 경고하는 바로 그 off-by-one 함정을
+#      T5-2 는 피하지 못했다). 후보를 둘 이상 두고 그래도 미판정이 정확히
+#      1(dispatch 는 여전히 하나만 고른다)임을 잰다.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/../../../shared/tests/assert.sh"
@@ -45,6 +55,7 @@ COUNTER="$REPO_ROOT/shared/tests/fixtures/adjudication/run_block_disposition_cou
 if [ "${1:-}" = "--emit-scanned" ]; then
   printf '%s\n' "${HOOK#"$REPO_ROOT"/}"
   PYTHONDONTWRITEBYTECODE=1 python3 "$COUNTER" "$REPO_ROOT" --emit-scanned
+  printf '%s\n' "shared/tests/fixtures/adjudication/run_block_disposition_count.py"
   exit 0
 fi
 
@@ -86,15 +97,22 @@ assert_grep "$BODY" 'disposition_lines\(' \
   "훅이 disposition_lines() 를 호출 형태로 쓴다"
 
 # ── 실행 절 — 진짜 decision:"block" 을 발생시켜 JSON 출력을 확인한다 ──────
-# T5-2(dispatch 강제) 경로: 정상 문서 하나를 발견시키면 이 경로를 탄다.
+# T5-2(dispatch 강제) 경로: 후보 문서를 «둘» 놓는다(수정 라운드 2, I2).
+# 하나만 놓으면 「dispatch 가 후보마다 hold() 를 부른다」류 회귀에서도 값이
+# 우연히 1 이라 이 절이 못 가른다 — :148-150 의 형제 절이 이미 경고하는
+# 그 off-by-one 함정(T5-1 은 그래서 실패 문서를 둘 쓴다)을 T5-2 는 피하지
+# 못하고 있었다. dispatch 는 여전히 한 턴에 하나만 고르므로(A11) 후보가
+# 둘이어도 기대값은 1 그대로다 — 「후보 수와 무관하게 정확히 1」을 잰다.
 WORK=$(mktemp -d -t revdispdisp-XXXXXX) || exit 1
 WORK=$(cd "$WORK" && pwd -P) || exit 1
 trap 'rm -rf "$WORK"' EXIT
 ( cd "$WORK" && git init -q && git config user.email t@t.t && git config user.name t \
   && git commit -q --allow-empty -m seed ) >/dev/null
 REL="docs/superpowers/specs/2026-05-17-disp-design.md"
+REL2="docs/superpowers/specs/2026-05-17-disp-design-b.md"
 mkdir -p "$WORK/$(dirname "$REL")"
 cp "$REPO_ROOT/plugins/spec-distill/tests/fixtures/2026-05-17-test-design.md" "$WORK/$REL"
+cp "$REPO_ROOT/plugins/spec-distill/tests/fixtures/2026-05-17-test-design.md" "$WORK/$REL2"
 mkdir -p "$WORK/.claude/spec-distill/disp-probe-sid"
 cat > "$WORK/.claude/spec-distill/disp-probe-sid/state.local.md" <<'EOF'
 ---

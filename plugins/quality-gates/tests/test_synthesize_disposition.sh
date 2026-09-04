@@ -19,20 +19,21 @@ REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 SCRIPT="$REPO_ROOT/plugins/quality-gates/scripts/synthesize_findings.py"
 
 # `--emit-scanned` — test_guards_coverage_bidirectional.sh 가 읽는다. 이 락의
-# 코퍼스는 상수다(도출이 아니다) — 위 `# guards:` 와 같은 일곱 경로를 그대로
-# 낸다. 실행 시 파이썬이 실제로 여는 파일은 심볼릭 링크 쪽(SCRIPT 와 같은
-# 디렉터리의 sibling import) 이지만, 내용이 갈리는 원본은 `shared/adjudication/`
-# 쪽이라 둘 다 낸다 — 어느 쪽이 바뀌어도 이 락의 여섯 assert_grep 값이
-# 달라질 수 있다는 것이 이 락이 실제로 의존하는 사실이다.
+# 코퍼스는 상수다(도출이 아니다). `# guards:` 는 `plugins/*/scripts/…` 글롭으로
+# spec-distill 쪽 심볼릭 링크 사본도 fail-safe 하게(선언 ⊇ 실제, 넓어도 무해)
+# 덮지만, `--emit-scanned` 는 다르다 — 그 값은 "선언 ⊇ 실제"의 **실제** 쪽이라
+# 넓히면 안 된다(수정 라운드 2, m1). `SCRIPT` 는 오직
+# `plugins/quality-gates/scripts/synthesize_findings.py` 하나이고, 파이썬이
+# import 로 실제로 여는 sibling 은 **그 디렉터리 안**의 심볼릭 링크뿐이다
+# (`sys.path[0]` 는 스크립트 자신의 디렉터리) — `plugins/spec-distill/scripts/`
+# 쪽 두 사본은 이 락이 실행하는 그 어떤 python3 호출도 열지 않는다. 다섯만 낸다.
 if [ "${1:-}" = "--emit-scanned" ]; then
   cat <<'SCANNED'
 plugins/quality-gates/scripts/synthesize_findings.py
 shared/adjudication/adjudication.py
 shared/adjudication/render_disposition.py
 plugins/quality-gates/scripts/adjudication.py
-plugins/spec-distill/scripts/adjudication.py
 plugins/quality-gates/scripts/render_disposition.py
-plugins/spec-distill/scripts/render_disposition.py
 SCANNED
   exit 0
 fi
@@ -70,5 +71,40 @@ assert_grep "$OUT" '억제 [1-9]'      "억제가 세어진다 (suppressed — D
 assert_grep "$OUT" '흡수 [1-9]'      "흡수가 세어진다 (absorbed — dedup)"
 assert_grep "$OUT" '미판정 [1-9]'    "판정자 부재가 세어진다 (hold)"
 assert_grep "$OUT" '\*\*배관 손실:\*\* [1-9]' "항목 파손 + 입력 실패가 배관 칸으로 간다"
+
+# ── clean(kept=0) 렌더 분기 — 수정 라운드 2 (C1) ──────────────────────────
+# `render()` 는 disposition_lines() 를 «두» 자리에서 부른다: :482(findings 가
+# 비었을 때 — "No high-confidence findings" clean 분기)와 :532(kept>0). 도출
+# 확인: 파일 전체에 disposition_lines( 호출이 정확히 이 둘뿐이다(제3의 자리
+# 없음, main() 은 render() 를 한 번만 부른다). 위 여섯 assert_grep 은 전부
+# `$OUT` 하나에 걸려 있고, 그 findings.yaml 은 CRITICAL 등 실채택 항목을
+# 남겨 :532 분기만 태운다 — :482 분기는 이 락이 한 번도 실행한 적이 없었다
+# (코디네이터 재현: :482 에서 plumb_line 을 지워도 이 파일을 코퍼스로 갖는
+# 락 8개 전부 GREEN, 같은 제거를 :532 에서 하면 이 파일이 5/6 RED 로 잡음 —
+# 두 분기 중 하나만 잠겨 있었다는 뜻). 배관 손실이 「clean」위에서 사라지는
+# 것이 가장 위험하다 — 입력 실패·항목 파손이 몇 건이든 화면에서 통째로
+# 증발하는데 게이트는 clean 을 찍는다.
+cat > "$TMPD/clean_findings.yaml" <<'YAML'
+findings:
+  - "CRITICAL: bare string finding — 매핑이 아니다"
+  - {agent: sec, file: low.py, line: 9, severity: SUGGESTION, summary: low-conf, confidence: 2}
+  - {agent: sec, file: rej.py, line: 3, severity: IMPORTANT, summary: rejected-one, confidence: 8}
+YAML
+cat > "$TMPD/clean_adversarial.yaml" <<'YAML'
+verdicts:
+  - {finding_id: "sec-rej.py-3", verdict: reject}
+YAML
+OUT_CLEAN="$(PYTHONDONTWRITEBYTECODE=1 python3 "$SCRIPT" \
+        --findings "$TMPD/clean_findings.yaml" \
+        --adversarial "$TMPD/clean_adversarial.yaml" 2>"$TMPD/err_clean.txt")"
+note "$OUT_CLEAN"
+
+assert_grep "$OUT_CLEAN" 'No high-confidence findings' \
+  "clean(kept=0) 렌더 분기를 실제로 태운다 (판정 대상 확인 — 안 태우면 아래는 공허)"
+assert_grep "$OUT_CLEAN" '기각 [1-9]'   "clean 분기에서도 기각이 값으로 실린다"
+assert_grep "$OUT_CLEAN" '억제 [1-9]'   "clean 분기에서도 억제가 값으로 실린다"
+assert_grep "$OUT_CLEAN" '미판정 [1-9]' "clean 분기에서도 판정자 부재가 값으로 실린다"
+assert_grep "$OUT_CLEAN" '\*\*배관 손실:\*\* [1-9]' \
+  "clean 분기에서도 배관 손실이 값으로 실린다 (가장 위험한 자리 — 여기가 비면 사용자는 clean 으로 읽는다)"
 
 finish

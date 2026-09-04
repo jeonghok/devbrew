@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
-# guards: plugins/*/agents/*.md plugins/*/skills/**/*.md plugins/*/commands/*.md tools/adjudication/check_slots.py
+# guards: plugins/*/agents/*.md plugins/*/skills/**/*.md plugins/*/commands/*.md tools/adjudication/check_slots.py shared/tests/fixtures/adjudication/run_slots.py
 #
 # 수정 라운드 1 (F6) — 판정기 자신을 declare 한다. `fixtures/adjudication/
 # run_slots.py` 가 `import check_slots` 하므로 이 락이 그 코퍼스다(도출은
 # import 로).
+#
+# 수정 라운드 2 (I1) — F4 가 실제로 고친 자리는 `check_slots.py` 가 아니라
+# «이» `run_slots.py` 의 print 루프였다(no_declaration 을 걸러내던 필터).
+# F6 은 check_slots.py 만 덮고 그것을 부르는 러너 자신은 무방비로 남겼다 —
+# 정확히 F6 이 닫으려던 부류가 그 옆자리에서 열려 있었다. `run_slots.py`
+# 를 이 락(그 러너의 유일한 소비자)에 편입한다.
 #
 # `commands/*.md` — 단일 `*` 다(`**` 아님). 이 파일들은 전부 flat(`commands/<name>.md`,
 # 하위 디렉터리 없음)이고, `# guards:` 를 소비하는 bash `case` 패턴은 리터럴
@@ -35,6 +41,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   PYTHONDONTWRITEBYTECODE=1 python3 "$HERE/fixtures/adjudication/run_slots.py" \
     "$REPO_ROOT" --emit-scanned
   printf '%s\n' "tools/adjudication/check_slots.py"
+  printf '%s\n' "shared/tests/fixtures/adjudication/run_slots.py"
   exit 0
 fi
 

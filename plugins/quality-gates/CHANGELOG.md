@@ -3,6 +3,57 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [6.6.4] — 2026-09-05
+
+### Fixed
+- **정정 — 바로 아래 `[6.6.3]` 절이 μ3 재현 결과를 "6/6 → 0/6, 크래시로
+  stdout 빈 문자열"이라고 적었으나, `docs/superpowers/plans/2026-09-03-
+  adjudication-topology-mutations.md` 가 서술한 그대로의 변이(`line2 = ""`
+  치환, 문장 삭제로 인한 NameError 가 아니다)를 그 시점 테스트 파일에 다시
+  걸어 재확인한 결과는 **5/6(Fail 1), 크래시 없음**이다. 방향(F3 이 이
+  락을 코퍼스에 편입해야 한다는 결론)은 그대로 유효하다 — 값만 틀렸다.
+  Keep a Changelog 관행상 `[6.6.3]` 절 본문은 고치지 않고 여기 정정만
+  남긴다(제자리 교체는 이 리포가 이미 두 번 겪은 실수 — 이전 릴리스
+  노트가 사라진다).
+- **Task 15 수정 라운드 2 (C1, Critical) — `synthesize_findings.py` 의
+  `render()` 는 `disposition_lines()` 를 두 자리에서 부르는데(:482 findings
+  가 빈 clean 분기, :532 kept>0 분기 — `main()` 이 `render()` 를 한 번만
+  불러 제3의 자리는 없음을 도출로 확인), `test_synthesize_disposition.sh`
+  의 여섯 assert_grep 이 findings.yaml 을 실채택 항목이 남게 짜서 :532
+  분기만 태웠다.** 코디네이터가 직접 재현: :482(clean) 분기에서 `plumb_line`
+  을 지우면 이 파일을 코퍼스로 갖는 락 8개 **전부 GREEN**(무검출) — 배관
+  손실이 사라져도 사용자 화면은 여전히 clean 으로 읽히는, 가장 위험한
+  자리가 무방비였다. :482 분기 전용 fixture(malformed 항목 + 판정자 없는
+  저신뢰 finding + reject 대상 하나를 함께 넣어 kept=0 이면서 기각·억제·
+  미판정·배관손실이 모두 값으로 나오게 구성)와 값 검사 넷을 추가했다.
+  양성 대조: :482/:532 각 분기에서 개별적으로 `plumb_line` 을 지우면 그
+  분기 전용 단언만 RED(격리 확인), 원복 후 11/11 GREEN.
+- **Task 15 수정 라운드 2 (m1, Minor) — `test_synthesize_disposition.sh` 의
+  `--emit-scanned` 가 이 락이 «읽지 않는» 경로 둘(`plugins/spec-distill/
+  scripts/{adjudication,render_disposition}.py`)을 내고 있었다.** `SCRIPT`
+  는 `plugins/quality-gates/scripts/synthesize_findings.py` 하나뿐이고
+  파이썬이 import 로 실제로 여는 sibling 은 그 디렉터리 안(quality-gates
+  쪽)의 심볼릭 링크뿐이다 — spec-distill 쪽 사본은 이 락의 어떤 실행도
+  건드리지 않는다. `# guards:` 는 그대로 둔다(fail-safe — 선언 ⊇ 실제는
+  무해하다는 것이 이 리포의 명시적 규약). `--emit-scanned` 만 다섯 경로로
+  좁혔다 — 그 값은 "선언 ⊇ 실제"의 **실제** 쪽이라 넓히면 안 된다.
+- **Task 15 수정 라운드 2 (m4, Minor) — `test_skill_drop_notice_consumed.sh`
+  에서 `$directive`/`$dlines` 를 계산하자마자(b1·c 의 «첫» 소비 지점) 쓰지만
+  그 앵커 유효성(d0) 보고는 55줄 뒤(d3 바로 앞)에 있었다.** 지시부 앵커가
+  깨지면 b1·c 가 "생산자만 고쳤다"·"문구 불일치" 같은 틀린 원인을 먼저
+  찍고 나서야 d0 이 진짜 원인(앵커 부재)을 드러냈다 — RED 라는 결론 자체는
+  안 바뀌지만 진단 순서가 계산 순서와 어긋나 있었다. d0 검사를 계산 직후,
+  b1 보다 앞으로 옮겼다. 양성 대조: 지시부 헤더 문구를 깨뜨리면 이제 d0 이
+  가장 먼저 "앵커가 깨졌다"를 찍고 그 아래 b1·c·d3 가 뒤따른다(5/14 Fail,
+  원복 후 14/14 GREEN).
+- **Task 15 수정 라운드 2 (m3, Minor) — F4(shared/tests/fixtures/adjudication/
+  run_slots.py, `# guards:` 를 가진 파일 없음)가 라운드 1의 어느 CHANGELOG
+  에도 없었다.** F6 은 같은 성질의 shared/ 변경("이 라운드가 하나의
+  커밋이므로")을 spec-distill CHANGELOG 에 적었는데 F4 는 빠졌다 —
+  일관성을 맞춰 여기 기록한다. I1(수정 라운드 2, 상세는 spec-distill
+  CHANGELOG)이 이 부류를 마저 닫으면서 `run_slots.py` 자신도
+  `test_agent_input_slots.sh` 의 `# guards:`/`--emit-scanned` 에 편입했다.
+
 ## [6.6.3] — 2026-09-04
 
 ### Fixed
