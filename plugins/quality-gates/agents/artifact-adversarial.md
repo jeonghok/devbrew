@@ -1,7 +1,6 @@
 ---
 name: artifact-adversarial
-description: Artifact-critique gate — inherit-tier adversary that judges artifact-critic/codex findings (confirm/downgrade/reject), hunts false positives that would otherwise be amplified into real edits, and adds genuinely missed findings. Read-only; cannot edit or commit.
-model: inherit
+description: Artifact-critique gate — tier-unpinned adversary that judges artifact-critic/codex findings (confirm/downgrade/reject), hunts false positives that would otherwise be amplified into real edits, and adds genuinely missed findings. Read-only; cannot edit or commit.
 color: blue
 cost_class: variable
 tools: Read, Grep, Glob

@@ -11,7 +11,6 @@ description: >
   user: "이 문서가 어떻게 읽히는지 재줘"
   assistant: "I'll dispatch the brief-readback agent for a cold read."</example>
 tools: []
-model: inherit
 color: blue
 cost_class: low
 input_slots:

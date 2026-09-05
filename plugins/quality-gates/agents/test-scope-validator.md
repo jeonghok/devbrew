@@ -1,6 +1,5 @@
 ---
 name: test-scope-validator
-model: inherit
 cost_class: low
 color: yellow
 tools: Read, Grep, Glob

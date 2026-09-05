@@ -12,7 +12,6 @@ description: >
   user: "이 방향이 틀렸을 가능성을 봐줘"
   assistant: "I'll dispatch the brief-direction-reviewer agent."</example>
 tools: Read, Grep, Glob, WebSearch, WebFetch
-model: inherit
 color: cyan
 cost_class: medium
 input_slots:

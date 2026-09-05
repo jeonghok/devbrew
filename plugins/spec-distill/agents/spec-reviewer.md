@@ -1,6 +1,5 @@
 ---
 name: spec-reviewer
-model: inherit
 cost_class: medium
 color: orange
 tools: Read, Grep, Glob, WebSearch, WebFetch

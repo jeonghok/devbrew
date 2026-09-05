@@ -1,6 +1,5 @@
 ---
 name: runtime-verifier
-model: inherit
 cost_class: variable
 color: green
 # TOOL-EXCEPTION: Bash — sandbox executor: 실제 서비스를 부팅해 AC 를 실행한다 (qg v2.2.0). Law 2 는 도구 deny 가 아니라 orchestrator 의 git-diff mutation guard 가 구조적으로 보장한다.
