@@ -175,19 +175,23 @@ fi
 # 리터럴 두 개로 방향을 못 박는다.
 NEW_RULE='**agent frontmatter 에 `model` 키를 두지 않는다.**'
 OLD_RULE='**agent `model:`은 `inherit`.**'
-if grep -qF "$NEW_RULE" "$AUTHORING"; then
-  ok "AC8d: plugin-authoring.md 에 «model 키 부재» 처방 존재"
+if [ ! -f "$AUTHORING" ]; then
+  no "AC8d: docs/plugin-authoring.md 부재 — 규약 문장 검사 3개를 판정할 수 없다 (fail-closed)"
 else
-  no "AC8d: «model 키 부재» 처방 문장이 없다 — 신규 플러그인이 티어를 핀할 수 있다"
-fi
-if grep -qF "$OLD_RULE" "$AUTHORING"; then
-  no "AC8d: 옛 처방(\`inherit\`)이 되살아났다 — 규약이 뒤집혔다"
-else
-  ok "AC8d: 옛 inherit 처방 없음"
-fi
-if grep -qE '^model: inherit' "$AUTHORING"; then
-  no "AC8d: authoring 문서에 model: inherit 코드 예시가 있다"
-else
-  ok "AC8d: model: inherit 코드 예시 없음"
+  if grep -qF "$NEW_RULE" "$AUTHORING"; then
+    ok "AC8d: plugin-authoring.md 에 «model 키 부재» 처방 존재"
+  else
+    no "AC8d: «model 키 부재» 처방 문장이 없다 — 신규 플러그인이 티어를 핀할 수 있다"
+  fi
+  if grep -qF "$OLD_RULE" "$AUTHORING"; then
+    no "AC8d: 옛 처방(\`inherit\`)이 되살아났다 — 규약이 뒤집혔다"
+  else
+    ok "AC8d: 옛 inherit 처방 없음"
+  fi
+  if grep -qE '^model: inherit' "$AUTHORING"; then
+    no "AC8d: authoring 문서에 model: inherit 코드 예시가 있다"
+  else
+    ok "AC8d: model: inherit 코드 예시 없음"
+  fi
 fi
 finish
