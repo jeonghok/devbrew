@@ -151,14 +151,19 @@ critic」)과 본문(「You run at the session tier (inherit) because …」), `
 - 반전되는 락 16개의 헤더 주석(C6).
 - CHANGELOG ×4, plugin.json ×4.
 
-**4. plugin-audit 소비자 경계** — `plugins/plugin-audit/scripts/check-plugin-structure.sh:55-67` 은 agent 마다
-plugin-dev 의 `validate-agent.sh` 를 돌리고, 실패 원인이 `color|model` 뿐이면 agent 당 `add_degr` 한 줄을 낸다.
-오늘은 20개 중 19개가 `color:` 를 갖고 검증기가 통과하므로 이 줄이 나오지 않는다(2026-09-06 실행 확인).
-핀을 빼면 검증기가 `❌ Missing required field: model` 을 내어 **agent 20개 전부에서 degrade 줄이 생긴다.**
-결정: `model` 누락만이 원인인 실패는 devbrew 규약 준수이므로 degrade 가 아니다 — 필터를 「`model` 누락 단독
-→ 기록 없음(규약 준수), `color` 누락 단독 → 기존 degrade 문구 유지」로 나눈다. 이 스크립트를 앵커하는 락은
-없다(grep 확인) — 새 락 하나를 둔다: fixture agent(`model` 없음·`color` 있음)에 대해 degrade 0 줄, `model: opus`
-를 넣은 fixture 에 대해서는 검증기가 통과하니 이 필터와 무관. 변이: 필터 분기를 지우면 fixture 에서 degrade 1 줄 → RED.
+**4. plugin-audit 소비자 경계** — `plugins/plugin-audit/scripts/check-plugin-structure.sh:55-91` 은 agent 마다
+plugin-dev 의 `validate-agent.sh` 를 돌린다. 실측(2026-09-06 구현·실행 확인): `model` 키가 아예 없는 agent
+에서 이 검증기는 자신의 `❌ Missing required field: model` 메시지에 **도달하지 못하고** ⚠️ 경고 줄만 낸 채
+rc=1 로 죽는다 — 원래 예상했던 「20개 전부에서 `❌` 줄이 생긴다」도, 「아무 신호 없이 침묵한다」도 아닌
+제3의 형태다. 결정은 다섯 분기다: (1) `model` 만 원인인 `❌` — 관찰되지는 않았으나 나오면 규약 준수이므로
+기록 없음. (2) `rc≠0` 이고 `❌|error` 매칭 줄이 전혀 없으며 `model` 키도 없음 — 규약 준수이자 검증기 결함이라
+**agent 당이 아니라 플러그인 실행당 집계 1줄**로 묶는다(`validate-agent.sh: model 키 없는 agent N개에서 ❌
+없이 exit — …검증 생략(devbrew 규약 준수)`). (3) 같은 무-`❌` 죽음인데 `model` 키가 **있음** — 규약과 무관한
+검증기 스퓨리어스 exit 이므로 기존대로 agent 별 degrade. (4) `color` 단독 원인 — 기존 degrade 문구 유지.
+(5) 그 외 `❌` — fact 로 기록. 이 스크립트를 앵커하는 락은 이전엔 없었다(grep 확인) — 락 하나를 신설했다.
+테스트 4건: model-only `❌`(무기록), color-only(기존 degrade), `model` 키 있는 무-`❌` 죽음(agent 별
+스퓨리어스 degrade), `model` 키 없는 무-`❌` 죽음 2건(집계 1줄, `2개` 표기). 변이: 분기 (2)를 지우면
+집계 줄이 사라지고 대신 agent 별 노이즈가 생겨 RED.
 
 ## Acceptance Criteria
 
@@ -173,7 +178,7 @@ plugin-dev 의 `validate-agent.sh` 를 돌리고, 실패 원인이 `color|model`
 - AC9. 착수 전 baseline 으로 「실패한 단언의 식별자 집합」(파일 + `no` 메시지 문자열)을 기록하고, 완료 후 집합에 **새 원소가 없다**. 줄 수 비교가 아니다 — 기존 실패가 사라지며 새 실패가 생기는 교차 회귀를 잡기 위함.
 - AC10. agent 20개 중 17개는 diff 가 정확히 `-model: inherit` 한 줄. 나머지 3개(§설계 1)는 그 한 줄 + 본문 `inherit` 서술 수정만.
 - AC11. `grep -rniE 'inherit' plugins docs/plugin-authoring.md` 의 잔여 hit 이 전부 (i) 이력(CHANGELOG·archive) (ii) fixture (iii) 음성 단언·주석 (iv) 무관 어휘(`inherits everything`·`inherit the env` 류) 중 하나다 — 현재 사실 서술로 남은 `inherit` 0건.
-- AC12. plugin-audit: `check-plugin-structure.sh` 를 devbrew 플러그인 하나에 돌렸을 때 `validate-agent.sh(...)` degrade 줄이 0건이고, 새 락(§설계 4)이 GREEN + 변이 RED.
+- AC12. plugin-audit: `check-plugin-structure.sh` 를 devbrew 플러그인 하나에 돌렸을 때 agent 별 `validate-agent.sh(...)` degrade 줄이 0건이고 집계 줄이 ≤1건(quality-gates 실측 「6개」 — runtime-verifier 는 선재 frontmatter `❌` 로 fact 경로), 테스트 4건 GREEN + 변이 RED.
 
 ## Files to Modify
 
@@ -232,6 +237,7 @@ plugin-dev 의 `validate-agent.sh` 를 돌리고, 실패 원인이 `color|model`
 | `opus` 핀 폐기 사유 "Fable 세션에서 리뷰어 하향" | 사유는 유효. 하향을 사용자가 설정으로 고르는 것은 허용 | 하니스 결정 → 사용자 결정으로 층이 옮겨졌고 되돌릴 수 있음. 사용자 수용 |
 | 리뷰 라운드 1 지적 — OQ3 「plugin-audit 필터 확인만」 | 필터 분기 변경(G6·§설계 4) | 검증기가 `model` 을 필수로 요구함을 실행으로 확인 — 20개 degrade 가 생긴다 |
 | 리뷰 라운드 1 지적 — G5 「#139 후속 1 동승」 | 제외(N5) | 하위 bullet 이고 락이 앵커하지 않음 — 독립 |
+| OQ3 → 필터로 degrade 제거(§설계 4) | 집계 1줄 + AC12 개정 | plugin-dev 검증기가 model 키 없는 agent 에서 ❌ 없이 rc=1 로 죽음을 실측 — 20줄 소음(R8)도 침묵도 아닌 형태 |
 
 ## 부록 — 프로브 재현
 

@@ -16,7 +16,7 @@
 - **구조 검사가 `model` 키 부재를 degrade 로 세던 것.** plugin-dev `validate-agent.sh` 는
   `model` 을 필수로 요구하는데 그것은 devbrew 규약이 아니다 — 핀을 빼면 agent 마다 degrade
   한 줄이 생겼을 것이다. `check-plugin-structure.sh` 가 `model` 누락 단독은 기록하지 않고
-  `color` 누락 단독만 기존대로 degrade 로 남긴다. 테스트 2건(양성 짝 포함). 구현 중 확인: plugin-dev 검증기는 model 키 없는 agent 에서 ❌ 없이 조용히 죽는다(rc=1) — 그 경우는 agent 별이 아니라 플러그인당 집계 1줄로, model 키가 있는데 죽으면 agent 별 스퓨리어스 exit 줄로 기록한다(테스트 4건).
+  `color` 누락 단독만 기존대로 degrade 로 남긴다. 구현 중 확인: plugin-dev 검증기는 model 키 없는 agent 에서 ❌ 없이 조용히 죽는다(rc=1) — 그 경우는 agent 별이 아니라 플러그인당 집계 1줄로, model 키가 있는데 죽으면 agent 별 스퓨리어스 exit 줄로 기록한다(테스트 4건, 양성 짝 포함).
 
 ## [0.8.2] — 2026-09-05
 

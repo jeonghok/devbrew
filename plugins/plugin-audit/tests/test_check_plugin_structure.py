@@ -160,8 +160,8 @@ class TestPluginStructure(unittest.TestCase):
         # rc != 0 이지만 ❌/error 매칭 라인이 전혀 없는 경우 (권한 오류, 완전 무출력 등) —
         # model/color 필터에 걸리지 않으니 아무것도 기록 안 하면 조용한 실패다. 형제
         # validator들처럼 "스퓨리어스 exit"로 degrade 되어야 한다 (C14).
-        # target 의 agent 는 model 키를 "가진" 파일 — round 2 에서 model-less 무출력
-        # crash 는 집계 경로로 분리됐으므로, 여기서는 그 분리와 섞이지 않게 model 키가
+        # target 의 agent 는 model 키를 "가진" 파일 — round 2 에서 model-less ❌ 없이
+        # 죽는 crash 는 집계 경로로 분리됐으므로, 여기서는 그 분리와 섞이지 않게 model 키가
         # 있는 agent 로 per-agent 스퓨리어스 경로만 확인한다.
         with tempfile.TemporaryDirectory() as t, tempfile.TemporaryDirectory() as pd:
             _stub_validate_agent_no_output_crash(pd)
@@ -172,9 +172,9 @@ class TestPluginStructure(unittest.TestCase):
             self.assertTrue(any("a.md" in x for x in va_entries), va_entries)
 
     def test_modelless_silent_crash_aggregated_one_line(self):   # fix round 2 — per-plugin 집계
-        # plugin-dev validate-agent.sh 는 model 키가 아예 없는 agent 에서 무출력 crash 한다
-        # (devbrew 전 agent 가 model-less 규약이라 이게 상시 발생). per-agent degrade 로
-        # 적으면 노이즈이므로, model-less 이면서 무출력 crash 인 agent 는 집계 카운터로만
+        # plugin-dev validate-agent.sh 는 model 키가 아예 없는 agent 에서 ⚠️ 경고만 내고
+        # ❌ 없이 rc=1 로 죽는다 (devbrew 전 agent 가 model-less 규약이라 이게 상시 발생).
+        # per-agent degrade 로 적으면 노이즈이므로, model-less 이면서 ❌ 없이 죽는 agent 는 집계 카운터로만
         # 세고 개별 파일명은 남기지 않는다 — 정확히 한 줄, "N개" 표기.
         with tempfile.TemporaryDirectory() as t, tempfile.TemporaryDirectory() as pd:
             _stub_validate_agent_no_output_crash(pd)

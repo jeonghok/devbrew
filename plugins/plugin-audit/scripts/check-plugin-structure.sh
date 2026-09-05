@@ -56,8 +56,8 @@ fi
 #   · `model` 누락 «단독»은 devbrew 규약 준수다 (docs/plugin-authoring.md: frontmatter 에
 #     model 키를 두지 않는다) — 기록하지 않는다. degrade 로 적으면 리포트가 거짓을 말한다.
 #   · `color` 누락 단독은 plugin-dev-ism — 기존대로 degrade 로 남긴다 (사실 아님, 생략 공시).
-#   · plugin-dev validate-agent.sh 는 model 키가 아예 없는 agent 에서 무출력 crash 한다
-#     (자신의 "Missing required field: model" 메시지에 도달하지 못하고 죽는다) — devbrew
+#   · plugin-dev validate-agent.sh 는 model 키가 아예 없는 agent 에서 ⚠️ 경고는 내지만
+#     "Missing required field: model" 즉 ❌ 줄에는 도달하지 못하고 rc=1 로 죽는다 — devbrew
 #     전 agent 가 model-less 규약이라 이게 상시·전수 발생한다. per-agent degrade 로 적으면
 #     agent 수만큼의 노이즈이므로 플러그인당 집계 1줄로 묶는다 (loud 이되 noisy 는 아니게).
 has_model_key() {  # $1 = agent file — frontmatter window(첫 두 --- 사이)에 model 키가 있는지
@@ -87,7 +87,7 @@ if [ -n "$VA" ]; then
     fi
   done
   if [ "$modelless_crash" -gt 0 ]; then
-    add_degr "validate-agent.sh: model 키 없는 agent ${modelless_crash}개에서 무출력 exit — plugin-dev 검증기가 model 부재를 처리 못 함, 검증 생략(devbrew 규약 준수)"
+    add_degr "validate-agent.sh: model 키 없는 agent ${modelless_crash}개에서 ❌ 없이 exit — plugin-dev 검증기가 model 부재를 처리 못 함, 검증 생략(devbrew 규약 준수)"
   fi
 fi
 

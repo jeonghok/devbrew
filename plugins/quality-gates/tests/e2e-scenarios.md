@@ -1,5 +1,7 @@
 # Quality-Gates v1.5.0 — E2E Verification Scenarios
 
+> **Historical (v2.2.x snapshot).** Model lines below predate the 2026-09-06 «no `model` key» convention; scenario H's "Task 1 model-override experiment" measured dispatch-time override of `inherit`, which gate agents no longer receive.
+
 This document records the manual verification scenarios for the v1.5.0 redesign.
 Live `/qg` runs require an interactive Claude Code session against a real PR;
 this file specifies *what to test* and *what passing looks like* so a reviewer

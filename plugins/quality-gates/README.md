@@ -181,7 +181,7 @@ The optional `codex-reviewer` agent has `cost_class: variable` — as a Tier B *
 { "env": { "CLAUDE_CODE_SUBAGENT_MODEL": "opus" } }
 ```
 
-Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` also exists and overrides even frontmatter pins; devbrew does not recommend it — it flattens dispatch-time discretion and other plugins' pins too.) Note the trade-off you are choosing: on a session stronger than the tier you set, reviewers run one tier below the writer.
+Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` also exists. The only thing measured here (CLI 2.1.261, 2026-09-06) is that it overrides a frontmatter `inherit`; its documented effect on dispatch-time `model` arguments and on other plugins' pins was not measured. devbrew does not recommend it.) Note the trade-off you are choosing: on a session stronger than the tier you set, reviewers run one tier below the writer.
 
 ## 게이트
 
