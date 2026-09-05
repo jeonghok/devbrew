@@ -168,18 +168,26 @@ else
   ok "AC8c: P12 섹션에 single-file 제약 없음"
 fi
 
-# --- AC8d: docs/plugin-authoring.md에 agent model: inherit 규약 신설 ---
-# 예전 정규식('model:.*`inherit`')은 토큰이 근처에 있다는 것만 증명했다 — **처방과
-# 금지를 구별하지 못한다**. "`inherit`을 쓰지 말고 리터럴 티어를 박아라"로 바꿔도
-# GREEN이었다(mutation M8). 처방 문장 전체를 앵커하고, 금지 어법을 따로 막는다.
-if grep -qF '**agent `model:`은 `inherit`.**' "$AUTHORING"; then
-  ok "AC8d: plugin-authoring.md에 agent model: inherit **처방** 존재"
+# --- AC8d: docs/plugin-authoring.md 의 agent model 규약 — «키 부재» ---
+# 2026-09-06 (CLI 2.1.261 실측): `inherit` 도 사용자의 subagent 기본 티어 설정을
+# 덮어쓴다. 규약은 「키를 두지 않는다」로 뒤집혔다. 옛 처방(`inherit`)과 옛 음성
+# 어법 regex(inherit 줄의 금지 어법 → RED)는 이 방향에서 반대로 운다 — 제거하고
+# 리터럴 두 개로 방향을 못 박는다.
+NEW_RULE='**agent frontmatter 에 `model` 키를 두지 않는다.**'
+OLD_RULE='**agent `model:`은 `inherit`.**'
+if grep -qF "$NEW_RULE" "$AUTHORING"; then
+  ok "AC8d: plugin-authoring.md 에 «model 키 부재» 처방 존재"
 else
-  no "AC8d: agent model: inherit 처방 문장이 없다 — 신규 플러그인이 리터럴 티어 핀을 복제할 수 있다"
+  no "AC8d: «model 키 부재» 처방 문장이 없다 — 신규 플러그인이 티어를 핀할 수 있다"
 fi
-if grep -nE 'inherit' "$AUTHORING" | grep -qE '쓰지[[:space:]]*(마|말)|금지|말고[[:space:]]*리터럴'; then
-  no "AC8d: inherit을 **금지**하는 어법이 있다 — 규약이 뒤집혔다"
+if grep -qF "$OLD_RULE" "$AUTHORING"; then
+  no "AC8d: 옛 처방(\`inherit\`)이 되살아났다 — 규약이 뒤집혔다"
 else
-  ok "AC8d: inherit을 금지하는 어법 없음"
+  ok "AC8d: 옛 inherit 처방 없음"
+fi
+if grep -qE '^model: inherit' "$AUTHORING"; then
+  no "AC8d: authoring 문서에 model: inherit 코드 예시가 있다"
+else
+  ok "AC8d: model: inherit 코드 예시 없음"
 fi
 finish
