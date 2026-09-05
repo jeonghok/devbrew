@@ -30,6 +30,8 @@ import compute_issue_id  # noqa: E402  (sibling helper, centralized id — §8)
 from hook_common import _yaml_scalar  # noqa: E402
 # subagent 발견의 처분 회계 (Task 2 — shared/adjudication/adjudication.py 심볼릭 링크).
 from adjudication import Ledger  # noqa: E402
+# 처분 두 줄의 공유 렌더 (Task 10 — shared/adjudication/render_disposition.py 심볼릭 링크).
+from render_disposition import disposition_report  # noqa: E402
 
 # --- verdict precedence (§7b) ------------------------------------------------
 RANK = {"approved": 0, "needs_revise": 1, "needs_interview": 2}
@@ -552,13 +554,29 @@ def main() -> int:
 
     codex_findings_display = build_codex_findings_display(codex_findings, codex_avail)
 
-    # 세 원장을 합산한다 — verdict 와 별개 채널.
-    merged = {"held": 0, "unknown": [], "reasons": []}
+    # 세 원장을 합산한다 — verdict 와 별개 채널. `report`·`held_by_class` 는
+    # codex_ledger·history_ledger 둘 다 있으므로(:486·:530) 합쳐서 하나로
+    # 보고한다 — 각각 따로 내면 소비자가 둘을 더해야 하고, 더하는 자리가
+    # 새 결함 지점이 된다.
+    _MERGED_COUNT_KEYS = ("accepted", "rejected", "held", "absorbed",
+                         "coerced", "sources_failed", "suppressed")
+    merged = {"held": 0, "unknown": [], "reasons": [],
+             "report": {"counts": {k: 0 for k in _MERGED_COUNT_KEYS},
+                        "degraded": False, "unknown_counts": [], "reasons": []},
+             "held_by_class": {"판정자 부재": 0, "항목 파손": 0, "기타": 0}}
     for L in (claude_ledger, codex_ledger, history_ledger):
         r = L.report()
         merged["held"] += r["counts"]["held"]
         merged["unknown"] += r["unknown_counts"]
         merged["reasons"] += r["reasons"]
+        for k in _MERGED_COUNT_KEYS:
+            merged["report"]["counts"][k] += r["counts"][k]
+        merged["report"]["degraded"] = merged["report"]["degraded"] or r["degraded"]
+        hc = L.held_by_class()
+        for k in merged["held_by_class"]:
+            merged["held_by_class"][k] += hc[k]
+    merged["report"]["unknown_counts"] = merged["unknown"]
+    merged["report"]["reasons"] = merged["reasons"]
     # degrade 사유는 `advisory` 로 간다. 형제 `merge_brief_review.py:325-328` 과
     # 같은 선택이고, 여기서는 표시 계약이 이유다: SKILL 의 "그대로 표시"·"degrade
     # 없음" 판정은 `advisory` 에만 걸려 있다. 별도 키로 내면 `load_history` 실패는
@@ -591,6 +609,18 @@ def main() -> int:
     # 자체의 계약이어야 한다.
     print(f"adjudication_held: {_yaml_scalar(merged['held'])}")
     print(f"adjudication_unknown: {_yaml_scalar(','.join(merged['unknown']))}")
+    # L2 가 요구하는 나머지 — 카운트가 «전부» 출력에 실려야 한다.
+    # 키 목록을 여기 다시 적지 않는다: 공유 헬퍼가 한 벌 펴고 이 자리는 그것을
+    # 돈다. 손으로 적으면 어휘가 늘어도 이 소비자가 조용하다.
+    for _k, _v in disposition_report(merged["report"],
+                                     merged["held_by_class"]).items():
+        if _k in ("reasons", "held_by_class"):
+            continue                      # 아래에서 따로 편다
+        print(f"adjudication_{_k}: {_yaml_scalar(_v)}")
+    _hc = merged["held_by_class"]
+    print(f"adjudication_held_unadjudicated: {_yaml_scalar(_hc['판정자 부재'])}")
+    print(f"adjudication_held_malformed: {_yaml_scalar(_hc['항목 파손'])}")
+    print(f"adjudication_held_other: {_yaml_scalar(_hc['기타'])}")
     return 0
 
 

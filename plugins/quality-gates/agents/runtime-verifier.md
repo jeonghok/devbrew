@@ -34,6 +34,35 @@ description: >
   user: "Run the runtime gate."
   assistant: "Setup-only fixes I apply in the sandbox; a product bug becomes FAIL
   with the offending diff surfaced as evidence."</example>
+input_slots:
+  - tag: project_dir
+    var: RUNTIME_PROJECT_DIR
+    kind: task
+  - tag: evidence_dir
+    var: EVIDENCE_DIR
+    kind: task
+  - tag: plan_path
+    var: PLAN_PATH
+    kind: task
+  - tag: spec_acceptance_criteria
+    var: SPEC_ACCEPTANCE_CRITERIA
+    kind: artifact
+  - tag: manifest
+    var: MANIFEST
+    kind: repo_context
+  - tag: approved_surfaces
+    var: APPROVED_SURFACES
+    kind: task
+  - tag: block_policy
+    var: BLOCK_POLICY
+    kind: task
+  - tag: iteration
+    var: RESOLUTION_ITER
+    kind: task
+  - tag: previous_evidence_log_path
+    var: PREVIOUS_EVIDENCE_LOG_PATH
+    kind: same_origin_history
+    optional: true
 ---
 
 # Runtime Verifier Agent (Runtime gate — sandbox executor)

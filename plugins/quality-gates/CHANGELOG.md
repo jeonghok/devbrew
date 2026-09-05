@@ -3,6 +3,304 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.2.1] — 2026-09-05
+
+### Fixed
+
+- **판정기 코퍼스의 `:NNN` 인용을 전수로 앵커·심볼 인용으로 바꿨다 — 이 부류의
+  다섯 번째 재발이자 K1 의 재검증 경로가 걸린 자리다 (최종 수정 라운드 3, D1).**
+  라운드 2 의 R-A 가 `review-dispatch.py` 의 `_block_with_ledger()` docstring 을
+  늘려 그 아래 전부가 +17 밀렸다. 그때 `EXEMPT` **키**는 정체 대조로 기계
+  갱신했지만 같은 파일의 면제 **사유 문자열과 주석 안 줄번호**는 그대로 남아,
+  주석이 옛 번호를 가리키고 바로 아래 키는 새 번호를 갖는 **자기모순** 상태가
+  됐다. 가장 나쁜 자리: `_T5_SELECT_LOOP_DISPATCH_CAP` 의 근거 인용
+  `review-dispatch.py:765-770` 이 지금은 **다른 mandate 블록**을 가리킨다 —
+  이 면제를 재검증하려는 다음 리뷰어가 「상한 도달 사실이 이미 공시됐다」의
+  근거가 아니라 엉뚱한 메시지를 읽게 된다. **K1 의 설계 전제가 「키 갱신 =
+  사유 재검증」이므로, 재검증 경로가 깨진 채로는 그 Critical 수정이 반쪽이다.**
+  **도출로 훑었다** — `tools/adjudication/` · `shared/tests/fixtures/adjudication/`
+  의 파일 25 개에서 주석·문자열 안 인용 **51 개**를 뽑아 실제 내용과 대조했고
+  (경로 명시형 + 문맥이 대상을 정하는 맨 `:NNN` 양쪽), **어긋난 것 16 · 지금은
+  옳으나 같은 함정인 것 12** 를 전부 심볼·앵커·원문 인용으로 바꿨다. 남은
+  인용 **0**. 번호를 다시 매기지 않았다 — 다섯 번 재발한 이유가 그것이다.
+  주요 형태: `review-dispatch.py:765-770` → 「dispatch 상한 mandate 메시지
+  (`if cap and attempt_n >= cap:` 분기)」 · `:544-546`/`:583-587` →
+  「`val_att.get(c.key, 0) >= val_cap` 분기」/「`capped_advisory`」 ·
+  flush 지점 일곱 개의 번호 나열 → 「`flush_advisory(capped_advisory)` 넷 ·
+  `_block_with_ledger(…, capped_advisory)` 둘 ·
+  `with_advisory({"systemMessage": …}, capped_advisory)` 하나」 ·
+  `:340~351` 일곱 자리 → 각 분기의 guard 식 · `synthesize_artifact_findings.py:131`
+  → 「`"sources_failed": sources_failed` 필드」 · `check_slots.py:142` →
+  「`no_declaration` problem 튜플」 · `test_dispatch_disposition.sh:80-84` →
+  「`NOTATION` 정규식 바로 위 주석」.
+  **편집 후 자기 대조도 돌렸다**(이 편집 자신이 파일을 늘려 또 밀 수 있다) —
+  같은 census 재실행 결과 인용 0, 그리고 이 코퍼스의 파일을 `:NNN` 으로
+  가리키는 리포 내 다른 자리는 과거 릴리스 노트 둘뿐이다(아래 Note).
+
+### Changed
+
+- **`check_wiring.py` 의 `from cite import cited as _cited` 는 죽은 import 가
+  아니라 «재수출» 이었다.** 그 파일 안에서는 안 쓰이지만
+  `shared/tests/fixtures/adjudication/run_wiring_scan.py` 가 **check_wiring 을
+  경유해** 그것을 import 해 `terminal_uncited` 를 계산한다 — 그냥 지웠으면
+  러너가 `ImportError` 로 죽었다. 별칭을 지우는 대신 **소비자를 원천으로
+  옮겼다**: `run_wiring_scan.py` 가 `from cite import cited` 로 직접 받고,
+  `check_wiring.py` 는 `from cite import uncited` 만 남긴다. 판정 로직·단언·
+  면제 판정은 무변경(락 다섯 전부 GREEN 유지).
+
+### Note
+
+이 절은 인용 교정이다 — **런타임 동작을 바꾸지 않았다.** 락의 단언, 판정 로직,
+면제 «판정» 은 무변경이고 다섯 락(16/6/14/35/6)이 그대로 GREEN 이다.
+
+바꾸지 않은 것: 이 CHANGELOG 의 **과거 릴리스 절** 안에 있는 `run_slots.py:32-36`
+· `tools/adjudication/check_slots.py:142` 두 인용. 그 절이 기록하는 시점에는
+참이었고, 릴리스 노트는 날짜와 버전이 박힌 시점 기록이라 지금 번호를 고치면
+기록 자체가 거짓이 된다(K7 에서 audits·interview 문서에 적용한 것과 같은 기준).
+
+## [7.2.0] — 2026-09-05
+
+### Fixed
+
+- **면제 키가 «자리»만 쥐고 «정체»를 안 쥐어, 조건만 바꾼 분기가 면제를 상속했다
+  (최종 리뷰 K1, Critical).** `tools/adjudication/check_wiring.py` 의 `stale_exempt()`
+  docstring 은 「낡은 키가 다른 버리는 분기와 겹치면 그 엉뚱한 자리가 조용히 면제된다
+  — 이 함수는 그 조용한 쪽을 소리 나게 만든다」고 선언했는데, 구현은
+  `[k for k in EXEMPT if k not in discard_lines]` 로 **키가 아무 버리는 분기도 안
+  가리킬 때만** 냈다(docstring 자신이 「이미 시끄럽다」고 적은 쪽). 실측 재현:
+  `synthesize_findings.py` 의 `if f.get("promoted"):` 를 **줄 수를 보존한 채**
+  `if f.get("promoted") or _norm_sev(f) == "info":` 로 바꾸면 info 심각도 발견이
+  회계 없이 통째로 버려지는데 락 넷(`test_adjudication_wiring.sh` 15/15 ·
+  `test_adjudication_consumed.sh` 6/6 · `test_synthesize_disposition.sh` 11/11 ·
+  `test_synthesize_findings.sh` 19/19)이 전부 GREEN 이었다.
+  **고침**: 면제 키를 `(경로, 줄, 정체)` 3-튜플로 바꿨다. 정체 =
+  `"<kind> in <func> @ <guard>"` 이고 `guard` 는 그 분기를 성립시키는 조건의 원문
+  (`ast.unparse`)이다(새 `exempt_key()`, `_enclosing_branch()` 가 본문과 정체를 한 번의
+  상승으로 함께 낸다). 해시가 아니라 원문을 쓴 이유: 면제 표를 읽는 사람이 파일을 열지
+  않고 무엇이 면제됐는지 본다. **양성 대조**(위 「줄 수 보존 + 조건만 확장」 변이):
+  이제 같은 락이 2건 RED — `exempt_stale=1`(어긋난 키를 이름과 함께) + `unwired=1`
+  (그 자리가 면제를 상속하지 못해 미배선으로 재등장, 음/양의 짝). 정상 트리에서 면제
+  17 개는 전부 유효하다(오탐 0).
+- **`test-scope-validator` 에 untrusted-input 조항이 없었다 (최종 리뷰 K2, 보안).**
+  이 브랜치의 슬롯 재태깅이 `skills/quality-pipeline/references/runtime-gate.md` 의
+  그 dispatch 에 `<diff>${FILTERED_DIFF}</diff>` 를 **추가**했는데(`origin/main` 엔 없던
+  필드) 조항 수는 `security-reviewer` 6 · `adversarial` 2 · `test-scope-validator`
+  **0** 이었다. 형제 문구를 베끼지 않고 이 agent 가 실제로 받는 입력에 맞춰 썼다 —
+  `filtered_diff` 뿐 아니라 **`candidate_test_files` 가 가리켜 `Read` 로 여는 파일들의
+  내용과 경로도 attacker-influenced** 라는 점, 주입된 지시를 `evidence` 에 그대로
+  인용해 두 번째 배달을 만들지 말라는 점을 명시. 회귀: `tests/test_test_scope_validator_frontmatter.sh`
+  에 형제 락과 같은 «섹션 윈도우» 스코프 단언 3(본문 규범 + 자기 입력 두 슬롯 지목)
+  — 절을 통째로 지우면 3건 RED(실측).
+
+### Changed
+
+- **락 셋의 통과 메시지가 실제로 잰 것보다 넓었다 (최종 리뷰 K4).**
+  - **L2**(`test_adjudication_consumed.sh` · `tools/adjudication/check_consumed.py`) —
+    `unconsumed_total=0` 은 소비자 다섯에 대한 다섯 개의 독립 사실이 아니다. 실측(이제
+    락이 매 실행마다 `OWNFILE`/`SHARED` 줄로 다시 낸다): 자기 파일만으로 여덟 키를 다
+    읽는 소비자는 `merge_review.py` 하나(8/8)이고 나머지 넷은 0/8·0/8·1/8·2/8 이며,
+    다섯 전부가 `shared/adjudication/render_disposition.py` 를 import 하고 **그 한
+    파일이 혼자 8/8 을 덮는다.** 헤더·통과 메시지에 그 수치를 넣었다.
+  - **L3**(`shared/tests/test_agent_input_slots.sh`) — 축 (a)는 agent 20 개 중 **16**
+    개만 잰다. 넷(`transcript-reader`·`audit-refuter`·`plugin-auditor`·`smoke-probe`)은
+    dispatch 가 Workflow JS 나 skill frontmatter 의 `context: fork` 라 `.md` 코퍼스에
+    구조적으로 안 보인다. `declared=N` 옆에 `measured=`/`unmeasured=` 를 내고 못 잰
+    agent 의 이름을 댄다(셀 수 없으면 셀 수 없음을 낸다).
+  - **L4**(`shared/tests/test_runner_disposition.sh`) — `/scripts/` 후처리가 모집단을
+    조용히 좁혀 다른 디렉터리(`plugins/*/lib/` 등)의 codex 러너가 **앵커 없이
+    통과**했고, vacuity 가드 `n_all > n_run` 이 그 버림을 «성공»으로 읽었다(많이 버릴수록
+    초록). 후처리를 **명시 제외 하나**(사유와 함께: `tests/spike/test_codex_json_extraction.sh`)
+    로 바꾸고 나머지는 전부 모집단에 넣는다. 새 축 둘: 「조용히 버려진 항목 0」(도출 −
+    명시 제외 = 모집단, 등식) · 「명시 제외가 실제로 1건 이상 걸렀다」(죽은 선언 방지).
+    `/scripts/` 밖은 세어서 이름을 댄다. **양성 대조**: `plugins/quality-gates/lib/` 에
+    앵커 없는 러너를 심으면 이름이 나오며 4건 RED(이전 판본에선 조용히 사라졌다).
+- **「모든 자리」주장을 실측으로 좁혔다 (최종 리뷰 K5).** `plugins/*/{skills,commands,agents}/**.md`
+  의 처분 앵커 17 개 중 `consumer=` 가 `.py` 경로인 것은 **6** 이고 나머지 11
+  (`human` 6 · `orchestrator` 5)은 L1·L2 모집단 «밖»이다(65%). 그 11 에 대한 집행은
+  축 C 의 `disclosure=` 리터럴 실재뿐이며 그 축은 채널 «이름»의 실재까지만 잰다.
+  v7.1.0 항목과 `test_adjudication_wiring.sh` 헤더에 이 수치를 적었다.
+- **면제 사유의 실질 검사를 조였다 (A/m1).** 리터럴 `"C6"` 두 글자면 만족하던 검사를
+  「C6(1)/C6(2) 조건 번호 + 본문 40자」로 바꿨다. 판정은 새 `tools/adjudication/cite.py`
+  하나가 지고 L1·L3 가 함께 쓴다 — 같은 요구가 두 등록부에서 다른 엄격도로 걸리던
+  비대칭(Task 11b Step 4b 가 한 번 고쳤다)이 술어를 베끼면 재발한다. 이 조임이
+  기존 면제 하나(`plugin-audit:audit-refuter.findings`)의 얇은 사유를 즉시 잡았다.
+- **면제 «크기»에 기계 baseline 을 붙였다 (A/m2).** 컴프리헨션에는 `COMP_BASELINE` 하드
+  단언이 있는데 면제는 `note` 로만 냈다 — 배선을 면제로 갈아 끼우는 우회가 조용했다.
+  `check_wiring.EXEMPT_BASELINE=17` · `check_slots.EXEMPT_SLOTS_BASELINE=4`.
+  양성 대조: 18 번째 항목을 넣으면 RED(실측).
+- **L1 헤더가 종류 정합의 검증자로 단일 락을 지목했다 (A/m3).** 실제로는 소비자마다
+  자기 처분 행렬 테스트가 있다 — 넷을 전부 인용한다.
+- **L4 가 실패 자리를 `basename` 으로만 이름 댔다 (A/m4).** 형제 넷과 같이
+  `file:line` 으로 바꿨다(앵커가 없으면 `:0` — 그 자체가 「앵커 없음」의 표기).
+- **`_IMPORT_RE` 에 단어 경계가 없어 `import adjudicationXX` 도 매칭했다 (A/m6).**
+  소비자 모집단을 그 정규식이 정하므로 오탐 하나가 ㉮ 를 늘려 다른 락의 코퍼스까지
+  흔든다. `\b` 둘을 넣었다.
+- **`quality-pipeline/SKILL.md` 가 `project_dir:` 계약의 «틀린 락»을 가리켰다 (B/M-5).**
+  「harness 테스트가 10줄 이내로 검증한다」는 거짓이다(그 줄을 지워도 실패 수 무변경).
+  진짜 집행자는 이 브랜치가 만든 `shared/tests/test_agent_input_slots.sh` 의
+  `undelivered` 축이며, 그것은 파싱 대조라 표기(공백 폭·변수명)에 둔감하다.
+- **줄번호 인용을 앵커·심볼 인용으로 (최종 리뷰 K7).** 이 브랜치가 `adjudication.py` 에
+  31줄을 더해 자기 설계문서의 인용들을 밀어냈다(순수 self-shift — `origin/main` 기준으로는
+  전부 옳았다). 이 부류의 네 번째 재발이라 번호를 다시 매기지 않고 **심볼/앵커로**
+  바꿨다: `security-reviewer` 의 `description` 이 가리키던 `adversarial.md:22-30` →
+  「`## Inputs` 절」, `test_skill_orchestration_behavior.sh` 의 `:88`/`:23` →
+  `. "$SCRIPT_DIR/../lib/reconstruct-skill.sh"` 호출 줄(그 사본이 이 CHANGELOG 에도
+  있어 함께 고쳤다), `test_guards_coverage_bidirectional.sh:74` → 「`--emit-scanned`
+  미지원」 분기, `adjudication.py:{59-64,96-98,99-102,110,136-138}` →
+  `coerced()`/`blocks()`/`_degraded()`/`reasons()`/`surfaced()`.
+
+### Note
+
+이 절은 whole-branch 리뷰 셋의 findings 를 한 파로 닫은 기록이다. 각 항목은 「변이 →
+RED 확인 → 원복 → GREEN 확인」 삼단을 거쳤다.
+
+## [7.1.2] — 2026-09-05
+
+### Fixed
+
+- **Task 15c 수정 라운드 2 (N1, Important) — 라운드 1이 I1 의 음의 짝을
+  「참으로 만든다」고 적은 것 자체가 거짓이었다.** 재리뷰 실측: decoy +
+  `project_dir:` 뒤 공백 두 개 + `${SANDBOX_DIR}`, decoy + 전혀 다른 변수명
+  `${QG_SANDBOX}` 하드코딩 — 둘 다 음의 짝을 우회한다(신규 FAIL 0, 코디네이터가
+  재현). 그런데 그 두 우회를 `tools/adjudication/check_slots.py` 의
+  `var_mismatch` 축(`shared/tests/test_agent_input_slots.sh` 가 돌린다)이
+  agent 이름과 file:line 을 대며 잡는 것도 함께 확인했다(12/12 → 11/12, 두
+  변이 각각 재현) — 그 축은 `runtime-verifier` 의 `input_slots` 선언과 dispatch
+  를 **파싱해서** 대조하므로 표기(공백 폭·변수명)에 무관하다. **주장을 낮췄다**:
+  "never a hardcoded sandbox_dir" 대신 "이 grep 쌍이 보장하는 것은 정확히 그
+  `${SANDBOX_DIR}` 슬롯 리터럴(그 공백 폭 그대로)의 부재뿐"으로, "참으로
+  만든다"는 문장은 지웠다. 진짜 ∀ 보장이 사는 곳(`var_mismatch` 축)을 명시.
+  음의 짝 자체는 지우지 않았다 — 정확한 리터럴 회귀를 싸게 잡는 두 번째 증인으로
+  여전히 유효하다(해롭지 않음). 검토하고 버린 대안(음의 짝을 "올바른 값 외
+  전부 금지"로 일반화)은 `var_mismatch` 가 이미 그것을 하므로 불완전한 두 번째
+  구현이 될 뿐이라 채택하지 않았다.
+- **Task 15c 수정 라운드 2 (N2, Minor) — m2 의 기록이 리스크의 절반을 숨기고
+  있었다.** "이 두 grep **모두** 매치를 잃어 거짓 RED" 라는 문장은 새 음의
+  짝에는 틀렸다 — 같은 공백-폭 변화(하나→둘)에서 양의 검사는 소리 나는 방향
+  (거짓 RED)으로, 음의 짝은 **침묵하는 방향**(fail-open — 위반이 그대로인데
+  조용히 PASS, N1 우회 (a)가 이 경로)으로 **반대로** 깨진다는 것을 적었다.
+  m2 를 코드로 고치지 않는 판정은 유지(v6.6.2 선례와의 일관성 + 거짓 RED 축은
+  소리가 나며 fail-open 축의 실제 안전망은 `var_mismatch` 라는 근거).
+- **Task 15c 수정 라운드 2 (N3, Important) — 재리뷰가 범위 밖으로 올린 같은
+  부류 하나.** `plugins/quality-gates/tests/lib/reconstruct-skill.sh` 는 이
+  락의 모든 단언이 읽는 문서(`$SKILL_MD`)를 만드는 load-bearing 의존인데
+  `# guards:`에도 `--emit-scanned`에도 없었다(R2·R3·F6 과 정확히 같은 부류).
+  `.`(source) 는 "읽는 것"에 해당한다고 판정 — bash 가 그 파일의 바이트를
+  읽고 해석하는 것은 `cat`/`grep` 으로 여는 것과 다르지 않다. 리디렉션 감사로
+  `source` 호출이 `. "$SCRIPT_DIR/../lib/reconstruct-skill.sh"` 한 줄뿐임을
+  재확인 후 `# guards:`·`--emit-scanned` 양쪽에
+  여섯 번째 경로로 추가. 양성 대조: 프로덕션 매처에 이 파일을 건드리는 실제
+  diff 를 먹이면 이제 이 락이 후보에 뜬다(수정 전엔 안 떴다), `test_guards_
+  coverage_bidirectional.sh` 는 이 락 몫 7/7·전체 105/105 GREEN.
+- **재리뷰가 C1 의 양성 대조를 독립 재현했다** — `88b0b0c`(라운드 1 이전) 판에
+  코디네이터의 반사실(emit 미가로채기 유지)을 직접 적용하니 emit 이 123줄을
+  뿜고 `test_guards_coverage_bidirectional.sh` 가 Fail 6(방향 A 1 + B 5)을
+  냈다 — 라운드 1 의 수정이 그 지뢰를 정확히 없앴다는 것과, emit 하는 6경로가
+  「실제로 읽는 것」과 정확히 일치한다는 것(PATH shim 계측, runtime-gate.md 의
+  awk `getline` 내부 읽기까지 포함해 과대 신고 아님)을 재리뷰가 별도로 확증했다
+  — 이 절 자체는 코드 변경이 아니라 검증 기록.
+
+## [7.1.1] — 2026-09-05
+
+### Fixed
+
+- **Task 15c 수정 라운드 1 (C1, Critical) — 이 브랜치가 방금 심은 지뢰.**
+  R2 로 `# guards:` 를 넣은 `test_skill_orchestration_behavior.sh` 가
+  `--emit-scanned` 인자를 가로채지 않고 있었다 — 그 인자를 받으면 정상 스위트
+  전체가 그대로 돌아 PASS/FAIL 123줄을 stdout 에 뿜었다. 오늘 무해했던 유일한
+  이유는 이 파일의 선재 RED 둘(iter cap 근접성·R1b→R8, 이 브랜치가 만든 것도
+  건드릴 것도 아니다) 때문에 rc≠0 이라 `test_guards_coverage_bidirectional.sh`
+  가 "미지원"으로 읽었기 때문이다 — 그 rc≠0 은 이 브랜치 소유가 아니라서, 언젠가
+  고쳐지면 방향 A·B 가 +6 거짓 FAIL 을 낸다(리뷰어가 사본 트리에서 rc=0 반사실로
+  실증). `test_guards_coverage_bidirectional.sh:23` 의 자기재귀 회피용 빈 응답은
+  이 자리의 선례가 «아니다»(그 파일은 자기 자신을 스캔 못 하는 게 사실이라
+  빈 응답이 정직하지만, 이 파일은 자기 자신을 스캔하는 게 아니다) — 대신
+  실제로 읽는 다섯 경로(SKILL.md 3종을 내는 동적 `find` 재사용 + plugin.json +
+  페르소나 둘)를 낸다. 양성 대조: 선재 RED 를 임시로 만족시킨 사본에서도
+  `--emit-scanned` 는 여전히 rc=0·같은 7줄, `test_guards_coverage_
+  bidirectional.sh` 도 여전히 GREEN(104/104, 이 락 몫 6/6 포함).
+- **Task 15c 수정 라운드 1 (I1, Important) — R3 dispatch 락이 ∃-검사인데 주석은
+  ∀("never a hardcoded sandbox_dir")를 주장했다.** 리뷰어 변이(dispatch 를
+  `${SANDBOX_DIR}` 로 하드코딩 + 문서 아무 데나 올바른 리터럴을 담은 decoy 산문
+  한 줄 추가)가 기존 PASS-only grep 을 통과시켰다 — v6.6.2 선례(critiquing-
+  artifacts 락)가 이미 쓰는 양의 개수 + 음의 짝 모양과 실제로는 달랐다는 뜻.
+  `project_dir: <project_dir>${SANDBOX_DIR}</project_dir>` 부재를 확인하는
+  음의 짝을 추가해 그 주장을 참으로 만들었다. 양성 대조: 리뷰어와 같은 decoy
+  변이를 재현하면 새 음의 짝만 RED(옛 ∃-체크는 여전히 속아서 PASS), 원복 후
+  GREEN.
+- **Task 15c 수정 라운드 1 (I2, Important) — R5 가 `test_synthesize_
+  disposition.sh` 에서 걷어낸 무조건 단정("선언 ⊇ 실제는 무해")을 같은 커밋이
+  형제 파일 `test_synthesize_artifact_findings.sh` 에 다시 심었다.** 두 파일이
+  서로를 인용하면 다음 사람이 어느 쪽을 읽느냐로 답이 갈린다 — 인용을 끊고
+  올바른 조건(방향 B 는 스캔 결과 0건 글롭을 FAIL 시킨다, 지금 무해한 것은
+  quality-gates 사본이 최소 1건을 맞기 때문)을 두 파일 모두에 직접 적었다.
+- **Task 15c 수정 라운드 1 (I3, Important) — R2 의 "다섯 밖은 안 읽는다" 전수
+  확인 근거로 인용한 grep 이 불건전했다.** `grep -n '"\$[A-Za-z_]*\(_DIR\|_MD
+  \|_JSON\|_ROOT\)"'` 는 변수 뒤에 닫는 따옴표가 바로 안 붙는 줄(이 파일 자신의
+  `. "$SCRIPT_DIR/../lib/reconstruct-skill.sh"`)을 구조적으로 놓친다. 결론
+  (다섯 밖은 안 읽는다)은 안 바뀌지만 — reconstruct-skill.sh 는 그 다섯짜리
+  목록 밖의 새 코퍼스를 열지 않는 스플라이서일 뿐이다 — "이 정규식이 증명한다"는
+  서술은 거짓이었다. 정규식을 인용하지 않고 수동 정독 사실만 남겼다.
+- **SKILL 제목 major 불일치(병합이 가져온 것, 이 브랜치가 7.1.x 를 출하하므로
+  같이 고친다) — `quality-pipeline/SKILL.md`·`publishing-pr-understanding/
+  SKILL.md` 의 제목이 `(v6.0.0)` 인 채 plugin.json 이 v7 로 올라 있었다.** 두
+  제목의 major 만 `(v7.0.0)` 으로 맞췄다(의미 변경 없음) — `test_skill_
+  orchestration_behavior.sh` 의 major-불일치 락 + "버전 단 제목 0개" 공허-방지
+  락 둘 다 GREEN 으로 복귀(merge 가 만든 4 FAIL → 선재 RED 2 만 남음).
+
+### Recorded (not fixed — coordinator to adjudicate)
+
+- **m1** — 위 주석들이 인용하는 줄번호(`:254`·`:441` 등)는 **이 커밋 시점 기준**이다.
+  이 헤더 주석 블록 자체가 다음에 또 늘어나면 같은 drift 가 재발할 수 있다 —
+  믿기 전에 `grep -n '^PLUGIN_JSON=\|^AGENTS_DIR='` 로 재확인할 것.
+- **m2** — I1 의 새 음의 짝을 포함해 이 파일의 `project_dir` 관련 `grep -qF` 들은
+  전체-리터럴 고정이라 `project_dir:` 뒤 공백 개수가 바뀌면(옛 ERE 는 허용했다)
+  거짓 RED 를 낸다. v6.6.2 선례와 같은 trade-off 라 지금은 고치지 않았다 — 고칠
+  경우의 대안 정규식을 주석에 남겨 뒀다.
+
+## [7.1.0] — 2026-09-05
+
+### Added
+
+- **처분 회계(`Ledger`)를 리뷰 findings 가 버려지는 자리에 배선하고, 그 배선을
+  락 다섯으로 강제한다.** **강제의 실측 범위**(「모든 자리」가 아니다): L1·L2 의
+  모집단은 `Ledger` 를 import 하는 `.py` 소비자 다섯 + `consumer=<.py 경로>` 앵커다.
+  `plugins/*/{skills,commands,agents}/**.md` 의 처분 앵커 17 개 중 `consumer=` 가
+  `.py` 경로인 것은 **6** 뿐이고 나머지 11(`human` 6 · `orchestrator` 5)은 L1·L2
+  «밖»이다 — 그 11 에 대한 집행은 `test_dispatch_disposition.sh` 축 C 의
+  `disclosure=` 리터럴 실재뿐이며, 그 축은 채널 «이름»의 실재까지만 재고 그
+  채널이 실제로 읽히는지는 못 잰다(CLAUDE.md 가 그 한계를 규정한다).
+  새 판정기는 `tools/adjudication/` 에 산다 —
+  `check_wiring.py`(버리는 분기가 같은 분기에 처분 호출을 갖는가) ·
+  `check_consumed.py`(원장 키를 소비자가 실제로 읽는가) ·
+  `check_slots.py`(agent 가 «선언한» 입력과 dispatch 가 «전달하는» 것의 일치, 그리고
+  선언된 종류가 금지 어휘가 아닌지) · `check_names.py`(dispatch 이름이 실재하는가).
+  락은 `shared/tests/test_adjudication_{wiring,consumed}.sh` ·
+  `test_agent_input_slots.sh` · `test_runner_disposition.sh` ·
+  `test_dispatch_name_defined.sh`.
+- `shared/adjudication/render_disposition.py` — 처분 두 줄(「처분:」·「배관 손실:」)을
+  렌더하는 유일한 자리. 소비자 넷이 심볼릭 링크로 공유한다.
+- agent 20 개가 `input_slots:` 를 선언한다(tag·var·kind). 금지 종류
+  (`prior_verdict`·`score`·`orchestrator_framing`)는 C6 인용과 함께 면제 등재를
+  요구한다.
+- 러너 여섯이 `**처분**` 앵커로 소비자·fail-정책·공시 채널을 밝힌다.
+
+### Fixed
+
+- `synthesize_findings.py` 의 **두 렌더 분기 모두** 처분 두 줄을 싣는다. 이전에는
+  `kept>0` 분기만 잠겨 있어, 「clean」을 찍는 빈-findings 분기에서 배관 손실이
+  소실돼도 어떤 락도 소리를 내지 않았다.
+- `synthesize_artifact_findings.py` 의 `key` 단계 렌더에 값 수준 커버리지를 준다.
+- `phase_key` 의 원장이 죽어 있던 것(배선은 있는데 호출부가 `ledger=None`)을 살린다.
+- L3 슬롯 재태깅이 어둡게 만든 `test_skill_orchestration_behavior.sh` 의 R3
+  dispatch 감시를 복구한다(성질은 무변경, 감시만 복구).
+
+### Note
+
+이 브랜치는 `6daba33`(당시 quality-gates v6.0.0)에서 갈라져 작업 중 6.1.0~6.6.5 로
+올렸다. 그 사이 `main` 이 v7.0.0(breaking)으로 갔으므로 병합 시 7.1.0 으로 맞춘다.
+아래 6.x 절들은 이 작업의 단계별 기록이며 «7.0.0 이후»에 작성됐다.
+
 ## [7.0.0] — 2026-09-04 (BREAKING)
 
 `gh pr create` 직후 `/qg` 파이프라인을 자동 기동하던 PostToolUse 훅을 제거한다. 파이프라인은
@@ -33,6 +331,375 @@
 - `README.md`·`commands/qg.md`·`tests/e2e-scenarios.md`: 훅·kill switch 키·시나리오 L 의 해당 서술 제거.
 - `setup-qg.sh --pr-url` / `/qg --pr-url` 과 `scripts/pr-create.sh` 는 그대로다 — 훅과 무관한 사용자 표면.
 
+## [6.6.5] — 2026-09-05
+
+### Fixed
+- **Task 15c (R1, Critical) — 이 브랜치의 L3 슬롯 재태깅(v6.6.0)이
+  `test_skill_orchestration_behavior.sh`(:270)의 R3(runtime-verifier) dispatch
+  `project_dir` 회귀 감시를 어둡게 했다.** 옛 패턴 `project_dir:[[:space:]]*
+  \?"\$runtime_project_dir` 은 `references/runtime-gate.md:722` 가
+  `project_dir: <project_dir>${RUNTIME_PROJECT_DIR}</project_dir>` 로 바뀐
+  뒤에도 그대로 남아 있어 0건 매칭·FAIL 이었다(HEAD 실패 3건 — 선재 RED
+  둘은 무관, iter cap·R1b→R8). 지키려는 성질(그 dispatch 가 `sandbox_dir`
+  하드코딩이 아니라 `runtime_project_dir` 값을 쓴다)은 안 깨졌으므로 새
+  표기의 **정확 전체 리터럴**(`grep -qF`)로 패턴만 갱신했다 — v6.6.2 가
+  `artifact_path` 락에 쓴 것과 같은 수리 형태. 양성 대조: 그 자리를
+  `<project_dir>${SANDBOX_DIR}</project_dir>` 로 바꾸면 RED(3건), 원복하면
+  다시 2건(선재 RED 만).
+- **Task 15c (R2, Important) — 위 락을 가진 `test_skill_orchestration_
+  behavior.sh` 에 `# guards:` 선언이 아예 없었다.** 그래서 SKILL.md·
+  runtime-gate.md 를 편집해도 이 락이 `compute-test-scope-candidates.sh` 의
+  후보에 안 들었다 — R1 회귀가 이 브랜치 내내 안 보인 이유. 이 파일이
+  실제로 여는 다섯 자리(quality-pipeline 외 모든 `skills/*/SKILL.md`,
+  `references/runtime-gate.md`, `.claude-plugin/plugin.json`,
+  `agents/security-reviewer.md`·`agents/adversarial.md`)에서 도출해
+  선언했다. 프로덕션 매처(`read -r -a` + 따옴표 `case`)를 직접 돌려 다섯
+  글롭이 의도한 파일에 정확히 매칭함을 확인하고, `runtime-gate.md` 를
+  건드리는 실제 diff 로 `compute-test-scope-candidates.sh` 가 이 락을
+  후보로 내는 것까지 end-to-end 로 확인했다.
+  `test_guards_coverage_bidirectional.sh` 는 93/93 GREEN 유지(이 파일은
+  `--emit-scanned` 미지원이라 방향 A/B 대상 밖, "미지원" 으로만 집계).
+- **Task 15c (R3, Important) — `synthesize_artifact_findings.py` 의 `key`
+  단계(:311-319, stderr 처분 두 줄)가 방금 고친 Critical(R1)과 같은
+  부류(두 렌더 분기 중 한쪽만 값으로 잠김)를, 다른 파일에서 반복했다.**
+  `test_synthesize_artifact_findings.sh` 는 `# guards:` 선언이 전혀 없었고
+  (선언 부재는 test_synthesize_disposition.sh 의 F3 과 같은 결함이 이
+  네 번째 소비자에도 있었다는 뜻), 「처분 회계 (T1-B)」절은 `--phase synth`
+  의 YAML 원장만 재고 `--phase key` 의 stderr 렌더는 한 번도 안 쟀다.
+  `# guards:` 선언(F3/m1 과 같은 다섯 경로, `--emit-scanned` 도 구현)을
+  더하고, 「처분 회계 (T1-C, key 단계)」절을 신설 — 실패 소스(findings
+  문서 아님) 1건 + 파손 항목(non-dict) 1건을 넣어 미판정(key 단계엔
+  「판정자 부재」 hold 가 원리적으로 없어 항상 0) · 배관 손실(항목 파손
+  1 + source_failed 1 = 2) · 차단(예) 을 값으로 못박았다. 양성 대조: :318의
+  stderr 기록 루프를 지우면 신설 세 단언 전부 RED(36→33 GREEN, 3 Fail),
+  원복 후 36/36 GREEN.
+- **Task 15c (R4, Minor) — CHANGELOG `[6.6.4]` 의 F4 항목(:49-56)이 파일만
+  지목하고 F4 자신이 무엇을 고쳤는지는 적지 않았다(실체는 `run_slots.py:
+  32-36` 소스 주석에만 있었다).** 형제 항목 F1·F2·F6(spec-distill
+  CHANGELOG) 처럼 결함을 서술하는 문장을 그 항목 안에 보탰다 — 기존
+  절은 그대로 두고 제자리 교체하지 않았다.
+- **Task 15c (R5, Minor) — `test_synthesize_disposition.sh:20-24` 근처의
+  "선언 ⊇ 실제는 무해하다"는 서술이 이 리포의 무조건 규약처럼 읽혔다.**
+  `test_guards_coverage_bidirectional.sh` 의 방향 B 는 스캔 결과를 하나도
+  안 덮는 글롭을 명시적으로 FAIL 시키므로, 그 서술대로면 방향 B 를 깨는
+  확장까지 허가하는 셈이 된다. 지금 그 글롭이 무해한 진짜 이유(quality-gates
+  쪽 사본에도 걸려 최소 1건은 맞기 때문)로 문장을 고쳤다 — 코드 변경 없음.
+
+## [6.6.4] — 2026-09-05
+
+### Fixed
+- **정정 — 바로 아래 `[6.6.3]` 절이 μ3 재현 결과를 "6/6 → 0/6, 크래시로
+  stdout 빈 문자열"이라고 적었으나, `docs/superpowers/plans/2026-09-03-
+  adjudication-topology-mutations.md` 가 서술한 그대로의 변이(`line2 = ""`
+  치환, 문장 삭제로 인한 NameError 가 아니다)를 그 시점 테스트 파일에 다시
+  걸어 재확인한 결과는 **5/6(Fail 1), 크래시 없음**이다. 방향(F3 이 이
+  락을 코퍼스에 편입해야 한다는 결론)은 그대로 유효하다 — 값만 틀렸다.
+  Keep a Changelog 관행상 `[6.6.3]` 절 본문은 고치지 않고 여기 정정만
+  남긴다(제자리 교체는 이 리포가 이미 두 번 겪은 실수 — 이전 릴리스
+  노트가 사라진다).
+- **Task 15 수정 라운드 2 (C1, Critical) — `synthesize_findings.py` 의
+  `render()` 는 `disposition_lines()` 를 두 자리에서 부르는데(:482 findings
+  가 빈 clean 분기, :532 kept>0 분기 — `main()` 이 `render()` 를 한 번만
+  불러 제3의 자리는 없음을 도출로 확인), `test_synthesize_disposition.sh`
+  의 여섯 assert_grep 이 findings.yaml 을 실채택 항목이 남게 짜서 :532
+  분기만 태웠다.** 코디네이터가 직접 재현: :482(clean) 분기에서 `plumb_line`
+  을 지우면 이 파일을 코퍼스로 갖는 락 8개 **전부 GREEN**(무검출) — 배관
+  손실이 사라져도 사용자 화면은 여전히 clean 으로 읽히는, 가장 위험한
+  자리가 무방비였다. :482 분기 전용 fixture(malformed 항목 + 판정자 없는
+  저신뢰 finding + reject 대상 하나를 함께 넣어 kept=0 이면서 기각·억제·
+  미판정·배관손실이 모두 값으로 나오게 구성)와 값 검사 넷을 추가했다.
+  양성 대조: :482/:532 각 분기에서 개별적으로 `plumb_line` 을 지우면 그
+  분기 전용 단언만 RED(격리 확인), 원복 후 11/11 GREEN.
+- **Task 15 수정 라운드 2 (m1, Minor) — `test_synthesize_disposition.sh` 의
+  `--emit-scanned` 가 이 락이 «읽지 않는» 경로 둘(`plugins/spec-distill/
+  scripts/{adjudication,render_disposition}.py`)을 내고 있었다.** `SCRIPT`
+  는 `plugins/quality-gates/scripts/synthesize_findings.py` 하나뿐이고
+  파이썬이 import 로 실제로 여는 sibling 은 그 디렉터리 안(quality-gates
+  쪽)의 심볼릭 링크뿐이다 — spec-distill 쪽 사본은 이 락의 어떤 실행도
+  건드리지 않는다. `# guards:` 는 그대로 둔다(fail-safe — 선언 ⊇ 실제는
+  무해하다는 것이 이 리포의 명시적 규약). `--emit-scanned` 만 다섯 경로로
+  좁혔다 — 그 값은 "선언 ⊇ 실제"의 **실제** 쪽이라 넓히면 안 된다.
+- **Task 15 수정 라운드 2 (m4, Minor) — `test_skill_drop_notice_consumed.sh`
+  에서 `$directive`/`$dlines` 를 계산하자마자(b1·c 의 «첫» 소비 지점) 쓰지만
+  그 앵커 유효성(d0) 보고는 55줄 뒤(d3 바로 앞)에 있었다.** 지시부 앵커가
+  깨지면 b1·c 가 "생산자만 고쳤다"·"문구 불일치" 같은 틀린 원인을 먼저
+  찍고 나서야 d0 이 진짜 원인(앵커 부재)을 드러냈다 — RED 라는 결론 자체는
+  안 바뀌지만 진단 순서가 계산 순서와 어긋나 있었다. d0 검사를 계산 직후,
+  b1 보다 앞으로 옮겼다. 양성 대조: 지시부 헤더 문구를 깨뜨리면 이제 d0 이
+  가장 먼저 "앵커가 깨졌다"를 찍고 그 아래 b1·c·d3 가 뒤따른다(5/14 Fail,
+  원복 후 14/14 GREEN).
+- **Task 15 수정 라운드 2 (m3, Minor) — F4(shared/tests/fixtures/adjudication/
+  run_slots.py, `# guards:` 를 가진 파일 없음)가 라운드 1의 어느 CHANGELOG
+  에도 없었다.** F6 은 같은 성질의 shared/ 변경("이 라운드가 하나의
+  커밋이므로")을 spec-distill CHANGELOG 에 적었는데 F4 는 빠졌다 —
+  일관성을 맞춰 여기 기록한다. I1(수정 라운드 2, 상세는 spec-distill
+  CHANGELOG)이 이 부류를 마저 닫으면서 `run_slots.py` 자신도
+  `test_agent_input_slots.sh` 의 `# guards:`/`--emit-scanned` 에 편입했다.
+  **F4 자신이 고친 결함(R4, adjudication-topology Task 15c) — 이 파일만
+  지목하고 무엇을 고쳤는지는 여태 어느 CHANGELOG 에도 없었다, 실체는
+  소스 주석(`run_slots.py:32-36`)에만 있었다.** `check_slots.check()` 는
+  `no_declaration` 위반마다 이미 agent 이름(`info["path"]`)을 튜플에 실어
+  냈는데(`tools/adjudication/check_slots.py:142`), `run_slots.py` 의 출력
+  루프가 그 축만 걸러내 `no_declaration=%d` 로 **개수만** 올리고 어느
+  agent 인지는 아무 데도 안 남겼다 — `undeclared`/`undelivered` 등 다른
+  축은 전부 이름을 대는데 이 축만 침묵했다. 정보(`info["path"]`)는 이미
+  있었고 흘리는 쪽은 print 루프였다 — 그 필터를 제거해 `no_declaration`
+  도 다른 축과 같은 `PROBLEM <kind> <key> @ <path> <detail>` 형식으로
+  agent 이름을 대게 했다.
+
+## [6.6.3] — 2026-09-04
+
+### Fixed
+- **Task 15 수정 라운드 1 — `test_synthesize_disposition.sh` 의 `# guards:`
+  가 `synthesize_findings.py` 하나만 선언해 자기가 실제로 지키는 것보다
+  좁았다(Important, 코디네이터가 재현: μ3 상태로 돌리면 6/6 → 0/6).** 이
+  스크립트는 `adjudication.py`·`render_disposition.py` 를 import 해서
+  회계·렌더 «값»을 직접 검사하므로(여섯 `assert_grep` 이 라벨이 아니라
+  카운트를 잰다) 둘 다 실제 코퍼스다. `# guards:` 를 그 두 모듈의 실 파일
+  (`shared/adjudication/*.py`) + 배포 심볼릭 링크 사본(`plugins/*/scripts/
+  {adjudication,render_disposition}.py`, quality-gates·spec-distill 둘 다
+  mode 120000)까지 넓혔다 — 어느 쪽이 바뀌어도 이 락이 이제 선택된다.
+  `--emit-scanned` 도 같은 일곱 경로를 내도록 맞춰 `test_guards_coverage_
+  bidirectional.sh` 의 선언⊆⊇실제 양방향이 그대로 성립한다(80→86 건 유지
+  GREEN).
+- **`test_skill_drop_notice_consumed.sh` 의 b1·c 두 단언이 근거 단락의
+  decoy 인용으로 만족되고 있었다(Minor, 코디네이터 지목 — b1; 같은 원인을
+  c 에서도 발견해 함께 닫음).** `quality-pipeline/SKILL.md` 의 "Not-clean
+  notice override" 지시 문단을 통째로 지워도(Task 15 μ12) 뒤따르는 "Why the
+  key is the marker" 근거 단락이 같은 문자열(`dropped as malformed`)을
+  예시로 다시 인용해 b1·c 가 GREEN 으로 남았다. 두 단언 모두 이미 있던
+  `$directive`(지시 문단만 뽑는 awk 범위, d0/d3 가 쓰던 것) 로 코퍼스를
+  좁혀 body-unique 하게 만들었다 — `$window`(step 4.5 섹션 전체) 대신
+  `$directive` 를 검사 대상으로 쓴다. 양성 대조: 같은 μ12 를 다시 걸면
+  이제 b1·c 둘 다 RED (Fail 4→6), 원복 후 14/14 GREEN.
+
+## [6.6.2] — 2026-09-04
+
+### Fixed
+- **Task 14 수정 라운드 2 — `test_critiquing_artifacts_skill.sh:154-155`(F-G
+  TOCTOU/symlink-escape 방어 락)가 v6.6.0 의 dispatch 재태깅으로 어두워져 있었다
+  (Critical, 코디네이터 리뷰가 잡고 독립 재현).** critic·adversarial dispatch 의
+  `artifact_path: <canonical>` 을 `<artifact_path>${CANONICAL_PATH}</artifact_path>`
+  로 바꾼 것(v6.6.0, L3 슬롯 태깅)이 이 락의 정확-리터럴 grep 을 0건으로 만들어
+  FAIL 이었다. 보안 성질(E2c 가 얼린 canonical 이 여전히 dispatch 에 실리는가)은
+  변하지 않았음을 SKILL.md 프로즈(E2c 절)와 var 이름(CANONICAL_PATH) 둘 다로
+  확인 — 락의 패턴만 새 표기의 **정확 전체 문자열**로 갱신했다(개수 하한 그대로
+  `-ge 2`). 느슨화가 아니라는 것은 raw-`<path>` 되돌리기 양성 대조로 확인
+  (카운트 락 + drift 락 둘 다 RED, 원복 후 클린). 이 결함은 브리프가 지정한 락
+  목록에도, 이전 라운드의 검증 패스에도 없었다 — `test_codex_backward_compat.sh`
+  가 돌리는 qg 전량 스위트(117개)로만 잡혔다.
+
+## [6.6.1] — 2026-09-04
+
+### Fixed
+- **Task 14 수정 라운드 1 — `tools/adjudication/check_slots.py`(L3 판정기) 의
+  dispatch 펜스 스캐너가 «인스턴스가 아니라 부류»로 고쳐졌다.** 코디네이터가
+  v6.6.0 의 보고 둘을 검토하고 지시:
+  - 펜스 감지가 `^```` (줄 시작 열 0) 이라 번호 목록 continuation 처럼 들여쓴
+    dispatch 펜스는 **구조적으로 영원히 안 보였다** — v6.6.0 은 그 인스턴스
+    둘(spec-distill 의 spec-reviewer·steelman-builder dispatch)의 들여쓰기를
+    풀어 우회했을 뿐, 부류는 그대로였다. `^\s*```` 로 고쳐 들여쓴 펜스도 열고
+    닫게 하고, 두 문서의 들여쓰기를 **원복**했다(스캐너가 보므로 문서를 도구에
+    맞출 필요가 없어짐) — 원복 후 L3 재확인 GREEN.
+  - `_harvest()`가 `_SUBAGENT_RE.search()`(첫 매치만) 를 써서, 펜스 하나에
+    subagent_type 이 둘(security-reviewer+adversarial) 이면 뒤의 태그를 앞
+    agent 에게 조용히 잘못 귀속시켰다. `.findall()`로 세어 둘 이상이면 **어느
+    쪽에도 귀속하지 않고** `multi_agent_fences` 목록(file:line + count)에
+    기록한다 — 이 리포 규약("셀 수 없으면 셀 수 없음을 낸다")대로 침묵과 0 을
+    구분.
+  - `test_agent_input_slots.sh` 에 `multi_agent_fences==0` assertion +
+    판정기 자체 fixture(`slots_multiagent`) 추가. 양성 대조 셋 확인:
+    (구) 스캐너로는 들여쓴 정상 dispatch 가 4건 허위 `undelivered` 를 냈고,
+    (신) 스캐너는 0건; 들여쓴 채로 슬롯 하나를 지우면 여전히 정확히 그
+    file:line 을 지목하는 `undeclared` 를 낸다; 두 `Agent()` 호출을 일시
+    병합하면 `multi_agent_fences=1` 이 `quality-pipeline/SKILL.md:365 agents=2`
+    를 이름 댄다. 이 판정기는 4개 플러그인의 agent 정의를 검사하는 공유
+    파일이라 관련 플러그인 전부(agent-transparency·plugin-audit·spec-distill)
+    함께 bump.
+
+## [6.6.0] — 2026-09-04
+
+### Added
+- **agent 7개(security-reviewer·adversarial·artifact-critic·artifact-adversarial·
+  test-scope-validator·runtime-verifier·pr-understanding-builder)에 frontmatter
+  `input_slots:` 선언 — L3(adjudication-topology Task 14).** 각 agent 가 dispatch
+  로 실제로 받는 (태그, 변수, `kind`) 삼중항을 선언하고, `shared/tests/test_agent_input_slots.sh`
+  가 그 선언과 SKILL 의 실제 dispatch 표기(`<tag>${VAR}</tag>`)가 일치하는지 +
+  선언된 `kind` 가 금지 어휘(`prior_verdict`/`score`/`orchestrator_framing`)가
+  아닌지를 잰다.
+- `tools/adjudication/check_slots.py` `EXEMPT_SLOTS` 에
+  `("quality-gates:adversarial", "phase1_findings")` ·
+  `("quality-gates:artifact-adversarial", "merged_findings")` 등재(C6(1)) —
+  Phase 1/2 findings·병합 findings 를 verdict 하는 것 자체가 두 agent 의
+  과업이라 대응물이 없다.
+
+### Fixed
+- **security-reviewer/adversarial 의 dispatch 프롬프트(quality-pipeline/SKILL.md)가
+  두 `Agent()` 호출을 펜스 하나에 담고 있어, 펜스-단위 dispatch 스캐너가 두
+  번째 호출(`adversarial`)의 태그를 첫 번째(`security-reviewer`)에게 귀속시켰다.**
+  펜스를 분리했다 — 펜스는 언제나 독립 dispatch 여야 한다는 판정기의 불변식.
+- security-reviewer/adversarial(persona 의 `filtered_diff`) ·
+  test-scope-validator(persona 의 "## Current Diff section") 가 자신의 Input
+  절에 문서화한 필드를 dispatch 프롬프트가 실제로는 보여주지 않고 있었다 —
+  세 dispatch 자리 모두에 그 필드를 명시적으로 채웠다(선언·문서·dispatch 삼자
+  불일치 해소, over-broad `optional: true` 로 덮지 않았다 — 실제로 상시 전달되는
+  입력이다).
+- runtime-verifier 의 persona 가 `plan_path` 를 Input 으로 문서화했으나
+  runtime-gate.md 의 dispatch 에는 없었다 — 함께 채움.
+- publishing-pr-understanding/SKILL.md 의 `Agent("quality-gates:pr-understanding-builder",
+  <blob inlined>)` 위치인자 표기를 이 리포 전역의 캐노니컬
+  `Agent({subagent_type: "...", prompt: ...})` 펜스로 승격 — 기존 표기는
+  `_SUBAGENT_RE`/`_PAIR_RE` 어느 쪽에도 안 걸려 dispatch 코퍼스에서 구조적으로
+  안 보이는 자리였다.
+
+## [6.5.5] — 2026-09-04
+
+### Fixed
+- **`shared/tests/test_runner_disposition.sh`(codex 러너 처분 락)의 세 `assert_grep`
+  이 `consumer=`·`fail-`·`disclosure=` **문자열의 존재**만 쟀지 값의 **참·거짓**은
+  재지 않았다 — Task 13 수정 라운드 1에서 `run_audit_codex_reviewer.sh`의
+  `consumer=orchestrator`가 거짓(실제 소비자는 같은 플러그인의 `.py`)이었는데도
+  이 락은 GREEN이었다(adjudication-topology Task 13 수정 라운드 2). `shared/tests/`에
+  있어 플러그인 자체는 아니지만 이 락의 코퍼스(`guards: plugins/*/scripts/*codex*.sh`)에
+  이 플러그인 몫 러너 둘(`run_codex_reviewer.sh`·`run_artifact_codex_reviewer.sh`)이
+  있어 bump(plugin-audit·spec-distill도 각자 몫 러너 때문에 동시 bump).
+  `consumer=` 값이 경로 모양(`/` 포함 또는 `.py`/`.js` 로 끝남)이면 ⑴ `git ls-files`
+  스냅샷 정확일치로 **추적된 파일인지**(단순 `[ -f ]`는 미추적 잔여 파일도 통과시킨다)
+  ⑵ 경로의 `plugins/<name>` 세그먼트가 **앵커가 사는 플러그인과 같은지**(설치본에서
+  다른 플러그인의 스크립트는 도달 불가라는 CLAUDE.md 규칙의 근거)를 잰다. 값이
+  `orchestrator`/`human`(그 밖의 비-경로 값 포함)이면 참·거짓을 구조적으로 못 재므로
+  `unverifiable_consumer=N`으로 개수를 낸다(조용히 건너뛰지 않는다 — 셀 수 없으면
+  셀 수 없음을 낸다는 이 리포의 규약). 형제 `test_dispatch_disposition.sh`의 축
+  A④/A⑤가 같은 규칙을 이미 인라인 python으로 구현하지만, 이 락은 순수 bash 라
+  로직을 그대로 복사하지 않고 **같은 판정을 이 락의 언어로 독립 구현**했다 — 두
+  구현이 코드를 공유하지 않는 이유(단일 인라인 스크립트 vs 순수 bash, 언어 전환
+  없이는 나눌 자리가 없음)를 락 헤더 주석에 남겼다.
+  양성 대조 넷(⒜ 부재 경로 ⒝ 다른 플러그인 경로 ⒞ 추적 안 된 파일 ⒟
+  `unverifiable_consumer` 증가)으로 이빨을 확인 — 상세는
+  `.superpowers/sdd/2026-09-03-adjudication-topology/task-13-report.md` §10.
+
+## [6.5.4] — 2026-09-04
+
+### Fixed
+- **codex 러너 둘(`run_codex_reviewer.sh`·`run_artifact_codex_reviewer.sh`)이 자기 처분을
+  밝히지 않고 있었다 — `shared/tests/test_runner_disposition.sh`(adjudication-topology
+  Task 13) 가 여섯 러너 26 단언 중 24 를 RED 로 잡았다(이 플러그인 몫 둘 포함).** 도출은
+  그 락의 `# guards: plugins/*/scripts/*codex*.sh` 코퍼스에서 직접 했다(스크래치 파일
+  아님) — `run_audit_codex_reviewer.sh`(plugin-audit) · `run_artifact_codex_reviewer.sh`·
+  `run_codex_reviewer.sh`(quality-gates, 이 항목) · `run_brief_codex_reviewer.sh`·
+  `run_seed_codex_reviewer.sh`·`run_spec_codex_reviewer.sh`(spec-distill) 여섯. 각 러너
+  상단에 `**처분** — consumer=<...> · fail-<open|closed> · disclosure=<리터럴>` 앵커를
+  추가했다.
+  - `run_codex_reviewer.sh`: `consumer=orchestrator`(quality-pipeline/SKILL.md 를 실행하는
+    오케스트레이터가 산출물 YAML 을 직접 읽어 판정한다 — `synthesize_findings.py` 는 이미
+    병합된 findings 블롭을 받을 뿐 이 파일을 직접 열지 않는다) · `fail-open`(Tier B: codex
+    미가용이면 그대로 continue — floor 리뷰어가 이 축의 주 판정자다) · `disclosure=banner`.
+  - `run_artifact_codex_reviewer.sh`: `consumer=plugins/quality-gates/scripts/synthesize_artifact_findings.py`
+    (`critiquing-artifacts/SKILL.md` 가 `--findings codex.yaml` 로 직접 넘긴다, 같은 플러그인
+    .py) · `fail-open`(codex 실패 시 codex.yaml 은 병합에서 제외되고 inherit-tier critic
+    단독으로 계속된다) · `disclosure=banner`.
+  - 기존 `shared/tests/test_dispatch_disposition.sh`(Task 5 산출물, Agent()/subagent dispatch
+    축) 는 19/19 Pass 로 무변경 — 이번 앵커는 다른 락(`test_runner_disposition.sh`)의
+    코퍼스(bash 코덱스 러너 스크립트)를 대상으로 한다.
+
+## [6.5.3] — 2026-09-04
+
+### Fixed
+- **`check_names.scanned_paths()` 가 kill-switch 파이썬 코퍼스를 빼고 있었다 — `dangling()` 이 그것을 실제로 소비하는데(adjudication-topology Task 12b 수정 라운드 1, 리뷰 Critical 하나).** v6.5.2 판은 「포함하면 plugins 전체 .py(155~161개)로 넓어져 `compute-test-scope-candidates.sh` 의 선택 정밀도를 죽인다」며 `killswitch_keys()` 가 여는 `plugins/*/**/*.py` 코퍼스를 `scanned_paths()` 에서 뺐다. 그 근거가 틀렸다 — `kill_switch_active()` 를 실제로 호출하는 파일은 8개뿐이고 전부 `plugins/*/hooks/*.py`·`plugins/*/scripts/*.py` 안에 있으며, 그 두 글롭은 이미 같은 커밋에서 `test_adjudication_wiring.sh`·`test_adjudication_consumed.sh` 가 선언으로 쓰고 있다 — catch-all 이 아니다. `tools/adjudication/check_names.py` 에 `_KILLSWITCH_GLOB` 상수를 신설해 `killswitch_keys()` 와 `scanned_paths()` 가 **같은 상수**를 쓰게 묶었다(한쪽만 바뀌는 일이 구조적으로 불가능) — 판정기 자신의 스캔 범위(`plugins/*/**/*.py`, 실측 155개, 6개 심볼릭 링크 제외)는 좁히지 않았다(좁히면 판정기 동작이 바뀌고 열거가 된다). `shared/tests/test_dispatch_name_defined.sh` 의 `# guards:` 에 그 코퍼스의 bash-safe 형태 `plugins/*/*.py`(단일 `*` — `**` 는 bash case 에서 인접 리터럴 `/` 를 요구해 실측 확인 없이 쓰면 구조적으로 어긋날 수 있다)를 추가. 양성 대조: kill-switch 코퍼스 안이지만 `plugins/*/scripts/*.py`·`plugins/*/hooks/*.py` 어느 쪽에도 안 걸리는 파일(`plugins/agent-transparency/tests/ab_driver.py`)을 변경해 `compute-test-scope-candidates.sh` 를 실제로 돌려, 수정 전엔 이 락이 후보로 안 뽑히고 수정 후엔 뽑히는 것을 확인(상세: `.superpowers/sdd/2026-09-03-adjudication-topology/task-12b-report.md`).
+
+## [6.5.2] — 2026-09-04
+
+### Fixed
+- **새 락 여섯(+발견된 일곱째)에 `--emit-scanned` 를 구현 — `test_guards_coverage_bidirectional.sh` 커버리지 계약 충족(adjudication-topology Task 12b).** v6.4.1 Known gaps 가 남긴 `test_synthesize_disposition.sh` 의 미구현을 포함해, 이 브랜치가 만든 `# guards:` 선언 보유 셸 락 전부가 `--emit-scanned` 를 구현하지 않은 채 남아 있었다 — 미구현이면 그 락은 자기 전체 출력(PASS/FAIL 텍스트)을 "스캔된 경로"로 잘못 파싱당해 시끄러운 오탐을 냈다. `plugins/quality-gates/tests/test_synthesize_disposition.sh` 는 이미 상수인 스크립트 경로 하나를 그대로 낸다. **브리프가 지정하지 않은 일곱째** `plugins/spec-distill/tests/test_review_dispatch_disposition.sh`(Task 11 산출물)도 같은 결함 signature 를 가져 함께 고쳤다 — Fail:0 도달에 필수였다(상세: spec-distill 쪽 CHANGELOG).
+- **`shared/tests/test_adjudication_wiring.sh` — `check_wiring.py` 에 `stale_exempt()` 신설, `EXEMPT` 의 (경로, 줄번호) drift 를 소리 나게 만든다(Task 11b 가 실증한 조용한 구멍).** 낡은 키가 아무것도 안 가리키면 배선 락이 이미 시끄럽게 잡지만, 밀린 줄이 «다른» 버리는 분기와 우연히 겹치면 검사 없이 조용히 면제됐다 — `exempt_stale` 축을 추가해 0 을 단언한다. 양성 대조(면제 항목 하나의 줄번호를 import 줄로 바꿔 RED 확인 후 원복)로 이빨을 확인.
+
+## [6.5.1] — 2026-09-04
+
+### Fixed
+- **Task 12 수정 라운드 1 — `quality-pipeline/SKILL.md:505`의 새 문구가 `test_skill_plugin_root_fallback.sh` 축 B(본문 bare 참조 전수)를 깼다.** v6.5.0이 그 줄에 쓴 `` `${CLAUDE_PLUGIN_ROOT}/scripts/` ``가 bash 펜스 밖 산문 인라인이라 fallback 없는 bare 참조로 잡혔다 — `CLAUDE_PLUGIN_ROOT`가 안 잡히는 맥락에서 조용히 빈 경로가 될 수 있었다. 같은 파일이 이미 쓰는 fallback 형태(`:122`·`:135`·`:274`·`:293`)와 글자 그대로 같게 `${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}/scripts/`로 교체. `test_skill_plugin_root_fallback.sh` Total 4/Pass 4/Fail 0으로 GREEN, `test_dispatch_name_defined.sh`(Task 12의 본 산출물)는 GREEN 유지.
+
+## [6.5.0] — 2026-09-04
+
+### Fixed
+- **`quality-pipeline/SKILL.md` step 4의 죽은 dispatch 이름 제거(adjudication-topology Task 12, T4-1).** `Dispatch \`quality-gates:synthesizer\` (or local synthesize_findings.py)`가 `37ea0d7`(synthesizer agent → script, v1.28.0)로 정의가 지워진 뒤에도 본문에 남아 있었다 — 괄호 안의 대안만 유일한 실체였다. `Run \`synthesize_findings.py\` (\`${CLAUDE_PLUGIN_ROOT}/scripts/\`)`로 괄호 안 대안을 본문으로 승격. `shared/tests/test_dispatch_name_defined.sh`(백틱으로 불린 `<plugin>:<name>` 이 실재 정의를 갖는지 역방향으로 검사)가 이 자리를 `dangling=1`로 잡고 있었고, 이 수정으로 `dangling=0`이 됐다 — 이 락이 처음으로 GREEN(Total 6, Pass 6, Fail 0).
+
+## [6.4.3] — 2026-09-04
+
+### Fixed
+- **`tools/adjudication/check_wiring.py`의 `EXEMPT`/`TERMINAL_CONSUMERS` 교정(adjudication-topology Task 11b)** — 이 락은 quality-gates 소유 파일도 검사하므로 함께 bump한다. 상세는 `plugins/spec-distill/CHANGELOG.md` v0.51.4 참조: 계획이 배정하지 않았던 `merge_review.py` 네 자리를 면제로 정리해 배선 락이 이 브랜치에서 처음 `Fail: 0`에 도달, `review-dispatch.py` 항목 10개의 줄번호 drift 교정, `_T5_SELECT_LOOP` 사유 오류 둘 수정, `EXEMPT`/`TERMINAL_CONSUMERS` C6 인용 검사 대칭화. quality-gates 소유 파일(`synthesize_findings.py`·`synthesize_artifact_findings.py`)은 이번 변경 대상이 아니다 — 영향은 락 자체의 정밀도뿐, 이 플러그인의 런타임 동작 변경 없음.
+
+## [6.4.2] — 2026-09-04
+
+### Fixed
+- **`shared/tests/test_adjudication_wiring.sh`의 import·앵커 대칭 축을 개수 비교에서 집합 비교로 강화(adjudication-topology Task 11 수정 라운드 1).** 이 락은 `plugins/*/scripts/*.py`·`plugins/*/hooks/*.py`(quality-gates 포함)를 검사하므로 quality-gates도 함께 bump한다. 상세는 `plugins/spec-distill/CHANGELOG.md` v0.51.1 참조 — `tools/adjudication/check_wiring.py`에 `TERMINAL_CONSUMERS` 상수 신설, `shared/tests/fixtures/adjudication/run_wiring_scan.py`가 `IMPORT`/`ANCHOR`/`TERMINAL` 세 집합을 새로 출력. quality-gates 소유 파일(`synthesize_findings.py`·`synthesize_artifact_findings.py`)은 이미 앵커를 갖고 있어 `TERMINAL_CONSUMERS`에 새로 오르지 않았다 — 영향은 락 자체의 정밀도 향상뿐, 이 플러그인의 런타임 동작 변경 없음.
+
+## [6.4.1] — 2026-09-04
+
+### Fixed
+- **`test_synthesize_disposition.sh`의 6번째 단언을 고쳤다(v6.4.0 Known gaps 해소, Task 10 수정 라운드 1).** 고칠 것은 렌더 서식이 아니라 단언이었다 — `line1`(`**처분:** 수용 N · 기각 N · …`)이 굵은 도입 라벨 + 맨 항목 구조이듯 `line2`도 같은 모양이라, "배관 손실"은 그 줄의 **도입 라벨**이지 맨 항목이 아니다. 단언을 `'배관 손실 [1-9]'`에서 `'\*\*배관 손실:\*\* [1-9]'`(라벨 전체를 앞뒤 굵음까지 고정)로 넓혔다 — 느슨한 부분 매치가 아니라 서식이 다시 바뀌면 알아채도록 라벨 전체를 못박았다. 계획 문서(`docs/superpowers/plans/2026-09-03-adjudication-topology.md:2183`)의 같은 줄도 같은 패턴으로 갱신 — 다음에 이 계획에서 브리프를 다시 뽑는 사람이 같은 함정에 빠지지 않도록. 6/6 GREEN 확인 후 `codex-blessed-red.txt`의 `test_synthesize_disposition.sh` 등재(사유 주석 포함)를 지웠다 — 양방향 래칫이 요구하는 그대로.
+- **`merge_brief_review.py`가 형제 `merge_review.py`와 같은 처분 회계를 stdout에 낸다(v6.4.0 Known gaps 해소).** `plugins/spec-distill/CHANGELOG.md` v0.50.1 참조.
+
+### Known gaps
+- **`test_guards_coverage_bidirectional.sh`가 새로 RED다 — 이 릴리스가 원인이 아니라 이 릴리스가 벗긴 pre-existing 결함이다.** `test_synthesize_disposition.sh`는 Task 8 원 커밋(`c3980fc`, 2026-09-04)부터 `--emit-scanned`를 구현한 적이 없다(직접 확인: `git show c3980fc:...test_synthesize_disposition.sh | grep emit-scanned` → 무출력). `test_codex_backward_compat.sh`의 "Running existing qg test suite..." 스텝이 이전에는 `test_synthesize_disposition.sh` 자신의 해시불일치를 먼저 보고했고, 그것이 GREEN이 된 지금은 그 뒤에 가려져 있던 `test_guards_coverage_bidirectional.sh`의 「미등재」실패가 처음 드러났다. `test_synthesize_disposition.sh`에 `--emit-scanned` 지원을 추가하는 것은 이 Task 의 범위 밖이라 고치지 않는다.
+
+## [6.4.0] — 2026-09-04
+
+### Added
+- `shared/adjudication/render_disposition.py` — `disposition_lines(report, held_classes)`(마크다운 두 줄 + advisory)와 `disposition_report(report, held_classes)`(구조화 dict, 카운트를 이름으로 편다). `Ledger.report()`/`held_by_class()`가 쓰는 원장을 「처분:」·「배관 손실:」 두 줄로 렌더하는 유일한 자리 — 소비자 넷(`synthesize_findings.py`·`synthesize_artifact_findings.py`·spec-distill의 `merge_review.py`·`merge_brief_review.py`)이 사본 없이 공유한다. `plugins/quality-gates/scripts/render_disposition.py`는 이 파일로 가는 git 심볼릭 링크(mode 120000, `adjudication.py`와 같은 방식).
+
+### Changed
+- `synthesize_findings.py`의 `render()` 시그니처를 `render(kept, suppressed_count, dropped_malformed, report, held_classes)`로 바꾼다 — 기존 `held_count`/`degraded`/`degrade_reasons` 세 개별 인자를 원장 `report` dict + `held_classes` dict 로 대체. `main()`이 `ledger.held_by_class()`를 넘긴다. 두 렌더 갈래(빈 findings·표 렌더) 모두 `disposition_lines()`의 두 줄(「처분:」·「배관 손실:」)을 싣고, 반환된 advisory(hold 분류 무손실성 위반 시)는 stderr로 낸다.
+- `synthesize_artifact_findings.py`의 `phase_synth` 출력 dict에 `adjudication` 블록을 더한다(`disposition_report(L.report(), L.held_by_class())`) — 기존 `degraded`/`degraded_reason` 4값 어휘(`adversarial`/`findings_load`/`sources_failed`/`none`)는 그대로 둔다.
+
+### Fixed
+- **`phase_key`의 원장이 죽어 있었다.** Task 9(v6.3.0)가 `phase_key(paths, ledger=None)`의 입력 실패 두 자리를 배선했지만 유일한 호출부 `main()`의 `phase_key(args.findings)`가 원장을 넘기지 않아 `if ledger is not None` 가드 안쪽이 영영 안 돌았다 — 배선이 있는데 실행되지 않는 상태. `main()`의 key 분기가 `Ledger(items="open")`을 만들어 넘기고, 처분 두 줄을 **stderr**로 낸다(stdout은 `phase_synth`가 다시 읽는 findings 문서라 건드리면 `_is_findings_doc` 스키마 판정을 깬다). 확인: `--findings /nonexistent.yaml` 실행 시 이전엔 stderr가 0바이트였고, 지금은 「배관 손실」 처분 줄이 보인다.
+
+### Known gaps
+- **`test_synthesize_disposition.sh`의 6번째 단언("배관 손실 [1-9]")이 여전히 FAIL이다(5/6 GREEN).** §5 목표 모양과 이 릴리스의 `disposition_lines()` line2는 `"**배관 손실:** %d ..."` 형식(`손실` 바로 뒤에 `:**` — 공백이 아니다)인데, 테스트의 grep 패턴은 `손실` 바로 뒤에 **공백** + 숫자를 요구한다. 이 어긋남은 계획 문서(`docs/superpowers/plans/2026-09-03-adjudication-topology.md:2183`·`:2682`)에도 동일하게 존재해 — 브리프의 오탈자가 아니라 계획 단계부터의 서식/테스트 불일치다. 렌더 서식(§5 예시)과 테스트 정규식 중 어느 쪽을 고칠지는 판정이 필요해 고치지 않고 남긴다. 이 때문에 `plugins/quality-gates/tests/codex-blessed-red.txt`의 `test_synthesize_disposition.sh` 등재도 지우지 않았다 — 지우면 `test_codex_backward_compat.sh`가 「미등재」로 실패하고, 그대로 둬도 실패 신호(1/6 PASS)가 바뀌어 「해시불일치」로 실패한다. 어느 쪽이든 RED이므로 원장을 조용히 다시 축복(re-bless)하지 않고 해시 불일치 상태로 남겨 다음 판정을 기다린다.
+
+## [6.3.2] — 2026-09-04
+
+### Fixed
+- `phase_synth` 의 미판정 `hold` 사유(`:211`)를 `"adversarial 판정 부재"` → `"판정자 부재: adversarial 판정 없음"`로 바꾼다 — `_HOLD_CLASSES`의 「판정자 부재」 접두와 일치시켜 `held_by_class()`가 「기타」 대신 올바른 칸으로 분류하게 한다. Task 2 의 정본 fixture(`shared/tests/fixtures/adjudication/probe_held_class.py:6`)가 이미 이 문자열을 기준으로 분류기를 세웠다. 주석(`# AC16: kept 에서 제외`)은 그대로. 스위트 단언은 `held` 총계만 보고 사유 문자열은 보지 않아 스위트 diff 로는 안 보이는 변경이라, 양성/음성 대조 프로브로 분류가 실제로 바뀌었음을 별도 확인했다.
+
+## [6.3.1] — 2026-09-04
+
+### Fixed
+- `test_synthesize_artifact_findings.sh` 의 「처분 회계 (T1-B)」 fixture — `absorbed` 단언이 리터럴 `dedup_key` 오버라이드에 의존해 실제로는 흡수를 유발하지 못했다(:234 의 `new_findings` 경로는 echo 된 dedup_key 를 신뢰하지 않고 `category`+`target_anchor`+`summary` 로 항상 재계산한다 — adversarial 이 echo 한 값을 믿지 않는 방어이지 버그가 아니다). kept finding 의 리터럴 `dedup_key` 를 제거해 내용 기반 해시를 쓰게 하고, `new_findings` 항목을 같은 `target_anchor`/`summary`(카테고리 없음도 동일)로 맞춰 **내용으로** 충돌시켰다 — 33/33 GREEN. 프로덕션 로직은 변경하지 않았다(`:151`의 `setdefault`와 `:234`의 무조건 재계산은 `phase_key` 가 만든 merged doc 경로에서 항상 같은 값을 내므로 동형이고, 차이는 손으로 쓴 fixture 에서만 드러난다). `codex-blessed-red.txt` 는 건드리지 않는다 — 이 RED 는 설계상이 아니라 fixture 결함이었다.
+
+## [6.3.0] — 2026-09-04
+
+### Changed
+- `synthesize_artifact_findings.py` 의 버리는 자리(T1-B) 다섯 곳이 원장 처분을 부른다: `phase_key` 의 소스 실패 둘(`source_failed`)·`phase_synth` 의 항목 처분 넷(기각·판정자 부재·수용·흡수). `L` 생성을 `phase_synth` 앞쪽으로 당겨 findings-load 실패·`sources_failed` 누적도 같은 원장에 `source_failed`로 싣는다.
+- `phase_synth` 출력 dict 에 `ledger:` 블록(원장 `counts` + 원장 자체 `degraded`)을 더한다 — 기존 `degraded`/`degraded_reason` 닫힌 어휘 4값(`adversarial`·`findings_load`·`sources_failed`·`none`)은 소비자 계약이라 유지, 원장은 병행 공시.
+- `phase_key(paths, ledger=None)` — `sources_failed` 카운터는 유지, 원장 호출을 더한다(생산만, 이 Task 의 소비자는 아직 없음).
+
+### Fixed
+- `:199` 의 `hold` 사유(`"adversarial 판정 부재"`)는 의도적으로 변경하지 않는다 — `held_by_class()` 의 「판정자 부재」 접두에 걸리지 않고 「기타」로 분류된다.
+
+## [6.2.1] — 2026-09-04
+
+### Fixed
+- `codex-blessed-red.txt` 에 `test_synthesize_disposition.sh` 를 등재 — 6.2.0 이 넣은 그 테스트는 여섯 단언 중 다섯이 `render()` 의 원장 소비(다음 Task 몫)를 기다리는 설계상 RED 라, 등재 없이는 `test_codex_backward_compat.sh` 가 "미등재"로 실패했다. 이 등재는 `render()` 가 배선되는 순간 양방향 래칫이 "stale 등재"로 지우라고 요구한다 — 풍경이 될 수 없다.
+
+## [6.2.0] — 2026-09-03
+
+### Changed
+- `synthesize_findings.py` 의 버리는 자리 전부가 원장 처분을 부른다 — 기각·보류·흡수·억제·강제·입력 실패, 그리고 수용.
+- `_as_list` 가 계산기 인자를 받는다: 컨테이너 카운터 셋(`dropped_raw`·`dropped_verdicts`·`dropped_newlist`)이 한 자리를 지나므로 그곳 하나가 셋을 덮는다.
+- `hold()` 사유에 접두 둘(`판정자 부재: ` / `항목 파손: `)을 통일 — `held_by_class()` 가 그것으로 분류한다.
+
+### Fixed
+- 기존 `dropped_*` 카운터는 유지된다. 원장은 더하기이지 대체가 아니다.
+
+## [6.1.0] — 2026-09-03
+
+### Added
+- `Ledger.suppressed(item, why)` — 규칙 억제를 기각과 분리된 칸으로 센다. 차단도 degrade 도 아니다.
+- `Ledger.held_by_class()` — `hold()` 사유의 접두별 개수. 미지 접두는 「기타」로 세어 합이 `held` 총계와 항상 일치한다.
+
+### Changed
+- `report()["counts"]` 에 `suppressed` 추가 (여섯 → 일곱).
 ## [6.0.1] — 2026-09-04
 
 ### Changed

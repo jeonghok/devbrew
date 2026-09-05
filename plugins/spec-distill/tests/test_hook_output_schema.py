@@ -479,72 +479,142 @@ class TestReviewDispatchOrdering(unittest.TestCase):
         return any(isinstance(c, ast.Constant) and c.value == "decision"
                    for c in ast.walk(call))
 
-    def _walk_calls_in_order(self, body_nodes, target_names):
-        """Yield (lineno, name) for Call nodes whose func.id is in target_names.
+    # ── 호출 순서 도출 ────────────────────────────────────────────────────
+    # 이 락은 한 번 «눈이 멀었다». emit 이 `main()` 안의 bare
+    # `print(json.dumps({"decision": ...}))` 에서 헬퍼 하나로 옮겨가자,
+    # `main()` 의 문(statement)만 훑던 옛 스캐너가 아무 emit 도 못 찾고
+    # "잴 대상이 사라졌다" 로 실패했다(정직한 실패 — 통과하지 않았다).
+    #
+    # 복구는 **도출**로 한다. 헬퍼 «이름»을 락에 적으면 다음 리팩터가 또
+    # 눈멀게 한다. 그래서 두 가지를 이름 없이 따라간다:
+    #   ⑴ **지역 함수 호출을 그 자리에 펼친다** — 이 모듈이 정의한 함수면
+    #      본문으로 내려간다(재귀 가드 있음). emit 이 어느 헬퍼로 가든 따라간다.
+    #   ⑵ **decision 성(性)을 호출 «인자»에서 전파한다** — 헬퍼 안의 print 는
+    #      `{"decision": ...}` 리터럴을 자기 안에 갖지 않는다(payload 를 인자로
+    #      받는다). 그 리터럴은 **호출 자리**에 있으므로, decision payload 를
+    #      건네받은 헬퍼 안의 stdout print 를 decision emit 으로 읽는다.
+    #
+    # `file=` 키워드가 붙은 print 는 제외한다 — stderr 진단이다. 이 구분이
+    # 없으면 락은 "rewrite 뒤에 아무 print 나 오면 통과" 가 되어 GREEN 을
+    # 유지한 채 변별력만 잃는다(그 손실은 스위트 diff 에 안 보인다).
+    #
+    # 순서 비교는 **줄번호가 아니라 이벤트 «순서»** 로 한다. 펼친 헬퍼의 본문은
+    # 호출 자리보다 «위»에 정의돼 있어 줄번호가 거꾸로 돈다 — 줄번호로 비교하면
+    # 그 자체로 거짓 RED 다.
 
-        `print` 는 **decision emit 인 것만** 낸다 (`_is_decision_emit`).
-        Recurses into FunctionDef body if encountered (handles helper refactor
-        per AC7.3.1 commentary).
+    @staticmethod
+    def _local_funcs(tree):
+        """이 모듈이 «정의한» 함수 이름 → 노드. 열거가 아니라 파일에서 도출."""
+        return {n.name: n for n in ast.walk(tree)
+                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
 
-        재귀 대상은 **문(statement)을 품는 노드 전부**다. 빠뜨린 노드 타입은 이 락을
-        RED 가 아니라 **눈멀게** 만든다: 그 안으로 옮겨진 호출은 `calls` 에서 그냥
-        사라지고, 남은 호출들끼리의 순서는 여전히 성립하므로 스위트는 GREEN 을
-        유지한다. 오늘 `rewrite_state` 도 decision emit 도 루프 안에 없지만, 그
-        사실은 이 락이 아니라 제품 코드의 현재 모양이 지키는 것이다.
+    @staticmethod
+    def _callee_name(call):
+        if isinstance(call.func, ast.Name):
+            return call.func.id
+        if isinstance(call.func, ast.Attribute):
+            return call.func.attr
+        return None
+
+    @staticmethod
+    def _to_stdout(call):
+        """`file=` 키워드가 없는 print — stderr 진단과 가른다."""
+        return not any(kw.arg == "file" for kw in call.keywords)
+
+    @staticmethod
+    def _own_calls(node):
+        """이 문 «자신»의 표현식에 있는 Call 들 (소스 순서).
+
+        하위 «문»(body/orelse/handlers/finalbody)은 건너뛴다 — 그쪽은
+        `_child_bodies()` 를 통해 따로 내려가므로, 여기서 함께 훑으면 같은
+        호출이 두 번 세어진다.
+
+        문 «타입»을 열거하지 않는다: `return helper({...})` 처럼 `ast.Expr` 이
+        아닌 자리로 emit 이 옮겨간 것이 정확히 이 락을 눈멀게 한 변화다.
+        """
+        out = []
+
+        def visit(n):
+            for child in ast.iter_child_nodes(n):
+                if isinstance(child, ast.stmt):
+                    continue
+                if isinstance(child, ast.Call):
+                    out.append(child)
+                visit(child)
+
+        visit(node)
+        return out
+
+    @staticmethod
+    def _child_bodies(node):
+        """이 문이 품은 하위 문 목록들 — 필드 이름을 열거하지 않고 «모양»으로
+        고른다(문의 리스트인 필드 전부 + except 핸들러)."""
+        out = []
+        for field in ("body", "orelse", "finalbody"):
+            v = getattr(node, field, None)
+            if isinstance(v, list) and v and all(isinstance(x, ast.stmt) for x in v):
+                out.append(v)
+        for handler in getattr(node, "handlers", None) or []:
+            out.append(handler.body)
+        return out
+
+    def _walk_calls_in_order(self, body_nodes, target_names, funcs,
+                             stack=(), carries_decision=False):
+        """실행(=소스) 순서로 `(name, lineno, via)` 를 낸다.
+
+        `via` 는 이 이벤트에 닿기까지 펼친 지역 함수 이름들 — 실패 메시지가
+        "어디로 옮겨갔는지" 를 사람에게 말해 준다.
         """
         for node in body_nodes:
-            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
-                call = node.value
-                name = None
-                if isinstance(call.func, ast.Name):
-                    name = call.func.id
-                elif isinstance(call.func, ast.Attribute):
-                    name = call.func.attr
+            for call in self._own_calls(node):
+                name = self._callee_name(call)
                 if name in target_names:
-                    if name != "print" or self._is_decision_emit(call):
-                        yield (node.lineno, name)
-            if isinstance(node, (ast.With, ast.AsyncWith)):
-                yield from self._walk_calls_in_order(node.body, target_names)
-            if isinstance(node, ast.Try):
-                yield from self._walk_calls_in_order(node.body, target_names)
-                for handler in node.handlers:
-                    yield from self._walk_calls_in_order(handler.body, target_names)
-                yield from self._walk_calls_in_order(node.orelse, target_names)
-                yield from self._walk_calls_in_order(node.finalbody, target_names)
-            if isinstance(node, ast.If):
-                yield from self._walk_calls_in_order(node.body, target_names)
-                yield from self._walk_calls_in_order(node.orelse, target_names)
-            if isinstance(node, (ast.For, ast.AsyncFor, ast.While)):
-                yield from self._walk_calls_in_order(node.body, target_names)
-                yield from self._walk_calls_in_order(node.orelse, target_names)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                yield from self._walk_calls_in_order(node.body, target_names)
+                    if name != "print":
+                        yield (name, call.lineno, tuple(stack))
+                    elif self._to_stdout(call) and (
+                            self._is_decision_emit(call) or carries_decision):
+                        yield (name, call.lineno, tuple(stack))
+                elif name in funcs and name not in stack:
+                    yield from self._walk_calls_in_order(
+                        funcs[name].body, target_names, funcs,
+                        stack + (name,),
+                        carries_decision or self._is_decision_emit(call))
+            for sub in self._child_bodies(node):
+                yield from self._walk_calls_in_order(
+                    sub, target_names, funcs, stack, carries_decision)
 
     def test_ast_rewrite_before_print(self):
-        """AC7.3.1 — static AST scan: rewrite_state appears before print."""
+        """AC7.3.1 — static AST scan: rewrite_state appears before the decision emit."""
         source = (HOOKS_DIR / "review-dispatch.py").read_text(encoding="utf-8")
         tree = ast.parse(source)
+        funcs = self._local_funcs(tree)
         main_fn = next(
             n for n in tree.body
             if isinstance(n, ast.FunctionDef) and n.name == "main"
         )
-        calls = list(self._walk_calls_in_order(main_fn.body, {"rewrite_state", "print"}))
-        rewrite_lines = [ln for ln, n in calls if n == "rewrite_state"]
-        print_lines = [ln for ln, n in calls if n == "print"]
-        self.assertTrue(rewrite_lines, "no rewrite_state call found in main()")
+        calls = list(self._walk_calls_in_order(
+            main_fn.body, {"rewrite_state", "print"}, funcs))
+        rewrite = [(i, ln, via) for i, (n, ln, via) in enumerate(calls)
+                   if n == "rewrite_state"]
+        emit = [(i, ln, via) for i, (n, ln, via) in enumerate(calls)
+                if n == "print"]
+        self.assertTrue(rewrite, "no rewrite_state call found in main()")
         self.assertTrue(
-            print_lines,
-            "main() 에 decision emit 이 없다 — 이 락이 잴 대상 자체가 사라졌다")
-        # 재는 성질은 **상태 write 가 decision emit 보다 앞선다** 이지 "언젠가 print 가
-        # 나온다" 가 아니다. 그래서 `min(rewrite) < max(print)` 가 아니라
-        # `max(rewrite) < max(decision emit)` 이다: 마지막 상태 write 가 마지막 emit
-        # 보다 앞서야 한다. 앞의 형태는 rewrite 뒤에 stderr print 하나만 있어도
-        # 통과하므로, rewrite 를 emit 뒤로 옮기는 변이를 놓친다.
+            emit,
+            "main() 에서 decision emit 에 도달하지 못했다 — 이 락이 잴 대상 자체가 "
+            "사라졌다. emit 이 지역 함수 밖(다른 모듈·동적 호출)으로 옮겨갔다면 "
+            "이 스캐너의 도출 규칙을 넓혀야 한다. 통과시키지 마라.")
+        # 재는 성질은 **상태 write 가 decision emit 보다 앞선다** 이지 "언젠가
+        # emit 이 나온다" 가 아니다. 그래서 `min(rewrite) < max(emit)` 가 아니라
+        # `max(rewrite) < max(emit)` 이다: 마지막 상태 write 가 마지막 emit 보다
+        # 앞서야 한다. 앞의 형태는 rewrite 뒤에 emit 하나만 더 있어도 통과하므로,
+        # rewrite 를 emit 뒤로 옮기는 변이를 놓친다.
         self.assertLess(
-            max(rewrite_lines), max(print_lines),
+            max(i for i, _l, _v in rewrite), max(i for i, _l, _v in emit),
             msg=(f"AC7.3.1 violated: 상태 write 가 decision emit 뒤에 있다 — "
                  f"두 번째 Stop 이 stale state 를 읽고 block storm 을 낸다. "
-                 f"rewrite={rewrite_lines}, decision_emit={print_lines}"),
+                 f"rewrite={[(l, v) for _i, l, v in rewrite]}, "
+                 f"decision_emit={[(l, v) for _i, l, v in emit]}"),
         )
 
     def test_mock_trace_rewrite_before_print(self):

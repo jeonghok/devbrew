@@ -53,7 +53,30 @@ if [ "${wlines:-0}" -ge 20 ]; then
 else
   no "b0 — step 4.5 섹션을 못 찾았다(${wlines}줄) — 앵커가 깨졌다, 아래 판정 무의미"
 fi
-if printf '%s' "$window" | grep -q 'dropped as malformed'; then
+
+# 지시부 — d0/d3 가 아래에서 다시 쓴다. 여기서 먼저 뽑는 이유는 b1/c 도
+# «지시부에만» unique 해야 하기 때문이다(수정 라운드 1, F5). `window`
+# 전체로 찾으면 "Why the key is the marker" 근거 단락(:583-ff)의 decoy
+# 인용 — `... was not matched by a` `dropped as malformed` `key` — 가
+# b1/c 를 만족시킨다: 지시부(556-571줄)를 통째로 지워도 이 decoy 인용이
+# 살아남아 b1·c 가 **GREEN 으로 남았다** (Task 15 μ12 실측 — b1 은
+# 코디네이터가 지목, c 는 같은 원인으로 여기서 함께 닫는다).
+directive="$(awk '/\*\*Not-clean notice override/,/Why this clause exists/' "$SKILL" | sed '$d')"
+dlines="$(printf '%s' "$directive" | wc -l | tr -d ' ')"
+
+# d0 — 앵커 유효성. 수정 라운드 2 (m4) — 이 검사는 원래 d3 바로 앞(지시부
+# 계산의 «두 번째» 소비 지점)에 있었다 — b1·c(첫 소비 지점, 바로 아래)가
+# 55줄 «먼저» `$directive` 를 읽으면서도 그 유효성 보고는 뒤에 나왔다.
+# 앵커가 깨지면 b1·c 가 "생산자만 고쳤다"·"문구 불일치" 같은 «틀린 원인»을
+# 먼저 찍고 나서야 진짜 원인(앵커 부재)이 드러났다 — RED 라는 사실 자체는
+# 안 바뀌지만 진단 순서가 거꾸로였다. 계산 직후, 첫 소비보다 앞으로 옮긴다.
+if [ "${dlines:-0}" -ge 10 ]; then
+  ok "d0 — 오버라이드 지시부 ${dlines}줄 확보 (앵커 유효)"
+else
+  no "d0 — 지시부를 못 찾았다(${dlines}줄) — 앵커가 깨졌다, 아래 b1·c·d3 판정 무의미"
+fi
+
+if printf '%s' "$directive" | grep -q 'dropped as malformed'; then
   ok "b1 — step 4.5가 drop 공지 문구를 소비한다"
 else
   no "b1 — step 4.5가 drop 공지를 읽지 않는다 (생산자만 고친 반쪽 수정)"
@@ -66,8 +89,10 @@ fi
 
 # ── (c) 생산자 문구와 소비자 문구가 **같은 문자열**인가 ───────────────────────
 # 둘을 따로 고정하면 한쪽 문구만 바꿔도 양쪽 다 GREEN인 채로 seam이 다시 열린다.
+# b1 과 같은 이유로 `$directive` 로 좁힌다 — `$window` 였으면 위 decoy 인용이
+# 이 검사도 만족시킨다.
 producer_phrase="$(printf '%s' "$out_b" | grep -o 'dropped as malformed' | head -1)"
-if [ -n "$producer_phrase" ] && printf '%s' "$window" | grep -qF "$producer_phrase"; then
+if [ -n "$producer_phrase" ] && printf '%s' "$directive" | grep -qF "$producer_phrase"; then
   ok "c — 생산자가 내는 문구와 소비자가 찾는 문구가 동일하다"
 else
   no "c — 생산자/소비자 문구 불일치 (producer='${producer_phrase:-<none>}')"
@@ -104,14 +129,9 @@ fi
 # 등장한다 — 창 전체를 보면 판정 키를 인스턴스 리터럴로 되돌려도 그 인용문이
 # 검사를 만족시켜 GREEN 이다 〔실측: 되돌림 변이에서 11/11 통과〕. 헤더가 문구를
 # 만족시키면 body 를 삭제해도 GREEN 인 것과 같은 함정이고, 판정은 지시부에
-# unique 해야 한다.
-directive="$(awk '/\*\*Not-clean notice override/,/Why this clause exists/' "$SKILL" | sed '$d')"
-dlines="$(printf '%s' "$directive" | wc -l | tr -d ' ')"
-if [ "${dlines:-0}" -ge 10 ]; then
-  ok "d0 — 오버라이드 지시부 ${dlines}줄 확보 (앵커 유효)"
-else
-  no "d0 — 지시부를 못 찾았다(${dlines}줄) — 앵커가 깨졌다, 아래 판정 무의미"
-fi
+# unique 해야 한다. `$directive`/`$dlines` 는 위 (b) 에서 이미 계산했고 그
+# 앵커 유효성(d0)도 그 자리에서 이미 보고했다(수정 라운드 2, m4 — 진단
+# 순서를 계산 순서와 맞춘다) — 다시 도출하지도, 다시 보고하지도 않는다.
 if printf '%s' "$directive" | grep -qF "$MARKER"; then
   ok "d3 — step 4.5 지시부가 공유 마커를 판정 키로 쓴다"
 else

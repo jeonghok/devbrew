@@ -4,6 +4,13 @@ model: inherit
 cost_class: low
 color: blue
 tools: Read, Grep, Glob, WebSearch, WebFetch
+input_slots:
+  - tag: ledger_state
+    var: LEDGER_STATE
+    kind: task
+  - tag: web_disabled
+    var: WEB_DISABLED
+    kind: task
 description: >
   Use this agent during a spec-distill coverage-driven interview to propose
   topic-derived coverage dimensions (this topic needs dimension X because …) and

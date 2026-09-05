@@ -15,6 +15,10 @@ tools: []
 model: inherit
 color: red
 cost_class: medium
+input_slots:
+  - tag: draft
+    var: BLOB
+    kind: artifact
 ---
 
 당신은 **seed 비평자**입니다. 당신의 책임은 **뺄셈** — 이 초안에 없어야 할 것을 찾는

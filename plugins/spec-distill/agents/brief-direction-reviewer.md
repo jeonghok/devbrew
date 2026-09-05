@@ -15,6 +15,10 @@ tools: Read, Grep, Glob, WebSearch, WebFetch
 model: inherit
 color: cyan
 cost_class: medium
+input_slots:
+  - tag: brief_path
+    var: PAYLOAD_PATH
+    kind: task
 ---
 
 # brief-direction-reviewer (Law 2 — direction axis)

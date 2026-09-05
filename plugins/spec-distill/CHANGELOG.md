@@ -1,5 +1,346 @@
 # Changelog
 
+## [0.53.1] — 2026-09-05
+
+### Fixed
+
+- **이 브랜치가 선재 락 하나를 깨뜨렸다 — mandate 의 꼬리를 잘랐다 (최종 수정
+  라운드 2, R-A).** `hooks/review-dispatch.py` 의 `_block_with_ledger()` 가 처분
+  두 줄을 `reason` **뒤**에 붙이면서,
+  `tests/test_hook_output_schema.py::test_normal_dispatch_states_mandate_lifetime`
+  이 요구하는 `reason.rstrip().endswith("이 mandate는 이번 dispatch 1회에만 유효하다.")`
+  가 깨졌다. 실측 대조: 같은 파일이 `origin/main` 에서 **1 failure**, 이 브랜치
+  HEAD 에서 **3 failures** — 둘이 회귀였다.
+  **고침**: 처분 두 줄(+advisory)을 `reason` **앞**으로 옮긴다. `reason` 은 다시
+  수명 문장으로 끝나고, 공시는 모델 채널에 그대로 남는다.
+  **왜 그쪽이 이기는가**: `endswith` 형태는 «측정된 두 번의 실패»에서 의도적으로
+  골라진 구조적 가드다 — mandate 뒤에 재발동 조건을 덧붙이려는 시도가 두 번 있었고
+  두 번 다 거짓이었다(커밋 단정 → git fail-open · 재편집 단정 → mark_reviewed 경로).
+  그래서 의미 판단을 버리고 「꼬리에 아무것도 붙지 않는다」는 형태를 택했다. 이
+  브랜치의 배치 단언은 실패 측정이 아니라 선호에서 나왔다 — **충돌하면 측정된
+  실패가 뒤에 있는 쪽이 이긴다.**
+  **버린 대안**: ⑴ 선재 락을 「미래형 단정만 금지」로 좁히기 — 두 번 틀린 그 의미
+  판단을 되살린다. ⑵ 처분을 `systemMessage` 로 옮기기 — 그 채널은 모델 도달
+  **0/14** 로 측정됐다(Task 11). 공시가 사라진다.
+  **비용**: 모델이 지시문 앞에 회계 두 줄을 먼저 읽는다(두 줄).
+  이 브랜치가 넣은 반대 방향 단언(`tests/test_review_dispatch_disposition.sh` 의
+  「MANDATORY 가 처분 줄보다 앞」)을 **반전**시키고, 그 자리에 **왜 반전했는지**를
+  적었다 — 다음 사람이 다시 뒤집지 않도록.
+
+- **이 브랜치가 기존 락 하나를 «공허»하게 만들었다 (최종 수정 라운드 2, R-B).**
+  decision emit 이 `main()` 의 bare `print(json.dumps({"decision": ...}))` 에서
+  `_block_with_ledger()` 로 옮겨가자, `main()` 의 문(statement)만 훑던
+  `test_ast_rewrite_before_print` 의 AST 스캐너가 아무 emit 도 못 찾았다. **그 락은
+  정직했다** — 통과하지 않고 「내가 잴 대상이 사라졌다」로 실패했다.
+  **복구(약화 아님)**: 스캐너가 **도출**로 emit 을 따라간다. 헬퍼 «이름»을
+  하드코딩하지 않는다 — ⑴ 이 모듈이 정의한 함수 호출이면 그 본문을 호출 자리에
+  펼치고(재귀 가드), ⑵ decision 성(性)을 호출 «인자»에서 전파한다(헬퍼 안의 print 는
+  `{"decision": …}` 리터럴을 자기 안에 갖지 않는다 — 그 리터럴은 호출 자리에 있다),
+  ⑶ `file=` 키워드가 붙은 print(=stderr 진단)는 계속 제외한다. 문 «타입»도 열거하지
+  않는다 — `return helper({...})` 처럼 `ast.Expr` 이 아닌 자리로 옮겨간 것이 정확히
+  이 락을 눈멀게 한 변화다. 순서 비교는 **줄번호가 아니라 이벤트 순서**로 한다(펼친
+  헬퍼는 호출 자리보다 «위»에 정의돼 있어 줄번호가 거꾸로 돈다).
+  등가 확인: 같은 스캐너를 `origin/main` 판 훅에 돌리면 이벤트 모양이 동일하다
+  (emit 2 · rewrite 1, 같은 순서) — 복구이지 완화가 아니다.
+  「도달 못 했다」는 실패 메시지도 「통과시키지 마라」로 강화했다.
+
+- **위 R-A 가 `check_wiring.py` 의 면제 키 열 개를 밀었다 — 락이 잡았고, 정체로
+  다시 못 박았다.** `_block_with_ledger()` 의 docstring 이 늘면서 그 아래
+  `review-dispatch.py` 의 버리는 분기 열 자리가 +17 줄 이동했다. 같은 파가 조금
+  전에 넣은 3-튜플 키(`(경로, 줄, 정체)`)가 그것을 **미배선 10 + 낡은 면제 10**
+  으로 이름과 함께 냈고, 정체(`kind`·`func`·`guard`)가 같은 행을 찾는 방식으로
+  **줄번호만** 기계 갱신했다(판정·사유 무변경 — 손으로 세지 않았다). 이 사건 자체를
+  `check_wiring.py` 의 해당 주석 블록에 기록했다.
+
+### Note
+
+세 양성 대조 전건 확인 — ⑴ 처분 줄을 다시 꼬리로 → `test_hook_output_schema.py`
+RED(2건) · ⑵ 처분 두 줄을 아예 삭제 → `test_review_dispatch_disposition.sh`
+RED(5건) · ⑶ `rewrite_state` 를 emit 뒤로 → `test_ast_rewrite_before_print` RED
+(+형제 락 둘도 함께). 셋 다 원복 후 GREEN.
+
+## [0.53.0] — 2026-09-05
+
+### Changed
+
+- **`blind-spot-prober.framing` 의 `kind` 를 정직하게 고쳤다 (최종 리뷰 K3).**
+  `artifact` 로 선언돼 있었으나 `conducting-interview/SKILL.md` 가 그 슬롯에 싣는 값은
+  **오케스트레이터가 직접 쓴 재구성 요약**(「지금까지의 framing(재구성된 문제정의 +
+  사용자 제약 요지)」)이라 금지 종류 `orchestrator_framing` 이다 — 선언이 그 사실을
+  가려 `tools/adjudication/check_slots.py` 의 (b) 축을 우회하고 있었다.
+  `kind: orchestrator_framing` 으로 바꾸고 `EXEMPT_SLOTS` 에 **C6(1) 인용과 함께**
+  등재했다(구조가 같은 `adversarial.phase1_findings` 의 선례). 사유: 이 agent 의 과업이
+  「지금의 framing 에 대한」 premortem 이라 프로브의 대상이 정의상 그 재구성 자체다 —
+  다른 값을 넣으면 프로버가 자기 framing 을 새로 세우고 그것을 치게 되어 이 agent 가
+  존재하는 이유를 잃는다. **잔여 위험은 남긴다**: 재구성이 이미 잃은 것은 프로버도 못
+  본다 — 그 축은 `reviewing-brief` 의 충실도 단계가 §6 원문 대비로 따로 잰다.
+  양성 대조: 면제를 지우면 `test_agent_input_slots.sh` 가
+  `PROBLEM forbidden_kind spec-distill:blind-spot-prober … kind=orchestrator_framing`
+  으로 RED(실측).
+- **같은 축을 전수로 다시 훑었다.** Task 14 의 스윕은 `prior_verdict` 축만 돌았고
+  `orchestrator_framing` 축은 안 돌았다. 20 개 agent 의 선언 슬롯 전부에 대해 dispatch
+  가 싣는 값의 «출처»를 읽어 다섯으로 분류한 결과 이 축에 걸리는 것은 **하나**뿐이었다.
+  지목됐던 `steelman-builder.direction`/`trigger` 는 ⓐ(과업의 대상·enum)로 판정 —
+  `direction` 은 사용자가 고른 방향의 재진술이고 `trigger` 는 게이트를 발동시킨 네 값
+  중 하나를 대는 enum 이라, 둘 다 「agent 가 내야 할 대안에 대한 오케스트레이터의
+  기대」가 아니다. 도출 근거는 `check_slots.py` 의 `EXEMPT_SLOTS` 위 주석에 남겼다.
+
+### Fixed
+
+- **줄번호 인용을 심볼 인용으로 (최종 리뷰 K7).** `tests/test_merge_brief_adjudication.py`
+  의 `shared/adjudication/adjudication.py:110` → `reasons()`. 이 브랜치가 그 파일에
+  31줄을 더해 밀린 자리다(순수 self-shift).
+- **README 의 「Principles Instantiated」에 이 사이클의 instantiation 이 없었다
+  (최종 리뷰 K6b).** `처분`·`adjudication`·`Ledger`·`input_slots` 를 전수 grep 하면
+  히트 0 이었다 — Law 3 의 discoverability 요구를 못 채운다. 처분 회계와 `input_slots`
+  두 줄을 더하고, 각각의 **범위 한계**(축 C 는 채널 이름의 실재까지만 잰다)를 함께 적었다.
+
+## [0.52.4] — 2026-09-05
+
+### Fixed
+- **Task 15 수정 라운드 2 (I1, Important) — F6 이 닫았다고 주장한 부류가
+  판정기를 «부르는» 러너 자신에서 다시 열려 있었다.** F6 은
+  `tools/adjudication/check_*.py`(락이 import 하는 대상) 넷을 `# guards:`
+  에 편입했지만, F4 의 실제 결함 자리는 `check_slots.py` 가 아니라 그것을
+  «부르는» `shared/tests/fixtures/adjudication/run_slots.py` 의 print
+  루프였고 — 그 러너를 코퍼스로 갖는 락은 하나도 없었다. F1 이 새로 만든
+  `run_block_disposition_count.py` 도 같은 무방비 상태로 태어났다. F6 과
+  정확히 같은 도출(열거가 아니라 그 `.sh` 가 실제로 실행하는 러너 파일명을
+  찾아서)로 다섯 러너를 각자의 유일한 소비자 락에 편입했다:
+  `run_block_disposition_count.py` → `test_review_dispatch_disposition.sh`
+  (이 플러그인), `run_wiring_scan.py`/`run_wiring_probe.py` →
+  `test_adjudication_wiring.sh`, `run_consumed.py` →
+  `test_adjudication_consumed.sh`, `run_slots.py` →
+  `test_agent_input_slots.sh`, `run_names.py` → `test_dispatch_name_defined.sh`
+  (뒤 넷은 `shared/tests/`, 이 플러그인 버전과 무관하지만 같은 커밋이라
+  여기 함께 기록 — F4 도 같은 이유로 quality-gates CHANGELOG 에 소급
+  기록했다, m3). `--emit-scanned` 도 맞춰 갱신 —
+  `test_guards_coverage_bidirectional.sh` 92/92 GREEN 유지.
+- **Task 15 수정 라운드 2 (I2, Important) — `test_review_dispatch_disposition.sh`
+  의 T5-2(dispatch 강제) 값 검사가 후보 문서를 «하나만» 놓아 「0 vs 1」은
+  갈라도 「1 vs N」은 못 갈랐다.** 같은 파일 :148-150 의 형제 절(T5-1)이
+  이미 경고하는 off-by-one 함정 — 실패 문서가 하나면 "메시지 줄마다 부른다"
+  류 회귀가 안 보여 T5-1 은 그래서 실패 문서를 둘 쓰는데 T5-2 는 하나였다.
+  후보 문서를 둘로 늘리고 "후보 수와 무관하게 미판정은 정확히 1"(dispatch
+  는 여전히 한 턴에 하나만 고른다, A11)을 못박았다. 양성 대조: `L.hold()`
+  를 선택된 후보 하나가 아니라 «모든 후보»에 대해 부르도록 되돌리는
+  회귀를 주입하면(후보 1개였다면 이 값이 우연히 1 이라 안 보였을 시나리오)
+  이제 미판정=2 로 RED — 후보 1개 상태에서는 이 회귀가 구조적으로 안 보임을
+  먼저 확인한 뒤 후보 2개로 고쳐서 다시 걸었다. 원복 후 14/14 GREEN.
+
+## [0.52.3] — 2026-09-04
+
+### Fixed
+- **Task 15 수정 라운드 1 (F1, Critical) — `test_review_dispatch_disposition.sh`
+  의 정적 카운트 절이 `grep -c '\.(hold|reject|source_failed|uncountable)\('`
+  였다.** `review-dispatch.py:222` 의 설명 주석 안 리터럴 `` `L.reject(...)` ``
+  텍스트가 이 정규식을 그대로 만족시켜, 진짜 처분 호출(:804 의
+  `L.hold(str(cand.path), ...)`) 하나가 지워져도 카운트가 2→2 로 안 줄었다
+  (코디네이터가 9개 락 전수로 재현: 변이 후에도 9/9 rc=0). `shared/tests/
+  fixtures/adjudication/run_block_disposition_count.py` 신설 — `ast` 로
+  `ast.Call`(func.attr in `tools/adjudication/check_wiring.DISPOSITION`) 과
+  `ast.Dict`(`"decision": "block"`) 만 센다(주석·문자열 리터럴은 원리적으로
+  안 잡힘). decoy fixture(`block_disposition_decoy.py`, 위 :222 패턴 재현)
+  로 계측기 자신도 검증한다 — grep 기반이면 ndisp=1(오검출), ast 기반은
+  ndisp=0(정답).
+- **Task 15 수정 라운드 1 (F2, Critical) — 같은 파일 실행 절이 `**처분:**`
+  라벨의 «존재»만 grep 했다.** `disposition_lines()` 는 원장이 비어도 그
+  라벨을 무조건 찍으므로, 위 :804 호출을 지우면 "미판정 0" 이 찍혀도
+  `assert_grep '\*\*처분:\*\*'` 는 통과했다. T5-1(구조 검증 실패 경로)이
+  이미 하던 것과 같은 방식으로 T5-2(dispatch 강제 경로)에도 「미판정」
+  «값»(정규식으로 추출) 을 `assert_eq` 로 재는 절을 추가 — 후보 문서 1건 →
+  미판정 정확히 1.
+- **양성 대조 (F1+F2)** — 두 수정 전: 위 :804 삭제(Task 15 μ11) 시 11/11
+  GREEN(무검출). 수정 후 같은 삭제: F1 이 "차단 자리 2 중 1 곳이 처분을 안
+  부른다" 로, F2 가 "미판정 1" 기대·"0" 실제로 각각 RED (12/14, 새 항목
+  포함 14 개 중 2 개 실패). 원복 후 14/14 GREEN.
+- **Task 15 수정 라운드 1 (F6, Important) — `tools/adjudication/` 아래 판정기
+  넷(check_wiring/consumed/slots/names)이 `# guards:` 선언 27개 어디에도
+  없었다.** 판정기를 약화시켜도 그 사실을 재는 락이 CI 선택에서 빠질 수
+  있었다는 뜻이다. `fixtures/adjudication/run_*.py` 의 실제 import(`from
+  check_wiring import ...` 등, 열거가 아니라 소스 grep 으로 도출)를 따라
+  `test_review_dispatch_disposition.sh`(check_wiring, F1 신설분) ·
+  `shared/tests/test_adjudication_wiring.sh`(check_wiring) 가 자기 판정기를
+  declare 하도록 고쳤다. `test_adjudication_consumed.sh`·`test_agent_input_
+  slots.sh`·`test_dispatch_name_defined.sh` 세 개는 shared/tests/ 소속이라
+  이 플러그인 버전과 무관 — quality-gates CHANGELOG 가 아니라 여기 함께
+  적는 이유는 이 라운드가 하나의 수정 커밋이기 때문이다(코드 변경 자체는
+  플러그인 파일 밖).
+
+## [0.52.2] — 2026-09-04
+
+### Fixed
+- **Task 14 수정 라운드 2 — v0.52.0 이 이 파일의 `## [0.51.8]` 헤딩을 `## [0.52.0]`
+  으로 제자리 교체했다(Critical, 코디네이터 리뷰가 잡고 독립 재현).** 본문은
+  남았지만 `[0.52.0]` 절 아래 두 번째 `### Fixed` 로 잘못 귀속됐고 `[0.51.8]`
+  헤딩은 파일 어디에도 없었다 — v0.52.0/v0.52.1 커밋 로그의 "기존 최신 절 위에
+  새 절을 추가했다"는 서술이 이 한 파일에 대해 거짓이었다(다른 세 CHANGELOG는
+  옳았다). `git show 83754af~1` 에서 `[0.51.8]` 원문(제목+본문)을 바이트 단위로
+  복원해 `[0.52.0]`·`[0.51.7]` 사이 제자리로 되돌렸다 — `diff` 로 본문 무결성
+  확인.
+- **이 결함이 `test_changelog_integrity.sh`(33/33 통과 상태)에 안 걸린 이유** —
+  그 락의 `ver_adjacent()`(`shared/tests/test_changelog_integrity.sh:171-172`)가
+  minor 경계를 넘는 인접 판정에서 **위(HI) 버전의 patch 가 0 인지만** 검사하고
+  **아래(LO) 버전의 patch 값(`l3`)은 그 분기에서 전혀 읽지 않는다.** 헤딩이
+  `[0.52.0]` 바로 다음에 `[0.51.7]` 로 이어지면(원래는 `[0.51.8]` 이 있어야 할
+  자리) `h2 == l2+1` 이고 `h3 == 0` 이라 무조건 "인접·gap 없음"으로 판정된다 —
+  중간에 통째로 빠진 patch 버전(들)이 있어도 이 분기는 그것을 볼 방법이 없다.
+  실제로 재현: `ver_adjacent(0.52.0, 0.51.7)` 경로를 코드로 직접 추적하면 `l3`
+  값이 조건식 어디에도 등장하지 않는다. **이 락은 고치지 않는다** — 락 강화는
+  별도 판정으로 코디네이터에게 넘긴다.
+
+## [0.52.1] — 2026-09-04
+
+### Fixed
+- **Task 14 수정 라운드 1** — `tools/adjudication/check_slots.py` 의 dispatch 펜스
+  스캐너가 들여쓴 펜스(`^\s*```` 로 수정)를 이제 보고, 펜스 하나에 subagent_type
+  둘 이상이면 세어서 드러낸다(`multi_agent_fences`). 이 판정기는 여러 플러그인의
+  agent 정의(`plugins/*/agents/*.md`)를 검사하는 공유 파일이라 이 브랜치의 선례대로
+  agent-transparency·plugin-audit·quality-gates·spec-distill 을 함께 bump(상세는
+  quality-gates CHANGELOG v6.6.1 참조). 이 플러그인 몫으로 v0.52.0 이 남긴
+  reviewing-spec/SKILL.md·conducting-interview/SKILL.md 의 두 dispatch 펜스
+  들여쓰기를 **원복**했다 — 스캐너가 이제 들여쓴 펜스를 읽으므로 문서를 도구
+  사정에 맞춰 바꿔 둘 필요가 없어졌다.
+
+## [0.52.0] — 2026-09-04
+
+### Added
+- **agent 9개 전부(seed-readback·seed-critic·brief-critic·brief-readback·
+  spec-reviewer·brief-direction-reviewer·coverage-mapper·blind-spot-prober·
+  steelman-builder)에 frontmatter `input_slots:` 선언 — L3(adjudication-topology
+  Task 14, 전량 GREEN).** 각 agent 가 dispatch 로 실제로 받는 (태그, 변수, `kind`)
+  삼중항을 선언하고, `shared/tests/test_agent_input_slots.sh` 가 선언과 SKILL 의
+  실제 dispatch 표기(`<tag>${VAR}</tag>`)가 일치하는지 + 선언된 `kind` 가 금지
+  어휘(`prior_verdict`/`score`/`orchestrator_framing`)가 아닌지를 잰다.
+  spec-reviewer 의 `issue_history` 는 **같은 spec 의 과거 라운드 이력**이라
+  `same_origin_history` — Law 2 가 막는 "다른 리뷰어의 판정"과는 다른 축이다.
+
+### Fixed
+- reviewing-spec/SKILL.md 의 spec-reviewer dispatch 펜스와
+  conducting-interview/SKILL.md 의 steelman-builder dispatch 펜스가 3-space
+  들여쓰기(번호 목록 continuation)였다 — `test_agent_input_slots.sh` 의 fence
+  스캐너(`re.match(r'^```')`, 줄 시작 앵커)가 들여쓰인 펜스의 시작 자체를 못 봐서
+  두 dispatch 자리가 통째로 관측 밖에 있었다. 들여쓰기를 제거해 dispatch 코퍼스에
+  실재하게 했다 — 내용은 무변경.
+
+## [0.51.8] — 2026-09-04
+
+### Fixed
+- **`shared/tests/test_runner_disposition.sh`(codex 러너 처분 락)가 `consumer=` 값의
+  참·거짓을 재지 못했다(adjudication-topology Task 13 수정 라운드 2).** 상세는
+  quality-gates 쪽 `CHANGELOG.md` v6.5.5 참조 — `shared/tests/` 공유 파일이라 이
+  락의 코퍼스(`guards: plugins/*/scripts/*codex*.sh`)에 러너가 있는 세 플러그인
+  (plugin-audit·quality-gates·spec-distill, 이 플러그인 몫은
+  `run_brief_codex_reviewer.sh`·`run_seed_codex_reviewer.sh`·
+  `run_spec_codex_reviewer.sh` 셋) 모두 함께 bump. 요약: `consumer=`가 경로 모양이면
+  `git ls-files` 정확일치로 추적 여부 + `plugins/<name>` 세그먼트로 동일-플러그인
+  여부를 검사하고, `orchestrator`/`human`은 `unverifiable_consumer=N`으로 개수만
+  낸다.
+
+## [0.51.7] — 2026-09-04
+
+### Fixed
+- **codex 러너 셋(`run_brief_codex_reviewer.sh`·`run_seed_codex_reviewer.sh`·
+  `run_spec_codex_reviewer.sh`)이 자기 처분을 밝히지 않고 있었다 —
+  `shared/tests/test_runner_disposition.sh`(adjudication-topology Task 13) 가 여섯
+  러너 26 단언 중 24 를 RED 로 잡았다(이 플러그인 몫 셋 포함, 나머지 셋은
+  quality-gates·plugin-audit 쪽 CHANGELOG 참조).** 도출은 그 락의
+  `# guards: plugins/*/scripts/*codex*.sh` 코퍼스에서 직접 했다(스크래치 파일 아님).
+  각 러너 상단에 `**처분** — consumer=<...> · fail-<open|closed> · disclosure=<리터럴>`
+  앵커를 추가했다.
+  - `run_brief_codex_reviewer.sh`: `consumer=plugins/spec-distill/scripts/merge_brief_review.py`
+    (충실도 축 — `reviewing-brief/SKILL.md` 가 `--codex-yaml` 로 직접 넘긴다) ·
+    `fail-open`(`merge_brief_review.py` 자신의 주석대로 "codex는 모델 다양성 보조다 —
+    파손을 공시하되 차단하지 않는다(primary=False)": critic 판정이 살아 있으면 codex
+    실패가 approved 를 막지 않고 `advisory[]` 로만 공시된다. 방향성 축은 병합기가 없어
+    SKILL.md 게이트 블록이 직접 읽어 나란히 보여준다 — 두 축 모두 codex 는 주 판정자가
+    아니다) · `disclosure=advisory`.
+  - `run_seed_codex_reviewer.sh`: `consumer=orchestrator`(이 축엔 병합기가 없다 —
+    `framing-requests/SKILL.md` 의 codex-gate 블록 자신이 `$CODEX_YAML` 을 유일하게
+    읽어 `codex_status` 를 echo 하고 격리 critic 의 findings 와 나란히 보여준다) ·
+    `fail-open`(codex 가 죽어도 격리 critic 이 남는다) ·
+    `disclosure=framing_degradations`.
+  - `run_spec_codex_reviewer.sh`: `consumer=plugins/spec-distill/scripts/merge_review.py`
+    (`reviewing-spec/SKILL.md` 가 `--codex-yaml` 로 직접 넘긴다) · `fail-open`(codex 가
+    죽어도 Claude 리뷰는 이미 돌았다 — `codex_degraded: true` + `advisory[]` 로 공시하되
+    `combined_verdict` 는 `claude_verdict` 를 그대로 쓴다) · `disclosure=advisory`.
+  - 기존 `shared/tests/test_dispatch_disposition.sh`(Task 5 산출물, Agent()/subagent
+    dispatch 축) 는 19/19 Pass 로 무변경 — 이번 앵커는 다른 락(`test_runner_disposition.sh`)
+    의 코퍼스(bash 코덱스 러너 스크립트)를 대상으로 한다.
+
+## [0.51.6] — 2026-09-04
+
+### Fixed
+- **`tools/adjudication/check_names.py` 의 `scanned_paths()` 가 `dangling()` 이 실제로 소비하는 kill-switch 코퍼스를 빠뜨리고 있었다(adjudication-topology Task 12b 수정 라운드 1, 리뷰 Critical).** 상세는 quality-gates 쪽 `CHANGELOG.md` v6.5.3 참조 — `shared/tests/`·`tools/adjudication/` 공유 파일이라 두 플러그인 다 bump. 요약: `_KILLSWITCH_GLOB` 상수를 신설해 `killswitch_keys()`·`scanned_paths()` 가 같은 글롭(`plugins/*/**/*.py`)을 쓰게 묶었고, `test_dispatch_name_defined.sh` 의 `# guards:` 에 그 bash-safe 형태(`plugins/*/*.py`)를 추가했다. 판정기의 실제 스캔 범위는 좁히지 않았다.
+
+## [0.51.5] — 2026-09-04
+
+### Fixed
+- **새 락 여섯(+발견된 일곱째)에 `--emit-scanned` 구현 — `test_guards_coverage_bidirectional.sh` 커버리지 계약 충족(adjudication-topology Task 12b, `shared/tests/` 다섯 개가 quality-gates·spec-distill 두 플러그인 파일을 함께 검사해 두 플러그인 다 bump).** `plugins/spec-distill/tests/test_review_dispatch_disposition.sh` — 브리프가 지정한 여섯에는 없었지만(Task 11 산출물, 계획 작성 시점 이후 등장) 같은 결함 signature(`--emit-scanned` 미구현 → 자기 전체 PASS/FAIL 출력이 "스캔된 경로"로 오파싱)를 가져 함께 고쳤다 — 코퍼스가 상수(`review-dispatch.py` 하나)라 그대로 낸다.
+- **`shared/tests/test_adjudication_consumed.sh` — 코퍼스에 `shared/adjudication/*.py` 를 더한다(`check_consumed.py` 의 `_closure()` 가 실제로 여는 파일).** `# guards:` 를 `plugins/*/scripts/*.py plugins/*/hooks/*.py` 에서 `shared/adjudication/*.py` 추가로 넓혔다 — 소비자 5개 전부가 `adjudication.py`·`render_disposition.py` 를 import 해 closure 에 들어오는 것을 실측 확인.
+- **`shared/tests/test_agent_input_slots.sh`·`test_dispatch_name_defined.sh` — `commands/**/*.md` 를 `commands/*.md` 로 교정.** `# guards:` 를 소비하는 bash `case` 패턴에서 `**` 는 인접한 리터럴 `/` 를 요구하는데, 실제 명령 파일은 전부 flat(`commands/<name>.md`, 하위 디렉터리 없음)이라 `**` 버전은 구조적으로 아무것도 못 덮는다(`plugins/quality-gates/scripts/compute-test-scope-candidates.sh` 도 같은 bash case 매칭을 실제 테스트-스코프 선택에 쓴다 — 이 오탈자는 커버리지 락뿐 아니라 그 선택 정밀도의 실사용 버그였다). `test_dispatch_name_defined.sh` 는 `plugins/*/README.md` 도 추가(`check_names.references()` 가 이미 읽고 있었으나 선언에 빠져 있었다).
+
+## [0.51.4] — 2026-09-04
+
+### Fixed
+- **배선 락(`shared/tests/test_adjudication_wiring.sh`)이 이 브랜치에서 처음으로 `Fail: 0` — 계획이 배정하지 않았던 네 자리(Task 11b, `merge_review.py`).** PR1 배선 baseline=미배선 14, 앞 Task 열이 review-dispatch.py 쪽 10을 닫았다고 전제했으나 계획의 어느 Task 도 `merge_review.py`의 남은 4자리(`:155`·`:160`·`:229`·`:270`)를 배정하지 않아 대표 단언이 원리적으로 GREEN이 될 수 없었다. 넷을 코드로 검증해 전부 **배선 불필요**로 판정(면제): `:155`·`:160`(`parse_codex_yaml`)은 codex YAML 파일의 텍스트 줄을 도는 라인 파서의 섹션 헤더 전이일 뿐 판정 항목이 아니다(`:160`은 오히려 `meta:` 전환 전에 `findings.append(cur)`로 진행 중이던 finding을 먼저 보존한다); `:229`(`derive_codex_verdict`)의 fold 조기 `return`은 `codex_findings` 전체가 이 함수와 무관하게 `build_ledger()`의 `for f in codex_findings:`(`:363`, 이미 배선됨)로 전수 재순회되고 표시 채널도 별도로 전체를 순회하므로 소실이 아니다; `:270`(`build_codex_findings_display`)의 `isinstance` 방어는 유일한 호출자(`main():555`)가 `parse_codex_yaml()`의 반환값을 변형 없이 넘기고 그 함수의 `findings`가 dict 항목만 생성하므로 도달 불가능하다(배선하면 Task 10의 `phase_key`와 같은 죽은 코드가 된다). `tools/adjudication/check_wiring.py`의 `EXEMPT`에 C6⑴ 인용과 함께 등재.
+- **`EXEMPT`의 `review-dispatch.py` 항목 10개가 줄번호 drift로 stale — 배선 락이 이미 승인된 자리를 "미배선"으로 오탐지하고 있었다.** v0.51.2/v0.51.3(`07c9991`·`6d87b2c`)가 `select_dispatch_target()`보다 앞선 코드(`_block_with_ledger` 재작성 + import 한 줄)를 늘려 그 함수 전체가 +13(이후 구간은 +14)줄 밀렸는데, `EXEMPT`는 (파일, 줄번호) 키라 이동에 조용히 stale해졌다 — Task 11b 실측(스캔 unwired=14, 브리프 전제=4)이 적발. 코드·판정은 무변경, 10개 키의 줄번호만 현재 위치(`:340`·`:342`·`:344`·`:346`·`:348`·`:350`·`:351`·`:543`·`:546`·`:603`)로 교정하고 내부 인용 줄번호(`capped_advisory` flush 지점 등)도 함께 갱신했다.
+- **`_T5_SELECT_LOOP` 면제 사유의 "다음 Stop 후보 목록에 다시 나타난다"가 두 영속-상태 필터(`DISPATCH_ATTEMPT_CAP`·`VALIDATION_ATTEMPT_CAP`)에는 거짓이었다(Task 11 리뷰가 잡은 것).** `arm_ledger.record_attempt()`가 상한 도달과 같은 write에서 `armed_paths`에도 추가하므로, 그 두 필터는 다음 Stop에 재통과하지 않는다. 결론(배선 불필요)은 그대로 두고 사유를 진짜 근거로 교체 — 상한 도달 사실은 상한에 닿던 그 dispatch 시도에서 이미 공시됐다(`DISPATCH_ATTEMPT_CAP`: `review-dispatch.py:765-770`의 mandate 메시지, `VALIDATION_ATTEMPT_CAP`: 같은 Stop 안에서 `main()`의 검증 대상 선별 루프가 만드는 `capped_advisory`). 전용 상수 `_T5_SELECT_LOOP_DISPATCH_CAP`·`_T5_SELECT_LOOP_VALIDATION_CAP` 신설.
+- **`EXEMPT`와 `TERMINAL_CONSUMERS`의 C6 인용 검사가 비대칭이었다(Task 11 리뷰가 잡은 것).** `run_wiring_scan.py`의 `exempt_uncited`는 값에 리터럴 `"C6"`가 있는지 보는데 `terminal_uncited`는 빈 문자열만 아니면 통과했다 — 같은 CLAUDE.md 요구가 두 등록부에서 다른 엄격도로 걸렸다. `terminal_uncited`를 `EXEMPT`와 같은 `"C6" not in str(v)` 규율로 맞추고 `TERMINAL_CONSUMERS`의 유일한 항목에 C6⑴ 인용을 명시했다. 양성 대조: 그 항목에서 `C6`만 지우고 나머지 문장을 남긴 채 `terminal_uncited=1`로 RED가 되는지 확인 후 원복.
+
+## [0.51.3] — 2026-09-04
+
+### Fixed
+- **T5-1(구조 검증 실패)의 원장이 「문서」가 아니라 「메시지 줄」을 세고 있었다 — 회계가 틀린 값을 냈다.** `for line in lines: L.hold(line[:60], ...)`가 `lines`(안내 헤더 + 실패 문서 목록 + 상한 도달 안내)를 통째로 돌아, 실패 문서가 N개여도 hold() 가 N+1(헤더 포함) 또는 N+2(헤더+상한 안내 포함)회 불렸다 — 자기 안내 메시지의 헤더 줄까지 "보류된 항목"으로 셌다. 이 값은 `items="closed"`라 다음 턴의 기계 소비자에게 그대로 전달된다. `failures.append(...)`를 도는 자리에서 `key`(실패한 문서 자체)를 `failed_keys`에 모으고, `L.hold()`는 이제 `failed_keys`를 돈다 — 문서 하나당 정확히 한 번. `reached_cap`은 이미 `failed_keys`의 부분집합이라 별도로 `hold()`하지 않는다(이중 계수 방지) — 상한 도달이 구조 검증 실패와 다른 사건으로서 별도 칸(`suppressed()` 등)이 필요한지는 열린 질문으로 남긴다. `plugins/spec-distill/tests/test_review_dispatch_disposition.sh`에 실패 문서 2개짜리 실행 케이스를 더해 "실패 문서 수 == disposition_lines() 의 배관 손실 칸 수"를 직접 못박는다(양성 대조로 이빨 확인) — 문서가 하나뿐이면 이 off-by-one이 안 보이므로 반드시 둘 이상으로 재야 한다.
+
+## [0.51.2] — 2026-09-04
+
+### Fixed
+- **훅의 차단 결정 두 자리가 소비 락(L2)을 다시 침묵시키고 있었다 — `reasons()` 대신 공유 렌더러로 바꾼다.** 전량 회귀 스윕이 `shared/tests/test_adjudication_consumed.sh`를 다시 RED(`unconsumed_total=8`)로 잡았다. `_block_with_ledger()`가 `ledger.reasons()`(`shared/adjudication/adjudication.py:136-149`)만 읽었는데, 그 함수는 `held`·`unknown`·`sources_failed`·`coerced(gate=True)` 넷만 낸다 — `accepted`/`rejected`/`absorbed`/`suppressed`는 한 줄도 안 낸다. 오늘 이 훅이 `hold()`만 불러 우연히 전부 덮였을 뿐, 앞으로 이 훅에 `L.reject(...)` 하나만 늘어도 공시가 조용히 사라지는 구조였다("오늘은 맞고 내일은 침묵"). `_block_with_ledger()`가 이제 원장 `report()`/`held_by_class()`를 공유 렌더러 `disposition_lines(report, held_classes)`(`shared/adjudication/render_disposition.py`, 소비자 넷이 이미 쓰는 것)로 낸다 — 카운트 이름을 손으로 다시 적지 않는다. **배치가 계약이다**: 이 훅의 `reason`은 모델을 움직이는 지시문(카나리 7/7 도달)이므로 지시문을 먼저 두고 처분 두 줄(+advisory)을 **뒤에** 붙인다. `plugins/spec-distill/tests/test_review_dispatch_disposition.sh`에 실행 절을 더해 실제 `decision:"block"`을 발생시켜 `reason`이 "MANDATORY..." 뒤에 "**처분:**"/"**배관 손실:**" 줄을 순서대로 담는지, `systemMessage`에는 처분 줄이 새지 않는지를 직접 검증한다 — 이전 판의 `assert_grep 'reasons\(\)'`는 구현이 바뀐 뒤에도 이 테스트 파일 자신의 설명 주석이 그 문자열을 우연히 담고 있어 계속 GREEN이었다(값싼 검사였다는 신호). 기존 `.reason` 내용을 못박는 두 테스트(`test_review_dispatch.sh` Case 11·17, `test_review_dispatch_design_mandate.sh` AC2·AC12)는 이 변경으로 깨지지 않는다 — 처분 줄을 기존 지시문 **뒤에 추가만** 하므로 `contains(...)` 단언이 그대로 성립한다(16/16 GREEN 확인).
+
+## [0.51.1] — 2026-09-04
+
+### Fixed
+- **v0.51.0 Known gaps 둘 중 하나 — `:533` 면제 사유가 범주 착오였다.** 최초 사유는 "`systemMessage`는 모델 도달 카나리 0/14라 채널 효과가 의심된다"였다 — 그러나 `systemMessage`는 애초에 **사람의 터미널** 채널이지 모델 컨텍스트 채널이 아니다(CLAUDE.md: "미판정 항목의 방향은 다음 소비자가 정한다: 기계면 제외, 사람이면 라벨을 붙여 보여준다"). T5-1·T5-2가 채널을 `reason`으로 정한 이유는 그 두 자리의 소비자가 **모델**(다음 턴 dispatch 판단)이었기 때문이고, `:533`의 소비자는 **사람**(세션을 보는 사람에게 "자동 검증을 안 하는 문서가 있다"고 알리는 것)이다 — 모델 미도달은 이 채널의 설계이지 결함이 아니다. `tools/adjudication/check_wiring.py`의 `EXEMPT[:533]` 사유를 다시 썼다. **면제 자체(C6⑴)와 "최종 리뷰 재검토" 표시는 그대로 유지** — 이 스킵이 규칙(상한값)이 정한 배제라는 점에서 `suppressed()` 재분류 후보라는 열린 질문은 남아 있다.
+- **v0.51.0 Known gaps 둘 중 다른 하나 — import·앵커 대칭 락을 개수 비교에서 집합 비교로 강화.** `shared/tests/test_adjudication_wiring.sh`의 `assert_eq "$n_import" "$n_anchor"`(개수만 비교)는 대리지표였다 — 한 파일이 import에서 빠지고 무관한 다른 파일이 anchor에 들어와도 개수가 같으면 그대로 통과한다. 두 단언으로 교체: **① `ANCHOR ⊆ IMPORT` (예외 없음)** — dispatch 자리가 `consumer=`로 선언한 파일이 실제로 원장을 import하지 않으면 거짓 선언이다. **② `(IMPORT \ ANCHOR) ⊆ TERMINAL_CONSUMERS`** — 앵커 없이 import만 하는 파일은 새 상수 `tools/adjudication/check_wiring.py::TERMINAL_CONSUMERS`(`EXEMPT`와 같은 규율: 사유 없는 항목은 그 자체로 RED)에 "왜 dispatch 앵커를 가질 수 없는가"를 사유와 함께 등재해야 한다. `review-dispatch.py`를 등재 — 종단(terminal) 결정자라 이름 붙일 dispatch 자리가 원리적으로 없다(subagent findings를 판정하는 소비자가 아니라 자기 자신의 `decision:"block"`을 직접 정한다). `shared/tests/fixtures/adjudication/run_wiring_scan.py`가 `IMPORT`/`ANCHOR`/`TERMINAL` 세 목록(집합)과 `terminal_total`/`terminal_uncited`를 새로 낸다.
+
+## [0.51.0] — 2026-09-04
+
+### Added
+- **훅(`review-dispatch.py`)의 차단 결정 두 자리가 원장 어휘로 자기 처분을 밝힌다(T5, adjudication-topology Task 11).** `from adjudication import Ledger`를 더해 이 훅이 처음으로 회계 소비자(㉮)에 들어온다. 구조 검증 실패 자리(구 `:605`대, 재도출 `:621`대)는 실패한 문서마다 `L.hold(line[:60], "항목 파손: 스코프 문서 구조 검증 실패")`를, 다음 턴 dispatch 강제 자리(구 `:758`대, 재도출 `:774`대)는 `L.hold(str(cand.path), "판정자 부재: 리뷰가 아직 안 돌았다 — 다음 턴에 강제한다")`를 부른다. 새 헬퍼 `_block_with_ledger()`가 `ledger.reasons()`의 줄을 `reason` 필드에 실어 낸다 — **채널은 `reason`이다.** 같은 두 자리가 이미 내는 `systemMessage`는 인터뷰 카나리 실측(14개 중 0개 모델 도달) 때문에 쓰지 않는다; `reason`은 차단 결정에 딸릴 때 7/7 도달한다. 원장 객체는 프로세스와 함께 사라지므로 `reasons()`의 줄을 `reason`에 실어 보내는 것으로 이 층의 회계가 완료된다(코드 주석에 근거 기록).
+- `plugins/spec-distill/tests/test_review_dispatch_disposition.sh` — 두 차단 자리 각각이 처분 호출(`hold`/`reject`/`source_failed`/`uncountable`)을 갖는지, `reasons()`를 읽는지, 그 사유를 `systemMessage`가 아니라 `reason`에 싣는지를 검사한다.
+- `tools/adjudication/check_wiring.py`의 `EXEMPT`에 `review-dispatch.py`의 열 자리(㉮ 편입으로 새로 대상이 된 `select_dispatch_target()`의 선택 루프 7곳 + `main()`의 검증 대상 선별 루프 3곳)를 C6⑴ 인용과 함께 등재. 근거는 코드를 읽고 확인했다: `discover()`가 매 Stop마다 git status로 무상태 재스캔하므로 이번 턴에 선택되지 않은 후보는 다음 턴에 다시 나타난다 — 소실 개념 자체가 성립하지 않는다.
+
+### Known gaps
+- **T5-1·T5-2가 배선한 `Ledger` import가 `shared/tests/test_adjudication_wiring.sh`의 import·앵커 대칭 축(㉮ 두 도출 경로가 같은 개수여야 한다)을 깬다.** `by_import`는 5(review-dispatch.py 포함)인데 `by_anchor`는 4로 그대로다 — 어떤 skill/command/agent 문서도 `consumer=review-dispatch.py`를 인용하지 않는다. 이 훅은 스킬이 dispatch한 subagent 결과를 받아 회계하는 소비자가 아니라 자기 자신의 `decision:"block"` 판단을 직접 회계하는 종단(terminal) 소비자라, 기존 앵커 대칭 검사가 전제하는 "모든 import 소비자는 어딘가 `consumer=`로 인용된다"는 가정이 이 범주(훅)에는 처음부터 성립하지 않을 수 있다. `derive_consumers()`/`test_adjudication_wiring.sh`를 훅과 스크립트 두 범주로 나눌지는 설계 판단이 필요해 이번 Task(T5, 파일 범위: 훅 + 새 테스트 + plugin.json/CHANGELOG)에서는 고치지 않았다 — 다음 리뷰가 볼 것.
+- **`tools/adjudication/check_wiring.py`의 EXEMPT `:533`(검증 상한 도달 스킵)은 경계 사례다.** 항목(`c.key`)은 `capped`→`capped_advisory`를 타고 실제로 이번 턴 JSON 출력의 `systemMessage`에 실리므로 C6⑴(대응물 없음)로 면제했지만, 바로 이 Task가 옆 두 `decision:"block"` 자리에서 실측한 사실 — `systemMessage`는 모델 컨텍스트 도달 카나리 0/14 — 이 이 채널에도 적용될 가능성이 있다. 소실은 아니나 채널 효과가 의심되는 자리라 규칙 억제(`suppressed()`)로 재분류할 후보로 남긴다.
+
+## [0.50.1] — 2026-09-04
+
+### Changed
+- **`merge_brief_review.py`가 형제 `merge_review.py`와 같은 모양으로 처분 회계를 stdout에 낸다(v0.50.0 Known gaps 해소, Task 10 수정 라운드 1).** 원장이 하나(`Ledger(items="open")`, `:228`)뿐이라 형제처럼 셋을 합칠 필요는 없다 — 그 하나의 `report()`/`held_by_class()`를 `disposition_report()`로 이름을 펴 `adjudication_held`/`adjudication_unknown`(기존 두 키) 뒤에 나머지 열한 개(`adjudication_accepted`/`rejected`/`absorbed`/`coerced`/`sources_failed`/`suppressed`/`unknown_counts`/`degraded`/`held_unadjudicated`/`held_malformed`/`held_other`)를 더한다. `reviewing-brief/SKILL.md:323`의 키 열거를 갱신 — 형제 `reviewing-spec/SKILL.md:116`만 갱신돼 있던 비대칭을 없앤다.
+- **락 우회가 아니라 락 갱신.** `test_merge_brief_adjudication.py::TestExternalKeysUnchanged::test_top_level_keys_are_exactly_the_declared_set`(2026-08-23, `7e6ad51`)이 top-level 키를 정확히 8개로 고정하던 것은 «신규 키 금지»가 아니라 «선언 없는 신규 키 금지»(신중함 게이트)였다 — `DECLARED_KEYS`에 새 키 13개를 리터럴로 추가하고 `assertEqual`은 그대로 유지해(부분집합 검사로 바꾸지 않음) 그 계약을 21개로 다시 선언했다. `test_garbled_differs_materially_from_control`(clean 라운드 `advisory == []` 고정)은 실측으로 **깨지지 않았다** — 새 키는 전부 top-level이지 `advisory` 항목이 아니고, `disposition_report()`가 내는 `reasons`/`held_by_class`는 루프가 건너뛴다. `test_merge_brief*.py` 40/40 GREEN(직접 확인).
+
+## [0.50.0] — 2026-09-04
+
+### Added
+- `plugins/spec-distill/scripts/render_disposition.py` — `shared/adjudication/render_disposition.py`로 가는 git 심볼릭 링크(mode 120000, `adjudication.py`와 같은 방식). `disposition_lines()`/`disposition_report()` 두 함수를 quality-gates와 공유한다.
+
+### Changed
+- `merge_review.py`가 세 원장(claude·codex·history)의 `report()`/`held_by_class()`를 합산해 `disposition_report()`로 이름을 편 뒤, 기존 `adjudication_held`/`adjudication_unknown` 두 키 뒤에 `adjudication_accepted`/`adjudication_rejected`/`adjudication_absorbed`/`adjudication_coerced`/`adjudication_sources_failed`/`adjudication_suppressed`/`adjudication_unknown_counts`/`adjudication_degraded`/`adjudication_held_unadjudicated`/`adjudication_held_malformed`/`adjudication_held_other`를 stdout에 더한다. 카운트 이름을 손으로 다시 적지 않는다 — 공유 헬퍼가 편 dict 를 루프로 돈다(L2 코퍼스가 그 import를 따라간다). `reviewing-spec/SKILL.md:116`의 키 열거를 새 키 전부를 반영하도록 갱신.
+
+### Known gaps
+- **`merge_brief_review.py`는 이 릴리스에서 `adjudication_*` 키를 하나도 내지 않는다** — 형제 `merge_review.py`와 달리 오늘 하나도 없어 전부 신규였는데, 그대로 추가하면 두 기존 락이 깨진다: (1) `test_merge_brief_adjudication.py::TestExternalKeysUnchanged::test_top_level_keys_are_exactly_the_declared_set`(2026-08-23, `7e6ad51`)가 top-level 키를 정확히 8개로 고정하고 "새 top-level 키를 추가하지 않는다 — 회계는 이미 escape되는 `advisory`에만 싣는다"를 명시적으로 선언한다. (2) `test_merge_brief_review.py::test_garbled_differs_materially_from_control`가 clean 라운드의 `advisory == []`를 고정한다 — disposition 두 줄을 advisory에 무조건 추가해도 이 락이 깨진다. 두 락 모두 이 브랜치 이전부터 있던 계약이라 판정 없이 넘어가지 않았다. 이 파일이 남아 있는 한 `shared/tests/test_adjudication_consumed.sh`(L2)는 이 파일에 대해 8개 키 전부 미소비로 RED다.
+
+## [0.49.0] — 2026-09-03
+
+### Added
+- `Ledger.suppressed(item, why)` — 규칙 억제를 기각과 분리된 칸으로 센다. 차단도 degrade 도 아니다.
+- `Ledger.held_by_class()` — `hold()` 사유의 접두별 개수. 미지 접두는 「기타」로 세어 합이 `held` 총계와 항상 일치한다.
+
+### Changed
+- `report()["counts"]` 에 `suppressed` 추가 (여섯 → 일곱).
+
 ## [0.48.0] — 2026-09-03
 
 ### Fixed

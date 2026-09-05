@@ -15,6 +15,7 @@ fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
 MOD="$HERE/../adjudication"
+REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 
 run() {   # run <python-body>  → stdout
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$MOD" python3 -c "$1"
@@ -117,5 +118,19 @@ try:
 except ValueError:
     print("RAISED")')"
 assert_eq "$out" "RAISED" "items 에 세 번째 값을 주면 ValueError"
+
+note "── 억제(D4) — reject 와 다른 칸이다"
+OUT="$(PYTHONDONTWRITEBYTECODE=1 python3 "$REPO_ROOT/shared/tests/fixtures/adjudication/probe_suppressed.py" "$REPO_ROOT")"
+assert_contains "$OUT" "suppressed=1"   "suppressed() 가 자기 칸에 센다"
+assert_contains "$OUT" "rejected=0"     "억제는 기각에 섞이지 않는다 (D4)"
+assert_contains "$OUT" "blocks=False"   "규칙 억제는 차단이 아니다"
+assert_contains "$OUT" "degraded=False" "규칙 억제는 degrade 가 아니다 — 규칙이 정한 결과다"
+
+note "── held_by_class — 접두별 분류"
+OUT="$(PYTHONDONTWRITEBYTECODE=1 python3 "$REPO_ROOT/shared/tests/fixtures/adjudication/probe_held_class.py" "$REPO_ROOT")"
+assert_contains "$OUT" "부재=1" "held_by_class: 판정자 부재"
+assert_contains "$OUT" "파손=2" "held_by_class: 항목 파손"
+assert_contains "$OUT" "기타=1" "held_by_class: 미지 접두는 «기타» 로 — 조용히 사라지지 않는다 (U4)"
+assert_contains "$OUT" "합=4"   "held_by_class 의 합 == held 총계. 어느 항목도 분류에서 빠지지 않는다"
 
 finish

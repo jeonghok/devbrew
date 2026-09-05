@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.3.2] — 2026-09-05
+
+### Fixed
+
+- **README 의 「Principles Instantiated」에 이 사이클의 instantiation 이 없었다
+  (최종 리뷰 K6b).** `처분`·`adjudication`·`Ledger`·`input_slots` 를 전수 grep 하면
+  히트 0 이었다. `transcript-reader` 의 `input_slots` 한 줄을 더하면서 **범위 한계**를
+  함께 적었다: 이 agent 의 dispatch 는 skill frontmatter 의 `context: fork` 라
+  `shared/tests/test_agent_input_slots.sh` 의 `.md` dispatch 코퍼스에 «안 보이고»,
+  그 락의 새 `unmeasured` 축이 이름을 댄다. 슬롯의 `optional: true` 가 그 미관측을
+  미전달과 가르는 **유일한 장치**이며(그 한 줄을 지우면 락이 `undelivered` 로 RED),
+  SDD 원장이 그것을 「무동작」으로 적었던 것을 정정했다.
+
+## [0.3.1] — 2026-09-04
+
+### Fixed
+- **Task 14 수정 라운드 1** — `tools/adjudication/check_slots.py`(L3 판정기,
+  `plugins/*/agents/*.md` 전부를 검사)의 dispatch 펜스 스캐너가 들여쓴 펜스를
+  구조적으로 못 보고, 한 펜스에 subagent_type 둘이면 조용히 첫 번째로만
+  귀속하던 결함을 고쳤다 — 상세는 quality-gates CHANGELOG v6.6.1 참조. 이
+  플러그인은 이 판정기의 검사 대상(transcript-reader)이라 선례대로 함께
+  bump. 이 라운드에서 이 플러그인의 파일 자체는 변경 없음.
+
+## [0.3.0] — 2026-09-04
+
+### Added
+- **transcript-reader 에 frontmatter `input_slots:` 선언 — L3(adjudication-topology
+  Task 14).** dispatch 는 `briefing-current-state/SKILL.md` 의 frontmatter
+  `context: fork` + `agent:` 필드가 만든다 — `Agent({subagent_type: "..."})` JS
+  펜스가 아니라 skill 본문 전체가 그대로 프롬프트가 되는 harness 기능이라,
+  `shared/tests/test_agent_input_slots.sh` 의 `.md`-only dispatch 코퍼스(`subagent_type:`
+  펜스 스캔)가 이 채널 자체를 구조적으로 못 본다 — 슬롯 `optional: true`(미전달이
+  아니라 관찰 불가).
+
 ## [0.2.4] — 2026-08-23
 
 ### Added

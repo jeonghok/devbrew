@@ -177,7 +177,7 @@ Agent({
   description: "Brief direction review",
   subagent_type: "spec-distill:brief-direction-reviewer",
   // **처분** — consumer=human · fail-open · disclosure=verification_status
-  prompt: `Review the interview brief at <PAYLOAD_PATH> for directional soundness.
+  prompt: `Review the interview brief at <brief_path>${PAYLOAD_PATH}</brief_path> for directional soundness.
 Read the repository and search the web. Answer both axis-(b) questions with evidence.
 Every finding must carry exactly one question for the user to decide.
 <kill switch 활성 시: "Do not use the web this run — answer from the repository and the brief alone.">`
@@ -320,7 +320,7 @@ codex #2는 **번들**(`$BUNDLE`)을 받습니다 — critic과 같은 재료입
 
 codex #2는 **항상 최종 문서를 봅니다** — stale이 원리적으로 불가능합니다. 그 불가능성을 만드는 것은 서술이 아니라 2-c입니다: payload가 수정되는 모든 라운드에서 codex #2와 구조 게이트를 **수정된 바이트에 다시 돌립니다.** 재실행이 없으면 이 문장은 거짓이 되고, 충실도 verdict는 **서로 다른 두 버전의 문서**에서 계산한 합집합이 되어 합집합의 보장을 잃습니다.
 
-병합 stdout의 키를 그대로 씁니다: `fidelity_verdict` · `critic_verdict` · `codex_verdict` · `critic_verdict_unrecoverable` · `codex_isolated` · `codex_degraded` · `fidelity_findings` · `advisory[]`. `advisory[]`는 사용자에게 **그대로** 표시합니다.
+병합 stdout의 키를 그대로 씁니다: `fidelity_verdict` · `critic_verdict` · `codex_verdict` · `critic_verdict_unrecoverable` · `codex_isolated` · `codex_degraded` · `fidelity_findings` · `advisory[]` · `adjudication_held` · `adjudication_unknown` · `adjudication_accepted` · `adjudication_rejected` · `adjudication_absorbed` · `adjudication_coerced` · `adjudication_sources_failed` · `adjudication_suppressed` · `adjudication_unknown_counts` · `adjudication_degraded` · `adjudication_held_unadjudicated` · `adjudication_held_malformed` · `adjudication_held_other`. `advisory[]`는 사용자에게 **그대로** 표시합니다. `adjudication_*` 는 이 라운드의 처분 원장(`Ledger`) 하나를 이름별로 편 것이다 — `adjudication_held`/`adjudication_unknown`은 각각 버린 항목 수·셀 수 없는 항목 목록이고, `adjudication_accepted`/`rejected`/`absorbed`/`coerced`/`sources_failed`/`suppressed`는 `Ledger.report()["counts"]`의 나머지 칸, `adjudication_unknown_counts`는 `adjudication_unknown`과 같은 목록을 원장 계약 그대로 편 것, `adjudication_degraded`는 판정 경로 온전성, `adjudication_held_unadjudicated`/`held_malformed`/`held_other`는 `held_by_class()`가 나눈 세 분류(판정자 부재·항목 파손·기타)다.
 
 `codex_avail == true`였는데도 `codex_degraded: true`이면 (`run_brief_codex_reviewer.sh`가 timeout·exec 실패·`payload_missing` 등으로 fallback YAML을 낸 경우) record(`component: codex`, `affected_axis: fidelity`, `verification_status: degraded`)를 남깁니다 — 1-c의 `affected_axis: all` record는 codex가 애초에 **없는**(kill switch 포함) 케이스만 다루고, 이 record는 codex가 있었는데 **이 라운드에 실패한** 케이스를 다룹니다. `codex_avail == false`인 라운드에도 병합은 YAML 부재를 `codex_degraded: true`로 보고하지만 그건 skip의 결과이므로 여기서 record를 **중복으로 남기지 않습니다**(1-c의 `all`이 이미 덮습니다). 이걸 남기지 않으면 merge 스크립트의 `advisory[]`에만 흔적이 남고 AC15의 degrade 원장에는 흔적이 남지 않습니다.
 

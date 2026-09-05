@@ -72,6 +72,8 @@ from parse_spec_structure import (  # noqa: E402
 )
 from resolve_mode import resolve_mode  # noqa: E402
 from discover_candidates import Candidate, GitUnavailable, discover  # noqa: E402
+from adjudication import Ledger  # noqa: E402
+from render_disposition import disposition_lines  # noqa: E402
 
 # stdin 을 읽기 **전에** 표준 스트림을 UTF-8 로 고정한다. 위 import 들은 stdin 을
 # 건드리지 않으므로 이 자리가 여전히 "첫 문장"이다 (근거는 hook_common 쪽 docstring).
@@ -208,6 +210,50 @@ def write_state_file(path: Path, body: str) -> None:
         f.write(body)
         f.flush()
         os.fsync(f.fileno())
+
+
+def _block_with_ledger(payload: dict, ledger: Ledger, advisory) -> int:
+    """차단 결정에 원장의 처분을 «reason 앞에» 실어 낸다.
+
+    Task 11 수정 라운드 2 — `reasons()`만 쓰던 최초 판을 되돌린다.
+    `reasons()`(adjudication.py:136-149)가 내는 것은 `held`·`unknown`·
+    `sources_failed`·`coerced(gate=True)` 넷뿐이다. `accepted`/`rejected`/
+    `absorbed`/`suppressed` 는 한 줄도 안 낸다 — 오늘 이 훅이 `hold()`만
+    불러 우연히 전부 덮일 뿐, 누가 `L.reject(...)` 하나만 더해도 공시가
+    조용히 사라진다(L2 소비 락이 실측한 공백). 그래서 원장 `report()` 전체를
+    공유 렌더러 `disposition_lines()`(다른 소비자 넷과 같은 벌)로 낸다 — 키
+    이름을 손으로 다시 적지 않는다.
+
+    **배치가 계약이다 — 그리고 그 계약을 «앞»으로 뒤집었다.**
+    최초 판은 처분 줄을 `reason` 뒤에 붙였다(근거: 지시문이 처분 텍스트에 묻히면
+    다음 턴 강제력이 떨어진다). 그 배치가 **선재 락 하나를 깼다** —
+    `tests/test_hook_output_schema.py` 의 `test_normal_dispatch_states_mandate_lifetime`
+    은 `reason.rstrip().endswith(EXPECTED_TAIL)` 로 mandate 가 **수명 문장으로
+    끝날 것**을 요구한다. 뒤에 무엇을 붙이든 깨진다.
+
+    **왜 그쪽이 이기는가**: 그 락의 형태(`endswith`)는 «측정된 두 번의 실패»에서
+    의도적으로 골라진 것이다 — 재발동 조건을 덧붙이려는 시도가 두 번 있었고 두
+    번 다 거짓이었다(커밋 단정 → git fail-open · 재편집 단정 → mark_reviewed
+    경로). 그래서 「무엇이 참인가」라는 의미 판단을 버리고 「꼬리에 아무것도
+    붙지 않는다」는 구조적 형태를 택했다. 이쪽의 배치 근거는 실패 측정이 아니라
+    선호다. 충돌하면 측정된 실패가 뒤에 있는 쪽이 이긴다.
+
+    검토하고 버린 대안 ⑴ 그 락을 「미래형 단정만 금지」로 좁히기 — 두 번 틀린
+    바로 그 의미 판단을 되살린다. ⑵ 처분을 `systemMessage` 로 옮기기 — 그 채널은
+    모델 도달 0/14 로 측정됐다(Task 11). 공시가 사라진다.
+
+    비용: 모델이 지시문 앞에 회계 두 줄을 먼저 읽는다. 두 줄이다.
+    """
+    report = ledger.report()
+    held_classes = ledger.held_by_class()
+    disp_line, plumb_line, advisories = disposition_lines(report, held_classes)
+    head = disp_line + "\n" + plumb_line
+    if advisories:
+        head += "\n" + "\n".join(advisories)
+    # 지시문이 «끝»에 온다 — `reason` 은 mandate 의 수명 문장으로 끝나야 한다.
+    payload["reason"] = head + "\n\n" + payload.get("reason", "")
+    print(json.dumps(with_advisory(payload, advisory)), flush=True)
+    return 0
 
 
 def validate_document(path: str) -> list[str]:
@@ -561,6 +607,7 @@ def main() -> int:
         cursor = next_cursor
     # --- 구조 검증 (A10 — TTL 가드보다 먼저) ---
     failures: list[str] = []
+    failed_keys: list[str] = []   # 회계 대상 — «문서» 단위, 메시지 줄 단위가 아니다
     reached_cap: list[str] = []
     # frontmatter 는 **원장 함수를 태우기 전에** 깐다. `record_validation` 은 빈 body 를
     # 받으면 블록 하나만 있는 body 를 내놓는데, 그건 이미 비어 있지 않아 나중에
@@ -572,6 +619,7 @@ def main() -> int:
             if not reasons:
                 continue
             failures.append(f"- {key}: " + "; ".join(reasons))
+            failed_keys.append(key)
             n = ledger.next_validation(body_after, key)
             body_after = ledger.record_validation(body_after, key, n)
             if n >= val_cap:
@@ -601,12 +649,22 @@ def main() -> int:
                 file=sys.stderr,
             )
             return flush_advisory(capped_advisory)
-        print(json.dumps(with_advisory({
+        L = Ledger(items="closed")   # 다음 소비자가 기계(다음 턴의 dispatch)다
+        # Task 11 수정 라운드 3 — `lines`(안내 헤더 + 실패 문서 + 상한 안내)가
+        # 아니라 `failed_keys`(실패한 «문서» 자체)를 돈다. `lines` 를 돌던 최초
+        # 판은 자기 안내 헤더 줄까지 보류 항목으로 셌다 — 문서가 하나만 실패해도
+        # 미판정이 2로 나오는 값이 틀린 공시였다(오케스트레이터 실측 적발).
+        # `reached_cap` 은 따로 hold() 하지 않는다 — 그 문서들은 이미 위에서
+        # `failed_keys` 에 들어 있으므로 또 세면 이중 계수다. 상한 도달이 구조
+        # 검증 실패와 다른 사건이라 별도 칸(예: `suppressed()`)이 필요한지는
+        # 열린 질문으로 남긴다(보고서 참조) — 여기서 새 처분을 발명하지 않는다.
+        for key in failed_keys:
+            L.hold(key, "항목 파손: 스코프 문서 구조 검증 실패")
+        return _block_with_ledger({
             "decision": "block",
             "reason": "\n".join(lines),
             "systemMessage": "[spec-distill] 스코프 문서 구조 검증 실패 — 이번 turn 은 리뷰 dispatch 없음",
-        }, capped_advisory)), flush=True)
-        return 0
+        }, L, capped_advisory)
     if picked and cursor != read_cursor(body):
         # 커서는 **통과했을 때도** 전진해야 한다. 상한을 넘는 dirty 문서가 전부
         # 통과하면 rewrite 가 한 번도 안 일어나고, 그러면 매 턴 같은 앞쪽 N개만
@@ -754,12 +812,18 @@ def main() -> int:
         )
         # empty stdout, no decision:block — 발견은 무상태라 다음 Stop 이 다시 찾는다
         return flush_advisory(capped_advisory)
-    print(json.dumps(with_advisory({
+    # 브리프는 이 자리의 항목 이름으로 `picked` 를 썼으나, `picked` 는 위 구조
+    # 검증 단계(:575)의 지역 변수로 이 지점까지 스코프는 살아 있어도 값은
+    # "이번 턴에 구조 검증한 후보 키 목록"이지 지금 dispatch 를 강제하는
+    # 대상이 아니다 — 라벨이 엉뚱한 문서를 가리킨다. 실제로 강제되는 항목은
+    # 위에서 고른 `cand`(Candidate) 이므로 그 `.path` 를 쓴다.
+    L = Ledger(items="closed")
+    L.hold(str(cand.path), "판정자 부재: 리뷰가 아직 안 돌았다 — 다음 턴에 강제한다")
+    return _block_with_ledger({
         "decision": "block",
         "reason": msg,
         "systemMessage": f"[spec-distill] {REVIEW_SKILL} dispatch enforced for next turn",
-    }, capped_advisory)), flush=True)
-    return 0
+    }, L, capped_advisory)
 
 
 if __name__ == "__main__":

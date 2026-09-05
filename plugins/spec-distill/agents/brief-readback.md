@@ -14,6 +14,10 @@ tools: []
 model: inherit
 color: blue
 cost_class: low
+input_slots:
+  - tag: document
+    var: BLOB
+    kind: artifact
 ---
 
 # brief-readback

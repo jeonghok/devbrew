@@ -19,6 +19,7 @@ import yaml
 from collections import defaultdict
 
 from adjudication import Ledger
+from render_disposition import disposition_lines
 
 
 SEV_ORDER = {"CRITICAL": 0, "IMPORTANT": 1, "SUGGESTION": 2}
@@ -50,10 +51,10 @@ def load_yaml(path, ledger=None):
             ledger.source_failed(str(path), "FileNotFoundError", primary=True)
         return [], 0
     if isinstance(data, dict) and "verdicts" in data:
-        return _as_list(data.get("verdicts"), "verdicts")
+        return _as_list(data.get("verdicts"), "verdicts", ledger)
     if isinstance(data, dict) and "findings" in data:
-        return _as_list(data.get("findings"), "findings")
-    return _as_list(data, "findings document")
+        return _as_list(data.get("findings"), "findings", ledger)
+    return _as_list(data, "findings document", ledger)
 
 
 def load_yaml_doc(path):
@@ -72,7 +73,7 @@ def load_yaml_doc(path):
         return None
 
 
-def _as_list(value, what):
+def _as_list(value, what, ledger=None):
     """Return `(list, dropped)` — `value` if it is a list, else `([], n)`.
 
     `or []` only rescues *falsy* values — `new_findings: 5` and
@@ -98,21 +99,28 @@ def _as_list(value, what):
     # 매핑이면 항목 수가 곧 소실 건수다(`new_findings: {a: {...}, b: {...}}` = 2건).
     # 스칼라는 주장 하나로 센다 — 문자열의 len()은 글자 수라 의미가 없다.
     lost = len(value) if isinstance(value, dict) else 1
+    if ledger is not None:
+        # primary=False — 이 컨테이너가 죽어도 «축»은 살아 있다(주 findings
+        # 경로는 따로 돈다). primary=True 로 하면 blocks() 가 켜져 오늘 통과하는
+        # 실행이 차단된다: 공시와 차단은 다른 술어다.
+        ledger.source_failed(
+            what, "expected list, got %s — %d건" % (type(value).__name__, lost),
+            primary=False)
     print(f"[synthesize_findings] {what} is {type(value).__name__}, "
           f"expected list — {lost}건 무시하고 계속한다"
           "(해당 입력은 심사되지 않았다)", file=sys.stderr)
     return [], lost
 
 
-def extract_verdicts(doc):
+def extract_verdicts(doc, ledger=None):
     if isinstance(doc, dict):
-        return _as_list(doc.get("verdicts"), "verdicts")
-    return _as_list(doc, "adversarial document")
+        return _as_list(doc.get("verdicts"), "verdicts", ledger)
+    return _as_list(doc, "adversarial document", ledger)
 
 
-def extract_new_findings(doc):
+def extract_new_findings(doc, ledger=None):
     if isinstance(doc, dict):
-        return _as_list(doc.get("new_findings"), "new_findings")
+        return _as_list(doc.get("new_findings"), "new_findings", ledger)
     return [], 0
 
 
@@ -146,7 +154,7 @@ def _norm_line(f):
         return 0
 
 
-def _normalize_identity(f):
+def _normalize_identity(f, ledger=None):
     """수집 지점에서 스칼라 정체성 필드를 확정한다(소비 지점마다 가드 금지).
 
     `_conf`/`_norm_sev`가 값 수준에서, `_as_list`가 컨테이너 수준에서 하는 일을
@@ -154,8 +162,15 @@ def _normalize_identity(f):
     마다 가드를 덧대면 malformed가 한 겹씩 새고, 라운드 2가 정확히 그렇게 새어서
     `severity`만 막고 `file`/`line`은 열어뒀다.
     """
-    f["file"] = _norm_file(f)
-    f["line"] = _norm_line(f)
+    for key, fn in (("file", _norm_file), ("line", _norm_line)):
+        raw = f.get(key)
+        new = fn(f)
+        if ledger is not None and raw != new:
+            # gate=False — 이 강제는 게이트 판정을 바꾸지 않는다(정체성 필드의
+            # 표기만 바꾼다). gate=True 는 `>=3` 같은 임계 비교를 무력화하는
+            # 대체에만 쓴다(adjudication.py 의 coerced()).
+            ledger.coerced(key, raw, new, gate=False)
+        f[key] = new
     return f
 
 
@@ -197,7 +212,7 @@ def _conf(f):
         return NEW_FINDING_DEFAULT_CONFIDENCE
 
 
-def promote_new_findings(raw_new, existing):
+def promote_new_findings(raw_new, existing, ledger=None):
     """adversarial의 `new_findings:` 항목을 진짜 finding으로 승격한다.
 
     Returns (promoted, dropped_malformed).
@@ -228,12 +243,17 @@ def promote_new_findings(raw_new, existing):
     for item in raw_new:
         if not isinstance(item, dict):
             dropped += 1
+            if ledger is not None:
+                ledger.hold(repr(item)[:60], "항목 파손: not a mapping")
             print("[synthesize_findings] dropped malformed adversarial finding: "
                   "not a mapping", file=sys.stderr)
             continue
         missing = [k for k in NEW_FINDING_REQUIRED if not item.get(k)]
         if missing:
             dropped += 1
+            if ledger is not None:
+                ledger.hold(repr(item.get("summary", item))[:60],
+                            "항목 파손: missing %s" % ", ".join(missing))
             print("[synthesize_findings] dropped malformed adversarial finding: "
                   f"missing {', '.join(missing)}", file=sys.stderr)
             continue
@@ -250,7 +270,7 @@ def promote_new_findings(raw_new, existing):
         f["promoted"] = True
         # 승격 경로도 같은 초크포인트를 쓴다 — `file: [a.py]`가 truthy라 필수-키
         # 검사를 통과한 뒤 sort_findings의 raw 비교에서 TypeError를 냈다.
-        _normalize_identity(f)
+        _normalize_identity(f, ledger=ledger)
         f.setdefault("confidence", NEW_FINDING_DEFAULT_CONFIDENCE)
         fid = finding_id(f)
         if fid in seen:
@@ -289,24 +309,28 @@ def apply_verdicts(findings, verdicts, ledger=None):
     for f in findings:
         if not isinstance(f, dict):
             dropped += 1
+            if ledger is not None:
+                ledger.hold(repr(f)[:60], "항목 파손: not a mapping")
             print("[synthesize_findings] dropped malformed finding "
                   f"({type(f).__name__}, expected mapping): {str(f)[:80]!r}",
                   file=sys.stderr)
             continue
         # 수집 지점 정규화 — dedup 키(해시)·sort tiebreak(비교)·finding_id가 모두
         # 이 값을 raw로 만지므로, 여기서 확정하지 않으면 하류 어디서든 터진다.
-        f = _normalize_identity(dict(f))
+        f = _normalize_identity(dict(f), ledger=ledger)
         v = by_id.get(finding_id(f))
         if v is None:
             # 유지한다(fail-open — 다음 소비자가 사람이다). 다만 «세지 않으면»
             # 판정이 있었던 것과 구별되지 않는다. 형제
             # synthesize_artifact_findings.py:197 에 unadjudicated += 1 이 있다.
             if ledger is not None:
-                ledger.hold(finding_id(f), "adversarial 판정 부재")
+                ledger.hold(finding_id(f), "판정자 부재: adversarial 판정 없음")
             out.append(f)
             continue
         verdict = v.get("verdict", "confirm")
         if verdict == "reject":
+            if ledger is not None:
+                ledger.reject(finding_id(f), "adversarial 기각")
             continue
         if verdict == "downgrade":
             f = dict(f)
@@ -314,11 +338,13 @@ def apply_verdicts(findings, verdicts, ledger=None):
                 f["severity"] = v["adjusted_severity"]
             if "adjusted_confidence" in v:
                 f["confidence"] = v["adjusted_confidence"]
+        if ledger is not None:
+            ledger.accept(finding_id(f))
         out.append(f)
     return out, dropped
 
 
-def dedup(findings):
+def dedup(findings, ledger=None):
     """(file, line, severity)가 같은 발견을 한 행으로 합치고 `sources`를 모은다.
 
     **승격된 발견(`promoted: True`)은 그룹핑에서 제외한다** — 근거는
@@ -338,11 +364,16 @@ def dedup(findings):
         group.sort(key=_conf, reverse=True)
         merged = dict(group[0])
         merged["sources"] = sorted({g.get("agent", "?") for g in group})
+        if ledger is not None:
+            # 그룹의 첫 항목만 살아남는다. 나머지는 «소실이 아니라 귀속»이다 —
+            # absorbed 는 degrade 가 아니다(adjudication.py 모듈 docstring).
+            for g in group[1:]:
+                ledger.absorbed(finding_id(g), finding_id(merged))
         deduped.append(merged)
     return deduped + passthrough
 
 
-def suppress(findings):
+def suppress(findings, ledger=None):
     """C30 rubric (R4): kept vs suppressed.
 
     - CRITICAL: always kept (any confidence).
@@ -359,6 +390,9 @@ def suppress(findings):
         sev = _norm_sev(f)
         conf = _conf(f)
         if sev != "CRITICAL" and conf <= 4:
+            if ledger is not None:
+                ledger.suppressed(finding_id(f),
+                                  "non-CRITICAL conf=%d <= 4 (C30 rubric)" % conf)
             suppressed.append(f)
         else:
             kept.append(f)
@@ -436,8 +470,8 @@ def _degrade_block(degraded, degrade_reasons):
     return out
 
 
-def render(findings, suppressed_count, dropped_malformed=0, held_count=0,
-           degraded=False, degrade_reasons=()):
+def render(kept, suppressed_count, dropped_malformed, report, held_classes):
+    findings = kept
     if not findings:
         # drop 공지는 이 분기에도 반드시 나가야 한다. 예전에는 아래 표-있는
         # 경로에만 있었고, 살아남은 발견이 0이면 여기서 먼저 return해 공지가
@@ -445,11 +479,15 @@ def render(findings, suppressed_count, dropped_malformed=0, held_count=0,
         # SKILL은 stdout만 읽어 counts=0을 보고 `## Review gate: clean`을
         # 찍었다 — 버려진 CRITICAL 주장이 **깨끗함으로 렌더**됐다는 뜻이다
         # (2026-08-04 재현, exit 0). 소실을 stdout에서 볼 수 있게 만든다.
+        disp_line, plumb_line, advisories = disposition_lines(report, held_classes)
+        for a in advisories:
+            print(a, file=sys.stderr)
         out = [
             "## Review Findings (Synthesized)",
             "",
             f"No high-confidence findings. {suppressed_count} low-confidence "
             "findings suppressed.",
+            disp_line, plumb_line,
         ]
         if dropped_malformed > 0:
             out.append(
@@ -458,10 +496,7 @@ def render(findings, suppressed_count, dropped_malformed=0, held_count=0,
                 "file/severity/summary) — see stderr. "
                 "**이 실행은 clean이 아니다**: 버려진 주장은 심사되지 않았다."
             )
-        if held_count > 0:
-            # 이 줄은 개수만 싣는다 — finding summary 는 여기 들어오지 않는다.
-            out.append(f"미판정 {held_count}건 — adversarial 판정이 없어 유지됐다.")
-        out.extend(_degrade_block(degraded, degrade_reasons))
+        out.extend(_degrade_block(report["degraded"], report["reasons"]))
         return "\n".join(out) + "\n"
 
     counts = {"CRITICAL": 0, "IMPORTANT": 0, "SUGGESTION": 0}
@@ -493,12 +528,14 @@ def render(findings, suppressed_count, dropped_malformed=0, held_count=0,
     )
     if suppressed_count > 0:
         counts_line += f" — {suppressed_count} suppressed (conf <= 4)"
-    if held_count > 0:
-        # 이 줄은 개수만 싣는다 — finding summary 는 여기 들어오지 않는다.
-        counts_line += f" — 미판정 {held_count}건"
 
-    out = ["## Review Findings (Synthesized)", "", counts_line, ""]
-    degrade_lines = _degrade_block(degraded, degrade_reasons)
+    disp_line, plumb_line, advisories = disposition_lines(report, held_classes)
+    for a in advisories:
+        print(a, file=sys.stderr)
+
+    out = ["## Review Findings (Synthesized)", "", counts_line,
+           disp_line, plumb_line, ""]
+    degrade_lines = _degrade_block(report["degraded"], report["reasons"])
     if degrade_lines:
         out.extend(degrade_lines)
         out.append("")
@@ -536,13 +573,14 @@ def main():
     ledger = Ledger(items="open")
 
     doc = load_yaml_doc(args.adversarial) if args.adversarial else None
-    verdicts, dropped_verdicts = extract_verdicts(doc)
+    verdicts, dropped_verdicts = extract_verdicts(doc, ledger=ledger)
     raw, dropped_raw = (load_yaml(args.findings, ledger=ledger)
                         if args.findings else ([], 0))
 
     findings, dropped_primary = apply_verdicts(raw, verdicts, ledger=ledger)
-    new_raw, dropped_newlist = extract_new_findings(doc)
-    promoted, dropped_promoted = promote_new_findings(new_raw, findings)
+    new_raw, dropped_newlist = extract_new_findings(doc, ledger=ledger)
+    promoted, dropped_promoted = promote_new_findings(new_raw, findings,
+                                                      ledger=ledger)
     # 모든 출처의 소실을 **한 채널로** 합친다. 하나라도 빠지면 stdout 공지가
     # 반쪽이 되고, 반쪽짜리 공지는 "이 실행은 clean이 아니다"를 말할 자격이 없다.
     # 컨테이너 수준(dropped_raw / dropped_verdicts / dropped_newlist)과 항목
@@ -551,17 +589,16 @@ def main():
     dropped_malformed = (dropped_raw + dropped_verdicts + dropped_newlist
                          + dropped_primary + dropped_promoted)
     findings = findings + promoted          # 기존 뒤에 append — 기존 표 순서를 흔들지 않는다
-    findings = dedup(findings)
-    kept, suppressed = suppress(findings)
+    findings = dedup(findings, ledger=ledger)
+    kept, suppressed = suppress(findings, ledger=ledger)
     kept = sort_findings(kept)
 
     # 원장은 «회계»만 한다 — 읽어서 stdout 에 싣는 것은 이 소비자의 책임이다.
     # 라운드 4 이전에는 `held` 만 꺼내 갔고 `degraded`/`reasons` 는 어디로도 가지
     # 않았다: 주 입력이 통째로 죽어도 출력이 clean 과 **바이트 동일**이었다.
     report = ledger.report()
-    held_count = report["counts"]["held"]
-    sys.stdout.write(render(kept, len(suppressed), dropped_malformed, held_count,
-                            report["degraded"], report["reasons"]))
+    sys.stdout.write(render(kept, len(suppressed), dropped_malformed,
+                            report, ledger.held_by_class()))
 
 
 if __name__ == "__main__":

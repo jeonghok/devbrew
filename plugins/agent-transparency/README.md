@@ -67,6 +67,14 @@
 - **Law 3 (Every Cycle Leaves the System Smarter)** — 이 플러그인이 하는 일
   자체가 compounding 이다. 설명이 트랜스크립트에 쌓이고 `/standup` 이 그것을
   다음 세션에 되돌려 준다.
+- **Law 2 (입력 오염 차단) — `input_slots`** — `transcript-reader` 가 frontmatter
+  에 받는 입력의 `tag`/`var`/`kind` 를 선언한다(`inventory` / `INVENTORY` /
+  `task` — `scripts/prepare_standup.py` 출력이라 판정도 점수도 아니다). 집행은
+  `shared/tests/test_agent_input_slots.sh`. **범위 한계**: 이 agent 의 dispatch 는
+  skill frontmatter 의 `context: fork` 라 그 락의 `.md` dispatch 코퍼스에
+  «안 보인다» — 축 (a)의 `unmeasured` 로 세어져 이름이 나오고, 슬롯의
+  `optional: true` 가 그 미관측을 미전달과 가르는 유일한 장치다(그 한 줄을
+  지우면 락이 즉시 `undelivered` 로 RED 가 된다).
 - **P13 (state 배치)** — state 파일을 만들지 않는다. 트랜스크립트가 이미 그
   역할을 한다.
 - **`cost_class` 선언** — `skills/briefing-current-state/SKILL.md` 가

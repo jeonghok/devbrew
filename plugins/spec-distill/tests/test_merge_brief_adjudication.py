@@ -24,10 +24,20 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / "plugins" / "spec-distill" / "scripts" / "merge_brief_review.py"
 
+# Task 10 수정 라운드 1 — 처분 회계(adjudication_*)가 stdout 계약에 들어오면서
+# 8개(원래 §9.1 검토 시점)에서 21개로 늘었다. 이 락은 «금지»가 아니라 신중함
+# 게이트다 — 「정확히 선언된 집합」이라는 계약은 새 집합을 «선언»하면 충족된다.
+# 늘리는 커밋은 이 리터럴을 같은 커밋에서 갱신해 확장을 보이게 해야 한다.
 DECLARED_KEYS = {
     "fidelity_verdict", "critic_verdict", "codex_verdict",
     "critic_verdict_unrecoverable", "codex_isolated", "codex_degraded",
     "fidelity_findings", "advisory",
+    "adjudication_held", "adjudication_unknown", "adjudication_accepted",
+    "adjudication_rejected", "adjudication_absorbed", "adjudication_coerced",
+    "adjudication_sources_failed", "adjudication_suppressed",
+    "adjudication_unknown_counts", "adjudication_degraded",
+    "adjudication_held_unadjudicated", "adjudication_held_malformed",
+    "adjudication_held_other",
 }
 
 CODEX_CLEAN = "findings: []\nmeta:\n  codex_failed: false\n"
@@ -116,7 +126,7 @@ class TestExists(unittest.TestCase):
 class TestDroppedElementIsHeld(unittest.TestCase):
     """`:162-167` — 비-dict 원소는 findings 로 승격 못 하고 버려진다. 이것이 «소실»
     이고, Ledger 의 `hold()` 로 회계돼야 한다 — Ledger.reasons() 는 "보류: <item> —
-    <why>" 형태를 낸다(shared/adjudication/adjudication.py:110)."""
+    <why>" 형태를 낸다(shared/adjudication/adjudication.py 의 reasons())."""
 
     def test_advisory_carries_ledger_hold_line_for_dropped_element(self):
         _, out, err = run(CRITIC_NON_DICT, CODEX_CLEAN)
@@ -221,9 +231,14 @@ class TestDiscardedCodexMalformedCountIsWired(unittest.TestCase):
 
 
 class TestExternalKeysUnchanged(unittest.TestCase):
-    """§9.1 잡종의 회계는 부가일 뿐, 외부 계약(8개 top-level 키)은 바뀌면 안 된다.
-    새 top-level 키를 추가하지 않는다 — 회계는 이미 escape 되는 `advisory`에만
-    싣는다(correction #3)."""
+    """외부 계약(top-level 키 집합)은 «조용히» 자라면 안 된다 — 늘 때마다
+    `DECLARED_KEYS` 를 같은 커밋에서 갱신해 그 확장이 리뷰에 보이게 만든다.
+
+    원래(§9.1, correction #3) 8개였을 때는 "새 top-level 키를 추가하지 않는다"
+    였다. Task 10 수정 라운드 1 이 처분 회계(`adjudication_*`, 형제
+    merge_review.py 와 같은 모양)를 stdout 계약에 정식으로 추가하면서 21개로
+    늘었다 — 그 확장이 `DECLARED_KEYS` 리터럴에 그대로 보인다. 이 락이 막는
+    것은 «신규 키»가 아니라 «선언 없는 신규 키»다."""
 
     def test_top_level_keys_are_exactly_the_declared_set(self):
         _, out, _ = run(CRITIC_CLEAN, CODEX_CLEAN)

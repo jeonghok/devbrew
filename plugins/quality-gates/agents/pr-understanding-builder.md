@@ -5,6 +5,13 @@ model: inherit
 color: cyan
 cost_class: variable
 tools: Read
+input_slots:
+  - tag: context
+    var: CONTEXT_BLOB
+    kind: artifact
+  - tag: tier
+    var: TIER
+    kind: task
 ---
 
 > `Read`는 파일시스템-읽기 전용이고 쓰기·실행·네트워크·위임이 전부 없다. 이 생성기는

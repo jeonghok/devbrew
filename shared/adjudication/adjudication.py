@@ -1,14 +1,19 @@
 """subagent 발견의 처분 회계.
 
 이 모듈은 **회계만** 한다. 출력 서식의 권위가 아니다 — 각 소비자는 자기 필드명으로
-렌더한다(proceed-gate.md:34-37 이 필드 통일을 명시적으로 거절했고, 형제 `_norm_sev`
-둘이 반대 방향 기본값을 각자 근거와 함께 갖는다).
+렌더한다(`proceed-gate.md` 이 «이 계약이 정하는 것은 "감추지 않는다" 뿐이고, 각 skill 은
+자기 degrade 채널을 자기 어휘 절에 이름으로 명시해야 한다»로 필드 통일을 명시적으로
+거절했고, 형제 `_norm_sev` 둘이 반대 방향 기본값을 각자 근거와 함께 갖는다).
+인용은 줄번호가 아니라 원문으로 한다 — 그 파일이 늘 때마다 번호가 밀린다(실측:
+`:34-37` 은 지금 옵션 표를 가리키고 근거 문장은 다른 자리에 있다).
 
-네 가지 처분을 구별한다:
+다섯 가지 처분을 구별한다(`accept()`·`reject()`·`suppressed()` 는 정상 판정이라
+이 목록 밖이다 — 여기 있는 것은 «항목이 온전히 판정되지 못한» 방식들이다):
   소실       — 항목이 사라지고 아무도 세지 않음        → hold()
   흡수       — 중복이 흡수처에 귀속, 소실이 아님       → absorbed()
   강제       — 항목이 아니라 값을 대체                 → coerced()
   원리적 미상 — 개수를 셀 방법이 없음                  → uncountable()
+  입력 사망   — 판정자(소스) 자체가 죽음               → source_failed()
 
 `degraded`(공시)와 `blocks()`(차단)는 **다른 술어**다:
   blocks()  == held > 0  or  unknown_counts  or  주(主) source_failed
@@ -38,6 +43,7 @@ class Ledger:
         self._coerced = []           # [(field, frm, to, gate)]
         self._sources_failed = []    # [(name, why, primary)]
         self._unknown = []           # [(what, why)]
+        self._suppressed = []        # [(item, why)]
 
     # ── 처분 ──────────────────────────────────────────────────────────
     def accept(self, item):
@@ -79,12 +85,41 @@ class Ledger:
         """
         self._unknown.append((what, why))
 
+    def suppressed(self, item, why):
+        """규칙 억제 — 판정자의 판단이 아니라 규칙(임계값)이 정한 배제.
+
+        `reject` 와 합치지 않는다. 합치면 「누가 왜 뺐나」가 다시 사라진다.
+        degrade 가 아니고 차단하지도 않는다: 규칙이 예상대로 작동한 것이다.
+        """
+        self._suppressed.append((item, why))
+
     # ── 파생 술어 ─────────────────────────────────────────────────────
     def _has_primary_source_failure(self):
         return any(primary for (_n, _w, primary) in self._sources_failed)
 
     def _has_gate_coercion(self):
         return any(gate for (_f, _a, _b, gate) in self._coerced)
+
+    _HOLD_CLASSES = ("판정자 부재", "항목 파손")
+
+    def held_by_class(self):
+        """`hold()` 의 `why` 접두별 개수. 합은 항상 `held` 총계와 같다.
+
+        알려진 접두에 안 걸리는 사유는 «기타» 로 «센다» — 버리면 이 반환의
+        합이 held 와 갈라지고, 그 차이는 소비자의 출력에서 조용히 사라진다.
+        `"기타" > 0` 일 때 advisory 를 내는 것은 소비자의 책임이다 — 이 모듈은
+        회계만 하고 렌더 권위가 아니다(모듈 docstring).
+        """
+        out = {k: 0 for k in self._HOLD_CLASSES}
+        out["기타"] = 0
+        for (_item, why) in self._held:
+            for k in self._HOLD_CLASSES:
+                if str(why).startswith(k):
+                    out[k] += 1
+                    break
+            else:
+                out["기타"] += 1
+        return out
 
     def blocks(self):
         """차단 — 항목이 소실됐거나 셀 수 없거나 그 축의 주(主) 판정자가 죽었을 때만 참.
@@ -127,6 +162,7 @@ class Ledger:
                 "absorbed": len(self._absorbed),
                 "coerced": len(self._coerced),
                 "sources_failed": len(self._sources_failed),
+                "suppressed": len(self._suppressed),
             },
             "degraded": self._degraded(),
             "unknown_counts": [what for (what, _why) in self._unknown],

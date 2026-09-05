@@ -1,5 +1,93 @@
 # Changelog
 
+## [0.8.2] — 2026-09-05
+
+### Fixed
+
+- **README 의 「Principles Instantiated」에 이 사이클의 instantiation 이 없었다
+  (최종 리뷰 K6b).** `처분`·`adjudication`·`Ledger`·`input_slots` 를 전수 grep 하면
+  히트 0 이었다. `input_slots`(agent 셋 + `audit-refuter.findings` 의 C6 면제)와
+  codex 러너의 `**처분**` 앵커 두 줄을 더했다. **범위 한계를 함께 적었다**: 이
+  플러그인의 dispatch 는 `audit-workflow.js` 의 `agent(prompt, {agentType})` 라
+  `shared/tests/test_agent_input_slots.sh` 의 `.md` dispatch 코퍼스에 «안 보이고»,
+  셋 다 그 락의 새 `unmeasured` 축으로 세어져 이름이 나온다.
+- **원장 정정 — `optional: true` 는 이 플러그인의 agent 셋에서 «무동작이 아니다».**
+  SDD 원장이 「`optional: true` 는 판정기가 정적 텍스트만 보므로 무동작」이라고
+  일반화해 적었는데, dispatch 가 `.md` 코퍼스 밖인 이 셋에서는 **유일한 침묵
+  장치**다 — `smoke-probe.md` 에서 그 한 줄만 지우면 `PROBLEM undelivered` 로 즉시
+  RED 가 된다(실측). 원장을 정정했다.
+
+## [0.8.1] — 2026-09-04
+
+### Fixed
+- **Task 14 수정 라운드 1** — `tools/adjudication/check_slots.py`(L3 판정기,
+  `plugins/*/agents/*.md` 전부를 검사)의 dispatch 펜스 스캐너가 들여쓴 펜스를
+  구조적으로 못 보고, 한 펜스에 subagent_type 둘이면 조용히 첫 번째로만
+  귀속하던 결함을 고쳤다 — 상세는 quality-gates CHANGELOG v6.6.1 참조. 이
+  플러그인은 이 판정기의 검사 대상(plugin-auditor·audit-refuter·smoke-probe)이라
+  선례대로 함께 bump. 이 라운드에서 이 플러그인의 파일 자체는 변경 없음.
+
+## [0.8.0] — 2026-09-04
+
+### Added
+- **agent 3개(plugin-auditor·audit-refuter·smoke-probe)에 frontmatter
+  `input_slots:` 선언 — L3(adjudication-topology Task 14).** 셋 다 dispatch 가
+  `audit-workflow.js`/`smoke-workflow.js` 의 `agent(prompt, {agentType})` JS
+  호출이라 `shared/tests/test_agent_input_slots.sh` 의 `.md`-only dispatch
+  코퍼스(`subagent_type: "..."` 펜스 스캔)가 이 dispatch 자리 자체를 구조적으로
+  못 본다 — 그래서 슬롯 전부 `optional: true` (미전달이 아니라 관찰 불가라는
+  뜻, 각 파일에 주석으로 남김). `audit-refuter` 의 `findings` 는 `plugin-auditor`
+  의 raw 감사 findings 를 반박하는 것 자체가 과업이라 `kind: prior_verdict` +
+  `tools/adjudication/check_slots.py` 의 기존 `EXEMPT_SLOTS` placeholder(C6(1))를
+  실제 태그명으로 채워 사용.
+
+## [0.7.3] — 2026-09-04
+
+### Fixed
+- **`shared/tests/test_runner_disposition.sh`(codex 러너 처분 락)가 `consumer=`
+  값의 참·거짓을 재지 못했다 — Task 13 수정 라운드 1이 이 플러그인 몫 러너에서
+  실제로 그 구멍에 빠졌던 자리(adjudication-topology Task 13 수정 라운드 2).**
+  `shared/tests/`에 있어 플러그인 자체는 아니지만 이 락의 코퍼스(`guards:
+  plugins/*/scripts/*codex*.sh`)에 이 플러그인의 `run_audit_codex_reviewer.sh`가
+  있어 함께 bump — 상세는 `shared/tests/test_runner_disposition.sh` 수정 내용
+  참조(quality-gates·spec-distill CHANGELOG에도 같은 설명이 반복 기록됨, 셋 다
+  이 락의 코퍼스에 러너가 있다).
+
+## [0.7.2] — 2026-09-04
+
+### Fixed
+- **v0.7.1 이 낸 `consumer=orchestrator` 선언이 거짓이었다 — 리뷰가 Critical 로 잡았다
+  (Task 13 수정 라운드 1).** `run_audit_codex_reviewer.sh` 의 산출물(`$CODEX_JSON`)을
+  같은 플러그인의 `.py` 가 **직접 여는** 자리가 실재했다:
+  `assemble-audit-data.py:233` 의 `load(a.codex_side)`(= `Path(p).read_text()`)가 그
+  경로를 직접 read 한다 — `codex_audit_to_json.py` 자기 docstring("소비자가 둘이다 …
+  나머지 셋은 `assemble-audit-data.py --codex-side`로 간다")과
+  `auditing-plugins/SKILL.md:137` 표가 이미 이 사실을 적어 두고 있었는데, v0.7.1 이
+  그 인용 바로 옆에서 반대 결론(`orchestrator`)을 냈다. `consumer=` 를
+  `plugins/plugin-audit/scripts/assemble-audit-data.py` 로 교정 — 다른 채널
+  (`findings` → `audit-workflow.js`, 오케스트레이터가 파싱해 넘길 뿐 파일을 직접
+  열지 않는 쪽)은 앵커 산문에 부기만 한다(형제 `run_brief_codex_reviewer.sh` 가
+  두 축을 같은 방식으로 처리한 선례). `fail-open`/`disclosure=meta.codex` 는
+  리뷰가 독립 확인해 무변경 — `emit_degrade()` 가 실패 시에도 빈 컬렉션의 유효
+  JSON 을 쓰므로 `assemble-audit-data.py` 의 `--codex-side` 가 그것을 읽어도
+  하류가 막히지 않는다. `shared/tests/test_runner_disposition.sh` 는 이 경로의
+  참·거짓을 구조적으로 재지 못해(존재+동일-플러그인만 검사) v0.7.1 도 GREEN 이었다
+  — 락이 못 잡는 부류였고, 사람 리뷰가 코드 인용 셋으로 잡았다.
+
+## [0.7.1] — 2026-09-04
+
+### Fixed
+- **`scripts/run_audit_codex_reviewer.sh` 가 자기 처분(누가 산출물을 읽는가·죽었을 때
+  막는가 공시하는가·어느 채널로 드러나는가)을 밝히지 않고 있었다 — `shared/tests/test_runner_disposition.sh`
+  (adjudication-topology Task 13) 가 26 단언 중 24 를 RED 로 잡았다.** 여섯 codex 러너 중
+  이 플러그인 몫 하나에 `**처분**` 앵커를 추가: `consumer=orchestrator`(산출물
+  `$CODEX_JSON` 을 `auditing-plugins/SKILL.md` 를 실행하는 오케스트레이터가 직접 읽어
+  `findings` 는 `audit-workflow.js` 의 `codexFindings` 인자로, `d_verdicts`/`oq_answers`/
+  `new_open_questions` 는 `assemble-audit-data.py` 의 `--codex-side` 로 나눠 넘긴다 — 두
+  스크립트 중 어느 쪽도 이 파일을 직접 열지 않는다) · `fail-open`(codex 가 죽어도 나머지
+  5축 감사(auditor+refuter)는 계속되고 `meta.codex.ran=false` + stderr 배너로만 공시된다
+  — 이 축의 주 판정자가 아니라 모델 다양성 보조다) · `disclosure=meta.codex`.
+
 ## [0.7.0] — 2026-09-03
 
 ### Added

@@ -5,6 +5,14 @@ tools: Read, Grep, Glob, WebSearch, WebFetch
 model: inherit
 color: red
 cost_class: medium
+# audit-workflow.js 의 refutePrompt() 가 build 하는 JS dispatch (agent(prompt, {agentType}))다.
+# `.md`-only dispatch 코퍼스는 이 자리를 구조적으로 못 본다 — optional: true 는 미전달이
+# 아니라 관찰 불가라는 뜻이다.
+input_slots:
+  - tag: findings
+    var: FINDINGS
+    kind: prior_verdict
+    optional: true
 ---
 
 You are **audit-refuter**. Your job is to **destroy** the finding handed to you.

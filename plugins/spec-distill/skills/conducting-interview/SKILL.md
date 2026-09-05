@@ -220,7 +220,7 @@ fi
 
 ```
 Agent({ description: "Map coverage dimensions", subagent_type: "spec-distill:coverage-mapper",
-        prompt: "열린/닫힌 차원 요약: <...>. focused_dimension: <...>, no_progress_streak: <N>. web_disabled: <true|false — true면 WebSearch/WebFetch 사용 금지, codebase 근거만>. 이 주제가 요구하는 derived 차원과 neglect를 제안." })
+        prompt: "coverage 원장 상태(열린/닫힌 차원 요약 · focused_dimension · no_progress_streak): <ledger_state>${LEDGER_STATE}</ledger_state>. web_disabled(true면 WebSearch/WebFetch 사용 금지, codebase 근거만): <web_disabled>${WEB_DISABLED}</web_disabled>. 이 주제가 요구하는 derived 차원과 neglect를 제안." })
 // **처분** — consumer=orchestrator · fail-open · disclosure=advisory
 ```
 
@@ -236,7 +236,7 @@ dispatch하고, dispatch 후 true로 세팅(재dispatch 금지).
 
 ```
 Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind-spot-prober",
-        prompt: "재구성된 문제정의: <...>. 지금까지의 사용자 제약 요지: <...>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
+        prompt: "지금까지의 framing(재구성된 문제정의 + 사용자 제약 요지): <framing>${FRAMING}</framing>. 이 framing의 hidden assumption과 failure mode를 웹근거와 함께." })
 // **처분** — consumer=orchestrator · fail-open · disclosure=loud advisory
 ```
 
@@ -295,7 +295,7 @@ fi
 1. `steelman-builder` 에이전트를 dispatch:
    ```
    Agent({ description: "Steelman alternative", subagent_type: "spec-distill:steelman-builder",
-           prompt: "의심 방향: <statement>. trigger: <이유>. 대안의 강한 케이스를 웹근거와 함께." })
+           prompt: "의심 방향: <direction>${SUSPECT_DIRECTION}</direction>. trigger: <trigger>${TRIGGER}</trigger>. 대안의 강한 케이스를 웹근거와 함께." })
    // **처분** — consumer=orchestrator · fail-open · disclosure=loud advisory
    ```
 2. builder 출력(`alternative_statement` + `evidence[].url`)을 **verbatim**으로 4-block에 반대

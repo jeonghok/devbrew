@@ -57,7 +57,7 @@ allowed-tools:
   - Write
 ---
 
-# Quality Gates — In-Turn Orchestrator (v6.0.0)
+# Quality Gates — In-Turn Orchestrator (v7.0.0)
 
 You are running the **full quality-gates pipeline** in a single assistant
 turn. You dispatch up to two gates serially in order (Runtime gate only when selected). At decision points
@@ -368,22 +368,25 @@ Agent({
   // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-open
   description: "Security review (Review gate iter N)",
   prompt: "Run code-level security review on the current diff.
-    project_dir: \"$project_dir\"
-    diff_scope: <the review scope you resolved at step 1: session (git-derived changed files) / branch (git diff vs base) / paths (--paths globs)>
-    plan_path: <path or 'auto'>
-    iteration: N
-    <…scout-supplied context…>"
+    project_dir: <project_dir>${PROJECT_DIR}</project_dir>
+    diff_scope: <diff_scope>${DIFF_SCOPE}</diff_scope> (session (git-derived changed files) / branch (git diff vs base) / paths (--paths globs) — the review scope you resolved at step 1)
+    plan_path: <plan_path>${PLAN_PATH}</plan_path> (path or 'auto')
+    iteration: <iteration>${ITERATION}</iteration>
+    filtered_diff: <filtered_diff>${FILTERED_DIFF}</filtered_diff> (unified diff computed from the resolved review scope, documentation paths excluded)"
 })
+```
 
+```
 Agent({
   subagent_type: "quality-gates:adversarial",
   // **처분** — consumer=plugins/quality-gates/scripts/synthesize_findings.py · fail-open
   description: "Adversarial review of Phase-1 findings (Review gate iter N)",
   prompt: "Re-review findings from Phase-1 reviewers for false positives
     and missed exploit paths.
-    project_dir: \"$project_dir\"
-    phase1_findings: <yaml from security-reviewer + Tier C specialists + codex>
-    iteration: N"
+    project_dir: <project_dir>${PROJECT_DIR}</project_dir>
+    phase1_findings: <phase1_findings>${PHASE1_FINDINGS}</phase1_findings> (yaml from security-reviewer + Tier C specialists + codex)
+    filtered_diff: <filtered_diff>${FILTERED_DIFF}</filtered_diff> (so you can verify findings against actual code)
+    iteration: <iteration>${ITERATION}</iteration>"
 })
 ```
 
@@ -502,7 +505,7 @@ run 에서도 방출**되므로 실패 신호로 쓰지 않는다. 그 층은 �
    gate** (lightness) — fan-out is bounded by the rubric's natural signal-binding, the
    transparency line above, and the recomputed max fan-out declared in the README.
    (A repo-wide `fan-out ≥5` hard-review gate was **removed** from CLAUDE.md and the philosophy doc by the harness-capability-suppression sweep — it is no longer a backstop and must not be cited as one.)
-4. Dispatch `quality-gates:synthesizer` (or local synthesize_findings.py)
+4. Run `synthesize_findings.py` (`${CLAUDE_PLUGIN_ROOT:-./plugins/quality-gates}/scripts/`)
    to consolidate findings. **Capture the script's complete stdout** — the
    synthesized Markdown block (counts line + findings table + suggested-fixes
    list, or the empty-state line). You surface this verbatim in step 4.5; do
@@ -790,9 +793,18 @@ the persona. Any dispatch of these agents MUST thread the preflight-frozen
 The contract is verified by:
 - runtime: agent personas reject prompts missing `project_dir:` (see
   `plugins/quality-gates/agents/*.md` frontmatter)
-- static: `tests/harness/test_skill_orchestration_behavior.sh` asserts
-  every `subagent_type: "<agent>"` block in this SKILL has a
-  `project_dir:` line within 10 lines (AC1, AC6 protocol-shape)
+- static: `shared/tests/test_agent_input_slots.sh` — it parses each agent's
+  frontmatter `input_slots:` and the dispatch fences in this SKILL, and
+  reports `PROBLEM undelivered` when a declared non-optional slot (such as
+  `project_dir`) has no dispatch delivering it. Being a parse-and-compare,
+  it is insensitive to spelling (space width, variable name) — which a
+  proximity grep is not.
+
+  *(An earlier revision of this paragraph named
+  `tests/harness/test_skill_orchestration_behavior.sh` as the enforcer of a
+  "`project_dir:` within 10 lines" rule. That was false — deleting the line
+  left that lock's failure count unchanged. The measured enforcer is the one
+  above.)*
 
 ## Review max-iter decision
 

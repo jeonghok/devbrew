@@ -262,10 +262,12 @@ Agent({
   // **처분** — consumer=orchestrator · fail-open · disclosure=R2 산문
   description: "Classify scope-relevant test files (Runtime gate)",
   prompt: "Validate test scope against current diff, spec acceptance criteria, and plan items.
-    project_dir: \"$project_dir\"
-    spec_path: <path or 'auto'; pass 'none' if DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1>
-    plan_path: <path or 'auto'>
-    candidate_test_files: <compute-test-scope-candidates.sh 출력>"
+    project_dir: <project_dir>${PROJECT_DIR}</project_dir>
+    spec_path: <spec_path>${SPEC_PATH}</spec_path> (path or 'auto'; pass 'none' if DEVBREW_QUALITY_GATES_DISABLE_SPEC_CONFORMANCE=1)
+    plan_path: <plan_path>${PLAN_PATH}</plan_path> (path or 'auto')
+    candidate_test_files: <candidate_test_files>${CANDIDATE_TEST_FILES}</candidate_test_files> (compute-test-scope-candidates.sh 출력)
+    ## Current Diff
+    <diff>${FILTERED_DIFF}</diff>"
 })
 ```
 
@@ -717,13 +719,15 @@ Agent({
   // **처분** — consumer=orchestrator · fail-closed · disclosure=baseline_unrunnable
   description: "Runtime verification (Runtime gate, sandbox executor)",
   prompt: "Boot the declared surfaces in the sandbox, drive flows, assert against spec AC, write an evidence-log.
-    project_dir: \"$runtime_project_dir\"
-    evidence_dir: \"$evidence_dir\"
-    spec_acceptance_criteria: <{ac_id,text} list or []>
-    manifest: <output of detect-runtime.sh>
-    approved_surfaces: <surfaces opted in at the Upfront Execution Plan>
-    block_policy: <stop|skip|ask>
-    resolution_iter: <N (1..DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS)>"
+    project_dir: <project_dir>${RUNTIME_PROJECT_DIR}</project_dir>
+    evidence_dir: <evidence_dir>${EVIDENCE_DIR}</evidence_dir>
+    plan_path: <plan_path>${PLAN_PATH}</plan_path> (path or 'auto')
+    spec_acceptance_criteria: <spec_acceptance_criteria>${SPEC_ACCEPTANCE_CRITERIA}</spec_acceptance_criteria> ({ac_id,text} list or [])
+    manifest: <manifest>${MANIFEST}</manifest> (output of detect-runtime.sh)
+    approved_surfaces: <approved_surfaces>${APPROVED_SURFACES}</approved_surfaces> (surfaces opted in at the Upfront Execution Plan)
+    block_policy: <block_policy>${BLOCK_POLICY}</block_policy> (stop|skip|ask)
+    resolution_iter: <iteration>${RESOLUTION_ITER}</iteration> (N, 1..DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS)
+    previous_evidence_log_path: <previous_evidence_log_path>${PREVIOUS_EVIDENCE_LOG_PATH}</previous_evidence_log_path> (present only when resolution_iter > 0)"
 })
 ```
 
