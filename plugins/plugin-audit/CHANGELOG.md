@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.9.0] — 2026-09-06
+
+### Changed
+
+- **agent frontmatter 의 `model: inherit` 를 제거했다 — `inherit` 는 사용자의 subagent
+  기본 티어 설정을 덮어쓴다 (CLI 2.1.261 실측, 2026-09-06).** frontmatter 에 `model` 키가
+  없으면 하니스가 「`CLAUDE_CODE_SUBAGENT_MODEL` → 세션 모델」 순으로 위임하고, `inherit` 는
+  그 첫 단계를 건너뛴다(헤드리스 probe 6회, 설계 §A). 설정이 없는 환경은 동작이 같다.
+  규약·락은 「키 부재」 단언으로 반전 — 정본은
+  `docs/superpowers/specs/2026-09-06-agent-model-unpin-design.md`.
+
+### Fixed
+
+- **구조 검사가 `model` 키 부재를 degrade 로 세던 것.** plugin-dev `validate-agent.sh` 는
+  `model` 을 필수로 요구하는데 그것은 devbrew 규약이 아니다 — 핀을 빼면 agent 마다 degrade
+  한 줄이 생겼을 것이다. `check-plugin-structure.sh` 가 `model` 누락 단독은 기록하지 않고
+  `color` 누락 단독만 기존대로 degrade 로 남긴다. 테스트 2건(양성 짝 포함). 구현 중 확인: plugin-dev 검증기는 model 키 없는 agent 에서 ❌ 없이 조용히 죽는다(rc=1) — 그 경우는 agent 별이 아니라 플러그인당 집계 1줄로, model 키가 있는데 죽으면 agent 별 스퓨리어스 exit 줄로 기록한다(테스트 4건).
+
 ## [0.8.2] — 2026-09-05
 
 ### Fixed
