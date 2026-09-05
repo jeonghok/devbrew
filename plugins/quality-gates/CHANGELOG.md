@@ -22,6 +22,12 @@
   README 에 사용자 설정 예시 한 줄과 트레이드오프(강한 세션에서 리뷰어 한 티어 하향) 명시.
 - `docs/plugin-authoring.md` 조항 재기술.
 
+### Verified
+
+- 사후 실측 (AC6, CLI 2.1.261, 2026-09-06): `plugin-audit:smoke-probe` 를 `--plugin-dir` 로 로드해
+  부모 opus 세션에서 dispatch — `CLAUDE_CODE_SUBAGENT_MODEL=haiku` 이면 Haiku 4.5, 없으면 Opus 5 보고.
+  Agent 호출에 `model` 인자 부재 확인.
+
 ## [7.2.1] — 2026-09-05
 
 ### Fixed
