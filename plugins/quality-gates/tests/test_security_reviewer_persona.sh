@@ -24,7 +24,8 @@ antiflag_section() {
 # Frontmatter required keys
 assert_count_ge "grep -c '^name: security-reviewer$' '$PERSONA'" 1 "frontmatter name"
 assert_count_ge "grep -c '^cost_class: medium$' '$PERSONA'" 1 "frontmatter cost_class medium"
-assert_count_ge "grep -c '^model: inherit$' '$PERSONA'" 1 "frontmatter model inherit"
+MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
+assert_file_absent "$PERSONA" "$MODEL_KEY" "frontmatter 에 model 키 없음 (하니스가 티어를 정하지 않는다)"
 assert_count_ge "grep -c '^tools: Read, Grep, Glob$' '$PERSONA'" 1 "frontmatter tools: allowlist (fail-closed)"
 assert_file_absent "$PERSONA" '^allowedTools:' "죽은 allowedTools 없음"
 assert_file_absent "$PERSONA" '^disallowedTools:' "disallowedTools 없음 (allowlist 가 컨트롤)"

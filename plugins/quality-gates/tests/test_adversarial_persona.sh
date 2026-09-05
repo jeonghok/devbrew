@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # AC6 — adversarial persona structural conformance (symmetric to
-# test_security_reviewer_persona.sh). Locks: frontmatter (name / model: inherit /
+# test_security_reviewer_persona.sh). Locks: frontmatter (name / model 키 부재 /
 # disallowedTools 4) + Gate A–D structure + v2.8.0 untrusted-input norm (A)
 # positioned before ## Verification protocol + 2 Gate C reject-at-verify
 # precedents (B) INSIDE the Gate C block, each specifying reject. Section-scoped
@@ -27,8 +27,8 @@ untrusted_section() {
 
 # Frontmatter required keys
 assert_count_ge "grep -c '^name: adversarial$' '$PERSONA'" 1 "frontmatter name adversarial"
-assert_count_ge "grep -c '^model: inherit$' '$PERSONA'" 1 "frontmatter model inherit"
-assert_file_absent "$PERSONA" '^model: (opus|sonnet|haiku)$' "고정 티어 핀 없음 (하니스가 세션 모델을 덮어쓰지 않는다)"
+MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
+assert_file_absent "$PERSONA" "$MODEL_KEY" "frontmatter 에 model 키 없음 (하니스가 티어를 정하지 않는다 — 사용자 설정 → 세션 모델)"
 assert_count_ge "grep -c '^tools: Read, Grep, Glob$' '$PERSONA'" 1 "frontmatter tools: allowlist (fail-closed)"
 assert_file_absent "$PERSONA" '^(allowedTools|disallowedTools):' "죽은 allowedTools / denylist 없음"
 assert_file_absent "$PERSONA" '^tools:.*(Write|Edit|MultiEdit|NotebookEdit|Bash|Agent|Monitor|mcp__)' "쓰기·실행·위임 도구가 tools: 에 없음"
