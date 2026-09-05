@@ -13,7 +13,8 @@
 > `model: sonnet` 핀이 opus 세션에서 리뷰어를 sonnet으로 만들어 **리뷰어가 writer보다 약한 상태를
 > 매 dispatch 재현**했다.
 >
-> **현재 규약**: 리포 내 모든 agent frontmatter는 `model: inherit`이다. dispatch 시점의 `model` 인자는
+> **현재 규약 (2026-09-06)**: 리포 내 모든 agent frontmatter 는 `model` 키를 두지 않는다 — `inherit` 도 사용자의
+> subagent 기본 티어 설정(`CLAUDE_CODE_SUBAGENT_MODEL`)을 덮어쓰기 때문이다(CLI 2.1.261 실측). dispatch 시점의 `model` 인자는
 > 오케스트레이터의 재량이되, 출력이 게이트 판정·측정에 들어가는 agent 에는 넘기지 않는다 —
 > 재량은 프로브·생성기에 한한다(`docs/plugin-authoring.md`, 2026-09-04). 타 플러그인이 *자기* frontmatter에 하드코딩한
 > `model:` 핀을 wrapper로 우회하지 않는다는 아래의 판단은 **그대로 유효하다** — 그것은 상류 저자의
