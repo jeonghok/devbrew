@@ -52,15 +52,22 @@ if [ -n "$VH" ] && [ -f "$TARGET/hooks/hooks.json" ]; then
   fi
 fi
 
-# validate-agent.sh — color/model required false-fail 필터 (거짓 증거 주입 금지)
+# validate-agent.sh — color/model required 필터 (거짓 증거 주입 금지)
+#   · `model` 누락 «단독»은 devbrew 규약 준수다 (docs/plugin-authoring.md: frontmatter 에
+#     model 키를 두지 않는다) — 기록하지 않는다. degrade 로 적으면 리포트가 거짓을 말한다.
+#   · `color` 누락 단독은 plugin-dev-ism — 기존대로 degrade 로 남긴다 (사실 아님, 생략 공시).
 if [ -n "$VA" ]; then
   for a in "$TARGET"/agents/*.md; do
     [ -f "$a" ] || continue
     out=$(bash "$VA" "$a" 2>&1); rc=$?
-    # color/model 누락만이 원인인 실패는 plugin-dev-ism → 필터
-    real=$(echo "$out" | grep -E '❌|error' | grep -viE 'color|model' || true)
+    errs=$(echo "$out" | grep -E '❌|error' || true)
+    real=$(echo "$errs" | grep -viE 'color|model' || true)
+    color_only=$(echo "$errs" | grep -iE 'color' || true)
     if [ $rc -ne 0 ] && [ -z "$real" ]; then
-      add_degr "validate-agent.sh($(basename "$a")): color/model required는 plugin-dev-ism — 필터(devbrew 불변식 아님)"
+      if [ -n "$color_only" ]; then
+        add_degr "validate-agent.sh($(basename "$a")): color required는 plugin-dev-ism — 필터(devbrew 불변식 아님)"
+      fi
+      # model 누락 단독: 규약 준수 — 아무것도 남기지 않는다
     elif [ -n "$real" ]; then
       add_fact "$(python3 -c "import json,sys; print(json.dumps({'validator':'validate-agent.sh','target':sys.argv[1],'fact':sys.argv[2][:400],'verifier_ok':True}))" "$a" "$real")"
     fi
