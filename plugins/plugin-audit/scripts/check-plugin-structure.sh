@@ -66,6 +66,8 @@ if [ -n "$VA" ]; then
     if [ $rc -ne 0 ] && [ -z "$real" ]; then
       if [ -n "$color_only" ]; then
         add_degr "validate-agent.sh($(basename "$a")): color required는 plugin-dev-ism — 필터(devbrew 불변식 아님)"
+      elif [ -z "$errs" ]; then
+        add_degr "validate-agent.sh($(basename "$a")) 스퓨리어스 exit $rc — 사실 생략 (C14)"
       fi
       # model 누락 단독: 규약 준수 — 아무것도 남기지 않는다
     elif [ -n "$real" ]; then

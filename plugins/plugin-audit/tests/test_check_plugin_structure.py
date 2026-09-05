@@ -53,6 +53,18 @@ def run(target, pdev_root):
     return r, (json.loads(r.stdout) if r.stdout.strip() else {})
 
 
+def _stub_validate_agent_no_output_crash(root):
+    """plugin-dev stub whose validate-agent.sh exits non-zero with NO output at all
+    (no ❌/error line) — e.g. a bare 'Permission denied' or truly empty stdout+stderr."""
+    base = Path(root) / "skills" / "hook-development" / "scripts"
+    base.mkdir(parents=True, exist_ok=True)
+    ad = Path(root) / "skills" / "agent-development" / "scripts"
+    ad.mkdir(parents=True, exist_ok=True)
+    _exe(ad / "validate-agent.sh", "#!/usr/bin/env bash\nexit 1\n")
+    _exe(base / "hook-linter.sh", "#!/usr/bin/env bash\necho '✅ clean'\nexit 0\n")
+    _exe(base / "validate-hook-schema.sh", "#!/usr/bin/env bash\necho '✅ ok'\nexit 0\n")
+
+
 def _stub_validate_agent_missing(root, field):
     """plugin-dev stub whose validate-agent.sh fails ONLY on the given missing field."""
     base = Path(root) / "skills" / "hook-development" / "scripts"
@@ -120,6 +132,18 @@ class TestPluginStructure(unittest.TestCase):
             self.assertEqual(r.returncode, 0)
             self.assertTrue([x for x in obj["degraded"] if "validate-agent.sh" in x],
                             obj["degraded"])
+
+    def test_no_output_crash_is_spurious_degrade(self):   # fix round 1 — loud degradation
+        # rc != 0 이지만 ❌/error 매칭 라인이 전혀 없는 경우 (권한 오류, 완전 무출력 등) —
+        # model/color 필터에 걸리지 않으니 아무것도 기록 안 하면 조용한 실패다. 형제
+        # validator들처럼 "스퓨리어스 exit"로 degrade 되어야 한다 (C14).
+        with tempfile.TemporaryDirectory() as t, tempfile.TemporaryDirectory() as pd:
+            _stub_validate_agent_no_output_crash(pd)
+            r, obj = run(_mk_target(t), pd)
+            self.assertEqual(r.returncode, 0)
+            self.assertTrue(
+                [x for x in obj["degraded"] if "validate-agent.sh" in x and "스퓨리어스" in x],
+                obj["degraded"])
 
 
 if __name__ == "__main__":
