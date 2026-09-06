@@ -274,7 +274,7 @@ user_sourced_items:
 
 ## 5. 기각 · Blind Spots
 
-- 기각 — 새 단계 없이 conducting-interview 의 R1+Round1 심화로 흡수하고 새 command·skill·seed·러너·게이트를 만들지 않는다 → 핵심 사실 주장('요청 원형 보존이 이미 기계 강제됨')이 오케스트레이터 검증에서 반증돼 Raw Capture 가 실재 갭으로 확인됨 — https://arxiv.org/abs/2503.13657 — verdict: defended — ST1
+- 기각 — 새 단계 없이 conducting-interview 의 R1+Round1 심화로 흡수하고 새 command·skill·seed·러너·게이트를 만들지 않는다 → 핵심 사실 주장('요청 원형 보존이 이미 기계 강제됨')이 오케스트레이터 검증에서 반증돼 Raw Capture 가 실재 갭으로 확인됨 — https://arxiv.org/abs/2503.13657 — verdict: kept — ST1 (이관 2026-09-06)
 - 기각 — seed 소비자를 임의 다운스트림 에이전트로 여는 범용 프롬프트 도구 → image-gen·research adapter 를 검증할 다운스트림이 이 리포에 없어 관찰 가능한 성공 조건을 쓸 수 없음
 - 기각 — `/interview` 가 거친 입력을 차단하고 framing 을 강제 → "호환성 유지" 명시 요구와 충돌하고, 원문 자체가 "이미 충분히 정제된 입력은 짧게 통과"를 허용함
 - 기각 — **확정되지 않은 핵심 가정이 남은 채로** seed 생성 즉시 자동으로 interview 를 이어서 실행 → 원문이 그 조건에서 직접 금지했고(짧은 통과 자체는 허용), 리포가 polite handoff · cross-compact 조기 진행으로 이미 두 번 막은 실패 양식

@@ -584,7 +584,7 @@ python3 "$SCRIPT" gate "$FX/interview-brief-verdict-no-url.md" >/dev/null 2>&1 \
 cp "$FX/interview-brief-verdict-no-url.md" "$TMPD/vnu.md"
 cp "$FX/interview-brief-verdict-no-url.audit.md" "$TMPD/vnu.audit.md"
 sed -i.bak 's|^audit_file:.*|audit_file: vnu.audit.md|' "$TMPD/vnu.md"
-sed -i.bak 's| → verdict: defended — ST1| → ST1|' "$TMPD/vnu.md"
+sed -i.bak 's| → verdict: kept — ST1| → ST1|' "$TMPD/vnu.md"
 rm -f "$TMPD/vnu.md.bak"
 out="$(python3 "$SCRIPT" gate "$TMPD/vnu.md" 2>/dev/null)"; rc=$?
 { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '판정 없는 steelman'; } \

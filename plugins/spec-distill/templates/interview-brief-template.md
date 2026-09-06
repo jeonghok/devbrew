@@ -72,7 +72,7 @@ user_sourced_items:
  `verdict:`를 가진 항목은 audit §3의 `ST<N>` 참조가 필수다.)
 
 - 기각 — <시도한 방향> → <버린 이유>
-- 기각 — <시도한 방향> → <버린 이유> — verdict: defended — ST1
+- 기각 — <시도한 방향> → <버린 이유> — verdict: kept — ST1
 - 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>
 
 ## 6. 사용자 원문

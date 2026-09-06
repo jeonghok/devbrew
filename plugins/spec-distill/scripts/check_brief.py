@@ -83,7 +83,7 @@ def _web_disabled() -> bool:
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
 URL_RE = re.compile(r"https?://\S+")
-VALID_VERDICTS = ("defended", "switched", "deferred")
+VALID_VERDICTS = ("kept", "refined", "switched", "deferred")
 # Fenced code blocks are illustrative, not authored content — strip them before
 # section/entry detection so headers quoted inside ``` cannot satisfy the gate (F4).
 FENCE_RE = re.compile(r"^[ \t]*```.*?^[ \t]*```[^\n]*$", re.DOTALL | re.MULTILINE)

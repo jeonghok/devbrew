@@ -211,6 +211,7 @@ source: spec-distill conducting-interview v0.53.1
 - brainstorming 진입 (2026-09-06): 재결정 2건 — S15 (C23 요지→원문 인용, 근거 check_slots.py 금지 kind·면제 baseline) · S16 (0건 게이트 기록 항목 요구, C26 신설). §5 기각 2건 추가. 게이트·완전성 재실행.
 - brainstorming 설계 (2026-09-06): §1~§3 승인, 구조 선택 S17. design doc 작성 → spec 리뷰 라운드 1: Claude needs_revise(block 1·high 4·medium 3) / codex needs_revise(high 3·medium 1), 병합 needs_revise, 처분 보류 0. 사용자 S18: 수정 후 재리뷰 1회 더 · ST1 이관은 refined. 라운드 1 지적 10건 전부 수용, design doc 수정.
 - spec 리뷰 라운드 2 (2026-09-06, D4 마지막): Claude needs_revise(high 2·medium 5; 라운드 1 8건 닫힘) / codex needs_revise(high 1·medium 3), 병합 needs_revise, 처분 보류 0. 11건 전부 수용해 design doc 수정. 수정은 재리뷰 없이 Human Gate 로(S18).
+- 이관 (2026-09-06): ST1 verdict: defended → refined (이관 2026-09-06 — 사용자 판정은 「보완」이었고 어휘 부재로 defended 로 적혔다, S18)
 
 ## 6. 사용자 원문
 
