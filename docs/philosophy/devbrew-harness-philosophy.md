@@ -26,6 +26,7 @@ KEEP-12 — Three Laws를 코드로 집행하는 load-bearing 원칙. 각 엔트
 ### P3 — Writer/Reviewer Isolation via Tool Scoping
 **Law 2 집행.** 역할 경계를 프롬프트가 아니라 frontmatter로 만든다 — 리뷰어 agent에는 `Write`/`Edit`이 없고 플래너에는 mutation-Bash가 없다. Load-bearing: "프롬프트를 믿자"에서 "도구가 존재조차 하지 않는다"로 바꾼다 — default-everything(전체 tool 접근) agent는 P3 위반이다.
 코드: `plugins/spec-distill/agents/spec-reviewer.md` · `plugins/quality-gates/agents/security-reviewer.md`
+문서 리뷰 자리 넷(design doc·brief·seed·generic)을 통일하는 엔진은 `shared/docreview/`(v0.55.0 기반, 호출자 0).
 
 ### P4 — Verification Is Infrastructure
 **Law 2 집행.** 모든 작업은 *증거*를 생산하는 검증 pass로 끝난다: mechanical(compile/lint/test) → semantic(AC 준수, 독립 리뷰어) → runtime(실제로 돌림), 저렴한 실패에서 short-circuit. Load-bearing: "컴파일됨"은 증거가 아니다 — runtime tier가 앞 두 tier가 놓치는 버그 class를 잡는다.
