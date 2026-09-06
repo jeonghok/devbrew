@@ -1,10 +1,5 @@
 # 한 문서 리뷰 라운드의 절차
 
-<!-- 이 파일은 진입 skill(reviewing-spec · reviewing-brief · framing-requests 검증 절 ·
-     critiquing-artifacts)이 Read 로 읽고 따르는 절차서다. Agent() dispatch 블록 자체는
-     각 진입 skill 안에 산다(처분 락 축 A⑤ — dispatch 앵커의 플러그인과 consumer= 경로의
-     플러그인이 같아야 한다). 여기 있는 것은 그 블록이 따르는 순서·계약이다. -->
-
 ## 상한
 
 `rereview_cap: 2` — 최초 리뷰가 라운드 1(`rereview_count` 0), 저자 수정 뒤 리뷰마다 +1, 2 에서 상한(라운드 3). 라운드 4 는 사용자가 승인 게이트에서 열어야만 돈다. 이 값의 정본은 이 한 줄이다.

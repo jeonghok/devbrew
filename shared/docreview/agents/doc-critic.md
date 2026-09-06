@@ -57,7 +57,7 @@ input_slots:
 
 ## 출력 형식
 
-두 블록을 순서대로. 각 블록은 YAML 리스트다. 항목 키: `ref`(자기 출력 안에서만 유효한 임시 참조, `c1`·`c2`…) · `layer` · `category`(프로필 rubric 의 값) · `anchor`(문서의 헤딩 앵커) · `disposition` · `summary`(한 문장) · `edit_scope`(선택) · `blocks`(ask 전용) · `supersedes`(선택) · `evidence`(reject·decide 에 필수 아님이나 decide 는 권장).
+두 블록을 순서대로. 각 블록은 YAML 리스트다. 항목 키: `ref`(자기 출력 안에서만 유효한 임시 참조, `c1`·`c2`…) · `layer` · `category`(프로필 rubric 의 값) · `anchor`(문서의 헤딩 앵커) · `disposition` · `summary`(한 문장) · `edit_scope`(선택) · `blocks`(ask 전용) · `supersedes`(선택) · `evidence`(**`decide` 에는 필수** — 문서에서 인용한다. 근거 없이 사용자에게 결정을 요구하지 않는다).
 
 ````
 ```docreview-layer1

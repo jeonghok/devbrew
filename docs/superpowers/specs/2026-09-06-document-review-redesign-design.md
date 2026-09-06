@@ -113,9 +113,13 @@ brainstorming → writing-plans → 구현의 큰 그림에서 스펙의 역할�
 ### 5.1 물리 배치 — `shared/docreview/` 정본 + 심볼릭 링크
 
 엔진(agent 둘 · 스크립트 넷 · 절차 reference 하나)은 `shared/docreview/` 에 정본으로 살고,
-spec-distill 과 quality-gates 의 `agents/` · `scripts/` · `references/` 에 **파일 단위 상대 심볼릭
-링크**로 배포된다(디렉토리 링크가 아니다). 이미 `shared/adjudication/` · `shared/codex/` 가 같은
-방식으로 두 플러그인의 `scripts/` 에 들어가 있다.
+spec-distill 과 quality-gates 에 배포된다. `scripts/` · `references/` 는 **파일 단위 상대 심볼릭
+링크**(디렉토리 링크가 아니다)이고, 이미 `shared/adjudication/` · `shared/codex/` 가 같은 방식으로
+두 플러그인의 `scripts/` 에 들어가 있다. **`agents/` 만은 링크가 아니라 바이트 동일 사본 + `copy-of:`
+마커다** — 심볼릭 링크로 둔 agent 는 dispatch 되지 않는다(2026-09-06 링크 로더 실측, `agents/` 확정
+`no`: `--plugin-dir` 세션에서 `Agent type … not found` 이고 세션 `init` 의 `agents` 배열에도 없다.
+같은 트리의 링크 아닌 대조군은 정상 dispatch 돼 `--plugin-dir` 자체의 한계가 아님을 배제했다).
+§13 항목 0 이 지시한 배포 방식 교체이고 아키텍처는 바뀌지 않는다.
 
 **skill 본문은 공유하지 않는다.** 처분 락(`shared/tests/test_dispatch_disposition.sh` 축 A⑤)은
 dispatch 앵커가 사는 파일의 플러그인과 `consumer=` 경로의 플러그인이 같기를 요구하므로, 한 SKILL.md
@@ -126,10 +130,12 @@ dispatch 앵커가 사는 파일의 플러그인과 `consumer=` 경로의 플러
 의 20줄 임계 아래로 유지한다(블록은 프롬프트 한 줄 + 처분 한 줄이다).
 
 **링크 락은 확장한다 — 새 락이 아니라 도출 축 하나다.** `test_copy_of_contract.sh` 축 1a 의 구조
-도출은 지금 `plugins/*/scripts/<basename>` 만 본다(371–397행). agent · reference 링크가 배포 지점
+도출은 지금 `plugins/*/scripts/<basename>` 만 본다(371–397행). reference 링크가 배포 지점
 0건으로 도출돼 RED 가 되므로, 구조 도출을 `plugins/*/{scripts,agents,references}/<basename>` 로
-넓힌다. 산문 도출(395행의 `scripts/<basename>` 참조 패턴)도 같은 세 디렉토리로 넓힌다 — 구조만
-넓히면 「참조는 하는데 배포 지점이 없는 플러그인」을 agent·reference 에 대해 못 잡는다. 값이 안
+넓힌다(agent 는 사본이라 축 1a 의 정본 목록에 안 들지만, 미래에 링크로 배포되는 것이 생겨도 조용히
+빠지지 않게 세 디렉토리를 함께 넓힌다). 산문 도출(395행의 `scripts/<basename>` 참조 패턴)도 같은 세
+디렉토리로 넓힌다 — 구조만 넓히면 「참조는 하는데 배포 지점이 없는 플러그인」을 reference 에 대해
+못 잡는다. 값이 안
 변한다는 것을 먼저 잰다 — 기존 정본(codex 3 · adjudication 2)의 도출 수가 확장 전후로 같아야 한다(그
 락 자신이 2026-08-18 에 같은 방법으로 넓혔다). 링크 로더 가정 자체는 §13 항목 0 이 PR 1 전에 잰다.
 
@@ -524,9 +530,10 @@ design doc 자리부터, 이후 PR 마다 코퍼스에 자리를 더한다).
   도출하고, 네 진입 skill 과 두 README 의 상한 언급이 전부 그 값과 같다. 정본을 3 으로 바꾸는 mutation
   에 RED 다(도출이 살아 있다는 증거).
 - AC14 — `shared/tests/test_copy_of_contract.sh` 축 1a 의 구조 도출이 `plugins/*/{scripts,agents,references}/`
-  를 덮고, 새 링크 전부(정본 7 = agent 2 · 스크립트 4 · reference 1, 호스트 2 → 14. 프로필은 호스트
-  데이터라 링크가 아니다)를 잰다. 확장 전후로 기존 정본의 도출 수가 같다. 링크 하나를 사본으로 바꾸는
-  mutation 이 RED 다.
+  를 덮고, 새 링크 전부(링크 정본 5 = 스크립트 4 · reference 1, 호스트 2 → 10)를 잰다. agent 둘은
+  링크가 아니라 사본이므로(§5.1) 축 1a 가 아니라 **축 1b**(copy-of 바이트 동일)가 호스트 2 → 사본 4 를
+  잰다. 프로필은 호스트 데이터라 둘 다 아니다. 확장 전후로 기존 정본의 도출 수가 같다. 링크 하나를
+  사본으로 바꾸는 mutation 이 RED 다.
 - AC15 — `/qg critique` 가 라운드마다 git 커밋을 만들지 않는다. `artifact_commit.sh` 가 없다.
 - AC16 — 두 리뷰어 agent 의 `tools:` 에 `Write` · `Edit` · `Bash` 가 없다(Law 2).
 - AC17 — 모든 dispatch 자리에 처분 한 줄이 있고 `shared/tests/test_dispatch_disposition.sh` 가 GREEN 이다.
@@ -545,8 +552,8 @@ design doc 자리부터, 이후 PR 마다 코퍼스에 자리를 더한다).
 `shared/tests/test_docreview_route.sh` · `shared/tests/test_docreview_anchor.sh` · 픽스처.
 
 **신규(호스트)** — `plugins/spec-distill/references/docreview-profiles/{design-doc,brief,seed}.md` ·
-`plugins/quality-gates/references/docreview-profiles/generic.md` · 두 플러그인의 `agents/` · `scripts/` ·
-`references/` 에 파일 단위 상대 심볼릭 링크.
+`plugins/quality-gates/references/docreview-profiles/generic.md` · 두 플러그인의 `scripts/` ·
+`references/` 에 파일 단위 상대 심볼릭 링크 · `agents/` 에 `copy-of:` 사본(§5.1).
 
 **수정(shared, 추가만)** — `shared/codex/codex_findings_to_yaml.py`(`--emit-keys docreview` 추가, 기존
 keyset 불변) · `shared/tests/test_copy_of_contract.sh`(축 1a 구조 도출을 `agents`·`references` 로 확장).
