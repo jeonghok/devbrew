@@ -66,6 +66,11 @@ FENCED_JSON_RE = re.compile(r"```json\s*\n(.*?)\n?```", re.DOTALL)
 DEFAULT_KEYS = ("file", "line", "severity", "confidence", "summary", "proposed_fix")
 DESIGN_KEYS = ("file", "line", "category", "target_section",
                "severity", "confidence", "summary", "proposed_fix")
+# docreview 엔진(설계 §6.2)의 리뷰어 출력 필드 전부. `blocks`만 리스트값이라
+# yaml_emit에 flow 렌더 분기가 필요하다(default·design 둘 다 리스트 필드가 없어
+# 그 분기는 이 둘의 출력 바이트를 바꾸지 않는다 — AC18).
+DOCREVIEW_KEYS = ("ref", "layer", "category", "anchor", "disposition", "summary",
+                  "edit_scope", "blocks", "supersedes", "evidence")
 
 
 def parse_fenced_json(text: str) -> dict | None:
@@ -96,7 +101,11 @@ def yaml_emit(findings: list[dict], meta: dict, keys: tuple[str, ...] = DEFAULT_
             out.append("  - agent: codex-reviewer")
             for k in keys:
                 if k in f:
-                    out.append(f"    {k}: {_yaml_scalar(f[k])}")
+                    v = f[k]
+                    if isinstance(v, list):
+                        out.append(f"    {k}: [{', '.join(_yaml_scalar(x) for x in v)}]")
+                    else:
+                        out.append(f"    {k}: {_yaml_scalar(v)}")
     out.append("meta:")
     for k, v in meta.items():
         out.append(f"  {k}: {_yaml_scalar(v)}")
@@ -162,10 +171,12 @@ def main() -> int:
     p.add_argument("--stderr-file", default=None)
     p.add_argument("--meta-override-exit-code", type=int, default=None)
     p.add_argument("--meta-override-reason", default=None)
-    p.add_argument("--emit-keys", default="default", choices=("default", "design"),
-                    help="emit keyset. design = category/target_section 추가 (design-doc 리뷰 어휘)")
+    p.add_argument("--emit-keys", default="default",
+                    choices=("default", "design", "docreview"),
+                    help="emit keyset. design = category/target_section 추가 (design-doc 리뷰 어휘). "
+                         "docreview = 문서 리뷰 엔진 어휘(ref/layer/disposition/edit_scope 등, 설계 §6.2)")
     args = p.parse_args()
-    keys = DESIGN_KEYS if args.emit_keys == "design" else DEFAULT_KEYS
+    keys = {"design": DESIGN_KEYS, "docreview": DOCREVIEW_KEYS}.get(args.emit_keys, DEFAULT_KEYS)
 
     stdin_text = sys.stdin.read()
     stderr_text = ""

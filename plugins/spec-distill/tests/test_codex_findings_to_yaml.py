@@ -248,5 +248,70 @@ class TestSummaryScalarRoundTrip(unittest.TestCase):
         self.assertIs(doc["meta"]["codex_failed"], False)
 
 
+def _wrap(findings_literal):
+    """평문 `{"findings": [...]}` 을 codex JSONL 이벤트(agent_message, 펜스드 json)로
+    감싼다. `run()` 은 `extract_last_agent_message` 를 거치므로 이 봉투 없이 평문을
+    바로 stdin 에 흘리면 `item.get("type") != "agent_message"` 라 findings 가 아니라
+    `reason: missing_result` 로 떨어진다(실측 — brief 초안의 raw-payload 케이스가
+    이 이유로 전부 RED 였다: 의도한 단언과 무관한 실패였다)."""
+    import json as _json
+    text = "```json\n{\"findings\": " + findings_literal + "}\n```"
+    return _json.dumps({"type": "item.completed",
+                        "item": {"type": "agent_message", "text": text}}) + "\n"
+
+
+class DocreviewKeys(unittest.TestCase):
+    def test_docreview_keyset_emits_disposition_layer_editscope(self):
+        payload = _wrap('[{"ref":"x1","layer":2,"category":"placeholder",'
+                        '"anchor":"#a","disposition":"decide","summary":"s",'
+                        '"edit_scope":"#a","blocks":["x2"],"evidence":"e"}]')
+        out = run(payload, argv_extra=("--emit-keys", "docreview"))
+        for tok in ("layer: 2", "disposition: decide", 'edit_scope: "#a"', 'anchor: "#a"'):
+            self.assertIn(tok, out)
+
+    def test_docreview_blocks_list_renders_flow_and_round_trips(self):
+        """AC18의 리스트 렌더 분기(`blocks`)가 실제로 파싱 가능한 YAML을 내는지 —
+        키 존재만 보면 `[x2, x3]`가 인용 없이 나가 파서를 깨뜨려도 못 잡는다."""
+        payload = _wrap('[{"ref":"x1","layer":1,"category":"c","anchor":"#a",'
+                        '"disposition":"ask","summary":"s","blocks":["x2","x3"],'
+                        '"evidence":"e"}]')
+        out = run(payload, argv_extra=("--emit-keys", "docreview"))
+        try:
+            import yaml  # noqa: PLC0415
+        except ImportError:  # pragma: no cover - 환경 의존
+            self.assertIn("blocks: [x2, x3]", out)
+            return
+        doc = yaml.safe_load(out)
+        self.assertEqual(doc["findings"][0]["blocks"], ["x2", "x3"])
+
+    def test_default_and_design_bytes_unchanged(self):
+        # AC18: docreview keyset 추가가 기존 두 keyset 의 출력을 바꾸지 않는다.
+        payload = _wrap('[{"file":"a.py","line":3,"severity":"high","summary":"s","proposed_fix":"f"}]')
+        self.assertEqual(run(payload), run(payload, argv_extra=("--emit-keys", "default")))
+        d = _wrap('[{"category":"x","target_section":"#a","severity":"high","summary":"s","proposed_fix":"f"}]')
+        self.assertIn("category: x", run(d, argv_extra=("--emit-keys", "design")))
+
+    def test_default_and_design_bytes_match_committed_fixture(self):
+        """AC18 회귀 가드의 진짜 이빨 — `run(payload) == run(payload, "--emit-keys","default")`
+        만 재면 양쪽이 같은 코드에서 나오는 항진명제다(둘 다 같은 버그를 함께 낸다면 여전히
+        같아서 통과한다). 그래서 기대값은 커밋된 고정 바이트(이 테스트 자체에 리터럴로
+        박은 산출물)와 대조한다 — `default`·`design` 코드 경로 자체가 바뀌면 이 리터럴과
+        어긋나 RED 다."""
+        payload = _wrap('[{"file":"a.py","line":3,"severity":"high","summary":"s","proposed_fix":"f"}]')
+        self.assertEqual(
+            run(payload),
+            "findings:\n  - agent: codex-reviewer\n    file: a.py\n    line: 3\n"
+            "    severity: high\n    summary: s\n    proposed_fix: f\n"
+            "meta:\n  codex_failed: false\n",
+        )
+        d = _wrap('[{"category":"x","target_section":"#a","severity":"high","summary":"s","proposed_fix":"f"}]')
+        self.assertEqual(
+            run(d, argv_extra=("--emit-keys", "design")),
+            "findings:\n  - agent: codex-reviewer\n    category: x\n"
+            '    target_section: "#a"\n    severity: high\n    summary: s\n'
+            "    proposed_fix: f\nmeta:\n  codex_failed: false\n",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
