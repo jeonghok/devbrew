@@ -69,10 +69,13 @@ user_sourced_items:
 ## 5. 기각 · Blind Spots
 
 (`기각` 항목이 0건이면 `- 기각 — N/A — 전부 first-time defend+lock` 한 줄 명시(빈 섹션 금지).
- `verdict:`를 가진 항목은 audit §3의 `ST<N>` 참조가 필수다.)
+ `verdict:`를 가진 항목은 audit §3의 `ST<N>` 참조가 필수다. verdict 항목이 0건이면 `검토 —` 항목이
+ 필수다 — 검토한 방향 · 전제 · trigger 후보 · 기각 이유 네 토큰을 담는다.)
 
 - 기각 — <시도한 방향> → <버린 이유>
-- 기각 — <시도한 방향> → <버린 이유> — verdict: kept — ST1
+- 기각 — <버린 것> → <버린 이유> — verdict: kept — ST1 — 부착 M/N
+- 보류 — <대안 statement> → §3 OQ1 — verdict: deferred — ST2 — 부착 M/N
+- 검토 — steelman 0건: 검토한 방향 <N>개 · 전제 <P1..Pn> · trigger 후보 <무엇을 봤는가> → 기각 이유 <왜 trigger 가 아닌가>
 - 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>
 
 ## 6. 사용자 원문

@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.54.0] — 2026-09-06
+
+### Added
+
+- `skills/conducting-interview/references/steelman.md` — R3 절차 전문. 전제 P1..Pn·goal 원문·제약 원문 전량을
+  dispatch 에 싣고, 게이트 전에 repo_claims(경로+앵커)와 양성 `touches` 부착 주장을 orchestrator 가 확인하며,
+  확인된 전제 충돌 0 이면 「재검토 사유 없음」 라벨(사용자가 그래도 전환하면 `사용자 override` 로 기록).
+  4-block 은 builder 추천과 orchestrator 의견을 나란히, 선택지는 유지/보완/전환/보류 고정 순서.
+- `scripts/skepticism.py` — payload §5 skepticism 검사(`VALID_VERDICTS` · verdict 형식 · `검토 —` 항목 · 폐쇄 판정 ·
+  bijection A). `check_brief.py` 는 절을 잘라 넘기기만 한다. 의존 방향은 check_brief → skepticism 하나.
+- 폐쇄 요구: verdict 항목 0건이면 `- 검토 — steelman 0건: 검토한 방향 N개 · 전제 … · trigger 후보 … → 기각 이유 …`
+  항목이 없으면 gate RED(브리프 C26). `보류 —` 접두의 deferred 항목은 verdict 로 세되 R4 기각으로 세지 않는다.
+- steelman-builder 슬롯 셋: `goal`(artifact) · `premises`(orchestrator_framing, `tools/adjudication/check_slots.py`
+  면제 5번째) · `constraints`(artifact). 출력 스키마: `case_for_alternative` → `case_for_current` →
+  `premise_refutation` → `premise_list_challenge` → `recommendation` → `refined_takes/drops` → `evidence[].touches` →
+  `repo_claims[].path/anchor/touches`.
+- 픽스처 6쌍(`steelman-empty-norecord` · `verdict-refined` · `verdict-defended` · `review-record-malformed` ·
+  `verdict-deferred-hold` · `review-only-no-reject`) + `tests/test_skepticism_module.sh`.
+
+### Changed
+
+- steelman 의 목적이 「원안 뒤집기」에서 「사용자 goal 에 가장 적합한 방향 찾기」로. 페르소나 역할은 「대안의 옹호자 ·
+  원안의 옹호자 아님」에서 「양쪽 케이스를 같은 기준으로 쓰는 분석자 · 어느 한 편의 옹호자 아님」으로.
+- verdict 토큰 `defended` → `kept`, `refined` 신설(`switched` · `deferred` 그대로). 픽스처 141 과 템플릿을 기계 치환,
+  과거 brief 의 기계 토큰 2줄(08-16 → refined · 08-22 → kept)과 이 브랜치 brief ST1(→ refined, 사용자 판정이
+  「보완」이었다)은 산문을 읽고 값을 골라 `(이관 2026-09-06)` 표기. 산문·verbatim 원문은 시점 기록이라 건드리지 않았다.
+  **별칭 없음** — spec-distill 은 v0.x 라 one-minor deprecation window 면제.
+- `tests/test_conducting_interview_stage.sh` 의 R3 블록은 `references/steelman.md` 에서 뜬다. `coverage-mapper neglect`
+  존재 락을 부재 락으로 반전(양성 짝: trigger 3값·검토·보류·새 어휘).
+
+### Removed
+
+- R3 trigger 「coverage-mapper neglect」 — 커버리지 공백은 probe 질문으로 간다(브리프 C18).
+- steelman-builder 의 `confidence` 필드와 「confidence < 0.4 면 원안 defend 합리적」 규칙 — `recommendation: kept` 와
+  `case_for_alternative.strongest` 가 같은 정보를 이산값으로 준다.
+
 ## [0.53.1] — 2026-09-05
 
 ### Fixed
