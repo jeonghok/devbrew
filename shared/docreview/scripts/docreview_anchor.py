@@ -1,0 +1,240 @@
+#!/usr/bin/env python3
+"""docreview_anchor.py — 헤딩 단위 앵커 도구.
+
+snapshot(헤딩 파싱 → 섹션 앵커·해시) · diff(두 스냅샷의 헤딩 단위 변경, 얼림 예외 제외) ·
+protected(앵커의 보호·불변·fix 허용 여부) · refs(그 앵커를 인용하는 섹션) · check-intent(패치 의도).
+
+파싱 규칙: ATX 헤딩만(setext 없음) · 코드 펜스 안 무시 · frontmatter 건너뜀 · 앵커는 GitHub slug ·
+섹션은 그 헤딩부터 다음 헤딩(레벨 무관) 직전까지(평면) · 해시는 우측 공백 제거 본문의 sha1 앞 12자.
+보호·불변·fix 허용은 제목과 조상 제목 전부에 대해 정규식 검색한다(하위 절로 캐스케이드).
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))  # bare .parent — 배포 지점의 형제를 읽는다
+from docreview_state import (  # noqa: E402
+    ProfileError, anchors_matching, fail, load_profile, load_state, save_state,
+    slugify,
+)
+
+HEADING_RE = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$")
+FENCE_RE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})")
+PREAMBLE = "#__preamble__"
+DOC_ANCHOR = "#__doc__"
+
+
+# ── 파싱 ────────────────────────────────────────────────────────────────
+def _after_frontmatter(lines) -> int:
+    if lines and lines[0].strip() == "---":
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                return i + 1
+    return 0
+
+
+def parse_sections(text: str, keep_body: bool = False) -> dict:
+    lines = text.split("\n")
+    start = _after_frontmatter(lines)
+    heads = []
+    fence = None
+    for i in range(start, len(lines)):
+        line = lines[i]
+        fm = FENCE_RE.match(line)
+        if fm:
+            tok = fm.group(1)[0]
+            if fence is None:
+                fence = tok
+            elif tok == fence:
+                fence = None
+            continue
+        if fence:
+            continue
+        hm = HEADING_RE.match(line)
+        if hm:
+            heads.append((i, len(hm.group(1)), hm.group(2).strip()))
+    sections = []
+
+    def add(anchor, title, level, a, b, parents):
+        body = "\n".join(x.rstrip() for x in lines[a:b]).strip("\n")
+        item = {"anchor": anchor, "title": title, "level": level, "line": a + 1,
+                "hash": hashlib.sha1(body.encode("utf-8")).hexdigest()[:12],
+                "parents": list(parents)}
+        if keep_body:
+            item["body"] = body
+        sections.append(item)
+
+    if not heads:
+        if "".join(lines[start:]).strip():
+            add(DOC_ANCHOR, "(문서 전체)", 0, start, len(lines), [])
+        return {"headingless": True, "sections": sections}
+    if "".join(lines[start:heads[0][0]]).strip():
+        add(PREAMBLE, "(머리말)", 0, start, heads[0][0], [])
+    seen = {}
+    stack = []  # [(level, anchor)]
+    for k, (ln, lvl, title) in enumerate(heads):
+        base = slugify(title)
+        n = seen.get(base, 0)
+        seen[base] = n + 1
+        anchor = "#" + (base if n == 0 else "%s-%d" % (base, n))
+        while stack and stack[-1][0] >= lvl:
+            stack.pop()
+        parents = [a for (_l, a) in stack]
+        end = heads[k + 1][0] if k + 1 < len(heads) else len(lines)
+        add(anchor, title, lvl, ln, end, parents)
+        stack.append((lvl, anchor))
+    return {"headingless": False, "sections": sections}
+
+
+def snapshot_of(doc_path) -> dict:
+    snap = parse_sections(Path(doc_path).read_text(encoding="utf-8"))
+    snap["doc"] = str(doc_path)
+    return snap
+
+
+# ── diff ────────────────────────────────────────────────────────────────
+def resolve_scope(scope: str, old_secs, new_secs) -> set:
+    """scope → 앵커 집합. `insert-after:#x` 는 new 에서 #x 바로 다음이고 old 에 없던 앵커 하나."""
+    if not scope.startswith("insert-after:"):
+        return {scope}
+    after = scope.split(":", 1)[1]
+    old = {s["anchor"] for s in old_secs}
+    for i, s in enumerate(new_secs):
+        if s["anchor"] == after and i + 1 < len(new_secs):
+            nxt = new_secs[i + 1]
+            if nxt["anchor"] not in old:
+                return {nxt["anchor"]}
+    return set()
+
+
+def diff_snapshots(old: dict, new: dict, exempt_scopes) -> dict:
+    os_, ns = old.get("sections", []), new.get("sections", [])
+    om = {s["anchor"]: s for s in os_}
+    nm = {s["anchor"]: s for s in ns}
+    headingless = bool(old.get("headingless") or new.get("headingless"))
+    ex = {}
+    for sc in exempt_scopes or []:
+        for a in resolve_scope(sc, os_, ns):
+            ex[a] = sc
+    changed, exempt_applied = [], []
+
+    def rec(anchor, kind, title, oh, nh):
+        item = {"anchor": anchor, "kind": kind, "title": title, "old_hash": oh, "new_hash": nh,
+                "evidence": "섹션 '%s' (%s) %s — hash %s→%s" % (title, anchor, kind, oh or "∅", nh or "∅")}
+        if headingless:
+            item["scope"] = DOC_ANCHOR
+            exempt_applied.append(item)
+        elif anchor in ex:
+            item["scope"] = ex[anchor]
+            exempt_applied.append(item)
+        else:
+            changed.append(item)
+
+    for a, s in nm.items():
+        if a not in om:
+            rec(a, "added", s["title"], None, s["hash"])
+        elif om[a]["hash"] != s["hash"]:
+            rec(a, "modified", s["title"], om[a]["hash"], s["hash"])
+    for a, s in om.items():
+        if a not in nm:
+            rec(a, "removed", s["title"], s["hash"], None)
+    return {"headingless": headingless, "changed": changed, "exempt_applied": exempt_applied}
+
+
+# ── 보호 부류 ────────────────────────────────────────────────────────────
+def classify_anchor(anchor: str, sections, prof: dict) -> dict:
+    found = any(s["anchor"] == anchor for s in sections)
+    if not found:
+        return {"anchor": anchor, "found": False, "protected": False, "immutable": False,
+                "fix_allowed": "*" in prof["fix_anchors"]}
+    return {
+        "anchor": anchor, "found": True,
+        "protected": anchor in anchors_matching(prof["protected_headings"], sections),
+        "immutable": anchor in anchors_matching(prof["immutable"], sections),
+        "fix_allowed": anchor in anchors_matching(prof["fix_anchors"], sections),
+    }
+
+
+# ── 인용 ────────────────────────────────────────────────────────────────
+def refs_of(doc_path, anchor: str) -> list:
+    snap = parse_sections(Path(doc_path).read_text(encoding="utf-8"), keep_body=True)
+    tgt = next((s for s in snap["sections"] if s["anchor"] == anchor), None)
+    hits = []
+    for s in snap["sections"]:
+        if s["anchor"] == anchor:
+            continue
+        body = s["body"]
+        if anchor in body or (tgt and tgt["title"] and tgt["title"] in body):
+            hits.append(s["anchor"])
+    return hits
+
+
+# ── CLI ─────────────────────────────────────────────────────────────────
+def _emit(obj) -> None:
+    print(json.dumps(obj, ensure_ascii=False))
+
+
+def cmd_snapshot(a) -> int:
+    p = Path(a.doc)
+    if not p.is_file():
+        return fail("doc_missing", doc=str(p))
+    _emit(snapshot_of(p))
+    return 0
+
+
+def cmd_diff(a) -> int:
+    old = json.loads(Path(a.old).read_text(encoding="utf-8"))
+    new = json.loads(Path(a.new).read_text(encoding="utf-8"))
+    ex = json.loads(Path(a.exempt).read_text(encoding="utf-8")) if a.exempt else []
+    if not isinstance(ex, list):
+        return fail("exempt_not_list")
+    _emit(diff_snapshots(old, new, ex))
+    return 0
+
+
+def cmd_protected(a) -> int:
+    try:
+        prof = load_profile(a.profile)
+    except ProfileError as e:
+        return fail("profile_invalid", detail=str(e))
+    snap = json.loads(Path(a.snapshot).read_text(encoding="utf-8"))
+    _emit(classify_anchor(a.anchor, snap.get("sections", []), prof))
+    return 0
+
+
+def cmd_refs(a) -> int:
+    hits = refs_of(a.doc, a.anchor)
+    _emit({"anchor": a.anchor, "refs": len(hits), "sections": hits})
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="docreview_anchor.py")
+    sp = p.add_subparsers(dest="cmd", required=True)
+    x = sp.add_parser("snapshot"); x.add_argument("doc"); x.set_defaults(fn=cmd_snapshot)
+    x = sp.add_parser("diff"); x.add_argument("old"); x.add_argument("new")
+    x.add_argument("--exempt", default=None); x.set_defaults(fn=cmd_diff)
+    x = sp.add_parser("protected"); x.add_argument("anchor")
+    x.add_argument("--profile", required=True); x.add_argument("--snapshot", required=True)
+    x.set_defaults(fn=cmd_protected)
+    x = sp.add_parser("refs"); x.add_argument("anchor"); x.add_argument("doc"); x.set_defaults(fn=cmd_refs)
+    return p
+
+
+def main(argv=None) -> int:
+    a = build_parser().parse_args(argv)
+    try:
+        return a.fn(a)
+    except FileNotFoundError as e:
+        return fail("file_missing", path=str(e))
+    except (ValueError, RuntimeError) as e:
+        return fail("unreadable", detail=str(e))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
