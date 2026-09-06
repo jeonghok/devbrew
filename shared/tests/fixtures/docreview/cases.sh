@@ -398,19 +398,57 @@ case_T10_protected_decide() {
   assert_eq "$(fsum "$d" '목표 B' '["decision_view"]["auto"]')" "True" "T10: 자동 채움 표시 [auto]"
   rm -rf "$d"
 }
-# 회귀 방지 — 리뷰 라운드가 되돌린 것: recritic 의 무효 검증(evidence 없는 reject)이
-# 보호 앵커의 fix 를 승격에서 면제해서는 안 된다. §6.3 의 보호 규칙은 "처분 무관하게" 이고
-# 예외는 유효 permit 하나뿐이다 — 검증이 그 항목을 건드렸든 안 건드렸든 균일하게 적용된다.
-case_T10_invalidated_reject_still_promotes() {
+# 회귀 방지 — 리뷰 라운드가 되돌린 것: recritic 의 무효 검증(evidence 없는 reject · 하향
+# raise)이 보호·불변 앵커의 fix 를 승격에서 면제해서는 안 된다. §6.3 의 보호 규칙은
+# "처분 무관하게" 이고 예외는 유효 permit 하나뿐이며, immutable 행은 예외가 아예 없다
+# ("어떤 처분도 그 본문을 바꾸지 않는다"). 옛 면제는 2×2(방아쇠 A=무효 reject/B=하향
+# raise × 적용처 1=protected/2=immutable) 였다 — 네 칸을 각각 케이스로 잠근다.
+case_T10_invalidated_reject_still_promotes() {   # A×1: 무효 reject × protected
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   local t; t="$(mktemp -t cr-XXXXXX.txt)"
-  printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#11-acceptance-criteria"\n  disposition: fix\n  summary: "회귀 방지: 무효 reject 뒤에도 보호 승격"\n```\n' > "$t"
+  printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#11-acceptance-criteria"\n  disposition: fix\n  summary: "회귀 방지 A1: 무효 reject 뒤에도 보호 승격"\n```\n' > "$t"
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep.json"
   local rt; rt="$(mktemp -t rt-XXXXXX.txt)"
   printf '```docreview-recritic\nverdicts:\n  - f: "f1"\n    verdict: reject\nadded: []\n```\n' > "$rt"
   py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
-  assert_eq "$(fsum "$d" '회귀 방지' '["disposition"]')" "decide" "T10 회귀: 보호 앵커의 fix 는 evidence 없는 reject(무효 → confirm 취급) 뒤에도 승격된다"
-  assert_eq "$(fsum "$d" '회귀 방지' '["promotion"]')" "protected" "T10 회귀: 승격 사유는 protected — 검증 개입 여부와 무관하게 균일 적용"
+  assert_eq "$(fsum "$d" '회귀 방지 A1' '["disposition"]')" "decide" "회귀 A×1: 보호 앵커의 fix 는 evidence 없는 reject(무효 → confirm 취급) 뒤에도 승격된다"
+  assert_eq "$(fsum "$d" '회귀 방지 A1' '["promotion"]')" "protected" "회귀 A×1: 승격 사유는 protected — 검증 개입 여부와 무관하게 균일 적용"
+  rm -rf "$d" "$t" "$rt"
+}
+case_T10_invalidated_raise_still_promotes() {   # B×1: 하향 raise × protected
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  local t; t="$(mktemp -t cr-XXXXXX.txt)"
+  printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#11-acceptance-criteria"\n  disposition: fix\n  summary: "회귀 방지 B1: 하향 raise 뒤에도 보호 승격"\n```\n' > "$t"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep.json"
+  local rt; rt="$(mktemp -t rt-XXXXXX.txt)"
+  printf '```docreview-recritic\nverdicts:\n  - f: "f1"\n    verdict: raise\n    to: drop\nadded: []\n```\n' > "$rt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(fsum "$d" '회귀 방지 B1' '["disposition"]')" "decide" "회귀 B×1: 보호 앵커의 fix 는 하향 raise(무시 → coerced) 뒤에도 승격된다"
+  assert_eq "$(fsum "$d" '회귀 방지 B1' '["promotion"]')" "protected" "회귀 B×1: 승격 사유는 protected"
+  rm -rf "$d" "$t" "$rt"
+}
+case_T12_invalidated_reject_still_promotes() {   # A×2: 무효 reject × immutable
+  local d; d="$(r1 "$PROF_SD/brief.md" "$FX/brief-sample.md")"
+  local t; t="$(mktemp -t cr-XXXXXX.txt)"
+  printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: omission\n  anchor: "#6-사용자-원문"\n  disposition: fix\n  summary: "회귀 방지 A2: 무효 reject 뒤에도 불변 승격"\n```\n' > "$t"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep.json"
+  local rt; rt="$(mktemp -t rt-XXXXXX.txt)"
+  printf '```docreview-recritic\nverdicts:\n  - f: "f1"\n    verdict: reject\nadded: []\n```\n' > "$rt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/brief-sample.md" > "$d/fin.json"
+  assert_eq "$(fsum "$d" '회귀 방지 A2' '["disposition"]')" "decide" "회귀 A×2: 불변 앵커의 fix 는 evidence 없는 reject(무효 → confirm 취급) 뒤에도 승격된다"
+  assert_eq "$(fsum "$d" '회귀 방지 A2' '["promotion"]')" "immutable" "회귀 A×2: 승격 사유는 immutable — 예외가 아예 없다(설계 §6.3)"
+  rm -rf "$d" "$t" "$rt"
+}
+case_T12_invalidated_raise_still_promotes() {   # B×2: 하향 raise × immutable
+  local d; d="$(r1 "$PROF_SD/brief.md" "$FX/brief-sample.md")"
+  local t; t="$(mktemp -t cr-XXXXXX.txt)"
+  printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: omission\n  anchor: "#6-사용자-원문"\n  disposition: fix\n  summary: "회귀 방지 B2: 하향 raise 뒤에도 불변 승격"\n```\n' > "$t"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep.json"
+  local rt; rt="$(mktemp -t rt-XXXXXX.txt)"
+  printf '```docreview-recritic\nverdicts:\n  - f: "f1"\n    verdict: raise\n    to: drop\nadded: []\n```\n' > "$rt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/brief-sample.md" > "$d/fin.json"
+  assert_eq "$(fsum "$d" '회귀 방지 B2' '["disposition"]')" "decide" "회귀 B×2: 불변 앵커의 fix 는 하향 raise(무시 → coerced) 뒤에도 승격된다"
+  assert_eq "$(fsum "$d" '회귀 방지 B2' '["promotion"]')" "immutable" "회귀 B×2: 승격 사유는 immutable — 예외가 아예 없다(설계 §6.3)"
   rm -rf "$d" "$t" "$rt"
 }
 case_T11_permit_keeps_disposition() {
