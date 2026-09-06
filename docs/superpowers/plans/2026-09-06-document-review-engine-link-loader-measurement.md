@@ -9,4 +9,4 @@
 
 **결론:** 디렉토리별로 갈린다. **`agents/` 는 확정 `no`**(Mode A 실측 dispatch 실패 + 대조군으로 confound 배제 완료, Mode B 국지 스캔에서도 동일 패턴 재현) → PR 2 이후 `agents/` 는 `copy-of:` 사본(바이트 동일 + 첫 줄 마커)으로 배포하고 설계 §5.1·AC14 를 그에 맞게 고친다(아키텍처 불변, 배포 방식만). **`references/` 는 Mode A 확정 `yes`, Mode B 라이브 실행은 인증 차단으로 미결** — 구조 증거(캐시 심볼릭 링크 0개 + 바이트 완전 동일 + 파일 read 에는 agent 같은 별도 레지스트리 스캔이 없다는 사실)는 정상 동작 쪽을 강하게 시사하나 확정은 아니다. 확정을 원하면 인증 가능한 격리 환경(별도 `ANTHROPIC_API_KEY` 또는 사람이 직접 `claude setup-token`으로 격리 디렉토리에 1회 로그인)에서 Step 3 헤드리스 부분만 재실행할 것을 후속 항목으로 남긴다. 그 전까지 설계 문서는 `references/`를 심볼릭 링크로 잠정 채택하거나, 보수적으로 `agents/`와 함께 `copy-of:`로 통일하는 두 선택지 중 설계자가 고른다.
 
-재현: 이 계획 Task 1 Step 1~3(브리프: `.superpowers/sdd/2026-09-06-document-review-engine/task-1-brief.md`). 프로브 자체는 리포에 남기지 않는다(job tmp: `$CLAUDE_JOB_DIR/tmp/linkprobe`).
+재현: `docs/superpowers/plans/2026-09-06-document-review-engine.md` 의 「Task 1: 링크 로더 측정」 Step 1~3. 프로브 자체는 리포에 남기지 않는다(job tmp: `$CLAUDE_JOB_DIR/tmp/linkprobe`).
