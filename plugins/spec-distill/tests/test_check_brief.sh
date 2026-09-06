@@ -894,16 +894,41 @@ DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-s
 # U3-T8(양성/음성): _web_disabled() 를 실제로 부르는 함수가 landscape_present 하나뿐인가.
 # 개수(grep -c)는 advisory 배출까지 세어 공시와 완화를 혼동하므로, 함수 본문만 도려내
 # 지점을 대조한다 (양성 + 음성 짝 — 그래야 "아무것도 안 걸림"으로 통과하는 죽은 락이 아니다).
-body_of() { awk -v f="$1" '$0 ~ "^def "f"\\(" {p=1;next} p && /^def |^[A-Z_]+ = / {exit} p' \
-  "$REPO_ROOT/plugins/spec-distill/scripts/check_brief.py"; }
-printf '%s' "$(body_of landscape_present)" | grep -q '_web_disabled()' \
-  && ok "U3-T8(양성): landscape_present 가 _web_disabled() 를 부른다 — 완화되는 그 하나" \
-  || no "U3-T8(양성): 조임이 사라졌다 — sentinel 구멍이 무조건 열려 있다"
-for fn in landscape_unkeyed skepticism_malformed payload_url_free; do
-  printf '%s' "$(body_of $fn)" | grep -q '_web_disabled()' \
-    && no "U3-T8(음성): $fn 이 여전히 _web_disabled() 로 완화된다 — 공시가 「하나」라고 말하는데 거짓" \
-    || ok "U3-T8(음성): $fn 은 완화되지 않는다"
-done
+#
+# **재는 대상이 두 파일에 나뉜다** — §5 검사는 scripts/skepticism.py 로 떠났다. 그래서
+# `body_of` 는 파일을 인자로 받고, **추출이 비면 `no` 로 떨어진다**: 함수가 어디로 옮겨가든
+# 「아무것도 재지 않은 단언」이 ✓ 로 찍히면 안 된다. 그 공허 통과가 실제로 일어났다 —
+# `skepticism_malformed` 가 모듈로 이사한 뒤 `body_of` 는 빈 문자열을 냈고, 빈 입력에
+# `grep -q` 는 비-0 이라 그대로 `ok` 가지로 흘러 락이 조용해졌다(스위트는 GREEN 이었다).
+# 빈 본문을 fail-closed 로 만드는 이 가드가 그 재발 클래스를 닫는다.
+SD_SCRIPTS="$REPO_ROOT/plugins/spec-distill/scripts"
+body_of() { awk -v f="$1" '$0 ~ "^def "f"\\(" {p=1;next} p && /^def |^[A-Z_]+ = / {exit} p' "$2"; }
+# web_reach <fn> <file> <yes|no> — <yes>=완화되어야 하는 그 하나, <no>=완화되면 안 되는 것
+web_reach() {
+  local fn="$1" file="$2" want="$3" body
+  body="$(body_of "$fn" "$file")"
+  if [[ -z "$body" ]]; then
+    no "U3-T8: $fn 본문을 ${file##*/} 에서 못 찾았다 — 이 단언은 아무것도 재지 않았다 (함수가 옮겨갔는가)"
+    return
+  fi
+  if printf '%s' "$body" | grep -q '_web_disabled()'; then
+    if [[ "$want" == yes ]]; then
+      ok "U3-T8(양성): $fn 가 _web_disabled() 를 부른다 — 완화되는 그 하나 (${file##*/})"
+    else
+      no "U3-T8(음성): $fn 이 여전히 _web_disabled() 로 완화된다 — 공시가 「하나」라고 말하는데 거짓"
+    fi
+  else
+    if [[ "$want" == yes ]]; then
+      no "U3-T8(양성): 조임이 사라졌다 — sentinel 구멍이 무조건 열려 있다"
+    else
+      ok "U3-T8(음성): $fn 은 완화되지 않는다 (${file##*/})"
+    fi
+  fi
+}
+web_reach landscape_present    "$SD_SCRIPTS/check_brief.py" yes
+web_reach landscape_unkeyed    "$SD_SCRIPTS/check_brief.py" no
+web_reach payload_url_free     "$SD_SCRIPTS/check_brief.py" no
+web_reach skepticism_malformed "$SD_SCRIPTS/skepticism.py"  no
 
 # ── N1c — §6 경계 유일성 (v0.46.0) ──────────────────────────────────────────
 # N1a 의 코퍼스(「payload 에서 §6 을 뺀 나머지」)와 N1b 의 코퍼스(「payload §6」)는 서로의
