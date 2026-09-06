@@ -12,11 +12,12 @@ test -f "$AGENT" && ok "agent file exists" || { no "agent file missing"; echo "T
 # Frontmatter 창 = 첫 두 '---' 사이. (구버전 awk 'c==1' 은 '---' 줄 자체를 포함했다.)
 fm="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$AGENT")"
 
-# 모델 티어 양방향 락 — 하니스가 세션 모델을 덮어쓰지 않는다(리터럴 핀 = 조용한 하향).
-grep -qE '^model: inherit$' <<<"$fm" \
-  && ok "model: inherit (세션 티어 상속)" || no "model이 inherit이 아님"
-grep -qE '^model: (opus|sonnet|haiku)$' <<<"$fm" \
-  && no "고정 티어 핀 잔존" || ok "고정 티어 핀 없음"
+# 모델 티어 락 — frontmatter 에 model 키를 두지 않는다. 리터럴 핀은 세션 선택을,
+# `inherit` 는 사용자의 subagent 기본 티어 설정을 덮어쓴다(CLI 2.1.261 실측).
+MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
+grep -qE "$MODEL_KEY" <<<"$fm" \
+  && no "frontmatter 에 model 키가 있다 — 하니스가 티어를 정한다" \
+  || ok "frontmatter 에 model 키 없음 (tier-unpinned)"
 
 # v0.21.0: allowedTools(죽은 필드) + disallowedTools → tools: allowlist.
 # census 가 가설을 확증했다: 업무에 WebSearch×2 · WebFetch×2 실사용.

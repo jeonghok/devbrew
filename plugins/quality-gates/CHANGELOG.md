@@ -3,6 +3,31 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.3.0] — 2026-09-06
+
+### Changed
+
+- **agent 7개의 frontmatter `model: inherit` 를 제거하고 규약을 «키 부재»로 뒤집었다 —
+  `inherit` 는 사용자의 subagent 기본 티어 설정을 덮어쓴다 (CLI 2.1.261 실측, 2026-09-06).**
+  `model` 키가 없으면 하니스가 「`CLAUDE_CODE_SUBAGENT_MODEL` → 세션 모델」 순으로 위임하고,
+  `inherit` 는 그 첫 단계를 건너뛴다(헤드리스 probe 6회, 설계 §A). 설정이 없는 환경은 동작이
+  같다. #139(2026-09-04) 의 「inherit = 사용자 선택 존중」 전제를 반증한 재결정.
+  정본: `docs/superpowers/specs/2026-09-06-agent-model-unpin-design.md`.
+- 락 반전: 스윕 `test_agent_model_inherit_sweep.sh` → `test_agent_model_unpinned_sweep.sh`
+  (키 존재 = RED, 하한 ≥10 유지), per-agent 락 8개, 규약 문장 락(AC8d) — 옛 음성 어법
+  regex 는 새 문장에 반대로 울어 제거하고 리터럴 두 개로 대체.
+- 새 변이 락 `test_agent_model_mutation.sh` — 다섯 표기(`model: inherit`·`model: opus`·
+  `model:inherit`·`"model": inherit`·`model : inherit`) + 빈 glob 하한으로 이빨 증명.
+- README·skill 본문·스크립트 주석의 `inherit`/`inherit-tier` 서술을 `tier-unpinned` 로.
+  README 에 사용자 설정 예시 한 줄과 트레이드오프(강한 세션에서 리뷰어 한 티어 하향) 명시.
+- `docs/plugin-authoring.md` 조항 재기술.
+
+### Verified
+
+- 사후 실측 (AC6, CLI 2.1.261, 2026-09-06): `plugin-audit:smoke-probe` 를 `--plugin-dir` 로 로드해
+  부모 opus 세션에서 dispatch — `CLAUDE_CODE_SUBAGENT_MODEL=haiku` 이면 Haiku 4.5, 없으면 Opus 5 보고.
+  Agent 호출에 `model` 인자 부재 확인.
+
 ## [7.2.1] — 2026-09-05
 
 ### Fixed

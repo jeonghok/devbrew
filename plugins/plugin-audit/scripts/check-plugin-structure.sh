@@ -52,19 +52,43 @@ if [ -n "$VH" ] && [ -f "$TARGET/hooks/hooks.json" ]; then
   fi
 fi
 
-# validate-agent.sh — color/model required false-fail 필터 (거짓 증거 주입 금지)
+# validate-agent.sh — color/model required 필터 (거짓 증거 주입 금지)
+#   · `model` 누락 «단독»은 devbrew 규약 준수다 (docs/plugin-authoring.md: frontmatter 에
+#     model 키를 두지 않는다) — 기록하지 않는다. degrade 로 적으면 리포트가 거짓을 말한다.
+#   · `color` 누락 단독은 plugin-dev-ism — 기존대로 degrade 로 남긴다 (사실 아님, 생략 공시).
+#   · plugin-dev validate-agent.sh 는 model 키가 아예 없는 agent 에서 ⚠️ 경고는 내지만
+#     "Missing required field: model" 즉 ❌ 줄에는 도달하지 못하고 rc=1 로 죽는다 — devbrew
+#     전 agent 가 model-less 규약이라 이게 상시·전수 발생한다. per-agent degrade 로 적으면
+#     agent 수만큼의 노이즈이므로 플러그인당 집계 1줄로 묶는다 (loud 이되 noisy 는 아니게).
+has_model_key() {  # $1 = agent file — frontmatter window(첫 두 --- 사이)에 model 키가 있는지
+  awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$1" | grep -qE "^[\"']?model[\"']?[[:space:]]*:"
+}
 if [ -n "$VA" ]; then
+  modelless_crash=0
   for a in "$TARGET"/agents/*.md; do
     [ -f "$a" ] || continue
     out=$(bash "$VA" "$a" 2>&1); rc=$?
-    # color/model 누락만이 원인인 실패는 plugin-dev-ism → 필터
-    real=$(echo "$out" | grep -E '❌|error' | grep -viE 'color|model' || true)
+    errs=$(echo "$out" | grep -E '❌|error' || true)
+    real=$(echo "$errs" | grep -viE 'color|model' || true)
+    color_only=$(echo "$errs" | grep -iE 'color' || true)
     if [ $rc -ne 0 ] && [ -z "$real" ]; then
-      add_degr "validate-agent.sh($(basename "$a")): color/model required는 plugin-dev-ism — 필터(devbrew 불변식 아님)"
+      if [ -n "$color_only" ]; then
+        add_degr "validate-agent.sh($(basename "$a")): color required는 plugin-dev-ism — 필터(devbrew 불변식 아님)"
+      elif [ -z "$errs" ]; then
+        if has_model_key "$a"; then
+          add_degr "validate-agent.sh($(basename "$a")) 스퓨리어스 exit $rc — 사실 생략 (C14)"
+        else
+          modelless_crash=$((modelless_crash+1))
+        fi
+      fi
+      # model 누락 단독: 규약 준수 — 아무것도 남기지 않는다
     elif [ -n "$real" ]; then
       add_fact "$(python3 -c "import json,sys; print(json.dumps({'validator':'validate-agent.sh','target':sys.argv[1],'fact':sys.argv[2][:400],'verifier_ok':True}))" "$a" "$real")"
     fi
   done
+  if [ "$modelless_crash" -gt 0 ]; then
+    add_degr "validate-agent.sh: model 키 없는 agent ${modelless_crash}개에서 ❌ 없이 exit — plugin-dev 검증기가 model 부재를 처리 못 함, 검증 생략(devbrew 규약 준수)"
+  fi
 fi
 
 # quick_validate.py (skill 검증기) — 이 plugin-dev 빌드에 부재 → 상시 degrade

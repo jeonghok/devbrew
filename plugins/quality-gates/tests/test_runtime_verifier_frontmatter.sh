@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Validates runtime-verifier.md frontmatter + body for the v2.2.0 sandbox-
-# executor contract. The agent is now an executor: model inherit, Write/Edit
+# executor contract. The agent is now an executor: frontmatter 에 model 키 없음, Write/Edit
 # in allowedTools, browser-interaction tools, NotebookEdit still denied, and
 # the body declares the sandbox / no-commit / product-fix-forbidden contract.
 
@@ -10,7 +10,8 @@ FILE="$(cd "$(dirname "$0")/.." && pwd)/agents/runtime-verifier.md"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 # --- frontmatter (v2.11.0: allowedTools(죽은 필드) → tools: allowlist) ---
-assert_file_grep "$FILE" "^model: inherit" "model is inherit"
+MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
+assert_file_absent "$FILE" "$MODEL_KEY" "frontmatter 에 model 키 없음 (tier-unpinned)"
 assert_file_grep "$FILE" "^cost_class: variable" "cost_class stays variable"
 assert_file_absent "$FILE" "^allowedTools:" "죽은 allowedTools 제거됨"
 assert_file_absent "$FILE" "^disallowedTools:" "disallowedTools 제거됨 (allowlist가 컨트롤)"

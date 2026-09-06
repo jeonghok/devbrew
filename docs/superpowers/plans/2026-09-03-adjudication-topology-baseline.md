@@ -32,7 +32,7 @@
 - `test_adversarial_persona.sh`
 - `test_agent_color.sh`
 - `test_agent_frontmatter_keys.sh`
-- `test_agent_model_inherit_sweep.sh`
+- `test_agent_model_unpinned_sweep.sh`
 - `test_agent_tools_lock_differential.sh`
 - `test_agent_tools_lock_mutation.sh`
 - `test_artifact_adversarial_frontmatter.sh`

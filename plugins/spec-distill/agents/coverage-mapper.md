@@ -1,6 +1,5 @@
 ---
 name: coverage-mapper
-model: inherit
 cost_class: low
 color: blue
 tools: Read, Grep, Glob, WebSearch, WebFetch

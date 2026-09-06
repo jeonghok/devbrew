@@ -13,7 +13,6 @@ description: >
   assistant: "I'll dispatch the seed-readback agent with only the seed
   inlined."</example>
 tools: []
-model: inherit
 color: blue
 cost_class: low
 input_slots:

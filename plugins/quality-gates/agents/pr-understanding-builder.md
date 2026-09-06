@@ -1,7 +1,6 @@
 ---
 name: pr-understanding-builder
 description: Authors a non-code-reader PR-understanding artifact from a single inlined context blob — a read-nothing generator whose sole tool is an inert Read it never invokes (no write/exec/network/delegation).
-model: inherit
 color: cyan
 cost_class: variable
 tools: Read

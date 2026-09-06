@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# T9/AC4/AC13a-b — artifact-adversarial: inherit-tier + read-only + verdict schema.
+# T9/AC4/AC13a-b — artifact-adversarial: tier-unpinned + read-only + verdict schema.
 set -u
 A="plugins/quality-gates/agents/artifact-adversarial.md"
 . "$(cd "$(dirname "$0")/../../.." && pwd)/shared/tests/assert.sh"
 
 assert_file_grep "$A" '^name: artifact-adversarial$' "name is artifact-adversarial"
-assert_file_grep "$A" '^model: inherit$' "model is inherit"
-assert_file_absent "$A" '^model: (opus|sonnet|haiku)' "model is NOT a pinned tier"
+MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
+assert_file_absent "$A" "$MODEL_KEY" "frontmatter 에 model 키 없음 (tier-unpinned — 사용자 설정 → 세션 모델)"
 assert_file_grep "$A" '^color: (cyan|green|yellow|blue|red|purple|orange|pink)$' "color in 8-color enum"
 assert_file_grep "$A" '^tools: Read, Grep, Glob[[:space:]]*$' "tools: allowlist (fail-closed, read-only)"
 assert_file_absent "$A" '^disallowedTools:' "denylist 제거됨 (allowlist 가 컨트롤)"

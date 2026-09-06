@@ -141,11 +141,11 @@ for a in seed-critic seed-readback; do
   printf '%s\n' "$fm" | grep -qE '^allowedTools:' \
     && no "$a: allowedTools(camelCase) — 존재하지 않는 필드다. 조용히 무시된다" \
     || ok "$a: allowedTools(camelCase) 잔존 없음"
-  # model: inherit — 형제 zero-tool 둘(brief-critic·brief-readback)의 정본과 같은 값.
-  ml="$(printf '%s\n' "$fm" | sed -n 's/^model:[[:space:]]*//p' | head -1)"
-  [ "$ml" = "inherit" ] \
-    && ok "$a: model: inherit" \
-    || no "$a: model: '$ml' — 형제 정본은 inherit 이다"
+  # model 키 부재 — 형제 zero-tool 둘(brief-critic·brief-readback)의 정본과 같다.
+  MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
+  printf '%s\n' "$fm" | grep -qE "$MODEL_KEY" \
+    && no "$a: frontmatter 에 model 키가 있다 — 형제 정본은 키 부재다" \
+    || ok "$a: model 키 없음"
   # description 이 dispatch 트리거로 기능하려면 실제로 이 agent 이름을 참조하는
   # SKILL.md dispatch 자리가 있어야 한다 — **토큰 공존이 아니라 관계**: description
   # 필드의 실재가 아니라 그 필드가 가리키는 대상(SKILL.md 안 실제 dispatch)이 있는지를

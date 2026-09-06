@@ -1,5 +1,7 @@
 # Quality-Gates v1.5.0 — E2E Verification Scenarios
 
+> **Historical (v2.2.x snapshot).** Model lines below predate the 2026-09-06 «no `model` key» convention; scenario H's "Task 1 model-override experiment" measured dispatch-time override of `inherit`, which gate agents no longer receive.
+
 This document records the manual verification scenarios for the v1.5.0 redesign.
 Live `/qg` runs require an interactive Claude Code session against a real PR;
 this file specifies *what to test* and *what passing looks like* so a reviewer
@@ -80,7 +82,7 @@ Total: 5–7 dispatches. AskUserQuestion fires only if Phase 1+2 ≥ 4.
 
 ### H — Cross-plugin model respect
 **Run**: any /qg invocation that dispatches `pr-review-toolkit:code-reviewer`.
-**Inspect**: state file dispatch summary should show `model: opus` for that agent (upstream-hardcoded, not overridden), while `inherit` agents show `model: sonnet` (Task 1 model-override experiment confirmed this works).
+**Inspect**: state file dispatch summary should show `model: opus` for that agent (upstream-hardcoded, not overridden), while devbrew agents (no `model` key) show `model: sonnet` (Task 1 model-override experiment confirmed this works).
 
 ### I — Repeat detection
 **Setup**: contrive a PR where Phase 1 finds the same finding twice (e.g., the auto-fix doesn't actually fix the root cause).
@@ -132,7 +134,7 @@ Agents (model + cost_class):
   scout: model=sonnet, cost_class=low
   adversarial: model=opus, cost_class=low
   synthesizer: model=sonnet, cost_class=low
-  runtime-verifier: model=inherit, cost_class=variable
+  runtime-verifier: model=(none — user setting/session), cost_class=variable
 
 SKILL cost_class: variable
 plugin.json version: 2.2.x

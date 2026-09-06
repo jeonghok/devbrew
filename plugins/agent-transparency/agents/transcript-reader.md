@@ -2,7 +2,6 @@
 name: transcript-reader
 description: /standup 의 fork 전용 — 디스크의 대화 기록과 git 산출물만 읽어 지금 상태를 답한다
 tools: Read, Grep, Glob
-model: inherit
 # briefing-current-state/SKILL.md 의 frontmatter `context: fork` + `agent:` 필드가 이
 # dispatch 를 만든다 — `Agent({subagent_type: "..."})` JS 펜스가 아니라 skill 본문 전체가
 # 그대로 프롬프트가 되는 harness 기능이라, `.md`-only dispatch 코퍼스(`subagent_type:` 펜스

@@ -10,11 +10,12 @@ AGENT="$REPO_ROOT/plugins/spec-distill/agents/coverage-mapper.md"
 test -f "$AGENT" || { no "agent 파일 부재: $AGENT"; echo "Total: 1 | Pass: 0 | Fail: 1"; exit 1; }
 FM="$(awk 'NR==1&&$0=="---"{f=1;next} f&&$0=="---"{exit} f' "$AGENT")"
 
-# 모델 티어 양방향 락 — 하니스가 세션 모델을 덮어쓰지 않는다(리터럴 핀 = 조용한 하향).
-grep -qE '^model: inherit$' <<<"$FM" \
-  && ok "model: inherit (세션 티어 상속)" || no "model이 inherit이 아님"
-grep -qE '^model: (opus|sonnet|haiku)$' <<<"$FM" \
-  && no "고정 티어 핀 잔존" || ok "고정 티어 핀 없음"
+# 모델 티어 락 — frontmatter 에 model 키를 두지 않는다. 리터럴 핀은 세션 선택을,
+# `inherit` 는 사용자의 subagent 기본 티어 설정을 덮어쓴다(CLI 2.1.261 실측).
+MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
+grep -qE "$MODEL_KEY" <<<"$FM" \
+  && no "frontmatter 에 model 키가 있다 — 하니스가 티어를 정한다" \
+  || ok "frontmatter 에 model 키 없음 (tier-unpinned)"
 
 grep -qE '^name: coverage-mapper$' <<<"$FM" \
   && ok "name: coverage-mapper (재명명)" || no "name이 coverage-mapper 아님"

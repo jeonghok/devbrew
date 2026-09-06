@@ -3,7 +3,7 @@ name: critiquing-artifacts
 description: >
   Critique → revise → re-critique loop for a single NON-CODE artifact
   (doc / spec / plan / config / prose). Triggered by `/qg critique <path>` or a
-  natural-language critique intent ("이 설계문서 비평해줘"). An inherit-tier
+  natural-language critique intent ("이 설계문서 비평해줘"). A tier-unpinned
   critic + adversarial (+ optional codex co-reviewer) review read-only; the
   orchestrator applies fixes and commits each round. Bounded by max-rounds +
   stagnation + kill switch. Not a code gate — code targets route to the normal
@@ -153,8 +153,8 @@ Agent({
     `run_brief_codex_reviewer.sh`와 동일한 exit-3 계약이고, 그 호출자
     (`spec-distill`의 `reviewing-brief` SKILL)가 이미 같은 `rc==3 → rm -f` 패턴을
     구현하고 있다.
-  - 출력이 `codex_failed: true`면 **가용 판정 후 런타임 실패**: `> [quality-gates] codex 가용 판정 후 런타임 실패(<reason>) — degraded, inherit-tier 단독.` (crash 아님, C7) codex.yaml은 병합에서 제외.
-- `codex_available: false` → **미가용**: `> [quality-gates] codex 미가용(<skip_reason>) — inherit-tier 단독 비평.` (위 런타임-실패 문구와 **구분**된 별도 라인.) `<skip_reason>` 자리에는
+  - 출력이 `codex_failed: true`면 **가용 판정 후 런타임 실패**: `> [quality-gates] codex 가용 판정 후 런타임 실패(<reason>) — degraded, tier-unpinned 단독.` (crash 아님, C7) codex.yaml은 병합에서 제외.
+- `codex_available: false` → **미가용**: `> [quality-gates] codex 미가용(<skip_reason>) — tier-unpinned 단독 비평.` (위 런타임-실패 문구와 **구분**된 별도 라인.) `<skip_reason>` 자리에는
   `not_installed`·`auth_missing`·`timeout_binary_missing`·`known_bad_version`·
   `version_below_floor`·`version_unreadable`·`kill_switch`·`inside_codex_sandbox`
   외에 형제 설정 `codex-killswitch.conf` 문제를 가리키는 `killswitch_config_missing`·
@@ -172,7 +172,7 @@ Agent({
   (`plugins/quality-gates/scripts/detect_codex.sh`는 `shared/codex/detect_codex.sh`를
   가리키는 상대 심볼릭 링크다). `<skip_reason>` 자리를 `unknown`으로 채우지 말고
   **`detector_not_runnable`**로 구별해 낸다:
-  `> [quality-gates] codex 감지기 실행 실패(detector_not_runnable) — inherit-tier 단독 비평.`
+  `> [quality-gates] codex 감지기 실행 실패(detector_not_runnable) — tier-unpinned 단독 비평.`
   (위 두 문구와 **구분**된 별도 라인 — "codex가 없다"와 "감지기를 못 돌렸다"는 다른 사실이다.)
 
 **2.5 merge + key** — critic(+가용·성공 시 codex) findings를 dedup하고 dedup_key를 주입:
@@ -286,4 +286,4 @@ critic·adversarial·codex는 read-only(`tools:` allowlist / codex `-s read-only
 
 - `DEVBREW_QUALITY_GATES_DISABLE=1` — 전역 즉시 종료(E0).
 - `DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE=1` — 이 모드만 종료(E0).
-- `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — codex co-review만 skip(`detect_codex.sh` 존중), inherit-tier 단독으로 degrade.
+- `DEVBREW_QUALITY_GATES_DISABLE_CODEX=1` — codex co-review만 skip(`detect_codex.sh` 존중), tier-unpinned 단독으로 degrade.

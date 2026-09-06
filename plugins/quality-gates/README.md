@@ -49,7 +49,7 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
 - **P17 (Consent) — 게시는 게이트가 아니라 opt-in consent-gated 표면** (v2.9.0) — `/qg-publish`는 매 실행마다 사람이 읽는 preview 뒤 AskUserQuestion으로 명시 동의를 받아야만 GitHub에 쓴다(비가역·영구 노출 고지 포함; cross-repo "always" 없음). **`/qg`의 Review gate/Runtime gate 자체는 이 기능으로 변경되지 않는다 — publish는 그 위에 얹힌 별도 opt-in 표면이지 세 번째 게이트가 아니다.**
 - **P18 (Bounded idempotency)** (v2.9.0) — `comment-upsert.py`가 인증 `user.id` 스코프 내에서 버전-패밀리 마커(`<!-- pr-understanding:v1 -->`, 첫 줄 anchored 매칭이 optional `tier=N` 접미사를 허용 — 빌더는 `tier=N`을 emit하지만 tier는 변경 파일 수에 따라 드리프트하므로 매칭은 tier를 무시해 멱등이 깨지지 않게 함)로 기존 코멘트를 조회해 0개→POST, 1개→PATCH, ≥2개(비정상)→REFUSE — 모호성 앞에서 임의로 고르지 않고 결정론적으로 멈추고 사용자 확인을 요구한다.
 - **pwn-request Law-2형 물리 분리 — 생성 ≠ 게시** (v2.9.0 → v2.12.0에서 **처음으로 사실이 됨**) — `pr-understanding-builder` 에이전트는 `tools:`에 무해한 항목 **하나만** 선언한다 (fail-closed allowlist — 쓰기·실행·네트워크·위임 도구 0개, 유일 항목 = inert `Read`(생성기가 미호출), 유일 입력 = inlined `build-pr-context.sh` blob). `gh`/네트워크는 오직 `publishing-pr-understanding` skill(오케스트레이터)만 보유한다. ⚠️ **v2.9.0~v2.10.x에서 이 주장은 거짓이었다**: 당시 격리는 존재하지 않는 필드 + 11개 이름 denylist였고, denylist에 `mcp__*`가 없어 tavily 웹검색·chrome-devtools 브라우저 제어가 **열려 있었다**. 이름 기반 denylist는 원리적으로 닫을 수 없다 — `Monitor`가 이름 없는 셸(`command`)과 이름 없는 egress(`ws`)를 준다. allowlist만이 열거되지 않은 것과 **미래에 추가될 것**을 자동 차단한다.
-- **Law 1/2/3 + P8/P18 (산출물 비평 루프, v2.11.0)** — `/qg critique`가 비-코드 산출물에 대해 inherit-tier `artifact-critic`+`artifact-adversarial`(+조건부 codex)의 read-only 비평 → 오케스트레이터 수정 → 라운드별 커밋 루프를 돈다. Law 1=E3 upfront 동의 게이트; Law 2=read-only 리뷰어(`tools:` allowlist)+매 라운드 독립 critic 게이트; Law 3=라운드별 커밋 감사추적; P18=max-rounds+stagnation predicate+kill switch(`DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE`); P8=NL 라우팅 모델-소유, 결정론은 `critique <path>`+§10 스키마. 별도 skill `critiquing-artifacts`로 위임(코드 2게이트 파이프라인 무변경).
+- **Law 1/2/3 + P8/P18 (산출물 비평 루프, v2.11.0)** — `/qg critique`가 비-코드 산출물에 대해 tier-unpinned `artifact-critic`+`artifact-adversarial`(+조건부 codex)의 read-only 비평 → 오케스트레이터 수정 → 라운드별 커밋 루프를 돈다. Law 1=E3 upfront 동의 게이트; Law 2=read-only 리뷰어(`tools:` allowlist)+매 라운드 독립 critic 게이트; Law 3=라운드별 커밋 감사추적; P18=max-rounds+stagnation predicate+kill switch(`DEVBREW_QUALITY_GATES_DISABLE_CRITIQUE`); P8=NL 라우팅 모델-소유, 결정론은 `critique <path>`+§10 스키마. 별도 skill `critiquing-artifacts`로 위임(코드 2게이트 파이프라인 무변경).
 - **LD3 (floor 는 실행이다) — 영향분 테스트의 실제 실행** (v3.0.0) — Runtime 게이트의 floor
   가 "전체 앱 부팅"이 아니라 *"레포에 이미 있는 테스트 중 영향분을 실제로 돌리는 것"*이다.
   `run-test-selection.sh` 가 러너 어댑터 9종을 **집합으로** 감지해 전부 실행한다 — 폴리글랏
@@ -88,13 +88,13 @@ quality-gates/
 ├── .claude-plugin/         # 플러그인 메타데이터
 │   └── plugin.json
 ├── agents/                 # Gate agent (leaf agent; 파이프라인이 dispatch)
-│   ├── runtime-verifier.md      # Runtime gate Step 3 (sandbox executor — model inherit)
+│   ├── runtime-verifier.md      # Runtime gate Step 3 (sandbox executor — tier-unpinned)
 │   ├── test-scope-validator.md  # Runtime gate Step 2.5 (pre-exec test scope check)
 │   ├── adversarial.md           # Review gate Phase 1.5 — false-positive hunter
 │   ├── security-reviewer.md     # Review gate Phase 1 always-run — 코드 레벨 보안 리뷰 (injection / authn-authz / secrets / SSRF / crypto-misuse / deserialization / raw-HTML / dependency manifest). Disable: `DEVBREW_QUALITY_GATES_DISABLE_SECURITY_REVIEWER=1`
-│   ├── artifact-critic.md       # `/qg critique` 게이트 — inherit-tier critic; 비-코드 산출물의 논리 갭·미기술 전제·불완전·근거 없는 주장·모호성 (read-only)
-│   ├── artifact-adversarial.md  # `/qg critique` 게이트 — inherit-tier 판정자; critic/codex 발견을 confirm/downgrade/reject 하고 놓친 것을 추가 (read-only)
-│   └── pr-understanding-builder.md  # publish 생성기 — model: inherit, tools: Read 1개 (inert·미호출; fail-closed; 쓰기·실행·네트워크·위임 0; 유일 입력 = inlined blob)
+│   ├── artifact-critic.md       # `/qg critique` 게이트 — tier-unpinned critic; 비-코드 산출물의 논리 갭·미기술 전제·불완전·근거 없는 주장·모호성 (read-only)
+│   ├── artifact-adversarial.md  # `/qg critique` 게이트 — tier-unpinned 판정자; critic/codex 발견을 confirm/downgrade/reject 하고 놓친 것을 추가 (read-only)
+│   └── pr-understanding-builder.md  # publish 생성기 — model 키 없음(tier-unpinned), tools: Read 1개 (inert·미호출; fail-closed; 쓰기·실행·네트워크·위임 0; 유일 입력 = inlined blob)
 ├── commands/
 │   ├── qg.md               # /qg slash command (--reset, --paths, branch flag 포함)
 │   ├── qg-publish.md       # /qg-publish slash command ([--dry-run]; publish skill로 얇은 dispatch)
@@ -169,11 +169,19 @@ The optional `codex-reviewer` agent has `cost_class: variable` — as a Tier B *
 
 ### PR-understanding publish cost (`/qg-publish`, separate from the two gates)
 
-`publishing-pr-understanding` skill은 `cost_class: variable` (context 크기·tier에 따라 다름). 저술을 맡는 `pr-understanding-builder`는 `model: inherit` — 세션이 쓰는 티어를 그대로 받는다(하니스가 티어를 덮어쓰지 않는다). Deep tier만 실행 전 upfront cost 고지(AskUserQuestion)를 하며, 작은 diff는 비용이 자연히 bounded되고 `/qg-publish`는 명시적 실행이 곧 비용 수용이다(NG5 정합 — 명시 실행이 유일한 touchpoint). Review/Runtime 두 게이트의 비용 표(위)와는 **완전히 별도** — publish는 게이트가 아니므로 depth 기반 자동 트리거가 없다.
+`publishing-pr-understanding` skill은 `cost_class: variable` (context 크기·tier에 따라 다름). 저술을 맡는 `pr-understanding-builder`는 frontmatter 에 `model` 키가 없다 — 사용자의 subagent 설정, 없으면 세션 티어를 받는다(하니스가 티어를 정하지 않는다). Deep tier만 실행 전 upfront cost 고지(AskUserQuestion)를 하며, 작은 diff는 비용이 자연히 bounded되고 `/qg-publish`는 명시적 실행이 곧 비용 수용이다(NG5 정합 — 명시 실행이 유일한 touchpoint). Review/Runtime 두 게이트의 비용 표(위)와는 **완전히 별도** — publish는 게이트가 아니므로 depth 기반 자동 트리거가 없다.
 
 ### Adversarial reviewer model
 
-`adversarial` agent uses `model: inherit`. It is the **single model-based judgment gate** in the Review gate: the Phase 1/2 reviewers emit findings and the synthesizer after it is a deterministic script, so every finding the user sees passed through its verdict. Its persona runs a per-finding 3-gate verification (real? / introduced-by-this-diff? / handled-elsewhere?) plus a severity realist check. Because it is the judgment bottleneck it must run at **the session's own tier** — pinning a literal tier here silently downgrades the bottleneck whenever the session runs something stronger, and silently raises cost whenever it runs something cheaper. Both directions overwrite the user's model choice, which the harness does not do. Locked bidirectionally by `tests/test_adversarial_model_consistency.sh` (inherit present AND no fixed tier). Runs ~once per Review gate fix-loop iteration (≤5×). To reduce its cost, lower the *number* of Review gate iterations or the diff scope.
+`adversarial` agent declares no `model` key. It is the **single model-based judgment gate** in the Review gate: the Phase 1/2 reviewers emit findings and the synthesizer after it is a deterministic script, so every finding the user sees passed through its verdict. Its persona runs a per-finding 3-gate verification (real? / introduced-by-this-diff? / handled-elsewhere?) plus a severity realist check. The harness does not choose its tier: with no `model` key the subagent resolves to the user's `CLAUDE_CODE_SUBAGENT_MODEL` setting if one is set, else to the session's own model (CLI 2.1.261, measured 2026-09-06). A literal tier would overwrite the session choice; `inherit` would overwrite the user's subagent setting — both directions are the harness deciding. Locked by `tests/test_adversarial_model_consistency.sh` (no `model` key AND no dispatch-time override). Runs ~once per Review gate fix-loop iteration (≤5×).
+
+**Choosing a cheaper tier for devbrew subagents is the user's call, not the plugin's.** Put it in your own settings — for example in `~/.claude/settings.json`:
+
+```json
+{ "env": { "CLAUDE_CODE_SUBAGENT_MODEL": "opus" } }
+```
+
+Remove the entry to return to the session tier. (`CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1` also exists. The only thing measured here (CLI 2.1.261, 2026-09-06) is that it overrides a frontmatter `inherit`; its documented effect on dispatch-time `model` arguments and on other plugins' pins was not measured. devbrew does not recommend it.) Note the trade-off you are choosing: on a session stronger than the tier you set, reviewers run one tier below the writer.
 
 ## 게이트
 
@@ -206,7 +214,7 @@ gh I/O·secret-scan·marker-scoped idempotent upsert는 결정론 스크립트�
 ```
 Tier A — Floor (비-trivia면 항상, 스코프 무관; 모델이 못 뺌)
   ├── quality-gates:security-reviewer   (Phase 1)   tools: Read, Grep, Glob (#104 락)
-  └── quality-gates:adversarial          (Phase 1.5, inherit)  tools: Read, Grep, Glob (#104 락)
+  └── quality-gates:adversarial          (Phase 1.5, tier-unpinned)  tools: Read, Grep, Glob (#104 락)
 Tier B — codex (availability-floor: detect_codex 참이면 무조건, 스코프 무관)
   └── codex-reviewer (별도 프로세스/모델 패밀리, OS read-only 샌드박스)
 Tier C — Dynamic (모델이 스코프로 선택, advisory 외부 에이전트; 최대 6 후보)

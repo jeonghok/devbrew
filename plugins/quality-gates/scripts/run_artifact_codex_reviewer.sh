@@ -6,8 +6,8 @@
 # fail-open 인 이유: 산출물(`codex.yaml`)은 critiquing-artifacts/SKILL.md 가
 # `synthesize_artifact_findings.py --findings critic.yaml [--findings codex.yaml]`로
 # 직접 넘긴다(같은 플러그인 .py). codex가 죽으면(`codex_failed: true`) codex.yaml은
-# 병합에서 **제외**되고 inherit-tier critic 단독으로 계속된다 — "degraded,
-# inherit-tier 단독" 배너로 공시할 뿐 이 축의 주 판정자(critic)를 막지 않는다.
+# 병합에서 **제외**되고 tier-unpinned critic 단독으로 계속된다 — "degraded,
+# tier-unpinned 단독" 배너로 공시할 뿐 이 축의 주 판정자(critic)를 막지 않는다.
 #
 # Mirrors run_codex_reviewer.sh: build prompt (file-path only) -> codex exec -
 # -s read-only --json < "$PROMPT" (stdin) -> extract fenced findings YAML. Any failure
