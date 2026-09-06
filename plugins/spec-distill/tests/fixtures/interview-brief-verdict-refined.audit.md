@@ -1,6 +1,6 @@
 ---
 type: interview-audit
-payload: interview-brief-steelman-empty.md
+payload: interview-brief-verdict-refined.md
 created_at: 2026-07-26
 session_id: testsession01
 source: spec-distill conducting-interview v0.23.0
@@ -12,7 +12,7 @@ source: spec-distill conducting-interview v0.23.0
 
 - floor:root_problem — closed — §1 Goal (ROOT_CAUSE)
 - floor:landscape — closed — §4 Next.js SSR 인용
-- floor:skepticism — closed — §5 검토 항목(steelman 0건)
+- floor:skepticism — closed — §5 islands steelman kept
 - floor:blind_spot — closed — §5 cold-start 위험
 - floor:open_questions — closed — §3 OQ1
 - derived:rendering-strategy — closed — SSR/islands 선택이 축; §5 근거
@@ -25,7 +25,10 @@ source: spec-distill conducting-interview v0.23.0
 
 ## 3. Steelman 원문
 
-(steelman 미발동 — §5 기각 항목이 방어된 대안을 인용하지 않음)
+#### ST1 — islands architecture가 full SSR보다 나을 수 있다
+
+> 부분 하이드레이션은 인터랙티브 섬만 JS를 싣는다. 대시보드처럼 정적 비율이 높은 화면에서는
+> full SSR + 전체 하이드레이션보다 TTI가 유리하다는 벤치마크가 있다.
 
 ## 4. 게이트 실행 기록
 

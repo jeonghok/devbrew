@@ -5,7 +5,7 @@ created_at: 2026-07-26
 session_id: testsession01
 source: spec-distill conducting-interview v0.23.0
 next_phase: superpowers:brainstorming
-audit_file: interview-brief-steelman-empty.audit.md
+audit_file: interview-brief-review-record-malformed.audit.md
 user_sourced_items:
   - id: C1
     source: verbatim
@@ -49,7 +49,7 @@ TTFP를 줄이는 것이 진짜 목표다. SPA 전환은 수단이었지 목표�
 
 ## 5. 기각 · Blind Spots
 
-- 검토 — steelman 0건: 검토한 방향 2개 · 전제 P1 SSR 우선 · trigger 후보 islands 벤치마크 → 기각 이유 전제와 충돌하지 않고 경계만 다듬는 근거
+- 검토 — steelman 0건: 검토한 방향 2개 · 전제 P1 SSR 우선 · trigger 후보 islands 벤치마크
 - 기각 — 전체 클라이언트 SPA → cold load에서 TTFP 회귀
 - 위험 — 숨은 가정 | SSR 호스트가 항상 저지연: cold start 시 TTFP 역전
 

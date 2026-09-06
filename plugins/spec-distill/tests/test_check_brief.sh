@@ -561,10 +561,35 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-st-orphan-audit.md" 2>/dev/nu
   && ok "T10: audit-only ST → '판정 없는 steelman'만 발화 (반대 방향 없음, message teeth)" \
   || no "T10: audit-only ST 메시지 방향이 틀렸거나 반대 방향이 섞여 있음"
 
-# T12: 양쪽 steelman 공집합 + 기각 항목 존재 + sentinel 없음 → green
+# T12 (v0.54.0 — C26): steelman 0건은 `검토 —` 기록 항목이 있어야 green. 기록이 없으면 red.
 python3 "$SCRIPT" gate "$FX/interview-brief-steelman-empty.md" >/dev/null 2>&1 \
-  && ok "T12: steelman 양쪽 공집합은 sentinel 없이 green (R4 sentinel과 다른 조건)" \
-  || no "T12: steelman 공집합은 sentinel을 요구받지 않는다"
+  && ok "T12: steelman 0건 + 검토 항목 1 → green" \
+  || no "T12: 검토 항목이 있는 0건 payload 가 막힌다"
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-steelman-empty-norecord.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'skepticism 기록 0건'; } \
+  && ok "T12(음성): verdict 0 + 검토 0 → red 「skepticism 기록 0건」 (AC9)" \
+  || no "T12(음성): 기록 없는 0건이 통과했다 — 폐쇄 요구가 없다"
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-review-record-malformed.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'malformed §5 검토 entries'; } \
+  && ok "T12(형식): 검토 항목에 기각 이유 없음 → red (AC11)" \
+  || no "T12(형식): 네 토큰 미달 검토 항목이 통과했다"
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-review-only-no-reject.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '§5 기각 항목 0건'; } \
+  && ok "T12(R4): 검토 1 + 기각 0 → red 「§5 기각 항목 0건」 — 검토는 기각을 대신 못 한다 (AC12)" \
+  || no "T12(R4): 검토 항목이 R4 기각으로 세어졌다"
+
+# T20 (v0.54.0 — C10/C15): 새 어휘. refined green · 옛 defended red · 보류 deferred 는 R4 로 안 센다.
+python3 "$SCRIPT" gate "$FX/interview-brief-verdict-refined.md" >/dev/null 2>&1 \
+  && ok "T20: verdict: refined → green (AC13)" || no "T20: refined 가 막힌다"
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-verdict-defended.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'malformed §5 verdict entries'; } \
+  && ok "T20: 옛 토큰 defended → red no-verdict (AC13, 별칭 없음)" \
+  || no "T20: defended 가 여전히 유효 토큰이다 — 별칭이 살아 있다"
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-verdict-deferred-hold.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '§5 기각 항목 0건' \
+    && ! printf '%s' "$out" | grep -q 'malformed §5 verdict\|bijection A'; } \
+  && ok "T20: 보류 — deferred 1 + 기각 0 → red 는 R4 만 (verdict 항목·bijection A 는 정상) (AC19)" \
+  || no "T20: 보류 항목이 R4 기각으로 세어졌거나 verdict 항목으로 안 읽힌다"
 
 # T11: verdict 항목 결손 → red ×3 (no-token/short/no-st — 이 셋은 URL과 무관한 결손이다)
 for v in no-token short no-st; do

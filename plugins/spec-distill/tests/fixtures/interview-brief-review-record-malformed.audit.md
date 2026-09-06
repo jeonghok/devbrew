@@ -1,6 +1,6 @@
 ---
 type: interview-audit
-payload: interview-brief-steelman-empty.md
+payload: interview-brief-review-record-malformed.md
 created_at: 2026-07-26
 session_id: testsession01
 source: spec-distill conducting-interview v0.23.0
