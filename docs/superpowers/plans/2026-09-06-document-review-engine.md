@@ -3197,7 +3197,7 @@ AC6 의 두 계약(일반 fix · decision permit)과 T27·T28 의 입구.
 
 **Interfaces:**
 - Produces (CLI): `check-intent <finding-id> --intent <scope> --state-dir D [--decision-id ID]` → rc 0 + `{"ok": true, "contract": "fix"|"permit", "scope"}` (state 에 `intent-pass` 기록) / rc 1 + `{"ok": false, "reason": …}` (일반 fix 계약이면 state 에 `escalate` 기록 — 그 fix 는 다음 라운드 decide).
-- 거부 사유 값: `unknown_finding` · `not_a_fix` · `fix_not_pending` · `scope_outside_edit_scope` · `anchor_not_in_fix_anchors` · `anchor_protected` · `anchor_immutable` · `insert_after_unresolved` · `unknown_permit` · `permit_round_mismatch` · `permit_consumed` · `scope_outside_permit`.
+- 거부 사유 값(14 — R13 이 `insert_after_protected` · `insert_after_immutable` 을 더함): `unknown_finding` · `not_a_fix` · `fix_not_pending` · `scope_outside_edit_scope` · `anchor_not_in_fix_anchors` · `anchor_protected` · `anchor_immutable` · `insert_after_unresolved` · `insert_after_protected` · `insert_after_immutable` · `unknown_permit` · `permit_round_mismatch` · `permit_consumed` · `scope_outside_permit`.
 
 - [ ] **Step 1: 케이스 (RED)**
 
@@ -3315,7 +3315,8 @@ def cmd_check_intent(a) -> int:
     if not f:
         return _reject("unknown_finding", id=a.finding_id)
     intent = a.intent.strip()
-    target = intent.split(":", 1)[1] if intent.startswith("insert-after:") else intent
+    is_insert = intent.startswith("insert-after:")
+    target = intent.split(":", 1)[1] if is_insert else intent
     cls = classify_anchor(target, sections, prof)
     if a.decision_id:
         p = st["permits"].get(a.decision_id)
@@ -3347,14 +3348,28 @@ def cmd_check_intent(a) -> int:
     scope = f.get("edit_scope") or f["anchor"]
     if intent != scope:
         return escalate("scope_outside_edit_scope")
-    if intent.startswith("insert-after:") and not cls["found"] and target != PREAMBLE:
-        return escalate("insert_after_unresolved")
-    if not cls["fix_allowed"]:
-        return escalate("anchor_not_in_fix_anchors")
-    if cls["protected"]:
-        return escalate("anchor_protected")
-    if cls["immutable"]:
-        return escalate("anchor_immutable")
+    if is_insert:
+        # R13(사용자 결정) — #x 뒤에 새 헤딩을 넣으면 평면 파싱상 #x 의 본문이 거기서
+        # 잘려 해시가 바뀐다("삽입"이 실제로 #x 를 변경한다). 그래서 대상의 protected·
+        # immutable 도 본다. fix_anchors(fix_allowed)는 **의도적으로 안 본다** — 새
+        # 섹션이 어느 절 "안"으로 들어가는지를 재는 게 아니라서 그 질문과 다르다.
+        # 사유 문자열은 일반 앵커의 anchor_protected/anchor_immutable 과 구별한다.
+        if not cls["found"] and target != PREAMBLE:
+            return escalate("insert_after_unresolved")
+        if cls["immutable"]:
+            return escalate("insert_after_immutable")
+        if cls["protected"]:
+            return escalate("insert_after_protected")
+    else:
+        # immutable 을 fix_allowed·protected 보다 먼저 본다 — brief §6 류(불변이면서
+        # fix_anchors 밖이기도 한 앵커)의 사유가 anchor_not_in_fix_anchors 로 흐려지면
+        # 「immutable 은 예외 0」(AC11)이라는 더 강한 사실이 하류에 안 보인다.
+        if cls["immutable"]:
+            return escalate("anchor_immutable")
+        if not cls["fix_allowed"]:
+            return escalate("anchor_not_in_fix_anchors")
+        if cls["protected"]:
+            return escalate("anchor_protected")
     fx["state"] = "intent_passed"
     fx["scope"] = intent
     fx["round"] = n
@@ -3372,7 +3387,7 @@ def cmd_check_intent(a) -> int:
     x.add_argument("--decision-id", default=None); x.set_defaults(fn=cmd_check_intent)
 ```
 
-`insert-after:#x` 의 일반 fix 계약: 의도 문자열이 finding 의 `edit_scope` 와 **같아야** 한다(T27 의 「#x 바로 뒤에 새 섹션 하나」는 다음 라운드의 diff 가 `resolve_scope` 로 검사한다 — 그 밖의 위치에 삽입된 섹션은 예외 ① 에 들지 않아 auto decide 가 된다).
+`insert-after:#x` 의 일반 fix 계약: 의도 문자열이 finding 의 `edit_scope` 와 **같아야** 한다(T27 의 「#x 바로 뒤에 새 섹션 하나」는 다음 라운드의 diff 가 `resolve_scope` 로 검사한다 — 그 밖의 위치에 삽입된 섹션은 예외 ① 에 들지 않아 auto decide 가 된다). **R13**(Task 7 리뷰 후 사용자 결정, 이 판본에 반영): 대상 `#x` 의 `protected`·`immutable` 도 본다 — 헤딩 파싱이 평면(섹션 = 그 헤딩부터 다음 헤딩 직전까지)이라 `#x` 바로 뒤에 새 헤딩을 넣으면 `#x` 의 본문이 거기서 잘려 해시가 바뀌고, 라우터의 보호/불변 승격은 finding 의 `anchor` 만 보고 `edit_scope` 는 해석하지 않아 `edit_scope: "insert-after:#<보호 헤딩>"` 이 그 승격을 우회했다. `fix_anchors` 는 그대로 우회한다(범위는 보호·불변 둘뿐). 사유 문자열은 일반 앵커 전용 `anchor_protected`/`anchor_immutable` 과 구별되는 `insert_after_protected`/`insert_after_immutable` 을 쓴다.
 
 - [ ] **Step 3: 통과 확인 · 커밋**
 
