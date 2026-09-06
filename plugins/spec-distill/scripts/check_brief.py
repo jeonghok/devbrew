@@ -213,7 +213,9 @@ def _entry_lines(section: str) -> list[str]:
     ]
 
 
-# 불릿을 떼는 곳은 여기 하나다(`skepticism.strip_bullet`, 위에서 `_strip_bullet` 로 들여온다).
+# 위 `_entry_lines`(항목을 **받아들이는** 규칙)에 붙는 주석이다 — 짝이 되는 **떼는** 규칙이
+# 어디 사는지를 밝힌다. 불릿을 떼는 곳은 리포에서 하나뿐이고 이 파일이 아니다:
+# `skepticism.strip_bullet`(이 파일 상단에서 `_strip_bullet` 로 들여온다).
 # 소비자들이 각자 `lstrip("- ")`를 쓰면 안 된다 — 그건 **문자 집합** strip이라 `*`를 벗기지 않아서,
 # `_entry_lines`가 `*`를 받아들인 직후 소비자는 그 줄을 못 알아본다 (`* 기각 — …`이 R4에 안 세지고,
 # `* floor:root_problem — …`이 원장 행 부재로 읽힌다). 방향은 fail-closed라 우회는 안 되지만, 항목을
@@ -303,7 +305,7 @@ def audit_pairing_errors(payload_fm: str, audit_text: str, payload_name: str) ->
     (floor 5 전부 closed)의 근거이므로, 끝나지 않은 인터뷰가 남의 원장을 상속해 green이 된다 —
     리뷰가 실행으로 실증했다: 같은 payload가 `audit_file: mine.audit.md`(floor 5 전부 open)에는
     exit 1, `audit_file: <남의 것>`(전부 closed)에는 exit 0. 한 줄 편집이 실패를 통과로 바꿨다.
-    `bijection_a_errors`는 백스톱이 못 된다 — `ST<N>`은 인터뷰마다 1부터 매겨져 steelman 1건짜리
+    `bijection_a_errors`(skepticism.py)는 백스톱이 못 된다 — `ST<N>`은 인터뷰마다 1부터 매겨져 steelman 1건짜리
     인터뷰 둘은 양쪽 다 `ST1`이라 불일치가 발생하지 않는다.
 
     부재는 불일치와 똑같이 red다 — 못 읽은 값을 "일치로 간주"하면 이 검사 자체가 fail-open이 되고,
@@ -716,7 +718,7 @@ def landscape_keys_declared(payload_text: str, audit_text: str) -> list[str]:
     **개수가 아니라 집합이다.** 개수는 세 번 틀린다: web-off brief(§4에 항목 1건,
     §7에 0건)가 `1 ≤ 0`으로 red · 두 §4 항목이 같은 출처를 인용하면 `2 ≤ 1`로 red ·
     §7이 sweep을 산문 전문으로 적으면 「항목」의 계수 단위가 미정이라 집행 불가.
-    집합이면 셋 다 통과한다. `bijection_a_errors`가 같은 판단을 이미 했다.
+    집합이면 셋 다 통과한다. `bijection_a_errors`(skepticism.py)가 같은 판단을 이미 했다.
 
     **조건부다.** 「audit §7이 비어 있지 않다」로 두면 갓 만든 audit도 웹이 꺼진
     audit도 red가 된다. payload가 landscape를 실었다는 사실을 조건으로 건다 —

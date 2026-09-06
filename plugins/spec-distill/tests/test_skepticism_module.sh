@@ -70,6 +70,14 @@ while IFS="$(printf '\t')" read -r st msg; do
   [[ -n "${st:-}" ]] || continue
   [[ "$st" == OK ]] && ok "$msg" || no "$msg"
 done <<< "$report"
-[[ "$(printf '%s\n' "$report" | grep -c .)" -ge 20 ]] \
-  && ok "함수 단위 판정 ≥20 줄 (vacuous 아님)" || no "함수 단위 판정이 20 줄 미만 — 파이썬 블록이 죽었다"
+# 공허 가드 — 파이썬 블록이 죽거나 중간에 잘리면 위 while 루프는 **아무것도 안 돌고** 스위트가
+# 조용히 통과한다. 하한(`-ge`)은 슬랙만큼 이빨이 없다: 단언을 몇 개 지워도 하한 위면 GREEN 이라
+# 「몇 개가 사라졌다」를 못 잡는다. 그래서 **실제 개수에 대한 등식**으로 못 박는다
+# (shared/tests/test_agent_input_slots.sh 의 baseline 관례와 같은 자리). 판정을 더하거나 빼는
+# 커밋이 같은 커밋에서 이 숫자를 고친다 — 안 고치면 여기가 red 로 알린다.
+PY_VERDICTS_EXPECTED=22
+py_verdicts_got="$(printf '%s\n' "$report" | grep -c .)"
+[[ "$py_verdicts_got" -eq "$PY_VERDICTS_EXPECTED" ]] \
+  && ok "함수 단위 판정 $py_verdicts_got 줄 — 기대와 정확히 같다 (vacuous 아님)" \
+  || no "함수 단위 판정 개수가 어긋난다: $PY_VERDICTS_EXPECTED 줄을 기대했는데 $py_verdicts_got 줄이 왔다 — 파이썬 블록이 죽었거나 판정이 늘고/줄었다(늘렸다면 PY_VERDICTS_EXPECTED 도 같은 커밋에서 고쳐라)"
 finish

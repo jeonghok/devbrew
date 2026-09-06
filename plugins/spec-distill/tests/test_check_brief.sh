@@ -635,10 +635,10 @@ python3 "$SCRIPT" gate "$FX/interview-brief-verdict-st-in-url.md" >/dev/null 2>&
   && no "FIX4: URL 안 phantom ST9 픽스처가 게이트를 통과함" \
   || ok "FIX4: URL 안 phantom ST9 픽스처 → red"
 
-# FIX4-bis (sweep 발견): bijection_a_errors(check_brief.py:688)도 ST<N>을 찾기 전에
+# FIX4-bis (sweep 발견): bijection_a_errors (skepticism.py)도 ST<N>을 찾기 전에
 # URL을 벗겨낸다 — skepticism_malformed와 같은 방어를 다른 소비자에서 반복한 것이다.
 # 위 FIX4의 gate 단언은 exit code만 보므로 이 defense를 안 껐어도 다른 사유(malformed
-# §5 verdict entries)로 이미 red라 이 결함을 못 잡는다(sweep 실행 실증: 688을
+# §5 verdict entries)로 이미 red라 이 결함을 못 잡는다(sweep 실행 실증: 그 URL 벗기기를
 # 무력화해도 123/123 그대로 GREEN). message teeth로 직접 잡는다 — phantom ST9가
 # "판정 없는 steelman"으로 오탐되면 안 된다.
 out="$(python3 "$SCRIPT" gate "$FX/interview-brief-verdict-st-in-url.md" 2>/dev/null)"
