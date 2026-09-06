@@ -227,11 +227,18 @@ def cmd_check_intent(a) -> int:
     decision permit: decision_id 가 유효하고 라운드가 맞고 그 apply_anchors 안이면
     edit_scope·fix_anchors·보호 부류를 우회하되 immutable 만은 절대 못 넘는다(AC11 — 예외 0).
 
-    `insert-after:#x` 는 #x 자체의 본문을 바꾸지 않고 그 뒤에 새 섹션을 더하는 것이라, #x 의
-    보호·불변·fix_anchors 는 겨누지 않는다(설계 §7 「#x 바로 뒤에 새 섹션 하나만 허용」 — 그 이상의
-    제약은 없다) — 스냅샷에서 #x 를 찾을 수 있는지(`found`)만 확인한다. 일반 앵커에서는 immutable 을
-    가장 먼저 본다: brief §6 류는 fix_anchors 밖이기도 하지만 그 사유를 anchor_not_in_fix_anchors 로
-    흐리면 「immutable 은 예외 0」이라는 더 강한 사실이 하류에 안 보인다.
+    `insert-after:#x` 는 스냅샷에서 #x 를 찾을 수 있는지(`found`)와 별개로 #x 의 `protected`·
+    `immutable` 도 본다(R13, 사용자 결정) — 헤딩 파싱이 평면이라(섹션 = 그 헤딩부터 **다음 헤딩**
+    직전까지) #x 바로 뒤에 새 헤딩을 넣으면 #x 의 본문이 거기서 잘려 해시가 바뀐다. 즉 "삽입"이
+    실제로는 #x 를 변경하므로, 라우터의 승격(anchor 만 봄)과 이 검사(예전엔 found 만 봄)가 함께
+    놓치던 틈 — `edit_scope: "insert-after:#<보호 헤딩>"` — 을 여기서 막는다. 사유는 일반 앵커의
+    `anchor_protected`/`anchor_immutable` 과 **다른 문자열**(`insert_after_protected`/
+    `insert_after_immutable`)을 쓴다 — "내 fix 앵커가 보호"와 "내 삽입 자리가 보호"는 다른 사실이고
+    미래 소비자가 구별할 수 있어야 한다. **`fix_anchors`(fix_allowed)는 여전히 안 본다** — 사용자
+    결정이 보호/불변 둘에 한정됐다(R13 범위); 새 섹션이 어느 절 "안"으로 들어가는지를 재는 것이
+    아니라서 fix_anchors 의 질문과 다르다. 일반 앵커(비-insert-after)에서는 immutable 을 가장 먼저
+    본다: brief §6 류는 fix_anchors 밖이기도 하지만 그 사유를 anchor_not_in_fix_anchors 로 흐리면
+    「immutable 은 예외 0」이라는 더 강한 사실이 하류에 안 보인다.
     """
     st = load_state(a.state_dir)
     prof = load_profile(st["profile"])
@@ -277,6 +284,10 @@ def cmd_check_intent(a) -> int:
     if is_insert:
         if not cls["found"] and target != PREAMBLE:
             return escalate("insert_after_unresolved")
+        if cls["immutable"]:
+            return escalate("insert_after_immutable")
+        if cls["protected"]:
+            return escalate("insert_after_protected")
     else:
         if cls["immutable"]:
             return escalate("anchor_immutable")

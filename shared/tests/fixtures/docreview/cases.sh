@@ -622,15 +622,42 @@ case_AC6_fix_contract() {
   assert_eq "$rc" "1" "AC6: brief §1 은 fix_anchors 밖(+보호) → 거부"
   rm -rf "$d"
 }
+# [R13 실행 노트] 원래 여기서 삽입 대상으로 썼던 #3-non-goals 는 design-doc 프로필의
+# 보호 부류다(classify_anchor 실측: protected=True) — R13 이 insert-after 대상의 protected 도
+# 보게 되면서 그 자리를 "통과" 로 기대하던 첫 단언이 깨진다. 픽스처를 design-sample.md 의
+# 비보호 헤딩 #1-context 로 옮긴다(같은 문서·같은 design-doc 프로필에서 classify_anchor 실측:
+# protected=False·immutable=False — task-7-report.md R13 절의 표 참조). 보호·불변 자체를 겨누는
+# 케이스는 아래 case_AC6_R13_insert_after_protection 이 맡는다.
 case_AC6_insert_after() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  seed_findings "$d" "[${F_FIX//\"edit_scope\":\"#12-files-to-modify\"/\"edit_scope\":\"insert-after:#1-context\"}]"
+  local out; out="$(_ci 'bbbb0001#r1.1' --intent 'insert-after:#1-context' --state-dir "$d")"; local rc=$?
+  assert_eq "$rc" "0" "AC6: insert-after 의도는 finding 의 edit_scope 와 같고 대상이 비보호·비불변이면 통과"
+  rm -rf "$d"; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  seed_findings "$d" "[${F_FIX//\"edit_scope\":\"#12-files-to-modify\"/\"edit_scope\":\"insert-after:#1-context\"}]"
+  out="$(_ci 'bbbb0001#r1.1' --intent 'insert-after:#2-goals' --state-dir "$d")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 scope_outside_edit_scope" "AC6: 다른 자리의 insert-after 는 거부"
+  rm -rf "$d"
+}
+# R13(사용자 결정) — 헤딩 파싱이 평면이라 #x 바로 뒤에 새 헤딩을 넣으면 #x 의 본문이 거기서
+# 잘려 해시가 바뀐다("삽입"이 실제로 #x 를 변경한다). 라우터는 finding 의 anchor 만 분류하고
+# check-intent 의 옛 insert-after 경로는 found 만 봐서, edit_scope 가 "insert-after:#<보호 헤딩>"
+# 인 finding 은 두 방어를 다 통과했다 — 그 틈을 여기서 막는다. 사유는 일반 앵커 전용
+# anchor_protected/anchor_immutable 과 구별되는 새 값(insert_after_protected/
+# insert_after_immutable)을 쓴다.
+case_AC6_R13_insert_after_protection() {
+  # 대상이 protected(design-doc 의 #3-non-goals, classify_anchor 실측: protected=True·immutable=False)
   local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   seed_findings "$d" "[${F_FIX//\"edit_scope\":\"#12-files-to-modify\"/\"edit_scope\":\"insert-after:#3-non-goals\"}]"
   local out; out="$(_ci 'bbbb0001#r1.1' --intent 'insert-after:#3-non-goals' --state-dir "$d")"; local rc=$?
-  assert_eq "$rc" "0" "AC6: insert-after 의도는 finding 의 edit_scope 와 같을 때 통과(#x 자체가 보호 부류라도 — #x 본문은 안 바뀐다)"
-  rm -rf "$d"; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
-  seed_findings "$d" "[${F_FIX//\"edit_scope\":\"#12-files-to-modify\"/\"edit_scope\":\"insert-after:#3-non-goals\"}]"
-  out="$(_ci 'bbbb0001#r1.1' --intent 'insert-after:#2-goals' --state-dir "$d")"; rc=$?
-  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 scope_outside_edit_scope" "AC6: 다른 자리의 insert-after 는 거부"
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 insert_after_protected" "R13: 보호 헤딩 뒤에 삽입 → insert_after_protected(anchor_protected 와 다른 문자열)"
+  assert_eq "$(st_yaml "$d" 'st["fixes"]["bbbb0001#r1.1"]["state"]')" "escalated" "R13: 거부는 이 fix 도 escalated 로(T28 과 같은 다음-라운드 decide 경로)"
+  rm -rf "$d"
+  # 대상이 immutable(brief 의 #6-사용자-원문, classify_anchor 실측: protected=False·immutable=True)
+  d="$(r1 "$PROF_SD/brief.md" "$FX/brief-sample.md")"
+  seed_findings "$d" "[${F_FIX//\"edit_scope\":\"#12-files-to-modify\"/\"edit_scope\":\"insert-after:#6-사용자-원문\"}]"
+  out="$(_ci 'bbbb0001#r1.1' --intent 'insert-after:#6-사용자-원문' --state-dir "$d")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 insert_after_immutable" "R13·AC11: 불변 헤딩 뒤에 삽입 → insert_after_immutable(immutable 은 삽입으로도 못 넘는다)"
   rm -rf "$d"
 }
 case_AC6_permit_contract() {
