@@ -350,10 +350,10 @@ verdict 는 산출물이 아니라 집계다. `decide` 의 상태는 다섯이�
 열리거나, 사용자가 그 후속을 기각·보류하면) 의무는 후속이 지고 만료 항목 자신은 더 이상 막지 않는다.
 「같은 계보의 새 `decide` 로 다시 올라온다」는 그 재상승 변환이 항상 성공한다는 전제 위에 있는데,
 실제로는 재상승이 두 단계다 — `docreview_state.py` 의 `observe-diff` 가 예약만 `st["reraise"]` 에
-적어 두고(`:552` 의 `st["reraise"] = reraise` 는 append 가 아니라 라운드마다 덮어쓰기다), 그 예약을
+적어 두는데, 그 대입(`st["reraise"] = reraise`)은 append 가 아니라 라운드마다 덮어쓰기다. 그 예약을
 실제 `decide` finding 으로 바꾸는 재상승 루프는 `docreview_route.py` 의 `finalize` 안에 있다. 그
-라운드의 `finalize` 가 그 루프에 이르기 전에 빠져나가면(예: `pending_recritic` 부재의
-`no_pending_recritic`, `:191–192`) 예약은 디스크에 남은 채 소비되지 않고, 다음 라운드
+라운드의 `finalize` 가 그 루프에 이르기 전에 빠져나가면(예: `pending_recritic` 부재로 조기
+반환하는 `no_pending_recritic` 가드) 예약은 디스크에 남은 채 소비되지 않고, 다음 라운드
 `observe-diff` 가 새로 계산한 값으로 그 자리를 덮어써 예약 자체가 사라진다. 그 창에서는 후속도
 사용자도 의무를 지지 않으므로 만료 항목 자신이 계속 승인을 막는다 — fail-closed.
 
@@ -427,8 +427,8 @@ critic 의 눈에 남는다. 문장 단위 diff 로 더 촘촘히 가는 것은 
 ### 8.2 승인 게이트
 
 열린 `decide` 0 · `adopted`(후속 없는 `expired` 포함, §6.4) 0 · 미적용 `fix` 0 일 때, 또는 상한
-도달·stagnation 시에 뜬다. 보이는 것은 남은
-`ask`·`defer` 목록 · 기각 계수 · degrade · (상한 도달이면) 마지막 라운드의 새 결함 목록이다.
+도달·stagnation 시에 뜬다. 보이는 것은 남은 `ask`·`defer` 목록 · 기각 계수 · degrade · (상한
+도달이면) 마지막 라운드의 새 결함 목록이다.
 선택지는 `references/proceed-gate.md` 의 4옵션 그대로이고(Non-goal), 열린 것이 남아 있으면 §6.4 의
 두 단계 규칙이 앞에 선다 — 그때의 「다음 라운드」는 예산이 남았으면 예산을 쓰고, 상한 도달 시에만
 「추가 라운드 1회 열기」(D19, 개별 승인)가 된다. 두 가드(AP2 polite stop 금지 · AC19 cross-compact 조기
