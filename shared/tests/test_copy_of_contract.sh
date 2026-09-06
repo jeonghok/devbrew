@@ -757,10 +757,27 @@ CONSUMED_PY="$(git ls-files -- 'shared/*.py' \
         | impscan "$cm" | grep -q . && printf '%s\n' "$cf"
     done)"
 # 분류기 **뒤**의 집합 — 위에서 실행 지점(`^if __name__`)이 있는 것을 뺀다.
+# 〔2026-09-06, ruling R7 — P15, 사용자 결정〕 앞 판본은 실행 지점이 있으면 그것만으로
+# 뺐다. `docreview_state.py`(Task 2+4) 가 그 가정을 깼다 — CLI(`init`·`begin-round`)이면서
+# **동시에** 형제 import 대상(`docreview_anchor.py`)인 첫 `shared/*.py` 다. 실행 지점만
+# 보고 빼면 이 정본은 축 1c 밖으로 떨어지는데, 아직 어디에도 배포되지 않았다면(축 1a 로
+# 심볼릭 링크되지 않았다면) 그 형제 계약을 아무도 재지 않는 상태로 남는다 — 바로 아래
+# 774줄 "배포 소비자가 import 하는 모듈은 실행 지점이 있든 없든 설치본에 형제가
+# 필요하다"가 지키려는 것이 정확히 이 경우다. 반대로 축 1a 로 이미 배포됐다면(정본이
+# `SYMLINK_CANONICALS` 에 들어 있다면) 그 형제-사본 계약은 심볼릭 링크 자체가 지고
+# 있고, 그 계약의 무결성은 축 1a 의 `symlink-∀` 가 이미 잰다 — 축 1a 헤더의 "심볼릭
+# 링크로 배포되는 정본은 형제 **사본**이 아니라서 여기 걸리지 않는다, 그쪽 계약은
+# 축 1a 가 진다"는 문장이 그 분업을 선언한다. 그래서 제외 조건에 배포 여부를 **더한다**
+# (조건 완화가 아니라 강화 — 실행 지점만으로는 더 이상 충분하지 않다): 실행 지점이
+# 있고 *그리고* 이미 축 1a 로 배포된 것만 뺀다. 배포가 아예 없는 채 실행 지점만 있는
+# 모듈은 여전히 아래 ∀ 대조에 남아 RED 를 낼 수 있다 — tripwire 는 안 죽는다.
 IMPORT_ONLY_CANONICALS="$(printf '%s\n' "$CONSUMED_PY" \
   | while IFS= read -r cf; do
       [ -n "$cf" ] || continue
-      grep -qE '^if __name__ == "__main__"' -- "$cf" && continue
+      if grep -qE '^if __name__ == "__main__"' -- "$cf" \
+          && printf '%s\n' "$SYMLINK_CANONICALS" | grep -qxF -- "$cf"; then
+        continue
+      fi
       printf '%s\n' "$cf"
     done)"
 
@@ -772,16 +789,33 @@ IMPORT_ONLY_CANONICALS="$(printf '%s\n' "$CONSUMED_PY" \
 # `listed == burned` 와 같은 모양으로 **분류기 앞뒤 두 집합을 대조**한다. 떨어진 것이
 # 있으면 이름을 찍고 RED 다 — 배포 소비자가 import 하는 모듈은 실행 지점이 있든 없든
 # 설치본에 형제가 필요하다(보안 모듈이 컬럼 0 에 스모크 테스트를 얻는 것은 흔하다).
+#
+# 〔2026-09-06, ruling R7 후속〕 위 IMPORT_ONLY_CANONICALS 가 이제 "실행 지점 + 축 1a
+# 배포"를 함께 만족해야 뺀다 — 그래서 여기서도 **같은 조건**을 "설명된 탈락"으로 인정해야
+# 한다. 안 그러면 방금 그 조건으로 정당하게 뺀 정본이 여기서 다시 "떨어졌다"로 잡혀
+# 등식이 항상 깨진다(빼는 조건과 대조 조건이 갈라지면 그 자체가 새 결함이다). 인정하는
+# 대상은 "실행 지점이 있고 축 1a 로 배포된 것" **뿐**이다 — 배포 없이 떨어진 것은 여전히
+# 설명되지 않으므로 tripwire 그대로 RED (요구된 이빨).
+EXEMPTED_PY="$(printf '%s\n' "$CONSUMED_PY" \
+  | while IFS= read -r cf; do
+      [ -n "$cf" ] || continue
+      if grep -qE '^if __name__ == "__main__"' -- "$cf" \
+          && printf '%s\n' "$SYMLINK_CANONICALS" | grep -qxF -- "$cf"; then
+        printf '%s\n' "$cf"
+      fi
+    done)"
 while IFS= read -r cf; do
   [ -n "$cf" ] || continue
   printf '%s\n' "$IMPORT_ONLY_CANONICALS" | grep -qxF -- "$cf" && continue
-  no "형제-∀ 도출: $cf 는 import 로 소비되는데 실행 지점(^if __name__)이 있다는 이유로 축 1c 밖으로 떨어졌다 — 이 정본의 형제 ∀ 계약이 조용히 소멸한다"
+  printf '%s\n' "$EXEMPTED_PY" | grep -qxF -- "$cf" && continue
+  no "형제-∀ 도출: $cf 는 import 로 소비되는데 실행 지점(^if __name__)이 있고 축 1a 로도 배포되지 않아 축 1c 밖으로 떨어졌다 — 이 정본의 형제 ∀ 계약을 두 축 어느 쪽도 지지 않는다"
 done <<EOF
 $CONSUMED_PY
 EOF
 n_consumed="$(printf '%s\n' "$CONSUMED_PY" | grep -c . || true)"
 n_canon="$(printf '%s\n' "$IMPORT_ONLY_CANONICALS" | grep -c . || true)"
-assert_eq "$n_canon" "$n_consumed" "형제-∀ 도출: import 로 소비되는 shared 모듈 ${n_consumed}건이 전부 축 1c 집합에 남았다 (분류기가 아무것도 떨어뜨리지 않았다)"
+n_exempted="$(printf '%s\n' "$EXEMPTED_PY" | grep -c . || true)"
+assert_eq "$((n_canon + n_exempted))" "$n_consumed" "형제-∀ 도출: import 로 소비되는 shared 모듈 ${n_consumed}건이 전부 축 1c 집합에 남거나(${n_canon}) 축 1a 배포로 면제됐다(${n_exempted}) — 설명 없이 떨어진 것은 없다"
 if [ "$n_canon" -ge 1 ]; then
   ok "형제-∀ 도출: import-only 정본 ${n_canon}건 (이름 열거 없음)"
 else
