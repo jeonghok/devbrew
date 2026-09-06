@@ -62,4 +62,27 @@ if grep -qE '병렬.{0,8}금지|투기적.{0,8}금지' "$AGENT"; then
 else
   ok "E10: 병렬 금지 문구 없음"
 fi
+
+# v0.54.0 — 목표 적합 재설계 (설계 §6.1). 부재 락에는 양성 짝을 둔다.
+grep -qE '^input_slots:' <<<"$fm" && ok "input_slots 선언" || no "input_slots 부재"
+for tag in direction trigger goal premises constraints; do
+  grep -qE "^  - tag: ${tag}$" <<<"$fm" && ok "슬롯 태그 $tag" || no "슬롯 태그 $tag 부재 (AC2)"
+done
+[[ "$(grep -c '^    kind: orchestrator_framing$' <<<"$fm")" -eq 1 ]] \
+  && ok "orchestrator_framing 은 슬롯 하나(premises)에만" || no "orchestrator_framing 슬롯 수가 1 이 아니다 (AC2)"
+awk '/tag: premises/{f=1} f&&/kind:/{print; exit}' <<<"$fm" | grep -q 'orchestrator_framing' \
+  && ok "premises 의 kind 가 orchestrator_framing" || no "premises 의 kind 가 다르다"
+grep -q 'confidence' "$AGENT" \
+  && no "AC1: confidence 필드/규칙 잔존 (폐지, 설계 O3)" || ok "AC1: confidence 부재"
+for tok in recommendation premise_refutation premise_list_challenge touches repo_claims anchor refined_takes refined_drops case_for_alternative case_for_current; do
+  grep -q "$tok" "$AGENT" && ok "AC1: 스키마 키 $tok 존재" || no "AC1: 스키마 키 $tok 부재"
+done
+grep -q '원안의 옹호자' "$AGENT" \
+  && no "AC3: 「원안의 옹호자」 문구 잔존 — 한 편 배정 역할" || ok "AC3: 「원안의 옹호자」 부재"
+grep -q '어느 한 편의 옹호자' "$AGENT" \
+  && ok "AC3: 「어느 한 편의 옹호자」 존재 (양성 짝)" || no "AC3: 「어느 한 편의 옹호자」 부재"
+grep -q 'coverage-mapper neglect\|neglect' "$AGENT" \
+  && no "C18: neglect trigger 문구 잔존" || ok "C18: neglect 부재"
+grep -qE 'kept.*refined.*switched' "$AGENT" && ok "추천 어휘 kept/refined/switched" || no "추천 어휘 부재"
+grep -qE 'defended|방어' "$AGENT" && no "옛 어휘 defended/방어 잔존" || ok "옛 어휘 부재"
 finish
