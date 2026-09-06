@@ -25,7 +25,7 @@ devbrew 에서 문서를 리뷰하는 자리 넷(design doc · interview brief �
 - [3. Non-goals](#3-non-goals)
 - [4. Constraints](#4-constraints)
 - [5. Architecture](#5-architecture)
-  - [5.1 물리 배치 — `shared/docreview/` 정본 + 심볼릭 링크](#51-물리-배치--shareddocreview-정본--심볼릭-링크)
+  - [5.1 물리 배치 — `shared/docreview/` 정본 + 심볼릭 링크 · agent 는 사본](#51-물리-배치--shareddocreview-정본--심볼릭-링크--agent-는-사본)
   - [5.2 컴포넌트 여섯](#52-컴포넌트-여섯)
   - [5.3 프로필 넷](#53-프로필-넷)
   - [5.4 진입 자리 넷과 배선](#54-진입-자리-넷과-배선)
@@ -110,7 +110,7 @@ brainstorming → writing-plans → 구현의 큰 그림에서 스펙의 역할�
 
 ## 5. Architecture
 
-### 5.1 물리 배치 — `shared/docreview/` 정본 + 심볼릭 링크
+### 5.1 물리 배치 — `shared/docreview/` 정본 + 심볼릭 링크 · agent 는 사본
 
 엔진(agent 둘 · 스크립트 넷 · 절차 reference 하나)은 `shared/docreview/` 에 정본으로 살고,
 spec-distill 과 quality-gates 에 배포된다. `scripts/` · `references/` 는 **파일 단위 상대 심볼릭
@@ -344,6 +344,25 @@ verdict 는 산출물이 아니라 집계다. `decide` 의 상태는 다섯이�
 (같은 계보의 새 `decide` 로 다시 올라온다). **`open` 과 `adopted` 가 0 이고 미적용 `fix` 가 0** 이면
 승인 게이트가 열린다 — 채택만 되고 안 고친 결정은 승인을 막는다.
 
+**여기서 `adopted` 는 문자 그대로의 상태값이 아니라 승인을 막는 술어다.** 실제로 집계되는 것은
+`state == "adopted"` 이거나, **`state == "expired"` 이면서 아직 그 계보의 후속(다른 finding 의
+`supersedes` 가 이 id 를 가리킴)이 없는 것**이다 — 후속이 실제로 생기면(같은 계보에 새 `decide` 가
+열리거나, 사용자가 그 후속을 기각·보류하면) 의무는 후속이 지고 만료 항목 자신은 더 이상 막지 않는다.
+「같은 계보의 새 `decide` 로 다시 올라온다」는 그 재상승 변환이 항상 성공한다는 전제 위에 있는데,
+실제로는 재상승이 두 단계다 — `docreview_state.py` 의 `observe-diff` 가 예약만 `st["reraise"]` 에
+적어 두고(`:552` 의 `st["reraise"] = reraise` 는 append 가 아니라 라운드마다 덮어쓰기다), 그 예약을
+실제 `decide` finding 으로 바꾸는 재상승 루프는 `docreview_route.py` 의 `finalize` 안에 있다. 그
+라운드의 `finalize` 가 그 루프에 이르기 전에 빠져나가면(예: `pending_recritic` 부재의
+`no_pending_recritic`, `:191–192`) 예약은 디스크에 남은 채 소비되지 않고, 다음 라운드
+`observe-diff` 가 새로 계산한 값으로 그 자리를 덮어써 예약 자체가 사라진다. 그 창에서는 후속도
+사용자도 의무를 지지 않으므로 만료 항목 자신이 계속 승인을 막는다 — fail-closed.
+
+**알려진 한계 둘(PR 2 가 고칠 것).** (a) 해제 술어는 「나를 가리키는 finding 이 있다」뿐이라, 의무를
+실제로 지지 않는 후속 — 비차단 `ask` · `drop` · `defer` · 재비판자 `reject` — 도 차단을 푼다. (b)
+후속이 영영 안 생기면 사용자에게 탈출구가 없다 — `cmd_decide` 는 `state != "open"` 인 finding 의
+재결정을 거부하고(만료 항목은 이미 `open` 이 아니다), `render_gate` 는 `adopted` 집합을 렌더하지
+않아 막힌 사실 자체가 게이트 텍스트에 보이지 않는다.
+
 **사후 `decide`(얼림 diff 가 만든 `origin: auto`)는 변경이 이미 일어난 것**이라 전이가 다르다 —
 「채택」은 관측된 변경을 승인하는 것이므로 즉시 `applied` 이고, 「기각」은 **원복 의무**를 만든다:
 그 앵커에 원복 `permit` 이 열리고 다음 라운드 diff 가 그 앵커의 해시를 기각 시점 이전 스냅샷과 같게
@@ -407,7 +426,8 @@ critic 의 눈에 남는다. 문장 단위 diff 로 더 촘촘히 가는 것은 
 
 ### 8.2 승인 게이트
 
-열린 `decide` 0 · 미적용 `fix` 0 일 때, 또는 상한 도달·stagnation 시에 뜬다. 보이는 것은 남은
+열린 `decide` 0 · `adopted`(후속 없는 `expired` 포함, §6.4) 0 · 미적용 `fix` 0 일 때, 또는 상한
+도달·stagnation 시에 뜬다. 보이는 것은 남은
 `ask`·`defer` 목록 · 기각 계수 · degrade · (상한 도달이면) 마지막 라운드의 새 결함 목록이다.
 선택지는 `references/proceed-gate.md` 의 4옵션 그대로이고(Non-goal), 열린 것이 남아 있으면 §6.4 의
 두 단계 규칙이 앞에 선다 — 그때의 「다음 라운드」는 예산이 남았으면 예산을 쓰고, 상한 도달 시에만
@@ -672,7 +692,7 @@ keyset 불변) · `shared/tests/test_copy_of_contract.sh`(축 1a 구조 도출�
 | S5 | 두 플러그인 모두 major bump | verdict → 처분은 계약 변경 | 「0.x 유지」 |
 | S6 | `defer` 는 design-doc 프로필만 | 목적지가 거기만 있다 | 「brief 에도 `defer`」 → 목적지 절을 새로 정해야 한다 |
 | S7 (리뷰 라운드 1 이후) | Q4 의 「엔진 skill 본문 1 링크」를 「절차 reference 1 링크 + dispatch 블록은 호스트 진입 skill 안」으로 | 처분 락 축 A⑤ 가 dispatch 앵커의 플러그인과 `consumer=` 의 플러그인 동일성을 요구한다(리뷰어 인용, 파일에서 확인). Q4 의 배치 자체는 유지 | 「락을 고쳐서 skill 공유」 |
-| S8 (리뷰 라운드 1 이후) | Q4 의 「새 락 0」을 「기존 링크 락의 도출 축 확장」으로 정정 | `test_copy_of_contract.sh` 구조 도출이 `scripts/` 한정(371–397행) | 「agent·reference 는 링크 말고 `copy-of` 사본」 |
+| S8 (리뷰 라운드 1 이후) | Q4 의 「새 락 0」을 「기존 링크 락의 도출 축 확장」으로 정정 | `test_copy_of_contract.sh` 구조 도출이 `scripts/` 한정(371–397행) | 「agent·reference 는 링크 말고 `copy-of` 사본」 — **agent 에 대해서는 §5.1 이 이미 이 방향으로 뒤집었다**(2026-09-06 링크 로더 실측 실패, `agents/` 만 `copy-of` 사본; `references/` 는 이 행의 전제대로 링크 유지) |
 | S9 (리뷰 라운드 1 이후) | `shared/codex/codex_findings_to_yaml.py` 를 무변경에서 추가 수정으로 | 고정 keyset 이 `disposition` 을 버린다 | 「codex 처분은 안 받고 recritic 이 전부 붙인다」 |
 | S10 (리뷰 라운드 1 이후) | 채택된 `decide` 는 `permit` 을 연다 · `check-intent` 는 finding 의 `edit_scope` 를 본다 · `ask` 는 `blocks` 로 `fix` 에 연결 · id 는 bucket+순번 · 불허 `defer` 는 `ask` · `immutable` 의 decide 적용처는 요약 | codex 5건 · Claude 2건이 계약 공백을 지적. 어느 것도 브리프 확정을 뒤집지 않고 채운다 | 각 행의 규칙을 이름으로 |
 | S11 (리뷰 라운드 2 이후) | 리뷰어 임시 `ref` + 라운드 박힌 id + 라우터 자동 계보 · `permit.apply_anchors` · `decide` 상태 다섯 · `applied_scopes` 얼림 예외 · 완료 기록은 승인 게이트 도달 시점 · 링크 로더 사전 측정(§13 항목 0) | Claude 6건 · codex 7건 — 라운드 1 수정이 만든 계약 공백. 브리프 확정 불변 | 각 행의 규칙을 이름으로 |

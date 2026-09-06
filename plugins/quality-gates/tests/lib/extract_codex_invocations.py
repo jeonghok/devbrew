@@ -20,8 +20,8 @@
 `tests/lib/codex_observation.sh`의 `codex_candidates()`(bash, 독립 구현)와 이
 파일이 같은 후보 집합을 내는지 매 실행마다 확인한다(standing assertion). 둘이
 같은 앵커를 쓴다는 주장이 1회성 수동 diff로만 검증되던 것을 고정한 것이다 —
-갈라지면 다음 실행에서 바로 RED. 그리고 `shared/tests/test_runner_disposition.sh:37`
-— 러너의 처분 공시를 검사할 모집단을 여기서 가져간다(모집단을 신설하지 않는다).
+갈라지면 다음 실행에서 바로 RED. 그리고 `shared/tests/test_runner_disposition.sh`의
+`EXTRACT=` 대입 — 러너의 처분 공시를 검사할 모집단을 여기서 가져간다(모집단을 신설하지 않는다).
 
 Usage: extract_codex_invocations.py <root_dir>
 Stdout: 후보 파일 경로, 한 줄에 하나, 정렬됨.
