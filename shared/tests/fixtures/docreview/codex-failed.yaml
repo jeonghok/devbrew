@@ -1,0 +1,5 @@
+findings: []
+meta:
+  codex_failed: true
+  reason: exit_nonzero
+  exit_code: 1

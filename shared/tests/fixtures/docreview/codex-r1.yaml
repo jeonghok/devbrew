@@ -1,0 +1,18 @@
+findings:
+  - agent: codex-reviewer
+    ref: x1
+    layer: 2
+    category: placeholder
+    anchor: "#12-files-to-modify"
+    disposition: decide
+    summary: "c.py 누락 — 파일 목록이 실제 변경과 다르다"
+    evidence: "§5 가 c.py 를 참조한다"
+  - agent: codex-reviewer
+    ref: x2
+    layer: 2
+    category: handoff_incomplete
+    anchor: "#handoff-context"
+    summary: "Deferred to plan 표가 비어 있다"
+meta:
+  codex_failed: false
+  exit_code: 0
