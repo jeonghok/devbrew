@@ -81,7 +81,7 @@ case_for_current:
   strongest: "<같은 기준으로 원안이 이기는 케이스, 2-4줄>"
 premise_refutation:
   hits: [P2]                 # 빈 배열 허용 = 반증 없음
-  why: "<hit 마다: 어느 근거(url 또는 path+anchor)가 어느 전제 문장과 어떻게 충돌하는가>"
+  why: "<hit 마다: 어느 근거(url 또는 path+anchor)가 어느 전제 문장과 어떻게 충돌하는가>"  # hits 가 [] 면 생략
 premise_list_challenge: "<전제 목록의 결함·빠진 전제 — 없으면 「없음」과 그 이유>"
 recommendation: kept | refined | switched
 refined_takes: "<refined 일 때 원안에서 취하는 것>"     # refined 가 아니면 생략
@@ -115,6 +115,9 @@ repo_claims:
 8. `recommendation: refined` 면 `refined_takes` 와 `refined_drops` 를 둘 다 채웁니다.
 9. `<constraints>` 가 이미 닫은 경로는 대안으로 내지 않습니다. 그 경로가 최선이라 판단하면
    `premise_list_challenge` 에 그 이유를 적습니다.
+10. `premise_refutation.hits` 가 비어 있으면 `recommendation: switched` 를 내지 않습니다 —
+    전제 충돌이 없는 근거는 `case_for_current` 를 강화하거나 `refined` 의 경계를 다듬는 데만
+    씁니다.
 
 ## 사용하지 않는 경우
 
