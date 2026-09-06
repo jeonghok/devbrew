@@ -75,7 +75,8 @@ fi
   원문.
 - **추천 답안**: 두 줄 나란히 — 「builder: <recommendation>」 / 「orchestrator: <의견>」. 아래에 `case_for_alternative`
   와 `case_for_current` 를 verbatim 으로. evidence 는 항목마다 `[부착 P<n>]` 또는 `[비부착]` 라벨, 반증된 것은
-  `[반증됨]` 추가. 마지막 줄 「근거 N 중 부착 M · 리포 주장 K 중 확인 J」.
+  `[반증됨]` 추가. `repo_claims` 도 항목마다 `[확인]` / `[반증됨]` / `[미확인]` 라벨과 함께 보인다. 마지막 줄
+  「근거 N 중 부착 M · 리포 주장 K 중 확인 J」.
 - **질문**: `AskUserQuestion` 선택지 **고정 순서** 유지 / 보완 / 전환 / 보류. `(Recommended)` 라벨은 붙이지 않는다.
 
 conducting-interview 는 builder 출력을 **약화·편집하지 않는다** — verbatim 계약이다.

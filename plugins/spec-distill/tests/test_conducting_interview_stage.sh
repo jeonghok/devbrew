@@ -413,7 +413,7 @@ grep -q 'references/steelman.md' "$SKILL" && ok "AC4: SKILL.md 가 steelman.md �
 # C18 — neglect trigger 부재(반전) + 양성 짝(trigger 3값 · 검토 · 보류 · 새 어휘)
 grep -q 'coverage-mapper neglect' <<<"$r3_block" \
   && no "C18: R3 trigger 에 coverage-mapper neglect 잔존" || ok "C18: R3 trigger 에 neglect 없음 (AC5)"
-for t in 'landscape 모순' 'anti-pattern' '제약'; do
+for t in 'landscape 모순' 'anti-pattern' '제약과의 충돌'; do
   grep -q "$t" <<<"$r3_block" && ok "R3 trigger 문구 존재: $t" || no "R3 trigger 문구 부재: $t (AC5)"
 done
 grep -q '검토 — steelman 0건' <<<"$r3_block" && ok "R3: 0건 검토 항목 형식 존재 (C8)" || no "R3: 검토 항목 형식 부재"
