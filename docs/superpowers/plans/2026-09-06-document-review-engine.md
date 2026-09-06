@@ -373,6 +373,7 @@ leaf 모듈이다. 문서 텍스트를 읽지 않고, 호스트 모듈을 import
 - Create: `shared/tests/fixtures/docreview/cases.sh` (골격 + `case_T37_cap_and_extra`)
 - Create: `shared/tests/test_docreview_state.sh` (골격 — Task 5 가 케이스를 더한다)
 - Create: `plugins/spec-distill/references/docreview-profiles/design-doc.md` (Task 3 이 나머지 셋과 함께 검증 — 여기서는 `begin-round` 픽스처가 프로필 하나를 요구하므로 먼저 만든다)
+- Modify: `shared/tests/test_skill_reference_pointers.sh` (역방향 코퍼스를 「플러그인 레벨 = 한 단계」로 — Step 5, ruling R3·R6. 이 Task 의 커밋이 첫 프로필을 **추적** 대상으로 만드는 순간 그 락이 RED 가 되므로 같은 커밋에 들어가야 한다)
 
 **Interfaces:**
 - Produces (python, 형제 import 용):
@@ -869,9 +870,39 @@ diff shared/tests/fixtures/docreview/design-sample.md shared/tests/fixtures/docr
 diff shared/tests/fixtures/docreview/design-sample.md shared/tests/fixtures/docreview/design-sample-r3.md    # Goals hunk 하나만
 ```
 
-`snapshot` 서브커맨드는 Task 4 것이다. T37 만 먼저 통과시키기 위해 이 Step 에서 임시로 손 스냅샷을 쓰지 않는다 — 대신 Task 4 까지 T37 은 RED 로 둔다(**Step 5 는 Task 4 뒤에 돌린다**). 이 순서를 지키는 이유: 케이스가 실제 `snapshot` 출력을 먹어야 픽스처가 코드와 같은 것을 재기 때문이다.
+`snapshot` 서브커맨드는 Task 4 것이다. T37 만 먼저 통과시키기 위해 이 Step 에서 임시로 손 스냅샷을 쓰지 않는다 — 대신 Task 4 까지 T37 은 RED 로 둔다(**Step 6 는 Task 4 뒤에 돌린다**). 이 순서를 지키는 이유: 케이스가 실제 `snapshot` 출력을 먹어야 픽스처가 코드와 같은 것을 재기 때문이다.
 
-- [ ] **Step 5: (Task 4 완료 후) 통과를 확인하고 커밋한다**
+- [ ] **Step 5: 고아 락의 플러그인-레벨 코퍼스를 「한 단계」로 좁힌다 (ruling R3 · R6 — 커밋 직전)**
+
+앞 판본은 «`plugins/*/references/docreview-profiles/*.md` 는 역방향 코퍼스(`plugins/*/references/*.md`,
+한 단계)에 들어가지 않는다» 고 적었다. **그 문장은 틀렸다** — 실측(2026-09-06):
+
+- `git ls-files -- 'plugins/*.md'` 가 298건을 낸다. git pathspec 의 `*` 는 `/` 를 넘는다.
+- 프로필 파일 하나를 `git add` 하고 `bash shared/tests/test_skill_reference_pointers.sh` 를 돌리면
+  `Total: 23 | Pass: 21 | Fail: 2`(고아 1). 프로필 넷이 커밋되면 고아 넷이다.
+- 코퍼스는 `git ls-files`(추적만)라 **Step 4 의 커밋 순간에** 발동한다.
+
+프로필은 skill 이 `Read` 하는 절차서가 아니라 스크립트가 `--profile` 로 먹는 **호스트 데이터**이고,
+PR 1 에는 그것을 가리킬 진입 skill 이 없다(호출자 0 — P1). 그러므로 `test_skill_reference_pointers.sh`
+의 역방향 코퍼스가 그 파일 헤더가 말하는 것(«플러그인 레벨» = `references/` 바로 밑 한 단계)을 실제로
+뜻하도록 고친다. 프로필만 이름으로 면제하지 않는다 — 면제는 락을 약화시키고, 여기서 틀린 것은
+프로필이 아니라 glob 의 깊이다.
+
+요구(형태는 구현자가 정한다):
+
+1. **값 불변 선측정** — 편집 전 코퍼스 건수를 기록한다(오늘 6). 편집 후 같아야 한다. 오늘 이 리포에
+   `plugins/*/references/` 두 단계 아래 파일은 없으므로 좁혀도 값이 변하지 않는 것이 정상이고,
+   변하면 좁히기가 지나친 것이다.
+2. **양성 대조** — 좁힌 뒤에도 진짜 고아(`plugins/spec-distill/references/<새파일>.md`, 아무 SKILL.md
+   도 가리키지 않음)를 `git add` 하면 여전히 RED 여야 한다. 이 대조 없이는 「Fail 0」이 이빨의
+   증거가 아니다. 대조 파일은 확인 후 지운다(`git rm --cached` + `rm`).
+3. **이유를 그 줄 옆에 남긴다** — 「git pathspec 의 `*` 가 `/` 를 넘으므로 이 패턴은 재귀적이다.
+   이 파일이 뜻하는 «플러그인 레벨» 은 한 단계다」. 다음 사람이 같은 오독을 반복하지 않게.
+
+Step 6 의 커밋에 `shared/tests/test_skill_reference_pointers.sh` 를 함께 넣고, 커밋 뒤
+`bash shared/tests/test_skill_reference_pointers.sh | tail -2` 가 `Fail: 0` 인지 확인한다.
+
+- [ ] **Step 6: (Task 4 완료 후) 통과를 확인하고 커밋한다**
 
 Run: `bash shared/tests/test_docreview_state.sh`
 Expected: `Total: 4 | Pass: 4 | Fail: 0`
@@ -880,7 +911,8 @@ Expected: `Total: 4 | Pass: 4 | Fail: 0`
 git add shared/docreview/scripts/docreview_state.py shared/tests/test_docreview_state.sh \
         shared/tests/fixtures/docreview/cases.sh shared/tests/fixtures/docreview/st_get.py \
         shared/tests/fixtures/docreview/design-sample*.md \
-        plugins/spec-distill/references/docreview-profiles/design-doc.md
+        plugins/spec-distill/references/docreview-profiles/design-doc.md \
+        shared/tests/test_skill_reference_pointers.sh
 git commit -q -m "feat(shared/docreview): 원장 leaf 모듈 — 프로필 로더 · state I/O · 라운드 상한 2 (T37)
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
@@ -894,7 +926,7 @@ Claude-Session: https://claude.ai/code/session_01KaXgPHM3jyMaG3BmoehK5U"
 **Files:**
 - Create: `plugins/spec-distill/references/docreview-profiles/brief.md`, `…/seed.md`, `plugins/quality-gates/references/docreview-profiles/generic.md`
 - Create: `shared/tests/test_docreview_profiles.sh`
-- Modify: `shared/tests/test_skill_reference_pointers.sh` (역방향 코퍼스를 「플러그인 레벨 = 한 단계」로 — Step 4, ruling R3)
+- **편집하지 않음**: `shared/tests/test_skill_reference_pointers.sh` — 코퍼스 좁히기는 Task 2 Step 5 가 이미 했다(ruling R6). 이 Task 는 Step 4 에서 GREEN 만 확인한다
 - Modify: `shared/docreview/scripts/docreview_anchor.py` 는 Task 4 에서 만들므로, 이 Task 의 `profile-check` CLI 는 **`docreview_state.py` 에 둔다** (leaf 가 로더를 갖고 있다). Interfaces 에 반영.
 
 **Interfaces:**
@@ -1107,45 +1139,21 @@ web: false
 EOF
 ```
 
-- [ ] **Step 4: 고아 락의 플러그인-레벨 코퍼스를 「한 단계」로 좁힌다 (실행 전 ruling R3)**
+- [ ] **Step 4 는 이 Task 에 없다 — Task 2 Step 5 로 옮겨졌다 (ruling R6)**
 
-앞 판본은 «`plugins/*/references/docreview-profiles/*.md` 는 역방향 코퍼스(`plugins/*/references/*.md`,
-한 단계)에 들어가지 않는다» 고 적었다. **그 문장은 틀렸다** — 실측(2026-09-06):
+고아 락(`test_skill_reference_pointers.sh`)의 코퍼스 좁히기는 **Task 2 Step 5** 에 있다. 그 락을 RED 로
+만드는 것은 프로필이 **추적되는 순간**이고, 첫 프로필(`design-doc.md`)을 커밋하는 것은 이 Task 가 아니라
+Task 2 의 커밋 스텝이기 때문이다. 이 Task 는 이미 좁혀진 락 위에 프로필 셋을 더할 뿐이며, 아래 Step 4 의
+확인 목록에 그 락을 포함한다.
 
-- `git ls-files -- 'plugins/*.md'` 가 298건을 낸다. git pathspec 의 `*` 는 `/` 를 넘는다.
-- 프로필 파일 하나를 `git add` 하고 `bash shared/tests/test_skill_reference_pointers.sh` 를 돌리면
-  `Total: 23 | Pass: 21 | Fail: 2`(고아 1). 프로필 넷이 커밋되면 고아 넷이다.
-- 코퍼스는 `git ls-files`(추적만)라 **Step 4 의 커밋 순간에** 발동한다.
-
-프로필은 skill 이 `Read` 하는 절차서가 아니라 스크립트가 `--profile` 로 먹는 **호스트 데이터**이고,
-PR 1 에는 그것을 가리킬 진입 skill 이 없다(호출자 0 — P1). 그러므로 `test_skill_reference_pointers.sh`
-의 역방향 코퍼스가 그 파일 헤더가 말하는 것(«플러그인 레벨» = `references/` 바로 밑 한 단계)을 실제로
-뜻하도록 고친다. 프로필만 이름으로 면제하지 않는다 — 면제는 락을 약화시키고, 여기서 틀린 것은
-프로필이 아니라 glob 의 깊이다.
-
-요구(형태는 구현자가 정한다):
-
-1. **값 불변 선측정** — 편집 전 코퍼스 건수를 기록한다(오늘 6). 편집 후 같아야 한다. 오늘 이 리포에
-   `plugins/*/references/` 두 단계 아래 파일은 없으므로 좁혀도 값이 변하지 않는 것이 정상이고,
-   변하면 좁히기가 지나친 것이다.
-2. **양성 대조** — 좁힌 뒤에도 진짜 고아(`plugins/spec-distill/references/<새파일>.md`, 아무 SKILL.md
-   도 가리키지 않음)를 `git add` 하면 여전히 RED 여야 한다. 이 대조 없이는 「Fail 0」이 이빨의
-   증거가 아니다. 대조 파일은 확인 후 지운다(`git rm --cached` + `rm`).
-3. **이유를 그 줄 옆에 남긴다** — 「git pathspec 의 `*` 가 `/` 를 넘으므로 이 패턴은 재귀적이다.
-   이 파일이 뜻하는 «플러그인 레벨» 은 한 단계다」. 다음 사람이 같은 오독을 반복하지 않게.
-
-Step 5 의 커밋에 `shared/tests/test_skill_reference_pointers.sh` 를 함께 넣고, 커밋 뒤
-`bash shared/tests/test_skill_reference_pointers.sh | tail -2` 가 `Fail: 0` 인지 확인한다.
-
-- [ ] **Step 5: 락 통과를 확인하고 커밋한다** (Step 4 를 먼저 끝낸 뒤)
+- [ ] **Step 4: 락 통과를 확인하고 커밋한다**
 
 Run: `bash shared/tests/test_docreview_profiles.sh`
 Expected: `Fail: 0` (통과 4 + 값 8 + 변이 4 + 개수 1).
 
 ```bash
 git add plugins/spec-distill/references/docreview-profiles plugins/quality-gates/references/docreview-profiles \
-        shared/tests/test_docreview_profiles.sh shared/docreview/scripts/docreview_state.py \
-        shared/tests/test_skill_reference_pointers.sh
+        shared/tests/test_docreview_profiles.sh shared/docreview/scripts/docreview_state.py
 git commit -q -m "feat(docreview): 프로필 넷(design-doc·brief·seed·generic) + 열 필드 스키마 락
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
@@ -1550,7 +1558,7 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 3: 통과를 확인한다 (Task 2 Step 5 도 함께)**
+- [ ] **Step 3: 통과를 확인한다 (Task 2 Step 6 도 함께)**
 
 ```bash
 SCRIPTS=shared/docreview/scripts bash shared/tests/test_docreview_anchor.sh | tail -3
