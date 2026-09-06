@@ -461,6 +461,7 @@ case_T11_permit_keeps_disposition() {
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
   py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample-r2.md" > "$d/fin.json"
   assert_eq "$(fsum "$d" '후속 손질' '["disposition"]')" "fix" "T11: 유효 permit 이 있는 보호 앵커는 리뷰어 처분 그대로"
+  assert_eq "$(jget "$d/fin.json" 'all(x["id"].split("#")[1].startswith("r2.") for x in d["findings"])')" "True" "T11: 라운드 2 에서 생성된 id 는 전부 r2. 로 시작 — 라운드 «번호» 가 실제로 박힌다(r 존재가 아니라 값)"
   rm -rf "$d" "$t"
 }
 case_T12_immutable_fix_to_decide() {

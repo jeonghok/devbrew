@@ -32,7 +32,7 @@ run_case() {   # run_case <scripts-dir> <case-fn> → ✗ 개수
 }
 # 계측기 양성 대조 — 변이 없는 사본에서 케이스가 GREEN.
 CLEAN="$BASE_MUT/clean"; mkclone "$CLEAN"
-for c in case_T35_frozen_change_auto_decide case_T10_protected_decide case_T05_T06_reject case_T13_ids_distinct case_T08_defer_disallowed case_T37_cap_and_extra case_AC6_fix_contract; do
+for c in case_T35_frozen_change_auto_decide case_T10_protected_decide case_T05_T06_reject case_T11_permit_keeps_disposition case_T08_defer_disallowed case_T37_cap_and_extra case_AC6_fix_contract; do
   f="$(run_case "$CLEAN" "$c")"
   [ "$f" = "0" ] && ok "양성대조: $c 는 변이 없는 사본에서 GREEN (계측기 정상)" || no "양성대조 실패: $c 가 clean 사본에서 이미 RED($f) — 계측기 고장"
 done
@@ -63,7 +63,7 @@ mut reject_no_evidence case_T05_T06_reject sed_route 's/if v.get("evidence"):/if
 # ④ 상향을 하향 허용으로 뒤집기 — raise to=drop 이 먹힌다
 mut raise_down case_T03_T04_raise sed_route 's/RANK\[to\] > RANK\[it\["disposition"\]\]/RANK[to] != RANK[it["disposition"]]/'
 # ⑤ id 에서 라운드 제거 — 같은 bucket 이 라운드 넘어 충돌
-mut id_no_round case_T13_ids_distinct sed_route 's/"%s#r%d.%d" % (b, n, k)/"%s#r1.%d" % (b, k)/'
+mut id_no_round case_T11_permit_keeps_disposition sed_route 's/"%s#r%d.%d" % (b, n, k)/"%s#r1.%d" % (b, k)/'
 # ⑥ defer 예외 제거(불허 defer 를 fix 로) — AC10 위반
 mut defer_to_fix case_T08_defer_disallowed sed_route 's/if d == "defer":/if d == "defer" and False:/'
 # ⑦ 상한 3 으로 — 라운드 4 가 승인 없이 돈다
