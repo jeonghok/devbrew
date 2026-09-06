@@ -50,6 +50,7 @@
 - **`set -u` bash 3.2** — 배열 확장에 `${arr[@]+"${arr[@]}"}`, heredoc 을 `$( )` 안에 넣지 않는다(`shared/tests/test_dispatch_disposition.sh` 머리 주석의 파싱 함정). python 실행은 항상 `PYTHONDONTWRITEBYTECODE=1`.
 - **문서 규약** — Korean-primary. 생성 산출물(agent · reference · 프로필)에 자기 출처 서술을 넣지 않는다(CLAUDE.md «Self-narrating artifact»). 근거는 이 계획과 CHANGELOG 에 둔다.
 - **버전** — 병합 후 base 는 spec-distill `0.54.0` · quality-gates `7.3.0`. PR 1 은 둘 다 minor: **`0.55.0` · `7.4.0`**. CHANGELOG 헤딩은 `## [version] — YYYY-MM-DD`, 건너뛴 버전 없음(`shared/tests/test_changelog_integrity.sh`).
+  **정정 (Task 12 실행 중, R22)**: origin/main 이 이 계획과 무관한 PR(#142)에서 spec-distill 을 이미 `0.55.0` 으로 선점했다 — 실제 실행분은 spec-distill `0.56.0` 으로 재부여(quality-gates `7.4.0` 은 무변경).
 - **커밋** — Conventional Commits, 끝에 `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>` 와 `Claude-Session: https://claude.ai/code/session_01KaXgPHM3jyMaG3BmoehK5U` 두 줄. 브랜치 `feature/document-review-engine`.
 
 ## 이 계획의 범위 — PR 1 만
