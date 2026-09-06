@@ -114,16 +114,16 @@
 | T24 | D `open` (post) | 사용자 「기각」 | `adopted` + 원복 permit `{kind: revert, expect_hash: 변경 전 해시, round: n+1}` | 결정 기록 | `case_T24_post_reject_revert_permit` |
 | T25 | D `adopted` (revert permit) | 라운드 n+1 스냅샷의 그 앵커 해시 == `expect_hash` | `applied` | progress +1 | `case_T25_revert_observed` |
 | T26 | D `adopted` (revert permit) | 해시가 복원되지 않음 | `expired` → 재상승 | — | `case_T26_revert_missed_reraise` |
-| T27 | X `pending` | 저자 패치 의도가 `check-intent` 통과 | `intent_passed` | `applied_scopes` += {id, scope, round n} (얼림 예외 ①) | `case_T27_intent_pass` |
+| T27 | X `pending` | 저자 패치 의도가 `check-intent` 통과 | `intent_passed` | `applied_scopes` += {id, scope, round n} (얼림 예외 ①) | `case_T27_intent_pass_records_scope` |
 | T28 | X `pending` | `check-intent` 거부(edit_scope 밖 · fix_anchors 밖 · 보호 · 불변) | `escalated` | 라운드 n+1 에 같은 계보의 `decide`(pre) 로 상향, evidence = 거부 사유 | `case_T28_intent_reject_escalates` |
 | T29 | X `intent_passed` | 라운드 n+1 diff 가 그 scope 변경 관측 | `applied` | progress +1 | `case_T29_fix_applied` |
 | T30 | X `intent_passed` | 라운드 n+1 diff 에 그 scope 변경 없음 | `intent_passed` 유지 (미적용으로 센다) | — | `case_T30_fix_unapplied_counts` |
-| T31 | X `pending`/`intent_passed`, 전제 A 미응답 | 라우팅 시 | `held` | 미적용으로 세지 않음 · 승인 게이트에 「보류」 | `case_T31_blocked_fix_held` |
+| T31 | X `pending`/`intent_passed`, 전제 A 미응답 | 라우팅 시 | `held` | 미적용으로 세지 않음 · 승인 게이트에 「보류」 | `case_T31_T34_blocked_fix_held_gate_opens` |
 | T32 | X `held` | 전제 A 응답 | `pending` | — | `case_T32_ask_answered_unholds` |
 | T33 | X `pending`/`intent_passed`/`held` | 승인 게이트 1단계 사용자 `drop` | `dropped` | 결정 기록 | `case_T33_user_drops_fix` |
-| T34 | A `blocks` ≠ ∅, 미응답 | 라우팅 끝 | 라운드 게이트 열림(decide 0 이어도) | AC6c | `case_T34_blocking_ask_opens_gate` |
+| T34 | A `blocks` ≠ ∅, 미응답 | 라우팅 끝 | 라운드 게이트 열림(decide 0 이어도) | AC6c | `case_T31_T34_blocked_fix_held_gate_opens`(T31 과 같은 케이스가 두 셀을 덮는다) |
 | T35 | 섹션(finding 없음 · 예외 ①~④ 밖) | 라운드 n+1 diff 에 변경 | auto `decide`(post) 생성 | evidence = 헤딩 diff 요약(해시 전후) · 영향 = `refs` | `case_T35_frozen_change_auto_decide` |
-| T36 | 섹션 ∈ 얼림 예외(①applied_scopes ②permit ③decision_log/defer_target ④헤딩 없음) | 변경 | auto decide 아님 | `exempt_applied` 에 기록 | `case_T36_freeze_exceptions` |
+| T36 | 섹션 ∈ 얼림 예외(①applied_scopes ②permit ③decision_log/defer_target ④헤딩 없음) | 변경 | auto decide 아님 | `exempt_applied` 에 기록 | `case_T36_freeze_exceptions_log_targets` |
 | T37 | 라운드 | `begin-round` | `round` +1, `rereview_count` = min(round−1, 2) | 라운드 ≥4 는 `--extra-approval` 필수, 없으면 rc 3 `cap_reached`; 있으면 `extra_rounds` append | `case_T37_cap_and_extra` |
 | T38 | 라운드 n ≥ 2 | 열린 계보 집합(P12) == n−1 의 것 ∧ progress == 0 ∧ 집합 ≠ ∅ | `stagnation: true` → 승인 게이트(두 단계) | — | `case_T38_stagnation` |
 | T39 | 라운드 | `gate` | `approval_ready` = open D 0 ∧ adopted D 0 ∧ 미적용 X 0(held 제외) ; `round_gate_needed` = open D ≥1 ∨ blocking A ≥1 ; `approval_gate_open` = ready ∨ cap ∨ stagnation ; `two_stage` = open ∧ ¬ready | `next_round_mode` = `budget`(rereview<2) / `extra_approval` | `case_T39_gate_derivation` |
