@@ -14,6 +14,7 @@ SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
 case_anchor_snapshot_shape
 case_anchor_slug_rules
 case_T44_headingless
+case_T44b_headingless_freeze_inactive
 case_anchor_diff_and_exempt
 case_anchor_insert_after
 case_anchor_protected_cascade

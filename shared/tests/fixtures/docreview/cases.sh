@@ -56,6 +56,20 @@ case_T44_headingless() {
   assert_eq "$dd" "(True, [])" "T44: headingless diff 는 changed 를 내지 않는다(얼림 비활성)"
   rm -f "$s"
 }
+# [Task 2+4 실행 노트 — ruling R8] 위 케이스의 둘째 단언은 같은 스냅샷을 자기 자신과
+# diff 한다(`diff "$s" "$s"`). `old == new` 라 `changed=[]` 는 문서 종류와 무관하게
+# 항상 보장되므로, 이 단언은 「얼림 비활성」을 실제로 재지 않는다 — `diff_snapshots` 의
+# `if headingless:` 분기를 통째로 지워도 여전히 통과한다(자기-자신 diff 는 애초에 해시가
+# 같아 `rec()` 이 한 번도 안 불린다). brief 원문을 그대로 두고(재발견 금지), 실제로 얼림
+# 경로를 지나는 케이스를 아래에 더한다 — **서로 다른** 두 headingless 픽스처를 diff 해
+# 변경이 `changed` 가 아니라 `exempt_applied` 로 가고 `scope` 가 `"#__doc__"` 인지 본다.
+case_T44b_headingless_freeze_inactive() {
+  local a b; a="$(mktemp -t hla-XXXXXX)"; b="$(mktemp -t hlb-XXXXXX)"
+  snap "$FX/headingless.md" "$a"; snap "$FX/headingless-r2.md" "$b"
+  local dd; dd="$(py docreview_anchor.py diff "$a" "$b" | jgets 'd["headingless"], d["changed"], [e["scope"] for e in d["exempt_applied"]]')"
+  assert_eq "$dd" "(True, [], ['#__doc__'])" "T44b: 서로 다른 headingless 문서 간 변경은 changed 가 아니라 exempt_applied(scope #__doc__) 로 간다(얼림 실제 경로)"
+  rm -f "$a" "$b"
+}
 case_anchor_diff_and_exempt() {
   local a b; a="$(mktemp -t s1-XXXXXX)"; b="$(mktemp -t s2-XXXXXX)"
   snap "$FX/design-sample.md" "$a"; snap "$FX/design-sample-r2.md" "$b"
@@ -85,7 +99,7 @@ case_anchor_protected_cascade() {
   assert_eq "$(py docreview_anchor.py protected '#12-files-to-modify' --profile "$p" --snapshot "$s" | jgets 'd["protected"]')" "False" "protected: Files 는 보호 아님"
   rm -f "$s"
 }
-# [Task 2+4 실행 노트 — task-2-4-report.md 참조] 이 케이스는 원래 여기서 brief.md
+# [Task 2+4 실행 노트] 이 케이스는 원래 여기서 brief.md
 # 프로필(§6 immutable · §2 fix 가능 · §1 Goal 보호) 단언 3건으로 이어졌다. 그 프로필
 # (`plugins/spec-distill/references/docreview-profiles/brief.md`)은 Task 3 산출물이고,
 # 이번 실행은 Task 2 + Task 4 만 수행하며 "나머지 프로필 셋"을 미리 만들지 않는다는
