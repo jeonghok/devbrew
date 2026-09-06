@@ -20,18 +20,19 @@
 - 어느 S<N> 을 goal 로 골랐는지, 전제 목록, 제약 S-id 범위를 audit §3 `#### ST<N>` 블록의 「dispatch 입력」
   소절에 적는다.
 
-Web kill switch 는 dispatch 직전에 확인한다:
+Web kill switch 는 dispatch 직전에 확인한다. 스위치가 켜져 있으면 **dispatch 하지 않는다** —
+`steelman-builder` 는 WebSearch/WebFetch 를 갖고 자기 스위치를 읽지 않으므로 차단은 이 자리에서만
+일어난다. 그래서 dispatch 는 조건문 밖이 아니라 `else` 가지 **안**에 있다:
 
-```bash
+```
 if [[ "${DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0}" == "1" ]]; then
   echo "[spec-distill] web 비활성 — steelman 자동 생략, 사용자에게 의심 방향 수동 확인 요청" >&2
+  # dispatch 없이 아래 「Web 부재 시 graceful degradation」 절로 간다.
+else
+  Agent({ description: "Steelman both cases", subagent_type: "spec-distill:steelman-builder",
+          prompt: "의심 방향: <direction>${SUSPECT_DIRECTION}</direction>. trigger: <trigger>${TRIGGER}</trigger>. 사용자 goal(원문): <goal>${GOAL}</goal>. 핵심 전제: <premises>${PREMISES}</premises>. 사용자가 지금까지 말한 제약(원문 전량): <constraints>${CONSTRAINTS}</constraints>. 양쪽 최강 케이스를 같은 기준으로, 전제 반증 판정과 추천을." })
+  # **처분** — consumer=orchestrator · fail-open · disclosure=loud advisory
 fi
-```
-
-```
-Agent({ description: "Steelman both cases", subagent_type: "spec-distill:steelman-builder",
-        prompt: "의심 방향: <direction>${SUSPECT_DIRECTION}</direction>. trigger: <trigger>${TRIGGER}</trigger>. 사용자 goal(원문): <goal>${GOAL}</goal>. 핵심 전제: <premises>${PREMISES}</premises>. 사용자가 지금까지 말한 제약(원문 전량): <constraints>${CONSTRAINTS}</constraints>. 양쪽 최강 케이스를 같은 기준으로, 전제 반증 판정과 추천을." })
-// **처분** — consumer=orchestrator · fail-open · disclosure=loud advisory
 ```
 
 한 방향당 steelman 1회 — 새 근거 없으면 재steelman 금지(AP16).
@@ -39,14 +40,19 @@ Agent({ description: "Steelman both cases", subagent_type: "spec-distill:steelma
 #### Step 2 — 게이트-전 확인 (orchestrator, Read/Grep)
 
 - `repo_claims` 전 항목: 경로 실재 → 앵커 실재 → 주장이 그 자리와 맞는가. 결과 ∈ {확인, 반증, 미확인}.
+  `미확인`(확정도 반증도 못 한 것)은 J 에 들지 않되 4-block 에서 `[미확인]` 라벨로 **보인다** — 다음
+  소비자가 사람이므로 라벨을 붙여 보여주고, `K−J` 안에 조용히 흡수하지 않는다. 왜 확정하지 못했는지
+  한 줄을 audit §3 에 남긴다.
 - **양성 부착 주장 전부**(C4): `evidence[]`·`repo_claims[]` 중 `touches` 가 비어 있지 않은 항목마다 `claim` 을
   지목된 전제 문장과 대조한다(repo_claims 는 경로·앵커 확인을 먼저 통과한 것만). 결과 ∈ {확인, 반증}.
   `premise_refutation.hits` 는 그 부분집합(부착 중 「충돌」을 주장하는 것)이라 같은 대조 안에서 「충돌인가」까지
   본다. 음성(`touches` 빈 배열)은 확인하지 않는다.
-- 「근거 N 중 부착 M」의 M 은 **확인을 통과한 부착**만 센다. 반증된 부착은 `[부착 주장 반증]` 라벨로 노출되고
+- 「근거 N 중 부착 M」의 M 은 **확인을 통과한 부착**만 센다. 반증된 부착은 `[반증됨]` 라벨로 노출되고
   M 에 들지 않는다(N 에는 든다). 리포 주장은 「리포 주장 K 중 확인 J」로 따로 센다.
 - 결과는 audit §3 `#### ST<N>` 블록의 「게이트-전 확인」 소절에 주장별 한 줄로 남는다.
-- 반증된 항목은 4-block 에서 빼지 않고 「반증됨」 라벨을 단다. orchestrator 는 verdict 를 대신 내지 않는다.
+- 반증된 항목은 4-block 에서 빼지 않고 `[반증됨]` 라벨을 단다 — 4-block 의 반증 라벨은 이 하나뿐이고,
+  무엇이 반증됐는지(부착 주장인지 리포 주장의 경로·앵커·내용인지)는 audit §3 「게이트-전 확인」 줄이
+  말한다. orchestrator 는 verdict 를 대신 내지 않는다.
 
 #### Step 2.5 — 재검토 자격 판정
 
