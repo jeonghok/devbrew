@@ -21,8 +21,8 @@ FM=$(awk '/^---$/{c++; next} c==1' "$AGENT")
 
 echo "== Frontmatter declarations =="
 assert_grep "$FM" '^name:[[:space:]]*test-scope-validator$' "name=test-scope-validator"
-assert_grep "$FM" '^model:[[:space:]]*inherit$' "model=inherit"
-assert_not_grep "$FM" '^model:[[:space:]]*(opus|sonnet|haiku)$' "고정 티어 핀 없음"
+MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
+assert_not_grep "$FM" "$MODEL_KEY" "frontmatter 에 model 키 없음 (tier-unpinned)"
 assert_grep "$FM" '^cost_class:[[:space:]]*low$' "cost_class=low"
 
 # v2.11.0: allowedTools(죽은 필드) / disallowedTools 블록 리스트 → tools: 한 줄 allowlist

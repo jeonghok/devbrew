@@ -1,7 +1,6 @@
 ---
 name: adversarial
 description: Phase 1.5 of the Review gate — adversarially reviews findings from Phase 1+2 reviewers to find false positives, weak fixes, or better alternatives, and reports genuine issues those reviewers missed. Strengthens review by hunting noise.
-model: inherit
 color: orange
 cost_class: low
 tools: Read, Grep, Glob

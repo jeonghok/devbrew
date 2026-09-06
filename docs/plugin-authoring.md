@@ -20,7 +20,7 @@ plugins/<your-plugin>/
 └── tests/                    # optional — 테스트는 여기 하나로. hooks/tests·scripts/tests 신설 금지
 ```
 
-- **agent `model:`은 `inherit`.** 리터럴 티어(`opus`/`sonnet`/`haiku`)를 박으면 하니스가 사용자의 모델 선택을 덮어쓴다 — 세션이 더 강한 모델을 쓸 때는 조용한 하향이고, 더 약한 모델을 쓸 때는 동의 없는 비용 증가다. 어느 방향이든 P8(Determinism Economy) 위반이다. reference: `plugins/plugin-audit/agents/*.md`.
+- **agent frontmatter 에 `model` 키를 두지 않는다.** 리터럴 티어(`opus`/`sonnet`/`haiku`)는 세션의 모델 선택을 덮어쓰고, `inherit` 는 사용자의 subagent 기본 티어 설정(`CLAUDE_CODE_SUBAGENT_MODEL`)을 덮어쓴다 — CLI 2.1.261 실측(2026-09-06, `docs/superpowers/specs/2026-09-06-agent-model-unpin-design.md` §A). 키가 없으면 하니스는 「사용자 설정 → 세션 모델」 순으로 위임한다. 어느 값이든 하니스가 티어를 정하는 것이라 P8(Determinism Economy) 위반이다. reference: `plugins/plugin-audit/agents/*.md`.
   - **dispatch 시점의 `model` 인자는 오케스트레이터의 재량이다.** 세션 모델이 어떤 것이든 상황에 맞는 티어를 고를 수 있다 — 단, 그 agent 의 출력이 **게이트 판정(verdict·findings)이나 측정(readback 류)에 들어가면 인자를 넘기지 않는다.** writer 인 오케스트레이터가 자기 리뷰어의 티어를 고르는 구조는 Law 2 의 취지와 충돌한다. 재량은 프로브·생성기처럼 사람이 읽는 출력만 내는 agent(예: `smoke-probe`, `transcript-reader`, `pr-understanding-builder`)에 한한다. adversarial 은 `plugins/quality-gates/tests/test_adversarial_model_consistency.sh` 가 dispatch 자리 근처의 `model=` 부재를 집행한다.
 
 **Reference 구현** — 본인 플러그인의 형태와 맞는 것을 읽으세요:

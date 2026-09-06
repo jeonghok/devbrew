@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.54.0] — 2026-09-06
+
+### Changed
+
+- **agent frontmatter 의 `model: inherit` 를 제거했다 — `inherit` 는 사용자의 subagent
+  기본 티어 설정을 덮어쓴다 (CLI 2.1.261 실측, 2026-09-06).** frontmatter 에 `model` 키가
+  없으면 하니스가 「`CLAUDE_CODE_SUBAGENT_MODEL` → 세션 모델」 순으로 위임하고, `inherit` 는
+  그 첫 단계를 건너뛴다(헤드리스 probe 6회, 설계 §A). 설정이 없는 환경은 동작이 같다.
+  규약·락은 「키 부재」 단언으로 반전 — 정본은
+  `docs/superpowers/specs/2026-09-06-agent-model-unpin-design.md`.
+
 ## [0.53.1] — 2026-09-05
 
 ### Fixed

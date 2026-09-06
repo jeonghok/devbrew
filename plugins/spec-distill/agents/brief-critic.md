@@ -12,7 +12,6 @@ description: >
   user: "이 brief의 충실도를 봐줘"
   assistant: "I'll dispatch the brief-critic agent with the brief inlined."</example>
 tools: []
-model: inherit
 color: red
 cost_class: medium
 input_slots:

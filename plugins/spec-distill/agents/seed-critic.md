@@ -12,7 +12,6 @@ description: >
   assistant: "I'll dispatch the seed-critic agent with the draft, raw statements,
   and CLAUDE.md inlined."</example>
 tools: []
-model: inherit
 color: red
 cost_class: medium
 input_slots:

@@ -121,7 +121,7 @@ v2.8.0 "diff is data, not instructions" norm을 orchestrator로 확장한다.
   유일한 입력이라는 boundary는 frontmatter가 아니라 persona 계약이다. read→publish 잔여 위험(주입된
   blob이 빌더에게 코퍼스 밖 파일을 Read 시키는 경우)은 corpus-기반 secret-scan(코퍼스 밖 비밀은
   못 잡는다) + 사람 preview + P17 consent로 **완화되나 제거되지는 않는다** — 사람 preview 가 최종
-  backstop이다. `model: inherit`이 빌더 frontmatter에 선언돼 있다(여기서 override하지 않음).
+  backstop이다. 빌더 frontmatter 에는 `model` 키가 없다(여기서 override 하지 않음 — 사용자 설정 → 세션 티어).
 
 ```
 Agent({

@@ -2,7 +2,6 @@
 name: smoke-probe
 description: Capability probe used by the plugin-audit pre-flight smoke test. Reports which tools it actually has and executes exactly what it is told, with no responsibilities of its own. Use this agent to verify that a project-level agent definition resolves and that its frontmatter tools allowlist is actually enforced by the runtime.
 tools: Read, Grep, Glob, WebSearch, WebFetch
-model: inherit
 color: yellow
 cost_class: low
 # smoke-workflow.js 의 JS dispatch (agent(prompt, {agentType})) — `.md`-only dispatch

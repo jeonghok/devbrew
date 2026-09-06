@@ -240,7 +240,7 @@ AskUserQuestion({
 
 **Upfront approval is authoritative.** A surface opted in here is NOT re-asked mid-run. A mid-run question fires only for a *newly discovered* block when `block_policy=ask`, and the total number of such mid-run questions is itself bounded by `DEVBREW_QUALITY_GATES_RUNTIME_MAX_RESOLUTIONS`.
 
-**Cost heads-up (AC13):** if the plan includes a web process-start surface (a heavy interactive flow on the inherited model), print one line before dispatching: `> Runtime gate will boot a web app and drive browser flows (heavier; inherited model).`
+**Cost heads-up (AC13):** if the plan includes a web process-start surface (a heavy interactive flow on the subagent's resolved tier), print one line before dispatching: `> Runtime gate will boot a web app and drive browser flows (heavier; subagent's resolved tier).`
 
 ## Dispatch Loop
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Spec B T7 (+ T21의 Bash 부재 절) — 신규 3 에이전트 도구·모델 표면 락.
-# AC4(쓰기·실행·위임 도구 0) · AC5(model: inherit) · N5(격리 집합 등식 L —
+# AC4(쓰기·실행·위임 도구 0) · AC5(model 키 부재) · N5(격리 집합 등식 L —
 # tools: [] 스캔 집합 == 리터럴 이름 넷)
 # Run: bash plugins/spec-distill/tests/test_brief_agents.sh
 set -u -o pipefail
@@ -18,9 +18,10 @@ for a in "${ALL[@]}"; do
   test -f "$f" || { no "에이전트 파일 부재: $a.md"; continue; }
   FM="$(fm_of "$f")"
 
-  # AC5 — model: inherit (리터럴 핀 금지, E10 선제 적용)
-  grep -qE '^model: inherit$' <<<"$FM" \
-    && ok "$a: model: inherit" || no "$a: model이 inherit이 아님 (E10 위반)"
+  # AC5 — model 키 부재 (리터럴 핀도 inherit 도 하니스가 티어를 정하는 값)
+  MODEL_KEY="^[\"']?model[\"']?[[:space:]]*:"
+  grep -qE "$MODEL_KEY" <<<"$FM" \
+    && no "$a: frontmatter 에 model 키가 있다" || ok "$a: model 키 없음"
 
   # AC4 — 쓰기·실행·위임 물리적 부재
   # tools: 값을 정규화한 뒤 토큰 단위 정확 일치(대소문자 무시)로 비교한다.

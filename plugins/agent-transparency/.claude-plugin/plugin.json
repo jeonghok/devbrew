@@ -1,7 +1,7 @@
 {
   "name": "agent-transparency",
   "description": "Reduces comprehension debt — surfaces what delegated agents did and what your judgment rests on, at decision and verdict points",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "author": {
     "name": "jeonghokim"
   }

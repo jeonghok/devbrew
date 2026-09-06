@@ -1,6 +1,5 @@
 ---
 name: blind-spot-prober
-model: inherit
 cost_class: variable
 color: red
 tools: Read, Grep, Glob, WebSearch, WebFetch
