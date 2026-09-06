@@ -422,6 +422,19 @@ for w in 유지 보완 전환 보류 kept refined switched deferred; do
   grep -q "$w" <<<"$r3_block" && ok "R3 어휘: $w" || no "R3 어휘 부재: $w (AC6)"
 done
 grep -qE 'defended|방어' <<<"$r3_block" && no "AC6: 옛 어휘 defended/방어 잔존" || ok "AC6: 옛 어휘 부재"
+# 5의례 표(`| R3 |` 행)는 r3_block 밖이다 — 그 블록은 이제 steelman.md 에서 뜨고, 표는 SKILL.md
+# 의 다른 절에 산다. 그래서 위 어휘 락이 닿지 않고, 그 자리가 조용히 옛 2값(`방어 또는 전환`)으로
+# 남았다. 요약 표는 독자가 절차 본문보다 **먼저** 믿는 자리라 따로 잠근다. 코퍼스는 $SKILL 전체.
+grep -q '방어 또는 전환' "$SKILL" \
+  && no "AC6: SKILL.md 에 옛 게이트 어휘 '방어 또는 전환' 잔존 (5의례 표 R3 행)" \
+  || ok "AC6: SKILL.md 에 옛 게이트 어휘 '방어 또는 전환' 부재"
+# 양성 짝 — 부재 단언 혼자면 표 행을 통째로 지워도 통과한다(부재는 대상이 없을 때 가장 잘 통과한다).
+ritual_r3="$(grep -m1 '^| R3 |' "$SKILL")"
+{ [[ -n "$ritual_r3" ]] \
+    && grep -qF '유지 / 보완 / 전환 / 보류' <<<"$ritual_r3" \
+    && grep -qF '검토 — steelman 0건' <<<"$ritual_r3"; } \
+  && ok "AC6: 5의례 표 R3 행이 4값 게이트 + steelman 0건 경로를 담는다 (부재락의 양성 짝)" \
+  || no "AC6: 5의례 표 R3 행이 없거나 새 어휘(유지/보완/전환/보류 · 검토 — steelman 0건)를 담지 않는다"
 for w in '재검토 열림' '재검토 사유 없음' '사용자 override'; do
   grep -q "$w" <<<"$r3_block" && ok "AC22: $w" || no "AC22: $w 부재"
 done
