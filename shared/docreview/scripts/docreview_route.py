@@ -211,7 +211,6 @@ def cmd_finalize(a) -> int:
             verdicts = blk.get("verdicts") or []
             added = blk.get("added") or []
 
-    rejected = []
     same_as = []
     for v in verdicts:
         if not isinstance(v, dict):
@@ -232,13 +231,11 @@ def cmd_finalize(a) -> int:
                 L.reject(f, str(v["evidence"]))
             else:
                 L.coerced("verdict", "reject", "confirm")
-                it["_verdict_invalidated"] = True
         elif vd == "raise":
             if to in RANK and (it["disposition"] is None or RANK[to] > RANK[it["disposition"]]):
                 it["disposition"] = to
             elif to in RANK:
                 L.coerced("disposition", to, it["disposition"])
-                it["_verdict_invalidated"] = True
             if v.get("layer") == 1 and it["layer"] == 2:
                 it["layer"] = 1
         else:
@@ -312,23 +309,12 @@ def cmd_finalize(a) -> int:
         it["origin"] = "reviewer"
         it["immutable"] = cls["immutable"]
         it["kind"] = "pre"
-        # 실행 노트(R1) — `_verdict_invalidated` 는 이 라운드에 recritic 검증이 이미
-        # 그 항목에 개입해 coerced 로 계수된 경우(무효 reject → confirm 취급 · 하향
-        # raise 무시)를 표시한다. §6.3 의 보호/불변 승격("처분 무관하게")은 검증이
-        # 손대지 않은 항목의 안전망이다 — 이미 한 번 재비판을 거쳐 처분이 그대로
-        # 확정된 항목에 같은 라운드 안에서 또 다른 자동 승격을 얹으면 사람이 못 보는
-        # 이중 강제가 된다. c6(T06)·c7(T04) 가 그 자리다: 둘 다 보호 부류 앵커
-        # (#11-acceptance-criteria·#51-parts, 각각 Acceptance Criteria·Architecture
-        # 캐스케이드 패턴)에 있지만 recritic 이 이미 개입했으므로 승격을 면제한다.
-        # c2(T10)·c0(T09) 는 검증이 손대지 않았거나(코덱 부재 상태에서의 c0) 순수
-        # confirm(c2, coercion 없음)이라 안전망이 그대로 적용된다.
-        invalidated = bool(it.pop("_verdict_invalidated", False))
-        if cls["immutable"] and d == "fix" and not invalidated:
+        if cls["immutable"] and d == "fix":
             it["promoted_from"] = "fix"
             it["promotion"] = "immutable"
             it["disposition"] = "decide"
             it["origin"] = "auto"
-        elif cls["protected"] and d != "decide" and not invalidated and not _permit_covers(st, n, it["anchor"]):
+        elif cls["protected"] and d != "decide" and not _permit_covers(st, n, it["anchor"]):
             it["promoted_from"] = d
             it["promotion"] = "protected"
             it["disposition"] = "decide"

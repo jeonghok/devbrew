@@ -35,17 +35,17 @@
   blocks: [c1]
 - ref: c5
   category: ambiguity
-  anchor: "#11-acceptance-criteria"
+  anchor: "#1-context"
   disposition: fix
   summary: "AC1 의 '관측 가능한' 이 무엇인지 없다"
 - ref: c6
   category: ambiguity
-  anchor: "#11-acceptance-criteria"
+  anchor: "#1-context"
   disposition: fix
   summary: "AC 가 하나뿐이라 Goals B 를 덮지 않는다"
 - ref: c7
   category: isolation
-  anchor: "#51-parts"
+  anchor: "#handoff-context"
   disposition: fix
   supersedes: "zzzz9999#r0.1"
   summary: "부품 경계가 흐리다"

@@ -19,6 +19,7 @@ case_T07_codex_no_disposition
 case_T08_defer_disallowed
 case_T09_disallowed_up
 case_T10_protected_decide
+case_T10_invalidated_reject_still_promotes
 case_T11_permit_keeps_disposition
 case_T12_immutable_fix_to_decide
 case_T13_ids_distinct

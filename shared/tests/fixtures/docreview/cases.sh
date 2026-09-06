@@ -398,6 +398,21 @@ case_T10_protected_decide() {
   assert_eq "$(fsum "$d" '목표 B' '["decision_view"]["auto"]')" "True" "T10: 자동 채움 표시 [auto]"
   rm -rf "$d"
 }
+# 회귀 방지 — 리뷰 라운드가 되돌린 것: recritic 의 무효 검증(evidence 없는 reject)이
+# 보호 앵커의 fix 를 승격에서 면제해서는 안 된다. §6.3 의 보호 규칙은 "처분 무관하게" 이고
+# 예외는 유효 permit 하나뿐이다 — 검증이 그 항목을 건드렸든 안 건드렸든 균일하게 적용된다.
+case_T10_invalidated_reject_still_promotes() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  local t; t="$(mktemp -t cr-XXXXXX.txt)"
+  printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#11-acceptance-criteria"\n  disposition: fix\n  summary: "회귀 방지: 무효 reject 뒤에도 보호 승격"\n```\n' > "$t"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep.json"
+  local rt; rt="$(mktemp -t rt-XXXXXX.txt)"
+  printf '```docreview-recritic\nverdicts:\n  - f: "f1"\n    verdict: reject\nadded: []\n```\n' > "$rt"
+  py docreview_route.py finalize --state-dir "$d" --recritic "$rt" --doc "$FX/design-sample.md" > "$d/fin.json"
+  assert_eq "$(fsum "$d" '회귀 방지' '["disposition"]')" "decide" "T10 회귀: 보호 앵커의 fix 는 evidence 없는 reject(무효 → confirm 취급) 뒤에도 승격된다"
+  assert_eq "$(fsum "$d" '회귀 방지' '["promotion"]')" "protected" "T10 회귀: 승격 사유는 protected — 검증 개입 여부와 무관하게 균일 적용"
+  rm -rf "$d" "$t" "$rt"
+}
 case_T11_permit_keeps_disposition() {
   local d; d="$(route_r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
   local gid; gid="$(fsum "$d" '목표 B' '["id"]')"
@@ -433,7 +448,7 @@ case_T14_T15_lineage() {
   assert_eq "$fid" "$lin" "T14: 새 finding 의 계보 뿌리는 자기 id"
   next_round "$d" "$FX/design-sample.md" >/dev/null
   local t; t="$(mktemp -t cr-XXXXXX.txt)"
-  printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#11-acceptance-criteria"\n  disposition: fix\n  summary: "AC 가 여전히 하나뿐이다"\n- ref: c2\n  category: ambiguity\n  anchor: "#11-acceptance-criteria"\n  disposition: fix\n  supersedes: "%s"\n  summary: "명시 지목"\n```\n' "$fid" > "$t"
+  printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#1-context"\n  disposition: fix\n  summary: "AC 가 여전히 하나뿐이다"\n- ref: c2\n  category: ambiguity\n  anchor: "#1-context"\n  disposition: fix\n  supersedes: "%s"\n  summary: "명시 지목"\n```\n' "$fid" > "$t"
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
   py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin.json"
   assert_eq "$(fsum "$d" '명시 지목' '["lineage"]')" "$lin" "T14: supersedes 실재 → 그 계보"
@@ -445,7 +460,7 @@ case_T15_auto_lineage() {
   local lin; lin="$(fsum "$d" 'AC 가 하나뿐' '["lineage"]')"
   next_round "$d" "$FX/design-sample.md" >/dev/null
   local t; t="$(mktemp -t cr-XXXXXX.txt)"
-  printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#11-acceptance-criteria"\n  disposition: fix\n  summary: "지목 없이 같은 자리"\n```\n' > "$t"
+  printf '```docreview-layer1\n[]\n```\n```docreview-layer2\n- ref: c1\n  category: ambiguity\n  anchor: "#1-context"\n  disposition: fix\n  summary: "지목 없이 같은 자리"\n```\n' > "$t"
   py docreview_route.py prepare-recritic --state-dir "$d" --critic "$t" --codex "$FX/codex-failed.yaml" > "$d/prep2.json"
   py docreview_route.py finalize --state-dir "$d" --recritic "$FX/recritic-missing.txt" --diff "$d/diff2.json" --doc "$FX/design-sample.md" > "$d/fin.json"
   assert_eq "$(fsum "$d" '지목 없이' '["lineage"]')" "$lin" "T15: 지목이 없으면 같은 bucket 의 열린 이전 finding 에 자동 연결(순번 낮은 것부터)"
