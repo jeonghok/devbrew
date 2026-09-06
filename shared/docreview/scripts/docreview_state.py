@@ -562,10 +562,17 @@ def gate_summary(st) -> dict:
     dec = st["decides"]
     fx = st["fixes"]
     asks = st["asks"]
+    # 승인을 막는 것은 `open` 과 `adopted` 다(§6.4). `expired` 는 「같은 계보의 새 decide 로
+    # 다시 올라온다」가 전제이므로, 그 후속이 실제로 생긴 뒤에는 의무를 후속이 진다 — 후속이
+    # 열려 있으면 그것이 막고, 사용자가 후속을 기각·보류했으면 그 결정이 산다. 후속이 아직
+    # 없는 동안(재상승 예약이 route 를 통과하기 전, 또는 그 변환이 실패한 경우)에는 의무를
+    # 아무도 지지 않으므로 만료 항목 자신이 계속 막는다 — fail-closed.
+    superseded = {f.get("supersedes") for f in st["findings"].values() if f.get("supersedes")}
     g = {
         "round": n, "rereview_count": rr, "cap_reached": rr >= REREVIEW_CAP,
         "open_decide": sorted(i for i, d in dec.items() if d["state"] == "open"),
-        "adopted": sorted(i for i, d in dec.items() if d["state"] in ("adopted", "expired")),
+        "adopted": sorted(i for i, d in dec.items()
+                          if d["state"] == "adopted" or (d["state"] == "expired" and i not in superseded)),
         "unapplied_fix": sorted(i for i, f in fx.items() if f["state"] in ("pending", "intent_passed")),
         "held_fix": sorted(i for i, f in fx.items() if f["state"] == "held"),
         "asks_open": sorted(i for i, x in asks.items() if not x.get("answered")),

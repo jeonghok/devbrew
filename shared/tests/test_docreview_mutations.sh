@@ -166,4 +166,9 @@ mut same_as_min case_T02_same_as_max sed_route 's/keep = max(live, key=lambda m:
 # 낸다. 미래에 엔진이 바뀌어 이 sed 가 더는 안 죽어도 같은 방식으로 소리 낸다(판정이
 # caught 가 되어 기대 unmeasurable 과 불일치) — 조용히 멎지 않는다.
 mut_expect unmeasurable canary_crash case_T05_T06_reject sed_route 's/if v.get("evidence"):/if True:/'
+# ⑫ 만료 항목의 「후속이 지는 의무」를 없애기 — 후속이 있든 없든 expired 가 영구히 막는다.
+# 하향 방향: 승인 게이트가 이행된 계보에도 안 열린다. 값만 어긋나고 크래시는 없다
+# (`superseded` 집합은 그대로 계산되고 쓰이지만 않는다 — 미사용 지역변수라 traceback 없음).
+mut expired_blocks_forever case_T22b_expired_superseded_unblocks sed_state \
+  's/if d\["state"\] == "adopted" or (d\["state"\] == "expired" and i not in superseded)/if d["state"] in ("adopted", "expired")/'
 finish

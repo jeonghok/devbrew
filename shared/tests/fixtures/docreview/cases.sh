@@ -116,6 +116,8 @@ seed_findings() {   # seed_findings <state-dir> <json-text>
 F_DEC='{"id":"aaaa0001#r1.1","lineage":"aaaa0001#r1.1","bucket":"aaaa0001","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#12-files-to-modify","edit_scope":"#12-files-to-modify","disposition":"decide","summary":"파일 목록이 두 가지로 읽힌다","evidence":"12행","blocks":[],"kind":"pre"}'
 F_FIX='{"id":"bbbb0001#r1.1","lineage":"bbbb0001#r1.1","bucket":"bbbb0001","origin":"reviewer","layer":2,"category":"placeholder","anchor":"#12-files-to-modify","edit_scope":"#12-files-to-modify","disposition":"fix","summary":"c.py 가 빠졌다","evidence":null,"blocks":[]}'
 F_ASK='{"id":"cccc0001#r1.1","lineage":"cccc0001#r1.1","bucket":"cccc0001","origin":"reviewer","layer":2,"category":"ambiguity","anchor":"#12-files-to-modify","edit_scope":"#12-files-to-modify","disposition":"ask","summary":"b.py 를 유지하나?","evidence":null,"blocks":["bbbb0001#r1.1"]}'
+# 라운드 2 의 재상승 항목 — F_DEC 의 계보를 이어받아 만료 항목을 supersedes 한다(라우터가 붙이는 최종 모양).
+F_DEC_R2='{"id":"aaaa0001#r2.1","lineage":"aaaa0001#r1.1","bucket":"aaaa0001","supersedes":"aaaa0001#r1.1","origin":"auto","layer":2,"category":"ambiguity","anchor":"#12-files-to-modify","edit_scope":"#12-files-to-modify","disposition":"decide","summary":"채택 후 미적용(expired): 파일 목록이 두 가지로 읽힌다","evidence":"라운드 2 에 채택 변경 관측 없음","blocks":[],"kind":"pre"}'
 F_POST='{"id":"dddd0001#r2.1","lineage":"dddd0001#r2.1","bucket":"dddd0001","origin":"auto","layer":2,"category":"frozen_change","anchor":"#12-files-to-modify","edit_scope":"#12-files-to-modify","disposition":"decide","summary":"finding 없이 바뀜","evidence":"hash a→b","blocks":[],"kind":"post","prev_hash":"PREV"}'
 st_yaml() {   # st_yaml <state-dir> <python-expr over st>   — heredoc-in-$() 파싱 함정을 피해 파일로 둔다
   python3 "$FX/st_get.py" "$1/docreview-state.md" "$2"
@@ -170,6 +172,19 @@ case_T22_permit_expired_reraise() {
   next_round "$d" "$FX/design-sample.md" >/dev/null       # 변경 없음
   assert_eq "$(jget "$d/obs2.json" 'd["expired"], [r["finding_id"] for r in d["reraise"]]')" "(['aaaa0001#r1.1'], ['aaaa0001#r1.1'])" "T22: 변경 없음 → expired + 같은 계보 재상승 예약"
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["approval_ready"]')" "False" "T22: expired 는 승인을 막는다(열린 계보)"
+  rm -rf "$d"
+}
+case_T22b_expired_superseded_unblocks() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' >/dev/null
+  next_round "$d" "$FX/design-sample.md" >/dev/null       # 라운드 2 — 변경 없음 → expired
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["adopted"], d["approval_ready"]')" "(['aaaa0001#r1.1'], False)" "T22b: 후속이 아직 없는 expired 는 계속 막는다(의무를 아무도 안 짐)"
+  seed_findings "$d" "[$F_DEC_R2]"                        # 재상승이 라운드 2 의 decide 로 들어옴
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["adopted"], d["open_decide"], d["approval_ready"]')" "([], ['aaaa0001#r2.1'], False)" "T22b: 후속이 생기면 만료 항목은 안 막고 후속(open)이 막는다"
+  py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r2.1' --choice adopt --quote '이번엔 적용한다' >/dev/null
+  next_round "$d" "$FX/design-sample-r2.md" >/dev/null    # 라운드 3 — permit 앵커 변경 관측
+  assert_eq "$(st_yaml "$d" 'st["decides"]["aaaa0001#r1.1"]["state"], st["decides"]["aaaa0001#r2.1"]["state"]')" "('expired', 'applied')" "T22b: 계보 상태 — 만료 그대로 + 후속 applied"
+  assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["approval_ready"]')" "True" "T22b·C1: 후속을 채택·적용하면 승인 게이트가 다시 열린다"
   rm -rf "$d"
 }
 case_T23_post_adopt_applied() {

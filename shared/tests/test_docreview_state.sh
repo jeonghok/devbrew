@@ -18,6 +18,7 @@ case_T19_reject_closes
 case_T20_hold_becomes_ask
 case_T21_permit_applied
 case_T22_permit_expired_reraise
+case_T22b_expired_superseded_unblocks
 case_T23_post_adopt_applied
 case_T24_post_reject_revert_permit
 case_T25_revert_observed
