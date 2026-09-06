@@ -66,11 +66,22 @@ FENCED_JSON_RE = re.compile(r"```json\s*\n(.*?)\n?```", re.DOTALL)
 DEFAULT_KEYS = ("file", "line", "severity", "confidence", "summary", "proposed_fix")
 DESIGN_KEYS = ("file", "line", "category", "target_section",
                "severity", "confidence", "summary", "proposed_fix")
-# docreview 엔진(설계 §6.2)의 리뷰어 출력 필드 전부. `blocks`만 리스트값이라
-# yaml_emit에 flow 렌더 분기가 필요하다(default·design 둘 다 리스트 필드가 없어
-# 그 분기는 이 둘의 출력 바이트를 바꾸지 않는다 — AC18).
+# docreview 엔진(설계 §6.2)의 리뷰어 출력 필드 전부. `blocks`만 리스트값이다
+# (`ask` 전용 — 그 답이 전제인 fix 의 ref 목록, D16). `supersedes`는 값 하나(이전
+# 라운드 finding id)라 리스트가 아니다.
 DOCREVIEW_KEYS = ("ref", "layer", "category", "anchor", "disposition", "summary",
                   "edit_scope", "blocks", "supersedes", "evidence")
+
+# yaml_emit의 flow-list 렌더 분기가 발동해도 되는 키의 **닫힌 집합**. `isinstance(v,
+# list)`만으로 분기하면 안 된다 — codex 출력은 신뢰 안 되는 외부 LLM 생성 입력이고,
+# 이 파일은 이미 그런 입력의 다른 기형(비-dict 원소·비-list `findings`·`[CRITICAL]`
+# 접두)을 방어한다. 이 축만 안 방어하면 `default`/`design` finding 에 스칼라 계약
+# 필드(예: `file`)가 기형으로 list 값을 실었을 때 flow-list로 렌더되어 옛 `_yaml_
+# scalar(...)`의 인용된 str() 폴백과 다른 바이트를 낸다 — AC18 위반(실측, 리뷰
+# 라운드 1: `{"file": ["a.py","b.py"], ...}` → `file: [a.py, b.py]`, 이전은
+# `file: "['a.py', 'b.py']"`). `default`·`design`은 이 집합에 든 키가 없으므로
+# 그 두 keyset의 모든 필드는 값 타입과 무관하게 항상 `_yaml_scalar` 폴백을 탄다.
+_LIST_VALUED_KEYS = frozenset({"blocks"})
 
 
 def parse_fenced_json(text: str) -> dict | None:
@@ -102,7 +113,7 @@ def yaml_emit(findings: list[dict], meta: dict, keys: tuple[str, ...] = DEFAULT_
             for k in keys:
                 if k in f:
                     v = f[k]
-                    if isinstance(v, list):
+                    if k in _LIST_VALUED_KEYS and isinstance(v, list):
                         out.append(f"    {k}: [{', '.join(_yaml_scalar(x) for x in v)}]")
                     else:
                         out.append(f"    {k}: {_yaml_scalar(v)}")

@@ -312,6 +312,34 @@ class DocreviewKeys(unittest.TestCase):
             "    proposed_fix: f\nmeta:\n  codex_failed: false\n",
         )
 
+    def test_default_and_design_ignore_list_valued_scalar_field(self):
+        """리뷰 라운드 1 CRIT-1 회귀 가드 — `yaml_emit` 의 flow-list 분기는
+        `isinstance(v, list)` 만으로 열리면 안 된다. codex 출력은 신뢰 안 되는 외부
+        LLM 생성 입력이라, `default`/`design` 이 선언한 스칼라 계약 필드(`file` ·
+        `category`)에 기형으로 list 값이 실려도(`{"file": ["a.py","b.py"], ...}`)
+        그 keyset 의 출력 바이트는 바뀌면 안 된다 — `blocks`(DOCREVIEW_KEYS 전용) 가
+        아닌 키는 항상 옛 `_yaml_scalar(...)` 의 인용된 `str()` 폴백을 타야 한다.
+        기대값은 `git show 81b0c9b:shared/codex/codex_findings_to_yaml.py`(이 필드
+        분기가 생기기 전 버전)를 **독립 실행**해 얻은 실측 바이트다 — 지금 코드에서
+        다시 계산한 값이 아니다(항진명제 방지, 위 test_..._match_committed_fixture
+        와 같은 원칙)."""
+        payload = _wrap('[{"file":["a.py","b.py"],"line":3,"severity":"high",'
+                        '"summary":"s","proposed_fix":"f"}]')
+        self.assertEqual(
+            run(payload),
+            "findings:\n  - agent: codex-reviewer\n    file: \"['a.py', 'b.py']\"\n"
+            "    line: 3\n    severity: high\n    summary: s\n    proposed_fix: f\n"
+            "meta:\n  codex_failed: false\n",
+        )
+        d = _wrap('[{"category":["x","y"],"target_section":"#a","severity":"high",'
+                  '"summary":"s","proposed_fix":"f"}]')
+        self.assertEqual(
+            run(d, argv_extra=("--emit-keys", "design")),
+            "findings:\n  - agent: codex-reviewer\n    category: \"['x', 'y']\"\n"
+            '    target_section: "#a"\n    severity: high\n    summary: s\n'
+            "    proposed_fix: f\nmeta:\n  codex_failed: false\n",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
