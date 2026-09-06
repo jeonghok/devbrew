@@ -78,6 +78,7 @@
 | P12 | **stagnation 의 «열린 계보 집합»** = 다음 상태의 finding 계보 — decide `open`/`adopted`/`expired` · fix `pending`/`intent_passed`/`held`/`escalated` · `blocks` 가 비지 않은 미응답 ask. `defer`·`drop`·`rejected`·`applied`·`dropped`·응답된 ask 는 닫힌 것 | §8.4 의 «저자가 움직이지 않았다» 를 재려면 저자에게 열린 일의 집합이어야 한다 | — |
 | P13 | **사후 auto decide 의 「채택」은 progress 에 세지 않는다** | §8.4 의 진행은 「check-intent 통과 fix 적용」과 「permit 을 통한 채택 결정의 적용」 둘이다. 이미 일어난 변경의 사후 승인은 어느 쪽도 아니다 | 「사후 승인도 진행이다」 |
 | P14 | **PR 1 의 시작은 로컬 `main`(319ed43) 병합이다** | 이 워크트리의 base 는 `5a56e4c` 인데 로컬 `main` 은 그 뒤 16 커밋(agent `model:` 제거 · 버전 bump · 락 반전)이 머지돼 있다. 그 위에서 만든 agent 는 병합 시 `model:` 락과 충돌한다 | 「`5a56e4c` 위에서 그대로 가라」 |
+| P15 | **`test_copy_of_contract.sh` 축 1c 의 제외 조건을 「실행 지점(`^if __name__`)이 있음」에서 「실행 지점이 있고 **동시에 축 1a(심볼릭 링크)로 배포됨**」으로 좁힌다.** 그 면제가 성립하도록 `docreview_state.py`·`docreview_anchor.py` 의 두 호스트 `scripts/` 링크를 Task 10 이 아니라 **Task 2+4 에서** 심는다 | `docreview_state.py` 는 계획의 인터페이스상 CLI(`init`·`begin-round`·`profile-check`)이면서 형제 import 대상(`docreview_anchor.py`)이라, 이 리포에서 그 조합을 만든 첫 파일이다(기존 import-소비 `shared/*.py` 6건은 전부 import-only). 축 1c 분류기는 `^if __name__` 이 있는 것을 빼고 **뺀 게 있으면 RED** 를 내므로 Task 10 의 링크로도 사라지지 않는다. 락 자신의 주석 둘이 이미 분업을 선언한다 — 「배포 소비자가 import 하는 모듈은 실행 지점이 있든 없든 설치본에 형제가 필요하다」 + 「심볼릭 링크로 배포되는 정본은 형제 사본이 아니라서 여기 걸리지 않는다, 그쪽 계약은 축 1a 가 진다」. 분류기가 그 선언을 따라잡지 못한 것이다. 이빨은 남는다: 배포가 아예 없는데 떨어지는 모듈은 여전히 RED. 사용자 결정(2026-09-06), 대안 둘(RED 를 Task 10 까지 안고 가기 · CLI 를 별도 파일로 떼어 아키텍처 변경)을 보고 고름 | 「필터를 원래대로 되돌리고 CLI 를 별도 파일로 떼라」 |
 
 ## D13 — finding · decide 상태 × 사건 전이표 (정본)
 
@@ -3935,7 +3936,9 @@ codex 부재·critic 층 2 부재·recritic 부재는 `fin.json` 의 `advisory[]
 EOF
 ```
 
-- [ ] **Step 2: 임시 링크 제거 + `scripts/` 링크 심기**
+- [ ] **Step 2: 임시 링크 제거 + 남은 `scripts/` 링크 심기**
+
+`docreview_state.py` · `docreview_anchor.py` 의 링크는 **Task 2+4 가 이미 심었다**(ruling R7 — 축 1c 분류기의 새 면제가 「축 1a 로 배포됨」을 조건으로 삼으므로 그 두 링크가 그때 실재해야 했다). 이 Step 이 새로 심는 것은 `docreview_route.py` 와 `run_docreview_codex_reviewer.sh` 둘이다. 아래 루프는 `ln -sf` 라 이미 있는 둘에 대해 idempotent 하다 — 그대로 돌려도 되고, 네 개 전부가 링크인지 확인하는 값이 있다.
 
 ```bash
 rm -f shared/docreview/scripts/adjudication.py   # Task 6 의 임시(있으면)
