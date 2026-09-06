@@ -226,6 +226,17 @@ def cmd_init(a) -> int:
     return 0
 
 
+def cmd_profile_check(a) -> int:
+    try:
+        prof = load_profile(a.profile)
+    except ProfileError as e:
+        fail("profile_invalid", detail=str(e), profile=a.profile)
+        return 2
+    pub = {k: v for k, v in prof.items() if k != "body"}
+    print(json.dumps(pub, ensure_ascii=False, indent=1))
+    return 0
+
+
 def cmd_begin_round(a) -> int:
     st = load_state(a.state_dir)
     snap = json.loads(Path(a.snapshot).read_text(encoding="utf-8"))
@@ -262,6 +273,8 @@ def build_parser() -> argparse.ArgumentParser:
     x = sp.add_parser("begin-round"); x.add_argument("--state-dir", required=True)
     x.add_argument("--snapshot", required=True); x.add_argument("--extra-approval", default=None)
     x.set_defaults(fn=cmd_begin_round)
+    x = sp.add_parser("profile-check"); x.add_argument("profile")
+    x.set_defaults(fn=cmd_profile_check)
     return p
 
 
