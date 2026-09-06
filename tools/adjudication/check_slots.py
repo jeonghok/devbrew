@@ -33,9 +33,11 @@ FORBIDDEN_KINDS = ("prior_verdict", "score", "orchestrator_framing")
 # ⓔ 에 해당하는 것은 «하나»였다 — `blind-spot-prober.framing`. 판정 근거:
 #   · `steelman-builder.direction`/`trigger` — 지목됐으나 ⓔ 가 아니다.
 #     `direction` 은 «사용자가 고른 방향»의 재진술(과업의 대상)이고,
-#     `trigger` 는 게이트를 발동시킨 네 값 중 하나를 대는 enum 이다
-#     (landscape 모순 / anti-pattern / 제약 충돌 / neglect). 둘 다 이 agent 가
+#     `trigger` 는 게이트를 발동시킨 세 값 중 하나를 대는 enum 이다
+#     (landscape 모순 / anti-pattern / 제약 충돌). 둘 다 이 agent 가
 #     내야 할 «대안»에 대한 오케스트레이터의 기대가 아니다 → ⓐ.
+#     2026-09-06 재설계로 슬롯 셋이 늘었다: `goal`·`constraints` 는 사용자 발화 원문 → ⓑ.
+#     `premises` 는 orchestrator 가 도출한 전제 목록 → ⓔ, 면제 등재(위 EXEMPT_SLOTS).
 #   · `coverage-mapper.ledger_state` — 원장 «상태»의 요약이지 판단이 아니다 → ⓐ.
 #   · `pr-understanding-builder.context` — `build-pr-context` 가 만든 blob → ⓑ.
 #   · `transcript-reader.inventory` — `prepare_standup.py` 출력 → ⓐ.
@@ -70,13 +72,22 @@ EXEMPT_SLOTS = {
         "위험은 남는다 — 재구성이 이미 잃은 것은 프로버도 못 본다. 그 "
         "축은 이 락이 아니라 reviewing-brief 의 충실도 단계가 §6 원문 대비로 "
         "따로 잰다(brief-critic).",
+    ("spec-distill:steelman-builder", "premises"):
+        "C6(1) 이 agent 의 과업은 «그 전제 목록에 대한» 반증 판정과 목록 자체의 반박이다 — "
+        "대상이 정의상 orchestrator 가 R1 에서 도출한 그 목록이라 대응물이 없다. 다른 값(사용자 "
+        "원문)을 넣으면 builder 가 자기 전제를 세우고 그것을 치게 되어 C16 의 목적(전제 목록이 "
+        "원안 저자의 상상력 경계를 물려받지 않게 한다)을 잃는다. 잔여 위험은 남는다 — 도출이 이미 "
+        "잃은 전제는 builder 도 못 본다(brief OQ2). 면제 범위는 이 슬롯 하나로 좁혔다: goal 과 "
+        "constraints 는 사용자 원문(artifact)으로 넘긴다. 설계 "
+        "docs/superpowers/specs/2026-09-06-steelman-goal-fit-design.md §6.7.",
 }
 
 # 면제 «크기»의 회귀 축 — L1 의 `EXEMPT_BASELINE` 과 같은 규율(최종 리뷰 A/m2
 # 를 두 등록부에 대칭으로 적용한다. 한쪽에만 두면 다음 우회가 안 걸린 쪽으로
 # 간다 — Task 11b Step 4b 가 고친 비대칭과 같은 모양이다). 전부 면제로 넣으면
 # L3(b)가 장식이 되는 것이 설계 M8 이 이 수를 재는 이유다.
-EXEMPT_SLOTS_BASELINE = 4
+# 2026-09-06 4→5: steelman-builder.premises (위 항목의 사유). 전제 목록은 정의상 orchestrator 종합이다.
+EXEMPT_SLOTS_BASELINE = 5
 
 # 변수명이 판정·점수를 시사하면 kind 가 금지 셋 중 하나여야 한다.
 # 그러면 면제 등재가 강제되고, 등재는 C6 인용을 요구한다.
