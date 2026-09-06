@@ -1,0 +1,1 @@
+../../../shared/docreview/scripts/run_docreview_codex_reviewer.sh

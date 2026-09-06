@@ -28,4 +28,5 @@
 | `codex/` | codex 가용성 판정 · 출력 변환 · 러너 공통 조각 · P21 프롬프트 프리앰블 |
 | `killswitch/` | kill switch 판정 |
 | `gc/` | TTL-GC 공통 조각 |
+| `docreview/` | 문서 리뷰 엔진 — 탐지·재비판 agent 둘, 앵커·라우팅·상태 스크립트 넷, 절차 reference 하나 (호스트가 프로필로 특화) |
 | `tests/` | 판정 헬퍼 · 트리거 모듈(`abort_trigger.sh` — 러너를 SIGTERM 으로 실제 중단시켜 EXIT 트랩 degrade 계약을 잰다) + 크로스-플러그인 락 |
