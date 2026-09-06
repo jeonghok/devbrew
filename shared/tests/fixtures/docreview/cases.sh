@@ -594,3 +594,113 @@ case_route_adjudication_keys() {
   assert_eq "$(jget "$d/fin.json" 'd["adjudication_accepted"] == len(d["findings"])')" "True" "route: 최종 목록 전부 accept 계수"
   rm -rf "$d"
 }
+
+# ── check-intent (Task 7) ─────────────────────────────────────────────────
+_ci() { py docreview_anchor.py check-intent "$@" 2>/dev/null; }   # rc 는 $?
+case_AC6_fix_contract() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_FIX]"
+  local out; out="$(_ci 'bbbb0001#r1.1' --intent '#12-files-to-modify' --state-dir "$d")"; local rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["contract"]')" "0 fix" "AC6: edit_scope 안 → 통과(fix 계약)"
+  assert_eq "$(st_yaml "$d" 'st["fixes"]["bbbb0001#r1.1"]["state"], len(st["applied_scopes"])')" "('intent_passed', 1)" "AC6·T27: 통과가 applied_scopes 에 남는다"
+  rm -rf "$d"; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_FIX]"
+  out="$(_ci 'bbbb0001#r1.1' --intent '#11-acceptance-criteria' --state-dir "$d")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 scope_outside_edit_scope" "AC6: edit_scope 밖 → 거부"
+  assert_eq "$(st_yaml "$d" 'st["fixes"]["bbbb0001#r1.1"]["state"], len(st["escalated"])')" "('escalated', 1)" "AC6·T28: 거부는 그 fix 를 escalated 로(다음 라운드 decide)"
+  rm -rf "$d"
+  # 보호 · 불변 · fix_anchors 밖
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  seed_findings "$d" "[${F_FIX//#12-files-to-modify/#2-goals}]"
+  out="$(_ci 'bbbb0001#r1.1' --intent '#2-goals' --state-dir "$d")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 anchor_protected" "AC6: 보호 부류 앵커 → 거부(라우터가 못 잡은 경로의 최종 방어)"
+  rm -rf "$d"; d="$(r1 "$PROF_SD/brief.md" "$FX/brief-sample.md")"
+  seed_findings "$d" "[${F_FIX//#12-files-to-modify/#6-사용자-원문}]"
+  out="$(_ci 'bbbb0001#r1.1' --intent '#6-사용자-원문' --state-dir "$d")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 anchor_immutable" "AC6: immutable → 거부"
+  rm -rf "$d"; d="$(r1 "$PROF_SD/brief.md" "$FX/brief-sample.md")"
+  seed_findings "$d" "[${F_FIX//#12-files-to-modify/#1-goal}]"
+  out="$(_ci 'bbbb0001#r1.1' --intent '#1-goal' --state-dir "$d")"; rc=$?
+  assert_eq "$rc" "1" "AC6: brief §1 은 fix_anchors 밖(+보호) → 거부"
+  rm -rf "$d"
+}
+case_AC6_insert_after() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  seed_findings "$d" "[${F_FIX//\"edit_scope\":\"#12-files-to-modify\"/\"edit_scope\":\"insert-after:#3-non-goals\"}]"
+  local out; out="$(_ci 'bbbb0001#r1.1' --intent 'insert-after:#3-non-goals' --state-dir "$d")"; local rc=$?
+  assert_eq "$rc" "0" "AC6: insert-after 의도는 finding 의 edit_scope 와 같을 때 통과(#x 자체가 보호 부류라도 — #x 본문은 안 바뀐다)"
+  rm -rf "$d"; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  seed_findings "$d" "[${F_FIX//\"edit_scope\":\"#12-files-to-modify\"/\"edit_scope\":\"insert-after:#3-non-goals\"}]"
+  out="$(_ci 'bbbb0001#r1.1' --intent 'insert-after:#2-goals' --state-dir "$d")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 scope_outside_edit_scope" "AC6: 다른 자리의 insert-after 는 거부"
+  rm -rf "$d"
+}
+case_AC6_permit_contract() {
+  # 보호 앵커(#2-goals)의 decide 를 채택 → permit 으로는 보호·fix_anchors 무관하게 통과, 라운드가 지나면 거부
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  seed_findings "$d" "[${F_DEC//#12-files-to-modify/#2-goals}]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' | jgets 'd["decision_id"]')"
+  local out rc
+  out="$(_ci 'aaaa0001#r1.1' --intent '#2-goals' --state-dir "$d" --decision-id "$did")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 permit_round_mismatch" "AC6: permit 은 다음 라운드(n+1) 것 — 같은 라운드엔 아직 아니다"
+  next_round "$d" "$FX/design-sample.md" >/dev/null   # 라운드 2 — 변경 없음이라 permit 은 아직 소모 안 됨? (observe-diff 가 expired 로 소모한다)
+  rm -rf "$d"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  seed_findings "$d" "[${F_DEC//#12-files-to-modify/#2-goals}]"
+  did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' | jgets 'd["decision_id"]')"
+  snap "$FX/design-sample.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null   # 라운드 2 진입, observe 전
+  out="$(_ci 'aaaa0001#r1.1' --intent '#2-goals' --state-dir "$d" --decision-id "$did")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["contract"]')" "0 permit" "AC6: 라운드 n+1 의 유효 permit → 보호 앵커라도 통과(permit 계약)"
+  out="$(_ci 'aaaa0001#r1.1' --intent '#12-files-to-modify' --state-dir "$d" --decision-id "$did")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 scope_outside_permit" "AC6: permit 의 apply_anchors 밖은 거부"
+  rm -rf "$d"
+  # immutable 은 permit 으로도 못 넘는다
+  d="$(r1 "$PROF_SD/brief.md" "$FX/brief-sample.md")"
+  seed_findings "$d" '[{"id":"eeee0001#r1.1","lineage":"eeee0001#r1.1","bucket":"eeee0001","origin":"reviewer","layer":2,"category":"omission","anchor":"#6-사용자-원문","edit_scope":"#6-사용자-원문","disposition":"decide","summary":"x","evidence":"S1","blocks":[],"kind":"pre"}]'
+  did="$(py docreview_state.py decide --state-dir "$d" --id 'eeee0001#r1.1' --choice adopt --quote '채택' | jgets 'd["decision_id"]')"
+  snap "$FX/brief-sample.md" "$d/s2.json"; py docreview_state.py begin-round --state-dir "$d" --snapshot "$d/s2.json" >/dev/null
+  out="$(_ci 'eeee0001#r1.1' --intent '#6-사용자-원문' --state-dir "$d" --decision-id "$did")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 anchor_immutable" "AC6·AC11: immutable 은 permit 으로도 절대 못 넘는다(immutable 플래그 없는 decide 의 permit 이 §6 을 겨눈 경우)"
+  rm -rf "$d"
+}
+# [Task 7 실행 노트] 위 세 케이스는 brief 축자다. brief Step 2 의 문면 코드는 이 케이스들과
+# 스스로 어긋난다 — (a) fix_allowed 검사가 immutable 검사보다 먼저면 브리프 §6 케이스가
+# `anchor_not_in_fix_anchors` 로 나와 위 기대(`anchor_immutable`)와 다르고, (b) protected·
+# fix_allowed·immutable 검사를 insert-after 에도 그대로 적용하면 `#3-non-goals`(Non-goals 는
+# 보호 부류, 직접 실측 확인)가 `anchor_protected` 로 막혀 위 insert-after 통과 기대와 어긋난다.
+# 설계 §7 은 insert-after 에 「#x 바로 뒤에 새 섹션 하나」외의 제약을 두지 않는다(#x 본문은
+# 안 바뀐다) — 그래서 구현은 insert-after 모드에서 found 검사만 하고, 일반 앵커 모드에서는
+# immutable 을 fix_allowed·protected 보다 먼저 본다(면 브리프 문면과 다르지만 설계·이 브리프의
+# 케이스 둘 다와 일치 — 권위는 설계 > 계획 > 브리프 코드). 아래는 그 재정렬이 없으면 못 잡는
+# 나머지 사유들을 채운다(12개 중 이 파일이 reason 값까지 재는 것 전부).
+case_AC6_reject_reasons_extra() {
+  local d out rc
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  out="$(_ci 'zzzz9999#r1.1' --intent '#12-files-to-modify' --state-dir "$d")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 unknown_finding" "AC6: 존재하지 않는 finding-id → unknown_finding"
+  seed_findings "$d" "[$F_DEC]"
+  out="$(_ci 'aaaa0001#r1.1' --intent '#12-files-to-modify' --state-dir "$d")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 not_a_fix" "AC6: disposition=decide 인 finding 에 check-intent → not_a_fix"
+  out="$(_ci 'aaaa0001#r1.1' --intent '#12-files-to-modify' --state-dir "$d" --decision-id 'D9.9')"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 unknown_permit" "AC6: 존재하지 않는 decision-id → unknown_permit(finding 은 실재)"
+  rm -rf "$d"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_FIX]"
+  py docreview_state.py fix --state-dir "$d" --id 'bbbb0001#r1.1' --event hold >/dev/null
+  out="$(_ci 'bbbb0001#r1.1' --intent '#12-files-to-modify' --state-dir "$d")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 fix_not_pending" "AC6: held 상태의 fix → fix_not_pending"
+  rm -rf "$d"
+  d="$(r1 "$PROF_SD/brief.md" "$FX/brief-sample.md")"
+  seed_findings "$d" "[${F_FIX//#12-files-to-modify/#1-goal}]"
+  out="$(_ci 'bbbb0001#r1.1' --intent '#1-goal' --state-dir "$d")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 anchor_not_in_fix_anchors" "AC6: fix_anchors 밖(같은 앵커가 보호이기도 하나 이 판정이 먼저 온다)"
+  rm -rf "$d"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  seed_findings "$d" "[${F_FIX//\"edit_scope\":\"#12-files-to-modify\"/\"edit_scope\":\"insert-after:#zzz-missing\"}]"
+  out="$(_ci 'bbbb0001#r1.1' --intent 'insert-after:#zzz-missing' --state-dir "$d")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 insert_after_unresolved" "AC6: insert-after 대상이 스냅샷에 없다 → insert_after_unresolved"
+  rm -rf "$d"
+  d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"; seed_findings "$d" "[$F_DEC]"
+  local did; did="$(py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '채택' | jgets 'd["decision_id"]')"
+  next_round "$d" "$FX/design-sample.md" >/dev/null   # observe-diff 가 미적중으로 이 permit 을 이미 소모한다
+  out="$(_ci 'aaaa0001#r1.1' --intent '#12-files-to-modify' --state-dir "$d" --decision-id "$did")"; rc=$?
+  assert_eq "$rc $(printf '%s' "$out" | jgets 'd["reason"]')" "1 permit_consumed" "AC6: 이미 소모된 permit → permit_consumed"
+  rm -rf "$d"
+}

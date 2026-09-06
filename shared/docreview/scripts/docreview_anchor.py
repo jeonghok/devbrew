@@ -213,6 +213,86 @@ def cmd_refs(a) -> int:
     return 0
 
 
+# ── 패치 의도 (AC6) ─────────────────────────────────────────────────────
+def _reject(reason, **extra):
+    out = {"ok": False, "reason": reason}
+    out.update(extra)
+    print(json.dumps(out, ensure_ascii=False))
+    return 1
+
+
+def cmd_check_intent(a) -> int:
+    """두 계약. 일반 fix: 앵커가 그 finding 의 edit_scope 안이고 프로필 fix_anchors 안이며
+    보호 부류·immutable 이 아니어야 한다(넷 다 위반이면 escalate 로 다음 라운드 decide 로).
+    decision permit: decision_id 가 유효하고 라운드가 맞고 그 apply_anchors 안이면
+    edit_scope·fix_anchors·보호 부류를 우회하되 immutable 만은 절대 못 넘는다(AC11 — 예외 0).
+
+    `insert-after:#x` 는 #x 자체의 본문을 바꾸지 않고 그 뒤에 새 섹션을 더하는 것이라, #x 의
+    보호·불변·fix_anchors 는 겨누지 않는다(설계 §7 「#x 바로 뒤에 새 섹션 하나만 허용」 — 그 이상의
+    제약은 없다) — 스냅샷에서 #x 를 찾을 수 있는지(`found`)만 확인한다. 일반 앵커에서는 immutable 을
+    가장 먼저 본다: brief §6 류는 fix_anchors 밖이기도 하지만 그 사유를 anchor_not_in_fix_anchors 로
+    흐리면 「immutable 은 예외 0」이라는 더 강한 사실이 하류에 안 보인다.
+    """
+    st = load_state(a.state_dir)
+    prof = load_profile(st["profile"])
+    n = int(st["round"])
+    sections = st["snapshots"].get(str(n), {}).get("sections", [])
+    f = st["findings"].get(a.finding_id)
+    if not f:
+        return _reject("unknown_finding", id=a.finding_id)
+    intent = a.intent.strip()
+    is_insert = intent.startswith("insert-after:")
+    target = intent.split(":", 1)[1] if is_insert else intent
+    cls = classify_anchor(target, sections, prof)
+    if a.decision_id:
+        p = st["permits"].get(a.decision_id)
+        if not p:
+            return _reject("unknown_permit", decision_id=a.decision_id)
+        if int(p["round"]) != n:
+            return _reject("permit_round_mismatch", permit_round=p["round"], round=n)
+        if p.get("consumed"):
+            return _reject("permit_consumed")
+        if intent not in p["apply_anchors"]:
+            return _reject("scope_outside_permit", apply_anchors=p["apply_anchors"])
+        if cls["immutable"]:
+            return _reject("anchor_immutable")
+        print(json.dumps({"ok": True, "contract": "permit", "scope": intent, "decision_id": a.decision_id},
+                         ensure_ascii=False))
+        return 0
+    if f.get("disposition") != "fix":
+        return _reject("not_a_fix", disposition=f.get("disposition"))
+    fx = st["fixes"].get(a.finding_id)
+    if not fx or fx["state"] not in ("pending", "intent_passed"):
+        return _reject("fix_not_pending", state=(fx or {}).get("state"))
+
+    def escalate(reason):
+        fx["state"] = "escalated"
+        st["escalated"].append({"finding_id": a.finding_id, "reason": "check-intent 거부: " + reason, "round": n})
+        save_state(a.state_dir, st, "check-intent reject %s (%s)" % (a.finding_id, reason))
+        return _reject(reason)
+
+    scope = f.get("edit_scope") or f["anchor"]
+    if intent != scope:
+        return escalate("scope_outside_edit_scope")
+    if is_insert:
+        if not cls["found"] and target != PREAMBLE:
+            return escalate("insert_after_unresolved")
+    else:
+        if cls["immutable"]:
+            return escalate("anchor_immutable")
+        if not cls["fix_allowed"]:
+            return escalate("anchor_not_in_fix_anchors")
+        if cls["protected"]:
+            return escalate("anchor_protected")
+    fx["state"] = "intent_passed"
+    fx["scope"] = intent
+    fx["round"] = n
+    st["applied_scopes"].append({"finding_id": a.finding_id, "scope": intent, "round": n})
+    save_state(a.state_dir, st, "check-intent pass %s %s" % (a.finding_id, intent))
+    print(json.dumps({"ok": True, "contract": "fix", "scope": intent}, ensure_ascii=False))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="docreview_anchor.py")
     sp = p.add_subparsers(dest="cmd", required=True)
@@ -223,6 +303,9 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--profile", required=True); x.add_argument("--snapshot", required=True)
     x.set_defaults(fn=cmd_protected)
     x = sp.add_parser("refs"); x.add_argument("anchor"); x.add_argument("doc"); x.set_defaults(fn=cmd_refs)
+    x = sp.add_parser("check-intent"); x.add_argument("finding_id")
+    x.add_argument("--intent", required=True); x.add_argument("--state-dir", required=True)
+    x.add_argument("--decision-id", default=None); x.set_defaults(fn=cmd_check_intent)
     return p
 
 
@@ -234,6 +317,8 @@ def main(argv=None) -> int:
         return fail("file_missing", path=str(e))
     except (ValueError, RuntimeError) as e:
         return fail("unreadable", detail=str(e))
+    except ProfileError as e:
+        return fail("profile_invalid", detail=str(e))
 
 
 if __name__ == "__main__":
