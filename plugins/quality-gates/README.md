@@ -80,6 +80,7 @@ Claude Code용 2-게이트 품질 검증 파이프라인. 멀티 플러그인 �
   `unit_within_worktree` 실패 → `unclaimed` 출력 → `continue`). 흡수자가 있는 레포에서
   이 검사가 죽은 무게라고 결론짓지 말 것 — 가장 위험한 클래스가 바로 그 축이다. regression:
   `tests/test_qa_ledger.sh`, `tests/harness/test_skill_orchestration_behavior.sh`.
+- **Law 3 (Compounding) — 문서 리뷰 엔진 기반 (v7.4.0)** — 네 문서 리뷰 자리를 통일하는 `shared/docreview/` 를 호출자 0 으로 심었다. `generic` 프로필(`references/docreview-profiles/generic.md`)이 non-code 아티팩트 자리를 데이터로 선언. `/qg critique` 의 전환(agent·reference 링크 배선, `artifact_commit.sh` 자율 커밋 루프 소멸)은 후속 major PR. 집행은 `shared/tests/test_docreview_*.sh` + 변이 매트릭스.
 
 ## 구조
 

@@ -757,31 +757,54 @@ CONSUMED_PY="$(git ls-files -- 'shared/*.py' \
         | impscan "$cm" | grep -q . && printf '%s\n' "$cf"
     done)"
 # 분류기 **뒤**의 집합 — 위에서 실행 지점(`^if __name__`)이 있는 것을 뺀다.
+# 〔2026-09-06, ruling R7 — P15, 사용자 결정〕 앞 판본은 실행 지점이 있으면 그것만으로
+# 뺐다. `docreview_state.py`(Task 2+4) 가 그 가정을 깼다 — CLI(`init`·`begin-round`)이면서
+# **동시에** 형제 import 대상(`docreview_anchor.py`)인 첫 `shared/*.py` 다. 실행 지점만
+# 보고 빼면 이 정본은 축 1c 밖으로 떨어지는데, 아직 어디에도 배포되지 않았다면(축 1a 로
+# 심볼릭 링크되지 않았다면) 그 형제 계약을 아무도 재지 않는 상태로 남는다 — 바로 아래
+# 774줄 "배포 소비자가 import 하는 모듈은 실행 지점이 있든 없든 설치본에 형제가
+# 필요하다"가 지키려는 것이 정확히 이 경우다. 반대로 축 1a 로 이미 배포됐다면(정본이
+# `SYMLINK_CANONICALS` 에 들어 있다면) 그 형제-사본 계약은 심볼릭 링크 자체가 지고
+# 있고, 그 계약의 무결성은 축 1a 의 `symlink-∀` 가 이미 잰다 — 축 1a 헤더의 "심볼릭
+# 링크로 배포되는 정본은 형제 **사본**이 아니라서 여기 걸리지 않는다, 그쪽 계약은
+# 축 1a 가 진다"는 문장이 그 분업을 선언한다. 그래서 제외 조건에 배포 여부를 **더한다**
+# (조건 완화가 아니라 강화 — 실행 지점만으로는 더 이상 충분하지 않다): 실행 지점이
+# 있고 *그리고* 이미 축 1a 로 배포된 것만 뺀다. 배포가 아예 없는 채 실행 지점만 있는
+# 모듈은 여전히 아래 ∀ 대조에 남아 RED 를 낼 수 있다 — tripwire 는 안 죽는다.
 IMPORT_ONLY_CANONICALS="$(printf '%s\n' "$CONSUMED_PY" \
   | while IFS= read -r cf; do
       [ -n "$cf" ] || continue
-      grep -qE '^if __name__ == "__main__"' -- "$cf" && continue
+      if grep -qE '^if __name__ == "__main__"' -- "$cf" \
+          && printf '%s\n' "$SYMLINK_CANONICALS" | grep -qxF -- "$cf"; then
+        continue
+      fi
       printf '%s\n' "$cf"
     done)"
 
-# 〔2026-08-18 fix round 1, F3〕 정본 집합 가드가 **합계 전용**(`n_canon -ge 1`)이면,
-# 정본이 여럿일 때 하나가 분류기에 떨어져 나가도 남은 수에 가려 GREEN 이다 — 그 정본의
-# ∀ 계약이 조용히 소멸한다(오늘 안전한 이유는 n_canon 이 우연히 1 이라서일 뿐이고,
-# 후속 태스크가 이 수를 셋으로 만든다). 축 1a 는 같은 모양에 **정본별** 가드를 갖는데
-# 축 1c 는 그것도 구조 가드도 없었다. 그래서 형제 락 `test_codex_copies_agree.sh` 의
-# `listed == burned` 와 같은 모양으로 **분류기 앞뒤 두 집합을 대조**한다. 떨어진 것이
-# 있으면 이름을 찍고 RED 다 — 배포 소비자가 import 하는 모듈은 실행 지점이 있든 없든
-# 설치본에 형제가 필요하다(보안 모듈이 컬럼 0 에 스모크 테스트를 얻는 것은 흔하다).
-while IFS= read -r cf; do
-  [ -n "$cf" ] || continue
-  printf '%s\n' "$IMPORT_ONLY_CANONICALS" | grep -qxF -- "$cf" && continue
-  no "형제-∀ 도출: $cf 는 import 로 소비되는데 실행 지점(^if __name__)이 있다는 이유로 축 1c 밖으로 떨어졌다 — 이 정본의 형제 ∀ 계약이 조용히 소멸한다"
-done <<EOF
-$CONSUMED_PY
-EOF
-n_consumed="$(printf '%s\n' "$CONSUMED_PY" | grep -c . || true)"
+# 〔2026-08-18 fix round 1, F3 — 2026-09-06 ruling R7 뒤에 폐기〕 이 자리에는 원래
+# "분류기 앞뒤 두 집합을 대조"하는 `listed == burned` 식 자기일관성 단언이 있었다:
+# `IMPORT_ONLY_CANONICALS`(뒤)가 `CONSUMED_PY`(앞)에서 실행 지점이 있는 것만 빼고 다
+# 남았는지를 개수로 확인했다. R7 이 제외 조건에 "그리고 축 1a 로 배포됨"을 더하면서
+# 그 단언은 **항진명제**가 됐다 — R7 직후 판본은 "실행 지점 + 배포"를 만족하는 것들의
+# 집합(`EXEMPTED_PY`)을 **같은 술어를 뒤집어** 따로 도출해 등식에 더했는데
+# (`n_canon + n_exempted == n_consumed`), 이 둘은 항상 `CONSUMED_PY` 를 정확히
+# 분할한다 — `SYMLINK_CANONICALS` 나 `^if __name__` grep 이 무엇을 내든(심지어 완전히
+# 틀려도) 좌변과 우변에 **같은 값**이 들어가 이 등식은 절대 못 깨진다(재리뷰가 잡음,
+# codex 교차 검토와 독립 일치). 그 사이의 "…축 1c 밖으로 떨어졌다" `no` 분기도 도달
+# 불가능한 죽은 코드였다 — 어떤 `cf` 도 그 분할의 두 쪽 중 정확히 하나에 반드시 든다.
+# 그래서 둘 다 지운다(약화가 아니다 — 아무것도 안 재던 코드를 지우는 것뿐이다).
+#
+# **F3 의 실제 tripwire 는 사라지지 않았다 — 자리를 옮겼다.** "실행 지점이 있는데
+# 배포가 안 된 정본이 조용히 축 1c 밖으로 빠진다"를 지금 잡는 것은 아래 954줄
+# `for canon in $IMPORT_ONLY_CANONICALS` 루프다: R7 의 제외 조건은 "실행 지점 **그리고**
+# 배포"라 배포가 없으면 그 정본은 여전히 `IMPORT_ONLY_CANONICALS` 에 남고, 이 ∀ 루프가
+# 자동으로 그 소비자마다 실제 형제(추적된 파일)가 있는지 · 설치본 대역에서 import 가
+# 되는지까지 검사한다 — 예외 없이 걸린다(별도 가드가 필요 없다, 이 루프가 곧 그것이다).
+# 반대로 실행 지점이 있고 배포가 실재하는 정본(`docreview_state.py`)은 `SYMLINK_CANONICALS`
+# 에 들어 있고, 그 값의 각 원소는 이미 위(축 1a, :309 이후)의 자기 ∀ 루프가 링크 존재·
+# 대상 존재·해시 일치·인덱스와 워킹트리 일치까지 전부 확인했다 — 형제-사본 계약을
+# 축 1a 가 진다는 것이 말뿐이 아니라 그 루프의 실행으로 성립한다.
 n_canon="$(printf '%s\n' "$IMPORT_ONLY_CANONICALS" | grep -c . || true)"
-assert_eq "$n_canon" "$n_consumed" "형제-∀ 도출: import 로 소비되는 shared 모듈 ${n_consumed}건이 전부 축 1c 집합에 남았다 (분류기가 아무것도 떨어뜨리지 않았다)"
 if [ "$n_canon" -ge 1 ]; then
   ok "형제-∀ 도출: import-only 정본 ${n_canon}건 (이름 열거 없음)"
 else

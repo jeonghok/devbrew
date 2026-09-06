@@ -248,5 +248,98 @@ class TestSummaryScalarRoundTrip(unittest.TestCase):
         self.assertIs(doc["meta"]["codex_failed"], False)
 
 
+def _wrap(findings_literal):
+    """평문 `{"findings": [...]}` 을 codex JSONL 이벤트(agent_message, 펜스드 json)로
+    감싼다. `run()` 은 `extract_last_agent_message` 를 거치므로 이 봉투 없이 평문을
+    바로 stdin 에 흘리면 `item.get("type") != "agent_message"` 라 findings 가 아니라
+    `reason: missing_result` 로 떨어진다(실측 — brief 초안의 raw-payload 케이스가
+    이 이유로 전부 RED 였다: 의도한 단언과 무관한 실패였다)."""
+    import json as _json
+    text = "```json\n{\"findings\": " + findings_literal + "}\n```"
+    return _json.dumps({"type": "item.completed",
+                        "item": {"type": "agent_message", "text": text}}) + "\n"
+
+
+class DocreviewKeys(unittest.TestCase):
+    def test_docreview_keyset_emits_disposition_layer_editscope(self):
+        payload = _wrap('[{"ref":"x1","layer":2,"category":"placeholder",'
+                        '"anchor":"#a","disposition":"decide","summary":"s",'
+                        '"edit_scope":"#a","blocks":["x2"],"evidence":"e"}]')
+        out = run(payload, argv_extra=("--emit-keys", "docreview"))
+        for tok in ("layer: 2", "disposition: decide", 'edit_scope: "#a"', 'anchor: "#a"'):
+            self.assertIn(tok, out)
+
+    def test_docreview_blocks_list_renders_flow_and_round_trips(self):
+        """AC18의 리스트 렌더 분기(`blocks`)가 실제로 파싱 가능한 YAML을 내는지 —
+        키 존재만 보면 `[x2, x3]`가 인용 없이 나가 파서를 깨뜨려도 못 잡는다."""
+        payload = _wrap('[{"ref":"x1","layer":1,"category":"c","anchor":"#a",'
+                        '"disposition":"ask","summary":"s","blocks":["x2","x3"],'
+                        '"evidence":"e"}]')
+        out = run(payload, argv_extra=("--emit-keys", "docreview"))
+        try:
+            import yaml  # noqa: PLC0415
+        except ImportError:  # pragma: no cover - 환경 의존
+            self.assertIn("blocks: [x2, x3]", out)
+            return
+        doc = yaml.safe_load(out)
+        self.assertEqual(doc["findings"][0]["blocks"], ["x2", "x3"])
+
+    def test_default_and_design_bytes_unchanged(self):
+        # AC18: docreview keyset 추가가 기존 두 keyset 의 출력을 바꾸지 않는다.
+        payload = _wrap('[{"file":"a.py","line":3,"severity":"high","summary":"s","proposed_fix":"f"}]')
+        self.assertEqual(run(payload), run(payload, argv_extra=("--emit-keys", "default")))
+        d = _wrap('[{"category":"x","target_section":"#a","severity":"high","summary":"s","proposed_fix":"f"}]')
+        self.assertIn("category: x", run(d, argv_extra=("--emit-keys", "design")))
+
+    def test_default_and_design_bytes_match_committed_fixture(self):
+        """AC18 회귀 가드의 진짜 이빨 — `run(payload) == run(payload, "--emit-keys","default")`
+        만 재면 양쪽이 같은 코드에서 나오는 항진명제다(둘 다 같은 버그를 함께 낸다면 여전히
+        같아서 통과한다). 그래서 기대값은 커밋된 고정 바이트(이 테스트 자체에 리터럴로
+        박은 산출물)와 대조한다 — `default`·`design` 코드 경로 자체가 바뀌면 이 리터럴과
+        어긋나 RED 다."""
+        payload = _wrap('[{"file":"a.py","line":3,"severity":"high","summary":"s","proposed_fix":"f"}]')
+        self.assertEqual(
+            run(payload),
+            "findings:\n  - agent: codex-reviewer\n    file: a.py\n    line: 3\n"
+            "    severity: high\n    summary: s\n    proposed_fix: f\n"
+            "meta:\n  codex_failed: false\n",
+        )
+        d = _wrap('[{"category":"x","target_section":"#a","severity":"high","summary":"s","proposed_fix":"f"}]')
+        self.assertEqual(
+            run(d, argv_extra=("--emit-keys", "design")),
+            "findings:\n  - agent: codex-reviewer\n    category: x\n"
+            '    target_section: "#a"\n    severity: high\n    summary: s\n'
+            "    proposed_fix: f\nmeta:\n  codex_failed: false\n",
+        )
+
+    def test_default_and_design_ignore_list_valued_scalar_field(self):
+        """리뷰 라운드 1 CRIT-1 회귀 가드 — `yaml_emit` 의 flow-list 분기는
+        `isinstance(v, list)` 만으로 열리면 안 된다. codex 출력은 신뢰 안 되는 외부
+        LLM 생성 입력이라, `default`/`design` 이 선언한 스칼라 계약 필드(`file` ·
+        `category`)에 기형으로 list 값이 실려도(`{"file": ["a.py","b.py"], ...}`)
+        그 keyset 의 출력 바이트는 바뀌면 안 된다 — `blocks`(DOCREVIEW_KEYS 전용) 가
+        아닌 키는 항상 옛 `_yaml_scalar(...)` 의 인용된 `str()` 폴백을 타야 한다.
+        기대값은 `git show 81b0c9b:shared/codex/codex_findings_to_yaml.py`(이 필드
+        분기가 생기기 전 버전)를 **독립 실행**해 얻은 실측 바이트다 — 지금 코드에서
+        다시 계산한 값이 아니다(항진명제 방지, 위 test_..._match_committed_fixture
+        와 같은 원칙)."""
+        payload = _wrap('[{"file":["a.py","b.py"],"line":3,"severity":"high",'
+                        '"summary":"s","proposed_fix":"f"}]')
+        self.assertEqual(
+            run(payload),
+            "findings:\n  - agent: codex-reviewer\n    file: \"['a.py', 'b.py']\"\n"
+            "    line: 3\n    severity: high\n    summary: s\n    proposed_fix: f\n"
+            "meta:\n  codex_failed: false\n",
+        )
+        d = _wrap('[{"category":["x","y"],"target_section":"#a","severity":"high",'
+                  '"summary":"s","proposed_fix":"f"}]')
+        self.assertEqual(
+            run(d, argv_extra=("--emit-keys", "design")),
+            "findings:\n  - agent: codex-reviewer\n    category: \"['x', 'y']\"\n"
+            '    target_section: "#a"\n    severity: high\n    summary: s\n'
+            "    proposed_fix: f\nmeta:\n  codex_failed: false\n",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

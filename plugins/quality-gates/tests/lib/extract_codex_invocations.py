@@ -16,11 +16,12 @@
 그래서 이 수집기가 놓친 호출부는 *"잘못된 통과"*가 아니라 *"검사되지 않음"*이다.
 그 구분이 결정적이다 — 이 파일은 커버리지를 주장하지 않는다.
 
-이 파일의 유일한 소비자는 `test_sandbox_enforced.sh`다 — 그 테스트가
+소비자는 둘이다. `test_sandbox_enforced.sh` — 그 테스트가
 `tests/lib/codex_observation.sh`의 `codex_candidates()`(bash, 독립 구현)와 이
 파일이 같은 후보 집합을 내는지 매 실행마다 확인한다(standing assertion). 둘이
 같은 앵커를 쓴다는 주장이 1회성 수동 diff로만 검증되던 것을 고정한 것이다 —
-갈라지면 다음 실행에서 바로 RED.
+갈라지면 다음 실행에서 바로 RED. 그리고 `shared/tests/test_runner_disposition.sh`의
+`EXTRACT=` 대입 — 러너의 처분 공시를 검사할 모집단을 여기서 가져간다(모집단을 신설하지 않는다).
 
 Usage: extract_codex_invocations.py <root_dir>
 Stdout: 후보 파일 경로, 한 줄에 하나, 정렬됨.
@@ -75,6 +76,16 @@ def collect(root: Path) -> list[str]:
     out = []
     for p in root.rglob("*"):
         if not p.is_file() or p.is_symlink():
+            # 알려진 공백 — **심볼릭 링크로 배포된 러너는 모집단에 안 든다.**
+            # `shared/docreview/scripts/run_docreview_codex_reviewer.sh` 가 그것이다:
+            # 정본은 `shared/` 라 스캔 root(`plugins`) 밖이고, 두 플러그인의 사본
+            # (`plugins/{quality-gates,spec-distill}/scripts/`)은 링크라 여기서 걸러진다.
+            # 그래서 `test_sandbox_enforced.sh`(codex 격리의 유일한 기둥 `-s read-only`
+            # 를 실행 관측으로 집행)와 `test_runner_disposition.sh`(처분 공시)가 이 러너를
+            # 한 번도 안 본다 — 잘못된 통과가 아니라 **검사되지 않음**이다.
+            # 고칠 때: 그 러너에 첫 호출자가 생기는 PR 2. 링크가 완성되는 때가 아니라
+            # 실제로 codex 를 태우기 시작하는 때가 위험 창이 열리는 때다. 이 skip 을
+            # 건드리는 것은 보안 락의 모집단을 바꾸는 일이라 그때 한 번에 판단한다.
             continue
         # **스캔 root 기준 상대 경로**로만 판정한다. 절대 경로 성분을 보면 root의
         # *조상*에 있는 디렉토리 이름까지 걸린다 — devbrew의 워크트리 관례가

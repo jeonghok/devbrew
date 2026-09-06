@@ -137,12 +137,22 @@ norm_path() {
 # skill 레벨과 플러그인 레벨 **둘 다**)를 낸다. 선언(guards: 세 글롭)과 실측이
 # 여기서 같이 맞아야 한다.
 #
-# git pathspec 의 `*` 는 `/` 를 넘으므로 `plugins/*/references/*.md` 하나로도 두
-# 모양이 다 잡힌다(실측). 그럼에도 두 pathspec 을 나란히 적는 것은 **의도를
-# 문서화**하기 위해서다 — 그 subtlety 에 조용히 기대지 않는다. `git ls-files` 는
-# 겹치는 pathspec 의 결과를 중복 없이 낸다(실측).
+# 〔Task 2 Step 5, ruling R6 — 2026-09-06 실측으로 정정〕 앞 판본은 여기서 "git
+# pathspec 의 `*` 는 `/` 를 넘으므로 `plugins/*/references/*.md` 하나로도 두 모양이
+# 다 잡힌다 — 의도적 중복 문서화"라고 적었다. **그 문장은 틀렸다.** `*` 가 `/` 를
+# 넘는 것은 사실이지만, 그래서 이 pathspec 이 **재귀적**이라는 결과가 이 락이
+# 뜻하는 "플러그인 레벨"(= `references/` 바로 밑 한 단계)을 조용히 깨뜨린다 —
+# `plugins/spec-distill/references/docreview-profiles/design-doc.md` 처럼 두 단계
+# 아래 파일까지 이 코퍼스에 들어와 버려서, 그 파일을 가리키는 SKILL.md 가 없으면
+# (있을 수 없다 — 그런 깊이는 «호스트 데이터»지 skill 절차서가 아니다) 고아로 오판된다
+# (실측: 프로필 1개를 `git add` 하면 `Total: 23 | Pass: 21 | Fail: 2`).
+# 고쳐서 플러그인 레벨 pathspec 만 `:(glob)` magic 으로 돌린다 — `:(glob)` 아래서는
+# wildmatch 가 FNM_PATHNAME 규칙을 적용해 맨몸 `*` 가 `/` 를 넘지 않고(한 세그먼트만),
+# 재귀는 `**` 로만 일어난다(실측: `git ls-files -- ':(glob)plugins/*/references/*.md'`
+# → 3건, 두 단계 아래 파일은 안 잡힘). skill 레벨 pathspec 은 오늘 이 리포에 그 깊이의
+# 파일이 없어 증상이 없으므로 그대로 둔다(범위를 이 Step 이 고치는 문제로 좁힌다).
 CORPUS="$(git ls-files -- 'plugins/*/skills/*/SKILL.md')"
-REF_CORPUS="$(git ls-files -- 'plugins/*/skills/*/references/*.md' 'plugins/*/references/*.md')"
+REF_CORPUS="$(git ls-files -- 'plugins/*/skills/*/references/*.md' ':(glob)plugins/*/references/*.md')"
 # 포인터 **출처** 코퍼스 = 둘의 합집합. 참조 파일도 포인터를 담을 수 있다(위 헤더).
 SRC_CORPUS="$CORPUS
 $REF_CORPUS"

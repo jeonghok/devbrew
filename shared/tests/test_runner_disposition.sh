@@ -29,6 +29,15 @@
 # `orchestrator`/`human` 은 참·거짓을 구조적으로 못 잰다 — 검증 대상이 없다. 조용히
 # 건너뛰지 않고 `unverifiable_consumer=N` 으로 개수를 낸다(셀 수 없으면 셀 수 없음을
 # 내라는 이 리포의 규약 — 침묵과 0 은 다른 사실이다).
+#
+# **모집단의 알려진 공백 — 심볼릭 링크로 배포된 러너.** 도출기가 링크를 건너뛰므로
+# (`extract_codex_invocations.py` 의 `is_symlink()` skip) 정본이 `shared/` 에 있고
+# 플러그인에는 링크로만 있는 러너는 이 락과 `test_sandbox_enforced.sh` 양쪽의 모집단에서
+# 빠진다. 지금 해당하는 것은 `shared/docreview/scripts/run_docreview_codex_reviewer.sh`
+# 하나다 — 이 락은 그 러너의 `disclosure=` 를 못 보고, 형제 락은 그 러너가 `-s read-only`
+# 로 codex 를 태우는지 못 본다. 살아 있는 취약점이 아니라 **검증 공백**이다(호출자 0).
+# 위험 창은 그 러너에 첫 호출자가 생기는 PR 2 에 열린다 — 링크가 완성되는 때가 아니라
+# 실제로 codex 를 태우기 시작하는 때다. 그때 도출기의 skip 을 다시 판단한다.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"

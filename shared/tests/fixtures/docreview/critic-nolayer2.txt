@@ -1,0 +1,13 @@
+리뷰를 마쳤다. 층 1 부터.
+
+```docreview-layer1
+- ref: c0
+  category: scope
+  anchor: "#3-non-goals"
+  disposition: decide
+  summary: "Non-goals 가 브리프의 범위 항목 하나를 조용히 뺐다"
+  evidence: "브리프 §2 C3 vs 문서 §3"
+```
+
+층 2.
+

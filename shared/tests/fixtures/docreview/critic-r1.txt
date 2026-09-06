@@ -1,0 +1,52 @@
+리뷰를 마쳤다. 층 1 부터.
+
+```docreview-layer1
+- ref: c0
+  category: scope
+  anchor: "#3-non-goals"
+  disposition: decide
+  summary: "Non-goals 가 브리프의 범위 항목 하나를 조용히 뺐다"
+  evidence: "브리프 §2 C3 vs 문서 §3"
+```
+
+층 2.
+
+```docreview-layer2
+- ref: c1
+  category: placeholder
+  anchor: "#12-files-to-modify"
+  disposition: fix
+  summary: "c.py 가 목록에 없다"
+- ref: c2
+  category: ambiguity
+  anchor: "#2-goals"
+  disposition: fix
+  summary: "목표 B 가 두 가지로 읽힌다"
+- ref: c3
+  category: testing
+  anchor: "#12-files-to-modify"
+  disposition: defer
+  summary: "AC1 의 자동 검증 절차는 plan 이 정한다"
+- ref: c4
+  category: ambiguity
+  anchor: "#12-files-to-modify"
+  disposition: ask
+  summary: "b.py 를 유지하나?"
+  blocks: [c1]
+- ref: c5
+  category: ambiguity
+  anchor: "#1-context"
+  disposition: fix
+  summary: "AC1 의 '관측 가능한' 이 무엇인지 없다"
+- ref: c6
+  category: ambiguity
+  anchor: "#1-context"
+  disposition: fix
+  summary: "AC 가 하나뿐이라 Goals B 를 덮지 않는다"
+- ref: c7
+  category: isolation
+  anchor: "#handoff-context"
+  disposition: fix
+  supersedes: "zzzz9999#r0.1"
+  summary: "부품 경계가 흐리다"
+```

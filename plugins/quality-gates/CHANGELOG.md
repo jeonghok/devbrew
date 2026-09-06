@@ -3,6 +3,14 @@
 `quality-gates` 플러그인의 주요 변경 사항을 기록합니다.
 포맷은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), 버전 규칙은 [SemVer](https://semver.org/spec/v2.0.0.html)를 따릅니다.
 
+## [7.4.0] — 2026-09-06
+
+### Added
+
+- **문서 리뷰 엔진 `shared/docreview/`(호출자 0, PR 1/5).** 네 문서 리뷰 자리(design doc·brief·seed·generic)를 하나로 통일하는 엔진의 기반을 심는다 — 탐지 agent `doc-critic`(층별 sentinel 블록 둘)·프레이밍을 못 보는 재비판 agent `doc-recritic`(입력 슬롯 셋)·스크립트 넷(`docreview_state`·`docreview_anchor`·`docreview_route`·codex 러너)·절차 reference. 산출물은 verdict 가 아니라 처분(decide·ask·fix·defer·drop)이 붙은 finding 목록이다. 이 릴리스는 `scripts/` 링크 넷만 심고 **아직 `/qg critique` 를 호출하지 않는다** — `generic` 자리 전환은 PR 4(major, `artifact_commit.sh` 의 라운드별 자율 커밋 루프 소멸).
+- 프로필 `references/docreview-profiles/generic.md` — non-code 아티팩트 자리의 정답 출처·허용 처분·층 rubric·결정 기록 목적지를 데이터로 선언(열 필드 스키마, `docreview_state.py profile-check` 가 검증).
+- **검증 공백**: 심볼릭 링크로 배포되는 `run_docreview_codex_reviewer.sh`(`shared/docreview/scripts/`)가 `extract_codex_invocations.py`(`is_symlink()` skip)와 `codex_observation.sh` 양쪽의 모집단에서 빠져, `test_sandbox_enforced.sh`·`shared/tests/test_runner_disposition.sh` 가 이 러너를 못 본다 — 호출자가 아직 0 이라 살아 있는 취약은 아니고, 첫 호출자가 생기는 PR 2 에서 도출기의 skip 을 다시 판단한다.
+
 ## [7.3.0] — 2026-09-06
 
 ### Changed
