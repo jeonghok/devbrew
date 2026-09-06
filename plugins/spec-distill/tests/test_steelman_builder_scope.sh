@@ -74,8 +74,11 @@ awk '/tag: premises/{f=1} f&&/kind:/{print; exit}' <<<"$fm" | grep -q 'orchestra
   && ok "premises 의 kind 가 orchestrator_framing" || no "premises 의 kind 가 다르다"
 grep -q 'confidence' "$AGENT" \
   && no "AC1: confidence 필드/규칙 잔존 (폐지, 설계 O3)" || ok "AC1: confidence 부재"
+# 키 앵커(줄 시작, 임의 들여쓰기 + 콜론) — 산문 규칙(번호로 시작)의 백틱 인용은
+# 이 형태로 시작하지 않으므로 걸리지 않는다. 순수 리터럴 존재만 보면 산문 인용이
+# 스키마 키 자체가 깨진 것을 가려 GREEN 을 낸다 (controller ruling, M5 관측).
 for tok in recommendation premise_refutation premise_list_challenge touches repo_claims anchor refined_takes refined_drops case_for_alternative case_for_current; do
-  grep -q "$tok" "$AGENT" && ok "AC1: 스키마 키 $tok 존재" || no "AC1: 스키마 키 $tok 부재"
+  grep -qE "^[[:space:]]*${tok}:" "$AGENT" && ok "AC1: 스키마 키 $tok 존재" || no "AC1: 스키마 키 $tok 가 없다"
 done
 grep -q '원안의 옹호자' "$AGENT" \
   && no "AC3: 「원안의 옹호자」 문구 잔존 — 한 편 배정 역할" || ok "AC3: 「원안의 옹호자」 부재"
@@ -83,6 +86,10 @@ grep -q '어느 한 편의 옹호자' "$AGENT" \
   && ok "AC3: 「어느 한 편의 옹호자」 존재 (양성 짝)" || no "AC3: 「어느 한 편의 옹호자」 부재"
 grep -q 'coverage-mapper neglect\|neglect' "$AGENT" \
   && no "C18: neglect trigger 문구 잔존" || ok "C18: neglect 부재"
-grep -qE 'kept.*refined.*switched' "$AGENT" && ok "추천 어휘 kept/refined/switched" || no "추천 어휘 부재"
+# recommendation: 스키마 줄에 앵커 — 서술부("recommending kept / refined / switched.")가
+# 같은 세 단어를 다른 목적(역할 설명)으로 써서 스키마 enum 파손을 가릴 수 있었다 (controller
+# ruling, M9 관측). 앵커는 그 줄 하나로 좁혀 enum 자체를 잰다.
+grep -qE '^recommendation:.*kept.*refined.*switched' "$AGENT" \
+  && ok "추천 어휘 kept/refined/switched (스키마 줄)" || no "추천 어휘 부재 (스키마 줄)"
 grep -qE 'defended|방어' "$AGENT" && no "옛 어휘 defended/방어 잔존" || ok "옛 어휘 부재"
 finish
