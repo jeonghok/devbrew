@@ -270,6 +270,10 @@ case_T45_decision_log_append_only() {
   local log; log="$(mktemp -t log-XXXXXX.md)"; cp "$FX/design-sample.md" "$log"
   py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r1.1' --choice adopt --quote '첫 결정' --log-file "$log" >/dev/null
   local first; first="$(st_yaml "$d" 'st["decision_log"][0]')"
+  # 리뷰 R1: 문서 파일의 바이트(메모리 dict 와는 다른 산출물)를 둘째 append 전에 잡아 둔다.
+  # `$()` 는 후행 개행을 전부 지우므로 sentinel 로 보존한다 — 안 그러면 "이미 쓰인 앞 줄에
+  # CORRUPTED 를 덧붙이는" 변이(개행 앞에 삽입)가 단순 substring 비교를 통과해 버린다.
+  local file_before; file_before="$(cat "$log"; printf 'X')"; file_before="${file_before%X}"
   next_round "$d" "$FX/design-sample.md" >/dev/null
   seed_findings "$d" "[${F_DEC/aaaa0001#r1.1\",\"lineage/aaaa0001#r2.1\",\"lineage}]"
   py docreview_state.py decide --state-dir "$d" --id 'aaaa0001#r2.1' --choice reject --quote '둘째 결정' --log-file "$log" >/dev/null
@@ -277,6 +281,15 @@ case_T45_decision_log_append_only() {
   assert_eq "$(st_yaml "$d" 'st["decision_log"][1]["supersedes"] == st["decision_log"][0]["decision_id"]')" "True" "T45: 같은 계보의 둘째 결정은 supersedes 를 단다"
   assert_eq "$(grep -c '^## 결정 기록$' "$log")" "1" "T45: 문서에 결정 기록 절이 한 번 만들어진다"
   assert_eq "$(grep -cE '^- D[0-9]+\.[0-9]+ ' "$log")" "2" "T45: 문서 절에 두 줄 append"
+  local file_after msg; file_after="$(cat "$log"; printf 'X')"; file_after="${file_after%X}"
+  msg="T45·AC12: 둘째 append 뒤에도 첫 항목까지의 문서 바이트가 그 접두(줄바꿈 포함)로 정확히 보존된다"
+  case "$file_after" in
+    "$file_before"*) ok "$msg" ;;
+    *) no "$msg"
+       printf '      before 끝: …%s\n      after  같은 길이: …%s\n' \
+         "$(printf '%s' "$file_before" | tail -c 30)" \
+         "$(printf '%s' "$file_after" | head -c "${#file_before}" | tail -c 30)" ;;
+  esac
   rm -rf "$d" "$log"
 }
 case_T12_immutable_permit_targets_summary() {
