@@ -290,31 +290,10 @@ fi
 
 ### R3 — Steelman 의심 게이트 (P17)
 
-의심 trigger = landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의 충돌 / coverage-mapper neglect.
-
-1. `steelman-builder` 에이전트를 dispatch:
-   ```
-   Agent({ description: "Steelman alternative", subagent_type: "spec-distill:steelman-builder",
-           prompt: "의심 방향: <direction>${SUSPECT_DIRECTION}</direction>. trigger: <trigger>${TRIGGER}</trigger>. 대안의 강한 케이스를 웹근거와 함께." })
-   // **처분** — consumer=orchestrator · fail-open · disclosure=loud advisory
-   ```
-2. builder 출력(`alternative_statement` + `evidence[].url`)을 **verbatim**으로 4-block에 반대
-   케이스로 제시 — conducting-interview는 이를 **약화·편집하지 않습니다**.
-3. **게이트**(P17): 사용자가 (방어 → 원안 유지 / 전환 → 대안 채택, 원안은 R4로 / 보류 → §3 OQ) 중 하나를 선택한다.
-4. 판정을 payload §5의 **`verdict:` 항목**으로 기록 — 각 항목은 (대안 statement + 웹근거 URL + `verdict ∈ {defended | switched | deferred}` + audit §3의 `ST<N>` 참조). 게이트 매핑: 방어→`defended`, 전환→`switched`, 보류→`deferred`(§3 OQ에도 박제). builder 출력 verbatim은 audit §3에 `#### ST<N>` 헤딩으로 남고, payload §5와 audit §3은 이 `ST<N>` id로 맞물린다(bijection A) — frontmatter에는 별도 필드를 두지 않는다.
-5. 한 방향당 steelman 1회(새 근거 없으면 재steelman 금지 — AP16 harassment 방지).
-
-**Web 부재 시 graceful degradation (R2 대칭)**: `steelman-builder`는 WebSearch/WebFetch를 요구합니다.
-kill switch `DEVBREW_SPEC_DISTILL_DISABLE_WEB=1` 또는 web 도구 부재로 steelman을 돌릴 수 없으면 —
-R2 landscape와 대칭으로 — opaque한 "malformed skepticism (no-url)" 게이트 실패로 떨어뜨리지 말고
-**loud advisory**를 내고 **수동 의심 게이트**로 전환합니다:
-`[spec-distill] web 비활성 — steelman 자동 생략, 사용자에게 의심 방향 수동 확인 요청`. 이 경우 §5의
-`verdict:` 항목은 사용자 판단(방어/전환/보류)을 근거로 기록하되 URL 부재 사유를 명시합니다(`check_brief.py`의
-skepticism 형식 검사는 web-disabled 시 수동 판단으로 위임).
-
-**Law 2 경계**: steelman 게이트는 Law 2 분리 메커니즘이 *아닙니다* — Law 2 분리 reviewer는
-오직 design doc(brainstorming `-design.md`)에만 적용됩니다. steelman은 문제공간 품질을 끌어올리는
-Law 1급 skepticism 의례입니다(verbatim pass-through로 무력화 방지).
+의심 trigger = landscape 모순 / 알려진 anti-pattern / 기존 사용자 제약과의 충돌. 절차 전문(전제 도출 ·
+`steelman-builder` dispatch · 게이트-전 확인 · 4-block · 유지/보완/전환/보류 게이트 · 기록 · steelman 0건의
+`검토 —` 항목 · web 비활성 시 steelman 자동 생략)은 `references/steelman.md` 다 — R3 에 들어갈 때 그 파일을 Read 한다.
+builder 출력은 verbatim 으로 다룬다(약화·편집 금지). 보류는 §3 OQ 에도 박제한다.
 
 ## seed 를 입력으로 받았을 때
 

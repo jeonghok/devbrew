@@ -398,10 +398,35 @@ grep -qi 'round' <<<"$rhythm_block" \
 # R3 트리거 용어 교체 + OQ 좌표 (scoped)
 # v0.23.0: payload가 9섹션 → 8섹션(§0–§7)이 되면서 OQ 좌표가 §8 → §3으로 이동했다.
 # 락도 새 좌표를 겨눈다 — 부정은 은퇴 좌표 §8(및 v0.22.0의 §6)을, 긍정은 §3을 잡는다.
-r3_block="$(awk '/^### R3 — Steelman/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$SKILL")"
+# v0.54.0: R3 절차 전문이 references/steelman.md 로 분리됐다(설계 §6.2). r3_block 은 그 파일에서
+# 뜬다. 파일 첫 헤딩이 `### R3 — Steelman` 이고 그 뒤로 `##`/`###` 헤딩이 없어야 블록이 파일
+# 끝까지 간다(AC23) — 중간 헤딩 하나가 아래 부재 락 셋을 공허하게 만든다.
+STEELMAN="$FIN_DIR/steelman.md"
+[[ -f "$STEELMAN" ]] && ok "코퍼스: references/steelman.md 실재 (AC4)" || no "코퍼스: references/steelman.md 부재 (AC4)"
+r3_block="$(awk '/^### R3 — Steelman/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$STEELMAN")"
+[[ "$(printf '%s\n' "$r3_block" | grep -c .)" -ge 40 ]] \
+  && ok "R3: r3_block 이 40줄 이상 (공허 아님)" || no "R3: r3_block 이 비었거나 잘렸다 — 첫 헤딩 또는 중간 ##/### 헤딩을 보라 (AC23)"
+[[ "$(awk 'NR>1 && /^##(#)? /' "$STEELMAN" | grep -c .)" -eq 0 ]] \
+  && ok "AC23: steelman.md 에 첫 줄 뒤 ##/### 헤딩 없음" || no "AC23: steelman.md 중간에 ##/### 헤딩 — r3_block 이 거기서 끊긴다"
+grep -q '^### R3 — Steelman' "$SKILL" && ok "R3: SKILL.md 에 R3 헤딩 유지" || no "R3: SKILL.md 의 R3 헤딩 소실"
+grep -q 'references/steelman.md' "$SKILL" && ok "AC4: SKILL.md 가 steelman.md 를 가리킨다" || no "AC4: SKILL.md 포인터 부재"
+# C18 — neglect trigger 부재(반전) + 양성 짝(trigger 3값 · 검토 · 보류 · 새 어휘)
 grep -q 'coverage-mapper neglect' <<<"$r3_block" \
-  && ok "R3: trigger term breadth-keeper tunneling replaced by coverage-mapper neglect" \
-  || no "R3: trigger term breadth-keeper tunneling replaced by coverage-mapper neglect"
+  && no "C18: R3 trigger 에 coverage-mapper neglect 잔존" || ok "C18: R3 trigger 에 neglect 없음 (AC5)"
+for t in 'landscape 모순' 'anti-pattern' '제약'; do
+  grep -q "$t" <<<"$r3_block" && ok "R3 trigger 문구 존재: $t" || no "R3 trigger 문구 부재: $t (AC5)"
+done
+grep -q '검토 — steelman 0건' <<<"$r3_block" && ok "R3: 0건 검토 항목 형식 존재 (C8)" || no "R3: 검토 항목 형식 부재"
+grep -q '보류 —' <<<"$r3_block" && ok "R3: 보류 항목 형식 존재 (AC19)" || no "R3: 보류 항목 형식 부재"
+for w in 유지 보완 전환 보류 kept refined switched deferred; do
+  grep -q "$w" <<<"$r3_block" && ok "R3 어휘: $w" || no "R3 어휘 부재: $w (AC6)"
+done
+grep -qE 'defended|방어' <<<"$r3_block" && no "AC6: 옛 어휘 defended/방어 잔존" || ok "AC6: 옛 어휘 부재"
+for w in '재검토 열림' '재검토 사유 없음' '사용자 override'; do
+  grep -q "$w" <<<"$r3_block" && ok "AC22: $w" || no "AC22: $w 부재"
+done
+grep -q 'touches' <<<"$r3_block" && ok "AC20: touches 확인 문구" || no "AC20: touches 부재"
+grep -q '부착 M/N\|부착 M' <<<"$r3_block" && ok "AC20: 부착 M/N 정의" || no "AC20: 부착 계수 정의 부재"
 grep -qE '§[68] OQ' <<<"$r3_block" \
   && no "R3: 은퇴 OQ 좌표(§6/§8) 잔존 (should be §3 OQ)" \
   || ok "R3: 은퇴 OQ 좌표(§6/§8) 제거됨 (should be §3 OQ)"
