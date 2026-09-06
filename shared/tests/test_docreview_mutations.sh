@@ -8,6 +8,11 @@
 # sed 로 변이한 뒤 cases.sh 의 한 케이스를 그 디렉토리로 돌린다. 케이스가 fail 하면(1건 이상 ✗)
 # 그 변이는 «잡혔다». **양성 대조**: 변이 전 사본에서 같은 케이스가 GREEN 이어야 한다(계측기 검증).
 set -u
+if [ "${1:-}" = "--emit-scanned" ]; then
+  git ls-files -- 'shared/docreview/scripts/*.py'
+  git ls-files -- 'shared/tests/fixtures/docreview/*'
+  exit 0
+fi
 HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
