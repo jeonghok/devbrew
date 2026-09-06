@@ -30,14 +30,17 @@ FORBIDDEN_KINDS = ("prior_verdict", "score", "orchestrator_framing")
 #   ⓒ 같은 출처의 과거 findings·이력 → `same_origin_history`
 #   ⓓ 리포 규약·설계 문서 → `repo_context`
 #   ⓔ **오케스트레이터가 직접 쓴 산문 종합** → `orchestrator_framing`(금지)
-# ⓔ 에 해당하는 것은 «하나»였다 — `blind-spot-prober.framing`. 판정 근거:
+# ⓔ 에 해당하는 것은 «둘»이다 — `blind-spot-prober.framing`, `steelman-builder.premises`
+# (2026-09-06 재설계로 추가). 판정 근거:
 #   · `steelman-builder.direction`/`trigger` — 지목됐으나 ⓔ 가 아니다.
 #     `direction` 은 «사용자가 고른 방향»의 재진술(과업의 대상)이고,
 #     `trigger` 는 게이트를 발동시킨 세 값 중 하나를 대는 enum 이다
 #     (landscape 모순 / anti-pattern / 제약 충돌). 둘 다 이 agent 가
 #     내야 할 «대안»에 대한 오케스트레이터의 기대가 아니다 → ⓐ.
-#     2026-09-06 재설계로 슬롯 셋이 늘었다: `goal`·`constraints` 는 사용자 발화 원문 → ⓑ.
-#     `premises` 는 orchestrator 가 도출한 전제 목록 → ⓔ, 면제 등재(위 EXEMPT_SLOTS).
+#   · `steelman-builder.premises` — 2026-09-06 재설계로 이 agent 의 선언 슬롯이
+#     다섯으로 늘었다. 그중 `goal`·`constraints` 는 사용자 발화 원문 → ⓑ.
+#     `premises` 는 orchestrator 가 R1 에서 도출한 전제 목록 → **ⓔ, 위에서 이미
+#     센 두 번째 항목**(면제 등재는 EXEMPT_SLOTS 참고, 이 bullet 은 새로 세지 않는다).
 #   · `coverage-mapper.ledger_state` — 원장 «상태»의 요약이지 판단이 아니다 → ⓐ.
 #   · `pr-understanding-builder.context` — `build-pr-context` 가 만든 blob → ⓑ.
 #   · `transcript-reader.inventory` — `prepare_standup.py` 출력 → ⓐ.
