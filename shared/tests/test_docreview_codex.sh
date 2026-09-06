@@ -23,19 +23,26 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 . "$HERE/assert.sh"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 
-RUNNER="${SCRIPTS:-$REPO_ROOT/shared/docreview/scripts}/run_docreview_codex_reviewer.sh"
+SCRIPTS="${SCRIPTS:-$REPO_ROOT/plugins/spec-distill/scripts}"
+RUNNER="$SCRIPTS/run_docreview_codex_reviewer.sh"
 FX="$REPO_ROOT/shared/tests/fixtures/docreview"
 PROF="$REPO_ROOT/plugins/spec-distill/references/docreview-profiles/design-doc.md"   # web: false
 BRIEFPROF="$REPO_ROOT/plugins/spec-distill/references/docreview-profiles/brief.md"    # web: true
 
-# codex_findings_to_yaml.py · prompt-preamble.md 는 이 러너가 `$PLUGIN_ROOT/scripts/`
-# sibling 으로 찾는다(형제 run_spec_codex_reviewer.sh 와 같은 규약). shared/docreview/
-# scripts/ 자신은 아직 그 sibling 을 갖지 않는다(호스트 링크는 Task 10) — 그래서
-# CLAUDE_PLUGIN_ROOT 를 이미 그 sibling 을 가진 실재 호스트(spec-distill)로 향하게 한다.
-# `run_docreview_codex_reviewer.sh` 자신의 소재(`$SCRIPTS`)와는 무관한 별개 경로다 —
-# `_RC`(runner_common.sh) sourcing 은 BASH_SOURCE 기준(sibling)이라 이 값의 영향을
-# 받지 않는다. 이 러너가 참조하는 파일 넷 중 셋(codex_findings_to_yaml.py·codex_jsonl.py·
-# prompt-preamble.md)은 PLUGIN_ROOT 경유, 하나(runner_common.sh)는 BASH_SOURCE 경유다.
+# 기본값은 형제 락(state·anchor·route)과 같은 배포 경로(plugins/spec-distill/scripts) —
+# 그 호스트 디렉토리는 이미 `run_docreview_codex_reviewer.sh` 자신(Task 10 링크) ·
+# codex_findings_to_yaml.py·codex_jsonl.py·prompt-preamble.md(호스트 정본) ·
+# runner_common.sh(호스트 실 사본, 형제 러너들과 공유)를 전부 갖고 있어 이 기본
+# 호출은 shared/docreview/scripts/ 의 어떤 스캐폴딩도 참조하지 않는다.
+#
+# CLAUDE_PLUGIN_ROOT 는 그래도 `$SCRIPTS` 와 무관하게 명시로 고정한다 — 호출자가
+# `$SCRIPTS` 를 다른 호스트(quality-gates)나 정본 자리(shared/docreview/scripts)로
+# 바꿔도 codex_findings_to_yaml.py·prompt-preamble.md 는 이 러너가 `$PLUGIN_ROOT/scripts/`
+# sibling 으로 찾으므로(형제 run_spec_codex_reviewer.sh 와 같은 규약) 항상 그 sibling을
+# 가진 실재 호스트를 가리켜야 한다. `runner_common.sh` sourcing 만은 `$PLUGIN_ROOT` 가
+# 아니라 BASH_SOURCE 기준(sibling)이라 이 값의 영향을 받지 않는다 — 이 러너가
+# 참조하는 파일 넷 중 셋(codex_findings_to_yaml.py·codex_jsonl.py·prompt-preamble.md)은
+# PLUGIN_ROOT 경유, 하나(runner_common.sh)는 BASH_SOURCE(= `$SCRIPTS`) 경유다.
 HOST_PLUGIN_ROOT="$REPO_ROOT/plugins/spec-distill"
 
 TMPD="$(mktemp -d -t docreview-codex-lock-XXXXXX)" || exit 1
