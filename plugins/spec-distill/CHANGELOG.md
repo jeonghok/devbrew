@@ -16,6 +16,10 @@
   면제 5번째) · `constraints`(artifact). 출력 스키마: `case_for_alternative` → `case_for_current` →
   `premise_refutation` → `premise_list_challenge` → `recommendation` → `refined_takes/drops` → `evidence[].touches` →
   `repo_claims[].path/anchor/touches`.
+- steelman-builder 재론 방지 규칙(동작 규칙 10번): `premise_refutation.hits` 가 비어 있으면
+  `recommendation: switched` 를 낼 수 없다 — 전제 충돌이 없는 근거는 `case_for_current` 강화나
+  `refined` 경계를 다듬는 데만 쓴다. 「전제 충돌만이 확정된 방향을 다시 연다」는 재설계 원칙이
+  실행 가능한 규칙으로 존재하는 자리.
 - 픽스처 6쌍(`steelman-empty-norecord` · `verdict-refined` · `verdict-defended` · `review-record-malformed` ·
   `verdict-deferred-hold` · `review-only-no-reject`) + `tests/test_skepticism_module.sh`.
 
@@ -35,6 +39,21 @@
 - R3 trigger 「coverage-mapper neglect」 — 커버리지 공백은 probe 질문으로 간다(브리프 C18).
 - steelman-builder 의 `confidence` 필드와 「confidence < 0.4 면 원안 defend 합리적」 규칙 — `recommendation: kept` 와
   `case_for_alternative.strongest` 가 같은 정보를 이산값으로 준다.
+
+### Fixed
+
+- `references/steelman.md` 의 web kill switch 확인이 dispatch 를 감싸는 조건문 밖 별도 코드 펜스에
+  `Agent({...})` 를 두고 있어, 스위치가 켜져 있어도 「steelman 자동 생략」 advisory 만 출력하고 그대로
+  dispatch 했다 — `steelman-builder` 는 `WebSearch`/`WebFetch` 를 보유하고 자기 스위치를 읽지 않으므로
+  차단은 orchestrator 단독 책임이었다. dispatch 를 `else` 가지 안으로 옮기고 `if < else < Agent < fi`
+  순서 관계를 락으로 고정.
+- `tests/test_conducting_interview_stage.sh` 의 AC6 어휘 락이 맨 토큰 grep(`kept` 등)을 써서 부분
+  문자열에 먹혔다 — `kept` 가 `s(kept)icism` 다섯 자리에 걸려, 진짜 verdict 자리 셋을 전부 지워도
+  매치 5건을 내고 스위트가 GREEN 이었다. 한↔영 짝 리터럴(`유지(kept)`·`보완(refined)`·`전환(switched)`·
+  `보류(deferred)`)로 교체.
+- `SKILL.md` 5의례 요약 표의 R3 행이 통과 기준을 여전히 2값(「steelman 후 *방어 또는 전환*」)으로 적어
+  4값 게이트(유지/보완/전환/보류)와 모순이었다. 4값으로 정정하고 옛 어휘 부재 + 새 어휘 존재 양성 짝
+  단언 추가.
 
 ## [0.53.1] — 2026-09-05
 
