@@ -37,7 +37,8 @@ machine-checked at all (모델 + 독립 adversary의 몫).
 CLI subcommands (all print JSON):
   check_brief.py sections <payload>            → {"missing": [...]}        (AC4)
   check_brief.py landscape-keys <payload>      → {"unkeyed": [...]}        (§4 «출처키» 요구)
-  check_brief.py skepticism <payload>          → {"malformed": [...]}      (AC11)
+  check_brief.py skepticism <payload>          → {"malformed": [...], "review_records": [...],
+                                                    "review_malformed": [...]}  (AC11)
   check_brief.py tried-discarded <payload>     → {"ok": bool}              (AC11, R4 이관)
   check_brief.py coverage <payload>            → {"failures": [...]}       (AC10, audit §1 해석)
   check_brief.py frontmatter <payload>         → {"errors": [...]}         (AC6/AC9 키 존재)
@@ -64,6 +65,11 @@ _SCRIPTS_DIR = str(Path(__file__).resolve().parent)
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 import section6  # noqa: E402
+from skepticism import (  # noqa: E402
+    URL_RE, strip_bullet as _strip_bullet, bijection_a_errors as _bijection_a,
+    skepticism_malformed as _skepticism_malformed, review_record_malformed,
+    review_record_entries, skepticism_closure_ok,
+)
 
 
 WEB_DISABLED_ADVISORY = (
@@ -82,8 +88,6 @@ def _web_disabled() -> bool:
     return os.environ.get("DEVBREW_SPEC_DISTILL_DISABLE_WEB") == "1"
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
-URL_RE = re.compile(r"https?://\S+")
-VALID_VERDICTS = ("defended", "switched", "deferred")
 # Fenced code blocks are illustrative, not authored content — strip them before
 # section/entry detection so headers quoted inside ``` cannot satisfy the gate (F4).
 FENCE_RE = re.compile(r"^[ \t]*```.*?^[ \t]*```[^\n]*$", re.DOTALL | re.MULTILINE)
@@ -209,17 +213,14 @@ def _entry_lines(section: str) -> list[str]:
     ]
 
 
-# 불릿을 떼는 곳은 여기 하나다. 소비자들이 각자 `lstrip("- ")`를 쓰면 안 된다 — 그건 **문자 집합**
-# strip이라 `*`를 벗기지 않아서, `_entry_lines`가 `*`를 받아들인 직후 소비자는 그 줄을 못 알아본다
-# (`* 기각 — …`이 R4에 안 세지고, `* floor:root_problem — …`이 원장 행 부재로 읽힌다). 방향은
-# fail-closed라 우회는 안 되지만, 항목을 받아들이는 규칙과 해석하는 규칙이 어긋나는 건 이 커밋이
-# 방금 닫은 바로 그 결함이다 — 한 층 아래에서 되풀이하지 않는다.
-BULLET_PREFIX_RE = re.compile(r"^\s*[-*]\s+")
-
-
-def _strip_bullet(ln: str) -> str:
-    """항목 줄에서 선행 불릿(`-` 또는 `*`) **하나**와 뒤따르는 공백을 뗀다."""
-    return BULLET_PREFIX_RE.sub("", ln, count=1)
+# 위 `_entry_lines`(항목을 **받아들이는** 규칙)에 붙는 주석이다 — 짝이 되는 **떼는** 규칙이
+# 어디 사는지를 밝힌다. 불릿을 떼는 곳은 리포에서 하나뿐이고 이 파일이 아니다:
+# `skepticism.strip_bullet`(이 파일 상단에서 `_strip_bullet` 로 들여온다).
+# 소비자들이 각자 `lstrip("- ")`를 쓰면 안 된다 — 그건 **문자 집합** strip이라 `*`를 벗기지 않아서,
+# `_entry_lines`가 `*`를 받아들인 직후 소비자는 그 줄을 못 알아본다 (`* 기각 — …`이 R4에 안 세지고,
+# `* floor:root_problem — …`이 원장 행 부재로 읽힌다). 방향은 fail-closed라 우회는 안 되지만, 항목을
+# 받아들이는 규칙과 해석하는 규칙이 어긋나는 건 이 커밋이 방금 닫은 바로 그 결함이다 — 한 층 아래에서
+# 되풀이하지 않는다.
 
 
 def _frontmatter(text: str) -> str:
@@ -304,7 +305,7 @@ def audit_pairing_errors(payload_fm: str, audit_text: str, payload_name: str) ->
     (floor 5 전부 closed)의 근거이므로, 끝나지 않은 인터뷰가 남의 원장을 상속해 green이 된다 —
     리뷰가 실행으로 실증했다: 같은 payload가 `audit_file: mine.audit.md`(floor 5 전부 open)에는
     exit 1, `audit_file: <남의 것>`(전부 closed)에는 exit 0. 한 줄 편집이 실패를 통과로 바꿨다.
-    `bijection_a_errors`는 백스톱이 못 된다 — `ST<N>`은 인터뷰마다 1부터 매겨져 steelman 1건짜리
+    `bijection_a_errors`(skepticism.py)는 백스톱이 못 된다 — `ST<N>`은 인터뷰마다 1부터 매겨져 steelman 1건짜리
     인터뷰 둘은 양쪽 다 `ST1`이라 불일치가 발생하지 않는다.
 
     부재는 불일치와 똑같이 red다 — 못 읽은 값을 "일치로 간주"하면 이 검사 자체가 fail-open이 되고,
@@ -717,7 +718,7 @@ def landscape_keys_declared(payload_text: str, audit_text: str) -> list[str]:
     **개수가 아니라 집합이다.** 개수는 세 번 틀린다: web-off brief(§4에 항목 1건,
     §7에 0건)가 `1 ≤ 0`으로 red · 두 §4 항목이 같은 출처를 인용하면 `2 ≤ 1`로 red ·
     §7이 sweep을 산문 전문으로 적으면 「항목」의 계수 단위가 미정이라 집행 불가.
-    집합이면 셋 다 통과한다. `bijection_a_errors`가 같은 판단을 이미 했다.
+    집합이면 셋 다 통과한다. `bijection_a_errors`(skepticism.py)가 같은 판단을 이미 했다.
 
     **조건부다.** 「audit §7이 비어 있지 않다」로 두면 갓 만든 audit도 웹이 꺼진
     audit도 red가 된다. payload가 landscape를 실었다는 사실을 조건으로 건다 —
@@ -761,40 +762,7 @@ def section5_entries(text: str) -> list[str]:
     return _entry_lines(_section_text(text, "5", "기각 · Blind Spots"))
 
 
-ST_HEADING_RE = re.compile(r"^####\s+(ST\d+)\b", re.MULTILINE)
-ST_REF_RE = re.compile(r"\b(ST\d+)\b")
 ATTRIBUTION_MARKERS = ("🗣", "☑", "✎")
-# skepticism_malformed의 statement<10c 측정에서 "verdict: defended" 같은 판정 어구 자체를
-# 제외한다 — 이 어구(>=17자)를 남겨두면 PN4가 약속하는 ">=10자 statement" 검사가 항상
-# has_verdict=True와 동시에 통과해버려 구조적으로 도달 불가능해진다(deadcode). Task 4에서
-# ST 참조 요구를 추가하며 발견 — brief Step 3 원문 그대로는 이 분기가 절대 발화하지 않는다.
-VERDICT_CLAUSE_RE = re.compile(r"verdict:\s*\S+", re.IGNORECASE)
-
-
-def verdict_entries(entries: list[str]) -> list[str]:
-    return [ln for ln in entries if "verdict:" in ln]
-
-
-def bijection_a_errors(payload_text: str, audit_text: str) -> list[str]:
-    """bijection A — payload §5 ↔ audit §3 (AC11).
-
-    개수 비교가 아니라 **id 집합 비교**다. 실제 steelman 항목은 다단락 블록이지 단일
-    불릿이 아니어서 "무엇을 한 항목으로 셀 것인가"가 미정이고, 그러면 집행이 불가능하다.
-    양쪽 공집합(steelman 0건)은 그대로 허용한다 — 공집합 == 공집합은 정합이고 steelman은
-    조건부 발동이라 0건이 정상이다. sentinel이 필요한 것은 R4(`기각` 0건)뿐이다.
-    """
-    refs = set()
-    for ln in verdict_entries(section5_entries(payload_text)):
-        # URL을 먼저 벗겨낸다 — 그러지 않으면 URL 경로 조각에 우연히 낀 word-bounded
-        # ST<N> 토큰(예: `/ST9/`)이 실제 참조인 양 집합에 섞여든다(phantom ref).
-        refs |= set(ST_REF_RE.findall(URL_RE.sub("", ln)))
-    declared = set(ST_HEADING_RE.findall(_section_text(audit_text, "3", "Steelman 원문")))
-    errs = []
-    for st in sorted(refs - declared):
-        errs.append(f"{st}: payload §5가 참조하지만 audit §3에 없음 (원문 없는 판정)")
-    for st in sorted(declared - refs):
-        errs.append(f"{st}: audit §3에 있지만 payload §5가 참조하지 않음 (판정 없는 steelman)")
-    return errs
 
 
 def attribution_block_missing(audit_text: str) -> bool:
@@ -806,40 +774,6 @@ def attribution_block_missing(audit_text: str) -> bool:
         if ln.lstrip().startswith(">") and all(m in ln for m in ATTRIBUTION_MARKERS):
             return False
     return True
-
-
-def skepticism_malformed(text: str) -> list[str]:
-    """§5의 `verdict:` 항목 형식 검사. PN4: 정확한 문자열 일치가 아니라 containment.
-
-    v0.44.0 N1a: URL 요구를 지웠다 — payload 외부 URL은 이제 N1a(`payload_url_free`)가
-    §6 예외 하나만 두고 전면 금지하므로, 이 함수가 §5 항목에서 URL 유무를 스스로
-    요구/거부할 이유가 없다(있으면 N1a가 별도로, 그리고 이 함수와 무관하게 red를 낸다).
-    `verdict:`·`statement`·ST 참조 요구는 그대로 남는다 — web kill switch는 이 셋 중
-    무엇도 완화하지 않는다(완화 대상이 URL 요구였는데 그게 없어졌다).
-    """
-    bad: list[str] = []
-    for ln in section5_entries(text):
-        if "verdict:" not in ln:
-            continue
-        has_verdict = bool(re.search(r"verdict:\s*(?:%s)\b" % "|".join(VALID_VERDICTS),
-                                     ln, re.IGNORECASE))
-        # URL을 먼저 벗겨낸 뒤 ST<N>을 찾는다 — URL 요구는 지웠지만 이 방어는 남긴다:
-        # payload에 URL이 남아 있으면(N1a가 별도로 잡는다) 그 경로 조각에 우연히 낀
-        # word-bounded ST<N>(예: `/ST9/`)이 실제 참조인 양 요구를 충족시키는 것을 막는다.
-        ln_no_url = URL_RE.sub("", ln)
-        has_st = bool(ST_REF_RE.search(ln_no_url))
-        stripped = _strip_bullet(VERDICT_CLAUSE_RE.sub("", ST_REF_RE.sub("", ln_no_url))).strip()
-        has_stmt = len(stripped) >= 10
-        if not (has_verdict and has_stmt and has_st):
-            miss = []
-            if not has_stmt:
-                miss.append("statement<10c")
-            if not has_verdict:
-                miss.append("no-verdict")
-            if not has_st:
-                miss.append("no-ST-ref")
-            bad.append(f"{ln[:60]} :: {','.join(miss)}")
-    return bad
 
 
 # 불릿은 `_entry_lines`와 같은 관례여야 한다 — `^-`만 보면 `* 기각 — N/A`가 sentinel로
@@ -1001,7 +935,8 @@ def gate(path: Path) -> int:
             if not audit_sec6_absent and attribution_block_missing(audit_text):
                 failures.append("audit §6 출처 표기 블록 부재 (🗣·☑·✎ 세 기호를 모두 담은 인용 줄 필요)")
             if not sec5_absent and not any(m.startswith("3.") for m in amiss):
-                ae = bijection_a_errors(text, audit_text)
+                ae = _bijection_a(section5_entries(text),
+                                  _section_text(audit_text, "3", "Steelman 원문"))
                 if ae:
                     failures.append(f"bijection A (payload §5↔audit §3): {ae}")
             if not any(m.startswith("7.") for m in amiss):
@@ -1018,9 +953,15 @@ def gate(path: Path) -> int:
     unk = landscape_unkeyed(text)
     if unk:
         failures.append(f"unkeyed landscape entries: {len(unk)}")
-    mal = skepticism_malformed(text)
+    entries5 = section5_entries(text) if not sec5_absent else []
+    mal = _skepticism_malformed(entries5)
     if mal:
         failures.append(f"malformed §5 verdict entries: {len(mal)}")
+    rmal = review_record_malformed(entries5)
+    if rmal:
+        failures.append(f"malformed §5 검토 entries: {len(rmal)}")
+    if not sec5_absent and not skepticism_closure_ok(entries5):
+        failures.append("§5 skepticism 기록 0건 (verdict 항목도 검토 항목도 없음)")
 
     if not sec5_absent and not tried_discarded_ok(text):
         failures.append("§5 기각 항목 0건 (N/A sentinel 없음)")
@@ -1071,7 +1012,10 @@ def main(argv: list[str]) -> int:
         print(json.dumps({"unkeyed": landscape_unkeyed(text)}, ensure_ascii=False))
         return 0
     if sub == "skepticism":
-        print(json.dumps({"malformed": skepticism_malformed(text)}, ensure_ascii=False))
+        e5 = section5_entries(text)
+        print(json.dumps({"malformed": _skepticism_malformed(e5),
+                          "review_records": review_record_entries(e5),
+                          "review_malformed": review_record_malformed(e5)}, ensure_ascii=False))
         return 0
     if sub == "tried-discarded":
         print(json.dumps({"ok": tried_discarded_ok(text)}, ensure_ascii=False))

@@ -398,10 +398,79 @@ grep -qi 'round' <<<"$rhythm_block" \
 # R3 트리거 용어 교체 + OQ 좌표 (scoped)
 # v0.23.0: payload가 9섹션 → 8섹션(§0–§7)이 되면서 OQ 좌표가 §8 → §3으로 이동했다.
 # 락도 새 좌표를 겨눈다 — 부정은 은퇴 좌표 §8(및 v0.22.0의 §6)을, 긍정은 §3을 잡는다.
-r3_block="$(awk '/^### R3 — Steelman/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$SKILL")"
+# R3 절차 분리: R3 절차 전문이 references/steelman.md 로 갔다(설계 §6.2). r3_block 은 그 파일에서
+# 뜬다. 파일 첫 헤딩이 `### R3 — Steelman` 이고 그 뒤로 `##`/`###` 헤딩이 없어야 블록이 파일
+# 끝까지 간다(AC23) — 중간 헤딩 하나가 아래 부재 락 셋을 공허하게 만든다.
+STEELMAN="$FIN_DIR/steelman.md"
+[[ -f "$STEELMAN" ]] && ok "코퍼스: references/steelman.md 실재 (AC4)" || no "코퍼스: references/steelman.md 부재 (AC4)"
+r3_block="$(awk '/^### R3 — Steelman/{f=1;print;next} /^### /{f=0} /^## /{f=0} f' "$STEELMAN")"
+[[ "$(printf '%s\n' "$r3_block" | grep -c .)" -ge 40 ]] \
+  && ok "R3: r3_block 이 40줄 이상 (공허 아님)" || no "R3: r3_block 이 비었거나 잘렸다 — 첫 헤딩 또는 중간 ##/### 헤딩을 보라 (AC23)"
+[[ "$(awk 'NR>1 && /^##(#)? /' "$STEELMAN" | grep -c .)" -eq 0 ]] \
+  && ok "AC23: steelman.md 에 첫 줄 뒤 ##/### 헤딩 없음" || no "AC23: steelman.md 중간에 ##/### 헤딩 — r3_block 이 거기서 끊긴다"
+grep -q '^### R3 — Steelman' "$SKILL" && ok "R3: SKILL.md 에 R3 헤딩 유지" || no "R3: SKILL.md 의 R3 헤딩 소실"
+grep -q 'references/steelman.md' "$SKILL" && ok "AC4: SKILL.md 가 steelman.md 를 가리킨다" || no "AC4: SKILL.md 포인터 부재"
+# C18 — neglect trigger 부재(반전) + 양성 짝(trigger 3값 · 검토 · 보류 · 새 어휘)
 grep -q 'coverage-mapper neglect' <<<"$r3_block" \
-  && ok "R3: trigger term breadth-keeper tunneling replaced by coverage-mapper neglect" \
-  || no "R3: trigger term breadth-keeper tunneling replaced by coverage-mapper neglect"
+  && no "C18: R3 trigger 에 coverage-mapper neglect 잔존" || ok "C18: R3 trigger 에 neglect 없음 (AC5)"
+for t in 'landscape 모순' 'anti-pattern' '제약과의 충돌'; do
+  grep -q "$t" <<<"$r3_block" && ok "R3 trigger 문구 존재: $t" || no "R3 trigger 문구 부재: $t (AC5)"
+done
+grep -q '검토 — steelman 0건' <<<"$r3_block" && ok "R3: 0건 검토 항목 형식 존재 (C8)" || no "R3: 검토 항목 형식 부재"
+grep -q '보류 —' <<<"$r3_block" && ok "R3: 보류 항목 형식 존재 (AC19)" || no "R3: 보류 항목 형식 부재"
+# AC6 어휘 — **맨 토큰 grep 은 부분 문자열에 먹힌다.** 실측(리뷰 라운드 3): `kept` 는
+# s**kept**icism 다섯 자리에 걸려서, 진짜 verdict 자리 셋(`유지(kept)`·`verdict: kept`·
+# `kept/switched`)을 전부 죽여도 `grep -c kept` 가 5 를 내고 스위트가 GREEN 이었다. 같은 결함이
+# `refined`(스키마 키 `refined_drops`)와 `전환`(「게이트로 전환한다」 — 다른 뜻)에도 약하게 있다.
+# 한국어에는 단어 경계가 없어 `\b` 로는 못 막는다 — **한↔영 짝 리터럴**로 못 박는다. 이 형태는
+# 덤으로 매핑까지 잠근다(옛 루프는 여덟 토큰의 «공존»만 봤지 어느 한국어가 어느 영어인지는 안 봤다).
+for pair in '유지(kept)' '보완(refined)' '전환(switched)' '보류(deferred)'; do
+  grep -qF "$pair" <<<"$r3_block" && ok "R3 어휘 짝: $pair" || no "R3 어휘 짝 부재: $pair (AC6)"
+done
+# 고정 순서는 Step 3 게이트에 살고 위 짝은 Step 4 기록 형식에 산다 — 서로 다른 자리라 독립이다.
+grep -qF '유지 / 보완 / 전환 / 보류' <<<"$r3_block" \
+  && ok "AC6: 게이트 선택지 고정 순서 (유지 / 보완 / 전환 / 보류)" \
+  || no "AC6: 게이트 선택지 고정 순서 부재"
+grep -qE 'defended|방어' <<<"$r3_block" && no "AC6: 옛 어휘 defended/방어 잔존" || ok "AC6: 옛 어휘 부재"
+# 5의례 표(`| R3 |` 행)는 r3_block 밖이다 — 그 블록은 이제 steelman.md 에서 뜨고, 표는 SKILL.md
+# 의 다른 절에 산다. 그래서 위 어휘 락이 닿지 않고, 그 자리가 조용히 옛 2값(`방어 또는 전환`)으로
+# 남았다. 요약 표는 독자가 절차 본문보다 **먼저** 믿는 자리라 따로 잠근다. 코퍼스는 $SKILL 전체.
+grep -q '방어 또는 전환' "$SKILL" \
+  && no "AC6: SKILL.md 에 옛 게이트 어휘 '방어 또는 전환' 잔존 (5의례 표 R3 행)" \
+  || ok "AC6: SKILL.md 에 옛 게이트 어휘 '방어 또는 전환' 부재"
+# 양성 짝 — 부재 단언 혼자면 표 행을 통째로 지워도 통과한다(부재는 대상이 없을 때 가장 잘 통과한다).
+ritual_r3="$(grep -m1 '^| R3 |' "$SKILL")"
+{ [[ -n "$ritual_r3" ]] \
+    && grep -qF '유지 / 보완 / 전환 / 보류' <<<"$ritual_r3" \
+    && grep -qF '검토 — steelman 0건' <<<"$ritual_r3"; } \
+  && ok "AC6: 5의례 표 R3 행이 4값 게이트 + steelman 0건 경로를 담는다 (부재락의 양성 짝)" \
+  || no "AC6: 5의례 표 R3 행이 없거나 새 어휘(유지/보완/전환/보류 · 검토 — steelman 0건)를 담지 않는다"
+for w in '재검토 열림' '재검토 사유 없음' '사용자 override'; do
+  grep -q "$w" <<<"$r3_block" && ok "AC22: $w" || no "AC22: $w 부재"
+done
+grep -q 'touches' <<<"$r3_block" && ok "AC20: touches 확인 문구" || no "AC20: touches 부재"
+# AC20 — 옛 락은 `grep -q '부착 M/N\|부착 M'` 였다. 첫 가지가 둘째의 **부분집합**이라 이빨은
+# 전부 둘째에 있었고, 그 둘째는 라벨이 광고하는 «형식 문자열 넷»이 아니라 `:46` 의 **정의 문장**
+# 하나가 만족시켰다(실측: 형식 문자열 4건을 다 지워도 GREEN). 두 주장을 쪼갠다.
+[[ "$(grep -c '부착 M/N' <<<"$r3_block")" -ge 4 ]] \
+  && ok "AC20: §5 기록 형식 4종이 '부착 M/N' 을 갖는다 (형식)" \
+  || no "AC20: '부착 M/N' 형식 문자열이 4건 미만 (형식)"
+grep -qF '확인을 통과한 부착' <<<"$r3_block" \
+  && ok "AC20: M 의 정의 — 확인을 통과한 부착만 센다 (정의)" \
+  || no "AC20: M 이 무엇을 세는지 규정하는 문장 부재 (정의)"
+# ── web kill switch 가 dispatch 를 **구조적으로** 막는가 (보안 컨트롤).
+# `steelman-builder` 는 WebSearch/WebFetch 를 갖고 자기 스위치를 읽지 않는다 — 차단 책임은
+# orchestrator 단독이다. 앞선 판본은 `if … echo … fi` 뒤에 `Agent({…})` 를 **조건 밖 별도
+# 펜스**로 두어, 문자 그대로 읽으면 「생략」을 출력하고도 그대로 dispatch 했다(egress 가 게이트
+# 밖). 산문 한 줄은 다음 편집자가 지우면 그만이라 **순서 관계**로 잠근다: if < else < Agent < fi.
+kw_if=$(grep -n 'DEVBREW_SPEC_DISTILL_DISABLE_WEB:-0' "$STEELMAN" | head -1 | cut -d: -f1)
+kw_else=$(awk -v s="${kw_if:-0}" 'NR>s && /^[[:space:]]*else[[:space:]]*$/{print NR; exit}' "$STEELMAN")
+kw_ag=$(grep -n 'Agent({' "$STEELMAN" | head -1 | cut -d: -f1)
+kw_fi=$(awk -v s="${kw_if:-0}" 'NR>s && /^[[:space:]]*fi[[:space:]]*$/{print NR; exit}' "$STEELMAN")
+{ [[ -n "$kw_if" && -n "$kw_else" && -n "$kw_ag" && -n "$kw_fi" ]] \
+    && [[ "$kw_if" -lt "$kw_else" ]] && [[ "$kw_else" -lt "$kw_ag" ]] && [[ "$kw_ag" -lt "$kw_fi" ]]; } \
+  && ok "AC8: steelman dispatch 가 kill switch 의 else 가지 안 (if=$kw_if else=$kw_else Agent=$kw_ag fi=$kw_fi)" \
+  || no "AC8: steelman dispatch 가 kill switch 게이트 «밖» — 스위치가 켜져도 web egress dispatch 가 나간다 (if=$kw_if else=$kw_else Agent=$kw_ag fi=$kw_fi)"
 grep -qE '§[68] OQ' <<<"$r3_block" \
   && no "R3: 은퇴 OQ 좌표(§6/§8) 잔존 (should be §3 OQ)" \
   || ok "R3: 은퇴 OQ 좌표(§6/§8) 제거됨 (should be §3 OQ)"
@@ -410,10 +479,12 @@ grep -qE '§[68] OQ' <<<"$r3_block" \
   || no "R3: §3 OQ reference present (x2)"
 
 # E10 (오케스트레이터 미러) — R3 dispatch 지시에 병렬·투기적 금지 문구 부재.
-# steelman-builder.md 에이전트 persona에서 삭제한 것과 같은 억제가 이 SKILL의 dispatch
-# 지시문에도 있었다(C5/AP9 인용 둘 다 근거 없음 — fix round 1). 전-파일 grep은 잘못이다:
-# :122 'teach-beat 최대 1회'와 :438 '2회까지'가 이 SKILL에 legitimately 남아있으므로
-# "$r3_block"(위에서 정의한 R3 섹션 윈도우)으로 스코프한다.
+# steelman-builder.md 페르소나에서 지운 것과 같은 억제가 R3 dispatch 지시문에도 있었다
+# (C5/AP9 인용 둘 다 근거 없음 — fix round 1). 스코프가 전-파일이 아닌 이유는 코퍼스가
+# 바뀌어도 그대로다: SKILL.md 에 'teach-beat 최대 1회' 같은 legitimate 한 횟수 제한 문구가
+# 남아 있어 전-파일 grep 은 그것에 걸린다. 지금 "$r3_block" 은 SKILL.md 의 섹션 윈도우가
+# 아니라 **references/steelman.md 전문**이다 — 재는 대상은 같고(그 절차의 dispatch 지시),
+# 사는 파일만 옮겨갔다.
 grep -qE '병렬.{0,8}금지|투기적.{0,8}금지' <<<"$r3_block" \
   && no "E10: R3 dispatch에 병렬·투기적 금지 문구 잔존 (scoped to R3)" \
   || ok "E10: R3 dispatch에 병렬 금지 문구 없음 (scoped to R3)"

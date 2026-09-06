@@ -561,10 +561,35 @@ out="$(python3 "$SCRIPT" gate "$FX/interview-brief-st-orphan-audit.md" 2>/dev/nu
   && ok "T10: audit-only ST → '판정 없는 steelman'만 발화 (반대 방향 없음, message teeth)" \
   || no "T10: audit-only ST 메시지 방향이 틀렸거나 반대 방향이 섞여 있음"
 
-# T12: 양쪽 steelman 공집합 + 기각 항목 존재 + sentinel 없음 → green
+# T12 (v0.54.0 — C26): steelman 0건은 `검토 —` 기록 항목이 있어야 green. 기록이 없으면 red.
 python3 "$SCRIPT" gate "$FX/interview-brief-steelman-empty.md" >/dev/null 2>&1 \
-  && ok "T12: steelman 양쪽 공집합은 sentinel 없이 green (R4 sentinel과 다른 조건)" \
-  || no "T12: steelman 공집합은 sentinel을 요구받지 않는다"
+  && ok "T12: steelman 0건 + 검토 항목 1 → green" \
+  || no "T12: 검토 항목이 있는 0건 payload 가 막힌다"
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-steelman-empty-norecord.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'skepticism 기록 0건'; } \
+  && ok "T12(음성): verdict 0 + 검토 0 → red 「skepticism 기록 0건」 (AC9)" \
+  || no "T12(음성): 기록 없는 0건이 통과했다 — 폐쇄 요구가 없다"
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-review-record-malformed.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'malformed §5 검토 entries'; } \
+  && ok "T12(형식): 검토 항목에 기각 이유 없음 → red (AC11)" \
+  || no "T12(형식): 네 토큰 미달 검토 항목이 통과했다"
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-review-only-no-reject.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '§5 기각 항목 0건'; } \
+  && ok "T12(R4): 검토 1 + 기각 0 → red 「§5 기각 항목 0건」 — 검토는 기각을 대신 못 한다 (AC12)" \
+  || no "T12(R4): 검토 항목이 R4 기각으로 세어졌다"
+
+# T20 (v0.54.0 — C10/C15): 새 어휘. refined green · 옛 defended red · 보류 deferred 는 R4 로 안 센다.
+python3 "$SCRIPT" gate "$FX/interview-brief-verdict-refined.md" >/dev/null 2>&1 \
+  && ok "T20: verdict: refined → green (AC13)" || no "T20: refined 가 막힌다"
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-verdict-defended.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q 'malformed §5 verdict entries'; } \
+  && ok "T20: 옛 토큰 defended → red no-verdict (AC13, 별칭 없음)" \
+  || no "T20: defended 가 여전히 유효 토큰이다 — 별칭이 살아 있다"
+out="$(python3 "$SCRIPT" gate "$FX/interview-brief-verdict-deferred-hold.md" 2>/dev/null)"; rc=$?
+{ [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '§5 기각 항목 0건' \
+    && ! printf '%s' "$out" | grep -q 'malformed §5 verdict\|bijection A'; } \
+  && ok "T20: 보류 — deferred 1 + 기각 0 → red 는 R4 만 (verdict 항목·bijection A 는 정상) (AC19)" \
+  || no "T20: 보류 항목이 R4 기각으로 세어졌거나 verdict 항목으로 안 읽힌다"
 
 # T11: verdict 항목 결손 → red ×3 (no-token/short/no-st — 이 셋은 URL과 무관한 결손이다)
 for v in no-token short no-st; do
@@ -584,7 +609,7 @@ python3 "$SCRIPT" gate "$FX/interview-brief-verdict-no-url.md" >/dev/null 2>&1 \
 cp "$FX/interview-brief-verdict-no-url.md" "$TMPD/vnu.md"
 cp "$FX/interview-brief-verdict-no-url.audit.md" "$TMPD/vnu.audit.md"
 sed -i.bak 's|^audit_file:.*|audit_file: vnu.audit.md|' "$TMPD/vnu.md"
-sed -i.bak 's| → verdict: defended — ST1| → ST1|' "$TMPD/vnu.md"
+sed -i.bak 's| → verdict: kept — ST1| → ST1|' "$TMPD/vnu.md"
 rm -f "$TMPD/vnu.md.bak"
 out="$(python3 "$SCRIPT" gate "$TMPD/vnu.md" 2>/dev/null)"; rc=$?
 { [[ $rc -ne 0 ]] && printf '%s' "$out" | grep -q '판정 없는 steelman'; } \
@@ -610,10 +635,10 @@ python3 "$SCRIPT" gate "$FX/interview-brief-verdict-st-in-url.md" >/dev/null 2>&
   && no "FIX4: URL 안 phantom ST9 픽스처가 게이트를 통과함" \
   || ok "FIX4: URL 안 phantom ST9 픽스처 → red"
 
-# FIX4-bis (sweep 발견): bijection_a_errors(check_brief.py:688)도 ST<N>을 찾기 전에
+# FIX4-bis (sweep 발견): bijection_a_errors (skepticism.py)도 ST<N>을 찾기 전에
 # URL을 벗겨낸다 — skepticism_malformed와 같은 방어를 다른 소비자에서 반복한 것이다.
 # 위 FIX4의 gate 단언은 exit code만 보므로 이 defense를 안 껐어도 다른 사유(malformed
-# §5 verdict entries)로 이미 red라 이 결함을 못 잡는다(sweep 실행 실증: 688을
+# §5 verdict entries)로 이미 red라 이 결함을 못 잡는다(sweep 실행 실증: 그 URL 벗기기를
 # 무력화해도 123/123 그대로 GREEN). message teeth로 직접 잡는다 — phantom ST9가
 # "판정 없는 steelman"으로 오탐되면 안 된다.
 out="$(python3 "$SCRIPT" gate "$FX/interview-brief-verdict-st-in-url.md" 2>/dev/null)"
@@ -869,16 +894,41 @@ DEVBREW_SPEC_DISTILL_DISABLE_WEB=1 python3 "$SCRIPT" gate "$FX/interview-brief-s
 # U3-T8(양성/음성): _web_disabled() 를 실제로 부르는 함수가 landscape_present 하나뿐인가.
 # 개수(grep -c)는 advisory 배출까지 세어 공시와 완화를 혼동하므로, 함수 본문만 도려내
 # 지점을 대조한다 (양성 + 음성 짝 — 그래야 "아무것도 안 걸림"으로 통과하는 죽은 락이 아니다).
-body_of() { awk -v f="$1" '$0 ~ "^def "f"\\(" {p=1;next} p && /^def |^[A-Z_]+ = / {exit} p' \
-  "$REPO_ROOT/plugins/spec-distill/scripts/check_brief.py"; }
-printf '%s' "$(body_of landscape_present)" | grep -q '_web_disabled()' \
-  && ok "U3-T8(양성): landscape_present 가 _web_disabled() 를 부른다 — 완화되는 그 하나" \
-  || no "U3-T8(양성): 조임이 사라졌다 — sentinel 구멍이 무조건 열려 있다"
-for fn in landscape_unkeyed skepticism_malformed payload_url_free; do
-  printf '%s' "$(body_of $fn)" | grep -q '_web_disabled()' \
-    && no "U3-T8(음성): $fn 이 여전히 _web_disabled() 로 완화된다 — 공시가 「하나」라고 말하는데 거짓" \
-    || ok "U3-T8(음성): $fn 은 완화되지 않는다"
-done
+#
+# **재는 대상이 두 파일에 나뉜다** — §5 검사는 scripts/skepticism.py 로 떠났다. 그래서
+# `body_of` 는 파일을 인자로 받고, **추출이 비면 `no` 로 떨어진다**: 함수가 어디로 옮겨가든
+# 「아무것도 재지 않은 단언」이 ✓ 로 찍히면 안 된다. 그 공허 통과가 실제로 일어났다 —
+# `skepticism_malformed` 가 모듈로 이사한 뒤 `body_of` 는 빈 문자열을 냈고, 빈 입력에
+# `grep -q` 는 비-0 이라 그대로 `ok` 가지로 흘러 락이 조용해졌다(스위트는 GREEN 이었다).
+# 빈 본문을 fail-closed 로 만드는 이 가드가 그 재발 클래스를 닫는다.
+SD_SCRIPTS="$REPO_ROOT/plugins/spec-distill/scripts"
+body_of() { awk -v f="$1" '$0 ~ "^def "f"\\(" {p=1;next} p && /^def |^[A-Z_]+ = / {exit} p' "$2"; }
+# web_reach <fn> <file> <yes|no> — <yes>=완화되어야 하는 그 하나, <no>=완화되면 안 되는 것
+web_reach() {
+  local fn="$1" file="$2" want="$3" body
+  body="$(body_of "$fn" "$file")"
+  if [[ -z "$body" ]]; then
+    no "U3-T8: $fn 본문을 ${file##*/} 에서 못 찾았다 — 이 단언은 아무것도 재지 않았다 (함수가 옮겨갔는가)"
+    return
+  fi
+  if printf '%s' "$body" | grep -q '_web_disabled()'; then
+    if [[ "$want" == yes ]]; then
+      ok "U3-T8(양성): $fn 가 _web_disabled() 를 부른다 — 완화되는 그 하나 (${file##*/})"
+    else
+      no "U3-T8(음성): $fn 이 여전히 _web_disabled() 로 완화된다 — 공시가 「하나」라고 말하는데 거짓"
+    fi
+  else
+    if [[ "$want" == yes ]]; then
+      no "U3-T8(양성): 조임이 사라졌다 — sentinel 구멍이 무조건 열려 있다"
+    else
+      ok "U3-T8(음성): $fn 은 완화되지 않는다 (${file##*/})"
+    fi
+  fi
+}
+web_reach landscape_present    "$SD_SCRIPTS/check_brief.py" yes
+web_reach landscape_unkeyed    "$SD_SCRIPTS/check_brief.py" no
+web_reach payload_url_free     "$SD_SCRIPTS/check_brief.py" no
+web_reach skepticism_malformed "$SD_SCRIPTS/skepticism.py"  no
 
 # ── N1c — §6 경계 유일성 (v0.46.0) ──────────────────────────────────────────
 # N1a 의 코퍼스(「payload 에서 §6 을 뺀 나머지」)와 N1b 의 코퍼스(「payload §6」)는 서로의

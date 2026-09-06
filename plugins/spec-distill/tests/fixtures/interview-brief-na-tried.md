@@ -49,6 +49,7 @@ TTFP를 줄이는 것이 진짜 목표다. SPA 전환은 수단이었지 목표�
 
 ## 5. 기각 · Blind Spots
 
+- 검토 — steelman 0건: 검토한 방향 2개 · 전제 P1 SSR 우선 · trigger 후보 islands 벤치마크 → 기각 이유 전제와 충돌하지 않고 경계만 다듬는 근거
 - 기각 — N/A — 전부 first-time defend+lock
 - 위험 — 숨은 가정 | SSR 호스트가 항상 저지연: cold start 시 TTFP 역전
 
