@@ -14,7 +14,7 @@
 
 - 모든 경로는 워크트리 `/Users/jeonghokim/Downloads/devbrew/.claude/worktrees/feature+steelman-goal-fit` 기준이다. 브랜치 `feature/steelman-goal-fit`. **main 체크아웃에 쓰지 않는다.**
 - `plugins/spec-distill/` 을 건드리는 PR 이므로 마지막 태스크에서 `.claude-plugin/plugin.json` 을 `0.53.1 → 0.54.0`, `CHANGELOG.md` 에 `## [0.54.0] — 2026-09-06`.
-- builder 의 `tools: Read, Grep, Glob, WebSearch, WebFetch` 와 `model: inherit` · `cost_class: variable` 은 바꾸지 않는다(Law 2 · 락).
+- builder 의 `tools: Read, Grep, Glob, WebSearch, WebFetch` 와 `cost_class: variable` 은 바꾸지 않는다(Law 2 · 락). (정정 2026-09-06: 이 목록은 frontmatter 의 model 키도 동결 대상으로 적었으나, 그 뒤 main 이 리포 전역에서 그 키를 제거했다. 상위 결정이 우선하므로 목록에서 뺀다 — 아래 페르소나 블록에서도 그 줄이 빠져 있다.)
 - 생성 파일(페르소나·steelman.md·템플릿)에는 지시만 쓴다 — 「왜 바뀌었는가」는 CHANGELOG 와 설계 문서에만(Self-narrating artifact 금지).
 - 옛 토큰 별칭 없음(O1). `switched`·`deferred` 는 토큰 그대로.
 - `references/steelman.md` 는 첫 줄 헤딩 `### R3 — Steelman 의심 게이트 (P17)` 뒤로 **`##`/`###` 헤딩을 두지 않는다**(Step 은 `####`). 락의 awk 가 다음 헤딩에서 블록을 끊는다.
@@ -684,7 +684,6 @@ Expected: Fail ≥ 15 (새 단언 대부분 RED).
 ````markdown
 ---
 name: steelman-builder
-model: inherit
 cost_class: variable
 color: red
 tools: Read, Grep, Glob, WebSearch, WebFetch
