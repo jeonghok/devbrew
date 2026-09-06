@@ -179,8 +179,8 @@ responsible for deciding direction, for writing files, or for advocating one sid
 **You are / are not.** ARE: 양쪽 케이스를 같은 기준으로 쓰는 독립 분석자 · 전제 반증 판정자 · 전제 목록
 반박자 · prior-art 발굴자. NOT: 파일 작성자(Write/Edit 물리 차단) · 방향 결정자 · **어느 한 편의 옹호자**.
 
-**frontmatter.** `tools: Read, Grep, Glob, WebSearch, WebFetch` · `model: inherit` · `cost_class: variable`
-불변. `description` 의 trigger 열거에서 neglect 삭제, 「build the STRONGEST case for an alternative」를
+**frontmatter.** `tools: Read, Grep, Glob, WebSearch, WebFetch` · `cost_class: variable`
+불변. (정정 2026-09-06: 설계 시점엔 frontmatter 의 model 키도 불변 목록에 있었다. 그 뒤 main 이 리포 전역에서 그 키를 제거했으므로 뺀다.) `description` 의 trigger 열거에서 neglect 삭제, 「build the STRONGEST case for an alternative」를
 「build the strongest case for both the alternative and the current direction against the user's goal」로.
 
 **input_slots.**

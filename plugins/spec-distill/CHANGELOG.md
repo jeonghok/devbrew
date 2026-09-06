@@ -54,6 +54,12 @@
 - `SKILL.md` 5의례 요약 표의 R3 행이 통과 기준을 여전히 2값(「steelman 후 *방어 또는 전환*」)으로 적어
   4값 게이트(유지/보완/전환/보류)와 모순이었다. 4값으로 정정하고 옛 어휘 부재 + 새 어휘 존재 양성 짝
   단언 추가.
+- `references/steelman.md` Step 2 가 확인도 반증도 못 한 `repo_claims` 항목에 `[미확인]` 라벨을 약속하는데,
+  Step 3 의 4-block 서술은 `evidence[]` 만 항목화하고 `repo_claims` 는 집계로 접어 그 라벨이 나타날 자리가
+  없었다 — Step 2 가 금지한 조용한 흡수로 귀결된다. Step 3 에 항목별 라벨 줄을 더했다.
+- `tests/test_conducting_interview_stage.sh` 의 R3 trigger 존재 락이 토큰 `제약` 을 써서 코퍼스의 다른 세
+  줄에 걸려 통과했다 — 트리거 줄에서 그 문구를 지워도 스위트가 GREEN 이었다. body-unique 인
+  `제약과의 충돌` 로 좁혔다.
 
 ## [0.54.0] — 2026-09-06
 
