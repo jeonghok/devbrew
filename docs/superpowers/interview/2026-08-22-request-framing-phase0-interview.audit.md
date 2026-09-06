@@ -91,3 +91,5 @@ source: spec-distill conducting-interview v0.23.0
 
 - 재제시 1/2 후 사용자가 ① 선택 → **29건 `provisional` → `confirmed`**. sentinel 줄은 같은 write 에서 삭제.
 - `provisional` 유지: **C3** 1건 — C13 이 범위를 바꿔 확정 시 충돌하는 유효 제약 두 개가 생기므로. 이력으로 남김.
+- 이관 (2026-09-06): ST1 verdict: defended → kept (이관 2026-09-06 — 대안의 핵심 주장이 반증돼 원안 유지)
+

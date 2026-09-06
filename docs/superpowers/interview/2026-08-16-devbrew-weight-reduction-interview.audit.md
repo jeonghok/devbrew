@@ -211,3 +211,5 @@ source: spec-distill conducting-interview v0.26.0
 - **모델 호출 실측**: 에이전트 **8회**(coverage-mapper 1 · blind-spot-prober 1 · steelman-builder 1 ·
   direction-reviewer 1 · critic 3 · readback 1) / codex **0회**. 진입 승인 시 고지한 상한은 에이전트 5 —
   **초과분 3회는 방향성 리뷰 이전 단계(인터뷰 본체)의 dispatch로, 리뷰 파이프라인 예산 밖이다.**
+- 이관 (2026-09-06): ST1 verdict: defended → refined (이관 2026-09-06 — 원안 유지 + 위험 4건을 설계 제약으로 이월한 것은 보완이다)
+

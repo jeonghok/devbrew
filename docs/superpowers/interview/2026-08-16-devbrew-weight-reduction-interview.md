@@ -319,7 +319,7 @@ user_sourced_items:
 ## 5. 기각 · Blind Spots
 
 - 기각 — 판단 기준을 새 전역 규약으로 문서화하고 강제 장치를 붙인다 → 무게 진술과 역방향이고, marketplace 거짓 설명이 산문 규칙 + 다중 리뷰를 약 10회 bump 동안 통과한 실측이 그 계층의 무력함을 증명 — https://code.claude.com/docs/en/best-practices — verdict: switched — ST2
-- 기각 — 통일하지 말고 자동 실행 지점만 만들고 갈라지면 RED만 붙인다 → 사용자가 통일 원안을 유지 — https://sandimetz.com/blog/2016/1/20/the-wrong-abstraction — verdict: defended — ST1
+- 기각 — 통일하지 말고 자동 실행 지점만 만들고 갈라지면 RED만 붙인다 → 사용자가 통일 원안을 유지 — https://sandimetz.com/blog/2016/1/20/the-wrong-abstraction — verdict: refined — ST1 (이관 2026-09-06)
 - 기각 — `docs/superpowers/{plans,specs,interview}` 감축 → C9가 대상을 `docs/audits/`로 한정
 - 기각 — `docs/audits/`에서 살아있는 인프라 3개만 남기고 나머지만 이동 → C13이 통째 이동 + 참조 동반 수정을 택함
 - 기각 — kill switch 이름에 옛 이름 fallback + 경고 1릴리스 → C18이 옵션 ③을 택함. ✎ 그 옵션 ③의 내용은 **fallback 없이 즉시 rename + CHANGELOG Deprecated 기재**이며, 사용자 발화 ⟨S25⟩가 담은 것은 옵션 번호와 근거('아직 개인적으로 사용하는 플러그인')뿐이라 이 문구는 orchestrator가 제시한 선택지 문구다

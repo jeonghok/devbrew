@@ -30,11 +30,28 @@ source: spec-distill conducting-interview v0.23.0
 ## 3. Steelman 원문
 
 (steelman-builder 출력 verbatim. payload §5의 `verdict:` 항목이 여기의 `ST<N>`을 참조한다 —
- 양방향 일치가 게이트 대상이다. steelman 0건이면 이 절은 비어 있어도 되고 sentinel도 필요 없다.)
+ 양방향 일치가 게이트 대상이다. steelman 0건이면 이 절은 비어 있어도 되고 sentinel도 필요 없다 —
+ 그때 skepticism 폐쇄 기록은 payload §5 의 `검토 —` 항목이다.)
 
 #### ST1 — <한 줄 요지>
 
+**dispatch 입력** — goal: S<N> · 전제: P1 <…>(S<N>) · P2 <…> · 제약: S1–S<N> 원문 전량 · trigger: <…>
+
 > <builder 출력 verbatim — 다단락 가능>
+
+**게이트-전 확인** — repo_claims: <path+anchor> 확인|반증|미확인 … · 부착 주장: <evidence #> → P<n> 확인|반증 … · 재검토 자격: 열림 <k>건 | 사유 없음
+
+**사용자 선택** — <유지|보완|전환|보류> (S<N>) <— 사용자 override(전제 충돌 0), 해당 시>
+
+#### ST2 — <한 줄 요지>
+
+**dispatch 입력** — goal: S<N> · 전제: P1 <…>(S<N>) · P2 <…> · 제약: S1–S<N> 원문 전량 · trigger: <…>
+
+> <builder 출력 verbatim — 다단락 가능>
+
+**게이트-전 확인** — repo_claims: <path+anchor> 확인|반증|미확인 … · 부착 주장: <evidence #> → P<n> 확인|반증 … · 재검토 자격: 열림 <k>건 | 사유 없음
+
+**사용자 선택** — <유지|보완|전환|보류> (S<N>) <— 사용자 override(전제 충돌 0), 해당 시>
 
 ## 4. 게이트 실행 기록
 
