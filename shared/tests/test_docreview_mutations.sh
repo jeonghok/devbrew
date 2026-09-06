@@ -56,33 +56,48 @@ for c in case_T35_frozen_change_auto_decide case_T10_protected_decide case_T05_T
   fi
 done
 
-# mut <이름> <케이스> <sed 프로그램…> — 사본을 변이하고 케이스가 RED 인지 본다.
-# **판정 조건에 「실패가 규칙에 귀속 가능할 것」이 들어간다(R19)**: 변이된 실행이
-# 파이썬 traceback 을 내면 그 실패가 «규칙 위반 탓»인지 «이 파일이 조금이라도 깨지면
-# 죽는 것 탓»인지 밖에서 구별할 수 없다 — 그런 셀은 「측정 불가」로 RED 고, `_ASSERT_FAIL`
-# 이 몇이든 「잡혔다」로 세지 않는다. 생존 단언 수(`apass`)는 항상 메시지에 출력해
-# 미래 독자가 변별력을 볼 수 있게 하되, 「생존 0」을 판정 기준으로 쓰지는 않는다
-# (단언이 하나뿐인 케이스가 미래에 이 셀을 지목하면 오분류하기 때문 — 판정은 오직
-# traceback 유무).
-mut() {
+# classify_result <bfail> <btb> <afail> <atb> → 판정 하나:
+#   instrument_broken | unmeasurable | caught | no_teeth
+# **판정 로직은 이 함수 하나에만 있다(R20)** — mut()(기대=caught)와 카나리아(기대=
+# unmeasurable, 아래 ⑪)가 이 함수를 똑같이 거쳐 같은 분기를 통과한다. 「실패가 규칙에
+# 귀속 가능할 것」(R19): 변이된 실행이 파이썬 traceback 을 내면(atb=1) 그 실패가
+# «규칙 위반 탓»인지 «이 파일이 조금이라도 깨지면 죽는 것 탓»인지 밖에서 구별할 수
+# 없다 — unmeasurable 로 판정하고 caught 로 세지 않는다.
+classify_result() {
+  if [ "$2" = "1" ] || [ "$1" != "0" ]; then echo "instrument_broken"; return; fi
+  if [ "$4" = "1" ]; then echo "unmeasurable"; return; fi
+  if [ "$3" != "0" ]; then echo "caught"; return; fi
+  echo "no_teeth"
+}
+# mut_expect <기대판정> <이름> <케이스> <sed 프로그램…> — 사본을 변이하고 classify_result
+# 의 판정이 <기대판정> 과 일치하는지 본다. 생존 단언 수(apass)는 항상 메시지에 출력해
+# 미래 독자가 변별력을 볼 수 있게 하되, 「생존 0」을 판정 기준으로 쓰지는 않는다(단언이
+# 하나뿐인 케이스가 미래에 어떤 셀을 지목하면 오분류하기 때문 — 판정은 오직 classify_result
+# 가 낸 문자열과의 일치 여부).
+mut_expect() {
+  local expected="$1"; shift
   local name="$1" case="$2"; shift 2
   local d="$BASE_MUT/$name"; mkclone "$d"
   "$@" "$d" || { no "변이 '$name': sed 적용 실패"; return; }
-  local bfail bpass btb afail apass atb
+  local bfail bpass btb afail apass atb verdict desc
   _split3 "$(run_case "$CLEAN" "$case")"; bfail="$_f"; bpass="$_p"; btb="$_tb"
   _split3 "$(run_case "$d" "$case")";     afail="$_f"; apass="$_p"; atb="$_tb"
-  if [ "$btb" = "1" ]; then
-    no "변이 '$name': 양성 대조(clean 사본) 자체가 traceback — 계측기 고장, 측정 불가"
-  elif [ "$bfail" != "0" ]; then
-    no "변이 '$name' → $case 양성 대조 실패(clean=$bfail) — 계측기 고장"
-  elif [ "$atb" = "1" ]; then
-    no "변이 '$name' → $case 측정 불가 — 변이 실행이 traceback 을 냈다(RED($afail) 생존($apass) 이지만 규칙 귀속인지 크래시 귀속인지 구별 불가 — 「잡힘」으로 안 센다)"
-  elif [ "$afail" != "0" ]; then
-    ok "변이 '$name' → $case RED($afail) 생존($apass) (규칙에 이빨이 있다)"
+  verdict="$(classify_result "$bfail" "$btb" "$afail" "$atb")"
+  case "$verdict" in
+    instrument_broken)
+      if [ "$btb" = "1" ]; then desc="계측기 고장 — 양성 대조(clean 사본) 자체가 traceback"
+      else desc="계측기 고장 — 양성 대조 실패(clean=$bfail)"; fi ;;
+    unmeasurable) desc="측정 불가 — 변이 실행이 traceback 을 냈다(RED($afail) 생존($apass), 규칙 귀속인지 크래시 귀속인지 구별 불가)" ;;
+    caught)       desc="RED($afail) 생존($apass) (규칙에 이빨이 있다)" ;;
+    no_teeth)     desc="안 잡힘(clean=$bfail, mutated=$afail) — 락이 이 규칙을 안 잰다" ;;
+  esac
+  if [ "$verdict" = "$expected" ]; then
+    ok "변이 '$name' → $case $desc"
   else
-    no "변이 '$name' → $case 가 안 잡힘 (clean=$bfail, mutated=$afail) — 락이 이 규칙을 안 잰다"
+    no "변이 '$name' → $case 판정=$verdict 기대=$expected 불일치 — $desc"
   fi
 }
+mut() { mut_expect caught "$@"; }   # 기존 10셀의 계약: 변이는 항상 caught 를 기대한다.
 sed_route()  { sed -i.bak "$1" "$2/docreview_route.py"  && rm -f "$2/docreview_route.py.bak"; }
 sed_anchor() { sed -i.bak "$1" "$2/docreview_anchor.py" && rm -f "$2/docreview_anchor.py.bak"; }
 sed_state()  { sed -i.bak "$1" "$2/docreview_state.py"  && rm -f "$2/docreview_state.py.bak"; }
@@ -136,4 +151,14 @@ mut intent_no_scope case_AC6_fix_contract sed_anchor 's/if intent != scope:/if F
 mut protected_self_only case_anchor_protected_cascade sed_state 's/def _titles_of(sec, by_anchor):/def _titles_of(sec, by_anchor):\n    return [sec.get("title") or ""]  # MUT/'
 # ⑩ same_as max 를 min 으로 — 낮은 처분이 남는다
 mut same_as_min case_T02_same_as_max sed_route 's/keep = max(live, key=lambda m: (RANK\[items\[m\]\["disposition"\]\], m))/keep = min(live, key=lambda m: (RANK[items[m]["disposition"]], m))/'
+# ⑪ 카나리아 — 일부러 크래시하는 변이(R19 이전의 옛 셀 ③ sed 그대로). evidence 가드를
+# 무조건 참으로 눌러도 그 안의 `v["evidence"]` 접근은 그대로 남아, evidence 키가 없는
+# verdict 에서 KeyError 로 죽는다(R19 리뷰어 원 발견 그대로 재현). **기대 판정은
+# unmeasurable 이다** — «잡혔다»가 아니라 «크래시라 못 잰다»가 옳은 판정이기 때문.
+# 이 셀은 classify_result 를 나머지 열 개와 똑같이 거친다(자체 traceback 검사를 따로
+# 갖지 않는다) — 그래서 classify_result 의 atb 분기를 지우면(양의 짝, 보고서 참조)
+# 판정이 caught 로 바뀌어 기대(unmeasurable)와 어긋나 이 셀 자체가 RED 로 소리를
+# 낸다. 미래에 엔진이 바뀌어 이 sed 가 더는 안 죽어도 같은 방식으로 소리 낸다(판정이
+# caught 가 되어 기대 unmeasurable 과 불일치) — 조용히 멎지 않는다.
+mut_expect unmeasurable canary_crash case_T05_T06_reject sed_route 's/if v.get("evidence"):/if True:/'
 finish
