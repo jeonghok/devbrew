@@ -112,6 +112,9 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
 - **C1** — 리뷰 진입에 어떤 이벤트 훅도 쓰지 않는다. SessionEnd 정리 훅은 리뷰와 무관하므로 유지한다.
 - **C2** — 루트 `CLAUDE.md` 불변.
 - **C3** — kill switch 는 보안 컨트롤이다(철학 P21). 사용자가 끈 것이 켜진 것으로 동작하거나 보이면 안 된다.
+  **명시적 예외 하나(사용자 결정 D9)**: 은퇴하는 `spec-distill:Stop`·`:review-dispatch` 는 advisory 만 내고 리뷰를
+  막지 않는다. 이 토큰으로 자동 리뷰를 꺼 둔 사용자에게는 오케스트레이터 경유 리뷰가 되살아나고, advisory 가 그
+  사실과 새 끄기 스위치를 알린다 — 「보이면 안 된다」 절반은 지키고 「동작하면 안 된다」 절반은 이 토큰에서 포기한다.
 - **C4** — 새 책임은 별도 모듈에 두고 기존 파일에는 진입 한 줄만 둔다.
 - **C5** — 플러그인을 건드리면 같은 변경에서 bump. 번호는 머지 직전에 정한다(병렬 브랜치와의 동일 번호
   무충돌 병합 방지).
@@ -136,8 +139,8 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
 
 | # | 끊기는 것 | 처리 |
 |---|---|---|
-| 1 | TTL-GC(`scripts/spec-distill-gc.py`)의 **유일한 기동자**가 훅이다(`review-dispatch.py:481` → `hook_common.fire_and_forget_gc`) | `hooks/session-end-cleanup.py` 가 per-session 삭제 뒤 `fire_and_forget_gc()` 를 부른다. 이 함수는 이름과 달리 동기다(`subprocess.run`, `timeout=5`) — SessionEnd 의 `timeout: 10` 안에 들어가고, 떼어낸 자식이 세션 종료 뒤 살아남는지를 따질 필요가 없다. GC kill switch(`spec-distill:spec-distill-gc`)는 그대로다 |
-| 2 | `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE` 의 유일한 독자가 `resolve_mode.py:50` 이다 | `reviewing-spec` 진입(§4.2)이 이 스위치를 존중한다. 이 skill 은 design 전용이므로 의미가 그대로 옮겨간다. 은퇴시키면 이 스위치로 리뷰를 꺼 둔 사용자에게 리뷰가 조용히 되살아난다(C3) |
+| 1 | TTL-GC(`scripts/spec-distill-gc.py`)의 **유일한 기동자**가 훅이다(`review-dispatch.py:481` → `hook_common.fire_and_forget_gc`) | `hooks/session-end-cleanup.py` 의 `main()` **첫 문장**(SessionEnd kill switch 검사와 stdin 파싱보다 앞)에서 `fire_and_forget_gc()` 를 부른다. 그러면 GC 는 자기 스위치만 따른다 — `spec-distill:spec-distill-gc` 와 전역 `DISABLE`(GC 스크립트가 `spec-distill-gc.py:81` 에서 스스로 검사한다). `spec-distill:SessionEnd` 를 꺼도 TTL-GC 는 남고, payload 조기 return(`:33-44`)이나 stdin 디코딩 실패가 GC 를 건너뛰게 하지 않는다 — 옛 Stop 훅도 stdin 을 읽기 전에 GC 를 돌렸다. GC 루트는 옛 훅과 같이 **프로세스 cwd** 의 `state_root()` 다(`spec-distill-gc.py:83`). per-session 삭제는 payload `cwd` 를 쓴다 — 두 층은 원래 서로 다른 훅에서 각자 루트를 풀었고 이 변경이 그 관계를 바꾸지 않는다. 이 함수는 이름과 달리 동기다(`subprocess.run`, `timeout=5`). 훅 `timeout: 10` 은 보통 충분하지만 최악의 경우(git 호출 지연 + GC 5초 + python 기동 둘) 넘을 수 있고, 그때 잃는 것은 그 회차의 GC 뿐이다(다음 SessionEnd 가 다시 돈다). 옛 훅에서는 `spec-distill:Stop` 이 GC 까지 부수효과로 막았다(`review-dispatch.py:479` 가 `:481` 앞) — 이 변경 뒤 그 사용자의 GC 는 다시 돈다. CHANGELOG 에 적는다 |
+| 2 | `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE` 의 유일한 독자가 `resolve_mode.py:50` 이다 | `reviewing-spec` 진입(§4.2)이 이 스위치를 존중한다. 의미는 **끄는 쪽으로 넓어진다** — 예전에는 자동 dispatch·구조 검사만 껐고 수동 호출은 살아 있었지만, 이제는 수동 호출을 포함해 skill 전체를 끈다. content-aware 판별(접미사 없는 `.md` 를 frontmatter 로 design 분류)도 함께 사라진다. 둘 다 README·CHANGELOG 에 적는다. 은퇴시키면 이 스위치로 리뷰를 꺼 둔 사용자에게 리뷰가 조용히 되살아난다(C3) |
 | 3 | `tools/adjudication/check_wiring.py` 의 `review-dispatch.py` 줄번호 키 `EXEMPT` 10개 · `TERMINAL_CONSUMERS` 1개 · `_T5_SELECT_LOOP*` 가 stale 이 되어 `test_adjudication_wiring.sh` 가 RED | 항목을 제거하고 `EXEMPT_BASELINE`·`COMP_BASELINE` 과 그 주석은 **재계수**한 값으로 쓴다(손으로 뺄셈하지 않는다) |
 | 4 | README 의 `spec-distill:Stop`·`:review-dispatch` 키가 도출 키 집합에서 사라져 `shared/tests/test_dispatch_name_defined.sh` 가 RED | 활성 kill switch 목록에서 빼고 「은퇴한 스위치」 절로 옮긴다. 표기는 그 락을 이미 통과하는 v0.36.0 은퇴 절의 방식을 따른다(확인은 plan) |
 | 5 | `reviewing-spec/SKILL.md:159` — 「`DEVBREW_SPEC_DISTILL_DISABLE=1` 은 훅이 dispatch 이전에 이미 걸러낸다」가 거짓이 되고, 이 skill 에 전역 끄기를 적용하는 자리가 없어진다 | §4.2 |
@@ -149,7 +152,7 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
 | 자리 | 넣는 것 (문구는 plan 에서 확정, 요지는 고정) |
 |---|---|
 | `skills/conducting-interview/references/finishing.md` 옵션 ① 의 verbatim `/compact` 템플릿 끝 `다음 단계:` | brainstorming 호출 → 설계문서를 쓰고 커밋 → **그 설계문서 경로로** `Skill spec-distill:reviewing-spec` → 승인 게이트에서 진행이 선택된 뒤 writing-plans. 템플릿에 새 꺾쇠 placeholder 를 넣지 않는다 — 이 문장은 사용자가 그대로 붙여넣는 것이고, 치환되지 않은 placeholder 를 잡는 fail-closed 검사가 없다(`finishing.md:351-353`) |
-| 같은 파일 옵션 ② 의 호출 프롬프트(재결정 규약 C4 문장 옆) | 같은 순서 + 「brainstorming 의 사용자 리뷰 게이트 자리에서 `reviewing-spec` 을 부른다. brainstorming 의 『다음은 writing-plans 뿐』 지시보다 이 순서가 우선한다」 |
+| 같은 파일 옵션 ② 의 호출 프롬프트(재결정 규약 C4 문장 옆) | 같은 순서 + 「brainstorming 의 사용자 리뷰 게이트 자리에서 `reviewing-spec` 을 부른다. brainstorming 의 『다음은 writing-plans 뿐』 지시보다 이 순서가 우선한다」 + 「`reviewing-spec` 이 게이트 없이 끝나면 brainstorming 의 사용자 리뷰 게이트로 돌아간다」 |
 | `templates/interview-brief-template.md` `## 7. Next Action` | 「reviewer 검증」을 `spec-distill:reviewing-spec` 이라는 이름과 순서(작성·커밋 → 리뷰 → 승인 게이트 뒤 writing-plans)로 바꾼다 |
 | `skills/reviewing-spec/SKILL.md` frontmatter `description` | 「superpowers:brainstorming 이 `docs/superpowers/specs/…-design.md` 를 쓰고 커밋한 직후, writing-plans 전에 쓴다. brainstorming 의 사용자 리뷰 게이트를 대신한다. 설계문서 경로를 인자로 받는다」 |
 
@@ -161,8 +164,11 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
 
 `reviewing-spec` 의 승인 게이트(① `/compact` 후 writing-plans · ② 바로 writing-plans · ③ 수정 · ④ 멈춤,
 정본 `references/proceed-gate.md`)가 brainstorming 의 「Please review it」 사용자 리뷰 게이트 자리를 대신한다.
-`reviewing-spec` 이 kill switch 로 꺼져 있으면(§4.2) 게이트 없이 advisory 단락으로 끝나고, 그다음은
-brainstorming 자신의 사용자 리뷰 게이트가 받는다 — 게이트가 0 개가 되는 경로는 없다.
+`reviewing-spec` 이 게이트 없이 끝나는 경로는 셋이다 — kill switch(§4.2) · 문서 부재 · 인자 없음에서 사용자가
+경로를 고르지 않음. 셋 다 advisory 단락의 **마지막 문장**이 같은 복귀 지시다: 「리뷰 없이 끝났다 — writing-plans
+로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).」 §3.1 ②
+의 호출 프롬프트도 같은 분기를 싣는다. 이 둘이 「게이트가 0 개가 되는 경로는 없다」를 받치는 메커니즘이다 —
+정적 문구이므로 AC16 은 문구의 존재와 위치만 잰다.
 
 ### 4. reviewing-spec 진입 계약
 
@@ -187,16 +193,16 @@ brainstorming 자신의 사용자 리뷰 게이트가 받는다 — 게이트가
 {"disabled": false, "reason": null, "advisories": ["[spec-distill] ..."]}
 ```
 
-- **끄기** — `kill_switch_active("spec-distill", "reviewing-spec")`(공용 헬퍼, `shared/killswitch/kill_switch_active.py:29`
-  — hook 이름 인자가 필수라 `DEVBREW_SKIP_HOOKS=spec-distill:reviewing-spec` 이라는 이름 붙은 스위치가 함께
-  생긴다. GC 스크립트가 이름을 가진 선례와 같은 모양) 또는 `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE == "1"`.
+- **끄기** — `kill_switch_active("spec-distill", "review-entry")`(공용 헬퍼, `shared/killswitch/kill_switch_active.py:29`
+  — hook 이름 인자가 필수라 `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` 이라는 이름 붙은 스위치가 함께
+  생긴다. GC 스크립트가 스크립트 이름을 스위치 이름으로 쓴 선례와 같다. skill 이름 `reviewing-spec` 을 쓰지 않는 이유: `check_names.py` 가 README 참조를 skill 이름으로도 해소하므로, 이 스위치의 수신처가 사라져도 매달림으로 잡히지 않는다) 또는 `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE == "1"`.
   `disabled: true` 면 skill 은 `reason` 과 advisories 를 단락으로 내고 게이트 없이 끝난다 — `proceed-gate.md` 가
   이미 규정한 「kill switch 예외 경로」다.
 - **은퇴 토큰 공시** — `DEVBREW_SKIP_HOOKS` 의 전체 토큰 대조로 `spec-distill:Stop` · `spec-distill:review-dispatch`
   (이번에 은퇴) · `spec-distill:validator` · `spec-distill:PostToolUse` · `spec-distill:reminder` ·
   `spec-distill:UserPromptSubmit`(v0.36.0 은퇴), 그리고 독립 변수 `DEVBREW_SPEC_DISTILL_SKIP_AUTOREVIEW == "1"`.
   발견되면 사용자의 토큰을 되읽어 「가리키던 훅은 삭제돼 아무것도 끄지 않는다. 설계문서 리뷰를 끄려면
-  `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` 또는 `DEVBREW_SKIP_HOOKS=spec-distill:reviewing-spec`, 플러그인
+  `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` 또는 `DEVBREW_SKIP_HOOKS=spec-distill:review-entry`, 플러그인
   전체는 `DEVBREW_SPEC_DISTILL_DISABLE=1`」을 advisory 로 낸다.
   - 매칭 규칙은 훅의 `retired_switch_advisory`(`review-dispatch.py:117-170`)를 **옮긴다** — 각 스위치를 읽던
     방식 그대로(토큰은 콤마 분리·양끝 공백 제거 후 전체 일치, `SKIP_AUTOREVIEW` 는 `== "1"`). 부분 문자열
@@ -204,6 +210,9 @@ brainstorming 자신의 사용자 리뷰 게이트가 받는다 — 게이트가
   - v0.36.0 토큰 넷을 포함하는 이유: 지금 그 넷의 advisory 는 「`spec-distill:Stop` 을 쓰라」고 말하는데 훅 삭제
     뒤에는 그 문장이 거짓이 된다. 문구를 고칠 자리가 이 모듈뿐이다.
   - 세션당 1회 마커는 두지 않는다 — 훅은 매 턴 돌아서 필요했지만 이 검사는 리뷰 호출마다 한 번 돈다.
+  - `spec-distill:Stop`·`:review-dispatch` 는 지금 자동 리뷰를 끄는 **살아 있는** 스위치다. 그래서 이 둘의 advisory 는
+    「이 토큰은 더 이상 리뷰를 막지 않는다 — 이번 리뷰는 진행된다」를 먼저 말하고 새 끄기 스위치를 댄다. 막지 않는
+    것은 사용자 결정 D9(C3 의 명시적 예외)다. 나머지 다섯은 v0.36.0 부터 이미 아무것도 끄지 않으므로 현상 유지다.
 - **환경변수 `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC`** 은 끄기 스위치가 아니라 조율 값이므로 advisory 대상이
   아니다. CHANGELOG Removed 에만 적는다.
 
@@ -237,16 +246,16 @@ brainstorming 자신의 사용자 리뷰 게이트가 받는다 — 게이트가
   Principles Instantiated 의 훅·원장·구조 검사 서술(`:81` · `:84-86` · `:89` · `:91-94` · `:112` · `:134` ·
   `:138` · `:140`. `:146` 은 gstack 흡수 이력이라 역사 서술이면 유지 — plan 에서 판정), Hooks Installed(Stop 행 삭제, `:158` 출력 스키마 문장 수정), 「발견의 한계」·
   「행동 케이스 테스트」 절 삭제, kill switch 절(Stop·`review-dispatch`·`REDISPATCH_TTL` 삭제, `DESIGN_MODE_DISABLE`
-  의미 재서술, `spec-distill:reviewing-spec` 추가, TTL-GC 줄은 SessionEnd 기동 사실로), 은퇴 절(새 토큰 둘 +
+  의미 재서술, `spec-distill:review-entry` 추가, TTL-GC 줄(`:228` 「TTL-GC가 backup으로 작동」)은 SessionEnd 첫 문장 기동 사실로), 은퇴 절(새 토큰 둘 +
   advisory 가 `reviewing-spec` 진입으로 옮겨감).
 - **원칙 서술의 정직성** — 「리뷰 진입은 집행(hook)이 아니라 skill 표면과 핸드오프 지시다」를 명시한다. 철학 P13
   (hook = 집행 / skill = capability 표면) 기준으로 이 자리의 집행이 사라졌다는 사실을 숨기지 않는다. Law 2
   분리는 그대로다.
 - **CHANGELOG** — Removed(훅 · 원장 · 발견 · 구조 검사 · 템플릿 · 토큰 · env) / Changed(`reviewing-spec` 입력 계약 ·
-  GC 기동자 · `DESIGN_MODE_DISABLE` 의 집행 지점 · 새 스위치 `spec-distill:reviewing-spec`) / Deprecated(window
+  GC 기동자 · `DESIGN_MODE_DISABLE` 의 집행 지점 · 새 스위치 `spec-distill:review-entry`) / Deprecated(window
   면제 — 선례와 같은 「제3자 설치가 현재 없다」 조건 수용 문구, 확인 시점의 사실 PUBLIC · fork 0 · star 0
   (2026-09-10), 선례의 「조용한 재활성화 없음」 논거가 여기서는 성립하지 않는다는 점과 그래서 두는 advisory) /
-  알려진 결과(§알려진 한계의 넷).
+  알려진 결과(§알려진 한계 전부).
 - **버전** — spec-distill major(공개 표면 제거), quality-gates patch(§5). 번호는 머지 직전.
 - **`plugin.json` description** — 「design docs reviewed by a physically-separated Law 2 reviewer」는 여전히 참이라
   무수정.
@@ -267,14 +276,15 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 - **AC2** — §1 본체 7개 파일이 없다. 삭제 집합의 식별자와 개념 별칭(Stop 훅 · dispatch mandate · arm 원장 ·
   arm-once · 구조 검증 · in-flight · born · `REDISPATCH_TTL` 등)이 CHANGELOG·과거 문서 밖에서 현재형으로 인용되지
   않는다. 검사 목록은 손으로 적지 않고 삭제 집합에서 도출한다.
-- **AC3** — `session-end-cleanup.py` 를 payload 로 실행하면 TTL 이 지난 **다른** 세션 폴더가 지워진다. GC kill
-  switch 가 켜져 있으면 지워지지 않는다.
+- **AC3** — `session-end-cleanup.py` 를 실행하면 프로세스 cwd 의 `state_root()` 아래 TTL 이 지난 **다른** 세션 폴더가
+  지워진다 — `spec-distill:SessionEnd` 가 꺼져 있을 때와 stdin 이 JSON 이 아닐 때도. `spec-distill:spec-distill-gc`
+  또는 전역 `DISABLE` 이 켜져 있으면 지워지지 않는다. 테스트는 `tests/test_session_end_cleanup.py` 에 더한다.
 - **AC4** — `review_entry.py` 의 `disabled` 판정: `DEVBREW_SPEC_DISTILL_DISABLE=1` → true ·
-  `DEVBREW_SKIP_HOOKS=spec-distill:reviewing-spec` → true · `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` → true ·
+  `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` → true · `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` → true ·
   아무것도 없음 → false · 각 변수 `=0` → false.
 - **AC5** — 은퇴 스위치 일곱(토큰 여섯 + `SKIP_AUTOREVIEW=1`)이 각각 사용자의 토큰을 이름으로 대는 advisory 를
   내고, 접미 토큰(`spec-distill:validator-v2`)과 `SKIP_AUTOREVIEW=0` 은 내지 않는다. advisory 는 존재하는
-  스위치만 가리킨다.
+  스위치만 가리킨다. 은퇴 토큰만 설정된 경우 `disabled` 는 false 다(D9).
 - **AC6** — `reviewing-spec` 이 엔진 라운드 전에 `review_entry.py` 를 부르고, `disabled: true` 면 게이트 없이
   advisory 단락으로 끝난다.
 - **AC7** — `reviewing-spec` `## 입력` 은 호출 인자에서 경로를 받고, 인자 없음 경로는 후보 제시 + 사용자 확인이다.
@@ -286,12 +296,20 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 - **AC10** — `shared/tests/test_adjudication_wiring.sh` · `shared/tests/test_dispatch_name_defined.sh` 가 GREEN 이고,
   `check_wiring.py` 의 baseline 값은 재계수 결과와 같다.
 - **AC11** — §5 의 일곱 자리에 삭제된 대상의 현재형 인용이 없고, `codex_prompt_common.py` 사본 일치 검사가 GREEN 이다.
-- **AC12** — 착수 전 baseline 대비 새 실패가 0 이다 — rc 가 아니라 파일별 실패 줄 수로 비교한다.
+- **AC12** — 착수 전 baseline 대비 새 실패가 0 이다. 비교 키는 **실패한 테스트 식별자**(파일 + 케이스 이름)의
+  집합이다 — 의도적으로 삭제한 테스트를 뺀 뒤, 변경 후 집합이 baseline 집합의 부분집합이어야 한다. rc 와 파일별
+  실패 줄 수는 보조 지표다(줄 수만 비교하면 사라진 실패 자리에 새 실패가 들어와도 같은 수가 된다).
 - **AC13** — 새 락은 전부 커밋 뒤 변이를 넣어 RED 를 확인했다(양성 대조 포함).
 - **AC14** — 수동 e2e 1회: 스크래치 리포에서 짧은 `/interview` → brainstorming 을 돌려, 오케스트레이터가
   writing-plans 전에 `reviewing-spec` 을 부르는지 관찰하고 결과를 PR 에 적는다. 부르지 않았으면 그 사실을 그대로
-  적는다 — 관찰 실패는 이 AC 의 실패가 아니라 기록 대상이다.
+  적는다. **통과 조건(D11)**: 옵션 ②(바로 brainstorming) 경로에서 writing-plans 전에 `reviewing-spec` 호출이
+  관찰돼야 한다. 관찰되지 않으면 §3.1 의 핸드오프 문구를 보강하고 다시 관찰한다 — 최대 2회. 그래도 관찰되지 않으면
+  머지 전에 사용자가 결정한다(머지 보류 / 한계로 기록하고 진행). 옵션 ①(`/compact` 후) 경로는 compact 요약이
+  운반자라 손실이 있을 수 있으므로(`finishing.md:347` 「사람이 유일한 운반자다」) 관찰·기록만 하고, 두 경로의 결과를
+  PR 에 구분해 적는다.
 - **AC15** — README·CHANGELOG 가 §6 대로 갱신되고, spec-distill 은 major, quality-gates 는 patch 로 bump 된다.
+- **AC16** — `reviewing-spec` 의 게이트 없는 종료 경로 셋(kill switch · 문서 부재 · 인자 없음 미선택)의 advisory 가
+  각각 §3.2 의 복귀 지시로 끝나고, §3.1 ② 의 호출 프롬프트가 같은 분기를 싣는다.
 
 ## Files to Modify
 
@@ -319,7 +337,13 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 - `skills/reviewing-spec/SKILL.md` · `skills/reviewing-brief/SKILL.md` ·
   `skills/conducting-interview/references/finishing.md` · `templates/interview-brief-template.md`
 - `README.md` · `CHANGELOG.md` · `.claude-plugin/plugin.json`
-- 테스트: `test_hook_output_schema.py`(`TestCrossResolverAdvisory` 만 남김) · `test_brainstorming_entry.sh` ·
+- 테스트: `test_hook_output_schema.py` — `TestCrossResolverAdvisory`(`state_path` 만 쓴다)만 남긴다. 훅을 실행하는
+  클래스(`TestReviewDispatchSchema` · `TestReviewDispatchMandateScope` · `TestMandateClaimsAreTrue` ·
+  `TestReviewDispatchOrdering` · `TestKillSwitches` · `TestInterviewDirectionLayerScope` — 마지막은 조사상 훅만
+  실행한다, plan 에서 재확인)는 삭제하고, `TestRetiredSwitchAdvisory` 는 `review_entry.py` 테스트로 옮긴다 ·
+  `test_reviewing_spec_design_only.sh`(CONVERGE 락 `:46-51` 이 §4.1 이 없애는 `mode:` 매핑 문장에 기대고 헤더
+  `:13-16` 이 「훅이 내는 `mode:`」를 인용한다 — 「프로필은 `design-doc.md` 고정」 문장으로 증인을 다시 건다) ·
+  `test_session_end_cleanup.py`(AC3) · `test_brainstorming_entry.sh` ·
   `test_brief_review_meta.sh` · `test_stale_terms.sh` · `test_readme_sync.sh` ·
   `test_reviewing_spec_state_keying.sh` · `test_handoff_context_empty_subsections.sh` ·
   `test_handoff_conversation_reference.sh`
@@ -333,9 +357,10 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 
 ## Verification Plan
 
-1. **baseline** — 착수 전 base(`c7b4f580`)에서 spec-distill · shared · quality-gates 스위트를 돌려 파일별 실패 줄
+1. **baseline** — 착수 전 base(`c7b4f580`)에서 spec-distill · shared · quality-gates 스위트를 돌려 실패한 테스트
+   식별자(파일 + 케이스) 집합(AC12 의 비교 키)과, 보조 지표로 파일별 실패 줄
    수를 기록한다. 이미 RED 인 파일은 이유를 함께 적는다.
-2. **새 락** — AC3·AC4·AC5 는 행동 테스트(프로세스 실행 · 환경변수 행렬), AC1·AC2·AC7·AC8 은 정적 락이다. 정적
+2. **새 락** — AC3·AC4·AC5 는 행동 테스트(프로세스 실행 · 환경변수 행렬), AC1·AC2·AC7·AC8·AC16 은 정적 락이다. 정적
    락은 문구의 존재와 순서를 증명할 뿐 모델이 따르는지는 재지 못한다 — 그 한계를 락 헤더에 적는다. 부재 락에는
    양성 짝을 붙인다(`Stop` 부재 ↔ `SessionEnd` 존재, `$STATE` 부재 ↔ `STATE_DIR` 존재).
 3. **mutation** — 새 락마다 커밋 뒤 변이를 넣고 RED 를 확인한다. 삭제만이 아니라 추가 · 반전 · 형태 변경으로
@@ -361,6 +386,10 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 | `DESIGN_MODE_DISABLE` 은퇴 | 그 스위치로 리뷰를 꺼 둔 사용자에게 리뷰가 조용히 되살아난다(C3) |
 | 게이트된 헤드리스 행동 테스트 | 모델 행동이라 흔들린다 — 흔들리는 RED 는 풍경이 된다. 헤드리스 `claude -p` 는 rc 0 으로 조용히 실패하는 모드가 기록돼 있다. 사용자 결정 D8 |
 | brainstorming 전체 헤드리스 실행 | `AskUserQuestion` 게이트에 답할 수 없어 실행이 멈춘다 |
+| 은퇴하는 `spec-distill:Stop`·`:review-dispatch` 를 끄기로 존중(수동 포함 disabled) | C3 를 온전히 지키지만 사용자가 advisory 만을 골랐다(D9) |
+| 은퇴 토큰을 호출 주체로 나눔(오케스트레이터 호출이면 disabled, 사용자 직접 호출이면 advisory) | 두 호출을 기계적으로 가를 표식이 없어 skill 인자에 새 표식을 발명해야 한다 |
+| `review_entry.py` 에 Law 1 필수 섹션 advisory 전용 존재 검사 | 「고침 → 재검사」 루프는 없지만, brainstorming 설계문서는 Law 1 섹션 목록을 따르지 않아 거의 매 리뷰 소음이 된다. 사용자는 구현 0 수용을 골랐다(D10) |
+| 새 스위치 이름을 skill 이름(`spec-distill:reviewing-spec`)으로 | `check_names.py` 가 README 참조를 skill 이름으로도 해소해 수신처가 사라져도 매달림으로 잡히지 않는다 |
 
 ## 알려진 한계
 
@@ -370,10 +399,13 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 - **`/brainstorming` 직접 경로는 약하다.** `reviewing-spec` description 하나가 brainstorming 본문의 「Do NOT invoke
   any other skill」과 정면으로 부딪친다. 이 경로에서는 리뷰를 건너뛰고 writing-plans 로 가는 경우가 흔할 것으로
   본다. 우회는 `/spec-distill:reviewing-spec <path>` 수동 호출이다.
-- **Law 1 필수 섹션 게이트의 리포 내 구현이 0 이 된다.** CLAUDE.md Law 1 이 나열한 섹션(Context/Why · Goals ·
+- **Law 1 필수 섹션 게이트의 리포 내 구현이 0 이 된다(사용자 결정 D10 으로 수용).** CLAUDE.md Law 1 이 나열한 섹션(Context/Why · Goals ·
   Non-goals · …)을 검사하던 유일한 코드가 spec 모드 검사였다 — 생산자가 없어 발동하지 않았지만 삭제 뒤에는 코드도
   없다. 다른 플러그인(quality-gates · project-init)에 같은 게이트는 없다(project-init 의 charter 게이트는 대상이
   다르다).
+- **자동 리뷰를 꺼 둔 사용자에게 리뷰가 되살아난다(사용자 결정 D9).** `spec-distill:Stop`·`:review-dispatch` 를
+  설정한 사용자는 advisory 를 보고 `spec-distill:review-entry` 또는 `DESIGN_MODE_DISABLE` 로 옮겨야 한다. 옮기기 전
+  첫 리뷰는 codex 호출을 포함해 한 번 돈다.
 - **deprecation window 면제의 근거가 약하다.** 리포가 PUBLIC 이라 누구든 마켓플레이스로 추가할 수 있고, fork 0 ·
   star 0 은 「설치가 없다」의 증명이 아니다.
 
@@ -397,12 +429,15 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 | D6 | 설계 섹션 1 | 승인 — GC→SessionEnd · `DESIGN_MODE_DISABLE` 존중 · 배선 락 재계수 · README 은퇴 절 · 인용 정정(quality-gates bump 포함) |
 | D7 | 설계 섹션 3 | 승인 |
 | D8 | 핵심 주장의 행동 검증 | 수동 e2e 1회 |
+| D9 | 은퇴하는 `spec-distill:Stop`·`:review-dispatch` (리뷰 라운드 1 이후) | advisory 만 — 리뷰를 막지 않는다. 이 토큰 사용자에게 리뷰가 되살아나는 것을 수용(C3 의 명시적 예외) |
+| D10 | Law 1 필수 섹션 게이트의 리포 내 구현 0 (리뷰 라운드 1 이후) | 수용 — CHANGELOG·알려진 한계에 기록 |
+| D11 | AC14 통과 기준 (리뷰 라운드 1 이후) | ② 경로 호출 관찰 필수. 실패하면 핸드오프 문구 보강·재관찰 최대 2회, 그래도 실패면 머지 전 사용자 결정. ① 경로는 관찰·기록 |
 
 오케스트레이터가 정하고 사용자에게 알린 것(되돌리려면 괄호 안의 한마디):
 
 | 정한 것 | 근거 |
 |---|---|
-| 새 스위치 `spec-distill:reviewing-spec` 신설 (「새 토큰 없이」) | 공용 헬퍼가 이름을 요구한다. GC 스크립트 선례 |
+| 새 스위치 `spec-distill:review-entry` 신설 (「새 토큰 없이」) | 공용 헬퍼가 이름을 요구한다. 이름은 스크립트 이름을 따른다(GC 선례 `spec-distill-gc`) — 처음 정한 `spec-distill:reviewing-spec` 은 skill 이름과 같아 이름 락이 수신처 소실을 못 잡는다(리뷰 라운드 1 지적) |
 | 은퇴 advisory 의 세션당 1회 마커 폐지 | 리뷰 호출마다 한 번만 돈다 |
 | v0.36.0 은퇴 토큰 넷을 advisory 대상에 포함 (「이번 두 개만」) | 지금의 그 advisory 문구가 훅 삭제 뒤 거짓이 된다 |
 | 다른 리포용 CLAUDE.md 안내를 README 에서 제외 (「README 안내는 남겨라」) | devbrew 가 스스로 하지 않는 일을 권하는 문장이 된다(D5) |
