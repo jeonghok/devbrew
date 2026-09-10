@@ -416,14 +416,17 @@ grep -q 'advisory' <<<"$covmap_block" \
 # rewrap 관용은 flatten 이 담당한다.
 close_block="$(awk '/^## 닫힘 · 재개방/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
 close_flat="$(tr '\n' ' ' <<<"$close_block" | tr -s ' ')"
-{ [[ -n "$close_block" ]] && grep -qE '사용자가 답한 S[^.]{0,10}뒤에만 닫' <<<"$close_flat"; } \
-  && ok "AC1/G2: «차원은 사용자가 답한 S 뒤에만 닫는다»" || no "AC1/G2: 닫힘 규칙 부재"
+# 한정어 «그 차원에 관한» 을 문구째 잡는다 — 어느 S 로 닫혔는지 보는 게이트가 없어(OQ2) 이 산문이
+# 유일한 방어선이고, 한정어가 빠지면 아무 S 나 인용해 닫는 것이 규칙상 허용된다.
+{ [[ -n "$close_block" ]] && grep -qF '차원은 그 차원에 관한 질문에 사용자가 답한 S 를 근거로만 닫는다' <<<"$close_flat"; } \
+  && ok "AC4/G2: «차원은 그 차원에 관한 질문에 사용자가 답한 S 를 근거로만 닫는다»" \
+  || no "AC4/G2: 닫힘 규칙(한정어 «그 차원에 관한» 포함) 부재"
 grep -qE '횟수[^.]{0,30}닫힘 근거가 아니' <<<"$close_flat" \
   && ok "G2: 이벤트 횟수는 닫힘 근거 아님" || no "G2: 횟수-비근거 문장 부재"
 grep -qF 'closed → open' <<<"$close_block" \
   && ok "AC5: closed → open 전이" || no "AC5: closed → open 부재"
-grep -qF '→ <차원> 재개방' <<<"$close_block" \
-  && ok "AC5: 상충 줄에 → 재개방" || no "AC5: 상충-재개방 표기 부재"
+grep -qF '«지금 이해»에 «→ <차원> 재개방' <<<"$close_flat" \
+  && ok "AC4/AC5: 재개방 표시 자리가 그 라운드의 «지금 이해»" || no "AC4/AC5: 재개방 표시 자리(«지금 이해») 부재"
 grep -qE '다시 닫힐 때[^.]{0,20}새 S|새 S[^.]{0,20}인용' <<<"$close_flat" \
   && ok "AC5: 재개방 후 닫힘은 새 S" || no "AC5: 새-S 규칙 부재"
 grep -qE '상한[^.]{0,10}없|무상한' <<<"$close_flat" \
@@ -431,6 +434,10 @@ grep -qE '상한[^.]{0,10}없|무상한' <<<"$close_flat" \
 for dim in root_problem landscape skepticism blind_spot open_questions; do
   grep -q "$dim" <<<"$close_block" && ok "§2.1: $dim 의 닫힘 발화 규약" || no "§2.1: $dim 닫힘 발화 규약 부재"
 done
+# landscape 닫힘 발화는 문구까지 잰다(위 루프는 차원 이름만 본다). finishing.md Step A 4 항도 같은
+# 문구여야 한다 — 아래 Step A 4 락이 그쪽을 잰다. 한쪽만 고치면 종료 직렬화가 다른 S 를 인용한다.
+grep -qF 'landscape = 외부 근거 처분 S' <<<"$close_flat" \
+  && ok "AC4: 닫힘 절의 landscape 닫힘 발화 = 외부 근거 처분 S" || no "AC4: 닫힘 절의 landscape 닫힘 발화 문구 부재"
 
 # blind-spot-prober dispatch (AC6/C8, scoped)
 blindspot_block="$(awk '/^## blind-spot-prober dispatch/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
@@ -449,6 +456,10 @@ grep -q 'blind_spot_dispatched' <<<"$blindspot_block" \
 grep -qE 'web 비활성|inline premortem' <<<"$blindspot_block" \
   && ok "C5: web-absent loud degrade to inline premortem" \
   || no "C5: web-absent loud degrade to inline premortem"
+blindspot_flat="$(tr '\n' ' ' <<<"$blindspot_block" | tr -s ' ')"
+grep -qE '사용자 처분 S 를 받은 뒤[^.]{0,30}closed 로 전이' <<<"$blindspot_flat" \
+  && ok "AC4: blind_spot 은 prober 출력의 처분 S 뒤에 closed (닫힘 절과 같은 규칙)" \
+  || no "AC4: blind-spot-prober 절이 처분 S 없이 closed 로 전이한다 — 닫힘 절과 어긋난다"
 
 # rhythm-guard 재프레임 (AC9, scoped)
 rhythm_block="$(awk '/^## C44 Dialectic Rhythm Guard/{f=1;print;next} /^## /{f=0} f' "$SKILL")"
@@ -988,6 +999,9 @@ grep -qF 'coverage-mapper 0' <<<"$b2_block" && ok "B-2: coverage-mapper unavaila
 stepa4="$(awk '/^4\. \*\*Coverage Ledger 직렬화/{f=1} f&&/^5\. /{exit} f' "$FIN")"
 grep -qE 'S<N>|S\d\+|S 앵커' <<<"$stepa4" && grep -qF '재개방' <<<"$stepa4" && ok "Step A 4: 직렬화가 S앵커·재개방 접미를 요구" || no "Step A 4: 직렬화 규칙에 S앵커/재개방 부재"
 grep -qF 'coverage-mapper <k>' <<<"$stepa4" && ok "Step A 4: §2 coverage-mapper <k> 직렬화" || no "Step A 4: coverage-mapper <k> 부재"
+grep -qF 'landscape = 외부 근거 처분 S' <<<"$(tr '\n' ' ' <<<"$stepa4" | tr -s ' ')" \
+  && ok "AC4: finishing.md Step A 4 항의 landscape 닫힘 발화 = 외부 근거 처분 S" \
+  || no "AC4: Step A 4 항의 landscape 닫힘 발화 문구 부재 (닫힘 절과 갈렸다)"
 # audit 템플릿
 TPL="$REPO_ROOT/plugins/spec-distill/templates/interview-audit-template.md"
 grep -qF '(재개방' "$TPL" && ok "AC10: 템플릿 §1 재개방 접미 예시" || no "AC10: 재개방 접미 예시 부재"
@@ -1030,6 +1044,10 @@ c43_prose_n="$(sed -n 's/.*다음 \([0-9][0-9]*\) 경로 중.*/\1/p' <<<"$c43_bl
 [[ "$c43_prose_n" == "$c43_rows" ]] \
   && ok "C43: 산문이 선언한 경로 수 $c43_prose_n == 표 행 수 $c43_rows" \
   || no "C43: 산문 «다음 ${c43_prose_n:-∅} 경로 중» 이 표 행 수 ${c43_rows:-∅} 와 다르다"
+c43_flat="$(tr '\n' ' ' <<<"$c43_block" | tr -s ' ')"
+grep -qF '매 라운드의 «지금 이해»·«질문» 에 어떤 path 인지' <<<"$c43_flat" \
+  && ok "AC4: C43 경로 표시 자리 = 매 라운드의 «지금 이해»·«질문»" \
+  || no "AC4: C43 경로 표시 자리가 «지금 이해»·«질문» 이 아니다"
 
 # 위 락의 코퍼스는 `SKILL.md` 뿐이라 **README 를 못 본다**. 그래서 README 안에서 87줄 떨어진
 # 두 줄이 «4-path» 와 «3-path» 로 서로 모순한 채 릴리스까지 갔다 — 사용자가 가장 먼저 읽는

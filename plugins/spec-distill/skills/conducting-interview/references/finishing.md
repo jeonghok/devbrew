@@ -73,7 +73,7 @@ audit §1 `## Coverage Ledger`에 직렬화합니다.
 
    **닫힌 행의 evidence 는 그 차원을 닫은 사용자 발화 `S<N>` 을 인용합니다**(게이트가 검사합니다 —
    `floor:<dim> evidence cites no S<N> anchor`). 어느 S 인지의 규약: root_problem = 재구성 동의 S ·
-   landscape = 외부 근거 되비추기 처분 S · skepticism = steelman 판정 S · blind_spot = 숨은 가정·
+   landscape = 외부 근거 처분 S · skepticism = steelman 판정 S · blind_spot = 숨은 가정·
    실패 양식 처분 S · open_questions = OQ 목록 확인 S. 사용자-승인 박제 행은 앵커가 접두 **뒤**에
    옵니다: `사용자-승인 박제(@S12) — §Open Questions 참조`. 재개방된 차원은 행 끝에
    `(재개방 <n>회 — <마지막 사유>)` 접미를 붙입니다(state `reopen_log` 의 마지막 항목).

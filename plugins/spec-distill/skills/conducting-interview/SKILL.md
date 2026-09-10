@@ -126,7 +126,8 @@ STATE="$ROOT/<session-id>/state.local.md"
 | (b) **judgment** | 사용자 선호/우선순위/제약 | 사용자에게 묻기 (default path). |
 | (d) **ontological** | "이게 무엇인가" 종류 (essence/root cause 등) | essence/root cause 류 — 라벨 강제 없음. 사용자에게 묻기. |
 
-매 라운드의 «확인한 사실»·«질문» 에 어떤 path 인지 transcript에 명시하십시오.
+매 라운드의 «지금 이해»·«질문» 에 어떤 path 인지 명시하십시오 — 경로 (a) 로 찾을 수 있는 것은 묻기 전에
+먼저 찾아 «지금 이해»에 싣습니다.
 
 ## 사용자 발화 기록 (G1, AC1)
 
@@ -212,17 +213,18 @@ name 기준 union·dedup.
 
 ## 닫힘 · 재개방
 
-**차원은 «그 차원의 되비추기에 사용자가 답한 S» 뒤에만 닫는다.** sweep·steelman·prober 의 **횟수**는
-닫힘 근거가 아니다 — 그 출력은 «상충/위험» 줄로 돌아와 사용자 처분 S 를 받은 뒤 닫힌다. 원장 행의
-evidence 는 그 S 를 인용하고, `check_brief.py`가 앵커 실재를 검사한다(«어느 S 가 닫힘을
+**차원은 그 차원에 관한 질문에 사용자가 답한 S 를 근거로만 닫는다**(floor · derived 모두).
+sweep·steelman·prober 의 **횟수**는 닫힘 근거가 아니다 — landscape·premortem 출력은 «지금 이해»에 실려,
+steelman 출력은 자기 게이트 제시 형식(`references/steelman.md` Step 3)으로 사용자 처분 S 를 받은 뒤 닫힌다.
+원장 행의 evidence 는 그 S 를 인용하고, `check_brief.py`가 앵커 실재를 검사한다(«어느 S 가 닫힘을
 정당화하는가»는 보지 않는다 — 그 한계는 spec OQ6).
-다섯 floor 의 닫힘 발화: root_problem = 재구성 동의 S · landscape = 외부 근거 되비추기 처분 S ·
+다섯 floor 의 닫힘 발화: root_problem = 재구성 동의 S · landscape = 외부 근거 처분 S ·
 skepticism = steelman 판정 S · blind_spot = 숨은 가정·실패 양식 처분 S · open_questions = OQ 목록
 확인 S.
 
 **재개방 — `closed → open` 을 허용한다.** 조건: 새 답·외부 근거·코드 사실이 그 차원의 닫힘 근거 S 와
 충돌할 때(판단은 orchestrator). 기록: 그 차원의 `reopened` +1, `reopen_log` 에
-`{round, reason, conflicts_with: S<N>}` append, 그 라운드의 «상충» 줄에 «→ <차원> 재개방: <사유>».
+`{round, reason, conflicts_with: S<N>}` append, 그 라운드의 «지금 이해»에 «→ <차원> 재개방: <사유>».
 상한 없음 — 라운드는 사용자 답으로만 돌아 사용자가 시계다. 재개방된 차원이 다시 닫힐 때는 **새 S** 를
 인용한다(게이트는 최신 닫힘의 evidence 를 본다).
 
@@ -241,8 +243,8 @@ Agent({ description: "Adversarial premortem", subagent_type: "spec-distill:blind
 ```
 
 출력(`hidden_assumptions[] + failure_modes[]`)을 orchestrator가 payload §5 `## 5. 기각 · Blind Spots`의
-**`위험` 항목**(`- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>`)으로 기록하고, `blind_spot` floor
-차원을 in-progress→closed로 전이한다. web 비활성 시 advisory:
+**`위험` 항목**(`- 위험 — <숨은 가정 | 실패 양식>: <내용> — <근거>`)으로 기록하고, 다음 라운드의
+«지금 이해»에 실어 사용자 처분 S 를 받은 뒤 `blind_spot` floor 차원을 closed 로 전이한다. web 비활성 시 advisory:
 `[spec-distill] web 비활성 — blind-spot-prober 자동 생략, inline premortem으로 전환`.
 
 ## 5 통과 의례 (Law 1 구조 게이트, R1–R5)
