@@ -19,6 +19,10 @@
 #    인자 없는 backtick 나열로만 쓰므로 2번의 정규식(이름 뒤 공백+토큰)에 걸리지
 #    않는다 — 1번 문단만 지워도 2번은 격리돼 그대로 GREEN 이어야 한다(Step 7).
 set -u -o pipefail
+if [ "${1:-}" = "--emit-scanned" ]; then
+  echo "shared/docreview/references/reviewing-document.md"
+  exit 0
+fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 . "$REPO_ROOT/shared/tests/assert.sh"
