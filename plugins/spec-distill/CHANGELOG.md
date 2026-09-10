@@ -9,11 +9,13 @@ major인 이유: **설계문서 리뷰의 자동 진입 계약이 깨진다.** S
 ### Added
 
 - **`scripts/review_entry.py` — `reviewing-spec` 진입 검사.** 끄기 판정(`DEVBREW_SPEC_DISTILL_DISABLE=1` · `DEVBREW_SKIP_HOOKS=spec-distill:review-entry` · `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1`)과 은퇴 스위치 공시를 stdout JSON 한 줄(`disabled` · `reason` · `advisories`)로 낸다. 새 kill switch 이름 `spec-distill:review-entry` 가 여기서 생긴다 — 공용 헬퍼 `kill_switch_active` 가 이름을 요구하고, 이름은 스크립트 이름을 따른다(`spec-distill-gc` 와 같은 관례). skill 이름 `reviewing-spec` 을 쓰지 않은 이유: `check_names.py` 가 README 참조를 skill 이름으로도 해소해 수신처가 사라져도 매달림으로 잡히지 않는다. 락: `tests/test_review_entry.py`.
+- **`reviewing-spec` 의 두 리터럴 펜스.** 진입 펜스(`<!-- review-entry:begin -->`)가 `review_entry.py` 를 부르고 모듈 부재 · rc≠0 · JSON 파싱 실패 · 스키마 위반(최상위 객체 · `disabled` boolean · `reason` 문자열|null · `advisories` 문자열 배열)을 전부 `DISABLED:entry_check_failed` 로 친다(fail-closed) — 끔 여부를 모르는 채 리뷰하면 사용자가 끈 스위치를 무시할 수 있고, 끔으로 치면 잃는 것은 자동 리뷰 한 번이다. skill 산문은 펜스 출력의 마지막 줄(판결)만 읽는다. 미커밋 펜스(`<!-- uncommitted-check:begin -->`)는 승인 게이트 ①/② 직전에 `git -C <dir> status --porcelain -- <basename>` 을 돌려, rc≠0(작업 트리 밖 · git 오류)이면 그 사실을, 출력이 있으면 미커밋을 advisory 로 낸다 — 출력이 비었다는 이유로 깨끗함으로 읽지 않는다. 락: `tests/test_reviewing_spec_entry_fence.sh`(두 펜스를 잘라내 실행).
 
 ### Changed
 
 - **TTL-GC 기동자가 SessionEnd 훅으로 옮겨왔다.** 그전의 유일한 기동자는 삭제된 Stop 훅이었다. `hooks/session-end-cleanup.py` 가 ① 자기 kill switch → ② 끝나는 세션의 폴더 삭제 → ③ `finally` 에서 `fire_and_forget_gc()` 순으로 돈다 — payload 가 JSON 이 아니거나 sid 가 없거나 stdin 디코딩이 실패해도 GC 는 돈다. 그래서 **`DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd`(와 `:session-end-cleanup`)는 이제 세션 정리와 TTL-GC 를 함께 끈다** — GC 만 끄려면 `spec-distill:spec-distill-gc`. GC 의 루트는 옛 훅과 같이 프로세스 cwd 의 state root 다. `fire_and_forget_gc` 는 이름과 달리 동기(timeout 5초)라 훅 timeout 을 넘기면 끊기는 것은 맨 뒤의 GC 뿐이다. `tests/test_session_end_cleanup.py` 의 `run_hook` 은 이제 `cwd` 를 필수로 받는다 — 비우면 러너 cwd 의 실제 상태 루트에서 GC 가 돈다.
 - **Handoff Context 두 락이 리뷰어 쪽만 잰다.** `test_handoff_context_empty_subsections.sh` · `test_handoff_conversation_reference.sh` 는 저자 쪽 계약의 정답 출처로 `templates/spec-template.md` 를 썼다. 템플릿이 사라져 두 락은 `design-doc.md` 프로필(`defer_target` · `handoff_incomplete` rubric)만 잰다. **잃은 것**: Handoff Context 를 `TL;DR` · `Implicit context` · `Deferred to plan` 세 항목으로 쓰라는 저자 지시와 「대화 컨텍스트 가정 금지」 지시의 기계 앵커. brainstorming 은 그 템플릿을 읽지 않았으므로 실제 저자에게 닿던 지시는 아니었다.
+- **`reviewing-spec` 입력 계약.** 설계문서 경로는 **호출 인자**다. 인자가 없으면 최근 커밋 50개 안에서 추가된 `-design.md` 최신 5개 + untracked 를 후보로 보이고 고르게 한다 — 고르지 않으면 대상 부재 경로다. 옛 mandate 의 `mode:` 슬롯은 없다(프로필은 `design-doc.md` 고정). 게이트 없이 끝나는 두 경로(대상 부재 · 진입 검사의 끔 — 검사 실패 포함)의 advisory 는 같은 복귀 지시로 끝난다: 「리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).」 `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` 의 집행 지점이 옛 `resolve_mode.py` 에서 이 진입 검사로 옮겨 오며 **뜻이 끄는 쪽으로 넓어졌다** — 예전에는 자동 리뷰와 구조 검사만 껐고 수동 호출은 살아 있었지만, 이제는 수동 호출까지 끈다. content-aware 판별(접미사 없는 `.md` 를 frontmatter 로 design 분류)도 함께 없어졌다. `test_reviewing_spec_state_keying.sh` 는 sid·`STATE_DIR` 도출만 잰다(원장 호출 창 단언은 대상과 함께 지웠다). `test_reviewing_spec_design_only.sh` 의 양성 단언은 「프로필 `design-doc.md` 고정」 문장으로 증인을 옮겼다.
 
 ### Removed
 
@@ -23,6 +25,7 @@ major인 이유: **설계문서 리뷰의 자동 진입 계약이 깨진다.** S
 - **환경변수 `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC`** — 끄기 스위치가 아니라 조율 값이라 advisory 대상이 아니다. README 스위치 목록에서도 뺐다.
 - **테스트 13 · fixture 9** — 삭제된 코드만 재던 것(`test_arm_ledger.py` · `test_arm_ledger_timing.sh` · `test_arm_once.sh` · `arm_test_helpers.sh` · `test_discover_candidates.py` · `test_discovery_driven_dispatch.py` · `test_parse_spec_structure.sh` · `test_resolve_mode_scope.sh` · `test_review_dispatch.sh` · `test_review_dispatch_design_mandate.sh` · `test_review_dispatch_disposition.sh` · `test_stop_absorbs_validation.py` · `test_write_path_behavior.sh`, fixture 는 이들만 쓰던 7개 + `shared/tests/fixtures/adjudication/` 의 둘). `test_hook_output_schema.py` 는 NG9 cross-resolver 케이스만 남는다 — 은퇴 스위치 케이스는 `test_review_entry.py` 로 옮겼다. `test_stale_terms.sh` V11(원장·훅 본문의 존재 요구)은 대상과 함께 지웠다.
 - **공용 도구의 삭제된 훅 항목** — `tools/adjudication/check_wiring.py` 의 `EXEMPT` 열 자리 · `TERMINAL_CONSUMERS` 한 항목 · 사유 상수 다섯. `EXEMPT_BASELINE` 과 `test_adjudication_wiring.sh` 의 `COMP_BASELINE` 은 삭제 뒤 스캔으로 재계수했다.
+- **`reviewing-spec` 의 `## 원장` 절** — `mark-reviewed` · `check-born` · `clear-inflight` A/B 네 호출과 `$STATE`(원장 파일)·「read==write 디렉토리 불변식」 서술. `check-born` 이 사용자에게 주던 미커밋 advisory 만 원장 없이 남긴다(위 Added).
 
 ### Deprecated
 

@@ -1,46 +1,119 @@
 ---
 name: reviewing-spec
 description: >
-  Use this skill to review a brainstorming design doc (docs/superpowers/specs/...-design.md)
-  with the shared document-review engine. It selects the design-doc profile, runs one engine
-  round (snapshot → kill switch → detection → codex → anonymize → re-critique → freeze-check
-  and routing → gate) inside a single turn, and closes with the shared proceed gate.
-  Design-mode only — the interview brief has its own reviewers (reviewing-brief).
+  Use right after superpowers:brainstorming writes and commits a design doc
+  (docs/superpowers/specs/...-design.md), before superpowers:writing-plans — this review replaces
+  brainstorming's user-review gate. Pass the design doc path as the argument. Runs the shared
+  document-review engine with the design-doc profile (snapshot → detection → codex → anonymize →
+  re-critique → freeze-check and routing → gate) inside a single turn and closes with the shared
+  proceed gate. Design-mode only — the interview brief has its own reviewers (reviewing-brief).
 cost_class: medium
 ---
 
 # reviewing-spec — 문서 리뷰 엔진의 design doc 자리
 
 이 skill 은 진입 껍데기다. 한 라운드의 절차는 공유 엔진이 갖고 있고, 여기 남는 것은 이 자리의
-것 — 입력 · 프로필 · dispatch 둘 · 원장 · 게이트 · degrade 채널 — 뿐이다.
+것 — 입력 · 진입 검사 · 프로필 · dispatch 둘 · 게이트 · degrade 채널 — 뿐이다.
 
 ## 입력
 
-Stop 훅(`hooks/review-dispatch.py`)의 dispatch mandate 가 세 슬롯을 싣는다. 훅은 무변경이므로 이
-셋이 계약의 전부다.
+`$spec_path` 는 **호출 인자**다 — `Skill spec-distill:reviewing-spec <설계문서 경로>` 또는
+`/spec-distill:reviewing-spec <경로>`. 상대 경로면 리포 루트 기준 절대 경로로 바꿔 쓴다.
 
-- `spec path: <절대경로>` → `$spec_path`. 리뷰 대상 문서. 어느 체크아웃인지도 이 절대경로가 말한다.
-- `mode: design|spec` → `$mode`. 프로필 선택에만 쓴다(아래 `## 프로필`).
-- 수명 문장 — 이 mandate 는 이번 dispatch 1회에만 유효하다(상한에 닿았으면 자동 dispatch 중단
-  사실). 이것은 **범위**이지 면제가 아니다 — 리뷰를 건너뛸 근거로 읽지 않는다.
+인자가 없으면 후보를 뽑아 `AskUserQuestion` 으로 고르게 한다 — 현재 브랜치의 최근 커밋 50개
+안에서 추가된 `-design.md` 중 최신 5개와 untracked 전부:
 
-mandate 없이 수동 호출됐으면 그 사실을 loud advisory 로 알리고 `$spec_path` 를 사용자에게 확인한다.
+```bash
+top="$(git rev-parse --show-toplevel)"
+git -C "$top" log -n 50 --diff-filter=A --name-only --pretty=format: -- 'docs/superpowers/specs/*-design.md' | awk 'NF && !seen[$0]++' | head -n 5 | sed "s|^|$top/|"
+git -C "$top" ls-files --others --exclude-standard -- 'docs/superpowers/specs/*-design.md' | sed "s|^|$top/|"
+```
 
-훅이 읽는 파일과 *정의상 동일한* harness session id + state root 로 상태를 연다. 훅은 raw sid 가
-아니라 `resolve_session_id`(env-first: `DEVBREW_SPEC_DISTILL_SESSION_ID` → `CLAUDE_CODE_SESSION_ID`
-→ payload)를 쓰므로, 스킬도 같은 리졸버를 CLI 로 재사용한다(DRY):
+후보가 없거나 사용자가 고르지 않으면 아래 「대상 부재」로 끝낸다.
+
+세션 상태 디렉토리는 `state_path.py` 리졸버로 연다 — 엔진 상태(`docreview-state.md`)와 codex
+산출물이 여기 산다:
 
 ```bash
 harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" session-id)"
 ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" state-root)"
-STATE="$ROOT/$harness_sid/state.local.md"   # 훅이 읽는 바로 그 파일
-STATE_DIR="$ROOT/$harness_sid"              # 엔진 상태(docreview-state.md)도 같은 디렉토리
+STATE_DIR="$ROOT/$harness_sid"
 ```
 
-`$STATE` 를 여는 이유는 arm 원장(`armed_paths`·`dispatch_attempts`·`inflight_paths`)이 훅이 읽는
-바로 그 파일에 있어야 하기 때문이다 — **read==write 디렉토리 불변식**(이 READ 와 아래 `## 원장`
-의 WRITE **전부** 가 같은 `$STATE` 를 가리킴)이 깨지면 arm-once 게이트가 훅과 다른 파일을 키잉해
-통째로 무의미해진다.
+### 대상 부재 — 게이트 없이 끝나는 경로 (정본 Step A)
+
+`$spec_path` 가 working-tree 에 없거나(삭제된 워크트리 경로 등) 인자 없이 불려 후보를 고르지
+않았으면 게이트를 띄우지 않고 이 문면 그대로 끝낸다. 승인 게이트 직전에도 같은 확인을 한 번 더
+한다.
+
+> `[spec-distill] current_spec '<path>' 부재 (working-tree 에 없거나 후보를 고르지 않았다) — handoff 진행 안 함. 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).`
+
+## 진입 검사
+
+엔진 라운드 전에 한 번 돈다. 끄기 판정은 이 펜스가 하고, 산문은 펜스 출력의 **마지막 줄**(판결)만
+읽는다 — 조건을 산문으로 적지 않는다. 산문 조건은 집행되지 않고, kill switch 는 P21 보안 컨트롤이라
+그 공백은 "껐다고 믿게만" 만든다.
+
+<!-- review-entry:begin -->
+```bash
+SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
+ENTRY="$SD/scripts/review_entry.py"
+RETURN_MSG="[spec-distill] 리뷰 없이 끝났다 — writing-plans 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트)."
+if [ ! -f "$ENTRY" ]; then
+  block="$(printf '%s\n' "[spec-distill] 진입 검사 실패(끔으로 친다) — 모듈 부재: $ENTRY" "review-entry: DISABLED:entry_check_failed")"
+else
+  entry_err="$(mktemp 2>/dev/null || printf '/dev/null')"
+  entry_out="$(python3 "$ENTRY" 2>"$entry_err")"; entry_rc=$?
+  entry_err_1="$(head -n 1 "$entry_err" 2>/dev/null)"
+  [ "$entry_err" != /dev/null ] && rm -f "$entry_err"
+  if [ "$entry_rc" -ne 0 ]; then
+    block="$(printf '%s\n' "[spec-distill] 진입 검사 실패(끔으로 친다) — $ENTRY rc=$entry_rc: $entry_err_1" "review-entry: DISABLED:entry_check_failed")"
+  else
+    block="$(printf '%s' "$entry_out" | python3 -c '
+import json, sys
+raw = sys.stdin.read()
+try:
+    d = json.loads(raw)
+except ValueError:
+    d = None
+ok = (isinstance(d, dict)
+      and isinstance(d.get("disabled"), bool)
+      and "reason" in d
+      and (d["reason"] is None or isinstance(d["reason"], str))
+      and isinstance(d.get("advisories"), list)
+      and all(isinstance(a, str) for a in d["advisories"]))
+if not ok:
+    print("[spec-distill] 진입 검사 실패(끔으로 친다) — 출력이 계약(JSON 객체 · disabled boolean · reason 문자열|null · advisories 문자열 배열)을 어긴다: " + raw[:120].replace("\n", " "))
+    print("review-entry: DISABLED:entry_check_failed")
+    sys.exit(0)
+for a in d["advisories"]:
+    print(a)
+if d["disabled"]:
+    print("review-entry: DISABLED:" + (d["reason"] or "disabled"))
+else:
+    print("review-entry: PROCEED")
+')" || block="review-entry: DISABLED:entry_check_failed"
+  fi
+fi
+verdict="$(printf '%s\n' "$block" | tail -n 1)"
+case "$verdict" in
+  "review-entry: PROCEED"|"review-entry: DISABLED:"?*) ;;
+  *) verdict="review-entry: DISABLED:entry_check_failed" ;;
+esac
+printf '%s\n' "$block" | sed '$d'
+[ "$verdict" = "review-entry: PROCEED" ] || printf '%s\n' "$RETURN_MSG"
+printf '%s\n' "$verdict"
+```
+<!-- review-entry:end -->
+
+마지막 줄이 정확히 `review-entry: PROCEED` 일 때만 `## 절차` 로 간다. 그 밖이면 — `review-entry:
+DISABLED:<사유>` — 펜스가 낸 `[spec-distill]` 줄을 **그대로** 한 단락으로 보이고 게이트 없이 끝난다
+(그 단락의 마지막 문장이 복귀 지시다). 정본 `proceed-gate.md` 의 kill switch 예외 경로다. `PROCEED`
+여도 `[spec-distill]` 줄(은퇴 스위치 공시)이 있으면 그대로 보인다.
+
+끄는 스위치는 셋이고 셋 다 이 skill 을 직접 불러도 끈다: `DEVBREW_SKIP_HOOKS=spec-distill:review-entry`
+· `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1` · 플러그인 전체 `DEVBREW_SPEC_DISTILL_DISABLE=1`. 진입
+검사 자신이 실패하면(모듈 부재 · rc≠0 · 출력 계약 위반) 끔으로 친다.
 
 ## 프로필
 
@@ -48,9 +121,7 @@ STATE_DIR="$ROOT/$harness_sid"              # 엔진 상태(docreview-state.md)�
 PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/design-doc.md"
 ```
 
-훅이 내는 `mode:` 의 값역은 `design`·`spec` 인데 프로필 파일 이름은 `design-doc.md` 다 — 이름이
-다르다. **매핑은 이 한 곳에만 있다: `design` 도 `spec` 도 같은 `design-doc.md` 로 간다.** 이 skill
-은 v0.12.0 부터 design 전용이라 `spec` 값이 와도 프로필이 갈리지 않는다.
+프로필은 `design-doc.md` 로 **고정**이다 — 이 skill 은 design 자리 전용이고 다른 프로필을 고르지 않는다.
 
 ## 절차
 
@@ -69,8 +140,7 @@ kill switch 는 P21 보안 컨트롤이라 그 공백은 "껐다고 믿게만" �
 ```bash
 SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
 # `## 프로필` 과 **같은 한 줄**이다. Bash 도구는 호출마다 새 셸이라 앞 펜스의 대입이 여기로
-# 오지 않는다 — `SD=` 를 펜스마다 다시 세우는 것과 같은 이유다. 어느 모드가 어느 프로필로
-# 가는가(매핑)는 그 절 하나에만 있고, 여기 있는 것은 그 결과값의 재도출뿐이다.
+# 오지 않는다 — `SD=` 를 펜스마다 다시 세우는 것과 같은 이유다.
 PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/design-doc.md"
 # 러너의 네 인자 중 둘은 이 펜스가 대입하지 않았었다. 같은 이유(새 셸)로 여기서 함께
 # 세운다 — `$CODEX_YAML` 은 세션의 **순수 함수**라 어느 셸에서 다시 도출해도 같은 파일을
@@ -122,13 +192,13 @@ skip_reason="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^skip_reason: //p')"
 # codex_available: 줄을 낸다(false 여도). 그 줄이 없으면 감지기 자체가 안 돈 것이다 —
 # skip_reason: unknown 으로 뭉개지 않는다.
 if [[ -z "$codex_avail" ]]; then skip_reason="detector_not_runnable"; fi
-# `$spec_path` 는 훅 mandate 의 슬롯(`## 입력`)이라 디스크에서 도출되지 않는다 — 값이
+# `$spec_path` 는 이 skill 의 호출 인자(`## 입력`)라 디스크에서 도출되지 않는다 — 값이
 # 없으면 여기서 **소리를 내고 멈춘다.** 빈 채로 러너에 넘기면 러너가 usage 로 rc 2 에
 # 죽는데, 그 rc 는 아래 잔존물 제거의 옛 조건(rc 3)이 보지 않는 값이라 직전 라운드 YAML 이
 # 그대로 남아 이번 라운드 판정으로 읽힌다. 처방은 「앞에 이어 붙여라」다 — 별개 호출로 다시
 # 돌려도 같은 빈 상태가 재생산된다.
 if [[ -z "${spec_path:-}" || -z "${CODEX_YAML:-}" ]]; then
-  echo "[spec-distill] codex 게이트 입력 부재 — spec_path='${spec_path:-}' CODEX_YAML='${CODEX_YAML:-}'. 「## 입력」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 함께 돌리고, spec_path 에는 dispatch mandate 의 'spec path:' 슬롯 값을 대입해라. 이 라운드의 codex 축은 없이 간다." >&2
+  echo "[spec-distill] codex 게이트 입력 부재 — spec_path='${spec_path:-}' CODEX_YAML='${CODEX_YAML:-}'. 「## 입력」 블록을 이 펜스 앞에 이어 붙여 같은 Bash 호출 안에서 함께 돌리고, spec_path 에는 이 skill 의 호출 인자(설계문서 경로)를 대입해라. 이 라운드의 codex 축은 없이 간다." >&2
   codex_avail=""; skip_reason="gate_inputs_missing"
 fi
 # 진입 중화가 실패했으면 그 사실이 다른 어떤 사유보다 앞선다 — 이 라운드는 codex 를
@@ -156,9 +226,9 @@ fi
 ```
 <!-- codex-gate:end -->
 
-`DEVBREW_SPEC_DISTILL_DISABLE=1` 은 훅이 dispatch 이전에 이미 걸러낸다(이 skill 에 진입하지 않는다).
-`DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` 은 codex 만 끄고 탐지 리뷰는 그대로 돈다.
-`DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` 은 재비판만 끈다. 셋 다 dispatch 직전에 확인하고
+`DEVBREW_SPEC_DISTILL_DISABLE=1` 은 `## 진입 검사` 펜스가 엔진 라운드 전에 걸러낸다(엔진 2단계도 한 번
+더 본다). `DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1` 은 codex 만 끄고 탐지 리뷰는 그대로 돈다.
+`DEVBREW_SPEC_DISTILL_DISABLE_RECRITIC=1` 은 재비판만 끈다. 뒤의 둘은 dispatch 직전에 확인하고
 캐시하지 않으며, 발화한 스위치는 아래 degrade 채널로 공시한다.
 
 ## dispatch 블록 둘
@@ -192,65 +262,6 @@ Agent({
 })
 ```
 
-## 원장
-
-아래 네 호출이 arm 원장(`armed_paths`·`inflight_paths`·`dispatch_attempts`)을 갱신하는 자리 전부다.
-
-### mark-reviewed — 승인 게이트에서 사용자가 진행(①/②)을 고른 뒤
-
-리뷰의 종결 사건이다. 이 기록 이후의 같은-세션 편집은 재arm 되지 않는다. **판정이 났을 때가 아니라
-사용자가 진행을 고른 뒤**에 찍는다 — 라운드 게이트에서 멈춘 문서는 아직 리뷰가 끝난 것이 아니다.
-
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" mark-reviewed "$harness_sid" "$spec_path"
-```
-
-이 한 호출이 **in-flight 표시도 함께 지운다** — 그래서 정상 경로에서는 아래 두 종료 자리의
-`clear-inflight` 를 부를 일이 없다. **예외** — `fin.json` 의 `blocks` 에 critic 사망이 실린 라운드,
-즉 아무도 리뷰하지 않은 라운드에서는 **호출하지 않는다.**
-
-`$harness_sid` 가 빈 값이면 상태 파일을 특정할 수 없으므로 호출하지 않고, 조용히 넘어가는 대신
-advisory 를 낸다:
-
-> `[spec-distill] harness_sid 미해석 — 이 세션의 상태 파일을 특정할 수 없어 리뷰 완료 기록(mark-reviewed)을 남기지 못했다. 같은 문서가 다시 dispatch될 수 있다. 해소: DEVBREW_SPEC_DISTILL_SESSION_ID로 sid를 명시하라.`
-
-### check-born — 진행 직전
-
-approve(①/②) 시점에 남은 유일한 할 일은 **문서가 아직 git 에 없으면 알리는 것**이다.
-
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" check-born "$spec_path"
-```
-
-exit 0 = git-tracked(할 말 없음). exit 1 = 미커밋 — 스크립트가 stderr 로 낸 advisory 를 **그대로**
-사용자에게 노출한다. exit 2 = 스코프 밖 경로 — advisory 를 노출하되 진행을 막지 않는다.
-
-### clear-inflight A — 문서 부재로 끝나는 경로
-
-`$spec_path` 가 working-tree 에 없으면(삭제된 worktree 경로 등) 게이트를 띄우지 않고 끝난다. 이
-문면 그대로 advisory 를 내고, **in-flight 표시를 걷어낸다.**
-
-> `[spec-distill] current_spec '<path>' 부재 (working-tree에 없음) — stale state. current_spec 재선택 또는 세션 리셋 필요. handoff 진행 안 함.`
-
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" clear-inflight "$harness_sid" "$spec_path"
-```
-
-CLI 는 지웠든 못 지웠든 항상 exit 0 이다 — **rc 를 성공 증거로 읽지 말고** stderr 에 뜬 것만
-사용자에게 노출한다. `$harness_sid` 가 빈 값이면 호출하지 않고 위와 같은 사유의 advisory 를 낸다.
-
-### clear-inflight B — ④ 멈춤으로 끝나는 경로
-
-상태를 보존하고 종료한다. 새 판정은 남기지 않고, 남은 일은 in-flight 표시를 걷어내는 것 하나다.
-
-```bash
-python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/arm_ledger.py" clear-inflight "$harness_sid" "$spec_path"
-```
-
-여기도 A 와 같이 **rc 를 성공 증거로 읽지 않는다**.
-`$harness_sid` 가 빈 값이면 호출하지 않고 같은 사유의 advisory 를 낸다. 이 호출은 재발동을
-열지 않는다(`armed_paths` 가 정한다) — 재개는 사용자 요청 시 이 skill 의 수동 호출로 한다.
-
 ## 게이트
 
 골격 · 두 가드 · 예외 경로의 정본은 아래 파일이다. 게이트 진입 시 읽고 따른다.
@@ -264,27 +275,48 @@ Read ${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/proceed-gate.md
 응답을 `decide`·`fix`·`ask` 서브커맨드로 반영한다. `approval_gate_open` 이면 승인 게이트이고, 열린
 것이 남아 있으면 두 단계다.
 
+승인 게이트를 띄우기 직전에 `$spec_path` 가 working-tree 에 있는지 다시 본다 — 없으면
+`### 대상 부재` 문면으로 끝낸다(게이트 없음).
+
 승인 게이트의 옵션 넷 — 정본 Step B 표를 이 skill 어휘로 채운 것이다:
 
 | # | 이 skill 에서 |
 |---|---|
-| ① | `/compact` 후 `superpowers:writing-plans` (권장) — verbatim `/compact` 명령을 노출하고 **턴 종료** |
-| ② | 바로 `Skill superpowers:writing-plans <path>` |
+| ① | 미커밋 확인 → `/compact` 후 `superpowers:writing-plans` (권장) — verbatim `/compact` 명령을 노출하고 **턴 종료** |
+| ② | 미커밋 확인 → 바로 `Skill superpowers:writing-plans <path>` |
 | ③ | 수정 필요 — 후속 질문으로 revise per findings / `conducting-interview` 재진입 / 사용자 직접 편집 분기 |
-| ④ | 멈춤 — 상태 보존하고 종료(`clear-inflight B`) |
+| ④ | 멈춤 — 상태 보존하고 종료 |
 
 - **① 의 정지 요건** — verbatim `/compact` 명령을 노출한 자리에서 **턴 종료(STOP)** 한다. 같은 턴
   에서 `writing-plans` 를 호출하지 않는다(compact 전 진입은 옵션 ① 을 무력화한다). 진입은 사용자가
   `/compact` 를 실제로 실행한 **다음 턴**에 사용자 트리거로만 일어나고, 사용자가 redirect 하면
   미진입한다(P17).
-- **polite stop 금지 (AP2)** — ①/② 를 골랐는데 narrate 만 하고 `## 원장` 의 두 호출과 다음 단계
+- **polite stop 금지 (AP2)** — ①/② 를 골랐는데 narrate 만 하고 `### 미커밋 확인` 과 다음 단계
   진입을 skip 하면 polite stop 이다. 이 skill 을 종료하는 모든 경로는 이 게이트를 거치거나, 게이트를
-  거치지 않는 예외 경로(문서 부재 · kill switch)면 명시적 advisory 단락을 동반한다 — 게이트-less
-  silent 종료는 금지다.
+  거치지 않는 예외 경로(`### 대상 부재` · `## 진입 검사` 의 끔)면 명시적 advisory 단락을 동반한다 —
+  게이트-less silent 종료는 금지다.
 - **재결정 규약 (P23)** — `decide` 처분이 인터뷰가 이미 확정한 항목을 겨냥하면 조용히 덮어쓰지
   않는다. design.md 의 재결정 기록에 *원래 / 재결정 후보 / 근거* 를 적어 다음 라운드로 들고 가고,
   확정이 실제로 뒤집히는 자리는 이 승인 게이트 하나다 — 사용자가 판정한다. 하류의 반증은 보고의
   근거이지 임의 변경의 근거가 아니다. 정본은 `proceed-gate.md` 의 「재결정 규약」 절.
+
+### 미커밋 확인 — ①/② 직전
+
+사용자가 진행을 고르면 다음 단계로 가기 전에 이 펜스를 돌리고, 나온 `[spec-distill]` 줄을 그대로
+보인다. 진행은 막지 않는다.
+
+<!-- uncommitted-check:begin -->
+```bash
+spec_dir="$(dirname -- "$spec_path")"
+spec_base="$(basename -- "$spec_path")"
+born_out="$(git -C "$spec_dir" status --porcelain -- "$spec_base" 2>/dev/null)"; born_rc=$?
+if [ "$born_rc" -ne 0 ]; then
+  echo "[spec-distill] 커밋 여부를 확인하지 못했다(git rc=$born_rc) — '$spec_path' 가 git 작업 트리 밖이거나 git 이 실패했다. writing-plans 전에 문서가 커밋됐는지 직접 확인하라."
+elif [ -n "$born_out" ]; then
+  echo "[spec-distill] 리뷰 수정분이 커밋되지 않았다: $spec_path — writing-plans 전에 커밋하라."
+fi
+```
+<!-- uncommitted-check:end -->
 
 ## degrade 채널
 
