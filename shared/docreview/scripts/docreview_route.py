@@ -106,12 +106,15 @@ def _codex_staleness(st, path):
     라운드의 것은 내용(스키마·마커)으로 못 가른다. 판별자는 시점이다: `begin-round` 가 남긴
     라운드 시작 표식보다 먼저 쓰인 파일은 직전 라운드 것이다. 진입 중화가 불가능한 권한
     조합(상태 디렉토리와 그 파일이 둘 다 쓰기 불가, 상태 파일은 쓰기 가능)에서도 1단계는
-    통과하므로 그 조합의 집행은 여기 하나다. 표식이 없으면 판별할 수 없으므로 부재로 닫는다.
+    통과하므로 그 조합의 집행은 여기 하나다. 표식이 없거나 정수가 아니면 판별할 수 없으므로
+    부재로 닫고, 표식과 같은 시각도 앞뒤를 가를 수 없으므로 부재 쪽으로 닫는다.
     """
     started = ((st.get("rounds") or {}).get(str(st.get("round"))) or {}).get("started_mtime_ns")
     if started is None:
         return "round_start_unrecorded"
-    if path.stat().st_mtime_ns < int(started):
+    if isinstance(started, bool) or not isinstance(started, int):
+        return "round_start_unreadable"
+    if path.stat().st_mtime_ns <= started:
         return "codex_predates_round"
     return None
 

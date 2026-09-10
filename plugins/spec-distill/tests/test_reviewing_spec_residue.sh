@@ -309,12 +309,19 @@ PY
 }
 sid=rs12pred; home="$SCRATCH/$sid"; D="$home/.claude/spec-distill/$sid"; mkdir -p "$D"
 mk_state "$D"                                    # 라운드 1
-yml="$D/docreview-codex.yaml"; plant_stale "$yml"  # 라운드 1 의 codex 산출물 — 라운드 2 시작보다 앞선다
-python3 -c 'import os, sys, time; t = time.time() - 60; os.utime(sys.argv[1], (t, t))' "$yml"
+yml="$D/docreview-codex.yaml"; plant_stale "$yml"  # 라운드 1 의 codex 산출물
+# 직전 라운드의 산출물은 라운드 1 시작 «뒤» · 라운드 2 시작 «앞» 에 쓰인다. 라운드 1 시작을 120초
+# 되돌리고 파일을 그 +60초(ns 명시)에 둔다 — 어떤 타임스탬프 해상도에서도 두 시작 사이다.
+python3 -c 'import os, sys
+sys.path.insert(0, sys.argv[1]); import docreview_state as s
+st = s.load_state(sys.argv[2]); r = st["rounds"]["1"]
+r["started_mtime_ns"] = int(r["started_mtime_ns"]) - 120 * 10**9; s.save_state(sys.argv[2], st)
+t = r["started_mtime_ns"] + 60 * 10**9; os.utime(sys.argv[3], ns=(t, t))' "$SD_SCRIPTS" "$D" "$yml"
 chmod 444 "$yml"; chmod 555 "$D"
 python3 "$SD_SCRIPTS/docreview_anchor.py" snapshot "$FXD/design-sample.md" > "$SCRATCH/$sid.s2.json"
 python3 "$SD_SCRIPTS/docreview_state.py" begin-round --state-dir "$D" --snapshot "$SCRATCH/$sid.s2.json" >/dev/null 2>&1; brc=$?
 rnd="$(python3 "$FXD/st_get.py" "$D/docreview-state.md" 'st["round"]' 2>/dev/null)"
+win="$(python3 -c 'import os, sys, yaml; t = open(sys.argv[1], encoding="utf-8").read(); r = yaml.safe_load(t[4:t.find("\n---\n", 4)])["docreview"]["rounds"]; m = os.stat(sys.argv[2]).st_mtime_ns; a = (r.get("1") or {}).get("started_mtime_ns"); b = (r.get("2") or {}).get("started_mtime_ns"); print(a is not None and b is not None and int(a) < m < int(b))' "$D/docreview-state.md" "$yml" 2>/dev/null)"
 ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
     PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
     STUB_WRITE=none STUB_RC=0 spec_path="$SKILL" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1 \
@@ -323,10 +330,10 @@ left="$(post_state "$yml")"
 python3 "$SD_SCRIPTS/docreview_route.py" prepare-recritic --state-dir "$D" --critic "$FXD/critic-r1.txt" \
     --codex "$yml" > "$SCRATCH/$sid.prep.json" 2>/dev/null
 chmod 755 "$D"; chmod 644 "$yml"
-if [ "$brc" = "0" ] && [ "$rnd" = "2" ] && [ "$left" != "absent" ] && [ "$left" != "0byte" ]; then
-  ok "A3 전제: 이 조합에서 1단계는 통과하고(rc 0, 라운드 2) 펜스는 잔존물을 치우지 못한다 ($left)"
+if [ "$brc" = "0" ] && [ "$rnd" = "2" ] && [ "$win" = "True" ] && [ "$left" != "absent" ] && [ "$left" != "0byte" ]; then
+  ok "A3 전제: 이 조합에서 1단계는 통과하고(rc 0, 라운드 2) 잔존물은 두 라운드 시작 사이에 있으며 펜스는 그것을 치우지 못한다 ($left)"
 else
-  no "A3 전제 붕괴: begin-round rc=$brc 라운드=$rnd 잔존=$left — 이 셀은 하류 판별을 재지 못한다"
+  no "A3 전제 붕괴: begin-round rc=$brc 라운드=$rnd 두 시작 사이=$win 잔존=$left — 이 셀은 하류 판별을 재지 못한다"
 fi
 got="$(prep_view "$SCRATCH/$sid.prep.json")"
 if [ "$got" = "True|codex_predates_round|0" ]; then

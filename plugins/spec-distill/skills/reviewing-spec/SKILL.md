@@ -136,7 +136,7 @@ fi
 # 진입 중화가 실패했으면 그 사실이 다른 어떤 사유보다 앞선다 — 이 라운드는 codex 를
 # 돌리지 않을 뿐 아니라, 하류가 그 자리의 파일을 이번 라운드 판정으로 읽으면 안 된다.
 if [[ "$residue_unclear" == "1" ]]; then
-  echo "[spec-distill] codex 산출물 경로를 비우지 못했다 — 지우지도 절단하지도 못했다: ${CODEX_YAML}. 이 라운드의 codex 축은 없이 간다. 그 파일은 이번 라운드 시작보다 먼저 쓰였으므로 5단계 prepare-recritic 이 부재(codex_predates_round)로 읽는다. 해소: 그 파일을 직접 지우거나 상태 디렉토리의 쓰기 권한을 복구하라." >&2
+  echo "[spec-distill] codex 산출물 경로를 비우지 못했다 — 지우지도 절단하지도 못했다: ${CODEX_YAML}. 이 라운드의 codex 축은 없이 간다. 5단계의 --codex 에 이 경로를 넘기지 마라 — 이번 라운드의 1단계 begin-round 가 rc 0 으로 끝났다면 prepare-recritic 이 이 파일을 부재(codex_predates_round)로 읽지만, 그 전제가 없으면 직전 라운드의 codex finding 이 이번 라운드 판정으로 섭취된다. 해소: 그 파일을 직접 지우거나 상태 디렉토리의 쓰기 권한을 복구하라." >&2
   codex_avail=""; skip_reason="residue_unclearable"; CODEX_YAML=""
 fi
 if [[ "$codex_avail" == "true" ]]; then

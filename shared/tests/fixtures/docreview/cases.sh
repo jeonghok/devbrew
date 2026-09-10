@@ -784,6 +784,58 @@ st = s.load_state(sys.argv[2]); st["rounds"][str(st["round"])].pop("started_mtim
     "시점 판별: 라운드 시작 기록이 없으면 판별할 수 없으므로 부재로 닫는다 (사유 round_start_unrecorded)"
   rm -rf "$d"
 }
+st_mark() {   # st_mark <state-dir> <op> [<file>] — 라운드 시작 표식을 다루는 픽스처 조작(엔진 사본을 쓴다)
+  python3 -c 'import os, sys
+sys.path.insert(0, sys.argv[1]); import docreview_state as s
+d, op = sys.argv[2], sys.argv[3]; st = s.load_state(d); cur = st["rounds"][str(st["round"])]
+if op == "shift-r1-back":   # 라운드 1 시작을 120초 앞으로 되돌리고 파일을 그 +60초(ns 명시)에 둔다
+    r = st["rounds"]["1"]; r["started_mtime_ns"] = int(r["started_mtime_ns"]) - 120 * 10**9; s.save_state(d, st)
+    t = r["started_mtime_ns"] + 60 * 10**9; os.utime(sys.argv[4], ns=(t, t))
+elif op == "tie":           # 파일 mtime 을 이번 라운드 표식과 정확히 같게
+    t = int(cur["started_mtime_ns"]); os.utime(sys.argv[4], ns=(t, t))
+elif op == "garble":        # 표식을 정수가 아닌 값으로
+    cur["started_mtime_ns"] = "not-a-number"; s.save_state(d, st)
+elif op == "window":        # 파일이 라운드 1 시작과 이번 라운드 시작 «사이» 에 있는가
+    m = os.stat(sys.argv[4]).st_mtime_ns; c = cur.get("started_mtime_ns")
+    print(st["round"], c is not None and int(st["rounds"]["1"]["started_mtime_ns"]) < m < int(c))
+else:
+    sys.exit("st_mark: unknown op %s" % op)' "$SCRIPTS" "$@"
+}
+# 직전 라운드의 산출물은 «직전 라운드 시작 뒤 · 이번 라운드 시작 앞» 에 쓰인다 — 위협의 실제 자리다.
+# 위의 부재 단언은 파일을 모든 라운드 시작보다 앞에 두므로 «어느 라운드의 표식과 비교하는가»를
+# 가르지 못한다. 라운드 1 시작을 120초 되돌리고 파일을 그 +60초에 두면, 어떤 타임스탬프
+# 해상도에서도 파일은 두 시작 사이에 있다.
+case_codex_prev_round_output_absent() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  cp "$FX/codex-r1.yaml" "$d/codex.yaml"; st_mark "$d" shift-r1-back "$d/codex.yaml"
+  next_round "$d" "$FX/design-sample.md" >/dev/null
+  assert_eq "$(st_mark "$d" window "$d/codex.yaml")" "2 True" \
+    "시점 판별 전제: 직전 라운드 산출물이 라운드 1 시작과 라운드 2 시작 «사이» 에 있다"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-r1.txt" --codex "$d/codex.yaml" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'd["degrade"]["codex_absent"], d["degrade"]["codex_reason"]')" "(True, 'codex_predates_round')" \
+    "시점 판별: 라운드 2 에서 직전 라운드 산출물(라운드 1 시작 뒤·라운드 2 시작 앞)은 부재다 — 비교 대상은 이번 라운드의 표식이다"
+  rm -rf "$d"
+}
+case_codex_tie_absent() {   # 표식과 같은 시각 — 앞뒤를 가를 수 없으면 부재 쪽으로 닫는다
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  cp "$FX/codex-r1.yaml" "$d/codex.yaml"; st_mark "$d" tie "$d/codex.yaml"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-r1.txt" --codex "$d/codex.yaml" > "$d/prep.json"
+  assert_eq "$(jget "$d/prep.json" 'd["degrade"]["codex_absent"], d["degrade"]["codex_reason"]')" "(True, 'codex_predates_round')" \
+    "시점 판별: mtime 이 라운드 시작 표식과 같으면 부재다 (동률은 부재 쪽)"
+  rm -rf "$d"
+}
+case_codex_round_start_unreadable_absent() {
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  st_mark "$d" garble
+  cp "$FX/codex-r1.yaml" "$d/codex.yaml"
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-r1.txt" --codex "$d/codex.yaml" > "$d/prep.json" 2>/dev/null; rc=$?
+  py docreview_route.py prepare-recritic --state-dir "$d" --critic "$FX/critic-r1.txt" --codex "$d/never-written.yaml" > "$d/ctl.json" 2>/dev/null
+  assert_eq "$rc|$(jget "$d/prep.json" 'd["degrade"]["codex_absent"], d["degrade"]["codex_reason"]' 2>/dev/null)" "0|(True, 'round_start_unreadable')" \
+    "시점 판별: 정수가 아닌 라운드 시작 표식은 죽지 않고 codex 부재로 닫는다 (rc 0, 사유 round_start_unreadable)"
+  assert_eq "$(jget "$d/prep.json" 'd["items"]' 2>/dev/null)" "$(jget "$d/ctl.json" 'd["items"]' 2>/dev/null)" \
+    "시점 판별: 표식이 깨져도 critic 항목은 그대로다 (codex 파일이 없던 라운드와 같다)"
+  rm -rf "$d"
+}
 route_r1() {   # route_r1 <profile> <doc> [critic] [codex] [recritic-tmpl|--skip] → state dir; $R1 = finalize json path
   local prof="$1" doc="$2" critic="${3:-$FX/critic-r1.txt}" codex="${4:-$FX/codex-r1.yaml}" rtmpl="${5:-$FX/recritic-r1.txt.tmpl}"
   local d; d="$(r1 "$prof" "$doc")" || return 1
