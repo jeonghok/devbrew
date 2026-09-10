@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/agents/doc-critic.md plugins/spec-distill/agents/doc-recritic.md
+# guards: plugins/spec-distill/skills/reviewing-brief/SKILL.md plugins/spec-distill/references/docreview-profiles/brief.md plugins/spec-distill/agents/doc-critic.md plugins/spec-distill/agents/doc-recritic.md shared/docreview/scripts/docreview_state.py
 #
 # `reviewing-brief` 껍데기의 **계약** 락 — 문서 리뷰 엔진의 brief 자리.
 #
@@ -23,6 +23,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/references/docreview-profiles/brief.md"
   echo "plugins/spec-distill/agents/doc-critic.md"
   echo "plugins/spec-distill/agents/doc-recritic.md"
+  echo "shared/docreview/scripts/docreview_state.py"
   exit 0
 fi
 
@@ -192,6 +193,18 @@ done
 grep -qF 'references/proceed-gate.md' "$SKILL" \
   && no "게이트: proceed-gate 계약의 채택자 포인터가 있다 — 이 skill 은 진행 게이트를 띄우지 않는다" \
   || ok "게이트: proceed-gate 채택자 포인터 없음 (2단계는 Step B 가 채택자다)"
+{ has "$G_BODY" 'hard gate' && has "$G_BODY" '승인 게이트가 열리지 않는다'; } \
+  && ok "게이트: finding 은 hard gate — 미해소 fix·decide 가 남으면 승인 게이트가 열리지 않는다 (차단력 서술)" \
+  || no "게이트: finding 의 차단력(hard gate) 서술이 사라졌다 — 완화처럼 읽힌다"
+# 그 서술이 엔진의 사실과 맞는가 — 차단 행 표에서 미적용 fix 와 열린 decide 가 실제로 승인을 막는다.
+block_fact="$(PYTHONDONTWRITEBYTECODE=1 python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+import docreview_state as d
+b = {r.name: r.blocks for r in d.GATE_ROWS}
+print("%s %s" % (b.get("unapplied_fix"), b.get("open_decide")))' "$ROOT/shared/docreview/scripts" 2>/dev/null)"
+[ "$block_fact" = "True True" ] \
+  && ok "게이트(사실): 엔진 GATE_ROWS 에서 unapplied_fix · open_decide 가 승인을 막는다 — hard gate 서술이 참이다" \
+  || no "게이트(사실): 엔진의 차단 행이 바뀌었다 ('$block_fact') — SKILL 의 hard gate 서술이 거짓이 됐다"
 { has "$G_BODY" 'polite stop' && has "$G_BODY" '미검증'; } \
   && ok "게이트: polite stop 금지와 critic 사망 시 「미검증」 라벨" \
   || no "게이트: polite stop 금지 또는 「미검증」 라벨이 빠졌다"
