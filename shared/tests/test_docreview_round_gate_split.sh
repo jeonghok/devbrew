@@ -7,7 +7,7 @@
 # (`plugins/spec-distill/skills/reviewing-spec/SKILL.md` 의 `## 게이트`)에 실제로 적혀
 # 있는지 잰다. 엔진 코드는 이 태스크에서 바뀌지 않는다 — 이 락은 산문만 지킨다.
 #
-# ── 두 축 ────────────────────────────────────────────────────────────────
+# ── 세 축 ────────────────────────────────────────────────────────────────
 # 1. 존재 — 분할 규칙 문구가 **본문**(헤더 제외)에 있는지 본다.
 #    `test_docreview_procedure_paths.sh` 와 같은 이유로 헤더 줄('#' 시작)을 코퍼스에서
 #    뺀다 — 헤더나 목차가 문구를 만족시키면 본문을 지워도 GREEN 이 되는 함정이 있다
@@ -17,6 +17,9 @@
 #    (리포에 기록된 실패 유형: feedback_negative_locks_need_positive_pair), 같은 자리에
 #    게이트 절 마커(절차서는 「8. **게이트**」, SKILL 은 「## 게이트」)가 실재하는지를
 #    함께 잰다.
+# 3. 존재 — 상한 도달 + 열린 것이 있는 경우에도 1단계가 「추가 라운드 1회 열기」를
+#    선택지로 낸다는 문구(controller 추가 요청 — `render_gate` else 분기가 이미 그렇게
+#    내는데 산문은 「상한 + 열린 것 0」의 1단계 선택지만 적고 있었다). body-unique.
 set -u -o pipefail
 if [ "${1:-}" = "--emit-scanned" ]; then
   echo "shared/docreview/references/reviewing-document.md"
@@ -59,5 +62,11 @@ assert_grep "$REF_FULL" '^8\. \*\*게이트\*\*' \
   "양의 짝 — 절차서에 8단계 게이트 절이 실재한다 (부재 단언이 통째 삭제로 헛통과하지 않는다)"
 assert_grep "$SKILL_FULL" '^## 게이트$' \
   "양의 짝 — reviewing-spec 에 ## 게이트 절이 실재한다"
+
+# ── 3. 존재 — 상한 도달 + 열린 것 있음에서도 1단계에 추가 라운드 선택지 (body-unique) ──
+assert_contains "$REF_BODY" '그 열린 항목들과 함께' \
+  "절차서 본문이 상한 도달 + 열린 것 있음에서도 1단계가 추가 라운드 1회 열기를 함께 낸다고 적는다"
+assert_contains "$SKILL_BODY" '그 열린 항목들과 함께' \
+  "reviewing-spec ## 게이트 본문이 같은 절을 적는다"
 
 finish
