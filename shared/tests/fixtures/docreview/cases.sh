@@ -691,6 +691,39 @@ case_T39_gate_derivation() {
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["approval_ready"], d["round_gate_needed"], d["approval_gate_open"]')" "(False, True, False)" "T39: 열린 decide → 라운드 게이트, 승인 게이트 아님"
   next_round "$d" "$FX/design-sample.md" >/dev/null; next_round "$d" "$FX/design-sample.md" >/dev/null
   assert_eq "$(py docreview_state.py gate --state-dir "$d" | jgets 'd["cap_reached"], d["approval_gate_open"], d["two_stage"], d["next_round_mode"]')" "(True, True, True, 'extra_approval')" "T39: 상한 도달 + 열린 것 → 두 단계, 다음 라운드는 개별 승인"
+  local gr; gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$gr" "추가 라운드 1회 열기" "T39: 열린 것이 있어도 렌더 1단계가 사용자 말로 「추가 라운드 1회 열기」를 싣는다(Park P3)"
+  assert_not_contains "$gr" "= extra_approval" "T39: 렌더에 날 모드 토큰 'extra_approval' 이 없다"
+  rm -rf "$d"
+}
+# ── 상한 도달 + 열린 것 0 — 승인 게이트는 항상 두 단계다 (Park P3·D-U3) ────
+# 기존(2026-09-06 설계 §8.2 원문)엔 「열린 것이 남아 있으면」만 두 단계였다 — 상한
+# 도달 + 열린 것 0 은 approval_ready 하나로 즉시 진행 옵션이 열렸다(추가 라운드를
+# 고를 자리가 없었다). 사용자가 이 동작을 뒤집었다: 상한 도달이면 항상 두 단계이고
+# 1단계에 「추가 라운드 1회 열기」가 선다. 아래가 그 음 셀이고, 바로 다음이 그 양의
+# 짝(상한 전 + 열린 것 0 은 예전대로 즉시 진행)이다.
+case_cap_zero_open_two_stage() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  next_round "$d" "$FX/design-sample.md" >/dev/null; next_round "$d" "$FX/design-sample.md" >/dev/null
+  local g; g="$(py docreview_state.py gate --state-dir "$d")"
+  assert_eq "$(printf '%s' "$g" | jgets 'd["cap_reached"], d["approval_ready"], d["two_stage"], d["next_round_mode"]')" \
+    "(True, True, True, 'extra_approval')" \
+    "상한 도달 + 열린 것 0: approval_ready 와 무관하게 two_stage 참, next_round_mode 는 개별 승인(Park P3·D-U3)"
+  local gr; gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_contains "$gr" "추가 라운드 1회 열기" "상한 도달 + 열린 것 0: 렌더 1단계가 사용자 말로 「추가 라운드 1회 열기」를 싣는다"
+  assert_contains "$gr" "진행 옵션으로" "상한 도달 + 열린 것 0: 1단계 둘째 선택지 「진행 옵션으로」도 함께 실린다"
+  assert_not_contains "$gr" "= extra_approval" "상한 도달 + 열린 것 0: 렌더에 날 모드 토큰 'extra_approval' 이 없다"
+  rm -rf "$d"
+}
+case_precap_zero_open_not_two_stage() {
+  local d; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  local g; g="$(py docreview_state.py gate --state-dir "$d")"
+  assert_eq "$(printf '%s' "$g" | jgets 'd["cap_reached"], d["approval_ready"], d["two_stage"], d["next_round_mode"]')" \
+    "(False, True, False, None)" \
+    "양의 짝 — 상한 전 + 열린 것 0: two_stage 거짓, next_round_mode 없음(동작 불변)"
+  local gr; gr="$(py docreview_state.py gate --state-dir "$d" --render)"
+  assert_not_contains "$gr" "추가 라운드 1회 열기" "양의 짝: 상한 전 렌더엔 「추가 라운드 1회 열기」문구가 없다"
+  assert_contains "$gr" "다음: 승인 게이트 — 진행 옵션 활성" "양의 짝: 상한 전 + 열린 것 0 은 예전처럼 즉시 진행 옵션이다"
   rm -rf "$d"
 }
 case_T45_decision_log_append_only() {

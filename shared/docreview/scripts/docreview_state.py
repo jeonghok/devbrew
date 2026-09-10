@@ -725,8 +725,14 @@ def gate_summary(st) -> dict:
     g["approval_ready"] = not any(g[row.name] for row in GATE_ROWS if row.blocks)
     g["round_gate_needed"] = bool(g["open_decide"] or g["blocking_ask_open"])
     g["approval_gate_open"] = g["approval_ready"] or g["cap_reached"] or g["stagnation"]
-    g["two_stage"] = g["approval_gate_open"] and not g["approval_ready"]
-    g["next_round_mode"] = None if g["approval_ready"] else ("budget" if rr < REREVIEW_CAP else "extra_approval")
+    # 상한 도달이면 열린 것이 0 이어도 두 단계다(Park P3·D-U3) — 1단계가 「추가 라운드
+    # 1회 열기」(§8.2)를 실어야 하고, 그 문구가 성립하려면 `next_round_mode` 가
+    # `extra_approval` 이어야 한다(`approval_ready` 와 무관). 상한 전(`cap_reached`
+    # False)은 이 조건이 원래 식으로 접혀 동작이 그대로다 — `budget`/`None` 분기는
+    # 손대지 않는다.
+    g["two_stage"] = g["cap_reached"] or (g["approval_gate_open"] and not g["approval_ready"])
+    g["next_round_mode"] = ("extra_approval" if g["cap_reached"]
+                             else (None if g["approval_ready"] else "budget"))
     rep = cur.get("route_report") or {}
     g["degrade"] = rep.get("degrade") or {}
     g["advisory"] = rep.get("advisory") or []
@@ -871,7 +877,20 @@ def render_gate(st, g) -> str:
     out.append("기각 %d건(재비판) · 사용자 기각 %d · drop %d · bucket 충돌 %d · 계보 지목 불일치 %d · 기각 계보 재상승 %d · 미소비 재상승 예약 %d · 미소비 상향 예약 %d"
                % (c["rejected"], c["user_rejected"], len(g["dropped"]), c["bucket_conflicts"],
                   c["lineage_mismatch"], c["revived"], c["reraise_unconsumed"], c["escalated_unconsumed"]))
-    if g["approval_ready"]:
+    if g["two_stage"] and g["next_round_mode"] == "extra_approval":
+        # 상한 도달 — approval_ready 와 무관하게 두 단계이고(Park P3·D-U3), 1단계는
+        # 날 모드 토큰(`extra_approval`)이 아니라 사용자 말로 이름을 낸다. 이 선택지를
+        # 고르면 다음 라운드 1단계가 `begin-round --extra-approval "<문구>"` 로 돌고, 그
+        # 문구는 사용자 자신이 쓰는 것이라 여기 산문에 미리 채우지 않는다.
+        if g["approval_ready"]:
+            out.append("다음: 승인 게이트 1단계 — 「추가 라운드 1회 열기」(다음 라운드 1단계가 "
+                       "begin-round --extra-approval \"<사용자 자신의 문구>\" 로 도는 개별 승인) "
+                       "또는 진행 옵션으로")
+        else:
+            out.append("다음: 승인 게이트 1단계 — 열린 항목을 처리한 뒤 진행 옵션, 또는 "
+                       "「추가 라운드 1회 열기」(다음 라운드 1단계가 "
+                       "begin-round --extra-approval \"<사용자 자신의 문구>\" 로 도는 개별 승인)")
+    elif g["approval_ready"]:
         out.append("다음: 승인 게이트 — 진행 옵션 활성")
     elif g["two_stage"]:
         out.append("다음: 승인 게이트 1단계 — 열린 항목을 처리한 뒤 진행 옵션 (다음 라운드 = %s)" % g["next_round_mode"])
