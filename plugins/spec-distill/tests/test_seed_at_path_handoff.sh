@@ -104,4 +104,28 @@ assert_eq "$(rejects "$tp" '<kebab-topic>')" R "이름 가드: 자리표 TOPIC �
 assert_eq "$(rejects "$ip" '2026-09-10-umbrella-kiosk-interview')" A "이름 가드(양성 짝): 공백 없는 IV_NAME 은 통과"
 assert_eq "$(rejects "$ip" '2026-09-10-umbrella kiosk-interview')" R "이름 가드: 공백 든 IV_NAME 거부"
 
+# ── 공유 계약: 정본 자체에 대한 단언 ───────────────────────────────────────
+stepb="$(block '^## Step B' '^## ' "$CANON")"
+c1="$(printf '%s\n' "$stepb" | grep -E '^\| ① \|')"
+c2="$(printf '%s\n' "$stepb" | grep -E '^\| ② \|')"
+{ [ -n "$c1" ] && [ -n "$c2" ]; } && ok "AC4(양성): 정본 Step B 표 ①·② 행을 읽었다" || no "AC4(양성): 정본 Step B 표 ①·② 행이 없다 — 아래 단언이 공허하다"
+assert_not_contains "$c1" '/compact' "AC4: Step B ① 행이 /compact 를 못박지 않는다"
+assert_contains "$c1" '권장 핸드오프 — skill 이 정한 명령을 노출하고 **턴 종료**' "AC4: ① = 권장 핸드오프, 명령은 skill 이 정한다"
+assert_contains "$c2" '차선 핸드오프 — skill 이 정한다' "§2: ② = 차선 핸드오프"
+assert_contains "$c2" '바로 진행' "§2: ② 에 바로 진행 선택지가 있다"
+fill="$(awk '/^\*\*각 skill 이 채우는 것\*\*/{f=1} f && /^$/{exit} f' "$CANON" | flat)"
+assert_contains "$fill" '①/② 의 핸드오프 종류(`/compact` · `/new` · 바로 진행)와 노출할 명령' "§2: 각 skill 이 채우는 것에 핸드오프 종류"
+stepa="$(block '^## Step A' '^## ' "$CANON" | flat)"
+assert_contains "$stepa" '핸드오프 명령도 노출하지 않는다' "AC4: Step A — 핸드오프 명령도 노출하지 않는다"
+assert_not_contains "$stepa" '`/compact` 도 노출하지 않는다' "AC4: Step A 옛 문면이 없다"
+g1="$(block '^### 가드 1' '^##' "$CANON" | flat)"
+assert_contains "$g1" '완료 동작은 핸드오프 종류가 정한다' "§2: 가드 1 — 완료 동작은 핸드오프 종류가 정한다"
+g2="$(block '^### 가드 2' '^##' "$CANON" | flat)"
+assert_contains "$g2" 'cross-compact 조기 진행 금지 (AC19)' "§2: 가드 2 제목 유지 (기존 인용이 가리키는 이름)"
+assert_contains "$g2" '**명령을 노출하면 그 턴은 거기서 종료(STOP)한다.**' "AC4: 가드 2 — 명령 노출 → 턴 종료"
+assert_contains "$g2" '바로 진행 옵션은 이 정지 요건의 **명시적 예외**다' "AC4: 가드 2 — 바로 진행 → 예외"
+ver="$(block '^## 검증' '^## ' "$CANON" | flat)"
+assert_contains "$ver" '명령을 노출하는 각 옵션의 서술 *블록 안에서*' "§2: 검증 절 리뷰 레이어 = 명령 노출 옵션마다"
+assert_contains "$ver" '「호출 모양」 절 옵션 표 ①·② 행' "§2: 앵커 절 — framing 앵커에 ② 행"
+
 finish
