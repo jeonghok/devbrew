@@ -72,6 +72,13 @@ grep -qF '확정 표시는 «(사용자 확인)» 하나' <<<"$conv_block" && ok
 # 오지 않으므로 이 리터럴을 만족시키지 못한다.
 grep -qF '다시 검증할 것 —»로 시작' <<<"$conv_block" && ok "AC11: 마지막 문단 «다시 검증할 것 —»로 시작 규칙" || no "AC11: 재검증 문단 규약 부재"
 grep -qE '그 밖[^.]{0,30}미확인|나머지[^.]{0,30}미확인' <<<"$conv_flat" && ok "AC11: 무표시 = 미확인" || no "AC11: 무표시=미확인 문장 부재"
+# Phase 1 이 이 문단을 어디에 쓰는가 — conducting-interview references/seed-input.md 와 같은 자리여야
+# 한다(두 문서가 갈라지면 Phase 0 은 없는 블록을 겨냥해 문단을 쓴다).
+grep -qF 'Phase 1 은 이 문단을 R1 의 «지금 이해»·질문의 재료와 coverage-mapper 첫 dispatch 의 입력으로 씁니다' <<<"$conv_flat" \
+  && ok "AC4: 재검증 문단의 소비 자리 = R1 «지금 이해»·질문 + coverage-mapper 첫 dispatch" \
+  || no "AC4: 재검증 문단의 소비 자리가 seed-input.md 와 갈렸다"
+grep -qF '필요하면 Phase 1 이 질문으로 검증합니다' <<<"$conv_flat" \
+  && ok "AC4: 무표시 문장은 Phase 1 이 질문으로 검증한다" || no "AC4: 무표시 문장의 검증 방식 문장 부재"
 # 수정 라운드 1: 「태그[^.]{0,30}(쓰지 않|없)」는 안전망 문장(「태그 없는 산문으로 떨어질 뿐」)도
 # 만족시켜, 규칙 문장(「seed 는 태그를 쓰지 않습니다」)을 지워도 GREEN 이 유지됐다(리뷰 지적,
 # 삭제-방향 뮤테이션으로 실측). 규칙 문장 고유의 리터럴로 좁힌다.

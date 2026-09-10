@@ -892,6 +892,11 @@ seed_flat="$(tr '\n' ' ' <<<"$seed_block" | tr -s ' ')"
 grep -qF '다시 검증할 것' <<<"$seed_flat" \
   && ok "AC11: seed 의 «다시 검증할 것» 문단을 R1/coverage-mapper 입력으로" \
   || no "AC11: seed 재검증 문단 소비 부재"
+# 위 단언은 낱말 하나만 봐서 그 문단을 «어디에» 쓰는지는 못 잰다. 한 문장 안에서 R1 의
+# «지금 이해» · coverage-mapper 첫 dispatch 둘 다와 결속됐는지 본다.
+grep -qF '«다시 검증할 것 —»** 은 R1 의 «지금 이해»·질문의 재료이자 coverage-mapper 첫 dispatch 의 입력' <<<"$seed_flat" \
+  && ok "AC4: seed 재검증 문단 = R1 «지금 이해»·질문의 재료 + coverage-mapper 첫 dispatch 입력" \
+  || no "AC4: seed 재검증 문단의 소비 자리가 R1 «지금 이해»·coverage-mapper 로 결속되지 않았다"
 # 위 단언의 코퍼스는 seed 참조 «산문» 뿐이라 dispatch 를 못 본다 — 실제 호출이 seed 를
 # 하나도 안 싣고 `<ledger_state>` 와 `<web_disabled>` 만 넘겨도 계속 green 이었다
 # (spec §4.1·AC11 위반). 첫 dispatch 는 R1 «전에» 돌고 그때 원장은 floor 다섯 줄뿐이라,
