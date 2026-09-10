@@ -8,7 +8,7 @@ minor 인 이유: `/interview` 가 새 입력 모양 `@<seed 경로>` 를 받는
 
 - **`/interview` Step 1.5 — `@경로` 인자 풀기.** 앞뒤 공백을 걷은 인자가 `@` 로 시작하는 공백 없는 한 토큰이면 그 파일을 Read 로 읽어 frontmatter 포함 전문을 「풀린 입력」으로 삼고, Step 2(trivia) · Step 2.5(seed 판별) · Step 3(`Skill conducting-interview`)이 그 값을 쓴다. 읽기 실패면 사유를 담은 문구를 내고 인터뷰를 시작하지 않는다. 입구에서 직접 푸는 이유: 2026-09-10 헤드리스 실측(`claude -p`)에서 커맨드 인자의 `@경로` 는 `$ARGUMENTS` 에 리터럴로 남고 파일이 첨부되지 않았다(평문 프롬프트의 `@경로` 는 첨부됐다). 대화형 입력은 재지 않았다 — 거기서 첨부되더라도 command 본문이 읽는 것은 치환된 인자라 이 단계가 필요하다.
 - `tests/test_seed_at_path_handoff.sh` — framing 옵션 표 · 호출 모양 · 두 가드 · 공유 계약(정본 자체) · Step 1.5 · 옛 호출 모양 부재(코퍼스 멤버십 양성 짝 포함) · 이름 가드 공백 거부(case 패턴을 실제로 돌린다). 단언 종류마다 삭제 · 치환 · 순서 뒤집기 · 재삽입 변이로 RED 를 확인했다.
-- 실동작 확인(2026-09-11, 헤드리스 `claude -p` + `--plugin-dir`, sonnet, 1회): `/spec-distill:interview @<seed>` 가 픽스처를 절대경로로 읽고 frontmatter 포함 전문을 그대로 `conducting-interview` 에 넘겼고, 조언 없이 첫 라운드가 seed 본문으로 시작했다. 없는 경로는 부재 문구를 내고 인터뷰를 시작하지 않았다. 대화형 입력은 재지 않았다.
+- 실동작 확인(2026-09-11, 헤드리스 `claude -p` + `--plugin-dir`, sonnet, 1회): `/spec-distill:interview @<seed>` 가 픽스처를 절대경로로 읽고 frontmatter 포함 전문을 바꾸지 않고 `conducting-interview` 에 넘겼다(넘긴 인자 = 픽스처 전문). 「`/request-framing` 을 먼저」 조언은 나오지 않았다. 없는 경로는 부재 문구를 내고 인터뷰를 시작하지 않았다. 재지 못한 것: 첫 라운드 — 헤드리스 세션에 작업 디렉토리 밖 읽기 권한이 없어 `conducting-interview` 의 참조 파일을 읽지 못했고, 인터뷰 질문 대신 그 제약을 알리고 진행 방식을 물으며 끝났다(그 글은 seed 주제를 언급했다). 대화형 입력도 재지 않았다.
 
 ### Changed
 
