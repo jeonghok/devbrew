@@ -38,7 +38,7 @@
 - **「풀린 입력」** — `/interview` Step 1.5 의 결과를 가리키는 이름이다. 이 철자(꺾쇠 인용부호 포함)를 모든 자리에서 그대로 쓴다.
 - **플러그인 파일 위생** — 설계 문서의 식별자(AC#, NG#, D#, R#, OQ#, §A)를 플러그인 파일에 적지 않는다. 이미 있는 `AC19`(가드 2 제목)는 그대로 둔다. 근거와 이력은 CHANGELOG 에 적는다(Self-narrating artifact 금지).
 - **커맨드 본문의 `$ARGUMENTS`** — Claude Code 가 입력 문자열로 **텍스트 치환**한다. 그래서 `commands/interview.md` 의 설명 산문에 `$ARGUMENTS` 를 새로 쓰지 않는다 — 쓰면 그 자리에 사용자 입력이 박혀 문장이 깨진다. 발동 조건 문장(입력값이 박혀도 뜻이 통하는 자리)만 예외다.
-- **버전** — `plugins/spec-distill/.claude-plugin/plugin.json` 을 `1.0.0` → `1.1.0`(minor, 새 입력 모양 = 새 surface)으로 올리고 같은 커밋에 `CHANGELOG.md` 의 `## [1.1.0] — 2026-09-10` 엔트리를 담는다. **번호와 날짜는 잠정이다** — 날짜는 머지하는 날로 바꾸고, 동시 워크트리 `feature/remove-spec-review-hook` 이 spec-distill 을 먼저 머지하면 머지 직전에 다시 정한다. 같은 버전 문자열은 충돌 없이 병합돼 git 이 알려주지 않는다.
+- **버전** — `plugins/spec-distill/.claude-plugin/plugin.json` 을 `1.1.0` → `1.2.0`(minor, 새 입력 모양 = 새 surface)으로 올리고 같은 커밋에 `CHANGELOG.md` 의 `## [1.2.0] — 2026-09-10` 엔트리를 담는다. **번호와 날짜는 잠정이다** — 날짜는 머지하는 날로 바꾸고, 착수 시점(2026-09-11)에 origin/main 이 이미 1.1.0 이라 1.2.0 으로 정했다. 동시 워크트리 `feature/remove-spec-review-hook` 이 spec-distill 을 먼저 머지하면 머지 직전에 다시 정한다. 같은 버전 문자열은 충돌 없이 병합돼 git 이 알려주지 않는다.
 - **커밋** — Conventional Commits, scope `spec-distill`. 메시지 끝에 두 줄:
   ```
   Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
@@ -62,7 +62,7 @@
 | `plugins/spec-distill/skills/conducting-interview/references/finishing.md` | 43행 S1 문장 한 곳 | T4 |
 | `plugins/spec-distill/templates/interview-seed-audit-template.md` | 11–13행 인용 블록 | T4 |
 | `plugins/spec-distill/README.md` | 32–34행 흐름도 | T4 |
-| `plugins/spec-distill/.claude-plugin/plugin.json` · `CHANGELOG.md` | 1.1.0 · 엔트리 | T5 (T6 가 V4 결과 한 줄 추가) |
+| `plugins/spec-distill/.claude-plugin/plugin.json` · `CHANGELOG.md` | 1.2.0 · 엔트리 | T5 (T6 가 V4 결과 한 줄 추가) |
 | `.claude/handoff-baseline/mutate.sh` · `v4/run_v4.sh` · `v4/judge_v4.py` (git 무시, 커밋 안 함) | 변이 도구 · V4 실행·판정 | T0 · T6 |
 
 ## 태스크 순서와 의존
@@ -378,6 +378,8 @@ bash .claude/handoff-baseline/mutate.sh plugins/spec-distill/commands/interview.
 ---
 
 ### Task 2: framing 게이트 — 옵션 표 · 호출 모양 · 두 가드 · 이름 가드
+
+> **줄 번호 주의** — 아래 줄 번호는 base `c7b4f580` 기준이다. origin/main 병합(`b1dab394`) 뒤 framing `SKILL.md` 는 55행 이후가 **+7줄** 밀렸다(워크트리 절에 빈 요청 문단이 들어왔다). 줄 번호가 아니라 인용한 옛 문면으로 찾아 바꾼다.
 
 **Files:**
 - Modify: `plugins/spec-distill/skills/framing-requests/SKILL.md` — 3–7행(description) · 13–14행(도입) · 126–127행(워크트리 5단계) · 204행(「## 상태」 서술) · 241–247행(TOPIC 주석·가드) · 257–259행(IV_NAME 가드·advisory) · 565–608행(호출 모양 절) · 627–635행(두 가드)
@@ -789,6 +791,8 @@ bash $M $F '각 skill 이 채우는 것' '①/② 의 핸드오프 종류' '옵�
 
 ### Task 4: 문구 동기화와 옛 호출 모양 부재 락
 
+> **줄 번호 주의** — 아래 줄 번호는 base `c7b4f580` 기준이다. origin/main 병합(`b1dab394`) 뒤 `request-framing.md` 는 31행 이후가 **+1줄** 밀렸다(Arguments 절이 한 줄 늘었다). 줄 번호가 아니라 인용한 옛 문면으로 찾아 바꾼다.
+
 **Files:**
 - Modify: `plugins/spec-distill/commands/request-framing.md` — 2행 · 9–10행 · 37–41행
 - Modify: `plugins/spec-distill/skills/conducting-interview/references/seed-input.md` — 3–7행
@@ -983,23 +987,23 @@ bash $M $P/skills/conducting-interview/references/finishing.md 'finishing S1' '`
 ### Task 5: 버전 · CHANGELOG · 전체 스위트 · 범위 확인
 
 **Files:**
-- Modify: `plugins/spec-distill/.claude-plugin/plugin.json` — `"version": "1.0.0"` → `"version": "1.1.0"`
+- Modify: `plugins/spec-distill/.claude-plugin/plugin.json` — `"version": "1.1.0"` → `"version": "1.2.0"`
 - Modify: `plugins/spec-distill/CHANGELOG.md` — 맨 위(`# Changelog` 다음 빈 줄 뒤)에 엔트리 추가
 
 **Interfaces:**
 - Consumes: Task 0 의 `baseline.tsv` · `shared-t0.txt` · `shared-locks.sh` · `run.sh`.
-- Produces: 커밋된 1.1.0 트리 — Task 6 이 이 트리를 헤드리스 세션에 싣는다.
+- Produces: 커밋된 1.2.0 트리 — Task 6 이 이 트리를 헤드리스 세션에 싣는다.
 
 - [ ] **Step 1: plugin.json**
 
-`"version": "1.0.0",` → `"version": "1.1.0",`. 다른 필드는 그대로.
+`"version": "1.1.0",` → `"version": "1.2.0",`. 다른 필드는 그대로.
 
 - [ ] **Step 2: CHANGELOG 엔트리**
 
-`# Changelog` 줄과 빈 줄 다음, `## [1.0.0] — 2026-09-09` **위**에 넣는다:
+`# Changelog` 줄과 빈 줄 다음, `## [1.1.0] — 2026-09-10` **위**에 넣는다:
 
 ```markdown
-## [1.1.0] — 2026-09-10
+## [1.2.0] — 2026-09-10
 
 minor 인 이유: `/interview` 가 새 입력 모양 `@<seed 경로>` 를 받는다 — 새 surface 다. 옛 입력(rough request · seed 전문 붙여넣기)은 그대로 동작한다.
 
@@ -1027,7 +1031,7 @@ Expected: 셋 다 `rc=0`. `test_changelog_integrity.sh` 는 헤딩 형식(`## [x
 `.claude/handoff-baseline/commit-msg.txt`:
 
 ```
-chore(spec-distill): 1.1.0 — seed @경로 핸드오프
+chore(spec-distill): 1.2.0 — seed @경로 핸드오프
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01EUJwm6ktX8Rvon4NjXVZ6X
@@ -1041,7 +1045,7 @@ Expected: 빈 출력.
 Run: `bash .claude/handoff-baseline/run.sh .claude/handoff-baseline/after.tsv`
 Expected: 마지막 줄 `total=81 nonzero=2`.
 
-Run: `diff .claude/handoff-baseline/baseline.tsv .claude/handoff-baseline/after.tsv`
+Run: `diff .claude/handoff-baseline/baseline-t0.tsv .claude/handoff-baseline/after.tsv`
 Expected: 새 테스트 한 줄의 추가(`> test_seed_at_path_handoff.sh	0	0`)만 나온다. 다른 줄이 하나라도 달라졌으면 — 선재 RED 두 파일의 실패 줄 수가 1 에서 바뀐 경우 포함 — 회귀다. 멈추고 그 파일의 출력을 읽어 원인을 보고한다.
 
 - [ ] **Step 6: 공용 락 셋**
@@ -1066,7 +1070,7 @@ Expected: 파일 13개 — 설계 문서 · 이 계획 · 계획서 File Structu
 
 **Files:**
 - Create: `.claude/handoff-baseline/v4/run_v4.sh` · `.claude/handoff-baseline/v4/judge_v4.py` (git 무시, 커밋 안 함)
-- Modify: `plugins/spec-distill/CHANGELOG.md` — `[1.1.0]` 의 `### Added` 에 결과 한 줄(전부 PASS 일 때만)
+- Modify: `plugins/spec-distill/CHANGELOG.md` — `[1.2.0]` 의 `### Added` 에 결과 한 줄(전부 PASS 일 때만)
 
 **Interfaces:**
 - Consumes: Task 5 까지 커밋된 트리.
@@ -1232,7 +1236,7 @@ Expected: `ok rc=0` · `missing rc=0` · 판정 줄 전부 `PASS` · `FAILS=0` �
 
 - [ ] **Step 5: 결과 기록 (전부 PASS 일 때만)**
 
-`CHANGELOG.md` `[1.1.0]` 의 `### Added` 마지막에 한 줄을 더한다. `<날짜>` 는 V4 를 돌린 날(YYYY-MM-DD)로 채운다:
+`CHANGELOG.md` `[1.2.0]` 의 `### Added` 마지막에 한 줄을 더한다. `<날짜>` 는 V4 를 돌린 날(YYYY-MM-DD)로 채운다:
 
 ```markdown
 - 실동작 확인(<날짜>, 헤드리스 `claude -p` + `--plugin-dir`, sonnet, 1회): `/spec-distill:interview @<seed>` 가 픽스처를 절대경로로 읽고 frontmatter 포함 전문을 그대로 `conducting-interview` 에 넘겼고, 조언 없이 첫 라운드가 seed 본문으로 시작했다. 없는 경로는 부재 문구를 내고 인터뷰를 시작하지 않았다. 대화형 입력은 재지 않았다.
@@ -1241,7 +1245,7 @@ Expected: `ok rc=0` · `missing rc=0` · 판정 줄 전부 `PASS` · `FAILS=0` �
 `.claude/handoff-baseline/commit-msg.txt`:
 
 ```
-docs(spec-distill): 1.1.0 실동작 확인 결과 기록
+docs(spec-distill): 1.2.0 실동작 확인 결과 기록
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01EUJwm6ktX8Rvon4NjXVZ6X
