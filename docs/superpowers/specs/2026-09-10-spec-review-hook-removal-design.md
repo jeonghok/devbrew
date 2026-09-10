@@ -84,7 +84,7 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
 영어 모호어 10개(`fast`·`robust`·…)다. 이 리포의 문서는 한국어가 주 언어이고, `design-doc.md` 프로필의
 `doc-critic` 층 2 가 `placeholder`·`ambiguity` 를 한국어 표현(「적절히」「빠르게」)까지 덮는다. 스캐너 자신이
 「이 검사가 실제로 설계 문서 작성을 세 번 막았다」(`parse_spec_structure.py:160`, 오탐)를 기록한다. spec 모드
-검사(필수 섹션·`locked_decisions`)는 그런 문서를 만드는 쪽이 없다(`spec-template.md` 참조 0).
+검사(필수 섹션·`locked_decisions`)는 그런 문서를 만드는 skill 이 없다 — `templates/spec-template.md` 를 읽는 것은 테스트 둘(`test_handoff_context_empty_subsections.sh` · `test_handoff_conversation_reference.sh`)뿐이고, 둘 다 저자 쪽 Handoff Context 계약의 정답 출처로 그 템플릿을 쓴다(§알려진 한계 · Deferred to plan).
 
 ## Goals
 
@@ -145,7 +145,7 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
 | 1 | TTL-GC(`scripts/spec-distill-gc.py`)의 **유일한 기동자**가 훅이다(`review-dispatch.py:481` → `hook_common.fire_and_forget_gc`) | `hooks/session-end-cleanup.py` 가 이 순서로 한다: ① 자기 kill switch(`spec-distill:SessionEnd` · `:session-end-cleanup` · 전역 `DISABLE`) 검사 ② 끝나는 세션의 폴더 삭제 ③ `try/finally` 의 `finally` 에서 `fire_and_forget_gc()`. ① 이 참이면 훅은 아무것도 하지 않는다 — GC 도 돌지 않는다(CLAUDE.md: 어떤 훅도 자기 kill switch 존중을 거부할 수 없다). 그래서 **`spec-distill:SessionEnd` 는 이번 세션 정리와 TTL-GC 를 함께 끈다** — README 의 이 스위치 설명(「SessionEnd cleanup hook만 skip」)을 같은 변경에서 고친다. ③ 이 `finally` 라서 ② 의 payload 조기 return(`:33-44`)이나 stdin 디코딩 예외가 GC 를 건너뛰게 하지 않는다. GC 자신은 `spec-distill:spec-distill-gc` 와 전역 `DISABLE` 을 스스로 검사한다(`spec-distill-gc.py:81`). 루트는 옛 훅과 같이 **프로세스 cwd** 의 `state_root()` 다(`spec-distill-gc.py:83`) — per-session 삭제는 payload `cwd` 를 쓰고, 두 층은 원래 서로 다른 훅에서 각자 루트를 풀었다. 이 함수는 이름과 달리 동기다(`subprocess.run`, `timeout=5`). 훅 `timeout: 10` 을 넘기면 끊기는 것은 **맨 뒤의 GC** 다 — 끝나는 세션의 자기 폴더 삭제는 그 앞에서 이미 끝났고, GC 는 다음 SessionEnd 가 다시 돈다. 옛 훅에서는 `spec-distill:Stop` 이 GC 까지 부수효과로 막았다(`review-dispatch.py:479` 가 `:481` 앞) — 이 변경 뒤 그 사용자의 GC 는 다시 돈다(C3 예외 · 알려진 한계) |
 | 2 | `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE` 의 유일한 독자가 `resolve_mode.py:50` 이다 | `reviewing-spec` 진입(§4.2)이 이 스위치를 존중한다. 의미는 **끄는 쪽으로 넓어진다** — 예전에는 자동 dispatch·구조 검사만 껐고 수동 호출은 살아 있었지만, 이제는 수동 호출을 포함해 skill 전체를 끈다. content-aware 판별(접미사 없는 `.md` 를 frontmatter 로 design 분류)도 함께 사라진다. 둘 다 README·CHANGELOG 에 적는다. 은퇴시키면 이 스위치로 리뷰를 꺼 둔 사용자에게 리뷰가 조용히 되살아난다(C3) |
 | 3 | `tools/adjudication/check_wiring.py` 의 `review-dispatch.py` 줄번호 키 `EXEMPT` 10개 · `TERMINAL_CONSUMERS` 1개 · `_T5_SELECT_LOOP*` 가 stale 이 되어 `test_adjudication_wiring.sh` 가 RED | 항목을 제거하고 `EXEMPT_BASELINE`·`COMP_BASELINE` 과 그 주석은 **재계수**한 값으로 쓴다(손으로 뺄셈하지 않는다) |
-| 4 | README 의 `spec-distill:Stop`·`:review-dispatch` 키가 도출 키 집합에서 사라져 `shared/tests/test_dispatch_name_defined.sh` 가 RED | 활성 kill switch 목록에서 빼고 「은퇴한 스위치」 절로 옮긴다. 표기는 그 락을 이미 통과하는 v0.36.0 은퇴 절의 방식을 따른다(확인은 plan) |
+| 4 | README `:227` 의 `spec-distill:review-dispatch` 키가 도출 키 집합에서 사라져 `shared/tests/test_dispatch_name_defined.sh` 가 RED(`spec-distill:Stop` 은 그 락의 참조 정규식이 소문자로 시작하는 이름만 잡아 걸리지 않는다 — 그래도 거짓이 되는 문장이라 함께 옮긴다) | 활성 kill switch 목록에서 빼고 「은퇴한 스위치」 절로 옮긴다. 표기는 그 락을 이미 통과하는 v0.36.0 은퇴 절의 방식을 따른다(확인은 plan) |
 | 5 | `reviewing-spec/SKILL.md:159` — 「`DEVBREW_SPEC_DISTILL_DISABLE=1` 은 훅이 dispatch 이전에 이미 걸러낸다」가 거짓이 된다. 전역 끄기를 적용하는 자리는 엔진 절차서 2단계의 산문 확인 하나만 남는다 | §4.2 — 결정론 모듈이 한 번 더 보고, 그 모듈이 실패하면 끔으로 친다 |
 
 ### 3. 오케스트레이터 경로
@@ -167,8 +167,8 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
 
 `reviewing-spec` 의 승인 게이트(① `/compact` 후 writing-plans · ② 바로 writing-plans · ③ 수정 · ④ 멈춤,
 정본 `references/proceed-gate.md`)가 brainstorming 의 「Please review it」 사용자 리뷰 게이트 자리를 대신한다.
-`reviewing-spec` 이 게이트 없이 끝나는 경로는 셋이다 — kill switch(§4.2) · 문서 부재 · 인자 없음에서 사용자가
-경로를 고르지 않음. 셋 다 advisory 단락의 **마지막 문장**이 같은 복귀 지시다: 「리뷰 없이 끝났다 — writing-plans
+`reviewing-spec` 이 게이트 없이 끝나는 경로는 정본(`references/proceed-gate.md:57`)이 적은 둘이다 — kill switch(§4.2, 진입 검사 실패 포함)와 대상 경로 부재. 인자 없이 불려 사용자가 후보를
+고르지 않은 경우는 **대상 경로 부재**(Step A)로 친다 — 정본을 고치지 않는다. 두 경로 모두 advisory 단락의 **마지막 문장**이 같은 복귀 지시다: 「리뷰 없이 끝났다 — writing-plans
 로 가기 전에 설계문서 경로를 보이고 사용자에게 검토를 요청하라(brainstorming 의 사용자 리뷰 게이트).」 §3.1 ②
 의 호출 프롬프트도 같은 분기를 싣는다. 이 둘이 「게이트가 0 개가 되는 경로는 없다」를 받치는 메커니즘이다 —
 정적 문구이므로 AC16 은 문구의 존재와 위치만 잰다.
@@ -203,10 +203,11 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
   `disabled: true` 면 skill 은 `reason` 과 advisories 를 단락으로 내고 게이트 없이 끝난다 — `proceed-gate.md` 가
   이미 규정한 「kill switch 예외 경로」다.
 - **진입 검사 실패는 끔으로 친다(fail-closed).** `review_entry.py` 가 없거나 rc≠0 이거나 stdout 이 JSON 한 줄로
-  파싱되지 않으면 skill 은 `disabled: true` · `reason: entry_check_failed` 로 간주하고, 실패 사실(경로 · rc · stderr
+  파싱되지 않거나, 파싱돼도 스키마(최상위 객체 · `disabled` 는 boolean 필수 · `reason` 은 문자열 또는 null ·
+  `advisories` 는 문자열 배열)를 어기면 skill 은 `disabled: true` · `reason: entry_check_failed` 로 간주하고, 실패 사실(경로 · rc · stderr
   첫 줄)을 advisory 로 낸 뒤 §3.2 의 복귀 지시로 끝난다. 끔 여부를 모르는 채 리뷰를 돌리면 사용자가 끈 스위치를
   무시할 수 있고, 끔으로 치면 잃는 것은 이번 자동 리뷰 한 번뿐이다 — 사용자는 brainstorming 의 사용자 리뷰 게이트를
-  그대로 받는다.
+  그대로 받는다. 엔진은 스키마가 유효하고 `disabled` 가 정확히 `false` 일 때만 돈다.
 - **공유 엔진 2단계와의 관계 — 병존.** 엔진 절차서 2단계(`references/reviewing-document.md:15`)의
   `DEVBREW_<HOST>_DISABLE` 확인은 그대로 둔다 — 네 자리가 공유하는 절차라 이 자리만을 위해 고치지 않는다. 전역
   끄기를 두 번 보지만 둘 다 끄는 방향이라 충돌하지 않는다. `review_entry.py` 가 더하는 것은 결정론 판정과
@@ -240,7 +241,8 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
 `## 원장` 절(`mark-reviewed` · `check-born` · `clear-inflight` A/B)을 삭제한다. `check-born` 이 사용자에게 주던
 효과 하나만 원장 없이 남긴다: 승인 게이트 ①/② 직전 `git status --porcelain -- "$spec_path"` 가 비어 있지
 않으면 「리뷰 수정분이 커밋되지 않았다」 advisory 를 낸다. 문서 부재 경로의 advisory 는 유지하고 원장 호출만
-뺀다. codex 펜스 주석의 「훅 mandate 의 슬롯」은 「호출 인자」로 바꾼다.
+뺀다. codex 펜스 주석의 「훅 mandate 의 슬롯」은 「호출 인자」로 바꾼다. 사용자에게 나가는 런타임 `echo` 문구
+(`SKILL.md:131` 「dispatch mandate 의 'spec path:' 슬롯 값을 대입해라」)도 같이 바꾼다.
 
 ### 5. 죽은 인용 정정
 
@@ -267,7 +269,7 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
   「행동 케이스 테스트」 절 삭제, kill switch 절(Stop·`review-dispatch`·`REDISPATCH_TTL` 삭제, `DESIGN_MODE_DISABLE`
   의미 재서술, `spec-distill:review-entry` 추가, TTL-GC 줄(`:228` 「TTL-GC가 backup으로 작동」)은 SessionEnd 의 `finally` 기동 사실로), 「먼저 — 무엇이 리뷰의 범위를 정하는가」 절(`:186-217`) · G6 상한 bullet(`:244-247`) 삭제 또는 재서술,
   SessionEnd 스위치 설명(두 층을 함께 끈다), 은퇴 절(v0.36.0 항목 `:255`·`:259` 의 「끄려면 `spec-distill:Stop`」
-  권고 제거 — 이 두 줄은 `test_dispatch_name_defined.sh` 도 RED 로 만든다 — + 새 토큰 둘 +
+  권고 제거 — 훅 삭제 뒤 거짓이 되는 문장이다 + 새 토큰 둘 +
   advisory 가 `reviewing-spec` 진입으로 옮겨감).
 - **원칙 서술의 정직성** — 「리뷰 진입은 집행(hook)이 아니라 skill 표면과 핸드오프 지시다」를 명시한다. 철학 P13
   (hook = 집행 / skill = capability 표면) 기준으로 이 자리의 집행이 사라졌다는 사실을 숨기지 않는다. Law 2
@@ -297,11 +299,15 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 - **AC2** — §1 본체 7개 파일이 없다. 삭제 집합의 식별자와 개념 별칭(Stop 훅 · dispatch mandate · arm 원장 ·
   arm-once · 구조 검증 · in-flight · born · `REDISPATCH_TTL` 등)이 CHANGELOG·과거 문서 밖에서 현재형으로 인용되지
   않는다. 검사 목록은 손으로 적지 않고 삭제 집합에서 도출한다.
-  「현재형」은 기계로 가르지 않고 **면제 코퍼스**로 정한다: (a) 역사 — `*/CHANGELOG.md` · `docs/archive/**` ·
+  「현재형」은 기계로 가르지 않고 **면제 코퍼스**로 정한다: (a) 역사 — `*/CHANGELOG.md` · `docs/archive/**` · `docs/audits/README.md`(항목마다 날짜가 붙은 감사 요약 인덱스) ·
   `docs/superpowers/{specs,plans,interview}/**` · 날짜 붙은 `docs/audits/*.md`. (b) 은퇴 토큰 리터럴(`spec-distill:Stop`
   · `:review-dispatch` · v0.36.0 넷 · `SKIP_AUTOREVIEW`)에 한해 `scripts/review_entry.py` · 그 테스트 · README 「은퇴한
   스위치」 절(절 헤딩으로 줄 범위를 자른다). (b) 는 **토큰 리터럴만** 면제한다 — 같은 파일이라도 다른 삭제
   식별자(`arm_ledger` 등)가 나오면 RED 다. 면제 목록은 락 파일 한 곳에 두고, 넓힐 때 이유를 함께 적는다.
+  **별칭 검사의 범위**: 개념 별칭(`in-flight` · `born` · `구조 검증` 등)은 다른 플러그인이 자기 개념으로 쓰는
+  일반어라(quality-gates 의 in-flight advisor 등) 리포 전체에 걸면 무관한 파일이 걸린다. 별칭 검사는 spec-distill
+  플러그인과 삭제 대상을 인용하는 공용 파일(§5)로 한정한다. 식별자 검사는 리포 전체다. 별칭 목록과 범위의
+  확정은 plan 이 한다.
 - **AC3** — `session-end-cleanup.py` 를 실행하면 프로세스 cwd 의 `state_root()` 아래 TTL 이 지난 **다른** 세션 폴더가
   지워진다 — stdin 이 JSON 이 아니거나 payload 에 sid 가 없을 때도(GC 는 `finally` 에 있다). `spec-distill:spec-distill-gc`
   또는 전역 `DISABLE` 이 켜져 있으면 지워지지 않는다. `spec-distill:SessionEnd` 가 켜져 있으면 이번 세션 폴더도
@@ -315,10 +321,11 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
   스위치만 가리킨다. 은퇴 토큰만 설정된 경우 `disabled` 는 false 다(D9). 은퇴 토큰과 유효한 끄기 스위치를 함께 설정하면 `disabled` 는
   true 이고, 은퇴 토큰 advisory 는 「리뷰가 진행된다」가 아니라 꺼진 사유를 말한다. `validator` 류 넷의 advisory 는
   대체 스위치를 대지 않는다.
-- **AC6** — `reviewing-spec` 이 엔진 라운드 전에 `review_entry.py` 를 부르고, `disabled: true` 면 게이트 없이
+- **AC6** — `reviewing-spec` 이 엔진 라운드 전에 `review_entry.py` 를 부르고, `disabled: true` 이거나 진입 검사가 실패하면(모듈 부재 · rc≠0 · JSON 파싱 실패 · 스키마 위반 — `{}` · `disabled` 비-boolean · 최상위 null/배열) 게이트 없이
   advisory 단락으로 끝난다.
 - **AC7** — `reviewing-spec` `## 입력` 은 호출 인자에서 경로를 받고, 인자 없음 경로는 후보 제시 + 사용자 확인이다.
-  `mode:` 슬롯 · `$STATE` · `arm_ledger.py` 호출이 skill 어디에도 없다.
+  `mode:` 슬롯 · `$STATE` · `arm_ledger.py` 호출이 skill 어디에도 없고, 그것을 가리키는 문장(게이트 표 ④ 행의
+  `clear-inflight B` · polite stop 줄의 「`## 원장` 의 두 호출」 · 런타임 echo 의 「dispatch mandate」)도 없다.
 - **AC8** — `finishing.md` ①의 `/compact` 템플릿 · ②의 호출 프롬프트 · brief 템플릿 §7 · `reviewing-spec`
   description 넷이 `spec-distill:reviewing-spec` 을 writing-plans **앞**에 적는다(순서까지). ①의 템플릿에 새
   꺾쇠 placeholder 가 없다.
@@ -337,12 +344,12 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
   관찰돼야 한다. 관찰되지 않으면 §3.1 의 핸드오프 문구를 보강하고 다시 관찰한다 — 최대 2회. 그래도 관찰되지 않으면
   머지 전에 사용자가 결정한다(머지 보류 / 한계로 기록하고 진행). 옵션 ①(`/compact` 후) 경로는 compact 요약이
   운반자라 손실이 있을 수 있으므로(`finishing.md:347` 「사람이 유일한 운반자다」) 관찰·기록만 하고, 두 경로의 결과를
-  PR 에 구분해 적는다. **교란 배제**: 세션 시작 때 새 판이 실렸는지 표식으로 확인한다 — agent 목록에
-  `spec-distill:doc-critic` 이 있고 `spec-distill:spec-reviewer` 가 없어야 한다(옛 판에는 Stop 훅이 살아 있어 그
-  훅이 스스로 `reviewing-spec` 을 강제할 수 있다). 표식이 옛 판이면 그 관찰은 무효다. superpowers 는 사용자의 기존
+  PR 에 구분해 적는다. **교란 배제**: 세션 시작 때 **이 변경에만 있는** 표식으로 새 판이 실렸는지 확인한다 — 실린 spec-distill 의 경로가 워크트리이고 그 `hooks/hooks.json` 에 `Stop` 항목이 없어야 한다. agent 이름(
+  `doc-critic` 있음 · `spec-reviewer` 없음)은 표식이 못 된다 — base `c7b4f580` 도 그 조건을 만족하면서 Stop 훅을 싣는다(옛 판의 그
+  훅이 스스로 `reviewing-spec` 을 강제할 수 있다). 표식이 확인되지 않으면 그 관찰은 무효다. 확인 방법(세션 안에서 무엇을 보고 PR 에 무엇을 남기는가)은 plan 이 정한다. superpowers 는 사용자의 기존
   설치를 쓴다 — `CLAUDE_CONFIG_DIR` 격리 설치는 superpowers 까지 빠져 brainstorming 을 부를 수 없으므로 쓰지 않는다.
 - **AC15** — README·CHANGELOG 가 §6 대로 갱신되고, spec-distill 은 major, quality-gates 는 patch 로 bump 된다.
-- **AC16** — `reviewing-spec` 의 게이트 없는 종료 경로 셋(kill switch · 문서 부재 · 인자 없음 미선택)의 advisory 가
+- **AC16** — `reviewing-spec` 의 게이트 없는 종료 경로 둘(kill switch — 진입 검사 실패 포함 · 대상 경로 부재 — 인자 없음 미선택 포함)의 advisory 가
   각각 §3.2 의 복귀 지시로 끝나고, §3.1 ② 의 호출 프롬프트가 같은 분기를 싣는다.
 
 ## Files to Modify
@@ -383,7 +390,8 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
   리포로 바꾸거나 기본 env 에 `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` 를 넣는다. SessionEnd 훅을 띄우는
   다른 테스트도 plan 이 전수로 찾아 같은 조건을 건다) · `test_brainstorming_entry.sh` ·
   `test_brief_review_meta.sh` · `test_stale_terms.sh` · `test_readme_sync.sh` ·
-  `test_reviewing_spec_state_keying.sh` · `test_handoff_context_empty_subsections.sh` ·
+  `test_reviewing_spec_state_keying.sh`(원장 호출 창을 재던 케이스는 삭제, sid · `STATE_DIR` 도출 케이스는 유지하고
+  `$STATE` 단언은 `STATE_DIR` 로 재조준) · `test_handoff_context_empty_subsections.sh`(처분은 Deferred to plan) ·
   `test_handoff_conversation_reference.sh`
 
 **수정** — `plugins/quality-gates/`: `scripts/codex_prompt_common.py` · `CHANGELOG.md` · `.claude-plugin/plugin.json`
@@ -449,6 +457,10 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 - **자동 리뷰를 꺼 둔 사용자에게 리뷰가 되살아난다(사용자 결정 D9).** `spec-distill:Stop`·`:review-dispatch` 를
   설정한 사용자는 advisory 를 보고 `spec-distill:review-entry` 또는 `DESIGN_MODE_DISABLE` 로 옮겨야 한다. 옮기기 전
   첫 리뷰는 codex 호출을 포함해 한 번 돈다. 같은 사용자의 TTL-GC 도 advisory 없이 다시 돈다.
+- **저자 쪽 Handoff Context 지시의 앵커가 사라진다.** `templates/spec-template.md` 는 두 락(`test_handoff_*.sh`)이
+  저자 쪽 Handoff Context 계약(세 라벨 · 「대화 컨텍스트 가정 금지」)의 정답 출처로 쓰던 파일이다. brainstorming 은
+  그 템플릿을 읽지 않으므로 실제 저자에게 닿던 지시는 아니었지만, 삭제 뒤에는 그 계약이 리뷰어 쪽(`design-doc.md`
+  프로필의 `handoff_incomplete`)에만 남는다.
 - **deprecation window 면제의 근거가 약하다.** 리포가 PUBLIC 이라 누구든 마켓플레이스로 추가할 수 있고, fork 0 ·
   star 0 은 「설치가 없다」의 증명이 아니다.
 
@@ -475,6 +487,7 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 | D9 | 은퇴하는 `spec-distill:Stop`·`:review-dispatch` (리뷰 라운드 1 이후) | advisory 만 — 리뷰를 막지 않는다. 이 토큰 사용자에게 리뷰가 되살아나는 것을 수용(C3 의 명시적 예외) |
 | D10 | Law 1 필수 섹션 게이트의 리포 내 구현 0 (리뷰 라운드 1 이후) | 수용 — CHANGELOG·알려진 한계에 기록 |
 | D11 | AC14 통과 기준 (리뷰 라운드 1 이후) | ② 경로 호출 관찰 필수. 실패하면 핸드오프 문구 보강·재관찰 최대 2회, 그래도 실패면 머지 전 사용자 결정. ① 경로는 관찰·기록 |
+| D12 | 리뷰 라운드 3 반복 지적 게이트 | ③ 수정 필요 — 리뷰대로 저자가 수정(틀린 문장 수정 + 검증 절차 세부는 plan 요구로), 수정 뒤 재리뷰 1회 |
 
 오케스트레이터가 정하고 사용자에게 알린 것(되돌리려면 괄호 안의 한마디):
 
@@ -488,6 +501,7 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 | GC 순서: SessionEnd kill switch → per-session 삭제 → `finally` 에서 GC (리뷰 라운드 2) | 훅은 자기 kill switch 를 거부할 수 없고(CLAUDE.md), timeout 에 잃는 층은 우선순위가 낮은 GC 여야 한다 |
 | 진입 검사 실패는 끔으로(fail-closed) (「실패하면 리뷰를 진행하라」) | 끈 스위치를 무시할 위험이 자동 리뷰 한 번을 잃는 비용보다 크다 |
 | 은퇴 Stop 토큰 사용자의 TTL-GC 재개를 D9 원칙으로 수용 (「은퇴 Stop 토큰이 있으면 GC 도 건너뛰어라」) | 같은 토큰 · 같은 원칙. advisory 가 없어 C3 의 두 절반을 모두 포기한다는 점을 C3 와 알려진 한계에 적었다 |
+| 인자 없음 미선택을 Step A 「대상 경로 부재」로 흡수 (리뷰 라운드 3) (「정본에 셋째 경로를 추가하라」) | 게이트 정본과 채택자 락(`test_proceed_gate_adopters.sh`)을 건드리지 않는다. 고르지 않은 경로는 대상이 없는 것과 같다 |
 
 ### Deferred to plan
 
@@ -499,3 +513,8 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 - 핸드오프 문구 넷의 확정 문안과, `finishing.md` ① 템플릿을 고정하는 기존 락의 갱신.
 - (닫힘 — 리뷰 라운드 2) `.claude-plugin/marketplace.json` 의 spec-distill 항목에는 version 필드가 없어 bump 대상이 아니다.
 - baseline 실행 명령(spec-distill 의 python 테스트는 `-m unittest` 로만 돈다).
+- 두 `test_handoff_*.sh` 의 처분 — 저자 쪽 앵커(`spec-template.md`)를 잃는다. 리뷰어 쪽(`design-doc.md` 프로필
+  `handoff_incomplete`) 단독 앵커로 재조준하거나 삭제한다. 어느 쪽이든 잃는 것(저자 쪽 절반)을 커밋 메시지와
+  CHANGELOG 에 적는다 — 조용히 약해지지 않게.
+- AC14 새 판 표식의 확인 방법 — 세션 안에서 무엇을 보고(로드된 플러그인 경로 · 활성 훅 목록) PR 에 무엇을 남기는가.
+- AC2 의 별칭 목록과 별칭 검사 범위의 확정.
