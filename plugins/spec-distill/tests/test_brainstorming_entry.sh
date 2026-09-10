@@ -1,45 +1,34 @@
 #!/usr/bin/env bash
-# AC9 — brainstorming entry (no /interview): hook fires + cleanup works.
-# strict sequential: (i) → (ii) → (iii).
+# AC9 — /interview 없이 들어온 세션(brainstorming 직접 진입)의 상태 폴더도 SessionEnd 가 치운다.
+# sid 는 payload 에서만 온다 — 두 env 를 지우는 것이 이 케이스의 요지다(/interview 없이
+# 들어온 세션은 하니스 payload 의 session_id 밖에 없다).
 set -euo pipefail
 
 PLUGIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-STOP="$PLUGIN_DIR/hooks/review-dispatch.py"
 END="$PLUGIN_DIR/hooks/session-end-cleanup.py"
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 cd "$WORK"
 git init -q
-mkdir -p docs/superpowers/specs
 
 SID="brainstorm-12345678"
-SPEC="$WORK/docs/superpowers/specs/2026-05-19-test-design.md"
-echo "design body" > "$SPEC"
+STATE_DIR="$WORK/.claude/spec-distill/$SID"
+mkdir -p "$STATE_DIR"
+echo "x" > "$STATE_DIR/docreview-state.md"
 
-# (i) Setup — Stop 훅이 dirty 문서를 발견해 state.local.md 를 쓴다.
-# **sid 는 payload 에서만 온다** — 두 env 를 지우는 것이 이 케이스의 요지다(/interview
-# 없이 들어온 세션은 하니스 payload 의 session_id 밖에 없다).
-printf '{"session_id":"%s"}' "$SID" \
-    | env -u DEVBREW_SPEC_DISTILL_SESSION_ID -u CLAUDE_CODE_SESSION_ID python3 "$STOP" >/dev/null 2>&1
+# (i) Setup — reviewing-spec 이 엔진 상태를 쓰는 세션 상태 디렉토리가 있다.
+[[ -f "$STATE_DIR/docreview-state.md" ]] \
+    && echo "[PASS] case i: session state dir present (sid=$SID)" \
+    || { echo "[FAIL] case i: setup failed"; exit 1; }
 
-STATE="$WORK/.claude/spec-distill/$SID/state.local.md"
-[[ -f "$STATE" ]] || { echo "[FAIL] case i: state not created"; exit 1; }
-grep -q "session_id: $SID" "$STATE" \
-    && echo "[PASS] case i: state.local.md created with session_id=$SID" \
-    || { echo "[FAIL] case i: session_id frontmatter wrong"; exit 1; }
-
-# (ii) Assertion — no "default" literal anywhere in state
-! grep -q 'default' "$STATE" \
-    && echo "[PASS] case ii: 'default' literal absent from state" \
-    || { echo "[FAIL] case ii: 'default' literal present"; exit 1; }
-
-# (iii) Cleanup verification — SessionEnd hook removes folder
+# (ii) Cleanup — SessionEnd 훅이 payload 의 sid 로 그 폴더를 지운다. cwd 가 $WORK 라
+# 같은 훅이 기동하는 TTL-GC 도 이 임시 리포의 상태 루트만 돈다.
 printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$WORK" \
-    | python3 "$END" >/dev/null 2>&1
+    | env -u DEVBREW_SPEC_DISTILL_SESSION_ID -u CLAUDE_CODE_SESSION_ID python3 "$END" >/dev/null 2>&1
 
-[[ ! -d "$WORK/.claude/spec-distill/$SID" ]] \
-    && echo "[PASS] case iii: SessionEnd cleanup removed folder" \
-    || { echo "[FAIL] case iii: folder still exists"; exit 1; }
+[[ ! -d "$STATE_DIR" ]] \
+    && echo "[PASS] case ii: SessionEnd cleanup removed folder" \
+    || { echo "[FAIL] case ii: folder still exists"; exit 1; }
 
-echo "PASSED: 3 cases sequential"
+echo "PASSED: 2 cases sequential"

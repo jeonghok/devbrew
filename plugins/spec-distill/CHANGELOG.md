@@ -13,6 +13,21 @@ major인 이유: **설계문서 리뷰의 자동 진입 계약이 깨진다.** S
 ### Changed
 
 - **TTL-GC 기동자가 SessionEnd 훅으로 옮겨왔다.** 그전의 유일한 기동자는 삭제된 Stop 훅이었다. `hooks/session-end-cleanup.py` 가 ① 자기 kill switch → ② 끝나는 세션의 폴더 삭제 → ③ `finally` 에서 `fire_and_forget_gc()` 순으로 돈다 — payload 가 JSON 이 아니거나 sid 가 없거나 stdin 디코딩이 실패해도 GC 는 돈다. 그래서 **`DEVBREW_SKIP_HOOKS=spec-distill:SessionEnd`(와 `:session-end-cleanup`)는 이제 세션 정리와 TTL-GC 를 함께 끈다** — GC 만 끄려면 `spec-distill:spec-distill-gc`. GC 의 루트는 옛 훅과 같이 프로세스 cwd 의 state root 다. `fire_and_forget_gc` 는 이름과 달리 동기(timeout 5초)라 훅 timeout 을 넘기면 끊기는 것은 맨 뒤의 GC 뿐이다. `tests/test_session_end_cleanup.py` 의 `run_hook` 은 이제 `cwd` 를 필수로 받는다 — 비우면 러너 cwd 의 실제 상태 루트에서 GC 가 돈다.
+- **Handoff Context 두 락이 리뷰어 쪽만 잰다.** `test_handoff_context_empty_subsections.sh` · `test_handoff_conversation_reference.sh` 는 저자 쪽 계약의 정답 출처로 `templates/spec-template.md` 를 썼다. 템플릿이 사라져 두 락은 `design-doc.md` 프로필(`defer_target` · `handoff_incomplete` rubric)만 잰다. **잃은 것**: Handoff Context 를 `TL;DR` · `Implicit context` · `Deferred to plan` 세 항목으로 쓰라는 저자 지시와 「대화 컨텍스트 가정 금지」 지시의 기계 앵커. brainstorming 은 그 템플릿을 읽지 않았으므로 실제 저자에게 닿던 지시는 아니었다.
+
+### Removed
+
+- **`hooks/review-dispatch.py`(Stop 훅)와 `hooks/hooks.json` 의 `Stop` 항목.** 발견(`git status` 로 dirty·untracked 문서) → Layer 1 구조 검증 → 다음 턴 `reviewing-spec` 강제의 셋이 함께 사라진다.
+- **그 훅만 쓰던 코드**: `scripts/arm_ledger.py`(arm 원장 — 같은 문서의 반복 강제를 막던 `armed_paths` · `inflight_paths` · `dispatch_attempts`) · `scripts/discover_candidates.py`(발견) · `scripts/parse_spec_structure.py` + `scripts/ambiguity-blacklist.txt`(구조 검증 — placeholder 4토큰 · 영어 모호어 10개 · spec 모드 필수 섹션) · `scripts/resolve_mode.py`(content-aware 모드 판정) · `templates/spec-template.md` · `scripts/hook_common.py` 의 `LAST_DISPATCHED_RE` · `parse_iso` · `state_file_for` · `configure_utf8_streams`.
+- **`state.local.md` 필드**: `last_dispatched_at` · `armed_paths` · `inflight_paths` · `dispatch_attempts` · `validation_attempts` · `discovery_cursor` · `git_unavailable_advised` · `retired_token_advised`.
+- **환경변수 `DEVBREW_SPEC_DISTILL_REDISPATCH_TTL_SEC`** — 끄기 스위치가 아니라 조율 값이라 advisory 대상이 아니다. README 스위치 목록에서도 뺐다.
+- **테스트 13 · fixture 9** — 삭제된 코드만 재던 것(`test_arm_ledger.py` · `test_arm_ledger_timing.sh` · `test_arm_once.sh` · `arm_test_helpers.sh` · `test_discover_candidates.py` · `test_discovery_driven_dispatch.py` · `test_parse_spec_structure.sh` · `test_resolve_mode_scope.sh` · `test_review_dispatch.sh` · `test_review_dispatch_design_mandate.sh` · `test_review_dispatch_disposition.sh` · `test_stop_absorbs_validation.py` · `test_write_path_behavior.sh`, fixture 는 이들만 쓰던 7개 + `shared/tests/fixtures/adjudication/` 의 둘). `test_hook_output_schema.py` 는 NG9 cross-resolver 케이스만 남는다 — 은퇴 스위치 케이스는 `test_review_entry.py` 로 옮겼다. `test_stale_terms.sh` V11(원장·훅 본문의 존재 요구)은 대상과 함께 지웠다.
+- **공용 도구의 삭제된 훅 항목** — `tools/adjudication/check_wiring.py` 의 `EXEMPT` 열 자리 · `TERMINAL_CONSUMERS` 한 항목 · 사유 상수 다섯. `EXEMPT_BASELINE` 과 `test_adjudication_wiring.sh` 의 `COMP_BASELINE` 은 삭제 뒤 스캔으로 재계수했다.
+
+### Deprecated
+
+- **one-minor deprecation window 를 두지 않고 한 번에 제거한다(사용자 결정 D3).** 근거는 선례(이 파일의 환경변수 어순 통일 항목)와 같은 조건이다 — 현재 제3자 설치가 없다(CLAUDE.md §메타데이터의 one-minor deprecation window 와의 충돌을 그 조건 아래 수용). 확인 시점의 사실: 리포 PUBLIC · fork 0 · star 0 (2026-09-10). **이것은 설치가 없다는 증명이 아니다** — PUBLIC 리포는 누구든 마켓플레이스로 추가할 수 있다. **제3자 설치가 확인되면 이 근거가 바뀐다** — 그때는 다음 제거에 예고 릴리스를 둔다.
+- 다른 선례(`project-init` 의 docs-lint 훅 제거 · quality-gates)가 window 면제에 함께 쓴 「기능이 사라졌으므로 조용한 재활성화가 일어날 수 없다」는 **여기서 성립하지 않는다 — 이 제거는 끈 것을 되살린다.** `DEVBREW_SKIP_HOOKS=spec-distill:Stop` · `:review-dispatch` 로 자동 리뷰를 꺼 둔 사용자에게 설계문서 리뷰가 다시 돌고(D9 — 은퇴 토큰은 리뷰를 막지 않는다), 같은 토큰이 부수효과로 멈추던 TTL-GC 도 다시 돈다. 그래서 `reviewing-spec` 의 진입 검사(`scripts/review_entry.py`)가 리뷰를 부를 때마다 사용자의 토큰을 되읽는 advisory 를 내고 살아 있는 끄기 스위치(`DEVBREW_SKIP_HOOKS=spec-distill:review-entry` · `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE=1`)를 댄다. TTL-GC 재개에는 advisory 가 없다.
 
 ## [1.0.0] — 2026-09-09
 
