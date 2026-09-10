@@ -606,7 +606,7 @@ Step A 도 그것을 읽습니다. 승인이 여는 것은 파일 쓰기가 아�
 
 ```
 /new
-/interview @docs/superpowers/interview/2026-09-10-<topic>-interview.md
+/interview @docs/superpowers/interview/<날짜>-<topic>-interview.md
 ```
 
 `/new` 뒤 같은 줄에 텍스트를 붙이면 그 텍스트는 세션 이름이 됩니다 — 두 줄을 **따로** 입력하라는 안내를

@@ -57,6 +57,7 @@ sa="$(block '^## Arguments' '^## ' "$CMD" | flat)"
 assert_contains "$s2" '「풀린 입력」을 대조' "§3: Step 2 trivia 대조 대상 = 풀린 입력"
 assert_contains "$s25" '「풀린 입력」의 frontmatter 에 `type: interview-seed`' "§3: Step 2.5 seed 판별 대상 = 풀린 입력"
 assert_contains "$s3" 'Skill conducting-interview <풀린 입력>' "§3: Step 3 인자 = 풀린 입력"
+[ -n "$s3" ] && ok "§3(양성): Step 3 블록을 읽었다" || no "§3(양성): Step 3 블록이 없다 — 아래 단언이 공허하다"
 assert_not_contains "$s3" 'Skill conducting-interview $ARGUMENTS' "§3: Step 3 가 치환된 원 인자를 넘기지 않는다"
 assert_contains "$sa" '「풀린 입력」 — Step 1.5 의 결과' "§3: Arguments 절이 풀린 입력을 가리킨다"
 

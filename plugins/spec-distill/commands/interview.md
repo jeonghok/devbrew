@@ -1,6 +1,6 @@
 ---
 description: 강한 문제공간 stage — 메타프롬프팅·웹리서치·steelman으로 방향을 끌어내 brainstorming용 interview brief를 생성. devbrew Law 1 instantiation.
-argument-hint: "[rough request]"
+argument-hint: "[rough request | @<seed 경로>]"
 ---
 
 # /interview
