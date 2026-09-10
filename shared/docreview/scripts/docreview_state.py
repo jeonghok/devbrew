@@ -106,6 +106,9 @@ def load_profile(path) -> dict:
     if (not isinstance(lr, dict) or not isinstance(lr.get("layer1"), list) or not lr["layer1"]
             or not isinstance(lr.get("layer2"), list)):
         raise ProfileError("layer_rubric_invalid")
+    lr_extra = [k for k in lr if k not in ("layer1", "layer2")]
+    if lr_extra:
+        raise ProfileError("layer_rubric_fields_unknown:%s" % ",".join(lr_extra))
     dl = data["decision_log"]
     if not isinstance(dl, dict) or dl.get("kind") not in LOG_KINDS:
         raise ProfileError("decision_log_invalid")
