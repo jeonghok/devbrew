@@ -7,14 +7,21 @@ state_root(hook_input, hook_name)). 파일은 `<state-dir>/docreview-state.md` �
 frontmatter 의 `docreview:` 트리가 원장, 본문은 사람이 읽는 사건 로그다. `state.local.md` 는
 건드리지 않는다 — 그 파일은 훅과 brief 파이프라인의 줄 파서가 소유한다.
 
-서브커맨드: init · begin-round · exempt-anchors · decide · fix · ask · defer · observe-diff · gate
+서브커맨드: state-dir-for · init · begin-round · exempt-anchors · decide · fix · ask · defer ·
+observe-diff · gate
 전이 규칙의 정본은 plan(2026-09-06-document-review-engine.md)의 D13 표다.
+
+상태 디렉토리는 **문서별**이다 — 한 디렉토리의 원장(라운드 · 재리뷰 상한 · finding · permit ·
+스냅샷)은 한 문서의 것이다. `state-dir-for` 가 세션 디렉토리와 문서 경로에서 그 자리를
+도출하고, `init` 은 이미 있는 원장이 다른 문서(또는 다른 프로필)의 것이면 거부한다.
 """
 from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -209,7 +216,48 @@ def _emit(obj) -> None:
     print(json.dumps(obj, ensure_ascii=False))
 
 
+# ── 문서의 정체 · 문서별 상태 디렉토리 ────────────────────────────────────────
+# 문서의 정체는 경로다(훅이 경로로 arm 한다). 비교와 디렉토리 도출은 **같은 정규화**
+# 하나를 쓴다 — 절대경로 + 심볼릭 링크 해석(`realpath`). 둘이 다른 정규화를 쓰면 같은
+# 문서를 다른 표기로 불렀을 때 같은 디렉토리에 앉고도 `init` 이 거부하거나, 그 반대가 된다.
+STATE_SUBDIR = "docreview"
+_KEY_UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def doc_identity(doc) -> str:
+    return os.path.realpath(doc)
+
+
+def profile_identity(profile) -> str:
+    """프로필의 정체는 이름(파일 stem)이다 — 경로가 아니다. 플러그인 루트가 옮겨져도(버전
+    캐시) 같은 프로필은 같은 프로필이다. 호스트마다 상태 루트가 따로라 다른 호스트의 같은
+    이름 프로필이 한 디렉토리에서 만나지 않는다."""
+    return Path(profile).stem
+
+
+def state_dir_for(root, session, doc) -> Path:
+    """`<root>/<session>/docreview/<이름표>-<정체 해시 16자>` — 세션과 문서 경로의 순수 함수.
+    이름표는 사람이 읽으라고 붙인 파일 stem 이고 유일성은 해시가 진다."""
+    ident = doc_identity(doc)
+    label = _KEY_UNSAFE.sub("-", Path(ident).stem).strip("-.")[:40] or "doc"
+    digest = hashlib.sha256(os.fsencode(ident)).hexdigest()[:16]
+    return Path(root) / session / STATE_SUBDIR / ("%s-%s" % (label, digest))
+
+
 # ── 서브커맨드 ───────────────────────────────────────────────────────────
+def cmd_state_dir_for(a) -> int:
+    # 상대 루트는 cwd 의 함수고, 빈 세션은 루트 바로 아래 자리다 — 둘 다 여러 세션이 같은
+    # 디렉토리를 나눠 쓰게 만든다. 거부한다.
+    if not a.root or not os.path.isabs(a.root):
+        return fail("root_not_absolute", root=a.root)
+    if not a.session or a.session in (".", "..") or "/" in a.session:
+        return fail("session_invalid", session=a.session)
+    if not a.doc:
+        return fail("doc_empty")
+    print(state_dir_for(a.root, a.session, a.doc))
+    return 0
+
+
 def cmd_init(a) -> int:
     if yaml is None:
         return fail("pyyaml_missing")
@@ -217,12 +265,24 @@ def cmd_init(a) -> int:
         load_profile(a.profile)
     except ProfileError as e:
         return fail("profile_invalid", detail=str(e))
+    # 빈 값은 `Path("")` = cwd 가 되어 cwd 에 원장을 만든다 — 없는 디렉토리로 친다.
+    if not a.state_dir:
+        return fail("state_dir_missing", state_dir=a.state_dir)
     d = Path(a.state_dir)
     if not d.is_dir():
         return fail("state_dir_missing", state_dir=str(d))
     p = state_path(d)
     if p.is_file():
         st = load_state(d)
+        # 다른 문서의 원장을 이어받으면 그 문서의 라운드·재리뷰 상한·finding·permit·
+        # 스냅샷이 이 문서에 섞인다. 거부는 원장을 건드리지 않는다.
+        have = st.get("doc")
+        if not isinstance(have, str) or doc_identity(have) != doc_identity(a.doc):
+            return fail("state_doc_mismatch", state_dir=str(d), state_doc=have, requested_doc=a.doc)
+        have = st.get("profile")
+        if not isinstance(have, str) or profile_identity(have) != profile_identity(a.profile):
+            return fail("state_profile_mismatch", state_dir=str(d), state_profile=have,
+                        requested_profile=a.profile)
         _emit({"ok": True, "created": False, "round": st["round"]})
         return 0
     st = _empty(a.doc, a.profile)
@@ -919,6 +979,9 @@ def cmd_gate_rows(a) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="docreview_state.py")
     sp = p.add_subparsers(dest="cmd", required=True)
+    x = sp.add_parser("state-dir-for"); x.add_argument("--root", required=True)
+    x.add_argument("--session", required=True); x.add_argument("--doc", required=True)
+    x.set_defaults(fn=cmd_state_dir_for)
     x = sp.add_parser("init"); x.add_argument("--state-dir", required=True)
     x.add_argument("--doc", required=True); x.add_argument("--profile", required=True)
     x.set_defaults(fn=cmd_init)

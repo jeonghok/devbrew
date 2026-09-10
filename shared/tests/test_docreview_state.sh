@@ -73,4 +73,10 @@ case_GR_held_decide_cross_ledger
 case_GR_escalated_fix_blocks_approval
 case_GR_escalated_fix_drop_clears_block
 case_GR_escalated_fix_reason_persists
+# 상태 디렉토리의 문서 정체 — init 거부 둘 · 그 양의 짝 · 빈 state-dir · 문서별 자리 도출.
+case_init_other_doc_refused
+case_init_other_profile_refused
+case_init_same_doc_idempotent
+case_init_empty_state_dir_refused
+case_state_dir_for_per_doc
 finish

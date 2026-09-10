@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# guards: plugins/spec-distill/skills/reviewing-spec/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf
+# guards: plugins/spec-distill/skills/reviewing-spec/SKILL.md plugins/spec-distill/scripts/detect_codex.sh plugins/spec-distill/scripts/codex-killswitch.conf shared/docreview/scripts/docreview_state.py
 #
 # `reviewing-spec` 의 codex 게이트를 **잘라내 실행**해, 직전 라운드의 산출물이 이번 라운드
 # 판정으로 새지 않는지 잰다.
@@ -21,6 +21,9 @@
 #   · **D) 하류가 실제로 무엇을 보는가** — 한 셀을 end-to-end 로 돌려 「섭취되지 않는다」를
 #     기계 채널(`prepare-recritic`)에서 직접 확인한다. A 가 부류를, D 가 그 부류가 왜
 #     보안 문제인지를 잰다.
+# 산출물 경로는 문서별 상태 디렉토리 안이다. 셀이 심는 경로도 엔진의 같은 도출
+# (`state-dir-for`)로 얻는다. 그 도출이 실제로 문서마다 다른 자리를 내는지는 P 가 잰다 —
+# `## 입력` 과 펜스를 차가운 셸에서 실행해 경로를 관측한다.
 #
 # ── 양성 짝이 둘인 이유 ──────────────────────────────────────────────────────
 # A 는 전부 **부재** 단언이라 「언제나 지운다」는 구현이 전부 만족시킨다. 그 구현은 이번
@@ -46,6 +49,7 @@ if [ "${1:-}" = "--emit-scanned" ]; then
   echo "plugins/spec-distill/skills/reviewing-spec/SKILL.md"
   echo "plugins/spec-distill/scripts/detect_codex.sh"
   echo "plugins/spec-distill/scripts/codex-killswitch.conf"
+  echo "shared/docreview/scripts/docreview_state.py"
   exit 0
 fi
 
@@ -89,7 +93,7 @@ post_state() {   # post_state <path> → absent | 0byte | <N>B
   elif [ ! -s "$1" ]; then echo 0byte
   else echo "$(wc -c < "$1" | tr -d ' ')B"; fi
 }
-yml_of() { printf '%s' "$SCRATCH/$1/.claude/spec-distill/$1/docreview-codex.yaml"; }
+yml_of() { printf '%s/docreview-codex.yaml' "$(dir_of "$1" "$SKILL")"; }
 
 # ── 가짜 플러그인 루트 ───────────────────────────────────────────────────────
 PR="$SCRATCH/plugin"
@@ -97,8 +101,15 @@ mkdir -p "$PR/scripts"
 cp "$ROOT/plugins/spec-distill/scripts/state_path.py"        "$PR/scripts/"
 cp "$ROOT/plugins/spec-distill/scripts/detect_codex.sh"      "$PR/scripts/"
 cp "$ROOT/plugins/spec-distill/scripts/codex-killswitch.conf" "$PR/scripts/"
+cp "$ROOT/plugins/spec-distill/scripts/docreview_state.py"   "$PR/scripts/"
 ln -s "$ROOT/plugins/spec-distill/references" "$PR/references"
 DETECTOR="$PR/scripts/detect_codex.sh"
+# dir_of <sid> <doc> → 그 세션·문서의 엔진 상태 디렉토리. 펜스가 쓰는 도출과 같은 한 줄이다.
+# 스크래치 홈은 git 밖이라 상태 루트가 cwd fallback(`<홈>/.claude/spec-distill`)이 된다.
+dir_of() {
+  python3 "$PR/scripts/docreview_state.py" state-dir-for \
+      --root "$SCRATCH/$1/.claude/spec-distill" --session "$1" --doc "$2" 2>/dev/null
+}
 
 cat > "$PR/scripts/run_docreview_codex_reviewer.sh" <<'STUB'
 #!/usr/bin/env bash
@@ -130,11 +141,13 @@ BASE="/usr/bin:/bin"
 # 같다. 이 락을 처음 돌렸을 때 실제로 셀 하나가 그렇게 무의미했다(7자 sid). 쓰는 이름을
 # 전부 미리 통과시켜, 계측기가 죽은 채로 판정이 나오는 것을 막는다.
 SIDS="rs01kill rs02noin rs03noip rs05rc3x rs04nodt rs06keep rs07trap rs08lock rs09down rs10ctlx
-      rs11trnc rs12pred rs21kill rs22noin rs23noip rs24nodt rs25rc3x rs26lock"
+      rs11trnc rs12pred rs21kill rs22noin rs23noip rs24nodt rs25rc3x rs26lock rs30plce"
 bad_sid=""
 for s in $SIDS; do
   DEVBREW_SPEC_DISTILL_SESSION_ID="$s" python3 "$PR/scripts/state_path.py" session-id >/dev/null 2>&1 \
     || bad_sid="$bad_sid $s"
+  # 문서별 자리가 도출되지 않으면 셀이 심는 경로가 스크래치의 빈 자리로 떨어진다 — 같은 붕괴다.
+  [ -n "$(dir_of "$s" "$SKILL")" ] || bad_sid="$bad_sid $s(state-dir-for)"
 done
 if [ -z "$bad_sid" ]; then
   ok "전제: 이 락이 쓰는 sid 전부가 state_path.py 의 세션 이름 검사를 통과한다 (도출이 조용히 죽지 않는다)"
@@ -147,11 +160,13 @@ plant_stale() {   # plant_stale <path>
 }
 
 # `run_fence <sid> <bin> <plant?> <stub_write> <stub_rc> [env…]` → 산출물 경로를 stdout 으로.
+# 경로는 `${RUN_DOC:-$SKILL}` 문서의 자리다 — 셀이 넘기는 `spec_path` 와 같은 문서여야 한다.
 CASE_ERR=""
 run_fence() {
   local sid="$1" bin="$2" plant="$3" sw="$4" rc="$5"; shift 5
-  local home="$SCRATCH/$sid"; mkdir -p "$home/.claude/spec-distill/$sid"
-  local yml="$home/.claude/spec-distill/$sid/docreview-codex.yaml"
+  local home="$SCRATCH/$sid" dir yml
+  dir="$(dir_of "$sid" "${RUN_DOC:-$SKILL}")"; [ -n "$dir" ] || dir="$home/.nodir"
+  mkdir -p "$dir"; yml="$dir/docreview-codex.yaml"
   [ "$plant" = "plant" ] && plant_stale "$yml"
   CASE_ERR="$SCRATCH/$sid.err"
   # cwd 를 스크래치로 둔다 — `state_path.py` 가 git 밖에서 cwd fallback 을 쓰므로
@@ -178,8 +193,9 @@ residue_case() {   # residue_case <라벨> <sid> <bin> <stub_write> <stub_rc> [e
     no "A($label): 직전 라운드 산출물이 그대로 남았다 ($(wc -c < "$yml" | tr -d ' ')바이트) — 5단계가 그것을 이번 라운드 codex 판정으로 읽는다"
   fi
 }
-residue_case "kill switch"          rs01kill  "$BIN_OK"   none 0 DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1
+residue_case "kill switch"          rs01kill  "$BIN_OK"   none 0 spec_path="$SKILL" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1
 residue_case "codex 미설치"          rs02noin  "$BIN_NONE" none 0 spec_path="$SKILL"
+# 문서 미상 — 펜스가 경로를 도출하지 못한다. 그래도 이 세션의 문서별 산출물은 중화돼야 한다.
 residue_case "게이트 입력 부재"       rs03noip  "$BIN_OK"   none 0
 residue_case "러너 rc=3 (껍데기)"     rs05rc3x  "$BIN_OK"   husk 3 spec_path="$SKILL"
 
@@ -204,7 +220,7 @@ keep_case() {   # keep_case <라벨> <sid> <stub_write> <stub_rc> <기대 마커
 }
 keep_case "keep-rc0"  rs06keep ok     0   "$THIS_MARK" "무조건 지우는 판본이면 이번 라운드 codex 판정이 통째로 버려진다"
 keep_case "keep-trap" rs07trap honest 143 "-"          "EXIT 트랩은 원래 실패의 rc 를 그대로 두고 기록을 남긴다(실측 rc 143) — rc != 0 으로 지우면 이번 라운드의 정직한 사유가 사라진다"
-if grep -q 'aborted_before_completion' "$SCRATCH/rs07trap/.claude/spec-distill/rs07trap/docreview-codex.yaml" 2>/dev/null; then
+if grep -q 'aborted_before_completion' "$(yml_of rs07trap)" 2>/dev/null; then
   ok "A+(keep-trap): 그 기록의 사유(aborted_before_completion)가 보존된다 — 하류가 뭉갠 사유 대신 실제 사유를 받는다"
 else
   no "A+(keep-trap): 정직한 기록의 사유가 남아 있지 않다"
@@ -214,14 +230,14 @@ fi
 # unlink 는 디렉토리 권한을, 절단은 파일 권한을 요구한다. 둘 다 막으면 중화가 불가능하고,
 # 그때 펜스는 codex 축을 끄고 사유를 대야 한다 — 그러지 않으면 사람이 읽는 채널은
 # 「degraded」라 하고 기계가 읽는 채널은 「codex 정상」이라 하는 모순 상태가 된다.
-sid=rs08lock; home="$SCRATCH/$sid"; mkdir -p "$home/.claude/spec-distill/$sid"
-yml="$home/.claude/spec-distill/$sid/docreview-codex.yaml"
-plant_stale "$yml"; chmod 444 "$yml"; chmod 555 "$home/.claude/spec-distill/$sid"
+sid=rs08lock; home="$SCRATCH/$sid"; D="$(dir_of "$sid" "$SKILL")"; mkdir -p "$D"
+yml="$D/docreview-codex.yaml"
+plant_stale "$yml"; chmod 444 "$yml"; chmod 555 "$D"
 ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
     PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
     STUB_WRITE=none STUB_RC=0 spec_path="$SKILL" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1 \
     bash "$FENCE" ) >/dev/null 2>"$SCRATCH/$sid.err"
-chmod 755 "$home/.claude/spec-distill/$sid"; chmod 644 "$yml"
+chmod 755 "$D"; chmod 644 "$yml"
 if grep -q 'residue_unclearable' "$SCRATCH/$sid.err"; then
   ok "A!(중화 불가): 지우지도 절단하지도 못하면 그 사유로 codex 축을 끈다 (조용한 통과 없음)"
 else
@@ -233,6 +249,9 @@ fi
 SD_SCRIPTS="$ROOT/plugins/spec-distill/scripts"
 FXD="$ROOT/shared/tests/fixtures/docreview"
 PROFILE_D="$ROOT/plugins/spec-distill/references/docreview-profiles/design-doc.md"
+# 원장을 여는 셀의 문서 — 원장의 `doc` 과 펜스의 `spec_path` 가 같은 문서라야 그 원장이
+# 앉은 자리가 펜스가 도출하는 자리다.
+DOC_D="$FXD/design-sample.md"
 downstream() {   # downstream <상태dir> <codex 경로> → "absent|items|marks"
   python3 "$SD_SCRIPTS/docreview_route.py" prepare-recritic --state-dir "$1" \
       --critic "$FXD/critic-r1.txt" --codex "$2" > "$1/prep.json" 2>/dev/null
@@ -246,15 +265,15 @@ print("%s|%d|%d" % (g.get("codex_absent"), len(items),
 PY
 }
 mk_state() {   # mk_state <dir>
-  python3 "$SD_SCRIPTS/docreview_state.py" init --state-dir "$1" --doc "$FXD/design-sample.md" --profile "$PROFILE_D" >/dev/null
-  python3 "$SD_SCRIPTS/docreview_anchor.py" snapshot "$FXD/design-sample.md" > "$1/s1.json"
+  python3 "$SD_SCRIPTS/docreview_state.py" init --state-dir "$1" --doc "$DOC_D" --profile "$PROFILE_D" >/dev/null
+  python3 "$SD_SCRIPTS/docreview_anchor.py" snapshot "$DOC_D" > "$1/s1.json"
   python3 "$SD_SCRIPTS/docreview_state.py" begin-round --state-dir "$1" --snapshot "$1/s1.json" >/dev/null
 }
-sid=rs09down; home="$SCRATCH/$sid"; D="$home/.claude/spec-distill/$sid"; mkdir -p "$D"
+sid=rs09down; home="$SCRATCH/$sid"; D="$(dir_of "$sid" "$DOC_D")"; mkdir -p "$D"
 mk_state "$D"
-yml="$(run_fence "$sid" "$BIN_OK" plant none 0 spec_path="$SKILL" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1)"
+yml="$(RUN_DOC="$DOC_D" run_fence "$sid" "$BIN_OK" plant none 0 spec_path="$DOC_D" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1)"
 got="$(downstream "$D" "$yml")"
-sid=rs10ctlx; home2="$SCRATCH/$sid"; D2="$home2/.claude/spec-distill/$sid"; mkdir -p "$D2"
+sid=rs10ctlx; home2="$SCRATCH/$sid"; D2="$(dir_of "$sid" "$DOC_D")"; mkdir -p "$D2"
 mk_state "$D2"
 ctl="$(downstream "$D2" "$D2/never-written.yaml")"
 if [ "${got%%|*}" != "True" ] || [ "${got##*|}" != "0" ]; then
@@ -272,12 +291,12 @@ fi
 # unlink 는 디렉토리 권한을, 절단은 파일 권한을 요구한다 — 이 조합에서 중화의 수단은 절단
 # 하나다. 잔존물은 라운드 시작 «뒤» 에 심는다: 하류의 시점 판별이 아니라 절단만으로
 # 중화되는지를 재기 위해서다.
-sid=rs11trnc; home="$SCRATCH/$sid"; D="$home/.claude/spec-distill/$sid"; mkdir -p "$D"
+sid=rs11trnc; home="$SCRATCH/$sid"; D="$(dir_of "$sid" "$DOC_D")"; mkdir -p "$D"
 mk_state "$D"
 yml="$D/docreview-codex.yaml"; plant_stale "$yml"; chmod 555 "$D"
 ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
     PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
-    STUB_WRITE=none STUB_RC=0 spec_path="$SKILL" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1 \
+    STUB_WRITE=none STUB_RC=0 spec_path="$DOC_D" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1 \
     bash "$FENCE" ) >/dev/null 2>"$SCRATCH/$sid.err"
 chmod 755 "$D"
 got="$(post_state "$yml")"
@@ -307,7 +326,7 @@ print("%s|%s|%d" % (g.get("codex_absent"), g.get("codex_reason"),
                     json.dumps(d.get("items") or [], ensure_ascii=False).count(sys.argv[2])))
 PY
 }
-sid=rs12pred; home="$SCRATCH/$sid"; D="$home/.claude/spec-distill/$sid"; mkdir -p "$D"
+sid=rs12pred; home="$SCRATCH/$sid"; D="$(dir_of "$sid" "$DOC_D")"; mkdir -p "$D"
 mk_state "$D"                                    # 라운드 1
 yml="$D/docreview-codex.yaml"; plant_stale "$yml"  # 라운드 1 의 codex 산출물
 # 직전 라운드의 산출물은 라운드 1 시작 «뒤» · 라운드 2 시작 «앞» 에 쓰인다. 라운드 1 시작을 120초
@@ -318,13 +337,13 @@ st = s.load_state(sys.argv[2]); r = st["rounds"]["1"]
 r["started_mtime_ns"] = int(r["started_mtime_ns"]) - 120 * 10**9; s.save_state(sys.argv[2], st)
 t = r["started_mtime_ns"] + 60 * 10**9; os.utime(sys.argv[3], ns=(t, t))' "$SD_SCRIPTS" "$D" "$yml"
 chmod 444 "$yml"; chmod 555 "$D"
-python3 "$SD_SCRIPTS/docreview_anchor.py" snapshot "$FXD/design-sample.md" > "$SCRATCH/$sid.s2.json"
+python3 "$SD_SCRIPTS/docreview_anchor.py" snapshot "$DOC_D" > "$SCRATCH/$sid.s2.json"
 python3 "$SD_SCRIPTS/docreview_state.py" begin-round --state-dir "$D" --snapshot "$SCRATCH/$sid.s2.json" >/dev/null 2>&1; brc=$?
 rnd="$(python3 "$FXD/st_get.py" "$D/docreview-state.md" 'st["round"]' 2>/dev/null)"
 win="$(python3 -c 'import os, sys, yaml; t = open(sys.argv[1], encoding="utf-8").read(); r = yaml.safe_load(t[4:t.find("\n---\n", 4)])["docreview"]["rounds"]; m = os.stat(sys.argv[2]).st_mtime_ns; a = (r.get("1") or {}).get("started_mtime_ns"); b = (r.get("2") or {}).get("started_mtime_ns"); print(a is not None and b is not None and int(a) < m < int(b))' "$D/docreview-state.md" "$yml" 2>/dev/null)"
 ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
     PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
-    STUB_WRITE=none STUB_RC=0 spec_path="$SKILL" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1 \
+    STUB_WRITE=none STUB_RC=0 spec_path="$DOC_D" DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1 \
     bash "$FENCE" ) >/dev/null 2>"$SCRATCH/$sid.err"
 left="$(post_state "$yml")"
 python3 "$SD_SCRIPTS/docreview_route.py" prepare-recritic --state-dir "$D" --critic "$FXD/critic-r1.txt" \
@@ -372,7 +391,7 @@ errexit_case "감지기 부재"       rs24nodt rs04nodt "$BIN_OK"   none 0 detec
 mv "$SCRATCH/detector.bak" "$DETECTOR"
 # 중화 불가 조합(A 의 셋째 층과 같은 잠금) — 지우기·절단의 실패가 errexit 로 펜스를 죽이면
 # residue_unclearable 공시가 사라진다.
-sid=rs26lock; home="$SCRATCH/$sid"; D="$home/.claude/spec-distill/$sid"; mkdir -p "$D"
+sid=rs26lock; home="$SCRATCH/$sid"; D="$(dir_of "$sid" "$SKILL")"; mkdir -p "$D"
 yml="$D/docreview-codex.yaml"; plant_stale "$yml"; chmod 444 "$yml"; chmod 555 "$D"
 ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" CODEX_API_KEY=t \
     PYTHONDONTWRITEBYTECODE=1 CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$sid" \
@@ -400,5 +419,77 @@ if grep -q 'codex co-review SKIPPED (reason: gate_inputs_missing)' "$SCRATCH/nos
   ok "E(sid 미해석): 세션 id 도출 실패가 펜스를 죽이지 않고 gate_inputs_missing 으로 공시된다"
 else
   no "E(sid 미해석): errexit 아래서 gate_inputs_missing 공시가 없다 — 도출 실패가 펜스를 죽였다"
+fi
+
+# ── P) 문서별 자리 — `## 입력` + 펜스를 차가운 셸에서 실행해 경로를 관측한다 ──────────
+# 한 세션에서 문서 둘을 리뷰하면 둘의 엔진 상태와 codex 산출물이 다른 자리에 앉아야 한다 —
+# 한 자리를 나눠 쓰면 둘째 문서가 첫 문서의 라운드·재리뷰 상한·finding 을 물려받는다. 같은
+# 문서는 dispatch 를 넘어 같은 자리로 돌아와야 한다(라운드 연속성). 두 번째 문서는 첫 문서와
+# **파일 이름이 같다** — 이름표(stem)만으로 갈리면 도출에서 문서 경로가 빠져도 통과한다.
+# 텍스트가 아니라 실행 결과로 판정한다: 블록을 잘라 이어 붙이고 끝에 관측 줄 하나를 단다.
+INPUT="$SCRATCH/input.sh"
+awk '
+  /^## 입력$/ {ins=1; next}
+  /^## 프로필$/ {ins=0}
+  ins && !seen && /^```bash$/ {inb=1; next}
+  ins && inb && /^```$/ {inb=0; seen=1; next}
+  ins && inb {print}
+' "$SKILL" > "$INPUT"
+if grep -q '^STATE_DIR=' "$INPUT" && bash -n "$INPUT" 2>/dev/null; then
+  ok "P 추출: \`## 입력\` 블록 $(grep -c . "$INPUT")줄 — STATE_DIR 대입을 담고 bash -n 을 통과한다"
+else
+  no "P 추출: \`## 입력\` 블록이 비었거나 STATE_DIR 대입이 없거나 문법이 깨졌다 — 아래 판정은 무의미하다"
+fi
+OBS_LINE='printf "STATE=%s\nSTATE_DIR=%s\nCODEX_YAML=%s\n" "${STATE:-}" "${STATE_DIR:-}" "${CODEX_YAML:-}" > "$OBS"'
+{ cat "$INPUT"; cat "$FENCE"; printf '%s\n' "$OBS_LINE"; } > "$SCRATCH/input-fence.sh"
+{ cat "$FENCE"; printf '%s\n' "$OBS_LINE"; } > "$SCRATCH/fence-only.sh"
+mkdir -p "$SCRATCH/other"; cp "$DOC_D" "$SCRATCH/other/design-sample.md"
+DOC_B="$SCRATCH/other/design-sample.md"
+place() {   # place <sid> <doc> <script> <관측 파일> — codex 는 kill switch 로 끈다(러너 무관)
+  local home="$SCRATCH/$1"; mkdir -p "$home"
+  ( cd "$home" && env -i PATH="$BIN_OK:$BASE" HOME="$home" PYTHONDONTWRITEBYTECODE=1 \
+      CLAUDE_PLUGIN_ROOT="$PR" DEVBREW_SPEC_DISTILL_SESSION_ID="$1" \
+      DEVBREW_SPEC_DISTILL_DISABLE_CODEX=1 spec_path="$2" OBS="$4" bash "$3" ) >/dev/null 2>"$4.err"
+}
+obs() { sed -n "s/^$2=//p" "$1" 2>/dev/null; }
+place rs30plce "$DOC_D" "$SCRATCH/input-fence.sh" "$SCRATCH/p1.obs"
+place rs30plce "$DOC_B" "$SCRATCH/input-fence.sh" "$SCRATCH/p2.obs"
+place rs30plce "$DOC_D" "$SCRATCH/input-fence.sh" "$SCRATCH/p3.obs"
+place rs30plce "$DOC_D" "$SCRATCH/fence-only.sh"  "$SCRATCH/p4.obs"
+sa="$(obs "$SCRATCH/p1.obs" STATE_DIR)"; ca="$(obs "$SCRATCH/p1.obs" CODEX_YAML)"
+sb="$(obs "$SCRATCH/p2.obs" STATE_DIR)"; cb="$(obs "$SCRATCH/p2.obs" CODEX_YAML)"
+sa2="$(obs "$SCRATCH/p3.obs" STATE_DIR)"; ca2="$(obs "$SCRATCH/p3.obs" CODEX_YAML)"
+ca4="$(obs "$SCRATCH/p4.obs" CODEX_YAML)"
+st1="$(obs "$SCRATCH/p1.obs" STATE)"; st2="$(obs "$SCRATCH/p2.obs" STATE)"
+if [ -n "$sa" ] && [ -n "$ca" ] && [ -n "$sb" ] && [ -n "$cb" ]; then
+  ok "P 전제: 두 문서 모두 STATE_DIR · CODEX_YAML 이 도출된다 (빈 값끼리의 비교가 아니다)"
+else
+  no "P 전제 붕괴: STATE_DIR='$sa'/'$sb' CODEX_YAML='$ca'/'$cb' — 아래 비교는 공허하다 ($(head -c 300 "$SCRATCH/p1.obs.err" 2>/dev/null))"
+fi
+if [ "$sa" != "$sb" ] && [ "$ca" != "$cb" ]; then
+  ok "P1: 한 세션의 다른 두 문서가 다른 STATE_DIR · 다른 CODEX_YAML 을 받는다"
+else
+  no "P1: 한 세션의 다른 두 문서가 같은 자리를 나눠 쓴다 (STATE_DIR $sa = $sb 또는 CODEX_YAML $ca = $cb)"
+fi
+if [ -n "$sa" ] && [ "$sa2" = "$sa" ] && [ "$ca2" = "$ca" ]; then
+  ok "P2: 같은 문서를 새 셸에서 다시 도출하면 같은 STATE_DIR · CODEX_YAML 이다 (라운드 연속성)"
+else
+  no "P2: 같은 문서의 재도출이 다른 자리를 낸다 ($sa → $sa2 · $ca → $ca2)"
+fi
+if [ -n "$ca" ] && [ "$ca4" = "$ca" ]; then
+  ok "P3: \`## 입력\` 없이 펜스만 돌아도 같은 CODEX_YAML 을 도출한다 (펜스의 재도출 = 같은 도출)"
+else
+  no "P3: 펜스 단독 재도출($ca4)이 \`## 입력\` 경유($ca)와 다르다"
+fi
+if [ -n "$sa" ] && [ "$ca" = "$sa/docreview-codex.yaml" ]; then
+  ok "P4: codex 산출물이 그 문서의 상태 디렉토리 안에 있다"
+else
+  no "P4: codex 산출물($ca)이 그 문서의 상태 디렉토리($sa) 밖이다"
+fi
+sess="${st1%/state.local.md}"
+if [ -n "$st1" ] && [ "$st1" = "$st2" ] && [ "$sess" != "$st1" ] && [ "${sa%/*}" = "$sess/docreview" ] && [ "${sb%/*}" = "$sess/docreview" ]; then
+  ok "P5: arm 원장(\$STATE)은 문서와 무관하게 세션의 한 파일이고, 문서별 디렉토리는 그 세션 아래 docreview/ 에 앉는다"
+else
+  no "P5: arm 원장 또는 문서별 디렉토리의 자리가 어긋났다 (STATE $st1 / $st2 · STATE_DIR $sa / $sb)"
 fi
 finish

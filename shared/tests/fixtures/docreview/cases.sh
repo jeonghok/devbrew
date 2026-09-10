@@ -776,7 +776,7 @@ open(sys.argv[3], "w", encoding="utf-8").write(re.sub(r"\{\{F:([^}]+)\}\}", lamb
 PY
 }
 # ── codex 산출물의 시점 판별 (prepare-recritic) ────────────────────────────
-# 산출물 경로는 세션의 순수 함수라 라운드마다 같은 파일이고, 직전 라운드의 산출물과 이번
+# 산출물 경로는 세션과 문서의 순수 함수라 같은 문서의 라운드마다 같은 파일이고, 직전 라운드의 산출물과 이번
 # 라운드의 것은 내용으로 못 가른다. `prepare-recritic` 은 `begin-round` 가 기록한 라운드
 # 시작보다 먼저 쓰인 codex 파일을 부재로 읽는다. 그래서 픽스처는 러너가 4단계에서 쓰듯
 # 라운드 시작 «뒤» 에 상태 디렉토리로 복사해 넘긴다 — 커밋된 픽스처의 mtime 은 체크아웃
@@ -1680,4 +1680,105 @@ case_GR_escalated_fix_reason_persists() {
   assert_eq "$(py docreview_state.py gate --state-dir "$d" --render | grep -c '사유: anchor_protected')" "1" \
     "GR: 라운드 2 렌더에도 같은 진짜 사유가 남는다(M7 — fx 레코드의 escalate_reason 이 원장 소비와 무관)"
   rm -rf "$d"
+}
+
+# ── 상태 디렉토리의 문서 정체 — init 거부 · state-dir-for ──────────────────────
+# 한 디렉토리의 원장은 한 문서의 것이다. 다른 문서로 init 하면 그 문서가 첫 문서의
+# 라운드·재리뷰 상한·finding·permit·스냅샷을 물려받는다. 판정은 stdout·stderr 파일을
+# grep 으로 읽는다 — 거부가 사라지는 변이에서 빈 stderr 를 json 으로 읽으면 traceback 이
+# 나고, 그러면 매트릭스가 규칙 위반을 「측정 불가」로 판정한다.
+case_init_other_doc_refused() {
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  cp "$d/docreview-state.md" "$d/before.md"
+  py docreview_state.py init --state-dir "$d" --doc "$FX/brief-sample.md" --profile "$PROF_SD/design-doc.md" >"$d/out" 2>"$d/err"; rc=$?
+  assert_eq "$rc" "1" "문서 정체: 다른 문서의 원장이 있는 디렉토리에 init 하면 rc 1"
+  assert_file_grep "$d/err" '"reason": "state_doc_mismatch"' "문서 정체: 사유는 state_doc_mismatch"
+  assert_file_grep "$d/err" '"state_doc": "[^"]*/design-sample\.md"' "문서 정체: 상세에 기존 원장의 문서가 실린다"
+  assert_file_grep "$d/err" '"requested_doc": "[^"]*/brief-sample\.md"' "문서 정체: 상세에 요청한 문서가 실린다"
+  assert_eq "$(cat "$d/out")" "" "문서 정체: 거부는 성공 JSON 을 내지 않는다"
+  if cmp -s "$d/before.md" "$d/docreview-state.md"; then
+    ok "문서 정체: 거부가 원장을 건드리지 않는다 (바이트 동일, 라운드 1 그대로)"
+  else
+    no "문서 정체: 거부했는데 원장이 바뀌었다"
+  fi
+  rm -rf "$d"
+}
+case_init_other_profile_refused() {
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  cp "$d/docreview-state.md" "$d/before.md"
+  py docreview_state.py init --state-dir "$d" --doc "$FX/design-sample.md" --profile "$PROF_SD/brief.md" >"$d/out" 2>"$d/err"; rc=$?
+  assert_eq "$rc" "1" "프로필 정체: 다른 프로필로 같은 문서를 init 하면 rc 1"
+  assert_file_grep "$d/err" '"reason": "state_profile_mismatch"' "프로필 정체: 사유는 state_profile_mismatch"
+  assert_file_grep "$d/err" '"state_profile": "[^"]*/design-doc\.md"' "프로필 정체: 상세에 기존 프로필이 실린다"
+  assert_file_grep "$d/err" '"requested_profile": "[^"]*/brief\.md"' "프로필 정체: 상세에 요청한 프로필이 실린다"
+  if cmp -s "$d/before.md" "$d/docreview-state.md"; then
+    ok "프로필 정체: 거부가 원장을 건드리지 않는다"
+  else
+    no "프로필 정체: 거부했는데 원장이 바뀌었다"
+  fi
+  rm -rf "$d"
+}
+# 위 두 거부의 양의 짝 — 같은 문서·같은 프로필은 표기가 달라도 멱등이다.
+case_init_same_doc_idempotent() {
+  local d rc; d="$(r1 "$PROF_SD/design-doc.md" "$FX/design-sample.md")"
+  cp "$d/docreview-state.md" "$d/before.md"
+  ln -s "$FX/design-sample.md" "$d/link.md"
+  py docreview_state.py init --state-dir "$d" --doc "$FX/design-sample.md" --profile "$PROF_SD/design-doc.md" >"$d/o1" 2>&1; rc=$?
+  assert_eq "$rc" "0" "멱등: 같은 문서로 다시 init 하면 rc 0"
+  assert_file_grep "$d/o1" '"created": false, "round": 1' "멱등: created false · 원장의 라운드 1 이 그대로 보인다"
+  py docreview_state.py init --state-dir "$d" --doc "$d/link.md" --profile "$PROF_SD/design-doc.md" >"$d/o2" 2>&1; rc=$?
+  assert_eq "$rc" "0" "멱등(정규화): 같은 문서를 가리키는 심볼릭 링크로 init 해도 rc 0"
+  assert_file_grep "$d/o2" '"created": false' "멱등(정규화): 심볼릭 링크 표기도 같은 문서로 읽는다"
+  py docreview_state.py init --state-dir "$d" --doc "$FX/./design-sample.md" --profile "$PROF_SD/../docreview-profiles/design-doc.md" >"$d/o3" 2>&1; rc=$?
+  assert_eq "$rc" "0" "멱등(정규화): '/./' 문서 표기와 '..' 프로필 표기로 init 해도 rc 0"
+  if cmp -s "$d/before.md" "$d/docreview-state.md"; then
+    ok "멱등: 재 init 셋이 원장을 건드리지 않는다"
+  else
+    no "멱등: 재 init 이 원장을 바꿨다"
+  fi
+  rm -rf "$d"
+}
+# 빈 --state-dir 는 `Path("")` = cwd 다 — cwd 에 원장이 생기면 안 된다.
+case_init_empty_state_dir_refused() {
+  local w o rc; w="$(mktemp -d -t docreview-XXXXXX)"; o="$(mktemp -d -t docreview-XXXXXX)"
+  ( cd "$w" && py docreview_state.py init --state-dir "" --doc "$FX/design-sample.md" --profile "$PROF_SD/design-doc.md" ) >"$o/out" 2>"$o/err"; rc=$?
+  assert_eq "$rc" "1" "빈 state-dir: init 이 rc 1 로 거부한다"
+  assert_file_grep "$o/err" '"reason": "state_dir_missing"' "빈 state-dir: 사유는 state_dir_missing"
+  if [ -e "$w/docreview-state.md" ]; then
+    no "빈 state-dir: cwd 에 원장이 생겼다"
+  else
+    ok "빈 state-dir: cwd 에 원장이 생기지 않는다"
+  fi
+  rm -rf "$w" "$o"
+}
+# 문서별 디렉토리 — 같은 문서는 같은 자리, 다른 문서는 다른 자리. 두 번째 문서는 첫 문서와
+# **파일 이름이 같게** 둔다: 이름표(stem)만으로 갈리면 도출에서 문서 경로가 빠져도 이 셀이
+# 통과한다. 유일성은 경로의 정체가 져야 한다.
+case_state_dir_for_per_doc() {
+  local w a1 a2 a3 b rc; w="$(mktemp -d -t docreview-XXXXXX)"
+  mkdir -p "$w/other"; cp "$FX/design-sample.md" "$w/other/design-sample.md"
+  ln -s "$FX/design-sample.md" "$w/link.md"
+  a1="$(py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "$FX/design-sample.md")"
+  a2="$(py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "$FX/design-sample.md")"
+  a3="$(py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "$w/link.md")"
+  b="$(py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "$w/other/design-sample.md")"
+  assert_eq "${a1%/*}" "$w/root/sess0001/docreview" "문서별 자리: <root>/<session>/docreview/ 아래다"
+  assert_grep "${a1##*/}" '^design-sample-[0-9a-f]{16}$' "문서별 자리: 키는 <stem>-<해시 16자>"
+  assert_eq "$a2" "$a1" "문서별 자리: 같은 문서를 두 번 도출하면 같은 자리"
+  assert_eq "$a3" "$a1" "문서별 자리: 같은 문서를 가리키는 심볼릭 링크도 같은 자리 (init 의 정규화와 같다)"
+  if [ -n "$b" ] && [ "$b" != "$a1" ] && [ "${b%/*}" = "$w/root/sess0001/docreview" ]; then
+    ok "문서별 자리: 이름이 같은 다른 문서는 다른 자리"
+  else
+    no "문서별 자리: 다른 문서가 같은 자리로 간다 ($b = $a1)"
+  fi
+  py docreview_state.py state-dir-for --root "root" --session sess0001 --doc "$FX/design-sample.md" >"$w/o1" 2>"$w/e1"; rc=$?
+  assert_eq "$rc:$(cat "$w/o1")" "1:" "문서별 자리: 상대 루트는 rc 1 · 출력 없음"
+  assert_file_grep "$w/e1" '"reason": "root_not_absolute"' "문서별 자리: 상대 루트의 사유는 root_not_absolute"
+  py docreview_state.py state-dir-for --root "$w/root" --session "" --doc "$FX/design-sample.md" >"$w/o2" 2>"$w/e2"; rc=$?
+  assert_eq "$rc:$(cat "$w/o2")" "1:" "문서별 자리: 빈 세션은 rc 1 · 출력 없음 (루트 바로 아래를 여러 세션이 나눠 쓰지 않는다)"
+  assert_file_grep "$w/e2" '"reason": "session_invalid"' "문서별 자리: 빈 세션의 사유는 session_invalid"
+  py docreview_state.py state-dir-for --root "$w/root" --session sess0001 --doc "" >"$w/o3" 2>"$w/e3"; rc=$?
+  assert_eq "$rc:$(cat "$w/o3")" "1:" "문서별 자리: 빈 문서는 rc 1 · 출력 없음"
+  assert_file_grep "$w/e3" '"reason": "doc_empty"' "문서별 자리: 빈 문서의 사유는 doc_empty"
+  rm -rf "$w"
 }

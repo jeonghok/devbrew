@@ -83,13 +83,27 @@ grep -qF 'state_path.py" session-id' <<<"$w_out" \
 grep -qE '^STATE="\$ROOT/\$harness_sid/' "$SKILL" \
   && ok "S2a: arm 원장 READ 가 \$harness_sid 로 \$STATE 를 만든다" \
   || no "S2a: \$STATE 가 \$harness_sid 에서 도출되지 않는다 — 훅과 다른 파일을 읽는다"
-# S2a2 〔fix round 1 / M-3〕: 엔진 상태 디렉터리도 같은 sid 로 키잉된다.
-# S2a 의 `^STATE="` 는 `STATE_DIR=` 을 매치하지 않는다 — 엔진 state(`docreview-state.md`)를
-# 다른 디렉터리로 쪼개는 편집이 **잡히지 않았다.** arm 원장과 엔진 상태가 갈리면 같은 세션의
-# 두 상태가 다른 자리에 앉고, 재개·GC·훅 판독이 서로 다른 것을 본다.
-grep -qE '^STATE_DIR="\$ROOT/\$harness_sid"' "$SKILL" \
-  && ok "S2a2: 엔진 state 디렉터리도 \$harness_sid 로 키잉된다 (arm 원장과 같은 자리)" \
-  || no "S2a2: \$STATE_DIR 이 \$ROOT/\$harness_sid 가 아니다 — 엔진 상태가 arm 원장과 다른 디렉터리로 갈린다"
+# S2a2: 엔진 상태 디렉터리는 arm 원장과 **같은 루트·세션** 아래에서 **문서별로** 도출된다.
+# S2a 의 `^STATE="` 는 `STATE_DIR=` 을 매치하지 않으므로 따로 잰다. 세 성분이 전부 있어야 한다:
+# 루트(`$ROOT`)와 세션(`$harness_sid`)이 arm 원장과 갈리면 같은 세션의 두 상태가 다른 자리에
+# 앉아 재개·GC·훅 판독이 서로 다른 것을 보고, 문서(`$spec_path`)가 빠지면 한 세션에서 리뷰한
+# 두 문서가 한 원장의 라운드·재리뷰 상한·finding 을 나눠 쓴다. 도출이 실제로 문서마다 다른
+# 자리를 내는지는 실행으로 잰다(test_reviewing_spec_residue.sh 의 P 셀).
+grep -qE '^STATE_DIR="\$\(python3 "[^"]*/scripts/docreview_state\.py" state-dir-for --root "\$ROOT" --session "\$harness_sid" --doc "\$\{spec_path:-\}"' "$SKILL" \
+  && ok "S2a2: 엔진 state 디렉터리가 \$ROOT · \$harness_sid · \$spec_path 에서 state-dir-for 로 도출된다" \
+  || no "S2a2: \$STATE_DIR 이 \$ROOT · \$harness_sid · \$spec_path 셋에서 state-dir-for 로 도출되지 않는다 — 엔진 상태가 arm 원장과 갈리거나 문서를 넘어 섞인다"
+# S2a3 (∀ — S2a2 의 짝): SKILL 안의 `STATE_DIR=` 대입이 **전부** 같은 도출을 거친다. S2a2 는
+# `## 입력` 한 줄의 존재만 잰다 — 펜스의 재도출이나 새 대입이 세션 디렉토리 자체를 쓰면
+# 침묵한다. 하한 2(`## 입력` + codex 펜스)는 이 등식의 vacuity 바닥이다.
+sd_tot=$(grep -cE '^[[:space:]]*STATE_DIR=' "$SKILL")
+sd_der=$(grep -cE '^[[:space:]]*STATE_DIR=.*docreview_state\.py" state-dir-for --root "\$ROOT" --session "\$harness_sid" --doc "\$\{spec_path:-\}"' "$SKILL")
+if [[ "$sd_tot" -lt 2 ]]; then
+  no "S2a3: STATE_DIR 대입이 ${sd_tot}건뿐 — \`## 입력\` 과 codex 펜스 두 자리가 안 찼다. 아래 등식은 이 상태에서 공허하다"
+elif [[ "$sd_tot" -eq "$sd_der" ]]; then
+  ok "S2a3: STATE_DIR 대입 ${sd_tot}건이 전부 문서별 도출을 거친다"
+else
+  no "S2a3: STATE_DIR 대입 ${sd_tot}건 중 문서별 도출은 ${sd_der}건 — 나머지가 세션 디렉토리를 문서를 넘어 나눠 쓴다"
+fi
 # sid 를 받는 verb 는 둘뿐이다(check-born 은 sid 인자를 안 받는다 — 조회이지 상태
 # write 가 아니다). 그 둘의 **모든** 호출과 harness_sid 로 키잉된 호출의 수를 비교한다.
 sid_tot=$(grep -cE 'arm_ledger\.py" (mark-reviewed|clear-inflight) "' "$SKILL")

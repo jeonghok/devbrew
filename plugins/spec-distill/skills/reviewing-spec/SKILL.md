@@ -34,13 +34,21 @@ mandate 없이 수동 호출됐으면 그 사실을 loud advisory 로 알리고 
 harness_sid="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" session-id)"
 ROOT="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/state_path.py" state-root)"
 STATE="$ROOT/$harness_sid/state.local.md"   # 훅이 읽는 바로 그 파일
-STATE_DIR="$ROOT/$harness_sid"              # 엔진 상태(docreview-state.md)도 같은 디렉토리
+STATE_DIR="$(python3 "${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}" || true)"   # 엔진 상태 — 이 문서만의 디렉토리
 ```
 
 `$STATE` 를 여는 이유는 arm 원장(`armed_paths`·`dispatch_attempts`·`inflight_paths`)이 훅이 읽는
 바로 그 파일에 있어야 하기 때문이다 — **read==write 디렉토리 불변식**(이 READ 와 아래 `## 원장`
 의 WRITE **전부** 가 같은 `$STATE` 를 가리킴)이 깨지면 arm-once 게이트가 훅과 다른 파일을 키잉해
-통째로 무의미해진다.
+통째로 무의미해진다. 그래서 `$STATE` 는 문서별로 쪼개지 않는다.
+
+엔진 상태(`$STATE_DIR`)는 **문서별**이다 — 세션과 문서 경로의 순수 함수
+(`<state-root>/<sid>/docreview/<stem>-<해시>`)라서 같은 문서는 dispatch 를 넘어 같은 디렉토리로
+돌아와 라운드와 재리뷰 상한이 이어지고, 다른 문서는 다른 디렉토리로 간다. 세션 디렉토리 하나를
+여러 문서가 쓰면 둘째 문서가 첫 문서의 라운드·상한·finding 위에서 시작한다(`init` 은 그런 원장을
+`state_doc_mismatch` 로 거부한다). 그러므로 `$spec_path` 를 이 블록보다 **먼저** 대입한다. 세션 id
+를 못 풀었거나 `$spec_path` 가 비면 도출이 사유를 stderr 로 내고 `$STATE_DIR` 은 빈 값이다 — 선결의
+`init` 이 `state_dir_missing` 으로 멈춘다.
 
 ## 프로필
 
@@ -72,21 +80,23 @@ SD="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}"
 # 오지 않는다 — `SD=` 를 펜스마다 다시 세우는 것과 같은 이유다. 어느 모드가 어느 프로필로
 # 가는가(매핑)는 그 절 하나에만 있고, 여기 있는 것은 그 결과값의 재도출뿐이다.
 PROFILE="${CLAUDE_PLUGIN_ROOT:-./plugins/spec-distill}/references/docreview-profiles/design-doc.md"
-# 러너의 네 인자 중 둘은 이 펜스가 대입하지 않았었다. 같은 이유(새 셸)로 여기서 함께
-# 세운다 — `$CODEX_YAML` 은 세션의 **순수 함수**라 어느 셸에서 다시 도출해도 같은 파일을
-# 가리킨다(`## 입력` 의 `$STATE_DIR` 과 같은 자리다. `mktemp` 은 `$$` 와 같은 결함이다 —
-# 다음 호출이 그 파일을 재발견하지 못한다). 이미 값이 있으면 그것을 쓴다: `## 입력` 을
-# 이 펜스 앞에 이어 붙여 한 호출로 도는 것이 정상 경로이고, 그때 두 번 도출하지 않는다.
+# 러너의 네 인자는 전부 이 호출 안에서 서야 한다. 같은 이유(새 셸)로 여기서 함께 세운다 —
+# `$CODEX_YAML` 은 `## 입력` 의 `$STATE_DIR`(세션과 문서의 **순수 함수**) 안의 한 파일이라
+# 어느 셸에서 다시 도출해도 같은 파일을 가리킨다. 도출은 `## 입력` 과 같은 `state-dir-for`
+# 한 줄이다. `mktemp` 은 `$$` 와 같은 결함이다 — 다음 호출이 그 파일을 재발견하지 못한다.
+# 이미 값이 있으면 그것을 쓴다: `## 입력` 을 이 펜스 앞에 이어 붙여 한 호출로 도는 것이
+# 정상 경로이고, 그때 두 번 도출하지 않는다.
 if [ -z "${CODEX_YAML:-}" ]; then
   harness_sid="${harness_sid:-$(python3 "$SD/scripts/state_path.py" session-id || true)}"
   ROOT="${ROOT:-$(python3 "$SD/scripts/state_path.py" state-root || true)}"
-  if [ -n "$harness_sid" ] && mkdir -p "$ROOT/$harness_sid" 2>/dev/null; then
-    CODEX_YAML="$ROOT/$harness_sid/docreview-codex.yaml"
+  STATE_DIR="${STATE_DIR:-$(python3 "$SD/scripts/docreview_state.py" state-dir-for --root "$ROOT" --session "$harness_sid" --doc "${spec_path:-}" || true)}"
+  if [ -n "$STATE_DIR" ] && mkdir -p "$STATE_DIR" 2>/dev/null; then
+    CODEX_YAML="$STATE_DIR/docreview-codex.yaml"
   fi
 fi
 # ── 잔존물 제거는 **여기**다 — 가용성 판정보다 «앞». ─────────────────────────
-# 이 경로는 세션의 순수 함수라 라운드마다 같은 파일이다. 직전 라운드가 성공했으면 그
-# YAML 은 `codex_failed: false` 를 달고 있어 내용만으로는 이번 라운드의 판정과 구별되지
+# 이 경로는 세션과 문서의 순수 함수라 같은 문서의 라운드마다 같은 파일이다. 직전 라운드가
+# 성공했으면 그 YAML 은 `codex_failed: false` 를 달고 있어 내용만으로는 이번 라운드의 판정과 구별되지
 # 않는다 — 남은 파일이 5단계에서 이번 라운드의 codex 판정으로 읽히면 직전 라운드의
 # finding 이 이번 것으로 삼켜지고 `codex_absent: false`, degrade 없음으로 보고된다.
 # 위험한 자리는 **codex 를 건너뛴 라운드**다: kill switch·미설치·감지기 부재·게이트 입력
@@ -110,13 +120,27 @@ fi
 # 조용히 넘어가지 않고 아래에서 codex 축을 **끈다**.
 # 앞 블록을 이어 붙이면 그 셸 옵션(`set -e`)도 따라온다 — 실패할 수 있는 명령은 rc 를
 # 삼키거나 잡는다. 여기서 펜스가 죽으면 잔존물이 살고 SKIPPED 공시도 나지 않는다.
-residue_unclear=0
-if [ -n "${CODEX_YAML:-}" ]; then
-  rm -f "$CODEX_YAML" 2>/dev/null || true
-  if [ -e "$CODEX_YAML" ]; then
-    : > "$CODEX_YAML" 2>/dev/null || true
-    if [ -s "$CODEX_YAML" ]; then residue_unclear=1; fi
+# **문서를 모르면**(`$spec_path` 가 비어 경로를 도출하지 못했다) 이 세션의 문서별 산출물
+# 전부가 후보다 — 어느 것이 이번 라운드의 경로인지 가를 수 없으므로 전부 같은 규칙으로
+# 중화한다. codex 산출물은 한 라운드의 4단계가 쓰고 5단계가 읽고 끝나는 파일이라 지워서
+# 잃는 것이 없다. 게이트 입력 부재도 codex 를 건너뛴 라운드다 — 그 라운드만 잔존물을 남기면
+# 위의 결함이 그 경로로 그대로 돌아온다.
+residue_unclear=0; residue_left=""
+neutralise() {   # 지운다 — 못 지우면 0바이트로 절단한다. 둘 다 못 하면 rc 1
+  rm -f "$1" 2>/dev/null || true
+  if [ -e "$1" ]; then
+    : > "$1" 2>/dev/null || true
+    if [ -s "$1" ]; then return 1; fi
   fi
+  return 0
+}
+if [ -n "${CODEX_YAML:-}" ]; then
+  neutralise "$CODEX_YAML" || { residue_unclear=1; residue_left="$CODEX_YAML"; }
+elif [ -n "${harness_sid:-}" ] && [ -n "${ROOT:-}" ]; then
+  for y in "$ROOT/$harness_sid"/docreview/*/docreview-codex.yaml; do
+    [ -e "$y" ] || continue
+    neutralise "$y" || { residue_unclear=1; residue_left="${residue_left:+$residue_left }$y"; }
+  done
 fi
 DETECT_OUT="$(bash "$SD/scripts/detect_codex.sh")" || true
 codex_avail="$(printf '%s\n' "$DETECT_OUT" | sed -n 's/^codex_available: //p')"
@@ -136,7 +160,7 @@ fi
 # 진입 중화가 실패했으면 그 사실이 다른 어떤 사유보다 앞선다 — 이 라운드는 codex 를
 # 돌리지 않을 뿐 아니라, 하류가 그 자리의 파일을 이번 라운드 판정으로 읽으면 안 된다.
 if [[ "$residue_unclear" == "1" ]]; then
-  echo "[spec-distill] codex 산출물 경로를 비우지 못했다 — 지우지도 절단하지도 못했다: ${CODEX_YAML}. 이 라운드의 codex 축은 없이 간다. 5단계의 --codex 에 이 경로를 넘기지 마라 — 이번 라운드의 1단계 begin-round 가 rc 0 으로 끝났다면 prepare-recritic 이 이 파일을 부재(codex_predates_round)로 읽지만, 그 전제가 없으면 직전 라운드의 codex finding 이 이번 라운드 판정으로 섭취된다. 해소: 그 파일을 직접 지우거나 상태 디렉토리의 쓰기 권한을 복구하라." >&2
+  echo "[spec-distill] codex 산출물 경로를 비우지 못했다 — 지우지도 절단하지도 못했다: ${residue_left}. 이 라운드의 codex 축은 없이 간다. 5단계의 --codex 에 이 경로를 넘기지 마라 — 이번 라운드의 1단계 begin-round 가 rc 0 으로 끝났다면 prepare-recritic 이 이 파일을 부재(codex_predates_round)로 읽지만, 그 전제가 없으면 직전 라운드의 codex finding 이 이번 라운드 판정으로 섭취된다. 해소: 그 파일을 직접 지우거나 상태 디렉토리의 쓰기 권한을 복구하라." >&2
   codex_avail=""; skip_reason="residue_unclearable"; CODEX_YAML=""
 fi
 if [[ "$codex_avail" == "true" ]]; then
