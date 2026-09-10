@@ -73,11 +73,11 @@ fi
 - **현재 이해**: 의심 방향 + trigger.
 - **막힌 결정**: Step 2.5 의 자격 판정 한 줄 → 전제 목록 P1..Pn **그대로**(C2) → builder 의 `premise_list_challenge`
   원문.
-- **추천 답안**: 두 줄 나란히 — 「builder: <recommendation>」 / 「orchestrator: <의견>」. 아래에 `case_for_alternative`
-  와 `case_for_current` 를 verbatim 으로. evidence 는 항목마다 `[부착 P<n>]` 또는 `[비부착]` 라벨, 반증된 것은
-  `[반증됨]` 추가. `repo_claims` 도 항목마다 `[확인]` / `[반증됨]` / `[미확인]` 라벨과 함께 보인다. 마지막 줄
-  「근거 N 중 부착 M · 리포 주장 K 중 확인 J」.
-- **질문**: `AskUserQuestion` 선택지 **고정 순서** 유지 / 보완 / 전환 / 보류. `(Recommended)` 라벨은 붙이지 않는다.
+- **추천 답안**: 두 줄 나란히 — 「builder: <recommendation>」 / 「orchestrator: <판정> — <이유>」(판정은 유지 / 보완 / 전환 중 하나 — 보류는 사람만 고른다).
+  아래에 `case_for_alternative` 와 `case_for_current` 를 verbatim 으로. evidence 는 항목마다 `[부착 P<n>]` 또는 `[비부착]`
+  라벨, 반증된 것은 `[반증됨]` 추가. `repo_claims` 도 항목마다 `[확인]` / `[반증됨]` / `[미확인]` 라벨과 함께 보인다.
+  마지막 줄 「근거 N 중 부착 M · 리포 주장 K 중 확인 J」.
+- **질문**: `AskUserQuestion` 선택지 **고정 순서** 유지 / 보완 / 전환 / 보류 — 추천을 첫 자리로 옮기지 않는다. 추천 표시는 출처 라벨뿐이다: builder 가 추천한 선택지 라벨 뒤에 `(builder 추천)`, orchestrator 판정 선택지 라벨 뒤에 `(orchestrator 추천)` — 두 추천이 다른 선택지면 각각 붙고, 같은 선택지면 `(builder·orchestrator 추천)` 하나만 붙인다. builder 추천이 switched 이고 Step 2.5 가 `재검토 사유 없음` 이면 전환 라벨은 `(builder 추천 · 전제 충돌 없음)` 이다. 도구·라운드 규약의 `(Recommended)`·`(권장)` 접미사는 붙이지 않는다. builder 의 kept / refined / switched 는 유지 / 보완 / 전환이다.
 
 conducting-interview 는 builder 출력을 **약화·편집하지 않는다** — verbatim 계약이다.
 
