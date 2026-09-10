@@ -202,12 +202,17 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
   생긴다. GC 스크립트가 스크립트 이름을 스위치 이름으로 쓴 선례와 같다. skill 이름 `reviewing-spec` 을 쓰지 않는 이유: `check_names.py` 가 README 참조를 skill 이름으로도 해소하므로, 이 스위치의 수신처가 사라져도 매달림으로 잡히지 않는다) 또는 `DEVBREW_SPEC_DISTILL_DESIGN_MODE_DISABLE == "1"`.
   `disabled: true` 면 skill 은 `reason` 과 advisories 를 단락으로 내고 게이트 없이 끝난다 — `proceed-gate.md` 가
   이미 규정한 「kill switch 예외 경로」다.
+- **판정은 리터럴 펜스가 한다 — 산문이 아니다.** `reviewing-spec/SKILL.md` 의 진입 검사는 `<!-- review-entry:begin -->`
+  ~ `<!-- review-entry:end -->` 마커가 달린 리터럴 bash 펜스 하나다. 펜스가 `review_entry.py` 를 부르고, 그 **안에서**
+  모듈 부재 · rc · JSON · 스키마를 판정해 **한 줄 판결**(`PROCEED` 또는 `DISABLED:<reason>`)과 advisories 를 낸다.
+  skill 산문은 그 판결 줄만 읽고 분기한다 — 끄기 조건을 산문으로 적지 않는다(`reviewing-spec/SKILL.md:65-66` 의
+  규칙과 codex 게이트 펜스의 선례). 판결 줄이 없거나 두 형태 어느 것도 아니면 `DISABLED` 로 친다.
 - **진입 검사 실패는 끔으로 친다(fail-closed).** `review_entry.py` 가 없거나 rc≠0 이거나 stdout 이 JSON 한 줄로
   파싱되지 않거나, 파싱돼도 스키마(최상위 객체 · `disabled` 는 boolean 필수 · `reason` 은 문자열 또는 null ·
-  `advisories` 는 문자열 배열)를 어기면 skill 은 `disabled: true` · `reason: entry_check_failed` 로 간주하고, 실패 사실(경로 · rc · stderr
+  `advisories` 는 문자열 배열)를 어기면 펜스는 `DISABLED:entry_check_failed` 판결을 내고, 실패 사실(경로 · rc · stderr
   첫 줄)을 advisory 로 낸 뒤 §3.2 의 복귀 지시로 끝난다. 끔 여부를 모르는 채 리뷰를 돌리면 사용자가 끈 스위치를
   무시할 수 있고, 끔으로 치면 잃는 것은 이번 자동 리뷰 한 번뿐이다 — 사용자는 brainstorming 의 사용자 리뷰 게이트를
-  그대로 받는다. 엔진은 스키마가 유효하고 `disabled` 가 정확히 `false` 일 때만 돈다.
+  그대로 받는다. 엔진은 판결이 `PROCEED` 일 때만 돈다 — 펜스는 스키마가 유효하고 `disabled` 가 정확히 `false` 일 때만 `PROCEED` 를 낸다.
 - **공유 엔진 2단계와의 관계 — 병존.** 엔진 절차서 2단계(`references/reviewing-document.md:15`)의
   `DEVBREW_<HOST>_DISABLE` 확인은 그대로 둔다 — 네 자리가 공유하는 절차라 이 자리만을 위해 고치지 않는다. 전역
   끄기를 두 번 보지만 둘 다 끄는 방향이라 충돌하지 않는다. `review_entry.py` 가 더하는 것은 결정론 판정과
@@ -239,7 +244,9 @@ review pass 이후로 보류.」(`review-dispatch.py:768-770`)가 그것을 턴 
 #### 4.3 원장 삭제와 미커밋 advisory
 
 `## 원장` 절(`mark-reviewed` · `check-born` · `clear-inflight` A/B)을 삭제한다. `check-born` 이 사용자에게 주던
-효과 하나만 원장 없이 남긴다: 승인 게이트 ①/② 직전 `git status --porcelain -- "$spec_path"` 가 비어 있지
+효과 하나만 원장 없이 남긴다: 승인 게이트 ①/② 직전 `git -C "$(dirname "$spec_path")" status --porcelain -- "$spec_path"` 를 리터럴 펜스로 돌려, rc≠0(스코프 밖
+경로 · git 오류)이면 그 사실을 advisory 로 내고(옛 `check-born` 의 스코프 밖 advisory 에 해당 — 진행은 막지 않는다),
+rc 0 인데 출력이 비어 있지
 않으면 「리뷰 수정분이 커밋되지 않았다」 advisory 를 낸다. 문서 부재 경로의 advisory 는 유지하고 원장 호출만
 뺀다. codex 펜스 주석의 「훅 mandate 의 슬롯」은 「호출 인자」로 바꾼다. 사용자에게 나가는 런타임 `echo` 문구
 (`SKILL.md:131` 「dispatch mandate 의 'spec path:' 슬롯 값을 대입해라」)도 같이 바꾼다.
@@ -321,7 +328,7 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
   스위치만 가리킨다. 은퇴 토큰만 설정된 경우 `disabled` 는 false 다(D9). 은퇴 토큰과 유효한 끄기 스위치를 함께 설정하면 `disabled` 는
   true 이고, 은퇴 토큰 advisory 는 「리뷰가 진행된다」가 아니라 꺼진 사유를 말한다. `validator` 류 넷의 advisory 는
   대체 스위치를 대지 않는다.
-- **AC6** — `reviewing-spec` 이 엔진 라운드 전에 `review_entry.py` 를 부르고, `disabled: true` 이거나 진입 검사가 실패하면(모듈 부재 · rc≠0 · JSON 파싱 실패 · 스키마 위반 — `{}` · `disabled` 비-boolean · 최상위 null/배열) 게이트 없이
+- **AC6** — `reviewing-spec` 이 엔진 라운드 전에 §4.2 의 진입 펜스(마커 달린 리터럴 bash)로 `review_entry.py` 를 부르고, 판결이 `PROCEED` 가 아니면 — `disabled: true` 이거나 진입 검사가 실패하면(모듈 부재 · rc≠0 · JSON 파싱 실패 · 스키마 위반 — `{}` · `disabled` 비-boolean · 최상위 null/배열) 게이트 없이
   advisory 단락으로 끝난다.
 - **AC7** — `reviewing-spec` `## 입력` 은 호출 인자에서 경로를 받고, 인자 없음 경로는 후보 제시 + 사용자 확인이다.
   `mode:` 슬롯 · `$STATE` · `arm_ledger.py` 호출이 skill 어디에도 없고, 그것을 가리키는 문장(게이트 표 ④ 행의
@@ -329,7 +336,8 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 - **AC8** — `finishing.md` ①의 `/compact` 템플릿 · ②의 호출 프롬프트 · brief 템플릿 §7 · `reviewing-spec`
   description 넷이 `spec-distill:reviewing-spec` 을 writing-plans **앞**에 적는다(순서까지). ①의 템플릿에 새
   꺾쇠 placeholder 가 없다.
-- **AC9** — 승인 게이트 ①/② 직전에 `$spec_path` 가 미커밋이면 advisory 가 나온다.
+- **AC9** — 승인 게이트 ①/② 직전에 `$spec_path` 가 미커밋이면 advisory 가 나온다. git 오류 · 스코프 밖 경로(rc≠0)도
+  조용히 지나가지 않고 advisory 가 나온다 — 출력이 비었다는 이유로 「깨끗함」으로 읽지 않는다.
 - **AC10** — `shared/tests/test_adjudication_wiring.sh` · `shared/tests/test_dispatch_name_defined.sh` 가 GREEN 이고,
   `check_wiring.py` 의 baseline 값은 재계수 결과와 같다.
 - **AC11** — §5 의 일곱 자리에 삭제된 대상의 현재형 인용이 없고, `codex_prompt_common.py` 사본 일치 검사가 GREEN 이다.
@@ -383,13 +391,13 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
   `TestReviewDispatchOrdering` · `TestKillSwitches` · `TestInterviewDirectionLayerScope` — 마지막은 조사상 훅만
   실행한다, plan 에서 재확인)는 삭제하고, `TestRetiredSwitchAdvisory` 는 `review_entry.py` 테스트로 옮긴다 ·
   `test_reviewing_spec_design_only.sh`(CONVERGE 락 `:46-51` 이 §4.1 이 없애는 `mode:` 매핑 문장에 기대고 헤더
-  `:13-16` 이 「훅이 내는 `mode:`」를 인용한다 — 「프로필은 `design-doc.md` 고정」 문장으로 증인을 다시 건다) ·
+  `:14` · `:33` 이 「훅이 내는 `mode:`」를 인용한다 — 「프로필은 `design-doc.md` 고정」 문장으로 증인을 다시 건다) ·
   `test_session_end_cleanup.py`(AC3 신설 케이스 + **기존 호출 전부 격리** — `run_hook` 의 기본값이 `cwd=None` 이라
   cwd 를 넘기는 호출은 `:66` 하나뿐이다. GC 가 붙으면 나머지 호출이 러너 cwd 의 실제 상태 루트 — 워크트리에서
   돌리면 main 체크아웃의 `.claude/spec-distill/` — 에서 오래된 세션 폴더를 지운다. `run_hook` 의 기본 cwd 를 임시
   리포로 바꾸거나 기본 env 에 `DEVBREW_SKIP_HOOKS=spec-distill:spec-distill-gc` 를 넣는다. SessionEnd 훅을 띄우는
   다른 테스트도 plan 이 전수로 찾아 같은 조건을 건다) · `test_brainstorming_entry.sh` ·
-  `test_brief_review_meta.sh` · `test_stale_terms.sh` · `test_readme_sync.sh` ·
+  `test_brief_review_meta.sh` · `test_stale_terms.sh` · `test_readme_sync.sh` · `test_probe_sweep_residue.sh`(`:51` 주석이 arm-once 를 살아 있는 백스톱으로 적는다) ·
   `test_reviewing_spec_state_keying.sh`(원장 호출 창을 재던 케이스는 삭제, sid · `STATE_DIR` 도출 케이스는 유지하고
   `$STATE` 단언은 `STATE_DIR` 로 재조준) · `test_handoff_context_empty_subsections.sh`(처분은 Deferred to plan) ·
   `test_handoff_conversation_reference.sh`
@@ -406,7 +414,10 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 1. **baseline** — 착수 전 base(`c7b4f580`)에서 spec-distill · shared · quality-gates 스위트를 돌려 실패한 테스트
    식별자(파일 + 케이스) 집합(AC12 의 비교 키)과, 보조 지표로 파일별 실패 줄
    수를 기록한다. 이미 RED 인 파일은 이유를 함께 적는다.
-2. **새 락** — AC3·AC4·AC5 는 행동 테스트(프로세스 실행 · 환경변수 행렬), AC1·AC2·AC7·AC8·AC16 은 정적 락이다. 정적
+2. **새 락** — AC3·AC4·AC5 는 행동 테스트(프로세스 실행 · 환경변수 행렬), **AC6 은 진입 펜스를 추출해 실행하는 행동
+   테스트**(codex 게이트 펜스를 추출·실행하는 `test_reviewing_spec_residue.sh` 와 같은 방식 — 모듈 부재 · rc≠0 ·
+   비-JSON · `{}` · `disabled` 비-boolean · 최상위 null/배열 · 정상 false/true 의 행렬), **AC9 는 미커밋 advisory
+   펜스를 추출해 실행하는 행동 테스트**(깨끗함 · 미커밋 · 스코프 밖 경로/git 오류), AC1·AC2·AC7·AC8·AC16 은 정적 락이다. 정적
    락은 문구의 존재와 순서를 증명할 뿐 모델이 따르는지는 재지 못한다 — 그 한계를 락 헤더에 적는다. 부재 락에는
    양성 짝을 붙인다(`Stop` 부재 ↔ `SessionEnd` 존재, `$STATE` 부재 ↔ `STATE_DIR` 존재).
 3. **mutation** — 새 락마다 커밋 뒤 변이를 넣고 RED 를 확인한다. 삭제만이 아니라 추가 · 반전 · 형태 변경으로
@@ -488,6 +499,7 @@ Law 3 — 다음 세션이 찾는 자리를 갱신한다:
 | D10 | Law 1 필수 섹션 게이트의 리포 내 구현 0 (리뷰 라운드 1 이후) | 수용 — CHANGELOG·알려진 한계에 기록 |
 | D11 | AC14 통과 기준 (리뷰 라운드 1 이후) | ② 경로 호출 관찰 필수. 실패하면 핸드오프 문구 보강·재관찰 최대 2회, 그래도 실패면 머지 전 사용자 결정. ① 경로는 관찰·기록 |
 | D12 | 리뷰 라운드 3 반복 지적 게이트 | ③ 수정 필요 — 리뷰대로 저자가 수정(틀린 문장 수정 + 검증 절차 세부는 plan 요구로), 수정 뒤 재리뷰 1회 |
+| D13 | 리뷰 라운드 4 게이트 | ③ 수정 필요 — 저자가 남은 3건(진입 판정 리터럴 펜스 · 검증 계획의 AC6/AC9 · `git status` rc 처리)을 고치고, 재리뷰 없이 게이트로 돌아온다 |
 
 오케스트레이터가 정하고 사용자에게 알린 것(되돌리려면 괄호 안의 한마디):
 
